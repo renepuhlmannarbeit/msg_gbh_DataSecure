@@ -44,7 +44,9 @@ async function convertNext(_profile, deps = {}) {
     const convert = deps.convertBuffer || require('./conversion-worker').convertBuffer;
     if (deps.onClaimed) await deps.onClaimed();
     const extraction = await convert(bytes, path.extname(String(entry.name || '')).toLowerCase(), {
-      signal: deps.signal, timeoutMs: deps.timeoutMs
+      signal: deps.signal, timeoutMs: deps.timeoutMs,
+      ...(['.pdf', '.pptx'].includes(path.extname(String(entry.name || '')).toLowerCase())
+        ? { passiveObjects: true } : {})
     });
     validateMarkdownExtraction(extraction);
     // "ok" confirms the closed coverage contract, not complete extraction.

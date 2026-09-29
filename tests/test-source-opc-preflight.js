@@ -161,6 +161,35 @@ test('external or active relationships anywhere in the package are rejected', ()
   assert.strictEqual(result.code, 'SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
 });
 
+test('passive presentation conversion admits omitted OLE and hyperlinks but privacy remains strict', () => {
+  const controls = opcControlEntries('pptx');
+  const rels = '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+    '<Relationship Id="o1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject" Target="../embeddings/oleObject1.bin"/>' +
+    '<Relationship Id="h1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink" Target="https://example.test" TargetMode="External"/>' +
+    '</Relationships>';
+  const parts = [
+    ...controls,
+    ['ppt/presentation.xml', '<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"/>'],
+    ['ppt/slides/slide1.xml', '<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"/>'],
+    ['ppt/slides/_rels/slide1.xml.rels', rels],
+    ['ppt/embeddings/oleObject1.bin', Buffer.from([1, 2, 3])]
+  ];
+  const conversion = { processingMode: 'markdown-only', productChannel: 'standalone' };
+  assert.strictEqual(inspect('passive.pptx', zipStore(parts), conversion).verdict, 'candidate');
+  assert.strictEqual(inspect('private.pptx', zipStore(parts),
+    { processingMode: 'markdown-and-anonymize', productChannel: 'standalone' }).code,
+  'SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
+  assert.strictEqual(inspect('cowork.pptx', zipStore(parts),
+    { processingMode: 'markdown-only', productChannel: 'plugin' }).code,
+  'SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
+  assert.strictEqual(inspect('macro.pptx', zipStore([
+    ...parts, ['ppt/vbaProject.bin', Buffer.from([1])]
+  ]), conversion).code, 'SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
+  assert.strictEqual(inspect('external-template.pptx', zipStore(parts.map(([name, value]) =>
+    name === 'ppt/slides/_rels/slide1.xml.rels' ? [name, rels.replace('relationships/hyperlink', 'relationships/attachedTemplate')] : [name, value])),
+  conversion).code, 'SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
+});
+
 test('foreign relationship namespaces are rejected even when their final name looks supported', () => {
   const relationships = '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId2" Type="https://evil.invalid/header" Target="header1.xml"/></Relationships>';
   const result = inspect('foreign-namespace.docx', docx({}, [

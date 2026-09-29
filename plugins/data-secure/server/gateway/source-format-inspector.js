@@ -166,7 +166,16 @@ function inspectSourceFormatFromFd(fd, stat, extension, options = {}) {
     if (!structure || !structure.content_types || !structure.root_relationships || structure.ooxml_type !== declaredType) {
       return finish(verdict(declaredType, 'zip', 'rejected', 'SOURCE_TYPE_MISMATCH', structure));
     }
-    if (structure.active_content) {
+    const passivePresentation = conversion && declaredType === 'pptx';
+    // OLE binaries are never opened by the text extractor. In the conversion-
+    // only product they can be omitted with incomplete coverage, but macros,
+    // controls and other active package parts must still fail preflight.
+    const passiveOleOnly = passivePresentation && !(inspected.entry_names || []).some(name => {
+      const active = /(?:^|\/)(?:vbaProject|oleObject)[^/]*\.bin$/iu.test(name) ||
+        /^(?:activeX|customUI|word\/embeddings|xl\/embeddings|ppt\/embeddings)\//iu.test(name);
+      return active && !/^ppt\/embeddings\/oleObject[0-9]+\.bin$/iu.test(name);
+    });
+    if (structure.active_content && !passiveOleOnly) {
       return finish(verdict(declaredType, declaredType, 'rejected', 'SOURCE_ACTIVE_CONTENT_UNSUPPORTED', structure));
     }
     let verifiedStructure;
@@ -174,7 +183,8 @@ function inspectSourceFormatFromFd(fd, stat, extension, options = {}) {
       verifiedStructure = validateOpcControls({
         declaredType,
         entries: new Set(inspected.entry_names || []),
-        controlParts: inspected.control_parts
+        controlParts: inspected.control_parts,
+        passivePresentation
       });
     } catch (error) {
       if (!(error instanceof OpcValidationError)) throw error;

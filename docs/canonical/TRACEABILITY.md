@@ -1,6 +1,6 @@
 # Entscheidungs-Traceability
 
-Stand: 23.09.2026 · 3.2.0-rc141
+Stand: 23.09.2026 · 3.2.0-rc142
 
 MAC-20260923-01–03 → BL-010.20 → Build-Deployment-Target 13.5, sämtliche
 Mach-O-Versionen/Architekturen/Systembibliotheken/Signaturen, numerische
@@ -726,6 +726,7 @@ aktuelle Produktzusage.
 | Story | Umsetzung / Vertrag | Nachweisgrenze |
 |---|---|---|
 | DS-101 | Ausdrückliche Wiederverwendung abgeschlossener Cowork-Stapel, ohne Originalzugriff oder neue Anonymisierung | BL-041.21; verpflichtende native Auswahl, erneute Generation-/Integritätsprüfung, dauerhaftes ACK unverändert; `test-local-handoff-reuse.js` |
+| DS-102 | Passive Standalone-Markdown-Konvertierung darf nicht ausgeführte PDF-/PPTX-Objekte mit unvollständiger Quellabdeckung übergehen; Privacy und Cowork bleiben strikt. Intel-/ARM-DMG ergänzt ZIP ohne Gatekeeper-Zusage. | BL-010.36; isolierter Konverter, OPC-Admission und Mac-Paketworkflow; E0 lokal, native neue Pakete und sichtbare UAT offen. |
 | BL-041.19 | `gateway/root-boundary.js`, `root-reservations.js`, beide Konfigurationsadapter, verpflichtende Bootstrap-Injektion; keine private Dateianlage bei Rootkonflikt, feste Fehler auch bei I/O-/Close-Fehlern | `test-root-boundary.js`, `test-product-bootstrap.js`, `test-core-contracts.mjs`; historische Host-Freigaben alter Versionen nicht rekonstruierbar |
 | BL-041.20 | `acceptance/CLAUDE_CODE_PILOT/contract.json` und Vorcheck `scripts/check-claude-code-pilot.mjs`; CLI und Desktop-Code-Reiter, ausschließlich enthaltene Abonutzung | `test-claude-code-pilot.mjs` prüft CLI-/Kostenvertrag; echte lokale CLI 2.1.280 und Strukturvorcheck PASS, CLI nicht angemeldet; Desktop-/Host-/Modellfälle NOT_RUN |
 | BL-041.21 / DS-101 | `gateway/local-only-handoff.js`, `batch-results.js`, nativer Picker, MCP-Schema/Registry und Skillreferenz | `test-local-handoff-reuse.js`: reale Pakete/Journal/Verifier, kein Originalzugriff, tatsächliche Grantfrist auch bei RAM-Snapshots; menschliche Auswahl gezielt eingespeist, nicht als native Abnahme ausgewiesen |

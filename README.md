@@ -1,6 +1,6 @@
 # GBH DataSecure – Standalone macOS RC141 · Windows/Linux und Cowork RC140
 
-Quellstand: 3.2.0-rc141
+Quellstand: 3.2.0-rc142
 
 RC141 enthält die Mac-Nachreviewkorrekturen: Standalone für Intel und Apple
 Silicon wurde nativ gebaut und mit Konvertierung, Anonymisierung, Zuordnung,

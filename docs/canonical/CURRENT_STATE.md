@@ -1,6 +1,6 @@
 # Aktueller Iststand
 
-Stand: 23.09.2026 · 3.2.0-rc141 · Standalone macOS RC141 dauerhaft veröffentlicht; Standalone Windows/Linux und Cowork bleiben RC140; Modellabnahme und N3/N4 offen
+Stand: 23.09.2026 · 3.2.0-rc142 · Standalone macOS RC141 dauerhaft veröffentlicht; Standalone Windows/Linux und Cowork bleiben RC140; Modellabnahme und N3/N4 offen
 
 ## RC141 – veröffentlichter, nativ geprüfter Standalone-Mac-Kandidat
 

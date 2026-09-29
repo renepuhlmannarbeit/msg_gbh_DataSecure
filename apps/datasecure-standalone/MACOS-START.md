@@ -30,15 +30,15 @@ Der GitHub-Workflow **Manual Standalone macOS sandbox evidence** kann auf echten
 GitHub-macOS-Runnern getrennt für Intel und Apple Silicon ausgeführt werden. Er
 ist ausschließlich manuell startbar und verlangt vor Runner-Zuteilung die
 Bestätigung, dass ein privates Repository enthaltene macOS-Minuten verbrauchen
-oder darüber hinaus Kosten auslösen kann. Zuerst nur `macos-arm64` starten;
-`both` erst nach Prüfung des GitHub-Actions-Budgets wählen.
+oder darüber hinaus Kosten auslösen kann. Ein einzelnes Ziel oder `both` darf
+erst nach einer ausdrücklichen Budgetentscheidung gestartet werden.
 
 Der Workflow baut und prüft die gepinnte Laufzeit, den nativen POSIX-
 Supervisor, die Standalone- und echten Konverterverträge, Rust/Clippy sowie das
 native Tauri-Release-Binary. Er verwendet keine Secrets oder persistenten
 Abhängigkeits-Caches. Ein Paket-Upload ist standardmäßig
 ausgeschaltet. Wird `upload_package` ausdrücklich aktiviert, lädt der Workflow
-nur das verifizierte ZIP und seine SHA-256-Datei mit einem Tag Aufbewahrung hoch.
+das verifizierte ZIP und DMG samt SHA-256-Dateien mit einem Tag Aufbewahrung hoch.
 Das Archiv wird zweimal bytegleich erzeugt, geprüft, entpackt, erneut auf
 Signatur und Architektur geprüft. Der überarbeitete Workflow prüft zusätzlich
 die tatsächlich eingebettete Mindestversion und Systembibliotheken **aller**
@@ -48,6 +48,14 @@ Zuordnung, Fehlerfälle und Verlauf mit der gebündelten Runtime. Diese neuen
 Gates bestehen für RC141 auf Intel und ARM aus dem oben gebundenen
 Commit. Das ersetzt nicht die nachfolgende sichtbare
 Finder-/Gatekeeper-/Picker-/VoiceOver-/Anwenderabnahme.
+
+Der DMG-Weg ist ein zusätzlicher, noch nativ zu belegender Installationsweg:
+DMG öffnen und die enthaltene App auf **Programme** ziehen. Er enthält dieselbe
+App wie das ZIP und muss vor Bereitstellung separat auf Integrität, Signatur,
+Start und Architektur geprüft werden. Ein DMG allein behebt jedoch keine
+Gatekeeper-Sperre. Solange Developer-ID-Signatur und Apple-Notarisierung fehlen,
+bleibt auch der DMG ein ad-hoc-signiertes internes Pilotpaket; die unten
+beschriebene app-spezifische Freigabe kann weiterhin nötig sein.
 
 Maßgebliche Herstellerhinweise:
 [GitHub-gehostete Runner](https://docs.github.com/en/actions/reference/runners/github-hosted-runners),

@@ -1,8 +1,8 @@
 # Release- und Distributionsvertrag
 
-Stand: 23.09.2026 · 3.2.0-rc141
+Stand: 23.09.2026 · 3.2.0-rc142
 
-Der aktuelle Quellstand ist RC141 und für Standalone macOS als technischer Vorabkandidat veröffentlicht.
+Der aktuelle Quellstand ist RC142-Entwicklungsstand und noch kein neu gebundener Paketkandidat.
 
 RC141 ist als Standalone-macOS-Vorabkandidat aus Quellcommit
 `1d5a67d37bd72a30f70ee1db5f5ef2a45ee6e542` veröffentlicht:

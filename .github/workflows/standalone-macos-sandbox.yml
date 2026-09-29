@@ -18,7 +18,7 @@ on:
         default: false
         type: boolean
       upload_package:
-        description: Upload the verified engineering ZIP for one day so it can be tested on a real Mac.
+        description: Upload the verified engineering ZIP and DMG for one day so they can be tested on a real Mac.
         required: true
         default: false
         type: boolean
@@ -129,7 +129,7 @@ jobs:
         run: cargo clippy --all-targets --locked -- -D warnings
       - name: Build the native signed macOS application bundle
         working-directory: apps/datasecure-standalone/tauri-contract
-        run: npx --no-install tauri build --bundles app
+        run: npx --no-install tauri build --bundles app,dmg
       - name: Verify bundle contract, signature and native architectures
         shell: bash
         run: |
@@ -213,6 +213,45 @@ jobs:
             --app "$packaged_app" --target "${{ matrix.target }}" --version "$version" --launch-services
           node tests/manual/standalone-macos-packaged-conversion.mjs "$packaged_app"
           node tests/test-standalone-package-smoke.mjs "$archive"
+      - name: Verify drag-to-Applications DMG contains the identical signed app
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./package.json').version")"
+          bundle="apps/datasecure-standalone/tauri-contract/target/release/bundle/macos/DataSecure Standalone.app"
+          dmg_dir="apps/datasecure-standalone/tauri-contract/target/release/bundle/dmg"
+          shopt -s nullglob
+          candidates=("$dmg_dir"/*.dmg)
+          test "${#candidates[@]}" -eq 1
+          test -f "${candidates[0]}"
+          dmg="dist/DataSecure-Standalone-${version}-${{ matrix.target }}.dmg"
+          cp -- "${candidates[0]}" "$dmg"
+          hdiutil verify "$dmg"
+          mount="$(mktemp -d "${RUNNER_TEMP}/datasecure-dmg.XXXXXX")"
+          case "$mount" in
+            "${RUNNER_TEMP}/datasecure-dmg."*) ;;
+            *) echo "Unsafe DMG mount directory" >&2; exit 74 ;;
+          esac
+          mounted=false
+          cleanup() {
+            case "$mount" in
+              "${RUNNER_TEMP}/datasecure-dmg."*)
+                if [[ "$mounted" == true ]]; then hdiutil detach "$mount"; fi
+                rmdir -- "$mount" ;;
+              *) exit 74 ;;
+            esac
+          }
+          trap cleanup EXIT
+          hdiutil attach -readonly -nobrowse -mountpoint "$mount" "$dmg"
+          mounted=true
+          test -d "$mount/DataSecure Standalone.app"
+          test -L "$mount/Applications"
+          test "$(readlink "$mount/Applications")" = /Applications
+          diff -qr "$bundle" "$mount/DataSecure Standalone.app"
+          codesign --verify --deep --strict --verbose=2 "$mount/DataSecure Standalone.app"
+          bash tests/manual/standalone-native-macos-launch.sh \
+            --app "$mount/DataSecure Standalone.app" --target "${{ matrix.target }}" --version "$version"
+          shasum -a 256 "$dmg" | sed "s|  .*|  $(basename "$dmg")|" > "${dmg}.sha256"
       - name: Upload the verified engineering package for one day
         if: ${{ inputs.upload_package == true }}
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -221,6 +260,8 @@ jobs:
           path: |
             dist/DataSecure-Standalone-*-${{ matrix.target }}.zip
             dist/DataSecure-Standalone-*-${{ matrix.target }}.zip.sha256
+            dist/DataSecure-Standalone-*-${{ matrix.target }}.dmg
+            dist/DataSecure-Standalone-*-${{ matrix.target }}.dmg.sha256
           if-no-files-found: error
           retention-days: 1
           compression-level: 0
@@ -241,7 +282,7 @@ jobs:
             echo "- Core runtime SHA-256: \`$(shasum -a 256 "$sidecar" | awk '{print $1}')\`"
             echo "- POSIX supervisor SHA-256: \`$(shasum -a 256 "$supervisor" | awk '{print $1}')\`"
             if [[ "${{ inputs.upload_package }}" == "true" ]]; then
-              echo "- The verified engineering ZIP and its SHA-256 sidecar were uploaded for one day."
+              echo "- The verified engineering ZIP and DMG with SHA-256 sidecars were uploaded for one day."
             else
               echo "- No package or diagnostic artifact was uploaded."
             fi

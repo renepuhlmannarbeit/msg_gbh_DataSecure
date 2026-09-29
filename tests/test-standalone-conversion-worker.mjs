@@ -249,6 +249,23 @@ try {
     assert.match(metadata.markdown, /Author: Max Mustermann/u);
     assert.ok(children.every(entry => entry.closed));
   });
+  await test('passive PDF Markdown retains page text while omitting interactive objects', async () => {
+    const sources = [
+      pdf([{ text, annotation: true }]),
+      pdf([{ text }], '', { form: true }),
+      pdf([{ text }], '', { signature: true }),
+      pdf([{ text }], '', { attachment: true }),
+      pdf([{ text }], '/OpenAction << /S /JavaScript /JS (app.alert\\(1\\)) >>')
+    ];
+    for (const source of sources) {
+      const result = await convert(source, '.pdf', { passiveObjects: true });
+      assert.match(result.markdown, /Max Mustermann/u);
+      assert.equal(result.coverage.status, 'incomplete');
+      assert.ok(result.coverage.reason_codes.includes('SOURCE_COVERAGE_UNVERIFIED'));
+    }
+    await assert.rejects(convertBuffer(encryptedPdf(), '.pdf', { passiveObjects: true }),
+      cause => cause.code === 'SOURCE_ENCRYPTED_UNSUPPORTED');
+  });
   await test('PDF forms, signatures, attachments, JavaScript and encryption stop through the real packaged parser', async () => {
     const activeSources = [
       ['AcroForm', pdf([{ text }], '', { form: true })],

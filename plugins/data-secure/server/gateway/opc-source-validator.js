@@ -38,6 +38,13 @@ const SAFE_MICROSOFT_REL_TYPES = new Set([
   'http://schemas.microsoft.com/office/2020/02/relationships/classificationlabels',
   'http://schemas.microsoft.com/office/2007/relationships/styleswitheffects'
 ]);
+// Passive text conversion ignores these presentation-only visual projections.
+// They are not followed by the Markdown extractor and do not permit a network
+// request. The ordinary privacy preflight still rejects them.
+const PASSIVE_PRESENTATION_REL_TYPES = new Set([
+  'http://schemas.microsoft.com/office/2007/relationships/diagramdrawing',
+  'http://schemas.microsoft.com/office/2007/relationships/hdphoto'
+]);
 const MAIN = Object.freeze({
   docx: Object.freeze({
     part: 'word/document.xml',
@@ -247,7 +254,7 @@ function hasSupportedRelationshipNamespace(value) {
     .some((namespace) => type.startsWith(namespace) && type.length > namespace.length);
 }
 
-function validateOpcControls({ declaredType, entries, controlParts }) {
+function validateOpcControls({ declaredType, entries, controlParts, passivePresentation = false }) {
   const expected = MAIN[declaredType];
   if (!expected || !(entries instanceof Set) || !controlParts || typeof controlParts !== 'object') {
     throw new OpcValidationError();
@@ -276,16 +283,28 @@ function validateOpcControls({ declaredType, entries, controlParts }) {
       if (!id || !type || !target || ids.has(id)) throw new OpcValidationError();
       ids.add(id);
       if (String(attribute(node, 'TargetMode')).toLowerCase() === 'external') {
+        // A passive Markdown conversion never follows a link. Only ordinary
+        // presentation hyperlinks may be ignored; all other external edges
+        // remain blocked, including remote templates and package references.
+        if (passivePresentation && declaredType === 'pptx' &&
+            OFFICE_REL_NAMESPACES.some(namespace => type.toLowerCase() === `${namespace}hyperlink`)) continue;
         throw new OpcValidationError('SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
       }
-      if (isBlockedRelationshipType(type)) {
+      const passiveOle = passivePresentation && declaredType === 'pptx' &&
+        OFFICE_REL_NAMESPACES.some(namespace => type.toLowerCase() === `${namespace}oleobject`);
+      if (isBlockedRelationshipType(type) && !passiveOle) {
         throw new OpcValidationError('SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
       }
-      if (!hasSupportedRelationshipNamespace(type)) {
+      if (!hasSupportedRelationshipNamespace(type) &&
+          !(passivePresentation && declaredType === 'pptx' &&
+            PASSIVE_PRESENTATION_REL_TYPES.has(type.toLowerCase()))) {
         throw new OpcValidationError('SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
       }
       const resolvedTarget = resolveRelationshipTarget(name, target);
       if (!resolvedTarget || !entries.has(resolvedTarget)) throw new OpcValidationError();
+      if (passiveOle && !/^ppt\/embeddings\/oleObject[0-9]+\.bin$/iu.test(resolvedTarget)) {
+        throw new OpcValidationError('SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
+      }
       if (name === '_rels/.rels' && OFFICE_REL_TYPES.has(type)) office.push(resolvedTarget);
     }
   }

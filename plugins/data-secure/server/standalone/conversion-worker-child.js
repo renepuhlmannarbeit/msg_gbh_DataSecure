@@ -130,10 +130,10 @@ function additionalOcrText(nativeText, ocrText) {
   }).join('');
 }
 
-async function pdfMarkdown(bytes) {
+async function pdfMarkdown(bytes, passiveObjects = false) {
   if (bytes.length > 25 * 1024 * 1024) fail('INPUT_FORMAT_LIMIT');
   const pdfRoot = path.join(root, 'node_modules', 'pdfjs-dist');
-  const { getDocument, OPS } = await import(pathToFileURL(path.join(pdfRoot, 'legacy', 'build', 'pdf.mjs')).href);
+  const { getDocument, OPS, AnnotationMode } = await import(pathToFileURL(path.join(pdfRoot, 'legacy', 'build', 'pdf.mjs')).href);
   // Actual painted operators, not merely image resources declared in the PDF.
   // These are the image operations of the bundled PDF.js display API.
   const imageOperations = new Set([OPS.paintImageXObject, OPS.paintInlineImageXObject,
@@ -148,20 +148,27 @@ async function pdfMarkdown(bytes) {
   try {
     const document = await task.promise;
     if (await document.getPermissions() !== null) fail('SOURCE_ENCRYPTED_UNSUPPORTED');
-    // Never execute forms, JavaScript or attachments. Their omission is not a
-    // complete document conversion; active-content documents remain stopped.
-    if (document.isPureXfa || await document.hasJSActions() || populated(await document.getFieldObjects()) ||
-        populated(await document.getAttachments())) fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
+    // Never execute forms, JavaScript or attachments. Passive conversion may
+    // omit them with incomplete coverage; privacy remains strict.
+    if (document.isPureXfa) fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
+    const hasDocumentObjects = await document.hasJSActions() || populated(await document.getFieldObjects()) ||
+      populated(await document.getAttachments());
+    if (hasDocumentObjects && !passiveObjects) fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
     const outline = await document.getOutline();
     const metadata = await document.getMetadata();
     const metadataKeys = ['Title', 'Author', 'Subject', 'Keywords', 'Creator', 'Producer',
       'CreationDate', 'ModDate', 'Trapped', 'Custom'];
-    if ((Array.isArray(outline) && outline.length > 0) || metadata?.metadata !== null) fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
+    if (((Array.isArray(outline) && outline.length > 0) || metadata?.metadata !== null) && !passiveObjects) {
+      fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
+    }
     const metadataLines = [];
     for (const key of metadataKeys) {
       const value = metadata?.info?.[key];
       if (value === undefined || value === '') continue;
-      if (!['string', 'number', 'boolean'].includes(typeof value)) fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
+      if (!['string', 'number', 'boolean'].includes(typeof value)) {
+        if (passiveObjects) continue;
+        fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
+      }
       metadataLines.push(`${key}: ${String(value)}`);
     }
     const sections = metadataLines.length ? [`# Dokumentmetadaten\n\n${literal(metadataLines.join('\n'))}`] : [];
@@ -172,8 +179,9 @@ async function pdfMarkdown(bytes) {
       const page = await document.getPage(number);
       let canvas;
       try {
-        if (page.isPureXfa || populated(await page.getJSActions())) fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
-        if ((await page.getAnnotations({ intent: 'display' })).length > 0) fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
+        if (page.isPureXfa) fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
+        if (!passiveObjects && (populated(await page.getJSActions()) ||
+            (await page.getAnnotations({ intent: 'display' })).length > 0)) fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
         const content = await page.getTextContent({ disableNormalization: true });
         let text = '';
         for (const item of content.items) {
@@ -193,7 +201,8 @@ async function pdfMarkdown(bytes) {
           const width = Math.ceil(viewport.width), height = Math.ceil(viewport.height);
           dimensions(width, height);
           canvas = canvasApi().createCanvas(width, height);
-          await page.render({ canvasContext: canvas.getContext('2d'), viewport, background: 'white' }).promise;
+          await page.render({ canvasContext: canvas.getContext('2d'), viewport, background: 'white',
+            annotationMode: AnnotationMode.DISABLE }).promise;
           ocr ??= await createOcr(); // One session per document, never across customers.
           const recognized = await recognize(canvas, ocr);
           if (hasNativeText) additional = additionalOcrText(nativeText, recognized);
@@ -228,10 +237,12 @@ async function main() {
       process.env.DISABLE_SYSTEM_FONTS_LOAD !== '1') fail('CONVERSION_POLICY_FAILED');
   const type = process.argv[2];
   const expectedBytes = Number(process.argv[3]);
-  const outputPolicy = process.argv[4];
-  if (![4, 5].includes(process.argv.length) || !Object.values(SOURCE_TYPES).includes(type) ||
+  const policies = process.argv.slice(4);
+  if (process.argv.length > 6 || !Object.values(SOURCE_TYPES).includes(type) ||
       !/^[1-9][0-9]*$/u.test(process.argv[3]) || !Number.isSafeInteger(expectedBytes) || expectedBytes > MAX_INPUT_BYTES) fail('CONVERSION_INPUT_INVALID');
-  if (outputPolicy !== undefined && (outputPolicy !== 'omit-docx-header-footer' || type !== 'docx')) {
+  if (new Set(policies).size !== policies.length || policies.some(policy =>
+    !((policy === 'omit-docx-header-footer' && type === 'docx') ||
+      (policy === 'passive-document-objects' && ['pdf', 'pptx'].includes(type))))) {
     fail('CONVERSION_INPUT_INVALID');
   }
   const chunks = []; let size = 0;
@@ -242,10 +253,10 @@ async function main() {
   }
   if (size !== expectedBytes) fail('CONVERSION_INPUT_INCOMPLETE');
   const bytes = Buffer.concat(chunks);
-  if (type === 'pdf') return pdfMarkdown(bytes);
+  if (type === 'pdf') return pdfMarkdown(bytes, policies.includes('passive-document-objects'));
   if (['png', 'bmp', 'jpeg'].includes(type)) return imageMarkdown(bytes, type);
   return extractMarkdownBuffer(bytes, `.${type}`,
-    outputPolicy === undefined ? {} : { omitDocxHeaderFooter: true });
+    policies.includes('omit-docx-header-footer') ? { omitDocxHeaderFooter: true } : {});
 }
 
 process.stdout.on('error', () => process.exit(2));

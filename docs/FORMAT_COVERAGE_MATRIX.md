@@ -1,6 +1,6 @@
 # Aktuelle Format-Coverage
 
-Stand: 11.09.2026 · Produktversion 3.2.0 RC141
+Stand: 11.09.2026 · Produktversion 3.2.0 RC142
 
 Diese Matrix trennt implementierte Verarbeitung, Extraktionsvollständigkeit und
 Zielhost-Abnahme. Ein erfolgreicher Konvertierungstest ist keine Freigabe für

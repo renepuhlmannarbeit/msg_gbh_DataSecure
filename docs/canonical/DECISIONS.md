@@ -6,7 +6,7 @@ Alle Entscheidungen bleiben als unveränderliche Historie erhalten. „Angenomme
 bedeutet deshalb nicht automatisch „heute vollständig aktiv“:
 
 - **aktiv:** DS-001 bis DS-012, DS-014, DS-017 bis DS-018, DS-020 bis DS-049,
-  DS-051 bis DS-058, DS-060 sowie DS-062 bis DS-065 und DS-067 bis DS-101, jeweils mit den unten
+  DS-051 bis DS-058, DS-060 sowie DS-062 bis DS-065 und DS-067 bis DS-102, jeweils mit den unten
   genannten Präzisierungen;
 - **ersetzt:** DS-013 durch DS-043, DS-015 durch DS-045, DS-016 durch DS-046,
   DS-019 durch DS-059, DS-050 durch DS-065 und DS-066 durch DS-078;
@@ -1656,3 +1656,18 @@ Lesen ist weiterhin keine fachliche Kenntnisnahme durch den Anwender.
 DS-101 präzisiert DS-069 und DS-099. Die Implementierung ist in den technisch
 geprüften RC140-Cowork-Paketen enthalten. Modellrouting und sichtbare native
 Auswahl bleiben gesonderte menschliche Abnahmen, keine automatische Freigabe.
+
+## DS-102 – Passive Konvertierung getrennt von strenger Anonymisierung
+
+Die reine Standalone-Markdown-Konvertierung darf PDF-Formulare, Signaturen,
+Links, Lesezeichen und eingebettete PPTX-OLE-Objekte als **nicht extrahierte**
+Objekte behandeln, wenn die sichere Text-/OCR-Extraktion ohne Ausführung oder
+Nachladen möglich ist. Das Ergebnis meldet unvollständige Quellabdeckung; es
+behauptet keine vollständige Konvertierung. Verschlüsselte PDFs, XFA,
+Makros, ActiveX, externe Vorlagen und unklare Paketbeziehungen bleiben gesperrt.
+Der Markdown-first-Anonymisierungsweg behält sein strengeres Preflight-Gate;
+keine passive Ausnahme darf durch diese Produktgrenze gelangen. Die Abgrenzung
+ist mit realen lokalen PDF-/PPTX-Dateien und isolierten Worker-Goldenfällen zu
+prüfen. Für macOS ergänzen nativ geprüfte Intel-/ARM-DMGs den ZIP-Weg, ohne
+Developer-ID-Signatur, Notarisierung oder menschliche Gatekeeper-Abnahme zu
+ersetzen. Siehe BL-010.36.
