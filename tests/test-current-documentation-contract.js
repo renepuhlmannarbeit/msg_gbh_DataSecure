@@ -92,20 +92,26 @@ test('release truth binds the published candidate while keeping human approval s
   const publishedVersion = version.replace(/rc\d+$/iu, `rc${published[1]}`);
   // A platform-only release must not silently relabel other product binaries.
   const macPublished = /RC(\d+) ist als Standalone-macOS-Vorabkandidat aus Quellcommit\s+`([0-9a-f]{40})` veröffentlicht/u.exec(release);
-  const macRc = macPublished ? `RC${macPublished[1]}` : publishedRc;
-  const macVersion = macPublished ? version.replace(/rc\d+$/iu, `rc${macPublished[1]}`) : publishedVersion;
+  const standalonePublished = /### RC(\d+) – Standalone Windows sowie macOS ZIP und zusätzlich DMG[\s\S]{0,450}?Quellcommit `([0-9a-f]{40})`/u.exec(release);
+  const standaloneRc = standalonePublished ? `RC${standalonePublished[1]}` : null;
+  const windowsRc = standaloneRc || publishedRc;
+  const windowsVersion = version.replace(/rc\d+$/iu, `rc${windowsRc.slice(2)}`);
+  const macRc = standaloneRc || (macPublished ? `RC${macPublished[1]}` : publishedRc);
+  const macVersion = version.replace(/rc\d+$/iu, `rc${macRc.slice(2)}`);
   const readme = read('README.md');
   assert.strictEqual(readme.split(/\r?\n/u)[0],
-    macRc === publishedRc
-      ? `# GBH DataSecure – Cowork und Standalone ${publishedRc}`
-      : `# GBH DataSecure – Standalone macOS ${macRc} · Windows/Linux und Cowork ${publishedRc}`,
+    standaloneRc
+      ? `# GBH DataSecure – Standalone Windows/macOS ${standaloneRc} · Linux und Cowork ${publishedRc}`
+      : macRc === publishedRc
+        ? `# GBH DataSecure – Cowork und Standalone ${publishedRc}`
+        : `# GBH DataSecure – Standalone macOS ${macRc} · Windows/Linux und Cowork ${publishedRc}`,
     'product title must agree with published candidates, not just source version');
   assert.ok(readme.includes(`Quellstand: ${version}`));
   assert.ok(release.includes(`releases/tag/v${publishedVersion}`),
     'published release link must match the explicitly bound candidate');
   const downloadRoot = 'https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download';
   const publishedArchives = [
-    [publishedVersion, `DataSecure-Standalone-${publishedVersion}-windows-x64.zip`],
+    [windowsVersion, `DataSecure-Standalone-${windowsVersion}-windows-x64.zip`],
     [publishedVersion, `DataSecure-Standalone-${publishedVersion}-linux-x64-glibc.zip`],
     [publishedVersion, `DataSecure-Privacy-Preflight-windows-x64-v${publishedVersion}.zip`],
     ...['macos-x64', 'macos-arm64'].map(target => [macVersion, `DataSecure-Standalone-${macVersion}-${target}.zip`])
@@ -115,7 +121,17 @@ test('release truth binds the published candidate while keeping human approval s
       `README download must bind ${name} to its published release`);
   }
   assert.ok(release.includes(`releases/tag/v${macVersion}`));
-  if (macPublished && macRc !== publishedRc) {
+  if (standalonePublished) {
+    assert.ok(readme.includes(standalonePublished[2]), 'Standalone source commit must remain explicit');
+    assert.ok(release.includes(`releases/tag/v${windowsVersion}`));
+    for (const target of ['macos-x64', 'macos-arm64']) {
+      assert.ok(readme.includes(`${downloadRoot}/v${macVersion}/DataSecure-Standalone-${macVersion}-${target}.dmg`),
+        'additional DMG must link to the same current Mac release as the retained ZIP');
+    }
+    assert.ok(!readme.includes(`DataSecure-Privacy-Preflight-windows-x64-v${windowsVersion}.zip`),
+      'Standalone-only publication must not invent a Cowork package');
+  }
+  if (!standalonePublished && macPublished && macRc !== publishedRc) {
     assert.ok(readme.includes(macPublished[2]), 'Mac source commit must remain explicit');
     for (const target of ['windows-x64', 'linux-x64-glibc']) {
       assert.ok(!readme.includes(`DataSecure-Standalone-${macVersion}-${target}.zip`),
@@ -125,11 +141,11 @@ test('release truth binds the published candidate while keeping human approval s
       'Mac-only publication must not invent a new Cowork download');
   }
   assert.match(release, /Menschliche N3\/N4-[\s\S]{0,160}Produktionsfreigaben bleiben offen/u);
-  if (publishedRc !== currentRc && macRc !== currentRc) {
+  if (publishedRc !== currentRc && macRc !== currentRc && windowsRc !== currentRc) {
     assert.match(release, new RegExp(`aktuelle Quellstand ist ${currentRc}-Entwicklungsstand`, 'u'),
       'a newer unbound source RC must remain explicitly marked as development state');
   }
-  if (publishedRc === currentRc || macRc === currentRc) {
+  if (publishedRc === currentRc || macRc === currentRc || windowsRc === currentRc) {
     assert.doesNotMatch(release.split('### RC139 – historischer Cowork-Kandidat')[0],
       /aktuelle Quellstand ist RC\d+-Entwicklungsstand/u,
       'a published current RC must not be marked as development state');

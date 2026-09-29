@@ -1,6 +1,6 @@
 # Formale N3/N4-Abnahme mit Windows und macOS
 
-Stand: 23.09.2026 · Standalone macOS 3.2.0-rc141 veröffentlicht; Standalone Windows/Linux und Cowork bleiben RC140; menschliche Abnahme offen
+Stand: 29.09.2026 · Standalone Windows/macOS 3.2.0-rc142 veröffentlicht; Standalone Linux und Cowork bleiben RC140; menschliche Abnahme offen
 
 **Mac-Sperrhinweis MAC-20260923:** Standalone-RC140 ist aufgrund seines
 POSIX-Helfers kein macOS-13.5-Kandidat (Intel mindestens 15.0, ARM mindestens
@@ -9,18 +9,30 @@ Cowork-Paketlieferung und sichtbare AppKit-Abnahme offen. Die alten ZIPs enthalt
 Quellkorrekturen nicht; eine erfolgreiche Installation auf neuerem macOS
 belegt keine Unterstützung der deklarierten 13.5.
 
-**Neuer technischer Mac-Prüfstand:** RC141-Standalone für Intel und ARM ist
+**Aktueller Standalone-Prüfstand:** RC142 für Windows x64 sowie macOS Intel und
+ARM ist an Commit `c0ddd11ecf366d32ff9962bfeffc6519b01a8c5d` gebunden. Das
+[RC142-Vorabrelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc142)
+enthält weiterhin beide architekturspezifischen Mac-ZIPs und zusätzlich beide
+DMGs, jeweils mit SHA-256-Datei. Windows-PKG-04/INT-13 bestand zwei bytegleiche
+Paketbauten und beide nativen Smokes; der native Mac-Lauf `36562812021` prüfte
+ZIP, DMG, identischen App-Inhalt, Signatur und Start auf beiden Architekturen.
+Für eine neue Standalone-N3/N4-Kampagne nur diese exakten RC142-Assets und den
+RC142-Commit zusammen verwenden. DMGs sind nicht notarisiert; sichtbare
+Finder-/Gatekeeper-Installation auf dem Ziel-Mac und menschliche Abnahme bleiben
+`NOT_RUN`. Linux-Standalone und Cowork behalten RC140; eine Cowork-Kampagne darf
+nicht als RC142-Stand-alone-Nachweis ausgegeben werden.
+
+**Historischer Mac-Prüfstand:** RC141-Standalone für Intel und ARM ist
 an Commit `1d5a67d37bd72a30f70ee1db5f5ef2a45ee6e542` und den bestandenen
 Lauf `35875613438` gebunden. Beide ZIPs samt Hashes sind im
 [RC141-Nachweis](../../REVIEW_PRODUCT_HOSTS_2026-09-23.md#rc141--nativer-neubau-und-genaue-nachweisgrenze)
 erfasst und im [dauerhaften RC141-Mac-Vorabrelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc141)
 mit unveränderten ZIP-Bytes veröffentlicht. Für einen separaten Mac-Test dieses
 architekturspezifische ZIP, seinen Hash und den RC141-Buildcommit verwenden.
-Dieser technische Vorlauf ist noch keine gemeinsame Windows-/Mac-Kampagne:
-kein neuer Windows-/Cowork-Kandidat und keine menschliche Evidence wurden
-damit erzeugt. Für die formale Kampagne keine RC140-Windows- und RC141-Mac-
-Pakete als denselben Produktcommit zusammenfassen. N3/N4-Vorlagen bleiben
-`NOT_RUN`; tatsächliches macOS 13.5 und Finder-/Gatekeeper-Abnahme sind offen.
+Dieser technische Vorlauf war keine gemeinsame Windows-/Mac-Kampagne:
+RC140-Windows- und RC141-Mac-Pakete dürfen nicht als denselben Produktcommit
+zusammengefasst werden. Für RC141 wie RC142 bleiben tatsächliches macOS 13.5
+und Finder-/Gatekeeper-Abnahme offen.
 
 Dieses Verzeichnis steuert die gemeinsame Abnahme durch zwei Personen: eine auf
 Windows x64 und eine auf einem Mac. Beide verwenden dasselbe Git-Repository und
@@ -55,8 +67,10 @@ Zielen bestanden. Danach folgt weiterhin
 die beobachtete Installation und Bedienung in Claude; ein maschineller
 MCP-Roundtrip ist keine sichtbare Anwenderabnahme.
 
-RC139- und RC137-Pakete bleiben historische Kandidaten; die formale RC140-
-Kampagne muss die neuen, commitgebundenen Pakethashes ausdrücklich wählen.
+RC139- und RC137-Pakete bleiben historische Kandidaten; eine formale RC140-
+Cowork-Kampagne muss deren commitgebundene Cowork-Pakethashes ausdrücklich
+wählen. Die RC142-Standalone-Kampagne verwendet stattdessen die oben gebundenen
+eigenen Pakete und denselben RC142-Commit auf Windows und Mac.
 Ein Runner-Smoke ersetzt nicht den Browser-/Finder-/Gatekeeper-Fresh-Install
 auf einem echten Mac.
 

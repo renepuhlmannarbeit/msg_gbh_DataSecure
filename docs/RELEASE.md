@@ -1,8 +1,39 @@
 # Release- und Distributionsvertrag
 
-Stand: 23.09.2026 · 3.2.0-rc142
+Stand: 29.09.2026 · 3.2.0-rc142
 
-Der aktuelle Quellstand ist RC142-Entwicklungsstand und noch kein neu gebundener Paketkandidat.
+Der aktuelle Quellstand ist als RC142-Standalone-Vorabkandidat gebunden; Linux und Cowork behalten RC140.
+
+### RC142 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
+
+Das [RC142-Vorabrelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc142)
+bindet exakt Quellcommit `c0ddd11ecf366d32ff9962bfeffc6519b01a8c5d`.
+Die [Pflicht-CI](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/36562791648)
+und die lokale vollständige Produktsuite sind grün. Windows-PKG-04/INT-13
+bestätigt zwei saubere, bytegleiche Builds und native Smokes beider ZIPs.
+Der Windows-ZIP-Hash ist
+`4a358f4534f6b678265406a8aa1a7829ba241a97562cea30a997a2ee5c6e08f1`.
+Der exakt gepackte Kandidat konvertierte zusätzlich die fünf im RC140-UAT
+gescheiterten realen PDF-/PPTX-Dateien ohne Inhaltsprotokoll; jede Ausgabe
+behielt den ehrlichen Grad `incomplete`. Die passive Ausnahme gilt nur für reine
+Standalone-Konvertierung, nicht für Anonymisierung oder Cowork.
+
+Der [native Mac-Lauf](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/36562812021)
+prüfte Intel und Apple Silicon separat: dieselbe ad-hoc-signierte App im
+unverändert weiter angebotenen ZIP und im zusätzlichen DMG, Architekturen,
+Signatur, Start, gemountetes DMG und `/Applications`-Link. Die lokal erneut
+abgeglichenen Release-Digests sind:
+
+| Architektur | ZIP SHA-256 | DMG SHA-256 |
+|---|---|---|
+| macOS Intel | `d1751bc52b8d97a706529cea5968a91caaf032daca3a1339db280067e3b3f3b2` | `09abfcd226637f87e7eb1f8590083d9666c70d2c0181ef80e9d43caae76bff4d` |
+| macOS Apple Silicon | `6727eaad725b3240d77633fa5ccf84c782e7f615790766db6a3d99e297789b66` | `2072ac1bdd8e9dabd649e9ad9f2b445e59a93c4d36f588c903fc9027ccb31aa8` |
+
+ZIP und DMG sind Alternativen, keine unterschiedlichen Funktionen. Ein DMG
+ersetzt weder Developer-ID-Signatur noch Apple-Notarisierung. Sichtbare
+Finder-/Gatekeeper-/13.5- und menschliche N3/N4-Abnahme bleiben offen.
+Die RC141- und RC140-Assets werden nicht überschrieben; RC142 enthält keine
+neuen Linux- oder Cowork-Pakete.
 
 RC141 ist als Standalone-macOS-Vorabkandidat aus Quellcommit
 `1d5a67d37bd72a30f70ee1db5f5ef2a45ee6e542` veröffentlicht:

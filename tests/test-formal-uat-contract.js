@@ -33,8 +33,15 @@ test('formal kit contains the complete two-person campaign contract', () => {
     `RC${boundCandidate[1]} ist als technischer Kandidat beider getrennten Produkte[\\s\\S]{0,120}` +
     `\`${boundCandidate[2]}\` gebunden und veröffentlicht`, 'u'));
   if (boundCandidate[1] !== campaignLabel) {
+    const standaloneCandidate = /### RC(\d+) – Standalone Windows sowie macOS ZIP und zusätzlich DMG[\s\S]{0,300}?Quellcommit `([0-9a-f]{40})`/u.exec(release);
     const macCandidate = /RC(\d+) ist als Standalone-macOS-Vorabkandidat aus Quellcommit\s+`([0-9a-f]{40})` veröffentlicht/u.exec(release);
-    if (macCandidate?.[1] === campaignLabel) {
+    if (standaloneCandidate?.[1] === campaignLabel) {
+      assert.ok(overview.includes(standaloneCandidate[2]), 'Standalone Windows/Mac candidate must bind its exact source commit');
+      assert.ok(overview.includes(`/releases/tag/v${productVersion}`));
+      assert.match(overview, /Windows-PKG-04\/INT-13 bestand zwei bytegleiche/u);
+      assert.match(overview, /beide\s+DMGs/u);
+      assert.match(overview, /Linux-Standalone und Cowork behalten RC\d+/u);
+    } else if (macCandidate?.[1] === campaignLabel) {
       assert.ok(overview.includes(macCandidate[2]), 'separate Mac candidate must bind its exact source commit');
       assert.ok(overview.includes(`/releases/tag/v${productVersion}`));
       assert.match(overview, /keine gemeinsame Windows-\/Mac-Kampagne/u);

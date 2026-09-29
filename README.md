@@ -1,15 +1,18 @@
-# GBH DataSecure – Standalone macOS RC141 · Windows/Linux und Cowork RC140
+# GBH DataSecure – Standalone Windows/macOS RC142 · Linux und Cowork RC140
 
 Quellstand: 3.2.0-rc142
 
-RC141 enthält die Mac-Nachreviewkorrekturen: Standalone für Intel und Apple
-Silicon wurde nativ gebaut und mit Konvertierung, Anonymisierung, Zuordnung,
-Verlauf und LaunchServices geprüft. Die unveränderten ZIPs samt Prüfsummen sind
-im [dauerhaften RC141-Mac-Vorabrelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc141)
-veröffentlicht, aus Quellcommit `1d5a67d37bd72a30f70ee1db5f5ef2a45ee6e542`.
-[Bestandener Mac-Lauf](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/35875613438)
-und [Commitbindung mit exakten Pakethashes](docs/REVIEW_PRODUCT_HOSTS_2026-09-23.md#rc141--nativer-neubau-und-genaue-nachweisgrenze).
-Standalone Windows/Linux und sämtliche Cowork-Pakete bleiben auf RC140.
+RC142 behebt die reine Windows-Markdown-Konvertierung für PDF-/PPTX-Quellen mit
+passiven Formular-, Signatur-, Link- und eingebetteten OLE-Objekten. Diese
+Objekte werden nicht ausgeführt oder als vollständig extrahiert ausgegeben;
+der Anonymisierungsweg bleibt strenger. Standalone Windows hat zwei bytegleiche
+PKG-04-Builds samt nativen Smokes bestanden. Auf Intel- und Apple-Silicon-Macs
+wurden **ZIP und zusätzlich DMG** aus derselben App nativ geprüft.
+[RC142-Standalone-Vorabrelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc142)
+bindet Commit `c0ddd11ecf366d32ff9962bfeffc6519b01a8c5d`;
+[beide Mac-Jobs](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/36562812021)
+und die [Release-Nachweise](docs/RELEASE.md) sind getrennt von sichtbarer UAT.
+Standalone Linux und sämtliche Cowork-Pakete bleiben auf RC140.
 
 Die Überschrift nennt zwei getrennte Produkte. Auch bei gleicher RC-Nummer
 bleiben ihre Pakete und Abnahmen getrennt. Ein neuer Quellstand aktualisiert
@@ -31,34 +34,35 @@ freigegebene Markdown-Ergebnisse.
 ## Standalone-App installieren (Windows, macOS und Linux)
 
 Für die Standalone-App werden **weder Claude noch Cowork, Node.js, Python oder
-Rust** benötigt. Das zur eigenen CPU passende Paket vollständig entpacken und
-nicht direkt aus dem ZIP starten:
+Rust** benötigt. Das zur eigenen CPU passende ZIP vollständig entpacken und
+nicht direkt aus dem ZIP starten; auf dem Mac gibt es alternativ ein DMG:
 
-**[macOS: RC141-Pakete und Prüfsummen herunterladen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc141)** ·
-**[Windows/Linux und Cowork: RC140-Pakete und Prüfsummen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc140)**
+**[Windows und macOS: RC142-ZIPs, Mac-DMGs und Prüfsummen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc142)** ·
+**[Linux und Cowork: RC140-Pakete und Prüfsummen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc140)**
 
 **Mac-Kompatibilitätshinweis:** Der erneute Paketreview hat in den veröffentlichten
 Standalone-RC140-ZIPs einen Helfer mit höherer Mindestversion gefunden: Intel
 verlangt macOS 15, Apple Silicon macOS 14. Die bisherige Angabe 13.5 war für
-diese ZIPs falsch. Für Mac die unten verlinkten RC141-ZIPs verwenden:
+diese ZIPs falsch. Für Mac die unten verlinkten RC142-ZIPs oder DMGs verwenden:
 ihr Binärvertrag ist für macOS 13.5 geprüft; ein realer Lauf auf 13.5 bleibt offen.
 Die RC140-Downloads werden nicht verändert. Die Mac-Pakete bleiben interne,
 ad-hoc-signierte Piloten ohne bestätigte Finder-/Gatekeeper-Abnahme.
 
 - **Windows 10/11 x64:**
-  [DataSecure-Standalone-3.2.0-rc140-windows-x64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc140/DataSecure-Standalone-3.2.0-rc140-windows-x64.zip)
+  [DataSecure-Standalone-3.2.0-rc142-windows-x64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc142/DataSecure-Standalone-3.2.0-rc142-windows-x64.zip)
   herunterladen, vollständig entpacken und
   `DataSecure Standalone.exe` doppelklicken. Microsoft Edge WebView2 muss als
   Windows-Systemkomponente vorhanden sein. [Ausführliche Windows-Anleitung](apps/datasecure-standalone/START-WINDOWS.md)
 - **Mac mit Intel-Prozessor:**
-  [DataSecure-Standalone-3.2.0-rc141-macos-x64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc141/DataSecure-Standalone-3.2.0-rc141-macos-x64.zip)
-  herunterladen, die separate `.zip.sha256` derselben Release-Seite prüfen,
-  im Finder entpacken, den enthaltenen gleichnamigen Ordner öffnen und erst
-  daraus `DataSecure Standalone.app` nach **Programme** ziehen.
+  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc142/DataSecure-Standalone-3.2.0-rc142-macos-x64.zip)
+  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc142/DataSecure-Standalone-3.2.0-rc142-macos-x64.dmg)
+  herunterladen, die jeweils passende `.sha256` derselben Release-Seite prüfen
+  und die enthaltene `DataSecure Standalone.app` nach **Programme** ziehen.
 - **Mac mit Apple Silicon (M1 oder neuer):**
-  [DataSecure-Standalone-3.2.0-rc141-macos-arm64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc141/DataSecure-Standalone-3.2.0-rc141-macos-arm64.zip)
+  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc142/DataSecure-Standalone-3.2.0-rc142-macos-arm64.zip)
+  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc142/DataSecure-Standalone-3.2.0-rc142-macos-arm64.dmg)
   herunterladen und genauso installieren.
-  Die Architektur zeigt **Apple-Menü → Über diesen Mac**. RC141 wurde auf
+  Die Architektur zeigt **Apple-Menü → Über diesen Mac**. RC142 wurde auf
   macOS 15 (Intel) und macOS 14 (ARM) ausgeführt; macOS 13.5 ist die deklarierte,
   in allen nativen Komponenten geprüfte Mindestversion (siehe Hinweis oben).
   [Ausführliche macOS-Anleitung](apps/datasecure-standalone/MACOS-START.md)
@@ -67,7 +71,7 @@ ad-hoc-signierte Piloten ohne bestätigte Finder-/Gatekeeper-Abnahme.
   vollständig entpacken, die enthaltene AppImage ausführbar machen und starten.
   Dieses Paket ist technisch nativ geprüft; die sichtbare Linux-UAT ist offen.
 
-Die macOS-Pakete sind interne, nur ad-hoc-signierte Piloten: Der tatsächliche
+Die macOS-ZIPs und -DMGs sind interne, nur ad-hoc-signierte Piloten: Der tatsächliche
 Browser-/Finder-/Gatekeeper-Installationsweg auf Intel und Apple Silicon ist
 noch nicht abgenommen. Sie sind nicht mit einer Apple Developer ID signiert
 oder notariell beglaubigt. Falls macOS den ersten Start wegen fehlender Identifizierung oder

@@ -1,5 +1,15 @@
 # DataSecure Standalone auf macOS starten
 
+Aktuell für Standalone: [RC142-Vorabrelease mit ZIP **und zusätzlich DMG** für
+Intel und Apple Silicon](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc142).
+Die beiden nativen Mac-Jobs aus Commit `c0ddd11ecf366d32ff9962bfeffc6519b01a8c5d`
+[sind bestanden](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/36562812021):
+ZIP und DMG enthalten dieselbe signierte App; beide Pakete wurden geprüft,
+das DMG gemountet und die App daraus gestartet. Die veröffentlichten Digests
+stimmen mit den lokal gesicherten Dateien überein. Die sichtbare
+Finder-/Gatekeeper-Installation auf den Macs der Testpersonen bleibt offen.
+
+Historischer RC141-Nachweis:
 Status: Die veröffentlichten RC141-ZIPs aus Commit
 `1d5a67d37bd72a30f70ee1db5f5ef2a45ee6e542` bestehen den nativen Intel-/ARM-Lauf
 [`35875613438`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/35875613438)
@@ -45,14 +55,14 @@ die tatsächlich eingebettete Mindestversion und Systembibliotheken **aller**
 Mach-O-Dateien einschließlich des Canvas-Addons. Er startet die entpackte App
 direkt sowie über LaunchServices und prüft Konvertierung, Anonymisierung,
 Zuordnung, Fehlerfälle und Verlauf mit der gebündelten Runtime. Diese neuen
-Gates bestehen für RC141 auf Intel und ARM aus dem oben gebundenen
-Commit. Das ersetzt nicht die nachfolgende sichtbare
+Gates bestehen für RC141 und RC142 auf Intel und ARM aus ihren jeweils gebundenen
+Commits. Das ersetzt nicht die nachfolgende sichtbare
 Finder-/Gatekeeper-/Picker-/VoiceOver-/Anwenderabnahme.
 
-Der DMG-Weg ist ein zusätzlicher, noch nativ zu belegender Installationsweg:
+Der DMG-Weg ist ein zusätzlicher, in RC142 nativ belegter Installationsweg:
 DMG öffnen und die enthaltene App auf **Programme** ziehen. Er enthält dieselbe
-App wie das ZIP und muss vor Bereitstellung separat auf Integrität, Signatur,
-Start und Architektur geprüft werden. Ein DMG allein behebt jedoch keine
+App wie das ZIP und wurde vor Bereitstellung separat auf Integrität, Signatur,
+Start und Architektur geprüft. Ein DMG allein behebt jedoch keine
 Gatekeeper-Sperre. Solange Developer-ID-Signatur und Apple-Notarisierung fehlen,
 bleibt auch der DMG ein ad-hoc-signiertes internes Pilotpaket; die unten
 beschriebene app-spezifische Freigabe kann weiterhin nötig sein.
@@ -65,19 +75,21 @@ und [Tauri-Builds mit GitHub Actions](https://v2.tauri.app/distribute/pipelines/
 
 ## Passendes Paket
 
-- Intel-Mac: [DataSecure-Standalone-3.2.0-rc141-macos-x64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc141/DataSecure-Standalone-3.2.0-rc141-macos-x64.zip)
-  und [SHA-256-Datei](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc141/DataSecure-Standalone-3.2.0-rc141-macos-x64.zip.sha256).
+- Intel-Mac: [RC142-ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc142/DataSecure-Standalone-3.2.0-rc142-macos-x64.zip)
+  oder [RC142-DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc142/DataSecure-Standalone-3.2.0-rc142-macos-x64.dmg),
+  jeweils mit gleichnamiger `.sha256` auf der Release-Seite.
 - Apple Silicon (M1 oder neuer):
-  [DataSecure-Standalone-3.2.0-rc141-macos-arm64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc141/DataSecure-Standalone-3.2.0-rc141-macos-arm64.zip)
-  und [SHA-256-Datei](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc141/DataSecure-Standalone-3.2.0-rc141-macos-arm64.zip.sha256).
+  [RC142-ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc142/DataSecure-Standalone-3.2.0-rc142-macos-arm64.zip)
+  oder [RC142-DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc142/DataSecure-Standalone-3.2.0-rc142-macos-arm64.dmg),
+  jeweils mit gleichnamiger `.sha256` auf der Release-Seite.
 - Historische RC140-ZIPs: Intel mindestens macOS 15, ARM mindestens macOS 14.
-- RC141-ZIPs: minOS-Binärvertrag 13.5 für beide Architekturen geprüft;
+- RC141-ZIPs sowie RC142-ZIPs/DMGs: minOS-Binärvertrag 13.5 für beide Architekturen geprüft;
   tatsächlich ausgeführt auf macOS 15 (Intel) und 14 (ARM). Abnahme auf 13.5 bleibt offen.
 
 Node, PDF-Parser, Canvas-Bilddecoder, Tesseract-WASM und deutsche/englische
 OCR-Modelle sind enthalten. Anwender installieren weder Rust/Xcode noch Node,
 Python, Homebrew, LibreOffice oder ein eigenes Tesseract. Die Laufzeitprüfung
-der RC140-/RC141-ZIPs fand nur macOS-Systembibliotheken als native Ladeabhängigkeiten.
+der RC140-/RC141-/RC142-Pakete fand nur macOS-Systembibliotheken als native Ladeabhängigkeiten.
 Ein fehlendes Build-Tool ist deshalb keine Erklärung für einen Endanwenderfehler.
 
 Das ZIP enthält einen Ordner
@@ -89,7 +101,7 @@ zum Beispiel für Apple Silicon:
 
 ```sh
 cd ~/Downloads
-shasum -a 256 -c DataSecure-Standalone-3.2.0-rc141-macos-arm64.zip.sha256
+shasum -a 256 -c DataSecure-Standalone-3.2.0-rc142-macos-arm64.zip.sha256
 ```
 
 Nur bei `OK` fortfahren. Den Versions- und Architekturnamen im Befehl an die
@@ -97,6 +109,12 @@ tatsächlich heruntergeladenen Dateien anpassen. Die interne `SHA256SUMS` ist
 kein Ersatz für diese Prüfung des heruntergeladenen ZIPs.
 
 ## Installation eines ad-hoc-signierten internen Pilotpakets
+
+Beim **DMG** die passende `.dmg` und `.dmg.sha256` gemeinsam herunterladen,
+analog die Prüfsumme kontrollieren, das DMG im Finder öffnen und die sichtbare
+`DataSecure Standalone.app` auf **Programme** ziehen. Danach das DMG auswerfen.
+Beim **ZIP** gelten die folgenden Schritte 1–2. Ab Schritt 3 ist der Weg für
+beide Pakete gleich:
 
 1. Das passende ZIP im Finder öffnen und den darin enthaltenen Ordner
    `DataSecure-Standalone-<Version>-macos-<Architektur>` öffnen.
