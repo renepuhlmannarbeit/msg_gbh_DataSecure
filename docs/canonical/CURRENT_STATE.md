@@ -1,15 +1,24 @@
 # Aktueller Iststand
 
-Stand: 29.09.2026 · 3.2.0-rc151 · Standalone Windows RC151 und macOS RC142 als getrennte Vorabkandidaten veröffentlicht; Standalone Linux und Cowork bleiben RC140; Modellabnahme und N3/N4 offen
+Stand: 29.09.2026 · 3.2.0-rc151 · Standalone und Cowork als getrennte RC151-Vorabkandidaten auf ihren Zielplattformen veröffentlicht; Modellabnahme und N3/N4 offen
 
-Windows RC151 bindet den sauberen Quellcommit
+Alle RC151-Pakete binden den sauberen Quellcommit
 `fdb8288c9bef2a64eeb10d584e1bf59a6cb864c3`. Die Pflicht-CI und zwei
 bytegleiche, nativ gestartete PKG-04-/INT-13-Archive bestanden; der ZIP-Hash ist
 `5108d3957c4987088519cf26ce2c5aba4df5611f9f993aa17c027ab1a82230c7`.
-Der vollständige 140-Dateien-Zielhostlauf mit diesem Paket und menschliche
-N3/N4-Abnahme stehen noch aus. Die nachfolgenden „lokalen“ Befunde beschreiben
-die Entstehung des jetzt veröffentlichten Windows-Kandidaten, keine
-Mac-/Linux-/Cowork-Paketfreigabe.
+Standalone-macOS wurde auf Intel und Apple Silicon als ZIP und zusätzlich DMG
+nativ geprüft ([Lauf 36618883915](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/36618883915));
+das Linux-AppImage-ZIP bestand seinen nativen Start
+([Lauf 36618884302](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/36618884302)).
+Die drei Cowork-Normal-ZIPs bestanden ihre nativen Zielplattform-Smokes
+([Lauf 36618886944](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/36618886944));
+Windows-Normal und -Debug sind an die leere UAT-Vorlage gebunden
+([Lauf 36618887161](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/36618887161)).
+Der vollständige 140-Dateien-Zielhostlauf mit RC151-Standalone und menschliche
+N3/N4-Abnahme stehen noch aus. Auch Mac-Finder-/Gatekeeper-, Linux-Desktop-
+und Cowork-Modellabnahmen sind damit nicht ersetzt. Die nachfolgenden
+„lokalen“ Befunde beschreiben die Entstehung des Kandidaten, nicht zusätzliche
+Zielhostfreigaben.
 
 Lokaler RC149-UAT-Nachtrag BL-010.42: Ein 140-Dateien-Korpus ergab 138
 anonymisierte Ergebnisse und zwei sicher gestoppte DOCX. Die technischen
@@ -36,16 +45,17 @@ lieferte drei anonymisierte Markdown-Ergebnisse samt Zuordnung. Die fünf
 Benutzerdateien wurden noch nicht durch die Anonymisierung geführt; eine
 Freigabe des vollständigen PPTX-Inhalts ist daraus nicht abzuleiten. XLSX
 bleibt direkt Markdown-first; ein CSV-
-Zwischenschritt wäre für mehrblättrige Mappen verlustbehaftet. Cowork und
-die bereits veröffentlichten Pakete ändern sich dadurch nicht.
+Zwischenschritt wäre für mehrblättrige Mappen verlustbehaftet. Diese
+Standalone-Änderung erweitert Coworks getrennte Formatgrenze nicht.
 
 Vor RC151 lokal vorbereiteter Standalone-Nachtrag BL-010.37: Eine vor
 `Starten` vorbereitete Auswahl kann über Datei-/Ordnerpicker oder Drop ergänzt
 werden. Doppelte Quellen werden übersprungen; ungültige oder zu große Nachträge
 lassen die bestehende Queue unverändert. Nach `Starten` gehört Neues in einen
-eigenen Lauf. Automatisierte Prüfungen und ein neuer lokaler Kandidat werden
-vor der sichtbaren Benutzerabnahme durchgeführt. Die Windows-Änderung ist
-in RC151 paketgebunden; Mac-, Linux- und Cowork-Pakete bleiben unverändert.
+eigenen Lauf. Automatisierte Prüfungen und ein lokaler Windows-Kandidat wurden
+vor der sichtbaren Benutzerabnahme durchgeführt. Die Änderung ist
+in den getrennten RC151-Standalone-Paketen gebunden; das Cowork-Paket folgt
+seinem eigenen, engeren Produktvertrag.
 BL-010.38 trennt zusätzlich einen abgeschlossenen Lauf von der Vorbereitung
 des nächsten. Der RC143-Zielhostbefund mit sieben sicher gestoppten PDFs ist
 auf das bisherige `PDF_OBJECT_COVERAGE_UNVERIFIED`-Gate zurückgeführt.
@@ -53,7 +63,7 @@ DS-103/BL-010.39 führt jetzt auch Standalone-PDF/PPTX über die bereits
 gebündelte passive Markdown-Extraktion in die nachgelagerte Anonymisierung.
 Die Quellabdeckung bleibt ausdrücklich unvollständig; unsichere Quellen
 stoppen weiter. Abschlussansicht, bewusste Rücksetzung, Warnanzeige und
-dieser Privacy-Übergang sind mit Windows RC151 paketgebunden, aber noch
+dieser Privacy-Übergang sind mit den RC151-Standalone-Paketen gebunden, aber noch
 nicht durch einen erneuten vollständigen sichtbaren Zielhostlauf belegt.
 BL-010.40 ergänzt den RC144-Zielhostbefund 11/12: Die lokale Reviewphase
 startete, doch ein sichtbares Prüffenster war nicht nachweisbar, während der

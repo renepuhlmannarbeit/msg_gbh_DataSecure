@@ -1,32 +1,37 @@
-# GBH DataSecure – Standalone Windows RC151, macOS RC142 · Linux und Cowork RC140
+# GBH DataSecure – Standalone und Cowork RC151
 
 Quellstand: 3.2.0-rc151
 
-Der [Windows-Standalone-Vorabkandidat RC151](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc151)
+Der [produktgetrennte Vorabkandidat RC151](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc151)
 bindet Quellcommit `fdb8288c9bef2a64eeb10d584e1bf59a6cb864c3`.
 Zwei saubere, bytegleiche Windows-Bauten bestanden Paket- und native Starttests;
-die Pflicht-CI ist grün. RC151 verbessert die Vorbereitung neuer Läufe,
+die Pflicht-CI ist grün. Standalone wurde außerdem auf macOS Intel und Apple
+Silicon als ZIP und DMG sowie auf Linux x64 als ZIP nativ gebaut und geprüft.
+Das getrennte Cowork-Plugin bestand seine nativen Paketsmokes auf Windows x64
+und beiden Mac-Architekturen; Windows-Normal und -Debug binden dieselbe
+leere UAT-Vorlage. RC151 verbessert die Vorbereitung neuer Läufe,
 Datei- und Ordnerauswahl, verständliche Fehlerhinweise und lokale
 Prüfentscheidungen. Eine erneute sichtbare Abnahme des 140-Dateien-Korpus und
-N3/N4 stehen noch aus; RC151 ist keine Produktionsfreigabe.
+die menschlichen N3/N4-, macOS-/Linux-Installations- und Cowork-Modellabnahmen
+stehen noch aus; RC151 ist keine Produktionsfreigabe.
 
-RC142 behebt die reine Windows-Markdown-Konvertierung für PDF-/PPTX-Quellen mit
+RC142 behob die reine Windows-Markdown-Konvertierung für PDF-/PPTX-Quellen mit
 passiven Formular-, Signatur-, Link- und eingebetteten OLE-Objekten. Diese
 Objekte werden nicht ausgeführt oder als vollständig extrahiert ausgegeben;
-der Anonymisierungsweg bleibt strenger. Standalone Windows hat zwei bytegleiche
+in RC142 blieb der Anonymisierungsweg strenger. Standalone Windows hat zwei bytegleiche
 PKG-04-Builds samt nativen Smokes bestanden. Auf Intel- und Apple-Silicon-Macs
 wurden **ZIP und zusätzlich DMG** aus derselben App nativ geprüft.
 [RC142-Standalone-Vorabrelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc142)
 bindet Commit `c0ddd11ecf366d32ff9962bfeffc6519b01a8c5d`;
 [beide Mac-Jobs](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/36562812021)
 und die [Release-Nachweise](docs/RELEASE.md) sind getrennt von sichtbarer UAT.
-Standalone Linux und sämtliche Cowork-Pakete bleiben auf RC140.
+Das ist historische Evidenz für RC142; die aktuellen Pakete stehen bei RC151.
 
 Die Überschrift nennt zwei getrennte Produkte. Auch bei gleicher RC-Nummer
 bleiben ihre Pakete und Abnahmen getrennt. Ein neuer Quellstand aktualisiert
 bestehende Downloads nicht automatisch.
 
-Der letzte gemeinsame Vorabrelease beider getrennten Produkte wurde als RC140 aus Quellcommit
+Der frühere gemeinsame Vorabrelease beider getrennten Produkte wurde als RC140 aus Quellcommit
 `814bc50e3d754224cd95b6fa91f122dd45f48487` veröffentlicht. Standalone
 bestand Windows-PKG-04/INT-13 sowie native Paketprüfungen auf macOS Intel,
 Apple Silicon und Linux x64. Cowork bestand native Paketprüfungen auf Windows
@@ -45,14 +50,12 @@ Für die Standalone-App werden **weder Claude noch Cowork, Node.js, Python oder
 Rust** benötigt. Das zur eigenen CPU passende ZIP vollständig entpacken und
 nicht direkt aus dem ZIP starten; auf dem Mac gibt es alternativ ein DMG:
 
-**[Windows: RC151-ZIP und Prüfsumme](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc151)** ·
-**[macOS: RC142-ZIPs, DMGs und Prüfsummen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc142)** ·
-**[Linux und Cowork: RC140-Pakete und Prüfsummen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc140)**
+**[RC151: Standalone-ZIPs, Mac-DMGs, Cowork-ZIPs und Prüfsummen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc151)**
 
 **Mac-Kompatibilitätshinweis:** Der erneute Paketreview hat in den veröffentlichten
 Standalone-RC140-ZIPs einen Helfer mit höherer Mindestversion gefunden: Intel
 verlangt macOS 15, Apple Silicon macOS 14. Die bisherige Angabe 13.5 war für
-diese ZIPs falsch. Für Mac die unten verlinkten RC142-ZIPs oder DMGs verwenden:
+diese ZIPs falsch. Für Mac die unten verlinkten RC151-ZIPs oder DMGs verwenden:
 ihr Binärvertrag ist für macOS 13.5 geprüft; ein realer Lauf auf 13.5 bleibt offen.
 Die RC140-Downloads werden nicht verändert. Die Mac-Pakete bleiben interne,
 ad-hoc-signierte Piloten ohne bestätigte Finder-/Gatekeeper-Abnahme.
@@ -63,20 +66,20 @@ ad-hoc-signierte Piloten ohne bestätigte Finder-/Gatekeeper-Abnahme.
   `DataSecure Standalone.exe` doppelklicken. Microsoft Edge WebView2 muss als
   Windows-Systemkomponente vorhanden sein. [Ausführliche Windows-Anleitung](apps/datasecure-standalone/START-WINDOWS.md)
 - **Mac mit Intel-Prozessor:**
-  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc142/DataSecure-Standalone-3.2.0-rc142-macos-x64.zip)
-  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc142/DataSecure-Standalone-3.2.0-rc142-macos-x64.dmg)
+  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc151/DataSecure-Standalone-3.2.0-rc151-macos-x64.zip)
+  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc151/DataSecure-Standalone-3.2.0-rc151-macos-x64.dmg)
   herunterladen, die jeweils passende `.sha256` derselben Release-Seite prüfen
   und die enthaltene `DataSecure Standalone.app` nach **Programme** ziehen.
 - **Mac mit Apple Silicon (M1 oder neuer):**
-  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc142/DataSecure-Standalone-3.2.0-rc142-macos-arm64.zip)
-  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc142/DataSecure-Standalone-3.2.0-rc142-macos-arm64.dmg)
+  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc151/DataSecure-Standalone-3.2.0-rc151-macos-arm64.zip)
+  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc151/DataSecure-Standalone-3.2.0-rc151-macos-arm64.dmg)
   herunterladen und genauso installieren.
-  Die Architektur zeigt **Apple-Menü → Über diesen Mac**. RC142 wurde auf
+  Die Architektur zeigt **Apple-Menü → Über diesen Mac**. RC151 wurde auf
   macOS 15 (Intel) und macOS 14 (ARM) ausgeführt; macOS 13.5 ist die deklarierte,
   in allen nativen Komponenten geprüfte Mindestversion (siehe Hinweis oben).
   [Ausführliche macOS-Anleitung](apps/datasecure-standalone/MACOS-START.md)
 - **Linux x64 mit glibc:**
-  [DataSecure-Standalone-3.2.0-rc140-linux-x64-glibc.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc140/DataSecure-Standalone-3.2.0-rc140-linux-x64-glibc.zip)
+  [DataSecure-Standalone-3.2.0-rc151-linux-x64-glibc.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc151/DataSecure-Standalone-3.2.0-rc151-linux-x64-glibc.zip)
   vollständig entpacken, die enthaltene AppImage ausführbar machen und starten.
   Dieses Paket ist technisch nativ geprüft; die sichtbare Linux-UAT ist offen.
 
@@ -126,18 +129,18 @@ Pfade und Tokens werden nicht protokolliert. Das normale Plugin bleibt frei davo
 ## Cowork-Plugin: aktueller Umfang
 
 Der aktuelle Cowork-Kandidat steht im
-[RC140-Vorabrelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc140)
+[RC151-Vorabrelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc151)
 bereit:
 
-- [Windows x64 – normales Plugin](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc140/DataSecure-Privacy-Preflight-windows-x64-v3.2.0-rc140.zip)
-- [Windows x64 – getrenntes Debug-Plugin](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc140/DataSecure-Privacy-Preflight-windows-x64-debug-v3.2.0-rc140.zip)
-- [macOS Intel](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc140/DataSecure-Privacy-Preflight-macos-x64-v3.2.0-rc140.zip)
-- [macOS Apple Silicon](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc140/DataSecure-Privacy-Preflight-macos-arm64-v3.2.0-rc140.zip)
-- [Windows-UAT-Vorlage – alle Modellgates `NOT_RUN`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc140/DataSecure-Cowork-UAT-Evidence-v3.2.0-rc140.zip)
-- [SHA-256-Prüfsummen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc140/SHA256SUMS)
+- [Windows x64 – normales Plugin](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc151/DataSecure-Privacy-Preflight-windows-x64-v3.2.0-rc151.zip)
+- [Windows x64 – getrenntes Debug-Plugin](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc151/DataSecure-Privacy-Preflight-windows-x64-debug-v3.2.0-rc151.zip)
+- [macOS Intel](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc151/DataSecure-Privacy-Preflight-macos-x64-v3.2.0-rc151.zip)
+- [macOS Apple Silicon](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc151/DataSecure-Privacy-Preflight-macos-arm64-v3.2.0-rc151.zip)
+- [Windows-UAT-Vorlage – alle Modellgates `NOT_RUN`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc151/DataSecure-Cowork-UAT-Evidence-v3.2.0-rc151.zip)
+- [SHA-256-Prüfsummen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc151/SHA256SUMS)
 
-RC138-/RC139-Archive und ihre damaligen UAT-Vorlagen bleiben historische Evidenz und
-werden nicht neu gebunden. Für RC140 gelten die erneuerten Nachweise in der
+RC138-/RC139-/RC140-Archive und ihre damaligen UAT-Vorlagen bleiben historische Evidenz und
+werden nicht neu gebunden. Für RC151 gelten die erneuerten Nachweise in der
 [Release-Anleitung](docs/RELEASE.md); die Windows-UAT-Vorlage ersetzt keine Mac-Abnahme.
 
 Das passende Paket vollständig herunterladen und als lokales

@@ -86,14 +86,15 @@ test('release truth binds the published candidate while keeping human approval s
   const currentRc = `RC${match[1]}`;
   assert.match(release, /^Der aktuelle Quellstand ist\b/mu,
     'the next version cut requires a stable source-state marker even after publication');
-  const published = /RC(\d+) ist als gemeinsamer, aber produktgetrennter Vorabkandidat[\s\S]{0,140}?Quellcommit `([0-9a-f]{40})` veröffentlicht/u.exec(release);
+  const currentAll = /### RC(\d+) – Standalone und Cowork auf allen Zielplattformen[\s\S]{0,400}?Quellcommit `([0-9a-f]{40})`/u.exec(release);
+  const published = currentAll || /RC(\d+) ist als gemeinsamer, aber produktgetrennter Vorabkandidat[\s\S]{0,140}?Quellcommit `([0-9a-f]{40})` veröffentlicht/u.exec(release);
   assert.ok(published, 'release truth must name a commit-bound published candidate');
   const publishedRc = `RC${published[1]}`;
   const publishedVersion = version.replace(/rc\d+$/iu, `rc${published[1]}`);
   // A platform-only release must not silently relabel other product binaries.
-  const macPublished = /RC(\d+) ist als Standalone-macOS-Vorabkandidat aus Quellcommit\s+`([0-9a-f]{40})` veröffentlicht/u.exec(release);
-  const standalonePublished = /### RC(\d+) – Standalone Windows sowie macOS ZIP und zusätzlich DMG[\s\S]{0,450}?Quellcommit `([0-9a-f]{40})`/u.exec(release);
-  const windowsPublished = /### RC(\d+) – Standalone Windows x64[\s\S]{0,350}?Quellcommit `([0-9a-f]{40})`/u.exec(release);
+  const macPublished = currentAll || /RC(\d+) ist als Standalone-macOS-Vorabkandidat aus Quellcommit\s+`([0-9a-f]{40})` veröffentlicht/u.exec(release);
+  const standalonePublished = currentAll || /### RC(\d+) – Standalone Windows sowie macOS ZIP und zusätzlich DMG[\s\S]{0,450}?Quellcommit `([0-9a-f]{40})`/u.exec(release);
+  const windowsPublished = currentAll || /### RC(\d+) – Standalone Windows x64[\s\S]{0,350}?Quellcommit `([0-9a-f]{40})`/u.exec(release);
   const standaloneRc = standalonePublished ? `RC${standalonePublished[1]}` : null;
   const windowsRc = windowsPublished ? `RC${windowsPublished[1]}` : standaloneRc || publishedRc;
   const windowsVersion = version.replace(/rc\d+$/iu, `rc${windowsRc.slice(2)}`);
@@ -101,7 +102,9 @@ test('release truth binds the published candidate while keeping human approval s
   const macVersion = version.replace(/rc\d+$/iu, `rc${macRc.slice(2)}`);
   const readme = read('README.md');
   assert.strictEqual(readme.split(/\r?\n/u)[0],
-    windowsPublished
+    currentAll
+      ? `# GBH DataSecure – Standalone und Cowork ${publishedRc}`
+    : windowsPublished
       ? `# GBH DataSecure – Standalone Windows ${windowsRc}, macOS ${macRc} · Linux und Cowork ${publishedRc}`
       : standaloneRc
       ? `# GBH DataSecure – Standalone Windows/macOS ${standaloneRc} · Linux und Cowork ${publishedRc}`
@@ -127,7 +130,7 @@ test('release truth binds the published candidate while keeping human approval s
   if (windowsPublished) {
     assert.ok(readme.includes(windowsPublished[2]), 'Windows source commit must remain explicit');
     assert.ok(release.includes(`releases/tag/v${windowsVersion}`));
-    assert.ok(!readme.includes(`DataSecure-Privacy-Preflight-windows-x64-v${windowsVersion}.zip`),
+    if (!currentAll) assert.ok(!readme.includes(`DataSecure-Privacy-Preflight-windows-x64-v${windowsVersion}.zip`),
       'Windows-only publication must not invent a Cowork package');
   }
   if (standalonePublished) {
@@ -137,8 +140,16 @@ test('release truth binds the published candidate while keeping human approval s
       assert.ok(readme.includes(`${downloadRoot}/v${macVersion}/DataSecure-Standalone-${macVersion}-${target}.dmg`),
         'additional DMG must link to the same current Mac release as the retained ZIP');
     }
-    assert.ok(!readme.includes(`DataSecure-Privacy-Preflight-windows-x64-v${windowsVersion}.zip`),
+    if (!currentAll) assert.ok(!readme.includes(`DataSecure-Privacy-Preflight-windows-x64-v${windowsVersion}.zip`),
       'Standalone-only publication must not invent a Cowork package');
+  }
+  if (currentAll) {
+    for (const target of ['macos-x64', 'macos-arm64']) {
+      assert.ok(readme.includes(`${downloadRoot}/v${publishedVersion}/DataSecure-Privacy-Preflight-${target}-v${publishedVersion}.zip`));
+    }
+    assert.ok(readme.includes(`${downloadRoot}/v${publishedVersion}/DataSecure-Privacy-Preflight-windows-x64-debug-v${publishedVersion}.zip`));
+    assert.ok(readme.includes(`${downloadRoot}/v${publishedVersion}/DataSecure-Cowork-UAT-Evidence-v${publishedVersion}.zip`));
+    assert.ok(readme.includes(`${downloadRoot}/v${publishedVersion}/SHA256SUMS`));
   }
   if (!standalonePublished && macPublished && macRc !== publishedRc) {
     assert.ok(readme.includes(macPublished[2]), 'Mac source commit must remain explicit');

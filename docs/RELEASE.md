@@ -2,10 +2,11 @@
 
 Stand: 29.09.2026 · 3.2.0-rc151
 
-Der aktuelle Quellstand ist als RC151-Windows-Standalone-Vorabkandidat gebunden. Die übrigen
-Produkt-/Plattformpakete behalten ihre separat geprüften Versionsstände.
+Der aktuelle Quellstand ist als RC151-Vorabkandidat für beide getrennten
+Produkte auf ihren jeweiligen Zielplattformen gebunden. Technische Paketprüfung
+ist keine menschliche Produkt- oder Produktionsfreigabe.
 
-### RC151 – Standalone Windows x64
+### RC151 – Standalone und Cowork auf allen Zielplattformen
 
 Das [RC151-Vorabrelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc151)
 bindet den sauberen Quellcommit `fdb8288c9bef2a64eeb10d584e1bf59a6cb864c3`.
@@ -18,13 +19,42 @@ und hat SHA-256
 Die GitHub-Asset-Digests des ZIPs und seiner `.sha256`-Datei wurden mit den
 lokalen Dateien abgeglichen.
 
+Standalone-macOS Intel und Apple Silicon wurden aus demselben Quellcommit
+als ZIP und zusätzlich DMG gebaut. Der [native Mac-Lauf](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/36618883915)
+prüfte je Architektur den Binär-/Signatur-/Mindestversionsvertrag, den
+gebündelten Konverter, den App-Start und die identische App in ZIP und DMG.
+Das Linux-x64-glibc-AppImage-ZIP bestand seinen
+[nativen Paket- und App-Startlauf](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/36618884302).
+Die heruntergeladenen Archive stimmen mit ihren eigenen `.sha256`-Dateien
+überein. ZIP bleibt auf dem Mac erhalten; DMG ist ein zusätzlicher Installationsweg.
+
+Das getrennte Cowork-Plugin bestand mit den normalen Windows-x64-, macOS-Intel-
+und macOS-ARM-ZIPs die [nativen Zielplattform-Smokes](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/36618886944).
+Der [Release-Evidence-Lauf](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/36618887161)
+baute zusätzlich das getrennte Windows-Debug-ZIP und band Normal/Debug an eine
+leere Windows-UAT-Vorlage; der Windows-Normalbau ist in beiden Workflows
+bytegleich. Die veröffentlichte Cowork-SBOM und `SHA256SUMS` wurden aus genau
+diesen vier ZIPs und der UAT-Vorlage neu erzeugt. Alle Modellgates in der Vorlage
+stehen auf `NOT_RUN`, nicht auf `PASS`.
+
+| RC151-Standalone-Archiv | SHA-256 |
+|---|---|
+| macOS Intel ZIP | `db1dca19d24637ac545da58ec0655d88136fb433c8ae267af95812124b17b1c5` |
+| macOS Intel DMG | `5f06d1cc1e3dd19e7361ceb49a5dfadaf1aa25d56af766f513ab9ba5661783c1` |
+| macOS Apple Silicon ZIP | `7b606108cd4a61043b9f0b678af9f465bb5d2c631f418eaf9a1a43e56965a22a` |
+| macOS Apple Silicon DMG | `81683ab53bbae1b4f0d67a4e65491b349a79e9835be70a161ff3d62246db98d1` |
+| Linux x64 glibc ZIP | `5626a40bee98f9502d22a10a4174eaeb74f3887937c2f2f3706893a56c7f0342` |
+
+Alle 19 RC151-GitHub-Assets, einschließlich Cowork-Paketen, SBOM und
+Prüfsummendateien, stimmen in Größe und SHA-256 mit dem lokalen Staging überein.
+
 RC151 bündelt die Standalone-Korrekturen für neue Läufe, Dateiauswahl,
 Fehleranzeige und lokale Prüfentscheidungen sowie die ergänzten
 Datenschutz-/Formatregressionen. Der erneute vollständige 140-Dateien-Lauf
 auf dem Benutzer-Zielhost, menschliche N3/N4-Abnahme und Produktionsfreigabe
 bleiben offen. Sicher gestoppte Dateien werden nicht automatisch freigegeben.
-RC151 enthält keine neuen macOS-, Linux- oder Cowork-Pakete: macOS ZIP/DMG
-bleiben RC142, Linux und Cowork RC140. Ältere Assets werden nicht überschrieben.
+Mac-Finder-/Gatekeeper-, Linux-Desktop- und Cowork-Modellabnahmen sowie die
+formale N3/N4-Freigabe bleiben ebenfalls offen. Ältere Assets werden nicht überschrieben.
 
 ### RC142 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
 
@@ -89,7 +119,7 @@ ihre veröffentlichten RC140-Pakete. macOS 13.5 ist nun der verifizierte
 Binärvertrag, noch kein real ausgeführter Zielhosttest. Sichtbare Installation
 und N3/N4 bleiben offen; die Pakete sind ad hoc signiert, nicht notarisiert.
 
-### RC140 – letzter gemeinsamer Vorabrelease, weiterhin für Windows/Linux und Cowork
+### RC140 – früherer gemeinsamer Vorabrelease
 
 RC140 ist als gemeinsamer, aber produktgetrennter Vorabkandidat aus dem sauberen
 Quellcommit `814bc50e3d754224cd95b6fa91f122dd45f48487` veröffentlicht:

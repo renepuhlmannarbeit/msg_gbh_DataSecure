@@ -27,10 +27,11 @@ test('formal kit contains the complete two-person campaign contract', () => {
   assert.match(overview, /Standalone muss offline funktionieren/u);
   assert.match(overview, /Cowork benötigt Claude Desktop und\s+Internet/u);
   assert.ok(campaignLabel, `release-candidate label missing in ${productVersion}`);
-  const boundCandidate = /RC(\d+) ist als gemeinsamer, aber produktgetrennter Vorabkandidat[\s\S]{0,140}?Quellcommit `([0-9a-f]{40})` veröffentlicht/u.exec(release);
+  const currentAll = /### RC(\d+) – Standalone und Cowork auf allen Zielplattformen[\s\S]{0,400}?Quellcommit `([0-9a-f]{40})`/u.exec(release);
+  const boundCandidate = currentAll || /RC(\d+) ist als gemeinsamer, aber produktgetrennter Vorabkandidat[\s\S]{0,140}?Quellcommit `([0-9a-f]{40})` veröffentlicht/u.exec(release);
   assert.ok(boundCandidate, 'release truth must identify the currently published product candidate');
   assert.match(overview, new RegExp(
-    `RC${boundCandidate[1]} ist als technischer Kandidat beider getrennten Produkte[\\s\\S]{0,120}` +
+    `RC${boundCandidate[1]} ist als technischer\\s+Kandidat beider getrennten Produkte[\\s\\S]{0,120}` +
     `\`${boundCandidate[2]}\` gebunden und veröffentlicht`, 'u'));
   if (boundCandidate[1] !== campaignLabel) {
     const standaloneCandidate = /### RC(\d+) – Standalone Windows sowie macOS ZIP und zusätzlich DMG[\s\S]{0,300}?Quellcommit `([0-9a-f]{40})`/u.exec(release);

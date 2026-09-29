@@ -1,37 +1,40 @@
 # Formale N3/N4-Abnahme mit Windows und macOS
 
-Stand: 29.09.2026 · Standalone Windows RC151, macOS RC142 veröffentlicht; Standalone Linux und Cowork bleiben RC140; menschliche Abnahme offen
+Stand: 29.09.2026 · Standalone und Cowork RC151 auf ihren Zielplattformen veröffentlicht; menschliche Abnahme offen
 
-**Windows-only-Nachtrag:** RC151-Standalone-Windows ist aus Commit
-`fdb8288c9bef2a64eeb10d584e1bf59a6cb864c3` im
-[RC151-Vorabrelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc151)
-gebunden. Zwei bytegleiche Windows-PKG-04-/INT-13-ZIPs bestanden native Starts;
-der ZIP-Hash ist
-`5108d3957c4987088519cf26ce2c5aba4df5611f9f993aa17c027ab1a82230c7`.
-Eine sichtbare Windows-N3/N4-Abnahme ist offen. RC151 enthält kein Mac-Paket:
-RC151-Windows und RC142-Mac bilden **keine gemeinsame Windows-/Mac-Kampagne**
-mit identischem Produktcommit. Wer beide Plattformen als einen Kandidaten
-abnehmen will, verwendet weiterhin die exakten RC142-Pakete und den
-RC142-Quellcommit oder wartet auf einen neuen gemeinsam gebundenen Kandidaten.
+**Aktueller Kandidat, getrennte Produktpakete:** RC151 ist als technischer
+Kandidat beider getrennten Produkte an Commit
+`fdb8288c9bef2a64eeb10d584e1bf59a6cb864c3` gebunden und veröffentlicht.
+Das [RC151-Vorabrelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc151)
+enthält Standalone-ZIPs für Windows x64, macOS Intel/ARM und Linux x64 sowie
+zusätzliche Mac-DMGs. Cowork besitzt getrennte normale ZIPs für Windows und
+beide Mac-Architekturen, ein Windows-Debug-ZIP und eine leere Windows-UAT-Vorlage.
+Windows-PKG-04-/INT-13-ZIPs waren bytegleich; die nativen Mac-, Linux- und
+Cowork-Paketläufe sind in [RELEASE.md](../../RELEASE.md) gebunden. Für die
+formale Abnahme müssen Standalone und Cowork weiterhin getrennte Kampagnen mit
+exakten produktspezifischen Hashes erhalten. Sichtbare Installation, Modelltests
+und N3/N4 stehen auf `NOT_RUN`; kein Runner-Lauf ersetzt diese Abnahme.
 
 **Mac-Sperrhinweis MAC-20260923:** Standalone-RC140 ist aufgrund seines
 POSIX-Helfers kein macOS-13.5-Kandidat (Intel mindestens 15.0, ARM mindestens
-14.0). BL-010.20 ist für RC141 technisch neu belegt; BL-012.9 behält die getrennte
-Cowork-Paketlieferung und sichtbare AppKit-Abnahme offen. Die alten ZIPs enthalten die
+14.0). BL-010.20 ist für RC141 technisch neu belegt; die getrennte
+Cowork-Paketlieferung erfolgte mit RC151, die sichtbare AppKit-Abnahme bleibt
+offen. Die alten ZIPs enthalten die
 Quellkorrekturen nicht; eine erfolgreiche Installation auf neuerem macOS
 belegt keine Unterstützung der deklarierten 13.5.
 
-**Letzter gemeinsamer Standalone-Prüfstand:** RC142 für Windows x64 sowie macOS Intel und
+**Historischer gemeinsamer Standalone-Prüfstand:** RC142 für Windows x64 sowie macOS Intel und
 ARM ist an Commit `c0ddd11ecf366d32ff9962bfeffc6519b01a8c5d` gebunden. Das
 [RC142-Vorabrelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc142)
 enthält weiterhin beide architekturspezifischen Mac-ZIPs und zusätzlich beide
 DMGs, jeweils mit SHA-256-Datei. Windows-PKG-04/INT-13 bestand zwei bytegleiche
 Paketbauten und beide nativen Smokes; der native Mac-Lauf `36562812021` prüfte
 ZIP, DMG, identischen App-Inhalt, Signatur und Start auf beiden Architekturen.
-Für eine gemeinsame Standalone-N3/N4-Kampagne nur diese exakten RC142-Assets und den
-RC142-Commit zusammen verwenden. DMGs sind nicht notarisiert; sichtbare
+Für die Wiederholung einer RC142-Kampagne nur deren exakte Assets und den
+RC142-Commit zusammen verwenden; für eine neue Kampagne gilt RC151. DMGs
+sind nicht notarisiert; sichtbare
 Finder-/Gatekeeper-Installation auf dem Ziel-Mac und menschliche Abnahme bleiben
-`NOT_RUN`. Linux-Standalone und Cowork behalten RC140; eine Cowork-Kampagne darf
+`NOT_RUN`. Damals behielten Linux-Standalone und Cowork RC140; eine Cowork-Kampagne darf
 nicht als RC142-Stand-alone-Nachweis ausgegeben werden.
 
 **Historischer Mac-Prüfstand:** RC141-Standalone für Intel und ARM ist
@@ -53,15 +56,15 @@ Produktkandidaten dürfen nicht vermischt werden. Die Testfälle selbst bleiben 
 [Cowork-UAT-Unterlagen](../UAT_TEST_KIT/README.md) und im
 [Standalone-UAT-Kit](../STANDALONE_UAT_TEST_KIT/README.md).
 
-RC140 ist als technischer Kandidat beider getrennten Produkte an Commit
+Historisch: RC140 ist als technischer Kandidat beider getrennten Produkte an Commit
 `814bc50e3d754224cd95b6fa91f122dd45f48487` gebunden und veröffentlicht.
 Die exakt erzeugten Cowork-ZIPs wurden auf Windows x64, macOS Intel und macOS
 ARM64 nativ gestartet; Standalone bestand Windows-PKG-04/INT-13 und native
 Paketläufe auf macOS Intel/ARM64 und Linux. Die generische Vorlage bleibt
 bewusst zunächst auf **Cowork-only** gesetzt, weil die veröffentlichte
 Windows-UAT-Datei nur Cowork-Normal/Debug bindet. Für eine Standalone-Kampagne
-wird ein eigenes Manifest mit demselben RC140-Commit, `standalone=true` und
-den exakten Standalone-Pakethashes angelegt. Eine formale Kampagne beginnt erst, wenn beide
+wäre ein eigenes Manifest mit demselben RC140-Commit, `standalone=true` und
+den exakten Standalone-Pakethashes erforderlich gewesen. Eine formale Kampagne beginnt erst, wenn beide
 Tester die exakten Pakethashes des jeweiligen Produkts gebunden haben. Die
 12×3- und 41×3-Modellgates bleiben `NOT_RUN`; das veröffentlichte Evidence-ZIP
 ist nur ihre leere Vorlage. Frühere RC-Evidence bleibt historisch und darf nicht
@@ -79,10 +82,13 @@ Zielen bestanden. Danach folgt weiterhin
 die beobachtete Installation und Bedienung in Claude; ein maschineller
 MCP-Roundtrip ist keine sichtbare Anwenderabnahme.
 
-RC139- und RC137-Pakete bleiben historische Kandidaten; eine formale RC140-
-Cowork-Kampagne muss deren commitgebundene Cowork-Pakethashes ausdrücklich
-wählen. Die RC142-Standalone-Kampagne verwendet stattdessen die oben gebundenen
-eigenen Pakete und denselben RC142-Commit auf Windows und Mac.
+RC139-, RC137-, RC140- und RC142-Pakete bleiben historische Kandidaten.
+Eine neue RC151-Cowork-Kampagne muss die RC151-Normal-/Debug-Hashes und je
+Mac-Architektur das passende Cowork-ZIP ausdrücklich binden. Eine getrennte
+RC151-Standalone-Kampagne bindet die eigenen Windows-/Mac-Pakete an denselben
+RC151-Commit; Linux benötigt eine getrennte Zielhost-Evidenz. Historische
+Kampagnen behalten ihre damaligen exakten
+Pakethashes; sie werden nicht als RC151 umetikettiert.
 Ein Runner-Smoke ersetzt nicht den Browser-/Finder-/Gatekeeper-Fresh-Install
 auf einem echten Mac.
 
