@@ -195,9 +195,39 @@ function removeOwnedRoot(root, initial) {
     assert.strictEqual(unchanged.result.processing, false);
     const cancelled = await client.send('cancel_admission', 'd'.repeat(16));
     assert.strictEqual(cancelled.ok, true);
+    const mixedRoot = path.join(root, 'mixed-folder');
+    fs.mkdirSync(path.join(mixedRoot, 'EINGABEN'), { recursive: true });
+    fs.writeFileSync(path.join(mixedRoot, 'EINGABEN', 'synthetic.txt'), 'synthetic');
+    fs.writeFileSync(path.join(mixedRoot, 'DATEILISTE.json'), '{}');
+    const mixed = await client.send('admit_selected_sources', 'f'.repeat(16), {
+      source_kind: 'folder', source_paths: [mixedRoot]
+    });
+    assert.strictEqual(mixed.ok, false);
+    assert.strictEqual(mixed.error_code, 'SOURCE_FOLDER_UNSUPPORTED_FILES');
+    assert.deepStrictEqual(mixed.error_details, {
+      unsupported_files: ['DATEILISTE.json'], unsupported_count: 1
+    });
+    assert.deepStrictEqual((await client.send('get_ui_context', '4'.repeat(16))).result.selected_files, [],
+      'a named folder error still cannot create a partial admission');
+    const oversizedRoot = path.join(root, 'nested-only-oversized');
+    const oversizedNested = path.join(oversizedRoot, 'documents');
+    fs.mkdirSync(oversizedNested, { recursive: true });
+    const oversizedFile = path.join(oversizedNested, 'synthetic.txt');
+    fs.writeFileSync(oversizedFile, 'x');
+    fs.truncateSync(oversizedFile, 8_000_001);
+    const rejectedFolder = await client.send('admit_selected_sources', '1'.repeat(16), {
+      source_kind: 'folder', source_paths: [oversizedRoot]
+    });
+    assert.strictEqual(rejectedFolder.ok, false);
+    assert.strictEqual(rejectedFolder.error_code, 'SOURCE_FORMAT_SIZE_LIMIT',
+      'the real sidecar must retain the safe size-limit reason instead of returning a generic failure');
+    assert.deepStrictEqual((await client.send('get_ui_context', '3'.repeat(16))).result.selected_files, [],
+      'a rejected folder must not create a partial admission');
     const stopped = await client.send('shutdown', 'e'.repeat(16));
     assert.strictEqual(stopped.ok, true);
     assert.strictEqual((await bounded(child.closed, 'sidecar did not stop')).code, 0);
+    assert.doesNotMatch(fs.readFileSync(path.join(diagnostics, 'sidecar-interactions.jsonl'), 'utf8'),
+      /DATEILISTE|synthetic\.txt/u, 'private diagnostics retain codes but never source names');
 
     const blockedBase = path.join(root, 'blocked-root');
     fs.mkdirSync(blockedBase);

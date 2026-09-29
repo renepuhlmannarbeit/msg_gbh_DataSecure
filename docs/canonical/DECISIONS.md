@@ -1,12 +1,12 @@
 # Verbindliches Entscheidungsregister
 
-Stand: 23.09.2026
+Stand: 29.09.2026
 
 Alle Entscheidungen bleiben als unveränderliche Historie erhalten. „Angenommen“
 bedeutet deshalb nicht automatisch „heute vollständig aktiv“:
 
 - **aktiv:** DS-001 bis DS-012, DS-014, DS-017 bis DS-018, DS-020 bis DS-049,
-  DS-051 bis DS-058, DS-060 sowie DS-062 bis DS-065 und DS-067 bis DS-102, jeweils mit den unten
+  DS-051 bis DS-058, DS-060 sowie DS-062 bis DS-065 und DS-067 bis DS-103, jeweils mit den unten
   genannten Präzisierungen;
 - **ersetzt:** DS-013 durch DS-043, DS-015 durch DS-045, DS-016 durch DS-046,
   DS-019 durch DS-059, DS-050 durch DS-065 und DS-066 durch DS-078;
@@ -1505,16 +1505,16 @@ DS-068 und DS-084.
 
 Präzisierung vom 23.09.2026 (BL-021.3): Ausschließlich heuristische, exakt
 lokalisierbare Rest-Personenkandidaten dürfen denselben lokalen Review nutzen.
-Hier gilt ausdrücklich **eine Entscheidung pro Fundstelle**, nicht die obige
-namensweite Prosa-Gruppierung. Eine Hinweiszeile kann denselben Wortlaut wie ein
-Personenfeld besitzen. Zustimmung ist an unveränderte Textfassung und exakte
-Position gebunden; bei unklarer Herkunft oder nach Textänderung wird sie nicht
-übernommen. Manuelle Redaktionsverschiebungen und Ausgabepräfixe werden bei
-der Bindung berücksichtigt. Direkte Identifier, bekannte Originalwerte,
-Personenfelder, Credentials und Strukturfehler bleiben unabhängig gesperrt.
-Ohne vollständige gültige lokale Entscheidung erfolgt keine Veröffentlichung.
-Es entsteht keine globale oder persistente Begriffsfreigabe. Reine
-Markdown-Konvertierung bleibt von dieser Datenschutzprüfung unberührt.
+Nach dem RC149-Anwenderlauf gilt für **exakt gleichen normalisierten Wortlaut
+desselben Kandidatentyps innerhalb einer aktuellen Prüfgruppe** eine sichtbare
+gemeinsame Entscheidung. Der technische Nachweis bleibt trotzdem pro Fundstelle
+an unveränderte Textfassung und exakte Position gebunden; bei unklarer Herkunft
+oder nach Textänderung wird er nicht übernommen. Manuelle Redaktionsverschiebungen
+und Ausgabepräfixe werden bei der Bindung berücksichtigt. Direkte Identifier,
+bekannte Originalwerte, Personenfelder, Credentials und Strukturfehler bleiben
+unabhängig gesperrt. Ohne vollständige gültige lokale Entscheidung erfolgt keine
+Veröffentlichung. Es entsteht keine globale oder persistente Begriffsfreigabe.
+Reine Markdown-Konvertierung bleibt davon unberührt.
 
 ## DS-097 – Zwei Produktadapter und drei Plattformadapter auf einem gemeinsamen Core
 
@@ -1671,3 +1671,33 @@ ist mit realen lokalen PDF-/PPTX-Dateien und isolierten Worker-Goldenfällen zu
 prüfen. Für macOS ergänzen nativ geprüfte Intel-/ARM-DMGs den ZIP-Weg, ohne
 Developer-ID-Signatur, Notarisierung oder menschliche Gatekeeper-Abnahme zu
 ersetzen. Siehe BL-010.36.
+
+## DS-103 – Standalone anonymisiert auch bei passiven Quellobjekten nur extrahiertes Markdown
+
+DS-103 präzisiert DS-102 für Standalone. Bei PPTX und PDF/Scan-PDF benutzt
+`markdown-and-anonymize` dieselbe lokal isolierte, passive Markdown-Extraktion
+wie `markdown-only`: Formularfelder, Signaturen, Anhänge, Skripte, Links,
+Lesezeichen und eingebettete OLE-Objekte werden weder ausgeführt noch als
+Originalcontainer freigegeben. Nur der tatsächlich extrahierte, nichtleere
+Markdown-Inhalt wird anschließend durch die Personen-, Unternehmens-,
+Geheimnis- und Residual-Prüfungen anonymisiert. Das Ergebnis behält getrennt
+den Status **unvollständige Quellabdeckung**; „PDF/PPTX vollständig
+anonymisiert“ ist keine zulässige Aussage.
+
+Verschlüsselte, beschädigte, textleere und strukturell unsichere Quellen,
+XFA, Makros, ActiveX, externe Vorlagen sowie unbekannte Objekte/Beziehungen
+bleiben fail-closed. Cowork behält seine eigene, strengere Produktgrenze; eine
+Standalone-Worker-Freigabe öffnet weder dessen PDF-/OCR-Pfad noch seine
+Office-Admission. Reale paketierte Parser- und Batchtests müssen den
+Übergang einschließlich negativer Fälle belegen. Siehe BL-010.39.
+
+Präzisierung für komplexe Office-Quellen: XLSX wird direkt als strukturierte
+Markdown-Repräsentation extrahiert und danach anonymisiert; ein CSV-
+Zwischenschritt ist keine sichere Voreinstellung für mehrblättrige Mappen.
+Standalone darf bei PPTX eindeutig interne XLSX-Pakete aus Folien oder
+Diagrammen nach eigener OOXML-Typ-/Beziehungsprüfung in diese Repräsentation
+aufnehmen. Exakt bekannte passive Autoren-, Revisions- und Diagrammstilteile
+dürfen ausgelassen werden, bleiben aber durch `incomplete` kenntlich. Eine
+unlesbare Einbettung ist kein Beweis vollständiger Quellabdeckung. Das öffnet
+weder beliebige OLE-Binärdaten noch Coworks strengere Admission; siehe
+BL-010.41.

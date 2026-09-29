@@ -3,7 +3,8 @@
 const invoke = window.__TAURI__.core.invoke;
 const byId = (id) => document.getElementById(id);
 const controls = ['select-files', 'select-folder', 'start', 'cancel', 'continue',
-  'process-results', 'new-batch', 'configure-results', 'diagnostics', 'processing-mode', 'output-naming-mode',
+  'process-results', 'process-completion-results', 'process-completion-history', 'prepare-new-run',
+  'new-batch', 'configure-results', 'setup-results', 'diagnostics', 'processing-mode', 'output-naming-mode',
   'task-markdown', 'task-anonymize'];
 const messages = {
   STANDALONE_BUSY: 'Ein Stapel wird bereits verarbeitet.',
@@ -13,8 +14,9 @@ const messages = {
   SOURCE_FOLDER_SIZE_LIMIT: 'Die unterstützten Dateien im Ordner sind zusammen größer als 500 MB. Bitte einen kleineren Stapel auswählen.',
   SOURCE_FOLDER_UNSUPPORTED_FILES: 'Der Ordner enthält mindestens eine nicht unterstützte Datei. Es wurde nichts übernommen; bitte diese Datei entfernen oder einen passenderen Ordner wählen.',
   SOURCE_FOLDER_EMPTY: 'In diesem Ordner und seinen Unterordnern wurden keine unterstützten Dateien gefunden.',
+  SOURCE_FORMAT_SIZE_LIMIT: 'Mindestens eine Datei überschreitet die sichere Einzeldateigrenze ihres Formats (Office: 64 MiB; PDF/Bild: 25 MiB; TXT/Markdown: 8 MB; CSV: 1,5 MB). Der Ordner wurde nicht übernommen. Bitte die zu große Datei aus der Auswahl herausnehmen oder einen kleineren Quellordner wählen; einzeln kann sie derzeit ebenfalls nicht verarbeitet werden.',
   SOURCE_ARTIFACT_IGNORED: 'Temporäre Office-Sperrdateien sind keine Dokumente. Bitte die eigentliche Word-, Excel- oder PowerPoint-Datei auswählen.',
-  STANDALONE_SELECTION_PREPARED: 'Eine Auswahl ist bereits vorbereitet. Bitte starten oder die Auswahl verwerfen, bevor du neue Dateien hinzufügst.',
+  STANDALONE_SELECTION_PREPARED: 'Die vorbereitete Auswahl konnte nicht ergänzt werden. Bitte den Status prüfen; die bisherigen Dateien bleiben ausgewählt.',
   STANDALONE_DROP_MIXED: 'Bitte entweder Dateien oder genau einen Ordner hineinziehen. Ordner und einzelne Dateien können nicht gemeinsam ausgewählt werden.',
   STANDALONE_NO_ADMISSION: 'Bitte zuerst Dateien oder einen Ordner auswählen.',
   STANDALONE_START_FAILED: 'Der lokale Start wurde nicht bestätigt. Bitte den Status prüfen und die Dateien nicht erneut starten.',
@@ -69,6 +71,10 @@ let currentSessionRunStarted = false;
 let currentSessionResultBaseline = '';
 let latestResultFolderSeen = '';
 let selectionRemoveButtons = [];
+let processPhase = 'entry';
+let suppressPriorTerminal = false;
+let admissionFailureCode = null;
+let lastFailureDetailsKey = '';
 const views = ['home', 'process', 'results'];
 const admissionAvailableStates = new Set(['ready', 'results_available', 'completed_without_results',
   'review_required', 'stopped', 'export_pending']);
@@ -114,13 +120,16 @@ function applyBusyState() {
   if (!operationInFlight && activeView === 'results' && historyDirty) refreshHistory();
 }
 function updateCurrentResultsAvailability() {
-  const button = byId('process-results');
-  button.disabled = operationInFlight || !currentResultsAvailable;
-  button.title = currentResultsAvailable ? '' : 'Noch kein Ergebnisordner verfügbar.';
+  for (const id of ['process-results', 'process-completion-results']) {
+    const button = byId(id);
+    button.disabled = operationInFlight || !currentResultsAvailable;
+    button.title = currentResultsAvailable ? '' : 'Noch kein Ergebnisordner verfügbar.';
+  }
 }
 function updateModeAvailability() {
   // The selector describes the next admission, never an active/recoverable run.
-  byId('processing-mode').disabled = operationInFlight || (!admitted && !admissionAvailableStates.has(lastPublicState));
+  byId('processing-mode').disabled = operationInFlight || processPhase === 'completion' ||
+    (!admitted && !admissionAvailableStates.has(lastPublicState));
   const needsMode = admitted && !validMode(byId('processing-mode').value);
   const needsNamingMode = admitted && byId('processing-mode').value === 'markdown-and-anonymize' &&
     !validOutputNamingMode(byId('output-naming-mode').value);
@@ -128,19 +137,29 @@ function updateModeAvailability() {
     byId('processing-mode').value !== 'markdown-and-anonymize';
   byId('start').disabled = operationInFlight || !admitted || needsMode || needsNamingMode;
   byId('start-help').hidden = !needsMode;
-  byId('task-markdown').disabled = byId('processing-mode').disabled;
-  byId('task-anonymize').disabled = byId('processing-mode').disabled;
-  const reason = byId('processing-mode').disabled ? 'Während der aktuellen Verarbeitung ist keine neue Aufgabe verfügbar.' : '';
+  const taskUnavailable = operationInFlight || processPhase === 'working' || (processPhase !== 'completion' &&
+    !admitted && !admissionAvailableStates.has(lastPublicState));
+  byId('task-markdown').disabled = taskUnavailable;
+  byId('task-anonymize').disabled = taskUnavailable;
+  const reason = taskUnavailable ? 'Während der aktuellen Verarbeitung ist keine neue Aufgabe verfügbar.' : '';
   byId('task-markdown').title = reason;
   byId('task-anonymize').title = reason;
 }
 function updateDropAvailability() {
-  const available = !operationInFlight && !admitted && admissionAvailableStates.has(lastPublicState);
+  const available = !operationInFlight && processPhase === 'entry' &&
+    (admitted || admissionAvailableStates.has(lastPublicState));
   byId('drop-zone').setAttribute('aria-disabled', String(!available));
   if (!available) byId('drop-zone').className = 'drop-zone';
   return available;
 }
 function visible(id, value) { byId(id).hidden = !value; }
+function setProcessPhase(phase) {
+  processPhase = phase;
+  visible('process-form', phase !== 'completion');
+  visible('process-completion', phase === 'completion');
+  updateModeAvailability();
+  updateDropAvailability();
+}
 function status(title, text, icon = '✓') {
   byId('status-icon').textContent = icon;
   byId('status-title').textContent = title;
@@ -151,6 +170,52 @@ function actionFeedback(text, error = false) {
   target.textContent = text;
   target.hidden = false;
   target.className = `action-feedback${error ? ' error' : ''}`;
+}
+function localError(error) {
+  const raw = String(error || 'STANDALONE_OPERATION_FAILED');
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed?.code === 'SOURCE_FOLDER_UNSUPPORTED_FILES' &&
+        Array.isArray(parsed.details?.unsupported_files) &&
+        Number.isSafeInteger(parsed.details.unsupported_count)) {
+      return { code: parsed.code, details: parsed.details };
+    }
+  } catch { /* Ordinary errors are fixed codes, not JSON. */ }
+  return { code: raw, details: null };
+}
+function unsupportedSelectionMessage(code, details, fallback) {
+  const base = messages[code] || fallback;
+  if (code !== 'SOURCE_FOLDER_UNSUPPORTED_FILES' || !details) return base;
+  const files = details.unsupported_files.filter(name => typeof name === 'string' && name.length > 0);
+  const missing = Math.max(0, details.unsupported_count - files.length);
+  return `${base}\nNicht unterstützt (${details.unsupported_count}):${files.length ? `\n${files.map(name => `• ${name.replace(/[\r\n\t]/gu, ' ')}`).join('\n')}` : ''}` +
+    (missing ? `\n${missing} weitere Datei${missing === 1 ? '' : 'en'} konnte${missing === 1 ? '' : 'n'} hier nicht einzeln angezeigt werden.` : '');
+}
+function renderFailedFiles(target, result) {
+  target.replaceChildren();
+  if (result?.ok !== true || result.local_ui_only !== true || result.external_disclosure !== false ||
+      result.available !== true || !Array.isArray(result.files)) {
+    target.textContent = 'Dateinamen für diesen Lauf sind lokal nicht mehr verfügbar. Die Anzahl bleibt im Verlauf erhalten.';
+    return;
+  }
+  if (result.files.length === 0) {
+    target.textContent = 'Für diesen Lauf wurden keine gestoppten Dateinamen gefunden.';
+    return;
+  }
+  const list = document.createElement('ol');
+  for (const file of result.files) {
+    if (typeof file?.name !== 'string' || !file.name) continue;
+    const item = document.createElement('li');
+    item.textContent = file.reason_code ? `${file.name} · Fehlercode: ${file.reason_code}` : file.name;
+    list.appendChild(item);
+  }
+  const missing = Math.max(0, Number(result.total || 0) - result.files.length);
+  if (missing) {
+    const item = document.createElement('li');
+    item.textContent = `${missing} weitere Datei${missing === 1 ? '' : 'en'} ohne verfügbaren Dateinamen.`;
+    list.appendChild(item);
+  }
+  target.appendChild(list);
 }
 function switchView(view) {
   activeView = views.includes(view) ? view : 'home';
@@ -258,6 +323,34 @@ function renderHistory(entries) {
       actions.appendChild(wrapper);
       historyButtons.push({ ...action, button });
     }
+    if (count(entry.failed_count) > 0) {
+      const wrapper = document.createElement('div');
+      const button = document.createElement('button');
+      const fileDetails = document.createElement('div');
+      button.textContent = 'Gestoppte Dateien anzeigen';
+      button.setAttribute('aria-label', `Gestoppte Dateien anzeigen · ${runLabel}`);
+      fileDetails.className = 'history-failure-details';
+      fileDetails.hidden = true;
+      button.addEventListener('click', async () => {
+        if (button.disabled || pageClosed || rendered !== historyRenderGeneration) return;
+        button.disabled = true;
+        feedback.hidden = false;
+        feedback.textContent = 'Dateinamen werden nur lokal gelesen …';
+        try {
+          const result = await invoke('get_run_failures', { batchId: entry.batch_id });
+          if (pageClosed || rendered !== historyRenderGeneration) return;
+          renderFailedFiles(fileDetails, result);
+          fileDetails.hidden = false;
+          feedback.textContent = 'Nicht verarbeitete Dateien dieses Laufs:';
+        } catch {
+          feedback.textContent = 'Die Dateidetails konnten nicht geladen werden. Bitte später erneut versuchen.';
+        } finally { button.disabled = false; }
+      });
+      wrapper.appendChild(button);
+      wrapper.appendChild(fileDetails);
+      actions.appendChild(wrapper);
+      historyButtons.push({ button, available: true });
+    }
     actions.appendChild(feedback);
     body.appendChild(row);
   }
@@ -293,17 +386,23 @@ function summarize(values, emptyText) {
   const visibleValues = values.slice(0, 5);
   return `${visibleValues.join(', ')}${values.length > visibleValues.length ? ` · +${values.length - visibleValues.length} weitere` : ''}`;
 }
+function renderResultFolderConfiguration(folder, isDefault) {
+  const location = folder || 'Noch nicht festgelegt';
+  const label = isDefault ? `Vorgeschlagen: ${location}` : location;
+  for (const id of ['result-folder', 'settings-result-folder']) {
+    byId(id).textContent = label;
+    byId(id).title = location;
+  }
+  byId('suggested-result-folder').textContent = location;
+  byId('result-folder-setup').hidden = !isDefault;
+}
 function renderUiContext(context) {
   if (!context || context.local_ui_only !== true || context.external_disclosure !== false) return;
-  const resultFolder = context.result_folder || 'Noch nicht festgelegt';
+  renderResultFolderConfiguration(context.result_folder, context.result_folder_is_default === true);
   const latestResultFolder = context.latest_result_folder || 'Noch kein abgeschlossener Lauf';
   latestResultFolderSeen = context.latest_result_folder || '';
   const sourceFolders = summarize(context.source_folders, 'Noch nicht ausgewählt');
   const selectedFiles = summarize(context.selected_files, 'Noch nicht ausgewählt');
-  for (const id of ['result-folder', 'settings-result-folder']) {
-    byId(id).textContent = resultFolder;
-    byId(id).title = resultFolder;
-  }
   byId('result-folder-results').textContent = latestResultFolder;
   byId('result-folder-results').title = latestResultFolder;
   byId('source-folders').textContent = sourceFolders;
@@ -380,6 +479,7 @@ function showError(error) {
 }
 
 function resetAdmissionUi() {
+  admissionFailureCode = null;
   admitted = false;
   admissionGeneration += 1;
   historyStateKey = null;
@@ -390,6 +490,9 @@ function resetAdmissionUi() {
   byId('home-selection').hidden = true;
   visible('select-files', true);
   visible('select-folder', true);
+  byId('select-files').textContent = 'Dateien auswählen';
+  byId('select-folder').textContent = 'Ordner mit Unterordnern auswählen';
+  byId('select-folder').title = 'Alle unterstützten Dateien aus diesem Ordner und seinen Unterordnern auswählen';
   visible('start', false);
   visible('cancel', false);
   updateModeAvailability();
@@ -397,8 +500,10 @@ function resetAdmissionUi() {
 }
 
 function renderAdmission(result) {
+  admissionFailureCode = null;
   admissionGeneration += 1;
   admitted = true;
+  setProcessPhase('entry');
   renderUiContext(result.ui_context);
   byId('home-selection').hidden = false;
   const size = Number.isSafeInteger(result.total_bytes) ? ` · ${Math.ceil(result.total_bytes / 1024)} KB` : '';
@@ -408,10 +513,15 @@ function renderAdmission(result) {
     : '';
   byId('summary').textContent = `${result.selected_count} Datei${result.selected_count === 1 ? '' : 'en'}${size}${recursive}${ignored} · vollständig lokal`;
   byId('summary').hidden = false;
-  status('Auswahl bereit', 'Einmal starten – danach läuft der Stapel ohne weitere Bestätigung.');
-  visible('select-files', false); visible('select-folder', false); visible('start', true); visible('cancel', true);
+  status('Auswahl bereit', 'Du kannst weitere Dateien oder Ordner hinzufügen. Erst „Starten“ verarbeitet den Stapel.');
+  visible('select-files', true); visible('select-folder', true); visible('start', true); visible('cancel', true);
+  byId('select-files').textContent = 'Dateien hinzufügen';
+  byId('select-folder').textContent = 'Ordner mit Unterordnern hinzufügen';
+  byId('select-folder').title = 'Alle unterstützten Dateien aus einem weiteren Ordner und seinen Unterordnern hinzufügen';
   visible('continue', false);
   byId('action-feedback').hidden = true;
+  if (result.already_selected_count > 0) actionFeedback(
+    `${result.already_selected_count} bereits ausgewählte Datei${result.already_selected_count === 1 ? '' : 'en'} nicht doppelt hinzugefügt.`);
   updateModeAvailability();
   updateDropAvailability();
 }
@@ -430,6 +540,14 @@ function handleNativeDrop(event) {
     actionFeedback('Die hineingezogene Auswahl wird lokal geprüft …');
   } else if (payload.phase === 'accepted') {
     nativeDropInFlight = false;
+    if (processPhase === 'completion') {
+      currentSessionRunStarted = false;
+      currentResultsAvailable = false;
+      suppressPriorTerminal = true;
+      byId('processing-mode').value = '';
+      byId('output-naming-mode').value = 'neutral';
+      renderModeHelp('');
+    }
     renderAdmission(payload.result);
     applyBusyState();
     if (activeView === 'process') byId(validMode(byId('processing-mode').value) ? 'start' : 'processing-mode').focus();
@@ -438,18 +556,28 @@ function handleNativeDrop(event) {
       nativeDropInFlight = false;
       applyBusyState();
     }
-    actionFeedback(messages[payload.error_code] || 'Die hineingezogene Auswahl konnte nicht übernommen werden.', true);
+    actionFeedback(unsupportedSelectionMessage(payload.error_code, payload.error_details,
+      'Die hineingezogene Auswahl konnte nicht übernommen werden.'), true);
   }
 }
 
 async function choose(command) {
-  if (operationInFlight || admitted) return;
+  if (operationInFlight || processPhase === 'completion') return;
   busy(true);
   try {
     const result = await invoke(command);
     if (result.cancelled) return;
     renderAdmission(result);
-  } catch (error) { showError(error); }
+  } catch (error) {
+    const { code, details } = localError(error);
+    actionFeedback(unsupportedSelectionMessage(code, details, admitted
+      ? 'Weitere Dateien konnten nicht hinzugefügt werden. Die bisherige Auswahl bleibt erhalten.'
+      : 'Der gewählte Ordner konnte nicht vollständig und sicher übernommen werden. Es wurde kein Stapel gestartet.'), true);
+    if (!admitted) {
+      admissionFailureCode = code;
+      showError(code);
+    }
+  }
   finally { busy(false); }
 }
 
@@ -505,8 +633,9 @@ for (const [index, name] of views.entries()) {
   });
 }
 for (const [id, mode] of [['task-markdown', 'markdown-only'], ['task-anonymize', 'markdown-and-anonymize']]) {
-  byId(id).addEventListener('click', () => {
+  byId(id).addEventListener('click', async () => {
     if (byId(id).disabled) return;
+    if (processPhase === 'completion' && !await prepareNewRun()) return;
     byId('processing-mode').value = mode;
     renderModeHelp(mode);
     updateModeAvailability();
@@ -519,6 +648,10 @@ byId('select-folder').addEventListener('click', () => choose('select_folder'));
 byId('process-results').addEventListener('click', () => {
   if (!byId('process-results').disabled) openLocal('open_current_results', 'Ergebnisordner');
 });
+byId('process-completion-results').addEventListener('click', () => {
+  if (!byId('process-completion-results').disabled) openLocal('open_current_results', 'Ergebnisordner');
+});
+byId('process-completion-history').addEventListener('click', () => switchView('results'));
 byId('processing-mode').addEventListener('change', () => { renderModeHelp(byId('processing-mode').value); updateModeAvailability(); });
 byId('output-naming-mode').addEventListener('change', () => { renderOutputNamingHelp(); updateModeAvailability(); });
 byId('cancel').addEventListener('click', async () => {
@@ -548,10 +681,16 @@ byId('start').addEventListener('click', async () => {
     startArguments.outputNamingMode = outputNamingMode;
   }
   if (!await call('start_admitted_batch', startArguments)) return;
+  lastFailureDetailsKey = '';
+  byId('process-failure-details').hidden = true;
+  byId('process-failure-list').replaceChildren();
   currentSessionResultBaseline = latestResultFolderSeen;
   currentSessionRunStarted = true;
+  suppressPriorTerminal = false;
+  setProcessPhase('working');
   lastProcessingMode = processingMode;
   admitted = false; admissionGeneration += 1; byId('summary').hidden = true;
+  byId('selection-list').hidden = true;
   currentResultsAvailable = false;
   updateCurrentResultsAvailability();
   historyStateKey = null;
@@ -563,13 +702,48 @@ byId('start').addEventListener('click', async () => {
   scheduleRefresh(0);
 });
 byId('continue').addEventListener('click', () => switchView('results'));
-byId('new-batch').addEventListener('click', () => {
-  if (!byId('processing-mode').disabled) {
-    byId('processing-mode').value = '';
-    byId('output-naming-mode').value = 'neutral';
-    renderModeHelp('');
-    updateModeAvailability();
+async function prepareNewRun() {
+  if (operationInFlight || processPhase === 'working' || ['preparing', 'processing'].includes(lastPublicState)) {
+    newBatchFeedback('Der aktuelle Lauf ist noch aktiv. Falls eine lokale Prüfung geöffnet wurde, schließe sie ab oder vertage sie dort. Danach kannst du eine neue Aufgabe wählen.', true);
+    return false;
   }
+  if (!await call('cancel_admission')) {
+    newBatchFeedback('Die neue Aufgabe konnte nicht vorbereitet werden. Bitte die Diagnose prüfen.', true);
+    return false;
+  }
+  newBatchFeedback('');
+  currentSessionRunStarted = false;
+  currentResultsAvailable = false;
+  suppressPriorTerminal = true;
+  lastFailureDetailsKey = '';
+  byId('process-failure-details').hidden = true;
+  byId('process-failure-list').replaceChildren();
+  resetAdmissionUi();
+  setProcessPhase('entry');
+  byId('processing-mode').value = '';
+  byId('output-naming-mode').value = 'neutral';
+  renderModeHelp('');
+  byId('action-feedback').hidden = true;
+  byId('source-folders').textContent = 'Noch nicht ausgewählt';
+  byId('selected-files').textContent = 'Noch nicht ausgewählt';
+  status('Bereit für einen neuen Lauf', 'Wähle eine Aufgabe und danach Dateien. Der vorherige Lauf bleibt im Verlauf.');
+  await refreshUiContext();
+  updateModeAvailability();
+  updateDropAvailability();
+  updateCurrentResultsAvailability();
+  return true;
+}
+function newBatchFeedback(message, error = false) {
+  const feedback = byId('new-batch-feedback');
+  feedback.textContent = message;
+  feedback.hidden = !message;
+  feedback.className = error ? 'nav-feedback error' : 'nav-feedback';
+}
+byId('prepare-new-run').addEventListener('click', async () => {
+  if (await prepareNewRun()) byId('processing-mode').focus();
+});
+byId('new-batch').addEventListener('click', async () => {
+  if (!await prepareNewRun()) return;
   switchView('home');
   byId('tab-home').focus();
 });
@@ -579,15 +753,11 @@ byId('diagnostics').addEventListener('click', async () => {
     actionFeedback('Der Diagnoseordner wurde an das Betriebssystem zum Öffnen übergeben. Die Protokolle enthalten keine Dateinamen, Pfade oder Inhalte.');
   } catch (error) { actionFeedback(messages[String(error)] || 'Der Diagnoseordner konnte nicht geöffnet werden.', true); }
 });
-byId('configure-results').addEventListener('click', async () => {
+async function configureResultFolder() {
   const result = await call('configure_results');
   if (result && !result.cancelled) {
     if (result.local_ui_only === true && result.external_disclosure === false) {
-      const resultFolder = result.result_folder || 'Noch nicht festgelegt';
-      for (const id of ['result-folder', 'settings-result-folder']) {
-        byId(id).textContent = resultFolder;
-        byId(id).title = resultFolder;
-      }
+      renderResultFolderConfiguration(result.result_folder, false);
     }
     actionFeedback(result.network_folder_notice === true
       ? 'Der Ordner ist gespeichert. Hinweis: Ergebnisse und Zuordnungsdateien können über dieses Netzlaufwerk an andere Systeme übertragen werden.'
@@ -595,7 +765,9 @@ byId('configure-results').addEventListener('click', async () => {
         ? 'Der neue Ordner ist gespeichert. Ausstehende Ergebnisse werden beim nächsten sicheren Wiederholungsversuch bereitgestellt.'
         : 'Künftige Ergebnisse werden dort in einem eigenen Laufordner abgelegt.');
   }
-});
+}
+byId('configure-results').addEventListener('click', configureResultFolder);
+byId('setup-results').addEventListener('click', configureResultFolder);
 
 function scheduleRefresh(delay) {
   clearTimeout(refreshTimer);
@@ -641,6 +813,19 @@ async function refresh() {
     } else lastTerminalContextKey = null;
     if (admitted || operationInFlight || pageClosed || generation !== admissionGeneration) return;
     lastPublicState = state.state;
+    if (currentSessionRunStarted && !suppressPriorTerminal &&
+        ['results_available', 'completed_without_results', 'review_required', 'stopped', 'export_pending'].includes(state.state)) {
+      setProcessPhase('completion');
+      byId('process-completion-title').textContent = state.state === 'review_required'
+        ? 'Prüfung für diesen Lauf offen' : state.state === 'stopped'
+          ? 'Fortsetzung für diesen Lauf möglich' : state.state === 'export_pending'
+            ? 'Bereitstellung dieses Laufs offen' : 'Dieser Lauf ist beendet';
+      byId('process-completion-help').textContent = state.state === 'review_required' || state.state === 'stopped'
+        ? 'Dieser Lauf benötigt noch eine Entscheidung oder Fortsetzung. Öffne ihn im Verlauf; ein neuer Lauf bleibt davon getrennt.'
+        : state.state === 'export_pending'
+          ? 'Die Bereitstellung dieses Laufs ist noch offen. Prüfe ihn im Verlauf, bevor du seine Ergebnisse verwendest.'
+          : 'Der Lauf ist abgeschlossen. Ergebnisse und Fehlerhinweise bleiben im Verlauf; für weitere Dateien beginne einen neuen Lauf.';
+    }
     const terminalHistory = !['preparing', 'processing'].includes(state.state);
     const nextHistoryKey = JSON.stringify([state.state, state.presentation_generation,
       terminalHistory ? state.result_count : null, terminalHistory ? state.failed_count : null,
@@ -658,7 +843,7 @@ async function refresh() {
     if (byId('result-warning')) {
       const warnings = Number.isSafeInteger(state.warning_count) ? state.warning_count : 0;
       const failed = Number.isSafeInteger(state.failed_count) ? state.failed_count : 0;
-      const details = failed ? 'Details zum Fehler findest du über „Diagnose öffnen“.' : '';
+      const details = failed ? 'Die betroffenen Dateien stehen im Abschluss unten oder im Verlauf.' : '';
       byId('result-warning').hidden = !converting;
       byId('result-warning').textContent = converting
         ? `Nicht anonymisiert: Die Dateien enthalten Originalinhalte.${warnings ? ` ${warnings} Datei(en) mit Extraktionshinweisen.` : ''}${failed ? ` ${failed} Datei(en) konnten nicht umgewandelt werden.` : ''}${details ? ` ${details}` : ''}`
@@ -679,22 +864,34 @@ async function refresh() {
       acknowledgedPresentationGeneration = null;
       const total = Number.isInteger(state.selected_count) ? state.selected_count : 0;
       const done = Number.isInteger(state.completed_count) ? state.completed_count : 0;
-      status(converting ? 'Umwandlung läuft' : 'Anonymisierung läuft', total > 0 ? `${done} von ${total} Dateien abgeschlossen.` : 'Die Dateien werden lokal verarbeitet.');
+      const reviews = Number.isInteger(state.review_count) ? state.review_count : 0;
+      const failed = Number.isInteger(state.failed_count) ? state.failed_count : 0;
+      const awaitingReview = reviews > 0 && total > 0 && done + failed + reviews >= total;
+      status(awaitingReview ? 'Lokale Prüfung erforderlich' : converting ? 'Umwandlung läuft' : 'Anonymisierung läuft',
+        awaitingReview
+          ? `${done} von ${total} Dateien abgeschlossen. ${reviews} Datei${reviews === 1 ? '' : 'en'} benötigt eine lokale Entscheidung. Bitte das separate Prüffenster abschließen oder dort vertagen; erst danach endet der Lauf und der Ergebnisordner wird verfügbar.`
+          : total > 0 ? `${done} von ${total} Dateien abgeschlossen.` : 'Die Dateien werden lokal verarbeitet.',
+        awaitingReview ? '!' : '✓');
       nextDelay = 1200;
     }
-    else if (state.state === 'review_required') { status('Prüfung erforderlich', `${state.review_count} Datei${state.review_count === 1 ? '' : 'en'} benötigt eine lokale Entscheidung.`); acknowledgeRenderedTerminalState(state.presentation_generation); }
-    else if (state.state === 'stopped') { status('Fortsetzung möglich', `${state.resumable_count} unterbrochene${state.resumable_count === 1 ? 'r Stapel kann' : ' Stapel können'} fortgesetzt werden.`); acknowledgeRenderedTerminalState(state.presentation_generation); }
+    else if (state.state === 'review_required') { status('Prüfung erforderlich', `${state.review_count} Datei${state.review_count === 1 ? '' : 'en'} benötigt eine lokale Entscheidung.`, '!'); acknowledgeRenderedTerminalState(state.presentation_generation); }
+    else if (state.state === 'stopped') { status('Fortsetzung möglich', `${state.resumable_count} unterbrochene${state.resumable_count === 1 ? 'r Stapel kann' : ' Stapel können'} fortgesetzt werden.`, '!'); acknowledgeRenderedTerminalState(state.presentation_generation); }
     else if (state.state === 'export_pending') {
       if (state.completion_pending === true) {
         status('Abschlussübersicht wird bereitgestellt',
-          'Die Verarbeitung ist abgeschlossen, aber die lokale Zuordnungsdatei oder der Abschlussnachweis konnte noch nicht vollständig gespeichert werden. Bitte den Ergebnisordner prüfen und erneut auswählen.');
+          'Die Verarbeitung ist abgeschlossen, aber die lokale Zuordnungsdatei oder der Abschlussnachweis konnte noch nicht vollständig gespeichert werden. Bitte den Ergebnisordner prüfen und erneut auswählen.', '!');
       } else {
-        status('Ergebnis wird bereitgestellt', `${state.export_pending_count} Ergebnis${state.export_pending_count === 1 ? ' wird' : 'se werden'} nach einer erneuten Ordnerprüfung bereitgestellt.`);
+        status('Ergebnis wird bereitgestellt', `${state.export_pending_count} Ergebnis${state.export_pending_count === 1 ? ' wird' : 'se werden'} nach einer erneuten Ordnerprüfung bereitgestellt.`, '!');
       }
       acknowledgeRenderedTerminalState(state.presentation_generation);
     }
     else if (state.state === 'results_available') {
-      status('Fertig', converting ? `${state.result_count} Markdown-Datei${state.result_count === 1 ? ' wurde' : 'en wurden'} erstellt. Nicht anonymisiert.` : `${state.result_count} anonymisierte${state.result_count === 1 ? 's Ergebnis ist' : ' Ergebnisse sind'} verfügbar.`);
+      const failed = Number.isSafeInteger(state.failed_count) ? state.failed_count : 0;
+      const completed = converting ? `${state.result_count} Markdown-Datei${state.result_count === 1 ? ' wurde' : 'en wurden'} erstellt. Nicht anonymisiert.`
+        : `${state.result_count} anonymisierte${state.result_count === 1 ? 's Ergebnis ist' : ' Ergebnisse sind'} verfügbar.`;
+      status(failed > 0 ? 'Abgeschlossen mit Hinweisen' : 'Fertig',
+        `${completed}${failed > 0 ? ` ${failed} Datei${failed === 1 ? ' wurde' : 'en wurden'} sicher gestoppt. Betroffene Dateien stehen unten und im Verlauf.` : ''}`,
+        failed > 0 ? '!' : '✓');
       acknowledgeRenderedTerminalState(state.presentation_generation);
     }
     else if (state.state === 'completed_without_results') {
@@ -703,7 +900,7 @@ async function refresh() {
         : state.ledger_available === true
           ? 'Details stehen in der lokalen Zuordnung.'
           : 'Eine Zuordnungsdatei ist für diesen Lauf nicht verfügbar. Bitte die Diagnose öffnen.';
-      status('Abgeschlossen mit Hinweisen', `${state.failed_count} Datei${state.failed_count === 1 ? ' wurde' : 'en wurden'} nicht verarbeitet. Es ist kein${converting ? ' Markdown-' : ' anonymisiertes '}Ergebnis verfügbar. ${details}`);
+      status('Keine Ergebnisse erstellt', `${state.failed_count} Datei${state.failed_count === 1 ? ' wurde' : 'en wurden'} sicher gestoppt. Es ist kein${converting ? ' Markdown-' : ' anonymisiertes '}Ergebnis verfügbar. Betroffene Dateien stehen unten und im Verlauf. ${details}`, '!');
       acknowledgeRenderedTerminalState(state.presentation_generation);
     }
     else if (state.state === 'blocked') { acknowledgedPresentationGeneration = null; status('Nicht bereit', 'Der lokale DataSecure-Core konnte nicht gestartet werden.'); }
@@ -711,10 +908,41 @@ async function refresh() {
       acknowledgedPresentationGeneration = null;
       status('Bereit', 'Wähle Dateien oder einen ganzen Ordner aus.');
     }
+    const showFailedFiles = currentSessionRunStarted && !suppressPriorTerminal &&
+      ['results_available', 'completed_without_results'].includes(state.state) &&
+      Number.isSafeInteger(state.failed_count) && state.failed_count > 0;
+    byId('process-failure-details').hidden = !showFailedFiles;
+    if (showFailedFiles) {
+      byId('process-failure-summary').textContent = `Nicht verarbeitete Dateien (${state.failed_count})`;
+      byId('process-failure-details').open = true;
+      const detailsKey = `${state.state}:${state.presentation_generation ?? ''}:${state.failed_count}:${generation}`;
+      if (detailsKey !== lastFailureDetailsKey) {
+        lastFailureDetailsKey = detailsKey;
+        byId('process-failure-list').textContent = 'Dateinamen werden nur lokal gelesen …';
+        try {
+          // Tauri requires the optional camelCase argument to be present;
+          // omitting it rejects the command before it reaches the sidecar.
+          const result = await invoke('get_run_failures', { batchId: null });
+          if (!pageClosed && !operationInFlight && generation === admissionGeneration) {
+            renderFailedFiles(byId('process-failure-list'), result);
+          }
+        } catch {
+          if (!pageClosed && generation === admissionGeneration) {
+            byId('process-failure-list').textContent = 'Die Dateidetails konnten nicht geladen werden. Bitte im Verlauf erneut versuchen.';
+          }
+        }
+        if (admitted || operationInFlight || pageClosed || generation !== admissionGeneration) return;
+      }
+    }
     if (state.termination_unconfirmed === true) {
       status('Verarbeitung unterbrochen', 'Das Ende des Konvertierungsprozesses konnte nicht bestätigt werden. Übrige Dateien wurden nicht gestartet. Bitte die Diagnose prüfen.');
       byId('status-icon').textContent = '!';
     }
+    if (suppressPriorTerminal && !currentSessionRunStarted &&
+        ['results_available', 'completed_without_results', 'review_required', 'stopped', 'export_pending'].includes(state.state)) {
+      status('Bereit für einen neuen Lauf', 'Wähle eine Aufgabe und danach Dateien. Der vorherige Lauf bleibt im Verlauf.');
+    }
+    if (admissionFailureCode && processPhase === 'entry' && !admitted) showError(admissionFailureCode);
   } catch (error) {
     if (!admitted && !operationInFlight && !pageClosed && generation === admissionGeneration) showError(error);
   }

@@ -1,6 +1,69 @@
 # Aktueller Iststand
 
-Stand: 23.09.2026 · 3.2.0-rc142 · Standalone macOS RC141 dauerhaft veröffentlicht; Standalone Windows/Linux und Cowork bleiben RC140; Modellabnahme und N3/N4 offen
+Stand: 29.09.2026 · 3.2.0-rc151 lokaler Entwicklungsstand · Standalone macOS RC141 dauerhaft veröffentlicht; Standalone Windows/Linux und Cowork bleiben RC140; Modellabnahme und N3/N4 offen
+
+Lokaler RC149-UAT-Nachtrag BL-010.42: Ein 140-Dateien-Korpus ergab 138
+anonymisierte Ergebnisse und zwei sicher gestoppte DOCX. Die technischen
+Tabellenwerte „Service Level“ und „Fail Closed“ waren zuvor nur als
+unlokalisierbare mögliche Personennamen erfasst. Einfache Zellen in Tabellen
+ohne sensibles Identitätslabel erhalten jetzt positionsgebundene lokale
+Prüffundstellen; eine menschliche Entscheidung kann den Lauf fortsetzen,
+ohne unbekannte Wörter global freizugeben. Wiederholt identische
+Rest-Personenkandidaten desselben Typs werden innerhalb einer aktuellen
+Prüfgruppe nur einmal abgefragt, aber an jeder Fundstelle separat verifiziert.
+Die Dateidetailansicht übergibt nun den optionalen `batchId`-Parameter
+ausdrücklich; die privaten Journalnamen sollen damit auch beim aktuellen
+abgeschlossenen Lauf erscheinen. Zielhost- und erneuter Vollkorpusnachweis
+stehen noch aus; RC149-ZIP enthält diese Änderungen nicht.
+
+Lokaler Nachtrag BL-010.41 zum RC147-Zielhostlauf: Die fünf gestoppten
+PowerPoints hatten teils passive OLE-/PowerPoint-Metadaten, teils intern
+verknüpfte XLSX-Tabellen. Standalones Markdown-first-Admission lässt nun
+gezielt bekannte interne Beziehungen zu; eingebettete XLSX werden vor der
+Zellübernahme selbst als OOXML geprüft. Die fünf echten lokalen Quellen
+bestehen die neue Strukturprüfung und liefern Markdown im gepackten isolierten
+Parser. Ein synthetischer PDF-/PPTX-Paketbatch einschließlich XLSX-Einbettung
+lieferte drei anonymisierte Markdown-Ergebnisse samt Zuordnung. Die fünf
+Benutzerdateien wurden noch nicht durch die Anonymisierung geführt; eine
+Freigabe des vollständigen PPTX-Inhalts ist daraus nicht abzuleiten. XLSX
+bleibt direkt Markdown-first; ein CSV-
+Zwischenschritt wäre für mehrblättrige Mappen verlustbehaftet. Cowork und
+die bereits veröffentlichten Pakete ändern sich dadurch nicht.
+
+Lokaler, noch unveröffentlichter Standalone-Nachtrag BL-010.37: Eine vor
+`Starten` vorbereitete Auswahl kann über Datei-/Ordnerpicker oder Drop ergänzt
+werden. Doppelte Quellen werden übersprungen; ungültige oder zu große Nachträge
+lassen die bestehende Queue unverändert. Nach `Starten` gehört Neues in einen
+eigenen Lauf. Automatisierte Prüfungen und ein neuer lokaler Kandidat werden
+vor der sichtbaren Benutzerabnahme durchgeführt; daraus folgt noch keine
+Änderung der veröffentlichten Windows-/Mac-/Linux- oder Cowork-Pakete.
+BL-010.38 trennt zusätzlich einen abgeschlossenen Lauf von der Vorbereitung
+des nächsten. Der RC143-Zielhostbefund mit sieben sicher gestoppten PDFs ist
+auf das bisherige `PDF_OBJECT_COVERAGE_UNVERIFIED`-Gate zurückgeführt.
+DS-103/BL-010.39 führt jetzt auch Standalone-PDF/PPTX über die bereits
+gebündelte passive Markdown-Extraktion in die nachgelagerte Anonymisierung.
+Die Quellabdeckung bleibt ausdrücklich unvollständig; unsichere Quellen
+stoppen weiter. Abschlussansicht, bewusste Rücksetzung, Warnanzeige und
+dieser Privacy-Übergang sind nur lokal und noch nicht als Release oder
+sichtbare Zielhost-UAT belegt.
+BL-010.40 ergänzt den RC144-Zielhostbefund 11/12: Die lokale Reviewphase
+startete, doch ein sichtbares Prüffenster war nicht nachweisbar, während der
+interaktive Prozess weiterlief. RC145 startet nur diesen Dialog ohne versteckten
+Top-Level-Start und erklärt im Standalone-Status den Reviewbedarf. „Neue Aufgabe
+wählen“ ist in der gemeinsamen Navigation aller Ansichten verfügbar und nennt
+bei einem aktiven Lauf den Sperrgrund, statt einen Klick stumm zu ignorieren.
+Der lokale Windows-Paket-Smoke und die automatisierten UI-/Reviewtests bestehen.
+Im sichtbaren Windows-Test erschien das Prüffenster und der Stapel endete mit
+11 anonymisierten Ergebnissen sowie einer sicher gestoppten Datei; das belegt
+den interaktiven Abschlussweg, nicht die Freigabe aller 12 Quellen. Der Test
+zeigte zugleich eine Verwechslungsgefahr bei zwei gelben Stellen: Die aktive
+Entscheidung war nur als „Stelle 2 von 2“ benannt, obwohl ein anderer Name
+bereits automatisch anonymisiert war. Die lokale Quelländerung zeigt deshalb
+den exakten aktuell zu entscheidenden Text und hebt ihn in beiden Ansichten
+gold hervor. Der lokale RC146-Windows-Testbau aus diesem Quellstand besteht
+Paket-, isolierte Sidecar-, Konvertierungs-, Privacy- und Verlauf-Smokes. Der
+reale Sichttest der neuen Entscheidungsleiste steht noch aus. Weder RC145 noch
+RC146 ist veröffentlicht oder an einen sauberen Quellcommit gebunden.
 
 ## RC141 – veröffentlichter, nativ geprüfter Standalone-Mac-Kandidat
 
@@ -1677,8 +1740,11 @@ PDF-/OCR-Pfad sicher gesperrt. Standalone verwendet den gebündelten
 Offline-PDF-/OCR-Pfad sowohl für reine Konvertierung als auch für die
 Anonymisierung des extrahierten Markdown-Inhalts; dessen Hinweise sind keine
 Vollständigkeitszusage für den Originalcontainer. Zielhost-/Fachabnahme bleibt
-offen. Der Standalone-E0-Vertrag stoppt erkannte Formulare/XFA, JavaScript-
-Aktionen, Anhänge, Signaturen, Annotationen, Outline, XMP und Verschlüsselung.
+offen. Der bisherige strenge Standalone-E0-Vertrag stoppte erkannte Formulare,
+JavaScript-Aktionen, Anhänge, Signaturen, Annotationen, Outline und XMP.
+DS-103 lässt solche passiven Objekte im Standalone-Markdown-Weg aus und
+anonymisiert ausschließlich den extrahierten Text; deren Inhalt gilt nicht
+als geprüft. XFA, Verschlüsselung und unsichere Strukturen stoppen weiterhin.
 Standardskonforme In-Memory-PDFs laufen dabei durch den echten paketierten
 PDF.js-Parser. Diese Prüfung fand und schloss einen realen Defect: PDF.js 6
 liefert Anhänge als `Map`; eine reine `Object.keys`-Prüfung hatte sie zuvor
@@ -1755,6 +1821,14 @@ lassen ihn fortsetzbar ruhen; Claude muss keinen zweiten Toolaufruf auslösen.
 ### BL-044 – Sichere Datei- und Ordnerquellen
 Mehrfachauswahl und rekursiver Ordnervertrag sind E0 implementiert; reale Link-/Race-
 Gegenproben fehlen.
+Ein lokaler Windows-RC145-Befund zeigte einen Oberordner mit ausschließlich
+Unterordnern: Die Rekursion funktionierte, aber eine darin enthaltene 75-MiB-
+PPTX überschritt die 64-MiB-Einzeldateigrenze. Der private Fehler wurde als
+generischer Fehlercode ausgegeben und die Statusanzeige anschließend vom
+Leerlauf-Poll überschrieben. Der lokale Folgekandidat erhält den spezifischen
+Größenfehlercode und hält die Erklärung bis zur nächsten erfolgreichen Auswahl
+sichtbar; die Sicherheitsgrenze und die vollständige Ablehnung des Ordners
+bleiben unverändert. Der tatsächliche Nutzerlauf des Folgekandidaten ist offen.
 
 ### BL-047 – Performance und Ressourcensteuerung
 Adaptive Vorbereitung ist technisch begrenzt, bleibt bis zu Referenzmessungen im

@@ -7,6 +7,7 @@ const { createSuite } = require('./helpers');
 const { zipStore } = require('./lib/zip');
 const { opcControlEntries, TYPES } = require('./lib/opc');
 const { inspectSourceFormatFromFd } = require('../plugins/data-secure/server/gateway/source-format-inspector');
+const { extractMarkdownBuffer } = require('../plugins/data-secure/server/standalone/markdown-extractor');
 
 const { test, done, assert } = createSuite('OPC source integrity preflight');
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-opc-preflight-'));
@@ -161,7 +162,7 @@ test('external or active relationships anywhere in the package are rejected', ()
   assert.strictEqual(result.code, 'SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
 });
 
-test('passive presentation conversion admits omitted OLE and hyperlinks but privacy remains strict', () => {
+test('Standalone Markdown-first privacy admits passive presentation objects but keeps plugin strict', () => {
   const controls = opcControlEntries('pptx');
   const rels = '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
     '<Relationship Id="o1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject" Target="../embeddings/oleObject1.bin"/>' +
@@ -177,8 +178,8 @@ test('passive presentation conversion admits omitted OLE and hyperlinks but priv
   const conversion = { processingMode: 'markdown-only', productChannel: 'standalone' };
   assert.strictEqual(inspect('passive.pptx', zipStore(parts), conversion).verdict, 'candidate');
   assert.strictEqual(inspect('private.pptx', zipStore(parts),
-    { processingMode: 'markdown-and-anonymize', productChannel: 'standalone' }).code,
-  'SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
+    { processingMode: 'markdown-and-anonymize', productChannel: 'standalone' }).verdict,
+  'candidate');
   assert.strictEqual(inspect('cowork.pptx', zipStore(parts),
     { processingMode: 'markdown-only', productChannel: 'plugin' }).code,
   'SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
@@ -188,6 +189,67 @@ test('passive presentation conversion admits omitted OLE and hyperlinks but priv
   assert.strictEqual(inspect('external-template.pptx', zipStore(parts.map(([name, value]) =>
     name === 'ppt/slides/_rels/slide1.xml.rels' ? [name, rels.replace('relationships/hyperlink', 'relationships/attachedTemplate')] : [name, value])),
   conversion).code, 'SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
+});
+
+test('Standalone reads a linked embedded workbook while keeping passive PowerPoint metadata incomplete', () => {
+  const relationshipNamespace = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const packageNamespace = 'http://schemas.openxmlformats.org/package/2006/relationships';
+  const workbook = zipStore([
+    ...opcControlEntries('xlsx'),
+    ['xl/workbook.xml', `<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="${relationshipNamespace}"><sheets><sheet name="Kontakte" sheetId="1" r:id="s1"/></sheets></workbook>`],
+    ['xl/_rels/workbook.xml.rels', `<Relationships xmlns="${packageNamespace}"><Relationship Id="s1" Type="${relationshipNamespace}/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`],
+    ['xl/worksheets/sheet1.xml', '<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Kontakt: Erika Beispiel</t></is></c></row></sheetData></worksheet>']
+  ]);
+  const presentationRels = `<Relationships xmlns="${packageNamespace}">` +
+    `<Relationship Id="s1" Type="${relationshipNamespace}/slide" Target="slides/slide1.xml"/>` +
+    '<Relationship Id="a1" Type="http://schemas.microsoft.com/office/2018/10/relationships/authors" Target="authors.xml"/>' +
+    '<Relationship Id="r1" Type="http://schemas.microsoft.com/office/2015/10/relationships/revisionInfo" Target="revisionInfo.xml"/>' +
+    '<Relationship Id="c1" Type="http://schemas.microsoft.com/office/2016/11/relationships/changesInfo" Target="changesInfos/changesInfo1.xml"/>' +
+    '</Relationships>';
+  const slideRels = `<Relationships xmlns="${packageNamespace}">` +
+    `<Relationship Id="p1" Type="${relationshipNamespace}/package" Target="../embeddings/data.xlsx"/>` +
+    `<Relationship Id="o1" Type="${relationshipNamespace}/oleObject" Target="../embeddings/oleObject1.bin"/>` +
+    '</Relationships>';
+  const parts = [
+    ...opcControlEntries('pptx'),
+    ['ppt/presentation.xml', `<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:r="${relationshipNamespace}"><p:sldIdLst><p:sldId id="256" r:id="s1"/></p:sldIdLst></p:presentation>`],
+    ['ppt/_rels/presentation.xml.rels', presentationRels],
+    ['ppt/slides/slide1.xml', '<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>Folientext</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>'],
+    ['ppt/slides/_rels/slide1.xml.rels', slideRels],
+    ['ppt/embeddings/data.xlsx', workbook],
+    ['ppt/embeddings/oleObject1.bin', Buffer.from([1, 2, 3])],
+    ['ppt/authors.xml', '<authorLst/>'],
+    ['ppt/revisionInfo.xml', '<revInfo/>'],
+    ['ppt/changesInfos/changesInfo1.xml', '<chgInfo/>']
+  ];
+  const bytes = zipStore(parts);
+  const standalone = { productChannel: 'standalone', processingMode: 'markdown-and-anonymize' };
+  assert.strictEqual(inspect('linked-workbook.pptx', bytes, standalone).verdict, 'candidate');
+  assert.strictEqual(inspect('linked-workbook-plugin.pptx', bytes,
+    { productChannel: 'plugin', processingMode: 'markdown-and-anonymize' }).code,
+  'SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
+  const extraction = extractMarkdownBuffer(bytes, '.pptx');
+  assert.match(extraction.markdown, /Erika Beispiel/u);
+  assert.deepStrictEqual(extraction.coverage.reason_codes,
+    ['SOURCE_COVERAGE_UNVERIFIED']);
+  const mislabelledWorkbook = zipStore(parts.map(([name, value]) => name === 'ppt/embeddings/data.xlsx'
+    ? [name, docx()] : [name, value]));
+  const mislabelledExtraction = extractMarkdownBuffer(mislabelledWorkbook, '.pptx');
+  assert.doesNotMatch(mislabelledExtraction.markdown, /Erika Beispiel/u);
+  assert.deepStrictEqual(mislabelledExtraction.coverage.reason_codes,
+    ['SOURCE_COVERAGE_UNVERIFIED']);
+  const changedTarget = zipStore(parts.map(([name, value]) => name === 'ppt/slides/_rels/slide1.xml.rels'
+    ? [name, slideRels.replace('embeddings/data.xlsx', 'embeddings/oleObject1.bin')] : [name, value]));
+  assert.strictEqual(inspect('wrong-package-target.pptx', changedTarget, standalone).code,
+    'SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
+  const externalPackage = zipStore(parts.map(([name, value]) => name === 'ppt/slides/_rels/slide1.xml.rels'
+    ? [name, slideRels.replace('Target="../embeddings/data.xlsx"',
+      'Target="https://example.invalid/data.xlsx" TargetMode="External"')] : [name, value]));
+  assert.strictEqual(inspect('external-package.pptx', externalPackage, standalone).code,
+    'SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
+  const active = zipStore([...parts, ['ppt/vbaProject.bin', Buffer.from([1])]]);
+  assert.strictEqual(inspect('macro-with-workbook.pptx', active, standalone).code,
+    'SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
 });
 
 test('foreign relationship namespaces are rejected even when their final name looks supported', () => {

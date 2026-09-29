@@ -1,6 +1,6 @@
 # Produktvertrag: GBH DataSecure
 
-Stand: 11.09.2026 · Ist-Zustand RC142
+Stand: 29.09.2026 · Ist-Zustand RC151 (lokaler Entwicklungsstand, noch nicht veröffentlicht)
 
 ## Ziel
 
@@ -27,6 +27,13 @@ Funktionswahl und Dateiauswahl startet der Anwender einmal die Verarbeitung.
 Zählern und Status. Jede Zeile öffnet nur ihren eigenen Ergebnisordner bzw. bei
 Anonymisierung ihre Zuordnung oder setzt genau diesen Stapel fort, sofern möglich. Ein
 Abschluss oder Neustart wechselt die Ansicht nicht automatisch.
+Nach einem Abschluss bleibt die Prozessansicht im Abschlusszustand: Sie bietet
+Ergebnis/Verlauf und **Neuen Lauf vorbereiten**, aber keine gleichzeitige
+alte Abschlussmeldung über einer neuen Dateiauswahl. Erst die bewusste neue
+Aufgabe leert Modus und Auswahl; der alte Lauf bleibt im Verlauf. Ein
+fortsetzbarer Lauf wird dadurch nicht heimlich verworfen, sondern bleibt an
+seine Verlaufszeile gebunden. Vor **Starten** darf die vorbereitete Auswahl
+noch ergänzt oder korrigiert werden; danach nicht mehr.
 Nach einem Neustart ist die aktuelle Prozesskarte leer und eine neue Auswahl
 sofort möglich. Frühere fortsetzbare Läufe werden nicht automatisch geladen;
 sie bleiben ausschließlich über ihre konkrete Zeile im Verlauf erreichbar.
@@ -76,12 +83,12 @@ bestätigte Person das stapelweit stabile Pseudonym erhält.
 
 BL-021.3 erweitert im unveröffentlichten Quellstand den lokalen Review auf
 exakt lokalisierbare, ausschließlich heuristische Rest-Personenkandidaten.
-Diese werden **pro Fundstelle** entschieden, nicht nach gleichem Wortlaut
-gruppiert. Eine gültige Beibehalten-Entscheidung gilt nur für die unveränderte
-geprüfte Fassung; direkte Identifier, bekannte Originalwerte und explizite
-Personenfelder bleiben unabhängig geprüft. Ohne Entscheidung beziehungsweise
-bei unklarer Herkunft kein Export. Dies ist keine automatische Freigabe von
-Hinweistexten und ändert weder Markdown-only noch den freigegebenen Formatscope.
+Exakt gleich geschriebene Kandidaten desselben Typs werden innerhalb **eines**
+Reviews mit einer sichtbaren Entscheidung gemeinsam behandelt. Technisch wird
+die Entscheidung dennoch an jede geprüfte Fundstelle der unveränderten Fassung
+gebunden; es entsteht keine dauerhafte Wortfreigabe. Direkte Identifier,
+bekannte Originalwerte, explizite Personenfelder und unlokalisierbare Befunde
+bleiben unabhängig gesperrt. Reine Markdown-Konvertierung bleibt unverändert.
 
 BL-021.4 ergänzt dieselbe lokale Entscheidung vor einer Identitätsbindung:
 Eine rein typografisch namensähnliche Versalienüberschrift bei unabhängig

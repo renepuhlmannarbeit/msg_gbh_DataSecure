@@ -10,16 +10,27 @@
   <main class="shell">
     <header><p class="eyebrow">GBH DataSecure</p><h1>Dokumente lokal vorbereiten</h1>
       <p class="lead">In Markdown umwandeln. Auf Wunsch anonymisieren. Ohne Cloud oder Internet.</p></header>
-    <nav class="tabs" role="tablist" aria-label="Hauptbereiche">
-      <button id="tab-home" class="tab active" role="tab" aria-controls="home-view" aria-selected="true" tabindex="0">Start</button>
-      <button id="tab-process" class="tab" role="tab" aria-controls="process-view" aria-selected="false" tabindex="-1">Verarbeiten</button>
-      <button id="tab-results" class="tab" role="tab" aria-controls="results-view" aria-selected="false" tabindex="-1">Verlauf</button>
-    </nav>
+    <div class="nav-row">
+      <nav class="tabs" role="tablist" aria-label="Hauptbereiche">
+        <button id="tab-home" class="tab active" role="tab" aria-controls="home-view" aria-selected="true" tabindex="0">Start</button>
+        <button id="tab-process" class="tab" role="tab" aria-controls="process-view" aria-selected="false" tabindex="-1">Verarbeiten</button>
+        <button id="tab-results" class="tab" role="tab" aria-controls="results-view" aria-selected="false" tabindex="-1">Verlauf</button>
+      </nav>
+      <button id="new-batch" type="button">Neue Aufgabe wählen</button>
+      <p id="new-batch-feedback" class="nav-feedback" role="status" hidden></p>
+    </div>
     <section class="card">
       <div class="status-row" aria-live="polite">
         <div id="status-icon" class="status-icon">✓</div>
         <div><h2 id="status-title">Bereit</h2><p id="status-text">Wähle Dateien oder einen ganzen Ordner aus.</p></div>
       </div>
+      <section id="result-folder-setup" class="setup-notice" aria-labelledby="result-folder-setup-title" hidden>
+        <div>
+          <h2 id="result-folder-setup-title">Ergebnisordner festlegen</h2>
+          <p>Es ist noch kein eigener Ergebnisordner ausgewählt. Wähle einen vorhandenen Ordner oder lege im folgenden Dialog einen neuen an. Ohne Auswahl erstellt DataSecure beim ersten Start automatisch den vorgeschlagenen Standardordner: <span id="suggested-result-folder"></span></p>
+        </div>
+        <button id="setup-results" type="button">Ergebnisordner auswählen</button>
+      </section>
 
       <div id="home-view" class="view" role="tabpanel" aria-labelledby="tab-home" tabindex="0">
         <h2>Was möchtest du tun?</h2>
@@ -41,6 +52,7 @@
       </div>
 
       <div id="process-view" class="view" role="tabpanel" aria-labelledby="tab-process" tabindex="0" hidden>
+        <div id="process-form">
         <label for="processing-mode" class="mode-label">Verarbeitung</label>
         <select id="processing-mode" aria-describedby="processing-mode-help" disabled>
           <option value="" selected>Bitte eine Aufgabe auswählen</option>
@@ -58,7 +70,11 @@
         </div>
         <div id="drop-zone" class="drop-zone" role="region" aria-label="Dateiaufnahme" aria-disabled="true">
           <strong>Dateien oder einen Ordner hierher ziehen</strong>
-          <span>Bei einem Ordner werden alle unterstützten Dateien in sämtlichen Unterordnern aufgenommen. TXT, Markdown, CSV, DOCX, XLSX, PPTX, PDF und Bilder (PNG/JPEG/BMP) · bis zu 200 Dateien und 500 MB pro Stapel.<br>Oder unten auswählen. Die Verarbeitung beginnt erst mit „Starten“.</span>
+          <span>Bei einem Ordner werden alle unterstützten Dateien in sämtlichen Unterordnern aufgenommen. TXT, Markdown, CSV, DOCX, XLSX, PPTX, PDF und Bilder (PNG/JPEG/BMP) · bis zu 200 Dateien und 500 MB pro Stapel.<br>Vor „Starten“ kannst du weitere Dateien oder Ordner hinzufügen. Die Verarbeitung beginnt erst mit „Starten“.</span>
+        </div>
+        <div class="actions selection-actions" aria-label="Dateiauswahl ergänzen">
+          <button id="select-files" class="primary">Dateien auswählen</button>
+          <button id="select-folder" title="Alle unterstützten Dateien aus diesem Ordner und seinen Unterordnern auswählen">Ordner mit Unterordnern auswählen</button>
         </div>
         <div id="summary" class="summary" hidden></div>
         <ul id="selection-list" class="selection-list" aria-label="Ausgewählte Dateien" hidden></ul>
@@ -68,14 +84,26 @@
           <div><dt>Ergebnisordner</dt><dd id="result-folder" title="">Noch nicht geladen</dd></div>
         </dl>
         <div class="actions">
-          <button id="select-files" class="primary">Dateien auswählen</button>
-          <button id="select-folder" title="Alle unterstützten Dateien aus diesem Ordner und seinen Unterordnern auswählen">Ordner mit Unterordnern auswählen</button>
           <button id="process-results" disabled title="Noch kein Ergebnisordner verfügbar.">Ergebnisordner</button>
           <button id="start" class="primary" aria-describedby="start-help" disabled hidden>Starten</button>
           <button id="cancel" hidden>Auswahl leeren</button>
           <button id="continue" class="primary" hidden>Im Verlauf fortsetzen</button>
         </div>
         <p id="start-help" class="mode-help" hidden>Bitte zuerst eine Aufgabe auswählen.</p>
+        </div>
+        <div id="process-completion" hidden>
+          <h2 id="process-completion-title">Dieser Lauf ist beendet</h2>
+          <p id="process-completion-help" class="section-intro">Den Abschluss findest du im Verlauf. Bereite für weitere Dateien einen neuen Lauf vor.</p>
+          <div class="actions">
+            <button id="prepare-new-run" class="primary">Neuen Lauf vorbereiten</button>
+            <button id="process-completion-results" disabled title="Noch kein Ergebnisordner verfügbar.">Ergebnisordner</button>
+            <button id="process-completion-history">Lauf im Verlauf ansehen</button>
+          </div>
+          <details id="process-failure-details" class="failure-details" hidden>
+            <summary id="process-failure-summary">Nicht verarbeitete Dateien</summary>
+            <div id="process-failure-list"></div>
+          </details>
+        </div>
       </div>
 
       <div id="results-view" class="view" role="tabpanel" aria-labelledby="tab-results" tabindex="0" hidden>
@@ -97,7 +125,6 @@
           <div><dt>Letzter Lauf</dt><dd id="result-folder-results" title="">Noch kein abgeschlossener Lauf</dd></div>
         </dl>
         </details>
-        <div class="actions"><button id="new-batch">Neue Aufgabe wählen</button></div>
       </div>
 
       <p id="action-feedback" class="action-feedback" role="status" aria-live="polite" hidden></p>

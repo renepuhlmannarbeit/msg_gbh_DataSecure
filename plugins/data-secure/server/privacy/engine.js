@@ -19,6 +19,7 @@ const {
   hasLabelBefore,
   plausibleCalendarDate,
   hasAmbiguousSensitiveTable,
+  isResolvedSensitiveTableHeader,
   isAllowedOrg,
   orgAlias,
   titleCase,
@@ -33,6 +34,7 @@ const {
   GENDERED_SALUTATION,
   ACADEMIC_HONORIFIC,
   markdownTableCells,
+  markdownTableColumnValues,
   collectPersonAnchors,
   collectPersonSeeds,
   collectContextualNameCandidates,
@@ -232,10 +234,11 @@ function residualTablePersonCandidates(text) {
     const separator = markdownTableCells(all[index + 1]);
     if (!headers || !separator || headers.length !== separator.length ||
         !separator.every((cell) => /^:?-{3,}:?$/u.test(cell))) continue;
-    // Generated converter columns carry no person-role evidence. A plain,
-    // exactly locatable name-shaped cell may use the existing local review;
-    // labelled columns and transformed/escaped cells retain the strict gate.
+    // A plain cell in a table without any sensitive identity header can be
+    // bound to an exact local-review span. Identity-labelled tables and
+    // transformed/escaped cells retain the strict gate.
     const generatedColumns = headers.every((header, column) => header === `Spalte ${column + 1}`);
+    const reviewableColumns = generatedColumns || !headers.some(isResolvedSensitiveTableHeader);
     index += 2;
     while (index < all.length) {
       const row = markdownTableCells(all[index]);
@@ -256,7 +259,7 @@ function residualTablePersonCandidates(text) {
         if (words.length === 2 && candidate.length <= 160 && looksName(candidate) && !ratedProfessionalPhrase) {
           const raw = all[index];
           const cells = raw.trim().replace(/^\|/u, '').replace(/\|$/u, '').split('|');
-          if (generatedColumns && !raw.includes('\\|') && value === candidate && cells.length === row.length &&
+          if (reviewableColumns && !raw.includes('\\|') && value === candidate && cells.length === row.length &&
               !cells[column].includes('\\') && raw.trim().startsWith('|')) {
             const start = lineOffsets[index] + raw.indexOf('|') + 1 +
               cells.slice(0, column).reduce((sum, cell) => sum + cell.length + 1, 0) + cells[column].indexOf(candidate);
@@ -272,6 +275,20 @@ function residualTablePersonCandidates(text) {
         }
       }
       index++;
+    }
+  }
+  return findings;
+}
+
+function residualSensitiveListPersons(text) {
+  // Independent release check: if the redactor's explicit-column rule ever
+  // regresses, a semicolon-delimited name must not quietly ship in Markdown.
+  const label = /^(?:Muss ersetzt werden|Personenbezogene Daten|Personennamen|Sensitive data|PII):?$/iu;
+  const findings = [];
+  for (const value of markdownTableColumnValues(text, label)) {
+    for (const part of value.split(';')) {
+      const candidate = normalizeSpaces(part);
+      if (looksName(candidate)) findings.push({ type: 'PERSON_CANDIDATE', text: candidate });
     }
   }
   return findings;
@@ -384,6 +401,12 @@ function buildPersonDictionary(seeds, reg) {
     const canonical = titleCase(seed.value);
     const ph = reg.assign('PERSON', canonical);
     entries.push({ value: seed.value, placeholder: ph, type: 'PERSON', priority: PRIORITY.PERSON });
+    // A spreadsheet or filename can spell the already anchored full identity
+    // as a slug. Match the whole two-token name before the surname alias does,
+    // otherwise "Laura-Stein" becomes the leaking "Laura-[PERSON]".
+    if (/^[\p{L}][\p{L}'’]+[ \t]+[\p{L}][\p{L}'’]+$/u.test(canonical)) {
+      entries.push({ value: canonical.replace(/[ \t]+/u, '-'), placeholder: ph, type: 'PERSON', priority: PRIORITY.PERSON });
+    }
     if (seed.matchValue && seed.matchValue !== seed.value) {
       entries.push({ value: seed.matchValue, placeholder: ph, type: 'PERSON', priority: PRIORITY.PERSON });
     }
@@ -772,6 +795,9 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
     out.push({ type: 'CREDENTIAL', text: '' });
   }
   for (const finding of conservativeLabelledResiduals(clean)) {
+    if (!out.some((current) => current.type === finding.type && current.text === finding.text)) out.push(finding);
+  }
+  for (const finding of residualSensitiveListPersons(clean)) {
     if (!out.some((current) => current.type === finding.type && current.text === finding.text)) out.push(finding);
   }
   // This structural final gate is intentionally independent from PERSON_LABEL.

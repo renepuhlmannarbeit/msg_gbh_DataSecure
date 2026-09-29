@@ -166,16 +166,18 @@ function inspectSourceFormatFromFd(fd, stat, extension, options = {}) {
     if (!structure || !structure.content_types || !structure.root_relationships || structure.ooxml_type !== declaredType) {
       return finish(verdict(declaredType, 'zip', 'rejected', 'SOURCE_TYPE_MISMATCH', structure));
     }
-    const passivePresentation = conversion && declaredType === 'pptx';
-    // OLE binaries are never opened by the text extractor. In the conversion-
-    // only product they can be omitted with incomplete coverage, but macros,
-    // controls and other active package parts must still fail preflight.
-    const passiveOleOnly = passivePresentation && !(inspected.entry_names || []).some(name => {
+    const passivePresentation = options.productChannel === 'standalone' &&
+      (conversion || options.processingMode === 'markdown-and-anonymize') && declaredType === 'pptx';
+    // The Standalone converter never executes OLE binaries. It can read
+    // bounded, ordinary XLSX packages linked from a presentation as text;
+    // both kinds of source remain explicitly incomplete. Macros and other
+    // executable parts still fail before the source is admitted.
+    const passivePresentationPartsOnly = passivePresentation && !(inspected.entry_names || []).some(name => {
       const active = /(?:^|\/)(?:vbaProject|oleObject)[^/]*\.bin$/iu.test(name) ||
         /^(?:activeX|customUI|word\/embeddings|xl\/embeddings|ppt\/embeddings)\//iu.test(name);
-      return active && !/^ppt\/embeddings\/oleObject[0-9]+\.bin$/iu.test(name);
+      return active && !/^ppt\/embeddings\/(?:oleObject[0-9]+\.bin|[^/]+\.xlsx)$/iu.test(name);
     });
-    if (structure.active_content && !passiveOleOnly) {
+    if (structure.active_content && !passivePresentationPartsOnly) {
       return finish(verdict(declaredType, declaredType, 'rejected', 'SOURCE_ACTIVE_CONTENT_UNSUPPORTED', structure));
     }
     let verifiedStructure;

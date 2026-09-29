@@ -49,6 +49,10 @@ function personAmbiguity(id, originalText, anonymizedText, value) {
   };
 }
 
+function residualAmbiguity(id, originalText, value) {
+  return { ...personAmbiguity(id, originalText, originalText, value), type: 'person_residual_ambiguous' };
+}
+
 function evaluateDarwinReview(draft) {
   let appkitAccessed = false;
   const native = {
@@ -311,10 +315,35 @@ test('all native reviewers bind one person decision to repeated identities withi
   assert.strictEqual(choiceCalls, 1);
   assert.deepStrictEqual(result.decisions,
     draft.ambiguities.map((item) => ({ ambiguity_id: item.ambiguity_id, decision: 'redact' })));
-  assert.match(powershellReviewScript(), /Die Entscheidung gilt automatisch/u);
-  assert.match(powershellReviewScript(), /person_prose_ambiguous.*foreach \(\$id/iu);
+  assert.match(powershellReviewScript(), /Die Entscheidung gilt für/u);
+  assert.match(powershellReviewScript(), /person_residual_ambiguous.*foreach \(\$id/iu);
   assert.match(darwinReviewScript(), /personGroupIds/u);
   assert.match(darwinReviewScript(), /controls\[index\]\.ids\.forEach/u);
+});
+
+test('one local choice covers the same residual wording across documents without a global exception', () => {
+  const phrase = 'SYNTHETISCHER HÄRTETEST';
+  const first = `${phrase}\nName: Max Mustermann`;
+  const second = `| Spalte 1 | Spalte 2 |\n| --- | --- |\n| ${phrase} | Testfall |`;
+  const bundle = buildBatchReviewDraft([first, second].map((original_text) => ({
+    original_text, anonymized_text: original_text, profile: 'general',
+    ambiguities: [residualAmbiguity('person-residual:v1:000001', original_text, phrase)]
+  })));
+  const group = groupForCandidate(bundle.draft, bundle.draft.ambiguities[0].ambiguity_id);
+  assert.deepStrictEqual(group.candidate_ids, bundle.draft.ambiguities.map((item) => item.ambiguity_id));
+  let choices = 0;
+  const result = linuxReviewTextLocally(bundle.draft, { env: {}, runner(_command, args) {
+    const command = args.join(' ');
+    if (command.includes('--text-info')) return { status: 0, stdout: '' };
+    if (command.includes('Alle Fundstellen sind entschieden')) return { status: 0, stdout: 'release' };
+    choices++;
+    return { status: 0, stdout: 'keep' };
+  } });
+  assert.strictEqual(choices, 1);
+  assert.deepStrictEqual(result.decisions.map((item) => item.decision), ['keep', 'keep']);
+  assert.throws(() => resolveBatchReviewResult(bundle, { action: 'reviewed', redactions: [],
+    decisions: bundle.draft.ambiguities.map((item, index) => ({ ambiguity_id: item.ambiguity_id,
+      decision: index ? 'redact' : 'keep' })) }), /einheitlich entschieden/u);
 });
 
 test('keeps names and paths out of its local-to-local metadata map', () => {

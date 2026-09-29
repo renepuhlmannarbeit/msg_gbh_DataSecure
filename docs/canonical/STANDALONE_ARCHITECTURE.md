@@ -85,8 +85,9 @@ Fortsetzen-Klick meldet nur die Workerannahme und liest danach den dauerhaften
 Laufstatus neu.
 
 1. **Auswahl:** `Dateien auswählen`, `Ordner auswählen`, Drag-and-drop,
-   einzelne Dateien entfernen, explizites `Starten` oder die gesamte
-   **Auswahl leeren**.
+   vor `Starten` weitere Dateien oder Ordner atomar ergänzen und doppelte
+   Pfade überspringen, einzelne Dateien entfernen oder die gesamte
+   **Auswahl leeren**. Nach `Starten` ist der Stapel unveränderlich.
 2. **Verarbeitung:** nichtmodaler, inhaltsfreier Fortschritt mit
    `abgeschlossen/ausgewählt`; ein Dateifehler stoppt nicht den übrigen Stapel.
    Eine Pause bleibt außerhalb der Istzusage, bis Befehl und Recovery belegt sind.
@@ -373,7 +374,7 @@ Standalone-Datenroot und der produktive Node-/OOXML-/PDF-/OCR-Konverter
 sind implementiert und automatisiert getestet. Der deaktivierte MarkItDown-
 Orakelvertrag ist zusätzliche Engineering-Infrastruktur. Zielkatalog, Tauri-Konfiguration,
 Renderer-Berechtigungsgrenze und macOS-Pilotablauf sind maschinenprüfbare
-Verträge. Die reale Rust-Hülle, ein nativer Picker ohne zweite Auswahl und der
+Verträge. Die reale Rust-Hülle, ein nativer Picker mit bewusstem Nachtrag vor Start und der
 private längengerahmte Core-Dispatcher wurden auf Windows x64 kompiliert und
 gestartet. Ein Ready-Handshake und eine feste 30-Sekunden-Antwortgrenze
 verhindern einen unendlich wartenden UI-Aufruf. Das Windows-x64-Pilot-ZIP bindet

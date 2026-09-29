@@ -25,8 +25,12 @@ Bedienung vereinfachen, ohne die lokale Datenschutzgrenze zu verschieben:
   abschließende Freigabe je begrenzter Prüfgruppe;
 - Tastaturbedienung auf Windows: `Alt+Z` behalten, `Alt+O` anonymisieren,
   `Alt+R` rückgängig, `Strg+Enter` freigeben und `Esc` vertagen/abbrechen;
-- eine bewusste Gruppenaktion nur für lokal nachweislich identische vollständige
-  Kontextzeilen; niemals fuzzy oder als Voreinstellung.
+- eine bewusste Gruppenaktion für Zertifikatsanbieter nur bei lokal nachweislich
+  identischen vollständigen Kontextzeilen; mögliche Personennamen desselben
+  Fundstellentyps mit exakt gleichem normalisierten Wortlaut werden innerhalb
+  der aktuellen Prüfgruppe nach sichtbarem Hinweis einmal entschieden. Jede
+  Fundstelle bleibt separat an ihre unveränderte Textposition gebunden;
+  niemals fuzzy oder als dauerhafte Begriffsfreigabe.
 
 ## Normal- und Ausnahmeweg
 

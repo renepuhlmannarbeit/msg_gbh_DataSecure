@@ -106,6 +106,7 @@ async function extractSourceForPrivacy(bytes, extension, options = {}) {
     extraction = await convert(bytes, normalizedExtension, {
       signal: options.signal,
       ...(normalizedExtension === '.docx' ? { omitDocxHeaderFooter: true } : {}),
+      ...(['.pdf', '.pptx'].includes(normalizedExtension) ? { passiveObjects: true } : {}),
       ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs })
     });
     const { validateMarkdownExtraction } = require('../standalone/markdown-contract');

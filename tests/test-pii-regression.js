@@ -13,6 +13,7 @@ const { luhnValid, isAllowedOrg, looksName } = require('../plugins/data-secure/s
 const { resolveSpans } = require('../plugins/data-secure/server/privacy/spans');
 const { trimReferenceValue } = require('../plugins/data-secure/server/privacy/structured');
 const { collectHeaderNameCandidates, collectPersonAnchors } = require('../plugins/data-secure/server/privacy/entities');
+const { csvToMarkdown } = require('../plugins/data-secure/server/document-parser');
 const { credentialIssuerAmbiguities } = require('../plugins/data-secure/server/privacy/credentials');
 const { personProseAmbiguities } = require('../plugins/data-secure/server/privacy/person-ambiguities');
 const { fullwidth, profiles, professionalText, identifierCases } = require('./lib/identifier-compatibility');
@@ -2024,6 +2025,62 @@ test('a plain person table label anchors the name and the independent gate detec
   const result = anonymizeVerified(source, 'general');
   assertAbsent(result.text, 'Anna Berger', 'person in numbered prose and the explicit table row');
   assert.match(result.text, /\[PERSON_\d+\]/u);
+  assert.deepStrictEqual(result.residual, []);
+});
+
+test('numbered profile prose keeps its words while replacing the person and company', () => {
+  const source = [
+    '1. Projektprofil von Anna Berger bei Elbwiese Beratung GmbH.',
+    '2. Anna Berger koordiniert die Einführung für Elbwiese Beratung GmbH.'
+  ].join('\n');
+  const result = anonymizeVerified(source, 'general');
+  assert.match(result.text, /^1\. Projektprofil von \[PERSON_\d+\] bei \[ORGANISATION_\d+\]\./u);
+  assertAbsent(result.text, 'Anna Berger');
+  assertAbsent(result.text, 'Elbwiese Beratung GmbH');
+  assert.deepStrictEqual(result.residual, []);
+  assert.strictEqual(anonymize('1. Beschreibung von Service Level.', 'general').text,
+    '1. Beschreibung von Service Level.', 'numbered technical prose must not become a person');
+});
+
+test('descriptive document titles do not become person identities beside real names', () => {
+  const imageText = 'Synthetisches Dokument\nAnna Berger\n\nElbwiese Beratung GmbH';
+  const pdfText = '## Seite 1\n\n```text\nSynthetisches Projektprofil\nName: Anna Berger\nFirma: Elbwiese Beratung GmbH\n```';
+  for (const [source, title] of [[imageText, 'Synthetisches Dokument'], [pdfText, 'Synthetisches Projektprofil']]) {
+    const result = anonymizeVerified(source, 'general');
+    assertPresent(result.text, title);
+    assertAbsent(result.text, 'Anna Berger');
+    assert.deepStrictEqual(result.residual, []);
+  }
+  // An explicit person field still wins over a title-like word shape.
+  assertAbsent(anonymizeVerified('Name: Synthetisches Dokument', 'general').text, 'Synthetisches Dokument');
+});
+
+test('explicitly sensitive reference cells and person prose cannot retain fictional names', () => {
+  const table = [
+    '| Datei | Muss ersetzt werden | Muss erhalten bleiben |',
+    '| --- | --- | --- |',
+    '| profil.docx | Laura Stein;Nordlicht Digital GmbH;kontakt@example.de | Laura Stein;Markdown |',
+    '| vertrag.docx | Murat Kaya;Elbwiese Beratung GmbH | ISO 27001 |'
+  ].join('\n');
+  const prose = 'Dieser Korpus verwendet die fiktive Person Sofia Lindner für mehrere Testfälle.';
+  assert.ok(pii.scanResidual(table, 'general').some((hit) => hit.type === 'PERSON_CANDIDATE' && hit.text === 'Laura Stein'));
+  for (const [source, names] of [[table, ['Laura Stein', 'Murat Kaya']], [prose, ['Sofia Lindner']]]) {
+    const result = anonymizeVerified(source, 'general');
+    for (const name of names) assertAbsent(result.text, name);
+    assert.deepStrictEqual(result.residual, []);
+  }
+});
+
+test('CSV import redacts full-name slugs instead of exposing a given name', () => {
+  const csv = [
+    'Datei;Stapelgruppe;Muss ersetzt werden',
+    'profil.docx;Laura-Stein-Nordlicht;"Laura Stein;Nordlicht Digital GmbH"'
+  ].join('\n');
+  const result = anonymizeVerified(csvToMarkdown(csv), 'general');
+  assertAbsent(result.text, 'Laura Stein');
+  assertAbsent(result.text, 'Laura-Stein');
+  assertAbsent(result.text, 'Laura-[PERSON');
+  assert.match(result.text, /\| \[PERSON_\d+\]-Nordlicht \|/u);
   assert.deepStrictEqual(result.residual, []);
 });
 

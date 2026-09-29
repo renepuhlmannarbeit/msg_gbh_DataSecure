@@ -331,6 +331,28 @@ async function main() {
     assert.match(JSON.stringify(observed.args), /MANUAL_REDACTION/);
   });
 
+  await testAsync('the interactive Windows reviewer is not launched with a hidden top-level window', async () => {
+    const childProcess = require('node:child_process');
+    const originalSpawnSync = childProcess.spawnSync;
+    let observed;
+    childProcess.spawnSync = (command, args, options) => {
+      observed = { command, args, options };
+      return { status: 0, stdout: '{"action":"deferred"}' };
+    };
+    try {
+      const draft = buildReviewDraft('Synthetic review', 'Synthetic review', 'general', [], { allowDefer: true });
+      assert.deepStrictEqual(reviewTextLocally(draft, { platform: 'win32', env: { SystemRoot: 'C:\\Windows' } }),
+        { action: 'deferred' });
+    } finally {
+      childProcess.spawnSync = originalSpawnSync;
+    }
+    assert.strictEqual(observed.options.windowsHide, false);
+    assert.strictEqual(observed.options.shell, false);
+    assert.match(observed.command, /powershell\.exe$/iu);
+    assert.doesNotMatch(observed.args.join(' '), /Synthetic review/u);
+    assert.match(observed.options.input, /Synthetic review/u);
+  });
+
   await testAsync('a native review timeout is reported with a fixed content-free code', async () => {
     const draft = buildReviewDraft('Kontakt: Max Mustermann', 'Kontakt: [PERSON_001]', 'customer');
     let caught;
@@ -415,6 +437,8 @@ async function main() {
     assert.match(powershellReviewScript(), /\$redact\.Visible = \(\$null -eq \$draft\.batch_review\)/u);
     assert.match(powershellReviewScript(), /Gleiche behalten/u);
     assert.match(powershellReviewScript(), /Decide-Group/u);
+    assert.match(powershellReviewScript(), /Gold markiert die aktuelle Stelle links und rechts oben/u);
+    assert.match(powershellReviewScript(), /\$left\.ScrollToCaret\(\)/u);
     assert.match(darwinReviewScript(), /draft\.batch_review/u);
     assert.match(darwinReviewScript(), /Automatisch abgeschlossen/u);
     assert.match(darwinReviewScript(), /Später entscheiden/u);
@@ -514,6 +538,47 @@ async function main() {
     assert.deepStrictEqual(JSON.parse(result.stdout).decisions, [{
       ambiguity_id: 'credential:v2:000001', decision: 'keep'
     }]);
+  });
+
+  await testAsync('the real Windows review form names the exact current finding after advancing', async () => {
+    if (process.platform !== 'win32') return;
+    const powershell = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
+    const value = 'A: PO POAM\nB: QX QZ';
+    const firstStart = value.indexOf('PO POAM');
+    const secondStart = value.indexOf('QX QZ');
+    const draft = buildReviewDraft(value, value, 'customer', [
+      {
+        ambiguity_id: 'person-residual:v1:000001', type: 'person_residual_ambiguous', replacement_kind: 'PERSON',
+        original_start: firstStart, original_end: firstStart + 7,
+        anonymized_start: firstStart, anonymized_end: firstStart + 7
+      },
+      {
+        ambiguity_id: 'person-residual:v1:000002', type: 'person_residual_ambiguous', replacement_kind: 'PERSON',
+        original_start: secondStart, original_end: secondStart + 5,
+        anonymized_start: secondStart, anonymized_end: secondStart + 5
+      }
+    ]);
+    const nonInteractiveScript = powershellReviewScript()
+      .replace(
+        '[void]$form.ShowDialog()',
+        '$form.Add_Shown({ $script:firstPrompt = $ambiguityInfo.Text; $script:promptWidth = $ambiguityInfo.Width; $script:promptY = $ambiguityInfo.Top; $script:buttonsY = $buttons.Top; $keep.PerformClick(); $script:secondPrompt = $ambiguityInfo.Text; $keep.PerformClick(); $approve.PerformClick() }); [void]$form.ShowDialog()'
+      )
+      .replace(
+        '[Console]::Out.Write(($script:answer | ConvertTo-Json -Compress))',
+        '[Console]::Out.Write((@{ first = $script:firstPrompt; second = $script:secondPrompt; width = $script:promptWidth; promptY = $script:promptY; buttonsY = $script:buttonsY; answer = $script:answer } | ConvertTo-Json -Compress -Depth 8))'
+      );
+    const result = childProcess.spawnSync(
+      powershell,
+      ['-NoProfile', '-NonInteractive', '-Sta', '-Command', nonInteractiveScript],
+      { input: JSON.stringify(draft), encoding: 'utf8', windowsHide: true, shell: false }
+    );
+    assert.strictEqual(result.status, 0, String(result.stderr || ''));
+    const output = JSON.parse(result.stdout);
+    assert.match(output.first, /Aktuell 1\/2: «PO POAM»/u);
+    assert.match(output.second, /Aktuell 2\/2: «QX QZ»/u);
+    assert.ok(output.width > 500, 'the current finding should use the full dialog width');
+    assert.ok(output.promptY < output.buttonsY, 'the current finding should sit directly above the decisions');
+    assert.strictEqual(output.answer.action, 'reviewed');
   });
 
   await testAsync('the real Windows review form lets a user go back and change an ambiguity decision', async () => {

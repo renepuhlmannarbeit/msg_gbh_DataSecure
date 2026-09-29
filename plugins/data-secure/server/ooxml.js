@@ -4,6 +4,7 @@ const path = require('path');
 const { readZip, ZipError } = require('./zip-reader');
 const { createXlsxReader } = require('./xlsx-structure');
 const { readXml } = require('./xml-reader');
+const { validateOpcControls } = require('./gateway/opc-source-validator');
 
 const MAX_EMBEDDED_DEPTH = 3;
 const MAX_EMBEDDED_DOCUMENTS = 20;
@@ -1584,6 +1585,16 @@ function parseOoxml(buffer, ext, context, options = {}) {
     zipLimits={maxUncompressed:remainingExpanded};
   }
   let entries; try{entries=readZip(buffer,zipLimits);}catch(e){if(e instanceof ZipError)throw e;throw new Error('Office-Datei konnte nicht als OOXML gelesen werden.');}
+  if(state.depth>0&&ext==='.xlsx'){
+    // An XLSX nested inside a presentation is not independently admitted
+    // through the source FD. Verify its declared type and relationships before
+    // its cells enter the Markdown representation. Legacy DOCX recursion has
+    // its own coverage checks and is not broadened by this PPTX policy.
+    const controlParts=Object.fromEntries([...entries]
+      .filter(([name])=>name==='[Content_Types].xml'||name.endsWith('.rels'))
+      .map(([name,data])=>[name,data.toString('utf8')]));
+    validateOpcControls({declaredType:ext.slice(1),entries:new Set(entries.keys()),controlParts});
+  }
   if(options.preserveText){
     for(const [name,data]of entries)if(/\.(?:xml|rels)$/i.test(name)){
       try{new TextDecoder('utf-8',{fatal:true}).decode(data);}

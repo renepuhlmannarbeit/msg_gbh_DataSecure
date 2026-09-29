@@ -34,6 +34,7 @@ testAsync('complete conversion becomes neutral in-memory parser output without a
     async convertBuffer(input, extension, options) {
       calls++;
       assert.equal(input, bytes); assert.equal(extension, '.pdf'); assert.equal(options.signal, undefined);
+      assert.equal(options.passiveObjects, true);
       return createMarkdownExtraction({ source_type: 'pdf', markdown: 'E-Mail: max@example.org',
         coverage: { status: 'complete', reason_codes: [] } });
     }
@@ -47,7 +48,7 @@ testAsync('complete conversion becomes neutral in-memory parser output without a
   assert.equal(Object.hasOwn(result, 'processing_mode'), false);
 });
 
-testAsync('Standalone DOCX privacy alone requests header and footer omission', async () => {
+testAsync('Standalone privacy passes only format-specific converter policies', async () => {
   let docxOptions;
   const result = await extractWideSourceForPrivacy(Buffer.from('synthetic docx'), '.docx', {
     ErrorType: SafeError,
@@ -75,6 +76,19 @@ testAsync('Standalone DOCX privacy alone requests header and footer omission', a
     }
   });
   assert.strictEqual(Object.hasOwn(xlsxOptions, 'omitDocxHeaderFooter'), false);
+  assert.strictEqual(Object.hasOwn(xlsxOptions, 'passiveObjects'), false);
+
+  let pptxOptions;
+  await extractWideSourceForPrivacy(bytes, '.pptx', {
+    ErrorType: SafeError,
+    async convertBuffer(_input, _extension, options) {
+      pptxOptions = options;
+      return createMarkdownExtraction({ source_type: 'pptx', markdown: 'Body text', coverage: {
+        status: 'incomplete', reason_codes: ['SOURCE_COVERAGE_UNVERIFIED']
+      } });
+    }
+  });
+  assert.strictEqual(pptxOptions.passiveObjects, true);
 });
 
 testAsync('useful incomplete Markdown continues into privacy while empty OCR stays fail closed', async () => {

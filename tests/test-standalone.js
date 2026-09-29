@@ -387,7 +387,7 @@ test('Standalone UI contract limits source details to the local display', () => 
   assert.deepStrictEqual([...PRIVATE_ACTIONS], [
     'admit_selected_sources', 'remove_admitted_source', 'cancel_admission', 'start_admitted_batch',
     'get_public_state', 'get_ui_context', 'ack_terminal_presented', 'continue_current_batch', 'configure_results',
-    'resolve_current_results', 'resolve_local_ledger', 'get_run_history',
+    'resolve_current_results', 'resolve_local_ledger', 'get_run_history', 'get_run_failures',
     'resolve_history_results', 'resolve_history_ledger', 'continue_history_batch', 'shutdown'
   ]);
 });
@@ -470,6 +470,14 @@ test('history IPC binds exact opaque run IDs and refuses paths, mode changes and
   }
   assert.throws(() => encodeFrame({ ...base, action: 'get_run_history', batch_id: 'b'.repeat(64) }),
     { code: 'DESKTOP_IPC_FIELD_INVALID' });
+  for (const message of [
+    { ...base, action: 'get_run_failures' },
+    { ...base, action: 'get_run_failures', batch_id: 'b'.repeat(64) }
+  ]) assert.deepStrictEqual(new FrameDecoder().push(encodeFrame(message)), [message]);
+  for (const batch_id of [null, '', '../latest', 'B'.repeat(64), 1, []]) {
+    assert.throws(() => encodeFrame({ ...base, action: 'get_run_failures', batch_id }),
+      { code: 'STANDALONE_HISTORY_INVALID' });
+  }
 });
 
 test('desktop start requires exactly one supported purpose; continue and other actions reject purpose fields', () => {
@@ -665,8 +673,10 @@ async function realAdmissionAdapterCase() {
   fs.mkdirSync(nested);
   const first = path.join(root, 'first.txt');
   const second = path.join(nested, 'second.txt');
+  const third = path.join(nested, 'first.txt');
   fs.writeFileSync(first, 'first local test');
   fs.writeFileSync(second, 'second local test');
+  fs.writeFileSync(third, 'third local test');
   try {
     const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
       validateSelectedPathAsync,
@@ -676,12 +686,38 @@ async function realAdmissionAdapterCase() {
     const admittedFiles = await service.admitSelectedSources([first, second], 'files');
     assert.deepStrictEqual(admittedFiles.ui_context.source_folders.sort(), [root, nested].sort());
     assert.deepStrictEqual(admittedFiles.ui_context.selected_files.sort(), ['first.txt', 'second.txt']);
+    const duplicate = await service.admitSelectedSources([first], 'files');
+    assert.strictEqual(duplicate.selected_count, 2);
+    assert.strictEqual(duplicate.already_selected_count, 1);
+    const appended = await service.admitSelectedSources([third], 'files');
+    assert.strictEqual(appended.selected_count, 3);
+    assert.strictEqual(new Set(appended.ui_context.selected_files).size, 3,
+      'same-basename additions must get distinct visible and export labels');
+    assert.strictEqual(service.admittedQueue.length, 3);
     service.cancelAdmission();
     const admittedFolder = await service.admitSelectedSources([root], 'folder');
     assert.deepStrictEqual(admittedFolder.ui_context.source_folders, [root]);
-    assert.deepStrictEqual(admittedFolder.ui_context.selected_files.sort(), ['first.txt', 'nested/second.txt']);
+    assert.strictEqual(admittedFolder.selected_count, 3);
+    const late = path.join(root, 'late.txt');
+    fs.writeFileSync(late, 'added after the folder picker');
+    const mixed = await service.admitSelectedSources([second, late], 'files');
+    assert.strictEqual(mixed.selected_count, 4);
+    assert.strictEqual(mixed.already_selected_count, 1,
+      'folder-to-file additions must skip paths already present in the folder');
+    assert.strictEqual(mixed.ui_context.source_kind, 'folder');
+    assert.deepStrictEqual(mixed.ui_context.source_folders, [root]);
+    await assert.rejects(service.admitSelectedSources([path.join(root, 'missing.txt')], 'files'));
+    assert.strictEqual(service.admittedQueue.length, 4,
+      'an invalid addition must leave the previous prepared selection intact');
+    assert.strictEqual(service.removeAdmittedSource(3).selected_count, 3);
     assert.ok(service.admittedQueue.every((item) => path.isAbsolute(item.full) &&
       path.basename(item.full) === item.name && Number.isSafeInteger(item.sourceBytes)));
+    await service.startAdmittedBatch();
+    const nextRun = await service.admitSelectedSources([second], 'files');
+    assert.strictEqual(nextRun.selected_count, 1, 'a completed admission never becomes part of the next run');
+    assert.strictEqual(nextRun.ui_context.source_kind, 'files');
+    assert.deepStrictEqual(nextRun.ui_context.source_folders, [nested],
+      'a fresh admission never inherits source folders from the preceding run');
   } finally {
     fs.rmSync(root, { recursive: true });
   }
@@ -706,6 +742,13 @@ async function oversizedAdmissionCase() {
   );
   await assert.rejects(service.startAdmittedBatch(), (error) => error.code === 'STANDALONE_NO_ADMISSION');
   assert.strictEqual(started, false, 'an oversized aggregate selection never reaches the worker');
+  const first = await service.admitSelectedSources([FIXTURE_SOURCE_A]);
+  assert.strictEqual(first.selected_count, 1);
+  await assert.rejects(service.admitSelectedSources([FIXTURE_SOURCE_B]),
+    (error) => error.code === 'STANDALONE_SELECTION_INVALID');
+  assert.deepStrictEqual(service.uiContext().selected_files, ['a.txt'],
+    'a cumulative size violation must not erase the original admission');
+  assert.strictEqual(service.admittedQueue.length, 1);
 }
 
 async function uncertainAdmissionStartCase() {
@@ -944,7 +987,7 @@ async function missingLedgerCase() {
   await testAsync('Standalone calls the engine directly without MCP or JSON-RPC', directServiceCase);
   await testAsync('native desktop admission validates once and starts without a second picker', admittedServiceCase);
   await testAsync('processing purpose is rejected before mutations and never silently falls back', processingModeServiceCase);
-  await testAsync('native desktop admission uses the real picker-to-queue adapter for files and folders', realAdmissionAdapterCase);
+  await testAsync('prepared selections extend transactionally without duplicate files or ambiguous labels', realAdmissionAdapterCase);
   await testAsync('prepared selections remove one item or clear the final item before Start', clearLastAdmittedSourceCase);
   await testAsync('native desktop admission enforces the aggregate 500 MB limit', oversizedAdmissionCase);
   await testAsync('a missing worker acknowledgement consumes the admission exactly once', uncertainAdmissionStartCase);

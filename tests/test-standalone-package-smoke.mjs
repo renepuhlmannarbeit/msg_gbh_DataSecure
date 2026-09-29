@@ -6,7 +6,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { readCentralModes } from '../scripts/lib/zip.mjs';
 import { isolatedSidecarEnvironment, removePackageSmokeScope } from './helpers/standalone-package-scope.mjs';
-import { office, image, pdf, text as conversionText } from './helpers/conversion-fixtures.mjs';
+import { office, passivePresentation, embeddedWorkbookPresentation, image, pdf, text as conversionText } from './helpers/conversion-fixtures.mjs';
 
 const require = createRequire(import.meta.url);
 const { readZip } = require('../plugins/data-secure/server/zip-reader.js');
@@ -163,6 +163,10 @@ try {
   assert.equal(freshContext.ok, true);
   assert.equal(freshContext.result.result_folder, path.join(environment.DATASECURE_STANDALONE_DOCUMENTS_DIR, 'SecureDataMsg'),
     'fresh default Documents must be isolated before configuring an explicit result destination');
+  assert.equal(freshContext.result.result_folder_is_default, true,
+    'the UI must distinguish a proposed default path from a chosen result folder');
+  assert.equal(fs.existsSync(freshContext.result.result_folder), false,
+    'reading the first-run context must not silently create the proposed result folder');
   assert.equal(freshContext.result.latest_result_folder, '', 'a fresh profile must not recover any real-user run');
   assert.equal(fs.statSync(path.join(environment.DATASECURE_STANDALONE_DIAGNOSTIC_DIR, 'sidecar-interactions.jsonl')).isFile(), true);
   const admitted = await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'b'.repeat(16),
@@ -171,6 +175,24 @@ try {
   assert.equal(admitted.result.selected_count, 4);
   assert.deepEqual([...admitted.result.ui_context.selected_files].sort(), [...sourceNames].sort());
   assert.deepEqual(admitted.result.ui_context.source_folders, [sourceDirectory]);
+  const supplemental = path.join(sourceDirectory, 'supplemental.md');
+  fs.writeFileSync(supplemental, '# Additional synthetic document\n', { flag: 'wx' });
+  const extended = await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'b1'.repeat(8),
+    action: 'admit_selected_sources', source_kind: 'files', source_paths: [supplemental] });
+  assert.equal(extended.ok, true);
+  assert.equal(extended.result.selected_count, 5,
+    'the shipped sidecar must append a later picker choice before Start');
+  assert.ok(extended.result.ui_context.selected_files.includes('supplemental.md'));
+  const duplicate = await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'b2'.repeat(8),
+    action: 'admit_selected_sources', source_kind: 'files', source_paths: [supplemental] });
+  assert.equal(duplicate.ok, true);
+  assert.equal(duplicate.result.selected_count, 5);
+  assert.equal(duplicate.result.already_selected_count, 1);
+  const removedAddition = await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'b3'.repeat(8),
+    action: 'remove_admitted_source', selection_index: 4 });
+  assert.equal(removedAddition.ok, true);
+  assert.equal(removedAddition.result.selected_count, 4,
+    'removing the late addition restores the exact original selection');
   const configured = await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'c'.repeat(16),
     action: 'configure_results', source_paths: [resultDirectory] });
   assert.equal(configured.ok, true);
@@ -178,6 +200,8 @@ try {
   const context = await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'd'.repeat(16), action: 'get_ui_context' });
   assert.equal(context.ok, true);
   assert.equal(context.result.result_folder, resultDirectory);
+  assert.equal(context.result.result_folder_is_default, false,
+    'the selected result folder must dismiss first-run guidance');
   assert.deepEqual([...context.result.selected_files].sort(), [...sourceNames].sort());
   const started = await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'e'.repeat(16),
     action: 'start_admitted_batch', processing_mode: 'markdown-and-anonymize', output_naming_mode: 'neutral' });
@@ -512,6 +536,61 @@ try {
     if (index === 2) assert.equal(resolved.error_code, 'STANDALONE_RESULTS_MISSING');
     else assert.equal(resolved.result.local_path, expectedRuns[index]);
   }
+  // RC143 regression: pure conversion of a PDF with passive objects worked,
+  // but the subsequent Standalone anonymization used a different converter
+  // policy and stopped before any result. Exercise the actual shipped sidecar,
+  // admission, worker, privacy core, mapping and run history together.
+  const passivePdfSource = path.join(sourceDirectory, 'Passives-Formular.pdf');
+  const passivePptxSource = path.join(sourceDirectory, 'Passive-Folien.pptx');
+  const embeddedPptxSource = path.join(sourceDirectory, 'Eingebettete-Tabelle.pptx');
+  const passivePdfBytes = pdf([{ text: 'Name: Max Mustermann', annotation: true }], '', { form: true });
+  const passivePptxBytes = passivePresentation();
+  const embeddedPptxBytes = embeddedWorkbookPresentation();
+  fs.writeFileSync(passivePdfSource, passivePdfBytes, { flag: 'wx' });
+  fs.writeFileSync(passivePptxSource, passivePptxBytes, { flag: 'wx' });
+  fs.writeFileSync(embeddedPptxSource, embeddedPptxBytes, { flag: 'wx' });
+  const passiveAdmission = await request({ schema: 'datasecure-standalone-private-ipc/1',
+    request_id: 'e7'.repeat(8), action: 'admit_selected_sources', source_kind: 'files',
+    source_paths: [passivePdfSource, passivePptxSource, embeddedPptxSource] });
+  assert.equal(passiveAdmission.ok, true);
+  assert.equal(passiveAdmission.result.selected_count, 3);
+  const passiveStart = await request({ schema: 'datasecure-standalone-private-ipc/1',
+    request_id: 'e8'.repeat(8), action: 'start_admitted_batch', processing_mode: 'markdown-and-anonymize',
+    output_naming_mode: 'neutral' });
+  assert.equal(passiveStart.ok, true);
+  let passiveTerminal;
+  for (let attempt = 0; attempt < 180; attempt += 1) {
+    const polled = await request({ schema: 'datasecure-standalone-private-ipc/1',
+      request_id: (0x2800 + attempt).toString(16).padStart(16, '0'), action: 'get_public_state' });
+    assert.equal(polled.ok, true);
+    if (polled.result.selected_count === 3 && terminalStates.has(polled.result.state)) {
+      passiveTerminal = polled.result; break;
+    }
+    await new Promise(resolve => setTimeout(resolve, 500));
+  }
+  assert.ok(passiveTerminal, 'the passive PDF/PPTX privacy run must terminate');
+  assert.equal(passiveTerminal.state, 'results_available', JSON.stringify(passiveTerminal));
+  assert.equal(passiveTerminal.result_count, 3);
+  assert.equal(passiveTerminal.failed_count, 0);
+  const passiveContext = await request({ schema: 'datasecure-standalone-private-ipc/1',
+    request_id: 'e9'.repeat(8), action: 'get_ui_context' });
+  const passiveRun = passiveContext.result.latest_result_folder;
+  const passiveOutputs = relativeFiles(passiveRun).filter(name => name.endsWith('.md'));
+  assert.equal(passiveOutputs.length, 3);
+  for (const name of passiveOutputs) {
+    const output = fs.readFileSync(path.join(passiveRun, ...name.split('/')), 'utf8');
+    assert.match(output, /Extraktionsstatus: Markdown erzeugt; Vollständigkeit des Originalcontainers nicht garantiert/u);
+    assert.match(output, /Anonymisierungsstatus: extrahierter Markdown-Inhalt vollständig geprüft/u);
+    assert.doesNotMatch(output, /Max(?: |&#32;)Mustermann/u);
+  }
+  const passiveMapping = fs.readFileSync(path.join(passiveRun, 'DataSecure-Zuordnung.csv'), 'utf8');
+  assert.match(passiveMapping, /Passives-Formular\.pdf/u);
+  assert.match(passiveMapping, /Passive-Folien\.pptx/u);
+  assert.match(passiveMapping, /Eingebettete-Tabelle\.pptx/u);
+  assert.deepEqual(fs.readFileSync(passivePdfSource), passivePdfBytes);
+  assert.deepEqual(fs.readFileSync(passivePptxSource), passivePptxBytes);
+  assert.deepEqual(fs.readFileSync(embeddedPptxSource), embeddedPptxBytes);
+  process.stdout.write('STANDALONE REAL PASSIVE PDF/PPTX PRIVACY PASS (3 results, embedded XLSX, separate source coverage)\n');
   const log = fs.readFileSync(path.join(environment.DATASECURE_STANDALONE_DIAGNOSTIC_DIR, 'sidecar-interactions.jsonl'), 'utf8');
   for (const row of historyRows) assert.ok(!log.includes(row.batch_id), 'run identifiers stay out of diagnostics');
   assert.ok(!log.includes(exactRun) && !log.includes(convertedRun));

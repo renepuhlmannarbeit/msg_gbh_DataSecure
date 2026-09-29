@@ -76,7 +76,7 @@ function publicError(requestId, error) {
     'STANDALONE_BUSY', 'STANDALONE_ENGINE_NOT_READY', 'STANDALONE_SELECTION_CANCELLED',
     'STANDALONE_SELECTION_INVALID', 'STANDALONE_NO_ADMISSION', 'STANDALONE_NOTHING_TO_CONTINUE',
     'SOURCE_FOLDER_FILE_LIMIT', 'SOURCE_FOLDER_SIZE_LIMIT',
-    'SOURCE_FOLDER_UNSUPPORTED_FILES', 'SOURCE_FOLDER_EMPTY',
+    'SOURCE_FOLDER_UNSUPPORTED_FILES', 'SOURCE_FOLDER_EMPTY', 'SOURCE_FORMAT_SIZE_LIMIT',
     'STANDALONE_START_FAILED',
     'PROCESSING_MODE_INVALID', 'PROCESSING_MODE_FORBIDDEN', 'RESULT_NAMING_MODE_INVALID', 'MARKDOWN_CONVERSION_NOT_READY',
     'STANDALONE_DATA_ROOT_UNSAFE',
@@ -88,9 +88,20 @@ function publicError(requestId, error) {
     'STANDALONE_LEDGER_MISSING', 'STANDALONE_LEDGER_OPEN_FAILED',
     'STANDALONE_HISTORY_INVALID', 'STANDALONE_HISTORY_MISSING', 'STANDALONE_HISTORY_UNAVAILABLE'
   ]);
+  const code = allowed.has(error?.code) ? error.code : 'STANDALONE_OPERATION_FAILED';
+  const localDetails = code === 'SOURCE_FOLDER_UNSUPPORTED_FILES' &&
+    Array.isArray(error?.localUnsupportedFiles) &&
+    error.localUnsupportedFiles.length <= 200 &&
+    error.localUnsupportedFiles.every(label => typeof label === 'string' && label.length > 0 && label.length <= 1024 &&
+      !label.startsWith('/') && !label.split('/').some(part => !part || part === '.' || part === '..')) &&
+    Number.isSafeInteger(error.localUnsupportedCount) &&
+    error.localUnsupportedCount >= error.localUnsupportedFiles.length && error.localUnsupportedCount <= 4096
+    ? { unsupported_files: error.localUnsupportedFiles, unsupported_count: error.localUnsupportedCount }
+    : null;
   return {
     schema: 'datasecure-standalone-private-response/1', request_id: requestId, ok: false,
-    error_code: allowed.has(error?.code) ? error.code : 'STANDALONE_OPERATION_FAILED'
+    error_code: code,
+    ...(localDetails ? { error_details: localDetails } : {})
   };
 }
 
@@ -107,6 +118,7 @@ async function dispatch(message) {
     case 'get_public_state': return service.status();
     case 'get_ui_context': return service.uiContext();
     case 'get_run_history': return service.history();
+    case 'get_run_failures': return service.runFailures(message.batch_id);
     case 'continue_history_batch': return service.continueHistoryBatch(message.batch_id);
     case 'ack_terminal_presented': return service.acknowledgeTerminalPresented(message.presentation_generation);
     case 'continue_current_batch': return service.continueCurrentBatch();

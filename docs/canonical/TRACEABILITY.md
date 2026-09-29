@@ -1,6 +1,42 @@
 # Entscheidungs-Traceability
 
-Stand: 23.09.2026 · 3.2.0-rc142
+Stand: 29.09.2026 · 3.2.0-rc151
+
+BL-010.41 → Standalone-PPTX mit passiv ausgelassenen OLE-/Metadatenteilen
+und begrenzt geprüften, intern verknüpften XLSX-Einbettungen zu Markdown
+extrahieren → `gateway/source-format-inspector.js`,
+`gateway/opc-source-validator.js`, `ooxml.js`. XLSX bleibt selbst direkt
+Markdown-first, nicht über CSV. E0: synthetische OPC-Positiv-/Negativfälle,
+Parser-Regression, schreibgeschützte Paketextraktion der fünf realen PPTX und
+isolierter Windows-Paketbatch mit drei synthetischen anonymisierten Quellen
+einschließlich eingebetteter XLSX. Anonymisierung der fünf Benutzerdateien,
+sichtbare UAT und Releasebindung offen.
+
+BL-010.37 → vorbereitete Standalone-Queue vor `Starten` atomar ergänzen →
+`frontend/app.js`, native Tauri-Picker/Drop, privates `admit_selected_sources`
+und `standalone/application-service.js` → echte Dateiadmission, eindeutige
+Quelllabels und kombinierte Limits. Abbruch/Fehler erhalten die vorhandene
+Auswahl; die begonnene Verarbeitung bleibt unveränderlich. Frontend-, Rust-,
+Service- und Sidecar-Pakettests sind E0; sichtbare Windows-/macOS-/Linux-UAT
+und Releasebindung bleiben davon getrennt.
+
+BL-010.38 → Standalone-Abschluss und neue Eingabe sichtbar trennen →
+`frontend/index.html`, `frontend/app.js` und erneute Quellenaufnahme in
+`standalone/application-service.js` → explizite neue Aufgabe, leere
+Dateiauswahl ohne geerbte Ordner, alte Läufe nur laufgebunden im Verlauf.
+Null Ergebnisse und Teilerfolg tragen Warnstatus. DS-103/BL-010.39 öffnet
+separat den Standalone-Übergang für sicher extrahiertes PDF-/PPTX-Markdown,
+nicht für den Originalcontainer oder Cowork. E0-Frontend-/Servicefälle und
+reale paketierte Parserfälle; E2-S16a/S16b offen.
+
+BL-010.40 → RC144-Windows-Lauf mit 11/12 abgeschlossenen Dateien,
+`review_ui_started` ohne Abschluss und ohne sichtbares Prüffenster →
+`companion/text-review.js` startet nur den interaktiven Windows-Reviewer nicht
+versteckt; `frontend/index.html`, `styles.css`, `app.js` zeigen den globalen
+Neuaufgaben-Klick, den aktiven Reviewzustand und den blockierten Ergebnisordner
+verständlich. `test-companion-processor.js`, `test-standalone-frontend.js`,
+Browser- und echter Paket-Smoke sind E0; sichtbare Windows-Reviewentscheidung,
+Abschluss/Vertagung und neuer Lauf sind E2-offen. RC145 bleibt lokal.
 
 MAC-20260923-01–03 → BL-010.20 → Build-Deployment-Target 13.5, sämtliche
 Mach-O-Versionen/Architekturen/Systembibliotheken/Signaturen, numerische
@@ -624,7 +660,7 @@ aktuelle Produktzusage.
 | BL-021.1, DS-049 | Personenlabels werden schreibweisenunabhängig, ihr Wert dagegen durch eine separate fallgebundene Grammatik erkannt. Ein kleingeschriebenes Prosawort nach einem Namen wird weder redigiert noch als Alias gespeichert; Zeilen-/Inline-Label, Punkt/kein Punkt, vollständige Namen, explizite Kleinschreibung und stabile v1-/v2-Wiederverwendung sind gegengeprüft. | `privacy/entities.js`; `test-batch-pseudonym-registry.js` |
 | BL-022.1, DS-017/049 | Horizontale und vertikale DOCX-Zellverbindungen (`w:gridSpan`, `w:vMerge`) stoppen mit `DOCX_STRUCTURE_UNSAFE`, solange der Renderer keine koordinatentreue Spaltenabbildung trägt. Normale Tabellen bleiben unterstützt. | `ooxml.js`; `test-docx-structure.js`, `test:parser-contract` |
 | BL-022.1, DS-017/049 | `mc:AlternateContent` wird namespacegebunden ausgewählt: die erste vollständig bekannte Word-2010-Textfeld-Choice, sonst genau ein Fallback; unbekannte Choice ohne Fallback, doppelte/fehlgeordnete Zweige oder Choice außerhalb des Containers stoppen mit `DOCX_STRUCTURE_UNSAFE`. | `ooxml.js`; `test-docx-structure.js`, `test-parsers.js` |
-| BL-023.2/3, DS-085/087/090 | Der Standalone-PDF-Pfad trennt Quellabdeckung und Markdown-Anonymisierung. Erkannte aktive oder nicht abgedeckte Inhalte stoppen vor Freigabe. Standardskonforme In-Memory-Golden-PDFs prüfen über den echten paketierten PDF.js-Parser AcroForm, Signaturfeld, EmbeddedFile/Name-Tree, JavaScript sowie leeres und nichtleeres Benutzerpasswort. Der reale `Map`-Rückgabetyp für Anhänge ist regressionsbelegt; `Set`, Arrays und Objektprojektionen werden zusätzlich defensiv normalisiert, ohne sie als beobachtete PDF.js-Vertragsformen auszugeben. Vollständige Originalcontainer-/Zielhostabdeckung bleibt offen. | `standalone/conversion-worker-child.js`, `tests/helpers/conversion-fixtures.mjs`; `test-standalone-conversion-worker.mjs` |
+| BL-023.2/3, DS-085/087/090/103 | Der Standalone-PDF-Pfad trennt Quellabdeckung und Markdown-Anonymisierung. Die frühere strenge Objektprüfung und die passive Textprojektion werden beide mit echten paketierten PDF.js-Goldenfällen geprüft: AcroForm, Signaturfeld, EmbeddedFile/Name-Tree, JavaScript und Passwort. DS-103 benutzt für Standalone-Privacy nur die passive Textprojektion; XFA, Verschlüsselung und unsichere Strukturen stoppen weiterhin. Der reale `Map`-Rückgabetyp für Anhänge ist regressionsbelegt; `Set`, Arrays und Objektprojektionen werden defensiv normalisiert. Vollständige Originalcontainer-/Zielhostabdeckung bleibt offen. | `standalone/conversion-worker-child.js`, `tests/helpers/conversion-fixtures.mjs`; `test-standalone-conversion-worker.mjs`, `test-standalone-package-smoke.mjs` |
 | BL-022.1, DS-017/049 | Historische Absatz-/Run-Eigenschaften können aktuelle Überschriften nicht überschreiben und blockieren die Datenschutzfreigabe. Kommentare werden nur mit eindeutigen vorhandenen Referenz-IDs und konsistenten Bereichen als vollständig behandelt; gefälschte `ChoiceSupported`-Literale ersetzen keine echte Namespaceauflösung. | `ooxml.js`, `tests/lib/docx-review-fixtures.js`; DOCX-Struktur-, Differential-, Parser- und Gatewaytests |
 | BL-010.9/23 | Sieben transportneutrale Core-Verträge werden ohne Prozess, Dateisystem, Timer, Gateway oder Standalone geladen und über statischen esbuild-Importabschluss in beiden tatsächlichen Produktprojektionen gebunden. | `server/core/*`; `test-core-contracts.mjs`, `test-core-policy-binding.mjs` |
 | BL-012.2/9/10, BL-041.10 | macOS verwendet einen einzelnen scrollbaren AppKit-Sammeldialog; Abschlussmeldungen bestätigen erst nach sichtbarem Fenster `SHOWN`, nicht bereits nach Prozessstart. | `companion/text-review.js`, `companion/completion-summary.js`; `test-companion-processor.js`, `test-completion-summary*.js`; native Intel-/ARM-E1/E2 offen |
@@ -727,11 +763,13 @@ aktuelle Produktzusage.
 |---|---|---|
 | DS-101 | Ausdrückliche Wiederverwendung abgeschlossener Cowork-Stapel, ohne Originalzugriff oder neue Anonymisierung | BL-041.21; verpflichtende native Auswahl, erneute Generation-/Integritätsprüfung, dauerhaftes ACK unverändert; `test-local-handoff-reuse.js` |
 | DS-102 | Passive Standalone-Markdown-Konvertierung darf nicht ausgeführte PDF-/PPTX-Objekte mit unvollständiger Quellabdeckung übergehen; Privacy und Cowork bleiben strikt. Intel-/ARM-DMG ergänzt ZIP ohne Gatekeeper-Zusage. | BL-010.36; isolierter Konverter, OPC-Admission, fünf reale gepackte Windows-Quellen, Windows-PKG-04/INT-13 und grüner Mac-Intel-/ARM-Lauf `36562812021` aus Commit `c0ddd11`; sichtbare UAT offen. |
+| DS-103 | Präzisiert DS-102: Auch Standalone-Privacy darf passiv ausgelassene PDF-/PPTX-Objekte akzeptieren, anonymisiert aber ausschließlich den extrahierten Markdown-Text mit separater unvollständiger Quellabdeckung. Cowork und die Grenzen für unsichere Quellen bleiben unverändert. | BL-010.39; `core/markdown-first-privacy.js`, `gateway/source-format-inspector.js`, realer isolierter PDF-/PPTX-Worker, Positiv-/Negativtests und UAT S16c; noch kein gebundener Release. |
 | BL-041.19 | `gateway/root-boundary.js`, `root-reservations.js`, beide Konfigurationsadapter, verpflichtende Bootstrap-Injektion; keine private Dateianlage bei Rootkonflikt, feste Fehler auch bei I/O-/Close-Fehlern | `test-root-boundary.js`, `test-product-bootstrap.js`, `test-core-contracts.mjs`; historische Host-Freigaben alter Versionen nicht rekonstruierbar |
 | BL-041.20 | `acceptance/CLAUDE_CODE_PILOT/contract.json` und Vorcheck `scripts/check-claude-code-pilot.mjs`; CLI und Desktop-Code-Reiter, ausschließlich enthaltene Abonutzung | `test-claude-code-pilot.mjs` prüft CLI-/Kostenvertrag; echte lokale CLI 2.1.280 und Strukturvorcheck PASS, CLI nicht angemeldet; Desktop-/Host-/Modellfälle NOT_RUN |
 | BL-041.21 / DS-101 | `gateway/local-only-handoff.js`, `batch-results.js`, nativer Picker, MCP-Schema/Registry und Skillreferenz | `test-local-handoff-reuse.js`: reale Pakete/Journal/Verifier, kein Originalzugriff, tatsächliche Grantfrist auch bei RAM-Snapshots; menschliche Auswahl gezielt eingespeist, nicht als native Abnahme ausgewiesen |
 | BL-050.4 | `tests/lib/adversarial-golden-oracle.mjs`, corpus-/batch-Goldenprüfungen; Produktionsfixes in `privacy/base.js`, `structured.js`, `engine.js`, `entities.js`, `personnel.js`; VECTRA-20260923: `tests/test-csv-source.js` | `npm run test:golden:adversarial-batch`: 16 Konvertate und 16 anonymisierte Ausgaben nach explizitem Titel-/Personenreview; echter Konverter/OCR/Verarbeitung/Export, Fach-/Identitätsanker einschließlich Titel, unabhängiger Pseudonymvergleich. CSV-JSON-Skalare über echten Parser/Privacy-Gateway, kein neuer Importer |
-| BL-021.3 / DS-096 | `privacy/residual-person-review.js`, Residualscanner, Compliance/Orchestrator und beide lokale Reviewadapter; Policy-Fingerprint einschlägig | `test-residual-person-review.js` sowie Vollstapel-Golden; exakte lokale Inhalts-/Fundstellenbindung, CRLF-/gemischte Tabellenoffsets, wiederholte Fragmente, kanonische Original-/Ergebnisdarstellung; keine Wortfreigabe/Gruppenübernahme; native Bedienung und neuer Release noch offen |
+| BL-021.3 / DS-096 | `privacy/residual-person-review.js`, Residualscanner, Compliance/Orchestrator und beide lokale Reviewadapter; Policy-Fingerprint einschlägig | `test-residual-person-review.js` und `test-batch-review-model.js`: exakte lokale Inhalts-/Fundstellenbindung, CRLF-/gemischte Tabellenoffsets, wiederholte Fragmente; eine sichtbare Entscheidung für exakt gleiche Kandidaten desselben Typs innerhalb des aktuellen Reviews, aber keine persistente Wortfreigabe; native Bedienung und neuer Release noch offen |
+| BL-010.42 | `privacy/engine.js`, `companion/text-review.js`, Standalone-Frontend und bestehender privater History-Endpunkt | RC149-UAT: 140 Markdown-Konvertate, 138 anonymisierte Ergebnisse, zwei `RESIDUAL_PII`-Stopps; synthetische Tabellen- und Presenter-Regression, `test-standalone-frontend.js` mit explizitem `batchId: null`. Erneuter paketierter 140er-Lauf und sichtbare Windows-/macOS-Abnahme offen. |
 | BL-021.4 | `privacy/engine.js`, `entities.js`, `personnel.js`: kontextgebundene Titelhypothese vor Personen-/Kunden-/Projektbindung; keine Korpusausnahme | PII-/Residualreview-Regressionen und unabhängige Fachanker im Vollstapel-Golden: technische Titel bleiben nach Entscheidung erhalten, starke Personenanker und Folge-Dokumente geschützt; Beschäftigungskontext darf nicht über Absätze zum vorherigen Hinweis springen |
 
 Die bisherigen Releasebindungen gelten nicht als Nachweis dieser neuen lokalen

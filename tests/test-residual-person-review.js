@@ -203,6 +203,18 @@ test('plain generated table cells are reviewed per occurrence, not as a global w
   }
 });
 
+test('plain technical cells in non-identity tables remain reviewable while person columns stay strict', () => {
+  const source = 'Name: Murat Kaya\n| Pruefschritt | Soll | Status |\n| --- | --- | --- |\n' +
+    '| T-03 | Service Level | fachlich geprueft |\n| T-04 | Fail Closed | fachlich geprueft |';
+  const anon = anonymizeMarkdown(source, 'general', { deferPersonReview: true });
+  assert.deepEqual(anon.residualPersonCandidates.map((item) => item.text), ['Service Level', 'Fail Closed']);
+  assert.ok(anon.residualPersonCandidates.every((item) => Number.isSafeInteger(item.start) && Number.isSafeInteger(item.end)));
+  assert.ok(!anon.text.includes('Murat Kaya'));
+  const table = '| Name | Rolle |\n| --- | --- |\n| Maria Novak | Beratung |';
+  assert.ok(pii.scanResidual(table, 'general', [], options).some((item) =>
+    item.type === 'PERSON_CANDIDATE' && !Number.isSafeInteger(item.start)));
+});
+
 test('default privacy still stops; the internal draft reserves only a locatable residual hypothesis', () => {
   assert.throws(() => anonymizeMarkdown(original, profile), error => error.code === 'RESIDUAL_PII');
   const { anon, input } = prepared();
@@ -245,9 +257,10 @@ test('same-spelling occurrences remain independent and cannot inherit an unrevie
   const input = { original_text: source, anonymized_text: source, profile, ambiguities: candidates,
     confirmPersonReview: all.confirm, replacementForAmbiguity: () => '[PERSON_009]' };
   const draft = review.buildReviewDraft(source, source, profile, candidates);
-  assert.deepEqual(draft.decision_groups, []);
+  assert.equal(draft.decision_groups.length, 1);
   const chosen = candidates.map((item, index) => ({ ambiguity_id: item.ambiguity_id, decision: index ? 'redact' : 'keep' }));
-  review.validateReviewResult({ action: 'reviewed', redactions: [], decisions: chosen }, draft);
+  assert.throws(() => review.validateReviewResult({ action: 'reviewed', redactions: [], decisions: chosen }, draft),
+    /einheitlich entschieden/u);
   const result = reviewedBatchText(input, chosen);
   assert.ok(result.text.endsWith('[PERSON_009]'));
   assert.deepEqual(verifiedScan(result.text, all), []);
@@ -333,22 +346,22 @@ test('reconstructed batch decisions reject a changed source or occurrence even i
     error => error.code === 'LOCAL_REVIEW_CANCELLED');
 });
 
-test('all native presenters keep residual choices separate while retaining prose grouping', () => {
+test('all native presenters bind identical residual wording to one batch decision', () => {
   const text = '[PERSON_001] – KEINE REALDATEN\n[PERSON_002] – KEINE REALDATEN';
   const candidates = residualPersonAmbiguities(text, text, pii.scanResidual(text, profile, [], options));
   const draft = review.buildReviewDraft(text, text, profile, candidates);
-  for (const candidate of candidates) assert.equal(review.groupForCandidate(draft, candidate.ambiguity_id), null);
+  for (const candidate of candidates) assert.equal(review.groupForCandidate(draft, candidate.ambiguity_id).candidate_ids.length, 2);
   assert.match(review.powershellReviewScript(), /person_residual_ambiguous/u);
   assert.match(review.darwinReviewScript(), /person_residual_ambiguous/u);
   for (const candidate of candidates) assert.match(review.linuxReviewContext(draft, candidate), /Ist dies ein Personenname\?/u);
   const bundle = review.buildBatchReviewDraft([{ original_text: text, anonymized_text: text, profile, ambiguities: candidates }]);
-  const selected = bundle.draft.ambiguities.map((item, index) => ({ ambiguity_id: item.ambiguity_id, decision: index ? 'redact' : 'keep' }));
+  const selected = bundle.draft.ambiguities.map((item) => ({ ambiguity_id: item.ambiguity_id, decision: 'keep' }));
   assert.ok(selected.every(item => item.ambiguity_id.startsWith('person-residual:v1:')));
   const resolved = review.resolveBatchReviewResult(bundle, { action: 'reviewed', decisions: selected, redactions: [] });
-  assert.deepEqual(resolved.documents[0].decisions.map(item => item.decision), ['keep', 'redact']);
+  assert.deepEqual(resolved.documents[0].decisions.map(item => item.decision), ['keep', 'keep']);
 });
 
-test('Linux local dialog logic asks each residual occurrence and accepts distinct explicit choices', () => {
+test('Linux local dialog logic asks once for identical residual occurrences', () => {
   const text = '[PERSON_001] – KEINE REALDATEN\n[PERSON_002] – KEINE REALDATEN';
   const candidates = residualPersonAmbiguities(text, text, pii.scanResidual(text, profile, [], options));
   const draft = review.buildReviewDraft(text, text, profile, candidates);
@@ -360,30 +373,31 @@ test('Linux local dialog logic asks each residual occurrence and accepts distinc
     if (command.includes('--text-info')) {
       viewed++;
       assert.match(input, /Ist dies ein Personenname\?/u);
-      assert.doesNotMatch(input, /automatisch für/u);
+      assert.match(input, /automatisch für 2 gleichnamige Stellen/u);
       return { status: 0, stdout: '' };
     }
     if (command.includes('Alle Fundstellen sind entschieden')) return { status: 0, stdout: 'release' };
     assert.doesNotMatch(command, /keep_group|redact_group/u);
-    return { status: 0, stdout: chosen++ ? 'redact' : 'keep' };
+    chosen++;
+    return { status: 0, stdout: 'keep' };
   } });
-  assert.equal(viewed, 2); assert.equal(chosen, 2);
-  assert.deepEqual(review.validateReviewResult(answer, draft).decisions.map(item => item.decision), ['keep', 'redact']);
+  assert.equal(viewed, 1); assert.equal(chosen, 1);
+  assert.deepEqual(review.validateReviewResult(answer, draft).decisions.map(item => item.decision), ['keep', 'keep']);
 });
 
-test('real Windows form never propagates a residual keep to the next same-spelling occurrence', () => {
+test('real Windows form applies one residual decision to each same-spelling occurrence', () => {
   if (process.platform !== 'win32') return;
   const text = '[PERSON_001] – KEINE REALDATEN\n[PERSON_002] – KEINE REALDATEN';
   const candidates = residualPersonAmbiguities(text, text, pii.scanResidual(text, profile, [], options));
   const draft = review.buildReviewDraft(text, text, profile, candidates);
   const script = review.powershellReviewScript().replace('[void]$form.ShowDialog()',
-    '$form.Add_Shown({ $keep.PerformClick(); $anonOrg.PerformClick(); $approve.PerformClick() }); [void]$form.ShowDialog()');
+    '$form.Add_Shown({ $keep.PerformClick(); $approve.PerformClick() }); [void]$form.ShowDialog()');
   const executable = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
   const result = childProcess.spawnSync(executable, ['-NoProfile', '-NonInteractive', '-Sta', '-Command', script], {
     input: JSON.stringify(draft), encoding: 'utf8', shell: false, windowsHide: true, timeout: 20000
   });
   assert.equal(result.status, 0, String(result.stderr || result.error || ''));
-  assert.deepEqual(review.validateReviewResult(JSON.parse(result.stdout), draft).decisions.map(item => item.decision), ['keep', 'redact']);
+  assert.deepEqual(review.validateReviewResult(JSON.parse(result.stdout), draft).decisions.map(item => item.decision), ['keep', 'keep']);
 });
 
 async function main() {

@@ -73,6 +73,15 @@ function stripOrganizationContextPrefix(value) {
   let candidate = String(value || '').replace(PROFESSIONAL_ORG_PREFIX_RE, '');
   const employment = candidate.match(PERSON_EMPLOYMENT_ORG_PREFIX_RE);
   if (employment && looksName(stripHonorifics(employment[1]))) candidate = employment[2];
+  // A numbered prose sentence may contain a person followed by a legal-form
+  // company. The permissive line matcher must not consume the whole sentence
+  // as the company merely because every word precedes its legal suffix.
+  const personAtCompany = candidate.match(
+    /^.{0,100}?\bvon[ \t]+([\p{Lu}][\p{L}'’-]+[ \t]+[\p{Lu}][\p{L}'’-]+)[ \t]+(?:bei|für|at|for)[ \t]+(.+)$/iu
+  );
+  if (personAtCompany && looksName(personAtCompany[1]) && SEGMENT_COMPANY_RE.test(personAtCompany[2])) {
+    candidate = personAtCompany[2];
+  }
   return candidate;
 }
 
@@ -266,6 +275,12 @@ function hasAbstractNounShape(value) {
     .split(/\s+/)
     .filter((token) => !/^(?:von|van|de|del|des|der|die|das|dem|den|ein(?:e|er|es|em|en)?|zu|zur|zum)$/iu.test(token))
     .every((token) => ABSTRACT_NOUN_ENDING_RE.test(token));
+}
+
+function isDescriptiveDocumentTitle(value) {
+  // A declined adjective followed by a document noun is presentation text,
+  // not a first/last name. This is a shape check rather than a title allowlist.
+  return /^[\p{Lu}][\p{Ll}]{2,}isch(?:e|er|es|en|em)[ \t]+[\p{Lu}][\p{L}]{2,}(?:ment|profil)$/u.test(value);
 }
 
 function stripHonorifics(value) {
@@ -506,6 +521,15 @@ function collectPersonAnchors(text, profile = 'general') {
   const tableLabel = new RegExp(`^${PERSON_LABEL}:?$`, 'iu');
   for (const value of markdownTableColumnValues(src, tableLabel)) pushExplicitPerson(out, value, 'label');
 
+  // Test manifests and import sheets often group several direct identifiers
+  // in one semicolon-separated cell instead of giving the person a dedicated
+  // column. The header is explicit sensitivity evidence; only name-shaped
+  // individual values become person anchors.
+  const sensitiveColumn = /^(?:Muss ersetzt werden|Personenbezogene Daten|Personennamen|Sensitive data|PII):?$/iu;
+  for (const value of markdownTableColumnValues(src, sensitiveColumn)) {
+    for (const part of value.split(';')) pushPerson(out, part.trim(), 'label');
+  }
+
   // Credential prose often names the holder on the same line as the issuer.
   // The issuer remains professional content, but the holder is still PII.
   const credentialHolder = new RegExp(
@@ -636,6 +660,7 @@ function collectHeaderNameCandidates(text, profile, maxLines = 40, hasStrongPers
     }
     if (!bigram.test(s)) continue;
     if (!looksName(titleCase(s))) continue;
+    if (isDescriptiveDocumentTitle(s)) continue;
     pushPerson(out, s, 'header_block');
   }
   return out;
@@ -671,7 +696,7 @@ function collectContextualNameCandidates(text, profile, { includeNegation = fals
   const src = String(text || '');
   const out = [];
   const before =
-    /(?<![\p{L}\p{N}_])(?:herrn?|frau|dr\.?|prof\.?|von|durch|gegenüber|kontakt|kunde|kundin|ansprechpartner(?:in)?|bewerber(?:in)?|mitarbeiter(?:in)?|vertreter(?:in)?|vertragspartei|vertreten\s+durch|represented\s+by|signed\s+by|z\.\s?hd\.?)\s*$/iu;
+    /(?<![\p{L}\p{N}_])(?:herrn?|frau|dr\.?|prof\.?|von|durch|gegenüber|kontakt|person|kunde|kundin|ansprechpartner(?:in)?|bewerber(?:in)?|mitarbeiter(?:in)?|vertreter(?:in)?|vertragspartei|vertreten\s+durch|represented\s+by|signed\s+by|z\.\s?hd\.?)\s*$/iu;
   const contactAfter = /^\s*(?:,|\(|-|–|—)?\s*(?:e-?mail|telefon|tel\.|mobil|kontakt|geb\.?|geboren)\b/iu;
   // Employment prose may wrap across lines, but not a paragraph boundary. In
   // the residual view, a masked person in the next paragraph is whitespace,
@@ -720,7 +745,11 @@ function collectContextualNameCandidates(text, profile, { includeNegation = fals
         // person context inside quoted correspondence must stay detectable.
         // Other Markdown structures remain excluded to avoid reclassifying
         // headings and generic list labels as people.
-        if (isStructuralLine(sourceLine) && !/^\s*>/u.test(sourceLine) && !negatedPerson) continue;
+        const numberedSentence = /^\s*\d+[.)][ \t]+.+[.!?][ \t]*$/u.test(sourceLine);
+        const companyAfterName = src.slice(end, to).match(/^[ \t]+(?:bei|für|at|for)[ \t]+(.+)$/iu);
+        const numberedPersonCompany = numberedSentence && before.test(ctxBefore) && companyAfterName &&
+          SEGMENT_COMPANY_RE.test(companyAfterName[1]);
+        if (isStructuralLine(sourceLine) && !/^\s*>/u.test(sourceLine) && !negatedPerson && !numberedPersonCompany) continue;
         const matched =
           before.test(ctxBefore) ||
           contactAfter.test(ctxAfter) ||

@@ -1,8 +1,8 @@
 # Release- und Distributionsvertrag
 
-Stand: 29.09.2026 · 3.2.0-rc142
+Stand: 29.09.2026 · 3.2.0-rc151
 
-Der aktuelle Quellstand ist als RC142-Standalone-Vorabkandidat gebunden; Linux und Cowork behalten RC140.
+Der aktuelle Quellstand ist RC151-Entwicklungsstand und noch kein neu gebundener Paketkandidat.
 
 ### RC142 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
 

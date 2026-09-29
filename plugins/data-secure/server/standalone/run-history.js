@@ -93,7 +93,28 @@ function createRunHistory(deps) {
     if (!entry.ledger_available) throw failure('STANDALONE_LEDGER_MISSING');
     return { ok: true, target_kind: 'file', local_path: path.join(entry._run, MAPPING), external_disclosure: false };
   }
-  return { history, find, resolveResults, resolveLedger };
+  function failures(batchId) {
+    const entry = find(batchId);
+    if (entry.failed_count === 0) return { ok: true, available: true, total: 0, files: [],
+      local_ui_only: true, external_disclosure: false };
+    // Names are read on demand from the private journal, never persisted in
+    // the content-free history summary or diagnostic log. Older expired
+    // journals may therefore have counts but no longer have names.
+    const state = deps.readStates().find(candidate => candidate.token === batchId &&
+      candidate.product_channel === 'standalone');
+    if (!state) return { ok: true, available: false, total: entry.failed_count, files: [],
+      local_ui_only: true, external_disclosure: false };
+    const stopped = state.items.filter(item => item.status === 'stopped' && item.local_mapping_exported !== false);
+    const files = stopped.slice(0, 200).map(item => ({
+      name: item.source_label || item.name,
+      ...(typeof item.error_code === 'string' && /^[A-Z][A-Z0-9_]{2,63}$/u.test(item.error_code)
+        ? { reason_code: item.error_code } : {})
+    })).filter(item => typeof item.name === 'string' && item.name.length > 0 && item.name.length <= 1024 &&
+      !path.isAbsolute(item.name) && !item.name.split('/').some(part => !part || part === '.' || part === '..'));
+    return { ok: true, available: true, total: stopped.length, files,
+      local_ui_only: true, external_disclosure: false };
+  }
+  return { history, find, resolveResults, resolveLedger, failures };
 }
 
 module.exports = { createRunHistory, validateBatchId };

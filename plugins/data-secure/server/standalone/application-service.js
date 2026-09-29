@@ -257,6 +257,11 @@ function pathsOverlap(left, right) {
   return inside(a, b) || inside(b, a);
 }
 
+function selectedPathIdentity(candidate) {
+  const resolved = path.resolve(candidate);
+  return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+}
+
 class StandaloneApplicationService {
   constructor(options = {}) {
     this.deps = options.dependencies || defaultDependencies();
@@ -405,6 +410,12 @@ class StandaloneApplicationService {
     return this.deps.runHistory.history();
   }
 
+  runFailures(batchId) {
+    const target = batchId || this.observedBatchId;
+    if (!target) throw fixedFailure('STANDALONE_HISTORY_MISSING', 'Für diesen Lauf sind keine Dateidetails verfügbar.');
+    return this.deps.runHistory.failures(target);
+  }
+
   resolveHistoryResults(batchId) {
     validateBatchId(batchId);
     return this.deps.runHistory.resolveResults(batchId);
@@ -485,6 +496,7 @@ class StandaloneApplicationService {
     }
     this.interactionActive = true;
     try {
+      const previousQueue = this.admittedQueue || [];
       let ignoredArtifactCount = 0;
       const selected = sourceKind === 'folder'
         ? await this.deps.enumerateSourceFolderAsync(sourcePaths[0], {
@@ -494,7 +506,23 @@ class StandaloneApplicationService {
         : await Promise.all(sourcePaths.map((candidate) => this.deps.validateSelectedPathAsync(candidate, {
             allowedTypes: CONVERSION_TYPES, signal
           })));
-      const queue = this.deps.batchQueueFromSelection(selected);
+      const seen = new Set(previousQueue.map((item) => selectedPathIdentity(item.full)));
+      const additions = [];
+      let alreadySelectedCount = 0;
+      for (const item of selected) {
+        const identity = selectedPathIdentity(item.sourcePath);
+        if (seen.has(identity)) { alreadySelectedCount++; continue; }
+        seen.add(identity);
+        additions.push(item);
+      }
+      // Recompute display labels for the complete queue. A later selection can
+      // introduce a duplicate basename; the same labels bind the mapping and
+      // the visible export tree. Publish the new admission only after every
+      // combined limit and label has passed validation.
+      const queue = this.deps.batchQueueFromSelection([
+        ...previousQueue.map((item) => ({ sourcePath: item.full, sourceBytes: item.sourceBytes,
+          sourceLabel: item.sourceLabel })), ...additions
+      ]);
       if (!Array.isArray(queue) || queue.length < 1 || queue.some((item) =>
         !item || typeof item.full !== 'string' || !path.isAbsolute(item.full) ||
         typeof item.name !== 'string' || item.name.length < 1 || path.basename(item.full) !== item.name ||
@@ -502,14 +530,17 @@ class StandaloneApplicationService {
         throw fixedFailure('STANDALONE_SELECTION_INVALID', 'Die lokale Dateiauswahl ist ungültig.');
       }
       const totalBytes = queue.reduce((sum, item) => sum + item.sourceBytes, 0);
-      if (!Number.isSafeInteger(totalBytes) || totalBytes > RESOURCE_LIMITS.MAX_BATCH_TOTAL_BYTES) {
+      if (queue.length > RESOURCE_LIMITS.MAX_BATCH_FILES ||
+          !Number.isSafeInteger(totalBytes) || totalBytes > RESOURCE_LIMITS.MAX_BATCH_TOTAL_BYTES) {
         throw fixedFailure('STANDALONE_SELECTION_INVALID', 'Der ausgewählte Stapel überschreitet die zulässige Gesamtgröße.');
       }
-      this.admittedQueue = queue;
-      const folders = [...new Set((sourceKind === 'folder' ? sourcePaths : queue.map((item) => path.dirname(item.full)))
+      const folders = [...new Set([...(previousQueue.length > 0 ? this.selectionContext?.sourceFolders || [] : []),
+        ...(sourceKind === 'folder' ? sourcePaths : additions.map((item) => path.dirname(item.sourcePath)))]
         .map((candidate) => path.resolve(candidate)))];
+      this.admittedQueue = queue;
       this.selectionContext = {
-        sourceKind,
+        sourceKind: sourceKind === 'folder' || (previousQueue.length > 0 && this.selectionContext?.sourceKind === 'folder')
+          ? 'folder' : 'files',
         sourceFolders: folders,
         // The queue already disambiguates duplicate basenames with the shortest
         // safe relative source label. Keep that label in the local-only UI so
@@ -520,11 +551,11 @@ class StandaloneApplicationService {
       return {
         ok: true, event: 'selection_summarized', selected_count: queue.length,
         total_bytes: totalBytes,
+        ...(alreadySelectedCount > 0 ? { already_selected_count: alreadySelectedCount } : {}),
         ...(ignoredArtifactCount > 0 ? { ignored_artifact_count: ignoredArtifactCount } : {}),
         ...admissionCounts(queue), ui_context: uiContext, external_disclosure: false
       };
     } catch (error) {
-      this.admittedQueue = null;
       if (signal?.aborted || error?.code === 'LOCAL_SELECTION_CANCELLED') {
         throw fixedFailure('STANDALONE_SELECTION_CANCELLED', 'Die Auswahl wurde abgebrochen.');
       }

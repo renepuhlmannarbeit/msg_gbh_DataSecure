@@ -184,6 +184,21 @@ function code(expected) { return (error) => error?.code === expected; }
     assert.equal(history.find(allStopped.token).status, 'completed_without_results');
     assert.equal(history.find(allStopped.token).results_available, false);
     assert.equal(history.find(allStopped.token).ledger_available, false);
+    assert.deepEqual(history.failures(allStopped.token), {
+      ok: true, available: true, total: 1,
+      files: [{ name: 'blocked.docx', reason_code: 'DOCX_STRUCTURE_UNSUPPORTED' }],
+      local_ui_only: true, external_disclosure: false
+    });
+    assert.doesNotMatch(JSON.stringify(history.history()), /blocked\.docx/u,
+      'file names are returned on demand, not persisted in content-free history rows');
+    const summaryOnly = createRunHistory({
+      readStates: () => [], readExports: exportsApi.readStandaloneExportHistory,
+      recoverableStates: () => [], liveExecutor: () => false
+    });
+    assert.deepEqual(summaryOnly.failures(allStopped.token), {
+      ok: true, available: false, total: 1, files: [],
+      local_ui_only: true, external_disclosure: false
+    });
     assert.throws(() => history.resolveResults(allStopped.token), code('STANDALONE_RESULTS_MISSING'));
     assert.throws(() => history.resolveLedger(allStopped.token), code('STANDALONE_LEDGER_MISSING'));
 

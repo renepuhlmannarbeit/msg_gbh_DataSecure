@@ -45,6 +45,21 @@ const PASSIVE_PRESENTATION_REL_TYPES = new Set([
   'http://schemas.microsoft.com/office/2007/relationships/diagramdrawing',
   'http://schemas.microsoft.com/office/2007/relationships/hdphoto'
 ]);
+// These exact PowerPoint projections are inert for Markdown extraction. Their
+// text is not asserted to be covered: PPTX Markdown always stays incomplete.
+// Keep owner and target checks below; this is not a general Microsoft-URI pass.
+const PASSIVE_PRESENTATION_METADATA = new Map([
+  ['http://schemas.microsoft.com/office/2018/10/relationships/authors',
+    [/^ppt\/_rels\/presentation\.xml\.rels$/iu, /^ppt\/authors\.xml$/iu]],
+  ['http://schemas.microsoft.com/office/2015/10/relationships/revisioninfo',
+    [/^ppt\/_rels\/presentation\.xml\.rels$/iu, /^ppt\/revisionInfo\.xml$/iu]],
+  ['http://schemas.microsoft.com/office/2016/11/relationships/changesinfo',
+    [/^ppt\/_rels\/presentation\.xml\.rels$/iu, /^ppt\/changesInfos\/changesInfo[0-9]+\.xml$/iu]],
+  ['http://schemas.microsoft.com/office/2011/relationships/chartcolorstyle',
+    [/^ppt\/charts\/_rels\/chart[0-9]+\.xml\.rels$/iu, /^ppt\/charts\/colors[0-9]+\.xml$/iu]],
+  ['http://schemas.microsoft.com/office/2011/relationships/chartstyle',
+    [/^ppt\/charts\/_rels\/chart[0-9]+\.xml\.rels$/iu, /^ppt\/charts\/style[0-9]+\.xml$/iu]]
+]);
 const MAIN = Object.freeze({
   docx: Object.freeze({
     part: 'word/document.xml',
@@ -292,10 +307,16 @@ function validateOpcControls({ declaredType, entries, controlParts, passivePrese
       }
       const passiveOle = passivePresentation && declaredType === 'pptx' &&
         OFFICE_REL_NAMESPACES.some(namespace => type.toLowerCase() === `${namespace}oleobject`);
-      if (isBlockedRelationshipType(type) && !passiveOle) {
+      const passivePackage = passivePresentation && declaredType === 'pptx' &&
+        OFFICE_REL_NAMESPACES.some(namespace => type.toLowerCase() === `${namespace}package`) &&
+        /^ppt\/(?:slides\/_rels\/slide[0-9]+|charts\/_rels\/chart[0-9]+)\.xml\.rels$/iu.test(name);
+      const passiveMetadata = passivePresentation && declaredType === 'pptx'
+        ? PASSIVE_PRESENTATION_METADATA.get(type.toLowerCase()) : null;
+      if (isBlockedRelationshipType(type) && !passiveOle && !passivePackage) {
         throw new OpcValidationError('SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
       }
       if (!hasSupportedRelationshipNamespace(type) &&
+          !passiveMetadata &&
           !(passivePresentation && declaredType === 'pptx' &&
             PASSIVE_PRESENTATION_REL_TYPES.has(type.toLowerCase()))) {
         throw new OpcValidationError('SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
@@ -303,6 +324,12 @@ function validateOpcControls({ declaredType, entries, controlParts, passivePrese
       const resolvedTarget = resolveRelationshipTarget(name, target);
       if (!resolvedTarget || !entries.has(resolvedTarget)) throw new OpcValidationError();
       if (passiveOle && !/^ppt\/embeddings\/oleObject[0-9]+\.bin$/iu.test(resolvedTarget)) {
+        throw new OpcValidationError('SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
+      }
+      if (passivePackage && !/^ppt\/embeddings\/[^/]+\.xlsx$/iu.test(resolvedTarget)) {
+        throw new OpcValidationError('SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
+      }
+      if (passiveMetadata && (!passiveMetadata[0].test(name) || !passiveMetadata[1].test(resolvedTarget))) {
         throw new OpcValidationError('SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
       }
       if (name === '_rels/.rels' && OFFICE_REL_TYPES.has(type)) office.push(resolvedTarget);

@@ -12,6 +12,7 @@ const PRIVATE_ACTIONS = new Set([
   'admit_selected_sources', 'remove_admitted_source', 'cancel_admission', 'start_admitted_batch',
   'get_public_state', 'get_ui_context', 'ack_terminal_presented', 'continue_current_batch', 'configure_results',
   'resolve_current_results', 'resolve_local_ledger', 'get_run_history',
+  'get_run_failures',
   'resolve_history_results', 'resolve_history_ledger', 'continue_history_batch', 'shutdown'
 ]);
 
@@ -28,6 +29,11 @@ function validatePrivateMessage(message) {
     fail('DESKTOP_IPC_ACTION_INVALID', 'Unbekannte Desktop-Aktion.');
   const allowedFields = new Set(['schema', 'request_id', 'action']);
   if (['resolve_history_results', 'resolve_history_ledger', 'continue_history_batch'].includes(message.action)) {
+    allowedFields.add('batch_id');
+    if (typeof message.batch_id !== 'string' || !/^[a-f0-9]{64}$/u.test(message.batch_id))
+      fail('STANDALONE_HISTORY_INVALID', 'Ungültige lokale Laufkennung.');
+  }
+  if (message.action === 'get_run_failures' && Object.hasOwn(message, 'batch_id')) {
     allowedFields.add('batch_id');
     if (typeof message.batch_id !== 'string' || !/^[a-f0-9]{64}$/u.test(message.batch_id))
       fail('STANDALONE_HISTORY_INVALID', 'Ungültige lokale Laufkennung.');

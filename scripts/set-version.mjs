@@ -138,6 +138,9 @@ patchText('docs/DETECTOR_BENCHMARK.md',
 patchText('docs/FORMAT_COVERAGE_MATRIX.md',
   /^(Stand:[^\n]*?Produktversion )\d+\.\d+\.\d+ RC\d+$/mu,
   `$1${releaseLabel(target)}`);
+patchText('docs/FORMAT_COVERAGE_MATRIX.md',
+  /^(Stand:[^\n]*?lokaler )\d+\.\d+\.\d+(?:-rc\d+)?(?=-Entwicklungsstand)/mu,
+  `$1${target}`);
 for (const rel of ['docs/IT-BETRIEBSHANDBUCH.md', 'docs/PLUGIN_SECURITY_MODEL.md',
   'docs/RELEASE.md', 'docs/TESTING.md']) {
   patchText(rel, /^(Stand:[^\n]*?· )\d+\.\d+\.\d+(?:-rc\d+)?(?=[^\n]*$)/mu, `$1${target}`);

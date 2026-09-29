@@ -1,10 +1,10 @@
 # Aktuelle Format-Coverage
 
-Stand: 11.09.2026 · Produktversion 3.2.0 RC142
+Stand: 29.09.2026 · lokaler 3.2.0-rc151-Entwicklungsstand, noch kein veröffentlichter Kandidat
 
 Diese Matrix trennt implementierte Verarbeitung, Extraktionsvollständigkeit und
-Zielhost-Abnahme. Ein erfolgreicher Konvertierungstest ist keine Freigabe für
-Anonymisierung, Cowork oder einen breiten Endnutzerrollout.
+Zielhost-Abnahme. Ein erfolgreicher Konvertierungstest allein beweist keine
+erfolgreiche Anonymisierung, Cowork-Freigabe oder einen Endnutzerrollout.
 
 ## Anonymisierung: Claude-Plugin und Standalone
 
@@ -27,9 +27,9 @@ die lokale Markdown-first-Extraktion.
 | Markdown (`.md`, `.markdown`) | belegt | freigegeben | E0 belegt, UAT offen | normalisierter Text; Links/HTML bleiben inert und werden nicht geladen |
 | CSV | belegt | freigegeben | E0 belegt, UAT offen | strikt validierte Tabelle als Markdown; defekte Struktur stoppt fail-closed |
 | DOCX | belegt für dokumentierte Bereiche | freigegeben; unbekannte inhaltsfähige Bereiche stoppen | Markdown-Extraktion wird anonymisiert | Custom-XML/Grafiken bleiben außerhalb des Markdown; Extraktionsstatus bleibt separat, der Markdown-Inhalt durchläuft alle Privacy-Gates |
-| XLSX | neutraler Konverter angebunden, Vollständigkeit noch nicht belegt | Markdown-Extraktion wird anonymisiert | Markdown-Extraktion wird anonymisiert | Extraktionsstatus bleibt separat `incomplete`; keine Vollständigkeitszusage für die Arbeitsmappe |
-| PPTX | neutraler Konverter angebunden, Vollständigkeit noch nicht belegt | Markdown-Extraktion wird anonymisiert | Markdown-Extraktion wird anonymisiert | Extraktionsstatus bleibt separat `incomplete`; keine Vollständigkeitszusage für die Präsentation |
-| PDF / Scan-PDF | Text/OCR angebunden, Vollständigkeit noch nicht belegt | gesperrt | Markdown-Extraktion wird anonymisiert | leere OCR stoppt; sonst keine Vollständigkeitszusage für das PDF |
+| XLSX | neutraler Konverter angebunden, Vollständigkeit noch nicht belegt | Markdown-Extraktion wird anonymisiert | Markdown-Extraktion wird anonymisiert; kein verlustbehafteter CSV-Zwischenschritt | Extraktionsstatus bleibt separat `incomplete`; keine Vollständigkeitszusage für die Arbeitsmappe |
+| PPTX | neutraler Konverter angebunden, Vollständigkeit noch nicht belegt | Markdown-Extraktion wird anonymisiert; eigene strengere Admission | Markdown-Extraktion wird anonymisiert; passive OLE-/Linkobjekte bleiben ausgelassen, eindeutig intern verknüpfte XLSX-Einbettungen werden begrenzt gelesen | Extraktionsstatus bleibt separat `incomplete`; keine Vollständigkeitszusage für die Präsentation oder ausgelassene Objekte |
+| PDF / Scan-PDF | Text/OCR angebunden, Vollständigkeit noch nicht belegt | gesperrt | Markdown-Extraktion wird anonymisiert, passive Formular-/Anhang-/Skriptobjekte bleiben ausgelassen | leere OCR und unsichere Quellen stoppen; sonst keine Vollständigkeitszusage für das PDF |
 | PNG, JPEG, BMP | lokale OCR angebunden, OCR nicht fachlich verifiziert | gesperrt | OCR-Markdown wird anonymisiert | leere OCR stoppt; sonst keine Vollständigkeitszusage für den Bildinhalt |
 | unbekannt, beschädigt oder verschlüsselt | nicht zulässig | gesperrt | gesperrt | kein Teilresultat und keine Entschlüsselung |
 
@@ -42,6 +42,16 @@ von DOCX und breiten Quellen nur als getrennten Coverage-Status weitergeben;
 unbekannte Coverage, leeres Markdown oder unsichere Quellen stoppen. Der übrige
 Stapel darf weiterlaufen. Originale werden nur gelesen und niemals automatisch
 verändert oder gelöscht.
+Bei PDF und PPTX ist diese Standalone-Regel nach DS-103 auch dann gültig, wenn
+passive Quellobjekte sicher ausgelassen werden: Freigegeben wird ausschließlich
+das geprüfte Markdown, niemals ein bereinigtes Original-PDF oder eine PPTX.
+Standalones PPTX-Ausnahme umfasst nur interne, eindeutig typisierte XLSX-
+Einbettungen an Folien/Diagrammen und exakt bekannte passive PowerPoint-
+Metadaten-/Stilbeziehungen. Eingebettete XLSX werden vor der Textextraktion
+selbst als OOXML geprüft. OLE-Binärdaten werden nicht ausgeführt oder als
+anonymisiert bezeichnet; Makros, ActiveX, externe Paketbeziehungen und
+unbekannte aktive Teile bleiben gesperrt. Eine XLSX-Arbeitsmappe wird nicht
+zuerst in CSV exportiert: Ein CSV-Export kann Blätter und Struktur verlieren.
 
 Für Tabellen werden eindeutige Quellköpfe wie `Name`, `Zuständig`,
 `Verantwortlich`, `Bearbeiter`, `Sachbearbeiter`, `Betreuer`, `Autor`,

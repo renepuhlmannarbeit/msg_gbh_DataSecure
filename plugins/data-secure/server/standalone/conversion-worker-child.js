@@ -148,8 +148,9 @@ async function pdfMarkdown(bytes, passiveObjects = false) {
   try {
     const document = await task.promise;
     if (await document.getPermissions() !== null) fail('SOURCE_ENCRYPTED_UNSUPPORTED');
-    // Never execute forms, JavaScript or attachments. Passive conversion may
-    // omit them with incomplete coverage; privacy remains strict.
+    // Never execute forms, JavaScript or attachments. Markdown-only and
+    // Standalone Markdown-first privacy may omit them with incomplete source
+    // coverage; the privacy gate still inspects all extracted Markdown.
     if (document.isPureXfa) fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
     const hasDocumentObjects = await document.hasJSActions() || populated(await document.getFieldObjects()) ||
       populated(await document.getAttachments());

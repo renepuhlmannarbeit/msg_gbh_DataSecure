@@ -133,14 +133,18 @@ test('the Tauri contract is now a buildable shell with private sidecar mediation
   assert.match(frontend, /configure_results/u);
   assert.match(frontend, /get_ui_context/u);
   assert.match(frontend, /await invoke\('frontend_ready', \{ nativeDropReady \}\)/u);
-  assert.match(frontend, /textContent = resultFolder/u,
+  assert.match(frontend, /byId\(id\)\.textContent = label/u,
     'local paths are rendered as text and never interpreted as markup');
+  assert.match(frontend, /byId\('suggested-result-folder'\)\.textContent = location/u,
+    'the proposed first-run path must also be rendered as text');
+  assert.doesNotMatch(frontend, /\.innerHTML\s*=/u,
+    'frontend must not interpret local paths as markup');
   assert.match(frontend, /open_history_ledger/u);
   assert.match(frontend, /handoff_confirmed/u);
   assert.match(frontend, /action-feedback/u);
   assert.match(frontend, /activeView = 'home'/u);
-  assert.strictEqual((frontend.match(/switchView\('results'\)/gu) || []).length, 1,
-    'only the explicitly clicked resume-navigation button opens history');
+  assert.strictEqual((frontend.match(/switchView\('results'\)/gu) || []).length, 2,
+    'only explicit completion and resume-navigation buttons open history');
   assert.match(sidecar, /local_target_requested/u);
   assert.match(sidecar, /local_target_resolved/u);
   assert.match(sidecar, /local_target_resolution_failed/u);
@@ -183,6 +187,16 @@ test('native drag-drop shares admission with pickers and keeps an explicit Start
   assert.match(rust, /admit_native_sources\(&worker, &paths, kind\)/u);
   assert.match(rust, /admit_native_sources\(&owned, &paths, "files"\)/u);
   assert.match(rust, /admit_native_sources\(&owned, &\[path\], "folder"\)/u);
+  for (const command of ['select_files', 'select_folder']) {
+    const start = rust.indexOf(`async fn ${command}(`);
+    const end = rust.indexOf('\n#[tauri::command]', start);
+    assert.ok(start >= 0 && end > start);
+    assert.match(rust.slice(start, end), /selection_guard\(&state\.selection_busy, &state\.admission_present, true\)/u,
+      `${command} must permit adding sources to a prepared batch`);
+  }
+  assert.match(rust.slice(rust.indexOf('fn native_drop('), rust.indexOf('fn request_id(')),
+    /selection_guard\(&state\.selection_busy, &state\.admission_present, true\)/u,
+    'native drops must extend a prepared batch through the same guarded admission');
   assert.match(rust, /STANDALONE_DROP_MIXED/u);
   assert.match(rust, /STANDALONE_SELECTION_PREPARED/u);
   assert.match(rust, /drop_received/u);

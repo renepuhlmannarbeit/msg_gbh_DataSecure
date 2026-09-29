@@ -87,6 +87,8 @@ test('a mixed tree is rejected as a whole instead of silently selecting supporte
     assert.match(error.message, /4 reguläre Dateien, davon 2 nicht freigegebene oder unbekannte Formate/iu);
     assert.match(error.message, /kein Stapel gestartet/iu);
     assert.doesNotMatch(error.message, /contract|notes|presentation|unknown|\.pptx|\.bin/iu);
+    assert.deepStrictEqual(error.localUnsupportedFiles, ['presentation.pptx', 'unknown.bin']);
+    assert.strictEqual(error.localUnsupportedCount, 2);
     return true;
   });
 });
@@ -228,6 +230,28 @@ test('a selected root replacement during listing rejects the complete synchronou
 });
 
 async function main() {
+  await testAsync('async admission reads files below a root containing only subfolders', async () => {
+    const root = clean('async-subfolders-only');
+    fs.mkdirSync(path.join(root, 'one'));
+    fs.mkdirSync(path.join(root, 'two'));
+    fs.writeFileSync(path.join(root, 'one', 'first.txt'), 'synthetic first');
+    fs.writeFileSync(path.join(root, 'two', 'second.txt'), 'synthetic second');
+    const selected = await enumerateSourceFolderAsync(root, {
+      hasReparseComponentAsync: async () => false
+    });
+    assert.deepStrictEqual(selected.map((entry) => entry.sourceLabel),
+      ['one/first.txt', 'two/second.txt']);
+  });
+  await testAsync('an oversized nested source rejects the whole folder with a public error code', async () => {
+    const root = clean('async-nested-format-limit');
+    fs.mkdirSync(path.join(root, 'one'));
+    fs.mkdirSync(path.join(root, 'two'));
+    fs.writeFileSync(path.join(root, 'one', 'small.txt'), 'a');
+    fs.writeFileSync(path.join(root, 'two', 'large.txt'), 'ab');
+    await assert.rejects(() => enumerateSourceFolderAsync(root, {
+      maxBytes: 1, hasReparseComponentAsync: async () => false
+    }), (error) => error.code === 'SOURCE_FORMAT_SIZE_LIMIT');
+  });
   await testAsync('async recursion also rejects the configured visible result tree', async () => {
     const cowork = clean('cowork-source-overlap-async');
     const output = path.join(cowork, 'DataSecure-Output');
@@ -267,6 +291,8 @@ async function main() {
       assert.strictEqual(error.code, 'SOURCE_FOLDER_UNSUPPORTED_FILES');
       assert.match(error.message, /2 reguläre Dateien, davon 1 nicht freigegebene oder unbekannte Formate/iu);
       assert.doesNotMatch(error.message, /supported|blocked|\.md|\.pdf/iu);
+      assert.deepStrictEqual(error.localUnsupportedFiles, ['blocked.pdf']);
+      assert.strictEqual(error.localUnsupportedCount, 1);
       return true;
     });
   });

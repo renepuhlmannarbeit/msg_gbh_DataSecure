@@ -262,7 +262,8 @@ function validateSelectedPath(selected, options = {}) {
   }
   const maxBytes = options.maxBytes ?? sourceLimitForExtension(extension);
   if (!Number.isSafeInteger(stat.size) || stat.size < 1 || stat.size > maxBytes) {
-    throw new SafeError('Die ausgewählte Datei überschreitet die sichere Einzeldateigrenze für dieses Format.');
+    throw Object.assign(new SafeError('Die ausgewählte Datei überschreitet die sichere Einzeldateigrenze für dieses Format.'),
+      { code: 'SOURCE_FORMAT_SIZE_LIMIT' });
   }
   return { sourcePath: candidate, sourceType, sourceBytes: stat.size };
 }
@@ -299,7 +300,8 @@ async function validateSelectedPathAsync(selected, options = {}) {
   }
   const maxBytes = options.maxBytes ?? sourceLimitForExtension(extension);
   if (!Number.isSafeInteger(stat.size) || stat.size < 1 || stat.size > maxBytes) {
-    throw new SafeError('Die ausgewählte Datei überschreitet die sichere Einzeldateigrenze für dieses Format.');
+    throw Object.assign(new SafeError('Die ausgewählte Datei überschreitet die sichere Einzeldateigrenze für dieses Format.'),
+      { code: 'SOURCE_FORMAT_SIZE_LIMIT' });
   }
   return { sourcePath: candidate, sourceType, sourceBytes: stat.size };
 }

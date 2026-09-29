@@ -64,5 +64,48 @@ try {
   await page.screenshot({ path: path.join(root, 'dist/standalone-home-narrow-preview.png'), fullPage: true });
   assert.deepEqual(errors, []);
   await context.close();
-  console.log('STANDALONE UI BROWSER PASS: home, history, exact actions, desktop/mobile layout, axe (UI fixture only)');
+
+  const firstRunContext = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+  await firstRunContext.route(/^https?:/u, route => route.abort());
+  await firstRunContext.addInitScript(() => {
+    let folderChosen = false;
+    let pickerCancelled = false;
+    window.__TAURI__ = {
+      event: { listen: async () => () => {} },
+      core: { invoke: async (action) => {
+        if (action === 'frontend_ready') return { ok: true, product_version: '3.2.0-rc142' };
+        if (action === 'get_ui_context') return { local_ui_only: true, external_disclosure: false,
+          result_folder: folderChosen ? 'C:\\Dokumente\\Mein Ordner' : 'C:\\Dokumente\\SecureDataMsg',
+          result_folder_is_default: !folderChosen, source_folders: [], selected_files: [] };
+        if (action === 'get_public_state') return { state: 'ready', results_available: false };
+        if (action === 'configure_results') {
+          if (!pickerCancelled) { pickerCancelled = true; return { ok: true, cancelled: true }; }
+          folderChosen = true;
+          return { ok: true, result_folder: 'C:\\Dokumente\\Mein Ordner',
+            local_ui_only: true, external_disclosure: false };
+        }
+        return { ok: true };
+      } }
+    };
+  });
+  const firstRunPage = await firstRunContext.newPage();
+  const firstRunErrors = [];
+  firstRunPage.on('pageerror', error => firstRunErrors.push(String(error)));
+  await firstRunPage.goto(pathToFileURL(path.join(root, 'apps/datasecure-standalone/frontend/index.html')).href);
+  await firstRunPage.getByRole('heading', { name: 'Ergebnisordner festlegen' }).waitFor();
+  await firstRunPage.addScriptTag({ path: require.resolve('axe-core/axe.min.js') });
+  const firstRunAudit = await firstRunPage.evaluate(async () => window.axe.run(document, { runOnly: {
+    type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa'] } }));
+  assert.deepEqual(firstRunAudit.violations.map(value => value.id), []);
+  assert.match(await firstRunPage.locator('#result-folder-setup').innerText(), /beim ersten Start automatisch/u);
+  await firstRunPage.screenshot({ path: path.join(root, 'dist/standalone-first-run-preview.png'), fullPage: true });
+  await firstRunPage.getByRole('button', { name: 'Ergebnisordner auswählen' }).click();
+  assert.equal(await firstRunPage.locator('#result-folder-setup').isVisible(), true,
+    'cancelled picker leaves the guidance visible');
+  await firstRunPage.getByRole('button', { name: 'Ergebnisordner auswählen' }).click();
+  assert.equal(await firstRunPage.locator('#result-folder-setup').isVisible(), false,
+    'explicit folder selection dismisses the guidance');
+  assert.deepEqual(firstRunErrors, []);
+  await firstRunContext.close();
+  console.log('STANDALONE UI BROWSER PASS: home, history, first-run result folder, desktop/mobile layout, axe (UI fixture only)');
 } finally { await browser.close(); }

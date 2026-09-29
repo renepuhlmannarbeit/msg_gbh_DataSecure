@@ -26,6 +26,28 @@ export function office(type) {
     ];
   return zipStore([...opcControlEntries(type), ...entries]);
 }
+export function passivePresentation() {
+  return zipStore([
+    ...opcControlEntries('pptx'),
+    ['ppt/presentation.xml', `<p:presentation xmlns:p="${P}" xmlns:r="${R}"><p:sldIdLst><p:sldId id="256" r:id="s1"/></p:sldIdLst></p:presentation>`],
+    ['ppt/_rels/presentation.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="s1" Type="${R}/slide" Target="slides/slide1.xml"/></Relationships>`],
+    ['ppt/slides/slide1.xml', `<p:sld xmlns:p="${P}" xmlns:a="${A}"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>Name: Max Mustermann</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>`],
+    ['ppt/slides/_rels/slide1.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="o1" Type="${R}/oleObject" Target="../embeddings/oleObject1.bin"/><Relationship Id="h1" Type="${R}/hyperlink" Target="https://example.test" TargetMode="External"/></Relationships>`],
+    ['ppt/embeddings/oleObject1.bin', Buffer.from([1, 2, 3])]
+  ]);
+}
+export function embeddedWorkbookPresentation() {
+  return zipStore([
+    ...opcControlEntries('pptx'),
+    ['ppt/presentation.xml', `<p:presentation xmlns:p="${P}" xmlns:r="${R}"><p:sldIdLst><p:sldId id="256" r:id="s1"/></p:sldIdLst></p:presentation>`],
+    ['ppt/_rels/presentation.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="s1" Type="${R}/slide" Target="slides/slide1.xml"/><Relationship Id="a1" Type="http://schemas.microsoft.com/office/2018/10/relationships/authors" Target="authors.xml"/></Relationships>`],
+    ['ppt/slides/slide1.xml', `<p:sld xmlns:p="${P}" xmlns:a="${A}"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>Name: Max Mustermann</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>`],
+    ['ppt/slides/_rels/slide1.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="p1" Type="${R}/package" Target="../embeddings/data.xlsx"/><Relationship Id="o1" Type="${R}/oleObject" Target="../embeddings/oleObject1.bin"/></Relationships>`],
+    ['ppt/embeddings/data.xlsx', office('xlsx')],
+    ['ppt/embeddings/oleObject1.bin', Buffer.from([1, 2, 3])],
+    ['ppt/authors.xml', '<authorLst/>']
+  ]);
+}
 export function image(blank = false) {
   const canvas = createCanvas(1600, 600), ctx = canvas.getContext('2d');
   ctx.fillStyle = 'white'; ctx.fillRect(0, 0, 1600, 600);

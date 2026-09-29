@@ -13,8 +13,26 @@ const { SOURCE_TYPES, sourceArtifactReason, sourceArtifactReasonAsync, validateS
 const SOURCE_FOLDER_TITLE = 'Ordner mit DataSecure lokal verarbeiten';
 const SOURCE_FOLDER_CANCELLED = '__DATASECURE_SOURCE_FOLDER_CANCELLED__';
 const TREE_LIMITS = Object.freeze({ maxDirectories: 1024, maxEntries: 4096, maxDepth: 32 });
+const MAX_REPORTED_UNSUPPORTED = 200;
 function folderFailure(code, message) {
   return Object.assign(new SafeError(message), { code });
+}
+function unsupportedFolderFailure(regularFiles, unsupportedFiles, labels) {
+  const error = folderFailure('SOURCE_FOLDER_UNSUPPORTED_FILES',
+    `Der ausgewählte Ordner enthält ${regularFiles} reguläre Dateien, davon ${unsupportedFiles} nicht freigegebene oder unbekannte Formate. Es wurde kein Stapel gestartet.`);
+  // These relative labels are for the local desktop error display only. The
+  // message and content-free diagnostics must never contain source names.
+  error.localUnsupportedFiles = labels;
+  error.localUnsupportedCount = unsupportedFiles;
+  return error;
+}
+function recordUnsupportedLabel(labels, root, full) {
+  if (labels.length >= MAX_REPORTED_UNSUPPORTED) return;
+  const relative = path.relative(root, full).split(path.sep).join('/');
+  if (relative && !relative.startsWith('../') && !path.isAbsolute(relative) &&
+      relative.length <= 1024 && !relative.split('/').some(part => !part || part === '.' || part === '..')) {
+    labels.push(relative);
+  }
 }
 function sameFsObject(left, right) {
   return Boolean(left && right && left.isDirectory() === right.isDirectory() &&
@@ -132,6 +150,7 @@ function enumerateSourceFolder(root, options = {}) {
   const candidates = [];
   let regularFiles = 0;
   let unsupportedFiles = 0;
+  const unsupportedLabels = [];
   let directories = 0;
   let entriesSeen = 0;
   while (pending.length) {
@@ -175,6 +194,7 @@ function enumerateSourceFolder(root, options = {}) {
       const sourceType = SOURCE_TYPES[path.extname(entry.name).toLowerCase()];
       if (!sourceType || !allowed.has(sourceType)) {
         unsupportedFiles++;
+        recordUnsupportedLabel(unsupportedLabels, resolvedRoot, full);
         continue;
       }
       candidates.push({ full, sourceLabel: normalizedSourceLabel(resolvedRoot, full) });
@@ -186,11 +206,10 @@ function enumerateSourceFolder(root, options = {}) {
   }
   // A folder selection means the whole regular-file tree.  Never turn it into
   // an implicit supported-format subset: a mixed tree must stop before any
-  // private source is copied.  Counts are safe local metadata; names and paths
-  // deliberately remain absent from this error.
+  // private source is copied. The exception's message stays content-free;
+  // bounded relative labels are only projected to the local desktop UI.
   if (unsupportedFiles > 0) {
-    throw folderFailure('SOURCE_FOLDER_UNSUPPORTED_FILES',
-      `Der ausgewählte Ordner enthält ${regularFiles} reguläre Dateien, davon ${unsupportedFiles} nicht freigegebene oder unbekannte Formate. Es wurde kein Stapel gestartet.`);
+    throw unsupportedFolderFailure(regularFiles, unsupportedFiles, unsupportedLabels);
   }
   if (!candidates.length) throw folderFailure('SOURCE_FOLDER_EMPTY', 'Der ausgewählte Ordner enthält keine unterstützten Dateien.');
 
@@ -252,6 +271,7 @@ async function enumerateSourceFolderAsync(root, options = {}) {
   const candidates = [];
   let regularFiles = 0;
   let unsupportedFiles = 0;
+  const unsupportedLabels = [];
   let directories = 0;
   let entriesSeen = 0;
   while (pending.length) {
@@ -304,14 +324,14 @@ async function enumerateSourceFolderAsync(root, options = {}) {
           }
         } else {
           unsupportedFiles++;
+          recordUnsupportedLabel(unsupportedLabels, resolvedRoot, full);
         }
       }
       await checkpoint();
     }
   }
   if (unsupportedFiles > 0) {
-    throw folderFailure('SOURCE_FOLDER_UNSUPPORTED_FILES',
-      `Der ausgewählte Ordner enthält ${regularFiles} reguläre Dateien, davon ${unsupportedFiles} nicht freigegebene oder unbekannte Formate. Es wurde kein Stapel gestartet.`);
+    throw unsupportedFolderFailure(regularFiles, unsupportedFiles, unsupportedLabels);
   }
   if (!candidates.length) throw folderFailure('SOURCE_FOLDER_EMPTY', 'Der ausgewählte Ordner enthält keine unterstützten Dateien.');
   const selected = [];

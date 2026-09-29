@@ -8,7 +8,10 @@
    Bei Anonymisierung zusätzlich **Neutrale Dateinamen (empfohlen)** oder
    **Originalname mit „-anonymisiert“** wählen. Die zweite Variante nur nutzen,
    wenn Datei- und Ordnernamen keine personenbezogenen Angaben enthalten.
-   Vor dem Start können einzelne Dateien entfernt oder die ganze Auswahl geleert werden.
+   Vor dem Start können weitere Dateien oder Ordner ergänzt, einzelne Dateien
+   entfernt oder die ganze Auswahl geleert werden. Bereits gewählte Dateien
+   werden dabei nicht doppelt aufgenommen. Nach **Starten** ist der Stapel fest;
+   weitere Quellen gehören in einen neuen Lauf.
 4. Bei Bedarf **Ergebnisordner ändern** wählen, dann **Starten** drücken.
 5. Nach Abschluss selbst **Verlauf** öffnen und beim gewünschten Lauf
    **Ergebnisordner** wählen. Im zugehörigen Laufordner
@@ -17,11 +20,22 @@
    Datei zur jeweiligen Quelldatei dort. Gestoppte Dateien stehen nur im
    Abschluss und in der Diagnose. Wenn alle Dateien stoppen, entstehen weder
    Ergebnisordner noch Zuordnungsdatei.
+   Die Ansicht **Verarbeiten** zeigt zunächst den Abschluss dieses Laufs.
+   Mit **Neuen Lauf vorbereiten** beginnst du bewusst eine leere Auswahl und
+   wählst die Aufgabe erneut; der vorige Lauf bleibt im **Verlauf**. Ein
+   fehlgeschlagener Lauf ohne Ergebnis ist kein erfolgreicher Abschluss.
 
 **Verlauf** zeigt die letzten 20 Verarbeitungen. Jede Zeile bietet den eigenen
 Ergebnisordner und – nur bei einem fortsetzbaren Stapel – **Fortsetzen**. Die
 Zuordnungsaktion ist nur für Anonymisierung aktiv. Auch nach einem Neustart bleibt die Startseite sichtbar.
 Ein Abschluss öffnet weder automatisch einen Ordner noch eine andere Ansicht.
+Wird eine Ordnerauswahl wegen unbekannter Dateiformate abgelehnt, zeigt die
+lokale Oberfläche die betroffenen relativen Dateinamen; es wird weiterhin
+nichts aus diesem Ordner übernommen. Nach einem Lauf stehen gestoppte
+Dateinamen und feste Fehlercodes im Abschluss sowie auf Abruf in der
+jeweiligen Verlaufszeile. Ist das private Laufjournal später nicht mehr
+vorhanden, bleibt im Verlauf nur die Anzahl sichtbar. Dateinamen werden nicht
+in Diagnoseprotokolle geschrieben.
 
 Die reine Umwandlung unterstützt TXT, Markdown, CSV, DOCX, XLSX, PPTX, PDF,
 Scan-PDF und PNG/JPEG/BMP. Sie anonymisiert **nicht**: Namen und andere Inhalte

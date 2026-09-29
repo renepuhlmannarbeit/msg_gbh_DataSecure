@@ -2,7 +2,7 @@
   "schema": "datasecure-formal-uat-campaign/1",
   "campaign_id": "",
   "state": "planned",
-  "product_version": "3.2.0-rc142",
+  "product_version": "3.2.0-rc151",
   "candidate_commit": "",
   "created_at_utc": "",
   "release_scope": {

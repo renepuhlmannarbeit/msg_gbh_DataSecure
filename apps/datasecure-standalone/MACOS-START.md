@@ -159,7 +159,16 @@ Die Freigabe erfordert je einen nativen Lauf auf Intel und Apple Silicon:
   Gatekeeper-Ablauf (oder dessen genaue Blockiermeldung);
 - Startseite ohne vorbelegten Modus; Auswahl oder Drag-and-drop verarbeitet noch
   nichts und erst **Starten** beginnt den Stapel;
-- Mehrfachauswahl und rekursive Ordnerauswahl ohne zweiten Picker;
+- Mehrfachauswahl und rekursive Ordnerauswahl; vor **Starten** weitere Dateien
+  oder Ordner ergänzen, Duplikate überspringen und eine Auswahl abbrechen,
+  ohne die bereits vorbereiteten Dateien zu verlieren;
+- bei einem Ordner mit unbekannten Dateien lokale Anzeige der betroffenen
+  relativen Namen ohne Teilübernahme; bei gestoppten Laufdateien Namen und
+  Fehlercodes im Abschluss und je Lauf im Verlauf prüfen, ohne Dateinamen im
+  Diagnoseprotokoll zu hinterlassen;
+- nach einem Abschluss im Tab **Verarbeiten** erst **Neuen Lauf vorbereiten**
+  wählen: Modus und Dateiauswahl werden geleert, alte Läufe bleiben im Verlauf;
+  vollständig gestoppte Eingaben zeigen eine Warnung statt eines Erfolgs;
 - **Nur in Markdown umwandeln** für TXT, Markdown, CSV, DOCX, XLSX, PPTX,
   Text-/Scan-PDF und PNG/JPEG/BMP; Basisnamen bleiben erhalten, es entsteht
   keine Zuordnungsdatei und kein PII-Review;

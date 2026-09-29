@@ -229,7 +229,7 @@ fn native_drop(state: &DesktopState, paths: Vec<PathBuf>) {
         None,
         None,
     );
-    let guard = match selection_guard(&state.selection_busy, &state.admission_present, false) {
+    let guard = match selection_guard(&state.selection_busy, &state.admission_present, true) {
         Ok(value) => value,
         Err(code) => {
             diagnostic_event(
@@ -277,7 +277,8 @@ fn native_drop(state: &DesktopState, paths: Vec<PathBuf>) {
                     json!({"phase": "accepted", "result": result}),
                 );
             }
-            Err(code) => {
+            Err(error) => {
+                let (code, details) = local_error_parts(&error);
                 diagnostic_event(
                     "drop_rejected",
                     Some("admit_selected_sources"),
@@ -288,7 +289,7 @@ fn native_drop(state: &DesktopState, paths: Vec<PathBuf>) {
                 let _ = owned.app.emit_to(
                     "main",
                     "datasecure-native-drop",
-                    json!({"phase": "failed", "error_code": code}),
+                    json!({"phase": "failed", "error_code": code, "error_details": details}),
                 );
             }
         }
@@ -658,7 +659,27 @@ fn mode_rejected_before_start(result: &Result<Value, String>) -> bool {
 
 enum ValidatedPrivateResponse {
     Success(Value),
-    Error(String),
+    Error(String, Option<Value>),
+}
+
+fn valid_local_error_details(details: &Value) -> bool {
+    let Some(object) = details.as_object() else { return false; };
+    if object.len() != 2 { return false; }
+    let Some(files) = object.get("unsupported_files").and_then(Value::as_array) else { return false; };
+    let Some(count) = object.get("unsupported_count").and_then(Value::as_u64) else { return false; };
+    files.len() <= MAX_BATCH_FILES && count >= files.len() as u64 && count <= 4096 &&
+        files.iter().all(|file| file.as_str().is_some_and(|label|
+            !label.is_empty() && label.len() <= 1024 && !label.starts_with('/') &&
+            !label.contains('\\') && label.split('/').all(|part| !part.is_empty() && part != "." && part != "..")))
+}
+
+fn local_error_parts(error: &str) -> (String, Option<Value>) {
+    let Ok(value) = serde_json::from_str::<Value>(error) else { return (error.to_string(), None); };
+    let Some(code) = value.get("code").and_then(Value::as_str) else { return (error.to_string(), None); };
+    let details = value.get("details").filter(|details|
+        code == "SOURCE_FOLDER_UNSUPPORTED_FILES" && valid_local_error_details(details)).cloned();
+    if details.is_none() { return (error.to_string(), None); }
+    (code.to_string(), details)
 }
 
 fn validate_private_response(
@@ -678,12 +699,15 @@ fn validate_private_response(
             .cloned()
             .map(ValidatedPrivateResponse::Success)
             .ok_or(()),
-        Some(false) if object.len() == 4 => object
-            .get("error_code")
-            .and_then(Value::as_str)
-            .filter(|value| !value.is_empty())
-            .map(|value| ValidatedPrivateResponse::Error(value.to_string()))
-            .ok_or(()),
+        Some(false) if object.len() == 4 || object.len() == 5 => {
+            let code = object.get("error_code").and_then(Value::as_str)
+                .filter(|value| !value.is_empty()).ok_or(())?;
+            let details = object.get("error_details");
+            if details.is_some() && (code != "SOURCE_FOLDER_UNSUPPORTED_FILES" ||
+                !valid_local_error_details(details.ok_or(())?)) { return Err(()); }
+            if object.len() == 5 && details.is_none() { return Err(()); }
+            Ok(ValidatedPrivateResponse::Error(code.to_string(), details.cloned()))
+        },
         _ => Err(()),
     }
 }
@@ -711,7 +735,7 @@ fn rpc(
 fn history_request(request_id: &str, action: &str, batch_id: &str) -> Result<Value, String> {
     if !matches!(
         action,
-        "resolve_history_results" | "resolve_history_ledger" | "continue_history_batch"
+        "resolve_history_results" | "resolve_history_ledger" | "continue_history_batch" | "get_run_failures"
     ) || batch_id.len() != 64
         || !batch_id
             .bytes()
@@ -817,7 +841,7 @@ fn rpc_request(
         return Err("STANDALONE_IPC_FAILED".to_string());
     }
     let validated = validated.expect("validated above");
-    if let ValidatedPrivateResponse::Error(code) = validated {
+    if let ValidatedPrivateResponse::Error(code, details) = validated {
         diagnostic_event(
             "ipc_response_error",
             Some(action),
@@ -825,7 +849,7 @@ fn rpc_request(
             Some(&code),
             Some(started.elapsed().as_millis()),
         );
-        return Err(code);
+        return Err(details.map_or(code.clone(), |details| json!({ "code": code, "details": details }).to_string()));
     }
     diagnostic_event(
         "ipc_response_ok",
@@ -836,7 +860,7 @@ fn rpc_request(
     );
     match validated {
         ValidatedPrivateResponse::Success(result) => Ok(result),
-        ValidatedPrivateResponse::Error(_) => unreachable!("handled above"),
+        ValidatedPrivateResponse::Error(_, _) => unreachable!("handled above"),
     }
 }
 
@@ -975,7 +999,7 @@ fn filters(dialog: rfd::FileDialog) -> rfd::FileDialog {
 
 #[tauri::command]
 async fn select_files(state: State<'_, DesktopState>) -> Result<Value, String> {
-    let _guard = selection_guard(&state.selection_busy, &state.admission_present, false)?;
+    let _guard = selection_guard(&state.selection_busy, &state.admission_present, true)?;
     diagnostic_event(
         "picker_opened",
         Some("select_files"),
@@ -1015,7 +1039,7 @@ async fn select_files(state: State<'_, DesktopState>) -> Result<Value, String> {
 
 #[tauri::command]
 async fn select_folder(state: State<'_, DesktopState>) -> Result<Value, String> {
-    let _guard = selection_guard(&state.selection_busy, &state.admission_present, false)?;
+    let _guard = selection_guard(&state.selection_busy, &state.admission_present, true)?;
     diagnostic_event(
         "picker_opened",
         Some("select_folder"),
@@ -1118,6 +1142,20 @@ async fn get_ui_context(state: State<'_, DesktopState>) -> Result<Value, String>
 #[tauri::command]
 async fn get_run_history(state: State<'_, DesktopState>) -> Result<Value, String> {
     blocking_rpc(state.inner().clone(), "get_run_history").await
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn get_run_failures(
+    state: State<'_, DesktopState>,
+    batch_id: Option<String>,
+) -> Result<Value, String> {
+    let owned = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || match batch_id {
+        Some(id) => history_rpc(&owned, "get_run_failures", &id),
+        None => rpc(&owned, "get_run_failures", None, &[], None, None),
+    })
+    .await
+    .map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())?
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -1394,6 +1432,7 @@ fn main() {
             get_public_state,
             get_ui_context,
             get_run_history,
+            get_run_failures,
             continue_history_batch,
             open_history_results,
             open_history_ledger,
@@ -1592,7 +1631,7 @@ mod tests {
     }
 
     #[test]
-    fn native_selection_guard_excludes_concurrent_and_already_prepared_selections() {
+    fn native_selection_guard_excludes_concurrent_selections_and_controls_prepared_access() {
         let busy = Arc::new(AtomicBool::new(false));
         let admitted = AtomicBool::new(false);
         let owner = selection_guard(&busy, &admitted, false).expect("first selection");
@@ -1614,7 +1653,7 @@ mod tests {
             !busy.load(Ordering::Acquire),
             "prepared rejection releases its own reservation"
         );
-        let start = selection_guard(&busy, &admitted, true).expect("explicit Start or cancel");
+        let start = selection_guard(&busy, &admitted, true).expect("append, Start or cancel");
         assert_eq!(
             selection_guard(&busy, &admitted, true).err().unwrap(),
             "STANDALONE_BUSY"
@@ -1805,16 +1844,29 @@ mod tests {
         });
         match validate_private_response(&success, id).expect("valid success") {
             ValidatedPrivateResponse::Success(result) => assert_eq!(result["ok"], json!(true)),
-            ValidatedPrivateResponse::Error(_) => panic!("unexpected domain error"),
+            ValidatedPrivateResponse::Error(_, _) => panic!("unexpected domain error"),
         }
         let domain_error = json!({
             "schema": RESPONSE_SCHEMA, "request_id": id, "ok": false,
             "error_code": "STANDALONE_BUSY"
         });
         match validate_private_response(&domain_error, id).expect("valid error") {
-            ValidatedPrivateResponse::Error(code) => assert_eq!(code, "STANDALONE_BUSY"),
+            ValidatedPrivateResponse::Error(code, None) => assert_eq!(code, "STANDALONE_BUSY"),
+            ValidatedPrivateResponse::Error(_, Some(_)) => panic!("unexpected private details"),
             ValidatedPrivateResponse::Success(_) => panic!("unexpected success"),
         }
+        let named_error = json!({
+            "schema": RESPONSE_SCHEMA, "request_id": id, "ok": false,
+            "error_code": "SOURCE_FOLDER_UNSUPPORTED_FILES",
+            "error_details": { "unsupported_files": ["nested/manifest.json"], "unsupported_count": 1 }
+        });
+        let validated = validate_private_response(&named_error, id).expect("valid local details");
+        if let ValidatedPrivateResponse::Error(code, Some(details)) = validated {
+            let encoded = json!({ "code": code, "details": details }).to_string();
+            let (decoded_code, decoded_details) = local_error_parts(&encoded);
+            assert_eq!(decoded_code, "SOURCE_FOLDER_UNSUPPORTED_FILES");
+            assert_eq!(decoded_details.expect("local details")["unsupported_files"][0], "nested/manifest.json");
+        } else { panic!("expected named local error"); }
         for malformed in [
             json!({ "schema": RESPONSE_SCHEMA, "request_id": id, "ok": true }),
             json!({ "schema": RESPONSE_SCHEMA, "request_id": id, "ok": true, "result": 1 }),
@@ -1822,6 +1874,10 @@ mod tests {
                 "result": {}, "extra": true }),
             json!({ "schema": RESPONSE_SCHEMA, "request_id": id, "ok": false,
                 "error_code": "" }),
+            json!({ "schema": RESPONSE_SCHEMA, "request_id": id, "ok": false,
+                "error_code": "STANDALONE_BUSY", "error_details": { "unsupported_files": ["name"], "unsupported_count": 1 } }),
+            json!({ "schema": RESPONSE_SCHEMA, "request_id": id, "ok": false,
+                "error_code": "SOURCE_FOLDER_UNSUPPORTED_FILES", "error_details": { "unsupported_files": ["../secret"], "unsupported_count": 1 } }),
         ] {
             assert!(validate_private_response(&malformed, id).is_err());
         }

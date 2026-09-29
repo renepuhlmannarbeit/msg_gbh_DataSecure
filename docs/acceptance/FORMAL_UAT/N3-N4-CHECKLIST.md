@@ -65,7 +65,7 @@ separat aufzeichnen; er ersetzt die Cowork-Fälle nicht.
 | ID | Prüfung | PASS-Regel |
 |---|---|---|
 | N4-01 | Einstieg und Aufgabenverständnis | Testperson erkennt beide Standalone-Funktionen beziehungsweise den Cowork-Anonymisierungsweg ohne technische Erklärung. |
-| N4-02 | Einfacher Normalweg | Auswahl, Start, eventuelle Sammelprüfung und Ergebniszugriff sind eindeutig; keine Bestätigungsorgie oder unerwartete Navigation. |
+| N4-02 | Einfacher Normalweg | Auswahl, Start, eventuelle Sammelprüfung und Ergebniszugriff sind eindeutig; bei mehreren Prüfstellen ist der aktuell zu entscheidende Text ausdrücklich genannt und in Quell- und Arbeitsansicht hervorgehoben. Keine Bestätigungsorgie oder unerwartete Navigation. |
 | N4-03 | Ergebnisverständnis | Konvertierung versus Anonymisierung, Extraktionsgrad, gestoppte Dateien und Zuordnung werden fachlich richtig verstanden. Auch bei neutralen Dateinamen erkennt die Testperson, dass erhaltene Unterordnernamen und Zuordnungsdateien Originalangaben enthalten können: kein pauschaler KI-Upload des Laufordners. Beim DOCX-Vertrag ist verständlich, dass Kopf-/Fußzeilen nur in der anonymisierten Ausgabe fehlen und dies keine Aussage über PDF-/PPTX-Randbereiche ist. |
 | N4-04 | Stapel und Historie | Dokumentübergreifende Personen-/Unternehmenskennungen, 20 Verlaufszeilen und laufgebundene Aktionen sind nachvollziehbar. |
 | N4-05 | Fehler und Wiederaufnahme | Abbruch, Fehler, Diagnose und Fortsetzung nennen eine klare nächste Aktion; technische Codes erscheinen nur als Detail. |

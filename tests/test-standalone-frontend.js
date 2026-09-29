@@ -152,24 +152,31 @@ async function nativeDropCase() {
   assert.strictEqual(elements.start.focused, undefined, 'a drop on home must not focus a hidden processing action');
   assert.strictEqual(elements['home-view'].hidden, false);
   assert.strictEqual(elements.start.disabled, true, 'a drop never supplies a processing mode');
-  assert.strictEqual(elements['drop-zone'].attributes['aria-disabled'], 'true');
+  assert.strictEqual(elements['drop-zone'].attributes['aria-disabled'], 'false',
+    'another drop can extend a prepared selection before Start');
+  assert.strictEqual(elements['select-files'].hidden, false);
+  assert.strictEqual(elements['select-files'].textContent, 'Dateien hinzufügen');
   assert.strictEqual(elements['selected-files'].textContent, 'Profil ä.txt, Daten.csv');
   assert.strictEqual(callsByCommand('start_admitted_batch'), 0, 'dropping must never start processing');
   releasePoll({ state: 'ready', results_available: false });
   await polling;
   assert.strictEqual(elements['status-title'].textContent, 'Auswahl bereit', 'old status poll must not overwrite a freshly admitted drop');
-  nativeListener({ payload: { phase: 'rejected', error_code: 'STANDALONE_SELECTION_PREPARED' } });
-  assert.match(elements['action-feedback'].textContent, /bereits vorbereitet/u);
+  nativeListener({ payload: { phase: 'failed', error_code: 'STANDALONE_SELECTION_INVALID' } });
+  assert.match(elements['action-feedback'].textContent, /Dateiauswahl/u);
   assert.strictEqual(elements.start.hidden, false, 'a second drop preserves the prepared selection');
-  await elements['select-files'].listeners.click();
-  assert.strictEqual(callsByCommand('select_files'), 0, 'prepared admission blocks another picker');
+  const cancelledAddition = elements['select-files'].listeners.click();
+  assert.strictEqual(callsByCommand('select_files'), 1, 'a prepared admission allows another picker');
+  releasePicker({ cancelled: true });
+  await cancelledAddition;
+  assert.strictEqual(elements['selected-files'].textContent, 'Profil ä.txt, Daten.csv',
+    'cancelling an additional picker retains the original admission');
   await elements['task-anonymize'].listeners.click();
   await elements.start.listeners.click();
   assert.strictEqual(callsByCommand('start_admitted_batch'), 1, 'only explicit Start invokes processing');
 
   const picker = elements['select-files'].listeners.click();
   await elements['select-folder'].listeners.click();
-  assert.strictEqual(callsByCommand('select_files'), 1);
+  assert.strictEqual(callsByCommand('select_files'), 2);
   assert.strictEqual(callsByCommand('select_folder'), 0, 'busy is set before waiting on the first picker');
   nativeListener({ payload: { phase: 'rejected', error_code: 'STANDALONE_BUSY' } });
   assert.strictEqual(elements['select-files'].disabled, true, 'rejected native drop cannot unlock an active picker');
@@ -225,6 +232,35 @@ function localContext(run = 'Lauf-1', selectedFiles = []) {
   return { local_ui_only: true, external_disclosure: false, result_folder: 'C:\\Ergebnisse',
     latest_result_folder: `C:\\Ergebnisse\\DataSecure-Output\\${run}`,
     source_folders: ['C:\\Quellen'], selected_files: selectedFiles };
+}
+async function firstRunResultFolderGuidanceCase() {
+  let cancelled = true;
+  const harness = await frontendHarness({
+    get_ui_context: () => ({ local_ui_only: true, external_disclosure: false,
+      result_folder: 'C:\\Dokumente\\SecureDataMsg', result_folder_is_default: true,
+      source_folders: [], selected_files: [] }),
+    configure_results: () => cancelled ? { ok: true, cancelled: true } : {
+      ok: true, result_folder: 'C:\\Dokumente\\Meine Ergebnisse',
+      local_ui_only: true, external_disclosure: false
+    }
+  });
+  const { elements } = harness;
+  assert.strictEqual(elements['result-folder-setup'].hidden, false,
+    'fresh profiles must show the result-folder choice on the start page');
+  assert.strictEqual(elements['suggested-result-folder'].textContent, 'C:\\Dokumente\\SecureDataMsg');
+  assert.strictEqual(elements['result-folder'].textContent, 'Vorgeschlagen: C:\\Dokumente\\SecureDataMsg');
+  assert.strictEqual(harness.count('start_admitted_batch'), 0,
+    'viewing the proposed location never creates a batch');
+  await harness.click('setup-results');
+  assert.strictEqual(elements['result-folder-setup'].hidden, false,
+    'cancelling the native folder picker must keep first-run guidance');
+  cancelled = false;
+  await harness.click('setup-results');
+  assert.strictEqual(elements['result-folder-setup'].hidden, true,
+    'an explicitly configured folder completes first-run guidance');
+  assert.strictEqual(elements['result-folder'].textContent, 'C:\\Dokumente\\Meine Ergebnisse');
+  assert.strictEqual(elements['settings-result-folder'].textContent, 'C:\\Dokumente\\Meine Ergebnisse');
+  assert.strictEqual(harness.count('configure_results'), 2);
 }
 function htmlElements() {
   const html = fs.readFileSync(path.join(__dirname, '../apps/datasecure-standalone/frontend/index.html'), 'utf8');
@@ -294,6 +330,22 @@ async function pickerTimerCancellationCase() {
   assert.strictEqual(harness.timers.size, 1);
 }
 
+async function folderLimitFeedbackCase() {
+  const harness = await frontendHarness({
+    select_folder: () => { throw 'SOURCE_FORMAT_SIZE_LIMIT'; },
+    select_files: () => ({ selected_count: 1, total_bytes: 1, ui_context: localContext('Lauf-1', ['synthetic.txt']) })
+  });
+  await harness.click('select-folder');
+  assert.match(harness.elements['status-title'].textContent, /SOURCE_FORMAT_SIZE_LIMIT/u);
+  assert.match(harness.elements['action-feedback'].textContent, /64 MiB/u);
+  await harness.runTimer();
+  assert.match(harness.elements['status-title'].textContent, /SOURCE_FORMAT_SIZE_LIMIT/u,
+    'an idle status poll must not erase the rejected folder reason');
+  await harness.click('select-files');
+  assert.strictEqual(harness.elements['status-title'].textContent, 'Auswahl bereit');
+  assert.strictEqual(harness.elements['action-feedback'].hidden, true);
+}
+
 async function selectionEditingCase() {
   const harness = await frontendHarness({
     select_files: () => ({ selected_count: 2, total_bytes: 8, ignored_artifact_count: 1,
@@ -322,6 +374,40 @@ async function selectionEditingCase() {
   await harness.click('cancel');
   assert.strictEqual(harness.elements['selection-list'].hidden, true);
   assert.strictEqual(harness.elements['selection-list'].children.length, 0);
+}
+
+async function selectionExtensionCase() {
+  let pickerCalls = 0;
+  const harness = await frontendHarness({
+    select_files: () => {
+      pickerCalls += 1;
+      if (pickerCalls === 3) throw 'STANDALONE_SELECTION_INVALID';
+      const names = pickerCalls === 1 ? ['Erste.txt'] : ['Erste.txt', 'Zweite.docx'];
+      return { selected_count: names.length, total_bytes: names.length * 4,
+        ui_context: localContext('Lauf-1', names) };
+    },
+    select_folder: () => ({ selected_count: 3, total_bytes: 12, already_selected_count: 1,
+      ui_context: { ...localContext('Lauf-1', ['Erste.txt', 'Zweite.docx', 'Unterordner/Dritte.csv']),
+        source_kind: 'folder' } })
+  });
+  await harness.click('task-markdown');
+  await harness.click('select-files');
+  assert.strictEqual(harness.elements['select-files'].hidden, false);
+  assert.strictEqual(harness.elements['select-files'].textContent, 'Dateien hinzufügen');
+  await harness.click('select-files');
+  assert.strictEqual(harness.elements['selected-files'].textContent, 'Erste.txt, Zweite.docx');
+  assert.strictEqual(harness.elements.summary.textContent.includes('2 Dateien'), true);
+  await harness.click('select-files');
+  assert.strictEqual(harness.elements['status-title'].textContent, 'Auswahl bereit',
+    'a failed addition must not replace a valid admission with a stopped state');
+  assert.strictEqual(harness.elements['selected-files'].textContent, 'Erste.txt, Zweite.docx');
+  await harness.click('select-folder');
+  assert.strictEqual(harness.elements['selected-files'].textContent,
+    'Erste.txt, Zweite.docx, Unterordner/Dritte.csv');
+  assert.match(harness.elements.summary.textContent, /3 Dateien.*einschließlich Unterordnern/u);
+  assert.match(harness.elements['action-feedback'].textContent, /nicht doppelt hinzugefügt/u);
+  assert.strictEqual(harness.count('start_admitted_batch'), 0,
+    'extending the prepared selection never implicitly starts the batch');
 }
 
 async function uncertainStartPollingCase() {
@@ -503,16 +589,16 @@ async function failedConversionNeverOffersLedgerCase() {
   assert.match(harness.elements['status-text'].textContent, /Diagnose öffnen/u);
   assert.doesNotMatch(harness.elements['status-text'].textContent, /Details stehen in der lokalen Zuordnung/u);
   assert.strictEqual(harness.elements['result-warning'].hidden, false);
-  assert.match(harness.elements['result-warning'].textContent, /2 Datei.*nicht umgewandelt.*Diagnose öffnen/u);
+  assert.match(harness.elements['result-warning'].textContent, /2 Datei.*nicht umgewandelt.*Dateien stehen im Abschluss unten oder im Verlauf/u);
   assert.doesNotMatch(harness.elements['result-warning'].textContent, /Details stehen in der Zuordnungsdatei/u);
   ledgerAvailable = false;
   await harness.runTimer();
-  assert.match(harness.elements['result-warning'].textContent, /Diagnose öffnen/u);
+  assert.match(harness.elements['result-warning'].textContent, /Dateien stehen im Abschluss unten oder im Verlauf/u);
   assert.doesNotMatch(harness.elements['result-warning'].textContent, /Details stehen in der Zuordnungsdatei/u);
   ledgerAvailable = true;
   await harness.runTimer();
   assert.match(harness.elements['status-text'].textContent, /keine Zuordnungsdatei erstellt/u);
-  assert.match(harness.elements['result-warning'].textContent, /Diagnose öffnen/u);
+  assert.match(harness.elements['result-warning'].textContent, /Dateien stehen im Abschluss unten oder im Verlauf/u);
   assert.doesNotMatch(harness.elements['result-warning'].textContent, /Zuordnungsdatei/u);
 }
 
@@ -530,7 +616,7 @@ async function completionPendingCase() {
   assert.doesNotMatch(harness.elements['status-text'].textContent, /0 anonymisierte|kein anonymisiertes Ergebnis/u);
   completionPending = false;
   await harness.runTimer();
-  assert.strictEqual(harness.elements['status-title'].textContent, 'Fertig');
+  assert.strictEqual(harness.elements['status-title'].textContent, 'Abgeschlossen mit Hinweisen');
 }
 
 async function explicitStartModeCase() {
@@ -725,6 +811,158 @@ async function homeAndExplicitChoiceCase() {
   assert.strictEqual(harness.elements['home-view'].hidden, false, 'a new terminal poll does not undo the explicit return home');
 }
 
+async function explicitNewRunAfterTerminalCase() {
+  let state = { state: 'ready', results_available: false };
+  let context = localContext('Vorheriger-Lauf', []);
+  const harness = await frontendHarness({
+    get_public_state: () => state,
+    get_ui_context: () => context,
+    select_files: () => {
+      context = localContext('Vorheriger-Lauf', ['Neues-Dokument.txt']);
+      return { selected_count: 1, ui_context: context };
+    },
+    cancel_admission: () => {
+      context = { ...context, source_folders: [], selected_files: [] };
+      return { ok: true };
+    },
+    start_admitted_batch: () => {
+      state = { state: 'processing', processing_mode: 'markdown-only', selected_count: 1, completed_count: 0 };
+      return { ok: true };
+    }
+  });
+  await harness.click('task-markdown');
+  await harness.click('select-files');
+  await harness.click('start');
+  await harness.runTimer();
+  state = { state: 'results_available', processing_mode: 'markdown-only', result_count: 1,
+    failed_count: 0, results_available: true, presentation_generation: 1 };
+  await harness.runTimer();
+  assert.strictEqual(harness.elements['process-form'].hidden, true, 'terminal run hides the old input form');
+  assert.strictEqual(harness.elements['process-completion'].hidden, false);
+  assert.strictEqual(harness.elements['select-files'].hidden, false, 'hidden form, not deleted controls');
+  assert.strictEqual(harness.elements['processing-mode'].disabled, true, 'old task cannot be changed inside the completion');
+  assert.strictEqual(harness.elements['drop-zone'].attributes['aria-disabled'], 'true');
+  assert.strictEqual(harness.elements['selected-files'].textContent, 'Neues-Dokument.txt', 'old detail remains only in the hidden form until reset');
+  await harness.click('prepare-new-run');
+  assert.strictEqual(harness.count('cancel_admission'), 1);
+  assert.strictEqual(harness.elements['process-form'].hidden, false);
+  assert.strictEqual(harness.elements['process-completion'].hidden, true);
+  assert.strictEqual(harness.elements['processing-mode'].value, '');
+  assert.strictEqual(harness.elements['selected-files'].textContent, 'Noch nicht ausgewählt');
+  assert.strictEqual(harness.elements['source-folders'].textContent, 'Noch nicht ausgewählt');
+  assert.strictEqual(harness.elements['process-results'].disabled, true, 'the prior run remains available only from history');
+  assert.strictEqual(harness.elements['status-title'].textContent, 'Bereit für einen neuen Lauf');
+  await harness.runTimer();
+  assert.strictEqual(harness.elements['status-title'].textContent, 'Bereit für einen neuen Lauf',
+    'a stale terminal poll cannot bring back the preceding run');
+  assert.strictEqual(harness.elements['processing-mode'].disabled, false);
+  await harness.click('task-anonymize');
+  assert.strictEqual(harness.elements['processing-mode'].value, 'markdown-and-anonymize');
+}
+
+async function activeLocalReviewExplainsBlockedNewRunCase() {
+  let state = { state: 'ready', results_available: false };
+  const harness = await frontendHarness({
+    get_public_state: () => state,
+    select_files: () => ({ selected_count: 1, ui_context: localContext('Prueflauf', ['Quelle.pdf']) }),
+    start_admitted_batch: () => {
+      state = { state: 'processing', processing_mode: 'markdown-and-anonymize',
+        selected_count: 12, completed_count: 11, review_count: 1, results_available: false };
+      return { ok: true };
+    }
+  });
+  const html = fs.readFileSync(path.join(__dirname, '../apps/datasecure-standalone/frontend/index.html'), 'utf8');
+  assert.ok(html.indexOf('id="new-batch"') < html.indexOf('id="home-view"'),
+    'new task action belongs to the shared navigation, not a single view');
+  assert.strictEqual(html.split('id="new-batch"').length, 2);
+  await harness.click('task-anonymize');
+  await harness.click('select-files');
+  await harness.click('start');
+  await harness.runTimer();
+  assert.strictEqual(harness.elements['selection-list'].hidden, true,
+    'completed selection must not show dead Remove buttons during processing');
+  assert.strictEqual(harness.elements['status-title'].textContent, 'Lokale Prüfung erforderlich');
+  assert.match(harness.elements['status-text'].textContent, /Prüffenster/u);
+  await harness.click('tab-results');
+  await harness.click('new-batch');
+  assert.match(harness.elements['new-batch-feedback'].textContent, /aktuelle Lauf ist noch aktiv/u);
+  assert.strictEqual(harness.elements['new-batch-feedback'].hidden, false);
+  assert.strictEqual(harness.count('cancel_admission'), 0,
+    'an active review must never be cancelled by a new-task click');
+}
+
+async function noResultCompletionIsNotSuccessCase() {
+  let state = { state: 'ready', results_available: false };
+  const harness = await frontendHarness({
+    get_public_state: () => state,
+    get_ui_context: () => ({ local_ui_only: true, external_disclosure: false,
+      result_folder: 'C:\\Ergebnisse', source_folders: [], selected_files: [] }),
+    select_files: () => ({ selected_count: 1, ui_context: localContext('Fehllauf', ['Quelle.pdf']) }),
+    start_admitted_batch: () => {
+      state = { state: 'processing', processing_mode: 'markdown-and-anonymize', selected_count: 1 };
+      return { ok: true };
+    }
+  });
+  await harness.click('task-anonymize');
+  await harness.click('select-files');
+  await harness.click('start');
+  state = { state: 'completed_without_results', processing_mode: 'markdown-and-anonymize',
+    result_count: 0, failed_count: 1, results_available: false };
+  await harness.runTimer();
+  assert.strictEqual(harness.elements['status-title'].textContent, 'Keine Ergebnisse erstellt');
+  assert.strictEqual(harness.elements['status-icon'].textContent, '!', 'all stopped is not shown as a green success');
+  assert.strictEqual(harness.elements['process-completion'].hidden, false);
+  assert.strictEqual(harness.elements['process-completion-results'].disabled, true);
+}
+
+async function namedLocalFailuresCase() {
+  const rejected = JSON.stringify({ code: 'SOURCE_FOLDER_UNSUPPORTED_FILES',
+    details: { unsupported_files: ['BEGLEITDATEIEN/ERWARTUNGEN.json', 'DATEILISTE.csv'], unsupported_count: 2 } });
+  const selection = await frontendHarness({ select_folder: () => { throw rejected; } });
+  await selection.click('task-anonymize');
+  await selection.click('select-folder');
+  assert.match(selection.elements['action-feedback'].textContent, /BEGLEITDATEIEN\/ERWARTUNGEN\.json/u);
+  assert.match(selection.elements['action-feedback'].textContent, /DATEILISTE\.csv/u);
+  assert.strictEqual(selection.elements['status-title'].textContent, 'Sicher gestoppt · SOURCE_FOLDER_UNSUPPORTED_FILES');
+  selection.native({ phase: 'failed', error_code: 'SOURCE_FOLDER_UNSUPPORTED_FILES',
+    error_details: { unsupported_files: ['nested/unbekannt.bin'], unsupported_count: 1 } });
+  assert.match(selection.elements['action-feedback'].textContent, /nested\/unbekannt\.bin/u);
+
+  let state = { state: 'ready', results_available: false };
+  const batchId = 'a'.repeat(64);
+  const details = { ok: true, available: true, total: 2, local_ui_only: true, external_disclosure: false,
+    files: [{ name: 'gruppe/Quelle.pdf', reason_code: 'PARSER_COVERAGE_UNVERIFIED' },
+      { name: 'andere/Quelle.pdf', reason_code: 'PERSON_CANDIDATE' }] };
+  const run = await frontendHarness({
+    get_public_state: () => state,
+    select_files: () => ({ selected_count: 2, ui_context: localContext('Namenslauf', ['gruppe/Quelle.pdf', 'andere/Quelle.pdf']) }),
+    start_admitted_batch: () => { state = { state: 'processing', selected_count: 2 }; return { ok: true }; },
+    get_run_failures: () => details,
+    get_run_history: () => localHistory([historyEntry(batchId, { result_count: 0, failed_count: 2,
+      status: 'completed_without_results', results_available: false })])
+  });
+  await run.click('task-anonymize');
+  await run.click('select-files');
+  await run.click('start');
+  state = { state: 'completed_without_results', processing_mode: 'markdown-and-anonymize',
+    result_count: 0, failed_count: 2, results_available: false };
+  await run.runTimer();
+  assert.strictEqual(run.elements['process-failure-details'].hidden, false);
+  assert.strictEqual(run.elements['process-failure-details'].open, true);
+  const currentFiles = run.elements['process-failure-list'].children[0].children;
+  assert.strictEqual(currentFiles.length, 2);
+  assert.match(currentFiles[0].textContent, /gruppe\/Quelle\.pdf.*PARSER_COVERAGE_UNVERIFIED/u);
+  await run.click('tab-results');
+  await settleFrontend();
+  const historyFailureButton = rowActions(run.elements, 0)[3];
+  await historyFailureButton.listeners.click();
+  const historyFiles = run.elements['history-body'].children[0].children[4].children[3].children[1].children[0].children;
+  assert.strictEqual(historyFiles.length, 2);
+  assert.match(historyFiles[1].textContent, /andere\/Quelle\.pdf.*PERSON_CANDIDATE/u);
+  assert.strictEqual(JSON.stringify(run.calls.filter(call => call.action === 'get_run_failures').map(call => call.args)),
+    JSON.stringify([{ batchId: null }, { batchId }]));
+}
+
 async function accessibleTabsCase() {
   const harness = await frontendHarness();
   let prevented = 0;
@@ -751,7 +989,8 @@ async function accessibleTabsCase() {
 async function historyRowBindingCase() {
   const batchId = '<img src=x onerror=bad()> exact-run-7';
   const entries = Array.from({ length: 25 }, (_, index) => historyEntry(index === 7 ? batchId : `run-${index}`, {
-    processing_mode: 'markdown-and-anonymize', ledger_available: true, resumable: index === 7
+    processing_mode: 'markdown-and-anonymize', ledger_available: true, resumable: index === 7,
+    result_count: 2, failed_count: 0
   }));
   const harness = await frontendHarness({
     get_run_history: () => localHistory(entries),
@@ -821,7 +1060,8 @@ async function historyPrivacyAndAvailabilityCase() {
   await settleFrontend();
   assert.strictEqual(harness.elements['history-body'].children.length, 0);
   assert.match(harness.elements['history-feedback'].textContent, /nicht geladen/u);
-  response = localHistory([historyEntry('failed-run', { results_available: false, ledger_available: false, resumable: false, status: 'completed_without_results' })]);
+  response = localHistory([historyEntry('failed-run', { results_available: false, ledger_available: false,
+    resumable: false, status: 'completed_without_results', failed_count: 0 })]);
   await harness.click('tab-results');
   await settleFrontend();
   for (const button of rowActions(harness.elements, 0)) {
@@ -851,8 +1091,25 @@ async function historyAdmissionRaceCase() {
   assert.strictEqual(harness.elements['status-title'].textContent, 'Auswahl bereit');
 }
 
+function selectionActionsStayAboveLongFileListsCase() {
+  const html = fs.readFileSync(path.join(__dirname, '../apps/datasecure-standalone/frontend/index.html'), 'utf8');
+  const dropZone = html.indexOf('id="drop-zone"');
+  const addFiles = html.indexOf('id="select-files"');
+  const addFolder = html.indexOf('id="select-folder"');
+  const selectedFiles = html.indexOf('id="selection-list"');
+  assert.ok(dropZone >= 0 && dropZone < addFiles && addFiles < addFolder && addFolder < selectedFiles,
+    'both picker actions remain visible immediately after the drop zone, before a potentially long selection');
+  assert.strictEqual(html.split('id="select-files"').length, 2, 'only one file picker action is rendered');
+  assert.strictEqual(html.split('id="select-folder"').length, 2, 'only one folder picker action is rendered');
+}
+
 (async () => {
   await testAsync('home is the default, mode must be explicit, and terminal updates never navigate', homeAndExplicitChoiceCase);
+  await testAsync('a finished run requires an explicit clean transition before another task', explicitNewRunAfterTerminalCase);
+  await testAsync('active local review explains a blocked global new-task click', activeLocalReviewExplainsBlockedNewRunCase);
+  await testAsync('a run with no results is visibly a failure rather than a green completion', noResultCompletionIsNotSuccessCase);
+  await testAsync('local folder errors and stopped runs reveal affected file names without logging content', namedLocalFailuresCase);
+  await testAsync('first start distinguishes a proposed result folder from a chosen one', firstRunResultFolderGuidanceCase);
   await testAsync('tabs use manual activation and roving arrow, Home and End focus', accessibleTabsCase);
   await testAsync('history renders at most 20 rows and every action binds its exact batch ID', historyRowBindingCase);
   await testAsync('history preserves focus, ignores progress polls and rejects stale replies and actions', historyFreshnessCase);
@@ -863,7 +1120,10 @@ async function historyAdmissionRaceCase() {
   await testAsync('native drops prepare without starting and preserve admission across races', nativeDropCase);
   await testAsync('a renderer reload restores a prepared selection and listener failure preserves picker fallback', restoredAdmissionCase);
   await testAsync('a poll timer consumed by a cancelled picker keeps polling alive', pickerTimerCancellationCase);
+  await testAsync('an oversized nested folder explains the limit until a valid selection replaces it', folderLimitFeedbackCase);
   await testAsync('a prepared selection supports per-file removal and clearing before Start', selectionEditingCase);
+  await testAsync('an existing selection accepts later files and folders without losing it on errors', selectionExtensionCase);
+  await testAsync('file and folder addition stays discoverable above long prepared lists', selectionActionsStayAboveLongFileListsCase);
   await testAsync('an unconfirmed slow start is observed until completion without restarting the batch', uncertainStartPollingCase);
   await testAsync('an unconfirmed start of a restored admission starts status recovery', restoredAdmissionUncertainStartCase);
   await testAsync('fast consecutive terminal runs refresh their exact result folder without repeated idle export reads', consecutiveTerminalRunsCase);

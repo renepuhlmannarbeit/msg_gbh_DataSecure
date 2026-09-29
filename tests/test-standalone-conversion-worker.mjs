@@ -23,7 +23,7 @@ const target = process.platform === 'win32' && process.arch === 'x64' ? 'windows
     : process.platform === 'linux' && process.arch === 'x64' ? 'linux-x64-glibc' : null;
 if (!target) throw new Error('CONVERSION_TEST_HOST_UNSUPPORTED');
 // Resolve target-native fixture dependencies only after the explicit host gate.
-const { office, image, pdf, encryptedPdf, text } = await import('./helpers/conversion-fixtures.mjs');
+const { office, passivePresentation, image, pdf, encryptedPdf, text } = await import('./helpers/conversion-fixtures.mjs');
 const scope = fs.mkdtempSync(path.join(repo, '.tmp-standalone-package-conversion-'));
 const server = path.join(scope, 'server');
 const runtime = path.join(server, 'standalone', 'conversion-runtime');
@@ -234,6 +234,20 @@ try {
       assert.ok(children.every(entry => entry.closed), `${extension} handoff follows converter termination`);
     }
   });
+  await test('passive PPTX OLE and hyperlink stay omitted while slide text enters privacy', async () => {
+    const source = passivePresentation();
+    const before = hash(source);
+    const converted = await convert(source, '.pptx', { passiveObjects: true });
+    const privacyInput = await extractWideSourceForPrivacy(source, '.pptx', { convertBuffer });
+    assert.match(converted.markdown, /Max Mustermann/u);
+    assert.match(privacyInput.markdown, /Max Mustermann/u);
+    assert.doesNotMatch(privacyInput.markdown, /example\.test/u);
+    assert.equal(privacyInput.sourceExtractionCoverage.status, 'incomplete');
+    const draft = anonymizeMarkdown(privacyInput.markdown, 'personnel_profile', { deferPersonReview: true });
+    assert.doesNotMatch(draft.text, /Max Mustermann|Nordstern GmbH/u);
+    assert.equal(hash(source), before);
+    assert.ok(children.every(entry => entry.closed));
+  });
   await test('empty real OCR output remains fail-closed before privacy publication', async () => {
     const bytes = image(true).toBuffer('image/png');
     await assert.rejects(extractWideSourceForPrivacy(bytes, '.png', { convertBuffer }),
@@ -255,6 +269,7 @@ try {
       pdf([{ text }], '', { form: true }),
       pdf([{ text }], '', { signature: true }),
       pdf([{ text }], '', { attachment: true }),
+      pdf([{ text }], '', { info: true }),
       pdf([{ text }], '/OpenAction << /S /JavaScript /JS (app.alert\\(1\\)) >>')
     ];
     for (const source of sources) {
@@ -262,6 +277,13 @@ try {
       assert.match(result.markdown, /Max Mustermann/u);
       assert.equal(result.coverage.status, 'incomplete');
       assert.ok(result.coverage.reason_codes.includes('SOURCE_COVERAGE_UNVERIFIED'));
+      const privacyInput = await extractWideSourceForPrivacy(source, '.pdf', { convertBuffer });
+      assert.match(privacyInput.markdown, /Max Mustermann/u);
+      assert.equal(privacyInput.sourceExtractionCoverage.status, 'incomplete');
+      assert.ok(privacyInput.sourceExtractionCoverage.reason_codes.includes('SOURCE_COVERAGE_UNVERIFIED'));
+      const draft = anonymizeMarkdown(privacyInput.markdown, 'personnel_profile', { deferPersonReview: true });
+      assert.doesNotMatch(draft.text, /Max Mustermann|Nordstern GmbH/u);
+      assert.ok(children.every(entry => entry.closed));
     }
     await assert.rejects(convertBuffer(encryptedPdf(), '.pdf', { passiveObjects: true }),
       cause => cause.code === 'SOURCE_ENCRYPTED_UNSUPPORTED');

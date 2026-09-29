@@ -66,7 +66,7 @@ function docx(paragraphs, extra = []) {
 function embeddedDocx(paragraphs, embedded, relationshipType = 'package') {
   return docx(paragraphs, [
     ['word/embeddings/nested.docx', embedded],
-    ['word/_rels/document.xml.rels', `<Relationships><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${relationshipType}" Target="embeddings/nested.docx"/></Relationships>`]
+    ['word/_rels/document.xml.rels', `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${relationshipType}" Target="embeddings/nested.docx"/></Relationships>`]
   ]);
 }
 
@@ -483,7 +483,7 @@ test('embedded OOXML recursion stops at the shared depth limit', () => {
     nested = embeddedDocx([`Ebene ${depth}`], nested);
   }
   const result = parseOoxml(nested, '.docx');
-  assert.ok(result.warnings.some((warning) => /Rekursionstiefe/u.test(warning)));
+  assert.ok(result.warnings.some((warning) => /Rekursionstiefe/u.test(warning)), JSON.stringify(result.warnings));
 });
 
 test('embedded OOXML count and byte budgets are fixed and fail closed', () => {

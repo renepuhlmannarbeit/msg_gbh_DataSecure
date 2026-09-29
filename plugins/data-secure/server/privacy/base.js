@@ -936,6 +936,7 @@ module.exports = {
   plausibleCalendarDate,
   tableHeaderAt,
   hasAmbiguousSensitiveTable,
+  isResolvedSensitiveTableHeader,
   normalizeSensitiveLabel,
   NAME_PARTICLE,
   NAME_PARTICLES,

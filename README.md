@@ -1,6 +1,6 @@
 # GBH DataSecure – Standalone Windows/macOS RC142 · Linux und Cowork RC140
 
-Quellstand: 3.2.0-rc142
+Quellstand: 3.2.0-rc151
 
 RC142 behebt die reine Windows-Markdown-Konvertierung für PDF-/PPTX-Quellen mit
 passiven Formular-, Signatur-, Link- und eingebetteten OLE-Objekten. Diese
@@ -203,6 +203,10 @@ automatisch abgeschnitten.
 Bei einer Ordnerauswahl werden alle Unterordner sicher geprüft. Überschreitet der
 Baum die Datei-/Größengrenze oder enthält er ein gesperrtes Format, meldet
 DataSecure die Auswahl verständlich zurück und startet keinen Teilstapel.
+Die 500-MiB-Grenze gilt für den gesamten Stapel; zusätzlich gelten kleinere
+Einzeldateigrenzen: Office-Dateien 64 MiB, PDF und Bilder 25 MiB, TXT/Markdown
+8 MB und CSV 1,5 MB. Auch eine zu große Datei in einem Unterordner lehnt die
+gesamte Ordnerauswahl ab; der Grund bleibt in der Oberfläche sichtbar.
 
 Die eigentliche Verarbeitung läuft lokal und offline. Cowork ist der bequeme
 Einstieg und kann die freigegebenen Markdown-Ergebnisse anschließend auswerten;
