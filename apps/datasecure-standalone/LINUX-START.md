@@ -1,5 +1,9 @@
 # DataSecure Standalone unter Linux starten
 
+Aktuelle Pakete: [RC157-AppImage-ZIP und Prüfsumme](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc157).
+Der native Linux-Paket-/App-Start einschließlich integrierter Prüfseite bestand;
+sichtbare Desktop- und Accessibility-Abnahme bleiben gesonderte Nachweise.
+
 Dieses Engineering-Paket ist auf Ubuntu 22.04 für Linux x64 mit glibc 2.35
 oder neuer gebaut. Es benötigt weder Claude noch eine zusätzliche Node.js-,
 Python- oder Rust-Installation.

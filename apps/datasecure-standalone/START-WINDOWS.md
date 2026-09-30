@@ -1,8 +1,10 @@
 # DataSecure Standalone starten (Windows x64)
 
-Aktuelles Windows-Testpaket: [RC151-ZIP mit Prüfsumme](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc151).
-Es ist ein technischer Vorabkandidat; sichtbare Vollkorpus- und N3/N4-Abnahme
-stehen noch aus.
+Aktuelles Windows-Testpaket: [RC157-ZIP mit Prüfsumme](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc157).
+Der RC157-Anwenderlauf mit 140 Ergebnissen einschließlich integrierter lokaler
+Prüfung und Stapelverarbeitung ist bestanden. Der finale Neubau bestand zwei
+saubere, bytegleiche Builds und native Paket-/App-Prüfungen. Es bleibt ein
+Vorabkandidat; noch fehlende Spezialabnahmen sind getrennt dokumentiert.
 
 1. ZIP vollständig in einen lokalen Ordner entpacken.
 2. `DataSecure Standalone.exe` doppelklicken.

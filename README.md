@@ -1,43 +1,30 @@
-# GBH DataSecure – Standalone und Cowork RC151
+# GBH DataSecure – Standalone RC157 · Cowork RC151
 
 Quellstand: 3.2.0-rc157
 
-Der [produktgetrennte Vorabkandidat RC151](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc151)
-bindet Quellcommit `fdb8288c9bef2a64eeb10d584e1bf59a6cb864c3`.
-Zwei saubere, bytegleiche Windows-Bauten bestanden Paket- und native Starttests;
-die Pflicht-CI ist grün. Standalone wurde außerdem auf macOS Intel und Apple
-Silicon als ZIP und DMG sowie auf Linux x64 als ZIP nativ gebaut und geprüft.
-Das getrennte Cowork-Plugin bestand seine nativen Paketsmokes auf Windows x64
-und beiden Mac-Architekturen; Windows-Normal und -Debug binden dieselbe
-leere UAT-Vorlage. RC151 verbessert die Vorbereitung neuer Läufe,
-Datei- und Ordnerauswahl, verständliche Fehlerhinweise und lokale
-Prüfentscheidungen. Eine erneute sichtbare Abnahme des 140-Dateien-Korpus und
-die menschlichen N3/N4-, macOS-/Linux-Installations- und Cowork-Modellabnahmen
-stehen noch aus; RC151 ist keine Produktionsfreigabe.
+Der [Standalone-Vorabkandidat RC157](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc157)
+bindet Quellcommit `111737d28021b6989ffe8d563b58daa9cbae610f`.
+Er enthält die integrierte lokale Stapelprüfung mit **Jetzt prüfen** direkt
+am Lauf, mehrere Prüfphasen im selben Fenster und eine automatisch erzeugte
+vertrauliche Identitätszuordnung im markierten Lauf-Unterordner.
+Der lokale Windows-Anwenderlauf mit 140 Dateien einschließlich Prüfung ist
+bestanden bestätigt. Der Release-Neubau besteht zwei saubere bytegleiche
+Windows-Bauten sowie native Paket-/Startprüfungen auf macOS Intel, Apple
+Silicon und Linux x64, jeweils einschließlich geladener integrierter Prüfseite.
+[Exakte Nachweise und Prüfsummen](docs/RELEASE.md).
 
-RC142 behob die reine Windows-Markdown-Konvertierung für PDF-/PPTX-Quellen mit
-passiven Formular-, Signatur-, Link- und eingebetteten OLE-Objekten. Diese
-Objekte werden nicht ausgeführt oder als vollständig extrahiert ausgegeben;
-in RC142 blieb der Anonymisierungsweg strenger. Standalone Windows hat zwei bytegleiche
-PKG-04-Builds samt nativen Smokes bestanden. Auf Intel- und Apple-Silicon-Macs
-wurden **ZIP und zusätzlich DMG** aus derselben App nativ geprüft.
-[RC142-Standalone-Vorabrelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc142)
-bindet Commit `c0ddd11ecf366d32ff9962bfeffc6519b01a8c5d`;
-[beide Mac-Jobs](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/36562812021)
-und die [Release-Nachweise](docs/RELEASE.md) sind getrennt von sichtbarer UAT.
-Das ist historische Evidenz für RC142; die aktuellen Pakete stehen bei RC151.
+Das getrennte [Cowork-Plugin bleibt auf RC151](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc151),
+aus Quellcommit `fdb8288c9bef2a64eeb10d584e1bf59a6cb864c3`. Seine Downloads
+werden durch den Standalone-Release nicht ersetzt. Menschliche N3/N4-,
+macOS-/Linux-Installations-, Accessibility- und Cowork-Modellabnahmen bleiben
+eigene Nachweise; die Vorabkandidaten sind keine pauschale Produktionsfreigabe.
 
 Die Überschrift nennt zwei getrennte Produkte. Auch bei gleicher RC-Nummer
 bleiben ihre Pakete und Abnahmen getrennt. Ein neuer Quellstand aktualisiert
 bestehende Downloads nicht automatisch.
 
-Der frühere gemeinsame Vorabrelease beider getrennten Produkte wurde als RC140 aus Quellcommit
-`814bc50e3d754224cd95b6fa91f122dd45f48487` veröffentlicht. Standalone
-bestand Windows-PKG-04/INT-13 sowie native Paketprüfungen auf macOS Intel,
-Apple Silicon und Linux x64. Cowork bestand native Paketprüfungen auf Windows
-x64, macOS Intel und Apple Silicon; Windows-Normal und -Debug sind an die
-UAT-Vorlage gebunden. Menschliche N3/N4-, Mac-Fresh-Install- und Cowork-
-Modellabnahmen bleiben offen. RC140 ist keine Produktionsfreigabe.
+Frühere Kandidaten und ihre unveränderten Nachweise sind im
+[Releasevertrag](docs/RELEASE.md) dokumentiert.
 
 DataSecure de-identifiziert lokale Geschäftsdokumente, bevor Claude deren Inhalt
 verwendet. Originale werden über einen Betriebssystemdialog gewählt, nur lesend
@@ -50,36 +37,36 @@ Für die Standalone-App werden **weder Claude noch Cowork, Node.js, Python oder
 Rust** benötigt. Das zur eigenen CPU passende ZIP vollständig entpacken und
 nicht direkt aus dem ZIP starten; auf dem Mac gibt es alternativ ein DMG:
 
-**[RC151: Standalone-ZIPs, Mac-DMGs, Cowork-ZIPs und Prüfsummen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc151)**
+**[RC157: Standalone-ZIPs, zusätzliche Mac-DMGs und Prüfsummen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc157)**
 
 **Mac-Kompatibilitätshinweis:** Der erneute Paketreview hat in den veröffentlichten
 Standalone-RC140-ZIPs einen Helfer mit höherer Mindestversion gefunden: Intel
 verlangt macOS 15, Apple Silicon macOS 14. Die bisherige Angabe 13.5 war für
-diese ZIPs falsch. Für Mac die unten verlinkten RC151-ZIPs oder DMGs verwenden:
+diese ZIPs falsch. Für Mac die unten verlinkten RC157-ZIPs oder DMGs verwenden:
 ihr Binärvertrag ist für macOS 13.5 geprüft; ein realer Lauf auf 13.5 bleibt offen.
 Die RC140-Downloads werden nicht verändert. Die Mac-Pakete bleiben interne,
 ad-hoc-signierte Piloten ohne bestätigte Finder-/Gatekeeper-Abnahme.
 
 - **Windows 10/11 x64:**
-  [DataSecure-Standalone-3.2.0-rc151-windows-x64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc151/DataSecure-Standalone-3.2.0-rc151-windows-x64.zip)
+  [DataSecure-Standalone-3.2.0-rc157-windows-x64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc157/DataSecure-Standalone-3.2.0-rc157-windows-x64.zip)
   herunterladen, vollständig entpacken und
   `DataSecure Standalone.exe` doppelklicken. Microsoft Edge WebView2 muss als
   Windows-Systemkomponente vorhanden sein. [Ausführliche Windows-Anleitung](apps/datasecure-standalone/START-WINDOWS.md)
 - **Mac mit Intel-Prozessor:**
-  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc151/DataSecure-Standalone-3.2.0-rc151-macos-x64.zip)
-  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc151/DataSecure-Standalone-3.2.0-rc151-macos-x64.dmg)
+  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc157/DataSecure-Standalone-3.2.0-rc157-macos-x64.zip)
+  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc157/DataSecure-Standalone-3.2.0-rc157-macos-x64.dmg)
   herunterladen, die jeweils passende `.sha256` derselben Release-Seite prüfen
   und die enthaltene `DataSecure Standalone.app` nach **Programme** ziehen.
 - **Mac mit Apple Silicon (M1 oder neuer):**
-  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc151/DataSecure-Standalone-3.2.0-rc151-macos-arm64.zip)
-  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc151/DataSecure-Standalone-3.2.0-rc151-macos-arm64.dmg)
+  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc157/DataSecure-Standalone-3.2.0-rc157-macos-arm64.zip)
+  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc157/DataSecure-Standalone-3.2.0-rc157-macos-arm64.dmg)
   herunterladen und genauso installieren.
-  Die Architektur zeigt **Apple-Menü → Über diesen Mac**. RC151 wurde auf
+  Die Architektur zeigt **Apple-Menü → Über diesen Mac**. RC157 wurde auf
   macOS 15 (Intel) und macOS 14 (ARM) ausgeführt; macOS 13.5 ist die deklarierte,
   in allen nativen Komponenten geprüfte Mindestversion (siehe Hinweis oben).
   [Ausführliche macOS-Anleitung](apps/datasecure-standalone/MACOS-START.md)
 - **Linux x64 mit glibc:**
-  [DataSecure-Standalone-3.2.0-rc151-linux-x64-glibc.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc151/DataSecure-Standalone-3.2.0-rc151-linux-x64-glibc.zip)
+  [DataSecure-Standalone-3.2.0-rc157-linux-x64-glibc.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc157/DataSecure-Standalone-3.2.0-rc157-linux-x64-glibc.zip)
   vollständig entpacken, die enthaltene AppImage ausführbar machen und starten.
   Dieses Paket ist technisch nativ geprüft; die sichtbare Linux-UAT ist offen.
 

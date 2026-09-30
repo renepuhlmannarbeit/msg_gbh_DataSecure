@@ -1,8 +1,22 @@
 # Formale N3/N4-Abnahme mit Windows und macOS
 
-Stand: 29.09.2026 · Standalone und Cowork RC151 auf ihren Zielplattformen veröffentlicht; menschliche Abnahme offen
+Stand: 30.09.2026 · Standalone RC157 veröffentlicht · Cowork bleibt RC151
 
-**Aktueller Kandidat, getrennte Produktpakete:** RC151 ist als technischer
+**Aktueller Standalone-Kandidat:** [RC157](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc157)
+bindet Quellcommit `111737d28021b6989ffe8d563b58daa9cbae610f` auf allen
+vier Standalone-Zielplattformen. Windows-PKG-04/INT-13 und native Mac-/Linux-
+Paketprüfungen einschließlich integrierter Prüfseite bestanden. Beide Mac-ZIPs
+und beide DMGs bleiben alternative Installationswege mit eigenen Prüfsummen.
+Der Windows-Anwenderlauf mit 140 Ergebnissen einschließlich lokaler Prüfung
+und Stapelverarbeitung ist bestanden bestätigt. Die leeren formalen CSV-
+Vorlagen widerlegen diesen Funktionsnachweis nicht. Noch fehlende einzelne
+Zielhost-/Accessibility-/Update-/Rollback- oder Rollenprotokolle sind getrennt
+zu benennen; der gesamte Windows-Funktionslauf ist nicht pauschal offen.
+Cowork bleibt RC151 und bekommt eine eigene produktgebundene Kampagne.
+Eine Standalone-RC157-Kampagne muss die exakten RC157-Pakethashes verwenden,
+nicht die historischen Kandidaten oder Cowork-UAT-Hashes.
+
+**Bisheriger gemeinsamer Quellstand, getrennte Produktpakete:** RC151 ist als technischer
 Kandidat beider getrennten Produkte an Commit
 `fdb8288c9bef2a64eeb10d584e1bf59a6cb864c3` gebunden und veröffentlicht.
 Das [RC151-Vorabrelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc151)
@@ -31,7 +45,8 @@ DMGs, jeweils mit SHA-256-Datei. Windows-PKG-04/INT-13 bestand zwei bytegleiche
 Paketbauten und beide nativen Smokes; der native Mac-Lauf `36562812021` prüfte
 ZIP, DMG, identischen App-Inhalt, Signatur und Start auf beiden Architekturen.
 Für die Wiederholung einer RC142-Kampagne nur deren exakte Assets und den
-RC142-Commit zusammen verwenden; für eine neue Kampagne gilt RC151. DMGs
+RC142-Commit zusammen verwenden; für eine neue Standalone-Kampagne gilt RC157,
+für Cowork weiterhin RC151. DMGs
 sind nicht notarisiert; sichtbare
 Finder-/Gatekeeper-Installation auf dem Ziel-Mac und menschliche Abnahme bleiben
 `NOT_RUN`. Damals behielten Linux-Standalone und Cowork RC140; eine Cowork-Kampagne darf

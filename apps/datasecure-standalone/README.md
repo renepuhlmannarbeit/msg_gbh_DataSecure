@@ -1,5 +1,10 @@
 # DataSecure Standalone Desktop
 
+Aktuelle Pakete: [RC157 für Windows, macOS Intel, macOS Apple Silicon und Linux](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc157).
+Auf beiden Macs bleibt ZIP erhalten; DMG ist ein zusätzlicher Weg. Alle vier
+nativen Paket-/App-Prüfungen einschließlich integrierter Prüfseite bestanden;
+der Windows-Anwenderlauf mit 140 Ergebnissen wurde als bestanden bestätigt.
+
 Dieses Verzeichnis enthält die reale Tauri-2-Desktop-Hülle und ihren
 plattformneutralen, maschinenprüfbaren Vertrag. Die Rust-Hülle, der native
 Datei-/Ordnerdialog und der private DataSecure-Sidecar-Kanal wurden in getrennten

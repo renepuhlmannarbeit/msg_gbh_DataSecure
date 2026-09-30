@@ -1,6 +1,15 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 30.09.2026 · Produktstand 3.2.0-rc157 · nur lokal gebaut, nicht veröffentlicht
+Stand: 30.09.2026 · 3.2.0-rc157 · Standalone RC157 veröffentlicht · Cowork bleibt RC151
+
+RC157 bindet Quellcommit `111737d28021b6989ffe8d563b58daa9cbae610f` auf main.
+Windows, macOS Intel, macOS Apple Silicon und Linux sind nativ geprüft und
+als Vorabpakete veröffentlicht; Mac-ZIP bleibt neben dem zusätzlichen DMG erhalten.
+Der Windows-Anwenderlauf samt integrierter Prüfung ist ausdrücklich bestanden.
+[Releasebindung und Plattformnachweise](../RELEASE.md#rc157--standalone-auf-allen-zielplattformen).
+Die unten beschriebenen RC152–157-Zwischenschritte sind Entstehungsgeschichte,
+keine weiterhin offenen Fehler; tatsächlich fehlende Spezialabnahmen stehen
+separat in Abschnitt B und der Evidence-Matrix.
 
 Dies ist die **einzige aktive Arbeitsliste**. Handlungsbedarf entsteht nur aus
 den Storytabellen und ihren ausdrücklich genannten Resten. Die nachfolgenden
@@ -31,8 +40,8 @@ mit zusätzlichen Negativtests und einem echten Offline-Paketintegrationstest.
 RC138 bleibt dennoch nicht wiederverwendbar. RC139 hat die strengere Commit-,
 Archiv- und UAT-Bindung aus sauberem Quellstand erneut nachgewiesen; damit kann
 die menschliche N3/N4-Kampagne vorbereitet werden, nicht als bestanden gelten.
-DS-104/BL-010.44 ist eine **neue**, lokal in Entwicklung befindliche Standalone-
-Story: Der Nutzer soll den lokalen Review in der Anwendung sehen
+DS-104/BL-010.44 war eine **neue**, zunächst lokal entwickelte Standalone-
+Story (in RC157 erledigt und veröffentlicht): Der Nutzer soll den lokalen Review in der Anwendung sehen
 und nach automatischem Lauf oder Neustart bewusst fortsetzen können. Der
 bisherige externe Review bleibt in RC151 bis zur geprüften Ablösung der Istweg; der
 inhaltsfreie Haupt-Renderer und Coworks eigener Adapter bleiben unverändert.

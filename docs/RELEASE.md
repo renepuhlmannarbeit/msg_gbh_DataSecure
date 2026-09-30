@@ -2,8 +2,9 @@
 
 Stand: 30.09.2026 · 3.2.0-rc157
 
-Der aktuelle Quellstand ist RC157-Entwicklungsstand. Daraus ist ein **lokaler
-Windows-Testkandidat** gebaut: ZIP-Verifikation, isolierter Paket-Smoke und
+Der aktuelle Quellstand ist RC157. Der Standalone-Vorabkandidat ist auf main
+und für Windows, macOS Intel, macOS Apple Silicon und Linux veröffentlicht.
+ZIP-Verifikation, isolierter Paket-Smoke und
 nativer Start einschließlich geladener Prüfseite bestanden. „Jetzt prüfen“
 öffnet die lokale Prüfung direkt aus der aktuellen Laufkarte; gezielte
 Frontend-/Service-/IPC-Tests bestätigen die Bindung an diesen Lauf.
@@ -16,11 +17,54 @@ Der abschließende Release-Review fand einen Einzeldokument-Randfall: Auch ein
 einziger mehrdeutiger Inhalt wird nun ausdrücklich in den Standalone-App-Review
 vertagt, statt während der Analyse den alten nativen Dialog zu öffnen.
 Ein gezielter Drei-Plattform-Vertrag prüft dies; Coworks Einzelreview bleibt
-unverändert. Der veröffentlichte Windows-Neubau wird deshalb zusätzlich technisch
-geprüft und nicht als bytegleich zum vorherigen Anwender-Test-ZIP behauptet.
-RC157 ist weder auf main gepusht noch
-veröffentlicht; technische Paketprüfung ist keine menschliche Produkt- oder
-Produktionsfreigabe.
+unverändert. Der veröffentlichte Windows-Neubau wurde deshalb zusätzlich technisch
+geprüft und wird nicht als bytegleich zum vorherigen Anwender-Test-ZIP behauptet.
+Die bestätigte Windows-Funktionsabnahme ist bestanden; technische Paketprüfung
+ersetzt keine noch fehlenden menschlichen Zielhost- oder Spezialabnahmen.
+
+### RC157 – Standalone auf allen Zielplattformen
+
+Das [RC157-Vorabrelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc157)
+bindet exakt Quellcommit `111737d28021b6989ffe8d563b58daa9cbae610f`.
+Das getrennte Cowork-Plugin bleibt auf RC151; es wurde nicht neu veröffentlicht.
+
+Die vollständige lokale Produktsuite und die
+[Pflicht-CI](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/36770901121)
+bestanden. Windows-PKG-04/INT-13 bestätigte zwei saubere, bytegleiche Builds
+und native Paketprüfungen beider Archive einschließlich des integrierten
+Prüffensters. Das Windows-ZIP umfasst 110.338.453 Byte.
+
+Der [native Mac-Lauf](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/36770900387)
+bestand auf Intel und Apple Silicon: Konverter, Architektur, Signatur,
+eingebettete Mindestversion aller nativen Komponenten, App-/LaunchServices-Start
+und geladene integrierte Prüfseite. Die ZIP-Archive wurden jeweils zweimal
+bytegleich erzeugt; ZIP und zusätzliches DMG enthalten dieselbe App.
+Das schreibgeschützt gemountete DMG samt Programme-Link und App-Start wurde
+ebenfalls geprüft. Das
+[Linux-x64-glibc-AppImage-ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/36770904442)
+bestand Konverter-, Paket- und native App-/Prüffenster-Smokes; auch sein
+ZIP-Archiv wurde zweimal bytegleich erzeugt.
+
+Alle zwölf veröffentlichten Assets – sechs Pakete und ihre eigenen
+`.sha256`-Dateien – stimmen in Größe und SHA-256 mit dem lokalen Staging überein.
+Die bestehenden RC151- und älteren Assets bleiben unverändert.
+
+| RC157-Standalone-Paket | SHA-256 |
+|---|---|
+| Windows x64 ZIP | `16130005616a8a93a48d27f0714208d56042eda6e409160673904ec728a2e996` |
+| macOS Intel ZIP | `c9ac0f1f6e25ec243d7f9c9bd67dd0774bd91ee39a2d2e5bc6978f640472fa59` |
+| macOS Intel DMG | `1269581859cb478d0c653c578b22d319e4c2dad5838f025ae301afe08acd9b03` |
+| macOS Apple Silicon ZIP | `f60ac9cadd0536950561e42a5c5b8bb7eac2eb1b0cda7d4917ea92bddbf0ad26` |
+| macOS Apple Silicon DMG | `89bfbd99903a6fff55fc9d301da7c4a64581deb0d8fbcc3f29ea78ec9a40d6b0` |
+| Linux x64 glibc ZIP | `81edb37ef19f2dca528b47a7c5ddd21a6eddcd4ddb5db9d6ec24666c978cda5f` |
+
+macOS verlangt mindestens 13.5; die tatsächlichen nativen Runner liefen auf
+14/15. Die Mac-App ist ad-hoc-signiert, nicht Developer-ID-signiert oder
+notarisiert. Sichtbare Finder-/Gatekeeper-/VoiceOver- und tatsächliche
+13.5-Abnahmen sowie Linux-Desktop-/Accessibility-Spezialfälle werden nicht aus
+den automatisierten Starts abgeleitet. Linux wurde auf Ubuntu 22.04 mit
+glibc 2.35 geprüft. Der bestätigte Windows-Anwenderlauf bleibt bestanden;
+die Veröffentlichung als RC ist keine pauschale Produktionsfreigabe.
 
 ### RC151 – Standalone und Cowork auf allen Zielplattformen
 

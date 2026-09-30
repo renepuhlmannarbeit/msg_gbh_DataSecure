@@ -1,6 +1,12 @@
 # Produktvertrag: GBH DataSecure
 
-Stand: 29.09.2026 · Ist-Zustand RC157 (lokaler Entwicklungsstand, noch nicht veröffentlicht)
+Stand: 30.09.2026 · 3.2.0-rc157 · Ist-Zustand RC157 · Standalone veröffentlicht · Cowork bleibt RC151
+
+Die Standalone-Pakete für Windows, beide Mac-Architekturen und Linux binden
+Quellcommit `111737d28021b6989ffe8d563b58daa9cbae610f`.
+[Release und Nachweise](../RELEASE.md#rc157--standalone-auf-allen-zielplattformen).
+Die integrierte lokale Prüfung und Identitätszuordnung gehören ausschließlich
+zum Standalone-Adapter; der veröffentlichte Cowork-Weg wird dadurch nicht verändert.
 
 ## Ziel
 
@@ -38,9 +44,11 @@ Nach einem Neustart ist die aktuelle Prozesskarte leer und eine neue Auswahl
 sofort möglich. Frühere fortsetzbare Läufe werden nicht automatisch geladen;
 sie bleiben ausschließlich über ihre konkrete Zeile im Verlauf erreichbar.
 
-Für eine spätere Standalone-Version ist nach DS-104 ein **in die App
-integrierter Prüfweg** beschlossen; ein lokaler Adapter ist in Entwicklung,
-aber in RC151 noch nicht enthalten oder nativ abgenommen.
+In Standalone RC157 ist nach DS-104 ein **in die App integrierter Prüfweg**
+veröffentlicht. Die Prüfseite ist auf allen vier Plattformen nativ gestartet;
+der sichtbare Windows-Anwenderlauf ist bestanden. Im historischen Stand war
+dieser Weg in RC151 noch nicht enthalten oder nativ abgenommen.
+**Jetzt prüfen** öffnet ihn direkt am aktuellen Lauf, ohne Umweg über den Verlauf.
 Die automatische Verarbeitung endet vor der menschlichen Entscheidung.
 **Später entscheiden** lässt den Lauf als **Prüfung offen** im Verlauf stehen;
 **Prüfung fortsetzen** öffnet genau diesen Lauf auch nach Neustart oder nach
@@ -49,7 +57,7 @@ freigegeben. Der Haupt-Renderer bleibt inhaltsfrei; nur ein berechtigungsarmes
 Standalone-Prüffenster zeigt erforderliche Quellstellen. Coworks eigener
 Reviewadapter und dessen Bedienung bleiben davon unabhängig.
 
-Eine lokal implementierte, noch nicht veröffentlichte Standalone-Erweiterung (BL-010.45) ist die
+Eine in RC157 veröffentlichte Standalone-Erweiterung (BL-010.45) ist die
 **automatische vertrauliche Identitätszuordnung** für Menschen. `[PERSON_011]`
 ist nur ein Beispiel, weder ein festes Kennungsformat noch eine Beschränkung
 auf Personen. Alle tatsächlich eindeutig zuordenbaren Pseudonyme – darunter

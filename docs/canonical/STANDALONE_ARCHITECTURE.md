@@ -218,16 +218,19 @@ ein nativer Guard serialisiert Auswahl, Aufnahme und Start. Ein Drop ersetzt
 keinen gerade vorbereiteten oder laufenden Stapel. Fehlversuche liefern einen
 sichtbaren, inhaltsfreien Hinweis und keine implizite Startfreigabe.
 
-### Zielbild DS-104: Review innerhalb von Standalone, nicht im Cowork-Adapter
+### DS-104: Review innerhalb von Standalone, nicht im Cowork-Adapter
 
-Dies ist **noch nicht RC151-Iststand**. RC151 bedient den Review durch einen
-separaten plattformspezifischen Dialogprozess. Lokal ist für BL-010.44 ein
-eigenes, kurzlebiges App-Reviewfenster mit eng begrenztem
-Inhaltsrecht. Der bisherige Haupt-Renderer bleibt bei seiner inhaltsfreien
+Dies ist **RC157-Iststand**, aber kein RC151-Bestandteil. RC151 bediente den
+Review durch einen separaten plattformspezifischen Dialogprozess. RC157 hat für
+BL-010.44 ein eigenes, kurzlebiges App-Reviewfenster mit eng begrenztem
+Inhaltsrecht. Nativ geladene Prüfseite und Sitzungsskript sind auf Windows,
+beiden Macs und Linux belegt; die sichtbare Windows-Funktionsabnahme ist bestanden.
+Der bisherige Haupt-Renderer bleibt bei seiner inhaltsfreien
 Statusprojektion; Reviewtext gelangt weder in seine allgemeine Navigation
 noch in Verlauf, Diagnose oder Eventlogs. Das Reviewfenster besitzt keine
 Datei-, Shell-, Netz-, MCP- oder Cowork-Berechtigung. Es öffnet sich aus
-**Prüfung öffnen**; wenn die automatische Verarbeitung fertig ist, bleibt
+**Jetzt prüfen** direkt an der aktuellen Laufkarte oder aus der genauen
+Verlaufszeile; wenn die automatische Verarbeitung fertig ist, bleibt
 dieser nächste Schritt sichtbar, auch falls das Fenster nicht in den
 Vordergrund gelangt. Schließen bedeutet nicht Freigabe.
 

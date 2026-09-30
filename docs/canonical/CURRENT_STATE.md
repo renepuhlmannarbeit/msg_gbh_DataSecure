@@ -1,6 +1,28 @@
 # Aktueller Iststand
 
-Stand: 30.09.2026 · 3.2.0-rc157 · Standalone und Cowork als getrennte RC151-Vorabkandidaten veröffentlicht; Windows-Standalone-Funktionslauf belegt, formale Modell-/N3/N4-Freigabe offen
+Stand: 30.09.2026 · 3.2.0-rc157 · Standalone RC157 veröffentlicht · Cowork bleibt RC151
+
+Standalone RC157 ist auf main und im
+[Vorabrelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc157)
+aus Quellcommit `111737d28021b6989ffe8d563b58daa9cbae610f` verfügbar:
+Windows x64, Linux x64 glibc sowie macOS Intel und Apple Silicon mit ZIP und
+zusätzlichem DMG. Alle vier nativen Zielplattformprüfungen bestehen, einschließlich
+der geladenen integrierten Prüfseite. Die zwölf Release-Assets stimmen mit den
+lokalen Paketen und Prüfsummendateien überein; Nachweise und Hashes stehen im
+[Releasevertrag](../RELEASE.md#rc157--standalone-auf-allen-zielplattformen).
+Der RC157-Windows-Anwenderlauf `3d6b69b7` einschließlich lokaler Prüfung und
+Stapelverarbeitung ist ausdrücklich bestanden: 140 Ergebnisse, 140 Dateizuordnungen
+und eine vertrauliche Identitäts-TXT mit 140/140 erfassten Ergebnissen.
+Der abschließende Einzeldokument-Reviewfix ist im finalen Neubau separat geprüft;
+dieser ist nicht bytegleich mit dem vorherigen Anwender-Test-ZIP.
+Coworks veröffentlichte Pakete und eigener Reviewadapter bleiben unverändert.
+Die benannten Mac-/Linux-Bedien-, Accessibility- und formalen Spezialabnahmen
+werden dadurch nicht pauschal als bestanden behauptet.
+
+## Entstehungs- und Nachweischronologie
+
+Die folgenden lokalen Zwischenstände und damaligen offenen Punkte sind historisch;
+maßgeblich ist der aktuelle Veröffentlichungsstand oben.
 
 Alle RC151-Pakete binden den sauberen Quellcommit
 `fdb8288c9bef2a64eeb10d584e1bf59a6cb864c3`. Die Pflicht-CI und zwei
@@ -77,7 +99,7 @@ Windows-Funktionslauf, keine neue vollständige semantische Inhaltsprüfung.
 „Später entscheiden“ bleibt erhalten; die betroffene Verlaufszeile erlaubt
 „Prüfung fortsetzen“ nach automatischem Lauf, App-Neustart und anderen
 Aufgaben. Haupt-Renderer und Cowork-Adapter bleiben getrennt; dieser
-Dokumentationsstand ist kein Zielhost- oder Release-Nachweis.
+damalige Zwischenstand allein war kein Zielhost- oder Release-Nachweis.
 
 BL-010.45 ist lokal als Standalone-only-Prototyp implementiert: Erkannt eindeutige
 Personen-, Unternehmens- und Projektpseudonyme erhalten eine private

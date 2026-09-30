@@ -1,13 +1,15 @@
 # DataSecure Standalone auf macOS starten
 
-Aktuell für Standalone: [RC151-Vorabrelease mit ZIP **und zusätzlich DMG** für
-Intel und Apple Silicon](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc151).
-Die beiden nativen Mac-Jobs aus Commit `fdb8288c9bef2a64eeb10d584e1bf59a6cb864c3`
-[sind bestanden](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/36618883915):
+Aktuell für Standalone: [RC157-Vorabrelease mit ZIP **und zusätzlich DMG** für
+Intel und Apple Silicon](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc157).
+Die beiden nativen Mac-Jobs aus Commit `111737d28021b6989ffe8d563b58daa9cbae610f`
+[sind bestanden](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/36770900387):
 ZIP und DMG enthalten dieselbe signierte App; beide Pakete wurden geprüft,
 das DMG gemountet und die App daraus gestartet. Die veröffentlichten Digests
 stimmen mit den lokal gesicherten Dateien überein. Die sichtbare
 Finder-/Gatekeeper-Installation auf den Macs der Testpersonen bleibt offen.
+Auch die integrierte Prüfseite und ihr Sitzungsskript wurden nativ geladen;
+die vollständige sichtbare Bedien-/VoiceOver-Abnahme ist damit nicht ersetzt.
 
 Historischer RC142-Nachweis: Die beiden nativen Mac-Jobs aus Commit
 `c0ddd11ecf366d32ff9962bfeffc6519b01a8c5d` [bestanden ebenfalls](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/36562812021);
@@ -60,11 +62,11 @@ die tatsächlich eingebettete Mindestversion und Systembibliotheken **aller**
 Mach-O-Dateien einschließlich des Canvas-Addons. Er startet die entpackte App
 direkt sowie über LaunchServices und prüft Konvertierung, Anonymisierung,
 Zuordnung, Fehlerfälle und Verlauf mit der gebündelten Runtime. Diese neuen
-Gates bestehen für RC141, RC142 und RC151 auf Intel und ARM aus ihren jeweils gebundenen
+Gates bestehen für RC141, RC142, RC151 und RC157 auf Intel und ARM aus ihren jeweils gebundenen
 Commits. Das ersetzt nicht die nachfolgende sichtbare
 Finder-/Gatekeeper-/Picker-/VoiceOver-/Anwenderabnahme.
 
-Der DMG-Weg ist ein zusätzlicher, in RC142 und RC151 nativ belegter Installationsweg:
+Der DMG-Weg ist ein zusätzlicher, in RC142, RC151 und RC157 nativ belegter Installationsweg:
 DMG öffnen und die enthaltene App auf **Programme** ziehen. Er enthält dieselbe
 App wie das ZIP und wurde vor Bereitstellung separat auf Integrität, Signatur,
 Start und Architektur geprüft. Ein DMG allein behebt jedoch keine

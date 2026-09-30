@@ -34,10 +34,18 @@ test('formal kit contains the complete two-person campaign contract', () => {
     `RC${boundCandidate[1]} ist als technischer\\s+Kandidat beider getrennten Produkte[\\s\\S]{0,120}` +
     `\`${boundCandidate[2]}\` gebunden und veröffentlicht`, 'u'));
   if (boundCandidate[1] !== campaignLabel) {
+    const standaloneAll = /### RC(\d+) – Standalone auf allen Zielplattformen[\s\S]{0,400}?Quellcommit `([0-9a-f]{40})`/u.exec(release);
     const standaloneCandidate = /### RC(\d+) – Standalone Windows sowie macOS ZIP und zusätzlich DMG[\s\S]{0,300}?Quellcommit `([0-9a-f]{40})`/u.exec(release);
     const macCandidate = /RC(\d+) ist als Standalone-macOS-Vorabkandidat aus Quellcommit\s+`([0-9a-f]{40})` veröffentlicht/u.exec(release);
     const windowsCandidate = /### RC(\d+) – Standalone Windows x64[\s\S]{0,350}?Quellcommit `([0-9a-f]{40})`/u.exec(release);
-    if (windowsCandidate?.[1] === campaignLabel) {
+    if (standaloneAll?.[1] === campaignLabel) {
+      assert.ok(overview.includes(standaloneAll[2]), 'all-platform Standalone candidate must bind its exact source commit');
+      assert.ok(overview.includes(`/releases/tag/v${productVersion}`));
+      assert.match(overview, /vier Standalone-Zielplattformen/u);
+      assert.match(overview, /beide DMGs/u);
+      assert.match(overview, new RegExp(`Cowork bleibt RC${boundCandidate[1]}`, 'u'));
+      assert.match(overview, /eigene produktgebundene Kampagne/u);
+    } else if (windowsCandidate?.[1] === campaignLabel) {
       assert.ok(overview.includes(windowsCandidate[2]), 'Windows-only candidate must bind its exact source commit');
       assert.ok(overview.includes(`/releases/tag/v${productVersion}`));
       assert.match(overview, /keine gemeinsame Windows-\/Mac-Kampagne/u);
