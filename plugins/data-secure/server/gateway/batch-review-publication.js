@@ -25,6 +25,7 @@ function createBatchReviewPublication(options = {}) {
   const mappingStoppedStatus = options.mappingStoppedStatus || 'sicher gestoppt';
   const withBatchPseudonymRegistry = options.withBatchPseudonymRegistry ||
     (async (_state, action) => action(undefined));
+  const captureStandaloneIdentitySnapshot = options.captureStandaloneIdentitySnapshot;
 
   function invalidBinding() {
     return invalidDecisionError(
@@ -129,6 +130,11 @@ function createBatchReviewPublication(options = {}) {
           removeImages: state.remove_images,
           packageId: packageIdForItem(item),
           retainPublishedOnAfterPublishFailure: true,
+          ...(state.product_channel === 'standalone' && captureStandaloneIdentitySnapshot
+            ? { persistStandaloneIdentitySnapshot: async ({ package_id, entries, unmapped_labels }) => {
+                try { captureStandaloneIdentitySnapshot(state.token, item.id, package_id, entries, { unmappedLabels: unmapped_labels }); }
+                catch { /* keep privacy publication independent; absence is reported separately */ }
+              } } : {}),
           reviewText: (input) => reviewedBatchText(input, decisionsByIndex.get(index + 1), {
             reviewedDraft: drafts[index],
             resolvedPersonReplacement: (value) => pseudonymRegistry?.lookup?.('PERSON', value)

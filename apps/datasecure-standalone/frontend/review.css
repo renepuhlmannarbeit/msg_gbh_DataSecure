@@ -1,0 +1,19 @@
+:root{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:#15241d;background:#f3f7f4;line-height:1.45}
+*{box-sizing:border-box}body{margin:0}main{max-width:1180px;margin:auto;padding:30px 34px 24px}
+.eyebrow{font-size:.78rem;font-weight:800;letter-spacing:.14em;color:#176b50;margin:0}h1{font-size:2rem;margin:.25rem 0 .35rem}h2{margin:.7rem 0}h3{font-size:1rem;margin:0 0 .55rem}
+header{margin-bottom:22px}header p:last-child{color:#53645c}.progress{display:flex;gap:16px;flex-wrap:wrap;font-weight:700;color:#436455}
+section#review{background:white;border:1px solid #d7e4db;border-radius:18px;padding:25px;box-shadow:0 12px 34px #18372a12}
+.exact-label{margin:.3rem 0;color:#586d61;font-size:.88rem;font-weight:700}.exact{font-size:1.3rem;font-weight:750;padding:12px 16px;margin:.35rem 0;background:#fff1c7;border-left:5px solid #a56b00;overflow-wrap:anywhere}
+.note{color:#53645c;margin:.8rem 0}.comparison{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:18px 0}
+.comparison>div{min-width:0;border:1px solid #d7e4db;border-radius:12px;padding:14px;background:#fafcfb}
+pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;max-height:300px;overflow:auto;margin:0}
+.actions,.finish{display:flex;flex-wrap:wrap;gap:10px}.finish{border-top:1px solid #d7e4db;margin-top:18px;padding-top:18px;justify-content:space-between}
+button{font:inherit;font-weight:700;border-radius:10px;border:1px solid #a9c4b4;background:white;color:#143d2b;padding:12px 16px;cursor:pointer}
+button:hover:not(:disabled){background:#e7f3ec}button:focus-visible{outline:3px solid #e09a22;outline-offset:2px}button:disabled{opacity:.52;cursor:not-allowed}
+button.primary{background:#116747;color:#fff;border-color:#116747}button.primary:hover:not(:disabled){background:#0c5138}
+.waiting{background:white;border:1px solid #d7e4db;border-radius:16px;padding:22px}.privacy{font-size:.88rem;color:#52665a;margin:20px 0}
+.work-indicator{display:flex;align-items:center;gap:12px;color:#116747;margin-bottom:12px}.work-indicator[hidden]{display:none}.work-gear{display:inline-block;font-size:1.7rem;line-height:1;animation:review-gear 2.4s linear infinite}
+@keyframes review-gear{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.work-gear{animation:none}}
+@media(max-width:760px){main{padding:20px 14px}.comparison{grid-template-columns:1fr}.finish{justify-content:flex-start}}
+@media(prefers-color-scheme:dark){:root{color:#edf6ef;background:#15221b}header p:last-child,.note,.privacy{color:#bbcfc1}section#review,.waiting{background:#1e3025;border-color:#3e5847}.comparison>div{background:#19291f;border-color:#3e5847}.exact{background:#5b451d;border-color:#ffc257}button{background:#23382a;color:#eef7ef;border-color:#659373}.eyebrow,.progress,.work-indicator{color:#83dab0}}

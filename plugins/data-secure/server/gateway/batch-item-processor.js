@@ -38,6 +38,7 @@ function createBatchItemProcessor(options = {}) {
   const invalidateUnpublishedBatchCopies = options.invalidateUnpublishedBatchCopies;
   const publicProgress = options.publicProgress;
   const writeTerminalEvidence = options.writeTerminalEvidence;
+  const captureStandaloneIdentitySnapshot = options.captureStandaloneIdentitySnapshot;
   const deliveryPendingStatus = options.deliveryPendingStatus || 'delivery_pending';
   const deferredReviewStatus = options.deferredReviewStatus || 'deferred_review';
   const retryableCodes = options.retryableCodes || new Set();
@@ -134,6 +135,14 @@ function createBatchItemProcessor(options = {}) {
         removeImages: state.remove_images,
         ...(converting ? { artifactId: expectedPackageId } : { packageId: expectedPackageId }),
         retainPublishedOnAfterPublishFailure: true,
+        ...(!converting && state.product_channel === 'standalone' && captureStandaloneIdentitySnapshot
+          ? { persistStandaloneIdentitySnapshot: async ({ package_id, entries, unmapped_labels }) => {
+              // This is an additional private human aid, not a precondition
+              // for safe anonymization. Missing records remain visibly
+              // incomplete in the human mapping document.
+              try { captureStandaloneIdentitySnapshot(state.token, item.id, package_id, entries, { unmappedLabels: unmapped_labels }); }
+              catch { /* never replace a verified privacy result with a mapping write failure */ }
+            } } : {}),
         onClaimed: async () => {
           checkpoint('private_copy_claimed', 'intake_and_preparation');
           if (deps.onClaimed) await deps.onClaimed();

@@ -1,6 +1,6 @@
 # Produktvertrag: GBH DataSecure
 
-Stand: 29.09.2026 · Ist-Zustand RC151 (lokaler Entwicklungsstand, noch nicht veröffentlicht)
+Stand: 29.09.2026 · Ist-Zustand RC157 (lokaler Entwicklungsstand, noch nicht veröffentlicht)
 
 ## Ziel
 
@@ -37,6 +37,36 @@ noch ergänzt oder korrigiert werden; danach nicht mehr.
 Nach einem Neustart ist die aktuelle Prozesskarte leer und eine neue Auswahl
 sofort möglich. Frühere fortsetzbare Läufe werden nicht automatisch geladen;
 sie bleiben ausschließlich über ihre konkrete Zeile im Verlauf erreichbar.
+
+Für eine spätere Standalone-Version ist nach DS-104 ein **in die App
+integrierter Prüfweg** beschlossen; ein lokaler Adapter ist in Entwicklung,
+aber in RC151 noch nicht enthalten oder nativ abgenommen.
+Die automatische Verarbeitung endet vor der menschlichen Entscheidung.
+**Später entscheiden** lässt den Lauf als **Prüfung offen** im Verlauf stehen;
+**Prüfung fortsetzen** öffnet genau diesen Lauf auch nach Neustart oder nach
+anderen Aufgaben. Ungeprüfte Dateien werden nicht als anonymisierte Ergebnisse
+freigegeben. Der Haupt-Renderer bleibt inhaltsfrei; nur ein berechtigungsarmes
+Standalone-Prüffenster zeigt erforderliche Quellstellen. Coworks eigener
+Reviewadapter und dessen Bedienung bleiben davon unabhängig.
+
+Eine lokal implementierte, noch nicht veröffentlichte Standalone-Erweiterung (BL-010.45) ist die
+**automatische vertrauliche Identitätszuordnung** für Menschen. `[PERSON_011]`
+ist nur ein Beispiel, weder ein festes Kennungsformat noch eine Beschränkung
+auf Personen. Alle tatsächlich eindeutig zuordenbaren Pseudonyme – darunter
+Unternehmens- und Projektkennungen – gehören dazu. Die bestehende Datei-Zuordnung
+leistet das nicht. Generische Sammelmasken wie `[EMAIL_REDACTED]` dürfen nicht
+irreführend einem einzigen Originalwert zugewiesen werden. Die vertrauliche
+TXT-Datei liegt pro Lauf in `VERTRAULICH-NICHT-HOCHLADEN` unter dem
+Ergebnisordner; private Einzelsnapshots bleiben im App-Datenbereich. Sie enthält
+Originalwerte und darf nicht in KI-Systeme hochgeladen werden. **Der gesamte
+Laufordner ist damit kein KI-Uploadpaket.** Die Datei wird nicht automatisch
+gelöscht; die App bietet keinen Löschbutton. Die 20 jüngsten Läufe sind direkt
+im Verlauf erreichbar. Ältere Zuordnungen lassen sich über „Einstellungen und
+Hilfe → Vertrauliche Zuordnungen öffnen“ im privaten lokalen Ordner auffinden.
+Erfasste und nicht eindeutig zuordenbare Stellen werden getrennt ausgewiesen.
+Betriebssystemkonto und Datenträgerverschlüsselung müssen den
+lokalen Zugriff schützen; eine zusätzliche Dateiverschlüsselung ist bislang
+nicht implementiert.
 
 1. In Cowork „Dateien anonymisieren“ schreiben oder den gleichnamigen Skill wählen.
 2. Nur beim ersten Lauf einen lokalen Ergebnisordner ausdrücklich wählen.

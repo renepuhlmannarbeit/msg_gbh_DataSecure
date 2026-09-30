@@ -26,6 +26,7 @@ config.promptsUserIfNeeded = false
 config.activates = false
 config.environment = [
     "DATASECURE_STANDALONE_NATIVE_SMOKE_ROOT": root.path,
+    "DATASECURE_STANDALONE_NATIVE_SMOKE_REVIEW": "1",
     "DATASECURE_STANDALONE_DOCUMENTS_DIR": root.appendingPathComponent("profile/Documents").path,
     "HOME": root.appendingPathComponent("profile").path,
     "USERPROFILE": root.appendingPathComponent("profile").path,

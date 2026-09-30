@@ -1,6 +1,6 @@
 # Aktueller Iststand
 
-Stand: 29.09.2026 · 3.2.0-rc151 · Standalone und Cowork als getrennte RC151-Vorabkandidaten auf ihren Zielplattformen veröffentlicht; Modellabnahme und N3/N4 offen
+Stand: 30.09.2026 · 3.2.0-rc157 · Standalone und Cowork als getrennte RC151-Vorabkandidaten veröffentlicht; Windows-Standalone-Funktionslauf belegt, formale Modell-/N3/N4-Freigabe offen
 
 Alle RC151-Pakete binden den sauberen Quellcommit
 `fdb8288c9bef2a64eeb10d584e1bf59a6cb864c3`. Die Pflicht-CI und zwei
@@ -14,11 +14,87 @@ Die drei Cowork-Normal-ZIPs bestanden ihre nativen Zielplattform-Smokes
 ([Lauf 36618886944](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/36618886944));
 Windows-Normal und -Debug sind an die leere UAT-Vorlage gebunden
 ([Lauf 36618887161](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/36618887161)).
-Der vollständige 140-Dateien-Zielhostlauf mit RC151-Standalone und menschliche
-N3/N4-Abnahme stehen noch aus. Auch Mac-Finder-/Gatekeeper-, Linux-Desktop-
-und Cowork-Modellabnahmen sind damit nicht ersetzt. Die nachfolgenden
-„lokalen“ Befunde beschreiben die Entstehung des Kandidaten, nicht zusätzliche
-Zielhostfreigaben.
+Der Anwender hat RC151-Standalone auf Windows mit dem entpackten 140-Dateien-
+Root in beiden Modi ausgeführt. Die Ausgaben enthalten 140 Markdown-Konvertate,
+140 anonymisierte Markdown-Ergebnisse und eine Zuordnung mit 140 Einträgen;
+schreibgeschützt geprüfte Quellhashes, Sollstellen und Fachtexte stützen den
+positiven Funktionsbefund. Damit ist der vollständige Windows-Gesamtlauf nicht
+mehr offen. Für die formale N3/N4-Freigabe fehlen noch andere, genau benannte
+Teilfälle und Rollenprotokolle; `NOT_RUN` in den leeren UAT-CSV darf nicht als
+„RC151 läuft unter Windows nicht“ gelesen werden. Mac-Finder-/Gatekeeper-,
+Linux-Desktop- und Cowork-Modellabnahmen werden durch den Windows-Lauf nicht
+ersetzt. Die nachfolgenden älteren lokalen Befunde beschreiben die Entstehung
+des Kandidaten und sind durch die aktuelle Evidence einzuordnen.
+
+Neue, noch **nicht** in RC151 enthaltene Produktentscheidung DS-104/
+BL-010.44: Standalone soll die bislang separat gestartete lokale
+Stapelprüfung als App-eigenes, berechtigungsarmes Reviewfenster führen. Ein
+erster lokaler Implementierungsstand enthält die getrennte Fenster-Capability,
+flüchtig begrenzten Review-Broker, genaue Fundstellenanzeige und explizites
+Fortsetzen; Quell-, Renderer-, IPC- und Rust-Tests bestehen. Im ersten
+RC152-Windows-Anwenderlauf blieb das nach Neustart geöffnete Prüffenster weiß,
+während der Lauf im Verlauf weiter „Prüfung nötig“ zeigte. Der Fensterbau lief
+entgegen der Tauri-/WebView2-Vorgabe in einem synchronen Befehl. Im lokalen
+RC153-Kandidaten ist er asynchron. Der sichtbare Windows-Anwenderlauf
+`9daa6c66` erreichte nach mehreren Prüfgruppen 140/140 anonymisierte
+Ergebnisse und eine Zuordnung. Das Prüffenster blieb danach fälschlich mit
+einem Wartetext offen. RC154 erkennt nun den tatsächlichen terminalen
+Laufstatus und schließt erst dann automatisch; zusätzlich gibt es einen
+sicheren Schließen-Button. Der erneute sichtbare Test dieses geänderten
+Kandidaten sowie weitere Zielhost-/Accessibility-Abnahmen stehen noch aus.
+Die RC154-Rückmeldung zeigte zusätzlich: Nach einer bestätigten Gruppe
+braucht derselbe Lauf manchmal eine weitere Core-Prüfphase. Bislang musste
+sie über den Verlauf gestartet werden. Lokal ist nun im weiterhin offenen
+Prüffenster ein Wartezustand mit **Weitere Prüfung fortsetzen** ergänzt;
+der private Befehl ist an den zuletzt dort beantworteten Lauf gebunden.
+RC155 wurde lokal als Windows-ZIP gebaut; Standalone-, Dokumentations-, Rust-
+und Paketprüfungen sowie der native Start mit geladener Prüfseite bestanden.
+RC156 ist ebenfalls nur lokal als Windows-ZIP gebaut: Der mehrdeutige globale
+Prüfbutton wurde dem aktiven Lauf zugeordnet, ein wartendes Prüffenster zeigt
+einen Arbeitsindikator, und der Verlauf hat keinen Identitäts-Löschbutton mehr.
+Die lesbare Identitäts-TXT wird im markierten vertraulichen Lauf-Unterordner
+publiziert; private Snapshots bleiben getrennt. Paket-/Sidecar-Smoke und
+nativer Windows-Start bestanden. Der Anwender bestätigte am 30.09.2026 den
+erfolgreichen RC156-Lauf einschließlich lokaler Prüfung und Stapelverarbeitung.
+Der letzte Ergebnislauf `Lauf-20260930-192338-ca4349c5` enthält nach nur lesender
+Kontrolle 140 Markdown-Dateien, 140 eindeutige Dateizuordnungen und die
+vertrauliche Identitäts-TXT im Lauf-Unterordner. Deren Vollständigkeitshinweis
+nennt 140/140 erfasste Ergebnisdateien und 0 nicht eindeutig zuordenbare
+Pseudonymstellen. Dies bestätigt den Windows-Funktionslauf; ein neuer
+vollständiger Inhaltsvergleich war nicht Teil dieser Kontrolle.
+RC157 ergänzt für den aktuellen Lauf **Jetzt prüfen** direkt in der
+Verarbeiten-Karte. Der Button setzt den verbundenen Lauf fort und öffnet
+das Prüffenster ohne Umweg über den Verlauf. Nach einem Verbindungsneustart
+darf diese Aktion keinen anderen historischen Lauf auswählen. Der lokale
+RC157-Windows-ZIP bestand die Paketprüfung, reale isolierte Sidecar-Läufe
+und den nativen Start mit geladener Prüfseite. Die direkte Prüfaktion samt
+Fehler- und Doppelstartpfad ist gezielt getestet. Der Anwender bestätigte
+anschließend RC157 einschließlich lokaler Prüfung als vollständig bestanden.
+Der Ergebnislauf `Lauf-20260930-195144-3d6b69b7` enthält nach nur lesender
+Kontrolle 140 Markdown-Ergebnisse, 140 Dateizuordnungen und die vertrauliche
+Identitäts-TXT mit Vollständigkeitshinweis 140/140. Dies ist ein bestätigter
+Windows-Funktionslauf, keine neue vollständige semantische Inhaltsprüfung.
+„Später entscheiden“ bleibt erhalten; die betroffene Verlaufszeile erlaubt
+„Prüfung fortsetzen“ nach automatischem Lauf, App-Neustart und anderen
+Aufgaben. Haupt-Renderer und Cowork-Adapter bleiben getrennt; dieser
+Dokumentationsstand ist kein Zielhost- oder Release-Nachweis.
+
+BL-010.45 ist lokal als Standalone-only-Prototyp implementiert: Erkannt eindeutige
+Personen-, Unternehmens- und Projektpseudonyme erhalten eine private
+menschliche Originalwert-Zuordnung. Eine einzelne Personenkennung war nur ein
+Beispiel. Die bisherige `DataSecure-Zuordnung.csv` verknüpft weiterhin Dateien;
+private Einzelsnapshots liegen im App-Datenbereich; die lesbare vertrauliche
+TXT-Datei wird zusätzlich in `VERTRAULICH-NICHT-HOCHLADEN` innerhalb des
+Lauf-Ergebnisordners abgelegt. **Der gesamte Laufordner ist deshalb nicht für
+einen KI-Upload geeignet.** Die letzten 20 Läufe sind über den expliziten Verlaufsklick
+zu öffnen; für ältere Zuordnungen öffnet eine Einstellungsaktion den privaten
+Ordner lokal im Betriebssystem.
+Generische Masken haben keine 1:1-Rückabbildung; fehlende Snapshots und
+Pseudonyme ohne eindeutige Herkunft erscheinen als unvollständig. Keine
+automatische Löschung und kein App-Löschbutton; eine manuelle Löschung ist
+über das Betriebssystem möglich. Eine zusätzliche Verschlüsselung der lokalen Datei besteht
+noch nicht. Lokale JS-/Rust-Verträge und RC152-Windows-Paket-Smoke liegen vor,
+aber noch kein sichtbarer Zielhost- oder Realformat-Abnahmenachweis.
 
 Lokaler RC149-UAT-Nachtrag BL-010.42: Ein 140-Dateien-Korpus ergab 138
 anonymisierte Ergebnisse und zwei sicher gestoppte DOCX. Die technischen
@@ -31,8 +107,9 @@ Rest-Personenkandidaten desselben Typs werden innerhalb einer aktuellen
 Prüfgruppe nur einmal abgefragt, aber an jeder Fundstelle separat verifiziert.
 Die Dateidetailansicht übergibt nun den optionalen `batchId`-Parameter
 ausdrücklich; die privaten Journalnamen sollen damit auch beim aktuellen
-abgeschlossenen Lauf erscheinen. Zielhost- und erneuter Vollkorpusnachweis
-stehen noch aus; RC149-ZIP enthält diese Änderungen nicht.
+abgeschlossenen Lauf erscheinen. Der erneute Vollkorpusnachweis ist mit RC151
+auf Windows erfolgt; die sichtbare Einzelentscheidung im Review bleibt ein
+eigener Bediennachweis. RC149-ZIP enthält diese Änderungen nicht.
 
 Lokaler Nachtrag BL-010.41 zum RC147-Zielhostlauf: Die fünf gestoppten
 PowerPoints hatten teils passive OLE-/PowerPoint-Metadaten, teils intern
@@ -63,8 +140,9 @@ DS-103/BL-010.39 führt jetzt auch Standalone-PDF/PPTX über die bereits
 gebündelte passive Markdown-Extraktion in die nachgelagerte Anonymisierung.
 Die Quellabdeckung bleibt ausdrücklich unvollständig; unsichere Quellen
 stoppen weiter. Abschlussansicht, bewusste Rücksetzung, Warnanzeige und
-dieser Privacy-Übergang sind mit den RC151-Standalone-Paketen gebunden, aber noch
-nicht durch einen erneuten vollständigen sichtbaren Zielhostlauf belegt.
+dieser Privacy-Übergang sind mit den RC151-Standalone-Paketen gebunden. Der
+erneute 140-Dateien-Windows-Lauf belegt den positiven Gesamtpfad; einzelne
+Negativ- und Bedienfälle bleiben für die formale Abnahme gesondert offen.
 BL-010.40 ergänzt den RC144-Zielhostbefund 11/12: Die lokale Reviewphase
 startete, doch ein sichtbares Prüffenster war nicht nachweisbar, während der
 interaktive Prozess weiterlief. RC145 startet nur diesen Dialog ohne versteckten
@@ -1850,13 +1928,15 @@ sichtbar; die Sicherheitsgrenze und die vollständige Ablehnung des Ordners
 bleiben unverändert. Der tatsächliche Nutzerlauf des Folgekandidaten ist offen.
 
 ### BL-047 – Performance und Ressourcensteuerung
-Adaptive Vorbereitung ist technisch begrenzt, bleibt bis zu Referenzmessungen im
-Produktstandard seriell. Stapel, Speicher und Cowork-Seiten sind begrenzt; große
+Der Produktstandard bleibt seriell; adaptive Vorbereitung ist technisch
+begrenzt, aber für RC151 nicht aktiviert oder als Releasebedingung gefordert.
+Stapel, Speicher und Cowork-Seiten sind begrenzt; große
 freigegebene Markdown-Snapshots werden verifiziert und höchstens 64 MiB pro
 Handoff-Sitzung gehalten. Lesen, Hashen und Erzeugen des UTF-8-Index erfolgen im
 Produktpfad asynchron und größenbegrenzt; ein 6-MiB-Regressionslauf belegt das
-Yielding des MCP-Ereignisloops. Referenzmessungen und die Entscheidung über eine
-adaptive Parallelisierung bleiben BL-047.1.
+Yielding des MCP-Ereignisloops. Weitere versionsgebundene Referenzmessungen
+gehören zu N3-09. Nur ein dabei belegter Engpass eröffnet eine neue
+Optimierungsstory; BL-011.12 ist als aktueller Abnahmeblocker entfallen.
 Der Replay fehlgeschlagener sichtbarer Exporte ist aus dem MCP-Startpfad entfernt
 und zeitlich begrenzt. Ergebnislisten führen keine zweite synchrone Vollhashrunde
 aus; die eigentliche Inhaltsübergabe bleibt unverändert vollständig und asynchron

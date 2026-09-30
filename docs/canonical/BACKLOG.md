@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 29.09.2026 · Produktstand 3.2.0-rc151
+Stand: 30.09.2026 · Produktstand 3.2.0-rc157 · nur lokal gebaut, nicht veröffentlicht
 
 Dies ist die **einzige aktive Arbeitsliste**. Handlungsbedarf entsteht nur aus
 den Storytabellen und ihren ausdrücklich genannten Resten. Die nachfolgenden
@@ -31,13 +31,72 @@ mit zusätzlichen Negativtests und einem echten Offline-Paketintegrationstest.
 RC138 bleibt dennoch nicht wiederverwendbar. RC139 hat die strengere Commit-,
 Archiv- und UAT-Bindung aus sauberem Quellstand erneut nachgewiesen; damit kann
 die menschliche N3/N4-Kampagne vorbereitet werden, nicht als bestanden gelten.
-Ein integrierter Tauri-Review ist keine aktuelle Restlieferung: Standalone nutzt
-bewusst den lokalen Core-Reviewer hinter der inhaltsfreien Renderergrenze.
+DS-104/BL-010.44 ist eine **neue**, lokal in Entwicklung befindliche Standalone-
+Story: Der Nutzer soll den lokalen Review in der Anwendung sehen
+und nach automatischem Lauf oder Neustart bewusst fortsetzen können. Der
+bisherige externe Review bleibt in RC151 bis zur geprüften Ablösung der Istweg; der
+inhaltsfreie Haupt-Renderer und Coworks eigener Adapter bleiben unverändert.
+Der erste RC152-Windows-Echtlauf zeigte beim Fortsetzen ein weißes Prüffenster:
+Der synchrone Tauri-Fensterbau blockierte WebView2. RC153 erzeugt das Fenster
+asynchron und verlangt im isolierten nativen Pakettest sowohl die geladene
+Prüfseite als auch den Start ihres Prüfsitzungs-Skripts. Die Fortsetzung des
+konkreten Anwenderlaufs und die sichtbare Bedienabnahme bleiben offen.
+Der RC153-Anwenderlauf vom 30.09.2026 (`9daa6c66`) erreichte 140/140
+anonymisierte Dateien und eine Zuordnung; nach einer weiteren Prüfgruppe blieb
+das Prüffenster jedoch mit einem Wartetext offen, obwohl der Verlauf bereits
+„Abgeschlossen“ meldete. Lokal ist deshalb die laufende Prüfsitzung um ein
+terminales Abschlussbit ergänzt: mehrere Gruppen bleiben im selben Fenster,
+nach dem bestätigten Laufabschluss schließt es automatisch, und in der
+Warteansicht gibt es einen sicheren Schließen-Button. Die erneute native
+Anwenderprüfung dieses geänderten Kandidaten steht noch aus.
+Die RC154-Rückmeldung zeigte einen weiteren Bruch: Nach einer entschiedenen
+Prüfgruppe kann derselbe Lauf neue Fundstellen melden, die bisher nur über
+**Verlauf → Prüfung fortsetzen** startbar waren. Der lokale Nachfolger bindet
+die Fortsetzung an den im Prüffenster beantworteten Lauf, zeigt während der
+Core-Prüfung einen Wartehinweis und bietet dort **Weitere Prüfung fortsetzen**
+an. RC155 bestand die lokalen Standalone-/Dokumentations-/Rust-Tests, den
+Windows-Pakettest und den nativen Start mit geladener Prüfseite. RC156 ergänzt
+einen sichtbaren Arbeitsindikator, ordnet die Prüfaktion dem Lauf zu und legt
+die vertrauliche Identitäts-TXT nur im markierten Lauf-Unterordner ab; es
+entfernt den App-Löschweg. Lokaler Paket-/Sidecar-Test und nativer Windows-Start
+bestanden. Der Anwender bestätigte den RC156-Windows-Lauf samt Prüfung und
+Stapelverarbeitung als bestanden. Der letzte Lauf `ca4349c5` enthält nach
+nur lesender Kontrolle 140 Markdown-Ergebnisse, 140 eindeutige
+Dateizuordnungen und eine Identitäts-TXT mit Vollständigkeitshinweis 140/140.
+RC157 ergänzt **Jetzt prüfen** direkt in der Verarbeiten-Karte des aktuellen
+Laufs. Der private Fortsetzungsbefehl verlangt dafür einen verbundenen Lauf;
+ein Verbindungsneustart darf keinen historischen Ersatzlauf fortsetzen.
+Die direkten UI-/Service-/IPC-Prüfungen, der isolierte Pakettest und der native
+Windows-Start mit geladener Prüfseite bestehen für den lokalen RC157-Kandidaten.
+Der Anwender bestätigte RC157 anschließend als vollständig bestanden,
+einschließlich lokaler Prüfung und Stapelverarbeitung. Der Ergebnislauf
+`3d6b69b7` enthält nach nur lesender Kontrolle 140 Markdown-Ergebnisse,
+140 Dateizuordnungen und die vertrauliche Identitäts-TXT (140/140 erfasst).
+Die Windows-Funktionsabnahme einschließlich Direkteinstieg ist damit nicht
+mehr offen; andere Zielhosts und benannte Spezialabnahmen bleiben getrennt.
 Abschnitt B enthält ausschließlich menschliche beziehungsweise
 zielhostgebundene Evidenz. Die Kompatibilitätsadapter für bestehende Journale
 und Exporte bleiben absichtlich erhalten und sind keine zu löschende Altlast.
 
-### RC141 macOS / RC140 übrige Pakete – aktuelle technische Release-Evidence
+**RC151-Windows-Funktionsnachweis vom 30.09.2026:** Der vom Anwender auf dem
+Windows-Zielhost ausgeführte 140-Dateien-Stapel liegt in beiden Modi vollständig
+vor: 140 Markdown-Konvertate, 140 anonymisierte Markdown-Ergebnisse und eine
+Zuordnung mit 140 Einträgen. Der gewählte entpackte Paketroot enthielt neben den
+133 beabsichtigten Dateien unter `EINGABEN` sieben Begleitdateien. Die
+schreibgeschützte Nachprüfung bestätigte Quell-/Manifest-Hashes, die 52 direkt
+lesbaren Konvertate bytegleich, 54 erhaltene und 54 entfernte DOCX-Sollstellen,
+2168 fachliche CSV-Beschreibungszeilen sowie ausgewählte technische Titel und
+synthetische Identitätsanker. Damit sind die bisherigen Aussagen „erneuter
+Gesamtlauf ausstehend“ und „auf Windows nicht gelaufen“ überholt. Diese
+Beobachtung ist wiederverwendbare **Teil-Evidenz** für N3-05/N3-06 und N4-07,
+kein Anlass für einen pauschalen Wiederholungslauf. Die formalen N3/N4-CSV sind
+noch nicht ausgefüllte Abnahmeprotokolle: Ihre `NOT_RUN`-Felder beziehen sich
+auf den jeweiligen vollständigen, rollen- und paketgebundenen Prüffall, nicht
+auf den bereits erfolgten Produkt-Funktionstest. Offene Teilfälle werden in
+Abschnitt B getrennt geführt; Mac-/Linux-Bedienung und Cowork werden aus dem
+Windows-Lauf nicht abgeleitet.
+
+### RC141 macOS / RC140 übrige Pakete – historische technische Release-Evidence
 
 **Nachreview MAC-20260923:** Die unten belegten RC140-Läufe bleiben historische
 Paket-Evidence. BL-010.20 und BL-012.9 wurden erneut geöffnet; der RC141-
@@ -739,14 +798,19 @@ Windows-x64-Engineering-Piloten, WebView2-Voraussetzung und Evidencegrenzen.
 | BL-010.34 | Cowork-Markdown-first-Office nach DS-093: XLSX/PPTX nach sicherem OPC-Preflight im ausgelieferten isolierten Parser extrahieren, Tabellen für den Privacy-Core normalisieren und ausschließlich die nichtleere Markdown-Repräsentation anonymisieren. `source_extraction_coverage` bleibt mindestens `incomplete/SOURCE_COVERAGE_UNVERIFIED`, während `document_result` die vollständige Privacy-Prüfung des extrahierten Inhalts ausweist. Genau ein Picker, kein Roh-Zwischenexport, neutrale Namen, privates Mapping und unveränderte Originale. E0 umfasst reale isolierte Officeparser-, Admission-, Batch-, Paket- und Cross-Produkt-Regression; E1/E2 Cowork-Zielhost-UAT offen. PDF/Scan-PDF/Bilder bleiben bis zum kompakten, paketierten und nativ belegten OCR-/PDF-Pfad offen. | **erledigt** |
 | BL-010.35 | RC136-UAT-Härtung nach DS-100: rekursive Standalone-Aufnahme überspringt ausschließlich belegte Office-Besitzerdateien `~$*.docx/xlsx/pptx`, nachdem Link-/Dateitypprüfung, kleine Artefaktgröße, fehlende eigene OPC-Signatur und eine passende größere OPC-Quelldatei im selben Ordner bestätigt wurden. Ein echtes OPC-Dokument wird nie allein wegen seines Namens verworfen; direkte Artefaktauswahl wird fest abgewiesen und nur die Anzahl erscheint lokal. Ein App-Neustart projiziert keinen inaktiven Altstapel, kein altes Ergebnis und keine Fortsetzungsaktion in die aktuelle Prozesskarte. Historische Fortsetzung bleibt exakt laufgebunden im Verlauf; Start-Recovery bereinigt weiterhin verwaiste Sperren und unvollständige Veröffentlichungen, ein lebender Worker wahrt die Ein-Stapel-Sperre. Golden-, Admission-, Service-, Frontend-, History- und Recoverytests sind E0-grün; RC137 bindet Windows-PKG-04/INT-13 sowie native Windows-/macOS-/Linux- und Cowork-Zielpakete. Sichtbare Zielhost-UAT bleibt offen. | **erledigt** |
 | BL-010.36 | DS-102: RC140-Regression der reinen Windows-Konvertierung für interaktive PDFs und PPTX mit eingebetteten OLE-Objekten behoben, ohne die strengere Anonymisierung oder Cowork zu öffnen. Passive Objekte werden nicht ausgeführt oder nachgeladen; Extraktionsstatus bleibt `incomplete`. Isolierte Worker-, Admission-, Produktgrenz- und fünf reale Paket-Dateiprüfungen bestanden. RC142-Windows-PKG-04/INT-13: zwei bytegleiche Builds, native Smokes, Commit `c0ddd11`. Mac Intel/ARM: ZIP und zusätzlich DMG aus derselben signierten `.app`, Mount, `/Applications`-Link, Signatur, Start und Hash im grünen Lauf `36562812021`. Alle zehn Release-Asset-Digests lokal abgeglichen. DMG bleibt bis Developer-ID/Notarisierung interner Pilot; sichtbare Zielhost-UAT offen. | **erledigt** |
-| BL-010.37 | Standalone-Auswahl vor dem expliziten **Starten** ergänzen: weitere Dateien oder rekursive Ordner über Picker oder nativen Drop hinzufügen, vorhandene Pfade nicht doppelt aufnehmen und nach jeder Ergänzung eindeutige Quelllabels für Liste und Export neu bilden. Die kombinierte 200-Dateien-/500-MiB-Grenze wird vor Änderung der vorbereiteten Auswahl geprüft; Dialogabbruch, ungültige Quelle oder Limitfehler erhalten den bisherigen Stapel. Entfernen/Leeren und beide Betriebsarten bleiben gleich, ein bereits gestarteter Lauf unveränderlich. Frontend-, Rust-, Service-, realer Sidecar-Paket- und E2-Zielhosttest. **Lokaler Entwicklungsstand: Implementierung und E0-Prüfung; noch kein Commit, keine Veröffentlichung oder sichtbare Zielhost-UAT.** | **in Arbeit** |
-| BL-010.38 | Standalone-Abschluss und neuer Lauf klar trennen: Nach einem terminalen Lauf zeigt **Verarbeiten** nur noch Abschlussaktionen, nicht die alte Auswahl in einer wieder offenen Eingabemaske. **Neuen Lauf vorbereiten** leert Modus und Dateiauswahl; der vorige Lauf bleibt im Verlauf, auch wenn er dort fortsetzbar ist. Eine neue native Drop-Auswahl startet ebenfalls eine frische Vorbereitung, ohne Quellenordner des vorherigen Laufs zu erben. Vollständig gestoppte Läufe sind Warnungen ohne grünes Erfolgssignal; Teilerfolg nennt auch die gestoppten Dateien. RC143-UAT: sieben PDF-Quellen stoppten mit `PDF_OBJECT_COVERAGE_UNVERIFIED`; DS-103/BL-010.39 ändert diese Produktgrenze gezielt für extrahiertes Markdown, ohne Originalcontainer-Freigabe. Frontend-/Service-Regressionsprüfung und E2-Übergang S16a/S16b. **Lokal implementiert; noch keine sichtbare Zielhost-UAT, kein Commit oder Release.** | **in Arbeit** |
-| BL-010.39 | DS-103: Standalone-Anonymisierung für PDF/Scan-PDF und PPTX nutzt die bereits gebündelte passive Markdown-Extraktion vor dem Privacy-Core. Formulare, Skripte, Anhänge, Signaturen, Links, Lesezeichen und OLE werden nicht ausgeführt und können ausgelassen bleiben; der separate Extraktionsstatus bleibt `incomplete`. Vollständig anonymisiert und residualgeprüft wird nur der tatsächlich extrahierte Markdown-Inhalt. Leere OCR, verschlüsselte/beschädigte Quellen, XFA, Makros, ActiveX, externe Vorlagen und unbekannte Objektklassen stoppen weiter. Cowork behält seine bisherige strengere Admission. Pflichtnachweis: reale paketierte PDF-/PPTX-Parser, positive/negative Batchfälle, Quellhashes, Coverage-/Mapping-/History-Vertrag und Zielhost-UAT. **Lokal in Implementierung und E0-Prüfung; kein Commit/Release.** | **in Arbeit** |
-| BL-010.40 | RC144-Windows-Befund: Bei 11/12 Dateien begann laut inhaltsfreier Diagnose eine lokale Stapelprüfung, aber es war kein Prüffenster in der Windows-Fensterliste sichtbar; der interaktive PowerShell-Prozess blieb aktiv. RC145 lokal: Reviewprozess ohne versteckten Top-Level-Start, erklärter Reviewbedarf und gesperrter Ergebnisordner, globaler Neuaufgaben-Klick mit Sperrbegründung und keine wirkungslosen Entfernen-Knöpfe während der Verarbeitung. **Sichtbarer RC145-Windows-Test:** Prüffenster erschien; nach lokaler Entscheidung endete der Stapel mit 11 anonymisierten Ergebnissen und einer sicher gestoppten Datei. Danach zeigte sich die neue UX-Lücke, dass „Stelle 2 von 2“ bei mehreren gelben Stellen den aktuell gemeinten Text nicht identifiziert. RC146 lokal: konkreter Fundstellentext statt bloßer Zahl, goldene Hervorhebung in Quell- und Arbeitsfassung; echter WinForms-Dialogtest für Wechsel von Stelle 1 zu 2 sowie Frontend-, Dokumentations-, Paket-, Konvertierungs-, Privacy- und Verlauf-Smokes grün. **Noch offen:** sichtbarer RC146-Test dieser Nachbesserung, vertagte Entscheidung und neuer Lauf nach Abschluss. RC145/RC146 sind nur lokal, weder committed noch veröffentlicht; das RC145-ZIP enthält die Nachbesserung nicht. | **in Arbeit** |
-| BL-010.41 | RC147-Windows-Befund: Alle fünf PPTX im 11-Dateien-Stapel stoppten vor der Anonymisierung mit `SOURCE_ACTIVE_CONTENT_UNSUPPORTED`, obwohl der neutrale Parser daraus Markdown und aus drei Präsentationen intern verknüpfte XLSX-Zellen lesen konnte. Standalone lässt jetzt nur exakt bekannte passive PowerPoint-Metadaten-/Diagrammstilbeziehungen und interne, begrenzt geprüfte XLSX-Pakete an Folien/Diagrammen zu. OLE bleibt ausgelassen, der Extraktionsgrad `incomplete`; Makros, externe Pakete und Coworks strengere Admission bleiben gesperrt. XLSX bleibt direkt Markdown-first statt eines verlustbehafteten CSV-Zwischenschritts. E0: synthetische Positiv-/Negativfälle, schreibgeschützte Paketextraktion aller fünf lokalen Quellen und ein isolierter echter Windows-Paketbatch mit synthetischer PPTX/XLSX-Einbettung, PDF/PPTX, drei anonymisierten Ergebnissen und Zuordnung. **Noch offen:** Anonymisierungsprüfung der fünf Benutzerdateien, sichtbare Benutzerabnahme und gebundener Release. | **in Arbeit** |
+| BL-010.37 | Standalone ergänzt vor **Starten** weitere Dateien oder rekursive Ordner über Picker/Drop, ohne Duplikate; ungültige Nachträge, Dialogabbruch und Überschreiten der kombinierten 200-Dateien-/500-MiB-Grenze lassen die bestehende Auswahl unverändert. Der laufende Stapel bleibt unveränderlich. Frontend-, Rust-, Service- und realer Sidecar-Pakettest bestanden; die Änderung ist im RC151-Standalone aus sauberem Commit veröffentlicht. Der Windows-Funktionslauf belegt die Verarbeitung einer rekursiven 140-Dateien-Auswahl, aber nicht jeden Ergänzungs-/Limit-/Abbruchfall in der sichtbaren UI. | **erledigt** |
+| BL-010.38 | Standalone trennt abgeschlossenen Lauf und frische Vorbereitung; Abschluss zeigt keine alte Eingabequeue, der neue Lauf erbt weder Modus noch Quellenordner. Vollständig gestoppte Läufe und Teilerfolge werden als Warnung ausgewiesen. Frontend-/Service-Regressionsprüfung und RC151-Paketbindung sind erfolgt. Der Anwender hat auf Windows Folgeläufe in beiden Modi ausgeführt; die vollständige E2-Bedienabnahme der Zustandsübergänge bleibt getrennt offen. | **erledigt** |
+| BL-010.39 | DS-103: Standalone anonymisiert nach passiver Markdown-Extraktion auch PDF/Scan-PDF und PPTX. Formulare, Skripte, Anhänge, Signaturen, Links, Lesezeichen und OLE werden nicht ausgeführt und können ausgelassen bleiben; `source_extraction_coverage` bleibt getrennt und unvollständig. Nur der extrahierte Markdown-Inhalt wird anonymisiert und residualgeprüft. Leere OCR, verschlüsselte/beschädigte Quellen, XFA, Makros, ActiveX, externe Vorlagen und unbekannte Objektklassen stoppen weiter; Coworks strengere Admission bleibt unverändert. Reale Paket-/Batch-/Quellhash-/Coverage-/Mappingtests und der RC151-Windows-Gesamtlauf mit 140 anonymisierten Ausgaben belegen E0 und den positiven Zielhostpfad; Negativgrenzen und Quellvollständigkeit sind dadurch nicht fachlich freigegeben. | **erledigt** |
+| BL-010.40 | RC144-Windows-Befund: Der lokale Sammelreview war bei 11/12 unsichtbar. RC145 startete den Dialog ohne versteckten Top-Level-Start; im sichtbaren Windows-Test erschien er und der Stapel endete nach lokaler Entscheidung mit 11 Ergebnissen und einem sicheren Stopp. Die folgende Fundstellen-UX benennt den konkreten Text und hebt ihn in Quelle und Arbeitsfassung hervor; ein echter WinForms-Dialogtest prüft den Wechsel zwischen Fundstellen. Navigation und Abschlussstatus erklären aktiven Review und gesperrten Ergebnisordner. Alle Änderungen sind im RC151-Paket gebunden; eine sichtbare RC151-Prüfung jeder Reviewaktion auf Windows und macOS bleibt E2, nicht neue E0-Arbeit. | **erledigt** |
+| BL-010.41 | RC147-Windows-Befund: Fünf PPTX stoppten mit `SOURCE_ACTIVE_CONTENT_UNSUPPORTED`. Standalone lässt seitdem nur bekannte passive PPTX-Metadaten-/Diagrammstilbeziehungen und intern geprüfte XLSX-Einbettungen zu; OLE bleibt ausgelassen, Coverage `incomplete`, Makros/externe Pakete und Coworks strengere Admission bleiben gesperrt. XLSX bleibt wegen Blatt- und Strukturverlust direkt Markdown-first statt CSV-Zwischenschritt. Synthetische Positiv-/Negativfälle, schreibgeschützte Extraktion der fünf Quellen und ein echter Windows-Paketbatch bestanden; die Änderung ist im RC151-Paket veröffentlicht. Ob genau die fünf alten Benutzer-PPTX im RC151-Korpus enthalten waren, ist aus dem 140-Dateien-Abgleich nicht belegt und bleibt ein gezielter E2-Nachweis statt eines erneuten Gesamtbuilds. | **erledigt** |
 
-| BL-010.42 / BL-021.3 | RC149-Windows-UAT mit demselben 140-Dateien-Korpus: Markdown-only 140 Ergebnisse; Privacy 138 Ergebnisse, zwei DOCX mit `RESIDUAL_PII` sicher gestoppt. Die Restprüfung las „Service Level“ und „Fail Closed“ aus einfachen technischen Tabellen als nicht lokalisierbare Personenkandidaten. Exakt einfache Zellen in Tabellen ohne sensibles Identitätslabel gelangen nun in den bestehenden lokalen Review; explizite Personenfelder, transformierte/escapte Zellen und direkte Identifier bleiben strikt. Identisch normalisierte Rest-Personenkandidaten desselben Typs werden pro aktueller Prüfgruppe einmal sichtbar entschieden, intern jedoch an jede genaue Fundstelle gebunden. Die Abschlussansicht übergibt den optionalen `batchId`-Parameter ausdrücklich an Tauri, damit die zwei Dateinamen aus dem privaten Journal geladen werden. **E0:** gezielte Privacy-/Review-/Frontend-/History-Tests; **offen:** paketierter erneuter 140-Dateien-Lauf, sichtbare Windows-/macOS-Bedienabnahme und vollständige Quellabdeckung. Keine automatische Freigabe unbekannter Personen. | **in Arbeit** |
-| BL-010.43 / BL-021.4 | Inhaltsabgleich zweier lokaler RC150-140-Dateien-Läufe: Veröffentlichung und Zuordnung waren vollständig, dennoch verschluckte die Organisationserkennung in 50 TXT/Markdown-Varianten einen nummerierten Einleitungssatz; 14 OCR/PDF/Endungsvarianten klassifizierten beschreibende Dokumenttitel als Personen; zwei zusätzlich aufgenommene Begleitdateien ließen in einer semikolongetrennten Sollwerttabelle bzw. in Personenprosa synthetische Namen stehen. Der gemeinsame Privacy-Core begrenzt nun Organisationen am expliziten Personen-/Unternehmensübergang, erfasst Personen in solchen nummerierten Sätzen und sensiblen Tabellenzellen, bewahrt beschreibende Titel und ersetzt bindestrichgetrennte Vollnamen vor einem bloßen Nachnamenalias. Die unabhängige Restprüfung stoppt unbearbeitete Namen in den sensiblen Tabellenzellen. **E0:** gezielte positive und negative Regressionen sowie schreibgeschützte Nachprüfung der betroffenen Quell-/Konversionsbeispiele. **Offen:** erneuter paketierter Gesamtlauf und menschliche Inhaltsabnahme; die alten RC150-Ergebnisse werden nicht rückwirkend geändert. | **in Arbeit** |
+| BL-010.42 / BL-021.3 | RC149 ergab 138/140 Privacy-Ergebnisse; zwei DOCX stoppten wegen „Service Level“ und „Fail Closed“ als unlokalisierbaren Rest-Personenkandidaten. Exakt einfache technische Tabellenzellen gehen nun in den positionsgebundenen lokalen Review; sensible Labels, transformierte Zellen und direkte Identifier bleiben strikt. Gleichartige normalisierte Kandidaten werden pro Prüfgruppe einmal entschieden, intern aber an jeder Fundstelle geprüft. Die Abschlussansicht lädt Dateinamen mit `batchId` aus dem privaten Journal. Gezielte E0-Tests und der paketierte RC151-Windows-Gesamtlauf mit 140/140 anonymisierten Ergebnissen sind erfolgt; sichtbare Einzelbedienung auf beiden Plattformen und vollständige Quellabdeckung sind weiterhin eigene Abnahmepunkte. Keine automatische Freigabe unbekannter Personen. | **erledigt** |
+| BL-010.43 / BL-021.4 | Der RC150-Inhaltsabgleich deckte verlorene Einleitungssätze, überanonymisierte technische Titel sowie nicht ersetzte synthetische Namen in Begleitdateien auf. Der Privacy-Core begrenzt Organisationsspannen, erfasst Personen in nummerierter Prosa und sensiblen Tabellenzellen, bewahrt beschreibende Titel und ersetzt bindestrichgetrennte Vollnamen vor bloßen Nachnamenaliasen. Der unabhängige Restcheck bleibt aktiv. Gezielte positive/negative Regressionen und der veröffentlichte RC151-Gesamtlauf sind erfolgt; dessen schreibgeschützte Inhaltsnachprüfung bestätigt ausgewählte Sollstellen, 2168 CSV-Beschreibungen und Identitätsanker. Eine vollständige menschliche Satz-für-Satz-/OCR-/Originalcontainerprüfung ist damit nicht behauptet; alte RC150-Ausgaben bleiben unverändert. | **erledigt** |
+| BL-010.44 | **Standalone-only Review-UX nach DS-104:** Eigenes berechtigungsarmes App-Reviewfenster ohne Rohtext im inhaltsfreien Haupt-Renderer und ohne Cowork-/MCP-Abhängigkeit. Flüchtiger 40-MiB-Broker, 128-KiB-Frames, exakter Fundstellentext, Gruppenentscheidung, „Später entscheiden“, laufgebundene Fortsetzung und asynchroner Fensterbau sind umgesetzt. Mehrere Prüfphasen bleiben mit Arbeitsindikator im selben Fenster; der bestätigte Laufabschluss schließt es. RC157 bietet „Jetzt prüfen“ direkt in der aktuellen Laufkarte und lehnt historische Ersatzläufe nach Verbindungsneustart ab. JS-/IPC-/Rust-/Pakettests und nativer Windows-Start bestehen. RC156 `ca4349c5` und RC157 `3d6b69b7` einschließlich lokaler Prüfung und Stapelverarbeitung sind vom Anwender bestanden bestätigt; letzterer enthält 140/140 Ergebnisse. Die E0-Lieferung ist fertig. Andere Zielhosts, A11y und vollständige Negativ-/Recovery-Abnahmen stehen getrennt in Abschnitt B und der Evidence-Matrix. Kein RC151-Bestandteil. | **erledigt** |
+| BL-010.45 | **Vertrauliche automatische Identitätszuordnung nur für Standalone:** Personen-, Unternehmens- und Projektpseudonyme werden lauf-/dateigebunden privat erfasst; `[PERSON_011]` ist nur ein Beispiel. Generische Masken und unklare Quellen gelten nicht als 1:1-Zuordnung. Die lesbare TXT wird einmalig im markierten Unterordner `VERTRAULICH-NICHT-HOCHLADEN` des gebundenen Lauf-Ergebnisordners abgelegt; private Einzelsnapshots bleiben im App-Datenbereich. **Der ganze Laufordner darf damit nicht an KI-Systeme übergeben werden**, nur einzeln geprüfte anonymisierte Markdown-Dateien. Der Verlauf öffnet die Datei laufgebunden lokal; ältere private Zuordnungen bleiben über Einstellungen erreichbar. Kein automatisches Löschen und kein App-Löschbutton; eine manuell entfernte sichtbare Kopie wird nicht neu angelegt. Cowork und Privacy-Entscheidungen bleiben unverändert. RC156-Modul-/Verlaufstests und der isolierte Paket-Sidecar-Lauf mit realen TXT/MD/CSV/DOCX-Dateien bestätigen die vertrauliche TXT im markierten Lauf-Unterordner; noch offen: sichtbare Zielhost-/Recovery-/A11y-Abnahme, Bedrohungsmodell, Datenträgerverschlüsselung/Backup-Hinweis und vollständige Originalwertabdeckung an realen Formaten. Keine Anonymitäts- oder KI-/Rechtskonformitätsgarantie. | **in Arbeit** |
+
+DS-105 bindet BL-010.45 an die ausdrückliche Entscheidung: keine automatische
+Löschung der vertraulichen lokalen Identitätszuordnung.
 
 DS-082 bindet dazu die lokale, nicht protokollierte Anzeige von Quellenordner,
 Dateiauswahl und Ergebnisziel. DS-085 bindet den inzwischen implementierten
@@ -965,7 +1029,7 @@ künstlichen `MCP26-01`-Cutover aus.
 | BL-041.17 | **P2 · Astra-20260912-Kandidaten- und UAT-Evidenzbindung.** Die UAT-Vorlage entsteht ausschließlich aus dem finalen, explizit übergebenen Release-Artefaktsatz und dessen gebundenem Commit, nicht aus beliebigem lokalem `dist` oder aktuellem `HEAD`. Die 12×3-Matrix referenziert nur tatsächlich erzeugte UAT-Fixtures und beschreibt Initial-, Tool- und Follow-up-Phase widerspruchsfrei; der automatische Vertragstest löst Fixture, Vorbedingung, erwartetes Werkzeug und Cleanup gegen den Korpus auf. Die Release-Dokumentation trennt Cowork- und Standalone-Kampagnen sowie veröffentlichte Normal-, Debug- und UAT-Artefakte eindeutig. | `build:cowork-uat-evidence` verlangt Normal-ZIP, Debug-ZIP und sauberen aktuellen Kandidatencommit, verifiziert beide Archive vor der Evidenzaufnahme und bindet deren `source_commit`. Die Matrix prüft alle Fixturepfade gegen den Generator; nicht vorhandene Fälle, falsche Zuordnungen und fehlende Argumente stoppen. Workflow und Vertragstests sind grün. | **erledigt** |
 | BL-041.18 | **P3 · Astra-20260912-Promptnamen.** Die Promptauflösung akzeptiert ausschließlich eigene Schlüssel von `PROMPT_DEFAULTS`; Prototyp-Eigenschaften und jeder unbekannte Name liefern dieselbe definierte Invalid-Params-Antwort wie andere unbekannte Prompts. | `constructor`, `toString`, `__proto__` und beliebige unbekannte Namen liefern keinen Workflow; alle vier erklärten Promptnamen bleiben manifest- und serverseitig identisch. `test-manifest.js` und 66 echte stdio-Protokollfälle sind grün. | **erledigt** |
 
-| BL-041.19 | **P1 · PH-20260923-01 · E0 korrigiert, noch unveröffentlicht.** Kanonische Roottrennung vor Speichern/Reset/Bootstrap/privater Anlage; cached Roots werden erneut geprüft. Historische private/öffentliche Wurzeln im Produktdatenraum bleiben durch maximal 256 atomare Reservierungen geschützt, auch nach Reset. 43 Rootfälle, vier konkurrierende Prozesse, MCP-Start ohne private Refusalwrites und Standalone-Gegenregression bestehen. Atomarer Austausch identischer Reservierungen zwischen Pfadprüfung und Öffnen ist deterministisch reproduziert und durch einmalige Metadatenrevalidierung behoben; andere Roots und Hardlinks bleiben gesperrt, keine Retrieschleife. Der frühere Einzelfehler ohne stderr ist rückwirkend nicht eindeutig zuzuordnen. Core erhält Pflichtinjektion statt Gateway-Import. Keine Migration/Löschung; nicht erfasste Altfreigaben/fremde Namespaces bleiben Betreiberprüfung und eine unsichere Altconfig erfordert kontrollierte Offline-Korrektur. Neue Paket-/Zielhostprüfung offen. | **erledigt** |
+| BL-041.19 | **P1 · PH-20260923-01 · E0 in RC151 veröffentlicht.** Kanonische Roottrennung vor Speichern/Reset/Bootstrap/privater Anlage; cached Roots werden erneut geprüft. Historische private/öffentliche Wurzeln im Produktdatenraum bleiben durch maximal 256 atomare Reservierungen geschützt, auch nach Reset. 43 Rootfälle, vier konkurrierende Prozesse, MCP-Start ohne private Refusalwrites und Standalone-Gegenregression bestehen. Atomarer Austausch identischer Reservierungen zwischen Pfadprüfung und Öffnen ist deterministisch reproduziert und durch einmalige Metadatenrevalidierung behoben; andere Roots und Hardlinks bleiben gesperrt, keine Retrieschleife. Der frühere Einzelfehler ohne stderr ist rückwirkend nicht eindeutig zuzuordnen. Core erhält Pflichtinjektion statt Gateway-Import. Keine Migration/Löschung; nicht erfasste Altfreigaben/fremde Namespaces bleiben Betreiberprüfung und eine unsichere Altconfig erfordert kontrollierte Offline-Korrektur. Paket-Smokes sind RC151-gebunden; sichtbare Zielhost-Gegenprüfung der Rootfälle bleibt offen. | **erledigt** |
 | BL-041.20 | **PH-20260923-02/-03/-10 · E0 vorbereitet.** Lokales Claude Code ist ein zusätzlicher Hostpilot desselben Plugins, kein drittes Produkt. 14-Fälle-Vertrag und Anleitung unter `acceptance/CLAUDE_CODE_PILOT/`, kostenfreier read-only CLI-Vorcheck plus Vertragstests vorhanden. Offizielles Update auf 2.1.280 und Vorcheck PASS; CLI nicht angemeldet. Lokaler Code-Reiter in Claude Desktop als eigene Oberfläche berücksichtigt. E1/E2: exaktes natives Ziel-ZIP, Ladequelle/Hash/Toolinventar, Originalzugriffs-Negativfälle, Picker/Review/Recovery/Wiederverwendung, Sync und Doppelinstallation beobachten. Nutzerentscheidung: ausschließlich enthaltene Claude-Abonutzung, keine API-/Zusatzkosten; bei unklarem Abrechnungsweg oder Limit kein Modellaufruf. Desktop-Zugang noch nicht geprüft. Keine Freigabe für WSL/Linux/Cloud und kein Ersatz für Cowork-/Standalone-Abnahmen. | **in Arbeit** |
 | BL-041.21 | **PH-20260923-04 · DS-101 bestätigt und E0 umgesetzt.** `unread` bleibt Standard; `reuse_completed` erfordert ausdrücklichen Auftrag und stets native Auswahl, auch bei einem Kandidaten. Keine neue Anonymisierung oder Originalzugriffe. Paketgeneration/TTL/Integrität werden pro Seite und nach Async-I/O erneut geprüft; bestehende ACKs/Terminal-Evidence bleiben unverändert. Reale Datei-/Journal-/Pakettests prüfen auch entfernte Originale, Generationstausch, Ablauf, Abbruch und Produktgrenzen. Neue Paket-, Modell- und native Auswahlabnahme bleiben E1/E2. | **erledigt** |
 | BL-050.4 | **PH-20260923-05 · E0 umgesetzt.** Unabhängiges Ausgabeorakel ersetzt Selbst-Lookup und pauschale Ambiguitätsfreigabe. `test-adversarial-golden-batch.mjs` verarbeitet alle 16 Dateien in beiden Zwecken mit produktiv projiziertem Konverter/OCR, echten Journalen/Privacy-Gates/Publikationen/Exporten; nur die menschliche Reviewentscheidung wird synthetisch beantwortet. Nach BL-021.3/4: 16 Konvertate und 16 anonymisierte Ausgaben nach expliziten Titel-/Personenentscheidungen; davor keine Publikationshandles. Identitätsanker fehlen, definierte Fachanker einschließlich technischer Titel bleiben, unabhängige Pseudonyme sind konsistent, Quellen unverändert. Französische Straßen und falsche Firmen-/Projektbindungen aus technischen Dashlisten korrigiert; Namenslecks nach Markern, Negationen und verschachtelten Listen gegengeprüft. VECTRA-20260923 ergänzt einen realen CSV-/eingebetteten-JSON-Gegenfall im bestehenden Test, ohne neue Runtime/Importoberfläche; vorhandene typisierte Registry wiederverwendet. Neuer Releasearchivtest und menschliche OCR-/Fachqualität bleiben eigene Gates, keine allgemeine Semantik-/Vollständigkeitsgarantie. | **erledigt** |
@@ -1054,61 +1118,86 @@ nicht durch Diagramme als erledigt dargestellt:
 
 ## B. Technisch vorbereitet – menschliche Evidenz offen
 
+Der RC151-Standalone-Funktionslauf auf Windows ist **durchgeführt** und wird
+für passende Prüfschritte angerechnet: rekursive Auswahl/Ergebnisweg und beide
+Modi (N3-05), positiver Formatpfad und geprüfte unveränderte Quellen
+(N3-06/N3-08) sowie kontrollierte Fachtext-/PII-Stichproben (N4-07). Das ist
+keine pauschale formale N3/N4-Freigabe. Gezielt offen bleiben insbesondere
+sichtbare Auswahlkorrektur und Grenzablehnung, ein versionsgebundener
+200-Dateien-/500-MiB-Lauf, Abbruch/Wiederaufnahme, Update/Rollback,
+Tastatur/Screenreader, rollengetragene Inhaltsfreigabe, Mac-Finder-/Gatekeeper-
+und Linux-Desktopbedienung sowie Coworks eigene Host-/Modelltests. Bereits
+geprüfte 140 Dateien werden nicht allein für einen administrativen Status
+erneut verarbeitet. **Offen** bedeutet: ein konkreter Resttest ist ausführbar,
+aber noch nicht belegt. **Blockiert** bedeutet nur: eine benannte technische
+Voraussetzung fehlt tatsächlich; es ist nicht gleichbedeutend mit „Code kaputt“
+oder „RC151-ZIP darf nicht verwendet werden“. Positive Format-/Starttests
+ersetzen keine negativen Fehler-, Accessibility- oder Mac-Bedienfälle. Derselbe
+beobachtete Test darf dagegen mehreren passenden Stories als Evidence dienen.
+
 | Story | Noch erforderlicher Nachweis | Status |
 |---|---|---|
-| BL-010.8 | Drei getrennte, selbsttragende Ziel-ZIPs sind der aktuelle Produkt- und UAT-Weg. Die relative Git-Marketplace-Projektion ist konzeptionell korrekt, aber mit den offiziellen macOS-Node-Binaries nicht in einem normalen GitHub-Repository publizierbar, weil einzelne Dateien 100 MiB überschreiten. Vor Marketplace-Freigabe fehlen ein kleinerer Runtime-/Launcherweg oder belastbare Claude-Evidence für einen anderen Binärtransport sowie Veröffentlichung, Installation und Update auf den Cowork-Zielhosts. | **blockiert** |
-| BL-010.7 | Lokale Cowork-Sitzung eines bestehenden Desktop-Deployments mit Plugin-MCP positiv sowie Cloud-Cowork/Web/Mobil/Scheduled – auch bei geöffneter Desktop-App – negativ für Originale prüfen. | **blockiert** |
-| BL-010.1 | Portablen Pluginstart auf jedem freizugebenden Zielsystem ohne vorinstallierte Runtime nachweisen; Windows-E0 ist grün, macOS und echter Cowork-Host fehlen. | **blockiert** |
+| BL-010.8 | Die drei selbsttragenden Ziel-ZIPs sind gebaut und nativ gestartet; sie bleiben der aktuelle Cowork-UAT-Weg und sind durch diesen Eintrag **nicht** blockiert. Nur der zusätzliche Git-Marketplace-Kanal wartet auf eine kleinere Runtime/einen unterstützten Binärtransport: einzelne offizielle macOS-Node-Dateien überschreiten GitHubs normale 100-MiB-Objektgrenze. Danach erst Marketplace-Veröffentlichung und Zielhost-Installation/Update. | **blockiert** |
+| BL-010.7 | Lokale Cowork-Sitzung eines bestehenden Desktop-Deployments mit Plugin-MCP positiv sowie Cloud-Cowork/Web/Mobil/Scheduled – auch bei geöffneter Desktop-App – negativ für Originale prüfen. | **offen** |
+| BL-010.1 | Portablen Pluginstart ohne vorinstallierte Runtime nachweisen: RC151-Pakete sind auf Windows x64, macOS Intel und ARM64 nativ gestartet. Offen ist der frische Start **in einer echten lokalen Cowork-Sitzung** auf den freizugebenden Hosts, nicht ein weiterer bloßer CI-Paketstart. | **offen** |
 | BL-010.2 | Windows-x64 Fresh Install, Kernlauf, Update und Entfernen. | **offen** |
 | BL-010.3 | macOS Intel/ARM Fresh Install, Kernlauf, Quarantäne und Entfernen. | **offen** |
 | BL-010.6 | Upgrade und Rollback mit unveränderten Quellen und synthetischen Daten. | **offen** |
-| BL-011.3 | Mehrere pausierte Stapel und stabilen Pseudonymkontext real prüfen; kein Keyring. | **blockiert** |
-| BL-011.6 | Größen- und Ressourcenstopps auf Windows und macOS beobachten. | **blockiert** |
-| BL-011.7 | Abbruch, Fortsetzung und Zähler in echter Cowork-Bedienung verstehen lassen. | **blockiert** |
-| BL-011.9 | POSIX-Supervisor auf realen macOS-Zielen unter Last und Abbruch nachweisen. | **blockiert** |
-| BL-011.11 | Crash-/Dateisystemverhalten auf realen Zielsystemen prüfen. | **blockiert** |
-| BL-011.12 | Adaptive Mehrprozessvorbereitung erst nach Windows-/macOS-Ressourcennachweis aktivieren. | **blockiert** |
-| BL-011.13 | Plain-Arbeitskopien, Review und Fortsetzung auf Zielsystemen abnehmen; kein Schlüsselbundtest. | **blockiert** |
-| BL-012.2 | Abschluss-, Review-, Resume- und Stopmeldungen beobachtet abnehmen. | **blockiert** |
-| BL-012.3 | Vertagten Review nach Neustart ohne neue Dateiauswahl fortsetzen. | **blockiert** |
-| BL-012.5 | Tastatur, Zoom, Screenreader und Fokus auf Windows/macOS prüfen. | **blockiert** |
-| BL-012.6 | Alltagssprache und genau eine nächste Aktion mit fachfremden Personen prüfen. | **blockiert** |
-| BL-012.7 | Kernaufgabe ohne technische Hilfe in höchstens drei bewussten Aktionen abschließen. | **blockiert** |
-| BL-012.8 | Ausgelieferten nativen AppKit-Sammelreview auf macOS mit Fresh Install, Fokus und Bedienung prüfen; der `osascript`-Picker ist ein eigener UI-Pfad. | **blockiert** |
-| BL-012.9/10, BL-043.1 | Vereinfachten Sammelreview und automatischen Klar-Datei-Pfad in echter lokaler Cowork-Sitzung auf Windows/macOS beobachten; prüfen, dass klare Dateien keinen Dialog öffnen und die inhaltsfreien Zähler verstanden werden. | **blockiert** |
-| BL-021.1 | TXT/Markdown auf Windows und macOS im installierten Produkt abnehmen. | **blockiert** |
-| BL-021.2 | CSV-Dialekte und fachlichen Inhalt auf Windows/macOS abnehmen. | **blockiert** |
-| BL-031.1 | Zertifikats-/Organisationskontext durch IT-/Health-IT-Fachvertretung prüfen. | **blockiert** |
-| BL-032.1 | Mehrdeutigkeitsdialog auf Windows/macOS verständlich und konsistent abnehmen. | **blockiert** |
-| BL-041.1 | Beide Skills in echter Claude-UI gegen denselben Jobvertrag prüfen. | **blockiert** |
-| BL-041.2 | Ursprüngliche Aufgabe nach Abbruch begrenzt und verständlich fortsetzen. | **blockiert** |
-| BL-041.3 | Chat-Upload eines synthetischen Originals muss sicher zum lokalen Picker umleiten. | **blockiert** |
-| BL-041.4 | Spracheingabe und direkte Skillauswahl müssen denselben Ablauf starten. | **blockiert** |
-| BL-041.5 | 200 Dateien/500 MiB, Neustart und Fortsetzung in Cowork abnehmen. | **blockiert** |
-| BL-041.6 | Reine Anonymisierung endet lokal ohne Polling oder automatisches Ergebnislesen. | **blockiert** |
-| BL-041.7 | Werkzeugberechtigungen, Pickerabbruch und Ergebnisübergabe in aktueller Cowork-Version prüfen. | **blockiert** |
-| BL-041.8 | Den ausgelieferten Pluginserver mit der offiziellen MCP-Conformance-Prüfung gegen `2026-07-28` belegen. MCP-Tasks/Benachrichtigungen zusätzlich versions- und zielhostgebunden prüfen; ohne jeweiligen Nachweis kein Produktpfad und keine vollständige Konformitätsaussage. | **blockiert** |
-| BL-041.9 | Den automatischen Übergang vom Hintergrundstapel in genau einen nicht blockierenden Sammelreview sowie „Später“, Abschluss und Wiederaufnahme auf Windows/macOS beobachten. | **blockiert** |
-| BL-041.10 | Die gelieferte einmalige Ergebnisordnerwahl, Wiederverwendung ohne neue Abfrage, Ordnerwechsel, begrenzten Hintergrund-Replay und „Ergebnisse öffnen“ in echter Cowork-Bedienung auf Windows/macOS abnehmen. Beobachtung 03.09.2026 (Windows, rc85): Cowork beendet den MCP-Elternprozess kurz nach der Tool-Antwort; die Abschlussmeldung erschien in 4 von 5 Läufen nicht. Seit der zweiphasigen Eltern-/Worker-Übernahme (E0) ist nativ zu belegen, dass bei Elternprozessende oder Presenterfehler genau ein Fenster erscheint. | **blockiert** |
-| BL-041.11–.13 | Registry, öffentlicher Statusumschlag und progressive Skillkontexte mit den 41 vollständigen Modellfällen jeweils dreimal in frischen Cowork-Sitzungen prüfen; zusätzlich die kuratierte 12×3-Candidate-Matrix ausführen. Ein verbotenes Outcome ist kein Mehrheitsentscheid, sondern Release-Stopper. | **blockiert** |
-| BL-044.1 | Rekursive Ordnerquelle mit Link-/Race-Gegenproben auf Zielsystemen prüfen. | **blockiert** |
-| BL-049.1 | Format-/Strukturgates und Ergebnisgrade durch Security auf Zielsystemen abnehmen. | **blockiert** |
-| BL-050.3 | Referenzwerte und reales Dateisystem-/Power-Loss-Verhalten erfassen. | **blockiert** |
+| BL-011.3 | Mehrere pausierte Stapel und stabilen Pseudonymkontext real prüfen; kein Keyring. | **offen** |
+| BL-011.6 | Größen- und Ressourcenstopps auf Windows und macOS beobachten. | **offen** |
+| BL-011.7 | Abbruch, Fortsetzung und Zähler in echter Cowork-Bedienung verstehen lassen. | **offen** |
+| BL-011.9 | POSIX-Supervisor auf realen macOS-Zielen unter Last und Abbruch nachweisen. | **offen** |
+| BL-011.11 | Crash-/Dateisystemverhalten auf realen Zielsystemen prüfen. | **offen** |
+| BL-011.13 | Plain-Arbeitskopien, Review und Fortsetzung auf Zielsystemen abnehmen; kein Schlüsselbundtest. | **offen** |
+| BL-012.2 | RC151-Windows-Abschluss beider 140-Dateien-Läufe und der sichtbare RC145-Windows-Sammelreview sind beobachtet. Noch gezielt prüfen: konkrete RC151-Reviewfundstelle, vertagte Entscheidung/Resume und Stopmeldung in Windows sowie die entsprechenden Mac-Ansichten; die bereits gesehenen Abschlussläufe nicht wiederholen. | **offen** |
+| BL-012.3 | Vertagten Review nach Neustart ohne neue Dateiauswahl fortsetzen. | **offen** |
+| BL-012.5 | Tastatur, Zoom, Screenreader und Fokus auf Windows/macOS prüfen. | **offen** |
+| BL-012.6 | Alltagssprache und genau eine nächste Aktion mit fachfremden Personen prüfen. | **offen** |
+| BL-012.7 | Kernaufgabe ohne technische Hilfe in höchstens drei bewussten Aktionen abschließen. | **offen** |
+| BL-012.8 | Ausgelieferten nativen AppKit-Sammelreview auf macOS mit Fresh Install, Fokus und Bedienung prüfen; der `osascript`-Picker ist ein eigener UI-Pfad. | **offen** |
+| BL-012.9/10, BL-043.1 | Vereinfachten Sammelreview und automatischen Klar-Datei-Pfad in echter lokaler Cowork-Sitzung auf Windows/macOS beobachten; prüfen, dass klare Dateien keinen Dialog öffnen und die inhaltsfreien Zähler verstanden werden. | **offen** |
+| BL-021.1 | Windows ist mit RC151 teilweise belegt: 52 direkte TXT/Markdown-Konvertate sind bytegleich und die zugehörigen Anonymisierungsausgaben wurden kontrolliert. Offen sind die gleiche sichtbare Bedienung auf macOS sowie nicht durch diese Stichprobe abgedeckte Grenzfälle; kein erneuter Windows-Gesamtlauf. | **offen** |
+| BL-021.2 | Windows ist mit RC151 teilweise belegt: 24 CSV-Quellen und 2168 fachliche Beschreibungszeilen wurden in der Anonymisierung nachgeprüft. Offen sind gezielte CSV-Dialekt-Grenzfälle und macOS-Bedienung/Fachurteil; nicht erneut alle 140 Quellen laufen lassen. | **offen** |
+| BL-031.1 | Zertifikats-/Organisationskontext durch IT-/Health-IT-Fachvertretung prüfen. | **offen** |
+| BL-032.1 | Der lokale Sammelreview wurde im RC145-Windows-Lauf sichtbar und nach einer Entscheidung abgeschlossen. Die konkrete Fundstellenkennzeichnung von RC151, Vertagen/Ändern und der AppKit-Mac-Dialog sind noch beobachtet auf Verständlichkeit und Konsistenz zu prüfen. | **offen** |
+| BL-041.1 | Beide Skills in echter Claude-UI gegen denselben Jobvertrag prüfen. | **offen** |
+| BL-041.2 | Ursprüngliche Aufgabe nach Abbruch begrenzt und verständlich fortsetzen. | **offen** |
+| BL-041.3 | Chat-Upload eines synthetischen Originals muss sicher zum lokalen Picker umleiten. | **offen** |
+| BL-041.4 | Spracheingabe und direkte Skillauswahl müssen denselben Ablauf starten. | **offen** |
+| BL-041.5 | Cowork-Grenzstapel mit 200 Dateien/500 MiB sowie Neustart/Fortsetzung in einer lokalen Cowork-Sitzung abnehmen. Den versionsgebundenen Grenzlauf aus BL-051.3 dafür mitbenutzen, soweit er denselben Produkt-/Hostpfad prüft; der Windows-Standalone-140-Lauf deckt Cowork nicht ab. | **offen** |
+| BL-041.6 | Reine Anonymisierung endet lokal ohne Polling oder automatisches Ergebnislesen. | **offen** |
+| BL-041.7 | Werkzeugberechtigungen, Pickerabbruch und Ergebnisübergabe in aktueller Cowork-Version prüfen. | **offen** |
+| BL-041.9 | Den automatischen Übergang vom Hintergrundstapel in genau einen nicht blockierenden Sammelreview sowie „Später“, Abschluss und Wiederaufnahme auf Windows/macOS beobachten. | **offen** |
+| BL-041.10 | Die gelieferte einmalige Ergebnisordnerwahl, Wiederverwendung ohne neue Abfrage, Ordnerwechsel, begrenzten Hintergrund-Replay und „Ergebnisse öffnen“ in echter Cowork-Bedienung auf Windows/macOS abnehmen. Beobachtung 03.09.2026 (Windows, rc85): Cowork beendet den MCP-Elternprozess kurz nach der Tool-Antwort; die Abschlussmeldung erschien in 4 von 5 Läufen nicht. Seit der zweiphasigen Eltern-/Worker-Übernahme (E0) ist nativ zu belegen, dass bei Elternprozessende oder Presenterfehler genau ein Fenster erscheint. | **offen** |
+| BL-041.11–.13 | Registry, öffentlicher Statusumschlag und progressive Skillkontexte mit den 41 vollständigen Modellfällen jeweils dreimal in frischen Cowork-Sitzungen prüfen; zusätzlich die kuratierte 12×3-Candidate-Matrix ausführen. Ein verbotenes Outcome ist kein Mehrheitsentscheid, sondern Release-Stopper. | **offen** |
+| BL-044.1 | Rekursive Ordnerquelle mit Link-/Race-Gegenproben auf Zielsystemen prüfen. | **offen** |
+| BL-049.1 | Format-/Strukturgates und Ergebnisgrade durch Security auf Zielsystemen abnehmen. | **offen** |
+| BL-050.3 | Referenzwerte und reales Dateisystem-/Power-Loss-Verhalten erfassen. | **offen** |
 | BL-051.1 | Plugin-ZIP auf Windows x64 und macOS Intel/ARM frisch installieren. | **offen** |
-| BL-051.2 | Erst nach Bereitstellung der selbsttragenden Marketplace-Projektion: privaten Marketplace auf Windows/macOS installieren, aktualisieren und entfernen. | **offen** |
+| BL-051.2 | Nur für den zusätzlichen Marketplace-Kanal: privaten Marketplace auf Windows/macOS installieren, aktualisieren und entfernen, sobald BL-010.8 einen veröffentlichbaren selbsttragenden Binärtransport belegt. Der aktuelle ZIP-UAT-Weg ist unabhängig davon. | **blockiert** |
 | BL-051.3 | Versionneuen UAT-Serienlauf mit 200 Dateien und bis zu 500 MiB durchführen. | **offen** |
 | BL-051.4 | Produktrollback auf Windows/macOS abnehmen. | **offen** |
-| BL-051.5 | ZIP-/Marketplace-Lebenszyklus in Cowork real abnehmen. | **offen** |
-| BL-051.6 | Cloud-Cowork/Web/Mobil/Scheduled – auch bei geöffneter Desktop-App – sowie lokale Desktop-Sitzung ohne MCP negativ auf Originalzugriff prüfen. | **blockiert** |
-| BL-052.1 | Beobachtete Anwenderabnahme mit dem aktuellen UAT-Kit durchführen. | **offen** |
+| BL-051.5 | Zuerst den RC151-ZIP-Lebenszyklus in echter Cowork-Bedienung abnehmen; der Marketplace-Anteil kann erst nach BL-010.8/BL-051.2 geprüft werden und blockiert den ZIP-Piloten nicht. | **offen** |
+| BL-051.6 | Cloud-Cowork/Web/Mobil/Scheduled – auch bei geöffneter Desktop-App – sowie lokale Desktop-Sitzung ohne MCP negativ auf Originalzugriff prüfen. | **offen** |
+| BL-052.1 | RC151-Standalone ist auf Windows durch den Anwender mit 140 Quellen in beiden Modi gelaufen; die Nachprüfung wird für N3-05/N3-06/N3-08/N4-07 als Teil-Evidenz übernommen. Nur noch fehlende Einzelfälle des aktuellen UAT-Kits, Testerrollen und dokumentierte Gesamtabnahme ergänzen; keine pauschale Wiederholung des Funktionslaufs. Cowork und andere Zielhosts bleiben getrennt. | **offen** |
 | BL-052.2 | IT-/Health-IT-Fachabnahme durchführen. | **offen** |
 | BL-052.3 | Datenschutzabnahme mit synthetischen Daten durchführen. | **offen** |
 | BL-052.4 | Gebrauchstauglichkeit mit fachfremden Nutzenden abnehmen. | **offen** |
 | BL-052.5 | Architektur und lokale Sicherheitsgrenze vor breitem Rollout freigeben. | **offen** |
 
-„Blockiert“ bedeutet hier: Die Implementierung oder E0-Vorbereitung ist vorhanden,
-aber eine reale Zielplattform, Claude-Version oder benannte Fachperson ist für den
-Abschluss erforderlich. Es ist kein verdeckter Entwicklungsauftrag.
+### Aus der aktuellen Abnahmeliste entfernt
+
+| Story | Entscheidung und vorhandener Nachweis | Status |
+|---|---|---|
+| BL-011.12 | Adaptive Mehrprozessvorbereitung ist für RC151 keine Voraussetzung. Der Produktstandard bleibt nach DS-047 seriell; die vorhandene 100-Dateien-Messung und der RC151-Windows-140-Dateien-Lauf liefern einen Ausgangspunkt. Erst ein belegter Zielhost-Engpass eröffnet eine neue Optimierungsstory. Es wird **nicht** behauptet, dass die optionale Parallelisierung implementiert oder abgenommen sei. | **erledigt** |
+| BL-041.8 | Die ausgelieferte Cowork-Konfiguration startet einen lokalen stdio-MCP-Server; Paket- und Protokolltests prüfen diesen Produktpfad. Der derzeitige offizielle [MCP-Conformance-Serverlauf](https://github.com/modelcontextprotocol/conformance#testing-servers) verlangt dagegen eine URL und bewertet damit nicht dieses unveränderte stdio-Plugin. Deshalb entfällt der unpassende Pflichtlauf gegen `2026-07-28` für RC151; wir behaupten **keine vollständige offizielle MCP-Konformität**. Optionale Tasks/Benachrichtigungen werden ohne eigenen Zielhostnachweis nicht aktiviert. Ein neuer Transport oder ein offizieller stdio-Prüfpfad wäre eine neue Aufgabe. | **erledigt** |
+
+Nur BL-010.8 und BL-051.2 sind damit noch tatsächlich **blockiert**: Für den
+zusätzlichen Marketplace fehlt ein veröffentlichbarer Binärtransport. Eine
+fehlende menschliche Testperson, ein noch nicht ausgeführter Mac-/Cowork-Test
+oder ein leerer UAT-Vordruck heißt hier **offen**, nicht blockiert. Beide
+Marketplace-Einträge beschreiben dieselbe Abhängigkeit und verlangen keinen
+doppelten Test.
 
 ## Release-Evidence-Verträge
 

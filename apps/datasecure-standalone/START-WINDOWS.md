@@ -17,11 +17,20 @@ stehen noch aus.
    werden dabei nicht doppelt aufgenommen. Nach **Starten** ist der Stapel fest;
    weitere Quellen gehören in einen neuen Lauf.
 4. Bei Bedarf **Ergebnisordner ändern** wählen, dann **Starten** drücken.
-5. Nach Abschluss selbst **Verlauf** öffnen und beim gewünschten Lauf
+5. Falls **Prüfung erforderlich** erscheint, direkt in der Laufkarte
+   **Jetzt prüfen** wählen. Das lokale Prüffenster führt durch die offenen
+   Fundstellen. Mit **Später entscheiden** kann die Prüfung verschoben und
+   später beim selben Lauf im **Verlauf** fortgesetzt werden.
+   Nach Abschluss selbst **Verlauf** öffnen und beim gewünschten Lauf
    **Ergebnisordner** wählen. Im zugehörigen Laufordner
    liegen die Markdown-Dateien. Bei Anonymisierung liegt zusätzlich
    `DataSecure-Zuordnung.csv` mit der Zuordnung jeder erfolgreich erzeugten
-   Datei zur jeweiligen Quelldatei dort. Gestoppte Dateien stehen nur im
+   Datei zur jeweiligen Quelldatei dort. Die automatisch erkannte menschliche
+   Identitätszuordnung liegt zusätzlich in `VERTRAULICH-NICHT-HOCHLADEN`.
+   Diese TXT enthält Originalwerte: **Nie den ganzen Laufordner an eine KI
+   geben**, sondern nur einzeln geprüfte anonymisierte Markdown-Dateien.
+   Einen Löschbutton gibt es nicht; DataSecure löscht die Identitätszuordnung
+   nicht automatisch. Gestoppte Dateien stehen nur im
    Abschluss und in der Diagnose. Wenn alle Dateien stoppen, entstehen weder
    Ergebnisordner noch Zuordnungsdatei.
    Die Ansicht **Verarbeiten** zeigt zunächst den Abschluss dieses Laufs.
@@ -71,8 +80,9 @@ Zuordnungsdatei. Datei- und Ordnernamen werden nicht anonymisiert, bleiben aber
 vollständig lokal und erscheinen nicht in Diagnoseprotokollen.
 
 Node.js, Rust, Claude, Cowork und eine Internetverbindung werden nicht benötigt.
-DataSecure schreibt private Arbeitsdaten ausschließlich in den lokalen
-DataSecure-Bereich und Ergebnisse in den gewählten Ergebnisordner. Reine
+DataSecure schreibt private Zwischenstände in den lokalen DataSecure-Bereich
+und Ergebnisse einschließlich der ausdrücklich markierten vertraulichen
+Zuordnung in den gewählten Ergebnisordner. Reine
 Konvertierungen landen unter `DataSecure-Markdown/Lauf-…`, anonymisierte
 Ergebnisse getrennt unter `DataSecure-Output/Lauf-…`.
 Originaldateien werden nicht verändert oder gelöscht.

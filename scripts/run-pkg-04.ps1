@@ -76,7 +76,7 @@ foreach ($label in @('candidate-a', 'candidate-b')) {
     Invoke-Checked 'node.exe' @('scripts/verify-standalone-package.mjs', $candidateArchive)
     Invoke-Checked 'node.exe' @('tests/test-standalone-package-smoke.mjs', $candidateArchive)
     Invoke-Checked 'powershell.exe' @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
-        'tests/manual/standalone-native-windows-launch.ps1', '-Archive', $candidateArchive)
+        'tests/manual/standalone-native-windows-launch.ps1', '-Archive', $candidateArchive, '-AssertReviewWindow')
     $expanded = Join-Path $candidateDirectory 'expanded'
     Expand-Archive -LiteralPath $candidateArchive -DestinationPath $expanded
     $productRoot = Join-Path $expanded "DataSecure-Standalone-$($package.version)-windows-x64"

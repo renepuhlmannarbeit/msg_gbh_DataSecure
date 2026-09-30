@@ -1,5 +1,7 @@
 'use strict';
 
+const crypto = require('node:crypto');
+
 // The local human review must outlive the short Cowork tool call.  This worker
 // owns reconstruction, the native review window and local publication; its
 // parent receives no document content, file identity, capability or token in a
@@ -21,6 +23,7 @@ const { DETACHED_REVIEW_TIMEOUT_MS } = require('../companion/review-timeouts');
 const { terminalVisibleExport } = require('./result-export');
 
 let started = false;
+let activeBatchToken = null;
 const startDeadline = setTimeout(() => process.exit(2), 30_000);
 // The whole point of running detached is that a human decision can outlive a
 // Cowork tool call. companion/text-review.js still defaults its native-dialog
@@ -31,6 +34,28 @@ function lifecycle(event) {
   try { recordWorkflowEvent(event); } catch { /* diagnostics never changes review state */ }
 }
 
+function reviewInsideStandalone(draft) {
+  return new Promise((resolve, reject) => {
+    const reviewId = crypto.randomBytes(16).toString('hex');
+    const onAnswer = (message) => {
+      if (message?.type !== 'standalone-review-answer' || message.review_id !== reviewId) return;
+      process.off('message', onAnswer);
+      resolve(message.answer);
+    };
+    process.on('message', onAnswer);
+    try {
+      process.send({ type: 'standalone-review-draft', review_id: reviewId, batch_token: activeBatchToken, draft }, (error) => {
+        if (!error) return;
+        process.off('message', onAnswer);
+        reject(error);
+      });
+    } catch (error) {
+      process.off('message', onAnswer);
+      reject(error);
+    }
+  });
+}
+
 process.once('message', async (message) => {
   const token = String(message?.batch_token || '');
   if (started || message?.type !== 'start-local-review' || !/^[a-f0-9]{64}$/.test(token)) {
@@ -38,6 +63,7 @@ process.once('message', async (message) => {
     return;
   }
   started = true;
+  activeBatchToken = token;
   clearTimeout(startDeadline);
   const notify = (payload) => new Promise((resolve) => {
     try {
@@ -56,7 +82,9 @@ process.once('message', async (message) => {
       executorPid: process.pid,
       localFinalize: true,
       onReviewLifecycle: lifecycle,
-      reviewOptions: { timeoutMs: DETACHED_REVIEW_TIMEOUT_MS }
+      reviewOptions: { timeoutMs: DETACHED_REVIEW_TIMEOUT_MS },
+      ...(message.ui === 'standalone-app' && standaloneChannel
+        ? { reviewTextLocally: reviewInsideStandalone } : {})
     });
     // A failing visible export must not discard the completed local review
     // result; the released packages stay pending for the next export replay.

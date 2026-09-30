@@ -55,6 +55,18 @@ abgeschlossener Lauf ist kein Ersatz-PASS für den Fortsetzungsteil.
   Überschriften zusätzlich auf Überredaktion kontrollieren, nicht nur auf das
   Vorhandensein der Ergebnisdatei. Tabellen mit Windows-/gemischten Zeilentrennern
   und wiederholte PDF-/OCR-Überschriften auf genaue Fundstellenzuordnung prüfen.
+- Standalone-N3-05/-07/-08 und N4-03/-04 zusätzlich (DS-105, erst neuer
+  Kandidat): Vertrauliche Identitätszuordnung für mehrere Personen-, Firmen-
+  und Projektpseudonyme gegen synthetische Originale prüfen. Die Datei darf
+  nicht im KI-Ergebnisordner liegen oder im inhaltsfreien Verlauf erscheinen;
+  generische Masken und fehlende eindeutige Bindungen müssen kenntlich bleiben.
+  App-Neustart, Journalablauf und Update dürfen sie **nicht automatisch löschen**.
+  Auch nach mehr als 20 Läufen muss der private Zuordnungsordner über
+  „Einstellungen und Hilfe“ lokal erreichbar bleiben. Nur die bestätigte
+  App-Aktion zum exakten Lauf löscht sie; andere Läufe und
+  anonymisierte Ergebnisse bleiben. Zugriff durch anderes Betriebssystemkonto,
+  Sicherung/Datenträgerverschlüsselung und Bedienung mit Tastatur/Screenreader
+  separat prüfen. Keine Freigabe allein durch synthetische JS-Tests.
 
 Diese Zusatzfälle sind keine nachträgliche Änderung der bereits gebundenen
 RC139-/RC137-Paket-Evidence. Den [Claude-Code-Pilot](../CLAUDE_CODE_PILOT/README.md)
@@ -80,3 +92,13 @@ separat aufzeichnen; er ersetzt die Cowork-Fälle nicht.
 - `BLOCKED`: wegen Umgebung oder fehlender Voraussetzung nicht ausführbar; kein
   Ersatz für PASS.
 - `NOT_RUN`: noch nicht durchgeführt.
+
+`NOT_RUN` in einer formalen CSV-Zeile bewertet nur den **vollständigen**
+Prüffall dieser Kampagne, nicht die Lauffähigkeit des Produkts. Insbesondere
+ist RC151-Standalone am 30.09.2026 auf Windows mit 140 Quellen in beiden Modi
+erfolgreich gelaufen; die Ergebnisse sind als Teil-Evidenz für N3-05/N3-06/
+N3-08/N4-07 in der [Evidence-Matrix](../../canonical/BACKLOG_EVIDENCE_MATRIX.md)
+erfasst. Bei der formalen Abnahme vorhandene Nachweise übernehmen und nur die
+fehlenden Prüfschritte beobachten; kein zweiter 140-Dateien-Lauf allein zum
+Ausfüllen einer Vorlage. Ein `PASS` wird erst nach Prüfung aller Kriterien der
+jeweiligen Zeile durch die benannte Rolle eingetragen.

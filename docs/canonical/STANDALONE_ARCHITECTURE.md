@@ -94,7 +94,10 @@ Laufstatus neu.
 3. **Prüfung:** nur im Anonymisierungszweck und erst nach Abschluss offener
    automatischer Arbeit; echte Mehrdeutigkeiten gesammelt in einer Liste mit
    `Anonymisieren`, `Beibehalten`, `Für gleiche Treffer übernehmen` und
-   `Später`.
+   `Später`. Vertagen beendet nur den aktuellen Prüftermin: Der Lauf bleibt
+   als **Prüfung offen** in seiner Verlaufszeile und kann dort nach Neustart
+   oder nach anderen Läufen bewusst fortgesetzt werden. Ungeprüfte Dateien
+   erhalten kein freigegebenes Ergebnis.
 4. **Ergebnis:** nichtmodaler Status in der aktuellen Ansicht. Auf bewussten
    Wechsel in den Verlauf folgen `Ergebnisse öffnen`, bei Anonymisierung
    `Zuordnung anzeigen` und `Fortsetzen` je Zeile beziehungsweise
@@ -193,10 +196,12 @@ inhaltlich statt bytegleich verglichen.
 Tauri 2 ist nach dem Technologiegegencheck der verbindliche Engineering-
 Kandidat für die Desktop-Hülle. Die implementierte Rust-Schicht öffnet den nativen
 Datei- oder Ordnerdialog und startet den zielgebunden mitgelieferten
-DataSecure-Core als Sidecar. Der Renderer verwendet nur das geschlossene UI-View-Model aus
+DataSecure-Core als Sidecar. Der Haupt-Renderer verwendet nur das geschlossene UI-View-Model aus
 `server/standalone/ui-contract.json`; er sieht ausschließlich die für den
 Anwender bestimmte lokale Textanzeige von Auswahl und Ziel, niemals Rohbytes,
-Mapping oder private Core-Verzeichnisse. Diese Anzeige wird nicht protokolliert
+Mapping oder private Core-Verzeichnisse. Das getrennte Reviewfenster darf
+nur während einer aktiven lokalen Prüfsitzung den benötigten Rohtext sehen.
+Diese Anzeige wird nicht protokolliert
 und besitzt keinen Netzwerkkanal. Die einzige produktive Zustandsquelle ist der
 inhaltsfreie, kombinierte `get_public_state`-Snapshot; der Renderer fragt ihn
 sequenziell und ohne überlappende Polls ab. Frühere, nicht angebundene
@@ -212,6 +217,86 @@ oder Netzwerkrechte. Drop und Picker verwenden denselben Admissionvertrag;
 ein nativer Guard serialisiert Auswahl, Aufnahme und Start. Ein Drop ersetzt
 keinen gerade vorbereiteten oder laufenden Stapel. Fehlversuche liefern einen
 sichtbaren, inhaltsfreien Hinweis und keine implizite Startfreigabe.
+
+### Zielbild DS-104: Review innerhalb von Standalone, nicht im Cowork-Adapter
+
+Dies ist **noch nicht RC151-Iststand**. RC151 bedient den Review durch einen
+separaten plattformspezifischen Dialogprozess. Lokal ist für BL-010.44 ein
+eigenes, kurzlebiges App-Reviewfenster mit eng begrenztem
+Inhaltsrecht. Der bisherige Haupt-Renderer bleibt bei seiner inhaltsfreien
+Statusprojektion; Reviewtext gelangt weder in seine allgemeine Navigation
+noch in Verlauf, Diagnose oder Eventlogs. Das Reviewfenster besitzt keine
+Datei-, Shell-, Netz-, MCP- oder Cowork-Berechtigung. Es öffnet sich aus
+**Prüfung öffnen**; wenn die automatische Verarbeitung fertig ist, bleibt
+dieser nächste Schritt sichtbar, auch falls das Fenster nicht in den
+Vordergrund gelangt. Schließen bedeutet nicht Freigabe.
+
+Mehrere Prüfgruppen desselben Laufs erscheinen nacheinander im selben
+App-Prüffenster; eine neue Gruppe ist kein neuer Lauf. Falls nach einer
+bestätigten Gruppe erst durch die erneute Core-Prüfung weitere Fundstellen
+entstehen, zeigt das offene Fenster zunächst einen Wartehinweis und bietet
+anschließend **Weitere Prüfung fortsetzen** für genau diesen Lauf an. Diese
+Aktion ist nur im berechtigungsarmen Prüffenster verfügbar; sie verwendet
+keinen globalen „letzten Lauf“ und gibt keine ungeprüften Ergebnisse frei.
+Nach bestätigtem
+terminalem Laufstatus schließt das Fenster automatisch. Während einer
+Wartephase gibt es zusätzlich **Prüffenster schließen**; eine zu diesem
+Zeitpunkt noch offene Entscheidung wird dadurch nur vertagt, nie freigegeben.
+Die Abschlussfeststellung kommt aus dem privaten Core-Zustand und erst nach
+dem letzten Review, nicht schon aus der Annahme einer einzelnen Entscheidung.
+
+Die Review-Sitzung wird nur für den genauen Standalone-Lauf, die versiegelte
+Quellgeneration, die Policyversion und die aktuell offenen Fundstellen
+ausgegeben. Der erste Adapter vermittelt maximal 40 MiB flüchtigen Draft in
+128-KiB-Abschnitten über eine eigene Tauri-Capability und nimmt Entscheidungen
+entgegen. Die bestehende allgemeine 1-MiB-IPC-Grenze wird nicht erhöht;
+unbegrenzte Rohtextnachrichten oder ein lokaler HTTP-Port sind kein Ersatz.
+Der Core validiert jede Fundstellen-ID, Textposition, Gruppenreichweite und
+Abschlussfreigabe erneut. Eine UI-Antwort allein veröffentlicht nichts.
+
+Die Reviewansicht nennt **Dokument N von M**, **Fundstelle X von Y** und den
+exakten aktiven Text unmittelbar bei den Entscheidungsschaltflächen.
+Quellkontext und anonymisierte Vorschau stehen lesbar nebeneinander, bei
+schmalem Fenster untereinander; nur die aktive Stelle ist hervorgehoben.
+Entscheidungen für exakt gleiche Stellen zeigen ihre Anzahl/Reichweite.
+Rückgängig und **Später entscheiden** bleiben erreichbar, Freigabe erst nach
+vollständig validierten Entscheidungen. Der Hauptlauf heißt währenddessen
+**Prüfung offen** und bietet in seiner Laufkarte **Jetzt prüfen**, das den
+aktuellen verbundenen Lauf fortsetzt und das Prüffenster direkt öffnet.
+Nach Verbindungsneustart gibt es dabei keinen Rückfall auf einen beliebigen
+historischen Lauf. Für eine verschobene Prüfung bietet der Verlauf bei
+derselben Laufkennung **Prüfung fortsetzen**. Automatisch fertiggestellte Dateien werden nicht
+noch einmal verarbeitet; die offenen werden nicht als anonymisierte
+Ergebnisse ausgegeben. Mac- und Linux-Reviewer des Cowork-Plugins bleiben
+eigene Produktadapter. Die gemeinsame Engine und ihr Review-Ergebnisvertrag
+werden nicht für einen Desktop-Sonderfall aufgeweicht.
+
+### DS-105: getrennte vertrauliche Identitätszuordnung
+
+Der Standalone-Adapter erfasst vor der anonymisierten Publikation nur die
+typisierten, im fertigen Markdown tatsächlich verwendeten eindeutigen
+Pseudonyme samt erkanntem Originalwert. Pro Lauf und Datei liegt ein privater
+Snapshot im App-Datenbereich; nach freigegebenen Ergebnissen entsteht daraus
+eine vertrauliche menschliche TXT-Datei. Private Einzelsnapshots bleiben im
+App-Datenbereich; nur die lesbare TXT wird einmalig in
+`VERTRAULICH-NICHT-HOCHLADEN` innerhalb des gebundenen Lauf-Ergebnisordners
+publiziert. Der Laufordner als Ganzes ist daher **nicht KI-uploadfähig**.
+Eine manuell entfernte sichtbare Kopie wird nicht still wiederhergestellt.
+Die inhaltsfreie Verlaufsprojektion enthält lediglich Verfügbarkeit;
+der private Host öffnet die exakte Datei zum gewählten Lauf. Andere Produkte
+erhalten keine Rohwertschnittstelle. Nicht rückführbare Sammelmasken,
+fehlende Snapshots und typisierte Pseudonyme ohne eindeutigen Ursprung sind
+ausdrücklich keine vollständige Identitätszuordnung.
+
+Es gibt auf Nutzerwunsch **keinen TTL- oder Startup-Löschpfad** für diese
+Zuordnung. Sie bleibt nach Ablauf der Arbeitsjournale erhalten; die App
+bietet keinen Löschbutton. Eine etwaige Löschung ist eine manuelle
+Betriebssystemaktion. Da der Verlauf nur 20 Läufe zeigt, öffnet eine separate
+Einstellungsaktion den privaten Zuordnungsordner im Betriebssystem; die
+inhaltsfreie Hauptansicht erhält auch dabei keine Originalwerte. Der lokale
+Zugriff folgt dem Betriebssystemkonto; zusätzliche
+Verschlüsselung und Zielhost-/Backup-Verhalten sind vor Freigabe noch zu
+prüfen. Dieser lokale Implementierungsstand ist nicht Teil von RC151.
 
 ### Zweiter Modus: Konvertierung ohne Anonymisierung (implementierter Ablauf)
 
@@ -351,6 +436,13 @@ Kommandozeile, Environment, freie Exceptions, Tracebacks und fremdes
 stdout/stderr. Das Mapping ist eine lokale Fachdatei, kein Log.
 
 ## Lieferreihenfolge
+
+Der explizite App-Review gilt auch für genau eine mehrdeutige Datei. Der
+automatische Analysepfad vertagt sie unabhängig von der Stapelgröße; nur die
+bewusst gestartete, laufgebundene Prüfsitzung verarbeitet die Entscheidung.
+Coworks vorhandener Einzelreview bleibt von diesem Standalone-Kanalcheck
+unverändert. Native macOS-/Linux-Paketsmokes verlangen zusätzlich die geladene
+integrierte Prüfseite und ihren privaten Sitzungsaufruf.
 
 Die direkte Service-/CLI-Schicht, physische Namespace-Trennung, Tauri-Hülle,
 native Auswahl/Drop, beide Zwecke, Konvertierungsworker, Fortschritt und

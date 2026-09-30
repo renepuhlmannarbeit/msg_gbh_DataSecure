@@ -64,7 +64,7 @@ assert.doesNotMatch(nativeJob, /build-runtime-plugin|test-bundled-runtime/u);
 const projected = collectProductFiles(path.join(root, 'plugins', 'data-secure'));
 const entries = new Map(projected.map(file => [file.archivePath, fs.readFileSync(file.fullPath)]));
 const commonModules = ['conversion-runtime-resolver.js', 'conversion-worker-contract.js', 'conversion-worker.js',
-  'convert-next.js', 'markdown-artifact.js', 'markdown-contract.js', 'markdown-retention.js', 'markdown-store.js'];
+  'convert-next.js', 'identity-ledger.js', 'markdown-artifact.js', 'markdown-contract.js', 'markdown-retention.js', 'markdown-store.js'];
 assert.deepEqual([...entries.keys()].filter(name => name.startsWith('server/standalone/')).sort(),
   commonModules.map(name => `server/standalone/${name}`).sort());
 assert.deepEqual(verifyProductRelativeRequires(entries), { ok: true });

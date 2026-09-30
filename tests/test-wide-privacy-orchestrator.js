@@ -88,11 +88,20 @@ testAsync('wide DOCX XLSX and PPTX retain an explicit source header for privacy 
       assert.doesNotMatch(extracted.markdown, /HEADER PRIVATE|FOOTER PRIVATE/u);
     }
     const entry = { name: `privacy-table${extension}`, private_artifact_plain: true, private_bytes: Buffer.from(bytes) };
+    let privateSnapshot;
+    const registry = createBatchPseudonymRegistry(Buffer.alloc(32, 37), { contractVersion: READABLE_CONTRACT_VERSION });
     const result = await anonymizeNext('personnel_profile', { productChannel: 'standalone', inputQueue: [entry],
-      convertBuffer: directConversion });
+      pseudonymRegistry: registry,
+      convertBuffer: directConversion,
+      persistStandaloneIdentitySnapshot(snapshot) { privateSnapshot = snapshot; } });
     const released = readOutput(result.package_id, result.read_capability).text;
     assert.doesNotMatch(released, /Max Mustermann|Nordlicht GmbH/u, extension);
     assert.match(released, /\[PERSON_001\]|\[UNTERNEHMEN_001\]/u, extension);
+    assert.equal(privateSnapshot.package_id, result.package_id, extension);
+    assert.ok(privateSnapshot.entries.some(({ original }) => original.toLowerCase() === 'max mustermann'), extension);
+    assert.ok(privateSnapshot.entries.some(({ original }) => original.toLowerCase() === 'nordlicht gmbh'), extension);
+    assert.deepEqual(privateSnapshot.unmapped_labels, [], extension);
+    registry.dispose();
   }
 });
 
@@ -222,9 +231,12 @@ testAsync('the Cowork/plugin channel still blocks PDF before any wide converter'
 testAsync('Cowork DOCX privacy omits header and footer through the isolated parser contract', async () => {
   const entry = { name: 'profile.docx', private_artifact_plain: true,
     private_bytes: Buffer.from(privacyTableDocx()) };
+  let privateCaptures = 0;
   const result = await anonymizeNext('personnel_profile', {
-    productChannel: 'plugin', inputQueue: [entry]
+    productChannel: 'plugin', inputQueue: [entry],
+    persistStandaloneIdentitySnapshot() { privateCaptures++; }
   });
+  assert.equal(privateCaptures, 0, 'Cowork never enters the Standalone private identity sink');
   assert.equal(result.privacy_scope, 'extracted-markdown-only');
   assert.deepEqual(result.source_extraction_coverage, {
     status: 'incomplete', reason_codes: ['DOCX_HEADER_FOOTER_EXCLUDED_BY_POLICY']

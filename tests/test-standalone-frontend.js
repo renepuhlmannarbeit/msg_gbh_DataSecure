@@ -100,6 +100,9 @@ async function openFeedbackCase() {
   assert.strictEqual(elements['status-title'].textContent, 'Fertig', 'open feedback must not overwrite the completed run state');
   await rowActions(elements, 0)[1].listeners.click();
   assert.match(elements['action-feedback'].textContent, /Zuordnung.*übergeben/u);
+  await elements['identity-mappings-directory'].listeners.click();
+  assert.ok(calls.includes('open_identity_mappings_directory'));
+  assert.match(elements['action-feedback'].textContent, /vertrauliche Zuordnungsordner.*übergeben/u);
 }
 
 async function nativeDropCase() {
@@ -292,7 +295,8 @@ async function frontendHarness(overrides = {}) {
     return { ok: true };
   };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../apps/datasecure-standalone/frontend/app.js'), 'utf8'), {
-    window: { __TAURI__: { core: { invoke }, event: { listen: async (_name, callback) => {
+    window: { confirm: (message) => overrides.confirm ? overrides.confirm(message) : true,
+      __TAURI__: { core: { invoke }, event: { listen: async (_name, callback) => {
       nativeListener = callback; return () => {};
     } } }, addEventListener() {} },
     document: { getElementById: (id) => elements[id], createElement: element },
@@ -657,7 +661,7 @@ async function explicitOutputNamingCase() {
   assert.match(harness.elements['output-naming-help'].textContent, /Unterordnernamen bleiben unverändert/u);
   assert.match(harness.elements['output-naming-help'].textContent, /Zuordnungsdatei enthält Originalnamen/u);
   const resultNotice = fs.readFileSync(path.join(__dirname, '../apps/datasecure-standalone/frontend/index.html'), 'utf8');
-  assert.match(resultNotice, /id="result-sharing-notice"[^>]*>Vor einer Weitergabe:[^<]+nicht pauschal den ganzen Laufordner/u);
+  assert.match(resultNotice, /id="result-sharing-notice"[^>]*>Vor einer Weitergabe:[^<]+nie den ganzen Laufordner/u);
   assert.match(resultNotice, /Reine Markdown-Konvertierung anonymisiert keine Inhalte/u);
   harness.elements['output-naming-mode'].value = 'source-with-suffix';
   harness.elements['output-naming-mode'].listeners.change();
@@ -882,13 +886,78 @@ async function activeLocalReviewExplainsBlockedNewRunCase() {
   assert.strictEqual(harness.elements['selection-list'].hidden, true,
     'completed selection must not show dead Remove buttons during processing');
   assert.strictEqual(harness.elements['status-title'].textContent, 'Lokale Prüfung erforderlich');
-  assert.match(harness.elements['status-text'].textContent, /Prüffenster/u);
+  assert.match(harness.elements['status-text'].textContent, /lokale Prüfung/u);
   await harness.click('tab-results');
   await harness.click('new-batch');
   assert.match(harness.elements['new-batch-feedback'].textContent, /aktuelle Lauf ist noch aktiv/u);
   assert.strictEqual(harness.elements['new-batch-feedback'].hidden, false);
   assert.strictEqual(harness.count('cancel_admission'), 0,
     'an active review must never be cancelled by a new-task click');
+}
+
+async function reviewActionStaysWithRunCase() {
+  const html = fs.readFileSync(path.join(__dirname, '../apps/datasecure-standalone/frontend/index.html'), 'utf8');
+  assert.ok(html.indexOf('id="process-form"') < html.indexOf('id="review-open"') &&
+    html.indexOf('id="review-open"') < html.indexOf('id="process-completion"'),
+  'the live review action belongs to the current run rather than the global navigation');
+  const batchId = 'c'.repeat(64);
+  let state = { state: 'ready', results_available: false };
+  let continuationRejected = true;
+  const harness = await frontendHarness({
+    get_public_state: () => state,
+    get_run_history: () => localHistory([historyEntry(batchId, { status: 'review_required',
+      results_available: false, resumable: true, processing_mode: 'markdown-and-anonymize' })]),
+    select_files: () => ({ selected_count: 1, ui_context: localContext('Prueflauf', ['Quelle.pdf']) }),
+    continue_current_batch: () => {
+      if (continuationRejected) throw 'STANDALONE_BUSY';
+      state = { state: 'processing', processing_mode: 'markdown-and-anonymize',
+        selected_count: 1, completed_count: 0, review_count: 1, results_available: false };
+      return { ok: true };
+    },
+    start_admitted_batch: () => {
+      state = { state: 'processing', processing_mode: 'markdown-and-anonymize',
+        selected_count: 1, completed_count: 0, review_count: 1, results_available: false };
+      return { ok: true };
+    }
+  });
+  await harness.click('task-anonymize');
+  await harness.click('select-files');
+  await harness.click('start');
+  await harness.runTimer();
+  assert.equal(harness.elements['review-open'].hidden, false);
+  await harness.click('review-open');
+  assert.equal(harness.count('open_review_window'), 1);
+  state = { state: 'review_required', processing_mode: 'markdown-and-anonymize',
+    selected_count: 1, review_count: 1, result_count: 0, results_available: false };
+  await harness.runTimer();
+  assert.equal(harness.elements['review-open'].hidden, true);
+  assert.equal(harness.elements['process-completion-review'].hidden, false);
+  await harness.click('process-completion-review');
+  assert.equal(harness.count('open_review_window'), 1, 'a refused continuation never opens a misleading review window');
+  assert.equal(harness.elements['process-completion-review'].hidden, false);
+  continuationRejected = false;
+  await harness.click('process-completion-review');
+  assert.equal(harness.count('open_review_window'), 2);
+  assert.equal(harness.count('get_run_history'), 0, 'direct review does not load or navigate to History');
+  assert.equal(harness.elements['process-view'].hidden, false);
+  assert.equal(harness.elements['results-view'].hidden, true);
+  assert.equal(harness.elements['process-completion-review'].hidden, true);
+  assert.equal(harness.elements['process-completion'].hidden, true);
+  await harness.click('process-completion-review');
+  assert.equal(harness.count('continue_current_batch'), 2, 'the accepted continuation cannot be started twice');
+  state = { state: 'review_required', processing_mode: 'markdown-and-anonymize',
+    selected_count: 1, review_count: 1, result_count: 0, results_available: false };
+  await harness.runTimer();
+  assert.equal(harness.elements['process-completion-history'].textContent, 'Lauf im Verlauf ansehen');
+  assert.equal(harness.elements['process-completion-history'].className, '');
+  await harness.click('process-completion-history');
+  await settleFrontend();
+  assert.equal(harness.count('continue_history_batch'), 0, 'navigation alone does not resume the run');
+  const resume = rowActions(harness.elements, 0).find(button => button.textContent === 'Prüfung fortsetzen');
+  assert.ok(resume);
+  await resume.listeners.click();
+  assert.equal(JSON.stringify(harness.calls.find(call => call.action === 'continue_history_batch').args),
+    JSON.stringify({ batchId }));
 }
 
 async function noResultCompletionIsNotSuccessCase() {
@@ -954,9 +1023,11 @@ async function namedLocalFailuresCase() {
   assert.match(currentFiles[0].textContent, /gruppe\/Quelle\.pdf.*PARSER_COVERAGE_UNVERIFIED/u);
   await run.click('tab-results');
   await settleFrontend();
-  const historyFailureButton = rowActions(run.elements, 0)[3];
+  const historyFailureButton = rowActions(run.elements, 0).find(button => button.textContent === 'Gestoppte Dateien anzeigen');
   await historyFailureButton.listeners.click();
-  const historyFiles = run.elements['history-body'].children[0].children[4].children[3].children[1].children[0].children;
+  const failureWrapper = run.elements['history-body'].children[0].children[4].children
+    .find(wrapper => wrapper.children[0]?.textContent === 'Gestoppte Dateien anzeigen');
+  const historyFiles = failureWrapper.children[1].children[0].children;
   assert.strictEqual(historyFiles.length, 2);
   assert.match(historyFiles[1].textContent, /andere\/Quelle\.pdf.*PERSON_CANDIDATE/u);
   assert.strictEqual(JSON.stringify(run.calls.filter(call => call.action === 'get_run_failures').map(call => call.args)),
@@ -1003,13 +1074,14 @@ async function historyRowBindingCase() {
   assert.strictEqual(harness.elements['history-body'].children[7].children[0].attributes.scope, 'row');
   assert.strictEqual(harness.elements['history-body'].children[7].children[0].children[0].textContent, `Lauf ${batchId.slice(-8)}`);
   const buttons = rowActions(harness.elements, 7);
-  assert.strictEqual(buttons.length, 3);
-  assert.strictEqual(rowActions(harness.elements, 0)[2].disabled, true);
-  assert.match(rowActions(harness.elements, 0)[2].title, /Keine Fortsetzung/u);
+  assert.strictEqual(buttons.length, 4);
+  assert.strictEqual(rowActions(harness.elements, 0)[2].disabled, true, 'private mapping is absent');
+  assert.strictEqual(rowActions(harness.elements, 0)[3].disabled, true);
+  assert.match(rowActions(harness.elements, 0)[3].title, /Keine Fortsetzung/u);
   const feedback = harness.elements['history-body'].children[7].children[4].children.at(-1);
   assert.strictEqual(feedback.attributes.role, 'status');
   assert.strictEqual(feedback.hidden, true);
-  for (const button of buttons) {
+  for (const button of buttons.filter(button => !button.disabled)) {
     await button.listeners.click(); await settleFrontend();
     assert.strictEqual(feedback.hidden, false);
     assert.match(feedback.textContent, /übergeben|Fortsetzung/u, 'feedback remains next to the activated row');
@@ -1022,6 +1094,26 @@ async function historyRowBindingCase() {
   assert.strictEqual(harness.count('open_local_ledger'), 0);
   assert.strictEqual(harness.count('continue_current_batch'), 0);
   assert.strictEqual(harness.elements['results-view'].hidden, false);
+}
+
+async function privateIdentityHistoryCase() {
+  const batchId = 'd'.repeat(64);
+  const harness = await frontendHarness({
+    get_run_history: () => localHistory([historyEntry(batchId, { failed_count: 0,
+      processing_mode: 'markdown-and-anonymize', identity_mapping_available: true })]),
+    open_history_identity_mapping: () => ({ ok: true, handoff_confirmed: true })
+  });
+  await harness.click('tab-results');
+  await settleFrontend();
+  const buttons = rowActions(harness.elements, 0);
+  const open = buttons.find(button => button.textContent === 'Identitäten (vertraulich)');
+  const remove = buttons.find(button => button.textContent === 'Identitätszuordnung löschen');
+  assert.ok(open);
+  assert.equal(remove, undefined, 'the run has no identity delete button');
+  assert.equal(open.disabled, false);
+  await open.listeners.click();
+  assert.equal(harness.count('open_history_identity_mapping'), 1);
+  assert.equal(harness.count('delete_history_identity_mapping'), 0);
 }
 
 async function historyFreshnessCase() {
@@ -1107,11 +1199,13 @@ function selectionActionsStayAboveLongFileListsCase() {
   await testAsync('home is the default, mode must be explicit, and terminal updates never navigate', homeAndExplicitChoiceCase);
   await testAsync('a finished run requires an explicit clean transition before another task', explicitNewRunAfterTerminalCase);
   await testAsync('active local review explains a blocked global new-task click', activeLocalReviewExplainsBlockedNewRunCase);
+  await testAsync('review actions stay with their exact run and history navigation does not resume it', reviewActionStaysWithRunCase);
   await testAsync('a run with no results is visibly a failure rather than a green completion', noResultCompletionIsNotSuccessCase);
   await testAsync('local folder errors and stopped runs reveal affected file names without logging content', namedLocalFailuresCase);
   await testAsync('first start distinguishes a proposed result folder from a chosen one', firstRunResultFolderGuidanceCase);
   await testAsync('tabs use manual activation and roving arrow, Home and End focus', accessibleTabsCase);
   await testAsync('history renders at most 20 rows and every action binds its exact batch ID', historyRowBindingCase);
+  await testAsync('private identity mapping opens locally without a delete action', privateIdentityHistoryCase);
   await testAsync('history preserves focus, ignores progress polls and rejects stale replies and actions', historyFreshnessCase);
   await testAsync('history requires a local-only envelope and explains disabled actions', historyPrivacyAndAvailabilityCase);
   await testAsync('a native admission invalidates pending history and refreshes the selected panel safely', historyAdmissionRaceCase);

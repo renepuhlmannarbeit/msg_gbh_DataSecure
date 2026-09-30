@@ -115,7 +115,10 @@ process.once('message', async (message) => {
     // ambiguities, open the existing local batch reviewer now instead of
     // returning to Cowork for another tool call. A defer/cancel/error remains
     // an `awaiting_local_review` checkpoint and is therefore safely resumable.
-    const reviewed = processingMode === MODES.MARKDOWN ? { progress: completed, attempted: false } : await continueIntoLocalReview(message.batch_token, completed, {
+    // Standalone shows an explicit in-app review step. Its worker never opens
+    // a detached OS dialog while the main window is still processing.
+    const reviewed = processingMode === MODES.MARKDOWN || standaloneChannel
+      ? { progress: completed, attempted: false } : await continueIntoLocalReview(message.batch_token, completed, {
       executorPid: process.pid,
       claimLocalBatchExecutor,
       releaseLocalBatchExecutor,

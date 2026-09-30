@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const { SafeError } = require('../runtime');
 const { processingModeForBatch } = require('../core/processing-mode');
 const { convertNext } = require('../standalone/convert-next');
+const identityLedger = require('../standalone/identity-ledger');
 const { PROFILES, LIMITS, validateBatchLimits, storageStatus, hasReparseComponent } = require('./common');
 const { anonymizeNext, prepareProcessingRun } = require('./orchestrator');
 const { retentionDays } = require('./retention');
@@ -127,7 +128,16 @@ function batchTtlMs() {
 const { writeState, readState, readStateForMaintenance, removeState } = createBatchJournalStore({
   productChannel: String(process.env.DATASECURE_PRODUCT_CHANNEL || 'plugin'),
   onStateWritten: (state) => {
-    if (state.product_channel === 'standalone') require('./standalone-history-store').recordStandaloneState(state);
+    if (state.product_channel === 'standalone') {
+      require('./standalone-history-store').recordStandaloneState(state);
+      try { identityLedger.pruneStopped(state); }
+      catch { /* an unsafe private path is left untouched; no anonymized result changes */ }
+      if (state.processing_mode !== 'markdown-only' && state.items?.some((item) => item.status === 'released') &&
+          state.items.every((item) => item.status === 'released' || item.status === 'stopped')) {
+        try { identityLedger.materialize(state); }
+        catch { /* private mapping is visibly absent/incomplete; the privacy result remains valid */ }
+      }
+    }
   },
   assertZeroDayWorkAvailable(state) {
     if (state.zero_day_work_ended !== true && !liveLocalExecutor(state) && !processAlive(state.intake_owner_pid)) {
@@ -445,7 +455,8 @@ const { publishReviewedBatch } = createBatchReviewPublication({
   deliveryPendingStatus: DELIVERY_PENDING,
   retryableCodes: RETRYABLE_CODES,
   mappingStoppedStatus: MAPPING_STOPPED,
-  withBatchPseudonymRegistry: withDurableBatchPseudonymRegistry
+  withBatchPseudonymRegistry: withDurableBatchPseudonymRegistry,
+  captureStandaloneIdentitySnapshot: identityLedger.capture
 });
 
 const { reviewDeferredBatch } = createBatchReviewOrchestrator({
@@ -489,7 +500,8 @@ const { processSingleBatchItem } = createBatchItemProcessor({
   deliveryPendingStatus: DELIVERY_PENDING,
   deferredReviewStatus: DEFERRED_REVIEW,
   retryableCodes: RETRYABLE_CODES,
-  mappingStoppedStatus: MAPPING_STOPPED
+  mappingStoppedStatus: MAPPING_STOPPED,
+  captureStandaloneIdentitySnapshot: identityLedger.capture
 });
 
 const { maintainBeforeNext } = createBatchNextMaintenance({

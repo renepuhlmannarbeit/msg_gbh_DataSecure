@@ -4,6 +4,7 @@ param(
     [switch] $LegacyProfileContract,
     [switch] $EmitEvidence,
     [switch] $AssertNoListeners,
+    [switch] $AssertReviewWindow,
     [string] $ExpectedSha256 = ''
 )
 
@@ -85,6 +86,9 @@ function New-IsolatedStartInfo([string] $FilePath) {
         $startInfo.EnvironmentVariables[$entry.Key] = $value
     }
     $startInfo.EnvironmentVariables['DATASECURE_STANDALONE_NATIVE_SMOKE_ROOT'] = $testRoot
+    if ($AssertReviewWindow) {
+        $startInfo.EnvironmentVariables['DATASECURE_STANDALONE_NATIVE_SMOKE_REVIEW'] = '1'
+    }
     return $startInfo
 }
 
@@ -329,12 +333,17 @@ try {
             $_.event -eq 'ipc_response_ok' -and $_.action -eq 'get_ui_context'
         }).Count -gt 0
         $pageLoaded = @($desktopSession | Where-Object { $_.event -eq 'page_loaded' }).Count -gt 0
+        $reviewPageLoaded = @($desktopSession | Where-Object { $_.event -eq 'review_page_loaded' }).Count -gt 0
+        $reviewScriptStarted = @($desktopSession | Where-Object {
+            $_.event -eq 'ipc_request_started' -and $_.action -eq 'get_review_session'
+        }).Count -gt 0
         $frontendReady = @($desktopSession | Where-Object { $_.event -eq 'frontend_ready' }).Count -gt 0
         $setupStarted = @($desktopSession | Where-Object { $_.event -eq 'setup_started' }).Count -gt 0
         $setupCompleted = @($desktopSession | Where-Object { $_.event -eq 'setup_completed' }).Count -gt 0
         $sidecarStarted = @($sidecarSession | Where-Object { $_.event -eq 'sidecar_started' }).Count -gt 0
         $serviceInitialized = @($sidecarSession | Where-Object { $_.event -eq 'service_initialized' }).Count -gt 0
-        if ($pageLoaded -and $frontendReady -and $publicState -and $uiContext -and $sidecarStarted -and $serviceInitialized) {
+        if ($pageLoaded -and $frontendReady -and $publicState -and $uiContext -and $sidecarStarted -and $serviceInitialized -and
+            (-not $AssertReviewWindow -or ($reviewPageLoaded -and $reviewScriptStarted))) {
             $startupStopwatch.Stop()
             $startupMilliseconds = [Math]::Round($startupStopwatch.Elapsed.TotalMilliseconds, 3)
             $passed = $true
@@ -346,6 +355,7 @@ try {
         # cleaned. A timeout alone cannot distinguish page loading from IPC failure.
         $checkpoint = [ordered]@{ application = ($application.Count -gt 0); setup_started = $setupStarted;
             setup_completed = $setupCompleted; page_loaded = $pageLoaded;
+            review_page_loaded = $reviewPageLoaded; review_script_started = $reviewScriptStarted;
             frontend_ready = $frontendReady; public_state = $publicState; ui_context = $uiContext;
             sidecar_started = $sidecarStarted; service_initialized = $serviceInitialized }
         Write-Output ('STANDALONE NATIVE CHECKPOINT ' + ($checkpoint | ConvertTo-Json -Compress))
@@ -362,6 +372,9 @@ try {
         if (-not $setupCompleted) { throw 'STANDALONE_NATIVE_SETUP_TIMEOUT' }
         if (-not $pageLoaded) { throw 'STANDALONE_NATIVE_PAGE_LOAD_TIMEOUT' }
         if (-not $frontendReady) { throw 'STANDALONE_NATIVE_FRONTEND_READY_TIMEOUT' }
+        if ($AssertReviewWindow -and (-not $reviewPageLoaded -or -not $reviewScriptStarted)) {
+            throw 'STANDALONE_NATIVE_REVIEW_WINDOW_TIMEOUT'
+        }
         throw 'STANDALONE_NATIVE_IPC_TIMEOUT'
     }
     if (-not (Test-Path -LiteralPath (Join-Path $testRoot 'profile\Local\SecureDataMsg-Standalone\workspace') -PathType Container)) {

@@ -1,6 +1,6 @@
 # GBH DataSecure – Standalone und Cowork RC151
 
-Quellstand: 3.2.0-rc151
+Quellstand: 3.2.0-rc157
 
 Der [produktgetrennte Vorabkandidat RC151](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc151)
 bindet Quellcommit `fdb8288c9bef2a64eeb10d584e1bf59a6cb864c3`.

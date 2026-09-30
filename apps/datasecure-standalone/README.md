@@ -54,6 +54,13 @@ tatsächlich erzeugten relativen Pfade. Namen und Pfade bleiben lokal und werden
 nicht diagnostisch protokolliert. Die Wahl wird vor Start gebunden und bleibt
 bei Fortsetzung unverändert.
 
+Für Menschen entsteht außerdem eine vertrauliche Identitäts-TXT im Unterordner
+`VERTRAULICH-NICHT-HOCHLADEN` des jeweiligen Anonymisierungslaufs. Sie enthält
+erkannte Originalwerte; private Einzelsnapshots bleiben im App-Datenbereich.
+DataSecure löscht beides nicht automatisch und bietet keinen Löschbutton.
+**Niemals den gesamten Laufordner an eine KI übergeben** – nur einzeln geprüfte
+anonymisierte Markdown-Dateien.
+
 Der Endnutzerablauf besitzt drei Hauptansichten: **Start**, **Verarbeiten** für
 Auswahl, Start und Fortschritt sowie **Verlauf** für die 20 neuesten
 Verarbeitungen. Ergebnis- und Fortsetzungsaktionen beziehen sich jeweils auf

@@ -93,16 +93,20 @@ test('release truth binds the published candidate while keeping human approval s
   const publishedVersion = version.replace(/rc\d+$/iu, `rc${published[1]}`);
   // A platform-only release must not silently relabel other product binaries.
   const macPublished = currentAll || /RC(\d+) ist als Standalone-macOS-Vorabkandidat aus Quellcommit\s+`([0-9a-f]{40})` veröffentlicht/u.exec(release);
-  const standalonePublished = currentAll || /### RC(\d+) – Standalone Windows sowie macOS ZIP und zusätzlich DMG[\s\S]{0,450}?Quellcommit `([0-9a-f]{40})`/u.exec(release);
-  const windowsPublished = currentAll || /### RC(\d+) – Standalone Windows x64[\s\S]{0,350}?Quellcommit `([0-9a-f]{40})`/u.exec(release);
+  const standaloneAll = /### RC(\d+) – Standalone auf allen Zielplattformen[\s\S]{0,400}?Quellcommit `([0-9a-f]{40})`/u.exec(release);
+  const standalonePublished = standaloneAll || currentAll || /### RC(\d+) – Standalone Windows sowie macOS ZIP und zusätzlich DMG[\s\S]{0,450}?Quellcommit `([0-9a-f]{40})`/u.exec(release);
+  const windowsPublished = standaloneAll || currentAll || /### RC(\d+) – Standalone Windows x64[\s\S]{0,350}?Quellcommit `([0-9a-f]{40})`/u.exec(release);
   const standaloneRc = standalonePublished ? `RC${standalonePublished[1]}` : null;
   const windowsRc = windowsPublished ? `RC${windowsPublished[1]}` : standaloneRc || publishedRc;
   const windowsVersion = version.replace(/rc\d+$/iu, `rc${windowsRc.slice(2)}`);
   const macRc = standaloneRc || (macPublished ? `RC${macPublished[1]}` : publishedRc);
   const macVersion = version.replace(/rc\d+$/iu, `rc${macRc.slice(2)}`);
+  const linuxVersion = standaloneAll ? windowsVersion : publishedVersion;
   const readme = read('README.md');
   assert.strictEqual(readme.split(/\r?\n/u)[0],
-    currentAll
+    standaloneAll
+      ? `# GBH DataSecure – Standalone ${standaloneRc} · Cowork ${publishedRc}`
+    : currentAll
       ? `# GBH DataSecure – Standalone und Cowork ${publishedRc}`
     : windowsPublished
       ? `# GBH DataSecure – Standalone Windows ${windowsRc}, macOS ${macRc} · Linux und Cowork ${publishedRc}`
@@ -118,7 +122,7 @@ test('release truth binds the published candidate while keeping human approval s
   const downloadRoot = 'https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download';
   const publishedArchives = [
     [windowsVersion, `DataSecure-Standalone-${windowsVersion}-windows-x64.zip`],
-    [publishedVersion, `DataSecure-Standalone-${publishedVersion}-linux-x64-glibc.zip`],
+    [linuxVersion, `DataSecure-Standalone-${linuxVersion}-linux-x64-glibc.zip`],
     [publishedVersion, `DataSecure-Privacy-Preflight-windows-x64-v${publishedVersion}.zip`],
     ...['macos-x64', 'macos-arm64'].map(target => [macVersion, `DataSecure-Standalone-${macVersion}-${target}.zip`])
   ];
@@ -130,7 +134,7 @@ test('release truth binds the published candidate while keeping human approval s
   if (windowsPublished) {
     assert.ok(readme.includes(windowsPublished[2]), 'Windows source commit must remain explicit');
     assert.ok(release.includes(`releases/tag/v${windowsVersion}`));
-    if (!currentAll) assert.ok(!readme.includes(`DataSecure-Privacy-Preflight-windows-x64-v${windowsVersion}.zip`),
+    if (!currentAll || standaloneAll) assert.ok(!readme.includes(`DataSecure-Privacy-Preflight-windows-x64-v${windowsVersion}.zip`),
       'Windows-only publication must not invent a Cowork package');
   }
   if (standalonePublished) {
@@ -140,7 +144,7 @@ test('release truth binds the published candidate while keeping human approval s
       assert.ok(readme.includes(`${downloadRoot}/v${macVersion}/DataSecure-Standalone-${macVersion}-${target}.dmg`),
         'additional DMG must link to the same current Mac release as the retained ZIP');
     }
-    if (!currentAll) assert.ok(!readme.includes(`DataSecure-Privacy-Preflight-windows-x64-v${windowsVersion}.zip`),
+    if (!currentAll || standaloneAll) assert.ok(!readme.includes(`DataSecure-Privacy-Preflight-windows-x64-v${windowsVersion}.zip`),
       'Standalone-only publication must not invent a Cowork package');
   }
   if (currentAll) {
@@ -228,7 +232,8 @@ test('MCP protocol stays host-negotiated without a fictional cutover', () => {
   assert.match(decisions, /`MCP26-01` ist kein offizieller\s+MCP-Protokollbezeichner/u);
   assert.match(decisions, /hostgesteuerte\s+Versionsaushandlung/u);
   assert.match(current, /`2026-07-28` über `server\/discover`/u);
-  assert.match(backlog, /offiziellen MCP-Conformance-Prüfung/u);
+  assert.match(backlog, /keine vollständige offizielle MCP-Konformität/u);
+  assert.match(backlog, /stdio-MCP-Server/u);
   assert.match(trace, /\| DS-081 \| aktiv und aktuell \|/u);
   assert.ok(capabilities.decision_ids.includes('DS-081'));
 });
@@ -428,6 +433,24 @@ test('Cowork opens only its latest completed run and preserves the Standalone pr
   const architecture = read('docs/canonical/TARGET_ARCHITECTURE.md');
   assert.match(architecture, /50 MB/u);
   assert.match(architecture, /Standalone-Konverter-\/OCR-Runtime/u);
+});
+
+test('Standalone review target stays independent and supports deferred decisions', () => {
+  const target = JSON.parse(read('docs/canonical/TARGET_CAPABILITIES.json'));
+  assert.ok(target.decision_ids.includes('DS-104'));
+  const decisions = read('docs/canonical/DECISIONS.md');
+  const backlog = read('docs/canonical/BACKLOG.md');
+  const architecture = read('docs/canonical/STANDALONE_ARCHITECTURE.md');
+  const product = read('docs/canonical/PRODUCT.md');
+  for (const [name, content] of Object.entries({ decisions, backlog, architecture, product })) {
+    assert.match(content, /Später entscheiden/u, `${name} must retain deferral`);
+    assert.match(content, /Cowork/u, `${name} must preserve the product boundary`);
+  }
+  assert.match(decisions, /Der bisher inhaltsfreie Haupt-Renderer bleibt inhaltsfrei/u);
+  assert.match(architecture, /Prüfung fortsetzen/u);
+  assert.match(backlog, /\| BL-010\.44 \|[^\n]*\*\*erledigt\*\*/u);
+  assert.match(backlog, /RC157 `3d6b69b7`[\s\S]{0,160}Anwender bestanden bestätigt/u);
+  assert.match(product, /RC151 noch nicht enthalten oder nativ abgenommen/u);
 });
 
 test('Cowork start wording is identical in runtime, skill, examples and UAT', () => {

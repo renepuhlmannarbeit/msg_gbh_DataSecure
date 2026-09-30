@@ -122,6 +122,7 @@ test('Standalone projects engine state into a small product-neutral status', () 
     processing_mode: 'markdown-and-anonymize', warning_count: 0,
     preparing: false,
     processing: false,
+    batch_complete: false,
     review_required: true,
     resumable: false,
     results_available: true,
@@ -174,6 +175,71 @@ test('Standalone consumes one combined journal snapshot per public status poll',
   service.observedBatchId = batchId;
   assert.strictEqual(service.status().state, 'results_available');
   assert.strictEqual(snapshots, 1);
+});
+
+test('review window sees terminal completion only after the final review group', () => {
+  const batchId = 'a'.repeat(64);
+  const latest = { selected_count: 2, completed_count: 1, result_count: 1, failed_count: 0,
+    review_count: 1, review_ready: true, export_pending_count: 0, processing: false,
+    resumable: false, complete: false };
+  const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+    reviewSession: () => ({ ready: false }), latestProductBatchStatus: () => latest,
+    reviewContinuationBatchId: () => batchId
+  }) });
+  service.observedBatchId = batchId;
+  assert.deepStrictEqual(service.reviewSession(), { ready: false, run_complete: false,
+    continuation_available: true });
+  latest.review_ready = false;
+  latest.complete = true;
+  latest.completed_count = 2;
+  latest.result_count = 2;
+  assert.deepStrictEqual(service.reviewSession(), { ready: false, run_complete: true,
+    continuation_available: false });
+  latest.export_pending_count = 1;
+  assert.deepStrictEqual(service.reviewSession(), { ready: false, run_complete: false,
+    continuation_available: false });
+  service.observedBatchId = 'b'.repeat(64);
+  assert.deepStrictEqual(service.reviewSession(), { ready: false, run_complete: false,
+    continuation_available: false }, 'a review window must not continue or close based on another run');
+});
+
+testAsync('review-window continuation is bound to the run that supplied its answered draft', async () => {
+  const batchId = 'a'.repeat(64);
+  const latest = { selected_count: 2, completed_count: 1, result_count: 1, failed_count: 0,
+    review_count: 1, review_ready: true, export_pending_count: 0, processing: false,
+    resumable: true, complete: false };
+  let reviewedBatchId = batchId;
+  const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+    latestProductBatchStatus: () => latest,
+    reviewContinuationBatchId: () => reviewedBatchId
+  }) });
+  service.observedBatchId = batchId;
+  const calls = [];
+  service.continueHistoryBatch = async (id) => { calls.push(id); return { ok: true, event: 'batch_continued' }; };
+  assert.deepStrictEqual(await service.continueReviewSession(), { ok: true, event: 'batch_continued' });
+  assert.deepStrictEqual(calls, [batchId]);
+  reviewedBatchId = 'b'.repeat(64);
+  await assert.rejects(service.continueReviewSession(), { code: 'STANDALONE_NOTHING_TO_CONTINUE' });
+  latest.review_ready = false;
+  reviewedBatchId = batchId;
+  await assert.rejects(service.continueReviewSession(), { code: 'STANDALONE_NOTHING_TO_CONTINUE' });
+  assert.deepStrictEqual(calls, [batchId]);
+});
+
+testAsync('the desktop current-run continuation refuses a historical fallback after reconnect', async () => {
+  const batchId = 'c'.repeat(64);
+  let historicalFallbacks = 0;
+  const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+    continueMostRecentBatch: () => { historicalFallbacks++; throw new Error('UNEXPECTED_HISTORY_FALLBACK'); }
+  }) });
+  await assert.rejects(service.continueCurrentBatch(undefined, { requireObserved: true }),
+    { code: 'STANDALONE_NOTHING_TO_CONTINUE' });
+  service.observedBatchId = batchId;
+  let selected;
+  service.continueHistoryBatch = async (id) => { selected = id; return { ok: true }; };
+  assert.deepStrictEqual(await service.continueCurrentBatch(undefined, { requireObserved: true }), { ok: true });
+  assert.strictEqual(selected, batchId);
+  assert.strictEqual(historicalFallbacks, 0);
 });
 
 test('a restart leaves historical recoverable work in History and presents a fresh process card', () => {
@@ -231,6 +297,7 @@ test('Standalone exposes a recoverable batch as a resumable stopped state', () =
     processing_mode: 'markdown-and-anonymize', warning_count: 0,
     preparing: false,
     processing: false,
+    batch_complete: false,
     review_required: false,
     resumable: true,
     results_available: true,
@@ -368,7 +435,9 @@ test('Standalone UI contract limits source details to the local display', () => 
   assert.strictEqual(contract.network_listener, false);
   assert.strictEqual(contract.renderer_file_system_access, false);
   assert.strictEqual(contract.renderer_receives_source_paths, 'local-display-only');
-  assert.strictEqual(contract.renderer_receives_raw_content, false);
+  assert.strictEqual(contract.renderer_receives_raw_content, 'review-window-only');
+  assert.strictEqual(contract.main_renderer_receives_raw_content, false);
+  assert.strictEqual(contract.review_window.close_action, 'defer');
   assert.strictEqual(contract.renderer_receives_open_target, false);
   assert.strictEqual(contract.desktop_host_target_resolution, 'sidecar-resolve-rust-open');
   assert.strictEqual(contract.state_source, 'polled_public_status_snapshot');
@@ -380,7 +449,10 @@ test('Standalone UI contract limits source details to the local display', () => 
   assert.ok(contract.forbidden_payload_fields.includes('raw_content'));
   assert.deepStrictEqual(contract.commands, [
     'select_files', 'select_folder', 'remove_admitted_source', 'cancel_admission', 'start_admitted_batch',
-    'get_public_state', 'get_ui_context', 'get_run_history', 'open_history_results', 'open_history_ledger', 'continue_history_batch',
+    'get_public_state', 'get_ui_context', 'get_run_history', 'open_history_results', 'open_history_ledger',
+    'open_history_identity_mapping', 'open_identity_mappings_directory', 'continue_history_batch',
+    'open_review_window', 'close_review_window', 'get_review_session', 'get_review_chunk', 'submit_review',
+    'continue_review_session',
     'ack_terminal_presented', 'continue_current_batch', 'configure_results',
     'open_current_results', 'open_local_ledger', 'open_diagnostic_folder', 'shutdown'
   ]);
@@ -388,7 +460,10 @@ test('Standalone UI contract limits source details to the local display', () => 
     'admit_selected_sources', 'remove_admitted_source', 'cancel_admission', 'start_admitted_batch',
     'get_public_state', 'get_ui_context', 'ack_terminal_presented', 'continue_current_batch', 'configure_results',
     'resolve_current_results', 'resolve_local_ledger', 'get_run_history', 'get_run_failures',
-    'resolve_history_results', 'resolve_history_ledger', 'continue_history_batch', 'shutdown'
+    'resolve_history_results', 'resolve_history_ledger', 'resolve_history_identity_mapping',
+    'resolve_identity_mappings_directory',
+    'continue_history_batch',
+    'get_review_session', 'get_review_chunk', 'submit_review', 'continue_review_session', 'shutdown'
   ]);
 });
 
@@ -417,7 +492,7 @@ test('private desktop IPC is framed, bounded and independent of line endings', (
   assert.throws(() => encodeFrame({ ...message, raw_content: 'private' }),
     (error) => error.code === 'DESKTOP_IPC_FIELD_INVALID');
   assert.throws(() => encodeFrame({ ...message, action: 'submit_review', source_paths: undefined }),
-    (error) => error.code === 'DESKTOP_IPC_ACTION_INVALID');
+    (error) => error.code === 'DESKTOP_IPC_REVIEW_INVALID');
   const configure = { schema: message.schema, request_id: 'b'.repeat(16),
     action: 'configure_results', source_paths: ['/Users/demo/Results'] };
   assert.ok(encodeFrame(configure).length > 4);

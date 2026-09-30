@@ -97,6 +97,7 @@ xprop -root _NET_SUPPORTING_WM_CHECK 2>/dev/null | grep -q 'window id' || {
 
 env \
   DATASECURE_STANDALONE_NATIVE_SMOKE_ROOT="$test_root" \
+  DATASECURE_STANDALONE_NATIVE_SMOKE_REVIEW=1 \
   DATASECURE_STANDALONE_DOCUMENTS_DIR="$test_root/profile/Documents" \
   HOME="$test_root/profile" USERPROFILE="$test_root/profile" \
   LOCALAPPDATA="$test_root/profile/Local" APPDATA="$test_root/profile/Roaming" \
@@ -114,6 +115,8 @@ while ((SECONDS < deadline)); do
   if [[ -f "$desktop_log" && -f "$sidecar_log" ]] \
     && grep -q '"event":"page_loaded"' "$desktop_log" \
     && grep -q '"event":"frontend_ready"' "$desktop_log" \
+    && grep -q '"event":"review_page_loaded"' "$desktop_log" \
+    && grep -q '"action":"get_review_session"' "$sidecar_log" \
     && grep -q '"action":"get_public_state"' "$desktop_log" \
     && grep -q '"action":"get_ui_context"' "$desktop_log" \
     && grep -q '"event":"sidecar_started"' "$sidecar_log" \

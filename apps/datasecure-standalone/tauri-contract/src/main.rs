@@ -15,7 +15,7 @@ use std::{
     },
     time::{Duration, Instant, SystemTime, UNIX_EPOCH},
 };
-use tauri::{AppHandle, DragDropEvent, Emitter, Manager, State, WindowEvent};
+use tauri::{AppHandle, DragDropEvent, Emitter, Manager, State, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 const MAX_FRAME_BYTES: usize = 1024 * 1024;
 const MAX_ADMISSION_PATH_BYTES: usize = 768 * 1024;
@@ -735,7 +735,8 @@ fn rpc(
 fn history_request(request_id: &str, action: &str, batch_id: &str) -> Result<Value, String> {
     if !matches!(
         action,
-        "resolve_history_results" | "resolve_history_ledger" | "continue_history_batch" | "get_run_failures"
+        "resolve_history_results" | "resolve_history_ledger" | "resolve_history_identity_mapping"
+            | "continue_history_batch" | "get_run_failures"
     ) || batch_id.len() != 64
         || !batch_id
             .bytes()
@@ -1144,6 +1145,93 @@ async fn get_run_history(state: State<'_, DesktopState>) -> Result<Value, String
     blocking_rpc(state.inner().clone(), "get_run_history").await
 }
 
+#[tauri::command]
+async fn open_review_window(app: AppHandle) -> Result<Value, String> {
+    if let Some(window) = app.get_webview_window("review") {
+        window.show().map_err(|_| "STANDALONE_REVIEW_WINDOW_FAILED".to_string())?;
+        window.set_focus().map_err(|_| "STANDALONE_REVIEW_WINDOW_FAILED".to_string())?;
+    } else {
+        WebviewWindowBuilder::new(&app, "review", WebviewUrl::App("review.html".into()))
+            .title("DataSecure – lokale Prüfung")
+            .inner_size(1080.0, 760.0)
+            .min_inner_size(680.0, 500.0)
+            .build()
+            .map_err(|_| "STANDALONE_REVIEW_WINDOW_FAILED".to_string())?;
+    }
+    Ok(json!({ "ok": true, "opened": true }))
+}
+
+fn review_window_only(window: &tauri::WebviewWindow) -> Result<(), String> {
+    if window.label() == "review" { Ok(()) }
+    else { Err("STANDALONE_REVIEW_WINDOW_INVALID".to_string()) }
+}
+
+#[tauri::command]
+fn close_review_window(window: tauri::WebviewWindow) -> Result<Value, String> {
+    review_window_only(&window)?;
+    window.close().map_err(|_| "STANDALONE_REVIEW_WINDOW_FAILED".to_string())?;
+    Ok(json!({ "ok": true }))
+}
+
+#[tauri::command]
+async fn get_review_session(window: tauri::WebviewWindow, state: State<'_, DesktopState>) -> Result<Value, String> {
+    review_window_only(&window)?;
+    blocking_rpc(state.inner().clone(), "get_review_session").await
+}
+
+#[tauri::command]
+async fn get_review_chunk(
+    window: tauri::WebviewWindow,
+    state: State<'_, DesktopState>,
+    review_id: String,
+    chunk_index: u64,
+) -> Result<Value, String> {
+    review_window_only(&window)?;
+    if review_id.len() != 32 || !review_id.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
+        || chunk_index > 319 {
+        return Err("STANDALONE_REVIEW_SESSION_INVALID".to_string());
+    }
+    let owned = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let id = request_id();
+        rpc_request(&owned, "get_review_chunk", &id, json!({
+            "schema": IPC_SCHEMA, "request_id": id, "action": "get_review_chunk",
+            "review_id": review_id, "chunk_index": chunk_index
+        }))
+    }).await.map_err(|_| "STANDALONE_REVIEW_SESSION_INVALID".to_string())?
+}
+
+#[tauri::command]
+async fn submit_review(
+    window: tauri::WebviewWindow,
+    state: State<'_, DesktopState>,
+    review_id: String,
+    answer: Value,
+) -> Result<Value, String> {
+    review_window_only(&window)?;
+    if review_id.len() != 32 || !review_id.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)) {
+        return Err("STANDALONE_REVIEW_SESSION_INVALID".to_string());
+    }
+    let owned = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let id = request_id();
+        rpc_request(&owned, "submit_review", &id, json!({
+            "schema": IPC_SCHEMA, "request_id": id, "action": "submit_review",
+            "review_id": review_id, "answer": answer
+        }))
+    }).await.map_err(|_| "STANDALONE_REVIEW_DECISION_INVALID".to_string())?
+}
+
+#[tauri::command]
+async fn continue_review_session(
+    window: tauri::WebviewWindow,
+    state: State<'_, DesktopState>,
+) -> Result<Value, String> {
+    review_window_only(&window)?;
+    let _guard = selection_guard(&state.selection_busy, &state.admission_present, false)?;
+    blocking_rpc(state.inner().clone(), "continue_review_session").await
+}
+
 #[tauri::command(rename_all = "camelCase")]
 async fn get_run_failures(
     state: State<'_, DesktopState>,
@@ -1226,6 +1314,18 @@ async fn open_history_ledger(
     )
     .await
 }
+
+#[tauri::command(rename_all = "camelCase")]
+async fn open_history_identity_mapping(
+    state: State<'_, DesktopState>,
+    batch_id: String,
+) -> Result<Value, String> {
+    open_history_target(
+        state.inner().clone(), batch_id, "open_history_identity_mapping",
+        "resolve_history_identity_mapping", "file",
+    ).await
+}
+
 #[tauri::command]
 async fn ack_terminal_presented(
     state: State<'_, DesktopState>,
@@ -1325,6 +1425,25 @@ async fn open_local_ledger(state: State<'_, DesktopState>) -> Result<Value, Stri
     .map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())?
 }
 #[tauri::command]
+async fn open_identity_mappings_directory(state: State<'_, DesktopState>) -> Result<Value, String> {
+    let owned = state.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        let target = resolved_local_target(&owned, "resolve_identity_mappings_directory", "directory")
+            .inspect_err(|code| {
+                diagnostic_event(
+                    "local_target_validation_failed",
+                    Some("open_identity_mappings_directory"),
+                    "failed",
+                    Some(code),
+                    None,
+                );
+            })?;
+        open_local_target(&target, "directory", "open_identity_mappings_directory")
+    })
+    .await
+    .map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())?
+}
+#[tauri::command]
 async fn open_diagnostic_folder() -> Result<Value, String> {
     let directory = diagnostic_directory();
     std::fs::create_dir_all(&directory)
@@ -1347,6 +1466,16 @@ fn frontend_ready(state: State<'_, DesktopState>, native_drop_ready: Option<bool
         .frontend_ready
         .store(native_drop_ready == Some(true), Ordering::Release);
     diagnostic_event("frontend_ready", None, "ready", None, None);
+    if NATIVE_SMOKE_PROFILE.get().and_then(Option::as_ref).is_some()
+        && std::env::var("DATASECURE_STANDALONE_NATIVE_SMOKE_REVIEW").as_deref() == Ok("1")
+    {
+        let app = state.app.clone();
+        tauri::async_runtime::spawn(async move {
+            if open_review_window(app).await.is_err() {
+                diagnostic_event("review_window_open_failed", None, "error", None, None);
+            }
+        });
+    }
     json!({ "ok": true, "product_version": env!("CARGO_PKG_VERSION"),
         "admission_prepared": state.admission_present.load(Ordering::Acquire) })
 }
@@ -1370,8 +1499,9 @@ fn main() {
         diagnostic_event("webview_profile_ready", None, "ready", None, None);
     }
     let result = tauri::Builder::default()
-        .on_page_load(|_webview, _payload| {
-            diagnostic_event("page_loaded", None, "ready", None, None);
+        .on_page_load(|webview, _payload| {
+            let event = if webview.label() == "review" { "review_page_loaded" } else { "page_loaded" };
+            diagnostic_event(event, None, "ready", None, None);
         })
         .setup(|app| {
             diagnostic_event("setup_started", None, "progress", None, None);
@@ -1387,6 +1517,25 @@ fn main() {
             Ok(())
         })
         .on_window_event(|window, event| {
+            if window.label() == "review" {
+                if matches!(event, WindowEvent::CloseRequested { .. }) {
+                    if let Some(state) = window.try_state::<DesktopState>() {
+                        let owned = state.inner().clone();
+                        tauri::async_runtime::spawn_blocking(move || {
+                            if let Ok(session) = rpc(&owned, "get_review_session", None, &[], None, None) {
+                                if let Some(review_id) = session.get("review_id").and_then(Value::as_str) {
+                                    let id = request_id();
+                                    let _ = rpc_request(&owned, "submit_review", &id, json!({
+                                        "schema": IPC_SCHEMA, "request_id": id, "action": "submit_review",
+                                        "review_id": review_id, "answer": { "action": "deferred" }
+                                    }));
+                                }
+                            }
+                        });
+                    }
+                }
+                return;
+            }
             if window.label() != "main" {
                 return;
             }
@@ -1432,10 +1581,18 @@ fn main() {
             get_public_state,
             get_ui_context,
             get_run_history,
+            open_review_window,
+            close_review_window,
+            get_review_session,
+            get_review_chunk,
+            submit_review,
+            continue_review_session,
             get_run_failures,
             continue_history_batch,
             open_history_results,
             open_history_ledger,
+            open_history_identity_mapping,
+            open_identity_mappings_directory,
             ack_terminal_presented,
             continue_current_batch,
             configure_results,

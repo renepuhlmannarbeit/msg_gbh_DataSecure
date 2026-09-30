@@ -601,6 +601,22 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     }
     diagnosticStage = 'verified';
 
+    // The optional Standalone-only human mapping is captured privately before
+    // publication, so a crash after the package rename cannot lose the raw
+    // values. A missing private mapping never weakens the final residual gate
+    // or changes the anonymized Markdown that is released.
+    if (deps.productChannel === 'standalone' && typeof deps.persistStandaloneIdentitySnapshot === 'function') {
+      const entries = ['PERSON', 'ORG', 'PROJECT'].flatMap((kind) =>
+        (pseudonymRegistry.entriesForKind?.(kind) || [])
+          .filter(({ placeholder }) => typeof placeholder === 'string' && finalText.includes(placeholder) &&
+            /^\[(?:PERSON|UNTERNEHMEN|PROJEKT)_\d{3,5}\]$/u.test(placeholder))
+          .map(({ value, placeholder }) => ({ pseudonym: placeholder, original: value })));
+      const captured = new Set(entries.map((entry) => entry.pseudonym));
+      const unmapped_labels = [...new Set(finalText.match(/\[(?:PERSON|UNTERNEHMEN|PROJEKT)_\d{3,5}\]/gu) || [])]
+        .filter((label) => !captured.has(label));
+      await deps.persistStandaloneIdentitySnapshot({ package_id: packageId, entries, unmapped_labels });
+    }
+
     // DS-045 is derived from the exact, already verified release signals.
     // Free-form warnings and unknown visual coverage can never be downgraded
     // into a harmless omission by a model or a caller.

@@ -234,6 +234,14 @@ try {
   assert.equal(mappingText.charCodeAt(0), 0xfeff,
     'the visible mapping must carry an UTF-8 BOM so Excel decodes German punctuation correctly');
   for (const name of sourceNames) assert.ok(mappingText.includes(name), 'every source must have a mapping row');
+  const confidentialFolder = path.join(exactRun, 'VERTRAULICH-NICHT-HOCHLADEN');
+  const identities = path.join(confidentialFolder, 'DataSecure-Identitaeten-VERTRAULICH.txt');
+  assert.equal(fs.statSync(identities).isFile(), true,
+    'the shipped Standalone sidecar places the human mapping in the marked run subfolder');
+  assert.deepEqual(fs.readdirSync(confidentialFolder), ['DataSecure-Identitaeten-VERTRAULICH.txt'],
+    'private per-file snapshots never enter the result directory');
+  assert.match(fs.readFileSync(identities, 'utf8'), /NICHT in KI-Systeme hochladen/u);
+  assert.match(fs.readFileSync(identities, 'utf8'), /\[PERSON_001\] = lina testfeld/iu);
   const outputs = relativeFiles(exactRun).filter((name) => name.endsWith('.md'));
   assert.equal(outputs.length, 4, 'the actual mixed-format run must export all four results');
   assert.deepEqual(outputs, ['csv/Dokument-001-anonymisiert.md', 'docx/Dokument-002-anonymisiert.md',

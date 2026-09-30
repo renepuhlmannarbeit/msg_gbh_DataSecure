@@ -25,6 +25,7 @@ const { readConfiguredResultRoot } = require('../plugins/data-secure/server/gate
 const reservation = require('../plugins/data-secure/server/gateway/batch-intake-reservation');
 const historyStore = require('../plugins/data-secure/server/gateway/standalone-history-store');
 const { createRunHistory } = require('../plugins/data-secure/server/standalone/run-history');
+const identityLedger = require('../plugins/data-secure/server/standalone/identity-ledger');
 const { StandaloneApplicationService } = require('../plugins/data-secure/server/standalone/application-service');
 const { createBatchPseudonymState } = require('../plugins/data-secure/server/batch-pseudonym-context');
 const now = Date.now();
@@ -53,7 +54,7 @@ function stateFixture(character, offset = 0, extra = {}) {
   }
   return state;
 }
-function completeFixture(character, offset) {
+function completeFixture(character, offset, identities = null) {
   const itemId = character.repeat(32);
   const packageId = `ds_${itemId}`;
   const directory = path.join(roots().output, packageId);
@@ -68,6 +69,7 @@ function completeFixture(character, offset) {
   }));
   const state = stateFixture(character, offset, { items: [{ id: itemId, name: 'private-source-name.txt',
     status: 'released', package_id: packageId, source_label: 'private-source-name.txt' }] });
+  if (identities) identityLedger.capture(state.token, itemId, packageId, identities);
   assert.equal(exportsApi.exportCompletedState(state).available, true);
   return state;
 }
@@ -167,7 +169,8 @@ function code(expected) { return (error) => error?.code === expected; }
     try { assert.throws(() => batch.continueStandaloneBatch(older.token), code('STANDALONE_BUSY')); }
     finally { batch._test.releaseActiveLock('9'.repeat(64)); }
 
-    const completed = completeFixture('d', 2000);
+    const completed = completeFixture('d', 2000,
+      [{ pseudonym: '[PERSON_001]', original: 'Synthetischer Testname' }]);
     const originalRun = exportsApi.visibleExportDirectory(completed.token);
     const completedTwo = completeFixture('e', 3000);
     const secondRun = exportsApi.visibleExportDirectory(completedTwo.token);
@@ -175,6 +178,20 @@ function code(expected) { return (error) => error?.code === expected; }
     assert.equal(history.resolveResults(completed.token).local_path, originalRun);
     assert.equal(history.resolveLedger(completed.token).local_path, path.join(originalRun, 'DataSecure-Zuordnung.csv'));
     assert.equal(history.resolveResults(completedTwo.token).local_path, secondRun);
+    assert.equal(fs.existsSync(path.join(originalRun, 'VERTRAULICH-NICHT-HOCHLADEN',
+      'DataSecure-Identitaeten-VERTRAULICH.txt')), true,
+    'a completed standalone export creates only the marked human-readable copy');
+    assert.equal(history.find(completed.token).identity_mapping_available, true);
+    assert.doesNotMatch(JSON.stringify(history.history()), /Synthetischer Testname/u,
+      'history returns only the availability bit, never an identity value');
+    const identityTarget = history.resolveIdentityMapping(completed.token);
+    assert.equal(identityTarget.target_kind, 'file');
+    assert.equal(identityTarget.local_path, path.join(originalRun, 'VERTRAULICH-NICHT-HOCHLADEN',
+      'DataSecure-Identitaeten-VERTRAULICH.txt'));
+    assert.match(fs.readFileSync(identityTarget.local_path, 'utf8'), /\[PERSON_001\] = Synthetischer Testname/u);
+    assert.equal(history.find(completed.token).identity_mapping_available, true);
+    assert.equal(history.resolveResults(completed.token).local_path, originalRun,
+      'the confidential copy does not change the anonymized result binding');
     await assert.rejects(service.continueHistoryBatch(completed.token), code('STANDALONE_NOTHING_TO_CONTINUE'));
 
     const allStopped = stateFixture('4', 1500, { items: [{ id: '4'.repeat(32), name: 'blocked.docx',
@@ -374,6 +391,9 @@ function code(expected) { return (error) => error?.code === expected; }
       assert.equal(activeRow.completed_count, 0); assert.equal(activeRow.review_count, 1);
     } finally { assert.equal(batch.releaseLocalBatchExecutor(activeHistory.token, process.pid), true); }
 
+    identityLedger.capture(completedTwo.token, completedTwo.items[0].id, completedTwo.items[0].package_id,
+      [{ pseudonym: '[PERSON_002]', original: 'Älterer synthetischer Name' }]);
+    const olderIdentity = identityLedger.materialize(completedTwo).local_path;
     for (let index = 0; index < 25; index++) {
       const token = (1000 + index).toString(16).padStart(64, '0');
       const state = { ...older, token, created_at: new Date(now + 10000 + index * 1000).toISOString() };
@@ -384,6 +404,9 @@ function code(expected) { return (error) => error?.code === expected; }
     assert.equal(snapshot.entries[0].batch_id, (1024).toString(16).padStart(64, '0'));
     assert.equal(snapshot.entries.at(-1).batch_id, (1005).toString(16).padStart(64, '0'));
     assert.throws(() => history.resolveResults(completedTwo.token), code('STANDALONE_HISTORY_MISSING'), 'out-of-window stale IDs fail closed');
+    assert.equal(fs.existsSync(olderIdentity), true, 'last-20 history never deletes an older human mapping');
+    assert.equal(path.dirname(path.dirname(olderIdentity)), identityLedger.resolveDirectory(),
+      'the private directory action keeps older mappings locally reachable');
     assert.equal(fs.existsSync(secondRun), true, 'last-20 retention never deletes visible results');
     process.stdout.write('STANDALONE HISTORY PASS\n');
   } finally {

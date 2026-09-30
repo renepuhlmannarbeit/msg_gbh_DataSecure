@@ -11,13 +11,13 @@
       "product_target": "windows-x64",
       "rust_target": "x86_64-pc-windows-msvc",
       "sidecar_filename": "datasecure-core-x86_64-pc-windows-msvc.exe",
-      "package_filename": "DataSecure-Standalone-3.2.0-rc151-windows-x64.zip"
+      "package_filename": "DataSecure-Standalone-3.2.0-rc157-windows-x64.zip"
     },
     {
       "product_target": "macos-x64",
       "rust_target": "x86_64-apple-darwin",
       "sidecar_filename": "datasecure-core-x86_64-apple-darwin",
-      "package_filename": "DataSecure-Standalone-3.2.0-rc151-macos-x64.zip",
+      "package_filename": "DataSecure-Standalone-3.2.0-rc157-macos-x64.zip",
       "minimum_system_version": "13.5",
       "native_execution_required": true,
       "gatekeeper_guide": "MACOS-START.md"
@@ -26,7 +26,7 @@
       "product_target": "macos-arm64",
       "rust_target": "aarch64-apple-darwin",
       "sidecar_filename": "datasecure-core-aarch64-apple-darwin",
-      "package_filename": "DataSecure-Standalone-3.2.0-rc151-macos-arm64.zip",
+      "package_filename": "DataSecure-Standalone-3.2.0-rc157-macos-arm64.zip",
       "minimum_system_version": "13.5",
       "native_execution_required": true,
       "gatekeeper_guide": "MACOS-START.md"
@@ -35,7 +35,7 @@
       "product_target": "linux-x64-glibc",
       "rust_target": "x86_64-unknown-linux-gnu",
       "sidecar_filename": "datasecure-core-x86_64-unknown-linux-gnu",
-      "package_filename": "DataSecure-Standalone-3.2.0-rc151-linux-x64-glibc.zip",
+      "package_filename": "DataSecure-Standalone-3.2.0-rc157-linux-x64-glibc.zip",
       "minimum_glibc_version": "2.35",
       "distribution_format": "appimage-in-zip",
       "start_guide": "LINUX-START.md"

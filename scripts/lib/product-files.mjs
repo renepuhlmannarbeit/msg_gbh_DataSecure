@@ -25,7 +25,10 @@ const sharedStandaloneModules = new Set([
   'server/standalone/markdown-artifact.js',
   'server/standalone/markdown-contract.js',
   'server/standalone/markdown-retention.js',
-  'server/standalone/markdown-store.js'
+  'server/standalone/markdown-store.js',
+  // The shared batch module references this inert Standalone-only sink.
+  // Cowork has no UI/IPC action and never invokes it because the channel is guarded.
+  'server/standalone/identity-ledger.js'
 ]);
 
 function excludedEngineeringFile(normalized) {

@@ -89,9 +89,33 @@ test('Tauri renderer has no direct file, dialog, shell or network permission', (
     ['core:event:allow-listen', 'core:event:allow-unlisten'].includes(permission)));
   assert.strictEqual(config.build.devUrl, undefined);
   assert.deepStrictEqual(config.bundle.externalBin, ['binaries/datasecure-core']);
-  assert.deepStrictEqual(config.app.security.capabilities, ['main-window']);
+  assert.deepStrictEqual(config.app.security.capabilities, ['main-window', 'review-window']);
   assert.match(config.app.security.csp, /default-src 'self'/u);
   assert.doesNotMatch(config.app.security.csp, /https:|wss:|ws:/u);
+});
+
+test('local review window is created by an async command on Windows', () => {
+  // Tauri/WebView2 can leave a window white when its builder runs in a synchronous command.
+  assert.match(rust, /#\[tauri::command\]\s*async fn open_review_window\(app: AppHandle\)/u);
+  assert.match(rust, /WebviewWindowBuilder::new\(&app, "review", WebviewUrl::App\("review\.html"\.into\(\)\)\)/u);
+  assert.match(rust, /"review_page_loaded"/u);
+  const reviewCapability = JSON.parse(fs.readFileSync(path.join(root, 'tauri-contract/capabilities/review.json'), 'utf8'));
+  const permissions = fs.readFileSync(path.join(root, 'tauri-contract/permissions/commands.toml'), 'utf8');
+  assert.deepStrictEqual(reviewCapability.windows, ['review']);
+  assert.ok(reviewCapability.permissions.includes('allow-close-review-window'));
+  assert.ok(!capability.permissions.includes('allow-close-review-window'));
+  assert.ok(reviewCapability.permissions.includes('allow-continue-review-session'));
+  assert.ok(!capability.permissions.includes('allow-continue-review-session'));
+  assert.match(permissions, /commands\.allow = \["close_review_window"\]/u);
+  assert.match(permissions, /commands\.allow = \["continue_review_session"\]/u);
+  assert.match(rust, /fn close_review_window\(window: tauri::WebviewWindow\)[\s\S]*?review_window_only\(&window\)\?/u);
+  assert.match(rust, /async fn continue_review_session\([\s\S]*?review_window_only\(&window\)\?/u);
+  assert.match(rust, /if let Some\(window\) = app\.get_webview_window\("review"\)/u,
+    'the next review group reuses the existing review window');
+  assert.match(nativeSmoke, /STANDALONE_NATIVE_REVIEW_WINDOW_TIMEOUT/u);
+  for (const name of ['review.html', 'review.js', 'review.css']) {
+    assert.ok(fs.statSync(path.join(root, 'frontend', name)).size > 0, `${name} must be packaged`);
+  }
 });
 
 test('the Tauri contract is now a buildable shell with private sidecar mediation', () => {
@@ -110,7 +134,7 @@ test('the Tauri contract is now a buildable shell with private sidecar mediation
     'Node must not receive a Windows verbatim path in its preload argument');
   assert.match(rust, /DATASECURE_STANDALONE_DIAGNOSTIC_SESSION/u);
   assert.match(rust, /"session_id": diagnostic_session\(\)/u);
-  assert.match(rust, /diagnostic_event\("page_loaded"/u);
+  assert.match(rust, /if webview\.label\(\) == "review" \{ "review_page_loaded" \} else \{ "page_loaded" \}/u);
   assert.match(rust, /diagnostic_event\("setup_started"/u);
   assert.match(rust, /diagnostic_event\("webview_profile_ready"/u);
   assert.match(rust, /diagnostic_event\("setup_completed"/u);
@@ -120,7 +144,7 @@ test('the Tauri contract is now a buildable shell with private sidecar mediation
   assert.match(rust, /fn frontend_ready\(/u);
   assert.doesNotMatch(rust, /"HTTP_PROXY"|"HTTPS_PROXY"|"OPENAI_API_KEY"|"ANTHROPIC_API_KEY"/u);
   assert.match(rust, /process_guard\.take\(\)/u);
-  assert.doesNotMatch(frontend, /source_path|source_paths|raw_content|mapping|fetch\s*\(/u);
+  assert.doesNotMatch(frontend, /source_path|source_paths|raw_content|fetch\s*\(/u);
   assert.match(frontend, /choose\('select_files'\)/u);
   assert.doesNotMatch(frontend, /setInterval\s*\(/u);
   assert.match(frontend, /refreshInFlight/u);
@@ -144,7 +168,7 @@ test('the Tauri contract is now a buildable shell with private sidecar mediation
   assert.match(frontend, /action-feedback/u);
   assert.match(frontend, /activeView = 'home'/u);
   assert.strictEqual((frontend.match(/switchView\('results'\)/gu) || []).length, 2,
-    'only explicit completion and resume-navigation buttons open history');
+    'only explicit completion and resume actions open history; review is not a global navigation button');
   assert.match(sidecar, /local_target_requested/u);
   assert.match(sidecar, /local_target_resolved/u);
   assert.match(sidecar, /local_target_resolution_failed/u);
@@ -233,7 +257,8 @@ test('processing purpose crosses only the explicit desktop Start and cannot chan
   const continuing = rust.slice(rust.indexOf('async fn continue_current_batch'), rust.indexOf('async fn configure_results'));
   assert.doesNotMatch(continuing, /processing_mode/u);
   assert.match(frontend, /byId\('continue'\)\.addEventListener\('click', \(\) => switchView\('results'\)\)/u);
-  assert.doesNotMatch(frontend, /call\('continue_current_batch'\)/u);
+  assert.match(frontend, /call\('continue_current_batch'\)/u);
+  assert.match(sidecar, /service\.continueCurrentBatch\(undefined, \{ requireObserved: true \}\)/u);
   const html = fs.readFileSync(path.join(root, 'frontend/index.html'), 'utf8');
   assert.match(html, /value="" selected/u);
   assert.match(html, /id="processing-mode"[^>]* disabled/u, 'startup cannot choose a mode before status is known');

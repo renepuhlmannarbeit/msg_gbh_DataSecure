@@ -13,7 +13,10 @@ const PRIVATE_ACTIONS = new Set([
   'get_public_state', 'get_ui_context', 'ack_terminal_presented', 'continue_current_batch', 'configure_results',
   'resolve_current_results', 'resolve_local_ledger', 'get_run_history',
   'get_run_failures',
-  'resolve_history_results', 'resolve_history_ledger', 'continue_history_batch', 'shutdown'
+  'resolve_history_results', 'resolve_history_ledger', 'resolve_history_identity_mapping',
+  'resolve_identity_mappings_directory',
+  'continue_history_batch',
+  'get_review_session', 'get_review_chunk', 'submit_review', 'continue_review_session', 'shutdown'
 ]);
 
 function fail(code, message) {
@@ -28,7 +31,8 @@ function validatePrivateMessage(message) {
   if (!PRIVATE_ACTIONS.has(message.action))
     fail('DESKTOP_IPC_ACTION_INVALID', 'Unbekannte Desktop-Aktion.');
   const allowedFields = new Set(['schema', 'request_id', 'action']);
-  if (['resolve_history_results', 'resolve_history_ledger', 'continue_history_batch'].includes(message.action)) {
+  if (['resolve_history_results', 'resolve_history_ledger', 'resolve_history_identity_mapping',
+    'continue_history_batch'].includes(message.action)) {
     allowedFields.add('batch_id');
     if (typeof message.batch_id !== 'string' || !/^[a-f0-9]{64}$/u.test(message.batch_id))
       fail('STANDALONE_HISTORY_INVALID', 'Ungültige lokale Laufkennung.');
@@ -59,6 +63,29 @@ function validatePrivateMessage(message) {
     if (!Number.isSafeInteger(message.presentation_generation) || message.presentation_generation < 1 ||
         message.presentation_generation > MAX_PRESENTATION_GENERATION)
       fail('DESKTOP_IPC_PRESENTATION_GENERATION_INVALID', 'Ungültige Darstellungskennung.');
+  }
+  if (message.action === 'get_review_chunk' || message.action === 'submit_review') {
+    allowedFields.add('review_id');
+    if (typeof message.review_id !== 'string' || !/^[a-f0-9]{32}$/u.test(message.review_id))
+      fail('DESKTOP_IPC_REVIEW_INVALID', 'Ungültige lokale Prüfkennung.');
+    if (message.action === 'get_review_chunk') {
+      allowedFields.add('chunk_index');
+      if (!Number.isSafeInteger(message.chunk_index) || message.chunk_index < 0 || message.chunk_index > 319)
+        fail('DESKTOP_IPC_REVIEW_INVALID', 'Ungültiger lokaler Prüfabschnitt.');
+    } else {
+      allowedFields.add('answer');
+      const answer = message.answer;
+      if (!answer || typeof answer !== 'object' || Array.isArray(answer) ||
+          !['deferred', 'reviewed'].includes(answer.action) ||
+          (answer.action === 'deferred' && Object.keys(answer).sort().join(',') !== 'action') ||
+          (answer.action === 'reviewed' && (Object.keys(answer).sort().join(',') !== 'action,decisions,redactions' ||
+            !Array.isArray(answer.decisions) || answer.decisions.length > 10000 ||
+            !answer.decisions.every((item) => item && Object.keys(item).sort().join(',') === 'ambiguity_id,decision' &&
+              typeof item.ambiguity_id === 'string' && item.ambiguity_id.length <= 80 &&
+              ['keep', 'redact'].includes(item.decision)) ||
+            !Array.isArray(answer.redactions) || answer.redactions.length !== 0)))
+        fail('DESKTOP_IPC_REVIEW_INVALID', 'Ungültige lokale Prüfentscheidung.');
+    }
   }
   if (message.action === 'admit_selected_sources' || message.action === 'configure_results') {
     allowedFields.add('source_paths');

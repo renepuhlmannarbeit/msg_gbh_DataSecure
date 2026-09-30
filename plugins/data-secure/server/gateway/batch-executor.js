@@ -778,6 +778,7 @@ function startLocalReviewExecutor(token, options = {}) {
     pendingReviews.set(token, child);
     child.on?.('message', (message) => {
       if (acceptance.accept(message)) return;
+      if (options.appReview?.receive(child, message)) return;
       const progress = localBatchStateProgress(message, new Set(['local-review-state']));
       if (!progress) return;
       presentTerminalNoticeAsParent(token, child,
@@ -794,8 +795,10 @@ function startLocalReviewExecutor(token, options = {}) {
         error_code: code === 0 && !failed ? 'NONE' : 'LOCAL_REVIEW_WORKER_EXITED' });
       if (claimedLease) releaseExecutor(token, pid);
       if (pendingReviews.get(token) === child) pendingReviews.delete(token);
+      options.appReview?.release(child);
     };
-    child.send({ type: 'start-local-review', batch_token: token }, (error) => {
+    child.send({ type: 'start-local-review', batch_token: token,
+      ...(options.appReview ? { ui: 'standalone-app' } : {}) }, (error) => {
       if (worker.ended || worker.failed) return;
       if (error) { worker.fail('LOCAL_IPC_FAILED'); return; }
       lifecycle({ event: error ? 'review_ipc_failed' : 'review_ipc_dispatched', outcome: error ? 'stopped' : 'ok',

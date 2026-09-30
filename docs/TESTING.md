@@ -1,6 +1,6 @@
 # Aktueller Testvertrag
 
-Stand: 23.09.2026 · 3.2.0-rc151
+Stand: 23.09.2026 · 3.2.0-rc157
 
 Das vollständige chronologische Testjournal bis RC84 liegt unverändert im
 [Archiv](archive/2026-09/testing/TESTING_HISTORY_THROUGH_RC84.md). Diese Datei
@@ -193,6 +193,12 @@ echte Worker-Übergabe bis zum dauerhaften Endzustand und nativen Binary-Smoke:
 ```text
 npm run test:standalone:pkg-04 -- -ExpectedCommit <vollständiger Commit>
 ```
+
+Seit RC153 startet der native PKG-04-Smoke außerdem das separate Standalone-
+Prüffenster und verlangt `review_page_loaded` sowie den ersten
+`get_review_session`-Aufruf. Damit wird ein weißes, nicht initialisiertes
+WebView2-Zusatzfenster erkannt; die sichtbare Entscheidung eines echten
+Reviewfunds und die Wiederaufnahme eines Anwenderlaufs bleiben eigene UAT-Fälle.
 
 Erst nach `PKG-04 PASS` schreibt der Runner eine separate
 `INT-13-BINDING.json`. `INT-13` bindet damit genau einen Kandidaten an Commit,

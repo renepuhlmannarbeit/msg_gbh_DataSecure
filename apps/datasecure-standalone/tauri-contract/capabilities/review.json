@@ -1,0 +1,13 @@
+{
+  "identifier": "review-window",
+  "description": "Nur die lokale, flüchtige Standalone-Prüfsitzung; keine Datei-, Dialog-, Shell- oder Netzwerkrechte.",
+  "windows": ["review"],
+  "local": true,
+  "permissions": [
+    "allow-get-review-session",
+    "allow-close-review-window",
+    "allow-get-review-chunk",
+    "allow-submit-review",
+    "allow-continue-review-session"
+  ]
+}

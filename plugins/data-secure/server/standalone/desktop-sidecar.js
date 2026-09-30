@@ -86,7 +86,8 @@ function publicError(requestId, error) {
     'STANDALONE_RESULT_ROOT_UNSAFE', 'STANDALONE_RESULT_OPEN_FAILED',
     'STANDALONE_RESULTS_MISSING',
     'STANDALONE_LEDGER_MISSING', 'STANDALONE_LEDGER_OPEN_FAILED',
-    'STANDALONE_HISTORY_INVALID', 'STANDALONE_HISTORY_MISSING', 'STANDALONE_HISTORY_UNAVAILABLE'
+    'STANDALONE_HISTORY_INVALID', 'STANDALONE_HISTORY_MISSING', 'STANDALONE_HISTORY_UNAVAILABLE',
+    'STANDALONE_REVIEW_SESSION_INVALID', 'STANDALONE_REVIEW_DECISION_INVALID'
   ]);
   const code = allowed.has(error?.code) ? error.code : 'STANDALONE_OPERATION_FAILED';
   const localDetails = code === 'SOURCE_FOLDER_UNSUPPORTED_FILES' &&
@@ -119,20 +120,30 @@ async function dispatch(message) {
     case 'get_ui_context': return service.uiContext();
     case 'get_run_history': return service.history();
     case 'get_run_failures': return service.runFailures(message.batch_id);
+    case 'get_review_session': return service.reviewSession();
+    case 'get_review_chunk': return service.reviewChunk(message.review_id, message.chunk_index);
+    case 'submit_review': return service.submitReview(message.review_id, message.answer);
+    case 'continue_review_session': return service.continueReviewSession();
     case 'continue_history_batch': return service.continueHistoryBatch(message.batch_id);
     case 'ack_terminal_presented': return service.acknowledgeTerminalPresented(message.presentation_generation);
-    case 'continue_current_batch': return service.continueCurrentBatch();
+    case 'continue_current_batch': return service.continueCurrentBatch(undefined, { requireObserved: true });
     case 'configure_results': return service.configureResults({ path: message.source_paths[0] });
     case 'resolve_current_results':
     case 'resolve_local_ledger':
     case 'resolve_history_results':
-    case 'resolve_history_ledger': {
+    case 'resolve_history_ledger':
+    case 'resolve_history_identity_mapping':
+    case 'resolve_identity_mappings_directory': {
       diagnosticEvent('local_target_requested', { action: message.action });
       try {
         const result = message.action === 'resolve_history_results'
           ? service.resolveHistoryResults(message.batch_id)
           : message.action === 'resolve_history_ledger'
             ? service.resolveHistoryLedger(message.batch_id)
+            : message.action === 'resolve_history_identity_mapping'
+              ? service.resolveHistoryIdentityMapping(message.batch_id)
+            : message.action === 'resolve_identity_mappings_directory'
+              ? service.resolveIdentityMappingsDirectory()
             : message.action === 'resolve_current_results'
               ? service.resolveResults() : service.resolveLedger();
         diagnosticEvent('local_target_resolved', { action: message.action, outcome: 'ready' });

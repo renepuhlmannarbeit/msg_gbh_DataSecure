@@ -1,10 +1,26 @@
 # Release- und Distributionsvertrag
 
-Stand: 29.09.2026 · 3.2.0-rc151
+Stand: 30.09.2026 · 3.2.0-rc157
 
-Der aktuelle Quellstand ist als RC151-Vorabkandidat für beide getrennten
-Produkte auf ihren jeweiligen Zielplattformen gebunden. Technische Paketprüfung
-ist keine menschliche Produkt- oder Produktionsfreigabe.
+Der aktuelle Quellstand ist RC157-Entwicklungsstand. Daraus ist ein **lokaler
+Windows-Testkandidat** gebaut: ZIP-Verifikation, isolierter Paket-Smoke und
+nativer Start einschließlich geladener Prüfseite bestanden. „Jetzt prüfen“
+öffnet die lokale Prüfung direkt aus der aktuellen Laufkarte; gezielte
+Frontend-/Service-/IPC-Tests bestätigen die Bindung an diesen Lauf.
+Der RC157-Windows-Anwenderlauf `3d6b69b7` samt lokaler Prüfung und
+Stapelverarbeitung wurde am 30.09.2026 ausdrücklich als vollständig bestanden
+bestätigt. Die nur lesende Nachkontrolle findet 140 Markdown-Ergebnisse,
+140 Dateizuordnungen und die vertrauliche Identitäts-TXT mit 140/140 erfassten
+Ergebnisdateien. Der frühere RC156-Lauf `ca4349c5` bestand ebenfalls.
+Der abschließende Release-Review fand einen Einzeldokument-Randfall: Auch ein
+einziger mehrdeutiger Inhalt wird nun ausdrücklich in den Standalone-App-Review
+vertagt, statt während der Analyse den alten nativen Dialog zu öffnen.
+Ein gezielter Drei-Plattform-Vertrag prüft dies; Coworks Einzelreview bleibt
+unverändert. Der veröffentlichte Windows-Neubau wird deshalb zusätzlich technisch
+geprüft und nicht als bytegleich zum vorherigen Anwender-Test-ZIP behauptet.
+RC157 ist weder auf main gepusht noch
+veröffentlicht; technische Paketprüfung ist keine menschliche Produkt- oder
+Produktionsfreigabe.
 
 ### RC151 – Standalone und Cowork auf allen Zielplattformen
 

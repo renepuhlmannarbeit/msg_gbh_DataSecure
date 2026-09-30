@@ -85,6 +85,7 @@
         </dl>
         <div class="actions">
           <button id="process-results" disabled title="Noch kein Ergebnisordner verfügbar.">Ergebnisordner</button>
+          <button id="review-open" type="button" hidden>Prüffenster für diesen Lauf öffnen</button>
           <button id="start" class="primary" aria-describedby="start-help" disabled hidden>Starten</button>
           <button id="cancel" hidden>Auswahl leeren</button>
           <button id="continue" class="primary" hidden>Im Verlauf fortsetzen</button>
@@ -95,6 +96,7 @@
           <h2 id="process-completion-title">Dieser Lauf ist beendet</h2>
           <p id="process-completion-help" class="section-intro">Den Abschluss findest du im Verlauf. Bereite für weitere Dateien einen neuen Lauf vor.</p>
           <div class="actions">
+            <button id="process-completion-review" class="primary" hidden>Jetzt prüfen</button>
             <button id="prepare-new-run" class="primary">Neuen Lauf vorbereiten</button>
             <button id="process-completion-results" disabled title="Noch kein Ergebnisordner verfügbar.">Ergebnisordner</button>
             <button id="process-completion-history">Lauf im Verlauf ansehen</button>
@@ -109,7 +111,7 @@
       <div id="results-view" class="view" role="tabpanel" aria-labelledby="tab-results" tabindex="0" hidden>
         <h2>Deine letzten Läufe</h2>
         <p class="section-intro">Ergebnisordner gehören immer zum jeweiligen Lauf. Eine Zuordnung gibt es nur für anonymisierte Ergebnisse. Die Übersicht bleibt auf diesem Gerät.</p>
-        <p id="result-sharing-notice" class="mode-help">Vor einer Weitergabe: Nur die geprüften Markdown-Ergebnisse auswählen, nicht pauschal den ganzen Laufordner. Auch bei neutralen Dateinamen können Unterordnernamen und die Zuordnungsdatei Originalangaben enthalten. Reine Markdown-Konvertierung anonymisiert keine Inhalte.</p>
+        <p id="result-sharing-notice" class="mode-help">Vor einer Weitergabe: Nur die einzeln geprüften anonymisierten Markdown-Ergebnisse auswählen, nie den ganzen Laufordner. Der Unterordner „VERTRAULICH-NICHT-HOCHLADEN“ enthält echte Identitäten; auch die Zuordnungsdatei und Unterordnernamen können Originalangaben enthalten. Reine Markdown-Konvertierung anonymisiert keine Inhalte.</p>
         <p id="history-feedback" class="mode-help" role="status">Der Verlauf wird beim Öffnen geladen.</p>
         <div class="table-scroll" tabindex="0" role="region" aria-label="Letzte 20 Läufe">
           <table id="history-table" hidden>
@@ -130,14 +132,16 @@
       <p id="action-feedback" class="action-feedback" role="status" aria-live="polite" hidden></p>
       <details class="settings">
         <summary>Einstellungen und Hilfe</summary>
-        <p>Hier kannst du den künftigen Ergebnisordner ändern oder inhaltsfreie Diagnoseprotokolle öffnen.</p>
+        <p>Hier kannst du den künftigen Ergebnisordner ändern, inhaltsfreie Diagnoseprotokolle oder dauerhaft gespeicherte vertrauliche Zuordnungen öffnen.</p>
         <dl class="context settings-context" aria-label="Gespeicherter Ergebnisordner">
           <div><dt>Aktueller Ergebnisordner</dt><dd id="settings-result-folder" title="">Noch nicht geladen</dd></div>
         </dl>
         <div class="actions">
           <button id="configure-results">Ergebnisordner ändern</button>
           <button id="diagnostics">Diagnose öffnen</button>
+          <button id="identity-mappings-directory">Vertrauliche Zuordnungen öffnen</button>
         </div>
+        <p class="action-reason">Dieser lokale Ordner enthält private Originalwert-Zwischenstände und ist nicht für KI-Uploads bestimmt. Auch ältere Zuordnungen bleiben ohne automatische Löschung erhalten.</p>
       </details>
     </section>
     <p class="privacy">Originale bleiben unverändert. Ohne Upload und ohne zusätzliche Runtime-Installation. Anonymisierung erzeugt immer Markdown; bei XLSX, PPTX, PDF/Scan-PDF und Bildern wird der extrahierte Markdown-Inhalt anonymisiert und der Extraktionsstatus getrennt ausgewiesen. Reine Konvertierung kann Extraktionshinweise enthalten. <span id="product-version">Version wird geladen</span></p>

@@ -172,6 +172,9 @@ function removeOwnedRoot(root, initial) {
     assert.strictEqual(emptyHistory.ok, true);
     assert.strictEqual(emptyHistory.result.local_ui_only, true);
     assert.deepStrictEqual(emptyHistory.result.entries, []);
+    const unboundCurrent = await client.send('continue_current_batch', 'ac'.repeat(8));
+    assert.strictEqual(unboundCurrent.ok, false);
+    assert.strictEqual(unboundCurrent.error_code, 'STANDALONE_NOTHING_TO_CONTINUE');
     for (const action of ['resolve_history_results', 'resolve_history_ledger', 'continue_history_batch']) {
       const unknown = await client.send(action, 'ac'.repeat(8), { batch_id: 'd'.repeat(64) });
       assert.strictEqual(unknown.ok, false, 'a missing history entry must not resolve or resume the latest run');

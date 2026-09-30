@@ -29,6 +29,12 @@ async function reviewSingleBatchTextLocally(input, state, item, deps = {}) {
   // Raw-derived draft data stays in memory and reaches only the native review
   // helper over stdin. It is never returned through MCP or stored in a journal.
   if ((input.ambiguities || []).length === 0) return { text: input.anonymized_text };
+  // Standalone always enters the explicit app-owned review, including a
+  // one-file run. Reviewed replay uses reviewedBatchText, not this native route.
+  // Cowork retains its existing direct single-document dialog behavior.
+  if (state.product_channel === 'standalone') {
+    throw localReviewError('LOCAL_REVIEW_DEFERRED', 'Die Datei benötigt eine lokale Entscheidung in der Anwendung. Wähle für diesen Lauf „Jetzt prüfen“ oder setze ihn später im Verlauf fort. Bis dahin bleibt die Datei lokal gesperrt.');
+  }
   if (state.items.length > 1 && item.review_resumed !== true && deps.deferAmbiguousReview !== false) {
     throw localReviewError('LOCAL_REVIEW_DEFERRED', 'Die lokale Zertifikatsentscheidung wird nach der Stapelanalyse gemeinsam vorgelegt. Die Datei bleibt bis dahin lokal gesperrt.');
   }

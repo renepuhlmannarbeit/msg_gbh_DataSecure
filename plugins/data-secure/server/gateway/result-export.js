@@ -10,6 +10,7 @@ const { writeFully, syncParentDirectory, renameWithTransientRetry, linkWithTrans
 const { processAlive } = require('./process-liveness');
 const { csvField } = require('./mapping');
 const { readMarkdownArtifact, verifyMarkdownItem } = require('../standalone/markdown-store');
+const identityLedger = require('../standalone/identity-ledger');
 const { validateCoverage, MAX_MARKDOWN_CHARS } = require('../standalone/markdown-contract');
 const { RESOURCE_LIMITS } = require('../resource-limits');
 const { MODES: RESULT_NAMING_MODES, resultNamingModeForBatch } = require('../core/result-naming-mode');
@@ -734,6 +735,15 @@ function visibleExportDirectory(token) {
     return '';
   }
 }
+function publishStandaloneIdentityIfPossible(state) {
+  if (state?.product_channel !== 'standalone' || state.processing_mode === 'markdown-only') return;
+  try {
+    const runPath = visibleExportDirectory(state.token);
+    if (!runPath) return;
+    identityLedger.materialize(state);
+    identityLedger.publishDocumentToRun(state.token, runPath);
+  } catch { /* a private identity copy must never turn verified Markdown into a false processing failure */ }
+}
 // The visible export is a convenience projection of already verified internal
 // packages. Every failure here – including a damaged or conflicting export
 // record – is a fail-closed "pending" result and never an exception: the
@@ -772,8 +782,12 @@ function exportCompletedState(state) {
       // user until they delete them. A completed record is therefore final: it is
       // neither re-verified nor re-materialised after a user deletion, and a later
       // destination change does not mirror earlier runs into the new folder.
-      if (plan.value.complete === true) return { exported: plan.value.items.length, pending: 0,
-        available: plan.value.items.length > 0 };
+      // The separate confidential identity copy is offered once per run and is
+      // not recreated after a user removes it.
+      if (plan.value.complete === true) {
+        publishStandaloneIdentityIfPossible(state);
+        return { exported: plan.value.items.length, pending: 0, available: plan.value.items.length > 0 };
+      }
       const total = plan.value.items.length;
       const pendingResult = () => {
         let done = exportedCount(plan.value);
@@ -784,6 +798,7 @@ function exportCompletedState(state) {
         const destination = activeDestination(plan.value);
         if (!destination) return pendingResult();
         const finished = exportOpenItems(plan.target, readRecord(plan.target), destination);
+        if (finished.complete === true) publishStandaloneIdentityIfPossible(state);
         return finished.complete === true ? { exported: total, pending: 0, available: true } : pendingResult();
       } catch {
         return pendingResult();

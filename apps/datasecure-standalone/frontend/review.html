@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DataSecure – lokale Prüfung</title>
+  <link rel="stylesheet" href="review.css">
+  <script src="review.js" defer></script>
+</head>
+<body>
+  <main>
+    <header>
+      <p class="eyebrow">GBH DATASECURE · NUR LOKAL</p>
+      <h1>Stapelprüfung</h1>
+      <p id="summary" role="status">Die Prüfung wird vorbereitet …</p>
+    </header>
+    <section id="review" hidden aria-labelledby="finding-title">
+      <div class="progress"><span id="document-position"></span><span id="finding-position"></span></div>
+      <h2 id="finding-title">Ist dies ein Personenname?</h2>
+      <p class="exact-label">Aktuell zu entscheiden</p>
+      <p id="exact-text" class="exact" tabindex="0"></p>
+      <p id="group-note" class="note"></p>
+      <div class="comparison">
+        <div><h3>Quellkontext</h3><pre id="source-context" tabindex="0"></pre></div>
+        <div><h3>Vorgesehene Ausgabe</h3><pre id="output-context" tabindex="0"></pre></div>
+      </div>
+      <div class="actions">
+        <button id="redact" class="primary">Als Person anonymisieren</button>
+        <button id="keep">Kein Personenname – beibehalten</button>
+        <button id="undo">Rückgängig</button>
+      </div>
+      <div class="finish">
+        <button id="defer">Später entscheiden</button>
+        <button id="release" class="primary" disabled>Geprüft freigeben</button>
+      </div>
+    </section>
+    <section id="waiting" class="waiting" aria-live="polite">
+      <div id="work-indicator" class="work-indicator" hidden>
+        <span class="work-gear" aria-hidden="true">⚙</span>
+        <strong>DataSecure arbeitet im Hintergrund …</strong>
+      </div>
+      <p id="waiting-text">Die lokale Verarbeitung bereitet die Fundstellen vor. Dieses Fenster kann offen bleiben.</p>
+      <button id="retry">Status erneut prüfen</button>
+      <button id="continue-review" class="primary" hidden>Weitere Prüfung fortsetzen</button>
+      <button id="close-review">Prüffenster schließen</button>
+    </section>
+    <p class="privacy">Inhalte und Entscheidungen bleiben auf diesem Gerät. Schließen gibt ungeprüfte Ergebnisse nicht frei; der Lauf kann später im Verlauf fortgesetzt werden.</p>
+  </main>
+</body>
+</html>

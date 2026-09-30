@@ -39,6 +39,36 @@ description = "Zeigt höchstens 20 lokale Standalone-Läufe ohne Dokumentinhalte
 commands.allow = ["get_run_history"]
 
 [[permission]]
+identifier = "allow-open-review-window"
+description = "Öffnet ausschließlich das lokale Standalone-Prüffenster."
+commands.allow = ["open_review_window"]
+
+[[permission]]
+identifier = "allow-get-review-session"
+description = "Liest nur die Kennung und Größe der aktiven lokalen Prüfsitzung."
+commands.allow = ["get_review_session"]
+
+[[permission]]
+identifier = "allow-close-review-window"
+description = "Schließt ausschließlich das lokale Prüffenster; eine offene Entscheidung bleibt sicher vertagt."
+commands.allow = ["close_review_window"]
+
+[[permission]]
+identifier = "allow-get-review-chunk"
+description = "Liest einen begrenzten Rohtextabschnitt nur im Prüffenster."
+commands.allow = ["get_review_chunk"]
+
+[[permission]]
+identifier = "allow-submit-review"
+description = "Sendet die vollständige lokale Entscheidung oder Vertagung an den Core."
+commands.allow = ["submit_review"]
+
+[[permission]]
+identifier = "allow-continue-review-session"
+description = "Setzt nur den an dieses Prüffenster gebundenen lokalen Lauf mit weiteren Fundstellen fort."
+commands.allow = ["continue_review_session"]
+
+[[permission]]
 identifier = "allow-open-history-results"
 description = "Öffnet ausschließlich den Ergebnisordner des lokal gebundenen Verlaufs-Eintrags."
 commands.allow = ["open_history_results"]
@@ -47,6 +77,16 @@ commands.allow = ["open_history_results"]
 identifier = "allow-open-history-ledger"
 description = "Zeigt ausschließlich die Zuordnungsdatei des lokal gebundenen Verlaufs-Eintrags."
 commands.allow = ["open_history_ledger"]
+
+[[permission]]
+identifier = "allow-open-history-identity-mapping"
+description = "Öffnet die vertrauliche Identitätszuordnung nur für einen lokal gebundenen Lauf."
+commands.allow = ["open_history_identity_mapping"]
+
+[[permission]]
+identifier = "allow-open-identity-mappings-directory"
+description = "Öffnet nur lokal den privaten Ordner dauerhaft aufbewahrter Identitätszuordnungen."
+commands.allow = ["open_identity_mappings_directory"]
 
 [[permission]]
 identifier = "allow-continue-history-batch"
@@ -60,7 +100,7 @@ commands.allow = ["ack_terminal_presented"]
 
 [[permission]]
 identifier = "allow-continue-current-batch"
-description = "Setzt den letzten lokal fortsetzbaren Stapel fort."
+description = "Setzt den aktuell in dieser Sitzung verbundenen Lauf fort."
 commands.allow = ["continue_current_batch"]
 
 [[permission]]

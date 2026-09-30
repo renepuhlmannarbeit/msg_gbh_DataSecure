@@ -116,6 +116,21 @@ async function main() {
     assert.strictEqual(output.text, '[MANUAL_REDACTION] Zertifikat');
   });
 
+  await testAsync('Standalone defers single and multiple ambiguous files to the app, never the native dialog', async () => {
+    for (const platform of ['win32', 'darwin', 'linux']) {
+      for (const count of [1, 2]) {
+        const item = { review_resumed: true };
+        let nativeCalls = 0;
+        await assert.rejects(reviewSingleBatchTextLocally(reviewInput(), {
+          product_channel: 'standalone', items: [item, ...Array(count - 1).fill({})]
+        }, item, { platform, deferAmbiguousReview: false,
+          reviewTextLocally() { nativeCalls++; throw new Error('unexpected native dialog'); }
+        }), error => error.code === 'LOCAL_REVIEW_DEFERRED');
+        assert.strictEqual(nativeCalls, 0);
+      }
+    }
+  });
+
   done();
 }
 

@@ -3,8 +3,8 @@
 const invoke = window.__TAURI__.core.invoke;
 const byId = (id) => document.getElementById(id);
 const controls = ['select-files', 'select-folder', 'start', 'cancel', 'continue',
-  'process-results', 'process-completion-results', 'process-completion-history', 'prepare-new-run',
-  'new-batch', 'configure-results', 'setup-results', 'diagnostics', 'processing-mode', 'output-naming-mode',
+  'process-results', 'process-completion-results', 'process-completion-review', 'process-completion-history', 'prepare-new-run',
+  'new-batch', 'review-open', 'configure-results', 'setup-results', 'diagnostics', 'identity-mappings-directory', 'processing-mode', 'output-naming-mode',
   'task-markdown', 'task-anonymize'];
 const messages = {
   STANDALONE_BUSY: 'Ein Stapel wird bereits verarbeitet.',
@@ -44,7 +44,8 @@ const messages = {
   STANDALONE_RESULTS_MISSING: 'Es ist noch kein vollständiger Ergebnislauf verfügbar.',
   STANDALONE_LEDGER_MISSING: 'Es ist noch keine lokale Zuordnung vorhanden.',
   STANDALONE_LEDGER_OPEN_FAILED: 'Die lokale Zuordnungsdatei konnte nicht angezeigt werden.',
-  STANDALONE_DIAGNOSTICS_OPEN_FAILED: 'Der lokale Diagnoseordner konnte nicht geöffnet werden.'
+  STANDALONE_DIAGNOSTICS_OPEN_FAILED: 'Der lokale Diagnoseordner konnte nicht geöffnet werden.',
+  STANDALONE_REVIEW_WINDOW_FAILED: 'Das lokale Prüffenster konnte nicht geöffnet werden. Der Lauf bleibt sicher offen.'
 };
 let admitted = false;
 let admissionGeneration = 0;
@@ -292,7 +293,10 @@ function renderHistory(entries) {
     for (const action of [
       { command: 'open_history_results', label: 'Ergebnisordner', available: entry.results_available === true, reason: 'Kein Ergebnisordner verfügbar.' },
       { command: 'open_history_ledger', label: 'Zuordnung', available: entry.ledger_available === true, reason: 'Keine Zuordnung verfügbar.' },
-      { command: 'continue_history_batch', label: 'Fortsetzen', available: entry.resumable === true, reason: 'Keine Fortsetzung verfügbar.', resume: true }
+      { command: 'open_history_identity_mapping', label: 'Identitäten (vertraulich)',
+        available: entry.identity_mapping_available === true, reason: 'Keine vertrauliche Identitätszuordnung verfügbar.' },
+      { command: 'continue_history_batch', label: entry.status === 'review_required' ? 'Prüfung fortsetzen' : 'Fortsetzen',
+        available: entry.resumable === true, reason: 'Keine Fortsetzung verfügbar.', resume: true, review: entry.status === 'review_required' }
     ]) {
       const wrapper = document.createElement('div');
       const button = document.createElement('button');
@@ -305,7 +309,11 @@ function renderHistory(entries) {
         if (action.resume) {
           const result = await call(action.command, { batchId: entry.batch_id });
           feedback.textContent = result?.ok === true ? 'Fortsetzung gestartet. Der Laufstatus wird geprüft …' : 'Fortsetzung nicht möglich. Bitte den aktuellen Status prüfen.';
-          if (result?.ok === true) { actionFeedback('Der Worker hat die Fortsetzung angenommen. Erst der aktualisierte Laufstatus bestätigt das Ergebnis.'); await refresh(); }
+          if (result?.ok === true) {
+            actionFeedback('Der Worker hat die Fortsetzung angenommen. Erst der aktualisierte Laufstatus bestätigt das Ergebnis.');
+            if (action.review) await call('open_review_window');
+            await refresh();
+          }
         } else {
           const result = await openLocal(action.command, action.label, { batchId: entry.batch_id });
           feedback.textContent = result?.handoff_confirmed === true
@@ -314,6 +322,12 @@ function renderHistory(entries) {
         }
       });
       wrapper.appendChild(button);
+      if (action.command === 'open_history_identity_mapping' && action.available) {
+        const notice = document.createElement('span');
+        notice.className = 'action-reason';
+        notice.textContent = 'Enthält Originalwerte im markierten vertraulichen Lauf-Unterordner. Nie den ganzen Laufordner an KI weitergeben.';
+        wrapper.appendChild(notice);
+      }
       if (!action.available) {
         const reason = document.createElement('span');
         reason.className = 'action-reason';
@@ -651,6 +665,22 @@ byId('process-results').addEventListener('click', () => {
 byId('process-completion-results').addEventListener('click', () => {
   if (!byId('process-completion-results').disabled) openLocal('open_current_results', 'Ergebnisordner');
 });
+byId('process-completion-review').addEventListener('click', async () => {
+  if (operationInFlight || processPhase !== 'completion' || lastPublicState !== 'review_required' ||
+      !currentSessionRunStarted || suppressPriorTerminal) return;
+  actionFeedback('Die Prüfung für diesen Lauf wird vorbereitet …');
+  const continued = await call('continue_current_batch');
+  if (continued?.ok !== true) return;
+  // Once acknowledged, never start this continuation twice while waiting for
+  // the next status poll. The review window can show its preparation state.
+  lastPublicState = 'processing';
+  visible('process-completion-review', false);
+  setProcessPhase('working');
+  status('Prüfung wird vorbereitet', 'DataSecure bereitet die offenen Fundstellen dieses Laufs vor. Das Prüffenster wird geöffnet.', '!');
+  const opened = await call('open_review_window');
+  if (opened?.ok === true) actionFeedback('Die lokale Prüfung für diesen Lauf ist geöffnet.');
+  await refresh();
+});
 byId('process-completion-history').addEventListener('click', () => switchView('results'));
 byId('processing-mode').addEventListener('change', () => { renderModeHelp(byId('processing-mode').value); updateModeAvailability(); });
 byId('output-naming-mode').addEventListener('change', () => { renderOutputNamingHelp(); updateModeAvailability(); });
@@ -702,6 +732,7 @@ byId('start').addEventListener('click', async () => {
   scheduleRefresh(0);
 });
 byId('continue').addEventListener('click', () => switchView('results'));
+byId('review-open').addEventListener('click', () => call('open_review_window'));
 async function prepareNewRun() {
   if (operationInFlight || processPhase === 'working' || ['preparing', 'processing'].includes(lastPublicState)) {
     newBatchFeedback('Der aktuelle Lauf ist noch aktiv. Falls eine lokale Prüfung geöffnet wurde, schließe sie ab oder vertage sie dort. Danach kannst du eine neue Aufgabe wählen.', true);
@@ -752,6 +783,14 @@ byId('diagnostics').addEventListener('click', async () => {
     await invoke('open_diagnostic_folder');
     actionFeedback('Der Diagnoseordner wurde an das Betriebssystem zum Öffnen übergeben. Die Protokolle enthalten keine Dateinamen, Pfade oder Inhalte.');
   } catch (error) { actionFeedback(messages[String(error)] || 'Der Diagnoseordner konnte nicht geöffnet werden.', true); }
+});
+byId('identity-mappings-directory').addEventListener('click', async () => {
+  try {
+    await invoke('open_identity_mappings_directory');
+    actionFeedback('Der vertrauliche Zuordnungsordner wurde an das Betriebssystem zum Öffnen übergeben. Nicht an KI-Systeme weitergeben.');
+  } catch (error) {
+    actionFeedback(messages[String(error)] || 'Der vertrauliche Zuordnungsordner konnte nicht geöffnet werden.', true);
+  }
 });
 async function configureResultFolder() {
   const result = await call('configure_results');
@@ -820,11 +859,17 @@ async function refresh() {
         ? 'Prüfung für diesen Lauf offen' : state.state === 'stopped'
           ? 'Fortsetzung für diesen Lauf möglich' : state.state === 'export_pending'
             ? 'Bereitstellung dieses Laufs offen' : 'Dieser Lauf ist beendet';
-      byId('process-completion-help').textContent = state.state === 'review_required' || state.state === 'stopped'
-        ? 'Dieser Lauf benötigt noch eine Entscheidung oder Fortsetzung. Öffne ihn im Verlauf; ein neuer Lauf bleibt davon getrennt.'
+      byId('process-completion-help').textContent = state.state === 'review_required'
+        ? 'Dieser Lauf benötigt noch eine lokale Entscheidung. Mit „Jetzt prüfen“ öffnest du die Prüfung direkt. Du kannst sie auch später im Verlauf fortsetzen.'
+        : state.state === 'stopped'
+          ? 'Dieser Lauf kann im Verlauf fortgesetzt werden; ein neuer Lauf bleibt davon getrennt.'
         : state.state === 'export_pending'
           ? 'Die Bereitstellung dieses Laufs ist noch offen. Prüfe ihn im Verlauf, bevor du seine Ergebnisse verwendest.'
           : 'Der Lauf ist abgeschlossen. Ergebnisse und Fehlerhinweise bleiben im Verlauf; für weitere Dateien beginne einen neuen Lauf.';
+      visible('process-completion-review', state.state === 'review_required');
+      byId('process-completion-history').textContent = 'Lauf im Verlauf ansehen';
+      byId('process-completion-history').className = '';
+      byId('prepare-new-run').className = state.state === 'review_required' ? '' : 'primary';
     }
     const terminalHistory = !['preparing', 'processing'].includes(state.state);
     const nextHistoryKey = JSON.stringify([state.state, state.presentation_generation,
@@ -853,6 +898,7 @@ async function refresh() {
     updateDropAvailability();
     byId('result-count').textContent = String(Number.isInteger(state.result_count) ? state.result_count : 0);
     visible('continue', state.state === 'review_required' || state.state === 'stopped');
+    visible('review-open', state.state === 'processing' && state.review_count > 0);
     visible('select-files', admissionAvailableStates.has(state.state));
     visible('select-folder', admissionAvailableStates.has(state.state));
     if (state.state === 'preparing') {
@@ -869,7 +915,7 @@ async function refresh() {
       const awaitingReview = reviews > 0 && total > 0 && done + failed + reviews >= total;
       status(awaitingReview ? 'Lokale Prüfung erforderlich' : converting ? 'Umwandlung läuft' : 'Anonymisierung läuft',
         awaitingReview
-          ? `${done} von ${total} Dateien abgeschlossen. ${reviews} Datei${reviews === 1 ? '' : 'en'} benötigt eine lokale Entscheidung. Bitte das separate Prüffenster abschließen oder dort vertagen; erst danach endet der Lauf und der Ergebnisordner wird verfügbar.`
+          ? `${done} von ${total} Dateien abgeschlossen. ${reviews} Datei${reviews === 1 ? '' : 'en'} benötigt eine lokale Entscheidung. Öffne die lokale Prüfung oder vertage sie; ungeprüfte Ergebnisse bleiben gesperrt.`
           : total > 0 ? `${done} von ${total} Dateien abgeschlossen.` : 'Die Dateien werden lokal verarbeitet.',
         awaitingReview ? '!' : '✓');
       nextDelay = 1200;

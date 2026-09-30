@@ -189,22 +189,34 @@
           "markdownDescription": "Verwirft eine noch nicht gestartete lokale Auswahl."
         },
         {
+          "description": "Schließt ausschließlich das lokale Prüffenster; eine offene Entscheidung bleibt sicher vertagt.",
+          "type": "string",
+          "const": "allow-close-review-window",
+          "markdownDescription": "Schließt ausschließlich das lokale Prüffenster; eine offene Entscheidung bleibt sicher vertagt."
+        },
+        {
           "description": "Ändert den Ergebnisordner über eine native lokale Ordnerauswahl.",
           "type": "string",
           "const": "allow-configure-results",
           "markdownDescription": "Ändert den Ergebnisordner über eine native lokale Ordnerauswahl."
         },
         {
-          "description": "Setzt den letzten lokal fortsetzbaren Stapel fort.",
+          "description": "Setzt den aktuell in dieser Sitzung verbundenen Lauf fort.",
           "type": "string",
           "const": "allow-continue-current-batch",
-          "markdownDescription": "Setzt den letzten lokal fortsetzbaren Stapel fort."
+          "markdownDescription": "Setzt den aktuell in dieser Sitzung verbundenen Lauf fort."
         },
         {
           "description": "Setzt genau den gewählten unterbrochenen Stapel nach erneuter Zustandsprüfung fort.",
           "type": "string",
           "const": "allow-continue-history-batch",
           "markdownDescription": "Setzt genau den gewählten unterbrochenen Stapel nach erneuter Zustandsprüfung fort."
+        },
+        {
+          "description": "Setzt nur den an dieses Prüffenster gebundenen lokalen Lauf mit weiteren Fundstellen fort.",
+          "type": "string",
+          "const": "allow-continue-review-session",
+          "markdownDescription": "Setzt nur den an dieses Prüffenster gebundenen lokalen Lauf mit weiteren Fundstellen fort."
         },
         {
           "description": "Bestätigt inhaltsfrei, dass die lokale Oberfläche ihr Skript geladen hat.",
@@ -217,6 +229,18 @@
           "type": "string",
           "const": "allow-get-public-state",
           "markdownDescription": "Liest nur den inhaltsfreien öffentlichen Verarbeitungszustand."
+        },
+        {
+          "description": "Liest einen begrenzten Rohtextabschnitt nur im Prüffenster.",
+          "type": "string",
+          "const": "allow-get-review-chunk",
+          "markdownDescription": "Liest einen begrenzten Rohtextabschnitt nur im Prüffenster."
+        },
+        {
+          "description": "Liest nur die Kennung und Größe der aktiven lokalen Prüfsitzung.",
+          "type": "string",
+          "const": "allow-get-review-session",
+          "markdownDescription": "Liest nur die Kennung und Größe der aktiven lokalen Prüfsitzung."
         },
         {
           "description": "Zeigt höchstens 20 lokale Standalone-Läufe ohne Dokumentinhalte.",
@@ -243,6 +267,12 @@
           "markdownDescription": "Öffnet ausschließlich den festen lokalen Ordner mit inhaltsfreien Interaktionsprotokollen."
         },
         {
+          "description": "Öffnet die vertrauliche Identitätszuordnung nur für einen lokal gebundenen Lauf.",
+          "type": "string",
+          "const": "allow-open-history-identity-mapping",
+          "markdownDescription": "Öffnet die vertrauliche Identitätszuordnung nur für einen lokal gebundenen Lauf."
+        },
+        {
           "description": "Zeigt ausschließlich die Zuordnungsdatei des lokal gebundenen Verlaufs-Eintrags.",
           "type": "string",
           "const": "allow-open-history-ledger",
@@ -255,10 +285,22 @@
           "markdownDescription": "Öffnet ausschließlich den Ergebnisordner des lokal gebundenen Verlaufs-Eintrags."
         },
         {
+          "description": "Öffnet nur lokal den privaten Ordner dauerhaft aufbewahrter Identitätszuordnungen.",
+          "type": "string",
+          "const": "allow-open-identity-mappings-directory",
+          "markdownDescription": "Öffnet nur lokal den privaten Ordner dauerhaft aufbewahrter Identitätszuordnungen."
+        },
+        {
           "description": "Öffnet nur den lokalen Ordner der privaten Zuordnung; die Oberfläche erhält weder Pfad noch Inhalt.",
           "type": "string",
           "const": "allow-open-local-ledger",
           "markdownDescription": "Öffnet nur den lokalen Ordner der privaten Zuordnung; die Oberfläche erhält weder Pfad noch Inhalt."
+        },
+        {
+          "description": "Öffnet ausschließlich das lokale Standalone-Prüffenster.",
+          "type": "string",
+          "const": "allow-open-review-window",
+          "markdownDescription": "Öffnet ausschließlich das lokale Standalone-Prüffenster."
         },
         {
           "description": "Entfernt genau eine Datei per Position aus der noch nicht gestarteten lokalen Auswahl.",
@@ -289,6 +331,12 @@
           "type": "string",
           "const": "allow-start-admitted-batch",
           "markdownDescription": "Startet ausschließlich die bereits lokal geprüfte Auswahl."
+        },
+        {
+          "description": "Sendet die vollständige lokale Entscheidung oder Vertagung an den Core.",
+          "type": "string",
+          "const": "allow-submit-review",
+          "markdownDescription": "Sendet die vollständige lokale Entscheidung oder Vertagung an den Core."
         },
         {
           "description": "Default core plugins set.\n#### This default permission set includes:\n\n- `core:path:default`\n- `core:event:default`\n- `core:window:default`\n- `core:webview:default`\n- `core:app:default`\n- `core:image:default`\n- `core:resources:default`\n- `core:menu:default`\n- `core:tray:default`",

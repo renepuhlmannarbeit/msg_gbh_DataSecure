@@ -68,6 +68,9 @@ assert.strictEqual(packageJson.devDependencies['@tauri-apps/cli'], '2.11.4');
 assert.strictEqual(packageLock.packages['node_modules/@tauri-apps/cli'].version, '2.11.4');
 for (const expected of [
   'DATASECURE_STANDALONE_NATIVE_SMOKE_ROOT',
+  'DATASECURE_STANDALONE_NATIVE_SMOKE_REVIEW=1',
+  'review_page_loaded',
+  'get_review_session',
   'DATASECURE_STANDALONE_DOCUMENTS_DIR',
   'profile/Library/Application Support/SecureDataMsg-Standalone/workspace',
   'sidecar_started',

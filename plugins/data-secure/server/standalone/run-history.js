@@ -5,6 +5,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const identityLedger = require('./identity-ledger');
 const { SCHEMA, failure, validateBatchId, historyProgress, validSummary, summarizeState,
   readStandaloneSummaries, recordStandaloneState, recordStandaloneExport, boundRun } = require('../gateway/standalone-history-store');
 
@@ -70,7 +71,10 @@ function createRunHistory(deps) {
                 : savedExport?.complete === true ? 'results_available' : 'export_pending')
             : 'failed';
         const { schema, export_id, complete, ...fields } = summary;
-        return { ...fields, status, results_available: Boolean(run), ledger_available: ledger, resumable: canResume, _run: run };
+        return { ...fields, status, results_available: Boolean(run), ledger_available: ledger,
+          identity_mapping_available: ['results_available', 'completed_without_results'].includes(status) &&
+            identityLedger.documentAvailable(summary.batch_id),
+          resumable: canResume, _run: run };
       });
   }
   function history() {
@@ -93,6 +97,22 @@ function createRunHistory(deps) {
     if (!entry.ledger_available) throw failure('STANDALONE_LEDGER_MISSING');
     return { ok: true, target_kind: 'file', local_path: path.join(entry._run, MAPPING), external_disclosure: false };
   }
+  function resolveIdentityMapping(batchId) {
+    const entry = find(batchId);
+    if (!entry.identity_mapping_available) throw failure('STANDALONE_IDENTITY_MAPPING_MISSING');
+    // The journal can expire while the human mapping intentionally remains.
+    // While it still exists, re-materialize on access so a transient locked
+    // document cannot leave a stale partial view after later releases.
+    const current = deps.readStates().find(state => state.product_channel === 'standalone' && state.token === batchId);
+    if (current) identityLedger.materialize(current);
+    const privateFile = identityLedger.resolveDocument(batchId);
+    let localPath = privateFile;
+    if (entry._run) {
+      try { localPath = identityLedger.publishDocumentToRun(batchId, entry._run).local_path; }
+      catch { /* private mapping remains available when the user-owned run folder conflicts */ }
+    }
+    return { ok: true, target_kind: 'file', local_path: localPath, external_disclosure: false };
+  }
   function failures(batchId) {
     const entry = find(batchId);
     if (entry.failed_count === 0) return { ok: true, available: true, total: 0, files: [],
@@ -114,7 +134,7 @@ function createRunHistory(deps) {
     return { ok: true, available: true, total: stopped.length, files,
       local_ui_only: true, external_disclosure: false };
   }
-  return { history, find, resolveResults, resolveLedger, failures };
+  return { history, find, resolveResults, resolveLedger, resolveIdentityMapping, failures };
 }
 
 module.exports = { createRunHistory, validateBatchId };

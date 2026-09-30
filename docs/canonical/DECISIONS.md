@@ -379,9 +379,13 @@ andere Quellen laufen weiter. Diese Entscheidung ersetzt DS-016.
 
 ## DS-047 – Adaptive lokale Ressourcensteuerung
 
-Parallelität richtet sich automatisch nach CPU, freiem Speicher, Format und OCR.
-Der normale Speicheretat beträgt höchstens das Minimum aus 25 Prozent RAM und zwei
-GiB. Picker und Startannahme sollen je höchstens zwei Sekunden benötigen, kein
+Der Produktstandard bleibt seriell; eine adaptive Mehrprozessvorbereitung wird
+nicht allein wegen eines früheren Architekturwunsches aktiviert. Erst wenn eine
+versionsgebundene Zielhostmessung einen relevanten Engpass und einen sicheren
+Zusatznutzen belegt, wird sie erneut als Produktänderung bewertet. Dann richtet
+sich die Parallelität nach CPU, freiem Speicher, Format und OCR. Der normale
+Speicheretat beträgt höchstens das Minimum aus 25 Prozent RAM und zwei GiB.
+Picker und Startannahme sollen je höchstens zwei Sekunden benötigen, kein
 Verarbeitungsaufruf Cowork länger als zehn Sekunden blockieren; ein unbegründeter
 Regressionseffekt über zehn Prozent blockiert die Freigabe.
 
@@ -1701,3 +1705,89 @@ dürfen ausgelassen werden, bleiben aber durch `incomplete` kenntlich. Eine
 unlesbare Einbettung ist kein Beweis vollständiger Quellabdeckung. Das öffnet
 weder beliebige OLE-Binärdaten noch Coworks strengere Admission; siehe
 BL-010.41.
+
+## DS-104 – Eigenständiger integrierter Standalone-Review
+
+Am 30.09.2026 vom Product Owner für die nächste Standalone-Entwicklung
+bestätigt: Die lokale Stapelprüfung soll als erkennbarer Schritt **innerhalb
+der Standalone-Anwendung** bedient werden. Ein erster lokaler App-Adapter ist
+implementiert und source-/Rust-geprüft, aber weder in RC151 enthalten noch
+auf den Zielhosts sichtbar abgenommen. Der separat gestartete
+PowerShell-/AppKit-/Linux-Dialog bleibt in RC151 der Istweg.
+Der Cowork-Review bleibt unabhängig und wird durch diese Standalone-Änderung
+weder ersetzt noch im Verhalten, Vertrag oder Paketumfang umgestellt.
+
+Die gemeinsame Privacy-Engine, positionsgebundene Fundstellen, Gruppierungs-
+und Ergebnisvalidierung bleiben maßgeblich. Die neue Anzeige ist ein
+Standalone-Produktadapter, kein zweiter Detektor und keine Cowork-Abhängigkeit.
+Der bisher inhaltsfreie Haupt-Renderer bleibt inhaltsfrei. Ein eigens
+berechtigungsarmes, kurzlebiges App-Reviewfenster darf nur den lokal für die
+aktuelle Entscheidung erforderlichen Rohtext sehen; es erhält weder allgemeine
+Datei-/Shell-/Netzrechte noch Cowork-/MCP-Funktionen. Inhalte und Entscheidungen
+werden nicht in Diagnose, Verlauf oder neue persistente UI-Daten geschrieben.
+Der bestehende 1-MiB-IPC-Vertrag darf nicht durch unbeschränkte Rohtextframes
+aufgeweicht werden. Der lokale Entwurf verwendet einen flüchtigen Broker mit
+höchstens 40 MiB pro Draft und 128-KiB-Abschnitten über das bestehende
+begrenzte IPC; die Review-Window-Capability ist von der Hauptansicht getrennt.
+Die Quell- und Policybindung sowie die Sichtbarkeit müssen zusätzlich nativ
+auf allen Zielplattformen abgenommen werden.
+
+Die Hauptansicht zeigt inhaltsfrei „Lokale Prüfung nötig“ und bietet eine
+ausdrückliche Aktion **Prüfung öffnen**; ein nicht sichtbares Fenster darf den
+Lauf nicht still blockieren. Im Review stehen pro Stelle das aktuelle Dokument
+innerhalb des Stapels, der **exakte zu entscheidende Text**, ein markierter
+Quellausschnitt und die beabsichtigte Ausgabe. Die Aktionen heißen
+**Als Person anonymisieren** beziehungsweise **Kein Personenname – beibehalten**
+(andere Befundarten erhalten passende fachliche Wörter), **Rückgängig**,
+**Später entscheiden** und erst nach allen Entscheidungen **Geprüft freigeben**.
+Eine Entscheidung für nachweislich gleiche Stellen nennt ihre Reichweite vor
+dem Klick. Farbe ist nie das einzige Unterscheidungsmerkmal. Schließen,
+Absturz, Fokusverlust oder Protokollfehler dürfen niemals eine Freigabe
+simulieren; offene Stellen bleiben fortsetzbar und Ergebnisse gesperrt.
+
+**Später entscheiden** bleibt ausdrücklich erhalten: Die automatische
+Verarbeitung darf zuerst enden, ohne dass der Mensch sofort prüfen muss.
+Der betroffene Lauf heißt dann **Prüfung offen**, nicht „abgeschlossen“;
+bereits einzeln freigegebene Ergebnisse bleiben erhalten, ungeprüfte Dateien
+werden nicht veröffentlicht.
+Für den aktuellen verbundenen Lauf öffnet **Jetzt prüfen** in der
+Verarbeiten-Karte das Prüffenster direkt. Eine unterbrochene Verbindung darf
+keinen beliebigen historischen Lauf als Ersatz fortsetzen.
+Die konkrete Verlaufszeile bietet
+**Prüfung fortsetzen** auch nach App-Neustart und nach zwischenzeitlich
+bearbeiteten anderen Läufen. Sie bindet die ursprüngliche Laufkennung,
+Quellkopien, Regelversion und Entscheidungen neu; weder der letzte Lauf noch
+eine neue Dateiauswahl werden stillschweigend eingesetzt. Erst die validierte
+letzte Entscheidung kann den Prüfteil abschließen. Ein absichtliches Vertagen
+ist kein Fehler und braucht keine automatische Wiederholung oder Erinnerung.
+
+Die Oberfläche wird auf Windows, macOS Intel/ARM und Linux als Standalone-
+Produktpfad entwickelt und jeweils mit Tastatur, Fokus, Screenreader,
+Schließen/Fortsetzen, identischen Gruppen und sicherem Stopp geprüft.
+Release-ZIP/DMG und Cowork-Pakete bleiben unabhängig. Siehe BL-010.44.
+
+## DS-105 – Private menschliche Identitätszuordnung ohne automatische Löschung
+
+Standalone erzeugt zusätzlich zur Dateizuordnung eine nur lokal zu öffnende,
+vertrauliche Originalwert-Zuordnung für tatsächlich eindeutig gebundene
+Personen-, Unternehmens- und Projektpseudonyme. Der gemeinsame Privacy-Core
+entscheidet weiterhin über Erkennung und Freigabe; Cowork erhält weder diesen
+Speicher noch neue Werkzeuge. Private Einzelsnapshots bleiben im lokalen
+App-Datenbereich. Die lesbare TXT liegt zusätzlich pro Lauf im deutlich
+markierten Unterordner `VERTRAULICH-NICHT-HOCHLADEN` des Ergebnisordners.
+Der ganze Laufordner ist damit **nicht** zum KI-Upload geeignet; nur einzeln
+geprüfte anonymisierte Markdown-Dateien dürfen ausgewählt werden. Generische Masken und Pseudonyme ohne eindeutige
+Quelle werden nicht als zurückführbare Identität ausgegeben. Fehlende
+Datei-Snapshots und ungeklärte Pseudonyme müssen als unvollständig erscheinen.
+
+Auf ausdrücklichen Nutzerwunsch gibt es **keine automatische Löschung oder
+Aufbewahrungsfrist** und keinen Löschbutton in der App. Die Dateien bleiben
+erhalten, auch nachdem kurzlebige Arbeitsjournale ablaufen; eine etwaige
+manuelle Löschung erfolgt über das Betriebssystem.
+Ein Öffnen ist eine lokale Betriebssystemübergabe; die inhaltsfreie Hauptansicht
+erhält nie Originalwerte. Die Zuordnung selbst ist personenbezogen und darf
+auch für Läufe außerhalb der letzten 20 über den privaten Zuordnungsordner
+lokal gefunden werden. Sie darf
+nicht als anonymisierte Datei an KI-Systeme weitergegeben werden. Zugriff,
+Datenträgerverschlüsselung, Backup und Löschung benötigen Zielhost-/Betriebs-
+abnahme; eine zusätzliche Dateiverschlüsselung wird nicht behauptet.

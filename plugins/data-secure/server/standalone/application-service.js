@@ -115,6 +115,7 @@ function defaultDependencies() {
   const { cleanupAbandonedWorkingJobs } = require('../gateway/orchestrator');
   const { startBatchMaintenance } = require('../gateway/batch-maintenance');
   const batchExecutor = require('../gateway/batch-executor');
+  const reviewBroker = require('./review-broker').createReviewBroker();
   const intakeReservation = require('../gateway/batch-intake-reservation');
   const runHistory = createRunHistory({
     readStates: readStandaloneHistoryStates,
@@ -195,7 +196,13 @@ function defaultDependencies() {
     replayPendingResultExports,
     startLocalIntakeExecutor: batchExecutor.startLocalIntakeExecutor,
     startLocalBatchExecutor: batchExecutor.startLocalBatchExecutor,
-    startLocalReviewExecutor: batchExecutor.startLocalReviewExecutor,
+    startLocalReviewExecutor: (token, options) => batchExecutor.startLocalReviewExecutor(token, {
+      ...options, appReview: reviewBroker
+    }),
+    reviewSession: reviewBroker.session,
+    reviewContinuationBatchId: reviewBroker.lastReviewedBatchId,
+    reviewChunk: reviewBroker.chunk,
+    submitReview: reviewBroker.submit,
     acknowledgeStandaloneTerminalNotice: batchExecutor.acknowledgeStandaloneTerminalNotice,
     pendingStandaloneTerminalNoticeGeneration: batchExecutor.pendingStandaloneTerminalNoticeGeneration,
     continueMostRecentBatch,
@@ -281,6 +288,28 @@ class StandaloneApplicationService {
       ...(Number.isSafeInteger(fields.item_count) ? { item_count: fields.item_count } : {}),
       ...(fields.error_code ? { error_code: fields.error_code } : {})
     });
+  }
+
+  reviewSession() {
+    const session = this.deps.reviewSession?.() || { ready: false };
+    if (session.ready) return session;
+    const status = this.status();
+    const sameRun = this.observedBatchId &&
+      this.deps.reviewContinuationBatchId?.() === this.observedBatchId;
+    return { ready: false,
+      run_complete: Boolean(sameRun && status.batch_complete === true &&
+        ['results_available', 'completed_without_results'].includes(status.state)),
+      continuation_available: Boolean(sameRun && status.state === 'review_required') };
+  }
+  reviewChunk(reviewId, index) { return this.deps.reviewChunk(reviewId, index); }
+  submitReview(reviewId, answer) { return this.deps.submitReview(reviewId, answer); }
+
+  async continueReviewSession(signal) {
+    const batchId = this.deps.reviewContinuationBatchId?.();
+    if (!batchId || batchId !== this.observedBatchId || this.status().state !== 'review_required') {
+      throw fixedFailure('STANDALONE_NOTHING_TO_CONTINUE', 'Für dieses Prüffenster ist keine weitere Prüfung bereit.');
+    }
+    return this.continueHistoryBatch(batchId, signal);
   }
 
   ensureResultRoot() {
@@ -371,6 +400,7 @@ class StandaloneApplicationService {
       ...(latest?.termination_unconfirmed === true ? { termination_unconfirmed: true } : {}),
       preparing,
       processing,
+      batch_complete: latest?.complete === true,
       review_required: reviewReady,
       resumable,
       results_available: packages > 0,
@@ -424,6 +454,16 @@ class StandaloneApplicationService {
   resolveHistoryLedger(batchId) {
     validateBatchId(batchId);
     return this.deps.runHistory.resolveLedger(batchId);
+  }
+
+  resolveHistoryIdentityMapping(batchId) {
+    validateBatchId(batchId);
+    return this.deps.runHistory.resolveIdentityMapping(batchId);
+  }
+
+  resolveIdentityMappingsDirectory() {
+    const localPath = require('./identity-ledger').resolveDirectory();
+    return { ok: true, target_kind: 'directory', local_path: localPath, external_disclosure: false };
   }
 
   async continueHistoryBatch(batchId, signal) {
@@ -686,9 +726,12 @@ class StandaloneApplicationService {
     }
   }
 
-  async continueCurrentBatch(signal) {
+  async continueCurrentBatch(signal, options = {}) {
     if (this.interactionActive || this.admittedQueue?.length > 0) throw fixedFailure('STANDALONE_BUSY', 'Ein lokaler Vorgang ist bereits aktiv.');
     if (this.observedBatchId) return this.continueHistoryBatch(this.observedBatchId, signal);
+    if (options.requireObserved === true) {
+      throw fixedFailure('STANDALONE_NOTHING_TO_CONTINUE', 'Der aktuelle Lauf ist nicht mehr verbunden. Bitte ihn im Verlauf auswählen.');
+    }
     const status = this.deps.lightweightStatus();
     if (status.local_intake_pending || status.batch_processing_active) {
       throw fixedFailure('STANDALONE_BUSY', 'Ein lokaler Stapel wird bereits verarbeitet.');
