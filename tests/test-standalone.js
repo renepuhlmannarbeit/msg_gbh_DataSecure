@@ -17,6 +17,7 @@ const {
   batchQueueFromSelection, validateSelectedPathAsync
 } = require('../plugins/data-secure/server/companion/file-picker');
 const { enumerateSourceFolderAsync } = require('../plugins/data-secure/server/companion/source-folder');
+const { createReviewBroker } = require('../plugins/data-secure/server/standalone/review-broker');
 
 const { test, testAsync, done, assert } = createSuite('Standalone product');
 const FIXTURE_SOURCE_ROOT = path.resolve(os.tmpdir(), 'datasecure-unit-source');
@@ -224,6 +225,96 @@ testAsync('review-window continuation is bound to the run that supplied its answ
   reviewedBatchId = batchId;
   await assert.rejects(service.continueReviewSession(), { code: 'STANDALONE_NOTHING_TO_CONTINUE' });
   assert.deepStrictEqual(calls, [batchId]);
+});
+
+testAsync('real broker lifecycle binds first-draft failure, safe retry and the single-document limit to one run', async () => {
+  const batchId = 'c'.repeat(64);
+  const broker = createReviewBroker();
+  const latest = { selected_count: 1, completed_count: 0, result_count: 0, failed_count: 0,
+    review_count: 1, review_ready: true, export_pending_count: 0, processing: false,
+    resumable: true, complete: false };
+  const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+    latestProductBatchStatus: () => latest, reviewSession: broker.session,
+    reviewContinuationBatchId: broker.boundBatchId,
+    runHistory: { reviewTargets: (id) => {
+      assert.strictEqual(id, batchId); return ['Folien.pdf', 'Tabelle.xlsx'];
+    } }
+  }) });
+  service.observedBatchId = batchId;
+  const calls = [];
+  service.continueHistoryBatch = async (id) => { calls.push(id); return { ok: true }; };
+  const owner = { send() {} };
+  broker.begin(owner, batchId);
+  assert.strictEqual(service.reviewSession().continuation_available, false,
+    'journal review_ready alone must never restart a still-live preparing worker');
+  await assert.rejects(service.continueReviewSession(), { code: 'STANDALONE_NOTHING_TO_CONTINUE' });
+  broker.release(owner);
+  assert.strictEqual(service.reviewSession().continuation_available, true);
+  assert.deepStrictEqual(service.reviewSession().affected_files, ['Folien.pdf', 'Tabelle.xlsx'],
+    'the bound retry targets are available before a possibly unconfirmed continuation');
+  broker.begin(owner, batchId);
+  broker.failed(owner, 'BATCH_REVIEW_RECONSTRUCTION_FAILED');
+  assert.strictEqual(service.reviewSession().retry_available, false);
+  broker.release(owner, { failed: true });
+  assert.strictEqual(service.reviewSession().phase, 'failed');
+  assert.strictEqual(service.reviewSession().retry_available, true);
+  assert.deepStrictEqual(service.reviewSession().affected_files, ['Folien.pdf', 'Tabelle.xlsx']);
+  assert.deepStrictEqual(await service.continueReviewSession(), { ok: true });
+  assert.deepStrictEqual(calls, [batchId]);
+  broker.begin(owner, batchId);
+  broker.failed(owner, 'LOCAL_REVIEW_TOO_LARGE');
+  broker.release(owner, { failed: true });
+  assert.strictEqual(service.reviewSession().continuation_available, false);
+  assert.strictEqual(service.reviewSession().error_code, 'LOCAL_REVIEW_TOO_LARGE');
+  await assert.rejects(service.continueReviewSession(), { code: 'STANDALONE_NOTHING_TO_CONTINUE' });
+  service.observedBatchId = 'd'.repeat(64);
+  assert.strictEqual(service.reviewSession().phase, 'unbound');
+  assert.strictEqual(service.reviewSession().error_code, undefined);
+  assert.strictEqual(service.reviewSession().affected_files, undefined);
+});
+
+test('review completion separates idle export debt from a still-running worker', () => {
+  const batchId = 'a'.repeat(64);
+  let workerActive = true;
+  const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+    reviewSession: () => ({ ready: false, batch_id: batchId, phase: 'idle', worker_active: workerActive }),
+    reviewContinuationBatchId: () => batchId,
+    latestProductBatchStatus: () => ({ selected_count: 1, completed_count: 1, result_count: 1,
+      failed_count: 0, review_count: 0, review_ready: false, complete: true,
+      export_pending_count: 1, processing: false, resumable: false })
+  }) });
+  service.observedBatchId = batchId;
+  assert.strictEqual(service.reviewSession().phase, 'idle');
+  workerActive = false;
+  assert.strictEqual(service.reviewSession().phase, 'export_pending');
+  assert.strictEqual(service.reviewSession().run_complete, false);
+  assert.strictEqual(service.reviewSession().continuation_available, false);
+});
+
+testAsync('multi-file admission names every rejected file and keeps the previous selection atomic', async () => {
+  const paths = ['ok.txt', 'empty.txt', 'large.txt'].map((name) => path.join(FIXTURE_SOURCE_ROOT, name));
+  const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+    async validateSelectedPathAsync(candidate) {
+      if (candidate === FIXTURE_SOURCE_A || candidate === paths[0]) return { sourcePath: candidate, sourceBytes: 4 };
+      await new Promise((resolve) => setImmediate(resolve));
+      throw Object.assign(new Error('private path must not be shown'), {
+        code: candidate === paths[1] ? 'SOURCE_FILE_EMPTY' : 'SOURCE_FORMAT_SIZE_LIMIT'
+      });
+    }
+  }) });
+  await service.admitSelectedSources([FIXTURE_SOURCE_A]);
+  await assert.rejects(service.admitSelectedSources(paths), (error) => {
+    assert.strictEqual(error.code, 'SOURCE_SELECTION_REJECTED');
+    assert.strictEqual(error.localSelectionCount, 2);
+    assert.deepStrictEqual(error.localSelectionFiles, [
+      { name: 'empty.txt', reason_code: 'SOURCE_FILE_EMPTY' },
+      { name: 'large.txt', reason_code: 'SOURCE_FORMAT_SIZE_LIMIT' }
+    ]);
+    assert.doesNotMatch(error.message, /private path|empty\.txt|large\.txt/u);
+    return true;
+  });
+  assert.deepStrictEqual(service.uiContext().selected_files, ['a.txt']);
+  assert.strictEqual(service.interactionActive, false);
 });
 
 testAsync('the desktop current-run continuation refuses a historical fallback after reconnect', async () => {
@@ -449,7 +540,7 @@ test('Standalone UI contract limits source details to the local display', () => 
   assert.ok(contract.forbidden_payload_fields.includes('raw_content'));
   assert.deepStrictEqual(contract.commands, [
     'select_files', 'select_folder', 'remove_admitted_source', 'cancel_admission', 'start_admitted_batch',
-    'get_public_state', 'get_ui_context', 'get_run_history', 'open_history_results', 'open_history_ledger',
+    'get_public_state', 'get_ui_context', 'get_run_history', 'get_run_failures', 'open_history_results', 'open_history_ledger',
     'open_history_identity_mapping', 'open_identity_mappings_directory', 'continue_history_batch',
     'open_review_window', 'close_review_window', 'get_review_session', 'get_review_chunk', 'submit_review',
     'continue_review_session',

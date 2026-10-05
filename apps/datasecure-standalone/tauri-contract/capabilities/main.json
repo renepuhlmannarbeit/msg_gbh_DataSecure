@@ -14,6 +14,7 @@
     "allow-get-public-state",
     "allow-get-ui-context",
     "allow-get-run-history",
+    "allow-get-run-failures",
     "allow-open-review-window",
     "allow-open-history-results",
     "allow-open-history-ledger",

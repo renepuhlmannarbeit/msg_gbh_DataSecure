@@ -3,9 +3,35 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const { execFileSync } = require('node:child_process');
+const { randomUUID } = require('node:crypto');
 const { test } = require('node:test');
 
 const root = path.resolve(__dirname, '..');
+
+test('unpublished candidate builds reject unsafe or existing output before altering saved files', () => {
+  const script = path.join(root, 'scripts/build-standalone-package.mjs');
+  assert.throws(() => execFileSync(process.execPath, [script, '--engineering-directory', '../release'],
+    { stdio: 'pipe' }), /STANDALONE_BUILD_ARGUMENT_INVALID/u);
+  const name = `engineering-contract-${randomUUID()}`;
+  const directory = path.join(root, 'dist', name);
+  fs.mkdirSync(directory);
+  const initial = fs.lstatSync(directory);
+  const sentinel = path.join(directory, 'preserved.txt');
+  fs.writeFileSync(sentinel, 'saved candidate');
+  try {
+    assert.throws(() => execFileSync(process.execPath, [script, '--engineering-directory', name],
+      { stdio: 'pipe' }), /EEXIST/u);
+    assert.equal(fs.readFileSync(sentinel, 'utf8'), 'saved candidate');
+    assert.deepEqual(fs.readdirSync(directory), ['preserved.txt']);
+  } finally {
+    const current = fs.lstatSync(directory);
+    assert.ok(current.isDirectory() && !current.isSymbolicLink());
+    assert.equal(current.dev, initial.dev); assert.equal(current.ino, initial.ino);
+    assert.equal(path.dirname(directory), path.join(root, 'dist'));
+    fs.unlinkSync(sentinel); fs.rmdirSync(directory);
+  }
+});
 
 test('standalone package build uses pinned runtime and a closed resource projection', () => {
   const prepare = fs.readFileSync(path.join(root, 'scripts', 'prepare-standalone-runtime.mjs'), 'utf8');
@@ -61,7 +87,10 @@ test('macOS package build is deterministic, self-contained and fail-closed', () 
   assert.match(verify, /readCentralModes/u);
   assert.match(verify, /0o100755/u);
   assert.match(verify, /\[0xcf, 0xfa, 0xed, 0xfe\]/u);
-  assert.match(verify, /CONVERSION_PACKAGE_RESOURCE_MISSING/u);
+  assert.match(verify, /verifyConversionInventory\(relative,/u);
+  const integrity = fs.readFileSync(path.join(root, 'scripts', 'lib', 'standalone-package-integrity.mjs'), 'utf8');
+  assert.match(integrity, /CONVERSION_INVENTORIES_MISSING/u);
+  assert.match(integrity, /verifyInventory\(files, manifest\.files,/u);
   assert.match(verify, /`\$\{archive\}\.sha256`/u);
 });
 
@@ -217,4 +246,26 @@ test('package smoke exercises a real failed CSV without exposing a false result 
   assert.match(smoke, /fs\.readFileSync\(failedSource\), failedOriginal/u);
   const { parseDocumentBuffer } = require('../plugins/data-secure/server/document-parser');
   assert.throws(() => parseDocumentBuffer(Buffer.from('Name,Wert\nBeispiel,"nicht abgeschlossen\n'), '.csv'), /CSV_QUOTE_INVALID/u);
+});
+
+test('package smoke binds actual review decisions and real restart to the extracted bundled runtime', async () => {
+  const smoke = fs.readFileSync(path.join(root, 'tests', 'test-standalone-package-smoke.mjs'), 'utf8');
+  assert.match(smoke, /await runPackagedReviewScenario\(\{ request, sourceDirectory, restart: async/u);
+  const restart = smoke.slice(smoke.indexOf('await runPackagedReviewScenario'), smoke.indexOf('const log =',
+    smoke.indexOf('await runPackagedReviewScenario')));
+  assert.match(restart, /childProcess\.spawn\(childProcessPath\(runtime\)/u);
+  assert.match(restart, /action: 'shutdown'/u);
+  assert.match(restart, /closePromise/u);
+  assert.doesNotMatch(restart, /plugins\/data-secure\/server|process\.execPath/u);
+  const scenario = fs.readFileSync(path.join(root, 'tests', 'helpers', 'standalone-packaged-review.mjs'), 'utf8');
+  for (const clause of ['originalAmbiguities', 'redact_organization', 'run_complete', 'failure names survive',
+    'automatic', 'no Tauri/WebView interaction claim']) assert.ok(scenario.includes(clause), clause);
+  assert.doesNotMatch(scenario, /vm\.|require\.cache|worker_factory|review_callback/u);
+  const { packagedReviewFixtures } = await import('./helpers/standalone-packaged-review.mjs');
+  const fixtures = packagedReviewFixtures();
+  assert.equal(fixtures.size, 5);
+  assert.equal([...fixtures].filter(([name]) => name.endsWith('.md')).length, 4);
+  for (const [name, bytes] of fixtures) if (name.endsWith('.md')) {
+    assert.equal(bytes.toString('utf8').match(/SYNTHETISCHER HÄRTETEST|TESTRUN VERIFIZIERER/gu).length, 1500);
+  }
 });

@@ -2,6 +2,8 @@
 
 const { normalizeText, canonicalizeRenderedText } = require('./base');
 const { preservedTextRanges } = require('./credentials');
+const { RESOURCE_LIMITS } = require('../resource-limits');
+const { sourceVariableTokens, VARIABLE_PLACEHOLDER_RE } = require('./spans');
 
 // These capabilities live only in the processing call. They are neither a
 // persisted allowlist nor a user/MCP parameter, and contain no public fields.
@@ -14,13 +16,33 @@ function invalidReview() {
   return error;
 }
 
-function residualPersonAmbiguities(originalText, anonymizedText, findings) {
+function assertReviewCount(count, options) {
+  const standalone = options.productChannel === 'standalone';
+  const limit = standalone ? RESOURCE_LIMITS.MAX_STANDALONE_REVIEW_FINDINGS : 1000;
+  if (count <= limit) return;
+  if (!standalone) throw invalidReview();
+  const error = new Error(`Ein Dokument überschreitet die lokale Prüfgrenze von ${limit.toLocaleString('de-DE')} Fundstellen. Teile dieses Dokument in kleinere Quelldateien und starte dafür einen neuen Lauf. Ungeprüfte Ergebnisse bleiben gesperrt; bereits geprüfte Ergebnisse bleiben erhalten.`);
+  error.code = 'LOCAL_REVIEW_TOO_LARGE';
+  throw error;
+}
+
+function importedSourceMarkerCandidates(originalText, anonymizedText) {
+  const sourceMarkers = sourceVariableTokens(normalizeText(originalText));
+  if (!sourceMarkers.size) return [];
+  return Array.from(String(anonymizedText).matchAll(VARIABLE_PLACEHOLDER_RE))
+    .filter(match => sourceMarkers.has(match[0]))
+    .map(match => ({ type: 'PERSON_CANDIDATE', text: match[0], start: match.index,
+      end: match.index + match[0].length }));
+}
+
+function residualPersonAmbiguities(originalText, anonymizedText, findings, options = {}) {
   const original = normalizeText(originalText);
   const anonymized = String(anonymizedText);
-  if (canonicalizeRenderedText(anonymized) !== anonymized || !Array.isArray(findings) || findings.length > 1000) throw invalidReview();
+  if (canonicalizeRenderedText(anonymized) !== anonymized || !Array.isArray(findings)) throw invalidReview();
+  assertReviewCount(findings.length, options);
   const identical = original === anonymized;
   const preserved = identical ? [{ original_start: 0, original_end: original.length, anonymized_start: 0 }]
-    : preservedTextRanges(original, anonymized);
+    : preservedTextRanges(original, anonymized, { preserveSourceVariableMarkers: true });
   const fragmentProvenance = new Map();
   const completelyPreserved = (retained) => {
     const fragment = original.slice(retained.original_start, retained.original_end);
@@ -77,15 +99,18 @@ function residualPersonAmbiguities(originalText, anonymizedText, findings) {
   return candidates;
 }
 
-function createPersonReviewBinding(text, ambiguities) {
+function createPersonReviewBinding(text, ambiguities, options = {}) {
   const source = String(text);
-  if (!Array.isArray(ambiguities) || ambiguities.length > 1000) throw invalidReview();
+  if (!Array.isArray(ambiguities)) throw invalidReview();
+  assertReviewCount(ambiguities.length, options);
   const snapshot = ambiguities.map((item) => Object.freeze({ ...item }));
   const byId = new Map(snapshot.map((item) => [item.ambiguity_id, item]));
   if (byId.size !== snapshot.length) throw invalidReview();
-  const required = snapshot.filter((item) => item.type === TYPE);
+  const required = snapshot.filter((item) => item.type === TYPE ||
+    (options.productChannel === 'standalone' && item.type === 'person_prose_ambiguous'));
   for (const item of required) {
-    if (!/^person-residual:v1:[0-9]{6}$/u.test(item.ambiguity_id) || item.replacement_kind !== 'PERSON' ||
+    const validId = item.type === TYPE ? /^person-residual:v1:[0-9]{6}$/u : /^person:v1:[0-9]{6}$/u;
+    if (!validId.test(item.ambiguity_id) || item.replacement_kind !== 'PERSON' ||
         !Number.isSafeInteger(item.anonymized_start) || !Number.isSafeInteger(item.anonymized_end) ||
         item.anonymized_start < 0 || item.anonymized_end <= item.anonymized_start || item.anonymized_end > source.length) throw invalidReview();
   }
@@ -98,7 +123,10 @@ function createPersonReviewBinding(text, ambiguities) {
     const choices = new Map();
     for (const item of decisions) {
       if (!item || Object.keys(item).sort().join(',') !== 'ambiguity_id,decision' ||
-          !byId.has(item.ambiguity_id) || choices.has(item.ambiguity_id) || !['keep', 'redact'].includes(item.decision)) throw invalidReview();
+          !byId.has(item.ambiguity_id) || choices.has(item.ambiguity_id) ||
+          !(['keep', 'redact'].includes(item.decision) || (options.allowOrganizationReview === true &&
+            item.decision === 'redact_organization' &&
+            ['person_prose_ambiguous', TYPE].includes(byId.get(item.ambiguity_id).type)))) throw invalidReview();
       choices.set(item.ambiguity_id, item.decision);
     }
     const edits = redactions.map((item) => ({ ...item })).sort((a, b) => a.start - b.start || a.end - b.end);
@@ -107,7 +135,9 @@ function createPersonReviewBinding(text, ambiguities) {
       if (!['end,start', 'end,replacement,start'].includes(Object.keys(edit).sort().join(',')) ||
           !Number.isSafeInteger(edit.start) || !Number.isSafeInteger(edit.end) || edit.start < cursor ||
           edit.end <= edit.start || edit.end > source.length ||
-          (edit.replacement !== undefined && !/^\[(?:MANUAL_REDACTION|PERSON_(?:[0-9]{3,5}|[A-Z2-7]{10,52}))\]$/u.test(edit.replacement))) throw invalidReview();
+          (edit.replacement !== undefined && !/^\[(?:MANUAL_REDACTION|PERSON_(?:[0-9]{3,5}|[A-Z2-7]{10,52}))\]$/u.test(edit.replacement) &&
+            !(options.allowOrganizationReview === true &&
+              /^\[(?:UNTERNEHMEN|ORGANISATION)_(?:[0-9]{3,5}|[A-Z2-7]{10,52})\]$/u.test(edit.replacement)))) throw invalidReview();
       expected += source.slice(cursor, edit.start) + (edit.replacement || '[MANUAL_REDACTION]');
       cursor = edit.end;
     }
@@ -117,9 +147,11 @@ function createPersonReviewBinding(text, ambiguities) {
     for (const item of required) {
       const start = item.anonymized_start, end = item.anonymized_end;
       const overlaps = edits.filter((edit) => edit.start < end && start < edit.end);
-      if (choices.get(item.ambiguity_id) === 'redact') {
+      const choice = choices.get(item.ambiguity_id);
+      if (choice === 'redact' || choice === 'redact_organization') {
+        const marker = choice === 'redact' ? /^\[PERSON_/u : /^\[(?:UNTERNEHMEN|ORGANISATION)_/u;
         if (overlaps.length !== 1 || overlaps[0].start !== start || overlaps[0].end !== end ||
-            !/^\[PERSON_/u.test(overlaps[0].replacement || '')) throw invalidReview();
+            !marker.test(overlaps[0].replacement || '')) throw invalidReview();
         continue;
       }
       if (overlaps.length) throw invalidReview();
@@ -151,4 +183,5 @@ function reviewedPersonRanges(token, rendered) {
   return approval?.text === rendered ? approval.ranges : [];
 }
 
-module.exports = { residualPersonAmbiguities, createPersonReviewBinding, reviewedPersonRanges };
+module.exports = { residualPersonAmbiguities, importedSourceMarkerCandidates,
+  createPersonReviewBinding, reviewedPersonRanges };

@@ -45,4 +45,14 @@ test('macOS verifies its truthful RSS-based resource contract', () => {
   }), { available: true, reason: 'ok', executable: file });
 });
 
+test('typed probe errors distinguish a missing loader from a vanished verified executable', () => {
+  for (const [code, reason] of [['ENOENT', 'dependency_missing'], ['EACCES', 'executable_denied'], ['ENOEXEC', 'executable_format']]) {
+    clearPosixSupervisorCache(); const file = artifact(`probe-${code}`);
+    assert.equal(verifyPosixSupervisor({ platform: 'linux', arch: 'x64', executable: file,
+      spawnSync: () => ({ error: Object.assign(new Error('PRIVATE DETAILS'), { code }) }) }).reason, reason);
+  }
+  clearPosixSupervisorCache(); const file = artifact('probe-vanished');
+  assert.equal(verifyPosixSupervisor({ platform: 'linux', arch: 'x64', executable: file,
+    spawnSync: () => { fs.unlinkSync(file); return { error: { code: 'ENOENT' } }; } }).reason, 'executable_missing');
+});
 done();

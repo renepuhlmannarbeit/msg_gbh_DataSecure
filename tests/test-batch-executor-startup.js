@@ -10,6 +10,7 @@ const { EventEmitter } = require('node:events');
 const { createSuite } = require('./helpers');
 
 const assert = require('node:assert');
+const { createReviewBroker } = require('../plugins/data-secure/server/standalone/review-broker');
 const filename = path.join(__dirname, '../plugins/data-secure/server/gateway/batch-executor.js');
 const source = fs.readFileSync(filename, 'utf8');
 const TOKEN = 'a'.repeat(64);
@@ -847,6 +848,36 @@ async function main() {
     assert.strictEqual(result.status, 0, result.stderr || result.stdout);
     assert.match(result.stdout, /ENOENT probe: batch, intake, review passed/);
   });
+  for (const [nativeCode, expected] of [['ENOENT', 'LOCAL_REVIEW_START_MISSING'],
+    ['EACCES', 'LOCAL_REVIEW_START_DENIED'], ['EPERM', 'LOCAL_REVIEW_START_DENIED'],
+    ['ENOEXEC', 'LOCAL_REVIEW_START_ARCHITECTURE'], ['EFTYPE', 'LOCAL_REVIEW_START_ARCHITECTURE']]) {
+    test(`Standalone review binds a synchronous ${nativeCode} launch failure before any draft`, () => {
+      const broker = createReviewBroker();
+      const f = fixture('review', Object.assign(privateError(), { code: nativeCode }));
+      assert.throws(() => f.start({ appReview: broker }), (error) => error instanceof SafeError && error.code === expected);
+      assert.deepStrictEqual(broker.session(), { ready: false, batch_id: TOKEN,
+        phase: 'failed', worker_active: false, error_code: expected });
+      assert.strictEqual(broker.boundBatchId(), TOKEN);
+      assert.doesNotMatch(JSON.stringify(broker.session()), /PRIVATE|customer|C:\\/u);
+      assert.strictEqual(f.claims.length, 0);
+      f.drain();
+    });
+  }
+  await testAsync('Standalone review retains its lease until exit after asynchronous denied launch', async () => {
+    const broker = createReviewBroker();
+    const child = fakeChild();
+    const f = fixture('review', child);
+    const started = f.start({ appReview: broker, requireIpcAcknowledgement: true });
+    child.emit('error', Object.assign(privateError(), { code: 'EPERM' }));
+    await assert.rejects(started.ipcAcknowledgement, { code: 'LOCAL_REVIEW_START_DENIED' });
+    assert.strictEqual(broker.session().worker_active, true);
+    assert.strictEqual(broker.session().error_code, 'LOCAL_REVIEW_START_DENIED');
+    assertRetainedWhileAlive(f, child, 'review');
+    child.exit(1);
+    f.drain();
+    assert.strictEqual(broker.session().worker_active, false);
+    assert.strictEqual(broker.session().error_code, 'LOCAL_REVIEW_START_DENIED');
+  });
   done();
 }
 
@@ -865,7 +896,8 @@ async function realNoPidProbe() {
     child.once('exit', () => { exited = true; });
     const f = fixture(role, child);
     assert.strictEqual(child.pid, undefined);
-    assertSafeStartFailure(() => f.start());
+    const broker = role === 'review' ? createReviewBroker() : undefined;
+    assertSafeStartFailure(() => f.start(broker ? { appReview: broker } : {}));
     await closed;
     assert.strictEqual(exited, false, 'failed spawn emits error/close, not exit');
     f.drain();
@@ -873,6 +905,8 @@ async function realNoPidProbe() {
     assert.strictEqual(f.claims.length, 0);
     assert.strictEqual(f.releases.length, 0);
     assertBoundedDiagnostics(f);
+    if (broker) assert.deepStrictEqual(broker.session(), { ready: false, batch_id: TOKEN,
+      phase: 'failed', worker_active: false, error_code: 'LOCAL_REVIEW_START_MISSING' });
   }
   console.log('ENOENT probe: batch, intake, review passed');
 }

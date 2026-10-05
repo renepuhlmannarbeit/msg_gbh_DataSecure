@@ -44,9 +44,9 @@ const {
   makeRegistry
 } = require('./entities');
 const { anonymizePersonnel } = require('./personnel');
-const { reviewedPersonRanges } = require('./residual-person-review');
+const { reviewedPersonRanges, importedSourceMarkerCandidates } = require('./residual-person-review');
 const { findStructuredSpans, scanStructured, replaceStructured } = require('./structured');
-const { placeholderSpans, applySpans } = require('./spans');
+const { placeholderSpans, maskPlaceholders, applySpans } = require('./spans');
 const {
   credentialContextSpans,
   credentialContextDetails,
@@ -743,7 +743,12 @@ function anonymize(text, profile = 'general', options = {}) {
   }
 
   const reserved = placeholderSpans(out);
-  const usable = spans.filter((s) => !reserved.some((r) => s.start < r.end && r.start < s.end));
+  const usable = spans.filter((s) => !reserved.some((r) => s.start < r.end && r.start < s.end &&
+    // A label-bound credential span owns the entire sensitive value, including
+    // forged/misplaced marker inside it. A marker must not shield neighbouring
+    // password text. Pure credential/manual-redaction values were excluded by
+    // the structural detector and therefore remain idempotent.
+    !(s.type === 'CREDENTIAL' && s.start <= r.start && s.end >= r.end)));
   const usableCredentials = sortedCredentialIntervals(usable);
 
   // Person and organisation findings are recorded when the dictionary is built;
@@ -781,7 +786,12 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
   const rendered = canonicalizeRenderedText(text);
   // Keep UTF-16 coordinates in the canonical view. A local human decision is
   // occurrence-bound; shrinking placeholders would move its reviewed span.
-  const clean = rendered.replace(/\[[A-ZÄÖÜ_]+(?:_\d+)?\]/gu, (value) => ' '.repeat(value.length));
+  const clean = maskPlaceholders(rendered);
+  // Discovery needs blank placeholder-only lines to retain late name context.
+  // Literal occurrence matching, however, must not bridge those blanks: they
+  // stand for already replaced text, not whitespace in an intact source name.
+  // Keep the exact UTF-16 coordinates and an opaque, non-whitespace barrier.
+  const personOccurrenceText = maskPlaceholders(rendered, '\uFFFC');
   const reviewedRanges = reviewedPersonRanges(options.reviewedPersonCandidates, rendered);
   const credentialRanges = credentialContextDetails(clean);
   const structured = scanStructured(clean);
@@ -791,6 +801,15 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
     .filter((f) => !(f.type === 'URL' && isProtectedProfessionalDomain(clean,f.start,f.end,credentialRanges)))
     .filter((f) => f.type === 'CREDENTIAL' || !insideCredentialValue(f.start, f.end))
     .map((f) => ({ type: f.type, text: f.type === 'CREDENTIAL' ? '' : f.text }));
+  // This dependency is internal and is always the actual canonical parser
+  // source in the publication workflow, never a user/MCP provenance claim.
+  // Inspect imported variable-payload labels (numeric IDs as well as HMACs)
+  // before opaque marker masking.
+  // Exact reviewed bytes/ranges may waive only their explicit Keep choice.
+  for (const finding of importedSourceMarkerCandidates(options.originalSourceText || '', rendered)) {
+    if (reviewedRanges.some(range => range.start === finding.start && range.end === finding.end)) continue;
+    out.push(options.includePersonCandidateSpans === true ? finding : { type: finding.type, text: finding.text });
+  }
   if (residualCredentialCandidates(clean).length && !out.some((finding) => finding.type === 'CREDENTIAL')) {
     out.push({ type: 'CREDENTIAL', text: '' });
   }
@@ -859,7 +878,7 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
     residualPersonSeeds.push(seed);
   }
   for (const seed of residualPersonSeeds) {
-    const occurrences=findLiteralSpans(clean,seed.value,'','PERSON',PRIORITY.PERSON)
+    const occurrences=findLiteralSpans(personOccurrenceText,seed.value,'','PERSON',PRIORITY.PERSON)
       .filter((span) => !insideCredentialValue(span.start, span.end));
     if (!occurrences.length) continue;
     const issuerOnly=occurrences.length>0 && occurrences.every((span) =>

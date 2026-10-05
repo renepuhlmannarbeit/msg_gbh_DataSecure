@@ -198,7 +198,7 @@ function afterIpcDrain(options, callback) {
 // Attach before checking pid: a failed spawn returns a ChildProcess without a
 // pid and emits `error` on the next turn. An outer synchronous catch cannot
 // consume that event. IPC errors may also happen after successful startup.
-function observeWorker(child, onFailure, onExit) {
+function observeWorker(child, onFailure, onExit, classifyNativeError) {
   if (!child || typeof child.once !== 'function') throw new Error('invalid child');
   const pid = Number.isSafeInteger(child.pid) && child.pid > 0 ? child.pid : null;
   let ended = false;
@@ -221,7 +221,10 @@ function observeWorker(child, onFailure, onExit) {
       try { child.kill?.(); } catch { /* retain ownership until confirmed exit */ }
     }
   }
-  (child.on || child.once).call(child, 'error', () => fail(pid === null ? 'LOCAL_WORKER_SPAWN_FAILED' : 'LOCAL_IPC_FAILED'));
+  (child.on || child.once).call(child, 'error', (error) => {
+    const classified = classifyNativeError?.(error);
+    fail(classified || (pid === null ? 'LOCAL_WORKER_SPAWN_FAILED' : 'LOCAL_IPC_FAILED'));
+  });
   child.once('exit', end);
   return { fail, get ended() { return ended; }, get failed() { return failed; } };
 }
@@ -739,6 +742,13 @@ function contentFreeReviewStart(progress, started) {
   };
 }
 
+function reviewStartErrorCode(error) {
+  if (error?.code === 'ENOENT') return 'LOCAL_REVIEW_START_MISSING';
+  if (['EACCES', 'EPERM'].includes(error?.code)) return 'LOCAL_REVIEW_START_DENIED';
+  if (['ENOEXEC', 'EFTYPE'].includes(error?.code)) return 'LOCAL_REVIEW_START_ARCHITECTURE';
+  return 'LOCAL_REVIEW_START_FAILED';
+}
+
 // Human review can legitimately take longer than a Cowork tool deadline.  The
 // token is sent only over inherited private IPC to a detached local worker;
 // Cowork receives a bounded start acknowledgement immediately and never sees
@@ -755,25 +765,41 @@ function startLocalReviewExecutor(token, options = {}) {
   let child;
   let worker;
   let acceptance;
-  let onWorkerFailure = (errorCode) => lifecycle({ event: 'review_ipc_failed', outcome: 'stopped', error_code: errorCode });
+  let attempt;
+  let onWorkerFailure = (errorCode) => {
+    options.appReview?.failed?.(child, errorCode);
+    acceptance?.reject(ipcAcknowledgementError(errorCode));
+    lifecycle({ event: 'review_ipc_failed', outcome: 'stopped', error_code: errorCode });
+  };
   let onWorkerExit = (code, failed, pid) => {
     if (pid !== null) lifecycle({ event: 'review_worker_exited', outcome: 'stopped', exit_code: code,
       error_code: 'LOCAL_REVIEW_WORKER_EXITED' });
+    if (claimedLease) releaseExecutor(token, pid);
+    if (pendingReviews.get(token) === child) pendingReviews.delete(token);
+    options.appReview?.release(child, { failed: code !== 0 || failed, errorCode: 'LOCAL_REVIEW_WORKER_EXITED' });
   };
   let claimedLease = false;
   try {
+    attempt = options.appReview?.beginAttempt?.(token);
     child = launchBackgroundRole('review', { forkProcess, env: batchWorkerEnvironment({ ...(options.env || process.env), DATASECURE_RUN_ID: runId }) });
-    worker = observeWorker(child, code => onWorkerFailure(code), (...args) => onWorkerExit(...args));
+    worker = observeWorker(child, code => onWorkerFailure(code), (...args) => onWorkerExit(...args),
+      options.appReview ? (error) => {
+        const code = reviewStartErrorCode(error);
+        options.appReview.startFailed?.(token, code, child, attempt);
+        return code;
+      } : undefined);
     if (!child || !Number.isSafeInteger(child.pid) || child.pid <= 0 || typeof child.send !== 'function') {
       throw new Error('invalid child');
     }
     lifecycle({ event: 'review_worker_spawned', outcome: 'ok' });
     const claimed = claimExecutor(token, child.pid);
     if (claimed.ok === false) {
+      options.appReview?.startFailed?.(token, 'LOCAL_REVIEW_START_FAILED', child, attempt);
       worker.fail('LOCAL_WORKER_SPAWN_FAILED');
       return contentFreeReviewStart(claimed, false);
     }
     claimedLease = true;
+    options.appReview?.begin?.(child, token);
     acceptance = createWorkerAcceptance(worker, 'local-review-accepted', options);
     pendingReviews.set(token, child);
     child.on?.('message', (message) => {
@@ -786,6 +812,7 @@ function startLocalReviewExecutor(token, options = {}) {
         progress.batch_total);
     });
     onWorkerFailure = (errorCode) => {
+      options.appReview?.failed?.(child, errorCode);
       acceptance.reject(ipcAcknowledgementError(errorCode));
       lifecycle({ event: 'review_ipc_failed', outcome: 'stopped', error_code: errorCode });
     };
@@ -795,7 +822,8 @@ function startLocalReviewExecutor(token, options = {}) {
         error_code: code === 0 && !failed ? 'NONE' : 'LOCAL_REVIEW_WORKER_EXITED' });
       if (claimedLease) releaseExecutor(token, pid);
       if (pendingReviews.get(token) === child) pendingReviews.delete(token);
-      options.appReview?.release(child);
+      options.appReview?.release(child, { failed: code !== 0 || failed,
+        errorCode: 'LOCAL_REVIEW_WORKER_EXITED' });
     };
     child.send({ type: 'start-local-review', batch_token: token,
       ...(options.appReview ? { ui: 'standalone-app' } : {}) }, (error) => {
@@ -809,10 +837,14 @@ function startLocalReviewExecutor(token, options = {}) {
     const response = contentFreeReviewStart(claimed, true);
     Object.defineProperty(response, 'ipcAcknowledgement', { value: acceptance.promise, enumerable: false });
     return response;
-  } catch {
+  } catch (error) {
     if (worker) worker.fail('LOCAL_WORKER_SPAWN_FAILED');
     else lifecycle({ event: 'review_ipc_failed', outcome: 'stopped', error_code: 'LOCAL_WORKER_SPAWN_FAILED' });
-    throw new SafeError('Die lokale Stapelprüfung konnte nicht sicher gestartet werden.');
+    const code = reviewStartErrorCode(error);
+    options.appReview?.startFailed?.(token, code, child, attempt);
+    const failure = new SafeError('Die lokale Stapelprüfung konnte nicht sicher gestartet werden.');
+    if (options.appReview) failure.code = code;
+    throw failure;
   }
 }
 

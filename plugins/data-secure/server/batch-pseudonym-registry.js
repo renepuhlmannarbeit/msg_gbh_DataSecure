@@ -57,6 +57,12 @@ function inputError(message) {
   return error;
 }
 
+function capacityError() {
+  const error = new Error('Die laufweite Grenze für eindeutige Identitäten oder deren Schreibweisen ist erreicht. Bitte einen kleineren neuen Lauf mit den verbleibenden Originaldateien beginnen.');
+  error.code = 'BATCH_PSEUDONYM_CAPACITY_EXCEEDED';
+  return error;
+}
+
 function textLimitError() {
   const error = new SafeError('Der Text oder eine bekannte Stapelkennung überschreitet die lokale Prüfgrenze.');
   error.code = 'TEXT_TOO_LARGE';
@@ -157,7 +163,7 @@ function createBatchPseudonymRegistry(secret, options = {}) {
     if (canonical.length > KNOWN_ALIAS_MAX_CHARS) throw textLimitError();
     const start = completeStartIndex ? knownStartId(canonical) : null;
     if (start && !knownStarts.has(start) && knownStarts.size >= 10000) {
-      throw inputError('Der lokale Stapel-Pseudonymzustand ist vollständig belegt.');
+      throw capacityError();
     }
     return start;
   }
@@ -244,17 +250,17 @@ function createBatchPseudonymRegistry(secret, options = {}) {
     if (!readable) {
       const derived = placeholderForDigest(kind, digest, labels);
       if (!labels.has(derived.placeholder) && labels.size >= 10000) {
-        throw inputError('Der lokale Stapel-Pseudonymzustand ist vollständig belegt.');
+        throw capacityError();
       }
       return derived;
     }
     const digestId = digest.toString('base64url');
     const existing = digestLabels.get(digestId);
     if (existing) return { placeholder: existing, digestId };
-    if (labels.size >= 10000) throw inputError('Der lokale Stapel-Pseudonymzustand ist vollständig belegt.');
+    if (labels.size >= 10000) throw capacityError();
     const prefix = READABLE_PREFIX[kind] + (ambiguous ? '_UNKLAR' : '');
     const next = (sequences.get(prefix) || 0) + 1;
-    if (next > 10000) throw inputError('Der lokale Stapel-Pseudonymzustand ist vollständig belegt.');
+    if (next > 10000) throw capacityError();
     const placeholder = `[${prefix}_${String(next).padStart(3, '0')}]`;
     sequences.set(prefix, next);
     digestLabels.set(digestId, placeholder);
@@ -263,7 +269,7 @@ function createBatchPseudonymRegistry(secret, options = {}) {
 
   function assertAliasCapacity(alias) {
     if (!bindings.has(alias) && bindings.size >= 10000) {
-      throw inputError('Der lokale Stapel-Pseudonymzustand ist vollständig belegt.');
+      throw capacityError();
     }
   }
 
@@ -402,7 +408,7 @@ function createBatchPseudonymRegistry(secret, options = {}) {
     const requiredAliases = [alias, presentationId].filter((id) => !bindings.has(id));
     const unusedPresentationId = placeholder === LEGACY_EMPLOYER_ROLE ? displayId : roleId;
     if (bindings.size + requiredAliases.length - Number(bindings.has(unusedPresentationId)) > 10000) {
-      throw inputError('Der lokale Stapel-Pseudonymzustand ist vollständig belegt.');
+      throw capacityError();
     }
     // All reservations/capacities are checked before the first mutation, so a
     // failed action's finally-export always remains a valid resumable journal.

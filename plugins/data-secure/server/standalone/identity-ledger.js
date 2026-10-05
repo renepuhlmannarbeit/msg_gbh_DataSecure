@@ -10,12 +10,16 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { assertPrivateDirectory, ensurePrivateDirectory } = require('../gateway/common');
 const { linkWithTransientRetry, syncParentDirectory } = require('../gateway/batch-journal-io');
+const { RESOURCE_LIMITS } = require('../resource-limits');
 
 const SCHEMA = 'datasecure-standalone-identity/1';
 const TOKEN_RE = /^[a-f0-9]{64}$/u;
 const ITEM_RE = /^[a-f0-9]{32}$/u;
 const LABEL_RE = /^\[(?:PERSON|UNTERNEHMEN|PROJEKT)_\d{3,5}\]$/u;
 const MAX_SNAPSHOT_BYTES = 2 * 1024 * 1024;
+// Each valid private snapshot is bounded separately. The human document is a
+// streamed aggregation, not another single-item snapshot (up to 200 items).
+const MAX_DOCUMENT_BYTES = RESOURCE_LIMITS.MAX_BATCH_FILES * (MAX_SNAPSHOT_BYTES + 2048);
 const CONFIDENTIAL_FOLDER = 'VERTRAULICH-NICHT-HOCHLADEN';
 const DOCUMENT = 'DataSecure-Identitaeten-VERTRAULICH.txt';
 const PUBLICATION = 'publication.json';
@@ -48,11 +52,11 @@ function resolveDirectory(options = {}) {
   return root;
 }
 
-function assertRegular(file) {
+function assertRegular(file, maxBytes = MAX_SNAPSHOT_BYTES) {
   const link = fs.lstatSync(file, { bigint: true });
   const opened = fs.statSync(file, { bigint: true });
   if (!link.isFile() || link.isSymbolicLink() || !opened.isFile() ||
-      link.dev !== opened.dev || link.ino !== opened.ino || opened.size > BigInt(MAX_SNAPSHOT_BYTES) ||
+      link.dev !== opened.dev || link.ino !== opened.ino || opened.size > BigInt(maxBytes) ||
       link.nlink !== 1n) throw invalid();
 }
 
@@ -147,11 +151,47 @@ function readableLine(value) {
   return String(value || '').normalize('NFC').replace(/[\r\n\u0000-\u001f\u007f]+/gu, ' ').trim();
 }
 
+function fileDigest(file) {
+  assertRegular(file, MAX_DOCUMENT_BYTES);
+  const fd = fs.openSync(file, 'r');
+  const buffer = Buffer.alloc(64 * 1024);
+  const hash = crypto.createHash('sha256');
+  try {
+    let length;
+    while ((length = fs.readSync(fd, buffer, 0, buffer.length, null)) > 0) hash.update(buffer.subarray(0, length));
+    return hash.digest('hex');
+  } finally { buffer.fill(0); fs.closeSync(fd); }
+}
+
+function atomicDocument(file, chunks) {
+  const temporary = `${file}.${crypto.randomBytes(12).toString('hex')}.tmp`;
+  let total = 0;
+  const hash = crypto.createHash('sha256');
+  try {
+    const fd = fs.openSync(temporary, 'wx', 0o600);
+    try {
+      for (const chunk of chunks) {
+        const bytes = Buffer.from(chunk, 'utf8');
+        try {
+          total += bytes.length;
+          if (total > MAX_DOCUMENT_BYTES) throw invalid();
+          hash.update(bytes);
+          fs.writeFileSync(fd, bytes);
+        } finally { bytes.fill(0); }
+      }
+      fs.fsyncSync(fd);
+    } finally { fs.closeSync(fd); }
+    if (fs.existsSync(file) && fileDigest(file) === hash.digest('hex')) return;
+    fs.renameSync(temporary, file);
+    syncParentDirectory(file, fs, process.platform);
+  } finally { try { fs.unlinkSync(temporary); } catch (error) { if (error.code !== 'ENOENT') throw error; } }
+}
+
 function materialize(state, options = {}) {
   const status = identityStatus(state, options);
   if (!status.available) throw invalid();
   const directory = directoryFor(state.token, options);
-  const lines = [
+  const header = [
     'DataSecure – vertrauliche Identitätszuordnung (nur lokal für Menschen)',
     'NICHT in KI-Systeme hochladen. Diese Datei enthält Originalwerte und ist selbst vertraulich.',
     `Vollständigkeit der erfassten Ergebnisdateien: ${status.captured_count}/${status.released_count}.`,
@@ -160,23 +200,21 @@ function materialize(state, options = {}) {
     'Originalwerte sind technisch für den Vergleich normalisiert; Groß-/Kleinschreibung kann abweichen.',
     ''
   ];
+  function* chunks() {
+  yield header.join('\r\n') + '\r\n';
   for (const item of state.items.filter((candidate) => candidate.status === 'released')) {
     let snapshot;
     try { snapshot = readSnapshot(state.token, item.id, options); }
-    catch { lines.push(`OHNE ZUORDNUNG: ${readableLine(item.source_label || item.name)}`); continue; }
-    lines.push(`Datei: ${readableLine(item.source_label || item.name)}`);
-    if (!snapshot.entries.length) lines.push('  Keine eindeutig zuordenbaren Pseudonyme erfasst.');
-    for (const entry of snapshot.entries) lines.push(`  ${entry.pseudonym} = ${readableLine(entry.original)}`);
-    for (const label of snapshot.unmapped_labels) lines.push(`  OHNE EINDEUTIGE ZUORDNUNG: ${label}`);
-    lines.push('');
+    catch { yield `OHNE ZUORDNUNG: ${readableLine(item.source_label || item.name)}\r\n`; continue; }
+    yield `Datei: ${readableLine(item.source_label || item.name)}\r\n`;
+    if (!snapshot.entries.length) yield '  Keine eindeutig zuordenbaren Pseudonyme erfasst.\r\n';
+    for (const entry of snapshot.entries) yield `  ${entry.pseudonym} = ${readableLine(entry.original)}\r\n`;
+    for (const label of snapshot.unmapped_labels) yield `  OHNE EINDEUTIGE ZUORDNUNG: ${label}\r\n`;
+    yield '\r\n';
+  }
   }
   const file = path.join(directory, DOCUMENT);
-  const content = lines.join('\r\n');
-  if (fs.existsSync(file)) {
-    assertRegular(file);
-    if (fs.readFileSync(file, 'utf8') === content) return { local_path: file, complete: status.complete };
-  }
-  atomicWrite(file, content);
+  atomicDocument(file, chunks());
   return { local_path: file, complete: status.complete };
 }
 
@@ -185,7 +223,7 @@ function resolveDocument(token, options = {}) {
   assertDirectory(path.dirname(directory));
   assertDirectory(directory);
   const file = path.join(directory, DOCUMENT);
-  assertRegular(file);
+  assertRegular(file, MAX_DOCUMENT_BYTES);
   return file;
 }
 
@@ -221,9 +259,7 @@ function publishDocumentToRun(token, runPath, options = {}) {
   const markerFile = path.join(directory, PUBLICATION);
   const confidential = path.join(run, CONFIDENTIAL_FOLDER);
   const target = path.join(confidential, DOCUMENT);
-  const bytes = fs.readFileSync(privateFile);
-  if (bytes.length > MAX_SNAPSHOT_BYTES) throw invalid();
-  const digest = crypto.createHash('sha256').update(bytes).digest('hex');
+  const digest = fileDigest(privateFile);
   const marker = { schema: 'datasecure-standalone-identity-publication/1', run, sha256: digest };
   if (fs.existsSync(markerFile)) {
     assertRegular(markerFile);
@@ -232,8 +268,8 @@ function publishDocumentToRun(token, runPath, options = {}) {
     // remains available through the local History action.
     try {
       assertPlainDirectory(confidential);
-      assertRegular(target);
-      if (crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex') === digest) {
+      assertRegular(target, MAX_DOCUMENT_BYTES);
+      if (fileDigest(target) === digest) {
         return { local_path: target, published: true, existing: true };
       }
     } catch { /* private fallback below */ }
@@ -243,25 +279,42 @@ function publishDocumentToRun(token, runPath, options = {}) {
   assertPlainDirectory(run);
   assertPlainDirectory(confidential);
   if (fs.existsSync(target)) {
-    assertRegular(target);
-    if (crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex') !== digest) throw invalid();
+    assertRegular(target, MAX_DOCUMENT_BYTES);
+    if (fileDigest(target) !== digest) throw invalid();
   } else {
     const temporary = path.join(confidential, `.${DOCUMENT}.${crypto.randomBytes(12).toString('hex')}.tmp`);
     try {
-      const fd = fs.openSync(temporary, 'wx', 0o600);
-      try { fs.writeFileSync(fd, bytes); fs.fsyncSync(fd); }
+      fs.copyFileSync(privateFile, temporary, fs.constants.COPYFILE_EXCL);
+      fs.chmodSync(temporary, 0o600);
+      const fd = fs.openSync(temporary, 'r+');
+      try { fs.fsyncSync(fd); }
       finally { fs.closeSync(fd); }
+      if (fileDigest(temporary) !== digest) throw invalid();
       assertPlainDirectory(run);
       assertPlainDirectory(confidential);
       linkWithTransientRetry(temporary, target);
       fs.unlinkSync(temporary);
       syncParentDirectory(target, fs, process.platform);
-      assertRegular(target);
-      if (crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex') !== digest) throw invalid();
+      assertRegular(target, MAX_DOCUMENT_BYTES);
+      if (fileDigest(target) !== digest) throw invalid();
     } finally { try { fs.unlinkSync(temporary); } catch { /* preserve the target/error */ } }
   }
   atomicWrite(markerFile, JSON.stringify(marker));
   return { local_path: target, published: true, existing: false };
+}
+
+function publicationAvailable(token, run, options = {}) {
+  try {
+    const file = resolveDocument(token, options);
+    const markerFile = path.join(directoryFor(token, options), PUBLICATION);
+    assertRegular(markerFile);
+    const marker = JSON.parse(fs.readFileSync(markerFile, 'utf8'));
+    const digest = fileDigest(file);
+    if (JSON.stringify(marker) !== JSON.stringify({ schema: 'datasecure-standalone-identity-publication/1', run, sha256: digest })) return false;
+    const directory = path.join(run, CONFIDENTIAL_FOLDER);
+    assertPlainDirectory(run); assertPlainDirectory(directory);
+    return fileDigest(path.join(directory, DOCUMENT)) === digest;
+  } catch { return false; }
 }
 
 // Only uncommitted snapshots belonging to definitively stopped items are
@@ -286,4 +339,4 @@ function pruneStopped(state, options = {}) {
 }
 
 module.exports = { capture, readSnapshot, identityStatus, materialize, resolveDocument, pruneStopped,
-  documentAvailable, publishDocumentToRun, privateRoot, resolveDirectory };
+  documentAvailable, publishDocumentToRun, publicationAvailable, privateRoot, resolveDirectory };

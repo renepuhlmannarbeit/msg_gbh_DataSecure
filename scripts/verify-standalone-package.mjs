@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { readCentralModes } from './lib/zip.mjs';
+import { verifyStandaloneInventory, verifyConversionInventory, verifyArchiveChecksum } from './lib/standalone-package-integrity.mjs';
 
 const require = createRequire(import.meta.url);
 const { readZip } = require('../plugins/data-secure/server/zip-reader.js');
@@ -42,12 +42,7 @@ assert.equal(manifest.version, version);
 assert.equal(manifest.target, 'windows-x64');
 assert.equal(manifest.requires_node_install, false);
 assert.equal(manifest.requires_rust_install, false);
-for (const file of manifest.files) {
-  const value = relative.get(file.path);
-  assert.ok(value, `STANDALONE_MANIFEST_MISSING:${file.path}`);
-  assert.equal(value.length, file.bytes);
-  assert.equal(crypto.createHash('sha256').update(value).digest('hex'), file.sha256);
-}
+verifyStandaloneInventory(relative, manifest);
 const rustLicenses = JSON.parse(relative.get('RUST-LICENSE-INVENTORY.json'));
 assert.equal(rustLicenses.schema, 'datasecure-rust-license-inventory/1');
 assert.ok(rustLicenses.components.length > 0);
@@ -56,12 +51,6 @@ const sbom = JSON.parse(relative.get('SBOM.spdx.json'));
 for (const component of rustLicenses.components) {
   assert.ok(sbom.packages.some((item) => item.name === component.name && item.versionInfo === component.version &&
     item.licenseDeclared === component.license && item.licenseConcluded === component.license));
-}
-const sums = relative.get('SHA256SUMS').toString('utf8').trim().split(/\r?\n/u);
-for (const line of sums) {
-  const match = /^([a-f0-9]{64})  (.+)$/u.exec(line);
-  assert.ok(match, 'STANDALONE_SHA256SUMS_INVALID');
-  assert.equal(crypto.createHash('sha256').update(relative.get(match[2])).digest('hex'), match[1]);
 }
 for (const executable of ['DataSecure Standalone.exe', 'datasecure-core-x86_64-pc-windows-msvc.exe',
   'server/standalone/conversion-runtime/node.exe',
@@ -73,13 +62,9 @@ for (const executable of ['DataSecure Standalone.exe', 'datasecure-core-x86_64-p
 const conversion = JSON.parse(relative.get('server/standalone/conversion-runtime/RUNTIME.json'));
 assert.equal(conversion.schema, 'datasecure-conversion-runtime/1');
 assert.equal(conversion.target, 'windows-x64');
-for (const file of conversion.files) {
-  const value = relative.get(`server/standalone/conversion-runtime/${file.path}`);
-  assert.ok(value, 'CONVERSION_PACKAGE_RESOURCE_MISSING');
-  assert.equal(value.length, file.bytes);
-  assert.equal(crypto.createHash('sha256').update(value).digest('hex'), file.sha256);
-}
+verifyConversionInventory(relative, 'server/standalone/conversion-runtime/', conversion);
 for (const [name, version] of [['tesseract.js', '7.0.0'], ['@napi-rs/canvas', '1.0.7'], ['pdfjs-dist', '6.2.108']]) {
   assert.ok(conversion.packages.some(item => item.name === name && item.version === version));
 }
+verifyArchiveChecksum(bytes, archive, fs.readFileSync(`${archive}.sha256`, 'utf8'));
 process.stdout.write(`${JSON.stringify({ ok: true, archive, entries: relative.size, bytes: bytes.length })}\n`);

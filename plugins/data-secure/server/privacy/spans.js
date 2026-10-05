@@ -8,7 +8,27 @@
 // Collecting spans first and resolving conflicts once makes the outcome
 // independent of rule order.
 
-const PLACEHOLDER_RE = /\[[A-ZÄÖÜ_]+(?:_\d+)?\]/gu;
+// A bracketed uppercase source value is not a redaction. Only the closed
+// vocabulary actually emitted by the engine/registries is opaque. Recognising
+// these legacy output tokens also keeps re-anonymisation idempotent; syntax is
+// not an attestation that a token in an imported document was generated here.
+// In particular [BEISPIEL], [NAME] and [ABC_123] remain ordinary source text.
+const PLACEHOLDER_RE = /\[(?:(?:PERSON|ORGANISATION|UNTERNEHMEN|KUNDE|PROJEKT|PERSON_UNKLAR|UNTERNEHMEN_UNKLAR|PROJEKT_UNKLAR)_(?:[0-9]{3,5}|[A-Z2-7]{10,52})|ARBEITGEBER_001|ORGANISATION_UNKLAR|PERSON_REVIEW_[0-9]{6}|(?:BANK_DATA|CONTACT|CREDENTIAL|DATE|EMAIL|ID|IP|LOCATION|PHONE|URL)_REDACTED|MANUAL_REDACTION)\]/gu;
+
+// Unlike fixed redaction vocabulary, an imported variable suffix can be
+// written as a real name or internal identifier. Syntax alone is no provenance:
+// [PERSON_DENISEKOCH] looks like an HMAC label; [PERSON_4711] can be an ID. Its
+// unchanged source occurrence needs an explicit, occurrence-bound local choice
+// before publication. Newly produced labels are not imported source values.
+const VARIABLE_PLACEHOLDER_RE = /\[(?:(?:PERSON|ORGANISATION|UNTERNEHMEN|KUNDE|PROJEKT|PERSON_UNKLAR|UNTERNEHMEN_UNKLAR|PROJEKT_UNKLAR)_(?:[0-9]{3,5}|[A-Z2-7]{10,52})|PERSON_REVIEW_[0-9]{6})\]/gu;
+
+function sourceVariableTokens(text) {
+  return new Set(String(text).match(VARIABLE_PLACEHOLDER_RE) || []);
+}
+
+function maskPlaceholders(text, barrier = ' ') {
+  return String(text).replace(PLACEHOLDER_RE, value => barrier.repeat(value.length));
+}
 
 function placeholderSpans(text) {
   const out = [];
@@ -59,4 +79,5 @@ function lineBoundsAt(text, index) {
   return { from, to };
 }
 
-module.exports = { PLACEHOLDER_RE, placeholderSpans, resolveSpans, applySpans, lineBoundsAt };
+module.exports = { PLACEHOLDER_RE, VARIABLE_PLACEHOLDER_RE, sourceVariableTokens,
+  placeholderSpans, maskPlaceholders, resolveSpans, applySpans, lineBoundsAt };

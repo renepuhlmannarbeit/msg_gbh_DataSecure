@@ -8,6 +8,7 @@ const { LIMITS, hasReparseComponent, hasReparseComponentAsync, isManagedStagingP
 const { sourceLimitForExtension } = require('../resource-limits');
 const { uiProcessEnvironment } = require('./ui-process-policy');
 const { visibleResultTreeOverlaps } = require('../gateway/result-folder-config');
+const { MAX_METADATA_BYTES, metadataName, metadataReason } = require('./folder-metadata');
 const VISIBLE_OUTPUT_SOURCE_MESSAGE = 'Die ausgewählte Datei liegt im sichtbaren DataSecure-Output. Bitte nur Originaldateien auswählen.';
 
 const MAX_SOURCE_BYTES = LIMITS.MAX_INPUT_BYTES;
@@ -69,9 +70,23 @@ async function readPrefix(filePath, io) {
 // exists whose first two characters Office replaced with "~$".
 function sourceArtifactReason(filePath, options = {}) {
   const name = officeOwnerName(filePath);
-  if (!name) return null;
   const fsApi = options.fs || fs;
+  if (!name && !(options.productChannel === 'standalone' && metadataName(path.basename(filePath)))) return null;
   const stat = options.stat || fsApi.lstatSync(filePath);
+  if (!name) {
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size < 1 || stat.size > MAX_METADATA_BYTES) return null;
+    const fd = fsApi.openSync(filePath, 'r');
+    try {
+      const current = fsApi.fstatSync(fd);
+      if (!current.isFile() || current.size !== stat.size || current.ino !== stat.ino || current.dev !== stat.dev) return null;
+      const buffer = Buffer.alloc(stat.size);
+      try {
+        let read = 0;
+        while (read < buffer.length) { const size = fsApi.readSync(fd, buffer, read, buffer.length - read, read); if (!size) return null; read += size; }
+        return metadataReason(path.basename(filePath), buffer);
+      } finally { buffer.fill(0); }
+    } finally { fsApi.closeSync(fd); }
+  }
   if (!Number.isSafeInteger(stat.size) || stat.size < 1 || stat.size > OFFICE_OWNER_MAX_BYTES) return null;
   if (zipPrefix(readPrefixSync(filePath, fsApi))) return null;
   const tail = name.slice(2).toLocaleLowerCase('en-US');
@@ -88,10 +103,24 @@ function sourceArtifactReason(filePath, options = {}) {
 
 async function sourceArtifactReasonAsync(filePath, options = {}) {
   const name = officeOwnerName(filePath);
-  if (!name) return null;
   const fsApi = options.fs || fs;
+  if (!name && !(options.productChannel === 'standalone' && metadataName(path.basename(filePath)))) return null;
   const io = options.fsPromises || fsApi.promises || fs.promises;
   const stat = options.stat || await io.lstat(filePath);
+  if (!name) {
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size < 1 || stat.size > MAX_METADATA_BYTES) return null;
+    const handle = await io.open(filePath, 'r');
+    try {
+      const current = await handle.stat();
+      if (!current.isFile() || current.size !== stat.size || current.ino !== stat.ino || current.dev !== stat.dev) return null;
+      const buffer = Buffer.alloc(stat.size);
+      try {
+        let read = 0;
+        while (read < buffer.length) { const { bytesRead } = await handle.read(buffer, read, buffer.length - read, read); if (!bytesRead) return null; read += bytesRead; }
+        return metadataReason(path.basename(filePath), buffer);
+      } finally { buffer.fill(0); }
+    } finally { await handle.close(); }
+  }
   if (!Number.isSafeInteger(stat.size) || stat.size < 1 || stat.size > OFFICE_OWNER_MAX_BYTES) return null;
   if (zipPrefix(await readPrefix(filePath, io))) return null;
   const tail = name.slice(2).toLocaleLowerCase('en-US');
@@ -228,42 +257,56 @@ function pickerCommands(platform = process.platform, env = process.env, allowedT
 
 function stripPickerLineEnding(value) { return String(value ?? '').replace(/\r?\n$/u, ''); }
 
+// Local-only metadata: never put original filenames in an exception message,
+// public MCP response or content-free diagnostics.
+function selectionFileFailure(code, message, selected) {
+  const error = Object.assign(new SafeError(message), { code });
+  const name = path.basename(String(selected || ''));
+  if (name && name.length <= 1024 && !/[\\\u0000-\u001f\u007f]/u.test(name) &&
+      !['.', '..'].includes(name) && !path.win32.isAbsolute(name) && !path.posix.isAbsolute(name)) {
+    error.localSelectionFiles = [{ name, reason_code: code }];
+    error.localSelectionCount = 1;
+  }
+  return error;
+}
+
 function validateSelectedPath(selected, options = {}) {
   const fsApi = options.fs || fs;
   const pathHasReparseComponent = options.hasReparseComponent || hasReparseComponent;
   const candidate = String(selected || '');
-  if (!candidate) throw new SafeError('Keine Datei ausgewählt.');
-  if (!path.isAbsolute(candidate)) throw new SafeError('Die Dateiauswahl ist nicht absolut.');
-  if (isManagedStagingPath(candidate)) throw new SafeError('Private temporäre Ausgaben dürfen nicht als Quelle ausgewählt werden.');
+  if (!candidate) throw selectionFileFailure('SOURCE_PATH_UNSAFE', 'Keine Datei ausgewählt.', candidate);
+  if (!path.isAbsolute(candidate)) throw selectionFileFailure('SOURCE_PATH_UNSAFE', 'Die Dateiauswahl ist nicht absolut.', candidate);
+  if (isManagedStagingPath(candidate)) throw selectionFileFailure('SOURCE_PATH_UNSAFE', 'Private temporäre Ausgaben dürfen nicht als Quelle ausgewählt werden.', candidate);
   // Released results must not re-enter the pipeline through the file picker
   // either; the folder picker applies the same gate to the whole tree.
-  if (visibleResultTreeOverlaps(candidate)) throw new SafeError(VISIBLE_OUTPUT_SOURCE_MESSAGE);
+  if (visibleResultTreeOverlaps(candidate)) throw selectionFileFailure('SOURCE_PATH_UNSAFE', VISIBLE_OUTPUT_SOURCE_MESSAGE, candidate);
   if (pathHasReparseComponent(candidate)) {
-    throw new SafeError('Die ausgewählte Datei liegt hinter einem Link oder Reparse-Punkt und wurde nicht übernommen.');
+    throw selectionFileFailure('SOURCE_PATH_UNSAFE', 'Die ausgewählte Datei liegt hinter einem Link oder Reparse-Punkt und wurde nicht übernommen.', candidate);
   }
   const extension = path.extname(candidate).toLowerCase();
   const sourceType = SOURCE_TYPES[extension];
-  if (!sourceType) throw new SafeError('Das ausgewählte Dateiformat wird nicht unterstützt.');
+  if (!sourceType) throw selectionFileFailure('SOURCE_FORMAT_UNSUPPORTED', 'Das ausgewählte Dateiformat wird nicht unterstützt.', candidate);
   if (options.allowedTypes && !new Set(options.allowedTypes).has(sourceType)) {
-    throw new SafeError('Dieses Dateiformat ist im aktuellen Companion-Ablauf noch nicht freigegeben.');
+    throw selectionFileFailure('SOURCE_FORMAT_UNSUPPORTED', 'Dieses Dateiformat ist im aktuellen Companion-Ablauf noch nicht freigegeben.', candidate);
   }
   let stat;
   try {
     stat = fsApi.lstatSync(candidate);
-  } catch {
-    throw new SafeError('Die ausgewählte Datei ist nicht mehr verfügbar.');
+  } catch (error) {
+    throw selectionFileFailure(['EACCES', 'EPERM'].includes(error?.code) ? 'SOURCE_ACCESS_DENIED' : 'SOURCE_READ_FAILED',
+      'Die ausgewählte Datei ist nicht mehr verfügbar oder nicht zugreifbar.', candidate);
   }
   if (!stat.isFile() || stat.isSymbolicLink()) {
-    throw new SafeError('Die Auswahl ist keine reguläre lokale Datei.');
+    throw selectionFileFailure('SOURCE_PATH_UNSAFE', 'Die Auswahl ist keine reguläre lokale Datei.', candidate);
   }
   if (sourceArtifactReason(candidate, { ...options, fs: fsApi, stat })) {
-    throw Object.assign(new SafeError('Eine temporäre Office-Sperrdatei kann nicht verarbeitet werden.'),
-      { code: 'SOURCE_ARTIFACT_IGNORED' });
+    throw selectionFileFailure('SOURCE_ARTIFACT_IGNORED',
+      'Eine temporäre Office-Sperrdatei kann nicht verarbeitet werden.', candidate);
   }
   const maxBytes = options.maxBytes ?? sourceLimitForExtension(extension);
   if (!Number.isSafeInteger(stat.size) || stat.size < 1 || stat.size > maxBytes) {
-    throw Object.assign(new SafeError('Die ausgewählte Datei überschreitet die sichere Einzeldateigrenze für dieses Format.'),
-      { code: 'SOURCE_FORMAT_SIZE_LIMIT' });
+    throw selectionFileFailure(stat.size === 0 ? 'SOURCE_FILE_EMPTY' : 'SOURCE_FORMAT_SIZE_LIMIT',
+      stat.size === 0 ? 'Die ausgewählte Datei ist leer.' : 'Die ausgewählte Datei überschreitet die sichere Einzeldateigrenze für dieses Format.', candidate);
   }
   return { sourcePath: candidate, sourceType, sourceBytes: stat.size };
 }
@@ -274,34 +317,35 @@ async function validateSelectedPathAsync(selected, options = {}) {
   const pathHasReparseComponent = options.hasReparseComponentAsync ||
     ((target) => options.hasReparseComponent ? options.hasReparseComponent(target) : hasReparseComponentAsync(target, fsApi));
   const candidate = String(selected || '');
-  if (!candidate) throw new SafeError('Keine Datei ausgewählt.');
-  if (!path.isAbsolute(candidate)) throw new SafeError('Die Dateiauswahl ist nicht absolut.');
-  if (isManagedStagingPath(candidate)) throw new SafeError('Private temporäre Ausgaben dürfen nicht als Quelle ausgewählt werden.');
-  if (visibleResultTreeOverlaps(candidate)) throw new SafeError(VISIBLE_OUTPUT_SOURCE_MESSAGE);
+  if (!candidate) throw selectionFileFailure('SOURCE_PATH_UNSAFE', 'Keine Datei ausgewählt.', candidate);
+  if (!path.isAbsolute(candidate)) throw selectionFileFailure('SOURCE_PATH_UNSAFE', 'Die Dateiauswahl ist nicht absolut.', candidate);
+  if (isManagedStagingPath(candidate)) throw selectionFileFailure('SOURCE_PATH_UNSAFE', 'Private temporäre Ausgaben dürfen nicht als Quelle ausgewählt werden.', candidate);
+  if (visibleResultTreeOverlaps(candidate)) throw selectionFileFailure('SOURCE_PATH_UNSAFE', VISIBLE_OUTPUT_SOURCE_MESSAGE, candidate);
   throwIfSelectionAborted(options.signal);
   if (await pathHasReparseComponent(candidate)) {
-    throw new SafeError('Die ausgewählte Datei liegt hinter einem Link oder Reparse-Punkt und wurde nicht übernommen.');
+    throw selectionFileFailure('SOURCE_PATH_UNSAFE', 'Die ausgewählte Datei liegt hinter einem Link oder Reparse-Punkt und wurde nicht übernommen.', candidate);
   }
   throwIfSelectionAborted(options.signal);
   const extension = path.extname(candidate).toLowerCase();
   const sourceType = SOURCE_TYPES[extension];
-  if (!sourceType) throw new SafeError('Das ausgewählte Dateiformat wird nicht unterstützt.');
+  if (!sourceType) throw selectionFileFailure('SOURCE_FORMAT_UNSUPPORTED', 'Das ausgewählte Dateiformat wird nicht unterstützt.', candidate);
   if (options.allowedTypes && !new Set(options.allowedTypes).has(sourceType)) {
-    throw new SafeError('Dieses Dateiformat ist im aktuellen Companion-Ablauf noch nicht freigegeben.');
+    throw selectionFileFailure('SOURCE_FORMAT_UNSUPPORTED', 'Dieses Dateiformat ist im aktuellen Companion-Ablauf noch nicht freigegeben.', candidate);
   }
   let stat;
   try { stat = await io.lstat(candidate); }
-  catch { throw new SafeError('Die ausgewählte Datei ist nicht mehr verfügbar.'); }
+  catch (error) { throw selectionFileFailure(['EACCES', 'EPERM'].includes(error?.code) ? 'SOURCE_ACCESS_DENIED' : 'SOURCE_READ_FAILED',
+    'Die ausgewählte Datei ist nicht mehr verfügbar oder nicht zugreifbar.', candidate); }
   throwIfSelectionAborted(options.signal);
-  if (!stat.isFile() || stat.isSymbolicLink()) throw new SafeError('Die Auswahl ist keine reguläre lokale Datei.');
+  if (!stat.isFile() || stat.isSymbolicLink()) throw selectionFileFailure('SOURCE_PATH_UNSAFE', 'Die Auswahl ist keine reguläre lokale Datei.', candidate);
   if (await sourceArtifactReasonAsync(candidate, { ...options, fs: fsApi, fsPromises: io, stat })) {
-    throw Object.assign(new SafeError('Eine temporäre Office-Sperrdatei kann nicht verarbeitet werden.'),
-      { code: 'SOURCE_ARTIFACT_IGNORED' });
+    throw selectionFileFailure('SOURCE_ARTIFACT_IGNORED',
+      'Eine temporäre Office-Sperrdatei kann nicht verarbeitet werden.', candidate);
   }
   const maxBytes = options.maxBytes ?? sourceLimitForExtension(extension);
   if (!Number.isSafeInteger(stat.size) || stat.size < 1 || stat.size > maxBytes) {
-    throw Object.assign(new SafeError('Die ausgewählte Datei überschreitet die sichere Einzeldateigrenze für dieses Format.'),
-      { code: 'SOURCE_FORMAT_SIZE_LIMIT' });
+    throw selectionFileFailure(stat.size === 0 ? 'SOURCE_FILE_EMPTY' : 'SOURCE_FORMAT_SIZE_LIMIT',
+      stat.size === 0 ? 'Die ausgewählte Datei ist leer.' : 'Die ausgewählte Datei überschreitet die sichere Einzeldateigrenze für dieses Format.', candidate);
   }
   return { sourcePath: candidate, sourceType, sourceBytes: stat.size };
 }

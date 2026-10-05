@@ -86,6 +86,11 @@ process.once('message', async (message) => {
       ...(message.ui === 'standalone-app' && standaloneChannel
         ? { reviewTextLocally: reviewInsideStandalone } : {})
     });
+    if (standaloneChannel && result.ok === false &&
+        !['LOCAL_REVIEW_CANCELLED', 'LOCAL_REVIEW_DEFERRED'].includes(result.error)) {
+      await notify({ type: 'standalone-review-failed', batch_token: token,
+        error_code: typeof result.error === 'string' ? result.error : 'LOCAL_REVIEW_FAILED' });
+    }
     // A failing visible export must not discard the completed local review
     // result; the released packages stay pending for the next export replay.
     const visibleExport = terminalVisibleExport(result, () => exportCompletedBatchResults(token));
@@ -139,6 +144,8 @@ process.once('message', async (message) => {
     // not a crashed worker.  The next explicit continuation can open it again.
     exitCode = result.ok === true || ['LOCAL_REVIEW_CANCELLED', 'LOCAL_REVIEW_DEFERRED'].includes(result.error) ? 0 : 1;
   } catch {
+    if (standaloneChannel) await notify({ type: 'standalone-review-failed', batch_token: token,
+      error_code: 'LOCAL_REVIEW_FAILED' });
     lifecycle({ event: 'review_terminal_state', outcome: 'stopped', error_code: 'LOCAL_REVIEW_FAILED' });
   } finally {
     releaseLocalBatchExecutor(token, process.pid);

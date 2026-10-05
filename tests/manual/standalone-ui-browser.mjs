@@ -7,17 +7,18 @@ import path from 'node:path';
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright-core');
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const productVersion = require(path.join(root, 'package.json')).version;
 const browser = await chromium.launch({ channel: 'msedge', headless: true });
 try {
   const context = await browser.newContext({ viewport: { width: 1280, height: 1000 } });
   await context.route(/^https?:/u, route => route.abort());
-  await context.addInitScript(() => {
+  await context.addInitScript(({ productVersion }) => {
     window.uiCalls = [];
     window.__TAURI__ = {
       event: { listen: async () => () => {} },
       core: { invoke: async (action, args) => {
         window.uiCalls.push({ action, args });
-        if (action === 'frontend_ready') return { ok: true, product_version: '3.2.0-rc109' };
+        if (action === 'frontend_ready') return { ok: true, product_version: productVersion };
         if (action === 'get_ui_context') return { local_ui_only: true, external_disclosure: false,
           result_folder: 'C:\\Dokumente\\SecureDataMsg', source_folders: [], selected_files: [] };
         if (action === 'get_public_state') return { state: 'results_available', processing_mode: 'markdown-only',
@@ -32,7 +33,7 @@ try {
         return { ok: true, handoff_confirmed: true };
       } }
     };
-  });
+  }, { productVersion });
   const page = await context.newPage();
   const errors = [];
   page.on('pageerror', error => errors.push(String(error)));
@@ -67,13 +68,13 @@ try {
 
   const firstRunContext = await browser.newContext({ viewport: { width: 1280, height: 900 } });
   await firstRunContext.route(/^https?:/u, route => route.abort());
-  await firstRunContext.addInitScript(() => {
+  await firstRunContext.addInitScript(({ productVersion }) => {
     let folderChosen = false;
     let pickerCancelled = false;
     window.__TAURI__ = {
       event: { listen: async () => () => {} },
       core: { invoke: async (action) => {
-        if (action === 'frontend_ready') return { ok: true, product_version: '3.2.0-rc142' };
+        if (action === 'frontend_ready') return { ok: true, product_version: productVersion };
         if (action === 'get_ui_context') return { local_ui_only: true, external_disclosure: false,
           result_folder: folderChosen ? 'C:\\Dokumente\\Mein Ordner' : 'C:\\Dokumente\\SecureDataMsg',
           result_folder_is_default: !folderChosen, source_folders: [], selected_files: [] };
@@ -87,7 +88,7 @@ try {
         return { ok: true };
       } }
     };
-  });
+  }, { productVersion });
   const firstRunPage = await firstRunContext.newPage();
   const firstRunErrors = [];
   firstRunPage.on('pageerror', error => firstRunErrors.push(String(error)));

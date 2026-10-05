@@ -22,6 +22,220 @@ const profile = 'personnel_profile';
 const original = 'Name: Max Mustermann\nMax Mustermann – KEINE REALDATEN';
 const options = { strongPersonAnchor: true, includePersonCandidateSpans: true };
 
+test('closed marker syntax is Engine-compatible but does not prove imported source-token origin', () => {
+  const { placeholderSpans, maskPlaceholders } = require('../plugins/data-secure/server/privacy/spans');
+  for (const source of ['[BEISPIEL]', '[NAME]', '[ABC_123]', '[PERSON_01]', '[EMAIL_OTHER]']) {
+    assert.deepEqual(placeholderSpans(source), []);
+    assert.equal(maskPlaceholders(source), source);
+  }
+  for (const marker of ['[PERSON_001]', '[UNTERNEHMEN_003]', '[ORGANISATION_UNKLAR]',
+    '[PERSON_UNKLAR_013]', '[PERSON_ABCDEFGHIJ234567]', '[ARBEITGEBER_001]',
+    '[EMAIL_REDACTED]', '[CREDENTIAL_REDACTED]', '[MANUAL_REDACTION]', '[PERSON_REVIEW_000001]']) {
+    assert.equal(placeholderSpans(marker).length, 1, marker);
+    assert.equal(maskPlaceholders(marker), ' '.repeat(marker.length));
+    assert.equal(pii.anonymize(marker).text, marker,
+      'raw Engine compatibility is byte-idempotent; actual publication separately checks imported token origin');
+  }
+});
+
+test('raw Engine/gate treat foreign brackets as source and still detect neighbouring identifiers', () => {
+  const source = 'Name: Anna Beispiel\nAnmerkung: [BEISPIEL]\n[PERSON_001] anna@example.org\n[ABC_123]';
+  const result = anonymizeMarkdown(source, 'general');
+  assert.doesNotMatch(result.text, /beispiel|anna@example/iu);
+  assert.ok(result.text.includes('[PERSON_001]'), 'existing markers do not absorb adjacent new identifiers');
+  assert.ok(result.text.includes('[ABC_123]'), 'ordinary inert bracketed text is not erased wholesale');
+  assert.deepEqual(pii.scanResidual(result.text, 'general', result.dictionary), []);
+  assert.ok(pii.scanResidual('Name: [PERSON_001]\nAnmerkung: [BEISPIEL]', 'general', result.dictionary)
+    .some(finding => finding.type === 'RESIDUAL_ENTITY'), 'a forged raw bracket cannot hide a known original');
+  assert.equal(anonymizeMarkdown(result.text, 'general').text, result.text);
+});
+
+test('credential cells redact mixed/foreign marker values as a whole without learning their secrets', () => {
+  for (const value of ['[BEISPIEL]', '[NAME]', '[ABC_123]', '[PERSON_001]',
+    '[EMAIL_REDACTED] raw-secret', '[CREDENTIAL_REDACTED] raw-secret', 'raw-secret [MANUAL_REDACTION]']) {
+    const source = `| Dienst | Passwort |\n| --- | --- |\n| Portal | ${value} |`;
+    const result = anonymizeMarkdown(source, 'general');
+    assert.equal(result.text, '| Dienst | Passwort |\n| --- | --- |\n| Portal | [CREDENTIAL_REDACTED] |', value);
+    assert.deepEqual(result.dictionary, [], 'credential values are not retained as entity aliases');
+    assert.deepEqual(pii.scanResidual(result.text), []);
+    assert.equal(anonymizeMarkdown(result.text, 'general').text, result.text);
+    const field = anonymizeMarkdown(`Passwort: ${value}`, 'general');
+    assert.equal(field.text, 'Passwort: [CREDENTIAL_REDACTED]', 'the same marker cannot shield part of a labelled field');
+    assert.deepEqual(field.dictionary, []);
+    assert.equal(anonymizeMarkdown(field.text, 'general').text, field.text);
+  }
+});
+
+test('one-column GFM credential tables remove plain/mixed secrets but generic one-column content remains intact', () => {
+  for (const value of ['raw-secret', '[BEISPIEL]', '[NAME]', '[ABC_123]', '[EMAIL_REDACTED] raw-secret']) {
+    const source = `| Passwort |\n| --- |\n| ${value} |`;
+    const result = anonymizeMarkdown(source, 'general');
+    assert.equal(result.text, '| Passwort |\n| --- |\n| [CREDENTIAL_REDACTED] |');
+    assert.deepEqual(result.dictionary, []);
+    assert.equal(anonymizeMarkdown(result.text, 'general').text, result.text);
+    assert.ok(pii.scanResidual(source).some(finding => finding.type === 'CREDENTIAL'));
+  }
+  for (const source of ['| Technik |\n| --- |\n| Kubernetes |', '| Thema |\n| --- |\n| Service Level |',
+    'Passwort\n---\nDies ist eine allgemeine Erklärung.']) {
+    assert.equal(anonymizeMarkdown(source, 'general').text, source);
+  }
+});
+
+test('raw Engine registry compatibility never attests imported variable-token origin or hides neighbouring identifiers', () => {
+  const { createBatchPseudonymRegistry, CONTRACT_VERSION, READABLE_CONTRACT_VERSION } =
+    require('../plugins/data-secure/server/batch-pseudonym-registry');
+  for (const contractVersion of [CONTRACT_VERSION, READABLE_CONTRACT_VERSION]) {
+    const registry = createBatchPseudonymRegistry(Buffer.alloc(32, 31), { contractVersion });
+    try {
+      const marker = registry.assign('PERSON', 'Erika Beispiel');
+      const source = `${marker}\nName: Anna Linden\nAnmerkung: [LINDEN]\n${marker} anna@example.org`;
+      const result = anonymizeMarkdown(source, 'general', { registry });
+      assert.doesNotMatch(result.text, /linden|anna@example/iu);
+      assert.ok(result.text.startsWith(marker + '\n'));
+      assert.equal(anonymizeMarkdown(result.text, 'general', { registry }).text, result.text);
+      const imported = pii.scanResidual(result.text, 'general', result.dictionary, {
+        originalSourceText: source, includePersonCandidateSpans: true
+      });
+      assert.equal(imported.length, 2,
+        'raw syntax idempotence does not silently authorize variable-payload imported labels for publication');
+      const candidates = residualPersonAmbiguities(source, result.text, imported);
+      const binding = createPersonReviewBinding(result.text, candidates);
+      const input = { original_text: source, anonymized_text: result.text, profile: 'general', ambiguities: candidates,
+        confirmPersonReview: binding.confirm };
+      const kept = reviewedBatchText(input, decisions(input));
+      assert.equal(kept.text, result.text, 'HMAC and readable registry IDs both require explicit byte-preserving Keep');
+      assert.deepEqual(pii.scanResidual(kept.text, 'general', result.dictionary, {
+        originalSourceText: source, reviewedPersonCandidates: binding.forPublication('', kept.text, '')
+      }), []);
+      const credential = `| Dienst | Passwort |\n| --- | --- |\n| Portal | ${marker} raw-secret |`;
+      const redacted = anonymizeMarkdown(credential, 'general', { registry });
+      assert.doesNotMatch(redacted.text, /raw-secret/u);
+      assert.ok(redacted.text.includes('[CREDENTIAL_REDACTED]'));
+    } finally { registry.dispose(); }
+  }
+});
+
+test('imported variable-token lookalikes require exact source/output Keep provenance, not a marker regex attestation', () => {
+  const source = 'Name: Denise Koch\nImportiert: [PERSON_DENISEKOCH]\nAuch: [PERSON_DENISEKOCH]';
+  const anon = anonymizeMarkdown(source, 'general', { deferPersonReview: true });
+  const sourceOptions = { originalSourceText: source, includePersonCandidateSpans: true };
+  const findings = pii.scanResidual(anon.text, 'general', anon.dictionary, sourceOptions);
+  assert.equal(findings.length, 2);
+  assert.ok(findings.every(finding => finding.text === '[PERSON_DENISEKOCH]'));
+  const candidates = residualPersonAmbiguities(source, anon.text, findings);
+  assert.deepEqual(candidates.map(candidate => source.slice(candidate.original_start, candidate.original_end)),
+    ['[PERSON_DENISEKOCH]', '[PERSON_DENISEKOCH]']);
+  const binding = createPersonReviewBinding(anon.text, candidates);
+  const input = { original_text: source, anonymized_text: anon.text, profile: 'general', ambiguities: candidates,
+    confirmPersonReview: binding.confirm, replacementForAmbiguity: () => '[PERSON_009]' };
+  const kept = reviewedBatchText(input, decisions(input));
+  assert.equal(kept.text, anon.text);
+  const prefix = '<!-- Generated header -->\n\n';
+  const proof = binding.forPublication(prefix, kept.text, '');
+  assert.deepEqual(pii.scanResidual(prefix + kept.text, 'general', anon.dictionary,
+    { originalSourceText: source, reviewedPersonCandidates: proof }), []);
+  assert.equal(pii.scanResidual(prefix + 'x' + kept.text, 'general', anon.dictionary,
+    { originalSourceText: source, reviewedPersonCandidates: proof }).length, 2,
+    'even identical imported tokens lose their approval when canonical published bytes change');
+  const noSourceCollision = 'Name: Denise Koch';
+  const generated = anonymizeMarkdown(noSourceCollision, 'general');
+  assert.deepEqual(pii.scanResidual(generated.text, 'general', generated.dictionary,
+    { originalSourceText: noSourceCollision }), [], 'a newly created token is not an imported source value');
+  for (const marker of ['[EMAIL_REDACTED]', '[MANUAL_REDACTION]', '[ARBEITGEBER_001]', '[ORGANISATION_UNKLAR]']) {
+    assert.deepEqual(pii.scanResidual(marker, 'general', [], { originalSourceText: marker }), [],
+      'fixed redaction vocabulary has no variable original-value payload');
+  }
+  for (const marker of ['[PERSON_011]', '[UNTERNEHMEN_4711]', '[ORGANISATION_99999]', '[PERSON_REVIEW_471123]']) {
+    const findings = pii.scanResidual(marker, 'general', [], { originalSourceText: marker, includePersonCandidateSpans: true });
+    assert.equal(findings.length, 1, 'a numeric suffix can be a real original identifier, not proof of a generated ordinal');
+    assert.equal(findings[0].text, marker);
+    const candidates = residualPersonAmbiguities(marker, marker, findings);
+    const binding = createPersonReviewBinding(marker, candidates);
+    const input = { original_text: marker, anonymized_text: marker, profile: 'general', ambiguities: candidates,
+      confirmPersonReview: binding.confirm };
+    const kept = reviewedBatchText(input, decisions(input));
+    assert.equal(kept.text, marker);
+    assert.deepEqual(pii.scanResidual(marker, 'general', [], { originalSourceText: marker,
+      reviewedPersonCandidates: binding.forPublication('', marker, '') }), []);
+  }
+  // A source/output token collision cannot waive any generated occurrence by
+  // lookup alone: ambiguous/missing source fragments fail exact binding.
+  const collisionSource = '[PERSON_DENISEKOCH] then real name';
+  const collisionOutput = 'then [PERSON_DENISEKOCH]';
+  assert.throws(() => residualPersonAmbiguities(collisionSource, collisionOutput,
+    pii.scanResidual(collisionOutput, 'general', [], {
+      originalSourceText: collisionSource, includePersonCandidateSpans: true
+    })), error => error.code === 'AMBIGUITY_REVIEW_REQUIRED');
+});
+
+test('numeric imported tokens bind every original occurrence and cannot borrow another publication approval', () => {
+  const source = 'Personalnummer: [PERSON_4711]\nName: Anna Linden\nReferenz: [PERSON_REVIEW_471123] anna@example.org';
+  const anon = anonymizeMarkdown(source, 'general', { deferPersonReview: true });
+  assert.doesNotMatch(anon.text, /Anna Linden|anna@example/iu);
+  const scanOptions = { originalSourceText: source, includePersonCandidateSpans: true };
+  const findings = pii.scanResidual(anon.text, 'general', anon.dictionary, scanOptions);
+  assert.deepEqual(findings.map(item => item.text), ['[PERSON_4711]', '[PERSON_REVIEW_471123]']);
+  const candidates = residualPersonAmbiguities(source, anon.text, findings);
+  for (const item of candidates) assert.equal(source.slice(item.original_start, item.original_end),
+    anon.text.slice(item.anonymized_start, item.anonymized_end), 'each choice has exact original/output coordinates');
+  for (const choice of ['keep', 'redact', 'redact_organization']) {
+    const binding = createPersonReviewBinding(anon.text, candidates, { allowOrganizationReview: true });
+    const input = { original_text: source, anonymized_text: anon.text, profile: 'general', ambiguities: candidates,
+      allowOrganizationReview: true, confirmPersonReview: binding.confirm,
+      replacementForAmbiguity: () => choice === 'redact_organization' ? '[UNTERNEHMEN_009]' : '[PERSON_009]' };
+    const reviewed = reviewedBatchText(input, decisions(input, choice));
+    if (choice === 'keep') assert.equal(reviewed.text, anon.text);
+    else assert.doesNotMatch(reviewed.text, /4711|471123/u);
+    const prefix = '<!-- Header -->\n';
+    const proof = binding.forPublication(prefix, reviewed.text, '');
+    assert.deepEqual(pii.scanResidual(prefix + reviewed.text, 'general', anon.dictionary,
+      { originalSourceText: source, reviewedPersonCandidates: proof }), []);
+    if (choice === 'keep') {
+      assert.equal(pii.scanResidual(prefix + reviewed.text, 'general', anon.dictionary,
+        { originalSourceText: source, reviewedPersonCandidates: {} }).length, 2,
+      'a public-shaped proof object grants no original-token approval');
+      assert.equal(pii.scanResidual(prefix + reviewed.text + '\n[PERSON_4711]', 'general', anon.dictionary,
+        { originalSourceText: source, reviewedPersonCandidates: proof }).length, 3,
+      'duplicated original numeric tokens invalidate the old exact-body proof');
+      const addedPrefix = '[PERSON_4711]\n';
+      assert.equal(pii.scanResidual(addedPrefix + reviewed.text, 'general', anon.dictionary,
+        { originalSourceText: source, reviewedPersonCandidates: binding.forPublication(addedPrefix, reviewed.text, '') }).length, 1,
+      'a Keep for body occurrences cannot approve a new prefix occurrence');
+    }
+  }
+  const deletedCopy = '[PERSON_4711]\n[PERSON_4711]';
+  assert.throws(() => residualPersonAmbiguities(deletedCopy, '[PERSON_4711]',
+    pii.scanResidual('[PERSON_4711]', 'general', [], { originalSourceText: deletedCopy, includePersonCandidateSpans: true })),
+  error => error.code === 'AMBIGUITY_REVIEW_REQUIRED', 'a missing copy cannot borrow the first original occurrence');
+});
+
+test('Standalone residual count is call-scoped at 5,000, while default/Cowork stays at 1,000', () => {
+  const value = 'SYNTHETISCHER HÄRTETEST';
+  for (const count of [1000, 1001, 5000, 5001]) {
+    const text = Array(count).fill(value).join('\n');
+    const findings = Array.from({ length: count }, (_, index) => ({ type: 'PERSON_CANDIDATE', text: value,
+      start: index * (value.length + 1), end: index * (value.length + 1) + value.length }));
+    if (count <= 5000) {
+      const candidates = residualPersonAmbiguities(text, text, findings, { productChannel: 'standalone' });
+      assert.equal(candidates.length, count);
+      createPersonReviewBinding(text, candidates, { productChannel: 'standalone' });
+      if (count > 1000) assert.throws(() => createPersonReviewBinding(text, candidates),
+        error => error.code === 'AMBIGUITY_REVIEW_REQUIRED');
+    } else {
+      assert.throws(() => residualPersonAmbiguities(text, text, findings, { productChannel: 'standalone' }),
+        error => error.code === 'LOCAL_REVIEW_TOO_LARGE');
+      const candidates = findings.map((finding, index) => ({ ambiguity_id: `person-residual:v1:${String(index + 1).padStart(6, '0')}`,
+        type: 'person_residual_ambiguous', replacement_kind: 'PERSON', anonymized_start: finding.start,
+        anonymized_end: finding.end }));
+      assert.throws(() => createPersonReviewBinding(text, candidates, { productChannel: 'standalone' }),
+        error => error.code === 'LOCAL_REVIEW_TOO_LARGE');
+    }
+    if (count <= 1000) assert.equal(residualPersonAmbiguities(text, text, findings).length, count);
+    else assert.throws(() => residualPersonAmbiguities(text, text, findings),
+      error => error.code === 'AMBIGUITY_REVIEW_REQUIRED');
+  }
+});
+
 function prepared(source = original) {
   const anon = anonymizeMarkdown(source, profile, { deferPersonReview: true });
   const ambiguities = residualPersonAmbiguities(source, anon.text, anon.residualPersonCandidates);
@@ -40,6 +254,21 @@ function verifiedScan(text, binding, dictionary = [], prefix = '', suffix = '') 
     strongPersonAnchor: true, reviewedPersonCandidates: binding.forPublication(prefix, text, suffix)
   });
 }
+
+test('masked pseudonyms cannot create unbindable cross-placeholder candidates or hide adjacent real names', () => {
+  for (const marker of ['[PERSON_001]', '[UNTERNEHMEN_003]', '[EMAIL_REDACTED]']) {
+    const output = `Alpha ${marker} Beta\nMarta Linden`;
+    const findings = pii.scanResidual(output, 'customer', [], options);
+    const start = output.indexOf('Marta Linden');
+    assert.deepEqual(findings, [{ type: 'PERSON_CANDIDATE', text: 'Marta Linden', start, end: start + 12 }]);
+    assert.ok(findings.every(item => output.slice(item.start, item.end) === item.text));
+    const source = output.replace(marker, 'Max Mustermann');
+    const candidates = residualPersonAmbiguities(source, output, findings);
+    assert.equal(candidates.length, 1);
+    assert.equal(source.slice(candidates[0].original_start, candidates[0].original_end), 'Marta Linden');
+    assert.deepEqual(pii.scanResidual(`Alpha ${marker} Beta`, 'customer', [], options), []);
+  }
+});
 
 test('competing uppercase titles use the existing local review before any identity is assigned', () => {
   for (const activeProfile of ['general', 'personnel_profile']) {
@@ -66,6 +295,26 @@ test('competing uppercase titles use the existing local review before any identi
       }), []);
     }
   }
+});
+
+test('Standalone company classification binds exact residual edits, while default Cowork rejects that choice', () => {
+  const source = 'CAPGEMINI INVENT\nName: Max Mustermann';
+  const anon = anonymizeMarkdown(source, 'general', { deferPersonReview: true });
+  const ambiguities = residualPersonAmbiguities(source, anon.text, anon.residualPersonCandidates);
+  const binding = createPersonReviewBinding(anon.text, ambiguities, { allowOrganizationReview: true });
+  const input = { original_text: source, anonymized_text: anon.text, profile: 'general', ambiguities,
+    allowOrganizationReview: true, confirmPersonReview: binding.confirm, replacementForAmbiguity: () => '[UNTERNEHMEN_003]' };
+  const result = reviewedBatchText(input, decisions(input, 'redact_organization'));
+  assert.equal(result.text, '[UNTERNEHMEN_003]\nName: [PERSON_001]');
+  assert.deepEqual(pii.scanResidual(result.text, 'general', anon.dictionary, {
+    strongPersonAnchor: true, reviewedPersonCandidates: binding.forPublication('', result.text, '')
+  }), []);
+  const candidate = ambiguities[0];
+  const edits = [{ start: candidate.anonymized_start, end: candidate.anonymized_end, replacement: '[UNTERNEHMEN_003]' }];
+  assert.throws(() => createPersonReviewBinding(anon.text, ambiguities).confirm(
+    decisions(input, 'redact_organization'), edits, result.text), error => error.code === 'AMBIGUITY_REVIEW_REQUIRED');
+  assert.throws(() => createPersonReviewBinding(anon.text, ambiguities, { allowOrganizationReview: true }).confirm(
+    decisions(input, 'redact'), edits, result.text), error => error.code === 'AMBIGUITY_REVIEW_REQUIRED');
 });
 
 test('uppercase people remain protected and explicit fields never become optional review decisions', () => {
@@ -401,6 +650,276 @@ test('real Windows form applies one residual decision to each same-spelling occu
 });
 
 async function main() {
+  await testAsync('ordinary Standalone conversational names require a bound choice and preserve technical language', async () => {
+    const cases = [
+      ['In der Besprechung sagte Anna Linden, dass die Lieferung morgen erfolgt.', 'Anna Linden'],
+      ['Gestern rief Denise Koch an.', 'Denise Koch'],
+      ['Ich habe mit Renate Winter gesprochen.', 'Renate Winter'],
+      ['Gestern traf Jean-Luc Moreau die Delegation.', 'Jean-Luc Moreau'],
+      ['Wir haben mit María García gesprochen.', 'María García'],
+      ['Am Montag hat Anna Linden gesprochen.', 'Anna Linden'],
+      ['Gestern bestätigte Anna Linden den Termin.', 'Anna Linden'],
+      ['In der Besprechung berichtete Anna Linden über das Ergebnis.', 'Anna Linden'],
+      ['Notiz: Gestern rief Denise Koch an.', 'Denise Koch'],
+      ['Mit Anna Linden gesprochen.', 'Anna Linden'],
+      ['Die Kollegin Anna Linden sagte das.', 'Anna Linden'],
+      ['Die Anwältin Anna Linden rief an.', 'Anna Linden'],
+      ['Ich habe mit der Kollegin Anna Linden gesprochen.', 'Anna Linden'],
+      ['Die Kollegin Anna Linden von der Planung sagte das.', 'Anna Linden'],
+      ['Ich habe mit der Kollegin Anna Linden von der Planung gesprochen.', 'Anna Linden'],
+      ['Gestern traf Anna van den Berg die Delegation.', 'Anna van den Berg'],
+      ['Gestern traf Jean-Luc de la Croix die Delegation.', 'Jean-Luc de la Croix']
+    ];
+    for (const [index, [source, name]] of cases.entries()) {
+      const file = path.join(scope, `conversation-${index}.md`);
+      fs.writeFileSync(file, source, 'utf8');
+      await assert.rejects(() => anonymizeSelectedSource(file, 'general', { productChannel: 'standalone' }),
+        error => error.code === 'AMBIGUITY_REVIEW_REQUIRED');
+      await assert.rejects(() => anonymizeSelectedSource(file, 'general', { productChannel: 'standalone',
+        reviewText: input => ({ text: input.anonymized_text }) }), error => error.code === 'AMBIGUITY_REVIEW_REQUIRED');
+      for (const choice of ['keep', 'redact', 'redact_organization']) {
+        const result = await anonymizeSelectedSource(file, 'general', { productChannel: 'standalone', reviewText(input) {
+          assert.ok(input.ambiguities.some(candidate => input.original_text.slice(candidate.original_start, candidate.original_end) === name), source);
+          return reviewedBatchText(input, decisions(input, choice));
+        } });
+        const output = gateway.readOutput(result.package_id, result.read_capability, 0, 50000).text;
+        if (choice === 'keep') assert.ok(output.includes(name)); else assert.ok(!output.includes(name));
+        if (source.includes('den Termin')) assert.ok(output.includes('den Termin'), 'ordinary information after the exact name survives');
+        if (source.includes('von der Planung')) assert.ok(output.includes('von der Planung'), 'department suffix is not part of the person name');
+      }
+      assert.equal(fs.readFileSync(file, 'utf8'), source);
+    }
+    const { personProseCandidateSpans } = require('../plugins/data-secure/server/privacy/person-ambiguities');
+    assert.deepEqual(personProseCandidateSpans('Gestern rief Denise Koch an.'), [], 'Cowork retains its existing candidate scope');
+    for (const source of ['Service Level sagte das Team.', 'Fail Closed bezeichnet den Betriebsmodus.',
+      'Digitale Transformation ist das Thema.', 'Am Montag hat das Team begonnen.']) {
+      assert.deepEqual(personProseCandidateSpans(source, { productChannel: 'standalone' }), [], source);
+    }
+    assert.equal(personProseCandidateSpans('Die Kollegin sagt, dass Anna Linden rief.', { productChannel: 'standalone' }).length, 1);
+  });
+  await testAsync('both actual publication routes block imported HMAC and numeric source lookalikes without explicit bound Keep or Redact', async () => {
+    const { createBatchPseudonymRegistry, CONTRACT_VERSION, READABLE_CONTRACT_VERSION } =
+      require('../plugins/data-secure/server/batch-pseudonym-registry');
+    for (const channel of ['plugin', 'standalone']) {
+      for (const source of ['Name: [PERSON_DENISEKOCH]',
+        'Personalnummer: [PERSON_4711]',
+        'Referenz: [PERSON_REVIEW_471123]',
+        'Firma: [UNTERNEHMEN_4711]',
+        'Kundennummer: [KUNDE_4711]',
+        'Referenz: [PROJEKT_UNKLAR_4711]',
+        'Personalnummer: [PERSON_47&#49;1]',
+        'Name: Denise Koch\nImportiert: [PERSON_DENISEKOCH]\n[ORGANISATION_CAPGEMINIINVENT]',
+        'Name: &#68;enise Koch\nImportiert: [PERSON_DENI&#83;EKOCH]',
+        'Name: Denise Koch\nMarta Linden schreibt den Bericht.\nImportiert: [PERSON_DENISEKOCH]']) {
+        const file = path.join(scope, `imported-hmac-${channel}-${source.length}.md`);
+        fs.writeFileSync(file, source, 'utf8');
+        await assert.rejects(() => anonymizeSelectedSource(file, 'general', { productChannel: channel }),
+          error => error.code === 'AMBIGUITY_REVIEW_REQUIRED');
+        await assert.rejects(() => anonymizeSelectedSource(file, 'general', {
+          productChannel: channel, reviewText: input => ({ text: input.anonymized_text })
+        }), error => error.code === 'AMBIGUITY_REVIEW_REQUIRED', 'returning a draft is not an explicit Keep proof');
+        if (channel === 'plugin') {
+          await assert.rejects(() => anonymizeSelectedSource(file, 'general', {
+            productChannel: channel, reviewText(input) {
+              assert.equal(input.allowOrganizationReview, undefined, 'no Standalone field appears in the Cowork draft');
+              return reviewedBatchText(input, decisions(input, 'redact_organization'));
+            }
+          }), error => error.code === 'LOCAL_REVIEW_CANCELLED',
+          'Cowork does not inherit the Standalone-only company choice');
+        }
+        for (const choice of ['keep', 'redact', ...(channel === 'standalone' ? ['redact_organization'] : [])]) {
+          const registry = createBatchPseudonymRegistry(Buffer.alloc(32, 17), {
+            contractVersion: READABLE_CONTRACT_VERSION
+          });
+          try {
+            let expectedBody;
+            const result = await anonymizeSelectedSource(file, 'general', {
+              productChannel: channel, pseudonymRegistry: registry, reviewText(input) {
+                assert.ok(input.ambiguities.length >= 1);
+                assert.ok(input.ambiguities.every(candidate =>
+                  ['person_residual_ambiguous', 'person_prose_ambiguous'].includes(candidate.type)));
+                assert.ok(input.ambiguities.some(candidate => candidate.type === 'person_residual_ambiguous' &&
+                  /\[(?:PERSON|ORGANISATION|UNTERNEHMEN|KUNDE|PROJEKT_UNKLAR)_/u.test(input.original_text.slice(candidate.original_start, candidate.original_end))));
+                const result = reviewedBatchText(input, decisions(input, choice));
+                if (choice === 'keep') assert.equal(result.text, input.anonymized_text, 'Keep must be byte-preserving');
+                else {
+                  assert.doesNotMatch(result.text, /DENISEKOCH|CAPGEMINIINVENT|4711|471123/u);
+                  for (const candidate of input.ambiguities.filter(item => item.type === 'person_residual_ambiguous')) {
+                    assert.ok(!result.text.includes(input.original_text.slice(candidate.original_start, candidate.original_end)),
+                      'the actual reviewed imported source token is replaced, not merely declared reviewed');
+                  }
+                }
+                expectedBody = result.text;
+                return result;
+              }
+            });
+            const text = gateway.readOutput(result.package_id, result.read_capability, 0, 50000).text;
+            assert.ok(text.endsWith(expectedBody), 'the exact kept/redacted body is actually published');
+            assert.doesNotMatch(text, /Denise Koch/u, 'a raw name outside the token is still replaced');
+            if (choice === 'redact_organization') assert.match(text, /\[UNTERNEHMEN_[0-9]{3,5}\]/u);
+          } finally { registry.dispose(); }
+        }
+        assert.equal(fs.readFileSync(file, 'utf8'), source);
+      }
+      for (const contractVersion of [CONTRACT_VERSION, READABLE_CONTRACT_VERSION]) {
+      const registry = createBatchPseudonymRegistry(Buffer.alloc(32, 31), { contractVersion });
+      try {
+        const marker = registry.assign('PERSON', 'Erika Beispiel');
+        const contractSuffix = contractVersion === CONTRACT_VERSION ? 'hmac' : 'readable';
+        const file = path.join(scope, `real-registry-reanonymization-${channel}-${contractSuffix}.md`);
+        fs.writeFileSync(file, marker + '\n' + marker, 'utf8');
+        await assert.rejects(() => anonymizeSelectedSource(file, 'general', {
+          productChannel: channel, pseudonymRegistry: registry
+        }), error => error.code === 'AMBIGUITY_REVIEW_REQUIRED',
+        'a real legacy registry ID also needs Keep when source bytes alone have no provenance');
+        const result = await anonymizeSelectedSource(file, 'general', {
+          productChannel: channel, pseudonymRegistry: registry, reviewText(input) {
+            assert.equal(input.ambiguities.length, 2);
+            const kept = reviewedBatchText(input, decisions(input));
+            assert.equal(kept.text, marker + '\n' + marker);
+            return kept;
+          }
+        });
+        assert.ok(gateway.readOutput(result.package_id, result.read_capability, 0, 30000).text.endsWith(marker + '\n' + marker));
+      } finally { registry.dispose(); }
+      }
+    }
+  });
+  await testAsync('new numeric tokens without an original collision publish, but source/generated collisions never guess provenance', async () => {
+    const { createBatchPseudonymRegistry, READABLE_CONTRACT_VERSION } =
+      require('../plugins/data-secure/server/batch-pseudonym-registry');
+    for (const channel of ['plugin', 'standalone']) {
+      const fresh = path.join(scope, `fresh-generated-numeric-${channel}.md`);
+      fs.writeFileSync(fresh, 'Name: Anna Beispiel\nE-Mail: anna@example.org', 'utf8');
+      const freshResult = await anonymizeSelectedSource(fresh, 'general', { productChannel: channel });
+      const freshText = gateway.readOutput(freshResult.package_id, freshResult.read_capability, 0, 30000).text;
+      assert.match(freshText, /\[PERSON_[0-9]{3,5}\]/u);
+      assert.doesNotMatch(freshText, /Anna Beispiel|anna@example/iu);
+      const collisionSource = 'Name: Anna Beispiel\nAnmerkung: [BEISPIEL]\n[PERSON_001] anna@example.org';
+      const collision = path.join(scope, `source-generated-numeric-collision-${channel}.md`);
+      fs.writeFileSync(collision, collisionSource, 'utf8');
+      const registry = createBatchPseudonymRegistry(Buffer.alloc(32, 33), { contractVersion: READABLE_CONTRACT_VERSION });
+      try {
+        let reachedReview = false;
+        await assert.rejects(() => anonymizeSelectedSource(collision, 'general', { productChannel: channel,
+          pseudonymRegistry: registry, reviewText(input) {
+            reachedReview = true;
+            return reviewedBatchText(input, decisions(input));
+          } }), error => error.code === 'AMBIGUITY_REVIEW_REQUIRED');
+        assert.equal(reachedReview, false,
+          'missing exact source/output provenance cannot be guessed by choosing the first identical numeric marker');
+        assert.equal(fs.readFileSync(collision, 'utf8'), collisionSource);
+      } finally { registry.dispose(); }
+    }
+  });
+  await testAsync('actual imported-marker provenance consumes the same Standalone 5,000 budget, not a second bypass allowance', async () => {
+    for (const count of [5000, 5001]) {
+      const source = Array(count).fill('[PERSON_DENISEKOCH]').join('\n');
+      const file = path.join(scope, `imported-marker-boundary-${count}.md`);
+      fs.writeFileSync(file, source, 'utf8');
+      let reachedReview = false;
+      const run = () => anonymizeSelectedSource(file, 'general', { productChannel: 'standalone', reviewText(input) {
+        reachedReview = true;
+        assert.equal(input.ambiguities.length, count);
+        return reviewedBatchText(input, decisions(input));
+      } });
+      if (count === 5001) {
+        await assert.rejects(run, error => error.code === 'LOCAL_REVIEW_TOO_LARGE');
+        assert.equal(reachedReview, false);
+      } else {
+        const result = await run();
+        assert.equal(reachedReview, true);
+        let text = '', offset = 0;
+        for (;;) {
+          const chunk = gateway.readOutput(result.package_id, result.read_capability, offset, 30000);
+          text += chunk.text;
+          offset = chunk.next_offset;
+          if (!chunk.has_more) break;
+        }
+        assert.ok(text.endsWith(source));
+        assert.equal((text.match(/\[PERSON_DENISEKOCH\]/gu) || []).length, count);
+      }
+    }
+  });
+  await testAsync('actual Standalone publication cannot use forged source brackets or mixed credential cells to bypass privacy', async () => {
+    const sources = [
+      'Name: Anna Beispiel\nAnmerkung: [BEISPIEL]\n[PERSON_4711] anna@example.org',
+      ...['[BEISPIEL]', '[NAME]', '[ABC_123]', '[EMAIL_REDACTED] raw-secret'].map(value =>
+        `| Dienst | Passwort |\n| --- | --- |\n| Portal | ${value} |\nPasswort: ${value}`),
+      ...['raw-secret', '[BEISPIEL]', '[NAME]', '[ABC_123]', '[EMAIL_REDACTED] raw-secret'].map(value =>
+        `| Passwort |\n| --- |\n| ${value} |`)
+    ];
+    for (const [index, source] of sources.entries()) {
+      const file = path.join(scope, `forged-marker-${index}.md`);
+      fs.writeFileSync(file, source, 'utf8');
+      if (index === 0) await assert.rejects(() => anonymizeSelectedSource(file, 'general', { productChannel: 'standalone' }),
+        error => error.code === 'AMBIGUITY_REVIEW_REQUIRED', 'an intentional imported numeric token first needs a local decision');
+      let reviewed = false;
+      const result = await anonymizeSelectedSource(file, 'general', { productChannel: 'standalone',
+        ...(index === 0 ? { reviewText(input) {
+          reviewed = true;
+          assert.equal(input.ambiguities.length, 1);
+          assert.equal(input.original_text.slice(input.ambiguities[0].original_start, input.ambiguities[0].original_end), '[PERSON_4711]');
+          const kept = reviewedBatchText(input, decisions(input));
+          assert.equal(kept.text, input.anonymized_text);
+          return kept;
+        } } : {}) });
+      const text = gateway.readOutput(result.package_id, result.read_capability, 0, 50000).text;
+      assert.doesNotMatch(text, /BEISPIEL|anna@example|raw-secret|\[NAME\]|\[ABC_123\]/iu);
+      assert.ok(text.includes(index === 0 ? '[PERSON_001]' : '[CREDENTIAL_REDACTED]'));
+      if (index === 0) { assert.equal(reviewed, true); assert.ok(text.includes('[PERSON_4711]')); }
+      assert.equal(fs.readFileSync(file, 'utf8'), source);
+    }
+    const generic = '| Technik |\n| --- |\n| Kubernetes |\n\n| Thema |\n| --- |\n| Service Level |';
+    const file = path.join(scope, 'one-column-generic.md');
+    fs.writeFileSync(file, generic, 'utf8');
+    const result = await anonymizeSelectedSource(file, 'general', { productChannel: 'standalone' });
+    assert.ok(gateway.readOutput(result.package_id, result.read_capability, 0, 30000).text.includes(generic),
+      'the actual publication path must also preserve nonsensitive one-column table content');
+  });
+  await testAsync('real Engine and Standalone orchestrator reach review at 1,000/1,001/5,000 and give a size cause at 5,001', async () => {
+    for (const count of [1000, 1001, 5000, 5001]) {
+      const source = 'Name: Max Mustermann\n| Spalte 1 | Spalte 2 |\n| --- | --- |\n' +
+        Array.from({ length: count }, (_, index) => `| SYNTHETISCHER HÄRTETEST | ${index + 1} |`).join('\n');
+      const file = path.join(scope, `review-boundary-${count}.md`);
+      fs.writeFileSync(file, source, 'utf8');
+      let reachedReview = false;
+      const run = () => anonymizeSelectedSource(file, 'general', { productChannel: 'standalone', reviewText(input) {
+        reachedReview = true;
+        assert.equal(input.ambiguities.length, count, 'no prepared draft bypasses the actual detectors');
+        const result = reviewedBatchText(input, decisions(input));
+        assert.ok(result.text.includes('SYNTHETISCHER HÄRTETEST'));
+        return result;
+      } });
+      if (count <= 5000) {
+        const result = await run();
+        assert.equal(reachedReview, true);
+        assert.equal(result.ok, true);
+        let text = '', offset = 0;
+        for (;;) {
+          const chunk = gateway.readOutput(result.package_id, result.read_capability, offset, 30000);
+          assert.ok(chunk.next_offset > offset);
+          text += chunk.text;
+          offset = chunk.next_offset;
+          if (!chunk.has_more) { assert.equal(text.length, chunk.total_chars); break; }
+        }
+        assert.doesNotMatch(text, /Max Mustermann/u);
+        assert.equal(text.match(/SYNTHETISCHER HÄRTETEST/gu).length, count,
+          'every reviewed occurrence remains in the complete persisted result, not only its first preview chunk');
+      } else {
+        await assert.rejects(run, error => error.code === 'LOCAL_REVIEW_TOO_LARGE');
+        assert.equal(reachedReview, false);
+      }
+      assert.equal(fs.readFileSync(file, 'utf8'), source);
+    }
+    const file = path.join(scope, 'review-boundary-1001.md');
+    let reachedReview = false;
+    await assert.rejects(() => anonymizeSelectedSource(file, 'general', { productChannel: 'plugin', reviewText() {
+      reachedReview = true;
+      throw new Error('COWORK_LIMIT_WAS_BYPASSED');
+    } }), error => error.code === 'AMBIGUITY_REVIEW_REQUIRED');
+    assert.equal(reachedReview, false, 'Standalone opt-in is not sticky for a later Cowork call');
+  });
   await testAsync('both product orchestrators bind review to the same canonical parser representation', async () => {
     const { canonicalizeRenderedText } = require('../plugins/data-secure/server/privacy/base');
     const literalMarkup = 'Code: &lt;br&gt; und &lt;span&gt;literal&lt;/span&gt; und &lt;!-- Hinweis --&gt;';
@@ -460,6 +979,40 @@ async function main() {
     assert.ok(gateway.readOutput(result.package_id, result.read_capability, 0, 50000).text.includes('KEINE REALDATEN'));
   });
   let sequence = 0;
+  await testAsync('real Standalone publication replaces a manually confirmed company with a company pseudonym', async () => {
+    const file = path.join(scope, 'company-original.txt');
+    const source = 'CAPGEMINI INVENT\nName: Max Mustermann';
+    fs.writeFileSync(file, source, 'utf8');
+    const { createBatchPseudonymRegistry, READABLE_CONTRACT_VERSION } = require('../plugins/data-secure/server/batch-pseudonym-registry');
+    const registry = createBatchPseudonymRegistry(Buffer.alloc(32, 26), { contractVersion: READABLE_CONTRACT_VERSION });
+    try {
+    const snapshots = [];
+    const result = await anonymizeSelectedSource(file, 'general', {
+      productChannel: 'standalone', pseudonymRegistry: registry,
+      persistStandaloneIdentitySnapshot: snapshot => snapshots.push(snapshot), reviewText(input) {
+        assert.equal(input.allowOrganizationReview, true);
+        return reviewedBatchText(input, decisions(input, 'redact_organization'));
+      }
+    });
+    const text = gateway.readOutput(result.package_id, result.read_capability, 0, 50000).text;
+    assert.match(text, /\[UNTERNEHMEN_001\]/u);
+    assert.ok(!text.includes('CAPGEMINI INVENT'));
+    assert.equal(fs.readFileSync(file, 'utf8'), source);
+    assert.ok(snapshots[0].entries.some(entry => entry.pseudonym === '[UNTERNEHMEN_001]' &&
+      entry.original.toLocaleUpperCase('de-DE') === 'CAPGEMINI INVENT'));
+    const later = path.join(scope, 'company-later.txt');
+    fs.writeFileSync(later, source + '\nWeiterer technischer Sachstand.', 'utf8');
+    const continued = await anonymizeSelectedSource(later, 'general', {
+      productChannel: 'standalone', pseudonymRegistry: registry, reviewText(input) {
+        assert.equal(input.ambiguities.length, 0, 'the exact known company is not reserved again as a person');
+        return reviewedBatchText(input, []);
+      }
+    });
+    const laterText = gateway.readOutput(continued.package_id, continued.read_capability, 0, 50000).text;
+    assert.match(laterText, /\[UNTERNEHMEN_001\]/u);
+    assert.ok(!laterText.includes('CAPGEMINI INVENT'));
+    } finally { registry.dispose(); }
+  });
   const selectedFile = () => {
     const file = path.join(scope, `original-${++sequence}.txt`);
     fs.writeFileSync(file, original, 'utf8');

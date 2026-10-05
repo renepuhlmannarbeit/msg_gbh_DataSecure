@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/resource.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <time.h>
@@ -24,6 +25,8 @@
 
 enum { USAGE_ERROR = 120, SETUP_ERROR = 121, START_ERROR = 122,
        WAIT_ERROR = 124, RESOURCE_LIMIT = 125,
+       EXECUTABLE_MISSING = 127, EXECUTABLE_DENIED = 128, EXECUTABLE_FORMAT = 129,
+       DEPENDENCY_MISSING = 132,
        CPU_LIMIT_SETUP_ERROR = 130, CORE_LIMIT_SETUP_ERROR = 131,
        FILE_LIMIT_SETUP_ERROR = 134, OPEN_FILE_LIMIT_SETUP_ERROR = 135 };
 
@@ -33,12 +36,13 @@ enum { USAGE_ERROR = 120, SETUP_ERROR = 121, START_ERROR = 122,
 #define CONTRACT_JSON "{\"schema\":\"datasecure-posix-sandbox/v1\",\"limits\":[\"cpu\",\"file_size\",\"open_files\",\"rss\",\"wallclock\"],\"process_group_reap\":true}\n"
 #endif
 
-static volatile sig_atomic_t child_group = -1;
+static volatile sig_atomic_t cancellation_requested = 0;
 
 static void terminate_group(int signal_number) {
   (void)signal_number;
-  if (child_group > 0) kill(-child_group, SIGKILL);
-  _exit(RESOURCE_LIMIT);
+  // The handler may run before a process group exists. Do not exit before the
+  // parent can reconcile its own child and reap it; never kill an inherited group.
+  cancellation_requested = 1;
 }
 
 static int parse_unsigned(const char *text, uint64_t minimum, uint64_t maximum,
@@ -88,10 +92,15 @@ static uint64_t resident_bytes(pid_t pid) {
 #endif
 }
 
-static void kill_and_reap(pid_t pid) {
+static int kill_and_reap(pid_t pid) {
   int status;
+  pid_t waited;
   kill(-pid, SIGKILL);
-  while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {}
+  // Covers a failed/unfinished setpgid. This PID belongs to us until waitpid;
+  // it cannot be recycled while our child remains unreaped.
+  kill(pid, SIGKILL);
+  do { waited = waitpid(pid, &status, 0); } while (waited < 0 && errno == EINTR);
+  return waited == pid ? 0 : -1;
 }
 
 /* A hosted process may inherit a hard limit below DataSecure's requested
@@ -116,6 +125,7 @@ int main(int argc, char **argv) {
   uint64_t memory_bytes, started;
   pid_t pid;
   struct sigaction action;
+  sigset_t cancellation_signals, previous_mask;
   if (argc == 2 && strcmp(argv[1], "--sandbox-contract") == 0) {
     if (fputs(CONTRACT_JSON, stdout) == EOF || fflush(stdout) != 0) return WAIT_ERROR;
     return 0;
@@ -127,17 +137,30 @@ int main(int argc, char **argv) {
       !parse_unsigned(argv[4], 100, 600000, &cpu_ms) ||
       !parse_unsigned(argv[6], 100, 600000, &wall_ms)) return USAGE_ERROR;
   memory_bytes = memory_mib * 1024ULL * 1024ULL;
+  sigemptyset(&cancellation_signals);
+  sigaddset(&cancellation_signals, SIGINT);
+  sigaddset(&cancellation_signals, SIGTERM);
+  sigaddset(&cancellation_signals, SIGHUP);
+  if (sigprocmask(SIG_BLOCK, &cancellation_signals, &previous_mask) != 0) return SETUP_ERROR;
   memset(&action, 0, sizeof(action));
   action.sa_handler = terminate_group;
   sigemptyset(&action.sa_mask);
   if (sigaction(SIGINT, &action, NULL) != 0 || sigaction(SIGTERM, &action, NULL) != 0 ||
       sigaction(SIGHUP, &action, NULL) != 0) return SETUP_ERROR;
+  // An inherited SIG_IGN/SA_NOCLDWAIT must not auto-reap our group leader:
+  // the unreaped child is the ownership/PID-reuse guard for group cleanup.
+  action.sa_handler = SIG_DFL;
+  if (sigaction(SIGCHLD, &action, NULL) != 0) return SETUP_ERROR;
 
   pid = fork();
   if (pid < 0) return START_ERROR;
   if (pid == 0) {
     uint64_t seconds = (cpu_ms + 999ULL) / 1000ULL;
     if (setpgid(0, 0) != 0) _exit(SETUP_ERROR);
+    action.sa_handler = SIG_DFL;
+    if (sigaction(SIGINT, &action, NULL) != 0 || sigaction(SIGTERM, &action, NULL) != 0 ||
+        sigaction(SIGHUP, &action, NULL) != 0 ||
+        sigprocmask(SIG_SETMASK, &previous_mask, NULL) != 0) _exit(SETUP_ERROR);
 #ifdef __linux__
     if (prctl(PR_SET_PDEATHSIG, SIGKILL) != 0 || getppid() == 1) _exit(SETUP_ERROR);
 #endif
@@ -147,12 +170,32 @@ int main(int argc, char **argv) {
       _exit(FILE_LIMIT_SETUP_ERROR);
     }
     if (apply_limit_ceiling(RLIMIT_NOFILE, (rlim_t)64) != 0) _exit(OPEN_FILE_LIMIT_SETUP_ERROR);
-    execvp(argv[8], &argv[8]);
-    _exit(START_ERROR);
+    // argv[8] is an absolute, verified runtime path. No PATH search and no
+    // execvp ENOEXEC shell fallback: invalid binaries are not shell programs.
+    execv(argv[8], &argv[8]);
+    {
+      int start_errno = errno;
+      struct stat executable;
+      if (start_errno == EACCES || start_errno == EPERM) _exit(EXECUTABLE_DENIED);
+      if (start_errno == ENOEXEC
+#ifdef EBADARCH
+          || start_errno == EBADARCH
+#endif
+         ) _exit(EXECUTABLE_FORMAT);
+      if (start_errno == ENOENT || start_errno == ENOTDIR) {
+        if (stat(argv[8], &executable) == 0 && S_ISREG(executable.st_mode)) _exit(DEPENDENCY_MISSING);
+        _exit(EXECUTABLE_MISSING);
+      }
+      _exit(START_ERROR);
+    }
   }
 
-  child_group = pid;
-  if (setpgid(pid, pid) != 0 && errno != EACCES) {
+  if (setpgid(pid, pid) != 0 &&
+      !(errno == EACCES && getpgid(pid) == pid) && errno != ESRCH) {
+    kill_and_reap(pid);
+    return SETUP_ERROR;
+  }
+  if (sigprocmask(SIG_SETMASK, &previous_mask, NULL) != 0) {
     kill_and_reap(pid);
     return SETUP_ERROR;
   }
@@ -162,17 +205,36 @@ int main(int argc, char **argv) {
     return SETUP_ERROR;
   }
   for (;;) {
-    int status = 0;
-    pid_t waited = waitpid(pid, &status, WNOHANG);
-    if (waited == pid) {
-      child_group = -1;
-      if (WIFEXITED(status)) return WEXITSTATUS(status);
-      if (WIFSIGNALED(status)) return RESOURCE_LIMIT;
+    siginfo_t observed;
+    int waited;
+    if (cancellation_requested) {
+      if (kill_and_reap(pid) != 0) return WAIT_ERROR;
+      return RESOURCE_LIMIT;
+    }
+    memset(&observed, 0, sizeof(observed));
+    // Observe without reaping. Killing a numeric group AFTER waitpid would
+    // allow PID/PGID reuse and could signal an unrelated new process group.
+    waited = waitid(P_PID, (id_t)pid, &observed, WEXITED | WNOHANG | WNOWAIT);
+    if (waited == 0 && observed.si_pid == pid) {
+      // Reconcile the owned group even after normal child exit. This also
+      // covers cancellation arriving between exit observation and return:
+      // the leader reserves its PID until every group signal is complete.
+      if (kill_and_reap(pid) != 0) return WAIT_ERROR;
+      if (cancellation_requested) return RESOURCE_LIMIT;
+      if (observed.si_code == CLD_EXITED) return observed.si_status;
+      if (observed.si_code == CLD_KILLED || observed.si_code == CLD_DUMPED) return RESOURCE_LIMIT;
       return WAIT_ERROR;
     }
     if (waited < 0 && errno != EINTR) {
-      kill_and_reap(pid);
+      // ECHILD means ownership is absent: never signal a potentially reused
+      // numeric PID/PGID. The explicit SIGCHLD disposition prevents this in
+      // the normal single-threaded parent, which is the only reaper here.
+      if (errno != ECHILD) kill_and_reap(pid);
       return WAIT_ERROR;
+    }
+    if (cancellation_requested) {
+      if (kill_and_reap(pid) != 0) return WAIT_ERROR;
+      return RESOURCE_LIMIT;
     }
     {
       uint64_t now = monotonic_ms();
@@ -183,13 +245,12 @@ int main(int argc, char **argv) {
       }
       if (now - started >= wall_ms || rss > memory_bytes) {
         kill_and_reap(pid);
-        child_group = -1;
         return RESOURCE_LIMIT;
       }
     }
     {
       struct timespec pause = { 0, 10 * 1000 * 1000 };
-      while (nanosleep(&pause, &pause) != 0 && errno == EINTR) {}
+      while (nanosleep(&pause, &pause) != 0 && errno == EINTR && !cancellation_requested) {}
     }
   }
 }

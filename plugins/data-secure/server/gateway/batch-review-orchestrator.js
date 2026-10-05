@@ -1,8 +1,11 @@
 'use strict';
 
 const { releaseOwnedLock } = require('./batch-lock-release');
+const { prepareStandaloneReviewChoices, mergeStandaloneReviewChoices,
+  rememberStandaloneReviewChoices } = require('./standalone-review-choices');
 
 const { MAX_REVIEW_CHARS, MAX_DARWIN_REVIEW_FINDINGS, reviewSizeError } = require('../companion/text-review');
+const { MAX_STANDALONE_REVIEW_FINDINGS, standaloneReviewSizeError } = require('./standalone-review-budget');
 
 // Covers both per-document separator labels (at most 100 documents).
 const REVIEW_LABEL_BUDGET = 64;
@@ -55,7 +58,10 @@ function createBatchReviewOrchestrator(options = {}) {
         try { deps.onReviewLifecycle?.(event); } catch { /* diagnostics cannot change a privacy decision */ }
       };
       const platform = deps.platform || currentPlatform();
-      const findingLimit = platform === 'darwin' ? MAX_DARWIN_REVIEW_FINDINGS : Infinity;
+      const standalone = state.product_channel === 'standalone';
+      const findingLimit = standalone ? MAX_STANDALONE_REVIEW_FINDINGS
+        : platform === 'darwin' ? MAX_DARWIN_REVIEW_FINDINGS : Infinity;
+      const sizeError = standalone ? standaloneReviewSizeError : reviewSizeError;
       let cursor = 0;
       let carry = null;
       let reviewedCount = 0;
@@ -79,7 +85,7 @@ function createBatchReviewOrchestrator(options = {}) {
         throw error;
       };
       const groupFailureMessage = (error) => {
-        if (error?.code === 'LOCAL_REVIEW_TOO_LARGE') return reviewSizeError().message;
+        if (error?.code === 'LOCAL_REVIEW_TOO_LARGE') return sizeError().message;
         if (error?.code === 'LOCAL_REVIEW_CANCELLED') return 'Die lokale Prüfung wurde abgebrochen. Bereits geprüfte Ergebnisse bleiben erhalten.';
         return reviewedCount > 0
           ? 'Die aktuelle Prüfgruppe wurde sicher gestoppt. Offene Dateien bleiben lokal gesperrt; bereits geprüfte Ergebnisse bleiben erhalten.'
@@ -105,10 +111,13 @@ function createBatchReviewOrchestrator(options = {}) {
           carry = null;
           const chars = draftCharacters(draft);
           const count = Array.isArray(draft?.ambiguities) ? draft.ambiguities.length : 0;
-          if (chars > MAX_REVIEW_CHARS || count > findingLimit) throw reviewSizeError();
+          if (chars > MAX_REVIEW_CHARS || count > findingLimit) throw sizeError();
           const weight = chars + REVIEW_LABEL_BUDGET;
           if (drafts.length && (budget + weight > MAX_REVIEW_CHARS || findings + count > findingLimit)) {
-            carry = { item, draft };
+            // Standalone publication can bind an entity for the next file.
+            // Recreate its exact spans with the updated registry, rather than
+            // retaining a pre-decision draft across the group boundary.
+            carry = state.product_channel === 'standalone' ? { item } : { item, draft };
             break;
           }
           selected.push(item);
@@ -133,30 +142,36 @@ function createBatchReviewOrchestrator(options = {}) {
       let outcome;
       try {
         checkAbort();
-        lifecycle({ event: 'review_ui_started', outcome: 'progress', item_count: selected.length });
-        outcome = await runBatchReviewLocally(drafts, {
+        const plan = state.product_channel === 'standalone'
+          ? prepareStandaloneReviewChoices(state, drafts) : null;
+        const uiDrafts = plan ? plan.openDrafts : drafts;
+        const reusedDocuments = selected.length - uiDrafts.length;
+        if (uiDrafts.length) lifecycle({ event: 'review_ui_started', outcome: 'progress', item_count: uiDrafts.length });
+        outcome = uiDrafts.length ? await runBatchReviewLocally(uiDrafts, {
           platform,
           allowDefer: true,
+          ...(state.product_channel === 'standalone' ? { allowOrganizationReview: true } : {}),
           batchSummary: {
             batchTotal,
             automaticallyCompleted,
             safelyStopped,
             otherPending,
-            previouslyReviewed: reviewedCount,
-            reviewPendingTotal: items.length - reviewedCount
+            previouslyReviewed: reviewedCount + reusedDocuments,
+            reviewPendingTotal: items.length - reviewedCount - reusedDocuments
           },
           reviewTextLocally: deps.reviewTextLocally || reviewTextLocally,
           ...(deps.reviewOptions || {})
-        });
+        }) : { action: 'reviewed', documents: [] };
+        if (plan) outcome = mergeStandaloneReviewChoices(plan, outcome);
         checkAbort();
-        lifecycle({ event: 'review_ui_finished', outcome: outcome.action === 'reviewed' ? 'ok' : 'stopped',
-          item_count: selected.length, error_code: outcome.action === 'reviewed' ? 'NONE' : 'LOCAL_REVIEW_CANCELLED' });
+        if (uiDrafts.length) lifecycle({ event: 'review_ui_finished', outcome: outcome.action === 'reviewed' ? 'ok' : 'stopped',
+          item_count: uiDrafts.length, error_code: outcome.action === 'reviewed' ? 'NONE' : 'LOCAL_REVIEW_CANCELLED' });
       } catch (error) {
         const code = ['LOCAL_REVIEW_TOO_LARGE', 'LOCAL_REVIEW_TIMEOUT', 'LOCAL_REVIEW_CANCELLED'].includes(error?.code) ? error.code : 'LOCAL_REVIEW_FAILED';
         lifecycle({ event: 'review_ui_failed', outcome: 'stopped', item_count: selected.length, error_code: code });
         markDeferredReview(state, items.slice(reviewedCount), code);
         writeState(state);
-        const message = code === 'LOCAL_REVIEW_TOO_LARGE' ? reviewSizeError().message :
+        const message = code === 'LOCAL_REVIEW_TOO_LARGE' ? sizeError().message :
           code === 'LOCAL_REVIEW_CANCELLED' ? groupFailureMessage(error) :
           code === 'LOCAL_REVIEW_TIMEOUT' ? 'Die lokale Prüfgruppe hat nicht rechtzeitig geantwortet. Bereits geprüfte Ergebnisse bleiben erhalten.' :
           'Die lokale Prüfgruppe konnte nicht abgeschlossen werden. Bereits geprüfte Ergebnisse bleiben erhalten.';
@@ -171,7 +186,15 @@ function createBatchReviewOrchestrator(options = {}) {
 
       let publication;
       try {
-        publication = await publishReviewedBatch(state, selected.length === items.length ? items : selected, drafts, outcome.documents, deps);
+        const publicationDeps = state.product_channel === 'standalone' ? {
+          ...deps,
+          onReviewDecisionsBound: async (boundDrafts, boundDocuments) => {
+            rememberStandaloneReviewChoices(state, boundDrafts, boundDocuments);
+            writeState(state);
+            await deps.onReviewDecisionsBound?.(boundDrafts, boundDocuments);
+          }
+        } : deps;
+        publication = await publishReviewedBatch(state, selected.length === items.length ? items : selected, drafts, outcome.documents, publicationDeps);
       } catch (error) {
         if (error?.code !== 'BATCH_REVIEW_DECISION_BINDING_INVALID') throw error;
         return { ok: false, error: error.code, message: groupFailureMessage(error), ...publicProgress(state), ...deliverySummary(), raw_content_sent_to_claude: false };

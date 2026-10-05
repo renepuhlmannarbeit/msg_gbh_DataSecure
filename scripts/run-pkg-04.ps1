@@ -62,6 +62,7 @@ if (Test-Path -LiteralPath $evidenceRoot) { throw 'PKG04_EVIDENCE_ALREADY_EXISTS
 New-Item -ItemType Directory -Path $evidenceRoot | Out-Null
 
 $candidates = @()
+Invoke-Checked 'npm.cmd' @('run', 'test:standalone')
 Invoke-Checked 'npm.cmd' @('run', 'test:standalone:conversion')
 Invoke-Checked 'powershell.exe' @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File',
     'tests/manual/standalone-native-windows-launch.ps1', '-ValidateIsolationOnly')
@@ -89,6 +90,8 @@ foreach ($label in @('candidate-a', 'candidate-b')) {
         package_smoke = 'passed'
         worker_handoff_smoke = 'passed'
         native_binary_smoke = 'passed'
+        packaged_review_ipc = 'passed'
+        native_review_decisions = 'not_run'
         native_smoke_isolation = 'fresh-private-profile-documents-temp-webview'
     }
 }
@@ -128,6 +131,8 @@ $binding = [ordered]@{
     package_smoke = 'passed'
     worker_handoff_smoke = 'passed'
     native_binary_smoke = 'passed'
+    packaged_review_ipc = 'passed'
+    native_review_decisions = 'not_run'
 }
 $bindingPath = Join-Path $evidenceRoot 'INT-13-BINDING.json'
 Write-JsonUtf8NoBom $bindingPath $binding 5

@@ -70,7 +70,7 @@ for (const expected of [
   'DATASECURE_STANDALONE_NATIVE_SMOKE_ROOT',
   'DATASECURE_STANDALONE_NATIVE_SMOKE_REVIEW=1',
   'review_page_loaded',
-  'get_review_session',
+  'native-review-readiness.js',
   'DATASECURE_STANDALONE_DOCUMENTS_DIR',
   'profile/Library/Application Support/SecureDataMsg-Standalone/workspace',
   'sidecar_started',
@@ -84,6 +84,19 @@ for (const expected of [
 assert.doesNotMatch(macosLaunch, /child_pids="\$\(pgrep -P/u,
   'the sidecar check must not classify every WebView child as a sidecar');
 assert.doesNotMatch(macosLaunch, /curl|wget|https?:\/\//u);
+const readiness = fs.readFileSync(path.join(root, 'tests', 'helpers', 'native-review-readiness.js'), 'utf8');
+assert.match(readiness, /get_review_session/u);
+assert.match(readiness, /ipc_response_ok/u);
+const { actionReady } = require('./helpers/native-review-readiness');
+const overlappingReadiness = [
+  { event: 'ipc_request_started', action: 'get_review_session', request_id: 'a'.repeat(35) },
+  { event: 'ipc_request_started', action: 'get_review_session', request_id: 'b'.repeat(35) },
+  { event: 'ipc_response_ok', action: 'get_review_session', request_id: 'a'.repeat(35) }
+];
+assert.equal(actionReady(overlappingReadiness, 'get_review_session'), false,
+  'an old request response must not prove readiness of the newer request');
+assert.equal(actionReady([...overlappingReadiness,
+  { event: 'ipc_response_ok', action: 'get_review_session', request_id: 'b'.repeat(35) }], 'get_review_session'), true);
 
 assert.match(workflow, /actions\/checkout@[a-f0-9]{40}/u);
 assert.match(workflow, /actions\/setup-node@[a-f0-9]{40}/u);

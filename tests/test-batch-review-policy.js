@@ -66,6 +66,25 @@ test('person decisions are occurrence-bound and use a stable typed pseudonym', (
     [{ ambiguity_id: 'person:v1:000001', decision: 'redact' }]), /Personenpseudonym/u);
 });
 
+test('company review uses only an explicitly permitted ORG assignment and cannot become a keep exception', () => {
+  const input = { ...personReviewInput(), allowOrganizationReview: true,
+    replacementForAmbiguity(_candidate, kind) { assert.equal(kind, 'ORG'); return '[UNTERNEHMEN_003]'; } };
+  const choices = [{ ambiguity_id: input.ambiguities[0].ambiguity_id, decision: 'redact_organization' }];
+  assert.equal(reviewedBatchText(input, choices).text, '[UNTERNEHMEN_003] koordinierte die Einführung.');
+  assert.throws(() => reviewedBatchText({ ...input, allowOrganizationReview: false }, choices), /nicht verfügbar/u);
+  assert.throws(() => reviewedBatchText({ ...input, replacementForAmbiguity: () => '[PERSON_003]' }, choices), /gewählten Typ/u);
+  assert.throws(() => reviewedBatchText({ ...reviewInput(), allowOrganizationReview: true }, [
+    { ambiguity_id: 'credential:v2:000001', decision: 'redact_organization' }
+  ]), /nicht verfügbar/u);
+  const replayed = { ...input, anonymized_text: '[UNTERNEHMEN_003] koordinierte die Einführung.', ambiguities: [] };
+  const options = { reviewedDraft: input, resolvedOrganizationReplacement: () => '[UNTERNEHMEN_003]' };
+  assert.equal(reviewedBatchText(replayed, choices, options).text, replayed.anonymized_text);
+  for (const altered of [ { ...replayed, original_text: replayed.original_text + ' geändert' },
+    { ...replayed, anonymized_text: replayed.anonymized_text + ' Anna Berger' } ]) {
+    assert.throws(() => reviewedBatchText(altered, choices, options), error => error.code === 'LOCAL_REVIEW_CANCELLED');
+  }
+});
+
 test('a replayed person decision is accepted only for the exact source, redact choice and bound marker', () => {
   const reviewedDraft = personReviewInput();
   const replayed = {

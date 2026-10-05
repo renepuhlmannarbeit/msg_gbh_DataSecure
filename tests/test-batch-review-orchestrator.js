@@ -4,6 +4,8 @@ const { SafeError } = require('../plugins/data-secure/server/runtime');
 const { createBatchReviewOrchestrator } = require('../plugins/data-secure/server/gateway/batch-review-orchestrator');
 const batchFacade = require('../plugins/data-secure/server/gateway/batch');
 const { reviewBatchTextLocally } = require('../plugins/data-secure/server/companion/text-review');
+const { createBatchPseudonymState } = require('../plugins/data-secure/server/batch-pseudonym-context');
+const { MAX_STANDALONE_REVIEW_FINDINGS } = require('../plugins/data-secure/server/gateway/standalone-review-budget');
 const { createSuite } = require('./helpers');
 
 const { test, testAsync, done, assert } = createSuite('Batch review orchestration boundary');
@@ -90,9 +92,10 @@ function fixture(options = {}) {
   return { orchestrator, token, active, events, lifecycle, items, state, drafts, progress, deps, writes: () => writes };
 }
 
-function findingFixture(counts, platform = 'darwin') {
+function findingFixture(counts, platform = 'darwin', standalone = false) {
   const items = counts.map((count, id) => ({ id, count, status: 'deferred_review' }));
-  const state = { items };
+  const state = { items, ...(standalone ? { token: 'd'.repeat(64), product_channel: 'standalone',
+    ...createBatchPseudonymState({ productChannel: 'standalone' }) } : {}) };
   const active = new Set();
   const captured = [];
   const groups = [];
@@ -133,7 +136,102 @@ function findingFixture(counts, platform = 'darwin') {
   return { orchestrator, active, items, captured, groups };
 }
 
+function standaloneChoiceFixture(options = {}) {
+  const count = MAX_STANDALONE_REVIEW_FINDINGS / 2 + 500;
+  const token = 'c'.repeat(64);
+  const state = options.state || { token, product_channel: 'standalone',
+    ...createBatchPseudonymState({ productChannel: 'standalone' }),
+    items: [{ id: 0, status: 'deferred_review' }, { id: 1, status: 'deferred_review' }] };
+  const captured = [];
+  const uiGroups = [];
+  const publications = [];
+  const writes = [];
+  const valueAt = (id, index) => options.mixedLater && id === 1 && index === count - 1 ? 'Andere Angabe' : 'Erika Beispiel';
+  const createDraft = (item) => {
+    if (options.resolvedCarry && publications.length > 0) {
+      return { original_text: 'Erika Beispiel', anonymized_text: '[PERSON_001]',
+        allowOrganizationReview: true, ambiguities: [] };
+    }
+    let text = '';
+    const ambiguities = [];
+    for (let index = 0; index < count; index++) {
+      const value = valueAt(item.id, index);
+      const start = text.length;
+      text += value + '\n';
+      ambiguities.push({ ambiguity_id: `${item.id === 0 ? 'person' : 'person-residual'}:v1:${String(index + 1).padStart(6, '0')}`,
+        type: item.id === 0 ? 'person_prose_ambiguous' : 'person_residual_ambiguous', replacement_kind: 'PERSON',
+        original_start: start, original_end: start + value.length,
+        anonymized_start: start, anonymized_end: start + value.length });
+    }
+    return { original_text: text, anonymized_text: text, allowOrganizationReview: true, ambiguities };
+  };
+  const orchestrator = createBatchReviewOrchestrator({
+    SafeError, active: new Set(), acquireActiveLock() {}, releaseActiveLock: () => true,
+    readState: () => state, assertLocalExecutorAccess() {}, reconcilePublishedItems: () => false,
+    reconcilePendingMappings: () => false, markInterruptedItemsRetryable: () => 0,
+    writeState(value) { writes.push(JSON.stringify(value)); },
+    publicProgress: () => ({ batch_total: state.items.length,
+      released: state.items.filter((item) => item.status === 'released').length, stopped: 0 }),
+    deferredReviewPlan: () => ({ ready: true, items: state.items.filter((item) => item.status === 'deferred_review') }),
+    markDeferredReview(_state, items, code) { items.forEach((item) => { item.status = 'deferred_review'; item.error_code = code; }); },
+    captureDeferredReviewInput: async (_state, item) => { captured.push(item.id); return createDraft(item); },
+    runBatchReviewLocally: async (drafts, callOptions) => {
+      uiGroups.push(drafts.map((item) => item.ambiguities.length));
+      assert.strictEqual(callOptions.allowOrganizationReview, true);
+      if (options.deferSecond && uiGroups.length === 2) return { action: 'deferred', documents: [] };
+      return { action: 'reviewed', documents: drafts.map((draft, index) => ({ document_index: index + 1,
+        decisions: draft.ambiguities.map((candidate) => ({ ambiguity_id: candidate.ambiguity_id,
+          decision: options.choice || 'keep' })) })) };
+    },
+    publishReviewedBatch: async (_state, items, drafts, documents, deps) => {
+      // Production performs its complete validation before invoking this hook.
+      await deps.onReviewDecisionsBound(drafts, documents);
+      publications.push(documents);
+      items.forEach((item) => { item.status = 'released'; });
+      return { packages: [], locallyReleased: items.length, failed: 0 };
+    },
+    writeTerminalEvidence: () => true, currentPlatform: () => 'darwin'
+  });
+  return { state, captured, uiGroups, publications, writes, count,
+    run: () => orchestrator.reviewDeferredBatch(token, { localFinalize: true }) };
+}
+
 async function main() {
+  await testAsync('Standalone reuses an exact keep across phase families and freshly reconstructs its carried document', async () => {
+    const value = standaloneChoiceFixture();
+    const result = await value.run();
+    assert.strictEqual(result.locally_released, 2);
+    assert.deepStrictEqual(value.captured, [0, 1, 1]);
+    assert.deepStrictEqual(value.uiGroups, [[value.count]]);
+    assert.deepStrictEqual(value.publications.map((group) => group[0].decisions.length), [value.count, value.count]);
+    assert.ok(value.publications[1][0].decisions.every((choice) => choice.decision === 'keep'));
+    assert.strictEqual(value.state.standalone_review_choices.entries.length, 1);
+    assert.doesNotMatch(value.writes.join('\n'), /Erika|Beispiel/iu);
+  });
+
+  await testAsync('Standalone handles a carried source whose prior decision already removed every ambiguity', async () => {
+    const value = standaloneChoiceFixture({ resolvedCarry: true, choice: 'redact_organization' });
+    const result = await value.run();
+    assert.strictEqual(result.locally_released, 2);
+    assert.deepStrictEqual(value.captured, [0, 1, 1]);
+    assert.deepStrictEqual(value.uiGroups, [[value.count]]);
+    assert.deepStrictEqual(value.publications[1][0].decisions, []);
+    assert.strictEqual(value.state.standalone_review_choices.entries[0][1], 'redact_organization');
+  });
+
+  await testAsync('Standalone retains only submitted decisions across defer/restart and asks only the later unknown name', async () => {
+    const value = standaloneChoiceFixture({ mixedLater: true, deferSecond: true });
+    const paused = await value.run();
+    assert.strictEqual(paused.error, 'LOCAL_REVIEW_DEFERRED');
+    assert.deepStrictEqual(value.uiGroups, [[value.count], [1]]);
+    assert.strictEqual(value.state.standalone_review_choices.entries.length, 1);
+    assert.strictEqual(value.state.items[0].status, 'released');
+    const resumed = standaloneChoiceFixture({ mixedLater: true, state: JSON.parse(JSON.stringify(value.state)) });
+    assert.strictEqual((await resumed.run()).locally_released, 1);
+    assert.deepStrictEqual(resumed.uiGroups, [[1]]);
+    assert.strictEqual(resumed.publications[0][0].decisions.length, resumed.count);
+    assert.strictEqual(resumed.state.standalone_review_choices.entries.length, 2);
+  });
   for (const [counts, expectedGroups] of [[[600, 600], [600, 600]], [[600, 400, 1], [1000, 1]]]) {
     await testAsync(`macOS splits ${counts.join('+')} findings and publishes every document exactly once`, async () => {
       const value = findingFixture(counts);
@@ -158,6 +256,26 @@ async function main() {
     assert.deepStrictEqual(value.groups.map((group) => group.findings), [1200]);
     assert.strictEqual(value.active.size, 0);
   });
+
+  for (const platform of ['win32', 'darwin', 'linux']) {
+    await testAsync(`Standalone ${platform} shares the app budget and accepts a single document above the native macOS limit`, async () => {
+      const single = findingFixture([1001], platform, true);
+      assert.strictEqual((await single.orchestrator.reviewDeferredBatch('synthetic', { localFinalize: true })).ok, true);
+      assert.deepStrictEqual(single.groups.map((group) => group.findings), [1001]);
+      const grouped = findingFixture([3000, 3000], platform, true);
+      const result = await grouped.orchestrator.reviewDeferredBatch('synthetic', { localFinalize: true });
+      assert.strictEqual(result.locally_released, 2);
+      assert.deepStrictEqual(grouped.groups.map((group) => group.findings), [3000, 3000]);
+      assert.deepStrictEqual(grouped.captured, [0, 1, 1], 'app groups rebind carried spans after publication');
+      const oversized = findingFixture([MAX_STANDALONE_REVIEW_FINDINGS + 1], platform, true);
+      const limited = await oversized.orchestrator.reviewDeferredBatch('synthetic', { localFinalize: true });
+      assert.strictEqual(limited.error, 'LOCAL_REVIEW_TOO_LARGE');
+      assert.match(limited.message, /5\.000 Fundstellen/u);
+      assert.match(limited.message, /kleinere Quelldateien/u);
+      assert.strictEqual(limited.locally_released, 0);
+      assert.deepStrictEqual(oversized.groups, []);
+    });
+  }
 
   await testAsync('a single oversized macOS document reports a technical size error without UI or silent deferral', async () => {
     const value = findingFixture([1001]);

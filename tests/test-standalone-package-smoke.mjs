@@ -6,6 +6,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { readCentralModes } from '../scripts/lib/zip.mjs';
 import { isolatedSidecarEnvironment, removePackageSmokeScope } from './helpers/standalone-package-scope.mjs';
+import { runPackagedReviewScenario } from './helpers/standalone-packaged-review.mjs';
 import { office, passivePresentation, embeddedWorkbookPresentation, image, pdf, text as conversionText } from './helpers/conversion-fixtures.mjs';
 
 const require = createRequire(import.meta.url);
@@ -99,6 +100,7 @@ function protocolClient(child, stderr) {
 let child;
 let childClosed = false;
 let closePromise;
+let activeRequest;
 try {
   const environment = isolatedSidecarEnvironment(root, extraction);
   // Exercise the optional trace through the actual packaged child chain, not
@@ -153,6 +155,7 @@ try {
   const stderr = { value: '' };
   child.stderr.on('data', (chunk) => { stderr.value = (stderr.value + chunk.toString('utf8')).slice(-4096); });
   let { request } = protocolClient(child, stderr);
+  activeRequest = request;
   const status = await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'a'.repeat(16), action: 'get_public_state' });
   assert.equal(status.schema, 'datasecure-standalone-private-response/1');
   assert.equal(status.request_id, 'a'.repeat(16));
@@ -533,6 +536,7 @@ try {
   closePromise = new Promise(resolve => child.once('close', code => { childClosed = true; resolve(code); }));
   child.stderr.on('data', chunk => { stderr.value = (stderr.value + chunk.toString('utf8')).slice(-4096); });
   ({ request } = protocolClient(child, stderr));
+  activeRequest = request;
   const restarted = await request({ schema: 'datasecure-standalone-private-ipc/1',
     request_id: 'd5'.repeat(8), action: 'get_run_history' });
   assert.equal(restarted.ok, true);
@@ -599,6 +603,24 @@ try {
   assert.deepEqual(fs.readFileSync(passivePptxSource), passivePptxBytes);
   assert.deepEqual(fs.readFileSync(embeddedPptxSource), embeddedPptxBytes);
   process.stdout.write('STANDALONE REAL PASSIVE PDF/PPTX PRIVACY PASS (3 results, embedded XLSX, separate source coverage)\n');
+  await runPackagedReviewScenario({ request, sourceDirectory, restart: async () => {
+    const stopped = await request({ schema: 'datasecure-standalone-private-ipc/1',
+      request_id: 'ea'.repeat(8), action: 'shutdown' });
+    assert.equal(stopped.ok, true);
+    const code = await Promise.race([closePromise, new Promise((_, reject) => {
+      const timer = setTimeout(() => reject(new Error('STANDALONE_REVIEW_RESTART_TIMEOUT')), 10000); timer.unref();
+    })]);
+    assert.equal(code, 0, 'the packaged control process exits normally before the resumed instance starts');
+    childClosed = false;
+    child = childProcess.spawn(childProcessPath(runtime), ['--require=../network-deny.cjs', path.basename(sidecar)], {
+      cwd: childProcessPath(path.dirname(sidecar)), windowsHide: true, shell: false,
+      stdio: ['pipe', 'pipe', 'pipe'], env: environment
+    });
+    closePromise = new Promise(resolve => child.once('close', value => { childClosed = true; resolve(value); }));
+    child.stderr.on('data', chunk => { stderr.value = (stderr.value + chunk.toString('utf8')).slice(-4096); });
+    ({ request } = protocolClient(child, stderr)); activeRequest = request;
+    return request;
+  } });
   const log = fs.readFileSync(path.join(environment.DATASECURE_STANDALONE_DIAGNOSTIC_DIR, 'sidecar-interactions.jsonl'), 'utf8');
   for (const row of historyRows) assert.ok(!log.includes(row.batch_id), 'run identifiers stay out of diagnostics');
   assert.ok(!log.includes(exactRun) && !log.includes(convertedRun));
@@ -611,8 +633,26 @@ try {
   process.stdout.write('STANDALONE PACKAGE ISOLATED SIDECAR SMOKE PASS\n');
 } finally {
   if (child && !childClosed && child.exitCode === null) {
-    child.kill();
-    await closePromise;
+    // A failed assertion may leave a real private review worker awaiting an
+    // answer. Defer that exact draft and request production shutdown before
+    // cleaning the isolated tree; never kill a process using recycled IDs.
+    try {
+      if (activeRequest) {
+        const session = await activeRequest({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'ff'.repeat(8), action: 'get_review_session' });
+        if (session.ok && session.result.ready) await activeRequest({ schema: 'datasecure-standalone-private-ipc/1',
+          request_id: 'fe'.repeat(8), action: 'submit_review', review_id: session.result.review_id, answer: { action: 'deferred' } });
+        await activeRequest({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'fd'.repeat(8), action: 'shutdown' });
+      } else child.kill();
+    } catch { child.kill(); }
+    const stopped = await Promise.race([closePromise.then(() => true), new Promise(resolve => {
+      const timer = setTimeout(() => resolve(false), 10000); timer.unref();
+    })]);
+    if (!stopped) {
+      child.kill();
+      await Promise.race([closePromise, new Promise((_, reject) => {
+        const timer = setTimeout(() => reject(new Error('STANDALONE_SMOKE_CLEANUP_TIMEOUT')), 5000); timer.unref();
+      })]);
+    }
   }
   if (process.env.DATASECURE_SMOKE_KEEP === '1') process.stderr.write(`STANDALONE_SMOKE_KEPT:${extraction}\n`);
   else safeRemove();

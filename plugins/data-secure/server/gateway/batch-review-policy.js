@@ -14,14 +14,25 @@ function localReviewError(code, message) {
   return error;
 }
 
-function ambiguityRedaction(input, ambiguity, validateOnly = false) {
+function ambiguityRedaction(input, ambiguity, validateOnly = false, decision = 'redact') {
+  const organization = decision === 'redact_organization';
+  if (organization && (!(input.allowOrganizationReview === true || input.allow_organization_review === true) ||
+      !['person_prose_ambiguous', 'person_residual_ambiguous'].includes(ambiguity?.type))) {
+    throw localReviewError('LOCAL_REVIEW_CANCELLED', 'Die Unternehmensentscheidung ist für diese Fundstelle nicht verfügbar.');
+  }
   if (!['person_prose_ambiguous', 'person_residual_ambiguous'].includes(ambiguity?.type)) {
     return { start: ambiguity.anonymized_start, end: ambiguity.anonymized_end };
   }
   if (typeof input.replacementForAmbiguity !== 'function') {
     throw localReviewError('LOCAL_REVIEW_CANCELLED', 'Das stabile Personenpseudonym konnte nicht lokal gebunden werden. Es wurde nichts freigegeben.');
   }
-  const replacement = validateOnly ? '[PERSON_000]' : input.replacementForAmbiguity(ambiguity);
+  const kind = organization ? 'ORG' : 'PERSON';
+  const replacement = validateOnly ? organization ? '[UNTERNEHMEN_000]' : '[PERSON_000]'
+    : input.replacementForAmbiguity(ambiguity, kind);
+  if (!(organization ? /^\[(?:UNTERNEHMEN|ORGANISATION)_(?:[0-9]{3,5}|[A-Z2-7]{10,52})\]$/u
+    : /^\[PERSON_(?:[0-9]{3,5}|[A-Z2-7]{10,52})\]$/u).test(replacement)) {
+    throw localReviewError('LOCAL_REVIEW_CANCELLED', 'Das Entitätspseudonym konnte nicht mit dem gewählten Typ gebunden werden.');
+  }
   return { start: ambiguity.anonymized_start, end: ambiguity.anonymized_end, replacement };
 }
 
@@ -105,14 +116,18 @@ function reviewedBatchText(input, decisions, options = {}) {
     // the same source, it was explicitly redacted, and the freshly generated
     // text contains the registry's exact bound marker but no raw spelling.
     const prior = reviewedById.get(decision.ambiguity_id);
-    if (!prior || decision.decision !== 'redact' || !['person_prose_ambiguous', 'person_residual_ambiguous'].includes(prior.type) ||
+    const organization = decision.decision === 'redact_organization' && input.allowOrganizationReview === true;
+    const resolver = organization ? options.resolvedOrganizationReplacement : options.resolvedPersonReplacement;
+    if (!prior || !(decision.decision === 'redact' || organization) || !['person_prose_ambiguous', 'person_residual_ambiguous'].includes(prior.type) ||
         prior.replacement_kind !== 'PERSON' || reviewedDraft.original_text !== input.original_text ||
-        typeof options.resolvedPersonReplacement !== 'function') {
+        typeof resolver !== 'function') {
       throw localReviewError('LOCAL_REVIEW_CANCELLED', 'Die lokale Stapelentscheidung ist für diese Datei nicht vollständig. Es wurde nichts freigegeben.');
     }
     const raw = reviewedDraft.original_text.slice(prior.original_start, prior.original_end);
-    const replacement = options.resolvedPersonReplacement(raw);
-    if (typeof replacement !== 'string' || !replacement || !input.anonymized_text.includes(replacement) ||
+    const replacement = resolver(raw);
+    const marker = organization ? /^\[(?:UNTERNEHMEN|ORGANISATION)_(?:[0-9]{3,5}|[A-Z2-7]{10,52})\]$/u
+      : /^\[PERSON_(?:[0-9]{3,5}|[A-Z2-7]{10,52})\]$/u;
+    if (typeof replacement !== 'string' || !marker.test(replacement) || !input.anonymized_text.includes(replacement) ||
         input.anonymized_text.includes(raw)) {
       throw localReviewError('LOCAL_REVIEW_CANCELLED', 'Die lokale Stapelentscheidung konnte nicht sicher mit dem bereits gebundenen Personenpseudonym bestätigt werden.');
     }
@@ -122,15 +137,17 @@ function reviewedBatchText(input, decisions, options = {}) {
   }
   const redactions = activeDecisions.map((candidate) => {
     const ambiguity = ambiguityById.get(candidate.ambiguity_id);
-    if (!ambiguity || candidate.decision !== 'redact') {
+    if (!ambiguity || !['redact', 'redact_organization'].includes(candidate.decision)) {
       if (!ambiguity || candidate.decision !== 'keep') {
         throw localReviewError('LOCAL_REVIEW_CANCELLED', 'Die lokale Stapelentscheidung ist ungültig. Es wurde nichts freigegeben.');
       }
       return null;
     }
-    return ambiguityRedaction(input, ambiguity, options.validateOnly === true);
+    return ambiguityRedaction(input, ambiguity, options.validateOnly === true, candidate.decision);
   }).filter(Boolean);
-  const text = applyManualRedactions(input.anonymized_text, redactions);
+  const text = applyManualRedactions(input.anonymized_text, redactions, {
+    allowOrganizationReview: input.allowOrganizationReview === true || input.allow_organization_review === true
+  });
   if (options.validateOnly !== true) input.confirmPersonReview?.(activeDecisions, redactions, text);
   return { text };
 }

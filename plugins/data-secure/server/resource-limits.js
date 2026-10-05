@@ -11,6 +11,9 @@ const RESOURCE_LIMITS = Object.freeze({
   MAX_INPUT_BYTES: 500 * MIB,
   MAX_BATCH_FILES: 200,
   MAX_BATCH_TOTAL_BYTES: 500 * MIB,
+  // App-owned decisions use a bounded desktop transport, independently from
+  // the default/Cowork native-dialog limits. All core review stages share it.
+  MAX_STANDALONE_REVIEW_FINDINGS: 5000,
   MAX_TEXT_CHARS: 8_000_000,
   MAX_VISUAL_ASSETS: 150,
   MAX_ASSET_BYTES: 30 * MIB,

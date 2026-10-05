@@ -41,6 +41,19 @@ RC141 korrigiert das Deployment-Target, native Signaturen und numerische
 App-Metadaten; die veröffentlichten RC140-ZIPs enthalten diese Korrekturen nicht.
 Die sichtbare menschliche Abnahme bleibt offen.
 
+## Diagnose ohne geladene Oberfläche
+
+Der lokale Entwicklungsstand DS-109 (noch nicht im veröffentlichten RC157)
+kann den inhaltsfreien Diagnoseordner vor der WebView-Initialisierung mit
+`--startup-diagnostics` öffnen. Im Terminal den ausführbaren App-Inhalt
+`"/Applications/DataSecure Standalone.app/Contents/MacOS/datasecure-standalone" --startup-diagnostics`
+starten; bei anderem Installationsort den App-Pfad entsprechend wählen.
+Ein Startbericht nennt einen festen System-/Paketfehlercode ohne Dokumentinhalt.
+Wird schon der Prozessstart von macOS blockiert, kann die App selbst keinen
+Bericht erzeugen. Die macOS-Meldung mit der IT prüfen; Gatekeeper oder andere
+Schutzfunktionen nicht pauschal deaktivieren. Diese Diagnosefunktion ist keine
+neue native Mac-Bedienabnahme.
+
 ## Kostenkontrollierter technischer Vorlauf
 
 Der GitHub-Workflow **Manual Standalone macOS sandbox evidence** kann auf echten
@@ -82,12 +95,12 @@ und [Tauri-Builds mit GitHub Actions](https://v2.tauri.app/distribute/pipelines/
 
 ## Passendes Paket
 
-- Intel-Mac: [RC151-ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc151/DataSecure-Standalone-3.2.0-rc151-macos-x64.zip)
-  oder [RC151-DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc151/DataSecure-Standalone-3.2.0-rc151-macos-x64.dmg),
+- Intel-Mac: [RC157-ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc157/DataSecure-Standalone-3.2.0-rc157-macos-x64.zip)
+  oder [RC157-DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc157/DataSecure-Standalone-3.2.0-rc157-macos-x64.dmg),
   jeweils mit gleichnamiger `.sha256` auf der Release-Seite.
 - Apple Silicon (M1 oder neuer):
-  [RC151-ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc151/DataSecure-Standalone-3.2.0-rc151-macos-arm64.zip)
-  oder [RC151-DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc151/DataSecure-Standalone-3.2.0-rc151-macos-arm64.dmg),
+  [RC157-ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc157/DataSecure-Standalone-3.2.0-rc157-macos-arm64.zip)
+  oder [RC157-DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc157/DataSecure-Standalone-3.2.0-rc157-macos-arm64.dmg),
   jeweils mit gleichnamiger `.sha256` auf der Release-Seite.
 - Historische RC140-ZIPs: Intel mindestens macOS 15, ARM mindestens macOS 14.
 - RC141-ZIPs sowie RC142-/RC151-ZIPs und -DMGs: minOS-Binärvertrag 13.5 für beide Architekturen geprüft;

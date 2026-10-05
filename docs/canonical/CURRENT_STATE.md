@@ -1,6 +1,6 @@
 # Aktueller Iststand
 
-Stand: 30.09.2026 · 3.2.0-rc157 · Standalone RC157 veröffentlicht · Cowork bleibt RC151
+Stand: 05.10.2026 · 3.2.0-rc157 · Veröffentlichung unverändert; lokale DS-106/107/108/109-Nachbesserung unveröffentlicht · Cowork bleibt RC151
 
 Standalone RC157 ist auf main und im
 [Vorabrelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc157)
@@ -18,6 +18,161 @@ dieser ist nicht bytegleich mit dem vorherigen Anwender-Test-ZIP.
 Coworks veröffentlichte Pakete und eigener Reviewadapter bleiben unverändert.
 Die benannten Mac-/Linux-Bedien-, Accessibility- und formalen Spezialabnahmen
 werden dadurch nicht pauschal als bestanden behauptet.
+
+## Lokale Nachbesserung vom 05.10.2026 (noch nicht veröffentlicht)
+
+DS-109 / BL-010.52 setzt die erneut fachlich revalidierte Architekturverbesserung
+ohne MVC-Neubau um: gebundene Gesprächsnamen statt unbemerkter Freigabe,
+konservative OCR-/Malreihenfolgenprüfung, gestreamte laufweite Identitätsdatei
+mit ehrlichen Warnungen und Ausgabeheader, eng erkannte OS-Begleitdateien,
+geschlossene Fehler-/DTO-Verträge, stabile History-Zeilen und native Start-/
+Öffnungsdiagnose. Konkrete Rollen-/Abteilungssuffixe und der neue native
+Identitätsöffnungsvertrag wurden im abschließenden Gegenreview zusätzlich
+korrigiert. Gezielte Publikations-, Paketkonverter- und Rust-Regressionen sind
+geprüft. Der vollständige lokale Produktschnitt mit 194 Testdateien, 45 Rusttests
+und Clippy, 41 echten Windows-Konvertierungsgruppen sowie dem endgültigen
+Windows-Engineering-Paketworkflow und nativen Start ist bestanden. Die
+Wiederaufnahme konkreter Startfehler erfolgt nur ausdrücklich nach lokaler
+Ursachenbehebung und höchstens bis zum dritten gleichen Fehlschlag;
+Sicherheitsgrenzen bleiben davon ausgeschlossen. Hash, tatsächlicher
+Nachweisumfang und der mangels sauberem Quellcommit verweigerte
+veröffentlichungsgebundene Cowork-Build stehen in der Evidence-Matrix.
+Neue native Mac-Gerätebedienung und unabhängige Inhaltsqualitätsmetriken
+bleiben ausdrücklich getrennt offen. Kein neues Release wurde erzeugt.
+
+DS-106 / BL-010.46 ergänzt für Standalone die ausdrückliche Prüfwahl
+**Als Unternehmen anonymisieren**. Die tatsächliche Ersetzung und die
+vertrauliche Zuordnung verwenden Unternehmens- statt Personenpseudonyme.
+Eine Entscheidung über dieselbe vollständige Schreibweise wird für offene und
+folgende Prüfungen desselben Laufs wiederverwendet, auch nach Neustart. Neue
+Läufe und bereits fertig veröffentlichte Ergebnisse bleiben davon getrennt.
+Die private Entscheidungstabelle enthält authentifizierte, lauf-/Seed-/Policy-
+gebundene HMAC-Schlüssel statt Rohschreibweisen. Coworks Reviewadapter erhält
+keine neue Unternehmensaktion oder laufweite Entscheidungstabelle.
+
+Der reale RC157-PDF-Lauf `5e50a0b0` erreichte 9/10 Ergebnisse. Die fehlende
+Dateiliste war ein eigener Fehler der Hauptfenster-Capability für
+`get_run_failures`; sie ist lokal korrigiert. Nicht verarbeitete Dateien werden
+mit vollständigem Namen einschließlich Endung, Fehlercode, Erklärung und
+nächstem Schritt angezeigt. Der separate Verarbeitungsstopp
+`AMBIGUITY_REVIEW_REQUIRED` ist reproduziert: Die Restprüfung überbrückte einen
+bereits ersetzten Platzhalter mit Leerzeichen und erzeugte eine nicht bindbare
+Namenshypothese. Literal-Fundstellen erhalten jetzt koordinatentreue Grenzen;
+die unabhängige Restprüfung und die exakte lokale Freigabebindung bleiben aktiv.
+Mit unverändertem installierten Konverter und neuem Privacy-Code erreicht die
+konkrete PDF vier exakt gebundene Prüfkandidaten statt des vorherigen Stopps.
+Der gemeldete Windows-Komplettausfall bei einer Kollegin ist ohne ihre Diagnose
+noch nicht ursächlich zugeordnet.
+
+Der reale Markdown-Lauf `8676f0ca` dient als Gegenprobe für PDF-Grafikreste.
+Die lokale Extraktion lässt reine nicht decodierbare Symbolruns mit einem
+ehrlichen Grafikhinweis aus; lesbare Texte, Zahlen, Tabellen und Formeln bleiben
+erhalten. Zusätzlicher Raster-OCR wird nur bei geometrisch vollständig durch
+beibehaltenen nativen Text belegten, exakt gleichen Wörtern und sicherer
+PDF-Malreihenfolge unterdrückt. Bild-only-Text und
+unbekannte Geometrie bleiben erhalten; Grafiknamen und Bildbeschreibungen
+werden nicht erfunden. Geometrisch belegte Textgrenzen trennen zuvor angeklebte
+Seitenzahlen. Diese Änderungen sind lokale Entwicklung, keine nachträgliche
+Abnahme oder Veröffentlichung des RC157-Pakets.
+E0 bestanden: kanonische CI-Suite mit 72 Basis- und 61 weiteren Testdateien,
+38 reale paketierte Konvertierungsgruppen, 11 PDF-Layoutfälle sowie zusätzliche
+Review-/Journal-/Captureprüfungen und gezieltes Gegenreview. BL-010.46 ist
+technisch erledigt; der ungeklärte Kolleginnen-Befund bleibt gesondert unter
+BL-010.47 offen. Für diesen früheren Prüfschnitt wurde noch kein neuer
+Paketbau oder neuer Zielhostnachweis behauptet; der nachfolgende DS-107-Schnitt
+erweitert und korrigiert diese begrenzte Evidenz.
+
+## Technischer Gegenreview und Umsetzung DS-107 vom 05.10.2026
+
+BL-010.48 schließt die dabei gefundenen echten Integrationslücken: Die
+Unternehmenswahl wird jetzt vom privaten Desktop-IPC akzeptiert und bis zur
+typisierten Veröffentlichung geprüft. Standalone begrenzt den Prüfdialog auf
+Windows/macOS/Linux einheitlich auf 5.000 Fundstellen. Broker und Oberfläche
+kennen laufgebundene Vorbereitung, Publikation, First-Draft-Fehler,
+Wiederholung und Exportreparatur; ein noch lebender Worker wird nicht doppelt
+gestartet. Startfehler erklären fehlende Komponenten, verweigerte Ausführung
+oder falsche Architektur und nennen die dafür vorgemerkten Dateien.
+
+Rust begrenzt die gesamte Anfrage einschließlich Sperre, Prozessstart und
+Schreiben. Normales natives Schließen und Testschließen verwenden denselben
+unabhängigen, begrenzten Sidecar-Shutdown. Dateifehler bleiben auch ohne
+erfolgreiche Zuordnungsausgabe sichtbar. Aufnahmefehler nennen die betroffenen
+relativen Dateinamen und nächsten Schritte; nicht gestartete Dateien werden
+von tatsächlich gestoppten Dateien unterschieden.
+
+Tests prüfen zusätzlich den echten Sidecar-/Reviewworker-/Broker-Weg mit
+serialisierter Unternehmensentscheidung, First-Draft-Fault und Wiederholung,
+ungültiger Antwort sowie Vertagen/Fortsetzen. Native Review-Smokes verlangen
+eine erfolgreiche `get_review_session`-Antwort; Requestbeginn und bloße
+Seitenladung reichen nicht. Nicht ausführbare Plattformfälle zählen als Skip,
+Browserfixtures ausdrücklich nur als UI-/Accessibility-Nachweis.
+
+Der lokale Windows-Engineering-Bau entsteht separat mit
+`--engineering-directory`; bestehende RC157-Releasearchive bleiben erhalten.
+Neue native macOS-Gerätebedienung und Publisher-Signierung/Notarisierung sind
+damit nicht belegt. Der Windows-Komplettausfall der Kollegin bleibt ohne
+gerätebezogene Diagnose oder reproduzierbare Gegenprobe ursächlich offen
+(BL-010.47). Das bedeutet nicht, dass bereits bestandene Anwenderläufe erneut
+ungetestet sind. Test- und Paketbindung dieses Schnitts stehen in der
+Evidence-Matrix; kein Push oder Release wird daraus abgeleitet.
+
+## Mehrdimensionale Revalidierung und Umsetzung DS-108 vom 05.10.2026
+
+Die bestätigten Befunde des erneuten technischen Audits sind lokal korrigiert
+und nochmals unabhängig aus Privacy-, Native-/Lifecycle- und Testgate-Sicht
+gegengeprüft. BL-010.49 ist technisch E0 erledigt; das ist keine Freigabe eines
+neuen Releases oder eine Behauptung vollständiger Zielgerätebedienung.
+
+Quelltext darf sich weder mit beliebigen Klammerlabels noch mit typisierten
+HMAC-/numerischen Markern still als bereits anonymisiert ausgeben. Übernommene
+variable Quellmarker benötigen eine exakt gebundene lokale Entscheidung;
+tatsächlich neu erzeugte Pseudonyme werden davon unterschieden. Ganze
+Zugangsdatenzellen bleiben auch mit Markern und in einspaltigen Tabellen geschützt.
+Standalone verwendet durchgehend das angekündigte 5.000er-Prüfbudget, während
+Coworks Reviewvertrag und 1.000er-Budget getrennt bleiben.
+
+Der Reviewrenderer verwirft veraltete Antworten und führt genau einen Polltimer.
+Verlorene Bestätigungen werden als unklar behandelt und durch Statusabgleich
+aufgelöst, nicht durch automatische erneute Entscheidungen. Fortsetzungsfehler
+behalten Ursache und gebundene Dateinamen. Native Fensterschließung bindet die
+tatsächlich ausgelieferte Review-ID. Prozessstarts werden vor dem OS-Aufruf
+registriert; auch wiederholtes Quit kann die Shutdown-Reconciliation nicht
+überspringen oder deren Fehlercode durch Erfolg ersetzen. POSIX hält die
+Prozessgruppen-Eigentümerschaft bis nach der terminalen Gruppenbereinigung.
+Die Aufnahme erhält eine eigene endliche Fünf-Minuten-Frist mit ehrlichem
+Zeit-Heartbeat; innere Windows-Konverterstartursachen bleiben unterscheidbar.
+
+Die Produktsuite besteht mit 136 Testdateien (75 Basis + 61 direkte), die
+gezielten Rust-Prüfungen mit 39 Tests und strengem Clippy. Reale Windows-
+Konvertierung, vier positive POSIX-Cancellation-Gegenproben und zwei wirksame
+Mutanten auf WSL/Linux, Renderer-Fault-Injection und vollständige Paketinventare
+sind separat nachgewiesen. Die Testdetails und ihre Grenzen stehen in der
+[Evidence-Matrix](BACKLOG_EVIDENCE_MATRIX.md#ds-108--abschließender-lokaler-revalidierungsnachweis).
+
+Der finale isolierte Windows-Engineering-Kandidat ist
+`dist/engineering-ds108-final-20261005/DataSecure-Standalone-3.2.0-rc157-windows-x64.zip`,
+589 Einträge, 110386747 Bytes, SHA-256
+`d4dcd06ae001564301d9e7a205aaf1656f5e423c8d9ad17f7583828247625aba`.
+Paketverifier und echter paketierter Sidecar-/Worker-Gesamtweg bestehen:
+6.001 Fundstellen über mehrere Gruppen, Personen-/Unternehmensentscheidungen,
+Verschieben, Neustart, laufweite Übernahme, automatische Folgegruppe, vollständige
+Ausgabeprüfung und exakter Fehlerdateiname. Der native Windows-Start prüft
+Haupt-/Prüfseitenladung und korrelierte erfolgreiche IPC, nicht menschliche
+Reviewentscheidungen. Start: 2540,399 ms; Windows 10.0.26200.0 x64,
+WebView2 154.0.4258.53 (machine), zehn zugeordnete Prozesse, keine TCP-Listener
+oder UDP-Endpunkte im Messfenster; Exit 0 und 911 test-eigene Einträge bereinigt.
+
+BL-010.50 bleibt offen für die bediente Gesamtprüfung genau des neuen Pakets
+auf Windows sowie beiden Mac-Architekturen. WSL-Supervisorlaufzeit ist kein
+macOS-Abbruchnachweis; native Seitenladung ist keine Bedienabnahme. Die
+ausführbare Kampagne bindet den extrahierten Dateibaum vor beiden Starts und
+vor PASS an sämtliche Archivbytes und verlangt echte Bedienattestation.
+BL-010.51 sammelt gezielte Weiterentwicklung aus offiziellen Methodenquellen:
+unabhängig annotierte Erkennungs-/Fehlanonymisierungsmetriken, reproduzierbare
+modellbasierte Zustandsfolgen und spätere Buildherkunft. Die aktuelle Architektur
+wird stabilisiert, nicht durch Cloudverarbeitung oder eine neue NLP-Pflicht
+ersetzt. Keine Originale oder vorhandenen Anwenderläufe wurden verändert;
+kein Commit, Push, Tag oder Release wurde aus diesem lokalen Auftrag abgeleitet.
 
 ## Entstehungs- und Nachweischronologie
 

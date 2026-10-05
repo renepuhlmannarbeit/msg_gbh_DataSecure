@@ -85,6 +85,25 @@ try {
   assert.equal(ledger.identityStatus(cowork, options).available, false);
   assert.equal(ledger.documentAvailable(token, options), true,
     'private mappings have no automatic expiry or application delete action');
+  const largeToken = 'e'.repeat(64);
+  const entries = Array.from({ length: 400 }, (_, index) => ({
+    pseudonym: `[PERSON_${String(index + 1).padStart(3, '0')}]`, original: `Synthetischer langer Originalname ${index} für die Kapazitätsgegenprobe`
+  }));
+  const largeState = { ...state, token: largeToken, items: Array.from({ length: 100 }, (_, index) => ({
+    id: index.toString(16).padStart(32, '0'), status: 'released', source_label: `Unterordner/Datei-${index}.docx`
+  })) };
+  for (const item of largeState.items) ledger.capture(largeToken, item.id, `ds_${item.id}`, entries, options);
+  const large = ledger.materialize(largeState, options);
+  assert.equal(large.complete, true);
+  assert.ok(fs.statSync(large.local_path).size > 2 * 1024 * 1024, 'aggregate crosses single-snapshot limit');
+  assert.equal(ledger.documentAvailable(largeToken, options), true);
+  const largeRun = path.join(output, 'Lauf-20261005-123000-abcdef02');
+  fs.mkdirSync(largeRun);
+  assert.equal(ledger.publishDocumentToRun(largeToken, largeRun, options).published, true);
+  assert.equal(ledger.publishDocumentToRun(largeToken, largeRun, options).existing, true);
+  const largeTime = fs.statSync(large.local_path).mtimeMs;
+  ledger.materialize(largeState, options);
+  assert.equal(fs.statSync(large.local_path).mtimeMs, largeTime);
   console.log('STANDALONE IDENTITY LEDGER PASS');
 } finally {
   const resolved = fs.realpathSync.native(root);

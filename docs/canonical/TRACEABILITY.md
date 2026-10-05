@@ -1,6 +1,6 @@
 # Entscheidungs-Traceability
 
-Stand: 30.09.2026 · 3.2.0-rc157 · Standalone RC157 veröffentlicht · Cowork bleibt RC151
+Stand: 05.10.2026 · 3.2.0-rc157 · Veröffentlichung unverändert; lokale DS-106/107/108/109-Nachbesserung unveröffentlicht · Cowork bleibt RC151
 
 RC157-Veröffentlichungsbindung → Quellcommit
 `111737d28021b6989ffe8d563b58daa9cbae610f` → native Windows-, Intel-/ARM-macOS-
@@ -9,6 +9,92 @@ Release-Assets → [Releasevertrag](../RELEASE.md#rc157--standalone-auf-allen-zi
 Der Windows-Anwenderlauf `3d6b69b7` ist bestanden. Die nachfolgenden früheren
 lokalen Entwicklungsnachweise sind mit dieser Releasebindung zu lesen;
 separat benannte menschliche Spezialabnahmen bleiben davon getrennt.
+
+DS-109 / BL-010.52 → erneut revalidierte Architekturkorrekturen ohne MVC-Neubau →
+`privacy/person-ambiguities.js`, `standalone/pdf-text-layout.js`,
+`standalone/markdown-visuals.js`, `standalone/identity-ledger.js`, `run-history.js`,
+`companion/folder-metadata.js`, `core/desktop-error-contract.js`,
+`batch-pseudonym-registry.js`, `gateway/compliance.js`, `posix-supervisor.js`,
+`native/ocr/pilot/posix-sandbox.c`, `frontend/{app,review}.js` und
+`tauri-contract/src/{main,native_open,startup_diagnostics}.rs`.
+Echte Publikation → `test-residual-person-review.js`,
+`test-wide-privacy-orchestrator.js`; reale PDF.js-/Worker-Grenze →
+`test-standalone-conversion-worker.mjs`, `test-standalone-pdf-text-layout.js`;
+Identität/Metadaten → `test-standalone-{history,identity-ledger}.js`,
+`test-source-folder.js`; DTO-/UI-Vertrag →
+`test-standalone-{desktop-contract,frontend,review-frontend}.js`,
+`test-batch-review-model.js`; Ursachen → `test-diagnostic-causes.js`,
+`test-posix-supervisor.js` und Rust-Tests. E0-Gates stehen in der Evidence-Matrix;
+keine Ableitung bedienter Mac-/Windows-UAT oder eines Releases.
+
+DS-107 / BL-010.48 → tatsächlicher Standalone-Entscheidungsvertrag, begrenzte
+Verbindungen und erklärbare Zustände → `standalone/desktop-ipc.js`,
+`standalone/review-broker.js`, `standalone/application-service.js`,
+`gateway/batch-executor.js`, `gateway/standalone-review-budget.js`,
+`frontend/review.js`, `tauri-contract/src/ipc_transport.rs` und `src/main.rs`.
+Echte Sidecar-/Worker-Integration prüft Unternehmen, First-Draft-Fault/Retry,
+ungültige Antwort und Vertagen/Fortsetzen; Rust prüft Frist und Shutdown auch
+an einem realen Kindprozess, der keine stdin liest. Sichere Dateilisten →
+`companion/file-picker.js`, `companion/source-folder.js`, `run-history.js`,
+`desktop-sidecar.js` und `frontend/app.js`; Verarbeitung, ausstehende Dateien
+und Zuordnungsschuld bleiben getrennt. Neue sichere OS-Codes ändern keine
+Core-Coverage oder Cowork-Reviewberechtigung.
+
+DS-108 / BL-010.49 → erneute, gegenbeispielgestützte Revalidierung →
+`privacy/spans.js`, `privacy/engine.js`, `privacy/structured.js`,
+`privacy/residual-person-review.js`, `gateway/orchestrator.js`,
+`frontend/review.js`, `frontend/app.js`, `standalone/application-service.js`,
+`tauri-contract/src/{main,ipc_transport,review_window}.rs` sowie Windows-/
+POSIX-Supervisor. Markerherkunft, 1.000/1.001/5.000/5.001, Credentialtabellen,
+verlorene ACKs, veraltete Chunks, gebundene Dateinamen und echte OS-Prozesse
+erhalten eigene Gegenproben statt bloßer Modell-/Stringassertions.
+
+DS-108 → vollständige Paket-/Gateevidenz →
+`scripts/lib/standalone-package-integrity.mjs`, alle drei Standalone-Verifier,
+`test-standalone-package-integrity.mjs`, `test-native-smoke-integrity.js`,
+`test-standalone-review-ipc.js`, Standalone-NPM-/PKG-04-Eingänge und
+`helpers/standalone-packaged-review.mjs`. BL-010.50 →
+`tests/manual/standalone-native-review-campaign.mjs`: Vorbereitung NOT_RUN;
+bediente echte Tauri-Sitzungen und Ausgabenprüfung nötig. Aktuelle Prüfsummen,
+unabhängige Reviews und Grenzen stehen in der Evidence-Matrix.
+
+DS-107 → korrigierte Testaussage → `helpers/native-review-readiness.js`,
+`helpers/platform-case.js`, Windows-/macOS-Native-Smoke-Skripte,
+`test-native-smoke-integrity.js`, `test-standalone-review-ipc.js` und
+`run-product-suite.js`. Erfolgreiche Antwort statt Aufrufbeginn; Skip statt
+Pass auf falschem Host; Browserfixture ist keine native fachliche Freigabe.
+`build-standalone-package.mjs --engineering-directory` → neues isoliertes
+lokales Paket, vorhandene Releases bleiben unverändert. Native macOS-
+Bedienevidenz, Signierung/Notarisierung und BL-010.47 bleiben getrennt offen.
+
+DS-106 / BL-010.46 → Standalone-Unternehmensentscheidung und laufweit
+authentifizierte Wiederverwendung gleicher vollständiger Schreibweisen →
+`frontend/review.js`, `companion/text-review.js`, `gateway/batch-review-policy.js`,
+`gateway/batch-review-publication.js`, `gateway/standalone-review-choices.js`,
+`gateway/batch-review-orchestrator.js`, `gateway/batch-journal-store.js`,
+`privacy/residual-person-review.js`. Rohschreibweisen erscheinen nicht in der
+Entscheidungstabelle; Quell-/Ausgabespans und letzte Restprüfung bleiben gebunden.
+E0: Choices-/Modell-/Policy-/Frontend-/Broker-/Orchestrator-/Journaltests,
+reale Standalone-Textpublikation mit Unternehmensmarker, Folgedokument und
+Identitätssnapshot. Nicht rückwirkend für fertige Ergebnisse, nicht für neue
+Läufe oder Coworks Reviewadapter.
+
+BL-010.46 → konkrete Fehlerdateien lokal anzeigen → `frontend/app.js`,
+`tauri-contract/permissions/commands.toml`, `tauri-contract/capabilities/main.json`,
+`standalone/ui-contract.json`; Desktop-/Frontend-/Sidecar-/Rust-Negativtests.
+RC157-Lauf `5e50a0b0`: 9/10 Ergebnisse, Anzeige-Capabilityfehler unabhängig vom
+reproduzierten Platzhalter-übergreifenden Restkandidaten → `privacy/engine.js`.
+Kolleginnen-Komplettausfall benötigt noch die betreffende Windows-Diagnose
+(BL-010.47, offen). BL-010.46 ist mit 133 CI-Testdateien, 38 paketierten
+Konvertierungsgruppen und den gezielten Review-/Recoverytests technisch
+erledigt; neuer Paketbau und native Zielhostabnahme werden nicht behauptet.
+
+BL-010.46 → ehrliche Grafikhinweise und konservative PDF-Text-/OCR-Grenzen →
+`standalone/markdown-visuals.js`, `standalone/pdf-text-layout.js`,
+`standalone/conversion-worker-child.js`, `standalone/markdown-extractor.js`;
+Extractor-, PDF-Layout- und real paketierte Convertertests, Gegenprobe am
+Markdown-Lauf `8676f0ca`. Kein semantisches Erraten von Grafiken oder pauschales
+Entfernen unbekannter OCR-Texte. Lokaler Stand vom 05.10., noch kein Release.
 
 BL-010.41 → Standalone-PPTX mit passiv ausgelassenen OLE-/Metadatenteilen
 und begrenzt geprüften, intern verknüpften XLSX-Einbettungen zu Markdown
@@ -769,6 +855,10 @@ aktuelle Produktzusage.
 
 | Story | Umsetzung / Vertrag | Nachweisgrenze |
 |---|---|---|
+| DS-109 | Revalidierte Schichtentrennung ohne MVC-Neubau; Gesprächsnamen, OCR-Malreihenfolge, gestreamte Identitätsdatei, OS-Metadaten, geschlossene DTO-/Fehlerverträge, native Startdiagnose/Reaper und stabile History-Knoten. | BL-010.52; gezielte echte Publikations-/Worker-/Rust-Gegenproben; Gesamtgate-Stand in der Evidence-Matrix, neue bediente Zielhostkampagne und Qualitätsmetriken separat offen. |
+| DS-108 | Mehrdimensionale Gegenbeispiele und unabhängiger Nachreview: Markerherkunft/Credentials, tatsächliches Reviewbudget, Renderer-/Fenster-/Spawnrennen, Fristen, OS-Ursachen und vollständige Paket-/Gateevidenz. Offizielle Methodenrecherche trennt adaptierte Reparaturen von späteren Erweiterungen. | BL-010.49–.51; genaue Test-/Paketbindung und Grenzen in der Evidence-Matrix; bediente neue Tauri-/Mac-Kampagne separat, keine Release- oder Signierevidenz. |
+| DS-107 | Reale Desktop-IPC-Unternehmensentscheidung, lauf-/startversuchsgebundene Fehler, einheitliches Reviewbudget, Deadline-/Shutdown-Grenzen, konkrete Dateifehler und ehrliche Native-Smoke-/Skip-Evidenz. | BL-010.48; gezielte positive/negative JS-/Rust-Tests, echte Sidecar-/Reviewworker-Integration, getrennter lokaler Windows-Engineering-Bau; keine neue Mac-Bedien- oder Signierevidenz. |
+| DS-106 | Standalone-Unternehmenswahl bis ORG, authentifizierte laufweite Wiederverwendung exakter vollständiger Schreibweisen, lokale konkrete Fehlerdateien und konservative Grafik-/OCR-Grenzen. | BL-010.46; gezielte positive/negative E0-Tests, reale PDF-Gegenproben und Quellschutz; Desktop-IPC-Nachbesserung unter DS-107. Kolleginnen-Komplettausfall ohne Windows-Diagnose nicht zugeordnet. |
 | DS-101 | Ausdrückliche Wiederverwendung abgeschlossener Cowork-Stapel, ohne Originalzugriff oder neue Anonymisierung | BL-041.21; verpflichtende native Auswahl, erneute Generation-/Integritätsprüfung, dauerhaftes ACK unverändert; `test-local-handoff-reuse.js` |
 | DS-102 | Passive Standalone-Markdown-Konvertierung darf nicht ausgeführte PDF-/PPTX-Objekte mit unvollständiger Quellabdeckung übergehen; Privacy und Cowork bleiben strikt. Intel-/ARM-DMG ergänzt ZIP ohne Gatekeeper-Zusage. | BL-010.36; isolierter Konverter, OPC-Admission, fünf reale gepackte Windows-Quellen, Windows-PKG-04/INT-13 und grüner Mac-Intel-/ARM-Lauf `36562812021` aus Commit `c0ddd11`; sichtbare UAT offen. |
 | DS-103 | Präzisiert DS-102: Auch Standalone-Privacy darf passiv ausgelassene PDF-/PPTX-Objekte akzeptieren, anonymisiert aber ausschließlich den extrahierten Markdown-Text mit separater unvollständiger Quellabdeckung. Cowork und die Grenzen für unsichere Quellen bleiben unverändert. | BL-010.39; `core/markdown-first-privacy.js`, `gateway/source-format-inspector.js`, realer isolierter PDF-/PPTX-Worker, Positiv-/Negativtests und UAT S16c; noch kein gebundener Release. |

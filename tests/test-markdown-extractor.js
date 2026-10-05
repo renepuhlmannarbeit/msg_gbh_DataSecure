@@ -11,6 +11,7 @@ const { validateMarkdownExtraction } = require('../plugins/data-secure/server/st
 const { parseDocumentBuffer, parseCsvRows } = require('../plugins/data-secure/server/document-parser');
 const { parseOoxml } = require('../plugins/data-secure/server/ooxml');
 const { RESOURCE_LIMITS } = require('../plugins/data-secure/server/resource-limits');
+const { unreadableSymbolRun, cleanOcrSymbolLines, visualNotices } = require('../plugins/data-secure/server/standalone/markdown-visuals');
 const { test, done, assert } = createSuite('Content-preserving engineering Markdown extraction');
 
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
@@ -199,6 +200,27 @@ test('DOCX media and external relationships cannot produce complete extraction',
   ]), '.docx');
   assert.strictEqual(result.coverage.status, 'incomplete');
   assert.ok(result.coverage.reason_codes.includes('VISUAL_CONTENT_NOT_EXTRACTED'));
+  assert.ok(result.markdown.includes('> Grafikhinweis: Die Grafik selbst ist nicht im Markdown enthalten.'));
+  assert.ok(result.markdown.includes('Control'));
+  assert.ok(!result.markdown.includes('image1.png'));
+  assert.ok(!result.markdown.includes('data:image/'));
+});
+
+test('visual cleanup omits only undecodable symbol runs and never mathematical or meaningful Unicode text', () => {
+  for (const value of ['\uE000', '\u{F0000}\u{100000}', ' \uFFFD\uE101\t ', '(\uE000)']) {
+    assert.strictEqual(unreadableSymbolRun(value), true);
+  }
+  for (const value of ['Max Mustermann', 'Muster GmbH', '中文 العربية', 'x² = 4 → y', '☐ ☑ ✓ ❌',
+    '© 2026 € 22,5', 'A\uE000B', '\uE000 42', '\uE000 →', '...', '']) {
+    assert.strictEqual(unreadableSymbolRun(value), false, value);
+  }
+  const source = 'Max Mustermann\r\n \uE000\uE001 \r\n☐ Vorgang prüfen\n€ 1000\nMuster GmbH\uE002\n';
+  assert.deepStrictEqual(cleanOcrSymbolLines(source), {
+    text: 'Max Mustermann\r\n\r\n☐ Vorgang prüfen\n€ 1000\nMuster GmbH\uE002\n', omitted: true
+  });
+  assert.deepStrictEqual(cleanOcrSymbolLines('\uE000'), { text: '', omitted: true });
+  assert.strictEqual(visualNotices(), '');
+  assert.ok(visualNotices({ symbols: true }).includes('nicht als Text rekonstruiert'));
 });
 
 test('XLSX row 10001 is retained by both the existing and extraction renderers', () => {

@@ -52,6 +52,8 @@ assert.match(conversionWorker,
 assert.match(conversionResolver,
   /process\.platform === 'linux' && process\.arch === 'x64' \? 'linux-x64-glibc' : null/u);
 assert.match(tauriMain,
-  /WindowEvent::CloseRequested[\s\S]*?process\.take\(\);[\s\S]*?window\.app_handle\(\)\.exit\(0\);/u);
+  /WindowEvent::CloseRequested[\s\S]*?api\.prevent_close\(\);[\s\S]*?begin_native_exit\(state\.inner\(\)\.clone\(\)\)/u);
+assert.match(tauriMain, /ExitRequested \{ api, code, \.\. \}/u);
+assert.match(tauriMain, /if !state\.exit_gate\.allowed\(code\) \{\s*api\.prevent_exit\(\)/u);
 
 process.stdout.write('Standalone Linux manual sandbox workflow: PASS\n');

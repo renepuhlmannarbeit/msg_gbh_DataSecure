@@ -15,6 +15,13 @@ const messages = {
   SOURCE_FOLDER_UNSUPPORTED_FILES: 'Der Ordner enthält mindestens eine nicht unterstützte Datei. Es wurde nichts übernommen; bitte diese Datei entfernen oder einen passenderen Ordner wählen.',
   SOURCE_FOLDER_EMPTY: 'In diesem Ordner und seinen Unterordnern wurden keine unterstützten Dateien gefunden.',
   SOURCE_FORMAT_SIZE_LIMIT: 'Mindestens eine Datei überschreitet die sichere Einzeldateigrenze ihres Formats (Office: 64 MiB; PDF/Bild: 25 MiB; TXT/Markdown: 8 MB; CSV: 1,5 MB). Der Ordner wurde nicht übernommen. Bitte die zu große Datei aus der Auswahl herausnehmen oder einen kleineren Quellordner wählen; einzeln kann sie derzeit ebenfalls nicht verarbeitet werden.',
+  SOURCE_FILE_EMPTY: 'Mindestens eine ausgewählte Datei ist leer. Es wurde nichts übernommen.',
+  SOURCE_FORMAT_UNSUPPORTED: 'Mindestens eine ausgewählte Datei hat ein nicht unterstütztes Format. Es wurde nichts übernommen.',
+  SOURCE_READ_FAILED: 'Die Datei- oder Ordnerauswahl ist nicht mehr verfügbar oder konnte nicht vollständig gelesen werden. Es wurde nichts übernommen. Bitte den lokalen Speicherort prüfen und erneut auswählen.',
+  SOURCE_ACCESS_DENIED: 'Der Zugriff auf die Datei- oder Ordnerauswahl wurde vom Betriebssystem verweigert. Es wurde nichts übernommen. Bitte die Zugriffsrechte mit der IT prüfen; Schutzfunktionen nicht deaktivieren.',
+  SOURCE_PATH_UNSAFE: 'Mindestens eine Auswahl ist keine reguläre lokale Datei oder liegt hinter einem Link. Es wurde nichts übernommen.',
+  SOURCE_IDENTITY_CHANGED: 'Mindestens eine Quelldatei hat sich während der Auswahl verändert. Es wurde nichts übernommen.',
+  SOURCE_SELECTION_REJECTED: 'Mehrere ausgewählte Dateien konnten nicht aufgenommen werden. Es wurde nichts übernommen; die übrigen Dateien wurden nicht gestartet.',
   SOURCE_ARTIFACT_IGNORED: 'Temporäre Office-Sperrdateien sind keine Dokumente. Bitte die eigentliche Word-, Excel- oder PowerPoint-Datei auswählen.',
   STANDALONE_SELECTION_PREPARED: 'Die vorbereitete Auswahl konnte nicht ergänzt werden. Bitte den Status prüfen; die bisherigen Dateien bleiben ausgewählt.',
   STANDALONE_DROP_MIXED: 'Bitte entweder Dateien oder genau einen Ordner hineinziehen. Ordner und einzelne Dateien können nicht gemeinsam ausgewählt werden.',
@@ -26,8 +33,12 @@ const messages = {
   MARKDOWN_CONVERSION_NOT_READY: 'Die installierte Version unterstützt diese Betriebsart nicht. Bitte die aktuelle Standalone-Version verwenden. Der Stapel wurde nicht gestartet; deine Dateiauswahl bleibt erhalten.',
   STANDALONE_NOTHING_TO_CONTINUE: 'Es gibt keinen fortsetzbaren Stapel.',
   BATCH_PSEUDONYM_CONTEXT_UNAVAILABLE: 'Dieser ältere Stapel verwendet nicht mehr den aktuellen Datenschutz-Regelsatz. Bitte die Originaldateien neu auswählen.',
+  BATCH_PSEUDONYM_CAPACITY_EXCEEDED: 'Die laufweite Grenze für Identitäten oder Schreibweisen wurde erreicht. Bereits geprüfte Ergebnisse bleiben erhalten. Bitte die hier genannten verbleibenden Originaldateien in einem kleineren neuen Lauf verarbeiten.',
   STANDALONE_RUNTIME_MISSING: 'Der lokale DataSecure-Core fehlt.',
   STANDALONE_RUNTIME_START_FAILED: 'Der lokale DataSecure-Core konnte nicht gestartet werden.',
+  STANDALONE_RUNTIME_DENIED: 'Das Betriebssystem hat den Start der lokalen Verarbeitungskomponente verweigert. Das ist ein Systemfehler, kein Dokumentfehler. Bitte das vollständige Paket und die Zugriffs-/Freigaberegeln mit der IT prüfen; Schutzfunktionen nicht deaktivieren.',
+  STANDALONE_RUNTIME_ARCHITECTURE_INVALID: 'Die lokale Verarbeitungskomponente konnte nicht als ausführbares Programm gestartet werden. Bitte das vollständige Paket für Windows bzw. Mac Intel oder Apple Silicon passend zum Gerät neu entpacken.',
+  STANDALONE_CLOSING: 'DataSecure wird gerade geschlossen. Es wurde keine neue Aktion gestartet. Offene Läufe können nach einem Neustart im Verlauf fortgesetzt werden.',
   STANDALONE_DATA_ROOT_UNSAFE: 'Der private lokale DataSecure-Bereich konnte nicht sicher geöffnet werden.',
   UNSAFE_STORAGE_LOCATION: 'Der private lokale DataSecure-Bereich ist nicht zugreifbar.',
   STARTUP_RECOVERY_FAILED: 'Eine unterbrochene Verarbeitung konnte nicht sicher wiederhergestellt werden.',
@@ -39,14 +50,25 @@ const messages = {
   STARTUP_FAILED: 'Der lokale DataSecure-Core hat den Start sicher verweigert.',
   STANDALONE_IPC_FAILED: 'Die lokale Verbindung zum DataSecure-Core wurde unterbrochen und wird beim nächsten Versuch neu gestartet.',
   STANDALONE_IPC_TIMEOUT: 'Die lokale Verarbeitung antwortete nicht rechtzeitig. Die Verbindung wird beim nächsten Versuch neu gestartet.',
+  STANDALONE_ADMISSION_TIMEOUT: 'Die Aufnahme der Auswahl wurde nach fünf Minuten ohne Bestätigung beendet. Es wurde kein Stapel gestartet. Die vorbereitete Auswahl ist nicht mehr verfügbar; bitte Dateien oder Ordner erneut auswählen. Bei erneutem Fehler die lokalen Zugriffsrechte und „Diagnose öffnen“ prüfen.',
   STANDALONE_RESULT_ROOT_UNSAFE: 'Der Ergebnisordner darf nicht im privaten DataSecure-Bereich liegen.',
   STANDALONE_RESULT_OPEN_FAILED: 'Der Ergebnisordner konnte nicht geöffnet werden.',
   STANDALONE_RESULTS_MISSING: 'Es ist noch kein vollständiger Ergebnislauf verfügbar.',
   STANDALONE_LEDGER_MISSING: 'Es ist noch keine lokale Zuordnung vorhanden.',
   STANDALONE_LEDGER_OPEN_FAILED: 'Die lokale Zuordnungsdatei konnte nicht angezeigt werden.',
+  STANDALONE_IDENTITY_MAPPING_MISSING: 'Das lesbare Identitätsdokument ist noch nicht verfügbar. Die geprüften Markdown-Ergebnisse bleiben gültig. Über „Identitäten (vertraulich)“ kann die Erstellung erneut versucht werden, sofern private Zuordnungen erhalten sind.',
+  STANDALONE_IDENTITY_MAPPING_INVALID: 'Die vertrauliche Identitätszuordnung ist unvollständig oder konnte nicht sicher erstellt werden. Nicht alle Pseudonyme sind damit rückführbar. Die geprüften Markdown-Ergebnisse bleiben gültig; bitte Diagnose und lokalen Speicherzugriff prüfen.',
+  STANDALONE_IDENTITY_PUBLICATION_FAILED: 'Die Identitätskopie im vertraulichen Ergebnis-Unterordner fehlt oder konnte nicht erstellt werden. Stattdessen wird die private lokale Zuordnung angeboten. Geprüfte Markdown-Ergebnisse bleiben gültig. Eine von dir gelöschte oder geänderte Kopie wird nicht automatisch wiederhergestellt.',
   STANDALONE_DIAGNOSTICS_OPEN_FAILED: 'Der lokale Diagnoseordner konnte nicht geöffnet werden.',
   STANDALONE_REVIEW_WINDOW_FAILED: 'Das lokale Prüffenster konnte nicht geöffnet werden. Der Lauf bleibt sicher offen.'
 };
+const reviewStartMessages = {
+  LOCAL_REVIEW_START_MISSING: 'Eine benötigte lokale Laufzeit oder Prüfkomponente fehlt. Bitte das vollständige DataSecure-Paket neu entpacken; die vorgemerkten Dateien bleiben ungeprüft.',
+  LOCAL_REVIEW_START_DENIED: 'Das Betriebssystem hat den Start der lokalen Prüfkomponente verweigert. Bitte Ausführungsrechte und Sicherheitsrichtlinien mit der IT prüfen; Schutzfunktionen nicht deaktivieren. Dies ist kein nachgewiesener Dokumentfehler.',
+  LOCAL_REVIEW_START_ARCHITECTURE: 'Die lokale Prüfkomponente passt nicht zur Architektur oder zum ausführbaren Format dieses Geräts. Bitte das passende vollständige Paket für Windows bzw. Mac Intel oder Apple Silicon verwenden.',
+  LOCAL_REVIEW_START_FAILED: 'Die lokale Prüfkomponente konnte nicht gestartet werden. Die vorgemerkten Dateien bleiben ungeprüft. Bitte den festen Fehlercode und die Diagnose für die Fehleranalyse verwenden.'
+};
+Object.assign(messages, reviewStartMessages);
 let admitted = false;
 let admissionGeneration = 0;
 let refreshInFlight = false;
@@ -59,6 +81,7 @@ let operationInFlight = false;
 let foregroundOperationInFlight = false;
 let nativeDropInFlight = false;
 let unlistenNativeDrop = null;
+let unlistenAdmissionProgress = null;
 let pageClosed = false;
 let lastProcessingMode = null;
 let historyRequestGeneration = 0;
@@ -67,6 +90,7 @@ let historyStateKey = null;
 let historyButtons = [];
 let lastHistorySnapshot = null;
 let historyRenderGeneration = 0;
+const historyRows = new Map();
 let currentResultsAvailable = false;
 let currentSessionRunStarted = false;
 let currentSessionResultBaseline = '';
@@ -176,18 +200,35 @@ function localError(error) {
   const raw = String(error || 'STANDALONE_OPERATION_FAILED');
   try {
     const parsed = JSON.parse(raw);
-    if (parsed?.code === 'SOURCE_FOLDER_UNSUPPORTED_FILES' &&
-        Array.isArray(parsed.details?.unsupported_files) &&
-        Number.isSafeInteger(parsed.details.unsupported_count)) {
+    if (['SOURCE_FOLDER_UNSUPPORTED_FILES', 'SOURCE_SELECTION_REJECTED', 'SOURCE_FORMAT_SIZE_LIMIT',
+        'SOURCE_FILE_EMPTY', 'SOURCE_FORMAT_UNSUPPORTED', 'SOURCE_READ_FAILED', 'SOURCE_ACCESS_DENIED',
+        'SOURCE_PATH_UNSAFE', 'SOURCE_IDENTITY_CHANGED', 'SOURCE_ARTIFACT_IGNORED'].includes(parsed?.code)) {
       return { code: parsed.code, details: parsed.details };
     }
   } catch { /* Ordinary errors are fixed codes, not JSON. */ }
   return { code: raw, details: null };
 }
+function safeLocalFileLabel(name) {
+  return typeof name === 'string' && name.length > 0 && name.length <= 1024 &&
+    !name.startsWith('/') && !/[:\\\u0000-\u001f\u007f]/u.test(name) &&
+    !name.split('/').some(part => !part || part === '.' || part === '..');
+}
 function unsupportedSelectionMessage(code, details, fallback) {
   const base = messages[code] || fallback;
-  if (code !== 'SOURCE_FOLDER_UNSUPPORTED_FILES' || !details) return base;
-  const files = details.unsupported_files.filter(name => typeof name === 'string' && name.length > 0);
+  if (!details) return base;
+  if (Array.isArray(details.selection_files) && details.selection_files.length > 0 && details.selection_files.length <= 200 &&
+      Number.isSafeInteger(details.selection_count) && details.selection_count >= details.selection_files.length && details.selection_count <= 4096) {
+    const files = details.selection_files.filter(file => safeLocalFileLabel(file?.name));
+    const missing = Math.max(0, details.selection_count - files.length);
+    return `${base}\nNicht aufgenommen (${details.selection_count}):\n${files.map(file => {
+      const explanation = failedFileExplanation(file.reason_code);
+      return `• ${file.name}\n${explanation.reason}\nNächster Schritt: ${explanation.next}` +
+        (/^[A-Z][A-Z0-9_]{2,63}$/u.test(file.reason_code || '') ? `\nFehlercode: ${file.reason_code}` : '');
+    }).join('\n')}` + (missing ? `\n${missing} weitere Datei${missing === 1 ? '' : 'en'} ohne verfügbaren Dateinamen.` : '');
+  }
+  if (code !== 'SOURCE_FOLDER_UNSUPPORTED_FILES' || !Array.isArray(details.unsupported_files) || details.unsupported_files.length > 200 ||
+      !Number.isSafeInteger(details.unsupported_count) || details.unsupported_count < details.unsupported_files.length || details.unsupported_count > 4096) return base;
+  const files = details.unsupported_files.filter(safeLocalFileLabel);
   const missing = Math.max(0, details.unsupported_count - files.length);
   return `${base}\nNicht unterstützt (${details.unsupported_count}):${files.length ? `\n${files.map(name => `• ${name.replace(/[\r\n\t]/gu, ' ')}`).join('\n')}` : ''}` +
     (missing ? `\n${missing} weitere Datei${missing === 1 ? '' : 'en'} konnte${missing === 1 ? '' : 'n'} hier nicht einzeln angezeigt werden.` : '');
@@ -199,15 +240,25 @@ function renderFailedFiles(target, result) {
     target.textContent = 'Dateinamen für diesen Lauf sind lokal nicht mehr verfügbar. Die Anzahl bleibt im Verlauf erhalten.';
     return;
   }
-  if (result.files.length === 0) {
-    target.textContent = 'Für diesen Lauf wurden keine gestoppten Dateinamen gefunden.';
+  if (result.files.length === 0 && !result.pending_files?.length) {
+    target.textContent = Number.isSafeInteger(result.total) && result.total > 0
+      ? `${result.total} betroffene Datei${result.total === 1 ? '' : 'en'}; die Dateinamen sind lokal nicht verfügbar. Der Lauf wird dadurch nicht erneut gestartet.`
+      : 'Für diesen Lauf wurden keine gestoppten Dateinamen gefunden.';
     return;
   }
   const list = document.createElement('ol');
   for (const file of result.files) {
-    if (typeof file?.name !== 'string' || !file.name) continue;
+    if (!safeLocalFileLabel(file?.name)) continue;
     const item = document.createElement('li');
-    item.textContent = file.reason_code ? `${file.name} · Fehlercode: ${file.reason_code}` : file.name;
+    const explanation = failedFileExplanation(file.reason_code);
+    // Never render source labels or untrusted error text as HTML. Only the
+    // fixed local code is mapped to an explanation and an actionable next step.
+    const stage = file.stage === 'mapping_pending'
+      ? 'Die lokale Fehler-/Zuordnungsübersicht ist zusätzlich noch nicht geschrieben. Der Lauf ist nicht vollständig abgeschlossen.\n'
+      : file.stage === 'retryable' ? 'Verarbeitung unterbrochen; dieser Eintrag kann nach Behebung fortgesetzt werden.\n' : '';
+    item.textContent = `${file.name}\n${stage}${explanation.reason}\nNächster Schritt: ${explanation.next}` +
+      (typeof file.reason_code === 'string' && /^[A-Z][A-Z0-9_]{2,63}$/u.test(file.reason_code)
+        ? `\nFehlercode: ${file.reason_code}` : '');
     list.appendChild(item);
   }
   const missing = Math.max(0, Number(result.total || 0) - result.files.length);
@@ -217,6 +268,92 @@ function renderFailedFiles(target, result) {
     list.appendChild(item);
   }
   target.appendChild(list);
+  if (Array.isArray(result.pending_files) && result.pending_files.length > 0) {
+    const title = document.createElement('p');
+    title.textContent = `Noch nicht gestartete Dateien (${Number.isSafeInteger(result.pending_total) ? result.pending_total : result.pending_files.length}). Diese Dateien sind nicht als Dokumentfehler gewertet. Den Lauf nach Behebung im Verlauf fortsetzen.`;
+    target.appendChild(title);
+    const pendingList = document.createElement('ul');
+    for (const file of result.pending_files.slice(0, 200)) {
+      if (!safeLocalFileLabel(file?.name)) continue;
+      const item = document.createElement('li'); item.textContent = file.name; pendingList.appendChild(item);
+    }
+    target.appendChild(pendingList);
+  }
+}
+function failedFileExplanation(code) {
+  if (code === 'CONVERSION_LIMIT_SETUP_FAILED') return {
+    reason: 'Die lokale Verarbeitungskomponente konnte ihre Schutz- und Ressourcengrenzen nicht einrichten. Dies ist ein Systemfehler, kein nachgewiesener Größenfehler dieser Datei.',
+    next: 'Das vollständige Paket verwenden und diesen Fehlercode mit der IT prüfen. Schutzfunktionen nicht deaktivieren; die Datei nicht nur wegen dieses Codes verkleinern.'
+  };
+  if (code === 'BATCH_PSEUDONYM_CAPACITY_EXCEEDED') return {
+    reason: 'Die gemeinsame Pseudonymzuordnung dieses Laufs hat ihre begrenzte Kapazität erreicht. Es wurde kein ungeprüftes Ergebnis veröffentlicht.',
+    next: 'Die verbleibenden Dateien in einem kleineren neuen Lauf verarbeiten. Unterschiedliche neue Läufe haben getrennte Zuordnungen.'
+  };
+  if (code === 'LOCAL_REVIEW_TOO_LARGE') return {
+    reason: 'Diese Datei überschreitet die lokale Prüfgrenze von 5.000 Fundstellen oder die Textgrößengrenze.',
+    next: 'Die Originaldatei in kleinere Dokumente aufteilen und erneut anonymisieren. Es wurde kein ungeprüftes Ergebnis veröffentlicht.'
+  };
+  if (code === 'SOURCE_ARTIFACT_IGNORED') return {
+    reason: 'Diese Datei ist eine temporäre Office-Sperrdatei, nicht das eigentliche Word-, Excel- oder PowerPoint-Dokument.',
+    next: 'Die eigentliche Originaldatei auswählen und die Sperrdatei aus der Auswahl entfernen. Die bisherige Auswahl bleibt unverändert.'
+  };
+  if (code === 'SOURCE_FILE_EMPTY') return {
+    reason: 'Diese Quelldatei ist leer und wurde nicht aufgenommen.',
+    next: 'Eine nicht leere Originaldatei auswählen; die leere Datei aus der Auswahl entfernen.'
+  };
+  if (['SOURCE_ACCESS_DENIED', 'CONVERSION_EXECUTABLE_DENIED', 'STANDALONE_RUNTIME_DENIED'].includes(code)) return {
+    reason: code === 'SOURCE_ACCESS_DENIED' ? 'Das Betriebssystem hat den Zugriff auf diese Quelldatei verweigert.'
+      : 'Das Betriebssystem hat den Start einer lokalen Verarbeitungskomponente verweigert. Dies ist ein Systemfehler, kein nachgewiesener Dokumentfehler.',
+    next: 'Lokalen Zugriff und die Programm-/Ordnerfreigabe mit der IT prüfen. Der Fehlercode allein beweist keine Antivirus-Blockade; Schutzfunktionen nicht deaktivieren.'
+  };
+  if (code === 'CONVERSION_ARCHITECTURE_INVALID' || code === 'STANDALONE_RUNTIME_ARCHITECTURE_INVALID') return {
+    reason: 'Eine lokale Verarbeitungskomponente ist nicht in einem auf diesem Gerät ausführbaren Format. Der Fehler liegt nicht nachweislich am Dokument.',
+    next: 'Das vollständige Paket für die passende Plattform und Architektur neu entpacken; bei erneutem Fehler diesen Code an die IT weitergeben.'
+  };
+  if (code === 'SOURCE_PATH_UNSAFE') return {
+    reason: 'Diese Auswahl ist keine reguläre lokale Datei oder liegt hinter einem Link/Reparse-Punkt.',
+    next: 'Eine lokale Kopie der Originaldatei in einem regulären Quellordner auswählen.'
+  };
+  if (['AMBIGUITY_REVIEW_REQUIRED', 'PERSON_CANDIDATE', 'RESIDUAL_PII'].includes(code)) return {
+    reason: 'Die Datenschutzprüfung konnte diese Datei nicht sicher freigeben. Es wurde kein ungeprüftes Ergebnis veröffentlicht.',
+    next: 'Die Datei einzeln erneut anonymisieren. Falls sie erneut stoppt, „Diagnose öffnen“ und diesen Fehlercode für die Fehleranalyse angeben.'
+  };
+  if (['PARSER_COVERAGE_UNVERIFIED', 'DOCX_STRUCTURE_UNSUPPORTED', 'SOURCE_FORMAT_UNSUPPORTED',
+    'DOCUMENT_FORMAT_UNSUPPORTED'].includes(code)) return {
+    reason: 'Der Dokumentinhalt konnte nicht vollständig oder in einem unterstützten Format übernommen werden.',
+    next: 'Die Originaldatei in der ursprünglichen Anwendung öffnen und als unterstütztes Format neu speichern; anschließend einzeln erneut auswählen.'
+  };
+  if (['SOURCE_ENCRYPTED_UNSUPPORTED', 'PASSWORD_PROTECTED_DOCUMENT_UNSUPPORTED'].includes(code)) return {
+    reason: 'Diese Datei ist verschlüsselt oder passwortgeschützt und konnte nicht gelesen werden.',
+    next: 'Mit berechtigtem Zugriff eine ungeschützte lokale Kopie aus der ursprünglichen Anwendung speichern und diese erneut auswählen.'
+  };
+  if (/^(?:SOURCE|PDF|IMAGE|OOXML|DOCX|XLSX|PPTX|CONVERSION|TEXT|INPUT).*(?:SIZE|LIMIT|TOO_LARGE)/u.test(code || '')) return {
+    reason: 'Die Datei oder ihre extrahierten Inhalte überschreiten eine unterstützte Verarbeitungsgrenze.',
+    next: 'Die Datei verkleinern oder in kleinere Dokumente aufteilen und einzeln erneut auswählen.'
+  };
+  if (['CONVERSION_RUNTIME_UNAVAILABLE', 'CONVERSION_ISOLATION_UNAVAILABLE', 'CONVERSION_START_FAILED',
+    'CONVERSION_EXECUTABLE_MISSING', 'CONVERSION_DEPENDENCY_MISSING',
+    'CONVERSION_MODEL_INVALID', 'PARSER_ISOLATION_FAILED'].includes(code)) return {
+    reason: 'Die lokale Verarbeitungskomponente konnte nicht bereitgestellt werden. Der Fehler muss nicht am Dokument liegen.',
+    next: 'Das vollständige Standalone-Paket neu entpacken und die App daraus starten. Bei erneutem Fehler „Diagnose öffnen“; nicht nur die EXE kopieren.'
+  };
+  if (['SOURCE_READ_FAILED', 'SOURCE_IDENTITY_CHANGED', 'SOURCE_SNAPSHOT_CHANGED', 'BATCH_SNAPSHOT_CHANGED'].includes(code)) return {
+    reason: 'Die Quelldatei war nicht zugreifbar oder hat sich seit ihrer Auswahl verändert.',
+    next: 'Die Datei lokal speichern, in anderen Anwendungen schließen und vor einem neuen Lauf erneut auswählen.'
+  };
+  if (['PROCESSING_INTERRUPTED', 'RECOVERY_FAILED', 'WORKER_EXITED', 'CONVERSION_WORKER_FAILED',
+    'STANDALONE_IPC_FAILED', 'STANDALONE_IPC_TIMEOUT'].includes(code)) return {
+    reason: 'Die lokale Verarbeitung wurde unterbrochen oder der lokale Verarbeitungsprozess antwortete nicht.',
+    next: 'Im Verlauf prüfen, ob „Fortsetzen“ verfügbar ist. Andernfalls „Diagnose öffnen“ und die Datei einzeln erneut verarbeiten.'
+  };
+  if (/^(?:RESULT|LOCAL_MAPPING|EXPORT|OUTPUT).*(?:FAILED|PENDING|UNSAFE|MISSING)/u.test(code || '')) return {
+    reason: 'Das Ergebnis oder seine lokale Zuordnung konnte nicht vollständig bereitgestellt werden.',
+    next: 'Den Ergebnisordner und seine Zugriffsrechte prüfen. Den Lauf im Verlauf fortsetzen, falls die Aktion angeboten wird.'
+  };
+  return {
+    reason: 'Die lokale Verarbeitung dieser Datei wurde gestoppt; es wurde kein ungeprüftes Ergebnis veröffentlicht.',
+    next: '„Diagnose öffnen“ und den angezeigten Fehlercode für die Fehleranalyse angeben. Die Originaldatei bleibt unverändert.'
+  };
 }
 function switchView(view) {
   activeView = views.includes(view) ? view : 'home';
@@ -260,10 +397,10 @@ function renderHistory(entries) {
     return;
   }
   lastHistorySnapshot = snapshot;
-  const rendered = ++historyRenderGeneration;
+  ++historyRenderGeneration;
   const body = byId('history-body');
-  body.replaceChildren();
   historyButtons = [];
+  const liveRows = new Set();
   const states = { ready: 'Bereit', preparing: 'Vorbereitung', processing: 'Läuft',
     review_required: 'Prüfung nötig', stopped: 'Unterbrochen', export_pending: 'Bereitstellung offen',
     results_available: 'Abgeschlossen', completed_without_results: 'Ohne Ergebnisse', blocked: 'Nicht bereit',
@@ -271,7 +408,26 @@ function renderHistory(entries) {
   const count = (value) => Number.isSafeInteger(value) && value >= 0 ? value : 0;
   for (const entry of entries.slice(0, 20)) {
     if (!entry || typeof entry.batch_id !== 'string' || !entry.batch_id) continue;
+    liveRows.add(entry.batch_id);
+    const signature = JSON.stringify(entry);
+    const { selected_count, result_count, ...stable } = entry;
+    const stableSignature = JSON.stringify(stable);
+    const previous = historyRows.get(entry.batch_id);
+    if (previous?.signature === signature) {
+      historyButtons.push(...previous.buttons);
+      continue;
+    }
+    if (previous?.stableSignature === stableSignature) {
+      previous.signature = signature;
+      previous.row.children[2].textContent = `${count(entry.selected_count)} ausgewählt · ${count(entry.result_count)} Ergebnisse · ${count(entry.failed_count)} fehlgeschlagen`;
+      historyButtons.push(...previous.buttons);
+      continue;
+    }
+    if (previous) previous.live = false;
+    const record = { signature, stableSignature, live: true, buttons: [] };
+    historyRows.set(entry.batch_id, record);
     const row = document.createElement('tr');
+    record.row = row;
     const runLabel = `Lauf ${entry.batch_id.slice(-8)}`;
     const date = new Date(entry.created_at);
     const heading = historyCell(row, Number.isNaN(date.getTime()) ? 'Datum unbekannt'
@@ -303,11 +459,12 @@ function renderHistory(entries) {
       button.textContent = action.label;
       button.setAttribute('aria-label', `${action.label} · ${runLabel}`);
       button.addEventListener('click', async () => {
-        if (button.disabled || pageClosed || rendered !== historyRenderGeneration) return;
+        if (button.disabled || pageClosed || !record.live) return;
         feedback.hidden = false;
         feedback.textContent = `${action.label} wird angefordert …`;
         if (action.resume) {
           const result = await call(action.command, { batchId: entry.batch_id });
+          if (pageClosed || !record.live) return;
           feedback.textContent = result?.ok === true ? 'Fortsetzung gestartet. Der Laufstatus wird geprüft …' : 'Fortsetzung nicht möglich. Bitte den aktuellen Status prüfen.';
           if (result?.ok === true) {
             actionFeedback('Der Worker hat die Fortsetzung angenommen. Erst der aktualisierte Laufstatus bestätigt das Ergebnis.');
@@ -315,7 +472,8 @@ function renderHistory(entries) {
             await refresh();
           }
         } else {
-          const result = await openLocal(action.command, action.label, { batchId: entry.batch_id });
+          const result = await openLocal(action.command, action.label, { batchId: entry.batch_id }, () => !pageClosed && record.live);
+          if (pageClosed || !record.live) return;
           feedback.textContent = result?.handoff_confirmed === true
             ? `${action.label}: Öffnen an das Betriebssystem übergeben.`
             : `${action.label} konnte nicht geöffnet werden. Bitte den Verlauf aktualisieren.`;
@@ -328,6 +486,12 @@ function renderHistory(entries) {
         notice.textContent = 'Enthält Originalwerte im markierten vertraulichen Lauf-Unterordner. Nie den ganzen Laufordner an KI weitergeben.';
         wrapper.appendChild(notice);
       }
+      if (action.command === 'open_history_identity_mapping' && messages[entry.identity_mapping_warning]) {
+        const notice = document.createElement('span');
+        notice.className = 'action-reason';
+        notice.textContent = messages[entry.identity_mapping_warning];
+        wrapper.appendChild(notice);
+      }
       if (!action.available) {
         const reason = document.createElement('span');
         reason.className = 'action-reason';
@@ -335,9 +499,9 @@ function renderHistory(entries) {
         wrapper.appendChild(reason);
       }
       actions.appendChild(wrapper);
-      historyButtons.push({ ...action, button });
+      record.buttons.push({ ...action, button });
     }
-    if (count(entry.failed_count) > 0) {
+    if (count(entry.failed_count) > 0 || count(entry.problem_count) > 0) {
       const wrapper = document.createElement('div');
       const button = document.createElement('button');
       const fileDetails = document.createElement('div');
@@ -346,28 +510,37 @@ function renderHistory(entries) {
       fileDetails.className = 'history-failure-details';
       fileDetails.hidden = true;
       button.addEventListener('click', async () => {
-        if (button.disabled || pageClosed || rendered !== historyRenderGeneration) return;
+        if (button.disabled || pageClosed || !record.live) return;
         button.disabled = true;
         feedback.hidden = false;
         feedback.textContent = 'Dateinamen werden nur lokal gelesen …';
         try {
           const result = await invoke('get_run_failures', { batchId: entry.batch_id });
-          if (pageClosed || rendered !== historyRenderGeneration) return;
+          if (pageClosed || !record.live) return;
           renderFailedFiles(fileDetails, result);
           fileDetails.hidden = false;
           feedback.textContent = 'Nicht verarbeitete Dateien dieses Laufs:';
         } catch {
-          feedback.textContent = 'Die Dateidetails konnten nicht geladen werden. Bitte später erneut versuchen.';
+          if (pageClosed || !record.live) return;
+          feedback.textContent = 'Die Dateidetails konnten nicht geladen werden. „Gestoppte Dateien anzeigen“ erneut wählen; bei wiederholtem Fehler „Diagnose öffnen“. Der Lauf wird dadurch nicht erneut gestartet.';
         } finally { button.disabled = false; }
       });
       wrapper.appendChild(button);
       wrapper.appendChild(fileDetails);
       actions.appendChild(wrapper);
-      historyButtons.push({ button, available: true });
+      record.buttons.push({ button, available: true });
     }
     actions.appendChild(feedback);
-    body.appendChild(row);
+    historyButtons.push(...record.buttons);
   }
+  // Keep unchanged nodes in place: refreshing another run must not discard
+  // keyboard focus, opened details or its local action feedback.
+  for (const [id, record] of historyRows) {
+    if (!liveRows.has(id)) { record.live = false; historyRows.delete(id); }
+  }
+  const ordered = entries.slice(0, 20).map(entry => historyRows.get(entry?.batch_id)?.row).filter(Boolean);
+  for (const child of Array.from(body.children)) if (!ordered.includes(child)) body.removeChild(child);
+  ordered.forEach((row, index) => { if (body.children[index] !== row) body.insertBefore(row, body.children[index] || null); });
   const hasRows = historyButtons.length > 0;
   byId('history-table').hidden = !hasRows;
   byId('history-feedback').textContent = hasRows ? 'Bis zu 20 zuletzt angelegte Läufe. Nicht verfügbare Aktionen sind deaktiviert.' : 'Noch keine lokalen Läufe vorhanden.';
@@ -523,7 +696,7 @@ function renderAdmission(result) {
   const size = Number.isSafeInteger(result.total_bytes) ? ` · ${Math.ceil(result.total_bytes / 1024)} KB` : '';
   const recursive = result.ui_context?.source_kind === 'folder' ? ' · einschließlich Unterordnern' : '';
   const ignored = Number.isSafeInteger(result.ignored_artifact_count) && result.ignored_artifact_count > 0
-    ? ` · ${result.ignored_artifact_count} temporäre Office-Datei${result.ignored_artifact_count === 1 ? '' : 'en'} übersprungen`
+    ? ` · ${result.ignored_artifact_count} bekannte Begleitdatei${result.ignored_artifact_count === 1 ? '' : 'en'} übersprungen`
     : '';
   byId('summary').textContent = `${result.selected_count} Datei${result.selected_count === 1 ? '' : 'en'}${size}${recursive}${ignored} · vollständig lokal`;
   byId('summary').hidden = false;
@@ -536,6 +709,8 @@ function renderAdmission(result) {
   byId('action-feedback').hidden = true;
   if (result.already_selected_count > 0) actionFeedback(
     `${result.already_selected_count} bereits ausgewählte Datei${result.already_selected_count === 1 ? '' : 'en'} nicht doppelt hinzugefügt.`);
+  if (Array.isArray(result.ignored_artifacts) && result.ignored_artifacts.length) actionFeedback(
+    `Nicht als Dokument verarbeitet (bekannte Begleitdateien): ${result.ignored_artifacts.slice(0, 200).map(item => item.name).join(', ')}${result.ignored_artifact_count > result.ignored_artifacts.length ? ' · Weitere Begleitdateien wurden übersprungen.' : ''}`);
   updateModeAvailability();
   updateDropAvailability();
 }
@@ -570,9 +745,24 @@ function handleNativeDrop(event) {
       nativeDropInFlight = false;
       applyBusyState();
     }
+    invalidateTransportAdmission(payload.error_code);
     actionFeedback(unsupportedSelectionMessage(payload.error_code, payload.error_details,
       'Die hineingezogene Auswahl konnte nicht übernommen werden.'), true);
   }
+}
+
+function invalidateTransportAdmission(code) {
+  if (!['STANDALONE_ADMISSION_TIMEOUT', 'STANDALONE_IPC_TIMEOUT', 'STANDALONE_IPC_FAILED'].includes(code)) return;
+  lastPublicState = null;
+  resetAdmissionUi();
+}
+
+function handleAdmissionProgress(event) {
+  const payload = event?.payload;
+  if (pageClosed || !operationInFlight || payload?.phase !== 'validating' ||
+      !Number.isSafeInteger(payload.elapsed_ms) || payload.elapsed_ms < 0 || payload.elapsed_ms > 300000) return;
+  const elapsed = Math.floor(payload.elapsed_ms / 1000);
+  actionFeedback(`Die Auswahl wird lokal geprüft …${elapsed ? ` (${elapsed} Sekunden)` : ''} Bitte warten. Die Verarbeitung beginnt erst mit „Starten“.`);
 }
 
 async function choose(command) {
@@ -584,6 +774,7 @@ async function choose(command) {
     renderAdmission(result);
   } catch (error) {
     const { code, details } = localError(error);
+    invalidateTransportAdmission(code);
     actionFeedback(unsupportedSelectionMessage(code, details, admitted
       ? 'Weitere Dateien konnten nicht hinzugefügt werden. Die bisherige Auswahl bleibt erhalten.'
       : 'Der gewählte Ordner konnte nicht vollständig und sicher übernommen werden. Es wurde kein Stapel gestartet.'), true);
@@ -601,7 +792,7 @@ async function call(command, args) {
   try { return await invoke(command, args); }
   catch (error) {
     const code = String(error || 'STANDALONE_OPERATION_FAILED');
-    if (code === 'STANDALONE_NO_ADMISSION' || code === 'STANDALONE_START_FAILED' || code === 'STANDALONE_IPC_FAILED' || code === 'STANDALONE_IPC_TIMEOUT') {
+    if (code === 'STANDALONE_NO_ADMISSION' || code === 'STANDALONE_START_FAILED' || code === 'STANDALONE_IPC_FAILED' || code === 'STANDALONE_IPC_TIMEOUT' || code === 'STANDALONE_ADMISSION_TIMEOUT') {
       lastPublicState = null;
       resetAdmissionUi();
       // A restored admission has no running poll yet. An unconfirmed start can
@@ -609,21 +800,31 @@ async function call(command, args) {
       scheduleRefresh(1200);
     }
     showError(code);
+    if (Object.hasOwn(reviewStartMessages, code) &&
+        ['continue_current_batch', 'continue_history_batch'].includes(command)) {
+      // Only these proven review-start failures have bound the broker to the
+      // selected run. Its private window can name the affected sources without
+      // exposing review data to the content-free main renderer.
+      try { await invoke('open_review_window'); }
+      catch { actionFeedback('Die Fehlermeldung bleibt bestehen. Das lokale Prüffenster mit den vorgemerkten Dateinamen konnte zusätzlich nicht geöffnet werden.', true); }
+    }
     return null;
   }
   finally { busy(false); }
 }
 
-async function openLocal(command, label, args) {
+async function openLocal(command, label, args, isCurrent = () => !pageClosed) {
   if (operationInFlight) return null;
   actionFeedback(`${label} wird an das Betriebssystem übergeben …`);
   busy(true);
   try {
     const result = await invoke(command, args);
+    if (!isCurrent()) return null;
     if (result?.handoff_confirmed !== true) throw 'STANDALONE_OPERATION_FAILED';
-    actionFeedback(`${label} wurde an das Betriebssystem zum Öffnen übergeben.`);
+    actionFeedback(messages[result.identity_mapping_warning] || `${label} wurde an das Betriebssystem zum Öffnen übergeben.`, Boolean(result.identity_mapping_warning));
     return result;
   } catch (error) {
+    if (!isCurrent()) return null;
     const code = String(error || 'STANDALONE_OPERATION_FAILED');
     actionFeedback(messages[code] || 'Der lokale Öffnungsvorgang ist fehlgeschlagen.', true);
     return null;
@@ -955,11 +1156,12 @@ async function refresh() {
       status('Bereit', 'Wähle Dateien oder einen ganzen Ordner aus.');
     }
     const showFailedFiles = currentSessionRunStarted && !suppressPriorTerminal &&
-      ['results_available', 'completed_without_results'].includes(state.state) &&
-      Number.isSafeInteger(state.failed_count) && state.failed_count > 0;
+      ((['results_available', 'completed_without_results'].includes(state.state) &&
+        Number.isSafeInteger(state.failed_count) && state.failed_count > 0) || state.state === 'stopped');
     byId('process-failure-details').hidden = !showFailedFiles;
     if (showFailedFiles) {
-      byId('process-failure-summary').textContent = `Nicht verarbeitete Dateien (${state.failed_count})`;
+      byId('process-failure-summary').textContent = state.state === 'stopped'
+        ? 'Dateien mit unterbrochenen Verarbeitungsschritten' : `Nicht verarbeitete Dateien (${state.failed_count})`;
       byId('process-failure-details').open = true;
       const detailsKey = `${state.state}:${state.presentation_generation ?? ''}:${state.failed_count}:${generation}`;
       if (detailsKey !== lastFailureDetailsKey) {
@@ -974,7 +1176,21 @@ async function refresh() {
           }
         } catch {
           if (!pageClosed && generation === admissionGeneration) {
-            byId('process-failure-list').textContent = 'Die Dateidetails konnten nicht geladen werden. Bitte im Verlauf erneut versuchen.';
+            const target = byId('process-failure-list');
+            target.replaceChildren();
+            const help = document.createElement('p');
+            help.textContent = 'Die Dateidetails konnten nicht geladen werden. Lade nur die Dateiliste erneut; der Lauf wird dadurch nicht erneut gestartet. Bei wiederholtem Fehler „Diagnose öffnen“.';
+            const retry = document.createElement('button');
+            retry.textContent = 'Dateiliste erneut laden';
+            retry.addEventListener('click', async () => {
+              if (pageClosed || operationInFlight || generation !== admissionGeneration) return;
+              retry.disabled = true;
+              lastFailureDetailsKey = '';
+              await refresh();
+              retry.disabled = false;
+            });
+            target.appendChild(help);
+            target.appendChild(retry);
           }
         }
         if (admitted || operationInFlight || pageClosed || generation !== admissionGeneration) return;
@@ -1015,6 +1231,13 @@ async function refresh() {
       byId('drop-zone').hidden = true;
       actionFeedback('Drag-and-drop ist gerade nicht verfügbar. Bitte „Dateien auswählen“ oder „Ordner auswählen“ verwenden.', true);
     }
+    try {
+      const unlisten = await window.__TAURI__.event.listen('datasecure-admission-progress', handleAdmissionProgress);
+      if (pageClosed) { unlisten(); return; }
+      unlistenAdmissionProgress = unlisten;
+    } catch {
+      // A missing progress listener must not disable the actual picker/admission path.
+    }
     const ready = await invoke('frontend_ready', { nativeDropReady });
     if (ready && typeof ready.product_version === 'string' && /^\d+\.\d+\.\d+-rc\d+$/u.test(ready.product_version)) {
       byId('product-version').textContent = `Version ${ready.product_version}`;
@@ -1037,4 +1260,5 @@ window.addEventListener('pagehide', () => {
   pageClosed = true;
   clearTimeout(refreshTimer);
   if (unlistenNativeDrop) { unlistenNativeDrop(); unlistenNativeDrop = null; }
+  if (unlistenAdmissionProgress) { unlistenAdmissionProgress(); unlistenAdmissionProgress = null; }
 });

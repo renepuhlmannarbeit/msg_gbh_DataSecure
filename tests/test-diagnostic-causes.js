@@ -14,6 +14,17 @@ const {
 
 const { test, assert, done } = createSuite('Diagnostic causes');
 
+test('actual registry capacity is a fixed workflow cause instead of an input or generic failure', () => {
+  const { createBatchPseudonymRegistry, READABLE_CONTRACT_VERSION } = require('../plugins/data-secure/server/batch-pseudonym-registry');
+  const registry = createBatchPseudonymRegistry(Buffer.alloc(32, 91), { contractVersion: READABLE_CONTRACT_VERSION });
+  try {
+    for (let index = 0; index < 10000; index++) registry.assign('PERSON', `Synthetic${index} Test`);
+    assert.throws(() => registry.assign('PERSON', 'SyntheticOverflow Test'), error => error.code === 'BATCH_PSEUDONYM_CAPACITY_EXCEEDED');
+    assert.ok(WORKFLOW_ERROR_CODES.includes('BATCH_PSEUDONYM_CAPACITY_EXCEEDED'));
+    assert.equal(registry.lookup('PERSON', 'Synthetic0 Test'), '[PERSON_001]', 'accepted labels survive a capacity stop');
+  } finally { registry.dispose(); }
+});
+
 test('every cause has a fixed, path-free German hint and the list is closed', () => {
   assert.ok(CAUSE_CODES.length >= 15);
   for (const code of CAUSE_CODES) {

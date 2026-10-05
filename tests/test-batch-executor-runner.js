@@ -9,12 +9,17 @@ const { test, testAsync, done, assert } = createSuite('Batch executor runner bou
 const token = 'e'.repeat(64);
 const pid = 4242;
 
-test('only transient conversion failures remain recoverable in the production batch policy', () => {
+test('only explicitly recoverable technical conversion causes belong to the production retry policy', () => {
   assert.deepEqual(
     batchFacade._test.retryableErrorCodes.filter(code => code.startsWith('CONVERSION_')).sort(),
-    ['CONVERSION_START_FAILED', 'CONVERSION_TIMEOUT']
+    ['CONVERSION_ARCHITECTURE_INVALID', 'CONVERSION_DEPENDENCY_MISSING',
+      'CONVERSION_EXECUTABLE_DENIED', 'CONVERSION_EXECUTABLE_MISSING',
+      'CONVERSION_START_FAILED', 'CONVERSION_TIMEOUT']
   );
-  assert.ok(!batchFacade._test.retryableErrorCodes.includes('CONVERSION_ISOLATION_UNAVAILABLE'));
+  for (const code of ['CONVERSION_ISOLATION_UNAVAILABLE', 'CONVERSION_LIMIT_SETUP_FAILED',
+    'CONVERSION_TERMINATION_UNCONFIRMED']) {
+    assert.ok(!batchFacade._test.retryableErrorCodes.includes(code));
+  }
 });
 
 function progress(overrides = {}) {
@@ -115,7 +120,7 @@ function fixture(options = {}) {
     },
     appendMapping() { stoppedMappings++; events.push('stopped-mapping'); },
     cleanupTerminalWorkCopy() { cleaned++; events.push('cleanup'); },
-    retryableCodes: new Set(['CONVERSION_TIMEOUT']),
+    retryableCodes: options.retryableCodes || new Set(['CONVERSION_TIMEOUT']),
     deliveryPendingStatus: 'delivery_pending',
     maxBatchFiles: options.maxBatchFiles || 100
   });
@@ -417,6 +422,63 @@ testAsync('only catalogued transient worker failures remain resumable and exhaus
       assert.strictEqual(state.items[0].status, 'stopped');
       assert.strictEqual(state.items[0].error_code, 'RETRY_LIMIT_EXCEEDED');
     }
+  }
+});
+
+testAsync('production start causes need explicit resume and stop after three failures without altering published work', async () => {
+  const retryableCodes = new Set(batchFacade._test.retryableErrorCodes);
+  for (const code of ['CONVERSION_EXECUTABLE_MISSING', 'CONVERSION_EXECUTABLE_DENIED',
+    'CONVERSION_ARCHITECTURE_INVALID', 'CONVERSION_DEPENDENCY_MISSING']) {
+    const published = { id: 'd'.repeat(32), name: 'released.md', status: 'completed',
+      artifact_id: 'already-published', local_mapping_exported: true };
+    const publishedBefore = JSON.stringify(published);
+    let state = {
+      schema: 'datasecure-batch/5', processing_mode: 'markdown-only', product_channel: 'standalone',
+      token, local_executor_pid: pid,
+      items: [published, { id: 'c'.repeat(32), name: 'source.pdf', status: 'pending' }],
+      io_summary: {}, progress: progress({ remaining: 1 })
+    };
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      const failure = Object.assign(new Error('private native detail'), { code });
+      const value = fixture({ state, retryableCodes, failProcessAt: 1, processError: failure });
+      await assert.rejects(value.run(), error => error === failure);
+      state = value.state();
+      assert.strictEqual(value.counts().processCalls, 1, 'the runner never retries automatically');
+      assert.strictEqual(JSON.stringify(state.items[0]), publishedBefore, 'committed work is unchanged');
+      const item = state.items[1];
+      assert.strictEqual(item.retry_failure_code, code);
+      assert.strictEqual(item.retry_failure_count, attempt);
+      if (attempt < 3) {
+        assert.strictEqual(item.status, 'retryable');
+        assert.strictEqual(item.error_code, code);
+        // This represents the separately tested explicit continuation, not an
+        // automatic retry by the executor or an instruction to bypass OS policy.
+        item.status = 'pending';
+        item.checkpoint = 'resumed';
+      } else {
+        assert.strictEqual(item.status, 'stopped');
+        assert.strictEqual(item.error_code, 'RETRY_LIMIT_EXCEEDED');
+        assert.strictEqual(value.cleaned(), 1);
+      }
+    }
+  }
+});
+
+testAsync('production safety failures stop immediately and never become a retryable source', async () => {
+  for (const code of ['CONVERSION_ISOLATION_UNAVAILABLE', 'CONVERSION_LIMIT_SETUP_FAILED',
+    'CONVERSION_TERMINATION_UNCONFIRMED']) {
+    const failure = Object.assign(new Error('private native detail'), { code });
+    const value = fixture({
+      state: { schema: 'datasecure-batch/5', processing_mode: 'markdown-only', product_channel: 'standalone',
+        token, local_executor_pid: pid, items: [{ id: 'c'.repeat(32), name: 'source.pdf', status: 'pending' }],
+        io_summary: {}, progress: progress({ remaining: 1 }) },
+      retryableCodes: new Set(batchFacade._test.retryableErrorCodes), failProcessAt: 1, processError: failure
+    });
+    await assert.rejects(value.run(), error => error === failure);
+    assert.strictEqual(value.counts().processCalls, 1);
+    assert.strictEqual(value.state().items[0].status, 'stopped');
+    assert.strictEqual(value.state().items[0].error_code, code);
+    assert.strictEqual(value.state().items[0].retry_failure_count, undefined);
   }
 });
 

@@ -39,6 +39,11 @@ description = "Zeigt höchstens 20 lokale Standalone-Läufe ohne Dokumentinhalte
 commands.allow = ["get_run_history"]
 
 [[permission]]
+identifier = "allow-get-run-failures"
+description = "Liest betroffene Dateinamen und feste Fehlercodes nur lokal für den ausgewählten Standalone-Lauf."
+commands.allow = ["get_run_failures"]
+
+[[permission]]
 identifier = "allow-open-review-window"
 description = "Öffnet ausschließlich das lokale Standalone-Prüffenster."
 commands.allow = ["open_review_window"]

@@ -10,6 +10,15 @@ const { SCHEMA, failure, validateBatchId, historyProgress, validSummary, summari
   readStandaloneSummaries, recordStandaloneState, recordStandaloneExport, boundRun } = require('../gateway/standalone-history-store');
 
 const MAPPING = 'DataSecure-Zuordnung.csv';
+function safeLocalLabel(name) {
+  return typeof name === 'string' && name.length > 0 && name.length <= 1024 &&
+    !path.posix.isAbsolute(name) && !path.win32.isAbsolute(name) && !/[:\\\u0000-\u001f\u007f]/u.test(name) &&
+    !name.split('/').some(part => !part || part === '.' || part === '..');
+}
+function problemItems(state) {
+  return (state?.items || []).filter(item => item.status === 'stopped' ||
+    item.status === 'preflight_mapping_pending' || item.status === 'retryable');
+}
 function regularFile(file) {
   try { const stat = fs.lstatSync(file); return stat.isFile() && !stat.isSymbolicLink(); }
   catch { return false; }
@@ -71,9 +80,18 @@ function createRunHistory(deps) {
                 : savedExport?.complete === true ? 'results_available' : 'export_pending')
             : 'failed';
         const { schema, export_id, complete, ...fields } = summary;
+        const problems = state ? problemItems(state).length : summary.failed_count;
+        const identityEligible = summary.result_count > 0 && status === 'results_available' &&
+          summary.processing_mode !== 'markdown-only';
+        const readableIdentity = identityEligible && identityLedger.documentAvailable(summary.batch_id);
+        const capturedIdentity = identityEligible && state ? identityLedger.identityStatus(state) : null;
+        const identityWarning = identityEligible && !readableIdentity ? 'STANDALONE_IDENTITY_MAPPING_MISSING' :
+          capturedIdentity?.available && !capturedIdentity.complete ? 'STANDALONE_IDENTITY_MAPPING_INVALID' :
+            readableIdentity && run && !identityLedger.publicationAvailable(summary.batch_id, run) ? 'STANDALONE_IDENTITY_PUBLICATION_FAILED' : null;
         return { ...fields, status, results_available: Boolean(run), ledger_available: ledger,
-          identity_mapping_available: ['results_available', 'completed_without_results'].includes(status) &&
-            identityLedger.documentAvailable(summary.batch_id),
+          ...(problems !== summary.failed_count ? { problem_count: problems } : {}),
+          identity_mapping_available: Boolean(readableIdentity || capturedIdentity?.available),
+          ...(identityWarning ? { identity_mapping_warning: identityWarning } : {}),
           resumable: canResume, _run: run };
       });
   }
@@ -104,37 +122,57 @@ function createRunHistory(deps) {
     // While it still exists, re-materialize on access so a transient locked
     // document cannot leave a stale partial view after later releases.
     const current = deps.readStates().find(state => state.product_channel === 'standalone' && state.token === batchId);
-    if (current) identityLedger.materialize(current);
+    if (current) {
+      try { identityLedger.materialize(current); }
+      catch { throw failure('STANDALONE_IDENTITY_MAPPING_INVALID'); }
+    }
     const privateFile = identityLedger.resolveDocument(batchId);
     let localPath = privateFile;
+    let publicationAvailable = false;
     if (entry._run) {
-      try { localPath = identityLedger.publishDocumentToRun(batchId, entry._run).local_path; }
+      try { const published = identityLedger.publishDocumentToRun(batchId, entry._run); localPath = published.local_path; publicationAvailable = published.published; }
       catch { /* private mapping remains available when the user-owned run folder conflicts */ }
     }
-    return { ok: true, target_kind: 'file', local_path: localPath, external_disclosure: false };
+    return { ok: true, target_kind: 'file', local_path: localPath, external_disclosure: false,
+      publication_available: publicationAvailable,
+      ...(!publicationAvailable ? { identity_mapping_warning: 'STANDALONE_IDENTITY_PUBLICATION_FAILED' } : {}) };
   }
   function failures(batchId) {
     const entry = find(batchId);
-    if (entry.failed_count === 0) return { ok: true, available: true, total: 0, files: [],
-      local_ui_only: true, external_disclosure: false };
     // Names are read on demand from the private journal, never persisted in
     // the content-free history summary or diagnostic log. Older expired
     // journals may therefore have counts but no longer have names.
     const state = deps.readStates().find(candidate => candidate.token === batchId &&
       candidate.product_channel === 'standalone');
-    if (!state) return { ok: true, available: false, total: entry.failed_count, files: [],
+    if (!state) return { ok: true, available: entry.failed_count === 0, total: entry.failed_count, files: [],
       local_ui_only: true, external_disclosure: false };
-    const stopped = state.items.filter(item => item.status === 'stopped' && item.local_mapping_exported !== false);
+    const stopped = problemItems(state);
     const files = stopped.slice(0, 200).map(item => ({
       name: item.source_label || item.name,
+      ...(item.local_mapping_exported === false || item.status === 'preflight_mapping_pending'
+        ? { stage: 'mapping_pending' } : item.status === 'retryable' ? { stage: 'retryable' } : {}),
       ...(typeof item.error_code === 'string' && /^[A-Z][A-Z0-9_]{2,63}$/u.test(item.error_code)
         ? { reason_code: item.error_code } : {})
-    })).filter(item => typeof item.name === 'string' && item.name.length > 0 && item.name.length <= 1024 &&
-      !path.isAbsolute(item.name) && !item.name.split('/').some(part => !part || part === '.' || part === '..'));
+    })).filter(item => safeLocalLabel(item.name));
+    // A stopped worker can leave later sources untouched. Show these separately
+    // instead of pretending that every selected document failed to convert.
+    const pending = !deps.liveExecutor(state) && (stopped.length > 0 || entry.status === 'failed')
+      ? state.items.filter(item => item.status === 'pending') : [];
+    const pendingFiles = pending.slice(0, 200).map(item => ({ name: item.source_label || item.name }))
+      .filter(item => safeLocalLabel(item.name));
     return { ok: true, available: true, total: stopped.length, files,
+      ...(pending.length ? { pending_total: pending.length, pending_files: pendingFiles } : {}),
       local_ui_only: true, external_disclosure: false };
   }
-  return { history, find, resolveResults, resolveLedger, resolveIdentityMapping, failures };
+  function reviewTargets(batchId) {
+    validateBatchId(batchId);
+    const state = deps.readStates().find(candidate => candidate.token === batchId &&
+      candidate.product_channel === 'standalone');
+    if (!state) return [];
+    return (state.items || []).filter(item => item.status === 'deferred_review')
+      .slice(0, 200).map(item => item.source_label || item.name).filter(safeLocalLabel);
+  }
+  return { history, find, resolveResults, resolveLedger, resolveIdentityMapping, failures, reviewTargets };
 }
 
 module.exports = { createRunHistory, validateBatchId };

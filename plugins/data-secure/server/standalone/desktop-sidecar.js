@@ -6,6 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { StandaloneApplicationService } = require('./application-service');
 const { FrameDecoder, MAX_FRAME_BYTES } = require('./desktop-ipc');
+const { desktopErrorCode } = require('../core/desktop-error-contract');
 
 const diagnosticDirectory = path.resolve(process.env.DATASECURE_STANDALONE_DIAGNOSTIC_DIR ||
   path.join(os.tmpdir(), 'SecureDataMsg-Standalone'));
@@ -72,33 +73,29 @@ function writeFrame(value, callback) {
 }
 
 function publicError(requestId, error) {
-  const allowed = new Set([
-    'STANDALONE_BUSY', 'STANDALONE_ENGINE_NOT_READY', 'STANDALONE_SELECTION_CANCELLED',
-    'STANDALONE_SELECTION_INVALID', 'STANDALONE_NO_ADMISSION', 'STANDALONE_NOTHING_TO_CONTINUE',
-    'SOURCE_FOLDER_FILE_LIMIT', 'SOURCE_FOLDER_SIZE_LIMIT',
-    'SOURCE_FOLDER_UNSUPPORTED_FILES', 'SOURCE_FOLDER_EMPTY', 'SOURCE_FORMAT_SIZE_LIMIT',
-    'STANDALONE_START_FAILED',
-    'PROCESSING_MODE_INVALID', 'PROCESSING_MODE_FORBIDDEN', 'RESULT_NAMING_MODE_INVALID', 'MARKDOWN_CONVERSION_NOT_READY',
-    'STANDALONE_DATA_ROOT_UNSAFE',
-    'UNSAFE_STORAGE_LOCATION', 'STARTUP_RECOVERY_FAILED', 'STARTUP_OUTBOX_RECOVERY_FAILED',
-    'STARTUP_MIGRATION_FAILED', 'STARTUP_CLEANUP_FAILED', 'RUNTIME_INTEGRITY_FAILED',
-    'DURABLE_RUNTIME_FAILED', 'STARTUP_FAILED',
-    'STANDALONE_RESULT_ROOT_UNSAFE', 'STANDALONE_RESULT_OPEN_FAILED',
-    'STANDALONE_RESULTS_MISSING',
-    'STANDALONE_LEDGER_MISSING', 'STANDALONE_LEDGER_OPEN_FAILED',
-    'STANDALONE_HISTORY_INVALID', 'STANDALONE_HISTORY_MISSING', 'STANDALONE_HISTORY_UNAVAILABLE',
-    'STANDALONE_REVIEW_SESSION_INVALID', 'STANDALONE_REVIEW_DECISION_INVALID'
-  ]);
-  const code = allowed.has(error?.code) ? error.code : 'STANDALONE_OPERATION_FAILED';
-  const localDetails = code === 'SOURCE_FOLDER_UNSUPPORTED_FILES' &&
+  const code = desktopErrorCode(error?.code);
+  const safeLabel = label => typeof label === 'string' && label.length > 0 && label.length <= 1024 &&
+    !path.posix.isAbsolute(label) && !path.win32.isAbsolute(label) && !/[:\\\u0000-\u001f\u007f]/u.test(label) &&
+    !label.split('/').some(part => !part || part === '.' || part === '..');
+  const selectionCodes = new Set(['SOURCE_FORMAT_SIZE_LIMIT', 'SOURCE_FILE_EMPTY', 'SOURCE_FORMAT_UNSUPPORTED',
+    'SOURCE_READ_FAILED', 'SOURCE_ACCESS_DENIED', 'SOURCE_PATH_UNSAFE', 'SOURCE_IDENTITY_CHANGED', 'SOURCE_ARTIFACT_IGNORED']);
+  let localDetails = code === 'SOURCE_FOLDER_UNSUPPORTED_FILES' &&
     Array.isArray(error?.localUnsupportedFiles) &&
+    error.localUnsupportedFiles.length > 0 &&
     error.localUnsupportedFiles.length <= 200 &&
-    error.localUnsupportedFiles.every(label => typeof label === 'string' && label.length > 0 && label.length <= 1024 &&
-      !label.startsWith('/') && !label.split('/').some(part => !part || part === '.' || part === '..')) &&
+    error.localUnsupportedFiles.every(safeLabel) &&
     Number.isSafeInteger(error.localUnsupportedCount) &&
     error.localUnsupportedCount >= error.localUnsupportedFiles.length && error.localUnsupportedCount <= 4096
     ? { unsupported_files: error.localUnsupportedFiles, unsupported_count: error.localUnsupportedCount }
     : null;
+  if ((selectionCodes.has(code) || code === 'SOURCE_SELECTION_REJECTED') &&
+      Array.isArray(error?.localSelectionFiles) && error.localSelectionFiles.length > 0 &&
+      error.localSelectionFiles.length <= 200 && error.localSelectionFiles.every(item => item &&
+        Object.keys(item).length === 2 && safeLabel(item.name) && selectionCodes.has(item.reason_code)) &&
+      Number.isSafeInteger(error.localSelectionCount) && error.localSelectionCount >= error.localSelectionFiles.length &&
+      error.localSelectionCount <= 4096) {
+    localDetails = { selection_files: error.localSelectionFiles, selection_count: error.localSelectionCount };
+  }
   return {
     schema: 'datasecure-standalone-private-response/1', request_id: requestId, ok: false,
     error_code: code,

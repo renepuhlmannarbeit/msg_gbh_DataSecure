@@ -1,6 +1,6 @@
 # Evidence-Matrix für aktive Arbeit
 
-Stand: 30.09.2026 · 3.2.0-rc157
+Stand: 05.10.2026 · 3.2.0-rc157 · Veröffentlichung unverändert; DS-106/DS-107/DS-108/DS-109 lokal unveröffentlicht
 
 **Aktuelle RC157-Veröffentlichung:** Quellcommit
 `111737d28021b6989ffe8d563b58daa9cbae610f` ist auf main und als Standalone-RC
@@ -14,6 +14,124 @@ Nachkontrolle fand 140 Ergebnisse, 140 Dateizuordnungen und die vertrauliche
 Identitäts-TXT mit 140/140 erfassten Ergebnissen. Der danach ergänzte
 Einzeldokument-Reviewfix wurde im finalen Neubau gezielt technisch geprüft.
 Cowork bleibt RC151; offene menschliche Spezialabnahmen bleiben separat.
+
+**Neue lokale E0-Evidenz vom 05.10.2026 (DS-106 / BL-010.46, unveröffentlicht):**
+Unternehmenswahl bis zur tatsächlichen ORG-Publikation und Identitätszuordnung,
+authentifizierte gleiche Schreibweisen über Prüfphasen/Neustart, exakte
+Fundstellenbindung, unveränderter Cowork-Reviewvertrag und Fehlerdatei-IPC sind
+gezielt geprüft. Am echten RC157-Lauf `5e50a0b0` sind die Ursachen getrennt:
+fehlende Hauptfenster-Capability für Fehlerdetails und ein reproduzierter
+Cross-Placeholder-Restkandidat vor dem Review. Der neue Privacy-Code erreicht
+mit dem unveränderten installierten Konverter vier exakt gebundene Kandidaten;
+kein ungeprüftes Ergebnis wurde freigegeben. Die PDF des Markdown-Laufs
+`8676f0ca` wurde auf allen elf Seiten mit dem paketierten Konverter gegengeprüft;
+native Zeichen bleiben erhalten, OCR-Dubletten über nativem Text und angeklebte
+Footer-Seitenzahlen werden geometrisch behandelt. Bild-only-Logo-OCR wird
+nicht semantisch geraten. Originale und vorhandene Läufe bleiben unverändert.
+Das ist keine Abnahme eines neuen Releasepakets und erklärt den separaten
+Windows-Komplettausfall der Kollegin ohne ihre Diagnose noch nicht.
+Abgeschlossenes E0-Gate: 133 Testdateien in `run-product-suite.js ci`,
+38 real paketierte Konvertierungsgruppen, 11 PDF-Layoutfälle und zusätzliche
+Review-/Journal-/Capturetests; BL-010.46 technisch erledigt. BL-010.47 erfasst
+den fehlenden Diagnosebeleg des anderen Windows-Rechners als eigenen offenen
+Punkt, nicht als erneut offene bereits bestandene Anwenderabnahme.
+
+**Lokaler Integrationsnachweis vom 05.10.2026 (DS-107 / BL-010.48):**
+Die finale Gesamtsuite bestand mit 135 Testdateien (74 Basis- und 61 direkten Produkttests).
+Zusätzlich bestanden 39 reale paketierte Konvertierungsgruppen auf Windows,
+neun Core-Policy-Gruppen, 26 Rust-Tests und das strenge Clippy-Gate. Die echte
+Sidecar-/Reviewworker-Integration prüft die typisierte Unternehmensentscheidung
+bis zur Veröffentlichung, Fehler vor dem ersten Prüfdraft mit anschließendem
+explizitem Wiederholen, ungültige Entscheidungen und Verschieben/Fortsetzen.
+Der Start der ersten Prüfung wartet auf den tatsächlichen Worker-Endzustand,
+nicht allein auf einen bereits geschriebenen Journalcheckpoint. Acht
+Continuation-Negativfälle sichern die vier festen Startursachen über beide
+Einstiege; 42 Hauptfrontendfälle prüfen auch die konkrete Fehlermeldung und
+das Öffnen der betroffenen Dateiliste ohne automatischen Worker-Neustart.
+
+Der isolierte Windows-Engineering-Bau liegt unter
+`dist/engineering-auditfix-verified-20261005/DataSecure-Standalone-3.2.0-rc157-windows-x64.zip`:
+589 Einträge, 110376954 Bytes, SHA-256
+`240db62613998e352d5a7b3ac21f7ebfba89ddf3ffba36f0a24d7b553dfbd253`.
+Paketvertrag und isolierter Sidecar-Smoke bestanden mit exakt diesem ZIP:
+elf gemischte Markdown-Ergebnisse und ein gezielt fehlerhafter CSV-Fall in
+beiden Betriebsarten, drei reale PDF-/PPTX-Privacyfälle einschließlich
+eingebettetem XLSX sowie Verlauf/Neustart mit geändertem Ergebnisroot.
+Der native Windows-Lauf prüft sichtbare Haupt-/Prüfseitenladung und eine
+erfolgreiche Review-IPC-Antwort: Start 1987,069 ms, Windows 10.0.26200.0 x64,
+WebView2 154.0.4258.53 (machine), zehn zugeordnete Prozesse, keine TCP-Listener
+und keine UDP-Endpunkte im Messfenster. Der native Test endete mit Exit 0;
+seine 910 test-eigenen Einträge wurden anschließend geprüft entfernt.
+Das ist kein menschlicher
+Prüfentscheidungs-, Accessibility- oder macOS-Gerätenachweis.
+
+Ein früherer Messversuch am vorletzten Engineering-ZIP scheiterte an einer
+nicht eindeutigen UDP-Prozesszuordnung. Er zählt ausdrücklich nicht als PASS;
+der darauf folgende Lauf und der finale Kandidat bestanden dieselbe strenge
+Prüfung. Die Ursache der uneindeutigen Messung wurde nicht reproduziert.
+Der Test gibt jetzt begrenzte inhaltsfreie Zuordnungsmerkmale aus, statt diese
+Unsicherheit auszublenden. Falsche Hosts zählen als SKIP/Exit 77; Seitenladung
+oder lediglich gestartete/fehlgeschlagene IPC dürfen keine native Freigabe
+erzeugen. Publisher-Signierung, neue Mac-Zielhosttests und der gerätebezogene
+Komplettausfall bei der Kollegin bleiben separate offene Nachweise. Es gibt
+keinen neuen Release-Tag und keinen Upload; die veröffentlichte RC157 ist
+unverändert. Originale und vorhandene Anwenderläufe wurden nicht verändert.
+
+## DS-108 – abschließender lokaler Revalidierungsnachweis
+
+Stand: 05.10.2026; unveröffentlicht. BL-010.49 ist technisch E0 erledigt.
+Die ursprünglichen Auditpunkte wurden durch drei unabhängige technische
+Prüfrichtungen revalidiert: Privacy/Publikation, native Prozesse/Fenster und
+Test-/Paketgates. Zusätzlich gefundene Markerherkunfts-, spätes POSIX-Cancel-,
+Readinesskorrelations-, Kandidatenintegritäts- und Exitcode-Rennen wurden erneut
+korrigiert und gegengeprüft. Das ist keine Garantie vollständiger Erkennung und
+keine Abnahme nicht ausgeführter GUI-/Mac-Gerätefälle.
+
+| Befundgruppe | Nachweis am korrigierten Stand | Grenze des Nachweises |
+|---|---|---|
+| Quellmarker und Credential-Leaks | 42 Residual-/Publikationsfälle, 159 PII-Fälle und 20 adversariale Goldens. Beliebige Klammerlabels, HMAC-Lookalikes und numerische Originalmarker gelangen ohne genaue Keep-/Redact-Entscheidung nicht still in die Veröffentlichung; ganze Credentialzellen einschließlich einspaltiger Tabellen sind geschützt. Neue echte Pseudonyme werden nicht verwechselt. | Kein pauschaler Herkunftsbeweis durch Syntax; unbindbare Kollision bleibt sicher gestoppt. |
+| Durchgängiges Standalone-Prüfbudget | Echte Verarbeitung mit 1.000, 1.001 und 5.000 Fundstellen erreicht die lokale Prüfung; 5.001 liefert den erklärten Größenfehler. Fehlender Reviewcallback und fehlender Keep-Beleg verhindern Veröffentlichung. | Auch die 40-MiB-Textgrenze ist endlich; nicht nur Anzahl bestimmt die Größe. Cowork bleibt bei 1.000. |
+| Renderer-Zustände und Bestätigungen | 20 Gegenproben mit dem tatsächlichen Reviewrenderer: verspätete Antworten, Submit/Close/Continue, verlorenes ACK, pollende Fehlerbehandlung und gebundene Dateinamen. Ein Ladevorgang/Timer und Generationen verhindern alte Drafts. | Kontrollierte Transport-/Antwortfehler in echtem Frontendcode, keine native GUI-Bedienung. |
+| Native Close-, Spawn- und Shutdownbindung | 39 echte Rust-Tests, strenges Clippy und Releasebuild. Fensterinstanz/ausgelieferte Review-ID, vorregistrierte Spawnversuche, begrenzte Shutdown-Reconciliation und terminaler Code 0/70 sind getrennt geprüft; wiederholtes externes Quit umgeht sie nicht. Unabhängiger Schlussreview bestätigte die letzte Exitcode-Korrektur. | Ein im OS blockierter Spawn ist nicht portabel gewaltsam abbrechbar; Timeout darf keinen erfolgreichen Shutdown behaupten. |
+| POSIX-Gruppeneigentum und Cancellation | Auf WSL/Linux vier reale positive Fälle: Cancel vor Exitbeobachtung, zwischen Beobachtung und Reap, normaler Exit mit lebendem Enkel und geerbtes SIGCHLD-ignore. Zwei bewusst defekte Varianten lassen Kinder zurück und werden erkannt; PID-gebundene Testbereinigung und fremder Sentinel bleiben getrennt. | Kein macOS-Laufzeitnachweis; Signal-/waitid-Unterstützung wird nicht aus Linux auf einen Mac übertragen. |
+| Langsame Aufnahme und Konverterfehler | Reale 200-Dateien-Aufnahme mit verlangsamten Metadaten dauert 37,571 s und gelingt im JS-Aufnahmeweg; separater Rust-Test bindet 300-s-Aufnahme-/30-s-Normalfrist und ehrliche Heartbeats. 40 reale Windows-Konvertierungsgruppen einschließlich 60 früher Abbrüche bestehen; fehlendes/nicht ausführbares/falsches Programm behält die konkrete Startursache. | Der langsame 200-Dateien-Fall ist kein vollständiger Tauri-Pickerlauf. Eine Antivirusursache beim Rechner der Kollegin ist nicht nachgewiesen. |
+| Starttest- und Inventarlücken | 19 Integritäts-/Readinessfälle einschließlich 41 tatsächlicher PowerShell-Prüfgruppen und CLI-Negativfall; nur jeweils neueste erfolgreiche Anfrage derselben Session/Request-ID zählt. Sieben vollständige Inventarfälle prüfen fehlende/zusätzliche/veränderte Dateien statt nur gelisteter Hashes. | Native Start-PASS beweist erfolgreiche Seiten/IPC, nicht Reviewbedienung; Hashes sind keine Publisher-Signatur oder Buildherkunft. |
+| Exakter Kandidat und vollständiger Reviewweg | Finale ZIP-Paketprüfung sowie echte paketierte Sidecar-/Worker-Integration mit 6.001 Fundstellen: erster Block 4.500, weitere Gruppen, Person/Unternehmen, Verschieben, realer Neustart, laufweite Übernahme und konkretes `05-nicht-verarbeitet.csv` / `PARSE_FAILED`. Jede Ausgabezeile, unveränderte Sachzelle, Reihenfolge und stabile Identitäten werden geprüft. Veränderte extrahierte Runtime trotz unverändertem ZIP verweigert die native Kampagne. | Paketierter IPC-E2E ist ausdrücklich keine Tauri/WebView-Interaktion; vorbereitete Bedienkampagne bleibt NOT_RUN bis echter Bedienattestation. |
+
+Gesamtsuite: 136 Testdateien (75 Basis + 61 direkte) bestanden; zusätzlich neun
+Core-Policy-Gruppen und das vollständige Standalone-Gate einschließlich aller
+39 Rust-Tests. Die vier vormals fehlenden Regressionen sind im allgemeinen
+Produktgate und im plattformverwendeten `test:standalone` gebunden. Rust- und
+Desktop-/Plattformvertrag wurden nach der letzten Exitcode-Korrektur erneut
+geprüft. Ein dabei noch auf `allowed()` statt `allowed(code)` zeigender
+Linux-Sourcevertrag war eine veraltete Testassertion; sie wurde auf die strengere
+Codebindung korrigiert, nicht die Produktbedingung abgeschwächt.
+
+**Exakter finaler Windows-Kandidat:**
+`dist/engineering-ds108-final-20261005/DataSecure-Standalone-3.2.0-rc157-windows-x64.zip`,
+589 Einträge, 110386747 Bytes, SHA-256
+`d4dcd06ae001564301d9e7a205aaf1656f5e423c8d9ad17f7583828247625aba`.
+Isolierter Mixed-Format-Test: elf Ergebnisse plus gezielt defekte CSV in beiden
+Zwecken; drei reale PDF-/PPTX-Privacyfälle einschließlich eingebetteter XLSX;
+Verlauf, Neustart, geänderter Ergebnisroot und oben beschriebener Review-E2E
+bestanden mit diesem ZIP. Native Windows-Seiten-/IPC-Prüfung: 2540,399 ms,
+Windows 10.0.26200.0 x64, WebView2 154.0.4258.53 (machine), zehn zugeordnete
+Prozesse, keine TCP-Listener/UDP-Endpunkte im Messfenster. Native Testbeendigung
+Exit 0; 911 geprüfte test-eigene Einträge wurden bereinigt. Vorherige
+Engineering-ZIPs zählen nicht als Beleg für die letzte native Exitcode-Änderung.
+
+**Offene, klar getrennte Arbeit:** BL-010.50 verlangt die bediente native
+Gesamtkampagne auf Windows und macOS Intel/Apple Silicon, einschließlich
+Vertagen/Neustart, Folgeprüfungen, konkreter Fehlerdateinamen und Abbruch.
+BL-010.51 ist gezielte zusätzliche Methodenadaption, nicht blockiert:
+unabhängige Precision-/Recall-/Fehlanonymisierungsmetriken, seeded
+Zustandsmodelltests und spätere attestierte Buildherkunft. Quellen und
+Adaptionsentscheidungen stehen in DS-108. Der ungeklärte andere Windows-Rechner
+bleibt BL-010.47; keine Diagnose wird erfunden. Frühere bestandene Anwenderläufe
+bleiben bestanden. Kein Commit/Push/Release; Originale und Ergebnisläufe blieben
+unverändert. Publisher-Signierung und Mac-/Bedien-/Accessibility-Nachweise
+werden nicht aus den aktuellen Source-, WSL-, Worker- oder Windows-Starttests
+abgeleitet.
 
 **Früherer RC151-Standalone-Inhaltsnachweis (Windows-Zielhost, 30.09.2026):** Die vom
 Anwender ausgeführten Läufe `Lauf-20260930-110539-31025d04` (nur Markdown)
@@ -386,6 +504,36 @@ Dieser Abschnitt beschreibt den damaligen Vorbindungsstand von RC108. RC108
 wurde später separat gebunden; der aktuelle RC109-Nachweis steht am Anfang
 dieser Matrix. Windows-Engineering-Evidence ersetzt weiterhin weder sichtbaren
 UAT noch Intel-/ARM-macOS.
+
+## DS-109 – revalidierte Architekturkorrekturen, lokaler Prüfschnitt
+
+Stand: 05.10.2026; keine Veröffentlichung. Drei technische Reviewrollen prüften
+Privacy/OCR, native Lebenszyklen und UI-/DTO-Verträge unabhängig. Bestätigte
+Gegenbeispiele wurden umgesetzt und nochmals überprüft. Der zweite Schnitt
+fand zusätzlich den Abteilungssuffix „von der Planung“ und einen zu strengen
+nativen Identitäts-DTO-Vertrag; beide wurden geschlossen regressionsgesichert.
+
+| Nachweis | Tatsächlicher Umfang |
+|---|---|
+| `test-residual-person-review.js` | 43/43 bestanden, einschließlich echter Engine-/Standalone-Publikation, gebundener Keep/PERSON/Unternehmenswahl, Quellschutz, technischer Negativkontrollen und Reviewgrenzen. Die unabhängige letzte Gegenprüfung bestätigte 12 tatsächliche Publikationen für Suffix-/Partikelfälle, exakte Grenzen und unveränderten Cowork-Adapterumfang. |
+| `test-standalone-conversion-worker.mjs` | 41 echte paketierte Konvertierungsgruppen auf Windows x64 bestanden, 0 übersprungen; tatsächliche PDF.js-Operatorliste und OCR-/Abbruchpfade. PDF.js-Probe besitzt einen Kindprozess, dessen DLL vor Bereinigung entladen ist. |
+| `cargo test --locked --offline` | 45/45 Windows-Host-Rusttests bestanden, 0 ignoriert; erweiterter geschlossener Identitäts-DTO, tatsächliche OS-Helfer, Prozess-/Shutdownverträge und Startbericht. `cargo clippy --locked --offline --all-targets -- -D warnings` bestanden. Keine native Mac-GUI-Abnahme. |
+| Gezielte Source-/Vertragsprüfungen | Quellenaufnahme 27, PDF-Layout 12, History/Identitätsledger, Frontend 45, Reviewfrontend 22, Desktopvertrag 24, Wide-Orchestrator 11, Reviewmodell 16, Diagnose 8 und POSIX-Adapter 4: bestanden im jeweils dokumentierten lokalen Schnitt. |
+| Wiederaufnahmevertrag | Ein veralteter Vollsuite-Test erwartete nur die früheren allgemeinen Startcodes. Nach unabhängiger fachlicher Gegenprüfung schließt die Erwartung die vier differenzierten Startursachen ein. 13 Runner-Regressionen bestanden: kein automatisches Retry, drei gleiche Fehlschläge führen zum terminalen Stopp, freigegebene Arbeit bleibt unverändert; Isolation, Schutzgrenzenfehler und unbestätigte Terminierung bleiben sofort terminal. Produktions-Retrylogik wurde dafür nicht aufgeweicht. |
+| `validate-claude-local.mjs --cli …claude.exe` | Claude Code 2.1.280, Plugin-/Marketplace-Strukturvalidierung PASS; kein Modell-, Cowork- oder Gerätebediennachweis. |
+| Windows-Engineering-Paket | Frischer endgültiger Kandidat `dist/engineering-ds109-final-20261005/DataSecure-Standalone-3.2.0-rc157-windows-x64.zip`, 591 Einträge, 110.406.939 Byte; SHA-256 `3efd3d69813d0705b5557fe3d1ccf7cda5b66d07f23dafe2966a95002252c3c6`. Archiv-/Inventarprüfung bestanden. Unveröffentlichter Arbeitsstand, kein neuer Releasecommit. |
+| Paketgebundener Workflow | Für genau diesen Hash bestanden: echte Mischformatkonvertierung (11 Ergebnisse und ein absichtlich fehlerhaftes CSV in beiden Modi), passive PDF-/PPTX-Privacy, Review-IPC mit 1.500 Fundstellen je Datei und 4.500 in der ersten Gruppe, Keep/PERSON/Unternehmen, automatische Folgeprüfung, Verschieben/Neustart, laufweite Entscheidungen und konkreter CSV-Fehlername. History in beiden Modi, fehlerhafter Lauf, exakte Ziele, Neustart und geänderter Ergebnisordner bestanden. Keine WebView-Bedienung durch diesen Sidecar-Test behauptet. |
+| Nativer Windows-Start desselben Pakets | Geladene Haupt-/Prüfseite und erfolgreiche IPC; 1.497,514 ms Start, Desktop-EXE 3.727.360 Byte, Windows 10.0.26200.0 x64, WebView2 154.0.4258.53 (machine). Im Messfenster 7 Prozesse, 0 TCP-Listener und 0 UDP-Endpunkte. Testscope mit 912 eigenen Einträgen bereinigt. Kein vollständiger bedienter Review-/Accessibility-Nachweis. |
+| POSIX-Startgegenproben | Frischer WSL/Linux-C-Build mit `-std=c11 -Wall -Wextra -Werror -O2`: fehlend 127, nicht ausführbar 128, ungültiges ELF 129, fehlender ELF-Loader 132, gültiger Start 0. Vier Adaptertests und 16 Darwin-/Linux-Vertragsfälle bestanden; keine injizierten Setup-Syscallfehler oder native Mac-Laufzeitprobe. |
+| Abschließende lokale Gesamtgates | `npm run test:product` vollständig bestanden: 75 Basis- und 119 direkte Testdateien (194 insgesamt), einschließlich der korrigierten 13 Runner-Regressionen. `npm run test:docs` und `git diff --check` bestanden; Claude-Strukturprüfung, Rust-/Clippy-, Konverter- und Windows-Paketnachweise siehe oben. Technischer E0-Umsetzungsschnitt abgeschlossen, nicht als allgemeine Zielhost-/Releasefreigabe ausgegeben. |
+| Veröffentlichungsgebundene Cowork-Gates | `npm run build` versucht, nach erfolgreicher Native-/Statusprüfung durch `BUNDLED_PLUGIN_SOURCE_COMMIT_INVALID` abgelehnt: der vorhandene nicht committete Arbeitsstand ist kein sauberer Releasecommit. `test:plugin-zip` versucht, aktuelles RC157-Plugin-ZIP fehlt entsprechend. Schutz nicht umgangen; Cowork RC151 und veröffentlichte Standalone-Archive unverändert. Standalone-Engineering-Paket separat nachgewiesen, nicht als bestandener Cowork-Releasebuild ausgegeben. |
+
+Ein früher Testversuch ließ wegen geladener Windows-Canvas-DLL den eigenen
+Temporärordner `.tmp-standalone-package-conversion-4VGehN` zurück. Keine stärkere
+oder breitere Löschung wurde versucht; der reparierte Testlauf bereinigt seinen
+eigenen neuen Scope erfolgreich. Originale, vorhandene Ergebnisläufe und
+veröffentlichte Archive blieben unverändert. Der WSL-Supervisor-Nachweis ist
+eine Linux-Gegenprobe, keine native macOS-Evidenz. BL-010.50/51 bleiben offen.
 
 ## Historischer RC107-/DS-067-Nachweis
 

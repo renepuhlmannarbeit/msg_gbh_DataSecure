@@ -175,7 +175,7 @@ function removeOwnedRoot(root, initial) {
     const unboundCurrent = await client.send('continue_current_batch', 'ac'.repeat(8));
     assert.strictEqual(unboundCurrent.ok, false);
     assert.strictEqual(unboundCurrent.error_code, 'STANDALONE_NOTHING_TO_CONTINUE');
-    for (const action of ['resolve_history_results', 'resolve_history_ledger', 'continue_history_batch']) {
+    for (const action of ['resolve_history_results', 'resolve_history_ledger', 'continue_history_batch', 'get_run_failures']) {
       const unknown = await client.send(action, 'ac'.repeat(8), { batch_id: 'd'.repeat(64) });
       assert.strictEqual(unknown.ok, false, 'a missing history entry must not resolve or resume the latest run');
       assert.strictEqual(unknown.error_code, 'STANDALONE_HISTORY_MISSING');
@@ -196,6 +196,30 @@ function removeOwnedRoot(root, initial) {
     const unchanged = await client.send('get_public_state', '7'.repeat(16));
     assert.strictEqual(unchanged.result.preparing, false);
     assert.strictEqual(unchanged.result.processing, false);
+    // Exercise the real picker validator, service and framed sidecar reply,
+    // not a mocked error. An owner record is proven by its non-ZIP content
+    // and the larger OPC-looking sibling that Office named it after.
+    const ownerFile = path.join(sourceDirectory, '~$port.docx');
+    const originalOfficeFile = path.join(sourceDirectory, 'Report.docx');
+    fs.writeFileSync(ownerFile, 'synthetic Office owner record');
+    const officePrefix = Buffer.alloc(1024);
+    Buffer.from([0x50, 0x4b, 0x03, 0x04]).copy(officePrefix);
+    fs.writeFileSync(originalOfficeFile, officePrefix);
+    for (const [selected, expectedCode] of [
+      [[ownerFile], 'SOURCE_ARTIFACT_IGNORED'],
+      [[ownerFile, originalOfficeFile], 'SOURCE_SELECTION_REJECTED']
+    ]) {
+      const rejectedOwner = await client.send('admit_selected_sources', '6'.repeat(16), {
+        source_kind: 'files', source_paths: selected
+      });
+      assert.strictEqual(rejectedOwner.ok, false);
+      assert.strictEqual(rejectedOwner.error_code, expectedCode);
+      assert.deepStrictEqual(rejectedOwner.error_details, {
+        selection_files: [{ name: '~$port.docx', reason_code: 'SOURCE_ARTIFACT_IGNORED' }], selection_count: 1
+      }, 'single and mixed owner selections retain their exact local name and artifact reason');
+      assert.deepStrictEqual((await client.send('get_ui_context', '5'.repeat(16))).result.selected_files,
+        ['profil.txt'], 'a rejected owner selection cannot replace or partially extend the admission');
+    }
     const cancelled = await client.send('cancel_admission', 'd'.repeat(16));
     assert.strictEqual(cancelled.ok, true);
     const mixedRoot = path.join(root, 'mixed-folder');
@@ -224,13 +248,27 @@ function removeOwnedRoot(root, initial) {
     assert.strictEqual(rejectedFolder.ok, false);
     assert.strictEqual(rejectedFolder.error_code, 'SOURCE_FORMAT_SIZE_LIMIT',
       'the real sidecar must retain the safe size-limit reason instead of returning a generic failure');
+    assert.deepStrictEqual(rejectedFolder.error_details, {
+      selection_files: [{ name: 'documents/synthetic.txt', reason_code: 'SOURCE_FORMAT_SIZE_LIMIT' }], selection_count: 1
+    }, 'real framed IPC retains the complete local relative label and extension');
+    const emptyFile = path.join(oversizedNested, 'empty.md');
+    fs.writeFileSync(emptyFile, '');
+    const rejectedFiles = await client.send('admit_selected_sources', '2'.repeat(16), {
+      source_kind: 'files', source_paths: [oversizedFile, emptyFile]
+    });
+    assert.strictEqual(rejectedFiles.ok, false);
+    assert.strictEqual(rejectedFiles.error_code, 'SOURCE_SELECTION_REJECTED');
+    assert.deepStrictEqual(rejectedFiles.error_details, {
+      selection_files: [{ name: 'synthetic.txt', reason_code: 'SOURCE_FORMAT_SIZE_LIMIT' },
+        { name: 'empty.md', reason_code: 'SOURCE_FILE_EMPTY' }], selection_count: 2
+    }, 'all rejected direct selections cross the real sidecar boundary with fixed reasons');
     assert.deepStrictEqual((await client.send('get_ui_context', '3'.repeat(16))).result.selected_files, [],
       'a rejected folder must not create a partial admission');
     const stopped = await client.send('shutdown', 'e'.repeat(16));
     assert.strictEqual(stopped.ok, true);
     assert.strictEqual((await bounded(child.closed, 'sidecar did not stop')).code, 0);
     assert.doesNotMatch(fs.readFileSync(path.join(diagnostics, 'sidecar-interactions.jsonl'), 'utf8'),
-      /DATEILISTE|synthetic\.txt/u, 'private diagnostics retain codes but never source names');
+      /DATEILISTE|synthetic\.txt|empty\.md|documents|port\.docx|Report\.docx/u, 'private diagnostics retain codes but never source names');
 
     const blockedBase = path.join(root, 'blocked-root');
     fs.mkdirSync(blockedBase);

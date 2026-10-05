@@ -1,13 +1,17 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod native_smoke;
+mod ipc_transport;
+mod review_window;
+mod native_open;
+mod startup_diagnostics;
 
 use serde_json::{json, Value};
 use std::{
     fs::OpenOptions,
     io::{BufReader, Read, Write},
     path::{Path, PathBuf},
-    process::{Child, ChildStdin, Command, Stdio},
+    process::{Command, Stdio},
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
         mpsc::{self, Receiver},
@@ -69,6 +73,28 @@ fn diagnostic_event(
     error_code: Option<&str>,
     elapsed_ms: Option<u128>,
 ) {
+    diagnostic_correlated_event(event, action, outcome, error_code, elapsed_ms, None);
+}
+
+fn diagnostic_request_id(id: &str) -> Option<&str> {
+    ((16..=64).contains(&id.len()) && id.bytes().all(|value| value.is_ascii_hexdigit() && !value.is_ascii_uppercase()))
+        .then_some(id)
+}
+
+fn diagnostic_ipc_event(event: &str, action: &str, id: &str, outcome: &str,
+    error_code: Option<&str>, elapsed_ms: Option<u128>) {
+    diagnostic_correlated_event(event, Some(action), outcome, error_code, elapsed_ms,
+        diagnostic_request_id(id));
+}
+
+fn diagnostic_correlated_event(
+    event: &str,
+    action: Option<&str>,
+    outcome: &str,
+    error_code: Option<&str>,
+    elapsed_ms: Option<u128>,
+    request_id: Option<&str>,
+) {
     let Ok(_guard) = DIAGNOSTIC_LOCK.lock() else {
         return;
     };
@@ -106,19 +132,21 @@ fn diagnostic_event(
     if let Some(value) = elapsed_ms {
         record["elapsed_ms"] = json!(value);
     }
+    if let Some(value) = request_id {
+        record["request_id"] = json!(value);
+    }
     let _ = writeln!(file, "{record}");
 }
 
 struct SidecarProcess {
-    child: Child,
-    input: ChildStdin,
+    child: ipc_transport::ChildControl,
+    writes: mpsc::Sender<ipc_transport::WriteRequest>,
     responses: Receiver<Result<Value, String>>,
 }
 
 impl Drop for SidecarProcess {
     fn drop(&mut self) {
-        let _ = self.child.kill();
-        let _ = self.child.wait();
+        self.child.terminate();
     }
 }
 
@@ -126,9 +154,12 @@ impl Drop for SidecarProcess {
 struct DesktopState {
     app: AppHandle,
     sidecar: Arc<Mutex<Option<SidecarProcess>>>,
+    lifecycle: ipc_transport::Lifecycle,
+    exit_gate: ipc_transport::ExitGate,
     selection_busy: Arc<AtomicBool>,
     admission_present: Arc<AtomicBool>,
     frontend_ready: Arc<AtomicBool>,
+    review_window_binding: Arc<Mutex<review_window::Binding>>,
 }
 
 struct SelectionGuard(Arc<AtomicBool>);
@@ -400,7 +431,18 @@ fn configure_support_trace(command: &mut Command, setting: Option<&std::ffi::OsS
     }
 }
 
-fn spawn_sidecar(app: &tauri::AppHandle) -> Result<SidecarProcess, String> {
+fn runtime_spawn_code(error: &std::io::Error) -> &'static str {
+    match error.kind() {
+        std::io::ErrorKind::NotFound => "STANDALONE_RUNTIME_MISSING",
+        std::io::ErrorKind::PermissionDenied => "STANDALONE_RUNTIME_DENIED",
+        _ if matches!(error.raw_os_error(), Some(193 | 216)) && cfg!(windows) => "STANDALONE_RUNTIME_ARCHITECTURE_INVALID",
+        _ if matches!(error.raw_os_error(), Some(8)) && cfg!(unix) => "STANDALONE_RUNTIME_ARCHITECTURE_INVALID",
+        _ => "STANDALONE_RUNTIME_START_FAILED",
+    }
+}
+
+fn spawn_sidecar(app: &tauri::AppHandle, lifecycle: &ipc_transport::Lifecycle, deadline: Instant) -> Result<SidecarProcess, String> {
+    let spawn_guard = lifecycle.begin_spawn()?;
     diagnostic_event("sidecar_starting", None, "progress", None, None);
     let (executable, script) = runtime_paths(app).inspect_err(|code| {
         diagnostic_event(
@@ -507,25 +549,30 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<SidecarProcess, String> {
         use std::os::windows::process::CommandExt;
         command.creation_flags(0x08000000);
     }
-    let mut child = command.spawn().map_err(|_| {
+    let mut child = command.spawn().map_err(|error| {
+        let code = runtime_spawn_code(&error);
         diagnostic_event(
             "sidecar_spawn_failed",
             None,
             "failed",
-            Some("STANDALONE_RUNTIME_START_FAILED"),
+            Some(code),
             None,
         );
-        "STANDALONE_RUNTIME_START_FAILED".to_string()
+        code.to_string()
     })?;
     diagnostic_event("sidecar_spawned", None, "ready", None, None);
-    let input = child
-        .stdin
-        .take()
-        .ok_or_else(|| "STANDALONE_RUNTIME_START_FAILED".to_string())?;
-    let output = child
-        .stdout
-        .take()
-        .ok_or_else(|| "STANDALONE_RUNTIME_START_FAILED".to_string())?;
+    let input = child.stdin.take();
+    let output = child.stdout.take();
+    let child = ipc_transport::ChildControl::new(child);
+    spawn_guard.register(child.clone())?;
+    if Instant::now() >= deadline {
+        child.terminate();
+        return Err("STANDALONE_IPC_TIMEOUT".to_string());
+    }
+    let (Some(input), Some(output)) = (input, output) else {
+        child.terminate();
+        return Err("STANDALONE_RUNTIME_START_FAILED".to_string());
+    };
     let (sender, responses) = mpsc::sync_channel(1);
     std::thread::spawn(move || {
         let mut reader = BufReader::new(output);
@@ -539,7 +586,7 @@ fn spawn_sidecar(app: &tauri::AppHandle) -> Result<SidecarProcess, String> {
     });
     Ok(SidecarProcess {
         child,
-        input,
+        writes: ipc_transport::writer(input),
         responses,
     })
 }
@@ -662,22 +709,41 @@ enum ValidatedPrivateResponse {
     Error(String, Option<Value>),
 }
 
-fn valid_local_error_details(details: &Value) -> bool {
+fn safe_local_label(label: &str) -> bool {
+    !label.is_empty() && label.len() <= 1024 && !label.starts_with('/') &&
+        !label.contains(['\\', ':']) && !label.chars().any(char::is_control) &&
+        label.split('/').all(|part| !part.is_empty() && part != "." && part != "..")
+}
+
+fn selection_reason(code: &str) -> bool {
+    matches!(code, "SOURCE_FORMAT_SIZE_LIMIT" | "SOURCE_FILE_EMPTY" | "SOURCE_FORMAT_UNSUPPORTED" |
+        "SOURCE_READ_FAILED" | "SOURCE_ACCESS_DENIED" | "SOURCE_PATH_UNSAFE" | "SOURCE_IDENTITY_CHANGED" |
+        "SOURCE_ARTIFACT_IGNORED")
+}
+
+fn valid_local_error_details(code: &str, details: &Value) -> bool {
     let Some(object) = details.as_object() else { return false; };
     if object.len() != 2 { return false; }
-    let Some(files) = object.get("unsupported_files").and_then(Value::as_array) else { return false; };
-    let Some(count) = object.get("unsupported_count").and_then(Value::as_u64) else { return false; };
-    files.len() <= MAX_BATCH_FILES && count >= files.len() as u64 && count <= 4096 &&
-        files.iter().all(|file| file.as_str().is_some_and(|label|
-            !label.is_empty() && label.len() <= 1024 && !label.starts_with('/') &&
-            !label.contains('\\') && label.split('/').all(|part| !part.is_empty() && part != "." && part != "..")))
+    if code == "SOURCE_FOLDER_UNSUPPORTED_FILES" {
+        let Some(files) = object.get("unsupported_files").and_then(Value::as_array) else { return false; };
+        let Some(count) = object.get("unsupported_count").and_then(Value::as_u64) else { return false; };
+        return files.len() <= MAX_BATCH_FILES && count >= files.len() as u64 && count <= 4096 &&
+            files.iter().all(|file| file.as_str().is_some_and(safe_local_label));
+    }
+    if !selection_reason(code) && code != "SOURCE_SELECTION_REJECTED" { return false; }
+    let Some(files) = object.get("selection_files").and_then(Value::as_array) else { return false; };
+    let Some(count) = object.get("selection_count").and_then(Value::as_u64) else { return false; };
+    !files.is_empty() && files.len() <= MAX_BATCH_FILES && count >= files.len() as u64 && count <= 4096 &&
+        files.iter().all(|file| file.as_object().is_some_and(|entry|
+            entry.len() == 2 && entry.get("name").and_then(Value::as_str).is_some_and(safe_local_label) &&
+            entry.get("reason_code").and_then(Value::as_str).is_some_and(selection_reason)))
 }
 
 fn local_error_parts(error: &str) -> (String, Option<Value>) {
     let Ok(value) = serde_json::from_str::<Value>(error) else { return (error.to_string(), None); };
     let Some(code) = value.get("code").and_then(Value::as_str) else { return (error.to_string(), None); };
     let details = value.get("details").filter(|details|
-        code == "SOURCE_FOLDER_UNSUPPORTED_FILES" && valid_local_error_details(details)).cloned();
+        valid_local_error_details(code, details)).cloned();
     if details.is_none() { return (error.to_string(), None); }
     (code.to_string(), details)
 }
@@ -701,10 +767,10 @@ fn validate_private_response(
             .ok_or(()),
         Some(false) if object.len() == 4 || object.len() == 5 => {
             let code = object.get("error_code").and_then(Value::as_str)
-                .filter(|value| !value.is_empty()).ok_or(())?;
+                .filter(|value| !value.is_empty() && value.len() <= 128 &&
+                    value.bytes().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == b'_')).ok_or(())?;
             let details = object.get("error_details");
-            if details.is_some() && (code != "SOURCE_FOLDER_UNSUPPORTED_FILES" ||
-                !valid_local_error_details(details.ok_or(())?)) { return Err(()); }
+            if details.is_some() && !valid_local_error_details(code, details.ok_or(())?) { return Err(()); }
             if object.len() == 5 && details.is_none() { return Err(()); }
             Ok(ValidatedPrivateResponse::Error(code.to_string(), details.cloned()))
         },
@@ -767,6 +833,27 @@ fn history_rpc(state: &DesktopState, action: &str, batch_id: &str) -> Result<Val
     rpc_request(state, action, &id, request)
 }
 
+fn rpc_duration(action: &str) -> Duration {
+    Duration::from_secs(if action == "admit_selected_sources" { 300 } else { 30 })
+}
+
+fn admission_transport_code(action: &str, code: String) -> String {
+    if action == "admit_selected_sources" && code == ipc_transport::TIMEOUT {
+        "STANDALONE_ADMISSION_TIMEOUT".to_string()
+    } else { code }
+}
+
+fn admission_progress(state: &DesktopState, action: &str, phase: &str, elapsed_ms: u128) {
+    if action != "admit_selected_sources" { return; }
+    // An operation heartbeat, not an invented percent or claimed file count.
+    if let Some(window) = state.app.get_webview_window("main") {
+        let _ = window.emit("datasecure-admission-progress", json!({
+            "phase": phase, "elapsed_ms": elapsed_ms
+        }));
+    }
+    diagnostic_event("admission_progress", Some(action), phase, None, Some(elapsed_ms));
+}
+
 fn rpc_request(
     state: &DesktopState,
     action: &str,
@@ -774,51 +861,57 @@ fn rpc_request(
     request: Value,
 ) -> Result<Value, String> {
     let started = Instant::now();
-    diagnostic_event("ipc_request_started", Some(action), "progress", None, None);
-    let payload = serde_json::to_vec(&request).map_err(|_| "STANDALONE_IPC_FAILED".to_string())?;
+    // Recursive admission can validate/hash up to 200 files / 500 MB, including
+    // slow local/cloud-backed disks. It is not a 30-second ordinary UI request.
+    let deadline = started + rpc_duration(action);
+    diagnostic_ipc_event("ipc_request_started", action, id, "progress", None, None);
+    admission_progress(state, action, "validating", 0);
+    let early_failure = |code: &String| diagnostic_ipc_event("ipc_request_failed", action, id,
+        "failed", Some(code), Some(started.elapsed().as_millis()));
+    let payload = serde_json::to_vec(&request).map_err(|_| "STANDALONE_IPC_FAILED".to_string())
+        .inspect_err(early_failure)?;
     if payload.len() > MAX_FRAME_BYTES {
+        early_failure(&"STANDALONE_IPC_FAILED".to_string());
         return Err("STANDALONE_IPC_FAILED".to_string());
     }
-    let mut process_guard = state
-        .sidecar
-        .lock()
-        .map_err(|_| "STANDALONE_IPC_FAILED".to_string())?;
+    let mut process_guard = ipc_transport::lock_until(&state.sidecar, deadline, &state.lifecycle.stopping)
+        .map_err(|code| admission_transport_code(action, code)).inspect_err(early_failure)?;
     if process_guard.is_none() {
-        *process_guard = Some(spawn_sidecar(&state.app)?);
+        // Spawning may itself be delayed by the OS. A late result is dropped
+        // (and its owned child terminated), never adopted after shutdown.
+        let app = state.app.clone();
+        let lifecycle = state.lifecycle.clone();
+        let (sender, receiver) = mpsc::channel();
+        std::thread::spawn(move || { let _ = sender.send(spawn_sidecar(&app, &lifecycle, deadline)); });
+        *process_guard = Some(ipc_transport::receive_until(&receiver, deadline, &state.lifecycle.stopping)
+            .and_then(|result| result).map_err(|code| admission_transport_code(action, code))
+            .inspect_err(early_failure)?);
     }
     let result = (|| {
         let process = process_guard
             .as_mut()
             .ok_or_else(|| "STANDALONE_RUNTIME_START_FAILED".to_string())?;
-        process
-            .input
-            .write_all(&(payload.len() as u32).to_be_bytes())
-            .map_err(|_| "STANDALONE_IPC_FAILED".to_string())?;
-        process
-            .input
-            .write_all(&payload)
-            .and_then(|_| process.input.flush())
-            .map_err(|_| "STANDALONE_IPC_FAILED".to_string())?;
-        diagnostic_event("ipc_request_sent", Some(action), "progress", None, None);
-        process
-            .responses
-            .recv_timeout(Duration::from_secs(30))
-            .map_err(|_| "STANDALONE_IPC_TIMEOUT".to_string())?
+        let (sent, completed) = mpsc::channel();
+        process.writes.send((payload, sent)).map_err(|_| "STANDALONE_IPC_FAILED".to_string())?;
+        ipc_transport::receive_until(&completed, deadline, &state.lifecycle.stopping)??;
+        diagnostic_ipc_event("ipc_request_sent", action, id, "progress", None, None);
+        ipc_transport::receive_until_with_progress(&process.responses, deadline, &state.lifecycle.stopping,
+            || admission_progress(state, action, "validating", started.elapsed().as_millis()))?
     })();
     let response = match result {
         Ok(response) => response,
         Err(code) => {
+            let code = admission_transport_code(action, code);
+            admission_progress(state, action, "failed", started.elapsed().as_millis());
             let child_exited = process_guard
-                .as_mut()
-                .and_then(|process| process.child.try_wait().ok().flatten())
-                .is_some();
-            diagnostic_event(
+                .as_ref().is_some_and(|process| process.child.exited());
+            diagnostic_ipc_event(
                 if child_exited {
                     "sidecar_exited_before_response"
                 } else {
                     "ipc_request_failed"
                 },
-                Some(action),
+                action, id,
                 "failed",
                 Some(&code),
                 Some(started.elapsed().as_millis()),
@@ -830,9 +923,9 @@ fn rpc_request(
     };
     let validated = validate_private_response(&response, id);
     if validated.is_err() {
-        diagnostic_event(
+        diagnostic_ipc_event(
             "ipc_response_invalid",
-            Some(action),
+            action, id,
             "failed",
             Some("STANDALONE_IPC_FAILED"),
             Some(started.elapsed().as_millis()),
@@ -843,22 +936,24 @@ fn rpc_request(
     }
     let validated = validated.expect("validated above");
     if let ValidatedPrivateResponse::Error(code, details) = validated {
-        diagnostic_event(
+        admission_progress(state, action, "rejected", started.elapsed().as_millis());
+        diagnostic_ipc_event(
             "ipc_response_error",
-            Some(action),
+            action, id,
             "failed",
             Some(&code),
             Some(started.elapsed().as_millis()),
         );
         return Err(details.map_or(code.clone(), |details| json!({ "code": code, "details": details }).to_string()));
     }
-    diagnostic_event(
+    diagnostic_ipc_event(
         "ipc_response_ok",
-        Some(action),
+        action, id,
         "ready",
         None,
         Some(started.elapsed().as_millis()),
     );
+    admission_progress(state, action, "accepted", started.elapsed().as_millis());
     match validated {
         ValidatedPrivateResponse::Success(result) => Ok(result),
         ValidatedPrivateResponse::Error(_, _) => unreachable!("handled above"),
@@ -921,6 +1016,23 @@ fn validate_local_target(result: Value, expected_kind: &str) -> Result<PathBuf, 
     Ok(target)
 }
 
+fn history_local_target(mut result: Value, kind: &str, identity: bool) -> Result<(PathBuf, Option<String>), String> {
+    let warning = if identity {
+        let object = result.as_object_mut().ok_or_else(|| "STANDALONE_IPC_FAILED".to_string())?;
+        let published = object.get("publication_available").and_then(Value::as_bool)
+            .ok_or_else(|| "STANDALONE_IPC_FAILED".to_string())?;
+        let warning = object.get("identity_mapping_warning").and_then(Value::as_str);
+        if kind != "file" || (published && (object.len() != 5 || object.contains_key("identity_mapping_warning")))
+            || (!published && (object.len() != 6 || warning != Some("STANDALONE_IDENTITY_PUBLICATION_FAILED"))) {
+            return Err("STANDALONE_IPC_FAILED".to_string());
+        }
+        let warning = warning.map(str::to_string);
+        object.remove("publication_available"); object.remove("identity_mapping_warning");
+        warning
+    } else { None };
+    Ok((validate_local_target(result, kind)?, warning))
+}
+
 fn native_open_command(target: &Path, kind: &str) -> Result<Command, String> {
     #[cfg(target_os = "windows")]
     {
@@ -960,10 +1072,15 @@ fn native_open_command(target: &Path, kind: &str) -> Result<Command, String> {
 
 fn open_local_target(target: &Path, kind: &str, action: &str) -> Result<Value, String> {
     diagnostic_event("os_open_requested", Some(action), "progress", None, None);
-    let mut command = native_open_command(target, kind)?;
+    let command = native_open_command(target, kind)?;
     // Do not apply CREATE_NO_WINDOW or another hidden-window flag here.  The
     // operating-system file manager is intentionally a visible user action.
-    command.spawn().map_err(|_| {
+    let completed_action = action.to_string();
+    native_open::handoff(command, move |status| {
+        if !matches!(status, Ok(status) if status.success()) {
+            diagnostic_event("os_open_helper_failed", Some(&completed_action), "failed", Some("STANDALONE_OS_OPEN_HELPER_FAILED"), None);
+        }
+    }).map_err(|_| {
         let code = if kind == "file" {
             "STANDALONE_LEDGER_OPEN_FAILED"
         } else {
@@ -1151,14 +1268,45 @@ async fn open_review_window(app: AppHandle) -> Result<Value, String> {
         window.show().map_err(|_| "STANDALONE_REVIEW_WINDOW_FAILED".to_string())?;
         window.set_focus().map_err(|_| "STANDALONE_REVIEW_WINDOW_FAILED".to_string())?;
     } else {
-        WebviewWindowBuilder::new(&app, "review", WebviewUrl::App("review.html".into()))
+        let owned = app.state::<DesktopState>().inner().clone();
+        let generation = owned.review_window_binding.lock()
+            .map_err(|_| "STANDALONE_REVIEW_WINDOW_FAILED".to_string())?.opened();
+        let window = WebviewWindowBuilder::new(&app, "review", WebviewUrl::App("review.html".into()))
             .title("DataSecure – lokale Prüfung")
+            .visible(false)
             .inner_size(1080.0, 760.0)
             .min_inner_size(680.0, 500.0)
             .build()
             .map_err(|_| "STANDALONE_REVIEW_WINDOW_FAILED".to_string())?;
+        // The closure belongs to this actual window instance, not the reused
+        // "review" label. A late close event from an old window cannot touch a
+        // newer window, its generation, or its review group.
+        window.on_window_event(move |event| {
+            if matches!(event, WindowEvent::CloseRequested { .. }) {
+                defer_closed_review(&owned, generation);
+            }
+        });
+        if window.show().and_then(|_| window.set_focus()).is_err() {
+            let _ = window.close();
+            return Err("STANDALONE_REVIEW_WINDOW_FAILED".to_string());
+        }
     }
     Ok(json!({ "ok": true, "opened": true }))
+}
+
+fn defer_closed_review(state: &DesktopState, generation: u64) {
+    let review_id = state.review_window_binding.lock().ok()
+        .and_then(|mut binding| binding.close_snapshot(generation));
+    if let Some(review_id) = review_id {
+        let owned = state.clone();
+        tauri::async_runtime::spawn_blocking(move || {
+            let id = request_id();
+            let _ = rpc_request(&owned, "submit_review", &id, json!({
+                "schema": IPC_SCHEMA, "request_id": id, "action": "submit_review",
+                "review_id": review_id, "answer": { "action": "deferred" }
+            }));
+        });
+    }
 }
 
 fn review_window_only(window: &tauri::WebviewWindow) -> Result<(), String> {
@@ -1192,12 +1340,19 @@ async fn get_review_chunk(
         return Err("STANDALONE_REVIEW_SESSION_INVALID".to_string());
     }
     let owned = state.inner().clone();
+    let generation = owned.review_window_binding.lock()
+        .map_err(|_| "STANDALONE_REVIEW_WINDOW_FAILED".to_string())?.generation();
     tauri::async_runtime::spawn_blocking(move || {
         let id = request_id();
-        rpc_request(&owned, "get_review_chunk", &id, json!({
+        let result = rpc_request(&owned, "get_review_chunk", &id, json!({
             "schema": IPC_SCHEMA, "request_id": id, "action": "get_review_chunk",
             "review_id": review_id, "chunk_index": chunk_index
-        }))
+        }));
+        if result.is_ok() {
+            owned.review_window_binding.lock()
+                .map_err(|_| "STANDALONE_REVIEW_WINDOW_FAILED".to_string())?.delivered(generation, &review_id);
+        }
+        result
     }).await.map_err(|_| "STANDALONE_REVIEW_SESSION_INVALID".to_string())?
 }
 
@@ -1215,10 +1370,15 @@ async fn submit_review(
     let owned = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
         let id = request_id();
-        rpc_request(&owned, "submit_review", &id, json!({
+        let result = rpc_request(&owned, "submit_review", &id, json!({
             "schema": IPC_SCHEMA, "request_id": id, "action": "submit_review",
             "review_id": review_id, "answer": answer
-        }))
+        }));
+        if result.is_ok() {
+            owned.review_window_binding.lock()
+                .map_err(|_| "STANDALONE_REVIEW_WINDOW_FAILED".to_string())?.accepted(&review_id);
+        }
+        result
     }).await.map_err(|_| "STANDALONE_REVIEW_DECISION_INVALID".to_string())?
 }
 
@@ -1268,8 +1428,8 @@ async fn open_history_target(
     kind: &'static str,
 ) -> Result<Value, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let target = history_rpc(&state, resolve_action, &batch_id)
-            .and_then(|result| validate_local_target(result, kind))
+        let resolved = history_rpc(&state, resolve_action, &batch_id)?;
+        let (target, warning) = history_local_target(resolved, kind, resolve_action == "resolve_history_identity_mapping")
             .inspect_err(|code| {
                 diagnostic_event(
                     "local_target_validation_failed",
@@ -1279,7 +1439,9 @@ async fn open_history_target(
                     None,
                 )
             })?;
-        open_local_target(&target, kind, action)
+        let mut result = open_local_target(&target, kind, action)?;
+        if let Some(code) = warning { result["identity_mapping_warning"] = json!(code); }
+        Ok(result)
     })
     .await
     .map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())?
@@ -1448,9 +1610,12 @@ async fn open_diagnostic_folder() -> Result<Value, String> {
     let directory = diagnostic_directory();
     std::fs::create_dir_all(&directory)
         .map_err(|_| "STANDALONE_DIAGNOSTICS_OPEN_FAILED".to_string())?;
-    let mut command = native_open_command(&directory, "directory")?;
-    command
-        .spawn()
+    let command = native_open_command(&directory, "directory")?;
+    native_open::handoff(command, |status| {
+        if !matches!(status, Ok(status) if status.success()) {
+            diagnostic_event("os_open_helper_failed", Some("open_diagnostic_folder"), "failed", Some("STANDALONE_OS_OPEN_HELPER_FAILED"), None);
+        }
+    })
         .map_err(|_| "STANDALONE_DIAGNOSTICS_OPEN_FAILED".to_string())?;
     diagnostic_event("diagnostic_folder_opened", None, "ready", None, None);
     Ok(json!({ "ok": true, "opened": true, "external_disclosure": false }))
@@ -1480,7 +1645,28 @@ fn frontend_ready(state: State<'_, DesktopState>, native_drop_ready: Option<bool
         "admission_prepared": state.admission_present.load(Ordering::Acquire) })
 }
 
+fn begin_native_exit(state: DesktopState) {
+    if !state.exit_gate.begin() { return; }
+    state.lifecycle.stopping.store(true, Ordering::Release);
+    tauri::async_runtime::spawn_blocking(move || {
+        let stopped = state.lifecycle.stop();
+        diagnostic_event("sidecar_shutdown", None, if stopped { "ready" } else { "failed" },
+            if stopped { None } else { Some("STANDALONE_SHUTDOWN_FAILED") }, None);
+        state.app.exit(state.exit_gate.finish(stopped));
+    });
+}
+
 fn main() {
+    if std::env::args_os().nth(1).is_some_and(|value| value == "--startup-diagnostics") {
+        let directory = diagnostic_directory();
+        if std::fs::create_dir_all(&directory).is_err() { std::process::exit(70); }
+        // The CLI has no GUI loop keeping the waiter alive. This helper exits
+        // after handing the directory to the OS; wait before leaving the CLI.
+        if let Ok(command) = native_open_command(&directory, "directory") {
+            if !matches!(native_open::handoff_before_exit(command), Ok(status) if status.success()) { std::process::exit(70); }
+        } else { std::process::exit(70); }
+        return;
+    }
     let profile = match native_smoke::from_environment() {
         Ok(profile) => profile,
         Err(_) => std::process::exit(65),
@@ -1508,9 +1694,12 @@ fn main() {
             let state = DesktopState {
                 app: app.handle().clone(),
                 sidecar: Arc::new(Mutex::new(None)),
+                lifecycle: ipc_transport::Lifecycle::default(),
+                exit_gate: ipc_transport::ExitGate::default(),
                 selection_busy: Arc::new(AtomicBool::new(false)),
                 admission_present: Arc::new(AtomicBool::new(false)),
                 frontend_ready: Arc::new(AtomicBool::new(false)),
+                review_window_binding: Arc::new(Mutex::new(review_window::Binding::default())),
             };
             app.manage(state);
             diagnostic_event("setup_completed", None, "ready", None, None);
@@ -1518,43 +1707,21 @@ fn main() {
         })
         .on_window_event(|window, event| {
             if window.label() == "review" {
-                if matches!(event, WindowEvent::CloseRequested { .. }) {
-                    if let Some(state) = window.try_state::<DesktopState>() {
-                        let owned = state.inner().clone();
-                        tauri::async_runtime::spawn_blocking(move || {
-                            if let Ok(session) = rpc(&owned, "get_review_session", None, &[], None, None) {
-                                if let Some(review_id) = session.get("review_id").and_then(Value::as_str) {
-                                    let id = request_id();
-                                    let _ = rpc_request(&owned, "submit_review", &id, json!({
-                                        "schema": IPC_SCHEMA, "request_id": id, "action": "submit_review",
-                                        "review_id": review_id, "answer": { "action": "deferred" }
-                                    }));
-                                }
-                            }
-                        });
-                    }
-                }
+                // Its instance-bound listener owns review close; this global
+                // label callback must not query or defer a future session.
                 return;
             }
             if window.label() != "main" {
                 return;
             }
             match event {
-                WindowEvent::CloseRequested { .. }
-                    if NATIVE_SMOKE_PROFILE
-                        .get()
-                        .and_then(Option::as_ref)
-                        .is_some() =>
-                {
+                WindowEvent::CloseRequested { api, .. } => {
+                    api.prevent_close();
                     if let Some(state) = window.try_state::<DesktopState>() {
-                        if let Ok(mut process) = state.sidecar.lock() {
-                            process.take();
-                        }
+                        begin_native_exit(state.inner().clone());
+                    } else {
+                        window.app_handle().exit(0);
                     }
-                    // Headless package smokes must prove the app-owned child is
-                    // released before the synthetic window-manager close ends
-                    // WebKit. Normal user sessions keep Tauri's native close path.
-                    window.app_handle().exit(0);
                 }
                 WindowEvent::DragDrop(DragDropEvent::Drop { paths, .. }) => {
                     // Configured windows can emit events before setup manages
@@ -1605,25 +1772,29 @@ fn main() {
         .build(context);
     let app = match result {
         Ok(app) => app,
-        Err(_) => {
+        Err(error) => {
+            let code = startup_diagnostics::classify(&error);
             diagnostic_event(
                 "application_run_failed",
                 None,
                 "error",
-                Some("STANDALONE_APPLICATION_RUN_FAILED"),
+                Some(code),
                 None,
             );
+            if let Ok(file) = startup_diagnostics::report(&diagnostic_directory(), code) {
+                if let Ok(command) = native_open_command(&file, "file") {
+                    let _ = native_open::handoff_before_exit(command);
+                }
+            } else { eprintln!("DataSecure Startfehler: {code}. Diagnose konnte nicht geschrieben werden."); }
             std::process::exit(70);
         }
     };
     app.run(|app_handle, event| {
-        if matches!(
-            event,
-            tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
-        ) {
+        if let tauri::RunEvent::ExitRequested { api, code, .. } = event {
             if let Some(state) = app_handle.try_state::<DesktopState>() {
-                if let Ok(mut process) = state.sidecar.lock() {
-                    process.take();
+                if !state.exit_gate.allowed(code) {
+                    api.prevent_exit();
+                    begin_native_exit(state.inner().clone());
                 }
             }
         }
@@ -1633,6 +1804,17 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn diagnostic_ipc_correlation_accepts_only_bounded_content_free_ids() {
+        let id = request_id();
+        assert_eq!(diagnostic_request_id(&id), Some(id.as_str()));
+        assert_eq!(diagnostic_request_id("0123456789abcdef"), Some("0123456789abcdef"));
+        for invalid in ["private/file.pdf", "Anna Beispiel", "ABCDEF0123456789", "", "1"] {
+            assert_eq!(diagnostic_request_id(invalid), None);
+        }
+        assert_eq!(diagnostic_request_id(&"a".repeat(65)), None);
+    }
 
     #[test]
     fn inactive_previous_runs_never_block_a_new_selection() {
@@ -2040,6 +2222,54 @@ mod tests {
         }
     }
 
+    #[test]
+    fn named_selection_errors_cross_only_the_bounded_local_contract() {
+        let id = "0123456789abcdef";
+        let details = json!({"selection_files": [
+            {"name": "Unterordner/leere.csv", "reason_code": "SOURCE_FILE_EMPTY"},
+            {"name": "gesperrt.pdf", "reason_code": "SOURCE_ACCESS_DENIED"}
+        ], "selection_count": 2});
+        let response = json!({"schema": RESPONSE_SCHEMA, "request_id": id, "ok": false,
+            "error_code": "SOURCE_SELECTION_REJECTED", "error_details": details});
+        assert!(validate_private_response(&response, id).is_ok());
+        let encoded = json!({"code": "SOURCE_SELECTION_REJECTED", "details": details}).to_string();
+        assert_eq!(local_error_parts(&encoded).0, "SOURCE_SELECTION_REJECTED");
+        for label in ["C:/private.pdf", "../private.pdf", "/private.pdf", "a\\private.pdf", "a\nprivate.pdf"] {
+            let mut invalid = response.clone();
+            invalid["error_details"]["selection_files"][0]["name"] = json!(label);
+            assert!(validate_private_response(&invalid, id).is_err(), "{label}");
+        }
+        let mut invalid = response;
+        invalid["error_details"]["selection_files"][0]["reason_code"] = json!("raw error with content");
+        assert!(validate_private_response(&invalid, id).is_err());
+    }
+
+    #[test]
+    fn office_owner_error_retains_its_name_for_single_and_mixed_admission() {
+        let id = "0123456789abcdef";
+        let details = json!({"selection_files": [
+            {"name": "~$port.docx", "reason_code": "SOURCE_ARTIFACT_IGNORED"}
+        ], "selection_count": 1});
+        for code in ["SOURCE_ARTIFACT_IGNORED", "SOURCE_SELECTION_REJECTED"] {
+            let response = json!({"schema": RESPONSE_SCHEMA, "request_id": id, "ok": false,
+                "error_code": code, "error_details": details});
+            assert!(validate_private_response(&response, id).is_ok(), "{code}");
+            let encoded = json!({"code": code, "details": details}).to_string();
+            let (decoded_code, decoded_details) = local_error_parts(&encoded);
+            assert_eq!(decoded_code, code);
+            assert_eq!(decoded_details.expect("local details")["selection_files"][0]["name"], "~$port.docx");
+        }
+    }
+
+    #[test]
+    fn runtime_spawn_errors_are_safe_categories_not_raw_os_messages() {
+        assert_eq!(runtime_spawn_code(&std::io::Error::new(std::io::ErrorKind::PermissionDenied, "private path")), "STANDALONE_RUNTIME_DENIED");
+        assert_eq!(runtime_spawn_code(&std::io::Error::new(std::io::ErrorKind::NotFound, "private path")), "STANDALONE_RUNTIME_MISSING");
+        assert_eq!(runtime_spawn_code(&std::io::Error::other("private path")), "STANDALONE_RUNTIME_START_FAILED");
+        #[cfg(windows)]
+        assert_eq!(runtime_spawn_code(&std::io::Error::from_raw_os_error(193)), "STANDALONE_RUNTIME_ARCHITECTURE_INVALID");
+    }
+
     #[cfg(target_os = "windows")]
     #[test]
     fn child_launch_removes_only_windows_verbatim_path_spelling() {
@@ -2087,6 +2317,28 @@ mod tests {
         assert!(!windows_attributes_contain_reparse_point(0x10));
     }
 
+    #[test]
+    fn history_identity_open_accepts_only_closed_publication_status() {
+        let path = std::env::current_exe().unwrap();
+        let base = json!({"ok": true, "target_kind": "file", "local_path": path, "external_disclosure": false});
+        let mut published = base.clone(); published["publication_available"] = json!(true);
+        let (target, warning) = history_local_target(published.clone(), "file", true).unwrap();
+        assert_eq!(target, path); assert_eq!(warning, None);
+        let mut fallback = base.clone(); fallback["publication_available"] = json!(false);
+        fallback["identity_mapping_warning"] = json!("STANDALONE_IDENTITY_PUBLICATION_FAILED");
+        assert_eq!(history_local_target(fallback.clone(), "file", true).unwrap().1.as_deref(), Some("STANDALONE_IDENTITY_PUBLICATION_FAILED"));
+        for mut invalid in [published.clone(), fallback.clone()] {
+            invalid["unexpected"] = json!("private detail");
+            assert_eq!(history_local_target(invalid, "file", true).unwrap_err(), "STANDALONE_IPC_FAILED");
+        }
+        fallback["identity_mapping_warning"] = json!("private detail");
+        assert_eq!(history_local_target(fallback, "file", true).unwrap_err(), "STANDALONE_IPC_FAILED");
+        published["identity_mapping_warning"] = json!("STANDALONE_IDENTITY_PUBLICATION_FAILED");
+        assert_eq!(history_local_target(published, "file", true).unwrap_err(), "STANDALONE_IPC_FAILED");
+        assert_eq!(history_local_target(base.clone(), "file", true).unwrap_err(), "STANDALONE_IPC_FAILED");
+        assert_eq!(history_local_target(base, "file", false).unwrap().1, None);
+    }
+
     #[cfg(unix)]
     #[test]
     fn refuses_non_utf8_source_paths() {
@@ -2099,3 +2351,13 @@ mod tests {
         );
     }
 }
+    #[test]
+    fn admission_has_its_own_bounded_deadline_and_honest_transport_failure() {
+        assert_eq!(rpc_duration("admit_selected_sources"), Duration::from_secs(300));
+        assert_eq!(rpc_duration("get_public_state"), Duration::from_secs(30));
+        assert_eq!(rpc_duration("submit_review"), Duration::from_secs(30));
+        assert_eq!(admission_transport_code("admit_selected_sources", ipc_transport::TIMEOUT.to_string()),
+            "STANDALONE_ADMISSION_TIMEOUT");
+        assert_eq!(admission_transport_code("get_public_state", ipc_transport::TIMEOUT.to_string()), ipc_transport::TIMEOUT);
+        assert_eq!(admission_transport_code("admit_selected_sources", ipc_transport::CLOSED.to_string()), ipc_transport::CLOSED);
+    }

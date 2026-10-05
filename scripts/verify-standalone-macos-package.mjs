@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { readCentralModes } from './lib/zip.mjs';
 import { verifyMacNativeContract } from './lib/macos-native-contract.mjs';
+import { verifyStandaloneInventory, verifyConversionInventory, verifyArchiveChecksum } from './lib/standalone-package-integrity.mjs';
 
 const require = createRequire(import.meta.url);
 const { readZip } = require('../plugins/data-secure/server/zip-reader.js');
@@ -71,6 +72,7 @@ assert.equal(manifest.requires_node_install, false);
 assert.equal(manifest.requires_rust_install, false);
 assert.equal(manifest.requires_network, false);
 assert.equal(manifest.requires_webview2, false);
+verifyStandaloneInventory(relative, manifest);
 for (const file of manifest.files) {
   const value = relative.get(file.path);
   assert.ok(value, `STANDALONE_MANIFEST_MISSING:${file.path}`);
@@ -90,12 +92,6 @@ for (const component of rustLicenses.components) {
     item.versionInfo === component.version && item.licenseDeclared === component.license &&
     item.licenseConcluded === component.license));
 }
-const sums = relative.get('SHA256SUMS').toString('utf8').trim().split(/\r?\n/u);
-for (const line of sums) {
-  const match = /^([a-f0-9]{64})  (.+)$/u.exec(line);
-  assert.ok(match, 'STANDALONE_SHA256SUMS_INVALID');
-  assert.equal(crypto.createHash('sha256').update(relative.get(match[2])).digest('hex'), match[1]);
-}
 for (const executable of executables) {
   assert.equal(modes.get(`${prefix}${executable}`), 0o100755);
   const value = relative.get(executable);
@@ -106,14 +102,9 @@ const native = verifyMacNativeContract(relative, { target: productTarget,
 const conversion = JSON.parse(relative.get(`${app}/Contents/Resources/server/standalone/conversion-runtime/RUNTIME.json`));
 assert.equal(conversion.schema, 'datasecure-conversion-runtime/1');
 assert.equal(conversion.target, productTarget);
-for (const file of conversion.files) {
-  const value = relative.get(`${app}/Contents/Resources/server/standalone/conversion-runtime/${file.path}`);
-  assert.ok(value, 'CONVERSION_PACKAGE_RESOURCE_MISSING');
-  assert.equal(value.length, file.bytes);
-  assert.equal(crypto.createHash('sha256').update(value).digest('hex'), file.sha256);
-}
+verifyConversionInventory(relative, `${app}/Contents/Resources/server/standalone/conversion-runtime/`, conversion);
 const checksum = fs.readFileSync(`${archive}.sha256`, 'utf8').trim();
-assert.equal(checksum, `${crypto.createHash('sha256').update(bytes).digest('hex')}  ${path.basename(archive)}`);
+verifyArchiveChecksum(bytes, archive, checksum);
 process.stdout.write(`${JSON.stringify({ ok: true, archive, target: productTarget,
   entries: relative.size, bytes: bytes.length, native_binaries: native.map(({ path, minimumVersion }) =>
     ({ path, minimum_version: minimumVersion })) })}\n`);

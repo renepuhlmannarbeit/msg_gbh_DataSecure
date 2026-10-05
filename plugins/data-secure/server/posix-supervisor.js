@@ -91,6 +91,17 @@ function verifyPosixSupervisor(options = {}) {
       return { available: false, reason: 'verification_failed' };
     }
     const probe = (options.spawnSync || childProcess.spawnSync)(executable, ['--sandbox-contract'], { encoding: 'utf8', windowsHide: true, shell: false, env: {}, timeout: 5000, maxBuffer: 4096, stdio: ['ignore', 'pipe', 'ignore'] });
+    if (['EACCES', 'EPERM'].includes(probe.error?.code)) return { available: false, reason: 'executable_denied' };
+    if (['ENOENT', 'ENOTDIR'].includes(probe.error?.code)) {
+      try {
+        const named = fs.lstatSync(executable);
+        return { available: false, reason: named.isFile() && !named.isSymbolicLink() &&
+          named.dev === execFile.stat.dev && named.ino === execFile.stat.ino &&
+          named.size === execFile.stat.size && named.mtimeMs === execFile.stat.mtimeMs
+            ? 'dependency_missing' : 'verification_failed' };
+      } catch (error) { return { available: false, reason: ['ENOENT', 'ENOTDIR'].includes(error.code) ? 'executable_missing' : 'verification_failed' }; }
+    }
+    if (['ENOEXEC', 'EFTYPE', 'EBADARCH'].includes(probe.error?.code)) return { available: false, reason: 'executable_format' };
     const expectedContract = platform === 'darwin' ? DARWIN_CONTRACT : CONTRACT;
     if (probe.status !== 0 || String(probe.stdout || '').trim() !== expectedContract) return { available: false, reason: 'contract_failed' };
     const result = { available: true, reason: 'ok', executable };

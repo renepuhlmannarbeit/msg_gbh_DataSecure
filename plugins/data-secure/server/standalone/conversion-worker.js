@@ -1,6 +1,7 @@
 'use strict';
 
 const path = require('node:path');
+const fs = require('node:fs');
 const childProcess = require('node:child_process');
 const { resolveConversionRuntime } = require('./conversion-runtime-resolver');
 const { verifyNativeLauncherArtifact } = require('../native-launcher');
@@ -12,6 +13,35 @@ const DEFAULT_TIMEOUT_MS = 300_000;
 const TERMINATION_GRACE_MS = 1500;
 const MAX_RESPONSE_BYTES = MAX_MARKDOWN_CHARS * 6 + 4096;
 const error = code => Object.assign(new Error('Die lokale Markdown-Konvertierung konnte nicht abgeschlossen werden.'), { code });
+
+// Classify the OS fact, not a guessed cause (for example antivirus software).
+// Raw vendor messages, executable paths and source content never escape here.
+function conversionStartFailureCode(failure, executable, io = fs) {
+  if (['EACCES', 'EPERM'].includes(failure?.code)) return 'CONVERSION_EXECUTABLE_DENIED';
+  if (['ENOEXEC', 'EFTYPE'].includes(failure?.code)) return 'CONVERSION_ARCHITECTURE_INVALID';
+  if (['ENOENT', 'ENOTDIR'].includes(failure?.code)) {
+    try {
+      if (io.lstatSync(executable).isFile()) return 'CONVERSION_DEPENDENCY_MISSING';
+    } catch { /* Missing executable or an unresolvable path, not a known policy block. */ }
+    return 'CONVERSION_EXECUTABLE_MISSING';
+  }
+  return 'CONVERSION_START_FAILED';
+}
+
+function nativeConversionExitCode(code, platform = process.platform) {
+  // These codes are reserved by both native launchers; the untrusted parser
+  // guard prevents a document process from forging the supervisor's facts.
+  if (['win32', 'darwin', 'linux'].includes(platform)) {
+    if (code === 127) return 'CONVERSION_EXECUTABLE_MISSING';
+    if (code === 128) return 'CONVERSION_EXECUTABLE_DENIED';
+    if (code === 129) return 'CONVERSION_ARCHITECTURE_INVALID';
+  }
+  if (platform !== 'win32' && code === 132) return 'CONVERSION_DEPENDENCY_MISSING';
+  if (platform !== 'win32' && [130, 131, 134, 135].includes(code)) return 'CONVERSION_LIMIT_SETUP_FAILED';
+  if (code === 125) return 'CONVERSION_RESOURCE_LIMIT';
+  if (Number.isInteger(code) && code >= 120 && code <= 126) return 'CONVERSION_ISOLATION_FAILED';
+  return null;
+}
 
 function launch(runtime, sourceType, inputBytes, timeoutMs, omitDocxHeaderFooter, passiveObjects) {
   const server = path.resolve(__dirname, '..');
@@ -27,7 +57,9 @@ function launch(runtime, sourceType, inputBytes, timeoutMs, omitDocxHeaderFooter
     try { verifyNativeLauncherArtifact(command); } catch { throw error('CONVERSION_ISOLATION_UNAVAILABLE'); }
   } else {
     const supervisor = verifyPosixSupervisor();
-    if (!supervisor.available) throw error('CONVERSION_ISOLATION_UNAVAILABLE');
+    if (!supervisor.available) throw error({ executable_denied: 'CONVERSION_EXECUTABLE_DENIED',
+      executable_missing: 'CONVERSION_EXECUTABLE_MISSING', dependency_missing: 'CONVERSION_DEPENDENCY_MISSING', executable_format: 'CONVERSION_ARCHITECTURE_INVALID'
+    }[supervisor.reason] || 'CONVERSION_ISOLATION_UNAVAILABLE');
     command = supervisor.executable;
   }
   return { command, args: ['--memory-mib', '1024', '--cpu-ms', String(DEFAULT_TIMEOUT_MS),
@@ -57,7 +89,7 @@ async function convertBuffer(bytes, extension, options = {}) {
     let child;
     try { child = childProcess.spawn(invocation.command, invocation.args, { cwd: runtime.root,
       env: environment, stdio: ['pipe', 'pipe', 'pipe'], shell: false, windowsHide: true }); }
-    catch { reject(error('CONVERSION_START_FAILED')); return; }
+    catch (failure) { reject(error(conversionStartFailureCode(failure, invocation.command))); return; }
     const chunks = [];
     let size = 0, stderrSize = 0, stopped = null, closed = false, settled = false, inputFlushed = false, grace;
     const finish = (failure, result) => {
@@ -79,7 +111,7 @@ async function convertBuffer(bytes, extension, options = {}) {
     const timer = setTimeout(() => stop('CONVERSION_TIMEOUT'), timeoutMs);
     signal?.addEventListener('abort', abort, { once: true });
     if (signal?.aborted) abort();
-    child.once('error', () => stop('CONVERSION_START_FAILED'));
+    child.once('error', failure => stop(conversionStartFailureCode(failure, invocation.command)));
     child.stdout.on('data', chunk => {
       size += chunk.length;
       if (size > MAX_RESPONSE_BYTES) { stop('CONVERSION_OUTPUT_LIMIT'); return; }
@@ -90,9 +122,15 @@ async function convertBuffer(bytes, extension, options = {}) {
     child.stdin.on('error', () => stop('CONVERSION_INPUT_INCOMPLETE'));
     child.once('close', code => {
       closed = true;
+      // A launcher that cannot start its parser can close stdin first (EPIPE).
+      // Keep the confirmed inner OS fact instead of hiding it behind that
+      // secondary incomplete-input symptom; deliberate cancellation still wins.
+      const nativeFailure = nativeConversionExitCode(code);
+      if (nativeFailure && stopped === 'CONVERSION_INPUT_INCOMPLETE') {
+        finish(nativeFailure); return;
+      }
       if (stopped) { finish(stopped); return; }
-      if (code === 125) { finish('CONVERSION_RESOURCE_LIMIT'); return; }
-      if (Number.isInteger(code) && code >= 120 && code <= 126) { finish('CONVERSION_ISOLATION_FAILED'); return; }
+      if (nativeFailure) { finish(nativeFailure); return; }
       try {
         const response = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks)));
         if (code === 2 && exactKeys(response, ['schema', 'ok', 'error_code']) && response.ok === false &&
@@ -114,4 +152,4 @@ async function convertBuffer(bytes, extension, options = {}) {
   });
 }
 
-module.exports = { convertBuffer, DEFAULT_TIMEOUT_MS, TERMINATION_GRACE_MS };
+module.exports = { convertBuffer, conversionStartFailureCode, nativeConversionExitCode, DEFAULT_TIMEOUT_MS, TERMINATION_GRACE_MS };

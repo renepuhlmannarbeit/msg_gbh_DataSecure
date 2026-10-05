@@ -1,6 +1,7 @@
 param(
     [string] $Archive = '',
     [switch] $ValidateIsolationOnly,
+    [switch] $ValidateReadinessOnly,
     [switch] $LegacyProfileContract,
     [switch] $EmitEvidence,
     [switch] $AssertNoListeners,
@@ -10,9 +11,173 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+function Test-NativeOpaqueId($Value) {
+    return ($Value -is [string] -and $Value -cmatch '^[a-f0-9]{16,64}$')
+}
+
+function Get-NativeCurrentSession($Events) {
+    $records = @($Events)
+    $start = -1
+    for ($index = 0; $index -lt $records.Count; $index++) {
+        if ($records[$index].event -ceq 'application_started') { $start = $index }
+    }
+    if ($start -ge 0) {
+        $session = $records[$start].session_id
+        if (-not (Test-NativeOpaqueId $session)) { return }
+        for ($index = $start; $index -lt $records.Count; $index++) {
+            if ((Test-NativeOpaqueId $records[$index].session_id) -and $records[$index].session_id -ceq $session) {
+                $records[$index]
+            }
+        }
+        return
+    }
+    $tagged = @($records | Where-Object { $null -ne $_.PSObject.Properties['session_id'] })
+    if ($tagged.Count -eq 0) { return $records }
+    $session = $tagged[0].session_id
+    if (-not (Test-NativeOpaqueId $session)) { return }
+    if (@($tagged | Where-Object { -not (Test-NativeOpaqueId $_.session_id) -or $_.session_id -cne $session }).Count -gt 0) { return }
+    return @($records | Where-Object { $_.session_id -ceq $session })
+}
+
+function Test-NativeActionReadiness($Events, [string] $Action) {
+    $records = @(Get-NativeCurrentSession $Events)
+    $start = -1
+    for ($index = 0; $index -lt $records.Count; $index++) {
+        if ($records[$index].event -ceq 'ipc_request_started' -and $records[$index].action -ceq $Action) {
+            $start = $index
+        }
+    }
+    if ($start -lt 0) { return $false }
+    $requestId = $records[$start].request_id
+    if (-not (Test-NativeOpaqueId $requestId)) { return $false }
+    $response = $null
+    for ($index = $start + 1; $index -lt $records.Count; $index++) {
+        $record = $records[$index]
+        if ($record.action -cne $Action) { continue }
+        if (-not (Test-NativeOpaqueId $record.request_id)) { return $false }
+        if ($record.request_id -ceq $requestId) { $response = $record }
+    }
+    # A late response to A cannot prove readiness of the newer request B.
+    return ($null -ne $response -and $response.event -ceq 'ipc_response_ok')
+}
+
+function Test-NativeReviewReadiness($Events) {
+    $Events = @(Get-NativeCurrentSession $Events)
+    $page = @($Events | Where-Object { $_.event -eq 'review_page_loaded' }).Count -gt 0
+    return ($page -and (Test-NativeActionReadiness $Events 'get_review_session'))
+}
+
+function Test-NativeMainReadiness($Events) {
+    $Events = @(Get-NativeCurrentSession $Events)
+    $page = @($Events | Where-Object { $_.event -eq 'page_loaded' }).Count -gt 0
+    $frontend = @($Events | Where-Object { $_.event -eq 'frontend_ready' }).Count -gt 0
+    return ($page -and $frontend -and (Test-NativeActionReadiness $Events 'get_public_state') -and
+        (Test-NativeActionReadiness $Events 'get_ui_context'))
+}
+
+if ($ValidateReadinessOnly) {
+    $groups = 0
+    $requestA = 'a' * 35
+    $requestB = 'b' * 35
+    $page = [pscustomobject]@{ event = 'review_page_loaded' }
+    $request = [pscustomobject]@{ event = 'ipc_request_started'; action = 'get_review_session'; request_id = $requestA }
+    $requestNext = [pscustomobject]@{ event = 'ipc_request_started'; action = 'get_review_session'; request_id = $requestB }
+    $failed = [pscustomobject]@{ event = 'ipc_response_error'; action = 'get_review_session'; request_id = $requestA }
+    $failedNext = [pscustomobject]@{ event = 'ipc_response_error'; action = 'get_review_session'; request_id = $requestB }
+    $passedResponse = [pscustomobject]@{ event = 'ipc_response_ok'; action = 'get_review_session'; request_id = $requestA }
+    $passedNext = [pscustomobject]@{ event = 'ipc_response_ok'; action = 'get_review_session'; request_id = $requestB }
+    $unrelated = [pscustomobject]@{ event = 'ipc_response_ok'; action = 'get_public_state'; request_id = $requestA }
+    $invalid = [pscustomobject]@{ event = 'ipc_response_invalid'; action = 'get_review_session'; request_id = $requestA }
+    $transportFailed = [pscustomobject]@{ event = 'ipc_request_failed'; action = 'get_review_session'; request_id = $requestA }
+    $sidecarExited = [pscustomobject]@{ event = 'sidecar_exited_before_response'; action = 'get_review_session'; request_id = $requestA }
+    foreach ($events in @(@($page, $request), @($page, $request, $failed),
+        @($page, $request, $unrelated), @($page, $request, $passedResponse, $failed),
+        @($page, $request, $passedResponse, $invalid), @($page, $request, $passedResponse, $transportFailed),
+        @($page, $request, $passedResponse, $sidecarExited), @($page, $request, $passedResponse, $request),
+        @($page, $request, $requestNext, $passedResponse),
+        @($page, $request, $requestNext, $failedNext, $passedResponse),
+        @($page, $request, $requestNext, $passedResponse, $failedNext),
+        @($page, $request, [pscustomobject]@{ event = 'ipc_response_ok'; action = 'get_review_session' }),
+        @($page, [pscustomobject]@{ event = 'ipc_request_started'; action = 'get_review_session' }, $passedResponse))) {
+        if (Test-NativeReviewReadiness $events) { throw 'STANDALONE_NATIVE_REVIEW_FALSE_POSITIVE' }
+        $groups++
+    }
+    foreach ($events in @(@($page, $request, $failed, $passedResponse),
+        @($page, $request, $requestNext, $passedResponse, $passedNext),
+        @($page, $request, $requestNext, $passedNext, $failed))) {
+        if (-not (Test-NativeReviewReadiness $events)) { throw 'STANDALONE_NATIVE_REVIEW_SUCCESS_NOT_OBSERVED' }
+        $groups++
+    }
+    foreach ($id in @('', ('x' * 35), ('a' * 15), ('a' * 65), 1234567890123456)) {
+        $start = [pscustomobject]@{ event = 'ipc_request_started'; action = 'get_review_session'; request_id = $id }
+        $end = [pscustomobject]@{ event = 'ipc_response_ok'; action = 'get_review_session'; request_id = $id }
+        if (Test-NativeReviewReadiness @($page, $start, $end)) { throw 'STANDALONE_NATIVE_REQUEST_ID_INVALID' }
+        $groups++
+    }
+    foreach ($size in @(16, 35, 64)) {
+        $id = 'c' * $size
+        $start = [pscustomobject]@{ event = 'ipc_request_started'; action = 'get_review_session'; request_id = $id }
+        $end = [pscustomobject]@{ event = 'ipc_response_ok'; action = 'get_review_session'; request_id = $id }
+        if (-not (Test-NativeReviewReadiness @($page, $start, $end))) { throw 'STANDALONE_NATIVE_REQUEST_ID_REFUSED' }
+        $groups++
+    }
+    $mainEvents = @([pscustomobject]@{ event = 'page_loaded' }, [pscustomobject]@{ event = 'frontend_ready' })
+    foreach ($action in @('get_public_state', 'get_ui_context')) {
+        $mainEvents += [pscustomobject]@{ event = 'ipc_request_started'; action = $action; request_id = $requestA }
+        $mainEvents += [pscustomobject]@{ event = 'ipc_response_ok'; action = $action; request_id = $requestA }
+    }
+    if (-not (Test-NativeMainReadiness $mainEvents)) { throw 'STANDALONE_NATIVE_MAIN_SUCCESS_NOT_OBSERVED' }
+    $groups++
+    foreach ($action in @('get_public_state', 'get_ui_context')) {
+        foreach ($event in @('ipc_response_error', 'ipc_response_invalid', 'ipc_request_started', 'ipc_request_failed')) {
+            if (Test-NativeMainReadiness @($mainEvents + [pscustomobject]@{ event = $event; action = $action; request_id = $requestA })) {
+                throw 'STANDALONE_NATIVE_MAIN_FALSE_POSITIVE'
+            }
+            $groups++
+        }
+        $next = @($mainEvents + [pscustomobject]@{ event = 'ipc_request_started'; action = $action; request_id = $requestB })
+        $oldResponse = [pscustomobject]@{ event = 'ipc_response_ok'; action = $action; request_id = $requestA }
+        $newResponse = [pscustomobject]@{ event = 'ipc_response_ok'; action = $action; request_id = $requestB }
+        if (Test-NativeMainReadiness @($next + $oldResponse)) { throw 'STANDALONE_NATIVE_MAIN_OLD_RESPONSE_ACCEPTED' }
+        $groups++
+        if (-not (Test-NativeMainReadiness @($next + $oldResponse + $newResponse))) {
+            throw 'STANDALONE_NATIVE_MAIN_LATEST_RESPONSE_REFUSED'
+        }
+        $groups++
+    }
+    $sessionA = '1' * 32
+    $sessionB = '2' * 32
+    $first = @([pscustomobject]@{ event = 'application_started'; session_id = $sessionA })
+    foreach ($record in @($page, $request, $passedResponse)) {
+        $tagged = [pscustomobject]@{ event = $record.event; action = $record.action; request_id = $record.request_id; session_id = $sessionA }
+        $first += $tagged
+    }
+    $second = @([pscustomobject]@{ event = 'application_started'; session_id = $sessionB })
+    foreach ($record in @($page, $request)) {
+        $second += [pscustomobject]@{ event = $record.event; action = $record.action; request_id = $record.request_id; session_id = $sessionB }
+    }
+    $oldSuccess = [pscustomobject]@{ event = $passedResponse.event; action = $passedResponse.action; request_id = $requestA; session_id = $sessionA }
+    $newSuccess = [pscustomobject]@{ event = $passedResponse.event; action = $passedResponse.action; request_id = $requestA; session_id = $sessionB }
+    if (Test-NativeReviewReadiness @($first + $second + $oldSuccess)) { throw 'STANDALONE_NATIVE_OLD_SESSION_ACCEPTED' }
+    $groups++
+    if (-not (Test-NativeReviewReadiness @($first + $second + $newSuccess + $oldSuccess))) {
+        throw 'STANDALONE_NATIVE_CURRENT_SESSION_REFUSED'
+    }
+    $groups++
+    if (Test-NativeReviewReadiness @($first + [pscustomobject]@{ event = 'application_started' } + $page + $request + $passedResponse)) {
+        throw 'STANDALONE_NATIVE_MISSING_SESSION_ACCEPTED'
+    }
+    $groups++
+    if (Test-NativeReviewReadiness @($second[1..2] + $oldSuccess)) { throw 'STANDALONE_NATIVE_MIXED_SESSIONS_ACCEPTED' }
+    $groups++
+    Write-Output "STANDALONE NATIVE READINESS CONTRACT PASS ($groups groups; no native app launch)"
+    exit 0
+}
+
 if ($env:OS -ne 'Windows_NT') {
     Write-Output 'STANDALONE NATIVE WINDOWS LAUNCH SKIP (non-Windows host)'
-    exit 0
+    # 77 is an explicit not-applicable verdict, never a successful native gate.
+    exit 77
 }
 
 $repositoryRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path
@@ -223,6 +388,12 @@ function Get-NativeNetworkObservation([int] $RootProcessId, [DateTime] $Expected
             $signature.SignerCertificate -and
             $signature.SignerCertificate.Subject -match '(?:^|,\s*)O=Microsoft Corporation(?:,|$)'
         if (-not $isOwnProfile -or -not $isWebView -or -not $isMicrosoft) {
+            # A failed observation is not product-network evidence. Keep its
+            # cause diagnosable without exposing paths, command lines or ports.
+            $classification = [ordered]@{ own_profile = [bool] $isOwnProfile;
+                webview_process = [bool] $isWebView; microsoft_signature = [bool] $isMicrosoft;
+                signature_status = [string] $signature.Status }
+            Write-Output ('STANDALONE NATIVE ENDPOINT CLASSIFICATION ' + ($classification | ConvertTo-Json -Compress))
             throw 'STANDALONE_NATIVE_NETWORK_ENDPOINT_UNATTRIBUTED'
         }
         $udpProcesses.Add('msedgewebview2.exe')
@@ -326,24 +497,21 @@ try {
         $session = $application[0].session_id
         $desktopSession = @($desktop | Where-Object { $_.session_id -eq $session })
         $sidecarSession = @(Read-InteractionEvents $sidecarLog | Where-Object { $_.session_id -eq $session })
-        $publicState = @($desktopSession | Where-Object {
-            $_.event -eq 'ipc_response_ok' -and $_.action -eq 'get_public_state'
-        }).Count -gt 0
-        $uiContext = @($desktopSession | Where-Object {
-            $_.event -eq 'ipc_response_ok' -and $_.action -eq 'get_ui_context'
-        }).Count -gt 0
+        $publicState = Test-NativeActionReadiness $desktopSession 'get_public_state'
+        $uiContext = Test-NativeActionReadiness $desktopSession 'get_ui_context'
         $pageLoaded = @($desktopSession | Where-Object { $_.event -eq 'page_loaded' }).Count -gt 0
         $reviewPageLoaded = @($desktopSession | Where-Object { $_.event -eq 'review_page_loaded' }).Count -gt 0
         $reviewScriptStarted = @($desktopSession | Where-Object {
             $_.event -eq 'ipc_request_started' -and $_.action -eq 'get_review_session'
         }).Count -gt 0
+        $reviewReady = Test-NativeReviewReadiness $desktopSession
         $frontendReady = @($desktopSession | Where-Object { $_.event -eq 'frontend_ready' }).Count -gt 0
         $setupStarted = @($desktopSession | Where-Object { $_.event -eq 'setup_started' }).Count -gt 0
         $setupCompleted = @($desktopSession | Where-Object { $_.event -eq 'setup_completed' }).Count -gt 0
         $sidecarStarted = @($sidecarSession | Where-Object { $_.event -eq 'sidecar_started' }).Count -gt 0
         $serviceInitialized = @($sidecarSession | Where-Object { $_.event -eq 'service_initialized' }).Count -gt 0
         if ($pageLoaded -and $frontendReady -and $publicState -and $uiContext -and $sidecarStarted -and $serviceInitialized -and
-            (-not $AssertReviewWindow -or ($reviewPageLoaded -and $reviewScriptStarted))) {
+            (-not $AssertReviewWindow -or $reviewReady)) {
             $startupStopwatch.Stop()
             $startupMilliseconds = [Math]::Round($startupStopwatch.Elapsed.TotalMilliseconds, 3)
             $passed = $true
@@ -356,6 +524,7 @@ try {
         $checkpoint = [ordered]@{ application = ($application.Count -gt 0); setup_started = $setupStarted;
             setup_completed = $setupCompleted; page_loaded = $pageLoaded;
             review_page_loaded = $reviewPageLoaded; review_script_started = $reviewScriptStarted;
+            review_session_response_ok = $reviewReady;
             frontend_ready = $frontendReady; public_state = $publicState; ui_context = $uiContext;
             sidecar_started = $sidecarStarted; service_initialized = $serviceInitialized }
         Write-Output ('STANDALONE NATIVE CHECKPOINT ' + ($checkpoint | ConvertTo-Json -Compress))
@@ -372,7 +541,7 @@ try {
         if (-not $setupCompleted) { throw 'STANDALONE_NATIVE_SETUP_TIMEOUT' }
         if (-not $pageLoaded) { throw 'STANDALONE_NATIVE_PAGE_LOAD_TIMEOUT' }
         if (-not $frontendReady) { throw 'STANDALONE_NATIVE_FRONTEND_READY_TIMEOUT' }
-        if ($AssertReviewWindow -and (-not $reviewPageLoaded -or -not $reviewScriptStarted)) {
+        if ($AssertReviewWindow -and -not $reviewReady) {
             throw 'STANDALONE_NATIVE_REVIEW_WINDOW_TIMEOUT'
         }
         throw 'STANDALONE_NATIVE_IPC_TIMEOUT'
@@ -400,7 +569,7 @@ try {
         }
         Write-Output ('STANDALONE NATIVE EVIDENCE ' + ($evidence | ConvertTo-Json -Compress))
     }
-    Write-Output 'STANDALONE NATIVE WINDOWS LAUNCH PASS'
+    Write-Output 'STANDALONE NATIVE WINDOWS LAUNCH PASS (load + successful IPC only; no review decisions)'
 } finally {
     if ($null -ne $process -and -not $process.HasExited) {
         # Closing the owned window lets Tauri drop/stop its sidecar. A forced

@@ -18,6 +18,19 @@ const nativeSmoke = fs.readFileSync(path.join(__dirname, 'manual/standalone-nati
 const productVersion = require('../package.json').version;
 const iconDirectory = path.join(root, 'tauri-contract/icons');
 
+test('closed desktop errors preserve identity and capacity facts and their renderer recovery hints', () => {
+  const { DESKTOP_ERROR_CODES, desktopErrorCode } = require('../plugins/data-secure/server/core/desktop-error-contract');
+  assert.equal(new Set(DESKTOP_ERROR_CODES).size, DESKTOP_ERROR_CODES.length);
+  assert.ok(Object.isFrozen(DESKTOP_ERROR_CODES));
+  for (const code of ['STANDALONE_IDENTITY_MAPPING_MISSING', 'STANDALONE_IDENTITY_MAPPING_INVALID',
+    'STANDALONE_IDENTITY_PUBLICATION_FAILED', 'BATCH_PSEUDONYM_CAPACITY_EXCEEDED']) {
+    assert.equal(desktopErrorCode(code), code);
+    assert.match(frontend, new RegExp(`${code}: '[^']{20,}'`, 'u'));
+  }
+  assert.equal(desktopErrorCode('PRIVATE PATH /name.docx'), 'STANDALONE_OPERATION_FAILED');
+  assert.match(sidecar, /desktopErrorCode\(error\?\.code\)/u);
+});
+
 test('desktop manifests, Rust package and artifact names use the product version', () => {
   assert.strictEqual(config.version, productVersion);
   assert.match(cargo, new RegExp(`^version = "${productVersion.replaceAll('.', '\\.') }"$`, 'mu'));
@@ -118,6 +131,50 @@ test('local review window is created by an async command on Windows', () => {
   }
 });
 
+test('native review close is bound before visibility and never discovers a later current session', () => {
+  const opening = rust.slice(rust.indexOf('async fn open_review_window('), rust.indexOf('fn review_window_only('));
+  assert.match(opening, /\.visible\(false\)/u);
+  assert.ok(opening.indexOf('window.on_window_event(') < opening.indexOf('if window.show()'),
+    'native X listener must be registered before users can close the window');
+  assert.match(opening, /defer_closed_review\(&owned, generation\)/u);
+  const closing = rust.slice(rust.indexOf('fn defer_closed_review('), rust.indexOf('fn review_window_only('));
+  assert.match(closing, /close_snapshot\(generation\)/u);
+  assert.doesNotMatch(closing, /get_review_session/u,
+    'a delayed close may never fetch and defer the next session');
+  const binding = fs.readFileSync(path.join(root, 'tauri-contract/src/review_window.rs'), 'utf8');
+  assert.match(binding, /if generation != self\.generation \{ return None; \}/u);
+  assert.match(binding, /old_native_close_event_cannot_defer_new_window/u,
+    'real Rust behavioral tests must cover old native close events');
+});
+
+test('recursive admission uses a separate bounded deadline and an honest content-free heartbeat', () => {
+  assert.match(rust, /Duration::from_secs\(if action == "admit_selected_sources" \{ 300 \} else \{ 30 \}\)/u);
+  assert.match(rust, /let deadline = started \+ rpc_duration\(action\)/u);
+  assert.match(rust, /STANDALONE_ADMISSION_TIMEOUT/u);
+  const progress = rust.slice(rust.indexOf('fn admission_progress('), rust.indexOf('fn rpc_request('));
+  assert.match(progress, /get_webview_window\("main"\)/u);
+  assert.match(progress, /"datasecure-admission-progress"/u);
+  const payload = progress.match(/json!\(\{([\s\S]*?)\}\)/u)?.[1];
+  assert.ok(payload);
+  assert.deepStrictEqual([...payload.matchAll(/"([^"]+)":/gu)].map(match => match[1]), ['phase', 'elapsed_ms']);
+});
+
+test('every repeated external quit stays prevented until the shutdown completion gate', () => {
+  const exit = rust.slice(rust.indexOf('fn begin_native_exit('), rust.indexOf('fn main()'));
+  assert.match(exit, /if !state\.exit_gate\.begin\(\)/u);
+  assert.ok(exit.indexOf('state.lifecycle.stop()') < exit.indexOf('state.exit_gate.finish(stopped)'),
+    'only the completed shutdown worker may allow the internal final exit');
+  assert.match(exit, /state\.app\.exit\(state\.exit_gate\.finish\(stopped\)\)/u);
+  const handler = rust.slice(rust.indexOf('app.run(|app_handle, event|'));
+  assert.match(handler, /ExitRequested \{ api, code, \.\. \}/u);
+  assert.match(handler, /if !state\.exit_gate\.allowed\(code\) \{\s*api\.prevent_exit\(\);\s*begin_native_exit/u);
+  assert.doesNotMatch(handler, /exit_started/u,
+    'starting cleanup does not permit later external Quit requests');
+  const transport = fs.readFileSync(path.join(root, 'tauri-contract/src/ipc_transport.rs'), 'utf8');
+  for (const name of ['repeated_quit_requests_cannot_bypass_pending_spawn_reconciliation',
+    'failed_shutdown_allows_only_its_completed_failure_terminal_exit']) assert.ok(transport.includes(name));
+});
+
 test('the Tauri contract is now a buildable shell with private sidecar mediation', () => {
   assert.match(cargo, /tauri\s*=\s*\{\s*version\s*=\s*"2\.11\.5"/u);
   assert.match(rust, /stdin\(Stdio::piped\(\)\).*stdout\(Stdio::piped\(\)\)/su);
@@ -139,8 +196,14 @@ test('the Tauri contract is now a buildable shell with private sidecar mediation
   assert.match(rust, /diagnostic_event\("webview_profile_ready"/u);
   assert.match(rust, /diagnostic_event\("setup_completed"/u);
   assert.match(rust, /diagnostic_event\(\s*"application_run_failed"/u);
-  assert.match(rust,
-    /RunEvent::ExitRequested \{ \.\. \} \| tauri::RunEvent::Exit[\s\S]*?process\.take\(\);/u);
+  assert.match(rust, /fn begin_native_exit\(state: DesktopState\)/u);
+  assert.match(rust, /api\.prevent_close\(\)/u);
+  assert.match(rust, /api\.prevent_exit\(\)/u);
+  assert.match(rust, /state\.lifecycle\.stop\(\)/u);
+  assert.doesNotMatch(rust, /state\.sidecar\.lock\(\)/u,
+    'window close must never wait behind an in-flight private pipe request');
+  assert.match(rust, /ipc_transport::lock_until/u);
+  assert.match(rust, /ipc_transport::receive_until/u);
   assert.match(rust, /fn frontend_ready\(/u);
   assert.doesNotMatch(rust, /"HTTP_PROXY"|"HTTPS_PROXY"|"OPENAI_API_KEY"|"ANTHROPIC_API_KEY"/u);
   assert.match(rust, /process_guard\.take\(\)/u);
@@ -204,7 +267,7 @@ test('the Tauri contract is now a buildable shell with private sidecar mediation
 test('native drag-drop shares admission with pickers and keeps an explicit Start', () => {
   assert.strictEqual(config.app.windows[0].dragDropEnabled, true);
   assert.match(rust, /WindowEvent::DragDrop\(DragDropEvent::Drop/u);
-  const windowHook = rust.slice(rust.indexOf('.on_window_event('), rust.indexOf('.invoke_handler('));
+  const windowHook = rust.slice(rust.lastIndexOf('.on_window_event('), rust.indexOf('.invoke_handler('));
   assert.doesNotMatch(windowHook, /\.state::<DesktopState>/u,
     'configured windows can emit events before application setup manages state');
   assert.match(windowHook, /DragDropEvent::Drop[\s\S]*if let Some\(state\) = window\.try_state::<DesktopState>\(\)/u);
@@ -253,7 +316,8 @@ test('processing purpose crosses only the explicit desktop Start and cannot chan
   assert.match(rust, /request\["processing_mode"\] = json!\(validate_processing_mode\(processing_mode\)\?\)/u);
   assert.match(rust, /request\["output_naming_mode"\] = json!\(value\)/u);
   assert.match(sidecar, /outputNamingMode: message\.output_naming_mode/u);
-  assert.match(sidecar, /MARKDOWN_CONVERSION_NOT_READY/u);
+  assert.equal(require('../plugins/data-secure/server/core/desktop-error-contract').desktopErrorCode(
+    'MARKDOWN_CONVERSION_NOT_READY'), 'MARKDOWN_CONVERSION_NOT_READY');
   const continuing = rust.slice(rust.indexOf('async fn continue_current_batch'), rust.indexOf('async fn configure_results'));
   assert.doesNotMatch(continuing, /processing_mode/u);
   assert.match(frontend, /byId\('continue'\)\.addEventListener\('click', \(\) => switchView\('results'\)\)/u);
@@ -281,7 +345,7 @@ test('the native Windows smoke exercises the visible WebView lifecycle', () => {
 
 test('history actions are separately permissioned and carry only exact batch identity to the private host', () => {
   const permissions = fs.readFileSync(path.join(root, 'tauri-contract/permissions/commands.toml'), 'utf8');
-  for (const action of ['get_run_history', 'open_history_results', 'open_history_ledger', 'continue_history_batch']) {
+  for (const action of ['get_run_history', 'get_run_failures', 'open_history_results', 'open_history_ledger', 'continue_history_batch']) {
     assert.ok(capability.permissions.includes(`allow-${action.replaceAll('_', '-')}`));
     assert.ok(permissions.includes(`commands.allow = ["${action}"]`));
     assert.ok(rust.includes(`async fn ${action}(`));
@@ -292,7 +356,32 @@ test('history actions are separately permissioned and carry only exact batch ide
   assert.match(sidecar, /resolveHistoryLedger\(message\.batch_id\)/u);
   assert.match(sidecar, /continueHistoryBatch\(message\.batch_id\)/u);
   assert.match(frontend, /batchId: entry\.batch_id/u);
-  assert.match(rust, /validate_local_target\(result, kind\)/u);
+  assert.match(rust, /history_local_target\(resolved, kind, resolve_action == "resolve_history_identity_mapping"\)/u);
+});
+
+test('every documented UI command has a narrow native permission and exactly one window capability', () => {
+  const contract = JSON.parse(fs.readFileSync(path.join(__dirname,
+    '../plugins/data-secure/server/standalone/ui-contract.json'), 'utf8'));
+  const permissions = fs.readFileSync(path.join(root, 'tauri-contract/permissions/commands.toml'), 'utf8');
+  const reviewCapability = JSON.parse(fs.readFileSync(path.join(root, 'tauri-contract/capabilities/review.json'), 'utf8'));
+  for (const command of contract.commands) {
+    const permission = `allow-${command.replaceAll('_', '-')}`;
+    assert.ok(permissions.includes(`commands.allow = ["${command}"]`), `${command} has no narrow permission`);
+    const owners = [capability, reviewCapability].filter(window => window.permissions.includes(permission));
+    assert.equal(owners.length, 1, `${command} must be available in precisely its owning local window`);
+  }
+  assert.ok(!reviewCapability.permissions.includes('allow-get-run-failures'),
+    'the review window does not need access to unrelated source file names');
+  const mainCommands = new Set([
+    ...[...frontend.matchAll(/\b(?:invoke|choose)\('([a-z_]+)'/gu)].map(match => match[1]),
+    ...[...frontend.matchAll(/\bcommand: '([a-z_]+)'/gu)].map(match => match[1])
+  ]);
+  assert.ok(mainCommands.has('get_run_failures'), 'regression must cover the actual renderer call, not only its contract');
+  for (const command of mainCommands) {
+    const permission = `allow-${command.replaceAll('_', '-')}`;
+    assert.ok(capability.permissions.includes(permission), `${command} is called by main but denied by its native ACL`);
+    assert.ok(permissions.includes(`commands.allow = ["${command}"]`), `${command} has no native permission declaration`);
+  }
 });
 
 test('prepared selections remove exactly one item through the private native contract', () => {

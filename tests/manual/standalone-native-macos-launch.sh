@@ -3,7 +3,8 @@ set -euo pipefail
 
 if [[ "$(uname -s)" != "Darwin" ]]; then
   echo "STANDALONE NATIVE MACOS LAUNCH SKIP (non-macOS host)"
-  exit 0
+  # 77 is an explicit not-applicable verdict, never a successful native gate.
+  exit 77
 fi
 
 app_bundle=""
@@ -121,9 +122,8 @@ while ((SECONDS < deadline)); do
     && grep -q '"event":"page_loaded"' "$desktop_log" \
     && grep -q '"event":"frontend_ready"' "$desktop_log" \
     && grep -q '"event":"review_page_loaded"' "$desktop_log" \
-    && grep -q '"action":"get_review_session"' "$sidecar_log" \
-    && grep -q '"action":"get_public_state"' "$desktop_log" \
-    && grep -q '"action":"get_ui_context"' "$desktop_log" \
+    && node "$script_directory/../helpers/native-review-readiness.js" "$desktop_log" \
+    && node "$script_directory/../helpers/native-review-readiness.js" "$desktop_log" --main \
     && grep -q '"event":"sidecar_started"' "$sidecar_log" \
     && grep -q '"event":"service_initialized"' "$sidecar_log"; then
     ready=true
@@ -183,4 +183,4 @@ if [[ -n "$remaining_command" && "$remaining_command" == "$sidecar_command" ]]; 
   exit 1
 fi
 app_pid=""
-echo "STANDALONE NATIVE MACOS APP BUNDLE LAUNCH PASS ($target, launch_services=$launch_services)"
+echo "STANDALONE NATIVE MACOS APP BUNDLE LAUNCH PASS ($target, launch_services=$launch_services; load + successful IPC only, no review decisions)"

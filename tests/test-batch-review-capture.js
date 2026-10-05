@@ -139,6 +139,15 @@ async function main() {
     }
   });
 
+  await testAsync('Standalone accepts an exact reconstructed draft already resolved by its run registry', async () => {
+    const draft = { original_text: 'Erika Beispiel', anonymized_text: '[PERSON_001]', ambiguities: [] };
+    const value = fixture({ draft });
+    assert.strictEqual(await value.run(), draft);
+    assert.deepStrictEqual(value.events, ['entry', 'package-id', 'anonymize']);
+    await assert.rejects(fixture({ draft, productChannel: 'plugin' }).run(),
+      (error) => error.code === 'BATCH_REVIEW_RECONSTRUCTION_FAILED');
+  });
+
   await testAsync('capture preserves object identity, inputs and the batch test facade', async () => {
     const draft = { ambiguities: [{ value: 'secret' }], nested: { unchanged: true } };
     const value = fixture({ draft });

@@ -16,7 +16,7 @@
     </header>
     <section id="review" hidden aria-labelledby="finding-title">
       <div class="progress"><span id="document-position"></span><span id="finding-position"></span></div>
-      <h2 id="finding-title">Ist dies ein Personenname?</h2>
+      <h2 id="finding-title">Wie soll diese Fundstelle behandelt werden?</h2>
       <p class="exact-label">Aktuell zu entscheiden</p>
       <p id="exact-text" class="exact" tabindex="0"></p>
       <p id="group-note" class="note"></p>
@@ -26,7 +26,8 @@
       </div>
       <div class="actions">
         <button id="redact" class="primary">Als Person anonymisieren</button>
-        <button id="keep">Kein Personenname – beibehalten</button>
+        <button id="redact-organization" hidden>Als Unternehmen anonymisieren</button>
+        <button id="keep">Beibehalten</button>
         <button id="undo">Rückgängig</button>
       </div>
       <div class="finish">

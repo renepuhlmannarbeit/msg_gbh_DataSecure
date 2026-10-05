@@ -1,6 +1,6 @@
 # DataSecure Standalone – Sicherheitsmodell
 
-Stand: 07.09.2026 · Entscheidungen DS-075 bis DS-092
+Stand: 05.10.2026 · einschließlich DS-104 bis DS-108
 
 ## Geltungsbereich
 
@@ -81,7 +81,61 @@ Lauf, seinen gespeicherten Zweck und sein ursprüngliches Ziel erneut. Abschluss
 und Wiederherstellung öffnen keine Ergebnisse automatisch. Ein geänderter
 Ergebnisstandard verändert keine früheren Öffnungsziele.
 
+## DS-106: lokale Entitätsentscheidung und exakte Wiederverwendung
+
+Die Standalone-Unternehmenswahl ist ein ausdrücklich gesetzter interner
+Reviewvertrag, keine neue MCP-Aktion und keine allgemeine Core-Allowlist.
+Person und Unternehmen erzeugen typverschiedene Registry-Einträge; Credential-
+Fundstellen akzeptieren keine Unternehmenswahl. Original-/Ausgabespans,
+vollständige Entscheidungsbindung und unabhängige Restprüfung bleiben vor jeder
+Publikation erforderlich. Bereits ersetzte Platzhalter dürfen bei der Rest-
+Fundstellensuche keine erfundenen Namen über ihre maskierten Leerstellen bilden.
+
+Die private Entscheidungstabelle enthält höchstens 10.000 HMAC-gebundene
+vollständige Schreibweisen ohne Rohwerte. Sie ist authentifiziert und an den
+konkreten Lauf, seinen Seed, Vertrag, Regelversion und Policy-Fingerprint
+gebunden. Manipulierte, widersprüchliche oder zu große Tabellen werden nicht
+übernommen. Wiederverwendung gilt nur nach exakter aktueller Fundstellenprüfung
+in offenen und folgenden Prüfphasen desselben Laufs, nicht für neue Läufe oder
+fertige Dateien. Die Tabelle ist keine Verschlüsselungs- oder Anonymitätszusage.
+
+Dateinamen in Fehlerlisten sind private lokale Metadaten. Der Renderer erhält
+keine ungeprüften Pipeline-Fehlertexte oder Dokumentinhalte. Fehler der Anzeige,
+Verarbeitung und Zielhostumgebung werden getrennt diagnostiziert; ein
+Komplettausfall eines anderen Geräts wird nicht ohne dessen Diagnose einem
+beobachteten Einzeldokumentfehler zugeschrieben.
+
+Bei der Extraktion werden keine Grafikbedeutungen erfunden. Nur vollständig
+unlesbare Symbolruns werden ausgelassen und gekennzeichnet. Bild-only-OCR und
+unbekannte Geometrie bleiben erhalten; doppelte OCR-Wörter dürfen nur über
+belegtem, beibehaltenem und sichtbar gerendertem nativem Text unterdrückt werden.
+Veränderte Inhalte benötigen einen neuen überprüften Paketstand; die lokale
+Implementierung gilt nicht als nachträglicher Nachweis für RC157.
+
 ## Paket- und Supply-Chain-Grenze
+
+DS-108 bindet die Frist von 30 Sekunden (Quellenaufnahme: 300 Sekunden) an die gesamte Desktop-Anfrage:
+Kanalsperre, Prozessstart, Frame-Schreiben und Antwort. Ein gesonderter
+Child-Control erlaubt das native Schließen unabhängig von dieser Sperre.
+Die App wartet begrenzt auf das Ende ihres Sidecars und protokolliert eine
+nicht bestätigte Beendigung als `STANDALONE_SHUTDOWN_FAILED`, nicht als Erfolg.
+Sie beendet keine fremden Prozesse und gibt keine offenen Reviewdaten frei.
+
+Aufnahmefehler dürfen über einen geschlossenen, größenbegrenzten privaten
+Vertrag Dateilabels an die eigene Hauptansicht geben: relative Namen mit
+Endungen und feste Ursachecodes, keine beliebigen Exceptions oder Inhalte.
+Die vertrauliche Prüfseite kann bei Startfehlern ihre vorgemerkten Dateien
+nennen. Dieselben Namen dürfen nicht in inhaltsfreie Diagnoseereignisse
+gelangen. Fehlende Laufzeit, Ausführungsverweigerung und ungültige Architektur
+werden getrennt; keine davon rechtfertigt pauschales Abschalten von
+Betriebssystemschutz. Ein bestätigter Startfehler bleibt beim konkreten
+Lauf und Startversuch, bis ein neuer Versuch bewusst gestartet wird.
+
+Der gemeinsame Standalone-Prüfadapter begrenzt jeden Dialog auf 5.000
+Fundstellen, 40 MiB flüchtigen Entwurf und maximal 1 MiB je IPC-Frame.
+Diese Grenze ersetzt keine Entwurfsberechtigung oder unabhängige Restprüfung.
+Zu große einzelne Dokumente werden erklärbar vertagt und müssen aufgeteilt
+werden; eine automatische Freigabe ist ausdrücklich kein Fallback.
 
 Das Windows-x64-Engineering-Paket enthält Tauri-Hülle, gepinnte offizielle
 Node-Runtime, eine beim Paketbau frisch erzeugte geschlossene Coreprojektion,
@@ -99,10 +153,29 @@ Lizenzfreigabe bleibt davon getrennt. Native ad-hoc signierte macOS-App-Bundles
 sind auf Intel und Apple Silicon gebaut und über die private IPC-Grenze
 gestartet. Reproduzierbare, manifest-/hash-/modusgeprüfte Engineering-ZIPs sind
 für beide Architekturen gebaut und nach dem Entpacken erneut gestartet.
-Die sichtbare Windows-/macOS-UAT ist noch offen. Linux x64 besitzt ebenfalls eine gebündelte,
+Der bestätigte Windows-Anwenderlauf von RC157 bleibt gültige begrenzte
+Bedienevidenz. Der neue lokale DS-107-Engineering-Bau ist kein nachträglicher
+Nachweis für dessen Bytes; neue native macOS-Bedienevidenz ist hier nicht
+erbracht. Windows-Publisher-Signierung und macOS-Developer-ID/Notarisierung
+benötigen Organisationszertifikate und bleiben von lokal bestandenen Tests
+getrennt. Linux x64 besitzt ebenfalls eine gebündelte,
 nativ gebaute und bis durch App → private IPC → Core gestartete AppImage-
 Projektion; die sichtbare Linux-Zielhost-UAT ist noch offen. Bis dahin bleiben
-alle Pakete Engineering-Piloten.
+die zusätzlichen Spezialabnahmen offen; frühere bestandene Anwenderläufe
+werden dadurch nicht zurückgenommen.
+
+## Zusätzliche Gegenprüfung DS-108
+
+DS-108 verschärft die Marker-/Reviewgrenze: Großbuchstaben in eckigen Klammern
+sind keine Datenschutzattestation. Die enge Ausgabemarkergrammatik wird bei aus
+dem Original übernommenen variablen typisierten Labels (HMAC oder numerische
+Kennnummern einschließlich `PERSON_REVIEW`) durch eine lokale,
+positionsgebundene Herkunftsentscheidung ergänzt. Tatsächlich neu erzeugte
+Marker bleiben geschützt. Gemischte und einspaltige Zugangsdatenzellen können
+keinen unredigierten Rest durch einen vorgeschobenen Marker freigeben.
+5.000 Fundstellen gelten in der gesamten Standalone-Kette, nicht nur im Dialog;
+Cowork behält seinen eigenen kleineren Vertrag. Weitere Zustands-, OS-Start-
+und Paketprüfgrenzen stehen unter DS-108 und in der aktuellen Evidence-Matrix.
 
 ## Nichtziele
 

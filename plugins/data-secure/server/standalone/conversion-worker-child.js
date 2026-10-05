@@ -9,6 +9,8 @@ const { createRequire } = require('node:module');
 const { pathToFileURL } = require('node:url');
 const { extractMarkdownBuffer } = require('./markdown-extractor');
 const { createMarkdownExtraction, MAX_MARKDOWN_CHARS } = require('./markdown-contract');
+const { unreadableSymbolRun, cleanOcrSymbolLines, visualNotices } = require('./markdown-visuals');
+const { nativeTextSeparator, paintedTextGeometryAvailable, nativeTextRegions, uncoveredOcrText } = require('./pdf-text-layout');
 const { SOURCE_TYPES, ERROR_CODES, MAX_INPUT_BYTES } = require('../core/conversion-worker-contract');
 const { decodePng } = require('../images/png');
 const { decodeBmp } = require('../images/bmp');
@@ -52,11 +54,11 @@ async function createOcr() {
   return worker;
 }
 
-async function recognize(canvas, ocr) {
-  const result = await ocr.recognize(canvas.toBuffer('image/png'), {}, { text: true });
+async function recognize(canvas, ocr, nativeRegions = []) {
+  const result = await ocr.recognize(canvas.toBuffer('image/png'), {}, { text: true, blocks: nativeRegions.length > 0 });
   if (typeof result?.data?.text !== 'string') fail('CONVERSION_OCR_FAILED');
   if (result.data.text.length > MAX_MARKDOWN_CHARS) fail('TEXT_TOO_LARGE');
-  return result.data.text; // Deliberately no normalization or anonymization.
+  return nativeRegions.length ? uncoveredOcrText(result.data, nativeRegions) : result.data.text;
 }
 
 async function imageMarkdown(bytes, type) {
@@ -90,10 +92,12 @@ async function imageMarkdown(bytes, type) {
   let ocr;
   try {
     ocr = await createOcr();
-    const text = await recognize(canvas, ocr);
+    const recognized = cleanOcrSymbolLines(await recognize(canvas, ocr));
+    const text = recognized.text;
     const reasons = ['OCR_NOT_VERIFIED', 'VISUAL_CONTENT_NOT_EXTRACTED'];
     if (!text.trim()) reasons.push('OCR_TEXT_EMPTY');
-    return createMarkdownExtraction({ source_type: type, markdown: text,
+    const notices = visualNotices({ image: true, symbols: recognized.omitted });
+    return createMarkdownExtraction({ source_type: type, markdown: `${text}${text ? '\n\n' : ''}${notices}`,
       coverage: { status: 'incomplete', reason_codes: reasons.sort() } });
   } finally {
     if (ocr) await ocr.terminate();
@@ -185,19 +189,33 @@ async function pdfMarkdown(bytes, passiveObjects = false) {
             (await page.getAnnotations({ intent: 'display' })).length > 0)) fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
         const content = await page.getTextContent({ disableNormalization: true });
         let text = '';
+        let omittedSymbols = false;
+        let previousTextItem;
         for (const item of content.items) {
           // PDF.js may emit marked-content boundaries; these contain no text.
           if (!Object.hasOwn(item, 'str')) continue;
           if (typeof item.str !== 'string') fail('PDF_EXTRACTION_FAILED');
-          text += item.str + (item.hasEOL ? '\n' : '');
+          if (item.str.trim() && !text.endsWith('\n')) {
+            const separator = nativeTextSeparator(previousTextItem, item);
+            if (separator === '\n' || (separator && !/\s/u.test(text.slice(-1)) && !/^\s/u.test(item.str))) text += separator;
+          }
+          if (unreadableSymbolRun(item.str)) {
+            // Private font glyphs cannot be reconstructed from a code point.
+            // Preserve a boundary and try local raster OCR below; do not emit
+            // cryptic glyphs or silently concatenate their neighbouring words.
+            omittedSymbols = true;
+            text += item.hasEOL ? '\n' : ' ';
+          } else text += item.str + (item.hasEOL ? '\n' : '');
+          if (item.hasEOL) previousTextItem = undefined;
+          else if (item.str.trim()) previousTextItem = item;
           if (text.length + total > MAX_MARKDOWN_CHARS) fail('TEXT_TOO_LARGE');
         }
         const nativeText = text;
         const hasNativeText = Boolean(nativeText.trim());
-        const operators = hasNativeText ? await page.getOperatorList() : null;
+        const operators = await page.getOperatorList();
         const hasPaintedImage = operators?.fnArray.some(operation => imageOperations.has(operation));
         let additional = '';
-        if (!hasNativeText || hasPaintedImage) {
+        if (!hasNativeText || hasPaintedImage || omittedSymbols) {
           const viewport = page.getViewport({ scale: 2 });
           const width = Math.ceil(viewport.width), height = Math.ceil(viewport.height);
           dimensions(width, height);
@@ -205,14 +223,19 @@ async function pdfMarkdown(bytes, passiveObjects = false) {
           await page.render({ canvasContext: canvas.getContext('2d'), viewport, background: 'white',
             annotationMode: AnnotationMode.DISABLE }).promise;
           ocr ??= await createOcr(); // One session per document, never across customers.
-          const recognized = await recognize(canvas, ocr);
-          if (hasNativeText) additional = additionalOcrText(nativeText, recognized);
-          else text = recognized;
+          const regions = hasNativeText && paintedTextGeometryAvailable(operators, OPS)
+            ? nativeTextRegions(content.items, content.styles, viewport) : [];
+          const recognized = cleanOcrSymbolLines(await recognize(canvas, ocr, regions));
+          omittedSymbols ||= recognized.omitted;
+          if (hasNativeText) additional = additionalOcrText(nativeText, recognized.text);
+          else text = recognized.text;
           reasons.add('OCR_NOT_VERIFIED');
-          if (!recognized.trim() && !hasNativeText) reasons.add('OCR_TEXT_EMPTY');
+          if (!recognized.text.trim() && !hasNativeText) reasons.add('OCR_TEXT_EMPTY');
         }
+        const notices = visualNotices({ image: Boolean(hasPaintedImage), symbols: omittedSymbols });
         const section = `## Seite ${number}\n\n${literal(text)}` +
-          (additional.trim() ? `\n\n### Zusätzlicher Bildtext (OCR)\n\n${literal(additional)}` : '');
+          (additional.trim() ? `\n\n### Zusätzlicher Bildtext (OCR)\n\n${literal(additional)}` : '') +
+          (notices ? `\n\n${notices}` : '');
         total += section.length + (sections.length ? 2 : 0);
         if (total > MAX_MARKDOWN_CHARS) fail('TEXT_TOO_LARGE');
         sections.push(section);

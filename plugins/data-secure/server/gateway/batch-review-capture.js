@@ -32,7 +32,9 @@ function createBatchReviewCapture(options = {}) {
       captureStoppedPipeline = true;
     }
     if (!captureStoppedPipeline || !captured ||
-        !Array.isArray(captured.ambiguities) || captured.ambiguities.length === 0) {
+        !Array.isArray(captured.ambiguities) ||
+        (captured.ambiguities.length === 0 && (state.product_channel !== 'standalone' ||
+          typeof captured.original_text !== 'string' || typeof captured.anonymized_text !== 'string'))) {
       throw localReviewError(
         'BATCH_REVIEW_RECONSTRUCTION_FAILED',
         'Die lokale Stapelprüfung konnte die offene Fundstelle nicht unverändert rekonstruieren. Es wurde nichts freigegeben.'

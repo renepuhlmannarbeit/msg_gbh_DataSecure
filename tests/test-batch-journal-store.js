@@ -9,6 +9,7 @@ const { notProcessedDocumentResult } = require('../plugins/data-secure/server/ga
 const { createSuite } = require('./helpers');
 const { createBatchPseudonymState } = require('../plugins/data-secure/server/batch-pseudonym-context');
 const { createBatchPseudonymRegistry } = require('../plugins/data-secure/server/batch-pseudonym-registry');
+const { rememberStandaloneReviewChoices, prepareStandaloneReviewChoices } = require('../plugins/data-secure/server/gateway/standalone-review-choices');
 
 const { test, done, assert } = createSuite('Batch journal state store');
 const token = 'a'.repeat(64);
@@ -56,6 +57,25 @@ function fixture(options = {}) {
 function raw(target) {
   return fs.readFileSync(target, 'utf8');
 }
+
+test('restart-stable Standalone review choices are authenticated and never store raw names', () => {
+  const item = fixture();
+  try {
+    const value = state({ product_channel: 'standalone', ...createBatchPseudonymState({ productChannel: 'standalone' }) });
+    const draft = { original_text: 'Erika Beispiel', anonymized_text: 'Erika Beispiel',
+      allowOrganizationReview: true, ambiguities: [{ ambiguity_id: 'person:v1:000001', type: 'person_prose_ambiguous',
+        original_start: 0, original_end: 14, anonymized_start: 0, anonymized_end: 14 }] };
+    rememberStandaloneReviewChoices(value, [draft], [{ document_index: 1,
+      decisions: [{ ambiguity_id: 'person:v1:000001', decision: 'keep' }] }]);
+    item.store.writeState(value);
+    assert.doesNotMatch(raw(item.target), /Erika|Beispiel/iu);
+    const restored = item.store.readState(token);
+    assert.strictEqual(prepareStandaloneReviewChoices(restored, [draft]).openDrafts.length, 0);
+    restored.standalone_review_choices.entries[0][1] = 'redact';
+    assert.throws(() => item.store.writeState(restored), /BATCH_PSEUDONYM_STATE_INVALID/u);
+    assert.strictEqual(item.store.readState(token).standalone_review_choices.entries[0][1], 'keep');
+  } finally { item.cleanup(); }
+});
 
 test('writeState integrates positive short writes and zero-progress failure atomically', () => {
   const initial = fixture();

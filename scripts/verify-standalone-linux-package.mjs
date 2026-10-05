@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { readCentralModes } from './lib/zip.mjs';
+import { verifyStandaloneInventory, verifyArchiveChecksum } from './lib/standalone-package-integrity.mjs';
 
 const require = createRequire(import.meta.url);
 const { readZip } = require('../plugins/data-secure/server/zip-reader.js');
@@ -47,6 +48,7 @@ assert.equal(manifest.signing, 'unsigned');
 assert.equal(manifest.requires_node_install, false);
 assert.equal(manifest.requires_rust_install, false);
 assert.equal(manifest.requires_network, false);
+verifyStandaloneInventory(relative, manifest);
 for (const file of manifest.files) {
   const value = relative.get(file.path);
   assert.ok(value, `STANDALONE_MANIFEST_MISSING:${file.path}`);
@@ -64,11 +66,6 @@ for (const component of rustLicenses.components) {
   assert.ok(sbom.packages.some((item) => item.name === component.name &&
     item.versionInfo === component.version && item.licenseDeclared === component.license));
 }
-for (const line of relative.get('SHA256SUMS').toString('utf8').trim().split(/\r?\n/u)) {
-  const match = /^([a-f0-9]{64})  (.+)$/u.exec(line);
-  assert.ok(match, 'STANDALONE_SHA256SUMS_INVALID');
-  assert.equal(crypto.createHash('sha256').update(relative.get(match[2])).digest('hex'), match[1]);
-}
 const checksum = fs.readFileSync(`${archive}.sha256`, 'utf8').trim();
-assert.equal(checksum, `${crypto.createHash('sha256').update(bytes).digest('hex')}  ${path.basename(archive)}`);
+verifyArchiveChecksum(bytes, archive, checksum);
 process.stdout.write(`${JSON.stringify({ ok: true, archive, target, entries: relative.size, bytes: bytes.length })}\n`);

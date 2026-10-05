@@ -7,7 +7,7 @@ const { createSuite } = require('./helpers');
 const {
   SOURCE_FOLDER_CANCELLED, sourceFolderPickerCommands, pickSourceFolder, enumerateSourceFolder, enumerateSourceFolderAsync
 } = require('../plugins/data-secure/server/companion/source-folder');
-const { batchQueueFromSelection } = require('../plugins/data-secure/server/companion/file-picker');
+const { batchQueueFromSelection, validateSelectedPath, validateSelectedPathAsync } = require('../plugins/data-secure/server/companion/file-picker');
 
 const { test, testAsync, done, assert } = createSuite('Secure recursive source folder');
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-source-folder-'));
@@ -18,6 +18,60 @@ function clean(name = 'input') {
   fs.mkdirSync(target, { recursive: true });
   return target;
 }
+
+function dsStoreFixture() {
+  const bytes = Buffer.alloc(8196);
+  bytes.writeUInt32BE(1, 0); bytes.write('Bud1', 4);
+  for (const position of [8, 16]) bytes.writeUInt32BE(2048, position);
+  bytes.writeUInt32BE(2048, 12);
+  const root = 2052;
+  bytes.writeUInt32BE(2, root); bytes.writeUInt32BE(4096 | 5, root + 12);
+  bytes.writeUInt32BE(1, root + 1032); bytes[root + 1036] = 4;
+  bytes.write('DSDB', root + 1037); bytes.writeUInt32BE(1, root + 1041);
+  bytes.writeUInt32BE(4096, 4096 + 20);
+  return bytes;
+}
+function thumbsFixture(extraName = '1') {
+  const bytes = Buffer.alloc(2048);
+  Buffer.from('d0cf11e0a1b11ae1', 'hex').copy(bytes);
+  bytes.writeUInt16LE(3, 26); bytes.writeUInt16LE(0xfffe, 28);
+  bytes.writeUInt16LE(9, 30); bytes.writeUInt16LE(6, 32);
+  bytes.writeUInt32LE(1, 44); bytes.writeUInt32LE(1, 48);
+  bytes.writeUInt32LE(0, 76);
+  bytes.fill(0xff, 512, 1024); bytes.writeUInt32LE(0xfffffffd, 512); bytes.writeUInt32LE(0xfffffffe, 516);
+  for (const [index, name] of ['Root Entry', 'Catalog', extraName].entries()) {
+    const cursor = 1024 + index * 128;
+    bytes.write(name + '\0', cursor, 'utf16le'); bytes.writeUInt16LE((name.length + 1) * 2, cursor + 64);
+    bytes[cursor + 66] = index === 0 ? 5 : 2;
+  }
+  return bytes;
+}
+testAsync('Standalone folder admission recognises bounded OS structures and reports names, never generic hidden files', async () => {
+  const root = clean('os-metadata');
+  fs.writeFileSync(path.join(root, 'Quelle.md'), 'Name: Anna Linden');
+  const artifacts = { '.DS_Store': dsStoreFixture(), 'desktop.ini': Buffer.from('[.ShellClassInfo]\nIconResource=folder.ico,0\n'), 'Thumbs.db': thumbsFixture() };
+  for (const [name, bytes] of Object.entries(artifacts)) fs.writeFileSync(path.join(root, name), bytes);
+  const skipped = [];
+  const opts = { productChannel: 'standalone', onIgnoredArtifact: (reason, name) => skipped.push([reason, name]) };
+  assert.equal(enumerateSourceFolder(root, opts).length, 1);
+  assert.deepEqual(skipped.map(item => item[1]).sort(), Object.keys(artifacts).sort());
+  assert.ok(skipped.every(item => item[0] === 'os_folder_metadata'));
+  skipped.length = 0;
+  assert.equal((await enumerateSourceFolderAsync(root, opts)).length, 1);
+  assert.equal(skipped.length, 3);
+  assert.throws(() => enumerateSourceFolder(root), error => error.code === 'SOURCE_FOLDER_UNSUPPORTED_FILES', 'Cowork scope unchanged');
+  const { metadataReason } = require('../plugins/data-secure/server/companion/folder-metadata');
+  assert.equal(metadataReason('Thumbs.db', thumbsFixture('WordDocument')), null);
+  for (const name of Object.keys(artifacts)) {
+    assert.equal(metadataReason(name, Buffer.from('Name: Anna Linden')), null, 'a reserved filename is insufficient');
+    fs.writeFileSync(path.join(root, name), 'Name: Anna Linden');
+    await assert.rejects(() => enumerateSourceFolderAsync(root, opts), error =>
+      error.code === 'SOURCE_FOLDER_UNSUPPORTED_FILES' && error.localUnsupportedFiles.includes(name));
+    fs.writeFileSync(path.join(root, name), artifacts[name]);
+  }
+  fs.writeFileSync(path.join(root, '.private-notes'), 'Private original');
+  assert.throws(() => enumerateSourceFolder(root, opts), error => error.code === 'SOURCE_FOLDER_UNSUPPORTED_FILES');
+});
 
 test('picker commands are shell-free native folder dialogs on Windows, macOS and Linux', () => {
   const windows = sourceFolderPickerCommands('win32', { SystemRoot: 'C:\\Windows' })[0];
@@ -89,6 +143,48 @@ test('a mixed tree is rejected as a whole instead of silently selecting supporte
     assert.doesNotMatch(error.message, /contract|notes|presentation|unknown|\.pptx|\.bin/iu);
     assert.deepStrictEqual(error.localUnsupportedFiles, ['presentation.pptx', 'unknown.bin']);
     assert.strictEqual(error.localUnsupportedCount, 2);
+    return true;
+  });
+});
+
+test('all rejected supported files retain local relative labels and fixed reasons before admission', () => {
+  const root = clean('named-supported-failures');
+  fs.mkdirSync(path.join(root, 'nested'));
+  fs.writeFileSync(path.join(root, 'empty.txt'), '');
+  fs.writeFileSync(path.join(root, 'valid.txt'), 'ok');
+  fs.writeFileSync(path.join(root, 'nested', 'large.md'), 'too large');
+  assert.throws(() => enumerateSourceFolder(root, { hasReparseComponent: () => false, maxBytes: 3 }), error => {
+    assert.strictEqual(error.code, 'SOURCE_SELECTION_REJECTED');
+    assert.deepStrictEqual(error.localSelectionFiles, [
+      { name: 'empty.txt', reason_code: 'SOURCE_FILE_EMPTY' },
+      { name: 'nested/large.md', reason_code: 'SOURCE_FORMAT_SIZE_LIMIT' }
+    ]);
+    assert.strictEqual(error.localSelectionCount, 2);
+    assert.doesNotMatch(error.message, /empty|large|nested|\.txt|\.md/u);
+    return true;
+  });
+});
+
+test('file access denial is a fixed OS fact with a local basename, never a claimed antivirus cause', () => {
+  const candidate = path.join(base, 'Private Name.pdf');
+  assert.throws(() => validateSelectedPath(candidate, { hasReparseComponent: () => false,
+    fs: { lstatSync: () => { throw Object.assign(new Error(`denied ${candidate}`), { code: 'EACCES' }); } } }), error => {
+    assert.strictEqual(error.code, 'SOURCE_ACCESS_DENIED');
+    assert.deepStrictEqual(error.localSelectionFiles, [{ name: 'Private Name.pdf', reason_code: 'SOURCE_ACCESS_DENIED' }]);
+    assert.doesNotMatch(error.message, /Private Name|Antivirus|\\|\.pdf/u);
+    return true;
+  });
+});
+
+test('a blocked source folder retains its fixed OS access reason without inventing document failures', () => {
+  const root = clean('blocked-read');
+  assert.throws(() => enumerateSourceFolder(root, { hasReparseComponent: () => false, fs: {
+    lstatSync: fs.lstatSync.bind(fs),
+    readdirSync: () => { throw Object.assign(new Error(`private folder ${root}`), { code: 'EACCES' }); }
+  } }), error => {
+    assert.strictEqual(error.code, 'SOURCE_ACCESS_DENIED');
+    assert.equal(error.localSelectionFiles, undefined, 'a failed directory walk cannot know which document names are present');
+    assert.doesNotMatch(error.message, /blocked-read|Antivirus/u);
     return true;
   });
 });
@@ -230,6 +326,26 @@ test('a selected root replacement during listing rejects the complete synchronou
 });
 
 async function main() {
+  await testAsync('async folder admission enumerates every rejected supported file without returning a partial queue', async () => {
+    const root = clean('async-named-supported-failures');
+    fs.mkdirSync(path.join(root, 'nested'));
+    fs.writeFileSync(path.join(root, 'empty.md'), '');
+    fs.writeFileSync(path.join(root, 'nested', 'large.txt'), 'too large');
+    await assert.rejects(() => enumerateSourceFolderAsync(root, {
+      hasReparseComponentAsync: async () => false, maxBytes: 3
+    }), error => {
+      assert.strictEqual(error.code, 'SOURCE_SELECTION_REJECTED');
+      assert.deepStrictEqual(error.localSelectionFiles, [
+        { name: 'empty.md', reason_code: 'SOURCE_FILE_EMPTY' },
+        { name: 'nested/large.txt', reason_code: 'SOURCE_FORMAT_SIZE_LIMIT' }
+      ]);
+      assert.strictEqual(error.localSelectionCount, 2);
+      return true;
+    });
+    await assert.rejects(() => validateSelectedPathAsync(path.join(root, 'missing.txt'), {
+      hasReparseComponentAsync: async () => false
+    }), error => error.code === 'SOURCE_READ_FAILED' && error.localSelectionFiles[0].name === 'missing.txt');
+  });
   await testAsync('async admission reads files below a root containing only subfolders', async () => {
     const root = clean('async-subfolders-only');
     fs.mkdirSync(path.join(root, 'one'));

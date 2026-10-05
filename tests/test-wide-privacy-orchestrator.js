@@ -95,6 +95,8 @@ testAsync('wide DOCX XLSX and PPTX retain an explicit source header for privacy 
       convertBuffer: directConversion,
       persistStandaloneIdentitySnapshot(snapshot) { privateSnapshot = snapshot; } });
     const released = readOutput(result.package_id, result.read_capability).text;
+    assert.match(released, /Vertrauliche Identitätszuordnung mit Originalwerten wird lokal dauerhaft aufbewahrt/u);
+    assert.doesNotMatch(released, /Keine persistente Personen-Pseudonymtabelle/u);
     assert.doesNotMatch(released, /Max Mustermann|Nordlicht GmbH/u, extension);
     assert.match(released, /\[PERSON_001\]|\[UNTERNEHMEN_001\]/u, extension);
     assert.equal(privateSnapshot.package_id, result.package_id, extension);

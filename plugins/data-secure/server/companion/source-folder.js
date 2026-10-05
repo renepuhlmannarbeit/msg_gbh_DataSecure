@@ -14,8 +14,14 @@ const SOURCE_FOLDER_TITLE = 'Ordner mit DataSecure lokal verarbeiten';
 const SOURCE_FOLDER_CANCELLED = '__DATASECURE_SOURCE_FOLDER_CANCELLED__';
 const TREE_LIMITS = Object.freeze({ maxDirectories: 1024, maxEntries: 4096, maxDepth: 32 });
 const MAX_REPORTED_UNSUPPORTED = 200;
+const SELECTION_REASON_CODES = new Set(['SOURCE_FORMAT_SIZE_LIMIT', 'SOURCE_FILE_EMPTY',
+  'SOURCE_FORMAT_UNSUPPORTED', 'SOURCE_READ_FAILED', 'SOURCE_ACCESS_DENIED',
+  'SOURCE_PATH_UNSAFE', 'SOURCE_IDENTITY_CHANGED']);
 function folderFailure(code, message) {
   return Object.assign(new SafeError(message), { code });
+}
+function folderReadFailure(error, message) {
+  return folderFailure(['EACCES', 'EPERM'].includes(error?.code) ? 'SOURCE_ACCESS_DENIED' : 'SOURCE_READ_FAILED', message);
 }
 function unsupportedFolderFailure(regularFiles, unsupportedFiles, labels) {
   const error = folderFailure('SOURCE_FOLDER_UNSUPPORTED_FILES',
@@ -33,6 +39,18 @@ function recordUnsupportedLabel(labels, root, full) {
       relative.length <= 1024 && !relative.split('/').some(part => !part || part === '.' || part === '..')) {
     labels.push(relative);
   }
+}
+function recordSelectionFailure(failures, error, sourceLabel) {
+  if (!SELECTION_REASON_CODES.has(error?.code)) throw error;
+  failures.push({ name: sourceLabel, reason_code: error.code });
+}
+function throwSelectionFailures(failures) {
+  if (!failures.length) return;
+  const error = folderFailure(failures.length === 1 ? failures[0].reason_code : 'SOURCE_SELECTION_REJECTED',
+    'Die ausgewählten Dateien konnten nicht vollständig aufgenommen werden. Es wurde kein Stapel gestartet.');
+  error.localSelectionFiles = failures.slice(0, MAX_REPORTED_UNSUPPORTED);
+  error.localSelectionCount = failures.length;
+  throw error;
 }
 function sameFsObject(left, right) {
   return Boolean(left && right && left.isDirectory() === right.isDirectory() &&
@@ -142,7 +160,8 @@ function enumerateSourceFolder(root, options = {}) {
     throw new SafeError('Der ausgewählte Quellordner liegt hinter einem Link oder Reparse-Punkt.');
   }
   let rootStat;
-  try { rootStat = io.lstatSync(resolvedRoot); } catch { throw new SafeError('Der ausgewählte Quellordner ist nicht verfügbar.'); }
+  try { rootStat = io.lstatSync(resolvedRoot); }
+  catch (error) { throw folderReadFailure(error, 'Der ausgewählte Quellordner ist nicht verfügbar.'); }
   if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) throw new SafeError('Die Auswahl ist kein regulärer lokaler Ordner.');
 
   const pending = [{ directory: resolvedRoot, depth: 0, identity: rootStat }];
@@ -165,7 +184,7 @@ function enumerateSourceFolder(root, options = {}) {
     catch { throw new SafeError('Der ausgewählte Ordner hat sich während der Prüfung verändert.'); }
     if (!sameFsObject(before, current.identity)) throw new SafeError('Der ausgewählte Ordner hat sich während der Prüfung verändert.');
     try { entries = io.readdirSync(current.directory, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name)); }
-    catch { throw new SafeError('Der ausgewählte Ordner konnte nicht vollständig gelesen werden.'); }
+    catch (error) { throw folderReadFailure(error, 'Der ausgewählte Ordner konnte nicht vollständig gelesen werden.'); }
     let after;
     try { after = io.lstatSync(current.directory); }
     catch { throw new SafeError('Der ausgewählte Ordner hat sich während der Prüfung verändert.'); }
@@ -185,9 +204,9 @@ function enumerateSourceFolder(root, options = {}) {
         continue;
       }
       if (!stat.isFile()) throw new SafeError('Der ausgewählte Ordner enthält ein nicht unterstütztes Dateisystemobjekt.');
-      const artifactReason = sourceArtifactReason(full, { fs: io, stat });
+      const artifactReason = sourceArtifactReason(full, { fs: io, stat, productChannel: options.productChannel });
       if (artifactReason) {
-        options.onIgnoredArtifact?.(artifactReason);
+        options.onIgnoredArtifact?.(artifactReason, normalizedSourceLabel(resolvedRoot, full));
         continue;
       }
       regularFiles++;
@@ -217,9 +236,13 @@ function enumerateSourceFolder(root, options = {}) {
   // root-relative label as part of the private queue: Standalone uses it to
   // reproduce the selected directory tree in the visible result. It remains
   // local and is never diagnostic or public MCP data.
-  const selected = candidates.map(({ full, sourceLabel }) => ({
-    ...validateSelectedPath(full, { ...options, fs: io, allowedTypes }), sourceLabel, treeOrder: sourceLabel
-  }));
+  const selected = [];
+  const selectionFailures = [];
+  for (const { full, sourceLabel } of candidates) {
+    try { selected.push({ ...validateSelectedPath(full, { ...options, fs: io, allowedTypes }), sourceLabel, treeOrder: sourceLabel }); }
+    catch (error) { recordSelectionFailure(selectionFailures, error, sourceLabel); }
+  }
+  throwSelectionFailures(selectionFailures);
   for (const [directory, identity] of directoryIdentities) {
     let current;
     try { current = io.lstatSync(directory); }
@@ -263,7 +286,8 @@ async function enumerateSourceFolderAsync(root, options = {}) {
   throwIfSelectionAborted(options.signal);
   if (await reparse(resolvedRoot)) throw new SafeError('Der ausgewählte Quellordner liegt hinter einem Link oder Reparse-Punkt.');
   let rootStat;
-  try { rootStat = await asyncIo.lstat(resolvedRoot); } catch { throw new SafeError('Der ausgewählte Quellordner ist nicht verfügbar.'); }
+  try { rootStat = await asyncIo.lstat(resolvedRoot); }
+  catch (error) { throw folderReadFailure(error, 'Der ausgewählte Quellordner ist nicht verfügbar.'); }
   if (!rootStat.isDirectory() || rootStat.isSymbolicLink()) throw new SafeError('Die Auswahl ist kein regulärer lokaler Ordner.');
 
   const pending = [{ directory: resolvedRoot, depth: 0, identity: rootStat }];
@@ -287,7 +311,7 @@ async function enumerateSourceFolderAsync(root, options = {}) {
     catch { throw new SafeError('Der ausgewählte Ordner hat sich während der Prüfung verändert.'); }
     if (!sameFsObject(before, current.identity)) throw new SafeError('Der ausgewählte Ordner hat sich während der Prüfung verändert.');
     try { entries = (await asyncIo.readdir(current.directory, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name)); }
-    catch { throw new SafeError('Der ausgewählte Ordner konnte nicht vollständig gelesen werden.'); }
+    catch (error) { throw folderReadFailure(error, 'Der ausgewählte Ordner konnte nicht vollständig gelesen werden.'); }
     let after;
     try { after = await asyncIo.lstat(current.directory); }
     catch { throw new SafeError('Der ausgewählte Ordner hat sich während der Prüfung verändert.'); }
@@ -308,9 +332,9 @@ async function enumerateSourceFolderAsync(root, options = {}) {
       }
       else {
         if (!stat.isFile()) throw new SafeError('Der ausgewählte Ordner enthält ein nicht unterstütztes Dateisystemobjekt.');
-        const artifactReason = await sourceArtifactReasonAsync(full, { fs: io, fsPromises: asyncIo, stat });
+        const artifactReason = await sourceArtifactReasonAsync(full, { fs: io, fsPromises: asyncIo, stat, productChannel: options.productChannel });
         if (artifactReason) {
-          options.onIgnoredArtifact?.(artifactReason);
+          options.onIgnoredArtifact?.(artifactReason, normalizedSourceLabel(resolvedRoot, full));
           await checkpoint();
           continue;
         }
@@ -335,12 +359,16 @@ async function enumerateSourceFolderAsync(root, options = {}) {
   }
   if (!candidates.length) throw folderFailure('SOURCE_FOLDER_EMPTY', 'Der ausgewählte Ordner enthält keine unterstützten Dateien.');
   const selected = [];
+  const selectionFailures = [];
   for (const { full, sourceLabel } of candidates) {
-    selected.push({ ...await validateSelectedPathAsync(full, {
-      ...options, fs: io, fsPromises: asyncIo, hasReparseComponentAsync: reparse, allowedTypes
-    }), sourceLabel, treeOrder: sourceLabel });
+    try {
+      selected.push({ ...await validateSelectedPathAsync(full, {
+        ...options, fs: io, fsPromises: asyncIo, hasReparseComponentAsync: reparse, allowedTypes
+      }), sourceLabel, treeOrder: sourceLabel });
+    } catch (error) { recordSelectionFailure(selectionFailures, error, sourceLabel); }
     await checkpoint();
   }
+  throwSelectionFailures(selectionFailures);
   for (const [directory, identity] of directoryIdentities) {
     let current;
     try { current = await asyncIo.lstat(directory); }

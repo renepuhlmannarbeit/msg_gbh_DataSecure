@@ -14,6 +14,11 @@ const SOURCE_KINDS = new Set(['files', 'folder']);
 const PROFILES = new Set(['auto', 'customer', 'applicant', 'personnel_profile', 'contract', 'general']);
 const CONVERSION_TYPES = ['txt', 'md', 'csv', 'docx', 'xlsx', 'pptx', 'pdf', 'png', 'jpeg', 'bmp'];
 const DIRECT_MARKDOWN_TYPES = new Set(['.txt', '.md', '.markdown', '.csv']);
+const SELECTION_REASON_CODES = new Set(['SOURCE_FORMAT_SIZE_LIMIT', 'SOURCE_FILE_EMPTY',
+  'SOURCE_FORMAT_UNSUPPORTED', 'SOURCE_READ_FAILED', 'SOURCE_ACCESS_DENIED',
+  'SOURCE_PATH_UNSAFE', 'SOURCE_IDENTITY_CHANGED', 'SOURCE_ARTIFACT_IGNORED']);
+const REVIEW_START_FAILURE_CODES = new Set(['LOCAL_REVIEW_START_MISSING',
+  'LOCAL_REVIEW_START_DENIED', 'LOCAL_REVIEW_START_ARCHITECTURE', 'LOCAL_REVIEW_START_FAILED']);
 let standaloneStartup;
 
 function validateChoice(value, allowed, fallback) {
@@ -200,7 +205,7 @@ function defaultDependencies() {
       ...options, appReview: reviewBroker
     }),
     reviewSession: reviewBroker.session,
-    reviewContinuationBatchId: reviewBroker.lastReviewedBatchId,
+    reviewContinuationBatchId: reviewBroker.boundBatchId,
     reviewChunk: reviewBroker.chunk,
     submitReview: reviewBroker.submit,
     acknowledgeStandaloneTerminalNotice: batchExecutor.acknowledgeStandaloneTerminalNotice,
@@ -292,21 +297,42 @@ class StandaloneApplicationService {
 
   reviewSession() {
     const session = this.deps.reviewSession?.() || { ready: false };
-    if (session.ready) return session;
+    const boundBatchId = session.batch_id || this.deps.reviewContinuationBatchId?.();
+    const sameRun = Boolean(this.observedBatchId && boundBatchId === this.observedBatchId);
+    if (session.ready && (!session.batch_id || sameRun)) return session;
     const status = this.status();
-    const sameRun = this.observedBatchId &&
-      this.deps.reviewContinuationBatchId?.() === this.observedBatchId;
-    return { ready: false,
-      run_complete: Boolean(sameRun && status.batch_complete === true &&
-        ['results_available', 'completed_without_results'].includes(status.state)),
-      continuation_available: Boolean(sameRun && status.state === 'review_required') };
+    const complete = Boolean(sameRun && status.batch_complete === true &&
+      ['results_available', 'completed_without_results'].includes(status.state));
+    const failed = sameRun && session.phase === 'failed';
+    const exportPending = sameRun && status.state === 'export_pending' && session.worker_active !== true;
+    const actionableLimit = failed && session.error_code === 'LOCAL_REVIEW_TOO_LARGE';
+    const canContinue = Boolean(sameRun && status.state === 'review_required' &&
+      session.worker_active !== true && !actionableLimit);
+    let affectedFiles = [];
+    if (failed || canContinue) {
+      try { affectedFiles = this.deps.runHistory.reviewTargets?.(boundBatchId) || []; }
+      catch { /* missing labels must not change the run's fail-closed state */ }
+    }
+    return { ready: false, run_complete: complete,
+      continuation_available: canContinue,
+      ...(session.phase ? {
+        phase: !sameRun ? 'unbound' : complete ? 'complete' : failed ? 'failed' : exportPending ? 'export_pending'
+          : canContinue ? 'retry_available' : session.phase,
+        worker_active: sameRun && session.worker_active === true,
+        retry_available: failed && canContinue,
+        ...(failed ? { error_code: session.error_code || 'LOCAL_REVIEW_FAILED' } : {}),
+        // Capture targets before continuing too: an unconfirmed transport/start
+        // cannot ask the departed worker for the names afterwards.
+        ...(failed || canContinue ? { affected_files: affectedFiles } : {})
+      } : {}) };
   }
   reviewChunk(reviewId, index) { return this.deps.reviewChunk(reviewId, index); }
   submitReview(reviewId, answer) { return this.deps.submitReview(reviewId, answer); }
 
   async continueReviewSession(signal) {
     const batchId = this.deps.reviewContinuationBatchId?.();
-    if (!batchId || batchId !== this.observedBatchId || this.status().state !== 'review_required') {
+    if (!batchId || batchId !== this.observedBatchId ||
+        this.reviewSession().continuation_available !== true) {
       throw fixedFailure('STANDALONE_NOTHING_TO_CONTINUE', 'Für dieses Prüffenster ist keine weitere Prüfung bereit.');
     }
     return this.continueHistoryBatch(batchId, signal);
@@ -505,7 +531,12 @@ class StandaloneApplicationService {
         throw fixedFailure('STANDALONE_START_FAILED', 'Der lokale Start wurde nicht bestätigt. Bitte den Status prüfen.');
       }
       try { await started.ipcAcknowledgement; }
-      catch { throw fixedFailure('STANDALONE_START_FAILED', 'Der lokale Start wurde nicht bestätigt. Bitte den Status prüfen.'); }
+      catch (error) {
+        if (review && REVIEW_START_FAILURE_CODES.has(error?.code)) {
+          throw fixedFailure(error.code, 'Die lokale Prüfkomponente konnte nicht gestartet werden.');
+        }
+        throw fixedFailure('STANDALONE_START_FAILED', 'Der lokale Start wurde nicht bestätigt. Bitte den Status prüfen.');
+      }
       return { ok: true, event: 'batch_continued', external_disclosure: false };
     } finally {
       if (reservation) this.deps.releaseIntake(reservation.reservation_id);
@@ -517,10 +548,35 @@ class StandaloneApplicationService {
     if (sourceKind === 'folder') {
       const folder = await this.deps.pickSourceFolderAsync({ signal });
       return this.deps.enumerateSourceFolderAsync(folder, {
-        allowedTypes: CONVERSION_TYPES, signal
+        allowedTypes: CONVERSION_TYPES, signal, productChannel: 'standalone'
       });
     }
     return this.deps.pickSourcesAsync({ allowedTypes: CONVERSION_TYPES, signal });
+  }
+
+  async validateSourceSelection(sourcePaths, signal) {
+    const outcomes = await Promise.allSettled(sourcePaths.map((candidate) =>
+      this.deps.validateSelectedPathAsync(candidate, { allowedTypes: CONVERSION_TYPES, signal })));
+    const rejected = outcomes.filter((entry) => entry.status === 'rejected');
+    if (!rejected.length) return outcomes.map((entry) => entry.value);
+    // Cancellation remains cancellation, never a file failure. Multi-selection
+    // admission is atomic and waits for every validation so no failing filename
+    // is lost simply because a different file failed first.
+    const cancelled = rejected.find((entry) => entry.reason?.code === 'LOCAL_SELECTION_CANCELLED');
+    if (cancelled) throw cancelled.reason;
+    if (sourcePaths.length === 1) throw rejected[0].reason;
+    const error = fixedFailure('SOURCE_SELECTION_REJECTED',
+      'Diese Dateiauswahl konnte nicht übernommen werden. Die betroffenen Dateien stehen in den Details; die bisherige Auswahl bleibt unverändert.');
+    error.localSelectionFiles = outcomes.flatMap((entry, index) => {
+      if (entry.status !== 'rejected') return [];
+      const name = path.basename(String(sourcePaths[index] || ''));
+      if (!name || name.length > 1024 || /[\\/\u0000-\u001f\u007f]/u.test(name) ||
+          ['.', '..'].includes(name) || path.win32.isAbsolute(name) || path.posix.isAbsolute(name)) return [];
+      return [{ name, reason_code: SELECTION_REASON_CODES.has(entry.reason?.code)
+        ? entry.reason.code : 'SOURCE_READ_FAILED' }];
+    });
+    error.localSelectionCount = rejected.length;
+    throw error;
   }
 
   async admitSelectedSources(sourcePaths, sourceKind = 'files', signal) {
@@ -538,14 +594,17 @@ class StandaloneApplicationService {
     try {
       const previousQueue = this.admittedQueue || [];
       let ignoredArtifactCount = 0;
+      const ignoredArtifacts = [];
       const selected = sourceKind === 'folder'
         ? await this.deps.enumerateSourceFolderAsync(sourcePaths[0], {
-            allowedTypes: CONVERSION_TYPES, signal,
-            onIgnoredArtifact: () => { ignoredArtifactCount++; }
+            allowedTypes: CONVERSION_TYPES, signal, productChannel: 'standalone',
+            onIgnoredArtifact: (reason, name) => {
+              ignoredArtifactCount++;
+              if (ignoredArtifacts.length < RESOURCE_LIMITS.MAX_BATCH_FILES && typeof name === 'string' &&
+                  name.length <= 1024 && !/[\u0000-\u001f\u007f]/u.test(name)) ignoredArtifacts.push({ name, reason_code: reason });
+            }
           })
-        : await Promise.all(sourcePaths.map((candidate) => this.deps.validateSelectedPathAsync(candidate, {
-            allowedTypes: CONVERSION_TYPES, signal
-          })));
+        : await this.validateSourceSelection(sourcePaths, signal);
       const seen = new Set(previousQueue.map((item) => selectedPathIdentity(item.full)));
       const additions = [];
       let alreadySelectedCount = 0;
@@ -592,7 +651,7 @@ class StandaloneApplicationService {
         ok: true, event: 'selection_summarized', selected_count: queue.length,
         total_bytes: totalBytes,
         ...(alreadySelectedCount > 0 ? { already_selected_count: alreadySelectedCount } : {}),
-        ...(ignoredArtifactCount > 0 ? { ignored_artifact_count: ignoredArtifactCount } : {}),
+        ...(ignoredArtifactCount > 0 ? { ignored_artifact_count: ignoredArtifactCount, ignored_artifacts: ignoredArtifacts } : {}),
         ...admissionCounts(queue), ui_context: uiContext, external_disclosure: false
       };
     } catch (error) {
@@ -760,7 +819,10 @@ class StandaloneApplicationService {
     }
     try {
       await started.ipcAcknowledgement;
-    } catch {
+    } catch (error) {
+      if (review && REVIEW_START_FAILURE_CODES.has(error?.code)) {
+        throw fixedFailure(error.code, 'Die lokale Prüfkomponente konnte nicht gestartet werden.');
+      }
       throw fixedFailure('STANDALONE_START_FAILED', 'Der lokale Start wurde nicht bestätigt. Bitte den Status prüfen.');
     }
     return { ok: true, event: 'batch_continued', external_disclosure: false };

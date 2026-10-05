@@ -225,7 +225,7 @@ test('alias types cannot cross entity kinds and readable sequence exhaustion is 
     registry.dispose();
     registry = createBatchPseudonymRegistry(secret, { ...options, persistedState: snapshot });
     assert.throws(() => registry.assign('ORG', 'Andere GmbH'),
-      (error) => error.code === 'BATCH_PSEUDONYM_INPUT_INVALID');
+      (error) => error.code === 'BATCH_PSEUDONYM_CAPACITY_EXCEEDED');
     assert.deepStrictEqual(registry.exportState(), snapshot, 'failed allocation does not publish an invalid reservation');
   } finally { registry.dispose(); secret.fill(0); }
 });

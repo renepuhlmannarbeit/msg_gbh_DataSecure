@@ -18,6 +18,25 @@ constexpr int kAssignError = 123;
 constexpr int kWaitError = 124;
 constexpr int kResourceLimit = 125;
 constexpr int kUnsupportedHost = 126;
+// Fixed, content-free inner CreateProcess facts; never expose vendor text or paths.
+constexpr int kExecutableMissing = 127;
+constexpr int kExecutableDenied = 128;
+constexpr int kArchitectureInvalid = 129;
+
+int StartFailureCode(DWORD error) {
+  switch (error) {
+    case ERROR_FILE_NOT_FOUND:
+    case ERROR_PATH_NOT_FOUND: return kExecutableMissing;
+    case ERROR_ACCESS_DENIED:
+    case ERROR_PRIVILEGE_NOT_HELD:
+    case ERROR_ACCESS_DISABLED_BY_POLICY:
+    case ERROR_VIRUS_INFECTED:
+    case ERROR_VIRUS_DELETED: return kExecutableDenied;
+    case ERROR_BAD_EXE_FORMAT:
+    case ERROR_EXE_MACHINE_TYPE_MISMATCH: return kArchitectureInvalid;
+    default: return kStartError;
+  }
+}
 
 bool IsNativeAmd64Host() {
   using IsWow64Process2Function = BOOL(WINAPI*)(HANDLE, USHORT*, USHORT*);
@@ -223,6 +242,7 @@ int wmain(int argc, wchar_t* argv[]) {
   // otherwise leaves a suspended child outside KILL_ON_JOB_CLOSE forever.
   const BOOL created = CreateProcessW(argv[8], mutable_command.data(), nullptr, nullptr, TRUE,
                                       flags, nullptr, nullptr, &startup.StartupInfo, &process);
+  const DWORD start_error = created ? ERROR_SUCCESS : GetLastError();
   DeleteProcThreadAttributeList(attributes);
   CloseIfValid(child_stdin);
   CloseIfValid(child_stdout);
@@ -230,7 +250,7 @@ int wmain(int argc, wchar_t* argv[]) {
   if (!created) {
     CloseHandle(completion);
     CloseHandle(job);
-    return kStartError;
+    return StartFailureCode(start_error);
   }
 
   BOOL in_job = FALSE;

@@ -3,6 +3,7 @@
 const { normalizeSpaces, normalizeText, ORG_SUFFIX, TECH_TERMS, escapeRegExp, NB, NA } = require('./base');
 const { matchers: credentialCatalogMatchers } = require('./credential-catalog');
 const { markdownTableCells, collectOrganizations } = require('./entities');
+const { sourceVariableTokens } = require('./spans');
 
 // The table path must recognise the same narrowly tested certification
 // headings as profile detection. Otherwise a CSV row containing a credential
@@ -166,8 +167,13 @@ function literalMatches(text, value) {
 // Redaction changes offsets and may consume a line break in a wrapped holder
 // name. Align the surviving literal fragments around placeholders, instead of
 // assuming that source/output line numbers or repeated-name ordinals match.
-function preservedTextRanges(original, anonymized) {
+function preservedTextRanges(original, anonymized, options = {}) {
   const ranges=[];
+  // Source-present variable-label lookalikes are ordinary source bytes for this narrow
+  // alignment path, not delimiters with presumed generated provenance. A
+  // collision between an imported value and a new generated value remains
+  // conservative: exact source/output fragment binding must still succeed.
+  const sourceMarkers = options.preserveSourceVariableMarkers === true ? sourceVariableTokens(original) : null;
   // Cowork/legacy batches use base32 labels, including digits inside the
   // suffix. They delimit preserved fragments just like readable V2 labels.
   const placeholders=/\[(?:[A-ZÄÖÜ_]+(?:_\d+)?|(?:PERSON|ORGANISATION|KUNDE|PROJEKT)_[A-Z2-7]{10,52})\]/gu;
@@ -190,6 +196,7 @@ function preservedTextRanges(original, anonymized) {
   };
   let match;
   while((match=placeholders.exec(anonymized))!==null) {
+    if (sourceMarkers?.has(match[0])) continue;
     add(match.index);
     outputStart=match.index+match[0].length;
   }

@@ -73,7 +73,8 @@ function createBatchReviewPublication(options = {}) {
         const id = decision?.ambiguity_id;
         if (!decision || Object.keys(decision).sort().join(',') !== 'ambiguity_id,decision' ||
             typeof id !== 'string' || !expectedIds.has(id) || decisionIds.has(id) ||
-            !['keep', 'redact'].includes(decision.decision)) throw invalidBinding();
+            !(['keep', 'redact'].includes(decision.decision) ||
+              (draft.allowOrganizationReview === true && decision.decision === 'redact_organization'))) throw invalidBinding();
         decisionIds.add(id);
       }
       if (decisionIds.size !== expectedIds.size) throw invalidBinding();
@@ -87,6 +88,9 @@ function createBatchReviewPublication(options = {}) {
     // Validate the complete local result before the first durable status change
     // or publication. Array order is irrelevant; document_index is the binding.
     const decisionsByIndex = bindReviewedDocuments(items, drafts, reviewedDocuments);
+    // Only a fully occurrence-bound answer may become a restart-stable local
+    // choice. Remembering it is not publication or a residual-gate exemption.
+    if (state.product_channel === 'standalone') await deps.onReviewDecisionsBound?.(drafts, reviewedDocuments);
     const packages = [];
     let locallyReleased = 0;
     let failed = 0;
@@ -137,7 +141,8 @@ function createBatchReviewPublication(options = {}) {
               } } : {}),
           reviewText: (input) => reviewedBatchText(input, decisionsByIndex.get(index + 1), {
             reviewedDraft: drafts[index],
-            resolvedPersonReplacement: (value) => pseudonymRegistry?.lookup?.('PERSON', value)
+            resolvedPersonReplacement: (value) => pseudonymRegistry?.lookup?.('PERSON', value),
+            resolvedOrganizationReplacement: (value) => pseudonymRegistry?.lookup?.('ORG', value)
           }),
           beforePublish: async (details) => {
             positiveDocumentResult(details?.document_result);

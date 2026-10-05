@@ -180,6 +180,38 @@ test('preserves mixed ambiguity types and their local identifiers through one ba
     ['credential:v2:000001', 'person:v1:000001']);
 });
 
+test('Standalone groups both entity hypotheses and propagates typed company choices, never enabling Cowork implicitly', () => {
+  const text = 'CAPGEMINI INVENT';
+  const documents = [
+    { original_text: text, anonymized_text: text, allowOrganizationReview: true,
+      ambiguities: [personAmbiguity('person:v1:000001', text, text, text)] },
+    { original_text: text, anonymized_text: text, allowOrganizationReview: true,
+      ambiguities: [residualAmbiguity('person-residual:v1:000001', text, text)] }
+  ];
+  const bundle = buildBatchReviewDraft(documents);
+  assert.equal(bundle.draft.allow_organization_review, true);
+  assert.deepEqual(bundle.draft.batch_review.documents, bundle.entries.map(entry => ({
+    document_index: entry.document_index, candidate_ids: [...entry.candidate_ids.keys()]
+  })), 'document identity comes from backend membership, never source separators');
+  assert.equal(groupForCandidate(bundle.draft, bundle.draft.ambiguities[0].ambiguity_id).candidate_ids.length, 2);
+  const answer = { action: 'reviewed', redactions: [], decisions: bundle.draft.ambiguities.map(item =>
+    ({ ambiguity_id: item.ambiguity_id, decision: 'redact_organization' })) };
+  assert.deepEqual(resolveBatchReviewResult(bundle, answer).documents.map(doc => doc.decisions[0].decision),
+    ['redact_organization', 'redact_organization']);
+  const contradictory = structuredClone(answer);
+  contradictory.decisions[1].decision = 'keep';
+  assert.throws(() => resolveBatchReviewResult(bundle, contradictory), /einheitlich/u);
+  const legacy = buildBatchReviewDraft(documents.map(({ allowOrganizationReview, ...document }) => document));
+  assert.equal(legacy.draft.allow_organization_review, undefined);
+  assert.equal(legacy.draft.batch_review.documents, undefined, 'Cowork metadata remains unchanged');
+  assert.throws(() => resolveBatchReviewResult(legacy, answer), /ungültig/u);
+  const credential = buildBatchReviewDraft([{ original_text: text, anonymized_text: text,
+    allowOrganizationReview: true, ambiguities: [ambiguity('credential:v2:000001', text, text, text)] }]);
+  assert.throws(() => resolveBatchReviewResult(credential, { action: 'reviewed', redactions: [], decisions: [
+    { ambiguity_id: credential.draft.ambiguities[0].ambiguity_id, decision: 'redact_organization' }
+  ] }), /keine Unternehmensentscheidung/u);
+});
+
 test('rejects contradictory choices for the same possible person across documents', () => {
   const text = 'Anna Berger koordinierte die Einführung.';
   const bundle = buildBatchReviewDraft([

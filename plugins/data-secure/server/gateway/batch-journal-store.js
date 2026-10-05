@@ -1,6 +1,7 @@
 'use strict';
 
 const { validPersistedLabel, validKnownAliasIndex } = require('../batch-pseudonym-registry');
+const { validStandaloneReviewChoices } = require('./standalone-review-choices');
 
 const fs = require('fs');
 const path = require('path');
@@ -261,6 +262,7 @@ function createBatchJournalStore(options = {}) {
   }
 
   function validPseudonymState(state) {
+    if (!validStandaloneReviewChoices(state)) return false;
     const fields = ['pseudonym_contract_version', 'pseudonym_ruleset_version', 'pseudonym_seed'];
     const present = fields.filter((field) => Object.hasOwn(state || {}, field));
     // Pre-RC batches remain listable/retirable, but processing refuses them in

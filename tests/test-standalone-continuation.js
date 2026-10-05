@@ -24,6 +24,7 @@ const { createBatchContinuation } = require('../plugins/data-secure/server/gatew
 const { createBatchRecovery } = require('../plugins/data-secure/server/gateway/batch-recovery');
 const { createBatchReviewState } = require('../plugins/data-secure/server/gateway/batch-review-state');
 const { createBatchReviewOrchestrator } = require('../plugins/data-secure/server/gateway/batch-review-orchestrator');
+const { createBatchPseudonymState } = require('../plugins/data-secure/server/batch-pseudonym-context');
 const { createBatchExecutorRunner } = require('../plugins/data-secure/server/gateway/batch-executor-runner');
 const { continueIntoLocalReview } = require('../plugins/data-secure/server/gateway/automatic-local-review');
 const { batchNextAction } = require('../plugins/data-secure/server/gateway/batch-next-action');
@@ -39,6 +40,7 @@ function fixture(otherStatus, options = {}) {
   const token = crypto.randomBytes(32).toString('hex');
   let state = {
     schema: 'datasecure-batch/1', product_channel: 'standalone', token, profile: 'general',
+    ...createBatchPseudonymState({ productChannel: 'standalone' }),
     created_at: new Date().toISOString(), expires_at: new Date(Date.now() + 86400000).toISOString(),
     items: ['deferred_review', otherStatus, 'released', 'stopped'].map((status, index) => ({
       id: crypto.randomBytes(16).toString('hex'), name: `synthetic-${index}.txt`, status,
@@ -116,13 +118,19 @@ function fixture(otherStatus, options = {}) {
   const reviewState = createBatchReviewState();
   const { reviewDeferredBatch } = createBatchReviewOrchestrator({
     ...shared, ...reviewState,
-    captureDeferredReviewInput: async () => ({ original_text: 'Synthetisch.', anonymized_text: 'Synthetisch.' }),
+    captureDeferredReviewInput: async () => ({ original_text: 'Erika Beispiel', anonymized_text: 'Erika Beispiel',
+      allowOrganizationReview: true, ambiguities: [{ ambiguity_id: 'person:v1:000001', type: 'person_prose_ambiguous',
+        replacement_kind: 'PERSON', original_start: 0, original_end: 14, anonymized_start: 0, anonymized_end: 14 }] }),
     async runBatchReviewLocally(drafts) {
       events.push('review');
       assert.equal(batchNextAction(publicProgress(state)), 'review');
-      return { action: reviewAction, documents: drafts };
+      return { action: reviewAction, documents: reviewAction === 'reviewed' ? drafts.map((draft, index) => ({
+        document_index: index + 1, decisions: draft.ambiguities.map((candidate) => ({
+          ambiguity_id: candidate.ambiguity_id, decision: 'keep' }))
+      })) : [] };
     },
-    async publishReviewedBatch(value, items) {
+    async publishReviewedBatch(value, items, drafts, documents, deps) {
+      await deps.onReviewDecisionsBound(drafts, documents);
       for (const item of items) { packageFor(item); item.status = 'released'; }
       writeState(value);
       return { packages: [], locallyReleased: items.length, failed: 0 };
@@ -329,6 +337,21 @@ async function confirmStart(f, invoke, expected) {
           assert.equal(exportsApi.visibleExportDirectory(f.token), '');
           f.assertIdle();
           await confirmStart(f, () => f.service.continueCurrentBatch(), 'batch');
+        });
+      }
+      for (const code of ['LOCAL_REVIEW_START_MISSING', 'LOCAL_REVIEW_START_DENIED',
+        'LOCAL_REVIEW_START_ARCHITECTURE', 'LOCAL_REVIEW_START_FAILED']) {
+        await testAsync(`${entrypoint}: a proven ${code} review ACK preserves its safe cause`, async () => {
+          const f = fixture('released');
+          const result = entrypoint === 'history'
+            ? f.service.continueHistoryBatch(f.token) : f.service.continueCurrentBatch();
+          assert.equal(f.starts.at(-1).kind, 'review');
+          f.starts.at(-1).reject(Object.assign(new Error('untrusted OS detail must not escape'), { code }));
+          await assert.rejects(result, error => error.code === code && !error.message.includes('untrusted'));
+          assert.equal(f.progress().deferred_review, 1);
+          assert.deepEqual(f.events, []);
+          assert.equal(exportsApi.visibleExportDirectory(f.token), '');
+          f.assertIdle();
         });
       }
     }

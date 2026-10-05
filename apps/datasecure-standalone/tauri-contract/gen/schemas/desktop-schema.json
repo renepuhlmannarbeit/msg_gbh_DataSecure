@@ -243,6 +243,12 @@
           "markdownDescription": "Liest nur die Kennung und Größe der aktiven lokalen Prüfsitzung."
         },
         {
+          "description": "Liest betroffene Dateinamen und feste Fehlercodes nur lokal für den ausgewählten Standalone-Lauf.",
+          "type": "string",
+          "const": "allow-get-run-failures",
+          "markdownDescription": "Liest betroffene Dateinamen und feste Fehlercodes nur lokal für den ausgewählten Standalone-Lauf."
+        },
+        {
           "description": "Zeigt höchstens 20 lokale Standalone-Läufe ohne Dokumentinhalte.",
           "type": "string",
           "const": "allow-get-run-history",

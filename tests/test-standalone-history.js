@@ -192,6 +192,24 @@ function code(expected) { return (error) => error?.code === expected; }
     assert.equal(history.find(completed.token).identity_mapping_available, true);
     assert.equal(history.resolveResults(completed.token).local_path, originalRun,
       'the confidential copy does not change the anonymized result binding');
+    const publishIdentity = identityLedger.publishDocumentToRun;
+    identityLedger.publishDocumentToRun = () => { throw Object.assign(new Error('PRIVATE PATH'), { code: 'EACCES' }); };
+    try {
+      const fallback = history.resolveIdentityMapping(completed.token);
+      assert.equal(fallback.publication_available, false);
+      assert.equal(fallback.identity_mapping_warning, 'STANDALONE_IDENTITY_PUBLICATION_FAILED');
+      assert.equal(fallback.local_path, identityLedger.resolveDocument(completed.token));
+    } finally { identityLedger.publishDocumentToRun = publishIdentity; }
+    const materializeIdentity = identityLedger.materialize;
+    identityLedger.materialize = () => { throw Object.assign(new Error('PRIVATE PATH'), { code: 'ENOSPC' }); };
+    try { assert.throws(() => history.resolveIdentityMapping(completed.token), code('STANDALONE_IDENTITY_MAPPING_INVALID')); }
+    finally { identityLedger.materialize = materializeIdentity; }
+    // User removal is permanent: history reports the missing publication, but
+    // never silently restores it on opening the retained private fallback.
+    fs.unlinkSync(identityTarget.local_path);
+    assert.equal(history.find(completed.token).identity_mapping_warning, 'STANDALONE_IDENTITY_PUBLICATION_FAILED');
+    assert.equal(history.resolveIdentityMapping(completed.token).publication_available, false);
+    assert.equal(fs.existsSync(identityTarget.local_path), false);
     await assert.rejects(service.continueHistoryBatch(completed.token), code('STANDALONE_NOTHING_TO_CONTINUE'));
 
     const allStopped = stateFixture('4', 1500, { items: [{ id: '4'.repeat(32), name: 'blocked.docx',
@@ -201,6 +219,7 @@ function code(expected) { return (error) => error?.code === expected; }
     assert.equal(history.find(allStopped.token).status, 'completed_without_results');
     assert.equal(history.find(allStopped.token).results_available, false);
     assert.equal(history.find(allStopped.token).ledger_available, false);
+    assert.equal(history.find(allStopped.token).identity_mapping_warning, undefined);
     assert.deepEqual(history.failures(allStopped.token), {
       ok: true, available: true, total: 1,
       files: [{ name: 'blocked.docx', reason_code: 'DOCX_STRUCTURE_UNSUPPORTED' }],
@@ -208,6 +227,16 @@ function code(expected) { return (error) => error?.code === expected; }
     });
     assert.doesNotMatch(JSON.stringify(history.history()), /blocked\.docx/u,
       'file names are returned on demand, not persisted in content-free history rows');
+    const failureService = new StandaloneApplicationService({ dependencies: dependencies(history) });
+    failureService.observedBatchId = allStopped.token;
+    assert.deepEqual(failureService.runFailures(), history.failures(allStopped.token),
+      'current failure details belong to the observed run, never the newest different run');
+    assert.deepEqual(failureService.runFailures(completed.token), {
+      ok: true, available: true, total: 0, files: [], local_ui_only: true, external_disclosure: false
+    }, 'an explicit successful run never borrows failures from the observed run');
+    failureService.observedBatchId = null;
+    assert.throws(() => failureService.runFailures(), code('STANDALONE_HISTORY_MISSING'),
+      'an unbound request must not guess a run or disclose another source filename');
     const summaryOnly = createRunHistory({
       readStates: () => [], readExports: exportsApi.readStandaloneExportHistory,
       recoverableStates: () => [], liveExecutor: () => false
@@ -381,9 +410,25 @@ function code(expected) { return (error) => error?.code === expected; }
       const saved = JSON.parse(fs.readFileSync(path.join(process.env.EU_PRIVACY_DATA_ROOT, 'standalone-run-history', `${candidate.token}.json`), 'utf8'));
       assert.equal(saved.complete, progress.complete);
       assert.equal(saved.failed_count, progress.stopped); assert.equal(saved.completed_count, progress.completed);
+      const details = makeHistory().failures(candidate.token);
+      const problems = items.filter(item => ['stopped', 'preflight_mapping_pending', 'retryable'].includes(item.status));
+      assert.equal(details.total, problems.length, 'an unfinished local mapping must not conceal a stopped filename');
+      if (items.some(item => item.status === 'stopped' && item.local_mapping_exported === false)) {
+        assert.ok(details.files.some(file => file.name === 'synthetic.txt' && file.stage === 'mapping_pending'));
+        assert.ok(row.problem_count > row.failed_count, 'the local row can offer details without corrupting completed counts');
+      }
+      if (problems.length > 0 && items.some(item => item.status === 'pending')) {
+        assert.equal(details.pending_total, items.filter(item => item.status === 'pending').length);
+        assert.deepEqual(details.pending_files, [{ name: 'synthetic.txt' }]);
+      }
+      assert.doesNotMatch(JSON.stringify(saved), /synthetic\.txt/u, 'failure names never enter the content-free history summary');
     }
     const activeHistory = stateFixture('7', 6000, { items: [{ id: '7'.repeat(32), name: 'synthetic.txt', status: 'pending' },
       { id: '6'.repeat(32), name: 'synthetic-review.txt', status: 'deferred_review' }] });
+    assert.deepEqual(makeHistory().reviewTargets(activeHistory.token), ['synthetic-review.txt'],
+      'a review-process failure names only the pending review files from its exact run');
+    assert.deepEqual(makeHistory().reviewTargets('8'.repeat(64)), [],
+      'a different run never borrows the failed review target list');
     assert.equal(batch.claimLocalBatchExecutor(activeHistory.token, process.pid).ok, true);
     try {
       const activeRow = makeHistory().find(activeHistory.token);

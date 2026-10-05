@@ -94,6 +94,15 @@ Systembestandteil ist auf regulär aktualisierten Windows-10/11-Systemen bereits
 vorhanden. Fehlt er, startet die Oberfläche nicht; DataSecure lädt ihn nicht
 automatisch aus dem Internet nach.
 
+Wenn die Oberfläche nicht startet, versucht DataSecure einen inhaltsfreien
+Startbericht im lokalen Diagnoseordner abzulegen und diesen zu öffnen.
+Der Diagnoseordner kann auch ohne WebView gestartet werden: In `cmd` im
+entpackten App-Ordner `"DataSecure Standalone.exe" --startup-diagnostics`
+ausführen. Der feste Fehlercode unterscheidet einen System-/Paketstartfehler
+von Dokumentfehlern. Blockiert Windows bereits den gesamten Prozessstart,
+kann DataSecure selbst keinen Bericht erstellen; die Betriebssystemmeldung
+mit der IT prüfen. Keine Schutzfunktion pauschal deaktivieren.
+
 Dieses Paket ist noch ein interner Engineering-Pilot ohne Codesignatur. Windows
 kann deshalb beim ersten Start einen Herkunftshinweis anzeigen.
 

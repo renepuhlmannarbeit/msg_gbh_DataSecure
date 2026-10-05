@@ -5,6 +5,43 @@ Auf beiden Macs bleibt ZIP erhalten; DMG ist ein zusätzlicher Weg. Alle vier
 nativen Paket-/App-Prüfungen einschließlich integrierter Prüfseite bestanden;
 der Windows-Anwenderlauf mit 140 Ergebnissen wurde als bestanden bestätigt.
 
+Lokaler Entwicklungsstand vom 05.10.2026 (noch nicht in RC157 veröffentlicht):
+Die Prüfung bietet zusätzlich **Als Unternehmen anonymisieren** und
+**Beibehalten**. Eine bestätigte Behandlung derselben vollständigen Schreibweise
+gilt für offene und folgende Prüfungen dieses Laufs, auch nach Neustart. Neue
+Läufe und bereits fertige Ergebnisse bleiben getrennt. Nicht verarbeitete
+Dateien werden mit Namen einschließlich Endung, Fehlercode und nächstem Schritt
+genannt; **Dateidetails erneut laden** lädt nur die Liste, nicht die Verarbeitung.
+PDF-OCR über bereits vorhandenem nativem Text wird nur bei vollständiger
+Geometrieabdeckung, exakter Wortgleichheit und sicherer Malreihenfolge
+unterdrückt. Nicht lesbare Symbolruns und ausgelassene Grafiken erhalten einen
+sachlichen Hinweis; unbekannte Bildtexte werden nicht blind entfernt und
+Grafikbeschreibungen nicht erfunden. Siehe DS-106 / BL-010.46 im kanonischen Stand.
+
+DS-107 / BL-010.48 härtet zusätzlich die echte Desktop-Verbindung und den
+Prüfprozess: Unternehmensentscheidungen passieren die private IPC-Validierung;
+Vorbereitung, Veröffentlichung, Fehler und nötige Exportreparatur werden
+unterschieden. Fehlende Komponente, verweigerte Ausführung oder falsche
+Architektur erhalten einen festen Fehlercode mit passendem nächsten Schritt.
+Das laufgebundene Prüffenster kann die dafür vorgemerkten Dateinamen nennen,
+auch wenn der Worker vor dem ersten Entwurf nicht startet. Eine Wiederholung
+ist erst nach dessen tatsächlichem Ende möglich. Das Schließen der App wartet
+nicht unbegrenzt auf einen blockierten Prüfkanal; ungeprüfte Dateien bleiben
+gesperrt und fortsetzbar. Pro Prüfdialog sind auf allen Plattformen maximal
+5.000 Fundstellen möglich. Größere einzelne Dokumente müssen aufgeteilt werden.
+Diese Änderungen sind im lokalen Windows-Engineering-Bau geprüft, noch nicht
+als neues Release oder native macOS-Bedienabnahme veröffentlicht.
+
+DS-109 ergänzt lokal (noch unveröffentlicht) gebundene Gesprächsnamen,
+konservative OCR-Wort-/Malreihenfolgenprüfung und ehrliche Identitätswarnungen.
+Bekannte OS-Begleitdateien werden nur nach Strukturprüfung übersprungen und
+namentlich angezeigt. Startet die Oberfläche nicht, kann die Anwendung mit
+`--startup-diagnostics` den inhaltsfreien Diagnoseordner ohne WebView öffnen.
+Ein komplett vom Betriebssystem blockiertes Programm kann selbst keinen Bericht
+erstellen; hierfür benötigt die IT die Betriebssystemmeldung. Schutzfunktionen
+nicht deaktivieren. Weitere technische Evidenz und offene Geräteprüfungen stehen
+in DS-109 / BL-010.52 und der kanonischen Evidence-Matrix.
+
 Dieses Verzeichnis enthält die reale Tauri-2-Desktop-Hülle und ihren
 plattformneutralen, maschinenprüfbaren Vertrag. Die Rust-Hülle, der native
 Datei-/Ordnerdialog und der private DataSecure-Sidecar-Kanal wurden in getrennten
@@ -128,9 +165,10 @@ belegt nur seine tatsächliche Intel- oder ARM64-Architektur.
 Sieben transportneutrale Core-Verträge für Start, Zweck, nächste Aktion,
 Konverterkommunikation, Ergebnisgrad, Ergebnisprojektion und Fortschritt sind
 in beiden Produktprojektionen gebunden. Breitere Format-/Profil-/Recovery-
-Goldenabdeckung bleibt ein Refactoringziel. Für Anonymisierung auf macOS ist
-der einzelne AppKit-Sammelreviewadapter E0 implementiert; seine tatsächliche
-Bedienung auf Intel und Apple Silicon ist noch Zielhostabnahme. Reine Markdown-Konvertierung
+Goldenabdeckung bleibt ein Refactoringziel. Standalone verwendet auf Windows,
+macOS und Linux dieselbe integrierte Tauri-Prüfseite mit privater IPC, nicht
+Coworks externen AppKit-/PowerShell-Adapter. Die vollständige sichtbare
+Bedienabnahme auf beiden Mac-Architekturen bleibt getrennte Zielhostevidenz. Reine Markdown-Konvertierung
 benötigt keinen PII-Sammelreview. Maßgeblich sind der
 [aktuelle Stand](../../docs/canonical/CURRENT_STATE.md) und das
 [kanonische Backlog](../../docs/canonical/BACKLOG.md).

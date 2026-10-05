@@ -1,8 +1,28 @@
 # DataSecure Standalone – Produkt- und Einführungsarchitektur
 
-Stand: 11.09.2026 · Entscheidungen DS-075 bis DS-100 · Steuerung über BL-010.9
+Stand: 05.10.2026 · einschließlich DS-104 bis DS-109 · Steuerung über BL-010.9
 
 ## Produktabgrenzung
+
+DS-109 bestätigt die vorhandenen Schichten statt eines MVC-Neubaus:
+Renderer projizieren Zustand und senden gebundene Aktionen; der
+Standalone-Anwendungsdienst orchestriert Aufnahme, Lauf und Fortsetzung;
+reine Coreverträge besitzen Semantik und geschlossene Fehlerkataloge; Tauri
+und native Supervisoren besitzen Fenster-, Prozess- und OS-Zielverantwortung.
+Das native Öffnen einer Identität prüft den erweiterten DTO geschlossen,
+trennt dessen Warnung und reduziert anschließend auf den vierfeldrigen
+Dateizielvertrag. Dokumentnummern stammen aus Backend-Kandidatenmitgliedschaft.
+Verlaufspolling behält unveränderte Aktionsknoten und entwertet Antworten
+gelöschter/geänderter Zeilen. Diese Struktur verbessert Zustandsklarheit,
+ohne Coworks Adapter oder eine zweite Privacy-Engine einzuführen.
+
+Das laufweite Identitätsdokument ist separat größenbegrenzt und gestreamt;
+Originalwerte bleiben vertraulich und dauerhaft lokal. Fehler bei seiner
+Ergebnisordnerkopie erhalten eine Warnung, auch wenn die private Datei noch
+geöffnet werden kann. Lokale OS-Metadaten werden nur nach enger Strukturprüfung
+ausgelassen und namentlich gemeldet. Startberichte und
+`--startup-diagnostics` benötigen keine erfolgreiche WebView-Initialisierung;
+OS-Blockaden vor Prozessstart benötigen weiterhin externe Betriebssystemevidenz.
 
 DataSecure Standalone ist ein **eigenständiges zweites Endnutzerprodukt**. Es
 funktioniert ohne Claude, Cowork, Skills, MCP, Agenten, Chat, Internetzugang und
@@ -274,6 +294,76 @@ Ergebnisse ausgegeben. Mac- und Linux-Reviewer des Cowork-Plugins bleiben
 eigene Produktadapter. Die gemeinsame Engine und ihr Review-Ergebnisvertrag
 werden nicht für einen Desktop-Sonderfall aufgeweicht.
 
+### DS-106: Entitätstyp und laufweite Wiederverwendung (lokaler Entwicklungsstand)
+
+Nur Standalone setzt `allowOrganizationReview` im internen Reviewvertrag.
+Die lokale Seite bietet Person, Unternehmen und Beibehalten; die typisierte
+Unternehmensantwort geht bis zur ORG-Registry und dem Identitätssnapshot.
+Credential-Entscheidungen und Coworks eigener Adapter werden nicht erweitert.
+
+`gateway/standalone-review-choices.js` persistiert eine begrenzte, authentifizierte
+Tabelle im privaten Laufjournal. Vollständige normalisierte Schreibweisen werden
+mit HMAC statt Klartext gebunden: Laufkennung, Seed, Vertrags-/Regelversion und
+Policy-Fingerprint gehören zur Bindung. Vor Wiederverwendung werden aktuelle
+Quell-/Ausgabespans geprüft. Das Zusammenführen einer neuen Prüfgruppe erhält
+alle ursprünglichen Kandidaten für die vollständige Freigabebindung; kein
+bekannter Text wird pauschal zur Ausnahme der Restprüfung. Nach Änderung der
+Registry werden vertagte Standalone-Drafts frisch rekonstruiert, nicht anhand
+veralteter Offsets fortgeschrieben. Neue Läufe und fertige Ausgaben bleiben
+getrennt. Bereits bestätigte Entscheidungen gelten für offene und folgende
+Prüfungen des Laufs, auch nach Neustart.
+
+Das Hauptfenster darf ausschließlich laufgebundene Fehler-Metadaten durch
+`get_run_failures` lesen: Dateiname/Endung, fester Fehlercode und feste
+Handlungserklärung, kein Dokumentinhalt. Ein erneuter Listenaufruf startet
+keinen Batch und erteilt keine Reviewfreigabe.
+
+Die Standalone-Konverter halten Grafikhinweise und konservative PDF-/OCR-
+Geometrie in eigenen Modulen (`markdown-visuals.js`, `pdf-text-layout.js`).
+Keine externen Bildbeschreibungen, keine semantische Löschung beliebiger
+OCR-Wörter; ohne sichere Geometrie bleibt OCR erhalten.
+
+### DS-107: geprüfte Desktop-Verbindungen und Fehlerzustände (05.10.2026, unveröffentlicht)
+
+Die typisierte Unternehmensentscheidung wird auch vom tatsächlichen privaten
+Frame-Decoder akzeptiert; der Broker prüft weiterhin die ausdrückliche
+Freigabeberechtigung des besitzenden Drafts. Eine echte Sidecar-/Worker-
+Integration belegt Fehler vor dem ersten Draft, laufgebundene Wiederaufnahme,
+Unternehmenspublikation, ungültige Antwort sowie Vertagen/Fortsetzen. Das ist
+kein Ersatz für den vollständigen nativen Bedienlauf auf einem Mac.
+
+Standalone verwendet auf allen Plattformen ein Dialogbudget von 5.000
+Fundstellen und 40 MiB Draftdaten, mit Antworten unter der 1-MiB-Framegrenze.
+Prüfgruppen werden begrenzt; ein einzelnes größeres Dokument erhält einen
+konkreten Hinweis zum Aufteilen statt einer wiederholten identischen Prüfung.
+Coworks externe Adapter und deren eigene Grenzen bleiben unverändert.
+
+Die Prüfsitzung bindet bereits den Workerstart an die Laufkennung. Vorbereitung,
+Bereitschaft, Publikation, technische Fehler, Wiederaufnahme und ausstehende
+Ergebnisbereitstellung sind getrennte Zustände. Ein fehlgeschlagener Worker
+darf keinen endlosen Arbeitsindikator darstellen. Die UI nennt sichere
+Fehlercodes, nächste Schritte und die für diese Prüfung vorgemerkten Dateien;
+ein Prozessstartfehler bedeutet nicht, dass diese Dokumente beschädigt sind.
+
+Rust begrenzt Request-Lock, Prozessstart, Pipe-Schreiben und Antwort gemeinsam
+auf 30 Sekunden. Der Pipe-Writer läuft getrennt; die unabhängige Child-Control
+unterbricht ihn beim Schließen. Das native Hauptfenster nutzt dieselbe
+Schließbehandlung wie der isolierte Smoke, ohne auf den Request-Mutex zu warten.
+Die Kindprozessbeendigung wird begrenzt geprüft; fehlende Bestätigung erhält
+einen festen Diagnosecode, nicht eine unbegrenzte GUI-Warteoperation.
+
+Dateidetails enthalten nur lokale Basenames/relative Labels mit Endung und
+festen Ursachen. Gestoppte Dateien mit ausstehender Zuordnung bleiben sichtbar;
+noch nicht gestartete Dateien stehen getrennt. Diagnoseprotokolle erhalten
+keine Labels, Rohtexte oder OS-Fehlermeldungen. Ein verweigerter Zugriff wird
+nicht automatisch einem Virenscanner oder Gatekeeper zugeschrieben.
+
+Native Smokes verlangen eine erfolgreiche `get_review_session`-Antwort, nicht
+nur Seitenladen oder Requeststart. Plattformfremde Konverterfälle sind explizite
+Skips. Browser-/Textverträge bleiben als solche gekennzeichnet. Ein neuer
+Engineering-Build kann in einem frischen eigenen Verzeichnis entstehen, ohne
+das gespeicherte Releasepaket zu überschreiben.
+
 ### DS-105: getrennte vertrauliche Identitätszuordnung
 
 Der Standalone-Adapter erfasst vor der anonymisierten Publikation nur die
@@ -471,8 +561,11 @@ Orakelvertrag ist zusätzliche Engineering-Infrastruktur. Zielkatalog, Tauri-Kon
 Renderer-Berechtigungsgrenze und macOS-Pilotablauf sind maschinenprüfbare
 Verträge. Die reale Rust-Hülle, ein nativer Picker mit bewusstem Nachtrag vor Start und der
 private längengerahmte Core-Dispatcher wurden auf Windows x64 kompiliert und
-gestartet. Ein Ready-Handshake und eine feste 30-Sekunden-Antwortgrenze
-verhindern einen unendlich wartenden UI-Aufruf. Das Windows-x64-Pilot-ZIP bindet
+gestartet. Ein Ready-Handshake und endliche Aktionsfristen (30 Sekunden;
+Quellenaufnahme nach DS-108 fünf Minuten mit echten Zeit-Heartbeats)
+begrenzen wartende UI-Aufrufe. Ein unbekannt lange im OS blockierter Spawn
+wird beim Shutdown außerhalb der GUI weiter reconciliiert, niemals als
+erfolgreich beendet ausgegeben. Das Windows-x64-Pilot-ZIP bindet
 die herkunftsgeprüfte Node-Runtime und eine frisch erzeugte geschlossene
 Coreprojektion; Paketprüfung und isolierter Sidecar-Smoke sind grün. Der Build
 ist ein technischer Vertikalschnitt, **noch kein freigegebenes

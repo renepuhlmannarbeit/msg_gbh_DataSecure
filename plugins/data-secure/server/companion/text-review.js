@@ -75,7 +75,7 @@ function exactContextLine(text, start, end) {
   return normalizeText(source.slice(lineStart, lineEnd)).replace(/\s+/gu, ' ').trim().toLocaleLowerCase('de-DE');
 }
 
-function decisionGroups(ambiguities, originalText) {
+function decisionGroups(ambiguities, originalText, allowOrganizationReview = false) {
   const candidatesByContext = new Map();
   for (const candidate of ambiguities) {
     const source = String(originalText || '');
@@ -92,7 +92,8 @@ function decisionGroups(ambiguities, originalText) {
     const person = ['person_prose_ambiguous', 'person_residual_ambiguous'].includes(candidate.type);
     const basis = person ? identity : context;
     if (!basis) continue;
-    const key = `${candidate.type}\u0000${basis}`;
+    const family = person && allowOrganizationReview ? 'entity_name' : candidate.type;
+    const key = `${family}\u0000${basis}`;
     const ids = candidatesByContext.get(key) || [];
     ids.push(candidate.ambiguity_id);
     candidatesByContext.set(key, ids);
@@ -164,7 +165,8 @@ function buildReviewDraft(originalText, anonymizedText, profile, ambiguities = [
     // Local-only decision metadata is part of every review draft. This makes
     // repeated person spellings one decision unit even inside a single file;
     // the aggregate batch facade merely adds progress and document mapping.
-    decision_groups: decisionGroups(safeAmbiguities, original),
+    decision_groups: decisionGroups(safeAmbiguities, original, progress.allowOrganizationReview === true),
+    ...(progress.allowOrganizationReview === true ? { allow_organization_review: true } : {}),
     batch_index: batchIndex,
     batch_total: batchTotal,
     allow_defer: allowDefer
@@ -206,7 +208,8 @@ function buildBatchReviewDraft(documents, progress = {}) {
       document.anonymized_text,
       document.profile || 'general',
       document.ambiguities || [],
-      { batchIndex: index + 1, batchTotal: documents.length }
+      { batchIndex: index + 1, batchTotal: documents.length,
+        allowOrganizationReview: document.allowOrganizationReview === true || document.allow_organization_review === true }
     );
     const label = reviewDocumentLabel(index, documents.length);
     originals.push(label, individual.original_text);
@@ -244,7 +247,11 @@ function buildBatchReviewDraft(documents, progress = {}) {
   const draft = buildReviewDraft(originalText, anonymizedText, 'general', ambiguities, {
     batchIndex: 1,
     batchTotal: 1,
-    allowDefer: progress.allowDefer === true
+    allowDefer: progress.allowDefer === true,
+    // Only the app-owned Standalone adapter opts in. Native Cowork review
+    // drafts and their existing two-choice payload remain unchanged.
+    allowOrganizationReview: documents.every((document) =>
+      document.allowOrganizationReview === true || document.allow_organization_review === true)
   });
   draft.batch_review = {
     schema: BATCH_REVIEW_SCHEMA,
@@ -256,6 +263,9 @@ function buildBatchReviewDraft(documents, progress = {}) {
     // copied into this metadata, a journal, MCP response or diagnostic.
     decision_groups: draft.decision_groups
   };
+  if (draft.allow_organization_review === true) draft.batch_review.documents = entries.map(entry => ({
+    document_index: entry.document_index, candidate_ids: [...entry.candidate_ids.keys()]
+  }));
   return { draft, entries };
 }
 
@@ -667,7 +677,8 @@ function validateReviewResult(value, draft = null) {
     if (!Array.isArray(suppliedDecisions)) throw new SafeError('Die lokalen Zuordnungsentscheidungen fehlen.');
     const decisions = suppliedDecisions.map((item) => {
       if (!item || Object.keys(item).sort().join(',') !== 'ambiguity_id,decision' ||
-        !['keep', 'redact'].includes(item.decision)) {
+        !(['keep', 'redact'].includes(item.decision) ||
+          (draft?.allow_organization_review === true && item.decision === 'redact_organization'))) {
         throw new SafeError('Eine lokale Zuordnungsentscheidung ist ungültig.');
       }
       return { ambiguity_id: String(item.ambiguity_id), decision: item.decision };
@@ -682,10 +693,15 @@ function validateReviewResult(value, draft = null) {
       const personChoices = new Map();
       for (const choice of decisions) {
         const candidate = byId.get(choice.ambiguity_id);
+        if (choice.decision === 'redact_organization' &&
+            !['person_prose_ambiguous', 'person_residual_ambiguous'].includes(candidate?.type)) {
+          throw new SafeError('Diese Fundstelle erlaubt keine Unternehmensentscheidung.');
+        }
         if (!['person_prose_ambiguous', 'person_residual_ambiguous'].includes(candidate?.type)) continue;
         const identity = normalizeText(draft.original_text.slice(candidate.original_start, candidate.original_end))
           .replace(/\s+/gu, ' ').trim().toLocaleLowerCase('de-DE');
-        const decisionKey = `${candidate.type}:${identity}`;
+        const family = draft.allow_organization_review === true ? 'entity_name' : candidate.type;
+        const decisionKey = `${family}:${identity}`;
         const previous = personChoices.get(decisionKey);
         if (previous && previous !== choice.decision) {
           throw new SafeError('Gleiche mögliche Personennamen müssen im lokalen Stapel einheitlich entschieden werden.');
@@ -709,7 +725,7 @@ function validateReviewResult(value, draft = null) {
   return { action: value.action };
 }
 
-function applyManualRedactions(text, ranges) {
+function applyManualRedactions(text, ranges, options = {}) {
   const source = String(text || '');
   const sorted = [...(ranges || [])].sort((a, b) => a.start - b.start || a.end - b.end);
   let previousEnd = 0;
@@ -718,7 +734,9 @@ function applyManualRedactions(text, ranges) {
       !Number.isSafeInteger(range.start) || !Number.isSafeInteger(range.end) ||
       range.start < previousEnd || range.start < 0 || range.end <= range.start || range.end > source.length ||
       (range.replacement !== undefined &&
-        !/^\[(?:MANUAL_REDACTION|PERSON_(?:[0-9]{3,5}|[A-Z2-7]{10,52}))\]$/u.test(range.replacement))
+        !/^\[(?:MANUAL_REDACTION|PERSON_(?:[0-9]{3,5}|[A-Z2-7]{10,52}))\]$/u.test(range.replacement) &&
+        !(options.allowOrganizationReview === true &&
+          /^\[(?:UNTERNEHMEN|ORGANISATION)_(?:[0-9]{3,5}|[A-Z2-7]{10,52})\]$/u.test(range.replacement)))
     ) throw new SafeError('Eine lokale Anonymisierungsauswahl liegt außerhalb des geprüften Textes.');
     previousEnd = range.end;
   }

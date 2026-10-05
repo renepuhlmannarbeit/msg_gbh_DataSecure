@@ -4,6 +4,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
 const { createSuite } = require('./helpers');
+const { createReviewBroker, MAX_DRAFT_BYTES } = require('../plugins/data-secure/server/standalone/review-broker');
+const { buildReviewDraft, MAX_REVIEW_CHARS } = require('../plugins/data-secure/server/companion/text-review');
 
 const { testAsync, done, assert } = createSuite('Standalone frontend');
 
@@ -11,6 +13,8 @@ function element() {
   return { disabled: false, hidden: false, textContent: '', title: '', className: '', listeners: {}, attributes: {},
     value: '', children: [],
     appendChild(child) { this.children.push(child); return child; },
+    removeChild(child) { this.children.splice(this.children.indexOf(child), 1); return child; },
+    insertBefore(child, before) { const old = this.children.indexOf(child); if (old >= 0) this.children.splice(old, 1); const index = before ? this.children.indexOf(before) : this.children.length; this.children.splice(index, 0, child); return child; },
     replaceChildren(...children) { this.children = children; },
     focus() { this.focused = true; },
     setAttribute(name, value) { this.attributes[name] = value; },
@@ -111,6 +115,7 @@ async function nativeDropCase() {
   const calls = [];
   const windowEvents = {};
   let nativeListener;
+  let progressListener;
   let removed = 0;
   let releasePoll;
   let holdNextPoll = false;
@@ -129,7 +134,9 @@ async function nativeDropCase() {
   const timers = [];
   const context = {
     window: { __TAURI__: { core: { invoke }, event: { listen: async (name, callback) => {
-      assert.strictEqual(name, 'datasecure-native-drop'); nativeListener = callback;
+      assert.ok(['datasecure-native-drop', 'datasecure-admission-progress'].includes(name));
+      if (name === 'datasecure-native-drop') nativeListener = callback;
+      else progressListener = callback;
       return () => { removed += 1; };
     } } }, addEventListener: (name, callback) => { windowEvents[name] = callback; } },
     document: { getElementById: (id) => elements[id], createElement: element },
@@ -178,6 +185,8 @@ async function nativeDropCase() {
   assert.strictEqual(callsByCommand('start_admitted_batch'), 1, 'only explicit Start invokes processing');
 
   const picker = elements['select-files'].listeners.click();
+  progressListener({ payload: { phase: 'validating', elapsed_ms: 31000 } });
+  assert.match(elements['action-feedback'].textContent, /31 Sekunden.*Bitte warten/u);
   await elements['select-folder'].listeners.click();
   assert.strictEqual(callsByCommand('select_files'), 2);
   assert.strictEqual(callsByCommand('select_folder'), 0, 'busy is set before waiting on the first picker');
@@ -191,7 +200,7 @@ async function nativeDropCase() {
   assert.strictEqual(elements['select-files'].disabled, false);
   windowEvents.pagehide();
   windowEvents.pagehide();
-  assert.strictEqual(removed, 1, 'native listener is removed exactly once');
+  assert.strictEqual(removed, 2, 'both native listeners are removed exactly once');
 }
 
 async function restoredAdmissionCase() {
@@ -286,6 +295,7 @@ async function frontendHarness(overrides = {}) {
   const calls = [];
   let timerId = 0;
   let nativeListener;
+  let admissionProgressListener;
   const invoke = async (action, args) => {
     calls.push({ action, args });
     if (overrides[action]) return overrides[action](args);
@@ -296,8 +306,10 @@ async function frontendHarness(overrides = {}) {
   };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../apps/datasecure-standalone/frontend/app.js'), 'utf8'), {
     window: { confirm: (message) => overrides.confirm ? overrides.confirm(message) : true,
-      __TAURI__: { core: { invoke }, event: { listen: async (_name, callback) => {
-      nativeListener = callback; return () => {};
+      __TAURI__: { core: { invoke }, event: { listen: async (name, callback) => {
+      if (name === 'datasecure-native-drop') nativeListener = callback;
+      if (name === 'datasecure-admission-progress') admissionProgressListener = callback;
+      return () => {};
     } } }, addEventListener() {} },
     document: { getElementById: (id) => elements[id], createElement: element },
     setTimeout(callback, delay) { timers.set(++timerId, { callback, delay }); return timerId; },
@@ -308,6 +320,7 @@ async function frontendHarness(overrides = {}) {
     elements, calls, timers,
     click: (id) => elements[id].listeners.click(),
     native: (payload) => nativeListener({ payload }),
+    progress: (payload) => admissionProgressListener({ payload }),
     runTimer() {
       assert.strictEqual(timers.size, 1, 'exactly one next status timer must exist');
       const [id, timer] = timers.entries().next().value;
@@ -334,6 +347,35 @@ async function pickerTimerCancellationCase() {
   assert.strictEqual(harness.timers.size, 1);
 }
 
+async function admissionProgressAndTimeoutCase() {
+  const pending = deferred();
+  let selections = 0;
+  const harness = await frontendHarness({ select_files: () => ++selections === 1
+    ? { selected_count: 1, ui_context: localContext('Lauf-1', ['Bisher.txt']) }
+    : pending.promise });
+  await harness.click('task-anonymize');
+  await harness.click('select-files');
+  const choosing = harness.click('select-files');
+  const before = harness.count('get_public_state');
+  harness.progress({ phase: 'validating', elapsed_ms: 45000 });
+  assert.match(harness.elements['action-feedback'].textContent, /45 Sekunden.*Bitte warten/u);
+  assert.doesNotMatch(harness.elements['action-feedback'].textContent, /%/u, 'elapsed time is not invented percentage progress');
+  const feedback = harness.elements['action-feedback'].textContent;
+  harness.progress({ phase: 'validating', elapsed_ms: '<script>private</script>' });
+  assert.strictEqual(harness.elements['action-feedback'].textContent, feedback);
+  await harness.runTimer();
+  assert.strictEqual(harness.count('get_public_state'), before, 'long admission must not send a competing 30-second status RPC');
+  pending.reject('STANDALONE_ADMISSION_TIMEOUT');
+  await choosing;
+  assert.strictEqual(harness.elements.start.hidden, true, 'the killed sidecar no longer owns its old in-memory admission');
+  assert.strictEqual(harness.elements['select-files'].textContent, 'Dateien auswählen');
+  assert.match(harness.elements['action-feedback'].textContent, /fünf Minuten.*erneut auswählen/u);
+  assert.doesNotMatch(harness.elements['action-feedback'].textContent, /bisherige Auswahl bleibt/u);
+  assert.strictEqual(harness.count('start_admitted_batch'), 0);
+  harness.progress({ phase: 'validating', elapsed_ms: 46000 });
+  assert.match(harness.elements['action-feedback'].textContent, /fünf Minuten/u, 'late heartbeat must not overwrite the terminal admission error');
+}
+
 async function folderLimitFeedbackCase() {
   const harness = await frontendHarness({
     select_folder: () => { throw 'SOURCE_FORMAT_SIZE_LIMIT'; },
@@ -353,6 +395,7 @@ async function folderLimitFeedbackCase() {
 async function selectionEditingCase() {
   const harness = await frontendHarness({
     select_files: () => ({ selected_count: 2, total_bytes: 8, ignored_artifact_count: 1,
+      ignored_artifacts: [{ name: 'Unterordner/.DS_Store', reason_code: 'os_folder_metadata' }],
       ui_context: localContext('Lauf-1', ['Quelle.docx', 'Notiz.md']) }),
     remove_admitted_source: ({ selectionIndex }) => {
       assert.strictEqual(selectionIndex, 1, 'the grouped display retains the original queue index');
@@ -363,7 +406,8 @@ async function selectionEditingCase() {
   });
   await harness.click('task-markdown');
   await harness.click('select-files');
-  assert.match(harness.elements.summary.textContent, /1 temporäre Office-Datei übersprungen/u);
+  assert.match(harness.elements.summary.textContent, /1 bekannte Begleitdatei übersprungen/u);
+  assert.match(harness.elements['action-feedback'].textContent, /Unterordner\/\.DS_Store/u);
   assert.strictEqual(harness.elements['selection-list'].hidden, false);
   assert.strictEqual(harness.elements['selection-list'].children.length, 4);
   assert.match(harness.elements['selection-list'].children[0].textContent, /Direkt lesbare Textdateien \(1\)/u);
@@ -984,6 +1028,30 @@ async function noResultCompletionIsNotSuccessCase() {
   assert.strictEqual(harness.elements['process-completion-results'].disabled, true);
 }
 
+async function reviewStartFailureGuidanceCase() {
+  for (const [code, reason] of [
+    ['LOCAL_REVIEW_START_MISSING', /fehlt.*vollständige.*Paket/u],
+    ['LOCAL_REVIEW_START_DENIED', /verweigert.*Sicherheitsrichtlinien/u],
+    ['LOCAL_REVIEW_START_ARCHITECTURE', /Architektur.*passende.*Paket/u],
+    ['LOCAL_REVIEW_START_FAILED', /nicht gestartet.*ungeprüft/u]
+  ]) {
+    const harness = await frontendHarness({
+      get_run_history: () => localHistory([historyEntry('exact-review-run', {
+        status: 'review_required', resumable: true, failed_count: 0
+      })]),
+      continue_history_batch: () => { throw code; }
+    });
+    await harness.click('tab-results');
+    await settleFrontend();
+    await rowActions(harness.elements, 0).find(button => button.textContent === 'Prüfung fortsetzen').listeners.click();
+    assert.match(harness.elements['status-title'].textContent, new RegExp(code, 'u'));
+    assert.match(harness.elements['status-text'].textContent, reason);
+    assert.equal(harness.count('continue_history_batch'), 1, 'no automatic worker retry');
+    assert.equal(harness.count('open_review_window'), 1, 'the bound private window can name its sources despite failed worker start');
+    assert.doesNotMatch(harness.elements['status-text'].textContent, /Antivirus hat|Dokument ist defekt/u);
+  }
+}
+
 async function namedLocalFailuresCase() {
   const rejected = JSON.stringify({ code: 'SOURCE_FOLDER_UNSUPPORTED_FILES',
     details: { unsupported_files: ['BEGLEITDATEIEN/ERWARTUNGEN.json', 'DATEILISTE.csv'], unsupported_count: 2 } });
@@ -1020,7 +1088,9 @@ async function namedLocalFailuresCase() {
   assert.strictEqual(run.elements['process-failure-details'].open, true);
   const currentFiles = run.elements['process-failure-list'].children[0].children;
   assert.strictEqual(currentFiles.length, 2);
-  assert.match(currentFiles[0].textContent, /gruppe\/Quelle\.pdf.*PARSER_COVERAGE_UNVERIFIED/u);
+  assert.match(currentFiles[0].textContent, /gruppe\/Quelle\.pdf[\s\S]*PARSER_COVERAGE_UNVERIFIED/u);
+  assert.match(currentFiles[0].textContent, /nicht vollständig[\s\S]*Nächster Schritt:[\s\S]*neu speichern/u);
+  assert.match(currentFiles[1].textContent, /Datenschutzprüfung[\s\S]*kein ungeprüftes Ergebnis[\s\S]*Nächster Schritt:/u);
   await run.click('tab-results');
   await settleFrontend();
   const historyFailureButton = rowActions(run.elements, 0).find(button => button.textContent === 'Gestoppte Dateien anzeigen');
@@ -1029,9 +1099,63 @@ async function namedLocalFailuresCase() {
     .find(wrapper => wrapper.children[0]?.textContent === 'Gestoppte Dateien anzeigen');
   const historyFiles = failureWrapper.children[1].children[0].children;
   assert.strictEqual(historyFiles.length, 2);
-  assert.match(historyFiles[1].textContent, /andere\/Quelle\.pdf.*PERSON_CANDIDATE/u);
+  assert.match(historyFiles[1].textContent, /andere\/Quelle\.pdf[\s\S]*PERSON_CANDIDATE/u);
   assert.strictEqual(JSON.stringify(run.calls.filter(call => call.action === 'get_run_failures').map(call => call.args)),
     JSON.stringify([{ batchId: null }, { batchId }]));
+}
+
+async function namedAdmissionAndSystemFailuresCase() {
+  const selection = await frontendHarness({ select_folder: () => { throw JSON.stringify({
+    code: 'SOURCE_SELECTION_REJECTED', details: { selection_count: 2, selection_files: [
+      { name: 'nested/empty.md', reason_code: 'SOURCE_FILE_EMPTY' },
+      { name: 'nested/large.pdf', reason_code: 'SOURCE_FORMAT_SIZE_LIMIT' }
+    ] }
+  }); } });
+  await selection.click('task-anonymize'); await selection.click('select-folder');
+  assert.match(selection.elements['action-feedback'].textContent, /nested\/empty\.md[\s\S]*leer[\s\S]*nested\/large\.pdf[\s\S]*Verarbeitungsgrenze/u);
+  assert.match(selection.elements['action-feedback'].textContent, /Nächster Schritt:[\s\S]*SOURCE_FILE_EMPTY/u);
+  assert.equal(selection.count('start_admitted_batch'), 0);
+
+  const batchId = 'b'.repeat(64);
+  const details = { ok: true, available: true, total: 1, local_ui_only: true, external_disclosure: false,
+    files: [{ name: 'nested/Auftrag.pdf', reason_code: 'CONVERSION_EXECUTABLE_DENIED', stage: 'mapping_pending' }],
+    pending_total: 1, pending_files: [{ name: 'Noch-nicht-gestartet.xlsx' }] };
+  const harness = await frontendHarness({
+    get_run_history: () => localHistory([historyEntry(batchId, { failed_count: 0, problem_count: 1,
+      status: 'stopped', results_available: false, resumable: true })]),
+    get_run_failures: () => details
+  });
+  await harness.click('tab-results'); await settleFrontend();
+  const button = rowActions(harness.elements, 0).find(item => item.textContent === 'Gestoppte Dateien anzeigen');
+  assert.ok(button, 'mapping debt cannot hide the affected local filename behind failed_count=0');
+  await button.listeners.click();
+  const wrapper = harness.elements['history-body'].children[0].children[4].children
+    .find(item => item.children[0]?.textContent === 'Gestoppte Dateien anzeigen');
+  const content = wrapper.children[1];
+  assert.match(content.children[0].children[0].textContent, /nested\/Auftrag\.pdf[\s\S]*Zuordnungsübersicht[\s\S]*Systemfehler[\s\S]*kein nachgewiesener Dokumentfehler/u);
+  assert.match(content.children[0].children[0].textContent, /keine Antivirus-Blockade[\s\S]*Schutzfunktionen nicht deaktivieren/u);
+  assert.match(content.children[1].textContent, /Noch nicht gestartete Dateien[\s\S]*nicht als Dokumentfehler/u);
+  assert.equal(content.children[2].children[0].textContent, 'Noch-nicht-gestartet.xlsx');
+}
+
+async function namedOfficeOwnerAdmissionCase() {
+  for (const code of ['SOURCE_ARTIFACT_IGNORED', 'SOURCE_SELECTION_REJECTED']) {
+    let attempts = 0;
+    const harness = await frontendHarness({ select_files: () => {
+      if (attempts++ === 0) return { selected_count: 1, ui_context: localContext('Vorbereitet', ['Profil.txt']) };
+      throw JSON.stringify({ code, details: { selection_count: 1, selection_files: [
+        { name: '~$port.docx', reason_code: 'SOURCE_ARTIFACT_IGNORED' }
+      ] } });
+    } });
+    await harness.click('task-anonymize'); await harness.click('select-files');
+    await harness.click('select-files');
+    const feedback = harness.elements['action-feedback'].textContent;
+    assert.match(feedback, /~\$port\.docx[\s\S]*temporäre Office-Sperrdatei[\s\S]*eigentliche Originaldatei[\s\S]*SOURCE_ARTIFACT_IGNORED/u);
+    assert.doesNotMatch(feedback, /SOURCE_READ_FAILED|STANDALONE_OPERATION_FAILED|Zugriffsrechte|Antivirus/u);
+    assert.equal(harness.elements['selected-files'].textContent, 'Profil.txt');
+    assert.equal(harness.elements['status-title'].textContent, 'Auswahl bereit');
+    assert.equal(harness.count('start_admitted_batch'), 0);
+  }
 }
 
 async function accessibleTabsCase() {
@@ -1055,6 +1179,147 @@ async function accessibleTabsCase() {
   assert.strictEqual(harness.elements['tab-results'].attributes['aria-selected'], 'true');
   assert.strictEqual(harness.elements['results-view'].hidden, false);
   assert.strictEqual(prevented, 4);
+}
+
+async function failureDetailsRetryCase() {
+  let state = { state: 'ready', results_available: false };
+  let requests = 0;
+  const run = await frontendHarness({
+    get_public_state: () => state,
+    get_ui_context: () => ({ ...localContext('Fehlerlauf'), latest_result_folder: '' }),
+    select_files: () => ({ selected_count: 2, ui_context: localContext('Fehlerlauf', ['Erste.pdf', 'Zweite.docx']) }),
+    start_admitted_batch: () => { state = { state: 'processing', selected_count: 2 }; return { ok: true }; },
+    get_run_failures: () => {
+      requests += 1;
+      if (requests === 1) throw 'STANDALONE_IPC_FAILED';
+      return { ok: true, available: true, total: 2, local_ui_only: true, external_disclosure: false,
+        files: [{ name: 'Erste.pdf', reason_code: 'AMBIGUITY_REVIEW_REQUIRED' },
+          { name: 'Zweite.docx', reason_code: 'UNKNOWN_FIXED_ERROR' }] };
+    }
+  });
+  await run.click('task-anonymize');
+  await run.click('select-files');
+  await run.click('start');
+  state = { state: 'completed_without_results', processing_mode: 'markdown-and-anonymize',
+    result_count: 0, failed_count: 2, results_available: false };
+  await run.runTimer();
+  const help = run.elements['process-failure-list'].children[0];
+  const retry = run.elements['process-failure-list'].children[1];
+  assert.match(help.textContent, /Dateidetails[\s\S]*nicht erneut gestartet[\s\S]*Diagnose öffnen/u);
+  assert.equal(retry.textContent, 'Dateiliste erneut laden');
+  await run.runTimer();
+  assert.equal(requests, 1, 'failed detail reads do not cause an unbounded background retry loop');
+  await retry.listeners.click();
+  assert.equal(requests, 2);
+  assert.equal(run.count('start_admitted_batch'), 1, 'retry only reads metadata, never reprocesses documents');
+  assert.equal(run.elements['process-completion-results'].disabled, true, 'all-stopped runs have no result action');
+  const files = run.elements['process-failure-list'].children[0].children;
+  assert.match(files[0].textContent, /Erste\.pdf[\s\S]*AMBIGUITY_REVIEW_REQUIRED[\s\S]*$/u);
+  assert.match(files[1].textContent, /Zweite\.docx[\s\S]*Originaldatei bleibt unverändert[\s\S]*UNKNOWN_FIXED_ERROR/u);
+}
+
+async function actualTextSizeFailureCase() {
+  // Exercise the real UTF-8 transport guard, without inventing thousands of
+  // findings. The short valid draft is expanded in the same coordinate space;
+  // this is not a native GUI or a large-document extraction test.
+  const draft = buildReviewDraft('Anna Beispiel', 'Anna Beispiel', 'general', [{
+    ambiguity_id: 'person:v1:000001', type: 'person_prose_ambiguous', replacement_kind: 'PERSON',
+    original_start: 0, original_end: 13, anonymized_start: 0, anonymized_end: 13
+  }], { allowDefer: true });
+  const prefix = '数'.repeat(7_000_000) + ' ';
+  draft.original_text = prefix + draft.original_text;
+  draft.anonymized_text = prefix + draft.anonymized_text;
+  draft.locators.forEach(locator => { locator.start += prefix.length; locator.end += prefix.length; });
+  draft.ambiguities.forEach(item => {
+    item.original_start += prefix.length; item.original_end += prefix.length;
+    item.anonymized_start += prefix.length; item.anonymized_end += prefix.length;
+  });
+  assert.equal(draft.ambiguities.length, 1);
+  assert.ok(draft.original_text.length <= MAX_REVIEW_CHARS);
+  assert.ok(Buffer.byteLength(JSON.stringify(draft), 'utf8') > MAX_DRAFT_BYTES);
+  const broker = createReviewBroker();
+  const owner = { send() {} };
+  const batchId = 'b'.repeat(64);
+  broker.begin(owner, batchId);
+  broker.receive(owner, { type: 'standalone-review-draft', review_id: 'a'.repeat(32),
+    batch_token: batchId, draft });
+  const session = broker.session();
+  assert.equal(session.phase, 'failed');
+  assert.equal(session.error_code, 'LOCAL_REVIEW_TOO_LARGE');
+
+  let state = { state: 'ready', results_available: false };
+  const run = await frontendHarness({
+    get_public_state: () => state,
+    get_ui_context: () => ({ ...localContext('Textgrößenlauf'), latest_result_folder: '' }),
+    select_files: () => ({ selected_count: 1,
+      ui_context: { ...localContext('Textgrößenlauf', ['Textreich.docx']), latest_result_folder: '' } }),
+    start_admitted_batch: () => { state = { state: 'processing', selected_count: 1 }; return { ok: true }; },
+    get_run_failures: () => ({ ok: true, available: true, total: 1,
+      local_ui_only: true, external_disclosure: false,
+      files: [{ name: 'Textreich.docx', reason_code: session.error_code }] })
+  });
+  await run.click('task-anonymize');
+  await run.click('select-files');
+  await run.click('start');
+  state = { state: 'completed_without_results', processing_mode: 'markdown-and-anonymize',
+    result_count: 0, failed_count: 1, results_available: false };
+  await run.runTimer();
+  const rendered = run.elements['process-failure-list'].children[0].children[0].textContent;
+  assert.match(rendered, /Textreich\.docx[\s\S]*Fundstellen oder die Textgrößengrenze/u);
+  assert.doesNotMatch(rendered, /enthält mehr als 5\.000/u);
+  assert.equal(run.elements['process-completion-results'].disabled, true);
+}
+
+async function failureReasonCategoriesCase() {
+  let state = { state: 'ready', results_available: false };
+  const files = [
+    { name: 'Unterordner/Geschützt.pdf', reason_code: 'SOURCE_ENCRYPTED_UNSUPPORTED' },
+    { name: 'Sehr-große-Tabelle.xlsx', reason_code: 'XLSX_STRUCTURE_LIMIT' },
+    { name: 'Präsentation.pptx', reason_code: 'CONVERSION_RUNTIME_UNAVAILABLE' },
+    { name: 'Veränderte-Quelle.docx', reason_code: 'SOURCE_SNAPSHOT_CHANGED' },
+    { name: 'Literal-<script>-Dateiname.md', reason_code: 'UNKNOWN_FIXED_ERROR', reason: '<script>untrusted detail</script>' },
+    { name: 'Viele-Fundstellen.md', reason_code: 'LOCAL_REVIEW_TOO_LARGE' },
+    { name: 'Start-fehlt.pdf', reason_code: 'CONVERSION_EXECUTABLE_MISSING' },
+    { name: 'Start-verweigert.pdf', reason_code: 'CONVERSION_EXECUTABLE_DENIED' },
+    { name: 'Falsches-Programmformat.pdf', reason_code: 'CONVERSION_ARCHITECTURE_INVALID' },
+    { name: 'Schutzgrenzen.pdf', reason_code: 'CONVERSION_LIMIT_SETUP_FAILED' },
+    { name: 'Zuordnungen.docx', reason_code: 'BATCH_PSEUDONYM_CAPACITY_EXCEEDED' }
+  ];
+  const run = await frontendHarness({
+    get_public_state: () => state,
+    get_ui_context: () => ({ ...localContext('Fehlerlauf'), latest_result_folder: '' }),
+    select_files: () => ({ selected_count: files.length,
+      ui_context: { ...localContext('Fehlerlauf', files.map(file => file.name)), latest_result_folder: '' } }),
+    start_admitted_batch: () => { state = { state: 'processing', selected_count: files.length }; return { ok: true }; },
+    get_run_failures: () => ({ ok: true, available: true, total: files.length,
+      local_ui_only: true, external_disclosure: false, files })
+  });
+  await run.click('task-anonymize');
+  await run.click('select-files');
+  await run.click('start');
+  state = { state: 'completed_without_results', processing_mode: 'markdown-and-anonymize',
+    result_count: 0, failed_count: files.length, results_available: false };
+  await run.runTimer();
+  const rendered = run.elements['process-failure-list'].children[0].children;
+  files.forEach((file, index) => {
+    assert.ok(rendered[index].textContent.startsWith(`${file.name}\n`), 'the complete relative name and extension remain visible');
+    assert.ok(rendered[index].textContent.includes(`Fehlercode: ${file.reason_code}`));
+    assert.match(rendered[index].textContent, /Nächster Schritt:/u);
+    assert.doesNotMatch(rendered[index].textContent, /untrusted detail/u, 'backend error prose is never forwarded');
+  });
+  assert.match(rendered[0].textContent, /passwortgeschützt[\s\S]*berechtigtem Zugriff/u);
+  assert.match(rendered[1].textContent, /Verarbeitungsgrenze[\s\S]*kleinere Dokumente/u);
+  assert.match(rendered[2].textContent, /nicht am Dokument[\s\S]*vollständige Standalone-Paket/u);
+  assert.match(rendered[3].textContent, /verändert[\s\S]*erneut auswählen/u);
+  assert.match(rendered[5].textContent, /5\.000[\s\S]*kleinere Dokumente/u);
+  assert.match(rendered[5].textContent, /Fundstellen oder die Textgrößengrenze/u,
+    'the shared code also covers an oversized text with few findings');
+  assert.doesNotMatch(rendered[5].textContent, /enthält mehr als 5\.000/u);
+  assert.match(rendered[6].textContent, /nicht am Dokument[\s\S]*vollständige Standalone-Paket/u);
+  assert.match(rendered[7].textContent, /Systemfehler[\s\S]*keine Antivirus-Blockade/u);
+  assert.match(rendered[8].textContent, /ausführbaren Format[\s\S]*passende Plattform/u);
+  assert.match(rendered[9].textContent, /Systemfehler[\s\S]*nicht nur wegen dieses Codes verkleinern/u);
+  assert.match(rendered[10].textContent, /Pseudonymzuordnung[\s\S]*kleineren neuen Lauf/u);
 }
 
 async function historyRowBindingCase() {
@@ -1118,7 +1383,7 @@ async function privateIdentityHistoryCase() {
 
 async function historyFreshnessCase() {
   const older = deferred();
-  let response = localHistory([historyEntry('run-first')]);
+  let response = localHistory([historyEntry('run-first'), historyEntry('run-other')]);
   let state = { state: 'processing', completed_count: 0, result_count: 0 };
   const harness = await frontendHarness({ get_run_history: () => response, get_public_state: () => state });
   await harness.click('tab-results');
@@ -1132,6 +1397,18 @@ async function historyFreshnessCase() {
   await harness.click('tab-results');
   await settleFrontend();
   assert.strictEqual(rowActions(harness.elements, 0)[0], initialButton, 'unchanged entries preserve the focused DOM row');
+  response = localHistory([historyEntry('run-first'), { ...historyEntry('run-other'), result_count: 2 }]);
+  await harness.click('tab-results');
+  await settleFrontend();
+  assert.strictEqual(rowActions(harness.elements, 0)[0], initialButton, 'updating a different run preserves the focused DOM row');
+  response = localHistory([{ ...historyEntry('run-first'), result_count: 2 }, historyEntry('run-other')]);
+  await harness.click('tab-results');
+  await settleFrontend();
+  assert.strictEqual(rowActions(harness.elements, 0)[0], initialButton, 'counter updates on the same run preserve its valid actions');
+  response = localHistory([historyEntry('run-other'), { ...historyEntry('run-first'), result_count: 2 }]);
+  await harness.click('tab-results');
+  await settleFrontend();
+  assert.strictEqual(rowActions(harness.elements, 1)[0], initialButton, 'a reordered row retains its bound action node');
   response = older.promise;
   await harness.click('tab-results');
   response = localHistory([historyEntry('run-new')]);
@@ -1201,7 +1478,13 @@ function selectionActionsStayAboveLongFileListsCase() {
   await testAsync('active local review explains a blocked global new-task click', activeLocalReviewExplainsBlockedNewRunCase);
   await testAsync('review actions stay with their exact run and history navigation does not resume it', reviewActionStaysWithRunCase);
   await testAsync('a run with no results is visibly a failure rather than a green completion', noResultCompletionIsNotSuccessCase);
+  await testAsync('a proven review-start failure explains its cause and opens only its bound private file list', reviewStartFailureGuidanceCase);
   await testAsync('local folder errors and stopped runs reveal affected file names without logging content', namedLocalFailuresCase);
+  await testAsync('admission lists every local rejection and system failures stay distinct from untouched documents', namedAdmissionAndSystemFailuresCase);
+  await testAsync('single and mixed Office owner rejections retain their filename, correct reason and prepared selection', namedOfficeOwnerAdmissionCase);
+  await testAsync('one real finding can exceed the UTF-8 draft size guard and is not reported as more than 5000 findings', actualTextSizeFailureCase);
+  await testAsync('failed detail reads offer a local-only retry without restarting an all-stopped run', failureDetailsRetryCase);
+  await testAsync('each stopped file has its full extension, a fixed reason and an appropriate recovery step', failureReasonCategoriesCase);
   await testAsync('first start distinguishes a proposed result folder from a chosen one', firstRunResultFolderGuidanceCase);
   await testAsync('tabs use manual activation and roving arrow, Home and End focus', accessibleTabsCase);
   await testAsync('history renders at most 20 rows and every action binds its exact batch ID', historyRowBindingCase);
@@ -1214,6 +1497,7 @@ function selectionActionsStayAboveLongFileListsCase() {
   await testAsync('native drops prepare without starting and preserve admission across races', nativeDropCase);
   await testAsync('a renderer reload restores a prepared selection and listener failure preserves picker fallback', restoredAdmissionCase);
   await testAsync('a poll timer consumed by a cancelled picker keeps polling alive', pickerTimerCancellationCase);
+  await testAsync('slow admission shows real elapsed progress and a hard timeout invalidates only its lost prepared selection', admissionProgressAndTimeoutCase);
   await testAsync('an oversized nested folder explains the limit until a valid selection replaces it', folderLimitFeedbackCase);
   await testAsync('a prepared selection supports per-file removal and clearing before Start', selectionEditingCase);
   await testAsync('an existing selection accepts later files and folders without losing it on errors', selectionExtensionCase);

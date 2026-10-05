@@ -108,7 +108,11 @@
     "DS-102",
     "DS-103",
     "DS-104",
-    "DS-105"
+    "DS-105",
+    "DS-106",
+    "DS-107",
+    "DS-108",
+    "DS-109"
   ],
   "products": {
     "shared_core": "one-policy-and-engine-baseline",

@@ -13,11 +13,25 @@ const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf
 const productTarget = 'windows-x64';
 const rustTarget = 'x86_64-pc-windows-msvc';
 const folderName = `DataSecure-Standalone-${version}-${productTarget}`;
-const stageParent = path.join(root, 'dist', 'standalone-package-stage');
+const args = process.argv.slice(2);
+if (args.length && (args.length !== 2 || args[0] !== '--engineering-directory' ||
+    !/^engineering-[a-z0-9-]{1,64}$/u.test(args[1]))) throw new Error('STANDALONE_BUILD_ARGUMENT_INVALID');
+// Fresh unpublished candidates must not overwrite a saved release archive.
+const engineeringDirectory = args.length ? path.join(root, 'dist', args[1]) : null;
+if (engineeringDirectory) {
+  const parent = fs.lstatSync(path.join(root, 'dist'));
+  if (!parent.isDirectory() || parent.isSymbolicLink()) throw new Error('STANDALONE_STAGE_UNSAFE');
+  fs.mkdirSync(engineeringDirectory); // EEXIST is intentionally fatal.
+}
+const stageParent = engineeringDirectory ? path.join(engineeringDirectory, 'stage') : path.join(root, 'dist', 'standalone-package-stage');
 const stage = path.join(stageParent, folderName);
-const output = path.join(root, 'dist', `${folderName}.zip`);
+const output = path.join(engineeringDirectory || path.join(root, 'dist'), `${folderName}.zip`);
 
 function safeResetStage() {
+  if (engineeringDirectory) {
+    fs.mkdirSync(stage, { recursive: true });
+    return;
+  }
   const resolved = path.resolve(stageParent);
   const dist = path.resolve(root, 'dist');
   if (path.dirname(resolved) !== dist || path.basename(resolved) !== 'standalone-package-stage') {
@@ -138,7 +152,7 @@ fs.writeFileSync(path.join(stage, 'SHA256SUMS'), `${hashes.map((file) => `${file
 
 const archiveFiles = collectFiles(stageParent).map((file) => ({ ...file,
   mode: file.archivePath.endsWith('.exe') ? 0o100755 : 0o100644 }));
-fs.rmSync(output, { force: true });
+if (!engineeringDirectory) fs.rmSync(output, { force: true });
 const archive = writeZip(output, archiveFiles);
 const zipBytes = readRegular(output, 512 * 1024 * 1024);
 fs.writeFileSync(`${output}.sha256`, `${crypto.createHash('sha256').update(zipBytes).digest('hex')}  ${path.basename(output)}\n`);

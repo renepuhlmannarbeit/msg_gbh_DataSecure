@@ -7,6 +7,7 @@ const { decodeUtf8Source, parseCsvDialect } = require('../document-parser');
 const { parseOoxml } = require('../ooxml');
 const { RESOURCE_LIMITS } = require('../resource-limits');
 const { createMarkdownExtraction, MAX_MARKDOWN_CHARS } = require('./markdown-contract');
+const { visualNotices } = require('./markdown-visuals');
 
 const SOURCE_TYPES = new Map([
   ['.txt', 'txt'], ['.md', 'md'], ['.markdown', 'md'], ['.csv', 'csv'],
@@ -92,7 +93,14 @@ function extractMarkdownBuffer(buffer, extension, options = {}) {
       markdown = parsed.markdown;
       if (options.omitDocxHeaderFooter === true) reasons.add('DOCX_HEADER_FOOTER_EXCLUDED_BY_POLICY');
       if (parsed.warnings.length || source_type === 'xlsx' || source_type === 'pptx') reasons.add('SOURCE_COVERAGE_UNVERIFIED');
-      if (parsed.attachments.length) reasons.add('VISUAL_CONTENT_NOT_EXTRACTED');
+      if (parsed.attachments.length) {
+        reasons.add('VISUAL_CONTENT_NOT_EXTRACTED');
+        // The .md file is useful on its own when passed to an AI: explain the
+        // omission without embedding image bytes, XML or source filenames, and
+        // never invent an image title/description. Retain all extracted prose,
+        // table cells, chart data and text-box text above this fixed notice.
+        markdown += `${markdown ? '\n\n' : ''}${visualNotices({ image: true })}`;
+      }
     }
     const reason_codes = [...reasons].sort();
     return createMarkdownExtraction({ source_type, markdown,

@@ -20,6 +20,7 @@ const CORE_POLICY_FILES = Object.freeze([
   'core/processing-mode.js',
   'gateway/batch-review-publication.js',
   'gateway/batch-review-policy.js',
+  'gateway/standalone-review-choices.js',
   'gateway/compliance.js',
   'gateway/common.js',
   'gateway/orchestrator.js',

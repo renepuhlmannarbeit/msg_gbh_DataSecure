@@ -61,12 +61,13 @@ function throwIfAborted(signal) {
   throw error;
 }
 
-function reservePersonReviewCandidates(text, pseudonymRegistry) {
+function reservePersonReviewCandidates(text, pseudonymRegistry, allowOrganizationReview = false) {
   // Source preview, reservations and engine must share one representation.
   // Parser-generated <br>/entities otherwise shift retained review fragments.
   const original = canonicalizeRenderedText(text);
-  const reservations = personProseCandidateSpans(original)
-    .filter((span) => !pseudonymRegistry?.lookup?.('PERSON', span.value))
+  const reservations = personProseCandidateSpans(original, { productChannel: allowOrganizationReview ? 'standalone' : 'cowork' })
+    .filter((span) => !pseudonymRegistry?.lookup?.('PERSON', span.value) &&
+      !(allowOrganizationReview && pseudonymRegistry?.lookup?.('ORG', span.value)))
     .map((span, index) => ({
       ...span,
       token: `[PERSON_REVIEW_${String(index + 1).padStart(6, '0')}]`
@@ -484,21 +485,25 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     // from an MCP tool argument and is never written to an output package,
     // journal, diagnostic, or audit receipt.
     const pseudonymRegistry = deps.pseudonymRegistry || makeRegistry();
-    const personReview = reservePersonReviewCandidates(rawWithOcr, pseudonymRegistry);
+    const personReview = reservePersonReviewCandidates(rawWithOcr, pseudonymRegistry, deps.productChannel === 'standalone');
     const anon = anonymizeMarkdown(personReview.masked, effective, { registry: pseudonymRegistry, deferPersonReview: true });
     anon.text = personReview.restore(anon.text);
     const organizationAmbiguities = ['personnel_profile', 'applicant'].includes(effective)
       ? credentialIssuerAmbiguities(personReview.original, anon.text)
       : [];
     const personAmbiguities = [
-      ...personProseAmbiguities(personReview.original, anon.text),
-      ...(anon.residualPersonCandidates ? residualPersonAmbiguities(personReview.original, anon.text,
+      ...personProseAmbiguities(personReview.original, anon.text, { productChannel: deps.productChannel }),
+      ...residualPersonAmbiguities(personReview.original, anon.text,
         pii.scanResidual(anon.text, effective, anon.dictionary, {
-          strongPersonAnchor: anon.strongPersonAnchor, includePersonCandidateSpans: true
-        })) : [])
+          strongPersonAnchor: anon.strongPersonAnchor, includePersonCandidateSpans: true,
+          originalSourceText: personReview.original
+        }), { productChannel: deps.productChannel })
     ];
     const ambiguities = [...organizationAmbiguities, ...personAmbiguities];
-    const personReviewBinding = createPersonReviewBinding(anon.text, ambiguities);
+    const personReviewBinding = createPersonReviewBinding(anon.text, ambiguities, {
+      productChannel: deps.productChannel,
+      allowOrganizationReview: deps.productChannel === 'standalone'
+    });
     diagnostic.text_entity_count = anon.entityCount;
     diagnostic.ambiguous_organization_count = organizationAmbiguities.length;
     diagnostic.ambiguous_person_count = personAmbiguities.length;
@@ -527,13 +532,17 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
         profile: effective,
         detected_identifiers: anon.entityCount,
         ambiguities,
+        ...(deps.productChannel === 'standalone' ? { allowOrganizationReview: true } : {}),
         confirmPersonReview: personReviewBinding.confirm,
-        replacementForAmbiguity: (candidate) => {
+        replacementForAmbiguity: (candidate, kind = 'PERSON') => {
           if (!['person_prose_ambiguous', 'person_residual_ambiguous'].includes(candidate?.type) || candidate.replacement_kind !== 'PERSON') {
             throw new SafeError('Die lokale Mehrdeutigkeitsentscheidung ist ungültig.');
           }
+          if (kind !== 'PERSON' && !(kind === 'ORG' && deps.productChannel === 'standalone')) {
+            throw new SafeError('Der gewählte Entitätstyp ist für diesen Produktweg nicht erlaubt.');
+          }
           const value = personReview.original.slice(candidate.original_start, candidate.original_end);
-          return pseudonymRegistry.assign('PERSON', value);
+          return pseudonymRegistry.assign(kind, value);
         },
         technical_review_required:
           review > 0 ||
@@ -569,6 +578,8 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       : '';
     const finalPrefix =
       complianceHeader(effective, {
+        productChannel,
+        identityMappingRetained: productChannel === 'standalone' && typeof deps.persistStandaloneIdentitySnapshot === 'function',
         ext,
         passes: anon.passes,
         entityCount: anon.entityCount,
@@ -591,6 +602,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     // including the compliance header and the asset section.
     const finalResidual = pii.scanResidual(finalText, effective, anon.dictionary, {
       strongPersonAnchor: anon.strongPersonAnchor,
+      originalSourceText: personReview.original,
       reviewedPersonCandidates
     });
     if (finalResidual.length) {
@@ -664,7 +676,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
         residual_gate_checked_dictionary_literals: true,
         visual_fail_closed: true,
         visual_ocr_text_released: true,
-        persistent_mapping: false,
+        persistent_mapping: productChannel === 'standalone' && typeof deps.persistStandaloneIdentitySnapshot === 'function',
         ...runtimeInfo()
       },
       ambiguity_resolution: ambiguities.length > 0 ? 'local_human_complete' : 'not_required',
@@ -788,7 +800,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
         source_extraction_coverage: sourceExtractionCoverage
       } : {}),
       original_moved_to_processed: false,
-      persistent_mapping_retained: false,
+      persistent_mapping_retained: productChannel === 'standalone' && typeof deps.persistStandaloneIdentitySnapshot === 'function',
       ...runtimeInfo(),
       raw_content_sent_to_claude: false,
       ai_act: aiActMeta(effective)

@@ -268,7 +268,10 @@ function markdownCellsWithOffsets(line, lineStart) {
   let bodyEnd = last;
   if (line[bodyStart] === '|') bodyStart++;
   if (bodyEnd > bodyStart && line[bodyEnd - 1] === '|') bodyEnd--;
-  if (!line.slice(bodyStart, bodyEnd).includes('|')) return null;
+  // GFM also permits a one-column table with an outer pipe. Without either
+  // an internal or an outer pipe this could instead be an ordinary paragraph
+  // or Setext heading, so do not reinterpret bare prose as a table.
+  if (!line.slice(bodyStart, bodyEnd).includes('|') && line[first] !== '|' && line[last - 1] !== '|') return null;
   const cells = [];
   let cellStart = bodyStart;
   let escaped = false;
@@ -288,7 +291,7 @@ function markdownCellsWithOffsets(line, lineStart) {
     }
   }
   pushCell(bodyEnd);
-  return cells.length >= 2 ? cells : null;
+  return cells.length >= 1 ? cells : null;
 }
 
 function findCredentialTableSpans(text) {
@@ -316,9 +319,17 @@ function findCredentialTableSpans(text) {
       const resolved = tableHeadersAt(src, starts[row]);
       for (let column = 0; column < cells.length; column++) {
         const cell = cells[column];
-        const header = resolved?.headers[column] ?? null;
+        // The general multi-column table index deliberately does not analyse
+        // one-column tables. This detector can bind a sole explicit credential
+        // header directly: the separator and every row width were just checked.
+        // No inference is made for generic headers or person-shaped cell text.
+        const header = resolved?.headers[column] ?? (headers.length === 1 ? headers[0].value : null);
         if (header === null || !CREDENTIAL_LABEL_HEADER_RE.test(header)) continue;
-        if (!cell.value || placeholderSpans(cell.value).length) continue;
+        // A marker elsewhere in this credential cell cannot vouch for the
+        // remaining source value. Nor is an email/person marker evidence that
+        // a password was removed. Only a whole-cell credential/manual redaction
+        // may remain opaque on subsequent passes.
+        if (!cell.value || /^\[(?:CREDENTIAL_REDACTED|MANUAL_REDACTION)\]$/u.test(cell.value)) continue;
         spans.push({
           type: 'CREDENTIAL',
           start: cell.start,
@@ -448,8 +459,13 @@ function findStructuredSpans(text) {
       }
 
       const end = start + value.length;
-      // Never re-detect inside an already inserted placeholder.
-      if (reserved.some((r) => start < r.end && r.start < end)) continue;
+      // An opaque marker cannot protect extra source material in a labelled
+      // credential field. Replacing its entire value is safe even when it
+      // contains an unrelated/partial marker; a pure prior redaction remains
+      // idempotent. Other detectors still cannot dissect a marker token.
+      if (reserved.some((r) => start < r.end && r.start < end &&
+          !(det.type === 'CREDENTIAL' && start <= r.start && end >= r.end &&
+            !/^\[(?:CREDENTIAL_REDACTED|MANUAL_REDACTION)\]$/u.test(value.trim())))) continue;
       if (det.accept && !det.accept(value, view, start)) continue;
 
       spans.push({

@@ -3,6 +3,7 @@
 const { validateProcessingMode } = require('../core/processing-mode');
 const { validateResultNamingMode } = require('../core/result-naming-mode');
 const { RESOURCE_LIMITS } = require('../resource-limits');
+const { MAX_STANDALONE_REVIEW_FINDINGS, REVIEW_DECISIONS } = require('../gateway/standalone-review-budget');
 
 const MAX_FRAME_BYTES = 1024 * 1024;
 const MAX_ADMISSION_PATH_BYTES = 768 * 1024;
@@ -79,10 +80,10 @@ function validatePrivateMessage(message) {
           !['deferred', 'reviewed'].includes(answer.action) ||
           (answer.action === 'deferred' && Object.keys(answer).sort().join(',') !== 'action') ||
           (answer.action === 'reviewed' && (Object.keys(answer).sort().join(',') !== 'action,decisions,redactions' ||
-            !Array.isArray(answer.decisions) || answer.decisions.length > 10000 ||
+            !Array.isArray(answer.decisions) || answer.decisions.length > MAX_STANDALONE_REVIEW_FINDINGS ||
             !answer.decisions.every((item) => item && Object.keys(item).sort().join(',') === 'ambiguity_id,decision' &&
               typeof item.ambiguity_id === 'string' && item.ambiguity_id.length <= 80 &&
-              ['keep', 'redact'].includes(item.decision)) ||
+              REVIEW_DECISIONS.includes(item.decision)) ||
             !Array.isArray(answer.redactions) || answer.redactions.length !== 0)))
         fail('DESKTOP_IPC_REVIEW_INVALID', 'Ungültige lokale Prüfentscheidung.');
     }

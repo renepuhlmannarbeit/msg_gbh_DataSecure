@@ -59,6 +59,7 @@
     "get_public_state",
     "get_ui_context",
     "get_run_history",
+    "get_run_failures",
     "open_history_results",
     "open_history_ledger",
     "open_history_identity_mapping",

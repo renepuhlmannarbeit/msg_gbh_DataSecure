@@ -17,6 +17,7 @@ const { xlsxCounterexample, bmp32 } = require('./lib/conversion-counterexamples'
 const { anonymizeMarkdown } = require('../plugins/data-secure/server/gateway/compliance');
 const { zipStore } = require('./lib/zip');
 const { opcControlEntries } = require('./lib/opc');
+const { createPlatformCases } = require('./helpers/platform-case');
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const target = process.platform === 'win32' && process.arch === 'x64' ? 'windows-x64'
   : process.platform === 'darwin' && ['x64', 'arm64'].includes(process.arch) ? `macos-${process.arch}`
@@ -29,6 +30,32 @@ const server = path.join(scope, 'server');
 const runtime = path.join(server, 'standalone', 'conversion-runtime');
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const originalSpawn = childProcess.spawn, children = [];
+function privateGlyphPdf(overrideStream) {
+  // Real PDF.js text mapping: an ordinary painted G is mapped to a private-use
+  // code point. The native extractor must not forward the undecodable glyph;
+  // raster OCR can recover its visible text without executing document code.
+  const stream = overrideStream || 'BT /F1 20 Tf 30 200 Td (Max Mustermann) Tj 0 -50 Td (G) Tj ET';
+  const cmap = 'begincmap /CMapType 2 def 1 begincodespacerange <00> <FF> endcodespacerange ' +
+    '1 beginbfchar <47> <E000> endbfchar endcmap';
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 300] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R >>',
+    `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /ToUnicode 6 0 R >>',
+    `<< /Length ${cmap.length} >>\nstream\n${cmap}\nendstream`
+  ];
+  const chunks = [Buffer.from('%PDF-1.7\n')], offsets = [0];
+  let size = chunks[0].length;
+  for (const [index, object] of objects.entries()) {
+    offsets.push(size);
+    const bytes = Buffer.from(`${index + 1} 0 obj\n${object}\nendobj\n`);
+    chunks.push(bytes); size += bytes.length;
+  }
+  chunks.push(Buffer.from(`xref\n0 7\n0000000000 65535 f \n${offsets.slice(1).map(offset =>
+    `${String(offset).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<< /Root 1 0 R /Size 7 >>\nstartxref\n${size}\n%%EOF\n`));
+  return Buffer.concat(chunks);
+}
 function headerFooterDocx() {
   const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
   const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -51,8 +78,7 @@ childProcess.spawn = (...args) => {
   children.push(entry); observeSpawn?.(child, args);
   return child;
 };
-let passed = 0;
-async function test(name, fn) { await fn(); passed++; process.stdout.write(`ok ${passed} - ${name}\n`); }
+const { test, snapshot: testCounts } = createPlatformCases();
 
 try {
   await test('offline runtime is pinned, deterministic, target-specific and self-contained', () => {
@@ -65,7 +91,92 @@ try {
     writeConversionRuntime(repo, runtime, target);
     assert.throws(() => writeConversionRuntime(repo, runtime, target), /CONVERSION_PACKAGE_DESTINATION_EXISTS/u);
   });
-  const { convertBuffer } = require(path.join(server, 'standalone', 'conversion-worker.js'));
+  const { convertBuffer, conversionStartFailureCode, nativeConversionExitCode } = require(path.join(server, 'standalone', 'conversion-worker.js'));
+  await test('actual bundled PDF.js path painting after text cannot suppress later visible OCR', () => {
+    // PDF.js loads a native canvas DLL. Own its lifetime in an exited child so
+    // Windows can remove the temporary package without a loaded-DLL lock.
+    const proof = `const assert = require('node:assert/strict');
+      const path = require('node:path'); const { pathToFileURL } = require('node:url');
+      (async () => {
+        const runtime = process.argv[1], server = process.argv[2];
+        const pdfjs = await import(pathToFileURL(path.join(runtime, 'node_modules/pdfjs-dist/legacy/build/pdf.mjs')));
+        const { paintedTextGeometryAvailable } = require(path.join(server, 'standalone/pdf-text-layout.js'));
+        const task = pdfjs.getDocument({ data: Uint8Array.from(Buffer.from(process.argv[3], 'base64')),
+          isEvalSupported: false, verbosity: 0,
+          standardFontDataUrl: path.join(runtime, 'node_modules/pdfjs-dist/standard_fonts/').replaceAll('\\\\', '/') + '/' });
+        try {
+          const doc = await task.promise;
+          const ops = await (await doc.getPage(1)).getOperatorList();
+          assert.ok(ops.fnArray.includes(pdfjs.OPS.showText));
+          assert.ok(ops.fnArray.includes(pdfjs.OPS.constructPath));
+          assert.equal(paintedTextGeometryAvailable(ops, pdfjs.OPS), false);
+          process.stdout.write('PAINT_ORDER_PROOF_OK');
+        } finally { await task.destroy(); }
+      })().catch(error => { console.error(error); process.exitCode = 1; });`;
+    const output = childProcess.execFileSync(process.execPath, ['-e', proof, runtime, server,
+      privateGlyphPdf('BT /F1 12 Tf 30 100 Td (Name: Anna Linden) Tj ET 1 1 1 rg 0 0 300 200 re f').toString('base64')],
+    { windowsHide: true, timeout: 30000, encoding: 'utf8', maxBuffer: 1024 * 1024 });
+    assert.ok(output.includes('PAINT_ORDER_PROOF_OK'));
+  });
+  await test('OS-start classification never copies source paths or guesses a security product', () => {
+    const privateFailure = code => ({ code, message: 'private-name.pdf C:\\Private\\secret EDR vendor message' });
+    const absent = { lstatSync: () => { throw Object.assign(new Error('private path'), { code: 'ENOENT' }); } };
+    const present = { lstatSync: () => ({ isFile: () => true }) };
+    assert.equal(conversionStartFailureCode(privateFailure('EACCES'), 'private-path', absent), 'CONVERSION_EXECUTABLE_DENIED');
+    assert.equal(conversionStartFailureCode(privateFailure('EPERM'), 'private-path', absent), 'CONVERSION_EXECUTABLE_DENIED');
+    assert.equal(conversionStartFailureCode(privateFailure('ENOEXEC'), 'private-path', absent), 'CONVERSION_ARCHITECTURE_INVALID');
+    assert.equal(conversionStartFailureCode(privateFailure('EFTYPE'), 'private-path', absent), 'CONVERSION_ARCHITECTURE_INVALID');
+    assert.equal(conversionStartFailureCode(privateFailure('ENOENT'), 'private-path', absent), 'CONVERSION_EXECUTABLE_MISSING');
+    assert.equal(conversionStartFailureCode(privateFailure('ENOENT'), 'private-path', present), 'CONVERSION_DEPENDENCY_MISSING');
+    assert.equal(conversionStartFailureCode(privateFailure('UNKNOWN'), 'private-path', absent), 'CONVERSION_START_FAILED');
+    const lifecycle = require(path.join(server, 'core', 'conversion-worker-contract.js')).LIFECYCLE_ERROR_CODES;
+    for (const code of ['CONVERSION_EXECUTABLE_DENIED', 'CONVERSION_ARCHITECTURE_INVALID',
+      'CONVERSION_EXECUTABLE_MISSING', 'CONVERSION_DEPENDENCY_MISSING']) assert.ok(lifecycle.includes(code));
+    assert.equal(nativeConversionExitCode(127, 'win32'), 'CONVERSION_EXECUTABLE_MISSING');
+    assert.equal(nativeConversionExitCode(128, 'win32'), 'CONVERSION_EXECUTABLE_DENIED');
+    assert.equal(nativeConversionExitCode(129, 'win32'), 'CONVERSION_ARCHITECTURE_INVALID');
+    for (const platform of ['darwin', 'linux']) {
+      assert.equal(nativeConversionExitCode(127, platform), 'CONVERSION_EXECUTABLE_MISSING');
+      assert.equal(nativeConversionExitCode(128, platform), 'CONVERSION_EXECUTABLE_DENIED');
+      assert.equal(nativeConversionExitCode(129, platform), 'CONVERSION_ARCHITECTURE_INVALID');
+      assert.equal(nativeConversionExitCode(132, platform), 'CONVERSION_DEPENDENCY_MISSING');
+      for (const exit of [130, 131, 134, 135]) assert.equal(nativeConversionExitCode(exit, platform), 'CONVERSION_LIMIT_SETUP_FAILED');
+    }
+  });
+  await test('real Windows inner launcher distinguishes missing and invalid executables', async () => {
+    const executable = path.join(server, 'native', 'windows-x64', 'datasecure-sandbox.exe');
+    const args = ['--memory-mib', '128', '--cpu-ms', '5000', '--wall-ms', '10000', '--'];
+    const missing = path.join(scope, 'definitely-missing.exe');
+    const invalid = path.join(scope, 'not-an-executable.exe');
+    fs.writeFileSync(invalid, 'synthetic-invalid-executable');
+    const invoke = target => new Promise((resolve, reject) => {
+      const child = childProcess.spawn(executable, [...args, target, '--synthetic-probe'],
+        { stdio: ['pipe', 'pipe', 'pipe'], shell: false, windowsHide: true });
+      const timer = setTimeout(() => { child.kill(); reject(new Error('NATIVE_START_PROBE_TIMEOUT')); }, 12000);
+      child.once('error', failure => { clearTimeout(timer); reject(failure); });
+      child.once('close', code => { clearTimeout(timer); resolve(code); });
+      child.stdin.end(); child.stdout.resume(); child.stderr.resume();
+    });
+    assert.equal(await invoke(missing), 127);
+    assert.equal(await invoke(invalid), 129);
+    // A directory is not an executable: Windows reports access denied, without
+    // implying that an antivirus or another specific security product acted.
+    assert.equal(await invoke(scope), 128);
+    const trackedSpawn = childProcess.spawn;
+    try {
+      for (const [target, expected] of [[missing, 'CONVERSION_EXECUTABLE_MISSING'],
+        [invalid, 'CONVERSION_ARCHITECTURE_INVALID'], [scope, 'CONVERSION_EXECUTABLE_DENIED']]) {
+        childProcess.spawn = (command, launchArgs, options) => {
+          const redirected = [...launchArgs];
+          if (command === executable) redirected[redirected.indexOf('--') + 1] = target;
+          return trackedSpawn(command, redirected, options);
+        };
+        // Inject only the executable location. The real native launcher, pipe
+        // race, OS process-start result and conversion-worker mapping all run.
+        await assert.rejects(convertBuffer(Buffer.from('Synthetic source'), '.txt'), { code: expected });
+      }
+    } finally { childProcess.spawn = trackedSpawn; }
+  }, { platform: 'win32' });
   const { extractSourceForPrivacy } = require(path.join(server, 'core', 'markdown-first-privacy.js'));
   const extractWideSourceForPrivacy = (bytes, extension, options = {}) => extractSourceForPrivacy(
     bytes,
@@ -183,6 +294,8 @@ try {
       assert.match(result.markdown, /Max Mustermann/u); assert.match(result.markdown, /Nordstern GmbH/u);
       assert.equal(result.coverage.status, 'incomplete');
       assert.deepEqual(result.coverage.reason_codes, ['OCR_NOT_VERIFIED', 'VISUAL_CONTENT_NOT_EXTRACTED']);
+      assert.match(result.markdown, /> Grafikhinweis: Die Grafik selbst ist nicht im Markdown enthalten\./u);
+      assert.doesNotMatch(result.markdown, /data:image\/|!\[.*\]\(/u);
     });
   }
   await test('independent 32-bit BI_RGB with zero unused bytes remains visible through actual local OCR', async () => {
@@ -204,6 +317,8 @@ try {
     assert.ok(!pure.coverage.reason_codes.includes('OCR_NOT_VERIFIED'));
     const scan = await convert(pdf([{ image: jpeg }]), '.pdf');
     assert.match(scan.markdown, /Max Mustermann/u); assert.ok(scan.coverage.reason_codes.includes('OCR_NOT_VERIFIED'));
+    assert.match(scan.markdown, /> Grafikhinweis: Die Grafik selbst ist nicht im Markdown enthalten\./u);
+    assert.doesNotMatch(pure.markdown, /Grafikhinweis/u);
     const mixed = await convert(pdf([{ text: 'Text page Max Mustermann' }, { image: jpeg }]), '.pdf');
     assert.match(mixed.markdown, /## Seite 1[\s\S]*Text page Max Mustermann[\s\S]*## Seite 2[\s\S]*Nordstern GmbH/u);
     assert.equal((mixed.markdown.match(/Max Mustermann/gu) || []).length, 2);
@@ -219,6 +334,14 @@ try {
     const privacyInput = await extractWideSourceForPrivacy(source, '.pdf', { convertBuffer });
     assert.match(privacyInput.markdown, /Readable native text/u);
     assert.equal(privacyInput.sourceExtractionCoverage.status, 'incomplete');
+  });
+  await test('PDF private-use symbol runs are omitted with an honest notice and local OCR fallback', async () => {
+    const result = await convert(privateGlyphPdf(), '.pdf');
+    assert.match(result.markdown, /Max Mustermann/u);
+    assert.doesNotMatch(result.markdown, /\p{Co}|\uFFFD/u);
+    assert.match(result.markdown, /> Grafikhinweis: Nicht lesbare Symbolzeichen wurden ausgelassen\./u);
+    assert.ok(result.coverage.reason_codes.includes('OCR_NOT_VERIFIED'));
+    assert.ok(!result.coverage.reason_codes.includes('OCR_TEXT_EMPTY'));
   });
   await test('every real wide format hands useful Markdown to privacy with explicit source coverage', async () => {
     const sources = [
@@ -327,7 +450,9 @@ try {
     const nativeLines = ['MAX  MUSTERMANN', 'Nordstern GmbH', 'Projektmanager Software Tester'];
     const native = await convert(pdf([{ textLines: nativeLines, invisibleText: true }]), '.pdf');
     const hybrid = await convert(pdf([{ image: jpeg, textLines: nativeLines, invisibleText: true }]), '.pdf');
-    assert.equal(hybrid.markdown, native.markdown, 'comparison never rewrites text extracted by PDF.js');
+    assert.equal(hybrid.markdown.split('\n\n> Grafikhinweis:')[0], native.markdown,
+      'comparison never rewrites native text; only the fixed visual omission notice is added');
+    assert.match(hybrid.markdown, /> Grafikhinweis: Die Grafik selbst ist nicht im Markdown enthalten\./u);
     assert.match(hybrid.markdown, /MAX MUSTERMANN/u);
     assert.equal((hybrid.markdown.match(/mustermann/giu) || []).length, 1);
     assert.equal((hybrid.markdown.match(/Nordstern GmbH/gu) || []).length, 1);
@@ -392,7 +517,6 @@ try {
     assert.ok(children.every(entry => entry.closed));
   });
   await test('native Windows assignment is atomic and 60 early cancellations leave no stdio-owning orphan', async () => {
-    if (process.platform !== 'win32') return;
     const native = fs.readFileSync(path.join(repo, 'native', 'windows', 'datasecure-sandbox.cpp'), 'utf8');
     assert.ok(native.indexOf('PROC_THREAD_ATTRIBUTE_JOB_LIST') < native.indexOf('const BOOL created = CreateProcessW'));
     assert.doesNotMatch(native, /\bAssignProcessToJobObject\s*\(/u);
@@ -401,7 +525,7 @@ try {
       await assert.rejects(convertBuffer(Buffer.from(text), '.txt', { timeoutMs: 1 + i % 3 }), { code: 'CONVERSION_TIMEOUT' });
       assert.ok(children.every(entry => entry.closed), `early termination ${i} confirmed every inherited pipe closed`);
     }
-  });
+  }, { platform: 'win32' });
   await test('truncated real stdin cannot promote a successfully parseable prefix to complete Markdown', async () => {
     observeSpawn = child => {
       const end = child.stdin.end.bind(child.stdin);
@@ -482,7 +606,8 @@ try {
       }
     }
   });
-  process.stdout.write(`${passed} packaged conversion groups passed\n`);
+  const counts = testCounts();
+  process.stdout.write(`${counts.passed} packaged conversion groups passed; ${counts.skipped} skipped (${target})\n`);
 } finally {
   childProcess.spawn = originalSpawn;
   for (const entry of children) if (!entry.closed) entry.kill('SIGTERM');

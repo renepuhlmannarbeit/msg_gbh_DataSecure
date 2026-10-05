@@ -1,12 +1,12 @@
 # Verbindliches Entscheidungsregister
 
-Stand: 29.09.2026
+Stand: 05.10.2026
 
 Alle Entscheidungen bleiben als unveränderliche Historie erhalten. „Angenommen“
 bedeutet deshalb nicht automatisch „heute vollständig aktiv“:
 
 - **aktiv:** DS-001 bis DS-012, DS-014, DS-017 bis DS-018, DS-020 bis DS-049,
-  DS-051 bis DS-058, DS-060 sowie DS-062 bis DS-065 und DS-067 bis DS-103, jeweils mit den unten
+  DS-051 bis DS-058, DS-060 sowie DS-062 bis DS-065 und DS-067 bis DS-107, jeweils mit den unten
   genannten Präzisierungen;
 - **ersetzt:** DS-013 durch DS-043, DS-015 durch DS-045, DS-016 durch DS-046,
   DS-019 durch DS-059, DS-050 durch DS-065 und DS-066 durch DS-078;
@@ -1791,3 +1791,283 @@ lokal gefunden werden. Sie darf
 nicht als anonymisierte Datei an KI-Systeme weitergegeben werden. Zugriff,
 Datenträgerverschlüsselung, Backup und Löschung benötigen Zielhost-/Betriebs-
 abnahme; eine zusätzliche Dateiverschlüsselung wird nicht behauptet.
+
+## DS-106 – Standalone-Entitätstyp, laufweite Prüfentscheidung und ehrliche Extraktion
+
+Datum: 05.10.2026. Lokale Nachbesserung, noch kein neues veröffentlichtes Paket.
+
+Die Standalone-Prüfung unterscheidet ausdrücklich **Als Person anonymisieren**,
+**Als Unternehmen anonymisieren** und **Beibehalten**. Die Unternehmenswahl
+wird als typisierte ORG-Entscheidung bis zum tatsächlichen Unternehmenspseudonym
+und zur vertraulichen Identitätszuordnung weitergereicht, nicht nur umbenannt.
+Zugangsdaten-/Credential-Entscheidungen erhalten diese Aktion nicht.
+
+Eine bestätigte Behandlung gilt für dieselbe normalisierte vollständige
+Schreibweise in offenen und folgenden Prüfungen desselben Laufs, auch nach
+Neustart/Vertagen. Es gibt keine unscharfe Namensähnlichkeit, keine automatische
+Übertragung auf neue Läufe und keine nachträgliche Änderung fertiger Ausgaben.
+Der private Journalbestand speichert authentifizierte HMAC-Schlüssel, gebunden
+an Lauf, Seed, Vertrag, Regelversion und Policy-Fingerprint, nicht Rohwerte.
+Vor der Übernahme wird jede aktuelle Fundstelle erneut exakt an Original und
+Ausgabe gebunden. Restprüfung und Veröffentlichungsgate bleiben erforderlich.
+Coworks veröffentlichter Reviewadapter bleibt ein unabhängiger Produktpfad.
+
+Fehlerdetails sind rein lokal und nennen Dateinamen mit Endung, festen Code,
+Ursacheklasse und nächsten Schritt. Ein Fehler beim Laden der Liste darf einen
+konkreten Verarbeitungsfehler nicht verdecken. Das erneute Laden der Liste
+startet keine Verarbeitung; unbekannte Ursachen werden nicht erfunden.
+
+Markdown enthält keine erfundenen Bildbeschreibungen: ausgelassene Grafiken und
+vollständig unlesbare Symbolruns erhalten sachliche Hinweise. Lesbare Texte,
+Zahlen, Tabellen, Formeln und Bild-only-OCR bleiben erhalten. OCR-Wörter werden
+nur bei belegter räumlicher vollständiger Abdeckung durch beibehaltenen nativen
+Text unterdrückt. Ohne sichere Geometrie bleibt OCR erhalten. Diese Grenze ist
+bewusst konservativ: beliebige ASCII-OCR-Fehler sind kein sicherer Löschgrund.
+
+## DS-107 – Begrenzte App-Verbindungen, erklärbare Fehler und ehrliche Testevidenz
+
+Datum: 05.10.2026. Nach dem technischen Gegenreview vom Product Owner zur
+Implementierung beauftragt. Lokaler Entwicklungsstand, kein neues Release.
+
+Eine Standalone-Prüfentscheidung muss den realen Renderer-/Rust-/Sidecar-
+Vertrag durchlaufen; einzelne Modell- oder UI-Tests ersetzen diesen Nachweis
+nicht. Der Unternehmenswert ist im geschlossenen privaten IPC zugelassen,
+bleibt aber an einen dafür berechtigten aktuellen Entwurf gebunden. Ein
+integrierter Prüfdialog hat auf allen Plattformen dieselbe Obergrenze von
+5.000 Fundstellen; ein darüber liegendes Einzeldokument verlangt Aufteilung
+statt unbeschränkter Frames oder ungeprüfter Veröffentlichung.
+
+Vorbereitung, Entscheidung, Publikation, technischer Fehler, Exportreparatur
+und absichtliches Vertagen werden laufgebunden unterschieden. Ein Fehler vor
+dem ersten Entwurf muss sichtbar werden. Wiederholen setzt das bestätigte
+Ende des alten Workers voraus. Verspätete Nachrichten alter Startversuche
+dürfen einen neueren Versuch nicht verändern.
+
+Die Desktop-RPC-Frist schließt Warten auf den Kanal, Prozessstart, Schreiben
+und Antwort ein. Das native Schließen darf nicht auf derselben RPC-Sperre
+warten. Es beendet ausschließlich den eigenen Sidecar mit begrenztem Warten;
+ungeprüfte Ergebnisse bleiben gesperrt und dauerhaft fortsetzbar. Ein
+fehlgeschlagener Shutdown wird nicht als erfolgreicher Abschluss gemeldet.
+
+Lokale Fehleranzeigen nennen sichere relative Dateinamen mit Endung, eine
+belegte Ursacheklasse, festen Code und den nächsten Schritt. Verarbeitungs-
+fehler und noch nicht gestartete Dateien bleiben getrennt; fehlerhafte
+Zuordnungsausgaben dürfen die Dateiliste nicht verdecken. Bei einem
+Prozessstartfehler heißen die genannten Quellen ausdrücklich nur „für diese
+Prüfung vorgemerkte Dateien“. Zugriffsverweigerung ist kein Beweis für einen
+Antivirus- oder Richtlinienblock. Diagnoseprotokolle bleiben inhaltsfrei.
+
+Native Review-Smokes verlangen eine erfolgreiche `get_review_session`-
+Antwort, nicht nur Seitenladung oder Aufrufbeginn. Nicht ausgeführte
+Plattformfälle werden als Skip statt Pass gezählt. Browserfixtures belegen
+UI-/Accessibility-Eigenschaften, keine echte native Ergebnisfreigabe.
+Lokale Engineering-Bauten entstehen in einem neuen, getrennten Verzeichnis
+und überschreiben keine vorhandenen Releasearchive. Coworks Review- und
+Paketadapter bleiben von diesen Standalone-Verträgen getrennt.
+
+## DS-108 – Gegenbeispiele vor Freigabe, Markerherkunft und erneuter technischer Review
+
+Datum: 05.10.2026. Vom Product Owner nach der unabhängigen Gegenprüfung zur
+mehrdimensionalen Revalidierung und Umsetzung beauftragt; lokaler, nicht
+veröffentlichter Entwicklungsstand. DS-107 war kein vollständiger Nachweis:
+vorgelagerte 1.000er-Grenzen und weitere Zustands-/Testlücken werden hier
+ausdrücklich korrigiert, nicht durch frühere grüne Tests überstimmt.
+
+Ein beliebiger Quellwert wie `[BEISPIEL]`, `[NAME]` oder `[ABC_123]` ist kein
+geschützter Platzhalter. Die geschlossene Ausgabemarkergrammatik ersetzt
+keinen Herkunftsbeweis: Auch ein typisiertes Base32/HMAC-Lookalike oder ein
+numerisches Quelllabel wie `[PERSON_4711]` bzw. `[PERSON_REVIEW_471123]` kann
+Originalnamen oder private Kennnummern enthalten. Aus dem tatsächlichen
+Original übernommene variable Tokens benötigen vor Veröffentlichung eine exakt
+positionsgebundene lokale Entscheidung. Tatsächlich neu erzeugte Labels werden
+nicht damit verwechselt; eine Quell-/Ausgabekollision wird konservativ geprüft.
+Bewusstes Beibehalten ermöglicht Reanonymisierung ohne stille Herkunftszusage.
+Die unabhängige finale Restprüfung und die authentifizierte Reviewbindung bleiben
+erforderlich. Zugangsdatenzellen werden als ganzer Wert behandelt, auch wenn
+sie einen Marker enthalten oder in einer gültigen einspaltigen Tabelle stehen.
+
+Standalone verwendet durchgehend 5.000 Fundstellen pro Prüfdialog; auch die
+vor dem Fenster laufenden Residual-/Bindungsprüfungen verwenden dieses Budget.
+Coworks bestehende 1.000er-Grenze bleibt getrennt. Eine Überschreitung liefert
+`LOCAL_REVIEW_TOO_LARGE` und verlangt Aufteilung, keine ungeprüfte Veröffentlichung.
+
+Ein Renderer besitzt genau einen aktuellen Ladevorgang und Polltimer.
+Übernommene Entscheidungen, Schließen und Fortsetzen invalidieren verspätete
+Antworten. Eine verlorene Entscheidungsbestätigung bedeutet **unklar**, nicht
+„nichts freigegeben“: Der gebundene Lauf wird erneut abgefragt; kein automatisches
+Resubmit. Fortsetzungsfehler behalten feste Ursache und zuvor gebundene Dateinamen,
+auch wenn der nächste Status noch vorbereitet wird. Native X-Ereignisse binden
+die konkrete Fensterinstanz und zuletzt tatsächlich gelieferte Review-ID, nicht
+eine später abgefragte globale aktuelle Sitzung.
+
+Die Quellenaufnahme besitzt eine eigene endliche Fünf-Minuten-Frist und echte
+sekündliche Zeit-Heartbeats ohne erfundene Prozentwerte. Ein hart beendeter
+Kanal verliert seine flüchtige Auswahl; die App verlangt ehrlich erneute Auswahl.
+Normale Dokument-/Validierungsfehler erhalten dagegen die vorherige Auswahl.
+Native Spawnversuche werden vor dem OS-Aufruf registriert. Shutdown wartet
+außerhalb der GUI-/RPC-Sperre auf Reconciliation; ein tatsächlich im OS blockierter
+Spawn ist nicht portabel abbrechbar und wird nicht als erfolgreich beendet
+ausgegeben. POSIX-Cancellation wird bis zur koordinierten Prozessgruppenanlage
+zurückgehalten; eigene Kinder werden beendet und reapet. Der Gruppenleiter
+bleibt durch `waitid(...WNOWAIT)` bis nach der terminalen Gruppenbereinigung
+unreapet; kein Signal wird nach Verlust der PID-/PGID-Eigentümerschaft gesendet.
+Auch wiederholtes natives Quit umgeht die ausstehende Spawn-Reconciliation
+nicht. Nach deren Ende wird ausschließlich der erwartete terminale Tauri-Code
+0 bzw. 70 zugelassen; externe Quit-Ereignisse ohne Code oder mit einem anderen
+Code dürfen den Fehlerabschluss nicht überholen. Windows bewahrt innere Konverterstartursachen als
+Missing/Denied/Architecture-Codes.
+
+Paketprüfung verlangt vollständige, eindeutige Inventare von ZIP, Payload,
+Conversion-Runtime und SHA256SUMS sowie die externe Archivprüfsumme. Die
+bewussten Selbsthash-Ausnahmen werden einzeln benannt. Native Starttests
+verlangen die jeweils neueste erfolgreiche Antwort beider Hauptfensteraktionen
+und der Review-Sitzung: dieselbe begrenzte opaque Request-ID innerhalb derselben
+Anwendungssitzung, nicht bloß Aufruf oder verspätete Antwort einer älteren Anfrage.
+Die bediente Kampagne bindet zusätzlich vor beiden Starts und vor PASS den
+tatsächlich extrahierten Dateibaum vollständig an die geprüften ZIP-Bytes;
+Vollausgabeprüfungen verlangen alle Zeilen, Sachzellen und konsistente Identitäten.
+Paketierter Node-/Worker-E2E,
+Renderer-Gegenproben, Rust-/Supervisor-Laufzeit und bediente Tauri-Gesamtprüfung
+sind unterschiedliche Nachweise. Nicht ausgeführte Zielhost-/GUI-Fälle bleiben
+`NOT_RUN`; kein Source-/Node-Test wird zur macOS- oder nativen Bedienabnahme erklärt.
+
+Die neuen Fixes werden erneut durch unabhängige technische Review-Agenten
+gegengeprüft. Neue Gegenbeispiele öffnen einen Befund erneut. Kanonische
+Evidence-Matrix und Backlog nennen den tatsächlichen Prüfschnitt und die
+verbleibenden Geräte-/Bediennachweise. Push, Tag und Release benötigen einen
+gesonderten Auftrag; vorhandene Nutzerläufe und Releasearchive bleiben erhalten.
+
+### Offizielle Recherche und Adaptionsentscheidung (05.10.2026)
+
+Die Recherche ist eine technische Methodenauswahl, keine Behauptung zusätzlicher
+Laufzeitevidenz. Es werden keine Nutzerdokumente an Cloud-Erkennungsdienste
+übergeben und keine neue NLP-Runtime allein aufgrund einer Empfehlung eingebaut.
+
+- **Erkennungsqualität separat messen:** Die [Presidio-Evaluationsdokumentation](https://presidio.dataprivacystack.org/evaluation/)
+  unterscheidet Precision, Recall und F-beta sowie falsch positive und falsch
+  negative Befunde. Adaptionsziel: diese Größen je Entitätsart, Quellformat und
+  OCR-/Native-Textweg aus unabhängig annotierten Goldens ausweisen, einschließlich
+  unnötiger Ersetzungen. Erfolgreiche Dateizahlen sind kein Qualitätsmaß. Ein
+  unabhängiger Offline-Detektor kann später als Differenzialprobe dienen, nicht
+  als alleinige Wahrheit oder verpflichtende Produktabhängigkeit.
+- **Verspätete Antworten entwerten:** Das [offizielle React-Beispiel](https://react.dev/reference/react/useEffect#fetching-data-with-effects)
+  verwirft Ergebnisse nach Cleanup, um anders geordnete Antworten abzufangen.
+  DS-108 adaptiert dieses frameworkunabhängige Prinzip mit Renderer-Generationen,
+  serialisierten Ladevorgängen und genau einem Polltimer; kein React-Umbau.
+- **Wiederholungen nicht blind senden:** Die [AWS Builders Library](https://aws.amazon.com/builders-library/making-retries-safe-with-idempotent-APIs/)
+  beschreibt stabile Anforderungsidentitäten und atomare Speicherung von Identität
+  und Wirkung. Sofort adaptiert ist die vorsichtige Grenze: verlorene Bestätigung
+  als unklar behandeln und Status abgleichen statt Entscheidungen automatisch
+  nochmals senden. Ein dauerhaftes, antwortdigestgebundenes ACK-Receipt wäre eine
+  eigene spätere Erweiterung; die aktuelle Reparatur behauptet kein Exactly-once.
+- **Zustandsfolgen statt nur Beispiele testen:** [fast-check Model-based testing](https://fast-check.dev/docs/advanced/model-based-testing/)
+  beschreibt ein bewusst einfacheres Referenzmodell, reproduzierbare Sequenzen
+  und kontrollierte asynchrone Ablaufplanung. Die neuen Regressionen injizieren
+  bereits verspätete Antworten, ACK-Verlust und Close-/Continue-Reihenfolgen in
+  den echten Renderercode. Eine zusätzliche seeded Zustandsmodellkampagne bleibt
+  als gezielte Testverbesserung offen; kein kopierter Produktcode als Testoracle.
+- **Windows-Kinder atomar an Jobs binden:** [Microsofts Implementierungsbeispiel](https://devblogs.microsoft.com/oldnewthing/20230209-00/?p=107812/)
+  nennt `PROC_THREAD_ATTRIBUTE_JOB_LIST` zur Vermeidung der Crashlücke zwischen
+  suspended CreateProcess und späterer Jobzuweisung. Der aktuelle C++-Converter
+  verwendet diese atomare Zuweisung bereits vor `CreateProcessW`; das ist
+  unabhängig vom zusätzlich behobenen Desktop-Spawnregistrierungsrennen.
+  Eine künftige Kombination mit eingeschränkten Primärtokens wäre ein eigener
+  Berechtigungs-/Kompatibilitätstest und wird hier nicht als umgesetzt behauptet.
+- **Inventar ist nicht Buildherkunft:** [SLSA 1.2 Provenance](https://slsa.dev/spec/v1.2/provenance)
+  unterscheidet nachweisbare Herkunft vom bloßen Artefakthash. Die vollständige
+  DS-108-Inventarprüfung ist jetzt erforderlich; attestierte Releaseherkunft
+  bleibt eine separate Supply-Chain-Erweiterung. Lokale Engineering-ZIPs erhalten
+  dadurch weder Publisher-Signierung noch ein behauptetes SLSA-Level.
+
+### Produktbewertung und nächste Priorität
+
+Die lokale, offline gebündelte Standalone-Architektur wird beibehalten. Echte
+Firmen-/Personenentscheidungen, laufweite Wiederverwendung, Quellschutz und
+getrennte vertrauliche Zuordnung sind wertvolle Produktgrundlagen. Ein Neubau
+oder eine neue Cloud-/NLP-Abhängigkeit folgt daraus nicht.
+
+Die wiederholt bestätigte strukturelle Schwäche liegt an den Zustandsgrenzen
+zwischen Renderer, Tauri, Sidecar, Worker und Reviewbroker. Neue Funktionen
+haben derzeit geringere Priorität als eindeutige Lauf-/Gruppen-/Anfragebindung,
+kleinere verantwortliche Module und eine verbindliche Statusprojektion.
+Grüne Dateizahlen, erfolgreiches Laden oder einzelne Markerassertions dürfen
+weder vollständige Inhaltsqualität noch Gerätebedienung belegen. Nächste
+produktnahe Schritte sind die vollständige bediente Paketkampagne (BL-010.50)
+und unabhängig annotierte Erkennungs-/Fehlanonymisierungsmetriken (BL-010.51).
+Die sichere Übergabe trennt geprüfte Markdown-Dateien ausdrücklich von der
+vertraulichen Identitätszuordnung; ein kompletter Laufordner ist kein KI-Upload.
+
+## DS-109 – Architektur beibehalten, bestätigte Vertrags- und Qualitätslücken schließen (05.10.2026)
+
+**Entscheidung:** Kein MVC-/Framework-Neubau. Die bestehende Trennung aus
+inhaltsfreiem Haupt-Renderer, lokalem Prüf-Renderer, Tauri-Plattformadapter,
+Standalone-Anwendungsdienst und gemeinsamem Privacy-Core bleibt bestehen.
+Kleinere reine Verträge und verantwortliche Adapter sind einer zweiten Engine
+oder einer Cowork-Kopplung vorzuziehen. Drei unabhängige technische Reviewrollen
+revalidierten Privacy/OCR, native Lebenszyklen und DTO-/UI-Verträge; anschließend
+wurden konkrete Gegenbeispiele im echten Verarbeitungspfad nachgeprüft.
+
+**Umgesetzter lokaler Schnitt (unveröffentlicht):**
+
+- Standalone erfasst zusätzliche alltagssprachliche Namenshypothesen als exakt
+  gebundene lokale Prüfentscheidung. Artikel, Rollen und fachliche Endphrasen
+  gehören nicht zum Namen; echte Namenspartikeln bleiben erhalten. Eine bloße
+  unveränderte Textrückgabe erteilt keine Freigabe. Cowork bekommt nicht
+  automatisch den erweiterten Standalone-Dialogvertrag.
+- OCR-Dubletten werden nur bei exakter normalisierter Wortgleichheit, vollständiger
+  Geometrieabdeckung und konservativ belegter PDF-Malreihenfolge unterdrückt.
+  Übermalen, unbekannte Operationen und veränderte Wörter dürfen sichtbaren
+  Bildtext nicht durch einen verdeckten nativen Text ersetzen. Grafikhinweise
+  behaupten weder erfundene Bildbeschreibungen noch vollständigen OCR-Text.
+- Einzelne Identitätssnapshots behalten ihre 2-MiB-Grenze; das laufweite Dokument
+  wird getrennt begrenzt und gestreamt. Ein nicht kopierbares Ergebnisdokument
+  kann auf die private lokale Zuordnung zurückfallen, aber nur mit sichtbarer
+  Warnung. Eine vom Nutzer entfernte oder geänderte veröffentlichte Kopie wird
+  nicht still neu erzeugt. Der Ausgabeheader benennt tatsächlich aktivierte
+  dauerhafte Originalwertspeicherung statt pauschal deren Abwesenheit.
+- Registry-Kapazität, Start-/Loader-/Architekturfehler und fehlgeschlagene
+  Schutzgrenzen erhalten getrennte feste Ursachen. Schutzgrenzenfehler sind
+  keine behaupteten Dokument-Größenfehler. Fehlercode, betroffene lokale Datei
+  und nächster Schritt bleiben getrennt von inhaltsfreien Protokollen.
+  Die differenzierten Startursachen behalten den ausdrücklich nutzerinitiierten
+  Wiederaufnahmeweg: erst Ursache lokal beheben, dann fortsetzen; nach insgesamt
+  drei gleichen Fehlschlägen wird gestoppt. Keine automatische Wiederholung und
+  keine Sicherheitsumgehung. Fehlende Isolation, Schutzgrenzenfehler und
+  unbestätigte Terminierung sind nicht wiederholbare Startursachen.
+- Nur strukturell erkannte `.DS_Store`, `desktop.ini` und `Thumbs.db` werden im
+  Standalone-Aufnahmeweg mit benanntem Überspringhinweis ausgelassen. Der Name
+  allein genügt nicht; unbekannte oder umbenannte Nutzerdaten bleiben abgelehnt.
+- OS-Öffnungshelfer werden außerhalb der GUI besessen und abgewartet. Ein
+  erfolgreicher Spawn ist nur eine Übergabe, keine bestätigte sichtbare Öffnung.
+  Tauri-Startfehler erzeugen einen festen Bericht; `--startup-diagnostics` öffnet
+  den Diagnoseordner vor dem WebView-Start. Wird bereits die gesamte EXE vom OS
+  blockiert, kann sie keine eigene Diagnose erzeugen; OS-/IT-Nachweis bleibt nötig.
+- History-Zeilen bleiben bei unveränderten Aktionen stabil; verspätete Antworten
+  ungültiger Zeilen werden verworfen. Dokumentnummern im Review stammen aus
+  einer geschlossenen Backend-Kandidatenkarte, niemals aus Quelltexttrennern.
+  Ein gemeinsamer reiner Desktop-Fehlerkatalog sichert die Sidecar-/UI-Grenze.
+
+**Gegenreview statt grüner Scheinevidenz:** Nach dem ersten Umbau wurden zusätzlich
+„Anna Linden von der Planung“ und ein vom nativen Vierfeldvalidator abgelehnter
+Identitäts-DTO gefunden. Beide erhalten eigene Publikations-/Rust-Regressionen.
+Der erweiterte Identitätsvertrag wird geschlossen geprüft und erst danach auf
+den unveränderten lokalen Zielvalidator reduziert; beliebige Zusatzfelder
+werden nicht erlaubt. Reale PDF.js-Operatorlisten werden in einem besessenen
+Kindprozess geprüft, damit dessen Canvas-DLL auf Windows vor Testbereinigung
+entladen ist. Veraltete Stringassertions werden durch Vertrags-/Verhaltensprüfungen
+ersetzt, nicht durch entfernte Anforderungen.
+
+**Adaptierte Primärquellen:** Die [Tauri-Prozessarchitektur](https://tauri.app/concept/process-model/)
+stützt die getrennten Verantwortlichkeiten. Der [Rust-Child-Vertrag](https://doc.rust-lang.org/std/process/struct.Child.html)
+verlangt ausdrückliche Kindprozessverwaltung statt implizitem Aufräumen beim
+Drop. Die engen Metadatenrecognizer orientieren sich an der
+[desktop.ini-Dokumentation](https://learn.microsoft.com/en-us/windows/win32/shell/how-to-customize-folders-with-desktop-ini),
+dem [CFB-Formatvertrag](https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-cfb/53989ce4-7b05-4f8d-829b-d08d6148375b)
+und der [DS_Store-Buddy-Implementierung](https://github.com/dmgbuild/ds_store/blob/main/src/ds_store/buddy.py).
+Strukturerkennung ist keine Herkunftsattestierung und ersetzt keine Zielhostprobe.
+
+**Grenzen:** Keine Zusage universeller Namenserkennung, rechtlicher Anonymität,
+vollständiger PDF-/Office-Containerabdeckung oder AI-Act-Konformität. Unabhängige
+Qualitätsmetriken bleiben BL-010.51; bediente neue native Windows-/Intel-/ARM-Mac-
+Kampagne bleibt BL-010.50. Historische bestandene Läufe werden nicht zurückgenommen.
+Kein Commit, Push, Tag oder Release aus diesem Implementierungsauftrag.
