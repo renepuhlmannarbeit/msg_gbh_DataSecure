@@ -177,6 +177,21 @@ Befunde sind damit individuell eingeordnet; eine weitere frische Security-
 Kampagne muss dies am endgültigen Paketquellcommit bestätigen. Die Pflicht-CI
 und erneut 41 reale Windows-Konvertierungsgruppen bestanden am `61b342c`.
 
+Die vollständige frische Security-Kampagne am `c5e3bf9`
+([Lauf 37389586981](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/37389586981))
+bestand Gitleaks sowie beide CodeQL-Gates mit 78 individuell eingeordneten
+JavaScript-Befunden; die Pflicht-CI bestand ebenfalls. Die anschließenden
+nativen Mac-Gates (`37389628567`) fanden einen echten Fixturefehler vor dem
+Paketbau: Neue Markdown-Proben verwendeten den OS-Temp-Alias `/var/...`, den
+die private Speichergrenze ausdrücklich ablehnt. Die Fixtures für Held-I/O,
+Retention und die Windows-emulierende OCR-Cacheprobe verwenden jetzt den
+kanonischen Temp-Pfad; Produktgrenzen und Assertions werden nicht gelockert.
+Ein unabhängiger begrenzter Gegenreview fand keinen weiteren entsprechenden
+Fixturefehler. Windows-Gegenproben und beide echten Linux-FIFO-Fälle bestehen.
+Der laufende Windows-Bau am alten Testschnitt wurde gezielt beendet; daraus
+wird kein PKG-04-PASS abgeleitet. Neue native Mac-Gates, saubere Windows-
+Paketbindung und Security am endgültigen Commit sind weiterhin erforderlich.
+
 Keine darüber hinausgehende Garantie: Der portable Node-Reader schützt
 geprüfte gehaltene Bytes und verwirft erkannte Namespace-Änderungen, ersetzt
 aber keine atomare native Windows-openat-Schnittstelle. Gleichberechtigte

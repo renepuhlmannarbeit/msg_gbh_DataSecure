@@ -15,13 +15,16 @@ const {
 const { portableOcrOptions } = require('../plugins/data-secure/server/runtime');
 
 let passed = 0;
+// Some module-isolation cases deliberately emulate Windows on a Mac host.
+// Canonical fixtures avoid passing that Windows boundary an OS-owned /var alias.
+const temporaryRoot = fs.realpathSync.native(os.tmpdir());
 async function test(name, fn) {
   try { await fn(); passed++; console.log(`  ok   ${name}`); }
   catch (error) { console.error(`  fail ${name}`); throw error; }
 }
 function hash(data) { return crypto.createHash('sha256').update(data).digest('hex'); }
 function isolatedCachedAdapter() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'portable-ocr-cache-'));
+  const root = fs.mkdtempSync(path.join(temporaryRoot, 'portable-ocr-cache-'));
   const server = path.join(root, 'server'); fs.mkdirSync(server);
   const bundle = path.join(server, 'ocr-runtime'); fs.renameSync(fixture(), bundle);
   const source = require.resolve('../plugins/data-secure/server/portable-ocr');
@@ -34,7 +37,7 @@ function isolatedCachedAdapter() {
   return { root, bundle, adapter: instance.exports };
 }
 function fixture(released = true) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'portable-ocr-test-'));
+  const root = fs.mkdtempSync(path.join(temporaryRoot, 'portable-ocr-test-'));
   const files = {
     'datasecure-ocr-sandbox.exe': Buffer.from('launcher'),
     'runtime-worker.mjs': Buffer.from('worker'),
@@ -163,7 +166,7 @@ function hangingSpawn() {
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
   await test('passes the network preload as an argv item when the installation path contains spaces', async () => {
-    const base = fs.mkdtempSync(path.join(os.tmpdir(), 'portable ocr parent-'));
+    const base = fs.mkdtempSync(path.join(temporaryRoot, 'portable ocr parent-'));
     const original = fixture(true);
     const root = path.join(base, 'Data Secure Plugin');
     fs.renameSync(original, root);

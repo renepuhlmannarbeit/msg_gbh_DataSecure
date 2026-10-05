@@ -7,7 +7,11 @@ const { createSuite } = require('./helpers');
 const { readBoundFile, readBoundFileRecord } = require('../plugins/data-secure/server/core/bound-file-io');
 const { createBestEffortDiagnosticLog } = require('../plugins/data-secure/server/core/safe-diagnostic-log');
 const { test, done, assert } = createSuite('Held file and best-effort diagnostic boundaries');
-const root = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-bound-io-'));
+// Product private storage deliberately rejects symlink ancestors. macOS's
+// OS-owned /var temp alias must be resolved in the fixture, not allowed by
+// relaxing that product boundary. All child probes inherit this real root.
+const temporaryRoot = fs.realpathSync.native(os.tmpdir());
+const root = fs.mkdtempSync(path.join(temporaryRoot, 'datasecure-bound-io-'));
 const links = [];
 function fixture() {
   const directory = fs.mkdtempSync(path.join(root, 'case-'));
@@ -314,7 +318,7 @@ test('directory junctions/symlinks, including higher ancestors with missing desc
 });
 done().finally(() => {
   for (const link of links) { assert.ok(fs.lstatSync(link).isSymbolicLink()); fs.unlinkSync(link); }
-  assert.equal(path.dirname(root), path.resolve(os.tmpdir()));
+  assert.equal(path.dirname(root), temporaryRoot);
   assert.ok(path.basename(root).startsWith('datasecure-bound-io-'));
   fs.rmSync(root, { recursive: true });
 });

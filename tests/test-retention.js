@@ -19,7 +19,9 @@ const {
 } = require(path.join(runtime, 'gateway', 'retention.js'));
 
 const { test, done, assert } = createSuite('Retention and local deletion');
-const base = fs.mkdtempSync(path.join(os.tmpdir(), 'eu-privacy-retention-'));
+// Actual private-tree deletion rejects symlink ancestors, including macOS's
+// /var alias. Give the product the real temp path instead of weakening it.
+const base = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'eu-privacy-retention-'));
 const DAY = 24 * 60 * 60 * 1000;
 const NOW = Date.UTC(2026, 7, 21, 12, 0, 0);
 
