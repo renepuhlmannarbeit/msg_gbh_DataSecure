@@ -5,7 +5,7 @@
       "app"
     ],
     "macOS": {
-      "bundleVersion": "157",
+      "bundleVersion": "158",
       "minimumSystemVersion": "13.5",
       "signingIdentity": "-"
     }

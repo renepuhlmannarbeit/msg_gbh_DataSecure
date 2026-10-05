@@ -1,8 +1,9 @@
 # Release- und Distributionsvertrag
 
-Stand: 30.09.2026 · 3.2.0-rc157
+Stand: 05.10.2026 · 3.2.0-rc158
 
-Der aktuelle Quellstand ist RC157. Der Standalone-Vorabkandidat ist auf main
+Der aktuelle Quellstand ist RC158-Entwicklungsstand und noch kein neu gebundener Paketkandidat.
+Der bisher veröffentlichte Standalone-Vorabkandidat RC157 ist auf main
 und für Windows, macOS Intel, macOS Apple Silicon und Linux veröffentlicht.
 ZIP-Verifikation, isolierter Paket-Smoke und
 nativer Start einschließlich geladener Prüfseite bestanden. „Jetzt prüfen“
@@ -21,6 +22,24 @@ unverändert. Der veröffentlichte Windows-Neubau wurde deshalb zusätzlich tech
 geprüft und wird nicht als bytegleich zum vorherigen Anwender-Test-ZIP behauptet.
 Die bestätigte Windows-Funktionsabnahme ist bestanden; technische Paketprüfung
 ersetzt keine noch fehlenden menschlichen Zielhost- oder Spezialabnahmen.
+
+### RC158 – beauftragter Standalone-Vorabrelease in Vorbereitung
+
+Der Anwender hat am 05.10.2026 Commit und Push auf main sowie neue
+Windows- und macOS-Vorabpakete beauftragt. RC158 enthält die revalidierten
+Korrekturen DS-106–109. Windows x64 wird aus einem sauberen Quellcommit
+zweimal gebaut und paketgebunden geprüft; macOS Intel und Apple Silicon
+werden im bestehenden nativen Zielplattformworkflow als ZIP und DMG gebaut.
+Dieser ausdrücklich beauftragte Releasebau ist eine Ausnahme vom normalen
+lokalen Arbeitsweg ohne manuelle Actions-Läufe. Alte Archive werden nicht
+ersetzt. Cowork RC151 und Linux RC157 bleiben ihre getrennt veröffentlichten
+Kandidaten; lokale Cowork-Buildgates sind keine Cowork-Neuveröffentlichung.
+
+Commit-, Archiv- und Hashbindung werden erst nach erfolgreichem Paketbau
+eingetragen. Automatisierte technische Nachweise ersetzen weder die erneute
+Windows-Anwenderabnahme des exakten RC158-Pakets noch Mac-Finder-/Gatekeeper-,
+Accessibility- oder formale N3/N4-Abnahme. Mac-Pakete bleiben ad-hoc-signiert,
+nicht Developer-ID-signiert oder notarisiert.
 
 ### RC157 – Standalone auf allen Zielplattformen
 

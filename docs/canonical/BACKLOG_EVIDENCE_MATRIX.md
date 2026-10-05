@@ -1,6 +1,13 @@
 # Evidence-Matrix für aktive Arbeit
 
-Stand: 05.10.2026 · 3.2.0-rc157 · Veröffentlichung unverändert; DS-106/DS-107/DS-108/DS-109 lokal unveröffentlicht
+Stand: 05.10.2026 · 3.2.0-rc158 · beauftragter Vorabrelease in Vorbereitung
+
+Der Produktcommit `44bf3d0` enthält DS-106–109; der neue Versionsschnitt ist
+RC158. Der saubere, commitgebundene Windows-Doppelbau und die nativen
+Mac-Intel-/Apple-Silicon-Pakete sind beauftragt, aber noch nicht als bestanden
+ausgewiesen. Der DS-109-Nachweis unten beschreibt unverändert den vorherigen
+lokalen Arbeitsstand. Releaseevidence wird separat an Commit und Archivhash
+gebunden; Cowork RC151 wird nicht neu veröffentlicht.
 
 **Aktuelle RC157-Veröffentlichung:** Quellcommit
 `111737d28021b6989ffe8d563b58daa9cbae610f` ist auf main und als Standalone-RC

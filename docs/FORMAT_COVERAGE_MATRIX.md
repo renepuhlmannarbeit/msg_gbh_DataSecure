@@ -1,6 +1,6 @@
 # Aktuelle Format-Coverage
 
-Stand: 29.09.2026 · lokaler 3.2.0-rc157-Entwicklungsstand, noch kein veröffentlichter Kandidat
+Stand: 29.09.2026 · lokaler 3.2.0-rc158-Entwicklungsstand, noch kein veröffentlichter Kandidat
 
 Diese Matrix trennt implementierte Verarbeitung, Extraktionsvollständigkeit und
 Zielhost-Abnahme. Ein erfolgreicher Konvertierungstest allein beweist keine

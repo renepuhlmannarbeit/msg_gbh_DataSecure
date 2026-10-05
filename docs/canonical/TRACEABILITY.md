@@ -1,6 +1,6 @@
 # Entscheidungs-Traceability
 
-Stand: 05.10.2026 · 3.2.0-rc157 · Veröffentlichung unverändert; lokale DS-106/107/108/109-Nachbesserung unveröffentlicht · Cowork bleibt RC151
+Stand: 05.10.2026 · 3.2.0-rc158 · Veröffentlichung unverändert; lokale DS-106/107/108/109-Nachbesserung unveröffentlicht · Cowork bleibt RC151
 
 RC157-Veröffentlichungsbindung → Quellcommit
 `111737d28021b6989ffe8d563b58daa9cbae610f` → native Windows-, Intel-/ARM-macOS-

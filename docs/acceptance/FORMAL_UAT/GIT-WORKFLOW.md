@@ -25,10 +25,10 @@ Nach den Builds legt die Release-Koordination vom Produkt-Commit einen
 Kampagnenbranch an, zum Beispiel:
 
 ```text
-git switch -c uat/campaign-rc157-uat1 <candidate-commit>
+git switch -c uat/campaign-rc158-uat1 <candidate-commit>
 ```
 
-`CAMPAIGN.template.json` wird als `CAMPAIGN-rc157-uat1.json` kopiert und mit
+`CAMPAIGN.template.json` wird als `CAMPAIGN-rc158-uat1.json` kopiert und mit
 Kampagnenkennung, `candidate_commit`, Paketnamen und SHA-256 ausgefüllt. Nur
 Manifest und gegebenenfalls unveränderte Evidence-Vorlagen werden committet und
 der Kampagnenbranch wird gepusht. Der Manifest-Commit ist zwangsläufig ein
@@ -40,7 +40,7 @@ Beide Personen holen denselben Kampagnenbranch. Die Windows-Person verwendet:
 
 ```text
 git fetch origin
-git switch -c uat/windows-rc157-uat1 origin/uat/campaign-rc157-uat1
+git switch -c uat/windows-rc158-uat1 origin/uat/campaign-rc158-uat1
 ```
 
 Sie ändert nur `WINDOWS-EVIDENCE.csv` und bei Bedarf eine inhaltsfreie
@@ -48,7 +48,7 @@ Defectnotiz. Die Mac-Person verwendet:
 
 ```text
 git fetch origin
-git switch -c uat/macos-rc157-uat1 origin/uat/campaign-rc157-uat1
+git switch -c uat/macos-rc158-uat1 origin/uat/campaign-rc158-uat1
 ```
 
 Sie ändert nur `MACOS-EVIDENCE.csv` und bei Bedarf eine inhaltsfreie

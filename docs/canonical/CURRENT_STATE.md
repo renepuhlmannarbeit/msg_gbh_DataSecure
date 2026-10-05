@@ -1,6 +1,13 @@
 # Aktueller Iststand
 
-Stand: 05.10.2026 · 3.2.0-rc157 · Veröffentlichung unverändert; lokale DS-106/107/108/109-Nachbesserung unveröffentlicht · Cowork bleibt RC151
+Stand: 05.10.2026 · 3.2.0-rc158 · Vorabrelease in Vorbereitung; veröffentlichte Pakete noch RC157 · Cowork bleibt RC151
+
+Der Anwender hat Commit/Push und einen neuen Standalone-Vorabrelease für
+Windows x64 sowie macOS Intel/Apple Silicon beauftragt. DS-106–109 sind im
+Produktcommit `44bf3d0` zusammengeführt; RC158 ist der neue Versionsschnitt.
+Paketbau und Veröffentlichung sind noch nicht abgeschlossen. Die nachfolgenden
+RC157- und lokalen Engineering-Nachweise bleiben auf ihren tatsächlichen
+Prüfschnitt begrenzt; RC158-Paketnachweise werden separat ergänzt.
 
 Standalone RC157 ist auf main und im
 [Vorabrelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc157)
