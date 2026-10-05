@@ -41,6 +41,23 @@ Windows-Anwenderabnahme des exakten RC158-Pakets noch Mac-Finder-/Gatekeeper-,
 Accessibility- oder formale N3/N4-Abnahme. Mac-Pakete bleiben ad-hoc-signiert,
 nicht Developer-ID-signiert oder notarisiert.
 
+Die erste RC158-Gegenprobe am Commit `e2e08dd` bestand Produktsuite
+(75 Basis- und 119 direkte Testdateien) und Pflicht-CI. Sie fand zwei echte
+Releaseharnessfehler: PKG-04 bereitete im frischen Windows-Checkout die Runtime
+nicht vor den Rusttests vor; eine Mac-Integritätsfixture enthielt keine
+regulären Unix-Dateimodi. `ae9bf02` korrigiert Vorbereitung und Testarchiv,
+ohne den Paketverifier zu lockern. Die gültige Fixture besteht zuerst die
+Integritätsprüfung; ihre anschließende Mutation wird weiterhin verworfen.
+
+Die vollständige Gitleaks-8.30.1-Historienprüfung fand drei unabhängig
+revalidierte synthetische Regressionseingaben, keine belegten Betriebsgeheimnisse.
+`.gitleaksignore` bindet ausschließlich deren exakte Commit/Datei/Regel/Zeilen-
+Fingerprints; Regeln, neue Treffer und die vollständige Historie bleiben aktiv.
+Die lokale Wiederholung über 493 Commits bestand; ein zusätzlich eingespeister
+neuer synthetischer Credential-Test wurde weiterhin abgelehnt. Der native
+CodeQL-Lauf bestand. Die JavaScript-SARIF-Befunde werden getrennt revalidiert;
+diese Zwischenstände sind keine abgeschlossene RC158-Sicherheitsfreigabe.
+
 ### RC157 – Standalone auf allen Zielplattformen
 
 Das [RC157-Vorabrelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc157)

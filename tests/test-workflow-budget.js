@@ -127,6 +127,21 @@ test('manual security evidence can be selected instead of always running three j
   assert.strictEqual((security.match(/^    if: \$\{\{ inputs\.scope/gm) || []).length, 3);
 });
 
+test('secret history exceptions bind only three reviewed synthetic historical findings', () => {
+  const source = fs.readFileSync(path.join(root, '.gitleaksignore'), 'utf8');
+  const fingerprints = source.split(/\r?\n/u).map(line => line.trim()).filter(line => line && !line.startsWith('#'));
+  assert.deepStrictEqual(fingerprints, [
+    '22f5b781d676691f09e906d2ac76c045624179db:tests/test-pii-regression.js:generic-api-key:1279',
+    '5dcc2dd10bd75262aefaa572461368dc4de54874:tasks/AUFTRAG-CODEX-RC123-REDAKTIONSKERN.md:generic-api-key:371',
+    'af3f0c7dcd0d1c63626422f2d2324383ec74b374:tests/test-batch-processing-orchestrator.js:generic-api-key:11'
+  ]);
+  const security = workflows.get('security.yml');
+  assert.match(security, /fetch-depth: 0/u);
+  assert.match(security, /--log-opts="--all"/u);
+  assert.match(security, /--redact=100/u);
+  assert.doesNotMatch(security, /--exit-code=0|continue-on-error: true/u);
+});
+
 test('locked development tools do not become product runtime dependencies', () => {
   const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   const lock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8'));

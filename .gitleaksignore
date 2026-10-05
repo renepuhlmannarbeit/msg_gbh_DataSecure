@@ -1,0 +1,9 @@
+# Independently reviewed on 2026-10-05: three historical synthetic fixtures.
+# Exact commit/file/rule/line fingerprints only. No secret values, path-wide
+# exclusions, disabled rules or history rewrites. New findings remain fatal.
+# Credential-redaction regression input (not an operational API key).
+22f5b781d676691f09e906d2ac76c045624179db:tests/test-pii-regression.js:generic-api-key:1279
+# The same synthetic input in the historical reproduction specification.
+5dcc2dd10bd75262aefaa572461368dc4de54874:tasks/AUFTRAG-CODEX-RC123-REDAKTIONSKERN.md:generic-api-key:371
+# Deterministic local harness token with mocked dependencies; no credential.
+af3f0c7dcd0d1c63626422f2d2324383ec74b374:tests/test-batch-processing-orchestrator.js:generic-api-key:11
