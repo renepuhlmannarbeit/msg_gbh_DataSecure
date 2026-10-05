@@ -27,7 +27,7 @@ function readPlainFile(file, maximum) {
   try {
     const named = fs.lstatSync(file);
     if (!named.isFile() || named.isSymbolicLink() || named.nlink !== 1 || named.size > maximum) throw invalid();
-    fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+    fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0) | (fs.constants.O_NONBLOCK || 0));
     const opened = fs.fstatSync(fd);
     if (!opened.isFile() || opened.nlink !== 1 || opened.dev !== named.dev || opened.ino !== named.ino || opened.size !== named.size) throw invalid();
     const buffer = Buffer.alloc(opened.size + 1);

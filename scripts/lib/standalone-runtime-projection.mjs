@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import boundFileIo from '../../plugins/data-secure/server/core/bound-file-io.js';
 
 const ENTRYPOINTS = Object.freeze([
   'standalone/desktop-sidecar.js',
@@ -56,7 +57,7 @@ export function collectStandaloneRuntime(serverRoot, productTarget) {
     if (files.has(current.relative)) continue;
     regular(current.resolved);
     if (FORBIDDEN.test(current.relative)) throw new Error(`STANDALONE_PROJECTION_ENTRY_FORBIDDEN:${current.relative}`);
-    const bytes = fs.readFileSync(current.resolved);
+    const bytes = boundFileIo.readBoundFile(current.resolved, { maximum: 128 * 1024 * 1024, checkCtime: true });
     files.set(current.relative, { relative: current.relative, source: current.resolved, bytes });
     if (!/\.(?:c?js)$/iu.test(current.relative)) continue;
     const source = bytes.toString('utf8');

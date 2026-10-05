@@ -5,11 +5,11 @@ mod ipc_transport;
 mod review_window;
 mod native_open;
 mod startup_diagnostics;
+mod diagnostic_log;
 
 use serde_json::{json, Value};
 use std::{
-    fs::OpenOptions,
-    io::{BufReader, Read, Write},
+    io::{BufReader, Read},
     path::{Path, PathBuf},
     process::{Command, Stdio},
     sync::{
@@ -29,7 +29,6 @@ const MAX_PRESENTATION_GENERATION: u64 = 9_007_199_254_740_991;
 const IPC_SCHEMA: &str = "datasecure-standalone-private-ipc/1";
 const RESPONSE_SCHEMA: &str = "datasecure-standalone-private-response/1";
 static REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
-static DIAGNOSTIC_LOCK: Mutex<()> = Mutex::new(());
 static DIAGNOSTIC_SESSION: OnceLock<String> = OnceLock::new();
 static NATIVE_SMOKE_PROFILE: OnceLock<Option<native_smoke::Profile>> = OnceLock::new();
 
@@ -95,25 +94,6 @@ fn diagnostic_correlated_event(
     elapsed_ms: Option<u128>,
     request_id: Option<&str>,
 ) {
-    let Ok(_guard) = DIAGNOSTIC_LOCK.lock() else {
-        return;
-    };
-    let directory = diagnostic_directory();
-    if std::fs::create_dir_all(&directory).is_err() {
-        return;
-    }
-    let current = directory.join("desktop-interactions.jsonl");
-    if std::fs::metadata(&current)
-        .map(|value| value.len() > 2 * 1024 * 1024)
-        .unwrap_or(false)
-    {
-        let previous = directory.join("desktop-interactions.previous.jsonl");
-        let _ = std::fs::remove_file(&previous);
-        let _ = std::fs::rename(&current, &previous);
-    }
-    let Ok(mut file) = OpenOptions::new().create(true).append(true).open(current) else {
-        return;
-    };
     let mut record = json!({
         "schema": "datasecure-standalone-interaction/1",
         "time_ms": SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),
@@ -135,7 +115,7 @@ fn diagnostic_correlated_event(
     if let Some(value) = request_id {
         record["request_id"] = json!(value);
     }
-    let _ = writeln!(file, "{record}");
+    diagnostic_log::append(&diagnostic_directory(), &record);
 }
 
 struct SidecarProcess {

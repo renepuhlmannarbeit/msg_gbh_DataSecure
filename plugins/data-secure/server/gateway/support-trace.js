@@ -1,4 +1,5 @@
 'use strict';
+const { readHeldBytes } = require('../core/bound-file-io');
 
 // Engineering/support trace for one deliberately activated debug build. Each
 // event is an immutable JSON file so the MCP parent and detached workers cannot
@@ -119,12 +120,12 @@ function readSupportTrace(options = {}) {
     const file = path.join(directory, name);
     let fd;
     try {
-      fd = io.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+      fd = io.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0) | (fs.constants.O_NONBLOCK || 0));
       const opened = io.fstatSync(fd);
       const named = io.lstatSync(file);
       if (!opened.isFile() || opened.size < 2 || opened.size > MAX_EVENT_BYTES || named.isSymbolicLink() ||
           opened.dev !== named.dev || opened.ino !== named.ino) continue;
-      const raw = JSON.parse(io.readFileSync(fd, 'utf8'));
+      const raw = JSON.parse(readHeldBytes(fd, opened.size, io).toString('utf8'));
       const parsed = Date.parse(String(raw.timestamp || ''));
       if (raw.schema !== SUPPORT_TRACE_SCHEMA || !Number.isFinite(parsed) || parsed < cutoff || parsed > now + 300000) continue;
       events.push(sanitizeSupportTrace(raw, { now }));

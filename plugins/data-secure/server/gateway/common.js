@@ -214,7 +214,7 @@ function roots(){
 }
 function sha256Buffer(b){return crypto.createHash('sha256').update(b).digest('hex');}
 function sha256File(p){
-  const descriptor=fs.openSync(p,fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW||0));
+  const descriptor=fs.openSync(p,fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW||0) | (fs.constants.O_NONBLOCK || 0));
   const hash=crypto.createHash('sha256');
   const buffer=Buffer.allocUnsafe(1024*1024);
   try{

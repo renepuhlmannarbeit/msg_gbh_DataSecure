@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import boundFileIo from '../../plugins/data-secure/server/core/bound-file-io.js';
 import { readRegular, sha256, readStandaloneRuntimeContract, verifyTargetEvidence } from './bundled-runtime.mjs';
 
 const BINDINGS = Object.freeze({ 'windows-x64': 'canvas-win32-x64-msvc',
@@ -12,10 +13,8 @@ const MAX_FILES = 4096, MAX_BYTES = 384 * 1024 * 1024;
 function regularBytes(file) {
   // Empty legal package files are allowed; runtime/binary/model reads below
   // retain their stricter existing contracts.
-  const stat = fs.lstatSync(file);
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size > 128 * 1024 * 1024) throw new Error('CONVERSION_PACKAGE_FILE_UNSAFE');
-  if (!stat.size) return Buffer.alloc(0);
-  return readRegular(file, 128 * 1024 * 1024);
+  try { return boundFileIo.readBoundFile(file, { maximum: 128 * 1024 * 1024, checkCtime: true }); }
+  catch { throw new Error('CONVERSION_PACKAGE_FILE_UNSAFE'); }
 }
 
 export function collectConversionRuntime(repoRoot, productTarget) {

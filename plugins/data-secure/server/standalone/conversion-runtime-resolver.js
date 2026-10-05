@@ -5,16 +5,13 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { readBoundFileRecord } = require('../core/bound-file-io');
 const fail = () => { throw Object.assign(new Error('Die lokale Konvertierungslaufzeit fehlt oder ist beschädigt.'),
   { code: 'CONVERSION_RUNTIME_UNAVAILABLE' }); };
 let cached;
 
 function readChecked(file, maximum) {
-  const before = fs.lstatSync(file, { bigint: true });
-  if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1n || before.size > BigInt(maximum)) fail();
-  const bytes = fs.readFileSync(file);
-  const after = fs.lstatSync(file, { bigint: true });
-  if (['dev', 'ino', 'size', 'mtimeNs', 'ctimeNs'].some(key => before[key] !== after[key])) fail();
+  const { bytes, stat: before } = readBoundFileRecord(file, { maximum, checkCtime: true });
   return { bytes, identity: `${before.dev}:${before.ino}:${before.size}:${before.mtimeNs}:${before.ctimeNs}` };
 }
 

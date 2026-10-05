@@ -3,6 +3,8 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { readBoundFile, readBoundFileRecord, assertDirectory, sameFile } = require('../core/bound-file-io');
+const { identity: privateIdentity, safeUnlinkBoundPrivateFile } = require('./bound-private-file');
 const { SafeError } = require('../runtime');
 const { roots } = require('./common');
 const { assertWritableCapacity, normalizePostPreflightWriteError } = require('./storage-capacity');
@@ -192,6 +194,17 @@ function durableAtomicWrite(target, temporary, payload, options = {}) {
   }
 }
 
+function removeReadRecord(record, io) {
+  const parent = record.directory.chain[0].identity;
+  return safeUnlinkBoundPrivateFile(record.path, { io, binding: {
+    target: record.path, parent: record.directory.path, file: privateIdentity(record.stat),
+    parentIdentity: { dev: parent.dev, ino: parent.ino }
+  }, validate() {
+    assertDirectory(record.directory);
+    if (!sameFile(io.lstatSync(record.path, { bigint: true }), record.identity)) throw new Error('changed');
+  } });
+}
+
 function readOutboxEntries(options = {}) {
   const io = options.fs || fs;
   const dir = assertOutboxDirectory(options);
@@ -206,13 +219,16 @@ function readOutboxEntries(options = {}) {
     if (OUTBOX_TEMP_RE.test(entry.name) && entry.isFile() && !entry.isSymbolicLink()) {
       try {
         const temporary = path.join(dir, entry.name);
-        const stat = io.lstatSync(temporary);
-        if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 8192) throw new Error('unsafe temp');
-        const value = JSON.parse(io.readFileSync(temporary, 'utf8'));
+        const checked = readBoundFileRecord(temporary, { io, maximum: 8192 });
+        const value = JSON.parse(checked.bytes);
         if (!validOutboxEntry(value) || entry.name !== `.mo_${value.entry_id}.tmp`) throw new Error('invalid temp');
         const promoted = path.join(dir, `mo_${value.entry_id}.json`);
         if (io.existsSync(promoted)) throw new Error('conflicting intent');
+        assertDirectory(checked.directory);
+        if (!sameFile(io.lstatSync(temporary, { bigint: true }), checked.identity)) throw new Error('changed temp');
         renameWithTransientRetry(temporary, promoted, io);
+        const after = readBoundFileRecord(promoted, { io, maximum: 8192, directory: checked.directory });
+        if (!sameFile(after.stat, checked.identity) || !after.bytes.equals(checked.bytes)) throw new Error('changed promotion');
         syncParentDirectory(promoted, io, options.platform || process.platform);
         result.push({ ...value, file: promoted });
         continue;
@@ -225,9 +241,7 @@ function readOutboxEntries(options = {}) {
     }
     const file = path.join(dir, entry.name);
     try {
-      const stat = io.lstatSync(file);
-      if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 8192) throw new Error('unsafe entry');
-      const value = JSON.parse(io.readFileSync(file, 'utf8'));
+      const value = JSON.parse(readBoundFile(file, { io, maximum: 8192 }));
       if (!validOutboxEntry(value) || entry.name !== `mo_${value.entry_id}.json`) throw new Error('invalid entry');
       result.push({ ...value, file });
     } catch {
@@ -285,14 +299,13 @@ function removeMappingOutbox(entry, options = {}) {
     throw new SafeError('Die lokale Zuordnungswarteschlange konnte nicht sicher bereinigt werden.');
   }
   try {
-    const stat = io.lstatSync(entry.file);
-    if (!stat.isFile() || stat.isSymbolicLink()) throw new Error('unsafe entry');
-    const current = JSON.parse(io.readFileSync(entry.file, 'utf8'));
+    const checked = readBoundFileRecord(entry.file, { io, maximum: 8192 });
+    const current = JSON.parse(checked.bytes);
     if (!validOutboxEntry(current) || current.entry_id !== entry.entry_id ||
       current.package_id !== entry.package_id || current.original_basename !== entry.original_basename ||
       current.state !== entry.state || current.schema !== entry.schema ||
       JSON.stringify(current.document_result) !== JSON.stringify(entry.document_result)) throw new Error('changed');
-    io.unlinkSync(entry.file);
+    removeReadRecord(checked, io);
     syncParentDirectory(entry.file, io, options.platform || process.platform);
     return true;
   } catch {
@@ -326,10 +339,9 @@ function releaseMappingLock(lock, options = {}) {
   const io = options.fs || fs;
   try {
     if (lock.descriptor !== undefined) io.closeSync(lock.descriptor);
-    const stat = io.lstatSync(lock.target);
-    if (!stat.isFile() || stat.isSymbolicLink()) return false;
-    if (io.readFileSync(lock.target, 'utf8') !== lock.marker) return false;
-    io.unlinkSync(lock.target);
+    const checked = readBoundFileRecord(lock.target, { io, maximum: 1024 });
+    if (checked.bytes.toString('utf8') !== lock.marker) return false;
+    removeReadRecord(checked, io);
     return true;
   } catch { return false; }
 }
@@ -368,9 +380,7 @@ function appendMapping(originalName, packageId, status = RELEASED, options = {})
     if (!parent.isDirectory() || parent.isSymbolicLink()) throw new Error('unsafe mapping directory');
     lock = acquireMappingLock(options);
     if (io.existsSync(target)) {
-      const existing = io.lstatSync(target);
-      if (!existing.isFile() || existing.isSymbolicLink()) throw new Error('unsafe mapping file');
-      previous = io.readFileSync(target, 'utf8');
+      previous = readBoundFile(target, { io, maximum: 64 * 1024 * 1024 }).toString('utf8');
     }
   } catch (error) {
     if (lock) releaseMappingLock(lock, options);

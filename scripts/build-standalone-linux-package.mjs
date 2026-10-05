@@ -124,7 +124,7 @@ const archiveFiles = collectFiles(stageParent).map((file) => {
 });
 fs.rmSync(output, { force: true });
 fs.rmSync(`${output}.sha256`, { force: true });
-const archive = writeZip(output, archiveFiles);
+const archive = writeZip(output, archiveFiles, { maximumFileBytes: 512 * 1024 * 1024 });
 const zipBytes = readRegular(output, 768 * 1024 * 1024);
 const digest = crypto.createHash('sha256').update(zipBytes).digest('hex');
 fs.writeFileSync(`${output}.sha256`, `${digest}  ${path.basename(output)}\n`, { flag: 'wx' });

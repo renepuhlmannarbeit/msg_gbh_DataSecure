@@ -23,7 +23,7 @@ export function readSeaFile(file, maxBytes = 256 * 1024 * 1024) {
   if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1 || before.size > maxBytes) {
     throw new Error('SEA_FILE_UNSAFE');
   }
-  const fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+  const fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0) | (fs.constants.O_NONBLOCK || 0));
   try {
     const opened = fs.fstatSync(fd);
     const same = (stat) => stat.isFile() && !stat.isSymbolicLink() && stat.nlink === 1 &&

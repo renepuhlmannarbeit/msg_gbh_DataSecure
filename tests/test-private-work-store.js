@@ -74,6 +74,21 @@ test('hard-linked read refused', () => {
   const file = target(); fs.writeFileSync(file, 'original'); const link = target(); fs.linkSync(file, link);
   assert.throws(() => store().readFile(link), { code: 'PRIVATE_ARTIFACT_PATH_INVALID' });
 });
+test('distinct 64-bit file IDs never compare equal after Number rounding', () => {
+  const file = target(); fs.writeFileSync(file, 'safe'); const io = Object.create(fs);
+  const first = 9007199254740992n, second = first + 1n; let reads = 0;
+  io.lstatSync = (candidate, options) => {
+    const stat = fs.lstatSync(candidate, options);
+    if (candidate === file) stat.ino = options?.bigint ? first : Number(first);
+    return stat;
+  };
+  io.fstatSync = (fd, options) => {
+    const stat = fs.fstatSync(fd, options); stat.ino = options?.bigint ? second : Number(second); return stat;
+  };
+  io.readSync = (...args) => { reads++; return fs.readSync(...args); };
+  assert.throws(() => store({ fs: io }).readFile(file), { code: 'PRIVATE_ARTIFACT_READ_FAILED' });
+  assert.equal(reads, 0);
+});
 
 test('close failure prevents publication', () => {
   const file = target(); const io = Object.create(fs);
@@ -84,7 +99,19 @@ test('close failure prevents publication', () => {
 test('read close failure never returns bytes', () => {
   const file = target(); fs.writeFileSync(file, 'x'); const io = Object.create(fs);
   io.closeSync = (fd) => { fs.closeSync(fd); throw new Error('close failed'); };
-  assert.throws(() => store({ fs: io }).readFile(file), /close failed/);
+  assert.throws(() => store({ fs: io }).readFile(file), { code: 'PRIVATE_ARTIFACT_READ_FAILED' });
+});
+test('pre-open content changes and during-read hardlinks are refused', () => {
+  for (const stage of ['before-open', 'during-read']) {
+    const file = target(); fs.writeFileSync(file, 'safe'); const io = Object.create(fs);
+    if (stage === 'before-open') io.openSync = (...args) => {
+      fs.writeFileSync(file, 'evil'); const stat = fs.statSync(file);
+      fs.utimesSync(file, stat.atime, new Date(Date.now() + 10000));
+      return fs.openSync(...args);
+    };
+    else io.readSync = (...args) => { fs.linkSync(file, target()); return fs.readSync(...args); };
+    assert.throws(() => store({ fs: io }).readFile(file), error => /^PRIVATE_ARTIFACT_/u.test(error.code));
+  }
 });
 test('publication race cannot replace an existing destination', () => {
   const file = target(); const io = Object.create(fs);

@@ -49,7 +49,7 @@ function bindPrivateFile(target, options = {}) {
     const named = io.lstatSync(resolved, { bigint: true });
     if (!parentStat.isDirectory() || parentStat.isSymbolicLink() || !named.isFile() ||
         named.isSymbolicLink() || named.nlink !== 1n) throw failure();
-    fd = io.openSync(resolved, io.constants.O_RDONLY | (io.constants.O_NOFOLLOW || 0));
+    fd = io.openSync(resolved, io.constants.O_RDONLY | (io.constants.O_NOFOLLOW || 0) | (io.constants.O_NONBLOCK || 0));
     const opened = io.fstatSync(fd, { bigint: true });
     if (!opened.isFile() || opened.nlink !== 1n || !sameIdentity(opened, identity(named))) throw failure();
     const after = io.lstatSync(resolved, { bigint: true });
@@ -75,6 +75,7 @@ function safeUnlinkBoundPrivateFile(target, options = {}) {
   if (resolved !== binding.target || path.dirname(resolved) !== binding.parent) throw failure();
   const randomBytes = options.randomBytes || crypto.randomBytes;
   const quarantine = path.join(binding.parent, `.delete_${randomBytes(12).toString('hex')}`);
+  let movedObject = false;
   try {
     if (typeof options.validate === 'function') options.validate(resolved);
     const current = io.lstatSync(resolved, { bigint: true });
@@ -82,6 +83,7 @@ function safeUnlinkBoundPrivateFile(target, options = {}) {
         !sameIdentity(current, binding.file) ||
         !sameParent(io.lstatSync(binding.parent, { bigint: true }), binding.parentIdentity)) throw failure();
     io.renameSync(resolved, quarantine);
+    movedObject = true;
     const moved = io.lstatSync(quarantine, { bigint: true });
     if (!moved.isFile() || moved.isSymbolicLink() || moved.nlink !== 1n ||
         !sameFileObject(moved, binding.file) ||
@@ -93,7 +95,11 @@ function safeUnlinkBoundPrivateFile(target, options = {}) {
     // If a replacement won the rename race it is preserved under the random
     // quarantine name. Never delete an object whose identity is uncertain.
     if (error?.code === 'PRIVATE_FILE_IDENTITY_UNCERTAIN') throw error;
-    throw failure();
+    const safe = failure();
+    // Only a failure before the namespace move is retryable. Never repeat a
+    // removal after an uncertain move, or expose native paths/messages.
+    if (!movedObject && ['EPERM', 'EACCES', 'EBUSY'].includes(error?.code)) safe.retry_code = error.code;
+    throw safe;
   }
 }
 

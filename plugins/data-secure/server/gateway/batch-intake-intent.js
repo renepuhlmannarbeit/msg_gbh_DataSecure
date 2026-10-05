@@ -1,4 +1,5 @@
 'use strict';
+const { readHeldBytes } = require('../core/bound-file-io');
 
 const fs = require('fs');
 const path = require('path');
@@ -60,12 +61,12 @@ function createBatchIntakeIntent(options = {}) {
     const binding = bindFile(target, { io });
     let fd;
     try {
-      fd = io.openSync(target, io.constants.O_RDONLY | (io.constants.O_NOFOLLOW || 0));
+      fd = io.openSync(target, io.constants.O_RDONLY | (io.constants.O_NOFOLLOW || 0) | (io.constants.O_NONBLOCK || 0));
       const opened = io.fstatSync(fd, { bigint: true });
       if (!opened.isFile() || opened.nlink !== 1n ||
           Object.entries(boundIdentity(opened)).some(([key, value]) => binding.file[key] !== value) ||
           opened.size > 2048n || opened.size < 1n) throw new Error('BATCH_INTAKE_INTENT_INVALID');
-      const record = JSON.parse(io.readFileSync(fd, 'utf8'));
+      const record = JSON.parse(readHeldBytes(fd, opened.size, io).toString('utf8'));
       const after = io.fstatSync(fd, { bigint: true });
       if (Object.entries(boundIdentity(after)).some(([key, value]) => binding.file[key] !== value)) {
         throw new Error('BATCH_INTAKE_INTENT_INVALID');

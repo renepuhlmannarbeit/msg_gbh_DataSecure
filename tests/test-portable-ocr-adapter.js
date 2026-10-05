@@ -6,6 +6,8 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { EventEmitter } = require('events');
+const vm = require('node:vm');
+const { createRequire } = require('node:module');
 const { encodePng } = require('../plugins/data-secure/server/images/png');
 const {
   runtimeTarget, portableOcrStatus, ocrPngDetailedPortable, PortableOcrError
@@ -18,6 +20,19 @@ async function test(name, fn) {
   catch (error) { console.error(`  fail ${name}`); throw error; }
 }
 function hash(data) { return crypto.createHash('sha256').update(data).digest('hex'); }
+function isolatedCachedAdapter() {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'portable-ocr-cache-'));
+  const server = path.join(root, 'server'); fs.mkdirSync(server);
+  const bundle = path.join(server, 'ocr-runtime'); fs.renameSync(fixture(), bundle);
+  const source = require.resolve('../plugins/data-secure/server/portable-ocr');
+  const instance = { exports: {} };
+  // Only isolate the module cache/default installation path. Parsing, bound
+  // readers, hashes and filesystem calls remain the actual production code.
+  vm.runInNewContext(`(function(require,module,exports,__dirname,process){${fs.readFileSync(source, 'utf8')}\n})`,
+    { Buffer, setTimeout, clearTimeout }, { filename: source })(createRequire(source), instance,
+    instance.exports, server, { platform: 'win32', arch: 'x64' });
+  return { root, bundle, adapter: instance.exports };
+}
 function fixture(released = true) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'portable-ocr-test-'));
   const files = {
@@ -105,6 +120,30 @@ function hangingSpawn() {
       assert.strictEqual(portableOcrStatus({ runtimeRoot: root, platform: 'win32', arch: 'x64' }).reason,
         'bundle_integrity_failed');
     } finally { fs.rmSync(root, { recursive: true, force: true }); }
+  });
+  await test('a cached runtime also rejects a new nearer unmanifested dependency', () => {
+    const { root, bundle, adapter } = isolatedCachedAdapter();
+    try {
+      assert.equal(adapter.portableOcrStatus().available, true);
+      const injected = path.join(bundle, 'node_modules/tesseract.js/src/worker-script/utils/node_modules/bmp-js/index.js');
+      fs.mkdirSync(path.dirname(injected), { recursive: true }); fs.writeFileSync(injected, 'unmanifested');
+      assert.equal(adapter.portableOcrStatus().available, false);
+      assert.equal(adapter.portableOcrStatus({ noCache: true }).reason, 'bundle_integrity_failed');
+    } finally { fs.rmSync(root, { recursive: true }); }
+  });
+  await test('an uncached alternate runtime cannot replace only the cached identity bindings', () => {
+    const { root, bundle, adapter } = isolatedCachedAdapter();
+    try {
+      const first = adapter.portableOcrStatus(); assert.equal(first.available, true);
+      fs.unlinkSync(path.join(bundle, 'bundle-manifest.json'));
+      fs.writeFileSync(path.join(bundle, 'datasecure-ocr-sandbox.exe'), 'changed old launcher');
+      fs.renameSync(fixture(), path.join(bundle, 'windows-x64'));
+      const uncached = adapter.portableOcrStatus({ noCache: true });
+      assert.equal(uncached.available, true); assert.notEqual(uncached.launcher, first.launcher);
+      const normal = adapter.portableOcrStatus();
+      assert.equal(normal.available, true); assert.equal(normal.launcher, uncached.launcher);
+      assert.notEqual(normal.launcher, first.launcher);
+    } finally { fs.rmSync(root, { recursive: true }); }
   });
   await test('executes a released verified bundle through the bounded adapter', async () => {
     const root = fixture(true);

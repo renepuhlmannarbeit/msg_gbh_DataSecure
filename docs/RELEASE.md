@@ -1,6 +1,6 @@
 # Release- und Distributionsvertrag
 
-Stand: 05.10.2026 · 3.2.0-rc158
+Stand: 06.10.2026 · 3.2.0-rc158
 
 Der aktuelle Quellstand ist RC158-Entwicklungsstand; sein Release ist wegen
 neu revalidierter Sicherheitsbefunde angehalten, nicht als Paket veröffentlicht.
@@ -86,6 +86,58 @@ wurde ebenfalls gestoppt. Es gibt daraus keine bestandenen Paketnachweise.
 RC158 wurde weder getaggt noch als GitHub-Prerelease veröffentlicht. RC157-
 Anwender- und Paketnachweise bleiben unverändert auf ihren bisherigen Schnitt
 begrenzt; die neu gefundenen Lücken machen daraus keine Sicherheitsfreigabe.
+
+**Nachbesserung vom 06.10.2026:** Die bestätigten Lesestellen nutzen jetzt
+begrenzte Bytes des gehaltenen Deskriptors statt eines erneuten Pfadlesens.
+Dateityp, Linkzahl, exakte BigInt-Identität, Größe, mtime und gebundene
+Eltern werden geprüft; DS-070 bleibt erhalten (Daten-ctime ist kein
+Identitätsmerkmal). Bestehende deskriptorgebundene Reader lesen positional
+und größenbegrenzt; POSIX-Opens verwenden zusätzlich NONBLOCK, damit ein
+geraceter FIFO nicht vor der Typprüfung hängen bleibt. Sichtbare Ausgaben
+erlauben weiterhin nur ausdrücklich die eigene Zwei-Link-Crash-Recovery.
+
+Sidecar-Diagnose rotiert ausschließlich in exklusiv neu angelegte Segmente,
+ohne bestehende Archive zu löschen, umzubenennen oder zu kürzen. Kollisionen,
+Teilwrite-, Postcheck- und Closefehler deaktivieren weitere Diagnose-I/O,
+nicht das Produkt. Der native Desktop-Sink erstellt neue Dateien relativ zu
+gehaltenen Verzeichnishandles (Windows NtCreateFile/OBJ_DONT_REPARSE; POSIX
+openat/mkdirat) und schreibt ausschließlich über das eigene gehaltene Handle.
+Neustart-Abnahme liest die sicheren Segmente zusammen. Der OCR-Cache bindet
+Status und Identitäten gemeinsam und kontrolliert auch die gesamte Inventarmenge.
+
+Gezielte lokale Gegenproben bestehen: Reader-/Diagnose-Tests einschließlich
+Hardlinks, Junctions, Austausch, Größenwachstum, FD 0 und kurzen/fehlerhaften
+I/O; reale Sidecar-IPC trotz defekter Diagnose; drei native Windows-Rust-
+Diagnoseprüfungen einschließlich höherer Junction und gleichzeitigem Loglesen.
+Die POSIX-FIFO-Gegenprobe bestand zusätzlich unter echtem Linux/WSL mit
+checksumgeprüftem Node 22.23.2; sie ist kein nativer macOS-Nachweis.
+Unabhängige Reviews führten zu zusätzlichen Korrekturen für Segmentkollision,
+Teilwrites, Cache-Vermischung, große Datei-IDs und Neustart-Evidenz.
+Der Review-Asset-Rollback verwendet die bei exklusiver Erstellung gebundene
+Datei-/Elternidentität, niemals die frisch gelesene Identität einer Ersatzdatei.
+Die reale Fremddatei-Substitution bei fehlgeschlagener Manifestveröffentlichung
+bleibt erhalten; der unveränderte eigene Kandidat wird weiterhin bereinigt.
+
+Die neue CodeQL-Triage ist pro Regel, Datei, exaktem Primärfingerprint und
+normalisiertem vollständigem Quellhash gebunden. Geänderte Quellen, neue oder
+doppelte Findings bleiben gesperrt; fehlende/fehlgeschlagene SARIF-Analysen
+können keine Nullbefunde vortäuschen. Die alte Analyse wird nicht als neue
+Freigabe verwendet. Die vollständige lokale Regression besteht mit 76 Basis-
+und 119 direkten Testdateien; dazu bestehen 48 Rusttests, warning-free Clippy,
+41 reale Windows-Konvertierungsgruppen und die Dokumentationsgates.
+Die 15 Reader-/Diagnosefälle bestehen auf Windows (zwei POSIX-spezifische
+Fälle ausdrücklich nicht ausgeführt) und vollständig auf Linux/WSL;
+der zusätzliche Produkt-FIFO-Fall prüft echte Markdown-, Status- und SEA-Leser.
+Frische Security-, saubere Windows-PKG-04- und beide
+Mac-Paketgates sind noch ausstehend; RC158 bleibt bis dahin unveröffentlicht.
+
+Keine darüber hinausgehende Garantie: Der portable Node-Reader schützt
+geprüfte gehaltene Bytes und verwirft erkannte Namespace-Änderungen, ersetzt
+aber keine atomare native Windows-openat-Schnittstelle. Gleichberechtigte
+Prozesse desselben Benutzers können unter Unix nach einer Prüfung weitere
+Hardlinks anlegen. Ein vorbereiteter fremder Inode wird im nativen Diagnose-
+Sink trotzdem nicht zum Schreiben geöffnet. Menschliche Plattformabnahmen
+und Developer-ID/Notarisierung bleiben getrennte Nachweise.
 
 ### RC157 – Standalone auf allen Zielplattformen
 

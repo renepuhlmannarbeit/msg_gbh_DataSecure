@@ -1,4 +1,5 @@
 'use strict';
+const { readHeldBytes } = require('../core/bound-file-io');
 
 const fs = require('fs');
 const path = require('path');
@@ -35,14 +36,14 @@ function createBatchIntakeReservation(deps = {}) {
   function readRecord(target, validator) {
     let descriptor;
     try {
-      descriptor = io.openSync(target, io.constants.O_RDONLY | (io.constants.O_NOFOLLOW || 0));
+      descriptor = io.openSync(target, io.constants.O_RDONLY | (io.constants.O_NOFOLLOW || 0) | (io.constants.O_NONBLOCK || 0));
       const opened = io.fstatSync(descriptor);
       const named = io.lstatSync(target);
       if (!opened.isFile() || !named.isFile() || named.isSymbolicLink() ||
           opened.dev !== named.dev || opened.ino !== named.ino || opened.size < 1 || opened.size > MAX_RECORD_BYTES) {
         return { state: 'invalid' };
       }
-      const value = JSON.parse(io.readFileSync(descriptor, 'utf8'));
+      const value = JSON.parse(readHeldBytes(descriptor, opened.size, io).toString('utf8'));
       if (!validator(value)) return { state: 'invalid' };
       return { state: 'valid', value, identity: { dev: opened.dev, ino: opened.ino, size: opened.size } };
     } catch (error) {

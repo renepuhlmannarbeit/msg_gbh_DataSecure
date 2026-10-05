@@ -4,6 +4,7 @@
 // Do not import common/privacy-config/result-folder-config here: the same gate
 // must run before either configuration writer or the private root creator.
 const fs = require('fs');
+const { readBoundFile } = require('../core/bound-file-io');
 const path = require('path');
 const { dataRoot } = require('../runtime');
 const { readReservations, publishReservations, SCHEMA } = require('./root-reservations');
@@ -80,9 +81,7 @@ function assertSettingsParent(directory) {
 function readRootRecord(directory, name) {
   const file = path.join(directory, 'settings', name);
   try {
-    const stat = fs.lstatSync(file);
-    if (!stat.isFile() || stat.isSymbolicLink() || stat.size < 1 || stat.size > 4096) throw unsafe();
-    const value = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const value = JSON.parse(readBoundFile(file, { maximum: 4096, minimum: 1 }));
     const supported = name === 'privacy-root.json' ? value?.version === 1 :
       ['datasecure-result-root/1', 'datasecure-result-root/2'].includes(value?.schema);
     if (!supported || typeof value.root !== 'string' || !path.isAbsolute(value.root)) throw unsafe();

@@ -26,7 +26,7 @@ function boundDescriptor(entry, deps = {}) {
   if (reparseCheck(entry.full)) throw new SourceFormatError('SOURCE_IDENTITY_CHANGED');
   let descriptor;
   try {
-    descriptor = io.openSync(entry.full, io.constants.O_RDONLY | (io.constants.O_NOFOLLOW || 0));
+    descriptor = io.openSync(entry.full, io.constants.O_RDONLY | (io.constants.O_NOFOLLOW || 0) | (io.constants.O_NONBLOCK || 0));
     const opened = io.fstatSync(descriptor);
     const named = io.lstatSync(entry.full);
     if (!opened.isFile() || !named.isFile() || named.isSymbolicLink() ||

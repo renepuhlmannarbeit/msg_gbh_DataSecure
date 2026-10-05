@@ -7,6 +7,7 @@ import { readRegular, sha256, verifyTargetEvidence, readContract } from './lib/b
 import { writeStandaloneRuntime } from './lib/standalone-runtime-projection.mjs';
 import { writeConversionRuntime } from './lib/standalone-conversion-runtime.mjs';
 import { loadCargoLicenseInventory } from './lib/cargo-license-inventory.mjs';
+import boundFileIo from '../plugins/data-secure/server/core/bound-file-io.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
@@ -49,15 +50,12 @@ function copyFile(source, relative, mode = 0o600) {
 }
 
 function copyCargoExecutable(source, relative) {
-  const before = fs.statSync(source, { bigint: true });
-  if (!before.isFile() || before.size < 1024n || before.size > 64n * 1024n * 1024n) {
-    throw new Error('STANDALONE_EXECUTABLE_UNSAFE');
-  }
+  let bytes;
+  try { bytes = boundFileIo.readBoundFile(source, { minimum: 1024, maximum: 64 * 1024 * 1024, maxLinks: 2, checkCtime: true }); }
+  catch { throw new Error('STANDALONE_EXECUTABLE_UNSAFE'); }
   const destination = path.join(stage, relative);
-  fs.copyFileSync(source, destination, fs.constants.COPYFILE_EXCL);
-  const after = fs.statSync(source, { bigint: true });
-  if (before.size !== after.size || before.mtimeNs !== after.mtimeNs ||
-      !fs.readFileSync(source).equals(fs.readFileSync(destination))) {
+  fs.writeFileSync(destination, bytes, { flag: 'wx', mode: 0o700 });
+  if (!bytes.equals(boundFileIo.readBoundFile(destination, { maximum: bytes.length, minimum: bytes.length, checkCtime: true }))) {
     throw new Error('STANDALONE_EXECUTABLE_CHANGED');
   }
 }

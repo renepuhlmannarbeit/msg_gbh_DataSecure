@@ -1,0 +1,710 @@
+{
+  "schema": "datasecure-codeql-triage/1",
+  "source_review": "RC158 security revalidation; real product path-read and diagnostic findings excluded",
+  "entries": [
+    {
+      "rule": "js/incomplete-multi-character-sanitization",
+      "path": "plugins/data-secure/server/privacy/base.js",
+      "source_sha256": "273f70a9d1cb3a3f056ae4e4b1ccc8bb4f678d31af601ab979258d3bf432ecbb",
+      "reason": "Intermediate comment removal is not the HTML trust boundary; the final single-character angle-bracket escape makes nested remnants inert.",
+      "fingerprints": [
+        {
+          "line": "1d012976cd430d6c:1",
+          "column": "6"
+        },
+        {
+          "line": "412b0e8bb17d38e6:1",
+          "column": "6"
+        }
+      ]
+    },
+    {
+      "rule": "js/double-escaping",
+      "path": "tests/lib/adversarial-golden-oracle.mjs",
+      "source_sha256": "aa6f2e09cb2a0b927f88e2ef7b03b99ed4c0f5aad86605b6a578dabdedab40aa",
+      "reason": "Non-shipped synthetic fixture/assertion; no password storage, HTML sink or URL authorization boundary.",
+      "fingerprints": [
+        {
+          "line": "9b49be5561411533:1",
+          "column": "7"
+        }
+      ]
+    },
+    {
+      "rule": "js/insufficient-password-hash",
+      "path": "tests/helpers/conversion-fixtures.mjs",
+      "source_sha256": "93517ccbfd82a3aca9a9fd3c23c154ad3f476a50c698fa2665e81a05788d957f",
+      "reason": "Non-shipped synthetic fixture/assertion; no password storage, HTML sink or URL authorization boundary.",
+      "fingerprints": [
+        {
+          "line": "62f24e022bcebfcf:1",
+          "column": "49"
+        },
+        {
+          "line": "7dde5a05823aadd3:1",
+          "column": "48"
+        }
+      ]
+    },
+    {
+      "rule": "js/incomplete-url-substring-sanitization",
+      "path": "tests/test-rc80-semantics.js",
+      "source_sha256": "9646a711d1cb6e1f6c33eff21fd751294712ef04efdd60187df805b21eac8c8f",
+      "reason": "Non-shipped synthetic fixture/assertion; no password storage, HTML sink or URL authorization boundary.",
+      "fingerprints": [
+        {
+          "line": "f427e49ecb2dabd9:1",
+          "column": "10"
+        },
+        {
+          "line": "f427e49ecb2dabd9:1",
+          "column": "31"
+        },
+        {
+          "line": "3185d31781f092fb:1",
+          "column": "10"
+        },
+        {
+          "line": "4a81448da0b6d5be:1",
+          "column": "10"
+        },
+        {
+          "line": "4a81448da0b6d5be:1",
+          "column": "28"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "plugins/data-secure/server/gateway/batch-journal-store.js",
+      "source_sha256": "2a91d2030dae1354c21ecd530f801815adc4b89dc6d9487e20dc4f55a83ae875",
+      "reason": "The flagged open is descriptor-bound or exclusive; object checks precede reads/writes and uncertainty stops publication.",
+      "fingerprints": [
+        {
+          "line": "b6bb02c26b1767d:1",
+          "column": "13"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "plugins/data-secure/server/gateway/batch-private-store.js",
+      "source_sha256": "217a7461e5e77f611d5dfbbecc1e9e7ef4eae4deda971a5d13b64d26d0f1cf9b",
+      "reason": "The flagged open is descriptor-bound or exclusive; object checks precede reads/writes and uncertainty stops publication.",
+      "fingerprints": [
+        {
+          "line": "e6581828627a17fc:1",
+          "column": "5"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "plugins/data-secure/server/gateway/bound-private-file.js",
+      "source_sha256": "caa17408108ceaaf43695200d0b6c31ad56b4f248b9ee9600129c886a5ba7aaa",
+      "reason": "The flagged open is descriptor-bound or exclusive; object checks precede reads/writes and uncertainty stops publication.",
+      "fingerprints": [
+        {
+          "line": "dc58d2645007630a:1",
+          "column": "5"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "plugins/data-secure/server/gateway/package-staging.js",
+      "source_sha256": "2df8ab811d774938dbffbc55d6435a86eec81151b866f2fb2890c1df6aae43fb",
+      "reason": "The flagged open is descriptor-bound or exclusive; object checks precede reads/writes and uncertainty stops publication.",
+      "fingerprints": [
+        {
+          "line": "8d1fd0829c9bd8c1:1",
+          "column": "5"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "plugins/data-secure/server/gateway/private-work-store.js",
+      "source_sha256": "efd46b45f561b253e36fe7287c1a6b1d2be705ab5c9a7eb08d3fadf84c194219",
+      "reason": "The flagged open is descriptor-bound or exclusive; object checks precede reads/writes and uncertainty stops publication.",
+      "fingerprints": [
+        {
+          "line": "e6cf05f60848b0c8:1",
+          "column": "5"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "plugins/data-secure/server/gateway/retention.js",
+      "source_sha256": "7a5a3c0a6952900e2386dcbe9e8a270b8a8ee81ac67f58cab6c2b2154d6cee5b",
+      "reason": "The flagged open is descriptor-bound or exclusive; object checks precede reads/writes and uncertainty stops publication.",
+      "fingerprints": [
+        {
+          "line": "2a017a9332b128db:1",
+          "column": "11"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "plugins/data-secure/server/gateway/review.js",
+      "source_sha256": "309d5af905e5df4729ee816851b02cacc2df4615c59becff0425c96ba58ef068",
+      "reason": "The flagged open is descriptor-bound or exclusive; object checks precede reads/writes and uncertainty stops publication.",
+      "fingerprints": [
+        {
+          "line": "5fcba96a2a7ae55d:1",
+          "column": "13"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "plugins/data-secure/server/gateway/root-reservations.js",
+      "source_sha256": "6793e75473315e890a010bcb83c5a5b718e89bd64a533383b7c7a46da164d835",
+      "reason": "The flagged open is descriptor-bound or exclusive; object checks precede reads/writes and uncertainty stops publication.",
+      "fingerprints": [
+        {
+          "line": "1c0335c72ef72d8c:1",
+          "column": "5"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "plugins/data-secure/server/gateway/standalone-history-store.js",
+      "source_sha256": "37468130d4a930600a3598414afd172ff402e4760f206ba7c3999b3e27e6bb98",
+      "reason": "The flagged open is descriptor-bound or exclusive; object checks precede reads/writes and uncertainty stops publication.",
+      "fingerprints": [
+        {
+          "line": "f9419a6f9ee146c1:1",
+          "column": "19"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "plugins/data-secure/server/gateway/visuals.js",
+      "source_sha256": "2938c3d715175a52a1dee0b3bce209e7de1bef3f0d911b38f34890611e737c6a",
+      "reason": "The flagged open is descriptor-bound or exclusive; object checks precede reads/writes and uncertainty stops publication.",
+      "fingerprints": [
+        {
+          "line": "7caca6af043ccaf9:1",
+          "column": "6"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "plugins/data-secure/server/native-launcher.js",
+      "source_sha256": "ab36778f74b22aa3eb9ac2a01fb70ccfc24a1ea4e18adb84060762abc774b89c",
+      "reason": "The flagged open is descriptor-bound or exclusive; object checks precede reads/writes and uncertainty stops publication.",
+      "fingerprints": [
+        {
+          "line": "80aa0cc73a0a55c6:1",
+          "column": "13"
+        },
+        {
+          "line": "9edff6e504bebc15:1",
+          "column": "13"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "plugins/data-secure/server/sea-batch-probe.js",
+      "source_sha256": "22fbca98aab81324ec634c5564c3c04da462f7d3b5ea8bcc37c599522af9c53f",
+      "reason": "The flagged open is descriptor-bound or exclusive; object checks precede reads/writes and uncertainty stops publication.",
+      "fingerprints": [
+        {
+          "line": "24b88fa0a896077a:1",
+          "column": "5"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "plugins/data-secure/server/standalone/markdown-store.js",
+      "source_sha256": "d02ac3912495ed25352f8c6c5400df3ea26b034fd51af95ca73051e11a6d89dc",
+      "reason": "The flagged open is descriptor-bound or exclusive; object checks precede reads/writes and uncertainty stops publication.",
+      "fingerprints": [
+        {
+          "line": "d9c83b6217dac05f:1",
+          "column": "5"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "plugins/data-secure/server/status-app/server.js",
+      "source_sha256": "467040ce325bc24f489ab9d5a7c4308ff39dea8314e1f9f8318f89e274f1d5cc",
+      "reason": "The flagged open is descriptor-bound or exclusive; object checks precede reads/writes and uncertainty stops publication.",
+      "fingerprints": [
+        {
+          "line": "7b378ebde50000f5:1",
+          "column": "11"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "scripts/generate-adversarial-golden-corpus.mjs",
+      "source_sha256": "f18af8e324125e7a182506ea8d850f0c1b666147b52705f94248d9663e0f046f",
+      "reason": "The flagged open is descriptor-bound or exclusive; object checks precede reads/writes and uncertainty stops publication.",
+      "fingerprints": [
+        {
+          "line": "f41b92cacd00c856:1",
+          "column": "0"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "scripts/lib/sea-source-evidence.mjs",
+      "source_sha256": "558dccaa53f4380831f02128781679cb455cf86e2dfdef21ee2564476ea7bf98",
+      "reason": "The flagged open is descriptor-bound or exclusive; object checks precede reads/writes and uncertainty stops publication.",
+      "fingerprints": [
+        {
+          "line": "8fe2b774aa069ae2:1",
+          "column": "11"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "tests/helpers/standalone-candidate-integrity.mjs",
+      "source_sha256": "89e7c002f673bb28c1171debc721e98148195cb06c105b60ccf581cb719f5b53",
+      "reason": "Controlled non-shipped test fixture or deliberate adversarial mutation; no product publication authority.",
+      "fingerprints": [
+        {
+          "line": "4670b6ff4a3446d7:1",
+          "column": "17"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "tests/lib/core-policy-product-scenarios.js",
+      "source_sha256": "1698b25d56fae3e8d32302553a458ea18ca5ba2b5f991c9e140325ba110281d1",
+      "reason": "Controlled non-shipped test fixture or deliberate adversarial mutation; no product publication authority.",
+      "fingerprints": [
+        {
+          "line": "67ed4066b03f3348:1",
+          "column": "97"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "tests/lib/product-isolation-worker.cjs",
+      "source_sha256": "64876b34b03fda3cbd9ac7aeaceea0f665cd5be96958833458cfffe2e9da2624",
+      "reason": "Controlled non-shipped test fixture or deliberate adversarial mutation; no product publication authority.",
+      "fingerprints": [
+        {
+          "line": "304ba4efa50ab7ea:1",
+          "column": "19"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "tests/manual/standalone-local-conversion-probe.mjs",
+      "source_sha256": "061a23abab574ff49816e63cf361c12e237c4bcd9f04d085252ab5197387663a",
+      "reason": "Controlled non-shipped test fixture or deliberate adversarial mutation; no product publication authority.",
+      "fingerprints": [
+        {
+          "line": "7d6ea22148e2af6b:1",
+          "column": "35"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "tests/manual/standalone-package-corpus.mjs",
+      "source_sha256": "e910d125db995202f41927a8e058ddca75876cab9c887093f23d5d3af72df1de",
+      "reason": "Controlled non-shipped test fixture or deliberate adversarial mutation; no product publication authority.",
+      "fingerprints": [
+        {
+          "line": "b3008386b5c880bb:1",
+          "column": "24"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "tests/test-adversarial-golden-corpus.mjs",
+      "source_sha256": "9c0af6edbc3b9a0f59d9c6ff2405f4211e2d2248d3d57a4a6222eaa58a584ff3",
+      "reason": "Controlled non-shipped test fixture or deliberate adversarial mutation; no product publication authority.",
+      "fingerprints": [
+        {
+          "line": "fd21675e08f4e70f:1",
+          "column": "48"
+        },
+        {
+          "line": "2f3f6eefd13bf901:1",
+          "column": "40"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "tests/test-batch-private-artifact-migration.js",
+      "source_sha256": "d192c1b0a7a42aacb9af0e56bf2fd20731c38cfb688672ab31d295e0886e2be7",
+      "reason": "Controlled non-shipped test fixture or deliberate adversarial mutation; no product publication authority.",
+      "fingerprints": [
+        {
+          "line": "67fee32eae1189aa:1",
+          "column": "23"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "tests/test-bundled-runtime-smoke.mjs",
+      "source_sha256": "e8cd4fbf305a1dcfe071cb202ce66d4692649d0e2eb4684e1abecccd652abb68",
+      "reason": "Controlled non-shipped test fixture or deliberate adversarial mutation; no product publication authority.",
+      "fingerprints": [
+        {
+          "line": "92b4fbe9b139b477:1",
+          "column": "14"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "tests/test-direct-picker-batch.js",
+      "source_sha256": "aeb4d830080cede5ff6e7a06af8d78c3ddabd2c5e0d1761726dbecb708dc534b",
+      "reason": "Controlled non-shipped test fixture or deliberate adversarial mutation; no product publication authority.",
+      "fingerprints": [
+        {
+          "line": "73130a3a451392b1:1",
+          "column": "19"
+        },
+        {
+          "line": "9d7eca45361bae46:1",
+          "column": "19"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "tests/test-gateway-e2e.js",
+      "source_sha256": "1abf8345c75f8a67110e39d91f1daf0b4fa317bfd80855272ebfee112bbbe718",
+      "reason": "Controlled non-shipped test fixture or deliberate adversarial mutation; no product publication authority.",
+      "fingerprints": [
+        {
+          "line": "c6889fea21bd5803:1",
+          "column": "43"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "tests/test-legacy-input-migration.js",
+      "source_sha256": "c39a995cc221f933a421385e01424841b240e3c92258064c2d14523f10c89378",
+      "reason": "Controlled non-shipped test fixture or deliberate adversarial mutation; no product publication authority.",
+      "fingerprints": [
+        {
+          "line": "735ee987d83b52bc:1",
+          "column": "43"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "tests/test-ocr-runtime-bundle.mjs",
+      "source_sha256": "49a1d86caf741b108b34493879528655f28fd82c0440994741b113f3aa47fc69",
+      "reason": "Controlled non-shipped test fixture or deliberate adversarial mutation; no product publication authority.",
+      "fingerprints": [
+        {
+          "line": "5e406cd1e85749e1:1",
+          "column": "48"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "tests/test-ocr-universal-assembler.mjs",
+      "source_sha256": "7dcbba4a59339a700ec0192aa0610d71619e7b5de55488478256f9968caba23b",
+      "reason": "Controlled non-shipped test fixture or deliberate adversarial mutation; no product publication authority.",
+      "fingerprints": [
+        {
+          "line": "ae11bfea92aee842:1",
+          "column": "26"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "tests/test-ocr-universal-bundle.mjs",
+      "source_sha256": "1fc13d3bf340e8244fd91ebef60c264e167fed157c1e58409341746e8cd55d0d",
+      "reason": "Controlled non-shipped test fixture or deliberate adversarial mutation; no product publication authority.",
+      "fingerprints": [
+        {
+          "line": "5e406cd1e85749e1:1",
+          "column": "48"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "tests/test-package-staging.js",
+      "source_sha256": "94f6e40e67e8bac5e61bae9b06f40e9290bb0b948a104c2eada6b69045a01535",
+      "reason": "Controlled non-shipped test fixture or deliberate adversarial mutation; no product publication authority.",
+      "fingerprints": [
+        {
+          "line": "3ef98a8911a60f4d:1",
+          "column": "71"
+        },
+        {
+          "line": "b9ae875e9f5a2b82:1",
+          "column": "23"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "tests/test-read-only-source-snapshot.js",
+      "source_sha256": "1ddb8cc2177e4ae338de81dfb90a7d2db06c0a265641fd20b7871265d53196a5",
+      "reason": "Controlled non-shipped test fixture or deliberate adversarial mutation; no product publication authority.",
+      "fingerprints": [
+        {
+          "line": "c6889fea21bd5803:1",
+          "column": "43"
+        },
+        {
+          "line": "e51c98cf60293630:1",
+          "column": "57"
+        },
+        {
+          "line": "4fdfa5f11844b1a9:1",
+          "column": "57"
+        },
+        {
+          "line": "f2d59fc989146fe8:1",
+          "column": "19"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "tests/test-sea-parser-role.js",
+      "source_sha256": "9f8884aa437a421098ac281e833971d4ec92e23ee03af13101b2295d46e82ba4",
+      "reason": "Controlled non-shipped test fixture or deliberate adversarial mutation; no product publication authority.",
+      "fingerprints": [
+        {
+          "line": "7737a93174473b25:1",
+          "column": "0"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "tests/test-source-format-inspector.js",
+      "source_sha256": "61c31a0af4b3dc65c087b83ccfc26976e0789c75e375155cdd56d8ef32d02fc5",
+      "reason": "Controlled non-shipped test fixture or deliberate adversarial mutation; no product publication authority.",
+      "fingerprints": [
+        {
+          "line": "efcb51ba2dfb47c1:1",
+          "column": "11"
+        },
+        {
+          "line": "abd3b84c7b4b86d4:1",
+          "column": "11"
+        },
+        {
+          "line": "ac412eced5ae82e5:1",
+          "column": "11"
+        },
+        {
+          "line": "7aef7e8e80350719:1",
+          "column": "11"
+        },
+        {
+          "line": "830c7978ccdeb585:1",
+          "column": "19"
+        },
+        {
+          "line": "f8ab1ab9869e4a46:1",
+          "column": "19"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "tests/test-source-opc-preflight.js",
+      "source_sha256": "c3b40530898a3d4d253dacae0841422b3f9676da2c4e694105119e2b106b0be1",
+      "reason": "Controlled non-shipped test fixture or deliberate adversarial mutation; no product publication authority.",
+      "fingerprints": [
+        {
+          "line": "3c6694f79fa380e6:1",
+          "column": "11"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "tests/test-standalone-format-corpus.mjs",
+      "source_sha256": "9734ff5bccc4e20dfcaca0d87a84f4f5936206671247f2dbc71610fd36df16e7",
+      "reason": "Controlled non-shipped test fixture or deliberate adversarial mutation; no product publication authority.",
+      "fingerprints": [
+        {
+          "line": "94431fd691440de7:1",
+          "column": "37"
+        },
+        {
+          "line": "459562a1b81334d1:1",
+          "column": "14"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "tests/test-standalone-conversion-worker.mjs",
+      "source_sha256": "c660914642d9571f2422e2703ebcafc180aad6901e12f4bd722dd6d8f6ee57b3",
+      "reason": "Controlled non-shipped test fixture or deliberate adversarial mutation; no product publication authority.",
+      "fingerprints": [
+        {
+          "line": "cbce90cda28b7c35:1",
+          "column": "17"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "tests/test-standalone-identity-ledger.js",
+      "source_sha256": "44d0773c08128b573673e8f987aa9b08b155f474385a6b0fdae6257d39e3e47a",
+      "reason": "Controlled non-shipped test fixture or deliberate adversarial mutation; no product publication authority.",
+      "fingerprints": [
+        {
+          "line": "df7cd399e5930540:1",
+          "column": "13"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "tests/test-standalone-package-smoke.mjs",
+      "source_sha256": "165c1384761d0c77b318965c0f9199b3c0312063b27a8845e60498fc90e4a0d1",
+      "reason": "Controlled non-shipped test fixture or deliberate adversarial mutation; no product publication authority.",
+      "fingerprints": [
+        {
+          "line": "60dcafc5a1f63f7a:1",
+          "column": "20"
+        },
+        {
+          "line": "eca12e11064d7f94:1",
+          "column": "13"
+        },
+        {
+          "line": "d507f9604abc2d4e:1",
+          "column": "13"
+        },
+        {
+          "line": "24fc1591f8613b27:1",
+          "column": "13"
+        },
+        {
+          "line": "a7f4e6c277fb269d:1",
+          "column": "24"
+        },
+        {
+          "line": "c4cbd6ffb5381c89:1",
+          "column": "13"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "tests/test-uat-fixture-generation.js",
+      "source_sha256": "79e149bd1431a48f1c712bef141914c47ec129c6d1a8be6a67cf85e016822655",
+      "reason": "Controlled non-shipped test fixture or deliberate adversarial mutation; no product publication authority.",
+      "fingerprints": [
+        {
+          "line": "3c6694f79fa380e6:1",
+          "column": "11"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-access-to-http",
+      "path": "native/ocr/pilot/fetch-models.mjs",
+      "source_sha256": "2af69048a335f6dc15459ff1989e21689220e98c8b9162304831dbb99bf53337",
+      "reason": "Engineering-only pinned model download: fixed HTTPS origin, hash and exact size verification, exclusive local creation.",
+      "fingerprints": [
+        {
+          "line": "e9d6f5f85d7c015b:1",
+          "column": "29"
+        },
+        {
+          "line": "8d6dc19772388271:1",
+          "column": "36"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-access-to-http",
+      "path": "tests/helpers/packaged-network-canary.cjs",
+      "source_sha256": "b375c148465b213c8f0c04bd49433e0ffee7a903fae0b2b36bdf3a5e27b8d689",
+      "reason": "Synthetic loopback network-denial counterexample in a non-shipped test helper.",
+      "fingerprints": [
+        {
+          "line": "4b56e8e8e2007f03:1",
+          "column": "40"
+        },
+        {
+          "line": "2b035d2c446fe047:1",
+          "column": "42"
+        },
+        {
+          "line": "cd6a43628215b218:1",
+          "column": "45"
+        },
+        {
+          "line": "7baa12e01050fb88:1",
+          "column": "33"
+        }
+      ]
+    },
+    {
+      "rule": "js/http-to-file-access",
+      "path": "native/ocr/pilot/fetch-models.mjs",
+      "source_sha256": "2af69048a335f6dc15459ff1989e21689220e98c8b9162304831dbb99bf53337",
+      "reason": "Engineering-only pinned model download: fixed HTTPS origin, hash and exact size verification, exclusive local creation.",
+      "fingerprints": [
+        {
+          "line": "56dd60fc591a6f73:1",
+          "column": "50"
+        },
+        {
+          "line": "a724342ad46007fd:1",
+          "column": "57"
+        }
+      ]
+    },
+    {
+      "rule": "js/regex/missing-regexp-anchor",
+      "path": "tests/test-companion-processor.js",
+      "source_sha256": "5f1bb4d375cffd2fb85921776236344cb891eb6ccdca01e88b02d0de749d3309",
+      "reason": "Non-shipped synthetic fixture/assertion; no password storage, HTML sink or URL authorization boundary.",
+      "fingerprints": [
+        {
+          "line": "d772ef11d2546b65:1",
+          "column": "51"
+        },
+        {
+          "line": "4ff339c027213f23:1",
+          "column": "29"
+        },
+        {
+          "line": "93918b6cdbb2de17:1",
+          "column": "29"
+        },
+        {
+          "line": "552cb809153fe5d3:1",
+          "column": "51"
+        }
+      ]
+    }
+  ]
+}

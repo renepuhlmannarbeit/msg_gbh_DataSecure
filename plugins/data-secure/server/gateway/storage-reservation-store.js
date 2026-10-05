@@ -1,4 +1,5 @@
 'use strict';
+const { readHeldBytes } = require('../core/bound-file-io');
 
 const fs = require('fs');
 const { renameWithTransientRetry } = require('./batch-journal-io');
@@ -60,11 +61,11 @@ function validRecord(value) {
 function readRegular(file, io = fs) {
   let descriptor;
   try {
-    descriptor = io.openSync(file, io.constants.O_RDONLY | (io.constants.O_NOFOLLOW || 0));
+    descriptor = io.openSync(file, io.constants.O_RDONLY | (io.constants.O_NOFOLLOW || 0) | (io.constants.O_NONBLOCK || 0));
     const opened = io.fstatSync(descriptor);
     const named = io.lstatSync(file);
     if (!opened.isFile() || named.isSymbolicLink() || opened.dev !== named.dev || opened.ino !== named.ino) throw new Error('unsafe file');
-    return { descriptor, stat: opened, text: io.readFileSync(descriptor, 'utf8') };
+    return { descriptor, stat: opened, text: readHeldBytes(descriptor, opened.size, io).toString('utf8') };
   } catch (error) {
     if (error?.code === 'ENOENT') return null;
     throw reservationError();

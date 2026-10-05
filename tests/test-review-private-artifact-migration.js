@@ -213,6 +213,24 @@ test('post-rename manifest uncertainty preserves a successfully committed review
     'the immutable review evidence is not rewritten after manifest commit');
 });
 
+test('manifest rollback preserves a foreign asset substituted after exclusive creation', () => {
+  const h = fixture();
+  const targetPath = path.join(h.packageDir, 'assets', 'asset-001_reviewed.png');
+  const displaced = `${targetPath}.original`;
+  const originalManifest = fs.readFileSync(path.join(h.packageDir, 'manifest.json'));
+  assert.throws(() => approveReviewAsset(h.reviewId, true, {
+    writeFileAtomically() {
+      fs.renameSync(targetPath, displaced);
+      fs.writeFileSync(targetPath, 'foreign asset must survive');
+      throw new Error('synthetic manifest rollback');
+    }
+  }), /synthetic manifest rollback/u);
+  assert.strictEqual(fs.readFileSync(targetPath, 'utf8'), 'foreign asset must survive');
+  assert.deepStrictEqual(fs.readFileSync(displaced), png);
+  assert.deepStrictEqual(fs.readFileSync(path.join(h.packageDir, 'manifest.json')), originalManifest);
+  assert.deepStrictEqual(fs.readFileSync(h.preview), png);
+});
+
 test('preview cleanup preserves a replacement created after identity inspection', () => {
   const h = fixture();
   const displaced = `${h.preview}.old`;

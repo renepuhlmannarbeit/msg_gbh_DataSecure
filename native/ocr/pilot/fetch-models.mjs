@@ -9,8 +9,15 @@ const modelDir = path.join(pilotDir, 'models');
 const rawBase = new URL(lock.raw_base);
 
 if (rawBase.protocol !== 'https:' || rawBase.hostname !== 'raw.githubusercontent.com' ||
-    rawBase.pathname !== '/tesseract-ocr/tessdata_fast') {
+    rawBase.pathname !== '/tesseract-ocr/tessdata_fast' || rawBase.username || rawBase.password ||
+    rawBase.port || rawBase.search || rawBase.hash || !/^[a-f0-9]{40}$/u.test(String(lock.commit)) ||
+    Object.keys(lock.models || {}).sort().join(',') !== 'deu,eng') {
   throw new Error('MODEL_SOURCE_NOT_ALLOWLISTED');
+}
+for (const [language, item] of [...Object.entries(lock.models), ['license', lock.license]]) {
+  if (item?.file !== (language === 'license' ? 'LICENSE' : `${language}.traineddata`) ||
+      !Number.isSafeInteger(item.bytes) || item.bytes < 1 || item.bytes > 16 * 1024 * 1024 ||
+      !/^[a-f0-9]{64}$/u.test(String(item.sha256))) throw new Error('MODEL_LOCK_INVALID');
 }
 
 if (fs.existsSync(modelDir)) throw new Error('MODEL_DIRECTORY_ALREADY_EXISTS');

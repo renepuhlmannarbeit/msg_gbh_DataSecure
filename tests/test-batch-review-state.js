@@ -132,7 +132,12 @@ testAsync('accepted journals with unaccounted positions never become review-read
       isDirectory: () => false, isFile: () => true, isSymbolicLink: () => false };
     const parent = { ...stat, ino: 1n, isDirectory: () => true, isFile: () => false };
     const io = { constants: { O_RDONLY: 0 }, lstatSync: value => value === target ? stat : parent,
-      openSync: () => 1, fstatSync: () => stat, readFileSync: () => bytes, closeSync() {} };
+      openSync: () => 1, fstatSync: () => stat,
+      readSync(fd, buffer, offset, length, position) {
+        assert.strictEqual(fd, 1);
+        assert.ok(position >= 0 && position + length <= bytes.length);
+        return bytes.copy(buffer, offset, position, position + length);
+      }, closeSync() {} };
     const state = createBatchJournalStore({ io, batchPath: () => target }).readStateForMaintenance(token);
     const value = publicProgress(state);
     assert.strictEqual(value.batch_total, items.length);

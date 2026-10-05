@@ -1,4 +1,5 @@
 'use strict';
+const { readHeldBytes } = require('../core/bound-file-io');
 
 const fs = require('fs');
 const { renameWithTransientRetry } = require('./batch-journal-io');
@@ -142,12 +143,12 @@ function readDiagnosticFile(file, options = {}) {
   const io = options.fs || fs;
   let fd;
   try {
-    fd = io.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+    fd = io.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0) | (fs.constants.O_NONBLOCK || 0));
     const opened = io.fstatSync(fd);
     const named = io.lstatSync(file);
     if (!opened.isFile() || opened.size < 1 || opened.size > MAX_FILE_BYTES || named.isSymbolicLink() ||
         opened.dev !== named.dev || opened.ino !== named.ino) return '';
-    return io.readFileSync(fd, 'utf8');
+    return readHeldBytes(fd, opened.size, io).toString('utf8');
   } catch (error) {
     if (error?.code === 'ENOENT') return '';
     throw error;

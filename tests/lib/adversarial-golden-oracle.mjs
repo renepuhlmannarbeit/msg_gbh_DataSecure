@@ -53,10 +53,10 @@ export function assertCrossDocumentPseudonyms(outputs) {
       const text = semanticText(outputs.get(number));
       // These exact source sentences identify semantic occurrences. A title
       // accidentally redacted as a person cannot satisfy this assertion.
-      const prose = [...text.matchAll(/(\[PERSON_[A-Z2-7\d]+\]) arbeitet bei (\[UNTERNEHMEN_[A-Z2-7\d]+\])/gu)];
+      const prose = [...text.matchAll(/(\[PERSON_[A-Z0-9]+\]) arbeitet bei (\[UNTERNEHMEN_[A-Z0-9]+\])/gu)];
       const occurrence = prose[proseOccurrence[number]];
-      const person = number <= 10 ? occurrence?.[1] : /Name:\s*(\[PERSON_[A-Z2-7\d]+\])/u.exec(text)?.[1];
-      const company = number <= 10 ? occurrence?.[2] : /Unternehmen:\s*(\[UNTERNEHMEN_[A-Z2-7\d]+\])/u.exec(text)?.[1];
+      const person = number <= 10 ? occurrence?.[1] : /Name:\s*(\[PERSON_[A-Z0-9]+\])/u.exec(text)?.[1];
+      const company = number <= 10 ? occurrence?.[2] : /Unternehmen:\s*(\[UNTERNEHMEN_[A-Z0-9]+\])/u.exec(text)?.[1];
       assert.ok(person, `fixture ${number}: observable primary person pseudonym required`);
       assert.ok(company, `fixture ${number}: observable primary company pseudonym required`);
       return { person, company };

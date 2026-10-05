@@ -15,6 +15,7 @@ const os = require('node:os');
 
 const baseFiles = [
   'tests/test-test-harness.js',
+  'tests/test-bound-file-io.js',
   'tests/test-core-contracts.mjs',
   'tests/test-cargo-license-inventory.mjs',
   'tests/test-mcp-input-validation.mjs',

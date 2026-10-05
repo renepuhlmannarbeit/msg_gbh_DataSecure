@@ -3,6 +3,7 @@
 // A ZIP-installed plugin has no host-managed environment-value editor. Store
 // only the chosen root locally; never expose the path in MCP responses/audit.
 const fs = require('fs');
+const { readBoundFile } = require('../core/bound-file-io');
 const { renameWithTransientRetry } = require('./batch-journal-io');
 const path = require('path');
 const { dataRoot } = require('../runtime');
@@ -26,9 +27,7 @@ function ensureConfigDirectory() {
 function readConfiguredPrivacyRoot() {
   const file = configPath();
   try {
-    const stat = fs.lstatSync(file);
-    if (!stat.isFile() || stat.isSymbolicLink() || stat.size > 4096) return '';
-    const value = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const value = JSON.parse(readBoundFile(file, { maximum: 4096, minimum: 1 }));
     return typeof value?.root === 'string' && path.isAbsolute(value.root) ? path.resolve(value.root) : '';
   } catch { return ''; }
 }

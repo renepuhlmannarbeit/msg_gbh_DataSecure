@@ -1,6 +1,6 @@
 {
   "version": "3.2.0-rc158",
-  "build_date": "2026-10-05",
+  "build_date": "2026-10-06",
   "target": "Claude Plugin ZIP / private Marketplace; Windows x64 and macOS Intel/ARM Fresh Install pending; Linux later",
   "runtime": "Bundled local runtime target; plugin-ZIP start without system Node pending Fresh Install; no end-user npm/Python setup",
   "native_toolchain": "MSVC 19.50.35725 / VC Tools 14.50.35717 / Windows SDK 10.0.26100.0",

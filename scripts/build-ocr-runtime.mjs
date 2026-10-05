@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import boundFileIo from '../plugins/data-secure/server/core/bound-file-io.js';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { verifyNativeArtifact } from './lib/native-artifact.mjs';
@@ -20,7 +21,7 @@ const licenseFallbacks = {
 };
 
 function sha256(file) {
-  return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+  return crypto.createHash('sha256').update(boundFileIo.readBoundFile(file, { maximum: 128 * 1024 * 1024, checkCtime: true })).digest('hex');
 }
 function ensureTreeSafe(source) {
   for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
@@ -61,23 +62,23 @@ const components = [];
 let notice = '# DataSecure OCR – Drittanbieterhinweise\n\n';
 for (const name of packages) {
   const source = path.join(pilot, 'node_modules', ...name.split('/'));
-  const metadata = JSON.parse(fs.readFileSync(path.join(source, 'package.json'), 'utf8'));
+  const metadata = JSON.parse(boundFileIo.readBoundFile(path.join(source, 'package.json'), { maximum: 128 * 1024, checkCtime: true }));
   copyTree(source, path.join(output, 'node_modules', ...name.split('/')));
   const licenseFile = fs.readdirSync(source).find((file) => /^(licen[cs]e|copying)([-.]|$)/iu.test(file));
   const fallback = licenseFallbacks[`${name}@${metadata.version}`];
   if (!licenseFile && !fallback) throw new Error(`OCR_BUNDLE_LICENSE_TEXT_MISSING_${name}`);
-  if (fallback && (!fs.statSync(fallback).isFile() || !fs.readFileSync(fallback, 'utf8').includes(
+  if (fallback && (!fs.statSync(fallback).isFile() || !boundFileIo.readBoundFile(fallback, { maximum: 2 * 1024 * 1024, checkCtime: true }).toString('utf8').includes(
     'Permission is hereby granted'))) throw new Error(`OCR_BUNDLE_LICENSE_FALLBACK_INVALID_${name}`);
   components.push({
     name, version: metadata.version, license: metadata.license,
     license_file: licenseFile || `fallback:${path.basename(fallback)}`
   });
   notice += `## ${name} ${metadata.version} — ${metadata.license}\n\n`;
-  if (licenseFile) notice += `${fs.readFileSync(path.join(source, licenseFile), 'utf8').trim()}\n\n`;
-  else notice += `${fs.readFileSync(fallback, 'utf8').trim()}\n\n`;
+  if (licenseFile) notice += `${boundFileIo.readBoundFile(path.join(source, licenseFile), { maximum: 2 * 1024 * 1024, checkCtime: true }).toString('utf8').trim()}\n\n`;
+  else notice += `${boundFileIo.readBoundFile(fallback, { maximum: 2 * 1024 * 1024, checkCtime: true }).toString('utf8').trim()}\n\n`;
 }
 notice += '## tessdata_fast deu/eng — Apache-2.0\n\n' +
-  fs.readFileSync(path.join(pilot, 'models', 'LICENSE'), 'utf8').trim() + '\n';
+  boundFileIo.readBoundFile(path.join(pilot, 'models', 'LICENSE'), { maximum: 2 * 1024 * 1024, checkCtime: true }).toString('utf8').trim() + '\n';
 fs.writeFileSync(path.join(output, 'THIRD_PARTY_NOTICES.md'), notice, { flag: 'wx' });
 
 if (target === 'windows-x64') {

@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { collectFiles, writeZip } from './lib/zip.mjs';
 import { readRegular, sha256, verifyTargetEvidence, readContract } from './lib/bundled-runtime.mjs';
 import { loadCargoLicenseInventory } from './lib/cargo-license-inventory.mjs';
+import boundFileIo from '../plugins/data-secure/server/core/bound-file-io.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
@@ -52,15 +53,13 @@ function safeResetStage() {
 }
 
 function copyRegular(source, destination, mode = null) {
-  const before = fs.lstatSync(source, { bigint: true });
-  if (!before.isFile() || before.isSymbolicLink() || before.size > 256n * 1024n * 1024n) {
-    throw new Error('STANDALONE_MACOS_SOURCE_UNSAFE');
-  }
+  let checked;
+  try { checked = boundFileIo.readBoundFileRecord(source, { maximum: 256 * 1024 * 1024, maxLinks: 2, checkCtime: true }); }
+  catch { throw new Error('STANDALONE_MACOS_SOURCE_UNSAFE'); }
+  const { bytes, stat: before } = checked;
   fs.mkdirSync(path.dirname(destination), { recursive: true });
-  fs.copyFileSync(source, destination, fs.constants.COPYFILE_EXCL);
-  const after = fs.lstatSync(source, { bigint: true });
-  if (before.size !== after.size || before.mtimeNs !== after.mtimeNs ||
-      !fs.readFileSync(source).equals(fs.readFileSync(destination))) {
+  fs.writeFileSync(destination, bytes, { flag: 'wx', mode: mode ?? Number(before.mode & 0o777n) });
+  if (!bytes.equals(boundFileIo.readBoundFile(destination, { maximum: bytes.length, minimum: bytes.length, checkCtime: true }))) {
     throw new Error('STANDALONE_MACOS_SOURCE_CHANGED');
   }
   fs.chmodSync(destination, mode ?? Number(before.mode & 0o777n));

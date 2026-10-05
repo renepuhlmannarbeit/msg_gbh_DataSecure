@@ -1,6 +1,7 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import boundFileIo from '../../plugins/data-secure/server/core/bound-file-io.js';
 
 const TARGETS = ['windows-x64', 'macos-x64', 'macos-arm64', 'linux-x64'];
 
@@ -33,7 +34,7 @@ function validateUniversalManifest(manifest, options = {}) {
   for (const item of manifest.files) {
     if (!item || typeof item !== 'object' || Array.isArray(item) ||
       Object.keys(item).sort().join(',') !== 'bytes,path,sha256' || expected.has(item.path) ||
-      !Number.isSafeInteger(item.bytes) || item.bytes < 0 || !/^[a-f0-9]{64}$/u.test(String(item.sha256)) ||
+      !Number.isSafeInteger(item.bytes) || item.bytes < 0 || item.bytes >= 65 * 1024 * 1024 || !/^[a-f0-9]{64}$/u.test(String(item.sha256)) ||
       typeof item.path !== 'string' || item.path.includes('\\') ||
       item.path.split('/').some((part) => !part || part === '.' || part === '..')) {
       throw new Error('OCR_UNIVERSAL_INVENTORY_INVALID');
@@ -43,8 +44,8 @@ function validateUniversalManifest(manifest, options = {}) {
   return expected;
 }
 
-function sha256(file) {
-  return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+function sha256(bytes) {
+  return crypto.createHash('sha256').update(bytes).digest('hex');
 }
 function treeFiles(directory, base = directory) {
   const result = [];
@@ -67,14 +68,17 @@ function validateUniversalRuntime(directory, options = {}) {
   if (!manifestInfo.isFile() || manifestInfo.isSymbolicLink() || manifestInfo.size > 1024 * 1024) {
     throw new Error('OCR_UNIVERSAL_MANIFEST_INVALID');
   }
-  const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+  const manifestBytes = boundFileIo.readBoundFile(manifestFile, { maximum: 1024 * 1024, minimum: 1, checkCtime: true });
+  const manifest = JSON.parse(manifestBytes);
   const expected = validateUniversalManifest(manifest, options);
   let bytes = 0;
   for (const item of manifest.files) {
     bytes += item.bytes;
+    if (bytes >= 65 * 1024 * 1024) throw new Error('OCR_UNIVERSAL_INVENTORY_INVALID');
     const file = path.join(root, ...item.path.split('/'));
     const info = fs.lstatSync(file);
-    if (!info.isFile() || info.isSymbolicLink() || info.size !== item.bytes || sha256(file) !== item.sha256) {
+    if (!info.isFile() || info.isSymbolicLink() || info.size !== item.bytes ||
+        sha256(boundFileIo.readBoundFile(file, { maximum: item.bytes, minimum: item.bytes, checkCtime: true })) !== item.sha256) {
       throw new Error(`OCR_UNIVERSAL_HASH_FAILED_${item.path}`);
     }
   }
@@ -86,7 +90,7 @@ function validateUniversalRuntime(directory, options = {}) {
     'models/eng.traineddata', 'THIRD_PARTY_NOTICES.md', ...manifest.targets.map((item) => item.launcher)]) {
     if (!expected.has(required)) throw new Error('OCR_UNIVERSAL_INCOMPLETE');
   }
-  return { root, manifest, manifestSha256: sha256(manifestFile), bytes, files: manifest.files.length + 1 };
+  return { root, manifest, manifestSha256: sha256(manifestBytes), bytes, files: manifest.files.length + 1 };
 }
 
 export { TARGETS, validateUniversalManifest, validateUniversalRuntime };

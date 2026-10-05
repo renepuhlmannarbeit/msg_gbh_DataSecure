@@ -13,6 +13,7 @@ import { readCentralModes } from '../../scripts/lib/zip.mjs';
 import { packagedReviewFixtures, assertPackagedReviewOutputs } from '../helpers/standalone-packaged-review.mjs';
 import { verifyExtractedCandidate } from '../helpers/standalone-candidate-integrity.mjs';
 import { verifyStandaloneInventory, verifyArchiveChecksum } from '../../scripts/lib/standalone-package-integrity.mjs';
+import { nativeDiagnosticEvents } from '../helpers/native-diagnostic-events.mjs';
 
 const require = createRequire(import.meta.url);
 const { readZip } = require('../../plugins/data-secure/server/zip-reader.js');
@@ -35,11 +36,7 @@ function checkedScope(scope) {
   return resolved;
 }
 function events(scope) {
-  const file = path.join(scope, 'temp', 'SecureDataMsg-Standalone', 'desktop-interactions.jsonl');
-  if (!fs.existsSync(file)) return [];
-  return fs.readFileSync(file, 'utf8').split(/\r?\n/u).flatMap(line => {
-    try { return [JSON.parse(line)]; } catch { return []; }
-  });
+  return nativeDiagnosticEvents(path.join(scope, 'temp', 'SecureDataMsg-Standalone'));
 }
 function writeReceipt(scope, metadata, status, detail = {}) {
   const receipt = { schema: 'datasecure-native-review-campaign/1', status,

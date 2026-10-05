@@ -3,6 +3,7 @@
 // The user-visible result destination is deliberately separate from the
 // private DataSecure workspace. Only released Markdown is copied there.
 const fs = require('fs');
+const { readBoundFile } = require('../core/bound-file-io');
 const { renameWithTransientRetry } = require('./batch-journal-io');
 const path = require('path');
 const { dataRoot } = require('../runtime');
@@ -48,9 +49,7 @@ function ensureConfigDirectory() {
 function readRecord() {
   try {
     const file = configPath();
-    const stat = fs.lstatSync(file);
-    if (!stat.isFile() || stat.isSymbolicLink() || stat.size < 1 || stat.size > 4096) return null;
-    const value = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const value = JSON.parse(readBoundFile(file, { maximum: 4096, minimum: 1 }));
     const keys = Object.keys(value || {}).sort().join(',');
     const legacy = value?.schema === LEGACY_SCHEMA && keys === 'identity,root,schema';
     const isCurrent = value?.schema === SCHEMA && keys === 'identity,notices,root,schema' &&
@@ -80,9 +79,7 @@ function recordedResultRootPath() {
   if (environment && path.isAbsolute(environment)) return path.resolve(environment);
   try {
     const file = configPath();
-    const stat = fs.lstatSync(file);
-    if (!stat.isFile() || stat.isSymbolicLink() || stat.size < 1 || stat.size > 4096) return '';
-    const value = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const value = JSON.parse(readBoundFile(file, { maximum: 4096, minimum: 1 }));
     return value?.schema === SCHEMA && typeof value.root === 'string' && path.isAbsolute(value.root) ? path.resolve(value.root) : '';
   } catch { return ''; }
 }

@@ -79,7 +79,7 @@ function assertPlainWorkFile(target, io = fs) {
   if (!named.isFile() || named.isSymbolicLink()) throw new Error('BATCH_WORK_UNSAFE');
   let fd;
   try {
-    fd = io.openSync(target, io.constants.O_RDONLY | (io.constants.O_NOFOLLOW || 0));
+    fd = io.openSync(target, io.constants.O_RDONLY | (io.constants.O_NOFOLLOW || 0) | (io.constants.O_NONBLOCK || 0));
     const opened = io.fstatSync(fd, { bigint: true });
     if (!opened.isFile() || opened.dev !== named.dev || opened.ino !== named.ino) throw new Error('BATCH_WORK_UNSAFE');
     const header = Buffer.alloc(8);

@@ -9,6 +9,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
+import boundFileIo from '../../plugins/data-secure/server/core/bound-file-io.js';
 
 const FIXED_DOS_TIME = 0x6000; // 12:00:00
 const FIXED_DOS_DATE = 0x5c21; // 2026-01-01
@@ -54,13 +55,17 @@ export function collectFiles(dir, base = dir) {
   return out;
 }
 
-export function writeZip(outFile, files) {
+export function writeZip(outFile, files, options = {}) {
+  const maximum = options.maximumFileBytes ?? 256 * 1024 * 1024;
+  if (!Number.isSafeInteger(maximum) || maximum < 0 || maximum > 512 * 1024 * 1024) {
+    throw new Error('ZIP_FILE_LIMIT_INVALID');
+  }
   const locals = [];
   const centrals = [];
   let offset = 0;
 
   for (const file of files) {
-    const raw = fs.readFileSync(file.fullPath);
+    const raw = boundFileIo.readBoundFile(file.fullPath, { maximum, checkCtime: true });
     const deflated = zlib.deflateRawSync(raw, { level: 9 });
     const useDeflate = deflated.length < raw.length;
     const data = useDeflate ? deflated : raw;

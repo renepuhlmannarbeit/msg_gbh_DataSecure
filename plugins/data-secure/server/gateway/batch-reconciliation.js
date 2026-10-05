@@ -2,8 +2,10 @@
 
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
+const { readBoundFile, bindDirectory } = require('../core/bound-file-io');
 const { SafeError } = require('../runtime');
-const { roots, sha256File } = require('./common');
+const { roots } = require('./common');
 const { appendMapping, ensureMappingOutbox, removeMappingOutbox, STOPPED } = require('./mapping');
 const {
   GRADES,
@@ -21,7 +23,7 @@ function createBatchReconciliation(options = {}) {
   const io = options.io || fs;
   const pathApi = options.path || path;
   const storageRoots = options.roots || roots;
-  const hashFile = options.sha256File || sha256File;
+  const hashBytes = options.sha256Bytes || (bytes => crypto.createHash('sha256').update(bytes).digest('hex'));
   const persistMappingIntent = options.ensureMappingOutbox || ensureMappingOutbox;
   const writeMapping = options.appendMapping || appendMapping;
   const clearMappingIntent = options.removeMappingOutbox || removeMappingOutbox;
@@ -67,14 +69,16 @@ function createBatchReconciliation(options = {}) {
       const documentStat = io.lstatSync(documentPath);
       if (!manifestStat.isFile() || manifestStat.isSymbolicLink() ||
           !documentStat.isFile() || documentStat.isSymbolicLink()) return record('structurally_unsafe');
-      const manifest = JSON.parse(io.readFileSync(manifestPath, 'utf8'));
+      const directory = bindDirectory(target, { io });
+      const manifest = JSON.parse(readBoundFile(manifestPath, { io, directory, maximum: 1024 * 1024, minimum: 1 }));
+      const documentBytes = readBoundFile(documentPath, { io, directory, maximum: 32 * 1024 * 1024 });
       const supportedSchema = ['eu-privacy-package/2', 'eu-privacy-package/3'].includes(manifest?.schema);
       const documentResult = manifest?.schema === 'eu-privacy-package/3'
         ? validateManifestDocumentResult(manifest)
         : null;
       const verified = supportedSchema && manifest.package_id === packageId && manifest.document === `${packageId}.md` &&
         /^[a-f0-9]{64}$/i.test(String(manifest.document_sha256 || '')) &&
-        hashFile(documentPath) === manifest.document_sha256;
+        hashBytes(documentBytes) === manifest.document_sha256;
       return verified ? record('verified', documentResult) : record('unsafe');
     } catch { return record('unsafe'); }
   }

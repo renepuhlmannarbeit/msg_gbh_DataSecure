@@ -58,7 +58,7 @@ function preflightSourceEnvelopes(queue, deps = {}) {
     let descriptor;
     try {
       if (hasReparseComponent(entry.full)) throw new SafeError('Eine ausgewählte Datei liegt hinter einem Link oder Reparse-Punkt.');
-      descriptor = fs.openSync(entry.full, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+      descriptor = fs.openSync(entry.full, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0) | (fs.constants.O_NONBLOCK || 0));
       const opened = fs.fstatSync(descriptor);
       const named = fs.lstatSync(entry.full);
       if (!opened.isFile() || !named.isFile() || named.isSymbolicLink() ||
@@ -114,7 +114,7 @@ function regularFileStat(target) {
   const noFollow = fs.constants.O_NOFOLLOW || 0;
   let descriptor;
   try {
-    descriptor = fs.openSync(target, fs.constants.O_RDONLY | noFollow);
+    descriptor = fs.openSync(target, fs.constants.O_RDONLY | noFollow | (fs.constants.O_NONBLOCK || 0));
     const opened = fs.fstatSync(descriptor);
     const named = fs.lstatSync(target);
     if (!opened.isFile() || !named.isFile() || named.isSymbolicLink() || opened.dev !== named.dev || opened.ino !== named.ino) {
@@ -147,7 +147,7 @@ function copySnapshotFile(source, destination, expected, deps = {}) {
   }
   try {
     if (reparseCheck(source)) throw new SafeError('Eine ausgewählte Datei liegt hinter einem Link oder Reparse-Punkt.');
-    input = io.openSync(source, io.constants.O_RDONLY | noFollow);
+    input = io.openSync(source, io.constants.O_RDONLY | noFollow | (io.constants.O_NONBLOCK || 0));
     const opened = io.fstatSync(input);
     const named = io.lstatSync(source);
     if (!opened.isFile() || !named.isFile() || named.isSymbolicLink() ||

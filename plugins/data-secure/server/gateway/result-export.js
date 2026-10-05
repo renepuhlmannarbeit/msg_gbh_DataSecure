@@ -3,6 +3,8 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const { readBoundFile, readBoundFileRecord, assertDirectory } = require('../core/bound-file-io');
+const { identity: privateIdentity, safeUnlinkBoundPrivateFile } = require('./bound-private-file');
 const { dataRoot } = require('../runtime');
 const { safeResolvePackage, readVerifiedFile } = require('./package-store');
 const { inspectRoot, readConfiguredResultRoot, resultOutputDirectory } = require('./result-folder-config');
@@ -80,26 +82,29 @@ function validClaim(value) {
     typeof value.created_at === 'string' && Number.isFinite(Date.parse(value.created_at));
 }
 function readClaim(target) {
-  let descriptor;
   try {
-    descriptor = fs.openSync(target, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
-    const opened = fs.fstatSync(descriptor);
-    const named = fs.lstatSync(target);
-    if (!opened.isFile() || !named.isFile() || named.isSymbolicLink() ||
-        opened.dev !== named.dev || opened.ino !== named.ino || opened.size < 1 || opened.size > 1024) return null;
-    const value = JSON.parse(fs.readFileSync(descriptor, 'utf8'));
-    return validClaim(value) ? { value, dev: opened.dev, ino: opened.ino, size: opened.size } : null;
+    const checked = readBoundFileRecord(target, { maximum: 1024, minimum: 1 });
+    const { stat: opened } = checked;
+    const value = JSON.parse(checked.bytes);
+    return validClaim(value) ? { value, dev: opened.dev, ino: opened.ino, size: opened.size, checked } : null;
   } catch { return null; }
-  finally { if (descriptor !== undefined) try { fs.closeSync(descriptor); } catch {} }
 }
 function removeClaimIfUnchanged(target, expected, attempts = 1) {
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     const current = readClaim(target);
     if (!current || current.value.claim_id !== expected.value.claim_id || current.dev !== expected.dev ||
         current.ino !== expected.ino || current.size !== expected.size) return false;
-    try { fs.unlinkSync(target); return true; }
+    try {
+      const { checked } = current;
+      const parent = checked.directory.chain[0].identity;
+      safeUnlinkBoundPrivateFile(target, { binding: {
+        target: checked.path, parent: checked.directory.path, file: privateIdentity(checked.stat),
+        parentIdentity: { dev: parent.dev, ino: parent.ino }
+      }, validate: () => assertDirectory(checked.directory) });
+      return true;
+    }
     catch (error) {
-      if (!TRANSIENT_CLAIM_CODES.has(error?.code) || attempt === attempts - 1) return false;
+      if (!TRANSIENT_CLAIM_CODES.has(error?.retry_code || error?.code) || attempt === attempts - 1) return false;
       claimRetryDelay(10 * (attempt + 1));
     }
   }
@@ -299,11 +304,11 @@ function writeRecord(target, value) {
   }
 }
 function readRecord(target) {
-  const stat = fs.lstatSync(target);
   // Up to 200 relative source labels (1024 characters each), JSON escaping,
   // fixed error codes and hashes must fit without relaxing item/string bounds.
-  if (!stat.isFile() || stat.isSymbolicLink() || stat.size < 1 || stat.size > 1024 * 1024) throw new Error('RESULT_EXPORT_STATE_UNSAFE');
-  const value = JSON.parse(fs.readFileSync(target, 'utf8'));
+  let value;
+  try { value = JSON.parse(readBoundFile(target, { maximum: 1024 * 1024, minimum: 1 })); }
+  catch { throw new Error('RESULT_EXPORT_STATE_UNSAFE'); }
   if (!validRecord(value)) throw new Error('RESULT_EXPORT_STATE_UNSAFE');
   return value;
 }
@@ -500,10 +505,17 @@ function exportOne(destination, run, item) {
   const resolvedTarget = ensureResultParent(destination, run, item.file);
   const target = resolvedTarget.target;
   assertDirectoryBinding(resolvedTarget.parent);
+  const validateParents = () => {
+    assertDirectoryBinding(destination.root);
+    assertDirectoryBinding(destination.output, destination.root);
+    assertDirectoryBinding(run, destination.output);
+    assertDirectoryBinding(resolvedTarget.parent);
+  };
   if (fs.existsSync(target)) {
-    const stat = fs.lstatSync(target);
-    if (!stat.isFile() || stat.isSymbolicLink() ||
-        crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex') !== item.sha256) throw new Error('RESULT_EXPORT_CONFLICT');
+    try {
+      const existing = readBoundFile(target, { maximum: 32 * 1024 * 1024, maxLinks: 2, validateParents });
+      if (crypto.createHash('sha256').update(existing).digest('hex') !== item.sha256) throw new Error('conflict');
+    } catch { throw new Error('RESULT_EXPORT_CONFLICT'); }
     return false;
   }
   let bytes, m;
@@ -557,9 +569,10 @@ function exportOne(destination, run, item) {
     assertDirectoryBinding(destination.output, destination.root);
     assertDirectoryBinding(run, destination.output);
     assertDirectoryBinding(resolvedTarget.parent);
-    const written = fs.lstatSync(target);
-    if (!written.isFile() || written.isSymbolicLink() || written.size !== bytes.length ||
-        crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex') !== expected) throw new Error('RESULT_EXPORT_VERIFY_FAILED');
+    try {
+      const written = readBoundFile(target, { maximum: bytes.length, minimum: bytes.length, maxLinks: 2, validateParents });
+      if (crypto.createHash('sha256').update(written).digest('hex') !== expected) throw new Error('verify');
+    } catch { throw new Error('RESULT_EXPORT_VERIFY_FAILED'); }
     return true;
   } finally {
     try { if (descriptor !== undefined) fs.closeSync(descriptor); } catch {}
@@ -599,10 +612,16 @@ function exportVisibleMapping(destination, run, record) {
   const target = path.join(run.path, VISIBLE_MAPPING_FILE);
   const bytes = visibleMappingBytes(record);
   const expected = crypto.createHash('sha256').update(bytes).digest('hex');
+  const validateParents = () => {
+    assertDirectoryBinding(destination.root);
+    assertDirectoryBinding(destination.output, destination.root);
+    assertDirectoryBinding(run, destination.output);
+  };
   if (fs.existsSync(target)) {
-    const stat = fs.lstatSync(target);
-    if (!stat.isFile() || stat.isSymbolicLink() || stat.size !== bytes.length ||
-        crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex') !== expected) {
+    try {
+      const existing = readBoundFile(target, { maximum: bytes.length, minimum: bytes.length, maxLinks: 2, validateParents });
+      if (crypto.createHash('sha256').update(existing).digest('hex') !== expected) throw new Error('conflict');
+    } catch {
       throw new Error('RESULT_EXPORT_MAPPING_CONFLICT');
     }
     return false;
@@ -629,9 +648,10 @@ function exportVisibleMapping(destination, run, record) {
     }
     fs.unlinkSync(temporary);
     syncParentDirectory(target, fs, process.platform);
-    const written = fs.lstatSync(target);
-    if (!written.isFile() || written.isSymbolicLink() || written.size !== bytes.length ||
-        crypto.createHash('sha256').update(fs.readFileSync(target)).digest('hex') !== expected) {
+    try {
+      const written = readBoundFile(target, { maximum: bytes.length, minimum: bytes.length, maxLinks: 2, validateParents });
+      if (crypto.createHash('sha256').update(written).digest('hex') !== expected) throw new Error('verify');
+    } catch {
       throw new Error('RESULT_EXPORT_VERIFY_FAILED');
     }
     return true;

@@ -88,7 +88,7 @@ function readRecord(ctx, target) {
     const named = ctx.io.lstatSync(target, { bigint: true });
     if (!named.isFile() || named.isSymbolicLink() || named.nlink !== 1n ||
         named.size < 1n || named.size > BigInt(MAX_RECORD_BYTES)) throw failure();
-    fd = ctx.io.openSync(target, ctx.io.constants.O_RDONLY | (ctx.io.constants.O_NOFOLLOW || 0));
+    fd = ctx.io.openSync(target, ctx.io.constants.O_RDONLY | (ctx.io.constants.O_NOFOLLOW || 0) | (ctx.io.constants.O_NONBLOCK || 0));
     const opened = ctx.io.fstatSync(fd, { bigint: true });
     if (!opened.isFile() || opened.nlink !== 1n || !sameIdentity(identity(opened), identity(named)) ||
         opened.size !== named.size || opened.mtimeNs !== named.mtimeNs) throw failure();

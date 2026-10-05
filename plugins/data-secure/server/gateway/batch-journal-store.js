@@ -1,4 +1,5 @@
 'use strict';
+const { readHeldBytes } = require('../core/bound-file-io');
 
 const { validPersistedLabel, validKnownAliasIndex } = require('../batch-pseudonym-registry');
 const { validStandaloneReviewChoices } = require('./standalone-review-choices');
@@ -216,7 +217,7 @@ function createBatchJournalStore(options = {}) {
       const parent = path.dirname(target);
       const parentBefore = io.lstatSync(parent, { bigint: true });
       const named = io.lstatSync(target, { bigint: true });
-      descriptor = io.openSync(target, io.constants.O_RDONLY | (io.constants.O_NOFOLLOW || 0));
+      descriptor = io.openSync(target, io.constants.O_RDONLY | (io.constants.O_NOFOLLOW || 0) | (io.constants.O_NONBLOCK || 0));
       const stat = io.fstatSync(descriptor, { bigint: true });
       if (typeof parentBefore.isDirectory !== 'function' || !parentBefore.isDirectory() ||
           typeof parentBefore.isSymbolicLink !== 'function' || parentBefore.isSymbolicLink() ||
@@ -225,7 +226,7 @@ function createBatchJournalStore(options = {}) {
           stat.size < 1n || stat.size > BigInt(MAX_JOURNAL_BYTES)) {
         throw new Error('unsafe');
       }
-      const bytes = io.readFileSync(descriptor);
+      const bytes = readHeldBytes(descriptor, stat.size, io);
       const after = io.fstatSync(descriptor, { bigint: true });
       const namedAfter = io.lstatSync(target, { bigint: true });
       const parentAfter = io.lstatSync(parent, { bigint: true });

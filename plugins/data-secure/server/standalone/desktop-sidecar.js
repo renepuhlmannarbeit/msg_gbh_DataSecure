@@ -7,28 +7,23 @@ const path = require('node:path');
 const { StandaloneApplicationService } = require('./application-service');
 const { FrameDecoder, MAX_FRAME_BYTES } = require('./desktop-ipc');
 const { desktopErrorCode } = require('../core/desktop-error-contract');
+const { createBestEffortDiagnosticLog } = require('../core/safe-diagnostic-log');
 
 const diagnosticDirectory = path.resolve(process.env.DATASECURE_STANDALONE_DIAGNOSTIC_DIR ||
   path.join(os.tmpdir(), 'SecureDataMsg-Standalone'));
-const diagnosticFile = path.join(diagnosticDirectory, 'sidecar-interactions.jsonl');
+const diagnosticLog = createBestEffortDiagnosticLog({ directory: diagnosticDirectory, name: 'sidecar-interactions.jsonl' });
 const diagnosticSession = /^[a-f0-9]{16,64}$/u.test(String(process.env.DATASECURE_STANDALONE_DIAGNOSTIC_SESSION || ''))
   ? process.env.DATASECURE_STANDALONE_DIAGNOSTIC_SESSION : null;
 
 function diagnosticEvent(event, fields = {}) {
   try {
-    fs.mkdirSync(diagnosticDirectory, { recursive: true, mode: 0o700 });
-    if (fs.statSync(diagnosticFile, { throwIfNoEntry: false })?.size > 2 * 1024 * 1024) {
-      const previous = path.join(diagnosticDirectory, 'sidecar-interactions.previous.jsonl');
-      fs.rmSync(previous, { force: true });
-      fs.renameSync(diagnosticFile, previous);
-    }
-    fs.appendFileSync(diagnosticFile, `${JSON.stringify({
+    diagnosticLog.append(`${JSON.stringify({
       schema: 'datasecure-standalone-interaction/1', time_ms: Date.now(), component: 'sidecar',
       ...(diagnosticSession ? { session_id: diagnosticSession } : {}),
       event, outcome: fields.outcome || 'progress',
       ...(fields.action ? { action: fields.action } : {}),
       ...(fields.error_code ? { error_code: fields.error_code } : {})
-    })}\n`, { encoding: 'utf8', mode: 0o600 });
+    })}\n`);
   } catch { /* Diagnostics must never change product behavior. */ }
 }
 

@@ -8,6 +8,7 @@ const { safeResolvePackage, safeFile, issueReadCapability } = require('./package
 const { createPrivateWorkStore } = require('./private-work-store');
 const { decodePng, encodePng } = require('../image-sanitizer');
 const { writeFully, syncParentDirectory, renameWithTransientRetry } = require('./batch-journal-io');
+const { bindDirectory, assertDirectory, objectIdentity, sameObject } = require('../core/bound-file-io');
 
 function writeFileAtomically(target, input, io = fs, platform = process.platform) {
   const temporary = `${target}.tmp_${require('crypto').randomBytes(8).toString('hex')}`;
@@ -218,6 +219,7 @@ function approveReviewAsset(reviewId, confirmed, deps = {}) {
     const targetPath = path.join(assetsDir, target);
     const dataHash = sha256Buffer(data);
     let assetCreated = false;
+    let createdIdentity, createdParent;
     if (fs.existsSync(targetPath)) {
       const existing = safeFile(p, targetRel.split('/').join(path.sep));
       if (sha256File(existing) !== dataHash || fs.lstatSync(existing).size !== data.length) {
@@ -226,9 +228,25 @@ function approveReviewAsset(reviewId, confirmed, deps = {}) {
     } else {
       let descriptor;
       try {
+        createdParent = bindDirectory(assetsDir);
+        assertDirectory(createdParent);
         descriptor = fs.openSync(targetPath, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL, 0o600);
+        const opened = fs.fstatSync(descriptor, { bigint: true });
+        if (!opened.isFile() || opened.nlink !== 1n) throw new SafeError('Review-Ziel ist nicht sicher gebunden.');
+        createdIdentity = objectIdentity(opened);
+        assertDirectory(createdParent);
+        const named = fs.lstatSync(targetPath, { bigint: true });
+        if (!named.isFile() || named.isSymbolicLink() || named.nlink !== 1n || !sameObject(named, createdIdentity)) {
+          throw new SafeError('Review-Ziel wurde verändert.');
+        }
         writeFully(descriptor, data, fs);
         fs.fsyncSync(descriptor);
+        const after = fs.fstatSync(descriptor, { bigint: true });
+        const afterNamed = fs.lstatSync(targetPath, { bigint: true });
+        assertDirectory(createdParent);
+        if (!sameObject(after, createdIdentity) || !sameObject(afterNamed, createdIdentity) ||
+            !afterNamed.isFile() || afterNamed.isSymbolicLink() || after.nlink !== 1n || afterNamed.nlink !== 1n ||
+            after.size !== BigInt(data.length)) throw new SafeError('Review-Ziel wurde verändert.');
         fs.closeSync(descriptor); descriptor = undefined;
         syncParentDirectory(targetPath, fs, process.platform);
       } finally {
@@ -270,11 +288,13 @@ function approveReviewAsset(reviewId, confirmed, deps = {}) {
       } catch { manifestCommitted = false; }
       if (!manifestCommitted && assetCreated) {
         try {
-          const stat = fs.lstatSync(targetPath, { bigint: true });
-          const parent = fs.lstatSync(assetsDir, { bigint: true });
-          const identity = (value) => ({ dev: String(value.dev), ino: String(value.ino), birthtimeNs: String(value.birthtimeNs) });
+          // Rollback owns only the originally created object, never whichever
+          // replacement now happens to occupy its name. Uncertainty preserves it.
+          assertDirectory(createdParent);
+          const removalIdentity = (original) => ({ dev: original.dev, ino: original.ino, birthtimeNs: original.birth });
           safeRemovePrivateTree(assetsDir, target, {
-            expectedParentIdentity: identity(parent), expectedIdentity: identity(stat)
+            expectedParentIdentity: removalIdentity(createdParent.chain[0].identity),
+            expectedIdentity: removalIdentity(createdIdentity)
           });
         } catch { /* an unreferenced verified file is safer than deleting a replacement */ }
       }

@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import boundFileIo from '../plugins/data-secure/server/core/bound-file-io.js';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import vm from 'node:vm';
@@ -47,11 +48,11 @@ const result = await build({
   metafile: true,
   legalComments: 'inline'
 });
-const script = result.outputFiles[0].text.replaceAll('</script', '<\\/script');
+const script = result.outputFiles[0].text.replace(/<\/script/giu, '<\\/script');
 const template = fs.readFileSync(path.join(root, 'ui/status-card/template.html'), 'utf8');
 // A function replacement keeps JavaScript's $&, $` and $' literal.
 const html = template.replace('<!-- STATUS_APP_SCRIPT -->', () => `<script>${script}</script>`);
-new vm.Script(html.match(/<script>([\s\S]*?)<\/script>/)[1]);
+new vm.Script(script);
 if (Buffer.byteLength(html) > 768 * 1024) throw new Error('Status UI exceeds offline bundle budget');
 const packages = new Map();
 const lock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8'));
@@ -72,7 +73,7 @@ const dependencies = [];
 for (const [name, { directory, info }] of [...packages].sort(([a], [b]) => a.localeCompare(b))) {
   const license = ['LICENSE', 'LICENSE.md', 'LICENSE.txt'].map(file => path.join(directory, file)).find(file => fs.existsSync(file));
   if (!license) throw new Error(`Missing license for bundled dependency: ${name}`);
-  const licenseText = fs.readFileSync(license, 'utf8');
+  const licenseText = boundFileIo.readBoundFile(license, { maximum: 2 * 1024 * 1024, checkCtime: true }).toString('utf8');
   const locked = lock.packages[path.relative(root, directory).split(path.sep).join('/')];
   if (!locked?.integrity || locked.version !== info.version) throw new Error(`Unlocked bundled dependency: ${name}`);
   dependencies.push({ name, version: info.version, integrity: locked.integrity, license_sha256: crypto.createHash('sha256').update(licenseText).digest('hex') });

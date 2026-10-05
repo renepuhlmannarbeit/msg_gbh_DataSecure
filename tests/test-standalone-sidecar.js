@@ -167,6 +167,17 @@ function removeOwnedRoot(root, initial) {
     assert.strictEqual(status.ok, true);
     assert.strictEqual(status.result.product_channel, 'standalone');
     assert.strictEqual(status.result.external_disclosure, false);
+    // A diagnostic failure must never break the actual framed application.
+    const diagnosticSentinel = path.join(root, 'diagnostic-sentinel');
+    fs.writeFileSync(diagnosticSentinel, 'foreign diagnostic target');
+    const unsafeDiagnosticFile = path.join(diagnostics, 'sidecar-interactions.jsonl');
+    fs.renameSync(unsafeDiagnosticFile, `${unsafeDiagnosticFile}.owned`);
+    fs.linkSync(diagnosticSentinel, unsafeDiagnosticFile);
+    const diagnosticFailureState = await client.send('get_public_state', 'aa'.repeat(8));
+    assert.strictEqual(diagnosticFailureState.ok, true);
+    assert.strictEqual(fs.readFileSync(diagnosticSentinel, 'utf8'), 'foreign diagnostic target');
+    fs.unlinkSync(unsafeDiagnosticFile);
+    fs.renameSync(`${unsafeDiagnosticFile}.owned`, unsafeDiagnosticFile);
     assert.doesNotMatch(JSON.stringify(status), /source_path|raw_content|mapping/u);
     const emptyHistory = await client.send('get_run_history', 'ab'.repeat(8));
     assert.strictEqual(emptyHistory.ok, true);

@@ -53,7 +53,7 @@ function hashBoundSource(source, expectedStat) {
   let failure = null;
   let digest;
   try {
-    sourceFd = fs.openSync(source, fs.constants.O_RDONLY | noFollow);
+    sourceFd = fs.openSync(source, fs.constants.O_RDONLY | noFollow | (fs.constants.O_NONBLOCK || 0));
     const opened = assertBoundIdentity(source, sourceFd, expectedStat, false);
     const hash = crypto.createHash('sha256');
     const chunk = Buffer.allocUnsafe(64 * 1024);
@@ -92,7 +92,7 @@ function copySourceToPrivateWork({ source, destination, expectedStat, expectedSh
   let failure = null;
   let result;
   try {
-    sourceFd = fs.openSync(source, fs.constants.O_RDONLY | noFollow);
+    sourceFd = fs.openSync(source, fs.constants.O_RDONLY | noFollow | (fs.constants.O_NONBLOCK || 0));
     const opened = assertBoundIdentity(source, sourceFd, expectedStat, externallySealed);
 
     destinationFd = fs.openSync(destination, 'wx', 0o600);
@@ -157,7 +157,7 @@ function readSourceToPrivateMemory({ source, expectedStat, expectedSha256 }) {
   let failure = null;
   let privateBytes;
   try {
-    sourceFd = fs.openSync(source, fs.constants.O_RDONLY | noFollow);
+    sourceFd = fs.openSync(source, fs.constants.O_RDONLY | noFollow | (fs.constants.O_NONBLOCK || 0));
     const opened = assertBoundIdentity(source, sourceFd, expectedStat, externallySealed);
     privateBytes = Buffer.allocUnsafe(opened.size);
     const hash = crypto.createHash('sha256');

@@ -25,7 +25,7 @@ function readRegularFile(directory, filename, maximum, fsApi) {
   const target = path.join(directory, filename);
   const before = fsApi.lstatSync(target, { bigint: true });
   if (!before.isFile() || before.isSymbolicLink() || before.size < 1n || before.size > BigInt(maximum)) throw new Error('Invalid UI artifact');
-  const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0);
+  const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0) | (fs.constants.O_NONBLOCK || 0);
   const fd = fsApi.openSync(target, flags);
   try {
     const opened = fsApi.fstatSync(fd, { bigint: true });

@@ -1,4 +1,5 @@
 'use strict';
+const { readHeldBytes } = require('../core/bound-file-io');
 
 // Private, content-free run summaries outlive the source-copy/journal retention
 // window. Export bindings are separate files because workers and UI readers may
@@ -50,13 +51,13 @@ function historyRoot() {
 function readJson(file) {
   const stat = fs.lstatSync(file, { bigint: true });
   if (!stat.isFile() || stat.isSymbolicLink() || stat.size < 1n || stat.size > 32768n) throw failure('STANDALONE_HISTORY_UNAVAILABLE');
-  const descriptor = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+  const descriptor = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0) | (fs.constants.O_NONBLOCK || 0));
   try {
     const opened = fs.fstatSync(descriptor, { bigint: true });
     if (!opened.isFile() || opened.dev !== stat.dev || opened.ino !== stat.ino || opened.size !== stat.size) {
       throw failure('STANDALONE_HISTORY_UNAVAILABLE');
     }
-    return JSON.parse(fs.readFileSync(descriptor, 'utf8'));
+    return JSON.parse(readHeldBytes(descriptor, opened.size, fs, 32768).toString('utf8'));
   } finally { fs.closeSync(descriptor); }
 }
 function writeJson(name, value) {

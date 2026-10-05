@@ -1,6 +1,9 @@
 'use strict';
 
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
+const crypto = require('crypto');
 const { SafeError } = require('../plugins/data-secure/server/runtime');
 const { createBatchReconciliation } = require('../plugins/data-secure/server/gateway/batch-reconciliation');
 const { notProcessedDocumentResult } = require('../plugins/data-secure/server/gateway/document-result-grade');
@@ -8,7 +11,7 @@ const { createSuite } = require('./helpers');
 
 const { test, done, assert } = createSuite('Batch reconciliation');
 const packageId = `ds_${'a'.repeat(32)}`;
-const output = path.join('private-root', 'Output');
+const fixtureRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-reconciliation-'));
 const completeResult = Object.freeze({
   schema: 'datasecure-document-result/1', grade: 'complete', omissions: [], reason_code: null
 });
@@ -17,31 +20,34 @@ function fixture(options = {}) {
   const events = [];
   const mappingCalls = [];
   const mode = options.mode || 'v3';
+  const output = fs.mkdtempSync(path.join(fixtureRoot, 'Output-'));
   const packageFolder = path.join(output, packageId);
   const manifestPath = path.join(packageFolder, 'manifest.json');
   const documentPath = path.join(packageFolder, `${packageId}.md`);
-  const digest = 'b'.repeat(64);
-  const io = {
+  const documentBytes = Buffer.from('# Test publication\n');
+  const digest = crypto.createHash('sha256').update(documentBytes).digest('hex');
+  const io = { ...fs,
     existsSync(target) { return target === packageFolder && mode !== 'missing'; },
-    lstatSync(target) {
+    lstatSync(target, settings) {
       if (target === packageFolder) {
-        return {
+        return { ...fs.lstatSync(target, settings),
           isDirectory: () => mode !== 'not-directory',
           isSymbolicLink: () => mode === 'folder-symlink'
         };
       }
       if (target === manifestPath || target === documentPath) {
-        return {
+        return { ...fs.lstatSync(target, settings),
           isFile: () => mode !== 'not-file',
           isSymbolicLink: () => mode === 'document-symlink'
         };
       }
-      throw new Error('unexpected path');
+      return fs.lstatSync(target, settings);
     },
-    readFileSync(target) {
-      if (target !== manifestPath) throw new Error('unexpected read');
-      if (mode === 'malformed-manifest') return '{';
-      const value = {
+  };
+  if (mode !== 'missing') {
+    fs.mkdirSync(packageFolder);
+    fs.writeFileSync(documentPath, documentBytes);
+    const value = {
         schema: mode === 'wrong-schema' ? 'other' : (mode === 'v3' ? 'eu-privacy-package/3' : 'eu-privacy-package/2'),
         package_id: mode === 'wrong-package' ? `ds_${'c'.repeat(32)}` : packageId,
         document: `${packageId}.md`,
@@ -53,16 +59,15 @@ function fixture(options = {}) {
         visual_assets_withheld_at_release: 0,
         document_result: completeResult
       });
-      return JSON.stringify(value);
-    }
-  };
+    fs.writeFileSync(manifestPath, mode === 'malformed-manifest' ? '{' : JSON.stringify(value));
+  }
   let failure = options.mappingFailure;
   const reconciliation = createBatchReconciliation({
     SafeError,
     io,
     path,
     roots: options.roots || (() => ({ output })),
-    sha256File: () => mode === 'hash-mismatch' ? 'd'.repeat(64) : digest,
+    sha256Bytes: bytes => mode === 'hash-mismatch' ? 'd'.repeat(64) : crypto.createHash('sha256').update(bytes).digest('hex'),
     ensureMappingOutbox(name, id, documentResult) {
       events.push(`ensure:${name}:${id}`);
       mappingCalls.push({ phase: 'intent', name, id, documentResult });
@@ -320,4 +325,7 @@ test('the batch composition root preserves every reconciliation test facade', ()
   ]) assert.strictEqual(typeof _test[name], 'function', name);
 });
 
-done();
+done().finally(() => {
+  assert.ok(path.dirname(fixtureRoot) === path.resolve(os.tmpdir()) && path.basename(fixtureRoot).startsWith('datasecure-reconciliation-'));
+  fs.rmSync(fixtureRoot, { recursive: true });
+});

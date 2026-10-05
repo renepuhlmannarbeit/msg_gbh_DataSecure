@@ -1,4 +1,5 @@
 'use strict';
+const { readHeldBytes } = require('../core/bound-file-io');
 
 const fs = require('fs');
 const path = require('path');
@@ -52,13 +53,13 @@ function createBatchActiveLock(deps = {}) {
     const target = activeLockPath();
     let descriptor;
     try {
-      descriptor = io.openSync(target, io.constants.O_RDONLY | (io.constants.O_NOFOLLOW || 0));
+      descriptor = io.openSync(target, io.constants.O_RDONLY | (io.constants.O_NOFOLLOW || 0) | (io.constants.O_NONBLOCK || 0));
       const opened = io.fstatSync(descriptor);
       const named = io.lstatSync(target);
       if (!opened.isFile() || !named.isFile() || named.isSymbolicLink() ||
         named.dev !== opened.dev || named.ino !== opened.ino ||
         opened.size < 1 || opened.size > MAX_LOCK_BYTES) return null;
-      const value = JSON.parse(io.readFileSync(descriptor, 'utf8'));
+      const value = JSON.parse(readHeldBytes(descriptor, opened.size, io).toString('utf8'));
       if (!validActiveLock(value)) return null;
       return {
         value,

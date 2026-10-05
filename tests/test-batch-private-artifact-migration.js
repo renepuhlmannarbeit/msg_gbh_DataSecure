@@ -190,6 +190,8 @@ test('renamed cipher envelopes survive expiry reads and the actual maintenance c
       const journal = createBatchJournalStore({
         batchPath: () => target, workPath: () => h.work,
         io: { ...fs, constants: fs.constants, readSync(fd, bytes, offset, length, position) {
+          const opened = fs.fstatSync(fd, { bigint: true }), work = fs.lstatSync(source, { bigint: true });
+          if (opened.dev !== work.dev || opened.ino !== work.ino) return fs.readSync(fd, bytes, offset, length, position);
           assert.ok(position + length <= 8, 'header reads must stay bounded');
           const read = fs.readSync(fd, bytes, offset, Math.min(2, length), position);
           bytesRead += read;
@@ -229,6 +231,8 @@ test('ordinary snapshot expiry keeps cleanup and active reads avoid any header s
       batchPath: () => target, workPath: () => h.work,
       safeRemoveWorkDirectory() { removes++; },
       io: { ...fs, constants: fs.constants, readSync(fd, bytes, offset, length, position) {
+        const opened = fs.fstatSync(fd, { bigint: true }), work = fs.lstatSync(source, { bigint: true });
+        if (opened.dev !== work.dev || opened.ino !== work.ino) return fs.readSync(fd, bytes, offset, length, position);
         assert.ok(position + length <= 8);
         const read = fs.readSync(fd, bytes, offset, length, position);
         bytesRead += read;

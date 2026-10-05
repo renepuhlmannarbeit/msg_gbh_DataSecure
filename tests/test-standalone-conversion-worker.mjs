@@ -569,18 +569,25 @@ try {
   await test('100 small sources reuse validated runtime bytes rather than rehashing 188 MB per file', async () => {
     // Restore/cache after the deliberately changed manifest in the prior test.
     await convert(Buffer.from(text), '.txt');
-    const originalRead = fs.readFileSync;
+    const originalRead = fs.readSync, originalOpen = fs.openSync, originalClose = fs.closeSync;
+    const openedRuntimeFiles = new Set();
     let heavyReads = 0, heavyBytes = 0;
-    fs.readFileSync = function(file, ...args) {
-      const result = originalRead.call(this, file, ...args);
+    fs.openSync = function(file, ...args) {
+      const descriptor = originalOpen.call(this, file, ...args);
       if (typeof file === 'string' && file.startsWith(runtime + path.sep) && !file.endsWith('RUNTIME.json')) {
-        heavyReads++; heavyBytes += Buffer.byteLength(result);
+        openedRuntimeFiles.add(descriptor);
       }
+      return descriptor;
+    };
+    fs.readSync = function(descriptor, ...args) {
+      const result = originalRead.call(this, descriptor, ...args);
+      if (openedRuntimeFiles.has(descriptor)) { heavyReads++; heavyBytes += result; }
       return result;
     };
+    fs.closeSync = function(descriptor) { openedRuntimeFiles.delete(descriptor); return originalClose.call(this, descriptor); };
     const started = performance.now();
     try { for (let i = 0; i < 100; i++) await convert(Buffer.from(`${text}\nDocument ${i}`), '.txt'); }
-    finally { fs.readFileSync = originalRead; }
+    finally { fs.readSync = originalRead; fs.openSync = originalOpen; fs.closeSync = originalClose; }
     assert.equal(heavyReads, 0); assert.equal(heavyBytes, 0);
     process.stdout.write(`100-TXT packaged runtime: ${Math.round(performance.now() - started)} ms; repeated heavy runtime reads: ${heavyReads}\n`);
   });

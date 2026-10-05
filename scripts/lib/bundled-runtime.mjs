@@ -5,6 +5,7 @@ import zlib from 'node:zlib';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
+const { readBoundFile } = require('../../plugins/data-secure/server/core/bound-file-io.js');
 const { readZip } = require('../../plugins/data-secure/server/zip-reader.js');
 const HEX = /^[a-f0-9]{64}$/u;
 const MAX_ARCHIVE = 256 * 1024 * 1024;
@@ -55,16 +56,13 @@ export function createTargetOutput(repositoryRoot, requestedOutput, targetId) {
 }
 
 export function readRegular(file, limit = MAX_ARCHIVE) {
-  const before = fs.lstatSync(file, { bigint: true });
-  if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1n || before.size <= 0n || before.size > BigInt(limit)) {
-    throw new Error('BUNDLED_RUNTIME_FILE_UNSAFE');
+  try {
+    return readBoundFile(file, { maximum: limit, minimum: 1, checkCtime: true });
+  } catch (error) {
+    if (error?.code === 'ENOENT') throw error;
+    throw new Error(error?.code === 'BOUND_FILE_UNSAFE'
+      ? 'BUNDLED_RUNTIME_FILE_UNSAFE' : 'BUNDLED_RUNTIME_FILE_CHANGED');
   }
-  const bytes = fs.readFileSync(file);
-  const after = fs.lstatSync(file, { bigint: true });
-  for (const key of ['dev', 'ino', 'size', 'mtimeNs', 'ctimeNs', 'nlink']) {
-    if (before[key] !== after[key]) throw new Error('BUNDLED_RUNTIME_FILE_CHANGED');
-  }
-  return bytes;
 }
 
 function tarString(bytes, start, length) {

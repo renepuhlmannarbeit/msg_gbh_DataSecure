@@ -88,7 +88,7 @@ function readRegular(file, maximum = MAX_FILE_BYTES) {
     const before = fs.lstatSync(file, { bigint: true });
     demand(before.isFile() && !before.isSymbolicLink() && before.nlink === 1n &&
       before.size > 0n && before.size <= BigInt(maximum), 'SEA_BATCH_SCOPE_INVALID');
-    fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+    fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0) | (fs.constants.O_NONBLOCK || 0));
     demand(identity(fs.fstatSync(fd, { bigint: true })) === identity(before), 'SEA_BATCH_SCOPE_CHANGED');
     // Bounded descriptor read even if a concurrent writer grows the file
     // after the initial stat. One extra byte detects that change.

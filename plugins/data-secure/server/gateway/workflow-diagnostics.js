@@ -1,4 +1,5 @@
 'use strict';
+const { readHeldBytes } = require('../core/bound-file-io');
 
 // Content-free lifecycle evidence for the local Cowork handoff. Each new event
 // is an immutable JSON file so detached processes cannot lose one another's
@@ -117,13 +118,13 @@ function readWorkflowFile(file, options = {}) {
   const io = options.fs || fs;
   let fd;
   try {
-    const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0);
+    const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0) | (fs.constants.O_NONBLOCK || 0);
     fd = io.openSync(file, flags);
     const opened = io.fstatSync(fd);
     const named = io.lstatSync(file);
     if (!opened.isFile() || opened.size > MAX_WORKFLOW_FILE_BYTES || named.isSymbolicLink() ||
         opened.dev !== named.dev || opened.ino !== named.ino) return '';
-    return io.readFileSync(fd, 'utf8');
+    return readHeldBytes(fd, opened.size, io).toString('utf8');
   } catch (error) {
     if (error?.code === 'ENOENT') return '';
     throw error;

@@ -8,6 +8,7 @@ import contract from '../../../plugins/data-secure/server/standalone/markdown-co
 import imageLimits from '../../../plugins/data-secure/server/images/common.js';
 import png from '../../../plugins/data-secure/server/images/png.js';
 import bmp from '../../../plugins/data-secure/server/images/bmp.js';
+import boundFileIo from '../../../plugins/data-secure/server/core/bound-file-io.js';
 
 const require = createRequire(import.meta.url);
 const directory = path.dirname(fileURLToPath(import.meta.url));
@@ -19,17 +20,18 @@ const diagnostic = (code) => process.stderr.write(`${code}\n`);
 
 function verifyLocalModels() {
   let inventory;
-  try { inventory = JSON.parse(fs.readFileSync(path.join(directory, 'models.lock.json'), 'utf8')); }
+  try { inventory = JSON.parse(boundFileIo.readBoundFile(path.join(directory, 'models.lock.json'), { maximum: 64 * 1024, checkCtime: true })); }
   catch { fail('OCR_MODEL_UNAVAILABLE'); }
   for (const language of ['deu', 'eng']) {
     const entry = inventory.models?.[language];
-    if (entry?.file !== `${language}.traineddata` || !/^[a-f0-9]{64}$/u.test(entry.sha256)) fail('OCR_MODEL_INTEGRITY_FAILED');
+    if (entry?.file !== `${language}.traineddata` || !/^[a-f0-9]{64}$/u.test(entry.sha256) ||
+        !Number.isSafeInteger(entry.bytes) || entry.bytes < 1 || entry.bytes > 16 * 1024 * 1024) fail('OCR_MODEL_INTEGRITY_FAILED');
     let data;
     try {
       const file = path.join(directory, 'models', `${language}.traineddata`);
       const stat = fs.lstatSync(file);
       if (!stat.isFile() || stat.isSymbolicLink() || stat.size !== entry.bytes) fail('OCR_MODEL_INTEGRITY_FAILED');
-      data = fs.readFileSync(file);
+      data = boundFileIo.readBoundFile(file, { maximum: entry.bytes, minimum: entry.bytes, checkCtime: true });
     } catch (error) {
       if (error?.code === 'OCR_MODEL_INTEGRITY_FAILED') throw error;
       fail('OCR_MODEL_UNAVAILABLE');

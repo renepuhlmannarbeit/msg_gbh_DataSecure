@@ -22,13 +22,13 @@ function createPathGuard(privateRoot, io) {
     const rootRelative = path.relative(volumeRoot, root);
     for (const component of rootRelative ? rootRelative.split(path.sep) : []) {
       cursor = path.join(cursor, component);
-      if (io.lstatSync(cursor).isSymbolicLink()) throw new Error('linked root ancestor');
+      if (io.lstatSync(cursor, { bigint: true }).isSymbolicLink()) throw new Error('linked root ancestor');
     }
     const nativeRealpath = io.realpathSync.native || io.realpathSync;
     const realRoot = nativeRealpath(root);
     if (path.relative(root, realRoot) !== '' || path.relative(realRoot, root) !== '') throw new Error('redirected root');
-    const named = io.lstatSync(root);
-    const resolved = io.statSync(root);
+    const named = io.lstatSync(root, { bigint: true });
+    const resolved = io.statSync(root, { bigint: true });
     if (!named.isDirectory() || named.isSymbolicLink() || !resolved.isDirectory() || !sameIdentity(named, resolved)) {
       throw new Error('unsafe root');
     }
@@ -47,7 +47,7 @@ function createPathGuard(privateRoot, io) {
       throw failure('PRIVATE_ARTIFACT_PATH_INVALID', 'Der Artefaktpfad liegt außerhalb der privaten Wurzel.');
     }
     try {
-      const currentRoot = io.lstatSync(root);
+      const currentRoot = io.lstatSync(root, { bigint: true });
       if (!currentRoot.isDirectory() || currentRoot.isSymbolicLink() || !sameIdentity(currentRoot, rootIdentity)) {
         throw new Error('root changed');
       }
@@ -56,8 +56,8 @@ function createPathGuard(privateRoot, io) {
       for (const component of parentRelative ? parentRelative.split(path.sep) : []) {
         if (!component || component === '.' || component === '..') throw new Error('bad component');
         cursor = path.join(cursor, component);
-        const named = io.lstatSync(cursor);
-        const resolved = io.statSync(cursor);
+        const named = io.lstatSync(cursor, { bigint: true });
+        const resolved = io.statSync(cursor, { bigint: true });
         if (!named.isDirectory() || named.isSymbolicLink() || !resolved.isDirectory() || !sameIdentity(named, resolved)) {
           throw new Error('unsafe ancestor');
         }
@@ -73,7 +73,7 @@ function createPathGuard(privateRoot, io) {
 function ensureSafeTarget(target, io, validatePath, requireAbsent = false) {
   target = validatePath(target);
   try {
-    const existing = io.lstatSync(target);
+    const existing = io.lstatSync(target, { bigint: true });
     if (requireAbsent) {
       throw failure('PRIVATE_ARTIFACT_ALREADY_EXISTS', 'Ein privates Artefakt darf in diesem Schnitt nicht ersetzt werden.');
     }

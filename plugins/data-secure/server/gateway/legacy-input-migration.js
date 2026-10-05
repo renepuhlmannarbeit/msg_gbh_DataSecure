@@ -1,4 +1,5 @@
 'use strict';
+const { readHeldBytes } = require('../core/bound-file-io');
 
 const fs = require('fs');
 const path = require('path');
@@ -34,11 +35,11 @@ function readOwner(jobDir) {
     const jobStat = fs.lstatSync(jobDir);
     if (!jobStat.isDirectory() || jobStat.isSymbolicLink()) return { state: 'invalid' };
     const ownerPath = path.join(jobDir, '.owner.json');
-    descriptor = fs.openSync(ownerPath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+    descriptor = fs.openSync(ownerPath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0) | (fs.constants.O_NONBLOCK || 0));
     const opened = fs.fstatSync(descriptor);
     const named = fs.lstatSync(ownerPath);
     if (!opened.isFile() || named.isSymbolicLink() || !sameFile(opened, named)) return { state: 'invalid' };
-    const owner = JSON.parse(fs.readFileSync(descriptor, 'utf8'));
+    const owner = JSON.parse(readHeldBytes(descriptor, opened.size, fs, 4096).toString('utf8'));
     if (!owner || !Number.isSafeInteger(owner.pid) ||
         !/^[0-9a-f]{32}$/i.test(String(owner.nonce || '')) ||
         Number.isNaN(Date.parse(owner.created_at)) ||
@@ -108,11 +109,11 @@ function writeMarker(target, value, options = {}) {
 function readLock(target) {
   let descriptor;
   try {
-    descriptor = fs.openSync(target, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+    descriptor = fs.openSync(target, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0) | (fs.constants.O_NONBLOCK || 0));
     const opened = fs.fstatSync(descriptor);
     const named = fs.lstatSync(target);
     if (!opened.isFile() || named.isSymbolicLink() || !sameFile(opened, named)) throw new Error('invalid');
-    const value = JSON.parse(fs.readFileSync(descriptor, 'utf8'));
+    const value = JSON.parse(readHeldBytes(descriptor, opened.size, fs, 4096).toString('utf8'));
     if (!value || value.schema !== SCHEMA || !Number.isSafeInteger(value.pid) ||
         !/^[0-9a-f]{32}$/i.test(String(value.nonce || '')) ||
         Number.isNaN(Date.parse(value.created_at)) ||

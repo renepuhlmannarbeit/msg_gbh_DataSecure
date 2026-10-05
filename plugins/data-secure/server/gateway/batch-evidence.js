@@ -1,4 +1,5 @@
 'use strict';
+const { readHeldBytes } = require('../core/bound-file-io');
 
 const fs = require('fs');
 const path = require('path');
@@ -221,12 +222,12 @@ function validateAnyEvidenceRecord(record) {
 function readBoundJson(target, io = fs) {
   let descriptor;
   try {
-    descriptor = io.openSync(target, io.constants.O_RDONLY | (io.constants.O_NOFOLLOW || 0));
+    descriptor = io.openSync(target, io.constants.O_RDONLY | (io.constants.O_NOFOLLOW || 0) | (io.constants.O_NONBLOCK || 0));
     const opened = io.fstatSync(descriptor);
     const named = io.lstatSync(target);
     if (!opened.isFile() || !named.isFile() || named.isSymbolicLink() ||
       opened.dev !== named.dev || opened.ino !== named.ino) throw new Error('unsafe');
-    return { value: JSON.parse(io.readFileSync(descriptor, 'utf8')), stat: opened };
+    return { value: JSON.parse(readHeldBytes(descriptor, opened.size, io).toString('utf8')), stat: opened };
   } finally {
     if (descriptor !== undefined) io.closeSync(descriptor);
   }

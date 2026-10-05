@@ -1,4 +1,5 @@
 'use strict';
+const { readHeldBytes } = require('../core/bound-file-io');
 const fs=require('fs');const path=require('path');const crypto=require('crypto');
 const {isUtf8}=require('buffer');
 const {SafeError}=require('../runtime');
@@ -134,7 +135,7 @@ function safeFile(base,rel){
 function readVerifiedFile(base,rel,maxBytes=Number.POSITIVE_INFINITY){
   const file=safeFile(base,rel);let descriptor,data,failure;
   try{
-    descriptor=fs.openSync(file,fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW||0));
+    descriptor=fs.openSync(file,fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW||0) | (fs.constants.O_NONBLOCK || 0));
     const before=fs.fstatSync(descriptor),named=fs.lstatSync(file);
     if(!before.isFile()||!named.isFile()||named.isSymbolicLink()||before.dev!==named.dev||before.ino!==named.ino)throw new SafeError('Paketdatei ist nicht freigegeben.');
     if(!Number.isSafeInteger(before.size)||before.size<0||before.size>maxBytes)throw new SafeError('Paketdatei überschreitet die sichere Größenbegrenzung.');
@@ -142,7 +143,7 @@ function readVerifiedFile(base,rel,maxBytes=Number.POSITIVE_INFINITY){
       data=Buffer.alloc(before.size);let read=0;
       while(read<data.length){const count=fs.readSync(descriptor,data,read,data.length-read,read);if(count<=0)break;read+=count;}
       if(read!==data.length)throw new SafeError('Paketdatei wurde während des Lesens verändert.');
-    }else data=fs.readFileSync(descriptor);
+    }else data=readHeldBytes(descriptor, before.size, fs);
     const after=fs.fstatSync(descriptor),namedAfter=fs.lstatSync(file);
     if(after.dev!==before.dev||after.ino!==before.ino||after.size!==before.size||!namedAfter.isFile()||namedAfter.isSymbolicLink()||namedAfter.dev!==before.dev||namedAfter.ino!==before.ino||data.length!==before.size){
       throw new SafeError('Paketdatei wurde während des Lesens verändert.');
@@ -159,7 +160,7 @@ function readVerifiedFile(base,rel,maxBytes=Number.POSITIVE_INFINITY){
 async function readVerifiedFileAsync(base,rel,maxBytes=Number.POSITIVE_INFINITY){
   const file=safeFile(base,rel);let descriptor,data,failure;
   try{
-    descriptor=await fs.promises.open(file,fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW||0));
+    descriptor=await fs.promises.open(file,fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW||0) | (fs.constants.O_NONBLOCK || 0));
     const before=await descriptor.stat(),named=await fs.promises.lstat(file);
     if(!before.isFile()||!named.isFile()||named.isSymbolicLink()||before.dev!==named.dev||before.ino!==named.ino)throw new SafeError('Paketdatei ist nicht freigegeben.');
     if(!Number.isSafeInteger(before.size)||before.size<0||before.size>maxBytes)throw new SafeError('Paketdatei überschreitet die sichere Größenbegrenzung.');

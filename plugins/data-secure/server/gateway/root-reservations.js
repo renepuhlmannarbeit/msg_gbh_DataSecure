@@ -29,7 +29,7 @@ function readRecord(target, name) {
     try {
       let named = fs.lstatSync(target);
       if (!named.isFile() || named.isSymbolicLink() || named.nlink !== 1 || named.size < 1 || named.size > MAX_BYTES) throw unsafe();
-      fd = fs.openSync(target, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0));
+      fd = fs.openSync(target, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0) | (fs.constants.O_NONBLOCK || 0));
       const opened = fs.fstatSync(fd);
       // A concurrent publisher can atomically replace this immutable record
       // between lstat and open. Bind once to the object actually opened, not a

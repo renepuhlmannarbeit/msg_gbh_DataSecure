@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const childProcess = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { readBoundFileRecord, assertDirectory, sameFile } = require('./core/bound-file-io');
 const { decodePng } = require('./images/png');
 
 const OCR_TIMEOUT_MS = 50_000;
@@ -12,7 +13,7 @@ const OCR_CPU_MS = 40_000;
 const OCR_WALL_MS = 45_000;
 const MAX_INPUT_BYTES = 25 * 1024 * 1024;
 const MAX_OUTPUT_BYTES = 32 * 1024 * 1024;
-let cachedStatus;
+let cachedEntry;
 
 class PortableOcrError extends Error {
   constructor(code = 'OCR_BACKEND_UNAVAILABLE') {
@@ -30,8 +31,8 @@ function runtimeTarget(platform = process.platform, arch = process.arch) {
   return null;
 }
 
-function sha256(file) {
-  return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+function sha256(bytes) {
+  return crypto.createHash('sha256').update(bytes).digest('hex');
 }
 
 function safeBundleFile(root, relative) {
@@ -55,7 +56,7 @@ function inventoryFiles(root, current = root, output = []) {
   return output;
 }
 
-function inspectPortableOcr(options = {}) {
+function inspectPortableOcr(options = {}, capture) {
   const platform = options.platform || process.platform;
   const arch = options.arch || process.arch;
   const target = runtimeTarget(platform, arch);
@@ -72,25 +73,34 @@ function inspectPortableOcr(options = {}) {
     if (!manifestInfo.isFile() || manifestInfo.isSymbolicLink() || manifestInfo.size > 1024 * 1024) {
       throw new Error('manifest');
     }
-    const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+    const bindings = [];
+    const manifestRead = readBoundFileRecord(manifestFile, { maximum: 1024 * 1024, minimum: 1, checkCtime: true });
+    bindings.push(manifestRead);
+    const manifest = JSON.parse(manifestRead.bytes);
     const legacy = manifest.schema === 'data-secure-ocr-runtime-bundle/v1' && manifest.target === target;
     const universal = manifest.schema === 'data-secure-ocr-runtime-bundle/v2' &&
       manifest.target === 'universal' && Array.isArray(manifest.targets);
     const targetEntry = universal && manifest.targets.find((item) => item?.target === target);
     if ((!legacy && !targetEntry) || manifest.contract !== 'data-secure-ocr-result/v1' ||
       JSON.stringify(manifest.models) !== JSON.stringify(['deu', 'eng']) ||
-      !Array.isArray(manifest.files) || manifest.files.length < 6) throw new Error('manifest');
+      !Array.isArray(manifest.files) || manifest.files.length < 6 || manifest.files.length > 4096) throw new Error('manifest');
     if (manifest.release_enabled !== true) {
       return { available: false, mode: 'bundled_disabled', reason: 'coverage_unverified', target };
     }
     const seen = new Set();
+    let total = 0;
     for (const item of manifest.files) {
       if (!item || Object.keys(item).sort().join(',') !== 'bytes,path,sha256' ||
-        !Number.isSafeInteger(item.bytes) || item.bytes < 0 ||
+        !Number.isSafeInteger(item.bytes) || item.bytes < 0 || item.bytes > 128 * 1024 * 1024 ||
         !/^[a-f0-9]{64}$/u.test(String(item.sha256)) || seen.has(item.path)) throw new Error('inventory');
       seen.add(item.path);
+      total += item.bytes;
+      if (total > 128 * 1024 * 1024) throw new Error('inventory');
       const { file, info } = safeBundleFile(root, item.path);
-      if (info.size !== item.bytes || sha256(file) !== item.sha256) throw new Error('integrity');
+      const checked = readBoundFileRecord(file, { maximum: item.bytes, minimum: item.bytes, checkCtime: true });
+      if (info.size !== item.bytes || sha256(checked.bytes) !== item.sha256) throw new Error('integrity');
+      // Cache only identities, not potentially large model byte buffers.
+      bindings.push({ ...checked, bytes: undefined });
     }
     const actual = inventoryFiles(root).filter((item) => item !== 'bundle-manifest.json').sort();
     if (actual.length !== seen.size || actual.some((item) => !seen.has(item))) throw new Error('inventory');
@@ -103,11 +113,14 @@ function inspectPortableOcr(options = {}) {
       'models/deu.traineddata', 'models/eng.traineddata', 'THIRD_PARTY_NOTICES.md']) {
       if (!seen.has(required)) throw new Error('incomplete');
     }
-    return {
+    const status = {
       available: true, mode: 'bundled_portable_ocr', reason: 'ok', target, root,
       launcher: path.join(root, ...launcherRelative.split('/')), worker: path.join(root, 'runtime-worker.mjs'),
       networkDeny: path.join(root, 'network-deny.cjs')
     };
+    if (capture) capture({ status, bindings: bindings.map(({ bytes, ...binding }) => binding),
+      inventory: actual });
+    return status;
   } catch {
     return { available: false, mode: 'unavailable', reason: 'bundle_integrity_failed', target };
   }
@@ -117,8 +130,24 @@ function portableOcrStatus(options = {}) {
   if (options.runtimeRoot || options.platform || options.arch || options.noCache) {
     return inspectPortableOcr(options);
   }
-  if (!cachedStatus) cachedStatus = inspectPortableOcr();
-  return { ...cachedStatus };
+  if (cachedEntry?.status.available) {
+    try {
+      for (const binding of cachedEntry.bindings) {
+        assertDirectory(binding.directory);
+        if (!sameFile(fs.lstatSync(binding.path, { bigint: true }), binding.identity)) throw new Error('changed');
+      }
+      if (!cachedEntry.bindings.length) throw new Error('missing');
+      const actual = inventoryFiles(cachedEntry.status.root).filter(item => item !== 'bundle-manifest.json').sort();
+      if (actual.length !== cachedEntry.inventory.length ||
+          actual.some((item, index) => item !== cachedEntry.inventory[index])) throw new Error('inventory');
+    } catch { cachedEntry = undefined; }
+  }
+  if (!cachedEntry) {
+    let inspected;
+    const status = inspectPortableOcr({}, entry => { inspected = entry; });
+    cachedEntry = inspected || { status, bindings: [], inventory: [] };
+  }
+  return { ...cachedEntry.status };
 }
 
 function exactKeys(value, keys) {

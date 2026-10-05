@@ -289,7 +289,7 @@ function removeReviewPreviews(reviewDir, root, at, fsApi = fs) {
       if (name.toLowerCase().endsWith('.dsart')) continue;
       if (evidence.protectedPreviewNames.has(name)) continue;
       const probe = Buffer.alloc(8);
-      const fd = fsApi.openSync(file, fsApi.constants.O_RDONLY | (fsApi.constants.O_NOFOLLOW || 0));
+      const fd = fsApi.openSync(file, fsApi.constants.O_RDONLY | (fsApi.constants.O_NOFOLLOW || 0) | (fsApi.constants.O_NONBLOCK || 0));
       let encrypted;
       try {
         if (!sameFile(fileStat, fsApi.fstatSync(fd))) throw new Error('Review-Preview wurde ersetzt.');
