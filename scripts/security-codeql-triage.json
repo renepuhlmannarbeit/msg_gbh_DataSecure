@@ -647,6 +647,18 @@
       ]
     },
     {
+      "rule": "js/file-system-race",
+      "path": "tests/test-status-app-server.js",
+      "source_sha256": "7e02fd53fb459253c94a93521d805058f40e123c4581f1c171df1bf9a8ea84cf",
+      "reason": "Non-shipped regression deliberately rewrites its own synthetic coherent manifest/HTML pair inside the injected open hook. The production reader must reject before any replacement byte is read; the same replacement is independently shown to be valid after the race. Real-filesystem test passed; this mutation is the adversarial stimulus, not a product write boundary.",
+      "fingerprints": [
+        {
+          "line": "962fd6442bc73f96:1",
+          "column": "0"
+        }
+      ]
+    },
+    {
       "rule": "js/regex/missing-regexp-anchor",
       "path": "tests/test-companion-processor.js",
       "source_sha256": "5f1bb4d375cffd2fb85921776236344cb891eb6ccdca01e88b02d0de749d3309",

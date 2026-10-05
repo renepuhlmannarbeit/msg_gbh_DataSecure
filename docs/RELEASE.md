@@ -165,6 +165,18 @@ Clippy, Dokumentationsgates sowie der strengen installierten Claude-CLI-
 Validierung von Plugin und Marketplace. Frische Security- und saubere
 Paketprüfungen bleiben bis zu ihrem tatsächlichen Abschluss ausstehend.
 
+Die weitere frische JavaScript-Analyse am Commit `61b342c`
+([Lauf 37389042799](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/37389042799))
+enthält 78 Befunde. Die einzige neue untriagierte Stelle ist die absichtliche
+Dateimutationsfixture in `tests/test-status-app-server.js`, keine Produkt-
+Schreibstelle. Die reale Gegenprobe akzeptiert zuerst das gültige Artefakt,
+verwirft die ausgetauschten Bytes vor dem ersten Lesen und akzeptiert das
+ebenfalls gültige Ersatzpaar anschließend unabhängig. Nur dieser exakte
+Testfingerprint wird zusätzlich quellhashgebunden dokumentiert. Alle 78
+Befunde sind damit individuell eingeordnet; eine weitere frische Security-
+Kampagne muss dies am endgültigen Paketquellcommit bestätigen. Die Pflicht-CI
+und erneut 41 reale Windows-Konvertierungsgruppen bestanden am `61b342c`.
+
 Keine darüber hinausgehende Garantie: Der portable Node-Reader schützt
 geprüfte gehaltene Bytes und verwirft erkannte Namespace-Änderungen, ersetzt
 aber keine atomare native Windows-openat-Schnittstelle. Gleichberechtigte
