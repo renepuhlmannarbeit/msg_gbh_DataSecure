@@ -1,6 +1,6 @@
 # Evidence-Matrix für aktive Arbeit
 
-Stand: 05.10.2026 · 3.2.0-rc158 · beauftragter Vorabrelease in Vorbereitung
+Stand: 05.10.2026 · 3.2.0-rc158 · beauftragter Vorabrelease wegen Sicherheitsbefunden angehalten
 
 Der Produktcommit `44bf3d0` enthält DS-106–109; der neue Versionsschnitt ist
 RC158. Der saubere, commitgebundene Windows-Doppelbau und die nativen
@@ -8,6 +8,15 @@ Mac-Intel-/Apple-Silicon-Pakete sind beauftragt, aber noch nicht als bestanden
 ausgewiesen. Der DS-109-Nachweis unten beschreibt unverändert den vorherigen
 lokalen Arbeitsstand. Releaseevidence wird separat an Commit und Archivhash
 gebunden; Cowork RC151 wird nicht neu veröffentlicht.
+
+Die RC158-Produktsuite (194 Dateien), Pflicht-CI und native CodeQL-Prüfung am
+ersten Versionscommit sind bestanden. JavaScript-CodeQL meldet 111 Ergebnisse;
+ein unabhängiger Review und eigene Quell-/Speichergegenproben bestätigen reale
+ungebundene Diagnose-Schreib- und pfadbasierte Leselücken. Diese verhindern
+aktuell den Release. Drei historische Gitleaks-Testeingaben sind exakt triagiert;
+493-Commit-Wiederholung und Ablehnung eines neuen synthetischen Credentials
+bestanden. Gestoppte Windows-/Mac-Neubaugates sind ausdrücklich kein PASS.
+[Exakte Laufbindung und offene Korrekturen](../RELEASE.md#rc158--beauftragter-standalone-vorabrelease-aktuell-angehalten).
 
 **Aktuelle RC157-Veröffentlichung:** Quellcommit
 `111737d28021b6989ffe8d563b58daa9cbae610f` ist auf main und als Standalone-RC

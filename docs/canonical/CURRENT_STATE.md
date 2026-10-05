@@ -1,6 +1,6 @@
 # Aktueller Iststand
 
-Stand: 05.10.2026 · 3.2.0-rc158 · Vorabrelease in Vorbereitung; veröffentlichte Pakete noch RC157 · Cowork bleibt RC151
+Stand: 05.10.2026 · 3.2.0-rc158 · Vorabrelease wegen Sicherheitsbefunden angehalten; veröffentlichte Pakete noch RC157 · Cowork bleibt RC151
 
 Der Anwender hat Commit/Push und einen neuen Standalone-Vorabrelease für
 Windows x64 sowie macOS Intel/Apple Silicon beauftragt. DS-106–109 sind im
@@ -8,6 +8,14 @@ Produktcommit `44bf3d0` zusammengeführt; RC158 ist der neue Versionsschnitt.
 Paketbau und Veröffentlichung sind noch nicht abgeschlossen. Die nachfolgenden
 RC157- und lokalen Engineering-Nachweise bleiben auf ihren tatsächlichen
 Prüfschnitt begrenzt; RC158-Paketnachweise werden separat ergänzt.
+
+Der beauftragte RC158-Release ist aktuell konkret angehalten: Die zusätzliche
+JavaScript-CodeQL-Gegenprüfung bestätigt ungebundene Diagnose-Schreibzugriffe
+und mehrere pfadbasierte, nicht ausreichend gebundene Lesezugriffe. Das sind
+neue Produktionsbefunde neben bestandenen Funktionstests, keine erneut offenen
+alten Abnahmen. Mac- und Windows-Neubaugates wurden gestoppt; keine RC158-
+Pakete veröffentlicht. Ursachen, Gegenprobe und eng begrenzter Lösungsumfang
+stehen im [Releasevertrag](../RELEASE.md#rc158--beauftragter-standalone-vorabrelease-aktuell-angehalten).
 
 Standalone RC157 ist auf main und im
 [Vorabrelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc157)

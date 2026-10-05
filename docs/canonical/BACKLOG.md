@@ -1,11 +1,20 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 05.10.2026 · Produktstand 3.2.0-rc158 · Vorabrelease in Vorbereitung; Veröffentlichung noch RC157 · Cowork bleibt RC151
+Stand: 05.10.2026 · Produktstand 3.2.0-rc158 · Vorabrelease wegen Sicherheitsbefunden angehalten; Veröffentlichung noch RC157 · Cowork bleibt RC151
 
 Commit/Push und Standalone-Vorabpakete für Windows x64 sowie macOS Intel/Apple
 Silicon sind beauftragt. DS-106–109 sind technisch abgeschlossen; die neue
 RC158-Paketbindung folgt erst nach erfolgreichem Releasebau. Fehlende
 Gerätebedien- und Qualitätsnachweise BL-010.47/50/51 bleiben davon getrennt.
+
+**Neue offene Releasearbeit, nicht bereits erledigte Abnahme:** RC158 benötigt
+zuerst gebundene best-effort Diagnose-I/O sowie begrenzte, deskriptorgebundene
+Lesezugriffe in den neu bestätigten Konfigurations-/Mapping-/Export-/Runtime-
+Stellen. Link-, Austausch-, Wachstums- und Descriptor-Cleanup-Regressionen
+müssen den echten Ablauf prüfen. Die 111 JavaScript-SARIF-Ergebnisse sind
+einzeln zu triagieren: echte Lücken beheben, bestätigte Fehlalarme eng begründen,
+keine ganzen Regeln ausschalten. Erst danach neue Windows-/Mac-Paketgates und
+Veröffentlichung. [Befunde und Releasezustand](../RELEASE.md#rc158--beauftragter-standalone-vorabrelease-aktuell-angehalten).
 
 RC157 bindet Quellcommit `111737d28021b6989ffe8d563b58daa9cbae610f` auf main.
 Windows, macOS Intel, macOS Apple Silicon und Linux sind nativ geprüft und

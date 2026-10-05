@@ -2,7 +2,8 @@
 
 Stand: 05.10.2026 · 3.2.0-rc158
 
-Der aktuelle Quellstand ist RC158-Entwicklungsstand und noch kein neu gebundener Paketkandidat.
+Der aktuelle Quellstand ist RC158-Entwicklungsstand; sein Release ist wegen
+neu revalidierter Sicherheitsbefunde angehalten, nicht als Paket veröffentlicht.
 Der bisher veröffentlichte Standalone-Vorabkandidat RC157 ist auf main
 und für Windows, macOS Intel, macOS Apple Silicon und Linux veröffentlicht.
 ZIP-Verifikation, isolierter Paket-Smoke und
@@ -23,7 +24,7 @@ geprüft und wird nicht als bytegleich zum vorherigen Anwender-Test-ZIP behaupte
 Die bestätigte Windows-Funktionsabnahme ist bestanden; technische Paketprüfung
 ersetzt keine noch fehlenden menschlichen Zielhost- oder Spezialabnahmen.
 
-### RC158 – beauftragter Standalone-Vorabrelease in Vorbereitung
+### RC158 – beauftragter Standalone-Vorabrelease, aktuell angehalten
 
 Der Anwender hat am 05.10.2026 Commit und Push auf main sowie neue
 Windows- und macOS-Vorabpakete beauftragt. RC158 enthält die revalidierten
@@ -57,6 +58,34 @@ Die lokale Wiederholung über 493 Commits bestand; ein zusätzlich eingespeister
 neuer synthetischer Credential-Test wurde weiterhin abgelehnt. Der native
 CodeQL-Lauf bestand. Die JavaScript-SARIF-Befunde werden getrennt revalidiert;
 diese Zwischenstände sind keine abgeschlossene RC158-Sicherheitsfreigabe.
+
+**Konkreter Releaseblocker vom 05.10.2026:** Die
+[JavaScript-Sicherheitsanalyse](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/37374539610)
+am Commit `e2e08dd` enthält 111 SARIF-Befunde. Ein unabhängiger Gegenreview
+und eigene Quell-/Speichergegenproben bestätigen reale Dateisystemlücken:
+`standalone/desktop-sidecar.js` schreibt und rotiert Diagnosepfade ohne
+Datei-/Verzeichnisbindung; vorbereitete Links werden nicht verworfen.
+Mehrere Konfigurations-, Mapping-, Export- und Runtime-Lesepfade prüfen einen
+Pfad und lesen später erneut über diesen Pfad statt begrenzt über einen
+gehaltenen Deskriptor. Bei `scripts/lib/bundled-runtime.mjs::readRegular`
+akzeptiert eine Speichergegenprobe zehn substituierte Bytes trotz Limit und
+Statgröße vier. Das ist keine behauptete native Ausnutzung auf einem Zielhost.
+Die Änderungen `ae9bf02` und `9e59fb0` korrigieren diese Produktionsstellen nicht.
+
+Die Ergebnisse sind nicht pauschal Sicherheitsfehler: geprüfte exklusive
+Neuanlagen, bereits gebundene Deskriptoren, Testmutationen und synthetische
+PDF-Kompatibilitätswerte liefern auch begründete False Positives. Eine
+regelweite Unterdrückung oder ungeprüfte Baseline ist ausdrücklich keine
+Lösung. Reale I/O-Lücken benötigen zuerst Korrekturen und Link-/Swap-/Wachstums-
+Regressionen; bestätigte Fehlalarme eine eng gebundene dokumentierte Triage.
+
+Die erneut gestartete Mac-Kampagne am Commit `9e59fb0`
+([Lauf 37375755354](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/37375755354))
+wurde vor dem Zielplattformbau abgebrochen; der lokale Windows-PKG-04-Neulauf
+wurde ebenfalls gestoppt. Es gibt daraus keine bestandenen Paketnachweise.
+RC158 wurde weder getaggt noch als GitHub-Prerelease veröffentlicht. RC157-
+Anwender- und Paketnachweise bleiben unverändert auf ihren bisherigen Schnitt
+begrenzt; die neu gefundenen Lücken machen daraus keine Sicherheitsfreigabe.
 
 ### RC157 – Standalone auf allen Zielplattformen
 
