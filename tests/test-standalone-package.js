@@ -177,6 +177,9 @@ test('release runtime lookup cannot fall back to the developer checkout', () => 
 
 test('PKG-04 evidence writer supports Windows PowerShell 5.1 without a BOM', () => {
   const releaseGate = fs.readFileSync(path.join(root, 'scripts', 'run-pkg-04.ps1'), 'utf8');
+  const preparation = releaseGate.indexOf("Invoke-Checked 'node.exe' @('scripts/prepare-standalone-runtime.mjs')");
+  const rustContracts = releaseGate.indexOf("Invoke-Checked 'npm.cmd' @('run', 'test:standalone')");
+  assert.ok(preparation >= 0 && preparation < rustContracts, 'fresh-checkout runtime preparation precedes Rust contracts');
   assert.doesNotMatch(releaseGate, /Set-Content[^\r\n]*utf8NoBOM/u);
   assert.match(releaseGate, /System\.Text\.UTF8Encoding\(\$false\)/u);
   assert.match(releaseGate, /System\.IO\.File\]::WriteAllText/u);

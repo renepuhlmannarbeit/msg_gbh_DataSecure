@@ -292,7 +292,8 @@ testAsync('native campaign rejects a changed extracted runtime before either lau
   assert.match(source, /for \(const phase of \[1, 2\]\) \{\s+verifyCandidate\(scope, metadata\);/u);
   assert.match(source, /assertPackagedReviewOutputs\(outputs\)/u);
   if (!['win32', 'darwin'].includes(process.platform)) return;
-  const { zipStore } = require('./lib/zip.js');
+  const { writeZip, readCentralModes } = await import('../scripts/lib/zip.mjs');
+  const { verifyExtractedCandidate } = await import('./helpers/standalone-candidate-integrity.mjs');
   const { removePackageSmokeScope } = await import('./helpers/standalone-package-scope.mjs');
   const parent = fs.realpathSync.native(os.tmpdir());
   const scope = path.join(parent, `.tmp-standalone-native-${crypto.randomUUID().replaceAll('-', '')}`);
@@ -305,17 +306,24 @@ testAsync('native campaign rejects a changed extracted runtime before either lau
     sha256: digest(bytes), executable: false })) };
   entries.set('STANDALONE-MANIFEST.json', Buffer.from(JSON.stringify(manifest)));
   entries.set('SHA256SUMS', Buffer.from([...entries].map(([name, bytes]) => `${digest(bytes)}  ${name}`).join('\n') + '\n'));
-  const archive = path.join(archiveScope, 'synthetic.zip'), bytes = zipStore([...entries].map(([name, value]) => [prefix + name, value]));
+  const archive = path.join(archiveScope, 'synthetic.zip');
   fs.mkdirSync(scope);
   try {
-    fs.writeFileSync(archive, bytes);
-    const metadata = { archive, archive_sha256: digest(bytes), target, version, operator_attestation: true };
     const info = path.join(scope, 'NATIVE-REVIEW-CAMPAIGN.json'), receipt = path.join(scope, 'NATIVE-REVIEW-RECEIPT.json');
-    fs.writeFileSync(info, JSON.stringify(metadata)); fs.writeFileSync(receipt, JSON.stringify({ status: 'NOT_RUN' }));
     for (const [name, value] of entries) {
       const destination = path.join(scope, 'candidate', ...`${prefix}${name}`.split('/'));
       fs.mkdirSync(path.dirname(destination), { recursive: true }); fs.writeFileSync(destination, value, { flag: 'wx' });
+      if (process.platform !== 'win32') fs.chmodSync(destination, 0o644);
     }
+    writeZip(archive, [...entries].map(([name]) => ({
+      fullPath: path.join(scope, 'candidate', ...`${prefix}${name}`.split('/')),
+      archivePath: prefix + name, mode: 0o100644
+    })));
+    const bytes = fs.readFileSync(archive);
+    const metadata = { archive, archive_sha256: digest(bytes), target, version, operator_attestation: true };
+    verifyExtractedCandidate(path.join(scope, 'candidate'),
+      new Map([...entries].map(([name, value]) => [prefix + name, value])), readCentralModes(bytes));
+    fs.writeFileSync(info, JSON.stringify(metadata)); fs.writeFileSync(receipt, JSON.stringify({ status: 'NOT_RUN' }));
     fs.writeFileSync(path.join(scope, 'candidate', ...`${prefix}server/module.js`.split('/')), 'edited after verified extraction');
     for (const mode of ['--check', '--launch']) {
       fs.writeFileSync(info, JSON.stringify(metadata));
@@ -323,6 +331,7 @@ testAsync('native campaign rejects a changed extracted runtime before either lau
         { encoding: 'utf8', windowsHide: true, timeout: 5000 });
       assert.notEqual(result.status, 0); assert.match(result.stderr, /CANDIDATE_FILE_CHANGED/u);
       assert.equal(JSON.parse(fs.readFileSync(receipt, 'utf8')).status, 'NOT_RUN');
+      assert.equal(digest(fs.readFileSync(archive)), metadata.archive_sha256);
     }
   } finally {
     // Reuse the checked per-entry cleanup implementation by moving only this
