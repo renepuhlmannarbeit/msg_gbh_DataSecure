@@ -5,7 +5,10 @@ const os = require('node:os');
 const path = require('node:path');
 const childProcess = require('node:child_process');
 const { createSuite } = require('./helpers');
-const scope = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-residual-review-'));
+// Real gateway publication must use a plain private directory. macOS's
+// OS-owned temp alias is canonicalized by the fixture, not waived by storage.
+const temporaryRoot = fs.realpathSync.native(os.tmpdir());
+const scope = fs.mkdtempSync(path.join(temporaryRoot, 'datasecure-residual-review-'));
 process.env.EU_PRIVACY_ROOT = path.join(scope, 'private');
 process.env.EU_PRIVACY_DATA_ROOT = path.join(scope, 'data');
 process.env.EU_PRIVACY_RESULT_ROOT = path.join(scope, 'results');
@@ -1053,6 +1056,6 @@ async function main() {
 main().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => {
   await done();
   // The scope was freshly created by this test and has never contained user data.
-  if (!scope.startsWith(path.join(os.tmpdir(), 'datasecure-residual-review-')) || fs.lstatSync(scope).isSymbolicLink()) throw new Error('UNSAFE_TEST_SCOPE');
+  if (path.dirname(scope) !== temporaryRoot || !path.basename(scope).startsWith('datasecure-residual-review-') || fs.lstatSync(scope).isSymbolicLink()) throw new Error('UNSAFE_TEST_SCOPE');
   fs.rmSync(scope, { recursive: true, force: true });
 });

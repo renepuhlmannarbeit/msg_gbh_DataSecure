@@ -192,6 +192,16 @@ Der laufende Windows-Bau am alten Testschnitt wurde gezielt beendet; daraus
 wird kein PKG-04-PASS abgeleitet. Neue native Mac-Gates, saubere Windows-
 Paketbindung und Security am endgültigen Commit sind weiterhin erforderlich.
 
+Der Mac-Neulauf am `1f669c7` (`37390212355`) bestätigt alle neuen Held-I/O-,
+Retention-, Status-, SEA-, Private-Work- und OCR-Gegenproben auf Intel/ARM.
+Er deckt denselben Temp-Aliasfehler auch im neuen echten Publikationsharness
+`test-residual-person-review.js` auf. Dessen globale Fixture und Cleanup-
+Grenze verwenden nun ebenfalls denselben kanonischen Temp-Pfad. Ein weiterer
+unabhängiger Review über alle 31 direkt registrierten JS-Testdateien und neun
+lokale Testabhängigkeiten findet keinen zusätzlichen entsprechenden Aliasfall.
+Der unveränderte Schutz gegen private Symlink-Vorfahren bleibt aktiv; die
+fehlgeschlagenen Kampagnen werden nicht als Paket-PASS ausgegeben.
+
 Keine darüber hinausgehende Garantie: Der portable Node-Reader schützt
 geprüfte gehaltene Bytes und verwirft erkannte Namespace-Änderungen, ersetzt
 aber keine atomare native Windows-openat-Schnittstelle. Gleichberechtigte
