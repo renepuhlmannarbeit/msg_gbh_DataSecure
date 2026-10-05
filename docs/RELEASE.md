@@ -131,6 +131,40 @@ der zusätzliche Produkt-FIFO-Fall prüft echte Markdown-, Status- und SEA-Leser
 Frische Security-, saubere Windows-PKG-04- und beide
 Mac-Paketgates sind noch ausstehend; RC158 bleibt bis dahin unveröffentlicht.
 
+Die frische JavaScript-Analyse am Sicherheitscommit `b88c31b`
+([Lauf 37385984596](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/37385984596))
+enthält 81 statt zuvor 111 Befunde. Native CodeQL- und vollständige
+Gitleaks-Historienprüfung bestanden; die JavaScript-Freigabe blieb gesperrt.
+Der erneute unabhängige Gegenreview bestätigte fünf zusätzliche Restlücken:
+Status-App-Buildwrites konnten Ersatzdateien kürzen; Markdown-, Status- und
+SEA-Quellreader banden Identitäten beziehungsweise Eltern unvollständig;
+Preview-Retention konnte einen zweiten Pfadsnapshot als Löschberechtigung
+übernehmen. Diese Stellen sind jetzt korrigiert, nicht pauschal ausgenommen.
+Der Buildwriter prüft vor fd-Truncate/Write die ursprüngliche BigInt-Identität
+und alle Eltern. Die drei Reader nutzen die gemeinsame begrenzte Held-I/O-
+Grenze; Manifest und Dokument teilen ihre ursprüngliche Elternbindung.
+Die Preview-Probe und das spätere Löschen verwenden denselben ersten Snapshot.
+
+Gezielte neue Regressionen bestehen: 16 Reader-/Diagnosefälle unter Windows
+(POSIX-Fälle weiterhin ausdrücklich nicht ausgeführt), 13 Status-Serverfälle,
+26 Retentionfälle sowie Status-Buildwriter-, SEA-Evidence- und History-Prüfungen.
+Die tatsächliche Dateisystem-ABA-Gegenprobe erhält sowohl das ursprüngliche
+Preview als auch die verschlüsselte Ersatzdatei. Gültige Ausgangsartefakte
+werden jeweils vor der Mutation akzeptiert; eine lediglich kaputte Fixture
+kann deshalb keinen bestandenen Substitutionstest vortäuschen. Beide
+unabhängigen Abschlussreviews fanden im begrenzten geprüften Umfang keine
+verbleibenden reproduzierbaren P1/P2; dies ersetzt die neuen Releasegates nicht.
+Die 16 Reader-/Diagnosefälle bestehen zusätzlich vollständig unter Linux/WSL
+mit erneut checksumgeprüftem Node 22.23.2, einschließlich beider FIFO-Fälle.
+Die neuen Retention-, Status-Reader-/Writer- und SEA-Reader-Regressionen sind
+im gemeinsamen Standalone-Zielplattformgate registriert, damit Windows-PKG-04
+und beide Mac-Builds sie tatsächlich erneut ausführen.
+Der vollständige Produktschnitt nach diesen zusätzlichen Korrekturen besteht
+erneut mit 76 Basis- und 119 direkten Testdateien, 48 Rusttests, warning-free
+Clippy, Dokumentationsgates sowie der strengen installierten Claude-CLI-
+Validierung von Plugin und Marketplace. Frische Security- und saubere
+Paketprüfungen bleiben bis zu ihrem tatsächlichen Abschluss ausstehend.
+
 Keine darüber hinausgehende Garantie: Der portable Node-Reader schützt
 geprüfte gehaltene Bytes und verwirft erkannte Namespace-Änderungen, ersetzt
 aber keine atomare native Windows-openat-Schnittstelle. Gleichberechtigte

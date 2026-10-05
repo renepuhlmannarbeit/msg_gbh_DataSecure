@@ -1,6 +1,6 @@
 {
   "schema": "datasecure-codeql-triage/1",
-  "source_review": "RC158 security revalidation; real product path-read and diagnostic findings excluded",
+  "source_review": "RC158 independently revalidated held I/O boundaries; obsolete real path-reader findings removed after source correction",
   "entries": [
     {
       "rule": "js/incomplete-multi-character-sanitization",
@@ -76,12 +76,24 @@
     },
     {
       "rule": "js/file-system-race",
-      "path": "plugins/data-secure/server/gateway/batch-journal-store.js",
-      "source_sha256": "2a91d2030dae1354c21ecd530f801815adc4b89dc6d9487e20dc4f55a83ae875",
-      "reason": "The flagged open is descriptor-bound or exclusive; object checks precede reads/writes and uncertainty stops publication.",
+      "path": "plugins/data-secure/server/core/bound-file-io.js",
+      "source_sha256": "4ffc960aa24c6e569120252b968f992d114ee1b7448b7f06be18947fe568929f",
+      "reason": "Held bounded positional read: original BigInt file fingerprint and every parent are checked before the first byte and after reading; links, swaps, growth and close errors stop the operation.",
       "fingerprints": [
         {
-          "line": "b6bb02c26b1767d:1",
+          "line": "38fbef828e00147d:1",
+          "column": "5"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "plugins/data-secure/server/gateway/batch-journal-store.js",
+      "source_sha256": "5d7fe03f85f6a3a33670c5eb8960179685948c3273c8419679c7b6556fbe2300",
+      "reason": "Held journal read uses exact BigInt identity, bounded bytes and original parent checks; no checked path is reopened for content.",
+      "fingerprints": [
+        {
+          "line": "9a3a30a372074aed:1",
           "column": "13"
         }
       ]
@@ -89,11 +101,11 @@
     {
       "rule": "js/file-system-race",
       "path": "plugins/data-secure/server/gateway/batch-private-store.js",
-      "source_sha256": "217a7461e5e77f611d5dfbbecc1e9e7ef4eae4deda971a5d13b64d26d0f1cf9b",
-      "reason": "The flagged open is descriptor-bound or exclusive; object checks precede reads/writes and uncertainty stops publication.",
+      "source_sha256": "4251c3cd876bce4faa6507c41117c53b7e0bf141c0242c36116069a3c98ef59f",
+      "reason": "The flagged legacy header probe reads at most eight bytes from the held original BigInt object; post-check and caller workdir binding reject replacement.",
       "fingerprints": [
         {
-          "line": "e6581828627a17fc:1",
+          "line": "938352affcb3d243:1",
           "column": "5"
         }
       ]
@@ -101,11 +113,11 @@
     {
       "rule": "js/file-system-race",
       "path": "plugins/data-secure/server/gateway/bound-private-file.js",
-      "source_sha256": "caa17408108ceaaf43695200d0b6c31ad56b4f248b9ee9600129c886a5ba7aaa",
-      "reason": "The flagged open is descriptor-bound or exclusive; object checks precede reads/writes and uncertainty stops publication.",
+      "source_sha256": "d6d34ade355db21fc44c79995492931c0fda7a4678bc2c762ce2e066d9d1e16b",
+      "reason": "Held descriptor authority checks exact original BigInt identity, link count and parent binding before any read or mutation.",
       "fingerprints": [
         {
-          "line": "dc58d2645007630a:1",
+          "line": "b09313e13bdc07c:1",
           "column": "5"
         }
       ]
@@ -113,23 +125,11 @@
     {
       "rule": "js/file-system-race",
       "path": "plugins/data-secure/server/gateway/package-staging.js",
-      "source_sha256": "2df8ab811d774938dbffbc55d6435a86eec81151b866f2fb2890c1df6aae43fb",
-      "reason": "The flagged open is descriptor-bound or exclusive; object checks precede reads/writes and uncertainty stops publication.",
+      "source_sha256": "9d257918482b658fd19a37144dcb79bf74bec3ea21999eb2c6a61274acc50231",
+      "reason": "Bounded owner marker read checks held BigInt identity, size/time and original parents; exclusive ownership and marker hash prevent adopting a replacement staging root.",
       "fingerprints": [
         {
-          "line": "8d1fd0829c9bd8c1:1",
-          "column": "5"
-        }
-      ]
-    },
-    {
-      "rule": "js/file-system-race",
-      "path": "plugins/data-secure/server/gateway/private-work-store.js",
-      "source_sha256": "efd46b45f561b253e36fe7287c1a6b1d2be705ab5c9a7eb08d3fadf84c194219",
-      "reason": "The flagged open is descriptor-bound or exclusive; object checks precede reads/writes and uncertainty stops publication.",
-      "fingerprints": [
-        {
-          "line": "e6cf05f60848b0c8:1",
+          "line": "a1e6564faa11e7de:1",
           "column": "5"
         }
       ]
@@ -137,35 +137,23 @@
     {
       "rule": "js/file-system-race",
       "path": "plugins/data-secure/server/gateway/retention.js",
-      "source_sha256": "7a5a3c0a6952900e2386dcbe9e8a270b8a8ee81ac67f58cab6c2b2154d6cee5b",
-      "reason": "The flagged open is descriptor-bound or exclusive; object checks precede reads/writes and uncertainty stops publication.",
+      "source_sha256": "94954c2ef5af84a374aef72fab3ebc8564a8cfd8497922c8c37cf9cb60ece0ea",
+      "reason": "After correction, the header probe and deletion share one original BigInt snapshot and full parent binding; the actual plaintext/encrypted ABA regression preserves the encrypted replacement.",
       "fingerprints": [
         {
-          "line": "2a017a9332b128db:1",
+          "line": "debc674d68f6855e:1",
           "column": "11"
         }
       ]
     },
     {
       "rule": "js/file-system-race",
-      "path": "plugins/data-secure/server/gateway/review.js",
-      "source_sha256": "309d5af905e5df4729ee816851b02cacc2df4615c59becff0425c96ba58ef068",
-      "reason": "The flagged open is descriptor-bound or exclusive; object checks precede reads/writes and uncertainty stops publication.",
-      "fingerprints": [
-        {
-          "line": "5fcba96a2a7ae55d:1",
-          "column": "13"
-        }
-      ]
-    },
-    {
-      "rule": "js/file-system-race",
       "path": "plugins/data-secure/server/gateway/root-reservations.js",
-      "source_sha256": "6793e75473315e890a010bcb83c5a5b718e89bd64a533383b7c7a46da164d835",
-      "reason": "The flagged open is descriptor-bound or exclusive; object checks precede reads/writes and uncertainty stops publication.",
+      "source_sha256": "caa79bca4e3e09937d5e1d0ebbd112a6c1e2f3841a406c6b07dcc03a491b6333",
+      "reason": "The held reservation read is bounded to 4096 bytes with exact BigInt identity; strict schema, role hash and original parent checks bind this metadata record.",
       "fingerprints": [
         {
-          "line": "1c0335c72ef72d8c:1",
+          "line": "c48d2d7a1127cd07:1",
           "column": "5"
         }
       ]
@@ -173,12 +161,24 @@
     {
       "rule": "js/file-system-race",
       "path": "plugins/data-secure/server/gateway/standalone-history-store.js",
-      "source_sha256": "37468130d4a930600a3598414afd172ff402e4760f206ba7c3999b3e27e6bb98",
+      "source_sha256": "765434badb73c9b20b41dc2529a1af2ed3692a37e3daaf57573b938b09a3a124",
+      "reason": "Held history metadata read checks BigInt object identity and size before bounded 32KiB bytes; strict schema and run/directory binding validate the record.",
+      "fingerprints": [
+        {
+          "line": "de0610bd49d4b082:1",
+          "column": "19"
+        }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "plugins/data-secure/server/gateway/review.js",
+      "source_sha256": "e7b3e8ff543416414b69b3cf6d30a5246008c30afb1b58ff6fdd5b17758a82e6",
       "reason": "The flagged open is descriptor-bound or exclusive; object checks precede reads/writes and uncertainty stops publication.",
       "fingerprints": [
         {
-          "line": "f9419a6f9ee146c1:1",
-          "column": "19"
+          "line": "5fcba96a2a7ae55d:1",
+          "column": "13"
         }
       ]
     },
@@ -213,36 +213,12 @@
     {
       "rule": "js/file-system-race",
       "path": "plugins/data-secure/server/sea-batch-probe.js",
-      "source_sha256": "22fbca98aab81324ec634c5564c3c04da462f7d3b5ea8bcc37c599522af9c53f",
-      "reason": "The flagged open is descriptor-bound or exclusive; object checks precede reads/writes and uncertainty stops publication.",
+      "source_sha256": "36e6a4321d972de4cea60d14a1568a8a4c06078fa509f4e67a5d091a69449854",
+      "reason": "Held evidence read checks original BigInt identity, birth/size/link/time, full captured parents and bounded bytes including a growth probe.",
       "fingerprints": [
         {
-          "line": "24b88fa0a896077a:1",
+          "line": "2395d6fdaddf9016:1",
           "column": "5"
-        }
-      ]
-    },
-    {
-      "rule": "js/file-system-race",
-      "path": "plugins/data-secure/server/standalone/markdown-store.js",
-      "source_sha256": "d02ac3912495ed25352f8c6c5400df3ea26b034fd51af95ca73051e11a6d89dc",
-      "reason": "The flagged open is descriptor-bound or exclusive; object checks precede reads/writes and uncertainty stops publication.",
-      "fingerprints": [
-        {
-          "line": "d9c83b6217dac05f:1",
-          "column": "5"
-        }
-      ]
-    },
-    {
-      "rule": "js/file-system-race",
-      "path": "plugins/data-secure/server/status-app/server.js",
-      "source_sha256": "467040ce325bc24f489ab9d5a7c4308ff39dea8314e1f9f8318f89e274f1d5cc",
-      "reason": "The flagged open is descriptor-bound or exclusive; object checks precede reads/writes and uncertainty stops publication.",
-      "fingerprints": [
-        {
-          "line": "7b378ebde50000f5:1",
-          "column": "11"
         }
       ]
     },
@@ -255,18 +231,6 @@
         {
           "line": "f41b92cacd00c856:1",
           "column": "0"
-        }
-      ]
-    },
-    {
-      "rule": "js/file-system-race",
-      "path": "scripts/lib/sea-source-evidence.mjs",
-      "source_sha256": "558dccaa53f4380831f02128781679cb455cf86e2dfdef21ee2564476ea7bf98",
-      "reason": "The flagged open is descriptor-bound or exclusive; object checks precede reads/writes and uncertainty stops publication.",
-      "fingerprints": [
-        {
-          "line": "8fe2b774aa069ae2:1",
-          "column": "11"
         }
       ]
     },
@@ -349,7 +313,7 @@
     {
       "rule": "js/file-system-race",
       "path": "tests/test-batch-private-artifact-migration.js",
-      "source_sha256": "d192c1b0a7a42aacb9af0e56bf2fd20731c38cfb688672ab31d295e0886e2be7",
+      "source_sha256": "2146bb1b55a3a3cb0ec177c04e7fdfdd4c20c4b9bbd844b8b16fef05747a9176",
       "reason": "Controlled non-shipped test fixture or deliberate adversarial mutation; no product publication authority.",
       "fingerprints": [
         {
@@ -561,7 +525,7 @@
     {
       "rule": "js/file-system-race",
       "path": "tests/test-standalone-conversion-worker.mjs",
-      "source_sha256": "c660914642d9571f2422e2703ebcafc180aad6901e12f4bd722dd6d8f6ee57b3",
+      "source_sha256": "e419a7b944f27f936ebb6780ddcb69cbd05fd12782ffa9b01cd0e6455af31eb6",
       "reason": "Controlled non-shipped test fixture or deliberate adversarial mutation; no product publication authority.",
       "fingerprints": [
         {

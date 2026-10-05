@@ -189,6 +189,60 @@ try {
     assert.strictEqual(app(fixture(Buffer.from([0xff, 0xff]))).initialize(host), false);
   });
 
+  test('a coherent same-inode pair rewritten between lstat and open is not adopted', () => {
+    const data = fixture();
+    assert.strictEqual(app(data).initialize(host), true, 'the unchanged artifact must be valid');
+    const artifact = path.join(data.directory, 'artifact.json');
+    const htmlFile = path.join(data.directory, 'status-card.html');
+    const replacement = fs.readFileSync(htmlFile, 'utf8').replace('Fixed local status', 'Raced local status');
+    const replacementManifest = { ...data.manifest,
+      sha256: crypto.createHash('sha256').update(replacement).digest('hex') };
+    let raced = false, reads = 0, opened = 0, closed = 0;
+    const fsApi = { ...fs,
+      openSync(target, ...args) {
+        if (target === artifact && !raced) {
+          raced = true;
+          const before = fs.statSync(artifact);
+          fs.writeFileSync(artifact, JSON.stringify(replacementManifest));
+          fs.writeFileSync(htmlFile, replacement);
+          fs.utimesSync(artifact, before.atime, new Date(before.mtimeMs + 10000));
+        }
+        opened++;
+        return fs.openSync(target, ...args);
+      },
+      readSync(...args) { reads++; return fs.readSync(...args); },
+      closeSync(fd) { closed++; return fs.closeSync(fd); }
+    };
+    const server = app({ ...data, fsApi });
+    assert.strictEqual(server.initialize(host), false);
+    assert.strictEqual(raced, true);
+    assert.strictEqual(reads, 0, 'reject the raced object before reading replacement bytes');
+    assert.strictEqual(closed, opened);
+    assert.strictEqual(server.readResource(RESOURCE_URI), null);
+    assert.strictEqual(app(data).initialize(host), true, 'replacement is coherent, not merely invalid JSON/hash');
+  });
+
+  test('replacing a plain parent between manifest and HTML reads disables the resource', () => {
+    const data = fixture();
+    assert.strictEqual(app(data).initialize(host), true);
+    let exchanged = false, closed = 0;
+    const moved = `${data.directory}-original`;
+    const fsApi = { ...fs, closeSync(fd) {
+      fs.closeSync(fd); closed++;
+      if (!exchanged) {
+        exchanged = true;
+        fs.renameSync(data.directory, moved);
+        fs.cpSync(moved, data.directory, { recursive: true });
+      }
+    } };
+    const server = app({ ...data, fsApi });
+    assert.strictEqual(server.initialize(host), false);
+    assert.strictEqual(exchanged, true);
+    assert.strictEqual(closed, 1, 'the shared parent binding stops before opening HTML');
+    assert.strictEqual(server.readResource(RESOURCE_URI), null);
+    assert.strictEqual(app(data).initialize(host), true, 'new directory also contains a valid artifact');
+  });
+
   test('negotiated HTML is cached in memory so later resource reads perform no disk access', () => {
     const data = fixture();
     let reads = 0;

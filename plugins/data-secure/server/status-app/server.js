@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { projectStartResult } = require('./model');
+const { readBoundFile, bindDirectory, assertDirectory } = require('../core/bound-file-io');
 
 const RESOURCE_URI = 'ui://data-secure/status-card-v1.html';
 const RESOURCE_MIME_TYPE = 'text/html;profile=mcp-app';
@@ -21,42 +22,23 @@ function resourceMetadata() {
 
 // Only package-owned, literal filenames can reach this reader. Descriptor and
 // identity checks reject links/replacements before reading bounded file bytes.
-function readRegularFile(directory, filename, maximum, fsApi) {
+function readRegularFile(directory, filename, maximum, fsApi, binding) {
   const target = path.join(directory, filename);
-  const before = fsApi.lstatSync(target, { bigint: true });
-  if (!before.isFile() || before.isSymbolicLink() || before.size < 1n || before.size > BigInt(maximum)) throw new Error('Invalid UI artifact');
-  const flags = fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0) | (fs.constants.O_NONBLOCK || 0);
-  const fd = fsApi.openSync(target, flags);
-  try {
-    const opened = fsApi.fstatSync(fd, { bigint: true });
-    if (!opened.isFile() || opened.dev !== before.dev || opened.ino !== before.ino || opened.size !== before.size) throw new Error('Changed UI artifact');
-    const bytes = Buffer.alloc(Number(opened.size));
-    let offset = 0;
-    while (offset < bytes.length) {
-      const count = fsApi.readSync(fd, bytes, offset, bytes.length - offset, offset);
-      if (!count) throw new Error('Incomplete UI artifact');
-      offset += count;
-    }
-    const after = fsApi.fstatSync(fd, { bigint: true });
-    if (after.size !== opened.size || after.mtimeNs !== opened.mtimeNs || after.ctimeNs !== opened.ctimeNs) throw new Error('Changed UI artifact');
-    return bytes;
-  } finally {
-    fsApi.closeSync(fd);
-  }
+  return readBoundFile(target, { io: fsApi, directory: binding, minimum: 1, maximum, checkCtime: true });
 }
 
 function verifiedHtml(directory, fsApi) {
-  const dir = fsApi.lstatSync(directory);
-  if (!dir.isDirectory() || dir.isSymbolicLink()) throw new Error('Invalid UI directory');
-  const manifest = JSON.parse(readRegularFile(directory, 'artifact.json', MAX_MANIFEST_BYTES, fsApi).toString('utf8'));
+  const binding = bindDirectory(directory, { io: fsApi });
+  const manifest = JSON.parse(readRegularFile(directory, 'artifact.json', MAX_MANIFEST_BYTES, fsApi, binding).toString('utf8'));
   if (!manifest || Object.keys(manifest).sort().join(',') !== 'bytes,release_enabled,schema,sdk_version,sha256' ||
       manifest.schema !== 'datasecure-status-app-artifact/v1' || manifest.sdk_version !== '1.7.5' ||
       manifest.release_enabled !== false || !Number.isSafeInteger(manifest.bytes) ||
       manifest.bytes < 1 || manifest.bytes > MAX_HTML_BYTES || !/^[a-f0-9]{64}$/.test(manifest.sha256)) throw new Error('Invalid UI manifest');
-  const bytes = readRegularFile(directory, 'status-card.html', MAX_HTML_BYTES, fsApi);
+  const bytes = readRegularFile(directory, 'status-card.html', MAX_HTML_BYTES, fsApi, binding);
   if (bytes.length !== manifest.bytes || crypto.createHash('sha256').update(bytes).digest('hex') !== manifest.sha256) throw new Error('UI integrity mismatch');
   const html = bytes.toString('utf8');
   if (!Buffer.from(html, 'utf8').equals(bytes)) throw new Error('Invalid UI encoding');
+  assertDirectory(binding);
   return html;
 }
 

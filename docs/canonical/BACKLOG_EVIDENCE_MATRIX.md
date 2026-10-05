@@ -18,6 +18,20 @@ aktuell den Release. Drei historische Gitleaks-Testeingaben sind exakt triagiert
 bestanden. Gestoppte Windows-/Mac-Neubaugates sind ausdrücklich kein PASS.
 [Exakte Laufbindung und offene Korrekturen](../RELEASE.md#rc158--beauftragter-standalone-vorabrelease-aktuell-angehalten).
 
+**Sicherheitsnachbesserung vom 06.10.2026:** Held-I/O, sichere Diagnose-
+Segmente und native Diagnosehandles sind lokal umgesetzt. Die frische Analyse
+an `b88c31b` enthält 81 Findings; native CodeQL und Gitleaks bestehen.
+Fünf zusätzlich bestätigte Restfehler sind lokal ebenfalls korrigiert.
+Gezielte Regressionen: Reader/Diagnose 16 Fälle auf Windows und vollständig
+Linux/WSL, Statusreader 13, Retention 26 einschließlich tatsächlicher ABA-
+Substitution, Status-Buildwriter sowie SEA- und Markdownreader. Zwei unabhängige
+Abschlussreviews fanden keine verbleibenden reproduzierbaren P1/P2 in diesem
+Umfang. Alle neuen I/O-Regressionen laufen im gemeinsamen Standalone-Paketgate.
+Die vollständige Produktsuite besteht erneut mit 76 Basis- und 119 direkten
+Testdateien; 48 Rusttests, warning-free Clippy, Dokumentation und strenge
+installierte Claude-CLI-Validierung bestehen ebenfalls. Neue Security- und
+Paketbindung fehlen noch; dies ist keine RC158-Veröffentlichungsfreigabe.
+
 **Aktuelle RC157-Veröffentlichung:** Quellcommit
 `111737d28021b6989ffe8d563b58daa9cbae610f` ist auf main und als Standalone-RC
 für Windows, macOS Intel, macOS Apple Silicon und Linux veröffentlicht.

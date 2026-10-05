@@ -2,6 +2,9 @@ import fs from 'node:fs';
 import crypto from 'node:crypto';
 import vm from 'node:vm';
 import assert from 'node:assert/strict';
+import os from 'node:os';
+import path from 'node:path';
+import { writeBoundArtifact } from '../scripts/lib/bound-artifact-writer.mjs';
 import { createRequire } from 'node:module';
 const require = createRequire(import.meta.url);
 const root = new URL('../', import.meta.url);
@@ -33,6 +36,63 @@ assert.ok(notices.includes('licensing transition'));
 assert.ok(inventory.dependencies.some(d => d.name === '@modelcontextprotocol/ext-apps' && d.version === '1.7.5'));
 assert.ok(!inventory.dependencies.some(d => ['axe-core', 'esbuild'].includes(d.name)));
 console.log('Status artifact: hash/size, syntax/offline, exact inventory/licenses PASS');
+const fixture = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'datasecure-bound-build-'));
+try {
+  const output = path.join(fixture, 'artifact.html');
+  const foreign = path.join(fixture, 'foreign.txt');
+  writeBoundArtifact(output, 'old artifact bytes');
+  writeBoundArtifact(output, 'new');
+  assert.equal(fs.readFileSync(output, 'utf8'), 'new', 'successful rewrite truncates only the bound original');
+  fs.writeFileSync(foreign, 'FOREIGN MUST SURVIVE');
+  const link = path.join(fixture, 'hardlink.html');
+  fs.linkSync(foreign, link);
+  assert.throws(() => writeBoundArtifact(link, 'unsafe'), { code: 'BUILD_ARTIFACT_UNSAFE' });
+  assert.equal(fs.readFileSync(foreign, 'utf8'), 'FOREIGN MUST SURVIVE');
+  let swapped = false;
+  const racingIo = Object.create(fs);
+  racingIo.openSync = (target, ...args) => {
+    if (target === output) {
+      fs.renameSync(output, path.join(fixture, 'original.html'));
+      fs.copyFileSync(foreign, output);
+      swapped = true;
+    }
+    return fs.openSync(target, ...args);
+  };
+  assert.throws(() => writeBoundArtifact(output, 'unsafe', { io: racingIo }), { code: 'BUILD_ARTIFACT_UNSAFE' });
+  assert.equal(swapped, true);
+  assert.equal(fs.readFileSync(output, 'utf8'), 'FOREIGN MUST SURVIVE', 'raced foreign leaf must not be truncated');
+  assert.equal(fs.readFileSync(path.join(fixture, 'original.html'), 'utf8'), 'new');
+  const shortIo = Object.create(fs);
+  shortIo.writeSync = (fd, bytes, offset, length, position) => fs.writeSync(fd, bytes, offset, Math.min(length, 2), position);
+  writeBoundArtifact(path.join(fixture, 'short.html'), 'short writes still complete', { io: shortIo });
+  assert.equal(fs.readFileSync(path.join(fixture, 'short.html'), 'utf8'), 'short writes still complete');
+  let actualFd, closed = 0;
+  const zeroIo = Object.create(fs);
+  zeroIo.openSync = (...args) => { actualFd = fs.openSync(...args); return 0; };
+  for (const method of ['fstatSync', 'ftruncateSync', 'writeSync', 'fsyncSync']) zeroIo[method] = (fd, ...args) => {
+    assert.equal(fd, 0); return fs[method](actualFd, ...args);
+  };
+  zeroIo.closeSync = fd => { assert.equal(fd, 0); closed++; fs.closeSync(actualFd); };
+  writeBoundArtifact(path.join(fixture, 'zero.html'), 'descriptor zero', { io: zeroIo });
+  assert.equal(closed, 1);
+  assert.equal(fs.readFileSync(path.join(fixture, 'zero.html'), 'utf8'), 'descriptor zero');
+  const linkedDirectory = path.join(fixture, 'redirect');
+  fs.symlinkSync(fixture, linkedDirectory, process.platform === 'win32' ? 'junction' : 'dir');
+  try {
+    assert.throws(() => writeBoundArtifact(path.join(linkedDirectory, 'foreign.txt'), 'unsafe'), { code: 'BUILD_ARTIFACT_UNSAFE' });
+    assert.equal(fs.readFileSync(foreign, 'utf8'), 'FOREIGN MUST SURVIVE');
+  } finally { fs.unlinkSync(linkedDirectory); }
+  console.log('Status artifact writer: bound rewrite, hardlink/swap/ancestor rejection, short writes and FD 0 PASS');
+} finally {
+  assert.equal(path.dirname(fixture), fs.realpathSync(os.tmpdir()));
+  assert.ok(fs.lstatSync(fixture).isDirectory() && !fs.lstatSync(fixture).isSymbolicLink());
+  for (const name of fs.readdirSync(fixture)) {
+    const leaf = path.join(fixture, name);
+    assert.ok(fs.lstatSync(leaf).isFile() && !fs.lstatSync(leaf).isSymbolicLink());
+    fs.unlinkSync(leaf);
+  }
+  fs.rmdirSync(fixture);
+}
 if (process.argv.includes('--archives') || process.argv.includes('--engineering-archives') || process.argv.includes('--archive')) {
   const { readZip } = require('../plugins/data-secure/server/zip-reader.js');
   const pkg = JSON.parse(fs.readFileSync(new URL('package.json', root), 'utf8'));

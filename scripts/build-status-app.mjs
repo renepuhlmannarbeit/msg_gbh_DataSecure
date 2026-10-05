@@ -6,6 +6,7 @@ import vm from 'node:vm';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { build } from 'esbuild';
+import { writeBoundArtifact } from './lib/bound-artifact-writer.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const target = path.join(root, 'plugins/data-secure/server/status-app');
@@ -83,10 +84,9 @@ const artifact = { schema: 'datasecure-status-app-artifact/v1', sha256: crypto.c
 for (const [name, data] of [['status-card.html', html], ['artifact.json', JSON.stringify(artifact, null, 2) + '\n'], ['THIRD_PARTY_NOTICES.md', notices], ['bundled-dependencies.json', JSON.stringify({ schema: 'datasecure-status-app-dependencies/v1', dependencies }, null, 2) + '\n']]) {
   const destination = path.join(target, name);
   if (check) {
-    if (!fs.existsSync(destination) || fs.readFileSync(destination, 'utf8') !== data) throw new Error(`Stale status UI artifact: ${name}`);
+    if (!fs.existsSync(destination) || boundFileIo.readBoundFile(destination, { maximum: 2 * 1024 * 1024, checkCtime: true }).toString('utf8') !== data) throw new Error(`Stale status UI artifact: ${name}`);
   } else {
-    if (fs.lstatSync(target).isSymbolicLink() || (fs.existsSync(destination) && (!fs.lstatSync(destination).isFile() || fs.lstatSync(destination).isSymbolicLink()))) throw new Error('Unsafe status UI artifact target');
-    fs.writeFileSync(destination, data);
+    writeBoundArtifact(destination, data);
   }
 }
 console.log(`Status card ${check ? 'verified' : 'built'}: ${artifact.bytes} bytes; ${packages.size} bundled dependencies; release disabled`);

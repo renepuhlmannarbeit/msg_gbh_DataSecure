@@ -11,6 +11,12 @@ const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 
 const packageLock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8'));
 const macosLaunch = fs.readFileSync(path.join(root, 'tests', 'manual', 'standalone-native-macos-launch.sh'), 'utf8');
 
+for (const regression of ['test-bound-file-io.js', 'test-retention.js', 'test-status-app-server.js',
+  'test-status-app-artifacts.mjs', 'test-sea-source-evidence.mjs']) {
+  assert.ok(packageJson.scripts['test:standalone'].includes(`node tests/${regression}`),
+    `the target-platform release gate must execute the I/O regression: ${regression}`);
+}
+
 assert.match(workflow, /^name: Manual Standalone macOS sandbox evidence$/mu);
 assert.match(workflow, /^on:\n  workflow_dispatch:\n/mu);
 assert.doesNotMatch(workflow, /^  (?:push|pull_request|schedule):/mu,

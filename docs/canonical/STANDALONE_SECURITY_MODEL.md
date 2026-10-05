@@ -177,6 +177,31 @@ keinen unredigierten Rest durch einen vorgeschobenen Marker freigeben.
 Cowork behält seinen eigenen kleineren Vertrag. Weitere Zustands-, OS-Start-
 und Paketprüfgrenzen stehen unter DS-108 und in der aktuellen Evidence-Matrix.
 
+## Gehaltene Datei-I/O und Diagnose (RC158)
+
+Leser verwenden begrenzte positionale Reads des gehaltenen Deskriptors und
+prüfen ursprüngliche BigInt-Dateiidentität, Typ, Linkzahl, Größe, mtime und die
+gesamte ursprüngliche Elternkette vor und nach dem Lesen. Daten-ctime bleibt
+nach DS-070 kein Identitätsmerkmal; ausführungsbestimmende Artefakte können
+zusätzlich ctime binden. Zusammengehörige Manifest-/Dokumentreads teilen die
+Elternbindung. Ein POSIX-FIFO darf den Open-Schritt nicht blockieren.
+
+Diagnose ist Best Effort: exklusiv neue Segmente statt überschreibender
+Rotation; Teilwrites, Kollisionen und unsichere Ziele stoppen weitere
+Diagnose-I/O, nicht die Anonymisierung. Der native Sink erstellt Dateien
+relativ zu gehaltenen Elternhandles. Buildwrites kürzen eine vorhandene Datei
+erst nach Identitätsprüfung ihres gehaltenen Deskriptors. Preview-Löschungen
+dürfen nur den zuerst geprüften eigenen Snapshot entfernen, keine später
+substituierte Datei übernehmen.
+
+Diese Grenzen sind keine atomare portable Namespace-Transaktion gegen
+gleichberechtigte Prozesse desselben Benutzers. Der Node-Reader ersetzt kein
+natives Windows-openat; gleichberechtigte Unix-Prozesse können nach einer
+Prüfung weitere Links anlegen. Unsicherheit verhindert Ergebnisfreigabe,
+und der native Diagnose-Sink öffnet keine vorbereiteten fremden Inodes zum
+Schreiben. Gegenproben und genaue Plattformnachweise stehen im
+[Releasevertrag](../RELEASE.md#rc158--beauftragter-standalone-vorabrelease-aktuell-angehalten).
+
 ## Nichtziele
 
 - keine rechtssichere Anonymitäts- oder Zertifizierungszusage;

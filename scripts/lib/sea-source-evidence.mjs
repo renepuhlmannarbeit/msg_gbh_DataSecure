@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import boundFileIo from '../../plugins/data-secure/server/core/bound-file-io.js';
 
 export function assertSeaDirectory(directory) {
   const absolute = path.resolve(directory);
@@ -19,29 +20,11 @@ export function assertSeaDirectory(directory) {
 
 export function readSeaFile(file, maxBytes = 256 * 1024 * 1024) {
   assertSeaDirectory(path.dirname(file));
-  const before = fs.lstatSync(file);
-  if (!before.isFile() || before.isSymbolicLink() || before.nlink !== 1 || before.size > maxBytes) {
-    throw new Error('SEA_FILE_UNSAFE');
-  }
-  const fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0) | (fs.constants.O_NONBLOCK || 0));
   try {
-    const opened = fs.fstatSync(fd);
-    const same = (stat) => stat.isFile() && !stat.isSymbolicLink() && stat.nlink === 1 &&
-      stat.dev === before.dev && stat.ino === before.ino && stat.size === before.size &&
-      stat.mtimeMs === before.mtimeMs && stat.ctimeMs === before.ctimeMs;
-    if (!same(opened)) throw new Error('SEA_FILE_CHANGED');
-    // Explicit length bounds also hold if the file grows while being read.
-    const bytes = Buffer.alloc(before.size);
-    let offset = 0;
-    while (offset < bytes.length) {
-      const count = fs.readSync(fd, bytes, offset, bytes.length - offset, offset);
-      if (!count) throw new Error('SEA_FILE_CHANGED');
-      offset += count;
-    }
-    if (!same(fs.fstatSync(fd)) || !same(fs.lstatSync(file))) throw new Error('SEA_FILE_CHANGED');
-    assertSeaDirectory(path.dirname(file));
-    return bytes;
-  } finally { fs.closeSync(fd); }
+    return boundFileIo.readBoundFile(file, { maximum: maxBytes, checkCtime: true });
+  } catch (error) {
+    throw new Error(error?.code === 'BOUND_FILE_UNSAFE' ? 'SEA_FILE_UNSAFE' : 'SEA_FILE_CHANGED');
+  }
 }
 
 export const seaHash = (bytes) => crypto.createHash('sha256').update(bytes).digest('hex');

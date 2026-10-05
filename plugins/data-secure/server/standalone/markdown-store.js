@@ -8,6 +8,7 @@ const { ensurePrivateDirectory, assertPrivateDirectory, safeRemovePrivateTree } 
 const { writeFully, syncParentDirectory, renameWithTransientRetry } = require('../gateway/batch-journal-io');
 const { ARTIFACT_ID_RE, createMarkdownArtifact, validateMarkdownArtifact } = require('./markdown-artifact');
 const { MAX_MARKDOWN_CHARS } = require('./markdown-contract');
+const { readBoundFile, bindDirectory, assertDirectory } = require('../core/bound-file-io');
 
 // This store is not the privacy Output tree. No public capability resolver
 // accepts its dm_ identities, paths, manifests or unredacted Markdown.
@@ -22,36 +23,21 @@ function metadata(manifest) {
   };
 }
 function invalid() { const error = new Error('MARKDOWN_ARTIFACT_INVALID'); error.code = 'MARKDOWN_ARTIFACT_INVALID'; return error; }
-function readPlainFile(file, maximum) {
-  let fd;
-  try {
-    const named = fs.lstatSync(file);
-    if (!named.isFile() || named.isSymbolicLink() || named.nlink !== 1 || named.size > maximum) throw invalid();
-    fd = fs.openSync(file, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0) | (fs.constants.O_NONBLOCK || 0));
-    const opened = fs.fstatSync(fd);
-    if (!opened.isFile() || opened.nlink !== 1 || opened.dev !== named.dev || opened.ino !== named.ino || opened.size !== named.size) throw invalid();
-    const buffer = Buffer.alloc(opened.size + 1);
-    let length = 0;
-    while (length < buffer.length) {
-      const count = fs.readSync(fd, buffer, length, buffer.length - length, null);
-      if (!count) break;
-      length += count;
-    }
-    const bytes = buffer.subarray(0, length);
-    const after = fs.lstatSync(file);
-    if (bytes.length > maximum || bytes.length !== opened.size || after.dev !== opened.dev || after.ino !== opened.ino || after.isSymbolicLink()) throw invalid();
-    return bytes;
-  } finally { if (fd !== undefined) fs.closeSync(fd); }
+function readPlainFile(file, maximum, directory) {
+  try { return readBoundFile(file, { maximum, directory }); }
+  catch { throw invalid(); }
 }
 function readMarkdownArtifact(artifactId) {
   if (!ARTIFACT_ID_RE.test(String(artifactId || ''))) throw invalid();
   const root = artifactRoot();
   const folder = path.join(root, artifactId);
   assertPrivateDirectory(folder, root);
-  const manifest = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(readPlainFile(path.join(folder, 'manifest.json'), 16384)));
-  const markdown = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(readPlainFile(path.join(folder, `${artifactId}.md`), MAX_MARKDOWN_CHARS * 4));
+  const directory = bindDirectory(folder);
+  const manifest = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(readPlainFile(path.join(folder, 'manifest.json'), 16384, directory)));
+  const markdown = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(readPlainFile(path.join(folder, `${artifactId}.md`), MAX_MARKDOWN_CHARS * 4, directory));
   validateMarkdownArtifact(manifest, markdown);
   if (manifest.artifact_id !== artifactId) throw invalid();
+  assertDirectory(directory);
   assertPrivateDirectory(folder, root);
   return { manifest, markdown };
 }

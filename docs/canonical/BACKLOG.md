@@ -13,6 +13,12 @@ Wachstum und I/O-Fehler geprüft. Zusätzliche Reviewbefunde zu OCR-Cache,
 Segmentkollision, Teilwrites, FIFO-Opens und BigInt-Dateiidentität sind ebenfalls
 korrigiert. Die frische vollständige lokale Regression (195 Testdateien),
 48 Rusttests mit Clippy und 41 reale Konvertierungsgruppen bestehen.
+Die erneute SARIF-Gegenprüfung bestätigte fünf zusätzliche Restlücken;
+Status-Buildwriter, Markdown-/Status-/SEA-Reader und Preview-Retention sind
+ebenfalls korrigiert. Gezielte tatsächliche Austausch-/ABA-Gegenproben und
+zwei unabhängige Abschlussreviews bestehen. Der komplette Produktschnitt
+nach diesen zusätzlichen Korrekturen besteht erneut: 76 Basis- und 119 direkte
+Testdateien, 48 Rusttests, warning-free Clippy und Dokumentationsgates.
 Offen bleiben der strenge Security-Gate mit einzeln gebundener
 False-Positive-Triage sowie saubere
 Windows-/Mac-Paketgates und Veröffentlichung. Keine ganzen Regeln werden

@@ -136,6 +136,53 @@ test('review cleanup preserves a replacement that appears after descriptor inspe
   assert.strictEqual(meta.preview_file, 'asset-001.png');
 });
 
+test('preview cleanup never adopts a second snapshot as deletion authority after an ABA swap', () => {
+  const r = sandbox('preview-snapshot-aba');
+  const dir = reviewItem(r, 'review', 8);
+  const preview = path.join(dir, 'asset-001.png');
+  const originalCopy = path.join(dir, 'held-original.png');
+  const encryptedCopy = path.join(dir, 'held-encrypted.png');
+  const encryptedBytes = 'DSARTF01cipher';
+  const original = { lstat: fs.lstatSync, open: fs.openSync, close: fs.closeSync };
+  let swapped = false, previewFd, closes = 0;
+  fs.lstatSync = (target, ...args) => {
+    const stat = original.lstat(target, ...args);
+    if (target === preview && !swapped) {
+      swapped = true;
+      fs.renameSync(preview, originalCopy);
+      fs.writeFileSync(preview, encryptedBytes);
+    }
+    return stat;
+  };
+  fs.openSync = (target, ...args) => {
+    if (target !== preview) return original.open(target, ...args);
+    previewFd = original.open(originalCopy, ...args);
+    // The checked plaintext object is returned for the probe; its pathname is
+    // briefly restored while the encrypted replacement waits outside it.
+    fs.renameSync(preview, encryptedCopy);
+    fs.renameSync(originalCopy, preview);
+    return previewFd;
+  };
+  fs.closeSync = fd => {
+    original.close(fd);
+    if (fd === previewFd) {
+      closes++;
+      fs.renameSync(preview, originalCopy);
+      fs.renameSync(encryptedCopy, preview);
+    }
+  };
+  let result;
+  try { result = removeReviewPreviews(dir, r.review, NOW); }
+  finally { fs.lstatSync = original.lstat; fs.openSync = original.open; fs.closeSync = original.close; }
+  assert.strictEqual(swapped, true);
+  assert.strictEqual(closes, 1);
+  assert.strictEqual(result.removed, 0);
+  assert.ok(result.failures.length > 0);
+  assert.strictEqual(fs.readFileSync(preview, 'utf8'), encryptedBytes);
+  assert.strictEqual(fs.readFileSync(originalCopy, 'utf8'), 'preview bytes');
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(dir, 'asset-001.review.json'), 'utf8')).preview_file, 'asset-001.png');
+});
+
 test('hidden staging and current-job directories are never touched', () => {
   const r = sandbox('staging');
   for (const parent of [r.processed, r.output, r.review]) {

@@ -5,6 +5,7 @@ const path = require('path');
 const { SafeError } = require('../runtime');
 const { roots, safeRemovePrivateTree } = require('./common');
 const { writeReviewMetaAtomically } = require('./review');
+const { bindDirectory, assertDirectory, fileIdentity, sameFile: sameBoundFile } = require('../core/bound-file-io');
 
 const DEFAULT_RETENTION_DAYS = 7;
 const MAX_RETENTION_DAYS = 14;
@@ -279,9 +280,9 @@ function removeReviewPreviews(reviewDir, root, at, fsApi = fs) {
     const name = path.basename(file);
     try {
       assertInside(file, root);
-      const fileStat = fsApi.lstatSync(file);
-      const boundFileStat = fsApi === fs ? fs.lstatSync(file, { bigint: true }) : null;
-      if (fileStat.isSymbolicLink() || !fileStat.isFile()) {
+      const parentBinding = fsApi === fs ? bindDirectory(reviewDir) : null;
+      const fileStat = fsApi.lstatSync(file, { bigint: true });
+      if (fileStat.isSymbolicLink() || !fileStat.isFile() || String(fileStat.nlink) !== '1') {
         throw new Error('Review-Preview ist kein freigegebener Dateipfad.');
       }
       // Old ciphertext remains untouched, including renamed files. A plain
@@ -292,7 +293,9 @@ function removeReviewPreviews(reviewDir, root, at, fsApi = fs) {
       const fd = fsApi.openSync(file, fsApi.constants.O_RDONLY | (fsApi.constants.O_NOFOLLOW || 0) | (fsApi.constants.O_NONBLOCK || 0));
       let encrypted;
       try {
-        if (!sameFile(fileStat, fsApi.fstatSync(fd))) throw new Error('Review-Preview wurde ersetzt.');
+        const original = fileIdentity(fileStat);
+        if (!sameBoundFile(fsApi.fstatSync(fd, { bigint: true }), original)) throw new Error('Review-Preview wurde ersetzt.');
+        if (parentBinding) assertDirectory(parentBinding);
         let offset = 0;
         while (offset < probe.length) {
           const count = fsApi.readSync(fd, probe, offset, probe.length - offset, offset);
@@ -301,18 +304,21 @@ function removeReviewPreviews(reviewDir, root, at, fsApi = fs) {
           offset += count;
         }
         encrypted = probe.equals(Buffer.from('DSARTF01'));
+        if (!sameBoundFile(fsApi.fstatSync(fd, { bigint: true }), original) ||
+            !sameBoundFile(fsApi.lstatSync(file, { bigint: true }), original)) throw new Error('Review-Preview wurde ersetzt.');
       } finally { fsApi.closeSync(fd); }
       if (encrypted) continue;
       if (fsApi === fs) {
-        const parentStat = fs.lstatSync(reviewDir, { bigint: true });
+        assertDirectory(parentBinding);
         const identity = (value) => ({
           dev: String(value.dev),
           ino: String(value.ino),
           birthtimeNs: String(value.birthtimeNs)
         });
         safeRemovePrivateTree(reviewDir, name, {
-          expectedParentIdentity: identity(parentStat),
-          expectedIdentity: identity(boundFileStat)
+          expectedParentIdentity: { dev: parentBinding.chain[0].identity.dev,
+            ino: parentBinding.chain[0].identity.ino, birthtimeNs: parentBinding.chain[0].identity.birth },
+          expectedIdentity: identity(fileStat)
         });
       } else {
         fsApi.unlinkSync(file);

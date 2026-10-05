@@ -172,6 +172,60 @@ test('actual Markdown, status and SEA readers refuse a raced FIFO within a bound
     assert.ifError(result.error); assert.equal(result.status, 0, `${mode}: ${result.stderr}`);
   }
 });
+
+test('actual Markdown and SEA readers preserve exact 64-bit identities before reading bytes', () => {
+  const code = `
+    const fs = require('node:fs'), path = require('node:path'), assert = require('node:assert/strict');
+    const [mode, directory] = process.argv.slice(1);
+    (async () => {
+      let target, read;
+      if (mode === 'markdown') {
+        process.env.EU_PRIVACY_DATA_ROOT = path.join(directory, 'data');
+        const store = require('./plugins/data-secure/server/standalone/markdown-store');
+        const { createMarkdownExtraction } = require('./plugins/data-secure/server/standalone/markdown-contract');
+        const id = 'dm_' + 'b'.repeat(32);
+        await store.publishMarkdownArtifact(createMarkdownExtraction({ source_type: 'txt', markdown: 'safe',
+          coverage: { status: 'complete', reason_codes: [] } }), id);
+        target = path.join(store.artifactRoot(), id, 'manifest.json');
+        read = () => store.readMarkdownArtifact(id);
+        assert.equal(read().markdown, 'safe');
+      } else {
+        target = path.join(directory, 'source'); fs.writeFileSync(target, 'safe');
+        const { readSeaFile } = await import('./scripts/lib/sea-source-evidence.mjs');
+        read = () => readSeaFile(target); assert.equal(read().toString(), 'safe');
+      }
+      const a = 2n ** 54n + 1n, b = a + 1n;
+      assert.equal(Number(a), Number(b), 'the former Number identities alias');
+      const original = { lstat: fs.lstatSync, open: fs.openSync, fstat: fs.fstatSync,
+        read: fs.readSync, close: fs.closeSync };
+      const handles = new Set(); let reads = 0, opens = 0, closes = 0;
+      fs.lstatSync = (candidate, ...args) => {
+        const stat = original.lstat(candidate, ...args);
+        if (candidate === target) stat.ino = args[0]?.bigint ? a : Number(a);
+        return stat;
+      };
+      fs.openSync = (candidate, ...args) => {
+        const fd = original.open(candidate, ...args);
+        if (candidate === target) { handles.add(fd); opens++; } return fd;
+      };
+      fs.fstatSync = (fd, ...args) => {
+        const stat = original.fstat(fd, ...args);
+        if (handles.has(fd)) stat.ino = args[0]?.bigint ? b : Number(b);
+        return stat;
+      };
+      fs.readSync = (fd, ...args) => { if (handles.has(fd)) reads++; return original.read(fd, ...args); };
+      fs.closeSync = fd => { if (handles.delete(fd)) closes++; return original.close(fd); };
+      assert.throws(read); assert.equal(opens, 1); assert.equal(reads, 0); assert.equal(closes, opens);
+    })().catch(error => { console.error(error); process.exitCode = 1; });
+  `;
+  for (const mode of ['markdown', 'sea']) {
+    const { directory } = fixture();
+    const result = spawnSync(process.execPath, ['-e', code, mode, directory], {
+      cwd: path.resolve(__dirname, '..'), timeout: 8000, encoding: 'utf8', windowsHide: true
+    });
+    assert.ifError(result.error); assert.equal(result.status, 0, `${mode}: ${result.stderr}`);
+  }
+});
 test('diagnostic rotation is exclusive and never replaces or removes old archives', () => {
   const { directory } = fixture(); const archive = path.join(directory, 'sidecar-interactions.previous.jsonl');
   fs.writeFileSync(archive, 'archive sentinel');

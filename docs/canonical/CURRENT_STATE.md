@@ -13,6 +13,11 @@ Der beauftragte RC158-Release bleibt bis zu neuen Paket- und Sicherheitsgates
 angehalten. Die bestätigten Diagnose-/Leselücken sind lokal mit gehaltenen,
 begrenzten I/O-Grenzen und Gegenproben korrigiert. Der unabhängige Gegenreview
 führte zu weiteren Cache-, Kollisions-, FIFO- und Identitätskorrekturen.
+Die frische SARIF-Gegenprüfung am Commit `b88c31b` bestätigte fünf weitere
+Restlücken bei Status-Buildwrites, drei Readern und Preview-Löschbindung.
+Sie sind lokal korrigiert; neue exakte 64-Bit-, kohärente Austausch- und echte
+Dateisystem-ABA-Regressionen bestehen. Zwei unabhängige Abschlussreviews
+fanden in diesem begrenzten Umfang keine verbleibenden reproduzierbaren P1/P2.
 Alte Funktionstests sind keine Sicherheitsfreigabe; frische Windows-/Mac-
 Paketnachweise fehlen noch. Es gibt noch keine veröffentlichten RC158-Pakete.
 Ursachen, Gegenprobe und eng begrenzter Lösungsumfang
