@@ -18,8 +18,21 @@ const {
 } = require('../plugins/data-secure/server/batch-pseudonym-context');
 
 const { testAsync: test, done, assert } = createSuite('Restart-stable batch pseudonym state');
+// A random base64url HMAC can contain a short name as an incidental substring.
+// Raw source words must remain forbidden, but bytes inside an opaque digest
+// are not a disclosure of that word. Delimiters also catch JSON keys/values.
+const RAW_SOURCE_WORDS = /(?<![A-Za-z0-9_-])(?:Max|Mustermann|Anna|Beispiel|Morgenstern|Erika|Nachfolger)(?![A-Za-z0-9_-])/u;
 
 async function main() {
+
+await test('raw-name oracle distinguishes opaque HMAC substrings from actual source words', () => {
+  const opaque = 'p1X9A38gv14_m5mP8IxMLTMaxC7JbkDx_v_HmUUXkCA';
+  assert.doesNotMatch(JSON.stringify({ binding: opaque }), RAW_SOURCE_WORDS);
+  for (const text of ['Max', 'Max Mustermann', 'Anna Beispiel', 'Projekt Morgenstern', 'Erika Nachfolger', 'Name: Anna']) {
+    assert.match(JSON.stringify({ illicit_value: text }), RAW_SOURCE_WORDS, text);
+  }
+  assert.match(JSON.stringify({ Max: opaque }), RAW_SOURCE_WORDS, 'raw identity keys are also forbidden');
+});
 
 await test('a private journal state contains only versioned random seed material', () => {
   const source = Buffer.alloc(32, 7);
@@ -196,7 +209,7 @@ await test('Standalone numbered reservations survive restart and new people rece
     assert.strictEqual(registry.assign('PERSON', 'Erika Nachfolger'), '[PERSON_003]');
     assert.strictEqual(registry.assign('PROJECT', 'Projekt Morgenstern'), '[PROJEKT_001]');
   });
-  assert.doesNotMatch(JSON.stringify(restored), /Max|Mustermann|Anna|Beispiel|Morgenstern|Erika|Nachfolger/u);
+  assert.doesNotMatch(JSON.stringify(restored), RAW_SOURCE_WORDS);
 });
 
 await test('separate batches have independent numbering and private lookup identities', async () => {

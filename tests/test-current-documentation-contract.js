@@ -7,6 +7,25 @@ const { createSuite } = require('./helpers');
 const { test, done, assert } = createSuite('Current documentation contract');
 const root = path.resolve(__dirname, '..');
 const read = (relative) => fs.readFileSync(path.join(root, relative), 'utf8');
+// Publication chronology is independent per product/platform. A newer
+// Windows/macOS release must not be hidden by an older all-platform release.
+function latestPublished(text, ...patterns) {
+  return patterns.flatMap(pattern => Array.from(text.matchAll(new RegExp(pattern.source, `${pattern.flags}g`))))
+    .sort((left, right) => Number(right[1]) - Number(left[1]))[0] || null;
+}
+const ALL_PRODUCTS = /### RC(\d+) – Standalone und Cowork auf allen Zielplattformen[\s\S]{0,400}?Quellcommit `([0-9a-f]{40})`/u;
+const ALL_STANDALONE = /### RC(\d+) – Standalone auf allen Zielplattformen[\s\S]{0,400}?Quellcommit `([0-9a-f]{40})`/u;
+const WINDOWS_MAC = /### RC(\d+) – Standalone Windows sowie macOS ZIP und zusätzlich DMG[\s\S]{0,450}?Quellcommit `([0-9a-f]{40})`/u;
+
+test('publication chronology preserves older Linux and Cowork when Windows/macOS advance', () => {
+  const published = `### RC151 – Standalone und Cowork auf allen Zielplattformen\nQuellcommit \`${'a'.repeat(40)}\`\n` +
+    `### RC157 – Standalone auf allen Zielplattformen\nQuellcommit \`${'b'.repeat(40)}\`\n` +
+    `### RC158 – Standalone Windows sowie macOS ZIP und zusätzlich DMG\nQuellcommit \`${'c'.repeat(40)}\``;
+  assert.strictEqual(latestPublished(published, ALL_PRODUCTS)[1], '151');
+  assert.strictEqual(latestPublished(published, ALL_PRODUCTS, ALL_STANDALONE)[1], '157');
+  assert.strictEqual(latestPublished(published, ALL_PRODUCTS, ALL_STANDALONE, WINDOWS_MAC)[1], '158');
+  assert.strictEqual(latestPublished(published, WINDOWS_MAC)[2], 'c'.repeat(40));
+});
 
 const userDocs = [
   'README.md',
@@ -86,28 +105,32 @@ test('release truth binds the published candidate while keeping human approval s
   const currentRc = `RC${match[1]}`;
   assert.match(release, /^Der aktuelle Quellstand ist\b/mu,
     'the next version cut requires a stable source-state marker even after publication');
-  const currentAll = /### RC(\d+) – Standalone und Cowork auf allen Zielplattformen[\s\S]{0,400}?Quellcommit `([0-9a-f]{40})`/u.exec(release);
+  const currentAll = latestPublished(release, ALL_PRODUCTS);
   const published = currentAll || /RC(\d+) ist als gemeinsamer, aber produktgetrennter Vorabkandidat[\s\S]{0,140}?Quellcommit `([0-9a-f]{40})` veröffentlicht/u.exec(release);
   assert.ok(published, 'release truth must name a commit-bound published candidate');
   const publishedRc = `RC${published[1]}`;
   const publishedVersion = version.replace(/rc\d+$/iu, `rc${published[1]}`);
   // A platform-only release must not silently relabel other product binaries.
   const macPublished = currentAll || /RC(\d+) ist als Standalone-macOS-Vorabkandidat aus Quellcommit\s+`([0-9a-f]{40})` veröffentlicht/u.exec(release);
-  const standaloneAll = /### RC(\d+) – Standalone auf allen Zielplattformen[\s\S]{0,400}?Quellcommit `([0-9a-f]{40})`/u.exec(release);
-  const standalonePublished = standaloneAll || currentAll || /### RC(\d+) – Standalone Windows sowie macOS ZIP und zusätzlich DMG[\s\S]{0,450}?Quellcommit `([0-9a-f]{40})`/u.exec(release);
-  const windowsPublished = standaloneAll || currentAll || /### RC(\d+) – Standalone Windows x64[\s\S]{0,350}?Quellcommit `([0-9a-f]{40})`/u.exec(release);
+  const standaloneAll = latestPublished(release, ALL_STANDALONE);
+  const standalonePublished = latestPublished(release, ALL_STANDALONE, ALL_PRODUCTS, WINDOWS_MAC);
+  const windowsPublished = latestPublished(release, ALL_STANDALONE, ALL_PRODUCTS, WINDOWS_MAC,
+    /### RC(\d+) – Standalone Windows x64[\s\S]{0,350}?Quellcommit `([0-9a-f]{40})`/u);
   const standaloneRc = standalonePublished ? `RC${standalonePublished[1]}` : null;
   const windowsRc = windowsPublished ? `RC${windowsPublished[1]}` : standaloneRc || publishedRc;
   const windowsVersion = version.replace(/rc\d+$/iu, `rc${windowsRc.slice(2)}`);
   const macRc = standaloneRc || (macPublished ? `RC${macPublished[1]}` : publishedRc);
   const macVersion = version.replace(/rc\d+$/iu, `rc${macRc.slice(2)}`);
-  const linuxVersion = standaloneAll ? windowsVersion : publishedVersion;
+  const linuxRc = standaloneAll ? `RC${standaloneAll[1]}` : publishedRc;
+  const linuxVersion = version.replace(/rc\d+$/iu, `rc${linuxRc.slice(2)}`);
   const readme = read('README.md');
   assert.strictEqual(readme.split(/\r?\n/u)[0],
-    standaloneAll
+    windowsRc === macRc && macRc === linuxRc && linuxRc !== publishedRc
       ? `# GBH DataSecure – Standalone ${standaloneRc} · Cowork ${publishedRc}`
-    : currentAll
+    : windowsRc === macRc && macRc === linuxRc && linuxRc === publishedRc
       ? `# GBH DataSecure – Standalone und Cowork ${publishedRc}`
+    : windowsRc === macRc && linuxRc !== publishedRc
+      ? `# GBH DataSecure – Standalone Windows/macOS ${standaloneRc} · Linux ${linuxRc} · Cowork ${publishedRc}`
     : windowsPublished
       ? `# GBH DataSecure – Standalone Windows ${windowsRc}, macOS ${macRc} · Linux und Cowork ${publishedRc}`
       : standaloneRc
@@ -147,7 +170,7 @@ test('release truth binds the published candidate while keeping human approval s
     if (!currentAll || standaloneAll) assert.ok(!readme.includes(`DataSecure-Privacy-Preflight-windows-x64-v${windowsVersion}.zip`),
       'Standalone-only publication must not invent a Cowork package');
   }
-  if (currentAll) {
+  if (currentAll && publishedRc === windowsRc && publishedRc === macRc && publishedRc === linuxRc) {
     for (const target of ['macos-x64', 'macos-arm64']) {
       assert.ok(readme.includes(`${downloadRoot}/v${publishedVersion}/DataSecure-Privacy-Preflight-${target}-v${publishedVersion}.zip`));
     }

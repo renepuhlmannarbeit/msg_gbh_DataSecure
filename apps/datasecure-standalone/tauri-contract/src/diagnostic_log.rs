@@ -202,11 +202,17 @@ mod tests {
         let mut sink = create(&directory).unwrap();
         assert_eq!(std::fs::read(directory.join("desktop-interactions.jsonl")).unwrap(), b"sentinel");
         sink.file.write_all(b"test\n").unwrap();
-        let own_name = std::fs::read_dir(&directory).unwrap().map(|entry| entry.unwrap().path())
-            .find(|path| path.file_name().unwrap().to_string_lossy().starts_with("desktop-interactions.") &&
-                path.file_name().unwrap() != "desktop-interactions.previous.jsonl").unwrap();
+        let own_names: Vec<_> = std::fs::read_dir(&directory).unwrap().map(|entry| entry.unwrap().path())
+            .filter(|path| path.file_name().unwrap().to_string_lossy().starts_with("desktop-interactions.") &&
+                path.file_name().unwrap() != "desktop-interactions.jsonl" &&
+                path.file_name().unwrap() != "desktop-interactions.previous.jsonl").collect();
+        // Directory enumeration order is unspecified, especially on APFS.
+        // Neither the original log nor its archive is the exclusive segment.
+        assert_eq!(own_names.len(), 1);
+        let own_name = &own_names[0];
         // Real diagnostic readers must be able to inspect the held segment.
         assert_eq!(std::fs::read(own_name).unwrap(), b"test\n");
+        assert_eq!(platform::identity(&File::open(own_name).unwrap()).unwrap(), sink.identity);
         assert_eq!(platform::identity(&sink.file).unwrap(), sink.identity);
         assert_eq!(std::fs::read(directory.join("desktop-interactions.previous.jsonl")).unwrap(), b"archive");
         drop(sink);

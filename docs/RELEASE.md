@@ -26,6 +26,18 @@ ersetzt keine noch fehlenden menschlichen Zielhost- oder Spezialabnahmen.
 
 ### RC158 – beauftragter Standalone-Vorabrelease, aktuell angehalten
 
+Die native Wiederholung am Quellcommit `26fdce9` bestand die frische
+Security-Kampagne `37390631300` und Pflicht-CI `37390631909`. Im Mac-Lauf
+`37390634725` wählte ein Rust-Test über die unbestimmte Verzeichnisreihenfolge
+das bestehende Hauptlog statt des exklusiven neuen Segments. Der Test schließt
+jetzt Hauptlog und Archiv ausdrücklich aus, verlangt genau ein neues Segment
+und bindet es zusätzlich an die Identität des gehaltenen Handles. Die
+Produktdiagnose wird dadurch nicht gelockert. Ein zweiter Test verwechselte
+die zufällige Zeichenfolge „Max“ innerhalb eines HMAC mit einem Klartextnamen;
+sein Orakel prüft nun vollständige Namenswörter und gezielte Klartext-Gegenbeispiele.
+Diese Korrekturen benötigen neue vollständige Paketgates; der alte Lauf ist
+kein bestandener Mac-Paketnachweis.
+
 Der Anwender hat am 05.10.2026 Commit und Push auf main sowie neue
 Windows- und macOS-Vorabpakete beauftragt. RC158 enthält die revalidierten
 Korrekturen DS-106–109. Windows x64 wird aus einem sauberen Quellcommit
