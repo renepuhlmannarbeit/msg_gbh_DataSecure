@@ -36,6 +36,27 @@ export const contactPhone = '+49 (040) 987654321';
 export const correctedPhone = '+49 (040) 987654322';
 export const correctionSentinel = 'SYNTHETISCHER KORREKTURTEST';
 
+export function assertPackagedMarkdownOcrOutputs(texts) {
+  assert.equal(texts.length, 2);
+  const graphics = '> Grafikhinweis: Die Grafik selbst ist nicht im Markdown enthalten. Lokal erkannter Bildtext ist übernommen, kann aber unvollständig sein. Bildinhalt und visuelle Anordnung werden nicht automatisch beschrieben.';
+  const confirmation = '> OCR-Kontaktwerte wurden lokal bestätigt oder korrigiert. Übrige OCR-Inhalte bleiben ungeprüft. Nicht anonymisiert: enthält Originalinhalte.';
+  const contactNotice = /^> OCR-Hinweis \(Bild\): Kontaktwerte in OCR-Zeile\(n\) \d+(?:, \d+)* können Zeichenfehler enthalten\. Vor einer Nutzung mit den Originalen vergleichen\. Auch hohe OCR-Konfidenzen bestätigen keine exakte Erkennung\.(?: Mindestens eine dieser Zeilen enthält Wörter mit geringer Erkennungssicherheit\.)?(?: Für mindestens eine dieser Zeilen fehlen vergleichbare Wortkonfidenzen\.)?(?: Die geometrische Nachprüfung lieferte abweichende Lesarten in OCR-Zeile\(n\) \d+(?:, \d+)*; die exakten Kontaktzeichen sind nicht bestätigt\.)?$/u;
+  const used = new Set();
+  for (const expected of contactReferences) {
+    const indexes = texts.flatMap((value, index) => value.includes(`E-Mail: ${expected.corrected}`) ? [index] : []);
+    assert.equal(indexes.length, 1, 'CORRECTED_MARKDOWN_CONTACT_DOCUMENT_MISSING');
+    assert.ok(!used.has(indexes[0]), 'MARKDOWN_CONTACT_DOCUMENTS_MERGED'); used.add(indexes[0]);
+    const lines = texts[indexes[0]].replaceAll('\r\n', '\n').split('\n').filter(line => line.trim());
+    assert.equal(lines.filter(line => line === graphics).length, 1);
+    assert.equal(lines.filter(line => line === confirmation).length, 1);
+    assert.equal(lines.filter(line => contactNotice.test(line)).length, 1);
+    const body = lines.filter(line => line !== graphics && line !== confirmation && !contactNotice.test(line)).join('\n');
+    assert.equal(body, `Name: Max Mustermann\nE-Mail: ${expected.corrected}\nTelefon: ${correctedPhone}\nJava bleibt.\n${correctionSentinel}`,
+      'MARKDOWN_COMPLETE_DOCUMENT_BODY_CHANGED');
+  }
+  assert.equal(used.size, texts.length, 'MARKDOWN_CONTACT_DOCUMENT_NOT_VERIFIED');
+}
+
 export function packagedOcrFixtures() {
   return new Map(contactReferences.map(({ name, email }) => {
     const canvas = image(true), context = canvas.getContext('2d');
@@ -184,17 +205,10 @@ export async function runPackagedOcrScenario({ request: initialRequest, restart,
     .map(name => fs.readFileSync(path.join(output.local_path, name), 'utf8'));
   if (!markdownOnly) assertPackagedOcrOutputs(texts);
   else {
-    assert.equal(texts.length, 2); assert.equal(complete.processing_mode, 'markdown-only');
-    for (const expected of contactReferences) {
-      const matching = texts.filter(value => value.includes(`E-Mail: ${expected.corrected}`));
-      assert.equal(matching.length, 1, 'CORRECTED_MARKDOWN_CONTACT_DOCUMENT_MISSING');
-      const output = matching[0];
-      assert.match(output, /Name: Max Mustermann/u); assert.match(output, /Java bleibt\./u);
-      assert.match(output, /SYNTHETISCHER KORREKTURTEST/u);
-      assert.ok(output.includes(`Telefon: ${correctedPhone}`));
-      assert.doesNotMatch(output, /\[PERSON_|\[EMAIL_|\[PHONE_|png_base64|data:image|Anonymisierungsstatus/u);
-      assert.ok(!output.includes(expected.email) && !output.includes(contactPhone), 'OLD_MARKDOWN_CONTACT_REUSED');
-    }
+    assert.equal(complete.processing_mode, 'markdown-only');
+    assertPackagedMarkdownOcrOutputs(texts);
+    assert.throws(() => assertPackagedMarkdownOcrOutputs([texts.join('\n'), '']),
+      'one merged document plus one empty document must never pass');
     assert.ok(!fs.readdirSync(output.local_path).some(name => /Identitaeten|Zuordnung/u.test(name)),
       'MARKDOWN_REVIEW_MUST_NOT_CREATE_PRIVACY_MAPPINGS');
   }
