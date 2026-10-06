@@ -399,8 +399,9 @@ test('native smoke isolates data, Documents, diagnostics and WebView before prod
   assert.doesNotMatch(nativeSmoke, /EnvironmentVariables\.Clear\(\)/u);
   assert.match(host, /Remove-StandaloneDesktopEnvironmentOverrides/u);
   assert.match(host, /WEBVIEW2_/u);
-  assert.match(nativeSmoke, /if \(\$ValidateIsolationOnly\)[\s\S]*GetTempPath\(\)[\s\S]*GetFullPath\(\$env:LOCALAPPDATA\)/u,
-    'the WebView profile uses normal per-user application-data ACLs, not checkout or temporary-file ACLs');
+  assert.match(nativeSmoke, /\$nativeProfileParent = \[System\.IO\.Path\]::GetFullPath\(\[System\.IO\.Path\]::GetTempPath\(\)\)/u,
+    'the NEW private smoke root uses the OS temporary namespace, never the checkout or an existing product profile');
+  assert.match(nativeSmoke, /New-NativeCleanupContext \$nativeProfileParent/u);
   assert.doesNotMatch(nativeSmoke, /\$env:(?:USERPROFILE|HOME|LOCALAPPDATA|APPDATA|TEMP|TMP|CODEX_HOME)\s*=/iu);
   for (const key of ['USERPROFILE', 'LOCALAPPDATA', 'APPDATA', 'TEMP', 'DATASECURE_STANDALONE_DOCUMENTS_DIR']) {
     assert.ok((isolation + rust).includes(key));

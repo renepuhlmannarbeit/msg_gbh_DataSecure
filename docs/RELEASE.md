@@ -38,6 +38,20 @@ sein Orakel prüft nun vollständige Namenswörter und gezielte Klartext-Gegenbe
 Diese Korrekturen benötigen neue vollständige Paketgates; der alte Lauf ist
 kein bestandener Mac-Paketnachweis.
 
+Die Windows-Paketgegenprobe an `26fdce9` scheiterte im Diagnose-Orakel,
+nicht in den bereits bestandenen paketgebundenen IPC-/Review-Szenarien:
+Windows 11 Build 26200 verweigerte den relativen NtCreateFile-Zugriff auf
+ein frisches direktes Kind von LocalAppData mit `STATUS_REPARSE_POINT_ENCOUNTERED`,
+obwohl Win32-Metadaten und fsutil keinen Reparsepunkt meldeten. Derselbe echte
+Rust-Sink besteht im temporären Namespace auch optimiert; derselbe Paketkandidat
+besteht dort native Haupt-/Prüfseitenladung und erfolgreiche IPC-Antworten.
+Der Harness legt sein neues, vollständig gebundenes und isoliertes Profil nun
+dort an. OBJ_DONT_REPARSE, exklusive Neuanlage, strikte Verzeichnis- und
+Cleanup-Bindung bleiben unverändert. Daraus wird keine Antivirusursache und
+keine allgemeine Aussage über LocalAppData auf anderen Windows-Geräten abgeleitet.
+Der bisherige Checkpoint ohne Desktopprotokoll ist kein Nachweis eines
+WebView-Initialisierungsfehlers. Neue abschließende Paketgates stehen weiter aus.
+
 Der Anwender hat am 05.10.2026 Commit und Push auf main sowie neue
 Windows- und macOS-Vorabpakete beauftragt. RC158 enthält die revalidierten
 Korrekturen DS-106–109. Windows x64 wird aus einem sauberen Quellcommit

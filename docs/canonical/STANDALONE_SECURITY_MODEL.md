@@ -1,6 +1,6 @@
 # DataSecure Standalone – Sicherheitsmodell
 
-Stand: 05.10.2026 · einschließlich DS-104 bis DS-108
+Stand: 06.10.2026 · einschließlich DS-104 bis DS-109
 
 ## Geltungsbereich
 

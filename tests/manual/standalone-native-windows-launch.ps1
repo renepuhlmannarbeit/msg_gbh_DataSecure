@@ -200,11 +200,11 @@ if (-not $ValidateIsolationOnly -and $ExpectedSha256) {
 }
 $expectedVersion = $archiveIdentity.Version
 $productDirectory = $archiveIdentity.ProductDirectory
-$nativeProfileParent = if ($ValidateIsolationOnly) {
-    [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd('\')
-} else {
-    [System.IO.Path]::GetFullPath($env:LOCALAPPDATA).TrimEnd('\')
-}
+# Keep the NEW, handle-bound smoke profile in the operating-system temporary
+# namespace. Some Windows hosts return STATUS_REPARSE_POINT_ENCOUNTERED for
+# relative native opens of a direct child of LocalAppData, even when Win32
+# metadata reports no link. Do not weaken OBJ_DONT_REPARSE to bypass that.
+$nativeProfileParent = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd('\')
 $cleanupContext = New-NativeCleanupContext $nativeProfileParent
 $testRoot = $cleanupContext.Root
 $extractedRoot = Join-Path $testRoot 'candidate'

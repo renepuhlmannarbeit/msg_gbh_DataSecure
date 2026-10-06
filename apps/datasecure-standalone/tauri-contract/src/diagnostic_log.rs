@@ -193,6 +193,21 @@ mod platform {
 mod tests {
     use super::*;
     #[test]
+    fn fresh_nested_sink_writes_a_readable_first_record() {
+        let base = std::env::temp_dir();
+        let root = base.join(format!(".tmp-standalone-native-{:032x}",
+            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        std::fs::create_dir(&root).unwrap();
+        let directory = root.join("temp/SecureDataMsg-Standalone");
+        std::fs::create_dir_all(&directory).unwrap();
+        platform::directory(&directory).unwrap();
+        append(&directory, &serde_json::json!({ "event": "application_started" }));
+        assert_eq!(std::fs::read(directory.join("desktop-interactions.jsonl")).unwrap(), b"{\"event\":\"application_started\"}\n");
+        *STATE.lock().unwrap() = State::Initial;
+        assert!(root.file_name().unwrap().to_string_lossy().starts_with(".tmp-standalone-native-"));
+        std::fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
     fn exclusive_sink_preserves_existing_log_and_archive() {
         let directory = std::env::temp_dir().join(format!("datasecure-diagnostic-test-{}-{}", std::process::id(),
             std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
