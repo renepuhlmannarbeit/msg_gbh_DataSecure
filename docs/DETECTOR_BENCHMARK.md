@@ -347,6 +347,29 @@ RC158 archives and release authority remain unchanged. Native workflow results
 must name the exact branch commit and architecture; human Gatekeeper/Finder/
 VoiceOver and correction-field UAT remain separate.
 
+The authorised native run
+[37460941660](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/37460941660)
+passed on Intel and Apple Silicon at commit
+`86b9f757caf1b7df8731d787d007c9b77dde88da`. Both architectures passed 47
+Rust tests, warning-free Clippy, actual supervisor/cancellation probes and
+44 converter groups; two Windows-only cases were explicitly skipped, never
+counted as passed. The real built app, extracted ZIP (direct and LaunchServices)
+and mounted DMG successfully loaded both pages and completed correlated private
+IPC, with normal quit and observed sidecar termination. For each architecture,
+the two repeated builds of its ZIP were byte-identical. The exact archives
+passed mixed-format/privacy/error/review/
+follow-up/restart/history scenarios and the real-pixel contact-correction
+scenario above. ZIP inventory/Mach-O and DMG hashes also passed after local
+download. Exact archive hashes and failed earlier attempts are recorded in
+[CURRENT_STATE](canonical/CURRENT_STATE.md).
+
+These package-bound decisions are private IPC, not human Tauri/WebView edits.
+The full 72-variant quality corpus has not been measured against these exact
+Mac archives; the Windows quality report and the narrower Mac package scenario
+must not be merged into such a claim. Ad-hoc signing is not notarisation.
+Nine raw OCR email errors, human reference/correction-field acceptance and
+release authority remain open. Main and released RC158 bytes are unchanged.
+
 ## External evaluation order
 
 1. Evaluate DocCloak.Core's regex-only path in an isolated, pinned test environment. This is

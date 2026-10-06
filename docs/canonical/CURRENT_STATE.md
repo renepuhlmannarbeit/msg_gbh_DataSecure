@@ -491,6 +491,44 @@ angelegt und auf Link-/Pfadumleitung geprüft. Die erweiterte Gesamtsuite
 (83 Basis + 119 direkte); die elf aktualisierten Paketverträge einschließlich
 der zusätzlichen echten Leerer-Checkout-Fixture bestehen separat. Beide fehlgeschlagenen
 Mac-Versuche ersetzen keinen Bundle-/Paket-/nativen Appnachweis.
+
+Der dritte Engineering-Lauf
+[37460941660](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/37460941660)
+bindet Quellcommit `86b9f757caf1b7df8731d787d007c9b77dde88da`. Apple Silicon
+(`macos-14`) und Intel (`macos-15-intel`) bestehen den vollständigen Workflow:
+jeweils 47 native Rust-Tests,
+Clippy ohne Warnungen, echte Supervisor-/Abbruchgegenfälle, 44 reale
+Konvertergruppen und zwei ausdrücklich nicht als PASS gezählte Windows-
+Spezialfälle, Appbau und Ad-hoc-Signatur-/ABI-Prüfung. Haupt- und Prüfseite
+antworten erfolgreich über die korrelierte private IPC; das gebaute Bundle,
+entpackte ZIP (direkter Start und LaunchServices) und gemountete DMG werden
+nativ gestartet und ordentlich beendet. Das ZIP entsteht zweimal bytegleich.
+Der tatsächliche Paket-Sidecarpfad besteht gemischte Konvertierung, konkrete
+CSV-Fehlerdatei, passive PDF/PPTX-Inhalte, Person/Firma, Folgegruppen,
+laufweite Entscheidungen sowie den oben beschriebenen echten PNG-Kontakt-
+Korrektur-/Neustartpfad mit vollständiger Ausgabeprüfung. Dies sind reale
+Prozess-/IPC-Tests, keine menschlichen Reviewklicks.
+
+Apple-Silicon-ZIP: 599 Einträge/115321882 Bytes, SHA-256
+`bdb85166368c4106e38b40a7931fc67dba8bb8a79f955ff132b7a86210e278ca`;
+DMG: 112246366 Bytes, SHA-256
+`a64427bf195ba7b5b0301201d3d6c40b139b01a9881adf31958317df8030e677`.
+Beide Dateien und Prüfsummen sind lokal unter
+`dist/engineering-macos-ocr-contact-20261006-37460941660/macos-arm64/`
+gesichert. Intel-ZIP: 599 Einträge/118613725 Bytes, SHA-256
+`57671b4ea67c382a6f051634f2ac7b8c363d200277d54195507cf70e1fd61b38`;
+DMG: 116139306 Bytes, SHA-256
+`62785e15f20b6185193af87e1f2f1b15f1cec5b63edaa569157bd2d3ccb60902`.
+Intel-Dateien sind im parallelen `macos-x64/`-Unterordner gesichert.
+ZIP-Inventar-/Mach-O-Verifier und DMG-Hashvergleich bestehen für beide
+Architekturen auch nach dem Download. Die vollständigen Läufe stehen lokal
+in `dist/macos-ocr-contact-37460941660-{arm64,x64,complete}.log`.
+Ad-hoc-Signierung ist keine Apple-Notarisierung. Menschliche Gatekeeper-/
+Finder-/VoiceOver-/Kontaktfeldabnahme, die 72-Varianten-Qualitätsmessung am
+exakten Mac-Archiv und allgemeine OCR-Genauigkeit sind damit nicht belegt.
+Die lokalen Kontakt-, Paket- und Testpfadverträge bestehen zusätzlich unter
+dem tatsächlichen gepinnten Node 22.23.2, nicht nur dem Engineering-Host-Node.
+
 Cowork-Build/Plugin-ZIP bleiben im unreinen Quellbaum wegen Herkunftssperre
 beziehungsweise fehlendem neuen Archiv nicht bestanden; keine Umgehung.
 

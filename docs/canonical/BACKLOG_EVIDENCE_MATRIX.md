@@ -34,6 +34,37 @@ Paketbindung sind oben separat belegt. Native Seiten-/IPC-Smokes sind keine
 bediente GUI-Kampagne; Developer-ID/Notarisierung und menschliche N3/N4-
 Spezialabnahmen bleiben offen. Der ungeklärte Kolleginnen-Ausfall bleibt BL-010.47.
 
+**Zusätzlicher Engineering-Qualitäts-/Paketnachweis vom 06.10.2026 (unveröffentlicht):**
+Der ausdrücklich freigegebene Branch
+`codex/ocr-contact-native-revalidation-20261006` ist gepusht. Main und alle
+veröffentlichten Archive bleiben unverändert; der Anwender hat das rote
+Roh-OCR-Gate für diesen isolierten Testbranch ausdrücklich akzeptiert.
+Die frische synthetische 72-Varianten-Vollmessung bindet Referenz, Policy und
+Konverter-/Modellbytes. Nach expliziter Kontaktkorrektur und gebundener
+Entitätsprüfung sind 72 Ausgaben publiziert, 310 sensible Vorkommen ohne
+bekannte finale Reste und keine verlorenen Sachwörter/Fachanker gemessen.
+Roh-OCR enthält weiterhin neun falsche E-Mail-Lesarten; das unveränderte Gate
+meldet nur `QUALITY_FINDINGS_OPEN`, nicht PASS.
+
+Das exakte Windows-Engineering-ZIP besteht realen Konvertierungs-, Fehler-,
+Person-/Firmen-/Folgegruppen-/History-/Neustart- und OCR-Kontaktkorrekturpfad;
+native Windows-Haupt-/Prüfseiten-IPC ist separat bestanden. Der Mac-Lauf
+[37460941660](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/37460941660)
+bindet `86b9f757caf1b7df8731d787d007c9b77dde88da` und besteht vollständig
+auf Intel und Apple Silicon: je 47 Rust-Tests, Clippy, reale Supervisor- und
+44 Konvertergruppen, zwei korrekt übersprungene Windows-Spezialfälle, App-
+Signatur/ABI, erfolgreicher nativer Haupt-/Prüfseitenstart mit korrelierter
+IPC, bytegleicher ZIP-Doppelbau und tatsächlicher paketierter Review-/OCR-
+Korrektur-/Neustartpfad, LaunchServices und identische gemountete DMG.
+ZIP-Inventar/Mach-O und DMG-Prüfsummen bestehen nach lokalem Download erneut.
+Alle fünf Engineering-Archivhashes, vorherige fehlgeschlagene Versuche und
+Grenzen stehen im [Iststand](CURRENT_STATE.md).
+
+Dies ist keine bediente GUI-Abnahme, Apple-Notarisierung, menschliche
+Referenzannotation, volle Qualitätsmessung am exakten Mac-Archiv oder neue
+Releasefreigabe. BL-010.51/BL-050.6 bleiben wegen dieser genau benannten
+Restarbeit **in Arbeit**; BL-010.50 bleibt eine separate menschliche Kampagne.
+
 **Frühere RC157-Veröffentlichung (weiterhin aktueller Linux-Download):** Quellcommit
 `111737d28021b6989ffe8d563b58daa9cbae610f` ist auf main und als Standalone-RC
 für Windows, macOS Intel, macOS Apple Silicon und Linux veröffentlicht.
