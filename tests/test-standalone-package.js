@@ -3,18 +3,60 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
+const os = require('node:os');
 const { execFileSync } = require('node:child_process');
 const { randomUUID } = require('node:crypto');
 const { test } = require('node:test');
 
 const root = path.resolve(__dirname, '..');
 
+function ensureFixtureParent(repositoryRoot) {
+  const repositoryInfo = fs.lstatSync(repositoryRoot);
+  assert.ok(repositoryInfo.isDirectory() && !repositoryInfo.isSymbolicLink());
+  assert.equal(fs.realpathSync.native(repositoryRoot), repositoryRoot);
+  const parent = path.join(repositoryRoot, 'dist');
+  try { fs.mkdirSync(parent); } catch (error) { if (error.code !== 'EEXIST') throw error; }
+  const parentInfo = fs.lstatSync(parent);
+  assert.ok(parentInfo.isDirectory() && !parentInfo.isSymbolicLink());
+  assert.equal(fs.realpathSync.native(parent), parent);
+  return parent;
+}
+
+test('package contract fixture works without a dist parent and preserves an existing parent', () => {
+  const temporary = fs.realpathSync.native(os.tmpdir());
+  const scope = fs.mkdtempSync(path.join(temporary, 'datasecure-package-contract-'));
+  const parent = path.join(scope, 'dist'), sentinel = path.join(parent, 'preserved.txt');
+  try {
+    assert.equal(fs.existsSync(parent), false, 'fresh source checkout has no dist');
+    assert.equal(ensureFixtureParent(scope), parent);
+    fs.writeFileSync(sentinel, 'existing content', { flag: 'wx' });
+    assert.equal(ensureFixtureParent(scope), parent);
+    assert.equal(fs.readFileSync(sentinel, 'utf8'), 'existing content');
+  } finally {
+    assert.equal(path.dirname(scope), temporary);
+    assert.match(path.basename(scope), /^datasecure-package-contract-/u);
+    assert.equal(fs.realpathSync.native(scope), scope);
+    if (fs.existsSync(sentinel)) {
+      assert.ok(fs.lstatSync(sentinel).isFile() && !fs.lstatSync(sentinel).isSymbolicLink());
+      fs.unlinkSync(sentinel);
+    }
+    if (fs.existsSync(parent)) {
+      assert.ok(fs.lstatSync(parent).isDirectory() && !fs.lstatSync(parent).isSymbolicLink());
+      fs.rmdirSync(parent);
+    }
+    fs.rmdirSync(scope);
+  }
+});
+
 test('unpublished candidate builds reject unsafe or existing output before altering saved files', () => {
   const script = path.join(root, 'scripts/build-standalone-package.mjs');
   assert.throws(() => execFileSync(process.execPath, [script, '--engineering-directory', '../release'],
     { stdio: 'pipe' }), /STANDALONE_BUILD_ARGUMENT_INVALID/u);
   const name = `engineering-contract-${randomUUID()}`;
-  const directory = path.join(root, 'dist', name);
+  // A source-only checkout has no dist/. Create only that known fixture
+  // parent, refusing an existing link/redirect and preserving all its content.
+  const parent = ensureFixtureParent(root);
+  const directory = path.join(parent, name);
   fs.mkdirSync(directory);
   const initial = fs.lstatSync(directory);
   const sentinel = path.join(directory, 'preserved.txt');
@@ -253,12 +295,16 @@ test('package smoke exercises a real failed CSV without exposing a false result 
 
 test('package smoke binds actual review decisions and real restart to the extracted bundled runtime', async () => {
   const smoke = fs.readFileSync(path.join(root, 'tests', 'test-standalone-package-smoke.mjs'), 'utf8');
-  assert.match(smoke, /await runPackagedReviewScenario\(\{ request, sourceDirectory, restart: async/u);
-  const restart = smoke.slice(smoke.indexOf('await runPackagedReviewScenario'), smoke.indexOf('const log =',
-    smoke.indexOf('await runPackagedReviewScenario')));
+  assert.match(smoke, /const restartReviewSidecar = async \(\) =>/u);
+  assert.match(smoke, /await runPackagedReviewScenario\(\{ request, sourceDirectory, restart: restartReviewSidecar \}\)/u);
+  assert.match(smoke, /await runPackagedOcrScenario\(\{ request, sourceDirectory, restart: restartReviewSidecar \}\)/u);
+  const restart = smoke.slice(smoke.indexOf('const restartReviewSidecar = async'),
+    smoke.indexOf('await runPackagedReviewScenario'));
   assert.match(restart, /childProcess\.spawn\(childProcessPath\(runtime\)/u);
   assert.match(restart, /action: 'shutdown'/u);
   assert.match(restart, /closePromise/u);
+  assert.match(restart, /\(\{ request \} = protocolClient\(child, stderr\)\); activeRequest = request/u);
+  assert.match(restart, /return request/u);
   assert.doesNotMatch(restart, /plugins\/data-secure\/server|process\.execPath/u);
   const scenario = fs.readFileSync(path.join(root, 'tests', 'helpers', 'standalone-packaged-review.mjs'), 'utf8');
   for (const clause of ['originalAmbiguities', 'redact_organization', 'run_complete', 'failure names survive',

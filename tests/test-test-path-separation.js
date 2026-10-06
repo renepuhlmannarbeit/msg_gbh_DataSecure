@@ -51,6 +51,12 @@ test('native conversion resources are required by PKG-04, not silently added to 
   assert.match(pkg04, /Invoke-Checked 'npm.cmd' @\('run', 'test:standalone:conversion'\)/u);
 });
 
+test('standalone package source contracts run in every product gate as well as the target gate', () => {
+  const suite = require('./run-product-suite');
+  assert.ok(suite.baseFiles.includes('tests/test-standalone-package.js'));
+  assert.match(pkg.scripts['test:standalone'], /node tests\/test-standalone-package\.js(?: &&|$)/u);
+});
+
 test('fast documentation validation cannot trigger SEA, apps or Claude CLI', () => {
   assert.strictEqual(pkg.scripts['test:docs'], 'npm run test:docs:fast');
   assert.doesNotMatch(pkg.scripts['test:docs:fast'], /sea|status-app|claude-local/iu);

@@ -1114,6 +1114,15 @@ ohne PASS; die unveränderte strenge Wiederholung bestätigt zehn eigene Prozess
 und keine TCP-/UDP-Endpunkte im Messfenster. Bedienkampagne für OCR ist ausführbar, aber ohne echte Bedienung
 NOT_RUN. Separater Testbranch und bestehender Mac-Workflow für beide
 Architekturen sind ausdrücklich autorisiert; Resultate bis Abschluss offen.
+Zwei native Versuche stoppen an Testbefunden: nicht kanonischer TEMP-Pfad,
+danach veraltete Erwartung der gemeinsam genutzten Neustart-Closure. Die
+Kontakt-/Resume-Verträge bestehen im zweiten Versuch auf Intel und ARM.
+Fixture und Strukturvertrag sind korrigiert; der Paketvertrag ist nun auch
+im allgemeinen Produktgate statt nur im Zielgate enthalten. Eine unabhängige
+Leerer-Checkout-Gegenprobe sichert seinen bisher fehlenden `dist/`-Elternordner.
+Erweitertes Produktgate: 202 Dateien grün, elf aktuelle Paketverträge separat
+grün. Fehlgeschlagene native Versuche bleiben dokumentiert; Mac-Bundle-/
+Paketnachweis weiterhin erst nach erfolgreichem Workflowabschluss.
 Main/Releases unverändert, strenges Qualitätsgate bleibt rot. Genau diese
 Restpunkte bleiben **in Arbeit**, nicht pauschal „blockiert“ oder erledigt.
 

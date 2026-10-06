@@ -474,6 +474,23 @@ Migrationstests bestehen bereits nativ auf beiden Architekturen. Bundlebau,
 nativer Appstart und Mac-Paketworkflow wurden in diesem fehlgeschlagenen
 Versuch nicht erreicht; native Mac-Resultate stehen bis dem korrigierten
 Workflowabschluss aus.
+Im zweiten Versuch `37459238369` (`a1be843a…`) bestehen die 13 Kontaktverträge
+und der tatsächliche kontrollierte Kontakt-/Resume-/Publikationspfad auf
+beiden Mac-Architekturen. Danach scheitert ein alter Paket-Strukturtest, der den
+Neustartcode noch inline statt in der inzwischen gemeinsam von Entitäts- und
+OCR-Szenario verwendeten Closure erwartet. Derselbe Fehler ist lokal auf
+Windows reproduzierbar. Der Test prüft nun beide gebundenen Aufrufe sowie
+Shutdown, bestätigtes Ende, echten Prozessstart und Transport-Neubindung.
+Er wird zusätzlich in jedes allgemeine Produktgate aufgenommen; zuvor war
+er nur über `test:standalone` erreichbar. Die frühere grüne 201-Dateien-Suite
+hat ihn deshalb nicht abgedeckt. Der unabhängige Gegenreview findet zusätzlich
+eine fehlende Fixture-Elternanlage im frischen Source-Checkout ohne `dist/`;
+dieser bekannte Elternordner wird nun ohne Löschen bestehender Inhalte
+angelegt und auf Link-/Pfadumleitung geprüft. Die erweiterte Gesamtsuite
+`dist/product-contact-native-macos-fixture-20261006.log` besteht mit 202 Dateien
+(83 Basis + 119 direkte); die elf aktualisierten Paketverträge einschließlich
+der zusätzlichen echten Leerer-Checkout-Fixture bestehen separat. Beide fehlgeschlagenen
+Mac-Versuche ersetzen keinen Bundle-/Paket-/nativen Appnachweis.
 Cowork-Build/Plugin-ZIP bleiben im unreinen Quellbaum wegen Herkunftssperre
 beziehungsweise fehlendem neuen Archiv nicht bestanden; keine Umgehung.
 
