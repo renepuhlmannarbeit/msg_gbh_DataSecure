@@ -469,6 +469,27 @@ Native Mac-Resultate stehen bis tatsächlichem Workflowabschluss aus.
 Cowork-Build/Plugin-ZIP bleiben im unreinen Quellbaum wegen Herkunftssperre
 beziehungsweise fehlendem neuen Archiv nicht bestanden; keine Umgehung.
 
+#### Zusätzlicher Datei-ID-Gatebefund (BL-010.52)
+
+Die erneute Gesamtsuite traf einen echten Windows-Gegenfall der historischen
+Input-Migration: zwei verschiedene Datei-IDs `9570149209941131` und
+`9570149209941132` kollabierten als JavaScript-Number. Dadurch wurde eine fremde
+sichtbare Datei irrtümlich als bereits vorhandener Recovery-Hardlink bewertet.
+Alle Identitäts-Stats dieses Moduls verwenden nun exakte BigInts; Number-
+Identitäten werden ausdrücklich abgelehnt, begrenzte Leselängen bleiben durch
+den bestehenden Held-Reader validiert. Ein unabhängiger Read-only-Gegenreview
+bestätigt die echte erhaltene Dateisystem-Gegenprobe und alle Lock-/Owner-/
+Recovery-Stat-Aufrufe. 16 Migrationstests einschließlich exakter 64-Bit- und
+echter FS-Identität bestehen; dieser Test gehört jetzt zusätzlich zum
+freigegebenen Mac-Workflow. Keine historischen Anwenderdaten wurden verändert.
+
+Das abschließende integrierte Produktgate besteht mit 201 Testdateien
+(82 Basis + 119 direkte), Docs-/Link-/Versionsprüfung, strenger lokaler
+Claude-Strukturprüfung und `git diff --check`. Der isolierte Windows-Build,
+Paketverifier, echte Paketworkflow und native Seiten-/IPC-Starts sind separat
+oben gebunden. Das ist der begrenzte Engineering-Nachweis, keine Aufhebung des
+weiterhin roten Roh-OCR-Gates und keine neue Releasefreigabe.
+
 ## Entstehungs- und Nachweischronologie
 
 Die folgenden lokalen Zwischenstände und damaligen offenen Punkte sind historisch;

@@ -121,6 +121,7 @@ jobs:
       - name: Run product, conversion, Rust and workflow contracts
         run: |
           node tests/test-uat-fixture-generation.js
+          node tests/test-legacy-input-migration.js
           npm run test:standalone
       - name: Run the real isolated converter-worker boundary
         run: npm run test:standalone:conversion

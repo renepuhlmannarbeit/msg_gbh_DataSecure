@@ -1117,6 +1117,14 @@ Architekturen sind ausdrücklich autorisiert; Resultate bis Abschluss offen.
 Main/Releases unverändert, strenges Qualitätsgate bleibt rot. Genau diese
 Restpunkte bleiben **in Arbeit**, nicht pauschal „blockiert“ oder erledigt.
 
+**Zusätzlicher E0-Gatebefund BL-010.52:** Historische Windows-Input-Migration
+verwechselte zwei verschiedene 64-Bit-Datei-IDs durch Number-Rundung.
+Exakte BigInt-Identität schließt den reproduzierten Recovery-/Lock-Randfall;
+16 Regressionen und unabhängige echte Dateisystem-Gegenprobe bestehen.
+Das integrierte Produktgate ist mit 201 Dateien grün, Mac-Workflow führt die
+Migration zusätzlich aus. Technische Korrektur erledigt, keine Änderung
+vorhandener Anwenderdaten und keine pauschale Zielhost-/Releaseabnahme.
+
 #### BL-041.17 – zweiter Astra-Gegenreview, 12.09.2026
 
 Diese nummerierten Befunde bleiben als Fehlerursache und Regressionsvertrag

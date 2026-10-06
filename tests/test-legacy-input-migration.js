@@ -20,10 +20,28 @@ function fixture() {
 
 const claimName = (jobId, original) => `.processing_${jobId}_${original}`;
 function identity(file) {
-  const stat = fs.lstatSync(file);
+  const stat = fs.lstatSync(file, { bigint: true });
   return { dev: stat.dev, ino: stat.ino, size: stat.size, mtimeMs: stat.mtimeMs,
     sha256: crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex') };
 }
+
+test('64-bit Windows file identities never collapse to a rounded collision or accept Number stats', () => {
+  const first = { dev: 1n, ino: 9570149209941131n };
+  const second = { dev: 1n, ino: 9570149209941132n };
+  assert.strictEqual(Number(first.ino), Number(second.ino), 'counterexample must collide when rounded');
+  assert.strictEqual(_test.sameFile(first, second), false);
+  assert.strictEqual(_test.sameFile(first, { ...first }), true);
+  assert.strictEqual(_test.sameFile({ dev: 1, ino: Number(first.ino) }, { dev: 1, ino: Number(second.ino) }), false);
+  const f = fixture(); fs.mkdirSync(f.input);
+  const original = path.join(f.input, 'exact.txt');
+  fs.writeFileSync(original, 'actual held identity');
+  const exact = fs.lstatSync(original, { bigint: true });
+  assert.strictEqual(_test.recoveryDestination(f.input, 'exact.txt', exact).alreadyLinked, true);
+  const unrelated = { dev: exact.dev, ino: exact.ino + 1n };
+  const recovered = _test.recoveryDestination(f.input, 'exact.txt', unrelated);
+  assert.strictEqual(recovered.alreadyLinked, false);
+  assert.strictEqual(path.basename(recovered.destination), 'exact_wiederhergestellt_2.txt');
+});
 
 test('fresh install writes only a private version marker and never creates Input', () => {
   const f = fixture();

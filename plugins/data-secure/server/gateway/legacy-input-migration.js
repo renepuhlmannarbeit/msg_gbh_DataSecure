@@ -16,12 +16,16 @@ const LOCK_QUARANTINE_PREFIX = `${LOCK_NAME}.quarantine.`;
 const CLAIM_PATTERN = /^\.processing_([a-z0-9]+_[0-9a-f]{8})_(.+)$/i;
 
 function sameFile(left, right) {
-  return left.dev === right.dev && left.ino === right.ino;
+  // Windows file IDs can exceed Number.MAX_SAFE_INTEGER. Never compare
+  // rounded IDs (including recovery destinations and owned lock deletion).
+  return typeof left.dev === 'bigint' && typeof left.ino === 'bigint' &&
+    typeof right.dev === 'bigint' && typeof right.ino === 'bigint' &&
+    left.dev === right.dev && left.ino === right.ino;
 }
 
 function secureDirectory(directory, label) {
-  const named = fs.lstatSync(directory);
-  const opened = fs.statSync(directory);
+  const named = fs.lstatSync(directory, { bigint: true });
+  const opened = fs.statSync(directory, { bigint: true });
   if (!named.isDirectory() || named.isSymbolicLink() || !opened.isDirectory() ||
       named.dev !== opened.dev || named.ino !== opened.ino) {
     throw new SafeError(`${label} ist kein sicherer lokaler Ordner.`);
@@ -32,12 +36,12 @@ function secureDirectory(directory, label) {
 function readOwner(jobDir) {
   let descriptor;
   try {
-    const jobStat = fs.lstatSync(jobDir);
+    const jobStat = fs.lstatSync(jobDir, { bigint: true });
     if (!jobStat.isDirectory() || jobStat.isSymbolicLink()) return { state: 'invalid' };
     const ownerPath = path.join(jobDir, '.owner.json');
     descriptor = fs.openSync(ownerPath, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0) | (fs.constants.O_NONBLOCK || 0));
-    const opened = fs.fstatSync(descriptor);
-    const named = fs.lstatSync(ownerPath);
+    const opened = fs.fstatSync(descriptor, { bigint: true });
+    const named = fs.lstatSync(ownerPath, { bigint: true });
     if (!opened.isFile() || named.isSymbolicLink() || !sameFile(opened, named)) return { state: 'invalid' };
     const owner = JSON.parse(readHeldBytes(descriptor, opened.size, fs, 4096).toString('utf8'));
     if (!owner || !Number.isSafeInteger(owner.pid) ||
@@ -59,7 +63,7 @@ function recoveryDestination(inputDir, originalName, claimedStat) {
     const name = index === 0 ? originalName : `${base}_wiederhergestellt_${index + 1}${ext}`;
     const destination = path.join(inputDir, name);
     try {
-      const existing = fs.lstatSync(destination);
+      const existing = fs.lstatSync(destination, { bigint: true });
       if (existing.isFile() && !existing.isSymbolicLink() && sameFile(existing, claimedStat)) {
         return { destination, alreadyLinked: true };
       }
@@ -110,8 +114,8 @@ function readLock(target) {
   let descriptor;
   try {
     descriptor = fs.openSync(target, fs.constants.O_RDONLY | (fs.constants.O_NOFOLLOW || 0) | (fs.constants.O_NONBLOCK || 0));
-    const opened = fs.fstatSync(descriptor);
-    const named = fs.lstatSync(target);
+    const opened = fs.fstatSync(descriptor, { bigint: true });
+    const named = fs.lstatSync(target, { bigint: true });
     if (!opened.isFile() || named.isSymbolicLink() || !sameFile(opened, named)) throw new Error('invalid');
     const value = JSON.parse(readHeldBytes(descriptor, opened.size, fs, 4096).toString('utf8'));
     if (!value || value.schema !== SCHEMA || !Number.isSafeInteger(value.pid) ||
@@ -144,7 +148,7 @@ function removeOwnedLock(lock, purpose, options = {}) {
   if (fs.existsSync(quarantine)) throw new Error('LEGACY_INPUT_MIGRATION_LOCK_CHANGED');
   if (typeof options.beforeLockQuarantine === 'function') options.beforeLockQuarantine({ ...lock, purpose });
   fs.renameSync(lock.target, quarantine);
-  const moved = fs.lstatSync(quarantine);
+  const moved = fs.lstatSync(quarantine, { bigint: true });
   if (!moved.isFile() || moved.isSymbolicLink() || !sameFile(moved, lock.stat)) {
     restoreChangedLock(quarantine, lock.target);
     throw new Error('LEGACY_INPUT_MIGRATION_LOCK_CHANGED');
@@ -164,7 +168,7 @@ function acquireLock(directory, options = {}) {
       const value = { schema: SCHEMA, pid: process.pid, created_at: new Date(now).toISOString(), nonce: crypto.randomBytes(16).toString('hex') };
       writeFully(descriptor, JSON.stringify(value), fs);
       fs.fsyncSync(descriptor);
-      const stat = fs.fstatSync(descriptor);
+      const stat = fs.fstatSync(descriptor, { bigint: true });
       fs.closeSync(descriptor);
       descriptor = undefined;
       return { target, stat, value };
@@ -229,7 +233,7 @@ function migrateLegacyInputV1(options = {}) {
         !SUPPORTED.has(path.extname(originalName).toLowerCase())) { failures++; continue; }
     const claim = path.join(input, entry.name);
     try {
-      const claimedStat = fs.lstatSync(claim);
+      const claimedStat = fs.lstatSync(claim, { bigint: true });
       if (!entry.isFile() || !claimedStat.isFile() || claimedStat.isSymbolicLink()) { failures++; continue; }
       const ownership = readOwner(path.join(jobs, jobId));
       if (ownership.state === 'invalid') { failures++; continue; }
@@ -250,13 +254,13 @@ function migrateLegacyInputV1(options = {}) {
   for (const plan of plans) {
     if (plan.destination.alreadyLinked) { claimsPreserved++; continue; }
     try {
-      const currentBefore = fs.lstatSync(plan.claim);
+      const currentBefore = fs.lstatSync(plan.claim, { bigint: true });
       if (!currentBefore.isFile() || currentBefore.isSymbolicLink() || !sameFile(currentBefore, plan.claimedStat)) {
         throw new Error('LEGACY_INPUT_CLAIM_CHANGED');
       }
       fs.linkSync(plan.claim, plan.destination.destination);
-      const currentClaim = fs.lstatSync(plan.claim);
-      const currentDestination = fs.lstatSync(plan.destination.destination);
+      const currentClaim = fs.lstatSync(plan.claim, { bigint: true });
+      const currentDestination = fs.lstatSync(plan.destination.destination, { bigint: true });
       if (!currentClaim.isFile() || currentClaim.isSymbolicLink() ||
           !currentDestination.isFile() || currentDestination.isSymbolicLink() ||
           !sameFile(currentClaim, plan.claimedStat) || !sameFile(currentDestination, plan.claimedStat)) {
@@ -286,4 +290,4 @@ function migrateLegacyInputV1(options = {}) {
   }
 }
 
-module.exports = { SCHEMA, migrateLegacyInputV1, readMarker, _test: { recoveryDestination, readOwner, writeMarker, acquireLock, releaseLock } };
+module.exports = { SCHEMA, migrateLegacyInputV1, readMarker, _test: { sameFile, recoveryDestination, readOwner, writeMarker, acquireLock, releaseLock } };
