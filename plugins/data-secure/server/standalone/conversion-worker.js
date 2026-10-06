@@ -142,7 +142,8 @@ async function convertBuffer(bytes, extension, options = {}) {
         validateMarkdownExtraction(response.result);
         if (response.result.source_type !== type) throw error('CONVERSION_RESPONSE_INVALID');
         if (!inputFlushed) { finish('CONVERSION_INPUT_INCOMPLETE'); return; }
-        finish(null, createMarkdownExtraction({ source_type: type, markdown: response.result.markdown, coverage: response.result.coverage }));
+        finish(null, createMarkdownExtraction({ source_type: type, markdown: response.result.markdown, coverage: response.result.coverage,
+          ...(response.result.ocr_contacts ? { ocr_contacts: response.result.ocr_contacts } : {}) }));
       } catch { finish('CONVERSION_RESPONSE_INVALID'); }
     });
     if (!stopped) child.stdin.end(input, failure => {

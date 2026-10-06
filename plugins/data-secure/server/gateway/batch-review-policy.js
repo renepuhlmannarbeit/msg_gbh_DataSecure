@@ -94,17 +94,29 @@ function reviewedBatchText(input, decisions, options = {}) {
   }
   const reviewedById = new Map((reviewedDraft?.ambiguities || []).map((candidate) => [candidate.ambiguity_id, candidate]));
   const activeDecisions = [];
+  const activeIds = new Set();
   for (const decision of decisions) {
-    if (ambiguityById.has(decision.ambiguity_id)) {
+    const prior = reviewedById.get(decision.ambiguity_id);
+    // Earlier publications can resolve a candidate and renumber the remaining
+    // ones. A Standalone replay is bound to the immutable source occurrence,
+    // never to a mutable display ordinal. No fuzzy text or nearest match.
+    const current = reviewedDraft && input.allowOrganizationReview === true && prior
+      ? (input.ambiguities || []).find(candidate => candidate.type === prior.type &&
+          candidate.replacement_kind === prior.replacement_kind &&
+          candidate.original_start === prior.original_start && candidate.original_end === prior.original_end)
+      : ambiguityById.get(decision.ambiguity_id);
+    if (current) {
       if (reviewedDraft) {
-        const current = ambiguityById.get(decision.ambiguity_id);
-        const prior = reviewedById.get(decision.ambiguity_id);
         if (!prior || prior.type !== current.type || prior.original_start !== current.original_start ||
             prior.original_end !== current.original_end) {
           throw localReviewError('LOCAL_REVIEW_CANCELLED', 'Die lokale Stapelentscheidung gehört zu einer anderen Fundstelle. Es wurde nichts freigegeben.');
         }
       }
-      activeDecisions.push(decision);
+      if (activeIds.has(current.ambiguity_id)) {
+        throw localReviewError('LOCAL_REVIEW_CANCELLED', 'Die lokale Stapelentscheidung enthält eine doppelte Fundstelle. Es wurde nichts freigegeben.');
+      }
+      activeIds.add(current.ambiguity_id);
+      activeDecisions.push({ ...decision, ambiguity_id: current.ambiguity_id });
       continue;
     }
     if (!reviewedDraft) {
@@ -115,7 +127,6 @@ function reviewedBatchText(input, decisions, options = {}) {
     // Accept that vanished decision only when the immutable reviewed draft is
     // the same source, it was explicitly redacted, and the freshly generated
     // text contains the registry's exact bound marker but no raw spelling.
-    const prior = reviewedById.get(decision.ambiguity_id);
     const organization = decision.decision === 'redact_organization' && input.allowOrganizationReview === true;
     const resolver = organization ? options.resolvedOrganizationReplacement : options.resolvedPersonReplacement;
     if (!prior || !(decision.decision === 'redact' || organization) || !['person_prose_ambiguous', 'person_residual_ambiguous'].includes(prior.type) ||

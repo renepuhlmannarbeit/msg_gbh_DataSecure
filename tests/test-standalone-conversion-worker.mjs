@@ -9,6 +9,7 @@ import { writeStandaloneRuntime } from '../scripts/lib/standalone-runtime-projec
 import { collectConversionRuntime, writeConversionRuntime } from '../scripts/lib/standalone-conversion-runtime.mjs';
 import { removePackageSmokeScope } from './helpers/standalone-package-scope.mjs';
 import { createCases as createAdversarialCases } from '../scripts/generate-adversarial-golden-corpus.mjs';
+import { qualityCases } from '../scripts/generate-quality-corpus.mjs';
 
 const require = createRequire(import.meta.url);
 const { decodePng } = require('../plugins/data-secure/server/images/png');
@@ -18,6 +19,7 @@ const { anonymizeMarkdown } = require('../plugins/data-secure/server/gateway/com
 const { zipStore } = require('./lib/zip');
 const { opcControlEntries } = require('./lib/opc');
 const { createPlatformCases } = require('./helpers/platform-case');
+const { contactQuality, qualityNotice } = require('../plugins/data-secure/server/standalone/ocr-quality');
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const target = process.platform === 'win32' && process.arch === 'x64' ? 'windows-x64'
   : process.platform === 'darwin' && ['x64', 'arm64'].includes(process.arch) ? `macos-${process.arch}`
@@ -81,6 +83,34 @@ childProcess.spawn = (...args) => {
 const { test, snapshot: testCounts } = createPlatformCases();
 
 try {
+  await test('OCR contact warnings retain line locations and never silently repair text', () => {
+    const source = 'Kontakt: qa11@dquality.example.invalid\nTelefon: +49 30 555 1011\nFHIR';
+    const scored = { confidence: 99, blocks: [{ paragraphs: [{ lines: [
+      { text: 'Kontakt: qa11@dquality.example.invalid', words: [{ text: 'Kontakt:', confidence: 99 },
+        { text: 'qa11@dquality.example.invalid', confidence: 53 }] },
+      { text: 'Telefon: +49 30 555 1011', words: [{ text: '+49', confidence: 99 }] }
+    ] }] }] };
+    const quality = contactQuality(scored, source);
+    assert.deepEqual(quality, { contact_lines: [1, 2], low_confidence_lines: [1], unscored_contact_lines: [], disagreement_lines: [] });
+    const notice = qualityNotice(quality);
+    assert.match(notice, /OCR-Hinweis \(Bild\).*OCR-Zeile\(n\) 1, 2/u);
+    assert.match(notice, /geringer Erkennungssicherheit/u);
+    assert.doesNotMatch(notice, /qa11|dquality|555|99/u);
+    assert.equal(source, 'Kontakt: qa11@dquality.example.invalid\nTelefon: +49 30 555 1011\nFHIR');
+    const high = contactQuality({ blocks: [{ paragraphs: [{ lines: [{ text: source.split('\n')[0],
+      words: [{ confidence: 99 }] }] }] }] }, source.split('\n')[0]);
+    assert.deepEqual(high.low_confidence_lines, []);
+    assert.match(qualityNotice(high, 2), /Seite 2.*Auch hohe OCR-Konfidenzen/u,
+      'high word confidence never establishes exact contact extraction');
+    const missing = contactQuality(null, 'E-Mail: qa11 quality example invalid');
+    assert.deepEqual(missing.unscored_contact_lines, [1]);
+    assert.match(qualityNotice(missing), /fehlen vergleichbare Wortkonfidenzen/u);
+    assert.equal(qualityNotice(contactQuality(scored, 'FHIR\nKubernetes')), '', 'discarded OCR contacts have no warning');
+    assert.deepEqual(contactQuality({ blocks: [{ paragraphs: [{ lines: [
+      { text: 'same@example.invalid', words: [{ confidence: 99 }] },
+      { text: 'same@example.invalid', words: [{ confidence: 20 }] }
+    ] }] }] }, 'same@example.invalid').low_confidence_lines, [1]);
+  });
   await test('offline runtime is pinned, deterministic, target-specific and self-contained', () => {
     const a = collectConversionRuntime(repo, target), b = collectConversionRuntime(repo, target);
     assert.deepEqual(a.map(item => [item.relative, hash(item.bytes)]), b.map(item => [item.relative, hash(item.bytes)]));
@@ -288,6 +318,84 @@ try {
   });
   const canvas = image(), png = canvas.toBuffer('image/png'), jpeg = canvas.toBuffer('image/jpeg');
   const bitmap = decodePng(png), bmp = encodeBmp(bitmap);
+  await test('real offline image OCR carries a local contact-quality warning without changing its pixels or values', async () => {
+    const contactImage = image(true), context = contactImage.getContext('2d');
+    context.fillStyle = '#111111'; context.font = '27px Arial';
+    ['Boris Quastenbach arbeitet bei Falkenquell AG.', 'Kontakt: qa11@quality.example.invalid',
+      'Telefon: +49 30 555 1011', 'FHIR', 'Kubernetes'].forEach((line, index) => context.fillText(line, 35, 36 + index * 37));
+    try {
+      const bytes = contactImage.toBuffer('image/png');
+      const result = await convert(bytes, '.png');
+      assert.ok(result.coverage.reason_codes.includes('OCR_CONTACT_VALUES_UNVERIFIED'));
+      assert.match(result.markdown, /> OCR-Hinweis \(Bild\): Kontaktwerte in OCR-Zeile\(n\)/u);
+      assert.match(result.markdown, /Kontakt: \S+@\S+/u);
+      assert.match(result.markdown, /Telefon: \+49 30 555 1011/u);
+      assert.doesNotMatch(result.markdown, /\[EMAIL_|\[PHONE_/u, 'conversion warns but never repairs or anonymizes');
+      assert.equal(result.ocr_contacts.length, 2);
+      assert.deepEqual(result.ocr_contacts.map(item => item.kind), ['email', 'phone']);
+      for (const item of result.ocr_contacts) assert.ok(result.markdown.slice(item.start, item.end).trim());
+      const privacy = await extractWideSourceForPrivacy(bytes, '.png', { convertBuffer });
+      assert.ok(privacy.sourceExtractionCoverage.reason_codes.includes('OCR_CONTACT_VALUES_UNVERIFIED'),
+        'real conversion warning survives the separate privacy extraction contract');
+      assert.match(privacy.markdown, /OCR-Hinweis \(Bild\)/u);
+      assert.deepEqual(privacy.ocrContacts, result.ocr_contacts);
+      assert.ok(children.every(entry => entry.closed));
+    } finally { contactImage.width = 1; contactImage.height = 1; }
+  });
+  await test('real scan PDF contact warnings name only the affected page; native text remains unchanged', async () => {
+    const contactImage = image(true), context = contactImage.getContext('2d');
+    context.fillStyle = 'black'; context.font = '40px Arial';
+    context.fillText('E-Mail: test-person@example.invalid', 35, 90);
+    context.fillText('Telefon: +49 30 555 1000', 35, 170);
+    try {
+      const source = pdf([{ text: 'Native E-Mail: exact@example.invalid' }, { image: contactImage.toBuffer('image/jpeg') }]);
+      const result = await convert(source, '.pdf');
+      assert.match(result.markdown, /Native E-Mail: exact@example\.invalid/u);
+      assert.ok(result.coverage.reason_codes.includes('OCR_CONTACT_VALUES_UNVERIFIED'));
+      assert.match(result.markdown, /> OCR-Hinweis \(Seite 2\): Kontaktwerte/u);
+      assert.doesNotMatch(result.markdown, /OCR-Hinweis \(Seite 1\)/u);
+      assert.equal(result.ocr_contacts.length, 2);
+      assert.ok(result.ocr_contacts.every(item => item.page === 2));
+      assert.ok(result.ocr_contacts.some(item => result.markdown.slice(item.start, item.end) === 'test-person@example.invalid'));
+      const native = await convert(pdf([{ text: 'E-Mail: exact@example.invalid' }]), '.pdf');
+      assert.ok(!native.coverage.reason_codes.includes('OCR_CONTACT_VALUES_UNVERIFIED'));
+      assert.doesNotMatch(native.markdown, /OCR-Hinweis/u);
+      assert.ok(!native.ocr_contacts, 'native PDF text never acquires OCR contact review candidates');
+    } finally { contactImage.width = 1; contactImage.height = 1; }
+  });
+  const qualityFixtures = await qualityCases();
+  await test('real bounded line OCR preserves umlauts in the five independently found weak-image counterexamples', async () => {
+    for (const file of ['development/quality-009-clean.jpg', 'development/quality-010-clean.jpeg',
+      'development/quality-011-clean.bmp', 'development/quality-037-jpeg-noise.jpg', 'holdout/quality-056-jpeg-noise.jpeg']) {
+      const fixture = qualityFixtures.find(entry => entry.file === file);
+      assert.ok(fixture, file);
+      const bytes = fixture.bytes, before = hash(bytes);
+      const result = await convert(bytes, path.extname(file));
+      assert.match(result.markdown, /Synthetischer Härtetest/u, file);
+      assert.match(result.markdown, /Die Messung beträgt 42 Prozent\./u, file);
+      assert.equal(hash(bytes), before);
+      assert.ok(children.every(entry => entry.closed));
+    }
+  });
+  await test('real contact re-segmentation reports disagreement but never replaces a value on the basis of two matching crops', async () => {
+    for (const [file, expected] of [['development/quality-020-clean.jpg', 'qa31@quality.example.invalid'],
+      ['development/quality-044-clean.bmp', 'qa71@quality.example.invalid'],
+      ['development/quality-019-rotated.png', 'qa30@quality.example.invalid'],
+      ['development/quality-037-jpeg-noise.jpg', 'qa60@quality.example.invalid'],
+      ['development/quality-043-rotated.bmp', 'qa70@quality.example.invalid'],
+      ['holdout/quality-055-low-resolution.png', 'qa90@quality.example.invalid'],
+      ['development/quality-009-clean.jpg', 'qa12@quality.example.invalid']]) {
+      const fixture = qualityFixtures.find(entry => entry.file === file);
+      assert.ok(fixture, file);
+      const before = hash(fixture.bytes), result = await convert(fixture.bytes, path.extname(file));
+      if (file === 'development/quality-009-clean.jpg') assert.ok(result.markdown.includes(expected), file);
+      else assert.match(result.markdown, /geometrische Nachprüfung lieferte abweichende Lesarten/u, file);
+      assert.ok(result.coverage.reason_codes.includes('OCR_CONTACT_VALUES_UNVERIFIED'));
+      assert.match(result.markdown, /Auch hohe OCR-Konfidenzen bestätigen keine exakte Erkennung/u);
+      assert.equal(hash(fixture.bytes), before);
+      assert.ok(children.every(entry => entry.closed));
+    }
+  });
   for (const [extension, bytes] of [['.png', png], ['.bmp', bmp], ['.jpeg', jpeg]]) {
     await test(`packaged real ${extension} offline OCR retains identifiers with honest incomplete coverage`, async () => {
       const result = await convert(bytes, extension);

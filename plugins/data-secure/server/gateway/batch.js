@@ -104,6 +104,7 @@ const privateWorkStore = Object.freeze({
   writeFile: (...args) => createPrivateWorkStore({ privateRoot: batchRoot() }).writeFile(...args),
   readFile: (...args) => createPrivateWorkStore({ privateRoot: batchRoot() }).readFile(...args)
 });
+const contactStore = require('./ocr-contact-store').createContactStore({ privateWorkStore, workPath });
 
 function plainExactPendingEntry(state, item) {
   migrateLegacyBatchState(state, { privateWorkStore, writeState });
@@ -430,6 +431,7 @@ const { resultCursor, parseResultCursor, listBatchResults, completedLocalOnlyCan
 });
 
 const { captureDeferredReviewInput } = createBatchReviewCapture({
+  contactStore,
   anonymizeNext,
   exactPendingEntry: plainExactPendingEntry,
   packageIdForItem,
@@ -442,6 +444,7 @@ const { markDeferredReview, deferredReviewPlan } = createBatchReviewState({
 });
 
 const { publishReviewedBatch } = createBatchReviewPublication({
+  contactStore,
   anonymizeNext,
   exactPendingEntry: plainExactPendingEntry,
   packageIdForItem,

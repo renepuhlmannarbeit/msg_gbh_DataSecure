@@ -1,6 +1,6 @@
 # Aktueller Testvertrag
 
-Stand: 23.09.2026 · 3.2.0-rc158
+Stand: 06.10.2026 · 3.2.0-rc158
 
 Das vollständige chronologische Testjournal bis RC84 liegt unverändert im
 [Archiv](archive/2026-09/testing/TESTING_HISTORY_THROUGH_RC84.md). Diese Datei
@@ -42,6 +42,95 @@ Dokumentinhalte gehören niemals in diese Spur. Es gibt keinen neuen Schalter
 im normalen Umwandlungsablauf und keine globale Umgebungsänderung durch Tests.
 
 Golden-Erwartungen werden im normalen Prüflauf niemals neu geschrieben.
+Der zusätzliche [Qualitätsbenchmark](DETECTOR_BENCHMARK.md#local-standalone-quality-benchmark-bl-0505)
+misst bekannte Restangaben und unnötige Ersetzungen getrennt von Extraktion und
+synthetischer Nachprüfung: `npm run benchmark:quality -- --output <neuer Ordner>`.
+Er benutzt echte projizierte Standalone-Runtime/Converter/OCR, keine GUI oder
+exakte Releasepaketbindung. 60 logische Fälle ergeben 72 Varianten; die vier
+Referenzklassen sind Person, Unternehmen, E-Mail und Telefon, nicht sämtliche
+personenbezogenen Kategorien oder komplexe Office-Objekte. Berichte einschließlich
+Quellwerten bleiben lokal. `npm run test:quality` prüft den Auswerter selbst in
+jedem Produktprofil und vor `test:standalone`; der ressourcenintensive Benchmark
+bleibt opt-in und gibt bei Befunden/nicht bewertbaren Ausgaben Exitcode 1 zurück.
+Referenz-Doppelprüfung durch Menschen und native macOS-Ausführung: NOT_RUN.
+
+`--native-only` führt nur die 40 Varianten ohne OCR aus und bleibt ausdrücklich
+ein Teilnachweis. Der Lauf bindet Runtime- und Auswerterhashes vor der Ausführung;
+Änderungen während des Laufs erzeugen `QUALITY_EVALUATION_SOURCE_CHANGED`.
+Die Reviewreferenz wird an die tatsächlich im Anonymisierungspfad extrahierte
+Quellfassung gebunden, nicht an eine anders formatierte Markdown-only-Tabelle.
+`npm run gate:quality -- <lokale QUALITAET.json>` prüft aktuelle Quellbindung,
+vollständige Korpusausführung, bestätigtes Workerende und neu aggregierte
+Endmetriken. Teil-, alte, gestoppte und inhaltsschädigende Ergebnisse bleiben rot.
+Das ist ein synthetisches Engineering-Regressionsgate, keine menschliche oder
+rechtliche Freigabe. Der ausführbare Gegenfalltest prüft außerdem tatsächliche
+Publikation, Firmen-/Personenentscheidungen und dokumentübergreifenden Neustart;
+die Cowork- und echten Namens-/Credential-Gates werden nicht gelockert.
+
+Die erneute OCR-/Anredenprüfung vom 06.10.2026 umfasst 52 fokussierte Fälle:
+26 Auswerter-, acht Berichts-, neun tatsächliche Privacy-Publikations- und neun
+geometrische OCR-Unit-Verträge. Personengebundene DS-012-Anreden werden als
+gezielte Datenschutzentfernung gezählt; gewöhnliche Wörter, akademische Titel
+und Verluste in beiden Extraktionswegen dürfen dadurch nicht verschwinden.
+`privacy_extraction.input_source` unterscheidet den tatsächlich erfassten
+Privacy-Eingang vom expliziten Markdown-Fallback automatischer Veröffentlichungen.
+OCR-Unit-Verträge sind keine echten Konverterläufe. Diese werden separat durch
+`node tests/test-standalone-conversion-worker.mjs` mit 46 Windows-Gruppen geprüft:
+originale Pixel, fünf Umlautgegenfälle, unveränderte Kontakt-Primärlesart trotz
+abweichender Wort-Crops, Zeitgrenzen, Fehler und bestätigtes Workerende. Der
+72-Varianten-Bericht `dist/quality-contact-invariant-final-20261006` bleibt wegen neun
+OCR-veränderten E-Mails rot, trotz 72 geprüfter Publikationen und fehlender
+bekannter finaler Referenzreste/Fachwortverluste. Keine neue Mac-/GUI-/Paket-
+oder menschliche Abnahme wird damit behauptet.
+
+Die anschließende Kontaktprüfung (06.10.2026, unveröffentlicht) ergänzt
+13 exakte Kontaktvertragsfälle und einen realen Zweidokument-IPC-/Publikations-
+ablauf mit kontrolliertem Konvertertext. Insgesamt bestehen 66 fokussierte Fälle
+plus diese Integration. Die vollständige Produktsuite besteht mit 201 Testdateien
+(82 Basis- und 119 direkten Testdateien). Tatsächliche Konverter/OCR bleiben separat in 46 Windows-
+Gruppen belegt. Kontaktentscheidungen gelten vor Personenreservierung und
+Anonymisierung; sie sind keine PII-Ausnahme. Manipulation, CR-Zeilenenden,
+gemischte Kontaktzeilen, 400-/256-Zeichen-/Framegrenzen, Neustart, Credential-
+Rohwertschutz und ein echter 401-Dateien-Abbruch bei 200 Quellen sind abgedeckt.
+Ein bisheriger Artefakttest mit Kontaktwarnung ohne Koordinaten wurde durch eine
+gültige OCR-Quelle und ausdrückliche Ablehnungstests ersetzt, nicht durch eine
+Lockerung des Produktionsvertrags.
+
+`dist/quality-contact-review-final-source-20261006` ist die neue stabile
+Vollmessung: 72/72 Ausgaben, 55 synthetische Kontaktbestätigungen, neun explizite
+Referenzkorrekturen und 202 Entitäts-Vorkommensentscheidungen; kein fataler Fehler,
+bestätigtes Workerende. Finale Referenzreste/Fachwortverluste und Änderungen nach
+Korrektur sind null; die rohe Extraktion enthält weiterhin neun E-Mail-Fehler.
+Das Qualitätsgate bleibt deshalb absichtlich rot mit `QUALITY_FINDINGS_OPEN`.
+65 Privacy-Eingänge wurden tatsächlich erfasst, sieben automatische Ausgaben
+verwenden den ausgewiesenen Markdown-Fallback; 32 rohe OCR-Privacy-Eingänge
+werden zusätzlich separat gemessen. Keine neue GUI-/Mac-/Releasearchiv- oder
+menschliche Referenzabnahme. Paketbau und ZIP-Verifikation sind bei uncommittierter
+Herkunft beziehungsweise fehlendem neuen Archiv weiterhin nicht bestanden.
+
+Die weitere Paketgegenprüfung ergänzt `tests/helpers/standalone-packaged-ocr-review.mjs`:
+echte PNGs und gepackter Offline-Konverter, unterschiedliche ausdrückliche
+Kontaktkorrekturen, Vertagen/Neustart auch nach der Korrektur und Kontrolle des
+tatsächlichen Folge-Privacy-Kontexts. Vollständige Körper- statt Teilblockprüfung
+verhindert Falsch-PASS bei zusätzlichen Kontakten oder Sachtexten. Negative
+Orakel gehören zu `test-native-smoke-integrity.js` (20 Fälle); fehlende/veränderte
+Konverterbytes machen den Qualitätsbericht unabhängig von JS-Identität alt.
+
+Native Bedienkampagnen werden getrennt vorbereitet:
+
+```powershell
+node tests/manual/standalone-native-review-campaign.mjs --prepare-ocr <exaktes-ZIP>
+node tests/manual/standalone-native-review-campaign.mjs --launch <ausgegebener-Testbereich>
+```
+
+Diese OCR-Kampagne benötigt drei tatsächlich bediente Tauri-/WebView-Sitzungen:
+vor Kontaktentscheidung vertagen, nach ausdrücklicher Korrektur BEIDER
+Kontaktdateien im danach folgenden normalen
+Entitätsreview vertagen, nach erneutem Start korrigierten Quellkontext bestätigen
+und beide Dateien im selben Fenster abschließen. Ohne Bedien-Attestierung,
+erfolgreiche IPC, unverändertes Paket/Quellen und korrekte Ausgaben kein PASS.
+Paket-Sidecar-Automatik ersetzt diese Bedienkampagne nicht.
+
 `npm run test:golden` vergleicht ausschließlich gegen die versionierte
 Erwartungsdatei. Nur nach einer ausdrücklich beabsichtigten und fachlich
 geprüften Verhaltensänderung darf `npm run update:golden` verwendet und dessen

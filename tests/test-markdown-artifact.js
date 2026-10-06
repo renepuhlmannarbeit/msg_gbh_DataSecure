@@ -79,8 +79,13 @@ test('empty text has an honest zero-byte digest rather than an invented placehol
 });
 
 test('incomplete conversion is retained with its explicit non-anonymized grade and reasons', () => {
+  const contactText = 'E-Mail: audit@example.invalid';
+  const contactMap = [{ start: 8, end: contactText.length, page: 1, line: 1, kind: 'email' }];
   for (const code of COVERAGE_REASON_CODES) {
-    const result = extraction('Text', 'docx', { status: 'incomplete', reason_codes: [code] });
+    const result = code === 'OCR_CONTACT_VALUES_UNVERIFIED'
+      ? createMarkdownExtraction({ source_type: 'pdf', markdown: contactText,
+        coverage: { status: 'incomplete', reason_codes: [code] }, ocr_contacts: contactMap })
+      : extraction('Text', 'docx', { status: 'incomplete', reason_codes: [code] });
     assert.strictEqual(validateMarkdownExtraction(result), result);
     const artifact = createMarkdownArtifact(result, artifactId);
     assert.strictEqual(artifact.manifest.extraction_grade, 'incomplete');
@@ -88,8 +93,17 @@ test('incomplete conversion is retained with its explicit non-anonymized grade a
     assert.strictEqual(artifact.manifest.anonymized, false);
     assert.strictEqual(validateMarkdownArtifact(artifact.manifest, artifact.markdown), artifact.manifest);
   }
-  const result = extraction('Text', 'pdf', { status: 'incomplete', reason_codes: [...COVERAGE_REASON_CODES] });
+  const result = createMarkdownExtraction({ source_type: 'pdf', markdown: contactText,
+    coverage: { status: 'incomplete', reason_codes: [...COVERAGE_REASON_CODES] }, ocr_contacts: contactMap });
   assert.strictEqual(result.coverage.reason_codes.length, COVERAGE_REASON_CODES.length);
+});
+
+test('a contact warning requires exact OCR provenance rather than a legacy unbound fixture', () => {
+  assert.throws(() => extraction('Text', 'pdf', { status: 'incomplete',
+    reason_codes: ['OCR_CONTACT_VALUES_UNVERIFIED'] }), errorCode('MARKDOWN_EXTRACTION_INVALID'));
+  assert.throws(() => createMarkdownExtraction({ source_type: 'pdf', markdown: 'Text',
+    coverage: complete(), ocr_contacts: [{ start: 0, end: 4, page: 1, line: 1, kind: 'contact' }] }),
+  errorCode('MARKDOWN_EXTRACTION_INVALID'));
 });
 
 test('coverage rejects missing, unknown, duplicate, unsorted and contradictory reasons', () => {

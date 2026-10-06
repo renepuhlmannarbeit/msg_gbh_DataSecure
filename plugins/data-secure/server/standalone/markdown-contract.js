@@ -9,6 +9,7 @@ const PROCESSING_MODE = MODES.MARKDOWN;
 const SOURCE_TYPES = Object.freeze(['txt', 'md', 'csv', 'docx', 'xlsx', 'pptx', 'pdf', 'png', 'jpeg', 'bmp']);
 const COVERAGE_REASON_CODES = Object.freeze([
   'DOCX_HEADER_FOOTER_EXCLUDED_BY_POLICY',
+  'OCR_CONTACT_VALUES_UNVERIFIED',
   'OCR_NOT_VERIFIED',
   'OCR_TEXT_EMPTY',
   'SOURCE_COVERAGE_UNVERIFIED',
@@ -68,29 +69,39 @@ function validateCoverage(coverage) {
 }
 
 function validateMarkdownExtraction(value) {
-  if (!exactKeys(value, ['schema', 'processing_mode', 'anonymized', 'source_type', 'markdown', 'coverage']) ||
+  const keys = ['schema', 'processing_mode', 'anonymized', 'source_type', 'markdown', 'coverage'];
+  if (!exactKeys(value, Object.hasOwn(value || {}, 'ocr_contacts') ? [...keys, 'ocr_contacts'] : keys) ||
       value.schema !== EXTRACTION_SCHEMA || value.processing_mode !== PROCESSING_MODE ||
       value.anonymized !== false || !SOURCE_VALUES.has(value.source_type)) throw new MarkdownContractError();
   validateMarkdownText(value.markdown);
   validateCoverage(value.coverage);
+  const contactWarning = value.coverage.reason_codes.includes('OCR_CONTACT_VALUES_UNVERIFIED');
+  const hasContacts = Object.hasOwn(value, 'ocr_contacts');
+  if (hasContacts) require('../core/ocr-contact-review').validateContacts(value.ocr_contacts, value.markdown, value.source_type);
+  // A warned OCR contact without an exact provenance map must not skip the
+  // mandatory confirmation hook during anonymisation.
+  if (contactWarning !== (hasContacts && value.ocr_contacts.length > 0)) throw new MarkdownContractError();
   return value;
 }
 
 function createMarkdownExtraction(input) {
-  if (!exactKeys(input, ['source_type', 'markdown', 'coverage'])) throw new MarkdownContractError();
+  const keys = ['source_type', 'markdown', 'coverage'];
+  if (!exactKeys(input, Object.hasOwn(input || {}, 'ocr_contacts') ? [...keys, 'ocr_contacts'] : keys)) throw new MarkdownContractError();
   const value = {
     schema: EXTRACTION_SCHEMA,
     processing_mode: PROCESSING_MODE,
     anonymized: false,
     source_type: input.source_type,
     markdown: input.markdown,
-    coverage: input.coverage
+    coverage: input.coverage,
+    ...(Object.hasOwn(input, 'ocr_contacts') ? { ocr_contacts: input.ocr_contacts } : {})
   };
   validateMarkdownExtraction(value);
   value.coverage = Object.freeze({
     status: value.coverage.status,
     reason_codes: Object.freeze([...value.coverage.reason_codes])
   });
+  if (value.ocr_contacts) value.ocr_contacts = Object.freeze(value.ocr_contacts.map(item => Object.freeze({ ...item })));
   return Object.freeze(value);
 }
 

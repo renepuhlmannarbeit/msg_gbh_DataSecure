@@ -1,7 +1,7 @@
 # Vertrag: einfacher lokaler Sammelreview v2
 
 Status: verbindlicher Produktvertrag · Stories: BL-012.9, BL-012.10, BL-043.1,
-BL-032.1, BL-021.1 · Entscheidungen: DS-068, DS-096
+BL-032.1, BL-021.1, BL-050.6 · Entscheidungen: DS-068, DS-096, DS-108
 
 ## Produktentscheidung
 
@@ -83,6 +83,56 @@ Bedienung vereinfachen, ohne die lokale Datenschutzgrenze zu verschieben:
   bereits gebundener exakter vollständiger Name wird in Folgedokumenten
   automatisch anonymisiert. „Beibehalten“ gilt nur für die geprüften offenen
   Stellen, innerhalb desselben Sammelreviews aber stets einheitlich.
+
+## Standalone-Erweiterung: OCR-Kontakte vor der Anonymisierung (06.10.2026, unveröffentlicht)
+
+Ein syntaktisch plausibler OCR-Kontakt ist noch kein nachweislich richtig
+erkannter Kontakt. Übernommene Kontaktzeilen aus PDF-/Bild-OCR erhalten deshalb
+exakte UTF-16-Spannen mit Seite und OCR-Zeile. Im Anonymisierungszweck bleibt die
+Datei zunächst offen. Das bestehende private Prüffenster zeigt vor dem
+Personen-/Unternehmensreview **Wurde dieser Kontaktwert richtig erkannt?** und
+bietet **OCR-Wert unverändert bestätigen** oder **Kontaktwert korrigieren**.
+Die ursprünglichen Pixel und die reine Markdown-Konvertierung bleiben unverändert.
+Der Anwender vergleicht den Wert mit seinem lokalen Original; die Oberfläche
+erfindet keine richtige Schreibweise und lädt keine Referenzdaten nach.
+
+Eine vollständige Kontaktentscheidung wird vor Personenreservierung und
+Anonymisierung auf den aktuellen Privacy-Eingang angewendet. Bestätigen ist
+keine Beibehalten-/PII-Ausnahme: E-Mail und Telefon unterliegen danach erneut
+den normalen Ersetzungen und der unabhängigen Restprüfung. Verschieben,
+Schließen, ungültige Antwort oder überschrittene Grenzen veröffentlichen die
+betroffene Datei nicht. Folgephasen werden im selben Prüffenster bearbeitet.
+
+Diese zusätzliche Phase ist auf Standalone begrenzt. Coworks Formate,
+Werkzeuge und externe Reviewadapter werden dadurch nicht erweitert. Der
+transportneutrale Validator ist ein Core-Modul; der private Gatewaystore wird
+nur vom ausdrücklich gesetzten Standalone-Hook benutzt.
+
+- Maximal 400 Kontaktvorkommen pro Dokument, 256 Zeichen je Korrektur und
+  höchstens 900 KiB für die vollständige Kontaktantwort. Das bestehende
+  1-MiB-IPC-Framebudget und das separate 5.000-Entitätsbudget bleiben erhalten.
+- Jede Kontaktstelle wird einzeln gebunden. Gleiche OCR-Schreibweisen können
+  unterschiedliche Originalwerte darstellen; es gibt keine fuzzy oder
+  dokumentübergreifend erratene Kontaktkorrektur.
+- Vollständige Entscheidungen liegen atomar und fsync-/readback-geprüft als
+  private `.ocrreview`-Arbeitsartefakte vor. HMAC bindet Lauf, Seed,
+  Snapshot-Hash, vollständigen Extraktionstext, Policy-/Pseudonymvertrag und
+  Kontaktspannen. Geänderte Quelle, OCR-Fassung oder manipulierte Entscheidung
+  erfordert einen neuen Lauf statt stiller Wiederverwendung.
+- Rohwerte und Korrekturen gelangen weder in das Laufjournal noch in Diagnose,
+  Support oder die Hauptansicht. Die Artefakte sind normale private lokale
+  Arbeitsdateien, keine Verschlüsselungszusage; ihre temporäre Aufbewahrung
+  entspricht den Arbeitsdaten, nicht der dauerhaft erhaltenen Identitäts-TXT.
+- `OCR_CONTACT_REVIEW_INVALID` nennt in der privaten Oberfläche die betroffenen
+  Dateien und einen festen nächsten Schritt, niemals ungeprüfte Exceptions.
+
+Die exakte Warnung-/Spannenbindung, CR/LF-Zeilenpositionen, echte private IPC,
+Abbruch/Neustart, Manipulation und Publikation sind E0-Regressionsfälle.
+Die integrierte Zweidokumentprüfung verwendet einen kontrollierten
+Konvertertranskript, nicht native GUI-Klicks. Reale Konverter/OCR und der
+72-Varianten-Benchmark sind gesonderte Nachweise. Die rohe OCR-Fehlerrate bleibt
+separat sichtbar; synthetische Referenzkorrekturen sind keine menschliche
+Bedien- oder Qualitätsabnahme.
 
 ## Noch erforderliche menschliche Evidenz
 

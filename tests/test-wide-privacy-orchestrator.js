@@ -21,6 +21,7 @@ const { anonymizeMarkdown } = require('../plugins/data-secure/server/gateway/com
 const { scanResidual } = require('../plugins/data-secure/server/privacy/engine');
 const { anonymizeNext } = require('../plugins/data-secure/server/gateway/orchestrator');
 const { readOutput } = require('../plugins/data-secure/server/gateway/package-store');
+const { reviewedBatchText } = require('../plugins/data-secure/server/gateway/batch-review-policy');
 const { createBatchPseudonymRegistry, READABLE_CONTRACT_VERSION } = require('../plugins/data-secure/server/batch-pseudonym-registry');
 const { zipStore } = require('./lib/zip');
 const { opcControlEntries } = require('./lib/opc');
@@ -156,9 +157,17 @@ testAsync('complete wide extraction is converted once, anonymized and published 
 
 testAsync('incomplete but useful wide extraction anonymizes its Markdown once with an explicit scope notice', async () => {
   const entry = privateEntry('scan.png', 'unchanged source bytes');
-  let conversions = 0;
+  let conversions = 0, reviews = 0;
   const result = await anonymizeNext('general', {
     productChannel: 'standalone', inputQueue: [entry],
+    reviewText(input) {
+      reviews++;
+      assert.equal(input.original_text, 'Max Mustermann');
+      assert.equal(input.ambiguities.length, 1, 'unlabelled OCR text needs a real bound identity choice');
+      const candidate = input.ambiguities[0];
+      assert.equal(input.original_text.slice(candidate.original_start, candidate.original_end), 'Max Mustermann');
+      return reviewedBatchText(input, [{ ambiguity_id: candidate.ambiguity_id, decision: 'redact' }]);
+    },
     async convertBuffer() {
       conversions++;
       return createMarkdownExtraction({ source_type: 'png', markdown: 'Max Mustermann',
@@ -166,6 +175,7 @@ testAsync('incomplete but useful wide extraction anonymizes its Markdown once wi
     }
   });
   assert.equal(conversions, 1);
+  assert.equal(reviews, 1);
   assert.equal(result.document_result.grade, 'complete');
   assert.equal(result.privacy_scope, 'extracted-markdown-only');
   assert.deepEqual(result.source_extraction_coverage,

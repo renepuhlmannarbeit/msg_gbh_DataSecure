@@ -56,6 +56,32 @@ function harness(sessions = null, allowOrganizationReview = false, singleFinding
   return { element, callbacks, calls, draft, timers };
 }
 
+testAsync('contact corrections and confirmations use distinct actions, preserve literal spelling and clear private input after submission', async () => {
+  const { buildContactDraft } = require('../plugins/data-secure/server/core/ocr-contact-review');
+  const h = harness(null, false, true, { modifyDraft(draft) {
+    const original_text = 'E-Mail: wrong@new.invalid';
+    for (const key of Object.keys(draft)) delete draft[key];
+    Object.assign(draft, buildContactDraft({ original_text, source_type: 'png',
+      contacts: [{ start: 8, end: original_text.length, line: 1, page: 2, kind: 'email' }] }));
+  } });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.element('contact-correction').hidden, false);
+  assert.equal(h.element('redact-organization').hidden, true);
+  assert.match(h.element('group-note').textContent, /Seite\/Bild 2.*Zeile 1/u);
+  h.element('contact-value').value = 'bad\n@new.invalid'; h.callbacks.get('redact')();
+  assert.equal(h.element('release').disabled, true);
+  assert.ok(h.element('contact-error').textContent);
+  h.element('contact-value').value = 'right@other.invalid'; h.callbacks.get('redact')();
+  assert.equal(h.element('release').disabled, false);
+  assert.match(h.element('output-context').textContent, /right@other.invalid/u);
+  h.callbacks.get('undo')(); h.callbacks.get('keep')(); h.callbacks.get('release')();
+  await new Promise(resolve => setImmediate(resolve));
+  const submitted = h.calls.find(call => call.command === 'submit_review');
+  assert.equal(submitted.args.answer.decisions[0].decision, 'confirm_contact');
+  assert.ok(!Object.hasOwn(submitted.args.answer.decisions[0], 'replacement'));
+  assert.equal(h.element('contact-value').value, '');
+});
+
 testAsync('the exact current finding is named and one person decision covers every identical occurrence', async () => {
   const h = harness();
   await new Promise((resolve) => setImmediate(resolve));

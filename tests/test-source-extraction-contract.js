@@ -4,6 +4,7 @@ const { createSuite } = require('./helpers');
 const { RESOURCE_LIMITS } = require('../plugins/data-secure/server/resource-limits');
 const {
   SOURCE_EXTRACTION_SCHEMA,
+  COVERAGE_REASON_CODES,
   createSourceExtraction,
   validateSourceExtraction
 } = require('../plugins/data-secure/server/core/source-extraction-contract');
@@ -33,6 +34,18 @@ test('coverage is exact, sorted and internally consistent', () => {
     { status: 'incomplete', reason_codes: ['SOURCE_COVERAGE_UNVERIFIED', 'OCR_NOT_VERIFIED'] },
     { status: 'incomplete', reason_codes: ['UNKNOWN'] }
   ]) assert.throws(() => createSourceExtraction({ source_type: 'pdf', markdown: 'Text', coverage }, maximum));
+});
+
+test('OCR contact uncertainty crosses both closed contracts without claiming verified contents', () => {
+  const standalone = require('../plugins/data-secure/server/standalone/markdown-contract');
+  assert.deepEqual(COVERAGE_REASON_CODES, standalone.COVERAGE_REASON_CODES,
+    'converter and privacy extraction vocabularies must stay synchronized');
+  const coverage = { status: 'incomplete', reason_codes: ['OCR_CONTACT_VALUES_UNVERIFIED', 'OCR_NOT_VERIFIED'] };
+  const value = createSourceExtraction({ source_type: 'png', markdown: 'Kontakt: unchanged@example.invalid', coverage }, maximum);
+  assert.equal(validateSourceExtraction(value, maximum), value);
+  assert.deepEqual(value.coverage.reason_codes, coverage.reason_codes);
+  assert.throws(() => createSourceExtraction({ source_type: 'png', markdown: value.markdown,
+    coverage: { ...coverage, status: 'complete' } }, maximum));
 });
 
 test('unknown types, extra fields, oversize text and lone surrogates fail closed', () => {

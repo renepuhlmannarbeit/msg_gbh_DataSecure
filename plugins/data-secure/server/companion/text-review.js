@@ -657,6 +657,7 @@ function linuxReviewTextLocally(draft, options) {
 }
 
 function validateReviewResult(value, draft = null) {
+  if (draft?.ocr_contact_review === true) return require('../core/ocr-contact-review').validateContactAnswer(value, draft);
   if (!value || !['reviewed', 'skipped', 'cancelled', 'deferred'].includes(value.action)) {
     throw new SafeError('Die lokale Textprüfung lieferte kein gültiges Ergebnis.');
   }

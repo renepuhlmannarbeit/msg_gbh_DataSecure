@@ -168,6 +168,8 @@ test('the native campaign never substitutes Node decisions for Tauri/WebView int
   assert.match(source, /CAMPAIGN_MAIN_IPC_NOT_SUCCESSFUL/u);
   assert.match(source, /CAMPAIGN_REVIEW_IPC_NOT_SUCCESSFUL/u);
   assert.match(source, /CAMPAIGN_DEFER_AND_BOTH_REVIEW_GROUPS_NOT_OBSERVED/u);
+  assert.match(source, /--prepare-ocr/u);
+  assert.match(source, /'CORRECTED'/u);
   assert.doesNotMatch(source, /runPackagedReviewScenario\(|desktop-sidecar\.js|request\(\{.*submit_review/u);
   if (!['win32', 'darwin'].includes(process.platform)) {
     const result = spawnSync(process.execPath, [script, '--check', 'not-a-native-scope'], {
@@ -207,6 +209,34 @@ test('the native campaign never substitutes Node decisions for Tauri/WebView int
     for (const file of files) fs.unlinkSync(file);
     fs.rmdirSync(scope);
   }
+});
+
+testAsync('packaged OCR assertions reject lost fields, leaked contacts and collapsed run identities', async () => {
+  const { assertPackagedOcrOutputs, assertAppliedOcrCorrection, contactReferences, correctedPhone,
+    correctionSentinel } = await import('./helpers/standalone-packaged-ocr-review.mjs');
+  const text = '<!--\nEU Privacy Document Gateway test\nProfil: general\n-->' +
+    '\n\n> **DataSecure-Hinweis:** Anonymisiert wurde ausschließlich der lokal in Markdown umgewandelte Inhalt. Die Vollständigkeit der Extraktion aus der Originaldatei ist nicht garantiert; nicht extrahierte Inhalte sind in diesem Ergebnis nicht enthalten.\n\n' +
+    `Name: [PERSON_001]\nE-Mail: [EMAIL_REDACTED]\nTelefon: [PHONE_REDACTED]\nJava bleibt.\n${correctionSentinel}\n\n` +
+    '> Grafikhinweis: Die Grafik selbst ist nicht im Markdown enthalten. Lokal erkannter Bildtext ist übernommen, kann aber unvollständig sein. Bildinhalt und visuelle Anordnung werden nicht automatisch beschrieben.\n\n' +
+    '> OCR-Hinweis (Bild): Kontaktwerte in OCR-Zeile(n) 3, 4 können Zeichenfehler enthalten. Vor einer Nutzung mit den Originalen vergleichen. Auch hohe OCR-Konfidenzen bestätigen keine exakte Erkennung.\n';
+  const texts = [text, text]; assertPackagedOcrOutputs(texts);
+  for (const mutate of [
+    values => values.pop(),
+    values => values[0] = values[0].replace('Telefon: [PHONE_REDACTED]\n', ''),
+    values => values[0] = values[0].replace('Java bleibt.', 'Java verändert.'),
+    values => values[0] = values[0].replace('[PERSON_001]', '[PERSON_099]'),
+    values => values[0] = values[0].replace('Java bleibt.', 'Java bleibt.\nZusatztext'),
+    values => values[0] = values[0].replace('Name:', 'Zusatztext\nName:'),
+    values => values[0] += 'alpha@native.example.invalid',
+    values => values[0] += 'unexpected@other.invalid',
+    values => values[0] += 'Telefon: +49 111222333',
+    values => values[0] = values[0].replace('Name:', 'Author:')
+  ]) { const values = [...texts]; mutate(values); assert.throws(() => assertPackagedOcrOutputs(values)); }
+  const expected = contactReferences[0];
+  const corrected = { original_text: `E-Mail: ${expected.corrected}\nTelefon: ${correctedPhone}` };
+  assertAppliedOcrCorrection(corrected, expected);
+  assert.throws(() => assertAppliedOcrCorrection({ original_text: corrected.original_text.replace(expected.corrected, expected.email) }, expected));
+  assert.throws(() => assertAppliedOcrCorrection({ original_text: corrected.original_text.replace(correctedPhone, '+49 (040) 987654321') }, expected));
 });
 
 testAsync('complete shared review assertions reject lost rows, changed Sachzellen and inconsistent IDs', async () => {
@@ -289,7 +319,7 @@ testAsync('the actual extracted execution tree rejects edited, missing, addition
 
 testAsync('native campaign rejects a changed extracted runtime before either launch or a PASS receipt', async () => {
   const source = fs.readFileSync(path.join(__dirname, 'manual/standalone-native-review-campaign.mjs'), 'utf8');
-  assert.match(source, /for \(const phase of \[1, 2\]\) \{\s+verifyCandidate\(scope, metadata\);/u);
+  assert.match(source, /for \(const phase of ocr \? \[1, 2, 3\] : \[1, 2\]\) \{\s+verifyCandidate\(scope, metadata\);/u);
   assert.match(source, /assertPackagedReviewOutputs\(outputs\)/u);
   if (!['win32', 'darwin'].includes(process.platform)) return;
   const { writeZip, readCentralModes } = await import('../scripts/lib/zip.mjs');

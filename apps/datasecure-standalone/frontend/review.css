@@ -11,6 +11,7 @@ pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;max-height:300px;ov
 button{font:inherit;font-weight:700;border-radius:10px;border:1px solid #a9c4b4;background:white;color:#143d2b;padding:12px 16px;cursor:pointer}
 button:hover:not(:disabled){background:#e7f3ec}button:focus-visible{outline:3px solid #e09a22;outline-offset:2px}button:disabled{opacity:.52;cursor:not-allowed}
 button.primary{background:#116747;color:#fff;border-color:#116747}button.primary:hover:not(:disabled){background:#0c5138}
+#contact-correction{margin:16px 0}#contact-correction label{display:block;font-weight:700;margin-bottom:6px}#contact-value{font:inherit;width:100%;padding:10px;border:1px solid #a9c4b4;border-radius:8px;background:transparent;color:inherit}#contact-value:focus-visible{outline:3px solid #e09a22;outline-offset:2px}#contact-error{color:#a12727}
 .waiting{background:white;border:1px solid #d7e4db;border-radius:16px;padding:22px}.privacy{font-size:.88rem;color:#52665a;margin:20px 0}
 .work-indicator{display:flex;align-items:center;gap:12px;color:#116747;margin-bottom:12px}.work-indicator[hidden]{display:none}.work-gear{display:inline-block;font-size:1.7rem;line-height:1;animation:review-gear 2.4s linear infinite}
 @keyframes review-gear{to{transform:rotate(360deg)}}

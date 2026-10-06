@@ -112,6 +112,40 @@ belegtem, beibehaltenem und sichtbar gerendertem nativem Text unterdrückt werde
 Veränderte Inhalte benötigen einen neuen überprüften Paketstand; die lokale
 Implementierung gilt nicht als nachträglicher Nachweis für RC157.
 
+## Vorangestellte OCR-Kontaktentscheidung (BL-050.6, unveröffentlicht)
+
+Die bestehende vertrauliche Prüfseite kann übernommene PDF-/Bild-OCR-Kontakte
+vor jeder Personenreservierung und Anonymisierung bestätigen oder ausdrücklich
+korrigieren. Seite, OCR-Zeile und genaue UTF-16-Position kommen aus dem
+Konvertervertrag; ein Kontaktwarncode ohne gültige nichtleere Spannenkarte wird
+abgewiesen. Hohe OCR-Konfidenz und übereinstimmende Zusatzlesarten sind keine
+Freigabe. Reine Markdown-Konvertierung erhält weiterhin die ursprüngliche
+Extraktion mit Qualitätshinweis.
+
+Maximal 400 Kontaktentscheidungen pro Dokument und 256 Zeichen pro Korrektur
+halten die vollständige Antwort innerhalb von 900 KiB und damit des 1-MiB-
+Transportbudgets. Der Broker akzeptiert diese Aktionen nur für seinen aktuell
+gebundenen Kontaktentwurf, nicht für eine beliebige Entitätsprüfung. Bestätigte
+Werte werden nicht von Ersetzungen oder Residual-Gates ausgenommen.
+
+Atomare private `.ocrreview`-Dateien binden komplette Entscheidungen per HMAC an
+Lauf/Seed, Quellen-Snapshot, vollständige aktuelle Extraktion, Policy, Vertrag
+und exakte Kontaktspannen. Die Wiederaufnahme prüft diese Bindung und die
+gehaltene Dateiintegrität erneut. Veränderungen stoppen mit
+`OCR_CONTACT_REVIEW_INVALID` und einem festen Hinweis auf einen neuen Lauf.
+Einträge enthalten gegebenenfalls Korrektur-Rohwerte und gehören ausschließlich
+in den privaten Arbeitsbereich, nicht ins Journal, Diagnose, Ergebnisverzeichnis
+oder die Hauptansicht. Ihre Aufbewahrung folgt temporären Arbeitsartefakten;
+die bestehende dauerhafte Identitätszuordnung bleibt davon getrennt.
+
+Bereinigung erlaubt nur eigene exakt benannte Dateien und nachgewiesene
+unterbrochene atomare Hardlink-Paare. Das begrenzte Inventar von 600 Einträgen
+deckt 200 Quellen, 200 Entscheidungen und 200 unterbrochene Tempdateien ab;
+fremde Links, Unterordner oder veränderte Identität werden nicht gelöscht.
+Dies ist keine Verschlüsselung oder Schutzgarantie gegen gleichberechtigte
+Prozesse desselben Benutzers. Cowork erhält keine neue Kontakt-UI oder
+Formatfreigabe. Details: [Reviewvertrag](contracts/BATCH_REVIEW_V2.md#standalone-erweiterung-ocr-kontakte-vor-der-anonymisierung-06102026-unveröffentlicht).
+
 ## Paket- und Supply-Chain-Grenze
 
 DS-108 bindet die Frist von 30 Sekunden (Quellenaufnahme: 300 Sekunden) an die gesamte Desktop-Anfrage:

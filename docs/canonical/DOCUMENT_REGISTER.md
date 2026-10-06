@@ -68,7 +68,7 @@ Abnahme.
 | `docs/PLUGIN_SECURITY_MODEL.md`, `SECURITY.md` | Security, Datenschutz, Architektur |
 | `docs/RELEASE.md`, `docs/TESTING.md`, `BUILD_INFO.json` | Entwicklung und Release Engineering |
 | `docs/FORMAT_COVERAGE_MATRIX.md` | belegter und geplanter Formatumfang; keine Freigabe ohne zugehörige Evidence |
-| `docs/DETECTOR_BENCHMARK.md` | synthetische, reproduzierbare Detektorbaseline; keine Aussage universeller Genauigkeit |
+| `docs/DETECTOR_BENCHMARK.md` | synthetische Detektorbaseline und unabhängiger lokaler Format-/OCR-Qualitätsbenchmark mit getrennter Roh-OCR-/Kontaktkorrektur-/Publikationsmessung; keine Aussage universeller Genauigkeit |
 | `docs/REVIEW_CLAUDE_COWORK_2026-09-01.md` | zeitgebundene Herstelleraufnahme; aktuelle Produktgrenze steht in DS-078 und der Hostmatrix |
 | `docs/REVIEW_PRODUCT_HOSTS_2026-09-23.md` | zeitgebundener Mehrdimensionenreview beider Produkte und Claude-Code-Hostoption; Befunde PH-20260923, offene Arbeit ausschließlich im Backlog |
 | Plugin-/Skill-READMEs und Skilltexte | Installation, Betrieb und Modellablauf |

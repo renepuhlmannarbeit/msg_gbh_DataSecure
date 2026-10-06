@@ -10,6 +10,9 @@ const { pathToFileURL } = require('node:url');
 const { extractMarkdownBuffer } = require('./markdown-extractor');
 const { createMarkdownExtraction, MAX_MARKDOWN_CHARS } = require('./markdown-contract');
 const { unreadableSymbolRun, cleanOcrSymbolLines, visualNotices } = require('./markdown-visuals');
+const { contactQuality, qualityNotice } = require('./ocr-quality');
+const { refineOcr } = require('./ocr-refinement');
+const { contactSpans } = require('../core/ocr-contact-review');
 const { nativeTextSeparator, paintedTextGeometryAvailable, nativeTextRegions, uncoveredOcrText } = require('./pdf-text-layout');
 const { SOURCE_TYPES, ERROR_CODES, MAX_INPUT_BYTES } = require('../core/conversion-worker-contract');
 const { decodePng } = require('../images/png');
@@ -55,10 +58,17 @@ async function createOcr() {
 }
 
 async function recognize(canvas, ocr, nativeRegions = []) {
-  const result = await ocr.recognize(canvas.toBuffer('image/png'), {}, { text: true, blocks: nativeRegions.length > 0 });
+  // Keep word confidence local to this isolated worker. A high whole-page
+  // confidence does not establish that a contact value was read correctly.
+  const result = await ocr.recognize(canvas.toBuffer('image/png'), {}, { text: true, blocks: true });
   if (typeof result?.data?.text !== 'string') fail('CONVERSION_OCR_FAILED');
   if (result.data.text.length > MAX_MARKDOWN_CHARS) fail('TEXT_TOO_LARGE');
-  return nativeRegions.length ? uncoveredOcrText(result.data, nativeRegions) : result.data.text;
+  // Re-segmentation stays in original pixel coordinates. Never change OCR
+  // geometry when a native PDF mask is in use, or duplicate its exact text.
+  const data = nativeRegions.length ? result.data : await refineOcr(result.data, canvas, ocr, canvasApi().createCanvas);
+  if (data.text.length > MAX_MARKDOWN_CHARS) fail('TEXT_TOO_LARGE');
+  const recognized = cleanOcrSymbolLines(nativeRegions.length ? uncoveredOcrText(data, nativeRegions) : data.text);
+  return { ...recognized, quality: contactQuality(data, recognized.text), wordData: data.blocks };
 }
 
 async function imageMarkdown(bytes, type) {
@@ -92,12 +102,15 @@ async function imageMarkdown(bytes, type) {
   let ocr;
   try {
     ocr = await createOcr();
-    const recognized = cleanOcrSymbolLines(await recognize(canvas, ocr));
+    const recognized = await recognize(canvas, ocr);
     const text = recognized.text;
     const reasons = ['OCR_NOT_VERIFIED', 'VISUAL_CONTENT_NOT_EXTRACTED'];
+    if (recognized.quality.contact_lines.length) reasons.push('OCR_CONTACT_VALUES_UNVERIFIED');
     if (!text.trim()) reasons.push('OCR_TEXT_EMPTY');
-    const notices = visualNotices({ image: true, symbols: recognized.omitted });
+    const notices = [visualNotices({ image: true, symbols: recognized.omitted }), qualityNotice(recognized.quality)]
+      .filter(Boolean).join('\n\n');
     return createMarkdownExtraction({ source_type: type, markdown: `${text}${text ? '\n\n' : ''}${notices}`,
+      ...(recognized.quality.contact_lines.length ? { ocr_contacts: contactSpans(text, recognized.quality) } : {}),
       coverage: { status: 'incomplete', reason_codes: reasons.sort() } });
   } finally {
     if (ocr) await ocr.terminate();
@@ -178,6 +191,7 @@ async function pdfMarkdown(bytes, passiveObjects = false) {
     }
     const sections = metadataLines.length ? [`# Dokumentmetadaten\n\n${literal(metadataLines.join('\n'))}`] : [];
     const reasons = new Set(['SOURCE_COVERAGE_UNVERIFIED', 'VISUAL_CONTENT_NOT_EXTRACTED']);
+    const contacts = [];
     let total = sections.reduce((sum, section, index) => sum + section.length + (index ? 2 : 0), 0);
     if (total > MAX_MARKDOWN_CHARS) fail('TEXT_TOO_LARGE');
     for (let number = 1; number <= document.numPages; number++) {
@@ -215,6 +229,9 @@ async function pdfMarkdown(bytes, passiveObjects = false) {
         const operators = await page.getOperatorList();
         const hasPaintedImage = operators?.fnArray.some(operation => imageOperations.has(operation));
         let additional = '';
+        let ocrNotice = '';
+        let retainedContacts = [];
+        let nativePrefix = true;
         if (!hasNativeText || hasPaintedImage || omittedSymbols) {
           const viewport = page.getViewport({ scale: 2 });
           const width = Math.ceil(viewport.width), height = Math.ceil(viewport.height);
@@ -225,17 +242,38 @@ async function pdfMarkdown(bytes, passiveObjects = false) {
           ocr ??= await createOcr(); // One session per document, never across customers.
           const regions = hasNativeText && paintedTextGeometryAvailable(operators, OPS)
             ? nativeTextRegions(content.items, content.styles, viewport) : [];
-          const recognized = cleanOcrSymbolLines(await recognize(canvas, ocr, regions));
+          const recognized = await recognize(canvas, ocr, regions);
           omittedSymbols ||= recognized.omitted;
           if (hasNativeText) additional = additionalOcrText(nativeText, recognized.text);
           else text = recognized.text;
           reasons.add('OCR_NOT_VERIFIED');
+          // Only retained OCR text carries a warning. Native text suppressed
+          // by the geometry mask is not falsely reported as an uncertain scan.
+          const retained = hasNativeText ? additional : text;
+          nativePrefix = hasNativeText;
+          const quality = retained === recognized.text ? recognized.quality : contactQuality({ blocks: recognized.wordData }, retained);
+          if (quality.contact_lines.length) {
+            reasons.add('OCR_CONTACT_VALUES_UNVERIFIED');
+            ocrNotice = qualityNotice(quality, number);
+            retainedContacts = contactSpans(retained, quality, number);
+          }
           if (!recognized.text.trim() && !hasNativeText) reasons.add('OCR_TEXT_EMPTY');
         }
-        const notices = visualNotices({ image: Boolean(hasPaintedImage), symbols: omittedSymbols });
+        const notices = [visualNotices({ image: Boolean(hasPaintedImage), symbols: omittedSymbols }), ocrNotice]
+          .filter(Boolean).join('\n\n');
         const section = `## Seite ${number}\n\n${literal(text)}` +
           (additional.trim() ? `\n\n### Zusätzlicher Bildtext (OCR)\n\n${literal(additional)}` : '') +
           (notices ? `\n\n${notices}` : '');
+        // Bind to the emitted literal's payload, not a searched page heading
+        // or matching native text. Fence length may vary with source backticks.
+        if (retainedContacts.length) {
+          const prefix = `## Seite ${number}\n\n` + (nativePrefix
+            ? `${literal(text)}\n\n### Zusätzlicher Bildtext (OCR)\n\n` : '');
+          const payload = nativePrefix ? additional : text;
+          const fenceHeaderLength = literal(payload).indexOf('\n') + 1;
+          const offset = total + (sections.length ? 2 : 0) + prefix.length + fenceHeaderLength;
+          contacts.push(...retainedContacts.map(item => ({ ...item, start: offset + item.start, end: offset + item.end })));
+        }
         total += section.length + (sections.length ? 2 : 0);
         if (total > MAX_MARKDOWN_CHARS) fail('TEXT_TOO_LARGE');
         sections.push(section);
@@ -245,6 +283,7 @@ async function pdfMarkdown(bytes, passiveObjects = false) {
       }
     }
     return createMarkdownExtraction({ source_type: 'pdf', markdown: sections.join('\n\n'),
+      ...(contacts.length ? { ocr_contacts: contacts } : {}),
       coverage: { status: 'incomplete', reason_codes: [...reasons].sort() } });
   } catch (cause) {
     if (cause?.name === 'PasswordException') fail('SOURCE_ENCRYPTED_UNSUPPORTED');

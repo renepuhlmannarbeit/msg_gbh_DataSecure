@@ -204,6 +204,271 @@ wird stabilisiert, nicht durch Cloudverarbeitung oder eine neue NLP-Pflicht
 ersetzt. Keine Originale oder vorhandenen Anwenderläufe wurden verändert;
 kein Commit, Push, Tag oder Release wurde aus diesem lokalen Auftrag abgeleitet.
 
+### Lokale Qualitätsmessung vom 06.10.2026 (BL-050.5/6)
+
+Die E0-Messinfrastruktur ist umgesetzt: unabhängige synthetische Referenzen,
+60 logische Fälle/72 Format-/OCR-Varianten und 23 Gegenregressionen für den
+Auswerter und das fundstellengebundene synthetische Review. Echte lokale
+Windows-Standalone-Runtimeprojektionen führen beide Zwecke mit produktiven
+Konvertern/OCR und verifizierten Publikationen aus. Berichte trennen Extraktion,
+unveröffentlichten Einpass-Core-Entwurf und tatsächliche finale Ausgabe; konkrete
+Dateinamen mit Endung, Positionen und lokale Quell-/Ausgabe-Gegenproben sind enthalten.
+Das Verfahren steht in [DETECTOR_BENCHMARK](../DETECTOR_BENCHMARK.md).
+
+Die Qualität ist nicht pauschal bestanden: Service Level, Fail Closed und
+Synthetischer Härtetest wurden in synthetischen Entwicklungsdateien tatsächlich
+als Personen ersetzt. Hinzu kommen separat ausgewiesene OCR-Veränderungen.
+Im abschließenden lokalen 72-Dateien-Lauf wurden alle 72 Ergebnisse veröffentlicht,
+darunter neun zunächst vertagte Dokumente nach insgesamt fünf synthetischen
+Prüfentscheidungen. Der unabhängige Endvergleich fand zwei unverändert gebliebene
+Firmenvorkommen in CSV/XLSX (BL-050.7), 226 verlorene Fachanker und neun durch OCR
+veränderte Identitätsvorkommen. Bekannte Personen-/E-Mail-/Telefonreste wurden in
+diesem begrenzten Referenzvergleich nicht gefunden; das ist keine allgemeine Zusage.
+Referenz-SHA-256: `827de027174f5447dc0a3358510f812e3adbec922d0244233e0ed34676b00bda`.
+Der Quelllauf und Gegenprüfungsdateien liegen lokal unter
+`dist/quality-acceptance-20261006`; der Benchmark endet wegen dieser Befunde korrekt
+mit Exitcode 1. Die 197-Dateien-Produktsuite, gezielte 23 Qualitätsregressionen,
+Docs-/Link-/Versionsprüfungen, strenge lokale Claude-CLI-Strukturprüfung und
+`git diff --check` bestehen. ZIP-Verifikation dieses Auftrags ist ohne erzeugtes
+neues Paket nicht durchführbar; ein alter Pakettest wird nicht als neuer Nachweis benutzt.
+BL-050.6 enthält die noch offene Produktkorrektur, BL-010.51 bleibt für unabhängige
+menschliche Referenzprüfungen, Ausbau der Klassen und weitere Methoden offen.
+Keine reale personenbezogene Quelle wurde verwendet. Native Mac-Ausführung und
+exaktes Releasepaket dieses Benchmarks sind NOT_RUN; technische Reviewantworten
+sind keine menschliche Abnahme. Normaler Paketbau verweigert hier den uncommitteten
+Arbeitsbaum (`BUNDLED_PLUGIN_SOURCE_COMMIT_INVALID`); die Herkunftssperre bleibt
+unverändert. Kein neues Paket, Push oder Prerelease aus diesem Messauftrag.
+
+### Lokale Standalone-Qualitätskorrektur vom 06.10.2026 (unveröffentlicht)
+
+BL-050.6/7 korrigiert die unsichere Personenbindung von Überschriften und
+neutralen Tabellenzellen: vor der Aliasregistrierung steht eine exakte lokale
+Personen-/Firmen-/Beibehalten-Entscheidung. Die Erkennung arbeitet regelbasiert;
+der Lauf registriert erkannte Schreibweisen und ihre Pseudonyme in einer lokalen
+Identitätszuordnung. Das ist kein KI-Modelltraining. Explizite Namen, echte Credentials und rechtlich erkannte
+Unternehmen mit abweichendem horizontalem Whitespace bleiben streng geschützt.
+Überlappende Hypothesen werden als disjunkte Quellbereiche geprüft. Folgeprüfungen
+binden Entscheidungen an unveränderte Quellkoordinaten, auch wenn zuvor entschiedene
+Firmen die Fundstellennummern verschieben. Dokumentwechsel und ein gespeicherter
+Neustart sind durch tatsächliche Publikationsgegenfälle geprüft; der Cowork-Weg
+erhält weder die erweiterten Standalone-Hypothesen noch neue Berechtigungen.
+
+Die stabile Windows-Nicht-OCR-Messung veröffentlicht alle 40 Ausgaben. Der finale
+Referenzvergleich findet keine bekannten Restangaben und keine verlorenen
+Fachanker. Die damalige Referenz wertet drei entfernte Anreden „Frau“ als
+Wortverluste; die unten dokumentierte Gegenprüfung bestätigt stattdessen die
+bestehende, personengebundene DS-012-Entfernung. Der alte Bericht bleibt unverändert.
+Bericht/Gegenprüfungen:
+`dist/quality-final-native-20261006`. Dies ist ausdrücklich kein 72-Dateien-/OCR-
+oder native Mac-Nachweis; der weiterhin überredigierende Einpass-Core-Entwurf
+ist nicht die Standalone-Publikation. BL-050.7 ist für diese E0-Gegenfälle erledigt,
+BL-050.6 bleibt für verbleibende Inhalts-/OCR-Qualität in Arbeit.
+
+Die abschließende Messung aller 72 Varianten liegt unter
+`dist/quality-final-all-formats-20261006`: alle Eingaben konvertiert, neun Ausgaben
+veröffentlicht und 63 im gemeinsamen Prüfblock vertagt. Fünf OCR-bedingte
+Fundstellen waren aus der unabhängigen synthetischen Referenz nicht eindeutig
+entscheidbar; der Harness gibt deshalb nicht pauschal frei. Neun veränderte
+sensible OCR-Vorkommen und zwölf sachliche Wortverluste bei der Extraktion
+bleiben offen. Die 63 nicht veröffentlichten Ausgaben sind unbewertet, nicht
+fehlerfrei. Die erfassten 197 Entscheidungen zählen gebundene Vorkommen,
+nicht menschliche Klicks. Beide Messungen enden ohne fatalen Laufzeitfehler,
+aber mit Exit 1 wegen Teilumfang beziehungsweise offener Qualitätsbefunde.
+
+Übernommener OCR-Kontakttext erhält im lokalen Markdown und Extraktionsvertrag
+`OCR_CONTACT_VALUES_UNVERIFIED` mit Seite/Bild und OCR-Zeilenhinweisen sowie
+fehlender/niedriger Wortkonfidenz. Hohe Konfidenz beweist keine exakte Erkennung;
+Text wird nicht geraten, repariert oder still verworfen. Unbekannte OCR-Fehler
+bleiben möglich. Runtime-/Auswerterhashes werden vor der Messung gebunden und
+nachher verglichen. Das synthetische Engineering-Gate `gate:quality` verweigert
+unvollständige/veraltete Berichte und offene Befunde, ersetzt aber keine menschliche
+oder rechtliche Abnahme. Die ausführbaren Qualitätsprüfungen umfassen nun 35
+Auswerter-/Review-/Publikationsgegenfälle. Das breite `test:product` besteht mit
+79 Basis- und 119 direkten Testdateien (198 insgesamt); die abschließende
+Funddatei-Vollständigkeitsprüfung des Qualitätsgates besteht zusätzlich im
+fokussierten Berichtstest. Docs-/Link-/Versionsprüfungen, lokale CLI-Strukturprüfung
+und `git diff --check` sind grün. Grüne Funktionstests ersetzen nicht das weiterhin
+rote inhaltliche Qualitätsgate. Native Windows-Konverter/OCR-Gegenfälle wurden
+separat ausgeführt, keine neue native Mac- oder menschliche Referenzabnahme.
+Build und neues ZIP sind weiterhin durch den uncommitteten Quellbaum begrenzt;
+die Herkunftssperre wird nicht umgangen. Kein Push/Prerelease in diesem Auftrag.
+
+### OCR-/Anreden-Gegenprüfung vom 06.10.2026 (unveröffentlicht)
+
+Die drei Folgepunkte sind umgesetzt und gemessen. Die fünf unbekannten OCR-
+Überschriften mit verlorenen Umlauten werden durch begrenzte Zeilenneusegmentierung
+aus unveränderten Originalpixeln korrekt gelesen. Keine Referenzwörter oder
+Kontaktwerte wurden in die Produktion übernommen. Pro Seite gelten höchstens
+32 Zusatzdurchläufe, 200.000 Pixel je Crop und zwei Millionen Crop-Pixel insgesamt;
+die bestehenden Supervisor-Zeit-/Abbruchgrenzen bleiben wirksam. Native PDF-
+Maskengeometrie wird nicht verändert.
+
+Die Vollmessung verwarf eine Zwischenlösung: zwei übereinstimmende E-Mail-Crops
+sind kein Genauigkeitsbeweis; ihre automatische Auswahl erhöhte die Fehlerzahl
+von neun auf sechzehn. Kontaktwerte behalten deshalb immer die ursprüngliche
+Seitenlesart. Abweichende Zusatzlesarten ergeben ausschließlich einen lokalen
+Qualitätshinweis mit Seite/Zeile und ohne Rohwerte in Diagnosemeldungen. Ein
+weiterer Gegenreview fand inkonsistente Wort-/Zeilenmetadaten als Randfall;
+fehlende Wortpositionen werden nun abgelehnt und Kontaktzeilen grundsätzlich
+ohne Rekonstruktion übernommen. Der originale Gegenfall ist bytegleich und
+startet keine Crops oder Zusatz-OCR; neun gezielte OCR-Unit-Verträge bestehen.
+
+Die Entfernung der Anrede „Frau“ vor einer Person ist kein Produktfehler,
+sondern die bestehende DS-012-Regel gegen erhaltene Geschlechtsmerkmale.
+Die unabhängige Referenz kennzeichnet nun nur exakte personengebundene
+Anredenspannen. Akademische Titel, freie Anredenwörter und Sachinhalte bleiben
+erhaltungspflichtig; bei der Extraktion selbst ist auch eine verlorene Anrede ein
+Befund. Ein unabhängiger Gegenreview fand eine weitere Auswerterlücke: Verlust
+nur im Privacy-Eingang wurde nicht getrennt bewertet. Beide Extraktionswege und
+die genaue Bindung der Ausnahme werden nun regressionsgeprüft; die ursprünglichen
+Gegenbeispiele sperren korrekt, erlaubte DS-012-Entfernung bleibt zulässig.
+
+Die stabile 72-Varianten-Messung `dist/quality-contact-invariant-final-20261006` bestätigt
+72 konvertierte und nach synthetischer lokaler Prüfung veröffentlichte Ausgaben,
+202 gebundene Vorkommensentscheidungen, keine unbekannten Reviewhypothesen,
+keinen fatalen Laufzeitfehler und bestätigtes Workerende. Referenz-SHA-256:
+`f841d0c73e1d1fca4ed999196373208c316f8d695fefda326f8deff9bb891b0f`.
+Keine bekannten finalen Identitätsreste, keine verlorenen Fachanker oder
+Sachwörter; sieben gezielte Anredenentfernungen sind separat gezählt. Sachliche
+Extraktionswortverluste sinken von zwölf auf null. Neun OCR-veränderte E-Mails
+bleiben offen: `gate:quality` verweigert die Freigabe mit `QUALITY_FINDINGS_OPEN`.
+63 Privacy-Extraktionen wurden tatsächlich erfasst; neun automatisch
+veröffentlichte Varianten sind ausdrücklich als Markdown-Fallback ausgewiesen,
+nicht als beobachteter zweiter Extraktionsweg. Der fehlgeschlagene 16-E-Mail-
+Zwischenbericht bleibt als Gegenbeleg erhalten, alte Messungen werden nicht umgeschrieben.
+
+52 fokussierte Qualitätsgegenfälle und 46 echte Windows-Konvertergruppen bestehen.
+Das erneut ausgeführte Produktgate besteht mit 80 Basis- und 119 direkten
+Testdateien (199 insgesamt); der letzte Metadatenrandfall ist zusätzlich im
+abschließenden fokussierten Lauf abgesichert. Docs-/Link-/Versionsprüfungen,
+strenge lokale CLI-Strukturprüfung und `git diff --check` bestehen.
+Zwei unabhängige technische Gegenreviews haben die
+Korrekturen geprüft, ersetzen aber keine menschliche Referenz-Doppelprüfung.
+Native Mac-Ausführung und exakte Releasepaketbindung dieses Stands bleiben
+NOT_RUN; Quelländerungen sind plattformgemeinsam, kein neuer Plattformnachweis.
+Kein Commit/Push/Tag/Prerelease; der normale Paketbau bleibt bei uncommitteter
+Herkunft korrekt gesperrt. BL-050.6 bleibt für OCR-Genauigkeit und unabhängige
+inhaltliche Abnahme in Arbeit, nicht wegen der erforderlichen Anredenentfernung.
+
+### Vorangestellte OCR-Kontaktprüfung vom 06.10.2026 (unveröffentlicht)
+
+Nach zusätzlicher geometrischer Gegenprüfung bleibt automatisches Raten von
+E-Mail-Zeichen verworfen: 13 zusätzliche Crop-Strategien korrigieren nicht
+zuverlässig die neun Rohfehler und verschlechtern teilweise korrekte Kontakte.
+Die bestehende Standalone-Prüfseite fragt deshalb exakte übernommene OCR-
+Kontaktstellen vor Personenreservierung und Privacy-Analyse ab. Bestätigen und
+ausdrückliches Korrigieren sind eigene geschlossene Aktionen; Quelle, Seite,
+OCR-Zeile und UTF-16-Spannen bleiben gebunden. Danach folgen normale
+Anonymisierung, Entitätsentscheidung und unabhängige Restprüfung im selben
+Fenster. Reine Konvertierung und Originale bleiben unverändert.
+
+Vollständige Kontaktentscheidungen werden atomar, fsync-/readback-geprüft und
+HMAC-authentifiziert in privaten `.ocrreview`-Arbeitsartefakten gespeichert.
+Lauf/Seed, Snapshot, komplette Extraktion, Policy/Pseudonymvertrag und genaue
+Spannen gehören zur Bindung. Fremde/manipulierte oder geänderte Daten stoppen
+mit festem Fehlercode und Dateihinweis; kein stiller Korrekturtransfer zwischen
+gleichen OCR-Schreibweisen, neuen Läufen oder geänderten Quellen. Journal,
+Diagnose, Hauptansicht und Ergebnisordner erhalten keine Korrektur-Rohwerte.
+400 Kontaktstellen je Dokument und 256 Zeichen je Korrektur halten die Antwort
+unter 900 KiB; das allgemeine IPC- und separate Entitätsbudget werden nicht erhöht.
+Coworks Formate und Werkzeuge bleiben unverändert.
+
+Zwei unabhängige Read-only-Prüfrollen revalidierten OCR-Genauigkeit und
+Verarbeitung/Sicherheit. Die Gegenbeispiele korrigierten tatsächliche IPC-
+Antwortvalidierung, CR-/CRLF-Offsets, mehrere Kontakte in derselben OCR-Zeile,
+eigene atomare Tempdateien und die Inventargrenze bei 200 Quellen. Ein realer
+Prozessabbruch mit 401 Dateien wird sicher bereinigt, nicht ungeprüft fortgesetzt.
+Lange nationale/internationale Teilnehmernummern werden nun vollständig ersetzt;
+unsichere überlange/abweichende Reste bleiben unabhängig gesperrt. Telefonförmige
+PINs verbleiben ausschließlich im rohwertfreien Credential-Befund, nicht als
+zweite Telefonnummer in Scannerresultaten. 159 PII-Regressionen bestehen.
+
+Die stabile Vollmessung
+`dist/quality-contact-review-final-source-20261006/BERICHTE/QUALITAET.json`
+verwendet unverändert Referenz-SHA-256
+`f841d0c73e1d1fca4ed999196373208c316f8d695fefda326f8deff9bb891b0f`.
+72 Varianten/60 logische Fälle sind konvertiert und publiziert: 55 unveränderte
+Kontaktbestätigungen, neun explizite Referenzkorrekturen und 202 gebundene
+Entitätsentscheidungen, null unbekannte Erwartungen. Die rohe OCR enthält
+weiterhin neun geänderte E-Mails; nach Kontaktentscheidung sind die gemessenen
+Privacy-Eingänge unverändert gegenüber der Referenz. Finale 310 sensible
+Vorkommen enthalten keine bekannten Reste; keine verlorenen Fachanker/Sachwörter.
+Sieben personengebundene DS-012-Anreden sind gezielt entfernt. 32 rohe OCR-
+Privacy-Eingänge und 65 korrigierte/sonstige tatsächliche Privacy-Eingänge wurden
+beobachtet; sieben automatische Publikationen benutzen den expliziten Markdown-
+Fallback. Kein fataler Fehler, Workerende bestätigt, Quellenbindung unverändert.
+Der unveränderte Qualitätscheck endet mit `QUALITY_FINDINGS_OPEN`, nicht grün.
+
+66 fokussierte Qualitätsfälle plus echte Zweidokument-IPC-/Publikationsintegration,
+23 Frontendfälle, 17 Markdown-Artefaktfälle und 46 Windows-Konvertergruppen
+bestehen. Die vollständige Produktsuite besteht mit 201 Testdateien
+(82 Basis- und 119 direkten Testdateien). Die Zweidokumentintegration verwendet kontrollierte Konvertertexte;
+echte OCR erfolgt in Konvertersuite und Vollbenchmark. Synthetische Antworten
+sind keine menschlichen Klicks oder Referenz-Doppelprüfung. Neue native Mac-
+Ausführung und exakte Releasepaketbindung bleiben NOT_RUN. Build verweigert
+uncommittierte Herkunft (`BUNDLED_PLUGIN_SOURCE_COMMIT_INVALID`); ein neues
+RC158-Plugin-ZIP liegt nicht vor. Kein Commit/Push/Tag/Prerelease, kein Umgehen
+des Herkunfts- oder Qualitätsgates. BL-050.6 bleibt für Roh-OCR und unabhängige
+inhaltliche/native Bedien-/Paketabnahme in Arbeit.
+
+### Native-/Paketgegenprüfung vom 06.10.2026 (Engineering-Testbranch)
+
+Der Anwender hat ausdrücklich den separaten Branch
+`codex/ocr-contact-native-revalidation-20261006` und genau die vorhandenen
+macOS-Engineering-Workflows für Intel/Apple Silicon freigegeben, auch bei rotem
+Roh-OCR-Gate. Main, veröffentlichte Archive und Releases bleiben unverändert.
+Die früheren lokalen Aussagen „kein Commit/Push“ beschreiben ihre damaligen
+Prüfschnitte, nicht diese neue Engineering-Freigabe.
+
+Die erneute Vollmessung
+`dist/quality-contact-native-final-20261006/BERICHTE/QUALITAET.json` bindet
+zusätzlich die tatsächlichen Konverter-/Modell-/Addonbytes. 72/72 Ausgaben nach
+synthetischer Prüfung, 310 sensible Vorkommen ohne bekannte finale Reste,
+keine verlorenen Sachwörter/Fachanker, 55 Kontaktbestätigungen/neun explizite
+Referenzkorrekturen und 202 Entitätsentscheidungen; Roh-OCR weiterhin neun
+geänderte E-Mails. Workerende und unveränderte Quellen sind bestätigt;
+`gate:quality` meldet ausschließlich `QUALITY_FINDINGS_OPEN`. Das ist keine
+menschliche Referenz- oder allgemeine Genauigkeitsabnahme.
+
+Der größere offizielle `tessdata_best`-Kandidat ist nach echten Pixelgegenproben
+verworfen: zwei alte Fehler korrigiert, 17 neue eingeführt, insgesamt 24 statt
+neun falsche E-Mails sowie höherer Zeit-/Speicherbedarf. Modell-/Referenzbytes
+bleiben unverändert. Provenienz und Vergleich stehen in
+`dist/ocr-best-probe-20261006`; Details im Detektorbenchmark.
+
+Windows-Engineering-ZIP:
+`dist/engineering-ocr-contact-final-20261006/DataSecure-Standalone-3.2.0-rc158-windows-x64.zip`,
+597 Einträge/110430390 Bytes, SHA-256
+`c1e84fa3f9831fd1d9940f2f7090350227b8e37d7b70d664f2c3cb371e524562`.
+Verifier und echter paketierter Gesamtworkflow bestehen einschließlich
+gemischter Formate, passiver PDF/PPTX-Inhalte, konkreter CSV-Fehlerdatei,
+Person/Firma, Folgegruppe, Vertagen/Neustart und laufweiter Entscheidungen.
+Neu werden zwei tatsächliche PNG-OCR-Dateien mit ausdrücklich unterschiedlichen
+Kontaktkorrekturen geprüft. Erst beide Kontaktprüfungen, danach Entitätsprüfung:
+beide geänderten Werte müssen vor und nach Neustart im tatsächlichen
+Privacy-Eingang stehen. Vollständige Ausgabeprüfung lehnt zusätzliche Inhalte
+und Kontakte ab; Testcleanup ist bestätigt. 20 Orakel-/Native-Smoke-Gegenfälle
+bestehen; die native Bedienkampagne `--prepare-ocr` bleibt ohne echte Bedienung
+NOT_RUN und beschreibt diese Reihenfolge in drei Anwendungssitzungen.
+
+Nativer Windows-Start desselben ZIPs bestätigt Haupt-/Prüfseitenladung und
+erfolgreiche korrelierte IPC (1219,926 ms; WebView2 154.0.4258.53,
+Windows 10.0.26200.0 x64), keine menschlichen Entscheidungen. Ein vorheriger
+Start desselben Archivhashes beobachtete keine TCP-/UDP-Endpunkte im Messfenster;
+der jüngste strenge Netzlauf endete dagegen mit
+`STANDALONE_NATIVE_NETWORK_ENDPOINT_UNATTRIBUTED`. Er ist kein PASS und kein
+nachgewiesener DataSecure-Netzwerkzugriff. Der getrennte erfolgreiche IPC-Lauf
+weist `network_observed:false` aus; seine Netzwerte sind unbewertet.
+Der anschließende vollständige Wiederholungslauf mit unverändertem Archiv
+und unveränderten Netzguards besteht (1792,382 ms, zehn zugeordnete Prozesse,
+keine TCP-Listener oder UDP-Endpunkte im Messfenster, 918 eigene Einträge
+bereinigt). Die vorherige unklare Beobachtung wird dadurch nicht zum PASS
+umgeschrieben; dies ist ein begrenzter Beobachtungsnachweis, keine allgemeine
+Netzwerk- oder Bediengarantie.
+Native Mac-Resultate stehen bis tatsächlichem Workflowabschluss aus.
+Cowork-Build/Plugin-ZIP bleiben im unreinen Quellbaum wegen Herkunftssperre
+beziehungsweise fehlendem neuen Archiv nicht bestanden; keine Umgehung.
+
 ## Entstehungs- und Nachweischronologie
 
 Die folgenden lokalen Zwischenstände und damaligen offenen Punkte sind historisch;

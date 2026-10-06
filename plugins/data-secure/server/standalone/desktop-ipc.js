@@ -4,6 +4,7 @@ const { validateProcessingMode } = require('../core/processing-mode');
 const { validateResultNamingMode } = require('../core/result-naming-mode');
 const { RESOURCE_LIMITS } = require('../resource-limits');
 const { MAX_STANDALONE_REVIEW_FINDINGS, REVIEW_DECISIONS } = require('../gateway/standalone-review-budget');
+const { MAX_CONTACTS, MAX_VALUE_CHARS } = require('../core/ocr-contact-review');
 
 const MAX_FRAME_BYTES = 1024 * 1024;
 const MAX_ADMISSION_PATH_BYTES = 768 * 1024;
@@ -19,6 +20,21 @@ const PRIVATE_ACTIONS = new Set([
   'continue_history_batch',
   'get_review_session', 'get_review_chunk', 'submit_review', 'continue_review_session', 'shutdown'
 ]);
+
+function validDecisionShape(item) {
+  if (!item || typeof item.ambiguity_id !== 'string' || item.ambiguity_id.length > 80) return false;
+  const keys = Object.keys(item).sort().join(',');
+  // This is the transport shape only. The broker MUST still check the owned,
+  // active draft: contact actions are never accepted for an entity review.
+  if (item.decision === 'confirm_contact' || item.decision === 'correct_contact') {
+    if (!/^ocr-contact:v1:[0-9]{6}$/u.test(item.ambiguity_id)) return false;
+    return item.decision === 'confirm_contact' ? keys === 'ambiguity_id,decision' :
+      keys === 'ambiguity_id,decision,replacement' && typeof item.replacement === 'string' &&
+      item.replacement.length > 0 && item.replacement.length <= MAX_VALUE_CHARS &&
+      !/[\p{Cc}\p{Cf}\p{Cs}\[\]`<>|]/u.test(item.replacement);
+  }
+  return keys === 'ambiguity_id,decision' && REVIEW_DECISIONS.includes(item.decision);
+}
 
 function fail(code, message) {
   throw Object.assign(new Error(message), { code });
@@ -81,9 +97,10 @@ function validatePrivateMessage(message) {
           (answer.action === 'deferred' && Object.keys(answer).sort().join(',') !== 'action') ||
           (answer.action === 'reviewed' && (Object.keys(answer).sort().join(',') !== 'action,decisions,redactions' ||
             !Array.isArray(answer.decisions) || answer.decisions.length > MAX_STANDALONE_REVIEW_FINDINGS ||
-            !answer.decisions.every((item) => item && Object.keys(item).sort().join(',') === 'ambiguity_id,decision' &&
-              typeof item.ambiguity_id === 'string' && item.ambiguity_id.length <= 80 &&
-              REVIEW_DECISIONS.includes(item.decision)) ||
+            !answer.decisions.every(validDecisionShape) ||
+            (answer.decisions.some(item => ['confirm_contact', 'correct_contact'].includes(item.decision)) &&
+              (answer.decisions.length > MAX_CONTACTS || !answer.decisions.every(item =>
+                ['confirm_contact', 'correct_contact'].includes(item.decision)))) ||
             !Array.isArray(answer.redactions) || answer.redactions.length !== 0)))
         fail('DESKTOP_IPC_REVIEW_INVALID', 'Ungültige lokale Prüfentscheidung.');
     }

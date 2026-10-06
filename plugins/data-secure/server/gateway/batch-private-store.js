@@ -119,7 +119,10 @@ function safeRemoveWorkDirectory(token, options = {}) {
     const same = (left, right) => ['dev', 'ino', 'birthtimeNs'].every((key) => left[key] === right[key]);
     if (options.expectedIdentity && JSON.stringify(identity(stat)) !== JSON.stringify(options.expectedIdentity)) throw new Error('BATCH_WORK_UNSAFE');
     const entries = fs.readdirSync(target, { withFileTypes: true });
-    if (entries.length > 400) throw new Error('BATCH_WORK_UNSAFE');
+    // 200 immutable sources + 200 private OCR decisions + one interrupted
+    // exclusive-write temporary per item. Names and counted owned hardlinks
+    // are still independently checked before any deletion.
+    if (entries.length > 600) throw new Error('BATCH_WORK_UNSAFE');
     // Journal-owned historical work trees may contain regular nested helper
     // files. Retain that existing explicit-discard contract, but preflight ALL
     // headers before removal. Intake-orphan intents authorize only flat copies.
@@ -134,7 +137,7 @@ function safeRemoveWorkDirectory(token, options = {}) {
     const plan = [];
     const links = new Map();
     for (const entry of entries) {
-      if (!entry.isFile() || !/^(?:[0-9]{3}_[a-f0-9]{24}(?:\.[a-z0-9]+)?|\.[0-9]{3}_[a-f0-9]{24}\.workcopy\.[a-f0-9]{24}\.tmp)$/iu.test(entry.name)) throw new Error('BATCH_WORK_UNSAFE');
+      if (!entry.isFile() || !/^(?:[0-9]{3}_[a-f0-9]{24}(?:\.[a-z0-9]+)?|\.[0-9]{3}_[a-f0-9]{24}\.(?:workcopy|ocrreview)\.[a-f0-9]{24}\.tmp)$/iu.test(entry.name)) throw new Error('BATCH_WORK_UNSAFE');
       const full = path.join(target, entry.name);
       const fileStat = assertPlainWorkFile(full);
       const key = `${fileStat.dev}:${fileStat.ino}`;

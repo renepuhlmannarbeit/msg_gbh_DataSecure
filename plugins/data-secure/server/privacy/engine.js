@@ -294,7 +294,7 @@ function residualSensitiveListPersons(text) {
   return findings;
 }
 
-function conservativeLabelledResiduals(text) {
+function conservativeLabelledResiduals(text, credentialSpans = []) {
   const findings = [];
   for (const match of text.matchAll(RESIDUAL_PERSON_TABLE_CANDIDATE_RE)) {
     const candidate = normalizeSpaces(match[1]);
@@ -307,9 +307,16 @@ function conservativeLabelledResiduals(text) {
   }
   const phoneView = identifierDetectionText(text);
   for (const match of phoneView.matchAll(RESIDUAL_PHONE_CANDIDATE_RE)) {
+    // Credential values are classified without echoing their original bytes.
+    // An international-shaped PIN must not leak as a second PHONE finding;
+    // the independent credential gate already prevents its publication.
+    if (overlapsCredential(credentialSpans, match.index, match.index + match[0].length)) continue;
     const digits = match[0].replace(/\D/gu, '');
-    if (digits.length >= 6 && digits.length <= 15 && !plausibleCalendarDate(match[0]) &&
-        hasLabelBefore(phoneView, match.index, PHONE_LABEL_RE, PHONE_LABEL_WINDOW)) {
+    // An excessive digit count is not proof of safety: it can be an OCR
+    // error or extension. Block strong labelled/international leftovers
+    // independently of the normal redactor's telephone-shape policy.
+    if (digits.length >= 6 && !plausibleCalendarDate(match[0]) &&
+        (match[0].startsWith('+') || hasLabelBefore(phoneView, match.index, PHONE_LABEL_RE, PHONE_LABEL_WINDOW))) {
       findings.push({ type: 'PHONE', text: text.slice(match.index, match.index + match[0].length) });
     }
   }
@@ -813,7 +820,7 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
   if (residualCredentialCandidates(clean).length && !out.some((finding) => finding.type === 'CREDENTIAL')) {
     out.push({ type: 'CREDENTIAL', text: '' });
   }
-  for (const finding of conservativeLabelledResiduals(clean)) {
+  for (const finding of conservativeLabelledResiduals(clean, credentialSpans)) {
     if (!out.some((current) => current.type === finding.type && current.text === finding.text)) out.push(finding);
   }
   for (const finding of residualSensitiveListPersons(clean)) {

@@ -377,6 +377,51 @@ test('whole-work cleanup retries bounded transient Windows delete failures witho
     fs.rmSync(base, { recursive: true, force: true });
   }
 });
+test('a real interrupted OCR correction write stays private and both owned hardlinks can be safely cleaned', () => {
+  const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-contact-crash-')));
+  const previous = { privacy: process.env.EU_PRIVACY_ROOT, local: process.env.LOCALAPPDATA, data: process.env.EU_PRIVACY_DATA_ROOT };
+  process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
+  process.env.LOCALAPPDATA = path.join(base, 'localapp');
+  process.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'data');
+  const { workPath, safeRemoveWorkDirectory } = require('../plugins/data-secure/server/gateway/batch-private-store');
+  const { createPrivateWorkStore } = require('../plugins/data-secure/server/gateway/private-work-store');
+  const work = workPath(token); fs.mkdirSync(work);
+  const target = path.join(work, '001_aaaaaaaaaaaaaaaaaaaaaaaa.ocrreview');
+  const modulePath = require.resolve('../plugins/data-secure/server/gateway/private-work-store');
+  let cleaned = false;
+  try {
+    // Exercise the actual maximum batch, not merely a single contact file.
+    for (let index = 1; index <= 200; index++) {
+      const stem = `${String(index).padStart(3, '0')}_${'a'.repeat(24)}`;
+      fs.writeFileSync(path.join(work, `${stem}.workcopy`), 'synthetic immutable source');
+      if (index !== 1) fs.writeFileSync(path.join(work, `${stem}.ocrreview`), 'synthetic checkpoint');
+    }
+    const script = `const fs=require('node:fs'); const {createPrivateWorkStore}=require(${JSON.stringify(modulePath)});` +
+      `const unlink=fs.unlinkSync; fs.unlinkSync=(file)=>{if(file.endsWith('.tmp'))process.exit(55); return unlink(file);};` +
+      `createPrivateWorkStore({privateRoot:${JSON.stringify(base)}}).writeFile(${JSON.stringify(target)},Buffer.from('synthetic private correction'));`;
+    const result = require('node:child_process').spawnSync(process.execPath, ['-e', script], { windowsHide: true, timeout: 10000 });
+    assert.equal(result.status, 55, result.stderr?.toString());
+    assert.equal(fs.readdirSync(work).length, 401, 'maximum batch plus abrupt write retains the bounded published/temporary names');
+    assert.equal(fs.statSync(target, { bigint: true }).nlink, 2n);
+    assert.throws(() => createPrivateWorkStore({ privateRoot: base }).readFile(target), 'an unconfirmed two-link checkpoint cannot resume');
+    safeRemoveWorkDirectory(token); cleaned = true;
+    assert.equal(fs.existsSync(work), false, 'the retention/discard cleanup guard accepts only these owned links');
+  } finally {
+    for (const [key, value] of [['EU_PRIVACY_ROOT', previous.privacy], ['LOCALAPPDATA', previous.local], ['EU_PRIVACY_DATA_ROOT', previous.data]])
+      value === undefined ? delete process.env[key] : process.env[key] = value;
+    // No broader cleanup fallback if the identity-checked work deletion failed.
+    if (cleaned) {
+      const inspect = directory => { for (const name of fs.readdirSync(directory)) {
+        const full = path.join(directory, name), info = fs.lstatSync(full);
+        assert.ok(!info.isSymbolicLink() && (info.isDirectory() || info.isFile()));
+        assert.ok(fs.realpathSync.native(full).startsWith(base + path.sep));
+        if (info.isDirectory()) { inspect(full); fs.rmdirSync(full); } else fs.unlinkSync(full);
+      } };
+      assert.equal(path.dirname(base), fs.realpathSync.native(os.tmpdir()));
+      inspect(base); fs.rmdirSync(base);
+    }
+  }
+});
 
 test('whole-work cleanup distinguishes exact inodes above the safe integer range', () => {
   const base = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-cleanup-inode-')));

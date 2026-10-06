@@ -22,7 +22,12 @@
       <p id="group-note" class="note"></p>
       <div class="comparison">
         <div><h3>Quellkontext</h3><pre id="source-context" tabindex="0"></pre></div>
-        <div><h3>Vorgesehene Ausgabe</h3><pre id="output-context" tabindex="0"></pre></div>
+        <div><h3 id="output-title">Vorgesehene Ausgabe</h3><pre id="output-context" tabindex="0"></pre></div>
+      </div>
+      <div id="contact-correction" hidden>
+        <label for="contact-value">Korrigierter Kontaktwert (mit dem Original vergleichen)</label>
+        <input id="contact-value" type="text" maxlength="256" autocomplete="off" spellcheck="false">
+        <p id="contact-error" role="alert"></p>
       </div>
       <div class="actions">
         <button id="redact" class="primary">Als Person anonymisieren</button>

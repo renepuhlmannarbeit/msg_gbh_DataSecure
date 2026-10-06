@@ -50,6 +50,34 @@ x64 glibc gebaut. Alle vier Pakete enthalten ihre gepinnte Runtime; die drei
 POSIX-Ziele sind nativ bis durch App → private IPC → Core gestartet. Es ist
 noch **kein freigegebenes Endnutzerprodukt**.
 
+### OCR-Kontakte prüfen (06.10.2026, unveröffentlichter Quellstand)
+
+Bei der Anonymisierung von Scan-PDFs und Bildern kann die vorhandene lokale
+Prüfung zuerst fragen: **Wurde dieser Kontaktwert richtig erkannt?** Seite und
+OCR-Zeile nennen die Position. Vergleichen Sie den angezeigten Wert mit Ihrem
+lokalen Original. Sie können ihn ausdrücklich bestätigen oder die richtige
+E-Mail-/Telefonschreibweise eingeben. Die Aktionen heißen **OCR-Wert unverändert
+bestätigen**, **Kontaktwert korrigieren** und **Kontaktwerte bestätigen und weiter**.
+Danach folgt im selben Fenster die normale
+Anonymisierung beziehungsweise Personen-/Unternehmensprüfung. Kontakt bestätigen
+bedeutet **nicht**, ihn unverändert im anonymisierten Ergebnis zu behalten.
+
+**Später entscheiden** hält die Datei gesperrt; die Prüfung ist beim selben Lauf
+fortsetzbar. Gespeicherte Kontaktentscheidungen werden nur auf genau dieselbe
+Quelle und Extraktion dieses Laufs angewendet. Hat sich diese Bindung geändert,
+nennt die App die betroffenen Dateien und verlangt einen neuen Lauf. Identische
+OCR-Fehlschreibweisen werden nicht automatisch als derselbe echte Kontakt
+behandelt. Mehr als 400 Kontaktstellen in einem einzelnen Dokument erfordern
+Aufteilung; Korrekturen sind auf 256 Zeichen beschränkt. Originale bleiben
+unverändert. **Nur in Markdown umwandeln** benötigt keine Kontaktfreigabe und
+enthält weiterhin den ursprünglichen OCR-Text mit Qualitätshinweisen.
+
+Diese Funktion ist lokal implementiert und technisch geprüft, noch nicht in
+einem neuen Windows-/Mac-Releasepaket abgenommen. OCR kann auch unerkannte Fehler
+enthalten; die Prüfung garantiert weder vollständige Erkennung noch rechtliche
+Anonymität. Der [Reviewvertrag](../../docs/canonical/contracts/BATCH_REVIEW_V2.md)
+trennt Standalone ausdrücklich von Coworks eigenem Reviewweg.
+
 Tauri ist ausschließlich für Fenster, native Auswahl, Sidecar-Lifecycle und
 die feste UI-Projektion zuständig. Formatprüfung, Konvertierung, PII-Erkennung,
 Anonymisierung, Review, Recovery, Mapping und Export verbleiben vollständig im
@@ -135,6 +163,15 @@ Entwickler bauen und prüfen die Hülle mit:
 npm run test:standalone
 npm run build:standalone:windows:portable
 ```
+
+Die zusätzliche native OCR-Bedienkampagne wird mit
+`node tests/manual/standalone-native-review-campaign.mjs --prepare-ocr <exaktes-ZIP>`
+vorbereitet. Sie bleibt bis zu echter Bedienung `NOT_RUN`: Kontaktprüfung
+vertagen, nach Neustart ausdrücklich andere synthetische Kontakte korrigieren,
+im folgenden Entitätsreview erneut vertagen und nach drittem Start deren
+Übernahme prüfen. Finale Körper-/Quellen-/Paketkontrollen sind Pflicht. Der
+automatische Paket-Smoke prüft dieselbe tatsächliche OCR-/Privacy-Kette über
+private IPC, ist aber keine Tauri-/WebView-Klickabnahme.
 
 Für native POSIX-Engineeringnachweise existieren die manuellen GitHub-Workflows
 **Manual Standalone macOS sandbox evidence** und **Manual Standalone Linux

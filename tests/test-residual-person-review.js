@@ -876,7 +876,11 @@ async function main() {
     const generic = '| Technik |\n| --- |\n| Kubernetes |\n\n| Thema |\n| --- |\n| Service Level |';
     const file = path.join(scope, 'one-column-generic.md');
     fs.writeFileSync(file, generic, 'utf8');
-    const result = await anonymizeSelectedSource(file, 'general', { productChannel: 'standalone' });
+    const result = await anonymizeSelectedSource(file, 'general', { productChannel: 'standalone', reviewText(input) {
+      assert.deepEqual(input.ambiguities.map(candidate => input.original_text.slice(candidate.original_start, candidate.original_end)),
+        ['Service Level'], 'a name-shaped neutral cell needs one bound semantic choice, not an automatic person alias');
+      return reviewedBatchText(input, decisions(input));
+    } });
     assert.ok(gateway.readOutput(result.package_id, result.read_capability, 0, 30000).text.includes(generic),
       'the actual publication path must also preserve nonsensitive one-column table content');
   });

@@ -323,6 +323,30 @@ Geometrie in eigenen Modulen (`markdown-visuals.js`, `pdf-text-layout.js`).
 Keine externen Bildbeschreibungen, keine semantische Löschung beliebiger
 OCR-Wörter; ohne sichere Geometrie bleibt OCR erhalten.
 
+### BL-050.6: Kontaktprüfung vor der Privacy-Analyse (06.10.2026, unveröffentlicht)
+
+Der Konverter liefert für übernommene PDF-/Bild-OCR-Kontakte eine geschlossene
+Spannenkarte mit Seite und Zeile. Der Orchestrator ruft ausschließlich im
+Standalone-Kanal vor Personenreservierung und Ersetzung den privaten
+`prepareOcrContacts`-Hook auf. In der ersten automatischen Phase bleibt eine
+solche Datei vertagt; die integrierte Prüfseite bestätigt oder korrigiert die
+exakten Stellen und geht anschließend im selben Fenster zur Entitätsprüfung.
+Reine Konvertierung bleibt unverändert. Kontaktbestätigung ist keine Ausnahme
+vom normalen PII-/Residual-Gate.
+
+`core/ocr-contact-review.js` enthält nur transportneutrale Spannen-/Antwort-
+Validierung. `gateway/ocr-contact-store.js` speichert komplette atomare private
+Entscheidungen, authentifiziert gegen Lauf/Seed, Snapshot, ganze Extraktion,
+Policy, Vertrag und Fundstellen. Capture und Publication prüfen dieselbe
+Bindung erneut; Journal und Hauptansicht enthalten keine Korrektur-Rohwerte.
+Der tatsächliche Desktop-Frame-Decoder prüft die geschlossenen Aktionsformen,
+der Broker zusätzlich die Berechtigung seines aktuell gebundenen Entwurfs.
+400 Kontaktstellen mit je höchstens 256 Korrekturzeichen und 900 KiB Antwort
+bleiben unter dem bestehenden IPC-Budget. Cowork erhält keinen zusätzlichen
+Hook, keine GUI-Abhängigkeit und keine PDF-/Bildfreigabe. Der
+[Reviewvertrag](contracts/BATCH_REVIEW_V2.md) beschreibt Verschieben, Wiederaufnahme
+und die getrennten Testnachweise; neue Mac-/Releasepakettests bleiben offen.
+
 ### DS-107: geprüfte Desktop-Verbindungen und Fehlerzustände (05.10.2026, unveröffentlicht)
 
 Die typisierte Unternehmensentscheidung wird auch vom tatsächlichen privaten

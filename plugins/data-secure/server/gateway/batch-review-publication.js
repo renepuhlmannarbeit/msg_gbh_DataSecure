@@ -26,6 +26,7 @@ function createBatchReviewPublication(options = {}) {
   const withBatchPseudonymRegistry = options.withBatchPseudonymRegistry ||
     (async (_state, action) => action(undefined));
   const captureStandaloneIdentitySnapshot = options.captureStandaloneIdentitySnapshot;
+  const contactStore = options.contactStore;
 
   function invalidBinding() {
     return invalidDecisionError(
@@ -134,6 +135,11 @@ function createBatchReviewPublication(options = {}) {
           removeImages: state.remove_images,
           packageId: packageIdForItem(item),
           retainPublishedOnAfterPublishFailure: true,
+          ...(state.product_channel === 'standalone' && contactStore ? { prepareOcrContacts: (input) => {
+            const text = contactStore.read(state, item, input);
+            if (text === null) throw invalidBinding();
+            return text;
+          } } : {}),
           ...(state.product_channel === 'standalone' && captureStandaloneIdentitySnapshot
             ? { persistStandaloneIdentitySnapshot: async ({ package_id, entries, unmapped_labels }) => {
                 try { captureStandaloneIdentitySnapshot(state.token, item.id, package_id, entries, { unmappedLabels: unmapped_labels }); }

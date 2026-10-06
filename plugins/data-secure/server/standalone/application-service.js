@@ -305,7 +305,7 @@ class StandaloneApplicationService {
       ['results_available', 'completed_without_results'].includes(status.state));
     const failed = sameRun && session.phase === 'failed';
     const exportPending = sameRun && status.state === 'export_pending' && session.worker_active !== true;
-    const actionableLimit = failed && session.error_code === 'LOCAL_REVIEW_TOO_LARGE';
+    const actionableLimit = failed && ['LOCAL_REVIEW_TOO_LARGE', 'OCR_CONTACT_REVIEW_INVALID'].includes(session.error_code);
     const canContinue = Boolean(sameRun && status.state === 'review_required' &&
       session.worker_active !== true && !actionableLimit);
     let affectedFiles = [];

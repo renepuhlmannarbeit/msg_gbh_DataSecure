@@ -61,4 +61,19 @@ test('the evaluator penalizes extra redaction and lost professional content', ()
   assert.deepStrictEqual(result.preservation.lostByCategory, { professional_content: 1 });
 });
 
+test('whole-document claims, duplicate inflation and partial names cannot improve the score', () => {
+  const source = 'Anna Muster entwickelt Software und erstellt Berichte.';
+  const sample = { source, entities: [{ type: 'PERSON', value: 'Anna Muster', start: 0, end: 11, severity: 3 }],
+    preserved: [{ value: 'entwickelt Software', category: 'professional_content' }] };
+  const exact = { type: 'PERSON', start: 0, end: 11 }, wrong = { type: 'PERSON', start: 12, end: 22 };
+  const output = '[PERSON_001] entwickelt Software und erstellt Berichte.';
+  const a = evaluateDetector([sample], () => ({ spans: [exact, wrong], output }));
+  const b = evaluateDetector([sample], () => ({ spans: [...Array(20).fill(exact), wrong], output }));
+  assert.strictEqual(a.precision, b.precision);
+  assert.strictEqual(evaluateDetector([sample], () => ({ spans: [{ type: 'PERSON', start: 0, end: source.length }], output })).recall, 0);
+  assert.strictEqual(evaluateDetector([sample], () => ({ spans: [exact], output: 'Anna entwickelt Software.' })).fn, 1);
+  assert.strictEqual(evaluateDetector([sample], () => ({ spans: [exact], output: `${output}\nMuster` })).fn, 1);
+  assert.throws(() => evaluateDetector([sample], () => ({ spans: [{ type: 'PERSON', start: -1, end: 11 }], output })), /DETECTOR_ADAPTER_SPAN_INVALID/u);
+});
+
 done();

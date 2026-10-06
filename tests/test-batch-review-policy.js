@@ -111,6 +111,29 @@ test('a replayed person decision is accepted only for the exact source, redact c
   }
 });
 
+test('Standalone replay binds surviving decisions to source coordinates when an earlier company disappears', () => {
+  const original = 'WIESENLABOR CONSULT\nService Level';
+  const candidate = (id, start, end) => ({ ambiguity_id: id, type: 'person_prose_ambiguous', replacement_kind: 'PERSON',
+    original_start: start, original_end: end, anonymized_start: start, anonymized_end: end });
+  const prior = { original_text: original, anonymized_text: original, allowOrganizationReview: true,
+    ambiguities: [candidate('person:v1:000001', 0, 19), candidate('person:v1:000002', 20, 33)] };
+  const output = '[UNTERNEHMEN_003]\nService Level';
+  const start = output.indexOf('Service Level');
+  const input = { ...prior, anonymized_text: output,
+    ambiguities: [{ ...candidate('person:v1:000001', 20, 33), anonymized_start: start, anonymized_end: start + 13 }] };
+  const choices = [{ ambiguity_id: 'person:v1:000001', decision: 'redact_organization' },
+    { ambiguity_id: 'person:v1:000002', decision: 'keep' }];
+  const options = { reviewedDraft: prior, resolvedOrganizationReplacement: () => '[UNTERNEHMEN_003]' };
+  assert.equal(reviewedBatchText(input, choices, options).text, output);
+  for (const altered of [ { ...input, original_text: original + ' geändert' },
+    { ...input, ambiguities: [{ ...input.ambiguities[0], original_start: 21 }] },
+    { ...input, anonymized_text: output + '\nWIESENLABOR CONSULT' } ]) {
+    assert.throws(() => reviewedBatchText(altered, choices, options), error => error.code === 'LOCAL_REVIEW_CANCELLED');
+  }
+  assert.throws(() => reviewedBatchText(input, [...choices, choices[1]], options),
+    error => error.code === 'LOCAL_REVIEW_CANCELLED');
+});
+
 async function main() {
   await testAsync('clear text bypasses the local UI while a multi-file ambiguity defers', async () => {
     const clear = await reviewSingleBatchTextLocally({ anonymized_text: 'Technischer Inhalt', ambiguities: [] }, { items: [{}] }, {});

@@ -37,7 +37,7 @@ function createReviewBroker() {
     if (run?.child !== child) return;
     if (run.phase === 'failed' && run.errorCode && code === 'LOCAL_REVIEW_WORKER_EXITED') return;
     run.phase = 'failed';
-    run.errorCode = ['LOCAL_REVIEW_TOO_LARGE', 'LOCAL_REVIEW_TIMEOUT',
+    run.errorCode = ['LOCAL_REVIEW_TOO_LARGE', 'OCR_CONTACT_REVIEW_INVALID', 'LOCAL_REVIEW_TIMEOUT',
       'LOCAL_REVIEW_CANCELLED', 'LOCAL_REVIEW_FAILED', 'LOCAL_REVIEW_WORKER_EXITED',
       'LOCAL_REVIEW_START_MISSING', 'LOCAL_REVIEW_START_DENIED',
       'LOCAL_REVIEW_START_ARCHITECTURE', 'LOCAL_REVIEW_START_FAILED',
@@ -77,7 +77,10 @@ function createReviewBroker() {
       return true;
     }
     let bytes;
-    try { bytes = Buffer.from(JSON.stringify(message.draft), 'utf8'); }
+    try {
+      if (message.draft.ocr_contact_review === true) require('../core/ocr-contact-review').validateContactDraft(message.draft);
+      bytes = Buffer.from(JSON.stringify(message.draft), 'utf8');
+    }
     catch {
       try { child.send({ type: 'standalone-review-answer', review_id: message.review_id, answer: { action: 'deferred' } }); }
       catch { /* worker disconnect remains fail-closed */ }

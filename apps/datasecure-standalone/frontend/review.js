@@ -13,6 +13,7 @@ const START_FAILURE_TEXT = Object.freeze({
   LOCAL_REVIEW_START_FAILED: 'Die lokale Prüfkomponente konnte nicht gestartet werden.'
 });
 const REVIEW_FAILURE_TEXT = Object.freeze({
+  OCR_CONTACT_REVIEW_INVALID: 'Die gespeicherte OCR-Kontaktentscheidung passt nicht mehr zur unveränderten Quelle oder konnte nicht sicher gelesen werden. Wähle die Originaldateien für einen neuen Lauf aus; eine alte Entscheidung wird nicht automatisch übernommen.',
   LOCAL_REVIEW_FAILED: 'Die Vorbereitung oder Verarbeitung der lokalen Prüfung ist fehlgeschlagen.',
   LOCAL_REVIEW_TIMEOUT: 'Die lokale Prüfung konnte nicht innerhalb der vorgesehenen Vorbereitungszeit bereitgestellt werden.',
   LOCAL_REVIEW_CANCELLED: 'Die lokale Prüfung wurde abgebrochen.',
@@ -25,7 +26,7 @@ function reviewFailureMessage(session) {
   if (Object.hasOwn(START_FAILURE_TEXT, session.error_code)) {
     message = `${START_FAILURE_TEXT[session.error_code]} (${session.error_code})`;
   } else if (session.error_code === 'LOCAL_REVIEW_TOO_LARGE') {
-    message = 'Dieses Dokument überschreitet die lokale Prüfgrenze von 5.000 Fundstellen oder die Textgrößengrenze (LOCAL_REVIEW_TOO_LARGE). Teile es in kleinere Quelldateien und beginne dafür einen neuen Lauf.';
+    message = 'Dieses Dokument überschreitet die lokale Prüfgrenze von 5.000 Entitätsfundstellen, 400 OCR-Kontaktwerten oder die Textgrößengrenze (LOCAL_REVIEW_TOO_LARGE). Teile es in kleinere Quelldateien und beginne dafür einen neuen Lauf.';
   } else {
     const code = Object.hasOwn(REVIEW_FAILURE_TEXT, session.error_code) ? session.error_code : 'LOCAL_REVIEW_FAILED';
     message = `${REVIEW_FAILURE_TEXT[code]} (${code})`;
@@ -44,6 +45,9 @@ function setWaiting(message, working = false) {
   for (const id of ['exact-text', 'source-context', 'output-context', 'group-note']) {
     el(id).textContent = '';
   }
+  el('contact-value').value = '';
+  el('contact-correction').hidden = true;
+  el('contact-error').textContent = '';
   el('waiting').hidden = false;
   el('work-indicator').hidden = !working;
   if (el('waiting-text').textContent !== message) el('waiting-text').textContent = message;
@@ -129,11 +133,12 @@ function render() {
   const exact = draft.original_text.slice(candidate.original_start, candidate.original_end);
   const count = groupIds(candidate).length;
   const credential = candidate.type === 'credential_issuer_ambiguous';
-  const organizationEnabled = !credential && draft.allow_organization_review === true;
+  const contact = draft.ocr_contact_review === true && candidate.type === 'ocr_contact_ambiguous';
+  const organizationEnabled = !contact && !credential && draft.allow_organization_review === true;
   el('summary').textContent = `${state.choices.size} von ${items.length} Stellen entschieden. Nur die aktive Fundstelle ist unten zu beurteilen.`;
   el('document-position').textContent = `Dokument ${state.documentPositions.get(candidate.ambiguity_id)} von ${draft.batch_review?.document_count || 1}`;
   el('finding-position').textContent = `Fundstelle ${state.cursor + 1} von ${items.length}`;
-  el('finding-title').textContent = credential ? 'Muss diese Angabe ersetzt werden?' : 'Wie soll diese Fundstelle behandelt werden?';
+  el('finding-title').textContent = contact ? 'Wurde dieser Kontaktwert richtig erkannt?' : credential ? 'Muss diese Angabe ersetzt werden?' : 'Wie soll diese Fundstelle behandelt werden?';
   el('exact-text').textContent = exact;
   el('group-note').textContent = count > 1
     ? `Diese Entscheidung gilt für ${count} nachweislich gleiche Fundstellen in diesem Stapel.`
@@ -141,17 +146,26 @@ function render() {
       : 'Diese Entscheidung gilt nur für die angezeigte Fundstelle.';
   if (organizationEnabled) el('group-note').textContent +=
     ' Die gewählte Behandlung gilt für dieselbe vollständige Schreibweise in offenen und folgenden Prüfungen dieses Laufs – auch in anderen Dokumenten. Bereits fertige Ergebnisse werden nicht nachträglich geändert.';
+  if (contact) el('group-note').textContent = `OCR: Seite/Bild ${candidate.page}, Zeile ${candidate.line}. ` +
+    'Vergleiche jedes Zeichen mit dem Original. Diese Bestätigung betrifft nur die Texterkennung; danach durchläuft der bestätigte Text die normale Anonymisierung und Restprüfung. Hohe OCR-Sicherheit ersetzt diese Prüfung nicht.';
   el('source-context').textContent = context(draft.original_text, candidate.original_start, candidate.original_end);
   const choice = state.choices.get(candidate.ambiguity_id);
   const marker = choice === 'redact_organization' ? '[UNTERNEHMEN_…]' : choice === 'redact' ?
     credential ? '[MANUAL_REDACTION]' : '[PERSON_…]' : null;
-  const preview = marker ? draft.anonymized_text.slice(0, candidate.anonymized_start) + marker +
+  const contactValue = contact && choice?.decision === 'correct_contact' ? choice.replacement : null;
+  const replacement = contactValue || marker;
+  const preview = replacement ? draft.anonymized_text.slice(0, candidate.anonymized_start) + replacement +
     draft.anonymized_text.slice(candidate.anonymized_end) : draft.anonymized_text;
   el('output-context').textContent = context(preview, candidate.anonymized_start,
-    marker ? candidate.anonymized_start + marker.length : candidate.anonymized_end);
-  el('redact').textContent = credential ? 'Angabe ersetzen' : 'Als Person anonymisieren';
+    replacement ? candidate.anonymized_start + replacement.length : candidate.anonymized_end);
+  el('output-title').textContent = contact ? 'Bestätigter Texteingang (noch nicht anonymisiert)' : 'Vorgesehene Ausgabe';
+  el('contact-correction').hidden = !contact;
+  el('contact-value').value = contactValue || exact;
+  el('contact-error').textContent = '';
+  el('redact').textContent = contact ? 'Kontaktwert korrigieren' : credential ? 'Angabe ersetzen' : 'Als Person anonymisieren';
   el('redact-organization').hidden = !organizationEnabled;
-  el('keep').textContent = credential ? 'Angabe beibehalten' : 'Beibehalten';
+  el('keep').textContent = contact ? 'OCR-Wert unverändert bestätigen' : credential ? 'Angabe beibehalten' : 'Beibehalten';
+  el('release').textContent = contact ? 'Kontaktwerte bestätigen und weiter' : 'Geprüft freigeben';
   el('release').disabled = state.choices.size !== items.length;
   el('undo').disabled = state.history.length === 0;
   el('waiting').hidden = true;
@@ -162,7 +176,21 @@ function decide(value) {
   if (!state.draft || state.waiting || (value === 'redact_organization' &&
       (state.draft.allow_organization_review !== true ||
         state.draft.ambiguities[state.cursor].type === 'credential_issuer_ambiguous'))) return;
-  const ids = groupIds(state.draft.ambiguities[state.cursor]);
+  const candidate = state.draft.ambiguities[state.cursor];
+  if (state.draft.ocr_contact_review === true) {
+    if (value === 'redact') {
+      const replacement = el('contact-value').value;
+      if (!replacement || replacement !== replacement.trim() || replacement.length > 256 || /[\p{Cc}\p{Cf}\p{Cs}\[\]`<>|]/u.test(replacement) ||
+          (candidate.contact_kind === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(replacement)) ||
+          (candidate.contact_kind === 'phone' && (!/^\+?[\d ()./-]{6,}$/u.test(replacement) || !/\d/u.test(replacement)))) {
+        el('contact-error').textContent = 'Bitte einen gültigen Kontaktwert ohne Zeilenumbrüche, Steuerzeichen oder Markdown eingeben (höchstens 256 Zeichen).';
+        return;
+      }
+      value = { decision: 'correct_contact', replacement };
+    } else if (value === 'keep') value = { decision: 'confirm_contact' };
+    else return;
+  }
+  const ids = groupIds(candidate);
   state.history.push(ids.map((id) => [id, state.choices.get(id)]));
   for (const id of ids) state.choices.set(id, value);
   const next = state.draft.ambiguities.findIndex((item) => !state.choices.has(item.ambiguity_id));
@@ -374,7 +402,8 @@ el('release').addEventListener('click', () => {
   if (!state.draft || state.choices.size !== state.draft.ambiguities.length) return;
   sendAnswer({ action: 'reviewed', redactions: [],
     decisions: state.draft.ambiguities.map((item) => ({ ambiguity_id: item.ambiguity_id,
-      decision: state.choices.get(item.ambiguity_id) })) });
+      ...(state.draft.ocr_contact_review === true ? state.choices.get(item.ambiguity_id)
+        : { decision: state.choices.get(item.ambiguity_id) }) })) });
 });
 el('retry').addEventListener('click', poll);
 el('continue-review').addEventListener('click', continueReview);

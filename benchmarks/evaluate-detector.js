@@ -1,5 +1,7 @@
 'use strict';
 
+const { tokens, align, evaluateQuality } = require('./evaluate-quality');
+
 const TYPE_ALIASES = new Map([
   ['ORG', 'ORGANIZATION'], ['ORGANISATION', 'ORGANIZATION'], ['COMPANY', 'ORGANIZATION'],
   ['LOCATION', 'POSTAL_ADDRESS'], ['ADDRESS', 'STREET_ADDRESS'], ['DOB', 'DATE_OF_BIRTH'],
@@ -44,9 +46,28 @@ function evaluateDetector(corpus, detect) {
     runtimeNs += process.hrtime.bigint() - started;
     processedChars += sample.source.length;
     const output = String(result.output || '');
-    const predictions = (result.spans || [])
-      .map((span) => ({ ...span, type: normalizedType(span.type) }))
-      .filter((span) => Number.isInteger(span.start) && Number.isInteger(span.end) && span.start >= 0 && span.end > span.start && span.end <= sample.source.length);
+    if (!Array.isArray(result.spans)) throw new Error('DETECTOR_ADAPTER_SPANS_INVALID');
+    const deduplicated = new Map();
+    for (const span of result.spans) {
+      if (!Number.isInteger(span.start) || !Number.isInteger(span.end) || span.start < 0 || span.end <= span.start ||
+          span.end > sample.source.length || typeof span.type !== 'string') throw new Error('DETECTOR_ADAPTER_SPAN_INVALID');
+      const prediction = { ...span, type: normalizedType(span.type) };
+      deduplicated.set(`${prediction.type}:${prediction.start}:${prediction.end}`, prediction);
+    }
+    const unique = [...deduplicated.values()];
+    // Nested alternatives of one type are one effective redaction (e.g.
+    // 'B.V' inside 'B.V.'). Keep the maximal interval; a broad interval cannot
+    // hide behind a correct inner interval and earn perfect precision.
+    const predictions = unique.filter(span => !unique.some(other => other !== span && sameFamily(span, other) &&
+      other.start <= span.start && other.end >= span.end && (other.start < span.start || other.end > span.end)));
+    const before = tokens(sample.source), after = tokens(output);
+    const changes = align(before.words.map(word => word.value), after.words.map(word => word.value));
+    const privacy = evaluateQuality({ id: sample.id, reference: sample.source, entities: sample.entities, preserve: [] },
+      { extracted: sample.source, automatic: output }).automatic;
+    const unchangedInRange = range => before.words.some((word, index) => overlaps(word, range) && changes.equal[index]) ||
+      privacy.leaks.some(leak => leak.introduced_or_unaligned && leak.expected === range.value);
+    const exactPrediction = (prediction, expected) => sameFamily(prediction, expected) &&
+      prediction.start === expected.start && prediction.end === expected.end;
 
     totals.expected += sample.entities.length;
     totals.predicted += predictions.length;
@@ -55,10 +76,8 @@ function evaluateDetector(corpus, detect) {
       if (!perType.has(type)) perType.set(type, { expected: 0, predicted: 0, matchedPredictions: 0, tp: 0, fn: 0, fp: 0 });
       const metrics = perType.get(type);
       metrics.expected++;
-      const covered = predictions.some((prediction) =>
-        sameFamily(prediction, expected) && prediction.start <= expected.start && prediction.end >= expected.end
-      );
-      if (covered && !output.includes(expected.value)) {
+      const covered = predictions.some(prediction => exactPrediction(prediction, expected));
+      if (covered && !unchangedInRange(expected)) {
         totals.tp++;
         metrics.tp++;
       } else {
@@ -69,7 +88,7 @@ function evaluateDetector(corpus, detect) {
     }
 
     for (const prediction of predictions) {
-      const hit = sample.entities.some((expected) => sameFamily(prediction, expected) && overlaps(prediction, expected));
+      const hit = sample.entities.some(expected => exactPrediction(prediction, expected) && !unchangedInRange(expected));
       if (!perType.has(prediction.type)) perType.set(prediction.type, { expected: 0, predicted: 0, matchedPredictions: 0, tp: 0, fn: 0, fp: 0 });
       const metrics = perType.get(prediction.type);
       metrics.predicted++;
@@ -83,7 +102,12 @@ function evaluateDetector(corpus, detect) {
 
     for (const control of sample.preserved) {
       preservation.expected++;
-      if (output.includes(control.value)) preservation.retained++;
+      // Every occurrence of a control must survive. One surviving 'Java'
+      // cannot stand in for a second erased occurrence elsewhere.
+      const ranges = Number.isInteger(control.start) && Number.isInteger(control.end) ? [control] :
+        [...sample.source.matchAll(new RegExp(control.value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'), 'gu'))]
+          .map(match => ({ start: match.index, end: match.index + match[0].length }));
+      if (ranges.length && ranges.every(range => before.words.every((word, index) => !overlaps(word, range) || changes.equal[index]))) preservation.retained++;
       else preservation.lostByCategory[control.category] = (preservation.lostByCategory[control.category] || 0) + 1;
     }
   }

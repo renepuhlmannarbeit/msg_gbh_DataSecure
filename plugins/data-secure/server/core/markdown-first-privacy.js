@@ -149,7 +149,8 @@ async function extractSourceForPrivacy(bytes, extension, options = {}) {
     unreviewedVisualCount: 0,
     requiresExplicitProfile: false,
     sourceType: neutral.source_type,
-    sourceExtractionCoverage: neutral.coverage
+    sourceExtractionCoverage: neutral.coverage,
+    ...(productChannel === 'standalone' && extraction.ocr_contacts ? { ocrContacts: extraction.ocr_contacts } : {})
   });
 }
 

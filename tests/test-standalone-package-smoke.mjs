@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { readCentralModes } from '../scripts/lib/zip.mjs';
 import { isolatedSidecarEnvironment, removePackageSmokeScope } from './helpers/standalone-package-scope.mjs';
 import { runPackagedReviewScenario } from './helpers/standalone-packaged-review.mjs';
+import { runPackagedOcrScenario } from './helpers/standalone-packaged-ocr-review.mjs';
 import { office, passivePresentation, embeddedWorkbookPresentation, image, pdf, text as conversionText } from './helpers/conversion-fixtures.mjs';
 
 const require = createRequire(import.meta.url);
@@ -101,6 +102,7 @@ let child;
 let childClosed = false;
 let closePromise;
 let activeRequest;
+let primaryFailure;
 try {
   const environment = isolatedSidecarEnvironment(root, extraction);
   // Exercise the optional trace through the actual packaged child chain, not
@@ -603,7 +605,7 @@ try {
   assert.deepEqual(fs.readFileSync(passivePptxSource), passivePptxBytes);
   assert.deepEqual(fs.readFileSync(embeddedPptxSource), embeddedPptxBytes);
   process.stdout.write('STANDALONE REAL PASSIVE PDF/PPTX PRIVACY PASS (3 results, embedded XLSX, separate source coverage)\n');
-  await runPackagedReviewScenario({ request, sourceDirectory, restart: async () => {
+  const restartReviewSidecar = async () => {
     const stopped = await request({ schema: 'datasecure-standalone-private-ipc/1',
       request_id: 'ea'.repeat(8), action: 'shutdown' });
     assert.equal(stopped.ok, true);
@@ -620,10 +622,16 @@ try {
     child.stderr.on('data', chunk => { stderr.value = (stderr.value + chunk.toString('utf8')).slice(-4096); });
     ({ request } = protocolClient(child, stderr)); activeRequest = request;
     return request;
-  } });
+  };
+  await runPackagedReviewScenario({ request, sourceDirectory, restart: restartReviewSidecar });
+  // The first scenario restarted the actual sidecar; request now points at
+  // that live process, not the initial closed transport.
+  await runPackagedOcrScenario({ request, sourceDirectory, restart: restartReviewSidecar });
   const log = fs.readFileSync(path.join(environment.DATASECURE_STANDALONE_DIAGNOSTIC_DIR, 'sidecar-interactions.jsonl'), 'utf8');
   for (const row of historyRows) assert.ok(!log.includes(row.batch_id), 'run identifiers stay out of diagnostics');
   assert.ok(!log.includes(exactRun) && !log.includes(convertedRun));
+  assert.doesNotMatch(log, /alpha@|beta@|native\.example\.invalid|98765432[12]/u,
+    'raw OCR contacts and their private corrections must not appear in diagnostics');
   await request({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'f'.repeat(16), action: 'shutdown' });
   await new Promise((resolve, reject) => {
     const timer = setTimeout(() => { child.kill(); reject(new Error('STANDALONE_SMOKE_SHUTDOWN_TIMEOUT')); }, 10000);
@@ -631,7 +639,11 @@ try {
   });
   process.stdout.write('STANDALONE REAL HISTORY PASS (both purposes, failed run, exact targets, restart, changed result root)\n');
   process.stdout.write('STANDALONE PACKAGE ISOLATED SIDECAR SMOKE PASS\n');
+} catch (error) {
+  primaryFailure = error;
+  throw error;
 } finally {
+  try {
   if (child && !childClosed && child.exitCode === null) {
     // A failed assertion may leave a real private review worker awaiting an
     // answer. Defer that exact draft and request production shutdown before
@@ -656,4 +668,10 @@ try {
   }
   if (process.env.DATASECURE_SMOKE_KEEP === '1') process.stderr.write(`STANDALONE_SMOKE_KEPT:${extraction}\n`);
   else safeRemove();
+  } catch (cleanupError) {
+    // Preserve the actual assertion as well as a refused/failed cleanup. Never
+    // retry deletion with looser path guards or turn cleanup into a PASS.
+    if (primaryFailure) throw new AggregateError([primaryFailure, cleanupError], 'STANDALONE_SMOKE_AND_CLEANUP_FAILED');
+    throw cleanupError;
+  }
 }

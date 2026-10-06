@@ -82,10 +82,10 @@ const PHONE_SEPARATOR = `(?:[${SEP_CHARS}]+|[${SEP_CHARS}]*[./${DASH_CHARS}][${S
 const PHONE_RE = new RegExp(
   `${NB}(?:(?:\\+|00)\\d{1,3}(?:${PHONE_SEPARATOR})?(?:\\(0\\)(?:${PHONE_SEPARATOR})?)?)?` +
     `(?:\\(?\\d{2,5}\\)?)` +
-    `(?:(?:${PHONE_SEPARATOR})?\\d{3,8}(?:${PHONE_SEPARATOR}\\d{1,6}){0,2}` +
+    `(?:(?:${PHONE_SEPARATOR})?\\d{3,12}(?:${PHONE_SEPARATOR}\\d{1,6}){0,2}` +
     // The subscriber block is also commonly grouped into short 2-digit pairs
     // (e.g. "030 12 34 56 78"). That shape needs its own branch requiring a
-    // real separator before the first group: making the plain 3-8 digit
+    // real separator before the first group: making the plain 3-12 digit
     // block's minimum 2 instead let it match any bare digit run (an area code
     // plus a short unseparated remainder, e.g. "1000" in "kontakt.1000@..."),
     // turning every 4+ digit number after a "kontakt"-labelled line into a

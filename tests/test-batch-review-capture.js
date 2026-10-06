@@ -157,6 +157,16 @@ async function main() {
     assert.deepStrictEqual(value.entry, { opaque_entry: true });
     assert.strictEqual(typeof batchFacade._test.captureDeferredReviewInput, 'function');
   });
+  await testAsync('internal quality capture binds the exact privacy source without changing the draft or public journal', async () => {
+    const draft = { original_text: 'SYNTHETISCHE QUELLE', anonymized_text: '[PERSON_001]', ambiguities: [{}] };
+    const value = fixture({ draft }); value.item.source_label = 'synthetic.csv';
+    let observed;
+    value.deps.onReviewSourceCaptured = event => { observed = event; assert.ok(Object.isFrozen(event)); };
+    assert.strictEqual(await value.run(), draft);
+    assert.deepEqual(observed, { sourceLabel: 'synthetic.csv', originalText: draft.original_text });
+    assert.deepEqual(value.state, value.stateBefore);
+    assert.equal(Object.hasOwn(value.item, 'originalText'), false);
+  });
 
   done();
 }

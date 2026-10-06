@@ -61,17 +61,24 @@ function throwIfAborted(signal) {
   throw error;
 }
 
-function reservePersonReviewCandidates(text, pseudonymRegistry, allowOrganizationReview = false) {
+function reservePersonReviewCandidates(text, pseudonymRegistry, allowOrganizationReview = false, profile = 'general') {
   // Source preview, reservations and engine must share one representation.
   // Parser-generated <br>/entities otherwise shift retained review fragments.
   const original = canonicalizeRenderedText(text);
-  const reservations = personProseCandidateSpans(original, { productChannel: allowOrganizationReview ? 'standalone' : 'cowork' })
+  const reservations = personProseCandidateSpans(original, { productChannel: allowOrganizationReview ? 'standalone' : 'cowork', profile })
     .filter((span) => !pseudonymRegistry?.lookup?.('PERSON', span.value) &&
       !(allowOrganizationReview && pseudonymRegistry?.lookup?.('ORG', span.value)))
     .map((span, index) => ({
       ...span,
       token: `[PERSON_REVIEW_${String(index + 1).padStart(6, '0')}]`
     }));
+  const ordered = [...reservations].sort((a, b) => a.start - b.start);
+  if (ordered.some((span, index) => original.slice(span.start, span.end) !== span.value ||
+      (index > 0 && ordered[index - 1].end > span.start))) {
+    const error = new SafeError('Überlappende lokale Fundstellen konnten nicht eindeutig rekonstruiert werden. Es wurde nichts freigegeben.');
+    error.code = 'AMBIGUITY_REVIEW_REQUIRED';
+    throw error;
+  }
   for (const reservation of reservations) {
     if (original.includes(reservation.token)) {
       const error = new SafeError('Ein lokaler Personenhinweis kollidiert mit reservierter interner Syntax. Es wurde nichts freigegeben.');
@@ -473,6 +480,17 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     // text privacy gate; the image bytes themselves stay local. See
     // docs/PLUGIN_SECURITY_MODEL.md.
     let rawWithOcr = converted.markdown + vis.ocrExtras;
+    if (deps.productChannel === 'standalone' && converted.ocrContacts?.length) {
+      const contactInput = { original_text: rawWithOcr, contacts: converted.ocrContacts, source_type: converted.sourceType };
+      require('../core/ocr-contact-review').validateContacts(contactInput.contacts, contactInput.original_text, contactInput.source_type);
+      if (typeof deps.prepareOcrContacts !== 'function') {
+        const error = new SafeError('OCR-Kontaktwerte benötigen eine lokale Bestätigung vor der Anonymisierung.');
+        error.code = 'LOCAL_REVIEW_DEFERRED';
+        throw error;
+      }
+      rawWithOcr = await deps.prepareOcrContacts(contactInput);
+      if (typeof rawWithOcr !== 'string' || rawWithOcr.length > LIMITS.MAX_TEXT_CHARS) throw new SafeError('Die bestätigte OCR-Fassung ist ungültig.');
+    }
     if (converted.unreviewedVisualCount) {
       rawWithOcr +=
         `\n\n> Hinweis: ${converted.unreviewedVisualCount} PDF-Visualobjekt(e) konnten nicht ` +
@@ -485,19 +503,22 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     // from an MCP tool argument and is never written to an output package,
     // journal, diagnostic, or audit receipt.
     const pseudonymRegistry = deps.pseudonymRegistry || makeRegistry();
-    const personReview = reservePersonReviewCandidates(rawWithOcr, pseudonymRegistry, deps.productChannel === 'standalone');
+    const personReview = reservePersonReviewCandidates(rawWithOcr, pseudonymRegistry, deps.productChannel === 'standalone', effective);
     const anon = anonymizeMarkdown(personReview.masked, effective, { registry: pseudonymRegistry, deferPersonReview: true });
     anon.text = personReview.restore(anon.text);
     const organizationAmbiguities = ['personnel_profile', 'applicant'].includes(effective)
       ? credentialIssuerAmbiguities(personReview.original, anon.text)
       : [];
+    const proseAmbiguities = personProseAmbiguities(personReview.original, anon.text, { productChannel: deps.productChannel, profile: effective });
     const personAmbiguities = [
-      ...personProseAmbiguities(personReview.original, anon.text, { productChannel: deps.productChannel }),
+      ...proseAmbiguities,
       ...residualPersonAmbiguities(personReview.original, anon.text,
         pii.scanResidual(anon.text, effective, anon.dictionary, {
           strongPersonAnchor: anon.strongPersonAnchor, includePersonCandidateSpans: true,
           originalSourceText: personReview.original
-        }), { productChannel: deps.productChannel })
+        }).filter(finding => finding.type !== 'PERSON_CANDIDATE' || !proseAmbiguities.some(candidate =>
+          finding.start >= candidate.anonymized_start && finding.end <= candidate.anonymized_end)),
+        { productChannel: deps.productChannel })
     ];
     const ambiguities = [...organizationAmbiguities, ...personAmbiguities];
     const personReviewBinding = createPersonReviewBinding(anon.text, ambiguities, {
