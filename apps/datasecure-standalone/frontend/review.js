@@ -48,6 +48,9 @@ function setWaiting(message, working = false) {
   el('contact-value').value = '';
   el('contact-correction').hidden = true;
   el('contact-error').textContent = '';
+  el('contact-image').src = '';
+  el('contact-original').hidden = true;
+  el('contact-image-note').textContent = '';
   el('waiting').hidden = false;
   el('work-indicator').hidden = !working;
   if (el('waiting-text').textContent !== message) el('waiting-text').textContent = message;
@@ -124,6 +127,28 @@ function documentPositions(draft) {
   return result;
 }
 
+function contactImageUrl(image) {
+  if (!image) return null;
+  const keys = ['schema', 'source_width', 'source_height', 'x', 'y', 'width', 'height', 'png_base64'];
+  if (Object.keys(image).length !== keys.length || !keys.every(key => Object.hasOwn(image, key)) ||
+      image.schema !== 'datasecure-ocr-contact-image/1' ||
+      !keys.slice(1, 7).every(key => Number.isSafeInteger(image[key])) ||
+      image.x < 0 || image.y < 0 || image.width < 1 || image.height < 1 ||
+      image.width > 4096 || image.height > 256 || image.width * image.height > 200000 ||
+      image.source_width < 1 || image.source_height < 1 || image.source_width * image.source_height > 30000000 ||
+      image.x + image.width > image.source_width || image.y + image.height > image.source_height ||
+      typeof image.png_base64 !== 'string' || image.png_base64.length > 131072 ||
+      !/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/u.test(image.png_base64)) return null;
+  const bytes = atob(image.png_base64);
+  if (bytes.length < 33 || ![137, 80, 78, 71, 13, 10, 26, 10].every((value, index) => bytes.charCodeAt(index) === value)) return null;
+  const integer = offset => Array.from(bytes.slice(offset, offset + 4), char => char.charCodeAt(0))
+    .reduce((number, byte) => number * 256 + byte, 0);
+  if (integer(16) !== image.width || integer(20) !== image.height) return null;
+  // The private broker already checked the closed PNG structure and CRCs.
+  // Never let source content choose an image URL or MIME type in the renderer.
+  return `data:image/png;base64,${image.png_base64}`;
+}
+
 function render() {
   const draft = state.draft;
   if (!draft) return;
@@ -134,6 +159,7 @@ function render() {
   const count = groupIds(candidate).length;
   const credential = candidate.type === 'credential_issuer_ambiguous';
   const contact = draft.ocr_contact_review === true && candidate.type === 'ocr_contact_ambiguous';
+  const markdownContact = contact && draft.processing_mode === 'markdown-only';
   const organizationEnabled = !contact && !credential && draft.allow_organization_review === true;
   el('summary').textContent = `${state.choices.size} von ${items.length} Stellen entschieden. Nur die aktive Fundstelle ist unten zu beurteilen.`;
   el('document-position').textContent = `Dokument ${state.documentPositions.get(candidate.ambiguity_id)} von ${draft.batch_review?.document_count || 1}`;
@@ -147,7 +173,16 @@ function render() {
   if (organizationEnabled) el('group-note').textContent +=
     ' Die gewählte Behandlung gilt für dieselbe vollständige Schreibweise in offenen und folgenden Prüfungen dieses Laufs – auch in anderen Dokumenten. Bereits fertige Ergebnisse werden nicht nachträglich geändert.';
   if (contact) el('group-note').textContent = `OCR: Seite/Bild ${candidate.page}, Zeile ${candidate.line}. ` +
-    'Vergleiche jedes Zeichen mit dem Original. Diese Bestätigung betrifft nur die Texterkennung; danach durchläuft der bestätigte Text die normale Anonymisierung und Restprüfung. Hohe OCR-Sicherheit ersetzt diese Prüfung nicht.';
+    'Vergleiche jedes Zeichen mit dem Original. ' + (markdownContact
+      ? 'Nur OCR-Korrektur: Der Markdown-Export bleibt nicht anonymisiert und enthält Originalinhalte. Andere OCR-Zeilen sind damit nicht bestätigt.'
+      : 'Diese Bestätigung betrifft nur die Texterkennung; danach durchläuft der bestätigte Text die normale Anonymisierung und Restprüfung. Hohe OCR-Sicherheit ersetzt diese Prüfung nicht.');
+  const imageUrl = contact ? contactImageUrl(candidate.image) : null;
+  el('contact-original').hidden = !contact;
+  el('contact-image').hidden = !imageUrl;
+  el('contact-image').src = imageUrl || '';
+  el('contact-image-note').textContent = !contact ? '' : imageUrl
+    ? 'Rasterausschnitt dieser Kontaktzeile; bei PDFs lokal aus der Seite gerendert. Nicht exportiert und nicht an KI übergeben.'
+    : 'Kein eindeutig zugeordneter Bildausschnitt verfügbar (Geometrie oder Größenlimit). Bitte den Wert in der Originaldatei vergleichen; die OCR-Lesart ist kein Originalbild.';
   el('source-context').textContent = context(draft.original_text, candidate.original_start, candidate.original_end);
   const choice = state.choices.get(candidate.ambiguity_id);
   const marker = choice === 'redact_organization' ? '[UNTERNEHMEN_…]' : choice === 'redact' ?
@@ -158,7 +193,7 @@ function render() {
     draft.anonymized_text.slice(candidate.anonymized_end) : draft.anonymized_text;
   el('output-context').textContent = context(preview, candidate.anonymized_start,
     replacement ? candidate.anonymized_start + replacement.length : candidate.anonymized_end);
-  el('output-title').textContent = contact ? 'Bestätigter Texteingang (noch nicht anonymisiert)' : 'Vorgesehene Ausgabe';
+  el('output-title').textContent = markdownContact ? 'Markdown-Texteingang (nicht anonymisiert)' : contact ? 'Bestätigter Texteingang (noch nicht anonymisiert)' : 'Vorgesehene Ausgabe';
   el('contact-correction').hidden = !contact;
   el('contact-value').value = contactValue || exact;
   el('contact-error').textContent = '';
@@ -384,6 +419,9 @@ async function continueReview() {
 async function closeReviewWindow() {
   if (state.closed) return;
   invalidateLoads();
+  const closingMessage = state.draft ? 'Das Prüffenster wird geschlossen.' : el('waiting-text').textContent;
+  clearDraft();
+  setWaiting(closingMessage);
   state.closed = true;
   try { await invoke('close_review_window'); }
   catch {

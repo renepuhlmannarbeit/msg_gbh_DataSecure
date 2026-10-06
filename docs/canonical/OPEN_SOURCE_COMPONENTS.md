@@ -69,6 +69,21 @@ prüft Reproduzierbarkeit und Schemaausführung. Diagnose speichert nur
 
 ## Nicht aktivierte Alternativen und Historie
 
+Am 06.10.2026 wurde der offizielle PaddleOCR-Latin-Recognizer ausschließlich in
+einem getrennten synthetischen Engineeringversuch verwendet, nicht im Produkt:
+[Modellrevision 89d3a50e](https://huggingface.co/PaddlePaddle/latin_PP-OCRv5_mobile_rec_onnx/tree/89d3a50e2c27e2e7cceeab0e944c25c807d5db4f),
+laut Modellkarte Apache-2.0, 8.042.023 ONNX-Bytes, SHA-256
+`7888113072263cb471b93f66dd5e2ad70548dc526fa1ace760d0d973dd121498`.
+Konfiguration/Zeichensatz werden separat an den gepinnten Git-Blob gebunden.
+ONNX Runtime Node 1.30.0 (MIT) liegt nur im eigenen `dist/ocr-methods-*`-Bereich,
+mit npm-Integritätsbindung und deaktivierten Installationsscripts; keine neue
+Produktabhängigkeit oder Modelldistribution. Vor einer Integration wären echte
+Lizenztexte/SBOM, Plattformpakete, native Sandbox und Offline-/Größengates nötig.
+Der Canvas-Port ist nicht numerisch gegen OpenCVs Referenz validiert.
+Der Vergleich verbessert die alte Regression, verschlechtert jedoch den neuen
+Korpus; weder Reader noch Konfidenz dürfen still die Produktlesart ersetzen.
+Methodik und Aussagegrenzen: [DETECTOR_BENCHMARK](../DETECTOR_BENCHMARK.md).
+
 Die früheren Kandidatenbewertungen samt Primärquellen und datierten
 Engineering-Läufen stehen vollständig im
 [archivierten Auswahlregister](../archive/2026-09/OPEN_SOURCE_COMPONENTS_BEFORE_RC109.md).

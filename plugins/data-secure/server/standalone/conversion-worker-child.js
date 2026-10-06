@@ -13,6 +13,7 @@ const { unreadableSymbolRun, cleanOcrSymbolLines, visualNotices } = require('./m
 const { contactQuality, qualityNotice } = require('./ocr-quality');
 const { refineOcr } = require('./ocr-refinement');
 const { contactSpans } = require('../core/ocr-contact-review');
+const { attachContactCrops } = require('./ocr-contact-crops');
 const { nativeTextSeparator, paintedTextGeometryAvailable, nativeTextRegions, uncoveredOcrText } = require('./pdf-text-layout');
 const { SOURCE_TYPES, ERROR_CODES, MAX_INPUT_BYTES } = require('../core/conversion-worker-contract');
 const { decodePng } = require('../images/png');
@@ -68,7 +69,8 @@ async function recognize(canvas, ocr, nativeRegions = []) {
   const data = nativeRegions.length ? result.data : await refineOcr(result.data, canvas, ocr, canvasApi().createCanvas);
   if (data.text.length > MAX_MARKDOWN_CHARS) fail('TEXT_TOO_LARGE');
   const recognized = cleanOcrSymbolLines(nativeRegions.length ? uncoveredOcrText(data, nativeRegions) : data.text);
-  return { ...recognized, quality: contactQuality(data, recognized.text), wordData: data.blocks };
+  return { ...recognized, quality: contactQuality(data, recognized.text), wordData: data.blocks,
+    cropText: nativeRegions.length ? null : data.text };
 }
 
 async function imageMarkdown(bytes, type) {
@@ -110,7 +112,8 @@ async function imageMarkdown(bytes, type) {
     const notices = [visualNotices({ image: true, symbols: recognized.omitted }), qualityNotice(recognized.quality)]
       .filter(Boolean).join('\n\n');
     return createMarkdownExtraction({ source_type: type, markdown: `${text}${text ? '\n\n' : ''}${notices}`,
-      ...(recognized.quality.contact_lines.length ? { ocr_contacts: contactSpans(text, recognized.quality) } : {}),
+      ...(recognized.quality.contact_lines.length ? { ocr_contacts: attachContactCrops(
+        contactSpans(text, recognized.quality), text, recognized.wordData, canvas, { bytes: 0 }, recognized.cropText) } : {}),
       coverage: { status: 'incomplete', reason_codes: reasons.sort() } });
   } finally {
     if (ocr) await ocr.terminate();
@@ -192,6 +195,7 @@ async function pdfMarkdown(bytes, passiveObjects = false) {
     const sections = metadataLines.length ? [`# Dokumentmetadaten\n\n${literal(metadataLines.join('\n'))}`] : [];
     const reasons = new Set(['SOURCE_COVERAGE_UNVERIFIED', 'VISUAL_CONTENT_NOT_EXTRACTED']);
     const contacts = [];
+    const cropBudget = { bytes: 0 };
     let total = sections.reduce((sum, section, index) => sum + section.length + (index ? 2 : 0), 0);
     if (total > MAX_MARKDOWN_CHARS) fail('TEXT_TOO_LARGE');
     for (let number = 1; number <= document.numPages; number++) {
@@ -255,7 +259,8 @@ async function pdfMarkdown(bytes, passiveObjects = false) {
           if (quality.contact_lines.length) {
             reasons.add('OCR_CONTACT_VALUES_UNVERIFIED');
             ocrNotice = qualityNotice(quality, number);
-            retainedContacts = contactSpans(retained, quality, number);
+            retainedContacts = attachContactCrops(contactSpans(retained, quality, number),
+              retained, recognized.wordData, canvas, cropBudget, recognized.cropText);
           }
           if (!recognized.text.trim() && !hasNativeText) reasons.add('OCR_TEXT_EMPTY');
         }

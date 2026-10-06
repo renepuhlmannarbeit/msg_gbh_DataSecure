@@ -3,7 +3,30 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { createRequire } from 'node:module';
 import { image } from './conversion-fixtures.mjs';
+const require = createRequire(import.meta.url);
+const { decodePng } = require('../../plugins/data-secure/server/images/png');
+const { validateContactImage } = require('../../plugins/data-secure/server/core/ocr-contact-image');
+
+function assertOriginalContactPixels(draft, bytes) {
+  const original = decodePng(bytes);
+  try {
+    for (const item of draft.ambiguities) {
+      assert.ok(item.image, 'PACKAGED_CONTACT_ORIGINAL_CROP_MISSING');
+      validateContactImage(item.image);
+      const { x, y, width, height, source_width, source_height } = item.image;
+      assert.equal(source_width, original.width); assert.equal(source_height, original.height);
+      const crop = decodePng(Buffer.from(item.image.png_base64, 'base64'));
+      try {
+        for (let row = 0; row < height; row++) assert.deepEqual(
+          crop.rgba.subarray(row * width * 4, (row + 1) * width * 4),
+          original.rgba.subarray(((y + row) * original.width + x) * 4, ((y + row) * original.width + x + width) * 4),
+          'PACKAGED_CONTACT_CROP_MUST_RETAIN_EXACT_SOURCE_PIXELS');
+      } finally { crop.rgba.fill(0); }
+    }
+  } finally { original.rgba.fill(0); }
+}
 
 export const contactReferences = Object.freeze([
   { name: '01-kontakte.png', email: 'alpha@native.example.invalid', corrected: 'alpha-corrected@native.example.invalid' },
@@ -62,8 +85,8 @@ export function assertAppliedOcrCorrection(draft, expected) {
   assert.ok(!draft.original_text.includes(expected.email) && !draft.original_text.includes(contactPhone), 'OCR_OLD_CONTACT_REUSED');
 }
 
-export async function runPackagedOcrScenario({ request: initialRequest, restart, sourceDirectory }) {
-  let request = initialRequest, sequence = 0x9000;
+export async function runPackagedOcrScenario({ request: initialRequest, restart, sourceDirectory, markdownOnly = false }) {
+  let request = initialRequest, sequence = markdownOnly ? 0xa000 : 0x9000;
   const send = async (action, fields = {}) => {
     const response = await request({ schema: 'datasecure-standalone-private-ipc/1',
       request_id: (++sequence).toString(16).padStart(16, '0'), action, ...fields });
@@ -87,14 +110,15 @@ export async function runPackagedOcrScenario({ request: initialRequest, restart,
     const draft = JSON.parse(Buffer.concat(pieces).toString('utf8'));
     return draft;
   }
-  const directory = path.join(sourceDirectory, 'Paketgebundene-OCR-Pruefung');
+  const directory = path.join(sourceDirectory, markdownOnly ? 'Paketgebundene-Markdown-OCR-Pruefung' : 'Paketgebundene-OCR-Pruefung');
   fs.mkdirSync(directory);
   const fixtures = packagedOcrFixtures();
   const sources = [...fixtures].map(([name, bytes]) => {
     const file = path.join(directory, name); fs.writeFileSync(file, bytes, { flag: 'wx' }); return file;
   });
   assert.equal((await send('admit_selected_sources', { source_kind: 'files', source_paths: sources })).selected_count, 2);
-  await send('start_admitted_batch', { processing_mode: 'markdown-and-anonymize', output_naming_mode: 'neutral' });
+  await send('start_admitted_batch', markdownOnly ? { processing_mode: 'markdown-only', ocr_contact_review: true } :
+    { processing_mode: 'markdown-and-anonymize', output_naming_mode: 'neutral' });
   const row = await until(async () => {
     const item = (await send('get_run_history')).entries[0];
     return item?.status === 'review_required' && (await send('get_public_state')).state === 'review_required' ? item : false;
@@ -115,7 +139,9 @@ export async function runPackagedOcrScenario({ request: initialRequest, restart,
   for (const [index, expected] of contactReferences.entries()) {
     const draft = await draftFor(ready);
     assert.equal(draft.ocr_contact_review, true); assert.equal(draft.ambiguities.length, 2);
+    assert.equal(draft.processing_mode, markdownOnly ? 'markdown-only' : undefined);
     assert.ok(draft.original_text.includes(expected.email), 'OCR_REFERENCE_DOCUMENT_BINDING_INVALID');
+    assertOriginalContactPixels(draft, fixtures.get(expected.name));
     // Explicit reference-bound test decisions only: never guessed replacements.
     // Deliberately DIFFERENT synthetic replacements prove application, not
     // merely that an action named "correct_contact" was accepted.
@@ -125,6 +151,7 @@ export async function runPackagedOcrScenario({ request: initialRequest, restart,
         replacement: item.contact_kind === 'email' ? expected.corrected : correctedPhone };
     });
     await send('submit_review', { review_id: ready.review_id, answer: { action: 'reviewed', redactions: [], decisions } });
+    if (markdownOnly && index === contactReferences.length - 1) break;
     const previous = ready.review_id;
     ready = await until(async () => {
       const value = await send('get_review_session'); return value.ready && value.review_id !== previous ? value : false;
@@ -133,6 +160,7 @@ export async function runPackagedOcrScenario({ request: initialRequest, restart,
   // The contact phase covers ALL documents before ordinary entity review.
   // Prove both distinct replacements reached the actual privacy input, then
   // restart AFTER durable correction. Old raw contacts must not be replayed.
+  if (!markdownOnly) {
   const entityDraft = await draftFor(ready); assert.equal(entityDraft.ocr_contact_review, undefined);
   for (const expected of contactReferences) assertAppliedOcrCorrection(entityDraft, expected);
   await send('submit_review', { review_id: ready.review_id, answer: { action: 'deferred' } });
@@ -147,13 +175,29 @@ export async function runPackagedOcrScenario({ request: initialRequest, restart,
   });
   assert.ok(entityChoices.length);
   await send('submit_review', { review_id: ready.review_id, answer: { action: 'reviewed', redactions: [], decisions: entityChoices } });
+  }
   await until(async () => (await send('get_review_session')).run_complete, 'corrected contacts must pass ordinary anonymization and publication');
   const complete = (await send('get_run_history')).entries.find(item => item.batch_id === row.batch_id);
   assert.equal(complete.result_count, 2); assert.equal(complete.failed_count, 0); assert.equal(complete.resumable, false);
   const output = await send('resolve_history_results', { batch_id: row.batch_id });
   const texts = fs.readdirSync(output.local_path).filter(name => name.endsWith('.md'))
     .map(name => fs.readFileSync(path.join(output.local_path, name), 'utf8'));
-  assertPackagedOcrOutputs(texts);
+  if (!markdownOnly) assertPackagedOcrOutputs(texts);
+  else {
+    assert.equal(texts.length, 2); assert.equal(complete.processing_mode, 'markdown-only');
+    for (const expected of contactReferences) {
+      const matching = texts.filter(value => value.includes(`E-Mail: ${expected.corrected}`));
+      assert.equal(matching.length, 1, 'CORRECTED_MARKDOWN_CONTACT_DOCUMENT_MISSING');
+      const output = matching[0];
+      assert.match(output, /Name: Max Mustermann/u); assert.match(output, /Java bleibt\./u);
+      assert.match(output, /SYNTHETISCHER KORREKTURTEST/u);
+      assert.ok(output.includes(`Telefon: ${correctedPhone}`));
+      assert.doesNotMatch(output, /\[PERSON_|\[EMAIL_|\[PHONE_|png_base64|data:image|Anonymisierungsstatus/u);
+      assert.ok(!output.includes(expected.email) && !output.includes(contactPhone), 'OLD_MARKDOWN_CONTACT_REUSED');
+    }
+    assert.ok(!fs.readdirSync(output.local_path).some(name => /Identitaeten|Zuordnung/u.test(name)),
+      'MARKDOWN_REVIEW_MUST_NOT_CREATE_PRIVACY_MAPPINGS');
+  }
   for (const [index, source] of sources.entries()) assert.deepEqual(fs.readFileSync(source), [...fixtures.values()][index]);
-  process.stdout.write('STANDALONE PACKAGED OCR CONTACT IPC PASS (real pixels/converter; correction; defer/restart; next document; verified final outputs; no native UI claim)\n');
+  process.stdout.write(`STANDALONE PACKAGED ${markdownOnly ? 'MARKDOWN ' : ''}OCR CONTACT IPC PASS (exact original crop pixels; correction; defer/restart; next document; verified final outputs; no native UI claim)\n`);
 }

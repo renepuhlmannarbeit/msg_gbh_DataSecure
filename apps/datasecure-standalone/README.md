@@ -54,8 +54,10 @@ noch **kein freigegebenes Endnutzerprodukt**.
 
 Bei der Anonymisierung von Scan-PDFs und Bildern kann die vorhandene lokale
 Prüfung zuerst fragen: **Wurde dieser Kontaktwert richtig erkannt?** Seite und
-OCR-Zeile nennen die Position. Vergleichen Sie den angezeigten Wert mit Ihrem
-lokalen Original. Sie können ihn ausdrücklich bestätigen oder die richtige
+OCR-Zeile nennen die Position. Ein eindeutig zugeordneter Original-Rasterausschnitt
+steht direkt daneben; bei PDF aus der lokal gerenderten Seite. Wenn Geometrie
+oder Größenlimit keinen sicheren Ausschnitt erlauben, bittet die Oberfläche
+ausdrücklich um Vergleich mit der Originaldatei. Sie können den Wert bestätigen oder die richtige
 E-Mail-/Telefonschreibweise eingeben. Die Aktionen heißen **OCR-Wert unverändert
 bestätigen**, **Kontaktwert korrigieren** und **Kontaktwerte bestätigen und weiter**.
 Danach folgt im selben Fenster die normale
@@ -69,8 +71,13 @@ nennt die App die betroffenen Dateien und verlangt einen neuen Lauf. Identische
 OCR-Fehlschreibweisen werden nicht automatisch als derselbe echte Kontakt
 behandelt. Mehr als 400 Kontaktstellen in einem einzelnen Dokument erfordern
 Aufteilung; Korrekturen sind auf 256 Zeichen beschränkt. Originale bleiben
-unverändert. **Nur in Markdown umwandeln** benötigt keine Kontaktfreigabe und
-enthält weiterhin den ursprünglichen OCR-Text mit Qualitätshinweisen.
+unverändert. **Nur in Markdown umwandeln** benötigt standardmäßig keine
+Kontaktfreigabe und enthält den ursprünglichen OCR-Text mit Qualitätshinweisen.
+Vor **Starten** kann zusätzlich **OCR-Kontaktwerte vor dem Markdown-Export lokal prüfen**
+aktiviert werden. Dann lassen sich Kontaktstellen auch ohne Anonymisierung
+korrigieren, verschieben und nach Neustart fortsetzen. Namen und andere
+Originalinhalte bleiben erhalten; andere OCR-Zeilen werden dadurch nicht geprüft.
+Die Bildausschnitte werden nicht mit exportiert und nicht an KI übergeben.
 
 Diese Funktion ist lokal implementiert und technisch geprüft, noch nicht in
 einem neuen Windows-/Mac-Releasepaket abgenommen. OCR kann auch unerkannte Fehler

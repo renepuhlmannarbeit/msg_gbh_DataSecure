@@ -107,6 +107,7 @@ async function dispatch(message) {
     case 'remove_admitted_source': return service.removeAdmittedSource(message.selection_index);
     case 'cancel_admission': return service.cancelAdmission();
     case 'start_admitted_batch': return service.startAdmittedBatch({ processingMode: message.processing_mode,
+      ...(message.ocr_contact_review === true ? { ocrContactReview: true } : {}),
       ...(message.output_naming_mode ? { outputNamingMode: message.output_naming_mode } : {}) });
     case 'get_public_state': return service.status();
     case 'get_ui_context': return service.uiContext();

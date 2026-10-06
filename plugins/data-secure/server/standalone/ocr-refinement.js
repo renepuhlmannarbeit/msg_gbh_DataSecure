@@ -114,4 +114,4 @@ async function refineOcr(data, canvas, ocr, createCanvas) {
     ({ ...paragraph, lines: (paragraph.lines || []).map(line => lineChanges.get(line) || line) })) })) };
 }
 
-module.exports = Object.freeze({ refinementPlan, refinedValue, refineOcr });
+module.exports = Object.freeze({ validBox, refinementPlan, refinedValue, refineOcr });

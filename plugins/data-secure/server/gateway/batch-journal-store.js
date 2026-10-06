@@ -71,7 +71,8 @@ function createBatchJournalStore(options = {}) {
   }
 
   function purposeOf(state) {
-    return `${state.product_channel || 'plugin'}:${processingModeForBatch(state)}:${resultNamingModeForBatch(state)}`;
+    return `${state.product_channel || 'plugin'}:${processingModeForBatch(state)}:${resultNamingModeForBatch(state)}` +
+      (state.ocr_contact_review === true ? `:ocr:${state.ocr_review_seed}` : ':ocr-off');
   }
 
   function assertPurposeUnchanged(state, target) {
@@ -263,6 +264,12 @@ function createBatchJournalStore(options = {}) {
   }
 
   function validPseudonymState(state) {
+    if (Object.hasOwn(state || {}, 'ocr_contact_review') || Object.hasOwn(state || {}, 'ocr_review_seed')) {
+      if (state.product_channel !== 'standalone' || state.schema !== MARKDOWN_SCHEMA || state.processing_mode !== 'markdown-only' ||
+          state.ocr_contact_review !== true || !PSEUDONYM_SEED_RE.test(String(state.ocr_review_seed || '')) ||
+          Buffer.from(state.ocr_review_seed, 'base64url').length !== 32 ||
+          Buffer.from(state.ocr_review_seed, 'base64url').toString('base64url') !== state.ocr_review_seed) return false;
+    }
     if (!validStandaloneReviewChoices(state)) return false;
     const fields = ['pseudonym_contract_version', 'pseudonym_ruleset_version', 'pseudonym_seed'];
     const present = fields.filter((field) => Object.hasOwn(state || {}, field));
@@ -384,7 +391,7 @@ function createBatchJournalStore(options = {}) {
       } catch { return false; }
     }
     if (Object.hasOwn(item, 'document_result')) return false;
-    if (['pending', 'retryable'].includes(item.status)) return present.length === 0;
+    if (['pending', 'retryable', 'deferred_review'].includes(item.status)) return present.length === 0;
     if (!['processing', 'mapping_pending', 'delivery_pending', 'released'].includes(item.status)) return false;
     if (item.status === 'processing' && present.length === 0) return true;
     // Publication can complete just before the worker loses its response. The
@@ -445,6 +452,8 @@ function createBatchJournalStore(options = {}) {
       ['plugin', 'standalone'].includes(state.product_channel);
     try { processingModeForBatch(state); resultNamingModeForBatch(state); } catch { return false; }
     return state?.token === token && supportedSchema && validProductChannel && validPseudonymState(state) &&
+      (state.schema !== MARKDOWN_SCHEMA || state.ocr_contact_review === true ||
+        !state.items?.some(item => item.status === 'deferred_review')) &&
       Array.isArray(state?.items) && state.items.length > 0 &&
       state.items.length <= maxBatchFiles &&
       state.items.every((item) => validPreflightItem(item, state.schema)) &&

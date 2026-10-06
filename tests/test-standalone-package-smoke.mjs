@@ -627,6 +627,7 @@ try {
   // The first scenario restarted the actual sidecar; request now points at
   // that live process, not the initial closed transport.
   await runPackagedOcrScenario({ request, sourceDirectory, restart: restartReviewSidecar });
+  await runPackagedOcrScenario({ request, sourceDirectory, restart: restartReviewSidecar, markdownOnly: true });
   const log = fs.readFileSync(path.join(environment.DATASECURE_STANDALONE_DIAGNOSTIC_DIR, 'sidecar-interactions.jsonl'), 'utf8');
   for (const row of historyRows) assert.ok(!log.includes(row.batch_id), 'run identifiers stay out of diagnostics');
   assert.ok(!log.includes(exactRun) && !log.includes(convertedRun));

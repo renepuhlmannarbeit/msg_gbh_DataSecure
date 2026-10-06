@@ -119,8 +119,24 @@ vor jeder Personenreservierung und Anonymisierung bestätigen oder ausdrücklich
 korrigieren. Seite, OCR-Zeile und genaue UTF-16-Position kommen aus dem
 Konvertervertrag; ein Kontaktwarncode ohne gültige nichtleere Spannenkarte wird
 abgewiesen. Hohe OCR-Konfidenz und übereinstimmende Zusatzlesarten sind keine
-Freigabe. Reine Markdown-Konvertierung erhält weiterhin die ursprüngliche
-Extraktion mit Qualitätshinweis.
+Freigabe. Reine Markdown-Konvertierung erhält standardmäßig die ursprüngliche
+Extraktion mit Qualitätshinweis. Die nicht vorausgewählte Option
+**OCR-Kontaktwerte vor dem Markdown-Export lokal prüfen** erlaubt auch hier ausdrückliche
+Kontaktkorrektur, ohne Anonymisierung oder Pseudonyme. Verschieben hält nur die
+betroffene Datei offen; Neustart bindet Opt-in und eigenen Seed erneut.
+
+Private Bildausschnitte enthalten ausschließlich die tatsächlich verwendeten
+Rasterpixel. PDF-Seiten werden lokal gerendert, nicht als Original-PDF-Pixel
+ausgegeben. Nur vollständig passende unmodifizierte OCR-Transkripte und
+eindeutige vollständige Geometrie erlauben einen Ausschnitt. Filterung oder
+Mehrdeutigkeit ergibt einen sichtbaren Originaldatei-Fallback, keinen geratenen
+Bildbeweis. Der geschlossene PNG-Vertrag erlaubt keine URL, Pfade, Metadaten,
+SVG, Animation oder angehängte Nutzlast; Struktur, CRC, Dimensionen und begrenzte
+Dekompression werden geprüft. Grenzen: 96 KiB/200.000 Pixel je Ausschnitt und
+2 MiB/2.000.000 Pixel je Dokument. Transport bleibt im privaten Reviewkanal.
+Die Hauptansicht erhält keine Pixel. Beim Übergang/Schließen werden Bild- und
+Rohtext-DOM geleert; eigene Buffer werden überschrieben. Das ist ausdrücklich
+keine garantierte Löschung unveränderlicher JavaScript-Strings oder OS-Caches.
 
 Maximal 400 Kontaktentscheidungen pro Dokument und 256 Zeichen pro Korrektur
 halten die vollständige Antwort innerhalb von 900 KiB und damit des 1-MiB-
@@ -130,7 +146,10 @@ Werte werden nicht von Ersetzungen oder Residual-Gates ausgenommen.
 
 Atomare private `.ocrreview`-Dateien binden komplette Entscheidungen per HMAC an
 Lauf/Seed, Quellen-Snapshot, vollständige aktuelle Extraktion, Policy, Vertrag
-und exakte Kontaktspannen. Die Wiederaufnahme prüft diese Bindung und die
+und exakte Kontaktspannen. Neue v2-Records binden auch Zweck und Bilddigest;
+Bildbytes werden nicht gespeichert. Gültige alte v1-Anonymisierungsentscheidungen
+bleiben unter ihrer bisherigen vollständigen HMAC-Bindung lesbar, nicht für
+Markdown. Die Wiederaufnahme prüft diese Bindung und die
 gehaltene Dateiintegrität erneut. Veränderungen stoppen mit
 `OCR_CONTACT_REVIEW_INVALID` und einem festen Hinweis auf einen neuen Lauf.
 Einträge enthalten gegebenenfalls Korrektur-Rohwerte und gehören ausschließlich

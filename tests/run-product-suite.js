@@ -21,6 +21,7 @@ const baseFiles = [
   'tests/test-standalone-quality-regression.js',
   'tests/test-ocr-refinement.js',
   'tests/test-ocr-contact-review.js', 'tests/test-ocr-contact-flow.js',
+  'tests/test-ocr-contact-images.js',
   'tests/test-cargo-license-inventory.mjs',
   'tests/test-mcp-input-validation.mjs',
   'tests/test-root-boundary.js', 'tests/test-claude-code-pilot.mjs',

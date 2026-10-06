@@ -62,6 +62,11 @@ function validatePrivateMessage(message) {
   if (message.action === 'start_admitted_batch') {
     allowedFields.add('processing_mode');
     validateProcessingMode(message.processing_mode, 'standalone');
+    if (Object.hasOwn(message, 'ocr_contact_review')) {
+      allowedFields.add('ocr_contact_review');
+      if (message.processing_mode !== 'markdown-only' || message.ocr_contact_review !== true)
+        fail('OCR_CONTACT_REVIEW_INVALID', 'OCR-Kontaktkorrektur ist eine ausdrückliche Option der reinen Konvertierung.');
+    }
     if (message.processing_mode === 'markdown-and-anonymize') {
       allowedFields.add('output_naming_mode');
       validateResultNamingMode(message.output_naming_mode, 'standalone');

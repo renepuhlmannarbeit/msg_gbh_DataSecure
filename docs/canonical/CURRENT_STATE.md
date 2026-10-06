@@ -360,7 +360,8 @@ Kontaktstellen vor Personenreservierung und Privacy-Analyse ab. Bestätigen und
 ausdrückliches Korrigieren sind eigene geschlossene Aktionen; Quelle, Seite,
 OCR-Zeile und UTF-16-Spannen bleiben gebunden. Danach folgen normale
 Anonymisierung, Entitätsentscheidung und unabhängige Restprüfung im selben
-Fenster. Reine Konvertierung und Originale bleiben unverändert.
+Fenster. Ohne das zusätzliche ausdrückliche OCR-Kontakt-Opt-in bleiben reine
+Konvertierung und Originale unverändert; das Opt-in ist nachfolgend beschrieben.
 
 Vollständige Kontaktentscheidungen werden atomar, fsync-/readback-geprüft und
 HMAC-authentifiziert in privaten `.ocrreview`-Arbeitsartefakten gespeichert.
@@ -372,6 +373,56 @@ Diagnose, Hauptansicht und Ergebnisordner erhalten keine Korrektur-Rohwerte.
 400 Kontaktstellen je Dokument und 256 Zeichen je Korrektur halten die Antwort
 unter 900 KiB; das allgemeine IPC- und separate Entitätsbudget werden nicht erhöht.
 Coworks Formate und Werkzeuge bleiben unverändert.
+
+#### Weiterer lokaler Lösungsreview: Bildprüfung und Markdown-Opt-in
+
+Der noch uncommittete Engineeringstand vom 06.10.2026 zeigt eindeutig gebundene
+Original-Rasterausschnitte unmittelbar in der privaten Kontaktprüfung. PDF-
+Ausschnitte stammen aus der tatsächlich lokal gerenderten Seite. Unmodifizierte
+gesamte OCR-Fassung, eindeutige Zeile und gültige Geometrie sind Voraussetzung;
+Hybrid-Filterung oder wiederholte Zeilen führen zum sichtbaren Originaldatei-
+Fallback. Keine Pixel in Markdown, Journal, Diagnose, Hauptansicht oder Cowork.
+Neue private Records binden Zweck und Bilddigest statt Bildbytes.
+
+Reine Konvertierung kann nun ausdrücklich **OCR-Kontaktwerte vor dem Markdown-
+Export lokal prüfen** aktivieren (standardmäßig aus). Verschieben/Neustart und
+lokale Veröffentlichung sind technisch gegengeprüft; Namen bleiben erhalten,
+keine Privacy-Analyse/Pseudonyme. Der Review korrigierte echte localFinalize-
+Journal- und Hybrid-Crop-Gegenbeispiele. Die 203 Produkttestdateien, 47 echten
+Windows-Konvertergruppen und 50 Windows-Rusttests bestehen; frontend- und
+private-IPC-Gegenfälle sind zusätzlich gezielt geprüft. Kein neuer Mac-/GUI-/
+Releasepaketnachweis und keine Veröffentlichung dieses Stands.
+
+Ein getrenntes 104-Varianten-Engineeringexperiment misst Tesseract-Zeichen-
+alternativen, 1×/1,5×/2× Kontakt-Crops und gepinntes PaddleOCR/ONNX. Paddle behebt
+im alten Protokoll neun E-Mail-Zeilen, verschlechtert jedoch zuvor richtige neue
+Kontaktzeilen. Kein automatischer Wechsel, keine neue Produktabhängigkeit oder
+ungefragte Korrektur. V4-Messung, Lizenzen, Referenz-/Runtimebindung und Grenzen
+stehen in [DETECTOR_BENCHMARK](../DETECTOR_BENCHMARK.md).
+Ein weiterer begrenzter Versuch rendert Kontaktregionen erneut aus originalen
+PDF-Bytes: fünf ausgewählte native Kontaktzeilen verbessern sich bei Skalierung
+2/3/4 nicht; acht Scan-Kontaktzeilen verschlechtern sich bei 3/4 von acht auf fünf
+exakte Zeilen. Das ist keine Vollabdeckungsmessung und keine Änderung der
+nativen PDF-Textextraktion. Keine automatische Auflösungsaktivierung.
+Die frische produktive 72-Varianten-Messung enthält weiterhin neun rohe OCR-
+Abweichungen; nach expliziter synthetischer Referenzkorrektur sind die finalen
+Ergebnisse korrekt im bekannten Referenzumfang. Qualitätsgate bleibt rot,
+BL-050.6 und neue native Bedien-/Paketbindung bleiben offen. Main/Releases sind
+unverändert.
+
+Der Nutzer hat anschließend den separaten Engineering-Checkpoint und einen
+weiteren Windows-/macOS-Intel-/Apple-Silicon-Paketlauf ausdrücklich beauftragt.
+Die Paketprüfung wird um exakte Originalpixel, Kontaktkorrektur, Verschieben/
+Neustart und Veröffentlichung auch im Markdown-Opt-in ergänzt. Das frühere
+Herkunftsgate `BUNDLED_PLUGIN_SOURCE_COMMIT_INVALID` wird nicht umgangen: Erst
+committen, dann aus einem sauberen Checkout bauen. Main und Releases bleiben
+unverändert; neue Paketergebnisse werden nach dem tatsächlichen Lauf ergänzt.
+
+Eine unabhängige technische Pixelprüfung der neun Rohabweichungen zeigt fünf
+zusätzliche `d` hinter `@` und vier `q`/`g`-Verwechslungen. Acht Originalraster
+klären den Fehler gut; ein weichgezeichneter niedrig aufgelöster Fall bleibt
+unsicherer. Das ist keine menschliche oder native Bedienabnahme und begründet
+keine automatische Korrekturregel. Das rohe Qualitätsgate bleibt rot.
 
 Zwei unabhängige Read-only-Prüfrollen revalidierten OCR-Genauigkeit und
 Verarbeitung/Sicherheit. Die Gegenbeispiele korrigierten tatsächliche IPC-

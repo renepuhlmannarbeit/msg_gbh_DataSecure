@@ -334,6 +334,12 @@ try {
       assert.equal(result.ocr_contacts.length, 2);
       assert.deepEqual(result.ocr_contacts.map(item => item.kind), ['email', 'phone']);
       for (const item of result.ocr_contacts) assert.ok(result.markdown.slice(item.start, item.end).trim());
+      for (const item of result.ocr_contacts) {
+        assert.ok(item.image, 'real contact recognition must carry an unambiguous original-raster crop');
+        const crop = decodePng(Buffer.from(item.image.png_base64, 'base64'));
+        const originalPixels = context.getImageData(item.image.x, item.image.y, item.image.width, item.image.height);
+        assert.deepEqual(crop.rgba, Buffer.from(originalPixels.data), 'crop pixels are exactly the decoded source region');
+      }
       const privacy = await extractWideSourceForPrivacy(bytes, '.png', { convertBuffer });
       assert.ok(privacy.sourceExtractionCoverage.reason_codes.includes('OCR_CONTACT_VALUES_UNVERIFIED'),
         'real conversion warning survives the separate privacy extraction contract');
@@ -356,12 +362,59 @@ try {
       assert.doesNotMatch(result.markdown, /OCR-Hinweis \(Seite 1\)/u);
       assert.equal(result.ocr_contacts.length, 2);
       assert.ok(result.ocr_contacts.every(item => item.page === 2));
+      assert.ok(result.ocr_contacts.every(item => item.image?.source_width === 1600 && item.image?.source_height === 600),
+        'PDF crops are bound to the correct rendered page, not source paths or thumbnails');
       assert.ok(result.ocr_contacts.some(item => result.markdown.slice(item.start, item.end) === 'test-person@example.invalid'));
       const native = await convert(pdf([{ text: 'E-Mail: exact@example.invalid' }]), '.pdf');
       assert.ok(!native.coverage.reason_codes.includes('OCR_CONTACT_VALUES_UNVERIFIED'));
       assert.doesNotMatch(native.markdown, /OCR-Hinweis/u);
       assert.ok(!native.ocr_contacts, 'native PDF text never acquires OCR contact review candidates');
     } finally { contactImage.width = 1; contactImage.height = 1; }
+  });
+  await test('projected offline OCR reaches the opt-in Markdown review and actual desktop-style local finalization without anonymizing', () => {
+    const canvas = image(true), context = canvas.getContext('2d');
+    context.fillStyle = 'black'; context.font = '40px Arial';
+    context.fillText('Boris Quastenbach', 35, 90);
+    context.fillText('Kontakt: qa11@quality.example.invalid', 35, 170);
+    const proof = `const assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path');
+      (async () => {
+        const root = process.argv[1], server = process.argv[2];
+        const own = path.join(root, 'markdown-ocr-flow'); fs.mkdirSync(own);
+        process.env.DATASECURE_PRODUCT_CHANNEL = 'standalone';
+        process.env.EU_PRIVACY_ROOT = path.join(own, 'private');
+        process.env.EU_PRIVACY_DATA_ROOT = path.join(own, 'data');
+        process.env.EU_PRIVACY_RESULT_ROOT = path.join(own, 'results'); fs.mkdirSync(process.env.EU_PRIVACY_RESULT_ROOT);
+        const bytes = fs.readFileSync(0), full = path.join(own, 'contact.png'); fs.writeFileSync(full, bytes);
+        let batch = require(path.join(server, 'gateway/batch'));
+        const token = batch.beginBatch({ expectedCount: 1, profile: 'general', productChannel: 'standalone',
+          processingMode: 'markdown-only', ocrContactReview: true, queue: [{ full, name: 'contact.png', sourceBytes: bytes.length }] }).batch_token;
+        const result = await batch.processBatchNext(token); assert.equal(result.error, 'LOCAL_REVIEW_DEFERRED');
+        delete require.cache[require.resolve(path.join(server, 'gateway/batch'))]; batch = require(path.join(server, 'gateway/batch'));
+        const { createReviewBroker } = require(path.join(server, 'standalone/review-broker'));
+        const { encodeFrame, FrameDecoder } = require(path.join(server, 'standalone/desktop-ipc'));
+        const reviewed = await batch.reviewDeferredBatch(token, { localFinalize: true, reviewTextLocally: async draft => {
+          assert.equal(draft.processing_mode, 'markdown-only'); assert.ok(draft.ambiguities[0].image);
+          const broker = createReviewBroker(), id = 'a'.repeat(32); let response;
+          const child = { send(message) { response = message.answer; } };
+          broker.receive(child, { type: 'standalone-review-draft', batch_token: token, review_id: id, draft });
+          const serialized = new FrameDecoder().push(encodeFrame({ schema: 'datasecure-standalone-private-ipc/1',
+            request_id: 'a'.repeat(16), action: 'submit_review', review_id: id,
+            answer: { action: 'reviewed', redactions: [], decisions: draft.ambiguities.map(item => ({
+              ambiguity_id: item.ambiguity_id, decision: 'correct_contact', replacement: 'fixed@new.invalid' })) } }))[0];
+          assert.equal(broker.submit(id, serialized.answer).accepted, true); broker.release(child); return response;
+        } });
+        assert.equal(reviewed.ok, true, JSON.stringify(reviewed)); assert.equal(reviewed.locally_released, 1);
+        const state = batch._test.readState(token); assert.equal(state.items[0].status, 'released');
+        assert.ok(!Object.hasOwn(state, 'pseudonym_seed'));
+        const artifact = require(path.join(server, 'standalone/markdown-store')).readMarkdownArtifact(state.items[0].artifact_id);
+        assert.match(artifact.markdown, /Boris Quastenbach/); assert.match(artifact.markdown, /fixed@new.invalid/);
+        assert.doesNotMatch(artifact.markdown, /png_base64|data:image|PERSON_/);
+        assert.deepEqual(fs.readFileSync(full), bytes);
+        process.stdout.write('REAL_MARKDOWN_OCR_FLOW_OK');
+      })().catch(error => { console.error(error); process.exitCode = 1; });`;
+    const output = childProcess.execFileSync(process.execPath, ['-e', proof, scope, server],
+      { input: canvas.toBuffer('image/png'), timeout: 120000, maxBuffer: 1024 * 1024, windowsHide: true, encoding: 'utf8' });
+    assert.match(output, /REAL_MARKDOWN_OCR_FLOW_OK/u); canvas.width = canvas.height = 1;
   });
   const qualityFixtures = await qualityCases();
   await test('real bounded line OCR preserves umlauts in the five independently found weak-image counterexamples', async () => {

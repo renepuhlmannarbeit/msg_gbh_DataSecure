@@ -115,6 +115,7 @@ function renderModeHelp(mode) {
     ? 'Nicht anonymisiert: Namen und andere Originalinhalte bleiben erhalten. Bei OCR oder grafischen Inhalten können Auslassungen entstehen; Hinweise stehen im Ergebnis.'
     : 'Namen und weitere erkannte Identifikatoren werden in der Markdown-Ausgabe ersetzt. XLSX, PPTX, PDF/Scan-PDF und Bilder werden vorher lokal in Markdown extrahiert; der Extraktionsstatus wird getrennt ausgewiesen.';
   byId('output-naming').hidden = mode !== 'markdown-and-anonymize';
+  byId('ocr-contact-option').hidden = !convert;
   renderOutputNamingHelp();
 }
 
@@ -160,6 +161,8 @@ function updateModeAvailability() {
     !validOutputNamingMode(byId('output-naming-mode').value);
   byId('output-naming-mode').disabled = operationInFlight || byId('processing-mode').disabled ||
     byId('processing-mode').value !== 'markdown-and-anonymize';
+  byId('ocr-contact-review').disabled = operationInFlight || byId('processing-mode').disabled ||
+    byId('processing-mode').value !== 'markdown-only';
   byId('start').disabled = operationInFlight || !admitted || needsMode || needsNamingMode;
   byId('start-help').hidden = !needsMode;
   const taskUnavailable = operationInFlight || processPhase === 'working' || (processPhase !== 'completion' &&
@@ -735,6 +738,7 @@ function handleNativeDrop(event) {
       suppressPriorTerminal = true;
       byId('processing-mode').value = '';
       byId('output-naming-mode').value = 'neutral';
+      byId('ocr-contact-review').checked = false;
       renderModeHelp('');
     }
     renderAdmission(payload.result);
@@ -902,6 +906,7 @@ byId('start').addEventListener('click', async () => {
     return;
   }
   const startArguments = { processingMode };
+  if (processingMode === 'markdown-only' && byId('ocr-contact-review').checked === true) startArguments.ocrContactReview = true;
   if (processingMode === 'markdown-and-anonymize') {
     const outputNamingMode = byId('output-naming-mode').value;
     if (!validOutputNamingMode(outputNamingMode)) {
@@ -954,6 +959,7 @@ async function prepareNewRun() {
   setProcessPhase('entry');
   byId('processing-mode').value = '';
   byId('output-naming-mode').value = 'neutral';
+  byId('ocr-contact-review').checked = false;
   renderModeHelp('');
   byId('action-feedback').hidden = true;
   byId('source-folders').textContent = 'Noch nicht ausgewählt';
@@ -1217,6 +1223,7 @@ async function refresh() {
 (async function bootstrap() {
   byId('processing-mode').value = '';
   byId('output-naming-mode').value = 'neutral';
+  byId('ocr-contact-review').checked = false;
   renderModeHelp('');
   switchView('home');
   updateModeAvailability();

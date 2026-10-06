@@ -117,6 +117,49 @@ function cleanup() {
     assert.match(released, /SYNTHETISCHER HÄRTETEST/u); assert.match(released, /Java bleibt/u);
   }
   for (const file of files) assert.deepEqual(fs.readFileSync(file.full), file.bytes);
+  // Opt-in conversion must share the real deferred lifecycle without entering
+  // anonymization or assigning any person/organization pseudonyms.
+  const md = batch.beginBatch({ expectedCount: 1, profile: 'general', productChannel: 'standalone',
+    processingMode: 'markdown-only', ocrContactReview: true, queue: [files[0]] }).batch_token;
+  const initial = await batch.processBatchNext(md, { convertBuffer });
+  assert.equal(initial.error, 'LOCAL_REVIEW_DEFERRED');
+  assert.equal(batch._test.readState(md).items[0].status, 'deferred_review');
+  assert.ok(!Object.hasOwn(batch._test.readState(md), 'pseudonym_seed'));
+  assert.doesNotMatch(JSON.stringify(batch._test.readState(md)), /wrong@|987654321|png_base64/u);
+  const deferredMd = await batch.reviewDeferredBatch(md, { convertBuffer,
+    reviewTextLocally: async () => ({ action: 'deferred' }) });
+  assert.equal(deferredMd.error, 'LOCAL_REVIEW_DEFERRED');
+  delete require.cache[require.resolve('../plugins/data-secure/server/gateway/batch')];
+  batch = require('../plugins/data-secure/server/gateway/batch');
+  let mdCalls = 0;
+  const reviewedMd = await batch.reviewDeferredBatch(md, { convertBuffer, localFinalize: true, reviewTextLocally: async draft => {
+    mdCalls++;
+    assert.equal(draft.processing_mode, 'markdown-only');
+    assert.equal(draft.ocr_contact_review, true);
+    return { action: 'reviewed', redactions: [], decisions: draft.ambiguities.map(item => ({
+      ambiguity_id: item.ambiguity_id, decision: item.contact_kind === 'email' ? 'correct_contact' : 'confirm_contact',
+      ...(item.contact_kind === 'email' ? { replacement: 'zora@other.invalid' } : {}) })) };
+  } });
+  assert.equal(reviewedMd.ok, true, JSON.stringify(reviewedMd));
+  assert.equal(mdCalls, 1);
+  assert.equal(reviewedMd.locally_released, 1);
+  assert.equal(batch._test.readState(md).items[0].status, 'released');
+  delete require.cache[require.resolve('../plugins/data-secure/server/gateway/batch')];
+  batch = require('../plugins/data-secure/server/gateway/batch');
+  assert.equal(batch._test.readState(md).items[0].status, 'released', 'exact desktop completion survives restart');
+  const artifact = require('../plugins/data-secure/server/standalone/markdown-store')
+    .readMarkdownArtifact(batch._test.readState(md).items[0].artifact_id);
+  const convertedText = artifact.markdown.toString('utf8');
+  assert.match(convertedText, /Zora Eibenhang/u);
+  assert.match(convertedText, /zora@other.invalid/u);
+  assert.match(convertedText, /987654321/u);
+  assert.match(convertedText, /Nicht anonymisiert/u);
+  assert.doesNotMatch(convertedText, /wrong@|\[PERSON_|png_base64|data:image/u);
+  assert.ok(!artifact.manifest.reason_codes.includes('OCR_CONTACT_VALUES_UNVERIFIED'));
+  assert.ok(artifact.manifest.reason_codes.includes('OCR_NOT_VERIFIED'));
+  assert.throws(() => batch.beginBatch({ expectedCount: 1, profile: 'general', productChannel: 'standalone',
+    processingMode: 'markdown-and-anonymize', ocrContactReview: true, queue: [files[0]] }));
+  console.log('✓ opt-in Markdown OCR review: defer/reload/correct without entity anonymization; no review payload in journal/export');
   process.stdout.write('✓ contact → serialized private IPC/broker → durable decision → defer/reload across documents → entity review → actual publication; controlled converter transcript, not native GUI evidence\n');
 })().catch(error => { console.error(error); process.exitCode = 1; }).finally(() => {
   for (const [key, value] of environment) value === undefined ? delete process.env[key] : process.env[key] = value;

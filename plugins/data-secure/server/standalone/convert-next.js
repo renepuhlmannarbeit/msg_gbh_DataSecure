@@ -3,7 +3,7 @@
 const path = require('path');
 const crypto = require('crypto');
 const { publishMarkdownArtifact } = require('./markdown-store');
-const { validateMarkdownExtraction } = require('./markdown-contract');
+const { validateMarkdownExtraction, createMarkdownExtraction } = require('./markdown-contract');
 const supportTrace = require('../gateway/support-trace');
 const { ERROR_CODES, LIFECYCLE_ERROR_CODES } = require('../core/conversion-worker-contract');
 const TRACE_ERRORS = new Set([...ERROR_CODES, ...LIFECYCLE_ERROR_CODES, 'REQUEST_CANCELLED', 'NONE']);
@@ -43,7 +43,7 @@ async function convertNext(_profile, deps = {}) {
   try {
     const convert = deps.convertBuffer || require('./conversion-worker').convertBuffer;
     if (deps.onClaimed) await deps.onClaimed();
-    const extraction = await convert(bytes, path.extname(String(entry.name || '')).toLowerCase(), {
+    let extraction = await convert(bytes, path.extname(String(entry.name || '')).toLowerCase(), {
       signal: deps.signal, timeoutMs: deps.timeoutMs,
       ...(['.pdf', '.pptx'].includes(path.extname(String(entry.name || '')).toLowerCase())
         ? { passiveObjects: true } : {})
@@ -54,6 +54,15 @@ async function convertNext(_profile, deps = {}) {
     // reason codes remain in the artifact, journal and local run overview.
     trace('coverage_checked', 'ok');
     if (deps.onExtracted) await deps.onExtracted({ source_type: extraction.source_type });
+    if (deps.ocrContactReview === true && extraction.ocr_contacts?.length) {
+      if (typeof deps.prepareOcrContacts !== 'function') throw Object.assign(new Error('LOCAL_REVIEW_DEFERRED'), { code: 'LOCAL_REVIEW_DEFERRED' });
+      const markdown = await deps.prepareOcrContacts({ original_text: extraction.markdown, contacts: extraction.ocr_contacts,
+        source_type: extraction.source_type, processing_mode: 'markdown-only' });
+      extraction = createMarkdownExtraction({ source_type: extraction.source_type,
+        markdown: `${markdown}\n\n> OCR-Kontaktwerte wurden lokal bestätigt oder korrigiert. Übrige OCR-Inhalte bleiben ungeprüft. Nicht anonymisiert: enthält Originalinhalte.`,
+        coverage: { status: extraction.coverage.status,
+          reason_codes: extraction.coverage.reason_codes.filter(code => code !== 'OCR_CONTACT_VALUES_UNVERIFIED') } });
+    }
     if (deps.signal?.aborted) { const error = new Error('REQUEST_CANCELLED'); error.code = 'REQUEST_CANCELLED'; throw error; }
     const result = await publishMarkdownArtifact(extraction, deps.artifactId, deps);
     trace('converter_completed', 'ok');

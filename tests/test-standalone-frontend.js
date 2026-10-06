@@ -807,6 +807,8 @@ async function pureConversionCase() {
   assert.strictEqual(harness.calls.find(call => call.action === 'start_admitted_batch').args.processingMode, 'markdown-only');
   assert.strictEqual(Object.hasOwn(harness.calls.find(call => call.action === 'start_admitted_batch').args, 'outputNamingMode'), false,
     'pure conversion never receives an anonymization naming option');
+  assert.strictEqual(Object.hasOwn(harness.calls.find(call => call.action === 'start_admitted_batch').args, 'ocrContactReview'), false,
+    'contact correction is never silently enabled');
   await harness.runTimer();
   assert.strictEqual(harness.elements['processing-mode'].value, 'markdown-only', 'intake must not reuse the previous batch purpose');
   state = { state: 'results_available', processing_mode: 'markdown-only', results_available: true, result_count: 1, warning_count: 1 };
@@ -820,6 +822,23 @@ async function pureConversionCase() {
   assert.strictEqual(harness.elements['status-icon'].textContent, '!');
   assert.match(harness.elements['status-text'].textContent, /Ende.*nicht bestätigt.*nicht gestartet/u);
   assert.doesNotMatch(harness.elements['status-text'].textContent, /sicher beendet|sicher gestoppt/u);
+}
+
+async function optionalMarkdownContactCase() {
+  for (const mode of ['markdown-only', 'markdown-and-anonymize']) {
+    const harness = await frontendHarness({
+      select_files: () => ({ selected_count: 1, ui_context: localContext('Lauf-1', ['Scan.pdf']) })
+    });
+    assert.strictEqual(harness.elements['ocr-contact-review'].checked, false);
+    await harness.click(mode === 'markdown-only' ? 'task-markdown' : 'task-anonymize');
+    assert.strictEqual(harness.elements['ocr-contact-option'].hidden, mode !== 'markdown-only');
+    await harness.click('select-files');
+    harness.elements['ocr-contact-review'].checked = true;
+    await harness.click('start');
+    const args = harness.calls.find(call => call.action === 'start_admitted_batch').args;
+    assert.strictEqual(Object.hasOwn(args, 'ocrContactReview'), mode === 'markdown-only');
+    if (mode === 'markdown-only') assert.strictEqual(args.ocrContactReview, true);
+  }
 }
 
 async function homeAndExplicitChoiceCase() {
@@ -1518,5 +1537,6 @@ function selectionActionsStayAboveLongFileListsCase() {
   await testAsync('a configured network result folder produces a visible local warning', networkResultFolderNoticeCase);
   await testAsync('only active work blocks admission while historical recovery remains optional', recoverableModeLockCase);
   await testAsync('pure conversion stays selected during intake and reports raw results and OCR warnings honestly', pureConversionCase);
+  await testAsync('optional OCR contact correction starts only with explicit Markdown opt-in, never an anonymization flag', optionalMarkdownContactCase);
   done();
 })();

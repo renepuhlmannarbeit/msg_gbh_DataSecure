@@ -39,6 +39,7 @@ function createBatchItemProcessor(options = {}) {
   const publicProgress = options.publicProgress;
   const writeTerminalEvidence = options.writeTerminalEvidence;
   const captureStandaloneIdentitySnapshot = options.captureStandaloneIdentitySnapshot;
+  const contactStore = options.contactStore;
   const deliveryPendingStatus = options.deliveryPendingStatus || 'delivery_pending';
   const deferredReviewStatus = options.deferredReviewStatus || 'deferred_review';
   const retryableCodes = options.retryableCodes || new Set();
@@ -134,6 +135,21 @@ function createBatchItemProcessor(options = {}) {
         copyClaim: true,
         removeImages: state.remove_images,
         ...(converting ? { artifactId: expectedPackageId } : { packageId: expectedPackageId }),
+        ...(converting && state.ocr_contact_review === true ? {
+          ocrContactReview: true,
+          prepareOcrContacts: async input => {
+            const stored = contactStore.read(state, item, input);
+            if (stored !== null) return stored;
+            if (deps.reviewOcrContacts !== true || typeof deps.reviewTextLocally !== 'function') {
+              throw Object.assign(new Error('LOCAL_REVIEW_DEFERRED'), { code: 'LOCAL_REVIEW_DEFERRED' });
+            }
+            const { buildContactDraft, validateContactAnswer } = require('../core/ocr-contact-review');
+            const draft = buildContactDraft(input);
+            const answer = validateContactAnswer(await deps.reviewTextLocally(draft), draft);
+            if (answer.action !== 'reviewed') throw Object.assign(new Error('LOCAL_REVIEW_DEFERRED'), { code: 'LOCAL_REVIEW_DEFERRED' });
+            return contactStore.write(state, item, input, answer);
+          }
+        } : {}),
         retainPublishedOnAfterPublishFailure: true,
         ...(!converting && state.product_channel === 'standalone' && captureStandaloneIdentitySnapshot
           ? { persistStandaloneIdentitySnapshot: async ({ package_id, entries, unmapped_labels }) => {

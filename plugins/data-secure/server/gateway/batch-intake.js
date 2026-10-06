@@ -93,6 +93,10 @@ function createBatchIntake(options = {}) {
     // unknown purposes must not silently become the historical default.
     const processingMode = validateProcessingMode(Object.hasOwn(beginOptions, 'processingMode')
       ? beginOptions.processingMode : MODES.ANONYMIZE, productChannel);
+    if (Object.hasOwn(beginOptions, 'ocrContactReview') &&
+        (beginOptions.ocrContactReview !== true || productChannel !== 'standalone' || processingMode !== MODES.MARKDOWN)) {
+      throw Object.assign(new Error('OCR_CONTACT_REVIEW_INVALID'), { code: 'OCR_CONTACT_REVIEW_INVALID' });
+    }
     let outputNamingMode = null;
     if (processingMode === MODES.MARKDOWN && Object.hasOwn(beginOptions, 'outputNamingMode')) {
       throw Object.assign(new Error('RESULT_NAMING_MODE_INVALID'), { code: 'RESULT_NAMING_MODE_INVALID' });
@@ -236,6 +240,8 @@ function createBatchIntake(options = {}) {
           : productChannel === 'standalone' ? 'datasecure-batch/6' : 'datasecure-batch/4',
         product_channel: productChannel,
         ...(processingMode === MODES.MARKDOWN ? { processing_mode: processingMode } : {}),
+        ...(beginOptions.ocrContactReview === true ? { ocr_contact_review: true,
+          ocr_review_seed: crypto.randomBytes(32).toString('base64url') } : {}),
         ...(processingMode !== MODES.MARKDOWN && productChannel === 'standalone'
           ? { output_naming_mode: outputNamingMode } : {}),
         token,

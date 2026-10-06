@@ -372,6 +372,123 @@ release authority remain open. Main and released RC158 bytes are unchanged.
 
 ## External evaluation order
 
+### Image-backed correction and alternative-reader revalidation, 2026-10-06
+
+This further **uncommitted engineering source** implements private raster crops
+for uniquely bound OCR contact lines, plus explicit opt-in correction in
+Markdown-only mode. Original files never change; remaining OCR is still
+unverified. Crops are transient private review data, never Markdown, diagnostic,
+main-renderer or Cowork output. Whole unfiltered transcript equality is required:
+the negative Hybrid-PDF case cannot borrow another identical occurrence's crop.
+New decision records bind crop digests and purpose; authenticated legacy
+anonymization records remain compatible. Markdown defer/restart/local-finalize
+does not run privacy analysis or add pseudonyms. See the
+[review contract](canonical/contracts/BATCH_REVIEW_V2.md).
+
+Independent OCR-method and privacy/platform review roles examined the solution.
+They identified and corrected a Markdown local-finalize journal field violation,
+a Hybrid-PDF crop-provenance error and incomplete research measurement boundaries.
+The measurement remains separate from the two products:
+
+```powershell
+node scripts/revalidate-ocr-methods.mjs setup dist/ocr-methods-example
+# Install only inside that exclusive engineering directory, never repository root:
+npm install --prefix dist/ocr-methods-example --ignore-scripts --no-audit --no-fund --save-exact onnxruntime-node@1.30.0
+node scripts/revalidate-ocr-methods.mjs run dist/ocr-methods-example
+```
+
+Setup fetches pinned official model/config bytes; run rechecks hashes, dictionary,
+npm version/integrity and local Tesseract weights. The run uses only synthetic
+bytes, disables main-process network entry points and has a ten-minute owned
+process deadline plus a Node heap cap, not a native OS-memory sandbox claim.
+Startup failures also close already-created readers. Up to six additional
+Tesseract ROI passes and 2 million crop pixels per input are allowed; baseline
+refinement and Paddle inference are additional work. Production integration
+would still need the existing native isolation/package gates.
+
+The final reproducible report is
+`dist/ocr-methods-20261006-v4/measurement/results.json`. New corpus: 24 literal
+logical cases, 16 development/8 reserved holdout, each with three raster variants
+(72 rasters). Arial, Times and Consolas bytes are hashed; generation used Windows
+fonts. Regression: 32 variants/28 IDs, including four scan PDFs. True q/g/d
+addresses, plus/dot/hyphen/uppercase/long/Unicode cases, damaged contacts, telephone
+and negative lines prevent a presumed universal q→g repair. The q-lower family
+deliberately overlaps the old regression; reserved holdout is not blinded human
+adjudication. Expectations use literal annotations, not the product detector.
+The preliminary v3 label-only regression expectations missed nine prose/parenthesis
+lines and were rejected; v4 uses independent annotated EMAIL/PHONE occurrences.
+v1/v2 lack the final provenance/type breakdown and are not the final report.
+
+Both readers receive the same Tesseract-selected contact ROI. Equality below
+means **whole contact line**, including label/whitespace, not independently
+measured email-character precision. Type breakdowns are recorded separately.
+
+| 1× cropped-line protocol | Baseline exact | Tesseract re-read exact | Paddle port exact |
+|---|---:|---:|---:|
+| New cases: 69 selected lines | 57 | 56 | 41 |
+| Old regression: 32 email lines | 23 | 22 | 32 |
+| Old regression: 32 phone lines | 32 | 32 | 32 |
+
+Paddle fixes all nine old email-line deviations in this protocol, but introduces
+21 incorrect lines on previously correct new inputs. Tesseract re-reading adds
+two such new errors. Paddle remains an engineering-only recognizer experiment,
+not a product replacement or automatic winner. Its BGR/CHW/CTC port is based on
+the [official recognizer](https://github.com/PaddlePaddle/PaddleOCR/blob/main/tools/infer/predict_rec.py),
+but Canvas resampling is not numerically validated against OpenCV. Paddle always
+normalizes to height 48: 1.5×/2× test resampling chains, not larger model inputs.
+Higher scales do not consistently improve the new corpus. Upscaling existing
+rasters must not be described as new PDF detail. A separate, unactivated
+PDF-region re-rendering experiment now reads original PDF bytes:
+
+```powershell
+node scripts/probe-pdf-contact-resolution.mjs dist/pdf-contact-resolution-example
+```
+
+Final report: `dist/pdf-contact-resolution-20261006-v2/results.json`. It uses
+the product's local PDF.js resource options and hashes the standard fonts;
+scale-2 clips are also pixel-compared against the full-page raster, independently
+of OCR. An initial run without standard-font resources and with an incorrect
+variant summary is not quality evidence. Five native and four scan PDFs were
+probed, first page only, using Tesseract-selected contact regions, not full-document
+coverage. At scale 2/3/4, the five selected native lines retain the same one exact
+whole-line result. The eight selected scan lines go from eight exact at scale 2
+to five at scales 3 and 4, introducing three errors each. Native-PDF OCR here is
+an experiment, not a replacement for native text extraction. More samples of a
+fixed-resolution scan do not restore missing source detail. Six additional passes
+per PDF, pixel limits and a 180-second owned-process deadline bound the experiment.
+There is no automatic PDF resolution change in either product.
+
+Actual `lstm_choice_mode=2` hOCR, character boxes, gray/binary images and reader
+differences are saved for synthetic diagnostics only. At 1×, 10 of 13 comparable
+positional substitutions have the reference character among Tesseract choices.
+These are reference-aided observations, not automatic recovery; equal length
+does not prove correct alignment, and insertions/omitted whitespace remain
+unresolved. No reader confidence chooses a value; automatic corrections = 0.
+ROI selection remains Tesseract-dependent, so this does not measure missed
+contact detection or Paddle end-to-end detection. All file/raster/reference/font,
+script, selected Tesseract core/WASM, models and runtime fingerprints are in v4.
+Methodology follows separate recognition/coverage/semantic metrics as described
+by [OCR-D evaluation](https://ocr-d.de/en/spec/ocrd_eval).
+
+The actual product-path revalidation report is separately
+`dist/quality-crops-revalidated-20261006/BERICHTE/QUALITAET.json`:
+72 variants converted, nine unchanged raw OCR email deviations. Synthetic
+reference-bound contact/entity decisions produce all 72 final outputs with
+zero known final reference leaks or lost factual anchors; this is not autonomous
+OCR success or human acceptance. The strict source/runtime-bound gate returns
+only `QUALITY_FINDINGS_OPEN`. The 203-file product suite, 47 real Windows
+conversion groups (including pixel comparison and OCR→Markdown opt-in→defer→
+restart→local publication) and 50 Windows Rust tests pass. Targeted DOM/private
+IPC tests add tampered CRCs, image disposal and mode-specific opt-in. No new
+native WebView/manual or exact-release/macOS test is implied; earlier Mac
+engineering evidence above belongs only to its named source commit.
+
+Packaging is not reported as passed: `npm run build` stops at
+`BUNDLED_PLUGIN_SOURCE_COMMIT_INVALID` because the engineering worktree is not a
+clean committed source. The plugin-ZIP test then lacks the required RC158 ZIP.
+No provenance bypass, commit, push, workflow dispatch or release was performed
+for this further source revision.
+
 1. Evaluate DocCloak.Core's regex-only path in an isolated, pinned test environment. This is
    the lowest-complexity candidate and requires no model in the product.
 2. Evaluate Microsoft Presidio as an external Python benchmark, not as a plugin dependency.

@@ -101,6 +101,28 @@ testAsync('the exact current finding is named and one person decision covers eve
   assert.strictEqual(h.element('output-context').textContent, '');
 });
 
+testAsync('private contact raster is displayed only for its current draft and cleared on close; Markdown mode is explicit', async () => {
+  const { encodePng } = require('../plugins/data-secure/server/images/png');
+  const { buildContactDraft } = require('../plugins/data-secure/server/core/ocr-contact-review');
+  const png = encodePng({ width: 4, height: 3, rgba: Buffer.alloc(48, 255) });
+  const h = harness(null, false, true, { modifyDraft(draft) {
+    for (const key of Object.keys(draft)) delete draft[key];
+    Object.assign(draft, buildContactDraft({ original_text: 'a@b.invalid', source_type: 'pdf', processing_mode: 'markdown-only',
+      contacts: [{ start: 0, end: 11, line: 1, page: 1, kind: 'email', image: {
+        schema: 'datasecure-ocr-contact-image/1', source_width: 10, source_height: 10,
+        x: 2, y: 3, width: 4, height: 3, png_base64: png.toString('base64') } }] }));
+  } });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.element('contact-original').hidden, false);
+  assert.equal(h.element('contact-image').src, `data:image/png;base64,${png.toString('base64')}`);
+  assert.match(h.element('contact-image-note').textContent, /gerendert/u);
+  assert.match(h.element('group-note').textContent, /nicht anonymisiert/u);
+  await h.callbacks.get('close-review')();
+  assert.equal(h.element('contact-image').src, '');
+  assert.equal(h.element('contact-value').value, '');
+  assert.equal(h.element('source-context').textContent, '');
+});
+
 testAsync('successive review groups stay in one window and only final completion closes it', async () => {
   const h = harness([
     { ready: true, review_id: 'a'.repeat(32), chunk_count: 1 },

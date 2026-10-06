@@ -465,6 +465,8 @@ const { publishReviewedBatch } = createBatchReviewPublication({
 });
 
 const { reviewDeferredBatch } = createBatchReviewOrchestrator({
+  processMarkdownReviewItem: (state, item, deps) => processSingleBatchItem(state, item,
+    plainExactPendingEntry(state, item), { ...deps, reviewOcrContacts: true }),
   SafeError,
   active,
   acquireActiveLock,
@@ -486,6 +488,7 @@ const { reviewDeferredBatch } = createBatchReviewOrchestrator({
 });
 
 const { processSingleBatchItem } = createBatchItemProcessor({
+  contactStore,
   SafeError,
   writeState,
   anonymizeNext,

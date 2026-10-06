@@ -7,6 +7,7 @@ section#review{background:white;border:1px solid #d7e4db;border-radius:18px;padd
 .note{color:#53645c;margin:.8rem 0}.comparison{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:18px 0}
 .comparison>div{min-width:0;border:1px solid #d7e4db;border-radius:12px;padding:14px;background:#fafcfb}
 pre{white-space:pre-wrap;overflow-wrap:anywhere;font:inherit;max-height:300px;overflow:auto;margin:0}
+#contact-original{margin:18px 0;padding:14px;border:1px solid #a9c4b4;border-radius:12px}.contact-image-scroll{overflow:auto;max-height:280px;background:white}#contact-image{max-width:none;display:block}#contact-image[hidden]{display:none}#contact-image-note{font-size:.9rem;margin-top:8px}
 .actions,.finish{display:flex;flex-wrap:wrap;gap:10px}.finish{border-top:1px solid #d7e4db;margin-top:18px;padding-top:18px;justify-content:space-between}
 button{font:inherit;font-weight:700;border-radius:10px;border:1px solid #a9c4b4;background:white;color:#143d2b;padding:12px 16px;cursor:pointer}
 button:hover:not(:disabled){background:#e7f3ec}button:focus-visible{outline:3px solid #e09a22;outline-offset:2px}button:disabled{opacity:.52;cursor:not-allowed}

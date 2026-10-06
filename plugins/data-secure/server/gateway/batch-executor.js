@@ -520,6 +520,10 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
   const processingMode = validateProcessingMode(Object.hasOwn(options, 'processingMode')
     ? options.processingMode : MODES.ANONYMIZE, (options.env || process.env).DATASECURE_PRODUCT_CHANNEL || 'plugin');
   const productChannel = (options.env || process.env).DATASECURE_PRODUCT_CHANNEL || 'plugin';
+  if (Object.hasOwn(options, 'ocrContactReview') &&
+      (options.ocrContactReview !== true || productChannel !== 'standalone' || processingMode !== MODES.MARKDOWN)) {
+    throw Object.assign(new Error('OCR_CONTACT_REVIEW_INVALID'), { code: 'OCR_CONTACT_REVIEW_INVALID' });
+  }
   let outputNamingMode = null;
   if (processingMode === MODES.MARKDOWN && Object.hasOwn(options, 'outputNamingMode')) {
     throw Object.assign(new Error('RESULT_NAMING_MODE_INVALID'), { code: 'RESULT_NAMING_MODE_INVALID' });
@@ -698,6 +702,7 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
         profile,
         ...(processingMode === MODES.MARKDOWN ? { processing_mode: processingMode } : {}),
         ...(outputNamingMode ? { output_naming_mode: outputNamingMode } : {}),
+        ...(options.ocrContactReview === true ? { ocr_contact_review: true } : {}),
         queue: queue.map((entry) => ({
           name: entry.name, full: entry.full, sourceBytes: entry.sourceBytes,
           sourceLabel: entry.sourceLabel || entry.name

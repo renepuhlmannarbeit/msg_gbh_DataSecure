@@ -11,7 +11,7 @@
   "scripts": {
     "standalone": "node plugins/data-secure/server/standalone/cli.js",
     "pretest:standalone": "npm run test:quality",
-    "test:quality": "node tests/test-quality-benchmark.js && node tests/test-quality-report.mjs && node tests/test-standalone-quality-regression.js && node tests/test-ocr-refinement.js && node tests/test-ocr-contact-review.js && node tests/test-ocr-contact-flow.js",
+    "test:quality": "node tests/test-quality-benchmark.js && node tests/test-quality-report.mjs && node tests/test-standalone-quality-regression.js && node tests/test-ocr-refinement.js && node tests/test-ocr-contact-review.js && node tests/test-ocr-contact-images.js && node tests/test-ocr-contact-flow.js",
     "uat:quality-corpus": "node scripts/generate-quality-corpus.mjs",
     "benchmark:quality": "node scripts/benchmark-quality.mjs",
     "gate:quality": "node scripts/check-quality-gate.mjs",

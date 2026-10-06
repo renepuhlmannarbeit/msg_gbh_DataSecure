@@ -11,7 +11,9 @@ const { SOURCE_TYPES, ERROR_CODES, MAX_INPUT_BYTES } = require('../core/conversi
 const ERROR_SET = new Set(ERROR_CODES);
 const DEFAULT_TIMEOUT_MS = 300_000;
 const TERMINATION_GRACE_MS = 1500;
-const MAX_RESPONSE_BYTES = MAX_MARKDOWN_CHARS * 6 + 4096;
+// Transient private cropped PNGs have their own explicit 2 MiB compressed
+// budget (base64 overhead included), independent of Markdown size.
+const MAX_RESPONSE_BYTES = MAX_MARKDOWN_CHARS * 6 + Math.ceil(2 * 1024 * 1024 / 3) * 4 + 256 * 1024;
 const error = code => Object.assign(new Error('Die lokale Markdown-Konvertierung konnte nicht abgeschlossen werden.'), { code });
 
 // Classify the OS fact, not a guessed cause (for example antivirus software).

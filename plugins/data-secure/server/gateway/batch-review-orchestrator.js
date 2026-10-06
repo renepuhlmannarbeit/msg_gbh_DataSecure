@@ -54,6 +54,27 @@ function createBatchReviewOrchestrator(options = {}) {
         return { ok: false, error: 'batch_review_not_ready', message: reviewPlan.message, ...progress, raw_content_sent_to_claude: false };
       }
 
+      if (state.schema === 'datasecure-batch/5' && state.processing_mode === 'markdown-only') {
+        if (state.product_channel !== 'standalone' || state.ocr_contact_review !== true ||
+            typeof options.processMarkdownReviewItem !== 'function') throw new SafeError('OCR_CONTACT_REVIEW_INVALID');
+        const packages = [];
+        let reviewed = 0;
+        for (const item of items) {
+          if (deps.abortSignal?.aborted) return { ok: false, error: 'LOCAL_REVIEW_CANCELLED',
+            ...publicProgress(state), reviewed_documents: reviewed, raw_content_sent_to_claude: false };
+          const result = await options.processMarkdownReviewItem(state, item, deps);
+          if (!result.ok) return { ...result, reviewed_documents: reviewed, packages };
+          if (deps.localFinalize === true) {
+            item.status = 'released'; item.checkpoint = 'released_locally';
+            writeState(state);
+          } else packages.push(result);
+          reviewed++;
+        }
+        return { ok: reviewed > 0, ...publicProgress(state), reviewed_documents: reviewed,
+          ...(deps.localFinalize === true ? { locally_released: reviewed } : { packages }),
+          local_evidence_exported: writeTerminalEvidence(state), raw_content_sent_to_claude: false };
+      }
+
       const lifecycle = (event) => {
         try { deps.onReviewLifecycle?.(event); } catch { /* diagnostics cannot change a privacy decision */ }
       };

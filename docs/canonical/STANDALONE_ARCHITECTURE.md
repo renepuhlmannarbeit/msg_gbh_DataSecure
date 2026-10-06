@@ -331,14 +331,29 @@ Standalone-Kanal vor Personenreservierung und Ersetzung den privaten
 `prepareOcrContacts`-Hook auf. In der ersten automatischen Phase bleibt eine
 solche Datei vertagt; die integrierte Prüfseite bestätigt oder korrigiert die
 exakten Stellen und geht anschließend im selben Fenster zur Entitätsprüfung.
-Reine Konvertierung bleibt unverändert. Kontaktbestätigung ist keine Ausnahme
-vom normalen PII-/Residual-Gate.
+Standardmäßig bleibt reine Konvertierung unverändert. Für **Nur in Markdown
+umwandeln** ist **OCR-Kontaktwerte vor dem Markdown-Export lokal prüfen** eine nicht
+vorausgewählte Option. Sie führt dieselbe Kontaktprüfung aus, ohne Privacy-Core,
+Entitätsprüfung oder Pseudonyme; das Ergebnis enthält weiterhin Originalinhalte.
+Kontaktbestätigung bei Anonymisierung ist keine Ausnahme vom PII-/Residual-Gate.
+
+Eindeutig zugeordnete Kontaktzeilen erhalten einen privaten PNG-Ausschnitt aus
+dem tatsächlich verwendeten Raster; bei PDF aus der lokal gerenderten Seite.
+Die gesamte unmodifizierte OCR-Fassung muss zur Spannenkarte passen. Nach
+Hybrid-PDF-Filterung, bei wiederholten identischen Zeilen oder unklarer Geometrie
+wird kein plausibel wirkender Ausschnitt geraten: Die Prüfseite fordert den
+Vergleich mit der Originaldatei. Pro Ausschnitt gelten 96 KiB/200.000 Pixel,
+pro Dokument 2 MiB/2.000.000 Pixel. Bilder gelangen nicht in Ergebnisse,
+Hauptansicht, Diagnose, Cowork oder gespeicherte Kontaktentscheidungen.
 
 `core/ocr-contact-review.js` enthält nur transportneutrale Spannen-/Antwort-
 Validierung. `gateway/ocr-contact-store.js` speichert komplette atomare private
 Entscheidungen, authentifiziert gegen Lauf/Seed, Snapshot, ganze Extraktion,
 Policy, Vertrag und Fundstellen. Capture und Publication prüfen dieselbe
 Bindung erneut; Journal und Hauptansicht enthalten keine Korrektur-Rohwerte.
+Neue v2-Entscheidungen binden zusätzlich Zweck und Bilddigest, nicht Bildbytes.
+Markdown-Opt-in wird mit eigenem zufälligem Seed im v5-Zweckvertrag gebunden;
+Vertagen, Neustart und lokale Veröffentlichung erhalten denselben Zweck.
 Der tatsächliche Desktop-Frame-Decoder prüft die geschlossenen Aktionsformen,
 der Broker zusätzlich die Berechtigung seines aktuell gebundenen Entwurfs.
 400 Kontaktstellen mit je höchstens 256 Korrekturzeichen und 900 KiB Antwort
@@ -442,8 +457,10 @@ Modus, Zielordner und Mappingkontext. PII-Review entfällt in diesem Modus.
 Extraktionshinweise werden mit lesbaren Ergebnissen gespeichert; fehlerhafte
 Dateien erscheinen in Abschluss und inhaltsfreier Diagnose. Reine Konvertierung
 erzeugt keine Zuordnung; bei Anonymisierung enthält sie ausschließlich
-tatsächlich veröffentlichte Ergebnisse. Es entsteht kein neuer
-Bestätigungsdialog. Der v5-Zweckvertrag unterscheidet sich ausdrücklich von
+tatsächlich veröffentlichte Ergebnisse. Ohne OCR-Kontakt-Opt-in entsteht kein
+neuer Bestätigungsdialog. Mit Opt-in bleibt das betroffene Konvertat bis zur
+Kontaktentscheidung offen; das ist keine Anonymisierung oder Prüfung aller
+OCR-Inhalte. Der v5-Zweckvertrag unterscheidet sich ausdrücklich von
 alten Anonymisierungsjournals. Eigene Worker-Nachrichtentypen verhindern,
 dass ein alter Worker Konvertierung irrtümlich als Anonymisierung startet.
 TXT/Markdown/CSV/DOCX/XLSX/PPTX, Text-/Scan-PDF und PNG/JPEG/BMP laufen im

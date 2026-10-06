@@ -7,19 +7,25 @@ const MAX_CONTACTS = 400; // 400 bounded UTF-8 replacements fit the 1 MiB answer
 const MAX_VALUE_CHARS = 256;
 const MAP_KEYS = ['start', 'end', 'page', 'line', 'kind'];
 const KINDS = new Set(['email', 'phone', 'contact']);
+const { validateContactImage, MAX_TOTAL_IMAGE_BYTES, MAX_TOTAL_IMAGE_PIXELS } = require('./ocr-contact-image');
 const failure = (code = 'OCR_CONTACT_REVIEW_INVALID') => Object.assign(
   new Error('Die lokale OCR-Kontaktprüfung konnte nicht sicher bestätigt werden.'), { code });
 
 function validateContacts(contacts, text, sourceType) {
   if (!Array.isArray(contacts) || contacts.length > 5000 || typeof text !== 'string' ||
       !['pdf', 'png', 'jpeg', 'bmp'].includes(sourceType)) throw failure();
-  let end = 0;
+  let end = 0, imageBytes = 0, imagePixels = 0;
   for (const item of contacts) {
-    if (!exactKeys(item, MAP_KEYS) || !KINDS.has(item.kind) ||
+    if (!exactKeys(item, Object.hasOwn(item || {}, 'image') ? [...MAP_KEYS, 'image'] : MAP_KEYS) || !KINDS.has(item.kind) ||
         !Number.isSafeInteger(item.start) || !Number.isSafeInteger(item.end) || item.start < end ||
         item.end <= item.start || item.end > text.length ||
         !Number.isSafeInteger(item.page) || item.page < 1 ||
         !Number.isSafeInteger(item.line) || item.line < 1 || /[\r\n]/u.test(text.slice(item.start, item.end))) throw failure();
+    if (Object.hasOwn(item, 'image')) {
+      imageBytes += validateContactImage(item.image);
+      imagePixels += item.image.width * item.image.height;
+    }
+    if (imageBytes > MAX_TOTAL_IMAGE_BYTES || imagePixels > MAX_TOTAL_IMAGE_PIXELS) throw failure();
     end = item.end;
   }
   return contacts;
@@ -75,13 +81,16 @@ function contactSpans(text, quality, page = 1, offset = 0) {
 
 function buildContactDraft(input) {
   validateContacts(input.contacts, input.original_text, input.source_type);
+  if (Object.hasOwn(input, 'processing_mode') && input.processing_mode !== 'markdown-only') throw failure();
   if (!input.contacts.length || input.contacts.length > MAX_CONTACTS) throw failure('LOCAL_REVIEW_TOO_LARGE');
   return { schema: 'data-secure-text-review/3', original_text: input.original_text,
     anonymized_text: input.original_text, locators: [], decision_groups: [],
     ocr_contact_review: true, batch_index: 1, batch_total: 1, allow_defer: true,
+    ...(input.processing_mode === 'markdown-only' ? { processing_mode: 'markdown-only' } : {}),
     ambiguities: input.contacts.map((item, index) => ({ ambiguity_id: `ocr-contact:v1:${String(index + 1).padStart(6, '0')}`,
       type: 'ocr_contact_ambiguous', original_start: item.start, original_end: item.end,
-      anonymized_start: item.start, anonymized_end: item.end, page: item.page, line: item.line, contact_kind: item.kind })) };
+      anonymized_start: item.start, anonymized_end: item.end, page: item.page, line: item.line, contact_kind: item.kind,
+      ...(item.image ? { image: item.image } : {}) })) };
 }
 
 function validReplacement(value, kind) {
@@ -95,18 +104,22 @@ function validReplacement(value, kind) {
 }
 
 function validateContactDraft(draft) {
-  if (!exactKeys(draft, ['schema', 'original_text', 'anonymized_text', 'locators', 'decision_groups',
-    'ocr_contact_review', 'batch_index', 'batch_total', 'allow_defer', 'ambiguities']) ||
+  const keys = ['schema', 'original_text', 'anonymized_text', 'locators', 'decision_groups',
+    'ocr_contact_review', 'batch_index', 'batch_total', 'allow_defer', 'ambiguities'];
+  if (!exactKeys(draft, Object.hasOwn(draft || {}, 'processing_mode') ? [...keys, 'processing_mode'] : keys) ||
+      (Object.hasOwn(draft, 'processing_mode') && draft.processing_mode !== 'markdown-only') ||
       draft.schema !== 'data-secure-text-review/3' || draft.ocr_contact_review !== true || draft.allow_defer !== true ||
       typeof draft.original_text !== 'string' || draft.original_text !== draft.anonymized_text ||
       draft.batch_index !== 1 || draft.batch_total !== 1 || !Array.isArray(draft.locators) || draft.locators.length ||
       !Array.isArray(draft.decision_groups) || draft.decision_groups.length ||
       !Array.isArray(draft.ambiguities) || !draft.ambiguities.length || draft.ambiguities.length > MAX_CONTACTS) throw failure();
   const contacts = draft.ambiguities.map((item, index) => {
-    if (!exactKeys(item, ['ambiguity_id', 'type', 'original_start', 'original_end', 'anonymized_start', 'anonymized_end', 'page', 'line', 'contact_kind']) ||
+    const keys = ['ambiguity_id', 'type', 'original_start', 'original_end', 'anonymized_start', 'anonymized_end', 'page', 'line', 'contact_kind'];
+    if (!exactKeys(item, item && Object.hasOwn(item, 'image') ? [...keys, 'image'] : keys) ||
         item.type !== 'ocr_contact_ambiguous' || item.ambiguity_id !== `ocr-contact:v1:${String(index + 1).padStart(6, '0')}` ||
         item.anonymized_start !== item.original_start || item.anonymized_end !== item.original_end) throw failure();
-    return { start: item.original_start, end: item.original_end, page: item.page, line: item.line, kind: item.contact_kind };
+    return { start: item.original_start, end: item.original_end, page: item.page, line: item.line, kind: item.contact_kind,
+      ...(item.image ? { image: item.image } : {}) };
   });
   validateContacts(contacts, draft.original_text, 'pdf');
   return draft;

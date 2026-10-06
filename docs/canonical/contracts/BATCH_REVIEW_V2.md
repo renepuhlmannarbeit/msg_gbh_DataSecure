@@ -92,9 +92,21 @@ exakte UTF-16-Spannen mit Seite und OCR-Zeile. Im Anonymisierungszweck bleibt di
 Datei zunächst offen. Das bestehende private Prüffenster zeigt vor dem
 Personen-/Unternehmensreview **Wurde dieser Kontaktwert richtig erkannt?** und
 bietet **OCR-Wert unverändert bestätigen** oder **Kontaktwert korrigieren**.
-Die ursprünglichen Pixel und die reine Markdown-Konvertierung bleiben unverändert.
-Der Anwender vergleicht den Wert mit seinem lokalen Original; die Oberfläche
+Die Originaldatei bleibt unverändert. Das Prüffenster zeigt bei eindeutiger
+Geometrie den tatsächlichen Rasterausschnitt neben Lesart und Korrektur; bei PDF
+stammt dieser aus der lokal gerenderten Seite. Fehlt eine sichere Zuordnung oder
+wird das Größenbudget überschritten, erscheint ein ausdrücklicher Hinweis auf
+den Vergleich mit der Originaldatei, kein Ersatzbild. Die Oberfläche
 erfindet keine richtige Schreibweise und lädt keine Referenzdaten nach.
+
+Bei **Nur in Markdown umwandeln** bleibt diese Prüfung standardmäßig aus.
+Das ausdrücklich gesetzte `ocr_contact_review: true` erlaubt Kontaktkorrektur
+vor dem Export. Es ist nur für neue Standalone-v5-Markdown-Stapel gültig;
+falscher Modus oder andere Werte werden abgewiesen. Opt-in und ein eigener
+32-Byte-Seed gehören zur dauerhaften Zweckbindung. Der private Kontaktentwurf
+trägt dann `processing_mode: markdown-only`; die normale Entitätsprüfung wird
+nicht gestartet. Verschieben und Neustart bleiben möglich. Der Export enthält
+Originalinhalte und markiert übrige OCR-Inhalte weiterhin als ungeprüft.
 
 Eine vollständige Kontaktentscheidung wird vor Personenreservierung und
 Anonymisierung auf den aktuellen Privacy-Eingang angewendet. Bestätigen ist
@@ -111,13 +123,22 @@ nur vom ausdrücklich gesetzten Standalone-Hook benutzt.
 - Maximal 400 Kontaktvorkommen pro Dokument, 256 Zeichen je Korrektur und
   höchstens 900 KiB für die vollständige Kontaktantwort. Das bestehende
   1-MiB-IPC-Framebudget und das separate 5.000-Entitätsbudget bleiben erhalten.
+- Optionaler Bildvertrag `datasecure-ocr-contact-image/1`: genaue Rastergröße,
+  Crop-Koordinaten/Dimensionen und kanonisches Base64 eines minimalen PNG.
+  96 KiB/200.000 Pixel je Crop, 2 MiB/2.000.000 Pixel insgesamt; 4.096 × 256
+  Pixel Maximaldimensionen. Ganze OCR-Fassung und eindeutige Zeile müssen zur
+  Geometrie passen; Hybrid-Filterung oder doppelte Zeilen deaktivieren den Crop.
+  Keine URL, externe Referenz, Bildexport, Diagnose oder dauerhafte Bildablage.
 - Jede Kontaktstelle wird einzeln gebunden. Gleiche OCR-Schreibweisen können
   unterschiedliche Originalwerte darstellen; es gibt keine fuzzy oder
   dokumentübergreifend erratene Kontaktkorrektur.
 - Vollständige Entscheidungen liegen atomar und fsync-/readback-geprüft als
   private `.ocrreview`-Arbeitsartefakte vor. HMAC bindet Lauf, Seed,
   Snapshot-Hash, vollständigen Extraktionstext, Policy-/Pseudonymvertrag und
-  Kontaktspannen. Geänderte Quelle, OCR-Fassung oder manipulierte Entscheidung
+  Kontaktspannen. v2 bindet zusätzlich Verarbeitungszweck und gegebenenfalls
+  Bilddigest, nicht Bildbytes. Authentifizierte v1-Records bleiben ausschließlich
+  für ihren bisherigen Anonymisierungszweck kompatibel. Geänderte Quelle,
+  OCR-Fassung, v2-Bildausschnitt oder manipulierte Entscheidung
   erfordert einen neuen Lauf statt stiller Wiederverwendung.
 - Rohwerte und Korrekturen gelangen weder in das Laufjournal noch in Diagnose,
   Support oder die Hauptansicht. Die Artefakte sind normale private lokale

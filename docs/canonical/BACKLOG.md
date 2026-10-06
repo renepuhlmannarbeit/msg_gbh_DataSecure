@@ -1142,6 +1142,25 @@ Das integrierte Produktgate ist mit 201 Dateien grün, Mac-Workflow führt die
 Migration zusätzlich aus. Technische Korrektur erledigt, keine Änderung
 vorhandener Anwenderdaten und keine pauschale Zielhost-/Releaseabnahme.
 
+**Lokale Ergänzung BL-050.6 vom 06.10.2026, unveröffentlicht:** Eindeutig an
+unmodifizierte OCR und Rastergeometrie gebundene Kontakt-Bildausschnitte im
+privaten Review; sonst sichtbarer Originaldatei-Fallback. Reine Markdown-
+Konvertierung bietet ausdrücklich nicht vorausgewähltes Kontaktprüf-Opt-in,
+mit eigener Zweck-/Seedbindung, Verschieben/Neustart und lokaler Veröffentlichung
+ohne Privacy-Analyse. Zwei technische Reviewrollen korrigierten tatsächliche
+localFinalize- und Hybrid-Provenanzfehler sowie Messmethodik. 203 Produktdateien,
+47 echte Windows-Konvertergruppen und 50 Rusttests bestehen. Die neue unabhängige
+104-Varianten-V4-Messung umfasst Tesseract-Alternativen und einen gepinnten lokalen
+Paddle-ROI-Prototyp; auf alten E-Mail-Zeilen verbessert, auf neuen Kontakten
+verschlechtert, deshalb keine Produktaktivierung oder automatische Wertwahl.
+Frische 72-Varianten-Produktmessung: neun rohe OCR-Abweichungen, null bekannte
+finale Referenzlecks nach explizitem synthetischem Review. Qualität bleibt
+**in Arbeit**. Echte PDF-Regionauflösung wurde separat begrenzt gemessen und
+brachte keine Verbesserung; bei Scan-Kontaktzeilen entstanden neue Fehler,
+deshalb keine automatische Produktaktivierung. Volle neue Mac-/exakte
+Paketbindung, menschliche Qualität/Bedienung und Releasefreigabe bleiben offen.
+Reproduktionskommandos und Aussagegrenzen: `docs/DETECTOR_BENCHMARK.md`.
+
 #### BL-041.17 – zweiter Astra-Gegenreview, 12.09.2026
 
 Diese nummerierten Befunde bleiben als Fehlerursache und Regressionsvertrag

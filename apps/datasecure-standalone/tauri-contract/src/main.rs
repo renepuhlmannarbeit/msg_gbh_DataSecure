@@ -1206,18 +1206,23 @@ async fn start_admitted_batch(
     state: State<'_, DesktopState>,
     processing_mode: Option<String>,
     output_naming_mode: Option<String>,
+    ocr_contact_review: Option<bool>,
 ) -> Result<Value, String> {
     let mode = validate_processing_mode(processing_mode.as_deref())?;
     validate_output_naming_mode(output_naming_mode.as_deref(), mode)?;
+    let contact_review = validate_ocr_contact_review(mode, ocr_contact_review)?;
     let _guard = selection_guard(&state.selection_busy, &state.admission_present, true)?;
     let owned = state.inner().clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
         let id = request_id();
-        let request = private_start_request(
+        let mut request = private_start_request(
             &id,
             processing_mode.as_deref(),
             output_naming_mode.as_deref(),
         )?;
+        if contact_review {
+            request["ocr_contact_review"] = json!(true);
+        }
         rpc_request(&owned, "start_admitted_batch", &id, request)
     })
     .await
@@ -1228,6 +1233,13 @@ async fn start_admitted_batch(
         state.admission_present.store(false, Ordering::Release);
     }
     result
+}
+fn validate_ocr_contact_review(mode: &str, value: Option<bool>) -> Result<bool, String> {
+    match value {
+        None => Ok(false),
+        Some(true) if mode == "markdown-only" => Ok(true),
+        _ => Err("OCR_CONTACT_REVIEW_INVALID".to_string()),
+    }
 }
 #[tauri::command]
 async fn get_public_state(state: State<'_, DesktopState>) -> Result<Value, String> {
@@ -1784,6 +1796,18 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn markdown_contact_review_is_explicit_opt_in_not_anonymization_or_coercion() {
+        for mode in ["markdown-only", "markdown-and-anonymize"] {
+            assert!(!validate_ocr_contact_review(mode, None).unwrap());
+            assert_eq!(validate_ocr_contact_review(mode, Some(false)).unwrap_err(), "OCR_CONTACT_REVIEW_INVALID");
+        }
+        assert!(validate_ocr_contact_review("markdown-only", Some(true)).unwrap());
+        for mode in ["markdown-and-anonymize", "unknown", ""] {
+            assert_eq!(validate_ocr_contact_review(mode, Some(true)).unwrap_err(), "OCR_CONTACT_REVIEW_INVALID");
+        }
+    }
 
     #[test]
     fn diagnostic_ipc_correlation_accepts_only_bounded_content_free_ids() {

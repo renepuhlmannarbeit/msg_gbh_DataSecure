@@ -29,7 +29,8 @@
     "result"
   ],
   "optional_review_processing_modes": [
-    "markdown-and-anonymize"
+    "markdown-and-anonymize",
+    "markdown-only"
   ],
   "requires_claude": false,
   "requires_cowork": false,

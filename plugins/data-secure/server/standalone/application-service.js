@@ -733,10 +733,13 @@ class StandaloneApplicationService {
     // to silently replace a requested conversion with anonymization.
     if (typeof options === 'string') options = { profile: options, processingMode: MODES.ANONYMIZE };
     if (!options || typeof options !== 'object' || Array.isArray(options) ||
-        Object.keys(options).some((key) => !['profile', 'processingMode', 'outputNamingMode'].includes(key))) {
+        Object.keys(options).some((key) => !['profile', 'processingMode', 'outputNamingMode', 'ocrContactReview'].includes(key))) {
       throw fixedFailure('PROCESSING_MODE_INVALID', 'Ungültiger Verarbeitungsmodus.');
     }
     const processingMode = assertRunnableProcessingMode(options.processingMode, PRODUCT_CHANNEL);
+    if (Object.hasOwn(options, 'ocrContactReview') && (processingMode !== MODES.MARKDOWN || options.ocrContactReview !== true)) {
+      throw fixedFailure('OCR_CONTACT_REVIEW_INVALID', 'OCR-Kontaktkorrektur ist eine ausdrückliche Option der reinen Konvertierung.');
+    }
     let outputNamingMode = null;
     if (processingMode === MODES.MARKDOWN && Object.hasOwn(options, 'outputNamingMode')) {
       throw fixedFailure('RESULT_NAMING_MODE_INVALID', 'Für reine Konvertierung ist keine Ergebnisbenennung erforderlich.');
@@ -759,6 +762,7 @@ class StandaloneApplicationService {
       this.terminalPresentation = null;
       const started = this.deps.startLocalIntakeExecutor(queue, profile, {
         intakeReservationId: reservation.reservation_id, signal, processingMode,
+        ...(options.ocrContactReview === true ? { ocrContactReview: true } : {}),
         ...(outputNamingMode ? { outputNamingMode } : {})
       });
       transferred = true;

@@ -87,6 +87,7 @@ function createReviewBroker() {
       return true;
     }
     if (bytes.length < 1 || bytes.length > MAX_DRAFT_BYTES) {
+      bytes.fill(0);
       failed(child, 'LOCAL_REVIEW_TOO_LARGE');
       try { child.send({ type: 'standalone-review-answer', review_id: message.review_id, answer: { action: 'deferred' } }); }
       catch { /* worker disconnect remains fail-closed */ }
@@ -125,6 +126,7 @@ function createReviewBroker() {
     catch { throw failure('STANDALONE_REVIEW_DECISION_INVALID'); }
     const current = active;
     active = null;
+    current.bytes.fill(0);
     try { current.child.send({ type: 'standalone-review-answer', review_id: reviewId, answer: validated }); }
     catch { failed(current.child); throw failure('STANDALONE_REVIEW_SESSION_INVALID'); }
     run.phase = validated.action === 'reviewed' ? 'publishing' : 'deferred';
@@ -133,7 +135,7 @@ function createReviewBroker() {
   }
 
   function release(child, options = {}) {
-    if (active?.child === child) active = null;
+    if (active?.child === child) { active.bytes.fill(0); active = null; }
     if (run?.child !== child) return;
     if (options.failed === true || ['preparing', 'ready'].includes(run.phase)) {
       failed(child, options.errorCode || 'LOCAL_REVIEW_WORKER_EXITED');

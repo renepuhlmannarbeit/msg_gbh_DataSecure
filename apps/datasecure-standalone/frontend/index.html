@@ -60,6 +60,10 @@
           <option value="markdown-and-anonymize">In Markdown umwandeln und anonymisieren</option>
         </select>
         <p id="processing-mode-help" class="mode-help">Wähle aus, ob Originalinhalte erhalten bleiben oder erkannte Identifikatoren ersetzt werden sollen.</p>
+        <div id="ocr-contact-option" hidden>
+          <label><input id="ocr-contact-review" type="checkbox"> OCR-Kontaktwerte vor dem Markdown-Export lokal prüfen</label>
+          <p class="mode-help">Optional bei Bildern und Scan-PDFs: Kontaktwerte anhand des Originalausschnitts bestätigen oder korrigieren. Kein Anonymisieren; andere OCR-Fehler werden dadurch nicht ausgeschlossen.</p>
+        </div>
         <div id="output-naming" class="output-naming" hidden>
           <label for="output-naming-mode" class="mode-label">Dateinamen der anonymisierten Ergebnisse</label>
           <select id="output-naming-mode" aria-describedby="output-naming-help">
