@@ -376,7 +376,7 @@ Coworks Formate und Werkzeuge bleiben unverändert.
 
 #### Weiterer lokaler Lösungsreview: Bildprüfung und Markdown-Opt-in
 
-Der noch uncommittete Engineeringstand vom 06.10.2026 zeigt eindeutig gebundene
+Der Engineeringstand vom 06.10.2026 zeigt eindeutig gebundene
 Original-Rasterausschnitte unmittelbar in der privaten Kontaktprüfung. PDF-
 Ausschnitte stammen aus der tatsächlich lokal gerenderten Seite. Unmodifizierte
 gesamte OCR-Fassung, eindeutige Zeile und gültige Geometrie sind Voraussetzung;
@@ -390,8 +390,9 @@ lokale Veröffentlichung sind technisch gegengeprüft; Namen bleiben erhalten,
 keine Privacy-Analyse/Pseudonyme. Der Review korrigierte echte localFinalize-
 Journal- und Hybrid-Crop-Gegenbeispiele. Die 203 Produkttestdateien, 47 echten
 Windows-Konvertergruppen und 50 Windows-Rusttests bestehen; frontend- und
-private-IPC-Gegenfälle sind zusätzlich gezielt geprüft. Kein neuer Mac-/GUI-/
-Releasepaketnachweis und keine Veröffentlichung dieses Stands.
+private-IPC-Gegenfälle sind zusätzlich gezielt geprüft. Die neue Engineering-
+Paketbindung ist nachstehend getrennt dokumentiert; keine Veröffentlichung
+oder behauptete menschliche Bedienabnahme dieses Stands.
 
 Ein getrenntes 104-Varianten-Engineeringexperiment misst Tesseract-Zeichen-
 alternativen, 1×/1,5×/2× Kontakt-Crops und gepinntes PaddleOCR/ONNX. Paddle behebt
@@ -407,16 +408,62 @@ nativen PDF-Textextraktion. Keine automatische Auflösungsaktivierung.
 Die frische produktive 72-Varianten-Messung enthält weiterhin neun rohe OCR-
 Abweichungen; nach expliziter synthetischer Referenzkorrektur sind die finalen
 Ergebnisse korrekt im bekannten Referenzumfang. Qualitätsgate bleibt rot,
-BL-050.6 und neue native Bedien-/Paketbindung bleiben offen. Main/Releases sind
-unverändert.
+BL-050.6 und die neue menschliche native Bedienabnahme bleiben offen.
+Main/Releases sind unverändert.
 
 Der Nutzer hat anschließend den separaten Engineering-Checkpoint und einen
 weiteren Windows-/macOS-Intel-/Apple-Silicon-Paketlauf ausdrücklich beauftragt.
-Die Paketprüfung wird um exakte Originalpixel, Kontaktkorrektur, Verschieben/
+Die Paketprüfung ist um exakte Originalpixel, Kontaktkorrektur, Verschieben/
 Neustart und Veröffentlichung auch im Markdown-Opt-in ergänzt. Das frühere
 Herkunftsgate `BUNDLED_PLUGIN_SOURCE_COMMIT_INVALID` wird nicht umgangen: Erst
 committen, dann aus einem sauberen Checkout bauen. Main und Releases bleiben
-unverändert; neue Paketergebnisse werden nach dem tatsächlichen Lauf ergänzt.
+unverändert. Produktcheckpoint: `6faee97d527a6a7bb6d5f010647ea5bcb6bed2ca`;
+verschärfte vollständige Ausgabeprüfung: `3ee1e1cceddac90144a7d8be224b69aa63b00d4f`,
+jeweils nur auf `codex/ocr-contact-native-revalidation-20261006`.
+
+Der saubere Windows-Checkout von `3ee1e1c` besteht Produktbuild, Plugin-ZIP und
+strukturelle CLI-Prüfung. Die frische 203-Dateien-Produktsuite, alle 47 echten
+Windows-Konvertergruppen und 50 Rusttests/Clippy bestehen. Exaktes Engineering-
+Standalone-ZIP: SHA-256
+`bbfe97a9ab47add34a0955b0a33daa971a4e0e38d3dfa10b106d6baf1c6a63f7`.
+Tatsächlicher paketierter Privat-IPC-Pfad prüft Originalpixel, verschiedene
+E-Mail-/Telefonkorrekturen, zwei Dokumente, Verschieben/Neustart, nachfolgende
+Entitätsprüfung und vollständige separate Ausgaben für Anonymisierung und
+Markdown-Opt-in. Zusammengeführte, doppelte und ergänzte Dokumente werden als
+Testgegenbeispiele abgewiesen. Wiederholte ZIP-Assemblierung aus demselben
+kompilierten Executable ist bytegleich, kein unabhängiger Compiler-Doppelbau.
+
+Das exakte Windows-ZIP startet Haupt- und Prüffenster mit erfolgreichen IPC-
+Antworten im eigenen nativen Profil: 1627,15 ms, 3.731.456 Byte Shell, null
+beobachtete TCP-Listener/UDP-Endpunkte. Kein nativer Reviewklick oder Nachweis
+der sichtbaren Pixelanzeige. Eine operatorgeführte OCR-Kampagne ist vorbereitet,
+ausdrücklich `NOT_RUN`, keine Bedienattestation durch Testskript.
+
+Der ausdrücklich genehmigte weitere Mac-Engineeringlauf
+[`37491424692`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/37491424692)
+bindet `3ee1e1c` und ist auf Intel und Apple Silicon erfolgreich abgeschlossen.
+Je Ziel: 48 Rusttests, Clippy ohne Warnungen, 45 echte Konvertergruppen; zwei
+Windows-spezifische Konvertergruppen sind ausdrücklich übersprungen, nicht
+bestanden. Beide exakten ZIPs bestehen die paketierte OCR-Korrektur für
+Anonymisierung und Markdown-Opt-in mit Originalpixeln, Verschieben/Neustart und
+vollständigen separaten Ausgaben. Natives App-Bundle, entpacktes ZIP und die
+identische App in der gemounteten DMG starten Haupt-/Prüfseiten mit erfolgreichen
+IPC-Antworten; das ZIP zusätzlich über LaunchServices. Kein Nachweis nativer
+Reviewklicks oder sichtbarer Pixelanzeige, kein unabhängiger Compiler-Doppelbau.
+
+Alle vier Mac-Dateien sind lokal gesichert und gegen ihre SHA-256-Seiten geprüft;
+beide ZIPs bestehen zusätzlich Inventar-/ABI-Verifikation:
+
+- Apple-Silicon-ZIP: `87e612bdb07e423d95454ff9b6dd1aaaafffcee4cc21f8d224a8bb949fcb7929`.
+- Apple-Silicon-DMG: `acac1fd521343337e04eea623ed3590ede3d70c01e55328b7309288af6999943`.
+- Intel-ZIP: `b0175cfb6ccfa68de2f910c112aa68a46d709d0cf0a47734bfbac5421c8c6f14`.
+- Intel-DMG: `329cec03925c5080f232e04541324e377f77720c9b0550f0363ec27206bd9895`.
+
+Pakete und abgeschlossene Joblogs liegen unter
+`dist/engineering-ocr-crops-3ee1e1c/`. Nur Engineeringpakete, kein neues
+veröffentlichtes RC158. Der vorher ersetzte Dispatch ist abgebrochen, kein PASS.
+Neue menschliche Bild-/Bedienprüfung und volle 72-Varianten-Qualitätsmessung am
+Mac-Archiv bleiben offen. Mac ad-hoc signiert, keine Developer-ID/Notarisierung.
 
 Eine unabhängige technische Pixelprüfung der neun Rohabweichungen zeigt fünf
 zusätzliche `d` hinter `@` und vier `q`/`g`-Verwechslungen. Acht Originalraster

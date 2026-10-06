@@ -483,11 +483,66 @@ IPC tests add tampered CRCs, image disposal and mode-specific opt-in. No new
 native WebView/manual or exact-release/macOS test is implied; earlier Mac
 engineering evidence above belongs only to its named source commit.
 
-Packaging is not reported as passed: `npm run build` stops at
-`BUNDLED_PLUGIN_SOURCE_COMMIT_INVALID` because the engineering worktree is not a
-clean committed source. The plugin-ZIP test then lacks the required RC158 ZIP.
-No provenance bypass, commit, push, workflow dispatch or release was performed
-for this further source revision.
+The initial uncommitted packaging attempt stopped at
+`BUNDLED_PLUGIN_SOURCE_COMMIT_INVALID`. The provenance gate was not bypassed.
+The user subsequently authorized an engineering-only checkpoint and Windows/
+Intel-Mac/Apple-Silicon package run. Product changes are committed as
+`6faee97d527a6a7bb6d5f010647ea5bcb6bed2ca`; stricter whole-document output
+assertions follow in `3ee1e1cceddac90144a7d8be224b69aa63b00d4f`. Only branch
+`codex/ocr-contact-native-revalidation-20261006` was pushed; main and releases
+remain unchanged.
+
+Windows was built from a clean checkout of `3ee1e1c`, not from a supplied fake
+source-commit value. Product build/plugin-ZIP/strict CLI structure checks pass.
+The engineering Standalone ZIP SHA-256 is
+`bbfe97a9ab47add34a0955b0a33daa971a4e0e38d3dfa10b106d6baf1c6a63f7`.
+Its verified private-IPC workflow covers real original crop pixels, different
+email/phone corrections, both contact documents, defer/restart, subsequent
+entity review, complete final anonymized outputs and separate complete
+Markdown-only outputs with opt-in. It also rejects a merged document plus an
+empty file, duplicate documents and extra body text. This is actual packaged
+backend processing, not native click or image-painting acceptance.
+All 47 real Windows converter groups and 50 Rust tests pass; Clippy has no
+warnings. The exact ZIP starts both native pages with successful IPC in an
+isolated profile: 1627.15 ms, 3,731,456-byte shell, no observed TCP listeners
+or UDP endpoints. Closing the owned test instance cleans its own profile.
+Repeated archive assembly is byte-identical from the same compiled executable;
+this is not an independent Rust compiler reproducibility claim.
+
+The new macOS engineering run is source-bound to `3ee1e1c`:
+[workflow 37491424692](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/37491424692).
+Both Intel and Apple Silicon jobs completed successfully: 48 Rust tests per
+target, warning-free Clippy and 45 real converter groups; the two Windows-only
+converter groups are explicitly skipped, not passed. The exact ZIPs pass both
+packaged OCR workflows (anonymization and opt-in Markdown), including original
+crop pixels, corrections, defer/restart and complete separate output documents.
+The native app, extracted ZIP and identical app mounted from the DMG start
+their main/review pages with successful IPC; ZIP launch is also checked through
+LaunchServices. Neither this nor the packaged IPC tests attest to native review
+clicks or visible image rendering. Repeated assembly uses the same compiled app,
+not an independent compiler double-build.
+
+All four Mac artifacts were downloaded and checked locally against their SHA-256
+sidecars; both ZIPs additionally pass the closed inventory/ABI verifier:
+
+- Apple Silicon ZIP: `87e612bdb07e423d95454ff9b6dd1aaaafffcee4cc21f8d224a8bb949fcb7929`.
+- Apple Silicon DMG: `acac1fd521343337e04eea623ed3590ede3d70c01e55328b7309288af6999943`.
+- Intel ZIP: `b0175cfb6ccfa68de2f910c112aa68a46d709d0cf0a47734bfbac5421c8c6f14`.
+- Intel DMG: `329cec03925c5080f232e04541324e377f77720c9b0550f0363ec27206bd9895`.
+
+Packages and completed job logs are retained under
+`dist/engineering-ocr-crops-3ee1e1c/`. These are engineering packages, not a new
+published RC158. Human image/interaction acceptance and the complete 72-variant
+quality measurement through each exact Mac archive remain open. The Mac app is
+ad-hoc signed, not Developer-ID signed or notarized. A replaced earlier
+engineering dispatch was cancelled, not recorded as PASS.
+
+Independent technical inspection of the nine original synthetic rasters finds
+five extra `d` characters after `@` and four `q`→`g` substitutions. Eight source
+images clearly resolve the difference; the upscaled low-resolution `quality-055`
+case supports `q` with lower certainty. This is neither human/blind-reference
+acceptance nor an automatic correction rule. The strict raw quality gate still
+returns `QUALITY_FINDINGS_OPEN`; no main push or release follows from these tests.
 
 1. Evaluate DocCloak.Core's regex-only path in an isolated, pinned test environment. This is
    the lowest-complexity candidate and requires no model in the product.

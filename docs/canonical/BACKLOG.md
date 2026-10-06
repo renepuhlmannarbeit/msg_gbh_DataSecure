@@ -1157,8 +1157,19 @@ Frische 72-Varianten-Produktmessung: neun rohe OCR-Abweichungen, null bekannte
 finale Referenzlecks nach explizitem synthetischem Review. Qualität bleibt
 **in Arbeit**. Echte PDF-Regionauflösung wurde separat begrenzt gemessen und
 brachte keine Verbesserung; bei Scan-Kontaktzeilen entstanden neue Fehler,
-deshalb keine automatische Produktaktivierung. Volle neue Mac-/exakte
-Paketbindung, menschliche Qualität/Bedienung und Releasefreigabe bleiben offen.
+deshalb keine automatische Produktaktivierung. Der neue Engineeringcheckpoint
+`3ee1e1c` ist auf dem getrennten Testbranch gesichert. Windows besteht exakte
+Paketprüfung einschließlich ursprünglicher Crop-Pixel, Korrektur, Verschieben/
+Neustart und vollständiger separater Dokumente in beiden Zwecken; native
+Haupt-/Prüfseiten starten mit erfolgreichen IPC-Antworten. Intel und Apple
+Silicon bestehen diese neue Paketbindung einschließlich gemounteter identischer
+DMG und ZIP-Start über LaunchServices im abgeschlossenen genehmigten Workflow
+`37491424692`: je 48 Rusttests, Clippy, 45 echte Konvertergruppen und zwei
+ausdrücklich übersprungene Windows-Konvertergruppen. Beide ZIPs und DMGs sind
+lokal hashgeprüft; ZIP-Inventar/ABI zusätzlich verifiziert. Nur technische
+Engineeringevidenz, keine nativen Reviewklicks/Bildanzeige oder Notarisierung.
+Die vollständige 72-Varianten-Qualitätsmessung am Mac-Archiv, menschliche
+Qualität/Bedienung, neun Roh-OCR-Abweichungen und Releasefreigabe bleiben offen.
 Reproduktionskommandos und Aussagegrenzen: `docs/DETECTOR_BENCHMARK.md`.
 
 #### BL-041.17 – zweiter Astra-Gegenreview, 12.09.2026
