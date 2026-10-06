@@ -122,7 +122,10 @@ test('contact answers remain inside the original IPC byte limit, independently o
   assert.throws(() => buildContactDraft(input(Array(401).fill('E-Mail: a@b.invalid').join('\n'))), error => error.code === 'LOCAL_REVIEW_TOO_LARGE');
 });
 test('durable private corrections survive reopen but reject changed extraction, run, seed and tampering', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-contact-'));
+  // macOS can expose /var as a symlink. Exercise storage with the canonical
+  // fixture root, without relaxing the product's redirected-ancestor guard.
+  const temporary = fs.realpathSync.native(os.tmpdir());
+  const root = fs.mkdtempSync(path.join(temporary, 'datasecure-contact-'));
   const state = { product_channel: 'standalone', token: 'a'.repeat(64), pseudonym_seed: Buffer.alloc(32, 7).toString('base64url'),
     core_policy_fingerprint: 'c'.repeat(64), pseudonym_contract_version: 'test/1', pseudonym_ruleset_version: 'test/1' };
   const item = { id: 'item-1', work_name: `001_${'b'.repeat(24)}.workcopy`, sha256: 'd'.repeat(64) };

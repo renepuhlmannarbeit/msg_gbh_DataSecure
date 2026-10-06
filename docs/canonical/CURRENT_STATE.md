@@ -465,7 +465,15 @@ keine TCP-Listener oder UDP-Endpunkte im Messfenster, 918 eigene Einträge
 bereinigt). Die vorherige unklare Beobachtung wird dadurch nicht zum PASS
 umgeschrieben; dies ist ein begrenzter Beobachtungsnachweis, keine allgemeine
 Netzwerk- oder Bediengarantie.
-Native Mac-Resultate stehen bis tatsächlichem Workflowabschluss aus.
+Der erste Mac-Workflow `37458613608` auf Quellcommit `458bd106…` stoppt auf
+beiden Architekturen im neuen Kontakt-Store-Test: die Testfixture verwendet den
+nicht kanonischen macOS-TEMP-Alias. Der Produktguard lehnt dessen umgeleiteten
+Vorfahr korrekt als `PRIVATE_ARTIFACT_ROOT_INVALID` ab. Die Fixture löst TEMP
+nun vor dem Anlegen auf; der Produktguard bleibt unverändert. Die 16
+Migrationstests bestehen bereits nativ auf beiden Architekturen. Bundlebau,
+nativer Appstart und Mac-Paketworkflow wurden in diesem fehlgeschlagenen
+Versuch nicht erreicht; native Mac-Resultate stehen bis dem korrigierten
+Workflowabschluss aus.
 Cowork-Build/Plugin-ZIP bleiben im unreinen Quellbaum wegen Herkunftssperre
 beziehungsweise fehlendem neuen Archiv nicht bestanden; keine Umgehung.
 
