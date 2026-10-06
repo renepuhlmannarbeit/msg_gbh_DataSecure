@@ -77,8 +77,8 @@
     {
       "rule": "js/file-system-race",
       "path": "plugins/data-secure/server/core/bound-file-io.js",
-      "source_sha256": "4ffc960aa24c6e569120252b968f992d114ee1b7448b7f06be18947fe568929f",
-      "reason": "Held bounded positional read: original BigInt file fingerprint and every parent are checked before the first byte and after reading; links, swaps, growth and close errors stop the operation.",
+      "source_sha256": "af7ae318b875d7cebd09a3636423bc24a77021bfd7538f5a362f62bc2a69eaeb",
+      "reason": "Held bounded positional read or streaming digest: original BigInt file fingerprint and every parent are checked before the first byte and after consumption; links, swaps, growth and close errors stop the operation. Streaming uses at most 64 KiB; existing allocation limits are unchanged. Independently re-reviewed with exact-bound, short-read, partial-final-chunk, FD 0 and substitution regressions.",
       "fingerprints": [
         {
           "line": "38fbef828e00147d:1",

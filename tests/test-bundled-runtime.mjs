@@ -8,7 +8,7 @@ import { execFileSync } from 'node:child_process';
 import { buildRuntimePlugin } from '../scripts/build-runtime-plugin.mjs';
 import {
   assertBinaryTarget, createTargetOutput, extractRuntime, normalizeRuntimeLicense, readContract,
-  readStandaloneRuntimeContract, sha256, verifyTargetEvidence
+  readStandaloneRuntimeContract, readRegular, hashRegular, sha256, verifyTargetEvidence
 } from '../scripts/lib/bundled-runtime.mjs';
 import { readCentralModes } from '../scripts/lib/zip.mjs';
 
@@ -150,6 +150,31 @@ test('official Node license text is portable across LF and CRLF archives', () =>
     'build-runtime-target.mjs'), 'utf8');
   assert.match(builder, /normalizeRuntimeLicense\(extractArchiveEntry\(/u,
     'every target must normalize its verified license before hashing and publication');
+});
+
+test('distribution builders hash archives with a bounded stream, not an oversized buffer', () => {
+  const temporaryParent = fs.realpathSync.native(os.tmpdir());
+  const directory = fs.mkdtempSync(path.join(temporaryParent, 'datasecure-archive-limit-'));
+  const file = path.join(directory, 'synthetic.zip');
+  try {
+    fs.writeFileSync(file, 'synthetic archive');
+    for (const platform of ['macos', 'linux']) {
+      const builder = fs.readFileSync(path.resolve(import.meta.dirname, '..', 'scripts',
+        `build-standalone-${platform}-package.mjs`), 'utf8');
+      const match = builder.match(/const (?:archiveDigest|digest) = hashRegular\(output, (\d+) \* 1024 \* 1024\);/u);
+      assert.ok(match, `${platform}: explicit compressed archive limit`);
+      const maximum = Number(match[1]) * 1024 * 1024;
+      assert.equal(maximum, 768 * 1024 * 1024, `${platform}: streaming archive budget`);
+      assert.equal(hashRegular(file, maximum), sha256(Buffer.from('synthetic archive')));
+    }
+    assert.throws(() => readRegular(file, 768 * 1024 * 1024), /BUNDLED_RUNTIME_FILE_UNSAFE/);
+    assert.throws(() => hashRegular(file, 768 * 1024 * 1024 + 1), /BUNDLED_RUNTIME_FILE_UNSAFE/);
+    assert.throws(() => hashRegular(file, 4), /BUNDLED_RUNTIME_FILE_UNSAFE/);
+    assert.throws(() => readRegular(file, 4), /BUNDLED_RUNTIME_FILE_UNSAFE/);
+  } finally {
+    assert.equal(path.dirname(directory), temporaryParent);
+    fs.rmSync(directory, { recursive: true });
+  }
 });
 
 test('target output creates a missing dist parent on a clean checkout', () => {

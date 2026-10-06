@@ -1,9 +1,8 @@
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { collectFiles, writeZip } from './lib/zip.mjs';
-import { readRegular, sha256, verifyTargetEvidence, readStandaloneRuntimeContract } from './lib/bundled-runtime.mjs';
+import { readRegular, hashRegular, sha256, verifyTargetEvidence, readStandaloneRuntimeContract } from './lib/bundled-runtime.mjs';
 import { loadCargoLicenseInventory } from './lib/cargo-license-inventory.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -125,7 +124,6 @@ const archiveFiles = collectFiles(stageParent).map((file) => {
 fs.rmSync(output, { force: true });
 fs.rmSync(`${output}.sha256`, { force: true });
 const archive = writeZip(output, archiveFiles, { maximumFileBytes: 512 * 1024 * 1024 });
-const zipBytes = readRegular(output, 768 * 1024 * 1024);
-const digest = crypto.createHash('sha256').update(zipBytes).digest('hex');
+const digest = hashRegular(output, 768 * 1024 * 1024);
 fs.writeFileSync(`${output}.sha256`, `${digest}  ${path.basename(output)}\n`, { flag: 'wx' });
 process.stdout.write(`${JSON.stringify({ ok: true, output, sha256: digest, ...archive })}\n`);

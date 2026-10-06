@@ -5,7 +5,7 @@ import zlib from 'node:zlib';
 import { createRequire } from 'node:module';
 
 const require = createRequire(import.meta.url);
-const { readBoundFile } = require('../../plugins/data-secure/server/core/bound-file-io.js');
+const { readBoundFile, hashBoundFile } = require('../../plugins/data-secure/server/core/bound-file-io.js');
 const { readZip } = require('../../plugins/data-secure/server/zip-reader.js');
 const HEX = /^[a-f0-9]{64}$/u;
 const MAX_ARCHIVE = 256 * 1024 * 1024;
@@ -58,6 +58,16 @@ export function createTargetOutput(repositoryRoot, requestedOutput, targetId) {
 export function readRegular(file, limit = MAX_ARCHIVE) {
   try {
     return readBoundFile(file, { maximum: limit, minimum: 1, checkCtime: true });
+  } catch (error) {
+    if (error?.code === 'ENOENT') throw error;
+    throw new Error(error?.code === 'BOUND_FILE_UNSAFE'
+      ? 'BUNDLED_RUNTIME_FILE_UNSAFE' : 'BUNDLED_RUNTIME_FILE_CHANGED');
+  }
+}
+
+export function hashRegular(file, limit = MAX_ARCHIVE) {
+  try {
+    return hashBoundFile(file, { maximum: limit, minimum: 1, checkCtime: true });
   } catch (error) {
     if (error?.code === 'ENOENT') throw error;
     throw new Error(error?.code === 'BOUND_FILE_UNSAFE'

@@ -59,6 +59,16 @@ Benutzer, SYSTEM und Administratoren. Owner und exakte Access-SDDL werden vor
 Identitätsbindung geprüft; keine nachträgliche offene ACL-Phase. Neun reale
 Cleanup-/Substitutionsgruppen einschließlich der privaten DACL bestehen.
 
+Der Intel-Mac-Bau desselben alten Schnitts bestand Bundle-Signatur, native
+Architekturen und Haupt-/Prüfseiten-IPC, scheiterte aber beim ZIP-Hashlesen:
+Der Aufrufer übergab 768 MiB, während der sichere gehaltene Reader höchstens
+512 MiB zulässt. Mac- und Linux-Distributionsbuilder hashen Archivbytes nun
+deskriptorgebunden mit höchstens 64 KiB Puffer und 768 MiB Gesamtbudget;
+die bestehende Buffer- und ZIP-Entpackgrenze bleibt unverändert. Regressionen
+prüfen die tatsächlichen Builderlimits, genaue Grenzen, kurze Reads, FD 0,
+Austausch, Wachstum, Elternwechsel und Fehler-Cleanup. Auch dieser technische
+Zwischenstand benötigt eine neue vollständige native Paketkampagne.
+
 Der Anwender hat am 05.10.2026 Commit und Push auf main sowie neue
 Windows- und macOS-Vorabpakete beauftragt. RC158 enthält die revalidierten
 Korrekturen DS-106–109. Windows x64 wird aus einem sauberen Quellcommit

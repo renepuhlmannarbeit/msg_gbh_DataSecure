@@ -4,6 +4,7 @@
 // pathname to read bytes after checking it; path checks bind the held object.
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 
 function failure(code = 'BOUND_FILE_UNSAFE') {
   return Object.assign(new Error(code), { code });
@@ -74,7 +75,25 @@ function readHeldBytes(fd, length, io = fs, maximum = 64 * 1024 * 1024) {
   }
   return bytes;
 }
-function readBoundFileRecord(target, options = {}) {
+// Distribution archives need only a digest, not an archive-sized buffer.
+// Their total budget is separate from the 512 MiB allocation ceiling.
+function hashHeldBytes(fd, length, io, maximum) {
+  const size = Number(length);
+  if (!Number.isSafeInteger(size) || size < 0 || size > maximum ||
+      !Number.isSafeInteger(maximum) || maximum < 0 || maximum > 768 * 1024 * 1024) throw failure();
+  const hash = crypto.createHash('sha256');
+  const buffer = Buffer.alloc(Math.min(size, 64 * 1024));
+  let offset = 0;
+  while (offset < size) {
+    const remaining = Math.min(size - offset, buffer.length);
+    const count = io.readSync(fd, buffer, 0, remaining, offset);
+    if (!Number.isSafeInteger(count) || count < 1 || count > remaining) throw failure('BOUND_FILE_CHANGED');
+    hash.update(buffer.subarray(0, count));
+    offset += count;
+  }
+  return hash.digest('hex');
+}
+function consumeBoundFileRecord(target, options, consume) {
   const io = options.io || fs;
   const maximum = options.maximum ?? 256 * 1024 * 1024;
   const minimum = options.minimum ?? 0;
@@ -101,14 +120,14 @@ function readBoundFileRecord(target, options = {}) {
     if (!sameFile(opened, identity)) throw failure('BOUND_FILE_CHANGED');
     assertDirectory(directory);
     options.validateParents?.();
-    const bytes = readHeldBytes(fd, size, io, maximum);
+    const value = consume(fd, size, io, maximum);
     if (!sameFile(io.fstatSync(fd, { bigint: true }), identity) ||
         !sameFile(io.lstatSync(absolute, { bigint: true }), identity)) throw failure('BOUND_FILE_CHANGED');
     assertDirectory(directory);
     options.validateParents?.();
     // A capability, not serializable user metadata. Callers may use it to
     // revalidate a later namespace operation without accepting another object.
-    return { bytes, stat: opened, identity, directory, path: absolute };
+    return { value, stat: opened, identity, directory, path: absolute };
   } catch (error) {
     if (error?.code?.startsWith('BOUND_FILE_')) throw error;
     if (!started && error?.code === 'ENOENT') throw error;
@@ -121,7 +140,14 @@ function readBoundFileRecord(target, options = {}) {
     }
   }
 }
+function readBoundFileRecord(target, options = {}) {
+  const { value: bytes, ...binding } = consumeBoundFileRecord(target, options, readHeldBytes);
+  return { bytes, ...binding };
+}
 function readBoundFile(target, options = {}) { return readBoundFileRecord(target, options).bytes; }
+function hashBoundFile(target, options = {}) {
+  return consumeBoundFileRecord(target, options, hashHeldBytes).value;
+}
 
-module.exports = { readBoundFile, readBoundFileRecord, readHeldBytes, bindDirectory, assertDirectory,
+module.exports = { readBoundFile, readBoundFileRecord, readHeldBytes, hashBoundFile, bindDirectory, assertDirectory,
   fileIdentity, sameFile, objectIdentity, sameObject, failure };

@@ -1,9 +1,8 @@
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { collectFiles, writeZip } from './lib/zip.mjs';
-import { readRegular, sha256, verifyTargetEvidence, readContract } from './lib/bundled-runtime.mjs';
+import { readRegular, hashRegular, sha256, verifyTargetEvidence, readContract } from './lib/bundled-runtime.mjs';
 import { loadCargoLicenseInventory } from './lib/cargo-license-inventory.mjs';
 import boundFileIo from '../plugins/data-secure/server/core/bound-file-io.js';
 
@@ -172,6 +171,6 @@ const archiveFiles = collectFiles(stageParent).map((file) => {
 fs.rmSync(output, { force: true });
 fs.rmSync(`${output}.sha256`, { force: true });
 const archive = writeZip(output, archiveFiles);
-const zipBytes = readRegular(output, 768 * 1024 * 1024);
-fs.writeFileSync(`${output}.sha256`, `${crypto.createHash('sha256').update(zipBytes).digest('hex')}  ${path.basename(output)}\n`, { flag: 'wx' });
-process.stdout.write(`${JSON.stringify({ ok: true, output, sha256: sha256(zipBytes), ...archive })}\n`);
+const archiveDigest = hashRegular(output, 768 * 1024 * 1024);
+fs.writeFileSync(`${output}.sha256`, `${archiveDigest}  ${path.basename(output)}\n`, { flag: 'wx' });
+process.stdout.write(`${JSON.stringify({ ok: true, output, sha256: archiveDigest, ...archive })}\n`);

@@ -2,9 +2,10 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 const { createSuite } = require('./helpers');
-const { readBoundFile, readBoundFileRecord } = require('../plugins/data-secure/server/core/bound-file-io');
+const { readBoundFile, readBoundFileRecord, hashBoundFile } = require('../plugins/data-secure/server/core/bound-file-io');
 const { createBestEffortDiagnosticLog } = require('../plugins/data-secure/server/core/safe-diagnostic-log');
 const { test, done, assert } = createSuite('Held file and best-effort diagnostic boundaries');
 // Product private storage deliberately rejects symlink ancestors. macOS's
@@ -39,6 +40,80 @@ test('exact bounds, short reads and explicitly permitted empty files', () => {
   changed(() => readBoundFile(file, { maximum: 4, minimum: 1 }));
   assert.equal(handles.size, 0);
 });
+test('streaming digest supports exact bounds, short reads, FD zero and a larger total without a larger buffer', () => {
+  const { file } = fixture(); let held, closes = 0;
+  const io = { ...fs, openSync(...args) { held = fs.openSync(...args); return 0; },
+    fstatSync(fd, ...args) { assert.equal(fd, 0); return fs.fstatSync(held, ...args); },
+    readSync(fd, bytes, offset, length, position) {
+      assert.equal(fd, 0); assert.ok(bytes.length <= 64 * 1024);
+      return fs.readSync(held, bytes, offset, Math.min(length, 1), position);
+    }, closeSync(fd) { assert.equal(fd, 0); closes++; fs.closeSync(held); } };
+  const expected = crypto.createHash('sha256').update('safe').digest('hex');
+  assert.equal(hashBoundFile(file, { io, maximum: 4 }), expected);
+  assert.equal(hashBoundFile(file, { maximum: 768 * 1024 * 1024 }), expected);
+  changed(() => hashBoundFile(file, { maximum: 3 }));
+  changed(() => hashBoundFile(file, { maximum: 768 * 1024 * 1024 + 1 }));
+  changed(() => readBoundFile(file, { maximum: 768 * 1024 * 1024 }));
+  assert.equal(closes, 1);
+  fs.writeFileSync(file, '');
+  assert.equal(hashBoundFile(file, { maximum: 0 }), crypto.createHash('sha256').digest('hex'));
+});
+test('streaming digest enforces its exact 768 MiB ceiling using a bounded synthetic FS seam', () => {
+  const { file } = fixture(); const maximum = 768 * 1024 * 1024;
+  const block = Buffer.alloc(64 * 1024, 0x61), expected = crypto.createHash('sha256');
+  for (let offset = 0; offset < maximum; offset += block.length) expected.update(block);
+  let size = maximum, reads = 0;
+  const { io, handles } = trackedIo({
+    lstatSync(target, ...args) { const stat = fs.lstatSync(target, ...args); if (target === file) stat.size = BigInt(size); return stat; },
+    fstatSync(...args) { const stat = fs.fstatSync(...args); stat.size = BigInt(size); return stat; },
+    readSync(fd, bytes, offset, length, position) {
+      assert.ok(bytes.length <= block.length); assert.equal(position, reads * block.length);
+      block.copy(bytes, offset, 0, length); reads++; return length;
+    }
+  });
+  assert.equal(hashBoundFile(file, { io, maximum }), expected.digest('hex'));
+  assert.equal(reads, maximum / block.length); assert.equal(handles.size, 0);
+  size++; reads = 0;
+  changed(() => hashBoundFile(file, { io, maximum }));
+  assert.equal(reads, 0); assert.equal(handles.size, 0);
+});
+test('streaming digest keeps byte order across short reads and an incomplete final chunk', () => {
+  const { file } = fixture();
+  const bytes = Buffer.alloc(2 * 64 * 1024 + 17);
+  for (let index = 0; index < bytes.length; index++) bytes[index] = index % 251;
+  fs.writeFileSync(file, bytes);
+  let position = 0, calls = 0;
+  const { io, handles } = trackedIo({ readSync(fd, buffer, offset, length, actualPosition) {
+    assert.ok(buffer.length <= 64 * 1024); assert.equal(actualPosition, position);
+    const count = fs.readSync(fd, buffer, offset, Math.min(length, 997), actualPosition);
+    position += count; calls++; return count;
+  } });
+  assert.equal(hashBoundFile(file, { io, maximum: bytes.length }),
+    crypto.createHash('sha256').update(bytes).digest('hex'));
+  assert.equal(position, bytes.length); assert.ok(calls > 2); assert.equal(handles.size, 0);
+});
+test('streaming digest rejects swaps, growth, parent changes, read and close failures', () => {
+  for (const scenario of ['swap', 'growth', 'parent', 'zero', 'read', 'close']) {
+    const { file, foreign, directory } = fixture(); let opened = false;
+    const { io, handles } = trackedIo(); const open = io.openSync, close = io.closeSync;
+    io.openSync = (...args) => { const fd = open(...args); opened = true; return fd; };
+    if (scenario === 'parent') io.lstatSync = (target, ...args) => {
+      const stat = fs.lstatSync(target, ...args); if (opened && target === directory) stat.ino++; return stat;
+    };
+    io.readSync = (...args) => {
+      if (scenario === 'zero') return 0;
+      if (scenario === 'read') throw new Error('synthetic read error');
+      if (scenario === 'swap') { fs.renameSync(file, `${file}-old`); fs.copyFileSync(foreign, file); }
+      if (scenario === 'growth') fs.appendFileSync(file, 'growth');
+      return fs.readSync(...args);
+    };
+    io.closeSync = fd => { close(fd); if (scenario === 'close') throw new Error('synthetic close error'); };
+    changed(() => hashBoundFile(file, { io, maximum: 16, checkCtime: true }));
+    assert.equal(handles.size, 0, scenario);
+    assert.equal(fs.readFileSync(foreign, 'utf8'), 'foreign contents');
+  }
+});
+
 test('lstat/open ABA substitution is rejected before any foreign byte is read', () => {
   const { file, foreign } = fixture(); let reads = 0;
   const { io, handles } = trackedIo();
