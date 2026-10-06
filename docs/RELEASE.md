@@ -2,10 +2,11 @@
 
 Stand: 06.10.2026 · 3.2.0-rc158
 
-Der aktuelle Quellstand ist RC158-Entwicklungsstand; sein Release ist wegen
-neu revalidierter Sicherheitsbefunde angehalten, nicht als Paket veröffentlicht.
-Der bisher veröffentlichte Standalone-Vorabkandidat RC157 ist auf main
-und für Windows, macOS Intel, macOS Apple Silicon und Linux veröffentlicht.
+Der aktuelle Quellstand ist RC158; der Standalone-Vorabkandidat für Windows x64
+sowie macOS Intel und Apple Silicon ist nach Sicherheitskorrektur und neuen
+Paketgates veröffentlicht. Linux bleibt separat RC157, Cowork bleibt RC151.
+Die folgenden RC157-Anwendernachweise bleiben auf ihren damaligen Schnitt
+begrenzt; die neue technische RC158-Paketbindung steht im nächsten Abschnitt.
 ZIP-Verifikation, isolierter Paket-Smoke und
 nativer Start einschließlich geladener Prüfseite bestanden. „Jetzt prüfen“
 öffnet die lokale Prüfung direkt aus der aktuellen Laufkarte; gezielte
@@ -24,7 +25,72 @@ geprüft und wird nicht als bytegleich zum vorherigen Anwender-Test-ZIP behaupte
 Die bestätigte Windows-Funktionsabnahme ist bestanden; technische Paketprüfung
 ersetzt keine noch fehlenden menschlichen Zielhost- oder Spezialabnahmen.
 
-### RC158 – beauftragter Standalone-Vorabrelease, aktuell angehalten
+### RC158 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
+
+Das [RC158-Prerelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc158)
+ist aus Quellcommit `f4caf948bde39dbebe8fe359235c3be84f189e5d`
+veröffentlicht. Fünf Pakete und fünf zugehörige SHA-256-Dateien sind verfügbar.
+Der GitHub-Tag bindet diesen exakten Commit; alle zehn hochgeladenen Asset-
+Digests und Größen stimmen mit den verifizierten lokalen Dateien überein.
+Alte Downloads werden nicht ersetzt; Linux RC157 und Cowork RC151 bleiben getrennt.
+
+Die bestätigten Diagnose-/Leselücken und zusätzlichen Status-/Retention-
+Restbefunde sind korrigiert und unabhängig gegengeprüft. Gehaltene,
+begrenzte Reader, exklusive Diagnose-Segmente, native relative Diagnosehandles,
+gebundene Wiederherstellung und kohärente Runtime-Inventare bleiben strikt.
+Der Archive-Hasher streamt mit höchstens 64 KiB Puffer; bestehende Reader- und
+Entpackgrenzen werden dafür nicht erhöht.
+
+Am exakten Paketquellcommit bestehen:
+
+- vollständige lokale Produktsuite: 76 Basis- und 119 direkte Testdateien
+  (195 insgesamt), Dokumentationsgates, 49 Windows-Rusttests und strenges Clippy;
+- sauberer Build, Plugin-ZIP-Verifikation und installierte Claude-CLI-
+  Validierung von Plugin und Marketplace; keine Cowork-Neuveröffentlichung;
+- Windows PKG-04: zwei saubere bytegleiche Archive, 593 Einträge,
+  reale 41 Konvertierungsgruppen ohne SKIP, Paket-/Worker-/Review-/History-Smokes
+  und native Haupt-/Prüfseitenladung mit erfolgreichen IPC-Antworten;
+- Intel und Apple Silicon: native Produkt-/Konvertierungs-/Rustgates,
+  strenges Clippy, Signatur-/Architekturprüfung, bytegleiche ZIP-Zweifacharchivierung,
+  extrahierte Paketprüfung einschließlich LaunchServices und Review-IPC-E2E;
+  DMG read-only gemountet, identische signierte App und Applications-Link geprüft;
+- [frische Security-Kampagne](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/37393841557):
+  vollständige Gitleaks-Historie, native Windows-CodeQL (0 Befunde) und
+  JavaScript-CodeQL (78 individuell, fingerprint-/quellhashgebunden geprüfte
+  Befunde, 0 ungeprüfte); keine regelweite Ausnahme;
+- [Pflicht-CI](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/37393753781)
+  und [native Mac-Kampagne](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/37393753525)
+  erfolgreich an demselben Commit.
+
+Windows-Evidence liegt in
+`dist/rc158-release-source-final/dist/pkg-04/f4caf948bde39dbebe8fe359235c3be84f189e5d/`:
+`PKG-04-RECEIPT.json` SHA-256
+`488536ea90bcd1c94bae7f480ba073dcfb5738242cf143a6c32b0cc3e070752c`
+und `INT-13-BINDING.json` binden Kandidat A. `native_review_decisions` ist
+ausdrücklich `not_run`: native Seitenladung/IPC und paketierter Review-E2E
+werden nicht als bediente Tauri/WebView-Kampagne ausgegeben.
+
+| RC158-Standalone-Paket | Byte | SHA-256 |
+|---|---:|---|
+| Windows x64 ZIP | 110413882 | `013823670571c32229c84c89a0374cab6977e18fa36aa92cf6c03cca921ea2a6` |
+| macOS Intel ZIP | 118596830 | `d4b385144b94c99366b442e43a3e21e7d0b535c195deab195081b67fb587756e` |
+| macOS Intel DMG | 116121175 | `62708d5a67615edf34878426b25437673426c67b7ccf7409cc6e4b9ade563007` |
+| macOS Apple Silicon ZIP | 115304343 | `d023ee29d46e279ecf3cd1359a45b1dd685f5a55293ff6fb02bb816968e19db6` |
+| macOS Apple Silicon DMG | 112218341 | `9f1705e66433dc6eeb0dabe14e2145545e235f31bafbaedaf5afd24d8841e6ef` |
+
+Mac-Pakete sind nur ad-hoc-signiert, nicht Developer-ID-signiert oder notarisiert.
+Native Ausführung erfolgte auf macOS 15 Intel und macOS 14 ARM; macOS 13.5
+ist der geprüfte Binärvertrag, kein ausgeführter Mindestversions-Gerätetest.
+Menschliche N3/N4-, Finder-/Gatekeeper-, Accessibility-, Update-/Rollback- und
+Produktionsfreigaben bleiben offen. Unabhängige Reviews und grüne Gates sind
+keine Garantie vollständiger Erkennung oder rechtlicher Anonymität.
+
+### RC158 – historische Releaseblocker und Nachbesserung
+
+Die folgenden Zwischenstände erklären die aufgefundenen Lücken, abgebrochenen
+Kampagnen und deren Behebung. Damals ausstehende Gates sind inzwischen durch
+die oben an `f4caf94` gebundene Veröffentlichung ergänzt; alte fehlgeschlagene
+Läufe bleiben ausdrücklich kein PASS.
 
 Die native Wiederholung am Quellcommit `26fdce9` bestand die frische
 Security-Kampagne `37390631300` und Pflicht-CI `37390631909`. Im Mac-Lauf

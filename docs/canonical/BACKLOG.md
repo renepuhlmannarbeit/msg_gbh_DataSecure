@@ -1,31 +1,31 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 06.10.2026 · Produktstand 3.2.0-rc158 · Sicherheitskorrekturen lokal umgesetzt; neue Releasegates ausstehend · Veröffentlichung noch RC157 · Cowork bleibt RC151
+Stand: 06.10.2026 · Produktstand 3.2.0-rc158 · Windows/macOS RC158 veröffentlicht · Linux bleibt RC157 · Cowork bleibt RC151
 
 Commit/Push und Standalone-Vorabpakete für Windows x64 sowie macOS Intel/Apple
-Silicon sind beauftragt. DS-106–109 sind technisch abgeschlossen; die neue
-RC158-Paketbindung folgt erst nach erfolgreichem Releasebau. Fehlende
+Silicon sind aus `f4caf948bde39dbebe8fe359235c3be84f189e5d` abgeschlossen.
+DS-106–109 und die Sicherheitsnachbesserung sind in RC158 veröffentlicht. Fehlende
 Gerätebedien- und Qualitätsnachweise BL-010.47/50/51 bleiben davon getrennt.
 
 **RC158-Sicherheitsnachbesserung:** Diagnose- und begrenzte, deskriptorgebundene
-Lesegrenzen sind lokal implementiert und gezielt gegen Links, Austausch,
+Lesegrenzen sind implementiert und gezielt gegen Links, Austausch,
 Wachstum und I/O-Fehler geprüft. Zusätzliche Reviewbefunde zu OCR-Cache,
 Segmentkollision, Teilwrites, FIFO-Opens und BigInt-Dateiidentität sind ebenfalls
 korrigiert. Die frische vollständige lokale Regression (195 Testdateien),
-48 Rusttests mit Clippy und 41 reale Konvertierungsgruppen bestehen.
+49 Windows-Rusttests mit Clippy und 41 reale Konvertierungsgruppen bestehen.
 Die erneute SARIF-Gegenprüfung bestätigte fünf zusätzliche Restlücken;
 Status-Buildwriter, Markdown-/Status-/SEA-Reader und Preview-Retention sind
 ebenfalls korrigiert. Gezielte tatsächliche Austausch-/ABA-Gegenproben und
 zwei unabhängige Abschlussreviews bestehen. Der komplette Produktschnitt
 nach diesen zusätzlichen Korrekturen besteht erneut: 76 Basis- und 119 direkte
-Testdateien, 48 Rusttests, warning-free Clippy und Dokumentationsgates.
-Offen bleiben der strenge Security-Gate mit einzeln gebundener
-False-Positive-Triage sowie saubere
-Windows-/Mac-Paketgates und Veröffentlichung. Keine ganzen Regeln werden
+Testdateien, 49 Windows-Rusttests, warning-free Clippy und Dokumentationsgates.
+Der frische strenge Security-Gate mit einzeln gebundener False-Positive-Triage,
+Pflicht-CI, sauberer Windows-Doppelbau, beide nativen Mac-ZIP-/DMG-Gates und
+die Veröffentlichung bestehen. Keine ganzen Regeln werden
 ausgeschaltet; alte Nachweise bleiben auf ihren Schnitt begrenzt.
-[Befunde und Releasezustand](../RELEASE.md#rc158--beauftragter-standalone-vorabrelease-aktuell-angehalten).
+[Befunde und Releasezustand](../RELEASE.md#rc158--standalone-windows-sowie-macos-zip-und-zusätzlich-dmg).
 
-RC157 bindet Quellcommit `111737d28021b6989ffe8d563b58daa9cbae610f` auf main.
+Die frühere RC157 bindet Quellcommit `111737d28021b6989ffe8d563b58daa9cbae610f`.
 Windows, macOS Intel, macOS Apple Silicon und Linux sind nativ geprüft und
 als Vorabpakete veröffentlicht; Mac-ZIP bleibt neben dem zusätzlichen DMG erhalten.
 Der Windows-Anwenderlauf samt integrierter Prüfung ist ausdrücklich bestanden.
@@ -34,21 +34,22 @@ Die unten beschriebenen RC152–157-Zwischenschritte sind Entstehungsgeschichte,
 keine weiterhin offenen Fehler; tatsächlich fehlende Spezialabnahmen stehen
 separat in Abschnitt B und der Evidence-Matrix.
 
-**Neue lokale Nachbesserung vom 05.10.2026:** DS-106 / BL-010.46 bearbeitet
+**In RC158 veröffentlichte Nachbesserung vom 05.10.2026:** DS-106 / BL-010.46 bearbeitet
 konkrete neue RC157-Befunde: Unternehmenswahl, laufweite Wiederverwendung
 vollständiger Schreibweisen, nicht ladbare Fehlerdateilisten und PDF-Grafik-/
 OCR-Artefakte. Der reale Lauf `5e50a0b0` lieferte 9/10 Ergebnisse; ein separater
 Restprüfungsfehler über bereits ersetzte Platzhalter ist reproduziert und lokal
 korrigiert. Vorherige bestandene Läufe bleiben gültige, begrenzte Evidenz und
 werden nicht zu pauschalen Abnahmen dieser neuen Änderungen umgedeutet.
-Veröffentlichter Stand bleibt RC157; der Kolleginnen-Komplettausfall ist ohne
+Der Kolleginnen-Komplettausfall ist ohne
 ihre Windows-Diagnose noch nicht ursächlich zugeordnet.
 
 **Technischer Gegenreview DS-107 / BL-010.48:** Reale Desktop-IPC-
 Unternehmensfreigabe, laufgebundene Prüf-Fehlerzustände, begrenztes IPC und
 Schließen ohne RPC-Sperre, konkrete Dateifehler auch bei Zuordnungsschuld
 sowie ehrliche Native-Smoke-/Skip-Auswertung sind implementiert. Der neue
-Windows-Engineering-Bau liegt getrennt von veröffentlichten RC157-Archiven.
+Windows-Engineering-Bau lag getrennt von veröffentlichten RC157-Archiven;
+die abschließende RC158-Releaseevidence ist oben verlinkt.
 Neue macOS-Gerätebedienung, Organisationssignierung und der ungeklärte
 Kolleginnen-Ausfall bleiben getrennte Nachweise, keine erneut offenen bereits
 abgeschlossenen Funktionstests.
@@ -864,13 +865,13 @@ Windows-x64-Engineering-Piloten, WebView2-Voraussetzung und Evidencegrenzen.
 
 | Story | Umsetzung und Nachweisgrenze | Status |
 |---|---|---|
-| BL-010.46 | **Standalone-Review und Fehlerworkflow nach DS-106:** Unternehmensentscheidung bis ORG und vertraulicher Zuordnung; authentifizierte lauf-/Seed-/Policy-gebundene Wiederverwendung vollständiger Schreibweisen über offene Prüfphasen und Neustart. Keine rückwirkenden Änderungen fertiger Dateien oder Erweiterung von Coworks Reviewadapter. Fehlerlisten nennen Datei mit Endung, Code, Ursacheklasse und nächsten Schritt; fehlende Hauptfenster-Capability ist korrigiert. Der echte Cross-Placeholder-Restprüfungsfehler erreicht jetzt vier exakt gebundene Kandidaten. Konservative Grafik-/OCR-Bereinigung erhält echte Texte und benennt Auslassungen. E0: 133 Testdateien der CI-Suite, 38 paketierte Konvertierungsgruppen, zusätzliche Review-/Journal-/Capturetests und elf reale PDF-Seiten bestehen; gezieltes Gegenreview ohne offene Befunde. Technische Lieferung fertig; neuer Releasebuild und dessen native/Anwenderabnahme sind noch nicht erfolgt. Neuer, separat zu diagnostizierender Kolleginnen-Befund unter BL-010.47. | **erledigt** |
+| BL-010.46 | **Standalone-Review und Fehlerworkflow nach DS-106:** Unternehmensentscheidung bis ORG und vertraulicher Zuordnung; authentifizierte lauf-/Seed-/Policy-gebundene Wiederverwendung vollständiger Schreibweisen über offene Prüfphasen und Neustart. Keine rückwirkenden Änderungen fertiger Dateien oder Erweiterung von Coworks Reviewadapter. Fehlerlisten nennen Datei mit Endung, Code, Ursacheklasse und nächsten Schritt; fehlende Hauptfenster-Capability ist korrigiert. Der echte Cross-Placeholder-Restprüfungsfehler erreicht jetzt vier exakt gebundene Kandidaten. Konservative Grafik-/OCR-Bereinigung erhält echte Texte und benennt Auslassungen. Ursprünglicher E0-Schnitt: 133 Testdateien der CI-Suite, 38 paketierte Konvertierungsgruppen, zusätzliche Review-/Journal-/Capturetests und elf reale PDF-Seiten. Technische Lieferung und neue native Windows-/Mac-Paketgates sind in RC158 veröffentlicht; neue bediente Abnahmen bleiben BL-010.50. Neuer, separat zu diagnostizierender Kolleginnen-Befund unter BL-010.47. | **erledigt** |
 | BL-010.47 | **Windows-Komplettausfall bei Kollegin:** Gemeldet sind Probleme aller Dokumente mit RC157, während der lokal geprüfte Lauf 9/10 Ergebnisse erzeugte. Die Diagnose kann derzeit nicht bereitgestellt werden. Die neuen sicheren Start-/Konvertercodes und Dateilisten aus BL-010.48 ermöglichen eine gezielte Gegenprobe; ohne gerätebezogene Fehlermeldung oder Reproduktion bleibt die konkrete Ursache offen. Nächster Schritt: den neuen Kandidaten auf diesem Rechner prüfen und den angezeigten festen Code samt betroffenen Dateinamen zuordnen. Geräteevidenz fehlt; kein Beweis für Antivirusblockade und keine pauschale Gleichsetzung mit dem behobenen Cross-Placeholder-Fehler. | **offen** |
-| BL-010.48 | **Standalone-Integration und Fehlerverhalten nach DS-107:** echte typisierte Unternehmensentscheidung über Desktop-IPC; einheitliches Reviewbudget; lauf-/startversuchsgebundene First-Draft- und Workerfehler mit konkreten Ursachecodes und vorgemerkten Dateien; RPC-Deadline einschließlich Sperre/Spawn/Schreiben; eigener begrenzter Shutdown unabhängig von RPC; sichtbare gestoppte und ausstehende Dateilisten trotz Zuordnungsschuld; atomare Admissionfehler mit Dateinamen/Endung und nächstem Schritt; erfolgreiche native Review-IPC-Antwort statt falsch grüner Seiten-/Requestprüfung, ehrliche Plattform-Skips und versionierte UI-Fixtures. E0 technisch umgesetzt und gezielt geprüft; lokale Windows-Paketbindung und Gesamtgate siehe Evidence-Matrix. Keine neue Veröffentlichung, keine behauptete native Mac-Bedienabnahme oder Publisher-Signierung. | **erledigt** |
-| BL-010.49 | **Mehrdimensionale technische Gegenprüfung nach DS-108:** bestätigte Marker-/Credential-Leaks, vorgelagerte Reviewbudget-Lücke, Renderer-Lade-/ACK-/Fortsetzungsrennen, native Fenster- und Spawn-/Shutdownbindung, POSIX-Cancellation, langsame Aufnahme, innere Windows-Konverterursachen und unvollständige Paket-/Plattformtests korrigiert und nochmals unabhängig technisch gegengeprüft. 136 Produkttestdateien, 39 Rust-Tests/Clippy, reale Windows-/WSL-Gegenproben und finaler ZIP-Review-E2E mit 6.001 Fundstellen bestanden. Technisch E0 erledigt: Evidence-Matrix trennt Source, paketierten Worker, Rust/Supervisor und bediente GUI; die verbleibende neue Zielhost-/Bedienkampagne liegt ausschließlich in BL-010.50. Kein Commit/Push/Release aus dem lokalen Prüfauftrag abgeleitet. | **erledigt** |
+| BL-010.48 | **Standalone-Integration und Fehlerverhalten nach DS-107:** echte typisierte Unternehmensentscheidung über Desktop-IPC; einheitliches Reviewbudget; lauf-/startversuchsgebundene First-Draft- und Workerfehler mit konkreten Ursachecodes und vorgemerkten Dateien; RPC-Deadline einschließlich Sperre/Spawn/Schreiben; eigener begrenzter Shutdown unabhängig von RPC; sichtbare gestoppte und ausstehende Dateilisten trotz Zuordnungsschuld; atomare Admissionfehler mit Dateinamen/Endung und nächstem Schritt; erfolgreiche native Review-IPC-Antwort statt falsch grüner Seiten-/Requestprüfung, ehrliche Plattform-Skips und versionierte UI-Fixtures. E0 technisch umgesetzt, gezielt geprüft und in RC158 veröffentlicht; Windows-/Mac-Paketbindung und Gesamtgate siehe Evidence-Matrix. Keine behauptete native Mac-Bedienabnahme oder Publisher-Signierung. | **erledigt** |
+| BL-010.49 | **Mehrdimensionale technische Gegenprüfung nach DS-108:** bestätigte Marker-/Credential-Leaks, vorgelagerte Reviewbudget-Lücke, Renderer-Lade-/ACK-/Fortsetzungsrennen, native Fenster- und Spawn-/Shutdownbindung, POSIX-Cancellation, langsame Aufnahme, innere Windows-Konverterursachen und unvollständige Paket-/Plattformtests korrigiert und nochmals unabhängig technisch gegengeprüft. Ursprünglicher E0-Schnitt: 136 Produkttestdateien, 39 Rust-Tests/Clippy, reale Windows-/WSL-Gegenproben und finaler ZIP-Review-E2E mit 6.001 Fundstellen. Technisch E0 erledigt und später in RC158 veröffentlicht: Evidence-Matrix trennt Source, paketierten Worker, Rust/Supervisor und bediente GUI; die verbleibende neue Zielhost-/Bedienkampagne liegt ausschließlich in BL-010.50. | **erledigt** |
 | BL-010.50 | **Exakter neuer Kandidat – bediente native Reviewkampagne:** ausführbare Kampagne auf Windows sowie macOS Intel/Apple Silicon mit zwei echten Tauri/WebView-Sitzungen, Vertagen/Neustart, Person-/Unternehmensentscheidung, automatischer Folgegruppe, laufweiter Übernahme und konkretem Fehlerdateinamen durchführen. Paket-/Source-IPC und reine Seitenladung ersetzen diesen Nachweis nicht. Vorbereitung ist ausdrücklich NOT_RUN, PASS verlangt Bedienattestation und geprüfte Ausgaben. Bereits bestätigte frühere Windows-Anwenderläufe werden dadurch nicht zurückgenommen. | **offen** |
 | BL-010.51 | **Gezielte Methodenadaption aus offizieller Recherche (DS-108):** unabhängig annotierte Qualitätsmetriken je Entitätsart/Format/OCR-Weg einschließlich Fehlanonymisierung; seeded modellbasierte Zustandsfolgen statt ausschließlich einzelner Beispielabläufe; bei späteren Releases nachweisbare Buildherkunft zusätzlich zum vollständigen Hashinventar. ACK-Receipts sind nur nach atomarem Identitäts-/Wirkungsvertrag sinnvoll. Die atomare Windows-Job-List-Zuweisung ist bereits vorhanden; eine künftige Kombination mit eingeschränkten Primärtokens wäre separat zu prüfen. Quellen und sofort adaptierte Teile stehen in DS-108; keine neue Cloudverarbeitung oder NLP-Pflichtabhängigkeit. Diese Erweiterung ist nicht blockiert und kein Wiederöffnen früherer bestandener Anwenderläufe. | **offen** |
-| BL-010.52 | **Revalidierte Architektur-/Inhaltskorrekturen DS-109:** Standalone-Gesprächsnamen mit exakten Grenzen, konservative OCR-Gleichheits-/Malreihenfolgenprüfung, gestreamte Identität und ehrliche Kopierwarnung/Header, typisierte Kapazitäts-/Loader-/Schutzgrenzenfehler, eng erkannte und benannte OS-Metadaten, native Startdiagnose/Child-Reaper, stabile History-Aktionen, Backend-Dokumentkarte und geschlossener Desktop-Fehlervertrag implementiert. Letzte Gegenbeispiele zu Abteilungssuffix und Identitäts-DTO korrigiert; Wiederaufnahmevertrag unabhängig revalidiert und durch 13 Runner-Regressionen gesichert. Technisch E0 erledigt: 194 Produkttestdateien, 45 Rusttests/Clippy, 41 echte Konvertierungsgruppen, finaler Windows-Paketworkflow und nativer Start bestanden; Einzelumfang und Hash in der Evidence-Matrix. Veröffentlichungsgebundener Cowork-Build verlangt weiterhin einen sauberen Quellcommit und wurde nicht umgangen. Kein MVC-Neubau, kein Commit/Push/Release. Neue bediente Zielhostkampagne und Qualitätsmetriken bleiben ausschließlich BL-010.50/51. | **erledigt** |
+| BL-010.52 | **Revalidierte Architektur-/Inhaltskorrekturen DS-109:** Standalone-Gesprächsnamen mit exakten Grenzen, konservative OCR-Gleichheits-/Malreihenfolgenprüfung, gestreamte Identität und ehrliche Kopierwarnung/Header, typisierte Kapazitäts-/Loader-/Schutzgrenzenfehler, eng erkannte und benannte OS-Metadaten, native Startdiagnose/Child-Reaper, stabile History-Aktionen, Backend-Dokumentkarte und geschlossener Desktop-Fehlervertrag implementiert. Letzte Gegenbeispiele zu Abteilungssuffix und Identitäts-DTO korrigiert; Wiederaufnahmevertrag unabhängig revalidiert und durch 13 Runner-Regressionen gesichert. Technisch E0 erledigt und in RC158 veröffentlicht: final 195 Produkttestdateien, 49 Windows-Rusttests/Clippy, 41 echte Konvertierungsgruppen, sauberer Windows-Doppelbau und beide native Mac-ZIP-/DMG-Paketgates bestanden; Einzelumfang und Hash in der Evidence-Matrix. Veröffentlichungsgebundener Cowork-Build bestand am sauberen Quellcommit, ohne Cowork neu zu veröffentlichen. Kein MVC-Neubau. Neue bediente Zielhostkampagne und Qualitätsmetriken bleiben ausschließlich BL-010.50/51. | **erledigt** |
 
 DS-105 bindet BL-010.45 an die ausdrückliche Entscheidung: keine automatische
 Löschung der vertraulichen lokalen Identitätszuordnung.

@@ -1,29 +1,34 @@
 # Aktueller Iststand
 
-Stand: 06.10.2026 · 3.2.0-rc158 · Sicherheitskorrekturen lokal umgesetzt; neue Releasegates ausstehend · veröffentlichte Pakete noch RC157 · Cowork bleibt RC151
+Stand: 06.10.2026 · 3.2.0-rc158 · Windows/macOS RC158 veröffentlicht · Linux bleibt RC157 · Cowork bleibt RC151
 
-Der Anwender hat Commit/Push und einen neuen Standalone-Vorabrelease für
-Windows x64 sowie macOS Intel/Apple Silicon beauftragt. DS-106–109 sind im
-Produktcommit `44bf3d0` zusammengeführt; RC158 ist der neue Versionsschnitt.
-Paketbau und Veröffentlichung sind noch nicht abgeschlossen. Die nachfolgenden
-RC157- und lokalen Engineering-Nachweise bleiben auf ihren tatsächlichen
-Prüfschnitt begrenzt; RC158-Paketnachweise werden separat ergänzt.
+Der beauftragte Standalone-Vorabrelease für Windows x64 sowie macOS Intel/Apple
+Silicon ist aus Quellcommit `f4caf948bde39dbebe8fe359235c3be84f189e5d` auf main
+und als [RC158-Prerelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc158)
+verfügbar. DS-106–109 und die revalidierten Diagnose-/Lesekorrekturen sind
+enthalten. Fünf Pakete plus fünf Prüfsummendateien sind gegen ihre GitHub-
+Digests geprüft. Linux bleibt RC157, Cowork bleibt RC151.
 
-Der beauftragte RC158-Release bleibt bis zu neuen Paket- und Sicherheitsgates
-angehalten. Die bestätigten Diagnose-/Leselücken sind lokal mit gehaltenen,
+Die bestätigten Diagnose-/Leselücken sind mit gehaltenen,
 begrenzten I/O-Grenzen und Gegenproben korrigiert. Der unabhängige Gegenreview
 führte zu weiteren Cache-, Kollisions-, FIFO- und Identitätskorrekturen.
 Die frische SARIF-Gegenprüfung am Commit `b88c31b` bestätigte fünf weitere
 Restlücken bei Status-Buildwrites, drei Readern und Preview-Löschbindung.
-Sie sind lokal korrigiert; neue exakte 64-Bit-, kohärente Austausch- und echte
+Sie sind korrigiert; neue exakte 64-Bit-, kohärente Austausch- und echte
 Dateisystem-ABA-Regressionen bestehen. Zwei unabhängige Abschlussreviews
 fanden in diesem begrenzten Umfang keine verbleibenden reproduzierbaren P1/P2.
-Alte Funktionstests sind keine Sicherheitsfreigabe; frische Windows-/Mac-
-Paketnachweise fehlen noch. Es gibt noch keine veröffentlichten RC158-Pakete.
-Ursachen, Gegenprobe und eng begrenzter Lösungsumfang
-stehen im [Releasevertrag](../RELEASE.md#rc158--beauftragter-standalone-vorabrelease-aktuell-angehalten).
+Am finalen Commit bestehen 195 Produkttestdateien, 49 Windows-Rusttests,
+warning-free Clippy, Dokumentation, sauberer Build und strenge Claude-CLI-
+Validierung. Windows PKG-04 bestätigt zwei bytegleiche saubere Bauten samt
+paketiertem Review-/Neustartworkflow; beide Mac-Architekturen bestätigen ZIP,
+DMG, native Haupt-/Prüfseitenladung und erfolgreiche IPC. Frische Gitleaks-,
+JavaScript-/native Windows-CodeQL- und Pflicht-CI-Gates bestehen ebenfalls.
+Ursachen, Archivhashes und eng begrenzter Nachweisumfang stehen im
+[Releasevertrag](../RELEASE.md#rc158--standalone-windows-sowie-macos-zip-und-zusätzlich-dmg).
+Native Fenster-Smokes sind keine bediente GUI-Abnahme; Mac Developer-ID,
+Notarisierung und neue menschliche Spezialabnahmen bleiben getrennt offen.
 
-Standalone RC157 ist auf main und im
+Der frühere Standalone RC157 bleibt im
 [Vorabrelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc157)
 aus Quellcommit `111737d28021b6989ffe8d563b58daa9cbae610f` verfügbar:
 Windows x64, Linux x64 glibc sowie macOS Intel und Apple Silicon mit ZIP und
@@ -40,7 +45,10 @@ Coworks veröffentlichte Pakete und eigener Reviewadapter bleiben unverändert.
 Die benannten Mac-/Linux-Bedien-, Accessibility- und formalen Spezialabnahmen
 werden dadurch nicht pauschal als bestanden behauptet.
 
-## Lokale Nachbesserung vom 05.10.2026 (noch nicht veröffentlicht)
+## Nachbesserung vom 05.10.2026 (in RC158 veröffentlicht)
+
+Die folgenden lokalen Engineering-Zwischenstände dokumentieren ihre damaligen
+Prüfschnitte; die abschließende Releasebindung und neuen Gates stehen oben.
 
 DS-109 / BL-010.52 setzt die erneut fachlich revalidierte Architekturverbesserung
 ohne MVC-Neubau um: gebundene Gesprächsnamen statt unbemerkter Freigabe,
@@ -59,7 +67,8 @@ Sicherheitsgrenzen bleiben davon ausgeschlossen. Hash, tatsächlicher
 Nachweisumfang und der mangels sauberem Quellcommit verweigerte
 veröffentlichungsgebundene Cowork-Build stehen in der Evidence-Matrix.
 Neue native Mac-Gerätebedienung und unabhängige Inhaltsqualitätsmetriken
-bleiben ausdrücklich getrennt offen. Kein neues Release wurde erzeugt.
+bleiben ausdrücklich getrennt offen. Der damalige lokale Auftrag erzeugte
+noch kein Release; die anschließende Veröffentlichung ist oben separat gebunden.
 
 DS-106 / BL-010.46 ergänzt für Standalone die ausdrückliche Prüfwahl
 **Als Unternehmen anonymisieren**. Die tatsächliche Ersetzung und die

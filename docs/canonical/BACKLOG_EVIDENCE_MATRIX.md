@@ -1,38 +1,40 @@
 # Evidence-Matrix für aktive Arbeit
 
-Stand: 05.10.2026 · 3.2.0-rc158 · beauftragter Vorabrelease wegen Sicherheitsbefunden angehalten
+Stand: 06.10.2026 · 3.2.0-rc158 · Windows/macOS RC158 veröffentlicht · Linux bleibt RC157 · Cowork bleibt RC151
 
-Der Produktcommit `44bf3d0` enthält DS-106–109; der neue Versionsschnitt ist
-RC158. Der saubere, commitgebundene Windows-Doppelbau und die nativen
-Mac-Intel-/Apple-Silicon-Pakete sind beauftragt, aber noch nicht als bestanden
-ausgewiesen. Der DS-109-Nachweis unten beschreibt unverändert den vorherigen
-lokalen Arbeitsstand. Releaseevidence wird separat an Commit und Archivhash
-gebunden; Cowork RC151 wird nicht neu veröffentlicht.
+RC158 für Windows x64 und macOS Intel/Apple Silicon ist aus Quellcommit
+`f4caf948bde39dbebe8fe359235c3be84f189e5d` veröffentlicht. Die technische
+Releaseevidence ist an diesen Commit und fünf Archivhashes gebunden; alle zehn
+GitHub-Assets einschließlich Prüfsummendateien stimmen nach Größe und Digest.
+Linux RC157 und Cowork RC151 werden nicht neu veröffentlicht.
 
-Die RC158-Produktsuite (194 Dateien), Pflicht-CI und native CodeQL-Prüfung am
-ersten Versionscommit sind bestanden. JavaScript-CodeQL meldet 111 Ergebnisse;
-ein unabhängiger Review und eigene Quell-/Speichergegenproben bestätigen reale
-ungebundene Diagnose-Schreib- und pfadbasierte Leselücken. Diese verhindern
-aktuell den Release. Drei historische Gitleaks-Testeingaben sind exakt triagiert;
-493-Commit-Wiederholung und Ablehnung eines neuen synthetischen Credentials
-bestanden. Gestoppte Windows-/Mac-Neubaugates sind ausdrücklich kein PASS.
-[Exakte Laufbindung und offene Korrekturen](../RELEASE.md#rc158--beauftragter-standalone-vorabrelease-aktuell-angehalten).
+Am exakten Quellcommit bestehen die vollständige Produktsuite (195 Testdateien),
+49 Windows-Rusttests, strenges Clippy, Dokumentationsgates, sauberer Build,
+Plugin-ZIP und installierte Claude-CLI-Validierung. Windows PKG-04 bestätigt
+zwei bytegleiche saubere Archive samt Konvertierungs-/Review-/History-Smokes;
+beide native Mac-Kampagnen bestätigen ZIP und DMG, Signatur, Architektur,
+LaunchServices und erfolgreiche Haupt-/Prüfseiten-IPC.
+Frische Gitleaks-Historie, native Windows-CodeQL (0 Befunde), JavaScript-CodeQL
+(78 individuell fingerprint-/quellhashgebunden geprüfte Befunde, 0 ungeprüfte)
+und Pflicht-CI bestehen. Abgebrochene ältere Gates zählen weiterhin nicht als PASS.
+[Exakte Lauf-, Asset- und Nachweisbindung](../RELEASE.md#rc158--standalone-windows-sowie-macos-zip-und-zusätzlich-dmg).
 
 **Sicherheitsnachbesserung vom 06.10.2026:** Held-I/O, sichere Diagnose-
-Segmente und native Diagnosehandles sind lokal umgesetzt. Die frische Analyse
-an `b88c31b` enthält 81 Findings; native CodeQL und Gitleaks bestehen.
-Fünf zusätzlich bestätigte Restfehler sind lokal ebenfalls korrigiert.
-Gezielte Regressionen: Reader/Diagnose 16 Fälle auf Windows und vollständig
-Linux/WSL, Statusreader 13, Retention 26 einschließlich tatsächlicher ABA-
+Segmente und native Diagnosehandles sind umgesetzt. Die historische Analyse
+an `b88c31b` enthielt 81 Findings und bestätigte fünf zusätzliche Restfehler;
+diese sind ebenfalls korrigiert. Gezielte Regressionen: Reader/Diagnose nun
+20 Fälle einschließlich Streaming, Statusreader 13, Retention 26 einschließlich tatsächlicher ABA-
 Substitution, Status-Buildwriter sowie SEA- und Markdownreader. Zwei unabhängige
 Abschlussreviews fanden keine verbleibenden reproduzierbaren P1/P2 in diesem
 Umfang. Alle neuen I/O-Regressionen laufen im gemeinsamen Standalone-Paketgate.
 Die vollständige Produktsuite besteht erneut mit 76 Basis- und 119 direkten
-Testdateien; 48 Rusttests, warning-free Clippy, Dokumentation und strenge
+Testdateien; 49 Windows-Rusttests, warning-free Clippy, Dokumentation und strenge
 installierte Claude-CLI-Validierung bestehen ebenfalls. Neue Security- und
-Paketbindung fehlen noch; dies ist keine RC158-Veröffentlichungsfreigabe.
+Paketbindung sind oben separat belegt. Native Seiten-/IPC-Smokes sind keine
+bediente GUI-Kampagne; Developer-ID/Notarisierung und menschliche N3/N4-
+Spezialabnahmen bleiben offen. Der ungeklärte Kolleginnen-Ausfall bleibt BL-010.47.
 
-**Aktuelle RC157-Veröffentlichung:** Quellcommit
+**Frühere RC157-Veröffentlichung (weiterhin aktueller Linux-Download):** Quellcommit
 `111737d28021b6989ffe8d563b58daa9cbae610f` ist auf main und als Standalone-RC
 für Windows, macOS Intel, macOS Apple Silicon und Linux veröffentlicht.
 Alle vier nativen Paket-/App-Prüfungen einschließlich integrierter Prüfseite
@@ -45,7 +47,7 @@ Identitäts-TXT mit 140/140 erfassten Ergebnissen. Der danach ergänzte
 Einzeldokument-Reviewfix wurde im finalen Neubau gezielt technisch geprüft.
 Cowork bleibt RC151; offene menschliche Spezialabnahmen bleiben separat.
 
-**Neue lokale E0-Evidenz vom 05.10.2026 (DS-106 / BL-010.46, unveröffentlicht):**
+**Historische lokale E0-Evidenz vom 05.10.2026 (DS-106 / BL-010.46, später in RC158 veröffentlicht):**
 Unternehmenswahl bis zur tatsächlichen ORG-Publikation und Identitätszuordnung,
 authentifizierte gleiche Schreibweisen über Prüfphasen/Neustart, exakte
 Fundstellenbindung, unveränderter Cowork-Reviewvertrag und Fehlerdatei-IPC sind
@@ -104,12 +106,14 @@ Unsicherheit auszublenden. Falsche Hosts zählen als SKIP/Exit 77; Seitenladung
 oder lediglich gestartete/fehlgeschlagene IPC dürfen keine native Freigabe
 erzeugen. Publisher-Signierung, neue Mac-Zielhosttests und der gerätebezogene
 Komplettausfall bei der Kollegin bleiben separate offene Nachweise. Es gibt
-keinen neuen Release-Tag und keinen Upload; die veröffentlichte RC157 ist
-unverändert. Originale und vorhandene Anwenderläufe wurden nicht verändert.
+aus dem damaligen lokalen Prüfauftrag keinen Release-Tag oder Upload;
+die spätere RC158-Veröffentlichung steht oben. RC157-Archive, Originale und
+vorhandene Anwenderläufe wurden nicht verändert.
 
 ## DS-108 – abschließender lokaler Revalidierungsnachweis
 
-Stand: 05.10.2026; unveröffentlicht. BL-010.49 ist technisch E0 erledigt.
+Prüfschnitt: 05.10.2026, damals unveröffentlicht; später in RC158 enthalten.
+BL-010.49 ist technisch E0 erledigt.
 Die ursprünglichen Auditpunkte wurden durch drei unabhängige technische
 Prüfrichtungen revalidiert: Privacy/Publikation, native Prozesse/Fenster und
 Test-/Paketgates. Zusätzlich gefundene Markerherkunfts-, spätes POSIX-Cancel-,

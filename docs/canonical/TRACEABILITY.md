@@ -1,16 +1,19 @@
 # Entscheidungs-Traceability
 
-Stand: 05.10.2026 · 3.2.0-rc158 · Veröffentlichung unverändert; lokale DS-106/107/108/109-Nachbesserung unveröffentlicht · Cowork bleibt RC151
+Stand: 06.10.2026 · 3.2.0-rc158 · Windows/macOS RC158 veröffentlicht · Linux bleibt RC157 · Cowork bleibt RC151
 
 RC158-Sicherheitsnachbesserung (DS-107/109) → `core/bound-file-io.js`,
 `safe-diagnostic-log.js`, native `diagnostic_log.rs`, gebundene Produktreader
 und `scripts/lib/bound-artifact-writer.mjs` → tatsächliche Link-/Austausch-/
 ABA-/I/O-Gegenproben in `test-bound-file-io.js`, `test-status-app-server.js`,
 `test-status-app-artifacts.mjs` und `test-retention.js` → unabhängige
-Abschlussreviews → neue Security- und Windows-/Mac-Paketgates noch ausstehend.
-[Begrenzter Nachweisumfang und Releasezustand](../RELEASE.md#rc158--beauftragter-standalone-vorabrelease-aktuell-angehalten).
+Abschlussreviews → vollständige Produktsuite (195 Testdateien), 49 Windows-
+Rusttests/Clippy, frische Gitleaks-/CodeQL-/CI-Gates und saubere Windows-/Mac-
+Paketgates bestanden → Veröffentlichung aus
+`f4caf948bde39dbebe8fe359235c3be84f189e5d`, fünf Pakete und fünf SHA-256-Dateien.
+[Begrenzter Nachweisumfang und Releasezustand](../RELEASE.md#rc158--standalone-windows-sowie-macos-zip-und-zusätzlich-dmg).
 
-RC157-Veröffentlichungsbindung → Quellcommit
+Frühere RC157-Veröffentlichungsbindung (weiter aktueller Linux-Download) → Quellcommit
 `111737d28021b6989ffe8d563b58daa9cbae610f` → native Windows-, Intel-/ARM-macOS-
 und Linux-Pakete einschließlich geladener integrierter Prüfseite; zwölf exakte
 Release-Assets → [Releasevertrag](../RELEASE.md#rc157--standalone-auf-allen-zielplattformen).
@@ -33,7 +36,8 @@ Identität/Metadaten → `test-standalone-{history,identity-ledger}.js`,
 `test-standalone-{desktop-contract,frontend,review-frontend}.js`,
 `test-batch-review-model.js`; Ursachen → `test-diagnostic-causes.js`,
 `test-posix-supervisor.js` und Rust-Tests. E0-Gates stehen in der Evidence-Matrix;
-keine Ableitung bedienter Mac-/Windows-UAT oder eines Releases.
+keine Ableitung bedienter Mac-/Windows-UAT. Die anschließende technische
+RC158-Releasebindung ist oben separat belegt.
 
 DS-107 / BL-010.48 → tatsächlicher Standalone-Entscheidungsvertrag, begrenzte
 Verbindungen und erklärbare Zustände → `standalone/desktop-ipc.js`,
