@@ -52,6 +52,13 @@ keine allgemeine Aussage über LocalAppData auf anderen Windows-Geräten abgelei
 Der bisherige Checkpoint ohne Desktopprotokoll ist kein Nachweis eines
 WebView-Initialisierungsfehlers. Neue abschließende Paketgates stehen weiter aus.
 
+Die unabhängige ACL-Gegenprüfung fand zusätzliche Schreibprincipals im
+geerbten Temp-ACL dieses Hosts. Deshalb erhält der neue Testroot bereits bei
+seiner Erstellung eine geschützte DACL ausschließlich für den aktuellen
+Benutzer, SYSTEM und Administratoren. Owner und exakte Access-SDDL werden vor
+Identitätsbindung geprüft; keine nachträgliche offene ACL-Phase. Neun reale
+Cleanup-/Substitutionsgruppen einschließlich der privaten DACL bestehen.
+
 Der Anwender hat am 05.10.2026 Commit und Push auf main sowie neue
 Windows- und macOS-Vorabpakete beauftragt. RC158 enthält die revalidierten
 Korrekturen DS-106–109. Windows x64 wird aus einem sauberen Quellcommit

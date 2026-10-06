@@ -12,6 +12,18 @@ function Assert-Refused([scriptblock] $Action, [string] $Code) {
 }
 function New-Fixture {
     $context = New-NativeCleanupContext $repository
+    $privateAcl = if ($PSVersionTable.PSVersion.Major -lt 6) {
+        [System.IO.Directory]::GetAccessControl($context.Root)
+    } else {
+        [System.IO.FileSystemAclExtensions]::GetAccessControl([System.IO.DirectoryInfo]::new($context.Root))
+    }
+    if (-not $privateAcl.AreAccessRulesProtected) { throw 'NATIVE_TEST_ACL_INHERITED' }
+    $allowedSids = @([System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value, 'S-1-5-18', 'S-1-5-32-544')
+    $privateRules = @($privateAcl.GetAccessRules($true, $true, [System.Security.Principal.SecurityIdentifier]))
+    if ($privateRules.Count -ne 3 -or @($privateRules | Where-Object {
+        $_.IdentityReference.Value -notin $allowedSids -or $_.IsInherited -or
+        $_.AccessControlType -ne [System.Security.AccessControl.AccessControlType]::Allow
+    }).Count -ne 0) { throw 'NATIVE_TEST_ACL_PRINCIPALS' }
     $cache = Join-Path $context.Root 'profile\AppData\Local\Microsoft\Windows\INetCache'
     $target = Join-Path $cache 'IE'
     New-Item -ItemType Directory -Path $target -ErrorAction Stop | Out-Null

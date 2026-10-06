@@ -402,6 +402,11 @@ test('native smoke isolates data, Documents, diagnostics and WebView before prod
   assert.match(nativeSmoke, /\$nativeProfileParent = \[System\.IO\.Path\]::GetFullPath\(\[System\.IO\.Path\]::GetTempPath\(\)\)/u,
     'the NEW private smoke root uses the OS temporary namespace, never the checkout or an existing product profile');
   assert.match(nativeSmoke, /New-NativeCleanupContext \$nativeProfileParent/u);
+  const nativeCleanup = fs.readFileSync(path.join(__dirname, 'manual/standalone-native-cleanup.ps1'), 'utf8');
+  assert.match(nativeCleanup, /SetAccessRuleProtection\(\$true, \$false\)/u);
+  assert.match(nativeCleanup, /CreateDirectory\(\$root, \$security\)/u);
+  assert.match(nativeCleanup, /STANDALONE_NATIVE_ROOT_ACL_UNSAFE/u);
+  assert.ok(nativeCleanup.indexOf('CreateDirectory($root, $security)') < nativeCleanup.indexOf('Initialize-NativeTestIdentity $root'));
   assert.doesNotMatch(nativeSmoke, /\$env:(?:USERPROFILE|HOME|LOCALAPPDATA|APPDATA|TEMP|TMP|CODEX_HOME)\s*=/iu);
   for (const key of ['USERPROFILE', 'LOCALAPPDATA', 'APPDATA', 'TEMP', 'DATASECURE_STANDALONE_DOCUMENTS_DIR']) {
     assert.ok((isolation + rust).includes(key));

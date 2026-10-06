@@ -168,7 +168,41 @@ function New-NativeCleanupContext([string] $Parent) {
         $ancestors.Add([pscustomobject]@{ Path = $item.FullName; Created = $item.CreationTimeUtc.Ticks })
     }
     $root = Join-Path $parentPath ".tmp-standalone-native-$([Guid]::NewGuid().ToString('N'))"
-    $created = New-Item -ItemType Directory -Path $root -ErrorAction Stop
+    if (Test-Path -LiteralPath $root) { throw 'STANDALONE_NATIVE_ROOT_EXISTS' }
+    # Supply the private DACL during creation, never after inheriting a writable
+    # Temp ACL. Only this user, SYSTEM and administrators may change evidence.
+    $owner = [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+    $security = [System.Security.AccessControl.DirectorySecurity]::new()
+    $security.SetAccessRuleProtection($true, $false)
+    $security.SetOwner($owner)
+    foreach ($sid in @($owner.Value, 'S-1-5-18', 'S-1-5-32-544')) {
+        $identity = [System.Security.Principal.SecurityIdentifier]::new($sid)
+        $rule = [System.Security.AccessControl.FileSystemAccessRule]::new($identity,
+            [System.Security.AccessControl.FileSystemRights]::FullControl,
+            [System.Security.AccessControl.InheritanceFlags]'ContainerInherit, ObjectInherit',
+            [System.Security.AccessControl.PropagationFlags]::None,
+            [System.Security.AccessControl.AccessControlType]::Allow)
+        $security.AddAccessRule($rule)
+    }
+    if ($PSVersionTable.PSVersion.Major -lt 6) {
+        [System.IO.Directory]::CreateDirectory($root, $security) | Out-Null
+    } else {
+        [System.IO.FileSystemAclExtensions]::Create([System.IO.DirectoryInfo]::new($root), $security)
+    }
+    $created = Get-Item -LiteralPath $root -Force -ErrorAction Stop
+    # Keep the restricted Node test environment independent of PowerShell
+    # module auto-loading; both runtimes expose the same Windows ACL API.
+    $acl = if ($PSVersionTable.PSVersion.Major -lt 6) {
+        [System.IO.Directory]::GetAccessControl($root)
+    } else {
+        [System.IO.FileSystemAclExtensions]::GetAccessControl([System.IO.DirectoryInfo]::new($root))
+    }
+    if (-not $acl.AreAccessRulesProtected -or
+        $acl.GetOwner([System.Security.Principal.SecurityIdentifier]).Value -ne $owner.Value -or
+        $acl.GetSecurityDescriptorSddlForm([System.Security.AccessControl.AccessControlSections]::Access) -ne
+        $security.GetSecurityDescriptorSddlForm([System.Security.AccessControl.AccessControlSections]::Access)) {
+        throw 'STANDALONE_NATIVE_ROOT_ACL_UNSAFE'
+    }
     $ancestors.Add([pscustomobject]@{ Path = $created.FullName; Created = $created.CreationTimeUtc.Ticks })
     Initialize-NativeTestIdentity $root
     $bound = foreach ($stamp in $ancestors) {
