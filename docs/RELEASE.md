@@ -4,6 +4,29 @@ Stand: 06.10.2026 · 3.2.0-rc159
 
 ### RC159 – Vierplattform-Prerelease in Vorbereitung (11.10.2026)
 
+Der dritte Runnerstand `e88048e` bestand die Sicherheitsprüfung (`38165242497`),
+aber noch nicht alle Paketgates. Die Source-CI importierte über einen reinen
+Assertion-Helfer voreilig das native Canvas-Addon; dieser Import ist nun erst
+bei tatsächlicher Bildgenerierung erforderlich, ohne Ersatzbilder oder Skip
+des realen Konvertertests. Eine frische Gegenprobe besteht mit 22 Smoke-
+Integritätsfällen und 47 realen Windows-Konvertergruppen.
+Die native macOS-Erstbindung scheiterte: Apples ACL-API meldet bei fehlender
+ACL `ENOENT`, das vorher als Schutzfehler behandelt wurde. Statt Fehlercodes
+pauschal freizugeben, fragt der korrigierte Rust-Pfad einen `filesec`-Snapshot
+über den gehaltenen FD ab und akzeptiert ausschließlich positiv bewiesene
+Abwesenheit oder eine nachgewiesen leere ACL. Native Tests unterscheiden
+nie gesetzte/leere ACL und verweigern weiterhin Allow/Deny/Inherited-Einträge;
+die Fixture setzt den Tag jetzt vor dem Qualifier gemäß Apple-Vertrag.
+Linuxs Wiederherstellung scheiterte beim sofortigen Lock-Neuerwerb nach Drop.
+Ein nicht klonbarer RAII-Guard gibt Unix-`flock` ausdrücklich frei; ein
+deterministischer Duplikat-Gegentest hält die alte Open-Description offen und
+prüft auch, dass deren späteres Schließen die neue Sperre nicht freigibt.
+Die konkrete Fork-Zeitlücke des Runnerfehlers wurde nicht per PID nachgewiesen.
+Exklusivität, Nonblocking-Erwerb, gehaltene Identität und Windows-Share-Regeln
+bleiben unverändert. Zwei unabhängige begrenzte Reviews und die tatsächliche
+Windows-Node/Rust-Exportgegenprobe bestehen; neue native Mac-/Linux-Paketgates
+stehen vor Veröffentlichung weiterhin aus.
+
 Der erste Runnerstand `2c7e246` ist noch kein Release-PASS: Windows
 (`38161424808`) und beide Macs (`38161427084`) stoppten an nicht kanonischen
 temporären Testwurzeln. Linux (`38161429686`) las einen früheren OCR-Gegenfall

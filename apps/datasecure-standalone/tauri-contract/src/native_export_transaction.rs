@@ -71,7 +71,7 @@ pub(crate) enum Status { Unprepared, Prepared, Completed, Acknowledged, Abandone
 struct Record { schema: String, plan_sha256: [u8; 32], stage: Option<ObjectId> }
 pub(crate) struct Transaction<'a> {
     journal: &'a Directory, staging: &'a Directory, target: &'a Directory, plan: Plan, guard: &'a NativeGuard,
-    _control: std::fs::File,
+    _control: export_directory::ControlLock,
 }
 impl<'a> Transaction<'a> {
     pub fn open(journal: &'a Directory, staging: &'a Directory, target: &'a Directory, plan: Plan, guard: &'a NativeGuard) -> io::Result<Self> {

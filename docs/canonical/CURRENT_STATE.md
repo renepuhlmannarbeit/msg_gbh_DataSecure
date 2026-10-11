@@ -13,6 +13,17 @@ damaligen Quellstand gebunden; keine allgemeine Bedien-/Qualitätsfreigabe.
 Vorhandene GitHub-Buildworkflows sind für diesen Lauf ausdrücklich autorisiert,
 lokale Desktopbedienung weiterhin nicht.
 
+**Native Nachbesserung, 11.10.2026:** Der Stand `e88048e` ist auf `main`,
+Sicherheitsworkflow bestanden, aber kein veröffentlichtes Prerelease.
+Mac-ACL-Abwesenheit wird nun durch erfolgreichen held-FD-`filesec`-Snapshot
+bewiesen; tatsächliche ACL-Einträge/Abfragefehler bleiben gesperrt. Unix-Locks
+besitzen einen nicht klonbaren Guard mit ausdrücklichem Unlock, einschließlich
+Duplikat-/Neuerwerb-Gegenprobe. Source-only OCR-Assertionen laden kein natives
+Canvas, während echte Bilder dessen tatsächliche Installation verlangen.
+Unabhängige begrenzte Reviews, 22 Smoke-Integritätsfälle, 47 reale Windows-
+Konvertergruppen und tatsächliche Windows-Node/Rust-Exporte bestehen.
+Neue native Paketgates bleiben vor Veröffentlichung erforderlich.
+
 **Aktueller lokaler Teststand RC159, 08.10.2026 – Übergang nach Fundstellen:**
 Der gemeldete r10-Lauf hatte seine OCR-/Entitätsentscheidungen gespeichert,
 aber noch keine nachträglichen Dokumentfreigaben. Der Hauptbutton lud nur eine

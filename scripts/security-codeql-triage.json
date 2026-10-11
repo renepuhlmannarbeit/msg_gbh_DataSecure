@@ -71,7 +71,7 @@
     {
       "rule": "js/insufficient-password-hash",
       "path": "tests/helpers/conversion-fixtures.mjs",
-      "source_sha256": "93517ccbfd82a3aca9a9fd3c23c154ad3f476a50c698fa2665e81a05788d957f",
+      "source_sha256": "2589d2101c14a4ec3d267d5d1e02b0b85823798c970cda100beb42d1788e51c1",
       "reason": "Non-shipped synthetic fixture/assertion; no password storage, HTML sink or URL authorization boundary.",
       "fingerprints": [
         {

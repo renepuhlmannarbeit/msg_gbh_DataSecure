@@ -2,6 +2,15 @@
 
 Stand: 08.10.2026 · 3.2.0-rc159 · Windows/macOS RC158 veröffentlicht · Linux bleibt RC157 · Cowork bleibt RC151
 
+DS-110 / BL-010.53, Prerelease-Gegenprobe vom 11.10.2026 → native Runner auf
+`e88048e` → macOS-ACL-Abwesenheit/Fixture-Reihenfolge, Unix-Lock-Recovery und
+voreiliger nativer Fixtureimport → `export_private_security.rs` (held-FD-
+filesec-Snapshot), `export_directory.rs` / `native_export_transaction.rs`
+(alleiniger RAII-Lock), `conversion-fixtures.mjs` (lazy realer Canvas) → native
+ACL-/Duplikat-Regressionen sowie 22 Smoke-Integritätsfälle und 47 reale Windows-
+Konvertergruppen. Sicherheitsworkflow `38165242497` ist bestanden; neue native
+Paketbindung und menschliche Bedienung bleiben davon getrennt.
+
 DS-110 / BL-010.53, Gesamtreview r9 vom 08.10.2026 →
 [R9-20261008](../REVIEW_STANDALONE_R9_2026-10-08.md) → drei unabhängig gefundene
 und vom Hauptreview wiederholte P2-Gegenbeispiele in Dokumentreload/Freigabe,

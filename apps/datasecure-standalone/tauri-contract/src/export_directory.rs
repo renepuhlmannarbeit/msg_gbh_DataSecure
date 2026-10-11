@@ -32,6 +32,18 @@ fn leaf(name: &str) -> io::Result<()> {
 }
 
 pub(crate) struct Directory { inner: platform::Directory, identity: Identity }
+/// Sole cooperative lock authority; never clone or expose its file. On Unix,
+/// closing only our fd can leave a flock alive in a fork-before-exec child.
+/// Explicitly unlock the shared open description when authority is dropped.
+pub(crate) struct ControlLock { file: File }
+impl Drop for ControlLock {
+    fn drop(&mut self) {
+        #[cfg(unix)] {
+            use std::os::fd::AsRawFd;
+            unsafe { libc::flock(self.file.as_raw_fd(), libc::LOCK_UN); }
+        }
+    }
+}
 /// Read-only recovery capability retains the exact parent/name relationship.
 /// It cannot create files or be republished as if it were a private stage.
 pub(crate) struct RecoveredDirectory<'a> { parent: &'a Directory, name: String, directory: Directory }
@@ -121,10 +133,10 @@ impl Directory {
     pub fn sync(&self) -> io::Result<()> { self.check()?; platform::sync_directory(&self.inner)?; self.check() }
     /// Cross-process cooperative serialization for the controlled native
     /// journal. The OS releases ownership on process exit; never unlink it.
-    pub fn lock_control(&self) -> io::Result<File> {
+    pub fn lock_control(&self) -> io::Result<ControlLock> {
         self.check()?;
-        let file = platform::lock_control(&self.inner)?;
-        platform::regular_identity(&file)?; self.check()?; Ok(file)
+        let lock = platform::lock_control(&self.inner)?;
+        platform::regular_identity(&lock.file)?; self.check()?; Ok(lock)
     }
     /// Fully prepare a bounded private journal record before exposing its
     /// final name. A crash leaves only an unowned temporary file, never a torn
@@ -392,14 +404,15 @@ mod platform {
         opened(unsafe { libc::openat(parent.file.as_raw_fd(), name.as_ptr(),
             libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK) })
     }
-    pub fn lock_control(parent: &Directory) -> io::Result<File> {
+    pub fn lock_control(parent: &Directory) -> io::Result<ControlLock> {
         let name = c"export-control.lock";
         let file = opened(unsafe { libc::openat(parent.file.as_raw_fd(), name.as_ptr(),
             libc::O_RDWR | libc::O_CREAT | libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK, 0o600u32) })?;
         let identity = regular_identity(&file)?;
         if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 { return Err(io::Error::last_os_error()); }
+        let lock = ControlLock { file }; // Own unlock before any further fallible check.
         if regular_identity(&read_file(parent, "export-control.lock")?)? != identity { return Err(unsafe_io()); }
-        Ok(file)
+        Ok(lock)
     }
     pub fn list_names(parent: &Directory, limit: usize) -> io::Result<Vec<String>> {
         // A new open description prevents directory-cursor interference.
@@ -590,8 +603,8 @@ mod platform {
     pub fn create_file(parent: &Directory, name: &str) -> io::Result<File> { relative(&parent.file, std::ffi::OsStr::new(name), false, true, false) }
     pub fn create_record(parent: &Directory, name: &str) -> io::Result<File> { relative_owned(&parent.file, std::ffi::OsStr::new(name), false, true, false, true) }
     pub fn read_file(parent: &Directory, name: &str) -> io::Result<File> { relative(&parent.file, std::ffi::OsStr::new(name), false, false, false) }
-    pub fn lock_control(parent: &Directory) -> io::Result<File> {
-        relative_policy(&parent.file, std::ffi::OsStr::new("export-control.lock"), false, false, false, false, true)
+    pub fn lock_control(parent: &Directory) -> io::Result<ControlLock> {
+        Ok(ControlLock { file: relative_policy(&parent.file, std::ffi::OsStr::new("export-control.lock"), false, false, false, false, true)? })
     }
     fn parse_names(buffer: &[u8], names: &mut Vec<String>, limit: usize) -> io::Result<()> {
         let mut offset = 0;
@@ -722,6 +735,22 @@ mod tests {
     }
     fn expected(name: &str, bytes: &[u8]) -> ExpectedFile {
         ExpectedFile { name: name.to_string(), bytes: bytes.len() as u64, sha256: Sha256::digest(bytes).into() }
+    }
+    #[cfg(unix)]
+    #[test]
+    fn dropped_lock_releases_authority_even_while_a_duplicate_description_survives() {
+        let f = Fixture::new(); let parent = f.directory();
+        let first = parent.lock_control().unwrap();
+        // Deterministic model of the inherited fd between fork and exec.
+        let inherited = first.file.try_clone().unwrap();
+        assert!(parent.lock_control().is_err());
+        drop(first);
+        let second = parent.lock_control().unwrap();
+        assert!(parent.lock_control().is_err());
+        drop(inherited); // Must not release the new, independent description.
+        assert!(parent.lock_control().is_err());
+        drop(second);
+        parent.lock_control().unwrap();
     }
     #[test]
     fn native_private_parent_creation_and_identity_bound_reopen_are_verified() {

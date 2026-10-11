@@ -1483,6 +1483,18 @@ die drei Fixturekorrekturen ohne Produktschutz-Ausnahme. SARIF auf dem zweiten
 Schnitt bindet 84 einzeln geprüfte Befunde ohne unbewerteten Rest; erneute
 Paketläufe auf dem korrigierten Commit bleiben erforderlich.
 
+Dritte Runnergegenprobe auf `e88048e`: frische Security grün; Source-CI importierte
+einen nativen Bildgenerator vorzeitig, Mac verweigerte fehlende ACL als Fehler,
+Linuxs Wiederherstellung scheiterte am Lock-Neuerwerb nach Drop. Korrekturen:
+lazy echter Canvas-Import (keine Fakebilder), positiver gehalten-FD-filesec-
+Snapshot statt pauschaler errno-Ausnahme, nicht klonbarer Unix-Unlock-Guard
+statt Close-only. Neue native ACL- und Duplikat-/Neuerwerb-Regressionen behalten
+Abweisung tatsächlicher ACL-Einträge, Nonblocking-Exklusivität und Windows-
+Share-Schutz. Mac-Fixture setzt Tag vor Qualifier. Zwei begrenzte unabhängige
+Reviews, 22 Smoke-Integritätsfälle, 47 reale Windows-Konvertergruppen und echter
+Node/Rust-Export bestehen. Neue native Runner-/Paketbindung bleibt erforderlich;
+keine Veröffentlichung oder menschliche UAT aus diesen Korrekturen ableiten.
+
 **RC159-Korrektur, 08.10.2026 – Übergang nach der Fundstellenprüfung:**
 Anwenderbefund am lokalen r10: Nach OCR-/Anonymisierungsentscheidung erschien
 der Verlauf mit zusätzlicher Status-Momentaufnahme, ohne verständlichen Übergang

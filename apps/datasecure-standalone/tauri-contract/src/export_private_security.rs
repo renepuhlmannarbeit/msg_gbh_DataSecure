@@ -42,16 +42,40 @@ fn no_extended_acl(file: &File) -> io::Result<()> {
 fn no_extended_acl(file: &File) -> io::Result<()> {
     use std::{ffi::c_void, os::fd::AsRawFd};
     extern "C" {
-        fn acl_get_fd_np(fd: i32, kind: i32) -> *mut c_void;
+        fn filesec_init() -> *mut c_void;
+        fn filesec_free(value: *mut c_void);
+        fn filesec_query_property(value: *mut c_void, property: i32, valid: *mut i32) -> i32;
+        fn filesec_get_property(value: *mut c_void, property: i32, result: *mut c_void) -> i32;
+        // Same Darwin stat ABI as libc::fstat: Intel has an INODE64 alias;
+        // Apple Silicon has only the 64-bit inode ABI.
+        #[cfg_attr(not(target_arch = "aarch64"), link_name = "fstatx_np$INODE64")]
+        fn fstatx_np(fd: i32, metadata: *mut libc::stat, security: *mut c_void) -> i32;
         fn acl_valid(acl: *mut c_void) -> i32;
         fn acl_get_entry(acl: *mut c_void, entry_id: i32, entry: *mut *mut c_void) -> i32;
         fn acl_free(value: *mut c_void) -> i32;
     }
-    let acl = unsafe { acl_get_fd_np(file.as_raw_fd(), 0x100) }; // ACL_TYPE_EXTENDED
-    if acl.is_null() {
-        let error = io::Error::last_os_error();
-        return if error.raw_os_error() == Some(libc::ENOTSUP) { Ok(()) } else { Err(error) };
+    struct Security(*mut c_void);
+    impl Drop for Security { fn drop(&mut self) { unsafe { filesec_free(self.0); } } }
+    let allocation = unsafe { filesec_init() };
+    if allocation.is_null() { return Err(io::Error::last_os_error()); }
+    let security = Security(allocation);
+    let mut metadata = std::mem::MaybeUninit::<libc::stat>::uninit();
+    if unsafe { fstatx_np(file.as_raw_fd(), metadata.as_mut_ptr(), security.0) } != 0 {
+        return Err(io::Error::last_os_error());
     }
+    let mut present = -1;
+    if unsafe { filesec_query_property(security.0, 5, &mut present) } != 0 { // FILESEC_ACL
+        return Err(io::Error::last_os_error());
+    }
+    // Positive absence from a successful, held-fd snapshot; never interpret
+    // NULL/ENOENT/EINVAL from an unsuccessful ACL lookup as permission proof.
+    if present == 0 { return Ok(()); }
+    if present < 0 { return Err(unsafe_permissions()); }
+    let mut acl = std::ptr::null_mut();
+    if unsafe { filesec_get_property(security.0, 5, (&mut acl as *mut *mut c_void).cast()) } != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    if acl.is_null() || acl as usize == 1 { return Err(unsafe_permissions()); }
     let valid = unsafe { acl_valid(acl) };
     let mut entry = std::ptr::null_mut();
     let result = if valid == 0 { unsafe { acl_get_entry(acl, 0, &mut entry) } } else { -2 }; // ACL_FIRST_ENTRY
@@ -108,9 +132,7 @@ mod native_macos_tests {
             let path = std::env::temp_dir().join(format!("datasecure-native-acl-{}-{}", std::process::id(),
                 std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
             fs::DirBuilder::new().mode(0o700).create(&path).unwrap();
-            let fixture = Self { file: File::open(&path).unwrap(), path };
-            fixture.acl(None); // Only this fresh empty synthetic fixture.
-            fixture
+            Self { file: File::open(&path).unwrap(), path }
         }
         fn acl(&self, entry_kind: Option<(i32, i32)>) {
             struct Acl(*mut c_void);
@@ -121,8 +143,8 @@ mod native_macos_tests {
                 assert_eq!(unsafe { acl_create_entry(&mut acl.0, &mut entry) }, 0);
                 let mut uuid = [0u8; 16];
                 assert_eq!(unsafe { mbr_uid_to_uuid(libc::geteuid(), uuid.as_mut_ptr()) }, 0);
-                assert_eq!(unsafe { acl_set_qualifier(entry, uuid.as_ptr().cast()) }, 0);
                 assert_eq!(unsafe { acl_set_tag_type(entry, kind) }, 0);
+                assert_eq!(unsafe { acl_set_qualifier(entry, uuid.as_ptr().cast()) }, 0);
                 let mut perms = std::ptr::null_mut();
                 assert_eq!(unsafe { acl_get_permset(entry, &mut perms) }, 0);
                 assert_eq!(unsafe { acl_add_perm(perms, 2) }, 0); // READ_DATA / LIST_DIRECTORY
@@ -146,8 +168,14 @@ mod native_macos_tests {
         }
     }
     #[test]
+    fn actual_darwin_fresh_directory_without_any_set_acl_is_accepted() {
+        let fixture = Fixture::new();
+        verify_private(&fixture.file).unwrap(); verify_namespace_parent(&fixture.file).unwrap();
+    }
+    #[test]
     fn actual_darwin_empty_acl_is_accepted_and_every_found_entry_is_refused() {
         let fixture = Fixture::new();
+        fixture.acl(None);
         verify_private(&fixture.file).unwrap(); verify_namespace_parent(&fixture.file).unwrap();
         for (kind, flags) in [(1, 0), (2, 0), (1, 16), (2, 16), (1, 32 | 64), (2, 32 | 64)] {
             fixture.acl(Some((kind, flags)));

@@ -235,6 +235,29 @@ test('the native campaign never substitutes Node decisions for Tauri/WebView int
   }
 });
 
+test('source-only OCR assertions load without canvas; actual pixel generation still requires it', () => {
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', `
+    import assert from 'node:assert/strict';
+    import Module from 'node:module';
+    const load = Module._load;
+    let rasterLoads = 0;
+    Module._load = function (specifier, ...args) {
+      if (specifier.includes('@napi-rs/canvas')) {
+        rasterLoads++;
+        throw Object.assign(new Error('NATIVE_RASTER_INTENTIONALLY_UNAVAILABLE'), { code: 'NATIVE_RASTER_INTENTIONALLY_UNAVAILABLE' });
+      }
+      return load.call(this, specifier, ...args);
+    };
+    const helper = await import('./tests/helpers/standalone-packaged-ocr-review.mjs');
+    assert.equal(rasterLoads, 0);
+    assert.equal(helper.contactReferences.length, 2);
+    assert.throws(() => helper.assertPackagedOcrOutputs([]), /OCR_REVIEW_RESULTS_INCOMPLETE/);
+    assert.throws(() => helper.packagedOcrFixtures(), { code: 'NATIVE_RASTER_INTENTIONALLY_UNAVAILABLE' });
+    assert.equal(rasterLoads, 1);
+  `], { cwd: path.resolve(__dirname, '..'), encoding: 'utf8', windowsHide: true, timeout: 5000 });
+  assert.equal(result.status, 0, result.stderr);
+});
+
 testAsync('packaged OCR assertions reject lost fields, leaked contacts and collapsed run identities', async () => {
   const { assertPackagedOcrOutputs, assertAppliedOcrCorrection, contactReferences, correctedPhone,
     correctionSentinel } = await import('./helpers/standalone-packaged-ocr-review.mjs');

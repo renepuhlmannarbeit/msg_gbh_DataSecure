@@ -1,7 +1,6 @@
 // Synthetic in-memory fixtures shared by real converter and packaged sidecar tests.
 import crypto from 'node:crypto';
 import { createRequire } from 'node:module';
-import { createCanvas } from '../../native/ocr/pilot/node_modules/@napi-rs/canvas/index.js';
 const require = createRequire(import.meta.url);
 const { zipStore } = require('../lib/zip');
 const { opcControlEntries } = require('../lib/opc');
@@ -49,6 +48,10 @@ export function embeddedWorkbookPresentation() {
   ]);
 }
 export function image(blank = false) {
+  // Source-only assertions import this helper without native raster resources.
+  // Actual pixel generation still requires the real pinned addon, with no
+  // placeholder, optional fallback or synthetic success when it is missing.
+  const { createCanvas } = require('../../native/ocr/pilot/node_modules/@napi-rs/canvas/index.js');
   const canvas = createCanvas(1600, 600), ctx = canvas.getContext('2d');
   ctx.fillStyle = 'white'; ctx.fillRect(0, 0, 1600, 600);
   ctx.fillStyle = 'black'; ctx.font = '54px Arial';
