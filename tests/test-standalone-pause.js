@@ -10,7 +10,7 @@ const { createStandalonePause } = require('../plugins/data-secure/server/gateway
 const { progressFacts } = require('../plugins/data-secure/server/core/batch-progress');
 const { validatePrivateMessage } = require('../plugins/data-secure/server/standalone/desktop-ipc');
 const { test, testAsync, done, assert } = createSuite('Standalone durable pause');
-const root = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-pause-'));
+const root = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'datasecure-pause-'));
 const token = 'a'.repeat(64);
 const state = () => ({ product_channel: 'standalone', token });
 const store = createStandalonePause({ root: () => root });

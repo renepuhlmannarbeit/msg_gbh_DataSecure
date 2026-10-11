@@ -11,7 +11,7 @@ const { bindDirectory } = require('../plugins/data-secure/server/core/bound-file
 const { execFileSync } = require('node:child_process');
 const { validatePrivateMessage } = require('../plugins/data-secure/server/standalone/desktop-ipc');
 const { test, assert, done } = createSuite('Standalone document review / selected AI export');
-const root = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-document-review-'));
+const root = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'datasecure-document-review-'));
 const sha = value => crypto.createHash('sha256').update(value).digest('hex');
 let n = 0;
 function fixture(v2 = false, traced = false, rejected = null) {

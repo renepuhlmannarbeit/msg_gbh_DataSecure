@@ -19,6 +19,7 @@ const baseFiles = [
   'tests/test-test-harness.js',
   'tests/test-native-ui-boundary.js',
   'tests/test-bound-file-io.js',
+  'tests/test-hocr-choice-groups.mjs',
   'tests/test-core-contracts.mjs',
   'tests/test-quality-benchmark.js', 'tests/test-quality-report.mjs',
   'tests/test-standalone-quality-regression.js',
@@ -226,6 +227,12 @@ function run(file, args = []) {
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
 
+function argumentsForFile(profile, file) {
+  // Cost-capped source CI has no target-native converter resources. The real
+  // projected worker cases remain mandatory in headless/full and native builds.
+  return profile === 'ci' && file === 'tests/test-standalone-sidecar.js' ? ['--source-only'] : [];
+}
+
 function main() {
   const profile = process.argv[2] || 'ci';
   // Validate consent and platform BEFORE fixtures, temporary roots or children.
@@ -247,7 +254,7 @@ function main() {
     process.env.TEMP = temporaryRoot;
   }
   console.log(`Product ${profile}: ${plan.headlessFiles.length} headless files; native Windows forms ${plan.nativeStatus}.`);
-  for (const file of plan.headlessFiles) run(file);
+  for (const file of plan.headlessFiles) run(file, argumentsForFile(profile, file));
   for (const file of plan.nativeFiles) run(file, ['--allow-native-ui']);
   console.log(`Product ${profile} suite passed (${plan.headlessFiles.length} headless files, ${plan.nativeFiles.length ? `${nativeUiCaseCount} native Windows form cases` : 'no native GUI executed'}).`);
   if (!plan.nativeFiles.length) console.log(nativeCoverageStatus());
@@ -255,7 +262,7 @@ function main() {
 }
 
 module.exports = { baseFiles, ciFiles, fullOnly, nativeUiFiles, nativeUiCaseCount, duplicateEntries,
-  executionPlan, nativeUiAuthorization, nativeCoverageStatus };
+  executionPlan, nativeUiAuthorization, nativeCoverageStatus, argumentsForFile };
 
 if (require.main === module) {
   try { main(); }

@@ -12,7 +12,7 @@ const { inspectSourceFormatFromFd } = require('../plugins/data-secure/server/gat
 const { enumerateSourceFolderAsync } = require('../plugins/data-secure/server/companion/source-folder');
 const { extractMarkdownBuffer } = require('../plugins/data-secure/server/standalone/markdown-extractor');
 
-const scope = fs.mkdtempSync(path.join(fs.realpathSync(os.tmpdir()), 'datasecure-adversarial-golden-'));
+const scope = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'datasecure-adversarial-golden-'));
 const first = path.join(scope, 'first'), second = path.join(scope, 'second');
 const digest = file => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 const directExtensions = new Set(['.txt', '.md', '.csv', '.docx', '.xlsx', '.pptx']);

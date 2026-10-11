@@ -1450,6 +1450,16 @@ lokale Desktopbedienung bleibt nicht autorisiert. Frische Headless-/Rust-/Paket-
 Prüfungen und tatsächliche Workflowergebnisse bestimmen die Bereitstellung.
 Eine Veröffentlichung als Prerelease erledigt keine menschliche Bedienabnahme.
 
+Erste Runnergegenprobe auf `2c7e246`: Windows/Mac-Testwurzeln unter OS-Alias,
+Linux-spezifisch korrekt gelesener OCR-Gegenfall und Source-CI ohne native
+Konverterressourcen verhinderten den Paketabschluss. Testpfade und die
+explizite `NOT_RUN`-Trennung werden korrigiert, Produktschutz nicht gelockert.
+Frische CodeQL-Gegenprobe fand zusätzlich echten ReDoS im Engineering-
+hOCR-Helfer sowie einen checked-path-Reopen im Konzept-Vorschauleser;
+begrenzter Tagscanner und gehaltenes Dateiobjekt beheben diese Grenzen.
+Einzeln revalidierte Datenliteral-/Pin-/Fixture-Fundstellen bleiben streng
+quell-/fingerprintgebunden. Native Wiederholung/Releasebindung noch offen.
+
 **RC159-Korrektur, 08.10.2026 – Übergang nach der Fundstellenprüfung:**
 Anwenderbefund am lokalen r10: Nach OCR-/Anonymisierungsentscheidung erschien
 der Verlauf mit zusätzlicher Status-Momentaufnahme, ohne verständlichen Übergang

@@ -7,7 +7,7 @@ const { test, assert, done } = createSuite('Standalone atomic run entity decisio
 const { createDocumentReviewStore } = require('../plugins/data-secure/server/gateway/standalone-document-review-store');
 const pii = require('../plugins/data-secure/server/pii-engine'), policy = require('../plugins/data-secure/server/privacy/policy');
 const sha = value => crypto.createHash('sha256').update(value).digest('hex');
-const root = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-run-entities-')); let serial = 0;
+const root = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'datasecure-run-entities-')); let serial = 0;
 function fixture(texts = ['Name: Anna Beispiel\n42 Projekte.', 'Name: Anna Beispiel\n17 Projekte.', 'Name: Bernd Mustermann\n31 Projekte.'], count = texts.length, registry) {
   const folder = path.join(root, String(++serial)), data = path.join(folder, 'data'), output = path.join(folder, 'output'), results = path.join(folder, 'results');
   for (const dir of [data, output, results]) fs.mkdirSync(dir, { recursive: true });

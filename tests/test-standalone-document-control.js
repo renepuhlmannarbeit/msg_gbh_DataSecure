@@ -5,7 +5,7 @@ const { test, after } = require('node:test');
 const { createBatchActiveLock } = require('../plugins/data-secure/server/gateway/batch-active-lock');
 const { withDocumentControl } = require('../plugins/data-secure/server/gateway/standalone-document-control');
 const { execFileSync } = require('node:child_process');
-const temporary = fs.realpathSync(os.tmpdir());
+const temporary = fs.realpathSync.native(os.tmpdir());
 const root = fs.mkdtempSync(path.join(temporary, 'datasecure-document-control-'));
 const token = 'a'.repeat(64), lockPath = path.join(root, 'control.lock');
 const gate = () => createBatchActiveLock({ lockPath: () => lockPath });

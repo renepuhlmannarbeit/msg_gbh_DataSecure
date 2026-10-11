@@ -1,11 +1,11 @@
 // Development only. No worker, user-document directory or product listener.
-import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { workspacePreviewBridge } from './standalone-workspace-preview.mjs';
 const require = createRequire(import.meta.url);
+const { readBoundFile } = require('../../plugins/data-secure/server/core/bound-file-io');
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const frontend = path.join(root, 'apps/datasecure-standalone/frontend');
 
@@ -54,9 +54,9 @@ export async function startReviewPreview({ port = 0, host = '127.0.0.1', draft, 
   const routes = new Map();
   for (const name of ['review.html', 'review.css', 'review.js', 'review-workspace.css', 'design-tokens.css',
     ...(workspace ? ['workspace.html', 'workspace.css', 'workspace.js', 'document-review.js'] : [])]) {
-    routes.set(`/${name}`, { body: fs.readFileSync(path.join(frontend, name)), type: name.endsWith('.js') ? 'text/javascript' : name.endsWith('.css') ? 'text/css' : 'text/html' });
+    routes.set(`/${name}`, { body: readBoundFile(path.join(frontend, name), { maximum: 20 * 1024 * 1024, checkCtime: true }), type: name.endsWith('.js') ? 'text/javascript' : name.endsWith('.css') ? 'text/css' : 'text/html' });
   }
-  routes.set('/fonts/InterVariable.woff2', { body: fs.readFileSync(path.join(frontend, 'fonts/InterVariable.woff2')), type: 'font/woff2' });
+  routes.set('/fonts/InterVariable.woff2', { body: readBoundFile(path.join(frontend, 'fonts/InterVariable.woff2'), { maximum: 20 * 1024 * 1024, checkCtime: true }), type: 'font/woff2' });
   if (workspace) {
     routes.set('/preview-workspace.js', { body: workspacePreviewBridge(), type: 'text/javascript' });
     const route = routes.get('/workspace.html');
@@ -68,9 +68,15 @@ export async function startReviewPreview({ port = 0, host = '127.0.0.1', draft, 
     routes.set(`/preview-${kind}.js`, { body: bridge(draft || syntheticDraft(kind)), type: 'text/javascript' });
   }
   if (conceptPath) {
-    const resolved = path.resolve(conceptPath), info = fs.lstatSync(resolved);
-    if (!info.isFile() || info.isSymbolicLink() || path.extname(resolved).toLowerCase() !== '.html' || info.size > 20 * 1024 * 1024) throw Error('INVALID_CONCEPT_FILE');
-    routes.set('/concept.html', { body: fs.readFileSync(resolved), type: 'text/html', concept: true });
+    const resolved = path.resolve(conceptPath);
+    let body;
+    try {
+      if (path.extname(resolved).toLowerCase() !== '.html') throw Error('INVALID_CONCEPT_FILE');
+      // Bind the held file and its ancestors. Never reopen a checked pathname;
+      // links, replacement or in-place mutation fail before exposing bytes.
+      body = readBoundFile(resolved, { maximum: 20 * 1024 * 1024, checkCtime: true });
+    } catch { throw Error('INVALID_CONCEPT_FILE'); }
+    routes.set('/concept.html', { body, type: 'text/html', concept: true });
   }
   const server = http.createServer((req, res) => {
     const address = server.address(), expectedHost = `127.0.0.1:${address.port}`;

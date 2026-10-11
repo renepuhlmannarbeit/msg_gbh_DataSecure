@@ -7,6 +7,9 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { encodeFrame } = require('../plugins/data-secure/server/standalone/desktop-ipc');
+const args = process.argv.slice(2);
+if (args.length && (args.length !== 1 || args[0] !== '--source-only')) throw new Error('STANDALONE_SIDECAR_TEST_ARGUMENT_INVALID');
+const sourceOnly = args.length === 1;
 
 function protocolClient(child, onNative, onReady) {
   let buffer = Buffer.alloc(0);
@@ -478,6 +481,7 @@ function removeOwnedRoot(root, initial) {
 
     // Exercise the actual v2 start contract through the sidecar AND worker.
     // Store-only tests cannot detect the worker's former anonymize-only guard.
+    if (!sourceOnly) {
     const { writeStandaloneRuntime } = await import('../scripts/lib/standalone-runtime-projection.mjs');
     const { writeConversionRuntime } = await import('../scripts/lib/standalone-conversion-runtime.mjs');
     const target = `${process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'macos' : 'linux'}-${process.arch === 'arm64' ? 'arm64' : 'x64'}${process.platform === 'linux' ? '-glibc' : ''}`;
@@ -546,6 +550,9 @@ function removeOwnedRoot(root, initial) {
       assert.equal((await hostClient.send('shutdown', '6'.repeat(16))).ok, true);
       assert.equal((await bounded(host.closed, 'document review sidecar did not stop', 10000)).code, 0);
       process.stdout.write(`✓ real v2 worker creates durable history and review contents: ${scenario.name}\n`);
+    }
+    } else {
+      process.stdout.write('Projected document/converter workflow: NOT_RUN in source-only CI; required by headless/full and native package gates.\n');
     }
 
     // Exercise the actual private endpoint and actual product batch worker. Its

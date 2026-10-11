@@ -4,6 +4,29 @@ Stand: 06.10.2026 · 3.2.0-rc159
 
 ### RC159 – Vierplattform-Prerelease in Vorbereitung (11.10.2026)
 
+Der erste Runnerstand `2c7e246` ist noch kein Release-PASS: Windows
+(`38161424808`) und beide Macs (`38161427084`) stoppten an nicht kanonischen
+temporären Testwurzeln. Linux (`38161429686`) las einen früheren OCR-Gegenfall
+korrekt und scheiterte an der Windows-spezifischen Fehlererwartung. Die
+Source-CI (`38161416046`) hatte neue echte Konverterszenarien ohne ihre nativen
+Ressourcen gestartet. Korrekturen betreffen Testpfade und ehrliche Trennung:
+Nur die kostenbegrenzte Source-CI meldet diese drei ressourcenabhängigen
+Sidecar-Szenarien `NOT_RUN`; Headless-/Standalone-/Paketgates verlangen sie.
+Produktschutzprüfungen bleiben unverändert. Die frische Sicherheitsanalyse
+(`38161432222`) verlangt neun neue/unzugeordnete Befunde: Ein tatsächlicher
+Engineering-hOCR-ReDoS wird durch einen begrenzten Tagscanner ersetzt, das
+Vorschauwerkzeug liest Konzepte jetzt über gehaltene Dateiobjekte. Übrige
+Fundstellen werden einzeln mit Quelle/Fingerprint triagiert. Wiederholte
+native Paket- und Sicherheitsläufe bleiben vor Veröffentlichung erforderlich.
+
+Gezielte lokale Gegenproben nach den Korrekturen: 47 reale Windows-
+Konvertergruppen, 39 Dokument-/Exportfälle, acht reversible Entitätsfälle,
+elf laufweite Entitätsfälle und 20 gehaltene I/O-/Diagnosegrenzen bestanden.
+Der neue hOCR-Scanner bewahrt alle 13.079 Gruppen in 399 gespeicherten
+synthetischen Diagnosen; isolierter Malformed-Prozess und unabhängige
+Sicherheitsgegenprüfung bestanden. Das ist kein nativer Mac-/Releasearchiv-
+Bediennachweis und keine neue OCR-Qualitätszusage.
+
 Der Anwender hat Commit/Push auf `main`, Prerelease-Testpakete für Windows x64,
 beide Mac-Architekturen und Linux x64 glibc sowie die vorhandenen GitHub-
 Buildworkflows einschließlich möglicher Kosten ausdrücklich beauftragt.

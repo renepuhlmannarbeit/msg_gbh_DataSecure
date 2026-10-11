@@ -26,6 +26,19 @@ Dateisystemtests, und meldet die sechs Formularfälle ausdrücklich `NOT_RUN`.
 Standalone meldet deren Status im Nachlauf. Das ist kein Gesamt-/Release-PASS.
 Fensterlose PowerShell-/Rust- und Quellvertragstests bleiben enthalten.
 
+RC159-Prerelease-Revalidierung (11.10.2026): Private Testwurzeln werden mit
+`fs.realpathSync.native(os.tmpdir())` kanonisiert; OS-Aliase dürfen nicht als
+produktive Umleitungsfreigabe dienen. Nur `test:product:ci` übergibt dem
+Sidecartest `--source-only`: Drei tatsächliche konverterabhängige v2-Szenarien
+werden dort ausdrücklich `NOT_RUN`, nicht als bestanden gewertet. Der direkte
+Aufruf, Headless-/Vollprofil und alle nativen Standalone-Paketgates führen sie
+weiterhin mit echten Ressourcen aus und scheitern bei fehlender Runtime.
+Der reale OCR-Gegenfalltest verlangt Warnungen für tatsächlich abweichende
+Kontaktlesarten, aber keine absichtlich falsche Lesart auf jeder CPU/WASM-
+Plattform. Das gemeinsame Warn-/Quellunverändertheits-/Prozessende-Gate bleibt.
+Ein eigener prozessbegrenzter hOCR-Parser-Gegenfall schützt zusätzlich das
+nicht ausgelieferte Forschungswerkzeug vor exponentiellem Backtracking.
+
 Nur mit aktueller ausdrücklicher Desktopfreigabe:
 `npm run test:product:native-ui -- --allow-native-ui` oder für das Windows-
 Gesamtprofil `npm run test:product -- --allow-native-ui`. Ohne diesen exakten

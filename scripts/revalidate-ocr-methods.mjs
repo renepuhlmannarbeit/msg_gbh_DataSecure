@@ -8,6 +8,7 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { spawn } from 'node:child_process';
 import { contactMethodCases } from '../benchmarks/ocr-contact-method-reference.mjs';
+import { hocrChoiceGroups } from './lib/hocr-choice-groups.mjs';
 const repo = path.resolve(import.meta.dirname, '..');
 const require = createRequire(import.meta.url);
 const pilotRequire = createRequire(path.join(repo, 'native/ocr/pilot/package.json'));
@@ -179,10 +180,7 @@ if (action === 'setup') {
     return previous[b.length];
   }
   function choices(hocr, text, expected) {
-    const decode = value => value.replace(/&(?:amp|lt|gt|quot|apos);/gu, match => ({ '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&apos;': "'" })[match])
-      .replace(/&#(x[a-f0-9]+|[0-9]+);/giu, (_, code) => String.fromCodePoint(code.startsWith('x') ? parseInt(code.slice(1), 16) : Number(code)));
-    const groups = Array.from(hocr.matchAll(/<span class='ocrx_cinfo' id='lstm_choices_[^']+'>\s*((?:<span class='ocrx_cinfo' id='choice_[^']+' title='x_confs [^']+'>[\s\S]*?<\/span>\s*)+)<\/span>/gu), match =>
-      Array.from(match[1].matchAll(/title='x_confs [^']+'>([\s\S]*?)<\/span>/gu), candidate => decode(candidate[1])));
+    const groups = hocrChoiceGroups(hocr);
     const observed = text.replace(/\s/gu, ''), truth = expected.replace(/\s/gu, '');
     // Unequal-length strings require a genuine insertion/deletion alignment,
     // not a guessed fixed-position character correction.

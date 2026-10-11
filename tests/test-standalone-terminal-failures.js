@@ -5,7 +5,7 @@ const { createSuite } = require('./helpers');
 const { createDocumentReviewStore } = require('../plugins/data-secure/server/gateway/standalone-document-review-store');
 const { notProcessedDocumentResult } = require('../plugins/data-secure/server/core/document-result-grade');
 const { test, assert, done } = createSuite('Standalone retained terminal failure evidence');
-const temporaryRoot = fs.realpathSync(os.tmpdir());
+const temporaryRoot = fs.realpathSync.native(os.tmpdir());
 const root = fs.mkdtempSync(path.join(temporaryRoot, 'datasecure-terminal-failures-'));
 let sequence = 0;
 function fixture(mode = 'markdown-and-anonymize', mixed = false) {

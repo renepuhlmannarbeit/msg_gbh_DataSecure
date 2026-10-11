@@ -10,6 +10,22 @@ const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 const runner = fs.readFileSync(path.join(__dirname, 'run-product-suite.js'), 'utf8');
 const workflow = (name) => fs.readFileSync(path.join(root, '.github', 'workflows', name), 'utf8');
 
+test('only cost-capped source CI excludes the resource-bound sidecar scenarios explicitly', () => {
+  const suite = require('./run-product-suite');
+  const sidecar = 'tests/test-standalone-sidecar.js';
+  assert.deepStrictEqual(suite.argumentsForFile('ci', sidecar), ['--source-only']);
+  for (const profile of ['headless', 'full', 'native-ui']) assert.deepStrictEqual(suite.argumentsForFile(profile, sidecar), []);
+  for (const file of suite.baseFiles.filter(file => file !== sidecar)) assert.deepStrictEqual(suite.argumentsForFile('ci', file), []);
+  const source = fs.readFileSync(path.join(root, sidecar), 'utf8');
+  assert.match(source, /NOT_RUN in source-only CI/u);
+  assert.match(source, /if \(!sourceOnly\)/u);
+  for (const file of ['test-standalone-terminal-failures.js', 'test-standalone-document-control.js',
+    'test-standalone-document-review.js', 'test-standalone-pause.js', 'test-standalone-entities.js', 'test-standalone-run-entities.js']) {
+    assert.match(fs.readFileSync(path.join(__dirname, file), 'utf8'), /fs\.realpathSync\.native\(os\.tmpdir\(\)\)/u,
+      `${file} must use the native canonical spelling without weakening the product path guard`);
+  }
+});
+
 test('default and CI aliases enter only the canonical product runner', () => {
   assert.strictEqual(pkg.scripts.test, 'npm run test:product');
   assert.strictEqual(pkg.scripts['test:ci'], 'npm run test:product:ci');

@@ -1,7 +1,45 @@
 {
   "schema": "datasecure-codeql-triage/1",
-  "source_review": "RC159 individually revalidated the existing 17 findings in eight changed files against held I/O boundaries or isolated synthetic assertions; fresh SARIF fingerprints remain mandatory and unknown findings are not waived",
+  "source_review": "RC159 independently reviewed the fresh 11 October SARIF findings, fixed the engineering hOCR ReDoS and preview pathname reopen, and individually bound the remaining pinned downloads, data-only preview serialization and synthetic assertions; fresh fingerprints remain mandatory and unknown findings are not waived",
   "entries": [
+    {
+      "rule": "js/http-to-file-access",
+      "path": "scripts/revalidate-ocr-methods.mjs",
+      "source_sha256": "9919f22421712db76d6c1dc45d551128a7d2f805820234c8032a4eb1c5092038",
+      "reason": "Engineering-only explicit setup downloads a fixed HTTPS model revision. Bounded bodies are checked against embedded ONNX SHA256/exact length and YAML Git-blob pins before exclusive writes to two fixed filenames; the network cannot choose a pathname. This is not a general local directory-race guarantee.",
+      "fingerprints": [
+        { "line": "96ff4ebb1ad1a4ee:1", "column": "57" },
+        { "line": "1a5138223dd18415:1", "column": "56" }
+      ]
+    },
+    {
+      "rule": "js/double-escaping",
+      "path": "benchmarks/evaluate-quality.js",
+      "source_sha256": "1c715c8ec409084d17c4b83fdf38608cd2f565be0ca988e7776102f9735b96c7",
+      "reason": "Independent benchmark normalization returns plain text for token comparisons, never an HTML, URL or execution sink. Nested encoded references are not a universal rendered-text oracle and need separate quality regressions before related accuracy claims.",
+      "fingerprints": [
+        { "line": "ddbb47d66e9d758a:1", "column": "7" }
+      ]
+    },
+    {
+      "rule": "js/bad-code-sanitization",
+      "path": "scripts/lib/standalone-review-preview.mjs",
+      "source_sha256": "0956ae8b917aa455e6c00da3a4d5f71e954dd439ac070ccbf6ba134fe17296cf",
+      "reason": "Development-only draft is JSON.stringify-serialized as a data literal in a separate JavaScript response, not inline HTML. HTTP requests cannot supply the draft. Quote/statement, closing-script and Unicode-separator counterexamples preserve data and do not execute code; the concept HTML is a separate explicit preview route.",
+      "fingerprints": [
+        { "line": "21f433c71d5c5734:1", "column": "33" }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "tests/test-standalone-pause.js",
+      "source_sha256": "336803b6c72fe2811b72e2b7415d33b896a3edad272cc47eb02bff23d7bafc2b",
+      "reason": "Each read only checks unchanged bytes of an intentionally invalid synthetic DOCX just written in the test-owned exclusive temporary directory; no user input or product read/publication authorization.",
+      "fingerprints": [
+        { "line": "4ce64876880021ff:1", "column": "13" },
+        { "line": "8f5eac4fdfb8df58:1", "column": "13" }
+      ]
+    },
     {
       "rule": "js/incomplete-multi-character-sanitization",
       "path": "plugins/data-secure/server/privacy/base.js",
@@ -297,7 +335,7 @@
     {
       "rule": "js/file-system-race",
       "path": "tests/test-adversarial-golden-corpus.mjs",
-      "source_sha256": "9c0af6edbc3b9a0f59d9c6ff2405f4211e2d2248d3d57a4a6222eaa58a584ff3",
+      "source_sha256": "91b6bcd9d9eba6c9ff63329b2ef169e73a6f195ec088412f9216c02cb7c1c4da",
       "reason": "Controlled non-shipped test fixture or deliberate adversarial mutation; no product publication authority.",
       "fingerprints": [
         {
@@ -369,7 +407,7 @@
       "reason": "Controlled non-shipped test fixture or deliberate adversarial mutation; no product publication authority.",
       "fingerprints": [
         {
-          "line": "735ee987d83b52bc:1",
+          "line": "7347f503eabd2f1d:1",
           "column": "43"
         }
       ]
@@ -509,7 +547,7 @@
     {
       "rule": "js/file-system-race",
       "path": "tests/test-standalone-format-corpus.mjs",
-      "source_sha256": "9734ff5bccc4e20dfcaca0d87a84f4f5936206671247f2dbc71610fd36df16e7",
+      "source_sha256": "6ba80bc1b98ac9c9055f450756425a4480884f7a7cb05d73684a28c53c002f68",
       "reason": "Controlled non-shipped test fixture or deliberate adversarial mutation; no product publication authority.",
       "fingerprints": [
         {
@@ -525,7 +563,7 @@
     {
       "rule": "js/file-system-race",
       "path": "tests/test-standalone-conversion-worker.mjs",
-      "source_sha256": "461644b59e677ad7e793946c0b93445a5ab1b74a5f29ab14d55e1e7f3c4eba88",
+      "source_sha256": "e4fc5a762706f819eee2dfef5056c5672c22273507ff58f676e7f66e689de450",
       "reason": "Controlled non-shipped test fixture or deliberate adversarial mutation; no product publication authority.",
       "fingerprints": [
         {

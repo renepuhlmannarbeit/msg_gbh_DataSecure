@@ -430,7 +430,8 @@ try {
       assert.ok(children.every(entry => entry.closed));
     }
   });
-  await test('real contact re-segmentation reports disagreement but never replaces a value on the basis of two matching crops', async () => {
+  await test('real contact re-segmentation reports observed disagreement without requiring an OCR error on every platform', async () => {
+    let disagreements = 0;
     for (const [file, expected] of [['development/quality-020-clean.jpg', 'qa31@quality.example.invalid'],
       ['development/quality-044-clean.bmp', 'qa71@quality.example.invalid'],
       ['development/quality-019-rotated.png', 'qa30@quality.example.invalid'],
@@ -441,13 +442,18 @@ try {
       const fixture = qualityFixtures.find(entry => entry.file === file);
       assert.ok(fixture, file);
       const before = hash(fixture.bytes), result = await convert(fixture.bytes, path.extname(file));
+      const disagrees = /geometrische Nachprüfung lieferte abweichende Lesarten/u.test(result.markdown);
+      if (disagrees) disagreements++;
+      // CPU/WASM variants can correctly read a previous Windows counterexample.
+      // A correct read must not be forced to invent a geometric disagreement.
+      if (!result.markdown.includes(expected)) assert.ok(disagrees, `Unwarned contact mismatch: ${file}`);
       if (file === 'development/quality-009-clean.jpg') assert.ok(result.markdown.includes(expected), file);
-      else assert.match(result.markdown, /geometrische Nachprüfung lieferte abweichende Lesarten/u, file);
       assert.ok(result.coverage.reason_codes.includes('OCR_CONTACT_VALUES_UNVERIFIED'));
       assert.match(result.markdown, /Auch hohe OCR-Konfidenzen bestätigen keine exakte Erkennung/u);
       assert.equal(hash(fixture.bytes), before);
       assert.ok(children.every(entry => entry.closed));
     }
+    assert.ok(disagreements > 0, 'The real regression cohort must still exercise a crop disagreement');
   });
   for (const [extension, bytes] of [['.png', png], ['.bmp', bmp], ['.jpeg', jpeg]]) {
     await test(`packaged real ${extension} offline OCR retains identifiers with honest incomplete coverage`, async () => {

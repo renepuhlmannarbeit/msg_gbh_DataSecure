@@ -2,6 +2,9 @@
 import assert from 'node:assert/strict';
 import http from 'node:http';
 import vm from 'node:vm';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { startReviewPreview } from '../scripts/lib/standalone-review-preview.mjs';
 await assert.rejects(startReviewPreview({ host: '0.0.0.0' }), /LOOPBACK_ONLY/u);
 const preview = await startReviewPreview();
@@ -59,3 +62,23 @@ try {
   assert.equal((await fetch(`${workspace.url}/fonts/%2e%2e%2fworkspace.html`)).status, 404);
   console.log('WORKSPACE PREVIEW PASS: synthetic banner/bridge, local font, same-origin embedded frame, no document/code directory exposure');
 } finally { await workspace.close(); }
+
+const fixtureDirectory = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'datasecure-preview-bound-'));
+const conceptPath = path.join(fixtureDirectory, 'concept.html'), aliasPath = path.join(fixtureDirectory, 'alias.html');
+try {
+  fs.writeFileSync(conceptPath, '<!doctype html><title>Synthetic concept</title>', { flag: 'wx' });
+  const concept = await startReviewPreview({ conceptPath });
+  try {
+    assert.equal(await (await fetch(`${concept.url}/concept.html`)).text(), '<!doctype html><title>Synthetic concept</title>');
+  } finally { await concept.close(); }
+  fs.linkSync(conceptPath, aliasPath);
+  await assert.rejects(startReviewPreview({ conceptPath }), /INVALID_CONCEPT_FILE/u);
+  await assert.rejects(startReviewPreview({ conceptPath: aliasPath }), /INVALID_CONCEPT_FILE/u);
+  await assert.rejects(startReviewPreview({ conceptPath: fixtureDirectory }), /INVALID_CONCEPT_FILE/u);
+  await assert.rejects(startReviewPreview({ conceptPath: path.join(fixtureDirectory, 'missing.html') }), /INVALID_CONCEPT_FILE/u);
+  console.log('CONCEPT PREVIEW PASS: held bounded snapshot, hard-link/directory/missing-file rejection; no user document input');
+} finally {
+  // Exact files exclusively created above; no recursive deletion or traversal.
+  for (const file of [aliasPath, conceptPath]) if (fs.existsSync(file)) fs.unlinkSync(file);
+  fs.rmdirSync(fixtureDirectory);
+}

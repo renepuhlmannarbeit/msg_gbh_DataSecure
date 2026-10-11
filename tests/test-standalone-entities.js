@@ -9,7 +9,7 @@ const { createDocumentReviewStore } = require('../plugins/data-secure/server/gat
 const { createTransformTrace } = require('../plugins/data-secure/server/privacy/transform-plan');
 const policy = require('../plugins/data-secure/server/privacy/policy');
 const pii = require('../plugins/data-secure/server/pii-engine');
-const root = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-entities-')), hash = text => crypto.createHash('sha256').update(text).digest('hex');
+const root = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'datasecure-entities-')), hash = text => crypto.createHash('sha256').update(text).digest('hex');
 let serial = 0;
 function fixture(raw = '😀 Name: Anna Beispiel\nAnna Beispiel hat 42 Projekte.\nE-Mail: anna@example.invalid', synthetic) {
   const dir = path.join(root, String(++serial)), output = path.join(dir, 'packages'), results = path.join(dir, 'results'), data = path.join(dir, 'private');
