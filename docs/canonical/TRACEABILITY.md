@@ -10,6 +10,10 @@ filesec-Snapshot), `export_directory.rs` / `native_export_transaction.rs`
 ACL-/Duplikat-Regressionen sowie 22 Smoke-Integritätsfälle und 47 reale Windows-
 Konvertergruppen. Sicherheitsworkflow `38165242497` ist bestanden; neue native
 Paketbindung und menschliche Bedienung bleiben davon getrennt.
+Ergänzende Runnergrenzen → `package.json` (Rust-Suite vor IPC-Ausführung),
+`standalone-native-windows-launch.ps1` (exakte Profilquieszenz vor Cleanup)
+→ 23 Integritätsfälle und 45 reine Readiness-/Parsergruppen; neue native
+Laufzeitbestätigung bleibt erforderlich, kein allgemeiner GUI-Abnahmenachweis.
 
 DS-110 / BL-010.53, Gesamtreview r9 vom 08.10.2026 →
 [R9-20261008](../REVIEW_STANDALONE_R9_2026-10-08.md) → drei unabhängig gefundene

@@ -487,6 +487,8 @@ test('UI-only browser fixtures follow the current version without claiming nativ
 test('Standalone/platform gates contain the actual review and integrity regressions without duplicate entries', () => {
   const root = path.resolve(__dirname, '..');
   const scripts = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).scripts;
+  assert.match(scripts['test:standalone:rust'], /^cd apps\/datasecure-standalone\/tauri-contract && cargo test --locked && cd \.\.\/\.\.\/\.\. && node tests\/test-standalone-native-export\.js$/u,
+    'cold Rust compilation must finish before the bounded native IPC execution timer starts');
   const files = [...scripts['test:standalone'].matchAll(/node (tests\/[^ ]+)/gu)].map(match => match[1]);
   assert.equal(new Set(files).size, files.length);
   for (const file of ['test-standalone-review-choices.js', 'test-standalone-review-ipc.js', 'test-native-smoke-integrity.js',
@@ -501,6 +503,18 @@ test('Standalone/platform gates contain the actual review and integrity regressi
   assert.match(gate, /packaged_review_ipc = 'passed'/u);
   assert.match(gate, /native_review_decisions = 'not_run'/u,
     'actual Node/private IPC decisions must not be relabelled as native UI acceptance');
+});
+
+test('Windows native cleanup proves profile quiescence before strict inventory and never skips failed deletion', () => {
+  const root = path.resolve(__dirname, '..');
+  const launcher = fs.readFileSync(path.join(root, 'tests/manual/standalone-native-windows-launch.ps1'), 'utf8');
+  const cleanup = fs.readFileSync(path.join(root, 'tests/manual/standalone-native-cleanup.ps1'), 'utf8');
+  assert.match(launcher, /Wait-NativeWebViewProfileExit \(Join-Path \$testRoot 'webview\\main'\) \$rootStartedUtc\s*\}\s*Remove-TestRoot/u);
+  assert.match(launcher, /\$held\.StartTime\.ToUniversalTime\(\)/u);
+  assert.match(launcher, /\$held\.WaitForExit\(\[Math\]::Min\(1000, \$remaining\)\)/u);
+  assert.match(launcher, /STANDALONE_NATIVE_WEBVIEW_EXIT_TIMEOUT/u);
+  assert.match(cleanup, /Get-Item -LiteralPath \$stamp\.Path -Force -ErrorAction Stop/u);
+  assert.match(cleanup, /Remove-Item -LiteralPath \$stamp\.Path -Force -ErrorAction Stop/u);
 });
 
 done();

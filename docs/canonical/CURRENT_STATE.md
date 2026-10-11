@@ -23,6 +23,11 @@ Canvas, während echte Bilder dessen tatsächliche Installation verlangen.
 Unabhängige begrenzte Reviews, 22 Smoke-Integritätsfälle, 47 reale Windows-
 Konvertergruppen und tatsächliche Windows-Node/Rust-Exporte bestehen.
 Neue native Paketgates bleiben vor Veröffentlichung erforderlich.
+Die Windows-Runner-v2-Start-/IPC-Gegenprobe ist bestanden; nachfolgender Cleanup
+wartet jetzt vor Inventarisierung auf exakt profilgebundene WebView-Ruhe.
+Intel-Mac-Kaltkompilierung ist vom unveränderten nativen IPC-Budget getrennt.
+23 Integritätsfälle und 45 reine Readiness-/Profilparsergruppen bestanden;
+keine lokale App gestartet und keine Löschfehler unterdrückt.
 
 **Aktueller lokaler Teststand RC159, 08.10.2026 – Übergang nach Fundstellen:**
 Der gemeldete r10-Lauf hatte seine OCR-/Entitätsentscheidungen gespeichert,

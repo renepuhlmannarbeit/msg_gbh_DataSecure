@@ -76,8 +76,58 @@ function Test-NativeMainReadiness($Events) {
         (Test-NativeActionReadiness $Events 'get_ui_context'))
 }
 
+function Get-NativeWebViewProfile([string] $CommandLine) {
+    $arguments = [regex]::Matches($CommandLine,
+        '(?i)(?:^|\s)--user-data-dir(?:=|\s+)(?:"([^"]+)"|([^\s"]+))')
+    if ($arguments.Count -ne 1) { return '' }
+    $argument = if ($arguments[0].Groups[1].Success) { $arguments[0].Groups[1].Value } else { $arguments[0].Groups[2].Value }
+    return [System.IO.Path]::GetFullPath($argument)
+}
+
+function Wait-NativeWebViewProfileExit([string] $ExpectedProfile, [DateTime] $NotBeforeUtc) {
+    $profile = [System.IO.Path]::GetFullPath($ExpectedProfile)
+    $deadline = [DateTimeOffset]::UtcNow.AddSeconds(20)
+    do {
+        $owned = @(Get-CimInstance -ClassName Win32_Process -Filter "Name = 'msedgewebview2.exe'" -ErrorAction Stop |
+            Where-Object { (Get-NativeWebViewProfile ([string] $_.CommandLine)) -ieq $profile })
+        if ($owned.Count -eq 0) { return }
+        foreach ($entry in $owned) {
+            $created = ([DateTime] $entry.CreationDate).ToUniversalTime()
+            if ($created -lt $NotBeforeUtc) { throw 'STANDALONE_NATIVE_WEBVIEW_INSTANCE_UNSAFE' }
+            $held = $null
+            try {
+                try { $held = [System.Diagnostics.Process]::GetProcessById([int] $entry.ProcessId) }
+                catch [System.ArgumentException] {
+                    # The process exited between enumeration and handle acquisition.
+                    # A fresh enumeration below must still prove profile quiescence.
+                    continue
+                }
+                if ($held.HasExited) { continue }
+                if ([Math]::Abs(($held.StartTime.ToUniversalTime() - $created).TotalMilliseconds) -gt 250) {
+                    throw 'STANDALONE_NATIVE_WEBVIEW_INSTANCE_UNSAFE'
+                }
+                $remaining = [int] ($deadline - [DateTimeOffset]::UtcNow).TotalMilliseconds
+                if ($remaining -le 0) { throw 'STANDALONE_NATIVE_WEBVIEW_EXIT_TIMEOUT' }
+                $null = $held.WaitForExit([Math]::Min(1000, $remaining))
+            } finally { if ($null -ne $held) { $held.Dispose() } }
+        }
+    } while ([DateTimeOffset]::UtcNow -lt $deadline)
+    throw 'STANDALONE_NATIVE_WEBVIEW_EXIT_TIMEOUT'
+}
+
 if ($ValidateReadinessOnly) {
     $groups = 0
+    $profile = [System.IO.Path]::GetFullPath('C:\synthetic owned\webview\main')
+    foreach ($line in @('webview --user-data-dir="C:\synthetic owned\webview\main" --type=renderer',
+        'webview --user-data-dir "C:\synthetic owned\webview\main"')) {
+        if ((Get-NativeWebViewProfile $line) -ine $profile) { throw 'STANDALONE_NATIVE_WEBVIEW_PROFILE_PARSE_INVALID' }
+        $groups++
+    }
+    foreach ($line in @('webview --other="C:\synthetic owned\webview\main"',
+        'webview --user-data-dir=C:\other --user-data-dir=C:\synthetic')) {
+        if (Get-NativeWebViewProfile $line) { throw 'STANDALONE_NATIVE_WEBVIEW_PROFILE_FALSE_POSITIVE' }
+        $groups++
+    }
     $requestA = 'a' * 35
     $requestB = 'b' * 35
     $page = [pscustomobject]@{ event = 'review_page_loaded' }
@@ -582,6 +632,12 @@ try {
             Stop-Process -Id $process.Id -ErrorAction Stop
             if (-not $process.WaitForExit(3000)) { throw 'STANDALONE_NATIVE_CLEANUP_PROCESS_RUNNING' }
         }
+    }
+    # Tauri exit alone does not mean Chromium has finished removing profile
+    # lockfiles. Prove the exact isolated profile is quiescent BEFORE inventory;
+    # never hide vanished paths during deletion or kill unrelated WebViews.
+    if ($null -ne $process) {
+        Wait-NativeWebViewProfileExit (Join-Path $testRoot 'webview\main') $rootStartedUtc
     }
     Remove-TestRoot
 }

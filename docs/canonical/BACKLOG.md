@@ -1494,6 +1494,13 @@ Share-Schutz. Mac-Fixture setzt Tag vor Qualifier. Zwei begrenzte unabhängige
 Reviews, 22 Smoke-Integritätsfälle, 47 reale Windows-Konvertergruppen und echter
 Node/Rust-Export bestehen. Neue native Runner-/Paketbindung bleibt erforderlich;
 keine Veröffentlichung oder menschliche UAT aus diesen Korrekturen ableiten.
+Weitere genaue Runnerabgrenzung: Intel-Mac startet den 180-Sekunden-IPC-Timer
+erst nach vollständiger Rust-Kompilierung/Suite, ohne das Ausführungsbudget zu
+lockern. Windows-v2-Start/IPC ist tatsächlich bestanden; sein späterer Cleanup
+verlangt jetzt vor Inventarisierung begrenzte Ruhe der exakt isolierten WebView-
+Profilprozesse mit Instanzprüfung. Strenge Löschfehler werden nicht übersprungen,
+unrelated WebViews nicht beendet. 23 Integritätsfälle und 45 reine PowerShell-
+Readiness-/Profilparsergruppen bestehen; dies ist keine lokale GUI-Bedienung.
 
 **RC159-Korrektur, 08.10.2026 – Übergang nach der Fundstellenprüfung:**
 Anwenderbefund am lokalen r10: Nach OCR-/Anonymisierungsentscheidung erschien

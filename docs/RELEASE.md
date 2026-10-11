@@ -27,6 +27,17 @@ bleiben unverändert. Zwei unabhängige begrenzte Reviews und die tatsächliche
 Windows-Node/Rust-Exportgegenprobe bestehen; neue native Mac-/Linux-Paketgates
 stehen vor Veröffentlichung weiterhin aus.
 
+Der Intel-Mac-Exporttest zählte zusätzlich kalte Rust-Kompilierung gegen das
+180-Sekunden-IPC-Budget. Der Plattformvertrag führt jetzt zuerst die komplette
+Rust-Suite aus, dann den tatsächlich nativen Node/Rust-Export; das IPC-Budget
+bleibt unverändert und wird nicht zur Kompilierzeitgrenze umgedeutet.
+Der Windows-Runner bestand echte v2-Start-/IPC-Evidence, scheiterte danach an
+einem nach Inventarisierung verschwundenen WebView-Lockfile. Der Launcher wartet
+jetzt vor Inventarisierung begrenzt auf das Ende der exakt isolierten WebView-
+Profilprozesse, hält Prozessinstanzen gegen PID-Wiederverwendung und bricht bei
+fehlender Ruhe ohne Löschung ab. Kein globales WebView-Kill und kein pauschales
+Überspringen von Fehlern in der strengen Löschphase.
+
 Der erste Runnerstand `2c7e246` ist noch kein Release-PASS: Windows
 (`38161424808`) und beide Macs (`38161427084`) stoppten an nicht kanonischen
 temporären Testwurzeln. Linux (`38161429686`) las einen früheren OCR-Gegenfall
