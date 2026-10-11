@@ -71,7 +71,7 @@ fn no_extended_acl(file: &File) -> io::Result<()> {
     // NULL/ENOENT/EINVAL from an unsuccessful ACL lookup as permission proof.
     if present == 0 { return Ok(()); }
     if present < 0 { return Err(unsafe_permissions()); }
-    let mut acl = std::ptr::null_mut();
+    let mut acl: *mut c_void = std::ptr::null_mut();
     if unsafe { filesec_get_property(security.0, 5, (&mut acl as *mut *mut c_void).cast()) } != 0 {
         return Err(io::Error::last_os_error());
     }
