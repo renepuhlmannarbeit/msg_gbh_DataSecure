@@ -1,12 +1,12 @@
 {
   "schema": "datasecure-codeql-triage/1",
-  "source_review": "RC158 independently revalidated held I/O boundaries; obsolete real path-reader findings removed after source correction",
+  "source_review": "RC159 individually revalidated the existing 17 findings in eight changed files against held I/O boundaries or isolated synthetic assertions; fresh SARIF fingerprints remain mandatory and unknown findings are not waived",
   "entries": [
     {
       "rule": "js/incomplete-multi-character-sanitization",
       "path": "plugins/data-secure/server/privacy/base.js",
-      "source_sha256": "273f70a9d1cb3a3f056ae4e4b1ccc8bb4f678d31af601ab979258d3bf432ecbb",
-      "reason": "Intermediate comment removal is not the HTML trust boundary; the final single-character angle-bracket escape makes nested remnants inert.",
+      "source_sha256": "d4bf51ca559b8bf8cb68215ab3c79e6823906ce77fe841d6942f990ec1859729",
+      "reason": "Comment removal is intermediate text normalization, not a general HTML sanitizer. Subsequent escaping masks recognized decoded comments and residual comment openings; actual HTML sinks have separate escaping boundaries.",
       "fingerprints": [
         {
           "line": "1d012976cd430d6c:1",
@@ -89,7 +89,7 @@
     {
       "rule": "js/file-system-race",
       "path": "plugins/data-secure/server/gateway/batch-journal-store.js",
-      "source_sha256": "5d7fe03f85f6a3a33670c5eb8960179685948c3273c8419679c7b6556fbe2300",
+      "source_sha256": "2f94612fb50d84f18311f232181ef2859aca9df1b910732875f514770dab6150",
       "reason": "Held journal read uses exact BigInt identity, bounded bytes and original parent checks; no checked path is reopened for content.",
       "fingerprints": [
         {
@@ -101,7 +101,7 @@
     {
       "rule": "js/file-system-race",
       "path": "plugins/data-secure/server/gateway/batch-private-store.js",
-      "source_sha256": "4251c3cd876bce4faa6507c41117c53b7e0bf141c0242c36116069a3c98ef59f",
+      "source_sha256": "6cc86ef674f811fef2a7d4854e1604c264957055034c41713ba9ecd07617ed0c",
       "reason": "The flagged legacy header probe reads at most eight bytes from the held original BigInt object; post-check and caller workdir binding reject replacement.",
       "fingerprints": [
         {
@@ -161,7 +161,7 @@
     {
       "rule": "js/file-system-race",
       "path": "plugins/data-secure/server/gateway/standalone-history-store.js",
-      "source_sha256": "765434badb73c9b20b41dc2529a1af2ed3692a37e3daaf57573b938b09a3a124",
+      "source_sha256": "2939f29838261feeec749015fb2c448752fe15e6f0b78dc7f82e9d65b66f944a",
       "reason": "Held history metadata read checks BigInt object identity and size before bounded 32KiB bytes; strict schema and run/directory binding validate the record.",
       "fingerprints": [
         {
@@ -365,7 +365,7 @@
     {
       "rule": "js/file-system-race",
       "path": "tests/test-legacy-input-migration.js",
-      "source_sha256": "c39a995cc221f933a421385e01424841b240e3c92258064c2d14523f10c89378",
+      "source_sha256": "25b89600f56b22507aa080b2d1a7b6df561447b7332b6e943650d414a0ffcde4",
       "reason": "Controlled non-shipped test fixture or deliberate adversarial mutation; no product publication authority.",
       "fingerprints": [
         {
@@ -525,7 +525,7 @@
     {
       "rule": "js/file-system-race",
       "path": "tests/test-standalone-conversion-worker.mjs",
-      "source_sha256": "e419a7b944f27f936ebb6780ddcb69cbd05fd12782ffa9b01cd0e6455af31eb6",
+      "source_sha256": "461644b59e677ad7e793946c0b93445a5ab1b74a5f29ab14d55e1e7f3c4eba88",
       "reason": "Controlled non-shipped test fixture or deliberate adversarial mutation; no product publication authority.",
       "fingerprints": [
         {
@@ -549,7 +549,7 @@
     {
       "rule": "js/file-system-race",
       "path": "tests/test-standalone-package-smoke.mjs",
-      "source_sha256": "165c1384761d0c77b318965c0f9199b3c0312063b27a8845e60498fc90e4a0d1",
+      "source_sha256": "5787cf4efc9ac6dad31353d8103a1984f75798482b71d09869b7a384675d0b1a",
       "reason": "Controlled non-shipped test fixture or deliberate adversarial mutation; no product publication authority.",
       "fingerprints": [
         {
@@ -661,7 +661,7 @@
     {
       "rule": "js/regex/missing-regexp-anchor",
       "path": "tests/test-companion-processor.js",
-      "source_sha256": "5f1bb4d375cffd2fb85921776236344cb891eb6ccdca01e88b02d0de749d3309",
+      "source_sha256": "15800877e04e65b22104fd73eae9a322c827001e35518518d231b0f0de67ffca",
       "reason": "Non-shipped synthetic fixture/assertion; no password storage, HTML sink or URL authorization boundary.",
       "fingerprints": [
         {
