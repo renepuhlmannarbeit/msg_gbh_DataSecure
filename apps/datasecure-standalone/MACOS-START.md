@@ -1,15 +1,53 @@
 # DataSecure Standalone auf macOS starten
 
-Aktuell für Standalone: [RC157-Vorabrelease mit ZIP **und zusätzlich DMG** für
-Intel und Apple Silicon](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc157).
-Die beiden nativen Mac-Jobs aus Commit `111737d28021b6989ffe8d563b58daa9cbae610f`
-[sind bestanden](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/36770900387):
-ZIP und DMG enthalten dieselbe signierte App; beide Pakete wurden geprüft,
-das DMG gemountet und die App daraus gestartet. Die veröffentlichten Digests
-stimmen mit den lokal gesicherten Dateien überein. Die sichtbare
-Finder-/Gatekeeper-Installation auf den Macs der Testpersonen bleibt offen.
-Auch die integrierte Prüfseite und ihr Sitzungsskript wurden nativ geladen;
-die vollständige sichtbare Bedien-/VoiceOver-Abnahme ist damit nicht ersetzt.
+Anleitung für **3.2.0-rc159** und die neue Oberfläche.
+[RC159-ZIP und zusätzlich DMG für Intel und Apple Silicon](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc159)
+mit der jeweils passenden Prüfsumme verwenden. Das Testpaket ist ad-hoc-signiert,
+nicht mit Apple Developer ID signiert oder notarisiert. Native technische
+Runner-Prüfungen ersetzen keine Finder-/Gatekeeper-/VoiceOver-/Bedienabnahme.
+
+## Verarbeitung und Prüfung in RC159
+
+1. Nach der Installation unter **Neue Verarbeitung** zuerst **Nur umwandeln**
+   oder **Umwandeln und anonymisieren** wählen. Dateien/Ordner hinzufügen,
+   gewünschte Dateien anhaken und das Ergebnisziel kontrollieren.
+   **Verarbeitung starten** beginnt höchstens 200 Dateien / 500 MB.
+   Auswahl oder Drag-and-drop allein startet nichts.
+2. **Jetzt prüfen** öffnet die Fundstellen dieses Laufs. Checkboxen wählen nur
+   aus. Gemeinsame Behandlungen sind zunächst vorgemerkt; erst **Gruppe
+   übergeben und weiter** speichert die vollständig bearbeitete Gruppe.
+   Offen-Filter, weitere Seiten und Folgegruppen beachten. Original-/Markdown-
+   Vergleich und OCR-Originalbildausschnitt gehören zum angezeigten Punkt.
+   Personen- und Unternehmensentscheidungen bleiben unterscheidbar.
+3. Nach Fundstellenabschluss öffnet sich bei Anonymisierung direkt die
+   Dokumentprüfung desselben Laufs. Quelle und geplantes Markdown vergleichen,
+   gewünschte Dokumente auswählen und **Auswahl freigeben** wählen.
+   Das ist ein eigener Schritt; technische Verarbeitung ist noch keine Freigabe.
+4. **Auswahl für KI exportieren** kopiert nach ausdrücklicher Bestätigung
+   ausschließlich freigegebene aktuelle Markdown-Stände in einen normalen
+   separaten Ordner. Originale, Identitäts-/Dateizuordnung, private Prüfstände
+   und Begleitdateien werden nicht mitkopiert. Den technischen Laufordner
+   niemals pauschal an eine KI weitergeben.
+5. **Später entscheiden**, Pause und Fortsetzung gehören zum konkreten Lauf.
+   Der Verlauf zeigt höchstens 20 Verarbeitungen. **Ergebnisse prüfen und
+   freigeben** öffnet bei Anonymisierung die spätere Dokumentprüfung.
+   Neue Dateien gehören nach dem Start in eine neue Verarbeitung.
+   Verbindungsverlust wiederholt Entscheidungen und Exportbestätigungen nicht blind.
+
+Bei reiner Umwandlung bleiben Originalinhalte erhalten.
+**Markdown nachkorrigieren** bietet die spätere Korrektur; ein solcher
+Markdown-Export ist ausdrücklich **nicht anonymisiert**. Neun rohe OCR-E-Mail-
+Abweichungen bleiben im synthetischen Qualitätskorpus bekannte Warnungen.
+Fehlerdateien werden lokal mit Namen, Fehlercode und nächstem Schritt angezeigt;
+Diagnoseprotokolle enthalten keine Namen, Pfade oder Dokumentinhalte.
+Originale und vertrauliche Identitätszuordnungen werden nicht automatisch gelöscht.
+
+## Historische technische Nachweise
+
+RC157: Die beiden nativen Mac-Jobs aus Commit
+`111737d28021b6989ffe8d563b58daa9cbae610f`
+[sind bestanden](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/36770900387).
+Diese Evidence gehört zu RC157, nicht zum neuen RC159-Paket.
 
 Historischer RC142-Nachweis: Die beiden nativen Mac-Jobs aus Commit
 `c0ddd11ecf366d32ff9962bfeffc6519b01a8c5d` [bestanden ebenfalls](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/36562812021);
@@ -43,8 +81,7 @@ Die sichtbare menschliche Abnahme bleibt offen.
 
 ## Diagnose ohne geladene Oberfläche
 
-Der lokale Entwicklungsstand DS-109 (noch nicht im veröffentlichten RC157)
-kann den inhaltsfreien Diagnoseordner vor der WebView-Initialisierung mit
+DS-109 ist im RC159-Quellstand enthalten. DataSecure kann den inhaltsfreien Diagnoseordner vor der WebView-Initialisierung mit
 `--startup-diagnostics` öffnen. Im Terminal den ausführbaren App-Inhalt
 `"/Applications/DataSecure Standalone.app/Contents/MacOS/datasecure-standalone" --startup-diagnostics`
 starten; bei anderem Installationsort den App-Pfad entsprechend wählen.
@@ -95,15 +132,15 @@ und [Tauri-Builds mit GitHub Actions](https://v2.tauri.app/distribute/pipelines/
 
 ## Passendes Paket
 
-- Intel-Mac: [RC157-ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc157/DataSecure-Standalone-3.2.0-rc157-macos-x64.zip)
-  oder [RC157-DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc157/DataSecure-Standalone-3.2.0-rc157-macos-x64.dmg),
+- Intel-Mac: [RC159-ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc159/DataSecure-Standalone-3.2.0-rc159-macos-x64.zip)
+  oder [RC159-DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc159/DataSecure-Standalone-3.2.0-rc159-macos-x64.dmg),
   jeweils mit gleichnamiger `.sha256` auf der Release-Seite.
 - Apple Silicon (M1 oder neuer):
-  [RC157-ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc157/DataSecure-Standalone-3.2.0-rc157-macos-arm64.zip)
-  oder [RC157-DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc157/DataSecure-Standalone-3.2.0-rc157-macos-arm64.dmg),
+  [RC159-ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc159/DataSecure-Standalone-3.2.0-rc159-macos-arm64.zip)
+  oder [RC159-DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc159/DataSecure-Standalone-3.2.0-rc159-macos-arm64.dmg),
   jeweils mit gleichnamiger `.sha256` auf der Release-Seite.
 - Historische RC140-ZIPs: Intel mindestens macOS 15, ARM mindestens macOS 14.
-- RC141-ZIPs sowie RC142-/RC151-ZIPs und -DMGs: minOS-Binärvertrag 13.5 für beide Architekturen geprüft;
+- Aktueller RC159-Binärvertrag: macOS 13.5 für beide Architekturen. Historische RC141-/RC142-/RC151-Pakete: minOS 13.5 geprüft;
   tatsächlich ausgeführt auf macOS 15 (Intel) und 14 (ARM). Abnahme auf 13.5 bleibt offen.
 
 Node, PDF-Parser, Canvas-Bilddecoder, Tesseract-WASM und deutsche/englische
@@ -121,7 +158,7 @@ zum Beispiel für Apple Silicon:
 
 ```sh
 cd ~/Downloads
-shasum -a 256 -c DataSecure-Standalone-3.2.0-rc151-macos-arm64.zip.sha256
+shasum -a 256 -c DataSecure-Standalone-3.2.0-rc159-macos-arm64.zip.sha256
 ```
 
 Nur bei `OK` fortfahren. Den Versions- und Architekturnamen im Befehl an die
@@ -177,32 +214,29 @@ Die Freigabe erfordert je einen nativen Lauf auf Intel und Apple Silicon:
 - echter Browser-Download beider Release-Dateien, externe ZIP-Prüfsumme,
   Finder-Entpackung samt Paket-Unterordner, Kopie nach Programme und
   Gatekeeper-Ablauf (oder dessen genaue Blockiermeldung);
-- Startseite ohne vorbelegten Modus; Auswahl oder Drag-and-drop verarbeitet noch
-  nichts und erst **Starten** beginnt den Stapel;
-- Mehrfachauswahl und rekursive Ordnerauswahl; vor **Starten** weitere Dateien
-  oder Ordner ergänzen, Duplikate überspringen und eine Auswahl abbrechen,
-  ohne die bereits vorbereiteten Dateien zu verlieren;
-- bei einem Ordner mit unbekannten Dateien lokale Anzeige der betroffenen
-  relativen Namen ohne Teilübernahme; bei gestoppten Laufdateien Namen und
-  Fehlercodes im Abschluss und je Lauf im Verlauf prüfen, ohne Dateinamen im
-  Diagnoseprotokoll zu hinterlassen;
-- nach einem Abschluss im Tab **Verarbeiten** erst **Neuen Lauf vorbereiten**
-  wählen: Modus und Dateiauswahl werden geleert, alte Läufe bleiben im Verlauf;
-  vollständig gestoppte Eingaben zeigen eine Warnung statt eines Erfolgs;
-- **Nur in Markdown umwandeln** für TXT, Markdown, CSV, DOCX, XLSX, PPTX,
-  Text-/Scan-PDF und PNG/JPEG/BMP; Basisnamen bleiben erhalten, es entsteht
-  keine Zuordnungsdatei und kein PII-Review;
-- **In Markdown umwandeln und anonymisieren** für TXT/Markdown/CSV direkt sowie
-  DOCX und breite Quellen genau einmal Markdown-first; Extraktionsabdeckung und
-  Anonymisierungsstatus werden getrennt angezeigt;
-- bei Anonymisierung neutrale Ergebnisnamen als Standard und den Quellbasisnamen
-  mit `-anonymisiert` als ausdrückliche Alternative prüfen;
-- Review, Abbruch, App-Neustart und Fortsetzung;
-- große lokale Prüfgruppen: mehr als 1000 Fundstellen werden auf mehrere
-  begrenzte Gruppen verteilt; technische Dialogfehler dürfen nicht als
-  Benutzerentscheidung „Später“ erscheinen (Quellkorrektur nach RC140);
-- Verlauf mit 20 zeilengebundenen Läufen; Ergebnisordner, Zuordnung und
-  Fortsetzung öffnen stets nur den gewählten Lauf;
+- **Neue Verarbeitung** ohne vorbelegte Aufgabe; Auswahl/Drag-and-drop
+  verarbeitet nichts, erst **Verarbeitung starten** beginnt den Lauf;
+- Mehrfachauswahl, rekursive Ordneraufnahme und Katalogcheckboxen; bis 200
+  Dateien / 500 MB verarbeiten, Auswahl abbrechen ohne Verlust vorhandener Quellen;
+- nicht unterstützte Quellen und gestoppte Dateien mit Namen, Endung,
+  Fehlercode und nächstem Schritt lokal anzeigen, ohne Namen in der Diagnose;
+- Fortschritt, Pause an Dateigrenzen und Fortsetzung desselben Laufs; neue
+  Verarbeitung erhält eine eigene Auswahl und verändert frühere Läufe nicht;
+- **Nur umwandeln** für TXT, Markdown, CSV, DOCX, XLSX, PPTX, Text-/Scan-PDF und
+  PNG/JPEG/BMP; Originalinhalte erhalten, optionale OCR-Kontaktprüfung,
+  Markdown-Nachkorrektur ohne Dateizuordnung oder Anonymisierungsbehauptung;
+- **Umwandeln und anonymisieren**: breite Quellen Markdown-first; getrennte
+  Extraktions-/Anonymisierungsstatus, neutrale Ergebnisnamen, Personen/Firmen;
+- Sammelbehandlung zunächst vorgemerkt, vollständige Gruppenübergabe,
+  Folgeschritte im selben Prüffenster, Vertagen/Neustart/Fortsetzen;
+- nach Fundstellenabschluss direkt Dokumentprüfung desselben Laufs; Freigaben
+  nur für ausdrücklich gewählte aktuelle Dokumentstände;
+- getrennter bestätigter KI-Export in einen normalen Ordner ohne Originale,
+  Zuordnungen oder private Prüfstände; Änderungen widerrufen betroffene Freigaben;
+- große lokale Prüfgruppen und verständliche technische Fehler; Dialogfehler
+  dürfen nicht als Benutzerentscheidung „Später“ erscheinen;
+- Verlauf mit höchstens 20 laufgebundenen Karten; alle Aktionen gehören zum
+  gewählten Lauf, keine Bestätigung allein durch Status-Momentaufnahmen;
 - falsches Architekturpaket stoppt verständlich;
 - keine Rosetta-Pflicht auf Apple Silicon;
 - Offline-Lauf, VoiceOver, Tastatur, Zoom, Fokus und Dark Mode;

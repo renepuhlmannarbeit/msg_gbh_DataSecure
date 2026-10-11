@@ -4,6 +4,16 @@ Stand: 06.10.2026 · 3.2.0-rc159
 
 ### RC159 – Vierplattform-Prerelease in Vorbereitung (11.10.2026)
 
+**Abschließender Dokumentationsabgleich:** Der Paketschnitt `6e64e53` bestand
+Windows, Apple Silicon und Linux; Intel-Mac befand sich noch im Build.
+Vollständige Security auf Audit-Folgecommit `2ed119e` bestand; nur Triage-
+Metadaten unterscheiden sich. Vor Veröffentlichung fand der unabhängige
+Release-Review jedoch veraltete tatsächlich beigelegte Startanleitungen.
+Diese werden auf Workspace-v2, vorgemerkte Gruppenentscheidungen, ausdrückliche
+Dokumentfreigabe und getrennten KI-Export korrigiert. Eine neue Drei-Plattform-
+Dokumentregression verlangt die aktuellen Aktionen. Neue Paketläufe binden
+diesen korrigierten Schnitt; die vorherigen Archive werden nicht veröffentlicht.
+
 Der dritte Runnerstand `e88048e` bestand die Sicherheitsprüfung (`38165242497`),
 aber noch nicht alle Paketgates. Die Source-CI importierte über einen reinen
 Assertion-Helfer voreilig das native Canvas-Addon; dieser Import ist nun erst

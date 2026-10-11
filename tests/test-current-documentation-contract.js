@@ -435,6 +435,20 @@ test('main README gives direct Windows and macOS Standalone installation paths',
   assert.match(readme, /Systemeinstellungen →\s+Datenschutz & Sicherheit/u);
 });
 
+test('all shipped Standalone start guides describe v2 staged review, explicit approval and separate export', () => {
+  for (const file of ['START-WINDOWS.md', 'MACOS-START.md', 'LINUX-START.md']) {
+    const text = read(`apps/datasecure-standalone/${file}`).replace(/\*\*/gu, '').replace(/\s+/gu, ' ');
+    for (const label of ['Neue Verarbeitung', 'Verarbeitung starten', 'Gruppe übergeben und weiter',
+      'Auswahl freigeben', 'Auswahl für KI exportieren']) {
+      assert.ok(text.includes(label), `${file} omits current action ${label}`);
+    }
+    assert.match(text, /normalen separaten Ordner/u, file);
+    assert.match(text, /nicht anonymisiert/u, file);
+    assert.match(text, /Identitäts.*(?:nicht|bleiben)/u, file);
+    assert.doesNotMatch(text, /Die Ansicht Verarbeiten zeigt zunächst den Abschluss/u, file);
+  }
+});
+
 test('Cowork opens only its latest completed run and preserves the Standalone product boundary', () => {
   const target = JSON.parse(read('docs/canonical/TARGET_CAPABILITIES.json'));
   assert.ok(target.decision_ids.includes('DS-092'));

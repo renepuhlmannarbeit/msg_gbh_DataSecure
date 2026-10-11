@@ -4,6 +4,14 @@ Stand: 08.10.2026 · 3.2.0-rc159 · Windows/macOS RC158 veröffentlicht · Linux
 
 ## Prototyp v2: laufende lokale Migration (DS-110 / BL-010.53)
 
+**Beigelegte Anleitungen, 11.10.2026:** Der unabhängige letzte Paketreview
+bestätigte alte Bedien-/Freigabeangaben in den drei tatsächlich mitgelieferten
+Startanleitungen. Sie beschreiben jetzt Workspace-v2, vorgemerkte Sammelaktionen,
+Fundstellenabschluss, ausdrückliche Dokumentfreigabe und getrennten KI-Export.
+Eine Dokumentregression prüft alle drei Anleitungen. Die technischen Gates
+von `6e64e53` sowie Security von `2ed119e` bleiben auf ihre Schnitte begrenzt;
+neue Paketbindung vor Veröffentlichung erforderlich.
+
 **Prerelease-Vorbereitung, 11.10.2026:** Auf ausdrücklichen Anwenderauftrag wird
 RC159 für vier Zielplattformen zum Testen vorbereitet. Der gemeinsame native
 Einstieg ist jetzt `workspace.html` (1280 × 900, weiterhin verkleinerbar), ohne

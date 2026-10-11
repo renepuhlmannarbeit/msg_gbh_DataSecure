@@ -1,112 +1,97 @@
 # DataSecure Standalone starten (Windows x64)
 
-Aktuelles Windows-Testpaket: [RC157-ZIP mit Prüfsumme](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc157).
-Der RC157-Anwenderlauf mit 140 Ergebnissen einschließlich integrierter lokaler
-Prüfung und Stapelverarbeitung ist bestanden. Der finale Neubau bestand zwei
-saubere, bytegleiche Builds und native Paket-/App-Prüfungen. Es bleibt ein
-Vorabkandidat; noch fehlende Spezialabnahmen sind getrennt dokumentiert.
+Anleitung für **3.2.0-rc159** und die neue Oberfläche. Das passende
+[RC159-ZIP und seine Prüfsumme](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc159)
+vollständig entpacken. Dies ist ein Test-Prerelease, keine abgeschlossene
+menschliche Plattform-, Bedien- oder Barrierefreiheitsfreigabe.
 
-1. ZIP vollständig in einen lokalen Ordner entpacken.
-2. `DataSecure Standalone.exe` doppelklicken.
-3. Auf **Start** die gewünschte Funktion wählen: **Nur in Markdown umwandeln**
-   oder **In Markdown umwandeln und anonymisieren**. Danach Dateien oder einen
-   Ordner auswählen (oder in das Fenster ziehen). Anfangs ist kein Modus vorbelegt.
-   Bei Anonymisierung zusätzlich **Neutrale Dateinamen (empfohlen)** oder
-   **Originalname mit „-anonymisiert“** wählen. Die zweite Variante nur nutzen,
-   wenn Datei- und Ordnernamen keine personenbezogenen Angaben enthalten.
-   Vor dem Start können weitere Dateien oder Ordner ergänzt, einzelne Dateien
-   entfernt oder die ganze Auswahl geleert werden. Bereits gewählte Dateien
-   werden dabei nicht doppelt aufgenommen. Nach **Starten** ist der Stapel fest;
-   weitere Quellen gehören in einen neuen Lauf.
-4. Bei Bedarf **Ergebnisordner ändern** wählen, dann **Starten** drücken.
-5. Falls **Prüfung erforderlich** erscheint, direkt in der Laufkarte
-   **Jetzt prüfen** wählen. Das lokale Prüffenster führt durch die offenen
-   Fundstellen. Mit **Später entscheiden** kann die Prüfung verschoben und
-   später beim selben Lauf im **Verlauf** fortgesetzt werden.
-   Nach Abschluss selbst **Verlauf** öffnen und beim gewünschten Lauf
-   **Ergebnisordner** wählen. Im zugehörigen Laufordner
-   liegen die Markdown-Dateien. Bei Anonymisierung liegt zusätzlich
-   `DataSecure-Zuordnung.csv` mit der Zuordnung jeder erfolgreich erzeugten
-   Datei zur jeweiligen Quelldatei dort. Die automatisch erkannte menschliche
-   Identitätszuordnung liegt zusätzlich in `VERTRAULICH-NICHT-HOCHLADEN`.
-   Diese TXT enthält Originalwerte: **Nie den ganzen Laufordner an eine KI
-   geben**, sondern nur einzeln geprüfte anonymisierte Markdown-Dateien.
-   Einen Löschbutton gibt es nicht; DataSecure löscht die Identitätszuordnung
-   nicht automatisch. Gestoppte Dateien stehen nur im
-   Abschluss und in der Diagnose. Wenn alle Dateien stoppen, entstehen weder
-   Ergebnisordner noch Zuordnungsdatei.
-   Die Ansicht **Verarbeiten** zeigt zunächst den Abschluss dieses Laufs.
-   Mit **Neuen Lauf vorbereiten** beginnst du bewusst eine leere Auswahl und
-   wählst die Aufgabe erneut; der vorige Lauf bleibt im **Verlauf**. Ein
-   fehlgeschlagener Lauf ohne Ergebnis ist kein erfolgreicher Abschluss.
+## Verarbeitung und Prüfung
 
-**Verlauf** zeigt die letzten 20 Verarbeitungen. Jede Zeile bietet den eigenen
-Ergebnisordner und – nur bei einem fortsetzbaren Stapel – **Fortsetzen**. Die
-Zuordnungsaktion ist nur für Anonymisierung aktiv. Auch nach einem Neustart bleibt die Startseite sichtbar.
-Ein Abschluss öffnet weder automatisch einen Ordner noch eine andere Ansicht.
-Wird eine Ordnerauswahl wegen unbekannter Dateiformate abgelehnt, zeigt die
-lokale Oberfläche die betroffenen relativen Dateinamen; es wird weiterhin
-nichts aus diesem Ordner übernommen. Nach einem Lauf stehen gestoppte
-Dateinamen und feste Fehlercodes im Abschluss sowie auf Abruf in der
-jeweiligen Verlaufszeile. Ist das private Laufjournal später nicht mehr
-vorhanden, bleibt im Verlauf nur die Anzahl sichtbar. Dateinamen werden nicht
-in Diagnoseprotokolle geschrieben.
+1. `DataSecure Standalone.exe` doppelklicken. Voraussetzung: Windows 10/11 x64
+   mit vorhandenem Microsoft Edge WebView2. DataSecure lädt keine Runtime nach.
+2. Unter **Neue Verarbeitung** die Aufgabe **Nur umwandeln** (Zweck:
+   **Nur in Markdown umwandeln**) oder **Umwandeln und anonymisieren** wählen.
+   Anfangs ist keine Aufgabe vorbelegt; Auswahl allein verarbeitet nichts.
+3. Dateien oder einen Ordner hinzufügen, gewünschte Dateien anhaken und das
+   Ergebnisziel kontrollieren. Unterordner werden berücksichtigt. Der Katalog
+   kann mehr Dateien enthalten; pro Verarbeitung höchstens 200 Dateien / 500 MB
+   auswählen. Weitere Dateien lassen sich vor dem Start ergänzen.
+4. **Verarbeitung starten** wählen (in früheren Versionen **Starten**).
+   Die Laufkarte zeigt Fortschritt, laufende Arbeit und Dateiprobleme.
+   **Pausieren** stellt die aktuelle Datei einschließlich Bereitstellung fertig;
+   danach beginnt keine weitere Datei. **Verarbeitung fortsetzen** setzt diesen
+   Lauf fort. Neue Eingaben gehören in eine **Neue Verarbeitung**.
+5. Bei **Jetzt prüfen** die Fundstellenprüfung direkt am Lauf öffnen.
+   Checkboxen wählen nur aus. Eine gemeinsame Behandlung merkt Entscheidungen
+   zunächst vor; erst **Gruppe übergeben und weiter** speichert die vollständig
+   bearbeitete Gruppe. Offen-Filter, weitere Seiten und Folgegruppen beachten.
+   Der Original-/Markdown-Vergleich gehört jeweils zum angezeigten Punkt.
+   OCR-Kontaktwerte mit den Originalbildpixeln vergleichen. **Als Person**,
+   **Als Unternehmen** und **Beibehalten** sind unterschiedliche Entscheidungen;
+   nachweislich gleiche vollständige Werte gelten für den betreffenden Lauf.
+6. Nach Abschluss aller Fundstellengruppen öffnet sich bei Anonymisierung die
+   Dokumentprüfung **desselben Laufs**. Das ist noch kein KI-Export:
+   Originaltext und geplantes Markdown vergleichen, gewünschte Dokumente
+   auswählen und **Auswahl freigeben** wählen. Änderungen heben betroffene
+   Freigaben auf. Über **Ergebnisse prüfen und freigeben** im Verlauf lässt
+   sich die Dokumentprüfung später wieder öffnen.
+7. **Auswahl für KI exportieren** wählen und den angezeigten Auftrag
+   ausdrücklich bestätigen. Nur freigegebene aktuelle Markdown-Stände werden
+   in einen **normalen separaten Ordner** kopiert. Originale, Identitäts- und
+   Dateizuordnung, private Prüfstände und technische Begleitdateien sind nicht
+   enthalten. Der technische Laufordner ist nicht dieser KI-Exportordner.
 
-Die reine Umwandlung unterstützt TXT, Markdown, CSV, DOCX, XLSX, PPTX, PDF,
-Scan-PDF und PNG/JPEG/BMP. Sie anonymisiert **nicht**: Namen und andere Inhalte
-bleiben erhalten. Bilder und Scan-Seiten werden mit der mitgelieferten lokalen
-Deutsch-/Englisch-Texterkennung gelesen. OCR und komplexe Layouts können
-unvollständig sein; Hinweise erscheinen beim Abschluss. Die Ausgaben behalten
-den Basisnamen der Quelle und wechseln nur auf `.md`; gleiche Basisnamen erhalten
-` (2)`, ` (3)` usw. Es wird keine Zuordnungsdatei erstellt. Passwortgeschützte oder defekte Dateien werden einzeln
-übersprungen. Die übrigen Dateien werden weiter verarbeitet.
+**Später entscheiden** verschiebt die Prüfung des konkreten Laufs. Noch nicht
+übergebene Eingaben sind nicht gespeichert. Der **Verlauf** enthält höchstens
+20 Verarbeitungen mit jeweils eigenen Aktionen; Fortsetzen oder Prüfen wählt
+keinen anderen Lauf. Nach Verbindungsverlust werden Starts, Entscheidungen und
+Exportbestätigungen nicht blind wiederholt. Den gespeicherten Stand bewusst
+neu laden und die angezeigte Wiederherstellung abwarten.
 
-Optional kann vor dem Start **In Markdown umwandeln und anonymisieren** gewählt
-werden. TXT, Markdown und CSV laufen direkt durch den Privacy-Core. DOCX und
-breite Quellen werden einmal lokal extrahiert; gültiger, nichtleerer Markdown-Inhalt
-wird anschließend vollständig anonymisiert. Ein Hinweis `incomplete` bezieht
-sich ausschließlich auf die Abdeckung des ursprünglichen Containers und bleibt
-im Ergebnis sichtbar; er behauptet nicht, dass die Markdown-Anonymisierung
-unvollständig war. Leere OCR, beschädigte oder unsichere Quellen werden als
-einzelne Datei gestoppt. Die übrigen Dateien des Stapels laufen weiter. Bei
-unklaren personenbezogenen Angaben kann eine lokale Prüfung nötig sein.
+Bei reiner Umwandlung bleiben Originalinhalte erhalten: **Markdown nachkorrigieren**
+bietet die nachträgliche Korrektur. Ein Markdown-Export ist ausdrücklich
+**nicht anonymisiert**. Fundstellenbestätigung, Dokumentfreigabe und Export
+bleiben getrennt; eine technische Erfolgsmeldung ersetzt keine Inhaltsprüfung.
 
-Bei einer Ordnerauswahl bleibt unterhalb von `Lauf-…` die komplette relative
-Unterordnerstruktur erhalten. Aus `bereich/quelle.xlsx` wird im
-Anonymisierungsmodus je nach Auswahl
-`bereich/Dokument-001-anonymisiert.md` oder
-`bereich/quelle-anonymisiert.md`; die `DataSecure-Zuordnung.csv` nennt genau
-den Quellpfad und den tatsächlich erzeugten relativen Ergebnispfad. Im Modus
-**Nur in Markdown umwandeln** entsteht `bereich/quelle.md` und keine
-Zuordnungsdatei. Datei- und Ordnernamen werden nicht anonymisiert, bleiben aber
-vollständig lokal und erscheinen nicht in Diagnoseprotokollen.
+## Ergebnisse, Formate und Fehler
 
-Node.js, Rust, Claude, Cowork und eine Internetverbindung werden nicht benötigt.
-DataSecure schreibt private Zwischenstände in den lokalen DataSecure-Bereich
-und Ergebnisse einschließlich der ausdrücklich markierten vertraulichen
-Zuordnung in den gewählten Ergebnisordner. Reine
-Konvertierungen landen unter `DataSecure-Markdown/Lauf-…`, anonymisierte
-Ergebnisse getrennt unter `DataSecure-Output/Lauf-…`.
-Originaldateien werden nicht verändert oder gelöscht.
+TXT, Markdown, CSV, DOCX, XLSX, PPTX, PDF, Scan-PDF und PNG/JPEG/BMP werden
+lokal verarbeitet. Breite Formate werden zuerst extrahiert; anonymisiert wird
+der extrahierte Markdown-Inhalt, nicht der ursprüngliche Container. OCR und
+komplexe Layouts können Lesefehler oder Auslassungen verursachen. Im synthetischen
+Qualitätskorpus bleiben neun rohe OCR-E-Mail-Abweichungen als bekannte Warnung.
 
-Voraussetzung ist Windows 10/11 x64 mit Microsoft Edge WebView2. Dieser
-Systembestandteil ist auf regulär aktualisierten Windows-10/11-Systemen bereits
-vorhanden. Fehlt er, startet die Oberfläche nicht; DataSecure lädt ihn nicht
-automatisch aus dem Internet nach.
+Technische Ergebnisse liegen unter `DataSecure-Markdown/Lauf-…` beziehungsweise
+`DataSecure-Output/Lauf-…`. Anonymisierung nutzt neutrale Ergebnisnamen.
+Die lokale `DataSecure-Zuordnung.csv` und
+`VERTRAULICH-NICHT-HOCHLADEN` enthalten Originalangaben. **Nie den gesamten
+Laufordner an eine KI geben.** Stattdessen den getrennten freigegebenen
+KI-Export verwenden. Die Identitätszuordnung wird nicht automatisch gelöscht.
+Reine Markdown-Konvertierung erzeugt keine Dateizuordnung.
+
+Nicht unterstützte Eingaben und verarbeitungsbezogene Probleme werden lokal
+mit Dateinamen einschließlich Endung, festem Fehlercode und nächstem Schritt
+angezeigt. Passwortgeschützte Dateien müssen außerhalb der App entschlüsselt
+werden; es gibt kein Quellenpasswortfeld. Sichere Ergebnisse anderer Dateien
+dürfen nicht mit einem vollständigen Laufabschluss verwechselt werden.
+Fehlen private Laufdetails später, können einzelne Dateinamen nicht mehr
+rekonstruiert werden; Diagnoseprotokolle enthalten bewusst keine Namen,
+Quellpfade oder Dokumentinhalte.
+
+## Startprobleme und Testgrenzen
+
+Node.js, Rust, Claude, Cowork und Internetzugang sind nicht erforderlich.
+Originaldateien werden niemals verändert oder automatisch gelöscht.
 
 Wenn die Oberfläche nicht startet, versucht DataSecure einen inhaltsfreien
-Startbericht im lokalen Diagnoseordner abzulegen und diesen zu öffnen.
-Der Diagnoseordner kann auch ohne WebView gestartet werden: In `cmd` im
-entpackten App-Ordner `"DataSecure Standalone.exe" --startup-diagnostics`
-ausführen. Der feste Fehlercode unterscheidet einen System-/Paketstartfehler
-von Dokumentfehlern. Blockiert Windows bereits den gesamten Prozessstart,
-kann DataSecure selbst keinen Bericht erstellen; die Betriebssystemmeldung
-mit der IT prüfen. Keine Schutzfunktion pauschal deaktivieren.
+Startbericht anzulegen. In `cmd` im entpackten App-Ordner
+`"DataSecure Standalone.exe" --startup-diagnostics` ausführen. Wenn Windows
+bereits den Prozessstart blockiert, kann die App keinen Bericht schreiben.
+Betriebssystemmeldung und Prüfsumme mit der IT prüfen; Schutzfunktionen nicht
+pauschal deaktivieren. Das Testpaket besitzt keine Windows-Codesignatur.
 
-Dieses Paket ist noch ein interner Engineering-Pilot ohne Codesignatur. Windows
-kann deshalb beim ersten Start einen Herkunftshinweis anzeigen.
-
-Für eine formale Freigabe anschließend nicht frei protokollieren, sondern die
-Windows-Spur im [N3/N4-Testplan](../../docs/acceptance/FORMAL_UAT/README.md)
-verwenden. Dort werden Commit, Paket-SHA-256, N3-Technik und N4-Anwendung
-einheitlich mit dem Mac-Lauf zusammengeführt.
+Native technische Runner-Prüfungen ersetzen nicht die Bedienung auf deinem
+Gerät. Für formale Nachweise den
+[N3/N4-Testplan](../../docs/acceptance/FORMAL_UAT/README.md) verwenden.
+Der frühere bestätigte RC157-Anwenderlauf bleibt historische Evidenz seines
+damaligen Pakets und ist keine neue RC159-Abnahme.

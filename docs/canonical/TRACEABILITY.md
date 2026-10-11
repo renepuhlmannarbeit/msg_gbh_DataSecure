@@ -2,6 +2,12 @@
 
 Stand: 08.10.2026 · 3.2.0-rc159 · Windows/macOS RC158 veröffentlicht · Linux bleibt RC157 · Cowork bleibt RC151
 
+DS-110 / BL-010.53, letzter Release-Dokumentationsreview 11.10.2026 → tatsächlich
+beigelegte Legacy-Startanleitungen trotz v2-App → `START-WINDOWS.md`,
+`MACOS-START.md`, `LINUX-START.md` → aktuelle Sammelprüfung, ausdrückliche
+Dokumentfreigabe und separater KI-Export; neue gemeinsame Dokumentregression.
+Frühere native Nachweise bleiben getrennt; neue Archive werden erneut gebunden.
+
 DS-110 / BL-010.53, Prerelease-Gegenprobe vom 11.10.2026 → native Runner auf
 `e88048e` → macOS-ACL-Abwesenheit/Fixture-Reihenfolge, Unix-Lock-Recovery und
 voreiliger nativer Fixtureimport → `export_private_security.rs` (held-FD-

@@ -1450,6 +1450,12 @@ lokale Desktopbedienung bleibt nicht autorisiert. Frische Headless-/Rust-/Paket-
 Prüfungen und tatsächliche Workflowergebnisse bestimmen die Bereitstellung.
 Eine Veröffentlichung als Prerelease erledigt keine menschliche Bedienabnahme.
 
+Letzter unabhängiger Release-Abgleich: Die drei beigelegten Startanleitungen
+enthielten noch Legacy-Bedienung und widersprachen der neuen Freigabe-/Export-
+Trennung. Anleitungen und gemeinsame Drei-Plattform-Dokumentregression sind
+korrigiert. Neue exakte Paketbindung bleibt vor Bereitstellung erforderlich;
+keine Veröffentlichung der älteren geprüften Archive mit falscher Anleitung.
+
 Erste Runnergegenprobe auf `2c7e246`: Windows/Mac-Testwurzeln unter OS-Alias,
 Linux-spezifisch korrekt gelesener OCR-Gegenfall und Source-CI ohne native
 Konverterressourcen verhinderten den Paketabschluss. Testpfade und die
