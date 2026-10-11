@@ -1502,6 +1502,17 @@ Profilprozesse mit Instanzprüfung. Strenge Löschfehler werden nicht übersprun
 unrelated WebViews nicht beendet. 23 Integritätsfälle und 45 reine PowerShell-
 Readiness-/Profilparsergruppen bestehen; dies ist keine lokale GUI-Bedienung.
 
+Vierte Runnergegenprobe `d02f31a`: Security bestanden (`38166846003`),
+Linux-Retention entdeckte eine echte Rebinding-Lücke nach Schließen des
+Probe-FDs. Jetzt bleibt der ursprüngliche vollständige Dateisnapshot die
+Löschautorität, auch vor Planannahme und unmittelbar vor Unlink; Parent-/Link-/
+Typgrenzen unverändert. Unabhängiges Read-only-Review bestätigt den Befund;
+26 Retention- und neun Löschtests unter Windows und WSL-Ubuntu bestanden.
+Zwei deterministische Inhaltswechseltests hängen nicht von Inode-Recycling ab.
+Portable letzte Pathname-TOCTOU-Grenze bleibt ausdrücklich bestehen. Mac-
+Kompilation benötigt außerdem eine ausdrückliche `*mut c_void`-Typangabe am
+ACL-Zeiger. Erneute native Paketbindung vor Veröffentlichung erforderlich.
+
 **RC159-Korrektur, 08.10.2026 – Übergang nach der Fundstellenprüfung:**
 Anwenderbefund am lokalen r10: Nach OCR-/Anonymisierungsentscheidung erschien
 der Verlauf mit zusätzlicher Status-Momentaufnahme, ohne verständlichen Übergang

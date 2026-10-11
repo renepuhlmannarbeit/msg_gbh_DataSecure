@@ -38,6 +38,17 @@ Profilprozesse, hält Prozessinstanzen gegen PID-Wiederverwendung und bricht bei
 fehlender Ruhe ohne Löschung ab. Kein globales WebView-Kill und kein pauschales
 Überspringen von Fehlern in der strengen Löschphase.
 
+Vierter Schnitt `d02f31a`: Security `38166846003` bestanden. Linux stoppte
+an einer echten Vorschau-Löschfreigabelücke: Der Löschplan durfte nach Probe-
+Close einen Ersatz mit wiederverwendeten Objektkennungen adoptieren. Der Fix
+behält den vollständigen ursprünglichen BigInt-Dateisnapshot inklusive Größe,
+Linkzahl, mtime/ctime bis zur letzten Zielprüfung. 26 Retention- und neun
+Löschgrenzfälle bestehen unter Windows sowie WSL-Ubuntu mit verifiziertem
+Node 22.23.2; die letzte portable Pathname-TOCTOU-Grenze bleibt dokumentiert.
+Mac-Kompilation benötigt den ausdrücklich typisierten ACL-Ausgabezeiger
+`*mut c_void`. Auch dieser fehlgeschlagene Schnitt wird nicht veröffentlicht;
+neue native Paket-/Sicherheitsgegenprobe erforderlich.
+
 Der erste Runnerstand `2c7e246` ist noch kein Release-PASS: Windows
 (`38161424808`) und beide Macs (`38161427084`) stoppten an nicht kanonischen
 temporären Testwurzeln. Linux (`38161429686`) las einen früheren OCR-Gegenfall

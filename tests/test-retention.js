@@ -115,11 +115,18 @@ test('review cleanup preserves a replacement that appears after descriptor inspe
   const r = sandbox('preview-replacement-race');
   const dir = reviewItem(r, 'review', 8);
   const preview = path.join(dir, 'asset-001.png');
+  const originalOpen = fs.openSync;
   const originalClose = fs.closeSync;
+  let previewFd;
   let replaced = false;
+  fs.openSync = (candidate, ...args) => {
+    const fd = originalOpen(candidate, ...args);
+    if (candidate === preview) previewFd = fd;
+    return fd;
+  };
   fs.closeSync = (fd) => {
     originalClose(fd);
-    if (!replaced) {
+    if (fd === previewFd && !replaced) {
       replaced = true;
       fs.unlinkSync(preview);
       fs.writeFileSync(preview, 'replacement that must survive');
@@ -129,8 +136,10 @@ test('review cleanup preserves a replacement that appears after descriptor inspe
   try {
     result = removeReviewPreviews(dir, r.review, NOW);
   } finally {
+    fs.openSync = originalOpen;
     fs.closeSync = originalClose;
   }
+  assert.strictEqual(replaced, true);
   assert.strictEqual(result.removed, 0);
   assert.ok(result.failures.length >= 1);
   assert.strictEqual(fs.readFileSync(preview, 'utf8'), 'replacement that must survive');

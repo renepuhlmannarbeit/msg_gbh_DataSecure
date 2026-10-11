@@ -29,6 +29,17 @@ Intel-Mac-Kaltkompilierung ist vom unveränderten nativen IPC-Budget getrennt.
 23 Integritätsfälle und 45 reine Readiness-/Profilparsergruppen bestanden;
 keine lokale App gestartet und keine Löschfehler unterdrückt.
 
+Vierte Runnergegenprobe `d02f31a`: Security bestanden (`38166846003`),
+Linux stoppte an einer echten Vorschau-Löschfreigabelücke: Nach FD-Close
+konnten wiederverwendete Objektkennungen einen Ersatz als neuen Löschplan
+adoptieren. Der ursprüngliche vollständige BigInt-Snapshot einschließlich
+Größe, Linkzahl, mtime/ctime wird jetzt nach Close, vor Planannahme und vor
+Unlink geprüft. 26 Retention- und neun Löschgrenzfälle bestehen unter Windows
+und WSL-Ubuntu mit verifiziertem Node 22.23.2; keine vollständige portable
+Pathname-Race-Freiheit behauptet. Mac-Rust benötigte eine ausdrückliche
+`*mut c_void`-Typangabe am ACL-Ausgabezeiger. Neue native Paketgates bleiben
+erforderlich; kein Prerelease aus dem fehlgeschlagenen Schnitt.
+
 **Aktueller lokaler Teststand RC159, 08.10.2026 – Übergang nach Fundstellen:**
 Der gemeldete r10-Lauf hatte seine OCR-/Entitätsentscheidungen gespeichert,
 aber noch keine nachträglichen Dokumentfreigaben. Der Hauptbutton lud nur eine

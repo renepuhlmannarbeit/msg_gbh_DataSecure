@@ -175,8 +175,8 @@
     {
       "rule": "js/file-system-race",
       "path": "plugins/data-secure/server/gateway/retention.js",
-      "source_sha256": "94954c2ef5af84a374aef72fab3ebc8564a8cfd8497922c8c37cf9cb60ece0ea",
-      "reason": "After correction, the header probe and deletion share one original BigInt snapshot and full parent binding; the actual plaintext/encrypted ABA regression preserves the encrypted replacement.",
+      "source_sha256": "d52e1bd2c2e92828f38d19364b798819fa6abfc5fdc55108b19809abeef4422d",
+      "reason": "Header probing and deletion retain the original full BigInt file snapshot including size, links, mtime and ctime, checked after close, before plan adoption and before unlink with the original parent binding. Replacement and same-object content changes are refused; portable Node pathname TOCTOU is narrowed, not claimed eliminated.",
       "fingerprints": [
         {
           "line": "debc674d68f6855e:1",

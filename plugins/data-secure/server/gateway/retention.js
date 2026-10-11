@@ -290,10 +290,13 @@ function removeReviewPreviews(reviewDir, root, at, fsApi = fs) {
       if (name.toLowerCase().endsWith('.dsart')) continue;
       if (evidence.protectedPreviewNames.has(name)) continue;
       const probe = Buffer.alloc(8);
+      // Keep the inspected contents as deletion authority across descriptor
+      // close. POSIX may reuse an inode immediately; object IDs alone must not
+      // authorize a replacement with different size/timestamps/link count.
+      const original = fileIdentity(fileStat, true);
       const fd = fsApi.openSync(file, fsApi.constants.O_RDONLY | (fsApi.constants.O_NOFOLLOW || 0) | (fsApi.constants.O_NONBLOCK || 0));
       let encrypted;
       try {
-        const original = fileIdentity(fileStat);
         if (!sameBoundFile(fsApi.fstatSync(fd, { bigint: true }), original)) throw new Error('Review-Preview wurde ersetzt.');
         if (parentBinding) assertDirectory(parentBinding);
         let offset = 0;
@@ -308,6 +311,7 @@ function removeReviewPreviews(reviewDir, root, at, fsApi = fs) {
             !sameBoundFile(fsApi.lstatSync(file, { bigint: true }), original)) throw new Error('Review-Preview wurde ersetzt.');
       } finally { fsApi.closeSync(fd); }
       if (encrypted) continue;
+      if (!sameBoundFile(fsApi.lstatSync(file, { bigint: true }), original)) throw new Error('Review-Preview wurde ersetzt.');
       if (fsApi === fs) {
         assertDirectory(parentBinding);
         const identity = (value) => ({
@@ -318,7 +322,8 @@ function removeReviewPreviews(reviewDir, root, at, fsApi = fs) {
         safeRemovePrivateTree(reviewDir, name, {
           expectedParentIdentity: { dev: parentBinding.chain[0].identity.dev,
             ino: parentBinding.chain[0].identity.ino, birthtimeNs: parentBinding.chain[0].identity.birth },
-          expectedIdentity: identity(fileStat)
+          expectedIdentity: identity(fileStat),
+          expectedFileSnapshot: original
         });
       } else {
         fsApi.unlinkSync(file);

@@ -15,6 +15,14 @@ Ergänzende Runnergrenzen → `package.json` (Rust-Suite vor IPC-Ausführung),
 → 23 Integritätsfälle und 45 reine Readiness-/Parsergruppen; neue native
 Laufzeitbestätigung bleibt erforderlich, kein allgemeiner GUI-Abnahmenachweis.
 
+Vierte Runnergegenprobe `d02f31a` → Linux-Retention-Rebinding nach Probe-Close
+und Mac-ACL-Ausgabezeigertyp → `retention.js` / `common.js` (unveränderte
+Originalsnapshot-Autorität mit Größe/Links/mtime/ctime bis finaler Zielprüfung),
+`export_private_security.rs` (expliziter FFI-Zeigertyp) → 26 Retention- und neun
+Löschtests auf Windows und WSL-Ubuntu. Security `38166846003` auf altem Schnitt
+grün; neue native Paketbindung erforderlich. Kein allgemeiner Node-TOCTOU-
+oder menschlicher Bediennachweis daraus abgeleitet.
+
 DS-110 / BL-010.53, Gesamtreview r9 vom 08.10.2026 →
 [R9-20261008](../REVIEW_STANDALONE_R9_2026-10-08.md) → drei unabhängig gefundene
 und vom Hauptreview wiederholte P2-Gegenbeispiele in Dokumentreload/Freigabe,

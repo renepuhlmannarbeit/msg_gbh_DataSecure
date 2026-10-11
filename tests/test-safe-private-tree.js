@@ -7,6 +7,7 @@ const { createSuite } = require('./helpers');
 
 const { test, done, assert } = createSuite('Safe private-tree cleanup');
 const { safeRemovePrivateTree } = require('../plugins/data-secure/server/gateway/common');
+const { fileIdentity } = require('../plugins/data-secure/server/core/bound-file-io');
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-private-tree-'));
 
@@ -105,6 +106,44 @@ test('bound cleanup validates the whole tree before removing any ordinary siblin
   fs.symlinkSync(outside, path.join(target, 'z-link'), process.platform === 'win32' ? 'junction' : 'dir');
   assert.throws(() => safeRemovePrivateTree(base, 'job', boundOptions(base, target)), /PRIVACY_STORAGE_UNSAFE/u);
   assert.strictEqual(fs.readFileSync(path.join(target, 'a-keep.txt'), 'utf8'), 'preserved');
+});
+
+test('content-bound cleanup rejects changed bytes on the same object before rebinding deletion authority', () => {
+  const base = parent('bound-content');
+  const target = path.join(base, 'preview.png');
+  fs.writeFileSync(target, 'old');
+  const options = { ...boundOptions(base, target),
+    expectedFileSnapshot: fileIdentity(fs.lstatSync(target, { bigint: true }), true) };
+  fs.writeFileSync(target, 'replacement that must survive');
+  assert.throws(() => safeRemovePrivateTree(base, 'preview.png', options), /PRIVACY_STORAGE_UNSAFE/u);
+  assert.strictEqual(fs.readFileSync(target, 'utf8'), 'replacement that must survive');
+  assert.throws(() => safeRemovePrivateTree(base, 'preview.png', {
+    expectedFileSnapshot: options.expectedFileSnapshot
+  }), /PRIVACY_STORAGE_UNSAFE/u);
+  const fresh = { ...boundOptions(base, target),
+    expectedFileSnapshot: fileIdentity(fs.lstatSync(target, { bigint: true }), true) };
+  assert.strictEqual(safeRemovePrivateTree(base, 'preview.png', fresh), true);
+});
+
+test('content-bound cleanup rechecks the original snapshot immediately before unlink', () => {
+  const base = parent('bound-content-late');
+  const target = path.join(base, 'preview.png');
+  fs.writeFileSync(target, 'old');
+  const options = { ...boundOptions(base, target),
+    expectedFileSnapshot: fileIdentity(fs.lstatSync(target, { bigint: true }), true) };
+  const original = fs.lstatSync;
+  let targetReads = 0;
+  fs.lstatSync = (candidate, ...args) => {
+    if (candidate === target && ++targetReads === 3) {
+      fs.writeFileSync(target, 'replacement after preflight');
+    }
+    return original(candidate, ...args);
+  };
+  try {
+    assert.throws(() => safeRemovePrivateTree(base, 'preview.png', options), /PRIVACY_STORAGE_UNSAFE/u);
+  } finally { fs.lstatSync = original; }
+  assert.ok(targetReads >= 3);
+  assert.strictEqual(fs.readFileSync(target, 'utf8'), 'replacement after preflight');
 });
 
 test('bound cleanup rejects wrong parent and target identities and accepts the exact regular tree', () => {

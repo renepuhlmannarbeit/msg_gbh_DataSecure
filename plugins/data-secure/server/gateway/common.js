@@ -6,6 +6,7 @@ const {assertRootSeparation,reserveRootSeparation}=require('./root-boundary');
 const {VERSION}=require('../version');
 const {uiProcessEnvironment}=require('../companion/ui-process-policy');
 const {RESOURCE_LIMITS,assertSourceSize}=require('../resource-limits');
+const {sameFile:sameBoundFile}=require('../core/bound-file-io');
 const SUPPORTED=new Set(['.pdf','.docx','.xlsx','.pptx','.txt','.md','.markdown','.csv','.png','.jpg','.jpeg','.bmp']);
 // Release allowlist for the supervised pilot. Other formats remain visible to
 // the queue so the user receives an explicit fail-closed result instead of the
@@ -100,6 +101,8 @@ function safeRemovePrivateTree(parent,literalChild,options={}){
   const target=path.join(parentPath,child);
   if(path.relative(parentPath,target)!==child||path.dirname(target)!==parentPath)throw new Error('PRIVACY_STORAGE_UNSAFE');
   const bound=options.expectedIdentity!==undefined;
+  const fileSnapshot=options.expectedFileSnapshot;
+  if(fileSnapshot!==undefined&&!bound)throw new Error('PRIVACY_STORAGE_UNSAFE');
   const identityOf=(stat)=>({dev:String(stat.dev),ino:String(stat.ino),birthtimeNs:String(stat.birthtimeNs)});
   const matches=(stat,expected)=>expected&&Object.keys(expected).sort().join(',')==='birthtimeNs,dev,ino'&&
     Object.values(expected).every(value=>typeof value==='string'&&/^(?:0|[1-9][0-9]*)$/.test(value))&&
@@ -118,7 +121,8 @@ function safeRemovePrivateTree(parent,literalChild,options={}){
       const stat=fs.lstatSync(full,{bigint:true});
       if(stat.isSymbolicLink()||(!stat.isDirectory()&&!stat.isFile())||
         (stat.isFile()&&stat.nlink!==1n)||
-        (full===target&&!matches(stat,options.expectedIdentity)))throw new Error('PRIVACY_STORAGE_UNSAFE');
+        (full===target&&(!matches(stat,options.expectedIdentity)||
+          (fileSnapshot!==undefined&&!sameBoundFile(stat,fileSnapshot)))))throw new Error('PRIVACY_STORAGE_UNSAFE');
       plan.set(full,{identity:identityOf(stat),directory:stat.isDirectory(),size:stat.size,mtimeNs:stat.mtimeNs});
       if(stat.isDirectory())for(const name of fs.readdirSync(full)){
         if(!name||name==='.'||name==='..'||/[\\/\0]/.test(name))throw new Error('PRIVACY_STORAGE_UNSAFE');
@@ -132,6 +136,7 @@ function safeRemovePrivateTree(parent,literalChild,options={}){
     for(let probe=current;probe!==parentPath;probe=path.dirname(probe)){
       const saved=plan.get(probe),stat=fs.lstatSync(probe,{bigint:true});
       if(!saved||stat.isSymbolicLink()||!matches(stat,saved.identity)||stat.isDirectory()!==saved.directory||
+        (probe===target&&fileSnapshot!==undefined&&!sameBoundFile(stat,fileSnapshot))||
         (!saved.directory&&(!stat.isFile()||stat.nlink!==1n||stat.size!==saved.size||stat.mtimeNs!==saved.mtimeNs)))throw new Error('PRIVACY_STORAGE_UNSAFE');
     }
   };
