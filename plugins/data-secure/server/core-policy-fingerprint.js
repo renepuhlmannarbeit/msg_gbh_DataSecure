@@ -36,7 +36,8 @@ const CORE_POLICY_FILES = Object.freeze([
   'privacy/policy.js',
   'privacy/residual-person-review.js',
   'privacy/spans.js',
-  'privacy/structured.js'
+  'privacy/structured.js',
+  'privacy/transform-plan.js'
 ]);
 
 function calculateCorePolicyFingerprint(options = {}) {

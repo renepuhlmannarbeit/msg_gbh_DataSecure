@@ -2,12 +2,13 @@
 
 const assert = require('node:assert');
 const childProcess = require('node:child_process');
+const crypto = require('node:crypto');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { encodeFrame } = require('../plugins/data-secure/server/standalone/desktop-ipc');
 
-function protocolClient(child) {
+function protocolClient(child, onNative, onReady) {
   let buffer = Buffer.alloc(0);
   let stderr = '';
   const pending = new Map();
@@ -27,6 +28,14 @@ function protocolClient(child) {
       try { value = JSON.parse(buffer.subarray(4, length + 4).toString('utf8')); }
       catch (error) { return failAll(error); }
       buffer = buffer.subarray(length + 4);
+      if (value.schema === 'datasecure-standalone-ready/1' && onReady) {
+        try { onReady(value); } catch (error) { failAll(error); }
+        continue;
+      }
+      if (['datasecure-native-export-request/1', 'datasecure-native-export-request/2'].includes(value.schema) && onNative) {
+        try { onNative(value, child); } catch (error) { failAll(error); }
+        continue;
+      }
       const waiter = pending.get(value.request_id);
       if (!waiter) return failAll(new Error('unexpected sidecar response'));
       pending.delete(value.request_id);
@@ -162,6 +171,63 @@ function removeOwnedRoot(root, initial) {
   let blockedChild;
   try {
     const client = protocolClient(child);
+    const unsupportedNative = await client.send('configure_results', '00'.repeat(8), {
+      source_paths: [environment.EU_PRIVACY_RESULT_ROOT], native_export_binding: true
+    });
+    assert.equal(unsupportedNative.ok, false);
+    assert.equal(unsupportedNative.error_code, 'STANDALONE_IPC_FAILED', 'requested native capability never silently falls back');
+    // Real process/pipe/configuration integration. This emulates the desktop
+    // response only, not the native filesystem identity implementation (Rust
+    // tests exercise that separately with actual directory handles).
+    const nativeRoot = path.join(root, 'native-binding'); fs.mkdirSync(nativeRoot);
+    const nativeEnv = isolatedEnvironment(nativeRoot);
+    delete nativeEnv.EU_PRIVACY_RESULT_ROOT;
+    nativeEnv.DATASECURE_NATIVE_EXPORT_CHANNEL = '1';
+    nativeEnv.DATASECURE_DOCUMENT_CONTROL_OWNER_PID = String(process.pid);
+    nativeEnv.DATASECURE_DOCUMENT_CONTROL_GENERATION = 'c'.repeat(32);
+    const nativeHost = trackChild(childProcess.spawn(process.execPath, [sidecarFile], {
+      stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, env: nativeEnv
+    }), children);
+    let callbacks = 0, readyCount = 0, deny = false;
+    const nativeIdentity = { volume: '18446744073709551615', object: '340282366920938463463374607431768211455', created_ns: '9007199254740993' };
+    const nativeBinding = { schema: 'datasecure-native-export-binding/1', root: path.join(nativeRoot, 'output'),
+      root_identity: nativeIdentity, data_root_identity: nativeIdentity, private_name: `native-export-${'a'.repeat(32)}`,
+      private_identity: nativeIdentity, anonymize_identity: nativeIdentity, markdown_identity: nativeIdentity };
+    const nativeClient = protocolClient(nativeHost, (request, host) => {
+      callbacks++; assert.equal(request.action, 'configure_export_root');
+      assert.equal(request.schema, 'datasecure-native-export-request/2');
+      assert.equal(request.sequence, 1);
+      assert.equal(request.root, path.join(nativeRoot, 'output'));
+      const payload = Buffer.from(JSON.stringify({ schema: 'datasecure-native-export-response/2',
+        request_id: request.request_id, native_id: request.native_id, sequence: request.sequence,
+        ok: !deny, ...(deny ? { error_code: 'AI_EXPORT_CONFLICT' } : { binding: nativeBinding }) }));
+      const header = Buffer.alloc(4); header.writeUInt32BE(payload.length);
+      host.stdin.write(Buffer.concat([header, payload]));
+    }, ready => {
+      assert.deepStrictEqual(ready, { schema: 'datasecure-standalone-ready/1', owner_generation: 'c'.repeat(32), ok: true });
+      assert.equal(++readyCount, 1, 'bootstrap handshake precedes any ordinary private response');
+    });
+    const configured = await nativeClient.send('configure_results', '01'.repeat(8), {
+      source_paths: [path.join(nativeRoot, 'output')], native_export_binding: true
+    });
+    assert.equal(configured.ok, true); assert.equal(callbacks, 1);
+    assert.equal(readyCount, 1);
+    const nativeData = require('../plugins/data-secure/server/standalone/application-service').standaloneDataRoot({ environment: nativeEnv });
+    const configFile = path.join(nativeData, 'settings', 'result-root.json');
+    const persisted = fs.readFileSync(configFile, 'utf8');
+    assert.deepEqual(JSON.parse(persisted).native_export, nativeBinding);
+    assert.equal(JSON.parse(persisted).schema, 'datasecure-result-root/4');
+    deny = true;
+    const refused = await nativeClient.send('configure_results', '02'.repeat(8), {
+      source_paths: [path.join(nativeRoot, 'output')], native_export_binding: true
+    });
+    assert.equal(refused.error_code, 'AI_EXPORT_CONFLICT');
+    assert.equal(fs.readFileSync(configFile, 'utf8'), persisted, 'native refusal cannot mutate existing settings');
+    const legacyConfiguration = await nativeClient.send('configure_results', '03'.repeat(8), { source_paths: [path.join(nativeRoot, 'output')] });
+    assert.equal(legacyConfiguration.ok, true, JSON.stringify(legacyConfiguration));
+    assert.equal(callbacks, 2, 'legacy request cannot silently acquire a native binding');
+    assert.equal(JSON.parse(fs.readFileSync(configFile, 'utf8')).schema, 'datasecure-result-root/2');
+    nativeHost.stdin.end(); assert.equal((await bounded(nativeHost.closed, 'native callback host did not close')).code, 0);
     const status = await client.send('get_public_state', 'a'.repeat(16));
     assert.strictEqual(status.schema, 'datasecure-standalone-private-response/1');
     assert.strictEqual(status.ok, true);
@@ -183,6 +249,53 @@ function removeOwnedRoot(root, initial) {
     assert.strictEqual(emptyHistory.ok, true);
     assert.strictEqual(emptyHistory.result.local_ui_only, true);
     assert.deepStrictEqual(emptyHistory.result.entries, []);
+    // Real private persistence -> application service -> framed error, not a
+    // mocked error response. The fixture belongs only to this isolated host.
+    const dataRoot = require('../plugins/data-secure/server/standalone/application-service').standaloneDataRoot({ environment });
+    const reviewStore = require('../plugins/data-secure/server/gateway/standalone-document-review-store').createDocumentReviewStore({ dataRoot });
+    const reviewBatch = 'e'.repeat(64), reviewItem = { id: 'f'.repeat(32), name: 'Pruefstand.txt', sha256: 'a'.repeat(64) };
+    reviewStore.capture({ token: reviewBatch, product_channel: 'standalone' }, reviewItem,
+      { package_id: `ds_${reviewItem.id}`, original_text: 'synthetic', markdown: 'synthetic' });
+    const reviewPackageId = `ds_${reviewItem.id}`;
+    const reviewPackageDirectory = path.join(dataRoot, 'workspace', 'Output', reviewPackageId);
+    fs.mkdirSync(reviewPackageDirectory, { recursive: true });
+    fs.writeFileSync(path.join(reviewPackageDirectory, `${reviewPackageId}.md`), 'synthetic');
+    fs.writeFileSync(path.join(reviewPackageDirectory, 'manifest.json'), JSON.stringify({
+      schema: 'eu-privacy-package/3', package_id: reviewPackageId, document: `${reviewPackageId}.md`,
+      verification: { text_residual_pii: 'passed' },
+      document_sha256: crypto.createHash('sha256').update('synthetic').digest('hex')
+    }));
+    const entityUnavailable = await client.send('get_document_entities', 'ad'.repeat(8),
+      { batch_id: reviewBatch, document_id: reviewItem.id, revision: 0, page: 0 });
+    assert.strictEqual(entityUnavailable.ok, false);
+    assert.strictEqual(entityUnavailable.error_code, 'DOCUMENT_ENTITY_UNAVAILABLE');
+    const legacyReviewSummary = await client.send('get_document_review_history_summary', 'af'.repeat(8), { batch_id: reviewBatch });
+    assert.strictEqual(legacyReviewSummary.ok, true);
+    assert.deepStrictEqual(legacyReviewSummary.result, { ok: true, available: false, local_ui_only: true, external_disclosure: false },
+      'the real framed summary endpoint never infers v2 approvals from a legacy snapshot');
+    const identityReference = await client.send('resolve_document_identity_overview', 'b0'.repeat(8), { batch_id: reviewBatch });
+    assert.strictEqual(identityReference.ok, true);
+    assert.strictEqual(identityReference.result.target_kind, 'file');
+    assert.strictEqual(identityReference.result.external_disclosure, false);
+    assert.match(identityReference.result.local_path, /DataSecure-Identitaeten-[a-f0-9]{64}\.txt$/u);
+    assert.match(fs.readFileSync(identityReference.result.local_path, 'utf8'), /NICHT.*KI|nicht.*KI/u);
+    const unavailableHistoricalReference = await client.send('resolve_document_identity_overview', 'b1'.repeat(8),
+      { batch_id: reviewBatch, operation_id: 'c'.repeat(32) });
+    assert.strictEqual(unavailableHistoricalReference.ok, false);
+    assert.doesNotMatch(JSON.stringify(unavailableHistoricalReference), /Pruefstand|synthetic|local_path/u);
+    fs.appendFileSync(identityReference.result.local_path, 'changed');
+    const alteredReference = await client.send('resolve_document_identity_overview', 'b2'.repeat(8), { batch_id: reviewBatch });
+    assert.strictEqual(alteredReference.ok, false);
+    assert.strictEqual(alteredReference.error_code, 'DOCUMENT_REVIEW_CONFLICT');
+    assert.doesNotMatch(JSON.stringify(alteredReference), /Pruefstand|synthetic|local_path/u);
+    const reviewDirectory = path.join(dataRoot, 'document-reviews', reviewBatch);
+    fs.renameSync(path.join(reviewDirectory, 'journal-format.json'), path.join(reviewDirectory, 'fixture-format.saved'));
+    fs.writeFileSync(path.join(reviewDirectory, 'decision-000001.json'), '{}');
+    const policyChanged = await client.send('get_document_entities', 'ae'.repeat(8),
+      { batch_id: reviewBatch, document_id: reviewItem.id, revision: 0, page: 0 });
+    assert.strictEqual(policyChanged.ok, false);
+    assert.strictEqual(policyChanged.error_code, 'DOCUMENT_REVIEW_POLICY_CHANGED');
+    assert.doesNotMatch(JSON.stringify([entityUnavailable, policyChanged]), /Pruefstand|synthetic/u);
     const unboundCurrent = await client.send('continue_current_batch', 'ac'.repeat(8));
     assert.strictEqual(unboundCurrent.ok, false);
     assert.strictEqual(unboundCurrent.error_code, 'STANDALONE_NOTHING_TO_CONTINUE');
@@ -275,6 +388,58 @@ function removeOwnedRoot(root, initial) {
     }, 'all rejected direct selections cross the real sidecar boundary with fixed reasons');
     assert.deepStrictEqual((await client.send('get_ui_context', '3'.repeat(16))).result.selected_files, [],
       'a rejected folder must not create a partial admission');
+    // The v2 opt-in crosses the real framed endpoint. Legacy callers above
+    // remain strict; the catalogue may show regular blocked files, never
+    // silently discard them or turn an unsafe selection into a partial one.
+    const catalogued = await client.send('admit_selected_sources', '3'.repeat(16), {
+      source_kind: 'folder', source_paths: [mixedRoot], source_catalogue: true
+    });
+    assert.strictEqual(catalogued.ok, true);
+    const catalogue = catalogued.result.ui_context.source_catalogue;
+    assert.deepStrictEqual(catalogue.filter(item => !item.selectable), [
+      { name: 'DATEILISTE.json', selectable: false, reason_code: 'SOURCE_FORMAT_UNSUPPORTED' }
+    ]);
+    assert.deepStrictEqual(catalogue.filter(item => item.selectable).map(item => item.name), ['EINGABEN/synthetic.txt']);
+    assert.match(catalogue.find(item => item.selectable).source_id, /^[a-f0-9]{32}$/u);
+    const beforeUnsafe = catalogued.result.ui_context;
+    const unsafeCatalogue = await client.send('admit_selected_sources', '3'.repeat(16), {
+      source_kind: 'files', source_paths: [ownerFile, emptyFile], source_catalogue: true
+    });
+    assert.strictEqual(unsafeCatalogue.ok, false);
+    assert.strictEqual(unsafeCatalogue.error_code, 'SOURCE_SELECTION_REJECTED');
+    const afterUnsafe = (await client.send('get_ui_context', '3'.repeat(16))).result;
+    assert.deepStrictEqual(afterUnsafe.source_catalogue, beforeUnsafe.source_catalogue);
+    assert.strictEqual(afterUnsafe.catalogue_revision, beforeUnsafe.catalogue_revision,
+      'unsafe opt-in input must not partly commit the ordinary empty-file rejection');
+    await client.send('cancel_admission', '3'.repeat(16));
+    const blockedCatalogue = await client.send('admit_selected_sources', '3'.repeat(16), {
+      source_kind: 'files', source_paths: [oversizedFile, emptyFile], source_catalogue: true
+    });
+    assert.strictEqual(blockedCatalogue.ok, true);
+    assert.strictEqual(blockedCatalogue.result.selected_count, 0);
+    assert.deepStrictEqual(blockedCatalogue.result.ui_context.source_catalogue.map(item => ({
+      name: item.name, selectable: item.selectable, reason_code: item.reason_code
+    })).sort((a, b) => a.name.localeCompare(b.name)), [
+      { name: 'empty.md', selectable: false, reason_code: 'SOURCE_FILE_EMPTY' },
+      { name: 'synthetic.txt', selectable: false, reason_code: 'SOURCE_FORMAT_SIZE_LIMIT' }
+    ]);
+    await client.send('cancel_admission', '3'.repeat(16));
+    const largeCatalogueRoot = path.join(root, 'large-catalogue'); fs.mkdirSync(largeCatalogueRoot);
+    for (let index = 0; index < 201; index++) fs.writeFileSync(path.join(largeCatalogueRoot, `${index}.txt`), 'synthetic');
+    const largeCatalogue = await client.send('admit_selected_sources', '3'.repeat(16), {
+      source_kind: 'folder', source_paths: [largeCatalogueRoot], source_catalogue: true
+    });
+    assert.strictEqual(largeCatalogue.ok, true); assert.strictEqual(largeCatalogue.result.ui_context.source_catalogue.length, 201);
+    const overLimitStart = await client.send('start_admitted_batch', '3'.repeat(16), { processing_mode: 'markdown-only' });
+    assert.strictEqual(overLimitStart.ok, false); assert.strictEqual(overLimitStart.error_code, 'STANDALONE_SELECTION_INVALID');
+    assert.deepStrictEqual((await client.send('get_ui_context', '3'.repeat(16))).result.source_catalogue,
+      largeCatalogue.result.ui_context.source_catalogue, 'real sidecar preserves oversized discovery after a rejected start');
+    assert.throws(() => encodeFrame({ schema: 'datasecure-standalone-private-ipc/1',
+      request_id: '3'.repeat(16), action: 'admit_selected_sources', source_kind: 'files',
+      source_paths: [emptyFile], source_catalogue: 'true' }), { code: 'DESKTOP_IPC_SOURCE_KIND_INVALID' });
+    assert.throws(() => encodeFrame({ schema: 'datasecure-standalone-private-ipc/1',
+      request_id: '3'.repeat(16), action: 'get_public_state', source_catalogue: true }),
+    { code: 'DESKTOP_IPC_FIELD_INVALID' });
     const stopped = await client.send('shutdown', 'e'.repeat(16));
     assert.strictEqual(stopped.ok, true);
     assert.strictEqual((await bounded(child.closed, 'sidecar did not stop')).code, 0);
@@ -311,6 +476,78 @@ function removeOwnedRoot(root, initial) {
     assert.doesNotMatch(interactionLog, /source_paths|source_path|selected_files|raw_content|mapping|request_id/iu);
     process.stdout.write('✓ standalone sidecar exchanges bounded content-free frames\n');
 
+    // Exercise the actual v2 start contract through the sidecar AND worker.
+    // Store-only tests cannot detect the worker's former anonymize-only guard.
+    const { writeStandaloneRuntime } = await import('../scripts/lib/standalone-runtime-projection.mjs');
+    const { writeConversionRuntime } = await import('../scripts/lib/standalone-conversion-runtime.mjs');
+    const target = `${process.platform === 'win32' ? 'windows' : process.platform === 'darwin' ? 'macos' : 'linux'}-${process.arch === 'arm64' ? 'arm64' : 'x64'}${process.platform === 'linux' ? '-glibc' : ''}`;
+    const repo = path.resolve(__dirname, '..'), packagedServer = path.join(root, 'packaged-server');
+    writeStandaloneRuntime(path.join(repo, 'plugins/data-secure/server'), packagedServer, target);
+    writeConversionRuntime(repo, path.join(packagedServer, 'standalone/conversion-runtime'), target);
+    for (const scenario of [
+      { name: 'document-markdown', mode: 'markdown-only' },
+      { name: 'document-markdown-ocr', mode: 'markdown-only', ocr: true },
+      { name: 'document-anonymize', mode: 'markdown-and-anonymize' }
+    ]) {
+      const caseRoot = path.join(root, scenario.name); fs.mkdirSync(caseRoot);
+      fixtureRoots.push(caseRoot);
+      const env = isolatedEnvironment(caseRoot);
+      const file = path.join(caseRoot, 'synthetic.txt'), original = 'E-Mail: erika@example.org\nTechnologie: Java\n';
+      fs.writeFileSync(file, original);
+      const observer = path.join(__dirname, 'lib/standalone-sidecar-document-start.cjs');
+      const host = trackChild(childProcess.spawn(process.execPath, [`--require=${observer}`, path.join(packagedServer, 'standalone/desktop-sidecar.js')], {
+        stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, env: { ...env, DATASECURE_TEST_DOCUMENT_START_ROOT: caseRoot }
+      }), children);
+      const hostClient = protocolClient(host);
+      const selected = await hostClient.send('admit_selected_sources', '1'.repeat(16), {
+        source_kind: 'files', source_paths: [file], source_catalogue: true
+      });
+      assert.equal(selected.ok, true);
+      const started = await hostClient.send('start_admitted_batch', '2'.repeat(16), {
+        processing_mode: scenario.mode, document_review: true,
+        ...(scenario.ocr ? { ocr_contact_review: true } : {}),
+        ...(scenario.mode !== 'markdown-only' ? { output_naming_mode: 'neutral' } : {}),
+        source_ids: selected.result.ui_context.source_catalogue.map(item => item.source_id),
+        catalogue_revision: selected.result.ui_context.catalogue_revision
+      });
+      assert.equal(started.ok, true, `${scenario.name}: ${JSON.stringify(started)}`);
+      const batchId = started.result.batch_id;
+      assert.match(batchId, /^[a-f0-9]{64}$/u);
+      await waitForFile(path.join(caseRoot, 'worker-complete.json'), 25000);
+      await workerEnded(caseRoot);
+      const deadline = Date.now() + 25000;
+      let entry;
+      do {
+        const history = await hostClient.send('get_run_history', '3'.repeat(16));
+        assert.equal(history.ok, true);
+        entry = history.result.entries.find(row => row.batch_id === batchId);
+        if (entry?.failed_count) {
+          const failures = await hostClient.send('get_run_failures', '7'.repeat(16), { batch_id: batchId });
+          assert.fail(`${scenario.name}: ${JSON.stringify(failures)}`);
+        }
+        if (entry?.result_count === 1 && !['preparing', 'processing'].includes(entry.status)) break;
+        assert.ok(Date.now() < deadline, `${scenario.name}: missing completed durable run ${JSON.stringify(entry)}`);
+        await new Promise(resolve => setTimeout(resolve, 100));
+      } while (true);
+      assert.equal(entry.processing_mode, scenario.mode); assert.equal(entry.failed_count, 0);
+      const documents = await hostClient.send('get_document_reviews', '4'.repeat(16), { batch_id: batchId });
+      assert.equal(documents.ok, true, JSON.stringify(documents));
+      assert.equal(documents.result.processing_mode, scenario.mode);
+      assert.equal(documents.result.documents.length, 1);
+      const item = documents.result.documents[0];
+      const chunk = await hostClient.send('get_document_review_chunk', '5'.repeat(16), {
+        batch_id: batchId, document_id: item.document_id, revision: item.revision, chunk_index: 0
+      });
+      assert.equal(chunk.ok, true, JSON.stringify(chunk));
+      const text = chunk.result.markdown;
+      if (scenario.mode === 'markdown-only') assert.ok(text.includes('erika@example.org'), 'Markdown-only must retain original contact text');
+      else assert.ok(!text.includes('erika@example.org'), 'Anonymized document must not retain the original contact');
+      assert.equal(fs.readFileSync(file, 'utf8'), original);
+      assert.equal((await hostClient.send('shutdown', '6'.repeat(16))).ok, true);
+      assert.equal((await bounded(host.closed, 'document review sidecar did not stop', 10000)).code, 0);
+      process.stdout.write(`✓ real v2 worker creates durable history and review contents: ${scenario.name}\n`);
+    }
+
     // Exercise the actual private endpoint and actual product batch worker. Its
     // only fixture seam holds execution after a real durable intake/lease until
     // parent IPC disconnects; this makes the former referenced-channel leak
@@ -330,11 +567,16 @@ function removeOwnedRoot(root, initial) {
         }), children);
       const hostClient = protocolClient(host);
       assert.strictEqual((await hostClient.send('get_public_state', '1'.repeat(16))).ok, true);
-      assert.strictEqual((await hostClient.send('admit_selected_sources', '2'.repeat(16), {
-        source_kind: 'files', source_paths: [fixtureSource]
-      })).ok, true);
+      const excludedSource = path.join(caseRoot, 'excluded.txt');
+      fs.writeFileSync(excludedSource, 'Must not be processed: excluded@example.invalid');
+      const selection = await hostClient.send('admit_selected_sources', '2'.repeat(16), {
+        source_kind: 'files', source_paths: [fixtureSource, excludedSource], source_catalogue: true
+      });
+      assert.strictEqual(selection.ok, true);
+      const selectedId = selection.result.ui_context.source_catalogue.find(item => item.name === 'synthetic.txt').source_id;
       assert.strictEqual((await hostClient.send('start_admitted_batch', '3'.repeat(16), {
-        processing_mode: 'markdown-and-anonymize', output_naming_mode: 'neutral'
+        processing_mode: 'markdown-and-anonymize', output_naming_mode: 'neutral',
+        source_ids: [selectedId], catalogue_revision: selection.result.ui_context.catalogue_revision
       })).ok, true);
       const ready = await waitForFile(path.join(caseRoot, 'worker-ready.json'));
       assert.strictEqual(ready.progress.batch_total, 1);

@@ -3,7 +3,6 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const childProcess = require('node:child_process');
 const { createSuite } = require('./helpers');
 // Real gateway publication must use a plain private directory. macOS's
 // OS-owned temp alias is canonicalized by the fixture, not waived by storage.
@@ -637,20 +636,8 @@ test('Linux local dialog logic asks once for identical residual occurrences', ()
   assert.deepEqual(review.validateReviewResult(answer, draft).decisions.map(item => item.decision), ['keep', 'keep']);
 });
 
-test('real Windows form applies one residual decision to each same-spelling occurrence', () => {
-  if (process.platform !== 'win32') return;
-  const text = '[PERSON_001] – KEINE REALDATEN\n[PERSON_002] – KEINE REALDATEN';
-  const candidates = residualPersonAmbiguities(text, text, pii.scanResidual(text, profile, [], options));
-  const draft = review.buildReviewDraft(text, text, profile, candidates);
-  const script = review.powershellReviewScript().replace('[void]$form.ShowDialog()',
-    '$form.Add_Shown({ $keep.PerformClick(); $approve.PerformClick() }); [void]$form.ShowDialog()');
-  const executable = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'WindowsPowerShell', 'v1.0', 'powershell.exe');
-  const result = childProcess.spawnSync(executable, ['-NoProfile', '-NonInteractive', '-Sta', '-Command', script], {
-    input: JSON.stringify(draft), encoding: 'utf8', shell: false, windowsHide: true, timeout: 20000
-  });
-  assert.equal(result.status, 0, String(result.stderr || result.error || ''));
-  assert.deepEqual(review.validateReviewResult(JSON.parse(result.stdout), draft).decisions.map(item => item.decision), ['keep', 'keep']);
-});
+// The actual Windows form probe lives in test-native-windows-forms.js and
+// requires explicit desktop permission. Engine/policy integration stays here.
 
 async function main() {
   await testAsync('ordinary Standalone conversational names require a bound choice and preserve technical language', async () => {

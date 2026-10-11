@@ -59,17 +59,24 @@ function resolveSpans(spans) {
   return kept.sort((a, b) => a.start - b.start);
 }
 
-function applySpans(text, spans) {
+function applySpans(text, spans, applied) {
   const resolved = resolveSpans(spans);
   let out = '';
   let cursor = 0;
+  const edits = [];
   for (const span of resolved) {
     if (span.start < cursor) continue;
     out += text.slice(cursor, span.start);
     out += span.reserved ? text.slice(span.start, span.end) : span.replacement;
+    if (applied && !span.reserved && text.slice(span.start, span.end) !== span.replacement)
+      edits.push({ start: span.start, end: span.end, original: text.slice(span.start, span.end), replacement: span.replacement, kind: span.type,
+        ...(typeof span.identity_value === 'string' ? { identity: span.identity_value } : {}),
+        ...(typeof span.identity_key === 'string' ? { identity_key: span.identity_key } : {}) });
     cursor = span.end;
   }
-  return out + text.slice(cursor);
+  const result = out + text.slice(cursor);
+  if (applied) applied(text, result, edits);
+  return result;
 }
 
 function lineBoundsAt(text, index) {

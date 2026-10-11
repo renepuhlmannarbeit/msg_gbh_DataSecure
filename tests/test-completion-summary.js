@@ -416,11 +416,6 @@ test('detached native launch exceptions are sanitized and fallback failures neve
   }
 });
 
-test('the real Windows completion form initializes and closes through the test-only path', () => {
-  if (process.platform !== 'win32') return;
-  assert.strictEqual(showCompletionSummary({ selected_count: 2, released_count: 1, failed_count: 1 }, {
-    platform: 'win32', testAutoClose: true
-  }), true);
-});
+// Real form initialization/auto-close is opt-in: test-native-windows-forms.js.
 
 done();

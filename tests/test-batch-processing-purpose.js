@@ -152,6 +152,21 @@ test('filename purpose requires v6 while historical Standalone v4 remains source
   ]) assert.throws(() => resultNamingModeForBatch(invalid), /RESULT_NAMING_MODE_INVALID/u);
 });
 
+test('document review retention cannot be enabled or disabled in a persisted run', () => {
+  for (const fresh of [false, true]) {
+    const f = fixture();
+    try {
+      f.begin(MODES.ANONYMIZE);
+      const writer = f.newStore();
+      const loaded = writer.readState(token);
+      const changed = fresh ? JSON.parse(JSON.stringify(loaded)) : loaded;
+      changed.standalone_document_review = true;
+      assert.throws(() => writer.writeState(changed), error => error.code === 'BATCH_PROCESSING_MODE_CHANGED');
+      assert.equal(f.newStore().readState(token).standalone_document_review, undefined);
+    } finally { f.cleanup(); }
+  }
+});
+
 test('loaded-object and fresh-object resume cannot change the persisted anonymized filename choice', () => {
   for (const fresh of [false, true]) {
     const f = fixture();

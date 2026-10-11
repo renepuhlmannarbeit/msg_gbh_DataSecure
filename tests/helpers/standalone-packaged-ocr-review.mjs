@@ -148,7 +148,8 @@ export async function runPackagedOcrScenario({ request: initialRequest, restart,
   await send('continue_history_batch', { batch_id: row.batch_id });
   let ready = await until(async () => { const value = await send('get_review_session'); return value.ready ? value : false; }, 'first OCR draft');
   const firstDraft = await draftFor(ready);
-  assert.equal(firstDraft.ocr_contact_review, true); assert.equal(firstDraft.ambiguities.length, 2);
+  assert.equal(firstDraft.ocr_contact_review, true); assert.equal(firstDraft.ambiguities.length, 4);
+  assert.equal(firstDraft.contact_batch.documents.length, 2);
   await send('submit_review', { review_id: ready.review_id, answer: { action: 'deferred' } });
   await until(async () => (await send('get_review_session')).continuation_available, 'deferred OCR worker must settle before restart');
   request = await restart();
@@ -157,26 +158,35 @@ export async function runPackagedOcrScenario({ request: initialRequest, restart,
   await send('continue_history_batch', { batch_id: row.batch_id });
   ready = await until(async () => { const value = await send('get_review_session'); return value.ready ? value : false; }, 'resumed OCR draft');
   assert.deepEqual(await draftFor(ready), firstDraft, 'RESTART_MUST_RETAIN_EXACT_OCR_OCCURRENCES');
-  for (const [index, expected] of contactReferences.entries()) {
+  {
     const draft = await draftFor(ready);
-    assert.equal(draft.ocr_contact_review, true); assert.equal(draft.ambiguities.length, 2);
+    assert.equal(draft.ocr_contact_review, true); assert.equal(draft.ambiguities.length, 4);
     assert.equal(draft.processing_mode, markdownOnly ? 'markdown-only' : undefined);
+    const references = new Map();
+    for (const expected of contactReferences) {
     assert.ok(draft.original_text.includes(expected.email), 'OCR_REFERENCE_DOCUMENT_BINDING_INVALID');
-    assertOriginalContactPixels(draft, fixtures.get(expected.name));
+    const document = draft.contact_batch.documents.find(item => item.source_label === expected.name);
+    assert.ok(document, 'CONTACT_DOCUMENT_FILENAME_MISSING');
+    const candidates = draft.ambiguities.filter(item => document.candidate_ids.includes(item.ambiguity_id));
+    assert.equal(candidates.length, 2);
+    assertOriginalContactPixels({ ambiguities: candidates }, fixtures.get(expected.name));
+    candidates.forEach(item => references.set(item.ambiguity_id, expected));
+    }
     // Explicit reference-bound test decisions only: never guessed replacements.
     // Deliberately DIFFERENT synthetic replacements prove application, not
     // merely that an action named "correct_contact" was accepted.
     const decisions = draft.ambiguities.map(item => {
       assert.ok(['email', 'phone'].includes(item.contact_kind));
       return { ambiguity_id: item.ambiguity_id, decision: 'correct_contact',
-        replacement: item.contact_kind === 'email' ? expected.corrected : correctedPhone };
+        replacement: item.contact_kind === 'email' ? references.get(item.ambiguity_id).corrected : correctedPhone };
     });
     await send('submit_review', { review_id: ready.review_id, answer: { action: 'reviewed', redactions: [], decisions } });
-    if (markdownOnly && index === contactReferences.length - 1) break;
+    if (!markdownOnly) {
     const previous = ready.review_id;
     ready = await until(async () => {
       const value = await send('get_review_session'); return value.ready && value.review_id !== previous ? value : false;
-    }, index === 0 ? 'next OCR document in the same review workflow' : 'both corrected privacy inputs must reach entity review');
+    }, 'both corrected privacy inputs must reach entity review after ONE contact-table answer');
+    }
   }
   // The contact phase covers ALL documents before ordinary entity review.
   // Prove both distinct replacements reached the actual privacy input, then

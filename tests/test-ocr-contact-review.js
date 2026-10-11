@@ -10,7 +10,7 @@ const { createPrivateWorkStore } = require('../plugins/data-secure/server/gatewa
 const { createReviewBroker } = require('../plugins/data-secure/server/standalone/review-broker');
 const { encodeFrame, FrameDecoder } = require('../plugins/data-secure/server/standalone/desktop-ipc');
 const { createMarkdownExtraction } = require('../plugins/data-secure/server/standalone/markdown-contract');
-const { test, done, assert } = createSuite('Source-bound pre-privacy OCR contact review');
+const { test, testAsync, done, assert } = createSuite('Source-bound pre-privacy OCR contact review');
 const text = 'E-Mail: garbled@business.invalid\nTelefon: +49 40 1234567\nName: Amina Lindenfels';
 function input(source = text) { return { original_text: source, source_type: 'png',
   contacts: contactSpans(source, contactQuality({}, source)) }; }
@@ -171,4 +171,46 @@ test('transport contact shapes never authorize a contact action against an entit
   assert.throws(() => broker.submit(decoded.review_id, decoded.answer), error => error.code === 'STANDALONE_REVIEW_DECISION_INVALID');
   assert.equal(broker.session().ready, true);
 });
+test('multi-document contact adapter preserves exact Unicode/CRLF offsets and splits DIFFERENT corrections of identical readings', () => {
+  const { buildContactBatch, resolveContactBatch } = require('../plugins/data-secure/server/gateway/ocr-contact-batch');
+  const entries = ['one.png', 'sub/two.pdf'].map(source_label => ({ source_label,
+    input: input('A\u0308\u200b\r\nE-Mail: same@wrong.invalid') }));
+  const bundle = buildContactBatch(entries);
+  assert.equal(bundle.draft.contact_batch.documents.length, 2);
+  assert.ok(bundle.draft.original_text.includes('A\u0308\u200b\r\n'));
+  const outcome = resolveContactBatch(bundle, answer(bundle.draft, { 0: 'first@new.invalid', 1: 'second@new.invalid' }));
+  assert.deepEqual(outcome.answers.map((value, index) => applyContactAnswer(entries[index].input, value)),
+    ['A\u0308\u200b\r\nE-Mail: first@new.invalid', 'A\u0308\u200b\r\nE-Mail: second@new.invalid']);
+  assert.deepEqual(bundle.draft.decision_groups, []);
+  for (const mutation of [draft => draft.contact_batch.documents[1].candidate_ids = draft.contact_batch.documents[0].candidate_ids,
+    draft => draft.contact_batch.documents[0].candidate_ids = ['foreign'], draft => draft.contact_batch.documents.pop(),
+    draft => draft.contact_batch.documents[0].source_label = 'bad\nname', draft => draft.contact_batch.extra = true]) {
+    const draft = structuredClone(bundle.draft); mutation(draft); assert.throws(() => validateContactDraft(draft));
+  }
+  assert.throws(() => buildContactBatch([entries[0], { ...entries[1], input: { ...entries[1].input, processing_mode: 'markdown-only' } }]));
+});
+
+testAsync('contact collection splits 400+1, never publishes, and resumes only complete documents after a write failure', async () => {
+  const { createBatchContactReview } = require('../plugins/data-secure/server/gateway/batch-contact-review');
+  const items = [200, 200, 1].map((count, index) => ({ id: index, source_label: `input-${index}.png`,
+    input: input(Array(count).fill('E-Mail: same@wrong.invalid').join('\n')) }));
+  const stored = new Map(), groups = [];
+  let failWrite = true;
+  const contactStore = { write(_state, item, _input, value) {
+    if (item.id === 1 && failWrite) { failWrite = false; throw Object.assign(new Error('write failed'), { code: 'OCR_CONTACT_REVIEW_INVALID' }); }
+    stored.set(item.id, value);
+  } };
+  const reviewContacts = createBatchContactReview({ contactStore,
+    captureDeferredReviewInput: async (_state, item) => stored.has(item.id) ? {} : { ocr_contact_input: item.input },
+    convertNext: () => { throw Error('must not convert Markdown in anonymization'); } });
+  const deps = { reviewTextLocally: async draft => { groups.push(draft.ambiguities.length); return answer(draft); } };
+  await assert.rejects(() => reviewContacts({ processing_mode: 'markdown-and-anonymize' }, items, deps));
+  assert.deepEqual(groups, [400]); assert.deepEqual([...stored.keys()], [0]);
+  await reviewContacts({ processing_mode: 'markdown-and-anonymize' }, items, deps);
+  assert.deepEqual(groups, [400, 201]); assert.deepEqual([...stored.keys()], [0, 1, 2]);
+  const noWrites = createBatchContactReview({ contactStore: { write() { throw Error('must not write invalid group'); } },
+    captureDeferredReviewInput: async (_state, item) => ({ ocr_contact_input: item.input }) });
+  await assert.rejects(() => noWrites({}, items.slice(2), { reviewTextLocally: async () => ({ action: 'reviewed', redactions: [], decisions: [] }) }));
+});
+
 done();

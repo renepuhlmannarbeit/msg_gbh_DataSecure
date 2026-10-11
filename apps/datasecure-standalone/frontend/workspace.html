@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DataSecure Standalone</title>
+  <link rel="stylesheet" href="design-tokens.css"><link rel="stylesheet" href="workspace.css">
+  <script src="workspace.js" defer></script><script src="document-review.js" defer></script>
+</head>
+<body>
+<main class="workspace">
+  <header class="brand-header">
+    <div class="brand-row"><span class="eyebrow">GBH DATASECURE</span><span class="pill local"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 3 4 6v6c0 4 4 7 8 9 4-2 8-5 8-9V6z"/><path d="m8 12 3 3 5-6"/></svg>Lokal · ohne Upload</span></div>
+    <h1>Dokumente lokal vorbereiten</h1>
+    <p class="lead">In Markdown umwandeln – auf Wunsch anonymisiert. Originale bleiben unverändert.</p>
+  </header>
+  <nav class="navigation" aria-label="Hauptbereiche">
+    <div class="nav-tabs" role="tablist" aria-label="Arbeitsbereiche">
+      <button id="nav-new" class="nav-tab active" role="tab" aria-selected="true" aria-controls="new-view">Neue Verarbeitung</button>
+      <button id="nav-history" class="nav-tab" role="tab" aria-selected="false" aria-controls="history-view" tabindex="-1">Verlauf <span id="open-count" class="pill warning" hidden></span></button>
+      <button id="nav-settings" class="nav-tab settings-tab" role="tab" aria-selected="false" aria-controls="settings-view" tabindex="-1"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="m9 3-.5 3-2 1-2.5-1-2 4 2 2v2l-2 2 2 4 2.5-1 2 1 .5 3h6l.5-3 2-1 2.5 1 2-4-2-2v-2l2-2-2-4-2.5 1-2-1-.5-3z" transform="translate(0 -1) scale(1 .95)"/><circle cx="12" cy="12" r="3"/></svg>Einstellungen</button>
+    </div>
+  </nav>
+  <p id="feedback" class="notice" role="status" hidden></p>
+  <p id="job-announcement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></p>
+  <section id="new-view" class="card" role="tabpanel" aria-labelledby="nav-new">
+    <div id="setup">
+      <div class="card-section">
+        <h2 class="step-heading"><span class="step-number">1</span> Aufgabe wählen</h2>
+        <fieldset class="task-cards"><legend class="sr-only">Verarbeitung</legend>
+          <label class="task-card"><input id="mode-markdown" name="mode" type="radio" value="markdown-only"><span><strong>Nur umwandeln</strong><span>Text aus Dokumenten, Tabellen, Folien, PDFs und Bildern in Markdown übernehmen. Scans per lokaler Texterkennung.</span><small>Originalinhalte bleiben erhalten – nicht anonymisiert</small></span></label>
+          <label class="task-card"><input id="mode-anonymize" name="mode" type="radio" value="markdown-and-anonymize"><span><strong>Umwandeln und anonymisieren</strong><span>Namen, Adressen, Kontaktdaten und Firmen im Markdown ersetzen.</span><small>Unklare Fundstellen vor der Bereitstellung lokal prüfen</small></span></label>
+        </fieldset>
+        <label id="ocr-option" class="option" hidden><input id="ocr-review" type="checkbox"> OCR-Kontaktwerte anhand des Originalbilds prüfen</label>
+      </div>
+      <div id="file-section" class="card-section files-section">
+        <h2 class="step-heading"><span class="step-number secondary">2</span> Dateien hinzufügen</h2>
+        <div id="drop-zone" class="drop-zone" role="region" aria-label="Dateiaufnahme">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 16V4m-5 5 5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></svg>
+          <strong>Dateien oder Ordner hierher ziehen</strong>
+          <div class="button-row"><button id="select-files">Dateien auswählen</button><button id="select-folder">Ordner auswählen</button></div>
+          <p>TXT, MD, CSV, DOCX, XLSX, PPTX, PDF, PNG, JPEG, BMP · bis 200 Dateien / 500 MB · Unterordner werden einbezogen</p>
+        </div>
+        <p id="admission-status" class="meta" role="status" hidden>Dateien werden gelesen …</p>
+        <div id="catalogue" class="file-box" hidden>
+          <div class="file-box-heading"><svg class="icon folder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 7V5h7l2 2h9v13H3z"/></svg><strong id="set-name">Dateiauswahl</strong><span id="catalogue-count" class="meta"></span><button id="expand-all" class="text-button trailing">Alle aufklappen</button></div>
+          <div class="file-toolbar"><label><input id="select-all" type="checkbox"> <strong id="selection-count">0 ausgewählt</strong></label><span class="spacer"></span><button id="choose-all" class="text-button">Alle auswählen</button><button id="choose-none" class="text-button">Alle abwählen</button><button id="clear-files" class="text-button muted">Liste leeren</button></div>
+          <div id="source-tree" class="source-tree" aria-label="Quellen nach Ordnern"></div>
+          <div id="selection-summary" class="file-summary" role="status"></div>
+          <p id="selection-limit" class="selection-limit" role="status" hidden></p>
+          <div class="file-add"><button id="add-more" class="text-button" aria-expanded="false" aria-controls="add-options">+ Weitere hinzufügen</button><div id="add-options" class="button-row" hidden><button id="add-files">Dateien auswählen</button><button id="add-folder">Ordner auswählen</button></div></div>
+        </div>
+      </div>
+      <div class="card-footer start-row">
+        <div class="destination"><span class="meta">Ergebnisse werden gespeichert in</span><strong id="destination">Wird geladen …</strong><button id="change-destination" class="text-button">Ordner ändern</button></div>
+        <div class="start-control"><button id="start" class="primary" aria-disabled="true" aria-describedby="start-hint">Verarbeitung starten <span aria-hidden="true">→</span></button><span id="start-hint" class="meta">Bitte Aufgabe und Dateien auswählen.</span></div>
+      </div>
+    </div>
+    <div id="job" hidden>
+      <div class="job-bar"><span class="meta uppercase">AUFTRAG</span><strong id="job-task"></strong><span class="divider">·</span><strong id="job-name"></strong><span id="job-count" class="meta"></span><button id="job-files-toggle" class="text-button trailing" aria-expanded="false" aria-controls="job-files">Dateien anzeigen ⌄</button></div>
+      <ul id="job-files" class="job-files" hidden></ul>
+      <div class="card-section job-content">
+        <div class="job-status"><span id="job-icon" class="status-icon" aria-hidden="true"></span><div><h2 id="job-title" tabindex="-1">Verarbeitung wird vorbereitet</h2><p id="job-description" class="muted"></p></div></div>
+        <div id="file-problems" class="file-problems" hidden><h3>Dateien mit Hinweisen</h3><div id="problem-list"></div></div>
+        <progress id="job-progress" max="1" aria-label="Abgeschlossene Dateien"></progress>
+        <p id="job-current" class="meta"></p>
+        <div id="job-actions" class="button-row"></div>
+      </div>
+    </div>
+  </section>
+  <section id="history-view" class="card" role="tabpanel" aria-labelledby="nav-history" hidden>
+    <div class="card-section"><div class="section-heading"><div><h2>Deine letzten Verarbeitungen</h2><p class="muted">Offene Prüfungen und Ergebnisse bleiben diesem Gerät zugeordnet.</p></div><button id="refresh-history">Aktualisieren</button></div>
+    <p id="history-status" class="meta" role="status"></p><div id="history-list" class="history-list"></div></div>
+  </section>
+  <section id="settings-view" class="card" role="tabpanel" aria-labelledby="nav-settings" hidden>
+    <div class="card-section"><h2>Einstellungen</h2><p class="muted">Alles bleibt lokal. Kein Konto und kein App-Passwort erforderlich.</p>
+      <div class="setting-row"><div><h3>Ergebnisordner</h3><p id="settings-destination" class="path"></p><p class="meta">Änderungen gelten für künftige Verarbeitungen.</p></div><button id="configure-results">Ordner ändern</button></div>
+      <div class="setting-row"><div><h3>Diagnose</h3><p class="meta">Technische Fehlercodes, ohne Dateinamen, Pfade oder Dokumentinhalte.</p></div><button id="diagnostics">Diagnose öffnen</button></div>
+      <div class="setting-row"><div><h3>Vertrauliche Zuordnungen</h3><p class="meta">Enthalten echte Identitäten. Nicht an KI weitergeben. Keine automatische Löschung.</p></div><button id="identities">Lokalen Ordner öffnen</button></div>
+    </div>
+  </section>
+  <section id="review-view" hidden role="tabpanel" aria-labelledby="nav-history"><div class="review-heading"><h2 id="review-heading" tabindex="-1">Lokale Prüfung</h2><span id="review-scope" class="meta">Entscheidungen gelten für diesen Lauf</span></div><iframe id="review-frame" title="Fundstellen gemeinsam prüfen" src="about:blank"></iframe></section>
+  <section id="documents-view" class="card" hidden role="tabpanel" aria-labelledby="documents-heading">
+    <div class="card-section">
+      <div class="section-heading"><div><span class="eyebrow">DOKUMENTPRÜFUNG · NUR LOKAL</span><h2 id="documents-heading" tabindex="-1">Prüfen und für KI exportieren</h2><p id="documents-run" class="meta"></p></div><button id="documents-back">Zur Verarbeitung</button></div>
+      <p id="documents-purpose" class="muted">Technische Verarbeitung ist noch keine Freigabe. Vergleiche Quelle und Markdown. Häkchen wählen nur aus; erst die Sammelaktion speichert deine Freigabe.</p>
+      <p id="documents-status" class="notice" role="status"></p>
+      <section id="documents-unavailable" class="notice error" aria-label="Nicht verfügbare oder unklare Dokumentprüfstände" hidden></section>
+      <button id="documents-reload" class="text-button">Gespeicherten Stand neu laden</button>
+      <div id="documents-identity-reference" class="button-row"><button id="documents-identities">Aktuelle Zuordnung (vertraulich)</button><p class="meta">Für die verfügbaren gespeicherten Dokumentstände, nicht für KI. Exportbelege öffnen ihre damalige Zuordnung separat. Keine automatische Löschung.</p></div>
+      <section id="document-recovery-draft" class="file-problems" hidden aria-labelledby="document-recovery-label"><h3 id="document-recovery-label"></h3><textarea id="document-recovery-text" readonly spellcheck="false" aria-label="Nicht bestätigter Korrekturentwurf"></textarea><button id="document-recovery-discard">Diesen erhaltenen Entwurf ausdrücklich verwerfen</button></section>
+      <details id="documents-export-receipts" hidden><summary>Gespeicherte Exportbelege</summary><p class="meta">Diese lokalen Belege dokumentieren abgeschlossene Kopiervorgänge, auch nach einer verlorenen Empfangsbestätigung. Sie prüfen nicht, ob Dateien später verändert oder gelöscht wurden. Eine vertrauliche Zuordnung gehört ausschließlich zu den damaligen exportierten Dokumentständen und wird nicht in den KI-Ordner kopiert.</p><ul id="documents-export-receipt-list"></ul></details>
+      <div class="documents-toolbar"><label><input id="documents-all" type="checkbox"> Alle auswählen</label><span id="documents-selected" class="meta">0 ausgewählt</span><span class="spacer"></span><button id="documents-approve">Auswahl freigeben</button><button id="documents-revoke">Freigaben widerrufen</button><button id="documents-export" class="primary">Auswahl für KI exportieren</button></div>
+      <div class="documents-layout">
+        <div id="documents-list" class="documents-list" aria-label="Dokumente dieses Laufs"></div>
+        <div class="document-detail">
+          <h3 id="document-name" tabindex="-1">Dokument auswählen</h3><p id="document-revision" class="meta"></p>
+          <div class="button-row document-pagination"><button id="document-previous">Vorherige Datei</button><span id="document-position" class="meta"></span><button id="document-next">Nächste Datei</button></div>
+          <div class="document-comparison"><label>Extrahierter Originaltext<textarea id="document-original" readonly spellcheck="false" aria-label="Extrahierter Originaltext"></textarea></label><label>Geplanter Markdown-Text<textarea id="document-markdown" readonly spellcheck="false" aria-label="Geplanter Markdown-Text"></textarea></label></div>
+          <div class="button-row"><button id="document-redact">Markierten Text zusätzlich maskieren</button><button id="document-restore">Zum technisch geprüften Basisstand</button><button id="document-save-correction" hidden>Markdown-Korrektur speichern</button><button id="document-discard-correction" hidden>Eingaben verwerfen</button></div>
+          <p id="document-edit-hint" class="meta">Diese Textansicht zeigt noch keinen vollständigen Entitätenplan. Zusätzliche Maskierungen und Rückkehr zum Basisstand heben die Freigabe auf. Kein freies Einfügen von Originalwerten. Private Prüfstände bleiben lokal gespeichert und gehören nicht in KI-Uploads.</p>
+          <section id="document-entities" hidden aria-labelledby="document-entities-heading">
+            <h3 id="document-entities-heading">Erkannte Stellen gemeinsam bearbeiten</h3>
+            <p class="meta">Häkchen wählen nur aus. Gleiche vollständige Personen- oder Unternehmensidentitäten können gemeinsam im ganzen Lauf behandelt werden; nachweislich zugeordnete Aliasse folgen ihnen. Kontakte, nicht eindeutig zugeordnete Nachnamen und unklare Aliasse bleiben dateibezogen. Jede Änderung hebt betroffene Freigaben auf; vor dem Export wird jeder neue Text erneut geprüft.</p>
+            <div class="entities-toolbar"><label><input id="entities-all" type="checkbox"> Sichtbare auswählen</label><label>Behandlung <select id="entities-decision"><option value="default">Technisch geprüfte Ersetzung</option><option value="person">Als Person ersetzen</option><option value="organization">Als Unternehmen ersetzen</option><option value="keep">Originalwert beibehalten</option></select></label><label>Anwenden auf <select id="entities-scope"><option value="run">Gesamten Lauf · gleiche Identität</option><option value="document">Nur diese Datei</option></select></label><button id="entities-apply">Auswahl anwenden</button></div>
+            <p id="entities-count" class="meta" role="status"></p>
+            <div class="entity-table-wrap"><table class="entity-table"><thead><tr><th scope="col">Auswahl</th><th scope="col">Originalwert</th><th scope="col">Geplante Ausgabe</th><th scope="col">Status</th></tr></thead><tbody id="entities-list"></tbody></table></div>
+            <div class="button-row"><button id="entities-previous">Zurück</button><span id="entities-page" class="meta"></span><button id="entities-next">Weiter</button></div>
+          </section>
+        </div>
+      </div>
+    </div>
+  </section>
+  <dialog id="document-export-dialog" aria-modal="true" aria-labelledby="document-export-title" aria-describedby="document-export-purpose">
+    <div class="export-dialog-content">
+      <h2 id="document-export-title">Auswahl exportieren</h2>
+      <p id="document-export-purpose"></p><p id="document-export-target" class="path"></p>
+      <div id="document-export-preview"><h3>Enthalten · neutrale Dateinamen</h3><ul id="document-export-files"></ul>
+        <div class="export-exclusions"><h3>Nicht enthalten</h3><p>Originaldateien, Identitätszuordnung, Dateizuordnung, private Prüfstände und technische Begleitdateien.</p></div>
+      </div>
+      <p id="document-export-result" role="status" hidden></p>
+      <label id="document-export-abandon-option" hidden><input id="document-export-abandon-check" type="checkbox"> Diesen unvollständigen Exportauftrag nicht weiter verfolgen. Bereits geschriebene Dateien werden nicht gelöscht.</label>
+      <div class="button-row"><button id="document-export-close" autofocus>Abbrechen</button><button id="document-export-abandon" hidden>Auftrag nicht weiter verfolgen</button><button id="document-export-confirm" class="primary">Exportieren</button></div>
+    </div>
+  </dialog>
+  <footer class="page-footer"><span>Nur lokal · Originale bleiben unverändert · OCR und Extraktion können Auslassungen enthalten</span><span id="product-version"></span></footer>
+</main>
+</body>
+</html>

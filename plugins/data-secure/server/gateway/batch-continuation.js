@@ -141,6 +141,7 @@ function createBatchContinuation(options = {}) {
         item.status = 'pending'; item.checkpoint = 'resumed'; delete item.error_code;
         changed = true;
       }
+      if (options.resumeStandalonePause?.(state)) changed = true;
       if (changed) writeState(state);
       if (!state.items.some((item) => ['pending', deliveryPendingStatus, deferredReviewStatus,
         mappingPendingStatus, preflightMappingPendingStatus].includes(item.status) ||

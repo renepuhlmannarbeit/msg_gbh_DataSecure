@@ -1,6 +1,592 @@
 # Aktueller Iststand
 
-Stand: 06.10.2026 · 3.2.0-rc158 · Windows/macOS RC158 veröffentlicht · Linux bleibt RC157 · Cowork bleibt RC151
+Stand: 08.10.2026 · 3.2.0-rc159 · Windows/macOS RC158 veröffentlicht · Linux bleibt RC157 · Cowork bleibt RC151
+
+## Prototyp v2: laufende lokale Migration (DS-110 / BL-010.53)
+
+**Prerelease-Vorbereitung, 11.10.2026:** Auf ausdrücklichen Anwenderauftrag wird
+RC159 für vier Zielplattformen zum Testen vorbereitet. Der gemeinsame native
+Einstieg ist jetzt `workspace.html` (1280 × 900, weiterhin verkleinerbar), ohne
+Engineering-Override. Neue Paket-/Workflow-Nachweise werden erst nach tatsächlich
+bestandenen Läufen eingetragen. Vorhandene Nachweise unten bleiben an ihren
+damaligen Quellstand gebunden; keine allgemeine Bedien-/Qualitätsfreigabe.
+Vorhandene GitHub-Buildworkflows sind für diesen Lauf ausdrücklich autorisiert,
+lokale Desktopbedienung weiterhin nicht.
+
+**Aktueller lokaler Teststand RC159, 08.10.2026 – Übergang nach Fundstellen:**
+Der gemeldete r10-Lauf hatte seine OCR-/Entitätsentscheidungen gespeichert,
+aber noch keine nachträglichen Dokumentfreigaben. Der Hauptbutton lud nur eine
+Status-Momentaufnahme. RC159 öffnet nach nativ bestätigtem Fundstellenabschluss
+direkt die Ergebnisprüfung desselben Laufs; der Verlaufs-Hauptbutton öffnet
+ebenfalls direkt die tatsächliche Dokumentliste. Metadaten bleiben sekundär.
+Die Oberfläche unterscheidet Fundstellenabschluss, Dokumentfreigabe und Export;
+keine automatische Auswahl, Freigabe oder Kopie. Native Sitzungsgeneration,
+Antwortbesitz und eingefrorener Schließzustand schützen gegen verspätete
+Status-/Schließantworten. Die unabhängige Read-only-Gegenprüfung fand eine
+späte Statusantwort nach manuellem Verlassen; Korrektur und Regression ergänzt.
+50 Workspacefälle bestehen, darunter die echte Dokumentrenderer-Integration
+mit 72 noch nicht freigegebenen Dokumenten, Folgegeneration, Reconnect,
+manuelles Vertagen und fehlgeschlagener Abschluss. 108 Windows-Rustfälle und
+Clippy ohne Warnungen bestehen; drei Subprozess-Helfer sind nicht selbständige
+Standardtests. Neue Offline-/Locked-Windows-Kompilierung und Paketverifier grün.
+Lokales Paket: `dist/engineering-workspace-v2-windows-rc159-20261008/`.
+Archiv-SHA-256: `78cb99f0f97323bc44b1858d9c10ca94106881cd20a359a6a1090eb9a6ca66e0`.
+611 Einträge, 111.026.437 Bytes; 190 Serverprojektionen sowie EXE in Archiv,
+Stage und frischer Kompilierung bytegleich. Echter isolierter Paket-Sidecar-Smoke
+besteht für beide Zwecke, Folgegruppen, Person/Firma, Vertagen/Neustart,
+OCR-Originalpixel/Korrektur und Fehlerdateinamen. Das ist kein Tauri-/WebView-
+Interaktionsnachweis. Sichtbare Windows-Abnahme beim Anwender; Desktopfreigabe
+weiterhin entzogen, Mac-Abnahme offen. Kein Commit/Push/Actions/Release.
+
+**RC159-Gesamtgegenprobe ohne Desktop abgeschlossen:**
+`tmp/rc159-headless-20261008.log`: alle 218 Nicht-GUI-Testdateien bestehen
+(97 Basis plus 121 direkte), einschließlich tatsächlicher Node-/Rust-
+10.001-Kontakt-Exporte, Pause, Wiederherstellung und Prozessgrenzen.
+996-Dateien-Scope zu Testbeginn:
+`be12a924fe0d5bb251c53f001b7b0be9da32148311721191ead8f7179ea009f5`.
+Währenddessen nur die Standalone-README auf RC159-Testhinweise aktualisiert;
+die übrigen 995 Dateien dieses Scopes sind unverändert:
+`52d3541af48dde634ca885874f3b1425d2a8a7dcd0d9ebba6e9dc146c23a9109`.
+Dokumentations-/installierte strenge Pluginstruktur-/Diffgates bestehen separat.
+Windows-Vollprofil verweigert mangels Desktopfreigabe mit Exit 77 vor Teststart;
+sechs Formularfälle und native Tauri-/Mac-Bedienabnahme bleiben `NOT_RUN`.
+Allgemeiner Release-/Cowork-Bau bleibt `BUNDLED_PLUGIN_SOURCE_COMMIT_INVALID`,
+aktuelles Cowork-ZIP fehlt. Dies ist lokale Engineering-Testbereitschaft, kein
+Gesamtprodukt-/Release-PASS. Paketnachweis neben dem ZIP: `PRUEFNACHWEIS.json`.
+
+**RC159-Qualitätsmessung erneuert, nicht rückwirkend freigegeben:**
+`dist/quality-rc159-transition-20261008/BERICHTE/QUALITAET.json` bindet Version,
+Laufzeit, Konverter, Auswerter und Referenz neu. 72 Varianten in beiden Wegen
+technisch umgewandelt; 55 Referenz-Kontaktbestätigungen, neun Korrekturen und
+202 Entitäts-Vorkommensentscheidungen, keine ungebundene Entscheidung.
+Finale und rohe Lesart gegen dieselben Enddateien: jeweils 310 bewertete
+sensible Vorkommen, null bekannte Reste/unbewertete Stellen oder Sachwortverlust.
+Neun rohe OCR-E-Mail-Leseabweichungen unverändert: Standardprofil
+`pass_with_warnings`, strenges Profil `QUALITY_EXTRACTION_WARNINGS_OPEN`.
+Workerbereinigung bestätigt. Kein unabhängiger menschlicher Referenz-/nativer
+GUI-/exakter Releasepaketnachweis; frühere RC158-Berichte sind historische Evidence.
+
+**Qualitätspriorisierung vom 08.10.2026:** Auf Anwenderwunsch werden rohe
+OCR-Lesegenauigkeit, finale Privacy und Sachinhaltserhalt getrennt bewertet.
+Nur vollständig bewertete rohe E-Mail-Leseabweichungen mit tatsächlich
+erfasstem und korrigiertem Privacy-Eingang können im Engineering-Gate Warnungen
+sein; sie werden nicht als behobene OCR-Fehler ausgegeben. Enddateien werden
+gegen die korrigierte und die ursprüngliche OCR-Lesart geprüft (`final` /
+`raw_final`), auch bei kopierten stark abweichenden Rohadressen. Telefonfehler
+sind nicht Teil der Warnungsausnahme. Strenges Extraktions-
+profil bleibt separat. Restdaten, fehlende Inhalte, unbewertete/gestoppte
+Ausgaben, partielle/veraltete Nachweise und unbestätigte Bereinigung bleiben
+Sperrgründe. Laufzeitprüfpflicht unverändert, keine Release-/Mac-Freigabe.
+Neun Roh-OCR-E-Mail-Abweichungen bleiben BL-050.6; stabile native Workflow- und
+Paketabnahme hat Vorrang. Methodik: [Qualitätsmessung](../DETECTOR_BENCHMARK.md).
+
+**Früherer RC158-Nachweis dieser Trennung:**
+`dist/quality-headless-boundary-20261008/BERICHTE/QUALITAET.json` bindet den
+damaligen Laufzeit-/Konverter-/Auswerterstand und die Referenz. 72/72 Varianten
+konvertiert und publiziert; 55 gebundene synthetische Kontaktbestätigungen,
+neun explizite Referenzkorrekturen und 202 Entitäts-Vorkommensentscheidungen.
+Finale Gegenprüfung beider Lesarten: jeweils 310 bewertete sensible Vorkommen,
+null bekannte Reste/unbewertete Stellen und kein gemessener Sachwortverlust.
+Neun rohe OCR-E-Mail-Leseabweichungen bleiben sichtbar: geprüftes Engineering-
+profil `pass_with_warnings`, strenges Extraktionsprofil
+`QUALITY_EXTRACTION_WARNINGS_OPEN`. Vorheriger Messentwurf ist überholt und
+wird vom Herkunftsgate abgewiesen; nicht rückwirkend grün. Die unabhängige
+Gegenprobe fand eine durch Referenzkorrektur verdeckte Rohadress-Lesart;
+zusätzlicher `raw_final`-Check schließt diese Messlücke. 39 Bewerter-/Bericht-
+fälle und `test:quality` bestehen. Keine Produkt-Laufzeitregel abgeschwächt;
+kein Commit/Push/Release, kein Desktop-/Mac-/exakter Paketnachweis.
+
+**Historische Grenze des Gesamtprüflaufs zur Messpolicy:** `test:product` wurde wegen der
+entzogenen Desktopfreigabe bewusst abgebrochen, nicht als PASS gewertet.
+`tests/test-residual-person-review.js` enthielt eine automatisch bediente echte
+Windows-Formularprobe mit `ShowDialog()`; `windowsHide` ist keine Garantie für
+unsichtbare Formularfenster. Weitere solche Proben standen in
+`tests/test-companion-processor.js` und wurden in diesem Lauf nicht erreicht.
+Gezielte Qualitätsprüfung und 72-Varianten-Messung sind davon getrennt.
+Protokoll: `tmp/quality-classified-product-final-20261008-1620.log`.
+993 ausführungs-/testbestimmende Quelldateien waren vor/nach dem Lauf identisch
+(`d559c1f1a5d5c26e6aad1fb48a202a1a2a9d70e5744232db93221dcc541fef15`).
+Die nachfolgenden früheren 217-Dateien-PASS-Nachweise gelten nicht automatisch
+für die spätere Messpolicy.
+
+**Testabgrenzung anschließend implementiert, BL-010.53.8:** Read-only-
+Gegenprüfung identifizierte insgesamt sechs tatsächliche Windows-GUI-Fälle,
+einschließlich der zuvor übersehenen Abschlussansicht. Alle sechs sind mit
+ihren bisherigen Assertions nach `tests/test-native-windows-forms.js` verlegt,
+mit einheitlich 20 Sekunden Prozessfrist. `test:product:headless` führt alle
+Nicht-GUI-Dateien des Vollprofils aus; CI/Standalone bleiben ohne diese Dialoge.
+`test:product` auf Windows und beide Native-UI-Eingänge verweigern ohne
+`--allow-native-ui` vor jedem Test-/Prozessstart den Lauf (Exit 77). Getrennte
+Statusmeldung `NOT_RUN` statt stiller Skip oder Gesamtgrün; auf Nicht-Windows
+sind diese Windows-Fälle `NOT_APPLICABLE`. 11 neue Guard-/Plan-/CLI-Gegenfälle
+und 12 bestehende Testpfadverträge bestehen. Anschließend besteht der vollständig
+neu gestartete Headless-Integrationslauf mit 218 Testdateien (97 Basis plus 121
+direkte), einschließlich echter Node-/Rust-Exporte mit 10.001 Kontakten und
+Windows-Prozessgrenzen. Protokoll: `tmp/native-ui-separated-headless-20261008.log`.
+996 vorhandene getrackte/nicht ignorierte ungetrackte Dateien unter
+`plugins/`, `apps/`, `scripts/`, `tests/`, `benchmarks/` sowie `package*.json`
+waren vor/nach dem Lauf identisch
+(`b1a154019941ddcd71597f603a3c97200c46b55afbdd57f6cfe84f574f11ed45`).
+Dies ist der damalige vollständige Nicht-GUI-Nachweis, kein Voll-/Release-PASS.
+Sechs Formularfälle bleiben `NOT_RUN`; native Tauri-/Mac-/Paketabnahme bleibt
+offen. Desktopfreigabe weiterhin entzogen, keine Oberfläche bedient.
+
+Der reguläre Windows-Vollaufruf und beide Native-UI-Aliase verweigern tatsächlich
+mit Exit 77 vor Teststart. Dokumentationsgates, strenge installierte Claude-
+Pluginprüfung und `git diff --check` bestehen. Normaler Gesamt-/Cowork-Paketbau
+bleibt an `BUNDLED_PLUGIN_SOURCE_COMMIT_INVALID` gesperrt; aktuelles Cowork-ZIP
+fehlt weiterhin. Kein Commit, Push, Actions-Start oder Release.
+
+Die Änderung der Testbefehle in `package.json` macht den vorherigen Bericht
+`quality-classified-final-20261008` korrekt `QUALITY_REPORT_STALE`. Deshalb wurde
+die vollständige 72-Varianten-Messung erneut ausgeführt, nicht das Herkunftsgate
+gelockert. Neuer Bericht siehe oben; Workerbereinigung bestätigt, identische
+55 Kontaktbestätigungen/neun Korrekturen/202 Entitätsentscheidungen, finales
+Ergebnis beider Lesarten ohne bekannte Referenzreste oder Sachverlust.
+Standardgate grün mit neun Warnungen; strenges und altes Herkunftsgate rot.
+Keine menschliche, native GUI-/Mac- oder exakte Paketabnahme.
+
+**Lokale Windows-Testversion r10 bereitgestellt, 08.10.2026:** Auf Anwenderwunsch
+liegt der korrigierte Stand unter
+`dist/engineering-workspace-v2-windows-20261008-r10/`. Neue Offline-/Locked-
+Releasekompilierung aktiviert nur in diesem Engineeringbau `workspace.html`
+mit Fenstertitel „lokaler Test r10“; Produktversion bleibt 3.2.0-rc158.
+Archiv-SHA-256: `1bf1ca259f1edb0a1bb45b27500bc8c8b88ffabcb79908c10d1683b3cba659c7`.
+Verifier und echter isolierter Paket-Sidecar-Smoke bestehen: beide Zwecke,
+passive PDF/PPTX/eingebettete XLSX, Firmen-/Personenentscheidungen, Folgegruppen,
+Vertagen/Neustart, OCR-Originalpixel/Korrekturen und genaue Fehlerdateinamen.
+Alle 190 projizierten Serverdateien sind bytegleich zum damaligen Quellstand;
+Paket-EXE und Stage sind bytegleich zur frischen Kompilierung. Der oben genannte
+996-Dateien-Digest ist auch vor/nach diesem Bau unverändert und bindet den
+218-Dateien-Headless-PASS. Zusätzlich frisch: Workspace 42, Dokumentrenderer 42,
+Stapelrenderer 39 und Native-UI-Guard 11 Fälle grün. `TESTHINWEISE.txt`,
+`BUILD-CONFIG.json` und `PRUEFNACHWEIS.json` liegen neben dem ZIP.
+Kein r10-App-/WebView-Start, kein nativer GUI-/Mac-/vollständiger Release-
+Paketworkflow-Nachweis. Die sichtbare Windows-Bedienabnahme übernimmt der
+Anwender. Neun rohe OCR-Warnungen und die übrigen Backlogpunkte bleiben offen;
+die Qualitätsmessung bindet Quellen/Konverter, nicht dieses exakte Archiv.
+Ältere Pakete erhalten; kein Commit, Push, Actions oder Release.
+
+**Spätere umfassende Gegenprüfung r9, 08.10.2026:**
+[Review R9-20261008](../REVIEW_STANDALONE_R9_2026-10-08.md) dokumentiert drei
+vom Hauptreview reproduzierte P2-Fehler: alter sichtbarer Dokumentvergleich bei
+Freigabe einer frisch geladenen Revision, ignorierte akzeptierte Pause im
+Review-Publikationspfad und ein erst beim Export auftretendes 10.001-Kontaktlimit
+der vertraulichen Übersicht. Zwei native Kontrollgrenzen sind statisch belegt:
+v2-Publikations-I/O kann die Antwortfrist umgehen; Sidecar-Retirement hängt nach
+Kanalfehlern von einem weiteren RPC ab. Keine reale OS-I/O-Blockade und kein
+neuer P1-Freigabebypass nachgewiesen. Dieser erste Reviewstand ist inzwischen
+überholt durch den Korrektur-/Gegenprüfungsnachtrag desselben Berichts:
+Dokumentbindung, Pauseclaims/Entscheidungserhalt, große Kontaktübersicht,
+asynchrone native Publikation und unmittelbare besitzgebundene Bereinigung
+sind lokal implementiert und gezielt geprüft. 108 Windows-Rusttests, Clippy,
+42 Dokumentrendererfälle, 42 Workspacefälle und der echte 10.001-Kontakt-
+Freigabe-/Node-/Rustexport samt Übersichtswiederlesen bestehen. Ein bei der
+Gegenprüfung entdecktes Wiederverbindungsbudget-Rennen und mutable Ausgabe-
+Bindung von Ausstellerentscheidungen wurden ebenfalls korrigiert. Die danach
+vollständig neu gestartete Produktsuite besteht mit 217 Testdateien (96 Basis
+plus 121 direkte); der korrigierte Quellscopedigest ist vor/nach dem Lauf
+identisch. Windows-Releasekompilierung, Dokumentationsgates und strenge
+installierte Claude-Pluginstrukturprüfung bestehen ebenfalls. Normaler
+Gesamt-/Cowork-Paketbau bleibt separat an der Herkunftsprüfung des schmutzigen
+Arbeitsstands gesperrt; das aktuelle Cowork-Archiv fehlt.
+Keine Desktopbedienung oder native Mac-/exakte Paketabnahme daraus ableiten;
+die alte r9-Paketbytebindung belegt nicht die neuen Korrekturen.
+BL-010.53 bleibt in Arbeit, keine allgemeine v2-Freigabe.
+
+Frische Windows-Qualitätsmessung unter `dist/quality-r9-review-20261008/`:
+72 Varianten technisch ohne Konvertierungsabbruch, neun rohe OCR-E-Mail-
+Abweichungen. Nach gebundenen synthetischen Prüfentscheidungen null bekannte
+Lecks und kein gemessener Sachwortverlust; keine menschliche Referenzabnahme
+oder Messung am exakten Releasearchiv. Das damals frische All-findings-Gate
+meldete ausschließlich `QUALITY_FINDINGS_OPEN`; dieser Bericht ist nach den
+nachfolgenden Quellkorrekturen und der neuen Messpolicy nicht mehr aktuell.
+Der r9-Verifier,
+Bytevergleich aller 190 projizierten Serverdateien und nativen EXE, 106 Windows-
+Rusttests und warning-free Clippy bestehen. Auch die neu gestartete vollständige
+Produktsuite besteht am vor/nach dem Lauf unveränderten r9-Quellscopedigest:
+217 Testdateien (96 Basis plus 121 direkte), einschließlich letztem Undo-Delta.
+Dokumentationsgates und installierte Claude-CLI-Strukturvalidierung bestehen.
+Normaler Produktbuild bleibt wegen
+ungebundenem schmutzigem Arbeitsstand rot (`BUNDLED_PLUGIN_SOURCE_COMMIT_INVALID`);
+das aktuelle Cowork-Produktarchiv fehlt, getrennt vom vorhandenen r9-Standalone-
+Testarchiv. Kein neuer Desktopzugriff, GUI-Start, Commit, Push, Release oder
+Actions-Start; neue native Mac-/sichtbare Bediennachweise bleiben offen.
+
+**Archivierter Windows-Teststand, 08.10.2026 (r9):**
+`dist/engineering-workspace-v2-windows-20261008-r9/` belegt den früheren
+Reviewstand. Das Archiv enthält die oben beschriebenen neuen Korrekturen
+nicht und ist kein Abnahmenachweis dafür. Für neue Tests gilt der oben
+gebundene korrigierte r10-Stand.
+Archiv-SHA-256: `f7de84085dd12e6862efcd599dfa0088141ec2747046c08dedfcf367747955c1`.
+Der abschließende unabhängige Konsistenzreview fand noch einen Undo-Fehler:
+Beim Rückgängigmachen einer Zurücksetzung wurden wiederhergestellte Entscheidungen
+durch „Noch offen“ unsichtbar. Undo wählt jetzt abhängig von den betroffenen
+restaurierten Zeilen „Vorgemerkt“, „Noch offen“ oder bei Mischung „Alle“;
+Vergleich/Seite und Statushinweis passen dazu, keine versteckte Auswahl oder
+automatische Übergabe. Zwei neue Regressionen waren davor rot, danach bestehen
+39 Prüfer- und 41 Workspace-Fälle. Der unabhängige Nachreview bestätigt genau
+diesen begrenzten Schnitt. Windows-r9 ist neu kompiliert und verifiziert;
+auch die echten Paket-Sidecar-Abläufe bestehen einschließlich OCR-Korrektur
+beider Zwecke, Firmen-/Personenentscheidungen, Folgeprüfung und Neustart.
+Der vorausgehende Gesamtprodukteingang bestand mit 217 Testdateien
+(96 Basis plus 121 direkte), hatte den früheren 37-Fall-Prüfer jedoch vor dem
+letzten Undo-Delta ausgeführt. Dieses Delta wurde zunächst separat mit allen
+39 Prüfer- und 41 Workspace-Fällen nachgeprüft. Die spätere umfassende
+Gegenprüfung oben ergänzt nun den vollständig neu gestarteten eingefrorenen
+r9-Gesamtlauf mit allen 217 Testdateien; kein allgemeiner Release-Nachweis.
+Keine r9-GUI gestartet oder bedient; Desktop-Freigabe bleibt entzogen.
+Die sichtbare Windows-Bedienabnahme übernimmt der Anwender.
+
+**Vorausgehender Korrekturschnitt, 08.10.2026 (r8):** Für neue Tests ersetzt
+`dist/engineering-workspace-v2-windows-20261008-r8/` das r7-Paket.
+Archiv-SHA-256: `b562c0ddb067bf02ae14f341ad4d6d7ec6079830577c959d6bf60e3cf9102c90`.
+Die zwei gemeldeten Nur-Markdown-Starts scheiterten im echten Worker vor der
+dauerhaften Laufanlage an `PROCESSING_MODE_INVALID`: Der neue Dokumentprüf-
+Schalter wurde irrtümlich nur für Anonymisierung akzeptiert. Er ist jetzt auch
+für neue Standalone-Markdown-Läufe erlaubt; Zweck-, Kanal- und Bool-Prüfung
+bleiben erhalten. Drei echte projizierte Sidecar-/Worker-Gegenproben bestätigen
+dauerhaften Verlauf und Dokumentinhalt für Markdown mit/ohne OCR-Prüfung sowie
+Anonymisierung. Auswahl allein startet oder navigiert weiterhin nicht.
+
+Die Sammelprüfung beginnt mit „Noch offen“. Vormerken entfernt behandelte
+Zeilen nur aus dieser Ansicht und füllt mit den verbleibenden offenen Zeilen
+auf. „Alle gefilterten Zeilen auswählen“ erfasst ausdrücklich auch Folgeseiten,
+trifft aber noch keine Entscheidung. Bei vollständig vorgemerkter Gruppe sind
+Abschlussaufforderung und ausdrückliche Übergabe sichtbar; unter „Vorgemerkt“
+bleiben Kontrolle/Änderung und Rückgängig möglich. Vergleich und Originalpixel
+folgen der sichtbaren Zeile, leere Filter zeigen keinen alten Vergleich.
+37 Prüfer- und 41 Workspace-Rendererfälle bestehen, einschließlich 50+14,
+64-Zeilen-Sammelauswahl, off-page Eingabekonflikt, Filter und Rückgängig.
+Erst nach bestätigtem Start wechselt die App zum Verlauf und hebt den verbundenen
+aktiven Lauf mit Arbeitsindikator/Dateifortschritt hervor. Native Windows-
+Kompilierung, Archiv-Verifier und echte r8-Paket-Sidecar-Abläufe bestehen.
+
+Die r8-GUI-Instanz wurde mit neuem isoliertem Profil geöffnet; nach Entzug der
+Desktop-Freigabe wird sie nicht weiter bedient. Kein vollständiger nativer
+r8-Bediennachweis und keine Mac-Abnahme daraus ableiten. Der Anwender testet
+den neuen Schnitt selbst. Keine Veröffentlichung, Commits, Pushes oder Actions.
+
+**Vorausgehender lokaler Nachweis, 08.10.2026:** Engineering-Paket r7 unter
+`dist/engineering-workspace-v2-windows-20261008-r7/` ersetzt r3–r6 für neue
+Tests. SHA-256: `bb603fdf95e6487f39131e8a4582976a18cdaa095c8f4b05ab9a168cda91e8ad`.
+Die automatische Wiederverbindung ist nun implementiert: zufällige native
+Besitzergeneration, sequenzierte Invalidierung alter UI-Antworten, tatsächliches
+Ende des alten Sidecars und aller nativen Aufträge vor Besitzerwechsel. Start,
+Entscheidungen und Exportbestätigungen werden niemals automatisch wiederholt.
+Private Textansichten/Auswahlen werden verworfen und ausdrücklich neu geladen.
+106 Windows-Rusttests bestehen; drei weitere Einträge sind Kindhelfer,
+keine separat ausgeführten Abnahmen. Clippy ist warnungsfrei.
+
+Die tatsächliche r7-Windows-GUI-Kette wurde mit einem isolierten Profil und
+drei synthetischen Quellen beobachtet: native Ordnerwahl, Start, direkte
+integrierte Prüfung, drei gruppierte Entscheidungen für sieben Fundstellen
+über zwei Dokumente (Unternehmen/Person/Beibehalten), ausdrückliche Übergabe,
+sichtbare Warteanzeige, automatischer Rückweg, Original-/Markdown-Vergleich,
+Auswahl ohne Freigabe, Sammelfreigabe und getrennter bestätigter KI-Export.
+Die absichtlich beschädigte `03-defekt.csv` bleibt mit `PARSE_FAILED` benannt
+und blockiert die gesunden Dokumente nicht. Der Export enthält exakt zwei
+neutrale Markdown-Dateien, keine Zuordnung oder privaten Begleitdateien;
+erwartete Ersatzmarker und unveränderte Quellhashes sind nachgeprüft.
+Kontrollierter Ausfall nur des eigenen r7-Sidecars nach Exportabschluss:
+automatische Wiederverbindung, ausdrückliche Neuladung mit erhaltenen Freigaben,
+genau ein unveränderter Export. Reguläres Schließen beendet App und Sidecar.
+Dies ist agentisch beobachtete begrenzte native Engineering-Evidenz,
+keine menschliche N3/N4-, vollständige Accessibility- oder Mac-Abnahme.
+
+Dabei wurden zwei echte Fehler geschlossen: Der Dokumentrenderer wies gültige
+Verarbeitungsfehler wie `PARSE_FAILED` zurück; nun zeigt er den begrenzten Code
+als Text mit Dateiname und sperrt gesunde Dokumente nicht. Der native Export
+verglich die Schlüsselreihenfolge einer Identitätsauswahl statt ihrer Werte;
+semantisch gleiche über Tauri umgeordnete Felder werden jetzt akzeptiert,
+Revision/Hash/Zugehörigkeit bleiben streng geprüft. Der Regressionstest war
+vor der Korrektur rot; 39 Dokument-/Export- und sieben echte Node/Pipe/Rust-
+Fälle bestehen danach. Ein unabhängiger begrenzter Review bestätigt die
+Korrektur. Der erneute Gesamtprodukteingang besteht mit 217 Testdateien
+(96 Basis plus 121 direkte). Paket-Verifier und tatsächlicher r7-Paket-Sidecar
+bestehen. Einzeldatei-Retry/Auslassen, vollständige Grafik-/Accessibility-
+Abnahme, native neue Mac-Pakettests und sauber gebundener Releasebuild bleiben
+offen. Keine Standardumschaltung, Veröffentlichung, Commits, Pushes oder Actions.
+
+Dokumentationsprüfung und `git diff --check` sind auch nach dieser Aktualisierung
+grün. Ein zusätzlicher isolierter Nur-Markdown-GUI-Versuch wurde vor dem Start
+abgebrochen: Das Desktop-Testwerkzeug meldete für den sichtbaren Quellenpicker
+ungültige Fenstergeometrie. Daraus wird weder ein bestandener Ablauf noch ein
+App-Fehler abgeleitet. Die eigenen identitätsgeprüften Testprozesse sind beendet;
+Testprofile und Nachweise bleiben erhalten. Der unabhängige Retry-Review hat
+zusätzlich Quellenbereinigung, unveränderliche Fehler-/Basisstände und
+abschlussgebundene Evidenz als notwendige Versuchsversionierungsgrenzen
+bestätigt; Umsetzung und Negativfälle bleiben in BL-010.53.7 offen.
+
+**Vorausgehende lokale Windows-Testbarkeit, 08.10.2026 (r3):** Engineering-Paket r3 unter
+`dist/engineering-workspace-v2-windows-20261008-r3/` aktiviert ausschließlich
+für diesen Bau `workspace.html`. Archiv-SHA-256:
+`f95c3ff09aa6f18da552e48d12852a5e4e53386340a483df9e15d5e2b14e6cba`.
+Verifier und tatsächliche Paket-Sidecar-Abläufe beider Zwecke einschließlich
+Folgeprüfungen/OCR/Vertagen/Neustart bestehen. Nativer Windows-Start belegt
+geladene Haupt-/Prüfseite und erfolgreiche private IPC, **nicht** den kompletten
+v2-GUI-/Exportablauf. Synthetische Browserprüfung bei 720 × 560 bestätigt
+erreichbare Sammelaktionen ohne Seitenüberlauf; initialer Fokus wurde korrigiert,
+damit der Vergleich nicht die Prüfliste verdeckt. Die Vorschau-Bereitschaft
+entspricht nun ihrem simulierten Ergebnisstatus. Keine neue Releaseversion,
+keine Standardumschaltung, kein Commit/Push/Actions-Start. Einzeldatei-Retry,
+Wiederverbindung, vollständige Grafik-/native GUI-Abnahme und beide neuen
+Mac-Paketprüfungen bleiben offen. r2 ist durch r3 ersetzt: Der Gesamtprüflauf
+fand anschließend eine fehlende Bindung von `privacy/transform-plan.js` an die
+dauerhafte Regelversion. Diese ist ergänzt; 25 Pseudonym-/Versionsfälle und
+neun echte Produktprojektions-/Neustartfälle bestehen. Eine unabhängige lesende
+Gegenprüfung bestätigt die Korrektur. Frühere unvollständige Engineering-Läufe
+mit anderer Regelversion werden absichtlich nicht automatisch migriert.
+Der vollständige lokale Produkteingang besteht nach dieser Korrektur mit
+217 Testdateien (96 Basis plus 121 direkte Tests). Dokumentationsgates und
+`git diff --check` bestehen ebenfalls. Releasebuild stoppt weiter am
+uncommitteten gebundenen Quellstand, das neue Pluginarchiv fehlt; keine
+allgemeine Freigabe aus dem lokalen Engineering-Bau ableiten.
+Weitere Teilschnittnachweise folgen unten.
+
+Der klickbare Anwenderprototyp ist die verbindliche grafische Referenz, nicht
+nur eine Farbvorlage. Drei unabhängige lesende Gegenprüfungen zu Verträgen,
+Export und Interaktion sind in den [Migrationsabgleich](../frontend-migration.md)
+eingeflossen. Neue Hauptoberfläche, lokale Inter-Schrift, Radio-Karten,
+hierarchische Häkchenauswahl, laufgebundene Ansicht, Verlauf/Einstellungen und
+integrierte Sammelprüfung sind im unveröffentlichten Arbeitsstand implementiert.
+Auswahl und Korrektureingabe treffen keine Entscheidung; eine zentrale Aktion
+merkt vor, erst die vollständige Gruppenübergabe sendet an den Worker.
+
+Der servergebundene Quellenkatalog kann reguläre ungeeignete Dateien einzeln
+mit Endung und festem Grund anzeigen. IDs und Katalogrevision werden beim
+Start erneut geprüft; Hinzufügen erhält Ausschlüsse. Dieser tolerante Weg
+wird nativ nur für die neue Hauptseite aktiviert. Legacy und Cowork behalten
+ihre strikte Aufnahme. Der öffentliche CLI-Status erhält keine Lauf-ID; die
+Laufbindung ist ausschließlich Teil des privaten lokalen UI-Kanals.
+
+Der neue Einstieg ist **noch nicht Standard und nicht vollständig nativ
+abgenommen**. Ein gesondertes lokales Windows-Engineering-Paket aktiviert ihn
+bereits; seine begrenzten Nachweise stehen unten. Persistierte Pause/Fortsetzung sowie nachträgliche Freigaben
+hashgebundener Text-Prüfstände und ein getrennter ausgewählter KI-Export sind
+jetzt als weiterer unveröffentlichter v2-Schnitt implementiert. Die Pause
+serialisiert ihren dauerhaften Intent mit dem Dateiclaim; die aktive Datei
+wird einschließlich Zuordnung beendet. Kontrollfehler stoppen keine Quellen.
+Eine echte TXT-Gateway-Gegenprobe prüft beide Modi, Neustart/Fortsetzung und
+unveränderte erste Ausgabe; nachgelagert auch tatsächliche Freigabe/Exportbytes.
+Der Dokumentprüfstand enthält extrahierten Originaltext, final geprüftes
+Markdown und einen reversiblen Plan aus tatsächlichen Core-Ersetzungen;
+sichtbare importierte Marker werden nicht rückwärts als Entitäten interpretiert.
+Person/Firma/Beibehalten/Basisstand sind revisionsgebunden, zusätzliche
+Maskierung sperrt überlappende Wiederherstellung. Laufweite Entscheidungen
+verwenden exakte vollständige Identitäten; nachweislich gebundene Aliasse folgen,
+mehrdeutige Nachnamen und Kontakte nicht. Ein gemeinsamer Commit projiziert alle
+betroffenen Dokumente konsistent. Jede Änderung widerruft deren Freigabe.
+Reine Markdown-Nachkorrektur ist als begrenzte Bereichsersetzung implementiert;
+ihre Kopien bleiben ausdrücklich nicht anonymisiert und außerhalb des KI-Exports.
+Sequenzierte Zustandsereignisse, komplette native Windows-/Mac-v2-Paketabnahme
+und deren Abschlussreview bleiben offen. Der separate Metadatenkatalog ist auf 1.000 Dateien
+und 512 KiB für die gesamte Aufnahmeantwort einschließlich Artefaktdetails und
+privatem Antwortumschlag begrenzt. Die 200-Dateien-/500-MiB-Grenze greift
+erst nach der Häkchenauswahl, erneut serverseitig vor jedem Start.
+Browserprüfungen verwenden klar markierte synthetische
+Daten; sie belegen nicht die Verarbeitung genau dieser Beispieldateien.
+Neun bekannte rohe OCR-E-Mail-Abweichungen bleiben getrennt im Qualitätsgate.
+Die vorherige lokale Produktvollsuite des ersten v2-Teilschnitts bestand mit
+206 Testdateien (87 Basis plus 119 direkte Tests). Der vorausgehende Versuch fand einen veralteten History-
+Testaufbau ohne reguläre Dateiaufnahme; dieser verwendet nun den echten
+Aufnahmeweg. Die anschließende vollständige Wiederholung dieses Teilschnitts bestand.
+Der jetzt erweiterte Eingang enthält 217 Testdateien. Der vorherige Versuch
+stoppte am unveränderten Git-Tracking-Check. Die neuen v2-Dateien sind inzwischen
+explizit zur Versionierung vorgemerkt (Intent-to-add, kein Commit). Der nächste
+Gesamtlauf fand die zuvor fehlende Transformationsspur in der Regelversionsbindung;
+nach der Korrektur besteht die vollständige Wiederholung mit 96 Basis- und
+121 direkten Testdateien. Dieser Quellnachweis ersetzt weder Releasebuild noch
+vollständige native v2-Bedienabnahme.
+Aktuell bestehen zusätzlich sieben Pausefälle (echte
+Gateway-Verarbeitung beider Modi/Neustart), 38 Dokument-/Exportfälle mit realen
+lokalen Dateien, 31 Dokumentrendererfälle, 12 vertrauliche Zuordnungsfälle, 12 tatsächliche Transformationsspurfälle,
+8 reversible Entitätenfälle, 11 laufweite Entscheidungsfälle, 14 Runner- und
+15 Zweckbindungsfälle. Die Browserprobe der
+Dokumentansicht bestätigt Auswahl ohne Entscheidung, explizite Sammelfreigabe,
+separaten Export und Reflow bei 390/900 Pixeln mit rein synthetischen Daten.
+Das UTF-8-Prüfstandbudget entspricht der bestehenden Zeichenobergrenze;
+beim Export werden private Textkörper nicht für alle Dokumente gleichzeitig
+gesammelt. Der genaue Dateiname und Fehlergrund bleiben auch nach einem
+fehlgeschlagenen Freigabeaufruf und anschließender Statusabfrage sichtbar.
+Unicode-Paare bleiben auch an Übertragungsblockgrenzen vollständig. Unbestätigte
+Exportaufträge werden nach Ansichts-/Prozessneustart mit derselben Auswahl
+wiederentdeckt; eine ausdrückliche Empfangsbestätigung wird getrennt gespeichert.
+Die Wiederentdeckung kopiert oder bestätigt nichts automatisch. Bereits bestätigte
+Abschlussbelege bleiben auch dann sichtbar, wenn die Antwort auf die Bestätigung
+verloren ging; sie sind ausdrücklich historische Belege, keine erneute Prüfung
+der heutigen Exportdateien. Nur der nächste offene Auftrag plus Gesamtzahl wird
+an die Oberfläche übertragen. Reale Neuprozess- und Renderer-Gegenproben decken
+verlorene Antworten und späteren Widerruf ab. Ein ausdrücklicher Verzicht auf
+einen unvollständigen Teil-Exportauftrag ist implementiert, ohne ursprünglichen
+Auftrag oder vorhandene Dateien zu ändern/löschen. Fertige Exporte bieten nur
+Empfangsbestätigung. Der modale Vorschau-/Bestätigungsdialog startet vor seiner
+Bestätigung kein I/O. Die native Erstbindung ist inzwischen angeschlossen;
+ihre vollständige Zielhost-/Paketabnahme bleibt vor der v2-Freigabe offen.
+Fertige neue Exporte lassen sich über ihre gespeicherten Lauf-/Operations-IDs
+öffnen; ursprünglicher Zweck, Verzeichnisidentität, Dateimenge und Hashes werden
+erneut geprüft. Es wird weder erneut kopiert noch automatisch bestätigt.
+Gegenproben weisen veränderte, zusätzliche, fehlende und ausgetauschte Dateien
+ab; native Explorer-/Finder-End-to-End-Abnahme bleibt offen. Der echte Sidecar
+erhält jetzt feste Dokument-/Exportfehlergründe bis zur Oberfläche.
+Im Verlauf ist ein ausdrücklich ausgelöster laufgebundener Abgleich aktueller
+Freigaben und historischer Exportbelege implementiert. Unvollständige Aufträge
+und offene Empfangsbestätigungen bleiben getrennt; Legacy ohne v2-Manifest ist
+unbekannt, fehlende/defekte Prüfstände sind kein Null-Erfolg. Reguläre Abfragen
+laden nicht automatisch alle Dokumentjournale. Verspätete Antworten werden
+verworfen. Die synthetische Tastatur-/DOM-Probe bestätigt Aufklappen, Legacy-
+Anzeige, Fokus und 390-Pixel-Reflow, keine native Paketabnahme.
+Priorisierte Hauptaktionen je Lauf und aufklappbare Nebenaktionen sind jetzt
+implementiert. Exakte aktuelle Exportabdeckung dedupliziert fertige Teil-Exporte
+und prüft Revision/Hash/Zweck, nicht nur die Anzahl historischer Kopien.
+Exportvorschau lädt den vollständigen aktuellen Stand nochmals; sie startet
+keinen Export. Fehlender Ergebnisordner, ersetztes Verzeichnis und unlesbare
+Bindung bleiben unterscheidbar. Der unabhängige Review fand einen P2 bei
+überholten Ladesperren nach Zuklappen oder parallelem Ordneröffnen; zwei zunächst
+rote Regressionen sind korrigiert. 32 Workspacefälle bestehen. Die synthetische
+Browserkette Freigabe → Verlauf → Exportvorschau → Escape sowie 390-Pixel-Reflow
+ist geprüft, kein nativer Plattformnachweis. Kein doppelter initialer Ladebutton.
+Die P1-Gegenprüfung präzisierte den nötigen nativen Exportbroker: Alle Ziel-I/O
+müssen handle-relativ erfolgen; eine gehaltene Lease mit anschließenden Node-
+Absolutpfadzugriffen reicht nicht. Sichere macOS-Erstbindung bleibt gesondert
+nachzuweisen. Dieser vorausgehende Review war Architekturvorbereitung;
+der spätere tatsächliche Anschluss ist unten gesondert belegt.
+Der normale Ergebnisordner bleibt auf ausdrücklichen Anwenderwunsch erhalten,
+keine ZIP-Umstellung. Der unabhängige Fachreview beschreibt private vollständige
+Vorbereitung und native No-replace-Veröffentlichung als begrenzten Lösungsweg.
+Ein erster interner nativer Dateisystembaustein war zunächst implementiert,
+aber noch nicht an Node, CLI oder Tauri-Befehle angeschlossen. Zwölf echte Windows-
+Gegenproben bestehen: handle-relative Anlage, No-replace-Veröffentlichung,
+32 konkurrierende Zielanlagen, gesperrter Rootaustausch, falsche/verschobene
+Stagebindung und ein Fehler nach tatsächlichem Rename. Der letzte Fall meldet
+ausdrücklich einen unklaren Publikationsstatus, keinen behaupteten Nicht-Export.
+Der folgende Schnitt ergänzt einen geschlossenen privaten Rückkanal für die
+Metadatenbindung exakt ausgewählter Ergebnisordner, native Lifecycle-Barriere
+und Korrektur der Sidecar-Start-/Registrierungslücke; kein neuer Exporthelper.
+Der interne Transaktionskern bindet Intent/Stage/Parents/Zweck/Dateimenge/Hashes
+dauerhaft und gleicht auch vor Verzicht eine mögliche Veröffentlichung ab.
+Zwei unabhängig belegte Befunde sind korrigiert: native lesende Recovery mit
+Parent-/Namensbindung und atomare vollständige Journalbelege statt halber
+Finaldateien. Zwölf Transaktionsregressionen einschließlich zwölf tatsächlicher
+Testprozess-Beendigungen bestehen. Kontrollierte private Parent-Rechte und ein
+dauerhafter Workspace-Bindungsbaustein sind zusätzlich implementiert: Sieben
+Workspacefälle einschließlich vier eigener Prozessbeendigungen prüfen Abbruch
+zwischen Intent, Parent-Anlage und Binding; unvollständige Belege erlauben keine
+Adoption. Ein Darwin-ACL-Vertragsfehler ist nach unabhängigem Review korrigiert;
+die neuen nativen Mac-ACL-Proben bleiben NOT_RUN. Die asynchrone Dokumentsperre
+hält jetzt bis zur tatsächlichen Promise-Erledigung (sechs gezielte Gegenproben).
+Insgesamt 100 Windows-Rusttests und warning-free Clippy bestehen. Zwei ignorierte
+Kindhelfer werden für 16 eigene Prozessbeendigungen von Eltern-Tests aufgerufen,
+nicht separat als PASS gezählt. Begrenzter unabhängiger Workspace-Abschlussreview
+ohne weiteren belegten P1/P2; keine vollständige App-Recoveryfreigabe.
+macOS-/Linux-Code ist noch nicht nativ ausgeführt. Der weitere v2-Schnitt
+verwendet jetzt statt des Node-Publishers einen nativen Exportbroker. Picker-
+Bootstrap und ursprüngliche Parent-Identitäten bleiben in Einstellungsschema 4
+und Operationsschema 5 gebunden. Freigegebene Körper gehen in begrenzten
+64-KiB-Blöcken über die private Pipe; nur Native schreibt sie handle-relativ in
+Operationsstages und veröffentlicht ohne Ersetzen. Zwei unabhängige P2 des
+ersten Anschlusses (Originaltext-Schreiben in einen ausgetauschten Spoolroot,
+gemeinsames Inventarlimit durch Körperreste) sind korrigiert und tatsächlich
+gegengeprüft. Ein Root-Trennungsfehler nach neuer Konfiguration ist ebenfalls
+korrigiert. Beide Zwecke bestehen im echten Node→Pipe→Rust-Dateisystemweg,
+einschließlich Lost-Completion/Widerruf/ACK/Abandon, Unicode-Multichunks und
+Rootaustausch. 103 Windows-Rusttests, warning-free Clippy, acht Kanal- und
+sieben Dokumentbesitzfälle bestehen. Drei ignorierte Rust-Helfer sind keine
+separaten Abnahmen. Desktop-Elternbesitz verhindert Freigaberennen nach
+Sidecar-Tod, bleibt dann aber bis zum vollständigen App-Neustart konservativ
+gesperrt. Sequenzierte Wiederverbindung und vollständige native v2-Pakettests bleiben
+offen. Kein Stromausfall-/vollständiger paketierter Abbruchnachweis und kein
+unsicherer Kopier-Fallback über Volumegrenzen; Legacy/Cowork bleiben unverändert.
+Terminale Dateifehler bleiben durch gebundene private Belege mit Namen und
+Grund nach Journalablauf lesbar. Fehlgeschlagene unveröffentlichte Entwürfe
+blockieren keine gesunden Prüfstände; sieben echte Gegenproben und unabhängiger
+Review bestehen. Einzelne Datei-Wiederholung/Auslassung ist noch nicht umgesetzt.
+Zusätzliche synthetische Browserprobe bestätigt zentrale Behandlung,
+Auswahl ohne Entscheidung, Original-/Markdown-Vergleich und 1280-/600-Pixel-
+Reflow; Auswahlspaltenumbruch korrigiert, keine neue native Grafikabnahme.
+Aktuelle vertrauliche Zuordnungen folgen jetzt tatsächlichen Entitätenrevisionen;
+zusätzlich bleibt jede neue exportgebundene Zuordnung bei den damaligen ausgewählten
+Revisionen/Hashes. Keine Rekonstruktion aus sichtbaren Markern oder mehrdeutigen
+Nachnamen. Echte Alias-, Firmenfeld-, Unicode- und Maskierungsgegenproben bestehen.
+Die unabhängige Zwei-Dateien-Manipulation (TXT plus angepasstes Digest) wird durch
+deterministisches Rendering aus dem gebundenen Objekt abgewiesen. Fehlende private
+Zuordnungen löschen keine fertigen Exportbelege oder ACKs. Die neue geschlossene
+native Öffnungsaktion überträgt nur IDs; echte gerahmte Sidecar-Gegenproben und
+synthetische Browser-Tastaturprobe bestehen, keine native Dateimanagerabnahme.
+Veröffentlichungseinträge außerhalb abgelaufener Verarbeitungsjournale erhalten
+die Namen fehlender Dokumentkörper; Lesen legt keine falschen Körperbelege an.
+Alte unbewiesene Quellen bleiben unbekannt, Roh-Markdown behält seinen Zweck.
+Offen bleiben die sichere Kopie der neuen Referenz in den menschlichen Ergebnis-
+bereich, Retry/Auslassen einzelner Fehlerdateien und vollständige Verlaufsabnahme.
+Neu revalidiert und korrigiert: Gemischte Aufnahme stoppt gültige Dateien nicht
+wegen hashloser abgewiesener Geschwister. Ausschließlich abgewiesene Eingaben
+behalten Namen mit Endung, Gründe und Zweck getrennt von Dokumentautorität.
+Metadaten werden bereits nach dem Aufnahmejournal gespeichert. Die unabhängigen
+Crash-/Ablaufgegenbefunde sind mit zuerst roten Tests korrigiert: Recovery,
+periodische Bereinigung und direkter Ablaufreader reparieren fehlende Manifeste
+vor Journalverlust; widersprüchliche Belege werden nicht überschrieben.
+Ein alter Null-Fehlerzähler verdrängt keine belegte Ablehnung. 27 Aufnahme-,
+24 Recovery-, 19 Journalfälle sowie echte Gateway-Neustarts beider Zwecke über
+alle drei Ablaufwege bestehen. Lokale Fehleransichten überleben Journalablauf,
+unvollständige Listen werden nicht als vollständig ausgegeben. Kein Einfluss
+auf Coworks Aufnahmevertrag und keine erfundene Freigabe oder Exportautorität.
+Stabile Laufaktions-IDs erhalten Tastaturfokus bei Fortschritt; entfallende
+Aktionen führen zur Laufüberschrift, nicht aus anderen Ansichten heraus.
+Die höfliche Statusregion meldet bedeutsame Phasen/Fehler statt jeden Zähler.
+Unabhängige begrenzte Browser-Tastaturgegenprobe besteht; native Accessibility-
+und v2-Paketabnahme bleiben offen.
+Unabhängige Gegenprüfungen bestätigten korrigierte Alias- und Journalendfehler:
+ein fehlender Entscheidungsspiegel wird nur aus einem exakten separat gespeicherten
+Commitnachweis rekonstruiert, widersprüchliche Belege sperren die Freigabe.
+Eine native Stromausfallgarantie oder Schutz vor gemeinsamem Verlust beider
+Kopien ist damit nicht belegt. Nach fehlgeschlagenem Zustandsabgleich sperrt die
+Oberfläche weitere Mutationen; Roh-Markdown-Entwürfe bleiben für Vergleich/Kopie
+erhalten. Der offene Exportdialog aktualisiert seine Wiederaufnahmeaktionen.
+Die Revalidierung anhand offizieller Tauri-, OWASP- und W3C-Kriterien ist im
+Migrationsabgleich dokumentiert, ohne pauschale Konformitätszusage.
+Aktuelle gezielte Gegenproben: 29 Workspace- und 33 Prüferfälle sowie
+57 Service- und 31 Ordnerfälle bestehen. Zwei weitere technische Gegenbefunde
+sind korrigiert und unabhängig revalidiert: Das Transportbudget zählt jetzt
+Unicode-Artefaktdetails vor dem Aufnahme-Commit; delegierte Starts verbrauchen
+sämtliche Katalog-IDs und Ablehnungen, auch bei unklarer Empfangsbestätigung.
+Neue Aufnahmen übernehmen keine alten Ablehnungen. Anzeigeinformationen des
+gestarteten Laufs bleiben getrennt erhalten.
+Die echte Sidecar-Gegenprobe nimmt 201 kleine Testdateien auf und verweigert
+deren ungefilterten Start ohne Verlust des Katalogs. Eine separate Browserprobe
+bestätigt Grenzhinweis/Startsperre und deren Aufhebung nach Abwahl einer Datei.
+52 Windows-Rusttests, Dokumentationsprüfung,
+Vorschaugrenzen und gepinnte Schrift-/Lizenzprüfung bestehen ebenfalls.
+Pause- und Dokument-/Exportregressionen sind auch im Standalone-Testeingang
+eingetragen, den die macOS-Paketworkflows verwenden. Der statische Workflowtest
+besteht; neue native macOS-Läufe wurden dadurch nicht ausgeführt.
+Eine vorausgehende Browserprobe korrigierte außerdem die zuvor aktiv wirkende
+Farbe des deaktivierten Exportbuttons und bestätigt den Fokus auf der
+Dokumentüberschrift sowie den wiedergeöffneten Exportbeleg. Bildschirmbeleg:
+`tmp/frontend-v2-ui/dokumentfreigabe-v2-export.png` (synthetische Vorschau).
+Die aktuelle Browserprobe bestätigt die laufweite Sammelaktion und unveränderte
+Texte vor deren Bestätigung, keine automatische Freigabe/Export und Reflow bei
+390/1280 Pixeln: `tmp/frontend-v2-ui/dokumententscheidung-laufweit-v2.png`.
+Die echte Browserprobe bestätigt zentrale Sammelaktionen, offene Restzeilen,
+Original-/Markdown-Vergleich, Reflow und stabile Fokusrückkehr anhand klar
+markierter synthetischer Daten. Der kompaktere Kopf und die gemeinsame
+Dokument-/Statuszeile lassen mehr Fundstellen sichtbar; vollständige Namen
+bleiben im lokalen DOM, Tooltip und ausgewählten Vergleich erhalten.
+Die anschließenden 33 Prüferregressionen und die unabhängige begrenzte
+Interaktionsgegenprüfung bestehen; Browserreflow bei 1280 und 900 Pixeln
+ist ohne horizontalen Seitenüberlauf geprüft.
+Der sichtbare Verlauf aktualisiert Laufzeilen
+ohne Verlust aufgeklappter Dateiprobleme; sequenzierte Backend-Ereignisse
+bleiben ein eigener offener Schritt.
+
+Die Veröffentlichungsgates sind **nicht grün**: Der releasegebundene Build
+stoppt an `BUNDLED_PLUGIN_SOURCE_COMMIT_INVALID` für den uncommittierten
+Arbeitsstand; die ZIP-Prüfung findet kein neu gebautes RC158-Pluginarchiv.
+Diese Herkunfts-/Paketprüfungen werden nicht umgangen. Nichts aus der
+v2-Migration wurde committed, gepusht oder veröffentlicht.
+Die folgenden Releaseangaben betreffen unverändert die veröffentlichten Pakete,
+nicht die v2-Migration.
+
+## Veröffentlichter Stand
 
 Der beauftragte Standalone-Vorabrelease für Windows x64 sowie macOS Intel/Apple
 Silicon ist aus Quellcommit `f4caf948bde39dbebe8fe359235c3be84f189e5d` auf main
@@ -508,6 +1094,141 @@ uncommittierte Herkunft (`BUNDLED_PLUGIN_SOURCE_COMMIT_INVALID`); ein neues
 RC158-Plugin-ZIP liegt nicht vor. Kein Commit/Push/Tag/Prerelease, kein Umgehen
 des Herkunfts- oder Qualitätsgates. BL-050.6 bleibt für Roh-OCR und unabhängige
 inhaltliche/native Bedien-/Paketabnahme in Arbeit.
+
+### Schnellere Standalone-Prüfliste vom 07.10.2026 (unveröffentlicht)
+
+DS-104/BL-050.6 ergänzt die bestehende private Prüfung um eine durchsuchbare,
+gefilterte Liste mit Checkboxen, ausdrücklichen Sammelaktionen und höchstens
+50 gerenderten Zeilen je Seite. Nachgewiesen gleiche Personen-/Firmenschreibweisen
+bleiben gruppiert; jedes Vorkommen hat seinen eigenen Original-/Markdown-Vergleich
+und privaten Dateinamen. Keine automatische Vorauswahl oder pauschale Freigabe.
+
+OCR-Kontakte mehrerer Dateien werden vor der eigentlichen Anonymisierung in
+begrenzten Gruppen gesammelt. Korrekturen bleiben trotz identischer OCR-Lesart
+datei-/fundstellengebunden. Die geschlossene Zuordnung wird vollständig geprüft,
+bevor komplette authentifizierte Dokumententscheidungen gespeichert werden.
+Bei Überlauf folgen weitere Gruppen im selben Fenster; nach einem Schreibfehler
+werden nur schon vollständig gespeicherte Dokumente übersprungen. Sammlung
+verlangt zusätzliche Quellenrekonstruktion, keine behauptete OCR-Beschleunigung.
+Cowork, Haupt-Renderer und Quellen bleiben unverändert. Noch nicht übergebene
+Entscheidungen der aktuellen Gruppe gehen bei Vertagen/Schließen verloren;
+bestätigte vorherige Gruppen bleiben fortsetzbar erhalten.
+
+Zwei unabhängige technische Prüfrollen revalidierten Backendbindung und Bedienung.
+Zwei echte UI-Gegenbeispiele wurden korrigiert: Rückgängig setzt nun Editor,
+Vorschau und gesendeten Wert gemeinsam zurück; verborgene/individuell entschiedene
+Zeilen bleiben nicht unbemerkt in einer Sammelauswahl. 29 Frontendfälle, 15
+Kontaktfälle, echte Zweidokument-IPC-/Publikation in beiden Zwecken, zehn
+referenzgebundene Qualitätsauswerterfälle und 20 Native-Smoke-Integritätsfälle
+bestehen. Der Browser-Gegenlauf mit echtem HTML/JS/CSS prüft zusätzlich beide
+UI-Fehler, OCR-Livekorrektur, private DOM-Bereinigung, automatisches A11y und
+390-Pixel-Reflow; IPC ist dabei synthetisch, keine native Bedienabnahme.
+
+Die anschließende UX-Revalidierung des Anwender-HTML-Entwurfs übernimmt die
+Listen-/Detailaufteilung, nicht dessen gebündelte Laufzeit, simulierte Bilder oder
+Speicherzusagen. Nur eine zentrale Behandlungsauswahl mit explizitem **Auf N
+Zeilen anwenden** trifft eine Vormerkung; rechts bleiben Original und Markdown
+ohne zweiten Editor oder Entscheidungsleiste. Alle Zeilen bleiben standardmäßig
+sichtbar. Ein fehlerhafter ausgewählter Korrekturwert stoppt die ganze Sammelaktion
+mit Dateiname; unveränderte Bestätigung verwirft keine abweichende Eingabe.
+Undo stellt auch ausstehende Eingaben wieder her. Eine Bearbeitung im Filter
+**Vorgemerkt** öffnet die Zeile wieder, wechselt sichtbar auf **Alle** und leert
+die Checkboxauswahl, ohne den Korrektureditor während der Eingabe zu verlieren.
+33 aktuelle Frontendfälle und der erneute reale Browsergegenlauf bestehen
+(kontrollierte IPC, A11y, 390–1920 Pixel, Datenschutzbereinigung). Die unabhängige
+Read-only-Gegenprüfung fand keinen weiteren konkreten Fehler im Sammelablauf.
+
+`preview:standalone:review` stellt ausschließlich eine feste Assetliste und
+synthetische Daten auf `127.0.0.1` bereit; eine ausdrücklich gewählte HTML-Datei
+kann separat gezeigt werden. Host-/Originprüfung und geschlossene Pfade bestehen
+in `test:standalone:preview`. Die echte Darstellung wurde im eingebauten Browser
+geöffnet und geprüft. Dies ist nur ein Entwicklungswerkzeug, kein Listener im
+Produkt und kein Beleg für native Bedienung oder OCR-Qualität.
+
+Der erste Gesamt-Goldenlauf fand zusätzlich einen inkonsistenten frühen
+Abbruchumschlag: die neue Kontaktphase ließ `packages: []` weg. Es gab keine
+Publikation, aber zwei echte Profil-/Produktgegenproben schlugen fehl. Der
+Umschlag ist korrigiert und mit 29 Orchestratorfällen einschließlich beider
+Lieferwege gegengeprüft; eine unabhängige Backendrolle bestätigt die Korrektur.
+Der erneute echte Goldenlauf besteht in allen neun Fällen, einschließlich der
+zuvor fehlgeschlagenen Bewerber-/Personalprofile. Die fehlgeschlagene erste
+Messung wird nicht als PASS gewertet.
+Der abschließende vollständige Produkttest besteht mit 84 Basis- und 119
+direkten Testdateien (203 insgesamt). Dokumentations-/Linkverträge, strenge
+installierte Claude-CLI-Validierung und `git diff --check` bestehen ebenfalls.
+
+Die nach der Abbruchkorrektur erneut ausgeführte Vollmessung
+`dist/quality-review-matrix-final-20261007/BERICHTE/QUALITAET.json`
+bindet unveränderte Referenz `f841d0c73e1d1fca4ed999196373208c316f8d695fefda326f8deff9bb891b0f`.
+72/72 Varianten konvertiert und final ausgewertet, 55 Kontaktbestätigungen/neun
+ausdrückliche Referenzkorrekturen plus 202 Entitätsentscheidungen, keine unbekannte
+Erwartung, kein fataler Fehler und Workerende bestätigt. Finale 310 sensible
+Vorkommen enthalten keine bekannten Reste; kein gemessener Sachwort-/Fachanker-
+verlust. Sieben personengebundene Anreden werden weiterhin gezielt entfernt.
+Rohe OCR unverändert neun E-Mail-Abweichungen; `gate:quality` stoppt ausschließlich
+mit `QUALITY_FINDINGS_OPEN`. Reale Konverter/OCR und Publikation, synthetische
+Entscheidungen, kein menschlicher oder exakter Release-/Mac-Qualitätsnachweis.
+Der frühere Matrixbericht bleibt als vorheriger Prüfschnitt erhalten und ist
+nicht die Bindung des abschließenden Quellstands.
+
+Die Paketprüfung ist auf die kombinierte Kontaktgruppe angepasst. Der zunächst
+ausgeführte veröffentlichungsgebundene Cowork-`build` stoppte korrekt mit
+`BUNDLED_PLUGIN_SOURCE_COMMIT_INVALID`; `test:plugin-zip` fand kein neues
+RC158-Plugin-ZIP. Dies ist kein Commitzwang für lokale Standalone-Testpakete:
+`build:standalone:windows` und `build-standalone-package.mjs
+--engineering-directory ...` können den aktuellen Arbeitsstand separat bauen.
+Der Anwender wünscht zunächst ausschließlich diesen lokalen Windows-Test;
+Main, veröffentlichte Downloads und macOS bleiben unverändert. Die zuvor
+bereitgestellten Engineeringarchive enthalten die neue Liste nicht. Kein
+Commit, Push, Actions-Start oder Release in diesem Umsetzungsschritt;
+menschliche/native Mac-Abnahme und die neun bekannten Roh-OCR-Abweichungen
+bleiben offen. Die nachfolgenden bisherigen Paketbelege gelten ausschließlich
+für ihre jeweils genannten älteren Quellstände.
+
+Der anschließende lokale Windows-Testbau ist abgeschlossen:
+`dist/engineering-review-matrix-windows-20261007/DataSecure-Standalone-3.2.0-rc158-windows-x64.zip`,
+SHA-256 `0d95c5e415dec59ac0a0dffe20f216ebb58ceecda818e16b5759284b5dee8c16`,
+601 Einträge, 110.445.486 Bytes. Inventarprüfung und echter isolierter
+Paketworkflow bestehen: beide Verarbeitungszwecke, reale Formatkonverter,
+Person/Firma, Folgegruppen, laufweite Entscheidungen, exakter Fehlerdateiname,
+OCR-Korrektur mit Originalpixelvergleich sowie Vertagen/Neustart. Der native
+Windows-Starttest bindet dasselbe Archiv und bestätigt geladene Haupt-/Prüfseite
+und erfolgreiche IPC (1.310,815 ms, 3.735.552-Byte-Hülle). Keine nativen
+Prüfentscheidungen und keine Netzwerkbeobachtung in diesem Starttest behauptet.
+Beide eigenen Testprofile wurden nach bestätigtem Prozessende entfernt;
+ältere Testverzeichnisse bleiben unverändert. Das neue Paket wurde separat
+unter `Downloads/DataSecure-Windows-Test-Pruefliste-20261007/` bereitgestellt,
+mit unveränderter Versionsanzeige RC158 und ausdrücklich als lokaler Testbau.
+`WINDOWS-TEST-EVIDENCE.json` neben dem Engineering-ZIP nennt Grenzen und Hashes.
+Der Stand ist nicht committed; der Basiscommit ist keine vollständige
+Quellstandattestierung. Kein Push/Release/Actions-Start, keine neue Mac-Abnahme.
+
+Der folgende Windows-Testbau bindet nun auch die zentrale Sammelaktions-
+Überarbeitung einschließlich des letzten Filter-/Eingabefokus-Fixes:
+`dist/engineering-review-bulk-windows-20261007/DataSecure-Standalone-3.2.0-rc158-windows-x64.zip`,
+SHA-256 `b032020e8d45996318b2f2aef2a059744ba69d64d6b6b3f5a3db59d1ce47b5ac`,
+601 Einträge, 110.446.310 Bytes. Vollständiges Inventar und isolierter echter
+Paketworkflow bestehen erneut, einschließlich beider Zwecke, kombinierter
+OCR-Kontaktgruppen, Originalpixel, Folgegruppen, Vertagen/Neustart, Personen/
+Firmen und konkreter Fehlerdateinamen. Nativer Haupt-/Prüfseitenstart und
+erfolgreiche IPC desselben Archivs bestehen (1.271,148 ms,
+3.736.064-Byte-Hülle, WebView2 154.0.4258.62, Windows 10.0.26200.0 x64).
+Eigene isolierte Testprofile sind nach Prozessende entfernt. Browserabläufe der
+endgültigen UI sind separat mit synthetischer IPC geprüft; keine nativen
+menschlichen Sammelentscheidungen und keine Netzwerkbeobachtung behauptet.
+Bereitgestellt in `Downloads/DataSecure-Windows-Test-Sammelaktionen-20261007/`,
+mit `TESTSTART.txt` und `WINDOWS-TEST-EVIDENCE.json`; das vorherige Paket bleibt
+unverändert. Weiterhin RC158-Anzeige, unveröffentlichter Arbeitsstand, kein
+Commit/Push/Release/Actions und keine neue Mac-Abnahme. Die neun rohen
+OCR-E-Mail-Abweichungen und damit das rote Qualitätsgate bleiben offen.
+
+Die technische Abschlussprüfung dieses Arbeitsgangs besteht: `test:product`
+(84 Basis- plus 119 direkte Testdateien), `test:docs`, strikte lokale
+Claude-CLI-Strukturprüfung sowie `git diff --check`. Die Produktsuite begann
+vor dem letzten reinen UI-Filter-/Fokus-Fix; dieser endgültige Frontendstand
+wurde anschließend separat mit allen 33 Frontendfällen und der vollständigen
+Browserkampagne geprüft und vor Archivierung nochmals nativ kompiliert.
+Die rote inhaltliche Qualitätsmessung ist damit ausdrücklich nicht aufgehoben.
 
 ### Native-/Paketgegenprüfung vom 06.10.2026 (Engineering-Testbranch)
 

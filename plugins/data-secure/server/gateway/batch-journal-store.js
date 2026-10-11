@@ -72,7 +72,8 @@ function createBatchJournalStore(options = {}) {
 
   function purposeOf(state) {
     return `${state.product_channel || 'plugin'}:${processingModeForBatch(state)}:${resultNamingModeForBatch(state)}` +
-      (state.ocr_contact_review === true ? `:ocr:${state.ocr_review_seed}` : ':ocr-off');
+      (state.ocr_contact_review === true ? `:ocr:${state.ocr_review_seed}` : ':ocr-off') +
+      (state.standalone_document_review === true ? ':document-review' : ':document-review-off');
   }
 
   function assertPurposeUnchanged(state, target) {
@@ -264,6 +265,8 @@ function createBatchJournalStore(options = {}) {
   }
 
   function validPseudonymState(state) {
+    if (Object.hasOwn(state || {}, 'standalone_document_review') &&
+        (state.product_channel !== 'standalone' || state.standalone_document_review !== true)) return false;
     if (Object.hasOwn(state || {}, 'ocr_contact_review') || Object.hasOwn(state || {}, 'ocr_review_seed')) {
       if (state.product_channel !== 'standalone' || state.schema !== MARKDOWN_SCHEMA || state.processing_mode !== 'markdown-only' ||
           state.ocr_contact_review !== true || !PSEUDONYM_SEED_RE.test(String(state.ocr_review_seed || '')) ||
@@ -451,7 +454,10 @@ function createBatchJournalStore(options = {}) {
     const validProductChannel = !Object.hasOwn(state || {}, 'product_channel') ||
       ['plugin', 'standalone'].includes(state.product_channel);
     try { processingModeForBatch(state); resultNamingModeForBatch(state); } catch { return false; }
-    return state?.token === token && supportedSchema && validProductChannel && validPseudonymState(state) &&
+    const validControl = !Object.hasOwn(state || {}, 'standalone_control_generation') ||
+      (state.product_channel === 'standalone' && Number.isSafeInteger(state.standalone_control_generation) &&
+        state.standalone_control_generation >= 0 && state.standalone_control_generation <= 1000000);
+    return state?.token === token && supportedSchema && validProductChannel && validControl && validPseudonymState(state) &&
       (state.schema !== MARKDOWN_SCHEMA || state.ocr_contact_review === true ||
         !state.items?.some(item => item.status === 'deferred_review')) &&
       Array.isArray(state?.items) && state.items.length > 0 &&
@@ -483,6 +489,7 @@ function createBatchJournalStore(options = {}) {
     if (nowMs() > expiry) {
       rejectRenamedEncryptedCopies(state);
       try {
+        options.beforeExpiryCleanup?.(state);
         removeWorkDirectory(token);
         removeState(state);
       } catch { /* fail closed below */ }

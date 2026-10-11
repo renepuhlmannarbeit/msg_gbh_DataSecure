@@ -174,8 +174,12 @@ test('Standalone consumes one combined journal snapshot per public status poll',
     latestProductBatchStatus: () => { throw new Error('SECOND_PRODUCT_SCAN'); }
   }) });
   service.observedBatchId = batchId;
-  assert.strictEqual(service.status().state, 'results_available');
+  const status = service.status();
+  assert.strictEqual(status.state, 'results_available');
+  assert.strictEqual(status.batch_id, undefined, 'public CLI status remains token-free');
   assert.strictEqual(snapshots, 1);
+  assert.strictEqual(service.status({ localUi: true }).batch_id, batchId,
+    'only the private desktop snapshot carries the exact observed run');
 });
 
 test('review window sees terminal completion only after the final review group', () => {
@@ -526,8 +530,10 @@ test('Standalone UI contract limits source details to the local display', () => 
   assert.strictEqual(contract.network_listener, false);
   assert.strictEqual(contract.renderer_file_system_access, false);
   assert.strictEqual(contract.renderer_receives_source_paths, 'local-display-only');
-  assert.strictEqual(contract.renderer_receives_raw_content, 'review-window-only');
-  assert.strictEqual(contract.main_renderer_receives_raw_content, false);
+  assert.strictEqual(contract.renderer_receives_raw_content, 'active-review-surface-only');
+  assert.strictEqual(contract.main_renderer_receives_raw_content, 'only-while-owned-embedded-or-document-review-active');
+  assert.strictEqual(contract.embedded_review.native_owner_guard, true);
+  assert.strictEqual(contract.embedded_review.mutually_exclusive_with_review_window, true);
   assert.strictEqual(contract.review_window.close_action, 'defer');
   assert.strictEqual(contract.renderer_receives_open_target, false);
   assert.strictEqual(contract.desktop_host_target_resolution, 'sidecar-resolve-rust-open');
@@ -541,8 +547,9 @@ test('Standalone UI contract limits source details to the local display', () => 
   assert.deepStrictEqual(contract.commands, [
     'select_files', 'select_folder', 'remove_admitted_source', 'cancel_admission', 'start_admitted_batch',
     'get_public_state', 'get_ui_context', 'get_run_history', 'get_run_failures', 'open_history_results', 'open_history_ledger',
-    'open_history_identity_mapping', 'open_identity_mappings_directory', 'continue_history_batch',
-    'open_review_window', 'close_review_window', 'get_review_session', 'get_review_chunk', 'submit_review',
+    'open_history_identity_mapping', 'open_identity_mappings_directory', 'continue_history_batch', 'pause_batch',
+    'get_document_reviews', 'get_document_review_history_summary', 'close_document_reviews', 'get_document_review_chunk', 'get_document_entities', 'decide_document_review', 'export_approved_documents', 'abandon_document_export', 'open_document_export', 'open_document_identity_overview',
+    'open_review_window', 'open_embedded_review', 'close_review_window', 'get_review_session', 'get_review_chunk', 'submit_review',
     'continue_review_session',
     'ack_terminal_presented', 'continue_current_batch', 'configure_results',
     'open_current_results', 'open_local_ledger', 'open_diagnostic_folder', 'shutdown'
@@ -553,7 +560,8 @@ test('Standalone UI contract limits source details to the local display', () => 
     'resolve_current_results', 'resolve_local_ledger', 'get_run_history', 'get_run_failures',
     'resolve_history_results', 'resolve_history_ledger', 'resolve_history_identity_mapping',
     'resolve_identity_mappings_directory',
-    'continue_history_batch',
+    'continue_history_batch', 'pause_batch',
+    'get_document_reviews', 'get_document_review_history_summary', 'get_document_review_chunk', 'get_document_entities', 'decide_document_review', 'export_approved_documents', 'abandon_document_export', 'resolve_document_export', 'resolve_document_identity_overview',
     'get_review_session', 'get_review_chunk', 'submit_review', 'continue_review_session', 'shutdown'
   ]);
 });
@@ -760,6 +768,14 @@ async function admittedServiceCase() {
   });
   const service = new StandaloneApplicationService({ dependencies: deps });
   const admitted = await service.admitSelectedSources([FIXTURE_SOURCE_A, FIXTURE_SOURCE_B]);
+  const catalogue = admitted.ui_context.source_catalogue;
+  assert.strictEqual(admitted.ui_context.catalogue_revision, 1);
+  assert.deepStrictEqual(catalogue.map(({ source_id, ...item }) => item), [
+    { name: 'a.txt', bytes: 4, selectable: true, source_type: 'txt', ocr_required: null },
+    { name: 'b.txt', bytes: 4, selectable: true, source_type: 'txt', ocr_required: null }
+  ]);
+  assert.ok(catalogue.every(item => /^[a-f0-9]{32}$/u.test(item.source_id)));
+  assert.strictEqual(new Set(catalogue.map(item => item.source_id)).size, 2);
   assert.deepStrictEqual(admitted, {
     ok: true, event: 'selection_summarized', selected_count: 2, total_bytes: 8,
     direct_count: 2, convertible_count: 0, blocked_count: 0, encrypted_count: 0,
@@ -771,6 +787,8 @@ async function admittedServiceCase() {
       source_kind: 'files',
       source_folders: [FIXTURE_SOURCE_ROOT],
       selected_files: ['a.txt', 'b.txt'],
+      catalogue_revision: 1,
+      source_catalogue: catalogue,
       local_ui_only: true,
       external_disclosure: false
     },
@@ -784,6 +802,8 @@ async function admittedServiceCase() {
     source_kind: 'files',
     source_folders: [FIXTURE_SOURCE_ROOT],
     selected_files: ['a.txt', 'b.txt'],
+    catalogue_revision: 1,
+    source_catalogue: catalogue,
     local_ui_only: true,
     external_disclosure: false
   });
@@ -797,6 +817,8 @@ async function admittedServiceCase() {
       source_kind: 'files',
       source_folders: [FIXTURE_SOURCE_ROOT],
       selected_files: ['b.txt'],
+      catalogue_revision: 2,
+      source_catalogue: [catalogue[1]],
       local_ui_only: true,
       external_disclosure: false
     },
@@ -804,7 +826,7 @@ async function admittedServiceCase() {
   });
   assert.throws(() => service.removeAdmittedSource(1), (error) => error.code === 'STANDALONE_SELECTION_INVALID');
   assert.deepStrictEqual(await service.startAdmittedBatch(), {
-    ok: true, event: 'batch_accepted', selected_count: 1, external_disclosure: false
+    ok: true, event: 'batch_accepted', batch_id: 'c'.repeat(64), selected_count: 1, external_disclosure: false
   });
   assert.strictEqual(startedQueue.length, 1);
   assert.deepStrictEqual(service.uiContext().selected_files, ['b.txt'],
@@ -821,6 +843,181 @@ async function admittedServiceCase() {
     { direct_count: 1, convertible_count: 1, blocked_count: 0, encrypted_count: 0 }
   );
   await assert.rejects(service.startAdmittedBatch(), (error) => error.code === 'STANDALONE_NO_ADMISSION');
+}
+
+async function catalogueSelectionCase() {
+  let launched = null, reservations = 0;
+  const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+    validateSelectedPathAsync: async sourcePath => {
+      if (sourcePath.endsWith('.zip')) { const error = Error('fixed'); error.code = 'SOURCE_FORMAT_UNSUPPORTED'; throw error; }
+      return { sourcePath, sourceType: 'txt', sourceBytes: 4 };
+    },
+    reserveIntake: () => { reservations++; return { reservation_id: 'r'.repeat(32) }; },
+    startLocalIntakeExecutor: queue => { launched = queue; return { ok: true, batch_token: 'e'.repeat(64),
+      local_intake_pending: true, ipcAcknowledgement: Promise.resolve() }; }
+  }) });
+  const admission = await service.admitSelectedSources([FIXTURE_SOURCE_A, path.join(FIXTURE_SOURCE_ROOT, 'archive.zip')], 'files', undefined, { catalogue: true });
+  const original = admission.ui_context;
+  assert.strictEqual(original.source_catalogue.length, 2);
+  assert.deepStrictEqual(original.source_catalogue[1], { name: 'archive.zip', selectable: false, reason_code: 'SOURCE_FORMAT_UNSUPPORTED' });
+  assert.doesNotMatch(JSON.stringify(original.source_catalogue), /full|sourcePath|source_path/u);
+  const added = (await service.admitSelectedSources([FIXTURE_SOURCE_B], 'files', undefined, { catalogue: true })).ui_context;
+  assert.strictEqual(added.source_catalogue[0].source_id, original.source_catalogue[0].source_id);
+  assert.strictEqual(added.catalogue_revision, original.catalogue_revision + 1);
+  const id = added.source_catalogue.find(item => item.name === 'b.txt').source_id;
+  for (const options of [
+    { sourceIds: [id], catalogueRevision: original.catalogue_revision },
+    { sourceIds: [id, id], catalogueRevision: added.catalogue_revision },
+    { sourceIds: ['f'.repeat(32)], catalogueRevision: added.catalogue_revision },
+    { sourceIds: [id] }, { catalogueRevision: added.catalogue_revision }
+  ]) {
+    await assert.rejects(service.startAdmittedBatch({ processingMode: 'markdown-only', ...options }), error => error.code === 'STANDALONE_SELECTION_INVALID');
+  }
+  assert.strictEqual(reservations, 0);
+  await service.startAdmittedBatch({ processingMode: 'markdown-only', sourceIds: [id], catalogueRevision: added.catalogue_revision });
+  assert.deepStrictEqual(launched.map(item => item.full), [FIXTURE_SOURCE_B]);
+  assert.strictEqual(reservations, 1);
+  assert.ok(service.deps.traces.every(event => !JSON.stringify(event).includes('archive.zip')));
+}
+
+async function removedCatalogueRevisionCase() {
+  const service = new StandaloneApplicationService({ dependencies: fakeDependencies() });
+  const before = (await service.admitSelectedSources([FIXTURE_SOURCE_A, FIXTURE_SOURCE_B])).ui_context;
+  service.removeAdmittedSource(0);
+  const after = service.uiContext();
+  assert.strictEqual(after.catalogue_revision, before.catalogue_revision + 1);
+  await assert.rejects(service.startAdmittedBatch({ processingMode: 'markdown-only',
+    sourceIds: [before.source_catalogue[1].source_id], catalogueRevision: before.catalogue_revision }), error => error.code === 'STANDALONE_SELECTION_INVALID');
+  assert.deepStrictEqual(after.source_catalogue.map(item => item.source_id), [before.source_catalogue[1].source_id]);
+}
+
+async function catalogueProcessingEnvelopeCase() {
+  let reservations = 0, madeResultRoot = 0, launched;
+  const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+    enumerateSourceFolderAsync: async (_root, options) => {
+      assert.strictEqual(options.maxSources, 1000);
+      assert.strictEqual(options.maxTotalBytes, Number.MAX_SAFE_INTEGER);
+      return Array.from({ length: 201 }, (_, index) => ({ sourcePath: path.join(FIXTURE_SOURCE_ROOT, `${index}.txt`),
+        sourceType: 'txt', sourceBytes: 4 }));
+    },
+    reserveIntake: () => { reservations++; return { reservation_id: 'r'.repeat(32) }; },
+    fs: { mkdirSync() { madeResultRoot++; } },
+    startLocalIntakeExecutor: queue => { launched = queue; return { ok: true, batch_token: 'e'.repeat(64),
+      local_intake_pending: true, ipcAcknowledgement: Promise.resolve() }; }
+  }) });
+  const before = (await service.admitSelectedSources([FIXTURE_SOURCE_ROOT], 'folder', undefined, { catalogue: true })).ui_context;
+  assert.strictEqual(before.source_catalogue.length, 201, 'discovery must not apply the processing file limit');
+  await assert.rejects(service.startAdmittedBatch({ processingMode: 'markdown-only' }), error => error.code === 'STANDALONE_SELECTION_INVALID');
+  assert.strictEqual(reservations, 0); assert.strictEqual(madeResultRoot, 0);
+  assert.deepStrictEqual(service.uiContext(), before, 'a rejected start preserves the catalogue and its revision');
+  const selected = before.source_catalogue.slice(0, 200).map(item => item.source_id);
+  await service.startAdmittedBatch({ processingMode: 'markdown-only', sourceIds: selected, catalogueRevision: before.catalogue_revision });
+  assert.strictEqual(reservations, 1); assert.strictEqual(launched.length, 200);
+}
+
+async function catalogueByteEnvelopeCase() {
+  let reservations = 0, launched;
+  const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+    validateSelectedPathAsync: async sourcePath => ({ sourcePath, sourceType: 'docx',
+      sourceBytes: Number(path.basename(sourcePath, '.docx')) < 7 ? 64 * 1024 * 1024 : sourcePath.endsWith('7.docx') ? 52 * 1024 * 1024 : 1 }),
+    reserveIntake: () => { reservations++; return { reservation_id: 'r'.repeat(32) }; },
+    startLocalIntakeExecutor: queue => { launched = queue; return { ok: true, batch_token: 'e'.repeat(64),
+      local_intake_pending: true, ipcAcknowledgement: Promise.resolve() }; }
+  }) });
+  const before = (await service.admitSelectedSources(Array.from({ length: 9 }, (_, index) =>
+    path.join(FIXTURE_SOURCE_ROOT, `${index}.docx`)), 'files', undefined, { catalogue: true })).ui_context;
+  const sourceIds = before.source_catalogue.map(item => item.source_id);
+  await assert.rejects(service.startAdmittedBatch({ processingMode: 'markdown-only', sourceIds,
+    catalogueRevision: before.catalogue_revision }), error => error.code === 'STANDALONE_SELECTION_INVALID');
+  assert.strictEqual(reservations, 0);
+  await service.startAdmittedBatch({ processingMode: 'markdown-only', sourceIds: sourceIds.slice(0, 8), catalogueRevision: before.catalogue_revision });
+  assert.strictEqual(launched.length, 8); assert.strictEqual(reservations, 1);
+  assert.strictEqual(launched.reduce((total, item) => total + item.sourceBytes, 0), 500 * 1024 * 1024);
+}
+
+async function catalogueLimitAtomicityCase() {
+  let entries = [];
+  const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+    enumerateSourceFolderAsync: async () => entries
+  }) });
+  const before = (await service.admitSelectedSources([FIXTURE_SOURCE_A], 'files', undefined, { catalogue: true })).ui_context;
+  for (const [amount, labelPrefix] of [[1000, ''], [300, 'x'.repeat(1000) + '/']]) {
+    entries = Array.from({ length: amount }, (_, index) => ({ sourcePath: path.join(FIXTURE_SOURCE_ROOT, `${index}.txt`),
+      sourceType: 'txt', sourceBytes: 4, sourceLabel: `${labelPrefix}${index}.txt` }));
+    await assert.rejects(service.admitSelectedSources([FIXTURE_SOURCE_ROOT], 'folder', undefined, { catalogue: true }),
+      error => error.code === 'SOURCE_FOLDER_FILE_LIMIT');
+    assert.deepStrictEqual(service.uiContext(), before, 'count and transport-budget rejection are both atomic');
+  }
+}
+
+async function catalogueCompleteResponseBudgetCase() {
+  const { MAX_CATALOGUE_METADATA_BYTES } = require('../plugins/data-secure/server/standalone/catalogue-limits');
+  const responseBytes = result => Buffer.byteLength(JSON.stringify({
+    schema: 'datasecure-standalone-private-response/1', request_id: '0'.repeat(64), ok: true, result
+  }), 'utf8');
+  const longLabel = Array.from({ length: 4 }, () => '測'.repeat(240)).join('/') + '/meta';
+  const ignored = Array.from({ length: 200 }, (_, index) => ({ name: `${longLabel}${index}`,
+    reason_code: 'SOURCE_ARTIFACT_IGNORED' }));
+  const makeService = labels => new StandaloneApplicationService({ dependencies: fakeDependencies({
+    enumerateSourceFolderAsync: async (_root, options) => {
+      for (const item of labels) options.onIgnoredArtifact(item.reason_code, item.name);
+      return [{ sourcePath: FIXTURE_SOURCE_B, sourceType: 'txt', sourceBytes: 4 }];
+    }
+  }) });
+  const calibration = makeService([]);
+  await calibration.admitSelectedSources([FIXTURE_SOURCE_A], 'files', undefined, { catalogue: true });
+  const core = await calibration.admitSelectedSources([FIXTURE_SOURCE_ROOT], 'folder', undefined, { catalogue: true });
+  let below = 0;
+  while (below < ignored.length && responseBytes({ ...core, ignored_artifact_count: below + 1,
+    ignored_artifacts: ignored.slice(0, below + 1) }) <= MAX_CATALOGUE_METADATA_BYTES) below++;
+  assert.ok(below > 0 && below < 200, 'the fixture straddles the complete-response budget');
+  for (const count of [below, below + 1, 200]) {
+    const service = makeService(ignored.slice(0, count));
+    const before = (await service.admitSelectedSources([FIXTURE_SOURCE_A], 'files', undefined, { catalogue: true })).ui_context;
+    if (count === below) {
+      const result = await service.admitSelectedSources([FIXTURE_SOURCE_ROOT], 'folder', undefined, { catalogue: true });
+      assert.ok(responseBytes(result) <= MAX_CATALOGUE_METADATA_BYTES);
+      assert.ok(responseBytes(result) > MAX_CATALOGUE_METADATA_BYTES - 4000, 'exercise the near-boundary response');
+      assert.strictEqual(result.ignored_artifacts.length, count, 'accepted metadata is not silently truncated');
+      assert.ok(responseBytes(result) < MAX_FRAME_BYTES);
+    } else {
+      await assert.rejects(service.admitSelectedSources([FIXTURE_SOURCE_ROOT], 'folder', undefined, { catalogue: true }),
+        error => error.code === 'SOURCE_FOLDER_FILE_LIMIT');
+      assert.deepStrictEqual(service.uiContext(), before, 'ignored Unicode labels must be budgeted before any admission commit');
+      assert.strictEqual(service.sourceIds.size, 1);
+    }
+  }
+}
+
+async function consumedCatalogueCase() {
+  for (const lostAcknowledgement of [false, true]) {
+    const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+      validateSelectedPathAsync: async sourcePath => {
+        if (sourcePath.endsWith('.zip')) throw Object.assign(Error('fixed'), { code: 'SOURCE_FORMAT_UNSUPPORTED' });
+        return { sourcePath, sourceType: 'txt', sourceBytes: 4 };
+      },
+      startLocalIntakeExecutor: () => ({ ok: true, batch_token: 'e'.repeat(64), local_intake_pending: true,
+        ipcAcknowledgement: lostAcknowledgement ? Promise.reject(Error('ACK_LOST')) : Promise.resolve() })
+    }) });
+    const before = (await service.admitSelectedSources([FIXTURE_SOURCE_A,
+      path.join(FIXTURE_SOURCE_ROOT, 'old.zip')], 'files', undefined, { catalogue: true })).ui_context;
+    const start = service.startAdmittedBatch({ processingMode: 'markdown-only',
+      sourceIds: [before.source_catalogue[0].source_id], catalogueRevision: before.catalogue_revision });
+    if (lostAcknowledgement) await assert.rejects(start, error => error.code === 'STANDALONE_START_FAILED');
+    else await start;
+    assert.strictEqual(service.admittedQueue, null);
+    assert.strictEqual(service.sourceIds.size, 0);
+    assert.strictEqual(service.rejectedSources.size, 0);
+    assert.strictEqual(service.uiContext().catalogue_revision, before.catalogue_revision + 1);
+    assert.deepStrictEqual(service.uiContext().source_catalogue, []);
+    assert.deepStrictEqual(service.uiContext().selected_files, ['a.txt'], 'the current run retains display-only context');
+    const next = (await service.admitSelectedSources([FIXTURE_SOURCE_B], 'files', undefined, { catalogue: true })).ui_context;
+    assert.deepStrictEqual(next.source_catalogue.map(item => item.name), ['b.txt']);
+    assert.strictEqual(service.sourceIds.size, 1);
+    await assert.rejects(service.startAdmittedBatch({ processingMode: 'markdown-only',
+      sourceIds: [before.source_catalogue[0].source_id], catalogueRevision: before.catalogue_revision }),
+    error => error.code === 'STANDALONE_SELECTION_INVALID');
+  }
 }
 
 async function clearLastAdmittedSourceCase() {
@@ -1152,6 +1349,13 @@ async function missingLedgerCase() {
 (async () => {
   await testAsync('Standalone calls the engine directly without MCP or JSON-RPC', directServiceCase);
   await testAsync('native desktop admission validates once and starts without a second picker', admittedServiceCase);
+  await testAsync('v2 catalogue names regular rejected files, preserves IDs and starts only a fresh owned subset', catalogueSelectionCase);
+  await testAsync('v2 discovery admits 201 files but enforces the processing envelope before any mutation', catalogueProcessingEnvelopeCase);
+  await testAsync('v2 starts only an owned subset within the 500 MiB processing envelope', catalogueByteEnvelopeCase);
+  await testAsync('v2 catalogue count and IPC projection budgets preserve the previous admission atomically', catalogueLimitAtomicityCase);
+  await testAsync('the complete admission response budgets Unicode artifact labels and its IPC envelope atomically', catalogueCompleteResponseBudgetCase);
+  await testAsync('confirmed and uncertain starts consume all catalogue IDs and rejected entries before the next admission', consumedCatalogueCase);
+  await testAsync('legacy removal invalidates catalogue revisions without changing surviving source IDs', removedCatalogueRevisionCase);
   await testAsync('processing purpose is rejected before mutations and never silently falls back', processingModeServiceCase);
   await testAsync('prepared selections extend transactionally without duplicate files or ambiguous labels', realAdmissionAdapterCase);
   await testAsync('prepared selections remove one item or clear the final item before Start', clearLastAdmittedSourceCase);

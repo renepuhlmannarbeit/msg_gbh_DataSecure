@@ -43,10 +43,11 @@ function reviewReady(events) {
   return scoped.some(record => record.event === 'review_page_loaded') && actionReady(scoped, 'get_review_session');
 }
 
-function mainReady(events) {
+function mainReady(events, { workspace = false } = {}) {
   const scoped = currentSession(events);
   return scoped.some(record => record.event === 'page_loaded') &&
     scoped.some(record => record.event === 'frontend_ready') &&
+    (!workspace || scoped.some(record => record.event === 'workspace_page_loaded')) &&
     actionReady(scoped, 'get_public_state') && actionReady(scoped, 'get_ui_context');
 }
 
@@ -58,7 +59,8 @@ if (require.main === module) {
       try { const value = JSON.parse(line); return value && typeof value === 'object' ? [value] : []; }
       catch { return []; }
     });
-    const check = process.argv[3] === '--main' ? mainReady : reviewReady;
+    const check = process.argv[3] === '--main'
+      ? events => mainReady(events, { workspace: process.argv[4] === '--workspace' }) : reviewReady;
     process.exitCode = check(records) ? 0 : 1;
   } catch { process.exitCode = 1; }
 }

@@ -1,8 +1,8 @@
 # Produktvertrag: GBH DataSecure
 
-Stand: 05.10.2026 · 3.2.0-rc158 · Ist-Zustand RC158 · Standalone-Vorabrelease in Vorbereitung · Cowork bleibt RC151
+Stand: 08.10.2026 · 3.2.0-rc159 · Ist-Zustand RC159 · Windows/macOS RC158 veröffentlicht · Linux bleibt RC157 · Cowork bleibt RC151
 
-Die bisher veröffentlichten RC157-Standalone-Pakete für Windows, beide Mac-Architekturen und Linux binden
+Die weiterhin verfügbaren RC157-Standalone-Pakete für Windows, beide Mac-Architekturen und Linux binden
 Quellcommit `111737d28021b6989ffe8d563b58daa9cbae610f`.
 [Release und Nachweise](../RELEASE.md#rc157--standalone-auf-allen-zielplattformen).
 Die integrierte lokale Prüfung und Identitätszuordnung gehören ausschließlich
@@ -43,6 +43,12 @@ noch ergänzt oder korrigiert werden; danach nicht mehr.
 Nach einem Neustart ist die aktuelle Prozesskarte leer und eine neue Auswahl
 sofort möglich. Frühere fortsetzbare Läufe werden nicht automatisch geladen;
 sie bleiben ausschließlich über ihre konkrete Zeile im Verlauf erreichbar.
+
+Unveröffentlichte Ergänzung vom 07.10.2026: Die Standalone-Prüfliste bündelt
+bewiesen gleiche Namen und bietet Mehrfachauswahl sowie direkte OCR-Eingaben.
+Zu jedem Vorkommen bleiben Original und Markdown-Vorschau einsehbar. Kontakte
+mehrerer Dokumente werden innerhalb der bestehenden Grenzen gemeinsam geprüft,
+aber jede Korrektur bleibt an ihre konkrete Originalfundstelle gebunden.
 
 In Standalone RC157 ist nach DS-104 ein **in die App integrierter Prüfweg**
 veröffentlicht. Die Prüfseite ist auf allen vier Plattformen nativ gestartet;
@@ -260,6 +266,31 @@ und gezählt. Nach erfolgreicher Aufnahme stoppt eine später als defekt,
 verschlüsselt oder unsicher erkannte unterstützte Datei nur ihre eigene
 Position; der Reststapel läuft weiter. Aufnahme und Verarbeitung sind getrennte
 Phasen, keine stillschweigende Teilfreigabe unbekannter Formate.
+
+## Standalone-Prototyp v2 (DS-110, Zielvertrag)
+
+Die neue Gestaltung und Interaktion folgt dem gelieferten klickbaren Prototyp.
+Fachliche Konflikte und Alt/Neu-Zuordnung stehen in `docs/frontend-migration.md`.
+Für Standalone ersetzt ein sicherer Quellenkatalog die pauschale Ablehnung
+gemischter regulärer Dateibäume: ungeeignete Dateien sichtbar mit Name/Grund,
+geeignete per Häkchen auswählbar. Unsichere Bäume bleiben gesperrt. Der
+Cowork-Aufnahmevertrag oben bleibt unverändert. Auswahl ist kein Start.
+Der Metadatenkatalog ist separat begrenzt (1.000 Dateien und 512 KiB für die
+vollständige Aufnahmeantwort einschließlich Artefaktdetails und Antwortumschlag).
+Die Verarbeitungsgrenze von 200 Dateien/500 MiB
+gilt erst für die angehakte Teilmenge; Einzeldatei- und Baum-Sicherheitsgrenzen
+bleiben erhalten. Ein überschrittener Katalog verwirft die neue Aufnahme,
+nicht die bereits vorbereitete Auswahl.
+Im unveröffentlichten v2-Schnitt sind Pause/Fortsetzung, dauerhafte private
+Text-Prüfstände, explizite revisionsgebundene Sammelfreigabe/Widerruf und ein
+getrennter KI-Export ausgewählter freigegebener Markdown-Dateien implementiert.
+Maskierung/Zurücksetzen widerruft Freigaben. Der Text-Prüfstand ist noch kein
+vollständiger reversibler Entitätenplan. Bestehende Läufe werden nicht
+rückwirkend als menschlich geprüft behandelt. Keine privaten Nebenprodukte
+im KI-Export; native Paketabnahme bleibt Voraussetzung der Standardumschaltung.
+Kein Passwortdialog.
+OCR-Prüfung für reine Konvertierung, Sammelbearbeitung und laufweite exakte
+Entitätsentscheidungen bleiben erhalten. Teil-Exporte lassen offene Dateien offen.
 
 ## Grenzen vor Freigabe
 

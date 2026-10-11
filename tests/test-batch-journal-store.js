@@ -41,6 +41,7 @@ function fixture(options = {}) {
     randomBytes: options.randomBytes || (() => Buffer.from('abcdef', 'utf8')),
     nowMs: options.nowMs || (() => Date.parse('2026-08-25T00:00:00.000Z')),
     syncParentDirectory: options.syncParentDirectory || (() => { events.push('sync-parent'); return true; }),
+    ...(options.beforeExpiryCleanup ? { beforeExpiryCleanup: options.beforeExpiryCleanup } : {}),
     retryDelay: options.retryDelay || (() => {})
   });
   return {
@@ -579,6 +580,24 @@ test('the batch composition root preserves the three journal test facades', () =
   assert.strictEqual(typeof _test.writeState, 'function');
   assert.strictEqual(typeof _test.readState, 'function');
   assert.strictEqual(typeof _test.readStateForMaintenance, 'function');
+});
+
+test('direct expiry reads preserve v2 metadata before journal removal and refuse cleanup on repair failure', () => {
+  for (const blocked of [false, true]) {
+    let item;
+    item = fixture({ beforeExpiryCleanup(value) {
+      assert.equal(value.standalone_document_review, true);
+      item.events.push('preserve-document-run');
+      if (blocked) throw new Error('DOCUMENT_REVIEW_CONFLICT');
+    } });
+    try {
+      fs.writeFileSync(item.target, JSON.stringify(state({ product_channel: 'standalone', standalone_document_review: true,
+        expires_at: '2026-08-20T00:00:00.000Z' })));
+      assert.throws(() => item.store.readState(token), /Sitzung ist abgelaufen/i);
+      assert.deepEqual(item.events, blocked ? ['preserve-document-run'] : ['preserve-document-run', 'remove-work']);
+      assert.equal(fs.existsSync(item.target), blocked);
+    } finally { item.cleanup(); }
+  }
 });
 
 done();

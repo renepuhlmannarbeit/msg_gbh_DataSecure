@@ -28,7 +28,10 @@ const sharedStandaloneModules = new Set([
   'server/standalone/markdown-store.js',
   // The shared batch module references this inert Standalone-only sink.
   // Cowork has no UI/IPC action and never invokes it because the channel is guarded.
-  'server/standalone/identity-ledger.js'
+  'server/standalone/identity-ledger.js',
+  // Pure rendering dependency of the shared, channel-guarded document store.
+  // This grants no Cowork UI/IPC action or confidential export path.
+  'server/standalone/confidential-overview.js'
 ]);
 
 function excludedEngineeringFile(normalized) {

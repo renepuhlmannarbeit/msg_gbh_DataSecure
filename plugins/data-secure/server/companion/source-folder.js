@@ -32,8 +32,8 @@ function unsupportedFolderFailure(regularFiles, unsupportedFiles, labels) {
   error.localUnsupportedCount = unsupportedFiles;
   return error;
 }
-function recordUnsupportedLabel(labels, root, full) {
-  if (labels.length >= MAX_REPORTED_UNSUPPORTED) return;
+function recordUnsupportedLabel(labels, root, full, limit = MAX_REPORTED_UNSUPPORTED) {
+  if (labels.length >= limit) return;
   const relative = path.relative(root, full).split(path.sep).join('/');
   if (relative && !relative.startsWith('../') && !path.isAbsolute(relative) &&
       relative.length <= 1024 && !relative.split('/').some(part => !part || part === '.' || part === '..')) {
@@ -261,6 +261,9 @@ function enumerateSourceFolder(root, options = {}) {
 // yields regularly so ping/cancellation can be processed while a large local
 // tree is inspected. No partial queue escapes on cancellation or error.
 async function enumerateSourceFolderAsync(root, options = {}) {
+  const catalogue = options.productChannel === 'standalone' && options.catalogue === true &&
+    typeof options.onRejectedSource === 'function';
+  const reportedUnsupportedLimit = catalogue ? options.maxSources ?? LIMITS.MAX_BATCH_FILES : MAX_REPORTED_UNSUPPORTED;
   const io = options.fs || fs;
   const asyncIo = options.fsPromises || io.promises || fs.promises;
   const reparse = options.hasReparseComponentAsync ||
@@ -348,16 +351,21 @@ async function enumerateSourceFolderAsync(root, options = {}) {
           }
         } else {
           unsupportedFiles++;
-          recordUnsupportedLabel(unsupportedLabels, resolvedRoot, full);
+          recordUnsupportedLabel(unsupportedLabels, resolvedRoot, full, reportedUnsupportedLimit);
         }
       }
       await checkpoint();
     }
   }
-  if (unsupportedFiles > 0) {
+  if (catalogue && unsupportedFiles > unsupportedLabels.length) throw folderFailure(
+    'SOURCE_FOLDER_FILE_LIMIT', 'Der Quellenkatalog enthält zu viele nicht unterstützte Dateien.');
+  if (unsupportedFiles > 0 && !catalogue) {
     throw unsupportedFolderFailure(regularFiles, unsupportedFiles, unsupportedLabels);
   }
-  if (!candidates.length) throw folderFailure('SOURCE_FOLDER_EMPTY', 'Der ausgewählte Ordner enthält keine unterstützten Dateien.');
+  if (catalogue) for (const name of unsupportedLabels) options.onRejectedSource({
+    name, full: path.join(resolvedRoot, ...name.split('/')), reason_code: 'SOURCE_FORMAT_UNSUPPORTED'
+  });
+  if (!candidates.length && !catalogue) throw folderFailure('SOURCE_FOLDER_EMPTY', 'Der ausgewählte Ordner enthält keine unterstützten Dateien.');
   const selected = [];
   const selectionFailures = [];
   for (const { full, sourceLabel } of candidates) {
@@ -365,7 +373,12 @@ async function enumerateSourceFolderAsync(root, options = {}) {
       selected.push({ ...await validateSelectedPathAsync(full, {
         ...options, fs: io, fsPromises: asyncIo, hasReparseComponentAsync: reparse, allowedTypes
       }), sourceLabel, treeOrder: sourceLabel });
-    } catch (error) { recordSelectionFailure(selectionFailures, error, sourceLabel); }
+    } catch (error) {
+      if (catalogue && ['SOURCE_FORMAT_SIZE_LIMIT', 'SOURCE_FILE_EMPTY', 'SOURCE_ACCESS_DENIED',
+        'SOURCE_READ_FAILED'].includes(error?.code)) {
+        options.onRejectedSource({ name: sourceLabel, full, reason_code: error.code });
+      } else recordSelectionFailure(selectionFailures, error, sourceLabel);
+    }
     await checkpoint();
   }
   throwSelectionFailures(selectionFailures);

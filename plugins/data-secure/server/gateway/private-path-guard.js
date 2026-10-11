@@ -10,7 +10,7 @@ function sameIdentity(left, right) {
   return Boolean(left && right && left.dev === right.dev && left.ino === right.ino);
 }
 
-function createPathGuard(privateRoot, io) {
+function createPathGuard(privateRoot, io, expectedRootIdentity) {
   if (typeof privateRoot !== 'string' || !path.isAbsolute(privateRoot)) {
     throw failure('PRIVATE_ARTIFACT_ROOT_REQUIRED', 'Eine absolute private Artefaktwurzel ist erforderlich.');
   }
@@ -29,6 +29,13 @@ function createPathGuard(privateRoot, io) {
     if (path.relative(root, realRoot) !== '' || path.relative(realRoot, root) !== '') throw new Error('redirected root');
     const named = io.lstatSync(root, { bigint: true });
     const resolved = io.statSync(root, { bigint: true });
+    if (expectedRootIdentity) {
+      // New identity bindings use exact bigint stats throughout. Never round
+      // large NTFS file IDs to Number or accept a legacy rounded binding here.
+      const matches = String(resolved.dev) === expectedRootIdentity.dev && String(resolved.ino) === expectedRootIdentity.ino &&
+        String(resolved.birthtimeNs ?? resolved.birthtimeMs) === expectedRootIdentity.birth;
+      if (!matches) throw new Error('unexpected root identity');
+    }
     if (!named.isDirectory() || named.isSymbolicLink() || !resolved.isDirectory() || !sameIdentity(named, resolved)) {
       throw new Error('unsafe root');
     }

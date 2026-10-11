@@ -61,6 +61,9 @@ process.once('message', async (message) => {
   try {
     const existingMode = isExistingBatch ? readBatchProcessingMode(message.batch_token) : undefined;
     processingMode = validateBatchMessagePurpose(message, standaloneChannel ? 'standalone' : 'plugin', existingMode);
+    if (Object.hasOwn(message, 'document_review') &&
+        (!isNewIntake || !standaloneChannel || ![MODES.ANONYMIZE, MODES.MARKDOWN].includes(processingMode) || message.document_review !== true))
+      throw Object.assign(new Error('DOCUMENT_REVIEW_INVALID'), { code: 'DOCUMENT_REVIEW_INVALID' });
     if (Object.hasOwn(message, 'ocr_contact_review') &&
         (!isNewIntake || !standaloneChannel || processingMode !== MODES.MARKDOWN || message.ocr_contact_review !== true)) {
       throw Object.assign(new Error('OCR_CONTACT_REVIEW_INVALID'), { code: 'OCR_CONTACT_REVIEW_INVALID' });
@@ -94,6 +97,7 @@ process.once('message', async (message) => {
         profile: message.profile || 'auto',
         processingMode,
         ...(message.ocr_contact_review === true ? { ocrContactReview: true } : {}),
+        ...(message.document_review === true ? { documentReview: true } : {}),
         ...(outputNamingMode ? { outputNamingMode } : {}),
         queue: message.queue,
         // The operating-system picker was the only start confirmation.

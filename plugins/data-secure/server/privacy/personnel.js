@@ -119,8 +119,11 @@ function looksLikeOrgSide(value, personKeys) {
   return ORG_SHAPE_RE.test(clean) || DOMAIN_SHAPE_RE.test(clean);
 }
 
-function anonymizePersonnel(text, reg, findings, personKeys = new Set(), knownDashCompanyRanges = [], deferredTypographyKeys = new Set()) {
+function anonymizePersonnel(text, reg, findings, personKeys = new Set(), knownDashCompanyRanges = [], deferredTypographyKeys = new Set(), applied) {
   const out = [];
+  const edits = [];
+  const edit = (start, end, replacement, kind) => { if (applied && text.slice(start, end) !== replacement)
+    edits.push({ start, end, original: text.slice(start, end), replacement, kind }); };
   const ranges = credentialContextSpans(text);
   // A customer can be a natural person. Leave a proven person value for the
   // shared person dictionary instead of assigning two identities to the same
@@ -147,6 +150,7 @@ function anonymizePersonnel(text, reg, findings, personKeys = new Set(), knownDa
   const allLines = String(text).split('\n');
   for (let lineIndex = 0; lineIndex < allLines.length; lineIndex++) {
     const rawLine = allLines[lineIndex];
+    const lineStart = lineOffset;
     const lineEnd = lineOffset + rawLine.length;
     const credentialLine = ranges.some((r) => lineOffset < r.end && r.start < lineEnd);
     lineOffset = lineEnd + 1;
@@ -166,6 +170,7 @@ function anonymizePersonnel(text, reg, findings, personKeys = new Set(), knownDa
       const ph = registerEmployer(reg, findings, tableEmployer[2]);
       if (ph) {
         out.push(line.replace(TABLE_EMPLOYER_RE, `$1${ph} $3`));
+        edit(lineStart + tableEmployer[1].length, lineStart + tableEmployer[1].length + tableEmployer[2].length, ph + ' ', 'EMPLOYER');
         continue;
       }
     }
@@ -175,6 +180,7 @@ function anonymizePersonnel(text, reg, findings, personKeys = new Set(), knownDa
       const ph = registerCustomer(reg, findings, tableCustomer[2]);
       if (ph) {
         out.push(line.replace(TABLE_CUSTOMER_RE, `$1${ph} $3`));
+        edit(lineStart + tableCustomer[1].length, lineStart + tableCustomer[1].length + tableCustomer[2].length, ph + ' ', 'CUSTOMER');
         continue;
       }
     }
@@ -184,6 +190,7 @@ function anonymizePersonnel(text, reg, findings, personKeys = new Set(), knownDa
       rememberLocation(reg, tableLocation[2]);
       findings.push({ type: 'LOCATION', value_hash: hashShort(tableLocation[2]) });
       out.push(line.replace(TABLE_LOCATION_RE, `$1${LOCATION_PLACEHOLDER} $3`));
+      edit(lineStart + tableLocation[1].length, lineStart + tableLocation[1].length + tableLocation[2].length, LOCATION_PLACEHOLDER + ' ', 'LOCATION');
       continue;
     }
 
@@ -192,6 +199,7 @@ function anonymizePersonnel(text, reg, findings, personKeys = new Set(), knownDa
       const ph = registerEmployer(reg, findings, lineEmployer[2]);
       if (ph) {
         out.push(lineEmployer[1] + ph);
+        edit(lineStart + lineEmployer[1].length, lineEnd, ph, 'EMPLOYER');
         continue;
       }
     }
@@ -201,6 +209,7 @@ function anonymizePersonnel(text, reg, findings, personKeys = new Set(), knownDa
       const ph = registerCustomer(reg, findings, lineCustomer[2]);
       if (ph) {
         out.push(lineCustomer[1] + ph);
+        edit(lineStart + lineCustomer[1].length, lineEnd, ph, 'CUSTOMER');
         continue;
       }
     }
@@ -210,6 +219,7 @@ function anonymizePersonnel(text, reg, findings, personKeys = new Set(), knownDa
       rememberLocation(reg, lineLocation[2]);
       findings.push({ type: 'LOCATION', value_hash: hashShort(lineLocation[2]) });
       out.push(lineLocation[1] + LOCATION_PLACEHOLDER);
+      edit(lineStart + lineLocation[1].length, lineEnd, LOCATION_PLACEHOLDER, 'LOCATION');
       continue;
     }
 
@@ -252,6 +262,10 @@ function anonymizePersonnel(text, reg, findings, personKeys = new Set(), knownDa
           { type: 'PROJECT', value_hash: hashShort(right) }
         );
         out.push(`${prefix}${customer} – ${project}`);
+        const leftEnd = lineStart + prefix.length + dash[1].length, rightStart = lineEnd - dash[2].length;
+        edit(lineStart + prefix.length, leftEnd, customer, 'CUSTOMER');
+        edit(leftEnd, rightStart, ' – ', 'NORMALIZATION');
+        edit(rightStart, lineEnd, project, 'PROJECT');
         continue;
       }
     }
@@ -273,6 +287,7 @@ function anonymizePersonnel(text, reg, findings, personKeys = new Set(), knownDa
           rememberOrganization(reg, s, customer);
           findings.push({ type: 'CUSTOMER', value_hash: hashShort(s) });
           out.push(prefix + customer);
+          edit(lineStart + prefix.length, lineEnd, customer, 'CUSTOMER');
           continue;
         }
       }
@@ -283,7 +298,9 @@ function anonymizePersonnel(text, reg, findings, personKeys = new Set(), knownDa
 
   // Business periods are substantive content. Only dates explicitly labelled
   // as birth dates are removed by the structured-identifier pass.
-  return out.join('\n');
+  const result = out.join('\n');
+  if (applied) applied(text, result, edits);
+  return result;
 }
 
 module.exports = { anonymizePersonnel, looksLikeOrgSide, hasStopToken };

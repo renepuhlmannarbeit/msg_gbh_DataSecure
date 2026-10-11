@@ -145,8 +145,8 @@ function outputStage(bound, output, status = 'not_evaluated') {
   const checked = new Set();
   const coveredLeakPositions = new Set(eligible.flatMap(entity => entity.observed_positions
     .filter(index => changes.equal[index]).map(index => changes.mapping[index])));
-  for (const entity of bound.entities) {
-    const wanted = tokens(entity.value).words.map(word => word.value);
+  for (const entity of bound.entities) for (const wanted of [tokens(entity.value).words.map(word => word.value),
+    ...(entity.complete && !entity.exact ? [entity.observed.map(word => word.value)] : [])]) {
     const key = `${entity.type}:${wanted.join(' ')}`;
     if (!wanted.length || checked.has(key)) continue;
     checked.add(key);
@@ -186,7 +186,16 @@ function outputStage(bound, output, status = 'not_evaluated') {
     !labelled.has(index) && !requiredPrivacyWords.has(index)))];
   const lostFactualWords = factual.filter(index => !changes.equal[index]);
   const mappedAfter = new Set(changes.mapping.filter(index => index !== null));
-  const addedFactualWords = after.words.map((_, index) => index).filter(index => index >= changes.start && index < changes.end &&
+  // Presentation headings/footers may occupy separate lines. A free alignment
+  // boundary must not also hide an inserted negation in the body's edge line.
+  const firstBodyWord = after.words[changes.start], lastBodyWord = after.words[changes.end - 1];
+  const bodyLineStart = firstBodyWord && changes.equal[0] && changes.mapping[0] === changes.start
+    ? after.text.lastIndexOf('\n', firstBodyWord.start - 1) + 1 : firstBodyWord?.start ?? 0;
+  const nextLine = lastBodyWord ? after.text.indexOf('\n', lastBodyWord.end) : -1;
+  const bodyLineEnd = lastBodyWord && changes.equal.at(-1) && changes.mapping.at(-1) === changes.end - 1
+    ? nextLine < 0 ? after.text.length : nextLine : lastBodyWord?.end ?? after.text.length;
+  const addedFactualWords = after.words.map((_, index) => index).filter(index =>
+    after.words[index].start >= bodyLineStart && after.words[index].end <= bodyLineEnd &&
     !mappedAfter.has(index) && !/^\[(?:PERSON|UNTERNEHMEN|ORG|EMAIL|PHONE|IBAN|REDACTED)[A-Z0-9_]*\]$/u.test(after.words[index].value));
   return { status, evaluated: true, reference_alignment: bound.aligned ? 'within_limit' : 'manual_check_required',
     sensitive_occurrences: bound.entities.length, observed_sensitive_occurrences: eligible.length,
@@ -249,7 +258,8 @@ function evaluateQuality(sample, record) {
     split: sample.split, format: record.format, ocr_variant: record.ocr_variant,
     extraction: { status: 'failed', error_code: record.extraction_error || 'QUALITY_EXTRACTION_MISSING' },
     detector_probe: { evaluated: false }, automatic: { evaluated: false, status: 'not_evaluated' },
-    final: { evaluated: false, status: record.final_status || 'not_evaluated' }, findings: [
+    final: { evaluated: false, status: record.final_status || 'not_evaluated' },
+    raw_final: { evaluated: false, status: record.final_status || 'not_evaluated' }, findings: [
       { stage: 'extraction', code: record.extraction_error || 'QUALITY_EXTRACTION_MISSING', file, location: sample.location }] };
   const bound = bindReference(sample, record.extracted);
   const automatic = outputStage(bound, record.automatic, record.automatic_status);
@@ -259,6 +269,9 @@ function evaluateQuality(sample, record) {
   const finalBound = typeof record.privacy_extracted === 'string' ? bindReference(sample, record.privacy_extracted) : bound;
   const rawPrivacyBound = typeof record.privacy_raw_extracted === 'string' ? bindReference(sample, record.privacy_raw_extracted) : finalBound;
   const final = outputStage(finalBound, record.final, record.final_status);
+  // An exact reference correction must not blind the final privacy check to
+  // the different OCR spelling that was actually present before correction.
+  const rawFinal = outputStage(rawPrivacyBound, record.final, record.final_status);
   const findings = [];
   const add = (stage, code, detail = {}) => findings.push({ stage, code, file, location: sample.location, ...detail });
   for (const [stage, input] of [['extraction', bound], ['privacy_extraction', finalBound],
@@ -272,7 +285,7 @@ function evaluateQuality(sample, record) {
     if (input.extraction.lost_factual_words) add(stage, 'SOURCE_FACTUAL_WORDS_CHANGED_OR_LOST',
       { count: input.extraction.lost_factual_words });
   }
-  for (const [stage, value] of [['automatic', automatic], ['final', final]]) {
+  for (const [stage, value] of [['automatic', automatic], ['final', final], ['raw_final', rawFinal]]) {
     for (const leak of value.leaks || []) add(stage, 'SENSITIVE_TEXT_REMAINS', leak);
     for (const control of value.lost_content || []) add(stage, 'UNNECESSARY_REDACTION', control);
     for (const context of value.privacy_context_leaks || []) add(stage, 'REQUIRED_PRIVACY_CONTEXT_REMAINS', context);
@@ -287,7 +300,8 @@ function evaluateQuality(sample, record) {
       ? 'actual_pre_contact_review_extraction' : 'privacy_extraction_fallback' },
     privacy_extraction: { ...extractionMetrics(finalBound), input_source: typeof record.privacy_extracted === 'string'
       ? 'actual_privacy_extraction' : 'markdown_extraction_fallback' },
-    detector_probe: detectorStage(bound, record.spans), automatic, final, review: record.review || null, findings };
+    detector_probe: detectorStage(bound, record.spans), automatic, final, raw_final: rawFinal,
+    review: record.review || null, findings };
 }
 
 function summarizeQuality(results) {
@@ -308,7 +322,7 @@ function summarizeQuality(results) {
         list.reduce((sum, item) => sum + (item.privacy_extraction?.[key] || 0), 0)])),
       failed_documents: list.filter(item => !item.privacy_extraction || item.privacy_extraction.status === 'failed').length,
       uncertain_documents: list.filter(item => item.privacy_extraction?.status === 'manual_check_required').length },
-    stages: Object.fromEntries(['automatic', 'final'].map(stage => {
+    stages: Object.fromEntries(['automatic', 'final', 'raw_final'].map(stage => {
       const evaluated = list.filter(item => item[stage].evaluated);
       return [stage, { evaluated_documents: evaluated.length, unevaluated_documents: list.length - evaluated.length,
         documents_with_known_leaks: evaluated.filter(item => item[stage].leaking_occurrences > 0).length,
@@ -326,13 +340,13 @@ function summarizeQuality(results) {
     .map(value => [value, summarize(results.filter(item => (item[key] || 'none') === value))]));
   return { ...summarize(results), by_format: grouped('format'), by_ocr_variant: grouped('ocr_variant'), by_split: grouped('split'),
     by_entity: Object.fromEntries([...new Set(results.flatMap(item => Object.keys(item.final.by_entity || item.automatic.by_entity || {})))].sort()
-      .map(type => [type, Object.fromEntries(['automatic', 'final'].map(stage => [stage,
+      .map(type => [type, Object.fromEntries(['automatic', 'final', 'raw_final'].map(stage => [stage,
         { sensitive_occurrences: results.reduce((sum, item) => sum + (item[stage].by_entity?.[type]?.sensitive_occurrences || 0), 0),
           leaking_occurrences: results.reduce((sum, item) => sum + (item[stage].by_entity?.[type]?.leaking_occurrences || 0), 0) }]))])) };
 }
 
 function qualityHasFindings(report) {
-  const summary = report.summary, final = summary.stages.final;
+  const summary = report.summary, final = summary.stages.final, rawFinal = summary.stages.raw_final;
   const privacyInput = summary.privacy_extraction;
   return Boolean(report.fatal_error || !report.full_corpus_executed || final.unevaluated_documents ||
     final.documents_with_known_leaks || final.lost_factual_words || final.unassessed_sensitive_occurrences ||
@@ -341,7 +355,80 @@ function qualityHasFindings(report) {
     !privacyInput || privacyInput.failed_documents || privacyInput.uncertain_documents || privacyInput.changed_entities ||
     privacyInput.missing_entities || privacyInput.changed_privacy_contexts || privacyInput.changed_preservation_controls || privacyInput.lost_factual_words ||
     summary.extraction_changed_privacy_contexts || summary.extraction_changed_entities ||
-    summary.extraction_changed_preservation_controls || summary.extraction_lost_factual_words);
+    summary.extraction_changed_preservation_controls || summary.extraction_lost_factual_words ||
+    rawFinal?.unevaluated_documents || rawFinal?.leaking_occurrences || rawFinal?.unassessed_sensitive_occurrences ||
+    rawFinal?.retained_privacy_context_occurrences || rawFinal?.unassessed_privacy_context_occurrences);
 }
 
-module.exports = { renderedText, tokens, align, editDistance, bindReference, evaluateQuality, summarizeQuality, qualityHasFindings };
+// Engineering prioritization, NOT a runtime publication policy or a release
+// certificate. Keep the strict diagnostic above unchanged: raw defects still
+// exist even after an explicit source-bound contact correction.
+function assessQuality(report) {
+  const base = { policy: 'datasecure-quality-policy/2', scope: 'reviewed-synthetic-engineering-only',
+    release_acceptance: 'not_assessed' };
+  try {
+    if (!Array.isArray(report.results) || !report.results.length) throw new Error('QUALITY_RESULTS_MISSING');
+    const summary = summarizeQuality(report.results);
+    const changes = { documents: 0, markdown_occurrences: 0, privacy_raw_occurrences: 0 };
+    const keys = ['changed_entities', 'missing_entities', 'changed_privacy_contexts',
+      'changed_preservation_controls', 'lost_factual_words'];
+    const validInput = input => input?.status === 'evaluated' && keys.every(key =>
+      Number.isSafeInteger(input[key]) && input[key] >= 0);
+    let rawBlocked = false;
+    for (const result of report.results) {
+      const ocr = ['png', 'jpg', 'jpeg', 'bmp'].includes(result.format) ||
+        (result.format === 'pdf' && result.ocr_variant === 'scan');
+      const actualInputs = result.privacy_extraction?.input_source === 'actual_privacy_extraction' &&
+        result.raw_privacy_extraction?.input_source === 'actual_pre_contact_review_extraction';
+      let documentWarnings = 0;
+      if (!Array.isArray(result.findings)) throw new Error('QUALITY_FINDINGS_MISSING');
+      for (const [stage, countKey] of [['extraction', 'markdown_occurrences'],
+        ['raw_privacy_extraction', 'privacy_raw_occurrences']]) {
+        const input = result[stage];
+        const stageFindings = result.findings.filter(item => item.stage === stage);
+        const contacts = stageFindings.filter(item => item.code === 'OCR_ENTITY_CHANGED' && item.type === 'EMAIL');
+        const eligible = ocr && actualInputs && validInput(input) &&
+          contacts.length === input.changed_entities && contacts.length === stageFindings.length;
+        const warned = eligible ? contacts.length : 0;
+        changes[countKey] += warned;
+        documentWarnings += warned;
+        if (!validInput(input) || input.changed_entities !== warned || stageFindings.length !== warned ||
+            keys.slice(1).some(key => input[key] > 0)) rawBlocked = true;
+      }
+      if (documentWarnings) changes.documents++;
+      if (!validInput(result.privacy_extraction)) rawBlocked = true;
+      // Unknown future source errors cannot silently become warnings.
+      if (result.findings.some(item => item.stage === 'privacy_extraction')) rawBlocked = true;
+    }
+    const final = summary.stages.final, rawFinal = summary.stages.raw_final, privacy = summary.privacy_extraction;
+    const finalKeys = ['leaking_occurrences', 'sensitive_occurrences', 'unassessed_sensitive_occurrences',
+      'lost_factual_words', 'added_factual_words', 'retained_privacy_context_occurrences', 'unassessed_privacy_context_occurrences'];
+    const privacyBlocked = Boolean(final.unevaluated_documents || final.documents_with_known_leaks ||
+      final.leaking_occurrences || final.unassessed_sensitive_occurrences ||
+      final.retained_privacy_context_occurrences || final.unassessed_privacy_context_occurrences ||
+      rawFinal.unevaluated_documents || rawFinal.leaking_occurrences || rawFinal.unassessed_sensitive_occurrences ||
+      rawFinal.retained_privacy_context_occurrences || rawFinal.unassessed_privacy_context_occurrences ||
+      privacy.failed_documents || privacy.uncertain_documents || privacy.changed_entities || privacy.missing_entities ||
+      privacy.changed_privacy_contexts || report.results.some(result => ['final', 'raw_final'].some(stage =>
+        result[stage].status !== 'published' || result[stage].reference_alignment !== 'within_limit' ||
+        !finalKeys.every(key => Number.isSafeInteger(result[stage][key]) && result[stage][key] >= 0))));
+    const preservationBlocked = Boolean(final.lost_preservation_controls || final.lost_factual_words ||
+      final.added_factual_words || summary.extraction_changed_preservation_controls ||
+      summary.extraction_lost_factual_words || privacy.changed_preservation_controls || privacy.lost_factual_words ||
+      summary.raw_privacy_extraction.changed_preservation_controls || summary.raw_privacy_extraction.lost_factual_words);
+    const adjusted = { ...summary, extraction_changed_entities:
+      summary.extraction_changed_entities - changes.markdown_occurrences };
+    const blocked = rawBlocked || privacyBlocked || preservationBlocked ||
+      report.runtime_cleanup !== 'confirmed' || qualityHasFindings({ ...report, summary: adjusted });
+    const warnings = changes.documents ? ['QUALITY_RAW_OCR_CONTACT_CHANGED'] : [];
+    return { ...base, status: blocked ? 'blocked' : warnings.length ? 'pass_with_warnings' : 'pass',
+      dimensions: { raw_extraction: rawBlocked ? 'blocked' : warnings.length ? 'warning' : 'pass',
+        reviewed_privacy: privacyBlocked ? 'blocked' : 'pass',
+        content_preservation: preservationBlocked ? 'blocked' : 'pass' },
+      warnings, raw_ocr_contact_changes: changes };
+  } catch {
+    return { ...base, status: 'blocked', warnings: [], error_code: 'QUALITY_REPORT_INVALID' };
+  }
+}
+
+module.exports = { renderedText, tokens, align, editDistance, bindReference, evaluateQuality, summarizeQuality, qualityHasFindings, assessQuality };

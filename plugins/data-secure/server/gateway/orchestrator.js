@@ -38,6 +38,7 @@ const { personProseCandidateSpans, personProseAmbiguities } = require('../privac
 const { residualPersonAmbiguities, createPersonReviewBinding } = require('../privacy/residual-person-review');
 const { makeRegistry } = require('../privacy/entities');
 const { canonicalizeRenderedText } = require('../privacy/base');
+const { createTransformTrace } = require('../privacy/transform-plan');
 const { PRIVACY_RULESET_VERSION, CREDENTIAL_CONTEXT_POLICY_VERSION } = require('../privacy/policy');
 const { processAlive } = require('./process-liveness');
 const { readSourceToPrivateMemory } = require('./read-only-source-snapshot');
@@ -93,17 +94,23 @@ function reservePersonReviewCandidates(text, pseudonymRegistry, allowOrganizatio
   return {
     original,
     masked,
-    restore(value) {
-      let restored = String(value || '');
+    mask_edits: ordered.map(span => ({ start: span.start, end: span.end, original: span.value,
+      replacement: span.token, kind: 'RESERVATION' })),
+    restore(value, applied) {
+      const before = String(value || ''), edits = [];
       for (const reservation of reservations) {
-        const first = restored.indexOf(reservation.token);
-        if (first < 0 || restored.indexOf(reservation.token, first + reservation.token.length) >= 0) {
+        const first = before.indexOf(reservation.token);
+        if (first < 0 || before.indexOf(reservation.token, first + reservation.token.length) >= 0) {
           const error = new SafeError('Ein lokaler Personenhinweis konnte nach der Datenschutzprüfung nicht sicher rekonstruiert werden.');
           error.code = 'AMBIGUITY_REVIEW_REQUIRED';
           throw error;
         }
-        restored = restored.slice(0, first) + reservation.value + restored.slice(first + reservation.token.length);
+        edits.push({ start: first, end: first + reservation.token.length,
+          original: reservation.token, replacement: reservation.value, kind: 'RESERVATION_RESTORE' });
       }
+      edits.sort((a, b) => a.start - b.start);
+      const restored = require('../privacy/transform-plan').applyEdits(before, edits);
+      if (applied) applied(before, restored, edits);
       return restored;
     }
   };
@@ -504,8 +511,14 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     // journal, diagnostic, or audit receipt.
     const pseudonymRegistry = deps.pseudonymRegistry || makeRegistry();
     const personReview = reservePersonReviewCandidates(rawWithOcr, pseudonymRegistry, deps.productChannel === 'standalone', effective);
-    const anon = anonymizeMarkdown(personReview.masked, effective, { registry: pseudonymRegistry, deferPersonReview: true });
-    anon.text = personReview.restore(anon.text);
+    const transform = deps.productChannel === 'standalone' && typeof deps.persistStandaloneDocumentReview === 'function'
+      ? createTransformTrace(personReview.original) : null;
+    if (transform) transform.append('reserve', personReview.original, personReview.masked, personReview.mask_edits);
+    const anon = anonymizeMarkdown(personReview.masked, effective, { registry: pseudonymRegistry, deferPersonReview: true,
+      ...(transform ? { captureTransformPlan: true } : {}) });
+    if (transform) transform.appendTrace('anonymization', anon.transform_trace);
+    anon.text = personReview.restore(anon.text, transform ?
+      (before, after, edits) => transform.append('restore-reservation', before, after, edits) : undefined);
     const organizationAmbiguities = ['personnel_profile', 'applicant'].includes(effective)
       ? credentialIssuerAmbiguities(personReview.original, anon.text)
       : [];
@@ -554,7 +567,16 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
         detected_identifiers: anon.entityCount,
         ambiguities,
         ...(deps.productChannel === 'standalone' ? { allowOrganizationReview: true } : {}),
-        confirmPersonReview: personReviewBinding.confirm,
+        confirmPersonReview: (decisions, redactions, resultText) => {
+          personReviewBinding.confirm(decisions, redactions, resultText);
+          if (transform) transform.append('human-review', anon.text, resultText,
+            [...redactions].sort((a, b) => a.start - b.start || a.end - b.end).map(edit => ({
+              start: edit.start, end: edit.end, original: anon.text.slice(edit.start, edit.end),
+              replacement: edit.replacement || '[MANUAL_REDACTION]',
+              kind: /^\[PERSON_/u.test(edit.replacement || '') ? 'PERSON' :
+                /^\[(?:UNTERNEHMEN|ORGANISATION)_/u.test(edit.replacement || '') ? 'ORGANIZATION' : 'MANUAL_REDACTION'
+            })));
+        },
         replacementForAmbiguity: (candidate, kind = 'PERSON') => {
           if (!['person_prose_ambiguous', 'person_residual_ambiguous'].includes(candidate?.type) || candidate.replacement_kind !== 'PERSON') {
             throw new SafeError('Die lokale Mehrdeutigkeitsentscheidung ist ungültig.');
@@ -614,6 +636,10 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     const finalSuffix = assetsMarkdown(vis.results);
     const reviewedPersonCandidates = personReviewBinding.forPublication(finalPrefix, reviewedText, finalSuffix);
     const finalText = finalPrefix + reviewedText + finalSuffix;
+    if (transform) transform.append('publication-frame', reviewedText, finalText, [
+      ...(finalPrefix ? [{ start: 0, end: 0, original: '', replacement: finalPrefix, kind: 'TECHNICAL' }] : []),
+      ...(finalSuffix ? [{ start: reviewedText.length, end: reviewedText.length, original: '', replacement: finalSuffix, kind: 'TECHNICAL' }] : [])
+    ]);
     const capacity = deps.assertWritableCapacity || assertWritableCapacity;
     capacity({ directory: stagePackage, bytes: Buffer.byteLength(finalText, 'utf8') });
     try { fs.writeFileSync(mdPath, finalText, 'utf8'); }
@@ -676,6 +702,20 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     // its independent on-disk manifest/hash verification below the package
     // boundary, so this removes only a redundant local I/O pass.
     const documentSha256 = crypto.createHash('sha256').update(finalText, 'utf8').digest('hex');
+    if (productChannel === 'standalone' && typeof deps.persistStandaloneDocumentReview === 'function') {
+      await deps.persistStandaloneDocumentReview({ package_id: packageId, original_text: rawWithOcr, markdown: finalText,
+        transform_trace: transform.finish(finalText),
+        verification_context: { profile: effective, dictionary: anon.dictionary,
+          strong_person_anchor: anon.strongPersonAnchor === true,
+          ruleset: PRIVACY_RULESET_VERSION, credential_policy: CREDENTIAL_CONTEXT_POLICY_VERSION,
+          publication_frame: { prefix: finalPrefix, suffix: finalSuffix },
+          reviewed_ranges: require('../privacy/residual-person-review').reviewedPersonRanges(reviewedPersonCandidates,
+            canonicalizeRenderedText(finalText)).map(range => ({
+              start: range.start + finalPrefix.length - canonicalizeRenderedText(finalPrefix).length,
+              end: range.end + finalPrefix.length - canonicalizeRenderedText(finalPrefix).length
+            })) }
+      });
+    }
     const manifest = {
       schema: 'eu-privacy-package/3',
       gateway_version: VERSION,
@@ -912,5 +952,5 @@ module.exports = {
   bestEffortRetentionCleanup,
   cleanupAbandonedWorkingJobs,
   prepareProcessingRun,
-  _test: { ensureProcessingRun }
+  _test: { ensureProcessingRun, reservePersonReviewCandidates }
 };

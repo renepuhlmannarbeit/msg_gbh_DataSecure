@@ -5,7 +5,8 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 const { StandaloneApplicationService } = require('./application-service');
-const { FrameDecoder, MAX_FRAME_BYTES } = require('./desktop-ipc');
+const { FrameDecoder, MAX_FRAME_BYTES, validatePrivateMessage } = require('./desktop-ipc');
+const { NativeExportChannel, RESPONSE_SCHEMA: NATIVE_RESPONSE_SCHEMA, PUBLICATION_RESPONSE } = require('./native-export-channel');
 const { desktopErrorCode } = require('../core/desktop-error-contract');
 const { createBestEffortDiagnosticLog } = require('../core/safe-diagnostic-log');
 
@@ -29,9 +30,27 @@ function diagnosticEvent(event, fields = {}) {
 
 let service;
 let startupError;
+const nativeChannel = new NativeExportChannel({ write: value => writeFrame(value) });
+const nativeEnabled = process.env.DATASECURE_NATIVE_EXPORT_CHANNEL === '1';
+let nativeSession;
+const ownerGeneration = process.env.DATASECURE_DOCUMENT_CONTROL_GENERATION;
 diagnosticEvent('sidecar_started', { outcome: 'ready' });
 try {
-  service = new StandaloneApplicationService();
+  const owner = Number(process.env.DATASECURE_DOCUMENT_CONTROL_OWNER_PID);
+  if (nativeEnabled && (!Number.isSafeInteger(owner) || owner <= 0 || owner !== process.ppid))
+    throw Object.assign(Error('STANDALONE_IPC_FAILED'), { code: 'STANDALONE_IPC_FAILED' });
+  const retiredControlGenerations = nativeEnabled ? JSON.parse(process.env.DATASECURE_RETIRED_CONTROL_GENERATIONS || '[]') : [];
+  if (nativeEnabled && (!/^[a-f0-9]{32}$/u.test(ownerGeneration || '') || !Array.isArray(retiredControlGenerations) ||
+      retiredControlGenerations.length > 16 || new Set(retiredControlGenerations).size !== retiredControlGenerations.length ||
+      retiredControlGenerations.some(value => !/^[a-f0-9]{32}$/u.test(value) || value === ownerGeneration)))
+    throw Object.assign(Error('STANDALONE_IPC_FAILED'), { code: 'STANDALONE_IPC_FAILED' });
+  service = new StandaloneApplicationService({ ...(nativeEnabled ? {
+    controlOwnerPid: owner, controlOwnerGeneration: ownerGeneration, retiredControlGenerations,
+    nativeExport: (operation, command, body) => {
+      if (!nativeSession) return Promise.reject(Object.assign(Error('STANDALONE_IPC_FAILED'), { code: 'STANDALONE_IPC_FAILED' }));
+      return nativeSession.send('export_documents', { operation, command, ...(body ? { body } : {}) });
+    }
+  } : {}) });
   diagnosticEvent('service_initialized', { outcome: 'ready' });
 } catch (error) {
   startupError = error;
@@ -39,12 +58,20 @@ try {
     outcome: 'failed', error_code: error?.code || 'STANDALONE_OPERATION_FAILED'
   });
 }
-const decoder = new FrameDecoder();
+// The owning native desktop waits for this exact private bootstrap proof before
+// dispatching an ordinary request. CLI/non-native adapters keep their protocol.
+if (nativeEnabled) writeFrame({ schema: 'datasecure-standalone-ready/1', owner_generation: ownerGeneration,
+  ok: !startupError, ...(startupError ? { error_code: desktopErrorCode(startupError.code) } : {}) });
+const decoder = new FrameDecoder({ validate: message => {
+  if (nativeEnabled && [NATIVE_RESPONSE_SCHEMA, PUBLICATION_RESPONSE].includes(message?.schema)) return nativeChannel.accept(message);
+  return validatePrivateMessage(message);
+} });
 let chain = Promise.resolve();
 let stopping = false;
 
 function stopInput() {
   stopping = true;
+  nativeChannel.abort();
   process.stdin.pause();
   decoder.buffer = Buffer.alloc(0);
 }
@@ -101,15 +128,19 @@ function publicError(requestId, error) {
 async function dispatch(message) {
   if (message.action === 'shutdown') return { ok: true, shutting_down: true, external_disclosure: false };
   if (startupError) throw startupError;
+  nativeSession = nativeEnabled ? nativeChannel.publication(message) : null;
   switch (message.action) {
     case 'admit_selected_sources':
-      return service.admitSelectedSources(message.source_paths, message.source_kind);
+      return service.admitSelectedSources(message.source_paths, message.source_kind, undefined,
+        { catalogue: message.source_catalogue === true });
     case 'remove_admitted_source': return service.removeAdmittedSource(message.selection_index);
     case 'cancel_admission': return service.cancelAdmission();
     case 'start_admitted_batch': return service.startAdmittedBatch({ processingMode: message.processing_mode,
+      ...(message.source_ids ? { sourceIds: message.source_ids, catalogueRevision: message.catalogue_revision } : {}),
       ...(message.ocr_contact_review === true ? { ocrContactReview: true } : {}),
+      ...(message.document_review === true ? { documentReview: true } : {}),
       ...(message.output_naming_mode ? { outputNamingMode: message.output_naming_mode } : {}) });
-    case 'get_public_state': return service.status();
+    case 'get_public_state': return service.status({ localUi: true });
     case 'get_ui_context': return service.uiContext();
     case 'get_run_history': return service.history();
     case 'get_run_failures': return service.runFailures(message.batch_id);
@@ -118,9 +149,30 @@ async function dispatch(message) {
     case 'submit_review': return service.submitReview(message.review_id, message.answer);
     case 'continue_review_session': return service.continueReviewSession();
     case 'continue_history_batch': return service.continueHistoryBatch(message.batch_id);
+    case 'pause_batch': return service.pauseBatch(message.batch_id);
+    case 'get_document_reviews': return service.documentReviews(message.batch_id);
+    case 'get_document_review_history_summary': return service.documentReviewHistorySummary(message.batch_id);
+    case 'get_document_review_chunk': return service.documentReviewChunk(message.batch_id, message.document_id, message.revision, message.chunk_index);
+    case 'get_document_entities': return service.documentEntities(message.batch_id, message.document_id, message.revision, message.page);
+    case 'decide_document_review': return service.decideDocumentReview(message.batch_id, message.document_id, message.decision);
+    case 'export_approved_documents': return service.exportApprovedDocuments(message.batch_id, message.operation_id, message.selection, message.acknowledge === true);
+    case 'abandon_document_export': return service.abandonDocumentExport(message.batch_id, message.operation_id, message.digest);
+    case 'resolve_document_export': return service.resolveDocumentExport(message.batch_id, message.operation_id);
+    case 'resolve_document_identity_overview': return service.resolveDocumentIdentityOverview(message.batch_id, message.operation_id);
     case 'ack_terminal_presented': return service.acknowledgeTerminalPresented(message.presentation_generation);
     case 'continue_current_batch': return service.continueCurrentBatch(undefined, { requireObserved: true });
-    case 'configure_results': return service.configureResults({ path: message.source_paths[0] });
+    case 'configure_results': {
+      if (message.native_export_binding === true && !nativeEnabled)
+        throw Object.assign(Error('STANDALONE_IPC_FAILED'), { code: 'STANDALONE_IPC_FAILED' });
+      if (nativeEnabled && message.native_export_binding === true) {
+        // Reject current AND historical private/public overlap before native
+        // provisioning, not after a potentially unsafe destination write.
+        require('../gateway/root-boundary').assertRootSeparation({ resultRoot: message.source_paths[0] });
+        const nativeExport = await nativeChannel.configureExportRoot(message);
+        return service.configureResults({ path: message.source_paths[0], nativeExport });
+      }
+      return service.configureResults({ path: message.source_paths[0] });
+    }
     case 'resolve_current_results':
     case 'resolve_local_ledger':
     case 'resolve_history_results':
@@ -159,6 +211,9 @@ process.stdin.on('data', (chunk) => {
   try { messages = decoder.push(chunk); }
   catch { endHost(65, 'private_ipc_invalid', 'DESKTOP_IPC_FRAME_INVALID'); return; }
   for (const message of messages) {
+    // Native replies must resolve the in-flight dispatch immediately, not wait
+    // behind that same dispatch in the serial request chain.
+    if ([NATIVE_RESPONSE_SCHEMA, PUBLICATION_RESPONSE].includes(message.schema)) continue;
     chain = chain.then(async () => {
       if (stopping) return;
       diagnosticEvent('request_received', { action: message.action });

@@ -106,6 +106,16 @@ test('inserting a negation into an intact assertion is not perfect preservation'
   assert.equal(result.final.added_factual_words, 1); assert.equal(result.final.lost_content.length, 1);
   assert.ok(qualityHasFindings({ summary: summarizeQuality([result]), full_corpus_executed: true }));
 });
+
+test('same-line leading/trailing additions are not free presentation metadata', () => {
+  const source = sample();
+  const clean = source.reference.replace('Anna Linden', '[PERSON_001]');
+  for (const output of [`Nicht ${clean}`, clean.replace(/bleibt\.$/u, 'bleibt nicht.')]) {
+    assert.equal(evaluateQuality(source, record(source.reference, output)).final.added_factual_words, 1);
+  }
+  const withScaffolding = `Dokumentausgabe\n${clean}\nEnde des Dokuments`;
+  assert.equal(evaluateQuality(source, record(source.reference, withScaffolding)).final.added_factual_words, 0);
+});
 test('a partly lost OCR name is still assessed and prevents a clean grade', () => {
   const source = sample(), ocr = source.reference.replace('Anna Linden', 'Anna');
   const result = evaluateQuality(source, record(ocr, ocr));

@@ -55,6 +55,30 @@ test('both main-window actions require their newest successful response, never j
     ? { ...event, event: 'ipc_response_error' } : event).concat([page, request, success])), false);
 });
 
+test('new native candidates require the actual workspace page as well as successful main IPC', () => {
+  const events = [{ event: 'page_loaded' }, { event: 'frontend_ready' }];
+  for (const action of ['get_public_state', 'get_ui_context']) events.push(
+    rpc('ipc_request_started', action), rpc('ipc_response_ok', action));
+  assert.equal(mainReady(events, { workspace: true }), false, 'Legacy page cannot prove v2');
+  assert.equal(mainReady([...events, { event: 'workspace_page_loaded' }], { workspace: true }), true);
+  assert.equal(mainReady([{ event: 'workspace_page_loaded' }], { workspace: true }), false);
+  const helper = path.join(__dirname, 'helpers/native-review-readiness.js');
+  for (const [records, expected] of [[events, 1], [[...events, { event: 'workspace_page_loaded' }], 0]]) {
+    const result = spawnSync(process.execPath, [helper, '-', '--main', '--workspace'], {
+      input: records.map(event => JSON.stringify(event)).join('\n') + '\n',
+      encoding: 'utf8', windowsHide: true, timeout: 5000
+    });
+    assert.equal(result.status, expected, result.stderr);
+  }
+  for (const platform of ['macos', 'linux']) {
+    const launcher = fs.readFileSync(path.join(__dirname, `manual/standalone-native-${platform}-launch.sh`), 'utf8');
+    assert.match(launcher, /native-review-readiness\.js" "\$desktop_log" --main --workspace/u);
+  }
+  const rust = fs.readFileSync(path.join(__dirname, '../apps/datasecure-standalone/tauri-contract/src/main.rs'), 'utf8');
+  assert.match(rust, /webview\.label\(\) == "main" && workspace_catalogue_path\(payload\.url\(\)\.path\(\)\)/u);
+  assert.match(rust, /diagnostic_event\("workspace_page_loaded", None, "ready", None, None\)/u);
+});
+
 test('the macOS log-check CLI returns nonzero for unsuccessful IPC and zero only after success', () => {
   const helper = path.join(__dirname, 'helpers/native-review-readiness.js');
   for (const [events, expected] of [

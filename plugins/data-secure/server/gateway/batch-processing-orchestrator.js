@@ -42,6 +42,12 @@ function createBatchProcessingOrchestrator(options = {}) {
       );
       if (pendingDelivery) return await deliveryResult(state, pendingDelivery);
 
+      // Maintenance may have settled mapping debt in this very call. Never
+      // fall through to a new source after a durable Standalone pause request.
+      if (options.pauseRequested?.(state)) {
+        return { ok: true, ...publicProgress(state), raw_content_sent_to_claude: false };
+      }
+
       const item = state.items.find((candidate) => candidate.status === 'pending');
       if (!item) {
         const progress = publicProgress(state);

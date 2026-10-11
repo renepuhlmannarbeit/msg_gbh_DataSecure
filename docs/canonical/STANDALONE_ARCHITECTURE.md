@@ -1,6 +1,6 @@
 # DataSecure Standalone – Produkt- und Einführungsarchitektur
 
-Stand: 05.10.2026 · einschließlich DS-104 bis DS-109 · Steuerung über BL-010.9
+Stand: 07.10.2026 · einschließlich DS-104 bis DS-109 · Steuerung über BL-010.9
 
 ## Produktabgrenzung
 
@@ -63,7 +63,9 @@ ohne ihre Fachdaten zu vermischen.
 
 Dieser Ablauf ist im Quellstand angebunden; seine Endnutzerfreigabe bleibt offen.
 Die native Windows-Hülle ist als Engineering-Pilot vorhanden; native
-Drag-and-drop-Aufnahme ist angebunden, eine freie Pausefunktion bleibt Zielumfang.
+Drag-and-drop-Aufnahme ist angebunden. Eine freie Pausefunktion bleibt im
+Legacy-Standard Zielumfang; im unveröffentlichten v2-Schnitt ist sie nun
+generationsgebunden an der dauerhaften Dateiclaim-Grenze implementiert.
 Sichtbare Drop-/Fokus- und macOS-Evidenz ist
 nicht durch den Windows-Code- und Pakettest ersetzt.
 
@@ -110,7 +112,9 @@ Laufstatus neu.
    **Auswahl leeren**. Nach `Starten` ist der Stapel unveränderlich.
 2. **Verarbeitung:** nichtmodaler, inhaltsfreier Fortschritt mit
    `abgeschlossen/ausgewählt`; ein Dateifehler stoppt nicht den übrigen Stapel.
-   Eine Pause bleibt außerhalb der Istzusage, bis Befehl und Recovery belegt sind.
+   Die veröffentlichte Legacy-Oberfläche bietet keine Pause. Der unveröffentlichte
+   v2-Schnitt besitzt jetzt Befehl und Recovery-Gegenprobe; native Paketabnahme
+   bleibt erforderlich (DS-110).
 3. **Prüfung:** nur im Anonymisierungszweck und erst nach Abschluss offener
    automatischer Arbeit; echte Mehrdeutigkeiten gesammelt in einer Liste mit
    `Anonymisieren`, `Beibehalten`, `Für gleiche Treffer übernehmen` und
@@ -322,6 +326,28 @@ Die Standalone-Konverter halten Grafikhinweise und konservative PDF-/OCR-
 Geometrie in eigenen Modulen (`markdown-visuals.js`, `pdf-text-layout.js`).
 Keine externen Bildbeschreibungen, keine semantische Löschung beliebiger
 OCR-Wörter; ohne sichere Geometrie bleibt OCR erhalten.
+
+### BL-050.6: Begrenzte Prüfliste (07.10.2026, unveröffentlicht)
+
+`gateway/batch-contact-review.js` erfasst Kontaktinputs vor jeder Veröffentlichung
+und bündelt sie über `gateway/ocr-contact-batch.js` ohne Textnormalisierung.
+Globale IDs werden nach vollständiger Antwortvalidierung auf vollständige lokale
+Dokumentantworten zurückgeführt; der bestehende Kontaktstore bindet sie erneut
+an unveränderte Quelle, Extraktion, Zweck und Bilddigest. Ein Schreibfehler darf
+bereits vollständige Dokumentantworten hinterlassen; Wiederaufnahme überspringt
+nur diese. Eine zusätzliche Rekonstruktion ist bewusst erforderlich, damit
+nach Kontaktkorrekturen die gewöhnliche Privacy-/Restprüfung neu arbeitet.
+400 Kontakte, Bild-/Textgrenzen und 40-MiB-Draftgrenze gelten auch aggregiert.
+Große Läufe erhalten Folgegruppen im selben Fenster, keine unbeschränkte Liste.
+
+Der private Renderer paginiert höchstens 50 Zeilen und rendert nur einen
+Detailvergleich mit Originalpixeln. Backend-Entitätsgruppen, nicht Textheuristiken
+im Renderer, bestimmen gemeinsame Zeilen. Filter-/Seitenwechsel leeren die
+explizite Auswahl; Eingabeänderung macht eine OCR-Entscheidung wieder offen.
+Vorschau, Korrekturfelder, Tabelle, Suche, Vorkommensliste und Bild-URL werden
+beim Übergang/Schließen geleert. Verlust der Empfangsbestätigung stellt Eingaben
+nur für denselben Review-ID wieder her. Dateinamen verbleiben als validierte
+private Dokumentmetadaten im Prüffenster, nicht in Diagnose oder Cowork.
 
 ### BL-050.6: Kontaktprüfung vor der Privacy-Analyse (06.10.2026, unveröffentlicht)
 
@@ -562,8 +588,9 @@ zufällige Lauf-/Itemkennungen, `product_channel`, Formatklasse, feste
 Versionen, begrenzte Zähler, Dauer und feste Fehlercodes.
 
 Standalone ergänzt ausschließlich UI-Aktionen aus einer geschlossenen Liste,
-Picker-Start/-Ende, Fortschritt, Review und Ergebnisöffnung. Eine spätere
-Pause erhält erst mit implementiertem Befehl und Recovery-Test einen Eventtyp.
+Picker-Start/-Ende, Fortschritt, Review und Ergebnisöffnung. Der unveröffentlichte
+Pausebefehl besitzt inzwischen Recovery-Gegenproben; ein sequenzierter
+UI-Ereignisvertrag bleibt weiterhin ein eigener offener DS-110-Schritt.
 MCP-/Toolereignisse gehören nur zum Pluginprotokoll. Verboten sind in allen Diagnosejournalen:
 Rohtext, Markdown-/OCR-Inhalt, Namen, Pfade, Mappinginhalt, Dokumenthash,
 Kommandozeile, Environment, freie Exceptions, Tracebacks und fremdes
@@ -615,3 +642,92 @@ und Linux x64 belegt; eine gegebenenfalls organisatorische Lizenzfreigabe und
 sichtbare Zielsystem-UAT bleiben offen. Auch vorhandene
 grüne Paketnachweise ersetzen keinen Nachweis
 für einen erst danach geänderten Kandidaten.
+
+## Prototyp-v2-Migration (DS-110)
+
+Die Vanilla-Oberfläche wird in Ansicht, lokale Auswahl und native Bridge
+gegliedert. Der Backend-Katalog besitzt die Quellen; Renderer-Häkchen sind
+keine Quellpfad-Autorität.
+Der Metadatenkatalog erlaubt bis zu 1.000 reguläre Dateien mit einer maximal
+512-KiB-großen vollständigen Aufnahmeantwort einschließlich ignorierter
+Artefaktdetails und privatem Antwortumschlag. Die vorhandenen 200-Dateien-/500-MiB-
+Verarbeitungsgrenzen werden serverseitig nach ID-/Revisionsprüfung und vor
+Reservierung bzw. Ergebnisordneranlage auf die angehakte Teilmenge angewendet.
+Dateityp-/Einzeldatei- und unsichere Baumgrenzen bleiben unverändert. Die
+Katalogerweiterung ist atomar einschließlich IDs und Revision.
+Pause ist ein persistierter Dateigrenzen-Checkpoint, nicht Shutdown. Implementiert
+in `standalone-pause.js` mit gemeinsamer kurzer Kontrollsperre für Intent,
+Dateiclaim und Fortsetzungsgeneration. Eine offene Zuordnung ist nicht pausiert.
+Die gleichen Claimgrenzen gelten im lokalen Kontakt-/Rekonstruktions-/
+Reviewpublikationspfad. Vollständig gebundene übergebene Entscheidungen werden
+vor dem ersten Publikationsclaim dauerhaft erhalten; nach akzeptierter Pause
+keine nächste Datei oder Folgegruppe. Mapping-/Publikationsschuld hält neue
+Standalone-Claims bis zur Reconciliation an.
+`standalone-document-review-store.js` ist ein geteilter Worker-Speicherbaustein,
+der nur bei explizitem Standalone-v2-Opt-in aktiv wird; kein neuer Cowork-Befehl.
+Unveränderliche private Original-/Markdown-Basisstände werden vor Veröffentlichung
+im automatischen und Stapelreview-Pfad gespeichert; Lesen verlangt eine positive
+Paket-/Byte-Reconciliation. Revisionsereignisse speichern Aktionen/Offsets statt
+voller Textduplikate, sind auf 1.000 begrenzt und werden beim Lesen neu abgeleitet.
+Freigabe ist an Revision/Hash gebunden; Maskierung und Wiederherstellung widerrufen
+sie. Chunk-IPC ist nur für die ausdrücklich geöffnete native v2-Dokumentansicht
+freigegeben und wird nach Antwort erneut auf Eigentümerschaft geprüft.
+Auch der Renderer bindet sichtbare Details und Checkboxabsicht an ID/Revision/
+Hash/Zweck/Chunkzahl. Ein Reload veränderter Dokumente darf weder den alten
+Vergleich stehen lassen noch dessen Freigabeabsicht auf neue Bytes übertragen.
+Ungespeicherte reine Markdown-Entwürfe werden dadurch nicht verworfen.
+Der ausgewählte KI-Export persistiert Auftrag, einzelne Ordner-Ownership und
+Abschluss getrennt. Neue Ordner-/Store-Bindungen verwenden exakte BigInt-IDs;
+ein ungebundenes vorhandenes Ziel wird nicht übernommen. Es werden nur neutrale
+flache Markdown-Dateien geschrieben, ohne Identitäten/Originalnamen/Bilddaten.
+Die Erstbindung und alle Ziel-I/O sind inzwischen an den nativen handle-relativen
+Workspace-/Exportbroker angeschlossen. Private vollständige Stage, ursprüngliche
+Picker-/Parentbindung und No-replace-Veröffentlichung ersetzen Node-Pfadzugriffe;
+kein Kopier-Fallback über Volumegrenzen. Windows-Dateisystem-/Crashgegenproben
+und eine begrenzte paketgebundene GUI-Exportkette bestehen. Neue native Mac-
+Race-/Paket- und vollständige Sicherheitsabnahme bleiben davon getrennt offen.
+Vollständige Nachprüfung benötigt einen separaten privaten
+revisionierten ReviewRunStore/DecisionService; freigegebene Revisionen bilden
+die einzige Eingabe eines neuen ApprovedExportService. Legacy-Bereitstellung
+und Cowork-Verträge dürfen nicht still umgedeutet werden. Plan, Konflikte und
+Abnahme: `docs/frontend-migration.md`, Arbeitsfortschritt BL-010.53.
+
+### Generationsgebundene Wiederverbindung (08.10.2026)
+
+Der native Desktop bleibt Besitzer laufender Dokumentmutationen. Ein zufälliger
+32-Hex-Generationswert bindet Sidecar, Ready-Handshake und Dokumentsperren.
+Rücksetzen ist erst erlaubt, nachdem der genaue alte Kindprozess beendet und
+alle registrierten nativen Aufträge tatsächlich erledigt sind. Nur explizit
+retirierte Generationen desselben geprüften Desktop-PIDs dürfen bereinigt werden;
+fremde oder alte generationlose Sperren werden nicht übernommen. Ein nicht
+belegtes Ende hält die Verbindung konservativ gesperrt.
+
+Bei Kanalfehler startet eine registrierte Bereinigung sofort. Neue native
+Arbeit/Spawns sind währenddessen gesperrt; erst nach Drain der registrierten
+Operationen und bestätigtem Ende des exakten Kindes wird dessen Sidecar entfernt.
+Bootstrap reserviert den SpawnGuard unter dem Sidecarmutex vor Verbrauch der
+Recoverygeneration. Abgewiesene Reads im Abschlussfenster verbrauchen kein Budget.
+Native v2-Publikations-I/O läuft in einem vor Threadstart registrierten Worker;
+abgelaufene oder beim Schließen verspätete Antworten werden nicht angenommen.
+Die Antwortfrist beendet jedoch keinen bereits laufenden OS-Schreibvorgang.
+Guard, Kontrollsperrenbesitzer und Bereinigung bleiben bis zu dessen tatsächlichem
+Ende/Reconciliation gekoppelt. Nach Rename ist Timeout unklarer Empfang, nicht
+Beweis einer ausgebliebenen Kopie. Dauerhaft blockiertes Kernel-I/O kann sichere
+Beendigung verzögern; keine maximale Shutdownzeit oder erzwungenes Abkoppeln
+versprechen. Windows-Gegenproben verwenden tatsächlichen Rename und Kindprozess;
+native Mac- und Paketbedienabnahme bleiben offen (R9-Korrekturnachtrag).
+
+Ein nativer Epochwechsel invalidiert Aufnahme, Reviewbindung, Textkörper,
+Auswahl und verspätete Antworten schon vor asynchronen Pickern/Drops. Der neue
+Sidecar wird mit geschlossenem Generationshandshake gestartet und der aktuelle
+Kontext ausschließlich lesend geladen. Weder Start noch Entscheidung, ACK oder
+Export wird wiederholt. Gespeicherte Dokumentstände benötigen ausdrückliche
+Neuladung; unbestätigte Mutationsaufträge bleiben über ihre ursprüngliche
+Operations-ID abgleichbar. r7-Windows-GUI-Gegenprobe nach fertigem Export bestätigt
+diesen Weg; weitere native Abbruchzeitpunkte und beide Macs bleiben offen.
+
+Identitätsauswahlen werden über geschlossene validierte Werte aus Dokument-ID,
+Revision und Ausgabehash verglichen, unabhängig von JSON-Schlüsselreihenfolge.
+Die Reihenfolge der tatsächlichen Exportauswahl bleibt separat unverändert, da
+sie die Zuordnung zu neutralen Dateinamen bestimmt. Hash-, Revisions-, Digest-
+und Eigentumsprüfungen werden dadurch nicht gelockert.

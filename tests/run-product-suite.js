@@ -4,8 +4,10 @@
 // unreleased PDF/OCR/SEA experiments have explicit scripts in package.json and
 // can no longer enter a product gate by accidental string concatenation.
 //
-// The three lists are disjoint by contract: `baseFiles` run in every profile,
-// `ciFiles` in `ci` and `full`, `fullOnly` in `full` only. A file listed twice
+// Headless source gates and native desktop interaction have separate evidence.
+// `full` on Windows requires --allow-native-ui before running ANY test; `headless`
+// covers all non-GUI files and explicitly reports the six native forms NOT_RUN.
+// The lists are disjoint by contract. A file listed twice
 // would run twice and cost minutes without adding evidence; the runner and
 // tests/test-test-path-separation.js both reject such an overlap.
 
@@ -15,6 +17,7 @@ const os = require('node:os');
 
 const baseFiles = [
   'tests/test-test-harness.js',
+  'tests/test-native-ui-boundary.js',
   'tests/test-bound-file-io.js',
   'tests/test-core-contracts.mjs',
   'tests/test-quality-benchmark.js', 'tests/test-quality-report.mjs',
@@ -23,18 +26,27 @@ const baseFiles = [
   'tests/test-ocr-contact-review.js', 'tests/test-ocr-contact-flow.js',
   'tests/test-ocr-contact-images.js',
   'tests/test-cargo-license-inventory.mjs',
+  'tests/test-standalone-font-license.mjs',
   'tests/test-mcp-input-validation.mjs',
   'tests/test-root-boundary.js', 'tests/test-claude-code-pilot.mjs',
   'tests/test-mcp-support-review.js',
   'tests/test-standalone-continuation.js',
   'tests/test-product-bootstrap.js', 'tests/test-standalone.js',
   'tests/test-standalone-frontend.js',
+  'tests/test-standalone-workspace.js',
+  'tests/test-standalone-document-review.js', 'tests/test-standalone-document-review-frontend.js',
+  'tests/test-private-transform-trace.js', 'tests/test-standalone-entities.js', 'tests/test-standalone-run-entities.js',
+  'tests/test-standalone-confidential-overview.js',
+  'tests/test-standalone-review-preview.mjs',
   'tests/test-standalone-review-frontend.js', 'tests/test-standalone-review-broker.js',
   'tests/test-standalone-review-choices.js',
   'tests/test-standalone-review-ipc.js',
   'tests/test-standalone-history.js',
   'tests/test-standalone-identity-ledger.js',
   'tests/test-standalone-sidecar.js',
+  'tests/test-native-export-channel.js',
+  'tests/test-standalone-terminal-failures.js',
+  'tests/test-standalone-document-control.js',
   'tests/test-standalone-desktop-contract.js', 'tests/test-markitdown-contract.js',
   'tests/test-native-smoke-integrity.js',
   'tests/test-standalone-package.js',
@@ -105,9 +117,11 @@ const ciFiles = [
 ];
 
 const fullOnly = [
+  'test-standalone-native-export.js',
   // Copied product projections and separate real processes belong to the
   // full local gate, not the cost-capped source CI profile.
   'test-core-policy-binding.mjs',
+  'test-standalone-pause.js',
   'test-product-isolation-offline.mjs',
   'test-text-source.js', 'test-csv-source.js',
   'test-csv-differential.js', 'test-parser-isolation.js', 'test-content-graph.js',
@@ -141,6 +155,47 @@ const fullOnly = [
   'test-companion-startup-boundary.js'
 ];
 
+const nativeUiFiles = ['test-native-windows-forms.js'];
+const nativeUiCaseCount = 6;
+
+function configurationError(code, message, exitCode = 64) {
+  return Object.assign(new Error(`${code}: ${message}`), { code, exitCode });
+}
+
+function nativeUiAuthorization(args, platform = process.platform) {
+  if (args.length !== 1 || args[0] !== '--allow-native-ui') {
+    throw configurationError('NATIVE_UI_NOT_AUTHORIZED',
+      'Native Windows forms require explicit desktop permission and --allow-native-ui. Use test:product:headless without desktop access.', 77);
+  }
+  if (platform !== 'win32') {
+    throw configurationError('NATIVE_UI_NOT_APPLICABLE',
+      'These six form tests apply only to Windows; native macOS/Linux acceptance is separate and NOT_RUN.', 78);
+  }
+}
+
+function executionPlan(profile, args = [], platform = process.platform) {
+  if (!['ci', 'full', 'headless', 'native-ui'].includes(profile)) {
+    throw configurationError('TEST_PROFILE_INVALID', 'Usage: node tests/run-product-suite.js <ci|full|headless|native-ui> [--allow-native-ui]');
+  }
+  const native = profile === 'native-ui' || (profile === 'full' && platform === 'win32');
+  if (native) nativeUiAuthorization(args, platform);
+  else if (args.length) throw configurationError('TEST_ARGUMENT_INVALID', 'This profile takes no flags; headless/CI never open native forms.');
+  const files = profile === 'native-ui' ? [] : [
+    ...baseFiles, ...normalizedEntries(ciFiles, 'tests/'),
+    ...(['full', 'headless'].includes(profile) ? normalizedEntries(fullOnly, 'tests/') : [])
+  ];
+  return {
+    profile,
+    headlessFiles: files,
+    nativeFiles: native ? normalizedEntries(nativeUiFiles, 'tests/') : [],
+    nativeStatus: native ? 'PENDING' : platform === 'win32' ? 'NOT_RUN' : 'NOT_APPLICABLE'
+  };
+}
+
+function nativeCoverageStatus(platform = process.platform) {
+  return `Native Windows forms: ${platform === 'win32' ? 'NOT_RUN' : 'NOT_APPLICABLE'} (${nativeUiCaseCount} cases). Standalone native GUI/package acceptance: NOT_RUN by this source suite.`;
+}
+
 // Every entry normalised to its repository-relative path, so overlaps between
 // the `tests/`-prefixed base list and the bare `ciFiles`/`fullOnly` names are
 // detected regardless of spelling.
@@ -154,7 +209,8 @@ function duplicateEntries() {
   for (const [name, entries] of [
     ['baseFiles', normalizedEntries(baseFiles)],
     ['ciFiles', normalizedEntries(ciFiles, 'tests/')],
-    ['fullOnly', normalizedEntries(fullOnly, 'tests/')]
+    ['fullOnly', normalizedEntries(fullOnly, 'tests/')],
+    ['nativeUiFiles', normalizedEntries(nativeUiFiles, 'tests/')]
   ]) {
     for (const entry of entries) {
       if (seen.has(entry)) duplicates.push(`${entry} (${seen.get(entry)} and ${name})`);
@@ -164,18 +220,16 @@ function duplicateEntries() {
   return duplicates;
 }
 
-function run(file) {
-  const result = spawnSync(process.execPath, [file], { cwd: process.cwd(), stdio: 'inherit', shell: false });
+function run(file, args = []) {
+  const result = spawnSync(process.execPath, [file, ...args], { cwd: process.cwd(), stdio: 'inherit', shell: false });
   if (result.error) throw result.error;
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
 
 function main() {
   const profile = process.argv[2] || 'ci';
-  if (!['ci', 'full'].includes(profile)) {
-    console.error('Usage: node tests/run-product-suite.js <ci|full>');
-    process.exit(64);
-  }
+  // Validate consent and platform BEFORE fixtures, temporary roots or children.
+  const plan = executionPlan(profile, process.argv.slice(3));
   const duplicates = duplicateEntries();
   if (duplicates.length) {
     console.error(`Product suite lists overlap: ${duplicates.join(', ')}`);
@@ -192,12 +246,18 @@ function main() {
     process.env.TMP = temporaryRoot;
     process.env.TEMP = temporaryRoot;
   }
-  for (const file of baseFiles) run(file);
-  const files = [...ciFiles, ...(profile === 'full' ? fullOnly : [])];
-  for (const file of files) run(`tests/${file}`);
-  console.log(`Product ${profile} suite passed (${baseFiles.length} base + ${files.length} direct test files).`);
+  console.log(`Product ${profile}: ${plan.headlessFiles.length} headless files; native Windows forms ${plan.nativeStatus}.`);
+  for (const file of plan.headlessFiles) run(file);
+  for (const file of plan.nativeFiles) run(file, ['--allow-native-ui']);
+  console.log(`Product ${profile} suite passed (${plan.headlessFiles.length} headless files, ${plan.nativeFiles.length ? `${nativeUiCaseCount} native Windows form cases` : 'no native GUI executed'}).`);
+  if (!plan.nativeFiles.length) console.log(nativeCoverageStatus());
+  else console.log('Standalone native GUI/package acceptance: NOT_RUN by these legacy form probes.');
 }
 
-module.exports = { baseFiles, ciFiles, fullOnly, duplicateEntries };
+module.exports = { baseFiles, ciFiles, fullOnly, nativeUiFiles, nativeUiCaseCount, duplicateEntries,
+  executionPlan, nativeUiAuthorization, nativeCoverageStatus };
 
-if (require.main === module) main();
+if (require.main === module) {
+  try { main(); }
+  catch (error) { console.error(error.message); process.exitCode = error.exitCode || 1; }
+}

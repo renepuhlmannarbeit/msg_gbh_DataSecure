@@ -24,6 +24,7 @@ function batchUserStatus(progress) {
     awaiting_local_review: [`Lokale Prüfung erforderlich: ${completed} von ${total} Dateien sind abgeschlossen.`, 'review_local_decisions'],
     awaiting_local_mapping_repair: [`Ergebnis lokal sicher erstellt: ${completed} von ${total} Dateien sind abgeschlossen. Die Zuordnungsübersicht wird lokal nachgetragen.`, 'local_mapping_repair'],
     awaiting_explicit_resume: [`Stapel angehalten: ${completed} von ${total} Dateien sind abgeschlossen.`, 'resume_batch'],
+    paused: [`Stapel pausiert: ${completed} von ${total} Dateien sind abgeschlossen.`, 'resume_batch'],
     awaiting_delivery_acknowledgement: [`Ergebnis wird sicher bereitgestellt: ${completed} von ${total} Dateien sind abgeschlossen.`, 'read_and_confirm_result'],
     processing_local_batch: [`Lokale Stapelverarbeitung läuft: ${completed} von ${total} Dateien sind abgeschlossen.${eta}`, 'wait_for_local_batch'],
     processing_local_document: [`Lokale Verarbeitung läuft: ${completed} von ${total} Dateien sind abgeschlossen.${eta}`, 'wait_for_current_document']
@@ -72,6 +73,8 @@ function progressFacts(state, config = {}, localProcessing = false) {
     deferred_review: deferredReview, remaining, retryable,
     delivery_pending: deliveryPending, mapping_pending: mappingPending, processing });
   const complete = !invalidState && remaining === 0 && retryable === 0 && deferredReview === 0 && mappingPending === 0 && deliveryPending === 0 && processing === 0;
+  const pauseRequested = state.product_channel === 'standalone' && !complete && state.standalone_pause_requested === true;
+  const paused = pauseRequested && !localProcessing && processing === 0 && deliveryPending === 0 && mappingPending === 0;
   const processingIndex = items.findIndex((item) => item.status === 'processing');
   const pendingIndex = items.findIndex((item) => item.status === 'pending');
   return {
@@ -91,10 +94,11 @@ function progressFacts(state, config = {}, localProcessing = false) {
     mapping_pending: mappingPending,
     remaining,
     local_processing_active: localProcessing === true,
+    ...(state.product_channel === 'standalone' ? { pause_requested: pauseRequested, paused } : {}),
     estimated_remaining_seconds: retryable === 0 && deferredReview === 0 ? measuredRemainingSeconds(state, remaining) : null,
-    awaiting_resume: retryable > 0 && remaining === 0 && deliveryPending === 0 && processing === 0,
+    awaiting_resume: paused || (retryable > 0 && remaining === 0 && deliveryPending === 0 && processing === 0),
     complete,
-    batch_phase: invalidState ? 'invalid_local_state' : (complete ? 'complete' : (localProcessing ? 'processing_local_batch' : (processing > 0 ? 'processing_local_document' : (deliveryPending > 0 ? 'awaiting_delivery_acknowledgement' : (reviewReady ? 'awaiting_local_review' : (mappingPending > 0 && remaining === 0 ? 'awaiting_local_mapping_repair' : (retryable > 0 && remaining === 0 ? 'awaiting_explicit_resume' : 'ready_for_next_document'))))))),
+    batch_phase: invalidState ? 'invalid_local_state' : (complete ? 'complete' : (paused ? 'paused' : (pauseRequested && mappingPending > 0 && !localProcessing ? 'awaiting_local_mapping_repair' : (localProcessing ? 'processing_local_batch' : (processing > 0 ? 'processing_local_document' : (deliveryPending > 0 ? 'awaiting_delivery_acknowledgement' : (reviewReady ? 'awaiting_local_review' : (mappingPending > 0 && remaining === 0 ? 'awaiting_local_mapping_repair' : (retryable > 0 && remaining === 0 ? 'awaiting_explicit_resume' : 'ready_for_next_document'))))))))),
     next_position: processingIndex >= 0 ? processingIndex + 1 : (pendingIndex >= 0 ? pendingIndex + 1 : null)
   };
 }

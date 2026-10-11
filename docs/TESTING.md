@@ -1,6 +1,6 @@
 # Aktueller Testvertrag
 
-Stand: 06.10.2026 · 3.2.0-rc158
+Stand: 08.10.2026 · 3.2.0-rc159
 
 Das vollständige chronologische Testjournal bis RC84 liegt unverändert im
 [Archiv](archive/2026-09/testing/TESTING_HISTORY_THROUGH_RC84.md). Diese Datei
@@ -12,6 +12,43 @@ Sicherheitsgegenfälle. Keine neue Testmatrix, doppelte Vertragskopie oder
 kostenpflichtige Modellrunde allein wegen einer kleinen Korrektur. Die
 vollständige lokale Produktsuite dient der abschließenden Integration;
 Tests und interne Nachweise erweitern nicht den normalen Anwenderablauf.
+
+**Desktopgrenze, BL-010.53.8:** Sechs echte automatisch bediente Windows-
+Formularproben aus Abschlussansicht, Restnamensprüfung und Companion liegen
+jetzt ausschließlich in `tests/test-native-windows-forms.js`. `windowsHide`
+versteckt keine WinForms-Fenster. Jeder dieser Prozesse ist auf 20 Sekunden
+begrenzt und bleibt synchron besitzgebunden; die Proben öffnen keinen Explorer.
+
+Ohne Desktopzugriff: `npm run test:product:headless`. Dieser Eingang führt alle
+Nicht-GUI-Dateien des Vollprofils aus, einschließlich echter Worker-/IPC-/
+Dateisystemtests, und meldet die sechs Formularfälle ausdrücklich `NOT_RUN`.
+`test:product:ci` und `test:standalone` öffnen diese Formulare ebenfalls nicht;
+Standalone meldet deren Status im Nachlauf. Das ist kein Gesamt-/Release-PASS.
+Fensterlose PowerShell-/Rust- und Quellvertragstests bleiben enthalten.
+
+Nur mit aktueller ausdrücklicher Desktopfreigabe:
+`npm run test:product:native-ui -- --allow-native-ui` oder für das Windows-
+Gesamtprofil `npm run test:product -- --allow-native-ui`. Ohne diesen exakten
+Schalter verweigern beide Eingänge vor Fixtures/Kindprozessen den Start mit
+`NATIVE_UI_NOT_AUTHORIZED` (Exit 77). Kein npm-Skript setzt ihn automatisch.
+`test:standalone:native-ui` ist derselbe getrennte Formulareingang. Auf macOS/
+Linux sind diese Windows-Proben `NOT_APPLICABLE` (expliziter Aufruf Exit 78),
+nicht bestanden; native Standalone-/Tauri-/Paketabnahmen aller Plattformen
+bleiben eigenständige Nachweise. Die sechs Legacy-Adapterproben ersetzen sie
+auch auf Windows nicht. Abgebrochene frühere Gesamtläufe bleiben kein PASS.
+Neue prozessstartende Tests sind vor ihrer Einordnung erneut transitiv auf
+native Interaktion zu prüfen. Der Migrationsguard schützt die bekannten sechs
+Fälle, ist aber keine allgemeine Betriebssystem-Sandbox für beliebigen Testcode.
+
+Lokaler Nachweis vom 08.10.2026: alle 218 Headless-Dateien (97 Basis plus 121
+direkte) bestanden; 996-Dateien-Quellscope vor/nach dem Lauf identisch.
+11 neue Guard-/Plan-/CLI-Fälle sichern die Abgrenzung, 12 bestehende Testpfad-
+verträge bleiben grün. Der normale Windows-Vollaufruf sowie beide Native-UI-
+Aliase wurden ohne Freigabeschalter tatsächlich abgewiesen, nicht als bestanden
+gewertet. Protokoll/Digest: [Iststand](canonical/CURRENT_STATE.md).
+Die sechs nativen Formularfälle und grafische Zielhost-/Paketabnahmen wurden
+nicht ausgeführt. Build/ZIP bleiben separat an Herkunft/fehlendem Archiv
+gesperrt. Keine Veröffentlichung oder neue Desktopfreigabe.
 
 RC111 trennt außerdem reine Core-Verträge von den Produktadaptern.
 `test-core-contracts.mjs` prüft Exportidentität der alten Importpfade, reine
@@ -51,7 +88,10 @@ Referenzklassen sind Person, Unternehmen, E-Mail und Telefon, nicht sämtliche
 personenbezogenen Kategorien oder komplexe Office-Objekte. Berichte einschließlich
 Quellwerten bleiben lokal. `npm run test:quality` prüft den Auswerter selbst in
 jedem Produktprofil und vor `test:standalone`; der ressourcenintensive Benchmark
-bleibt opt-in und gibt bei Befunden/nicht bewertbaren Ausgaben Exitcode 1 zurück.
+bleibt opt-in und gibt bei sperrenden Befunden/nicht bewertbaren Ausgaben
+Exitcode 1 zurück. Vollständig bewertete rohe OCR-E-Mail-Abweichungen können
+seit 08.10.2026 sichtbare Warnungen sein; das strenge Extraktionsprofil bleibt
+dafür rot (siehe unten „Umgang mit Fehlern“).
 Referenz-Doppelprüfung durch Menschen und native macOS-Ausführung: NOT_RUN.
 
 `--native-only` führt nur die 40 Varianten ohne OCR aus und bleibt ausdrücklich
@@ -702,6 +742,17 @@ Pflichtfelder, den ungestarteten Vorlagenstatus und die GO-Grenze. Eine Vorlage
 mit `NOT_RUN` ist keine Evidence.
 
 ## Umgang mit Fehlern
+
+Seit 08.10.2026 trennt die synthetische Qualitätsmessung gemäß DS-110 rohe
+OCR-Lesefehler von geprüfter Anonymisierung und Sachinhaltserhalt. Das normale
+`gate:quality` kann eng begrenzte, vollständig bewertete rohe OCR-Kontaktfehler
+als `pass_with_warnings` ausweisen. `--strict-extraction` hält diese Warnungen
+zusätzlich rot. Restdaten, Inhaltsverlust, unbewertete oder unvollständige
+Ergebnisse, veraltete Herkunft und unbestätigte Bereinigung bleiben gesperrt.
+Die genaue Ausnahme und die Grenzen stehen in
+[DETECTOR_BENCHMARK.md](DETECTOR_BENCHMARK.md#risk-classification-from-2026-10-08-ds-110--bl-0506).
+Das ist weder eine Änderung der Laufzeitprüfpflicht noch ein Ersatz für native
+Paket-, Bedien- oder menschliche Referenzabnahme.
 
 Ein unvollständiger Lauf ist kein PASS und kein Performancewert. Sandbox-, Host-
 oder Toolzugriffsfehler werden getrennt von Produktfehlern dokumentiert. Testlogs

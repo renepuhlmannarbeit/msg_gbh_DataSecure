@@ -424,6 +424,49 @@ async function main() {
     assert.deepStrictEqual(selected.map((entry) => entry.sourceLabel), ['04-workbook.xlsx']);
     assert.deepStrictEqual(ignored, ['office_owner_file']);
   });
+  await testAsync('only the explicit Standalone catalogue admits a mixed tree and names each regular rejection', async () => {
+    const root = clean('async-standalone-catalogue');
+    fs.mkdirSync(path.join(root, 'nested'));
+    fs.writeFileSync(path.join(root, 'nested', 'supported.md'), 'synthetic');
+    fs.writeFileSync(path.join(root, 'nested', 'empty.txt'), '');
+    fs.writeFileSync(path.join(root, 'archive.zip'), 'synthetic');
+    const rejected = [], options = { catalogue: true, onRejectedSource: item => rejected.push(item), hasReparseComponentAsync: async () => false };
+    await assert.rejects(enumerateSourceFolderAsync(root, options), error => error.code === 'SOURCE_FOLDER_UNSUPPORTED_FILES');
+    assert.strictEqual(rejected.length, 0, 'Cowork does not opt into a partial admission');
+    const selected = await enumerateSourceFolderAsync(root, { ...options, productChannel: 'standalone' });
+    assert.deepStrictEqual(selected.map(item => item.sourceLabel), ['nested/supported.md']);
+    assert.deepStrictEqual(rejected.map(({ full, ...item }) => item), [
+      { name: 'archive.zip', reason_code: 'SOURCE_FORMAT_UNSUPPORTED' },
+      { name: 'nested/empty.txt', reason_code: 'SOURCE_FILE_EMPTY' }
+    ]);
+    assert.ok(rejected.every(item => path.isAbsolute(item.full)));
+  });
+  await testAsync('Standalone catalogue can display an unsupported-only folder without a runnable queue', async () => {
+    const root = clean('async-catalogue-no-eligible'); fs.writeFileSync(path.join(root, 'archive.zip'), 'synthetic');
+    const rejected = [];
+    assert.deepStrictEqual(await enumerateSourceFolderAsync(root, { productChannel: 'standalone', catalogue: true,
+      onRejectedSource: item => rejected.push(item), hasReparseComponentAsync: async () => false }), []);
+    assert.strictEqual(rejected[0].name, 'archive.zip');
+  });
+  await testAsync('metadata discovery can exceed the batch count without changing strict admission', async () => {
+    const root = clean('async-catalogue-201');
+    for (let index = 0; index < 201; index++) fs.writeFileSync(path.join(root, `${index}.txt`), 'synthetic');
+    await assert.rejects(enumerateSourceFolderAsync(root, { productChannel: 'standalone',
+      hasReparseComponentAsync: async () => false }), error => error.code === 'SOURCE_FOLDER_FILE_LIMIT');
+    const selected = await enumerateSourceFolderAsync(root, { productChannel: 'standalone', catalogue: true,
+      maxSources: 1000, maxTotalBytes: Number.MAX_SAFE_INTEGER,
+      onRejectedSource() {}, hasReparseComponentAsync: async () => false });
+    assert.strictEqual(selected.length, 201);
+    assert.strictEqual(fs.readFileSync(path.join(root, '200.txt'), 'utf8'), 'synthetic');
+  });
+  await testAsync('larger bounded Standalone catalogues name all unsupported files, never a silent truncated subset', async () => {
+    const root = clean('async-catalogue-201-unsupported');
+    for (let index = 0; index < 201; index++) fs.writeFileSync(path.join(root, `${index}.zip`), 'synthetic');
+    const rejected = [];
+    assert.deepStrictEqual(await enumerateSourceFolderAsync(root, { productChannel: 'standalone', catalogue: true,
+      maxSources: 1000, onRejectedSource: item => rejected.push(item), hasReparseComponentAsync: async () => false }), []);
+    assert.strictEqual(rejected.length, 201); assert.strictEqual(new Set(rejected.map(item => item.name)).size, 201);
+  });
   await testAsync('a selected root replacement during async listing rejects the complete queue', async () => {
     const root = clean('async-root-swap');
     const replacement = clean('async-root-replacement');

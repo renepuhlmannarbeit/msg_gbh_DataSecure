@@ -79,7 +79,9 @@ function cleanup() {
     let answer;
     if (draft.ocr_contact_review) {
       contacts++;
-      if (contacts === 2 && !deferred) { deferred = true; answer = { action: 'deferred' }; }
+      assert.equal(draft.contact_batch.documents.length, 2, 'one contact table spans both sources');
+      assert.deepEqual(draft.contact_batch.documents.map(document => document.source_label), ['contact-1.png', 'contact-2.png']);
+      if (!deferred) { deferred = true; answer = { action: 'deferred' }; }
       else answer = { action: 'reviewed', redactions: [], decisions: draft.ambiguities.map(item => ({
         ambiguity_id: item.ambiguity_id, decision: item.contact_kind === 'email' ? 'correct_contact' : 'confirm_contact',
         ...(item.contact_kind === 'email' ? { replacement: 'zora@other.invalid' } : {}) })) };
@@ -98,8 +100,8 @@ function cleanup() {
   }
   const first = await batch.reviewDeferredBatch(token, { convertBuffer, reviewTextLocally });
   assert.equal(first.ok, false); assert.equal(first.error, 'LOCAL_REVIEW_DEFERRED', JSON.stringify(first));
-  assert.equal(contacts, 2); assert.equal(entities, 0);
-  assert.equal(fs.readdirSync(workPath(token)).filter(name => name.endsWith('.ocrreview')).length, 1);
+  assert.equal(contacts, 1); assert.equal(entities, 0);
+  assert.equal(fs.readdirSync(workPath(token)).filter(name => name.endsWith('.ocrreview')).length, 0);
   const journalBefore = JSON.stringify(batch._test.readState(token));
   assert.doesNotMatch(journalBefore, /wrong@|zora@|987654321|Zora Eibenhang/u);
   // Restore the real module and store after deferring midway across documents.
@@ -107,7 +109,7 @@ function cleanup() {
   batch = require('../plugins/data-secure/server/gateway/batch');
   const resumed = await batch.reviewDeferredBatch(token, { convertBuffer, reviewTextLocally });
   assert.equal(resumed.ok, true, JSON.stringify(resumed));
-  assert.equal(contacts, 3, 'first document uses its persisted bound confirmation instead of asking again');
+  assert.equal(contacts, 2, 'one contact submission handles both documents after reload');
   assert.equal(entities, 1);
   assert.equal(resumed.packages.length, 2);
   for (const result of resumed.packages) {
@@ -119,10 +121,12 @@ function cleanup() {
   for (const file of files) assert.deepEqual(fs.readFileSync(file.full), file.bytes);
   // Opt-in conversion must share the real deferred lifecycle without entering
   // anonymization or assigning any person/organization pseudonyms.
-  const md = batch.beginBatch({ expectedCount: 1, profile: 'general', productChannel: 'standalone',
-    processingMode: 'markdown-only', ocrContactReview: true, queue: [files[0]] }).batch_token;
-  const initial = await batch.processBatchNext(md, { convertBuffer });
-  assert.equal(initial.error, 'LOCAL_REVIEW_DEFERRED');
+  const md = batch.beginBatch({ expectedCount: 2, profile: 'general', productChannel: 'standalone',
+    processingMode: 'markdown-only', ocrContactReview: true, queue: files }).batch_token;
+  for (const file of files) {
+    const initial = await batch.processBatchNext(md, { convertBuffer });
+    assert.equal(initial.error, 'LOCAL_REVIEW_DEFERRED');
+  }
   assert.equal(batch._test.readState(md).items[0].status, 'deferred_review');
   assert.ok(!Object.hasOwn(batch._test.readState(md), 'pseudonym_seed'));
   assert.doesNotMatch(JSON.stringify(batch._test.readState(md)), /wrong@|987654321|png_base64/u);
@@ -136,13 +140,14 @@ function cleanup() {
     mdCalls++;
     assert.equal(draft.processing_mode, 'markdown-only');
     assert.equal(draft.ocr_contact_review, true);
+    assert.equal(draft.contact_batch.documents.length, 2);
     return { action: 'reviewed', redactions: [], decisions: draft.ambiguities.map(item => ({
       ambiguity_id: item.ambiguity_id, decision: item.contact_kind === 'email' ? 'correct_contact' : 'confirm_contact',
       ...(item.contact_kind === 'email' ? { replacement: 'zora@other.invalid' } : {}) })) };
   } });
   assert.equal(reviewedMd.ok, true, JSON.stringify(reviewedMd));
   assert.equal(mdCalls, 1);
-  assert.equal(reviewedMd.locally_released, 1);
+  assert.equal(reviewedMd.locally_released, 2);
   assert.equal(batch._test.readState(md).items[0].status, 'released');
   delete require.cache[require.resolve('../plugins/data-secure/server/gateway/batch')];
   batch = require('../plugins/data-secure/server/gateway/batch');

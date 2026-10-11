@@ -31,10 +31,37 @@ test('closed desktop errors preserve identity and capacity facts and their rende
   assert.match(sidecar, /desktopErrorCode\(error\?\.code\)/u);
 });
 
+test('every fixed document/entity/export failure survives the closed desktop vocabulary with an actionable explanation', () => {
+  const { desktopErrorCode } = require('../plugins/data-secure/server/core/desktop-error-contract');
+  const implementation = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/gateway/standalone-document-review-store.js'), 'utf8');
+  const documentRenderer = fs.readFileSync(path.join(root, 'frontend/document-review.js'), 'utf8');
+  const codes = [...new Set([...implementation.matchAll(/fail\('(DOCUMENT_[A-Z_]+|AI_EXPORT_[A-Z_]+)'/gu)].map(match => match[1]))];
+  assert.ok(codes.length >= 17);
+  for (const code of codes) {
+    assert.equal(desktopErrorCode(code), code, `${code} cannot become a generic transport error`);
+    assert.match(documentRenderer, new RegExp(`${code}: '[^']{20,}'`, 'u'));
+  }
+});
+
 test('desktop manifests, Rust package and artifact names use the product version', () => {
   assert.strictEqual(config.version, productVersion);
   assert.match(cargo, new RegExp(`^version = "${productVersion.replaceAll('.', '\\.') }"$`, 'mu'));
   for (const target of targets.targets) assert.ok(target.package_filename.includes(productVersion));
+});
+
+test('all standard native packages open the real v2 workspace without an engineering override', () => {
+  assert.strictEqual(config.app.windows.length, 1);
+  assert.strictEqual(config.app.windows[0].label, 'main');
+  assert.strictEqual(config.app.windows[0].url, 'workspace.html');
+  assert.strictEqual(config.app.windows[0].width, 1280);
+  assert.strictEqual(config.app.windows[0].height, 900);
+  assert.strictEqual(macConfig.app, undefined, 'macOS must inherit the same main entry');
+  const workspace = fs.readFileSync(path.join(root, 'frontend/workspace.html'), 'utf8');
+  for (const script of ['workspace.js', 'document-review.js']) {
+    assert.ok(workspace.includes(script));
+    assert.ok(fs.statSync(path.join(root, 'frontend', script)).isFile());
+  }
+  assert.doesNotMatch(workspace, /\?demo=|support\.js/u);
 });
 
 test('fresh Windows and macOS checkouts contain explicit native icon sources', () => {
@@ -116,13 +143,20 @@ test('local review window is created by an async command on Windows', () => {
   const permissions = fs.readFileSync(path.join(root, 'tauri-contract/permissions/commands.toml'), 'utf8');
   assert.deepStrictEqual(reviewCapability.windows, ['review']);
   assert.ok(reviewCapability.permissions.includes('allow-close-review-window'));
-  assert.ok(!capability.permissions.includes('allow-close-review-window'));
+  assert.ok(capability.permissions.includes('allow-close-review-window'));
   assert.ok(reviewCapability.permissions.includes('allow-continue-review-session'));
-  assert.ok(!capability.permissions.includes('allow-continue-review-session'));
+  assert.ok(capability.permissions.includes('allow-continue-review-session'));
   assert.match(permissions, /commands\.allow = \["close_review_window"\]/u);
   assert.match(permissions, /commands\.allow = \["continue_review_session"\]/u);
-  assert.match(rust, /fn close_review_window\(window: tauri::WebviewWindow\)[\s\S]*?review_window_only\(&window\)\?/u);
-  assert.match(rust, /async fn continue_review_session\([\s\S]*?review_window_only\(&window\)\?/u);
+  assert.match(rust, /fn close_review_window\([\s\S]*?review_window_only\(&window, &state\)\?/u);
+  assert.match(rust, /Ok\(json!\(\{ "ok": true, "review_generation": generation \}\)\)/u);
+  assert.match(rust, /window\.emit\("datasecure-review-closed", json!\(\{ "closed": true, "review_generation": generation \}\)\)/u);
+  assert.match(rust, /async fn continue_review_session\([\s\S]*?review_window_only\(&window, &state\)\?/u);
+  assert.match(rust, /review_window::owns_review\(window.label\(\), embedded\)/u);
+  const binding = fs.readFileSync(path.join(root, 'tauri-contract/src/review_window.rs'), 'utf8');
+  assert.match(binding, /only_the_active_review_surface_can_read_or_submit_private_content/u);
+  assert.match(rust, /let _review_guard = review_admission_guard\(&state\)\?/u,
+    'picker admission is mutually exclusive with entering the integrated review');
   assert.match(rust, /if let Some\(window\) = app\.get_webview_window\("review"\)/u,
     'the next review group reuses the existing review window');
   assert.match(nativeSmoke, /STANDALONE_NATIVE_REVIEW_WINDOW_TIMEOUT/u);
@@ -148,7 +182,7 @@ test('native review close is bound before visibility and never discovers a later
 });
 
 test('recursive admission uses a separate bounded deadline and an honest content-free heartbeat', () => {
-  assert.match(rust, /Duration::from_secs\(if action == "admit_selected_sources" \{ 300 \} else \{ 30 \}\)/u);
+  assert.match(rust, /Duration::from_secs\(if matches!\(action, "admit_selected_sources" \| "export_approved_documents" \| "resolve_document_export" \| "resolve_document_identity_overview" \| "get_document_review_history_summary"\) \{ 300 \} else \{ 30 \}\)/u);
   assert.match(rust, /let deadline = started \+ rpc_duration\(action\)/u);
   assert.match(rust, /STANDALONE_ADMISSION_TIMEOUT/u);
   const progress = rust.slice(rust.indexOf('fn admission_progress('), rust.indexOf('fn rpc_request('));
@@ -206,7 +240,11 @@ test('the Tauri contract is now a buildable shell with private sidecar mediation
   assert.match(rust, /ipc_transport::receive_until/u);
   assert.match(rust, /fn frontend_ready\(/u);
   assert.doesNotMatch(rust, /"HTTP_PROXY"|"HTTPS_PROXY"|"OPENAI_API_KEY"|"ANTHROPIC_API_KEY"/u);
-  assert.match(rust, /process_guard\.take\(\)/u);
+  const retirement = rust.slice(rust.indexOf('fn schedule_sidecar_retirement('), rust.indexOf('struct SelectionGuard('));
+  assert.match(retirement, /state\.lifecycle\.retire_async/u);
+  assert.match(retirement, /value\.child\.same\(&child\) && value\.owner_generation == generation/u);
+  assert.match(retirement, /process\.take\(\)/u, 'only the drained exact-owner callback removes the sidecar');
+  assert.doesNotMatch(rust, /process_guard\.take\(\)/u, 'request timeout cannot immediately drop a native writer owner');
   assert.doesNotMatch(frontend, /source_path|source_paths|raw_content|fetch\s*\(/u);
   assert.match(frontend, /choose\('select_files'\)/u);
   assert.doesNotMatch(frontend, /setInterval\s*\(/u);
@@ -359,21 +397,25 @@ test('history actions are separately permissioned and carry only exact batch ide
   assert.match(rust, /history_local_target\(resolved, kind, resolve_action == "resolve_history_identity_mapping"\)/u);
 });
 
-test('every documented UI command has a narrow native permission and exactly one window capability', () => {
+test('every documented UI command has a narrow native permission and explicit surface ownership', () => {
   const contract = JSON.parse(fs.readFileSync(path.join(__dirname,
     '../plugins/data-secure/server/standalone/ui-contract.json'), 'utf8'));
   const permissions = fs.readFileSync(path.join(root, 'tauri-contract/permissions/commands.toml'), 'utf8');
   const reviewCapability = JSON.parse(fs.readFileSync(path.join(root, 'tauri-contract/capabilities/review.json'), 'utf8'));
+  const sharedReviewCommands = new Set(['close_review_window', 'get_review_session', 'get_review_chunk',
+    'submit_review', 'continue_review_session']);
   for (const command of contract.commands) {
     const permission = `allow-${command.replaceAll('_', '-')}`;
     assert.ok(permissions.includes(`commands.allow = ["${command}"]`), `${command} has no narrow permission`);
     const owners = [capability, reviewCapability].filter(window => window.permissions.includes(permission));
-    assert.equal(owners.length, 1, `${command} must be available in precisely its owning local window`);
+    assert.equal(owners.length, sharedReviewCommands.has(command) ? 2 : 1,
+      `${command} must have only its explicit native owners`);
   }
   assert.ok(!reviewCapability.permissions.includes('allow-get-run-failures'),
     'the review window does not need access to unrelated source file names');
+  const workspace = fs.readFileSync(path.join(root, 'frontend/workspace.js'), 'utf8');
   const mainCommands = new Set([
-    ...[...frontend.matchAll(/\b(?:invoke|choose)\('([a-z_]+)'/gu)].map(match => match[1]),
+    ...[...(frontend + workspace).matchAll(/\b(?:invoke|choose|perform|pick)\('([a-z_]+)'/gu)].map(match => match[1]),
     ...[...frontend.matchAll(/\bcommand: '([a-z_]+)'/gu)].map(match => match[1])
   ]);
   assert.ok(mainCommands.has('get_run_failures'), 'regression must cover the actual renderer call, not only its contract');

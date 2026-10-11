@@ -93,6 +93,9 @@ function createBatchIntake(options = {}) {
     // unknown purposes must not silently become the historical default.
     const processingMode = validateProcessingMode(Object.hasOwn(beginOptions, 'processingMode')
       ? beginOptions.processingMode : MODES.ANONYMIZE, productChannel);
+    if (Object.hasOwn(beginOptions, 'documentReview') &&
+        (beginOptions.documentReview !== true || productChannel !== 'standalone'))
+      throw Object.assign(new Error('DOCUMENT_REVIEW_INVALID'), { code: 'DOCUMENT_REVIEW_INVALID' });
     if (Object.hasOwn(beginOptions, 'ocrContactReview') &&
         (beginOptions.ocrContactReview !== true || productChannel !== 'standalone' || processingMode !== MODES.MARKDOWN)) {
       throw Object.assign(new Error('OCR_CONTACT_REVIEW_INVALID'), { code: 'OCR_CONTACT_REVIEW_INVALID' });
@@ -240,6 +243,7 @@ function createBatchIntake(options = {}) {
           : productChannel === 'standalone' ? 'datasecure-batch/6' : 'datasecure-batch/4',
         product_channel: productChannel,
         ...(processingMode === MODES.MARKDOWN ? { processing_mode: processingMode } : {}),
+        ...(beginOptions.documentReview === true ? { standalone_document_review: true } : {}),
         ...(beginOptions.ocrContactReview === true ? { ocr_contact_review: true,
           ocr_review_seed: crypto.randomBytes(32).toString('base64url') } : {}),
         ...(processingMode !== MODES.MARKDOWN && productChannel === 'standalone'
@@ -259,6 +263,13 @@ function createBatchIntake(options = {}) {
         items
       };
       writeState(state);
+      // Persist local names/reasons even when no source can reach capture().
+      // This metadata confers no approval or publication authority. The sealed
+      // journal already owns the snapshots if persistence fails here.
+      if (state.standalone_document_review === true) {
+        if (typeof options.captureDocumentRun !== 'function') throw new Error('DOCUMENT_REVIEW_INVALID');
+        options.captureDocumentRun(state);
+      }
       try { intakeIntent.remove(token, intent); } catch { /* a published journal owns this tree now */ }
       return { ok: true, ...publicProgress(state), raw_content_sent_to_claude: false };
     } catch (error) {

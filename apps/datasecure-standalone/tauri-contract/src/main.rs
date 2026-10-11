@@ -6,6 +6,12 @@ mod review_window;
 mod native_open;
 mod startup_diagnostics;
 mod diagnostic_log;
+mod export_directory;
+mod export_private_security;
+mod native_export_channel;
+mod native_export_broker;
+mod native_export_transaction;
+mod native_export_workspace;
 
 use serde_json::{json, Value};
 use std::{
@@ -122,6 +128,8 @@ struct SidecarProcess {
     child: ipc_transport::ChildControl,
     writes: mpsc::Sender<ipc_transport::WriteRequest>,
     responses: Receiver<Result<Value, String>>,
+    owner_generation: String,
+    unusable: bool,
 }
 
 impl Drop for SidecarProcess {
@@ -130,16 +138,76 @@ impl Drop for SidecarProcess {
     }
 }
 
-#[derive(Clone)]
 struct DesktopState {
     app: AppHandle,
     sidecar: Arc<Mutex<Option<SidecarProcess>>>,
+    connection_epoch: Arc<AtomicU64>,
+    expected_connection_epoch: u64,
+    retired_owner_generations: Arc<Mutex<Vec<String>>>,
     lifecycle: ipc_transport::Lifecycle,
     exit_gate: ipc_transport::ExitGate,
     selection_busy: Arc<AtomicBool>,
     admission_present: Arc<AtomicBool>,
     frontend_ready: Arc<AtomicBool>,
     review_window_binding: Arc<Mutex<review_window::Binding>>,
+    embedded_review_active: Arc<AtomicBool>,
+    document_review_batch: Arc<Mutex<Option<String>>>,
+    review_ui_busy: Arc<AtomicBool>,
+}
+
+impl Clone for DesktopState {
+    fn clone(&self) -> Self {
+        Self { app: self.app.clone(), sidecar: self.sidecar.clone(), lifecycle: self.lifecycle.clone(),
+            connection_epoch: self.connection_epoch.clone(),
+            expected_connection_epoch: self.expected_connection_epoch,
+            retired_owner_generations: self.retired_owner_generations.clone(),
+            exit_gate: self.exit_gate.clone(), selection_busy: self.selection_busy.clone(),
+            admission_present: self.admission_present.clone(), frontend_ready: self.frontend_ready.clone(),
+            review_window_binding: self.review_window_binding.clone(), embedded_review_active: self.embedded_review_active.clone(),
+            document_review_batch: self.document_review_batch.clone(), review_ui_busy: self.review_ui_busy.clone() }
+    }
+}
+
+impl DesktopState {
+    // Only a real command/event ingress may capture a new connection. Copies
+    // made after delegation preserve that capture, even across an await.
+    fn capture_connection(&self) -> Self {
+        let mut captured = self.clone();
+        captured.expected_connection_epoch = self.connection_epoch.load(Ordering::Acquire);
+        captured
+    }
+}
+
+fn invalidate_connection(state: &DesktopState) {
+    let epoch = state.connection_epoch.fetch_add(1, Ordering::AcqRel) + 1;
+    state.admission_present.store(false, Ordering::Release);
+    state.embedded_review_active.store(false, Ordering::Release);
+    if let Ok(mut binding) = state.review_window_binding.lock() { binding.opened(); }
+    if let Ok(mut binding) = state.document_review_batch.lock() { *binding = None; }
+    let _ = state.app.emit("datasecure-connection", json!({ "epoch": epoch, "state": "recovering" }));
+}
+
+// Requested while holding the sidecar mutex, but drained/reaped without it.
+// Keep the exact process object stored until every native capability has ended.
+fn schedule_sidecar_retirement(state: &DesktopState, process: &SidecarProcess) -> Result<(), String> {
+    let sidecar = state.sidecar.clone();
+    let retired = state.retired_owner_generations.clone();
+    let child = process.child.clone(); let generation = process.owner_generation.clone();
+    state.lifecycle.retire_async(child.clone(), move || {
+        let result = (|| {
+            let mut process = sidecar.lock().map_err(|_| ipc_transport::FAILED.to_string())?;
+            if !process.as_ref().is_some_and(|value| value.child.same(&child) && value.owner_generation == generation) {
+                return Err(ipc_transport::FAILED.to_string());
+            }
+            let mut retired = retired.lock().map_err(|_| ipc_transport::FAILED.to_string())?;
+            if !retired.contains(&generation) { retired.push(generation); }
+            process.take(); // Drop now sees a confirmed, already-reaped child.
+            Ok::<(), String>(())
+        })();
+        diagnostic_event("sidecar_retirement_finished", None, if result.is_ok() { "ready" } else { "failed" },
+            result.as_ref().err().map(String::as_str), None);
+        result
+    })
 }
 
 struct SelectionGuard(Arc<AtomicBool>);
@@ -205,23 +273,33 @@ fn state_allows_new_admission(state: Option<&str>) -> bool {
     )
 }
 
+fn workspace_catalogue_path(path: &str) -> bool {
+    path == "/workspace.html" || path == "workspace.html"
+}
+
 fn admit_native_sources(
     state: &DesktopState,
     paths: &[PathBuf],
     kind: &str,
 ) -> Result<Value, String> {
+    if state.embedded_review_active.load(Ordering::Acquire) {
+        return Err("STANDALONE_BUSY".to_string());
+    }
     let current = rpc(state, "get_public_state", None, &[], None, None)?;
     if !state_allows_new_admission(current.get("state").and_then(Value::as_str)) {
         return Err("STANDALONE_BUSY".to_string());
     }
-    let result = rpc(
-        state,
-        "admit_selected_sources",
-        Some(kind),
-        paths,
-        None,
-        None,
-    )?;
+    // Bind tolerant catalogue admission to the actual v2 main asset. The
+    // legacy renderer must retain atomic mixed-folder rejection until it can
+    // display every blocked file. Never take this switch from a file path or
+    // a renderer-supplied argument.
+    let catalogue = state.app.get_webview_window("main")
+        .and_then(|window| window.url().ok())
+        .is_some_and(|url| workspace_catalogue_path(url.path()));
+    let id = request_id();
+    let mut request = private_request(&id, "admit_selected_sources", Some(kind), paths, None, None)?;
+    if catalogue { request["source_catalogue"] = json!(true); }
+    let result = rpc_request(state, "admit_selected_sources", &id, request)?;
     state.admission_present.store(true, Ordering::Release);
     Ok(result)
 }
@@ -230,6 +308,7 @@ fn admit_native_sources(
 // same admission validator used by the picker. Tauri also emits its built-in
 // drag-drop event with selected paths; this UI only subscribes to our event.
 fn native_drop(state: &DesktopState, paths: Vec<PathBuf>) {
+    let state = &state.capture_connection();
     if !state.frontend_ready.load(Ordering::Acquire) {
         return;
     }
@@ -258,14 +337,23 @@ fn native_drop(state: &DesktopState, paths: Vec<PathBuf>) {
             return;
         }
     };
+    let review_guard = match review_admission_guard(state) {
+        Ok(value) => value,
+        Err(code) => {
+            let _ = state.app.emit_to("main", "datasecure-native-drop",
+                json!({"phase": "rejected", "error_code": code}));
+            return;
+        }
+    };
     let owned = state.clone();
     let _ = owned.app.emit_to(
         "main",
         "datasecure-native-drop",
-        json!({"phase": "checking"}),
+        json!({"phase": "checking", "epoch": owned.expected_connection_epoch}),
     );
     tauri::async_runtime::spawn(async move {
         let _guard = guard;
+        let _review_guard = review_guard;
         let worker = owned.clone();
         let result = tauri::async_runtime::spawn_blocking(move || {
             let kind = dropped_source_kind(&paths)?;
@@ -285,7 +373,7 @@ fn native_drop(state: &DesktopState, paths: Vec<PathBuf>) {
                 let _ = owned.app.emit_to(
                     "main",
                     "datasecure-native-drop",
-                    json!({"phase": "accepted", "result": result}),
+                    json!({"phase": "accepted", "epoch": owned.expected_connection_epoch, "result": result}),
                 );
             }
             Err(error) => {
@@ -300,7 +388,7 @@ fn native_drop(state: &DesktopState, paths: Vec<PathBuf>) {
                 let _ = owned.app.emit_to(
                     "main",
                     "datasecure-native-drop",
-                    json!({"phase": "failed", "error_code": code, "error_details": details}),
+                    json!({"phase": "failed", "epoch": owned.expected_connection_epoch, "error_code": code, "error_details": details}),
                 );
             }
         }
@@ -421,8 +509,19 @@ fn runtime_spawn_code(error: &std::io::Error) -> &'static str {
     }
 }
 
-fn spawn_sidecar(app: &tauri::AppHandle, lifecycle: &ipc_transport::Lifecycle, deadline: Instant) -> Result<SidecarProcess, String> {
-    let spawn_guard = lifecycle.begin_spawn()?;
+fn reserve_sidecar_generation(lifecycle: &ipc_transport::Lifecycle, generations: &Mutex<Vec<String>>)
+    -> Result<(ipc_transport::SpawnGuard, String, Vec<String>), String> {
+    let guard = lifecycle.begin_spawn()?;
+    let mut entropy = [0u8; 16];
+    getrandom::fill(&mut entropy).map_err(|_| ipc_transport::FAILED.to_string())?;
+    let generation: String = entropy.iter().map(|value| format!("{value:02x}")).collect();
+    let mut retired = generations.lock().map_err(|_| ipc_transport::FAILED.to_string())?;
+    if retired.len() >= 16 { return Err("STANDALONE_CONNECTION_RECOVERY_BLOCKED".to_string()); }
+    let previous = retired.clone(); retired.push(generation.clone());
+    Ok((guard, generation, previous))
+}
+fn spawn_sidecar(app: &tauri::AppHandle, lifecycle: &ipc_transport::Lifecycle, spawn_guard: ipc_transport::SpawnGuard, deadline: Instant,
+    owner_generation: String, retired_generations: Vec<String>) -> Result<SidecarProcess, String> {
     diagnostic_event("sidecar_starting", None, "progress", None, None);
     let (executable, script) = runtime_paths(app).inspect_err(|code| {
         diagnostic_event(
@@ -496,6 +595,11 @@ fn spawn_sidecar(app: &tauri::AppHandle, lifecycle: &ipc_transport::Lifecycle, d
         command.env("DATASECURE_STANDALONE_DOCUMENTS_DIR", documents);
     }
     command.env("DATASECURE_PRODUCT_CHANNEL", "standalone");
+    command.env("DATASECURE_NATIVE_EXPORT_CHANNEL", "1");
+    command.env("DATASECURE_DOCUMENT_CONTROL_OWNER_PID", std::process::id().to_string());
+    command.env("DATASECURE_DOCUMENT_CONTROL_GENERATION", &owner_generation);
+    command.env("DATASECURE_RETIRED_CONTROL_GENERATIONS", serde_json::to_string(&retired_generations)
+        .map_err(|_| ipc_transport::FAILED.to_string())?);
     // Optional, explicitly enabled content-free support trace. No arbitrary
     // host environment or vendor stderr is forwarded to the product worker.
     configure_support_trace(
@@ -564,11 +668,25 @@ fn spawn_sidecar(app: &tauri::AppHandle, lifecycle: &ipc_transport::Lifecycle, d
             }
         }
     });
-    Ok(SidecarProcess {
+    let process = SidecarProcess {
         child,
         writes: ipc_transport::writer(input),
         responses,
-    })
+        owner_generation,
+        unusable: false,
+    };
+    let ready = ipc_transport::receive_until(&process.responses, deadline, &lifecycle.stopping)??;
+    if ready["schema"] != "datasecure-standalone-ready/1" || ready["owner_generation"] != process.owner_generation ||
+        ready.as_object().map_or(true, |fields| fields.len() != if ready["ok"] == true { 3 } else { 4 }) {
+        return Err(ipc_transport::FAILED.to_string());
+    }
+    if ready["ok"] != true {
+        let code = ready["error_code"].as_str().filter(|code| code.len() <= 80 &&
+            code.bytes().all(|value| value.is_ascii_uppercase() || value.is_ascii_digit() || value == b'_'))
+            .unwrap_or(ipc_transport::FAILED);
+        return Err(code.to_string());
+    }
+    Ok(process)
 }
 
 fn read_frame(reader: &mut impl Read) -> Result<Value, String> {
@@ -681,7 +799,8 @@ fn private_start_request(
 
 fn mode_rejected_before_start(result: &Result<Value, String>) -> bool {
     matches!(result, Err(code) if matches!(code.as_str(),
-        "PROCESSING_MODE_INVALID" | "PROCESSING_MODE_FORBIDDEN" | "MARKDOWN_CONVERSION_NOT_READY"))
+        "PROCESSING_MODE_INVALID" | "PROCESSING_MODE_FORBIDDEN" | "MARKDOWN_CONVERSION_NOT_READY" |
+        "STANDALONE_SELECTION_INVALID"))
 }
 
 enum ValidatedPrivateResponse {
@@ -782,7 +901,7 @@ fn history_request(request_id: &str, action: &str, batch_id: &str) -> Result<Val
     if !matches!(
         action,
         "resolve_history_results" | "resolve_history_ledger" | "resolve_history_identity_mapping"
-            | "continue_history_batch" | "get_run_failures"
+            | "continue_history_batch" | "get_run_failures" | "pause_batch"
     ) || batch_id.len() != 64
         || !batch_id
             .bytes()
@@ -814,7 +933,7 @@ fn history_rpc(state: &DesktopState, action: &str, batch_id: &str) -> Result<Val
 }
 
 fn rpc_duration(action: &str) -> Duration {
-    Duration::from_secs(if action == "admit_selected_sources" { 300 } else { 30 })
+    Duration::from_secs(if matches!(action, "admit_selected_sources" | "export_approved_documents" | "resolve_document_export" | "resolve_document_identity_overview" | "get_document_review_history_summary") { 300 } else { 30 })
 }
 
 fn admission_transport_code(action: &str, code: String) -> String {
@@ -856,16 +975,56 @@ fn rpc_request(
     }
     let mut process_guard = ipc_transport::lock_until(&state.sidecar, deadline, &state.lifecycle.stopping)
         .map_err(|code| admission_transport_code(action, code)).inspect_err(early_failure)?;
+    // Capture happens explicitly at command ingress, before a
+    // blocking task can queue behind another RPC. A stale mutation is never
+    // dispatched to a replacement service with a fresh source catalogue.
+    if state.expected_connection_epoch != state.connection_epoch.load(Ordering::Acquire) {
+        return Err("STANDALONE_CONNECTION_CHANGED".to_string());
+    }
+    if let Some(process) = process_guard.as_mut() {
+        if process.unusable || process.child.exited() {
+            if !process.unusable { process.unusable = true; invalidate_connection(state); }
+            schedule_sidecar_retirement(state, process)?;
+            // Even the action that first notices a dead process must re-enter
+            // under the new epoch. In particular it cannot restart a batch.
+            return Err("STANDALONE_CONNECTION_CHANGED".to_string());
+        }
+    }
     if process_guard.is_none() {
+        // After a broken connection only display reads may bootstrap its
+        // successor. A mutation must be explicitly invoked after Ready.
+        if state.connection_epoch.load(Ordering::Acquire) != 0 &&
+            !matches!(action, "get_public_state" | "get_ui_context" | "get_run_history") {
+            return Err("STANDALONE_CONNECTION_CHANGED".to_string());
+        }
         // Spawning may itself be delayed by the OS. A late result is dropped
         // (and its owned child terminated), never adopted after shutdown.
+        // Reserve under the same sidecar mutex, BEFORE consuming a recovery
+        // generation. Retirement may have removed the process but still be
+        // completing its lifecycle transition. Such reads are not bootstraps.
+        let (spawn_guard, owner_generation, retired_generations) = reserve_sidecar_generation(&state.lifecycle, &state.retired_owner_generations)?;
         let app = state.app.clone();
         let lifecycle = state.lifecycle.clone();
         let (sender, receiver) = mpsc::channel();
-        std::thread::spawn(move || { let _ = sender.send(spawn_sidecar(&app, &lifecycle, deadline)); });
-        *process_guard = Some(ipc_transport::receive_until(&receiver, deadline, &state.lifecycle.stopping)
-            .and_then(|result| result).map_err(|code| admission_transport_code(action, code))
-            .inspect_err(early_failure)?);
+        std::thread::Builder::new().name("sidecar-bootstrap".into()).spawn(move || {
+            let _ = sender.send(spawn_sidecar(&app, &lifecycle, spawn_guard, deadline, owner_generation, retired_generations));
+        }).map_err(|_| ipc_transport::FAILED.to_string())?;
+        let spawned = ipc_transport::receive_until(&receiver, deadline, &state.lifecycle.stopping)
+            .and_then(|result| result).map_err(|code| admission_transport_code(action, code));
+        match spawned {
+            Ok(process) => *process_guard = Some(process),
+            Err(code) => {
+                // Invalidate queued commands even if no service reached Ready.
+                invalidate_connection(state);
+                early_failure(&code);
+                return Err(code);
+            }
+        }
+        state.retired_owner_generations.lock().map_err(|_| ipc_transport::FAILED.to_string())?.clear();
+        // A recovered Ready is a new ingress boundary too: commands queued
+        // while bootstrap was running must not gain authority retroactively.
+        let epoch = ipc_transport::ready_connection_epoch(&state.connection_epoch);
+        let _ = state.app.emit("datasecure-connection", json!({ "epoch": epoch, "state": "ready" }));
     }
     let result = (|| {
         let process = process_guard
@@ -875,8 +1034,26 @@ fn rpc_request(
         process.writes.send((payload, sent)).map_err(|_| "STANDALONE_IPC_FAILED".to_string())?;
         ipc_transport::receive_until(&completed, deadline, &state.lifecycle.stopping)??;
         diagnostic_ipc_event("ipc_request_sent", action, id, "progress", None, None);
-        ipc_transport::receive_until_with_progress(&process.responses, deadline, &state.lifecycle.stopping,
-            || admission_progress(state, action, "validating", started.elapsed().as_millis()))?
+        let mut native_handled = false;
+        let mut native_bound = false;
+        let mut publication = native_export_channel::PublicationState::default();
+        loop {
+            let frame = ipc_transport::receive_until_with_progress(&process.responses, deadline, &state.lifecycle.stopping,
+                || admission_progress(state, action, "validating", started.elapsed().as_millis()))??;
+            let publication_reply = if frame.get("schema").and_then(Value::as_str) == Some(native_export_channel::PUBLICATION_REQUEST) {
+                native_export_channel::handle_publication(&frame, &request, &mut publication, &state.lifecycle, &native_export_data_root()?, deadline)?
+            } else { None };
+            if let Some(reply) = publication_reply.or(native_export_channel::handle(&frame, &request, &mut native_handled, &state.lifecycle, deadline)?) {
+                native_bound = reply.get("ok").and_then(Value::as_bool) == Some(true);
+                let payload = serde_json::to_vec(&reply).map_err(|_| ipc_transport::FAILED.to_string())?;
+                let (sent, completed) = mpsc::channel();
+                process.writes.send((payload, sent)).map_err(|_| ipc_transport::FAILED.to_string())?;
+                ipc_transport::receive_until(&completed, deadline, &state.lifecycle.stopping)??;
+            } else {
+                native_export_channel::validate_completion(&frame, &request, native_bound)?;
+                break Ok(frame);
+            }
+        }
     })();
     let response = match result {
         Ok(response) => response,
@@ -896,8 +1073,12 @@ fn rpc_request(
                 Some(&code),
                 Some(started.elapsed().as_millis()),
             );
-            process_guard.take();
-            state.admission_present.store(false, Ordering::Release);
+            if let Some(process) = process_guard.as_mut() {
+                process.unusable = true;
+                schedule_sidecar_retirement(state, process).inspect_err(|_| diagnostic_event(
+                    "sidecar_retirement_failed", None, "failed", Some("STANDALONE_CONNECTION_RECOVERY_BLOCKED"), None)).ok();
+            }
+            invalidate_connection(state);
             return Err(code);
         }
     };
@@ -910,8 +1091,12 @@ fn rpc_request(
             Some("STANDALONE_IPC_FAILED"),
             Some(started.elapsed().as_millis()),
         );
-        process_guard.take();
-        state.admission_present.store(false, Ordering::Release);
+        if let Some(process) = process_guard.as_mut() {
+            process.unusable = true;
+            schedule_sidecar_retirement(state, process).inspect_err(|_| diagnostic_event(
+                "sidecar_retirement_failed", None, "failed", Some("STANDALONE_CONNECTION_RECOVERY_BLOCKED"), None)).ok();
+        }
+        invalidate_connection(state);
         return Err("STANDALONE_IPC_FAILED".to_string());
     }
     let validated = validated.expect("validated above");
@@ -938,6 +1123,16 @@ fn rpc_request(
         ValidatedPrivateResponse::Success(result) => Ok(result),
         ValidatedPrivateResponse::Error(_, _) => unreachable!("handled above"),
     }
+}
+
+fn native_export_data_root() -> Result<PathBuf, String> {
+    if let Some(profile) = NATIVE_SMOKE_PROFILE.get().and_then(Option::as_ref) {
+        #[cfg(windows)] let base = profile.local_app_data.clone();
+        #[cfg(target_os = "macos")] let base = profile.user_profile.join("Library").join("Application Support");
+        #[cfg(all(unix, not(target_os = "macos")))] let base = profile.xdg_data.clone();
+        return Ok(base.join("SecureDataMsg-Standalone"));
+    }
+    native_export_broker::private_data_root().map_err(|_| "STANDALONE_DATA_ROOT_UNSAFE".into())
 }
 
 async fn blocking_rpc(state: DesktopState, action: &'static str) -> Result<Value, String> {
@@ -1097,7 +1292,9 @@ fn filters(dialog: rfd::FileDialog) -> rfd::FileDialog {
 
 #[tauri::command]
 async fn select_files(state: State<'_, DesktopState>) -> Result<Value, String> {
+    let owned = state.inner().capture_connection();
     let _guard = selection_guard(&state.selection_busy, &state.admission_present, true)?;
+    let _review_guard = review_admission_guard(&state)?;
     diagnostic_event(
         "picker_opened",
         Some("select_files"),
@@ -1126,7 +1323,6 @@ async fn select_files(state: State<'_, DesktopState>) -> Result<Value, String> {
         None,
         None,
     );
-    let owned = state.inner().clone();
     let result =
         tauri::async_runtime::spawn_blocking(move || admit_native_sources(&owned, &paths, "files"))
             .await
@@ -1137,7 +1333,9 @@ async fn select_files(state: State<'_, DesktopState>) -> Result<Value, String> {
 
 #[tauri::command]
 async fn select_folder(state: State<'_, DesktopState>) -> Result<Value, String> {
+    let owned = state.inner().capture_connection();
     let _guard = selection_guard(&state.selection_busy, &state.admission_present, true)?;
+    let _review_guard = review_admission_guard(&state)?;
     diagnostic_event(
         "picker_opened",
         Some("select_folder"),
@@ -1165,7 +1363,6 @@ async fn select_folder(state: State<'_, DesktopState>) -> Result<Value, String> 
         None,
         None,
     );
-    let owned = state.inner().clone();
     let result = tauri::async_runtime::spawn_blocking(move || {
         admit_native_sources(&owned, &[path], "folder")
     })
@@ -1178,7 +1375,7 @@ async fn select_folder(state: State<'_, DesktopState>) -> Result<Value, String> 
 #[tauri::command]
 async fn cancel_admission(state: State<'_, DesktopState>) -> Result<Value, String> {
     let _guard = selection_guard(&state.selection_busy, &state.admission_present, true)?;
-    let result = blocking_rpc(state.inner().clone(), "cancel_admission").await;
+    let result = blocking_rpc(state.inner().capture_connection(), "cancel_admission").await;
     state.admission_present.store(false, Ordering::Release);
     result
 }
@@ -1188,7 +1385,7 @@ async fn remove_admitted_source(
     selection_index: u64,
 ) -> Result<Value, String> {
     let _guard = selection_guard(&state.selection_busy, &state.admission_present, true)?;
-    let owned = state.inner().clone();
+    let owned = state.inner().capture_connection();
     let result = tauri::async_runtime::spawn_blocking(move || {
         let id = request_id();
         let request = removal_request(&id, selection_index)?;
@@ -1207,12 +1404,16 @@ async fn start_admitted_batch(
     processing_mode: Option<String>,
     output_naming_mode: Option<String>,
     ocr_contact_review: Option<bool>,
+    source_ids: Option<Vec<String>>,
+    catalogue_revision: Option<u64>,
 ) -> Result<Value, String> {
     let mode = validate_processing_mode(processing_mode.as_deref())?;
     validate_output_naming_mode(output_naming_mode.as_deref(), mode)?;
     let contact_review = validate_ocr_contact_review(mode, ocr_contact_review)?;
+    let document_review = state.app.get_webview_window("main")
+        .and_then(|window| window.url().ok()).map(|url| workspace_catalogue_path(url.path())).unwrap_or(false);
     let _guard = selection_guard(&state.selection_busy, &state.admission_present, true)?;
-    let owned = state.inner().clone();
+    let owned = state.inner().capture_connection();
     let result = tauri::async_runtime::spawn_blocking(move || {
         let id = request_id();
         let mut request = private_start_request(
@@ -1222,6 +1423,18 @@ async fn start_admitted_batch(
         )?;
         if contact_review {
             request["ocr_contact_review"] = json!(true);
+        }
+        if document_review { request["document_review"] = json!(true); }
+        if source_ids.is_some() || catalogue_revision.is_some() {
+            let ids = source_ids.ok_or("STANDALONE_SELECTION_INVALID")?;
+            let revision = catalogue_revision.ok_or("STANDALONE_SELECTION_INVALID")?;
+            if ids.is_empty() || ids.len() > MAX_BATCH_FILES || ids.iter().any(|id|
+                id.len() != 32 || !id.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))) ||
+                ids.iter().collect::<std::collections::HashSet<_>>().len() != ids.len() {
+                return Err("STANDALONE_SELECTION_INVALID".to_string());
+            }
+            request["source_ids"] = json!(ids);
+            request["catalogue_revision"] = json!(revision);
         }
         rpc_request(&owned, "start_admitted_batch", &id, request)
     })
@@ -1243,24 +1456,29 @@ fn validate_ocr_contact_review(mode: &str, value: Option<bool>) -> Result<bool, 
 }
 #[tauri::command]
 async fn get_public_state(state: State<'_, DesktopState>) -> Result<Value, String> {
-    blocking_rpc(state.inner().clone(), "get_public_state").await
+    blocking_rpc(state.inner().capture_connection(), "get_public_state").await
 }
 #[tauri::command]
 async fn get_ui_context(state: State<'_, DesktopState>) -> Result<Value, String> {
-    blocking_rpc(state.inner().clone(), "get_ui_context").await
+    blocking_rpc(state.inner().capture_connection(), "get_ui_context").await
 }
 #[tauri::command]
 async fn get_run_history(state: State<'_, DesktopState>) -> Result<Value, String> {
-    blocking_rpc(state.inner().clone(), "get_run_history").await
+    blocking_rpc(state.inner().capture_connection(), "get_run_history").await
 }
 
 #[tauri::command]
 async fn open_review_window(app: AppHandle) -> Result<Value, String> {
+    let owned = app.state::<DesktopState>().inner().capture_connection();
+    let _review_guard = selection_guard(&owned.review_ui_busy, &owned.admission_present, false)?;
+    if app.state::<DesktopState>().embedded_review_active.load(Ordering::Acquire) {
+        return Err("STANDALONE_BUSY".to_string());
+    }
     if let Some(window) = app.get_webview_window("review") {
         window.show().map_err(|_| "STANDALONE_REVIEW_WINDOW_FAILED".to_string())?;
         window.set_focus().map_err(|_| "STANDALONE_REVIEW_WINDOW_FAILED".to_string())?;
     } else {
-        let owned = app.state::<DesktopState>().inner().clone();
+        let owned = app.state::<DesktopState>().inner().capture_connection();
         let generation = owned.review_window_binding.lock()
             .map_err(|_| "STANDALONE_REVIEW_WINDOW_FAILED".to_string())?.opened();
         let window = WebviewWindowBuilder::new(&app, "review", WebviewUrl::App("review.html".into()))
@@ -1301,22 +1519,58 @@ fn defer_closed_review(state: &DesktopState, generation: u64) {
     }
 }
 
-fn review_window_only(window: &tauri::WebviewWindow) -> Result<(), String> {
-    if window.label() == "review" { Ok(()) }
+fn review_window_only(window: &tauri::WebviewWindow, state: &DesktopState) -> Result<(), String> {
+    let embedded = state.embedded_review_active.load(Ordering::Acquire);
+    if review_window::owns_review(window.label(), embedded) { Ok(()) }
     else { Err("STANDALONE_REVIEW_WINDOW_INVALID".to_string()) }
 }
 
+// Hold across picker/drop admission: an embedded review cannot open midway
+// through a pending selection, and a review cannot silently absorb a drop.
+fn review_admission_guard(state: &DesktopState) -> Result<SelectionGuard, String> {
+    let guard = selection_guard(&state.review_ui_busy, &state.admission_present, true)?;
+    if state.embedded_review_active.load(Ordering::Acquire) {
+        return Err("STANDALONE_BUSY".to_string());
+    }
+    Ok(guard)
+}
+
 #[tauri::command]
-fn close_review_window(window: tauri::WebviewWindow) -> Result<Value, String> {
-    review_window_only(&window)?;
-    window.close().map_err(|_| "STANDALONE_REVIEW_WINDOW_FAILED".to_string())?;
+fn open_embedded_review(window: tauri::WebviewWindow, state: State<'_, DesktopState>) -> Result<Value, String> {
+    let _review_guard = selection_guard(&state.review_ui_busy, &state.admission_present, false)?;
+    if window.label() != "main" || state.app.get_webview_window("review").is_some() {
+        return Err("STANDALONE_REVIEW_WINDOW_INVALID".to_string());
+    }
+    let already_open = state.embedded_review_active.swap(true, Ordering::AcqRel);
+    let generation = if let Ok(mut binding) = state.review_window_binding.lock() {
+        if already_open { binding.generation() } else { binding.opened() }
+    } else {
+        if !already_open { state.embedded_review_active.store(false, Ordering::Release); }
+        return Err("STANDALONE_REVIEW_WINDOW_FAILED".to_string());
+    };
+    Ok(json!({ "ok": true, "review_generation": generation }))
+}
+
+#[tauri::command]
+fn close_review_window(window: tauri::WebviewWindow, state: State<'_, DesktopState>) -> Result<Value, String> {
+    let _review_guard = selection_guard(&state.review_ui_busy, &state.admission_present, false)?;
+    review_window_only(&window, &state)?;
+    if window.label() == "main" {
+        let generation = state.review_window_binding.lock()
+            .map_err(|_| "STANDALONE_REVIEW_WINDOW_FAILED".to_string())?.generation();
+        // Capture only this delivered group; never close the application window.
+        defer_closed_review(&state, generation);
+        state.embedded_review_active.store(false, Ordering::Release);
+        window.emit("datasecure-review-closed", json!({ "closed": true, "review_generation": generation }))
+            .map_err(|_| "STANDALONE_REVIEW_WINDOW_FAILED".to_string())?;
+    } else { window.close().map_err(|_| "STANDALONE_REVIEW_WINDOW_FAILED".to_string())?; }
     Ok(json!({ "ok": true }))
 }
 
 #[tauri::command]
 async fn get_review_session(window: tauri::WebviewWindow, state: State<'_, DesktopState>) -> Result<Value, String> {
-    review_window_only(&window)?;
-    blocking_rpc(state.inner().clone(), "get_review_session").await
+    review_window_only(&window, &state)?;
+    blocking_rpc(state.inner().capture_connection(), "get_review_session").await
 }
 
 #[tauri::command]
@@ -1326,12 +1580,12 @@ async fn get_review_chunk(
     review_id: String,
     chunk_index: u64,
 ) -> Result<Value, String> {
-    review_window_only(&window)?;
+    review_window_only(&window, &state)?;
     if review_id.len() != 32 || !review_id.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
         || chunk_index > 319 {
         return Err("STANDALONE_REVIEW_SESSION_INVALID".to_string());
     }
-    let owned = state.inner().clone();
+    let owned = state.inner().capture_connection();
     let generation = owned.review_window_binding.lock()
         .map_err(|_| "STANDALONE_REVIEW_WINDOW_FAILED".to_string())?.generation();
     tauri::async_runtime::spawn_blocking(move || {
@@ -1355,11 +1609,11 @@ async fn submit_review(
     review_id: String,
     answer: Value,
 ) -> Result<Value, String> {
-    review_window_only(&window)?;
+    review_window_only(&window, &state)?;
     if review_id.len() != 32 || !review_id.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)) {
         return Err("STANDALONE_REVIEW_SESSION_INVALID".to_string());
     }
-    let owned = state.inner().clone();
+    let owned = state.inner().capture_connection();
     tauri::async_runtime::spawn_blocking(move || {
         let id = request_id();
         let result = rpc_request(&owned, "submit_review", &id, json!({
@@ -1379,9 +1633,9 @@ async fn continue_review_session(
     window: tauri::WebviewWindow,
     state: State<'_, DesktopState>,
 ) -> Result<Value, String> {
-    review_window_only(&window)?;
+    review_window_only(&window, &state)?;
     let _guard = selection_guard(&state.selection_busy, &state.admission_present, false)?;
-    blocking_rpc(state.inner().clone(), "continue_review_session").await
+    blocking_rpc(state.inner().capture_connection(), "continue_review_session").await
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -1389,7 +1643,7 @@ async fn get_run_failures(
     state: State<'_, DesktopState>,
     batch_id: Option<String>,
 ) -> Result<Value, String> {
-    let owned = state.inner().clone();
+    let owned = state.inner().capture_connection();
     tauri::async_runtime::spawn_blocking(move || match batch_id {
         Some(id) => history_rpc(&owned, "get_run_failures", &id),
         None => rpc(&owned, "get_run_failures", None, &[], None, None),
@@ -1404,12 +1658,141 @@ async fn continue_history_batch(
     batch_id: String,
 ) -> Result<Value, String> {
     let _guard = selection_guard(&state.selection_busy, &state.admission_present, false)?;
-    let owned = state.inner().clone();
+    let owned = state.inner().capture_connection();
     tauri::async_runtime::spawn_blocking(move || {
         history_rpc(&owned, "continue_history_batch", &batch_id)
     })
     .await
     .map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())?
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn pause_batch(state: State<'_, DesktopState>, batch_id: String) -> Result<Value, String> {
+    let owned = state.inner().capture_connection();
+    tauri::async_runtime::spawn_blocking(move || history_rpc(&owned, "pause_batch", &batch_id))
+        .await.map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())?
+}
+
+fn document_review_surface(window: &tauri::WebviewWindow, state: &DesktopState, batch_id: Option<&str>) -> Result<(), String> {
+    if window.label() != "main" || !workspace_catalogue_path(window.url().map_err(|_| "DOCUMENT_REVIEW_INVALID")?.path()) ||
+        state.embedded_review_active.load(Ordering::Acquire) || state.app.get_webview_window("review").is_some() {
+        return Err("DOCUMENT_REVIEW_INVALID".to_string());
+    }
+    if let Some(batch) = batch_id {
+        let binding = state.document_review_batch.lock().map_err(|_| "DOCUMENT_REVIEW_INVALID")?;
+        if binding.as_deref() != Some(batch) { return Err("DOCUMENT_REVIEW_STALE".to_string()); }
+    }
+    Ok(())
+}
+
+async fn document_review_rpc(window: tauri::WebviewWindow, state: DesktopState, batch_id: String,
+    action: &'static str, fields: Value) -> Result<Value, String> {
+    document_review_surface(&window, &state, Some(&batch_id))?;
+    let owned = state.clone();
+    let batch = batch_id.clone();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let id = request_id();
+        let mut request = json!({ "schema": IPC_SCHEMA, "request_id": id, "action": action, "batch_id": batch });
+        for (key, value) in fields.as_object().ok_or("DOCUMENT_REVIEW_INVALID")? { request[key] = value.clone(); }
+        rpc_request(&owned, action, &id, request)
+    }).await.map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())??;
+    // A closed/switched review invalidates the return channel as well.
+    document_review_surface(&window, &state, Some(&batch_id))?;
+    Ok(result)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn get_document_reviews(window: tauri::WebviewWindow, state: State<'_, DesktopState>, batch_id: String) -> Result<Value, String> {
+    document_review_surface(&window, &state, None)?;
+    if batch_id.len() != 64 || !batch_id.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)) {
+        return Err("DOCUMENT_REVIEW_INVALID".to_string());
+    }
+    *state.document_review_batch.lock().map_err(|_| "DOCUMENT_REVIEW_INVALID")? = Some(batch_id.clone());
+    document_review_rpc(window, state.inner().capture_connection(), batch_id, "get_document_reviews", json!({})).await
+}
+
+#[tauri::command]
+fn close_document_reviews(window: tauri::WebviewWindow, state: State<'_, DesktopState>) -> Result<Value, String> {
+    document_review_surface(&window, &state, None)?;
+    *state.document_review_batch.lock().map_err(|_| "DOCUMENT_REVIEW_INVALID")? = None;
+    Ok(json!({ "ok": true }))
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn get_document_review_history_summary(window: tauri::WebviewWindow, state: State<'_, DesktopState>, batch_id: String) -> Result<Value, String> {
+    document_review_surface(&window, &state, None)?;
+    if batch_id.len() != 64 || !batch_id.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)) {
+        return Err("DOCUMENT_REVIEW_INVALID".to_string());
+    }
+    let owned = state.inner().capture_connection();
+    let result = tauri::async_runtime::spawn_blocking(move || {
+        let id = request_id();
+        rpc_request(&owned, "get_document_review_history_summary", &id,
+            json!({ "schema": IPC_SCHEMA, "request_id": id, "action": "get_document_review_history_summary", "batch_id": batch_id }))
+    }).await.map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())??;
+    // Read-only metadata does not open or replace the active document binding.
+    document_review_surface(&window, &state, None)?;
+    Ok(result)
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn get_document_review_chunk(window: tauri::WebviewWindow, state: State<'_, DesktopState>,
+    batch_id: String, document_id: String, revision: u64, chunk_index: u64) -> Result<Value, String> {
+    document_review_rpc(window, state.inner().capture_connection(), batch_id, "get_document_review_chunk",
+        json!({ "document_id": document_id, "revision": revision, "chunk_index": chunk_index })).await
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn get_document_entities(window: tauri::WebviewWindow, state: State<'_, DesktopState>,
+    batch_id: String, document_id: String, revision: u64, page: u64) -> Result<Value, String> {
+    document_review_rpc(window, state.inner().capture_connection(), batch_id, "get_document_entities",
+        json!({ "document_id": document_id, "revision": revision, "page": page })).await
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn decide_document_review(window: tauri::WebviewWindow, state: State<'_, DesktopState>,
+    batch_id: String, document_id: String, decision: Value) -> Result<Value, String> {
+    document_review_rpc(window, state.inner().capture_connection(), batch_id, "decide_document_review",
+        json!({ "document_id": document_id, "decision": decision })).await
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn export_approved_documents(window: tauri::WebviewWindow, state: State<'_, DesktopState>,
+    batch_id: String, operation_id: String, selection: Value, acknowledge: Option<bool>) -> Result<Value, String> {
+    let mut payload = json!({ "operation_id": operation_id, "selection": selection });
+    if acknowledge == Some(true) { payload["acknowledge"] = json!(true); }
+    document_review_rpc(window, state.inner().capture_connection(), batch_id, "export_approved_documents",
+        payload).await
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn abandon_document_export(window: tauri::WebviewWindow, state: State<'_, DesktopState>,
+    batch_id: String, operation_id: String, digest: String) -> Result<Value, String> {
+    document_review_rpc(window, state.inner().capture_connection(), batch_id, "abandon_document_export",
+        json!({ "operation_id": operation_id, "digest": digest })).await
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn open_document_export(window: tauri::WebviewWindow, state: State<'_, DesktopState>,
+    batch_id: String, operation_id: String) -> Result<Value, String> {
+    let resolved = document_review_rpc(window.clone(), state.inner().capture_connection(), batch_id.clone(), "resolve_document_export",
+        json!({ "operation_id": operation_id })).await?;
+    let target = validate_local_target(resolved, "directory")?;
+    document_review_surface(&window, &state, Some(&batch_id))?;
+    // The server validates the stored purpose, exact owned directory and every
+    // exported hash. The renderer supplies identifiers only and sees no path.
+    open_local_target(&target, "directory", "open_document_export")
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn open_document_identity_overview(window: tauri::WebviewWindow, state: State<'_, DesktopState>,
+    batch_id: String, operation_id: Option<String>) -> Result<Value, String> {
+    let payload = match operation_id { Some(id) => json!({ "operation_id": id }), None => json!({}) };
+    let resolved = document_review_rpc(window.clone(), state.inner().capture_connection(), batch_id.clone(), "resolve_document_identity_overview", payload).await?;
+    let target = validate_local_target(resolved, "file")?;
+    document_review_surface(&window, &state, Some(&batch_id))?;
+    // No renderer-selected paths and no confidential text in the reply.
+    open_local_target(&target, "file", "open_document_identity_overview")
 }
 
 async fn open_history_target(
@@ -1445,7 +1828,7 @@ async fn open_history_results(
     batch_id: String,
 ) -> Result<Value, String> {
     open_history_target(
-        state.inner().clone(),
+        state.inner().capture_connection(),
         batch_id,
         "open_history_results",
         "resolve_history_results",
@@ -1460,7 +1843,7 @@ async fn open_history_ledger(
     batch_id: String,
 ) -> Result<Value, String> {
     open_history_target(
-        state.inner().clone(),
+        state.inner().capture_connection(),
         batch_id,
         "open_history_ledger",
         "resolve_history_ledger",
@@ -1475,7 +1858,7 @@ async fn open_history_identity_mapping(
     batch_id: String,
 ) -> Result<Value, String> {
     open_history_target(
-        state.inner().clone(), batch_id, "open_history_identity_mapping",
+        state.inner().capture_connection(), batch_id, "open_history_identity_mapping",
         "resolve_history_identity_mapping", "file",
     ).await
 }
@@ -1485,7 +1868,7 @@ async fn ack_terminal_presented(
     state: State<'_, DesktopState>,
     presentation_generation: u64,
 ) -> Result<Value, String> {
-    let owned = state.inner().clone();
+    let owned = state.inner().capture_connection();
     tauri::async_runtime::spawn_blocking(move || {
         rpc(
             &owned,
@@ -1501,11 +1884,16 @@ async fn ack_terminal_presented(
 }
 #[tauri::command]
 async fn continue_current_batch(state: State<'_, DesktopState>) -> Result<Value, String> {
-    blocking_rpc(state.inner().clone(), "continue_current_batch").await
+    blocking_rpc(state.inner().capture_connection(), "continue_current_batch").await
 }
 #[tauri::command]
 async fn configure_results(state: State<'_, DesktopState>) -> Result<Value, String> {
+    let owned = state.inner().capture_connection();
     let _guard = selection_guard(&state.selection_busy, &state.admission_present, true)?;
+    // Derived from the owned window, never a renderer-supplied filesystem flag.
+    // Keep the existing surface (including its network-folder behaviour) intact.
+    let native_binding = state.app.get_webview_window("main")
+        .and_then(|window| window.url().ok()).map(|url| workspace_catalogue_path(url.path())).unwrap_or(false);
     diagnostic_event(
         "picker_opened",
         Some("configure_results"),
@@ -1533,16 +1921,18 @@ async fn configure_results(state: State<'_, DesktopState>) -> Result<Value, Stri
         None,
         None,
     );
-    let owned = state.inner().clone();
     tauri::async_runtime::spawn_blocking(move || {
-        rpc(&owned, "configure_results", None, &[path], None, None)
+        let id = request_id();
+        let mut request = private_request(&id, "configure_results", None, &[path], None, None)?;
+        if native_binding { request["native_export_binding"] = json!(true); }
+        rpc_request(&owned, "configure_results", &id, request)
     })
     .await
     .map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())?
 }
 #[tauri::command]
 async fn open_current_results(state: State<'_, DesktopState>) -> Result<Value, String> {
-    let owned = state.inner().clone();
+    let owned = state.inner().capture_connection();
     tauri::async_runtime::spawn_blocking(move || {
         let target = resolved_local_target(&owned, "resolve_current_results", "directory")
             .inspect_err(|code| {
@@ -1561,7 +1951,7 @@ async fn open_current_results(state: State<'_, DesktopState>) -> Result<Value, S
 }
 #[tauri::command]
 async fn open_local_ledger(state: State<'_, DesktopState>) -> Result<Value, String> {
-    let owned = state.inner().clone();
+    let owned = state.inner().capture_connection();
     tauri::async_runtime::spawn_blocking(move || {
         let target =
             resolved_local_target(&owned, "resolve_local_ledger", "file").inspect_err(|code| {
@@ -1580,7 +1970,7 @@ async fn open_local_ledger(state: State<'_, DesktopState>) -> Result<Value, Stri
 }
 #[tauri::command]
 async fn open_identity_mappings_directory(state: State<'_, DesktopState>) -> Result<Value, String> {
-    let owned = state.inner().clone();
+    let owned = state.inner().capture_connection();
     tauri::async_runtime::spawn_blocking(move || {
         let target = resolved_local_target(&owned, "resolve_identity_mappings_directory", "directory")
             .inspect_err(|code| {
@@ -1614,7 +2004,7 @@ async fn open_diagnostic_folder() -> Result<Value, String> {
 }
 #[tauri::command]
 async fn shutdown(state: State<'_, DesktopState>) -> Result<Value, String> {
-    blocking_rpc(state.inner().clone(), "shutdown").await
+    blocking_rpc(state.inner().capture_connection(), "shutdown").await
 }
 
 #[tauri::command]
@@ -1677,21 +2067,30 @@ fn main() {
         diagnostic_event("webview_profile_ready", None, "ready", None, None);
     }
     let result = tauri::Builder::default()
-        .on_page_load(|webview, _payload| {
+        .on_page_load(|webview, payload| {
             let event = if webview.label() == "review" { "review_page_loaded" } else { "page_loaded" };
             diagnostic_event(event, None, "ready", None, None);
+            if webview.label() == "main" && workspace_catalogue_path(payload.url().path()) {
+                diagnostic_event("workspace_page_loaded", None, "ready", None, None);
+            }
         })
         .setup(|app| {
             diagnostic_event("setup_started", None, "progress", None, None);
             let state = DesktopState {
                 app: app.handle().clone(),
                 sidecar: Arc::new(Mutex::new(None)),
+                connection_epoch: Arc::new(AtomicU64::new(0)),
+                expected_connection_epoch: 0,
+                retired_owner_generations: Arc::new(Mutex::new(Vec::new())),
                 lifecycle: ipc_transport::Lifecycle::default(),
                 exit_gate: ipc_transport::ExitGate::default(),
                 selection_busy: Arc::new(AtomicBool::new(false)),
                 admission_present: Arc::new(AtomicBool::new(false)),
                 frontend_ready: Arc::new(AtomicBool::new(false)),
                 review_window_binding: Arc::new(Mutex::new(review_window::Binding::default())),
+                embedded_review_active: Arc::new(AtomicBool::new(false)),
+                document_review_batch: Arc::new(Mutex::new(None)),
+                review_ui_busy: Arc::new(AtomicBool::new(false)),
             };
             app.manage(state);
             diagnostic_event("setup_completed", None, "ready", None, None);
@@ -1710,7 +2109,7 @@ fn main() {
                 WindowEvent::CloseRequested { api, .. } => {
                     api.prevent_close();
                     if let Some(state) = window.try_state::<DesktopState>() {
-                        begin_native_exit(state.inner().clone());
+                        begin_native_exit(state.inner().capture_connection());
                     } else {
                         window.app_handle().exit(0);
                     }
@@ -1741,6 +2140,7 @@ fn main() {
             get_ui_context,
             get_run_history,
             open_review_window,
+            open_embedded_review,
             close_review_window,
             get_review_session,
             get_review_chunk,
@@ -1748,6 +2148,17 @@ fn main() {
             continue_review_session,
             get_run_failures,
             continue_history_batch,
+            pause_batch,
+            get_document_reviews,
+            get_document_review_history_summary,
+            close_document_reviews,
+            get_document_review_chunk,
+            get_document_entities,
+            decide_document_review,
+            export_approved_documents,
+            abandon_document_export,
+            open_document_export,
+            open_document_identity_overview,
             open_history_results,
             open_history_ledger,
             open_history_identity_mapping,
@@ -1786,7 +2197,7 @@ fn main() {
             if let Some(state) = app_handle.try_state::<DesktopState>() {
                 if !state.exit_gate.allowed(code) {
                     api.prevent_exit();
-                    begin_native_exit(state.inner().clone());
+                    begin_native_exit(state.inner().capture_connection());
                 }
             }
         }
@@ -1796,6 +2207,42 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn retirement_completion_gap_does_not_consume_recovery_generations() {
+        use std::process::{Command, Stdio};
+        #[cfg(windows)]
+        let mut command = { use std::os::windows::process::CommandExt; let mut c = Command::new("powershell.exe");
+            c.args(["-NoProfile", "-NonInteractive", "-Command", "Start-Sleep -Seconds 30"]).creation_flags(0x08000000); c };
+        #[cfg(not(windows))]
+        let mut command = { let mut c = Command::new("sleep"); c.arg("30"); c };
+        let lifecycle = ipc_transport::Lifecycle::default(); let generations = Mutex::new(vec!["a".repeat(32)]);
+        let child = ipc_transport::ChildControl::new(command.stdout(Stdio::null()).stderr(Stdio::null()).spawn().unwrap());
+        let spawn = lifecycle.begin_spawn().unwrap(); spawn.register(child.clone()).unwrap(); drop(spawn);
+        let (arrive, arrived) = mpsc::channel(); let (release, released) = mpsc::channel();
+        lifecycle.retire_async(child, move || { arrive.send(()).unwrap(); released.recv().unwrap(); Ok(()) }).unwrap();
+        arrived.recv_timeout(Duration::from_secs(5)).unwrap();
+        for _ in 0..32 { assert!(reserve_sidecar_generation(&lifecycle, &generations).is_err()); }
+        assert_eq!(generations.lock().unwrap().len(), 1);
+        release.send(()).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            match reserve_sidecar_generation(&lifecycle, &generations) {
+                Ok((guard, generation, prior)) => { assert_eq!(prior, vec!["a".repeat(32)]); assert_eq!(generation.len(), 32); drop(guard); break; },
+                Err(_) => { assert!(Instant::now() < deadline); std::thread::yield_now(); }
+            }
+        }
+        assert_eq!(generations.lock().unwrap().len(), 2); assert!(lifecycle.stop());
+    }
+
+    #[test]
+    fn tolerant_catalogue_is_bound_to_the_v2_asset_not_the_legacy_or_review_page() {
+        assert!(workspace_catalogue_path("/workspace.html"));
+        assert!(workspace_catalogue_path("workspace.html"));
+        for path in ["/", "/index.html", "/review.html", "/nested/workspace.html", "/workspace.html/", ""] {
+            assert!(!workspace_catalogue_path(path), "{path}");
+        }
+    }
 
     #[test]
     fn markdown_contact_review_is_explicit_opt_in_not_anonymization_or_coercion() {
@@ -2358,6 +2805,7 @@ mod tests {
     #[test]
     fn admission_has_its_own_bounded_deadline_and_honest_transport_failure() {
         assert_eq!(rpc_duration("admit_selected_sources"), Duration::from_secs(300));
+        assert_eq!(rpc_duration("get_document_review_history_summary"), Duration::from_secs(300));
         assert_eq!(rpc_duration("get_public_state"), Duration::from_secs(30));
         assert_eq!(rpc_duration("submit_review"), Duration::from_secs(30));
         assert_eq!(admission_transport_code("admit_selected_sources", ipc_transport::TIMEOUT.to_string()),

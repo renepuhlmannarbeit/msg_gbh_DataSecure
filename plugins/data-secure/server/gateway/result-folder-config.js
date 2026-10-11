@@ -8,10 +8,14 @@ const { renameWithTransientRetry } = require('./batch-journal-io');
 const path = require('path');
 const { dataRoot } = require('../runtime');
 const { assertRootSeparation, reserveRootSeparation } = require('./root-boundary');
+const { validNativeDirectoryIdentity, validNativeExportBinding } = require('../core/native-directory-identity');
 
 const CONFIG_NAME = 'result-root.json';
 const SCHEMA = 'datasecure-result-root/2';
 const LEGACY_SCHEMA = 'datasecure-result-root/1';
+const NATIVE_SCHEMA = 'datasecure-result-root/3';
+const EXPORT_SCHEMA = 'datasecure-result-root/4';
+const MAX_CONFIG_BYTES = 128 * 1024;
 
 function configDirectory() { return path.join(dataRoot(), 'settings'); }
 function configPath() { return path.join(configDirectory(), CONFIG_NAME); }
@@ -49,10 +53,13 @@ function ensureConfigDirectory() {
 function readRecord() {
   try {
     const file = configPath();
-    const value = JSON.parse(readBoundFile(file, { maximum: 4096, minimum: 1 }));
+    const value = JSON.parse(readBoundFile(file, { maximum: MAX_CONFIG_BYTES, minimum: 1 }));
     const keys = Object.keys(value || {}).sort().join(',');
     const legacy = value?.schema === LEGACY_SCHEMA && keys === 'identity,root,schema';
-    const isCurrent = value?.schema === SCHEMA && keys === 'identity,notices,root,schema' &&
+    const native = value?.schema === NATIVE_SCHEMA && keys === 'identity,native_identity,notices,root,schema' && validNativeDirectoryIdentity(value.native_identity) ||
+      value?.schema === EXPORT_SCHEMA && keys === 'identity,native_export,notices,root,schema' &&
+      validNativeExportBinding(value.native_export) && value.native_export.root === value.root;
+    const isCurrent = (native || value?.schema === SCHEMA && keys === 'identity,notices,root,schema') &&
       value.notices && Object.keys(value.notices).sort().join(',') === 'network,sync' &&
       typeof value.notices.network === 'boolean' && typeof value.notices.sync === 'boolean';
     if ((!legacy && !isCurrent) || typeof value.root !== 'string' || !value.identity) return null;
@@ -79,8 +86,8 @@ function recordedResultRootPath() {
   if (environment && path.isAbsolute(environment)) return path.resolve(environment);
   try {
     const file = configPath();
-    const value = JSON.parse(readBoundFile(file, { maximum: 4096, minimum: 1 }));
-    return value?.schema === SCHEMA && typeof value.root === 'string' && path.isAbsolute(value.root) ? path.resolve(value.root) : '';
+    const value = JSON.parse(readBoundFile(file, { maximum: MAX_CONFIG_BYTES, minimum: 1 }));
+    return [SCHEMA, NATIVE_SCHEMA, EXPORT_SCHEMA].includes(value?.schema) && typeof value.root === 'string' && path.isAbsolute(value.root) ? path.resolve(value.root) : '';
   } catch { return ''; }
 }
 // Canonical, case-folded comparison path: the real path of the longest existing
@@ -117,23 +124,45 @@ function visibleResultTreeOverlaps(target) {
   if (!roots.size) return false;
   const selected = comparablePath(target);
   for (const root of roots) {
-    for (const name of ['DataSecure-Output', 'DataSecure-Markdown']) {
+    for (const name of ['DataSecure-Output', 'DataSecure-Markdown', 'DataSecure-KI-Export', 'DataSecure-Markdown-Korrektur']) {
       const output = comparablePath(path.join(path.resolve(root), name));
       if (insideOrEqual(selected, output) || insideOrEqual(output, selected)) return true;
     }
   }
   return false;
 }
-function saveConfiguredResultRoot(root) {
+// Native identity and Node identity use different representations. Never
+// derive a native binding from stat(), or silently upgrade an old setting.
+function readConfiguredNativeRootBinding() {
+  assertRootSeparation();
+  if (String(process.env.EU_PRIVACY_RESULT_ROOT || '').trim()) return null;
+  const record = readRecord();
+  return record?.schema === NATIVE_SCHEMA ? { root: record.root, identity: { ...record.native_identity } } : null;
+}
+function readConfiguredNativeExportBinding() {
+  assertRootSeparation();
+  if (String(process.env.EU_PRIVACY_RESULT_ROOT || '').trim()) return null;
+  const record = readRecord();
+  return record?.schema === EXPORT_SCHEMA ? structuredClone(record.native_export) : null;
+}
+function saveConfiguredResultRoot(root, options = {}) {
+  const native = options.nativeIdentity !== undefined;
+  const exporting = options.nativeExport !== undefined;
+  if (native && exporting) throw new Error('RESULT_ROOT_UNSAFE');
+  if (exporting && (!validNativeExportBinding(options.nativeExport) || options.nativeExport.root !== root)) throw new Error('RESULT_ROOT_UNSAFE');
+  if (native && !validNativeDirectoryIdentity(options.nativeIdentity)) throw new Error('RESULT_ROOT_UNSAFE');
   const selected = inspectRoot(root);
   assertRootSeparation({ resultRoot: selected.root });
   reserveRootSeparation({ resultRoot: selected.root });
   const directory = ensureConfigDirectory();
   const target = configPath();
   const temporary = path.join(directory, `${CONFIG_NAME}.${process.pid}.${Date.now()}.tmp`);
-  const payload = JSON.stringify({ schema: SCHEMA, root: selected.root, identity: selected.identity, notices: {
+  const payload = JSON.stringify({ schema: exporting ? EXPORT_SCHEMA : native ? NATIVE_SCHEMA : SCHEMA, root: selected.root, identity: selected.identity,
+    ...(exporting ? { native_export: structuredClone(options.nativeExport) } : {}),
+    ...(native ? { native_identity: { ...options.nativeIdentity } } : {}), notices: {
     sync: isCommonSyncFolder(selected.root), network: isNetworkResultFolder(selected.root)
   } });
+  if (Buffer.byteLength(payload, 'utf8') > MAX_CONFIG_BYTES) throw new Error('RESULT_ROOT_UNSAFE');
   fs.writeFileSync(temporary, payload, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
   try { renameWithTransientRetry(temporary, target); }
   finally { try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch {} }
@@ -151,7 +180,7 @@ function consumeConfiguredResultNotices() {
   const directory = ensureConfigDirectory();
   const target = configPath();
   const temporary = path.join(directory, `${CONFIG_NAME}.${process.pid}.${Date.now()}.tmp`);
-  const payload = JSON.stringify({ ...record, schema: SCHEMA, notices: { sync: false, network: false } });
+  const payload = JSON.stringify({ ...record, schema: [NATIVE_SCHEMA, EXPORT_SCHEMA].includes(record.schema) ? record.schema : SCHEMA, notices: { sync: false, network: false } });
   fs.writeFileSync(temporary, payload, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
   try { renameWithTransientRetry(temporary, target); }
   finally { try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch {} }
@@ -188,7 +217,7 @@ function isNetworkResultFolder(root, platform = process.platform) {
 }
 
 module.exports = {
-  CONFIG_NAME, SCHEMA, LEGACY_SCHEMA, configPath, inspectRoot, readConfiguredResultRoot, recordedResultRootPath,
+  CONFIG_NAME, SCHEMA, LEGACY_SCHEMA, NATIVE_SCHEMA, EXPORT_SCHEMA, configPath, inspectRoot, readConfiguredResultRoot, recordedResultRootPath, readConfiguredNativeRootBinding, readConfiguredNativeExportBinding,
   saveConfiguredResultRoot, clearConfiguredResultRoot, resultOutputDirectory,
   consumeConfiguredResultNotices, isCommonSyncFolder, isNetworkResultFolder, visibleResultTreeOverlaps
 };

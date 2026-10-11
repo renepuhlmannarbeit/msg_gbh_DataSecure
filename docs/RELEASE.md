@@ -1,10 +1,58 @@
 # Release- und Distributionsvertrag
 
-Stand: 06.10.2026 · 3.2.0-rc158
+Stand: 06.10.2026 · 3.2.0-rc159
 
-Der aktuelle Quellstand ist RC158; der Standalone-Vorabkandidat für Windows x64
-sowie macOS Intel und Apple Silicon ist nach Sicherheitskorrektur und neuen
-Paketgates veröffentlicht. Linux bleibt separat RC157, Cowork bleibt RC151.
+### RC159 – Vierplattform-Prerelease in Vorbereitung (11.10.2026)
+
+Der Anwender hat Commit/Push auf `main`, Prerelease-Testpakete für Windows x64,
+beide Mac-Architekturen und Linux x64 glibc sowie die vorhandenen GitHub-
+Buildworkflows einschließlich möglicher Kosten ausdrücklich beauftragt.
+Der reguläre native Einstieg ist für diese Pakete `workspace.html`; kein
+Engineering-Override und keine Demo-Verarbeitung. Veröffentlichung und exakte
+Quell-/Archivbindung werden hier erst nach erfolgreicher Paketprüfung ergänzt.
+Lokale sichtbare Bedienung ist nicht autorisiert; menschliche Plattform-/
+Accessibility-Abnahme bleibt getrennt. Bekannte rohe OCR-Abweichungen bleiben
+sichtbare Warnungen nach DS-110, keine Zusage fehlerfreier Extraktion.
+
+Frische lokale Vorbereitung: 108 Windows-Rusttests/Clippy und Dokumentations-/
+Versions-/strenge Claude-Strukturprüfung bestanden. Qualitätsmessung
+`dist/quality-prerelease-rc159-20261011/BERICHTE/QUALITAET.json`: 72 Varianten in
+beiden Zwecken technisch vollständig; nach 55 synthetischen Kontaktbestätigungen,
+neun Referenzkorrekturen und 202 Entitäts-Vorkommensentscheidungen null bekannte
+finale Restdaten, unbewertete Vorkommen oder Sachwortverluste. Standardgate
+`pass_with_warnings`; neun rohe OCR-E-Mail-Abweichungen bleiben. Dies ist eine
+quell-/runtimegebundene synthetische Messung, keine exakte Releasepaket- oder
+menschliche Qualitätsabnahme. Ein zusätzlicher Read-only-Review bestätigt den
+Buildvertrag: neue native Starts müssen `workspace_page_loaded` und erfolgreiche
+aktuelle IPC-Antworten derselben Sitzung nachweisen; bloße Anfragen genügen nicht.
+
+Der frisch kompilierte lokale Windows-Vorbereitungsschnitt ist als
+`dist/engineering-prerelease-rc159-20261011/DataSecure-Standalone-3.2.0-rc159-windows-x64.zip`
+verifiziert (SHA-256
+`931d755312d022689aa89d7574adc680c7ad2aa365138492834527e3db2d8682`,
+611 Archiveinträge). Der isolierte Smoke aus genau diesem ZIP besteht: reale
+gemischte Konvertierung, passive PDF-/PPTX-Inhalte, Review-/OCR-IPC in beiden
+Zwecken, Folgegruppen, Vertagen/Neustart, laufweite Entscheidungen und genaue
+Fehlerdateinamen. Kein lokaler Tauri-/WebView-Bediennachweis; das ist noch nicht
+das spätere, an den Releasecommit gebundene Runnerpaket.
+
+Zusätzliche unabhängige Sicherheits-Revalidierung: Die 17 bisherigen,
+individuell gebundenen SARIF-Fundstellen in acht geänderten Dateien behalten ihre
+belegten Triagegründe (gehaltenes Dateiobjekt oder isolierte synthetische
+Testassertion). Die exakten Quellhashes wurden aktualisiert; Fingerprintbindung,
+Duplikatprüfung und Ablehnung unbekannter Befunde bleiben unverändert.
+Zehn strenge SARIF-Gate-Negativprüfungen bestehen. Das ersetzt keine frische
+CodeQL-Analyse; neue/veränderte Fundstellen sind vor Veröffentlichung gesondert
+zu bewerten. Der History-Metadatenleser erhält damit ausdrücklich keine
+allgemeine Race-Freiheitszusage.
+
+Der frische Gesamtprodukteingang `test:product:headless` besteht mit allen
+218 Testdateien, einschließlich des realen Node-/Rust-Exports mit 10.001
+Kontaktwerten und produktübergreifender Abbruch-/Neustart-/Review-Gegenproben.
+Sechs native Windows-Formfälle und menschliche GUI-/Zielhostabnahme bleiben
+ausdrücklich `NOT_RUN`; kein sichtbares lokales Fenster wurde bedient.
+
+Der aktuelle Quellstand ist RC159-Entwicklungsstand und noch kein neu gebundener Paketkandidat. Linux bleibt separat RC157, Cowork bleibt RC151.
 Die folgenden RC157-Anwendernachweise bleiben auf ihren damaligen Schnitt
 begrenzt; die neue technische RC158-Paketbindung steht im nächsten Abschnitt.
 ZIP-Verifikation, isolierter Paket-Smoke und

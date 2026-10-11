@@ -6,6 +6,7 @@ param(
     [switch] $EmitEvidence,
     [switch] $AssertNoListeners,
     [switch] $AssertReviewWindow,
+    [switch] $AssertWorkspace,
     [string] $ExpectedSha256 = ''
 )
 
@@ -500,6 +501,7 @@ try {
         $publicState = Test-NativeActionReadiness $desktopSession 'get_public_state'
         $uiContext = Test-NativeActionReadiness $desktopSession 'get_ui_context'
         $pageLoaded = @($desktopSession | Where-Object { $_.event -eq 'page_loaded' }).Count -gt 0
+        $workspaceLoaded = @($desktopSession | Where-Object { $_.event -eq 'workspace_page_loaded' }).Count -gt 0
         $reviewPageLoaded = @($desktopSession | Where-Object { $_.event -eq 'review_page_loaded' }).Count -gt 0
         $reviewScriptStarted = @($desktopSession | Where-Object {
             $_.event -eq 'ipc_request_started' -and $_.action -eq 'get_review_session'
@@ -511,7 +513,7 @@ try {
         $sidecarStarted = @($sidecarSession | Where-Object { $_.event -eq 'sidecar_started' }).Count -gt 0
         $serviceInitialized = @($sidecarSession | Where-Object { $_.event -eq 'service_initialized' }).Count -gt 0
         if ($pageLoaded -and $frontendReady -and $publicState -and $uiContext -and $sidecarStarted -and $serviceInitialized -and
-            (-not $AssertReviewWindow -or $reviewReady)) {
+            (-not $AssertReviewWindow -or $reviewReady) -and (-not $AssertWorkspace -or $workspaceLoaded)) {
             $startupStopwatch.Stop()
             $startupMilliseconds = [Math]::Round($startupStopwatch.Elapsed.TotalMilliseconds, 3)
             $passed = $true
@@ -540,6 +542,7 @@ try {
         if (-not $setupStarted) { throw 'STANDALONE_NATIVE_WEBVIEW_INITIALIZATION_TIMEOUT' }
         if (-not $setupCompleted) { throw 'STANDALONE_NATIVE_SETUP_TIMEOUT' }
         if (-not $pageLoaded) { throw 'STANDALONE_NATIVE_PAGE_LOAD_TIMEOUT' }
+        if ($AssertWorkspace -and -not $workspaceLoaded) { throw 'STANDALONE_NATIVE_WORKSPACE_LOAD_TIMEOUT' }
         if (-not $frontendReady) { throw 'STANDALONE_NATIVE_FRONTEND_READY_TIMEOUT' }
         if ($AssertReviewWindow -and -not $reviewReady) {
             throw 'STANDALONE_NATIVE_REVIEW_WINDOW_TIMEOUT'

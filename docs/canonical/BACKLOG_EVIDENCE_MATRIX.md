@@ -1,6 +1,103 @@
 # Evidence-Matrix für aktive Arbeit
 
-Stand: 06.10.2026 · 3.2.0-rc158 · Windows/macOS RC158 veröffentlicht · Linux bleibt RC157 · Cowork bleibt RC151
+Stand: 08.10.2026 · 3.2.0-rc159 · Windows/macOS RC158 veröffentlicht · Linux bleibt RC157 · Cowork bleibt RC151
+
+**Aktueller RC159-Nachtrag, BL-010.53:** Direkter Übergang von bestätigter
+Fundstellenprüfung zur Ergebnisprüfung desselben Laufs und direkter
+Verlaufs-Hauptbutton implementiert; Status-Momentaufnahme nur sekundär.
+Keine automatische Dokumentfreigabe oder Ausgabe. Unabhängiger Read-only-
+Review reproduzierte eine verspätete Statusantwort während manuellen Schließens;
+behoben und im 50-Fälle-Workspace-Gate abgesichert. 108 Windows-Rustfälle,
+Clippy, Offline-/Locked-Releasekompilierung, Archivverifier und echter isolierter
+Paket-Sidecar-Smoke grün. Lokaler RC159-Paketpfad, Bytebindung und Grenzen im
+Iststand; kein sichtbarer Desktop-/Mac-Nachweis. Frische 72-Varianten-Messung
+`dist/quality-rc159-transition-20261008` besteht nach gebundenen synthetischen
+Entscheidungen ohne bekannte finale Lecks/Sachwortverlust, mit neun unveränderten
+rohen OCR-E-Mail-Warnungen. Strenges Extraktionsprofil bleibt rot.
+Keine Gesamtmigration-/Releasefreigabe; kein Commit/Push/Actions/Release.
+Anschließend vollständiger Nicht-GUI-Gegenlauf RC159 grün: 218 Testdateien;
+Quellscope ohne die ausschließlich dokumentarisch aktualisierte Standalone-
+README unverändert. Digest und Protokoll im Iststand. Sechs Formularfälle
+`NOT_RUN`, Vollprofil verweigert ohne Desktopfreigabe mit Exit 77. Normaler
+Release-/Cowork-Bau weiterhin an sauberer Commitbindung gesperrt.
+
+**Unveröffentlichter v2/r9-Gesamtreview, 08.10.2026:**
+[R9-20261008](../REVIEW_STANDALONE_R9_2026-10-08.md) ergänzt drei tatsächlich
+reproduzierte P2-Workflowfehler und zwei statisch belegte native Kontrollgrenzen.
+Keine Korrektur-/Releaseevidence daraus ableiten; Bearbeitung BL-010.53.
+Frische 72-Varianten-Qualitätsmessung und r9-Paketbytebindung sind vom aktuellen
+Arbeitsstand durchgeführt, nicht vom nachfolgend beschriebenen veröffentlichten
+RC158-Commit. Neun Roh-OCR-Abweichungen hielten das damalige All-findings-Gate rot; finale
+synthetisch referenzgebundene Prüfung ohne bekannte Lecks/Sachwortverlust ist
+keine menschliche Referenz- oder native Mac-Abnahme. Der vollständig neu
+gestartete eingefrorene r9-Gesamteingang besteht mit 217 Testdateien
+(96 Basis plus 121 direkte), einschließlich letztem Undo-Delta; Quellscopedigest
+vor/nach dem Lauf unverändert. 106 Windows-Rustfälle und Clippy bestehen;
+Desktopfreigabe bleibt entzogen.
+
+**Korrektur-Nachtrag desselben Tages:** R9-01/02/03 gezielt behoben; R9-04/05
+mit besitzgebundenem Worker/Retirement implementiert und an tatsächlichen
+Windows-Rename-/Kindprozessgrenzen geprüft. 108 Rustfälle, warning-free Clippy,
+42 Dokumentrenderer-/42 Workspacefälle und echter 10.001-Kontakt-Freigabe-/
+Node-/Rustexport mit erneut gelesener Übersicht bestehen. R9-06/Optionsdrift
+und zwei nachentdeckte Replay-/Recoverybudget-Randfälle korrigiert. Maßgeblich
+sind der Nachtrag in R9 und BL-010.53; ältere Quell-/Archivhashes sind keine
+Bindung dieses neuen Codes. Abschließend erneute vollständige Produktsuite:
+217 Testdateien (96 Basis plus 121 direkte) grün, korrigierter Quellscopedigest
+vor/nach dem Lauf identisch. Windows-Releasekompilierung besteht; normaler
+Paketbau bleibt wegen fehlender sauberer Commitbindung gesperrt, aktuelles
+Cowork-ZIP fehlt. Keine Desktop-/Mac-/Releasefreigabe daraus ableiten.
+
+**Qualitätspriorisierung, 08.10.2026:** DS-110 / BL-050.6 trennt künftig
+vollständig bewertete rohe OCR-Kontaktabweichungen als sichtbare Warnungen von
+harten Sperrgründen (Restdaten, Sachverlust, unbewertete/fehlende Ausgaben,
+veraltete/partielle Herkunft, Bereinigung). Ein strenges Extraktionsprofil bleibt
+verfügbar. Die neun bekannten Rohfehler sind nicht behoben oder erledigt.
+Historische Messungen werden nicht rückwirkend freigegeben; native Mac-/exakte
+Releasepaket-/menschliche Bediennachweise bleiben eigenständig offen.
+
+**Neue Messpolicy separat belegt:** `dist/quality-headless-boundary-20261008`
+enthält die frische 72-Varianten-Messung; Quell-/Konverter-/Referenzbindung und
+Workerbereinigung bestätigt. Beide finalen Privacy-Gegenprüfungen (korrigierte
+und rohe Lesart) ohne bekannte Reste, unbewertete Vorkommen oder gemessenen
+Sachverlust nach gebundenen synthetischen Entscheidungen. Neun rohe E-Mail-
+Lesefehler bleiben Warnungen, nicht behoben. Tatsächlich ausgeführte Gate-
+Gegenprobe: Standardprofil `pass_with_warnings`, strenges Profil blockiert,
+überholter Bericht blockiert. 27 Bewerter- und 12 Bericht-/Gatefälle sowie
+gesamtes `test:quality` bestehen. Unabhängiger Read-only-Gegenreview reproduzierte
+und bestätigte anschließend die Schließung des Raw-Lesart-Blindflecks; keine
+menschliche E1/E2/E3-Abnahme. Keine Laufzeitfreigabe oder Veröffentlichung.
+
+**Vorheriger Gesamtprüflauf zur Messpolicy:** wegen entzogener Desktopfreigabe
+abgebrochen, kein PASS. Die damalige Windows-Suite enthielt echte automatisch
+bediente Formularproben (`test-residual-person-review.js`, weitere in
+`test-companion-processor.js`); versteckter Prozessstart schließt sichtbare
+Formulare nicht aus. Protokoll und
+unveränderter 993-Dateien-Quellscopedigest stehen im Iststand. Frühere grüne
+217-Dateien-Läufe sind historische Evidence, keine frische Gesamtfreigabe der
+Messpolicy. Qualitätsbenchmark und gezielte `test:quality`-Fälle bleiben gültig.
+
+**BL-010.53.8 – Testabgrenzung implementiert:** Sechs tatsächliche WinForms-
+Proben einschließlich Abschlussansicht sind in einem ausdrücklich freizugebenden
+Native-UI-Eingang erhalten, je 20 Sekunden begrenzt. Headless-/CI-/Standalone-
+Eingänge öffnen diese Formulare nicht und melden deren fehlende Evidence
+ausdrücklich. Windows-Vollprofil verweigert ohne `--allow-native-ui` vor jedem
+Teststart. 11 Guard-/Plan-/CLI-Fälle und 12 Testpfadverträge bestehen.
+Vollständige Headless-Integration anschließend grün: 218 Testdateien (97 Basis
+plus 121 direkte), darunter echte Node-/Rust-10.001-Kontakt-Exporte und Windows-
+Prozessgrenzen. 996-Dateien-Quellscope vor/nach dem Lauf identisch; Protokoll und
+Digest im Iststand. Standard-Voll-/Native-UI-Aufrufe tatsächlich ohne Freigabe
+verweigert (Exit 77), nicht als PASS gezählt. Sechs echte Formularfälle
+`NOT_RUN`; kein nativer Windows-/Mac-/Tauri-/Releasepaket-PASS daraus ableiten.
+Dokumentationsgates, strenge Pluginstrukturprüfung und Diffprüfung bestehen;
+Build weiter an schmutziger Commitbindung gesperrt, aktuelles Cowork-ZIP fehlt.
+Desktopfreigabe bleibt entzogen; kein Commit/Push/Release/Actions-Start.
+Die neuen Testbefehle machten den vorherigen `quality-classified-final-20261008`-
+Bericht korrekt alt. Die deshalb vollständig erneute 72-Varianten-Messung oben
+ist an den neuen Stand gebunden, mit bestätigter Bereinigung und unveränderten
+bekannten Ergebnissen. Standardgate `pass_with_warnings`, strenges
+Extraktionsgate rot; vorheriger Bericht `QUALITY_REPORT_STALE`. Keine
+Ausnahme oder rückwirkende Freigabe alter Herkunft.
 
 RC158 für Windows x64 und macOS Intel/Apple Silicon ist aus Quellcommit
 `f4caf948bde39dbebe8fe359235c3be84f189e5d` veröffentlicht. Die technische

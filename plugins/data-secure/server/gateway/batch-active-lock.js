@@ -19,12 +19,16 @@ function createBatchActiveLock(deps = {}) {
   const processApi = deps.process || process;
   const now = deps.now || (() => new Date());
   const randomLockId = deps.randomLockId || (() => crypto.randomBytes(16).toString('hex'));
+  // Only the native Standalone desktop delegates a document-control owner.
+  // An epoch is not authority supplied by a renderer or a generic batch worker.
+  const ownerGeneration = deps.ownerGeneration;
+  if (ownerGeneration !== undefined && !LOCK_ID_RE.test(ownerGeneration)) throw new TypeError('DOCUMENT_CONTROL_GENERATION_INVALID');
   const retryDelay = deps.retryDelay || ((milliseconds) => {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
   });
 
   function activeLockPath() {
-    return path.join(batchRoot(), 'active-processing.json');
+    return deps.lockPath ? deps.lockPath() : path.join(batchRoot(), 'active-processing.json');
   }
 
   function processAlive(pid) {
@@ -46,7 +50,8 @@ function createBatchActiveLock(deps = {}) {
     return Boolean(value && value.schema === LOCK_SCHEMA &&
       TOKEN_RE.test(value.token) && Number.isSafeInteger(value.pid) && value.pid > 0 &&
       typeof value.created_at === 'string' && Number.isFinite(Date.parse(value.created_at)) &&
-      (value.lock_id === undefined || LOCK_ID_RE.test(value.lock_id)));
+      (value.lock_id === undefined || LOCK_ID_RE.test(value.lock_id)) &&
+      (value.owner_generation === undefined || LOCK_ID_RE.test(value.owner_generation)));
   }
 
   function readActiveLockRecord() {
@@ -93,6 +98,7 @@ function createBatchActiveLock(deps = {}) {
       : leftLockId === rightLockId && LOCK_ID_RE.test(String(leftLockId || ''));
     return left.value.token === right.value.token && left.value.pid === right.value.pid &&
       left.value.created_at === right.value.created_at && sameLockId &&
+      left.value.owner_generation === right.value.owner_generation &&
       a.dev === b.dev && a.ino === b.ino && a.size === b.size;
   }
 
@@ -123,6 +129,7 @@ function createBatchActiveLock(deps = {}) {
       created_at: now().toISOString(),
       lock_id: randomLockId()
     };
+    if (ownerGeneration !== undefined) value.owner_generation = ownerGeneration;
     if (!LOCK_ID_RE.test(value.lock_id)) {
       throw new SafeError('Die lokale Stapelsperre konnte nicht sicher erzeugt werden.');
     }
@@ -161,7 +168,22 @@ function createBatchActiveLock(deps = {}) {
 
   function releaseActiveLock(token) {
     const existing = readActiveLockRecord();
-    if (!existing || existing.value.token !== token || existing.value.pid !== processApi.pid) return false;
+    if (!existing || existing.value.token !== token || existing.value.pid !== processApi.pid ||
+        existing.value.owner_generation !== ownerGeneration) return false;
+    return unlinkIfUnchanged(existing);
+  }
+
+  function retireDelegatedOwner(generations) {
+    if (ownerGeneration === undefined || !Array.isArray(generations) || generations.length > 16 ||
+        new Set(generations).size !== generations.length || generations.some(value =>
+          !LOCK_ID_RE.test(value) || value === ownerGeneration)) throw new TypeError('DOCUMENT_CONTROL_GENERATION_INVALID');
+    if (!io.existsSync(activeLockPath())) return true;
+    const existing = readActiveLockRecord();
+    // A foreign, legacy, malformed or live unretired generation stays locked.
+    // Rust grants these exact epochs only after reaping the old sidecar and
+    // draining its native publication work. Matching a PID alone is not proof.
+    if (!existing || existing.value.pid !== processApi.pid ||
+        !generations.includes(existing.value.owner_generation)) return false;
     return unlinkIfUnchanged(existing);
   }
 
@@ -172,7 +194,8 @@ function createBatchActiveLock(deps = {}) {
     validActiveLock,
     readActiveLock,
     acquireActiveLock,
-    releaseActiveLock
+    releaseActiveLock,
+    retireDelegatedOwner
   };
 }
 

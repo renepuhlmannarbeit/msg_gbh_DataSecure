@@ -133,21 +133,24 @@ function recordStandaloneExport(recordTarget, record, runPath) {
   const root = directoryBinding(path.dirname(output.path));
   writeJson(id, { schema: BINDING_SCHEMA, export_id: id, run, output, root });
 }
-function boundRun(id, expectedRunName) {
+function inspectBoundRun(id, expectedRunName) {
+  let binding;
+  try { binding = readJson(path.join(historyRoot(), `${id}.json`)); }
+  catch { return { availability: 'unknown' }; }
   try {
-    const binding = readJson(path.join(historyRoot(), `${id}.json`));
     if (binding.schema !== BINDING_SCHEMA || binding.export_id !== id ||
         (expectedRunName && path.basename(binding.run.path) !== expectedRunName) ||
         path.dirname(binding.run.path) !== binding.output.path ||
         path.dirname(binding.output.path) !== binding.root.path ||
         !['DataSecure-Output', 'DataSecure-Markdown'].includes(path.basename(binding.output.path)) ||
-        !/^Lauf-\d{8}-\d{6}-[a-f0-9]{8}$/u.test(path.basename(binding.run.path))) return '';
+        !/^Lauf-\d{8}-\d{6}-[a-f0-9]{8}$/u.test(path.basename(binding.run.path))) return { availability: 'unsafe' };
     for (const key of ['root', 'output', 'run']) {
-      if (JSON.stringify(directoryBinding(binding[key].path)) !== JSON.stringify(binding[key])) return '';
+      if (JSON.stringify(directoryBinding(binding[key].path)) !== JSON.stringify(binding[key])) return { availability: 'unsafe' };
     }
-    return binding.run.path;
-  } catch { return ''; }
+    return { availability: 'available', path: binding.run.path };
+  } catch (error) { return { availability: error.code === 'ENOENT' ? 'missing' : 'unsafe' }; }
 }
+function boundRun(id, expectedRunName) { return inspectBoundRun(id, expectedRunName).path || ''; }
 
 module.exports = { SCHEMA, failure, validateBatchId, historyProgress, validSummary, summarizeState,
-  readStandaloneSummaries, recordStandaloneState, recordStandaloneExport, boundRun };
+  readStandaloneSummaries, recordStandaloneState, recordStandaloneExport, boundRun, inspectBoundRun };

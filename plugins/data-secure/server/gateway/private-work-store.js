@@ -14,7 +14,7 @@ function createPrivateWorkStore(options = {}) {
   const io = options.fs || fs;
   const maxBytes = options.maxBytes ?? 64 * 1024 * 1024;
   if (!Number.isSafeInteger(maxBytes) || maxBytes < 0) throw failure('PRIVATE_ARTIFACT_LIMIT_INVALID');
-  const validate = createPathGuard(options.privateRoot, io);
+  const validate = createPathGuard(options.privateRoot, io, options.expectedRootIdentity);
   const platform = options.platform || process.platform;
 
   function ensureReady() {

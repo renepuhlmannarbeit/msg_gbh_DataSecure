@@ -95,6 +95,7 @@ function createBatchReviewPublication(options = {}) {
     const packages = [];
     let locallyReleased = 0;
     let failed = 0;
+    let processed = 0, pauseBlocked = false, recoveryBlocked = false;
 
     for (let index = 0; index < items.length; index++) {
       const item = items[index];
@@ -104,10 +105,16 @@ function createBatchReviewPublication(options = {}) {
         hasErrorCode: Object.hasOwn(item, 'error_code'),
         errorCode: item.error_code
       };
-      item.status = 'processing';
-      item.checkpoint = 'batch_review_publish_started';
-      delete item.error_code;
-      try { writeState(state); }
+      try {
+        const claimed = (options.claimStandaloneDocument || ((_state, action) => { action(); return true; }))(state, () => {
+          item.status = 'processing';
+          item.checkpoint = 'batch_review_publish_started';
+          delete item.error_code;
+          writeState(state);
+        });
+        if (!claimed) { pauseBlocked = true; break; }
+        processed++;
+      }
       catch (error) {
         item.status = previous.status;
         item.checkpoint = previous.checkpoint;
@@ -135,6 +142,10 @@ function createBatchReviewPublication(options = {}) {
           removeImages: state.remove_images,
           packageId: packageIdForItem(item),
           retainPublishedOnAfterPublishFailure: true,
+          ...(state.product_channel === 'standalone' && state.standalone_document_review === true ? {
+            persistStandaloneDocumentReview: value => require('./standalone-document-review-store')
+              .createDocumentReviewStore().capture(state, item, value)
+          } : {}),
           ...(state.product_channel === 'standalone' && contactStore ? { prepareOcrContacts: (input) => {
             const text = contactStore.read(state, item, input);
             if (text === null) throw invalidBinding();
@@ -167,6 +178,8 @@ function createBatchReviewPublication(options = {}) {
             positiveDocumentResult(details?.document_result);
             if (!sameDocumentResult(details.document_result, verifiedDocumentResult)) throw unconfirmedPublication();
             publishedDocumentResult = details.document_result;
+            if (state.product_channel === 'standalone' && state.standalone_document_review === true)
+              require('./standalone-document-review-store').createDocumentReviewStore().recordPublication(state.token, item.id);
             item.checkpoint = 'package_published';
             writeState(state, { durable: false });
           }
@@ -189,6 +202,7 @@ function createBatchReviewPublication(options = {}) {
           ensureMappingOutbox(item.source_label || item.name, result.package_id, item.document_result);
           item.mapping_outbox_persisted = true;
         } catch {
+          if (state.product_channel === 'standalone') { recoveryBlocked = true; break; }
           continue;
         }
         writeState(state);
@@ -196,7 +210,10 @@ function createBatchReviewPublication(options = {}) {
         catch { item.work_copy_cleanup_pending = true; }
         writeState(state);
         try { commitPendingMapping(item, result.package_id); }
-        catch { continue; }
+        catch {
+          if (state.product_channel === 'standalone') { recoveryBlocked = true; break; }
+          continue;
+        }
         if (deps.localFinalize === true) {
           item.status = 'released';
           item.checkpoint = 'released_locally';
@@ -221,6 +238,7 @@ function createBatchReviewPublication(options = {}) {
           item.error_code = 'PROCESSING_INTERRUPTED';
           item.work_copy_cleanup_pending = true;
           failed++;
+          if (state.product_channel === 'standalone') { recoveryBlocked = true; break; }
           continue;
         }
         const classified = applyRetryBudget(item, classifyPrepublicationError(error, retryableCodes));
@@ -241,7 +259,11 @@ function createBatchReviewPublication(options = {}) {
             item.local_mapping_exported = true;
             writeState(state);
           }
-          catch { failed++; continue; }
+          catch {
+            failed++;
+            if (state.product_channel === 'standalone') { recoveryBlocked = true; break; }
+            continue;
+          }
           try {
             cleanupTerminalWorkCopy(state, item, deps);
             item.work_copy_cleanup_pending = false;
@@ -252,7 +274,7 @@ function createBatchReviewPublication(options = {}) {
         writeState(state);
       }
     }
-    return { packages, locallyReleased, failed };
+    return { packages, locallyReleased, failed, processed, pauseBlocked, recoveryBlocked };
   }
 
   return { bindReviewedDocuments, publishReviewedBatch };

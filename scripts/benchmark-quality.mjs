@@ -9,12 +9,12 @@ import { writeStandaloneRuntime, collectStandaloneRuntime } from './lib/standalo
 import { writeConversionRuntime, collectConversionRuntime } from './lib/standalone-conversion-runtime.mjs';
 import { removePackageSmokeScope } from '../tests/helpers/standalone-package-scope.mjs';
 const require = createRequire(import.meta.url);
-const { evaluateQuality, summarizeQuality, bindReference, renderedText, tokens, qualityHasFindings } = require('../benchmarks/evaluate-quality');
+const { evaluateQuality, summarizeQuality, bindReference, renderedText, tokens, assessQuality } = require('../benchmarks/evaluate-quality');
 const repo = path.resolve(import.meta.dirname, '..');
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const semanticWords = value => tokens(value).words.map(word => word.value).join(' ');
 const evaluationFiles = ['benchmarks/quality-reference.js', 'benchmarks/evaluate-quality.js',
-  'scripts/generate-quality-corpus.mjs', 'scripts/benchmark-quality.mjs',
+  'scripts/generate-quality-corpus.mjs', 'scripts/benchmark-quality.mjs', 'scripts/check-quality-gate.mjs',
   'scripts/lib/standalone-runtime-projection.mjs', 'scripts/lib/standalone-conversion-runtime.mjs', 'package.json'];
 export function qualitySourceIdentity(target) {
   const digest = crypto.createHash('sha256');
@@ -42,6 +42,8 @@ export function writeQualityReport(directory, report) {
   if (fs.existsSync(directory)) throw new Error('QUALITY_REPORT_DESTINATION_EXISTS');
   fs.mkdirSync(directory);
   const rows = report.results.flatMap(result => result.findings);
+  const assessment = assessQuality(report);
+  report = { ...report, assessment };
   const header = ['Datei', 'Stufe', 'Code', 'Fundstelle', 'Start', 'Ende', 'Erwartet', 'Verblieben', 'Beobachtet', 'Grund', 'Anzahl'];
   fs.writeFileSync(path.join(directory, 'QUALITAET.json'), `${JSON.stringify(report, null, 2)}\n`, { flag: 'wx' });
   fs.writeFileSync(path.join(directory, 'BEFUNDE.csv'), '\ufeff' + [header,
@@ -55,12 +57,15 @@ export function writeQualityReport(directory, report) {
     `Dokumentvarianten: ${summary.documents}; logische Fälle: ${summary.logical_documents}. Menschliche Referenz-Doppelprüfung: **NOT_RUN**.`,
     'Nachprüfung: synthetische, referenzgebundene Entscheidungen je Fundstelle; keine menschliche E1/E2/E3-Evidenz oder Messung tatsächlicher UI-Klicks.',
     `OCR-Kontaktprüfung: ${report.synthetic_review?.contact_confirmations || 0} unveränderte Bestätigungen und ${report.synthetic_review?.contact_corrections || 0} explizite Referenzkorrekturen vor der Anonymisierung. Diese Korrekturen stammen ausschließlich aus der synthetischen Referenz, nicht aus dem Produktdetektor.`,
-    `Rohe Extraktion: ${summary.extraction_changed_entities} geänderte Entitätswerte; tatsächlicher roher Privacy-Eingang: ${summary.raw_privacy_extraction?.changed_entities || 0}; Privacy-Eingang nach lokaler Kontaktentscheidung: ${summary.privacy_extraction?.changed_entities || 0}. Rohfehler bleiben Befunde und halten das unveränderte Qualitätsgate rot.`,
+    `Engineering-Bewertung: **${assessment.status}** · Profil: geprüfte Anonymisierung · Release-/Plattformabnahme: **nicht bewertet**.`,
+    `Rohe Extraktion: ${summary.extraction_changed_entities} geänderte Entitätswerte; tatsächlicher roher Privacy-Eingang: ${summary.raw_privacy_extraction?.changed_entities || 0}; Privacy-Eingang nach lokaler Kontaktentscheidung: ${summary.privacy_extraction?.changed_entities || 0}. Rohfehler bleiben Befunde; vollständig bewertete OCR-E-Mail-Abweichungen können Warnungen sein, nicht automatisch behobene Lesefehler.`,
+    `Warnungen: ${assessment.warnings.join(', ') || 'keine'}. Das strenge Extraktionsprofil (--strict-extraction) bleibt bei solchen Warnungen rot. Fehlende Inhalte, Restdaten und unbewertete Ausgaben bleiben Sperrgründe.`,
     'Automatikwerte sind getrennt ausgewiesene Einpass-Core-Entwürfe, NICHT immer vom Produkt freigegebene Ausgaben. Tatsächliche automatische Veröffentlichungen stehen je Datei in automatic_publication.',
     'Detektorspannen sind eine zusätzliche Probe, nicht der Nachweis einer tatsächlichen Veröffentlichung.', '',
     '| Stufe | Bewertete Dokumente | Nicht bewertbar | Dokumente mit bekannten Restangaben | Verlorene Fachanker | Geänderte/verlorene Fachwörter |',
     '|---|---:|---:|---:|---:|---:|',
-    ...['automatic', 'final'].map(stage => { const value = summary.stages[stage]; return `| ${stage} | ${value.evaluated_documents} | ${value.unevaluated_documents} | ${value.documents_with_known_leaks} | ${value.lost_preservation_controls} | ${value.lost_factual_words} |`; }), '',
+    ...['automatic', 'final', 'raw_final'].map(stage => { const value = summary.stages[stage]; return `| ${stage} | ${value.evaluated_documents} | ${value.unevaluated_documents} | ${value.documents_with_known_leaks} | ${value.lost_preservation_controls} | ${value.lost_factual_words} |`; }), '',
+    '`final` prüft gegen den korrigierten Privacy-Eingang; `raw_final` prüft dieselbe Enddatei zusätzlich gegen die tatsächlich zuvor gelesene OCR-Lesart. Beide müssen ohne bekannte Restdaten und unbewertete Stellen sein. Die Spalten sind getrennte Gegenprüfungen, keine unabhängigen Dokumente.', '',
     `Gezielte Pflichtentfernung nach DS-012: ${summary.stages.final.required_privacy_words_removed} Anredenwörter entfernt; ` +
       `${summary.stages.final.retained_privacy_context_occurrences} unzulässig erhaltene Anreden und ` +
       `${summary.stages.final.unassessed_privacy_context_occurrences} nicht bewertbare Anreden. ` +
@@ -94,6 +99,8 @@ export function reviewChoice(sample, draft, item) {
 }
 
 export function contactReviewChoice(sample, draft, item) {
+  if (!Number.isInteger(item.original_start) || !Number.isInteger(item.original_end) || item.original_start < 0 ||
+      item.original_end <= item.original_start || item.original_end > draft.original_text.length) return null;
   const bound = bindReference(sample, draft.original_text);
   if (!bound.aligned || !Number.isInteger(item.original_start) || !Number.isInteger(item.original_end)) return null;
   const start = renderedText(draft.original_text.slice(0, item.original_start)).length;
@@ -106,6 +113,41 @@ export function contactReviewChoice(sample, draft, item) {
   return draft.original_text.slice(item.original_start, item.original_end) === entity.value
     ? { ambiguity_id: item.ambiguity_id, decision: 'confirm_contact' }
     : { ambiguity_id: item.ambiguity_id, decision: 'correct_contact', replacement: entity.value };
+}
+
+export function boundContactReviewChoice(entries, records, draft, item) {
+  const documents = draft.contact_batch?.documents;
+  if (!documents) {
+    const matched = entries.map((sample, index) => ({ sample, record: records[index] }))
+      .filter(({ record }) => record.privacy_raw_extracted === draft.original_text);
+    const votes = matched.map(({ sample }) => contactReviewChoice(sample, draft, item));
+    return votes.length && votes.every(choice => choice && JSON.stringify(choice) === JSON.stringify(votes[0])) ? votes[0] : null;
+  }
+  if (draft.contact_batch.schema !== 'datasecure-ocr-contact-batch/1' || !Array.isArray(documents) ||
+      !documents.length || documents.length > 200) return null;
+  let reconstructed = '', selected;
+  const ids = new Set();
+  for (const [index, document] of documents.entries()) {
+    const matches = entries.map((sample, position) => ({ sample, record: records[position] }))
+      .filter(({ sample }) => sample.file === document.source_label);
+    if (document.document_index !== index + 1 || matches.length !== 1 || !Array.isArray(document.candidate_ids) ||
+        !document.candidate_ids.length || typeof matches[0].record.privacy_raw_extracted !== 'string') return null;
+    reconstructed += `\n\n===== Dokument ${index + 1} =====\n\n`;
+    const start = reconstructed.length, text = matches[0].record.privacy_raw_extracted;
+    reconstructed += text;
+    for (const id of document.candidate_ids) {
+      if (ids.has(id)) return null;
+      ids.add(id);
+      if (id === item.ambiguity_id) selected = { sample: matches[0].sample, start, text };
+    }
+  }
+  // Compare the complete reconstruction, not a regex over headings that could
+  // also occur inside source text. Identical OCR readings never borrow another
+  // document's reference or correction.
+  if (reconstructed !== draft.original_text || !selected || item.original_start < selected.start ||
+      item.original_end > selected.start + selected.text.length) return null;
+  return contactReviewChoice(selected.sample, { original_text: selected.text }, { ...item,
+    original_start: item.original_start - selected.start, original_end: item.original_end - selected.start });
 }
 
 export function boundReviewChoice(entries, records, draft, item) {
@@ -237,12 +279,7 @@ export async function runQualityBenchmark(output, options = {}) {
             records[index].privacy_extracted = originalText;
           }, reviewTextLocally(draft) {
           if (draft.ocr_contact_review === true) {
-            const matched = entries.map((sample, index) => ({ sample, record: records[index] })).filter(({ record }) =>
-              record.privacy_raw_extracted === draft.original_text);
-            const decisions = draft.ambiguities.map(item => {
-              const votes = matched.map(({ sample }) => contactReviewChoice(sample, draft, item));
-              return votes.length && votes.every(choice => choice && JSON.stringify(choice) === JSON.stringify(votes[0])) ? votes[0] : null;
-            });
+            const decisions = draft.ambiguities.map(item => boundContactReviewChoice(entries, records, draft, item));
             records[0].review.contact_confirmations = (records[0].review.contact_confirmations || 0) + decisions.filter(item => item?.decision === 'confirm_contact').length;
             records[0].review.contact_corrections = (records[0].review.contact_corrections || 0) + decisions.filter(item => item?.decision === 'correct_contact').length;
             records[0].review.unannotated += decisions.filter(item => !item).length;
@@ -320,6 +357,7 @@ export async function runQualityBenchmark(output, options = {}) {
     contact_corrections: records.reduce((sum, record) => sum + (record.review.contact_corrections || 0), 0),
     decisions: records.reduce((sum, record) => sum + record.review.decisions, 0),
     unannotated: records.reduce((sum, record) => sum + record.review.unannotated, 0), count_scope: 'bound-occurrence-decisions-not-human-prompts' };
+  report.assessment = assessQuality(report);
   writeQualityReport(path.join(corpusRoot, 'BERICHTE'), report);
   return report;
 }
@@ -338,6 +376,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   } });
   // Aggregate-only stdout: source-bearing findings are confined to local files.
   process.stdout.write(`${JSON.stringify({ schema: report.schema, summary: report.summary,
-    fatal_error: report.fatal_error, human_reference_review: report.human_reference_review })}\n`);
-  if (qualityHasFindings(report)) process.exitCode = 1;
+    assessment: report.assessment, fatal_error: report.fatal_error, human_reference_review: report.human_reference_review })}\n`);
+  if (report.assessment.status === 'blocked') process.exitCode = 1;
 }

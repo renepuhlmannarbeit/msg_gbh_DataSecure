@@ -42,6 +42,12 @@ function createBatchRecovery(options = {}) {
   const preflightMappingPendingStatus = options.preflightMappingPendingStatus || 'preflight_mapping_pending';
   const intakeIntent = options.intakeIntent || createBatchIntakeIntent({ ...options, batchPath: journalPath });
   const finishZeroDayWork = options.finishZeroDayWork || (() => false);
+  function preserveDocumentRun(state) {
+    if (state.standalone_document_review !== true) return;
+    if (state.product_channel !== 'standalone' || typeof options.captureDocumentRun !== 'function')
+      throw new Error('DOCUMENT_REVIEW_INVALID');
+    options.captureDocumentRun(state);
+  }
   const removeState = options.removeState;
   const ErrorType = options.SafeError || SafeError;
   const recoverableState = options.recoverableState || (() => true);
@@ -148,6 +154,8 @@ function createBatchRecovery(options = {}) {
       // proves current work; otherwise the recovery counters expose Resume.
       // A live global processing lock is independently projected in `recovery`.
       processing: progress.local_processing_active === true,
+      ...(latest.product_channel === 'standalone' ? { pause_requested: progress.pause_requested === true,
+        paused: progress.paused === true } : {}),
       resumable: progress.awaiting_resume === true && recoverableState(latest),
       complete: progress.complete === true,
       ...(progress.complete === true && progress.stopped > 0
@@ -332,6 +340,10 @@ function createBatchRecovery(options = {}) {
           const state = readMaintenanceState(tokenFromName);
           if (liveLocalExecutor(state)) continue;
           if (state.zero_day_work === true && !processAlive(state.intake_owner_pid)) finishZeroDayWork(state);
+          // Repair the intake journal -> private metadata crash gap before
+          // mapping can advance and before the only owning journal expires.
+          // A conflicting existing manifest is never overwritten or inferred.
+          preserveDocumentRun(state);
           if (now > Date.parse(state.expires_at)) {
             if (reconcileTerminalEvidence) reconcileTerminalEvidence(state);
             removeWorkDirectory(state.token);
@@ -405,6 +417,7 @@ function createBatchRecovery(options = {}) {
           if (liveLocalExecutor(state)) continue;
           if (state.zero_day_work === true && !processAlive(state.intake_owner_pid)) finishZeroDayWork(state);
           if (now <= Date.parse(state.expires_at)) continue;
+          preserveDocumentRun(state);
           if (reconcileTerminalEvidence) reconcileTerminalEvidence(state);
           removeWorkDirectory(state.token);
           removeState(state);

@@ -38,12 +38,14 @@ assert.match(workflow, /uses: actions\/upload-artifact@[a-f0-9]{40}/u);
 assert.doesNotMatch(workflow, /uses: [^\n]+@(?![a-f0-9]{40}(?:\s|$))/u);
 for (const required of [
   'DATASECURE_STANDALONE_NATIVE_SMOKE_ROOT', 'XDG_DATA_HOME', 'XDG_RUNTIME_DIR',
-  'DATASECURE_STANDALONE_NATIVE_SMOKE_REVIEW=1', 'review_page_loaded', 'get_review_session',
+  'DATASECURE_STANDALONE_NATIVE_SMOKE_REVIEW=1', 'review_page_loaded', 'native-review-readiness.js',
   'AppRun', 'realpath -e', 'GDK_BACKEND=x11', 'WEBKIT_DISABLE_COMPOSITING_MODE=1',
   'Xvfb', 'dbus-launch', 'openbox --sm-disable', '_NET_SUPPORTING_WM_CHECK',
   'xdotool key alt+F4', 'sidecar_started', 'service_initialized', 'xdotool',
   'STANDALONE_NATIVE_LINUX_ORPHANED_SIDECAR'
 ]) assert.ok(launch.includes(required), required);
+assert.match(launch, /native-review-readiness\.js" "\$desktop_log" --main --workspace/u);
+assert.doesNotMatch(launch, /grep -q '"action":"get_(?:review_session|public_state|ui_context)"'/u);
 assert.equal(target.minimum_glibc_version, '2.35');
 assert.equal(target.distribution_format, 'appimage-in-zip');
 assert.equal(target.start_guide, 'LINUX-START.md');
@@ -52,7 +54,7 @@ assert.match(conversionWorker,
 assert.match(conversionResolver,
   /process\.platform === 'linux' && process\.arch === 'x64' \? 'linux-x64-glibc' : null/u);
 assert.match(tauriMain,
-  /WindowEvent::CloseRequested[\s\S]*?api\.prevent_close\(\);[\s\S]*?begin_native_exit\(state\.inner\(\)\.clone\(\)\)/u);
+  /WindowEvent::CloseRequested[\s\S]*?api\.prevent_close\(\);[\s\S]*?begin_native_exit\(state\.inner\(\)\.capture_connection\(\)\)/u);
 assert.match(tauriMain, /ExitRequested \{ api, code, \.\. \}/u);
 assert.match(tauriMain, /if !state\.exit_gate\.allowed\(code\) \{\s*api\.prevent_exit\(\)/u);
 

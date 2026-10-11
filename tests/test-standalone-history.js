@@ -27,6 +27,7 @@ const historyStore = require('../plugins/data-secure/server/gateway/standalone-h
 const { createRunHistory } = require('../plugins/data-secure/server/standalone/run-history');
 const identityLedger = require('../plugins/data-secure/server/standalone/identity-ledger');
 const { StandaloneApplicationService } = require('../plugins/data-secure/server/standalone/application-service');
+const { validateSelectedPathAsync, batchQueueFromSelection } = require('../plugins/data-secure/server/companion/file-picker');
 const { createBatchPseudonymState } = require('../plugins/data-secure/server/batch-pseudonym-context');
 const now = Date.now();
 const makeHistory = () => createRunHistory({
@@ -245,6 +246,24 @@ function code(expected) { return (error) => error?.code === expected; }
       ok: true, available: false, total: 1, files: [],
       local_ui_only: true, external_disclosure: false
     });
+    const retainedRejection = { document_id: '4'.repeat(32), name: 'nested/rejected.docx', reason_code: 'SOURCE_CONTAINER_CORRUPT' };
+    const retained = rows => createRunHistory({ readStates: () => [], readExports: exportsApi.readStandaloneExportHistory,
+      recoverableStates: () => [], liveExecutor: () => false, readRejectedInputs: () => rows }).failures(allStopped.token);
+    assert.deepEqual(retained([retainedRejection]), { ok: true, available: true, total: 1,
+      files: [{ name: 'nested/rejected.docx', reason_code: 'SOURCE_CONTAINER_CORRUPT' }], local_ui_only: true, external_disclosure: false });
+    const mappingPending = stateFixture('5', 1501, { items: [{ id: '5'.repeat(32), name: 'pending-rejection.docx',
+      status: 'preflight_mapping_pending', checkpoint: 'source_preflight_rejected', local_mapping_exported: false,
+      error_code: 'SOURCE_CONTAINER_CORRUPT' }] });
+    assert.equal(history.find(mappingPending.token).failed_count, 0, 'the summary has not counted terminal mapping yet');
+    const afterJournalLoss = createRunHistory({ readStates: () => [], readExports: () => [],
+      recoverableStates: () => [], liveExecutor: () => false, readRejectedInputs: () => [{
+        ...retainedRejection, document_id: mappingPending.items[0].id, name: 'pending-rejection.docx' }] });
+    assert.deepEqual(afterJournalLoss.failures(mappingPending.token), { ok: true, available: true, total: 1,
+      files: [{ name: 'pending-rejection.docx', reason_code: 'SOURCE_CONTAINER_CORRUPT' }],
+      local_ui_only: true, external_disclosure: false }, 'durable source rejection outranks a stale terminal counter');
+    for (const invalid of [null, [retainedRejection, retainedRejection], [{ ...retainedRejection, name: '../foreign.docx' }],
+      [{ ...retainedRejection, document_id: 'unknown' }], [{ ...retainedRejection, reason_code: 'arbitrary text' }]])
+      assert.deepEqual(retained(invalid), summaryOnly.failures(allStopped.token), 'invalid private evidence cannot supply filenames');
     assert.throws(() => history.resolveResults(allStopped.token), code('STANDALONE_RESULTS_MISSING'));
     assert.throws(() => history.resolveLedger(allStopped.token), code('STANDALONE_LEDGER_MISSING'));
 
@@ -257,6 +276,7 @@ function code(expected) { return (error) => error?.code === expected; }
     let pendingNotice = { token: completedTwo.token, generation: 70 };
     const notices = [];
     const observedDependencies = dependencies(history, {
+      validateSelectedPathAsync, batchQueueFromSelection,
       publicStatusSnapshot(selectedBatchId) {
         const snapshot = batch.productStatusSnapshot('standalone', { localUiSelection: true, selectedBatchId });
         return { ...snapshot, current: { engine_ready: true, local_intake_pending: false, ...snapshot.recovery } };
@@ -320,7 +340,9 @@ function code(expected) { return (error) => error?.code === expected; }
     assert.equal(freshDefault.status().state, 'ready');
     assert.equal(freshDefault.uiContext().latest_result_folder, '',
       'older result folders remain available only through their exact History row');
-    observing.admittedQueue = [{ name: 'next-source.txt' }];
+    const nextSource = path.join(base, 'next-source.txt');
+    fs.writeFileSync(nextSource, 'Synthetischer nächster Lauf');
+    await observing.admitSelectedSources([nextSource]);
     await observing.startAdmittedBatch({ profile: 'auto', processingMode: 'markdown-and-anonymize' });
     assert.equal(observing.observedBatchId, 'd'.repeat(64),
       'a new intake binds the exact returned run even when it finishes before the first status poll');
@@ -336,6 +358,7 @@ function code(expected) { return (error) => error?.code === expected; }
     process.env.EU_PRIVACY_RESULT_ROOT = replacementResultRoot;
     history = makeHistory();
     assert.equal(history.resolveResults(completed.token).local_path, originalRun);
+    assert.equal(history.find(completed.token).result_location, 'available');
     assert.equal(history.find(completed.token).resumable, false);
     assert.equal(history.find(completed.token).result_count, 1);
     assert.equal(fs.readdirSync(replacementResultRoot).length, 0, 'history never creates missing output folders');
@@ -355,7 +378,11 @@ function code(expected) { return (error) => error?.code === expected; }
     fs.renameSync(path.join(originalRun, 'DataSecure-Zuordnung.csv'), path.join(originalRun, 'mapping-retired-test-fixture.csv'));
     assert.equal(history.find(completed.token).ledger_available, false);
     assert.throws(() => history.resolveLedger(completed.token), code('STANDALONE_LEDGER_MISSING'));
-    fs.renameSync(originalRun, `${originalRun}-retired-test-fixture`); fs.mkdirSync(originalRun);
+    fs.renameSync(originalRun, `${originalRun}-retired-test-fixture`);
+    assert.equal(history.find(completed.token).result_location, 'missing', 'a deleted original folder differs from a replacement');
+    assert.throws(() => history.resolveResults(completed.token), code('STANDALONE_RESULTS_MISSING'));
+    fs.mkdirSync(originalRun);
+    assert.equal(history.find(completed.token).result_location, 'unsafe', 'a new directory at the same path never regains the old binding');
     assert.throws(() => history.resolveResults(completed.token), code('STANDALONE_RESULTS_MISSING'));
     assert.equal(fs.readdirSync(originalRun).length, 0);
 
@@ -411,7 +438,7 @@ function code(expected) { return (error) => error?.code === expected; }
       assert.equal(saved.complete, progress.complete);
       assert.equal(saved.failed_count, progress.stopped); assert.equal(saved.completed_count, progress.completed);
       const details = makeHistory().failures(candidate.token);
-      const problems = items.filter(item => ['stopped', 'preflight_mapping_pending', 'retryable'].includes(item.status));
+      const problems = items.filter(item => ['stopped', 'preflight_mapping_pending', 'mapping_pending', 'retryable'].includes(item.status));
       assert.equal(details.total, problems.length, 'an unfinished local mapping must not conceal a stopped filename');
       if (items.some(item => item.status === 'stopped' && item.local_mapping_exported === false)) {
         assert.ok(details.files.some(file => file.name === 'synthetic.txt' && file.stage === 'mapping_pending'));

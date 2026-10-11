@@ -13,6 +13,7 @@ const MAX_PASSES = 3;
 // detectors, which by construction cannot find what the redactor missed.
 function anonymizeMarkdown(raw, profile, options = {}) {
   let candidate = String(raw || '');
+  const trace = options.captureTransformPlan === true ? require('../privacy/transform-plan').createTransformTrace(candidate) : null;
   const dictionary = [];
   let entityCount = 0;
   let residual = [];
@@ -22,10 +23,12 @@ function anonymizeMarkdown(raw, profile, options = {}) {
   // schema never accepts one and this function neither persists nor creates a
   // secret: the batch-owned pseudonym context supplies that binding. No
   // platform keyring or future secret-store gate is part of this code path.
-  const anonymizeOptions = options.registry ? { registry: options.registry } : undefined;
+  const anonymizeOptions = { ...(options.registry ? { registry: options.registry } : {}),
+    ...(trace ? { captureTransformPlan: true } : {}) };
 
   for (let pass = 1; pass <= MAX_PASSES; pass++) {
     const result = pii.anonymize(candidate, profile, anonymizeOptions);
+    if (trace) trace.appendTrace(`pass:${pass}`, result.transform_trace);
     candidate = result.text;
     entityCount += result.findings.length;
     for (const value of result.dictionary || []) dictionary.push(value);
@@ -55,6 +58,7 @@ function anonymizeMarkdown(raw, profile, options = {}) {
 
   return {
     text: candidate,
+    ...(trace ? { transform_trace: trace.finish(candidate) } : {}),
     entityCount,
     passes,
     dictionary,

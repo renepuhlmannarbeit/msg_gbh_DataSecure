@@ -7,9 +7,11 @@ import { readRegular, sha256, verifyTargetEvidence, readContract } from './lib/b
 import { writeStandaloneRuntime } from './lib/standalone-runtime-projection.mjs';
 import { writeConversionRuntime } from './lib/standalone-conversion-runtime.mjs';
 import { loadCargoLicenseInventory } from './lib/cargo-license-inventory.mjs';
+import { standaloneFontLicense } from './lib/standalone-font-license.mjs';
 import boundFileIo from '../plugins/data-secure/server/core/bound-file-io.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const font = standaloneFontLicense(root);
 const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
 const productTarget = 'windows-x64';
 const rustTarget = 'x86_64-pc-windows-msvc';
@@ -95,6 +97,7 @@ writeStandaloneRuntime(
 );
 writeConversionRuntime(root, path.join(stage, 'server', 'standalone', 'conversion-runtime'), productTarget);
 copyFile(runtimeLicense, 'LICENSE.node.txt');
+copyFile(font.licensePath, 'LICENSE-Inter.txt');
 copyFile(path.join(root, 'LICENSE'), 'LICENSE');
 copyFile(path.join(root, 'apps', 'datasecure-standalone', 'THIRD_PARTY_NOTICES.md'), 'THIRD_PARTY_NOTICES.md');
 copyFile(path.join(root, 'apps', 'datasecure-standalone', 'START-WINDOWS.md'), 'START-WINDOWS.md');
@@ -117,6 +120,7 @@ const sbom = {
   name: folderName, documentNamespace: `https://internal.msg.example/datasecure/${version}/${productTarget}`,
   creationInfo: { created: '2026-09-04T00:00:00Z', creators: ['Tool: DataSecure standalone package builder'] },
   packages: [
+    font.package,
     { name: 'DataSecure Standalone', SPDXID: 'SPDXRef-DataSecure', versionInfo: version,
       downloadLocation: 'NOASSERTION', filesAnalyzed: false, licenseConcluded: 'LicenseRef-Proprietary', licenseDeclared: 'LicenseRef-Proprietary' },
     { name: 'Node.js', SPDXID: 'SPDXRef-Nodejs', versionInfo: contract.node_version,

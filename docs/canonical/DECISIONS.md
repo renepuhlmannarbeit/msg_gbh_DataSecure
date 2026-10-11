@@ -1766,6 +1766,19 @@ Produktpfad entwickelt und jeweils mit Tastatur, Fokus, Screenreader,
 Schließen/Fortsetzen, identischen Gruppen und sicherem Stopp geprüft.
 Release-ZIP/DMG und Cowork-Pakete bleiben unabhängig. Siehe BL-010.44.
 
+**Standalone-Ergänzung vom 07.10.2026 (DS-104 / BL-050.6, unveröffentlicht):**
+Die lokale Prüfung verwendet eine kompakte Liste mit expliziter Mehrfachauswahl,
+Behandlung pro Zeile und direkter OCR-Korrektureingabe. Originalkontext und
+Markdown-Vorschau bleiben für jedes auswählbare Vorkommen verfügbar. Nur vom
+Backend bewiesene gleiche Entitätsnamen bilden eine gemeinsame Zeile;
+OCR-Kontakte werden nie allein aufgrund gleicher Lesart zusammengeführt.
+Standalone sammelt Kontaktentwürfe mehrerer Quellen vor der Entitätsphase in
+begrenzte Gruppen und führt sie auf einzeln authentifizierte Dokumentantworten
+zurück. Kein neuer Cowork-Hook, kein Rohdatenrecht für die Hauptansicht.
+Auswahl ist keine Freigabe; Filter-/Seitenwechsel leeren die Auswahl. Nicht
+übergebene Zeilenentscheidungen werden beim Vertagen verworfen und sind als
+solche gekennzeichnet. Native Bedien-/Paketabnahme bleibt ein eigener Nachweis.
+
 ## DS-105 – Private menschliche Identitätszuordnung ohne automatische Löschung
 
 Standalone erzeugt zusätzlich zur Dateizuordnung eine nur lokal zu öffnende,
@@ -2071,3 +2084,45 @@ vollständiger PDF-/Office-Containerabdeckung oder AI-Act-Konformität. Unabhän
 Qualitätsmetriken bleiben BL-010.51; bediente neue native Windows-/Intel-/ARM-Mac-
 Kampagne bleibt BL-010.50. Historische bestandene Läufe werden nicht zurückgenommen.
 Kein Commit, Push, Tag oder Release aus diesem Implementierungsauftrag.
+
+## DS-110 – Standalone-Prototyp v2: reale Zustände vor Demo-Verhalten
+
+**Datum:** 2026-10-07. **Status:** entschieden, Umsetzung BL-010.53.
+
+Die klickbare Gestaltung aus `codex_auftrag_datasecure` ist die visuelle
+Referenz, kein Backend-Nachweis. Fachlicher Abgleich: `docs/frontend-migration.md`.
+Standalone erhält serverbesessene Quellenauswahl, Dateigrenzen-Pause und
+integrierte private Prüfung. DS-109s getrennte Verantwortlichkeiten gelten
+weiter: nur eng typisierte lokale Prüfdaten, keine freien Pfade oder Spans.
+Cowork bleibt unverändert. Vollständige Nachprüfung und ausdrücklicher KI-Export
+brauchen eigene revisionierte Dienste; `released` ist keine menschliche
+Freigabe. Teil-Export schließt offene Dateien nicht. Keine Passwortdialoge,
+Demo-Leiste, erfundenen Konfidenzen oder pauschale Anonymitätszusage.
+
+**Qualitätspriorisierung, 08.10.2026 (Anwenderentscheidung):** Rohe OCR-
+Lesegenauigkeit und geprüfte Anonymisierung werden getrennt bewertet. Vollständig
+referenzgebundene E-Mail-Leseabweichungen in tatsächlichen OCR-Eingängen
+dürfen als sichtbare Engineering-Warnung bestehen, wenn der tatsächliche
+Privacy-Eingang nach lokaler Prüfung korrekt und die Endausgabe vollständig
+bewertbar, ohne bekannte Restdaten beider Lesarten oder Sachwortverlust ist.
+Die Endausgabe wird gegen korrigierten und tatsächlichen rohen OCR-Eingang
+geprüft; stark abweichende ursprüngliche Schreibweisen dürfen nicht durch
+eine Referenzkorrektur aus der Gegenprüfung verschwinden. Telefon- und andere
+Entitätsabweichungen bleiben außerhalb der Warnungsausnahme. Fehlende Inhalte,
+unsichere Ausrichtung, unbewertete/gestoppte Ausgaben und veraltete oder partielle
+Nachweise bleiben Sperrgründe. Ein separates strenges Extraktionsprofil bleibt
+verfügbar. Keine Änderung an Laufzeitprüfpflichten, keine automatische OCR-
+Wahrheitskorrektur und keine allgemeine Release-/Anonymitätsfreigabe daraus
+ableiten. Neun bekannte Roh-OCR-E-Mail-Abweichungen bleiben BL-050.6; stabile
+Workflow- und native Paket-/Bediennachweise haben Vorrang (BL-010.53/.51).
+
+**Prerelease-Testbereitstellung, 11.10.2026 (ausdrücklicher Anwenderauftrag):**
+Der aktuelle RC159-v2-Stand soll auf `main` und als Prerelease für Windows x64,
+macOS Intel/Apple Silicon und Linux x64 glibc bereitgestellt werden. Der reguläre
+native Einstieg wird deshalb plattformübergreifend `workspace.html`; die ältere
+Oberfläche ist nicht der Einstieg dieser Testpakete. Dies ist eine kontrollierte
+Testbereitstellung, keine allgemeine v2-/N3-/N4-Abnahme. Offene Bedienabnahmen und
+Qualitätswarnungen bleiben sichtbar. Für genau diesen Prerelease-Lauf hat der
+Anwender die vorhandenen GitHub-Buildworkflows einschließlich möglicher Kosten
+ausdrücklich freigegeben. Die lokale Desktopfreigabe bleibt entzogen; hier nur
+Headless-Tests und Builds, sichtbare Bedienprüfung durch den Anwender.

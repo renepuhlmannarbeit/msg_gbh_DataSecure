@@ -121,6 +121,7 @@ function fixture(options = {}) {
     appendMapping() { stoppedMappings++; events.push('stopped-mapping'); },
     cleanupTerminalWorkCopy() { cleaned++; events.push('cleanup'); },
     retryableCodes: options.retryableCodes || new Set(['CONVERSION_TIMEOUT']),
+    pauseRequested: options.pauseRequested,
     deliveryPendingStatus: 'delivery_pending',
     maxBatchFiles: options.maxBatchFiles || 100
   });
@@ -140,6 +141,20 @@ function fixture(options = {}) {
     setState(value) { current = value; }
   };
 }
+
+testAsync('a pause-control read failure preserves every unstarted source and releases the lease', async () => {
+  const value = fixture({
+    state: { token, local_executor_pid: pid, product_channel: 'standalone', items: [{ status: 'pending' }],
+      io_summary: {}, progress: progress({ remaining: 1 }) },
+    pauseRequested() { throw Object.assign(new Error('STANDALONE_PAUSE_CONTROL_FAILED'), { code: 'STANDALONE_PAUSE_CONTROL_FAILED' }); }
+  });
+  await assert.rejects(value.run(), error => error.code === 'STANDALONE_PAUSE_CONTROL_FAILED');
+  assert.equal(value.state().items[0].status, 'pending');
+  assert.equal(value.counts().processCalls, 0);
+  assert.equal(value.stoppedMappings(), 0);
+  assert.equal(value.cleaned(), 0);
+  assert.ok(value.events.includes(`release:${token}:${pid}`));
+});
 
 testAsync('lease ownership is proven before progress, preparation or release', async () => {
   for (const options of [

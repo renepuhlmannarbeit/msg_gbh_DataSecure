@@ -17,7 +17,8 @@ const PRIVATE_ACTIONS = new Set([
   'get_run_failures',
   'resolve_history_results', 'resolve_history_ledger', 'resolve_history_identity_mapping',
   'resolve_identity_mappings_directory',
-  'continue_history_batch',
+  'continue_history_batch', 'pause_batch',
+  'get_document_reviews', 'get_document_review_history_summary', 'get_document_review_chunk', 'get_document_entities', 'decide_document_review', 'export_approved_documents', 'abandon_document_export', 'resolve_document_export', 'resolve_document_identity_overview',
   'get_review_session', 'get_review_chunk', 'submit_review', 'continue_review_session', 'shutdown'
 ]);
 
@@ -49,7 +50,8 @@ function validatePrivateMessage(message) {
     fail('DESKTOP_IPC_ACTION_INVALID', 'Unbekannte Desktop-Aktion.');
   const allowedFields = new Set(['schema', 'request_id', 'action']);
   if (['resolve_history_results', 'resolve_history_ledger', 'resolve_history_identity_mapping',
-    'continue_history_batch'].includes(message.action)) {
+    'continue_history_batch', 'pause_batch', 'get_document_reviews', 'get_document_review_history_summary', 'get_document_review_chunk', 'get_document_entities',
+    'decide_document_review', 'export_approved_documents', 'abandon_document_export', 'resolve_document_export', 'resolve_document_identity_overview'].includes(message.action)) {
     allowedFields.add('batch_id');
     if (typeof message.batch_id !== 'string' || !/^[a-f0-9]{64}$/u.test(message.batch_id))
       fail('STANDALONE_HISTORY_INVALID', 'Ungültige lokale Laufkennung.');
@@ -60,6 +62,19 @@ function validatePrivateMessage(message) {
       fail('STANDALONE_HISTORY_INVALID', 'Ungültige lokale Laufkennung.');
   }
   if (message.action === 'start_admitted_batch') {
+    if (Object.hasOwn(message, 'document_review')) {
+      allowedFields.add('document_review');
+      if (message.document_review !== true)
+        fail('DOCUMENT_REVIEW_INVALID', 'Ungültiger Dokumentprüfauftrag.');
+    }
+    if (Object.hasOwn(message, 'source_ids') || Object.hasOwn(message, 'catalogue_revision')) {
+      allowedFields.add('source_ids'); allowedFields.add('catalogue_revision');
+      if (!Number.isSafeInteger(message.catalogue_revision) || message.catalogue_revision < 0 ||
+          !Array.isArray(message.source_ids) || message.source_ids.length < 1 || message.source_ids.length > 200 ||
+          new Set(message.source_ids).size !== message.source_ids.length ||
+          !message.source_ids.every(id => typeof id === 'string' && /^[a-f0-9]{32}$/u.test(id)))
+        fail('STANDALONE_SELECTION_INVALID', 'Ungültige Quellenkatalog-Auswahl.');
+    }
     allowedFields.add('processing_mode');
     validateProcessingMode(message.processing_mode, 'standalone');
     if (Object.hasOwn(message, 'ocr_contact_review')) {
@@ -73,6 +88,72 @@ function validatePrivateMessage(message) {
     } else if (Object.hasOwn(message, 'output_naming_mode')) {
       fail('RESULT_NAMING_MODE_INVALID', 'Für reine Konvertierung ist keine Ergebnisbenennung zulässig.');
     }
+  }
+  if (['get_document_review_chunk', 'get_document_entities', 'decide_document_review'].includes(message.action)) {
+    allowedFields.add('document_id');
+    if (typeof message.document_id !== 'string' || !/^[a-f0-9]{32}$/u.test(message.document_id))
+      fail('DOCUMENT_REVIEW_INVALID', 'Ungültige Dokumentkennung.');
+  }
+  if (message.action === 'get_document_entities') {
+    allowedFields.add('revision'); allowedFields.add('page');
+    if (!Number.isSafeInteger(message.revision) || message.revision < 0 || message.revision > 10000 ||
+        !Number.isSafeInteger(message.page) || message.page < 0 || message.page > 10000)
+      fail('DOCUMENT_ENTITY_INVALID', 'Ungültiger Entitätenabschnitt.');
+  }
+  if (message.action === 'get_document_review_chunk') {
+    allowedFields.add('revision'); allowedFields.add('chunk_index');
+    if (!Number.isSafeInteger(message.revision) || message.revision < 0 || message.revision > 10000 ||
+        !Number.isSafeInteger(message.chunk_index) || message.chunk_index < 0 || message.chunk_index > 1024)
+      fail('DOCUMENT_REVIEW_INVALID', 'Ungültiger Dokumentabschnitt.');
+  }
+  if (message.action === 'decide_document_review') {
+    allowedFields.add('decision');
+    const value = message.decision;
+    if (!value || Object.keys(value).sort().join(',') !== (value.action === 'entities' ?
+        `action,entity_decisions,operation_id,output_sha256,ranges,revision${Object.hasOwn(value, 'scope') ? ',scope' : ''}` : 'action,operation_id,output_sha256,ranges,revision') ||
+        Object.hasOwn(value, 'scope') && !['document', 'run'].includes(value.scope) ||
+        !['approve', 'revoke', 'redact', 'restore_base', 'correct', 'entities'].includes(value.action) ||
+        !/^[a-f0-9]{32}$/u.test(value.operation_id || '') || !/^[a-f0-9]{64}$/u.test(value.output_sha256 || '') ||
+        !Number.isSafeInteger(value.revision) || value.revision < 0 || value.revision > 10000 ||
+        !Array.isArray(value.ranges) || value.ranges.length > 500 || value.ranges.some(range => !range ||
+          Object.keys(range).sort().join(',') !== (value.action === 'correct' ? 'end,replacement,start' : 'end,start') || !Number.isSafeInteger(range.start) ||
+          !Number.isSafeInteger(range.end) || range.start < 0 || range.end < range.start ||
+          (value.action !== 'correct' && range.end === range.start) || range.end > 8 * 1024 * 1024 ||
+          (value.action === 'correct' && (value.ranges.length !== 1 || typeof range.replacement !== 'string' ||
+            range.replacement.length > 32768 || !range.replacement.isWellFormed() || range.replacement.includes('\u0000')))))
+      fail('DOCUMENT_REVIEW_INVALID', 'Ungültige Dokumententscheidung.');
+    if (value.action === 'entities' && (value.ranges.length !== 0 || !Array.isArray(value.entity_decisions) ||
+        !value.entity_decisions.length || value.entity_decisions.length > 500 ||
+        new Set(value.entity_decisions.map(row => row?.entity_id)).size !== value.entity_decisions.length ||
+        value.entity_decisions.some(row => !row || Object.keys(row).sort().join(',') !== 'decision,entity_id' ||
+          !/^entity_[0-9]{6}$/u.test(row.entity_id || '') || !['default', 'keep', 'person', 'organization'].includes(row.decision))))
+      fail('DOCUMENT_ENTITY_INVALID', 'Ungültige Entitätenentscheidung.');
+  }
+  if (message.action === 'export_approved_documents') {
+    if (Object.hasOwn(message, 'acknowledge')) {
+      allowedFields.add('acknowledge');
+      if (message.acknowledge !== true) fail('AI_EXPORT_INVALID', 'Ungültige Exportbestätigung.');
+    }
+    allowedFields.add('operation_id'); allowedFields.add('selection');
+    if (!/^[a-f0-9]{32}$/u.test(message.operation_id || '') || !Array.isArray(message.selection) ||
+        !message.selection.length || message.selection.length > 200 || new Set(message.selection.map(row => row.document_id)).size !== message.selection.length ||
+        message.selection.some(row => !row || Object.keys(row).sort().join(',') !== 'document_id,output_sha256,revision' ||
+          !/^[a-f0-9]{32}$/u.test(row.document_id || '') || !/^[a-f0-9]{64}$/u.test(row.output_sha256 || '') ||
+          !Number.isSafeInteger(row.revision) || row.revision < 0 || row.revision > 10000))
+      fail('AI_EXPORT_INVALID', 'Ungültige Exportauswahl.');
+  }
+  if (message.action === 'abandon_document_export') {
+    allowedFields.add('operation_id'); allowedFields.add('digest');
+    if (!/^[a-f0-9]{32}$/u.test(message.operation_id || '') || !/^[a-f0-9]{64}$/u.test(message.digest || ''))
+      fail('AI_EXPORT_INVALID', 'Ungültiger Exportverzicht.');
+  }
+  if (message.action === 'resolve_document_export') {
+    allowedFields.add('operation_id');
+    if (!/^[a-f0-9]{32}$/u.test(message.operation_id || '')) fail('AI_EXPORT_INVALID', 'Ungültiger Exportbeleg.');
+  }
+  if (message.action === 'resolve_document_identity_overview' && Object.hasOwn(message, 'operation_id')) {
+    allowedFields.add('operation_id');
+    if (!/^[a-f0-9]{32}$/u.test(message.operation_id || '')) fail('AI_EXPORT_INVALID', 'Ungültiger Zuordnungsbeleg.');
   }
   if (message.action === 'remove_admitted_source') {
     allowedFields.add('selection_index');
@@ -112,10 +193,17 @@ function validatePrivateMessage(message) {
   }
   if (message.action === 'admit_selected_sources' || message.action === 'configure_results') {
     allowedFields.add('source_paths');
+    if (message.action === 'configure_results' && Object.hasOwn(message, 'native_export_binding')) {
+      allowedFields.add('native_export_binding');
+      if (message.native_export_binding !== true) fail('DESKTOP_IPC_FIELD_INVALID', 'Ungültige native Ergebnisbindung.');
+    }
     if (message.action === 'admit_selected_sources') {
       allowedFields.add('source_kind');
+      allowedFields.add('source_catalogue');
       if (!['files', 'folder'].includes(message.source_kind))
         fail('DESKTOP_IPC_SOURCE_KIND_INVALID', 'Ungültige Art der lokalen Auswahl.');
+      if (Object.hasOwn(message, 'source_catalogue') && typeof message.source_catalogue !== 'boolean')
+        fail('DESKTOP_IPC_SOURCE_KIND_INVALID', 'Ungültiger lokaler Quellenkatalog.');
     }
     if (!Array.isArray(message.source_paths) || message.source_paths.length < 1 ||
         message.source_paths.length > RESOURCE_LIMITS.MAX_BATCH_FILES)
@@ -145,7 +233,7 @@ function encodeFrame(message) {
 }
 
 class FrameDecoder {
-  constructor() { this.buffer = Buffer.alloc(0); }
+  constructor({ validate = validatePrivateMessage } = {}) { this.buffer = Buffer.alloc(0); this.validate = validate; }
 
   push(chunk) {
     if (!Buffer.isBuffer(chunk)) fail('DESKTOP_IPC_BYTES_REQUIRED', 'Desktop-Kanal erwartet Bytes.');
@@ -173,7 +261,7 @@ class FrameDecoder {
       let message;
       try { message = JSON.parse(payload.toString('utf8')); }
       catch { fail('DESKTOP_IPC_JSON_INVALID', 'Ungültige Desktop-Nachricht.'); }
-      messages.push(validatePrivateMessage(message));
+      messages.push(this.validate(message));
     }
     return messages;
   }

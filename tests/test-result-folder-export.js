@@ -16,7 +16,7 @@ process.env.EU_PRIVACY_RESULT_ROOT = cowork;
 
 const { roots } = require('../plugins/data-secure/server/gateway/common');
 const {
-  inspectRoot, readConfiguredResultRoot, saveConfiguredResultRoot,
+  inspectRoot, readConfiguredResultRoot, saveConfiguredResultRoot, readConfiguredNativeRootBinding, readConfiguredNativeExportBinding,
   resultOutputDirectory, consumeConfiguredResultNotices, isCommonSyncFolder, isNetworkResultFolder
 } = require('../plugins/data-secure/server/gateway/result-folder-config');
 const {
@@ -460,9 +460,25 @@ try {
   const syncConfigured = path.join(base, 'OneDrive', 'DataSecure');
   fs.mkdirSync(syncConfigured, { recursive: true });
   saveConfiguredResultRoot(syncConfigured);
+  assert.equal(readConfiguredNativeRootBinding(), null, 'old settings never become a native binding by inference');
+  const nativeIdentity = { volume: '18446744073709551615', object: '340282366920938463463374607431768211455', created_ns: '9007199254740993' };
+  saveConfiguredResultRoot(syncConfigured, { nativeIdentity });
+  assert.deepEqual(readConfiguredNativeRootBinding(), { root: syncConfigured, identity: nativeIdentity });
   assert.deepStrictEqual(consumeConfiguredResultNotices(), { sync: true, network: false });
   assert.deepStrictEqual(consumeConfiguredResultNotices(), { sync: false, network: false },
     'a persisted disclosure is consumed only after a successful handoff');
+  assert.deepEqual(readConfiguredNativeRootBinding(), { root: syncConfigured, identity: nativeIdentity }, 'consuming notices preserves exact native identity');
+  assert.throws(() => saveConfiguredResultRoot(syncConfigured, { nativeIdentity: { ...nativeIdentity, object: 123 } }), /RESULT_ROOT_UNSAFE/u);
+  const nativeExport = { schema: 'datasecure-native-export-binding/1', root: syncConfigured,
+    root_identity: nativeIdentity, data_root_identity: nativeIdentity, private_name: `native-export-${'a'.repeat(32)}`,
+    private_identity: nativeIdentity, anonymize_identity: nativeIdentity, markdown_identity: nativeIdentity };
+  saveConfiguredResultRoot(syncConfigured, { nativeExport });
+  assert.deepEqual(readConfiguredNativeExportBinding(), nativeExport);
+  assert.equal(readConfiguredNativeRootBinding(), null, 'v2 publication binding is not a legacy metadata binding');
+  assert.deepEqual(consumeConfiguredResultNotices(), { sync: true, network: false });
+  assert.deepEqual(readConfiguredNativeExportBinding(), nativeExport, 'notice consumption preserves every original native parent identity');
+  assert.equal(readConfiguredResultRoot(), syncConfigured, 'root separation reader supports the native publication schema');
+  assert.throws(() => saveConfiguredResultRoot(syncConfigured, { nativeIdentity, nativeExport }), /RESULT_ROOT_UNSAFE/u);
   saveConfiguredResultRoot(configured);
   const moved = path.join(base, 'configured-cowork-moved');
   fs.renameSync(configured, moved);

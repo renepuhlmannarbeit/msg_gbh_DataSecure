@@ -16,6 +16,13 @@ for (const regression of ['test-bound-file-io.js', 'test-retention.js', 'test-st
   assert.ok(packageJson.scripts['test:standalone'].includes(`node tests/${regression}`),
     `the target-platform release gate must execute the I/O regression: ${regression}`);
 }
+assert.ok(packageJson.scripts['pretest:standalone'].includes('node tests/test-standalone-pause.js'),
+  'the platform entry must run the durable pause regression, not only the general product suite');
+assert.ok(packageJson.scripts['pretest:standalone'].includes('npm run test:standalone:documents'));
+for (const regression of ['test-standalone-document-review.js', 'test-standalone-document-review-frontend.js']) {
+  assert.ok(packageJson.scripts['test:standalone:documents'].includes(`node tests/${regression}`),
+    `the platform entry must execute document approval/export regression: ${regression}`);
+}
 
 assert.match(workflow, /^name: Manual Standalone macOS sandbox evidence$/mu);
 assert.match(workflow, /^on:\n  workflow_dispatch:\n/mu);

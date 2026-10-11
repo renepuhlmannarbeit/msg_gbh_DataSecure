@@ -5,7 +5,7 @@ Every adapter receives the same version-controlled, synthetic ground truth and m
 only spans plus anonymized output. No real document, network request or model download is
 part of the benchmark.
 
-## Current synthetic-corpus baseline (3.2.0-rc158)
+## Current synthetic-corpus baseline (3.2.0-rc159)
 
 Command:
 
@@ -124,8 +124,9 @@ Local outputs:
 - `GEGENPRUEFUNG`: extracted text, unreleased core probe and actually published final
   text when available, bound to each result in JSON for direct counterverification.
 
-CLI stdout remains aggregate-only. Exit 1 means findings, incomplete source/output,
-incomplete smoke selection or fatal execution, not necessarily a broken evaluator.
+CLI stdout remains aggregate-only. Exit 1 means blocking findings, incomplete
+source/output, incomplete smoke selection or fatal execution, not necessarily a
+broken evaluator. Exit 0 can mean **pass_with_warnings**, not perfect raw OCR.
 `--max-files` is only a labelled incomplete smoke run. Deterministic pure evaluator/report
 tests are in the normal product gate and `pretest:standalone`; the 72-file run is opt-in.
 `--native-only` is a 40-file non-OCR subset, not full-corpus acceptance.
@@ -133,15 +134,72 @@ Runtime/evaluation hashes are captured before execution. Source changes during t
 invalidate its quality verdict. Synthetic choices bind to the actual privacy extraction;
 native CSV scaffolding need not equal the separately produced Markdown-only transcript.
 `npm run gate:quality -- <local QUALITAET.json>` rejects stale source hashes, partial
-execution, unconfirmed cleanup, inconsistent aggregates, unassessed outputs and open
+execution, unconfirmed cleanup, inconsistent aggregates, unassessed outputs and blocking
 quality findings. This engineering gate is separate from human and exact-package evidence.
 No release authority is granted by either test. Windows host execution does not establish
 macOS Intel/Apple Silicon results or human E1/E2/E3 evidence.
+
+### Risk classification from 2026-10-08 (DS-110 / BL-050.6)
+
+Raw reading accuracy, final privacy and factual preservation are separate dimensions.
+`qualityHasFindings` still reports the original defects. `assessQuality` recomputes
+the engineering classification from individual results, never from a cached pass label.
+The **reviewed-anonymization** profile permits only fully aligned, completely observed
+raw OCR EMAIL changes as explicit `QUALITY_RAW_OCR_CONTACT_CHANGED` warnings.
+Both the pre-contact-review OCR capture and actual corrected privacy input must exist;
+the latter must have no known source changes. Missing names/contacts, uncertain alignment,
+factual/qualification/context losses, final leaks, unassessed/deferred/stopped outputs,
+unconfirmed worker cleanup and fatal errors continue to block. Non-OCR text corruption
+and PHONE or other entity types are not covered by the contact-warning exception.
+Final privacy is checked against **both** corrected input (`final`) and the actual
+pre-correction OCR spelling (`raw_final`), including raw identities copied outside the
+aligned body. A reference correction must not make a strongly different raw email
+invisible. Missing raw-final assessment blocks; no file/holdout allowlist is introduced.
+
+Warning counts distinguish Markdown-only and raw privacy occurrences; do not add those
+counts as independent source defects. The strict profile remains available:
+
+```text
+npm run gate:quality -- <local QUALITAET.json> --strict-extraction
+```
+
+It additionally fails on raw OCR warnings with `QUALITY_EXTRACTION_WARNINGS_OPEN`.
+All raw findings, filenames and expected/observed values remain in the local JSON/CSV/
+Markdown report. Hash freshness, complete corpus and cleanup checks remain mandatory;
+the gate script is now part of the evaluation source identity. Older reports are not
+retroactively fresh or accepted. Earlier red gates below describe their then-current
+all-findings policy, not the new classified outcome.
+
+The evaluator also counts same-line additions at retained aligned body edges (e.g. a
+trailing negation), instead of silently treating them as presentation metadata. Separate-line
+headings/footers remain presentation exemptions: this bounded synthetic measurement is
+not a general semantic correctness proof. Runtime review/publication guards are unchanged.
 
 Methodological references: [TAB, Text Anonymization Benchmark](https://aclanthology.org/2022.cl-4.19/)
 motivates evaluating disclosure and information preservation separately; [OCR-D evaluation
 specification](https://ocr-d.de/en/spec/ocrd_eval.html) explains reference-based CER/WER and
 alignment. This implementation adapts those principles; it is not their official scorer.
+
+### Local Windows classified-policy observation, 2026-10-08
+
+Current classified-policy evidence, 2026-10-08:
+`dist/quality-headless-boundary-20261008/BERICHTE/QUALITAET.json` executes all 72
+variants through both real modes with unchanged source/evaluation identities and
+confirmed cleanup. Nine raw EMAIL changes remain; 55 source-bound confirmations,
+nine explicit synthetic reference corrections and 202 entity occurrence choices
+complete the reviewed path. Both final spelling checks assess 310 sensitive
+occurrences with zero known leaks/unassessed occurrences or measured factual loss.
+The actual current-source gate returns `pass_with_warnings`; strict extraction
+returns `QUALITY_EXTRACTION_WARNINGS_OPEN`, and the superseded report is rejected.
+The first classification draft exposed a raw-spelling blind spot and an overly
+broad edge-line expansion; neither was accepted as final evidence. Regression
+tests and independent counterchecking cover the corrections. No perfect OCR,
+human reference acceptance, native Mac or exact release-package claim follows.
+This full measurement was repeated after separating desktop tests because the
+changed `package.json` correctly invalidates the former
+`quality-classified-final-20261008` report (`QUALITY_REPORT_STALE`). No source-
+identity exception was introduced; raw/final results and review counts agree.
+The dated observations below retain their original historical policy/results.
 
 ### Local Windows observation, 2026-10-06
 

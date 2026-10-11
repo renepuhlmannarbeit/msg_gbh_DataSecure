@@ -4,6 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { readCentralModes } from './lib/zip.mjs';
+import { verifyStandaloneFontNotice } from './lib/standalone-font-license.mjs';
 import { verifyStandaloneInventory, verifyConversionInventory, verifyArchiveChecksum } from './lib/standalone-package-integrity.mjs';
 
 const require = createRequire(import.meta.url);
@@ -48,6 +49,7 @@ assert.equal(rustLicenses.schema, 'datasecure-rust-license-inventory/1');
 assert.ok(rustLicenses.components.length > 0);
 assert.ok(rustLicenses.components.every((item) => item.name && item.version && item.license && item.license !== 'NOASSERTION'));
 const sbom = JSON.parse(relative.get('SBOM.spdx.json'));
+verifyStandaloneFontNotice(relative, sbom);
 for (const component of rustLicenses.components) {
   assert.ok(sbom.packages.some((item) => item.name === component.name && item.versionInfo === component.version &&
     item.licenseDeclared === component.license && item.licenseConcluded === component.license));

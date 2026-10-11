@@ -155,6 +155,48 @@ Konvertertranskript, nicht native GUI-Klicks. Reale Konverter/OCR und der
 separat sichtbar; synthetische Referenzkorrekturen sind keine menschliche
 Bedien- oder Qualitätsabnahme.
 
+## Standalone-Prüfliste und Mehrdokument-Kontaktphase (07.10.2026, unveröffentlicht)
+
+- `contact_batch` ist eine optionale geschlossene Standalone-Metadatenstruktur
+  mit Schema `datasecure-ocr-contact-batch/1` und `documents`. Je Dokument sind
+  ausschließlich fortlaufender `document_index`, begrenzter privater
+  `source_label` und eindeutige vollständige `candidate_ids` zulässig. Kein
+  Name wird aus Quelltextseparatoren abgeleitet. Die Kontakttexte/UTF-16-Spannen
+  werden weder NFC-normalisiert noch fuzzy gruppiert. Gemischte Zwecke stoppen.
+- Auch im Aggregat gelten 400 Kontakte, 256 Korrekturzeichen, 900 KiB Antwort,
+  2 MiB/2.000.000 Bildpixel, die Core-Textgrenze und 40 MiB Broker-Draft. Ein
+  einzelnes ungültiges/zu großes Dokument wird nicht durch Aufteilung freigegeben.
+- Vor dem ersten Store-Schreibzugriff werden alle individuellen Antworten
+  vollständig validiert. Erst anschließend werden ganze Dokumententscheidungen
+  mit dem bestehenden HMAC-Vertrag gespeichert. Keine Publikation in der
+  Sammelphase; ein Speicherfehler lässt offene Dokumente gesperrt und erlaubt
+  die erneute Nutzung bereits vollständig gespeicherter Entscheidungen.
+- Die private Tabelle enthält maximal 50 DOM-Zeilen pro Seite. Bewiesene
+  Entitätsgruppen erhalten eine Zeile und eine wählbare Liste aller Vorkommen.
+  OCR erhält je Vorkommen eine Zeile; direkte Eingaben aktualisieren die
+  Vorschau und machen eine frühere Entscheidung wieder offen. Bewusst ausgewählte
+  OCR-Zeilen dürfen gemeinsam unverändert bestätigt oder mit ausdrücklich
+  eingetragenen individuellen Korrekturen gemeinsam behandelt werden. Eine
+  Lesart wird niemals automatisch auf eine andere Kontaktstelle übertragen.
+  Checkboxen und Behandlungsauswahl bereiten nur vor; erst die zentrale Aktion
+  **Auf N Zeilen anwenden** merkt Entscheidungen vor. Keine per-Zeile-Ausführung
+  und kein zweiter Korrektureditor oder Entscheidungsweg im Vergleichsbereich.
+  Alle ausgewählten Eingaben werden vor der ersten Zustandsänderung validiert;
+  eine fehlerhafte Eingabe stoppt die ganze Aktion mit Wert-/Dateihinweis.
+  Unverändert-Bestätigen darf abweichende Eingaben nicht still verwerfen.
+- Standardansicht **Alle** verhindert überraschendes Verschwinden behandelter
+  Zeilen; **Offen** und **Vorgemerkt** bleiben explizite Filter. Filter-/Seitenwechsel
+  leeren die Auswahl, erhalten aber Eingaben. Rückgängig nimmt eine Sammelaktion
+  einschließlich Eingabefeldern und Vorschau atomar zurück. **Vorgemerkt** ist
+  flüchtiger Fensterzustand, keine dauerhafte Speicherung. Erst **Gruppe übergeben
+  und weiter** übergibt eine vollständige Gruppe; beim
+  Vertagen/Schließen werden noch nicht übergebene Entscheidungen dieser Gruppe
+  verworfen. Dieser Hinweis steht direkt im Fenster. Folgegruppen und
+  Entitäts-/Restprüfung bleiben im selben laufgebundenen Fenster.
+- Standalone-Entitätsentwürfe dürfen validierte private Dateinamen pro Dokument
+  enthalten. Cowork-Drafts erhalten diese Metadaten nicht; seine Werkzeuge,
+  Formate, bestehenden nativen Adapter und Statusansicht bleiben unverändert.
+
 ## Noch erforderliche menschliche Evidenz
 
 - Windows und macOS: Fokus, Escape, Tastatur, Zoom, Screenreader und verständliche
@@ -168,7 +210,8 @@ Bedien- oder Qualitätsabnahme.
 
 ## Bewusst nachgelagert
 
-Eine zusammenhängende plattformübergreifende lokale HTML-Oberfläche, eine sichere
-freie Auswahl im Sammelreview und nutzerdefinierte Regeln sind nur nach eigener
-Story, Sicherheitsdesign und gemessenem UX-Nutzen zulässig. Die inhaltsfreie
+Standalone besitzt unter DS-104 eine eigene lokale HTML-Prüfoberfläche; ihre
+Prüfliste ist oben abgegrenzt. Ein entsprechender Umbau der Cowork-Adapter,
+freie Bereichsredaktionen im Sammelreview und nutzerdefinierte Regeln benötigen
+weiterhin eigene Story, Sicherheitsdesign und gemessenen UX-Nutzen. Die inhaltsfreie
 Status-App bleibt davon getrennt; sie wird nicht zum Rohdatenreview erweitert.

@@ -1,0 +1,18 @@
+/* Design reference: codex_auftrag_datasecure/design-tokens.css (DS-110). */
+/* Unmodified Inter v4.1, SIL OFL 1.1; see fonts/LICENSE-Inter.txt.
+   Source: https://github.com/rsms/inter/tree/v4.1/docs/font-files
+   SHA-256: 693b77d4f32ee9b8bfc995589b5fad5e99adf2832738661f5402f9978429a8e3 */
+@font-face{font-family:Inter;src:url('fonts/InterVariable.woff2') format('woff2');font-style:normal;font-weight:100 900;font-display:swap}
+:root {
+  --c-bg:#f3f5f4;--c-surface:#fff;--c-surface-muted:#f8faf9;--c-surface-text:#fbfcfb;
+  --c-border:#e3e8e6;--c-border-soft:#eef1ef;--c-border-input:#cfd8d4;--c-border-nav:#dfe5e2;--c-border-dash:#c5d2cc;--c-control:#b7c4be;
+  --c-ink:#14201b;--c-ink-2:#3c4943;--c-muted:#56635d;--c-faint:#7a8781;
+  --c-primary:#17694f;--c-primary-hover:#0f4c39;--c-primary-tint:#e3f1eb;--c-primary-tint-2:#f1f8f5;--c-primary-tint-3:#eef6f2;--c-primary-soft-border:#cfe5da;
+  --c-warn-bg:#fdf6e7;--c-warn-bg-2:#fbeed2;--c-warn-bg-3:#fdf9f0;--c-warn-border:#f0dfb6;--c-warn-border-2:#e3cf9e;--c-warn-line:#c98a12;--c-warn-ink:#7a4f00;--c-warn-ink-2:#4a3300;
+  --c-danger-bg:#fdf3f0;--c-danger-bg-2:#fbe3dc;--c-danger-border:#f1cfc5;--c-danger-ink:#a3361f;--c-danger-ink-2:#8a2c18;--c-overlay:rgba(20,32,27,.45);
+  --font-sans:Inter,system-ui,sans-serif;--font-mono:ui-monospace,Menlo,monospace;
+  --fs-h1:34px;--fs-h2-review:22px;--fs-dialog:19px;--fs-h2:18px;--fs-h2-card:17px;--fs-lg:16px;--fs-tab:15px;--fs-body:14px;--fs-meta:13px;--fs-small:12px;--fs-xs:11px;--lh-body:1.5;--lh-review:1.85;
+  --r-card:16px;--r-panel:14px;--r-box:12px;--r-file:10px;--r-btn:8px;--r-btn-sm:7px;--r-seg-inner:6px;--r-chip:5px;--r-pill:999px;
+  --s-2:2px;--s-4:4px;--s-6:6px;--s-8:8px;--s-10:10px;--s-12:12px;--s-14:14px;--s-16:16px;--s-18:18px;--s-20:20px;--s-24:24px;--s-28:28px;--s-32:32px;--s-40:40px;--s-56:56px;
+  --content-max:1180px;--shadow-modal:0 20px 60px rgba(20,32,27,.25);--tab-active-line:inset 0 -2px 0 #17694f;--t-fast:.15s;--t-base:.2s;
+}

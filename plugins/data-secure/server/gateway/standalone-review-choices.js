@@ -60,22 +60,36 @@ function validStandaloneReviewChoices(state) {
   catch { return false; }
 }
 
-function candidateKey(draft, candidate, digest) {
-  if (!ENTITY_TYPES.has(candidate?.type)) return null;
+function candidateKey(draft, candidate, digest, item) {
+  if (!ENTITY_TYPES.has(candidate?.type) && (candidate?.type !== 'credential_issuer_ambiguous' || !item)) return null;
   if (typeof draft.original_text !== 'string' || typeof draft.anonymized_text !== 'string' ||
       !Number.isSafeInteger(candidate.original_start) || !Number.isSafeInteger(candidate.original_end) ||
       !Number.isSafeInteger(candidate.anonymized_start) || !Number.isSafeInteger(candidate.anonymized_end) ||
       candidate.original_start < 0 || candidate.original_end <= candidate.original_start || candidate.original_end > draft.original_text.length ||
       candidate.anonymized_start < 0 || candidate.anonymized_end <= candidate.anonymized_start || candidate.anonymized_end > draft.anonymized_text.length) throw invalid();
   const canonical = (text) => normalizeText(text).replace(/\s+/gu, ' ').trim().toLocaleLowerCase('de-DE');
-  const value = canonical(draft.original_text.slice(candidate.original_start, candidate.original_end));
+  const original = draft.original_text.slice(candidate.original_start, candidate.original_end);
+  const value = canonical(original);
   if (!value || value !== canonical(draft.anonymized_text.slice(candidate.anonymized_start, candidate.anonymized_end))) throw invalid();
+  if (!ENTITY_TYPES.has(candidate?.type)) {
+    // Non-name decisions are replayable only for this precise source and
+    // occurrence. In particular, keeping a certificate issuer must NEVER
+    // become a run-wide spelling exemption for possible credentials.
+    if (candidate?.type !== 'credential_issuer_ambiguous' || !item) return null;
+    if (!/^[a-f0-9]{32}$/u.test(item.id || '') || !/^[a-f0-9]{64}$/u.test(item.sha256 || '') ||
+        typeof draft.original_text !== 'string' || typeof draft.anonymized_text !== 'string') throw invalid();
+    // Earlier publications can legitimately change registry replacements and
+    // output offsets. Bind immutable source identity, not that mutable output.
+    return digest('document-occurrence', JSON.stringify([item.id, item.sha256,
+      digest('source-text', draft.original_text), candidate.type, candidate.replacement_kind || null,
+      candidate.original_start, candidate.original_end, digest('source-fragment', original)]));
+  }
   // Prose and residual hypotheses share one exact spelling family. No fuzzy
   // aliases, legal suffix stripping, or issuer/certificate exceptions.
   return digest('entity-name', value);
 }
 
-function prepareStandaloneReviewChoices(state, drafts) {
+function prepareStandaloneReviewChoices(state, drafts, items = []) {
   return withKey(state, (digest) => {
     const entries = readEntries(state, digest);
     const documents = [];
@@ -91,7 +105,7 @@ function prepareStandaloneReviewChoices(state, drafts) {
         const id = candidate?.ambiguity_id;
         if (typeof id !== 'string' || !id || seen.has(id)) throw invalid();
         seen.add(id);
-        const key = candidateKey(draft, candidate, digest);
+        const key = candidateKey(draft, candidate, digest, items[index]);
         const choice = key && entries.get(key);
         if (choice) {
           if (choice === 'redact_organization' && draft.allowOrganizationReview !== true) throw invalid();
@@ -139,7 +153,7 @@ function mergeStandaloneReviewChoices(plan, outcome) {
 
 // Invoked only after the complete group has passed publication's exact
 // document/occurrence binding. A failed UI/Undo/defer never reaches this point.
-function rememberStandaloneReviewChoices(state, drafts, reviewedDocuments) {
+function rememberStandaloneReviewChoices(state, drafts, reviewedDocuments, items = []) {
   return withKey(state, (digest) => {
     const entries = readEntries(state, digest);
     if (!Array.isArray(drafts) || !Array.isArray(reviewedDocuments) || reviewedDocuments.length !== drafts.length) throw invalid();
@@ -160,7 +174,7 @@ function rememberStandaloneReviewChoices(state, drafts, reviewedDocuments) {
         if (!candidate || !choice || Object.keys(choice).sort().join(',') !== 'ambiguity_id,decision' ||
             decisionIds.has(choice.ambiguity_id) || !DECISIONS.has(choice.decision)) throw invalid();
         decisionIds.add(choice.ambiguity_id);
-        const key = candidateKey(draft, candidate, digest);
+        const key = candidateKey(draft, candidate, digest, items[document.document_index - 1]);
         if (!key) continue;
         if (choice.decision === 'redact_organization' && draft.allowOrganizationReview !== true) throw invalid();
         const previous = entries.get(key);

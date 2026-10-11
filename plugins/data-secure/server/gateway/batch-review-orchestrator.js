@@ -53,6 +53,31 @@ function createBatchReviewOrchestrator(options = {}) {
       if (!reviewPlan.ready) {
         return { ok: false, error: 'batch_review_not_ready', message: reviewPlan.message, ...progress, raw_content_sent_to_claude: false };
       }
+      const claimBoundary = () => (options.claimStandaloneDocument || ((_state, action) => { action(); return true; }))(state, () => {});
+      const pausedResult = (summary = {}) => ({ ok: true, ...publicProgress(state), ...summary,
+        pause_requested: true, message: 'Die Verarbeitung pausiert an einer sicheren Grenze. Gespeicherte Prüfentscheidungen bleiben erhalten.',
+        raw_content_sent_to_claude: false });
+      if (!claimBoundary()) return pausedResult({ reviewed_documents: 0, failed_documents: 0,
+        ...(deps.localFinalize === true ? { locally_released: 0 } : { packages: [] }) });
+
+      if (state.product_channel === 'standalone' && typeof options.reviewContacts === 'function') {
+        try {
+          const contacts = await options.reviewContacts(state, items, { ...deps, reviewTextLocally: deps.reviewTextLocally || reviewTextLocally });
+          if (contacts?.pauseBlocked) return pausedResult({ reviewed_documents: 0, failed_documents: 0,
+            ...(deps.localFinalize === true ? { locally_released: 0 } : { packages: [] }) });
+        }
+        catch (error) {
+          if (error?.code === 'STANDALONE_PAUSE_CONTROL_INVALID') throw error;
+          const code = error?.code || 'BATCH_REVIEW_RECONSTRUCTION_FAILED';
+          markDeferredReview(state, items, code);
+          writeState(state);
+          return { ok: false, error: code,
+            message: 'Die OCR-Prüfung ist noch offen. Bestätigte Dokumententscheidungen bleiben gespeichert; ungeprüfte Dateien bleiben gesperrt.',
+            ...publicProgress(state), reviewed_documents: 0, failed_documents: 0,
+            ...(deps.localFinalize === true ? { locally_released: 0 } : { packages: [] }),
+            raw_content_sent_to_claude: false };
+        }
+      }
 
       if (state.schema === 'datasecure-batch/5' && state.processing_mode === 'markdown-only') {
         if (state.product_channel !== 'standalone' || state.ocr_contact_review !== true ||
@@ -60,10 +85,14 @@ function createBatchReviewOrchestrator(options = {}) {
         const packages = [];
         let reviewed = 0;
         for (const item of items) {
+          if (!claimBoundary()) return pausedResult({ reviewed_documents: reviewed,
+            ...(deps.localFinalize === true ? { locally_released: reviewed } : { packages }) });
           if (deps.abortSignal?.aborted) return { ok: false, error: 'LOCAL_REVIEW_CANCELLED',
             ...publicProgress(state), reviewed_documents: reviewed, raw_content_sent_to_claude: false };
           const result = await options.processMarkdownReviewItem(state, item, deps);
           if (!result.ok) return { ...result, reviewed_documents: reviewed, packages };
+          if (item.status === 'deferred_review') return pausedResult({ reviewed_documents: reviewed,
+            ...(deps.localFinalize === true ? { locally_released: reviewed } : { packages }) });
           if (deps.localFinalize === true) {
             item.status = 'released'; item.checkpoint = 'released_locally';
             writeState(state);
@@ -113,6 +142,7 @@ function createBatchReviewOrchestrator(options = {}) {
           : error instanceof SafeError ? error.message : 'Die lokale Stapelprüfung wurde sicher gestoppt. Es wurde nichts freigegeben.';
       };
       while (cursor < items.length || carry) {
+      if (!claimBoundary()) return pausedResult(deliverySummary());
       const drafts = [];
       const selected = [];
       let budget = 0;
@@ -122,6 +152,7 @@ function createBatchReviewOrchestrator(options = {}) {
         lifecycle({ event: 'review_reconstruction_started', outcome: 'progress', item_count: items.length });
         while (cursor < items.length || carry) {
           checkAbort();
+          if (!claimBoundary()) return pausedResult(deliverySummary());
           const item = carry?.item || items[cursor];
           // Source bytes give a useful early bound for large text files. Office
           // expansion is checked again against the actual reconstructed text.
@@ -148,6 +179,7 @@ function createBatchReviewOrchestrator(options = {}) {
         }
         lifecycle({ event: 'review_reconstruction_finished', outcome: 'ok', item_count: selected.length });
       } catch (error) {
+        if (error?.code === 'STANDALONE_PAUSE_CONTROL_INVALID') throw error;
         lifecycle({ event: 'review_reconstruction_failed', outcome: 'stopped', item_count: items.length,
           error_code: ['LOCAL_REVIEW_TOO_LARGE', 'LOCAL_REVIEW_CANCELLED'].includes(error?.code) ? error.code : 'LOCAL_REVIEW_FAILED' });
         markDeferredReview(state, items.slice(reviewedCount), error?.code || 'BATCH_REVIEW_RECONSTRUCTION_FAILED');
@@ -163,15 +195,17 @@ function createBatchReviewOrchestrator(options = {}) {
       let outcome;
       try {
         checkAbort();
+        if (!claimBoundary()) return pausedResult(deliverySummary());
         const plan = state.product_channel === 'standalone'
-          ? prepareStandaloneReviewChoices(state, drafts) : null;
+          ? prepareStandaloneReviewChoices(state, drafts, selected) : null;
         const uiDrafts = plan ? plan.openDrafts : drafts;
         const reusedDocuments = selected.length - uiDrafts.length;
         if (uiDrafts.length) lifecycle({ event: 'review_ui_started', outcome: 'progress', item_count: uiDrafts.length });
         outcome = uiDrafts.length ? await runBatchReviewLocally(uiDrafts, {
           platform,
           allowDefer: true,
-          ...(state.product_channel === 'standalone' ? { allowOrganizationReview: true } : {}),
+          ...(state.product_channel === 'standalone' ? { allowOrganizationReview: true,
+            privateSourceLabels: plan.openIndices.map(index => selected[index].source_label) } : {}),
           batchSummary: {
             batchTotal,
             automaticallyCompleted,
@@ -210,7 +244,7 @@ function createBatchReviewOrchestrator(options = {}) {
         const publicationDeps = state.product_channel === 'standalone' ? {
           ...deps,
           onReviewDecisionsBound: async (boundDrafts, boundDocuments) => {
-            rememberStandaloneReviewChoices(state, boundDrafts, boundDocuments);
+            rememberStandaloneReviewChoices(state, boundDrafts, boundDocuments, selected);
             writeState(state);
             await deps.onReviewDecisionsBound?.(boundDrafts, boundDocuments);
           }
@@ -224,9 +258,13 @@ function createBatchReviewOrchestrator(options = {}) {
       allPackages.push(...packages);
       locallyReleasedCount += locallyReleased;
       failedCount += failed;
-      reviewedCount += selected.length;
+      reviewedCount += publication.processed ?? selected.length;
       // Drop all text references before reconstruction of the next group.
       drafts.length = 0;
+      if (publication.pauseBlocked) return pausedResult(deliverySummary());
+      if (publication.recoveryBlocked) return { ok: false, error: 'PROCESSING_INTERRUPTED',
+        message: 'Der lokale Abschluss- und Zuordnungsstand muss zuerst abgeglichen werden. Weitere Dateien bleiben unverändert.',
+        ...publicProgress(state), ...deliverySummary(), raw_content_sent_to_claude: false };
       }
       return {
         ok: allPackages.length > 0 || locallyReleasedCount > 0,

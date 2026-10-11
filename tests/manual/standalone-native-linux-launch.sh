@@ -24,6 +24,7 @@ done
   exit 66
 }
 appdir="$(cd "$appdir" && pwd -P)"
+script_directory="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd -P)"
 
 tmp_parent="$(cd "${RUNNER_TEMP:-${TMPDIR:-/tmp}}" && pwd -P)"
 session_id="$(tr -d '-' </proc/sys/kernel/random/uuid)"
@@ -116,9 +117,8 @@ while ((SECONDS < deadline)); do
     && grep -q '"event":"page_loaded"' "$desktop_log" \
     && grep -q '"event":"frontend_ready"' "$desktop_log" \
     && grep -q '"event":"review_page_loaded"' "$desktop_log" \
-    && grep -q '"action":"get_review_session"' "$sidecar_log" \
-    && grep -q '"action":"get_public_state"' "$desktop_log" \
-    && grep -q '"action":"get_ui_context"' "$desktop_log" \
+    && node "$script_directory/../helpers/native-review-readiness.js" "$desktop_log" \
+    && node "$script_directory/../helpers/native-review-readiness.js" "$desktop_log" --main --workspace \
     && grep -q '"event":"sidecar_started"' "$sidecar_log" \
     && grep -q '"event":"service_initialized"' "$sidecar_log"; then
     ready=true

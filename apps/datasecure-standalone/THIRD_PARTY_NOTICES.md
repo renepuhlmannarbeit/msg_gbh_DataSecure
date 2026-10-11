@@ -22,3 +22,8 @@ JavaScript-Abhängigkeiten auf. Das Paket-SBOM inventarisiert diese Komponenten.
 MarkItDown/Python wird für diesen Produktpfad nicht mitgeliefert oder benötigt.
 
 DataSecure selbst ist proprietär; maßgeblich ist `LICENSE`.
+
+Die Oberfläche enthält die unveränderte lokale Schrift Inter Variable 4.1 von
+Rasmus Andersson und Mitwirkenden unter SIL Open Font License 1.1. Der vollständige
+Text liegt als `LICENSE-Inter.txt` bei. Die Schrift wird ohne Internetzugriff aus
+dem Desktop-Frontend geladen; Version und SHA-256 stehen in der Paket-SBOM.

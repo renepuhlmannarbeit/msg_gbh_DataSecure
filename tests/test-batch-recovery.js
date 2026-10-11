@@ -110,6 +110,10 @@ function fixture(options = {}) {
       value.doMapping = false;
       return changed;
     },
+    ...(options.enableDocumentCapture ? { captureDocumentRun(value) {
+      events.push(`document-run:${value.token}`);
+      if (options.documentCaptureFailure === value.token) throw new Error('DOCUMENT_REVIEW_CONFLICT');
+    } } : {}),
     ...(options.enablePreflight ? {
       reconcilePreflightStoppedMappings(value) {
         events.push(`preflight-mapping:${value.token}`);
@@ -236,10 +240,15 @@ test('latest product status selects one channel and exposes only current-run cou
     result_count: 1,
     export_pending_count: 0,
     processing: false,
+    pause_requested: false,
+    paused: false,
     resumable: false,
     complete: false
   });
   assert.doesNotMatch(JSON.stringify(status), /[a-c]{64}|batch_token|path|name|hash/u);
+  const pluginStatus = item.recovery.latestProductBatchStatus('plugin');
+  assert.equal(Object.hasOwn(pluginStatus, 'pause_requested'), false);
+  assert.equal(Object.hasOwn(pluginStatus, 'paused'), false);
   assert.ok(item.events.every((event) => !/^(write|unlink|remove-work|acquire):/u.test(event)));
   assert.strictEqual(fixture().recovery.latestProductBatchStatus('standalone'), null);
   assert.throws(() => item.recovery.latestProductBatchStatus('invalid'), /PRODUCT_CHANNEL_INVALID/u);
@@ -499,6 +508,37 @@ test('recovery makes a durable preflight stopped mapping terminal exactly once',
     recovered: 0, removed: 0, failures: 0, skipped_active: false
   });
   assert.strictEqual(item.events.filter((event) => event === `write:${tokens[0]}`).length, 1);
+});
+
+test('v2 membership repair precedes mapping and both expiry cleanup paths, without touching legacy or live runs', () => {
+  const pending = { ...state(tokens[0], { items: [{ status: 'preflight_mapping_pending' }] }),
+    product_channel: 'standalone', standalone_document_review: true };
+  const expired = { ...pending, token: tokens[1], expires_at: past };
+  const legacy = { ...state(tokens[2]), product_channel: 'standalone' };
+  const live = { ...pending, token: tokens[3], live: true };
+  const item = fixture({ states: [pending, expired, legacy, live], enableDocumentCapture: true, enablePreflight: true });
+  assert.deepEqual(item.recovery.recoverBatches(), { recovered: 1, removed: 1, failures: 0, skipped_active: false });
+  assert.equal(item.events.filter(event => event.startsWith('document-run:')).length, 2);
+  assert.ok(item.events.indexOf(`document-run:${tokens[0]}`) < item.events.indexOf(`preflight-mapping:${tokens[0]}`));
+  assert.ok(item.events.indexOf(`document-run:${tokens[1]}`) < item.events.indexOf(`remove-work:${tokens[1]}`));
+  assert.equal(item.events.includes(`document-run:${tokens[2]}`), false);
+  assert.equal(item.events.includes(`document-run:${tokens[3]}`), false);
+  const periodic = fixture({ states: [expired], enableDocumentCapture: true });
+  assert.equal(periodic.recovery.cleanupExpiredBatchSnapshots().removed, 1);
+  assert.equal(periodic.events.includes(`document-run:${tokens[1]}`), true);
+  assert.ok(periodic.events.indexOf(`document-run:${tokens[1]}`) < periodic.events.indexOf(`remove-work:${tokens[1]}`));
+});
+
+test('failed or unavailable v2 membership repair never removes the owning journal', () => {
+  const value = { ...state(tokens[0], { expires_at: past }), product_channel: 'standalone', standalone_document_review: true };
+  for (const operation of ['recoverBatches', 'cleanupExpiredBatchSnapshots']) {
+    for (const options of [{ enableDocumentCapture: true, documentCaptureFailure: tokens[0] }, {}]) {
+      const item = fixture({ states: [value], ...options });
+      const result = item.recovery[operation]();
+      assert.equal(result.failures, 1); assert.equal(result.removed, 0);
+      assert.equal(item.events.some(event => /^(remove-work|unlink|mapping|preflight-mapping|write):/u.test(event)), false);
+    }
+  }
 });
 
 test('evidence outbox and terminal repair run under the same lock without changing batch recovery counters', () => {

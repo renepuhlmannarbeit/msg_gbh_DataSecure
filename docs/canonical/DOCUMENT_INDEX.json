@@ -1,7 +1,9 @@
 {
   "schema": "datasecure-document-index/1",
-  "validated_at": "2026-09-23",
+  "validated_at": "2026-10-08",
   "documents": [
+    {"id":"REVIEW-STANDALONE-R9-20261008","path":"docs/REVIEW_STANDALONE_R9_2026-10-08.md","class":"dated-multidimensional-review","status":"active","products":["standalone"],"owner":"quality","version_policy":"dated-evidence-not-release","superseded_by":null,"decisions":["DS-106","DS-108","DS-110"],"backlog_ids":["BL-010.53","BL-050.6"]},
+    {"id":"STANDALONE-FRONTEND-V2","path":"docs/frontend-migration.md","class":"standalone-migration-contract","status":"active","products":["standalone"],"owner":"ux","version_policy":"decision-driven","superseded_by":null,"decisions":["DS-110"],"backlog_ids":["BL-010.53"]},
     {"id":"CLAUDE-CODE-PILOT","path":"docs/acceptance/CLAUDE_CODE_PILOT/README.md","class":"host-qualification-plan","status":"active","products":["cowork-plugin"],"owner":"quality","version_policy":"source-revalidation-date","superseded_by":null,"decisions":["DS-078","DS-099","DS-101"],"backlog_ids":["BL-041.19","BL-041.20","BL-041.21"]},
     {"id":"CLAUDE-CODE-PILOT-CONTRACT","path":"docs/acceptance/CLAUDE_CODE_PILOT/contract.json","class":"machine-host-qualification-plan","status":"active","products":["cowork-plugin"],"owner":"quality","version_policy":"contract-version","superseded_by":null,"decisions":["DS-078","DS-101"],"backlog_ids":["BL-041.20"]},
     {"id":"REVIEW-PRODUCT-HOSTS-20260923","path":"docs/REVIEW_PRODUCT_HOSTS_2026-09-23.md","class":"dated-multidimensional-review","status":"active","products":["cowork-plugin","standalone"],"owner":"quality","version_policy":"dated-evidence-not-release","superseded_by":null,"decisions":["DS-069","DS-078","DS-097","DS-099","DS-100","DS-101"],"backlog_ids":["BL-021.3","BL-021.4","BL-041.19","BL-041.20","BL-041.21","BL-050.4"]},

@@ -92,6 +92,30 @@ test('only entity-name decisions are saved; certificate issuer keep remains occu
   assert.strictEqual(prepareStandaloneReviewChoices(run, [issuer]).openDrafts.length, 1);
 });
 
+test('a saved issuer choice resumes only its exact source, document, draft and occurrence', () => {
+  const run = state(), issuer = draft('Microsoft', { type: 'credential_issuer_ambiguous', id: 'credential:v2:000001' });
+  const item = { id: 'c'.repeat(32), sha256: 'd'.repeat(64) };
+  rememberStandaloneReviewChoices(run, [issuer], [{ document_index: 1, decisions: [{
+    ambiguity_id: issuer.ambiguities[0].ambiguity_id, decision: 'keep' }] }], [item]);
+  const restarted = JSON.parse(JSON.stringify(run));
+  assert.equal(prepareStandaloneReviewChoices(restarted, [issuer], [item]).openDrafts.length, 0);
+  assert.doesNotMatch(JSON.stringify(run.standalone_review_choices), /Microsoft|credential|original_start/u);
+  for (const changed of [{ ...item, id: 'e'.repeat(32) }, { ...item, sha256: 'e'.repeat(64) }])
+    assert.equal(prepareStandaloneReviewChoices(restarted, [issuer], [changed]).openDrafts.length, 1);
+  const changed = structuredClone(issuer); changed.original_text += '\nChanged context';
+  assert.equal(prepareStandaloneReviewChoices(restarted, [changed], [item]).openDrafts.length, 1);
+  const shifted = structuredClone(issuer); shifted.ambiguities[0].original_start++;
+  assert.throws(() => prepareStandaloneReviewChoices(restarted, [shifted], [item]), /sicher bestätigt/u);
+  const rebased = structuredClone(issuer);
+  rebased.anonymized_text = '[PERSON_001]: Microsoft\nEnde';
+  Object.assign(rebased.ambiguities[0], { ambiguity_id: 'credential:v2:000099', anonymized_start: 14, anonymized_end: 23 });
+  assert.equal(prepareStandaloneReviewChoices(restarted, [rebased], [item]).openDrafts.length, 0,
+    'registry replacement and display ID changes do not invalidate the same immutable source occurrence');
+  rebased.ambiguities[0].anonymized_end--;
+  assert.throws(() => prepareStandaloneReviewChoices(restarted, [rebased], [item]), /sicher bestätigt/u);
+  assert.equal(prepareStandaloneReviewChoices(restarted, [issuer]).openDrafts.length, 1, 'not a global issuer exception');
+});
+
 test('only open IDs reach the reviewer and document indices are restored exactly', () => {
   const run = state();
   remember(run, [draft('Erika Beispiel')], 'keep');

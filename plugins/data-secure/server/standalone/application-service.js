@@ -3,10 +3,12 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const crypto = require('node:crypto');
 const { RESOURCE_LIMITS } = require('../resource-limits');
 const { MODES, assertRunnableProcessingMode } = require('../core/processing-mode');
 const { MODES: RESULT_NAMING_MODES, validateResultNamingMode } = require('../core/result-naming-mode');
 const { batchNextAction } = require('../core/batch-next-action');
+const { MAX_CATALOGUE_SOURCES, MAX_CATALOGUE_METADATA_BYTES } = require('./catalogue-limits');
 
 const PRODUCT_CHANNEL = 'standalone';
 const VISIBLE_MAPPING_FILE = 'DataSecure-Zuordnung.csv';
@@ -14,6 +16,16 @@ const SOURCE_KINDS = new Set(['files', 'folder']);
 const PROFILES = new Set(['auto', 'customer', 'applicant', 'personnel_profile', 'contract', 'general']);
 const CONVERSION_TYPES = ['txt', 'md', 'csv', 'docx', 'xlsx', 'pptx', 'pdf', 'png', 'jpeg', 'bmp'];
 const DIRECT_MARKDOWN_TYPES = new Set(['.txt', '.md', '.markdown', '.csv']);
+function catalogueProjection(queue, sourceIds, rejectedSources) {
+  return (queue || []).map(item => ({
+    source_id: sourceIds.get(selectedPathIdentity(item.full)),
+    name: item.sourceLabel || item.name, bytes: item.sourceBytes,
+    selectable: true, source_type: path.extname(item.name).slice(1).toLowerCase(),
+    ocr_required: ['.png', '.jpeg', '.jpg', '.bmp'].includes(path.extname(item.name).toLowerCase()) ? true : null
+  })).concat([...rejectedSources.values()].map(item => ({
+    name: item.name, selectable: false, reason_code: item.reason_code
+  })));
+}
 const SELECTION_REASON_CODES = new Set(['SOURCE_FORMAT_SIZE_LIMIT', 'SOURCE_FILE_EMPTY',
   'SOURCE_FORMAT_UNSUPPORTED', 'SOURCE_READ_FAILED', 'SOURCE_ACCESS_DENIED',
   'SOURCE_PATH_UNSAFE', 'SOURCE_IDENTITY_CHANGED', 'SOURCE_ARTIFACT_IGNORED']);
@@ -94,7 +106,7 @@ function activateStandaloneNamespace(options = {}) {
   return root;
 }
 
-function defaultDependencies() {
+function defaultDependencies(options = {}) {
   // Namespace selection must happen before any gateway module is loaded. This
   // makes Standalone journals, settings, review data and exports invisible to
   // the optional Claude/MCP product even when both are installed.
@@ -109,7 +121,7 @@ function defaultDependencies() {
     continueMostRecentBatch, openBatchPackageProtection, recoverBatches,
     replayMappingOutbox, cleanupExpiredBatchSnapshots, recoverableBatchStatus, productStatusSnapshot,
     latestProductBatchStatus, latestProductResultDirectory, readStandaloneHistoryStates,
-    standaloneRecoverableStates, continueStandaloneBatch
+    standaloneRecoverableStates, continueStandaloneBatch, requestStandalonePause
   } = require('../gateway/batch');
   const { cleanupLocalData } = require('../gateway/retention');
   const { initializeProduct } = require('../core/product-bootstrap');
@@ -126,11 +138,16 @@ function defaultDependencies() {
     readStates: readStandaloneHistoryStates,
     readExports: readStandaloneExportHistory,
     recoverableStates: standaloneRecoverableStates,
+    pauseProgress: state => require('../gateway/batch').readBatchProgress(state.token),
     liveExecutor: require('../gateway/batch-active-lock').liveLocalExecutor
   });
   return {
     runHistory,
+    documentReviews: require('../gateway/standalone-document-review-store').createDocumentReviewStore({
+      nativeExport: options.nativeExport, controlOwnerPid: options.controlOwnerPid,
+      controlOwnerGeneration: options.controlOwnerGeneration, retiredControlGenerations: options.retiredControlGenerations }),
     continueStandaloneBatch,
+    requestStandalonePause,
     initializeProduct() {
       if (!standaloneStartup) {
         // Even optional history can touch internal files; reject conflicting
@@ -276,10 +293,13 @@ function selectedPathIdentity(candidate) {
 
 class StandaloneApplicationService {
   constructor(options = {}) {
-    this.deps = options.dependencies || defaultDependencies();
+    this.deps = options.dependencies || defaultDependencies(options);
     this.home = options.home || os.homedir();
     this.interactionActive = false;
     this.admittedQueue = null;
+    this.admissionRevision = 0;
+    this.sourceIds = new Map();
+    this.rejectedSources = new Map();
     this.selectionContext = null;
     this.observedBatchId = null;
     this.terminalPresentation = null;
@@ -356,7 +376,7 @@ class StandaloneApplicationService {
     return snapshot;
   }
 
-  status() {
+  status({ localUi = false } = {}) {
     const snapshot = this.observeCurrentRun();
     const current = snapshot?.current || this.deps.lightweightStatus();
     // A product snapshot also contains the newest historical journal so the
@@ -397,6 +417,8 @@ class StandaloneApplicationService {
       ? 'blocked'
       : preparing
         ? 'preparing'
+      : latest?.paused === true
+        ? 'paused'
       : processing
         ? 'processing'
         : reviewReady
@@ -421,11 +443,13 @@ class StandaloneApplicationService {
       ok: current.engine_ready === true,
       product_channel: PRODUCT_CHANNEL,
       state,
+      ...(localUi === true && /^[a-f0-9]{64}$/u.test(currentBatchId || '') ? { batch_id: currentBatchId } : {}),
       processing_mode: latest?.processing_mode || MODES.ANONYMIZE,
       warning_count: Number.isSafeInteger(latest?.warning_count) ? latest.warning_count : 0,
       ...(latest?.termination_unconfirmed === true ? { termination_unconfirmed: true } : {}),
       preparing,
       processing,
+      ...(latest?.pause_requested === true ? { pause_requested: true } : {}),
       batch_complete: latest?.complete === true,
       review_required: reviewReady,
       resumable,
@@ -464,6 +488,24 @@ class StandaloneApplicationService {
 
   history() {
     return this.deps.runHistory.history();
+  }
+
+  documentReviews(batchId) { return this.deps.documentReviews.list(batchId); }
+  documentReviewHistorySummary(batchId) { return this.deps.documentReviews.historySummary(batchId); }
+  documentReviewChunk(batchId, documentId, revision, index) { return this.deps.documentReviews.chunk(batchId, documentId, revision, index); }
+  documentEntities(batchId, documentId, revision, page) { return this.deps.documentReviews.entities(batchId, documentId, revision, page); }
+  decideDocumentReview(batchId, documentId, request) { return this.deps.documentReviews.decide(batchId, documentId, request); }
+  exportApprovedDocuments(batchId, operationId, selection, acknowledge = false) { return this.deps.documentReviews.exportApproved(batchId, operationId, selection, acknowledge); }
+  abandonDocumentExport(batchId, operationId, digest) { return this.deps.documentReviews.abandonExport(batchId, operationId, digest); }
+  resolveDocumentExport(batchId, operationId) { return this.deps.documentReviews.resolveExport(batchId, operationId); }
+  resolveDocumentIdentityOverview(batchId, operationId) { return this.deps.documentReviews.resolveIdentityOverview(batchId, operationId); }
+
+  pauseBatch(batchId) {
+    validateBatchId(batchId);
+    if (this.interactionActive) throw fixedFailure('STANDALONE_BUSY', 'Ein lokaler Vorgang ist bereits aktiv.');
+    this.deps.requestStandalonePause(batchId);
+    this.observedBatchId = batchId;
+    return { ok: true, ...this.status({ localUi: true }), external_disclosure: false };
   }
 
   runFailures(batchId) {
@@ -554,11 +596,19 @@ class StandaloneApplicationService {
     return this.deps.pickSourcesAsync({ allowedTypes: CONVERSION_TYPES, signal });
   }
 
-  async validateSourceSelection(sourcePaths, signal) {
-    const outcomes = await Promise.allSettled(sourcePaths.map((candidate) =>
-      this.deps.validateSelectedPathAsync(candidate, { allowedTypes: CONVERSION_TYPES, signal })));
+  async validateSourceSelection(sourcePaths, signal, options = {}) {
+    const catalogue = options.catalogue === true && typeof options.onRejectedSource === 'function';
+    const outcomes = await Promise.allSettled(sourcePaths.map(async (candidate) => {
+      try { return await this.deps.validateSelectedPathAsync(candidate, { allowedTypes: CONVERSION_TYPES, signal }); }
+      catch (error) {
+        if (!catalogue || !['SOURCE_FORMAT_UNSUPPORTED', 'SOURCE_FORMAT_SIZE_LIMIT', 'SOURCE_FILE_EMPTY',
+          'SOURCE_ACCESS_DENIED', 'SOURCE_READ_FAILED'].includes(error?.code)) throw error;
+        options.onRejectedSource({ full: candidate, name: path.basename(candidate), reason_code: error.code });
+        return null;
+      }
+    }));
     const rejected = outcomes.filter((entry) => entry.status === 'rejected');
-    if (!rejected.length) return outcomes.map((entry) => entry.value);
+    if (!rejected.length) return outcomes.map((entry) => entry.value).filter(Boolean);
     // Cancellation remains cancellation, never a file failure. Multi-selection
     // admission is atomic and waits for every validation so no failing filename
     // is lost simply because a different file failed first.
@@ -579,7 +629,7 @@ class StandaloneApplicationService {
     throw error;
   }
 
-  async admitSelectedSources(sourcePaths, sourceKind = 'files', signal) {
+  async admitSelectedSources(sourcePaths, sourceKind = 'files', signal, options = {}) {
     validateChoice(sourceKind, SOURCE_KINDS, 'files');
     if (!Array.isArray(sourcePaths) || sourcePaths.length < 1 || sourcePaths.length > RESOURCE_LIMITS.MAX_BATCH_FILES) {
       throw fixedFailure('STANDALONE_SELECTION_INVALID', 'Die lokale Auswahl ist ungültig.');
@@ -595,16 +645,30 @@ class StandaloneApplicationService {
       const previousQueue = this.admittedQueue || [];
       let ignoredArtifactCount = 0;
       const ignoredArtifacts = [];
+      const rejectedSources = new Map(this.rejectedSources);
+      const rejectSource = (item) => {
+        if (!item || typeof item.full !== 'string' || !path.isAbsolute(item.full) ||
+            typeof item.name !== 'string' || item.name.length > 1024 ||
+            /[\u0000-\u001f\u007f]/u.test(item.name)) {
+          throw fixedFailure('STANDALONE_SELECTION_INVALID', 'Ungültiger Quellenkatalog.');
+        }
+        rejectedSources.set(selectedPathIdentity(item.full), item);
+        if (rejectedSources.size > MAX_CATALOGUE_SOURCES) throw fixedFailure('SOURCE_FOLDER_FILE_LIMIT', 'Der Quellenkatalog ist zu groß.');
+      };
+      const catalogue = options.catalogue === true;
       const selected = sourceKind === 'folder'
         ? await this.deps.enumerateSourceFolderAsync(sourcePaths[0], {
             allowedTypes: CONVERSION_TYPES, signal, productChannel: 'standalone',
+            ...(catalogue ? { catalogue: true, onRejectedSource: rejectSource,
+              maxSources: MAX_CATALOGUE_SOURCES, maxTotalBytes: Number.MAX_SAFE_INTEGER } : {}),
             onIgnoredArtifact: (reason, name) => {
               ignoredArtifactCount++;
               if (ignoredArtifacts.length < RESOURCE_LIMITS.MAX_BATCH_FILES && typeof name === 'string' &&
                   name.length <= 1024 && !/[\u0000-\u001f\u007f]/u.test(name)) ignoredArtifacts.push({ name, reason_code: reason });
             }
           })
-        : await this.validateSourceSelection(sourcePaths, signal);
+        : await this.validateSourceSelection(sourcePaths, signal,
+          catalogue ? { catalogue: true, onRejectedSource: rejectSource } : {});
       const seen = new Set(previousQueue.map((item) => selectedPathIdentity(item.full)));
       const additions = [];
       let alreadySelectedCount = 0;
@@ -618,26 +682,32 @@ class StandaloneApplicationService {
       // introduce a duplicate basename; the same labels bind the mapping and
       // the visible export tree. Publish the new admission only after every
       // combined limit and label has passed validation.
-      const queue = this.deps.batchQueueFromSelection([
+      const combined = [
         ...previousQueue.map((item) => ({ sourcePath: item.full, sourceBytes: item.sourceBytes,
           sourceLabel: item.sourceLabel })), ...additions
-      ]);
-      if (!Array.isArray(queue) || queue.length < 1 || queue.some((item) =>
+      ];
+      const queue = combined.length ? this.deps.batchQueueFromSelection(combined) : [];
+      if (!Array.isArray(queue) || (!catalogue && queue.length < 1) || queue.some((item) =>
         !item || typeof item.full !== 'string' || !path.isAbsolute(item.full) ||
         typeof item.name !== 'string' || item.name.length < 1 || path.basename(item.full) !== item.name ||
         !Number.isSafeInteger(item.sourceBytes) || item.sourceBytes < 1)) {
         throw fixedFailure('STANDALONE_SELECTION_INVALID', 'Die lokale Dateiauswahl ist ungültig.');
       }
       const totalBytes = queue.reduce((sum, item) => sum + item.sourceBytes, 0);
-      if (queue.length > RESOURCE_LIMITS.MAX_BATCH_FILES ||
-          !Number.isSafeInteger(totalBytes) || totalBytes > RESOURCE_LIMITS.MAX_BATCH_TOTAL_BYTES) {
+      if (!Number.isSafeInteger(totalBytes) || (!catalogue && (queue.length > RESOURCE_LIMITS.MAX_BATCH_FILES ||
+          totalBytes > RESOURCE_LIMITS.MAX_BATCH_TOTAL_BYTES))) {
         throw fixedFailure('STANDALONE_SELECTION_INVALID', 'Der ausgewählte Stapel überschreitet die zulässige Gesamtgröße.');
       }
       const folders = [...new Set([...(previousQueue.length > 0 ? this.selectionContext?.sourceFolders || [] : []),
         ...(sourceKind === 'folder' ? sourcePaths : additions.map((item) => path.dirname(item.sourcePath)))]
         .map((candidate) => path.resolve(candidate)))];
-      this.admittedQueue = queue;
-      this.selectionContext = {
+      const nextSourceIds = new Map(this.sourceIds);
+      for (const item of queue) {
+        const identity = selectedPathIdentity(item.full);
+        if (!nextSourceIds.has(identity)) nextSourceIds.set(identity, crypto.randomBytes(16).toString('hex'));
+        rejectedSources.delete(identity);
+      }
+      const nextSelection = {
         sourceKind: sourceKind === 'folder' || (previousQueue.length > 0 && this.selectionContext?.sourceKind === 'folder')
           ? 'folder' : 'files',
         sourceFolders: folders,
@@ -646,14 +716,30 @@ class StandaloneApplicationService {
         // the user removes the intended file.
         selectedFiles: queue.map((item) => item.sourceLabel || item.name)
       };
-      const uiContext = this.uiContext();
-      return {
+      const nextRevision = this.admissionRevision + 1;
+      const result = {
         ok: true, event: 'selection_summarized', selected_count: queue.length,
         total_bytes: totalBytes,
         ...(alreadySelectedCount > 0 ? { already_selected_count: alreadySelectedCount } : {}),
         ...(ignoredArtifactCount > 0 ? { ignored_artifact_count: ignoredArtifactCount, ignored_artifacts: ignoredArtifacts } : {}),
-        ...admissionCounts(queue), ui_context: uiContext, external_disclosure: false
+        ...admissionCounts(queue), ui_context: this.projectUiContext({ selected: nextSelection,
+          queue, sourceIds: nextSourceIds, rejectedSources, revision: nextRevision }), external_disclosure: false
       };
+      // Budget the complete future response, not just the catalogue. Ignored
+      // metadata labels and repeated display labels also consume IPC bytes.
+      // Use the largest permitted request ID and leave headroom below 1 MiB.
+      const framed = { schema: 'datasecure-standalone-private-response/1', request_id: '0'.repeat(64), ok: true, result };
+      if ((catalogue && queue.length + rejectedSources.size > MAX_CATALOGUE_SOURCES) ||
+          Buffer.byteLength(JSON.stringify(framed), 'utf8') > MAX_CATALOGUE_METADATA_BYTES) {
+        throw fixedFailure('SOURCE_FOLDER_FILE_LIMIT', 'Der sichere Quellenkatalog ist zu groß. Bitte einen kleineren Unterordner auswählen.');
+      }
+      // No admission mutation before the complete bounded response has passed.
+      this.admittedQueue = queue;
+      this.sourceIds = nextSourceIds;
+      this.rejectedSources = rejectedSources;
+      this.admissionRevision = nextRevision;
+      this.selectionContext = nextSelection;
+      return result;
     } catch (error) {
       if (signal?.aborted || error?.code === 'LOCAL_SELECTION_CANCELLED') {
         throw fixedFailure('STANDALONE_SELECTION_CANCELLED', 'Die Auswahl wurde abgebrochen.');
@@ -667,6 +753,9 @@ class StandaloneApplicationService {
   cancelAdmission() {
     this.admittedQueue = null;
     this.selectionContext = null;
+    this.sourceIds.clear();
+    this.rejectedSources.clear();
+    this.admissionRevision++;
     return { ok: true, event: 'admission_cancelled', external_disclosure: false };
   }
 
@@ -675,7 +764,9 @@ class StandaloneApplicationService {
     if (!Number.isSafeInteger(selectionIndex) || selectionIndex < 0 || selectionIndex >= (this.admittedQueue?.length || 0)) {
       throw fixedFailure('STANDALONE_SELECTION_INVALID', 'Die ausgewählte Datei ist nicht mehr in der vorbereiteten Auswahl.');
     }
-    this.admittedQueue.splice(selectionIndex, 1);
+    const [removed] = this.admittedQueue.splice(selectionIndex, 1);
+    this.sourceIds.delete(selectedPathIdentity(removed.full));
+    this.admissionRevision++;
     if (this.admittedQueue.length === 0) {
       this.selectionContext = null;
       return { ok: true, event: 'admission_cleared', selected_count: 0,
@@ -694,8 +785,12 @@ class StandaloneApplicationService {
   }
 
   uiContext() {
+    return this.projectUiContext({ selected: this.selectionContext, queue: this.admittedQueue,
+      sourceIds: this.sourceIds, rejectedSources: this.rejectedSources, revision: this.admissionRevision });
+  }
+
+  projectUiContext({ selected, queue, sourceIds, rejectedSources, revision }) {
     this.observeCurrentRun();
-    const selected = this.selectionContext;
     const configured = this.deps.readConfiguredResultRoot();
     let latestResultFolder = '';
     // Reading the visible context is also the upgrade/recovery boundary for an
@@ -721,6 +816,8 @@ class StandaloneApplicationService {
       source_kind: selected?.sourceKind || null,
       source_folders: selected ? [...selected.sourceFolders] : [],
       selected_files: selected ? [...selected.selectedFiles] : [],
+      catalogue_revision: revision,
+      source_catalogue: catalogueProjection(queue, sourceIds, rejectedSources),
       local_ui_only: true,
       external_disclosure: false
     };
@@ -733,10 +830,12 @@ class StandaloneApplicationService {
     // to silently replace a requested conversion with anonymization.
     if (typeof options === 'string') options = { profile: options, processingMode: MODES.ANONYMIZE };
     if (!options || typeof options !== 'object' || Array.isArray(options) ||
-        Object.keys(options).some((key) => !['profile', 'processingMode', 'outputNamingMode', 'ocrContactReview'].includes(key))) {
+        Object.keys(options).some((key) => !['profile', 'processingMode', 'outputNamingMode', 'ocrContactReview', 'documentReview', 'sourceIds', 'catalogueRevision'].includes(key))) {
       throw fixedFailure('PROCESSING_MODE_INVALID', 'Ungültiger Verarbeitungsmodus.');
     }
     const processingMode = assertRunnableProcessingMode(options.processingMode, PRODUCT_CHANNEL);
+    if (Object.hasOwn(options, 'documentReview') && options.documentReview !== true)
+      throw fixedFailure('DOCUMENT_REVIEW_INVALID', 'Ungültiger lokaler Dokumentprüfauftrag.');
     if (Object.hasOwn(options, 'ocrContactReview') && (processingMode !== MODES.MARKDOWN || options.ocrContactReview !== true)) {
       throw fixedFailure('OCR_CONTACT_REVIEW_INVALID', 'OCR-Kontaktkorrektur ist eine ausdrückliche Option der reinen Konvertierung.');
     }
@@ -749,9 +848,25 @@ class StandaloneApplicationService {
         ? options.outputNamingMode : RESULT_NAMING_MODES.NEUTRAL, PRODUCT_CHANNEL);
     }
     const profile = validateChoice(options.profile, PROFILES, 'auto');
-    const queue = this.admittedQueue;
+    let queue = this.admittedQueue;
+    if (Object.hasOwn(options, 'sourceIds') || Object.hasOwn(options, 'catalogueRevision')) {
+      if (!Number.isSafeInteger(options.catalogueRevision) || options.catalogueRevision !== this.admissionRevision ||
+          !Array.isArray(options.sourceIds) || options.sourceIds.length < 1 || options.sourceIds.length > 200 ||
+          new Set(options.sourceIds).size !== options.sourceIds.length ||
+          !options.sourceIds.every(id => typeof id === 'string' && /^[a-f0-9]{32}$/u.test(id))) {
+        throw fixedFailure('STANDALONE_SELECTION_INVALID', 'Die Auswahl ist nicht mehr aktuell.');
+      }
+      const ids = new Set(options.sourceIds);
+      queue = (queue || []).filter(item => ids.has(this.sourceIds.get(selectedPathIdentity(item.full))));
+      if (queue.length !== ids.size) throw fixedFailure('STANDALONE_SELECTION_INVALID', 'Die Auswahl gehört nicht zum Quellenkatalog.');
+    }
     if (!Array.isArray(queue) || queue.length < 1) {
       throw fixedFailure('STANDALONE_NO_ADMISSION', 'Bitte zuerst Dateien oder einen Ordner auswählen.');
+    }
+    const selectedBytes = queue.reduce((total, item) => total + item.sourceBytes, 0);
+    if (queue.length > RESOURCE_LIMITS.MAX_BATCH_FILES || !Number.isSafeInteger(selectedBytes) ||
+        selectedBytes > RESOURCE_LIMITS.MAX_BATCH_TOTAL_BYTES) {
+      throw fixedFailure('STANDALONE_SELECTION_INVALID', 'Höchstens 200 Dateien und 500 MB pro Verarbeitung. Bitte die Auswahl verkleinern.');
     }
     this.ensureResultRoot();
     let reservation;
@@ -763,9 +878,19 @@ class StandaloneApplicationService {
       const started = this.deps.startLocalIntakeExecutor(queue, profile, {
         intakeReservationId: reservation.reservation_id, signal, processingMode,
         ...(options.ocrContactReview === true ? { ocrContactReview: true } : {}),
+        ...(options.documentReview === true ? { documentReview: true } : {}),
         ...(outputNamingMode ? { outputNamingMode } : {})
       });
       transferred = true;
+      // A delegated start consumes every private catalogue identity, including
+      // excluded and rejected entries, even if its acknowledgement is lost.
+      // Keep only the launched selection's display context for the current run.
+      this.admittedQueue = null;
+      this.sourceIds.clear();
+      this.rejectedSources.clear();
+      this.admissionRevision++;
+      if (this.selectionContext) this.selectionContext = { ...this.selectionContext,
+        selectedFiles: queue.map(item => item.sourceLabel || item.name) };
       try {
         const batchToken = confirmedIntakeBatchToken(started);
         await confirmedIntakeStart(started);
@@ -777,13 +902,12 @@ class StandaloneApplicationService {
         // Once the reservation has been delegated, a missing acknowledgement
         // is an uncertain start. Never reuse the same admission: the worker may
         // still reach its durable checkpoint after the caller timed out.
-        this.admittedQueue = null;
         this.trace('standalone_batch_stopped', { outcome: 'stopped', error_code: 'STANDALONE_START_FAILED' });
         throw fixedFailure('STANDALONE_START_FAILED', 'Der lokale Start wurde nicht bestätigt. Bitte den Status prüfen und die Dateien nicht erneut starten.');
       }
-      this.admittedQueue = null;
       this.trace('standalone_batch_accepted', { outcome: 'ok', item_count: queue.length });
-      return { ok: true, event: 'batch_accepted', selected_count: queue.length, external_disclosure: false };
+      return { ok: true, event: 'batch_accepted', batch_id: this.observedBatchId,
+        selected_count: queue.length, external_disclosure: false };
     } finally {
       if (reservation && !transferred) this.deps.releaseIntake(reservation.reservation_id);
     }
@@ -906,7 +1030,7 @@ class StandaloneApplicationService {
       }
       try { this.deps.runHistory?.history(); } catch { /* retain every safely readable prior export binding */ }
       this.deps.resultOutputDirectory({ root: selected });
-      this.deps.saveConfiguredResultRoot(selected);
+      this.deps.saveConfiguredResultRoot(selected, { nativeIdentity: options.nativeIdentity, nativeExport: options.nativeExport });
       let replay = null;
       try { replay = this.deps.replayPendingResultExports?.() || null; }
       catch { replay = { pending: true }; }

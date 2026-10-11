@@ -16,7 +16,9 @@ function createBatchProgress(deps) {
 
   function publicProgress(state, options = {}) {
     const items = Array.isArray(state?.items) ? state.items : [];
-    const progress = core.progressFacts(state, {
+    const progress = core.progressFacts({ ...state,
+      ...(state.product_channel === 'standalone' && deps.pauseRequested?.(state)
+        ? { standalone_pause_requested: true } : {}) }, {
       deliveryPendingStatus,
       deferredReviewStatus,
       mappingPendingStatus,

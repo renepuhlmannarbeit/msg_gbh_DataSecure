@@ -1,0 +1,94 @@
+// Real app assets + synthetic IPC: browser UX evidence, not native acceptance.
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { createRequire } from 'node:module';
+import { startReviewPreview, syntheticDraft } from '../../scripts/lib/standalone-review-preview.mjs';
+const require = createRequire(import.meta.url);
+const { chromium } = require('playwright-core');
+const { buildContactBatch } = require('../../plugins/data-secure/server/gateway/ocr-contact-batch');
+const { encodePng } = require('../../plugins/data-secure/server/images/png');
+const contacts = buildContactBatch(['one.png', 'two.png'].map((source_label, index) => ({ source_label,
+  input: { original_text: 'E-Mail: same@wrong.invalid', source_type: 'png', contacts: [{ start: 8, end: 26, page: 1, line: 1, kind: 'email',
+    image: { schema: 'datasecure-ocr-contact-image/1', source_width: 4, source_height: 3, x: 0, y: 0, width: 4, height: 3,
+      png_base64: encodePng({ width: 4, height: 3, rgba: Buffer.alloc(48, index ? 180 : 255) }).toString('base64') } }] } }))).draft;
+const browser = await chromium.launch({ channel: process.platform === 'win32' ? 'msedge' : 'chrome', headless: true });
+async function scenario(draft, work) {
+  const preview = await startReviewPreview({ draft });
+  const context = await browser.newContext({ viewport: { width: 1500, height: 1000 }, colorScheme: 'light' });
+  try {
+    await context.route('**/*', route => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());
+    // Test instrumentation must not relax the app's production-style CSP.
+    await context.addInitScript({ path: require.resolve('axe-core/axe.min.js') });
+    const page = await context.newPage(), errors = [];
+    page.on('pageerror', error => errors.push(String(error)));
+    await page.goto(`${preview.url}/review.html`); await page.locator('#review').waitFor({ state: 'visible' });
+    await work(page); assert.deepEqual(errors, []);
+  } finally { await context.close(); await preview.close(); }
+}
+const apply = async (page, value) => { await page.locator('#bulk-treatment').selectOption(value); await page.locator('#bulk-apply').click(); };
+try {
+  await scenario(syntheticDraft('entities'), async page => {
+    assert.equal(await page.locator('#matrix-body tr').count(), 1);
+    assert.equal(await page.locator('#matrix-body input:checked').count(), 0);
+    assert.equal(await page.locator('#matrix-body select, #redact, #keep, #contact-value').count(), 0);
+    await page.locator('#occurrence').selectOption({ index: 1 });
+    assert.match(await page.locator('#document-position').textContent(), /Demo-Zwei.docx/u);
+    await page.locator('#select-visible').check(); await page.locator('#bulk-treatment').selectOption('redact_organization');
+    assert.equal(await page.locator('#release').isEnabled(), false, 'Mode is not a decision');
+    await page.locator('#bulk-apply').click();
+    assert.match(await page.locator('#output-context').textContent(), /\[UNTERNEHMEN_…\]/u);
+    assert.equal(await page.locator('#matrix-body tr').count(), 1, 'Applied rows stay visible');
+    await page.locator('#undo').click(); assert.equal(await page.locator('#release').isEnabled(), false);
+    const audit = await page.evaluate(() => axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa'] } }));
+    assert.deepEqual(audit.violations.map(item => item.id), []);
+  });
+  await scenario(contacts, async page => {
+    const rows = page.locator('#matrix-body tr'), input = index => rows.nth(index).locator('input[type=text]');
+    await input(0).fill('first@new.invalid'); await input(1).fill('not an email');
+    await page.locator('#select-visible').check(); await apply(page, 'correct_contact');
+    assert.match(await page.locator('#summary').textContent(), /^0 von/u);
+    assert.match(await page.locator('#matrix-message').textContent(), /two.png/u);
+    await apply(page, 'confirm_contact');
+    assert.match(await page.locator('#matrix-message').textContent(), /geänderte Eingabe/u);
+    assert.equal(await input(0).inputValue(), 'first@new.invalid');
+    await input(1).fill('second@new.invalid'); await apply(page, 'correct_contact');
+    assert.equal(await page.locator('#release').isEnabled(), true);
+    await page.locator('#matrix-filter').selectOption('done'); await page.locator('#select-visible').check();
+    await input(1).fill('changed@new.invalid'); assert.equal(await page.locator('#release').isEnabled(), false);
+    assert.equal(await page.locator('#matrix-filter').inputValue(), 'all');
+    assert.equal(await page.locator('#select-visible').isChecked(), false);
+    assert.equal(await input(1).inputValue(), 'changed@new.invalid');
+    await page.locator('#undo').click();
+    assert.equal(await input(1).inputValue(), 'second@new.invalid', 'Undo restores the pending inputs before the whole Apply');
+    assert.equal(await page.locator('#release').isEnabled(), false);
+    assert.match(await page.locator('#output-context').textContent(), /first@new.invalid/u);
+    await page.locator('#finding-next').click(); assert.match(await page.locator('#document-position').textContent(), /two.png/u);
+    await page.locator('#finding-prev').click(); assert.match(await page.locator('#document-position').textContent(), /one.png/u);
+    await page.locator('#select-visible').check(); await apply(page, 'correct_contact');
+    await page.locator('#release').click(); await page.locator('#waiting').waitFor({ state: 'visible' });
+    assert.deepEqual(await page.evaluate(() => window.previewSubmissions[0].decisions.map(item => item.replacement)), ['first@new.invalid', 'second@new.invalid']);
+    assert.equal(await page.locator('#matrix-body tr').count(), 0);
+    assert.equal(await page.locator('#contact-image').getAttribute('src'), '');
+    assert.equal(await page.locator('#document-position').textContent(), '');
+  });
+  await scenario(syntheticDraft(), async page => {
+    assert.equal(await page.locator('#matrix-body tr').count(), 50);
+    await page.locator('#matrix-body input[type=checkbox]').first().check();
+    assert.equal(await page.locator('#select-visible').evaluate(element => element.indeterminate), true);
+    await page.locator('#matrix-next').click();
+    assert.equal(await page.locator('#matrix-body tr').count(), 14);
+    assert.equal(await page.locator('#bulk-apply').isEnabled(), false);
+    await page.locator('#matrix-type').selectOption('email');
+    assert.equal(await page.locator('#matrix-body tr').count(), 32);
+    await page.locator('#matrix-type').selectOption('all');
+    for (const width of [1920, 1500, 1200, 900, 390]) {
+      await page.setViewportSize({ width, height: 1000 });
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `Reflow at ${width}px`);
+    }
+    await page.setViewportSize({ width: 1500, height: 1000 });
+    const directory = path.resolve('dist/engineering-review-bulk-browser-20261007'); fs.mkdirSync(directory, { recursive: true });
+    await page.screenshot({ path: path.join(directory, 'review-bulk.png'), fullPage: true });
+  });
+  console.log('REVIEW BULK BROWSER PASS: actual HTML/JS/CSS, single explicit Apply, no duplicate editors/actions, different per-row corrections, atomic validation, Undo, grouped contexts, privacy clearing, axe, pagination and 390–1920px reflow; synthetic IPC, no native claim');
+} finally { await browser.close(); }

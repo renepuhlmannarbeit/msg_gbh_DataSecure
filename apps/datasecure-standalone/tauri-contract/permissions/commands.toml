@@ -104,6 +104,11 @@ description = "Bestätigt inhaltsfrei, dass ein terminaler Zustand im Hauptfenst
 commands.allow = ["ack_terminal_presented"]
 
 [[permission]]
+identifier = "allow-pause-batch"
+description = "Speichert einen dauerhaften Pausewunsch für genau einen Standalone-Lauf."
+commands.allow = ["pause_batch"]
+
+[[permission]]
 identifier = "allow-continue-current-batch"
 description = "Setzt den aktuell in dieser Sitzung verbundenen Lauf fort."
 commands.allow = ["continue_current_batch"]
@@ -137,3 +142,57 @@ commands.allow = ["shutdown"]
 identifier = "allow-frontend-ready"
 description = "Bestätigt inhaltsfrei, dass die lokale Oberfläche ihr Skript geladen hat."
 commands.allow = ["frontend_ready"]
+[[permission]]
+identifier = "allow-open-embedded-review"
+description = "Öffnet nur die laufgebundene integrierte Standalone-Prüfsitzung."
+commands.allow = ["open_embedded_review"]
+
+[[permission]]
+identifier = "allow-get-document-reviews"
+description = "Öffnet private nachträgliche Dokumentprüfung ausschließlich in der v2-Hauptansicht."
+commands.allow = ["get_document_reviews"]
+
+[[permission]]
+identifier = "allow-close-document-reviews"
+description = "Schließt die private Dokumentansicht und invalidiert ihre laufgebundene Leseberechtigung."
+commands.allow = ["close_document_reviews"]
+
+[[permission]]
+identifier = "allow-get-document-review-history-summary"
+description = "Liest nur Freigabe- und Exportanzahlen eines ausdrücklich ausgewählten v2-Laufs; keine Texte oder Pfade."
+commands.allow = ["get_document_review_history_summary"]
+
+[[permission]]
+identifier = "allow-get-document-review-chunk"
+description = "Liest nur einen revisionsgebundenen privaten Textvergleich der geöffneten Dokumentprüfung."
+commands.allow = ["get_document_review_chunk"]
+
+[[permission]]
+identifier = "allow-get-document-entities"
+description = "Liest ausschließlich revisionsgebundene tatsächliche Ersetzungen der geöffneten Dokumentprüfung."
+commands.allow = ["get_document_entities"]
+
+[[permission]]
+identifier = "allow-decide-document-review"
+description = "Speichert eine revisionsgebundene Freigabe oder zusätzliche feste Maskierung."
+commands.allow = ["decide_document_review"]
+
+[[permission]]
+identifier = "allow-export-approved-documents"
+description = "Exportiert nur explizit ausgewählte freigegebene Dokumentrevisionen ohne private Begleitdaten."
+commands.allow = ["export_approved_documents"]
+
+[[permission]]
+identifier = "allow-abandon-document-export"
+description = "Unvollständigen gebundenen Exportauftrag ausdrücklich nicht weiter verfolgen; keine Dateien löschen."
+commands.allow = ["abandon_document_export"]
+
+[[permission]]
+identifier = "allow-open-document-export"
+description = "Open only an existing verified document export resolved privately by its run and operation identifiers."
+commands.allow = ["open_document_export"]
+
+[[permission]]
+identifier = "allow-open-document-identity-overview"
+description = "Open a private revision-bound identity overview for the active document review."
+commands.allow = ["open_document_identity_overview"]

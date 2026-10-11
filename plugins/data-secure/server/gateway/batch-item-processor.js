@@ -109,16 +109,19 @@ function createBatchItemProcessor(options = {}) {
     if (!converting && (state?.schema === 'datasecure-batch/5' || state?.processing_mode === 'markdown-only')) {
       throw new SafeError('Die Konvertierung gehört ausschließlich zur lokalen Standalone-Anwendung.');
     }
-    item.status = 'processing';
-    item.checkpoint = 'processing_started';
-    item.processing_started_at_ms = nowMs();
+    const claimed = (options.claimStandaloneDocument || ((_state, action) => { action(); return true; }))(state, () => {
+      item.status = 'processing';
+      item.checkpoint = 'processing_started';
+      item.processing_started_at_ms = nowMs();
+      writeState(state);
+    });
+    if (!claimed) return { ok: true, ...publicProgress(state), raw_content_sent_to_claude: false };
     const phaseRecorder = createPhaseRecorder({ now: deps.performanceNow });
     const expectedPackageId = converting ? `dm_${item.id}` : packageIdForItem(item);
     let packagePublished = false;
     let publishCallbackCount = 0;
     let verifiedDocumentResult;
     let publishedDocumentResult;
-    writeState(state);
     try {
       const checkpoint = (phase, performancePhase) => {
         if (performancePhase) phaseRecorder.mark(performancePhase);
@@ -151,6 +154,10 @@ function createBatchItemProcessor(options = {}) {
           }
         } : {}),
         retainPublishedOnAfterPublishFailure: true,
+        ...(state.product_channel === 'standalone' && state.standalone_document_review === true ? {
+          persistStandaloneDocumentReview: value => require('./standalone-document-review-store')
+            .createDocumentReviewStore().capture(state, item, value)
+        } : {}),
         ...(!converting && state.product_channel === 'standalone' && captureStandaloneIdentitySnapshot
           ? { persistStandaloneIdentitySnapshot: async ({ package_id, entries, unmapped_labels }) => {
               // This is an additional private human aid, not a precondition
@@ -206,12 +213,16 @@ function createBatchItemProcessor(options = {}) {
           if (converting) {
             publishedDocumentResult = conversionIdentity(details, expectedPackageId);
             if (JSON.stringify(publishedDocumentResult) !== JSON.stringify(verifiedDocumentResult)) throw publicationUnconfirmed();
+            if (state.product_channel === 'standalone' && state.standalone_document_review === true)
+              require('./standalone-document-review-store').createDocumentReviewStore().recordPublication(state.token, item.id);
             checkpoint('package_published', 'publication');
             return;
           }
           positiveDocumentResult(details?.document_result);
           if (!sameDocumentResult(details.document_result, verifiedDocumentResult)) throw publicationUnconfirmed();
           publishedDocumentResult = details.document_result;
+          if (state.product_channel === 'standalone' && state.standalone_document_review === true)
+            require('./standalone-document-review-store').createDocumentReviewStore().recordPublication(state.token, item.id);
           checkpoint('package_published', 'publication');
         }
       });

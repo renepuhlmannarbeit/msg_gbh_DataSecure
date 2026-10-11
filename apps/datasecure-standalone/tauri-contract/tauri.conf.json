@@ -1,6 +1,6 @@
 {
   "productName": "DataSecure Standalone",
-  "version": "3.2.0-rc158",
+  "version": "3.2.0-rc159",
   "identifier": "de.msg.datasecure.standalone",
   "build": {
     "frontendDist": "../frontend"
@@ -11,8 +11,9 @@
       {
         "label": "main",
         "title": "DataSecure Standalone",
-        "width": 960,
-        "height": 720,
+        "url": "workspace.html",
+        "width": 1280,
+        "height": 900,
         "minWidth": 720,
         "minHeight": 560,
         "resizable": true,

@@ -380,6 +380,11 @@ function findLiteralSpans(text, needle, replacement, type, priority) {
       start: m.index,
       end: m.index + m[0].length,
       text: m[0],
+      identity_value: String(needle),
+      // Capture the registry's actual identity binding at the real operation,
+      // not by interpreting marker-looking text in a later document diff.
+      ...(['PERSON', 'PERSON_ALIAS'].includes(type) && typeof replacement === 'string' && replacement.startsWith('[PERSON_')
+        ? { identity_key: `registry:PERSON:${replacement}` } : {}),
       replacement,
       priority
     });
@@ -535,6 +540,9 @@ function buildOrgDictionary(text, reg, profile, findings, personKeys = new Set()
 
 function anonymize(text, profile = 'general', options = {}) {
   const src = canonicalizeRenderedText(text);
+  const trace = options.captureTransformPlan === true ? require('./transform-plan').createTransformTrace(String(text)) : null;
+  if (trace && src !== String(text)) trace.append('canonicalization', String(text), src,
+    [{ start: 0, end: String(text).length, original: String(text), replacement: src, kind: 'NORMALIZATION' }]);
   // Entity discovery must never reinterpret a credential value as a person,
   // organisation or project and then retain its raw value/hash in the batch
   // registry. Mask only the already label-bound value spans, preserving every
@@ -658,7 +666,8 @@ function anonymize(text, profile = 'general', options = {}) {
   if (profile === 'personnel_profile' || profile === 'applicant') {
     const knownDashCompanyRanges = knownAliases.filter((alias) => alias.kind === 'ORG' && /\s-\s/u.test(alias.value))
       .flatMap((alias) => findLiteralSpans(analysisSrc, alias.value, '', 'ORGANIZATION', PRIORITY.ORGANIZATION));
-    out = anonymizePersonnel(out, reg, findings, personKeys, knownDashCompanyRanges, deferredTypographyKeys);
+    out = anonymizePersonnel(out, reg, findings, personKeys, knownDashCompanyRanges, deferredTypographyKeys,
+      trace ? (input, output, edits) => trace.append('personnel', input, output, edits) : undefined);
   }
   const credentialRanges = credentialContextDetails(out);
 
@@ -703,7 +712,12 @@ function anonymize(text, profile = 'general', options = {}) {
   ));
   for (const alias of persistedSinglePersonAliases) {
     let matched = false;
-    const found = findLiteralSpans(out, alias.value, alias.placeholder, 'PERSON_ALIAS', PRIORITY.PERSON_ALIAS);
+    // Registering this document's full names may have made a previously
+    // unique surname ambiguous. The earlier alias snapshot is not authority
+    // for its final replacement or the private transformation identity.
+    const finalPlaceholder = typeof reg.lookup === 'function' ? reg.lookup('PERSON', alias.value) : alias.placeholder;
+    if (!finalPlaceholder) continue;
+    const found = findLiteralSpans(out, alias.value, finalPlaceholder, 'PERSON_ALIAS', PRIORITY.PERSON_ALIAS);
     for (const span of found) {
       const coveringOrganizations = organizationCoverage.filter((org) =>
         span.start >= org.start && span.end <= org.end
@@ -770,10 +784,11 @@ function anonymize(text, profile = 'general', options = {}) {
       : { type: span.type, value_hash: hashShort(span.text) });
   }
 
-  out = applySpans(out, usable);
+  out = applySpans(out, usable, trace ? (input, output, edits) => trace.append('entities', input, output, edits) : undefined);
 
   return {
     text: out,
+    ...(trace ? { transform_trace: trace.finish(out) } : {}),
     findings,
     counts: reg.counts,
     // Typed entries travel through the existing gateway gate unchanged. They
@@ -800,6 +815,7 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
   // Keep the exact UTF-16 coordinates and an opaque, non-whitespace barrier.
   const personOccurrenceText = maskPlaceholders(rendered, '\uFFFC');
   const reviewedRanges = reviewedPersonRanges(options.reviewedPersonCandidates, rendered);
+  const reviewedLiterals = require('./residual-person-review').reviewedLiteralRanges(options.reviewedPersonCandidates, rendered);
   const credentialRanges = credentialContextDetails(clean);
   const structured = scanStructured(clean);
   const credentialSpans = sortedCredentialIntervals(structured);
@@ -941,7 +957,8 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
     if (v.length < 3) continue;
     const occurrences=findLiteralSpans(clean,v,'','RESIDUAL_ENTITY',0);
     const credentialOrg=typed ? ['ORGANIZATION','PROJECT'].includes(value.type) : residualOrgKeys.has(key(v));
-    if (occurrences.some((s)=>!insideCredentialValue(s.start, s.end) && !(credentialOrg &&
+    if (occurrences.some((s)=>!reviewedLiterals.some(range => s.start >= range.start && s.end <= range.end) &&
+        !insideCredentialValue(s.start, s.end) && !(credentialOrg &&
         (credentialOrganizationRole(clean,s.start,s.end,credentialRanges)!=='private' ||
          isTechnologyOrganizationSpan(clean,s.start,s.end))))) {
       out.push({ type: 'RESIDUAL_ENTITY', text: v });

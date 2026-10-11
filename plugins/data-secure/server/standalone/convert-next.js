@@ -49,11 +49,18 @@ async function convertNext(_profile, deps = {}) {
         ? { passiveObjects: true } : {})
     });
     validateMarkdownExtraction(extraction);
+    const originalMarkdown = extraction.markdown;
     // "ok" confirms the closed coverage contract, not complete extraction.
     // The existing trace schema carries no quality fields: exact grades and
     // reason codes remain in the artifact, journal and local run overview.
     trace('coverage_checked', 'ok');
     if (deps.onExtracted) await deps.onExtracted({ source_type: extraction.source_type });
+    // Private review reconstruction only: stop before any artifact staging or
+    // publication, including when a converter no longer returns contacts.
+    if (typeof deps.captureOcrInput === 'function') return deps.captureOcrInput(extraction.ocr_contacts?.length ? {
+      original_text: extraction.markdown, contacts: extraction.ocr_contacts,
+      source_type: extraction.source_type, processing_mode: 'markdown-only'
+    } : null);
     if (deps.ocrContactReview === true && extraction.ocr_contacts?.length) {
       if (typeof deps.prepareOcrContacts !== 'function') throw Object.assign(new Error('LOCAL_REVIEW_DEFERRED'), { code: 'LOCAL_REVIEW_DEFERRED' });
       const markdown = await deps.prepareOcrContacts({ original_text: extraction.markdown, contacts: extraction.ocr_contacts,
@@ -64,6 +71,10 @@ async function convertNext(_profile, deps = {}) {
           reason_codes: extraction.coverage.reason_codes.filter(code => code !== 'OCR_CONTACT_VALUES_UNVERIFIED') } });
     }
     if (deps.signal?.aborted) { const error = new Error('REQUEST_CANCELLED'); error.code = 'REQUEST_CANCELLED'; throw error; }
+    if (typeof deps.persistStandaloneDocumentReview === 'function') {
+      await deps.persistStandaloneDocumentReview({ package_id: deps.artifactId,
+        original_text: originalMarkdown, markdown: extraction.markdown });
+    }
     const result = await publishMarkdownArtifact(extraction, deps.artifactId, deps);
     trace('converter_completed', 'ok');
     return { ok: true, ...result, processing_mode: 'markdown-only', anonymized: false };

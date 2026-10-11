@@ -4,8 +4,10 @@ import { fileURLToPath } from 'node:url';
 import { collectFiles, writeZip } from './lib/zip.mjs';
 import { readRegular, hashRegular, sha256, verifyTargetEvidence, readStandaloneRuntimeContract } from './lib/bundled-runtime.mjs';
 import { loadCargoLicenseInventory } from './lib/cargo-license-inventory.mjs';
+import { standaloneFontLicense } from './lib/standalone-font-license.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const font = standaloneFontLicense(root);
 const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
 const targets = JSON.parse(fs.readFileSync(path.join(root, 'apps', 'datasecure-standalone',
   'desktop-targets.json'), 'utf8'));
@@ -58,6 +60,7 @@ function inventory(ignored = new Set()) {
 safeResetStage();
 writeFile(appImageRelative, appImageBytes, 0o700);
 for (const [source, destination] of [
+  [font.licensePath, 'LICENSE-Inter.txt'],
   [path.join(root, 'LICENSE'), 'LICENSE'],
   [path.join(root, 'apps', 'datasecure-standalone', 'THIRD_PARTY_NOTICES.md'), 'THIRD_PARTY_NOTICES.md'],
   [path.join(root, 'apps', 'datasecure-standalone', 'LINUX-START.md'), 'LINUX-START.md']
@@ -87,6 +90,7 @@ const sbom = {
   name: folderName, documentNamespace: `https://internal.msg.example/datasecure/${version}/${productTarget}`,
   creationInfo: { created: '2026-09-04T00:00:00Z', creators: ['Tool: DataSecure standalone Linux package builder'] },
   packages: [
+    font.package,
     { name: 'DataSecure Standalone', SPDXID: 'SPDXRef-DataSecure', versionInfo: version,
       downloadLocation: 'NOASSERTION', filesAnalyzed: false, licenseConcluded: 'LicenseRef-Proprietary', licenseDeclared: 'LicenseRef-Proprietary' },
     { name: 'Node.js', SPDXID: 'SPDXRef-Nodejs', versionInfo: contract.node_version,

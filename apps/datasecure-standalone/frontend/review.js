@@ -1,9 +1,17 @@
 'use strict';
 
-const invoke = window.__TAURI__?.core?.invoke;
+const embedded = /(?:\?|&)embedded=1(?:&|$)/u.test(window.location?.search || '');
+const invoke = embedded && window.parent && window.parent !== window
+  ? window.parent.__DATASECURE_REVIEW__?.invoke
+  : window.__TAURI__?.core?.invoke;
+if (embedded) { document.body.classList.add('embedded'); elAfterLoad(); }
+function elAfterLoad() {
+  document.getElementById('close-review').textContent = 'Zur Verarbeitung';
+}
 const el = (id) => document.getElementById(id);
 const state = { draft: null, reviewId: null, cursor: 0, choices: new Map(), history: [],
-  waiting: false, submitted: false, closed: false, continuing: false, continuationAvailable: false,
+  rows: [], rowById: new Map(), candidateIndex: new Map(), groups: new Map(), selected: new Set(), inputs: new Map(), page: 0,
+  waiting: false, submitted: false, closed: false, disconnected: false, continuing: false, continuationAvailable: false,
   generation: 0, loadGeneration: null, pollTimer: null, pollFailures: 0,
   uncertainAnswer: null, continuationFailure: null, continuationSnapshot: null, lastSession: null };
 const START_FAILURE_TEXT = Object.freeze({
@@ -42,15 +50,26 @@ function reviewFailureMessage(session) {
 
 function setWaiting(message, working = false) {
   el('review').hidden = true;
-  for (const id of ['exact-text', 'source-context', 'output-context', 'group-note']) {
+  for (const id of ['exact-text', 'source-context', 'output-context', 'group-note', 'document-position', 'finding-position']) {
     el(id).textContent = '';
   }
-  el('contact-value').value = '';
-  el('contact-correction').hidden = true;
-  el('contact-error').textContent = '';
+  el('bulk-treatment').value = '';
+  el('bulk-treatment').disabled = true;
+  el('bulk-apply').disabled = true;
+  el('select-filtered').disabled = true;
+  el('matrix-empty').hidden = true;
+  el('select-visible').checked = false;
+  el('select-visible').indeterminate = false;
   el('contact-image').src = '';
   el('contact-original').hidden = true;
   el('contact-image-note').textContent = '';
+  el('matrix-body').replaceChildren();
+  el('occurrence').replaceChildren();
+  el('matrix-search').value = '';
+  el('matrix-count').textContent = '';
+  el('matrix-progress').textContent = '';
+  el('matrix-page').textContent = '';
+  el('matrix-message').textContent = '';
   el('waiting').hidden = false;
   el('work-indicator').hidden = !working;
   if (el('waiting-text').textContent !== message) el('waiting-text').textContent = message;
@@ -67,7 +86,7 @@ function cancelPoll() {
 
 function schedulePoll(delay = 1200) {
   cancelPoll();
-  if (state.closed || state.draft) return;
+  if ((state.closed || state.disconnected) || state.draft) return;
   state.pollTimer = window.setTimeout(() => {
     state.pollTimer = null;
     return poll();
@@ -85,6 +104,8 @@ function clearDraft() {
   state.reviewId = null;
   state.choices.clear();
   state.history = [];
+  state.rows = []; state.rowById.clear(); state.candidateIndex.clear(); state.groups.clear();
+  state.selected.clear(); state.inputs.clear(); state.documentPositions = new Map(); state.page = 0;
 }
 
 function safeFailureCode(error) {
@@ -97,10 +118,7 @@ function safeFailureCode(error) {
 }
 
 function groupIds(candidate) {
-  const group = state.draft.decision_groups?.find((item) => item.candidate_ids?.includes(candidate.ambiguity_id));
-  if (!group) return [candidate.ambiguity_id];
-  return ['person_prose_ambiguous', 'person_residual_ambiguous'].includes(candidate.type)
-    ? group.candidate_ids : [candidate.ambiguity_id];
+  return state.groups.get(candidate.ambiguity_id) || [candidate.ambiguity_id];
 }
 
 function context(text, start, end) {
@@ -111,9 +129,9 @@ function context(text, start, end) {
 
 function documentPositions(draft) {
   const result = new Map();
-  const total = draft.batch_review?.document_count || 1;
+  const total = draft.contact_batch?.documents.length || draft.batch_review?.document_count || 1;
   if (total === 1) { for (const candidate of draft.ambiguities) result.set(candidate.ambiguity_id, 1); return result; }
-  const documents = draft.batch_review?.documents;
+  const documents = draft.contact_batch?.documents || draft.batch_review?.documents;
   if (!Number.isSafeInteger(total) || total < 1 || total > 200 || !Array.isArray(documents) || documents.length !== total) throw Error('invalid document metadata');
   const ids = new Set(draft.ambiguities.map(candidate => candidate.ambiguity_id));
   documents.forEach((document, index) => {
@@ -149,10 +167,189 @@ function contactImageUrl(image) {
   return `data:image/png;base64,${image.png_base64}`;
 }
 
-function render() {
+const PAGE_SIZE = 50;
+function node(tag, text) {
+  const result = document.createElement(tag);
+  if (text !== undefined) result.textContent = text;
+  return result;
+}
+function documentName(id) {
+  const index = state.documentPositions.get(id);
+  const documents = state.draft.contact_batch?.documents || state.draft.batch_review?.documents;
+  return documents?.[index - 1]?.source_label || `Dokument ${index}`;
+}
+function prepareRows() {
+  state.rows = []; state.groups.clear(); state.rowById.clear(); state.candidateIndex.clear();
+  const candidates = new Map(state.draft.ambiguities.map((item, index) => {
+    state.candidateIndex.set(item.ambiguity_id, index); return [item.ambiguity_id, item];
+  }));
+  for (const group of state.draft.decision_groups || []) {
+    const ids = group.candidate_ids;
+    if (!Array.isArray(ids) || !ids.length || !ids.every(id => candidates.has(id))) throw Error('invalid group');
+    if (!ids.every(id => ['person_prose_ambiguous', 'person_residual_ambiguous'].includes(candidates.get(id).type))) continue;
+    for (const id of ids) {
+      if (state.groups.has(id)) throw Error('duplicate group');
+      state.groups.set(id, ids);
+    }
+  }
+  const seen = new Set();
+  for (const candidate of candidates.values()) {
+    if (seen.has(candidate.ambiguity_id)) continue;
+    const ids = groupIds(candidate);
+    for (const id of ids) seen.add(id);
+    const exact = state.draft.original_text.slice(candidate.original_start, candidate.original_end);
+    const names = [...new Set(ids.map(documentName))];
+    const row = { id: candidate.ambiguity_id, ids, candidate, exact, names,
+      search: `${exact}\n${names.join('\n')}`.toLocaleLowerCase('de-DE') };
+    state.rows.push(row); state.rowById.set(row.id, row);
+  }
+}
+function filteredRows() {
+  const query = el('matrix-search').value.trim().toLocaleLowerCase('de-DE');
+  const filter = el('matrix-filter').value || 'all';
+  const type = el('matrix-type').value || 'all';
+  return state.rows.filter(row => (!query || row.search.includes(query)) &&
+    (type === 'all' || row.candidate.contact_kind === type) &&
+    (filter === 'all' || (filter === 'done') === row.ids.every(id => state.choices.has(id))));
+}
+function visibleRows() { return filteredRows().slice(state.page * PAGE_SIZE, (state.page + 1) * PAGE_SIZE); }
+function updateBulk() {
+  const filtered = filteredRows(), filteredIds = new Set(filtered.map(row => row.id));
+  for (const id of state.selected) if (!filteredIds.has(id)) state.selected.delete(id);
+  const rows = [...state.selected].map(id => state.rowById.get(id)).filter(Boolean);
+  const contact = state.draft?.ocr_contact_review === true;
+  const actions = contact ? [['confirm_contact', 'OCR unverändert bestätigen'], ['correct_contact', 'Eingegebene Korrekturen übernehmen']]
+    : [['keep', 'Beibehalten'], ['redact', 'Als Person / sensible Angabe ersetzen'],
+      ...(state.draft?.allow_organization_review === true ? [['redact_organization', 'Als Unternehmen anonymisieren']] : [])];
+  actions.push(['reset', 'Wieder auf offen setzen']);
+  const treatment = el('bulk-treatment'), previous = treatment.value;
+  treatment.replaceChildren();
+  for (const [value, label] of [['', 'Behandlung wählen …'], ...actions]) {
+    const option = node('option', label); option.value = value;
+    option.disabled = value === 'redact_organization' && rows.some(row => row.candidate.type === 'credential_issuer_ambiguous');
+    treatment.append(option);
+  }
+  treatment.value = actions.some(([value]) => value === previous) ? previous : '';
+  treatment.disabled = !rows.length;
+  el('bulk-apply').textContent = `Auf ${rows.length} Zeile${rows.length === 1 ? '' : 'n'} anwenden`;
+  el('bulk-apply').disabled = !rows.length || !treatment.value ||
+    (treatment.value === 'redact_organization' && rows.some(row => row.candidate.type === 'credential_issuer_ambiguous'));
+  el('clear-selection').disabled = !rows.length;
+  const visible = visibleRows();
+  el('select-visible').checked = visible.length > 0 && visible.every(row => state.selected.has(row.id));
+  el('select-visible').indeterminate = visible.some(row => state.selected.has(row.id)) && !el('select-visible').checked;
+  el('select-visible').disabled = !visible.length;
+  el('select-visible').setAttribute('aria-label', `Diese Seite auswählen (${visible.length} Zeilen)`);
+  el('select-filtered').textContent = `Alle gefilterten Zeilen auswählen (${filtered.length})`;
+  el('select-filtered').disabled = !filtered.length || filtered.every(row => state.selected.has(row.id));
+  el('matrix-count').textContent = `${filtered.length} von ${state.rows.length} Zeilen · ${rows.length} angehakt`;
+}
+function renderTable() {
+  const filtered = filteredRows();
+  state.page = Math.max(0, Math.min(state.page, Math.ceil(filtered.length / PAGE_SIZE) - 1));
+  const visible = visibleRows();
+  const filteredIds = new Set(filtered.map(row => row.id));
+  for (const id of state.selected) if (!filteredIds.has(id)) state.selected.delete(id);
+  el('matrix-empty').hidden = filtered.length > 0;
+  el('matrix-empty').textContent = state.choices.size === state.draft.ambiguities.length
+    ? `Alle ${state.draft.ambiguities.length} Fundstellen sind vorgemerkt. Jetzt „Gruppe übergeben und weiter“ wählen. Unter „Vorgemerkt“ kannst du die Entscheidungen vorher ansehen und ändern.`
+    : 'Keine Zeilen für diesen Filter. Es gibt noch offene Fundstellen in dieser Gruppe; Suche oder Filter ändern.';
+  el('matrix-body').replaceChildren();
+  for (const row of visible) {
+    const tr = node('tr'); tr.dataset.row = row.id; tr.dataset.action = 'row';
+    tr.dataset.active = String(row.ids.includes(state.draft.ambiguities[state.cursor].ambiguity_id));
+    const selection = node('td'), checkbox = node('input'); checkbox.type = 'checkbox'; checkbox.checked = state.selected.has(row.id);
+    checkbox.dataset.row = row.id; checkbox.dataset.action = 'select'; checkbox.setAttribute('aria-label', `${row.exact} auswählen`);
+    selection.append(checkbox);
+    const value = node('td'), details = node('button', row.exact);
+    details.dataset.row = row.id; details.dataset.action = 'details'; details.setAttribute('aria-label', `Original und Markdown vergleichen: ${row.exact}`);
+    const metadata = node('div'), source = node('small', `${row.ids.length} Fundstelle${row.ids.length === 1 ? '' : 'n'} · ${row.names.join(', ')}`);
+    metadata.className = 'row-meta'; source.title = source.textContent;
+    value.append(details, metadata); metadata.append(source);
+    const contact = state.draft.ocr_contact_review === true;
+    const choice = state.choices.get(row.id), action = node('td');
+    action.hidden = !contact;
+    if (contact) {
+      const input = node('input'); input.type = 'text'; input.maxLength = 256; input.autocomplete = 'off'; input.spellcheck = false;
+      input.value = state.inputs.get(row.id) ?? (choice?.decision === 'correct_contact' ? choice.replacement : '');
+      input.placeholder = 'Nur bei Abweichung eingeben';
+      input.dataset.row = row.id; input.dataset.action = 'correction'; input.setAttribute('aria-label', `Korrigierter Kontaktwert: ${row.exact}`);
+      action.append(input);
+    }
+    const done = row.ids.every(id => state.choices.has(id));
+    const labels = { keep: 'Beibehalten', redact: 'Ersetzen', redact_organization: 'Unternehmen', confirm_contact: 'Unverändert', correct_contact: 'Korrigiert' };
+    const status = node('span', done ? `Vorgemerkt: ${labels[choice?.decision || choice]}` : state.inputs.get(row.id) ? 'Eingabe – noch offen' : 'Offen');
+    status.className = 'status-badge'; status.dataset.row = row.id; status.dataset.action = 'status'; status.dataset.done = String(done);
+    metadata.append(status);
+    tr.append(selection, value, action);
+    el('matrix-body').append(tr);
+  }
+  el('matrix-count').textContent = `${filtered.length} von ${state.rows.length} Zeilen · ${state.selected.size} ausgewählt`;
+  el('matrix-page').textContent = `Seite ${state.page + 1} von ${Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))}`;
+  el('matrix-prev').disabled = state.page === 0;
+  el('matrix-next').disabled = (state.page + 1) * PAGE_SIZE >= filtered.length;
+  updateBulk();
+}
+function validContact(value, candidate) {
+  return Boolean(value && value === value.trim() && value.length <= 256 && !/[\p{Cc}\p{Cf}\p{Cs}\[\]`<>|]/u.test(value) &&
+    (candidate.contact_kind !== 'email' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value)) &&
+    (candidate.contact_kind !== 'phone' || (/^\+?[\d ()./-]{6,}$/u.test(value) && /\d/u.test(value))));
+}
+function bulkDecision(value) {
+  if (!state.draft || state.waiting || !state.selected.size) return;
+  const filtered = new Set(filteredRows().map(row => row.id));
+  const rows = [...state.selected].filter(id => filtered.has(id)).map(id => state.rowById.get(id));
+  if (!rows.length) return;
+  if (value === 'redact_organization' && (state.draft.allow_organization_review !== true || rows.some(row => row.candidate.type === 'credential_issuer_ambiguous'))) return;
+  const contact = state.draft.ocr_contact_review === true;
+  if (!(contact ? ['confirm_contact', 'correct_contact', 'reset'] : ['keep', 'redact', 'redact_organization', 'reset']).includes(value)) return;
+  const changes = new Map();
+  // Validate the complete selection before changing even one decision.
+  for (const row of rows) {
+    const replacement = state.inputs.get(row.id) || '';
+    if (contact && value === 'confirm_contact' && replacement && replacement !== row.exact) {
+      el('matrix-message').textContent = `Nichts angewendet: „${row.exact}“ in ${row.names.join(', ')} hat eine geänderte Eingabe. Wähle „Eingegebene Korrekturen übernehmen“ oder leere dieses Korrekturfeld.`;
+      return;
+    }
+    if (contact && value === 'correct_contact' && !validContact(replacement, row.candidate)) {
+      el('matrix-message').textContent = `Nichts angewendet: Bitte für „${row.exact}“ in ${row.names.join(', ')} einen gültigen Kontaktwert ohne Markdown oder Steuerzeichen eingeben (höchstens 256 Zeichen).`;
+      return;
+    }
+    for (const id of row.ids) changes.set(id, value === 'reset' ? undefined : contact
+      ? value === 'correct_contact' ? { decision: value, replacement } : { decision: value } : value);
+  }
+  state.history.push([...changes.keys()].map(id => [id, state.choices.get(id), state.inputs.has(id), state.inputs.get(id)]));
+  for (const [id, choice] of changes) choice === undefined ? state.choices.delete(id) : state.choices.set(id, choice);
+  el('bulk-treatment').value = '';
+  state.selected.clear(); state.page = 0; render();
+  const remaining = state.rows.filter(row => !row.ids.every(id => state.choices.has(id))).length;
+  el('matrix-message').textContent = `${rows.length} Zeilen ${value === 'reset' ? 'wieder offen' : 'vorgemerkt'}. ${remaining} Prüfzeilen noch offen. Noch nicht übergeben – erst „Gruppe übergeben und weiter“ sendet die Entscheidungen.`;
+  (state.choices.size === state.draft.ambiguities.length ? el('release') : visibleRows().length ? el('exact-text') : el('matrix-filter')).focus();
+}
+function previewContext(candidate) {
+  const text = state.draft.anonymized_text;
+  const from = Math.max(0, candidate.anonymized_start - 180), to = Math.min(text.length, candidate.anonymized_end + 220);
+  let value = text.slice(from, to);
+  for (const item of [...state.draft.ambiguities].sort((left, right) => right.anonymized_start - left.anonymized_start)) {
+    if (item.anonymized_start < from || item.anonymized_end > to) continue;
+    const choice = state.choices.get(item.ambiguity_id);
+    const replacement = state.draft.ocr_contact_review === true
+      ? state.inputs.get(item.ambiguity_id) || (choice?.decision === 'correct_contact' ? choice.replacement : null)
+      : choice === 'redact_organization' ? '[UNTERNEHMEN_…]' : choice === 'redact'
+        ? item.type === 'credential_issuer_ambiguous' ? '[MANUAL_REDACTION]' : '[PERSON_…]' : null;
+    if (replacement !== null) value = value.slice(0, item.anonymized_start - from) + replacement + value.slice(item.anonymized_end - from);
+  }
+  return `${from ? '…' : ''}${value}${to < text.length ? '…' : ''}`;
+}
+function render(table = true) {
   const draft = state.draft;
   if (!draft) return;
   const items = draft.ambiguities;
+  const filtered = filteredRows();
+  state.page = Math.max(0, Math.min(state.page, Math.ceil(filtered.length / PAGE_SIZE) - 1));
+  const visible = visibleRows();
+  if (visible.length && !visible.some(row => row.ids.includes(items[state.cursor]?.ambiguity_id)))
+    state.cursor = state.candidateIndex.get(visible[0].id);
   if (state.cursor >= items.length) state.cursor = items.length - 1;
   const candidate = items[state.cursor];
   const exact = draft.original_text.slice(candidate.original_start, candidate.original_end);
@@ -161,8 +358,9 @@ function render() {
   const contact = draft.ocr_contact_review === true && candidate.type === 'ocr_contact_ambiguous';
   const markdownContact = contact && draft.processing_mode === 'markdown-only';
   const organizationEnabled = !contact && !credential && draft.allow_organization_review === true;
-  el('summary').textContent = `${state.choices.size} von ${items.length} Stellen entschieden. Nur die aktive Fundstelle ist unten zu beurteilen.`;
-  el('document-position').textContent = `Dokument ${state.documentPositions.get(candidate.ambiguity_id)} von ${draft.batch_review?.document_count || 1}`;
+  el('summary').textContent = `${state.choices.size} von ${items.length} Stellen vorgemerkt · ${items.length - state.choices.size} offen · ${state.rows.length} Prüfzeilen in dieser Gruppe. Noch nicht übergeben.`;
+  el('matrix-progress').textContent = `${state.choices.size} von ${items.length} Fundstellen vorgemerkt · ${items.length - state.choices.size} offen`;
+  el('document-position').textContent = `${documentName(candidate.ambiguity_id)} · Dokument ${state.documentPositions.get(candidate.ambiguity_id)} von ${draft.contact_batch?.documents.length || draft.batch_review?.document_count || 1}`;
   el('finding-position').textContent = `Fundstelle ${state.cursor + 1} von ${items.length}`;
   el('finding-title').textContent = contact ? 'Wurde dieser Kontaktwert richtig erkannt?' : credential ? 'Muss diese Angabe ersetzt werden?' : 'Wie soll diese Fundstelle behandelt werden?';
   el('exact-text').textContent = exact;
@@ -184,80 +382,71 @@ function render() {
     ? 'Rasterausschnitt dieser Kontaktzeile; bei PDFs lokal aus der Seite gerendert. Nicht exportiert und nicht an KI übergeben.'
     : 'Kein eindeutig zugeordneter Bildausschnitt verfügbar (Geometrie oder Größenlimit). Bitte den Wert in der Originaldatei vergleichen; die OCR-Lesart ist kein Originalbild.';
   el('source-context').textContent = context(draft.original_text, candidate.original_start, candidate.original_end);
-  const choice = state.choices.get(candidate.ambiguity_id);
-  const marker = choice === 'redact_organization' ? '[UNTERNEHMEN_…]' : choice === 'redact' ?
-    credential ? '[MANUAL_REDACTION]' : '[PERSON_…]' : null;
-  const contactValue = contact && choice?.decision === 'correct_contact' ? choice.replacement : null;
-  const replacement = contactValue || marker;
-  const preview = replacement ? draft.anonymized_text.slice(0, candidate.anonymized_start) + replacement +
-    draft.anonymized_text.slice(candidate.anonymized_end) : draft.anonymized_text;
-  el('output-context').textContent = context(preview, candidate.anonymized_start,
-    replacement ? candidate.anonymized_start + replacement.length : candidate.anonymized_end);
+  el('output-context').textContent = previewContext(candidate);
   el('output-title').textContent = markdownContact ? 'Markdown-Texteingang (nicht anonymisiert)' : contact ? 'Bestätigter Texteingang (noch nicht anonymisiert)' : 'Vorgesehene Ausgabe';
-  el('contact-correction').hidden = !contact;
-  el('contact-value').value = contactValue || exact;
-  el('contact-error').textContent = '';
-  el('redact').textContent = contact ? 'Kontaktwert korrigieren' : credential ? 'Angabe ersetzen' : 'Als Person anonymisieren';
-  el('redact-organization').hidden = !organizationEnabled;
-  el('keep').textContent = contact ? 'OCR-Wert unverändert bestätigen' : credential ? 'Angabe beibehalten' : 'Beibehalten';
-  el('release').textContent = contact ? 'Kontaktwerte bestätigen und weiter' : 'Geprüft freigeben';
+  el('correction-col').hidden = !contact; el('correction-heading').hidden = !contact;
+  el('matrix-type-label').hidden = !contact;
+  const rowIndex = filtered.findIndex(row => row.ids.includes(candidate.ambiguity_id));
+  el('finding-prev').disabled = rowIndex <= 0;
+  el('finding-next').disabled = rowIndex < 0 || rowIndex === filtered.length - 1;
   el('release').disabled = state.choices.size !== items.length;
   el('undo').disabled = state.history.length === 0;
   el('waiting').hidden = true;
   el('review').hidden = false;
-}
-
-function decide(value) {
-  if (!state.draft || state.waiting || (value === 'redact_organization' &&
-      (state.draft.allow_organization_review !== true ||
-        state.draft.ambiguities[state.cursor].type === 'credential_issuer_ambiguous'))) return;
-  const candidate = state.draft.ambiguities[state.cursor];
-  if (state.draft.ocr_contact_review === true) {
-    if (value === 'redact') {
-      const replacement = el('contact-value').value;
-      if (!replacement || replacement !== replacement.trim() || replacement.length > 256 || /[\p{Cc}\p{Cf}\p{Cs}\[\]`<>|]/u.test(replacement) ||
-          (candidate.contact_kind === 'email' && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(replacement)) ||
-          (candidate.contact_kind === 'phone' && (!/^\+?[\d ()./-]{6,}$/u.test(replacement) || !/\d/u.test(replacement)))) {
-        el('contact-error').textContent = 'Bitte einen gültigen Kontaktwert ohne Zeilenumbrüche, Steuerzeichen oder Markdown eingeben (höchstens 256 Zeichen).';
-        return;
-      }
-      value = { decision: 'correct_contact', replacement };
-    } else if (value === 'keep') value = { decision: 'confirm_contact' };
-    else return;
+  el('matrix-detail').hidden = !visible.length;
+  if (!visible.length) {
+    for (const id of ['exact-text', 'source-context', 'output-context', 'document-position', 'finding-position', 'group-note']) el(id).textContent = '';
+    el('contact-image').src = ''; el('contact-original').hidden = true;
   }
-  const ids = groupIds(candidate);
-  state.history.push(ids.map((id) => [id, state.choices.get(id)]));
-  for (const id of ids) state.choices.set(id, value);
-  const next = state.draft.ambiguities.findIndex((item) => !state.choices.has(item.ambiguity_id));
-  if (next >= 0) state.cursor = next;
-  render();
-  if (next >= 0) el('exact-text').focus();
+  if (table) {
+    el('occurrence').replaceChildren();
+    for (const id of groupIds(candidate)) {
+      const option = node('option', `${documentName(id)} · Fundstelle ${state.candidateIndex.get(id) + 1}`);
+      option.value = id; el('occurrence').append(option);
+    }
+    el('occurrence').value = candidate.ambiguity_id;
+    el('occurrence').hidden = count === 1; el('occurrence-label').hidden = count === 1;
+    renderTable();
+  }
 }
 
 function undo() {
-  if (!state.draft || state.waiting || state.closed) return;
+  if (!state.draft || state.waiting || (state.closed || state.disconnected)) return;
   const previous = state.history.pop();
   if (!previous) return;
-  for (const [id, value] of previous) {
+  for (const [id, value, hadInput, inputValue] of previous) {
     if (value === undefined) state.choices.delete(id);
     else state.choices.set(id, value);
+    // An Undo must restore editor, preview AND the transmitted value together.
+    // Never enable release while an unrelated pending edit masks that value.
+    if (hadInput) state.inputs.set(id, inputValue); else state.inputs.delete(id);
   }
   const index = state.draft.ambiguities.findIndex((item) => item.ambiguity_id === previous[0][0]);
   if (index >= 0) state.cursor = index;
+  const restoredIds = new Set(previous.map(([id]) => id));
+  const restoredStates = new Set(state.rows.filter(row => row.ids.some(id => restoredIds.has(id)))
+    .map(row => row.ids.every(id => state.choices.has(id))));
+  // Undo of Reset restores staged decisions; an open-only filter would hide
+  // precisely the rows the operator has just restored. Mixed states need All.
+  el('matrix-filter').value = restoredStates.size === 1 ? restoredStates.has(true) ? 'done' : 'open' : 'all';
+  el('matrix-search').value = ''; el('matrix-type').value = 'all';
+  state.selected.clear();
+  state.page = Math.max(0, Math.floor(filteredRows().findIndex(row => row.ids.includes(previous[0][0])) / PAGE_SIZE));
   render();
-  el('exact-text').focus();
+  el('matrix-message').textContent = `Letzte Aktion rückgängig gemacht. ${state.choices.size} Fundstellen vorgemerkt · ${state.draft.ambiguities.length - state.choices.size} offen. Noch nicht übergeben.`;
+  (visibleRows().length ? el('exact-text') : el('matrix-filter')).focus();
 }
 
 async function sendAnswer(answer) {
-  if (state.waiting || state.closed || !state.reviewId) return;
+  if (state.waiting || (state.closed || state.disconnected) || !state.reviewId) return;
   invalidateLoads();
   const generation = state.generation;
   const pending = { reviewId: state.reviewId, action: answer.action,
-    choices: new Map(state.choices), history: state.history.slice(), cursor: state.cursor };
+    choices: new Map(state.choices), inputs: new Map(state.inputs), history: state.history.slice(), cursor: state.cursor };
   state.waiting = true;
   try {
     const result = await invoke('submit_review', { reviewId: state.reviewId, answer });
-    if (state.closed || generation !== state.generation) return;
+    if ((state.closed || state.disconnected) || generation !== state.generation) return;
     if (result?.accepted !== true) throw Error('review answer not confirmed');
     clearDraft();
     state.uncertainAnswer = null;
@@ -269,7 +458,7 @@ async function sendAnswer(answer) {
     answer.action === 'reviewed');
     if (answer.action === 'reviewed') schedulePoll();
   } catch {
-    if (state.closed || generation !== state.generation) return;
+    if ((state.closed || state.disconnected) || generation !== state.generation) return;
     // The worker may already have accepted/published the reviewed decision.
     // Never replay it automatically or claim that nothing was released.
     clearDraft();
@@ -291,12 +480,12 @@ function decodeChunks(parts) {
 }
 
 async function poll() {
-  if (!invoke || state.draft || state.closed || state.continuing || state.waiting || state.loadGeneration !== null) return;
+  if (!invoke || state.draft || (state.closed || state.disconnected) || state.continuing || state.waiting || state.loadGeneration !== null) return;
   cancelPoll();
   const generation = state.generation;
   state.loadGeneration = generation;
   el('retry').disabled = true;
-  const current = () => !state.closed && generation === state.generation;
+  const current = () => !(state.closed || state.disconnected) && generation === state.generation;
   try {
     const session = await invoke('get_review_session');
     if (!current()) return;
@@ -306,7 +495,9 @@ async function poll() {
       state.waiting = false;
       if (session.run_complete === true) {
         state.continuationAvailable = false;
-        setWaiting('Der Lauf ist abgeschlossen. Das Prüffenster wird geschlossen.');
+        setWaiting(embedded
+          ? 'Fundstellenprüfung abgeschlossen. Die Ergebnisprüfung für denselben Lauf wird geöffnet. Freigabe und Export folgen dort ausdrücklich.'
+          : 'Die Fundstellenprüfung ist abgeschlossen. Das Prüffenster wird geschlossen. Den Ergebnis- und Freigabestatus beim zugehörigen Lauf im Hauptfenster prüfen.');
         state.uncertainAnswer = null;
         await closeReviewWindow();
         return;
@@ -350,6 +541,11 @@ async function poll() {
     state.documentPositions = documentPositions(draft);
     state.reviewId = session.review_id;
     state.draft = draft;
+    state.selected.clear(); state.inputs.clear(); state.page = 0;
+    el('matrix-filter').value = 'open';
+    el('matrix-type').value = 'all';
+    el('bulk-treatment').value = '';
+    prepareRows();
     state.cursor = 0;
     state.submitted = false;
     state.continuationAvailable = false;
@@ -360,15 +556,19 @@ async function poll() {
     if (pending?.reviewId === session.review_id) {
       const ids = new Set(draft.ambiguities.map((item) => item.ambiguity_id));
       state.choices = new Map([...pending.choices].filter(([id]) => ids.has(id)));
+      state.inputs = new Map([...pending.inputs].filter(([id]) => ids.has(id)));
       state.history = pending.history;
       state.cursor = Math.min(pending.cursor, draft.ambiguities.length - 1);
     }
     render();
     if (pending?.reviewId === session.review_id) el('summary').textContent =
       'Die Entscheidung ist nicht bestätigt; dieser Prüfschritt ist weiterhin offen. Deine Eingaben sind erhalten. Bitte prüfen und bewusst erneut freigeben oder später entscheiden.';
-    el('exact-text').focus();
+    // New groups start at their shared controls, not the lower detail pane.
+    // This also keeps the bulk actions visible in the stacked narrow layout.
+    el('matrix-title').focus();
   } catch {
     if (!current()) return;
+    clearDraft();
     state.waiting = false;
     state.continuationAvailable = false;
     state.pollFailures += 1;
@@ -387,7 +587,7 @@ async function poll() {
 }
 
 async function continueReview() {
-  if (!invoke || state.closed || state.continuing || !state.continuationAvailable) return;
+  if (!invoke || (state.closed || state.disconnected) || state.continuing || !state.continuationAvailable) return;
   invalidateLoads();
   const generation = state.generation;
   state.continuing = true;
@@ -396,18 +596,18 @@ async function continueReview() {
   setWaiting('Der nächste Prüfschritt für denselben Lauf wird gestartet. Bitte warten …', true);
   try {
     const result = await invoke('continue_review_session');
-    if (state.closed || generation !== state.generation) return;
+    if ((state.closed || state.disconnected) || generation !== state.generation) return;
     if (result?.ok !== true) throw Error('review continuation not confirmed');
     setWaiting('Der nächste Prüfschritt läuft. Weitere Fundstellen erscheinen hier, sobald sie bereit sind.', true);
     state.continuationFailure = null;
   } catch (error) {
-    if (state.closed || generation !== state.generation) return;
+    if ((state.closed || state.disconnected) || generation !== state.generation) return;
     state.continuationFailure = safeFailureCode(error);
     setWaiting(reviewFailureMessage({ ...state.continuationSnapshot,
       error_code: state.continuationFailure, retry_available: false }));
   } finally {
     state.continuing = false;
-    if (!state.closed && generation === state.generation) {
+    if (!(state.closed || state.disconnected) && generation === state.generation) {
       el('continue-review').disabled = false;
       // A previous timer may have fired while the continuation was in flight.
       // Always replace it, including after an unconfirmed/failed start.
@@ -419,21 +619,98 @@ async function continueReview() {
 async function closeReviewWindow() {
   if (state.closed) return;
   invalidateLoads();
-  const closingMessage = state.draft ? 'Das Prüffenster wird geschlossen.' : el('waiting-text').textContent;
+  const closingMessage = state.draft ? 'Die Prüfung wird verlassen.' : el('waiting-text').textContent;
   clearDraft();
   setWaiting(closingMessage);
+  state.uncertainAnswer = null;
   state.closed = true;
   try { await invoke('close_review_window'); }
   catch {
     state.closed = false;
-    setWaiting('Das Fenster konnte nicht automatisch geschlossen werden. Bitte über das X in der Titelleiste schließen. Der Lauf bleibt sicher gespeichert.');
+    setWaiting(embedded ? 'Die Prüfung konnte nicht verlassen werden. Bitte erneut versuchen; der Lauf bleibt lokal gespeichert.' : 'Das Fenster konnte nicht automatisch geschlossen werden. Bitte über das X in der Titelleiste schließen. Der Lauf bleibt sicher gespeichert.');
     schedulePoll();
   }
 }
 
-el('redact').addEventListener('click', () => decide('redact'));
-el('redact-organization').addEventListener('click', () => decide('redact_organization'));
-el('keep').addEventListener('click', () => decide('keep'));
+function changeContact(id, value, selectionStart, selectionEnd) {
+  if (!state.draft || state.waiting || state.draft.ocr_contact_review !== true || !state.rowById.has(id)) return;
+  const reopenFiltered = el('matrix-filter').value === 'done';
+  state.inputs.set(id, value); state.choices.delete(id);
+  state.cursor = state.candidateIndex.get(id);
+  if (reopenFiltered) {
+    // Do not leave an edited, now-open row selected under the "Vorgemerkt"
+    // filter, nor remove the input from beneath the user's typing cursor.
+    el('matrix-filter').value = 'all'; state.selected.clear();
+    state.page = Math.floor(filteredRows().findIndex(row => row.id === id) / PAGE_SIZE);
+    render();
+    const input = [...el('matrix-body').querySelectorAll('input[data-action="correction"]')].find(item => item.dataset.row === id);
+    input?.focus();
+    if (typeof input?.setSelectionRange === 'function' && Number.isInteger(selectionStart) && Number.isInteger(selectionEnd)) {
+      input.setSelectionRange(selectionStart, selectionEnd);
+    }
+    el('matrix-message').textContent = 'Bearbeitete Zeile ist wieder offen. Ansicht auf „Alle“ gewechselt und Checkboxauswahl aufgehoben; Eingaben bleiben erhalten.';
+    return;
+  }
+  render(false);
+  for (const item of el('matrix-body').querySelectorAll('[data-row]')) {
+    if (item.dataset.action === 'row') item.dataset.active = String(item.dataset.row === id);
+    if (item.dataset.row !== id) continue;
+    if (item.dataset.action === 'status') { item.textContent = value ? 'Eingabe – noch offen' : 'Offen'; item.dataset.done = 'false'; }
+  }
+  updateBulk();
+}
+el('matrix-body').addEventListener('click', event => {
+  const target = event.target.closest('[data-action="details"]');
+  const row = target && state.rowById.get(target.dataset.row);
+  if (!row) return;
+  state.cursor = state.candidateIndex.get(row.id); render(); el('exact-text').focus();
+});
+el('matrix-body').addEventListener('change', event => {
+  const target = event.target, row = state.rowById.get(target.dataset.row);
+  if (!row) return;
+  if (target.dataset.action === 'select') {
+    target.checked ? state.selected.add(row.id) : state.selected.delete(row.id);
+    updateBulk();
+  }
+});
+el('matrix-body').addEventListener('input', event => {
+  if (event.target.dataset.action === 'correction') changeContact(event.target.dataset.row, event.target.value, event.target.selectionStart, event.target.selectionEnd);
+});
+el('occurrence').addEventListener('change', event => {
+  const index = state.candidateIndex.get(event.target.value);
+  if (index === undefined) return;
+  state.cursor = index; render(); el('occurrence').focus();
+});
+for (const id of ['matrix-search', 'matrix-filter', 'matrix-type']) el(id).addEventListener(id === 'matrix-search' ? 'input' : 'change', () => {
+  const selected = state.selected.size;
+  state.selected.clear(); state.page = 0; render();
+  el('matrix-message').textContent = selected ? 'Ansicht geändert; die Checkboxauswahl wurde aufgehoben. Eingaben und vorgemerkte Entscheidungen bleiben erhalten.' : '';
+});
+el('select-visible').addEventListener('change', event => {
+  const rows = visibleRows();
+  for (const row of rows) event.target.checked ? state.selected.add(row.id) : state.selected.delete(row.id);
+  renderTable();
+});
+el('select-filtered').addEventListener('click', () => {
+  if (!state.draft || state.waiting || state.closed || state.disconnected) return;
+  state.selected = new Set(filteredRows().map(row => row.id)); renderTable();
+  el('matrix-message').textContent = `${state.selected.size} Zeilen über alle Seiten dieses Filters ausgewählt. Noch nichts vorgemerkt oder übergeben; bitte Behandlung wählen und anwenden.`;
+});
+el('clear-selection').addEventListener('click', () => { state.selected.clear(); renderTable(); });
+for (const [id, delta] of [['matrix-prev', -1], ['matrix-next', 1]]) el(id).addEventListener('click', () => {
+  state.page += delta; render();
+  el('matrix-message').textContent = `Seite gewechselt. ${state.selected.size} Zeilen bleiben über die Seiten hinweg angehakt. Eingaben und vorgemerkte Entscheidungen bleiben erhalten.`;
+});
+el('bulk-treatment').addEventListener('change', updateBulk);
+el('bulk-apply').addEventListener('click', () => bulkDecision(el('bulk-treatment').value));
+for (const [id, delta] of [['finding-prev', -1], ['finding-next', 1]]) el(id).addEventListener('click', () => {
+  if (!state.draft) return;
+  const rows = filteredRows(), index = rows.findIndex(row => row.ids.includes(state.draft.ambiguities[state.cursor].ambiguity_id));
+  const next = Math.max(0, Math.min(rows.length - 1, index + delta));
+  if (!rows[next]) return;
+  state.cursor = state.candidateIndex.get(rows[next].id); state.page = Math.floor(next / PAGE_SIZE);
+  render(); el(id).focus();
+});
 el('undo').addEventListener('click', undo);
 el('defer').addEventListener('click', () => sendAnswer({ action: 'deferred' }));
 el('release').addEventListener('click', () => {
@@ -446,5 +723,10 @@ el('release').addEventListener('click', () => {
 el('retry').addEventListener('click', poll);
 el('continue-review').addEventListener('click', continueReview);
 el('close-review').addEventListener('click', closeReviewWindow);
+window.__TAURI__?.event?.listen('datasecure-connection', event => {
+  if (event.payload?.state !== 'recovering') return;
+  invalidateLoads(); clearDraft(); state.disconnected = true;
+  setWaiting('Die lokale Verbindung wurde unterbrochen. Nicht übergebene Entscheidungen wurden verworfen. Bitte dieses Prüffenster schließen und den Lauf in der Hauptansicht erneut öffnen.');
+})?.catch(() => {});
 setWaiting('Die lokale Verarbeitung bereitet die Fundstellen vor. Bitte dieses Fenster offen lassen.', true);
 poll();

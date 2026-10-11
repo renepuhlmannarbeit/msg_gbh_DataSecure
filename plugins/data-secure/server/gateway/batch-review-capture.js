@@ -29,6 +29,10 @@ function createBatchReviewCapture(options = {}) {
                 sourceLabel: item.source_label, originalText: input.original_text }));
               const stored = contactStore.read(state, item, input);
               if (stored !== null) return stored;
+              if (deps.captureOcrInput === true) {
+                captured = { ocr_contact_input: input };
+                throw localReviewError('BATCH_REVIEW_CAPTURED', 'Lokaler OCR-Entwurf erfasst.');
+              }
               if (typeof deps.reviewTextLocally !== 'function') throw localReviewError(
                 'LOCAL_REVIEW_DEFERRED', 'OCR-Kontaktwerte benötigen das lokale Standalone-Prüffenster.');
               const { buildContactDraft, validateContactAnswer } = require('../core/ocr-contact-review');
@@ -47,6 +51,7 @@ function createBatchReviewCapture(options = {}) {
       if (error?.code !== 'BATCH_REVIEW_CAPTURED') throw error;
       captureStoppedPipeline = true;
     }
+    if (captureStoppedPipeline && captured?.ocr_contact_input) return captured;
     if (!captureStoppedPipeline || !captured ||
         !Array.isArray(captured.ambiguities) ||
         (captured.ambiguities.length === 0 && (state.product_channel !== 'standalone' ||

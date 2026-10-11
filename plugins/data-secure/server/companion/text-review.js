@@ -176,8 +176,9 @@ function buildReviewDraft(originalText, anonymizedText, profile, ambiguities = [
 // A batch review is intentionally an in-memory adapter around the established
 // single-text review schema. The journal stores neither this draft nor its
 // `entries` map: callers recreate it from sealed source copies for the one
-// local UI process. Anonymous "Dokument N" separators keep local file names
-// out of the UI payload as well as out of any eventual MCP response.
+// local UI process. Anonymous "Dokument N" separators remain the default;
+// Standalone alone can attach validated private source labels for its review
+// window. Neither labels nor source text enter an eventual MCP response.
 function buildBatchReviewDraft(documents, progress = {}) {
   if (!Array.isArray(documents) || documents.length < 1 || documents.length > LIMITS.MAX_BATCH_FILES) {
     throw new SafeError('Der lokale Stapelreview enthält keine zulässige Anzahl von Dokumenten.');
@@ -266,6 +267,13 @@ function buildBatchReviewDraft(documents, progress = {}) {
   if (draft.allow_organization_review === true) draft.batch_review.documents = entries.map(entry => ({
     document_index: entry.document_index, candidate_ids: [...entry.candidate_ids.keys()]
   }));
+  if (Object.hasOwn(progress, 'privateSourceLabels')) {
+    const labels = progress.privateSourceLabels;
+    if (draft.allow_organization_review !== true || !Array.isArray(labels) || labels.length !== entries.length ||
+        labels.some(label => typeof label !== 'string' || !label || label.length > 2048 || /[\p{Cc}\p{Cf}\p{Cs}]/u.test(label)))
+      throw new SafeError('Ungültige private Standalone-Dokumentzuordnung.');
+    draft.batch_review.documents.forEach((entry, index) => { entry.source_label = labels[index]; });
+  }
   return { draft, entries };
 }
 
@@ -312,7 +320,8 @@ function resolveBatchReviewResult(bundle, value) {
 async function reviewBatchTextLocally(documents, options = {}) {
   const bundle = buildBatchReviewDraft(documents, {
     allowDefer: options.allowDefer === true,
-    ...(options.batchSummary || {})
+    ...(options.batchSummary || {}),
+    ...(options.privateSourceLabels ? { privateSourceLabels: options.privateSourceLabels } : {})
   });
   const reviewer = options.reviewTextLocally || reviewTextLocally;
   const answer = await reviewer(bundle.draft, options);

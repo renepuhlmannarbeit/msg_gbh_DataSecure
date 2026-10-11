@@ -7,7 +7,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const identityLedger = require('./identity-ledger');
 const { SCHEMA, failure, validateBatchId, historyProgress, validSummary, summarizeState,
-  readStandaloneSummaries, recordStandaloneState, recordStandaloneExport, boundRun } = require('../gateway/standalone-history-store');
+  readStandaloneSummaries, recordStandaloneState, recordStandaloneExport, boundRun, inspectBoundRun } = require('../gateway/standalone-history-store');
 
 const MAPPING = 'DataSecure-Zuordnung.csv';
 function safeLocalLabel(name) {
@@ -17,7 +17,7 @@ function safeLocalLabel(name) {
 }
 function problemItems(state) {
   return (state?.items || []).filter(item => item.status === 'stopped' ||
-    item.status === 'preflight_mapping_pending' || item.status === 'retryable');
+    item.status === 'preflight_mapping_pending' || item.status === 'mapping_pending' || item.status === 'retryable');
 }
 function regularFile(file) {
   try { const stat = fs.lstatSync(file); return stat.isFile() && !stat.isSymbolicLink(); }
@@ -63,7 +63,9 @@ function createRunHistory(deps) {
       .slice(0, 20).map((summary) => {
         const state = current.get(summary.batch_id);
         const savedExport = exports.get(summary.export_id);
-        const bound = savedExport?.complete === true ? boundRun(summary.export_id, savedExport.run_directory) : '';
+        const location = summary.result_count === 0 || savedExport?.complete !== true ? { availability: 'not_created' }
+          : inspectBoundRun(summary.export_id, savedExport.run_directory);
+        const bound = location.path || '';
         // A visible result action is meaningful only when at least one result
         // exists. Old all-stopped runs may still contain a historical report
         // file, but it must not be exposed as a result or mapping action.
@@ -73,7 +75,8 @@ function createRunHistory(deps) {
         const processing = Boolean(state && deps.liveExecutor(state));
         const canResume = !processing && !summary.complete && resumable.has(summary.batch_id);
         const reviewReady = state && historyProgress(state).batch_phase === 'awaiting_local_review';
-        const status = processing ? 'processing' : canResume ? (reviewReady ? 'review_required' : 'stopped') :
+        const pause = state && deps.pauseProgress?.(state);
+        const status = pause?.paused === true ? 'paused' : processing ? 'processing' : canResume ? (reviewReady ? 'review_required' : 'stopped') :
           summary.complete
             ? (summary.result_count === 0
                 ? 'completed_without_results'
@@ -88,7 +91,8 @@ function createRunHistory(deps) {
         const identityWarning = identityEligible && !readableIdentity ? 'STANDALONE_IDENTITY_MAPPING_MISSING' :
           capturedIdentity?.available && !capturedIdentity.complete ? 'STANDALONE_IDENTITY_MAPPING_INVALID' :
             readableIdentity && run && !identityLedger.publicationAvailable(summary.batch_id, run) ? 'STANDALONE_IDENTITY_PUBLICATION_FAILED' : null;
-        return { ...fields, status, results_available: Boolean(run), ledger_available: ledger,
+        return { ...fields, status, result_location: location.availability, results_available: Boolean(run), ledger_available: ledger,
+          ...(pause?.pause_requested === true ? { pause_requested: true } : {}),
           ...(problems !== summary.failed_count ? { problem_count: problems } : {}),
           identity_mapping_available: Boolean(readableIdentity || capturedIdentity?.available),
           ...(identityWarning ? { identity_mapping_warning: identityWarning } : {}),
@@ -139,20 +143,37 @@ function createRunHistory(deps) {
   }
   function failures(batchId) {
     const entry = find(batchId);
-    // Names are read on demand from the private journal, never persisted in
-    // the content-free history summary or diagnostic log. Older expired
-    // journals may therefore have counts but no longer have names.
+    // Names are read on demand, never from the content-free history summary
+    // or diagnostic log. V2 intake rejections also have durable private metadata
+    // and therefore survive expiry of the processing journal.
     const state = deps.readStates().find(candidate => candidate.token === batchId &&
       candidate.product_channel === 'standalone');
-    if (!state) return { ok: true, available: entry.failed_count === 0, total: entry.failed_count, files: [],
-      local_ui_only: true, external_disclosure: false };
+    if (!state) {
+      let rejected = [];
+      try {
+        const rows = deps.readRejectedInputs ? deps.readRejectedInputs(batchId)
+          : require('../gateway/standalone-document-review-store').createDocumentReviewStore().notProcessed(batchId);
+        if (!Array.isArray(rows) || rows.length > entry.selected_count || rows.length > 200 ||
+            new Set(rows.map(row => row.document_id)).size !== rows.length || rows.some(row =>
+              !/^[a-f0-9]{32}$/u.test(row.document_id) || !safeLocalLabel(row.name) ||
+              !/^[A-Z][A-Z0-9_]{2,63}$/u.test(row.reason_code))) throw failure('STANDALONE_HISTORY_INVALID');
+        rejected = rows.map(({ name, reason_code }) => ({ name, reason_code }));
+      } catch { /* unavailable evidence must not invent names or success */ }
+      // A preflight rejection is already a proven input failure while its
+      // technical mapping may not have become terminal before a crash/expiry.
+      // Never let an older summary counter erase that durable evidence.
+      const total = Math.max(entry.failed_count, rejected.length);
+      return { ok: true, available: rejected.length === total, total, files: rejected,
+        local_ui_only: true, external_disclosure: false };
+    }
     const stopped = problemItems(state);
     const files = stopped.slice(0, 200).map(item => ({
       name: item.source_label || item.name,
-      ...(item.local_mapping_exported === false || item.status === 'preflight_mapping_pending'
+      ...(item.local_mapping_exported === false || ['preflight_mapping_pending', 'mapping_pending'].includes(item.status)
         ? { stage: 'mapping_pending' } : item.status === 'retryable' ? { stage: 'retryable' } : {}),
       ...(typeof item.error_code === 'string' && /^[A-Z][A-Z0-9_]{2,63}$/u.test(item.error_code)
-        ? { reason_code: item.error_code } : {})
+        ? { reason_code: item.error_code } : ['preflight_mapping_pending', 'mapping_pending'].includes(item.status)
+          ? { reason_code: 'LOCAL_MAPPING_PENDING' } : {})
     })).filter(item => safeLocalLabel(item.name));
     // A stopped worker can leave later sources untouched. Show these separately
     // instead of pretending that every selected document failed to convert.

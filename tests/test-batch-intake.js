@@ -82,6 +82,7 @@ function fixture(options = {}) {
       fs.rmSync(work, { recursive: true, force: true });
     },
     publicProgress: (state) => ({ total: state.items.length }),
+    captureDocumentRun: options.captureDocumentRun,
     platform: 'win32',
     productChannel: options.productChannel
   });
@@ -560,6 +561,30 @@ test('Standalone intake binds its product channel into the durable journal', () 
     assert.strictEqual(state.output_naming_mode, 'neutral');
     assert.strictEqual(state.pseudonym_contract_version, 'batch-pseudonym/v2');
   } finally { item.cleanup(); }
+});
+test('v2 run metadata is captured after the durable journal and failures preserve sealed work and ownership', () => {
+  for (const failCapture of [false, true]) {
+    let item, captures = 0;
+    item = fixture({ productChannel: 'standalone', captureDocumentRun(state) {
+      captures++;
+      assert.deepStrictEqual(JSON.parse(fs.readFileSync(item.journal, 'utf8')), state);
+      assert.equal(fs.readdirSync(item.work).length, 1);
+      if (failCapture) throw new Error('private capture details');
+    } });
+    try {
+      const begin = () => item.begin([item.queueEntry()], { documentReview: true });
+      if (failCapture) {
+        assert.throws(begin, error => !/private capture details/u.test(error.message));
+        assert.equal(fs.existsSync(item.journal), true); assert.equal(fs.readdirSync(item.work).length, 1);
+        assert.equal(fs.existsSync(path.join(item.root, `${token}.intake`)), true);
+        assert.equal(item.events.includes('remove-work'), false);
+      } else {
+        assert.equal(begin().ok, true);
+        assert.equal(fs.existsSync(path.join(item.root, `${token}.intake`)), false);
+      }
+      assert.equal(captures, 1); assert.equal(fs.readFileSync(item.source, 'utf8'), 'sealed source');
+    } finally { item.cleanup(); }
+  }
 });
 
 test('an all-stopped admission creates a durable repair checkpoint without source copies', () => {

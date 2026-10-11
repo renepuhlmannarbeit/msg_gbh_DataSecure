@@ -1,0 +1,35 @@
+/* Shared v2 visual language. Bulk decisions retain their tested semantics. */
+:root{font-family:var(--font-sans);font-size:14px;color:var(--c-ink);background:var(--c-bg);line-height:var(--lh-body)}
+main{max-width:1180px;padding:28px 24px}h1{font-size:var(--fs-h1);letter-spacing:-.02em;font-weight:700}h2{font-size:var(--fs-h2);font-weight:600}.eyebrow{font-weight:600;font-size:12px;color:var(--c-primary)}
+header p:last-child,.note,.privacy,td small,caption,#matrix-count,.exact-label{color:var(--c-muted)}
+section#review,.waiting{border-color:var(--c-border);border-radius:var(--r-card);background:var(--c-surface);box-shadow:none;padding:24px}
+button{font-weight:600;color:var(--c-ink);border-color:var(--c-border-input);border-radius:var(--r-btn);background:var(--c-surface);padding:10px 14px}button:disabled{opacity:1;color:var(--c-muted);background:var(--c-surface-muted);cursor:default}button.primary{background:var(--c-primary);border-color:var(--c-primary);color:white}button.primary:disabled{background:var(--c-border);border-color:var(--c-border);color:var(--c-muted)}button:hover:not(:disabled){background:var(--c-primary-tint)}button.primary:hover:not(:disabled){background:var(--c-primary-hover)}
+input,select{border-color:var(--c-border-input);border-radius:var(--r-btn);background:var(--c-surface)}input[type=checkbox]{width:18px;height:18px;accent-color:var(--c-primary)}
+button:focus-visible,input:focus-visible,select:focus-visible,pre:focus-visible,.exact:focus-visible{outline:2px solid var(--c-primary);outline-offset:3px}
+.bulk-actions,th{background:var(--c-surface-muted);border-color:var(--c-border)}.bulk-actions{border-radius:var(--r-box);padding:14px}.bulk-actions select,td input[type=text]{background:white;color:var(--c-ink);border-color:var(--c-border-input)}
+.matrix-detail,.table-scroll,th,td,.finish{border-color:var(--c-border)}.matrix-layout{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px}.matrix-detail{padding-left:20px}.table-scroll{max-height:580px}.correction-column{width:40%}tr:hover{background:var(--c-surface-muted)}tr[data-active=true]{background:var(--c-primary-tint-2);box-shadow:inset 3px 0 var(--c-primary)}
+.status-badge{border-color:var(--c-border-input);color:var(--c-muted)}.status-badge[data-done=true]{background:var(--c-primary-tint);color:var(--c-primary);border-color:var(--c-primary-soft-border)}.progress,.work-indicator{color:var(--c-primary)}#matrix-message{color:var(--c-warn-ink)}
+.comparison{grid-template-columns:repeat(2,minmax(0,1fr))}.comparison>div,#contact-original{border-color:var(--c-border);border-radius:var(--r-box);background:var(--c-surface-text)}.exact{background:var(--c-warn-bg);border-color:var(--c-warn-line);font-size:16px;font-weight:600}.contact-image-scroll{border-radius:6px}pre{font-size:13px;line-height:1.65}.note,.privacy{font-size:13px}.finish{padding-top:20px;margin-top:20px}.preview-banner{color:var(--c-warn-ink);background:var(--c-warn-bg)}
+body.embedded{background:var(--c-surface)}body.embedded main{max-width:none;padding:20px}body.embedded header{display:none}body.embedded section#review,body.embedded .waiting{border:0;padding:0}body.embedded .privacy{margin-bottom:0}
+.matrix-detail{border-left:1px solid var(--c-border);border-top:0;padding:0 0 0 20px}
+button{white-space:nowrap}button:focus-visible,input:focus-visible,select:focus-visible,pre:focus-visible,.exact:focus-visible{outline-offset:2px}
+td button{white-space:normal}
+body.embedded .table-scroll{max-height:clamp(240px,48vh,580px)}
+body.embedded .privacy{display:none}
+.matrix-heading{display:flex;align-items:center;justify-content:space-between;gap:8px 20px;flex-wrap:wrap}#matrix-progress{display:none;font-size:12px;color:var(--c-muted);margin:0}body.embedded #matrix-progress{display:block}
+/* Leave room for the work, not repeated instructions. The complete document
+   label remains in the DOM/title and in the selected finding's comparison. */
+.matrix-heading h2{margin:0}.matrix-guide{margin:6px 0 0}.matrix-toolbar{margin:10px 0 8px}.bulk-actions{padding:8px 12px}.bulk-actions button,.bulk-actions select{padding:8px 10px}
+.row-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px}.row-meta small{flex:1 1 130px;min-width:0;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.row-meta .status-badge{flex:none}
+.matrix-selection{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;margin:8px 0}.matrix-selection .note{margin:0}.matrix-empty{padding:20px;background:var(--c-primary-tint);border:1px solid var(--c-primary-soft-border);border-radius:var(--r-box);color:var(--c-primary)}
+body.embedded #handoff-note{font-size:12px;margin:8px 0 0}body.embedded .matrix-pages{margin-top:8px}body.embedded .matrix-pages button{padding:8px 12px}
+body.embedded #matrix-message:empty{display:none}
+body.embedded .finish{position:sticky;bottom:0;background:var(--c-surface);z-index:2}
+/* Keep the actual selected value visible while comparing the text below it. */
+@media(min-width:901px){body.embedded #exact-text{position:sticky;top:3px;z-index:1}}
+@media(min-width:901px){body.embedded main{height:100dvh;display:flex;flex-direction:column}body.embedded #review{display:flex;flex-direction:column;flex:1;min-height:0}body.embedded .matrix-layout{flex:1;min-height:180px}body.embedded .matrix-list{display:flex;flex-direction:column;min-height:0}body.embedded .table-scroll{flex:1;min-height:120px;max-height:none}body.embedded .matrix-detail{min-height:0;overflow:auto;padding-right:8px}body.embedded #handoff-note{font-size:12px;margin:12px 0 0}body.embedded .finish{margin-top:12px;padding-top:12px;flex:none}}
+/* Short desktop windows scroll the header instead of crushing the comparison
+   and list to a fraction of a row. The explicit handoff stays reachable. */
+@media(min-width:901px) and (max-height:600px){body.embedded main{height:auto;min-height:100dvh}body.embedded .matrix-layout{flex:none;height:360px;min-height:360px}}
+@media(max-width:900px){.matrix-layout{grid-template-columns:1fr}.matrix-detail{padding:20px 0 0;border-left:0;border-top:1px solid var(--c-border)}.comparison{grid-template-columns:1fr 1fr}.table-scroll{max-height:360px}}
+@media(max-width:650px){main,body.embedded main{padding:16px}section#review,.waiting{padding:16px}.comparison{grid-template-columns:1fr}.correction-column{width:43%}}

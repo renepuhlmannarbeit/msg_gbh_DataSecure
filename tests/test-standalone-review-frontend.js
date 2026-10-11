@@ -8,16 +8,55 @@ const { buildReviewDraft } = require('../plugins/data-secure/server/companion/te
 
 const { testAsync, done, assert } = createSuite('Standalone review frontend');
 const source = fs.readFileSync(path.join(__dirname, '../apps/datasecure-standalone/frontend/review.js'), 'utf8');
+const html = fs.readFileSync(path.join(__dirname, '../apps/datasecure-standalone/frontend/review.html'), 'utf8');
+const elementIds = new Set([...html.matchAll(/id="([^"]+)"/gu)].map(match => match[1]));
+
+function selectAll(h) { h.callbacks.get('select-visible:change')({ target: { checked: true } }); }
+function showStaged(h) { h.element('matrix-filter').value = 'done'; h.callbacks.get('matrix-filter:change')(); }
+function applySelected(h, value) {
+  h.element('bulk-treatment').value = value;
+  h.callbacks.get('bulk-treatment:change')();
+  h.callbacks.get('bulk-apply')();
+}
+function applyCurrent(h, value) {
+  const row = h.element('matrix-body').children.find(row => row.dataset.active === 'true');
+  if (!row) throw Error('Current row is not visible');
+  h.callbacks.get('matrix-body:change')({ target: { dataset: { row: row.dataset.row, action: 'select' }, checked: true } });
+  applySelected(h, h.draft.ocr_contact_review ? value === 'redact' ? 'correct_contact' : 'confirm_contact' : value);
+}
+function editContact(h, value, index = 0) {
+  const id = h.draft.ambiguities[index].ambiguity_id;
+  const input = h.element('matrix-body').querySelectorAll('input[data-action="correction"]').find(input => input.dataset.row === id);
+  assert.ok(input, 'Only actual table correction inputs may be edited'); input.value = value;
+  h.callbacks.get('matrix-body:input')({ target: input });
+}
+function correctionValue(h, index = 0) {
+  return h.element('matrix-body').querySelectorAll('input[data-action="correction"]').find(input => input.dataset.row === h.draft.ambiguities[index].ambiguity_id)?.value;
+}
 
 function harness(sessions = null, allowOrganizationReview = false, singleFinding = false, options = {}) {
   const callbacks = new Map();
   const elements = new Map();
   const timers = [];
+  const createElement = (tag, id = '') => ({
+    tagName: tag, id, dataset: {}, children: [], value: '', hidden: false, disabled: false, textContent: '',
+    focus() { this.focused = true; },
+    append(...values) { this.children.push(...values); },
+    replaceChildren(...values) { this.children = values; },
+    setAttribute(name, value) { this[name] = value; },
+    querySelectorAll(selector) {
+      const descendants = this.children.flatMap(child => [child, ...child.querySelectorAll('*')]);
+      if (selector === '*') return descendants;
+      if (selector === 'select') return descendants.filter(child => child.tagName === 'select');
+      if (selector === '[data-row]') return descendants.filter(child => child.dataset.row !== undefined);
+      if (selector === 'input[data-action="correction"]') return descendants.filter(child => child.tagName === 'input' && child.dataset.action === 'correction');
+      throw Error(`Unsupported test selector: ${selector}`);
+    },
+    addEventListener(type, callback) { callbacks.set(type === 'click' ? id : `${id}:${type}`, callback); }
+  });
   const element = (id) => {
-    if (!elements.has(id)) elements.set(id, {
-      hidden: false, disabled: false, textContent: '', focus() { this.focused = true; },
-      addEventListener(_type, callback) { callbacks.set(id, callback); }
-    });
+    assert.ok(elementIds.has(id), `Unknown product element: ${id}`);
+    if (!elements.has(id)) elements.set(id, createElement('div', id));
     return elements.get(id);
   };
   const original = 'Denise Koch und Denise Koch.';
@@ -48,12 +87,13 @@ function harness(sessions = null, allowOrganizationReview = false, singleFinding
     calls.push({ command, args });
     return options.invoke ? options.invoke(command, args, normalInvoke) : normalInvoke(command, args);
   };
-  const window = { __TAURI__: { core: { invoke } },
+  const listeners = new Map();
+  const window = { __TAURI__: { core: { invoke }, event: { async listen(name, callback) { listeners.set(name, callback); return () => {}; } } },
     setTimeout(callback) { timers.push(callback); return callback; },
     clearTimeout(callback) { const index = timers.indexOf(callback); if (index >= 0) timers.splice(index, 1); } };
-  vm.runInNewContext(source, { window, document: { getElementById: element }, TextDecoder, atob },
+  vm.runInNewContext(source, { window, document: { getElementById: element, createElement }, TextDecoder, atob },
     { filename: 'review.js' });
-  return { element, callbacks, calls, draft, timers };
+  return { element, callbacks, calls, draft, timers, listeners };
 }
 
 testAsync('contact corrections and confirmations use distinct actions, preserve literal spelling and clear private input after submission', async () => {
@@ -65,30 +105,34 @@ testAsync('contact corrections and confirmations use distinct actions, preserve 
       contacts: [{ start: 8, end: original_text.length, line: 1, page: 2, kind: 'email' }] }));
   } });
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(h.element('contact-correction').hidden, false);
-  assert.equal(h.element('redact-organization').hidden, true);
+  assert.equal(h.element('correction-heading').hidden, false);
+  assert.equal(h.element('bulk-treatment').children.some(option => option.value === 'redact_organization'), false);
   assert.match(h.element('group-note').textContent, /Seite\/Bild 2.*Zeile 1/u);
-  h.element('contact-value').value = 'bad\n@new.invalid'; h.callbacks.get('redact')();
+  editContact(h, 'bad\n@new.invalid'); applyCurrent(h, 'redact');
   assert.equal(h.element('release').disabled, true);
-  assert.ok(h.element('contact-error').textContent);
-  h.element('contact-value').value = 'right@other.invalid'; h.callbacks.get('redact')();
+  assert.ok(h.element('matrix-message').textContent);
+  editContact(h, 'right@other.invalid'); applyCurrent(h, 'redact');
   assert.equal(h.element('release').disabled, false);
+  showStaged(h);
   assert.match(h.element('output-context').textContent, /right@other.invalid/u);
-  h.callbacks.get('undo')(); h.callbacks.get('keep')(); h.callbacks.get('release')();
+  h.callbacks.get('undo')(); editContact(h, ''); applyCurrent(h, 'keep'); h.callbacks.get('release')();
   await new Promise(resolve => setImmediate(resolve));
   const submitted = h.calls.find(call => call.command === 'submit_review');
   assert.equal(submitted.args.answer.decisions[0].decision, 'confirm_contact');
   assert.ok(!Object.hasOwn(submitted.args.answer.decisions[0], 'replacement'));
-  assert.equal(h.element('contact-value').value, '');
+  assert.equal(h.element('matrix-body').children.length, 0);
 });
 
 testAsync('the exact current finding is named and one person decision covers every identical occurrence', async () => {
   const h = harness();
   await new Promise((resolve) => setImmediate(resolve));
+  assert.strictEqual(h.element('matrix-title').focused, true);
+  assert.notStrictEqual(h.element('exact-text').focused, true);
+  assert.match(html, /id="matrix-title" tabindex="-1"/u);
   assert.strictEqual(h.element('exact-text').textContent, 'Denise Koch');
   assert.match(h.element('group-note').textContent, /2 nachweislich gleiche Fundstellen/u);
   assert.strictEqual(h.element('release').disabled, true);
-  h.callbacks.get('redact')();
+  applyCurrent(h, 'redact');
   assert.strictEqual(h.element('release').disabled, false);
   h.callbacks.get('release')();
   await new Promise((resolve) => setImmediate(resolve));
@@ -119,7 +163,7 @@ testAsync('private contact raster is displayed only for its current draft and cl
   assert.match(h.element('group-note').textContent, /nicht anonymisiert/u);
   await h.callbacks.get('close-review')();
   assert.equal(h.element('contact-image').src, '');
-  assert.equal(h.element('contact-value').value, '');
+  assert.equal(h.element('matrix-body').children.length, 0);
   assert.equal(h.element('source-context').textContent, '');
 });
 
@@ -130,19 +174,20 @@ testAsync('successive review groups stay in one window and only final completion
     { ready: false, run_complete: true }
   ]);
   await new Promise((resolve) => setImmediate(resolve));
-  h.callbacks.get('redact')();
+  applyCurrent(h, 'redact');
   h.callbacks.get('release')();
   await new Promise((resolve) => setImmediate(resolve));
   assert.strictEqual(h.calls.filter((call) => call.command === 'close_review_window').length, 0);
   await h.timers.shift()();
   assert.strictEqual(h.element('review').hidden, false);
   assert.strictEqual(h.calls.filter((call) => call.command === 'close_review_window').length, 0);
-  h.callbacks.get('redact')();
+  applyCurrent(h, 'redact');
   h.callbacks.get('release')();
   await new Promise((resolve) => setImmediate(resolve));
   await h.timers.shift()();
   assert.strictEqual(h.calls.filter((call) => call.command === 'close_review_window').length, 1);
-  assert.match(h.element('waiting-text').textContent, /Lauf ist abgeschlossen/u);
+  assert.match(h.element('waiting-text').textContent, /Fundstellenprüfung ist abgeschlossen.*Freigabestatus/u);
+  assert.doesNotMatch(h.element('waiting-text').textContent, /Der Lauf ist abgeschlossen/u);
 });
 
 testAsync('a single finding explains run-wide reuse without a contradictory only-this-finding claim', async () => {
@@ -156,16 +201,16 @@ testAsync('a single finding explains run-wide reuse without a contradictory only
 testAsync('an explicit company choice covers the group, shows its typed preview and can be undone', async () => {
   const h = harness(null, true);
   await new Promise((resolve) => setImmediate(resolve));
-  assert.strictEqual(h.element('redact-organization').hidden, false);
-  assert.strictEqual(h.element('keep').textContent, 'Beibehalten');
+  assert.equal(h.element('bulk-treatment').children.some(option => option.value === 'redact_organization'), true);
   assert.match(h.element('group-note').textContent, /offenen und folgenden Prüfungen/u);
-  h.callbacks.get('redact-organization')();
+  applyCurrent(h, 'redact_organization');
+  showStaged(h);
   assert.match(h.element('output-context').textContent, /\[UNTERNEHMEN_…\]/u);
   assert.strictEqual(h.element('release').disabled, false);
   h.callbacks.get('undo')();
   assert.strictEqual(h.element('release').disabled, true);
   assert.ok(!h.element('output-context').textContent.includes('[UNTERNEHMEN_…]'));
-  h.callbacks.get('redact-organization')();
+  applyCurrent(h, 'redact_organization');
   h.callbacks.get('release')();
   await new Promise((resolve) => setImmediate(resolve));
   const answer = h.calls.find((call) => call.command === 'submit_review').args.answer;
@@ -176,8 +221,8 @@ testAsync('an explicit company choice covers the group, shows its typed preview 
 testAsync('old drafts do not silently gain organization decisions', async () => {
   const h = harness();
   await new Promise((resolve) => setImmediate(resolve));
-  assert.strictEqual(h.element('redact-organization').hidden, true);
-  h.callbacks.get('redact-organization')();
+  assert.equal(h.element('bulk-treatment').children.some(option => option.value === 'redact_organization'), false);
+  applyCurrent(h, 'redact_organization');
   assert.strictEqual(h.element('release').disabled, true);
 });
 
@@ -190,7 +235,7 @@ testAsync('a later review wave can be started and decided inside the same open w
     { ready: false, run_complete: true, continuation_available: false }
   ]);
   await new Promise((resolve) => setImmediate(resolve));
-  h.callbacks.get('redact')();
+  applyCurrent(h, 'redact');
   h.callbacks.get('release')();
   await new Promise((resolve) => setImmediate(resolve));
   await h.timers.shift()();
@@ -209,7 +254,7 @@ testAsync('a later review wave can be started and decided inside the same open w
   assert.strictEqual(h.element('review').hidden, false);
   assert.strictEqual(h.element('continue-review').hidden, true);
   assert.strictEqual(h.calls.filter((call) => call.command === 'close_review_window').length, 0);
-  h.callbacks.get('keep')();
+  applyCurrent(h, 'keep');
   h.callbacks.get('release')();
   await new Promise((resolve) => setImmediate(resolve));
   await h.timers.shift()();
@@ -312,7 +357,7 @@ testAsync('overlapping status clicks cannot load a stale draft after an accepted
   assert.equal(h.calls.filter((call) => call.command === 'get_review_chunk').length, 1);
   finishChunk();
   await new Promise((resolve) => setImmediate(resolve));
-  h.callbacks.get('keep')(); h.callbacks.get('release')();
+  applyCurrent(h, 'keep'); h.callbacks.get('release')();
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(h.element('exact-text').textContent, '');
   await h.timers.shift()();
@@ -388,7 +433,7 @@ testAsync('a lost answer acknowledgement reconciles publication without claiming
     return normal(command, args);
   } });
   await new Promise((resolve) => setImmediate(resolve));
-  h.callbacks.get('keep')(); h.callbacks.get('release')();
+  applyCurrent(h, 'keep'); h.callbacks.get('release')();
   await new Promise((resolve) => setImmediate(resolve));
   assert.match(h.element('waiting-text').textContent, /Bestätigung.*unklar/u);
   assert.doesNotMatch(h.element('summary').textContent, /nichts freigegeben/u);
@@ -405,7 +450,7 @@ testAsync('an unaccepted answer returns to the same draft with choices but never
     return normal(command, args);
   } });
   await new Promise((resolve) => setImmediate(resolve));
-  h.callbacks.get('keep')(); h.callbacks.get('release')();
+  applyCurrent(h, 'keep'); h.callbacks.get('release')();
   await new Promise((resolve) => setImmediate(resolve));
   assert.equal(h.element('review').hidden, false);
   assert.equal(h.element('release').disabled, false);
@@ -422,7 +467,7 @@ testAsync('a failed status lookup after uncertain submission retains uncertainty
     return normal(command, args);
   } });
   await new Promise((resolve) => setImmediate(resolve));
-  h.callbacks.get('keep')(); h.callbacks.get('release')();
+  applyCurrent(h, 'keep'); h.callbacks.get('release')();
   await new Promise((resolve) => setImmediate(resolve));
   assert.match(h.element('waiting-text').textContent, /Bereits geprüfte Ergebnisse können verfügbar sein/u);
   assert.doesNotMatch(h.element('waiting-text').textContent, /private vendor|nichts freigegeben/u);
@@ -438,7 +483,7 @@ testAsync('document position uses opaque backend IDs, never separators present i
     ] };
   } });
   await new Promise(resolve => setImmediate(resolve));
-  assert.equal(h.element('document-position').textContent, 'Dokument 1 von 2');
+  assert.match(h.element('document-position').textContent, /Dokument 1 von 2/u);
 });
 testAsync('missing duplicate or unknown document metadata rejects the draft before any decision', async () => {
   for (const kind of ['missing', 'duplicate', 'unknown']) {
@@ -454,4 +499,318 @@ testAsync('missing duplicate or unknown document metadata rejects the draft befo
     assert.equal(h.calls.some(call => call.command === 'submit_review'), false);
   }
 });
+testAsync('matrix groups proven entities, offers every occurrence context, and never preselects or decides a checkbox', async () => {
+  const h = harness(null, true, false, { modifyDraft(draft) {
+    draft.batch_review = { document_count: 2, documents: draft.ambiguities.map((item, index) => ({
+      document_index: index + 1, source_label: `file-${index + 1}.pdf`, candidate_ids: [item.ambiguity_id] })) };
+  } });
+  await new Promise(resolve => setImmediate(resolve));
+  const rows = h.element('matrix-body').children;
+  assert.equal(rows.length, 1); assert.equal(rows[0].children[0].children[0].checked, false);
+  assert.equal(h.element('occurrence').children.length, 2);
+  h.element('occurrence').value = h.draft.ambiguities[1].ambiguity_id;
+  h.callbacks.get('occurrence:change')({ target: h.element('occurrence') });
+  assert.match(h.element('document-position').textContent, /file-2.pdf/u);
+  selectAll(h);
+  assert.equal(h.element('release').disabled, true);
+  applySelected(h, 'redact_organization');
+  assert.equal(h.element('release').disabled, false);
+  showStaged(h);
+  assert.match(h.element('output-context').textContent, /\[UNTERNEHMEN_…\].*\[UNTERNEHMEN_…\]/u);
+  h.callbacks.get('undo')(); assert.equal(h.element('release').disabled, true);
+});
+
+testAsync('matrix keeps identical OCR readings separate with live individual corrections and requires re-confirmation after edits', async () => {
+  const { buildContactBatch } = require('../plugins/data-secure/server/gateway/ocr-contact-batch');
+  const h = harness(null, false, true, { modifyDraft(draft) {
+    for (const key of Object.keys(draft)) delete draft[key];
+    Object.assign(draft, buildContactBatch(['one.png', 'two.png'].map(source_label => ({ source_label,
+      input: { original_text: 'same@wrong.invalid', source_type: 'png',
+        contacts: [{ start: 0, end: 18, page: 1, line: 1, kind: 'email' }] } }))).draft);
+  } });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.element('matrix-body').children.length, 2);
+  h.element('matrix-filter').value = 'all'; h.callbacks.get('matrix-filter:change')();
+  for (const [index, replacement] of ['first@new.invalid', 'second@new.invalid'].entries()) {
+    const id = h.draft.ambiguities[index].ambiguity_id;
+    editContact(h, replacement, index);
+    assert.ok(h.element('output-context').textContent.includes(replacement));
+    h.callbacks.get('matrix-body:change')({ target: { dataset: { row: id, action: 'select' }, checked: true } });
+  }
+  assert.equal(h.element('release').disabled, true, 'Typing and selection alone cannot decide');
+  applySelected(h, 'correct_contact');
+  assert.equal(h.element('release').disabled, false);
+  editContact(h, 'changed@new.invalid', 1);
+  assert.equal(h.element('release').disabled, true);
+  applyCurrent(h, 'redact'); h.callbacks.get('release')();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(Array.from(h.calls.find(call => call.command === 'submit_review').args.answer.decisions, item => item.replacement),
+    ['first@new.invalid', 'changed@new.invalid']);
+  assert.equal(h.element('matrix-body').children.length, 0);
+  assert.equal(h.element('occurrence').children.length, 0);
+  assert.equal(h.element('matrix-search').value, '');
+});
+
+testAsync('Undo restores the same OCR value in editor, preview and submitted answer after an intervening edit', async () => {
+  const { buildContactDraft } = require('../plugins/data-secure/server/core/ocr-contact-review');
+  const h = harness(null, false, true, { modifyDraft(draft) {
+    for (const key of Object.keys(draft)) delete draft[key];
+    Object.assign(draft, buildContactDraft({ original_text: 'same@wrong.invalid', source_type: 'png',
+      contacts: [{ start: 0, end: 18, page: 1, line: 1, kind: 'email' }] }));
+  } });
+  await new Promise(resolve => setImmediate(resolve));
+  editContact(h, 'first@new.invalid'); applyCurrent(h, 'redact');
+  showStaged(h);
+  applySelected(h, 'reset'); // no selected rows: no action
+  h.callbacks.get('matrix-body:change')({ target: { dataset: { row: h.draft.ambiguities[0].ambiguity_id, action: 'select' }, checked: true } });
+  applySelected(h, 'reset');
+  h.element('matrix-filter').value = 'open'; h.callbacks.get('matrix-filter:change')();
+  editContact(h, 'second@new.invalid');
+  h.callbacks.get('undo')();
+  showStaged(h);
+  assert.equal(correctionValue(h), 'first@new.invalid');
+  assert.equal(h.element('output-context').textContent, 'first@new.invalid');
+  assert.equal(h.element('release').disabled, false);
+  h.callbacks.get('release')(); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.calls.find(call => call.command === 'submit_review').args.answer.decisions[0].replacement, 'first@new.invalid');
+});
+
+testAsync('individually correcting a selected OCR row cannot leave a hidden bulk-confirmation that overwrites it', async () => {
+  const { buildContactDraft } = require('../plugins/data-secure/server/core/ocr-contact-review');
+  const h = harness(null, false, true, { modifyDraft(draft) {
+    for (const key of Object.keys(draft)) delete draft[key];
+    Object.assign(draft, buildContactDraft({ original_text: 'same@wrong.invalid', source_type: 'png',
+      contacts: [{ start: 0, end: 18, page: 1, line: 1, kind: 'email' }] }));
+  } });
+  await new Promise(resolve => setImmediate(resolve));
+  selectAll(h);
+  editContact(h, 'correct@new.invalid'); applyCurrent(h, 'redact');
+  assert.equal(h.element('matrix-body').children.length, 0, 'Staged rows leave the open-first view without losing the decision');
+  assert.equal(h.element('bulk-apply').disabled, true);
+  applySelected(h, 'confirm_contact'); h.callbacks.get('release')();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.calls.find(call => call.command === 'submit_review').args.answer.decisions[0].replacement, 'correct@new.invalid');
+});
+
+testAsync('5,000 singleton findings render only 50 rows; paging preserves selection and filtering clears it', async () => {
+  const h = harness(null, true, true, { modifyDraft(draft) {
+    draft.original_text = draft.anonymized_text = 'Acme\n'.repeat(5000);
+    draft.decision_groups = [];
+    draft.ambiguities = Array.from({ length: 5000 }, (_, index) => ({ ambiguity_id: `credential:v2:${index}`,
+      type: 'credential_issuer_ambiguous', original_start: index * 5, original_end: index * 5 + 4,
+      anonymized_start: index * 5, anonymized_end: index * 5 + 4 }));
+  } });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.element('matrix-body').children.length, 50);
+  selectAll(h); h.element('bulk-treatment').value = 'keep'; h.callbacks.get('bulk-treatment:change')();
+  assert.equal(h.element('bulk-apply').disabled, false);
+  assert.equal(h.element('bulk-treatment').children.find(option => option.value === 'redact_organization').disabled, true, 'issuer rows cannot silently become companies');
+  h.callbacks.get('matrix-next')(); assert.equal(h.element('bulk-apply').disabled, false);
+  assert.equal(h.element('select-visible').checked, false, 'Only the first page is selected');
+  assert.equal(h.element('select-visible').indeterminate, false, 'Off-page selection is not a mixed checkbox on this page');
+  assert.equal(h.element('matrix-body').children.length, 50);
+  selectAll(h); h.element('matrix-search').value = 'not present';
+  h.callbacks.get('matrix-search:input')(); assert.equal(h.element('bulk-apply').disabled, true);
+  assert.equal(h.element('matrix-body').children.length, 0);
+});
+
+testAsync('checkboxes and treatment changes only prepare an action; Apply is the single decision entry point', async () => {
+  const h = harness(null, true);
+  await new Promise(resolve => setImmediate(resolve));
+  selectAll(h);
+  assert.equal(h.element('select-visible').checked, true);
+  h.element('bulk-treatment').value = 'keep'; h.callbacks.get('bulk-treatment:change')();
+  assert.equal(h.element('release').disabled, true);
+  assert.match(h.element('summary').textContent, /^0 von/u);
+  assert.match(h.element('matrix-progress').textContent, /^0 von .* offen$/u);
+  assert.equal(h.calls.some(call => call.command === 'submit_review'), false);
+  assert.equal(h.element('matrix-body').querySelectorAll('select').length, 0);
+  const metadata = h.element('matrix-body').children[0].children[1].children[1];
+  assert.equal(metadata.className, 'row-meta');
+  assert.equal(metadata.children[0].title, metadata.children[0].textContent, 'Compact metadata retains its complete document label');
+  assert.equal(metadata.children[1].textContent, 'Offen', 'The status stays beside the document, not in a repeated action column');
+  for (const obsolete of ['redact', 'keep', 'contact-value', 'bulk-keep']) assert.ok(!elementIds.has(obsolete));
+  h.callbacks.get('bulk-apply')();
+  assert.equal(h.element('release').disabled, false);
+  assert.equal(h.element('matrix-body').children.length, 0, 'Open-first view removes staged rows');
+  assert.equal(h.element('matrix-detail').hidden, true, 'An empty open view cannot display stale original or output context');
+  assert.equal(h.element('output-context').textContent, '');
+  assert.match(h.element('summary').textContent, /vorgemerkt.*Noch nicht übergeben/u);
+  assert.match(h.element('matrix-progress').textContent, /vorgemerkt · 0 offen$/u);
+  assert.equal(h.calls.some(call => call.command === 'submit_review'), false);
+});
+
+function twoContactHarness() {
+  const { buildContactBatch } = require('../plugins/data-secure/server/gateway/ocr-contact-batch');
+  return harness(null, false, true, { modifyDraft(draft) {
+    for (const key of Object.keys(draft)) delete draft[key];
+    Object.assign(draft, buildContactBatch(['one.png', 'two.png'].map(source_label => ({ source_label,
+      input: { original_text: 'same@wrong.invalid', source_type: 'png',
+        contacts: [{ start: 0, end: 18, page: 1, line: 1, kind: 'email' }] } }))).draft);
+  } });
+}
+
+function manyContactHarness() {
+  const { buildContactDraft } = require('../plugins/data-secure/server/core/ocr-contact-review');
+  return harness(null, false, true, { modifyDraft(draft) {
+    const values = Array.from({ length: 64 }, (_, index) => `qa${String(index).padStart(2, '0')}@quality.example.invalid`);
+    const original_text = values.join('\n');
+    let offset = 0;
+    const contacts = values.map((value, index) => {
+      const result = { start: offset, end: offset + value.length, page: 1, line: index + 1, kind: 'email' };
+      offset += value.length + 1; return result;
+    });
+    for (const key of Object.keys(draft)) delete draft[key];
+    Object.assign(draft, buildContactDraft({ original_text, source_type: 'png', processing_mode: 'markdown-only', contacts }));
+  } });
+}
+
+testAsync('open-first bulk review replaces 50 staged rows with the remaining 14 and explains the explicit final handoff', async () => {
+  const h = manyContactHarness(); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.element('matrix-filter').value, 'open');
+  selectAll(h); applySelected(h, 'confirm_contact');
+  assert.equal(h.element('matrix-body').children.length, 14);
+  assert.match(h.element('exact-text').textContent, /^qa50@/u, 'Comparison follows the first remaining open row');
+  assert.match(h.element('matrix-message').textContent, /14 .*offen/u);
+  assert.equal(h.element('release').disabled, true);
+  assert.equal(h.calls.some(call => call.command === 'submit_review'), false);
+  selectAll(h); applySelected(h, 'confirm_contact');
+  assert.equal(h.element('matrix-body').children.length, 0);
+  assert.match(h.element('matrix-empty').textContent, /Alle 64.*vorgemerkt.*Gruppe übergeben/u);
+  assert.equal(h.element('matrix-empty').hidden, false);
+  assert.equal(h.element('release').disabled, false);
+  assert.equal(h.element('release').focused, true);
+  assert.equal(h.calls.some(call => call.command === 'submit_review'), false, 'Completing the list never auto-submits');
+  h.element('matrix-filter').value = 'done'; h.callbacks.get('matrix-filter:change')();
+  assert.equal(h.element('matrix-body').children.length, 50, 'Staged decisions remain inspectable');
+  h.callbacks.get('undo')();
+  assert.equal(h.element('matrix-filter').value, 'open');
+  assert.equal(h.element('matrix-body').children.length, 14);
+  assert.equal(h.element('release').disabled, true);
+});
+
+testAsync('all filtered rows can be selected across pages without deciding; only Apply stages and explicit handoff submits all 64', async () => {
+  const h = manyContactHarness(); await new Promise(resolve => setImmediate(resolve));
+  h.callbacks.get('select-filtered')();
+  assert.match(h.element('matrix-count').textContent, /64 angehakt/u);
+  assert.match(h.element('summary').textContent, /^0 von/u);
+  h.callbacks.get('matrix-next')();
+  assert.match(h.element('matrix-count').textContent, /64 angehakt/u);
+  assert.equal(h.element('select-visible').checked, true);
+  applySelected(h, 'confirm_contact');
+  assert.equal(h.element('release').disabled, false);
+  assert.equal(h.calls.some(call => call.command === 'submit_review'), false);
+  h.callbacks.get('release')(); await new Promise(resolve => setImmediate(resolve));
+  const answer = h.calls.find(call => call.command === 'submit_review').args.answer;
+  assert.equal(answer.decisions.length, 64);
+  assert.ok(answer.decisions.every(item => item.decision === 'confirm_contact'));
+});
+
+testAsync('Undo of Reset shows restored staged rows and comparison instead of hiding all 64 behind the open filter', async () => {
+  const h = manyContactHarness(); await new Promise(resolve => setImmediate(resolve));
+  h.callbacks.get('select-filtered')(); applySelected(h, 'confirm_contact');
+  showStaged(h); h.callbacks.get('select-filtered')(); applySelected(h, 'reset');
+  assert.match(h.element('summary').textContent, /^0 von 64/u);
+  h.callbacks.get('undo')();
+  assert.equal(h.element('matrix-filter').value, 'done');
+  assert.equal(h.element('matrix-body').children.length, 50);
+  assert.equal(h.element('matrix-detail').hidden, false);
+  assert.match(h.element('exact-text').textContent, /^qa00@/u);
+  assert.match(h.element('matrix-message').textContent, /rückgängig.*64.*vorgemerkt.*0 offen/u);
+  assert.equal(h.element('release').disabled, false);
+  assert.equal(h.calls.some(call => call.command === 'submit_review'), false);
+});
+
+testAsync('Undo of a mixed Reset keeps both restored staged and open rows visible without hidden selection', async () => {
+  const h = manyContactHarness(); await new Promise(resolve => setImmediate(resolve));
+  selectAll(h); applySelected(h, 'confirm_contact');
+  h.element('matrix-filter').value = 'all'; h.callbacks.get('matrix-filter:change')();
+  h.callbacks.get('select-filtered')(); applySelected(h, 'reset');
+  h.callbacks.get('undo')();
+  assert.equal(h.element('matrix-filter').value, 'all');
+  assert.equal(h.element('matrix-body').children.length, 50);
+  assert.match(h.element('summary').textContent, /^50 von 64/u);
+  assert.match(h.element('matrix-count').textContent, /0 angehakt/u);
+  assert.match(h.element('matrix-message').textContent, /rückgängig.*50.*vorgemerkt.*14 offen/u);
+  assert.equal(h.element('release').disabled, true);
+  h.callbacks.get('matrix-next')();
+  assert.equal(h.element('matrix-body').children.length, 14);
+  assert.match(h.element('exact-text').textContent, /^qa50@/u);
+  assert.equal(h.calls.some(call => call.command === 'submit_review'), false);
+});
+
+testAsync('group-wide unchanged confirmation atomically rejects an edited off-page contact and filters never retain hidden selection', async () => {
+  const h = manyContactHarness(); await new Promise(resolve => setImmediate(resolve));
+  h.callbacks.get('matrix-next')(); editContact(h, 'correct@new.invalid', 63);
+  h.callbacks.get('matrix-prev')(); h.callbacks.get('select-filtered')();
+  applySelected(h, 'confirm_contact');
+  assert.match(h.element('matrix-message').textContent, /Nichts angewendet.*qa63@/u);
+  assert.match(h.element('summary').textContent, /^0 von/u);
+  assert.equal(h.element('release').disabled, true);
+  h.element('matrix-search').value = 'qa00@'; h.callbacks.get('matrix-search:input')();
+  assert.match(h.element('matrix-count').textContent, /0 angehakt/u);
+  h.callbacks.get('select-filtered')(); applySelected(h, 'confirm_contact');
+  assert.match(h.element('summary').textContent, /^1 von 64/u);
+  assert.match(h.element('matrix-empty').textContent, /Filter/u, 'No search matches is not a claim of complete review');
+  assert.equal(h.element('release').disabled, true);
+});
+
+testAsync('bulk validation is atomic and unchanged confirmation never discards pending corrections', async () => {
+  const h = twoContactHarness(); await new Promise(resolve => setImmediate(resolve));
+  editContact(h, 'first@new.invalid', 0); editContact(h, 'not an email', 1);
+  selectAll(h); applySelected(h, 'correct_contact');
+  assert.match(h.element('matrix-message').textContent, /Nichts angewendet.*two.png/u);
+  assert.match(h.element('summary').textContent, /^0 von/u);
+  applySelected(h, 'confirm_contact');
+  assert.match(h.element('matrix-message').textContent, /geänderte Eingabe/u);
+  assert.equal(correctionValue(h), 'first@new.invalid');
+  assert.equal(h.element('release').disabled, true);
+  editContact(h, 'second@new.invalid', 1); applySelected(h, 'correct_contact');
+  assert.equal(h.element('release').disabled, false);
+  h.callbacks.get('release')(); await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(Array.from(h.calls.find(call => call.command === 'submit_review').args.answer.decisions, item => item.replacement),
+    ['first@new.invalid', 'second@new.invalid']);
+});
+
+testAsync('editing a staged-filter row reopens it without hidden selection or losing the editor', async () => {
+  const h = twoContactHarness(); await new Promise(resolve => setImmediate(resolve));
+  selectAll(h); applySelected(h, 'confirm_contact');
+  h.element('matrix-filter').value = 'done'; h.callbacks.get('matrix-filter:change')();
+  selectAll(h); editContact(h, 'correct@new.invalid');
+  assert.equal(h.element('matrix-filter').value, 'all');
+  assert.equal(h.element('matrix-body').children.length, 2);
+  assert.equal(correctionValue(h), 'correct@new.invalid');
+  assert.equal(h.element('bulk-apply').disabled, true);
+  assert.equal(h.element('select-visible').checked, false);
+  assert.equal(h.element('release').disabled, true);
+  assert.match(h.element('matrix-message').textContent, /wieder offen.*aufgehoben/u);
+});
+
+testAsync('pending row edits survive navigation and filtering, Undo restores the whole pre-Apply state', async () => {
+  const h = twoContactHarness(); await new Promise(resolve => setImmediate(resolve));
+  editContact(h, 'first@new.invalid');
+  h.callbacks.get('finding-next')(); h.callbacks.get('finding-prev')();
+  assert.equal(correctionValue(h), 'first@new.invalid');
+  const id = h.draft.ambiguities[0].ambiguity_id;
+  h.callbacks.get('matrix-body:change')({ target: { dataset: { row: id, action: 'select' }, checked: true } });
+  assert.equal(h.element('select-visible').indeterminate, true);
+  h.element('matrix-search').value = 'one.png'; h.callbacks.get('matrix-search:input')();
+  assert.equal(h.element('select-visible').checked, false);
+  assert.match(h.element('matrix-message').textContent, /aufgehoben.*Eingaben/u);
+  selectAll(h); applySelected(h, 'correct_contact');
+  h.callbacks.get('undo')();
+  assert.equal(correctionValue(h), 'first@new.invalid');
+  assert.equal(h.element('release').disabled, true, 'Undo restores pending, not implicitly approved, correction');
+  assert.match(h.element('summary').textContent, /^0 von/u);
+});
+
+testAsync('a disconnected review blocks decisions and polling but still closes its native window', async () => {
+  const h = harness(); await new Promise(resolve => setImmediate(resolve));
+  h.listeners.get('datasecure-connection')({payload: {state: 'recovering', epoch: 1}});
+  h.callbacks.get('release')(); h.callbacks.get('retry')();
+  assert.equal(h.calls.some(call => call.command === 'submit_review'), false);
+  h.callbacks.get('close-review')(); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.calls.filter(call => call.command === 'close_review_window').length, 1);
+});
+
 done();

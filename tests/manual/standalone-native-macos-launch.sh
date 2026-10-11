@@ -123,7 +123,7 @@ while ((SECONDS < deadline)); do
     && grep -q '"event":"frontend_ready"' "$desktop_log" \
     && grep -q '"event":"review_page_loaded"' "$desktop_log" \
     && node "$script_directory/../helpers/native-review-readiness.js" "$desktop_log" \
-    && node "$script_directory/../helpers/native-review-readiness.js" "$desktop_log" --main \
+    && node "$script_directory/../helpers/native-review-readiness.js" "$desktop_log" --main --workspace \
     && grep -q '"event":"sidecar_started"' "$sidecar_log" \
     && grep -q '"event":"service_initialized"' "$sidecar_log"; then
     ready=true

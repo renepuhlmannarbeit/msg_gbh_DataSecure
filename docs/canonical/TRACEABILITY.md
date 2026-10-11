@@ -1,6 +1,160 @@
 # Entscheidungs-Traceability
 
-Stand: 06.10.2026 · 3.2.0-rc158 · Windows/macOS RC158 veröffentlicht · Linux bleibt RC157 · Cowork bleibt RC151
+Stand: 08.10.2026 · 3.2.0-rc159 · Windows/macOS RC158 veröffentlicht · Linux bleibt RC157 · Cowork bleibt RC151
+
+DS-110 / BL-010.53, Gesamtreview r9 vom 08.10.2026 →
+[R9-20261008](../REVIEW_STANDALONE_R9_2026-10-08.md) → drei unabhängig gefundene
+und vom Hauptreview wiederholte P2-Gegenbeispiele in Dokumentreload/Freigabe,
+Pause nach Stapelentscheidung und 10.001-Kontakt-Export. Zwei weitere native
+Kontrollgrenzen statisch belegt, keine OS-Fehlerinduktion oder neuer P1-Nachweis.
+Der ursprüngliche Review war rein lesend; Korrekturstand folgt unten. Paketbytebindung r9,
+vollständig neu gestarteter eingefrorener Gesamteingang mit 217 Testdateien
+(96 Basis plus 121 direkte, einschließlich letztem Undo-Delta) und
+106 Windows-Rusttests/Clippy bestehen; volle sichtbare v2-/Mac-Abnahme offen.
+Anschließender Korrekturnachtrag → `document-review.js` (gemeinsame Bindung),
+`batch-review-orchestrator.js` / `batch-review-publication.js` / `batch-contact-review.js`
+(Pauseclaims/Entscheidungserhalt), `standalone-review-choices.js` (immutable
+Ausstellerfundstelle), `confidential-overview.js` (Vorkommensbudget),
+`native_export_channel.rs` / `ipc_transport.rs` / `main.rs` (registrierter
+Worker/Retirement/Spawnreservierung) → neue Renderer-/Gateway-/Großexport-/
+Windows-Rename-/Recoveryregressionen grün; 108 Windows-Rustfälle/Clippy.
+Diese Implementierung folgt erst nach dem ursprünglichen Read-only-Review;
+kein Bezug zum alten r9-Archiv, keine native Mac-/allgemeine Freigabe.
+BL-050.6 / BL-010.51 → frische 72-Varianten-Messung
+`dist/quality-r9-review-20261008/BERICHTE/QUALITAET.json` → neun rohe OCR-
+Abweichungen, finale referenzgebundene synthetische Prüfung ohne bekannte Lecks/
+Sachwortverlust; damaliges All-findings-Gate `QUALITY_FINDINGS_OPEN`, keine
+allgemeine Qualitätserklärung. Nachfolgende DS-110-Anwenderentscheidung vom
+08.10.2026 → `assessQuality` / `check-quality-gate.mjs` → getrennte rohe OCR-
+Kontaktwarnungen und harte Privacy-/Sachinhalts-/Herkunftsgrenzen; zusätzliches
+strenges Extraktionsprofil. Alte Messungen bleiben historisch, BL-050.6 bleibt
+für rohe Lesegenauigkeit offen. Laufzeitguards unverändert.
+Aktueller Nachweis: `dist/quality-headless-boundary-20261008` → 72 Varianten,
+beide finalen Lesart-Gegenprüfungen ohne bekannte Reste/Sachwortverlust,
+neun rohe E-Mail-Warnungen; Standardgate `pass_with_warnings`, strenges Gate
+rot, alter Bericht gesperrt. 39 Bewerter-/Berichtregressionen und
+`test:quality` grün; keine menschliche/native Mac-/Releasefreigabe.
+Der vorherige Gesamtprüflauf wurde an der Desktopgrenze abgebrochen und zählt
+nicht als PASS (Protokoll/Quelldigest im Iststand). BL-010.53.8 →
+`run-product-suite.js` / `test-native-windows-forms.js` → sechs GUI-Proben
+getrennt/zeitbegrenzt erhalten, neues Headless-Vollprofil und explizite
+Windows-Startverweigerung ohne Desktop-Opt-in → 11 neue Guard-/Plan-/CLI-Fälle
+und 12 bestehende Testpfadverträge grün. Vollständige Headless-Integration:
+218 Testdateien bestanden, 996-Dateien-Quelldigest vor/nach dem Lauf identisch
+(Iststand/Protokoll). Sechs echte Formularfälle sowie native GUI-/Mac-/
+Paketabnahmen bleiben eigenständig `NOT_RUN`; keine Oberfläche bedient,
+kein Gesamt-/Release-PASS, Commit oder Push.
+Die Änderung der Testbefehle bindet `package.json` neu; der vorige Bericht
+`quality-classified-final-20261008` wird korrekt als alt gesperrt. Vollständige
+72-Varianten-Messung deshalb erneut ausgeführt, keine Herkunftsausnahme.
+
+DS-110 / BL-010.53.2/7, unveröffentlichte Aufnahme-/Recovery-Nachbesserung →
+`gateway/standalone-document-review-store.js`, `batch-intake.js`, `batch.js`,
+`batch-recovery.js`, `batch-journal-store.js`, `standalone/run-history.js` und
+`frontend/{workspace,document-review}.js` → gemischte und ausschließlich
+abgewiesene Eingaben in beiden Zwecken, haltbare Namen/Gründe ohne Quellhash-
+oder Freigabeautorität → 27 Aufnahme-, 38 Dokument-/Export-, 24 Recovery-,
+19 Journal-, 31 Dokumentrenderer- und 32 Workspacefälle sowie reale
+Gateway-Neustarts über drei Ablaufwege. Zwei unabhängige P2-Crash-/Ablaufbefunde
+zuerst rot reproduziert, danach korrigiert; Abschlussgegenreview separat.
+Fokus-/Statusverbesserung → stabile Laufaktionen und höfliche Statusregion,
+begrenzte synthetische Browser-Tastatur-/390-Pixel-Probe. Normaler Ergebnisordner
+bleibt gewählt. `tauri-contract/src/export_directory.rs` wurde zunächst als
+interner handle-relativer Dateisystembaustein implementiert →
+12 native Windowsfälle einschließlich 32 konkurrierender Zielanlagen und
+unklarem Status nach tatsächlichem Rename. Der Folgeschnitt ergänzt
+`native_export_transaction.rs`, `native_export_channel.rs`, `ipc_transport.rs`
+und `standalone/native-export-channel.js` → ausschließlich aktivierte
+Picker-Metadatenbindung, kontrollierter Lifecycle, dauerhafter Transaktionskern,
+lesende Recovery mit Parent-/Namensbindung, atomare Journalbelege und OS-
+Besitzsperre; zusätzlich `export_private_security.rs` und
+`native_export_workspace.rs` → kontrollierte private Parents, immutable
+Intent-/Binding-Belege, keine Adoption nach unvollständiger Anlage → 100 gesamte
+Windows-Rusttests, darunter zwölf Transaktions- und sieben Workspacefälle mit
+insgesamt 16 echten eigenen Testprozess-Beendigungen, plus warning-free Clippy.
+Zwei ignorierte Kindhelfer sind nur die von Eltern-Tests gestarteten Checkpoints.
+Darwin-ACL-Rückgabevertrag nach Apple-Quellcode korrigiert; tatsächliche native
+Mac-ACL-Gegenproben NOT_RUN. Begrenzter unabhängiger Workspace-Abschlussreview
+ohne weiteren belegten P1/P2. Promise-bewusste Dokumentsperre →
+`test-standalone-document-control.js` → sechs echte Sperr-/Fehlergegenproben.
+Der anschließende tatsächliche v2-Anschluss → `native_export_broker.rs`,
+`native_export_channel.rs`, `standalone/desktop-sidecar.js`,
+`standalone-document-review-store.js`, `result-folder-config.js` und
+`root-boundary.js` → dauerhaft gespeicherte originale native Bindung,
+64-KiB-Körperübertragung über vorhandene private Pipe und ausschließlich
+nativer Operationsstage statt Node-Absolutpfadpublisher. Zwei unabhängig
+belegte P2 (ausgetauschter Privatparent, gemeinsames Journalinventar) sind
+zuerst rot reproduziert und korrigiert; begrenzter Abschlussreview ohne
+weiteren belegten P1/P2. `test-standalone-native-export.js` prüft den echten
+Node-Store/Pipe/Rust-Dateisystemweg beider Zwecke, verlorene Bestätigung,
+späteren Widerruf, ACK derselben Kopie, Abbruch, Unicode-Mehrchunk und
+Privatrootaustausch. 103 Rusttests/Clippy, acht Kanalfälle und sieben
+Dokumentbesitzfälle bestehen; drei ignorierte Helfer werden durch ihre
+Elterntests aufgerufen. Desktopelternbesitz verhindert Freigabe einer noch
+nativen Operation bei Sidecar-Tod, verlangt derzeit aber vollen App-Neustart.
+Keine neue öffentliche CLI-/Renderer-Dateisystemaktion. Automatischer
+Wiederverbindungsvertrag und neue native Windows-/Mac-v2-Paketabnahme offen.
+Terminale Fehlerbelege → `test-standalone-terminal-failures.js` → sieben reale
+Fälle mit erhaltenen Namen/Gründen nach Journalablauf und gesunden Prüfständen
+neben fehlgeschlagenen Entwürfen. Synthetische Browserprobe bei 1280/600 Pixeln
+→ zentrale Behandlung/Original-/Markdown-Vergleich, korrigierter Auswahlumbruch,
+keine native Grafikabnahme. Der vorherige Gesamteingang mit 217 Testdateien
+stoppte am unveränderten Git-Tracking-Gate. Die neuen v2-Dateien sind jetzt
+explizit per Intent-to-add vorgemerkt, nicht committed. Der Folgelauf
+fand eine fehlende Bindung der neuen Transformationsspur an die Core-Regelversion
+→ `core-policy-fingerprint.js` ergänzt `privacy/transform-plan.js` →
+25 Versions-/Pseudonymfälle und neun echte Plugin-/Standalone-Projektionsfälle
+bestehen; unabhängige lesende Gegenprüfung bestätigt Versionswechsel und
+Ablehnung alter gebundener Kontexte. Die vollständige Wiederholung besteht
+mit 96 Basis- und 121 direkten Testdateien (217 insgesamt); Releasebuild,
+Pluginarchiv und vollständige native v2-GUI-Abnahme bleiben getrennt offen.
+Lokaler Windows-v2-Testbau r3 vom 08.10.2026, ersetzt r2 →
+`dist/engineering-workspace-v2-windows-20261008-r3/PRUEFNACHWEIS.json` →
+ZIP-SHA-256 `f95c3ff09aa6f18da552e48d12852a5e4e53386340a483df9e15d5e2b14e6cba`,
+Verifier und echte Paket-Sidecar-Abläufe beider Zwecke bestehen. Exakter nativer
+Windows-Start mit erfolgreicher Haupt-/Prüfseiten-IPC besteht; vollständige
+native v2-GUI-/Exportabnahme und beide Macs bleiben offen. Initiale Prüflisten-
+Fokusrückkehr → `review.html`, `review.js`, `test-standalone-review-frontend.js`
+→ 33 Fälle und synthetische 720-×-560-Browsergegenprobe ohne horizontalen
+Überlauf. Vorschau-Ergebnisbereitschaft → `standalone-workspace-preview.mjs`
+und `test-standalone-review-preview.mjs` → Simulation ist klar getrennt vom
+Produktbackend und seiner Abnahme. Kein Standardwechsel oder Release.
+Details und genaue Aussagegrenzen: [Migrationsabgleich](../frontend-migration.md).
+
+DS-104 / BL-050.6, lokale unveröffentlichte Prüfliste vom 07.10.2026 →
+`frontend/review.{html,css,js}`, `gateway/ocr-contact-batch.js`,
+`gateway/batch-contact-review.js`, `batch-review-capture.js`,
+`batch-review-orchestrator.js`, `standalone/convert-next.js`,
+`core/ocr-contact-review.js` und private Standalone-Labels in `companion/text-review.js`.
+Gruppierte Entitäten, unabhängige OCR-Korrekturen, gebundene Wiederaufnahme und
+vollständige Validierung vor Dokumentwrites → `test-ocr-contact-{review,flow}.js`,
+`test-batch-review-orchestrator.js`, `test-standalone-review-frontend.js`.
+Zwei unabhängige technische Rollen; konkrete Undo-/verdeckte-Auswahl-Gegenbeispiele
+auch über tatsächliches HTML/JS/CSS in `manual/standalone-review-matrix-browser.mjs`
+mit synthetischer IPC, A11y und 390-Pixel-Reflow. Auswerterbindung →
+`benchmark-quality.mjs` und `test-quality-report.mjs`; neue Kontaktgruppenfolge →
+`helpers/standalone-packaged-ocr-review.mjs` und
+`manual/standalone-native-review-campaign.mjs`.
+Frischer tatsächlicher 72-Varianten-Workflow →
+`dist/quality-review-matrix-final-20261007/BERICHTE/QUALITAET.json`: nach der
+Abbruchkorrektur erneut ausgeführt; nach synthetisch
+gebundenem Review null bekannte finale Reste/Sachwortverluste, unverändert neun
+Roh-OCR-Abweichungen und rotes `QUALITY_FINDINGS_OPEN`; Workerende bestätigt.
+Abschließendes vollständiges Produktgate: 203 Testdateien (84 Basis + 119
+direkte), Dokumentations-/Linkverträge und strenge installierte Plugin-
+Validierung bestanden. Der frühe Abbruch-Gegenbefund ist korrigiert und im
+erneuten echten Neun-Fälle-Goldenlauf bestätigt; erster Fehllauf bleibt belegt.
+Neuer lokaler Windows-Engineeringbau →
+`dist/engineering-review-matrix-windows-20261007/`, Archiv-SHA-256
+`0d95c5e415dec59ac0a0dffe20f216ebb58ceecda818e16b5759284b5dee8c16` →
+601 Einträge vollständig inventargeprüft → tatsächlicher Paketworkflow mit
+beiden OCR-Prüfzwecken, Originalpixeln, Folgegruppen und Neustart bestanden →
+hashgebundener nativer Windows-Haupt-/Prüfseitenstart und erfolgreiche IPC
+bestanden. `WINDOWS-TEST-EVIDENCE.json` neben dem ZIP bindet Arbeitsstand-Dateihashes
+und Aussagegrenzen. Keine nativen Prüfentscheidungen oder Netzwerkmessung in
+diesem Starttest. Menschliche Matrixabnahme und neue native Mac-Abnahme offen;
+alte Engineeringpakete belegen diesen Quellstand nicht. Kein neuer Release,
+Commit/Push oder Cowork-Reviewweg; Anwender testet zuerst lokal Windows.
 
 RC158-Sicherheitsnachbesserung (DS-107/109) → `core/bound-file-io.js`,
 `safe-diagnostic-log.js`, native `diagnostic_log.rs`, gebundene Produktreader
@@ -867,6 +1021,7 @@ aktuelle Produktzusage.
 
 | Story | Umsetzung / Vertrag | Nachweisgrenze |
 |---|---|---|
+| DS-110 | Prototyp v2 als verbindliche visuelle Referenz; Standalone-Katalog mit serverbesessenen IDs und Revision, integrierte aktive Prüffläche mit geschlossenem Befehlssatz. Pause, Dokumentrevisionen und ausdrücklicher KI-Export sind eigene Backend-Arbeit. | BL-010.53; `docs/frontend-migration.md`, Workspace-/Service-/Quellen-/Desktop-/Rusttests und gekennzeichnete synthetische Browserprüfung. Noch keine Aktivierung als Standardoberfläche oder native Paketabnahme. |
 | DS-109 | Revalidierte Schichtentrennung ohne MVC-Neubau; Gesprächsnamen, OCR-Malreihenfolge, gestreamte Identitätsdatei, OS-Metadaten, geschlossene DTO-/Fehlerverträge, native Startdiagnose/Reaper und stabile History-Knoten. | BL-010.52; gezielte echte Publikations-/Worker-/Rust-Gegenproben; Gesamtgate-Stand in der Evidence-Matrix, neue bediente Zielhostkampagne und Qualitätsmetriken separat offen. |
 | DS-108 | Mehrdimensionale Gegenbeispiele und unabhängiger Nachreview: Markerherkunft/Credentials, tatsächliches Reviewbudget, Renderer-/Fenster-/Spawnrennen, Fristen, OS-Ursachen und vollständige Paket-/Gateevidenz. Offizielle Methodenrecherche trennt adaptierte Reparaturen von späteren Erweiterungen. | BL-010.49–.51; genaue Test-/Paketbindung und Grenzen in der Evidence-Matrix; bediente neue Tauri-/Mac-Kampagne separat, keine Release- oder Signierevidenz. |
 | DS-107 | Reale Desktop-IPC-Unternehmensentscheidung, lauf-/startversuchsgebundene Fehler, einheitliches Reviewbudget, Deadline-/Shutdown-Grenzen, konkrete Dateifehler und ehrliche Native-Smoke-/Skip-Evidenz. | BL-010.48; gezielte positive/negative JS-/Rust-Tests, echte Sidecar-/Reviewworker-Integration, getrennter lokaler Windows-Engineering-Bau; keine neue Mac-Bedien- oder Signierevidenz. |

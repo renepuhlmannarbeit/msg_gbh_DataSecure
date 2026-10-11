@@ -1,6 +1,6 @@
 # Kanonisches Dokumentenregister
 
-Stand: 23.09.2026
+Stand: 08.10.2026
 
 ## Normativ aktuell
 
@@ -27,6 +27,7 @@ Register. `DOCUMENT_INDEX.json` führt diese Ablösung und DS-085/086 mit.
 | `DOCUMENT_INDEX.json` | maschinenlesbarer Status, Geltungsbereich, Eigentümer, Versionsregel und Ablösung aller führenden Dokumentklassen |
 | `../archive/INDEX.md` | stabile `ARCH-*`-Kennungen und Fundstellen historischer Dokumentgruppen |
 | `../acceptance/CLAUDE_CODE_PILOT/README.md`, `contract.json` | BL-041.20: eigener 14-Fälle-Hostplan und kostenfreier lokaler Vorcheck; keine Hostfreigabe |
+| `../frontend-migration.md` | DS-110: fachlicher Abgleich, Gestaltungs- und Migrationsvertrag des Standalone-Prototyps v2; einzige Arbeitsliste BL-010.53 |
 
 ### Vertragsstatus unter `contracts/`
 
@@ -71,6 +72,7 @@ Abnahme.
 | `docs/DETECTOR_BENCHMARK.md` | synthetische Detektorbaseline und unabhängiger lokaler Format-/OCR-Qualitätsbenchmark mit getrennter Roh-OCR-/Kontaktkorrektur-/Publikationsmessung; keine Aussage universeller Genauigkeit |
 | `docs/REVIEW_CLAUDE_COWORK_2026-09-01.md` | zeitgebundene Herstelleraufnahme; aktuelle Produktgrenze steht in DS-078 und der Hostmatrix |
 | `docs/REVIEW_PRODUCT_HOSTS_2026-09-23.md` | zeitgebundener Mehrdimensionenreview beider Produkte und Claude-Code-Hostoption; Befunde PH-20260923, offene Arbeit ausschließlich im Backlog |
+| `docs/REVIEW_STANDALONE_R9_2026-10-08.md` | zeitgebundener Review des unveröffentlichten Standalone-v2/r9-Arbeitsstands; reproduzierte Workflowfehler, native Kontrollgrenzen, frische Qualitätsmessung und präzise Test-/Paketgrenzen; Arbeit ausschließlich BL-010.53/BL-050.6 |
 | Plugin-/Skill-READMEs und Skilltexte | Installation, Betrieb und Modellablauf |
 | `CLAUDE.md`, `.claude/agents/*` | knapper Claude-Code-Projektkontext und versionierte Read-only-Prüfrollen; kein Produktvertrag |
 

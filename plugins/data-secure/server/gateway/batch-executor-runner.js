@@ -24,6 +24,7 @@ function createBatchExecutorRunner(options = {}) {
   const stoppedMappingStatus = options.stoppedMappingStatus || STOPPED;
   const deliveryPendingStatus = options.deliveryPendingStatus || 'delivery_pending';
   const maxBatchFiles = options.maxBatchFiles || 100;
+  const pauseRequested = options.pauseRequested || (() => false);
 
   function isPureConversion(state) {
     return state.schema === 'datasecure-batch/5' && state.processing_mode === 'markdown-only' &&
@@ -153,6 +154,9 @@ function createBatchExecutorRunner(options = {}) {
           continue;
         }
         if (lastProgress.remaining === 0) break;
+        // Delivery/mapping above belong to the active file and must settle
+        // before pause. Pending sources remain untouched, not failed.
+        if (pauseRequested(readState(token))) break;
         const before = `${lastProgress.completed}:${lastProgress.remaining}:${lastProgress.delivery_pending}`;
         const result = await processBatchNext(token, { ...batchDeps, executorPid });
         lastProgress = result;
@@ -170,7 +174,7 @@ function createBatchExecutorRunner(options = {}) {
       }
     } catch (error) {
       primaryError = error;
-      if (lifecycleEntered) {
+      if (lifecycleEntered && !String(error?.code || '').startsWith('STANDALONE_PAUSE_')) {
         try { stabilizeUnhandledFailure(token, error); }
         catch { /* preserve the primary failure; recovery will see the last durable state */ }
       }

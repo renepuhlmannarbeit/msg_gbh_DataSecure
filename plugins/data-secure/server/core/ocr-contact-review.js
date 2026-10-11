@@ -106,7 +106,9 @@ function validReplacement(value, kind) {
 function validateContactDraft(draft) {
   const keys = ['schema', 'original_text', 'anonymized_text', 'locators', 'decision_groups',
     'ocr_contact_review', 'batch_index', 'batch_total', 'allow_defer', 'ambiguities'];
-  if (!exactKeys(draft, Object.hasOwn(draft || {}, 'processing_mode') ? [...keys, 'processing_mode'] : keys) ||
+  if (Object.hasOwn(draft || {}, 'processing_mode')) keys.push('processing_mode');
+  if (Object.hasOwn(draft || {}, 'contact_batch')) keys.push('contact_batch');
+  if (!exactKeys(draft, keys) ||
       (Object.hasOwn(draft, 'processing_mode') && draft.processing_mode !== 'markdown-only') ||
       draft.schema !== 'data-secure-text-review/3' || draft.ocr_contact_review !== true || draft.allow_defer !== true ||
       typeof draft.original_text !== 'string' || draft.original_text !== draft.anonymized_text ||
@@ -122,6 +124,19 @@ function validateContactDraft(draft) {
       ...(item.image ? { image: item.image } : {}) };
   });
   validateContacts(contacts, draft.original_text, 'pdf');
+  if (Object.hasOwn(draft, 'contact_batch')) {
+    const batch = draft.contact_batch;
+    if (!exactKeys(batch, ['schema', 'documents']) || batch.schema !== 'datasecure-ocr-contact-batch/1' ||
+        !Array.isArray(batch.documents) || !batch.documents.length || batch.documents.length > 200) throw failure();
+    const remaining = new Set(draft.ambiguities.map(item => item.ambiguity_id));
+    for (const [index, document] of batch.documents.entries()) {
+      if (!exactKeys(document, ['document_index', 'source_label', 'candidate_ids']) || document.document_index !== index + 1 ||
+          typeof document.source_label !== 'string' || !document.source_label || document.source_label.length > 2048 ||
+          /[\p{Cc}\p{Cf}\p{Cs}]/u.test(document.source_label) || !Array.isArray(document.candidate_ids) || !document.candidate_ids.length) throw failure();
+      for (const id of document.candidate_ids) if (!remaining.delete(id)) throw failure();
+    }
+    if (remaining.size) throw failure();
+  }
   return draft;
 }
 

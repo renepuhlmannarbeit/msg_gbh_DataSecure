@@ -183,5 +183,27 @@ function reviewedPersonRanges(token, rendered) {
   return approval?.text === rendered ? approval.ranges : [];
 }
 
+// Standalone post-run review reconstructs these ranges from its immutable
+// actual-edit plan and revision journal, never from renderer offsets. Strong
+// labels, credentials and direct identifier checks remain non-waivable.
+function bindStandaloneDocumentKeeps(text, weakRanges, keptEntityRanges) {
+  if (typeof text !== 'string' || canonicalizeRenderedText(text) !== text) throw invalidReview();
+  const validate = ranges => {
+    if (!Array.isArray(ranges) || ranges.length > RESOURCE_LIMITS.MAX_STANDALONE_REVIEW_FINDINGS) throw invalidReview();
+    return ranges.map(row => {
+      if (!row || !Number.isSafeInteger(row.start) || !Number.isSafeInteger(row.end) || row.start < 0 ||
+          row.end <= row.start || row.end > text.length) throw invalidReview();
+      return Object.freeze({ start: row.start, end: row.end });
+    });
+  };
+  const kept = validate(keptEntityRanges), token = Object.freeze({});
+  approvals.set(token, { text, ranges: Object.freeze([...validate(weakRanges), ...kept]), literalRanges: Object.freeze(kept) });
+  return token;
+}
+function reviewedLiteralRanges(token, rendered) {
+  const approval = token && typeof token === 'object' ? approvals.get(token) : null;
+  return approval?.text === rendered ? approval.literalRanges || [] : [];
+}
+
 module.exports = { residualPersonAmbiguities, importedSourceMarkerCandidates,
-  createPersonReviewBinding, reviewedPersonRanges };
+  createPersonReviewBinding, reviewedPersonRanges, bindStandaloneDocumentKeeps, reviewedLiteralRanges };

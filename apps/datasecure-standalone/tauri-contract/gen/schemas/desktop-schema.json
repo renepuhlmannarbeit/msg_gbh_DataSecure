@@ -177,6 +177,12 @@
       "description": "Permission identifier",
       "oneOf": [
         {
+          "description": "Unvollständigen gebundenen Exportauftrag ausdrücklich nicht weiter verfolgen; keine Dateien löschen.",
+          "type": "string",
+          "const": "allow-abandon-document-export",
+          "markdownDescription": "Unvollständigen gebundenen Exportauftrag ausdrücklich nicht weiter verfolgen; keine Dateien löschen."
+        },
+        {
           "description": "Bestätigt inhaltsfrei, dass ein terminaler Zustand im Hauptfenster gerendert wurde.",
           "type": "string",
           "const": "allow-ack-terminal-presented",
@@ -187,6 +193,12 @@
           "type": "string",
           "const": "allow-cancel-admission",
           "markdownDescription": "Verwirft eine noch nicht gestartete lokale Auswahl."
+        },
+        {
+          "description": "Schließt die private Dokumentansicht und invalidiert ihre laufgebundene Leseberechtigung.",
+          "type": "string",
+          "const": "allow-close-document-reviews",
+          "markdownDescription": "Schließt die private Dokumentansicht und invalidiert ihre laufgebundene Leseberechtigung."
         },
         {
           "description": "Schließt ausschließlich das lokale Prüffenster; eine offene Entscheidung bleibt sicher vertagt.",
@@ -219,10 +231,46 @@
           "markdownDescription": "Setzt nur den an dieses Prüffenster gebundenen lokalen Lauf mit weiteren Fundstellen fort."
         },
         {
+          "description": "Speichert eine revisionsgebundene Freigabe oder zusätzliche feste Maskierung.",
+          "type": "string",
+          "const": "allow-decide-document-review",
+          "markdownDescription": "Speichert eine revisionsgebundene Freigabe oder zusätzliche feste Maskierung."
+        },
+        {
+          "description": "Exportiert nur explizit ausgewählte freigegebene Dokumentrevisionen ohne private Begleitdaten.",
+          "type": "string",
+          "const": "allow-export-approved-documents",
+          "markdownDescription": "Exportiert nur explizit ausgewählte freigegebene Dokumentrevisionen ohne private Begleitdaten."
+        },
+        {
           "description": "Bestätigt inhaltsfrei, dass die lokale Oberfläche ihr Skript geladen hat.",
           "type": "string",
           "const": "allow-frontend-ready",
           "markdownDescription": "Bestätigt inhaltsfrei, dass die lokale Oberfläche ihr Skript geladen hat."
+        },
+        {
+          "description": "Liest ausschließlich revisionsgebundene tatsächliche Ersetzungen der geöffneten Dokumentprüfung.",
+          "type": "string",
+          "const": "allow-get-document-entities",
+          "markdownDescription": "Liest ausschließlich revisionsgebundene tatsächliche Ersetzungen der geöffneten Dokumentprüfung."
+        },
+        {
+          "description": "Liest nur einen revisionsgebundenen privaten Textvergleich der geöffneten Dokumentprüfung.",
+          "type": "string",
+          "const": "allow-get-document-review-chunk",
+          "markdownDescription": "Liest nur einen revisionsgebundenen privaten Textvergleich der geöffneten Dokumentprüfung."
+        },
+        {
+          "description": "Liest nur Freigabe- und Exportanzahlen eines ausdrücklich ausgewählten v2-Laufs; keine Texte oder Pfade.",
+          "type": "string",
+          "const": "allow-get-document-review-history-summary",
+          "markdownDescription": "Liest nur Freigabe- und Exportanzahlen eines ausdrücklich ausgewählten v2-Laufs; keine Texte oder Pfade."
+        },
+        {
+          "description": "Öffnet private nachträgliche Dokumentprüfung ausschließlich in der v2-Hauptansicht.",
+          "type": "string",
+          "const": "allow-get-document-reviews",
+          "markdownDescription": "Öffnet private nachträgliche Dokumentprüfung ausschließlich in der v2-Hauptansicht."
         },
         {
           "description": "Liest nur den inhaltsfreien öffentlichen Verarbeitungszustand.",
@@ -273,6 +321,24 @@
           "markdownDescription": "Öffnet ausschließlich den festen lokalen Ordner mit inhaltsfreien Interaktionsprotokollen."
         },
         {
+          "description": "Open only an existing verified document export resolved privately by its run and operation identifiers.",
+          "type": "string",
+          "const": "allow-open-document-export",
+          "markdownDescription": "Open only an existing verified document export resolved privately by its run and operation identifiers."
+        },
+        {
+          "description": "Open a private revision-bound identity overview for the active document review.",
+          "type": "string",
+          "const": "allow-open-document-identity-overview",
+          "markdownDescription": "Open a private revision-bound identity overview for the active document review."
+        },
+        {
+          "description": "Öffnet nur die laufgebundene integrierte Standalone-Prüfsitzung.",
+          "type": "string",
+          "const": "allow-open-embedded-review",
+          "markdownDescription": "Öffnet nur die laufgebundene integrierte Standalone-Prüfsitzung."
+        },
+        {
           "description": "Öffnet die vertrauliche Identitätszuordnung nur für einen lokal gebundenen Lauf.",
           "type": "string",
           "const": "allow-open-history-identity-mapping",
@@ -307,6 +373,12 @@
           "type": "string",
           "const": "allow-open-review-window",
           "markdownDescription": "Öffnet ausschließlich das lokale Standalone-Prüffenster."
+        },
+        {
+          "description": "Speichert einen dauerhaften Pausewunsch für genau einen Standalone-Lauf.",
+          "type": "string",
+          "const": "allow-pause-batch",
+          "markdownDescription": "Speichert einen dauerhaften Pausewunsch für genau einen Standalone-Lauf."
         },
         {
           "description": "Entfernt genau eine Datei per Position aus der noch nicht gestarteten lokalen Auswahl.",

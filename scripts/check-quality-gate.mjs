@@ -4,11 +4,12 @@ import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 import { qualitySourceIdentity } from './benchmark-quality.mjs';
 const require = createRequire(import.meta.url);
-const { qualityHasFindings, summarizeQuality } = require('../benchmarks/evaluate-quality');
+const { assessQuality, summarizeQuality } = require('../benchmarks/evaluate-quality');
 
 // An engineering regression gate, not a legal or human acceptance certificate.
 // Partial executions, unassessed OCR and missing final outputs must stay red.
-export function qualityGateFailures(report, expected) {
+// Bounded raw OCR contact discrepancies remain explicit accuracy warnings.
+export function qualityGateFailures(report, expected, { strictExtraction = false } = {}) {
   const failures = [];
   if (!report || report.schema !== 'datasecure-quality-report/1' || !Array.isArray(report.results)) return ['QUALITY_REPORT_INVALID'];
   if (report.synthetic_only !== true || report.review_decisions !== 'synthetic-reference-bound') failures.push('QUALITY_REFERENCE_CONTRACT_INVALID');
@@ -27,13 +28,17 @@ export function qualityGateFailures(report, expected) {
   try {
     const summary = summarizeQuality(report.results);
     if (JSON.stringify(report.summary) !== JSON.stringify(summary)) failures.push('QUALITY_SUMMARY_MISMATCH');
-    if (qualityHasFindings({ ...report, summary })) failures.push('QUALITY_FINDINGS_OPEN');
+    const assessment = assessQuality(report); // Never trust a cached pass label.
+    if (assessment.status === 'blocked') failures.push('QUALITY_FINDINGS_OPEN');
+    if (strictExtraction && assessment.warnings.length) failures.push('QUALITY_EXTRACTION_WARNINGS_OPEN');
   } catch { failures.push('QUALITY_REPORT_INVALID'); }
   return [...new Set(failures)];
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  if (process.argv.length !== 3) throw new Error('Usage: check-quality-gate.mjs local-QUALITAET.json');
+  if (process.argv.length !== 3 && !(process.argv.length === 4 && process.argv[3] === '--strict-extraction')) {
+    throw new Error('Usage: check-quality-gate.mjs local-QUALITAET.json [--strict-extraction]');
+  }
   const reportPath = path.resolve(process.argv[2]);
   const report = JSON.parse(fs.readFileSync(reportPath, 'utf8'));
   const referencePath = path.join(path.dirname(path.dirname(reportPath)), 'REFERENZ.json');
@@ -49,8 +54,14 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
     version: require('../package.json').version,
     core_policy_fingerprint: require('../plugins/data-secure/server/core-policy-fingerprint').calculateCorePolicyFingerprint(),
     reference_sha256: require('node:crypto').createHash('sha256').update(referenceBytes).digest('hex') };
-  const failures = qualityGateFailures(report, expected);
+  const strictExtraction = process.argv[3] === '--strict-extraction';
+  const failures = qualityGateFailures(report, expected, { strictExtraction });
+  const assessment = assessQuality(report);
   // Only opaque codes on stdout. Source-bearing findings remain local.
-  process.stdout.write(`${JSON.stringify({ ok: failures.length === 0, scope: 'synthetic-engineering-only', failures })}\n`);
+  process.stdout.write(`${JSON.stringify({ ok: failures.length === 0,
+    status: failures.length ? 'blocked' : assessment.status, scope: assessment.scope,
+    profile: strictExtraction ? 'strict-extraction' : 'reviewed-anonymization',
+    release_acceptance: 'not_assessed', failures, warnings: assessment.warnings,
+    raw_ocr_contact_changes: assessment.raw_ocr_contact_changes })}\n`);
   if (failures.length) process.exitCode = 1;
 }

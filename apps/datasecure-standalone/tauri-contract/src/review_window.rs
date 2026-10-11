@@ -1,5 +1,9 @@
 //! The native X button may defer only the session delivered to this window.
 //! No delayed read of the broker's "current" session is permitted here.
+pub fn owns_review(label: &str, embedded: bool) -> bool {
+    matches!((label, embedded), ("main", true) | ("review", false))
+}
+
 #[derive(Default)]
 pub struct Binding {
     generation: u64,
@@ -32,6 +36,17 @@ impl Binding {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn only_the_active_review_surface_can_read_or_submit_private_content() {
+        assert!(owns_review("review", false));
+        assert!(!owns_review("main", false));
+        assert!(owns_review("main", true));
+        assert!(!owns_review("review", true));
+        for label in ["", "other", "main-child", "review-child"] {
+            assert!(!owns_review(label, false));
+            assert!(!owns_review(label, true));
+        }
+    }
     #[test]
     fn unloaded_window_never_defers_a_brokers_current_session() {
         let mut binding = Binding::default();

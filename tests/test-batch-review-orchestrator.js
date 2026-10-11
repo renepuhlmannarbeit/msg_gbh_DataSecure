@@ -73,6 +73,7 @@ function fixture(options = {}) {
       return options.outcome || { action: 'reviewed', documents: [{ document_index: 1 }, { document_index: 2 }] };
     },
     reviewTextLocally() {},
+    ...(options.reviewContacts ? { reviewContacts: options.reviewContacts } : {}),
     async publishReviewedBatch(valueState, valueItems, valueDrafts, documents, deps) {
       events.push('publish');
       assert.strictEqual(valueState, state);
@@ -93,7 +94,8 @@ function fixture(options = {}) {
 }
 
 function findingFixture(counts, platform = 'darwin', standalone = false) {
-  const items = counts.map((count, id) => ({ id, count, status: 'deferred_review' }));
+  const items = counts.map((count, id) => ({ id: standalone ? id.toString(16).padStart(32, '0') : id,
+    sha256: 'a'.repeat(64), count, source_label: `synthetic-${id}.txt`, status: 'deferred_review' }));
   const state = { items, ...(standalone ? { token: 'd'.repeat(64), product_channel: 'standalone',
     ...createBatchPseudonymState({ productChannel: 'standalone' }) } : {}) };
   const active = new Set();
@@ -106,9 +108,9 @@ function findingFixture(counts, platform = 'darwin', standalone = false) {
     publicProgress: () => ({}), deferredReviewPlan: () => ({ ready: true, items }),
     currentPlatform: () => platform,
     captureDeferredReviewInput: async (_state, item) => {
-      captured.push(item.id);
+      captured.push(items.indexOf(item));
       const text = 'Acme\n'.repeat(item.count);
-      return { original_text: text, anonymized_text: text, ambiguities: Array.from({ length: item.count }, (_, index) => ({
+      return { original_text: text, anonymized_text: text, ...(standalone ? { allowOrganizationReview: true } : {}), ambiguities: Array.from({ length: item.count }, (_, index) => ({
         ambiguity_id: `credential:v2:${String(index + 1).padStart(6, '0')}`,
         type: 'credential_issuer_ambiguous', original_start: index * 5, original_end: index * 5 + 4,
         anonymized_start: index * 5, anonymized_end: index * 5 + 4
@@ -197,6 +199,21 @@ function standaloneChoiceFixture(options = {}) {
 }
 
 async function main() {
+  await testAsync('early contact cancellation preserves empty delivery shape and releases the exact owned lock', async () => {
+    for (const localFinalize of [false, true]) {
+      const value = fixture({ reviewContacts: async () => { throw codedError('LOCAL_REVIEW_CANCELLED'); } });
+      value.state.product_channel = 'standalone';
+      const result = await value.orchestrator.reviewDeferredBatch(value.token, { ...value.deps, localFinalize });
+      assert.equal(result.ok, false); assert.equal(result.error, 'LOCAL_REVIEW_CANCELLED');
+      assert.equal(result.reviewed_documents, 0); assert.equal(result.failed_documents, 0);
+      assert.equal(result.raw_content_sent_to_claude, false);
+      if (localFinalize) { assert.equal(result.locally_released, 0); assert.ok(!Object.hasOwn(result, 'packages')); }
+      else assert.deepEqual(result.packages, []);
+      assert.ok(!value.events.some(event => event.startsWith('capture:') || event === 'ui' || event === 'publish'));
+      assert.equal(value.active.size, 0); assert.equal(value.events.at(-1), 'release:token');
+      assert.ok(value.items.every(item => item.status === 'deferred_review'));
+    }
+  });
   await testAsync('Standalone reuses an exact keep across phase families and freshly reconstructs its carried document', async () => {
     const value = standaloneChoiceFixture();
     const result = await value.run();
