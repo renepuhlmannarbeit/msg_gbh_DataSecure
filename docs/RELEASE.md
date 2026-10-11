@@ -19,6 +19,24 @@ Vorschauwerkzeug liest Konzepte jetzt über gehaltene Dateiobjekte. Übrige
 Fundstellen werden einzeln mit Quelle/Fingerprint triagiert. Wiederholte
 native Paket- und Sicherheitsläufe bleiben vor Veröffentlichung erforderlich.
 
+Zweiter Stand `b4f298d`: CodeQL (JavaScript und nativer Launcher) sowie Gitleaks
+bestanden (`38163037081`). Die Paketläufe stoppten an weiteren tatsächlichen
+Test-/Buildgrenzen: Elternprozess erwartete auf macOS das eigene statt des
+isolierten Kindprofils; Windows-Cleanup nahm gleiches TEMP-/Checkout-Volume an;
+Linux-Clippy entdeckte eine nur unter macOS benötigte veränderliche Variable.
+Korrekturen erhalten die Schutzverträge. Der Source-CI-Konfigurationstest wird
+in konkurrierende unveränderliche Reservierungen und deterministisch
+abgewiesenen Settingsaustausch mit ausdrücklich frischer Anfrage getrennt.
+Kein blindes Wiederholen von Sicherheitsfehlern und keine allgemeine
+Zusicherung gleichzeitiger erfolgreicher Settings-Erstschreibvorgänge.
+Die frische lokale Gesamtgegenprobe nach diesen Korrekturen besteht mit
+219 Headless-Testdateien, 108 Windows-Rusttests, Clippy, Dokumentations- und
+strenger lokaler Claude-Strukturprüfung. Sechs Windows-Formfälle bleiben
+`NOT_RUN`; kein lokales sichtbares Fenster wurde bedient. Die beiden behobenen
+Engineering-Lücken sind im frischen SARIF nicht mehr enthalten: 84 verbleibende
+Befunde sind einzeln quell-/fingerprintgebunden revalidiert, null unbewertet.
+Dies ersetzt weiterhin nicht die noch ausstehende exakte neue Paketbindung.
+
 Gezielte lokale Gegenproben nach den Korrekturen: 47 reale Windows-
 Konvertergruppen, 39 Dokument-/Exportfälle, acht reversible Entitätsfälle,
 elf laufweite Entitätsfälle und 20 gehaltene I/O-/Diagnosegrenzen bestanden.

@@ -444,14 +444,55 @@ try {
     });
   }
   test('concurrent real processes retain every distinct result-root reservation', f => {
+    // Exercise the immutable reservation contract, not simultaneous mutable
+    // settings replacements. Bound settings reads deliberately reject swaps.
+    boundary.reserveRootSeparation();
     const selected = Array.from({ length: 4 }, (_, i) => path.join(f.scope, `public-${i}`));
     selected.forEach(root => fs.mkdirSync(root));
-    const worker = `require(${JSON.stringify(require.resolve('../plugins/data-secure/server/gateway/result-folder-config'))}).saveConfiguredResultRoot(process.argv[1]);`;
+    const worker = `require(${JSON.stringify(require.resolve('../plugins/data-secure/server/gateway/root-boundary'))}).reserveRootSeparation({resultRoot:process.argv[1]});`;
     const launcher = `const {spawn}=require('child_process'); Promise.all(${JSON.stringify(selected)}.map(root=>new Promise(resolve=>{ const child=spawn(process.execPath,['-e',${JSON.stringify(worker)},root],{stdio:['ignore','ignore','pipe'],windowsHide:true}); child.stderr.on('data',bytes=>process.stderr.write(bytes)); child.on('error',()=>resolve(99)); child.on('exit',code=>resolve(code)); }))).then(codes=>{process.exitCode=codes.some(code=>code!==0)?1:0;});`;
     const child = spawnSync(process.execPath, ['-e', launcher], { env: { ...process.env }, encoding: 'utf8', timeout: 30000, windowsHide: true });
     assert.strictEqual(child.status, 0, child.stderr);
     const recorded = reservations.readReservations(f.data).filter(item => item.kind === 'public').map(item => item.root);
     for (const root of selected) assert.ok(recorded.includes(boundary.canonicalPath(root)), 'a competing selection must not erase a reserved result location');
+    assert.strictEqual(fs.existsSync(result.configPath()), false, 'reservation alone never changes the selected result root');
+  });
+  test('a concurrent settings replacement fails closed without overwriting it; an explicit fresh save succeeds', f => {
+    result.saveConfiguredResultRoot(f.visible);
+    const competing = path.join(f.scope, 'competing-public');
+    const requested = path.join(f.scope, 'requested-public');
+    fs.mkdirSync(competing); fs.mkdirSync(requested);
+    boundary.reserveRootSeparation({ resultRoot: competing });
+    const file = result.configPath();
+    const replacement = `${file}.test-replacement`;
+    const record = JSON.parse(configBytes(result));
+    record.root = competing;
+    const stat = fs.lstatSync(competing);
+    record.identity = { dev: String(stat.dev), ino: String(stat.ino), birthtime_ms: String(Math.trunc(stat.birthtimeMs)) };
+    fs.writeFileSync(replacement, JSON.stringify(record), { flag: 'wx' });
+    const competingBytes = fs.readFileSync(replacement);
+    const originalOpen = fs.openSync;
+    let swaps = 0;
+    fs.openSync = (value, ...args) => {
+      if (String(value) === file && swaps === 0) {
+        swaps++;
+        fs.renameSync(replacement, file);
+      }
+      return originalOpen(value, ...args);
+    };
+    try { fixedStorageFailure(() => result.saveConfiguredResultRoot(requested)); }
+    finally { fs.openSync = originalOpen; }
+    assert.strictEqual(swaps, 1, 'actual atomic replacement must occur during the held read');
+    assert.deepStrictEqual(configBytes(result), competingBytes, 'rejected save cannot overwrite a competing publication');
+    assert.strictEqual(result.readConfiguredResultRoot(), competing, 'competing publication remains a valid bound configuration');
+    const afterFailure = reservations.readReservations(f.data).filter(item => item.kind === 'public').map(item => item.root);
+    assert.ok(afterFailure.includes(boundary.canonicalPath(f.visible)));
+    assert.ok(afterFailure.includes(boundary.canonicalPath(competing)));
+    assert.ok(!afterFailure.includes(boundary.canonicalPath(requested)), 'rejected request has not reserved its new root');
+    result.saveConfiguredResultRoot(requested);
+    assert.strictEqual(result.readConfiguredResultRoot(), requested);
+    const afterRetry = reservations.readReservations(f.data).filter(item => item.kind === 'public').map(item => item.root);
+    for (const root of [f.visible, competing, requested]) assert.ok(afterRetry.includes(boundary.canonicalPath(root)));
   });
   console.log(`ROOT BOUNDARY: ${passed} real-filesystem cases passed`);
 } finally {

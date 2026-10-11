@@ -1460,6 +1460,29 @@ begrenzter Tagscanner und gehaltenes Dateiobjekt beheben diese Grenzen.
 Einzeln revalidierte Datenliteral-/Pin-/Fixture-Fundstellen bleiben streng
 quell-/fingerprintgebunden. Native Wiederholung/Releasebindung noch offen.
 
+Zweite Runnergegenprobe auf `b4f298d`: JavaScript-/Native-CodeQL und Gitleaks
+bestanden. Source-CI entdeckte eine unbegründete Testforderung nach gleichzeitig
+erfolgreichen Konfigurations-Erstschreibvorgängen trotz streng gebundener Leser.
+Der Vertrag wird getrennt: vier echte konkurrierende unveränderliche
+Reservierungen bleiben erhalten; ein deterministischer atomarer Settingswechsel
+wird ohne Überschreiben abgewiesen und erst bei ausdrücklicher frischer Anfrage
+im stabilen Zustand übernommen. Kein automatisches Retry/Lockern des
+Produktschutzes. Mac-Sidecar-Gegenprobe nutzt die isolierte HOME des Kindes auch
+bei der erwarteten Profilberechnung im Elternprozess, nicht das Runnerprofil.
+Windows-Smoke-Negativtest hält seine beiden synthetischen Cleanup-Verzeichnisse
+auf demselben TEMP-Volume (Runner-Checkout auf D:, TEMP auf C:); keine
+Cross-Volume-Rename-Annahme und keine breitere Löschberechtigung.
+Linux bestand die Standalone-/realen Konvertergates, stoppte aber an `unused_mut`
+im Rust-Diagnoseleser. Veränderlicher Pfad ist jetzt ausschließlich im
+macOS-Konfigurationsblock gebunden; Alias-/Handle-Schutz bleibt unverändert.
+Native Paket-/Veröffentlichungsbindung weiterhin in Arbeit.
+Frische lokale Schlussgegenprobe: 219 Headless-Dateien, 108 Windows-Rusttests,
+Clippy, aktuelle Dokumentation und strenge Claude-Strukturprüfung bestanden.
+Lokale native GUI weiterhin `NOT_RUN`. Unabhängiger Read-only-Review bestätigt
+die drei Fixturekorrekturen ohne Produktschutz-Ausnahme. SARIF auf dem zweiten
+Schnitt bindet 84 einzeln geprüfte Befunde ohne unbewerteten Rest; erneute
+Paketläufe auf dem korrigierten Commit bleiben erforderlich.
+
 **RC159-Korrektur, 08.10.2026 – Übergang nach der Fundstellenprüfung:**
 Anwenderbefund am lokalen r10: Nach OCR-/Anonymisierungsentscheidung erschien
 der Verlauf mit zusätzlicher Status-Momentaufnahme, ohne verständlichen Übergang

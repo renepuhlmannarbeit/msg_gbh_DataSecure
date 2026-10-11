@@ -351,7 +351,9 @@ testAsync('native campaign rejects a changed extracted runtime before either lau
   const { removePackageSmokeScope } = await import('./helpers/standalone-package-scope.mjs');
   const parent = fs.realpathSync.native(os.tmpdir());
   const scope = path.join(parent, `.tmp-standalone-native-${crypto.randomUUID().replaceAll('-', '')}`);
-  const archiveScope = fs.mkdtempSync(path.join(path.resolve(__dirname, '..'), '.tmp-standalone-package-'));
+  // Keep the two owned fixture trees on the same volume: Windows runners put
+  // TEMP on C: and the checkout on D:, so cleanup rename cannot cross them.
+  const archiveScope = fs.mkdtempSync(path.join(parent, '.tmp-standalone-package-'));
   const target = process.platform === 'win32' ? 'windows-x64' : `macos-${process.arch}`, version = 'synthetic';
   const prefix = `DataSecure-Standalone-${version}-${target}/`;
   const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
@@ -393,7 +395,7 @@ testAsync('native campaign rejects a changed extracted runtime before either lau
     assert.equal(path.dirname(scope), parent); assert.equal(fs.realpathSync.native(scope), scope);
     assert.ok(fs.lstatSync(scope).isDirectory() && !fs.lstatSync(scope).isSymbolicLink());
     const destination = path.join(archiveScope, 'campaign'); fs.renameSync(scope, destination);
-    removePackageSmokeScope(path.resolve(__dirname, '..'), archiveScope);
+    removePackageSmokeScope(parent, archiveScope);
   }
 });
 

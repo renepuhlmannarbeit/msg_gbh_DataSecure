@@ -215,7 +215,9 @@ function removeOwnedRoot(root, initial) {
     });
     assert.equal(configured.ok, true); assert.equal(callbacks, 1);
     assert.equal(readyCount, 1);
-    const nativeData = require('../plugins/data-secure/server/standalone/application-service').standaloneDataRoot({ environment: nativeEnv });
+    // os.homedir() belongs to this parent process, not to the isolated child.
+    // In particular macOS uses HOME directly rather than LOCALAPPDATA/XDG.
+    const nativeData = require('../plugins/data-secure/server/standalone/application-service').standaloneDataRoot({ environment: nativeEnv, home: nativeEnv.HOME });
     const configFile = path.join(nativeData, 'settings', 'result-root.json');
     const persisted = fs.readFileSync(configFile, 'utf8');
     assert.deepEqual(JSON.parse(persisted).native_export, nativeBinding);
@@ -254,7 +256,7 @@ function removeOwnedRoot(root, initial) {
     assert.deepStrictEqual(emptyHistory.result.entries, []);
     // Real private persistence -> application service -> framed error, not a
     // mocked error response. The fixture belongs only to this isolated host.
-    const dataRoot = require('../plugins/data-secure/server/standalone/application-service').standaloneDataRoot({ environment });
+    const dataRoot = require('../plugins/data-secure/server/standalone/application-service').standaloneDataRoot({ environment, home: environment.HOME });
     const reviewStore = require('../plugins/data-secure/server/gateway/standalone-document-review-store').createDocumentReviewStore({ dataRoot });
     const reviewBatch = 'e'.repeat(64), reviewItem = { id: 'f'.repeat(32), name: 'Pruefstand.txt', sha256: 'a'.repeat(64) };
     reviewStore.capture({ token: reviewBatch, product_channel: 'standalone' }, reviewItem,

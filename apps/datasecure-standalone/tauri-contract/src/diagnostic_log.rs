@@ -79,11 +79,15 @@ mod platform {
         if fd < 0 { Err(unsafe_io()) } else { Ok(unsafe { File::from_raw_fd(fd) }) }
     }
     pub fn directory(path: &Path) -> io::Result<Directory> {
-        let mut normalized = PathBuf::from(path);
+        let normalized = PathBuf::from(path);
         #[cfg(target_os = "macos")]
-        for alias in ["/var", "/tmp", "/etc"] {
-            if let Ok(rest) = path.strip_prefix(alias) { normalized = PathBuf::from(format!("/private{alias}")).join(rest); break; }
-        }
+        let normalized = {
+            let mut normalized = normalized;
+            for alias in ["/var", "/tmp", "/etc"] {
+                if let Ok(rest) = path.strip_prefix(alias) { normalized = PathBuf::from(format!("/private{alias}")).join(rest); break; }
+            }
+            normalized
+        };
         if !normalized.is_absolute() { return Err(unsafe_io()); }
         let mut file = File::open("/")?;
         for component in normalized.components() {
