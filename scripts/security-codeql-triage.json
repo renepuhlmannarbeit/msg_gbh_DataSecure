@@ -3,6 +3,17 @@
   "source_review": "RC159 independently reviewed the fresh 11 October SARIF findings, fixed the engineering hOCR ReDoS and preview pathname reopen, and individually bound the remaining pinned downloads, data-only preview serialization and synthetic assertions; fresh fingerprints remain mandatory and unknown findings are not waived",
   "entries": [
     {
+      "rule": "js/file-system-race",
+      "path": "tests/test-safe-private-tree.js",
+      "source_sha256": "1c4f348c3ec15c59a60e24652d2e512b7b2ac44afdbbaf0a164fb8ade13711de",
+      "reason": "Synthetic regression only: an owned temporary preview is deliberately rewritten after its original snapshot or during lstat, then its retained bytes are asserted after the real cleanup rejects the change. The three flagged fixture writes/reads do not authorize production writes or waive a runtime path race.",
+      "fingerprints": [
+        { "line": "9ec7c9429e8172e6:1", "column": "0" },
+        { "line": "c2842e0f81b9632:1", "column": "19" },
+        { "line": "e1d91d3d57e00fde:1", "column": "19" }
+      ]
+    },
+    {
       "rule": "js/http-to-file-access",
       "path": "scripts/revalidate-ocr-methods.mjs",
       "source_sha256": "9919f22421712db76d6c1dc45d551128a7d2f805820234c8032a4eb1c5092038",
