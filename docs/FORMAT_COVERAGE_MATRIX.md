@@ -1,6 +1,13 @@
 # Aktuelle Format-Coverage
 
-Stand: 29.09.2026 · lokaler 3.2.0-rc159-Entwicklungsstand, noch kein veröffentlichter Kandidat
+Stand: 11.10.2026 · 3.2.0-rc159 · Standalone RC159 veröffentlicht · Cowork bleibt RC151
+
+Der Standalone-Quellcommit `7af2a9d0268864a01b954e0175cae9f5a3616fe8` ist auf
+allen vier Zielplattformen technisch paketgebunden geprüft und veröffentlicht.
+[Runner, Hashes und Grenzen](RELEASE.md#rc159--standalone-auf-allen-zielplattformen).
+Das ist keine vollständige menschliche Format-/Qualitätsabnahme; neun bekannte
+rohe OCR-E-Mail-Abweichungen bleiben. Der veröffentlichte Cowork-Umfang bleibt
+separat an RC151 gebunden.
 
 Diese Matrix trennt implementierte Verarbeitung, Extraktionsvollständigkeit und
 Zielhost-Abnahme. Ein erfolgreicher Konvertierungstest allein beweist keine

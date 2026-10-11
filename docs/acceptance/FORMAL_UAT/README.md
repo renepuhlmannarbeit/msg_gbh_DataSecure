@@ -1,13 +1,14 @@
 # Formale N3/N4-Abnahme mit Windows und macOS
 
-Stand: 06.10.2026 · Standalone Windows/macOS RC158 · Linux RC157 · Cowork RC151
+Stand: 11.10.2026 · Standalone RC159 · Cowork RC151
 
-**Aktueller Windows-/Mac-Standalone-Kandidat:** [RC158](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc158)
-bindet Quellcommit `f4caf948bde39dbebe8fe359235c3be84f189e5d`.
-Windows-PKG-04/INT-13 bestand zwei bytegleiche saubere Bauten; beide nativen
-Mac-Paketprüfungen einschließlich integrierter Prüfseite, ZIP und beide
-DMGs bestehen. Linux-Standalone und Cowork behalten RC157 beziehungsweise
-RC151; sie dürfen nicht als derselbe RC158-Produktcommit zusammengefasst werden.
+**Aktueller Kandidat für vier Standalone-Zielplattformen:** [RC159](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc159)
+bindet Quellcommit `7af2a9d0268864a01b954e0175cae9f5a3616fe8`.
+Native Paket-/Startgates einschließlich geladener v2- und Prüfseite mit
+erfolgreicher IPC, ZIPs und beide DMGs bestehen. Wiederholte ZIP-Paketierung
+derselben kompilierten App ist identisch; dies ist kein Beleg zweier unabhängiger
+RC159-Rustkompilationen. Native Starts treffen keine Reviewentscheidungen.
+Cowork bleibt RC151 und darf nicht als derselbe RC159-Produktcommit gelten.
 Beide Mac-ZIPs und DMGs bleiben alternative Installationswege mit eigenen Prüfsummen.
 Der frühere RC157-Windows-Anwenderlauf mit 140 Ergebnissen einschließlich lokaler Prüfung
 und Stapelverarbeitung ist bestanden bestätigt. Die leeren formalen CSV-
@@ -15,7 +16,7 @@ Vorlagen widerlegen diesen Funktionsnachweis nicht. Noch fehlende einzelne
 Zielhost-/Accessibility-/Update-/Rollback- oder Rollenprotokolle sind getrennt
 zu benennen; der gesamte Windows-Funktionslauf ist nicht pauschal offen.
 Cowork bleibt RC151 und bekommt eine eigene produktgebundene Kampagne.
-Eine Standalone-RC158-Kampagne muss die exakten RC158-Pakethashes verwenden,
+Eine Standalone-RC159-Kampagne muss die exakten RC159-Pakethashes verwenden,
 nicht die historischen Kandidaten oder Cowork-UAT-Hashes.
 
 **Bisheriger gemeinsamer Quellstand, getrennte Produktpakete:** RC151 ist als technischer
@@ -47,7 +48,7 @@ DMGs, jeweils mit SHA-256-Datei. Windows-PKG-04/INT-13 bestand zwei bytegleiche
 Paketbauten und beide nativen Smokes; der native Mac-Lauf `36562812021` prüfte
 ZIP, DMG, identischen App-Inhalt, Signatur und Start auf beiden Architekturen.
 Für die Wiederholung einer RC142-Kampagne nur deren exakte Assets und den
-RC142-Commit zusammen verwenden; für eine neue Windows-/Mac-Standalone-Kampagne gilt RC158,
+RC142-Commit zusammen verwenden; für eine neue Windows-/Mac-Standalone-Kampagne gilt RC159,
 für Cowork weiterhin RC151. DMGs
 sind nicht notarisiert; sichtbare
 Finder-/Gatekeeper-Installation auf dem Ziel-Mac und menschliche Abnahme bleiben

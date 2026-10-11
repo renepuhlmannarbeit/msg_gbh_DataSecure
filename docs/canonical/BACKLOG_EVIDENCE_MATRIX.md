@@ -1,6 +1,26 @@
 # Evidence-Matrix für aktive Arbeit
 
-Stand: 08.10.2026 · 3.2.0-rc159 · Windows/macOS RC158 veröffentlicht · Linux bleibt RC157 · Cowork bleibt RC151
+Stand: 11.10.2026 · 3.2.0-rc159 · Standalone RC159 auf allen vier Zielplattformen veröffentlicht · Cowork bleibt RC151
+
+**Aktuelle technische Bereitstellung BL-010.53, 11.10.2026 – erledigt:**
+[RC159](../RELEASE.md#rc159--standalone-auf-allen-zielplattformen) bindet
+Quellcommit `7af2a9d0268864a01b954e0175cae9f5a3616fe8` für alle vier Pakete.
+Native Windows-/Intel-Mac-/Apple-Silicon-/Linux-Gates, CI, Clippy und vollständige
+Security am selben Commit bestanden. Vier ZIPs, zwei zusätzliche Mac-DMGs und
+sechs SHA-Dateien vor/nach Upload abgeglichen. Paketierte Windows-/Mac-Sidecars
+belegen Reviewfolgegruppen, OCR-Korrektur, Vertagen/Neustart und Fehlerdateinamen;
+native Tauri-Starts belegen v2-Laden und erfolgreiche aktuelle IPC, keine
+bedienten Entscheidungen. Lokaler Bytevergleich umfasst 190 Windows-/je 188
+Mac-Serverdateien sowie 188 Linux-Dateien nach reiner WSL-AppImage-Extraktion.
+Startanleitungen korrigiert und bytegebunden. Cowork-Source-/ZIP-/strenge
+Claude-Strukturprüfung bestanden, Cowork weiterhin RC151 veröffentlicht.
+
+Nicht erledigt durch diese Bereitstellung: menschliche Installation/Bedienung,
+vollständige Accessibility-/Zielhostabnahme und neue exakte Paket-Qualitätsmessung.
+Neun rohe OCR-E-Mail-Abweichungen bleiben; die separate synthetische Messung
+ist keine allgemeine Garantie. Sechs lokale Windows-Formfälle `NOT_RUN`,
+kein lokaler Desktop bedient. Die folgenden datierten Einträge beschreiben
+ihren damaligen Scope und werden nicht rückwirkend zu Releaseevidenz erklärt.
 
 **Aktueller RC159-Nachtrag, BL-010.53:** Direkter Übergang von bestätigter
 Fundstellenprüfung zur Ergebnisprüfung desselben Laufs und direkter

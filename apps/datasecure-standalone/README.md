@@ -1,6 +1,31 @@
 # DataSecure Standalone Desktop
 
-### Prototyp v2 (08.10.2026, laufende unveröffentlichte Migration)
+### Veröffentlichtes Test-Prerelease RC159 (11.10.2026)
+
+[RC159 für Windows x64, beide Macs und Linux x64 glibc](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc159)
+bindet Quellcommit `7af2a9d0268864a01b954e0175cae9f5a3616fe8`. Die neue
+`frontend/workspace.html` ist der gemeinsame reguläre native Einstieg, keine
+Demo-Verarbeitung. Neue Verarbeitung, Checkbox-/Sammelprüfung, Original-/
+Markdown-Vergleich und Übergang zur Dokumentprüfung gehören zu diesem Paket.
+Fundstellenentscheidungen, **Auswahl freigeben** und **Auswahl für KI exportieren**
+bleiben getrennt. Der KI-Export ist ein normaler separater Ordner ausschließlich
+mit freigegebenen aktuellen Markdown-Ständen; Zuordnungen bleiben privat.
+
+Alle vier nativen Paket-/Startgates, CI, Clippy und vollständige Security bestehen
+am selben Commit. ZIPs und beide zusätzlichen Mac-DMGs wurden samt SHA-Dateien
+nach Upload verifiziert. [Exakter Umfang und Hashes](../../docs/RELEASE.md#rc159--standalone-auf-allen-zielplattformen).
+Menschliche Zielhost-/Bedien-/A11y-Abnahme bleibt offen; Startproben bestätigen
+Laden und erfolgreiche IPC, keine bedienten Prüfentscheidungen. Macs sind nur
+ad-hoc-signiert, nicht notarisiert. Neun bekannte rohe OCR-E-Mail-Abweichungen
+bleiben. Cowork bleibt unabhängig veröffentlicht RC151. Die beigelegten
+[Windows-](START-WINDOWS.md), [Mac-](MACOS-START.md) und
+[Linux-Anleitungen](LINUX-START.md) beschreiben die aktuelle Bedienung.
+
+### Prototyp v2: historische lokale Entwicklung (08.10.2026)
+
+Die folgenden datierten Arbeitsstände beschreiben damalige Engineeringbauten
+und Sperren. Aktueller veröffentlichter Stand ist der oben gebundene RC159;
+keine alte GUI-/Archivprobe wird rückwirkend dessen Bedienabnahme.
 
 `frontend/workspace.html` übernimmt Gestaltung und Interaktion des klickbaren
 Anwenderprototyps: lokale Inter-Schrift, ruhige Karten, unterstrichene Navigation,
@@ -77,8 +102,8 @@ sind ausdrücklich simuliert und keine Produktabnahme.
 Für die grafische Grenzprüfung dient in dieser Vorschau
 `/workspace.html?demo=large-catalogue` mit 201 erfundenen Dateien.
 
-Veröffentlichte Pakete: [RC158 für Windows und beide Macs](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc158).
-Linux bleibt [RC157](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc157).
+Vor RC159 veröffentlichte Pakete: [RC158 für Windows und beide Macs](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc158)
+und [RC157 für Linux](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc157).
 Die folgenden früheren Entwicklungs-/Testbauangaben bleiben zeitlich getrennte Evidenz.
 
 Vorherige Pakete: [RC157 für Windows, macOS Intel, macOS Apple Silicon und Linux](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc157).

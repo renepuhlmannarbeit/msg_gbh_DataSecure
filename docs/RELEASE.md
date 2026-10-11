@@ -1,8 +1,73 @@
 # Release- und Distributionsvertrag
 
-Stand: 06.10.2026 · 3.2.0-rc159
+Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc159 · Veröffentlichungsnachtrag: 11.10.2026
 
-### RC159 – Vierplattform-Prerelease in Vorbereitung (11.10.2026)
+### RC159 – Standalone auf allen Zielplattformen
+
+Das [RC159-Prerelease](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc159)
+ist am 11.10.2026 aus Quellcommit `7af2a9d0268864a01b954e0175cae9f5a3616fe8`
+für Windows x64, macOS Intel, macOS Apple Silicon und Linux x64 glibc veröffentlicht.
+Tag, vier ZIPs, zwei zusätzliche Mac-DMGs und sechs SHA-256-Dateien binden diesen
+Schnitt; die zwölf Uploads wurden vor und nach Veröffentlichung gegen lokale
+Größe und GitHub-SHA-256-Digest geprüft. Keine alten Archive wurden ersetzt.
+Cowork bleibt unverändert auf RC151.
+
+| Nachweis am exakten Paketquellstand | Ergebnis / Grenze |
+|---|---|
+| [Windows `38169233488`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38169233488) | Standalone-/Rust-/Clippy-Gates, 47 reale Konvertergruppen ohne Skip, Paket-Sidecar-Smoke, identischer wiederholter ZIP-Bau und nativer Start aus genau diesem ZIP bestanden. Der native Start weist v2-Seitenladung und erfolgreiche aktuelle IPC derselben Sitzung nach, keine bedienten Reviewentscheidungen. |
+| [Beide Macs `38169235247`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38169235247) | Je Architektur 109 Rustfälle/Clippy und 45 reale Konvertergruppen bestanden; zwei Windows-spezifische Fälle sind ausdrücklich nicht anwendbar. Signaturen, Architektur/Mindestversion, identischer wiederholter ZIP-Bau, direkte sowie LaunchServices-Starts und DMG mit identischer App bestanden. Native Starts belegen Laden/erfolgreiche IPC; keine menschliche Gatekeeper-/Finder-/VoiceOver-Abnahme. |
+| [Linux `38169237247`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38169237247) | Standalone-/106 Rustfälle-/Clippy-Gates und 45 reale Konvertergruppen bestanden; zwei Windows-spezifische Fälle nicht anwendbar. AppImage-Payload, native IPC und geordnetes Ende auf Ubuntu 22.04, identischer wiederholter ZIP-Bau und Start aus dem extrahierten Downloadpaket bestanden. Keine vollständige Desktop-/Picker-/Dateimanager-Bedienabnahme. |
+| [Source-CI `38169233601`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38169233601) | Kostenbegrenzter Produkt-/Repository-Eingang bestanden. Dokumentierte ressourcenabhängige `NOT_RUN`-Fälle werden nicht als native Konverterevidenz gezählt; diese stammt aus den separaten Plattformgates. |
+| [Vollständige Security `38169238826`](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38169238826) | JavaScript-CodeQL, nativer Windows-CodeQL und Gitleaks über vollständige History bestanden; 87 einzeln quell-/fingerprintgebunden bewertete JS-Fundstellen, null unbewertet. Keine ganze Regel deaktiviert. |
+
+Die paketierten Windows-/Mac-Sidecar-Smokes prüfen tatsächlich gemischte Formate,
+passive PDF/PPTX-Inhalte, 1.500 Fundstellen je Datei/4.500 in der ersten Gruppe,
+Firma/Person, Folgegruppen, Vertagen/Neustart, laufweite Entscheidungen, genaue
+CSV-Fehlerdateinamen und originale OCR-Crop-Pixel/Korrektur in beiden Zwecken.
+Dies ist ausdrücklich getrennt von Tauri-/WebView-Klickabnahme. Drei ignorierte
+Rustfälle sind direkt vom jeweiligen Eltern-Regressionsfall gestartete
+Subprozesshelfer, keine als bestanden umetikettierten Bedienprüfungen.
+
+Zusätzlicher lokaler Byteabgleich ohne Desktop: 190 enthaltene Windows- und
+je 188 Mac-Serverdateien entsprechen exakt dem Releasecommit; 188 Linux-Dateien
+wurden nach reiner AppImage-Extraktion in WSL ebenfalls verglichen. Alle drei
+beigelegten Startanleitungen sind bytegebunden und beschreiben Workspace-v2,
+vorgemerkte Sammelentscheidungen, ausdrückliche Dokumentfreigabe und getrennten
+KI-Export. Der gemeinsame Einstieg ist `workspace.html`, ohne Demo-/Engineering-
+Override. Die vollständige Sicherheitskampagne bindet denselben Paketcommit.
+
+| Archiv | Bytes | SHA-256 |
+|---|---:|---|
+| Windows x64 ZIP | 111025829 | `dda85b25d4938f96044fd7180ece9a633b94db2816dd562b9f9efa510eedd627` |
+| macOS Intel ZIP | 119219214 | `3ee201f259544ee19d5c1a790e44897f9d29b71731e6e652a419c5e80e41071a` |
+| macOS Intel DMG | 116724973 | `66bc0d15213ea655c228a13a216b1201f0e82cbe3e2140136fc48b4d88898431` |
+| macOS Apple Silicon ZIP | 115912271 | `c83fc8255228861154e47e79642e64a4d26069f374a789050f233ebc50f1d691` |
+| macOS Apple Silicon DMG | 112817182 | `46601f453a076a37b5fab0b92ce915c1cf78cc3f03958f8b5aeab76b2614b169` |
+| Linux x64 glibc ZIP | 195727226 | `a6f1046f8d2336d6c98858599e19fea1d32f94fd8d3590307cbcb5dabca769bd` |
+
+Lokale maschinenlesbare Belege:
+`dist/rc159-prerelease-assets-7af2a9d/VERIFIED-RELEASE-ASSETS.json` und
+`VERIFIED-PUBLICATION.json`. Sie sind Engineering-Evidenz, kein zusätzlicher
+öffentlicher Dokumentupload. Der saubere Cowork-Source-Bau, sein ZIP-Gate mit
+150 Prüfungen/231 Einträgen und die installierte strenge Claude-Strukturprüfung
+bestanden ebenfalls auf diesem Commit, ohne ein neues Cowork-Paket zu publizieren.
+
+Menschliche N3/N4-, Zielhost-/Accessibility-/Update-/Rollback- und
+Produktionsfreigaben bleiben offen. Der lokale Anwenderdesktop wurde nicht
+bedient; sechs lokale Windows-Formfälle bleiben `NOT_RUN`. Macs sind nur
+ad-hoc-signiert, nicht Developer-ID-signiert/notarisiert; Mindestversion 13.5
+binär geprüft, tatsächliche Runner Intel 15/ARM 14, reale 13.5-UAT offen.
+Die synthetische 72-Varianten-Qualitätsmessung bleibt eine getrennte Quell-/
+Runtime-Messung, keine exakte Paket-/menschliche Qualitätsabnahme. Neun rohe
+OCR-E-Mail-Abweichungen sind weiterhin Warnungen, nicht behoben; nach gebundenen
+Referenzentscheidungen wurden dort keine bekannten finalen Restdaten oder
+Sachwortverluste gemessen. Keine allgemeine Anonymitäts-/Extraktionsgarantie.
+
+### RC159 – Historische Vorbereitung und verworfene Kandidaten (11.10.2026)
+
+Die folgenden datierten Zwischenstände beschreiben damalige Sperren und
+Korrekturen. Der aktuelle veröffentlichte Paketstatus steht oben; diese
+Zwischenarchive und ihre noch offenen Runnerzustände sind keine Releasebindung.
 
 **Abschließender Dokumentationsabgleich:** Der Paketschnitt `6e64e53` bestand
 Windows, Apple Silicon und Linux; Intel-Mac befand sich noch im Build.
@@ -148,7 +213,7 @@ Kontaktwerten und produktübergreifender Abbruch-/Neustart-/Review-Gegenproben.
 Sechs native Windows-Formfälle und menschliche GUI-/Zielhostabnahme bleiben
 ausdrücklich `NOT_RUN`; kein sichtbares lokales Fenster wurde bedient.
 
-Der aktuelle Quellstand ist RC159-Entwicklungsstand und noch kein neu gebundener Paketkandidat. Linux bleibt separat RC157, Cowork bleibt RC151.
+Der aktuelle Quellstand ist RC159 und als Standalone-Prerelease auf allen vier Zielplattformen gebunden. Cowork bleibt RC151.
 Die folgenden RC157-Anwendernachweise bleiben auf ihren damaligen Schnitt
 begrenzt; die neue technische RC158-Paketbindung steht im nächsten Abschnitt.
 ZIP-Verifikation, isolierter Paket-Smoke und

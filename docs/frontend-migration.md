@@ -3,6 +3,14 @@
 Stand: 2026-10-08. Referenz: `codex_auftrag_datasecure/ARBEITSAUFTRAG.md`,
 Design-Tokens und klickbarer Prototyp. Einzige Arbeitsliste: BL-010.53.
 
+**Bereitstellungsnachtrag 11.10.2026:** Die neue Oberfläche ist mit RC159 der
+reguläre Einstieg aller vier veröffentlichten Standalone-Testpakete, gebunden
+an `7af2a9d0268864a01b954e0175cae9f5a3616fe8`. Native Paket-/Start-, CI- und
+Sicherheitsgates bestanden; [genauer Scope](RELEASE.md#rc159--standalone-auf-allen-zielplattformen).
+Die vollständige grafische/menschliche Zielhostabnahme und übrigen Storyreste
+bleiben BL-010.53, keine pauschale Gesamtfreigabe. Frühere datierte Sperren
+unten sind Entwicklungsevidenz, nicht der aktuelle Veröffentlichungsstatus.
+
 ## Fachlicher Abgleich
 
 RC159-Korrektur vom 08.10.2026 (BL-010.53): Nach dem nativ bestätigten

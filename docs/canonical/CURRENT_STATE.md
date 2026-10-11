@@ -1,8 +1,32 @@
 # Aktueller Iststand
 
-Stand: 08.10.2026 · 3.2.0-rc159 · Windows/macOS RC158 veröffentlicht · Linux bleibt RC157 · Cowork bleibt RC151
+Stand: 11.10.2026 · 3.2.0-rc159 · Standalone RC159 auf allen vier Zielplattformen veröffentlicht · Cowork bleibt RC151
 
-## Prototyp v2: laufende lokale Migration (DS-110 / BL-010.53)
+## Aktuell veröffentlicht: Standalone RC159 (DS-110 / BL-010.53)
+
+[RC159](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc159)
+bindet Quellcommit `7af2a9d0268864a01b954e0175cae9f5a3616fe8`. Windows x64,
+Mac Intel/Apple Silicon und Linux x64 glibc sind gebaut und nativ geprüft;
+CI sowie vollständige JavaScript-/Native-CodeQL-/Gitleaks-Kampagne bestehen
+am selben Commit. Vier ZIPs, zwei Mac-DMGs und sechs Prüfsummendateien sind
+veröffentlicht und nach Upload nochmals exakt abgeglichen.
+[Umfang, Runner, Hashes und offene Abnahmen](../RELEASE.md#rc159--standalone-auf-allen-zielplattformen).
+
+Workspace-v2 ist der reguläre Einstieg aller vier Pakete. Nach bestätigtem
+Fundstellenabschluss folgt die Dokumentprüfung desselben Laufs, nicht bloß
+eine Status-Momentaufnahme. Dokumentfreigabe und normaler separater KI-Export
+bleiben ausdrücklich getrennt. Die tatsächlich beigelegten Anleitungen sind
+aktualisiert und bytegebunden. Cowork bleibt separat veröffentlicht RC151.
+
+Die Prerelease-Bereitstellung ist erledigt, keine allgemeine Produktfreigabe:
+native Starts belegen Laden/erfolgreiche IPC, paketierte Windows-/Mac-Sidecars
+zusätzlich tatsächliche Review-/OCR-/Recoveryabläufe, aber keine vollständige
+bediente GUI-Kette. Menschliche Zielhost-/A11y-Abnahme und die neun bekannten
+rohen OCR-E-Mail-Abweichungen bleiben offen. Lokale Desktopbedienung weiterhin
+nicht autorisiert und nicht durchgeführt. Die unten datierten Nachweise
+behalten ihren damaligen Scope; frühere Veröffentlichungssperren sind Historie.
+
+## Prototyp v2: Entwicklungs- und Evidenzchronologie
 
 **Beigelegte Anleitungen, 11.10.2026:** Der unabhängige letzte Paketreview
 bestätigte alte Bedien-/Freigabeangaben in den drei tatsächlich mitgelieferten

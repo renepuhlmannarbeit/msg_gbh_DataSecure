@@ -1,20 +1,25 @@
-# GBH DataSecure – Standalone Windows/macOS RC158 · Linux RC157 · Cowork RC151
+# GBH DataSecure – Standalone RC159 · Cowork RC151
 
 Quellstand: 3.2.0-rc159
 
-Der [Standalone-Vorabkandidat RC158 für Windows und macOS](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc158)
-bindet Quellcommit `f4caf948bde39dbebe8fe359235c3be84f189e5d`.
-Er enthält die integrierte lokale Stapelprüfung mit **Jetzt prüfen** direkt
-am Lauf, mehrere Prüfphasen im selben Fenster und eine automatisch erzeugte
-vertrauliche Identitätszuordnung im markierten Lauf-Unterordner.
-RC158 schließt die revalidierten Diagnose-/Dateileselücken und ergänzt
-Unternehmensentscheidungen, laufweite Wiederverwendung und konkrete Dateifehler.
-195 Produkttestdateien, frische Sicherheitsgates, zwei saubere bytegleiche
-Windows-Paketbauten sowie native Paket-/Startprüfungen auf macOS Intel und
-Apple Silicon bestehen, jeweils einschließlich geladener integrierter Prüfseite.
-Der frühere Windows-Anwenderlauf mit 140 Dateien einschließlich Prüfung bleibt
-bestanden bestätigt; dies ist keine neue bediente Abnahme von RC158.
-Linux bleibt beim separat veröffentlichten RC157.
+Der [Standalone-Vorabkandidat RC159 für alle vier Zielplattformen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc159)
+bindet Quellcommit `7af2a9d0268864a01b954e0175cae9f5a3616fe8`.
+Die neue Oberfläche ist der reguläre Einstieg: **Neue Verarbeitung**, schnelle
+Sammelprüfung mit Checkboxen und Original-/Markdown-Vergleich, Pausieren,
+laufgebundene Fortsetzung und konkrete Dateiprobleme. Nach Abschluss der
+Fundstellenprüfung öffnet sich die Dokumentprüfung desselben Laufs.
+**Auswahl freigeben** und **Auswahl für KI exportieren** sind getrennte,
+ausdrückliche Schritte; nur aktuelle freigegebene Markdown-Stände werden in
+einen normalen separaten Ordner kopiert. Vertrauliche Zuordnungen bleiben lokal
+und gehören nicht in KI-Uploads. Reine Markdown-Konvertierung anonymisiert nicht.
+Native Windows-, Intel-Mac-, Apple-Silicon- und Linux-Paket-/Startgates,
+warnungsfreies Clippy, CI und frische JavaScript-/Native-CodeQL-/Gitleaks-Gates
+bestehen am selben Quellcommit. Paketierte Windows-/Mac-Sidecar-Gegenproben
+prüfen auch Folgegruppen, OCR-Korrektur, Vertagen/Neustart und Fehlerdateinamen;
+native Startproben selbst bestätigen Laden und erfolgreiche IPC, keine
+bedienten Prüfentscheidungen. Neun bekannte rohe OCR-E-Mail-Abweichungen bleiben.
+Der frühere Windows-Anwenderlauf mit 140 Dateien bleibt gültige historische
+Evidenz, ist aber keine neue bediente RC159-Abnahme.
 [Exakte Nachweise und Prüfsummen](docs/RELEASE.md).
 
 Das getrennte [Cowork-Plugin bleibt auf RC151](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc151),
@@ -41,37 +46,36 @@ Für die Standalone-App werden **weder Claude noch Cowork, Node.js, Python oder
 Rust** benötigt. Das zur eigenen CPU passende ZIP vollständig entpacken und
 nicht direkt aus dem ZIP starten; auf dem Mac gibt es alternativ ein DMG:
 
-**[RC158: Windows-/Mac-ZIPs, zusätzliche Mac-DMGs und Prüfsummen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc158)**
-Linux-ZIP und seine Prüfsumme bleiben im [RC157-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc157).
+**[RC159: Windows-/Mac-/Linux-ZIPs, zusätzliche Mac-DMGs und Prüfsummen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc159)**
 
 **Mac-Kompatibilitätshinweis:** Der erneute Paketreview hat in den veröffentlichten
 Standalone-RC140-ZIPs einen Helfer mit höherer Mindestversion gefunden: Intel
 verlangt macOS 15, Apple Silicon macOS 14. Die bisherige Angabe 13.5 war für
-diese ZIPs falsch. Für Mac die unten verlinkten RC158-ZIPs oder DMGs verwenden:
+diese ZIPs falsch. Für Mac die unten verlinkten RC159-ZIPs oder DMGs verwenden:
 ihr Binärvertrag ist für macOS 13.5 geprüft; ein realer Lauf auf 13.5 bleibt offen.
 Die RC140-Downloads werden nicht verändert. Die Mac-Pakete bleiben interne,
 ad-hoc-signierte Piloten ohne bestätigte Finder-/Gatekeeper-Abnahme.
 
 - **Windows 10/11 x64:**
-  [DataSecure-Standalone-3.2.0-rc158-windows-x64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc158/DataSecure-Standalone-3.2.0-rc158-windows-x64.zip)
+  [DataSecure-Standalone-3.2.0-rc159-windows-x64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc159/DataSecure-Standalone-3.2.0-rc159-windows-x64.zip)
   herunterladen, vollständig entpacken und
   `DataSecure Standalone.exe` doppelklicken. Microsoft Edge WebView2 muss als
   Windows-Systemkomponente vorhanden sein. [Ausführliche Windows-Anleitung](apps/datasecure-standalone/START-WINDOWS.md)
 - **Mac mit Intel-Prozessor:**
-  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc158/DataSecure-Standalone-3.2.0-rc158-macos-x64.zip)
-  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc158/DataSecure-Standalone-3.2.0-rc158-macos-x64.dmg)
+  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc159/DataSecure-Standalone-3.2.0-rc159-macos-x64.zip)
+  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc159/DataSecure-Standalone-3.2.0-rc159-macos-x64.dmg)
   herunterladen, die jeweils passende `.sha256` derselben Release-Seite prüfen
   und die enthaltene `DataSecure Standalone.app` nach **Programme** ziehen.
 - **Mac mit Apple Silicon (M1 oder neuer):**
-  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc158/DataSecure-Standalone-3.2.0-rc158-macos-arm64.zip)
-  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc158/DataSecure-Standalone-3.2.0-rc158-macos-arm64.dmg)
+  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc159/DataSecure-Standalone-3.2.0-rc159-macos-arm64.zip)
+  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc159/DataSecure-Standalone-3.2.0-rc159-macos-arm64.dmg)
   herunterladen und genauso installieren.
-  Die Architektur zeigt **Apple-Menü → Über diesen Mac**. RC158 wurde auf
+  Die Architektur zeigt **Apple-Menü → Über diesen Mac**. RC159 wurde auf
   macOS 15 (Intel) und macOS 14 (ARM) ausgeführt; macOS 13.5 ist die deklarierte,
   in allen nativen Komponenten geprüfte Mindestversion (siehe Hinweis oben).
   [Ausführliche macOS-Anleitung](apps/datasecure-standalone/MACOS-START.md)
 - **Linux x64 mit glibc:**
-  [DataSecure-Standalone-3.2.0-rc157-linux-x64-glibc.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc157/DataSecure-Standalone-3.2.0-rc157-linux-x64-glibc.zip)
+  [DataSecure-Standalone-3.2.0-rc159-linux-x64-glibc.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc159/DataSecure-Standalone-3.2.0-rc159-linux-x64-glibc.zip)
   vollständig entpacken, die enthaltene AppImage ausführbar machen und starten.
   Dieses Paket ist technisch nativ geprüft; die sichtbare Linux-UAT ist offen.
 

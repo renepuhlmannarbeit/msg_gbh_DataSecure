@@ -1,6 +1,19 @@
 # Entscheidungs-Traceability
 
-Stand: 08.10.2026 · 3.2.0-rc159 · Windows/macOS RC158 veröffentlicht · Linux bleibt RC157 · Cowork bleibt RC151
+Stand: 11.10.2026 · 3.2.0-rc159 · Standalone RC159 auf allen vier Zielplattformen veröffentlicht · Cowork bleibt RC151
+
+DS-110 / BL-010.53, Veröffentlichung 11.10.2026 → ausdrücklicher Main-/
+Vierplattform-Prerelease-Auftrag samt Workflowkosten-Ausnahme → Quellcommit
+`7af2a9d0268864a01b954e0175cae9f5a3616fe8`, Tag `v3.2.0-rc159` →
+Windows `38169233488`, beide Macs `38169235247`, Linux `38169237247`, CI
+`38169233601` und vollständige Security `38169238826` erfolgreich am selben
+Commit → zwölf Assets vor/nach Veröffentlichung hash-/größengeprüft.
+Gemeinsamer v2-Einstieg und tatsächlich beigelegte Startanleitungen gebunden;
+Fundstellenabschluss führt zur Dokumentprüfung, Freigabe und KI-Export bleiben
+getrennt. [Exakte Evidenz](../RELEASE.md#rc159--standalone-auf-allen-zielplattformen).
+Bereitstellung erledigt; menschliche Plattform-/GUI-/A11y-Abnahme, rohe OCR-
+Genauigkeit und breite Produktionsfreigabe bleiben getrennt. Cowork RC151
+unverändert. Folgende datierte Vorbereitungsstände sind historische Evidenz.
 
 DS-110 / BL-010.53, letzter Release-Dokumentationsreview 11.10.2026 → tatsächlich
 beigelegte Legacy-Startanleitungen trotz v2-App → `START-WINDOWS.md`,

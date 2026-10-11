@@ -1,10 +1,10 @@
 # Produktvertrag: GBH DataSecure
 
-Stand: 08.10.2026 · 3.2.0-rc159 · Ist-Zustand RC159 · Windows/macOS RC158 veröffentlicht · Linux bleibt RC157 · Cowork bleibt RC151
+Stand: 11.10.2026 · 3.2.0-rc159 · Ist-Zustand RC159 · Standalone RC159 auf allen vier Zielplattformen veröffentlicht · Cowork bleibt RC151
 
-Die weiterhin verfügbaren RC157-Standalone-Pakete für Windows, beide Mac-Architekturen und Linux binden
-Quellcommit `111737d28021b6989ffe8d563b58daa9cbae610f`.
-[Release und Nachweise](../RELEASE.md#rc157--standalone-auf-allen-zielplattformen).
+Die aktuellen RC159-Standalone-Pakete für Windows, beide Mac-Architekturen und Linux binden
+Quellcommit `7af2a9d0268864a01b954e0175cae9f5a3616fe8`.
+[Release und begrenzte technische Nachweise](../RELEASE.md#rc159--standalone-auf-allen-zielplattformen).
 Die integrierte lokale Prüfung und Identitätszuordnung gehören ausschließlich
 zum Standalone-Adapter; der veröffentlichte Cowork-Weg wird dadurch nicht verändert.
 
@@ -24,46 +24,48 @@ einzuführen. Claude erhält knappe aufgabenbezogene Anweisungen; technische
 Schutzprüfungen bleiben im Code. Nur tatsächlich mehrdeutige Inhalte benötigen
 eine lokale Fachentscheidung, nicht jeder erfolgreiche Verarbeitungsschritt.
 
-## Normalreise
+## Normalreise: Standalone RC159
 
-Die folgende Normalreise betrifft das Claude-Produkt. Standalone startet nach
-DS-086 auf **Start**, ohne vorausgewählte Betriebsart. Nach ausdrücklicher
-Funktionswahl und Dateiauswahl startet der Anwender einmal die Verarbeitung.
-**Verlauf** zeigt die letzten 20 eigenen Verarbeitungen mit Datum, Zweck,
-Zählern und Status. Jede Zeile öffnet nur ihren eigenen Ergebnisordner bzw. bei
-Anonymisierung ihre Zuordnung oder setzt genau diesen Stapel fort, sofern möglich. Ein
-Abschluss oder Neustart wechselt die Ansicht nicht automatisch.
-Nach einem Abschluss bleibt die Prozessansicht im Abschlusszustand: Sie bietet
-Ergebnis/Verlauf und **Neuen Lauf vorbereiten**, aber keine gleichzeitige
-alte Abschlussmeldung über einer neuen Dateiauswahl. Erst die bewusste neue
-Aufgabe leert Modus und Auswahl; der alte Lauf bleibt im Verlauf. Ein
-fortsetzbarer Lauf wird dadurch nicht heimlich verworfen, sondern bleibt an
-seine Verlaufszeile gebunden. Vor **Starten** darf die vorbereitete Auswahl
-noch ergänzt oder korrigiert werden; danach nicht mehr.
-Nach einem Neustart ist die aktuelle Prozesskarte leer und eine neue Auswahl
-sofort möglich. Frühere fortsetzbare Läufe werden nicht automatisch geladen;
-sie bleiben ausschließlich über ihre konkrete Zeile im Verlauf erreichbar.
+Die bewusste Zweckwahl aus DS-086 bleibt erhalten; Benennung und Darstellung
+wurden mit v2 erneuert. Historische Abgrenzung: Der integrierte Standalone-
+App-Review war in RC151 noch nicht enthalten oder nativ abgenommen.
 
-Unveröffentlichte Ergänzung vom 07.10.2026: Die Standalone-Prüfliste bündelt
-bewiesen gleiche Namen und bietet Mehrfachauswahl sowie direkte OCR-Eingaben.
-Zu jedem Vorkommen bleiben Original und Markdown-Vorschau einsehbar. Kontakte
-mehrerer Dokumente werden innerhalb der bestehenden Grenzen gemeinsam geprüft,
-aber jede Korrektur bleibt an ihre konkrete Originalfundstelle gebunden.
+Unter **Neue Verarbeitung** wird ausdrücklich **Nur umwandeln** oder
+**Umwandeln und anonymisieren** gewählt. Dateien/Ordner hinzufügen und anhaken
+verarbeitet noch nichts; **Verarbeitung starten** beginnt den ausgewählten
+Stapel. Die laufgebundene Ansicht nennt Fortschritt und Dateiprobleme.
+**Pausieren** beendet die aktive Datei einschließlich Bereitstellung; danach
+beginnt keine weitere. **Verarbeitung fortsetzen** gehört genau zu diesem Lauf.
 
-In Standalone RC157 ist nach DS-104 ein **in die App integrierter Prüfweg**
-veröffentlicht. Die Prüfseite ist auf allen vier Plattformen nativ gestartet;
-der sichtbare Windows-Anwenderlauf ist bestanden. Im historischen Stand war
-dieser Weg in RC151 noch nicht enthalten oder nativ abgenommen.
-**Jetzt prüfen** öffnet ihn direkt am aktuellen Lauf, ohne Umweg über den Verlauf.
-Die automatische Verarbeitung endet vor der menschlichen Entscheidung.
-**Später entscheiden** lässt den Lauf als **Prüfung offen** im Verlauf stehen;
-**Prüfung fortsetzen** öffnet genau diesen Lauf auch nach Neustart oder nach
-anderen Aufgaben. Ungeprüfte Dateien werden nicht als anonymisierte Ergebnisse
-freigegeben. Der Haupt-Renderer bleibt inhaltsfrei; nur ein berechtigungsarmes
-Standalone-Prüffenster zeigt erforderliche Quellstellen. Coworks eigener
-Reviewadapter und dessen Bedienung bleiben davon unabhängig.
+**Jetzt prüfen** öffnet die integrierte Fundstellenprüfung ohne Verlaufsumweg.
+Checkboxen sind Auswahl, zentrale Aktionen merken Entscheidungen zunächst vor;
+erst **Gruppe übergeben und weiter** speichert eine vollständig behandelte
+Gruppe. Bewiesen gleiche vollständige Entitäten werden laufweit wiederverwendet;
+OCR-Korrekturen bleiben an konkrete Originalfundstellen gebunden. Originalpixel,
+Quelltext und Markdown-Vorschau bleiben lokal im berechtigten privaten Prüfweg.
+Der inhaltsfreie öffentliche Metadatenkanal ist davon getrennt; der Workspace
+erhält Dokumentinhalte nur über den expliziten privaten Dokumentprüfvertrag.
+Coworks Reviewadapter bleibt unabhängig.
 
-Eine in RC157 veröffentlichte Standalone-Erweiterung (BL-010.45) ist die
+Nach bestätigtem Fundstellenabschluss öffnet sich bei Anonymisierung die
+Dokumentprüfung **desselben Laufs**, nicht nur dessen Status-Momentaufnahme.
+Original und geplanten Text prüfen, Dokumente auswählen und **Auswahl freigeben**
+wählen. Freigaben binden Revision/Hash; Änderungen heben betroffene Freigaben auf.
+**Auswahl für KI exportieren** ist ein eigener bestätigter Auftrag: Nur aktuelle
+freigegebene Markdown-Stände gelangen in einen normalen separaten Ordner.
+Originale, private Prüfstände und Zuordnungen werden nicht mitkopiert.
+Fundstellenabschluss ist weder Dokumentfreigabe noch Exportabschluss.
+
+**Später entscheiden** lässt einen gespeicherten Lauf offen; unübergebene
+Eingaben sind nicht gespeichert. **Verlauf** zeigt bis zu 20 Verarbeitungen mit
+eigenen Aktionen; **Ergebnisse prüfen und freigeben** öffnet dort direkt die
+Dokumentliste. Neustart/Verbindungsverlust wiederholen Starts, Entscheidungen
+oder Exportbestätigungen nicht blind. Der gespeicherte Stand muss bewusst
+neu geladen werden; neue Eingaben starten keine alte Verarbeitung heimlich.
+**Markdown nachkorrigieren** gehört zum reinen Konvertierungszweck, dessen
+Ausgaben ausdrücklich Originalinhalte und keine Anonymisierung enthalten.
+
+Eine seit RC157 veröffentlichte Standalone-Erweiterung (BL-010.45) ist die
 **automatische vertrauliche Identitätszuordnung** für Menschen. `[PERSON_011]`
 ist nur ein Beispiel, weder ein festes Kennungsformat noch eine Beschränkung
 auf Personen. Alle tatsächlich eindeutig zuordenbaren Pseudonyme – darunter
@@ -81,6 +83,8 @@ Erfasste und nicht eindeutig zuordenbare Stellen werden getrennt ausgewiesen.
 Betriebssystemkonto und Datenträgerverschlüsselung müssen den
 lokalen Zugriff schützen; eine zusätzliche Dateiverschlüsselung ist bislang
 nicht implementiert.
+
+## Normalreise: Cowork RC151
 
 1. In Cowork „Dateien anonymisieren“ schreiben oder den gleichnamigen Skill wählen.
 2. Nur beim ersten Lauf einen lokalen Ergebnisordner ausdrücklich wählen.
