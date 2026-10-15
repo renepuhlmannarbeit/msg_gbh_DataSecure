@@ -27,6 +27,19 @@ Paketbau. Die bisherige Testausgabe verschluckte gerade die inhaltsfreie
 Fehlschlag nun ausschließlich die feste Phase und ggf. numerisches Errno aus.
 Welche Phase betroffen war, ist aus diesem Lauf nicht rekonstruierbar. Ein
 echter M2-/Finder-/Quarantäne-Nachweis steht weiterhin aus.
+Der nächste Lauf
+[38789969916](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38789969916)
+lieferte beim 19. Kurzprozess den zuvor fehlenden Beleg:
+`parent-process-group errno=1` (`EPERM`). Der Elternprozess rief `setpgid`
+nochmals auf, während das Kind seine eigene Prozessgruppe bereits setzen
+und sehr schnell enden konnte. Die Quellkorrektur entfernt den zweiten
+Eltern-`setpgid` und verlangt vor `exec` ein einzelnes Kind-Signal über
+eine begrenzt wartende Pipe. Erst danach darf der Elternprozess die
+Prozessgruppe überwachen oder beenden. Bleibt das Signal aus, wird der
+eigene Kindprozess beendet und als Setupfehler protokolliert; weder
+RSS-Grenze noch Gruppenbereinigung werden abgeschaltet. Linux-Kompilation
+mit `-Werror` und 300 echte kurze Kinder sind lokal grün. Ein neuer
+macOS-26-Gate-Lauf und ein M2-Test sind noch erforderlich.
 
 ### Mac-Quellreview nach dem M2-Fehlerbericht (noch kein neues Zielhost-Ergebnis)
 

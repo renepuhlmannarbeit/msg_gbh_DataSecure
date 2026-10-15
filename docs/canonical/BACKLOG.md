@@ -13,6 +13,11 @@ Der synthetische Test gibt im Fehlerfall nun nur die feste Supervisor-Phase
 und ggf. numerisches Errno aus. Beim nächsten 121 die Phase ursächlich beheben,
 keine RSS-/Prozessgruppenüberwachung für ein grünes Gate abschalten.
 Auch nach grünem Runner bleiben Finder-Quarantäne und verwalteter M2 offen.
+Der Folgelauf `38789969916` belegte `parent-process-group errno=1` (`EPERM`)
+beim 19. Kurzprozess. Der redundante Eltern-`setpgid` ist nun durch ein
+begrenztes Kind-vor-`exec`-Handshake ersetzt; RSS- und Gruppen-Reaping-
+Schutz bleiben bestehen. Linux-C-Build und 300 Kurzprozesse bestanden;
+macOS-26-Paketgate und Zielhost-Neuprobe bleiben offen.
 
 **P0 – M2-Neuprobe nach Quellreview:** Drei übermittelte Desktoplogs enthalten
 je 16 fehlgeschlagene IPC-Antworten. Quellfehler: automatisches

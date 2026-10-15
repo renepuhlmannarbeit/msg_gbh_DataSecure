@@ -22,6 +22,16 @@ betroffene Test verschluckte zuvor die neue inhaltsfreie 121-Phasenmeldung;
 `test-office-image-ocr.mjs` gibt bei Fehlschlag ausschließlich deren feste
 Phase und ggf. numerisches Errno aus. Ursache, Paketbau und verwalteter
 M2-/Finder-Test bleiben offen.
+Der nächste Lauf
+[38789969916](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38789969916)
+lieferte für den 19. Kurzprozess `parent-process-group errno=1` (`EPERM`).
+`posix-sandbox.c` verwendet nun statt des redundanten Eltern-`setpgid`
+ein bounded Pipe-Signal des Kinds nach erfolgreichem `setpgid(0,0)` und
+vor `exec`; fehlender Nachweis führt zu begrenztem Setupabbruch samt
+Reaping. Apple XNU nennt die `EPERM`-Pfadbedingungen ausdrücklich:
+[setpgid-Implementierung](https://github.com/apple/darwin-xnu/blob/main/bsd/kern/kern_prot.c).
+Linux-`-Werror`-Build und 300 Kurzprozesse bestanden lokal; die
+Mac-26-Gate-Neuprobe steht aus.
 
 M2-Quellreview, Runde 2 → `desktop-interactions*.jsonl` (drei Dateien,
 je 16 `STANDALONE_IPC_FAILED`) gegen `main.rs:reserve_sidecar_generation`

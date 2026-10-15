@@ -4,6 +4,7 @@
 #define _POSIX_C_SOURCE 200809L
 #endif
 #include <errno.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -46,7 +47,8 @@ static int setup_failure(const char *phase, int error_number) {
 
 #define CHILD_SETUP_FAILURE(phase) do { \
   static const char message[] = "datasecure-sandbox setup_failure phase=" phase "\n"; \
-  (void)write(STDERR_FILENO, message, sizeof(message) - 1); \
+  ssize_t reported = write(STDERR_FILENO, message, sizeof(message) - 1); \
+  (void)reported; \
   _exit(SETUP_ERROR); \
 } while (0)
 
@@ -147,6 +149,7 @@ int main(int argc, char **argv) {
   uint64_t memory_bytes, started;
   unsigned int unavailable_rss_samples = 0;
   pid_t pid;
+  int group_pipe[2];
   struct sigaction action;
   sigset_t cancellation_signals, previous_mask;
   if (argc == 2 && strcmp(argv[1], "--sandbox-contract") == 0) {
@@ -177,12 +180,26 @@ int main(int argc, char **argv) {
   // the unreaped child is the ownership/PID-reuse guard for group cleanup.
   action.sa_handler = SIG_DFL;
   if (sigaction(SIGCHLD, &action, NULL) != 0) return setup_failure("parent-child-handler", errno);
+  started = monotonic_ms();
+  if (started == UINT64_MAX) return setup_failure("parent-monotonic-clock", 0);
 
+  /* The child must establish its own group before any executable can run.
+     A one-byte pipe proves that fact to the parent without racing a second
+     setpgid against a short-lived exec/exit on Darwin. */
+  if (pipe(group_pipe) != 0) return setup_failure("parent-group-pipe", errno);
   pid = fork();
-  if (pid < 0) return START_ERROR;
+  if (pid < 0) {
+    close(group_pipe[0]); close(group_pipe[1]);
+    return START_ERROR;
+  }
   if (pid == 0) {
+    const char group_ready = 'G';
     uint64_t seconds = (cpu_ms + 999ULL) / 1000ULL;
+    close(group_pipe[0]);
     if (setpgid(0, 0) != 0) CHILD_SETUP_FAILURE("child-process-group");
+    if (write(group_pipe[1], &group_ready, 1) != 1)
+      CHILD_SETUP_FAILURE("child-group-signal");
+    close(group_pipe[1]);
     action.sa_handler = SIG_DFL;
     if (sigaction(SIGINT, &action, NULL) != 0 || sigaction(SIGTERM, &action, NULL) != 0 ||
         sigaction(SIGHUP, &action, NULL) != 0 ||
@@ -218,24 +235,32 @@ int main(int argc, char **argv) {
     }
   }
 
-  if (setpgid(pid, pid) != 0) {
-    int group_errno = errno;
-    /* EACCES means the child has already exec'd, after its own mandatory
-       setpgid. A second getpgid can race with a short-lived child exit. */
-    if (group_errno != EACCES && group_errno != ESRCH) {
+  close(group_pipe[1]);
+  {
+    struct pollfd pending = { .fd = group_pipe[0], .events = POLLIN };
+    char group_ready = 0;
+    int available = 0;
+    uint64_t handshake_limit = wall_ms < 5000 ? wall_ms : 5000;
+    for (;;) {
+      uint64_t now = monotonic_ms();
+      if (now == UINT64_MAX || now < started || now - started >= handshake_limit) break;
+      available = poll(&pending, 1, (int)(handshake_limit - (now - started)));
+      if (available < 0 && errno == EINTR) continue;
+      break;
+    }
+    int poll_errno = available < 0 ? errno : 0;
+    int received = available > 0 ? (int)read(group_pipe[0], &group_ready, 1) : 0;
+    int read_errno = received < 0 ? errno : 0;
+    close(group_pipe[0]);
+    if (available <= 0 || received != 1 || group_ready != 'G') {
       kill_and_reap(pid);
-      return setup_failure("parent-process-group", group_errno);
+      return setup_failure("parent-group-handshake", poll_errno ? poll_errno : read_errno);
     }
   }
   if (sigprocmask(SIG_SETMASK, &previous_mask, NULL) != 0) {
     int mask_errno = errno;
     kill_and_reap(pid);
     return setup_failure("parent-signal-restore", mask_errno);
-  }
-  started = monotonic_ms();
-  if (started == UINT64_MAX) {
-    kill_and_reap(pid);
-    return setup_failure("parent-monotonic-clock", 0);
   }
   for (;;) {
     siginfo_t observed;
