@@ -1,6 +1,18 @@
 # Entscheidungs-Traceability
 
-Stand: 15.10.2026 · 3.2.0-rc161 · veröffentlicht Standalone RC160 (Windows x64, macOS Intel/Apple Silicon) / Cowork RC151; Linux Standalone RC159
+Stand: 15.10.2026 · 3.2.0-rc161 · veröffentlicht Standalone RC161 (Mac-Test-Pre-Release), Windows RC160, Linux RC159 / Cowork RC151
+
+RC161-Mac-Testveröffentlichung → annotierter Tag `v3.2.0-rc161` löst auf
+`f96c9e246997e52bf37f21930e2d0a3f978d68b2`; [Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc161).
+[CI 38805013420](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38805013420),
+[Security 38805013905](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38805013905),
+[ARM/macOS 26 38805013790](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38805013790)
+und [Intel 38805013523](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38805013523)
+melden je denselben Commit und Erfolg. Beide heruntergeladenen ZIPs bestanden
+`verify-standalone-macos-package.mjs`; ZIPs/DMGs und vier Checksum-Dateien
+stimmen in lokaler SHA-256 und Bytezahl exakt mit GitHubs Release-Asset-Digests
+überein. Das ist native Paket-/Start-/IPC-Evidenz, keine menschliche
+M2-/Finder-/MDM-Abnahme oder Developer-ID-/Notarisierungsfreigabe.
 
 Mac-26-Supervisor-Nachprüfung →
 [Lauf 38786961975](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38786961975)
@@ -35,8 +47,8 @@ Linux-`-Werror`-Build und 300 Kurzprozesse bestanden lokal. Die
 auf `1ea56ab` bestand alle Schritte: native Kurzprozesse, Produkt-/OCR-Gates,
 Clippy, App-/Core-Integrität, privater IPC-Start, reguläres Benutzerprofil,
 ZIP mit echter Paketkonvertierung und DMG. Das auf einen Tag begrenzte
-Engineering-Artefakt ist kein Pre-Release und kein verwalteter M2-/Finder-
-oder Gatekeeper-Beleg.
+damalige Engineering-Artefakt war kein Pre-Release und ist kein Beleg für
+verwalteten M2, Finder oder Gatekeeper.
 
 M2-Quellreview, Runde 2 → `desktop-interactions*.jsonl` (drei Dateien,
 je 16 `STANDALONE_IPC_FAILED`) gegen `main.rs:reserve_sidecar_generation`

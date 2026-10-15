@@ -1,6 +1,16 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 15.10.2026 · Produktstand 3.2.0-rc161 · veröffentlicht Standalone RC160 (Windows x64, macOS Intel/Apple Silicon) / Cowork RC151; Linux Standalone RC159 · Teilkopie-/Dauerblockadefall und menschliche Zielhost-Abnahme offen
+Stand: 15.10.2026 · Produktstand 3.2.0-rc161 · veröffentlicht Standalone RC161 (Mac-Test-Pre-Release), Windows RC160, Linux RC159 / Cowork RC151 · Teilkopie-/Dauerblockadefall und menschliche Zielhost-Abnahme offen
+
+**P0 – RC161-Zielhostprobe:** Das [Mac-Test-Pre-Release RC161](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc161)
+ist aus `f96c9e2` nach grünen CI-, Security- und nativen ARM26-/Intel-Gates
+veröffentlicht. Auf dem verwalteten M2/macOS 26.2 ZIP oder DMG über den
+ursprünglichen Finder-/Benutzerordner-Weg mit **synthetischen** Daten prüfen:
+App-/Core-Verbindung, Datei-/Ordnerdialog, Ergebnisordner, kleine Konvertierung,
+Anonymisierung und Diagnosepaar. Sichtbare Build-ID und bei Fehlern beide
+inhaltsfreien Logarten erfassen. Kein Gatekeeper-/Endpoint-Bypass. Der M2-Befund
+und die Apple-Codeplatzierung/Developer-ID-/Notarisierung vor regulärer
+Mac-Auslieferung bleiben offen; Runner-Erfolg ist keine Zielhost-Abnahme.
 
 **P0 – Supervisor-Fehler 121 auf macOS 26 (CI behoben, Zielhost offen):** Der erste aktuelle Gate-Lauf
 `38786961975` stoppte vor dem App-Bau im nativen Kurzprozess-Test. Phasen-
@@ -32,7 +42,8 @@ Quellstand nach zwei Versuchen angehalten; ein ausdrücklich ausgelöster
 Statusversuch bleibt möglich, Lauf-/Exportaktionen werden nicht wiederholt.
 Exit-/Signal-/Mac-Architekturcodes, Sidecar-Logstatus, CI-Build-ID und
 linkfrei-exklusive Startdiagnose ergänzen den nächsten Diagnosebeleg.
-Lokale Tests und neues macOS-26-ARM-Engineering-Paket grün,
+Lokale Tests und damaliges macOS-26-ARM-Engineering-Paket grün; das
+veröffentlichte RC161-Testpaket ersetzt dieses eintägige Artefakt.
 **M2-/Finder-/MDM-Test noch offen**.
 Beim nächsten echten Test nur synthetische Quellen verwenden, Build-ID
 ablesen und beide Diagnosearten sichern. Keine Schutzrichtlinie abschalten.
@@ -52,13 +63,13 @@ nach `sidecar_spawned` mit `STANDALONE_IPC_FAILED`; das fehlende Sidecar-Log
 ist selbst eine Diagnoselücke. Quellstand: frühe Sidecar-Phasen und begrenzter
 nativer Exit-/Signalbefund, Picker- und UI-Blockgründe sowie Status des
 nativen Diagnose-Sinks ergänzt. Lokale Tests und macOS-26-ARM-CI-Gate sind
-grün; danach erneuter Nicht-Admin-M2-Test mit dem neuen Engineering-DMG
-oder -ZIP (nicht beide gleichzeitig),
-regulärem Benutzerprofil, Dateidialogen, Konvertierung, Ergebnisablage und
+grün; danach erneuter Nicht-Admin-M2-Test mit dem RC161-DMG
+oder -ZIP (nicht beide gleichzeitig), mit regulärem Benutzerprofil,
+Dateidialogen, Konvertierung, Ergebnisablage und
 vollständigem inhaltsfreiem Diagnosepaar. Bei fortbestehendem Fehler den
 festen Abbruchcode und gegebenenfalls die von IT freigegebene
 Endpoint-Security-/Gatekeeper-Diagnose auswerten, ohne Richtlinien zu umgehen.
-Kein neues Pre-Release allein aus einem grünen synthetischen CI-Start.
+Ein grüner synthetischer CI-Start allein hätte keine Zielhost-Freigabe begründet.
 Die Mac-Projektion muss im DMG für fremde Installations-Eigentümer lesbar
 und ausführbar sein (Quellkorrektur + natives Modus-Gate ergänzt). Der Nutzer
 kopierte aber in den eigenen Ordner, sodass diese Lücke den gemeldeten

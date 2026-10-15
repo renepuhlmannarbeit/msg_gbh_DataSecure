@@ -2,6 +2,36 @@
 
 Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc161 · Veröffentlichungsnachtrag: 15.10.2026
 
+### RC161 – macOS-Test-Pre-Release (Apple Silicon und Intel)
+
+Das [RC161-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc161)
+ist am 15.10.2026 aus Commit `f96c9e246997e52bf37f21930e2d0a3f978d68b2`
+als Mac-only-Teststand erschienen. Der annotierte Tag löst auf genau diesen
+Commit auf; Windows bleibt RC160, Linux RC159, Cowork RC151. Vier Mac-Pakete
+(ZIP und DMG je Architektur) und vier SHA-256-Dateien wurden nach dem
+Herunterladen strukturell und kryptographisch geprüft; alle acht Größen und
+GitHub-Asset-Digests stimmen mit lokalen Dateien überein.
+
+| Gate auf dem exakten Releasecommit | Ergebnis und Grenze |
+|---|---|
+| [Lokale Standalone-Quellsuite](../package.json) | Vollständig bestanden; 122 Rusttests bestanden, drei Subprozesshelfer bewusst ignoriert. Native Windows-Formtests und menschliche Mac-Bedienung darin `NOT_RUN`. |
+| [CI](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38805013420) und [Security](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38805013905) | Produkt-/Repository-Gates, JavaScript-/nativer CodeQL und vollständige Gitleaks-History bestanden. |
+| [macOS 26 ARM](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38805013790) | Nativer Supervisor-/Konverter-/Rust-/App-/Core-/ZIP-/DMG-Test bestanden. Kein verwalteter M2- oder Finder-/Quarantäne-Beleg. |
+| [macOS Intel](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38805013523) | Dieselben nativen Paketgrenzen bestanden. Keine menschliche Zielhost-Abnahme. |
+
+| Archiv | Bytes | SHA-256 |
+|---|---:|---|
+| macOS Apple Silicon ZIP | 116173730 | `b1b8d90a08573100cf41ca6508bf3ca06aeeb654d39871c2815f2f7f514a7cbc` |
+| macOS Apple Silicon DMG | 131303365 | `d8aa0ee5843b1c4cf74ff2996790e89614f2feb3203395d86545b4c8ee8f1cae` |
+| macOS Intel ZIP | 120271862 | `0b475e802f1e00f6fd21e0db5fe9c3a93526d933cc4ff6bbe55cef7674acdd0e` |
+| macOS Intel DMG | 136516941 | `390e87a14686d9eb5a0cd75366e82fc9b58f08d99ae9ae689e25cdb799c6c58a` |
+
+RC161 ist nur für den erneuten M2-Test mit synthetischen Daten bestimmt.
+Der ursprüngliche Startfehler auf dem verwalteten macOS-26.2-M2 ist noch nicht
+ursächlich bewiesen oder durch CI widerlegt. Die Pakete sind ad-hoc-signiert,
+nicht Developer-ID-signiert oder notarisiert. Kein Schutzrichtlinien-Bypass;
+keine Produktionsfreigabe und keine allgemeine OCR-/Anonymitätsgarantie.
+
 ### RC160 – Standalone-Test-Pre-Release (Windows und macOS)
 
 Das [RC160-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc160)

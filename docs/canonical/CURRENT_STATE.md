@@ -1,8 +1,29 @@
 # Aktueller Iststand
 
-Stand: 15.10.2026 · 3.2.0-rc161 · veröffentlicht Standalone RC160 (Windows x64, macOS Intel/Apple Silicon) / Cowork RC151; Linux Standalone RC159
+Stand: 15.10.2026 · 3.2.0-rc161 · veröffentlicht Standalone RC161 (macOS Intel/Apple Silicon, Test-Pre-Release); Windows RC160 / Linux RC159 / Cowork RC151
 
-### Nachprüfung des Mac-26-Supervisors (Engineering-Stand, kein neues RC)
+### RC161 als macOS-Test-Pre-Release veröffentlicht – M2-Zielhost weiter offen
+
+Das [RC161-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc161)
+bindet den annotierten Tag an `f96c9e246997e52bf37f21930e2d0a3f978d68b2`.
+Apple-Silicon- und Intel-ZIP sowie beide DMGs und vier `.sha256`-Dateien
+liegen dort dauerhaft statt nur als eintägige Engineering-Artefakte.
+Alle acht GitHub-Assetgrößen und SHA-256-Digests wurden gegen die lokal
+heruntergeladenen, paketgeprüften Dateien verglichen. Die vollständige
+lokale Standalone-Quellsuite, [CI](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38805013420),
+[Security](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38805013905),
+[macOS 26 ARM](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38805013790)
+und [macOS Intel](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38805013523)
+bestanden auf genau diesem Commit. Der ARM-Lauf prüfte den App-/Core-Start,
+isolierte Konvertierung, signiertes Bundle, ZIP- und DMG-Vergleich und
+Paketkonvertierung; Intel prüfte dieselben Paketgrenzen. Diese Evidenz
+ersetzt **nicht** den Finder-/Quarantäne-/MDM-Test auf dem betroffenen
+M2/macOS 26.2. Die Ursache des RC160-Startfehlers bleibt unbekannt. RC161 ist
+ad-hoc-signiert, nicht Developer-ID-signiert oder notarisiert; ausschließlich
+synthetische Daten für die Neuprobe verwenden. Windows RC160 wird durch diesen
+Mac-only-Pre-Release nicht ersetzt.
+
+### Vorausgehende Nachprüfung des Mac-26-Supervisors (Engineering-Stand vor RC161)
 
 Der erste erneute ARM/macOS-26-Lauf
 [38786961975](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38786961975)
@@ -45,7 +66,8 @@ Konvertierung/OCR, Clippy, signiertes Bundle samt Core-Integritätsbeleg,
 privater IPC-Start, reguläres Benutzerprofil, reproduzierbares ZIP,
 LaunchServices-Start, Paketkonvertierung und DMG-Vergleich. ZIP und DMG
 wurden als **Engineering-Artefakt** für einen Tag hochgeladen (Ablauf
-16.10.2026, 19:26 UTC). Es ist kein RC und kein M2-/Finder-/MDM-Nachweis.
+16.10.2026, 19:26 UTC). Dieses damalige Artefakt war kein RC und ist kein
+M2-/Finder-/MDM-Nachweis; der spätere RC161-Stand steht oben.
 Der Test auf dem verwalteten M2 mit macOS 26.2 bleibt erforderlich.
 
 ### Mac-Quellreview nach dem M2-Fehlerbericht (noch kein neues Zielhost-Ergebnis)
@@ -75,8 +97,9 @@ Verzeichnis an und überschreibt keine vorhandene Datei. Auf macOS meldet
 nicht schon nach dessen Spawn. JavaScript-Syntax, Workspace-/Sidecar-
 Regressionspfade, die vollständige Standalone-Quellsuite, die getrennte
 Konvertierungs-/OCR-Suite, Clippy und 122 Rust-Unit-Tests einschließlich
-neuer Fehlerpfade bestanden lokal. Native M2-Bedienung und ein neues Paket
-stehen noch aus; die Quellsuite meldet native GUI-Abnahme ausdrücklich NOT_RUN.
+neuer Fehlerpfade bestanden lokal. Zum Zeitpunkt dieses Reviews standen
+native M2-Bedienung und ein neues Paket noch aus; RC161 ist inzwischen oben
+separat belegt. Die Quellsuite meldet native GUI-Abnahme ausdrücklich NOT_RUN.
 
 Der erneute Bundle-Quellvergleich fand ein **separates Mac-Verteilungsrisiko**:
 Conversion-Node, POSIX-Supervisor und ein natives Add-on liegen derzeit unter
@@ -86,8 +109,9 @@ anschließend nativ zu prüfen. Diese Komponenten starten erst bei der
 Konvertierung und sind keine belegte Ursache des vorherigen ersten
 Core-Ready-Ausfalls. Das macOS-26-CI-Gate nutzt einen unquarantänisierten
 M1-Runner und ersetzt weder Browser-/Finder-/Gatekeeper noch den verwalteten
-M2 auf 26.2. RC160 bleibt als berichteter Teststand unverändert; keine
-neue Mac-Funktions- oder Releasefreigabe aus diesen Quellbefunden ableiten.
+M2 auf 26.2. RC160 bleibt als berichteter Fehlerstand unverändert; allein aus
+diesen Quellbefunden keine Mac-Funktionsfreigabe ableiten. Der spätere
+RC161-Test-Pre-Release beruht auf den oben getrennt aufgeführten Paketgates.
 
 ### macOS-26.2/M2-Rückmeldung: früher Core-Startabbruch (Paketgate grün, Zielhost offen)
 
