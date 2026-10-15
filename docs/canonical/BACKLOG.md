@@ -8,7 +8,8 @@ nach `sidecar_spawned` mit `STANDALONE_IPC_FAILED`; das fehlende Sidecar-Log
 ist selbst eine Diagnoselücke. Quellstand: frühe Sidecar-Phasen und begrenzter
 nativer Exit-/Signalbefund, Picker- und UI-Blockgründe sowie Status des
 nativen Diagnose-Sinks ergänzt. Lokale Tests und macOS-26-ARM-CI-Gate sind
-separat nachzuweisen; danach erneuter Nicht-Admin-M2-Test mit DMG/ZIP,
+grün; danach erneuter Nicht-Admin-M2-Test mit dem neuen Engineering-DMG
+oder -ZIP (nicht beide gleichzeitig),
 regulärem Benutzerprofil, Dateidialogen, Konvertierung, Ergebnisablage und
 vollständigem inhaltsfreiem Diagnosepaar. Bei fortbestehendem Fehler den
 festen Abbruchcode und gegebenenfalls die von IT freigegebene
@@ -19,8 +20,8 @@ und ausführbar sein (Quellkorrektur + natives Modus-Gate ergänzt). Der Nutzer
 kopierte aber in den eigenen Ordner, sodass diese Lücke den gemeldeten
 Abbruch nicht belegt. Unabhängig davon waren gebündelter Mac-Core-Pfad und
 `RUNTIME-EVIDENCE.json`-Pfad in der Laufzeitprüfung inkonsistent. Die
-gekoppelte Quellkorrektur ist implementiert; sie muss nativ am signierten
-ZIP und DMG sowie beim regulären Core-Start bestätigt werden.
+gekoppelte Quellkorrektur ist implementiert und im signierten Paket nativ
+bestätigt; der verwaltete M2-Zielhost bleibt separat zu prüfen.
 Erster macOS-26-ARM-CI-Lauf [38765209776](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38765209776)
 scheiterte vor dem Paketbau im realen Konverter-Gate nach 64 erfolgreichen
 Fällen an `CONVERSION_ISOLATION_FAILED` beim schnellen Wiederverwenden.
@@ -36,7 +37,11 @@ bestand daraufhin Konverter, App-/Core-Start, regulären LaunchServices-Start,
 ZIP und DMG. Der signierte Core ist nachweislich **nicht** bytegleich mit
 dem Roh-Node. Die gekoppelte Laufzeit-Integritätskorrektur (Mac-Core-Pfad,
 signierter In-App-Beleg, äußere Nachsignierung und DMG-Neubau) ist im
-Quellstand; ihre native Paketprüfung und die M2-/MDM-Bedienprobe stehen aus.
+Quellstand. Das [macOS-26-ARM-Paketgate 38773313665](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38773313665)
+ist vollständig grün, inklusive verpflichtender Hashprüfung am laufenden
+signierten Core, regulärem LaunchServices-Start, ZIP und DMG. Das
+zeitlich begrenzte Engineering-Artefakt gehört exakt zu `26bc50c`; die
+M2-/MDM-Bedienprobe und eine neue plattformübergreifende Freigabe stehen aus.
 
 **RC160-Bereitstellung:** Der Test-Pre-Release ist an
 `b5d52c550ead3fb4cea5acc9e9774de9863db32c` gebunden. CI,

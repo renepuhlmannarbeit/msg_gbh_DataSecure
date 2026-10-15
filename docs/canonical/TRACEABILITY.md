@@ -30,9 +30,8 @@ Core unter `server/`, Tauri legt ihn unter `Contents/MacOS/` ab; zugleich
 liegt `RUNTIME-EVIDENCE.json` außerhalb der `.app`. Die Runtime-Hashprüfung
 konnte so übersprungen werden. Der macOS-26-Lauf bestätigte die
 Byteänderung durch die Signierung; deshalb sind Pfad und post-signierter
-In-App-Beleg gemeinsam im Quellstand korrigiert. Die neue Kette bleibt bis
-zum nativen Paket-/Startnachweis offen. Keine Sicherheitsfreigabe aus
-grünen Quelltests ableiten.
+In-App-Beleg gemeinsam im Quellstand korrigiert. Die neue Kette hat nun
+einen nativen Paket-/Startnachweis, aber noch keine M2-/MDM-Bedienabnahme.
 
 Erster macOS-26-ARM-Gate-Lauf
 [38765209776](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38765209776)
@@ -56,7 +55,11 @@ Lauf [38768282220](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/acti
 Runtime-Kandidatenprüfung pro Pfad entkoppelt und post-signiertem Core ein
 In-App-`RUNTIME-EVIDENCE.json` zugeordnet. Workflow signiert den äußeren
 Bundle nach dem Beleg neu; ZIP-Verifier prüft inneren Hash und äußere
-Quellprovenienz. Native Wiederholung dieses **neuen** Belegpfads noch offen.
+Quellprovenienz. Die [native Wiederholung 38773313665](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38773313665)
+auf macOS 26 ARM bestand alle Gates für `26bc50c`, darunter den Marker
+`STANDALONE_MACOS_RUNNING_CORE_INTEGRITY_CHECKED`, Produktionsprofil,
+ZIP, DMG und synthetische Paketfälle. Ein Tag Engineering-Download,
+keine M2-/MDM-Bedien- oder neue RC-Freigabe.
 
 **RC160-Releasebindung:** Quellcommit
 `b5d52c550ead3fb4cea5acc9e9774de9863db32c` →

@@ -2,7 +2,7 @@
 
 Stand: 15.10.2026 · 3.2.0-rc160 · veröffentlicht Standalone RC160 (Windows x64, macOS Intel/Apple Silicon) / Cowork RC151; Linux Standalone RC159
 
-### macOS-26.2/M2-Rückmeldung: früher Core-Startabbruch (Quellkorrektur in Prüfung)
+### macOS-26.2/M2-Rückmeldung: früher Core-Startabbruch (Paketgate grün, Zielhost offen)
 
 Auf dem verwalteten M2-Mac laden sowohl ARM-DMG als auch ZIP die Oberfläche,
 aber der lokale Dienst meldet keine Bereitschaft; Datei-/Ordnerwahl und
@@ -39,8 +39,10 @@ Host-Node gelten und die Hash-Startprüfung ausfallen. Der dafür nötige
 Beleg lag nur außerhalb der `.app`. Lauf `38768282220` bestätigte, dass
 Tauri/Signierung die Core-Bytes verändert. Beide Pfade und der nach
 Signierung gemessene In-App-Beleg sind nun gemeinsam im Quellstand
-korrigiert; die erneute native Verifikation steht aus. Auch dieser Fehler
-beweist nicht die Ursache des frühen IPC-Abbruchs.
+korrigiert. Der macOS-26-ARM-Lauf `38773313665` bestätigt den signierten
+Start mit verpflichtender Hashprüfung sowie ZIP und DMG. Der verwaltete
+M2-Mac wurde mit diesem Paket noch nicht bedient. Auch dieser Fehler
+beweist nicht die Ursache des früheren IPC-Abbruchs.
 
 Die normale App verwendet gebündelte Hilfsprogramme direkt und benötigt weder
 eine freigeschaltete Terminal-App noch Adminrechte. Eine Organisation kann die
@@ -78,8 +80,13 @@ außerhalb der `.app` liegende Roh-Node-Evidence konnte daher nicht einfach
 als Laufzeitbeleg verwendet werden. Der neue Quellstand bindet den **nach
 der Core-Signierung** gemessenen Hash innerhalb von `Contents/Resources`,
 signiert danach die äußere App erneut und baut das DMG aus genau dieser
-App. Die tatsächliche Prüfung dieser neuen Kette und ein M2-Test fehlen
-noch; der grüne dritte Lauf enthielt diese nachfolgenden Änderungen nicht.
+App. Der [vierte native Lauf 38773313665](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38773313665)
+prüfte diese neue Kette erfolgreich: `STANDALONE_MACOS_RUNNING_CORE_INTEGRITY_CHECKED`,
+regulärer Produktionsprofil-/LaunchServices-Start, reale synthetische
+Konvertierungs-/Anonymisierungsfälle, signiertes ZIP und identisches DMG.
+Das hochgeladene Engineering-Artefakt trägt den Commit `26bc50c` und ist
+nur einen Tag verfügbar. Es ist **kein** neu veröffentlichtes RC und keine
+Finder-/Gatekeeper-/MDM-/M2-Bedienabnahme. Diese Probe bleibt offen.
 
 ### Aktuell veröffentlicht: Standalone RC160 als Test-Pre-Release
 
