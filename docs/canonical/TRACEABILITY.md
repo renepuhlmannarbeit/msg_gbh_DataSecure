@@ -1,6 +1,6 @@
 # Entscheidungs-Traceability
 
-Stand: 15.10.2026 · 3.2.0-rc160 · veröffentlicht Standalone RC160 (Windows x64, macOS Intel/Apple Silicon) / Cowork RC151; Linux Standalone RC159
+Stand: 15.10.2026 · 3.2.0-rc161 · veröffentlicht Standalone RC160 (Windows x64, macOS Intel/Apple Silicon) / Cowork RC151; Linux Standalone RC159
 
 Mac-26-Supervisor-Nachprüfung →
 [Lauf 38786961975](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38786961975)

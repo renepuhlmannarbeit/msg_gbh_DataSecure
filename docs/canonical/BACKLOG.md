@@ -1,6 +1,6 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 15.10.2026 · Produktstand 3.2.0-rc160 · veröffentlicht Standalone RC160 (Windows x64, macOS Intel/Apple Silicon) / Cowork RC151; Linux Standalone RC159 · Teilkopie-/Dauerblockadefall und menschliche Zielhost-Abnahme offen
+Stand: 15.10.2026 · Produktstand 3.2.0-rc161 · veröffentlicht Standalone RC160 (Windows x64, macOS Intel/Apple Silicon) / Cowork RC151; Linux Standalone RC159 · Teilkopie-/Dauerblockadefall und menschliche Zielhost-Abnahme offen
 
 **P0 – Supervisor-Fehler 121 auf macOS 26 (CI behoben, Zielhost offen):** Der erste aktuelle Gate-Lauf
 `38786961975` stoppte vor dem App-Bau im nativen Kurzprozess-Test. Phasen-

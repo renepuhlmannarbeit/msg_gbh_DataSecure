@@ -1,6 +1,6 @@
 # Produktvertrag: GBH DataSecure
 
-Stand: 11.10.2026 · 3.2.0-rc160 · Ist-Zustand RC160 · Standalone RC159 auf allen vier Zielplattformen veröffentlicht · Cowork bleibt RC151
+Stand: 11.10.2026 · 3.2.0-rc161 · Ist-Zustand RC161 · Standalone RC159 auf allen vier Zielplattformen veröffentlicht · Cowork bleibt RC151
 
 Die aktuellen RC159-Standalone-Pakete für Windows, beide Mac-Architekturen und Linux binden
 Quellcommit `7af2a9d0268864a01b954e0175cae9f5a3616fe8`.

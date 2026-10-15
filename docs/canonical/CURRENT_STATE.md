@@ -1,6 +1,6 @@
 # Aktueller Iststand
 
-Stand: 15.10.2026 · 3.2.0-rc160 · veröffentlicht Standalone RC160 (Windows x64, macOS Intel/Apple Silicon) / Cowork RC151; Linux Standalone RC159
+Stand: 15.10.2026 · 3.2.0-rc161 · veröffentlicht Standalone RC160 (Windows x64, macOS Intel/Apple Silicon) / Cowork RC151; Linux Standalone RC159
 
 ### Nachprüfung des Mac-26-Supervisors (Engineering-Stand, kein neues RC)
 

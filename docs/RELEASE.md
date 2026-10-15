@@ -1,6 +1,6 @@
 # Release- und Distributionsvertrag
 
-Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc160 · Veröffentlichungsnachtrag: 15.10.2026
+Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc161 · Veröffentlichungsnachtrag: 15.10.2026
 
 ### RC160 – Standalone-Test-Pre-Release (Windows und macOS)
 
@@ -253,7 +253,7 @@ Kontaktwerten und produktübergreifender Abbruch-/Neustart-/Review-Gegenproben.
 Sechs native Windows-Formfälle und menschliche GUI-/Zielhostabnahme bleiben
 ausdrücklich `NOT_RUN`; kein sichtbares lokales Fenster wurde bedient.
 
-Der aktuelle Quellstand ist RC160-Entwicklungsstand und noch kein neu gebundener Paketkandidat. Cowork bleibt RC151.
+Der aktuelle Quellstand ist RC161-Entwicklungsstand und noch kein neu gebundener Paketkandidat. Cowork bleibt RC151.
 Die folgenden RC157-Anwendernachweise bleiben auf ihren damaligen Schnitt
 begrenzt; die neue technische RC158-Paketbindung steht im nächsten Abschnitt.
 ZIP-Verifikation, isolierter Paket-Smoke und
