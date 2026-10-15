@@ -30,8 +30,13 @@ ein bounded Pipe-Signal des Kinds nach erfolgreichem `setpgid(0,0)` und
 vor `exec`; fehlender Nachweis führt zu begrenztem Setupabbruch samt
 Reaping. Apple XNU nennt die `EPERM`-Pfadbedingungen ausdrücklich:
 [setpgid-Implementierung](https://github.com/apple/darwin-xnu/blob/main/bsd/kern/kern_prot.c).
-Linux-`-Werror`-Build und 300 Kurzprozesse bestanden lokal; die
-Mac-26-Gate-Neuprobe steht aus.
+Linux-`-Werror`-Build und 300 Kurzprozesse bestanden lokal. Die
+[Mac-26-ARM-Gate-Neuprobe 38790860955](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38790860955)
+auf `1ea56ab` bestand alle Schritte: native Kurzprozesse, Produkt-/OCR-Gates,
+Clippy, App-/Core-Integrität, privater IPC-Start, reguläres Benutzerprofil,
+ZIP mit echter Paketkonvertierung und DMG. Das auf einen Tag begrenzte
+Engineering-Artefakt ist kein Pre-Release und kein verwalteter M2-/Finder-
+oder Gatekeeper-Beleg.
 
 M2-Quellreview, Runde 2 → `desktop-interactions*.jsonl` (drei Dateien,
 je 16 `STANDALONE_IPC_FAILED`) gegen `main.rs:reserve_sidecar_generation`

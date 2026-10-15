@@ -2,7 +2,7 @@
 
 Stand: 15.10.2026 · Produktstand 3.2.0-rc160 · veröffentlicht Standalone RC160 (Windows x64, macOS Intel/Apple Silicon) / Cowork RC151; Linux Standalone RC159 · Teilkopie-/Dauerblockadefall und menschliche Zielhost-Abnahme offen
 
-**P0 – Supervisor-Fehler 121 auf macOS 26:** Der erste aktuelle Gate-Lauf
+**P0 – Supervisor-Fehler 121 auf macOS 26 (CI behoben, Zielhost offen):** Der erste aktuelle Gate-Lauf
 `38786961975` stoppte vor dem App-Bau im nativen Kurzprozess-Test. Phasen-
 und numerische Errno-Diagnose, `setpgid`-Race-Korrektur und 300-Fälle-Test
 sind auf dem Entwicklungsbranch. Der zweite Gate-Lauf `38787926269`
@@ -16,8 +16,13 @@ Auch nach grünem Runner bleiben Finder-Quarantäne und verwalteter M2 offen.
 Der Folgelauf `38789969916` belegte `parent-process-group errno=1` (`EPERM`)
 beim 19. Kurzprozess. Der redundante Eltern-`setpgid` ist nun durch ein
 begrenztes Kind-vor-`exec`-Handshake ersetzt; RSS- und Gruppen-Reaping-
-Schutz bleiben bestehen. Linux-C-Build und 300 Kurzprozesse bestanden;
-macOS-26-Paketgate und Zielhost-Neuprobe bleiben offen.
+Schutz bleiben bestehen. Linux-C-Build und 300 Kurzprozesse bestanden.
+Das erneute [macOS-26-ARM-Paketgate 38790860955](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38790860955)
+auf `1ea56ab` bestand vollständig, einschließlich 300 nativer Kurzprozesse,
+isolierter Konvertierung/OCR, App-/Core-Start, regulärem Benutzerprofil,
+ZIP-/DMG- und Paketkonvertierungsnachweis. Das Engineering-Paket ist nur
+bis 16.10.2026, 19:26 UTC als Actions-Artefakt verfügbar. Zielhost-Neuprobe
+und Finder-/Quarantäne-/MDM-Nachweis bleiben offen.
 
 **P0 – M2-Neuprobe nach Quellreview:** Drei übermittelte Desktoplogs enthalten
 je 16 fehlgeschlagene IPC-Antworten. Quellfehler: automatisches
@@ -27,7 +32,8 @@ Quellstand nach zwei Versuchen angehalten; ein ausdrücklich ausgelöster
 Statusversuch bleibt möglich, Lauf-/Exportaktionen werden nicht wiederholt.
 Exit-/Signal-/Mac-Architekturcodes, Sidecar-Logstatus, CI-Build-ID und
 linkfrei-exklusive Startdiagnose ergänzen den nächsten Diagnosebeleg.
-Lokale Tests grün, **neues Mac-Paket und M2-/Finder-/MDM-Test noch offen**.
+Lokale Tests und neues macOS-26-ARM-Engineering-Paket grün,
+**M2-/Finder-/MDM-Test noch offen**.
 Beim nächsten echten Test nur synthetische Quellen verwenden, Build-ID
 ablesen und beide Diagnosearten sichern. Keine Schutzrichtlinie abschalten.
 

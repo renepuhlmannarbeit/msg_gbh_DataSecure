@@ -38,8 +38,15 @@ eine begrenzt wartende Pipe. Erst danach darf der Elternprozess die
 Prozessgruppe überwachen oder beenden. Bleibt das Signal aus, wird der
 eigene Kindprozess beendet und als Setupfehler protokolliert; weder
 RSS-Grenze noch Gruppenbereinigung werden abgeschaltet. Linux-Kompilation
-mit `-Werror` und 300 echte kurze Kinder sind lokal grün. Ein neuer
-macOS-26-Gate-Lauf und ein M2-Test sind noch erforderlich.
+mit `-Werror` und 300 echte kurze Kinder sind lokal grün. Der erneute
+[macOS-26-ARM-Gate-Lauf 38790860955](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38790860955)
+auf `1ea56ab` ist vollständig grün: 300 Kurzprozesse, echte isolierte
+Konvertierung/OCR, Clippy, signiertes Bundle samt Core-Integritätsbeleg,
+privater IPC-Start, reguläres Benutzerprofil, reproduzierbares ZIP,
+LaunchServices-Start, Paketkonvertierung und DMG-Vergleich. ZIP und DMG
+wurden als **Engineering-Artefakt** für einen Tag hochgeladen (Ablauf
+16.10.2026, 19:26 UTC). Es ist kein RC und kein M2-/Finder-/MDM-Nachweis.
+Der Test auf dem verwalteten M2 mit macOS 26.2 bleibt erforderlich.
 
 ### Mac-Quellreview nach dem M2-Fehlerbericht (noch kein neues Zielhost-Ergebnis)
 
