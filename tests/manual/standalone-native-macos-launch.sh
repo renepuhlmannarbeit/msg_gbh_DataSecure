@@ -125,6 +125,7 @@ while ((SECONDS < deadline)); do
     && node "$script_directory/../helpers/native-review-readiness.js" "$desktop_log" \
     && node "$script_directory/../helpers/native-review-readiness.js" "$desktop_log" --main --workspace \
     && grep -q '"event":"sidecar_started"' "$sidecar_log" \
+    && grep -q '"event":"runtime_integrity_checked"' "$sidecar_log" \
     && grep -q '"event":"service_initialized"' "$sidecar_log"; then
     ready=true
     break

@@ -28,10 +28,11 @@ in den eigenen Nutzerordner macht dies zum bestätigten Distributionsfehler,
 nicht zum belegten konkreten Startauslöser. `runtime-info.js` erwartet den
 Core unter `server/`, Tauri legt ihn unter `Contents/MacOS/` ab; zugleich
 liegt `RUNTIME-EVIDENCE.json` außerhalb der `.app`. Die Runtime-Hashprüfung
-kann so übersprungen werden. Ein isolierter Pfad-Fix wäre startblockierend;
-das signierte Core-Bytebild wird im macOS-26-Gate verglichen, danach ist
-die gekoppelte Korrektur umzusetzen. Keine Sicherheitsfreigabe aus grünen
-Quelltests ableiten.
+konnte so übersprungen werden. Der macOS-26-Lauf bestätigte die
+Byteänderung durch die Signierung; deshalb sind Pfad und post-signierter
+In-App-Beleg gemeinsam im Quellstand korrigiert. Die neue Kette bleibt bis
+zum nativen Paket-/Startnachweis offen. Keine Sicherheitsfreigabe aus
+grünen Quelltests ableiten.
 
 Erster macOS-26-ARM-Gate-Lauf
 [38765209776](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38765209776)
@@ -48,7 +49,14 @@ Wiederholung [38767569572](https://github.com/renepuhlmannarbeit/msg_gbh_DataSec
 feste Argumente plus Programm sind neun `argv`-Einträge, Exit 120 war
 fälschlich. `posix-sandbox.c` akzeptiert nun `argc >= 9`; Linux kompiliert
 mit `-Werror` und 100 echte argumentlose Kurzprozesse bestehen. Der
-ursprüngliche Konverter-/Mac-Bundle-Nachweis ist weiterhin offen.
+Lauf [38768282220](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38768282220)
+→ Konverter, nativer ARM-/regulärer macOS-26-Start und ZIP/DMG grün;
+`BUNDLED_RUNTIME_BYTE_EQUAL=false`. Deshalb `runtime-info.js` auf
+`Contents/MacOS/datasecure-core` korrigiert, die dauerhafte
+Runtime-Kandidatenprüfung pro Pfad entkoppelt und post-signiertem Core ein
+In-App-`RUNTIME-EVIDENCE.json` zugeordnet. Workflow signiert den äußeren
+Bundle nach dem Beleg neu; ZIP-Verifier prüft inneren Hash und äußere
+Quellprovenienz. Native Wiederholung dieses **neuen** Belegpfads noch offen.
 
 **RC160-Releasebindung:** Quellcommit
 `b5d52c550ead3fb4cea5acc9e9774de9863db32c` →

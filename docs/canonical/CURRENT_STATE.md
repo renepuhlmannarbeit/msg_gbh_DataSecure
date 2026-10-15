@@ -32,16 +32,15 @@ normalisiert die unveränderlichen Mac-Bundle-Dateien und prüft die Rechte im
 nativen Paketgate auch für einen anderen Eigentümer. Der betroffene Nutzer
 hat die App per Finder in einen eigenen Nutzerordner kopiert; deshalb ist
 dieser Fehler **keine belegte Erklärung** für seinen konkreten Ausfall.
-Ein zweiter bestätigter Architekturfehler bleibt offen: `runtime-info.js`
-sucht den gebündelten Mac-Core nicht am tatsächlichen Tauri-Pfad
-`Contents/MacOS/datasecure-core`. Dadurch kann die Runtime als Host-Node
-gelten und die Hash-Startprüfung ausfallen. Der dafür nötige Beleg liegt
-derzeit nur außerhalb der `.app`; eine isolierte Pfadkorrektur würde den
-Start verweigern. Der macOS-26-Runner prüft deshalb zusätzlich, ob Tauri
-die Core-Binärdatei bytegleich kopiert oder beim Signieren verändert. Erst
-mit diesem Befund beide Pfade/Belege gemeinsam reparieren und erneut nativ
-prüfen. Die Existenz des Fehlers beweist nicht die Ursache des frühen
-IPC-Abbruchs.
+Ein zweiter bestätigter Architekturfehler betraf `runtime-info.js`: der
+gebündelte Mac-Core wurde nicht am tatsächlichen Tauri-Pfad
+`Contents/MacOS/datasecure-core` gesucht. Dadurch konnte die Runtime als
+Host-Node gelten und die Hash-Startprüfung ausfallen. Der dafür nötige
+Beleg lag nur außerhalb der `.app`. Lauf `38768282220` bestätigte, dass
+Tauri/Signierung die Core-Bytes verändert. Beide Pfade und der nach
+Signierung gemessene In-App-Beleg sind nun gemeinsam im Quellstand
+korrigiert; die erneute native Verifikation steht aus. Auch dieser Fehler
+beweist nicht die Ursache des frühen IPC-Abbruchs.
 
 Die normale App verwendet gebündelte Hilfsprogramme direkt und benötigt weder
 eine freigeschaltete Terminal-App noch Adminrechte. Eine Organisation kann die
@@ -71,6 +70,16 @@ einen unabhängigen `argc`-Fehler auf (Supervisor-Exit 120 für ein Programm
 ohne Zusatzargument). Die Mindestanzahl ist korrigiert; 100 echte Linux-
 Kurzprozesse und strenge C-Kompilation bestehen lokal. Das ist kein
 Mac-App-Startnachweis und bestätigt die RSS-Hypothese nicht.
+Im dritten Lauf [38768282220](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38768282220)
+bestanden der zuvor scheiternde Konverterfall, signierter ARM-Bundle-Start,
+regulärer macOS-26-LaunchServices-Start, ZIP-Doppelbau und DMG-Abgleich.
+Der signierte Core weicht byteweise vom Quell-Node ab. Die bisherige
+außerhalb der `.app` liegende Roh-Node-Evidence konnte daher nicht einfach
+als Laufzeitbeleg verwendet werden. Der neue Quellstand bindet den **nach
+der Core-Signierung** gemessenen Hash innerhalb von `Contents/Resources`,
+signiert danach die äußere App erneut und baut das DMG aus genau dieser
+App. Die tatsächliche Prüfung dieser neuen Kette und ein M2-Test fehlen
+noch; der grüne dritte Lauf enthielt diese nachfolgenden Änderungen nicht.
 
 ### Aktuell veröffentlicht: Standalone RC160 als Test-Pre-Release
 

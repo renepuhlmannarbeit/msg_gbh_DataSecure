@@ -596,6 +596,8 @@ fn spawn_sidecar(app: &tauri::AppHandle, lifecycle: &ipc_transport::Lifecycle, s
         command.env("DATASECURE_STANDALONE_DOCUMENTS_DIR", documents);
     }
     command.env("DATASECURE_PRODUCT_CHANNEL", "standalone");
+    #[cfg(target_os = "macos")]
+    command.env("DATASECURE_BUNDLED_RUNTIME_REQUIRED", "1");
     command.env("DATASECURE_NATIVE_EXPORT_CHANNEL", "1");
     command.env("DATASECURE_DOCUMENT_CONTROL_OWNER_PID", std::process::id().to_string());
     command.env("DATASECURE_DOCUMENT_CONTROL_GENERATION", &owner_generation);

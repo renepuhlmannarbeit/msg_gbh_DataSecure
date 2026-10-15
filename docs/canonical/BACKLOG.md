@@ -17,10 +17,10 @@ Kein neues Pre-Release allein aus einem grünen synthetischen CI-Start.
 Die Mac-Projektion muss im DMG für fremde Installations-Eigentümer lesbar
 und ausführbar sein (Quellkorrektur + natives Modus-Gate ergänzt). Der Nutzer
 kopierte aber in den eigenen Ordner, sodass diese Lücke den gemeldeten
-Abbruch nicht belegt. Unabhängig davon sind gebündelter Mac-Core-Pfad und
-`RUNTIME-EVIDENCE.json`-Pfad in der Laufzeitprüfung inkonsistent; beide
-zusammen nach nativer Binär-/Signaturanalyse reparieren, nicht nur die
-Erkennung einzeln aktivieren. Die aktuellen Tests übersehen diese Prüfung.
+Abbruch nicht belegt. Unabhängig davon waren gebündelter Mac-Core-Pfad und
+`RUNTIME-EVIDENCE.json`-Pfad in der Laufzeitprüfung inkonsistent. Die
+gekoppelte Quellkorrektur ist implementiert; sie muss nativ am signierten
+ZIP und DMG sowie beim regulären Core-Start bestätigt werden.
 Erster macOS-26-ARM-CI-Lauf [38765209776](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38765209776)
 scheiterte vor dem Paketbau im realen Konverter-Gate nach 64 erfolgreichen
 Fällen an `CONVERSION_ISOLATION_FAILED` beim schnellen Wiederverwenden.
@@ -31,7 +31,12 @@ Die zweite native Wiederholung [38767569572](https://github.com/renepuhlmannarbe
 stoppte bereits im erweiterten Supervisor-Kurzprozess-Test: der bisherige
 Argumentzähler wies ein Programm ohne Zusatzargument mit Exit 120 ab.
 `argc` ist auf die tatsächlichen acht festen Argumente plus Programm korrigiert;
-der ursprüngliche 100-Dateien-Konverterfall bleibt nativ ungeklärt.
+Der dritte macOS-26-ARM-Lauf [38768282220](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38768282220)
+bestand daraufhin Konverter, App-/Core-Start, regulären LaunchServices-Start,
+ZIP und DMG. Der signierte Core ist nachweislich **nicht** bytegleich mit
+dem Roh-Node. Die gekoppelte Laufzeit-Integritätskorrektur (Mac-Core-Pfad,
+signierter In-App-Beleg, äußere Nachsignierung und DMG-Neubau) ist im
+Quellstand; ihre native Paketprüfung und die M2-/MDM-Bedienprobe stehen aus.
 
 **RC160-Bereitstellung:** Der Test-Pre-Release ist an
 `b5d52c550ead3fb4cea5acc9e9774de9863db32c` gebunden. CI,

@@ -6,6 +6,18 @@ const sea = require('node:sea');
 
 const KNOWN_TARGETS = new Set(['windows-x64', 'macos-x64', 'macos-arm64', 'linux-x64']);
 
+function standaloneExecutable(candidate, serverDirectory = __dirname) {
+  if (candidate === 'windows-x64') {
+    return path.resolve(serverDirectory, '..', 'datasecure-core-x86_64-pc-windows-msvc.exe');
+  }
+  if (candidate === 'macos-x64' || candidate === 'macos-arm64') {
+    // Tauri removes the target suffix and places externalBin under MacOS,
+    // while the product JS resources reside under Contents/Resources/server.
+    return path.resolve(serverDirectory, '..', '..', 'MacOS', 'datasecure-core');
+  }
+  return null;
+}
+
 function runtimeInfo() {
   const seaRuntime = sea.isSea() === true;
   let target = null;
@@ -17,13 +29,8 @@ function runtimeInfo() {
       'darwin/arm64': 'macos-arm64' })[`${process.platform}/${process.arch}`];
     if (candidate) {
       const standalone = process.env.DATASECURE_PRODUCT_CHANNEL === 'standalone';
-      const standaloneName = ({
-        'windows-x64': 'datasecure-core-x86_64-pc-windows-msvc.exe',
-        'macos-x64': 'datasecure-core-x86_64-apple-darwin',
-        'macos-arm64': 'datasecure-core-aarch64-apple-darwin'
-      })[candidate];
       const expected = standalone
-        ? path.resolve(__dirname, '..', standaloneName)
+        ? standaloneExecutable(candidate)
         : candidate === 'windows-x64'
           ? path.resolve(__dirname, '..', 'runtime', 'datasecure-node.exe')
           : path.resolve(__dirname, '..', 'runtime', 'targets', candidate, 'node');
@@ -33,15 +40,15 @@ function runtimeInfo() {
       const durableExpected = standalone
         ? path.resolve(__dirname, '..', 'runtime', process.platform === 'win32' ? 'datasecure-node.exe' : 'datasecure-node')
         : null;
-      try {
-        for (const executable of [expected, durableExpected].filter(Boolean)) {
+      for (const executable of [expected, durableExpected].filter(Boolean)) {
+        try {
           const stat = fs.lstatSync(executable);
           if (stat.isFile() && !stat.isSymbolicLink() && fs.realpathSync(executable) === fs.realpathSync(process.execPath)) {
             target = candidate;
             break;
           }
-        }
-      } catch { /* source checkout or externally managed Node */ }
+        } catch { /* Try the durable runtime after an absent bundle candidate. */ }
+      }
     }
   }
   const selfContained = seaRuntime || target !== null;
@@ -53,4 +60,4 @@ function runtimeInfo() {
   };
 }
 
-module.exports = { runtimeInfo };
+module.exports = { runtimeInfo, standaloneExecutable };

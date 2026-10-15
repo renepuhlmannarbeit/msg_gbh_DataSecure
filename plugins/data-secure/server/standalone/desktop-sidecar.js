@@ -66,6 +66,10 @@ try {
       return nativeSession.send('export_documents', { operation, command, ...(body ? { body } : {}) });
     }
   } : {}) });
+  if (nativeEnabled && process.env.DATASECURE_BUNDLED_RUNTIME_REQUIRED === '1') {
+    // initializeProduct has completed the mandatory signed-runtime check.
+    diagnosticEvent('runtime_integrity_checked', { outcome: 'ready' });
+  }
   diagnosticEvent('service_initialized', { outcome: 'ready' });
 } catch (error) {
   startupError = error;

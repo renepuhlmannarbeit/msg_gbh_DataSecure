@@ -12,11 +12,23 @@ const crypto = require('crypto');
 const { spawnSync } = require('child_process');
 const { createSuite } = require('./helpers');
 const guard = require('../plugins/data-secure/server/gateway/startup-guard');
+const { standaloneExecutable } = require('../plugins/data-secure/server/runtime-info');
 const workflowDiagnostics = require('../plugins/data-secure/server/gateway/workflow-diagnostics');
 const { VERSION } = require('../plugins/data-secure/server/version');
 
 const { test, done, assert } = createSuite('Startup guard');
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-startup-guard-'));
+
+test('macOS standalone Core resolves beside the app executable, not under resources', () => {
+  const server = path.join(base, 'DataSecure Standalone.app', 'Contents', 'Resources', 'server');
+  for (const target of ['macos-x64', 'macos-arm64']) {
+    assert.strictEqual(standaloneExecutable(target, server),
+      path.join(base, 'DataSecure Standalone.app', 'Contents', 'MacOS', 'datasecure-core'));
+  }
+  assert.strictEqual(standaloneExecutable('windows-x64', server),
+    path.join(base, 'DataSecure Standalone.app', 'Contents', 'Resources',
+      'datasecure-core-x86_64-pc-windows-msvc.exe'));
+});
 
 test('every startup failure maps to a fixed code and never to message text', () => {
   assert.strictEqual(guard.startupCodeFor(new Error('PRIVACY_STORAGE_UNSAFE')), 'UNSAFE_STORAGE_LOCATION');
@@ -116,7 +128,7 @@ test('refuseStartup records and exits with code 1', () => {
   assert.deepStrictEqual(exits, [1]);
 });
 
-test('the bundled runtime is verified against RUNTIME-EVIDENCE.json only in the self-contained product', () => {
+test('the bundled runtime is verified, and the native app cannot downgrade to host Node', () => {
   const dir = path.join(base, 'runtime');
   fs.mkdirSync(dir, { recursive: true });
   const executable = path.join(dir, 'datasecure-node.exe');
@@ -129,6 +141,9 @@ test('the bundled runtime is verified against RUNTIME-EVIDENCE.json only in the 
   writeEvidence(sha256);
   const self = { runtime_mode: 'self_contained_node', runtime_target: 'windows-x64' };
   assert.deepStrictEqual(guard.verifyBundledRuntime({ runtimeInfo: () => ({ runtime_mode: 'host_node', runtime_target: null }) }), { checked: false, reason: 'host_node' });
+  assert.throws(() => guard.verifyBundledRuntime({ requireSelfContained: true,
+    runtimeInfo: () => ({ runtime_mode: 'host_node', runtime_target: null }) }),
+  (error) => error.code === 'RUNTIME_INTEGRITY_FAILED', 'the native app must never skip its hash gate');
   assert.deepStrictEqual(guard.verifyBundledRuntime({ runtimeInfo: () => self, evidenceFile, executable }), { checked: true, target: 'windows-x64' });
   writeEvidence('f'.repeat(64));
   assert.throws(() => guard.verifyBundledRuntime({ runtimeInfo: () => self, evidenceFile, executable }), (error) => error.code === 'RUNTIME_INTEGRITY_FAILED');

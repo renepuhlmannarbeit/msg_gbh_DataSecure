@@ -135,7 +135,16 @@ jobs:
         run: cargo clippy --all-targets --locked -- -D warnings
       - name: Build the native signed macOS application bundle
         working-directory: apps/datasecure-standalone/tauri-contract
-        run: npx --no-install tauri build --bundles app,dmg
+        run: npx --no-install tauri build --bundles app
+      - name: Bind the signed Core bytes inside the app and re-sign the outer bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          bundle="apps/datasecure-standalone/tauri-contract/target/release/bundle/macos/DataSecure Standalone.app"
+          node scripts/finalize-standalone-macos-runtime-evidence.mjs \
+            --target "${{ matrix.target }}" --app "$bundle"
+          codesign --force --sign - "$bundle"
+          codesign --verify --deep --strict --verbose=2 "$bundle"
       - name: Verify bundle contract, signature and native architectures
         shell: bash
         run: |
@@ -143,6 +152,31 @@ jobs:
           bundle="apps/datasecure-standalone/tauri-contract/target/release/bundle/macos/DataSecure Standalone.app"
           app="$bundle/Contents/MacOS/datasecure-standalone"
           sidecar="$bundle/Contents/MacOS/datasecure-core"
+          node - "$bundle" "${{ matrix.target }}" <<'NODE'
+          const fs = require('node:fs');
+          const path = require('node:path');
+          const crypto = require('node:crypto');
+          const [app, target] = process.argv.slice(2);
+          const manifest = JSON.parse(fs.readFileSync(path.join(app, 'Contents/Resources/RUNTIME-EVIDENCE.json'), 'utf8'));
+          const entry = manifest.targets.find((item) => item.target === target);
+          const bytes = fs.readFileSync(path.join(app, 'Contents/MacOS/datasecure-core'));
+          if (manifest.schema !== 'datasecure-standalone-runtime-evidence/1' ||
+              entry?.bytes !== bytes.length || entry?.sha256 !== crypto.createHash('sha256').update(bytes).digest('hex')) {
+            throw new Error('STANDALONE_MACOS_SIGNED_RUNTIME_EVIDENCE_INVALID');
+          }
+          NODE
+          DATASECURE_PRODUCT_CHANNEL=standalone DATASECURE_BUNDLED_RUNTIME_REQUIRED=1 "$sidecar" - "$bundle" "${{ matrix.target }}" <<'NODE'
+          const path = require('node:path');
+          const [app, target] = process.argv.slice(2);
+          const server = path.resolve(app, 'Contents/Resources/server');
+          const info = require(path.join(server, 'runtime-info.js')).runtimeInfo();
+          const proof = require(path.join(server, 'gateway/startup-guard.js')).verifyBundledRuntime();
+          if (info.runtime_mode !== 'self_contained_node' || info.runtime_target !== target ||
+              proof.checked !== true || proof.target !== target) {
+            throw new Error('STANDALONE_MACOS_RUNNING_CORE_INTEGRITY_NOT_CHECKED');
+          }
+          process.stdout.write('STANDALONE_MACOS_RUNNING_CORE_INTEGRITY_CHECKED\n');
+          NODE
           conversion_node="$bundle/Contents/Resources/server/standalone/conversion-runtime/node"
           supervisor="$bundle/Contents/Resources/server/native/${{ matrix.target }}/datasecure-sandbox"
           test -f "$bundle/Contents/Info.plist"
@@ -243,13 +277,15 @@ jobs:
           set -euo pipefail
           version="$(node -p "require('./package.json').version")"
           bundle="apps/datasecure-standalone/tauri-contract/target/release/bundle/macos/DataSecure Standalone.app"
-          dmg_dir="apps/datasecure-standalone/tauri-contract/target/release/bundle/dmg"
-          shopt -s nullglob
-          candidates=("$dmg_dir"/*.dmg)
-          test "${#candidates[@]}" -eq 1
-          test -f "${candidates[0]}"
           dmg="dist/DataSecure-Standalone-${version}-${{ matrix.target }}.dmg"
-          cp -- "${candidates[0]}" "$dmg"
+          dmg_source="$(mktemp -d "${RUNNER_TEMP}/datasecure-dmg-source.XXXXXX")"
+          case "$dmg_source" in
+            "${RUNNER_TEMP}/datasecure-dmg-source."*) ;;
+            *) echo "Unsafe DMG source directory" >&2; exit 74 ;;
+          esac
+          ditto "$bundle" "$dmg_source/DataSecure Standalone.app"
+          ln -s /Applications "$dmg_source/Applications"
+          hdiutil create -quiet -volname "DataSecure Standalone" -srcfolder "$dmg_source" -format UDZO "$dmg"
           hdiutil verify "$dmg"
           mount="$(mktemp -d "${RUNNER_TEMP}/datasecure-dmg.XXXXXX")"
           case "$mount" in

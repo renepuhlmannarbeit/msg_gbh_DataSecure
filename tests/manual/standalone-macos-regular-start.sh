@@ -57,6 +57,7 @@ while ((SECONDS < deadline)); do
   if [[ -f "$desktop_log" && -f "$sidecar_log" ]] \
     && grep -q '"event":"sidecar_bootstrap_ready"' "$desktop_log" \
     && grep -q '"event":"sidecar_imports_ready"' "$sidecar_log" \
+    && grep -q '"event":"runtime_integrity_checked"' "$sidecar_log" \
     && grep -q '"event":"service_initialized"' "$sidecar_log" \
     && node "$(dirname "${BASH_SOURCE[0]}")/../helpers/native-review-readiness.js" \
       "$desktop_log" --main --workspace; then

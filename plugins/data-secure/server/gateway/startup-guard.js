@@ -144,6 +144,10 @@ function sha256File(file, io = fs) {
 
 function verifyBundledRuntime(options = {}) {
   const info = typeof options.runtimeInfo === 'function' ? options.runtimeInfo() : runtimeInfo();
+  if ((options.requireSelfContained === true || process.env.DATASECURE_BUNDLED_RUNTIME_REQUIRED === '1') &&
+      (info.runtime_mode !== 'self_contained_node' || !info.runtime_target)) {
+    throw Object.assign(new Error('bundled runtime not identified'), { code: 'RUNTIME_INTEGRITY_FAILED' });
+  }
   if (info.runtime_mode !== 'self_contained_node' || !info.runtime_target) return { checked: false, reason: 'host_node' };
   const io = options.fs || fs;
   const evidenceFile = options.evidenceFile || path.resolve(__dirname, '..', '..', 'RUNTIME-EVIDENCE.json');

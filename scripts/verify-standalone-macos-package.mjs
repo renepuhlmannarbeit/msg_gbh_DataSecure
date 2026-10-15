@@ -57,6 +57,7 @@ for (const required of [
   `${app}/Contents/Resources/server/standalone/conversion-runtime/RUNTIME.json`,
   `${app}/Contents/Resources/server/standalone/conversion-runtime/THIRD_PARTY_NOTICES.txt`,
   `${app}/Contents/Resources/server/native/${productTarget}/datasecure-sandbox.sha256`,
+  `${app}/Contents/Resources/RUNTIME-EVIDENCE.json`,
   ...executables, 'STANDALONE-MANIFEST.json', 'RUNTIME-EVIDENCE.json',
   'RUST-LICENSE-INVENTORY.json', 'SBOM.spdx.json', 'SHA256SUMS', 'LICENSE',
   'LICENSE.node.txt', 'THIRD_PARTY_NOTICES.md', 'MACOS-START.md'
@@ -99,6 +100,17 @@ for (const executable of executables) {
   const value = relative.get(executable);
   assert.deepEqual([...value.subarray(0, 4)], [0xcf, 0xfa, 0xed, 0xfe]);
 }
+const bundledEvidence = JSON.parse(relative.get(`${app}/Contents/Resources/RUNTIME-EVIDENCE.json`));
+const sourceEvidence = JSON.parse(relative.get('RUNTIME-EVIDENCE.json'));
+const signedCore = relative.get(`${app}/Contents/MacOS/datasecure-core`);
+const signedTarget = bundledEvidence.targets?.find((item) => item.target === productTarget);
+const sourceTarget = sourceEvidence.targets?.find((item) => item.target === productTarget);
+assert.equal(bundledEvidence.schema, 'datasecure-standalone-runtime-evidence/1');
+assert.equal(bundledEvidence.targets.length, 1);
+assert.equal(signedTarget?.bytes, signedCore.length);
+assert.equal(signedTarget?.sha256, crypto.createHash('sha256').update(signedCore).digest('hex'));
+assert.equal(signedTarget?.source_sha256, sourceTarget?.sha256);
+assert.equal(signedTarget?.node_version, sourceTarget?.node_version);
 const native = verifyMacNativeContract(relative, { target: productTarget,
   minimumVersion: manifest.minimum_system_version });
 const conversion = JSON.parse(relative.get(`${app}/Contents/Resources/server/standalone/conversion-runtime/RUNTIME.json`));
