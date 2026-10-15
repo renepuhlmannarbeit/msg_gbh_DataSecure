@@ -1,6 +1,46 @@
 # Release- und Distributionsvertrag
 
-Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc160 · Veröffentlichungsnachtrag: 11.10.2026
+Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc160 · Veröffentlichungsnachtrag: 15.10.2026
+
+### RC160 – Standalone-Test-Pre-Release (Windows und macOS)
+
+Das [RC160-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc160)
+ist am 15.10.2026 aus Quellcommit `b5d52c550ead3fb4cea5acc9e9774de9863db32c`
+für Windows x64, macOS Intel und macOS Apple Silicon veröffentlicht. Der
+annotierte Tag löst auf genau diesen Commit auf. Fünf Archive und fünf
+SHA-256-Dateien wurden vor dem Upload lokal und danach gegen die GitHub-Digests
+geprüft. Linux bleibt beim früheren RC159-Download, Cowork bei RC151; sie
+wurden für RC160 nicht neu gebaut oder freigegeben.
+
+| Gate auf dem exakten Releasecommit | Ergebnis und Grenze |
+|---|---|
+| [Lokale Standalone-Quellsuite](../package.json) | 120 Rusttests bestanden, drei bewusst ignorierte Subprozesshelfer; isolierter Windows-Paket-Sidecar-Smoke bestanden. Die vollständige Produkt-Headless-Suite mit 232 Dateien bestand; sechs native GUI-Formfälle darin ausdrücklich `NOT_RUN`. |
+| [CI](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38744664049) | Kostenbegrenzte Produkt- und Repository-Gates bestanden. |
+| [Security](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38745290152) | JavaScript-CodeQL, nativer Windows-CodeQL und vollständige Gitleaks-History bestanden. Neue CodeQL-Fundstellen wurden einzeln geprüft; keine ganze Regel wurde abgeschaltet. |
+| [Windows](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38745285549) | Native Standalone-/Konverter-/Rust-/Clippy-Regressionen, deterministischer Paketbau und Start mit v2-IPC aus genau dem Archiv bestanden. Keine menschliche End-to-End-Bedienabnahme. |
+| [Beide Macs](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38745281074) | Beide Architekturen bestanden native Tests, Signatur-/Paket-/Start-/IPC-Gates; die DMGs enthalten jeweils die identische App. Keine Finder-/Gatekeeper-/VoiceOver-Zielhostabnahme. |
+
+Der Anonymisierungsweg trennt OCR-Kontaktentscheidung, Dokumentvergleich,
+ausdrückliche Dokumentfreigabe und erst danach den getrennten KI-Kopie-Export.
+Die Hauptaktionen sind von zusätzlichen Maskierungs- und
+Wiederherstellungseingriffen getrennt; diese erfordern eine zweite Bestätigung
+und heben eine betroffene Freigabe auf. Der Markdown-only-Weg wurde funktional
+nicht geändert. Verbindungsverlust wiederholt keine Entscheidung und keinen
+Export automatisch. Die App lädt nicht selbst zu einer KI hoch.
+
+| Archiv | Bytes | SHA-256 |
+|---|---:|---|
+| Windows x64 ZIP | 111995409 | `1641b719922da00da8e627720fd615f4e349cec5c01648db79b079053b043855` |
+| macOS Intel ZIP | 120260643 | `3fb558a1ed9ae04bb105e2189176b02f5dcb01d39df261acebbec79cda906dce` |
+| macOS Intel DMG | 117431092 | `0c8ebf4a5a1032ec23385f099a1d54bd30c94c219475414ff30177fcf8154bff` |
+| macOS Apple Silicon ZIP | 116953592 | `77c792137f4208ec2d6bbaef8248755575862905675cb9714052d3150745ae6b` |
+| macOS Apple Silicon DMG | 113488405 | `ccb74a8c940e63a28284af5c74dffa7e48efa8e0d64fc0ce0cee412293e08da3` |
+
+Die macOS-Pakete sind ad-hoc-signiert, weder Developer-ID-signiert noch
+notarisiert. Native Start- und Paketgates ersetzen keine menschliche Bedien-,
+Barrierefreiheits-, Qualitäts- oder Zielhostabnahme. OCR und automatische
+Erkennung können auslassen oder falsch lesen; keine allgemeine
+Anonymitätsgarantie. Für erste Tests ausschließlich synthetische Daten nutzen.
 
 ### RC159 – Standalone auf allen Zielplattformen
 

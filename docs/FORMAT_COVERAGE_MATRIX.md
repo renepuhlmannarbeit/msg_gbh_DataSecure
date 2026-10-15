@@ -1,8 +1,14 @@
 # Aktuelle Format-Coverage
 
-Stand: 13.10.2026 · 3.2.0-rc160 · lokaler Quellstand in Prüfung · veröffentlicht Standalone RC159 / Cowork RC151
+Stand: 15.10.2026 · 3.2.0-rc160 · veröffentlicht Standalone RC160 (Windows x64, macOS Intel/Apple Silicon) / Cowork RC151; Linux Standalone RC159
 
-Der Standalone-Quellcommit `7af2a9d0268864a01b954e0175cae9f5a3616fe8` ist auf
+Der [RC160-Quellcommit](RELEASE.md#rc160--standalone-test-pre-release-windows-und-macos)
+`b5d52c550ead3fb4cea5acc9e9774de9863db32c` ist auf Windows x64 und
+beiden Mac-Architekturen paketgebunden geprüft und als Test-Pre-Release
+veröffentlicht. Die Formatmatrix beschreibt weiterhin technisch unterstützte
+Pfade, keine vollständige menschliche Format-, OCR- oder Anonymitätsabnahme.
+
+Der ältere RC159-Standalone-Quellcommit `7af2a9d0268864a01b954e0175cae9f5a3616fe8` ist auf
 allen vier Zielplattformen technisch paketgebunden geprüft und veröffentlicht.
 [Runner, Hashes und Grenzen](RELEASE.md#rc159--standalone-auf-allen-zielplattformen).
 Das ist keine vollständige menschliche Format-/Qualitätsabnahme; neun bekannte

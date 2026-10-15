@@ -1,6 +1,20 @@
 # Aktueller Iststand
 
-Stand: 15.10.2026 · 3.2.0-rc160 · lokaler Quellstand in Prüfung · veröffentlicht Standalone RC159 / Cowork RC151
+Stand: 15.10.2026 · 3.2.0-rc160 · veröffentlicht Standalone RC160 (Windows x64, macOS Intel/Apple Silicon) / Cowork RC151; Linux Standalone RC159
+
+### Aktuell veröffentlicht: Standalone RC160 als Test-Pre-Release
+
+[RC160](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc160)
+bindet den Quellcommit `b5d52c550ead3fb4cea5acc9e9774de9863db32c`
+und fünf geprüfte Archive mit fünf SHA-256-Belegen. Kostenbegrenzte CI,
+vollständige Security und native Windows-/Intel-/Apple-Silicon-Paketgates
+bestanden auf demselben Commit. [Runner, Hashes und Grenzen](../RELEASE.md#rc160--standalone-test-pre-release-windows-und-macos).
+Die 232 Headless-Produktdateien bestanden lokal; die sechs nativen
+Windows-GUI-Formfälle dieser Suite blieben `NOT_RUN`. Menschliche
+Windows-/Mac-Bedienabnahme, Accessibility, echte Nutzerdatenqualität und
+Produktionsfreigabe bleiben offen. Die ältere Aussage „neues Paket fehlt“ im
+nachfolgenden Entwicklungsprotokoll beschreibt den Stand vor dieser
+Veröffentlichung. Cowork und Linux wurden mit RC160 nicht neu veröffentlicht.
 
 ### Prüfoberflächen: Hauptweg und optionale Eingriffe getrennt (Quellstand)
 
@@ -15,8 +29,9 @@ Wiederherstellung schreiben erst nach einer zweiten, ausdrücklichen Bestätigun
 Abbrechen verändert keinen gespeicherten Textstand. Ein bestätigter Eingriff
 hebt die betroffene Freigabe auf und erfordert erneuten Textvergleich und
 Freigabe. Der Markdown-only-Bearbeitungsweg bleibt funktional unverändert.
-Gezielte Frontend- und synthetische Browserregressionen bestanden; native
-Windows-Bedienung dieses Quellstands und ein neues Installationspaket fehlen.
+Gezielte Frontend- und synthetische Browserregressionen bestanden; die native
+Windows-Bedienabnahme dieser Änderung bleibt offen. Das RC160-Testpaket ist
+inzwischen veröffentlicht (siehe oben).
 
 Der Nutzer zeigte später eine „Export fertig“-Meldung für 132 Dateien. Die
 folgende Diagnose „kein Exportbeleg“ bezieht sich auf den Zustand **vor**

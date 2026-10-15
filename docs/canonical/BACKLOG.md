@@ -1,6 +1,16 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 15.10.2026 · Produktstand 3.2.0-rc160 · r34-Anonymisierung ohne OCR nativ bis Korrektur, Freigabeentzug und erneutem KI-Export geprüft; r35 einfacher nativer Sidecar-Verbindungsausfall nach technischem Abschluss geprüft; r36 inhaltsfreier Status-/Diagnose-Ausweg als Quell- und Paketkandidat, Teilkopie-/Dauerblockadefall offen; veröffentlicht Standalone RC159 / Cowork RC151
+Stand: 15.10.2026 · Produktstand 3.2.0-rc160 · veröffentlicht Standalone RC160 (Windows x64, macOS Intel/Apple Silicon) / Cowork RC151; Linux Standalone RC159 · Teilkopie-/Dauerblockadefall und menschliche Zielhost-Abnahme offen
+
+**RC160-Bereitstellung:** Der Test-Pre-Release ist an
+`b5d52c550ead3fb4cea5acc9e9774de9863db32c` gebunden. CI,
+vollständige Security und die drei nativen Paketgates sind grün;
+[Download, Hashes und Grenzen](../RELEASE.md#rc160--standalone-test-pre-release-windows-und-macos).
+Offen bleiben die menschliche Bedien-/Barrierefreiheitsabnahme, der
+reproduzierbare Teilkopie-/Dauerblockade-Gegenfall und die erneute
+Gesamtabnahme durch den Nutzer. Historische Zwischenstände darunter sind
+keine zusätzliche Freigabe. Der bereits getestete Markdown-only-Weg wurde
+funktional nicht geändert.
 
 **BL-UX-Prüfwege – Quellstand umgesetzt, Bedienabnahme offen:** OCR-Kontaktwerte
 werden im Hauptweg verglichen, ausgewählt, vorgemerkt und erst danach
@@ -12,8 +22,9 @@ aufklappbar. „Zusätzliche Maskierung vorbereiten“ und
 „Basisstand-Wiederherstellung vorbereiten“ schreiben nicht beim ersten Klick;
 erst eine gesonderte Bestätigung schreibt, Abbrechen nicht. Danach muss der
 betroffene Stand erneut verglichen und freigegeben werden. Frontend- und
-synthetische Browsertests bestanden. Noch offen: natives Windows-Bedientesting,
-Paketierung und Nutzerabnahme; Markdown-only funktional nicht verändern.
+synthetische Browsertests bestanden. Die RC160-Paketierung ist abgeschlossen;
+natives Windows-Bedientesting und Nutzerabnahme bleiben offen. Markdown-only
+funktional nicht verändern.
 
 **Nachtrag zum 133-Quellen-Lauf:** Nach der folgenden ursprünglichen Diagnose
 zeigte der Nutzer eine „Export fertig“-Meldung für 132 Dateien. Der damalige

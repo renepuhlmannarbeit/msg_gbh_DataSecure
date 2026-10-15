@@ -1,6 +1,17 @@
 # Entscheidungs-Traceability
 
-Stand: 15.10.2026 · 3.2.0-rc160 · lokaler Quellstand in Prüfung · veröffentlicht Standalone RC159 / Cowork RC151
+Stand: 15.10.2026 · 3.2.0-rc160 · veröffentlicht Standalone RC160 (Windows x64, macOS Intel/Apple Silicon) / Cowork RC151; Linux Standalone RC159
+
+**RC160-Releasebindung:** Quellcommit
+`b5d52c550ead3fb4cea5acc9e9774de9863db32c` →
+[CI](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38744664049),
+[vollständige Security](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38745290152),
+[Windows-Paket](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38745285549)
+und [beide Mac-Pakete](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38745281074)
+→ [Test-Pre-Release mit SHA-256-Belegen](../RELEASE.md#rc160--standalone-test-pre-release-windows-und-macos).
+Alle Gates betreffen denselben Tag-Commit. Native Start-/IPC-Evidenz ist keine
+menschliche GUI-Bedien- oder Datenschutzfreigabe. Frühere „noch nicht
+veröffentlicht“-Aussagen im Entwicklungsprotokoll gelten für Zwischenstände.
 
 UX-OCR/Dokumentprüfung, Nutzerbeobachtungen vom 15.10.2026 →
 `review.html`/`review.js` trennen den OCR-Hauptweg vom optionalen Zurücknehmen
@@ -15,7 +26,8 @@ Bei Maskierung/Wiederherstellung schreibt der erste Klick nicht;
 Freigabeinvalidierung und der getrennte KI-Export bleiben erhalten. Belege:
 `tests/test-standalone-document-review-frontend.js`,
 `tests/test-standalone-review-frontend.js` und beide synthetischen
-Browserprüfungen. Grenze: keine neue native Windows-Abnahme/Installation.
+Browserprüfungen. Grenze: neues RC160-Paket vorhanden, aber keine neue
+menschliche native Windows-Bedienabnahme.
 
 Der Nutzer zeigte später „Export fertig“ für 132 Dateien; der folgende
 DS-085/DS-110-Befund ohne Exportbeleg beschreibt den früheren Zustand vor
