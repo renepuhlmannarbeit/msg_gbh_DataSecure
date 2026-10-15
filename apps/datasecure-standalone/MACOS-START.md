@@ -1,24 +1,23 @@
 # DataSecure Standalone auf macOS starten
 
-Anleitung für den veröffentlichten Teststand **3.2.0-rc160**.
-[RC160-ZIP und DMG für Intel und Apple Silicon](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc160)
+Anleitung für den macOS-Test-Pre-Release **3.2.0-rc161**.
+[RC161-ZIP und DMG für Intel und Apple Silicon](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc161)
 mit der jeweils passenden Prüfsumme verwenden. Das Testpaket ist ad-hoc-signiert,
 nicht mit Apple Developer ID signiert oder notarisiert. Native technische
 Runner-Prüfungen ersetzen keine Finder-/Gatekeeper-/VoiceOver-/Bedienabnahme.
 
 **Bekannter Mac-26.2/M2-Prüfstopp:** Ein Nutzer meldete bei DMG und ZIP eine
 sofort unterbrochene lokale Verbindung. RC160 ist auf diesem Zielhost daher
-**nicht als funktionsfähig abgenommen**; keine echten Dokumente als neuen
-Verarbeitungstest verwenden. Der Quellstand erhält frühere Core-Diagnostik
-und ein gezieltes macOS-26-Gate, ist aber noch kein neu veröffentlichtes
-Paket. Das Kopieren der App in den eigenen Nutzerordner verlangt normalerweise
+**nicht als funktionsfähig abgenommen**; auch RC161 ist zunächst nur eine
+gezielte Neuprobe mit synthetischen Daten. RC161 protokolliert den frühen
+Core-Start genauer und begrenzt automatische Wiederholungen. Das Kopieren
+der App in den eigenen Nutzerordner verlangt normalerweise
 keine Administratorrechte. Eine gesperrte Terminal-App ist für die normalen
 Datei-/Ordnerbuttons keine Voraussetzung. Beide Aussagen sind keine
 Umgehungsempfehlung für Organisationsrichtlinien.
 
-Für die nächste gemeinsame M2-Probe erst ein **neues, ausdrücklich als
-Engineering-Testpaket gekennzeichnetes** Paket verwenden, nicht das
-unveränderte RC160. Im Fuß der Anwendung die kurze Build-ID und die
+Für die nächste gemeinsame M2-Probe das **RC161-Testpaket**, nicht das
+unveränderte RC160 verwenden. Im Fuß der Anwendung die kurze Build-ID und die
 tatsächlich laufende Architektur (ARM64 oder Intel) notieren.
 Nur eine Paketvariante in einem eigenen Testordner starten und zunächst
 synthetische Testdateien verwenden. Wenn schon die Verbindung fehlt,
@@ -33,7 +32,7 @@ Schlägt schon der Start des lokalen Core auf einem verwalteten Mac fehl,
 die IT um eine zeitpunktbezogene Prüfung der Ausführungsrichtlinien bitten;
 keine Gatekeeper- oder Endpoint-Schutzfunktion deaktivieren.
 
-## Verarbeitung und Prüfung in RC160
+## Verarbeitung und Prüfung in RC161
 
 1. Nach der Installation unter **Neue Verarbeitung** zuerst **Nur umwandeln**
    oder **Umwandeln und anonymisieren** wählen. Dateien/Ordner hinzufügen,
@@ -159,16 +158,17 @@ und [Tauri-Builds mit GitHub Actions](https://v2.tauri.app/distribute/pipelines/
 
 ## Passendes Paket
 
-- Intel-Mac: [RC159-ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc159/DataSecure-Standalone-3.2.0-rc159-macos-x64.zip)
-  oder [RC159-DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc159/DataSecure-Standalone-3.2.0-rc159-macos-x64.dmg),
+- Intel-Mac: [RC161-ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc161/DataSecure-Standalone-3.2.0-rc161-macos-x64.zip)
+  oder [RC161-DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc161/DataSecure-Standalone-3.2.0-rc161-macos-x64.dmg),
   jeweils mit gleichnamiger `.sha256` auf der Release-Seite.
 - Apple Silicon (M1 oder neuer):
-  [RC159-ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc159/DataSecure-Standalone-3.2.0-rc159-macos-arm64.zip)
-  oder [RC159-DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc159/DataSecure-Standalone-3.2.0-rc159-macos-arm64.dmg),
+  [RC161-ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc161/DataSecure-Standalone-3.2.0-rc161-macos-arm64.zip)
+  oder [RC161-DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc161/DataSecure-Standalone-3.2.0-rc161-macos-arm64.dmg),
   jeweils mit gleichnamiger `.sha256` auf der Release-Seite.
 - Historische RC140-ZIPs: Intel mindestens macOS 15, ARM mindestens macOS 14.
-- Aktueller RC159-Binärvertrag: macOS 13.5 für beide Architekturen. Historische RC141-/RC142-/RC151-Pakete: minOS 13.5 geprüft;
-  tatsächlich ausgeführt auf macOS 15 (Intel) und 14 (ARM). Abnahme auf 13.5 bleibt offen.
+- Aktueller RC161-Binärvertrag: macOS 13.5 für beide Architekturen.
+  Die Paketgates laufen auf macOS 15 (Intel) und macOS 26 (ARM);
+  die Zielhost-Abnahme auf M2/macOS 26.2 und macOS 13.5 bleibt offen.
 
 Node, PDF-Parser, Canvas-Bilddecoder, Tesseract-WASM und deutsche/englische
 OCR-Modelle sind enthalten. Anwender installieren weder Rust/Xcode noch Node,
@@ -185,7 +185,7 @@ zum Beispiel für Apple Silicon:
 
 ```sh
 cd ~/Downloads
-shasum -a 256 -c DataSecure-Standalone-3.2.0-rc160-macos-arm64.zip.sha256
+shasum -a 256 -c DataSecure-Standalone-3.2.0-rc161-macos-arm64.zip.sha256
 ```
 
 Nur bei `OK` fortfahren. Den Versions- und Architekturnamen im Befehl an die
@@ -196,14 +196,17 @@ kein Ersatz für diese Prüfung des heruntergeladenen ZIPs.
 
 Beim **DMG** die passende `.dmg` und `.dmg.sha256` gemeinsam herunterladen,
 analog die Prüfsumme kontrollieren, das DMG im Finder öffnen und die sichtbare
-`DataSecure Standalone.app` auf **Programme** ziehen. Danach das DMG auswerfen.
+`DataSecure Standalone.app` auf **Programme** oder für die isolierte Neuprobe
+in einen eigenen Benutzer-Testordner ziehen. Danach das DMG auswerfen.
 Beim **ZIP** gelten die folgenden Schritte 1–2. Ab Schritt 3 ist der Weg für
 beide Pakete gleich:
 
 1. Das passende ZIP im Finder öffnen und den darin enthaltenen Ordner
    `DataSecure-Standalone-<Version>-macos-<Architektur>` öffnen.
 2. **Nur** `DataSecure Standalone.app` aus diesem Ordner nach **Programme**
-   ziehen; die App nicht direkt aus dem ZIP oder Downloads starten.
+   oder für die isolierte M2-Neuprobe in einen eigenen Benutzer-Testordner
+   ziehen; die App nicht direkt aus dem ZIP oder Downloads starten und keine
+   ältere RC160-App damit überschreiben.
 3. Die App einmal normal öffnen.
 4. Nur wenn macOS wegen des nicht identifizierten Entwicklers oder der fehlenden
    Notarisierung blockiert und die Quelle samt Prüfsumme verifiziert wurde:
@@ -213,7 +216,7 @@ beide Pakete gleich:
 5. Die erneute Rückfrage mit **Öffnen** bestätigen; gegebenenfalls das
    Mac-Anmeldepasswort eingeben.
 
-Danach lässt sich die App normal über **Programme** oder Spotlight starten.
+Danach lässt sich die App vom gewählten Ort starten.
 Die Ausnahme gilt nur für diese App. Gatekeeper darf weder global abgeschaltet
 noch mit `xattr`- oder `spctl`-Befehlen umgangen werden. Auf verwalteten Macs
 kann die Organisation das Öffnen nicht freigegebener Apps unterbinden.
