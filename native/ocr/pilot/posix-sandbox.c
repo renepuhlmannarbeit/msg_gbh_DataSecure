@@ -141,7 +141,9 @@ int main(int argc, char **argv) {
     if (fputs(CONTRACT_JSON, stdout) == EOF || fflush(stdout) != 0) return WAIT_ERROR;
     return 0;
   }
-  if (argc < 10 || strcmp(argv[1], "--memory-mib") != 0 ||
+  // Eight fixed arguments plus the executable are sufficient; the child
+  // does not need to receive an additional command-line argument.
+  if (argc < 9 || strcmp(argv[1], "--memory-mib") != 0 ||
       strcmp(argv[3], "--cpu-ms") != 0 || strcmp(argv[5], "--wall-ms") != 0 ||
       strcmp(argv[7], "--") != 0 ||
       !parse_unsigned(argv[2], 32, 4096, &memory_mib) ||

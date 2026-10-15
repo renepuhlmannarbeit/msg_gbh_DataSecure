@@ -65,6 +65,12 @@ fehlende Messung bleibt ein Fail-Closed-Fehler. Der Test protokolliert bei
 erneutem Fehler nur Iteration und numerischen Supervisor-Exit/Signal.
 Diese Erklärung ist erst nach dem nächsten nativen Lauf bestätigt; aus dem
 generischen Fehler allein folgt sie noch nicht.
+Die zweite Wiederholung [38767569572](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38767569572)
+erreichte den Konverterfall nicht: der neue 100-fache Kurzprozess-Test deckte
+einen unabhängigen `argc`-Fehler auf (Supervisor-Exit 120 für ein Programm
+ohne Zusatzargument). Die Mindestanzahl ist korrigiert; 100 echte Linux-
+Kurzprozesse und strenge C-Kompilation bestehen lokal. Das ist kein
+Mac-App-Startnachweis und bestätigt die RSS-Hypothese nicht.
 
 ### Aktuell veröffentlicht: Standalone RC160 als Test-Pre-Release
 

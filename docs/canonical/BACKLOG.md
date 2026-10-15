@@ -27,6 +27,11 @@ Fällen an `CONVERSION_ISOLATION_FAILED` beim schnellen Wiederverwenden.
 POSIX-Exit-/RSS-Rennbedingung quellenmäßig begrenzt korrigiert und der
 Supervisor-Exit für einen Wiederholungsfehler testseitig sichtbar gemacht;
 beides nativ erneut prüfen, dann erst Bundle- und regulären Start erreichen.
+Die zweite native Wiederholung [38767569572](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38767569572)
+stoppte bereits im erweiterten Supervisor-Kurzprozess-Test: der bisherige
+Argumentzähler wies ein Programm ohne Zusatzargument mit Exit 120 ab.
+`argc` ist auf die tatsächlichen acht festen Argumente plus Programm korrigiert;
+der ursprüngliche 100-Dateien-Konverterfall bleibt nativ ungeklärt.
 
 **RC160-Bereitstellung:** Der Test-Pre-Release ist an
 `b5d52c550ead3fb4cea5acc9e9774de9863db32c` gebunden. CI,

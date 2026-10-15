@@ -43,6 +43,12 @@ und bleibt bei anhaltender Messstörung Fail-Closed. Der Konvertertest
 meldet bei erneutem Fehler nur Iteration, Exitcode und Signal des
 Supervisors; `test-posix-supervisor-native.sh` prüft zusätzlich 100 echte
 kurzlebige Kindprozesse. Native Wiederholung und Ursachebestätigung offen.
+Wiederholung [38767569572](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38767569572)
+→ neuer Kurzprozess-Test findet zuvor verdeckten `argc < 10`-Fehler: acht
+feste Argumente plus Programm sind neun `argv`-Einträge, Exit 120 war
+fälschlich. `posix-sandbox.c` akzeptiert nun `argc >= 9`; Linux kompiliert
+mit `-Werror` und 100 echte argumentlose Kurzprozesse bestehen. Der
+ursprüngliche Konverter-/Mac-Bundle-Nachweis ist weiterhin offen.
 
 **RC160-Releasebindung:** Quellcommit
 `b5d52c550ead3fb4cea5acc9e9774de9863db32c` →
