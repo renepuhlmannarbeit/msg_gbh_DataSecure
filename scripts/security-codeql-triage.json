@@ -1,6 +1,6 @@
 {
   "schema": "datasecure-codeql-triage/1",
-  "source_review": "RC159 independently reviewed the fresh 11 October SARIF findings, fixed the engineering hOCR ReDoS and preview pathname reopen, and individually bound the remaining pinned downloads, data-only preview serialization and synthetic assertions; fresh fingerprints remain mandatory and unknown findings are not waived",
+  "source_review": "RC159 findings were individually reviewed; RC160 re-reviewed changed production sources and the fresh JavaScript SARIF, corrected the case-insensitive test assertion, and bound only exact synthetic-fixture findings. Source hashes and fingerprints remain mandatory; unknown findings are not waived.",
   "entries": [
     {
       "rule": "js/file-system-race",
@@ -35,8 +35,8 @@
     {
       "rule": "js/bad-code-sanitization",
       "path": "scripts/lib/standalone-review-preview.mjs",
-      "source_sha256": "0956ae8b917aa455e6c00da3a4d5f71e954dd439ac070ccbf6ba134fe17296cf",
-      "reason": "Development-only draft is JSON.stringify-serialized as a data literal in a separate JavaScript response, not inline HTML. HTTP requests cannot supply the draft. Quote/statement, closing-script and Unicode-separator counterexamples preserve data and do not execute code; the concept HTML is a separate explicit preview route.",
+      "source_sha256": "b7fd5f20babdafbed110a7745ed7181ec654ad82d5604426b4ca3a119cbf68ee",
+      "reason": "Re-reviewed RC160: development-only draft is JSON.stringify-serialized as a data literal in a separate same-origin JavaScript response protected by script-src 'self', not inline HTML. HTTP requests cannot supply the draft. Quote/statement, closing-script and Unicode-separator counterexamples preserve data and do not execute code; the concept HTML is a separate explicit preview route.",
       "fingerprints": [
         { "line": "21f433c71d5c5734:1", "column": "33" }
       ]
@@ -44,7 +44,7 @@
     {
       "rule": "js/file-system-race",
       "path": "tests/test-standalone-pause.js",
-      "source_sha256": "336803b6c72fe2811b72e2b7415d33b896a3edad272cc47eb02bff23d7bafc2b",
+      "source_sha256": "2393a791d492bf4155628ad3ef6a6db3e5573e25f4928e63b04f8bfeaaa8da9e",
       "reason": "Each read only checks unchanged bytes of an intentionally invalid synthetic DOCX just written in the test-owned exclusive temporary directory; no user input or product read/publication authorization.",
       "fingerprints": [
         { "line": "4ce64876880021ff:1", "column": "13" },
@@ -54,11 +54,11 @@
     {
       "rule": "js/incomplete-multi-character-sanitization",
       "path": "plugins/data-secure/server/privacy/base.js",
-      "source_sha256": "d4bf51ca559b8bf8cb68215ab3c79e6823906ce77fe841d6942f990ec1859729",
-      "reason": "Comment removal is intermediate text normalization, not a general HTML sanitizer. Subsequent escaping masks recognized decoded comments and residual comment openings; actual HTML sinks have separate escaping boundaries.",
+      "source_sha256": "ab032a73e2779712fe86fd03d027ec5649ab31956b641d4af6e8edab1cc75c4b",
+      "reason": "Re-reviewed RC160: first-pass comment removal is intermediate privacy-text normalization, not an HTML sink or a general HTML sanitizer. The second pass escapes decoded or newly synthesized comment/tag openings and residual '<' delimiters before the normalized text reaches extraction and residual checks; rendered HTML has separate escaping boundaries. The nested/comment-split regression is in test-pii-regression.js.",
       "fingerprints": [
         {
-          "line": "1d012976cd430d6c:1",
+          "line": "1d01330d6a5694cd:1",
           "column": "6"
         },
         {
@@ -138,8 +138,8 @@
     {
       "rule": "js/file-system-race",
       "path": "plugins/data-secure/server/gateway/batch-journal-store.js",
-      "source_sha256": "2f94612fb50d84f18311f232181ef2859aca9df1b910732875f514770dab6150",
-      "reason": "Held journal read uses exact BigInt identity, bounded bytes and original parent checks; no checked path is reopened for content.",
+      "source_sha256": "059e88561f6b79fc2b3fcc2a79a0b9ff77e319908d97ce7c8c61c96860c90d15",
+      "reason": "Re-reviewed RC160: the journal path is a 64-hex token beneath a private bound root. lstat is followed by O_NOFOLLOW/O_NONBLOCK open and fstat regular-file, link-count and dev/ino validation; bytes are read through the held descriptor, then file and parent identities are rechecked. Changes fail closed; no checked path is reopened for content.",
       "fingerprints": [
         {
           "line": "9a3a30a372074aed:1",
@@ -729,6 +729,50 @@
           "line": "552cb809153fe5d3:1",
           "column": "51"
         }
+      ]
+    },
+    {
+      "rule": "js/incomplete-multi-character-sanitization",
+      "path": "tests/test-content-privacy-extraction.js",
+      "source_sha256": "f97c06d6b0dc1024df0706b7ac296611f9a5af9c472604b1c2e480a94b259d7e",
+      "reason": "The two regex replacements turn markdown-it output from fixed synthetic CSV/table fixtures into comparison-only visible text. They are not an HTML sanitizer or a browser sink, cannot authorize publication, and the product Markdown renderer does not use this test helper. Source/output privacy assertions run separately on the actual Markdown bytes.",
+      "fingerprints": [
+        { "line": "7013cf4939fa4841:1", "column": "27" },
+        { "line": "7799942300535173:1", "column": "47" }
+      ]
+    },
+    {
+      "rule": "js/insufficient-password-hash",
+      "path": "tests/helpers/conversion-fixtures.mjs",
+      "source_sha256": "9c633dcf93e75c29c4f187777bf5a773d923ab6377622c7022ca6e7f3d5b6d87",
+      "reason": "This non-shipped helper constructs one deliberately legacy PDF Standard Security revision-2 fixture. MD5 and RC4 are mandated by that old PDF format solely to make a synthetic encrypted-PDF parser test; they are not used for user authentication, stored application passwords or DataSecure encryption.",
+      "fingerprints": [
+        { "line": "62f24e022bcebfcf:1", "column": "49" },
+        { "line": "7dde5a05823aadd3:1", "column": "48" }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "tests/test-standalone-conversion-worker.mjs",
+      "source_sha256": "7fc4eca76593c66c24076c6a8f9debf2c0c7232de6aa262b4c9dcb2d0b9de997",
+      "reason": "Both reads are regression assertions against source fixtures created inside the test-owned isolated directory: one compares unchanged OCR/deferred-review bytes, the other compares unchanged XLSX bytes after processing. The tested product path uses separately bound input bytes; these test reads do not authorize a product read, write or export.",
+      "fingerprints": [
+        { "line": "a0388551300414f9:1", "column": "17" },
+        { "line": "cbce90cda28b7c35:1", "column": "17" }
+      ]
+    },
+    {
+      "rule": "js/file-system-race",
+      "path": "tests/test-standalone-package-smoke.mjs",
+      "source_sha256": "2cf0e5e4beccc95406b3b7fff2c669b630377d13ba053cd3fad43e643a17ea87",
+      "reason": "These six reads inspect mappings, private mapping text, generated Markdown and unchanged synthetic sources under the package smoke's exclusive temporary test tree. They assert the shipped sidecar's output and source preservation; none is used by the application to grant document approval, choose an export path or read user data.",
+      "fingerprints": [
+        { "line": "60dcafc5a1f63f7a:1", "column": "20" },
+        { "line": "eca12e11064d7f94:1", "column": "13" },
+        { "line": "d507f9604abc2d4e:1", "column": "13" },
+        { "line": "24fc1591f8613b27:1", "column": "13" },
+        { "line": "a7f4e6c277fb269d:1", "column": "24" },
+        { "line": "c4cbd6ffb5381c89:1", "column": "13" }
       ]
     }
   ]

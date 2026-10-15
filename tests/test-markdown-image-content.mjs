@@ -70,8 +70,9 @@ for (const [label, source, expected] of cases) {
 }
 const alt = '<script> & [PERSON_011] A*B _C_ | § € ± →';
 const rendered = markdownIt.renderInline(literalAlt(alt));
-assert.doesNotMatch(rendered, /<script>|<em>|<strong>/u);
+assert.doesNotMatch(rendered, /<script>|<em>|<strong>/iu);
 assert.match(rendered, /&lt;script&gt; &amp; \[PERSON_011\] A\*B _C_ \| § € ± →/u);
+assert.doesNotMatch(markdownIt.renderInline(literalAlt('<SCRIPT>')), /<script>/iu);
 const quoted = markdownIt.parse(convert('> <svg><foreignObject><div>Anna&#10;&#10;Beispiel</div></foreignObject></svg>'), {});
 assert.equal(quoted.filter(token => token.type === 'blockquote_open').length, 1);
 assert.ok(quoted.filter(token => token.type === 'inline').every(token => token.level >= 2), 'both paragraphs remain inside quote');
