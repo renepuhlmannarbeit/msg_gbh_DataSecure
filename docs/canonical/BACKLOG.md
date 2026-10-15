@@ -2,6 +2,18 @@
 
 Stand: 15.10.2026 · Produktstand 3.2.0-rc160 · veröffentlicht Standalone RC160 (Windows x64, macOS Intel/Apple Silicon) / Cowork RC151; Linux Standalone RC159 · Teilkopie-/Dauerblockadefall und menschliche Zielhost-Abnahme offen
 
+**P0 – Supervisor-Fehler 121 auf macOS 26:** Der erste aktuelle Gate-Lauf
+`38786961975` stoppte vor dem App-Bau im nativen Kurzprozess-Test. Phasen-
+und numerische Errno-Diagnose, `setpgid`-Race-Korrektur und 300-Fälle-Test
+sind auf dem Entwicklungsbranch. Der zweite Gate-Lauf `38787926269`
+bestand den Kurzprozess-Test, scheiterte aber nach 64 erfolgreichen
+Konvertierungsgruppen an einem erneuten, bislang nicht phasenzugeordneten
+121 während der echten isolierten Konvertierung; kein Paket wurde gebaut.
+Der synthetische Test gibt im Fehlerfall nun nur die feste Supervisor-Phase
+und ggf. numerisches Errno aus. Beim nächsten 121 die Phase ursächlich beheben,
+keine RSS-/Prozessgruppenüberwachung für ein grünes Gate abschalten.
+Auch nach grünem Runner bleiben Finder-Quarantäne und verwalteter M2 offen.
+
 **P0 – M2-Neuprobe nach Quellreview:** Drei übermittelte Desktoplogs enthalten
 je 16 fehlgeschlagene IPC-Antworten. Quellfehler: automatisches
 Fünf-Sekunden-Retry verbrauchte die 16 sicheren Core-Besitzergenerationen

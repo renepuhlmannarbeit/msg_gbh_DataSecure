@@ -2,6 +2,32 @@
 
 Stand: 15.10.2026 · 3.2.0-rc160 · veröffentlicht Standalone RC160 (Windows x64, macOS Intel/Apple Silicon) / Cowork RC151; Linux Standalone RC159
 
+### Nachprüfung des Mac-26-Supervisors (Engineering-Stand, kein neues RC)
+
+Der erste erneute ARM/macOS-26-Lauf
+[38786961975](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38786961975)
+baute und signierte den POSIX-Supervisor, stoppte aber mit Exit 121 in der
+Serie sehr kurzlebiger `/usr/bin/true`-Kindprozesse. Er erreichte weder
+Produktgates noch einen Paketbau. Der alte Exitcode vereinte mehrere
+Setup-Pfade; aus diesem Befund allein lässt sich die genaue Ursache nicht
+beweisen. Der Supervisor protokolliert nun für jeden 121-Setup-Pfad eine
+feste Phase und ggf. numerisches Errno, ohne Argumente, Pfade oder Inhalte.
+Der Test nennt bei Fehlschlag Iteration und Exitstatus und prüft 300 statt
+100 Kurzprozesse. Die Eltern-`setpgid`-Prüfung liest `errno` nicht mehr nach
+einem zweiten Systemaufruf und behandelt `EACCES` gemäß POSIX als bereits
+ausgeführtes Kind, dessen eigener `setpgid` vor `exec` verpflichtend war.
+Linux-C-Syntax mit `-Werror` und `git diff --check` sind grün. Der
+[zweite macOS-26-Gate-Lauf 38787926269](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38787926269)
+auf Commit `efe6412` bestand den 300-Kurzprozess-Test und die vollständige
+Produktsuite, scheiterte aber später nach 64 erfolgreichen Konvertierungsgruppen
+in der echten isolierten Office/Markdown-OCR-Grenze erneut mit
+`CONVERSION_ISOLATION_FAILED` (Supervisor-Exit 121). Er erreichte keinen
+Paketbau. Die bisherige Testausgabe verschluckte gerade die inhaltsfreie
+121-Phasenmeldung des Supervisors; der synthetische Test gibt bei einem
+Fehlschlag nun ausschließlich die feste Phase und ggf. numerisches Errno aus.
+Welche Phase betroffen war, ist aus diesem Lauf nicht rekonstruierbar. Ein
+echter M2-/Finder-/Quarantäne-Nachweis steht weiterhin aus.
+
 ### Mac-Quellreview nach dem M2-Fehlerbericht (noch kein neues Zielhost-Ergebnis)
 
 Zwei unabhängige Architekturrunden über Rust/Tauri, Node-Startkette,

@@ -2,6 +2,27 @@
 
 Stand: 15.10.2026 · 3.2.0-rc160 · veröffentlicht Standalone RC160 (Windows x64, macOS Intel/Apple Silicon) / Cowork RC151; Linux Standalone RC159
 
+Mac-26-Supervisor-Nachprüfung →
+[Lauf 38786961975](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38786961975)
+belegt erfolgreiche Kompilation/Ad-hoc-Signatur und Exit 121 im nativen
+Kurzprozess-Test, nicht dessen genaue 121-Ursache. `posix-sandbox.c`
+kennzeichnet alle 121-Pfade inhaltsfrei und bewahrt Errno vor weiteren
+Systemaufrufen; die Eltern-`setpgid`-Bedingung wurde gegen das
+`EACCES`-/`getpgid`-Rennen korrigiert. `test-posix-supervisor-native.sh`
+meldet fehlgeschlagene Iteration/Exitcode und prüft 300 Kindprozesse.
+POSIX begründet den Eltern-/Kind-`setpgid`-Handshake und das `EACCES`
+nach `exec`:
+[The Open Group](https://pubs.opengroup.org/onlinepubs/009604599/functions/setpgid.html).
+Der Folgelauf
+[38787926269](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38787926269)
+auf Commit `efe6412` bestand 300 Kurzprozesse und die Produktsuite, stoppte
+aber nach 64 erfolgreichen Konvertierungsgruppen mit einem weiteren
+Supervisor-121 in der echten isolierten Office/Markdown-OCR-Grenze. Der
+betroffene Test verschluckte zuvor die neue inhaltsfreie 121-Phasenmeldung;
+`test-office-image-ocr.mjs` gibt bei Fehlschlag ausschließlich deren feste
+Phase und ggf. numerisches Errno aus. Ursache, Paketbau und verwalteter
+M2-/Finder-Test bleiben offen.
+
 M2-Quellreview, Runde 2 → `desktop-interactions*.jsonl` (drei Dateien,
 je 16 `STANDALONE_IPC_FAILED`) gegen `main.rs:reserve_sidecar_generation`
 und `workspace.js:refresh` abgeglichen: die wiederholten Status-Reads

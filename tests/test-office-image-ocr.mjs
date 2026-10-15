@@ -279,6 +279,17 @@ if (process.argv.includes('--source-only')) {
       assert.doesNotMatch(diagnostics, /CONVERSION_OCR_(?:STARTING|READY)/u);
     });
     process.stdout.write(`${passed} Office/MD groups passed; actual native host ${target}\n`);
+  } catch (failure) {
+    // The product never persists parser stderr. In this synthetic CI fixture,
+    // emit only the supervisor's fixed setup phase (and numeric errno) so an
+    // intermittent macOS isolation failure can be diagnosed without paths or
+    // document text from Node, OCR or other vendor processes.
+    const phases = [...diagnostics.matchAll(/datasecure-sandbox setup_failure phase=([a-z-]+)(?: errno=(\d+))?/gu)];
+    if (phases.length) {
+      const [, phase, errno] = phases.at(-1);
+      process.stderr.write(`DATASECURE_SUPERVISOR_SETUP_PHASE=${phase}${errno ? ` ERRNO=${errno}` : ''}\n`);
+    }
+    throw failure;
   } finally {
     childProcess.spawn = originalSpawn;
     for (const entry of children) if (!entry.closed()) entry.child.kill('SIGTERM');
