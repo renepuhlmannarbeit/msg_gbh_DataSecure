@@ -754,7 +754,7 @@
     {
       "rule": "js/file-system-race",
       "path": "tests/test-standalone-conversion-worker.mjs",
-      "source_sha256": "7fc4eca76593c66c24076c6a8f9debf2c0c7232de6aa262b4c9dcb2d0b9de997",
+      "source_sha256": "b77361e0770e689ba0238dab55ff8f5d3453e9a7b8d5e9d7ffced9d07d2bbfcf",
       "reason": "Both reads are regression assertions against source fixtures created inside the test-owned isolated directory: one compares unchanged OCR/deferred-review bytes, the other compares unchanged XLSX bytes after processing. The tested product path uses separately bound input bytes; these test reads do not authorize a product read, write or export.",
       "fingerprints": [
         { "line": "a0388551300414f9:1", "column": "17" },
