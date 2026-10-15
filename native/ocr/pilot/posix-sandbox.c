@@ -38,6 +38,18 @@ enum { USAGE_ERROR = 120, SETUP_ERROR = 121, START_ERROR = 122,
 
 static volatile sig_atomic_t cancellation_requested = 0;
 
+/* No executable path, arguments or document content may reach diagnostics. */
+static int setup_failure(const char *phase, int error_number) {
+  fprintf(stderr, "datasecure-sandbox setup_failure phase=%s errno=%d\n", phase, error_number);
+  return SETUP_ERROR;
+}
+
+#define CHILD_SETUP_FAILURE(phase) do { \
+  static const char message[] = "datasecure-sandbox setup_failure phase=" phase "\n"; \
+  (void)write(STDERR_FILENO, message, sizeof(message) - 1); \
+  _exit(SETUP_ERROR); \
+} while (0)
+
 static void terminate_group(int signal_number) {
   (void)signal_number;
   // The handler may run before a process group exists. Do not exit before the
@@ -154,28 +166,31 @@ int main(int argc, char **argv) {
   sigaddset(&cancellation_signals, SIGINT);
   sigaddset(&cancellation_signals, SIGTERM);
   sigaddset(&cancellation_signals, SIGHUP);
-  if (sigprocmask(SIG_BLOCK, &cancellation_signals, &previous_mask) != 0) return SETUP_ERROR;
+  if (sigprocmask(SIG_BLOCK, &cancellation_signals, &previous_mask) != 0)
+    return setup_failure("parent-signal-mask", errno);
   memset(&action, 0, sizeof(action));
   action.sa_handler = terminate_group;
   sigemptyset(&action.sa_mask);
   if (sigaction(SIGINT, &action, NULL) != 0 || sigaction(SIGTERM, &action, NULL) != 0 ||
-      sigaction(SIGHUP, &action, NULL) != 0) return SETUP_ERROR;
+      sigaction(SIGHUP, &action, NULL) != 0) return setup_failure("parent-signal-handler", errno);
   // An inherited SIG_IGN/SA_NOCLDWAIT must not auto-reap our group leader:
   // the unreaped child is the ownership/PID-reuse guard for group cleanup.
   action.sa_handler = SIG_DFL;
-  if (sigaction(SIGCHLD, &action, NULL) != 0) return SETUP_ERROR;
+  if (sigaction(SIGCHLD, &action, NULL) != 0) return setup_failure("parent-child-handler", errno);
 
   pid = fork();
   if (pid < 0) return START_ERROR;
   if (pid == 0) {
     uint64_t seconds = (cpu_ms + 999ULL) / 1000ULL;
-    if (setpgid(0, 0) != 0) _exit(SETUP_ERROR);
+    if (setpgid(0, 0) != 0) CHILD_SETUP_FAILURE("child-process-group");
     action.sa_handler = SIG_DFL;
     if (sigaction(SIGINT, &action, NULL) != 0 || sigaction(SIGTERM, &action, NULL) != 0 ||
         sigaction(SIGHUP, &action, NULL) != 0 ||
-        sigprocmask(SIG_SETMASK, &previous_mask, NULL) != 0) _exit(SETUP_ERROR);
+        sigprocmask(SIG_SETMASK, &previous_mask, NULL) != 0)
+      CHILD_SETUP_FAILURE("child-signal-restore");
 #ifdef __linux__
-    if (prctl(PR_SET_PDEATHSIG, SIGKILL) != 0 || getppid() == 1) _exit(SETUP_ERROR);
+    if (prctl(PR_SET_PDEATHSIG, SIGKILL) != 0 || getppid() == 1)
+      CHILD_SETUP_FAILURE("child-parent-death-signal");
 #endif
     if (apply_limit_ceiling(RLIMIT_CPU, (rlim_t)seconds) != 0) _exit(CPU_LIMIT_SETUP_ERROR);
     if (apply_limit_ceiling(RLIMIT_CORE, (rlim_t)0) != 0) _exit(CORE_LIMIT_SETUP_ERROR);
@@ -203,19 +218,24 @@ int main(int argc, char **argv) {
     }
   }
 
-  if (setpgid(pid, pid) != 0 &&
-      !(errno == EACCES && getpgid(pid) == pid) && errno != ESRCH) {
-    kill_and_reap(pid);
-    return SETUP_ERROR;
+  if (setpgid(pid, pid) != 0) {
+    int group_errno = errno;
+    /* EACCES means the child has already exec'd, after its own mandatory
+       setpgid. A second getpgid can race with a short-lived child exit. */
+    if (group_errno != EACCES && group_errno != ESRCH) {
+      kill_and_reap(pid);
+      return setup_failure("parent-process-group", group_errno);
+    }
   }
   if (sigprocmask(SIG_SETMASK, &previous_mask, NULL) != 0) {
+    int mask_errno = errno;
     kill_and_reap(pid);
-    return SETUP_ERROR;
+    return setup_failure("parent-signal-restore", mask_errno);
   }
   started = monotonic_ms();
   if (started == UINT64_MAX) {
     kill_and_reap(pid);
-    return SETUP_ERROR;
+    return setup_failure("parent-monotonic-clock", 0);
   }
   for (;;) {
     siginfo_t observed;
@@ -244,10 +264,13 @@ int main(int argc, char **argv) {
     }
     {
       uint64_t now = monotonic_ms();
-      uint64_t rss = resident_bytes(pid);
+      uint64_t rss;
+      errno = 0;
+      rss = resident_bytes(pid);
+      int rss_errno = rss == UINT64_MAX ? errno : 0;
       if (now == UINT64_MAX) {
         kill_and_reap(pid);
-        return SETUP_ERROR;
+        return setup_failure("monitor-monotonic-clock", 0);
       }
       if (now - started >= wall_ms || (rss != UINT64_MAX && rss > memory_bytes)) {
         kill_and_reap(pid);
@@ -264,7 +287,7 @@ int main(int argc, char **argv) {
         if (waited < 0 && errno == ECHILD) return WAIT_ERROR;
         if (++unavailable_rss_samples >= 3) {
           kill_and_reap(pid);
-          return SETUP_ERROR;
+          return setup_failure("monitor-memory-measurement", rss_errno);
         }
       } else {
         unavailable_rss_samples = 0;
