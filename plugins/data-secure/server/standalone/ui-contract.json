@@ -117,6 +117,7 @@
     "open_current_results",
     "open_local_ledger",
     "open_diagnostic_folder",
+    "report_blocked_picker",
     "shutdown"
   ],
   "forbidden_payload_fields": [

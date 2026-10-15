@@ -405,6 +405,12 @@
           "markdownDescription": "Entfernt genau eine Datei per Position aus der noch nicht gestarteten lokalen Auswahl."
         },
         {
+          "description": "Protokolliert nur erlaubte Picker-Aktionen und feste UI-Blockgründe ohne Dateiinhalte oder Pfade.",
+          "type": "string",
+          "const": "allow-report-blocked-picker",
+          "markdownDescription": "Protokolliert nur erlaubte Picker-Aktionen und feste UI-Blockgründe ohne Dateiinhalte oder Pfade."
+        },
+        {
           "description": "Öffnet die native Mehrfach-Dateiauswahl und übergibt Pfade nur an den lokalen Core.",
           "type": "string",
           "const": "allow-select-files",

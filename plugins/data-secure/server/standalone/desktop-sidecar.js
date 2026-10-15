@@ -1,13 +1,8 @@
 #!/usr/bin/env node
 'use strict';
 
-const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const { StandaloneApplicationService } = require('./application-service');
-const { FrameDecoder, MAX_FRAME_BYTES, validatePrivateMessage } = require('./desktop-ipc');
-const { NativeExportChannel, RESPONSE_SCHEMA: NATIVE_RESPONSE_SCHEMA, PUBLICATION_RESPONSE } = require('./native-export-channel');
-const { desktopErrorCode } = require('../core/desktop-error-contract');
 const { createBestEffortDiagnosticLog } = require('../core/safe-diagnostic-log');
 
 const diagnosticDirectory = path.resolve(process.env.DATASECURE_STANDALONE_DIAGNOSTIC_DIR ||
@@ -26,6 +21,26 @@ function diagnosticEvent(event, fields = {}) {
       ...(fields.error_code ? { error_code: fields.error_code } : {})
     })}\n`);
   } catch { /* Diagnostics must never change product behavior. */ }
+}
+
+// Record a content-free phase before importing the product service. On a
+// packaged Mac an import or native loader failure previously left no sidecar
+// evidence because all imports preceded the first diagnostic event.
+diagnosticEvent('sidecar_entry', { outcome: 'ready' });
+let StandaloneApplicationService, FrameDecoder, MAX_FRAME_BYTES, validatePrivateMessage;
+let NativeExportChannel, NATIVE_RESPONSE_SCHEMA, PUBLICATION_RESPONSE, desktopErrorCode;
+try {
+  ({ StandaloneApplicationService } = require('./application-service'));
+  ({ FrameDecoder, MAX_FRAME_BYTES, validatePrivateMessage } = require('./desktop-ipc'));
+  ({ NativeExportChannel, RESPONSE_SCHEMA: NATIVE_RESPONSE_SCHEMA, PUBLICATION_RESPONSE } = require('./native-export-channel'));
+  ({ desktopErrorCode } = require('../core/desktop-error-contract'));
+  diagnosticEvent('sidecar_imports_ready', { outcome: 'ready' });
+} catch (error) {
+  const code = error?.code === 'MODULE_NOT_FOUND' ? 'STANDALONE_SIDECAR_MODULE_MISSING'
+    : error?.code === 'ERR_DLOPEN_FAILED' ? 'STANDALONE_SIDECAR_NATIVE_LOAD_FAILED'
+      : 'STANDALONE_SIDECAR_IMPORT_FAILED';
+  diagnosticEvent('sidecar_import_failed', { outcome: 'failed', error_code: code });
+  process.exit(70);
 }
 
 let service;
@@ -55,7 +70,7 @@ try {
 } catch (error) {
   startupError = error;
   diagnosticEvent('service_initialization_failed', {
-    outcome: 'failed', error_code: error?.code || 'STANDALONE_OPERATION_FAILED'
+    outcome: 'failed', error_code: desktopErrorCode(error?.code)
   });
 }
 // The owning native desktop waits for this exact private bootstrap proof before

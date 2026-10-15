@@ -166,7 +166,7 @@ test('local review window is created by an async command on Windows', () => {
   assert.match(rust, /review_window::owns_review\(window.label\(\), embedded\)/u);
   const binding = fs.readFileSync(path.join(root, 'tauri-contract/src/review_window.rs'), 'utf8');
   assert.match(binding, /only_the_active_review_surface_can_read_or_submit_private_content/u);
-  assert.match(rust, /let _review_guard = review_admission_guard\(&state\)\?/u,
+  assert.match(rust, /let _review_guard = review_admission_guard\(&state\)\s*\.inspect_err\([\s\S]*?\)\?/u,
     'picker admission is mutually exclusive with entering the integrated review');
   assert.match(rust, /if let Some\(window\) = app\.get_webview_window\("review"\)/u,
     'the next review group reuses the existing review window');

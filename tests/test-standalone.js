@@ -616,7 +616,7 @@ test('Standalone UI contract limits source details to the local display', () => 
     'open_review_window', 'open_embedded_review', 'close_review_window', 'get_review_session', 'get_review_chunk', 'submit_review',
     'continue_review_session',
     'ack_terminal_presented', 'continue_current_batch', 'configure_results',
-    'open_current_results', 'open_local_ledger', 'open_diagnostic_folder', 'shutdown'
+    'open_current_results', 'open_local_ledger', 'open_diagnostic_folder', 'report_blocked_picker', 'shutdown'
   ]);
   assert.deepStrictEqual([...PRIVATE_ACTIONS], [
     'admit_selected_sources', 'remove_admitted_source', 'cancel_admission', 'start_admitted_batch',

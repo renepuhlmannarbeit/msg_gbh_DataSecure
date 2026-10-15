@@ -10,6 +10,7 @@ on:
         type: choice
         options:
           - macos-arm64
+          - macos-arm64-26
           - macos-x64
           - both
       confirm_private_runner_minutes:
@@ -49,6 +50,9 @@ jobs:
               ;;
             macos-arm64)
               matrix='{"include":[{"os":"macos-14","target":"macos-arm64","rust_arch":"arm64","sidecar":"datasecure-core-aarch64-apple-darwin","archive":"node-v22.23.2-darwin-arm64.tar.gz","sha256":"61130f394c1630d211dd50aecc4353d379480f36d3ac913cd85dbba1aed585c6"}]}'
+              ;;
+            macos-arm64-26)
+              matrix='{"include":[{"os":"macos-26","target":"macos-arm64","rust_arch":"arm64","sidecar":"datasecure-core-aarch64-apple-darwin","archive":"node-v22.23.2-darwin-arm64.tar.gz","sha256":"61130f394c1630d211dd50aecc4353d379480f36d3ac913cd85dbba1aed585c6"}]}'
               ;;
             both)
               matrix='{"include":[{"os":"macos-15-intel","target":"macos-x64","rust_arch":"x86_64","sidecar":"datasecure-core-x86_64-apple-darwin","archive":"node-v22.23.2-darwin-x64.tar.gz","sha256":"58e99022c2ff89395576cc7fd4d98cea24bb68081475d5f88b801ee8729fb026"},{"os":"macos-14","target":"macos-arm64","rust_arch":"arm64","sidecar":"datasecure-core-aarch64-apple-darwin","archive":"node-v22.23.2-darwin-arm64.tar.gz","sha256":"61130f394c1630d211dd50aecc4353d379480f36d3ac913cd85dbba1aed585c6"}]}'
@@ -151,12 +155,23 @@ jobs:
           codesign -dv --verbose=4 "$bundle" 2>&1 | grep -q '^Signature=adhoc$'
           for executable in "$app" "$sidecar" "$conversion_node" "$supervisor"; do
             test -x "$executable"
+            test -z "$(find "$executable" ! -perm -005 -print -quit)"
             file "$executable"
             arches="$(lipo -archs "$executable")"
             test "$arches" = "${{ matrix.rust_arch }}"
             codesign --verify --strict --verbose=2 "$executable"
           done
+          # The DMG retains bundle modes. Finder may copy into a system-owned
+          # /Applications; every user must still traverse/read immutable assets.
+          test -z "$(find "$bundle/Contents/Resources/server" -type d ! -perm -005 -print -quit)"
+          test -z "$(find "$bundle/Contents/Resources/server" -type f ! -perm -004 -print -quit)"
           find "$bundle" -type f \( -name '*.node' -o -name '*.dylib' \) -exec codesign --verify --strict --verbose=2 {} +
+          if cmp -s "dist/${{ matrix.target }}/node" "$sidecar"; then
+            echo 'BUNDLED_RUNTIME_BYTE_EQUAL=true'
+          else
+            echo 'BUNDLED_RUNTIME_BYTE_EQUAL=false'
+          fi
+          codesign -dv --verbose=4 "$sidecar" 2>&1 | grep -E '^(CodeDirectory|Signature=|Runtime Version=|TeamIdentifier=)' || true
           if find "$bundle" -print | grep -E '/(?:\.claude-plugin|skills|Claude|Cowork)(/|$)|/\.mcp\.json$'; then
             exit 1
           fi
@@ -168,6 +183,13 @@ jobs:
           bash tests/manual/standalone-native-macos-launch.sh \
             --app "apps/datasecure-standalone/tauri-contract/target/release/bundle/macos/DataSecure Standalone.app" \
             --target "${{ matrix.target }}" --version "$version"
+      - name: Verify regular-profile packaged startup on macOS 26
+        if: ${{ matrix.os == 'macos-26' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tests/manual/standalone-macos-regular-start.sh \
+            --app "apps/datasecure-standalone/tauri-contract/target/release/bundle/macos/DataSecure Standalone.app"
       - name: Build, verify and launch the deterministic distribution archive
         shell: bash
         run: |

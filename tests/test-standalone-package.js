@@ -91,6 +91,14 @@ test('standalone package build uses pinned runtime and a closed resource project
   const projection = fs.readFileSync(path.join(root, 'scripts', 'lib', 'standalone-runtime-projection.mjs'), 'utf8');
   assert.match(projection, /native\/windows-x64\/datasecure-sandbox\.exe/u);
   assert.match(projection, /native\/windows-x64\/datasecure-sandbox\.sha256/u);
+  const conversionProjection = fs.readFileSync(path.join(root, 'scripts', 'lib', 'standalone-conversion-runtime.mjs'), 'utf8');
+  for (const source of [projection, conversionProjection]) {
+    assert.match(source, /productTarget\.startsWith\('macos-'\)/u);
+    assert.match(source, /file\.bytes, \{ flag: 'wx', mode \}/u);
+    assert.match(source, /fs\.chmodSync\(target, mode\)/u);
+    assert.match(source, /executable \? 0o755 : 0o644/u);
+  }
+  assert.match(prepare, /process\.platform === 'darwin' \? 0o755/u);
   const toolchain = fs.readFileSync(path.join(root, 'apps', 'datasecure-standalone',
     'tauri-contract', 'rust-toolchain.toml'), 'utf8');
   assert.match(toolchain, /channel\s*=\s*"1\.98\.1"/u);

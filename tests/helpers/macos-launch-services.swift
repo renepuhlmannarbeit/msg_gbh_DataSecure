@@ -1,5 +1,5 @@
-// Test-host helper only. Launch through the same system service used by Finder,
-// with a private test profile; this does not simulate a Gatekeeper approval.
+// Test-host helper only. Launch through the same system service used by Finder.
+// Neither mode simulates a Gatekeeper approval on a managed user machine.
 import AppKit
 import Foundation
 
@@ -14,6 +14,30 @@ if CommandLine.arguments.count == 4 && CommandLine.arguments[1] == "--terminate"
         exit(1)
     }
     exit(0) // Request accepted, not evidence of an exit code or completed exit.
+}
+
+if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--regular" {
+    let appURL = URL(fileURLWithPath: CommandLine.arguments[2])
+    let config = NSWorkspace.OpenConfiguration()
+    config.createsNewApplicationInstance = true
+    config.allowsRunningApplicationSubstitution = false
+    config.promptsUserIfNeeded = false
+    config.activates = false
+    // No overridden HOME, TMPDIR, PATH, or DataSecure smoke profile: this
+    // is the packaged application's ordinary LaunchServices environment.
+    NSWorkspace.shared.openApplication(at: appURL, configuration: config) { application, error in
+        guard error == nil, let application = application else {
+            FileHandle.standardError.write(Data("STANDALONE_REGULAR_LAUNCH_FAILED\n".utf8))
+            exit(1)
+        }
+        print(application.processIdentifier)
+        exit(0)
+    }
+    DispatchQueue.main.asyncAfter(deadline: .now() + 30) {
+        FileHandle.standardError.write(Data("STANDALONE_REGULAR_LAUNCH_TIMEOUT\n".utf8))
+        exit(1)
+    }
+    RunLoop.main.run()
 }
 
 guard CommandLine.arguments.count == 3 else { exit(64) }

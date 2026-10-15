@@ -2,6 +2,37 @@
 
 Stand: 15.10.2026 · 3.2.0-rc160 · veröffentlicht Standalone RC160 (Windows x64, macOS Intel/Apple Silicon) / Cowork RC151; Linux Standalone RC159
 
+Mac-M2/macOS-26.2-Fehlerbericht → drei `desktop-interactions*.jsonl` belegen
+`runtime_resolved` → `sidecar_spawned` → IPC-Ausfall, ohne Sidecar-Log oder
+belegten Ergebnisordnerfehler. `main.rs`/`ipc_transport.rs` erfassen den
+Bootstrap-Ausgang mit festen Exit-/Signal-Klassen und begrenzter,
+inhaltsfreier Klassifikation früher Node-Fehlerausgabe;
+`desktop-sidecar.js` protokolliert Eintritt, Import, Initialisierung und
+Bereitschaft bzw. feste Fehlercodes. `main.rs`/`workspace.js` unterscheiden
+native Picker-Anforderung, Guard-/Dialogfehler und während der
+Wiederverbindung abgewiesene UI-Klicks; `diagnostic_log.rs` stellt nur den
+inhaltsfreien Sink-Status bereit. `standalone-macos-sandbox.yml` und
+`standalone-macos-regular-start.sh` ergänzen einen ausdrücklich manuell
+auszulösenden macOS-26-ARM-Paketstart im regulären Profil. Belege:
+`test-standalone-sidecar.js`, `test-standalone-workspace.js`, Rust-Tests und
+`test-standalone-macos-sandbox-workflow.js`; nativer Zielhosttest und MDM-
+Ursachenzuordnung offen. Weder Admin- noch CLI-Sperre werden aus den
+vorliegenden Logs als Ursache behauptet; die App benötigt beides im
+Normalbetrieb nicht.
+
+Mac-Architektur-Audit → `writeStandaloneRuntime`, `writeConversionRuntime`
+und `prepare-standalone-runtime.mjs` erzeugten DMG-Dateien teils mit
+`0600`/`0700`; ZIP setzt lesbare/exekutierbare Modi. Mac-Quellprojektion auf
+`0644`/`0755` und natives Bundle-Modus-Gate ergänzt. Der Finder-Kopiervorgang
+in den eigenen Nutzerordner macht dies zum bestätigten Distributionsfehler,
+nicht zum belegten konkreten Startauslöser. `runtime-info.js` erwartet den
+Core unter `server/`, Tauri legt ihn unter `Contents/MacOS/` ab; zugleich
+liegt `RUNTIME-EVIDENCE.json` außerhalb der `.app`. Die Runtime-Hashprüfung
+kann so übersprungen werden. Ein isolierter Pfad-Fix wäre startblockierend;
+das signierte Core-Bytebild wird im macOS-26-Gate verglichen, danach ist
+die gekoppelte Korrektur umzusetzen. Keine Sicherheitsfreigabe aus grünen
+Quelltests ableiten.
+
 **RC160-Releasebindung:** Quellcommit
 `b5d52c550ead3fb4cea5acc9e9774de9863db32c` →
 [CI](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38744664049),

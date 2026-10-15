@@ -2,6 +2,57 @@
 
 Stand: 15.10.2026 · 3.2.0-rc160 · veröffentlicht Standalone RC160 (Windows x64, macOS Intel/Apple Silicon) / Cowork RC151; Linux Standalone RC159
 
+### macOS-26.2/M2-Rückmeldung: früher Core-Startabbruch (Quellkorrektur in Prüfung)
+
+Auf dem verwalteten M2-Mac laden sowohl ARM-DMG als auch ZIP die Oberfläche,
+aber der lokale Dienst meldet keine Bereitschaft; Datei-/Ordnerwahl und
+Ergebnisordneränderung wirken dadurch blockiert. Die drei übermittelten
+Desktop-Diagnosen belegen `runtime_resolved` und `sidecar_spawned`, danach
+`STANDALONE_IPC_FAILED`; ein Sidecar-Protokoll fehlt. Das belegt **weder**
+einen defekten Ergebnisordner **noch** Gatekeeper, MDM oder fehlende
+Adminrechte als Ursache. Die fehlende frühe Core-Phase wird nun mit
+inhaltsfreien Markern, festem Import-/Initialisierungsfehlercode und nativ
+beobachtetem Exitcode/Signal erfasst. Frühe Node-Fehlerausgabe wird nur im
+Arbeitsspeicher begrenzt gelesen und auf feste Kategorien reduziert; rohe
+Ausgabe gelangt nicht in die Diagnose. Native Picker protokollieren Anforderung,
+Guard-Ablehnung, Dialogabschluss/Abbruch und Dialog-Taskfehler getrennt.
+Während der Wiederverbindung abgewiesene Picker-Klicks erhalten einen
+sichtbaren Grund und einen nativen Diagnoseschritt. Der native Abgleichstatus
+zeigt zusätzlich an, wenn sein eigener Diagnose-Sink nicht verfügbar ist.
+Ein nativer Dialog ohne Auswahl wird nur als `picker_no_selection` erfasst:
+Die Dialog-API kann dabei Nutzerabbruch und manche OS-Ablehnungen nicht
+beweissicher unterscheiden.
+Keine Dokumenttexte, Dateinamen, Pfade, Umgebungswerte oder rohen
+Systemfehlermeldungen werden dafür protokolliert.
+
+Der Architekturabgleich fand zusätzlich einen realen DMG-Paketfehler:
+Mac-Ressourcen und Hilfsprogramme wurden teilweise als `0600`/`0700`
+projiziert; der ZIP-Builder setzt hingegen `0644`/`0755`. Der Quellstand
+normalisiert die unveränderlichen Mac-Bundle-Dateien und prüft die Rechte im
+nativen Paketgate auch für einen anderen Eigentümer. Der betroffene Nutzer
+hat die App per Finder in einen eigenen Nutzerordner kopiert; deshalb ist
+dieser Fehler **keine belegte Erklärung** für seinen konkreten Ausfall.
+Ein zweiter bestätigter Architekturfehler bleibt offen: `runtime-info.js`
+sucht den gebündelten Mac-Core nicht am tatsächlichen Tauri-Pfad
+`Contents/MacOS/datasecure-core`. Dadurch kann die Runtime als Host-Node
+gelten und die Hash-Startprüfung ausfallen. Der dafür nötige Beleg liegt
+derzeit nur außerhalb der `.app`; eine isolierte Pfadkorrektur würde den
+Start verweigern. Der macOS-26-Runner prüft deshalb zusätzlich, ob Tauri
+die Core-Binärdatei bytegleich kopiert oder beim Signieren verändert. Erst
+mit diesem Befund beide Pfade/Belege gemeinsam reparieren und erneut nativ
+prüfen. Die Existenz des Fehlers beweist nicht die Ursache des frühen
+IPC-Abbruchs.
+
+Die normale App verwendet gebündelte Hilfsprogramme direkt und benötigt weder
+eine freigeschaltete Terminal-App noch Adminrechte. Eine Organisation kann die
+Ausführung des eingebetteten Dienstes oder Dateizugriffe dennoch blockieren;
+das bleibt eine zu prüfende Hypothese. Der neue manuelle macOS-26-ARM-Runner
+prüft zusätzlich den **regulären** Paketstart ohne synthetisches Testprofil.
+Er ist ein M1-CI-Host und ersetzt weder den M2-/MDM-Zielhosttest noch Finder,
+Gatekeeper, echte Dialoge oder einen normalen Nicht-Admin-Bedienlauf.
+Bis zur positiven Zielhostprüfung kein korrigiertes Paket als funktionsfähig
+behaupten und RC160 nicht stillschweigend ersetzen.
+
 ### Aktuell veröffentlicht: Standalone RC160 als Test-Pre-Release
 
 [RC160](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc160)

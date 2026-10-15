@@ -34,6 +34,18 @@ assert.match(workflow, /if: \$\{\{ inputs\.confirm_private_runner_minutes == tru
 assert.match(workflow, /default: macos-arm64/u, 'the default must allocate only one target');
 assert.match(workflow, /macos-15-intel/u);
 assert.match(workflow, /macos-14/u);
+assert.match(workflow, /macos-arm64-26/u);
+assert.match(workflow, /macos-26/u);
+assert.match(workflow, /standalone-macos-regular-start\.sh/u);
+assert.match(workflow, /find "\$bundle\/Contents\/Resources\/server" -type d ! -perm -005/u);
+assert.match(workflow, /find "\$bundle\/Contents\/Resources\/server" -type f ! -perm -004/u);
+const regularLaunch = fs.readFileSync(path.join(root, 'tests', 'manual', 'standalone-macos-regular-start.sh'), 'utf8');
+const launchServices = fs.readFileSync(path.join(root, 'tests', 'helpers', 'macos-launch-services.swift'), 'utf8');
+assert.match(regularLaunch, /macos-launch-services\.swift" --regular/u);
+assert.match(regularLaunch, /sidecar_bootstrap_ready/u);
+assert.match(launchServices, /CommandLine\.arguments\[1\] == "--regular"/u);
+assert.doesNotMatch(launchServices.split('if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--regular"')[1]
+  .split('guard CommandLine.arguments.count == 3')[0], /config\.environment\s*=/u);
 assert.match(workflow, /^permissions:\n  contents: read$/mu);
 assert.match(workflow, /timeout-minutes: 45/u);
 assert.match(workflow, /cancel-in-progress: true/u);

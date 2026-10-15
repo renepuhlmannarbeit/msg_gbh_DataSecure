@@ -624,11 +624,10 @@ fn spawn_sidecar(app: &tauri::AppHandle, lifecycle: &ipc_transport::Lifecycle, s
         .arg(script_name)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped());
-    if cfg!(debug_assertions) {
-        command.stderr(Stdio::inherit());
-    } else {
-        command.stderr(Stdio::null());
-    }
+    // Always drain stderr: a failure in Node or its --require preloader occurs
+    // before the JavaScript diagnostic sink exists. Never persist raw stderr,
+    // which may contain local paths or document content after startup.
+    command.stderr(Stdio::piped());
     #[cfg(target_os = "windows")]
     {
         use std::os::windows::process::CommandExt;
@@ -648,6 +647,27 @@ fn spawn_sidecar(app: &tauri::AppHandle, lifecycle: &ipc_transport::Lifecycle, s
     diagnostic_event("sidecar_spawned", None, "ready", None, None);
     let input = child.stdin.take();
     let output = child.stdout.take();
+    if let Some(mut stderr) = child.stderr.take() {
+        std::thread::spawn(move || {
+            let mut sample = Vec::with_capacity(4096);
+            let mut buffer = [0u8; 4096];
+            loop {
+                match stderr.read(&mut buffer) {
+                    Ok(0) | Err(_) => break,
+                    Ok(count) => {
+                        if sample.len() < 16 * 1024 {
+                            let keep = count.min(16 * 1024 - sample.len());
+                            sample.extend_from_slice(&buffer[..keep]);
+                        }
+                    }
+                }
+            }
+            if !sample.is_empty() {
+                diagnostic_event("sidecar_stderr_classified", None, "failed",
+                    Some(classify_sidecar_stderr(&sample)), None);
+            }
+        });
+    }
     let child = ipc_transport::ChildControl::new(child);
     spawn_guard.register(child.clone())?;
     if Instant::now() >= deadline {
@@ -676,18 +696,80 @@ fn spawn_sidecar(app: &tauri::AppHandle, lifecycle: &ipc_transport::Lifecycle, s
         owner_generation,
         unusable: false,
     };
-    let ready = ipc_transport::receive_until(&process.responses, deadline, &lifecycle.stopping)??;
+    let ready = match ipc_transport::receive_until(&process.responses, deadline, &lifecycle.stopping) {
+        Ok(Ok(frame)) => frame,
+        Ok(Err(code)) | Err(code) => {
+            diagnostic_event("sidecar_bootstrap_failed", None, "failed",
+                Some(sidecar_bootstrap_diagnostic(&process.child, &code)), None);
+            return Err(code);
+        }
+    };
     if ready["schema"] != "datasecure-standalone-ready/1" || ready["owner_generation"] != process.owner_generation ||
         ready.as_object().map_or(true, |fields| fields.len() != if ready["ok"] == true { 3 } else { 4 }) {
+        diagnostic_event("sidecar_bootstrap_failed", None, "failed", Some("STANDALONE_SIDECAR_READY_INVALID"), None);
         return Err(ipc_transport::FAILED.to_string());
     }
     if ready["ok"] != true {
         let code = ready["error_code"].as_str().filter(|code| code.len() <= 80 &&
             code.bytes().all(|value| value.is_ascii_uppercase() || value.is_ascii_digit() || value == b'_'))
             .unwrap_or(ipc_transport::FAILED);
+        diagnostic_event("sidecar_bootstrap_failed", None, "failed", Some(code), None);
         return Err(code.to_string());
     }
+    diagnostic_event("sidecar_bootstrap_ready", None, "ready", None, None);
     Ok(process)
+}
+
+fn sidecar_bootstrap_diagnostic(child: &ipc_transport::ChildControl, transport_code: &str) -> &'static str {
+    if transport_code == ipc_transport::TIMEOUT { return "STANDALONE_SIDECAR_READY_TIMEOUT"; }
+    if transport_code == ipc_transport::CLOSED { return "STANDALONE_SIDECAR_START_CANCELLED"; }
+    // EOF can precede the kernel's exit notification by a few milliseconds.
+    // A short, bounded observation improves the diagnosis without holding a
+    // child lock, changing the recovery decision or blocking the GUI thread.
+    let mut status = child.exit_status();
+    for _ in 0..5 {
+        if status.is_some() { break; }
+        std::thread::sleep(Duration::from_millis(10));
+        status = child.exit_status();
+    }
+    let Some(status) = status else { return "STANDALONE_SIDECAR_EOF_RUNNING"; };
+    if status.success() { return "STANDALONE_SIDECAR_EXIT_ZERO"; }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::ExitStatusExt;
+        #[cfg(target_os = "macos")]
+        match status.signal() {
+            Some(4) => return "STANDALONE_SIDECAR_SIGNAL_ILLEGAL_INSTRUCTION",
+            Some(6) => return "STANDALONE_SIDECAR_SIGNAL_ABORT",
+            Some(9) => return "STANDALONE_SIDECAR_SIGNAL_KILLED",
+            Some(10) => return "STANDALONE_SIDECAR_SIGNAL_BUS",
+            Some(11) => return "STANDALONE_SIDECAR_SIGNAL_SEGFAULT",
+            _ => {},
+        }
+        if status.signal().is_some() { return "STANDALONE_SIDECAR_SIGNAL_OTHER"; }
+    }
+    match status.code() {
+        Some(1) => "STANDALONE_SIDECAR_EXIT_ONE",
+        Some(70) => "STANDALONE_SIDECAR_EXIT_SEVENTY",
+        Some(126) => "STANDALONE_SIDECAR_EXIT_DENIED",
+        Some(127) => "STANDALONE_SIDECAR_EXIT_NOT_FOUND",
+        Some(_) => "STANDALONE_SIDECAR_EXIT_OTHER",
+        None => "STANDALONE_SIDECAR_EXIT_UNKNOWN",
+    }
+}
+
+fn classify_sidecar_stderr(sample: &[u8]) -> &'static str {
+    let value = String::from_utf8_lossy(sample).to_ascii_lowercase();
+    if value.contains("err_dlopen_failed") { "STANDALONE_SIDECAR_NATIVE_LOAD_FAILED" }
+    else if value.contains("module_not_found") || value.contains("cannot find module") {
+        "STANDALONE_SIDECAR_MODULE_MISSING"
+    } else if value.contains("eacces") || value.contains("permission denied") {
+        "STANDALONE_SIDECAR_FILE_ACCESS_DENIED"
+    } else if value.contains("eperm") || value.contains("operation not permitted") {
+        "STANDALONE_SIDECAR_OPERATION_DENIED"
+    } else if value.contains("runtime_integrity_failed") {
+        "STANDALONE_SIDECAR_RUNTIME_INTEGRITY_FAILED"
+    } else { "STANDALONE_SIDECAR_STDERR_OTHER" }
 }
 
 fn read_frame(reader: &mut impl Read) -> Result<Value, String> {
@@ -1346,10 +1428,13 @@ fn filters(dialog: rfd::FileDialog) -> rfd::FileDialog {
 #[tauri::command]
 async fn select_files(state: State<'_, DesktopState>) -> Result<Value, String> {
     let owned = state.inner().capture_connection();
-    let _guard = selection_guard(&state.selection_busy, &state.admission_present, true)?;
-    let _review_guard = review_admission_guard(&state)?;
+    diagnostic_event("picker_requested", Some("select_files"), "progress", None, None);
+    let _guard = selection_guard(&state.selection_busy, &state.admission_present, true)
+        .inspect_err(|code| diagnostic_event("picker_blocked", Some("select_files"), "blocked", Some(code), None))?;
+    let _review_guard = review_admission_guard(&state)
+        .inspect_err(|code| diagnostic_event("picker_blocked", Some("select_files"), "blocked", Some(code), None))?;
     diagnostic_event(
-        "picker_opened",
+        "picker_invocation_started",
         Some("select_files"),
         "progress",
         None,
@@ -1358,12 +1443,15 @@ async fn select_files(state: State<'_, DesktopState>) -> Result<Value, String> {
     let selected =
         tauri::async_runtime::spawn_blocking(|| filters(rfd::FileDialog::new()).pick_files())
             .await
-            .map_err(|_| "STANDALONE_SELECTION_FAILED".to_string())?;
+            .map_err(|_| {
+                diagnostic_event("picker_failed", Some("select_files"), "failed", Some("STANDALONE_SELECTION_FAILED"), None);
+                "STANDALONE_SELECTION_FAILED".to_string()
+            })?;
     let Some(paths) = selected else {
         diagnostic_event(
-            "picker_cancelled",
+            "picker_no_selection",
             Some("select_files"),
-            "cancelled",
+            "no_selection",
             None,
             None,
         );
@@ -1387,10 +1475,13 @@ async fn select_files(state: State<'_, DesktopState>) -> Result<Value, String> {
 #[tauri::command]
 async fn select_folder(state: State<'_, DesktopState>) -> Result<Value, String> {
     let owned = state.inner().capture_connection();
-    let _guard = selection_guard(&state.selection_busy, &state.admission_present, true)?;
-    let _review_guard = review_admission_guard(&state)?;
+    diagnostic_event("picker_requested", Some("select_folder"), "progress", None, None);
+    let _guard = selection_guard(&state.selection_busy, &state.admission_present, true)
+        .inspect_err(|code| diagnostic_event("picker_blocked", Some("select_folder"), "blocked", Some(code), None))?;
+    let _review_guard = review_admission_guard(&state)
+        .inspect_err(|code| diagnostic_event("picker_blocked", Some("select_folder"), "blocked", Some(code), None))?;
     diagnostic_event(
-        "picker_opened",
+        "picker_invocation_started",
         Some("select_folder"),
         "progress",
         None,
@@ -1398,12 +1489,15 @@ async fn select_folder(state: State<'_, DesktopState>) -> Result<Value, String> 
     );
     let selected = tauri::async_runtime::spawn_blocking(|| rfd::FileDialog::new().pick_folder())
         .await
-        .map_err(|_| "STANDALONE_SELECTION_FAILED".to_string())?;
+        .map_err(|_| {
+            diagnostic_event("picker_failed", Some("select_folder"), "failed", Some("STANDALONE_SELECTION_FAILED"), None);
+            "STANDALONE_SELECTION_FAILED".to_string()
+        })?;
     let Some(path) = selected else {
         diagnostic_event(
-            "picker_cancelled",
+            "picker_no_selection",
             Some("select_folder"),
-            "cancelled",
+            "no_selection",
             None,
             None,
         );
@@ -1974,13 +2068,15 @@ async fn continue_current_batch(state: State<'_, DesktopState>) -> Result<Value,
 #[tauri::command]
 async fn configure_results(state: State<'_, DesktopState>) -> Result<Value, String> {
     let owned = state.inner().capture_connection();
-    let _guard = selection_guard(&state.selection_busy, &state.admission_present, true)?;
+    diagnostic_event("picker_requested", Some("configure_results"), "progress", None, None);
+    let _guard = selection_guard(&state.selection_busy, &state.admission_present, true)
+        .inspect_err(|code| diagnostic_event("picker_blocked", Some("configure_results"), "blocked", Some(code), None))?;
     // Derived from the owned window, never a renderer-supplied filesystem flag.
     // Keep the existing surface (including its network-folder behaviour) intact.
     let native_binding = state.app.get_webview_window("main")
         .and_then(|window| window.url().ok()).map(|url| workspace_catalogue_path(url.path())).unwrap_or(false);
     diagnostic_event(
-        "picker_opened",
+        "picker_invocation_started",
         Some("configure_results"),
         "progress",
         None,
@@ -1988,12 +2084,15 @@ async fn configure_results(state: State<'_, DesktopState>) -> Result<Value, Stri
     );
     let selected = tauri::async_runtime::spawn_blocking(|| rfd::FileDialog::new().pick_folder())
         .await
-        .map_err(|_| "STANDALONE_SELECTION_FAILED".to_string())?;
+        .map_err(|_| {
+            diagnostic_event("picker_failed", Some("configure_results"), "failed", Some("STANDALONE_SELECTION_FAILED"), None);
+            "STANDALONE_SELECTION_FAILED".to_string()
+        })?;
     let Some(path) = selected else {
         diagnostic_event(
-            "picker_cancelled",
+            "picker_no_selection",
             Some("configure_results"),
-            "cancelled",
+            "no_selection",
             None,
             None,
         );
@@ -2091,8 +2190,24 @@ async fn open_diagnostic_folder() -> Result<Value, String> {
 fn get_native_recovery_status(state: State<'_, DesktopState>) -> Value {
     // Independent of the sidecar, including while IPC is blocked. This
     // snapshot never authorizes a new run, a release, or an export.
-    json!({ "phase": state.lifecycle.recovery_phase(), "local_ui_only": true,
+    json!({ "phase": state.lifecycle.recovery_phase(), "diagnostic_log": diagnostic_log::status(), "local_ui_only": true,
         "external_disclosure": false })
+}
+#[tauri::command]
+fn report_blocked_picker(action: String, reason: String) -> Value {
+    let allowed_action = matches!(action.as_str(), "select_files" | "select_folder" | "configure_results");
+    let code = match reason.as_str() {
+        "reconnecting" => Some("STANDALONE_UI_RECONNECTING"),
+        "busy" => Some("STANDALONE_UI_BUSY"),
+        _ => None,
+    };
+    if allowed_action {
+        if let Some(code) = code {
+            diagnostic_event("ui_picker_blocked", Some(&action), "blocked", Some(code), None);
+            return json!({ "ok": true });
+        }
+    }
+    json!({ "ok": false })
 }
 #[tauri::command]
 async fn shutdown(state: State<'_, DesktopState>) -> Result<Value, String> {
@@ -2265,6 +2380,7 @@ fn main() {
             open_local_ledger,
             open_diagnostic_folder,
             get_native_recovery_status,
+            report_blocked_picker,
             shutdown,
             frontend_ready
         ])
@@ -2303,6 +2419,15 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn sidecar_stderr_is_reduced_to_fixed_codes_without_private_text() {
+        assert_eq!(classify_sidecar_stderr(b"Error: Cannot find module '/Users/test/private.js'"),
+            "STANDALONE_SIDECAR_MODULE_MISSING");
+        assert_eq!(classify_sidecar_stderr(b"EACCES: permission denied, open '/Users/test/private.js'"),
+            "STANDALONE_SIDECAR_FILE_ACCESS_DENIED");
+        assert_eq!(classify_sidecar_stderr(b"private document body"), "STANDALONE_SIDECAR_STDERR_OTHER");
+    }
 
     #[test]
     fn retirement_completion_gap_does_not_consume_recovery_generations() {

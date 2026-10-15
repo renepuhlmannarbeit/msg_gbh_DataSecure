@@ -1,12 +1,22 @@
 # DataSecure Standalone auf macOS starten
 
-Anleitung für **3.2.0-rc159** und die neue Oberfläche.
-[RC159-ZIP und zusätzlich DMG für Intel und Apple Silicon](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc159)
+Anleitung für den veröffentlichten Teststand **3.2.0-rc160**.
+[RC160-ZIP und DMG für Intel und Apple Silicon](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc160)
 mit der jeweils passenden Prüfsumme verwenden. Das Testpaket ist ad-hoc-signiert,
 nicht mit Apple Developer ID signiert oder notarisiert. Native technische
 Runner-Prüfungen ersetzen keine Finder-/Gatekeeper-/VoiceOver-/Bedienabnahme.
 
-## Verarbeitung und Prüfung in RC159
+**Bekannter Mac-26.2/M2-Prüfstopp:** Ein Nutzer meldete bei DMG und ZIP eine
+sofort unterbrochene lokale Verbindung. RC160 ist auf diesem Zielhost daher
+**nicht als funktionsfähig abgenommen**; keine echten Dokumente als neuen
+Verarbeitungstest verwenden. Der Quellstand erhält frühere Core-Diagnostik
+und ein gezieltes macOS-26-Gate, ist aber noch kein neu veröffentlichtes
+Paket. Das Kopieren der App in den eigenen Nutzerordner verlangt normalerweise
+keine Administratorrechte. Eine gesperrte Terminal-App ist für die normalen
+Datei-/Ordnerbuttons keine Voraussetzung. Beide Aussagen sind keine
+Umgehungsempfehlung für Organisationsrichtlinien.
+
+## Verarbeitung und Prüfung in RC160
 
 1. Nach der Installation unter **Neue Verarbeitung** zuerst **Nur umwandeln**
    oder **Umwandeln und anonymisieren** wählen. Dateien/Ordner hinzufügen,

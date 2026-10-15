@@ -474,11 +474,27 @@ function removeOwnedRoot(root, initial) {
     assert.strictEqual((await bounded(blockedChild.closed, 'blocked sidecar did not stop')).code, 0);
     const interactionLog = fs.readFileSync(path.join(diagnostics, 'sidecar-interactions.jsonl'), 'utf8');
     const events = interactionLog.trim().split(/\r?\n/u).map((line) => JSON.parse(line));
+    const bootstrapEvents = events.map((event) => event.event);
+    assert.ok(bootstrapEvents.indexOf('sidecar_entry') >= 0);
+    assert.ok(bootstrapEvents.indexOf('sidecar_entry') < bootstrapEvents.indexOf('sidecar_imports_ready'));
+    assert.ok(bootstrapEvents.indexOf('sidecar_imports_ready') < bootstrapEvents.indexOf('service_initialized'));
     assert.ok(events.some((event) => event.event === 'service_initialized'));
     assert.ok(events.some((event) => event.event === 'request_received' && event.action === 'get_public_state'));
     assert.ok(events.some((event) => event.session_id === 'a'.repeat(32)));
     assert.ok(!events.some((event) => event.session_id === 'invalid session'));
     assert.doesNotMatch(interactionLog, /source_paths|source_path|selected_files|raw_content|mapping|request_id/iu);
+    const importRoot = fs.mkdtempSync(path.join(root, 'import-failure-'));
+    const importEnvironment = isolatedEnvironment(importRoot);
+    const importProbe = childProcess.spawnSync(process.execPath, ['-e',
+      'const Module=require("node:module"); const load=Module._load; Module._load=function(id,...args){ if(id==="./application-service"){const e=new Error("synthetic private path");e.code="MODULE_NOT_FOUND";throw e;} return load.call(this,id,...args); }; require(process.argv[1]);',
+      sidecarFile], { env: importEnvironment, encoding: 'utf8', timeout: 5000, windowsHide: true });
+    assert.equal(importProbe.status, 70, 'an early product import failure must terminate before private IPC');
+    const importLog = fs.readFileSync(path.join(importEnvironment.DATASECURE_STANDALONE_DIAGNOSTIC_DIR,
+      'sidecar-interactions.jsonl'), 'utf8');
+    assert.match(importLog, /"event":"sidecar_entry"/u);
+    assert.match(importLog, /"event":"sidecar_import_failed"/u);
+    assert.match(importLog, /"error_code":"STANDALONE_SIDECAR_MODULE_MISSING"/u);
+    assert.doesNotMatch(importLog, /synthetic private path/u);
     process.stdout.write('✓ standalone sidecar exchanges bounded content-free frames\n');
 
     // Exercise the actual v2 start contract through the sidecar AND worker.

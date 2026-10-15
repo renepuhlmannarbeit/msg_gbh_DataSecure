@@ -49,6 +49,17 @@ pub fn append(directory: &Path, record: &serde_json::Value) {
     if result.is_err() { *state = State::Disabled; }
 }
 
+pub fn status() -> &'static str {
+    match STATE.lock() {
+        Ok(state) => match *state {
+            State::Initial => "not_started",
+            State::Ready(_) => "ready",
+            State::Disabled => "unavailable",
+        },
+        Err(_) => "unavailable",
+    }
+}
+
 #[cfg(unix)]
 mod platform {
     use super::*;

@@ -141,10 +141,20 @@ export function writeConversionRuntime(repoRoot, destination, productTarget) {
   const output = path.resolve(destination);
   if (fs.existsSync(output)) throw new Error('CONVERSION_PACKAGE_DESTINATION_EXISTS');
   fs.mkdirSync(output, { recursive: true });
+  const macosBundle = productTarget.startsWith('macos-');
+  if (macosBundle) fs.chmodSync(output, 0o755);
   for (const file of files) {
     const target = path.join(output, ...file.relative.split('/'));
     fs.mkdirSync(path.dirname(target), { recursive: true });
-    fs.writeFileSync(target, file.bytes, { flag: 'wx', mode: file.executable && process.platform !== 'win32' ? 0o700 : 0o600 });
+    if (macosBundle) {
+      for (let directory = path.dirname(target); directory !== output; directory = path.dirname(directory)) {
+        fs.chmodSync(directory, 0o755);
+      }
+    }
+    const mode = macosBundle ? (file.executable ? 0o755 : 0o644) :
+      (file.executable && process.platform !== 'win32' ? 0o700 : 0o600);
+    fs.writeFileSync(target, file.bytes, { flag: 'wx', mode });
+    if (macosBundle) fs.chmodSync(target, mode);
   }
   return files.map(file => ({ relative: file.relative, bytes: file.bytes.length }));
 }

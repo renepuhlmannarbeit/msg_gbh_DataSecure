@@ -941,6 +941,30 @@ testAsync('connection recovery clears stale source IDs and reloads display only 
   assert.equal(h.el('connection-help').hidden, true);
   assert.equal(h.el('start').attrs['aria-disabled'], 'true');
 });
+testAsync('picker clicks during recovery explain the block and record a content-free native event', async () => {
+  const h = harness(); await tick();
+  h.listeners.get('datasecure-connection')({payload: {epoch: 1, state: 'recovering'}});
+  await tick();
+  const before = h.calls.filter(call => call.command === 'select_folder' || call.command === 'configure_results').length;
+  await h.act('select-folder');
+  await h.act('configure-results');
+  assert.equal(h.calls.filter(call => call.command === 'select_folder' || call.command === 'configure_results').length, before);
+  assert.equal(h.calls.filter(call => call.command === 'report_blocked_picker').length, 2);
+  assert.deepEqual(h.calls.filter(call => call.command === 'report_blocked_picker').map(call => [call.args.action, call.args.reason]),
+    [['select_folder', 'reconnecting'], ['configure_results', 'reconnecting']]);
+  assert.equal(h.el('connection-help').hidden, false);
+  assert.match(h.el('connection-status').textContent, /Dateiauswahl und Ergebnisordner/u);
+});
+testAsync('an unavailable native diagnostic sink is visible in recovery guidance', async () => {
+  const h = harness({invoke(command, args, fallback) {
+    if (command === 'get_native_recovery_status') return {phase: 'blocked', diagnostic_log: 'unavailable', local_ui_only: true, external_disclosure: false};
+    return fallback();
+  }});
+  await tick();
+  h.listeners.get('datasecure-connection')({payload: {epoch: 1, state: 'recovering'}});
+  await tick();
+  assert.match(h.el('connection-status').textContent, /Diagnoseprotokoll konnte nicht geschrieben/u);
+});
 testAsync('connection retry only reloads status and shows a blocked native phase without claiming completion', async () => {
   let blocked = false;
   const h = harness({invoke(command, args, fallback) {

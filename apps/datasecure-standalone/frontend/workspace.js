@@ -186,6 +186,9 @@
         idle: 'Es ist kein vorheriger lokaler Dienst mehr zugeordnet. Bitte Verbindung und gespeicherten Laufstatus erneut prüfen; DataSecure startet keinen Lauf automatisch.'
       }[snapshot?.phase];
       $('connection-status').textContent = message || generic;
+      if (snapshot?.diagnostic_log === 'unavailable') {
+        $('connection-status').textContent += ' Das lokale Diagnoseprotokoll konnte nicht geschrieben werden. Bitte die IT über diesen Hinweis informieren.';
+      }
     } catch {
       if (!closed && reconnecting && epoch === connectionEpoch) $('connection-status').textContent = generic;
     }
@@ -208,8 +211,19 @@
   }
   function beginBusy() { const ownership = ++busyGeneration; setBusy(true); return ownership; }
   function endBusy(ownership) { if (ownership === busyGeneration && !closed) setBusy(false); }
+  async function explainBlockedPicker(command, reason) {
+    if (!['select_files', 'select_folder', 'configure_results'].includes(command)) return;
+    await invoke('report_blocked_picker', { action: command, reason }).catch(() => {});
+    if (reason === 'reconnecting') {
+      $('connection-help').hidden = false;
+      $('connection-status').textContent = 'Dateiauswahl und Ergebnisordner sind erst nach der wiederhergestellten lokalen Verbindung verfügbar. Bitte „Verbindung und Laufstatus prüfen“ wählen.';
+    } else {
+      feedback('Ein lokaler Vorgang läuft bereits. Bitte dessen Abschluss abwarten und die Auswahl danach erneut öffnen.', true);
+    }
+  }
   async function perform(command, args) {
-    if (busy || closed || reconnecting) return null;
+    if (closed) return null;
+    if (busy || reconnecting) { await explainBlockedPicker(command, reconnecting ? 'reconnecting' : 'busy'); return null; }
     const connection = connectionEpoch;
     generation++; lastError = null; const ownership = beginBusy();
     try { const result = await invoke(command, args); return connection === connectionEpoch ? result : null; }
@@ -352,7 +366,7 @@
     renderTree();
   }
   async function pick(command) {
-    if (busy) return;
+    if (busy) { await explainBlockedPicker(command, 'busy'); return; }
     const connection = connectionEpoch;
     admitting = true; renderTree();
     const result = await perform(command);

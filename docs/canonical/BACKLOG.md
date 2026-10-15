@@ -2,6 +2,26 @@
 
 Stand: 15.10.2026 · Produktstand 3.2.0-rc160 · veröffentlicht Standalone RC160 (Windows x64, macOS Intel/Apple Silicon) / Cowork RC151; Linux Standalone RC159 · Teilkopie-/Dauerblockadefall und menschliche Zielhost-Abnahme offen
 
+**P0 – macOS 26.2/M2 Start und Diagnose:** ARM-DMG und ZIP zeigen nach dem
+Start die Oberfläche, aber keinen lokalen Dienst. Drei Desktop-Logs enden
+nach `sidecar_spawned` mit `STANDALONE_IPC_FAILED`; das fehlende Sidecar-Log
+ist selbst eine Diagnoselücke. Quellstand: frühe Sidecar-Phasen und begrenzter
+nativer Exit-/Signalbefund, Picker- und UI-Blockgründe sowie Status des
+nativen Diagnose-Sinks ergänzt. Lokale Tests und macOS-26-ARM-CI-Gate sind
+separat nachzuweisen; danach erneuter Nicht-Admin-M2-Test mit DMG/ZIP,
+regulärem Benutzerprofil, Dateidialogen, Konvertierung, Ergebnisablage und
+vollständigem inhaltsfreiem Diagnosepaar. Bei fortbestehendem Fehler den
+festen Abbruchcode und gegebenenfalls die von IT freigegebene
+Endpoint-Security-/Gatekeeper-Diagnose auswerten, ohne Richtlinien zu umgehen.
+Kein neues Pre-Release allein aus einem grünen synthetischen CI-Start.
+Die Mac-Projektion muss im DMG für fremde Installations-Eigentümer lesbar
+und ausführbar sein (Quellkorrektur + natives Modus-Gate ergänzt). Der Nutzer
+kopierte aber in den eigenen Ordner, sodass diese Lücke den gemeldeten
+Abbruch nicht belegt. Unabhängig davon sind gebündelter Mac-Core-Pfad und
+`RUNTIME-EVIDENCE.json`-Pfad in der Laufzeitprüfung inkonsistent; beide
+zusammen nach nativer Binär-/Signaturanalyse reparieren, nicht nur die
+Erkennung einzeln aktivieren. Die aktuellen Tests übersehen diese Prüfung.
+
 **RC160-Bereitstellung:** Der Test-Pre-Release ist an
 `b5d52c550ead3fb4cea5acc9e9774de9863db32c` gebunden. CI,
 vollständige Security und die drei nativen Paketgates sind grün;

@@ -149,6 +149,11 @@ description = "Liest nur die inhaltsfreie native Prozess-Abgleichphase, ohne den
 commands.allow = ["get_native_recovery_status"]
 
 [[permission]]
+identifier = "allow-report-blocked-picker"
+description = "Protokolliert nur erlaubte Picker-Aktionen und feste UI-Blockgründe ohne Dateiinhalte oder Pfade."
+commands.allow = ["report_blocked_picker"]
+
+[[permission]]
 identifier = "allow-shutdown"
 description = "Beendet den privaten lokalen Core-Prozess."
 commands.allow = ["shutdown"]

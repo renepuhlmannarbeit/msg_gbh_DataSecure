@@ -48,6 +48,7 @@
     "allow-open-local-ledger",
     "allow-open-diagnostic-folder",
     "allow-get-native-recovery-status",
+    "allow-report-blocked-picker",
     "allow-shutdown",
     "allow-frontend-ready"
   ]

@@ -2,7 +2,7 @@
 //! acquiring the request mutex or waiting for a blocked pipe writer.
 use std::{
     io::Write,
-    process::Child,
+    process::{Child, ExitStatus},
     sync::{atomic::{AtomicBool, AtomicU8, AtomicU64, Ordering}, mpsc, Arc, Condvar, Mutex, MutexGuard, TryLockError},
     time::{Duration, Instant},
 };
@@ -52,6 +52,9 @@ impl ChildControl {
     pub fn same(&self, other: &Self) -> bool { Arc::ptr_eq(&self.0, &other.0) }
     pub fn exited(&self) -> bool {
         self.0.try_lock().ok().and_then(|mut child| child.try_wait().ok().flatten()).is_some()
+    }
+    pub fn exit_status(&self) -> Option<ExitStatus> {
+        self.0.try_lock().ok().and_then(|mut child| child.try_wait().ok().flatten())
     }
     pub fn terminate(&self) -> bool {
         if self.1.compare_exchange(0, 1, Ordering::AcqRel, Ordering::Acquire).is_err() {

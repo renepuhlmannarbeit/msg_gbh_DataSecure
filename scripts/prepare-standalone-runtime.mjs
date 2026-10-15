@@ -27,7 +27,9 @@ const binaries = path.join(app, 'tauri-contract', 'binaries');
 fs.mkdirSync(binaries, { recursive: true });
 const destination = path.join(binaries, target.sidecar_filename);
 fs.rmSync(destination, { force: true });
-fs.writeFileSync(destination, runtimeBytes, { flag: 'wx', mode: process.platform === 'win32' ? 0o600 : 0o700 });
+const sidecarMode = process.platform === 'darwin' ? 0o755 : (process.platform === 'win32' ? 0o600 : 0o700);
+fs.writeFileSync(destination, runtimeBytes, { flag: 'wx', mode: sidecarMode });
+if (process.platform === 'darwin') fs.chmodSync(destination, sidecarMode);
 if (!fs.statSync(destination).isFile() || fs.statSync(destination).size !== fs.statSync(source).size) {
   throw new Error('STANDALONE_RUNTIME_COPY_FAILED');
 }

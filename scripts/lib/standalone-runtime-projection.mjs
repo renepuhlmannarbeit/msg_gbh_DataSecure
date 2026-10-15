@@ -74,12 +74,21 @@ export function collectStandaloneRuntime(serverRoot, productTarget) {
 export function writeStandaloneRuntime(serverRoot, destination, productTarget) {
   const output = path.resolve(destination);
   fs.mkdirSync(output, { recursive: true });
+  const macosBundle = productTarget.startsWith('macos-');
+  if (macosBundle) fs.chmodSync(output, 0o755);
   const files = collectStandaloneRuntime(serverRoot, productTarget);
   for (const file of files) {
     const target = path.join(output, ...file.relative.split('/'));
     fs.mkdirSync(path.dirname(target), { recursive: true });
+    if (macosBundle) {
+      for (let directory = path.dirname(target); directory !== output; directory = path.dirname(directory)) {
+        fs.chmodSync(directory, 0o755);
+      }
+    }
     const executable = /^native\/(?:macos-(?:x64|arm64)|linux-x64)\/datasecure-sandbox$/u.test(file.relative);
-    fs.writeFileSync(target, file.bytes, { flag: 'wx', mode: executable ? 0o700 : 0o600 });
+    const mode = macosBundle ? (executable ? 0o755 : 0o644) : (executable ? 0o700 : 0o600);
+    fs.writeFileSync(target, file.bytes, { flag: 'wx', mode });
+    if (macosBundle) fs.chmodSync(target, mode);
   }
   return files.map(({ relative, bytes }) => ({ relative: `server/${relative}`, bytes: bytes.length }));
 }
