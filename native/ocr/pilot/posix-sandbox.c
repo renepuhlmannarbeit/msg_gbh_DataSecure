@@ -103,6 +103,16 @@ static int kill_and_reap(pid_t pid) {
   return waited == pid ? 0 : -1;
 }
 
+static int finish_observed_child(pid_t pid, const siginfo_t *observed) {
+  // The leader remains unreaped while we reconcile its process group, so
+  // neither its PID nor PGID can be reused for an unrelated process.
+  if (kill_and_reap(pid) != 0) return WAIT_ERROR;
+  if (cancellation_requested) return RESOURCE_LIMIT;
+  if (observed->si_code == CLD_EXITED) return observed->si_status;
+  if (observed->si_code == CLD_KILLED || observed->si_code == CLD_DUMPED) return RESOURCE_LIMIT;
+  return WAIT_ERROR;
+}
+
 /* A hosted process may inherit a hard limit below DataSecure's requested
    ceiling.  POSIX permits an unprivileged process to lower rlim_max, but not
    to raise it.  Keep the stricter inherited ceiling instead of failing the
@@ -123,6 +133,7 @@ static int apply_limit_ceiling(int resource, rlim_t requested) {
 int main(int argc, char **argv) {
   uint64_t memory_mib = 0, cpu_ms = 0, wall_ms = 0;
   uint64_t memory_bytes, started;
+  unsigned int unavailable_rss_samples = 0;
   pid_t pid;
   struct sigaction action;
   sigset_t cancellation_signals, previous_mask;
@@ -216,14 +227,7 @@ int main(int argc, char **argv) {
     // allow PID/PGID reuse and could signal an unrelated new process group.
     waited = waitid(P_PID, (id_t)pid, &observed, WEXITED | WNOHANG | WNOWAIT);
     if (waited == 0 && observed.si_pid == pid) {
-      // Reconcile the owned group even after normal child exit. This also
-      // covers cancellation arriving between exit observation and return:
-      // the leader reserves its PID until every group signal is complete.
-      if (kill_and_reap(pid) != 0) return WAIT_ERROR;
-      if (cancellation_requested) return RESOURCE_LIMIT;
-      if (observed.si_code == CLD_EXITED) return observed.si_status;
-      if (observed.si_code == CLD_KILLED || observed.si_code == CLD_DUMPED) return RESOURCE_LIMIT;
-      return WAIT_ERROR;
+      return finish_observed_child(pid, &observed);
     }
     if (waited < 0 && errno != EINTR) {
       // ECHILD means ownership is absent: never signal a potentially reused
@@ -239,13 +243,29 @@ int main(int argc, char **argv) {
     {
       uint64_t now = monotonic_ms();
       uint64_t rss = resident_bytes(pid);
-      if (now == UINT64_MAX || rss == UINT64_MAX) {
+      if (now == UINT64_MAX) {
         kill_and_reap(pid);
         return SETUP_ERROR;
       }
-      if (now - started >= wall_ms || rss > memory_bytes) {
+      if (now - started >= wall_ms || (rss != UINT64_MAX && rss > memory_bytes)) {
         kill_and_reap(pid);
         return RESOURCE_LIMIT;
+      }
+      if (rss == UINT64_MAX) {
+        // A short-lived child may exit after the first waitid but before the
+        // OS RSS query. Recheck the still-owned child instead of treating a
+        // completed conversion as an isolation setup failure. A persistent
+        // inability to measure memory still fails closed after 30 ms.
+        memset(&observed, 0, sizeof(observed));
+        waited = waitid(P_PID, (id_t)pid, &observed, WEXITED | WNOHANG | WNOWAIT);
+        if (waited == 0 && observed.si_pid == pid) return finish_observed_child(pid, &observed);
+        if (waited < 0 && errno == ECHILD) return WAIT_ERROR;
+        if (++unavailable_rss_samples >= 3) {
+          kill_and_reap(pid);
+          return SETUP_ERROR;
+        }
+      } else {
+        unavailable_rss_samples = 0;
       }
     }
     {

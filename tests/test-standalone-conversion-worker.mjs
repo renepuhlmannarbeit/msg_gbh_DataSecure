@@ -76,7 +76,9 @@ let observeSpawn;
 childProcess.spawn = (...args) => {
   const child = originalSpawn(...args);
   const entry = { child, closed: false, kill: child.kill.bind(child) };
-  entry.done = new Promise(resolve => child.once('close', () => { entry.closed = true; resolve(); }));
+  entry.done = new Promise(resolve => child.once('close', (code, signal) => {
+    entry.closed = true; entry.exitCode = code; entry.signal = signal; resolve();
+  }));
   children.push(entry); observeSpawn?.(child, args);
   return child;
 };
@@ -1241,7 +1243,17 @@ try {
     };
     fs.closeSync = function(descriptor) { openedRuntimeFiles.delete(descriptor); return originalClose.call(this, descriptor); };
     const started = performance.now();
-    try { for (let i = 0; i < 100; i++) await convert(Buffer.from(`${text}\nDocument ${i}`), '.txt'); }
+    try {
+      for (let i = 0; i < 100; i++) {
+        try { await convert(Buffer.from(`${text}\nDocument ${i}`), '.txt'); }
+        catch (failure) {
+          const child = children.at(-1);
+          const exit = Number.isInteger(child?.exitCode) ? child.exitCode : 'none';
+          const signal = /^SIG[A-Z]+$/u.test(child?.signal || '') ? child.signal : 'none';
+          throw new Error(`CONVERSION_REUSE_FAILED iteration=${i} supervisor_exit=${exit} signal=${signal}`, { cause: failure });
+        }
+      }
+    }
     finally { fs.readSync = originalRead; fs.openSync = originalOpen; fs.closeSync = originalClose; }
     assert.equal(heavyReads, 0); assert.equal(heavyBytes, 0);
     process.stdout.write(`100-TXT packaged runtime: ${Math.round(performance.now() - started)} ms; repeated heavy runtime reads: ${heavyReads}\n`);

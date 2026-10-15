@@ -10,6 +10,14 @@ server_root="$repo_root/plugins/data-secure/server"
 "$supervisor" --memory-mib 384 --cpu-ms 5000 --wall-ms 10000 -- \
   "$node_path" -e 'process.stdout.write("native-supervisor-ok\n")'
 
+# A quick child may exit between the supervisor's non-reaping status check
+# and its RSS query. Repeat the actual native boundary; a completed child
+# must never become a spurious isolation/setup failure.
+for ((attempt = 0; attempt < 100; attempt++)); do
+  "$supervisor" --memory-mib 384 --cpu-ms 5000 --wall-ms 10000 -- /usr/bin/true
+done
+printf '%s\n' 'native-short-lived-child-exit-race: 100 cases PASS'
+
 # Node/V8 reserves memory differently from a traditional native process. In
 # particular, RLIMIT_AS or RLIMIT_DATA can let the parser emit a valid response
 # and then make Node fail while instantiating its internal WebAssembly HTTP parser. Run

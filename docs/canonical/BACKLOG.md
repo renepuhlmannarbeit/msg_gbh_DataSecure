@@ -21,6 +21,12 @@ Abbruch nicht belegt. Unabhängig davon sind gebündelter Mac-Core-Pfad und
 `RUNTIME-EVIDENCE.json`-Pfad in der Laufzeitprüfung inkonsistent; beide
 zusammen nach nativer Binär-/Signaturanalyse reparieren, nicht nur die
 Erkennung einzeln aktivieren. Die aktuellen Tests übersehen diese Prüfung.
+Erster macOS-26-ARM-CI-Lauf [38765209776](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38765209776)
+scheiterte vor dem Paketbau im realen Konverter-Gate nach 64 erfolgreichen
+Fällen an `CONVERSION_ISOLATION_FAILED` beim schnellen Wiederverwenden.
+POSIX-Exit-/RSS-Rennbedingung quellenmäßig begrenzt korrigiert und der
+Supervisor-Exit für einen Wiederholungsfehler testseitig sichtbar gemacht;
+beides nativ erneut prüfen, dann erst Bundle- und regulären Start erreichen.
 
 **RC160-Bereitstellung:** Der Test-Pre-Release ist an
 `b5d52c550ead3fb4cea5acc9e9774de9863db32c` gebunden. CI,

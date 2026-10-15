@@ -53,6 +53,19 @@ Gatekeeper, echte Dialoge oder einen normalen Nicht-Admin-Bedienlauf.
 Bis zur positiven Zielhostprüfung kein korrigiertes Paket als funktionsfähig
 behaupten und RC160 nicht stillschweigend ersetzen.
 
+Erster macOS-26-ARM-Lauf [38765209776](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38765209776):
+Quell-/Rust-Suite grün; das separate reale Konverter-Gate stoppte nach 64
+bestandenen Fällen in der schnellen 100-Dateien-Wiederverwendung mit
+`CONVERSION_ISOLATION_FAILED`. Bundlebau und App-Start wurden nicht erreicht.
+Im POSIX-Supervisor wurde eine Exit-/RSS-Abfrage-Rennbedingung gefunden:
+ein zwischen `waitid` und RSS-Messung beendeter Kindprozess konnte als
+Setupfehler erscheinen. Der Quellstand gleicht den gehaltenen Kindprozess
+erneut ab und lässt höchstens drei kurze fehlende RSS-Proben zu; anhaltend
+fehlende Messung bleibt ein Fail-Closed-Fehler. Der Test protokolliert bei
+erneutem Fehler nur Iteration und numerischen Supervisor-Exit/Signal.
+Diese Erklärung ist erst nach dem nächsten nativen Lauf bestätigt; aus dem
+generischen Fehler allein folgt sie noch nicht.
+
 ### Aktuell veröffentlicht: Standalone RC160 als Test-Pre-Release
 
 [RC160](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc160)

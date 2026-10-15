@@ -33,6 +33,17 @@ das signierte Core-Bytebild wird im macOS-26-Gate verglichen, danach ist
 die gekoppelte Korrektur umzusetzen. Keine Sicherheitsfreigabe aus grünen
 Quelltests ableiten.
 
+Erster macOS-26-ARM-Gate-Lauf
+[38765209776](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38765209776)
+→ nach 64 erfolgreichen Konverterfällen `CONVERSION_ISOLATION_FAILED` bei
+schneller Wiederverwendung, noch vor Bundle/Launch. `posix-sandbox.c`
+gleicht nach fehlgeschlagener RSS-Abfrage den weiterhin gehaltenen
+Kindstatus erneut ab, begrenzt fehlende Proben auf drei kurze Intervalle
+und bleibt bei anhaltender Messstörung Fail-Closed. Der Konvertertest
+meldet bei erneutem Fehler nur Iteration, Exitcode und Signal des
+Supervisors; `test-posix-supervisor-native.sh` prüft zusätzlich 100 echte
+kurzlebige Kindprozesse. Native Wiederholung und Ursachebestätigung offen.
+
 **RC160-Releasebindung:** Quellcommit
 `b5d52c550ead3fb4cea5acc9e9774de9863db32c` →
 [CI](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38744664049),
