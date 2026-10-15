@@ -71,6 +71,7 @@
     "stopped",
     "paused",
     "export_pending",
+    "export_abandoned",
     "results_available",
     "completed_without_results",
     "blocked"
@@ -91,6 +92,8 @@
     "open_identity_mappings_directory",
     "continue_history_batch",
     "pause_batch",
+    "abandon_result_export",
+    "skip_ocr_contact_review",
     "get_document_reviews",
     "get_document_review_history_summary",
     "close_document_reviews",

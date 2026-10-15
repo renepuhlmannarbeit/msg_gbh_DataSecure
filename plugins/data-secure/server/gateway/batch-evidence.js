@@ -1,5 +1,6 @@
 'use strict';
 const { readHeldBytes } = require('../core/bound-file-io');
+const { assertAnonymizationBatch } = require('../core/processing-mode');
 
 const fs = require('fs');
 const path = require('path');
@@ -24,7 +25,8 @@ const OLDEST_LEGACY_SCHEMA = 'datasecure-batch-evidence/1';
 const FILE_NAME = 'DataSecure-Batch-Nachweis.json';
 const OUTBOX_PREFIX = 'batch_evidence_pending_';
 const RECEIPT_ID_RE = /^[a-f0-9]{32}$/;
-const BATCH_SNAPSHOT_SCHEMAS = new Set(['datasecure-batch/1', 'datasecure-batch/2', 'datasecure-batch/3', 'datasecure-batch/4', 'datasecure-batch/6']);
+const BATCH_SNAPSHOT_SCHEMAS = new Set(['datasecure-batch/1', 'datasecure-batch/2', 'datasecure-batch/3', 'datasecure-batch/4', 'datasecure-batch/6', 'datasecure-batch/7']);
+const LEGACY_BATCH_SNAPSHOT_SCHEMAS = new Set([...BATCH_SNAPSHOT_SCHEMAS].filter(schema => schema !== 'datasecure-batch/7'));
 const PROFILES = new Set(['auto', 'customer', 'applicant', 'personnel_profile', 'contract', 'general']);
 const LEGACY_V2_RECORD_KEYS = [
   'schema', 'receipt_id', 'recorded_at', 'batch_started_at', 'batch_finished_at', 'profile', 'image_handling',
@@ -67,7 +69,7 @@ function aggregateDocumentResults(state, options = {}) {
       if (typeof resolvePublishedPackage !== 'function') {
         throw new SafeError('Der lokale Batch-Nachweis konnte das veröffentlichte Paket nicht verifizieren.');
       }
-      const published = resolvePublishedPackage(item.package_id);
+      const published = resolvePublishedPackage(item.package_id, state, item);
       if (published?.state !== 'verified' || !sameDocumentResult(item.document_result, published.document_result)) {
         throw new SafeError('Der lokale Batch-Nachweis stimmt nicht mit dem veröffentlichten Paket überein.');
       }
@@ -97,6 +99,9 @@ function evidenceRecord(
   receiptId = crypto.randomBytes(16).toString('hex'),
   options = {}
 ) {
+  // /7 is a persistence version for both purposes, not proof of privacy
+  // processing. Enforce here too: direct callers can bypass terminal routing.
+  assertAnonymizationBatch(state);
   const codes = [...new Set(state.items
     .map((item) => String(item.error_code || ''))
     .filter((code) => isDocumentResultReasonCode(code)))].sort();
@@ -166,7 +171,7 @@ function validateEvidenceRecord(record) {
     !exactKeys(record.grade_counts, GRADE_COUNT_KEYS) ||
     !Object.values(record.grade_counts).every((value) => Number.isSafeInteger(value) && value >= 0 && value <= RESOURCE_LIMITS.MAX_BATCH_FILES) ||
     Object.values(record.grade_counts).reduce((sum, value) => sum + value, 0) !== record.counts.total ||
-    (['datasecure-batch/2', 'datasecure-batch/3', 'datasecure-batch/4', 'datasecure-batch/6'].includes(record.batch_snapshot_schema) &&
+    (['datasecure-batch/2', 'datasecure-batch/3', 'datasecure-batch/4', 'datasecure-batch/6', 'datasecure-batch/7'].includes(record.batch_snapshot_schema) &&
       (record.grade_counts.complete + record.grade_counts.usable_with_omissions !== record.counts.released ||
        record.grade_counts.not_processed !== record.counts.stopped ||
        record.grade_counts.unavailable !== record.counts.retryable + record.counts.pending)) ||
@@ -204,7 +209,7 @@ function validateLegacyV2EvidenceRecord(record) {
     record.counts.released + record.counts.stopped + record.counts.retryable + record.counts.pending !== record.counts.total ||
     !['complete', 'complete_with_stopped_documents', 'incomplete'].includes(record.outcome) ||
     !safeVersion(record.gateway_version) || !safeVersion(record.privacy_ruleset) ||
-    !safeVersion(record.credential_context_policy) || !BATCH_SNAPSHOT_SCHEMAS.has(record.batch_snapshot_schema) ||
+    !safeVersion(record.credential_context_policy) || !LEGACY_BATCH_SNAPSHOT_SCHEMAS.has(record.batch_snapshot_schema) ||
     record.raw_content_sent_to_claude !== false || record.mapping_is_local_only !== true ||
     !Array.isArray(record.error_codes) || record.error_codes.length > 100 ||
     !record.error_codes.every((code) => isDocumentResultReasonCode(code))) {

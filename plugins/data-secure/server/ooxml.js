@@ -75,6 +75,169 @@ function mediaAttachments(entries, prefix, allowedParts = null) {
   }
   return out;
 }
+// Opt-in Standalone OCR scope, independent of the historical privacy parser.
+// An internal relationship proves package membership, not displayed content.
+// Read actual namespaced image/reference nodes; comments, CDATA, unreferenced
+// stories and spelling lookalikes never authorize a media byte.
+const RAW_IMAGE_NAMESPACES = Object.freeze({
+  word: new Set(['http://schemas.openxmlformats.org/wordprocessingml/2006/main', 'http://purl.oclc.org/ooxml/wordprocessingml/main']),
+  sheet: new Set(['http://schemas.openxmlformats.org/spreadsheetml/2006/main', 'http://purl.oclc.org/ooxml/spreadsheetml/main']),
+  presentation: new Set(['http://schemas.openxmlformats.org/presentationml/2006/main', 'http://purl.oclc.org/ooxml/presentationml/main']),
+  drawing: new Set(['http://schemas.openxmlformats.org/drawingml/2006/main', 'http://purl.oclc.org/ooxml/drawingml/main']),
+  spreadsheetDrawing: new Set(['http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing', 'http://purl.oclc.org/ooxml/drawingml/spreadsheetDrawing'])
+});
+function rawImageStructureError(ext, limit = false) {
+  return Object.assign(new Error('Office image reference scope is invalid'), {
+    code: `${ext.slice(1).toUpperCase()}_STRUCTURE_${limit ? 'LIMIT' : 'UNSAFE'}`
+  });
+}
+function rawRelationshipId(node, attribute = 'id') {
+  let found = null;
+  for (const namespace of OFFICE_RELATIONSHIP_NAMESPACES) {
+    const value = node.attributes.get(`{${namespace.slice(0, -1)}}${attribute}`);
+    if (value) { if (found !== null) return null; found = value; }
+  }
+  return found;
+}
+function rawOfficePartUsage(entries, part, family, rootName, ext, selectedStory = null) {
+  const usage = { images: new Set(), references: new Map(), storyIds: new Map() };
+  const data = entries.get(part);
+  if (!data) return usage;
+  let rootValid = false;
+  const inScope = node => {
+    let story = selectedStory === null, foundStory = false, body = family !== 'word' || rootName !== 'document';
+    for (let parent = node; parent; parent = parent.parent) {
+      if (RAW_IMAGE_NAMESPACES.word.has(parent.namespaceURI)) {
+        if (parent.localName === 'body') body = true;
+        if (selectedStory && !foundStory && parent.localName === selectedStory.name) {
+          foundStory = true;
+          story = selectedStory.ids.has(parent.attributes.get(`{${parent.namespaceURI}}id`));
+        }
+      }
+    }
+    return rootValid && story && body;
+  };
+  readXml(data.toString('utf8'), { decode: xmlDecode, error: limit => rawImageStructureError(ext, limit), start(node) {
+    if (!node.parent) rootValid = RAW_IMAGE_NAMESPACES[family].has(node.namespaceURI) && node.localName === rootName;
+    if (!inScope(node)) return;
+    if (RAW_IMAGE_NAMESPACES.drawing.has(node.namespaceURI) && node.localName === 'blip') {
+      const id = rawRelationshipId(node, 'embed'); if (id) usage.images.add(id);
+    }
+    if (node.namespaceURI === 'urn:schemas-microsoft-com:vml' && node.localName === 'imagedata') {
+      const id = rawRelationshipId(node) || node.attributes.get('{urn:schemas-microsoft-com:office:office}relid');
+      if (id) usage.images.add(id);
+    }
+    if (!RAW_IMAGE_NAMESPACES[family].has(node.namespaceURI)) return;
+    const kinds = family === 'word' ? { headerReference: 'header', footerReference: 'footer' }
+      : family === 'sheet' ? { sheet: 'worksheet', drawing: 'drawing', legacyDrawing: 'vmlDrawing' }
+        : { sldId: 'slide', sldMasterId: 'slideMaster' };
+    const kind = kinds[node.localName], id = kind && rawRelationshipId(node);
+    if (id) { if (!usage.references.has(kind)) usage.references.set(kind, new Set()); usage.references.get(kind).add(id); }
+    const storyKinds = { commentReference: 'comments', footnoteReference: 'footnotes', endnoteReference: 'endnotes' };
+    if (family === 'word' && storyKinds[node.localName]) {
+      const storyId = node.attributes.get(`{${node.namespaceURI}}id`);
+      if (storyId !== undefined) {
+        const storyKind = storyKinds[node.localName];
+        if (!usage.storyIds.has(storyKind)) usage.storyIds.set(storyKind, new Set());
+        usage.storyIds.get(storyKind).add(storyId);
+      }
+    }
+  } });
+  return usage;
+}
+function rawOfficeRelationships(entries, part, ext) {
+  const relPath = part ? path.posix.join(path.posix.dirname(part), '_rels', `${path.posix.basename(part)}.rels`) : '_rels/.rels';
+  const data = entries.get(relPath), byId = new Map();
+  if (!data) return byId;
+  const namespace = 'http://schemas.openxmlformats.org/package/2006/relationships';
+  let rootValid = false;
+  readXml(data.toString('utf8'), { decode: xmlDecode, error: limit => rawImageStructureError(ext, limit), start(node) {
+    if (!node.parent) rootValid = node.namespaceURI === namespace && node.localName === 'Relationships';
+    if (!rootValid || node.namespaceURI !== namespace || node.localName !== 'Relationship' ||
+        node.parent?.localName !== 'Relationships' || node.parent.namespaceURI !== namespace) return;
+    const id = node.attributes.get('{}Id'); if (!id) return;
+    if (byId.has(id)) { byId.set(id, null); return; }
+    byId.set(id, { kind: relationshipKind(node.attributes.get('{}Type')), target: node.attributes.get('{}Target'),
+      mode: node.attributes.get('{}TargetMode') });
+  } });
+  return byId;
+}
+function rawOfficeTarget(entries, part, relationships, id, kind, pattern) {
+  const edge = relationships.get(id), raw = edge?.target;
+  if (!edge || edge.kind !== kind || (edge.mode !== undefined && edge.mode !== 'Internal') ||
+      !raw || /[\\?#\0]/u.test(raw) || /^(?:\/|[A-Za-z]:|[a-z][a-z0-9+.-]*:)/iu.test(raw)) return null;
+  const target = path.posix.normalize(path.posix.join(path.posix.dirname(part), raw));
+  return pattern.test(target) && entries.has(target) ? target : null;
+}
+function rawSingleOfficeTarget(entries, part, relationships, kind, pattern) {
+  const ids = [...relationships].filter(([, edge]) => edge?.kind === kind).map(([id]) => id);
+  return ids.length === 1 ? rawOfficeTarget(entries, part, relationships, ids[0], kind, pattern) : null;
+}
+function referencedOfficeMedia(entries, ext, options) {
+  const packageRoot = { '.docx': 'word', '.xlsx': 'xl', '.pptx': 'ppt' }[ext];
+  const main = { '.docx': 'word/document.xml', '.xlsx': 'xl/workbook.xml', '.pptx': 'ppt/presentation.xml' }[ext];
+  const mediaPattern = new RegExp(`^${packageRoot}/media/[^/]+\\.(?:png|jpe?g|bmp|gif|tiff?|webp|svg|emf|wmf)$`, 'i');
+  const targets = new Set();
+  if (packageMainRelationshipIssueCount(entries, main)) return targets;
+  const mainPattern = { '.docx': /^word\/document\.xml$/, '.xlsx': /^xl\/workbook\.xml$/, '.pptx': /^ppt\/presentation\.xml$/ }[ext];
+  if (rawSingleOfficeTarget(entries, '', rawOfficeRelationships(entries, '', ext), 'officeDocument', mainPattern) !== main) return targets;
+  const collect = (part, usage, relationships) => {
+    for (const id of usage.images) {
+      const target = rawOfficeTarget(entries, part, relationships, id, 'image', mediaPattern);
+      if (target) targets.add(target);
+    }
+  };
+  const mainRelationships = rawOfficeRelationships(entries, main, ext);
+  if (ext === '.docx') {
+    const usage = rawOfficePartUsage(entries, main, 'word', 'document', ext);
+    collect(main, usage, mainRelationships);
+    if (options.omitDocxHeaderFooter !== true) for (const kind of ['header', 'footer']) {
+      for (const id of usage.references.get(kind) || []) {
+        const part = rawOfficeTarget(entries, main, mainRelationships, id, kind, new RegExp(`^word/${kind}\\d+\\.xml$`, 'i'));
+        if (part) collect(part, rawOfficePartUsage(entries, part, 'word', kind === 'header' ? 'hdr' : 'ftr', ext), rawOfficeRelationships(entries, part, ext));
+      }
+    }
+    for (const [kind, ids] of usage.storyIds) {
+      const part = rawSingleOfficeTarget(entries, main, mainRelationships, kind, new RegExp(`^word/${kind}\\.xml$`, 'i'));
+      const story = { name: { comments: 'comment', footnotes: 'footnote', endnotes: 'endnote' }[kind], ids };
+      if (part) collect(part, rawOfficePartUsage(entries, part, 'word', kind, ext, story), rawOfficeRelationships(entries, part, ext));
+    }
+  } else if (ext === '.xlsx') {
+    const usage = rawOfficePartUsage(entries, main, 'sheet', 'workbook', ext);
+    for (const id of usage.references.get('worksheet') || []) {
+      const sheet = rawOfficeTarget(entries, main, mainRelationships, id, 'worksheet', /^xl\/worksheets\/[^/]+\.xml$/i);
+      if (!sheet) continue;
+      const sheetUsage = rawOfficePartUsage(entries, sheet, 'sheet', 'worksheet', ext), rels = rawOfficeRelationships(entries, sheet, ext);
+      for (const drawingId of sheetUsage.references.get('drawing') || []) {
+        const drawing = rawOfficeTarget(entries, sheet, rels, drawingId, 'drawing', /^xl\/drawings\/[^/]+\.xml$/i);
+        if (drawing) collect(drawing, rawOfficePartUsage(entries, drawing, 'spreadsheetDrawing', 'wsDr', ext), rawOfficeRelationships(entries, drawing, ext));
+      }
+    }
+  } else {
+    const usage = rawOfficePartUsage(entries, main, 'presentation', 'presentation', ext);
+    const masters = new Set();
+    for (const id of usage.references.get('slideMaster') || []) {
+      const master = rawOfficeTarget(entries, main, mainRelationships, id, 'slideMaster', /^ppt\/slideMasters\/slideMaster\d+\.xml$/i);
+      if (master) masters.add(master);
+    }
+    for (const id of usage.references.get('slide') || []) {
+      const slide = rawOfficeTarget(entries, main, mainRelationships, id, 'slide', /^ppt\/slides\/slide\d+\.xml$/i);
+      if (!slide) continue;
+      const rels = rawOfficeRelationships(entries, slide, ext);
+      collect(slide, rawOfficePartUsage(entries, slide, 'presentation', 'sld', ext), rels);
+      const notes = rawSingleOfficeTarget(entries, slide, rels, 'notesSlide', /^ppt\/notesSlides\/notesSlide\d+\.xml$/i);
+      if (notes) collect(notes, rawOfficePartUsage(entries, notes, 'presentation', 'notes', ext), rawOfficeRelationships(entries, notes, ext));
+      const layout = rawSingleOfficeTarget(entries, slide, rels, 'slideLayout', /^ppt\/slideLayouts\/slideLayout\d+\.xml$/i);
+      if (!layout) continue;
+      const layoutRels = rawOfficeRelationships(entries, layout, ext);
+      const master = rawSingleOfficeTarget(entries, layout, layoutRels, 'slideMaster', /^ppt\/slideMasters\/slideMaster\d+\.xml$/i);
+      if (!master || !masters.has(master)) continue;
+      collect(layout, rawOfficePartUsage(entries, layout, 'presentation', 'sldLayout', ext), layoutRels);
+      collect(master, rawOfficePartUsage(entries, master, 'presentation', 'sldMaster', ext), rawOfficeRelationships(entries, master, ext));
+    }
+  }
+  return targets;
+}
 const CORE_PROPERTIES = [
   ['dc:title','Titel'],['dc:subject','Betreff'],['dc:creator','Autor'],
   ['cp:keywords','Schlagwörter'],['dc:description','Beschreibung'],
@@ -91,24 +254,25 @@ const APP_PROPERTIES = [
 // Text from an Office document is literal content, unlike an input .md file.
 // The extraction-only renderer escapes Markdown/HTML rather than allowing its
 // punctuation to become new markup. It preserves significant whitespace.
-function extractionText(value, inCell = false) {
+function extractionText(value, inCell = false, literalGfm = false) {
   let text = String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/([\\`*_[\]{}()#+.!|])/g, '\\$1')
     .replace(/\t/g, '&#9;').replace(/\r/g, '&#13;');
+  if (literalGfm) text = text.replace(/~/gu, '\\~');
   text = text.replace(/^ +| +$/gm, (spaces) => '&#32;'.repeat(spaces.length))
     .replace(/ {2,}/g, (spaces) => ' ' + '&#32;'.repeat(spaces.length - 1));
   return text.replace(/\n/g, inCell ? '<br>' : '  \n');
 }
 function metadataSection(entries, sourcePart, fields, options = {}) {
   const data=entries.get(sourcePart); if(!data)return null; const xml=data.toString('utf8'), lines=[];
-  for(const [tag,label] of fields){const value=textTags(xml,tag).map(item=>options.preserveText ? extractionText(item) : String(item).replace(/\s+/g,' ').trim()).filter(Boolean).join(' | ');if(value)lines.push(`- ${label}: ${value}`);}
+  for(const [tag,label] of fields){const value=textTags(xml,tag).map(item=>options.preserveText ? extractionText(item,false,options.literalMarkup) : String(item).replace(/\s+/g,' ').trim()).filter(Boolean).join(' | ');if(value)lines.push(`- ${label}: ${value}`);}
   return lines.length?{kind:'metadata',source_part:sourcePart,markdown:`## Dokumentmetadaten\n\n${lines.join('\n')}`}:null;
 }
 function customMetadataSection(entries, options = {}) {
   const sourcePart='docProps/custom.xml',data=entries.get(sourcePart);if(!data)return null;
   const xml=data.toString('utf8'),lines=[];let match;const properties=/<property\b([^>]*)>([\s\S]*?)<\/property>/gi;
   const scalar=/^\s*<vt:(lpwstr|bstr|i1|i2|i4|i8|int|ui1|ui2|ui4|ui8|uint|r4|r8|decimal|bool|filetime|date|cy|error)\b[^>]*>([\s\S]*?)<\/vt:\1>\s*$/i;
-  while((match=properties.exec(xml))){const rawName=xmlDecode(/\bname=["']([^"']+)["']/i.exec(match[1])?.[1]||'');const name=options.preserveText ? extractionText(rawName) : rawName.trim();const valueMatch=scalar.exec(match[2]);const value=valueMatch?(options.preserveText ? extractionText(xmlDecode(valueMatch[2])) : stripTags(valueMatch[2])):'';if(name&&value)lines.push(`- ${name}: ${value}`);}
+  while((match=properties.exec(xml))){const rawName=xmlDecode(/\bname=["']([^"']+)["']/i.exec(match[1])?.[1]||'');const name=options.preserveText ? extractionText(rawName,false,options.literalMarkup) : rawName.trim();const valueMatch=scalar.exec(match[2]);const value=valueMatch?(options.preserveText ? extractionText(xmlDecode(valueMatch[2]),false,options.literalMarkup) : stripTags(valueMatch[2])):'';if(name&&value)lines.push(`- ${name}: ${value}`);}
   return lines.length?{kind:'metadata',source_part:sourcePart,markdown:`## Benutzerdefinierte Dokumentmetadaten\n\n${lines.join('\n')}`}:null;
 }
 function customMetadataWarnings(entries) {
@@ -147,7 +311,7 @@ function renderPptTable(table, options = {}) {
   while ((row = rowRe.exec(table))) {
     const cells = []; let cell;
     const cellRe = /<a:tc\b[\s\S]*?<\/a:tc>/gi;
-    while ((cell = cellRe.exec(row[0]))) cells.push(options.preserveText ? extractionText(drawingText(cell[0]), true) : escapeMarkdownTableCell(textTags(cell[0], 'a:t').join('\n')));
+    while ((cell = cellRe.exec(row[0]))) cells.push(options.preserveText ? extractionText(drawingText(cell[0]), true, options.literalMarkup) : escapeMarkdownTableCell(textTags(cell[0], 'a:t').join('\n')));
     if (cells.length) rows.push(cells);
   }
   if (!rows.length) return '';
@@ -562,7 +726,7 @@ function renderWordStructure(root, options = {}) {
       if (emitted) write(inCell ? '<br>' : '\n\n');
       if (typeof child === 'string') {
         if (!inCell && !emitted) write(node.prefix || '');
-        write(options.preserveText ? extractionText(child, inCell) : (inCell ? escapeMarkdownTableCell(child) : child));
+        write(options.preserveText ? extractionText(child, inCell, options.literalMarkup) : (inCell ? escapeMarkdownTableCell(child) : child));
       } else emit(child, inCell);
       emitted = true;
     }
@@ -1243,7 +1407,7 @@ function parseXlsx(entries, options = {}) {
     const rows = parsed.rows; formulaCells += parsed.formulaCells;
     const parts=[];let rendered=0;
     const append=(part)=>{rendered+=part.length+2;if(rendered>MAX_WORD_RENDERED_CHARS)throw xlsxRenderLimit();parts.push(part);};
-    append(`# Arbeitsblatt: ${options.preserveText?extractionText(s.name):s.name}`);
+    append(`# Arbeitsblatt: ${options.preserveText?extractionText(s.name,false,options.literalMarkup):s.name}`);
     if(rows.length){
       const cols=rows.reduce((maximum,row)=>Math.max(maximum,row.length),0);
       // A sparse far-right cell must not expand into an unbounded dense table.
@@ -1251,7 +1415,7 @@ function parseXlsx(entries, options = {}) {
       if((cols*3+2)*(rows.length+2)>MAX_WORD_RENDERED_CHARS)throw xlsxRenderLimit();
       if(options.preserveText){append('| '+Array.from({length:cols},(_,i)=>`Spalte ${i+1}`).join(' | ')+' |');append('| '+Array.from({length:cols},()=> '---').join(' | ')+' |');}
       for(let index=0;index<rows.length;index++){
-        const row=rows[index]||[];const line=Array.from({length:cols},(_,i)=>options.preserveText?extractionText(String(row[i]??''),true):String(row[i]??'').replace(/\\/g,'\\\\').replace(/\|/g,'\\|').replace(/\r?\n/g,'<br>'));
+        const row=rows[index]||[];const line=Array.from({length:cols},(_,i)=>options.preserveText?extractionText(String(row[i]??''),true,options.literalMarkup):String(row[i]??'').replace(/\\/g,'\\\\').replace(/\|/g,'\\|').replace(/\r?\n/g,'<br>'));
         append('| '+line.join(' | ')+' |');
         if(!options.preserveText&&index===0)append('| '+line.map(()=> '---').join(' | ')+' |');
       }
@@ -1260,9 +1424,9 @@ function parseXlsx(entries, options = {}) {
   }
   const supplementCoverage = xlsxSupplementRelationshipCoverage(entries, sheetMeta);
   const commentCoverage = xlsxCommentRelationshipCoverage(entries, sheetMeta);
-  for(const [name,data] of entries) if(supplementCoverage.safeCharts.has(name)){const vals=textTags(data.toString('utf8'),'c:v').concat(textTags(data.toString('utf8'),'a:t')); if(vals.length)sections.push({kind:'table',source_part:name,markdown:`## Diagrammdaten ${path.basename(name)}\n\n${vals.join(' | ')}`});}
-  for(const [name,data]of entries)if(supplementCoverage.safeDrawings.has(name)){const vals=textTags(data.toString('utf8'),'a:t');if(vals.length)sections.push({kind:'text',source_part:name,markdown:`## Grafiktext ${path.basename(name)}\n\n${vals.join(' ')}`});}
-  for(const [name,data]of entries)if(commentCoverage.safeComments.has(name)){const vals=textTags(data.toString('utf8'),'t');if(vals.length)sections.push({kind:'text',source_part:name,markdown:`## Tabellenkommentare\n\n${vals.join('\n\n')}`});}
+  for(const [name,data] of entries) if(supplementCoverage.safeCharts.has(name)){const vals=textTags(data.toString('utf8'),'c:v').concat(textTags(data.toString('utf8'),'a:t')).map(value=>options.literalMarkup?extractionText(value,false,true):value); if(vals.length)sections.push({kind:'table',source_part:name,markdown:`## Diagrammdaten ${path.basename(name)}\n\n${vals.join(' | ')}`});}
+  for(const [name,data]of entries)if(supplementCoverage.safeDrawings.has(name)){const vals=textTags(data.toString('utf8'),'a:t').map(value=>options.literalMarkup?extractionText(value,false,true):value);if(vals.length)sections.push({kind:'text',source_part:name,markdown:`## Grafiktext ${path.basename(name)}\n\n${vals.join(' ')}`});}
+  for(const [name,data]of entries)if(commentCoverage.safeComments.has(name)){const vals=textTags(data.toString('utf8'),'t').map(value=>options.literalMarkup?extractionText(value,false,true):value);if(vals.length)sections.push({kind:'text',source_part:name,markdown:`## Tabellenkommentare\n\n${vals.join('\n\n')}`});}
   sections.push(...metadataSections(entries,options));
   const imageCoverage = packageImageRelationshipCoverage(entries, 'xl', 'XLSX', supplementCoverage.safeDrawings);
   const warnings=[...customMetadataWarnings(entries), ...xlsxCoverageWarnings(entries, sheetMeta), ...imageCoverage.warnings, ...supplementCoverage.warnings, ...commentCoverage.warnings];
@@ -1450,18 +1614,18 @@ function parsePptx(entries, options = {}) {
   const masterCoverage = pptMasterLayoutCoverage(entries, slides);
   const sections=[];
   for(const [slideIndex,s] of slides.entries()){
-    const n=options.preserveText?slideIndex+1:slideNumber(s),xml=entries.get(s).toString('utf8'),tableCoverage=pptSlideTableSections(xml,s,options),texts=options.preserveText?[extractionText(drawingText(tableCoverage.prose))]:textTags(tableCoverage.prose,'a:t'),slide=[`# Folie ${n}`];
+    const n=options.preserveText?slideIndex+1:slideNumber(s),xml=entries.get(s).toString('utf8'),tableCoverage=pptSlideTableSections(xml,s,options),texts=options.preserveText?[extractionText(drawingText(tableCoverage.prose),false,options.literalMarkup)]:textTags(tableCoverage.prose,'a:t'),slide=[`# Folie ${n}`];
     tableIssues+=tableCoverage.issues;
     if(texts.length)slide.push(texts.join('\n\n'));
     sections.push({kind:'text',source_part:s,markdown:slide.join('\n\n')});
     sections.push(...tableCoverage.tables);
     const notes=pptRelationshipTarget(entries,`ppt/slides/_rels/${path.basename(s)}.rels`,null,'notesSlide','ppt/slides');
-    if(notes&&notesCoverage.safeNotes.has(notes)){const nt=options.preserveText?[extractionText(drawingText(entries.get(notes).toString('utf8')))]:textTags(entries.get(notes).toString('utf8'),'a:t').filter(x=>!/^\d+$/.test(x.trim()));if(nt.length)sections.push({kind:'text',source_part:notes,markdown:`## Notizen\n\n${nt.join('\n\n')}`});}
+    if(notes&&notesCoverage.safeNotes.has(notes)){const nt=options.preserveText?[extractionText(drawingText(entries.get(notes).toString('utf8')),false,options.literalMarkup)]:textTags(entries.get(notes).toString('utf8'),'a:t').filter(x=>!/^\d+$/.test(x.trim()));if(nt.length)sections.push({kind:'text',source_part:notes,markdown:`## Notizen\n\n${nt.join('\n\n')}`});}
   }
   const chartCoverage = pptChartRelationshipCoverage(entries, slides);
-  for(const [name,data] of entries) if(chartCoverage.safeCharts.has(name)){const vals=textTags(data.toString('utf8'),'c:v').concat(textTags(data.toString('utf8'),'a:t'));if(vals.length)sections.push({kind:'table',source_part:name,markdown:`## Diagrammdaten ${path.basename(name)}\n\n${vals.join(' | ')}`});}
-  for(const [name,data] of entries) if(masterCoverage.safeLayouts.has(name)){const vals=textTags(data.toString('utf8'),'a:t');if(vals.length)sections.push({kind:'text',source_part:name,markdown:`## Folienlayout ${path.basename(name)}\n\n${vals.join('\n\n')}`});}
-  for(const [name,data] of entries) if(masterCoverage.safeMasters.has(name)){const vals=textTags(data.toString('utf8'),'a:t');if(vals.length)sections.push({kind:'text',source_part:name,markdown:`## Folienmaster ${path.basename(name)}\n\n${vals.join('\n\n')}`});}
+  for(const [name,data] of entries) if(chartCoverage.safeCharts.has(name)){const vals=textTags(data.toString('utf8'),'c:v').concat(textTags(data.toString('utf8'),'a:t')).map(value=>options.literalMarkup?extractionText(value,false,true):value);if(vals.length)sections.push({kind:'table',source_part:name,markdown:`## Diagrammdaten ${path.basename(name)}\n\n${vals.join(' | ')}`});}
+  for(const [name,data] of entries) if(masterCoverage.safeLayouts.has(name)){const vals=textTags(data.toString('utf8'),'a:t').map(value=>options.literalMarkup?extractionText(value,false,true):value);if(vals.length)sections.push({kind:'text',source_part:name,markdown:`## Folienlayout ${path.basename(name)}\n\n${vals.join('\n\n')}`});}
+  for(const [name,data] of entries) if(masterCoverage.safeMasters.has(name)){const vals=textTags(data.toString('utf8'),'a:t').map(value=>options.literalMarkup?extractionText(value,false,true):value);if(vals.length)sections.push({kind:'text',source_part:name,markdown:`## Folienmaster ${path.basename(name)}\n\n${vals.join('\n\n')}`});}
   sections.push(...metadataSections(entries,options));
   const imageCoverage = packageImageRelationshipCoverage(entries, 'ppt', 'PPTX', new Set(slides));
   const warnings=[...customMetadataWarnings(entries), ...pptxCoverageWarnings(entries, slides, notesCoverage.safeNotes, masterCoverage), ...imageCoverage.warnings, ...chartCoverage.warnings, ...notesCoverage.warnings, ...masterCoverage.warnings];if(issues)warnings.push(`PPTX enthält ${issues} nicht eindeutig über eine interne Folienbeziehung abgesicherte Struktur(en); Freigabe wird blockiert.`);
@@ -1617,6 +1781,12 @@ function parseOoxml(buffer, ext, context, options = {}) {
     // Styles, fields, hidden content and other unmodelled object semantics may
     // carry meaning beyond their literal text. Do not claim complete coverage.
     if(ext!=='.docx'||docxExtractionHasUnverifiedContent(entries))result.warnings.push('MARKDOWN_SOURCE_COVERAGE_UNVERIFIED');
+  }
+  if (options.referencedImagesOnly === true) {
+    // This extraction-only opt-in does not enable the new anonymization start.
+    // Privacy table transforms still require their own OCR offset mapping.
+    const prefix = { '.docx': 'word/media/', '.xlsx': 'xl/media/', '.pptx': 'ppt/media/' }[ext];
+    result.attachments = mediaAttachments(entries, prefix, referencedOfficeMedia(entries, ext, options));
   }
   return augmentEmbedded(result,entries,state,options);
 }

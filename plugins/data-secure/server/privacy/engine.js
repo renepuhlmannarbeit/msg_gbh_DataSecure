@@ -1,4 +1,5 @@
 'use strict';
+const { LEGACY_PERSON_FIELD_POLICY, CONTENT_PERSON_FIELD_POLICY, personFieldContextForConsumer, personFieldPattern, isPersonFieldLabel } = require('../core/person-field-policy');
 
 const {
   URL_RE,
@@ -19,6 +20,7 @@ const {
   hasLabelBefore,
   plausibleCalendarDate,
   hasAmbiguousSensitiveTable,
+  assertPersonFieldStructure,
   isResolvedSensitiveTableHeader,
   isAllowedOrg,
   orgAlias,
@@ -218,7 +220,7 @@ function visibleTableCellValue(value) {
   return normalizeSpaces(visible.replace(/^(?:\*\*|__|~~|`{1,3})(.*?)(?:\*\*|__|~~|`{1,3})$/u, '$1'));
 }
 
-function residualTablePersonCandidates(text) {
+function residualTablePersonCandidates(text, personFieldPolicy = LEGACY_PERSON_FIELD_POLICY) {
   const source = String(text || '');
   const all = source.split(/\r?\n/u);
   const lineOffsets = [0];
@@ -238,7 +240,7 @@ function residualTablePersonCandidates(text) {
     // bound to an exact local-review span. Identity-labelled tables and
     // transformed/escaped cells retain the strict gate.
     const generatedColumns = headers.every((header, column) => header === `Spalte ${column + 1}`);
-    const reviewableColumns = generatedColumns || !headers.some(isResolvedSensitiveTableHeader);
+    const reviewableColumns = generatedColumns || !headers.some(header => isResolvedSensitiveTableHeader(header, personFieldPolicy));
     index += 2;
     while (index < all.length) {
       const row = markdownTableCells(all[index]);
@@ -328,13 +330,14 @@ function conservativeLabelledResiduals(text, credentialSpans = []) {
   return findings;
 }
 
-function isExplicitPersonOccurrence(text, span, coveringOrganizations = []) {
+function isExplicitPersonOccurrence(text, span, coveringOrganizations = [], personFieldPolicy = LEGACY_PERSON_FIELD_POLICY) {
+  const personLabel = personFieldPattern(personFieldPolicy);
   const before = text.slice(Math.max(0, span.start - 180), span.start);
   const linePrefix = before.slice(before.lastIndexOf('\n') + 1);
   // Use the same bounded quote/list prefixes as collectPersonAnchors. Their
   // label applies only at this occurrence, not to every matching company alias.
   const labelledPrefix = linePrefix.replace(/^[ \t]*(?:>[ \t]*)?(?:[-*+][ \t]+)?/u, '');
-  if (new RegExp(`(?:^|\\|)\\s*${PERSON_LABEL}\\s*(?::|\\|)\\s*$`, 'iu').test(labelledPrefix)) {
+  if (new RegExp(`(?:^|\\|)\\s*${personLabel}\\s*(?::|\\|)\\s*$`, 'iu').test(labelledPrefix)) {
     // "Kunde" is intentionally accepted as a person label for documents such
     // as "Kunde: Max Mustermann", but it is also a strong organisation label.
     // A legal-form organisation at this exact position wins; otherwise the
@@ -350,7 +353,7 @@ function isExplicitPersonOccurrence(text, span, coveringOrganizations = []) {
   return /(?:Zertifikat|Bescheinigung|certificate|credential)\s+(?:für|for)\s*$/iu.test(linePrefix);
 }
 
-function isPersistedPersonAliasOccurrence(text, span, coveringOrganizations = []) {
+function isPersistedPersonAliasOccurrence(text, span, coveringOrganizations = [], personFieldPolicy = LEGACY_PERSON_FIELD_POLICY) {
   // A persisted surname proves which pseudonym to reuse, but not that an
   // equal word in a later document denotes the person. Decide at the exact
   // source position. For a Markdown link label, move the context boundary
@@ -359,10 +362,10 @@ function isPersistedPersonAliasOccurrence(text, span, coveringOrganizations = []
   const contextSpan = span.start > 0 && text[span.start - 1] === '['
     ? { ...span, start: span.start - 1 }
     : span;
-  if (isExplicitPersonOccurrence(text, contextSpan, coveringOrganizations)) return true;
+  if (isExplicitPersonOccurrence(text, contextSpan, coveringOrganizations, personFieldPolicy)) return true;
 
-  const header = tableHeaderAt(text, span.start);
-  if (header && new RegExp(`^(?:${PERSON_LABEL}):?$`, 'iu').test(normalizeSpaces(header))) return true;
+  const header = tableHeaderAt(text, span.start, personFieldPolicy);
+  if (header && isPersonFieldLabel(normalizeSpaces(header), personFieldPolicy)) return true;
 
   const before = text.slice(Math.max(0, span.start - 80), span.start);
   return /(?:z\.\s*hd\.?|zu\s+händen)\s*:?\s*$/iu.test(before);
@@ -539,7 +542,9 @@ function buildOrgDictionary(text, reg, profile, findings, personKeys = new Set()
 }
 
 function anonymize(text, profile = 'general', options = {}) {
-  const src = canonicalizeRenderedText(text);
+  const { policy: personFieldPolicy } = personFieldContextForConsumer(options);
+  const src = canonicalizeRenderedText(text, personFieldPolicy);
+  assertPersonFieldStructure(src, personFieldPolicy);
   const trace = options.captureTransformPlan === true ? require('./transform-plan').createTransformTrace(String(text)) : null;
   if (trace && src !== String(text)) trace.append('canonicalization', String(text), src,
     [{ start: 0, end: String(text).length, original: String(text), replacement: src, kind: 'NORMALIZATION' }]);
@@ -580,14 +585,14 @@ function anonymize(text, profile = 'general', options = {}) {
     const occurrences = findLiteralSpans(analysisSrc, seed.value, '', 'PERSON', PRIORITY.PERSON);
     return occurrences.length > 0 && occurrences.every((span) => {
       const covering = legalOrganizationSpans.filter((org) => span.start >= org.start && span.end <= org.end);
-      return covering.length > 0 && !isExplicitPersonOccurrence(analysisSrc, span, covering);
+      return covering.length > 0 && !isExplicitPersonOccurrence(analysisSrc, span, covering, personFieldPolicy);
     });
   };
 
   // "Kunde" can introduce a person, but a proven legal company (including
   // its repeated short name) must not create a global PERSON/surname alias.
   // Explicit Name/Herr/holder occurrences remain independent evidence.
-  const strongPersonAnchors = collectPersonAnchors(analysisSrc, profile).filter((seed) => !organizationOnlySeed(seed));
+  const strongPersonAnchors = collectPersonAnchors(analysisSrc, profile, personFieldPolicy).filter((seed) => !organizationOnlySeed(seed));
   const persistedSinglePersonAliases = knownAliases.filter((alias) =>
     alias.kind === 'PERSON' && normalizeSpaces(alias.value).split(/\s+/u).length === 1
   );
@@ -608,7 +613,7 @@ function anonymize(text, profile = 'general', options = {}) {
   const otherPersonEvidence = explicitPersonKeys.size > 0 || /\[PERSON(?:_UNKLAR)?_[A-Z0-9]+\]/u.test(analysisSrc) ||
     knownPersonAnchor;
   const deferredTypographyKeys = new Set();
-  const candidates = collectPersonSeeds(analysisSrc, profile, strongPersonAnchors, otherPersonEvidence ? true : null)
+  const candidates = collectPersonSeeds(analysisSrc, profile, strongPersonAnchors, otherPersonEvidence ? true : null, personFieldPolicy)
     .filter((seed) => {
       if (persistedSinglePersonKeys.has(key(seed.value))) return false;
       // A separately anchored person does not prove an unrelated all-caps
@@ -722,7 +727,7 @@ function anonymize(text, profile = 'general', options = {}) {
       const coveringOrganizations = organizationCoverage.filter((org) =>
         span.start >= org.start && span.end <= org.end
       );
-      if (!isPersistedPersonAliasOccurrence(out, span, coveringOrganizations)) continue;
+      if (!isPersistedPersonAliasOccurrence(out, span, coveringOrganizations, personFieldPolicy)) continue;
       spans.push(growOverMarkdownLabel(out, growOverHonorific(out, span)));
       matched = true;
     }
@@ -736,7 +741,7 @@ function anonymize(text, profile = 'general', options = {}) {
       );
       if ((entry.type === 'PERSON' || entry.type === 'PERSON_ALIAS') &&
           coveringOrganizations.length > 0 &&
-          !isExplicitPersonOccurrence(out, span, coveringOrganizations)) continue;
+          !isExplicitPersonOccurrence(out, span, coveringOrganizations, personFieldPolicy)) continue;
       if ((entry.type === 'ORGANIZATION' || entry.type === 'PROJECT') &&
           (credentialOrganizationRole(out, span.start, span.end, credentialRanges) !== 'private' ||
            isTechnologyOrganizationSpan(out, span.start, span.end))) continue;
@@ -805,7 +810,8 @@ function anonymize(text, profile = 'general', options = {}) {
 // things: that no direct identifier pattern is left, and that no literal the
 // redactor claimed to have replaced survives in the output.
 function scanResidual(text, profile = 'general', knownValues = [], options = {}) {
-  const rendered = canonicalizeRenderedText(text);
+  const { policy: personFieldPolicy } = personFieldContextForConsumer(options);
+  const rendered = canonicalizeRenderedText(text, personFieldPolicy);
   // Keep UTF-16 coordinates in the canonical view. A local human decision is
   // occurrence-bound; shrinking placeholders would move its reviewed span.
   const clean = maskPlaceholders(rendered);
@@ -846,7 +852,7 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
   // A missing operational column label may prevent redaction, but it must not
   // make a remaining name-shaped table value releasable.
   const residualKeys = new Set(out.map((finding) => `${finding.type}:${key(finding.text)}`));
-  for (const finding of residualTablePersonCandidates(clean)) {
+  for (const finding of residualTablePersonCandidates(clean, personFieldPolicy)) {
     const located = Number.isSafeInteger(finding.start) && Number.isSafeInteger(finding.end);
     if (located && reviewedRanges.some((range) => range.start === finding.start && range.end === finding.end)) continue;
     const findingKey = `${finding.type}:${key(finding.text)}` +
@@ -858,7 +864,10 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
   }
   // Structure is an independent release condition. A shifted/merged table row
   // cannot be assigned to a sensitive header by position without guessing.
-  if (hasAmbiguousSensitiveTable(clean) || hasAmbiguousSensitiveTable(identifierDetectionText(clean))) {
+  // Whitespace masking can make a final replaced cell look like a closing
+  // pipe in tables whose outer pipes are optional. Preserve opaque marker
+  // boundaries for STRUCTURE, while discovery above still uses blank masks.
+  if (hasAmbiguousSensitiveTable(personOccurrenceText, personFieldPolicy) || hasAmbiguousSensitiveTable(identifierDetectionText(personOccurrenceText), personFieldPolicy)) {
     out.push({ type: 'TABLE_STRUCTURE_AMBIGUOUS', text: '' });
   }
   const residualOrgKeys=new Set();
@@ -878,20 +887,35 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
   // presentation detector, but only its uppercase hypotheses: no automatic
   // profile change, redaction, or broad Title-Case rule is introduced here.
   const presentationCandidates = (source) => strongPersonAnchor && !['personnel_profile', 'applicant'].includes(profile)
-    ? collectPersonSeeds(source, 'personnel_profile', null, true).filter(uppercasePresentationHypothesis) : [];
+    ? collectPersonSeeds(source, 'personnel_profile', null, true, personFieldPolicy).filter(uppercasePresentationHypothesis) : [];
   // Both views are necessary: intact placeholders preserve actual Markdown
   // boundaries, but masking them exposes adjacent names and prevents already
   // redacted lines from exhausting the bounded profile-header window.
   const intactPersonSeeds = [
-    ...collectPersonSeeds(rendered, profile, null, strongPersonAnchor),
+    ...collectPersonSeeds(rendered, profile, null, strongPersonAnchor, personFieldPolicy),
     ...presentationCandidates(rendered),
     ...collectContextualNameCandidates(rendered, profile, { includeNegation: true }),
     ...collectNestedMarkdownPersonCandidates(rendered, profile)
   ];
   const intactPersonKeys = new Set(intactPersonSeeds.map((seed) => key(seed.value)));
   const residualPersonSeeds = [...intactPersonSeeds];
-  const personDiscoveryText = clean.replace(/^([ \t]*)[–—](?=[ \t])/gmu, '$1-');
-  for (const seed of [...collectPersonSeeds(personDiscoveryText, profile, null, strongPersonAnchor),
+  // A value-bearing sole header ("Name: [PERSON_001]") is not the
+  // column label "Name:". Masking its marker into spaces must not confer
+  // person-column authority on every subsequent factual cell.
+  const discoveryPieces = []; let discoveryCursor = 0;
+  for (const line of rendered.matchAll(/[^\r\n]+/gu)) {
+    const headers = markdownTableCells(line[0], true);
+    if (headers?.length !== 1 || !placeholderSpans(line[0]).length) continue;
+    const tail = rendered.slice(line.index + line[0].length);
+    const nextLine = /^(?:\r\n|\r|\n)([^\r\n]*)/u.exec(tail)?.[1];
+    const separator = nextLine === undefined ? null : markdownTableCells(nextLine, true);
+    if (separator?.length !== 1 || !/^:?-{3,}:?$/u.test(separator[0])) continue;
+    discoveryPieces.push(clean.slice(discoveryCursor, line.index), line[0]);
+    discoveryCursor = line.index + line[0].length;
+  }
+  discoveryPieces.push(clean.slice(discoveryCursor));
+  const personDiscoveryText = discoveryPieces.join('').replace(/^([ \t]*)[–—](?=[ \t])/gmu, '$1-');
+  for (const seed of [...collectPersonSeeds(personDiscoveryText, profile, null, strongPersonAnchor, personFieldPolicy),
     ...presentationCandidates(personDiscoveryText),
     ...collectContextualNameCandidates(personDiscoveryText, profile, { includeNegation: true }),
     ...collectNestedMarkdownPersonCandidates(personDiscoveryText, profile)]) {
@@ -986,8 +1010,15 @@ function verifyRedactedText(afterText, redactedValues = []) {
 }
 
 // Character spans used to map OCR text back to pixel rectangles.
-function sensitiveSpans(text, profile = 'general') {
+function sensitiveSpans(text, profile = 'general', options = {}) {
+  const { policy: personFieldPolicy } = personFieldContextForConsumer(options);
   const src = normalizeText(text);
+  // OCR locators need original UTF-16 positions, not a canonical Markdown
+  // rewrite. No new consumer may silently report empty/different spans when
+  // entity decoding or Unicode normalization requires a source-coordinate map.
+  if (personFieldPolicy === CONTENT_PERSON_FIELD_POLICY &&
+      (typeof text !== 'string' || src !== text || canonicalizeRenderedText(src, personFieldPolicy) !== src))
+    throw Object.assign(new Error('Die Fundstellen benötigen eine positionsgetreue Quelltextdarstellung.'), { code: 'SOURCE_EXTRACTION_INVALID' });
   const structured = scanStructured(src);
   const credentialValueSpans = sortedCredentialIntervals(structured);
   const credentialRanges = profile === 'personnel_profile' || profile === 'applicant'
@@ -1013,7 +1044,7 @@ function sensitiveSpans(text, profile = 'general') {
     add(f.type, f.start, f.end, f.type === 'CREDENTIAL' ? '' : f.text);
   }
 
-  for (const seed of collectPersonSeeds(src, profile)) {
+  for (const seed of collectPersonSeeds(src, profile, null, null, personFieldPolicy)) {
     for (const span of findLiteralSpans(src, seed.value, '', 'PERSON', PRIORITY.PERSON)) {
       // Keep OCR/image span classification aligned with the text engine: a
       // name-shaped substring inside a longer legal-form organisation is not
@@ -1023,7 +1054,7 @@ function sensitiveSpans(text, profile = 'general') {
         span.start >= org.start && span.end <= org.end
       );
       if (coveringOrganizations.length > 0 &&
-          !isExplicitPersonOccurrence(src, span, coveringOrganizations)) continue;
+          !isExplicitPersonOccurrence(src, span, coveringOrganizations, personFieldPolicy)) continue;
       add('PERSON', span.start, span.end, span.text);
     }
   }

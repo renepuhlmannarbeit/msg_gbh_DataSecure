@@ -119,7 +119,7 @@ function createBatchPseudonymRegistry(secret, options = {}) {
     key.fill(0);
     throw inputError('Die Pseudonym-Vertragsversion ist ungültig.');
   }
-  const rulesetVersion = String(options.rulesetVersion || 'de-business/3');
+  const rulesetVersion = String(options.rulesetVersion || require('./privacy/policy').PRIVACY_RULESET_VERSION);
   if (!/^[a-z0-9][a-z0-9._/-]{0,63}$/u.test(rulesetVersion)) {
     key.fill(0);
     throw inputError('Die Pseudonym-Regelversion ist ungültig.');

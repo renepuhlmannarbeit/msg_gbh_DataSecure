@@ -125,6 +125,8 @@ function fixture(role, firstChild) {
       if (name === '../runtime') return { SafeError };
       if (name === '../resource-limits') return require('../plugins/data-secure/server/resource-limits');
       if (name === '../core/processing-mode') return require('../plugins/data-secure/server/core/processing-mode');
+      if (name === '../core/content-options') return require('../plugins/data-secure/server/core/content-options');
+      if (name === './content-start-boundary') return require('../plugins/data-secure/server/gateway/content-start-boundary');
       if (name === '../core/result-naming-mode') return require('../plugins/data-secure/server/core/result-naming-mode');
       if (name === './batch') return batch;
       if (name === './workflow-diagnostics') return { recordWorkflowEvent: event => records.push(event) };
@@ -646,6 +648,14 @@ async function main() {
 
   for (const role of ['batch', 'review']) {
     const acceptedType = role === 'batch' ? 'local-batch-accepted' : 'local-review-accepted';
+    if (role === 'review') await testAsync('review: typed content rejection is never an accepted start and survives a late acceptance', async () => {
+      const child = fakeChild(); const f = fixture(role, child);
+      const started = f.start({ requireIpcAcknowledgement: true, ipcAckTimeoutMs: 10 });
+      child.emit('message', { type: 'local-review-rejected', error_code: 'CONTENT_OPTIONS_FORBIDDEN' });
+      await assert.rejects(started.ipcAcknowledgement, { code: 'CONTENT_OPTIONS_FORBIDDEN' });
+      child.emit('message', { type: acceptedType });
+      child.exit(2); f.drain(); assert.strictEqual(f.active(), false);
+    });
     await testAsync(`${role}: a flushed send callback alone cannot confirm worker receipt`, async () => {
       const child = fakeChild();
       const f = fixture(role, child);

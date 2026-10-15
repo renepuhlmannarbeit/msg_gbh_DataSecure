@@ -12,6 +12,7 @@ mod native_export_channel;
 mod native_export_broker;
 mod native_export_transaction;
 mod native_export_workspace;
+mod content_start;
 
 use serde_json::{json, Value};
 use std::{
@@ -800,7 +801,36 @@ fn private_start_request(
 fn mode_rejected_before_start(result: &Result<Value, String>) -> bool {
     matches!(result, Err(code) if matches!(code.as_str(),
         "PROCESSING_MODE_INVALID" | "PROCESSING_MODE_FORBIDDEN" | "MARKDOWN_CONVERSION_NOT_READY" |
-        "STANDALONE_SELECTION_INVALID"))
+        "STANDALONE_SELECTION_INVALID" | "CONTENT_OPTIONS_INVALID" | "CONTENT_OPTIONS_FORBIDDEN" |
+        "CONTENT_OPTIONS_NOT_READY"))
+}
+
+fn validate_start_content_body(body: &tauri::ipc::InvokeBody, document_review: bool) -> Result<Option<Value>, String> {
+    match body {
+        tauri::ipc::InvokeBody::Json(value) => content_start::decode_start(value, document_review),
+        tauri::ipc::InvokeBody::Raw(_) => Err("CONTENT_OPTIONS_INVALID".into()),
+    }
+}
+
+fn private_content_start_request(
+    request_id: &str,
+    processing_mode: Option<&str>,
+    output_naming_mode: Option<&str>,
+    content_options: Option<Value>,
+    document_review: bool,
+) -> Result<Value, String> {
+    let mut request = private_start_request(request_id, processing_mode, output_naming_mode)?;
+    if let Some(options) = content_options {
+        let decoded = content_start::decode_start(&json!({
+            "processingMode": processing_mode,
+            "contentOptions": options
+        }), document_review)?.ok_or("CONTENT_OPTIONS_INVALID")?;
+        request["content_options"] = decoded;
+    }
+    if document_review {
+        request["document_review"] = json!(true);
+    }
+    Ok(request)
 }
 
 enum ValidatedPrivateResponse {
@@ -817,7 +847,7 @@ fn safe_local_label(label: &str) -> bool {
 fn selection_reason(code: &str) -> bool {
     matches!(code, "SOURCE_FORMAT_SIZE_LIMIT" | "SOURCE_FILE_EMPTY" | "SOURCE_FORMAT_UNSUPPORTED" |
         "SOURCE_READ_FAILED" | "SOURCE_ACCESS_DENIED" | "SOURCE_PATH_UNSAFE" | "SOURCE_IDENTITY_CHANGED" |
-        "SOURCE_ARTIFACT_IGNORED")
+        "SOURCE_ARTIFACT_IGNORED" | "DOCUMENT_EXPORT_NAME_INVALID")
 }
 
 fn valid_local_error_details(code: &str, details: &Value) -> bool {
@@ -902,6 +932,7 @@ fn history_request(request_id: &str, action: &str, batch_id: &str) -> Result<Val
         action,
         "resolve_history_results" | "resolve_history_ledger" | "resolve_history_identity_mapping"
             | "continue_history_batch" | "get_run_failures" | "pause_batch"
+            | "skip_ocr_contact_review" | "abandon_result_export"
     ) || batch_id.len() != 64
         || !batch_id
             .bytes()
@@ -933,8 +964,25 @@ fn history_rpc(state: &DesktopState, action: &str, batch_id: &str) -> Result<Val
 }
 
 fn rpc_duration(action: &str) -> Duration {
-    Duration::from_secs(if matches!(action, "admit_selected_sources" | "export_approved_documents" | "resolve_document_export" | "resolve_document_identity_overview" | "get_document_review_history_summary") { 300 } else { 30 })
+    Duration::from_secs(if matches!(action, "admit_selected_sources" | "preview_document_export" | "export_approved_documents" |
+        "resolve_document_export" | "resolve_document_identity_overview" | "get_document_reviews" | "get_document_review_history_summary" |
+        "get_run_history" | "get_review_session" | "resolve_current_results" | "resolve_local_ledger") { 300 }
+        else if matches!(action, "get_public_state" | "get_ui_context") { 120 }
+        else { 30 })
 }
+
+fn rpc_lock_duration(action: &str) -> Duration {
+    // The first display read may need to verify a large saved run before the
+    // sidecar sends Ready. Other display reads can queue behind that startup;
+    // neither event is the duration of the request itself.
+    if matches!(action, "get_public_state" | "get_ui_context") {
+        Duration::from_secs(120)
+    } else {
+        rpc_duration(action)
+    }
+}
+
+fn rpc_bootstrap_duration() -> Duration { Duration::from_secs(120) }
 
 fn admission_transport_code(action: &str, code: String) -> String {
     if action == "admit_selected_sources" && code == ipc_transport::TIMEOUT {
@@ -962,7 +1010,7 @@ fn rpc_request(
     let started = Instant::now();
     // Recursive admission can validate/hash up to 200 files / 500 MB, including
     // slow local/cloud-backed disks. It is not a 30-second ordinary UI request.
-    let deadline = started + rpc_duration(action);
+    let lock_deadline = started + rpc_lock_duration(action);
     diagnostic_ipc_event("ipc_request_started", action, id, "progress", None, None);
     admission_progress(state, action, "validating", 0);
     let early_failure = |code: &String| diagnostic_ipc_event("ipc_request_failed", action, id,
@@ -973,7 +1021,7 @@ fn rpc_request(
         early_failure(&"STANDALONE_IPC_FAILED".to_string());
         return Err("STANDALONE_IPC_FAILED".to_string());
     }
-    let mut process_guard = ipc_transport::lock_until(&state.sidecar, deadline, &state.lifecycle.stopping)
+    let mut process_guard = ipc_transport::lock_until(&state.sidecar, lock_deadline, &state.lifecycle.stopping)
         .map_err(|code| admission_transport_code(action, code)).inspect_err(early_failure)?;
     // Capture happens explicitly at command ingress, before a
     // blocking task can queue behind another RPC. A stale mutation is never
@@ -1006,10 +1054,11 @@ fn rpc_request(
         let app = state.app.clone();
         let lifecycle = state.lifecycle.clone();
         let (sender, receiver) = mpsc::channel();
+        let bootstrap_deadline = Instant::now() + rpc_bootstrap_duration();
         std::thread::Builder::new().name("sidecar-bootstrap".into()).spawn(move || {
-            let _ = sender.send(spawn_sidecar(&app, &lifecycle, spawn_guard, deadline, owner_generation, retired_generations));
+            let _ = sender.send(spawn_sidecar(&app, &lifecycle, spawn_guard, bootstrap_deadline, owner_generation, retired_generations));
         }).map_err(|_| ipc_transport::FAILED.to_string())?;
-        let spawned = ipc_transport::receive_until(&receiver, deadline, &state.lifecycle.stopping)
+        let spawned = ipc_transport::receive_until(&receiver, bootstrap_deadline, &state.lifecycle.stopping)
             .and_then(|result| result).map_err(|code| admission_transport_code(action, code));
         match spawned {
             Ok(process) => *process_guard = Some(process),
@@ -1026,6 +1075,10 @@ fn rpc_request(
         let epoch = ipc_transport::ready_connection_epoch(&state.connection_epoch);
         let _ = state.app.emit("datasecure-connection", json!({ "epoch": epoch, "state": "ready" }));
     }
+    // A successful Ready (or a queued request obtaining the sidecar mutex)
+    // starts a fresh bounded action window. Expired startup time must never
+    // kill a healthy sidecar in the middle of its very first display read.
+    let deadline = Instant::now() + rpc_duration(action);
     let result = (|| {
         let process = process_guard
             .as_mut()
@@ -1401,30 +1454,33 @@ async fn remove_admitted_source(
 #[tauri::command(rename_all = "camelCase")]
 async fn start_admitted_batch(
     state: State<'_, DesktopState>,
+    request: tauri::ipc::Request<'_>,
     processing_mode: Option<String>,
     output_naming_mode: Option<String>,
     ocr_contact_review: Option<bool>,
     source_ids: Option<Vec<String>>,
     catalogue_revision: Option<u64>,
 ) -> Result<Value, String> {
+    let document_review = state.app.get_webview_window("main")
+        .and_then(|window| window.url().ok()).map(|url| workspace_catalogue_path(url.path())).unwrap_or(false);
+    let content_options = validate_start_content_body(request.body(), document_review)?;
     let mode = validate_processing_mode(processing_mode.as_deref())?;
     validate_output_naming_mode(output_naming_mode.as_deref(), mode)?;
     let contact_review = validate_ocr_contact_review(mode, ocr_contact_review)?;
-    let document_review = state.app.get_webview_window("main")
-        .and_then(|window| window.url().ok()).map(|url| workspace_catalogue_path(url.path())).unwrap_or(false);
     let _guard = selection_guard(&state.selection_busy, &state.admission_present, true)?;
     let owned = state.inner().capture_connection();
     let result = tauri::async_runtime::spawn_blocking(move || {
         let id = request_id();
-        let mut request = private_start_request(
+        let mut request = private_content_start_request(
             &id,
             processing_mode.as_deref(),
             output_naming_mode.as_deref(),
+            content_options,
+            document_review,
         )?;
         if contact_review {
             request["ocr_contact_review"] = json!(true);
         }
-        if document_review { request["document_review"] = json!(true); }
         if source_ids.is_some() || catalogue_revision.is_some() {
             let ids = source_ids.ok_or("STANDALONE_SELECTION_INVALID")?;
             let revision = catalogue_revision.ok_or("STANDALONE_SELECTION_INVALID")?;
@@ -1673,6 +1729,28 @@ async fn pause_batch(state: State<'_, DesktopState>, batch_id: String) -> Result
         .await.map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())?
 }
 
+#[tauri::command(rename_all = "camelCase")]
+async fn abandon_result_export(state: State<'_, DesktopState>, batch_id: String) -> Result<Value, String> {
+    let _guard = selection_guard(&state.selection_busy, &state.admission_present, false)?;
+    let owned = state.inner().capture_connection();
+    tauri::async_runtime::spawn_blocking(move || history_rpc(&owned, "abandon_result_export", &batch_id))
+        .await.map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())?
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn skip_ocr_contact_review(
+    state: State<'_, DesktopState>,
+    batch_id: String,
+) -> Result<Value, String> {
+    let _guard = selection_guard(&state.selection_busy, &state.admission_present, false)?;
+    let owned = state.inner().capture_connection();
+    tauri::async_runtime::spawn_blocking(move || {
+        history_rpc(&owned, "skip_ocr_contact_review", &batch_id)
+    })
+    .await
+    .map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())?
+}
+
 fn document_review_surface(window: &tauri::WebviewWindow, state: &DesktopState, batch_id: Option<&str>) -> Result<(), String> {
     if window.label() != "main" || !workspace_catalogue_path(window.url().map_err(|_| "DOCUMENT_REVIEW_INVALID")?.path()) ||
         state.embedded_review_active.load(Ordering::Acquire) || state.app.get_webview_window("review").is_some() {
@@ -1754,6 +1832,13 @@ async fn decide_document_review(window: tauri::WebviewWindow, state: State<'_, D
     batch_id: String, document_id: String, decision: Value) -> Result<Value, String> {
     document_review_rpc(window, state.inner().capture_connection(), batch_id, "decide_document_review",
         json!({ "document_id": document_id, "decision": decision })).await
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn preview_document_export(window: tauri::WebviewWindow, state: State<'_, DesktopState>,
+    batch_id: String, operation_id: String, selection: Value) -> Result<Value, String> {
+    document_review_rpc(window, state.inner().capture_connection(), batch_id, "preview_document_export",
+        json!({ "operation_id": operation_id, "selection": selection })).await
 }
 
 #[tauri::command(rename_all = "camelCase")]
@@ -2003,6 +2088,13 @@ async fn open_diagnostic_folder() -> Result<Value, String> {
     Ok(json!({ "ok": true, "opened": true, "external_disclosure": false }))
 }
 #[tauri::command]
+fn get_native_recovery_status(state: State<'_, DesktopState>) -> Value {
+    // Independent of the sidecar, including while IPC is blocked. This
+    // snapshot never authorizes a new run, a release, or an export.
+    json!({ "phase": state.lifecycle.recovery_phase(), "local_ui_only": true,
+        "external_disclosure": false })
+}
+#[tauri::command]
 async fn shutdown(state: State<'_, DesktopState>) -> Result<Value, String> {
     blocking_rpc(state.inner().capture_connection(), "shutdown").await
 }
@@ -2149,6 +2241,8 @@ fn main() {
             get_run_failures,
             continue_history_batch,
             pause_batch,
+            abandon_result_export,
+            skip_ocr_contact_review,
             get_document_reviews,
             get_document_review_history_summary,
             close_document_reviews,
@@ -2156,6 +2250,7 @@ fn main() {
             get_document_entities,
             decide_document_review,
             export_approved_documents,
+            preview_document_export,
             abandon_document_export,
             open_document_export,
             open_document_identity_overview,
@@ -2169,6 +2264,7 @@ fn main() {
             open_current_results,
             open_local_ledger,
             open_diagnostic_folder,
+            get_native_recovery_status,
             shutdown,
             frontend_ready
         ])
@@ -2570,6 +2666,9 @@ mod tests {
             "PROCESSING_MODE_INVALID",
             "PROCESSING_MODE_FORBIDDEN",
             "MARKDOWN_CONVERSION_NOT_READY",
+            "CONTENT_OPTIONS_INVALID",
+            "CONTENT_OPTIONS_FORBIDDEN",
+            "CONTENT_OPTIONS_NOT_READY",
         ] {
             assert!(mode_rejected_before_start(&Err(code.to_string())));
         }
@@ -2581,6 +2680,63 @@ mod tests {
             assert!(!mode_rejected_before_start(&Err(code.to_string())));
         }
         assert!(!mode_rejected_before_start(&Ok(json!({ "ok": true }))));
+    }
+
+    #[test]
+    fn actual_invoke_body_decodes_raw_contract_and_keeps_legacy_json() {
+        assert_eq!(validate_start_content_body(&tauri::ipc::InvokeBody::Json(
+            json!({ "processingMode": "markdown-only" })), false).unwrap(), None);
+        let content = json!({ "schema": "datasecure-content-options/1", "markdownOutput": "content-v1",
+            "scanOcr": true, "imageOcr": false });
+        assert_eq!(validate_start_content_body(&tauri::ipc::InvokeBody::Json(
+            json!({ "processingMode": "markdown-only", "contentOptions": content })), true).unwrap(), Some(content));
+        assert_eq!(validate_start_content_body(&tauri::ipc::InvokeBody::Json(
+            json!({ "processingMode": "markdown-only", "contentOptions": null })), true).unwrap_err(), "CONTENT_OPTIONS_INVALID");
+        assert_eq!(validate_start_content_body(&tauri::ipc::InvokeBody::Raw(vec![]), true).unwrap_err(), "CONTENT_OPTIONS_INVALID");
+    }
+
+    #[test]
+    fn raw_start_rpc_transports_every_content_option_without_privacy_fields() {
+        for output in ["content-v1", "notes-v1"] {
+            for scan in [false, true] {
+                for image in [false, true] {
+                    let content = json!({ "schema": "datasecure-content-options/1", "markdownOutput": output,
+                        "scanOcr": scan, "imageOcr": image });
+                    let request = private_content_start_request("0123456789abcdef", Some("markdown-only"),
+                        None, Some(content.clone()), true).unwrap();
+                    assert_eq!(request["content_options"], content);
+                    assert_eq!(request["processing_mode"], json!("markdown-only"));
+                    assert_eq!(request["document_review"], json!(true));
+                    assert_eq!(request.as_object().unwrap().len(), 6);
+                    for key in ["contentOptions", "output_naming_mode", "pseudonym_seed", "read_capability", "source_paths"] {
+                        assert!(request.get(key).is_none(), "{key}");
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn new_content_rpc_preserves_both_purposes_but_requires_document_review_surface() {
+        let content = json!({ "schema": "datasecure-content-options/1", "markdownOutput": "content-v1",
+            "scanOcr": true, "imageOcr": false });
+        let anonymized = private_content_start_request("0123456789abcdef", Some("markdown-and-anonymize"),
+            Some("neutral"), Some(content.clone()), true).unwrap();
+        assert_eq!(anonymized["processing_mode"], json!("markdown-and-anonymize"));
+        assert_eq!(anonymized["output_naming_mode"], json!("neutral"));
+        assert_eq!(anonymized["content_options"], content);
+        assert_eq!(anonymized["document_review"], json!(true));
+        for (mode, naming, reviewed) in [("markdown-only", None, false),
+            ("markdown-and-anonymize", Some("neutral"), false)] {
+            let failure = private_content_start_request("0123456789abcdef", Some(mode), naming,
+                Some(content.clone()), reviewed).unwrap_err();
+            assert_eq!(failure, "CONTENT_OPTIONS_NOT_READY");
+            assert!(mode_rejected_before_start(&Err(failure)));
+        }
+        let legacy = private_content_start_request("0123456789abcdef", Some("markdown-and-anonymize"),
+            Some("neutral"), None, false).unwrap();
+        assert!(legacy.get("content_options").is_none());
+        assert!(legacy.get("document_review").is_none());
     }
 
     #[test]
@@ -2805,9 +2961,19 @@ mod tests {
     #[test]
     fn admission_has_its_own_bounded_deadline_and_honest_transport_failure() {
         assert_eq!(rpc_duration("admit_selected_sources"), Duration::from_secs(300));
+        assert_eq!(rpc_duration("preview_document_export"), Duration::from_secs(300));
         assert_eq!(rpc_duration("get_document_review_history_summary"), Duration::from_secs(300));
-        assert_eq!(rpc_duration("get_public_state"), Duration::from_secs(30));
+        assert_eq!(rpc_duration("get_document_reviews"), Duration::from_secs(300));
+        assert_eq!(rpc_duration("get_run_history"), Duration::from_secs(300));
+        assert_eq!(rpc_duration("get_review_session"), Duration::from_secs(300));
+        assert_eq!(rpc_duration("get_public_state"), Duration::from_secs(120));
+        assert_eq!(rpc_duration("get_ui_context"), Duration::from_secs(120));
         assert_eq!(rpc_duration("submit_review"), Duration::from_secs(30));
+        assert_eq!(rpc_lock_duration("get_ui_context"), Duration::from_secs(120));
+        assert_eq!(rpc_lock_duration("get_public_state"), Duration::from_secs(120));
+        assert_eq!(rpc_lock_duration("get_run_history"), Duration::from_secs(300));
+        assert_eq!(rpc_lock_duration("submit_review"), Duration::from_secs(30));
+        assert_eq!(rpc_bootstrap_duration(), Duration::from_secs(120));
         assert_eq!(admission_transport_code("admit_selected_sources", ipc_transport::TIMEOUT.to_string()),
             "STANDALONE_ADMISSION_TIMEOUT");
         assert_eq!(admission_transport_code("get_public_state", ipc_transport::TIMEOUT.to_string()), ipc_transport::TIMEOUT);

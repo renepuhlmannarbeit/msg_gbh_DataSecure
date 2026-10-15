@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { batchRoot } = require('./batch-private-store');
-const { processingModeForBatch } = require('../core/processing-mode');
+const { processingModeForBatch, isMarkdownBatch } = require('../core/processing-mode');
 const { resultNamingModeForBatch } = require('../core/result-naming-mode');
 
 function createBatchRetentionProtection(options = {}) {
@@ -39,10 +39,21 @@ function createBatchRetentionProtection(options = {}) {
       } catch {
         return { ids, complete: false };
       }
-      if (!['datasecure-batch/1', 'datasecure-batch/2', 'datasecure-batch/3', 'datasecure-batch/4', 'datasecure-batch/5', 'datasecure-batch/6'].includes(state?.schema) || !Array.isArray(state.items)) {
+      if (!['datasecure-batch/1', 'datasecure-batch/2', 'datasecure-batch/3', 'datasecure-batch/4', 'datasecure-batch/5', 'datasecure-batch/6', 'datasecure-batch/7'].includes(state?.schema) || !Array.isArray(state.items)) {
         return { ids, complete: false };
       }
-      if (state.schema === 'datasecure-batch/6') {
+      // Real journal filenames are token-bound. Inspect the independent run
+      // anchor even after a schema/channel/flag downgrade, not only for /7.
+      // Old narrow in-memory projection fixtures may omit that filename.
+      const fileToken = /^([a-f0-9]{64})\.json$/u.exec(entry.name)?.[1];
+      if (fileToken || state.schema === 'datasecure-batch/7') {
+        try {
+          if (fileToken && state.token !== fileToken) return { ids, complete: false };
+          (options.assertContentBinding || (value => require('./standalone-document-review-store')
+            .createDocumentReviewStore({ dataRoot: options.documentReviewDataRoot }).assertContentBinding(value)))(state);
+        } catch { return { ids, complete: false }; }
+      }
+      if (['datasecure-batch/6', 'datasecure-batch/7'].includes(state.schema)) {
         try {
           processingModeForBatch(state);
           resultNamingModeForBatch(state);
@@ -50,8 +61,9 @@ function createBatchRetentionProtection(options = {}) {
           return { ids, complete: false };
         }
       }
-      if (state.schema === 'datasecure-batch/5') {
-        try { processingModeForBatch(state); } catch { return { ids, complete: false }; }
+      let markdown;
+      try { markdown = isMarkdownBatch(state); } catch { return { ids, complete: false }; }
+      if (markdown) {
         if (!conversionExportCommitted(state)) {
           for (const item of state.items) {
             // Deterministic prepublication IDs also protect a commit that the

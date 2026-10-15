@@ -2,16 +2,22 @@
 
 const { RESOURCE_LIMITS } = require('../resource-limits');
 const { MODES } = require('../core/processing-mode');
+const { validateContentOptions, serializeContentOptions } = require('../core/content-options');
+const { validatePrivateDocumentMetadata } = require('../core/private-document-metadata');
 
 const EXTRACTION_SCHEMA = 'datasecure-markdown-extraction/1';
+const CONTENT_EXTRACTION_SCHEMA = 'datasecure-markdown-extraction/2';
 const PROCESSING_MODE = MODES.MARKDOWN;
 // Vocabulary is a format contract, not a declaration of packaged support.
 const SOURCE_TYPES = Object.freeze(['txt', 'md', 'csv', 'docx', 'xlsx', 'pptx', 'pdf', 'png', 'jpeg', 'bmp']);
 const COVERAGE_REASON_CODES = Object.freeze([
   'DOCX_HEADER_FOOTER_EXCLUDED_BY_POLICY',
+  'IMAGE_OCR_DISABLED_BY_POLICY',
   'OCR_CONTACT_VALUES_UNVERIFIED',
   'OCR_NOT_VERIFIED',
   'OCR_TEXT_EMPTY',
+  'PDF_OCR_SCOPE_UNVERIFIED',
+  'SCAN_OCR_DISABLED_BY_POLICY',
   'SOURCE_COVERAGE_UNVERIFIED',
   'VISUAL_CONTENT_NOT_EXTRACTED'
 ]);
@@ -70,9 +76,17 @@ function validateCoverage(coverage) {
 
 function validateMarkdownExtraction(value) {
   const keys = ['schema', 'processing_mode', 'anonymized', 'source_type', 'markdown', 'coverage'];
-  if (!exactKeys(value, Object.hasOwn(value || {}, 'ocr_contacts') ? [...keys, 'ocr_contacts'] : keys) ||
-      value.schema !== EXTRACTION_SCHEMA || value.processing_mode !== PROCESSING_MODE ||
+  const current = Object.hasOwn(value || {}, 'content_options');
+  if (current) keys.push('content_options');
+  if (Object.hasOwn(value || {}, 'ocr_contacts')) keys.push('ocr_contacts');
+  if (Object.hasOwn(value || {}, 'private_document_metadata')) keys.push('private_document_metadata');
+  if (!exactKeys(value, keys) || value.schema !== (current ? CONTENT_EXTRACTION_SCHEMA : EXTRACTION_SCHEMA) || value.processing_mode !== PROCESSING_MODE ||
       value.anonymized !== false || !SOURCE_VALUES.has(value.source_type)) throw new MarkdownContractError();
+  if (current) validateContentOptions(value.content_options);
+  if (Object.hasOwn(value, 'private_document_metadata')) {
+    if (!current || value.source_type !== 'pdf') throw new MarkdownContractError();
+    validatePrivateDocumentMetadata(value.private_document_metadata);
+  }
   validateMarkdownText(value.markdown);
   validateCoverage(value.coverage);
   const contactWarning = value.coverage.reason_codes.includes('OCR_CONTACT_VALUES_UNVERIFIED');
@@ -84,16 +98,33 @@ function validateMarkdownExtraction(value) {
   return value;
 }
 
+// Callers must check their expected request, not just recognize both schemas.
+// Identical Markdown bytes never authorize a different OCR/options contract.
+function validateMarkdownExtractionForOptions(value, expected) {
+  validateMarkdownExtraction(value);
+  if (expected === undefined) {
+    if (value.schema !== EXTRACTION_SCHEMA) throw new MarkdownContractError();
+  } else if (value.schema !== CONTENT_EXTRACTION_SCHEMA ||
+      serializeContentOptions(value.content_options) !== serializeContentOptions(expected)) throw new MarkdownContractError();
+  return value;
+}
+
 function createMarkdownExtraction(input) {
   const keys = ['source_type', 'markdown', 'coverage'];
-  if (!exactKeys(input, Object.hasOwn(input || {}, 'ocr_contacts') ? [...keys, 'ocr_contacts'] : keys)) throw new MarkdownContractError();
+  const current = Object.hasOwn(input || {}, 'content_options');
+  if (current) keys.push('content_options');
+  if (Object.hasOwn(input || {}, 'ocr_contacts')) keys.push('ocr_contacts');
+  if (Object.hasOwn(input || {}, 'private_document_metadata')) keys.push('private_document_metadata');
+  if (!exactKeys(input, keys)) throw new MarkdownContractError();
   const value = {
-    schema: EXTRACTION_SCHEMA,
+    schema: current ? CONTENT_EXTRACTION_SCHEMA : EXTRACTION_SCHEMA,
     processing_mode: PROCESSING_MODE,
     anonymized: false,
     source_type: input.source_type,
     markdown: input.markdown,
     coverage: input.coverage,
+    ...(current ? { content_options: validateContentOptions(input.content_options) } : {}),
+    ...(Object.hasOwn(input, 'private_document_metadata') ? { private_document_metadata: validatePrivateDocumentMetadata(input.private_document_metadata) } : {}),
     ...(Object.hasOwn(input, 'ocr_contacts') ? { ocr_contacts: input.ocr_contacts } : {})
   };
   validateMarkdownExtraction(value);
@@ -106,7 +137,7 @@ function createMarkdownExtraction(input) {
 }
 
 module.exports = Object.freeze({
-  EXTRACTION_SCHEMA, PROCESSING_MODE, SOURCE_TYPES, COVERAGE_REASON_CODES, MAX_MARKDOWN_CHARS,
+  EXTRACTION_SCHEMA, CONTENT_EXTRACTION_SCHEMA, PROCESSING_MODE, SOURCE_TYPES, COVERAGE_REASON_CODES, MAX_MARKDOWN_CHARS,
   MarkdownContractError, exactKeys, validateMarkdownText, validateCoverage,
-  validateMarkdownExtraction, createMarkdownExtraction
+  validateMarkdownExtraction, validateMarkdownExtractionForOptions, createMarkdownExtraction
 });

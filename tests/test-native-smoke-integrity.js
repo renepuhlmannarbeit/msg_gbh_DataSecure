@@ -264,8 +264,7 @@ testAsync('packaged OCR assertions reject lost fields, leaked contacts and colla
   const text = '<!--\nEU Privacy Document Gateway test\nProfil: general\n-->' +
     '\n\n> **DataSecure-Hinweis:** Anonymisiert wurde ausschließlich der lokal in Markdown umgewandelte Inhalt. Die Vollständigkeit der Extraktion aus der Originaldatei ist nicht garantiert; nicht extrahierte Inhalte sind in diesem Ergebnis nicht enthalten.\n\n' +
     `Name: [PERSON_001]\nE-Mail: [EMAIL_REDACTED]\nTelefon: [PHONE_REDACTED]\nJava bleibt.\n${correctionSentinel}\n\n` +
-    '> Grafikhinweis: Die Grafik selbst ist nicht im Markdown enthalten. Lokal erkannter Bildtext ist übernommen, kann aber unvollständig sein. Bildinhalt und visuelle Anordnung werden nicht automatisch beschrieben.\n\n' +
-    '> OCR-Hinweis (Bild): Kontaktwerte in OCR-Zeile(n) 3, 4 können Zeichenfehler enthalten. Vor einer Nutzung mit den Originalen vergleichen. Auch hohe OCR-Konfidenzen bestätigen keine exakte Erkennung.\n';
+    '> Hinweis: Grafiken und ihre visuelle Anordnung sind nicht enthalten. Text aus Bildern wurde übernommen; Lesefehler und Auslassungen sind möglich. Erkannte Kontaktwerte bitte mit dem Original vergleichen.\n';
   const texts = [text, text]; assertPackagedOcrOutputs(texts);
   for (const mutate of [
     values => values.pop(),

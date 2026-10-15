@@ -183,6 +183,12 @@
           "markdownDescription": "Unvollständigen gebundenen Exportauftrag ausdrücklich nicht weiter verfolgen; keine Dateien löschen."
         },
         {
+          "description": "Gibt nur die automatische Fortsetzung einer unvollständigen sichtbaren Anonymisierungskopie dauerhaft auf; vorhandene Dateien bleiben unangetastet.",
+          "type": "string",
+          "const": "allow-abandon-result-export",
+          "markdownDescription": "Gibt nur die automatische Fortsetzung einer unvollständigen sichtbaren Anonymisierungskopie dauerhaft auf; vorhandene Dateien bleiben unangetastet."
+        },
+        {
           "description": "Bestätigt inhaltsfrei, dass ein terminaler Zustand im Hauptfenster gerendert wurde.",
           "type": "string",
           "const": "allow-ack-terminal-presented",
@@ -271,6 +277,12 @@
           "type": "string",
           "const": "allow-get-document-reviews",
           "markdownDescription": "Öffnet private nachträgliche Dokumentprüfung ausschließlich in der v2-Hauptansicht."
+        },
+        {
+          "description": "Liest nur die inhaltsfreie native Prozess-Abgleichphase, ohne den Core-Prozess aufzurufen.",
+          "type": "string",
+          "const": "allow-get-native-recovery-status",
+          "markdownDescription": "Liest nur die inhaltsfreie native Prozess-Abgleichphase, ohne den Core-Prozess aufzurufen."
         },
         {
           "description": "Liest nur den inhaltsfreien öffentlichen Verarbeitungszustand.",
@@ -381,6 +393,12 @@
           "markdownDescription": "Speichert einen dauerhaften Pausewunsch für genau einen Standalone-Lauf."
         },
         {
+          "description": "Liest ausschließlich den servergebundenen Dateinamenplan; legt weder Auftrag noch Ergebnisdateien an.",
+          "type": "string",
+          "const": "allow-preview-document-export",
+          "markdownDescription": "Liest ausschließlich den servergebundenen Dateinamenplan; legt weder Auftrag noch Ergebnisdateien an."
+        },
+        {
           "description": "Entfernt genau eine Datei per Position aus der noch nicht gestarteten lokalen Auswahl.",
           "type": "string",
           "const": "allow-remove-admitted-source",
@@ -403,6 +421,12 @@
           "type": "string",
           "const": "allow-shutdown",
           "markdownDescription": "Beendet den privaten lokalen Core-Prozess."
+        },
+        {
+          "description": "Überspringt nur die gewählte OCR-Kontaktprüfung eines reinen Markdown-Laufs; Werte bleiben ungeprüft.",
+          "type": "string",
+          "const": "allow-skip-ocr-contact-review",
+          "markdownDescription": "Überspringt nur die gewählte OCR-Kontaktprüfung eines reinen Markdown-Laufs; Werte bleiben ungeprüft."
         },
         {
           "description": "Startet ausschließlich die bereits lokal geprüfte Auswahl.",

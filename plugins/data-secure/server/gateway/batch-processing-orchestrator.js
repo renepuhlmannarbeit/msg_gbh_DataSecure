@@ -1,6 +1,7 @@
 'use strict';
 
 const { releaseOwnedLock } = require('./batch-lock-release');
+const { isMarkdownBatch } = require('../core/processing-mode');
 
 function createBatchProcessingOrchestrator(options = {}) {
   const SafeError = options.SafeError;
@@ -27,9 +28,12 @@ function createBatchProcessingOrchestrator(options = {}) {
     }
     acquireActiveLock(token);
     active.add(token);
-    let primaryError = false;
+    let primaryError = false, ownedEpoch;
     try {
+      if (options.captureOwnedEpoch) ownedEpoch = options.captureOwnedEpoch(token);
       const state = readState(token);
+      if (require('../core/content-options').contentOptionsForBatch(state))
+        deps = require('./content-consumer-dependencies').bindContentReviewDependencies(state, deps).dependencies;
       assertLocalExecutorAccess(state, deps.executorPid);
       if (state.invalidated === true) {
         throw new SafeError('Der bestätigte Dateistapel wurde verändert und ist nicht mehr verwendbar.');
@@ -89,7 +93,7 @@ function createBatchProcessingOrchestrator(options = {}) {
 
       // Security boundary: keep in-process and filesystem locks until the
       // delegated asynchronous pipeline has resolved or rejected.
-      if (state.schema === 'datasecure-batch/5' && state.processing_mode === 'markdown-only' && state.product_channel === 'standalone') {
+      if (isMarkdownBatch(state)) {
         return await processSingleBatchItem(state, item, entry, deps);
       }
       return await withBatchPseudonymRegistry(state, (pseudonymRegistry) =>
@@ -107,7 +111,7 @@ function createBatchProcessingOrchestrator(options = {}) {
       throw error;
     } finally {
       active.delete(token);
-      releaseOwnedLock(releaseActiveLock, token, SafeError, primaryError);
+      releaseOwnedLock(ownedEpoch ? () => options.releaseOwnedEpoch(ownedEpoch) : releaseActiveLock, token, SafeError, primaryError);
     }
   }
 

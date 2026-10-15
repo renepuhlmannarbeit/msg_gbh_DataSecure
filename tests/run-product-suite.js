@@ -35,6 +35,7 @@ const baseFiles = [
   'tests/test-product-bootstrap.js', 'tests/test-standalone.js',
   'tests/test-standalone-frontend.js',
   'tests/test-standalone-workspace.js',
+  'tests/test-workflow-presentation.js', 'tests/test-markdown-start-transport.js', 'tests/test-office-image-ocr.mjs', 'tests/test-office-image-relevance.js',
   'tests/test-standalone-document-review.js', 'tests/test-standalone-document-review-frontend.js',
   'tests/test-private-transform-trace.js', 'tests/test-standalone-entities.js', 'tests/test-standalone-run-entities.js',
   'tests/test-standalone-confidential-overview.js',
@@ -52,10 +53,12 @@ const baseFiles = [
   'tests/test-native-smoke-integrity.js',
   'tests/test-standalone-package.js',
   'tests/test-standalone-package-integrity.mjs',
-  'tests/test-processing-mode.js', 'tests/test-markdown-artifact.js', 'tests/test-markdown-extractor.js',
+  'tests/test-processing-mode.js', 'tests/test-content-options-persistence.js', 'tests/test-content-start-readiness.js', 'tests/test-content-anonymization-operation.js', 'tests/test-conversion-content-contract.js', 'tests/test-content-consumer-binding.js', 'tests/test-content-privacy-extraction.js', 'tests/test-markdown-artifact.js', 'tests/test-markdown-extractor.js',
   'tests/test-standalone-pdf-text-layout.js',
   'tests/test-source-extraction-contract.js', 'tests/test-wide-privacy-extraction.js',
+  'tests/test-standalone-anonymized-artifact.js',
   'tests/test-wide-privacy-orchestrator.js',
+  'tests/test-privacy-text-operation.js',
   'tests/test-wide-mixed-batch-recovery.js',
   'tests/test-prepublication-error-policy.js',
   'tests/test-batch-processing-purpose.js', 'tests/test-markdown-batch-export.js',
@@ -118,6 +121,7 @@ const ciFiles = [
 ];
 
 const fullOnly = [
+  'test-markdown-image-content.mjs',
   'test-standalone-native-export.js',
   // Copied product projections and separate real processes belong to the
   // full local gate, not the cost-capped source CI profile.
@@ -230,7 +234,7 @@ function run(file, args = []) {
 function argumentsForFile(profile, file) {
   // Cost-capped source CI has no target-native converter resources. The real
   // projected worker cases remain mandatory in headless/full and native builds.
-  return profile === 'ci' && file === 'tests/test-standalone-sidecar.js' ? ['--source-only'] : [];
+  return file === 'tests/test-office-image-ocr.mjs' || profile === 'ci' && file === 'tests/test-standalone-sidecar.js' ? ['--source-only'] : [];
 }
 
 function main() {

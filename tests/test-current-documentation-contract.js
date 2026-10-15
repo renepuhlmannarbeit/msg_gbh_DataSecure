@@ -438,7 +438,9 @@ test('main README gives direct Windows and macOS Standalone installation paths',
 test('all shipped Standalone start guides describe v2 staged review, explicit approval and separate export', () => {
   for (const file of ['START-WINDOWS.md', 'MACOS-START.md', 'LINUX-START.md']) {
     const text = read(`apps/datasecure-standalone/${file}`).replace(/\*\*/gu, '').replace(/\s+/gu, ' ');
-    for (const label of ['Neue Verarbeitung', 'Verarbeitung starten', 'Gruppe übergeben und weiter',
+    const reviewAction = file === 'START-WINDOWS.md'
+      ? 'Entscheidungen speichern' : 'Gruppe übergeben und weiter';
+    for (const label of ['Neue Verarbeitung', 'Verarbeitung starten', reviewAction,
       'Auswahl freigeben', 'Auswahl für KI exportieren']) {
       assert.ok(text.includes(label), `${file} omits current action ${label}`);
     }

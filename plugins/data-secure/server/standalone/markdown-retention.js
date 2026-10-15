@@ -5,7 +5,7 @@ const path = require('path');
 const { dataRoot } = require('../runtime');
 const { assertPrivateDirectory, safeRemovePrivateTree } = require('../gateway/common');
 const { ARTIFACT_ID_RE } = require('./markdown-artifact');
-const { readMarkdownArtifact } = require('./markdown-store');
+const { inspectMarkdownArtifactForMaintenance } = require('./markdown-store');
 
 function identity(file) {
   const stat = fs.lstatSync(file, { bigint: true });
@@ -41,7 +41,7 @@ function cleanupMarkdownArtifacts(options = {}) {
         throw new Error('MARKDOWN_RETENTION_UNSAFE');
       }
       const bound = identity(target);
-      const manifest = readMarkdownArtifact(entry.name).manifest;
+      const manifest = inspectMarkdownArtifactForMaintenance(entry.name).manifest;
       plan.push({ name: entry.name, identity: bound, manifest: JSON.stringify(manifest) });
     }
   } catch { return { ...result, errors: 1, skipped: true }; }
@@ -49,7 +49,7 @@ function cleanupMarkdownArtifacts(options = {}) {
   for (const item of plan) {
     try {
       assertPrivateDirectory(directory, dataRoot());
-      if (JSON.stringify(readMarkdownArtifact(item.name).manifest) !== item.manifest) throw new Error('MARKDOWN_RETENTION_UNSAFE');
+      if (JSON.stringify(inspectMarkdownArtifactForMaintenance(item.name).manifest) !== item.manifest) throw new Error('MARKDOWN_RETENTION_UNSAFE');
       safeRemovePrivateTree(directory, item.name, {
         expectedParentIdentity: parentIdentity, expectedIdentity: item.identity
       });

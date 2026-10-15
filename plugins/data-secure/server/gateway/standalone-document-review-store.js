@@ -12,13 +12,21 @@ const { ensurePrivateDirectory, roots } = require('../gateway/common');
 const { createPrivateWorkStore } = require('../gateway/private-work-store');
 const { createBatchActiveLock } = require('../gateway/batch-active-lock');
 const { withDocumentControl } = require('./standalone-document-control');
-const { readBoundFile, bindDirectory } = require('../core/bound-file-io');
+const { readBoundFile, bindDirectory, assertDirectory } = require('../core/bound-file-io');
 const { readConfiguredResultRoot, inspectRoot, readConfiguredNativeExportBinding } = require('../gateway/result-folder-config');
 const { validNativeExportBinding } = require('../core/native-directory-identity');
 const { syncParentDirectory } = require('../gateway/batch-journal-io');
 const { RESOURCE_LIMITS } = require('../resource-limits');
 const { validateDocumentResult, isDocumentResultReasonCode, GRADES } = require('../core/document-result-grade');
 const entityReview = require('./standalone-entity-review');
+const { safeMarkdownOutputNames, validMarkdownInventory } = require('../core/markdown-output-names');
+const { contentOptionsForBatch, validateContentOptions } = require('../core/content-options');
+const { contentOptionsDigest } = require('./content-options-binding');
+const { validatePrivateDocumentMetadata } = require('../core/private-document-metadata');
+const { exactKeys, SOURCE_TYPES } = require('../standalone/markdown-contract');
+const { validateMarkdownArtifactForOptions } = require('../standalone/markdown-artifact');
+const { validateExpectation } = require('../standalone/anonymized-artifact');
+const { processingModeForBatch } = require('../core/processing-mode');
 const { createConfidentialOverview, renderConfidentialOverview, MAX_BYTES: MAX_OVERVIEW_BYTES } = require('../standalone/confidential-overview');
 // Preserve the existing character budget even for four-byte UTF-8 text;
 // a byte-only 8 MiB cap would reject otherwise valid multilingual documents.
@@ -82,16 +90,17 @@ function createDocumentReviewStore(options = {}) {
     const file = path.join(ensurePrivateDirectory(base(), batchId), 'manifest.json');
     if (!fs.existsSync(file)) { if (optional) return null; throw fail('DOCUMENT_ENTITY_RUN_UNAVAILABLE'); }
     const value = read(file);
-    const v2 = value?.schema === 'datasecure-document-run/2';
-    const rejected = v2 ? value.preflight_rejections : [];
-    if (!closed(value, `schema,batch_id,product_channel,processing_mode,documents${v2 ? ',preflight_rejections' : ''}`) ||
-        !['datasecure-document-run/1', 'datasecure-document-run/2'].includes(value.schema) || value.batch_id !== batchId || value.product_channel !== 'standalone' ||
+    const v2 = value?.schema === 'datasecure-document-run/2', v3 = value?.schema === 'datasecure-document-run/3';
+    const rejected = v2 || v3 ? value.preflight_rejections : [];
+    if (v3) validateContentOptions(value.content_options);
+    if (!closed(value, `schema,batch_id,product_channel,processing_mode,documents${v2 || v3 ? ',preflight_rejections' : ''}${v3 ? ',content_options' : ''}`) ||
+        !['datasecure-document-run/1', 'datasecure-document-run/2', 'datasecure-document-run/3'].includes(value.schema) || value.batch_id !== batchId || value.product_channel !== 'standalone' ||
         ![MARKDOWN, ANONYMIZE].includes(value.processing_mode) || !Array.isArray(value.documents) ||
-        (!value.documents.length && !v2) || value.documents.length > 200 ||
+        (!value.documents.length && !v2 && !v3) || value.documents.length > 200 ||
         value.documents.some(row => !closed(row, 'document_id,source_sha256,name') || !valid(row.document_id, 32) || !valid(row.source_sha256, 64) || !label(row.name)) ||
         !Array.isArray(rejected) || rejected.length > 200 || v2 && !rejected.length ||
         rejected.some(row => !closed(row, 'document_id,name,reason_code') || !valid(row.document_id, 32) || !label(row.name) || !preflightReason(row.reason_code)) ||
-        value.documents.length + rejected.length > 200 ||
+        value.documents.length + rejected.length < 1 || value.documents.length + rejected.length > 200 ||
         new Set([...value.documents, ...rejected].map(row => row.document_id)).size !== value.documents.length + rejected.length)
       throw fail('DOCUMENT_REVIEW_INVALID');
     return value;
@@ -117,6 +126,8 @@ function createDocumentReviewStore(options = {}) {
   function captureManifest(state) {
     // Only an actual v2 worker state supplies immutable run membership. Never
     // infer authority from the newest twenty history rows or directory names.
+    const contentOptions = contentOptionsForBatch(state);
+    if (contentOptions) processingModeForBatch(state);
     if (state.standalone_document_review !== true) return;
     if (state.product_channel !== 'standalone' || ![MARKDOWN, ANONYMIZE].includes(state.processing_mode || ANONYMIZE))
       throw fail('DOCUMENT_REVIEW_INVALID');
@@ -128,18 +139,61 @@ function createDocumentReviewStore(options = {}) {
         rejected.push(preflightRejection(item));
       else documents.push({ document_id: item.id, source_sha256: item.sha256, name: item.source_label || item.name });
     }
-    const manifest = { schema: `datasecure-document-run/${rejected.length ? 2 : 1}`, batch_id: state.token, product_channel: 'standalone',
+    const manifest = { schema: `datasecure-document-run/${contentOptions ? 3 : rejected.length ? 2 : 1}`, batch_id: state.token, product_channel: 'standalone',
       processing_mode: state.processing_mode || ANONYMIZE,
       documents: documents.sort((a, b) => a.document_id.localeCompare(b.document_id)),
-      ...(rejected.length ? { preflight_rejections: rejected.sort((a, b) => a.document_id.localeCompare(b.document_id)) } : {}) };
+      ...(rejected.length || contentOptions ? { preflight_rejections: rejected.sort((a, b) => a.document_id.localeCompare(b.document_id)) } : {}),
+      ...(contentOptions ? { content_options: contentOptions } : {}) };
     if (new Set([...documents, ...rejected].map(row => row.document_id)).size !== state.items.length ||
         manifest.documents.some(row => !valid(row.document_id, 32) || !valid(row.source_sha256, 64) || !label(row.name)))
       throw fail('DOCUMENT_REVIEW_INVALID');
     put(path.join(ensurePrivateDirectory(base(), state.token), 'manifest.json'), manifest);
   }
+  function assertContentBinding(state, { allowMissing = false } = {}) {
+    const contentOptions = contentOptionsForBatch(state);
+    if (!valid(state.token, 64)) throw fail('CONTENT_OPTIONS_BINDING_INVALID');
+    // Do not create private directories during a legacy journal check. The
+    // durable anchor is checked independently of the caller's review flag.
+    const file = path.join(options.dataRoot || dataRoot(), 'document-reviews', state.token, 'manifest.json');
+    if (!fs.existsSync(file)) {
+      if (contentOptions && !allowMissing) throw fail('CONTENT_OPTIONS_BINDING_MISSING');
+      return;
+    }
+    const manifest = runManifest(state.token, false);
+    const newAnchor = manifest.schema === 'datasecure-document-run/3';
+    if (Boolean(contentOptions) !== newAnchor || newAnchor &&
+        (contentOptionsDigest(contentOptions) !== contentOptionsDigest(manifest.content_options) ||
+         processingModeForBatch(state) !== manifest.processing_mode || state.product_channel !== manifest.product_channel))
+      throw fail('CONTENT_OPTIONS_BINDING_INVALID');
+  }
   function captureRun(state) {
     if (state?.standalone_document_review !== true) throw fail('DOCUMENT_REVIEW_INVALID');
     return locked(state.token, () => { captureManifest(state); captureTerminalFailures(state); return { ok: true }; });
+  }
+  function assertDocumentBinding(state, item) {
+    assertContentBinding(state);
+    const manifest = runManifest(state.token, false);
+    const member = manifest?.documents.find(row => row.document_id === item?.id);
+    const current = state.items?.find(row => row.id === item?.id);
+    if (!member || !current || state.standalone_document_review !== true ||
+        member.source_sha256 !== item.sha256 || member.name !== (item.source_label || item.name) ||
+        current.sha256 !== item.sha256 || (current.source_label || current.name) !== member.name)
+      throw fail('CONTENT_OPTIONS_BINDING_INVALID');
+    return Object.freeze({ document_id: member.document_id, source_sha256: member.source_sha256, name: member.name });
+  }
+  function hasPublicationEvidence(state, item) {
+    assertDocumentBinding(state, item);
+    const run = path.join(options.dataRoot || dataRoot(), 'document-reviews', state.token), parent = bindDirectory(run);
+    const present = (file, bound) => {
+      try { fs.lstatSync(file); return true; }
+      catch (error) { if (error?.code !== 'ENOENT') throw fail('DOCUMENT_REVIEW_INVALID'); assertDirectory(bound); return false; }
+    };
+    if (present(path.join(run, `published-${item.id}.json`), parent)) return true;
+    const dir = path.join(run, item.id);
+    if (!present(dir, parent)) return false;
+    const body = bindDirectory(dir), found = present(path.join(dir, 'published.json'), body);
+    assertDirectory(parent);
+    return found;
   }
   function captureTerminalFailures(state) {
     const manifest = runManifest(state.token, false), run = ensurePrivateDirectory(base(), state.token);
@@ -288,41 +342,169 @@ function createDocumentReviewStore(options = {}) {
         rows.some(row => !['PERSON', 'PERSON_ALIAS'].includes(row.kind) || !bindings.has(row.identity_key)))) return null;
     return [...keys][0];
   }
-  function capture(state, item, value) {
+  function captureSnapshot(state, item, value) {
+    const contentOptions = contentOptionsForBatch(state);
+    if (contentOptions) processingModeForBatch(state);
+    const keys = ['package_id', 'original_text', 'markdown'];
+    if (Object.hasOwn(value || {}, 'transform_trace')) keys.push('transform_trace');
+    if (Object.hasOwn(value || {}, 'verification_context')) keys.push('verification_context');
+    if (contentOptions) keys.push('content_options', 'source_type');
+    if (contentOptions && processingModeForBatch(state) === ANONYMIZE) keys.push('publication_binding');
+    if (contentOptions && Object.hasOwn(value || {}, 'private_document_metadata')) keys.push('private_document_metadata');
+    if (!exactKeys(value, keys)) throw fail('DOCUMENT_REVIEW_INVALID');
+    let privateMetadata;
+    if (contentOptions) {
+      if (contentOptionsDigest(value.content_options) !== contentOptionsDigest(contentOptions)) throw fail('CONTENT_OPTIONS_BINDING_INVALID');
+      const extension = path.posix.extname(item.source_label || item.name).toLowerCase();
+      const sourceType = extension === '.jpg' ? 'jpeg' : extension === '.markdown' ? 'md' : extension.slice(1);
+      if (!SOURCE_TYPES.includes(value.source_type) || value.source_type !== sourceType) throw fail('DOCUMENT_REVIEW_INVALID');
+      if (Object.hasOwn(value, 'private_document_metadata')) {
+        if (sourceType !== 'pdf') throw fail('DOCUMENT_REVIEW_INVALID');
+        privateMetadata = validatePrivateDocumentMetadata(value.private_document_metadata);
+      }
+    }
     const mode = state.processing_mode || ANONYMIZE;
+    let publicationBinding;
+    if (contentOptions && mode === ANONYMIZE) {
+      try { publicationBinding = validateExpectation(value.publication_binding); }
+      catch { throw fail('DOCUMENT_REVIEW_INVALID'); }
+      if (publicationBinding.package_id !== value.package_id || publicationBinding.source_type !== value.source_type ||
+          publicationBinding.profile !== value.verification_context?.profile || publicationBinding.document_sha256 !== hash(value.markdown) ||
+          contentOptionsDigest(publicationBinding.content_options) !== contentOptionsDigest(contentOptions)) throw fail('DOCUMENT_REVIEW_INVALID');
+    }
+    if (mode === MARKDOWN && (Object.hasOwn(value, 'transform_trace') || Object.hasOwn(value, 'verification_context'))) throw fail('DOCUMENT_REVIEW_INVALID');
     if (state.product_channel !== 'standalone' || ![MARKDOWN, ANONYMIZE].includes(mode) ||
         value.package_id !== `${mode === MARKDOWN ? 'dm' : 'ds'}_${item.id}` || !valid(item.sha256, 64) || !label(item.source_label || item.name) ||
         typeof value.original_text !== 'string' || typeof value.markdown !== 'string' ||
         value.original_text.length > RESOURCE_LIMITS.MAX_TEXT_CHARS || value.markdown.length > RESOURCE_LIMITS.MAX_TEXT_CHARS ||
         !value.original_text.isWellFormed() || !value.markdown.isWellFormed() ||
         Buffer.byteLength(value.original_text) > MAX_TEXT || Buffer.byteLength(value.markdown) > MAX_TEXT) throw fail('DOCUMENT_REVIEW_LIMIT');
-    return locked(state.token, () => {
-      captureManifest(state);
-      put(path.join(ensurePrivateDirectory(base(), state.token), 'journal-format.json'), {
-        schema: 'datasecure-run-decision-commit/2', batch_id: state.token });
-      const manifest = runManifest(state.token), member = manifest?.documents.find(row => row.document_id === item.id);
-      if (manifest && (!member || member.source_sha256 !== item.sha256 || manifest.processing_mode !== mode ||
-          member.name !== (item.source_label || item.name))) throw fail('DOCUMENT_REVIEW_INVALID');
-      const target = directory(state.token, item.id, true);
-      const snapshot = { schema: 'datasecure-document-review/1', batch_id: state.token, document_id: item.id,
+    const snapshot = { schema: `datasecure-document-review/${contentOptions ? 2 : 1}`, batch_id: state.token, document_id: item.id,
         processing_mode: mode,
+        ...(contentOptions ? { content_options: contentOptions, source_type: value.source_type,
+          ...(privateMetadata ? { private_document_metadata: privateMetadata } : {}) } : {}),
+        ...(publicationBinding ? { publication_binding: publicationBinding, verification_context: value.verification_context } : {}),
         name: item.source_label || item.name, package_id: value.package_id, source_sha256: item.sha256,
         original_text: value.original_text, markdown: value.markdown, output_sha256: hash(value.markdown),
         ...(mode === ANONYMIZE && value.transform_trace ? {
           transform_trace: value.transform_trace, verification_context: value.verification_context
         } : {}) };
-      if (snapshot.transform_trace?.complete === true &&
-          require('../privacy/transform-plan').replayTransformTrace(snapshot.transform_trace) !== snapshot.markdown)
-        throw fail('DOCUMENT_REVIEW_INVALID');
-      put(path.join(target, 'base.json'), snapshot);
-      return snapshot.output_sha256;
+    if (snapshot.transform_trace?.complete === true &&
+        require('../privacy/transform-plan').replayTransformTrace(snapshot.transform_trace) !== snapshot.markdown)
+      throw fail('DOCUMENT_REVIEW_INVALID');
+    return snapshot;
+  }
+  function putCapture(state, item, snapshot) {
+    captureManifest(state);
+    put(path.join(ensurePrivateDirectory(base(), state.token), 'journal-format.json'), {
+      schema: 'datasecure-run-decision-commit/2', batch_id: state.token });
+    const manifest = runManifest(state.token), member = manifest?.documents.find(row => row.document_id === item.id);
+    if (manifest && (!member || member.source_sha256 !== item.sha256 || manifest.processing_mode !== purpose(snapshot) ||
+        member.name !== (item.source_label || item.name))) throw fail('DOCUMENT_REVIEW_INVALID');
+    put(path.join(directory(state.token, item.id, true), 'base.json'), snapshot);
+    return snapshot.output_sha256;
+  }
+  function capture(state, item, value) {
+    const snapshot = captureSnapshot(state, item, value);
+    return locked(state.token, () => putCapture(state, item, snapshot));
+  }
+  function preparedContext(state, item, context) {
+    require('./content-operation-authority').assertContentOperationContext(context, 'publication');
+    assertDocumentBinding(state, item);
+    if (context.batch_id !== state.token || context.document_id !== item.id || context.source_sha256 !== item.sha256 ||
+        context.source_label !== (item.source_label || item.name) ||
+        contentOptionsDigest(context.content_options) !== contentOptionsDigest(contentOptionsForBatch(state))) throw fail('DOCUMENT_REVIEW_CONFLICT');
+  }
+  function preparedInputs(snapshot) {
+    return candidateVerificationInputs({ snapshot, markdown: snapshot.markdown, ...initialProjection(snapshot) });
+  }
+  function preparedOwnerPath(state, item) {
+    return path.join(ensurePrivateDirectory(base(), state.token), `prepared-${item.id}.json`);
+  }
+  function preparedOwner(state, item) {
+    const file = preparedOwnerPath(state, item);
+    try { fs.lstatSync(file); } catch (error) { if (error?.code === 'ENOENT') return null; throw error; }
+    try {
+      const owner = read(file);
+      if (!exactKeys(owner, ['schema', 'batch_id', 'document_id', 'source_sha256', 'content_options_sha256',
+        'basis_sha256', 'manifest_sha256', 'prepared_sha256']) || owner.schema !== 'datasecure-prepared-publication-owner/1' ||
+        owner.batch_id !== state.token || owner.document_id !== item.id || owner.source_sha256 !== item.sha256 ||
+        owner.content_options_sha256 !== contentOptionsDigest(contentOptionsForBatch(state)) ||
+        !valid(owner.basis_sha256, 64) || !valid(owner.manifest_sha256, 64) || !valid(owner.prepared_sha256, 64))
+        throw fail('DOCUMENT_REVIEW_CONFLICT');
+      return owner;
+    } catch { throw fail('DOCUMENT_REVIEW_CONFLICT'); }
+  }
+  function ownerForRecord(state, item, record) {
+    if (!record || !valid(record.basis_sha256, 64) || !valid(record.publication_binding?.manifest_sha256, 64))
+      throw fail('DOCUMENT_REVIEW_CONFLICT');
+    return { schema: 'datasecure-prepared-publication-owner/1', batch_id: state.token, document_id: item.id,
+      source_sha256: item.sha256, content_options_sha256: contentOptionsDigest(contentOptionsForBatch(state)),
+      basis_sha256: record.basis_sha256, manifest_sha256: record.publication_binding.manifest_sha256,
+      prepared_sha256: hash(JSON.stringify(record)) };
+  }
+  function preparedPresence(target, ownerPresent) {
+    const present = name => {
+      try { fs.lstatSync(path.join(target, name)); return true; }
+      catch (error) { if (error?.code === 'ENOENT') return false; throw error; }
+    };
+    const prepared = present('prepared-publication.json'), basis = present('base.json');
+    if (prepared !== basis || prepared !== ownerPresent) throw fail('DOCUMENT_REVIEW_CONFLICT');
+    return prepared;
+  }
+  function capturePrepared(state, item, value, prepared, context) {
+    // Reflect no foreign graph before the process-local ticket/epoch check.
+    preparedContext(state, item, context);
+    const boundary = require('./prepared-publication'); boundary.guardPreparedGraph(value);
+    const snapshot = captureSnapshot(state, item, value);
+    const record = boundary.makePreparedRecord(snapshot, prepared, context, preparedInputs);
+    return locked(state.token, () => {
+      preparedContext(state, item, context);
+      const owner = preparedOwner(state, item), expectedOwner = ownerForRecord(state, item, record);
+      if (owner && JSON.stringify(owner) !== JSON.stringify(expectedOwner)) throw fail('DOCUMENT_REVIEW_CONFLICT');
+      let target;
+      try { target = directory(state.token, item.id); }
+      catch (error) { if (error?.code !== 'ENOENT') throw error; if (owner) throw fail('DOCUMENT_REVIEW_CONFLICT'); }
+      // A partial previous preparation is not permission to re-extract or
+      // overwrite it. Exact duplicates are create-only and byte-compared.
+      if (target) preparedPresence(target, Boolean(owner));
+      // This independent owner survives loss of either file or the entire
+      // document folder. Publish it first; partial preparation never starts
+      // a new OCR/privacy operation under the same document identity.
+      put(preparedOwnerPath(state, item), expectedOwner);
+      context.revalidate();
+      target = directory(state.token, item.id, true);
+      put(path.join(target, 'prepared-publication.json'), record);
+      context.revalidate();
+      return putCapture(state, item, snapshot);
+    });
+  }
+  function preparedReplay(state, item, context) {
+    preparedContext(state, item, context);
+    return locked(state.token, () => {
+      preparedContext(state, item, context);
+      const owner = preparedOwner(state, item);
+      let target;
+      try { target = directory(state.token, item.id); }
+      catch (error) { if (error?.code === 'ENOENT' && !owner) return null;
+        if (error?.code === 'ENOENT') throw fail('DOCUMENT_REVIEW_CONFLICT'); throw error; }
+      if (!preparedPresence(target, Boolean(owner))) return null;
+      const snapshot = baseSnapshot(state.token, item.id);
+      let record;
+      try { record = read(path.join(target, 'prepared-publication.json')); } catch { throw fail('DOCUMENT_REVIEW_CONFLICT'); }
+      if (JSON.stringify(owner) !== JSON.stringify(ownerForRecord(state, item, record))) throw fail('DOCUMENT_REVIEW_CONFLICT');
+      const replay = require('./prepared-publication').replayPreparedRecord(snapshot, record, context, preparedInputs);
+      preparedContext(state, item, context); return replay;
     });
   }
   function baseSnapshot(batchId, documentId) {
     let value;
     try { value = read(path.join(directory(batchId, documentId), 'base.json')); }
     catch { throw fail('DOCUMENT_REVIEW_MISSING'); }
-    if (value.schema !== 'datasecure-document-review/1' || value.batch_id !== batchId || value.document_id !== documentId ||
+    const contentBound = value.schema === 'datasecure-document-review/2';
+    if (contentBound) validateContentOptions(value.content_options);
+    if (!['datasecure-document-review/1', 'datasecure-document-review/2'].includes(value.schema) ||
+        !contentBound && Object.hasOwn(value, 'content_options') || value.batch_id !== batchId || value.document_id !== documentId ||
         ![MARKDOWN, ANONYMIZE].includes(purpose(value)) ||
         value.package_id !== `${purpose(value) === MARKDOWN ? 'dm' : 'ds'}_${documentId}` || !label(value.name) || !valid(value.source_sha256, 64) ||
         typeof value.original_text !== 'string' || typeof value.markdown !== 'string' ||
@@ -331,8 +513,36 @@ function createDocumentReviewStore(options = {}) {
         Buffer.byteLength(value.original_text) > MAX_TEXT || Buffer.byteLength(value.markdown) > MAX_TEXT ||
         hash(value.markdown) !== value.output_sha256) throw fail('DOCUMENT_REVIEW_INVALID');
     const manifest = runManifest(batchId), member = manifest?.documents.find(row => row.document_id === documentId);
+    if (contentBound !== (manifest?.schema === 'datasecure-document-run/3') || contentBound &&
+        contentOptionsDigest(value.content_options) !== contentOptionsDigest(manifest.content_options))
+      throw fail('CONTENT_OPTIONS_BINDING_INVALID');
     if (manifest && (!member || member.source_sha256 !== value.source_sha256 || member.name !== value.name ||
         manifest.processing_mode !== purpose(value))) throw fail('DOCUMENT_REVIEW_INVALID');
+    const keys = ['schema', 'batch_id', 'document_id', 'name', 'package_id', 'source_sha256', 'original_text', 'markdown', 'output_sha256'];
+    if (Object.hasOwn(value, 'processing_mode')) keys.push('processing_mode');
+    if (Object.hasOwn(value, 'transform_trace')) keys.push('transform_trace');
+    if (Object.hasOwn(value, 'verification_context')) keys.push('verification_context');
+    if (contentBound) keys.push('content_options', 'source_type');
+    if (contentBound && purpose(value) === ANONYMIZE) keys.push('publication_binding');
+    if (contentBound && Object.hasOwn(value, 'private_document_metadata')) keys.push('private_document_metadata');
+    if (!exactKeys(value, keys) || purpose(value) === MARKDOWN &&
+        (Object.hasOwn(value, 'transform_trace') || Object.hasOwn(value, 'verification_context'))) throw fail('DOCUMENT_REVIEW_INVALID');
+    if (contentBound) {
+      const extension = path.posix.extname(value.name).toLowerCase();
+      const sourceType = extension === '.jpg' ? 'jpeg' : extension === '.markdown' ? 'md' : extension.slice(1);
+      if (!SOURCE_TYPES.includes(value.source_type) || sourceType !== value.source_type) throw fail('DOCUMENT_REVIEW_INVALID');
+      if (Object.hasOwn(value, 'private_document_metadata')) {
+        if (sourceType !== 'pdf') throw fail('DOCUMENT_REVIEW_INVALID');
+        validatePrivateDocumentMetadata(value.private_document_metadata);
+      }
+      if (purpose(value) === ANONYMIZE) {
+        let binding;
+        try { binding = validateExpectation(value.publication_binding); } catch { throw fail('DOCUMENT_REVIEW_INVALID'); }
+        if (binding.package_id !== value.package_id || binding.source_type !== value.source_type ||
+            binding.profile !== value.verification_context?.profile || binding.document_sha256 !== value.output_sha256 ||
+            contentOptionsDigest(binding.content_options) !== contentOptionsDigest(value.content_options)) throw fail('DOCUMENT_REVIEW_INVALID');
+      }
+    }
     return value;
   }
   // A pre-publication snapshot alone grants nothing. Verify the actual package
@@ -367,16 +577,36 @@ function createDocumentReviewStore(options = {}) {
   function reconcile(batchId, documentId) {
     const snapshot = baseSnapshot(batchId, documentId);
     const dir = directory(batchId, documentId), publication = path.join(dir, 'published.json');
+    const boundAnonymization = snapshot.schema === 'datasecure-document-review/2' && purpose(snapshot) === ANONYMIZE;
     if (fs.existsSync(publication)) {
       const record = read(publication);
-      if (!closed(record, 'schema,output_sha256,package_id') || record.schema !== 'datasecure-document-publication/1' || record.output_sha256 !== snapshot.output_sha256 ||
+      if (!closed(record, `schema,output_sha256,package_id${boundAnonymization ? ',publication_binding' : ''}`) ||
+          record.schema !== `datasecure-document-publication/${boundAnonymization ? 2 : 1}` || record.output_sha256 !== snapshot.output_sha256 ||
           record.package_id !== snapshot.package_id) throw fail('DOCUMENT_REVIEW_INVALID');
+      if (boundAnonymization) {
+        let binding;
+        try { binding = validateExpectation(record.publication_binding); } catch { throw fail('DOCUMENT_REVIEW_INVALID'); }
+        if (JSON.stringify(binding) !== JSON.stringify(validateExpectation(snapshot.publication_binding))) throw fail('DOCUMENT_REVIEW_INVALID');
+        // A cached publication receipt never skips the expected /4 read.
+      } else {
+        recordMembership(snapshot);
+        return snapshot;
+      }
+    }
+    if (boundAnonymization) {
+      let artifact;
+      try { artifact = require('../standalone/anonymized-store').readAnonymizedArtifact(snapshot.package_id, snapshot.publication_binding); }
+      catch { throw fail('DOCUMENT_REVIEW_INVALID'); }
+      if (artifact.markdown !== snapshot.markdown || artifact.manifest.document_sha256 !== snapshot.output_sha256) throw fail('DOCUMENT_REVIEW_INVALID');
+      if (!fs.existsSync(publication)) put(publication, { schema: 'datasecure-document-publication/2', package_id: snapshot.package_id,
+        output_sha256: snapshot.output_sha256, publication_binding: validateExpectation(snapshot.publication_binding) });
       recordMembership(snapshot);
       return snapshot;
     }
     if (purpose(snapshot) === MARKDOWN) {
-      const artifact = options.readMarkdownArtifact ? options.readMarkdownArtifact(snapshot.package_id) :
-        require('../standalone/markdown-store').readMarkdownArtifact(snapshot.package_id);
+      const artifact = options.readMarkdownArtifact ? options.readMarkdownArtifact(snapshot.package_id, snapshot.content_options) :
+        require('../standalone/markdown-store').readMarkdownArtifact(snapshot.package_id, snapshot.content_options);
+      validateMarkdownArtifactForOptions(artifact.manifest, artifact.markdown, snapshot.content_options);
       if (artifact.manifest?.processing_mode !== MARKDOWN || artifact.manifest.anonymized !== false ||
           artifact.manifest.artifact_id !== snapshot.package_id || artifact.markdown !== snapshot.markdown ||
           artifact.manifest.document_sha256 !== snapshot.output_sha256) throw fail('DOCUMENT_REVIEW_INVALID');
@@ -398,6 +628,17 @@ function createDocumentReviewStore(options = {}) {
     return snapshot;
   }
   function recordPublication(batchId, documentId) { return locked(batchId, () => { reconcile(batchId, documentId); }); }
+  function publicationExpectation(batchId, documentId) {
+    return locked(batchId, () => {
+      // baseSnapshot has matched options, source membership and purpose to the
+      // independent immutable run anchor. This is a pre-publication expected
+      // context, not proof that a package already exists.
+      const snapshot = baseSnapshot(batchId, documentId);
+      if (snapshot.schema !== 'datasecure-document-review/2' || purpose(snapshot) !== ANONYMIZE)
+        throw fail('DOCUMENT_REVIEW_INVALID');
+      return validateExpectation(snapshot.publication_binding);
+    });
+  }
   function current(batchId, documentId, events = journal(batchId)) {
     if (valid(documentId, 32) && fs.existsSync(path.join(ensurePrivateDirectory(base(), batchId), `failure-${documentId}.json`))) {
       notProcessedLocked(batchId); // Validate retained evidence before refusing a conflicting body.
@@ -484,9 +725,17 @@ function createDocumentReviewStore(options = {}) {
     }
     return { markdown, entities: value.entities, weakRanges: value.weakRanges };
   }
-  function verifyCandidate(value) {
+  function candidateVerificationInputs(value) {
     if (purpose(value.snapshot) !== ANONYMIZE || !value.snapshot.transform_trace) return;
     const context = value.snapshot.verification_context;
+    // baseSnapshot has already checked these immutable options against the
+    // independent run manifest. Never take field semantics from a UI request.
+    const { personFieldPolicyForContentOptions } = require('../core/person-field-policy');
+    const contentBound = value.snapshot.schema === 'datasecure-document-review/2';
+    const fieldOptions = contentBound ? { productChannel: 'standalone', contentOptions: value.snapshot.content_options } : {};
+    const personFieldPolicy = personFieldPolicyForContentOptions(fieldOptions.contentOptions);
+    if (contentBound ? context?.person_field_policy !== personFieldPolicy : Object.hasOwn(context || {}, 'person_field_policy'))
+      throw fail('DOCUMENT_REVIEW_POLICY_CHANGED');
     const policy = require('../privacy/policy');
     if (!context || context.ruleset !== policy.PRIVACY_RULESET_VERSION || context.credential_policy !== policy.CREDENTIAL_CONTEXT_POLICY_VERSION ||
         !['general', 'personnel_profile', 'applicant', 'customer', 'contract'].includes(context.profile) || !Array.isArray(context.dictionary))
@@ -497,8 +746,8 @@ function createDocumentReviewStore(options = {}) {
         !value.snapshot.markdown.startsWith(frame.prefix) || !value.snapshot.markdown.endsWith(frame.suffix) ||
         !value.markdown.startsWith(frame.prefix) || !value.markdown.endsWith(frame.suffix)) throw fail('DOCUMENT_REVIEW_INVALID');
     const body = value.markdown.slice(frame.prefix.length, value.markdown.length - frame.suffix.length);
-    const canonicalPrefix = canonicalizeRenderedText(frame.prefix), canonical = canonicalizeRenderedText(value.markdown);
-    if (canonicalizeRenderedText(body) !== body || canonical !== canonicalPrefix + body + canonicalizeRenderedText(frame.suffix))
+    const canonicalPrefix = canonicalizeRenderedText(frame.prefix, personFieldPolicy), canonical = canonicalizeRenderedText(value.markdown, personFieldPolicy);
+    if (canonicalizeRenderedText(body, personFieldPolicy) !== body || canonical !== canonicalPrefix + body + canonicalizeRenderedText(frame.suffix, personFieldPolicy))
       throw fail('DOCUMENT_REVIEW_INVALID');
     const toCanonical = ranges => ranges.map(range => {
       if (range.start < frame.prefix.length || range.end > value.markdown.length - frame.suffix.length) throw fail('DOCUMENT_REVIEW_INVALID');
@@ -507,9 +756,16 @@ function createDocumentReviewStore(options = {}) {
     });
     const token = require('../privacy/residual-person-review').bindStandaloneDocumentKeeps(canonical, toCanonical(value.weakRanges),
       toCanonical((value.entities || []).filter(row => !row.disabled && row.decision === 'keep').map(({ start, end }) => ({ start, end }))));
-    const residual = require('../pii-engine').scanResidual(value.markdown, context.profile, context.dictionary, {
+    return { profile: context.profile, dictionary: context.dictionary, fieldOptions,
       strongPersonAnchor: context.strong_person_anchor === true, originalSourceText: value.snapshot.transform_trace.canonical_input,
-      reviewedPersonCandidates: token });
+      reviewedPersonCandidates: token };
+  }
+  function verifyCandidate(value) {
+    const fields = candidateVerificationInputs(value);
+    if (!fields) return;
+    const residual = require('../pii-engine').scanResidual(value.markdown, fields.profile, fields.dictionary, {
+      ...fields.fieldOptions, strongPersonAnchor: fields.strongPersonAnchor, originalSourceText: fields.originalSourceText,
+      reviewedPersonCandidates: fields.reviewedPersonCandidates });
     if (residual.length) throw fail('DOCUMENT_REVIEW_RESIDUAL_PII');
   }
   function derive(text, original, action, ranges, mode = ANONYMIZE) {
@@ -539,6 +795,7 @@ function createDocumentReviewStore(options = {}) {
   function metadata(value) { return { document_id: value.snapshot.document_id, name: value.snapshot.name,
     processing_mode: purpose(value.snapshot),
     revision: value.revision, output_sha256: value.output_sha256, approved: value.approved,
+    ...(purpose(value.snapshot) === MARKDOWN ? { text_modified: value.output_sha256 !== value.snapshot.output_sha256 } : {}),
     entity_review_available: Array.isArray(value.entities), entity_count: value.entities ? new Set(value.entities.map(row => row.entity_id)).size : 0,
     source_normalized: Boolean(value.snapshot.transform_trace?.complete),
     run_entity_review_available: purpose(value.snapshot) === ANONYMIZE && Boolean(runManifest(value.snapshot.batch_id)),
@@ -658,6 +915,9 @@ function createDocumentReviewStore(options = {}) {
           local_ui_only: true, external_disclosure: false };
       }
       if (previous) throw fail('DOCUMENT_REVIEW_STALE');
+      // Preserve replay/idempotent ACK of old immutable raw revisions, but do
+      // not create new anonymization actions in the conversion-only purpose.
+      if (request.action === 'redact' && purpose(value.snapshot) === MARKDOWN) throw fail('DOCUMENT_REVIEW_INVALID');
       if (request.revision !== value.revision || request.output_sha256 !== value.output_sha256) throw fail('DOCUMENT_REVIEW_STALE');
       if (value.revision >= 1000) throw fail('DOCUMENT_REVIEW_LIMIT');
       for (const file of fs.readdirSync(directory(batchId, documentId)).filter(name => /^revision-[0-9]{6}\.json$/u.test(name))) {
@@ -799,20 +1059,42 @@ function createDocumentReviewStore(options = {}) {
       return { ok: true, local_path: readIdentityOverview(batchId, binding, selection), target_kind: 'file', external_disclosure: false };
     });
   }
-  function operationDigest(batchId, operationId, mode, selection, identityBinding, native) {
-    return hash(JSON.stringify({ schema: native ? 'datasecure-document-export/5' : identityBinding === undefined ? 'datasecure-document-export/3' : 'datasecure-document-export/4', batch_id: batchId,
+  function operationContentDigest(batchId) {
+    const manifest = runManifest(batchId);
+    return manifest?.schema === 'datasecure-document-run/3' ? contentOptionsDigest(manifest.content_options) : undefined;
+  }
+  function operationDigest(batchId, operationId, mode, selection, identityBinding, native, files, contentDigest) {
+    return hash(JSON.stringify({ schema: contentDigest ? 'datasecure-document-export/7' : files ? 'datasecure-document-export/6' : native ? 'datasecure-document-export/5' : identityBinding === undefined ? 'datasecure-document-export/3' : 'datasecure-document-export/4', batch_id: batchId,
       operation_id: operationId, processing_mode: mode,
       selection: selection.map(({ document_id, revision, output_sha256 }) => ({ document_id, revision, output_sha256 })),
-      ...(identityBinding !== undefined ? { identity_binding_sha256: identityBinding } : {}), ...(native ? { native_export: native } : {}) }));
+      ...(identityBinding !== undefined ? { identity_binding_sha256: identityBinding } : {}), ...(native ? { native_export: native } : {}), ...(files ? { files } : {}),
+      ...(contentDigest ? { content_options_sha256: contentDigest } : {}) }));
   }
   function readOperation(run, operationId) {
     const op = read(path.join(run, `export-${operationId}.json`)), batchId = path.basename(run);
     if (!validSelection(op.selection)) throw fail('AI_EXPORT_INVALID');
-    if (op.schema === 'datasecure-ai-export/2') {
+    const contentDigest = operationContentDigest(batchId), contentBound = op.schema === 'datasecure-document-export/7';
+    if (Boolean(contentDigest) !== contentBound || !contentBound && Object.hasOwn(op, 'content_options_sha256')) throw fail('AI_EXPORT_INVALID');
+    if (contentBound) {
+      if (!exactKeys(op, ['schema', 'batch_id', 'operation_id', 'request_sha256', 'identity_binding_sha256', 'processing_mode',
+        'root', 'root_identity', 'files', 'selection', 'content_options_sha256', ...(Object.hasOwn(op, 'native_export') ? ['native_export'] : [])]) ||
+        op.batch_id !== batchId || op.operation_id !== operationId || ![MARKDOWN, ANONYMIZE].includes(op.processing_mode) ||
+        op.content_options_sha256 !== contentDigest || (op.processing_mode === MARKDOWN ? op.identity_binding_sha256 !== null : !valid(op.identity_binding_sha256, 64)) ||
+        !Array.isArray(op.files) || op.files.length !== op.selection.length || !validMarkdownInventory(op.files.map(row => row?.name)) ||
+        op.files.some((row, index) => !exactKeys(row, ['name', 'sha256']) || row.sha256 !== op.selection[index].output_sha256 ||
+          op.processing_mode === ANONYMIZE && row.name !== `Dokument_${String(index + 1).padStart(2, '0')}.md`) ||
+        operationDigest(batchId, operationId, op.processing_mode, op.selection, op.identity_binding_sha256, op.native_export, op.files, contentDigest) !== op.request_sha256)
+        throw fail('AI_EXPORT_INVALID');
+    } else if (op.schema === 'datasecure-ai-export/2') {
       // Legacy operations had an implicit anonymization purpose. Never adopt
       // an unbound raw-Markdown operation as an AI export.
       if (op.processing_mode !== undefined && op.processing_mode !== ANONYMIZE ||
           hash(JSON.stringify(op.selection)) !== op.request_sha256) throw fail('AI_EXPORT_INVALID');
+    } else if (op.schema === 'datasecure-document-export/6') {
+      if (op.batch_id !== batchId || op.operation_id !== operationId || op.processing_mode !== MARKDOWN || op.identity_binding_sha256 !== null ||
+          !Array.isArray(op.files) || op.files.length !== op.selection.length || !validMarkdownInventory(op.files.map(row => row?.name)) ||
+          op.files.some((row, index) => !closed(row, 'name,sha256') || row.sha256 !== op.selection[index].output_sha256) ||
+          operationDigest(batchId, operationId, MARKDOWN, op.selection, null, op.native_export, op.files) !== op.request_sha256) throw fail('AI_EXPORT_INVALID');
     } else if (!['datasecure-document-export/3', 'datasecure-document-export/4', 'datasecure-document-export/5'].includes(op.schema) || op.batch_id !== batchId ||
         op.operation_id !== operationId || ![MARKDOWN, ANONYMIZE].includes(op.processing_mode) ||
         ['datasecure-document-export/4', 'datasecure-document-export/5'].includes(op.schema) && (op.processing_mode === ANONYMIZE ? !valid(op.identity_binding_sha256, 64) : op.identity_binding_sha256 !== null) ||
@@ -821,10 +1103,10 @@ function createDocumentReviewStore(options = {}) {
           op.schema === 'datasecure-document-export/5' ? op.native_export : undefined) !== op.request_sha256) throw fail('AI_EXPORT_INVALID');
     // Missing human reference data must not erase a completed copy/ACK.
     // New or resumed copying validates it separately before target I/O.
-    if (!['datasecure-document-export/4', 'datasecure-document-export/5'].includes(op.schema) && Object.hasOwn(op, 'identity_binding_sha256')) throw fail('AI_EXPORT_INVALID');
-    const files = op.selection.map((row, index) => ({ name: `Dokument_${String(index + 1).padStart(2, '0')}.md`, sha256: row.output_sha256 }));
+    if (!['datasecure-document-export/4', 'datasecure-document-export/5', 'datasecure-document-export/6', 'datasecure-document-export/7'].includes(op.schema) && Object.hasOwn(op, 'identity_binding_sha256')) throw fail('AI_EXPORT_INVALID');
+    const files = ['datasecure-document-export/6', 'datasecure-document-export/7'].includes(op.schema) ? op.files : op.selection.map((row, index) => ({ name: `Dokument_${String(index + 1).padStart(2, '0')}.md`, sha256: row.output_sha256 }));
     if (JSON.stringify(op.files) !== JSON.stringify(files)) throw fail('AI_EXPORT_INVALID');
-    if (op.schema === 'datasecure-document-export/5') {
+    if (isNativeOperation(op)) {
       const native = op.native_export;
       if (!closed(native, 'binding,files') || !validNativeExportBinding(native.binding) || native.binding.root !== op.root ||
           !Array.isArray(native.files) || native.files.length !== files.length || native.files.some((file, index) =>
@@ -834,6 +1116,45 @@ function createDocumentReviewStore(options = {}) {
         throw fail('AI_EXPORT_INVALID');
     } else if (Object.hasOwn(op, 'native_export')) throw fail('AI_EXPORT_INVALID');
     return op;
+  }
+  const isNativeOperation = op => op.schema === 'datasecure-document-export/5' ||
+    ['datasecure-document-export/6', 'datasecure-document-export/7'].includes(op.schema) && Object.hasOwn(op, 'native_export');
+  function selectedFilePlan(batchId, selection, { rawPreview = false } = {}) {
+    const sources = []; let mode, total = 0;
+    // Validate the committed decision chain once for the whole selection.
+    // Re-reading it in current() for every document makes a large approved
+    // run quadratic and can outlive the desktop IPC deadline before preview.
+    const events = journal(batchId);
+    // Retain metadata only. Preview must not materialize 200 document bodies,
+    // traces and original texts before reaching the aggregate export budget.
+    for (const row of selection) {
+      const value = current(batchId, row.document_id, events);
+      if (mode && purpose(value.snapshot) !== mode) throw fail('AI_EXPORT_INVALID');
+      mode = purpose(value.snapshot);
+      if (value.revision !== row.revision || value.output_sha256 !== row.output_sha256) throw fail('DOCUMENT_REVIEW_STALE');
+      // Only read-only Raw previews may precede copy confirmation. Actual
+      // export/publication callers retain their approval requirement.
+      if (!value.approved && !(rawPreview && mode === MARKDOWN)) throw fail('DOCUMENT_REVIEW_UNAPPROVED');
+      total += Buffer.byteLength(value.markdown);
+      if (total > 500 * 1024 * 1024) throw fail('DOCUMENT_REVIEW_LIMIT');
+      sources.push({ source_label: value.snapshot.name });
+    }
+    const names = mode === MARKDOWN ? safeMarkdownOutputNames(sources) :
+      selection.map((_row, index) => `Dokument_${String(index + 1).padStart(2, '0')}.md`);
+    return { mode, files: names.map((name, index) => ({ name, sha256: selection[index].output_sha256 })) };
+  }
+  function previewExport(batchId, operationId, selection) {
+    return locked(batchId, () => {
+      if (!valid(operationId, 32) || !validSelection(selection)) throw fail('AI_EXPORT_INVALID');
+      const run = ensurePrivateDirectory(base(), batchId), filename = path.join(run, `export-${operationId}.json`);
+      let plan;
+      if (fs.existsSync(filename)) {
+        const op = readOperation(run, operationId);
+        if (JSON.stringify(op.selection) !== JSON.stringify(selection) || abandoned(run, operationId, op)) throw fail('AI_EXPORT_CONFLICT');
+        plan = { mode: op.processing_mode || ANONYMIZE, files: op.files };
+      } else plan = selectedFilePlan(batchId, selection, { rawPreview: true });
+      return { ok: true, processing_mode: plan.mode, files: plan.files, local_ui_only: true, external_disclosure: false };
+    });
   }
   const exportBinding = op => ({ batch_id: op.batch_id, operation_id: op.operation_id,
     processing_mode: op.processing_mode || ANONYMIZE, request_sha256: op.request_sha256 });
@@ -858,7 +1179,7 @@ function createDocumentReviewStore(options = {}) {
       const run = ensurePrivateDirectory(base(), batchId);
       if (!fs.existsSync(path.join(run, `export-${operationId}.json`))) throw fail('AI_EXPORT_INVALID');
       const op = readOperation(run, operationId);
-      if (op.schema === 'datasecure-document-export/5') throw fail('AI_EXPORT_CONFIGURATION_REQUIRED');
+      if (isNativeOperation(op)) throw fail('AI_EXPORT_CONFIGURATION_REQUIRED');
       if (op.request_sha256 !== digest) throw fail('AI_EXPORT_CONFLICT');
       if (!abandoned(run, operationId, op)) {
         if (fs.existsSync(path.join(run, `export-${operationId}-complete.json`))) throw fail('AI_EXPORT_ALREADY_COMPLETE');
@@ -911,7 +1232,7 @@ function createDocumentReviewStore(options = {}) {
   }
   function nativeOperation(op) { return { ...exportBinding(op), binding: op.native_export.binding, files: op.native_export.files }; }
   async function nativeCall(op, command, body) {
-    if (!options.nativeExport || op.schema !== 'datasecure-document-export/5') throw fail('AI_EXPORT_CONFIGURATION_REQUIRED');
+    if (!options.nativeExport || !isNativeOperation(op)) throw fail('AI_EXPORT_CONFIGURATION_REQUIRED');
     const status = await options.nativeExport(nativeOperation(op), command, body);
     if (!(command === 'write_body' ? ['receiving', 'staged'] : ['unprepared', 'prepared', 'completed', 'acknowledged', 'abandoned']).includes(status)) throw fail('AI_EXPORT_INVALID');
     return status;
@@ -939,7 +1260,7 @@ function createDocumentReviewStore(options = {}) {
       let op, nativeStatus;
       if (fs.existsSync(file)) {
         op = readOperation(run, operationId);
-        if (op.schema !== 'datasecure-document-export/5') throw fail('AI_EXPORT_CONFIGURATION_REQUIRED');
+        if (!isNativeOperation(op)) throw fail('AI_EXPORT_CONFIGURATION_REQUIRED');
         if (JSON.stringify(op.selection) !== JSON.stringify(selection)) throw fail('AI_EXPORT_CONFLICT');
         if (abandoned(run, operationId, op)) throw fail('AI_EXPORT_ABANDONED');
         // Reconcile before checking current revisions: a completed earlier
@@ -952,9 +1273,11 @@ function createDocumentReviewStore(options = {}) {
         }
       }
       if (acknowledge) throw fail('AI_EXPORT_INCOMPLETE');
+      const plan = op ? { mode: op.processing_mode, files: op.files } : selectedFilePlan(batchId, selection);
+      const events = journal(batchId);
       let mode, total = 0; const nativeFiles = [];
       for (const [index, row] of selection.entries()) {
-        const value = current(batchId, row.document_id);
+        const value = current(batchId, row.document_id, events);
         if (mode && mode !== purpose(value.snapshot)) throw fail('AI_EXPORT_INVALID');
         mode = purpose(value.snapshot);
         if (value.revision !== row.revision || value.output_sha256 !== row.output_sha256) throw fail('DOCUMENT_REVIEW_STALE');
@@ -962,7 +1285,7 @@ function createDocumentReviewStore(options = {}) {
         verifyCandidate(value);
         const bytes = Buffer.byteLength(value.markdown); total += bytes;
         if (bytes > MAX_TEXT || total > 500 * 1024 * 1024) throw fail('DOCUMENT_REVIEW_LIMIT');
-        nativeFiles.push({ name: `Dokument_${String(index + 1).padStart(2, '0')}.md`, bytes, sha256: [...Buffer.from(row.output_sha256, 'hex')] });
+        nativeFiles.push({ name: plan.files[index].name, bytes, sha256: [...Buffer.from(row.output_sha256, 'hex')] });
       }
       if (!op) {
         if (exportRecords(run).pending.length >= 16) throw fail('DOCUMENT_REVIEW_LIMIT');
@@ -971,8 +1294,10 @@ function createDocumentReviewStore(options = {}) {
         const inspected = inspectRoot(binding.root);
         const identityBinding = mode === ANONYMIZE ? saveIdentityOverview(batchId, selection) : null;
         const native = { binding, files: nativeFiles };
-        op = { schema: 'datasecure-document-export/5', batch_id: batchId, operation_id: operationId,
-          request_sha256: operationDigest(batchId, operationId, mode, selection, identityBinding, native),
+        const contentDigest = operationContentDigest(batchId);
+        op = { schema: contentDigest ? 'datasecure-document-export/7' : mode === MARKDOWN ? 'datasecure-document-export/6' : 'datasecure-document-export/5', batch_id: batchId, operation_id: operationId,
+          ...(contentDigest ? { content_options_sha256: contentDigest } : {}),
+          request_sha256: operationDigest(batchId, operationId, mode, selection, identityBinding, native, mode === MARKDOWN || contentDigest ? plan.files : undefined, contentDigest),
           processing_mode: mode, identity_binding_sha256: identityBinding, root: inspected.root,
           root_identity: bindDirectory(inspected.root).chain[0].identity, selection,
           files: nativeFiles.map(({ name, sha256 }) => ({ name, sha256: Buffer.from(sha256).toString('hex') })), native_export: native };
@@ -983,7 +1308,7 @@ function createDocumentReviewStore(options = {}) {
       // Stream through the owning pipe. No Node path-based write into a fresh
       // binding can precede native identity and private-ACL verification.
       for (const [index, row] of (nativeStatus === 'prepared' ? [] : selection).entries()) {
-        const value = current(batchId, row.document_id), bytes = Buffer.from(value.markdown);
+        const value = current(batchId, row.document_id, events), bytes = Buffer.from(value.markdown);
         if (!value.approved || value.revision !== row.revision || hash(bytes) !== row.output_sha256) throw fail('DOCUMENT_REVIEW_STALE');
         const chunkSize = 65536;
         for (let offset = 0; offset < bytes.length || offset === 0; offset += chunkSize) {
@@ -1028,12 +1353,13 @@ function createDocumentReviewStore(options = {}) {
       const run = ensurePrivateDirectory(base(), batchId), opFile = path.join(run, `export-${operationId}.json`);
       const completeFile = path.join(run, `export-${operationId}-complete.json`);
       let requestHash;
-      const files = selection.map((row, index) => ({ name: `Dokument_${String(index + 1).padStart(2, '0')}.md`, sha256: row.output_sha256 }));
+      let files;
       let op;
       if (fs.existsSync(opFile)) {
         op = readOperation(run, operationId); requestHash = op.request_sha256;
-        if (op.schema === 'datasecure-document-export/5') throw fail('AI_EXPORT_CONFIGURATION_REQUIRED');
-        if (JSON.stringify(op.files) !== JSON.stringify(files) || JSON.stringify(op.selection) !== JSON.stringify(selection)) throw fail('AI_EXPORT_CONFLICT');
+        if (isNativeOperation(op)) throw fail('AI_EXPORT_CONFIGURATION_REQUIRED');
+        if (JSON.stringify(op.selection) !== JSON.stringify(selection)) throw fail('AI_EXPORT_CONFLICT');
+        files = op.files;
         if (abandoned(run, operationId, op)) throw fail('AI_EXPORT_ABANDONED');
       }
       const folder = attempt => `Export-${operationId}${attempt === 1 ? '' : `-${attempt}`}`;
@@ -1073,9 +1399,10 @@ function createDocumentReviewStore(options = {}) {
       }
       if (acknowledge) throw fail('AI_EXPORT_INCOMPLETE');
       // Re-read approval while holding the same control lock as edits/revokes.
+      const events = journal(batchId);
       let totalBytes = 0, mode;
       for (const row of selection) {
-        const value = current(batchId, row.document_id);
+        const value = current(batchId, row.document_id, events);
         if (mode && mode !== purpose(value.snapshot)) throw fail('AI_EXPORT_INVALID');
         mode = purpose(value.snapshot);
         if (value.revision !== row.revision || value.output_sha256 !== row.output_sha256) throw fail('DOCUMENT_REVIEW_STALE');
@@ -1085,11 +1412,14 @@ function createDocumentReviewStore(options = {}) {
         if (totalBytes > 500 * 1024 * 1024) throw fail('DOCUMENT_REVIEW_LIMIT');
       }
       if (!op) {
+        files = selectedFilePlan(batchId, selection).files;
         if (exportRecords(run).pending.length >= 16) throw fail('DOCUMENT_REVIEW_LIMIT');
         const root = inspectRoot(options.resultRoot ? options.resultRoot() : readConfiguredResultRoot());
         const identityBinding = mode === ANONYMIZE ? saveIdentityOverview(batchId, selection) : null;
-        requestHash = operationDigest(batchId, operationId, mode, selection, identityBinding);
-        op = { schema: 'datasecure-document-export/4', batch_id: batchId, operation_id: operationId, request_sha256: requestHash,
+        const contentDigest = operationContentDigest(batchId);
+        requestHash = operationDigest(batchId, operationId, mode, selection, identityBinding, undefined, mode === MARKDOWN || contentDigest ? files : undefined, contentDigest);
+        op = { schema: contentDigest ? 'datasecure-document-export/7' : mode === MARKDOWN ? 'datasecure-document-export/6' : 'datasecure-document-export/4', batch_id: batchId, operation_id: operationId, request_sha256: requestHash,
+          ...(contentDigest ? { content_options_sha256: contentDigest } : {}),
           identity_binding_sha256: identityBinding,
           processing_mode: mode,
           root: root.root, root_identity: bindDirectory(root.root).chain[0].identity, files, selection };
@@ -1127,7 +1457,7 @@ function createDocumentReviewStore(options = {}) {
       // and candidates before checking the aggregate budget can exhaust memory.
       // The same control lock still excludes edits/revocations during both passes.
       for (let index = 0; index < selection.length; index++) {
-        const row = selection[index], value = current(batchId, row.document_id);
+        const row = selection[index], value = current(batchId, row.document_id, events);
         if (value.revision !== row.revision || value.output_sha256 !== row.output_sha256 || !value.approved)
           throw fail('DOCUMENT_REVIEW_STALE');
         const file = path.join(target, files[index].name), bytes = Buffer.from(value.markdown);
@@ -1148,7 +1478,7 @@ function createDocumentReviewStore(options = {}) {
       const run = ensurePrivateDirectory(base(), batchId);
       if (!fs.existsSync(path.join(run, `export-${operationId}.json`))) throw fail('AI_EXPORT_INVALID');
       const op = readOperation(run, operationId);
-      if (op.schema === 'datasecure-document-export/5') throw fail('AI_EXPORT_CONFIGURATION_REQUIRED');
+      if (isNativeOperation(op)) throw fail('AI_EXPORT_CONFIGURATION_REQUIRED');
       if (abandoned(run, operationId, op)) throw fail('AI_EXPORT_ABANDONED');
       const completeFile = path.join(run, `export-${operationId}-complete.json`);
       if (!fs.existsSync(completeFile)) throw fail('AI_EXPORT_INCOMPLETE');
@@ -1172,6 +1502,6 @@ function createDocumentReviewStore(options = {}) {
       return { ok: true, local_path: target, target_kind: 'directory', external_disclosure: false };
     });
   }
-  return Object.freeze({ captureRun, capture, notProcessed, recordPublication, list, historySummary, chunk, entities, decide, exportApproved, abandonExport, resolveExport, resolveIdentityOverview });
+  return Object.freeze({ captureRun, capture, capturePrepared, preparedReplay, assertContentBinding, assertDocumentBinding, hasPublicationEvidence, notProcessed, recordPublication, publicationExpectation, list, historySummary, chunk, entities, decide, previewExport, exportApproved, abandonExport, resolveExport, resolveIdentityOverview });
 }
 module.exports = { createDocumentReviewStore, MAX_TEXT, CHUNK };

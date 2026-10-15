@@ -7,7 +7,8 @@ const BINDINGS = Object.freeze({ 'windows-x64': 'canvas-win32-x64-msvc',
   'macos-x64': 'canvas-darwin-x64', 'macos-arm64': 'canvas-darwin-arm64',
   'linux-x64-glibc': 'canvas-linux-x64-gnu' });
 const PINNED = Object.freeze({ 'tesseract.js': '7.0.0', 'tesseract.js-core': '7.0.0',
-  '@napi-rs/canvas': '1.0.7', 'pdfjs-dist': '6.2.108' });
+  '@napi-rs/canvas': '1.0.7', 'pdfjs-dist': '6.2.108',
+  'mdast-util-from-markdown': '2.0.2', 'parse5': '7.3.0' });
 const MAX_FILES = 4096, MAX_BYTES = 384 * 1024 * 1024;
 
 function regularBytes(file) {
@@ -75,6 +76,37 @@ export function collectConversionRuntime(repoRoot, productTarget) {
     add(`node_modules/pdfjs-dist/${relative}`, regularBytes(path.join(pdfSource, ...relative.split('/'))));
   }
   for (const directory of ['cmaps', 'standard_fonts', 'iccs', 'wasm']) tree(path.join(pdfSource, directory), `node_modules/pdfjs-dist/${directory}`);
+  // Syntax readers belong exclusively to this isolated runtime. The sidecar
+  // never resolves them from repo node_modules or fetches them on user devices.
+  const syntaxPilot = path.join(root, 'native', 'markdown', 'pilot');
+  const syntaxLock = JSON.parse(readRegular(path.join(syntaxPilot, 'package-lock.json'), 512 * 1024));
+  if (Object.keys(syntaxLock.packages || {}).some(key => key.includes('/node_modules/'))) {
+    // This bounded collector deliberately supports a flat pinned closure only.
+    // Do not accidentally pick a different hoisted/transitive version.
+    throw new Error('CONVERSION_PACKAGE_NESTED_DEPENDENCY_UNSUPPORTED');
+  }
+  const syntaxPending = ['mdast-util-from-markdown', 'parse5'], syntaxSeen = new Set();
+  while (syntaxPending.length) {
+    const name = syntaxPending.pop();
+    if (syntaxSeen.has(name)) continue;
+    syntaxSeen.add(name);
+    const relative = `node_modules/${name}`, source = path.join(syntaxPilot, ...relative.split('/'));
+    const metadata = JSON.parse(readRegular(path.join(source, 'package.json'), 128 * 1024));
+    const pin = syntaxLock.packages?.[relative];
+    if (!pin || metadata.name !== name || metadata.version !== pin.version || !pin.integrity ||
+        !pin.resolved?.startsWith('https://registry.npmjs.org/') ||
+        (PINNED[name] && metadata.version !== PINNED[name]) || packages.some(item => item.name === name)) {
+      throw new Error('CONVERSION_PACKAGE_VERSION_INVALID');
+    }
+    if (typeof metadata.license !== 'string' || metadata.license === 'NOASSERTION' ||
+        !fs.readdirSync(source).some(file => /^licen[sc]e(?:\..*)?$/iu.test(file))) {
+      throw new Error('CONVERSION_PACKAGE_LICENSE_MISSING');
+    }
+    syntaxPending.push(...Object.keys(metadata.dependencies || {}));
+    packages.push({ name, version: metadata.version, license: metadata.license, integrity: pin.integrity });
+    tree(source, relative, candidate => !/(?:^|\/)\.[^/]+/u.test(candidate) &&
+      !/(?:^|\/)(?:test|tests|__test__|examples)(?:\/|$)/u.test(candidate) && !candidate.endsWith('.map'));
+  }
   const modelLockBytes = readRegular(path.join(pilot, 'models.lock.json'), 64 * 1024);
   const modelLock = JSON.parse(modelLockBytes);
   add('models.lock.json', modelLockBytes);
@@ -98,7 +130,8 @@ export function collectConversionRuntime(repoRoot, productTarget) {
     path: file.relative, bytes: file.bytes.length, sha256: sha256(file.bytes), executable: file.executable
   }));
   add('RUNTIME.json', Buffer.from(`${JSON.stringify({ schema: 'datasecure-conversion-runtime/1', target: productTarget,
-    node_file: nodeFile, node_version: contract.node_version, packages, files: inventory }, null, 2)}\n`));
+    node_file: nodeFile, node_version: contract.node_version,
+    syntax_reader_contract: 'datasecure-markdown-syntax/1', packages, files: inventory }, null, 2)}\n`));
   add('THIRD_PARTY_NOTICES.txt', Buffer.from(`Offline Markdown conversion runtime\n\n${packages.map(item => `${item.name} ${item.version}: ${item.license}`).join('\n')}\n\nTessdata fast 4.1.0: Apache-2.0 (models/LICENSE)\nNode.js: LICENSE.node.txt\nDependency license files remain beside each package.\n`));
   return [...files.values()].sort((a, b) => a.relative.localeCompare(b.relative));
 }

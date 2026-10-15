@@ -39,11 +39,15 @@ const SAFE_FORM_FIELD_LABEL_RE = new RegExp(
 );
 const FORM_FIELD_LABEL_RE = /(?:\p{L}[\p{L}\p{M}\p{N}_-]*)(?:[ \t\u00a0\u202f\u2007]+\p{L}[\p{L}\p{M}\p{N}_-]*){0,3}[ \t\u00a0\u202f\u2007]*:/iyu;
 function identifierStartsAt(text, start) {
-  for (const detector of [NEXT_EMAIL_RE, NEXT_IBAN_RE]) {
-    detector.lastIndex = start;
-    if (detector.test(text)) return true;
-  }
-  return false;
+  NEXT_EMAIL_RE.lastIndex = start;
+  const email = NEXT_EMAIL_RE.exec(text);
+  // In this bank-continuation corridor only, a numeric print group followed
+  // by slash and an address is a separate bank group, not the start of one
+  // giant email atom. The independent email detector still masks the full
+  // atom; overlap reconciliation moves it beyond the bank's proven boundary.
+  if (email && !/^\d+\/[^@]*@/u.test(email[0])) return true;
+  NEXT_IBAN_RE.lastIndex = start;
+  return NEXT_IBAN_RE.test(text);
 }
 
 function followerLabelStartsAt(text, start) {

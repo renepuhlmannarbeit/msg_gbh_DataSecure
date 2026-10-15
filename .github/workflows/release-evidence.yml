@@ -133,6 +133,8 @@ jobs:
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           npm ci --prefix native/pdfjs/pilot --ignore-scripts --no-audit --no-fund
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
+          npm ci --prefix native/markdown/pilot --ignore-scripts --no-audit --no-fund
+          if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node native/ocr/pilot/fetch-models.mjs
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
       - name: Fetch and attest the pinned official Windows runtime

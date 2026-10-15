@@ -17,14 +17,15 @@ function nativeTextSeparator(previous, item) {
   return item.transform[4] - previous.transform[4] - previous.width > height * 0.25 ? ' ' : '';
 }
 
-function paintedTextGeometryAvailable(operators, ops) {
+function paintedTextGeometryAvailable(operators, ops, { strictMarkedContent = false } = {}) {
   if (!Array.isArray(operators?.fnArray) || !Array.isArray(operators?.argsArray)) return false;
   const textPaint = new Set(['showText', 'showSpacedText', 'nextLineShowText', 'nextLineSetSpacingShowText'].map(key => ops[key]).filter(Number.isInteger));
   const obscuringPaint = new Set(['paintImageXObject', 'paintInlineImageXObject', 'paintImageXObjectRepeat',
     'paintInlineImageXObjectGroup', 'paintImageMaskXObject', 'paintImageMaskXObjectGroup', 'paintImageMaskXObjectRepeat',
     'fill', 'eoFill', 'fillStroke', 'eoFillStroke', 'closeFillStroke', 'closeEOFillStroke', 'shadingFill',
     'constructPath', 'rawFillPath', 'paintSolidColorImageMask', 'stroke', 'closeStroke'].map(key => ops[key]).filter(Number.isInteger));
-  const complex = new Set(['paintFormXObjectBegin', 'beginGroup', 'clip', 'eoClip'].map(key => ops[key]).filter(Number.isInteger));
+  const complex = new Set(['paintFormXObjectBegin', 'beginGroup', 'clip', 'eoClip',
+    ...(strictMarkedContent ? ['beginMarkedContent', 'beginMarkedContentProps'] : [])].map(key => ops[key]).filter(Number.isInteger));
   let textSeen = false;
   for (let index = 0; index < operators.fnArray.length; index++) {
     const operation = operators.fnArray[index], args = operators.argsArray[index];
@@ -87,11 +88,17 @@ function validBox(box) {
   return box && ['x0', 'y0', 'x1', 'y1'].every(key => Number.isFinite(box[key])) && box.x1 > box.x0 && box.y1 > box.y0;
 }
 
+// A multiword run's bounding box includes inter-word whitespace and is not a
+// collection of proven word boxes. Never suppress an equal graphic word in it.
+function nativeSingleTokenRegions(items, styles, viewport) {
+  return nativeTextRegions(items, styles, viewport).filter(region => !/\s/u.test(region.text));
+}
+
 // Geometry AND exact token evidence: overlapping, different raster text must
 // survive, including OCR errors and text covering an older native text layer.
 // If the OCR layout is absent/invalid or the comparison budget is exceeded, keep
 // all OCR. Never perform fuzzy word corrections or infer a graphic's meaning.
-function uncoveredOcrText(data, regions) {
+function uncoveredOcrText(data, regions, { singleTokenOnly = false } = {}) {
   if (!Array.isArray(data.blocks) || !regions.length) return data.text;
   let comparisons = 0, wordsSeen = 0, omitted = false;
   const output = [];
@@ -108,6 +115,7 @@ function uncoveredOcrText(data, regions) {
           let covered = false;
           for (const region of regions) {
             if (++comparisons > 2000000) return data.text;
+            if (singleTokenOnly && (typeof region.text !== 'string' || /\s/u.test(region.text))) continue;
             // One raster pixel permits antialiasing rounding, not nearby words.
             if (word.bbox.x0 >= region.x0 - 1 && word.bbox.y0 >= region.y0 - 1 &&
                 word.bbox.x1 <= region.x1 + 1 && word.bbox.y1 <= region.y1 + 1 &&
@@ -131,4 +139,4 @@ function uncoveredOcrText(data, regions) {
   return omitted ? output.join('') : data.text;
 }
 
-module.exports = Object.freeze({ nativeTextSeparator, paintedTextGeometryAvailable, nativeTextRegions, uncoveredOcrText });
+module.exports = Object.freeze({ nativeTextSeparator, paintedTextGeometryAvailable, nativeTextRegions, nativeSingleTokenRegions, uncoveredOcrText });

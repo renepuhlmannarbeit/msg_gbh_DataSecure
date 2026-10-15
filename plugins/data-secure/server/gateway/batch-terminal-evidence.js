@@ -14,6 +14,8 @@ const {
   RECEIPT_ID_RE
 } = require('./batch-evidence');
 const { projectBatchResults } = require('./batch-result-projection');
+const { isMarkdownBatch } = require('../core/processing-mode');
+const { contentOptionsForBatch } = require('../core/content-options');
 
 const MARKER_SCHEMA = 'datasecure-batch-terminal-evidence/2';
 const LEGACY_MARKER_SCHEMA = 'datasecure-batch-terminal-evidence/1';
@@ -58,14 +60,18 @@ function createBatchTerminalEvidence(options = {}) {
 
   function identityProjection(state) {
     return projectBatchResults(state, {
-      verifyPositive: (item) => publishedPackageIdentityRecord(item)
+      verifyPositive: (item) => publishedPackageIdentityRecord(item, state)
     });
   }
 
   function captureIdentities(state) {
     const captured = new Map();
     for (const item of releasedItems(state)) {
-      captured.set(item.package_id, capturePackageIdentity(item.package_id));
+      if (contentOptionsForBatch(state)) {
+        const record = publishedPackageRecord(item.package_id, state, item);
+        if (record?.state !== 'verified' || !record.publication_binding) throw new Error('PACKAGE_IDENTITY_CHANGED');
+        captured.set(item.package_id, JSON.stringify(record.publication_binding));
+      } else captured.set(item.package_id, capturePackageIdentity(item.package_id));
     }
     return captured;
   }
@@ -73,7 +79,7 @@ function createBatchTerminalEvidence(options = {}) {
   function identitiesMatch(left, right) {
     if (left.size !== right.size) return false;
     for (const [packageId, identity] of left) {
-      if (!samePackageIdentity(identity, right.get(packageId))) return false;
+      if (typeof identity === 'string' ? identity !== right.get(packageId) : !samePackageIdentity(identity, right.get(packageId))) return false;
     }
     return true;
   }
@@ -83,13 +89,13 @@ function createBatchTerminalEvidence(options = {}) {
     const record = makeRecord(state, recordedAt, receiptId, { publishedPackageRecord });
     const after = captureIdentities(state);
     if (!identitiesMatch(before, after)) throw new Error('PACKAGE_IDENTITY_CHANGED');
-    for (const item of releasedItems(state)) item.package_identity = after.get(item.package_id);
+    if (!contentOptionsForBatch(state)) for (const item of releasedItems(state)) item.package_identity = after.get(item.package_id);
     return record;
   }
 
   function existingIdentitiesRemainStable(state, operation) {
     const before = captureIdentities(state);
-    for (const item of releasedItems(state)) {
+    for (const item of contentOptionsForBatch(state) ? [] : releasedItems(state)) {
       if (!samePackageIdentity(before.get(item.package_id), item.package_identity)) return null;
     }
     const result = operation();
@@ -127,6 +133,9 @@ function createBatchTerminalEvidence(options = {}) {
     if (!terminal(state)) return undefined;
     let marker = state.terminal_evidence;
     const markerWasPresent = marker !== undefined;
+    if (markerWasPresent && contentOptionsForBatch(state) && (marker.schema !== MARKER_SCHEMA ||
+        marker.record?.schema !== EVIDENCE_SCHEMA || marker.record?.batch_snapshot_schema !== state.schema))
+      throw new SafeError('Der Abschlussnachweis gehört nicht zum gespeicherten Inhaltsvertrag.');
     if (marker !== undefined) validateMarker(marker);
     if (marker?.status === 'exported') {
       if (!exportedMarkerMatchesState(marker, state)) return false;
@@ -177,7 +186,7 @@ function createBatchTerminalEvidence(options = {}) {
   function writeTerminalEvidence(state) {
     // Conversion is not a privacy processing receipt. Its durable journal and
     // atomic visible run/CSV are the completion record; never forge PII grades.
-    if (state.schema === 'datasecure-batch/5') {
+    if (isMarkdownBatch(state)) {
       return state.processing_mode === 'markdown-only' && state.product_channel === 'standalone' &&
         terminal(state) && projectBatchResults(state).grades_verified === true;
     }

@@ -139,6 +139,23 @@ test('v3 packages require a grade consistent with their exact omission signals',
   assert.throws(() => issueReadCapability(id), /Paketmanifest/);
 });
 
+test('legacy public manifests cannot adopt reserved Standalone content bindings after a schema downgrade', () => {
+  for (const [key, value] of Object.entries({
+    content_options: { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: true, imageOcr: false },
+    product_channel: 'standalone', processing_mode: 'markdown-and-anonymize', anonymized: true,
+    publication_binding: { schema: 'datasecure-anonymized-publication-binding/1', manifest_sha256: 'a'.repeat(64) }
+  })) for (const schema of ['eu-privacy-package/2', 'eu-privacy-package/3']) {
+    const id = `run-downgrade-${key}-${schema.endsWith('3') ? 3 : 2}`;
+    makePackage(id, '# Synthetischer freigegebener Text');
+    const file = schema.endsWith('3') ? promotePackageToV3(id) : path.join(root, 'Output', id, 'manifest.json');
+    const manifest = JSON.parse(fs.readFileSync(file)); manifest[key] = value;
+    fs.writeFileSync(file, JSON.stringify(manifest));
+    assert.throws(() => issueReadCapability(id), /Paketmanifest/);
+    assert.throws(() => safeResolvePackage(id), /Paketmanifest/);
+    assert.equal(listOutputs().packages.some(row => row.package_id === id), false);
+  }
+});
+
 test('a bounded document page reads several independently authorized outputs together', () => {
   const first = issueReadCapability('run-one');
   const second = issueReadCapability('run-two');

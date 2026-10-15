@@ -13,6 +13,57 @@ unten sind Entwicklungsevidenz, nicht der aktuelle Veröffentlichungsstatus.
 
 ## Fachlicher Abgleich
 
+**Späterer Zielnachtrag 13.10.2026 – in Arbeit:** Das neue gebundene Inhaltsprofil
+ersetzt künftig generierte Hinweise im Markdown durch lokale Coverageanzeigen.
+Echte MD-Bildknoten werden syntaxbasiert durch Alttext ersetzt; Code/Literale
+bleiben erhalten. Scan-OCR standardmäßig an, zusätzliche Bild-OCR aus; beide
+explizit wählbar und unveränderlich pro Lauf. Dies ist noch keine gelieferte
+Checkbox oder Formatabnahme. Verbindliche Matrix und Negativfälle:
+[Aufgabe 6](../tasks/rc160-workflow/06-markdown-ocr.md). Desktoptests sind nun
+wieder autorisiert; die folgenden datierten Nichtbedien-/r4-Paketbelege bleiben
+historisch und belegen keinen neuen Quellstand.
+
+**Nachtrag 13.10.2026 – lokales RC160, BL-010.53:** Nur konvertieren / Markdown
+nachkorrigieren anonymisiert weder Namen noch Inhalte. Der Maskierungsbutton
+ist nur im Anonymisierungsweg verfügbar und auch serverseitig zweckbegrenzt.
+Neue raw Kopien behalten Basisnamen mit `.md`, nötige Kollisionszusätze sind
+sichtbar. Exportvorschau liest den servergebundenen Dateinamenplan, erzeugt
+keinen Exportintent, keine Freigabe und keine Kopie; bestehender privater
+Nachweisabgleich kann dabei stattfinden. Alte Exportaufträge behalten ihre
+damaligen Namen. Alle Zeilenkontrollen sind während der Vorschau wirklich
+deaktiviert. Private Fehlerdetails nennen gezielt betroffene Quellen, nicht
+pauschal die Auswahl. Keine Dateinamen in Diagnose oder Cowork-Rückgaben.
+
+PDF-/Bildtext erscheint als lesbare Absätze mit Zeilen-/Seitenbezug und einem
+kurzen Unsicherheits-/Auslassungshinweis. Erkannter Text und Metadaten werden
+nicht blind entfernt. OCR-Kontaktwerte bleiben exakte Originalwerte mit
+remappter Position und lokalem Bildausschnitt, spätere Korrekturen weiterhin
+möglich. Das Checkbox-Häkchen aktiviert zusätzliche Kontaktprüfung, nicht OCR
+oder die Lesbarkeitsformatierung. Echte Markdownquellen sind davon ausgenommen.
+Quellescapes, echte Fences und erlaubte korrigierte Kontaktzeichen werden im
+Privacy-Kern literal erhalten und trotzdem vollständig geprüft (`de-business/4`).
+Kodierte Identifier innerhalb solcher Literale erhalten keine Datenschutz-
+Ausnahme: Nur nachweisbare Identifierbereiche werden mit Originalkoordinaten
+dekodiert; gewöhnlicher Beispieltext wie `&amp;` bleibt literal. Explizite
+einspaltige Namens-/Firmentabellen werden ebenfalls geprüft. Generische
+Tabellenkontexte behalten ihre bisherige Mehrspaltensemantik, damit eine
+maskierte erste Zelle fachliche Zertifizierungsangaben nicht umklassifiziert.
+
+Die tatsächlichen v2-Seiten beider Zwecke wurden mit simuliertem IPC headless
+in Edge geprüft: berechnete Schrift, Fokus, Dialog, Freigabe-/Vorschautrennung,
+axe und 390–1280px-Reflow. Zusätzliches unabhängiges CommonMark-Testorakel
+prüft sichtbare Wörter statt allein Quellbytes. Keine Desktopbedienung und
+keine Native-GUI-Freigabe. Lokales Windows-RC160-r4-ZIP und exakte Sidecar-
+Smokes beider Zwecke bestehen, einschließlich korrigierter OCR-Kontakte,
+Folgegruppen, Neustart und konkreter Fehlermeldungen. Neue 72-Varianten-
+Qualitätsbindung besteht mit den neun bekannten Roh-OCR-Warnungen; keinerlei
+bekannte Restdaten/Sachwortverluste nach den synthetischen Referenzentscheidungen.
+Die 219 kanonischen Headless-Dateien sind in zwei belegten Etappen abgedeckt:
+161 Dateien, Korrektur des veralteten raw Namensorakels im Pausentest und 58
+Dateien in quellstabiler Fortsetzung. Keine umgeschriebene monolithische PASS-
+Evidenz. Neue Mac-Tests zunächst zurückgestellt. Tests des früheren Hinweistexts wurden auf den neuen
+einzigen Hinweis umgestellt und behalten vollständige Inhalts-/Negativprüfungen.
+
 RC159-Korrektur vom 08.10.2026 (BL-010.53): Nach dem nativ bestätigten
 Abschluss der eingebetteten Fundstellenprüfung öffnet sich direkt die private
 Ergebnisprüfung **desselben** Laufs, statt kommentarlos zum Verlauf zu wechseln.

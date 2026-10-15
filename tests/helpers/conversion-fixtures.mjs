@@ -35,6 +35,27 @@ export function passivePresentation() {
     ['ppt/embeddings/oleObject1.bin', Buffer.from([1, 2, 3])]
   ]);
 }
+export function literalSupplementPresentation() {
+  const source = '![Literal](data:image/png;base64,AAAA) <img src=secret.png> ~~Fachwort~~ § € ± →';
+  const xml = source.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+  const relationships = values => `<Relationships xmlns="${PR}">${values.map(([id, kind, target]) =>
+    `<Relationship Id="${id}" Type="${R}/${kind}" Target="${target}"/>`).join('')}</Relationships>`;
+  return zipStore([
+    ...opcControlEntries('pptx', { additionalOverrides: [
+      { part: 'ppt/charts/chart1.xml', contentType: 'application/vnd.openxmlformats-officedocument.drawingml.chart+xml' },
+      { part: 'ppt/slideLayouts/slideLayout1.xml', contentType: 'application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml' },
+      { part: 'ppt/slideMasters/slideMaster1.xml', contentType: 'application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml' }
+    ] }),
+    ['ppt/presentation.xml', `<p:presentation xmlns:p="${P}" xmlns:r="${R}"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="m1"/></p:sldMasterIdLst><p:sldIdLst><p:sldId id="256" r:id="s1"/></p:sldIdLst></p:presentation>`],
+    ['ppt/_rels/presentation.xml.rels', relationships([['s1', 'slide', 'slides/slide1.xml'], ['m1', 'slideMaster', 'slideMasters/slideMaster1.xml']])],
+    ['ppt/slides/slide1.xml', `<p:sld xmlns:p="${P}" xmlns:a="${A}"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>Fachlicher Haupttext</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>`],
+    ['ppt/slides/_rels/slide1.xml.rels', relationships([['c1', 'chart', '../charts/chart1.xml'], ['l1', 'slideLayout', '../slideLayouts/slideLayout1.xml']])],
+    ['ppt/charts/chart1.xml', `<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="${A}"><c:chart><c:title><a:t>${xml}</a:t></c:title><c:v>42</c:v></c:chart></c:chartSpace>`],
+    ['ppt/slideLayouts/slideLayout1.xml', `<p:sldLayout xmlns:p="${P}" xmlns:a="${A}"><p:cSld><a:t>${xml}</a:t></p:cSld></p:sldLayout>`],
+    ['ppt/slideLayouts/_rels/slideLayout1.xml.rels', relationships([['m1', 'slideMaster', '../slideMasters/slideMaster1.xml']])],
+    ['ppt/slideMasters/slideMaster1.xml', `<p:sldMaster xmlns:p="${P}" xmlns:a="${A}"><p:cSld><a:t>${xml}</a:t></p:cSld></p:sldMaster>`]
+  ]);
+}
 export function embeddedWorkbookPresentation() {
   return zipStore([
     ...opcControlEntries('pptx'),
@@ -64,17 +85,36 @@ export function pdf(pages, catalog = '', documentOptions = {}) {
     const n = objects.length + 1; kids.push(`${n} 0 R`); pageObjectIndexes.push(n - 1);
     const hasText = !source.image || source.text !== undefined || source.textLines !== undefined;
     const lines = source.textLines || [source.text || ''];
-    const escaped = value => value.replaceAll('\\', '\\\\').replaceAll('(', '\\(').replaceAll(')', '\\)');
+    const escaped = value => [...value].map(character => {
+      if (['\\', '(', ')'].includes(character)) return '\\' + character;
+      const unit = character === '€' ? 0x80 : character.codePointAt(0);
+      if (unit > 255) throw new Error('PDF_FIXTURE_ENCODING_UNSUPPORTED');
+      return unit < 32 || unit > 126 ? '\\' + unit.toString(8).padStart(3, '0') : character;
+    }).join('');
     const nativeText = hasText ? `BT /F1 20 Tf ${source.invisibleText ? '3 Tr ' : ''}${lines.map((line, index) =>
       `1 0 0 1 30 ${source.image ? 280 - index * 55 : 200 - index * 35} Tm (${escaped(line)}) Tj`).join(' ')} ET` : '';
-    const content = Buffer.from(`${source.image && !source.unpaintedImage ? 'q 800 0 0 300 0 0 cm /Im Do Q ' : ''}${nativeText}`);
+    const vectorGlyphs = { C: ['01110','10001','10000','10000','10000','10001','01110'],
+      L: ['10000','10000','10000','10000','10000','10000','11111'], O: ['01110','10001','10001','10001','10001','10001','01110'],
+      U: ['10001','10001','10001','10001','10001','10001','01110'], D: ['11110','10001','10001','10001','10001','10001','11110'] };
+    let graphic = '';
+    if (source.vectorText) {
+      for (const [letterIndex, letter] of [...source.vectorText].entries()) {
+        const glyph = vectorGlyphs[letter];
+        if (!glyph) throw new Error('PDF_VECTOR_FIXTURE_CHARACTER_UNSUPPORTED');
+        glyph.forEach((row, rowIndex) => [...row].forEach((pixel, column) => {
+          if (pixel === '1') graphic += `${60 + letterIndex * 54 + column * 8} ${50 + (6 - rowIndex) * 8} 8 8 re `;
+        }));
+      }
+      graphic = `q 0 0 0 rg ${graphic}f Q`;
+    }
+    const content = Buffer.from(`${source.image && !source.unpaintedImage ? 'q 800 0 0 300 0 0 cm /Im Do Q ' : ''}${nativeText} ${graphic}`);
     const resources = source.image ? `/XObject << /Im ${n + 2} 0 R >> ${hasText ? `/Font << /F1 ${n + 3} 0 R >>` : ''}` : `/Font << /F1 ${n + 2} 0 R >>`;
     const annotations = source.annotation ? ' /Annots [<< /Type /Annot /Subtype /Text /Rect [0 0 10 10] /Contents (Private note) >>]' : '';
     objects.push(Buffer.from(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 800 300] /Resources << ${resources} >> /Contents ${n + 1} 0 R${annotations} >>`));
     objects.push(Buffer.concat([Buffer.from(`<< /Length ${content.length} >>\nstream\n`), content, Buffer.from('\nendstream')]));
     objects.push(source.image ? Buffer.concat([Buffer.from(`<< /Type /XObject /Subtype /Image /Width 1600 /Height 600 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ${source.image.length} >>\nstream\n`), source.image, Buffer.from('\nendstream')]) :
-      Buffer.from('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'));
-    if (source.image && hasText) objects.push(Buffer.from('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'));
+      Buffer.from('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>'));
+    if (source.image && hasText) objects.push(Buffer.from('<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>'));
   }
   const catalogAdditions = [catalog];
   if (documentOptions.form || documentOptions.signature) {

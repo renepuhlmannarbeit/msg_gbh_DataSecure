@@ -1,4 +1,5 @@
 'use strict';
+const { CONTENT_BATCH_SCHEMA, contentOptionsForBatch } = require('./content-options');
 
 // Processing purpose is distinct from MCP delivery mode (local_only/analysis).
 // A converter is not a privacy-gate bypass: its durable v5 lifecycle belongs
@@ -28,7 +29,18 @@ function assertRunnableProcessingMode(value, productChannel) {
 // otherwise ignore new top-level fields and could resume it as anonymization.
 function processingModeForBatch(state) {
   if (!state || typeof state !== 'object' || Array.isArray(state)) fail('PROCESSING_MODE_INVALID');
+  contentOptionsForBatch(state);
   const channel = state.product_channel === undefined ? 'plugin' : state.product_channel;
+  if (state.schema === CONTENT_BATCH_SCHEMA) {
+    if (!Object.hasOwn(state, 'schema') || !Object.hasOwn(state, 'processing_mode') ||
+        !Object.hasOwn(state, 'product_channel') || !Object.hasOwn(state, 'standalone_document_review') ||
+        state.standalone_document_review !== true) fail('PROCESSING_MODE_INVALID');
+    const mode = validateProcessingMode(state.processing_mode, channel);
+    if (mode === MODES.MARKDOWN && (Object.keys(state).some(key => key.startsWith('pseudonym_')) ||
+        ['core_policy_fingerprint', 'read_capability', 'package_id', 'package_identity'].some(key => Object.hasOwn(state, key)) ||
+        state.remove_images === true)) fail('PROCESSING_MODE_INVALID');
+    return mode;
+  }
   if (['datasecure-batch/1', 'datasecure-batch/2', 'datasecure-batch/3', 'datasecure-batch/4'].includes(state.schema)) {
     if (Object.hasOwn(state, 'processing_mode') && state.processing_mode !== MODES.ANONYMIZE) {
       fail('PROCESSING_MODE_INVALID');
@@ -51,4 +63,10 @@ function processingModeForBatch(state) {
   return validateProcessingMode(state.processing_mode, channel);
 }
 
-module.exports = Object.freeze({ MODES, validateProcessingMode, assertRunnableProcessingMode, processingModeForBatch });
+function isMarkdownBatch(state) { return processingModeForBatch(state) === MODES.MARKDOWN; }
+function assertAnonymizationBatch(state) {
+  if (processingModeForBatch(state) !== MODES.ANONYMIZE) fail('PROCESSING_MODE_FORBIDDEN');
+}
+
+module.exports = Object.freeze({ MODES, validateProcessingMode, assertRunnableProcessingMode, processingModeForBatch,
+  isMarkdownBatch, assertAnonymizationBatch });

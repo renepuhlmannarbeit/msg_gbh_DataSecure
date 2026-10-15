@@ -6,7 +6,8 @@ const crypto = require('crypto');
 const { dataRoot } = require('../runtime');
 const { ensurePrivateDirectory, assertPrivateDirectory, safeRemovePrivateTree } = require('../gateway/common');
 const { writeFully, syncParentDirectory, renameWithTransientRetry } = require('../gateway/batch-journal-io');
-const { ARTIFACT_ID_RE, createMarkdownArtifact, validateMarkdownArtifact } = require('./markdown-artifact');
+const { ARTIFACT_ID_RE, createMarkdownArtifact, validateMarkdownArtifact, validateMarkdownArtifactForOptions } = require('./markdown-artifact');
+const { contentOptionsForConsumer } = require('../core/content-options');
 const { MAX_MARKDOWN_CHARS } = require('./markdown-contract');
 const { readBoundFile, bindDirectory, assertDirectory } = require('../core/bound-file-io');
 
@@ -27,7 +28,7 @@ function readPlainFile(file, maximum, directory) {
   try { return readBoundFile(file, { maximum, directory }); }
   catch { throw invalid(); }
 }
-function readMarkdownArtifact(artifactId) {
+function inspectMarkdownArtifactForMaintenance(artifactId) {
   if (!ARTIFACT_ID_RE.test(String(artifactId || ''))) throw invalid();
   const root = artifactRoot();
   const folder = path.join(root, artifactId);
@@ -41,17 +42,25 @@ function readMarkdownArtifact(artifactId) {
   assertPrivateDirectory(folder, root);
   return { manifest, markdown };
 }
-function verifyMarkdownItem(item) {
+// Structural maintenance inspection grants no publication/export authority.
+// Every processing reader supplies the independently stored expected contract.
+function readMarkdownArtifact(artifactId, expectedOptions) {
+  const artifact = inspectMarkdownArtifactForMaintenance(artifactId);
+  validateMarkdownArtifactForOptions(artifact.manifest, artifact.markdown, expectedOptions);
+  return artifact;
+}
+function verifyMarkdownItem(item, expectedOptions) {
   try {
     if (['package_id', 'package_identity', 'read_capability', 'document_result', 'pseudonym_seed', 'pseudonym_registry_state']
       .some((key) => Object.hasOwn(item || {}, key))) return false;
     if (Object.hasOwn(item || {}, 'id') && item.artifact_id !== `dm_${item.id}`) return false;
-    const actual = metadata(readMarkdownArtifact(item?.artifact_id).manifest);
+    const actual = metadata(readMarkdownArtifact(item?.artifact_id, expectedOptions).manifest);
     return Object.keys(actual).every((key) => JSON.stringify(actual[key]) === JSON.stringify(item[key]));
   } catch { return false; }
 }
 async function publishMarkdownArtifact(extraction, artifactId, hooks = {}) {
-  const artifact = createMarkdownArtifact(extraction, artifactId);
+  const expectedOptions = contentOptionsForConsumer(hooks, 'standalone');
+  const artifact = createMarkdownArtifact(extraction, artifactId, expectedOptions);
   const result = metadata(artifact.manifest);
   const root = artifactRoot();
   const target = path.join(root, artifactId);
@@ -81,7 +90,7 @@ async function publishMarkdownArtifact(extraction, artifactId, hooks = {}) {
     renameWithTransientRetry(temporary, target);
     published = true;
     syncParentDirectory(target, fs, process.platform);
-    if (!verifyMarkdownItem(result)) throw invalid();
+    if (!verifyMarkdownItem(result, expectedOptions)) throw invalid();
     if (hooks.afterPublish) await hooks.afterPublish(result);
     return result;
   } catch (error) {
@@ -98,4 +107,4 @@ async function publishMarkdownArtifact(extraction, artifactId, hooks = {}) {
   }
 }
 
-module.exports = { artifactRoot, metadata, readMarkdownArtifact, verifyMarkdownItem, publishMarkdownArtifact };
+module.exports = { artifactRoot, metadata, readMarkdownArtifact, inspectMarkdownArtifactForMaintenance, verifyMarkdownItem, publishMarkdownArtifact };

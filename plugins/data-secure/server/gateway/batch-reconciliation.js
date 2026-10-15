@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { readBoundFile, bindDirectory } = require('../core/bound-file-io');
+const { readBoundFile, bindDirectory, assertDirectory } = require('../core/bound-file-io');
 const { SafeError } = require('../runtime');
 const { roots } = require('./common');
 const { appendMapping, ensureMappingOutbox, removeMappingOutbox, STOPPED } = require('./mapping');
@@ -18,6 +18,9 @@ const {
 const { packageIdentityMatches } = require('./package-identity');
 const { artifactRoot, readMarkdownArtifact, metadata, verifyMarkdownItem } = require('../standalone/markdown-store');
 const { applyRetryBudget, clearRetryBudget } = require('./prepublication-error');
+const { isMarkdownBatch } = require('../core/processing-mode');
+const { contentOptionsForBatch, serializeContentOptions } = require('../core/content-options');
+const { privatePublicationRecord, confirmPublication } = require('./standalone-anonymized-batch');
 
 function createBatchReconciliation(options = {}) {
   const io = options.io || fs;
@@ -32,16 +35,34 @@ function createBatchReconciliation(options = {}) {
   const deliveryPendingStatus = options.deliveryPendingStatus || 'delivery_pending';
   const preflightMappingPendingStatus = options.preflightMappingPendingStatus || 'preflight_mapping_pending';
 
-  function publishedMarkdownArtifactRecord(artifactId) {
+  function publishedMarkdownArtifactRecord(artifactId, contentOptions, state, item) {
+    if (state && contentOptions) {
+      try {
+        if (!isMarkdownBatch(state) || serializeContentOptions(contentOptions) !== serializeContentOptions(contentOptionsForBatch(state)))
+          return { state: 'unsafe' };
+        require('./standalone-document-review-store').createDocumentReviewStore().assertDocumentBinding(state, item);
+      } catch { return { state: 'unsafe' }; }
+    }
     if (!/^dm_[a-f0-9]{32}$/u.test(String(artifactId || ''))) return { state: 'unsafe' };
     // Only the absence of the publication directory means "not published".
     // A missing member of an existing directory is an incomplete/unsafe
     // publication, not permission to overwrite that deterministic identity.
-    let target;
-    try { target = path.join(artifactRoot(), artifactId); } catch { return { state: 'unsafe' }; }
+    let target, directory;
+    try { const output = artifactRoot(); directory = bindDirectory(output); target = path.join(output, artifactId); }
+    catch { return { state: 'unsafe' }; }
     try { fs.lstatSync(target); }
-    catch (error) { return { state: error?.code === 'ENOENT' ? 'missing' : 'unsafe' }; }
-    try { return { state: 'verified', ...metadata(readMarkdownArtifact(artifactId).manifest) }; }
+    catch (error) {
+      try {
+        assertDirectory(directory);
+        if (state && contentOptions && (['delivery_pending', 'released'].includes(item.status) || item.checkpoint === 'package_published' ||
+            require('./standalone-document-review-store').createDocumentReviewStore().hasPublicationEvidence(state, item)))
+          return { state: 'unsafe' };
+        return { state: error?.code === 'ENOENT' ? 'missing' : 'unsafe' };
+      }
+      catch { return { state: 'unsafe' }; }
+    }
+    try { const record = metadata(readMarkdownArtifact(artifactId, contentOptions).manifest); assertDirectory(directory);
+      return { state: 'verified', ...record }; }
     catch { return { state: 'unsafe' }; }
   }
 
@@ -52,8 +73,13 @@ function createBatchReconciliation(options = {}) {
     return `ds_${item.id}`;
   }
 
-  function publishedPackageRecord(packageId) {
+  function publishedPackageRecord(packageId, state, item) {
     const record = (state, documentResult = null) => ({ state, document_result: documentResult });
+    if (state) {
+      try {
+        if (contentOptionsForBatch(state)) return privatePublicationRecord(packageId, state, item);
+      } catch { return record('unsafe'); }
+    }
     if (!/^ds_[a-f0-9]{32}$/i.test(String(packageId || ''))) return record('unsafe');
     let output;
     try { output = storageRoots().output; } catch { return record('unsafe'); }
@@ -83,12 +109,13 @@ function createBatchReconciliation(options = {}) {
     } catch { return record('unsafe'); }
   }
 
-  function publishedPackageState(packageId) {
-    const value = publishedPackageRecord(packageId).state;
+  function publishedPackageState(packageId, state, item) {
+    const value = publishedPackageRecord(packageId, state, item).state;
     return value === 'structurally_unsafe' ? false : value;
   }
 
-  function publishedPackageIdentityRecord(item) {
+  function publishedPackageIdentityRecord(item, state) {
+    if (state && contentOptionsForBatch(state)) return publishedPackageRecord(item?.package_id, state, item);
     const documentResult = item?.document_result || null;
     try {
       positiveDocumentResult(documentResult);
@@ -100,12 +127,12 @@ function createBatchReconciliation(options = {}) {
     }
   }
 
-  function regularPublishedPackage(packageId) {
-    return publishedPackageState(packageId) === 'verified';
+  function regularPublishedPackage(packageId, state, item) {
+    return publishedPackageState(packageId, state, item) === 'verified';
   }
 
-  function markMappingPending(item, packageId, documentResult) {
-    const published = publishedPackageRecord(packageId);
+  function markMappingPending(item, packageId, documentResult, state) {
+    const published = publishedPackageRecord(packageId, state, item);
     if (published.state !== 'verified') {
       throw new ErrorType('Das lokal veröffentlichte Paket konnte nicht sicher verifiziert werden.');
     }
@@ -128,7 +155,13 @@ function createBatchReconciliation(options = {}) {
     item.work_copy_cleanup_pending = true;
   }
 
-  function commitPendingMapping(item, packageId) {
+  function commitPendingMapping(item, packageId, state) {
+    if (state && contentOptionsForBatch(state)) {
+      if (packageId !== `ds_${item.id}`) throw new ErrorType('Die veröffentlichte Paketidentität ist ungültig.');
+      require('./standalone-anonymized-mapping').commitPrivateMapping(state, item);
+      delete item.mapping_outbox_persisted;
+      return;
+    }
     // Recovery order is contractual: durable intent, idempotent CSV, then
     // removal of the intent. Journal publication remains the caller's duty.
     const outbox = persistMappingIntent(item.source_label || item.name, packageId, item.document_result);
@@ -143,12 +176,12 @@ function createBatchReconciliation(options = {}) {
     for (const item of state.items || []) {
       if (item.status !== mappingPendingStatus) continue;
       const packageId = String(item.package_id || '');
-      const published = publishedPackageRecord(packageId);
+      const published = publishedPackageRecord(packageId, state, item);
       if (published.state !== 'verified') continue;
       if (published.document_result && !sameDocumentResult(item.document_result, published.document_result)) continue;
       if (!published.document_result && Object.hasOwn(item, 'document_result')) continue;
       try {
-        commitPendingMapping(item, packageId);
+        commitPendingMapping(item, packageId, state);
         item.status = deliveryPendingStatus;
         item.checkpoint = 'delivery_pending';
         delete item.error_code;
@@ -178,9 +211,8 @@ function createBatchReconciliation(options = {}) {
         validateDocumentResult(item.document_result);
         if (item.document_result.grade !== GRADES.NOT_PROCESSED ||
           item.document_result.reason_code !== item.error_code) continue;
-        writeMapping(item.source_label || item.name, '', STOPPED, {
-          mappingReference: item.id,
-          documentResult: item.document_result
+        if (!isMarkdownBatch(state)) writeMapping(item.source_label || item.name, '', STOPPED, {
+          mappingReference: item.id, documentResult: item.document_result
         });
         item.status = 'stopped';
         if (preflightPending) item.checkpoint = 'source_preflight_stopped';
@@ -199,9 +231,9 @@ function createBatchReconciliation(options = {}) {
     let changed = false;
     for (const item of state.items || []) {
       if (item.status !== 'processing') continue;
-      if (state.schema === 'datasecure-batch/5' && state.product_channel === 'standalone' && state.processing_mode === 'markdown-only') {
+      if (isMarkdownBatch(state)) {
         if (!/^[a-f0-9]{32}$/u.test(String(item.id || ''))) continue;
-        const record = publishedMarkdownArtifactRecord(`dm_${item.id}`);
+        const record = publishedMarkdownArtifactRecord(`dm_${item.id}`, contentOptionsForBatch(state), state, item);
         if (record.state !== 'verified') continue;
         const { state: ignored, ...identity } = record;
         Object.assign(item, identity);
@@ -219,14 +251,15 @@ function createBatchReconciliation(options = {}) {
       try { packageId = packageIdForItem(item); } catch { continue; }
       // Verify again inside markMappingPending. Output may change between the
       // two reads; there is intentionally no cache in this trust boundary.
-      const published = publishedPackageRecord(packageId);
+      const published = publishedPackageRecord(packageId, state, item);
       if (published.state !== 'verified') continue;
       if (!published.document_result && state.schema !== 'datasecure-batch/1') continue;
       // A V1 journal can have crashed after publishing a V2 package but before
       // its legacy mapping commit. Finish that exact historical commit without
       // manufacturing a DS-045 result; never process the deterministic package
       // path a second time.
-      markMappingPending(item, packageId, published.document_result);
+      if (contentOptionsForBatch(state)) confirmPublication(state, item);
+      markMappingPending(item, packageId, published.document_result, state);
       clearRetryBudget(item);
       changed = true;
     }
@@ -240,6 +273,7 @@ function createBatchReconciliation(options = {}) {
       item.checkpoint = code === 'RECOVERY_FAILED' ? 'recovery_failed' : 'stopped';
       item.error_code = code;
       item.document_result = notProcessedDocumentResult(code);
+      if (isMarkdownBatch(state)) { delete item.local_mapping_exported; return; }
       item.local_mapping_exported = false;
       try {
         writeMapping(item.source_label || item.name, '', STOPPED, {
@@ -250,8 +284,8 @@ function createBatchReconciliation(options = {}) {
     };
     for (const item of state.items || []) {
       if (item.status !== 'processing') continue;
-      if (state.schema === 'datasecure-batch/5' && state.product_channel === 'standalone' && state.processing_mode === 'markdown-only') {
-        const publication = publishedMarkdownArtifactRecord(`dm_${item.id}`);
+      if (isMarkdownBatch(state)) {
+        const publication = publishedMarkdownArtifactRecord(`dm_${item.id}`, contentOptionsForBatch(state), state, item);
         // A verified publication belongs to reconcilePublishedItems, never a
         // fresh conversion. A missing target is safe to retry after clearing
         // its unverified locator; unknown/mutated files are not overwritten.
@@ -266,7 +300,7 @@ function createBatchReconciliation(options = {}) {
         let packageId;
         try { packageId = packageIdForItem(item); }
         catch { stopRecovery(item); recovered++; continue; }
-        const publication = publishedPackageRecord(packageId);
+        const publication = publishedPackageRecord(packageId, state, item);
         if (publication.state === 'verified') continue;
         if (publication.state !== 'missing') {
           stopRecovery(item);

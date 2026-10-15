@@ -1,6 +1,8 @@
 'use strict';
 
 const { releaseOwnedLock } = require('./batch-lock-release');
+const { isMarkdownBatch } = require('../core/processing-mode');
+const { bindContentReviewDependencies } = require('./content-consumer-dependencies');
 const { prepareStandaloneReviewChoices, mergeStandaloneReviewChoices,
   rememberStandaloneReviewChoices } = require('./standalone-review-choices');
 
@@ -38,9 +40,12 @@ function createBatchReviewOrchestrator(options = {}) {
     if (active.has(token)) throw new SafeError('Für diese Batch-Sitzung läuft bereits eine Verarbeitung.');
     acquireActiveLock(token);
     active.add(token);
-    let primaryError = false;
+    let primaryError = false, ownedEpoch;
     try {
+      if (options.captureOwnedEpoch) ownedEpoch = options.captureOwnedEpoch(token);
       const state = readState(token);
+      const dependencies = bindContentReviewDependencies(state, deps);
+      deps = dependencies.dependencies;
       assertLocalExecutorAccess(state, deps.executorPid);
       if (state.invalidated === true) throw new SafeError('Der bestätigte Dateistapel wurde verändert und ist nicht mehr verwendbar.');
       const publishedReconciled = reconcilePublishedItems(state);
@@ -79,7 +84,7 @@ function createBatchReviewOrchestrator(options = {}) {
         }
       }
 
-      if (state.schema === 'datasecure-batch/5' && state.processing_mode === 'markdown-only') {
+      if (isMarkdownBatch(state)) {
         if (state.product_channel !== 'standalone' || state.ocr_contact_review !== true ||
             typeof options.processMarkdownReviewItem !== 'function') throw new SafeError('OCR_CONTACT_REVIEW_INVALID');
         const packages = [];
@@ -87,7 +92,7 @@ function createBatchReviewOrchestrator(options = {}) {
         for (const item of items) {
           if (!claimBoundary()) return pausedResult({ reviewed_documents: reviewed,
             ...(deps.localFinalize === true ? { locally_released: reviewed } : { packages }) });
-          if (deps.abortSignal?.aborted) return { ok: false, error: 'LOCAL_REVIEW_CANCELLED',
+          if (dependencies.isAborted()) return { ok: false, error: 'LOCAL_REVIEW_CANCELLED',
             ...publicProgress(state), reviewed_documents: reviewed, raw_content_sent_to_claude: false };
           const result = await options.processMarkdownReviewItem(state, item, deps);
           if (!result.ok) return { ...result, reviewed_documents: reviewed, packages };
@@ -129,7 +134,7 @@ function createBatchReviewOrchestrator(options = {}) {
         ...(deps.localFinalize === true && reviewedCount > 0 ? { local_evidence_exported: writeTerminalEvidence(state) } : {})
       });
       const checkAbort = () => {
-        if (!deps.abortSignal?.aborted) return;
+        if (!dependencies.isAborted()) return;
         const error = new SafeError('Die lokale Prüfung wurde abgebrochen. Bereits geprüfte Ergebnisse bleiben erhalten.');
         error.code = 'LOCAL_REVIEW_CANCELLED';
         throw error;
@@ -277,7 +282,7 @@ function createBatchReviewOrchestrator(options = {}) {
       throw error;
     } finally {
       active.delete(token);
-      releaseOwnedLock(releaseActiveLock, token, SafeError, primaryError);
+      releaseOwnedLock(ownedEpoch ? () => options.releaseOwnedEpoch(ownedEpoch) : releaseActiveLock, token, SafeError, primaryError);
     }
   }
 

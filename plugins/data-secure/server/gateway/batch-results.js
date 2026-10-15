@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const { isMarkdownBatch } = require('../core/processing-mode');
 const { publicPositiveDocumentResult, projectBatchResults, emptyGradeCounts, emptyOmissionCounts } = require('./batch-result-projection');
 
 function createBatchResultAccess(deps) {
@@ -26,8 +27,8 @@ function createBatchResultAccess(deps) {
     // returning any document byte. Legacy journals without a binding retain the
     // full synchronous verifier.
     const published = state.schema !== 'datasecure-batch/1' && item?.package_identity && publishedPackageIdentityRecord
-      ? publishedPackageIdentityRecord(item)
-      : publishedPackageRecord(item.package_id);
+      ? publishedPackageIdentityRecord(item, state)
+      : publishedPackageRecord(item.package_id, state, item);
     if (published?.state !== 'verified') return null;
     const hasJournalResult = Object.hasOwn(item, 'document_result');
     const hasPackageResult = published.document_result !== null && published.document_result !== undefined;
@@ -40,6 +41,7 @@ function createBatchResultAccess(deps) {
   }
 
   function pluginHandoffState(state) {
+    if (state?.schema === 'datasecure-batch/7') { isMarkdownBatch(state); return false; }
     if (state?.schema === 'datasecure-batch/5' || state?.processing_mode === 'markdown-only') return false;
     if (state?.product_channel === 'plugin') return true;
     // Journals written before product_channel was introduced belong to the

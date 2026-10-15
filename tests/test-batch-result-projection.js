@@ -5,6 +5,7 @@ const {
   projectBatchResults,
   publicPositiveDocumentResult
 } = require('../plugins/data-secure/server/gateway/batch-result-projection');
+const { createBatchProgress } = require('../plugins/data-secure/server/gateway/batch-progress');
 const {
   releasedDocumentResult,
   notProcessedDocumentResult,
@@ -29,6 +30,7 @@ test('mixed terminal V2 and encrypted V3 batches project the exact grades and al
   for (const schema of ['datasecure-batch/2', 'datasecure-batch/3', 'datasecure-batch/4', 'datasecure-batch/6']) {
     const projected = projectBatchResults({
       schema,
+      ...(schema === 'datasecure-batch/6' ? { product_channel: 'standalone', output_naming_mode: 'neutral' } : {}),
       items: [
         { status: 'released', package_id: `ds_${'a'.repeat(32)}`, document_result: complete },
         { status: 'released', package_id: `ds_${'b'.repeat(32)}`, document_result: omitted },
@@ -97,6 +99,23 @@ test('the Cowork document projection is positive, localized and contains no reas
   });
   assert.doesNotMatch(JSON.stringify(value), /reason|package|token|path|filename|RESIDUAL_PII/iu);
   assert.throws(() => publicPositiveDocumentResult(stopped), /Ungültiger/);
+});
+
+test('lightweight terminal status skips package and marker verification without claiming verified grades', () => {
+  let packageReads = 0;
+  const progress = createBatchProgress({
+    deliveryPendingStatus: 'delivery_pending', deferredReviewStatus: 'deferred_review',
+    mappingPendingStatus: 'mapping_pending',
+    publishedPackageRecord: () => { packageReads++; throw Error('unexpected package read'); }
+  });
+  const state = { schema: 'datasecure-batch/6', product_channel: 'standalone', token: 'a'.repeat(64),
+    terminal_evidence: { status: 'exported', record: { invalid: true } },
+    items: [{ status: 'released', package_id: `ds_${'a'.repeat(32)}`, document_result: complete }] };
+  const status = progress.publicProgress(state, { skipResultProjection: true });
+  assert.strictEqual(status.complete, true);
+  assert.strictEqual(status.released, 1);
+  assert.strictEqual(status.result_grades_verified, false);
+  assert.strictEqual(packageReads, 0);
 });
 
 done();

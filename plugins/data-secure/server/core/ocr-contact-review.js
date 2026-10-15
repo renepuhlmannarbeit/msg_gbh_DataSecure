@@ -13,7 +13,7 @@ const failure = (code = 'OCR_CONTACT_REVIEW_INVALID') => Object.assign(
 
 function validateContacts(contacts, text, sourceType) {
   if (!Array.isArray(contacts) || contacts.length > 5000 || typeof text !== 'string' ||
-      !['pdf', 'png', 'jpeg', 'bmp'].includes(sourceType)) throw failure();
+      !['pdf', 'png', 'jpeg', 'bmp', 'docx', 'xlsx', 'pptx', 'md'].includes(sourceType)) throw failure();
   let end = 0, imageBytes = 0, imagePixels = 0;
   for (const item of contacts) {
     if (!exactKeys(item, Object.hasOwn(item || {}, 'image') ? [...MAP_KEYS, 'image'] : MAP_KEYS) || !KINDS.has(item.kind) ||
@@ -142,6 +142,10 @@ function validateContactDraft(draft) {
 
 function validateContactAnswer(answer, draft) {
   validateContactDraft(draft);
+  // Skipping is a run-level choice for raw Markdown, never a confirmation of
+  // the recognised characters and never an anonymization decision.
+  if (draft.processing_mode === 'markdown-only' && exactKeys(answer, ['action']) &&
+      answer.action === 'skipped') return { action: 'skipped' };
   if (exactKeys(answer, ['action']) && ['deferred', 'cancelled'].includes(answer.action)) return { action: answer.action };
   if (!exactKeys(answer, ['action', 'redactions', 'decisions']) || answer.action !== 'reviewed' ||
       !Array.isArray(answer.redactions) || answer.redactions.length || !Array.isArray(answer.decisions) ||

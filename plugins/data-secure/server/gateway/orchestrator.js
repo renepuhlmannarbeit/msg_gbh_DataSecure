@@ -5,7 +5,6 @@ const { renameWithTransientRetry } = require('./batch-journal-io');
 const path = require('path');
 const crypto = require('crypto');
 const { SafeError, convertDocument } = require('../runtime');
-const pii = require('../pii-engine');
 const {
   VERSION,
   PROFILES,
@@ -23,7 +22,6 @@ const { assertWritableCapacity, normalizePostPreflightWriteError } = require('./
 const { processVisuals, assetsMarkdown } = require('./visuals');
 const { cleanupLocalData, retentionDays } = require('./retention');
 const {
-  anonymizeMarkdown,
   complianceHeader,
   aiActMeta,
   auditRecord,
@@ -33,12 +31,12 @@ const {
 const { migrateLegacyAuditReceipts, createPreparedAuditRun } = require('./audit');
 const { recordDiagnostic, classifyDiagnosticError } = require('./diagnostics');
 const { issueReadCapability } = require('./package-store');
-const { credentialIssuerAmbiguities } = require('../privacy/credentials');
-const { personProseCandidateSpans, personProseAmbiguities } = require('../privacy/person-ambiguities');
-const { residualPersonAmbiguities, createPersonReviewBinding } = require('../privacy/residual-person-review');
+const { assertLegacyContentOperation } = require('../core/content-options');
+const { personFieldContextForConsumer } = require('../core/person-field-policy');
+const { types } = require('node:util');
+const { reservePersonReviewCandidates, prepareTextPrivacyReview, resolveTextPrivacyReview,
+  finalizeTextPrivacyReview } = require('./privacy-text-operation');
 const { makeRegistry } = require('../privacy/entities');
-const { canonicalizeRenderedText } = require('../privacy/base');
-const { createTransformTrace } = require('../privacy/transform-plan');
 const { PRIVACY_RULESET_VERSION, CREDENTIAL_CONTEXT_POLICY_VERSION } = require('../privacy/policy');
 const { processAlive } = require('./process-liveness');
 const { readSourceToPrivateMemory } = require('./read-only-source-snapshot');
@@ -62,59 +60,6 @@ function throwIfAborted(signal) {
   throw error;
 }
 
-function reservePersonReviewCandidates(text, pseudonymRegistry, allowOrganizationReview = false, profile = 'general') {
-  // Source preview, reservations and engine must share one representation.
-  // Parser-generated <br>/entities otherwise shift retained review fragments.
-  const original = canonicalizeRenderedText(text);
-  const reservations = personProseCandidateSpans(original, { productChannel: allowOrganizationReview ? 'standalone' : 'cowork', profile })
-    .filter((span) => !pseudonymRegistry?.lookup?.('PERSON', span.value) &&
-      !(allowOrganizationReview && pseudonymRegistry?.lookup?.('ORG', span.value)))
-    .map((span, index) => ({
-      ...span,
-      token: `[PERSON_REVIEW_${String(index + 1).padStart(6, '0')}]`
-    }));
-  const ordered = [...reservations].sort((a, b) => a.start - b.start);
-  if (ordered.some((span, index) => original.slice(span.start, span.end) !== span.value ||
-      (index > 0 && ordered[index - 1].end > span.start))) {
-    const error = new SafeError('Überlappende lokale Fundstellen konnten nicht eindeutig rekonstruiert werden. Es wurde nichts freigegeben.');
-    error.code = 'AMBIGUITY_REVIEW_REQUIRED';
-    throw error;
-  }
-  for (const reservation of reservations) {
-    if (original.includes(reservation.token)) {
-      const error = new SafeError('Ein lokaler Personenhinweis kollidiert mit reservierter interner Syntax. Es wurde nichts freigegeben.');
-      error.code = 'AMBIGUITY_REVIEW_REQUIRED';
-      throw error;
-    }
-  }
-  let masked = original;
-  for (const reservation of [...reservations].sort((a, b) => b.start - a.start)) {
-    masked = masked.slice(0, reservation.start) + reservation.token + masked.slice(reservation.end);
-  }
-  return {
-    original,
-    masked,
-    mask_edits: ordered.map(span => ({ start: span.start, end: span.end, original: span.value,
-      replacement: span.token, kind: 'RESERVATION' })),
-    restore(value, applied) {
-      const before = String(value || ''), edits = [];
-      for (const reservation of reservations) {
-        const first = before.indexOf(reservation.token);
-        if (first < 0 || before.indexOf(reservation.token, first + reservation.token.length) >= 0) {
-          const error = new SafeError('Ein lokaler Personenhinweis konnte nach der Datenschutzprüfung nicht sicher rekonstruiert werden.');
-          error.code = 'AMBIGUITY_REVIEW_REQUIRED';
-          throw error;
-        }
-        edits.push({ start: first, end: first + reservation.token.length,
-          original: reservation.token, replacement: reservation.value, kind: 'RESERVATION_RESTORE' });
-      }
-      edits.sort((a, b) => a.start - b.start);
-      const restored = require('../privacy/transform-plan').applyEdits(before, edits);
-      if (applied) applied(before, restored, edits);
-      return restored;
-    }
-  };
-}
 
 function newJobId() {
   return `${Date.now().toString(36)}_${crypto.randomBytes(4).toString('hex')}`;
@@ -276,7 +221,57 @@ function ensureProcessingRun(deps = {}) {
   prepareProcessingRun(deps);
 }
 
+function checkedCaptureHooks(value) {
+  return require('./bound-content-input').checkedContentHooks(value, 'capture');
+}
+
+async function anonymizePersistedStandalone(ticket, suppliedHooks) {
+  // Foreign tickets fail before even reflecting on hooks. Only the productive
+  // batch instance can supply this process-local, scope-bound authority.
+  const context = require('./batch').consumeContentOperation(ticket);
+  try {
+    context.revalidate();
+    if (context.kind === 'publication')
+      return await require('./content-publication-operation').publishPersistedContent(context, suppliedHooks);
+    // Capture remains a hard endpoint, never a callback expected to throw.
+    const hooks = checkedCaptureHooks(suppliedHooks); hooks.checkAbort();
+    context.assertPseudonymRegistry(hooks.pseudonymRegistry);
+    if (!storageStatus().safe) throw Object.assign(new SafeError('Der lokale Datenschutzordner ist kein zulässiger Speicherort.'), { code: 'UNSAFE_STORAGE_LOCATION' });
+    const source = await require('./bound-content-input').extractBoundContentInput(context, hooks);
+    context.revalidate(); hooks.checkAbort();
+    if (source.kind === 'ocr-contact') return source;
+    const extraction = source.extraction, text = extraction.markdown;
+    const effective = context.profile === 'auto' ? detectProfileFromMarkdown(text) : context.profile;
+    const privacy = prepareTextPrivacyReview({ text, profile: effective, productChannel: 'standalone',
+      consumerOptions: { productChannel: 'standalone', contentOptions: context.content_options }, registry: hooks.pseudonymRegistry,
+      captureTrace: true, technicalReviewRequired: extraction.coverage.status !== 'complete',
+      ocrLineReview: extraction.coverage.reason_codes.includes('OCR_NOT_VERIFIED') });
+    context.revalidate(); hooks.checkAbort();
+    // No resolver, basis capture, publication proof, stage, audit or mapping is
+    // reachable from this endpoint, including an empty ambiguity collection.
+    return Object.freeze({ kind: 'privacy', draft: privacy.draft, source_extraction: extraction });
+  } finally { context.dispose(); }
+}
+
 async function anonymizeNext(profile = 'auto', deps = {}) {
+  // Direct/internal callers are also operations. Until publication, replay and
+  // export consume the full new contract, no valid option may fall through to
+  // the historical parser, maintenance or source claim.
+  let prototype = deps, prototypeDepth = 0;
+  while (prototype && ['object', 'function'].includes(typeof prototype)) {
+    if (++prototypeDepth > 64 || types.isProxy(prototype))
+      throw Object.assign(new SafeError('Der Inhaltsvertrag ist ungültig.'), { code: 'CONTENT_OPTIONS_INVALID' });
+    prototype = Object.getPrototypeOf(prototype);
+  }
+  if (deps && ('contentOptions' in deps || 'content_options' in deps)) {
+    const channel = Object.getOwnPropertyDescriptor(deps, 'productChannel');
+    const requestedOptions = Object.getOwnPropertyDescriptor(deps, 'contentOptions');
+    if ((channel && (!Object.hasOwn(channel, 'value') || !channel.enumerable)) ||
+        (requestedOptions && types.isProxy(requestedOptions.value)))
+      throw Object.assign(new SafeError('Der Inhaltsvertrag ist ungültig.'), { code: 'CONTENT_OPTIONS_INVALID' });
+    assertLegacyContentOperation(deps, 'contentOptions', channel ? channel.value : 'plugin', 'start');
+  }
+  const fieldOptions = personFieldContextForConsumer(deps).consumerOptions;
   const requested = String(profile || 'auto').toLowerCase();
   if (!PROFILES.has(requested)) throw new SafeError('Unbekanntes Profil.');
   if (!storageStatus().safe) {
@@ -510,97 +505,19 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     // from an MCP tool argument and is never written to an output package,
     // journal, diagnostic, or audit receipt.
     const pseudonymRegistry = deps.pseudonymRegistry || makeRegistry();
-    const personReview = reservePersonReviewCandidates(rawWithOcr, pseudonymRegistry, deps.productChannel === 'standalone', effective);
-    const transform = deps.productChannel === 'standalone' && typeof deps.persistStandaloneDocumentReview === 'function'
-      ? createTransformTrace(personReview.original) : null;
-    if (transform) transform.append('reserve', personReview.original, personReview.masked, personReview.mask_edits);
-    const anon = anonymizeMarkdown(personReview.masked, effective, { registry: pseudonymRegistry, deferPersonReview: true,
-      ...(transform ? { captureTransformPlan: true } : {}) });
-    if (transform) transform.appendTrace('anonymization', anon.transform_trace);
-    anon.text = personReview.restore(anon.text, transform ?
-      (before, after, edits) => transform.append('restore-reservation', before, after, edits) : undefined);
-    const organizationAmbiguities = ['personnel_profile', 'applicant'].includes(effective)
-      ? credentialIssuerAmbiguities(personReview.original, anon.text)
-      : [];
-    const proseAmbiguities = personProseAmbiguities(personReview.original, anon.text, { productChannel: deps.productChannel, profile: effective });
-    const personAmbiguities = [
-      ...proseAmbiguities,
-      ...residualPersonAmbiguities(personReview.original, anon.text,
-        pii.scanResidual(anon.text, effective, anon.dictionary, {
-          strongPersonAnchor: anon.strongPersonAnchor, includePersonCandidateSpans: true,
-          originalSourceText: personReview.original
-        }).filter(finding => finding.type !== 'PERSON_CANDIDATE' || !proseAmbiguities.some(candidate =>
-          finding.start >= candidate.anonymized_start && finding.end <= candidate.anonymized_end)),
-        { productChannel: deps.productChannel })
-    ];
-    const ambiguities = [...organizationAmbiguities, ...personAmbiguities];
-    const personReviewBinding = createPersonReviewBinding(anon.text, ambiguities, {
-      productChannel: deps.productChannel,
-      allowOrganizationReview: deps.productChannel === 'standalone'
-    });
+    const privacy = prepareTextPrivacyReview({ text: rawWithOcr, profile: effective, productChannel: deps.productChannel,
+      consumerOptions: fieldOptions, registry: pseudonymRegistry,
+      captureTrace: deps.productChannel === 'standalone' && typeof deps.persistStandaloneDocumentReview === 'function',
+      technicalReviewRequired: review > 0 || (converted.warnings || []).length > 0 || (converted.unreviewedVisualCount || 0) > 0 });
+    const anon = privacy, { organizationAmbiguities, personAmbiguities, ambiguities } = privacy;
     diagnostic.text_entity_count = anon.entityCount;
     diagnostic.ambiguous_organization_count = organizationAmbiguities.length;
     diagnostic.ambiguous_person_count = personAmbiguities.length;
-    if (deps.onDetected) {
-      await deps.onDetected({
-        profile: effective,
-        detected_identifiers: anon.entityCount,
-        ambiguous_organization_count: organizationAmbiguities.length,
-        ambiguous_person_count: personAmbiguities.length,
-        technical_review_required:
-          review > 0 ||
-          (converted.warnings || []).length > 0 ||
-          (converted.unreviewedVisualCount || 0) > 0
-      });
-    }
-    let reviewedText = anon.text;
-    if (ambiguities.length > 0 && !deps.reviewText) {
-      const error = new SafeError('Mehrdeutige Personen- oder Organisationsnamen benötigen eine lokale Entscheidung vor der Freigabe.');
-      error.code = 'AMBIGUITY_REVIEW_REQUIRED';
-      throw error;
-    }
-    if (deps.reviewText) {
-      const reviewResult = await deps.reviewText({
-        original_text: personReview.original,
-        anonymized_text: anon.text,
-        profile: effective,
-        detected_identifiers: anon.entityCount,
-        ambiguities,
-        ...(deps.productChannel === 'standalone' ? { allowOrganizationReview: true } : {}),
-        confirmPersonReview: (decisions, redactions, resultText) => {
-          personReviewBinding.confirm(decisions, redactions, resultText);
-          if (transform) transform.append('human-review', anon.text, resultText,
-            [...redactions].sort((a, b) => a.start - b.start || a.end - b.end).map(edit => ({
-              start: edit.start, end: edit.end, original: anon.text.slice(edit.start, edit.end),
-              replacement: edit.replacement || '[MANUAL_REDACTION]',
-              kind: /^\[PERSON_/u.test(edit.replacement || '') ? 'PERSON' :
-                /^\[(?:UNTERNEHMEN|ORGANISATION)_/u.test(edit.replacement || '') ? 'ORGANIZATION' : 'MANUAL_REDACTION'
-            })));
-        },
-        replacementForAmbiguity: (candidate, kind = 'PERSON') => {
-          if (!['person_prose_ambiguous', 'person_residual_ambiguous'].includes(candidate?.type) || candidate.replacement_kind !== 'PERSON') {
-            throw new SafeError('Die lokale Mehrdeutigkeitsentscheidung ist ungültig.');
-          }
-          if (kind !== 'PERSON' && !(kind === 'ORG' && deps.productChannel === 'standalone')) {
-            throw new SafeError('Der gewählte Entitätstyp ist für diesen Produktweg nicht erlaubt.');
-          }
-          const value = personReview.original.slice(candidate.original_start, candidate.original_end);
-          return pseudonymRegistry.assign(kind, value);
-        },
-        technical_review_required:
-          review > 0 ||
-          (converted.warnings || []).length > 0 ||
-          (converted.unreviewedVisualCount || 0) > 0
-      });
-      throwIfAborted(deps.abortSignal);
-      if (!reviewResult || typeof reviewResult.text !== 'string') {
-        throw new SafeError('Die lokale Textprüfung lieferte keine freigabefähige Fassung.');
-      }
-      if (reviewResult.text.length > MAX_TEXT_CHARS) {
-        throw new SafeError('Die lokal bearbeitete Fassung ist zu groß.');
-      }
-      reviewedText = reviewResult.text;
-    }
+    if (deps.onDetected) await deps.onDetected({ profile: effective, detected_identifiers: anon.entityCount,
+      ambiguous_organization_count: organizationAmbiguities.length, ambiguous_person_count: personAmbiguities.length,
+      technical_review_required: privacy.draft.technical_review_required });
+    const reviewedText = await resolveTextPrivacyReview(privacy, deps.reviewText,
+      { checkAbort: () => throwIfAborted(deps.abortSignal) });
     diagnosticStage = 'text_reviewed';
     assertStage(stageHandle);
 
@@ -634,30 +551,15 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
       }) +
       extractedMarkdownScope;
     const finalSuffix = assetsMarkdown(vis.results);
-    const reviewedPersonCandidates = personReviewBinding.forPublication(finalPrefix, reviewedText, finalSuffix);
-    const finalText = finalPrefix + reviewedText + finalSuffix;
-    if (transform) transform.append('publication-frame', reviewedText, finalText, [
-      ...(finalPrefix ? [{ start: 0, end: 0, original: '', replacement: finalPrefix, kind: 'TECHNICAL' }] : []),
-      ...(finalSuffix ? [{ start: reviewedText.length, end: reviewedText.length, original: '', replacement: finalSuffix, kind: 'TECHNICAL' }] : [])
-    ]);
+    const finalized = finalizeTextPrivacyReview(privacy, reviewedText, { prefix: finalPrefix, suffix: finalSuffix });
+    const finalText = finalized.markdown;
     const capacity = deps.assertWritableCapacity || assertWritableCapacity;
     capacity({ directory: stagePackage, bytes: Buffer.byteLength(finalText, 'utf8') });
     try { fs.writeFileSync(mdPath, finalText, 'utf8'); }
     catch (error) { throw normalizePostPreflightWriteError(error); }
 
-    // Second, independent gate over the exact bytes that will be released,
-    // including the compliance header and the asset section.
-    const finalResidual = pii.scanResidual(finalText, effective, anon.dictionary, {
-      strongPersonAnchor: anon.strongPersonAnchor,
-      originalSourceText: personReview.original,
-      reviewedPersonCandidates
-    });
-    if (finalResidual.length) {
-      const classes = [...new Set(finalResidual.map((x) => x.type))].sort().join(', ');
-      const error = new SafeError(`Finale Markdown-Datei hat den Residual-Gate nicht bestanden (${classes}).`);
-      error.code = 'RESIDUAL_PII';
-      throw error;
-    }
+    // The shared operation checked these exact bytes, including the technical
+    // frame, before writing. The on-disk publisher remains independent.
     diagnosticStage = 'verified';
 
     // The optional Standalone-only human mapping is captured privately before
@@ -704,17 +606,7 @@ async function anonymizeNext(profile = 'auto', deps = {}) {
     const documentSha256 = crypto.createHash('sha256').update(finalText, 'utf8').digest('hex');
     if (productChannel === 'standalone' && typeof deps.persistStandaloneDocumentReview === 'function') {
       await deps.persistStandaloneDocumentReview({ package_id: packageId, original_text: rawWithOcr, markdown: finalText,
-        transform_trace: transform.finish(finalText),
-        verification_context: { profile: effective, dictionary: anon.dictionary,
-          strong_person_anchor: anon.strongPersonAnchor === true,
-          ruleset: PRIVACY_RULESET_VERSION, credential_policy: CREDENTIAL_CONTEXT_POLICY_VERSION,
-          publication_frame: { prefix: finalPrefix, suffix: finalSuffix },
-          reviewed_ranges: require('../privacy/residual-person-review').reviewedPersonRanges(reviewedPersonCandidates,
-            canonicalizeRenderedText(finalText)).map(range => ({
-              start: range.start + finalPrefix.length - canonicalizeRenderedText(finalPrefix).length,
-              end: range.end + finalPrefix.length - canonicalizeRenderedText(finalPrefix).length
-            })) }
-      });
+        transform_trace: finalized.transform_trace, verification_context: finalized.verification_context });
     }
     const manifest = {
       schema: 'eu-privacy-package/3',
@@ -947,6 +839,7 @@ async function anonymizeSelectedSource(source, profile = 'auto', deps = {}) {
 }
 
 module.exports = {
+  anonymizePersistedStandalone,
   anonymizeNext,
   anonymizeSelectedSource,
   bestEffortRetentionCleanup,

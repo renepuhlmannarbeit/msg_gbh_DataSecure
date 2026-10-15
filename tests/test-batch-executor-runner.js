@@ -38,13 +38,13 @@ function progress(overrides = {}) {
 function fixture(options = {}) {
   const events = [];
   const preparedRun = { opaque: true };
-  let current = options.state || {
+  let current = { schema: 'datasecure-batch/4', ...(options.state || {
     token,
     local_executor_pid: pid,
     items: [{}],
     io_summary: {},
     progress: progress()
-  };
+  }) };
   let reads = 0;
   let processCalls = 0;
   let finalizeCalls = 0;

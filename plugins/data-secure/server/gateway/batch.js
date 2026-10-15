@@ -54,6 +54,9 @@ const {
   liveLocalExecutor,
   validActiveLock,
   readActiveLock,
+  captureOwnedEpoch,
+  assertOwnedEpoch,
+  releaseOwnedEpoch,
   acquireActiveLock,
   releaseActiveLock
 } = require('./batch-active-lock');
@@ -73,6 +76,7 @@ const {
 
 const active = new Set();
 const RETRYABLE_CODES = new Set(['REQUEST_CANCELLED', 'PARSER_TIMEOUT', 'PARSER_START_FAILED',
+  'STANDALONE_BUSY',
   'CONVERSION_TIMEOUT', 'CONVERSION_START_FAILED',
   'CONVERSION_EXECUTABLE_MISSING', 'CONVERSION_EXECUTABLE_DENIED',
   'CONVERSION_ARCHITECTURE_INVALID', 'CONVERSION_DEPENDENCY_MISSING',
@@ -120,6 +124,38 @@ function requestStandalonePause(token) {
   if (publicProgress(state).complete) return { ok: true, complete: true };
   standalonePause.request(() => readStateForMaintenance(token));
   return { ok: true, ...publicProgress(readStateForMaintenance(token)), raw_content_sent_to_claude: false };
+}
+
+// Explicit opt-out for a previously selected OCR contact check. This does
+// not manufacture review answers. Already published corrections stay bound to
+// their source; only still-deferred files are returned to conversion.
+function skipStandaloneOcrContactReview(token) {
+  const unavailable = () => Object.assign(new SafeError('Die OCR-Kontaktprüfung dieses Laufs kann derzeit nicht übersprungen werden.'),
+    { code: 'OCR_CONTACT_SKIP_UNAVAILABLE' });
+  if (!TOKEN_RE.test(String(token || '')) || active.has(token)) throw unavailable();
+  try { acquireActiveLock(token); } catch { throw unavailable(); }
+  active.add(token);
+  let primaryError = false;
+  try {
+    const state = readState(token);
+    if (state.product_channel !== 'standalone' || state.processing_mode !== 'markdown-only' ||
+        state.ocr_contact_review !== true || state.invalidated === true ||
+        Date.now() > Date.parse(state.expires_at) || liveLocalExecutor(state)) throw unavailable();
+    const deferred = state.items.filter(item => item.status === DEFERRED_REVIEW);
+    if (!deferred.length || state.ocr_contact_review_skipped === true) throw unavailable();
+    state.ocr_contact_review_skipped = true;
+    for (const item of deferred) {
+      item.status = 'pending';
+      item.checkpoint = 'ocr_contact_review_skipped';
+      delete item.error_code;
+    }
+    writeState(state);
+    return { ok: true, skipped: true, ...publicProgress(state), raw_content_sent_to_claude: false };
+  } catch (error) { primaryError = true; throw error; }
+  finally {
+    active.delete(token);
+    releaseOwnedLock(releaseActiveLock, token, SafeError, primaryError);
+  }
 }
 
 function plainExactPendingEntry(state, item) {
@@ -172,8 +208,43 @@ const { writeState, readState, readStateForMaintenance, removeState } = createBa
   }
 });
 
-const withDurableBatchPseudonymRegistry = (state, action) =>
-  withBatchPseudonymRegistry(state, action, { persist: writeState });
+const withDurableBatchPseudonymRegistry = (state, action) => {
+  const { contentOptionsForBatch } = require('../core/content-options');
+  if (!contentOptionsForBatch(state)) return withBatchPseudonymRegistry(state, action, { persist: writeState });
+  const epoch = captureOwnedEpoch(state.token);
+  let liveRegistry;
+  return withBatchPseudonymRegistry(state, registry => { liveRegistry = registry; return action(registry); }, { persist: () => {
+    assertOwnedEpoch(epoch);
+    const current = readStateForMaintenance(state.token);
+    const { ownedRegistrySnapshot } = require('../batch-pseudonym-context');
+    // The scope owns this registry; retrieve it through a closed local capture,
+    // not by a caller descriptor or by overwriting the latest journal object.
+    const owned = ownedRegistrySnapshot(liveRegistry, current);
+    const seed = validateBatchPseudonymState(current);
+    try {
+      const { checkedState } = require('./prepared-registry-commit');
+      const persisted = JSON.stringify(checkedState(current.pseudonym_registry_state, seed, { allowEmptyInitial: true }));
+      const initial = JSON.stringify(checkedState(owned.initial, seed)), final = checkedState(owned.current, seed);
+      if (persisted !== initial && persisted !== JSON.stringify(final))
+        throw Object.assign(Error('DOCUMENT_REVIEW_CONFLICT'), { code: 'DOCUMENT_REVIEW_CONFLICT' });
+      current.pseudonym_registry_state = final;
+      assertOwnedEpoch(epoch); writeState(current); assertOwnedEpoch(epoch);
+    } finally { seed.fill(0); }
+  } });
+};
+
+const contentOperationAuthority = require('./content-operation-authority').createContentOperationAuthority({
+  active, readStateForMaintenance, writeState, captureOwnedEpoch, assertOwnedEpoch,
+  documentReview: require('./standalone-document-review-store').createDocumentReviewStore(),
+  exactPendingEntry: plainExactPendingEntry
+});
+// This consumer is an internal composition bridge, not an IPC/MCP command.
+// The issuer remains closed here; a caller cannot mint or upgrade a ticket.
+function consumeContentOperation(ticket) { return contentOperationAuthority.consume(ticket); }
+async function runBoundContentOperation(token, itemId, kind, hooks) {
+  const ticket = contentOperationAuthority.issue(token, itemId, kind);
+  return require('./orchestrator').anonymizePersistedStandalone(ticket, hooks);
+}
 
 // Zero days controls SOURCE COPIES, not the time allowed to run a batch or
 // discover its completed exports. Journals keep the normal seven-day result
@@ -458,6 +529,7 @@ const { resultCursor, parseResultCursor, listBatchResults, completedLocalOnlyCan
 });
 
 const { captureDeferredReviewInput } = createBatchReviewCapture({
+  captureStandaloneReview: (token, id, hooks) => runBoundContentOperation(token, id, 'capture', hooks),
   contactStore,
   anonymizeNext,
   exactPendingEntry: plainExactPendingEntry,
@@ -471,6 +543,7 @@ const { markDeferredReview, deferredReviewPlan } = createBatchReviewState({
 });
 
 const { publishReviewedBatch } = createBatchReviewPublication({
+  publishStandaloneReviewedItem: (token, id, hooks) => runBoundContentOperation(token, id, 'publication', hooks),
   claimStandaloneDocument: standalonePause.claim,
   contactStore,
   anonymizeNext,
@@ -493,8 +566,10 @@ const { publishReviewedBatch } = createBatchReviewPublication({
 });
 
 const { reviewDeferredBatch } = createBatchReviewOrchestrator({
+  captureOwnedEpoch, releaseOwnedEpoch,
   reviewContacts: require('./batch-contact-review').createBatchContactReview({
     captureDeferredReviewInput, convertNext, exactPendingEntry: plainExactPendingEntry, contactStore,
+    writeState,
     claimStandaloneDocument: standalonePause.claim }),
   claimStandaloneDocument: standalonePause.claim,
   processMarkdownReviewItem: (state, item, deps) => processSingleBatchItem(state, item,
@@ -520,6 +595,7 @@ const { reviewDeferredBatch } = createBatchReviewOrchestrator({
 });
 
 const { processSingleBatchItem } = createBatchItemProcessor({
+  runStandaloneItem: (token, id, hooks) => runBoundContentOperation(token, id, 'publication', hooks),
   claimStandaloneDocument: standalonePause.claim,
   contactStore,
   SafeError,
@@ -555,6 +631,7 @@ const { maintainBeforeNext } = createBatchNextMaintenance({
 });
 
 const { processBatchNext: processBatchNextInternal } = createBatchProcessingOrchestrator({
+  captureOwnedEpoch, releaseOwnedEpoch,
   pauseRequested: standalonePause.requested,
   SafeError,
   active,
@@ -736,4 +813,4 @@ const { runLocalBatchExecutor } = createBatchExecutorRunner({
   maxBatchFiles: LIMITS.MAX_BATCH_FILES
 });
 
-module.exports = { requestStandalonePause, readStandaloneHistoryStates, standaloneRecoverableStates, continueStandaloneBatch, readBatchProcessingMode, beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, productStatusSnapshot, latestProductBatchStatus, latestProductResultDirectory, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, finalizePublishedPackageLocally, listBatchResults, completedLocalOnlyCandidates, verifyCompletedLocalOnlyGeneration, claimLocalBatchExecutor, releaseLocalBatchExecutor, reserveTerminalNotice, markTerminalNoticePresented, releaseTerminalNoticeReservation, claimTerminalNotice, readBatchProgress, exportCompletedBatchResults, runLocalBatchExecutor, recoverBatches, replayMappingOutbox, cleanupExpiredBatchSnapshots, openBatchPackageProtection, _test: { batchRoot, workPath, activeLockPath, writeState, readState, readStateForMaintenance, publicProgress, batchUserStatus, assertStagingCapacity, preflightOoxmlContainers, planBatchAdmission, acquireActiveLock, releaseActiveLock, validActiveLock, retryReleasedWorkCopyCleanup, packageIdForItem, publishedPackageRecord, publishedPackageState, regularPublishedPackage, reconcilePublishedItems, reconcilePendingMappings, reconcilePreflightStoppedMappings, commitPendingMapping, replayMappingOutbox, markInterruptedItemsRetryable, maintainBeforeNext, recoverableBatchStates, productStatusSnapshot, latestProductBatchStatus, latestProductResultDirectory, localCleanupStatus, reviewSingleBatchTextLocally, captureDeferredReviewInput, reviewedBatchText, resultCursor, parseResultCursor, liveLocalExecutor, completedLocalOnlyCandidates, retryableErrorCodes: Object.freeze([...RETRYABLE_CODES]), writeFully, syncParentDirectory, openBatchPackageProtection, writeTerminalEvidence, repairPendingEvidenceOutbox } };
+module.exports = { consumeContentOperation, requestStandalonePause, skipStandaloneOcrContactReview, readStandaloneHistoryStates, standaloneRecoverableStates, continueStandaloneBatch, readBatchProcessingMode, beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, productStatusSnapshot, latestProductBatchStatus, latestProductResultDirectory, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, finalizePublishedPackageLocally, listBatchResults, completedLocalOnlyCandidates, verifyCompletedLocalOnlyGeneration, claimLocalBatchExecutor, releaseLocalBatchExecutor, reserveTerminalNotice, markTerminalNoticePresented, releaseTerminalNoticeReservation, claimTerminalNotice, readBatchProgress, exportCompletedBatchResults, runLocalBatchExecutor, recoverBatches, replayMappingOutbox, cleanupExpiredBatchSnapshots, openBatchPackageProtection, _test: { withDurableBatchPseudonymRegistry, batchRoot, workPath, activeLockPath, writeState, readState, readStateForMaintenance, publicProgress, batchUserStatus, assertStagingCapacity, preflightOoxmlContainers, planBatchAdmission, acquireActiveLock, releaseActiveLock, validActiveLock, retryReleasedWorkCopyCleanup, packageIdForItem, publishedPackageRecord, publishedPackageState, regularPublishedPackage, reconcilePublishedItems, reconcilePendingMappings, reconcilePreflightStoppedMappings, commitPendingMapping, replayMappingOutbox, markInterruptedItemsRetryable, maintainBeforeNext, recoverableBatchStates, productStatusSnapshot, latestProductBatchStatus, latestProductResultDirectory, localCleanupStatus, reviewSingleBatchTextLocally, captureDeferredReviewInput, reviewedBatchText, resultCursor, parseResultCursor, liveLocalExecutor, completedLocalOnlyCandidates, retryableErrorCodes: Object.freeze([...RETRYABLE_CODES]), writeFully, syncParentDirectory, openBatchPackageProtection, writeTerminalEvidence, repairPendingEvidenceOutbox } };

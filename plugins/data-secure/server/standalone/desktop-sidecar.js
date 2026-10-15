@@ -118,6 +118,11 @@ function publicError(requestId, error) {
       error.localSelectionCount <= 4096) {
     localDetails = { selection_files: error.localSelectionFiles, selection_count: error.localSelectionCount };
   }
+  if (code === 'DOCUMENT_EXPORT_NAME_INVALID' && Array.isArray(error.failed_files) && error.failed_files.length > 0 &&
+      error.failed_files.length <= 200 && error.failed_files.every(item => item && Object.keys(item).length === 2 &&
+        safeLabel(item.name) && item.reason_code === code)) {
+    localDetails = { selection_files: error.failed_files, selection_count: error.failed_files.length };
+  }
   return {
     schema: 'datasecure-standalone-private-response/1', request_id: requestId, ok: false,
     error_code: code,
@@ -136,6 +141,7 @@ async function dispatch(message) {
     case 'remove_admitted_source': return service.removeAdmittedSource(message.selection_index);
     case 'cancel_admission': return service.cancelAdmission();
     case 'start_admitted_batch': return service.startAdmittedBatch({ processingMode: message.processing_mode,
+      ...(Object.hasOwn(message, 'content_options') ? { contentOptions: message.content_options } : {}),
       ...(message.source_ids ? { sourceIds: message.source_ids, catalogueRevision: message.catalogue_revision } : {}),
       ...(message.ocr_contact_review === true ? { ocrContactReview: true } : {}),
       ...(message.document_review === true ? { documentReview: true } : {}),
@@ -149,13 +155,16 @@ async function dispatch(message) {
     case 'submit_review': return service.submitReview(message.review_id, message.answer);
     case 'continue_review_session': return service.continueReviewSession();
     case 'continue_history_batch': return service.continueHistoryBatch(message.batch_id);
+    case 'skip_ocr_contact_review': return service.skipOcrContactReview(message.batch_id);
     case 'pause_batch': return service.pauseBatch(message.batch_id);
+    case 'abandon_result_export': return service.abandonResultExport(message.batch_id);
     case 'get_document_reviews': return service.documentReviews(message.batch_id);
     case 'get_document_review_history_summary': return service.documentReviewHistorySummary(message.batch_id);
     case 'get_document_review_chunk': return service.documentReviewChunk(message.batch_id, message.document_id, message.revision, message.chunk_index);
     case 'get_document_entities': return service.documentEntities(message.batch_id, message.document_id, message.revision, message.page);
     case 'decide_document_review': return service.decideDocumentReview(message.batch_id, message.document_id, message.decision);
     case 'export_approved_documents': return service.exportApprovedDocuments(message.batch_id, message.operation_id, message.selection, message.acknowledge === true);
+    case 'preview_document_export': return service.previewDocumentExport(message.batch_id, message.operation_id, message.selection);
     case 'abandon_document_export': return service.abandonDocumentExport(message.batch_id, message.operation_id, message.digest);
     case 'resolve_document_export': return service.resolveDocumentExport(message.batch_id, message.operation_id);
     case 'resolve_document_identity_overview': return service.resolveDocumentIdentityOverview(message.batch_id, message.operation_id);

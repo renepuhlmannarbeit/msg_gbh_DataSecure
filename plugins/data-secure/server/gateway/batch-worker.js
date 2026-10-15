@@ -21,6 +21,7 @@ const { recordWorkflowEvent } = require('./workflow-diagnostics');
 const { continueIntoLocalReview } = require('./automatic-local-review');
 const { validateBatchQueueEnvelope, validateBatchMessagePurpose, LOCAL_QUEUE_SCHEMA_INVALID, PURPOSE_ERROR_CODES } = require('./batch-queue-envelope');
 const { MODES } = require('../core/processing-mode');
+const { optionalContentOptions } = require('../core/content-options');
 const { MODES: RESULT_NAMING_MODES, validateResultNamingMode } = require('../core/result-naming-mode');
 
 let started = false;
@@ -31,7 +32,7 @@ process.once('message', async (message) => {
   const validToken = /^[a-f0-9]{64}$/.test(String(message?.batch_token || ''));
   const isExistingBatch = ['start-local-batch', 'start-local-markdown-batch'].includes(message?.type);
   const reservationId = String(message?.intake_reservation_id || '');
-  const isNewIntake = ['start-local-intake', 'start-local-markdown-intake'].includes(message?.type) && RESERVATION_ID_RE.test(reservationId);
+  const isNewIntake = ['start-local-intake', 'start-local-markdown-intake', 'start-local-content-markdown-intake', 'start-local-content-anonymize-intake'].includes(message?.type) && RESERVATION_ID_RE.test(reservationId);
   if (started || !validToken || (!isExistingBatch && !isNewIntake)) {
     process.exit(2);
     return;
@@ -58,9 +59,15 @@ process.once('message', async (message) => {
   }
   let processingMode;
   let outputNamingMode;
+  let contentOptions;
   try {
+    // Validate caller options before even reading a resume journal. The new
+    // message is intentionally unknown to old workers: never an ignored field.
+    validateBatchMessagePurpose(message, standaloneChannel ? 'standalone' : 'plugin');
     const existingMode = isExistingBatch ? readBatchProcessingMode(message.batch_token) : undefined;
     processingMode = validateBatchMessagePurpose(message, standaloneChannel ? 'standalone' : 'plugin', existingMode);
+    if (['start-local-content-markdown-intake', 'start-local-content-anonymize-intake'].includes(message.type))
+      contentOptions = optionalContentOptions(message, 'content_options', standaloneChannel ? 'standalone' : 'plugin');
     if (Object.hasOwn(message, 'document_review') &&
         (!isNewIntake || !standaloneChannel || ![MODES.ANONYMIZE, MODES.MARKDOWN].includes(processingMode) || message.document_review !== true))
       throw Object.assign(new Error('DOCUMENT_REVIEW_INVALID'), { code: 'DOCUMENT_REVIEW_INVALID' });
@@ -96,6 +103,7 @@ process.once('message', async (message) => {
         expectedCount: message.queue.length,
         profile: message.profile || 'auto',
         processingMode,
+        ...(contentOptions ? { contentOptions } : {}),
         ...(message.ocr_contact_review === true ? { ocrContactReview: true } : {}),
         ...(message.document_review === true ? { documentReview: true } : {}),
         ...(outputNamingMode ? { outputNamingMode } : {}),

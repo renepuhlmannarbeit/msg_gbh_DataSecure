@@ -141,6 +141,8 @@ patchText('docs/FORMAT_COVERAGE_MATRIX.md',
 patchText('docs/FORMAT_COVERAGE_MATRIX.md',
   /^(Stand:[^\n]*?lokaler )\d+\.\d+\.\d+(?:-rc\d+)?(?=-Entwicklungsstand)/mu,
   `$1${target}`);
+patchText('docs/FORMAT_COVERAGE_MATRIX.md', /^(Stand: [^·\n]+· )\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?/mu,
+  (_, prefix) => `${prefix}${target}`);
 for (const rel of ['docs/IT-BETRIEBSHANDBUCH.md', 'docs/PLUGIN_SECURITY_MODEL.md',
   'docs/RELEASE.md', 'docs/TESTING.md']) {
   patchText(rel, /^(Stand:[^\n]*?· )\d+\.\d+\.\d+(?:-rc\d+)?(?=[^\n]*$)/mu, `$1${target}`);
@@ -179,10 +181,12 @@ patchText(
 );
 patchText(
   'docs/canonical/PRODUCT.md',
-  /^(Stand: [^·\n]+· Ist-Zustand )\S+/mu,
+  /^(Stand: [^\n]*?Ist-Zustand )\S+/mu,
   (_, prefix) => `${prefix}${rcLabel(target)}`
 );
 
+patchText('docs/canonical/PRODUCT.md', /^(Stand: [^·\n]+· )\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?/mu,
+  (_, prefix) => `${prefix}${target}`);
 console.log(`version ${target}`);
 if (changed.length) {
   for (const rel of changed) console.log(`  ${checkOnly ? 'out of sync' : 'updated'} ${rel}`);

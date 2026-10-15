@@ -8,6 +8,7 @@ const { SafeError } = require('../runtime');
 const { batchRoot, TOKEN_RE } = require('./batch-private-store');
 const { processAlive: probeProcessAlive } = require('./process-liveness');
 const { processInstanceIdentity } = require('./process-identity');
+const { writeFully } = require('./batch-journal-io');
 
 const LOCK_SCHEMA = 'datasecure-active-batch/1';
 const MAX_LOCK_BYTES = 4096;
@@ -22,6 +23,10 @@ function createBatchActiveLock(deps = {}) {
   // Only the native Standalone desktop delegates a document-control owner.
   // An epoch is not authority supplied by a renderer or a generic batch worker.
   const ownerGeneration = deps.ownerGeneration;
+  // Only successful acquisitions by this factory mint ownership. Seeing a
+  // matching PID/token on disk is not sufficient and cannot mint an epoch.
+  const ownedAcquisitions = new Map();
+  const ownedEpochs = new WeakMap();
   if (ownerGeneration !== undefined && !LOCK_ID_RE.test(ownerGeneration)) throw new TypeError('DOCUMENT_CONTROL_GENERATION_INVALID');
   const retryDelay = deps.retryDelay || ((milliseconds) => {
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
@@ -62,16 +67,22 @@ function createBatchActiveLock(deps = {}) {
       const opened = io.fstatSync(descriptor);
       const named = io.lstatSync(target);
       if (!opened.isFile() || !named.isFile() || named.isSymbolicLink() ||
+        opened.nlink !== 1 || named.nlink !== 1 || named.size !== opened.size ||
         named.dev !== opened.dev || named.ino !== opened.ino ||
         opened.size < 1 || opened.size > MAX_LOCK_BYTES) return null;
       const value = JSON.parse(readHeldBytes(descriptor, opened.size, io).toString('utf8'));
       if (!validActiveLock(value)) return null;
+      const afterOpened = io.fstatSync(descriptor), afterNamed = io.lstatSync(target);
+      if (!afterOpened.isFile() || !afterNamed.isFile() || afterNamed.isSymbolicLink() ||
+          afterOpened.nlink !== 1 || afterNamed.nlink !== 1 || afterOpened.size !== opened.size || afterNamed.size !== opened.size ||
+          afterOpened.dev !== opened.dev || afterOpened.ino !== opened.ino || afterNamed.dev !== opened.dev || afterNamed.ino !== opened.ino) return null;
       return {
         value,
         identity: {
           dev: opened.dev,
           ino: opened.ino,
-          size: opened.size
+          size: opened.size,
+          nlink: opened.nlink
         }
       };
     } catch {
@@ -133,9 +144,49 @@ function createBatchActiveLock(deps = {}) {
     if (!LOCK_ID_RE.test(value.lock_id)) {
       throw new SafeError('Die lokale Stapelsperre konnte nicht sicher erzeugt werden.');
     }
-    io.writeFileSync(target, `${JSON.stringify(value)}\n`, {
-      encoding: 'utf8', mode: 0o600, flag: 'wx'
-    });
+    let descriptor, opened;
+    try {
+      descriptor = io.openSync(target, io.constants.O_WRONLY | io.constants.O_CREAT | io.constants.O_EXCL |
+        (io.constants.O_NOFOLLOW || 0), 0o600);
+      writeFully(descriptor, Buffer.from(`${JSON.stringify(value)}\n`, 'utf8'), io);
+      io.fsyncSync(descriptor);
+      opened = io.fstatSync(descriptor);
+      if (!opened.isFile() || opened.nlink !== 1) throw ownershipChanged();
+      const closing = descriptor; descriptor = undefined; io.closeSync(closing);
+    } finally { if (descriptor !== undefined) io.closeSync(descriptor); }
+    // This identity comes from the descriptor we created, not a pathname read
+    // after acquisition (which could already designate another equal file).
+    ownedAcquisitions.set(token, Object.freeze({ value: Object.freeze(value), identity: Object.freeze({
+      dev: opened.dev, ino: opened.ino, size: opened.size, nlink: opened.nlink }) }));
+  }
+
+  function ownershipChanged() {
+    return Object.assign(new SafeError('Die eigene lokale Verarbeitungssperre ist nicht mehr gültig.'), { code: 'BATCH_OWNERSHIP_CHANGED' });
+  }
+
+  function ownRecord(token) {
+    if (typeof token !== 'string' || !TOKEN_RE.test(token)) throw ownershipChanged();
+    const acquisition = ownedAcquisitions.get(token), current = readActiveLockRecord();
+    if (!acquisition || !current || current.identity.nlink !== 1 ||
+        !sameRecord(current, acquisition)) throw ownershipChanged();
+    return { acquisition, current };
+  }
+
+  function captureOwnedEpoch(token) {
+    const { acquisition, current } = ownRecord(token), proof = Object.freeze({});
+    ownedEpochs.set(proof, { acquisition, current });
+    return proof;
+  }
+
+  function assertOwnedEpoch(proof) {
+    // WeakMap lookup neither reflects on a foreign value nor evaluates it.
+    const expected = ownedEpochs.get(proof);
+    if (!expected) throw ownershipChanged();
+    try {
+      const { acquisition, current } = ownRecord(expected.acquisition.value.token);
+      if (acquisition !== expected.acquisition || !sameRecord(current, expected.current)) throw ownershipChanged();
+    } catch (error) { ownedEpochs.delete(proof); throw error; }
+    return true;
   }
 
   function acquireActiveLock(token) {
@@ -170,7 +221,20 @@ function createBatchActiveLock(deps = {}) {
     const existing = readActiveLockRecord();
     if (!existing || existing.value.token !== token || existing.value.pid !== processApi.pid ||
         existing.value.owner_generation !== ownerGeneration) return false;
-    return unlinkIfUnchanged(existing);
+    const acquisition = ownedAcquisitions.get(token);
+    if (acquisition && !sameRecord(existing, acquisition)) return false;
+    const released = unlinkIfUnchanged(existing);
+    if (released) ownedAcquisitions.delete(token);
+    return released;
+  }
+
+  function releaseOwnedEpoch(proof) {
+    const expected = ownedEpochs.get(proof);
+    if (!expected) return false;
+    try { assertOwnedEpoch(proof); } catch { return false; }
+    const released = unlinkIfUnchanged(expected.current);
+    if (released) { ownedAcquisitions.delete(expected.acquisition.value.token); ownedEpochs.delete(proof); }
+    return released;
   }
 
   function retireDelegatedOwner(generations) {
@@ -193,6 +257,9 @@ function createBatchActiveLock(deps = {}) {
     liveLocalExecutor,
     validActiveLock,
     readActiveLock,
+    captureOwnedEpoch,
+    assertOwnedEpoch,
+    releaseOwnedEpoch,
     acquireActiveLock,
     releaseActiveLock,
     retireDelegatedOwner

@@ -2,13 +2,17 @@
 
 const { buildContactBatch, resolveContactBatch } = require('./ocr-contact-batch');
 const { buildContactDraft } = require('../core/ocr-contact-review');
+const { bindContentDependencies, bindContentReviewDependencies } = require('./content-consumer-dependencies');
 
-function createBatchContactReview({ captureDeferredReviewInput, convertNext, exactPendingEntry, contactStore,
+function createBatchContactReview({ captureDeferredReviewInput, convertNext, exactPendingEntry, contactStore, writeState,
   claimStandaloneDocument = (_state, action) => { action(); return true; } }) {
   return async function reviewContacts(state, items, deps) {
+    if (state.ocr_contact_review_skipped === true && state.processing_mode === 'markdown-only') return { pauseBlocked: false };
+    const dependencies = bindContentReviewDependencies(state, deps);
+    deps = dependencies.dependencies;
     let entries = [];
     const checkAbort = () => {
-      if (deps.abortSignal?.aborted) throw Object.assign(new Error('LOCAL_REVIEW_CANCELLED'), { code: 'LOCAL_REVIEW_CANCELLED' });
+      if (dependencies.isAborted()) throw Object.assign(new Error('LOCAL_REVIEW_CANCELLED'), { code: 'LOCAL_REVIEW_CANCELLED' });
     };
     const flush = async () => {
       if (!entries.length) return true;
@@ -18,6 +22,12 @@ function createBatchContactReview({ captureDeferredReviewInput, convertNext, exa
       if (typeof deps.reviewTextLocally !== 'function') throw Object.assign(new Error('LOCAL_REVIEW_DEFERRED'), { code: 'LOCAL_REVIEW_DEFERRED' });
       const outcome = resolveContactBatch(bundle, await deps.reviewTextLocally(bundle.draft));
       checkAbort();
+      if (outcome.action === 'skipped' && state.processing_mode === 'markdown-only') {
+        state.ocr_contact_review_skipped = true;
+        writeState(state);
+        entries = [];
+        return true;
+      }
       if (outcome.action !== 'reviewed') throw Object.assign(new Error('LOCAL_REVIEW_DEFERRED'), {
         code: outcome.action === 'cancelled' ? 'LOCAL_REVIEW_CANCELLED' : 'LOCAL_REVIEW_DEFERRED' });
       // A failed write leaves only complete, source-bound document answers.
@@ -27,11 +37,12 @@ function createBatchContactReview({ captureDeferredReviewInput, convertNext, exa
       return claimStandaloneDocument(state, () => {});
     };
     for (const item of items) {
+      if (state.ocr_contact_review_skipped === true) break;
       checkAbort();
       if (!claimStandaloneDocument(state, () => {})) return { pauseBlocked: true };
       let input;
       if (state.processing_mode === 'markdown-only') {
-        input = await convertNext(state.profile, { ...deps, inputQueue: [exactPendingEntry(state, item)],
+        input = await convertNext(state.profile, { ...bindContentDependencies(state, deps), inputQueue: [exactPendingEntry(state, item)],
           captureOcrInput: value => value });
         if (input && contactStore.read(state, item, input) !== null) input = null;
       } else {
@@ -47,6 +58,9 @@ function createBatchContactReview({ captureDeferredReviewInput, convertNext, exa
         buildContactBatch([entry]);
         if (!entries.length) throw error;
         if (!await flush()) return { pauseBlocked: true };
+        // The flushed group may have saved a run-wide Raw opt-out. Do not
+        // enqueue the already captured next document into another review.
+        if (state.processing_mode === 'markdown-only' && state.ocr_contact_review_skipped === true) break;
       }
       entries.push(entry);
     }

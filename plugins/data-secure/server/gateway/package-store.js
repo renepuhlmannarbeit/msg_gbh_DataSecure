@@ -69,7 +69,9 @@ function validateIncludedAsset(asset){
   return asset;
 }
 function validatePublicManifest(manifest,id){
-  if(!manifest||!['eu-privacy-package/2','eu-privacy-package/3'].includes(manifest.schema)||manifest.package_id!==id||!PROFILES.has(manifest.profile)||!Number.isFinite(Date.parse(manifest.created_at))||manifest.document!==`${id}.md`||!/^[a-f0-9]{64}$/iu.test(String(manifest.document_sha256||''))){
+  // New Standalone binding fields cannot be adopted by changing only the
+  // schema. Historical producers never emitted these reserved fields.
+  if(!manifest||['content_options','product_channel','processing_mode','anonymized','publication_binding'].some(key=>Object.hasOwn(manifest,key))||!['eu-privacy-package/2','eu-privacy-package/3'].includes(manifest.schema)||manifest.package_id!==id||!PROFILES.has(manifest.profile)||!Number.isFinite(Date.parse(manifest.created_at))||manifest.document!==`${id}.md`||!/^[a-f0-9]{64}$/iu.test(String(manifest.document_sha256||''))){
     throw new SafeError('Paketmanifest fehlt oder ist ungültig.');
   }
   if(!Array.isArray(manifest.assets)||manifest.assets.length>RESOURCE_LIMITS.MAX_VISUAL_ASSETS)throw new SafeError('Paketmanifest fehlt oder ist ungültig.');

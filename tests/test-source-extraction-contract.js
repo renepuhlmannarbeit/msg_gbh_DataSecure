@@ -6,7 +6,8 @@ const {
   SOURCE_EXTRACTION_SCHEMA,
   COVERAGE_REASON_CODES,
   createSourceExtraction,
-  validateSourceExtraction
+  validateSourceExtraction,
+  validateSourceExtractionForOptions
 } = require('../plugins/data-secure/server/core/source-extraction-contract');
 
 const { test, assert, done } = createSuite('Neutral source extraction contract');
@@ -57,6 +58,40 @@ test('unknown types, extra fields, oversize text and lone surrogates fail closed
     coverage: { status: 'complete', reason_codes: [] } }, maximum), { code: 'TEXT_TOO_LARGE' });
   assert.throws(() => createSourceExtraction({ source_type: 'txt', markdown: '\ud800',
     coverage: { status: 'complete', reason_codes: [] } }, maximum));
+});
+
+test('new neutral extraction binds all options and does not authorize an unbound legacy consumer', () => {
+  const options = { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: true, imageOcr: false };
+  const input = { source_type: 'csv', markdown: '| Name |\n| --- |\n| Anna Beispiel |',
+    coverage: { status: 'complete', reason_codes: [] } };
+  const current = createSourceExtraction({ ...input, content_options: options }, maximum);
+  assert.equal(current.schema, 'datasecure-source-extraction/2');
+  assert.equal(validateSourceExtractionForOptions(current, maximum, options), current);
+  assert.equal(Object.isFrozen(current.content_options), true);
+  assert.throws(() => validateSourceExtractionForOptions(current, maximum));
+  assert.throws(() => validateSourceExtractionForOptions(createSourceExtraction(input, maximum), maximum, options));
+  for (const change of [{ markdownOutput: 'notes-v1' }, { scanOcr: false }, { imageOcr: true }])
+    assert.throws(() => validateSourceExtractionForOptions(current, maximum, { ...options, ...change }));
+  assert.throws(() => validateSourceExtraction({ ...current, schema: SOURCE_EXTRACTION_SCHEMA }, maximum));
+  assert.throws(() => createSourceExtraction({ ...input, content_options: null }, maximum));
+});
+
+test('pure record validators normalize reflection failures without inspecting foreign errors', () => {
+  const options = { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: true, imageOcr: false };
+  const input = { source_type: 'txt', markdown: 'Visible text', coverage: { status: 'complete', reason_codes: [] }, content_options: options };
+  const value = createSourceExtraction(input, maximum); let errorReads = 0;
+  const foreign = new Proxy({}, { get() { errorReads++; throw Error('PRIVATE_SENTINEL'); }, getPrototypeOf() { errorReads++; throw Error('PRIVATE_SENTINEL'); } });
+  const bad = target => new Proxy(target, { getOwnPropertyDescriptor() { throw foreign; }, ownKeys() { throw foreign; }, getPrototypeOf() { throw foreign; } });
+  for (const operation of [() => validateSourceExtraction(bad(value), maximum), () => createSourceExtraction(bad(input), maximum),
+    () => validateSourceExtractionForOptions(value, maximum, bad(options)),
+    () => validateSourceExtraction({ ...value, coverage: bad(value.coverage) }, maximum)])
+    assert.throws(operation, error => error.code === 'SOURCE_EXTRACTION_INVALID' && !error.message.includes('PRIVATE_SENTINEL'));
+  assert.equal(errorReads, 0);
+  const { SourceExtractionError } = require('../plugins/data-secure/server/core/source-extraction-contract');
+  for (const thrown of [null, 'PRIVATE_SENTINEL', Symbol('PRIVATE_SENTINEL'), new SourceExtractionError('TEXT_TOO_LARGE')]) {
+    const proxy = new Proxy(value, { getOwnPropertyDescriptor() { throw thrown; } });
+    assert.throws(() => validateSourceExtraction(proxy, maximum), error => error.code === 'SOURCE_EXTRACTION_INVALID');
+  }
 });
 
 done();

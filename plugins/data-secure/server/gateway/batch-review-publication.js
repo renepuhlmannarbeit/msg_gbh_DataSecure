@@ -1,4 +1,8 @@
 'use strict';
+const { assertAnonymizationBatch } = require('../core/processing-mode');
+const { bindContentDependencies, bindContentReviewDependencies } = require('./content-consumer-dependencies');
+const { contentOptionsForBatch } = require('../core/content-options');
+const { expectedPublication, confirmPublication } = require('./standalone-anonymized-batch');
 
 const {
   notProcessedDocumentResult,
@@ -86,6 +90,9 @@ function createBatchReviewPublication(options = {}) {
   }
 
   async function publishReviewedBatch(state, items, drafts, reviewedDocuments, deps = {}) {
+    assertAnonymizationBatch(state);
+    const contentOptions = contentOptionsForBatch(state);
+    if (contentOptions) deps = bindContentReviewDependencies(state, deps).dependencies;
     // Validate the complete local result before the first durable status change
     // or publication. Array order is irrelevant; document_index is the binding.
     const decisionsByIndex = bindReviewedDocuments(items, drafts, reviewedDocuments);
@@ -129,8 +136,12 @@ function createBatchReviewPublication(options = {}) {
       let publishedDocumentResult;
       try {
         const entry = exactPendingEntry(state, item);
-        const result = await withBatchPseudonymRegistry(state, (pseudonymRegistry) => anonymizeNext(state.profile, {
-          ...deps,
+        if (contentOptions && typeof options.publishStandaloneReviewedItem !== 'function')
+          throw Object.assign(Error('CONTENT_OPTIONS_NOT_READY'), { code: 'CONTENT_OPTIONS_NOT_READY' });
+        const operation = contentOptions ? (_profile, hooks) => options.publishStandaloneReviewedItem(state.token, item.id, hooks) : anonymizeNext;
+        const result = await withBatchPseudonymRegistry(state, (pseudonymRegistry) => {
+          const operationHooks = {
+          ...bindContentDependencies(state, deps),
           // Review publication must retain the same product adapter as the
           // initial attempt. Otherwise a deferred Standalone DOCX silently
           // falls back to the stricter Cowork parser and loses its explicit
@@ -163,9 +174,11 @@ function createBatchReviewPublication(options = {}) {
           }),
           beforePublish: async (details) => {
             positiveDocumentResult(details?.document_result);
+            if (contentOptionsForBatch(state) && (details?.package_id !== packageIdForItem(item) ||
+                JSON.stringify(details.publication_binding) !== JSON.stringify(expectedPublication(state, item)))) throw invalidBinding();
             verifiedDocumentResult = details.document_result;
             item.checkpoint = 'package_verified';
-            if (pseudonymRegistry) state.pseudonym_registry_state = pseudonymRegistry.exportState();
+            if (!contentOptions && pseudonymRegistry) state.pseudonym_registry_state = pseudonymRegistry.exportState();
             writeState(state);
             if (deps.beforePublish) await deps.beforePublish(details);
           },
@@ -178,12 +191,16 @@ function createBatchReviewPublication(options = {}) {
             positiveDocumentResult(details?.document_result);
             if (!sameDocumentResult(details.document_result, verifiedDocumentResult)) throw unconfirmedPublication();
             publishedDocumentResult = details.document_result;
+            if (contentOptionsForBatch(state) && JSON.stringify(details.publication_binding) !==
+                JSON.stringify(confirmPublication(state, item).publication_binding)) throw unconfirmedPublication();
             if (state.product_channel === 'standalone' && state.standalone_document_review === true)
               require('./standalone-document-review-store').createDocumentReviewStore().recordPublication(state.token, item.id);
             item.checkpoint = 'package_published';
             writeState(state, { durable: false });
           }
-        }));
+          };
+          return operation(state.profile, contentOptions ? require('./bound-content-input').publicationHooksFromServices(operationHooks) : operationHooks);
+        });
         if (!packagePublished || typeof result?.package_id !== 'string' || result.package_id !== publishedPackageId ||
           !sameDocumentResult(result?.document_result, verifiedDocumentResult) ||
           !sameDocumentResult(result?.document_result, publishedDocumentResult)) {
@@ -195,11 +212,14 @@ function createBatchReviewPublication(options = {}) {
           item.work_copy_cleanup_pending = true;
           throw unconfirmedPublication();
         }
-        markMappingPending(item, result.package_id, result.document_result);
+        if (contentOptionsForBatch(state) && JSON.stringify(result.publication_binding) !==
+            JSON.stringify(confirmPublication(state, item).publication_binding)) throw unconfirmedPublication();
+        markMappingPending(item, result.package_id, result.document_result, state);
         clearRetryBudget(item);
         writeState(state);
         try {
-          ensureMappingOutbox(item.source_label || item.name, result.package_id, item.document_result);
+          if (contentOptionsForBatch(state)) require('./standalone-anonymized-mapping').ensurePrivateMappingIntent(state, item);
+          else ensureMappingOutbox(item.source_label || item.name, result.package_id, item.document_result);
           item.mapping_outbox_persisted = true;
         } catch {
           if (state.product_channel === 'standalone') { recoveryBlocked = true; break; }
@@ -209,11 +229,15 @@ function createBatchReviewPublication(options = {}) {
         try { cleanupTerminalWorkCopy(state, item, deps); }
         catch { item.work_copy_cleanup_pending = true; }
         writeState(state);
-        try { commitPendingMapping(item, result.package_id); }
+        try { commitPendingMapping(item, result.package_id, state); }
         catch {
           if (state.product_channel === 'standalone') { recoveryBlocked = true; break; }
           continue;
         }
+        // The durable mapping-pending marker is no longer an active failure.
+        // Keeping it on a released item makes the completed run look as if its
+        // local result folder still needs repair.
+        delete item.error_code;
         if (deps.localFinalize === true) {
           item.status = 'released';
           item.checkpoint = 'released_locally';
@@ -231,6 +255,21 @@ function createBatchReviewPublication(options = {}) {
         else packages.push(deliveryResult(state, item));
       } catch (error) {
         if (publicationContractFailed) throw error;
+        if (!packagePublished && error?.code === 'BATCH_PUBLICATION_UNCONFIRMED') {
+          // The /4 publisher may have committed its rename before our callback
+          // was reached. Never classify a lost rename ACK as a parser stop.
+          item.status = 'processing';
+          item.checkpoint = 'publication_unconfirmed';
+          item.package_id = packageIdForItem(item);
+          item.error_code = 'PROCESSING_INTERRUPTED';
+          item.work_copy_cleanup_pending = true;
+          delete item.document_result;
+          delete item.mapping_outbox_persisted;
+          writeState(state);
+          failed++;
+          if (state.product_channel === 'standalone') { recoveryBlocked = true; break; }
+          continue;
+        }
         if (packagePublished) {
           item.status = 'processing';
           item.checkpoint = 'package_published';

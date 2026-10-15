@@ -38,7 +38,7 @@ function fixture(options = {}) {
     { id: '1'.repeat(32), name: 'first', status: 'deferred_review' },
     { id: '2'.repeat(32), name: 'second', status: 'deferred_review' }
   ];
-  const state = { profile: 'general', remove_images: false, items };
+  const state = { schema: 'datasecure-batch/4', profile: 'general', remove_images: false, items };
   const drafts = [draft('a-1', 'FIRST'), draft('a-2', 'SECOND')];
   let current = 0;
   const publication = createBatchReviewPublication({
@@ -118,6 +118,19 @@ function fixture(options = {}) {
 }
 
 async function main() {
+  await testAsync('the direct privacy-publication entry rejects raw before binding decisions or changing state', async () => {
+    for (const schema of ['datasecure-batch/5', 'datasecure-batch/7']) {
+      const value = fixture(); Object.assign(value.state, { schema, product_channel: 'standalone', processing_mode: 'markdown-only',
+        ...(schema === 'datasecure-batch/7' ? { standalone_document_review: true, content_options: {
+          schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: true, imageOcr: false } } : {}) });
+      const before = structuredClone(value.state);
+      const decisions = value.drafts.map((draft, index) => ({ document_index: index + 1,
+        decisions: draft.ambiguities.map(row => decision(row.ambiguity_id)) }));
+      await assert.rejects(value.publication.publishReviewedBatch(value.state, value.items, value.drafts, decisions),
+        error => error.code === 'PROCESSING_MODE_FORBIDDEN');
+      assert.deepEqual(value.events, []); assert.deepEqual(value.state, before);
+    }
+  });
   test('complete binding rejects malformed document and decision sets', () => {
     const { publication, items, drafts } = fixture();
     const first = { document_index: 1, decisions: [decision('a-1')] };
@@ -170,6 +183,8 @@ async function main() {
     assert.ok(value.events.includes('reviewed:FIRST:a-1'));
     assert.ok(value.events.includes('reviewed:SECOND:a-2'));
     assert.deepStrictEqual(value.items.map((item) => item.status), ['delivery_pending', 'delivery_pending']);
+    assert.ok(value.items.every((item) => !Object.hasOwn(item, 'error_code')),
+      'a committed mapping must clear its transient pending marker');
     const verifiedWrites = value.writes.filter(({ snapshot }) =>
       snapshot.items.some((item) => item.checkpoint === 'package_verified'));
     assert.ok(verifiedWrites.length >= 2, 'each reviewed document is durably checkpointed before publication');

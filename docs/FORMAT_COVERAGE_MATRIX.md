@@ -1,6 +1,6 @@
 # Aktuelle Format-Coverage
 
-Stand: 11.10.2026 · 3.2.0-rc159 · Standalone RC159 veröffentlicht · Cowork bleibt RC151
+Stand: 13.10.2026 · 3.2.0-rc160 · lokaler Quellstand in Prüfung · veröffentlicht Standalone RC159 / Cowork RC151
 
 Der Standalone-Quellcommit `7af2a9d0268864a01b954e0175cae9f5a3616fe8` ist auf
 allen vier Zielplattformen technisch paketgebunden geprüft und veröffentlicht.

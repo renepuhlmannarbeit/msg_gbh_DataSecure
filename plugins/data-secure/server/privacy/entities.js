@@ -1,4 +1,5 @@
 'use strict';
+const { LEGACY_PERSON_FIELD_POLICY, personFieldPattern } = require('../core/person-field-policy');
 
 const { lineBoundsAt } = require('./spans');
 const {
@@ -181,7 +182,7 @@ const HONORIFIC_QUALIFIER = '(?:med|dent|vet|jur|phil|theol|oec|habil|h\\.\\s?c|
 const HONORIFIC = `(?:${HONORIFIC_TITLE}(?:\\s+(?:${HONORIFIC_TITLE}|${HONORIFIC_QUALIFIER})){0,5})`;
 const ACADEMIC_HONORIFIC = `(?:${ACADEMIC_TITLE}(?:\\s+(?:${ACADEMIC_TITLE}|${HONORIFIC_QUALIFIER})){0,5})`;
 
-function markdownTableCells(line) {
+function markdownTableCells(line, allowSingleColumn = false) {
   const source = String(line || '').trim();
   if (!source.includes('|')) return null;
   const body = source.replace(/^\|/u, '').replace(/\|$/u, '');
@@ -203,15 +204,18 @@ function markdownTableCells(line) {
   }
   if (escaped) value += '\\';
   cells.push(value.trim());
-  return cells.length >= 2 ? cells : null;
+  // Only the callers that validate the complete table opt into a sole
+  // column. Generic context consumers must not reinterpret the surviving
+  // second cell of an optional-outer-pipe row after its first cell is masked.
+  return cells.length >= (allowSingleColumn ? 1 : 2) ? cells : null;
 }
 
 function markdownTableColumnValues(text, label) {
   const all = lines(text);
   const values = [];
   for (let index = 0; index + 2 < all.length; index++) {
-    const headers = markdownTableCells(all[index]);
-    const separator = markdownTableCells(all[index + 1]);
+    const headers = markdownTableCells(all[index], true);
+    const separator = markdownTableCells(all[index + 1], true);
     if (!headers || !separator || headers.length !== separator.length ||
       !separator.every((cell) => /^:?-{3,}:?$/u.test(cell))) continue;
     const matchedColumns = headers
@@ -220,7 +224,7 @@ function markdownTableColumnValues(text, label) {
     if (!matchedColumns.length) continue;
     index += 2;
     while (index < all.length) {
-      const row = markdownTableCells(all[index]);
+      const row = markdownTableCells(all[index], true);
       if (!row || row.length !== headers.length) {
         index--;
         break;
@@ -416,7 +420,8 @@ function collectNestedMarkdownPersonCandidates(text, profile) {
 }
 
 // High-confidence anchors: the document itself says "this is a person".
-function collectPersonAnchors(text, profile = 'general') {
+function collectPersonAnchors(text, profile = 'general', personFieldPolicy = LEGACY_PERSON_FIELD_POLICY) {
+  const personLabel = personFieldPattern(personFieldPolicy);
   const src = String(text || '');
   const out = [];
   let m;
@@ -436,14 +441,14 @@ function collectPersonAnchors(text, profile = 'general') {
   while ((m = honor.exec(src))) pushPerson(out, m[1], 'honorific');
 
   // "Name: Erika Beispiel", also inside markdown tables.
-  const linkLabel = new RegExp(`^[ \\t]*(?:>[ \\t]*)?(?:[-*+][ \\t]+)?${PERSON_LABEL}[ \\t]*:[ \\t]*!?\\[([^\\n]{1,500}?)\\]\\([^\\n)]{1,2000}\\)`, 'gimu');
+  const linkLabel = new RegExp(`^[ \\t]*(?:>[ \\t]*)?(?:[-*+][ \\t]+)?${personLabel}[ \\t]*:[ \\t]*!?\\[([^\\n]{1,500}?)\\]\\([^\\n)]{1,2000}\\)`, 'gimu');
   while ((m = linkLabel.exec(src))) pushExplicitPerson(out, m[1], 'label');
 
-  const referenceLinkLabel = new RegExp(`^[ \\t]*(?:>[ \\t]*)?(?:[-*+][ \\t]+)?${PERSON_LABEL}[ \\t]*:[ \\t]*!?\\[([^\\n]{1,500}?)\\]\\[[^\\n]{0,500}\\]`, 'gimu');
+  const referenceLinkLabel = new RegExp(`^[ \\t]*(?:>[ \\t]*)?(?:[-*+][ \\t]+)?${personLabel}[ \\t]*:[ \\t]*!?\\[([^\\n]{1,500}?)\\]\\[[^\\n]{0,500}\\]`, 'gimu');
   while ((m = referenceLinkLabel.exec(src))) pushExplicitPerson(out, m[1], 'label');
 
   const partialLinkLabel = new RegExp(
-    `^[ \\t]*(?:>[ \\t]*)?(?:[-*+][ \\t]+)?${PERSON_LABEL}[ \\t]*:[ \\t]*` +
+    `^[ \\t]*(?:>[ \\t]*)?(?:[-*+][ \\t]+)?${personLabel}[ \\t]*:[ \\t]*` +
       `!?\\[(${NAME_TOKEN}|${CAPS_TOKEN})\\](?:\\([^\\n)]{0,2000}\\)|\\[[^\\n]{0,500}\\])` +
       `[ \\t]+(${NAME_TOKEN}|${CAPS_TOKEN})[ \\t]*$`,
     'gimu'
@@ -470,7 +475,7 @@ function collectPersonAnchors(text, profile = 'general') {
     }
   }
 
-  const label = new RegExp(`^[ \\t]*(?:>[ \\t]*)?(?:[-*+][ \\t]+)?${PERSON_LABEL}[ \\t]*:[ \\t]*(.+)$`, 'gimu');
+  const label = new RegExp(`^[ \\t]*(?:>[ \\t]*)?(?:[-*+][ \\t]+)?${personLabel}[ \\t]*:[ \\t]*(.+)$`, 'gimu');
   while ((m = label.exec(src))) pushLabelledPersonValue(out, m[1], 'label');
 
   // Additional visible Markdown structures. These are deliberately limited
@@ -496,7 +501,7 @@ function collectPersonAnchors(text, profile = 'general') {
   // their intentionally tolerant handling of explicitly labelled lower-case
   // names such as "Name: anna beispiel".
   const inlineLabel = new RegExp(
-    `(?<![\\p{L}\\p{N}_])${PERSON_LABEL}(?![\\p{L}\\p{N}_])[ \\t]*:[ \\t]*`,
+    `(?<![\\p{L}\\p{N}_])${personLabel}(?![\\p{L}\\p{N}_])[ \\t]*:[ \\t]*`,
     'giu'
   );
   while ((m = inlineLabel.exec(src))) {
@@ -505,7 +510,7 @@ function collectPersonAnchors(text, profile = 'general') {
     pushLabelledPersonValue(out, value, 'label');
   }
 
-  const table = new RegExp(`^\\|[ \\t]*${PERSON_LABEL}[ \\t]*:?[ \\t]*\\|[ \\t]*([^|\\n]+)\\|`, 'gimu');
+  const table = new RegExp(`^\\|[ \\t]*${personLabel}[ \\t]*:?[ \\t]*\\|[ \\t]*([^|\\n]+)\\|`, 'gimu');
   while ((m = table.exec(src))) {
     // A parser-generated CSV header starts exactly like a two-column
     // key/value table ("| Name | E-Mail |"), but its next line is the
@@ -518,7 +523,7 @@ function collectPersonAnchors(text, profile = 'general') {
     pushExplicitPerson(out, m[1], 'label');
   }
 
-  const tableLabel = new RegExp(`^${PERSON_LABEL}:?$`, 'iu');
+  const tableLabel = new RegExp(`^${personLabel}:?$`, 'iu');
   for (const value of markdownTableColumnValues(src, tableLabel)) pushExplicitPerson(out, value, 'label');
 
   // Test manifests and import sheets often group several direct identifiers
@@ -779,9 +784,11 @@ function collectPersonSeeds(
   text,
   profile = 'general',
   precomputedAnchors = null,
-  strongPersonAnchorOverride = null
+  strongPersonAnchorOverride = null,
+  personFieldPolicy = LEGACY_PERSON_FIELD_POLICY
 ) {
-  const anchors = precomputedAnchors === null ? collectPersonAnchors(text, profile) : precomputedAnchors;
+  personFieldPattern(personFieldPolicy);
+  const anchors = precomputedAnchors === null ? collectPersonAnchors(text, profile, personFieldPolicy) : precomputedAnchors;
   const anchorInText = anchors.length > 0 || PERSON_PLACEHOLDER_RE.test(String(text || ''));
   const hasStrongPersonAnchor =
     strongPersonAnchorOverride === null ? anchorInText : Boolean(strongPersonAnchorOverride);
@@ -820,8 +827,8 @@ function collectPersonSeeds(
 }
 
 // Backwards-compatible view used by the residual gate.
-function collectNameSeeds(text, profile = 'general') {
-  return collectPersonAnchors(text, profile).map((s) => s.value);
+function collectNameSeeds(text, profile = 'general', personFieldPolicy = LEGACY_PERSON_FIELD_POLICY) {
+  return collectPersonAnchors(text, profile, personFieldPolicy).map((s) => s.value);
 }
 
 function collectOrganizations(text) {

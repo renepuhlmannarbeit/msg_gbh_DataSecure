@@ -48,6 +48,7 @@ jobs:
           npm ci --ignore-scripts --no-audit --no-fund
           npm ci --prefix native/ocr/pilot --ignore-scripts --no-audit --no-fund
           npm ci --prefix native/pdfjs/pilot --ignore-scripts --no-audit --no-fund
+          npm ci --prefix native/markdown/pilot --ignore-scripts --no-audit --no-fund
           node native/ocr/pilot/fetch-models.mjs
       - name: Compile and verify the target-native POSIX supervisor
         shell: bash

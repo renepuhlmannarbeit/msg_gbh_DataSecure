@@ -66,6 +66,29 @@ test('external archive checksum rejects changed bytes and a checksum for a diffe
   assert.throws(() => verifyArchiveChecksum(Buffer.from('changed'), 'candidate.zip', `${digest(bytes)}  candidate.zip`));
   assert.throws(() => verifyArchiveChecksum(bytes, 'candidate.zip', `${digest(bytes)}  other.zip`));
 });
+test('syntax files require their pinned contract even after inventory hashes are recomputed', () => {
+  const make = (contract = true) => {
+    const files = new Map([['runtime/RUNTIME.json', Buffer.from('{}')], ['runtime/THIRD_PARTY_NOTICES.txt', Buffer.from('license')]]);
+    const packages = [{ name: 'mdast-util-from-markdown', version: '2.0.2', license: 'MIT' },
+      { name: 'parse5', version: '7.3.0', license: 'MIT' }, { name: 'entities', version: '6.0.1', license: 'BSD-2-Clause' }];
+    for (const item of packages) files.set(`runtime/node_modules/${item.name}/package.json`,
+      Buffer.from(JSON.stringify({ name: item.name, version: item.version,
+        ...(item.name === 'parse5' ? { dependencies: { entities: '^6.0.0' } } : {}) })));
+    const manifest = { packages, files: [...files].filter(([name]) => name.includes('node_modules'))
+      .map(([name, value]) => record(name.slice('runtime/'.length), value)),
+      ...(contract ? { syntax_reader_contract: 'datasecure-markdown-syntax/1' } : {}) };
+    return { files, manifest };
+  };
+  let value = make(); verifyConversionInventory(value.files, 'runtime/', value.manifest);
+  value = make(false); assert.throws(() => verifyConversionInventory(value.files, 'runtime/', value.manifest), /CONVERSION_SYNTAX_CONTRACT_INVALID/u);
+  value = make(); value.manifest.packages.push({ ...value.manifest.packages[0] });
+  assert.throws(() => verifyConversionInventory(value.files, 'runtime/', value.manifest), /CONVERSION_SYNTAX_PACKAGE_DUPLICATE/u);
+  value = make(); value.files.delete('runtime/node_modules/entities/package.json');
+  value.manifest.files = value.manifest.files.filter(item => !item.path.includes('/entities/'));
+  assert.throws(() => verifyConversionInventory(value.files, 'runtime/', value.manifest), /CONVERSION_SYNTAX_DEPENDENCY_MISSING/u);
+  value = make(); value.manifest.packages[0].version = '999.0.0';
+  assert.throws(() => verifyConversionInventory(value.files, 'runtime/', value.manifest), /CONVERSION_SYNTAX_PIN_MISSING/u);
+});
 test('all three production verifiers invoke the common complete-inventory and external-checksum checks', () => {
   for (const file of ['verify-standalone-package.mjs', 'verify-standalone-macos-package.mjs', 'verify-standalone-linux-package.mjs']) {
     const source = fs.readFileSync(path.join(root, 'scripts', file), 'utf8');

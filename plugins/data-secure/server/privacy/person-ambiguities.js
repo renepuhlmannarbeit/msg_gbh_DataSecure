@@ -1,4 +1,5 @@
 'use strict';
+const { LEGACY_PERSON_FIELD_POLICY, personFieldContextForConsumer, personFieldPattern } = require('../core/person-field-policy');
 
 const {
   NAME_TOKEN,
@@ -60,6 +61,7 @@ const ABSTRACT_TOKEN_RE =
   /(?:ung(?:en)?|tion(?:en)?|sion(?:en)?|tät(?:en)?|keit(?:en)?|heit(?:en)?|schaft(?:en)?|nis(?:se)?|ment(?:e)?|wesen)$/iu;
 const BUSINESS_NOUN_RE =
   /^(?:administration|architecture|cloud|consulting|customer|delivery|development|engineering|finance|management|marketing|operations|planning|platform|product|program|project|quality|sales|security|service|services|strategy|success|support|team|transformation)$/iu;
+const ISOLATED_NAME_LINE_RE = new RegExp(`^(${NAME_SHAPE})[ \\t]*$`, 'u');
 
 function proseBody(line, options = {}) {
   const source = String(line || '');
@@ -124,7 +126,7 @@ function sourceLiteralSpans(source, value) {
     .map(match => ({ start: match.index, end: match.index + match[0].length }));
 }
 
-function protectedEvidenceRanges(source, profile) {
+function protectedEvidenceRanges(source, profile, personFieldPolicy = LEGACY_PERSON_FIELD_POLICY) {
   return [...findStructuredSpans(source),
     ...collectOrganizations(source).flatMap(value => {
       const alias = orgAlias(value);
@@ -136,7 +138,7 @@ function protectedEvidenceRanges(source, profile) {
         ? [value, alias] : [value];
       return values.flatMap(literal => sourceLiteralSpans(source, literal));
     }),
-    ...collectPersonAnchors(source, profile).filter(seed => ['label', 'honorific', 'credential_holder'].includes(seed.confidence))
+    ...collectPersonAnchors(source, profile, personFieldPolicy).filter(seed => ['label', 'honorific', 'credential_holder'].includes(seed.confidence))
       .flatMap(seed => sourceLiteralSpans(source, seed.matchValue || seed.value))];
 }
 
@@ -157,12 +159,13 @@ function disjointCandidates(source, candidates) {
 // Standalone can ask a local human before an uncertain presentation becomes a
 // persistent PERSON alias. Neither two capitalised words nor a table header is
 // identity evidence. Keep exact source coordinates; no blanket term allowlist.
-function standalonePresentationCandidateSpans(text, profile = 'personnel_profile') {
+function standalonePresentationCandidateSpans(text, profile = 'personnel_profile', options = {}) {
+  const { policy: personFieldPolicy } = personFieldContextForConsumer(options);
   const source = String(text);
-  const anchors = collectPersonAnchors(source, profile);
+  const anchors = collectPersonAnchors(source, profile, personFieldPolicy);
   const explicit = new Set(anchors.filter(seed => ['label', 'honorific', 'credential_holder'].includes(seed.confidence))
     .map(seed => key(seed.value)));
-  const evidenceRanges = protectedEvidenceRanges(source, profile);
+  const evidenceRanges = protectedEvidenceRanges(source, profile, personFieldPolicy);
   const candidates = [];
   const seen = new Set();
   const add = (start, end) => {
@@ -173,7 +176,7 @@ function standalonePresentationCandidateSpans(text, profile = 'personnel_profile
   };
   const uncertain = new Set(['caps_line', 'caps_dash', 'header_block', 'header_comma', 'header_particle',
     'header_tab', 'cjk_header', 'profile_structure', 'markdown_structure', 'markdown_link_label', 'markdown_metadata']);
-  for (const seed of collectPersonSeeds(source, profile)) {
+  for (const seed of collectPersonSeeds(source, profile, null, null, personFieldPolicy)) {
     if (!uncertain.has(seed.confidence)) continue;
     const value = seed.matchValue || seed.value;
     for (const range of sourceLiteralSpans(source, value)) add(range.start, range.end);
@@ -183,7 +186,7 @@ function standalonePresentationCandidateSpans(text, profile = 'personnel_profile
   // escaped cell into coordinates that no longer match the source.
   let lineStart = 0;
   const lines = source.split('\n');
-  const personHeader = new RegExp(`^(?:${PERSON_LABEL}):?$`, 'iu');
+  const personHeader = new RegExp(`^(?:${personFieldPattern(personFieldPolicy)}):?$`, 'iu');
   for (const [index, line] of lines.entries()) {
     const isHeader = /^[ \t]*\|?[ \t]*:?-{3,}:?[ \t]*(?:\|[ \t]*:?-{3,}:?[ \t]*)*\|?[ \t]*$/u.test(lines[index + 1] || '');
     if (/^[ \t]*\|.*\|[ \t]*$/u.test(line) && !line.includes('\\')) {
@@ -206,13 +209,25 @@ function standalonePresentationCandidateSpans(text, profile = 'personnel_profile
 }
 
 function personProseCandidateSpans(text, options = {}) {
+  const { policy: personFieldPolicy, consumerOptions } = personFieldContextForConsumer(options);
   const original = normalizeText(text);
-  const hasStrongPersonAnchor = collectPersonAnchors(original, 'general').length > 0;
+  const hasStrongPersonAnchor = collectPersonAnchors(original, 'general', personFieldPolicy).length > 0;
   const candidates = [];
   let lineStart = 0;
   for (const line of original.split('\n')) {
     const parsed = proseBody(line, options);
     if (parsed) {
+      // A raster/scan can contain an unlabelled, isolated name. The normal
+      // prose rule needs a verb and would silently publish this line. Reserve
+      // only a bounded two-token line for an exact human decision; do not
+      // infer identity from every title-cased heading or auto-redact it.
+      if (options.productChannel === 'standalone' && options.ocrLineReview === true) {
+        const isolated = ISOLATED_NAME_LINE_RE.exec(parsed.body);
+        if (isolated && normalizeSpaces(isolated[1]).split(/\s+/u).length === 2 && plausiblePerson(isolated[1])) {
+          const start = lineStart + parsed.leading + isolated.index;
+          candidates.push({ start, end: start + isolated[1].length, value: isolated[1] });
+        }
+      }
       const patterns = [SUBJECT_RE, ...(hasStrongPersonAnchor || options.productChannel === 'standalone' ? [AUXILIARY_SUBJECT_RE] : []),
         ...(options.productChannel === 'standalone' ? [CONVERSATION_SUBJECT_RE, CONVERSATION_OBJECT_RE, COMMUNICATION_OBJECT_RE] : [])];
       for (const pattern of patterns) {
@@ -234,8 +249,8 @@ function personProseCandidateSpans(text, options = {}) {
     lineStart += line.length + 1;
   }
   if (options.productChannel === 'standalone') {
-    candidates.push(...standalonePresentationCandidateSpans(original, options.profile));
-    const ranges = protectedEvidenceRanges(original, options.profile);
+    candidates.push(...standalonePresentationCandidateSpans(original, options.profile, consumerOptions));
+    const ranges = protectedEvidenceRanges(original, options.profile, personFieldPolicy);
     return disjointCandidates(original, candidates.filter(candidate =>
       !ranges.some(range => candidate.start < range.end && range.start < candidate.end)));
   }

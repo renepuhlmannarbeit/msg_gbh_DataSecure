@@ -19,9 +19,12 @@ body.embedded .privacy{display:none}
 .matrix-heading{display:flex;align-items:center;justify-content:space-between;gap:8px 20px;flex-wrap:wrap}#matrix-progress{display:none;font-size:12px;color:var(--c-muted);margin:0}body.embedded #matrix-progress{display:block}
 /* Leave room for the work, not repeated instructions. The complete document
    label remains in the DOM/title and in the selected finding's comparison. */
-.matrix-heading h2{margin:0}.matrix-guide{margin:6px 0 0}.matrix-toolbar{margin:10px 0 8px}.bulk-actions{padding:8px 12px}.bulk-actions button,.bulk-actions select{padding:8px 10px}
+.matrix-heading h2{margin:0}.matrix-guide{margin:6px 0 0}.matrix-help{font-size:13px;margin:2px 0;color:var(--c-muted)}.matrix-help summary{cursor:pointer;color:var(--c-primary);font-weight:600}.matrix-help summary:focus-visible{outline:2px solid var(--c-primary);outline-offset:2px}.matrix-help p{margin:6px 0}.matrix-toolbar{margin:10px 0 8px}.bulk-actions{padding:8px 12px}.bulk-actions button,.bulk-actions select{padding:8px 10px}
+.matrix-extra{margin-top:8px;font-size:12px;color:var(--c-muted)}.matrix-extra summary{cursor:pointer;width:max-content;max-width:100%;color:var(--c-primary);font-weight:600}.matrix-extra summary:focus-visible{outline:2px solid var(--c-primary);outline-offset:2px}.matrix-extra p{margin:6px 0}.matrix-extra button{padding:7px 10px;font-size:12px}
 .row-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-top:4px}.row-meta small{flex:1 1 130px;min-width:0;margin:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.row-meta .status-badge{flex:none}
 .matrix-selection{display:flex;align-items:center;flex-wrap:wrap;gap:8px 12px;margin:8px 0}.matrix-selection .note{margin:0}.matrix-empty{padding:20px;background:var(--c-primary-tint);border:1px solid var(--c-primary-soft-border);border-radius:var(--r-box);color:var(--c-primary)}
+.matrix-selection strong{white-space:nowrap}.matrix-selection #select-filtered,.finish #release{white-space:normal;text-align:center;overflow-wrap:anywhere}.matrix-actions-pinned{background:var(--c-surface);border-bottom:1px solid var(--c-border);padding:4px 0 8px}.matrix-actions-pinned #bulk-hint{margin:6px 0 0}.finish #release-hint{flex:1 1 220px;align-self:center}.finish #defer,.finish #release{flex:none}
+body.embedded .matrix-actions-pinned{position:sticky;top:0;z-index:3;box-shadow:0 5px 10px -10px var(--c-ink)}
 body.embedded #handoff-note{font-size:12px;margin:8px 0 0}body.embedded .matrix-pages{margin-top:8px}body.embedded .matrix-pages button{padding:8px 12px}
 body.embedded #matrix-message:empty{display:none}
 body.embedded .finish{position:sticky;bottom:0;background:var(--c-surface);z-index:2}
@@ -31,5 +34,6 @@ body.embedded .finish{position:sticky;bottom:0;background:var(--c-surface);z-ind
 /* Short desktop windows scroll the header instead of crushing the comparison
    and list to a fraction of a row. The explicit handoff stays reachable. */
 @media(min-width:901px) and (max-height:600px){body.embedded main{height:auto;min-height:100dvh}body.embedded .matrix-layout{flex:none;height:360px;min-height:360px}}
+@media(max-width:900px),(max-height:440px){body.embedded .matrix-actions-pinned{position:static;box-shadow:none}}
 @media(max-width:900px){.matrix-layout{grid-template-columns:1fr}.matrix-detail{padding:20px 0 0;border-left:0;border-top:1px solid var(--c-border)}.comparison{grid-template-columns:1fr 1fr}.table-scroll{max-height:360px}}
-@media(max-width:650px){main,body.embedded main{padding:16px}section#review,.waiting{padding:16px}.comparison{grid-template-columns:1fr}.correction-column{width:43%}}
+@media(max-width:650px){main,body.embedded main{padding:16px}section#review,.waiting{padding:16px}.comparison{grid-template-columns:1fr}.correction-column{width:43%}.finish #release{flex:1 1 100%;min-width:0;max-width:100%}}

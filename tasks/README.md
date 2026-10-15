@@ -15,9 +15,11 @@ menschlich bestätigen. Namenskonvention im Root von `tasks/`:
 mindestens eine konkrete Story `BL-nnn.x` nennen; reine Backlogpflege darf `BL-001`
 zugeordnet werden. Abgeschlossene Aufträge liegen datiert in `archiv/`. Der
 aktuelle schreibende Auftrag ist
-[`AUFTRAG-CODEX-RC123-REDAKTIONSKERN.md`](AUFTRAG-CODEX-RC123-REDAKTIONSKERN.md):
-Er behebt eine per Ausführung belegte Unter-Redaktion im
-Standalone-Markdown-first-Pfad und die zugehörigen Evidenzlücken. Der
+[`AUFTRAG-CODEX-RC160-WORKFLOW-INHALT.md`](AUFTRAG-CODEX-RC160-WORKFLOW-INHALT.md).
+Die sechs verknüpften Spezifikationen und die Aufgabenvorlage liegen unter
+[`rc160-workflow`](rc160-workflow/VORLAGE.md). Sie definieren Ergebnisse und
+Abnahme, sind aber keine zweite Statusliste. Der frühere RC123-Auftrag liegt
+mit seinem damaligen Inhalt im [Archiv](archiv/AUFTRAG-CODEX-RC123-REDAKTIONSKERN.md). Der
 abgeschlossene
 RC93-Gegenreview-Auftrag und sein um den RC94-Gegencheck ergänzter Bericht liegen
 im Archiv.

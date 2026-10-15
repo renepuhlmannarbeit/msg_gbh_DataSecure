@@ -145,7 +145,11 @@ testAsync('real Markdown and anonymization stop after the active file and resume
         output_sha256: changed.output_sha256, operation_id: '9'.repeat(32), ranges: [] });
       const result = reviews.exportApproved(id, 'f'.repeat(32), [{ document_id: row.document_id, revision: approved.revision, output_sha256: approved.output_sha256 }]);
       assert.equal(result.anonymized, false);
-      const copied = fs.readFileSync(path.join(root, 'output', 'DataSecure-Markdown-Korrektur', result.folder_name, 'Dokument_01.md'), 'utf8');
+      assert.ok(queue.some(item => item.name === row.name), 'export name must belong to an actual chosen source');
+      const correctedDirectory = path.join(root, 'output', 'DataSecure-Markdown-Korrektur', result.folder_name);
+      const originalMarkdownName = path.parse(row.name).name + '.md';
+      assert.deepEqual(fs.readdirSync(correctedDirectory), [originalMarkdownName], 'raw correction preserves the original basename');
+      const copied = fs.readFileSync(path.join(correctedDirectory, originalMarkdownName), 'utf8');
       assert.match(copied, /Anna Beispiel/u); assert.match(copied, /43 Projekte/u);
       assert.match(fs.readFileSync(queue[0].full, 'utf8'), /42 Projekte/u, 'original source unchanged by correction');
     }

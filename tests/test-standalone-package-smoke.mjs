@@ -7,7 +7,9 @@ import { fileURLToPath } from 'node:url';
 import { readCentralModes } from '../scripts/lib/zip.mjs';
 import { isolatedSidecarEnvironment, removePackageSmokeScope } from './helpers/standalone-package-scope.mjs';
 import { runPackagedReviewScenario } from './helpers/standalone-packaged-review.mjs';
-import { runPackagedOcrScenario } from './helpers/standalone-packaged-ocr-review.mjs';
+import { runPackagedOcrScenario, runPackagedOcrSkipScenario } from './helpers/standalone-packaged-ocr-review.mjs';
+import { runPackagedMarkdownScenario } from './helpers/standalone-packaged-markdown.mjs';
+import { runPackagedAnonymizedOcrScenario } from './helpers/standalone-packaged-anonymized-ocr.mjs';
 import { office, passivePresentation, embeddedWorkbookPresentation, image, pdf, text as conversionText } from './helpers/conversion-fixtures.mjs';
 
 const require = createRequire(import.meta.url);
@@ -624,10 +626,15 @@ try {
     return request;
   };
   await runPackagedReviewScenario({ request, sourceDirectory, restart: restartReviewSidecar });
+  await runPackagedReviewScenario({ request, sourceDirectory, restart: restartReviewSidecar, contentProfile: true });
   // The first scenario restarted the actual sidecar; request now points at
   // that live process, not the initial closed transport.
   await runPackagedOcrScenario({ request, sourceDirectory, restart: restartReviewSidecar });
   await runPackagedOcrScenario({ request, sourceDirectory, restart: restartReviewSidecar, markdownOnly: true });
+  await runPackagedOcrScenario({ request, sourceDirectory, restart: restartReviewSidecar, markdownOnly: true, contentOnly: true });
+  await runPackagedOcrSkipScenario({ request, sourceDirectory });
+  request = await runPackagedMarkdownScenario({ request, sourceDirectory, restart: restartReviewSidecar });
+  await runPackagedAnonymizedOcrScenario({ request, sourceDirectory });
   const log = fs.readFileSync(path.join(environment.DATASECURE_STANDALONE_DIAGNOSTIC_DIR, 'sidecar-interactions.jsonl'), 'utf8');
   for (const row of historyRows) assert.ok(!log.includes(row.batch_id), 'run identifiers stay out of diagnostics');
   assert.ok(!log.includes(exactRun) && !log.includes(convertedRun));

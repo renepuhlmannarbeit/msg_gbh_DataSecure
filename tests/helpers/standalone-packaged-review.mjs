@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 
 export function packagedReviewFixtures() {
   const table = '| Begriff | Fall |\n| --- | --- |\n' +
@@ -52,7 +53,7 @@ export function assertPackagedReviewOutputs(texts) {
 // privacy callback or journal mock substitutes for the packaged chain.
 // This is a packaged sidecar integration scenario, NOT a Tauri/WebView test.
 export async function runPackagedReviewScenario({ request: initialRequest, restart, sourceDirectory,
-  evidenceScope = 'packaged-sidecar' }) {
+  evidenceScope = 'packaged-sidecar', contentProfile = false }) {
   assert.ok(['packaged-sidecar', 'source-runtime'].includes(evidenceScope), 'REVIEW_EVIDENCE_SCOPE_INVALID');
   let request = initialRequest;
   let sequence = 0x7000;
@@ -62,11 +63,14 @@ export async function runPackagedReviewScenario({ request: initialRequest, resta
     assert.equal(answer.ok, true, `${action}: ${JSON.stringify(answer)}`);
     return answer.result;
   };
-  async function until(check, description, timeout = 120000) {
+  async function until(check, description, timeout = 120000, onTimeout = null) {
     const deadline = Date.now() + timeout;
     for (;;) {
       const value = await check(); if (value) return value;
-      assert.ok(Date.now() < deadline, description);
+      if (Date.now() >= deadline) {
+        const detail = onTimeout ? await onTimeout() : null;
+        throw new Error(`${description}${detail ? `: ${JSON.stringify(detail)}` : ''}`);
+      }
       await new Promise(resolve => setTimeout(resolve, 100));
     }
   }
@@ -81,13 +85,16 @@ export async function runPackagedReviewScenario({ request: initialRequest, resta
     return draft;
   }
   const fixtures = packagedReviewFixtures();
-  const directory = path.join(sourceDirectory, 'Paketgebundene-Pruefung');
+  const directory = path.join(sourceDirectory, contentProfile ? 'Paketgebundene-Inhalts-Anonymisierung' : 'Paketgebundene-Pruefung');
   fs.mkdirSync(directory, { recursive: true });
   const sources = [...fixtures].map(([name, bytes]) => {
     const file = path.join(directory, name); fs.writeFileSync(file, bytes, { flag: 'wx' }); return file;
   });
   assert.equal((await send('admit_selected_sources', { source_kind: 'files', source_paths: sources })).selected_count, 5);
-  await send('start_admitted_batch', { processing_mode: 'markdown-and-anonymize', output_naming_mode: 'neutral' });
+  await send('start_admitted_batch', { processing_mode: 'markdown-and-anonymize', output_naming_mode: 'neutral',
+    ...(contentProfile ? { document_review: true, content_options: {
+      schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: false, imageOcr: false
+    } } : {}) });
   const row = await until(async () => {
     const history = await send('get_run_history');
     const item = history.entries[0];
@@ -99,7 +106,7 @@ export async function runPackagedReviewScenario({ request: initialRequest, resta
   assert.equal(failures.files.length, 1);
   assert.equal(failures.files[0].name, '05-nicht-verarbeitet.csv',
     'the exact failed filename AND extension must cross the actual packaged private IPC');
-  assert.equal(failures.files[0].reason_code, 'PARSE_FAILED',
+  assert.equal(failures.files[0].reason_code, contentProfile ? 'CSV_QUOTE_INVALID' : 'PARSE_FAILED',
     'privacy parsing exposes a fixed safe reason, not a raw parser exception');
   await send('continue_history_batch', { batch_id: row.batch_id });
   let ready = await until(async () => { const value = await send('get_review_session'); return value.ready ? value : false; }, 'first actual group');
@@ -137,7 +144,42 @@ export async function runPackagedReviewScenario({ request: initialRequest, resta
   assert.equal(followingDraft.original_text.slice(candidate.original_start, candidate.original_end), 'SYNTHETISCHER FOLGETEST');
   await send('submit_review', { review_id: following.review_id, answer: { action: 'reviewed', redactions: [],
     decisions: [{ ambiguity_id: candidate.ambiguity_id, decision: 'keep' }] } });
-  await until(async () => (await send('get_review_session')).run_complete === true, 'both packaged review groups and export must complete');
+  await until(async () => (await send('get_review_session')).run_complete === true,
+    'both packaged review groups and export must complete', contentProfile ? 60000 : 120000, async () => {
+      const [session, state, history] = await Promise.all([
+        send('get_review_session'), send('get_public_state'), send('get_run_history')
+      ]);
+      const current = history.entries.find(entry => entry.batch_id === row.batch_id);
+      let exportRecord = null;
+      let journalTerminalFacts = null;
+      if (process.platform === 'win32') {
+        const scope = path.dirname(sourceDirectory);
+        const recordId = crypto.createHash('sha256').update(row.batch_id).digest('hex').slice(0, 32);
+        const record = path.join(path.dirname(sourceDirectory), 'Daten', 'Local',
+          'SecureDataMsg-Standalone', 'result-export-state', `re_${recordId}.json`);
+        try {
+          const journal = JSON.parse(fs.readFileSync(path.join(scope, 'Daten', 'Local',
+            'SecureDataMsg-Standalone', 'batches', `${row.batch_id}.json`), 'utf8'));
+          journalTerminalFacts = journal.items.reduce((facts, item) => {
+            facts[item.status] = (facts[item.status] || 0) + 1;
+            if (item.status === 'stopped') facts.stopped_mapping = item.local_mapping_exported;
+            return facts;
+          }, {});
+        } catch { journalTerminalFacts = 'unavailable'; }
+        try {
+          const saved = JSON.parse(fs.readFileSync(record, 'utf8'));
+          exportRecord = { schema: saved.schema, complete: saved.complete,
+            items: saved.items?.length, exported: saved.items?.filter(item => item.exported).length };
+        } catch { exportRecord = 'absent-or-invalid'; }
+      }
+      return { session: { ready: session.ready, run_complete: session.run_complete,
+        continuation_available: session.continuation_available }, public_state: state.state,
+        history: current && { status: current.status, result_count: current.result_count,
+        failed_count: current.failed_count, resumable: current.resumable }, export_record: exportRecord,
+        journal_terminal_facts: journalTerminalFacts,
+        progress: { complete: state.complete, batch_phase: state.batch_phase,
+          mapping_pending: state.mapping_pending, stopped: state.stopped } };
+    });
   const complete = (await send('get_run_history')).entries.find(item => item.batch_id === row.batch_id);
   assert.equal(complete.result_count, 4); assert.equal(complete.failed_count, 1); assert.equal(complete.resumable, false);
   const output = await send('resolve_history_results', { batch_id: row.batch_id });
@@ -145,6 +187,31 @@ export async function runPackagedReviewScenario({ request: initialRequest, resta
   assert.equal(results.length, 4);
   const texts = results.map(name => fs.readFileSync(path.join(output.local_path, name), 'utf8'));
   assertPackagedReviewOutputs(texts);
+  if (contentProfile) {
+    const documents = await send('get_document_reviews', { batch_id: row.batch_id });
+    assert.equal(documents.processing_mode, 'markdown-and-anonymize');
+    assert.equal(documents.documents.length, 4);
+    assert.ok(documents.documents.every(document => document.approved === false), 'technical success never grants human approval');
+    const document = documents.documents[0];
+    const decision = { action: 'approve', operation_id: crypto.randomBytes(16).toString('hex'),
+      output_sha256: document.output_sha256, revision: document.revision, ranges: [] };
+    const approved = await send('decide_document_review', { batch_id: row.batch_id, document_id: document.document_id, decision });
+    assert.equal(approved.approved, true, JSON.stringify({ ok: approved.ok,
+      keys: Object.keys(approved), reason_code: approved.reason_code }));
+    const operationId = crypto.randomBytes(16).toString('hex');
+    const selection = [{ document_id: document.document_id, output_sha256: approved.output_sha256, revision: approved.revision }];
+    const preview = await send('preview_document_export', { batch_id: row.batch_id, operation_id: operationId, selection });
+    assert.equal(preview.files.length, 1);
+    assert.doesNotMatch(preview.files[0].name, /pruefung|max|mustermann/iu);
+    const exported = await send('export_approved_documents', { batch_id: row.batch_id, operation_id: operationId, selection });
+    assert.equal(exported.exported_count, 1);
+    assert.notEqual(exported.anonymized, false, 'the anonymized path must not report a raw Markdown copy');
+    const opened = await send('resolve_document_export', { batch_id: row.batch_id, operation_id: operationId });
+    const names = fs.readdirSync(opened.local_path).filter(name => name.endsWith('.md'));
+    assert.equal(names.length, 1); assert.equal(names[0], preview.files[0].name);
+    assert.equal(crypto.createHash('sha256').update(fs.readFileSync(path.join(opened.local_path, names[0]))).digest('hex'),
+      approved.output_sha256);
+  }
   for (const [index, source] of sources.entries()) assert.deepEqual(fs.readFileSync(source), [...fixtures.values()][index]);
   const finalFailures = await send('get_run_failures', { batch_id: row.batch_id });
   assert.deepEqual(finalFailures.files, failures.files, 'failure names survive processing, human review, and process restart');

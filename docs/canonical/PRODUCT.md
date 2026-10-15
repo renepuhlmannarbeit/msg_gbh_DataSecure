@@ -1,6 +1,6 @@
 # Produktvertrag: GBH DataSecure
 
-Stand: 11.10.2026 · 3.2.0-rc159 · Ist-Zustand RC159 · Standalone RC159 auf allen vier Zielplattformen veröffentlicht · Cowork bleibt RC151
+Stand: 11.10.2026 · 3.2.0-rc160 · Ist-Zustand RC160 · Standalone RC159 auf allen vier Zielplattformen veröffentlicht · Cowork bleibt RC151
 
 Die aktuellen RC159-Standalone-Pakete für Windows, beide Mac-Architekturen und Linux binden
 Quellcommit `7af2a9d0268864a01b954e0175cae9f5a3616fe8`.
@@ -9,6 +9,22 @@ Die integrierte lokale Prüfung und Identitätszuordnung gehören ausschließlic
 zum Standalone-Adapter; der veröffentlichte Cowork-Weg wird dadurch nicht verändert.
 
 ## Ziel
+
+Lokaler RC160-Nachtrag (13.10.2026, DS-085/DS-110): Reine Konvertierung und
+Markdown-Nachkorrektur erhalten Originalinhalte und ursprüngliche Basisnamen
+mit `.md` (eindeutige Kollisionszusätze), ohne Inhalts-/Namensanonymisierung.
+Zielpräzisierung vom 14.10.2026: Das Standardprofil enthält lesbaren Text und
+Tabellen, keine Bilder, Bildverweise oder technischen Konvertierungsnotizen.
+Erkannte Wörter, echte Überschriften, Listen, Tabellenwerte und sichtbare
+Bildunterschriften bleiben erhalten. Technische Container-Metadaten und
+Extraktions-/Unsicherheitsmeldungen gehören in lokale Dokumentinformationen,
+nicht in die Seitenprosa. Ein erläuterndes Profil behält die bisherigen Hinweise.
+Scan-Texterkennung und zusätzliche Bild-/Grafik-Texterkennung werden getrennt
+gewählt und unveränderlich im Lauf gespeichert; zusätzliche Bild-OCR ist
+standardmäßig aus. Dieser vollständige Optionsanschluss ist noch in Arbeit.
+Echte Codebeispiele und Literalinhalt bleiben erhalten. Anonymisierung,
+Fundstellenprüfung, nachträgliche Dokumentfreigabe und neutraler KI-Export
+bleiben separat; keine automatische Freigabe oder garantierte OCR-Wahrheit.
 
 DataSecure umfasst zwei lokale Produkte mit gemeinsamem Verarbeitungskern:
 Das Cowork-Plugin de-identifiziert Geschäftsdokumente vor einer ausdrücklich

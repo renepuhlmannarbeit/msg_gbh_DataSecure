@@ -1065,7 +1065,7 @@ async function main() {
       process.platform === 'win32' ? 'windows_job_object' : 'node_heap_and_parent_timeout');
     assert.strictEqual(result.structuredContent.parser_hard_process_limits, process.platform === 'win32');
     assert.strictEqual(result.structuredContent.audit_schema, 'data-secure-audit-receipt/4');
-    assert.strictEqual(result.structuredContent.privacy_ruleset, 'de-business/3');
+    assert.strictEqual(result.structuredContent.privacy_ruleset, 'de-business/4');
     assert.strictEqual(result.structuredContent.credential_context_policy, 'credential-context/2');
     assert.strictEqual(typeof result.structuredContent.audit_receipts_retained, 'number');
     assert.strictEqual(typeof result.structuredContent.legacy_audit_pending, 'number');

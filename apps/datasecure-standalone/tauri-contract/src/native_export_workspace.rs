@@ -50,8 +50,9 @@ impl Request {
         if root == target { return Err(conflict()); }
         if root.volume != target.volume { return Err(error("AI_EXPORT_VOLUME_MISMATCH")); }
         let mut total = 0u64;
-        for (index, file) in self.files.iter().enumerate() {
-            if file.name != format!("Dokument_{:02}.md", index + 1) || file.bytes > 32_000_000 { return Err(conflict()); }
+        crate::export_directory::validate_export_names(&self.processing_mode, &self.files).map_err(|_| conflict())?;
+        for file in &self.files {
+            if file.bytes > 32_000_000 { return Err(conflict()); }
             total = total.checked_add(file.bytes).ok_or_else(conflict)?;
             if total > 500 * 1024 * 1024 { return Err(conflict()); }
         }

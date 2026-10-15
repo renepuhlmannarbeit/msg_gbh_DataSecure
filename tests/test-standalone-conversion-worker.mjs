@@ -26,7 +26,7 @@ const target = process.platform === 'win32' && process.arch === 'x64' ? 'windows
     : process.platform === 'linux' && process.arch === 'x64' ? 'linux-x64-glibc' : null;
 if (!target) throw new Error('CONVERSION_TEST_HOST_UNSUPPORTED');
 // Resolve target-native fixture dependencies only after the explicit host gate.
-const { office, passivePresentation, image, pdf, encryptedPdf, text } = await import('./helpers/conversion-fixtures.mjs');
+const { office, passivePresentation, literalSupplementPresentation, image, pdf, encryptedPdf, text } = await import('./helpers/conversion-fixtures.mjs');
 const scope = fs.mkdtempSync(path.join(repo, '.tmp-standalone-package-conversion-'));
 const server = path.join(scope, 'server');
 const runtime = path.join(server, 'standalone', 'conversion-runtime');
@@ -122,6 +122,357 @@ try {
     assert.throws(() => writeConversionRuntime(repo, runtime, target), /CONVERSION_PACKAGE_DESTINATION_EXISTS/u);
   });
   const { convertBuffer, conversionStartFailureCode, nativeConversionExitCode } = require(path.join(server, 'standalone', 'conversion-worker.js'));
+  await test('saved /7 anonymization captures all ten real formats without publishing a result or document basis', async () => {
+    const saved = new Map(['EU_PRIVACY_DATA_ROOT', 'EU_PRIVACY_ROOT', 'EU_PRIVACY_RESULT_ROOT', 'DATASECURE_PRODUCT_CHANNEL'].map(key => [key, process.env[key]]));
+    const own = path.join(scope, 'content-capture'); fs.mkdirSync(own);
+    process.env.EU_PRIVACY_DATA_ROOT = path.join(own, 'data');
+    process.env.EU_PRIVACY_ROOT = path.join(own, 'private');
+    process.env.EU_PRIVACY_RESULT_ROOT = path.join(own, 'results'); fs.mkdirSync(process.env.EU_PRIVACY_RESULT_ROOT);
+    process.env.DATASECURE_PRODUCT_CHANNEL = 'standalone';
+    const batch = require(path.join(server, 'gateway/batch'));
+    const { createBatchPseudonymState } = require(path.join(server, 'batch-pseudonym-context'));
+    const { createPrivateIoSummary } = require(path.join(server, 'gateway/performance'));
+    const { createPrivateWorkStore } = require(path.join(server, 'gateway/private-work-store'));
+    const { copySnapshotFile } = require(path.join(server, 'gateway/batch-snapshot'));
+    const { createDocumentReviewStore } = require(path.join(server, 'gateway/standalone-document-review-store'));
+    const { createContentAbortController } = require(path.join(server, 'gateway/content-consumer-dependencies'));
+    const raster = image(), ctx = raster.getContext('2d'); ctx.fillText('E-Mail: qa00@quality.example.invalid', 60, 520);
+    const png = raster.toBuffer('image/png'), jpeg = raster.toBuffer('image/jpeg');
+    const bitmap = encodeBmp(decodePng(png));
+    const sources = [['txt', Buffer.from('Name: Anna Beispiel\nCAPGEMINI INVENT\nSachinhalt: 42 EUR')],
+      ['md', Buffer.from('# Inhalt\nName: Anna Beispiel\nCAPGEMINI INVENT\n![Abbildung](ignored.png)')],
+      ['csv', Buffer.from('Name;Betrag\nAnna Beispiel;42')], ...['docx', 'xlsx', 'pptx'].map(type => [type, office(type)]),
+      ['pdf', pdf([{ text: 'Name: Anna Beispiel CAPGEMINI INVENT' }])], ['png', png], ['jpeg', jpeg], ['bmp', bitmap]];
+    let captured = 0, contacts = 0;
+    try {
+      for (const markdownOutput of ['content-v1', 'notes-v1']) for (const [sourceType, bytes] of sources) {
+        const id = crypto.randomBytes(16).toString('hex'), token = crypto.randomBytes(32).toString('hex');
+        const original = path.join(own, `Original-${id}.${sourceType}`); fs.writeFileSync(original, bytes);
+        const item = { id, name: `Original-${id}.${sourceType}`, source_label: `Original-${id}.${sourceType}`, size: bytes.length, sha256: hash(bytes),
+          work_name: `001_${crypto.randomBytes(12).toString('hex')}.${sourceType}`, private_artifact_plain: true,
+          status: 'deferred_review', checkpoint: 'awaiting_local_review', error_code: 'LOCAL_REVIEW_DEFERRED' };
+        const state = { schema: 'datasecure-batch/7', token, product_channel: 'standalone', processing_mode: 'markdown-and-anonymize',
+          standalone_document_review: true, profile: 'general', remove_images: false, output_naming_mode: 'neutral',
+          content_options: { schema: 'datasecure-content-options/1', markdownOutput, scanOcr: true,
+            imageOcr: ['png', 'jpeg', 'bmp'].includes(sourceType) },
+          created_at: '2026-10-14T00:00:00.000Z', expires_at: '2099-01-01T00:00:00.000Z',
+          io_summary: createPrivateIoSummary(), ...createBatchPseudonymState({ productChannel: 'standalone' }), items: [item] };
+        const work = batch._test.workPath(token); fs.mkdirSync(work);
+        const privateWorkStore = createPrivateWorkStore({ privateRoot: batch._test.batchRoot() });
+        copySnapshotFile(original, path.join(work, item.work_name), fs.statSync(original), { privateWorkStore, expectedSha256: item.sha256 });
+        batch._test.writeState(state); createDocumentReviewStore().captureRun(state);
+        const before = captured;
+        const controller = createContentAbortController();
+        const result = await batch.reviewDeferredBatch(token, { localFinalize: true, abortSignal: controller.signal,
+          onReviewSourceCaptured(value) {
+            assert.ok(value.originalText.trim());
+            if (markdownOutput === 'notes-v1' && ['png', 'jpeg', 'bmp'].includes(sourceType))
+              assert.match(value.originalText, /manual\.really\.long@quality\.example\.invalid/u,
+                'a length-changing authenticated contact correction precedes privacy capture');
+            captured++;
+            // This is a native input/capture probe, not a publication test.
+            // Use the actual pause boundary before an empty ambiguity list can
+            // automatically advance to the separately unfinished export path.
+            assert.equal(batch.requestStandalonePause(token).ok, true);
+          },
+          reviewTextLocally: async draft => {
+            if (draft.ocr_contact_review === true) { contacts++; return { action: 'reviewed', redactions: [],
+              decisions: draft.ambiguities.map(candidate => markdownOutput === 'notes-v1' && candidate.contact_kind === 'email'
+                ? { ambiguity_id: candidate.ambiguity_id, decision: 'correct_contact', replacement: 'manual.really.long@quality.example.invalid' }
+                : { ambiguity_id: candidate.ambiguity_id, decision: 'confirm_contact' }) }; }
+            return { action: 'deferred' };
+          } });
+        assert.ok(captured > before, `${markdownOutput}/${sourceType}: actual privacy source captured; ${result.error}`);
+        const stored = batch._test.readStateForMaintenance(token).items[0];
+        assert.equal(result.pause_requested, true, `${markdownOutput}/${sourceType}: actual pause after source capture`);
+        assert.equal(stored.status, 'deferred_review');
+        assert.notEqual(stored.status, 'released'); assert.equal(result.locally_released || 0, 0);
+        assert.deepEqual(fs.readFileSync(original), bytes); assert.equal(fs.existsSync(batch._test.activeLockPath()), false);
+        assert.equal(fs.existsSync(path.join(process.env.EU_PRIVACY_DATA_ROOT, 'standalone-anonymized-artifacts', 'Output', `ds_${id}`)), false);
+        assert.equal(fs.existsSync(path.join(process.env.EU_PRIVACY_ROOT, 'Output', `ds_${id}`)), false);
+        const files = [];
+        const walk = dir => { for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          const full = path.join(dir, entry.name); if (entry.isDirectory()) walk(full); else files.push(entry.name);
+        } };
+        walk(path.join(process.env.EU_PRIVACY_DATA_ROOT, 'document-reviews', token));
+        assert.ok(!files.some(name => /^(?:base\.json|publication\.json|prepared-publication\.json|audit\.json)$/u.test(name)), 'capture creates no publication evidence');
+      }
+      assert.ok(contacts >= 6, 'PNG, JPEG and BMP contact confirmation reached the actual callback in both profiles');
+    } finally { for (const [key, value] of saved) value === undefined ? delete process.env[key] : process.env[key] = value; }
+  });
+  await test('new pinned syntax closure imports inside the actual isolated worker; legacy Markdown remains unchanged', async () => {
+    const source = '# Inhalt\n\nName: Anna Beispiel\n\n![Grafiktitel](data:image/png;base64,AAAA)\n\n' +
+      '<picture><source srcset="https://example.invalid/never-fetch.png"><img alt="Caption" src="x"></picture>\n\n' +
+      '> <img\n> src="data:image/png;base64,AAAA"\n> alt="Diagramm">\n\n' +
+      '<svg><image href="data:image/png;base64,AAAA"/><text>Name: Anna <tspan>Beispiel</tspan></text></svg>\n\n' +
+      '```md\n![Code](literal.png)\n```';
+    const expected = '# Inhalt\n\nName: Anna Beispiel\n\nGrafiktitel\n\nCaption\n\n> Diagramm\n\nName: Anna Beispiel\n\n```md\n![Code](literal.png)\n```';
+    const original = Buffer.from(source), digest = hash(original);
+    for (const profile of [undefined, 'notes-v1']) {
+      const legacy = await convertBuffer(original, '.md', profile ? { markdownOutput: profile } : {});
+      assert.equal(legacy.markdown, source); assert.equal(legacy.coverage.status, 'complete');
+    }
+    const clean = await convertBuffer(original, '.md', { markdownOutput: 'content-v1' });
+    assert.equal(clean.markdown, expected);
+    assert.deepEqual(clean.coverage, { status: 'incomplete', reason_codes: ['VISUAL_CONTENT_NOT_EXTRACTED'] });
+    assert.equal(hash(original), digest, 'original bytes are untouched');
+    const referenced = await convertBuffer(Buffer.from('![Titel][bild]\n\n[bild]: x "Fachbeschreibung"'), '.md', { markdownOutput: 'content-v1' });
+    assert.equal(referenced.markdown, 'Titel — Fachbeschreibung\n\n');
+    const svg = await convertBuffer(Buffer.from('<svg><foreignObject><div>Erster</div><div>Zweiter</div></foreignObject></svg>'), '.md',
+      { markdownOutput: 'content-v1' });
+    assert.equal(svg.markdown, 'Erster\nZweiter');
+    const containers = await convertBuffer(Buffer.from('> <svg><foreignObject><div>Anna&#10;&#10;Beispiel</div></foreignObject></svg>\n\n' +
+      '- <svg><foreignObject><pre>Erster&#10;&#10;Zweiter</pre></foreignObject></svg>'), '.md', { markdownOutput: 'content-v1' });
+    assert.equal(containers.markdown, '> Anna\n> \n> Beispiel\n\n- Erster\n  \n  Zweiter', 'actual worker preserves generated paragraph containers');
+    const privacy = anonymizeMarkdown(clean.markdown, 'personnel_profile', { deferPersonReview: true });
+    assert.doesNotMatch(privacy.text, /Anna Beispiel/u);
+    assert.match(privacy.text, /Grafiktitel|Caption/u);
+    assert.ok(children.every(entry => entry.closed));
+    await assert.rejects(convertBuffer(Buffer.from('<svg><image href="data:image/png;base64,AAAA"/>'), '.md',
+      { markdownOutput: 'content-v1' }), { code: 'MARKDOWN_CONTENT_TRANSFORM_FAILED' });
+  });
+  await test('actual isolated TXT content presentation is literal; legacy and notes stay byte-equivalent', async () => {
+    const source = '![Literal](data:image/png;base64,AAAA) <img src=secret.png>\r\n# Kein Markdown\r\n1. Keine Liste\r\n' +
+      '`Code` und *Text* &amp; ~~Fachwort~~ § € ± →\r\n  Leerraum\tA  B  ';
+    const bytes = Buffer.from(source), original = hash(bytes), oracle = require('markdown-it')({ html: true });
+    for (const profile of [undefined, 'notes-v1']) {
+      assert.equal((await convertBuffer(bytes, '.txt', profile ? { markdownOutput: profile } : {})).markdown, source);
+    }
+    const clean = await convertBuffer(bytes, '.txt', { markdownOutput: 'content-v1' });
+    const html = oracle.render(clean.markdown);
+    assert.doesNotMatch(html, /<(?:img|h1|ol|li|pre|code|em|strong|s)(?:\s|>)/u);
+    assert.match(html, /!\[Literal\]\(data:image\/png;base64,AAAA\) &lt;img src=secret.png&gt;/u);
+    assert.match(html, /`Code` und \*Text\* &amp;amp; ~~Fachwort~~ § € ± →/u);
+    assert.match(html, /  Leerraum\tA  B  /u);
+    assert.equal(hash(bytes), original);
+  });
+  await test('actual isolated CSV profile preserves literal GFM characters without rewriting legacy artifacts', async () => {
+    const bytes = Buffer.from('"~~Fachwort~~ ![Literal](private.png)"'), oracle = require('markdown-it')({ html: true });
+    const legacy = await convertBuffer(bytes, '.csv');
+    assert.match(oracle.render(legacy.markdown), /<s>/u);
+    assert.equal((await convertBuffer(bytes, '.csv', { markdownOutput: 'notes-v1' })).markdown, legacy.markdown);
+    const clean = await convertBuffer(bytes, '.csv', { markdownOutput: 'content-v1' });
+    assert.doesNotMatch(oracle.render(clean.markdown), /<(?:img|s)(?:\s|>)/u);
+    assert.match(oracle.render(clean.markdown), /~~Fachwort~~ !\[Literal\]\(private.png\)/u);
+  });
+  await test('actual isolated Office chart/layout/master content is inert and retains every source value', async () => {
+    const bytes = literalSupplementPresentation(), oracle = require('markdown-it')({ html: true });
+    const legacy = await convertBuffer(bytes, '.pptx');
+    assert.match(oracle.render(legacy.markdown), /<img/u);
+    assert.equal((await convertBuffer(bytes, '.pptx', { markdownOutput: 'notes-v1' })).markdown, legacy.markdown);
+    const clean = await convertBuffer(bytes, '.pptx', { markdownOutput: 'content-v1' });
+    const html = oracle.render(clean.markdown);
+    assert.doesNotMatch(html, /<(?:img|s)(?:\s|>)/u);
+    assert.equal((html.match(/!\[Literal\]\(data:image\/png;base64,AAAA\)/gu) || []).length, 3);
+    assert.equal((html.match(/~~Fachwort~~/gu) || []).length, 3);
+    assert.match(html, /42/u);
+    assert.doesNotMatch(clean.markdown, /## (?:Diagrammdaten|Folienlayout|Folienmaster) [^\n]+\.xml/u);
+  });
+  await test('content-only PDF/OCR suppresses only owned notices and keeps exact contact spans/crops', async () => {
+    const native = await convertBuffer(pdf([{ text: 'Text mit § 5 und EUR 2026' }]), '.pdf', { markdownOutput: 'content-v1' });
+    assert.match(native.markdown, /Text mit § 5 und EUR 2026/u);
+    assert.doesNotMatch(native.markdown, /> Hinweis:|Zusätzlicher Bildtext/u);
+    const source = image(true), context = source.getContext('2d');
+    ['Name: Anna Beispiel', 'E-Mail: qa11@quality.example.invalid', 'Telefon: +49 30 555 1011']
+      .forEach((line, index) => context.fillText(line, 60, 130 + index * 110));
+    const pixels = source.toBuffer('image/png');
+    const legacy = await convertBuffer(pixels, '.png', { markdownOutput: 'notes-v1' });
+    const result = await convertBuffer(pixels, '.png', { markdownOutput: 'content-v1' });
+    assert.match(result.markdown, /Anna Beispiel/u);
+    assert.doesNotMatch(result.markdown, /> Hinweis:/u);
+    assert.ok(result.coverage.reason_codes.includes('OCR_NOT_VERIFIED'));
+    assert.ok(result.ocr_contacts?.length > 0);
+    assert.deepEqual(result.ocr_contacts, legacy.ocr_contacts, 'same original offsets and actual private pixel crops');
+    assert.ok(result.ocr_contacts.some(contact => contact.image?.png_base64), 'actual local crop retained');
+    for (const contact of result.ocr_contacts) {
+      assert.equal(result.markdown.slice(contact.start, contact.end), legacy.markdown.slice(contact.start, contact.end));
+    }
+  });
+  const contentChoices = (scanOcr = true, imageOcr = false, markdownOutput = 'content-v1') =>
+    ({ schema: 'datasecure-content-options/1', markdownOutput, scanOcr, imageOcr });
+  await test('real new raw consumer binds extraction, private capture, approval and original-name export for every source type', () => {
+    const canvas = image(), pixels = canvas.toBuffer('image/png');
+    const sources = [
+      ['txt', Buffer.from(text)], ['md', Buffer.from(`# Inhalt\n\n${text}\n\n![Titel](never-read.png)`)],
+      ['csv', Buffer.from(`Name;Unternehmen\nMax Mustermann;Nordstern GmbH`)],
+      ...['docx', 'xlsx', 'pptx'].map(type => [type, office(type)]),
+      ['pdf', pdf([{ text }], '', { info: true })], ['png', pixels],
+      ['jpeg', canvas.toBuffer('image/jpeg')], ['bmp', encodeBmp(decodePng(pixels))]
+    ];
+    const proof = `const assert = require('node:assert/strict'), fs = require('node:fs'), path = require('node:path'), crypto = require('node:crypto');
+      (async () => {
+        const own = path.join(process.argv[1], 'content-consumer-real'); fs.mkdirSync(own);
+        const server = process.argv[2];
+        process.env.EU_PRIVACY_DATA_ROOT = path.join(own, 'data'); process.env.EU_PRIVACY_ROOT = path.join(own, 'private');
+        process.env.EU_PRIVACY_RESULT_ROOT = path.join(own, 'results'); fs.mkdirSync(process.env.EU_PRIVACY_RESULT_ROOT);
+        const { convertNext } = require(path.join(server, 'standalone/convert-next'));
+        const { readMarkdownArtifact } = require(path.join(server, 'standalone/markdown-store'));
+        const { createDocumentReviewStore } = require(path.join(server, 'gateway/standalone-document-review-store'));
+        const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
+        const sources = JSON.parse(fs.readFileSync(0, 'utf8'));
+        for (const [index, [type, encoded]] of sources.entries()) {
+          const bytes = Buffer.from(encoded, 'base64'), digest = hash(bytes), id = (index + 1).toString(16).padStart(32, '0');
+          const name = 'Original-' + index + '.' + type, original = path.join(own, name); fs.writeFileSync(original, bytes);
+          const opts = { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: false, imageOcr: ['png', 'jpeg', 'bmp'].includes(type) };
+          const state = { schema: 'datasecure-batch/7', token: (index + 1).toString(16).padStart(64, '0'), product_channel: 'standalone',
+            processing_mode: 'markdown-only', standalone_document_review: true, content_options: opts,
+            items: [{ id, name, source_label: name, sha256: digest, status: 'pending' }] };
+          const store = createDocumentReviewStore(); store.captureRun(state);
+          const result = await convertNext('auto', { inputQueue: [{ name, private_bytes: Buffer.from(bytes), expected_sha256: digest }],
+            artifactId: 'dm_' + id, contentOptions: opts, ocrContactReview: true,
+            prepareOcrContacts: async input => input.original_text, // explicit synthetic confirmation, no spelling repair
+            persistStandaloneDocumentReview: value => store.capture(state, state.items[0], value),
+            afterPublish: () => store.recordPublication(state.token, id) });
+          assert.equal(result.anonymized, false); const artifact = readMarkdownArtifact(result.artifact_id, opts);
+          assert.equal(artifact.manifest.schema, 'datasecure-markdown-artifact/2'); assert.deepEqual(artifact.manifest.content_options, opts);
+          const rendered = require('entities').decodeHTML(require('markdown-it')({ html: false }).render(artifact.markdown));
+          assert.match(rendered, /Max Mustermann/u); assert.match(rendered, /Nordstern GmbH/u);
+          assert.doesNotMatch(artifact.markdown, /Zusätzlicher Bildtext|OCR-Kontaktwerte|Dokumentinformationen|Private title/u);
+          assert.equal(hash(fs.readFileSync(original)), digest);
+          let row = store.list(state.token).documents[0];
+          store.decide(state.token, id, { action: 'approve', ranges: [], revision: row.revision, output_sha256: row.output_sha256,
+            operation_id: crypto.randomBytes(16).toString('hex') });
+          row = createDocumentReviewStore().list(state.token).documents[0];
+          const exported = store.exportApproved(state.token, crypto.randomBytes(16).toString('hex'), [{ document_id: id, revision: row.revision, output_sha256: row.output_sha256 }]);
+          const file = path.join(process.env.EU_PRIVACY_RESULT_ROOT, 'DataSecure-Markdown-Korrektur', exported.folder_name, 'Original-' + index + '.md');
+          assert.equal(fs.readFileSync(file, 'utf8'), artifact.markdown);
+        }
+        process.stdout.write('10 real converter-to-approved-raw-export source variants passed\\n');
+      })().catch(error => { console.error(error); process.exitCode = 1; });`;
+    const output = childProcess.execFileSync(process.execPath, ['-e', proof, scope, server], {
+      input: JSON.stringify(sources.map(([type, bytes]) => [type, bytes.toString('base64')])), timeout: 300000, maxBuffer: 16 * 1024 * 1024,
+      windowsHide: true, encoding: 'utf8'
+    });
+    assert.match(output, /10 real converter-to-approved-raw-export source variants passed/u);
+  });
+  await test('content Markdown PDF metadata survives the actual batch item processor', async () => {
+    const saved = new Map(['EU_PRIVACY_DATA_ROOT', 'EU_PRIVACY_ROOT', 'EU_PRIVACY_RESULT_ROOT'].map(key => [key, process.env[key]]));
+    const directory = path.join(scope, 'pdf-metadata-batch'); fs.mkdirSync(directory);
+    process.env.EU_PRIVACY_DATA_ROOT = path.join(directory, 'data');
+    process.env.EU_PRIVACY_ROOT = path.join(directory, 'private');
+    process.env.EU_PRIVACY_RESULT_ROOT = path.join(directory, 'visible'); fs.mkdirSync(process.env.EU_PRIVACY_RESULT_ROOT);
+    try {
+      const { SafeError } = require(path.join(server, 'runtime'));
+      const { createBatchItemProcessor } = require(path.join(server, 'gateway', 'batch-item-processor'));
+      const { createDocumentReviewStore } = require(path.join(server, 'gateway', 'standalone-document-review-store'));
+      const { convertNext } = require(path.join(server, 'standalone', 'convert-next'));
+      const bytes = pdf([{ text }], '', { info: true });
+      const id = crypto.randomBytes(16).toString('hex');
+      const item = { id, name: 'Text.pdf', source_label: 'Text.pdf', sha256: hash(bytes), status: 'pending' };
+      const state = { schema: 'datasecure-batch/7', product_channel: 'standalone', processing_mode: 'markdown-only',
+        content_options: { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: false, imageOcr: false },
+        standalone_document_review: true, token: crypto.randomBytes(32).toString('hex'), created_at: new Date().toISOString(),
+        io_summary: {}, items: [item] };
+      createDocumentReviewStore().captureRun(state);
+      let cause;
+      const prohibited = () => { throw new Error('Privacy operation invoked for standalone conversion'); };
+      const processor = createBatchItemProcessor({ SafeError, writeState() {}, anonymizeNext: prohibited,
+        convertNext: async (...args) => { try { return await convertNext(...args); } catch (error) { cause = error; throw error; } },
+        packageIdForItem: prohibited, reviewSingleBatchTextLocally: prohibited, incrementPrivateIoSummary: prohibited,
+        ensureMappingOutbox: prohibited, markMappingPending: prohibited, commitPendingMapping: prohibited,
+        appendMapping() {}, invalidateUnpublishedBatchCopies() {}, cleanupTerminalWorkCopy() {},
+        createPhaseRecorder: () => ({ mark() {}, snapshot: () => ({}) }), publicProgress: () => ({}), writeTerminalEvidence: () => true });
+      const result = await processor.processSingleBatchItem(state, item,
+        { name: item.name, private_bytes: Buffer.from(bytes), expected_sha256: hash(bytes) }, { convertBuffer });
+      assert.equal(result.ok, true, cause?.stack || JSON.stringify(item));
+      assert.equal(item.status, 'delivery_pending');
+      assert.equal(createDocumentReviewStore().list(state.token).documents.length, 1);
+    } finally { for (const [key, value] of saved) value === undefined ? delete process.env[key] : process.env[key] = value; }
+  });
+  await test('all eight complete options reach the real isolated child and return an exact v2 echo', async () => {
+    for (const profile of ['content-v1', 'notes-v1']) for (const scan of [false, true]) for (const graphics of [false, true]) {
+      const options = contentChoices(scan, graphics, profile);
+      const source = Buffer.from('Original Anna Beispiel § € ± →'), before = hash(source);
+      const result = await convertBuffer(source, '.txt', { contentOptions: options });
+      assert.equal(result.schema, 'datasecure-markdown-extraction/2');
+      assert.deepEqual(result.content_options, options);
+      assert.match(result.markdown, /Anna Beispiel § € ± →/u);
+      assert.equal(hash(source), before);
+    }
+  });
+  await test('new Markdown transformation retains captions and literal code without image execution', async () => {
+    const source = Buffer.from('![Bildtext](data:image/png;base64,AAAA)\n\n`![Code](private.png)`');
+    const result = await convertBuffer(source, '.md', { contentOptions: contentChoices(false, false) });
+    assert.equal(result.schema, 'datasecure-markdown-extraction/2');
+    assert.match(result.markdown, /Bildtext/u);
+    assert.match(result.markdown, /`!\[Code\]\(private\.png\)`/u);
+    assert.doesNotMatch(result.markdown, /data:image\/png/u);
+  });
+  await test('PDF content metadata remains private; notes mode and visible page authors remain intact', async () => {
+    const bytes = pdf([{ text: 'Visible author Anna Beispiel' }], '', { info: true });
+    const content = await convertBuffer(bytes, '.pdf', { contentOptions: contentChoices(false, false) });
+    assert.match(content.markdown, /Visible author Anna Beispiel/u);
+    assert.doesNotMatch(content.markdown, /Dokumentinformationen|Private title|Max Mustermann|PDFFormatVersion/u);
+    assert.ok(content.private_document_metadata.entries.some(entry => entry.key === 'Author' && entry.value === 'Max Mustermann'));
+    const notes = await convertBuffer(bytes, '.pdf', { contentOptions: contentChoices(false, false, 'notes-v1') });
+    assert.match(notes.markdown, /Dokumentinformationen[\s\S]*Max Mustermann/u);
+    assert.deepEqual(notes.private_document_metadata, content.private_document_metadata);
+  });
+  await test('disabled raster OCR preserves native headers without even starting Tesseract and rejects empty exports', async () => {
+    let diagnostic = '';
+    observeSpawn = child => child.stderr.on('data', bytes => { diagnostic += bytes.toString(); });
+    try {
+      const pixels = image().toBuffer('image/jpeg');
+      const result = await convertBuffer(pdf([{ image: pixels, text: 'Small native header' }]), '.pdf',
+        { contentOptions: contentChoices(false, false) });
+      assert.match(result.markdown, /Small native header/u);
+      assert.doesNotMatch(result.markdown, /Nordstern|Projektmanager/u);
+      assert.ok(result.coverage.reason_codes.includes('SCAN_OCR_DISABLED_BY_POLICY'));
+      assert.ok(result.coverage.reason_codes.includes('IMAGE_OCR_DISABLED_BY_POLICY'));
+      await assert.rejects(convertBuffer(pdf([{ image: pixels }]), '.pdf', { contentOptions: contentChoices(false, false) }),
+        { code: 'PDF_TEXT_UNAVAILABLE_BY_POLICY' });
+      assert.doesNotMatch(diagnostic, /CONVERSION_OCR_(?:STARTING|READY)/u);
+    } finally { observeSpawn = undefined; }
+  });
+  await test('selective scan or graphic consent demands local PDF scope before any OCR, including header hybrids', async () => {
+    let diagnostic = '';
+    observeSpawn = child => child.stderr.on('data', bytes => { diagnostic += bytes.toString(); });
+    try {
+      const pixels = image().toBuffer('image/jpeg');
+      for (const options of [contentChoices(true, false), contentChoices(false, true)]) for (const header of [undefined, 'Small native header']) {
+        await assert.rejects(convertBuffer(pdf([{ image: pixels, ...(header ? { text: header } : {}) }]), '.pdf', { contentOptions: options }),
+          { code: 'PDF_OCR_SCOPE_REQUIRED' });
+      }
+      assert.doesNotMatch(diagnostic, /CONVERSION_OCR_(?:STARTING|READY)/u);
+    } finally { observeSpawn = undefined; }
+  });
+  await test('full OCR union keeps equal text at different locations instead of lexical/casefold deletion', async () => {
+    const pixels = image().toBuffer('image/jpeg');
+    const bytes = pdf([{ image: pixels, text: 'Max Mustermann' }]);
+    const before = hash(bytes);
+    const result = await convertBuffer(bytes, '.pdf', { contentOptions: contentChoices(true, true) });
+    assert.ok((result.markdown.match(/Max Mustermann/gu) || []).length >= 2, result.markdown);
+    assert.match(result.markdown, /Nordstern GmbH/u);
+    assert.doesNotMatch(result.markdown, /Zusätzlicher Bildtext|> Hinweis:/u);
+    assert.equal(hash(bytes), before);
+  });
+  await test('new image OCR returns exact original contact spans and crops, and blank images stop by nameable code', async () => {
+    const canvas = image(true), context = canvas.getContext('2d');
+    context.fillText('E-Mail: qa11@quality.example.invalid', 60, 130);
+    context.fillText('Telefon: +49 30 555 1011', 60, 240);
+    const result = await convertBuffer(canvas.toBuffer('image/png'), '.png', { contentOptions: contentChoices(false, true) });
+    assert.ok(result.ocr_contacts?.length > 0);
+    assert.ok(result.ocr_contacts.some(contact => contact.image?.png_base64));
+    for (const contact of result.ocr_contacts) assert.ok(result.markdown.slice(contact.start, contact.end).length > 0);
+    assert.doesNotMatch(result.markdown, /> Hinweis:/u);
+    const before = children.length;
+    await assert.rejects(convertBuffer(canvas.toBuffer('image/png'), '.png', { contentOptions: contentChoices(true, false) }), { code: 'IMAGE_OCR_REQUIRED' });
+    assert.equal(children.length, before, 'no runtime/decoder/OCR child for an unselected image');
+    await assert.rejects(convertBuffer(image(true).toBuffer('image/png'), '.png', { contentOptions: contentChoices(true, true) }), { code: 'CONVERSION_OCR_TEXT_EMPTY' });
+  });
+  await test('new union consent reads real vector-outline letters beside native prose; selective consent waits for scope', async () => {
+    const bytes = pdf([{ text: 'Native prose', vectorText: 'CLOUD' }]);
+    let diagnostic = '';
+    observeSpawn = child => child.stderr.on('data', chunk => { diagnostic += chunk.toString(); });
+    try {
+      await assert.rejects(convertBuffer(bytes, '.pdf', { contentOptions: contentChoices(true, false) }), { code: 'PDF_OCR_SCOPE_REQUIRED' });
+      assert.doesNotMatch(diagnostic, /CONVERSION_OCR_(?:STARTING|READY)/u);
+      const result = await convertBuffer(bytes, '.pdf', { contentOptions: contentChoices(true, true) });
+      assert.match(diagnostic, /CONVERSION_OCR_READY/u);
+      assert.match(result.markdown, /Native prose/u);
+      assert.match(result.markdown, /CLOUD/u, 'independently specified vector-letter content is retained');
+    } finally { observeSpawn = undefined; }
+  });
   await test('actual bundled PDF.js path painting after text cannot suppress later visible OCR', () => {
     // PDF.js loads a native canvas DLL. Own its lifetime in an exited child so
     // Windows can remove the temporary package without a loaded-DLL lock.
@@ -213,6 +564,72 @@ try {
     extension,
     { ...options, productChannel: 'standalone' }
   );
+  await test('actual bound privacy input covers ten formats, real CSV headers, DOCX stories and exact OCR crops', async () => {
+    const canvas = image(), pixels = canvas.toBuffer('image/png');
+    const sources = [
+      ['txt', Buffer.from(`Name: ${text}\nLiteral ![Code](never-fetch.png)`) ],
+      ['md', Buffer.from(`# Inhalt\n\nName: ${text}\n\n![Grafiktitel](never-fetch.png)\n\n\`\`\`md\n![Code](literal.png)\n\`\`\``)],
+      ['csv', Buffer.from('Name,Unternehmen,Name,\r\nMax Mustermann,Nordstern GmbH,Anna Beispiel,\r\n\r\n')],
+      ...['docx', 'xlsx', 'pptx'].map(type => [type, office(type)]),
+      ['pdf', pdf([{ text }], '', { info: true })], ['png', pixels],
+      ['jpeg', canvas.toBuffer('image/jpeg')], ['bmp', encodeBmp(decodePng(pixels))]
+    ];
+    const MarkdownIt = require('markdown-it'), { decodeHTML } = require('entities');
+    const { validatePrivacyExtractionForOptions } = require(path.join(server, 'core', 'markdown-first-privacy.js'));
+    for (const [type, bytes] of sources) {
+      const before = hash(bytes), options = contentChoices(false, ['png', 'jpeg', 'bmp'].includes(type));
+      const result = await extractSourceForPrivacy(bytes, '.' + type, { productChannel: 'standalone', contentOptions: options });
+      assert.deepEqual(result.sourceExtraction.content_options, options);
+      const verified = validatePrivacyExtractionForOptions(result, options, type);
+      assert.equal(Object.isFrozen(verified), true);
+      const rendered = decodeHTML(new MarkdownIt({ html: true }).render(verified.markdown));
+      assert.match(rendered, /Max Mustermann/u); assert.match(rendered, /Nordstern GmbH/u);
+      assert.equal(hash(bytes), before);
+      assert.ok(children.every(entry => entry.closed), 'closed real supervisor before privacy input is handed over');
+      for (const contact of verified.ocrContacts || []) {
+        assert.ok(contact.image?.png_base64, 'private original crop survives');
+        assert.ok(verified.markdown.slice(contact.start, contact.end).trim(), 'exact source value survives at the confirmed coordinates');
+      }
+      if (type === 'csv') {
+        assert.equal((rendered.match(/<th>Name<\/th>/gu) || []).length, 2);
+        assert.ok(rendered.includes('<th></th>')); assert.equal((rendered.match(/<tr>/gu) || []).length, 3);
+        assert.ok(!rendered.includes('Spalte ') && !rendered.includes('<th>Zeile'));
+      }
+      if (type === 'md') {
+        assert.ok(rendered.includes('Grafiktitel')); assert.ok(rendered.includes('![Code](literal.png)'));
+        assert.ok(!rendered.includes('<img') && !verified.markdown.includes('never-fetch'));
+      }
+      if (type === 'pdf') {
+        assert.ok(verified.privateDocumentMetadata.entries.some(entry => entry.key === 'Author'));
+        assert.ok(!verified.markdown.includes('Private title') && !JSON.stringify(verified.sourceExtraction).includes('privateDocumentMetadata'));
+      }
+    }
+    const docx = await extractSourceForPrivacy(headerFooterDocx(), '.docx', { productChannel: 'standalone', contentOptions: contentChoices(false, false) });
+    for (const value of ['BODY PRIVATE', 'HEADER PRIVATE', 'FOOTER PRIVATE']) assert.ok(docx.markdown.includes(value), value);
+    assert.ok(!docx.sourceExtractionCoverage.reason_codes.includes('DOCX_HEADER_FOOTER_EXCLUDED_BY_POLICY'));
+    const tableRow = values => '<w:tr>' + values.map(value => '<w:tc><w:p><w:r><w:t xml:space="preserve">' + value + '</w:t></w:r></w:p></w:tc>').join('') + '</w:tr>';
+    const tableDocx = zipStore([...opcControlEntries('docx'), ['word/document.xml',
+      '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:tbl>' +
+      tableRow([' Name ', '\tName\t', ' Name ', ' First Name ', 'Full Name', 'Vollständiger Name', 'Kontaktperson']) +
+      tableRow(['Qvx', 'Pzx', 'Rjx', 'Jmx', 'Kyx', 'Lpx', 'Mtx']) + '</w:tbl></w:body></w:document>']]);
+    const table = await extractSourceForPrivacy(tableDocx, '.docx', { productChannel: 'standalone', contentOptions: contentChoices(false, false) });
+    assert.ok(table.markdown.includes('&#32;Name&#32;') && table.markdown.includes('&#9;Name&#9;'));
+    assert.ok(!table.markdown.includes('Spalte 1'));
+    const privateText = require(path.join(server, 'gateway', 'compliance.js')).anonymizeMarkdown(table.markdown, 'general',
+      { productChannel: 'standalone', contentOptions: contentChoices(false, false) }).text;
+    for (const value of ['Qvx', 'Pzx', 'Rjx', 'Jmx', 'Kyx', 'Lpx', 'Mtx'])
+      assert.ok(!privateText.includes(value), 'sensitive actual Office value is de-identified: ' + value);
+    for (const label of ['Vollsta\u0308ndiger Name', 'Fir\u200bst Name']) {
+      const bytes = zipStore([...opcControlEntries('docx'), ['word/document.xml',
+        '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"><w:body><w:tbl>' +
+        tableRow([label]) + tableRow(['Qvx']) + '</w:tbl></w:body></w:document>']]);
+      const source = await extractSourceForPrivacy(bytes, '.docx', { productChannel: 'standalone', contentOptions: contentChoices(false, false) });
+      assert.ok(source.markdown.includes(label) && !source.markdown.includes('Spalte 1'), 'keep actual Unicode header while binding its visible meaning');
+      const result = require(path.join(server, 'gateway', 'compliance.js')).anonymizeMarkdown(source.markdown, 'general',
+        { productChannel: 'standalone', contentOptions: contentChoices(false, false) });
+      assert.ok(!result.text.includes('Qvx'));
+    }
+  });
   async function convert(input, extension, options) {
     const original = hash(input);
     const result = await convertBuffer(input, extension, options);
@@ -327,9 +744,10 @@ try {
       const bytes = contactImage.toBuffer('image/png');
       const result = await convert(bytes, '.png');
       assert.ok(result.coverage.reason_codes.includes('OCR_CONTACT_VALUES_UNVERIFIED'));
-      assert.match(result.markdown, /> OCR-Hinweis \(Bild\): Kontaktwerte in OCR-Zeile\(n\)/u);
+      assert.match(result.markdown, /Erkannte Kontaktwerte bitte mit dem Original vergleichen\./u);
+      assert.equal((result.markdown.match(/> Hinweis:/gu) || []).length, 1);
       assert.match(result.markdown, /Kontakt: \S+@\S+/u);
-      assert.match(result.markdown, /Telefon: \+49 30 555 1011/u);
+      assert.match(result.markdown, /Telefon: `\+49 30 555 1011`/u);
       assert.doesNotMatch(result.markdown, /\[EMAIL_|\[PHONE_/u, 'conversion warns but never repairs or anonymizes');
       assert.equal(result.ocr_contacts.length, 2);
       assert.deepEqual(result.ocr_contacts.map(item => item.kind), ['email', 'phone']);
@@ -343,7 +761,7 @@ try {
       const privacy = await extractWideSourceForPrivacy(bytes, '.png', { convertBuffer });
       assert.ok(privacy.sourceExtractionCoverage.reason_codes.includes('OCR_CONTACT_VALUES_UNVERIFIED'),
         'real conversion warning survives the separate privacy extraction contract');
-      assert.match(privacy.markdown, /OCR-Hinweis \(Bild\)/u);
+      assert.match(privacy.markdown, /Erkannte Kontaktwerte bitte mit dem Original vergleichen\./u);
       assert.deepEqual(privacy.ocrContacts, result.ocr_contacts);
       assert.ok(children.every(entry => entry.closed));
     } finally { contactImage.width = 1; contactImage.height = 1; }
@@ -358,8 +776,8 @@ try {
       const result = await convert(source, '.pdf');
       assert.match(result.markdown, /Native E-Mail: exact@example\.invalid/u);
       assert.ok(result.coverage.reason_codes.includes('OCR_CONTACT_VALUES_UNVERIFIED'));
-      assert.match(result.markdown, /> OCR-Hinweis \(Seite 2\): Kontaktwerte/u);
-      assert.doesNotMatch(result.markdown, /OCR-Hinweis \(Seite 1\)/u);
+      assert.equal((result.markdown.match(/> Hinweis:/gu) || []).length, 1);
+      assert.match(result.markdown, /Erkannte Kontaktwerte bitte mit dem Original vergleichen\./u);
       assert.equal(result.ocr_contacts.length, 2);
       assert.ok(result.ocr_contacts.every(item => item.page === 2));
       assert.ok(result.ocr_contacts.every(item => item.image?.source_width === 1600 && item.image?.source_height === 600),
@@ -442,14 +860,15 @@ try {
       const fixture = qualityFixtures.find(entry => entry.file === file);
       assert.ok(fixture, file);
       const before = hash(fixture.bytes), result = await convert(fixture.bytes, path.extname(file));
-      const disagrees = /geometrische Nachprüfung lieferte abweichende Lesarten/u.test(result.markdown);
+      const disagrees = /Nachprüfung lieferte abweichende Lesarten/u.test(result.markdown);
       if (disagrees) disagreements++;
       // CPU/WASM variants can correctly read a previous Windows counterexample.
       // A correct read must not be forced to invent a geometric disagreement.
       if (!result.markdown.includes(expected)) assert.ok(disagrees, `Unwarned contact mismatch: ${file}`);
       if (file === 'development/quality-009-clean.jpg') assert.ok(result.markdown.includes(expected), file);
       assert.ok(result.coverage.reason_codes.includes('OCR_CONTACT_VALUES_UNVERIFIED'));
-      assert.match(result.markdown, /Auch hohe OCR-Konfidenzen bestätigen keine exakte Erkennung/u);
+      assert.match(result.markdown, /Lesefehler und Auslassungen sind möglich/u);
+      assert.match(result.markdown, /Kontaktwerte bitte mit dem Original vergleichen/u);
       assert.equal(hash(fixture.bytes), before);
       assert.ok(children.every(entry => entry.closed));
     }
@@ -461,7 +880,8 @@ try {
       assert.match(result.markdown, /Max Mustermann/u); assert.match(result.markdown, /Nordstern GmbH/u);
       assert.equal(result.coverage.status, 'incomplete');
       assert.deepEqual(result.coverage.reason_codes, ['OCR_NOT_VERIFIED', 'VISUAL_CONTENT_NOT_EXTRACTED']);
-      assert.match(result.markdown, /> Grafikhinweis: Die Grafik selbst ist nicht im Markdown enthalten\./u);
+      assert.match(result.markdown, /> Hinweis: Grafiken und ihre visuelle Anordnung sind nicht enthalten\./u);
+      assert.doesNotMatch(result.markdown, /Zusätzlicher Bildtext|^```text/mu);
       assert.doesNotMatch(result.markdown, /data:image\/|!\[.*\]\(/u);
     });
   }
@@ -484,11 +904,67 @@ try {
     assert.ok(!pure.coverage.reason_codes.includes('OCR_NOT_VERIFIED'));
     const scan = await convert(pdf([{ image: jpeg }]), '.pdf');
     assert.match(scan.markdown, /Max Mustermann/u); assert.ok(scan.coverage.reason_codes.includes('OCR_NOT_VERIFIED'));
-    assert.match(scan.markdown, /> Grafikhinweis: Die Grafik selbst ist nicht im Markdown enthalten\./u);
+    assert.match(scan.markdown, /> Hinweis: Grafiken und ihre visuelle Anordnung sind nicht enthalten\./u);
+    for (const result of [pure, scan]) assert.doesNotMatch(result.markdown, /Zusätzlicher Bildtext|^```text/mu);
     assert.doesNotMatch(pure.markdown, /Grafikhinweis/u);
     const mixed = await convert(pdf([{ text: 'Text page Max Mustermann' }, { image: jpeg }]), '.pdf');
     assert.match(mixed.markdown, /## Seite 1[\s\S]*Text page Max Mustermann[\s\S]*## Seite 2[\s\S]*Nordstern GmbH/u);
     assert.equal((mixed.markdown.match(/Max Mustermann/gu) || []).length, 2);
+  });
+  await test('native PDF prose is readable, markup inert, and metadata retained after the pages', async () => {
+    const source = pdf([{ textLines: ['Name: Max Mustermann', 'Firma: Nordstern GmbH', 'a < b & c',
+      '![Grafik](https://example.invalid/image.png)'] }], '', { info: true });
+    const result = await convert(source, '.pdf', { passiveObjects: true });
+    assert.match(result.markdown, /^## Seite 1\n\nName: Max Mustermann  \nFirma: Nordstern GmbH/mu);
+    assert.match(result.markdown, /a &lt; b \\& c/u);
+    assert.match(result.markdown, /!\\\[Grafik\\\]\(https:\/\/example\.invalid\/image\.png\)/u);
+    assert.match(result.markdown, /## Dokumentinformationen[\s\S]*Title: Private title[\s\S]*Author: Max Mustermann/u);
+    assert.equal((result.markdown.match(/Max Mustermann/gu) || []).length, 2, 'body and author are both source data');
+    assert.doesNotMatch(result.markdown, /Zusätzlicher Bildtext|^```/mu);
+    assert.ok(!result.ocr_contacts && !result.coverage.reason_codes.includes('OCR_NOT_VERIFIED'));
+    const privateSource = await extractWideSourceForPrivacy(source, '.pdf', { convertBuffer });
+    const anonymized = anonymizeMarkdown(privateSource.markdown, 'general');
+    assert.doesNotMatch(anonymized.text, /Max Mustermann|Nordstern GmbH/u);
+    const renderer = new (require('markdown-it'))('commonmark', { html: true });
+    assert.ok(renderer.parse(anonymized.text, {}).filter(token => token.type === 'inline').flatMap(token => token.children)
+      .map(token => token.content).join('').includes('a < b & c'), 'actual converted wording remains visible after privacy');
+  });
+  await test('multiple real PDF contact pages retain crop maps and exact correction positions with a single notice', async () => {
+    const contactImage = image(true), context = contactImage.getContext('2d');
+    context.fillStyle = 'black'; context.font = '40px Arial';
+    context.fillText('E-Mail: test-person@example.invalid', 35, 90);
+    context.fillText('Telefon: +49 30 555 1000', 35, 170);
+    try {
+      const scan = contactImage.toBuffer('image/jpeg');
+      // Pure scan pages give an unambiguous line-to-pixel corridor on each
+      // page. Mixed native/image geometry has separate conservative tests.
+      const result = await convert(pdf([{ image: scan }, { image: scan }], '', { info: true }),
+        '.pdf', { passiveObjects: true });
+      assert.equal((result.markdown.match(/> Hinweis:/gu) || []).length, 1);
+      assert.doesNotMatch(result.markdown, /Zusätzlicher Bildtext|^```/mu);
+      assert.equal(result.ocr_contacts.length, 4);
+      assert.deepEqual(result.ocr_contacts.map(item => item.page), [1, 1, 2, 2]);
+      const { buildContactDraft, applyContactAnswer } = require(path.join(server, 'core/ocr-contact-review'));
+      const input = { original_text: result.markdown, contacts: result.ocr_contacts, source_type: 'pdf' };
+      const draft = buildContactDraft(input);
+      for (const candidate of draft.ambiguities) {
+        assert.ok(candidate.image && candidate.original_end <= result.markdown.indexOf('## Dokumentinformationen'));
+        assert.ok(result.markdown.slice(candidate.original_start, candidate.original_end).trim());
+      }
+      // Only the human choices are synthetic here; OCR, PDF rendering, crops,
+      // real source offsets and the productive answer application are actual.
+      const corrected = applyContactAnswer(input, { action: 'reviewed', redactions: [], decisions:
+        draft.ambiguities.map((candidate, index) => candidate.contact_kind === 'email'
+          ? { ambiguity_id: candidate.ambiguity_id, decision: 'correct_contact', replacement: `corrected-${index}@example.invalid` }
+          : { ambiguity_id: candidate.ambiguity_id, decision: 'confirm_contact' }) });
+      assert.match(corrected, /corrected-0@example\.invalid/u);
+      assert.match(corrected, /corrected-2@example\.invalid/u);
+      assert.equal((corrected.match(/## Seite [12]/gu) || []).length, 2);
+      assert.equal((corrected.match(/\+49 30 555 1000/gu) || []).length, 2);
+      assert.match(corrected, /Author: Max Mustermann/u);
+      const anonymized = anonymizeMarkdown(corrected, 'general');
+      assert.doesNotMatch(anonymized.text, /corrected-[02]@example\.invalid|Max Mustermann|555 1000/u);
+    } finally { contactImage.width = 1; contactImage.height = 1; }
   });
   await test('PDF native text plus a textless image remains usable with omissions', async () => {
     const blankJpeg = image(true).toBuffer('image/jpeg');
@@ -506,7 +982,7 @@ try {
     const result = await convert(privateGlyphPdf(), '.pdf');
     assert.match(result.markdown, /Max Mustermann/u);
     assert.doesNotMatch(result.markdown, /\p{Co}|\uFFFD/u);
-    assert.match(result.markdown, /> Grafikhinweis: Nicht lesbare Symbolzeichen wurden ausgelassen\./u);
+    assert.match(result.markdown, /Nicht lesbare Symbolzeichen wurden ausgelassen\./u);
     assert.ok(result.coverage.reason_codes.includes('OCR_NOT_VERIFIED'));
     assert.ok(!result.coverage.reason_codes.includes('OCR_TEXT_EMPTY'));
   });
@@ -548,7 +1024,7 @@ try {
     await assert.rejects(convertBuffer(pdf([{ text, annotation: true }]), '.pdf'),
       cause => cause.code === 'PDF_OBJECT_COVERAGE_UNVERIFIED' && !cause.message.includes('Private'));
     const metadata = await convert(pdf([{ text }], '', { info: true }), '.pdf');
-    assert.match(metadata.markdown, /# Dokumentmetadaten/u);
+    assert.match(metadata.markdown, /^## Dokumentinformationen$/mu);
     assert.match(metadata.markdown, /Title: Private title/u);
     assert.match(metadata.markdown, /Author: Max Mustermann/u);
     assert.ok(children.every(entry => entry.closed));
@@ -617,9 +1093,9 @@ try {
     const nativeLines = ['MAX  MUSTERMANN', 'Nordstern GmbH', 'Projektmanager Software Tester'];
     const native = await convert(pdf([{ textLines: nativeLines, invisibleText: true }]), '.pdf');
     const hybrid = await convert(pdf([{ image: jpeg, textLines: nativeLines, invisibleText: true }]), '.pdf');
-    assert.equal(hybrid.markdown.split('\n\n> Grafikhinweis:')[0], native.markdown,
+    assert.equal(hybrid.markdown.split('\n\n> Hinweis:')[0], native.markdown,
       'comparison never rewrites native text; only the fixed visual omission notice is added');
-    assert.match(hybrid.markdown, /> Grafikhinweis: Die Grafik selbst ist nicht im Markdown enthalten\./u);
+    assert.match(hybrid.markdown, /> Hinweis: Grafiken und ihre visuelle Anordnung sind nicht enthalten\./u);
     assert.match(hybrid.markdown, /MAX MUSTERMANN/u);
     assert.equal((hybrid.markdown.match(/mustermann/giu) || []).length, 1);
     assert.equal((hybrid.markdown.match(/Nordstern GmbH/gu) || []).length, 1);
@@ -668,6 +1144,9 @@ try {
     await assert.rejects(convertBuffer(Buffer.from(text), '.exe'), { code: 'MARKDOWN_FORMAT_UNSUPPORTED' });
     await assert.rejects(convertBuffer(Buffer.from(text), 'constructor'), { code: 'MARKDOWN_FORMAT_UNSUPPORTED' });
     await assert.rejects(convertBuffer(Buffer.from(text), '.txt', { runtime: 'anything' }), { code: 'CONVERSION_INPUT_INVALID' });
+    for (const markdownOutput of [null, false, {}, 'content-v2', 'http://example.invalid']) {
+      await assert.rejects(convertBuffer(Buffer.from(text), '.md', { markdownOutput }), { code: 'CONVERSION_INPUT_INVALID' });
+    }
     assert.equal(children.length, before);
   });
   await test('inflight cancellation after actual OCR readiness confirms supervisor termination', async () => {
@@ -731,6 +1210,15 @@ try {
     fs.unlinkSync(runtimeManifest);
     await assert.rejects(convertBuffer(Buffer.from(text), '.txt'), { code: 'CONVERSION_RUNTIME_UNAVAILABLE' });
     fs.writeFileSync(runtimeManifest, manifest, { flag: 'wx' });
+    const parser = path.join(runtime, 'node_modules', 'parse5', 'dist', 'index.js'), parserBytes = fs.readFileSync(parser);
+    fs.unlinkSync(parser);
+    await assert.rejects(convertBuffer(Buffer.from('![Titel](x)'), '.md', { markdownOutput: 'content-v1' }),
+      { code: 'CONVERSION_RUNTIME_UNAVAILABLE' });
+    fs.writeFileSync(parser, parserBytes, { flag: 'wx' });
+    const changedParser = Buffer.from(parserBytes); changedParser[0] ^= 1; fs.writeFileSync(parser, changedParser);
+    await assert.rejects(convertBuffer(Buffer.from('![Titel](x)'), '.md', { markdownOutput: 'content-v1' }),
+      { code: 'CONVERSION_RUNTIME_UNAVAILABLE' });
+    fs.writeFileSync(parser, parserBytes);
     assert.equal(children.length, before);
   });
   await test('100 small sources reuse validated runtime bytes rather than rehashing 188 MB per file', async () => {

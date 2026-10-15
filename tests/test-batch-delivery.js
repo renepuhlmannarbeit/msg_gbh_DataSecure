@@ -27,11 +27,11 @@ function fixture(options = {}) {
   const active = options.active || new Set();
   const packages = new Set(options.packages || ids);
   const files = new Map(options.files || []);
-  let durable = structuredClone(options.state || {
+  let durable = { schema: 'datasecure-batch/4', ...structuredClone(options.state || {
     token,
     items: [item(0)],
     complete: true
-  });
+  }) };
   let failWrite = options.failWrite === true;
   const delivery = createBatchDelivery({
     active,
@@ -117,11 +117,11 @@ function workName(entry) {
 test('a capability is issued only after the exact published package verifies', () => {
   const value = item(0);
   const denied = fixture({ packages: [] });
-  assert.throws(() => denied.delivery.deliveryResult({ items: [value] }, value), /sicher verifiziert/);
+  assert.throws(() => denied.delivery.deliveryResult({ schema: 'datasecure-batch/4', items: [value] }, value), /sicher verifiziert/);
   assert.ok(!denied.events.some((event) => event.startsWith('issue:')));
 
   const allowed = fixture();
-  const result = allowed.delivery.deliveryResult({ items: [value] }, value);
+  const result = allowed.delivery.deliveryResult({ schema: 'datasecure-batch/4', items: [value] }, value);
   assert.strictEqual(result.package_id, ids[0]);
   assert.strictEqual(result.read_capability, 'c'.repeat(43));
   assert.deepStrictEqual(allowed.events.slice(-2), [`verify:${ids[0]}`, `issue:${ids[0]}`]);

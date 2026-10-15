@@ -8,6 +8,9 @@ import { image } from './conversion-fixtures.mjs';
 const require = createRequire(import.meta.url);
 const { decodePng } = require('../../plugins/data-secure/server/images/png');
 const { validateContactImage } = require('../../plugins/data-secure/server/core/ocr-contact-image');
+const MarkdownIt = require('markdown-it');
+const markdownRenderer = new MarkdownIt('commonmark');
+const renderedLine = line => markdownRenderer.parseInline(line, {})[0].children.map(token => token.content).join('');
 
 function assertOriginalContactPixels(draft, bytes) {
   const original = decodePng(bytes);
@@ -36,21 +39,20 @@ export const contactPhone = '+49 (040) 987654321';
 export const correctedPhone = '+49 (040) 987654322';
 export const correctionSentinel = 'SYNTHETISCHER KORREKTURTEST';
 
-export function assertPackagedMarkdownOcrOutputs(texts) {
+export function assertPackagedMarkdownOcrOutputs(texts, contentOnly = false) {
   assert.equal(texts.length, 2);
-  const graphics = '> Grafikhinweis: Die Grafik selbst ist nicht im Markdown enthalten. Lokal erkannter Bildtext ist übernommen, kann aber unvollständig sein. Bildinhalt und visuelle Anordnung werden nicht automatisch beschrieben.';
   const confirmation = '> OCR-Kontaktwerte wurden lokal bestätigt oder korrigiert. Übrige OCR-Inhalte bleiben ungeprüft. Nicht anonymisiert: enthält Originalinhalte.';
-  const contactNotice = /^> OCR-Hinweis \(Bild\): Kontaktwerte in OCR-Zeile\(n\) \d+(?:, \d+)* können Zeichenfehler enthalten\. Vor einer Nutzung mit den Originalen vergleichen\. Auch hohe OCR-Konfidenzen bestätigen keine exakte Erkennung\.(?: Mindestens eine dieser Zeilen enthält Wörter mit geringer Erkennungssicherheit\.)?(?: Für mindestens eine dieser Zeilen fehlen vergleichbare Wortkonfidenzen\.)?(?: Die geometrische Nachprüfung lieferte abweichende Lesarten in OCR-Zeile\(n\) \d+(?:, \d+)*; die exakten Kontaktzeichen sind nicht bestätigt\.)?$/u;
+  const contactNotice = /^> Hinweis: Grafiken und ihre visuelle Anordnung sind nicht enthalten\. Text aus Bildern wurde übernommen; Lesefehler und Auslassungen sind möglich\. Erkannte Kontaktwerte bitte mit dem Original vergleichen\.(?: Die Nachprüfung lieferte abweichende Lesarten\.)?(?: Einige Wörter wurden unsicher erkannt\.)?(?: Die Erkennungssicherheit ist teilweise unbekannt\.)?(?: Nicht lesbare Symbolzeichen wurden ausgelassen\.)?$/u;
   const used = new Set();
   for (const expected of contactReferences) {
-    const indexes = texts.flatMap((value, index) => value.includes(`E-Mail: ${expected.corrected}`) ? [index] : []);
+    const indexes = texts.flatMap((value, index) => value.split('\n').some(line =>
+      renderedLine(line.trimEnd()) === `E-Mail: ${expected.corrected}`) ? [index] : []);
     assert.equal(indexes.length, 1, 'CORRECTED_MARKDOWN_CONTACT_DOCUMENT_MISSING');
     assert.ok(!used.has(indexes[0]), 'MARKDOWN_CONTACT_DOCUMENTS_MERGED'); used.add(indexes[0]);
-    const lines = texts[indexes[0]].replaceAll('\r\n', '\n').split('\n').filter(line => line.trim());
-    assert.equal(lines.filter(line => line === graphics).length, 1);
-    assert.equal(lines.filter(line => line === confirmation).length, 1);
-    assert.equal(lines.filter(line => contactNotice.test(line)).length, 1);
-    const body = lines.filter(line => line !== graphics && line !== confirmation && !contactNotice.test(line)).join('\n');
+    const lines = texts[indexes[0]].replaceAll('\r\n', '\n').split('\n').map(line => line.trimEnd()).filter(line => line.trim());
+    assert.equal(lines.filter(line => line === confirmation).length, contentOnly ? 0 : 1);
+    assert.equal(lines.filter(line => contactNotice.test(line)).length, contentOnly ? 0 : 1);
+    const body = lines.filter(line => line !== confirmation && !contactNotice.test(line)).map(renderedLine).join('\n');
     assert.equal(body, `Name: Max Mustermann\nE-Mail: ${expected.corrected}\nTelefon: ${correctedPhone}\nJava bleibt.\n${correctionSentinel}`,
       'MARKDOWN_COMPLETE_DOCUMENT_BODY_CHANGED');
   }
@@ -66,6 +68,61 @@ export function packagedOcrFixtures() {
     try { return [name, canvas.toBuffer('image/png')]; }
     finally { canvas.width = 1; canvas.height = 1; }
   }));
+}
+
+export async function runPackagedOcrSkipScenario({ request, sourceDirectory }) {
+  let sequence = 0xb000;
+  const send = async (action, fields = {}) => {
+    const response = await request({ schema: 'datasecure-standalone-private-ipc/1',
+      request_id: (++sequence).toString(16).padStart(16, '0'), action, ...fields });
+    assert.equal(response.ok, true, `${action}: ${JSON.stringify(response)}`);
+    return response.result;
+  };
+  const directory = path.join(sourceDirectory, 'Paketgebundene-Markdown-OCR-Ohne-Kontaktpruefung');
+  fs.mkdirSync(directory);
+  const fixtures = packagedOcrFixtures();
+  const sources = [...fixtures].map(([name, bytes]) => {
+    const file = path.join(directory, name); fs.writeFileSync(file, bytes, { flag: 'wx' }); return file;
+  });
+  const admitted = await send('admit_selected_sources', { source_kind: 'files', source_paths: sources });
+  assert.equal(admitted.selected_count, 2);
+  await send('start_admitted_batch', { processing_mode: 'markdown-only', ocr_contact_review: true });
+  const deadline = Date.now() + 120000;
+  let row;
+  for (;;) {
+    row = (await send('get_run_history')).entries[0];
+    if (row?.status === 'review_required') break;
+    assert.ok(Date.now() < deadline, 'PACKAGED_SKIP_CONTACT_REVIEW_NOT_REACHED');
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  assert.equal(row.result_count, 0);
+  await send('continue_history_batch', { batch_id: row.batch_id });
+  for (;;) {
+    if ((await send('get_review_session')).ready === true) break;
+    assert.ok(Date.now() < deadline, 'PACKAGED_SKIP_ACTIVE_REVIEW_NOT_READY');
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  const skipped = await send('skip_ocr_contact_review', { batch_id: row.batch_id });
+  assert.equal(skipped.skip_requested, true, 'ACTIVE_SKIP_MUST_NOT_FABRICATE_A_CONTACT_ANSWER');
+  let complete;
+  for (;;) {
+    complete = (await send('get_run_history')).entries.find(item => item.batch_id === row.batch_id);
+    if (complete?.result_count === 2 && complete.resumable === false) break;
+    assert.ok(Date.now() < deadline, 'PACKAGED_SKIP_MARKDOWN_NOT_COMPLETED');
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  const output = await send('resolve_history_results', { batch_id: row.batch_id });
+  const texts = fs.readdirSync(output.local_path).filter(name => name.endsWith('.md'))
+    .map(name => fs.readFileSync(path.join(output.local_path, name), 'utf8'));
+  assert.equal(texts.length, 2);
+  for (const value of texts) {
+    assert.doesNotMatch(value, /OCR-Kontaktwerte wurden lokal bestätigt oder korrigiert/u,
+      'SKIPPED_CONTACTS_MUST_NOT_BE_LABELED_AS_HUMAN_VERIFIED');
+    assert.doesNotMatch(value, /\[PERSON_|\[EMAIL_|\[PHONE_/u,
+      'RAW_SKIP_MUST_NOT_ANONYMIZE_MARKDOWN');
+  }
+  for (const [index, source] of sources.entries()) assert.deepEqual(fs.readFileSync(source), [...fixtures.values()][index]);
+  process.stdout.write('STANDALONE PACKAGED RAW OCR SKIP IPC PASS (active review; no fabricated confirmation; original files unchanged)\n');
 }
 
 export function assertPackagedOcrOutputs(texts) {
@@ -87,13 +144,11 @@ export function assertPackagedOcrOutputs(texts) {
     let body = normalized.slice(header[0].length);
     const scopeNotice = '> **DataSecure-Hinweis:** Anonymisiert wurde ausschließlich der lokal in Markdown umgewandelte Inhalt. Die Vollständigkeit der Extraktion aus der Originaldatei ist nicht garantiert; nicht extrahierte Inhalte sind in diesem Ergebnis nicht enthalten.\n\n';
     assert.ok(body.startsWith(scopeNotice), 'OCR_REVIEW_SCOPE_NOTICE_MISSING'); body = body.slice(scopeNotice.length);
-    const graphics = '> Grafikhinweis: Die Grafik selbst ist nicht im Markdown enthalten. Lokal erkannter Bildtext ist übernommen, kann aber unvollständig sein. Bildinhalt und visuelle Anordnung werden nicht automatisch beschrieben.';
-    const notice = /\n+> OCR-Hinweis \(Bild\): Kontaktwerte in OCR-Zeile\(n\) \d+(?:, \d+)* können Zeichenfehler enthalten\. Vor einer Nutzung mit den Originalen vergleichen\. Auch hohe OCR-Konfidenzen bestätigen keine exakte Erkennung\.(?: Mindestens eine dieser Zeilen enthält Wörter mit geringer Erkennungssicherheit\.)?(?: Für mindestens eine dieser Zeilen fehlen vergleichbare Wortkonfidenzen\.)?(?: Die geometrische Nachprüfung lieferte abweichende Lesarten in OCR-Zeile\(n\) \d+(?:, \d+)*; die exakten Kontaktzeichen sind nicht bestätigt\.)?\n?$/u.exec(body);
+    const notice = /\n+> Hinweis: Grafiken und ihre visuelle Anordnung sind nicht enthalten\. Text aus Bildern wurde übernommen; Lesefehler und Auslassungen sind möglich\. Erkannte Kontaktwerte bitte mit dem Original vergleichen\.(?: Die Nachprüfung lieferte abweichende Lesarten\.)?(?: Einige Wörter wurden unsicher erkannt\.)?(?: Die Erkennungssicherheit ist teilweise unbekannt\.)?(?: Nicht lesbare Symbolzeichen wurden ausgelassen\.)?\n?$/u.exec(body);
     assert.ok(notice, 'OCR_REVIEW_CONTACT_NOTICE_MISSING'); body = body.slice(0, notice.index).trimEnd();
-    assert.ok(body.endsWith(graphics), 'OCR_REVIEW_GRAPHICS_NOTICE_MISSING'); body = body.slice(0, -graphics.length).trim();
     const name = /^Name: (\[PERSON_\d+\])/u.exec(body); assert.ok(name, 'OCR_REVIEW_PERSON_MISSING');
     if (person) assert.equal(name[1], person, 'OCR_REVIEW_PERSON_IDS_INCONSISTENT'); else person = name[1];
-    assert.equal(body.split('\n').filter(line => line.trim()).join('\n'),
+    assert.equal(body.split('\n').map(line => line.trimEnd()).filter(line => line.trim()).join('\n'),
       `Name: ${person}\nE-Mail: [EMAIL_REDACTED]\nTelefon: [PHONE_REDACTED]\nJava bleibt.\n${correctionSentinel}`,
       'OCR_REVIEW_COMPLETE_BODY_CHANGED');
   }
@@ -106,7 +161,8 @@ export function assertAppliedOcrCorrection(draft, expected) {
   assert.ok(!draft.original_text.includes(expected.email) && !draft.original_text.includes(contactPhone), 'OCR_OLD_CONTACT_REUSED');
 }
 
-export async function runPackagedOcrScenario({ request: initialRequest, restart, sourceDirectory, markdownOnly = false }) {
+export async function runPackagedOcrScenario({ request: initialRequest, restart, sourceDirectory, markdownOnly = false, contentOnly = false }) {
+  assert.ok(!contentOnly || markdownOnly);
   let request = initialRequest, sequence = markdownOnly ? 0xa000 : 0x9000;
   const send = async (action, fields = {}) => {
     const response = await request({ schema: 'datasecure-standalone-private-ipc/1',
@@ -131,14 +187,18 @@ export async function runPackagedOcrScenario({ request: initialRequest, restart,
     const draft = JSON.parse(Buffer.concat(pieces).toString('utf8'));
     return draft;
   }
-  const directory = path.join(sourceDirectory, markdownOnly ? 'Paketgebundene-Markdown-OCR-Pruefung' : 'Paketgebundene-OCR-Pruefung');
+  const directory = path.join(sourceDirectory, contentOnly ? 'Paketgebundene-Inhalts-OCR-Pruefung' : markdownOnly ? 'Paketgebundene-Markdown-OCR-Pruefung' : 'Paketgebundene-OCR-Pruefung');
   fs.mkdirSync(directory);
   const fixtures = packagedOcrFixtures();
   const sources = [...fixtures].map(([name, bytes]) => {
     const file = path.join(directory, name); fs.writeFileSync(file, bytes, { flag: 'wx' }); return file;
   });
-  assert.equal((await send('admit_selected_sources', { source_kind: 'files', source_paths: sources })).selected_count, 2);
-  await send('start_admitted_batch', markdownOnly ? { processing_mode: 'markdown-only', ocr_contact_review: true } :
+  const admitted = await send('admit_selected_sources', { source_kind: 'files', source_paths: sources, ...(contentOnly ? { source_catalogue: true } : {}) });
+  if (contentOnly) assert.equal(admitted.ui_context.source_catalogue.length, 2);
+  else assert.equal(admitted.selected_count, 2);
+  await send('start_admitted_batch', contentOnly ? { processing_mode: 'markdown-only', ocr_contact_review: true, document_review: true,
+    content_options: { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: true, imageOcr: true },
+    source_ids: admitted.ui_context.source_catalogue.map(item => item.source_id), catalogue_revision: admitted.ui_context.catalogue_revision } : markdownOnly ? { processing_mode: 'markdown-only', ocr_contact_review: true } :
     { processing_mode: 'markdown-and-anonymize', output_naming_mode: 'neutral' });
   const row = await until(async () => {
     const item = (await send('get_run_history')).entries[0];
@@ -216,8 +276,8 @@ export async function runPackagedOcrScenario({ request: initialRequest, restart,
   if (!markdownOnly) assertPackagedOcrOutputs(texts);
   else {
     assert.equal(complete.processing_mode, 'markdown-only');
-    assertPackagedMarkdownOcrOutputs(texts);
-    assert.throws(() => assertPackagedMarkdownOcrOutputs([texts.join('\n'), '']),
+    assertPackagedMarkdownOcrOutputs(texts, contentOnly);
+    assert.throws(() => assertPackagedMarkdownOcrOutputs([texts.join('\n'), ''], contentOnly),
       'one merged document plus one empty document must never pass');
     assert.ok(!fs.readdirSync(output.local_path).some(name => /Identitaeten|Zuordnung/u.test(name)),
       'MARKDOWN_REVIEW_MUST_NOT_CREATE_PRIVACY_MAPPINGS');

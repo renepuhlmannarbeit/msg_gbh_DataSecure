@@ -101,6 +101,22 @@ test('Standalone still rejects a redirected POSIX data root', () => {
   }), (error) => error?.code === 'STANDALONE_DATA_ROOT_UNSAFE');
 });
 
+testAsync('direct OCR-contact opt-out does not forge a confirmation or interrupt another run', async () => {
+  const batchId = 'a'.repeat(64), otherId = 'b'.repeat(64), submitted = [];
+  const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+    runHistory: { find: id => ({ batch_id: id, processing_mode: 'markdown-only', resumable: false }) },
+    reviewSession: () => ({ ready: true, batch_id: batchId, review_id: 'c'.repeat(32), worker_active: true }),
+    submitReview: (_id, answer) => { submitted.push(answer); return { accepted: true }; }
+  }) });
+  service.interactionActive = true;
+  assert.deepStrictEqual(await service.skipOcrContactReview(batchId), {
+    ok: true, skip_requested: true, continuation_pending: false, external_disclosure: false
+  });
+  assert.deepStrictEqual(submitted, [{ action: 'skipped' }]);
+  await assert.rejects(service.skipOcrContactReview(otherId), { code: 'STANDALONE_BUSY' });
+  assert.deepStrictEqual(submitted, [{ action: 'skipped' }]);
+});
+
 test('CLI accepts only automatic file or folder processing', () => {
   assert.deepStrictEqual(parse(['anonymisieren', '--ordner']), {
     command: 'anonymisieren', sourceKind: 'folder', profile: 'auto'
@@ -295,6 +311,25 @@ test('review completion separates idle export debt from a still-running worker',
   assert.strictEqual(service.reviewSession().continuation_available, false);
 });
 
+test('idle review session reconciles a completed private export before reporting completion', () => {
+  const batchId = 'e'.repeat(64);
+  let repaired = false, calls = 0;
+  const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+    reviewSession: () => ({ ready: false, batch_id: batchId, phase: 'idle', worker_active: false }),
+    reviewContinuationBatchId: () => batchId,
+    runHistory: { history() { calls++; repaired = true; return { entries: [] }; } },
+    latestProductBatchStatus: () => ({ selected_count: 2, completed_count: 2,
+      result_count: repaired ? 1 : 0, failed_count: 1, review_count: 0,
+      review_ready: false, complete: true, export_pending_count: repaired ? 0 : 1,
+      processing: false, resumable: false })
+  }) });
+  service.observedBatchId = batchId;
+  assert.equal(service.reviewSession().run_complete, true);
+  assert.equal(calls, 1);
+  assert.equal(service.reviewSession().run_complete, true);
+  assert.equal(calls, 1, 'a completed export does not get replayed on later polls');
+});
+
 testAsync('multi-file admission names every rejected file and keeps the previous selection atomic', async () => {
   const paths = ['ok.txt', 'empty.txt', 'large.txt'].map((name) => path.join(FIXTURE_SOURCE_ROOT, name));
   const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
@@ -376,6 +411,35 @@ test('Standalone reports an incomplete visible export instead of a false finishe
   assert.strictEqual(status.results_available, false);
   assert.strictEqual(status.result_count, 0);
   assert.strictEqual(status.export_pending_count, 2);
+});
+
+test('only the exact inactive pending anonymization run can be abandoned', () => {
+  const batchId = 'd'.repeat(64), calls = [];
+  const selected = { token: batchId, product_channel: 'standalone' };
+  const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+    runHistory: { find: id => ({ batch_id: id, processing_mode: 'markdown-and-anonymize', status: 'export_pending' }) },
+    readStates: () => [selected],
+    abandonPendingResultExport: state => { calls.push(state); return { abandoned: true, exported: 1, pending: 1, available: false }; },
+    latestProductBatchStatus: () => ({ selected_count: 2, completed_count: 2, failed_count: 0,
+      result_count: 0, exported_count: 1, export_pending_count: 1, export_abandoned: true,
+      review_count: 0, processing: false, resumable: false, complete: true })
+  }) });
+  assert.deepEqual(service.abandonResultExport(batchId), { ok: true, batch_id: batchId,
+    abandoned: true, exported: 1, pending: 1, available: false, external_disclosure: false });
+  assert.equal(calls.length, 1); assert.equal(calls[0], selected);
+  assert.equal(service.status().state, 'export_abandoned');
+  assert.equal(service.status().results_available, false);
+  const unsafe = new StandaloneApplicationService({ dependencies: fakeDependencies({
+    runHistory: { find: id => ({ batch_id: id, processing_mode: 'markdown-and-anonymize', status: 'export_pending' }) },
+    readStates: () => [selected],
+    abandonPendingResultExport: () => { throw Error('RESULT_EXPORT_STATE_UNSAFE'); }
+  }) });
+  assert.throws(() => unsafe.abandonResultExport(batchId), error => error.code === 'RESULT_EXPORT_STATE_UNSAFE');
+  const busy = new StandaloneApplicationService({ dependencies: fakeDependencies({
+    lightweightStatus: () => ({ engine_ready: true, batch_processing_active: true }),
+    runHistory: { find: () => { throw Error('must not read history while active'); } }
+  }) });
+  assert.throws(() => busy.abandonResultExport(batchId), error => error.code === 'STANDALONE_BUSY');
 });
 
 test('Standalone exposes a recoverable batch as a resumable stopped state', () => {
@@ -547,7 +611,7 @@ test('Standalone UI contract limits source details to the local display', () => 
   assert.deepStrictEqual(contract.commands, [
     'select_files', 'select_folder', 'remove_admitted_source', 'cancel_admission', 'start_admitted_batch',
     'get_public_state', 'get_ui_context', 'get_run_history', 'get_run_failures', 'open_history_results', 'open_history_ledger',
-    'open_history_identity_mapping', 'open_identity_mappings_directory', 'continue_history_batch', 'pause_batch',
+    'open_history_identity_mapping', 'open_identity_mappings_directory', 'continue_history_batch', 'pause_batch', 'abandon_result_export', 'skip_ocr_contact_review',
     'get_document_reviews', 'get_document_review_history_summary', 'close_document_reviews', 'get_document_review_chunk', 'get_document_entities', 'decide_document_review', 'export_approved_documents', 'abandon_document_export', 'open_document_export', 'open_document_identity_overview',
     'open_review_window', 'open_embedded_review', 'close_review_window', 'get_review_session', 'get_review_chunk', 'submit_review',
     'continue_review_session',
@@ -560,8 +624,8 @@ test('Standalone UI contract limits source details to the local display', () => 
     'resolve_current_results', 'resolve_local_ledger', 'get_run_history', 'get_run_failures',
     'resolve_history_results', 'resolve_history_ledger', 'resolve_history_identity_mapping',
     'resolve_identity_mappings_directory',
-    'continue_history_batch', 'pause_batch',
-    'get_document_reviews', 'get_document_review_history_summary', 'get_document_review_chunk', 'get_document_entities', 'decide_document_review', 'export_approved_documents', 'abandon_document_export', 'resolve_document_export', 'resolve_document_identity_overview',
+    'continue_history_batch', 'pause_batch', 'skip_ocr_contact_review', 'abandon_result_export',
+    'get_document_reviews', 'get_document_review_history_summary', 'get_document_review_chunk', 'get_document_entities', 'decide_document_review', 'preview_document_export', 'export_approved_documents', 'abandon_document_export', 'resolve_document_export', 'resolve_document_identity_overview',
     'get_review_session', 'get_review_chunk', 'submit_review', 'continue_review_session', 'shutdown'
   ]);
 });
@@ -709,7 +773,8 @@ async function processingModeServiceCase() {
     { processingMode: 'local_only' }, { processingMode: 'markdown-and-anonymize', productChannel: 'plugin' },
     { processingMode: 'markdown-and-anonymize', outputNamingMode: 'unknown' },
     { processingMode: 'markdown-only', outputNamingMode: 'neutral' }]) {
-    const expected = Object.hasOwn(options || {}, 'outputNamingMode') ? 'RESULT_NAMING_MODE_INVALID' : 'PROCESSING_MODE_INVALID';
+    const expected = options === null || Array.isArray(options) ? 'CONTENT_OPTIONS_INVALID'
+      : Object.hasOwn(options, 'outputNamingMode') ? 'RESULT_NAMING_MODE_INVALID' : 'PROCESSING_MODE_INVALID';
     await assert.rejects(service.startAdmittedBatch(options), (error) => error.code === expected);
     assert.strictEqual(service.admittedQueue, queue, 'rejected purpose must not consume the admission');
     assert.strictEqual(service.selectionContext, selection);

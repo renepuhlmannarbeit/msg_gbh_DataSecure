@@ -1,5 +1,9 @@
 # Arbeitsauftrag an Codex: Redaktionskern und Evidenzlücken in 3.2.0-rc123
 
+Historischer Auftrag. Seit 13.10.2026 nicht mehr aktiv; der aktuelle
+Standalone-Auftrag steht in `tasks/AUFTRAG-CODEX-RC160-WORKFLOW-INHALT.md`.
+Der damalige Inhalt und seine Nachweisgrenzen bleiben unverändert erhalten.
+
 Stand: 08.09.2026 · Ausgangscommit `c62d7ec` · Produktstand 3.2.0-rc123
 Auftragsart: zeitgebundener schreibender Fix- und Nachweisauftrag
 Adressat: Codex auf einem anderen Rechner, ohne Zugriff auf die Reviewsitzung

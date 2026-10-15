@@ -32,7 +32,7 @@ function ioWithSwap(target, replacement, swapOnOpen) {
     ...fs,
     constants: fs.constants,
     openSync(name, flags, mode) {
-      if (name === target && ++opens === swapOnOpen) {
+      if (name === target && !(flags & (fs.constants.O_WRONLY | fs.constants.O_RDWR)) && ++opens === swapOnOpen) {
         fs.unlinkSync(target);
         writeLock(target, replacement.token, replacement.pid, replacement.lockId);
       }
@@ -196,6 +196,71 @@ test('EPERM and unknown liveness errors remain blocking while ESRCH proves death
     assert.deepStrictEqual(JSON.parse(fs.readFileSync(target, 'utf8')), lockValue(tokenA, 111), code);
   }
   fs.unlinkSync(target);
+});
+
+test('a visible matching-PID lock is not an own acquisition or a transferable epoch', () => {
+  const target = path.join(batchRoot(), 'active-processing.json');
+  const owner = createBatchActiveLock(), foreign = createBatchActiveLock();
+  writeLock(target, tokenA, process.pid);
+  try { assert.throws(() => owner.captureOwnedEpoch(tokenA), error => error.code === 'BATCH_OWNERSHIP_CHANGED'); }
+  finally { fs.unlinkSync(target); }
+  owner.acquireActiveLock(tokenA);
+  try {
+    const proof = owner.captureOwnedEpoch(tokenA);
+    assert.ok(Object.isFrozen(proof)); assert.deepEqual(Object.keys(proof), []);
+    assert.equal(owner.assertOwnedEpoch(proof), true);
+    for (const fake of [{}, { ...proof }, JSON.parse(JSON.stringify(proof)), new Proxy({}, {})])
+      assert.throws(() => owner.assertOwnedEpoch(fake), error => error.code === 'BATCH_OWNERSHIP_CHANGED');
+    assert.throws(() => foreign.assertOwnedEpoch(proof), error => error.code === 'BATCH_OWNERSHIP_CHANGED');
+    assert.throws(() => foreign.captureOwnedEpoch(tokenA), error => error.code === 'BATCH_OWNERSHIP_CHANGED');
+  } finally { owner.releaseActiveLock(tokenA); }
+});
+
+test('release/reacquire and byte-identical file replacement revoke an old own epoch', () => {
+  const target = path.join(batchRoot(), 'active-processing.json'), preserved = path.join(batchRoot(), 'old-epoch.json');
+  const owner = createBatchActiveLock(); owner.acquireActiveLock(tokenA);
+  const old = owner.captureOwnedEpoch(tokenA);
+  assert.equal(owner.releaseActiveLock(tokenA), true);
+  owner.acquireActiveLock(tokenA);
+  try {
+    assert.throws(() => owner.assertOwnedEpoch(old), error => error.code === 'BATCH_OWNERSHIP_CHANGED');
+    const current = owner.captureOwnedEpoch(tokenA), bytes = fs.readFileSync(target);
+    fs.renameSync(target, preserved); fs.writeFileSync(target, bytes);
+    assert.throws(() => owner.assertOwnedEpoch(current), error => error.code === 'BATCH_OWNERSHIP_CHANGED');
+    assert.equal(owner.releaseActiveLock(tokenA), false, 'release must not adopt the replaced pathname');
+    assert.deepEqual(fs.readFileSync(target), bytes);
+  } finally { if (fs.existsSync(target)) fs.unlinkSync(target); fs.unlinkSync(preserved); }
+});
+
+test('the acquisition binds file identity before the first epoch capture, not from a later pathname', () => {
+  const target = path.join(batchRoot(), 'active-processing.json'), preserved = path.join(batchRoot(), 'unseen-old-epoch.json');
+  const owner = createBatchActiveLock(); owner.acquireActiveLock(tokenA);
+  const bytes = fs.readFileSync(target); fs.renameSync(target, preserved); fs.writeFileSync(target, bytes);
+  try { assert.throws(() => owner.captureOwnedEpoch(tokenA), error => error.code === 'BATCH_OWNERSHIP_CHANGED'); }
+  finally { if (fs.existsSync(target)) fs.unlinkSync(target); fs.unlinkSync(preserved); }
+});
+
+test('capture rejects an observed named hardlink even when the earlier FD stat was single-linked', () => {
+  const target = path.join(batchRoot(), 'active-processing.json'), alias = path.join(batchRoot(), 'epoch-link.json');
+  let inject = false;
+  const owner = createBatchActiveLock({ fs: { ...fs, constants: fs.constants,
+    lstatSync(name, ...args) {
+      if (inject && name === target) { inject = false; fs.linkSync(target, alias); }
+      return fs.lstatSync(name, ...args);
+    } } });
+  owner.acquireActiveLock(tokenA); inject = true;
+  try { assert.throws(() => owner.captureOwnedEpoch(tokenA), error => error.code === 'BATCH_OWNERSHIP_CHANGED'); }
+  finally { fs.unlinkSync(alias); fs.unlinkSync(target); }
+});
+
+test('an old epoch-bound finally cannot release a later acquisition by the same PID and token', () => {
+  const target = path.join(batchRoot(), 'active-processing.json'), owner = createBatchActiveLock();
+  owner.acquireActiveLock(tokenA); const old = owner.captureOwnedEpoch(tokenA); owner.releaseActiveLock(tokenA);
+  owner.acquireActiveLock(tokenA); const current = owner.captureOwnedEpoch(tokenA), bytes = fs.readFileSync(target);
+  try {
+    assert.equal(owner.releaseOwnedEpoch(old), false); assert.deepEqual(fs.readFileSync(target), bytes);
+    assert.equal(owner.assertOwnedEpoch(current), true);
+  } finally { owner.releaseActiveLock(tokenA); }
 });
 
 try { fs.rmSync(base, { recursive: true, force: true }); } catch { /* best effort */ }

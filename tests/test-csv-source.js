@@ -132,4 +132,21 @@ test('large CSV conversion is deterministic without a runtime dependency', () =>
   assert.strictEqual(csvToMarkdown(source), csvToMarkdown(source));
 });
 
+test('one-column sensitive tables retain header context without treating open pipe prose as a table', () => {
+  const { tableHeaderAt } = require('../plugins/data-secure/server/privacy/base');
+  for (const [header, value] of [['Personalnummer', 'AB123'], ['Passwort', 'verysecret'],
+    ['Geburtsdatum', '13.02.1984'], ['E-Mail', 'anna@example.invalid'], ['Name', 'Anna Beispiel'], ['Unternehmen', 'Beispielwerke GmbH']]) {
+    for (const literalCells of [false, true]) {
+      const markdown = csvToMarkdown(`${header}\n${value}`, { literalCells });
+      assert.equal(tableHeaderAt(markdown, markdown.lastIndexOf('\n') + 2), header);
+      for (const profile of ['general', 'personnel_profile']) {
+        assert.doesNotMatch(require('markdown-it')({ html: true }).render(anonymizeMarkdown(markdown, profile, { deferPersonReview: true }).text),
+          new RegExp(value.replace(/[.*+?^${}()|[\]\\]/gu, '\\$&'), 'u'));
+      }
+    }
+  }
+  const prose = 'Personalnummer |\n--- |\nAB123';
+  assert.equal(tableHeaderAt(prose, prose.indexOf('AB123')), null);
+});
+
 done();

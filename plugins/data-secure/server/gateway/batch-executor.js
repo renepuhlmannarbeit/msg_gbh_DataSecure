@@ -26,6 +26,8 @@ const {
 } = require('./batch-intake-reservation');
 const { validateBatchQueueEnvelope, validateBatchMessagePurpose, LOCAL_QUEUE_SCHEMA_INVALID, PURPOSE_ERROR_CODES } = require('./batch-queue-envelope');
 const { MODES, validateProcessingMode } = require('../core/processing-mode');
+const { assertLegacyContentOperation } = require('../core/content-options');
+const { contentStartOptions, contentStartEnvironment } = require('./content-start-boundary');
 const { MODES: RESULT_NAMING_MODES, validateResultNamingMode } = require('../core/result-naming-mode');
 const { RESOURCE_LIMITS } = require('../resource-limits');
 
@@ -404,6 +406,8 @@ function durableBatchStateProgress(token, type, options = {}) {
 }
 
 function startLocalBatchExecutor(token, options = {}) {
+  assertLegacyContentOperation(options, 'contentOptions',
+    (options.env || process.env).DATASECURE_PRODUCT_CHANNEL || 'plugin', 'resume');
   if (!TOKEN_RE.test(String(token || ''))) throw new SafeError('Batch-Sitzung ist ungültig.');
   const processingMode = (options.readBatchProcessingMode || readBatchProcessingMode)(token);
   const startMessage = {
@@ -518,9 +522,15 @@ function startLocalBatchExecutor(token, options = {}) {
 // copied into the sealed batch snapshot.  Paths exist only in this private
 // IPC message and are never returned from this module or written through MCP.
 function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
+  const startEnvironment = contentStartEnvironment(options, process.env);
+  const startChannel = startEnvironment.DATASECURE_PRODUCT_CHANNEL || 'plugin';
+  const contentOptions = contentStartOptions(options, 'contentOptions', startChannel);
+  // Later lifecycle callbacks receive the same own environment, never a
+  // caller-mutated or inherited getter disguised as the previously checked one.
+  options = { ...options, env: startEnvironment };
   const processingMode = validateProcessingMode(Object.hasOwn(options, 'processingMode')
-    ? options.processingMode : MODES.ANONYMIZE, (options.env || process.env).DATASECURE_PRODUCT_CHANNEL || 'plugin');
-  const productChannel = (options.env || process.env).DATASECURE_PRODUCT_CHANNEL || 'plugin';
+    ? options.processingMode : MODES.ANONYMIZE, startChannel);
+  const productChannel = startChannel;
   if (Object.hasOwn(options, 'documentReview') &&
       (options.documentReview !== true || productChannel !== 'standalone'))
     throw Object.assign(new Error('DOCUMENT_REVIEW_INVALID'), { code: 'DOCUMENT_REVIEW_INVALID' });
@@ -700,14 +710,16 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
       });
     };
     child.send({
-        type: processingMode === MODES.MARKDOWN ? 'start-local-markdown-intake' : 'start-local-intake',
+        type: contentOptions ? processingMode === MODES.MARKDOWN ? 'start-local-content-markdown-intake' : 'start-local-content-anonymize-intake'
+          : processingMode === MODES.MARKDOWN ? 'start-local-markdown-intake' : 'start-local-intake',
         batch_token: token,
         intake_reservation_id: reservationId,
         profile,
-        ...(processingMode === MODES.MARKDOWN ? { processing_mode: processingMode } : {}),
+        ...(processingMode === MODES.MARKDOWN || contentOptions ? { processing_mode: processingMode } : {}),
         ...(outputNamingMode ? { output_naming_mode: outputNamingMode } : {}),
         ...(options.ocrContactReview === true ? { ocr_contact_review: true } : {}),
         ...(options.documentReview === true ? { document_review: true } : {}),
+        ...(contentOptions ? { content_options: contentOptions } : {}),
         queue: queue.map((entry) => ({
           name: entry.name, full: entry.full, sourceBytes: entry.sourceBytes,
           sourceLabel: entry.sourceLabel || entry.name
@@ -764,6 +776,8 @@ function reviewStartErrorCode(error) {
 // Cowork receives a bounded start acknowledgement immediately and never sees
 // the token or waits for the review window to close.
 function startLocalReviewExecutor(token, options = {}) {
+  assertLegacyContentOperation(options, 'contentOptions',
+    (options.env || process.env).DATASECURE_PRODUCT_CHANNEL || 'plugin', 'resume');
   if (!TOKEN_RE.test(String(token || ''))) throw new SafeError('Batch-Sitzung ist ungültig.');
   if (pendingReviews.size > 0) throw new SafeError('Eine lokale DataSecure-Prüfung läuft bereits.');
   const forkProcess = options.forkProcess;
@@ -814,6 +828,11 @@ function startLocalReviewExecutor(token, options = {}) {
     pendingReviews.set(token, child);
     child.on?.('message', (message) => {
       if (acceptance.accept(message)) return;
+      if (message?.type === 'local-review-rejected' && Object.keys(message).length === 2 &&
+          PURPOSE_ERROR_CODES.includes(message.error_code)) {
+        acceptance.reject(ipcAcknowledgementError(message.error_code));
+        return;
+      }
       if (options.appReview?.receive(child, message)) return;
       const progress = localBatchStateProgress(message, new Set(['local-review-state']));
       if (!progress) return;

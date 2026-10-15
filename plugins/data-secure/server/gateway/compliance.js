@@ -5,6 +5,7 @@ const pii = require('../pii-engine');
 const { VERSION } = require('./common');
 const { createAuditReceipt, writePackageAudit, retainAudit } = require('./audit');
 const { validateCoverage } = require('../core/source-extraction-contract');
+const { personFieldContextForConsumer } = require('../core/person-field-policy');
 
 const MAX_PASSES = 3;
 
@@ -12,7 +13,11 @@ const MAX_PASSES = 3;
 // replaced. Without them the gate can only re-run the redactor's own
 // detectors, which by construction cannot find what the redactor missed.
 function anonymizeMarkdown(raw, profile, options = {}) {
+  const { policy: personFieldPolicy, consumerOptions } = personFieldContextForConsumer(options);
   let candidate = String(raw || '');
+  const { assertPersonFieldStructure, canonicalizeRenderedText } = require('../privacy/base');
+  if (Object.hasOwn(consumerOptions, 'contentOptions'))
+    assertPersonFieldStructure(canonicalizeRenderedText(candidate, personFieldPolicy), personFieldPolicy);
   const trace = options.captureTransformPlan === true ? require('../privacy/transform-plan').createTransformTrace(candidate) : null;
   const dictionary = [];
   let entityCount = 0;
@@ -23,7 +28,7 @@ function anonymizeMarkdown(raw, profile, options = {}) {
   // schema never accepts one and this function neither persists nor creates a
   // secret: the batch-owned pseudonym context supplies that binding. No
   // platform keyring or future secret-store gate is part of this code path.
-  const anonymizeOptions = { ...(options.registry ? { registry: options.registry } : {}),
+  const anonymizeOptions = { ...consumerOptions, ...(options.registry ? { registry: options.registry } : {}),
     ...(trace ? { captureTransformPlan: true } : {}) };
 
   for (let pass = 1; pass <= MAX_PASSES; pass++) {
@@ -34,7 +39,7 @@ function anonymizeMarkdown(raw, profile, options = {}) {
     for (const value of result.dictionary || []) dictionary.push(value);
     strongPersonAnchor ||= result.strongPersonAnchor === true;
     passes = pass;
-    residual = pii.scanResidual(candidate, profile, dictionary, { strongPersonAnchor,
+    residual = pii.scanResidual(candidate, profile, dictionary, { ...consumerOptions, strongPersonAnchor,
       ...(options.deferPersonReview === true ? { includePersonCandidateSpans: true } : {}) });
     if (!residual.length) break;
   }

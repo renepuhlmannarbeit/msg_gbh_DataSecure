@@ -12,6 +12,7 @@ const {
 } = require('./bound-private-file');
 const { processAlive } = require('./process-liveness');
 const { MODES, validateProcessingMode } = require('../core/processing-mode');
+const { optionalContentOptions, validateContentOptions } = require('../core/content-options');
 
 const SUFFIX = '.intake';
 const identity = (stat) => ({ dev: String(stat.dev), ino: String(stat.ino), birthtimeNs: String(stat.birthtimeNs) });
@@ -37,11 +38,14 @@ function createBatchIntakeIntent(options = {}) {
     const productChannel = purpose.productChannel === undefined ? 'plugin' : purpose.productChannel;
     const processingMode = validateProcessingMode(purpose.processingMode === undefined
       ? MODES.ANONYMIZE : purpose.processingMode, productChannel);
+    if (Object.hasOwn(purpose, 'content_options')) throw Object.assign(new Error('CONTENT_OPTIONS_INVALID'), { code: 'CONTENT_OPTIONS_INVALID' });
+    const contentOptions = optionalContentOptions(purpose, 'contentOptions', productChannel);
     const stat = io.lstatSync(workDirectory(token), { bigint: true });
     if (!stat.isDirectory() || stat.isSymbolicLink() ||
         (expectedIdentity && !sameIdentity(identity(stat), expectedIdentity))) throw new Error('BATCH_INTAKE_INTENT_INVALID');
-    const record = { schema: processingMode === MODES.MARKDOWN ? 'datasecure-intake/2' : 'datasecure-intake/1',
-      ...(processingMode === MODES.MARKDOWN ? { product_channel: productChannel, processing_mode: processingMode } : {}),
+    const record = { schema: contentOptions ? 'datasecure-intake/3' : processingMode === MODES.MARKDOWN ? 'datasecure-intake/2' : 'datasecure-intake/1',
+      ...(processingMode === MODES.MARKDOWN || contentOptions ? { product_channel: productChannel, processing_mode: processingMode } : {}),
+      ...(contentOptions ? { content_options: contentOptions } : {}),
       token, pid: process.pid,
       expires_at: expiresAt, work_identity: identity(stat) };
     if (!validIdentity(record.work_identity)) throw new Error('BATCH_INTAKE_INTENT_INVALID');
@@ -71,9 +75,17 @@ function createBatchIntakeIntent(options = {}) {
       if (Object.entries(boundIdentity(after)).some(([key, value]) => binding.file[key] !== value)) {
         throw new Error('BATCH_INTAKE_INTENT_INVALID');
       }
+      const contentBound = record.schema === 'datasecure-intake/3';
+      if (contentBound) {
+        if (record.product_channel !== 'standalone' ||
+            ![MODES.MARKDOWN, MODES.ANONYMIZE].includes(record.processing_mode) ||
+            Object.keys(record).sort().join(',') !== 'content_options,expires_at,pid,processing_mode,product_channel,schema,token,work_identity')
+          throw new Error('BATCH_INTAKE_INTENT_INVALID');
+        validateContentOptions(record.content_options);
+      } else if (Object.hasOwn(record, 'content_options') || Object.hasOwn(record, 'contentOptions')) throw new Error('BATCH_INTAKE_INTENT_INVALID');
       const purposeBound = record.schema === 'datasecure-intake/2';
       if ((purposeBound && (record.product_channel !== 'standalone' || record.processing_mode !== MODES.MARKDOWN)) ||
-          (!purposeBound && (record.schema !== 'datasecure-intake/1' ||
+          (!purposeBound && !contentBound && (record.schema !== 'datasecure-intake/1' ||
             (Object.hasOwn(record, 'processing_mode') && record.processing_mode !== MODES.ANONYMIZE)))) {
         throw new Error('BATCH_INTAKE_INTENT_INVALID');
       }

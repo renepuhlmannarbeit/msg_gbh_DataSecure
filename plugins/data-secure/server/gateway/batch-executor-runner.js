@@ -4,6 +4,7 @@ const { SafeError } = require('../runtime');
 const { notProcessedDocumentResult } = require('./document-result-grade');
 const { appendMapping, STOPPED } = require('./mapping');
 const { classifyPrepublicationError, applyRetryBudget } = require('./prepublication-error');
+const { isMarkdownBatch } = require('../core/processing-mode');
 
 function createBatchExecutorRunner(options = {}) {
   const ErrorType = options.SafeError || SafeError;
@@ -27,8 +28,7 @@ function createBatchExecutorRunner(options = {}) {
   const pauseRequested = options.pauseRequested || (() => false);
 
   function isPureConversion(state) {
-    return state.schema === 'datasecure-batch/5' && state.processing_mode === 'markdown-only' &&
-      state.product_channel === 'standalone';
+    return isMarkdownBatch(state);
   }
 
   // A worker-level exception can happen outside the per-document catch, for
@@ -126,7 +126,7 @@ function createBatchExecutorRunner(options = {}) {
       lifecycleEntered = true;
       // Expensive but mandatory housekeeping is established exactly once for a
       // claimed local batch. The opaque capability remains process-local.
-      const conversion = claimed.schema === 'datasecure-batch/5' && claimed.processing_mode === 'markdown-only' && claimed.product_channel === 'standalone';
+      const conversion = isMarkdownBatch(claimed);
       const usesStandaloneConverter = claimed.product_channel === 'standalone';
       if (usesStandaloneConverter && claimed.items.some(item => item.error_code === 'CONVERSION_TERMINATION_UNCONFIRMED')) {
         interrupted = true;

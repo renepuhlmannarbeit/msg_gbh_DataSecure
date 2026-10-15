@@ -16,7 +16,7 @@ const contracts = [
   ['document-result-grade', 'gateway']
 ];
 const coreRoots = [...contracts.map(([name]) => name), 'batch-result-projection', 'batch-progress',
-  'processing-mode', 'product-bootstrap', 'source-extraction-contract'];
+  'processing-mode', 'content-options', 'person-field-policy', 'content-ocr-plan', 'private-document-metadata', 'result-naming-mode', 'product-bootstrap', 'source-extraction-contract'];
 const pureFiles = [...coreRoots.map((name) => `core/${name}.js`), 'resource-limits.js'];
 const sources = new Map(pureFiles.map(name => [name, fs.readFileSync(path.join(server, name), 'utf8')]));
 
@@ -172,6 +172,18 @@ test('the pure-leaf guard rejects native I/O and both product composition import
   }
 });
 
+test('person field policies are closed pure data and do not globally change legacy labels', () => {
+  const fields = pureLoader().load('core/person-field-policy.js');
+  assert.strictEqual(fields.personFieldPolicyForContentOptions(undefined), fields.LEGACY_PERSON_FIELD_POLICY);
+  assert.strictEqual(fields.isPersonFieldLabel('Full Name'), true);
+  assert.strictEqual(fields.isPersonFieldLabel(' Name '), false, 'legacy does not acquire new label normalization');
+  assert.strictEqual(fields.isPersonFieldLabel('First Name'), false);
+  assert.strictEqual(fields.isPersonFieldLabel('First Name', fields.CONTENT_PERSON_FIELD_POLICY), true);
+  assert.strictEqual(fields.isPersonFieldLabel('Vollständiger Name', fields.CONTENT_PERSON_FIELD_POLICY), true);
+  assert.strictEqual(fields.isPersonFieldLabel('Product Name', fields.CONTENT_PERSON_FIELD_POLICY), false);
+  assert.throws(() => fields.personFieldPattern('unknown'), /CONTENT_OPTIONS_INVALID/u);
+});
+
 await testAsync('the static parser closes the actual transitive core import graph', async () => {
   await staticPureGraph();
 });
@@ -259,8 +271,10 @@ test('conversion metadata preserves the exact frozen source, limit and error con
     'CONVERSION_RESOURCE_LIMIT', 'CONVERSION_ISOLATION_FAILED', 'CONVERSION_RESPONSE_INVALID', 'MARKDOWN_ARTIFACT_INVALID']);
   assert.deepStrictEqual(contract.ERROR_CODES, ['CONVERSION_INPUT_INVALID', 'CONVERSION_INPUT_INCOMPLETE', 'CONVERSION_POLICY_FAILED',
     'CONVERSION_EXTRACTION_FAILED', 'CONVERSION_IMAGE_INVALID', 'CONVERSION_PIXEL_LIMIT', 'CONVERSION_MODEL_INVALID', 'CONVERSION_OCR_FAILED',
+    'CONVERSION_OCR_TEXT_EMPTY', 'CONVERSION_METADATA_LIMIT', 'IMAGE_OCR_REQUIRED', 'OFFICE_IMAGE_OCR_UNAVAILABLE',
+    'PDF_OCR_SCOPE_REQUIRED', 'PDF_TEXT_UNAVAILABLE_BY_POLICY', 'MARKDOWN_IMAGE_OCR_UNAVAILABLE',
     'PDF_EXTRACTION_FAILED', 'PDF_OBJECT_COVERAGE_UNVERIFIED', 'SOURCE_ENCRYPTED_UNSUPPORTED', 'TEXT_TOO_LARGE',
-    'MARKDOWN_EXTRACTION_FAILED', 'MARKDOWN_FORMAT_UNSUPPORTED', 'INPUT_FILE_LIMIT', 'INPUT_FORMAT_LIMIT', 'TEXT_ENCODING_INVALID',
+    'MARKDOWN_EXTRACTION_FAILED', 'MARKDOWN_CONTENT_TRANSFORM_FAILED', 'MARKDOWN_FORMAT_UNSUPPORTED', 'INPUT_FILE_LIMIT', 'INPUT_FORMAT_LIMIT', 'TEXT_ENCODING_INVALID',
     'TEXT_CONTROL_INVALID', 'CSV_EMPTY', 'CSV_QUOTE_INVALID', 'CSV_DELIMITER_AMBIGUOUS', 'CSV_ROW_WIDTH_INVALID', 'DOCX_STRUCTURE_UNSAFE',
     'DOCX_STRUCTURE_LIMIT', 'OOXML_XML_CHARACTER_INVALID', 'OOXML_ENCODING_INVALID', 'XLSX_STRUCTURE_UNSAFE', 'XLSX_STRUCTURE_LIMIT',
     'XLSX_SHARED_STRING_INVALID', 'PPTX_STRUCTURE_UNSAFE', 'PPTX_STRUCTURE_LIMIT']);
@@ -294,6 +308,12 @@ test('both actual product projections contain the same core implementations and 
         `${channel}: actual ${core} bytes shipped`);
       const missing = new Map(entries);
       missing.delete(core);
+      if (channel === 'plugin' && name === 'content-ocr-plan') {
+        // Pure analysis roots are not all Cowork runtime dependencies. The
+        // new PDF OCR planner is reached only by Standalone's converter.
+        assert.deepStrictEqual(verifyProductRelativeRequires(missing), { ok: true });
+        continue;
+      }
       assert.throws(() => verifyProductRelativeRequires(missing), /PRODUCT_MODULE_DEPENDENCY_MISSING/u,
         `${channel}: missing ${core} must never fall back to a checkout or legacy implementation`);
     }

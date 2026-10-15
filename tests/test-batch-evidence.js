@@ -19,6 +19,7 @@ const {
   notProcessedDocumentResult
 } = require('../plugins/data-secure/server/gateway/document-result-grade');
 const { createSuite } = require('./helpers');
+const { CONTENT_OPTIONS_SCHEMA } = require('../plugins/data-secure/server/core/content-options');
 
 const { test, done, assert } = createSuite('Batch evidence durable store');
 
@@ -89,6 +90,38 @@ test('v6 Standalone anonymization produces evidence without losing its snapshot 
   assert.deepStrictEqual(record.grade_counts, {
     complete: 1, usable_with_omissions: 0, not_processed: 0, unavailable: 0
   });
+});
+
+test('direct evidence entry points enforce the validated purpose for every new content lifecycle shape', () => {
+  const content = { schema: CONTENT_OPTIONS_SCHEMA, markdownOutput: 'content-v1', scanOcr: true, imageOcr: false };
+  const dated = '2026-10-14T00:00:00.000Z';
+  for (const statuses of [['stopped'], ['pending'], ['released'], ['stopped', 'pending'], ['released', 'stopped']]) {
+    const source = { ...batchState('stopped', 'datasecure-batch/7'), product_channel: 'standalone',
+      processing_mode: 'markdown-only', standalone_document_review: true, content_options: content,
+      items: statuses.map(status => batchState(status).items[0]) };
+    let reads = 0;
+    for (const produce of [evidenceRecord, require('../plugins/data-secure/server/gateway/batch-evidence').appendBatchEvidence]) {
+      assert.throws(() => produce(source, dated, '7'.repeat(32), { publishedPackageRecord() { reads++; throw Error('must not aggregate'); } }),
+        error => error.code === 'PROCESSING_MODE_FORBIDDEN');
+    }
+    assert.equal(reads, 0, 'direct producer checks before any result verification or evidence I/O');
+    const opaqueItems = { ...source };
+    Object.defineProperty(opaqueItems, 'items', { enumerable: true, get() { reads++; throw Error('must not inspect items'); } });
+    for (const produce of [evidenceRecord, require('../plugins/data-secure/server/gateway/batch-evidence').appendBatchEvidence])
+      assert.throws(() => produce(opaqueItems, dated, '7'.repeat(32)), error => error.code === 'PROCESSING_MODE_FORBIDDEN');
+    assert.equal(reads, 0, 'the guard runs even before source-derived item getters');
+  }
+  const anonymized = { ...batchState('stopped', 'datasecure-batch/7'), product_channel: 'standalone',
+    processing_mode: 'markdown-and-anonymize', standalone_document_review: true, content_options: content, output_naming_mode: 'neutral' };
+  assert.equal(makeEvidence(anonymized, dated, '8'.repeat(32)).grade_counts.not_processed, 1);
+  const positive = { ...anonymized, items: batchState('released').items };
+  assert.equal(makeEvidence(positive, dated, '9'.repeat(32)).grade_counts.complete, 1);
+  for (const changed of [{ ...anonymized, processing_mode: 'unknown' }, { ...anonymized, content_options: null },
+    { ...anonymized, product_channel: 'plugin' }]) {
+    let reads = 0;
+    assert.throws(() => evidenceRecord(changed, dated, 'a'.repeat(32), { publishedPackageRecord() { reads++; } }));
+    assert.equal(reads, 0);
+  }
 });
 
 test('v1 and v2 migration preserve every legacy record without inventing grades', () => {

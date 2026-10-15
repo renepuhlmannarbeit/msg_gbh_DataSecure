@@ -109,6 +109,16 @@ description = "Speichert einen dauerhaften Pausewunsch für genau einen Standalo
 commands.allow = ["pause_batch"]
 
 [[permission]]
+identifier = "allow-abandon-result-export"
+description = "Gibt nur die automatische Fortsetzung einer unvollständigen sichtbaren Anonymisierungskopie dauerhaft auf; vorhandene Dateien bleiben unangetastet."
+commands.allow = ["abandon_result_export"]
+
+[[permission]]
+identifier = "allow-skip-ocr-contact-review"
+description = "Überspringt nur die gewählte OCR-Kontaktprüfung eines reinen Markdown-Laufs; Werte bleiben ungeprüft."
+commands.allow = ["skip_ocr_contact_review"]
+
+[[permission]]
 identifier = "allow-continue-current-batch"
 description = "Setzt den aktuell in dieser Sitzung verbundenen Lauf fort."
 commands.allow = ["continue_current_batch"]
@@ -132,6 +142,11 @@ commands.allow = ["open_local_ledger"]
 identifier = "allow-open-diagnostic-folder"
 description = "Öffnet ausschließlich den festen lokalen Ordner mit inhaltsfreien Interaktionsprotokollen."
 commands.allow = ["open_diagnostic_folder"]
+
+[[permission]]
+identifier = "allow-get-native-recovery-status"
+description = "Liest nur die inhaltsfreie native Prozess-Abgleichphase, ohne den Core-Prozess aufzurufen."
+commands.allow = ["get_native_recovery_status"]
 
 [[permission]]
 identifier = "allow-shutdown"
@@ -176,6 +191,11 @@ commands.allow = ["get_document_entities"]
 identifier = "allow-decide-document-review"
 description = "Speichert eine revisionsgebundene Freigabe oder zusätzliche feste Maskierung."
 commands.allow = ["decide_document_review"]
+
+[[permission]]
+identifier = "allow-preview-document-export"
+description = "Liest ausschließlich den servergebundenen Dateinamenplan; legt weder Auftrag noch Ergebnisdateien an."
+commands.allow = ["preview_document_export"]
 
 [[permission]]
 identifier = "allow-export-approved-documents"

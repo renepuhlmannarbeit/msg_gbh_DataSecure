@@ -146,17 +146,20 @@ async function probe(scenario, root) {
     }
     if (scenario === 'unsafe-recovery-mapping-debt') {
       const { createBatchReconciliation } = require('../plugins/data-secure/server/gateway/batch-reconciliation');
-      const reconciliation = createBatchReconciliation({ appendMapping() { throw new Error('Synthetic mapping failure'); } });
+      let mappingCalls = 0;
+      const reconciliation = createBatchReconciliation({ appendMapping() { mappingCalls++; throw new Error('Synthetic mapping failure'); } });
       reconciliation.markInterruptedItemsRetryable(initial);
       batch._test.writeState(initial);
       const before = batch.recoverableBatchStatus();
       const debt = batch._test.readState(token).items[0];
       const repaired = batch._test.readState(token);
-      batch._test.reconcilePreflightStoppedMappings(repaired);
+      const repairRequired = batch._test.reconcilePreflightStoppedMappings(repaired);
       batch._test.writeState(repaired);
       return { status: debt.status, mapping_pending: debt.local_mapping_exported === false,
-        recoverable: before.recoverable_batches, repaired: batch._test.readState(token).items[0].local_mapping_exported,
-        recoverable_after: batch.recoverableBatchStatus().recoverable_batches };
+        mapping_calls: mappingCalls, repaired: repairRequired, recoverable: before.recoverable_batches,
+        recoverable_after: batch.recoverableBatchStatus().recoverable_batches,
+        anonymization_mapping_exists: fs.existsSync(require('../plugins/data-secure/server/gateway/mapping').mappingPath()),
+        original_unchanged: fs.readFileSync(source, 'utf8') === raw };
     }
     const resumed = batch.resumeBatch(token);
     const state = batch._test.readState(token);
@@ -309,9 +312,10 @@ if (process.argv[2] === '--probe') {
   test('v5 snapshot and compatibility entry points reject cross-purpose journals before reading bytes', () => {
     assert.deepStrictEqual(run('purpose-guards'), { rejected: [true, true, true, true], unchanged: true });
   });
-  test('unsafe publication mapping debt stays repairable without restarting conversion', () => {
+  test('unsafe raw publication stops without conversion restart or an anonymization mapping debt', () => {
     assert.deepStrictEqual(run('unsafe-recovery-mapping-debt'), {
-      status: 'stopped', mapping_pending: true, recoverable: 1, repaired: true, recoverable_after: 0
+      status: 'stopped', mapping_pending: false, mapping_calls: 0, repaired: false, recoverable: 0,
+      recoverable_after: 0, anonymization_mapping_exists: false, original_unchanged: true
     });
   });
   for (const scenario of ['unconfirmed-termination', 'restored-unconfirmed-termination']) {

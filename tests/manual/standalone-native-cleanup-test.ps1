@@ -43,7 +43,7 @@ function Remove-FixtureLink($Fixture, $CreatedLink) {
     Assert-NativePathParents $Fixture.Context $CreatedLink.Path
     $item = Get-Item -LiteralPath $CreatedLink.Path -Force -ErrorAction Stop
     Assert-Test ($item.LinkType -ceq 'Junction' -and @($item.Target).Count -eq 1 -and
-        $item.Target[0] -eq $CreatedLink.Target -and
+        @($item.Target)[0] -eq $CreatedLink.Target -and
         [DataSecure.NativeTestIdentity]::Read($CreatedLink.Path) -eq $CreatedLink.Identity) 'fixture link identity'
     [System.IO.Directory]::Delete($CreatedLink.Path)
 }

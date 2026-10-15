@@ -5,13 +5,17 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { exactKeys } = require('../core/source-extraction-contract');
 const { buildContactDraft, validateContactAnswer, applyContactAnswer } = require('../core/ocr-contact-review');
+const { contentOptionsForBatch } = require('../core/content-options');
+const { isMarkdownBatch } = require('../core/processing-mode');
 const SCHEMA = 'datasecure-ocr-contact-correction/2';
+const CONTENT_SCHEMA = 'datasecure-ocr-contact-correction/3';
 const fail = () => Object.assign(new Error('Die gespeicherte OCR-Kontaktentscheidung passt nicht zur unveränderten Quelle.'),
   { code: 'OCR_CONTACT_REVIEW_INVALID' });
 
 function createContactStore({ privateWorkStore, workPath, io = fs }) {
   function binding(state, item, input) {
-    const markdown = state?.schema === 'datasecure-batch/5' && state?.processing_mode === 'markdown-only';
+    const contentOptions = contentOptionsForBatch(state);
+    const markdown = contentOptions ? isMarkdownBatch(state) : state?.schema === 'datasecure-batch/5' && state?.processing_mode === 'markdown-only';
     const seed = markdown ? state.ocr_review_seed : state?.pseudonym_seed;
     if (state?.product_channel !== 'standalone' || !/^[a-f0-9]{64}$/u.test(String(state.token || '')) ||
         !/^[0-9]{3}_[a-f0-9]{24}(?:\.[a-z0-9]+)?$/u.test(String(item?.work_name || '')) ||
@@ -23,14 +27,16 @@ function createContactStore({ privateWorkStore, workPath, io = fs }) {
       policy: state.core_policy_fingerprint, contract: state.pseudonym_contract_version, rules: state.pseudonym_ruleset_version,
       source_type: input.source_type, extraction_sha256: crypto.createHash('sha256').update(input.original_text, 'utf8').digest('hex'),
       contacts: input.contacts.map(({ image: _image, ...contact }) => contact) };
-    const identity = { ...legacyIdentity, schema: SCHEMA, processing_mode: markdown ? 'markdown-only' : 'markdown-and-anonymize',
+    const schema = contentOptions ? CONTENT_SCHEMA : SCHEMA;
+    const identity = { ...legacyIdentity, schema, processing_mode: markdown ? 'markdown-only' : 'markdown-and-anonymize',
+      ...(contentOptions ? { content_options: contentOptions } : {}),
       contacts: input.contacts.map(({ image, ...contact }) => ({ ...contact,
         ...(image ? { image_sha256: require('../core/ocr-contact-image').contactImageDigest(image) } : {}) })) };
     const key = Buffer.from(seed, 'base64url');
     if (key.length !== 32 || key.toString('base64url') !== seed) { key.fill(0); throw fail(); }
     const authenticate = (answer, legacy = false) => crypto.createHmac('sha256', key).update(JSON.stringify(legacy ? legacyIdentity : identity)).update('\0')
       .update(JSON.stringify(answer)).digest('hex');
-    return { target, identity, legacyIdentity, authenticate, markdown, dispose: () => key.fill(0) };
+    return { target, identity, legacyIdentity, authenticate, markdown, schema, contentBound: Boolean(contentOptions), dispose: () => key.fill(0) };
   }
 
   function read(state, item, input) {
@@ -42,8 +48,8 @@ function createContactStore({ privateWorkStore, workPath, io = fs }) {
       bytes = privateWorkStore.readFile(bound.target);
       if (bytes.length > 1024 * 1024) throw fail();
       const record = JSON.parse(bytes.toString('utf8'));
-      const legacy = !bound.markdown && record.schema === 'datasecure-ocr-contact-correction/1';
-      if (!exactKeys(record, ['schema', 'binding', 'answer', 'authentication']) || (!legacy && record.schema !== SCHEMA) ||
+      const legacy = !bound.contentBound && !bound.markdown && record.schema === 'datasecure-ocr-contact-correction/1';
+      if (!exactKeys(record, ['schema', 'binding', 'answer', 'authentication']) || (!legacy && record.schema !== bound.schema) ||
           JSON.stringify(record.binding) !== JSON.stringify(legacy ? bound.legacyIdentity : bound.identity) ||
           !/^[a-f0-9]{64}$/u.test(String(record.authentication || ''))) throw fail();
       const answer = validateContactAnswer(record.answer, buildContactDraft(input));
@@ -59,7 +65,7 @@ function createContactStore({ privateWorkStore, workPath, io = fs }) {
     const answer = validateContactAnswer(supplied, buildContactDraft(input));
     if (answer.action !== 'reviewed') throw Object.assign(fail(), { code: 'LOCAL_REVIEW_DEFERRED' });
     const bound = binding(state, item, input);
-    const bytes = Buffer.from(JSON.stringify({ schema: SCHEMA, binding: bound.identity, answer,
+    const bytes = Buffer.from(JSON.stringify({ schema: bound.schema, binding: bound.identity, answer,
       authentication: bound.authenticate(answer) }), 'utf8');
     try {
       if (bytes.length > 1024 * 1024) throw fail();
@@ -72,4 +78,4 @@ function createContactStore({ privateWorkStore, workPath, io = fs }) {
   return Object.freeze({ read, write });
 }
 
-module.exports = { SCHEMA, createContactStore };
+module.exports = { SCHEMA, CONTENT_SCHEMA, createContactStore };

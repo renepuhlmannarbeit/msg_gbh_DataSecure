@@ -118,7 +118,7 @@ test('verified processing items are adopted before interrupted work becomes retr
   const invalid = { id: 'g'.repeat(32), name: 'two.txt', status: 'processing' };
   const pending = { id: 'a'.repeat(32), status: 'pending' };
   const released = { id: 'a'.repeat(32), status: 'released' };
-  const state = { items: [adopted, invalid, pending, released] };
+  const state = { schema: 'datasecure-batch/4', items: [adopted, invalid, pending, released] };
 
   assert.strictEqual(reconciliation.reconcilePublishedItems(state), true);
   assert.deepStrictEqual(adopted, {
@@ -171,9 +171,9 @@ test('missing output is retryable while unsafe output stops without adoption', (
   for (const mode of ['missing', 'hash-mismatch', 'folder-symlink']) {
     const { reconciliation, events } = fixture({ mode });
     const processing = { id: 'a'.repeat(32), name: 'one.txt', status: 'processing' };
-    assert.strictEqual(reconciliation.reconcilePublishedItems({ items: [processing] }), false, mode);
+    assert.strictEqual(reconciliation.reconcilePublishedItems({ schema: 'datasecure-batch/4', items: [processing] }), false, mode);
     assert.strictEqual(processing.status, 'processing', mode);
-    assert.strictEqual(reconciliation.markInterruptedItemsRetryable({ items: [processing] }), 1, mode);
+    assert.strictEqual(reconciliation.markInterruptedItemsRetryable({ schema: 'datasecure-batch/4', items: [processing] }), 1, mode);
     if (mode === 'missing') {
       assert.strictEqual(processing.status, 'retryable');
       assert.strictEqual(processing.error_code, 'PROCESSING_INTERRUPTED');
@@ -239,21 +239,21 @@ test('interruption recovery mutates only processing items and is idempotent', ()
   const items = statuses.map((status, index) => ({ status, marker: index,
     ...(status === 'processing' ? { id: (index + 1).toString(16).repeat(32) } : {}) }));
   const untouched = items.filter((item) => item.status !== 'processing').map((item) => ({ ...item }));
-  assert.strictEqual(reconciliation.markInterruptedItemsRetryable({ items }), 2);
+  assert.strictEqual(reconciliation.markInterruptedItemsRetryable({ schema: 'datasecure-batch/4', items }), 2);
   assert.deepStrictEqual(items.filter((item) => item.status !== 'retryable'), untouched);
   for (const item of items.filter((entry) => entry.status === 'retryable')) {
     assert.strictEqual(item.checkpoint, 'retryable');
     assert.strictEqual(item.error_code, 'PROCESSING_INTERRUPTED');
     assert.strictEqual(item.retry_failure_count, 1);
   }
-  assert.strictEqual(reconciliation.markInterruptedItemsRetryable({ items }), 0);
+  assert.strictEqual(reconciliation.markInterruptedItemsRetryable({ schema: 'datasecure-batch/4', items }), 0);
 });
 
 test('three identical orphaned processing recoveries stop instead of looping forever', () => {
   const { reconciliation } = fixture({ mode: 'missing' });
   const item = { id: '8'.repeat(32), name: 'one.txt', status: 'processing' };
   for (let failure = 1; failure <= 3; failure++) {
-    assert.strictEqual(reconciliation.markInterruptedItemsRetryable({ items: [item] }), 1);
+    assert.strictEqual(reconciliation.markInterruptedItemsRetryable({ schema: 'datasecure-batch/4', items: [item] }), 1);
     assert.strictEqual(item.retry_failure_count, failure);
     if (failure < 3) {
       assert.strictEqual(item.status, 'retryable');
@@ -277,7 +277,7 @@ test('preflight stops become terminal only after an idempotent local stopped map
     document_result: notProcessedDocumentResult('SOURCE_TYPE_MISMATCH'),
     local_mapping_exported: false
   };
-  const state = { items: [item] };
+  const state = { schema: 'datasecure-batch/4', items: [item] };
   assert.strictEqual(reconciliation.reconcilePreflightStoppedMappings(state), true);
   assert.strictEqual(item.status, 'stopped');
   assert.strictEqual(item.checkpoint, 'source_preflight_stopped');
@@ -302,13 +302,29 @@ test('failed stopped mapping remains recoverable and snapshot-bearing impostors 
     local_mapping_exported: false
   };
   const failed = fixture({ mappingFailure: 'append' });
-  assert.strictEqual(failed.reconciliation.reconcilePreflightStoppedMappings({ items: [pending] }), false);
+  assert.strictEqual(failed.reconciliation.reconcilePreflightStoppedMappings({ schema: 'datasecure-batch/4', items: [pending] }), false);
   assert.strictEqual(pending.status, 'preflight_mapping_pending');
   failed.clearFailure();
-  assert.strictEqual(failed.reconciliation.reconcilePreflightStoppedMappings({ items: [pending] }), true);
+  assert.strictEqual(failed.reconciliation.reconcilePreflightStoppedMappings({ schema: 'datasecure-batch/4', items: [pending] }), true);
   const forged = { ...pending, status: 'preflight_mapping_pending', checkpoint: 'source_preflight_rejected', work_name: '001_fake.txt' };
-  assert.strictEqual(failed.reconciliation.reconcilePreflightStoppedMappings({ items: [forged] }), false);
+  assert.strictEqual(failed.reconciliation.reconcilePreflightStoppedMappings({ schema: 'datasecure-batch/4', items: [forged] }), false);
   assert.strictEqual(forged.status, 'preflight_mapping_pending');
+});
+
+test('raw preflight stops settle their metadata without an anonymization mapping for legacy and new runs', () => {
+  for (const schema of ['datasecure-batch/5', 'datasecure-batch/7']) {
+    const { reconciliation, mappingCalls } = fixture();
+    const item = { id: 'e'.repeat(32), name: 'synthetic-blocked.pdf', status: 'preflight_mapping_pending',
+      checkpoint: 'source_preflight_rejected', error_code: 'SOURCE_TYPE_MISMATCH', local_mapping_exported: false,
+      document_result: notProcessedDocumentResult('SOURCE_TYPE_MISMATCH') };
+    const state = { schema, product_channel: 'standalone', processing_mode: 'markdown-only', items: [item],
+      ...(schema === 'datasecure-batch/7' ? { standalone_document_review: true, content_options: {
+        schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: true, imageOcr: false } } : {}) };
+    assert.equal(reconciliation.reconcilePreflightStoppedMappings(state), true);
+    assert.equal(item.status, 'stopped'); assert.equal(item.checkpoint, 'source_preflight_stopped');
+    assert.equal(mappingCalls.length, 0);
+    assert.equal(reconciliation.reconcilePreflightStoppedMappings(state), false);
+  }
 });
 
 test('the batch composition root preserves every reconciliation test facade', () => {

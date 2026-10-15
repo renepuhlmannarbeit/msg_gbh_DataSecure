@@ -88,8 +88,9 @@ async function run() {
     loseNextPublish = true;
     await assert.rejects(exportCall(f, op), { code: 'STANDALONE_IPC_TIMEOUT' });
     const target = path.join(results, mode === 'markdown-only' ? 'DataSecure-Markdown-Korrektur' : 'DataSecure-KI-Export', `Export-${op}`);
-    assert.deepEqual(fs.readdirSync(target), ['Dokument_01.md']);
-    assert.equal(fs.readFileSync(path.join(target, 'Dokument_01.md'), 'utf8'), f.text);
+    const expectedName = mode === 'markdown-only' ? 'Quelle.md' : 'Dokument_01.md';
+    assert.deepEqual(fs.readdirSync(target), [expectedName]);
+    assert.equal(fs.readFileSync(path.join(target, expectedName), 'utf8'), f.text);
     f.decide('revoke'); // lost completion must still reconcile this earlier exact copy
     assert.equal((await exportCall(f, op, true)).exported_count, 1);
     assert.equal(f.store.historySummary(f.batchId).current_exported_count, 0);
@@ -114,7 +115,7 @@ async function run() {
   const large = fixture('markdown-only', ++i, '🙂 gültiger Text.\n'.repeat(12000));
   const largeOp = crypto.randomBytes(16).toString('hex');
   assert.equal((await exportCall(large, largeOp)).exported_count, 1);
-  assert.equal(fs.readFileSync(path.join(results, 'DataSecure-Markdown-Korrektur', `Export-${largeOp}`, 'Dokument_01.md'), 'utf8'), large.text);
+  assert.equal(fs.readFileSync(path.join(results, 'DataSecure-Markdown-Korrektur', `Export-${largeOp}`, 'Quelle.md'), 'utf8'), large.text);
   const privateEntries = fs.readdirSync(path.join(data, binding.private_name));
   assert.ok(privateEntries.every(name => !/^export-.*-body-/u.test(name)), 'body files never collect in the common native journal');
   assert.ok(privateEntries.length < 40, 'multi-chunk bodies are stored only inside their own operation stage');

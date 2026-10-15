@@ -1,4 +1,8 @@
 'use strict';
+const { assertAnonymizationBatch } = require('../core/processing-mode');
+const { bindContentDependencies } = require('./content-consumer-dependencies');
+const { contentOptionsForBatch } = require('../core/content-options');
+const { types } = require('node:util');
 
 function createBatchReviewCapture(options = {}) {
   const anonymizeNext = options.anonymizeNext;
@@ -9,13 +13,49 @@ function createBatchReviewCapture(options = {}) {
     (async (_state, action) => action(undefined));
   const contactStore = options.contactStore;
 
+  async function captureContentReview(state, item, deps) {
+    if (!deps || types.isProxy(deps)) throw localReviewError('CONTENT_OPTIONS_BINDING_INVALID', 'Der interne Prüfanschluss ist ungültig.');
+    const descriptors = Object.getOwnPropertyDescriptors(deps), selected = {};
+    for (const key of ['abortSignal', 'convertBuffer', 'timeoutMs', 'captureOcrInput']) {
+      const descriptor = descriptors[key];
+      if (!descriptor) continue;
+      if (!descriptor.enumerable || !Object.hasOwn(descriptor, 'value')) throw localReviewError('CONTENT_OPTIONS_BINDING_INVALID', 'Der interne Prüfanschluss ist ungültig.');
+      selected[key] = descriptor.value;
+    }
+    const observer = name => {
+      const descriptor = descriptors[name];
+      if (!descriptor) return undefined;
+      if (!descriptor.enumerable || !Object.hasOwn(descriptor, 'value') ||
+          typeof descriptor.value !== 'function' || types.isProxy(descriptor.value))
+        throw localReviewError('CONTENT_OPTIONS_BINDING_INVALID', 'Der interne Prüfanschluss ist ungültig.');
+      return descriptor.value;
+    };
+    const onOcrSourceCaptured = observer('onOcrSourceCaptured'), onReviewSourceCaptured = observer('onReviewSourceCaptured');
+    const result = await withBatchPseudonymRegistry(state, pseudonymRegistry => options.captureStandaloneReview(state.token, item.id, {
+      ...selected, pseudonymRegistry,
+      prepareOcrContacts: input => contactStore ? contactStore.read(state, item, input) : null,
+      ...(onOcrSourceCaptured ? { onOcrSourceCaptured: input => onOcrSourceCaptured(Object.freeze({
+        sourceLabel: item.source_label, originalText: input.original_text })) } : {})
+    }));
+    if (result?.kind === 'ocr-contact' && result.ocr_contact_input) return { ocr_contact_input: result.ocr_contact_input };
+    const captured = result?.kind === 'privacy' ? result.draft : null;
+    if (!captured || !Array.isArray(captured.ambiguities) || typeof captured.original_text !== 'string' || typeof captured.anonymized_text !== 'string')
+      throw localReviewError('BATCH_REVIEW_RECONSTRUCTION_FAILED', 'Die lokale Prüfung konnte nicht sicher rekonstruiert werden.');
+    onReviewSourceCaptured?.(Object.freeze({ sourceLabel: item.source_label, originalText: captured.original_text }));
+    return captured;
+  }
+
   async function captureDeferredReviewInput(state, item, deps = {}) {
+    assertAnonymizationBatch(state);
+    if (contentOptionsForBatch(state) && options.captureStandaloneReview) return captureContentReview(state, item, deps);
     const entry = exactPendingEntry(state, item);
     let captured;
     let captureStoppedPipeline = false;
     try {
-      await withBatchPseudonymRegistry(state, (pseudonymRegistry) => anonymizeNext(state.profile, {
-        ...deps,
+      const operation = contentOptionsForBatch(state) && options.captureStandaloneReview ?
+        (_profile, hooks) => options.captureStandaloneReview(state.token, item.id, hooks) : anonymizeNext;
+      await withBatchPseudonymRegistry(state, (pseudonymRegistry) => operation(state.profile, {
+        ...bindContentDependencies(state, deps),
         productChannel: state.product_channel,
         pseudonymRegistry,
         inputQueue: [entry],

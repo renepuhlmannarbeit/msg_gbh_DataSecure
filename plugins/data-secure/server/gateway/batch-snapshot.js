@@ -200,12 +200,12 @@ function exactPendingEntry(state, item, deps = {}) {
   if (!/^[0-9]{3}_[a-f0-9]{24}(?:\.[a-z0-9]+)?$/i.test(String(item?.work_name || ''))) {
     throw new SafeError('Die versiegelte Arbeitskopie ist ungültig.');
   }
-  if (['datasecure-batch/5', 'datasecure-batch/6'].includes(state.schema)) processingModeForBatch(state);
-  if (state.schema === 'datasecure-batch/6') resultNamingModeForBatch(state);
-  if (!['datasecure-batch/2', 'datasecure-batch/4', 'datasecure-batch/5', 'datasecure-batch/6'].includes(state.schema) ||
+  if (['datasecure-batch/5', 'datasecure-batch/6', 'datasecure-batch/7'].includes(state.schema)) processingModeForBatch(state);
+  if (['datasecure-batch/6', 'datasecure-batch/7'].includes(state.schema)) resultNamingModeForBatch(state);
+  if (!['datasecure-batch/2', 'datasecure-batch/4', 'datasecure-batch/5', 'datasecure-batch/6', 'datasecure-batch/7'].includes(state.schema) ||
       Object.hasOwn(item, 'private_artifact_encrypted') || Object.hasOwn(item, 'legacy_work_name') ||
       /\.dsart$/iu.test(item.work_name) ||
-      (['datasecure-batch/4', 'datasecure-batch/5', 'datasecure-batch/6'].includes(state.schema) && item.private_artifact_plain !== true)) {
+      (['datasecure-batch/4', 'datasecure-batch/5', 'datasecure-batch/6', 'datasecure-batch/7'].includes(state.schema) && item.private_artifact_plain !== true)) {
     const error = new SafeError('Eine alte verschlüsselte oder unbekannte Arbeitskopie bleibt unverändert erhalten. Bitte die Originaldateien neu auswählen.');
     error.code = 'PRIVATE_ARTIFACT_LEGACY_ENCRYPTED_UNSUPPORTED';
     throw error;

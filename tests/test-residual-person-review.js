@@ -686,6 +686,14 @@ async function main() {
       assert.deepEqual(personProseCandidateSpans(source, { productChannel: 'standalone' }), [], source);
     }
     assert.equal(personProseCandidateSpans('Die Kollegin sagt, dass Anna Linden rief.', { productChannel: 'standalone' }).length, 1);
+    const ocrLines = '## Seite 1\n\nMax Mustermann  \nNordstern GmbH  \nProjektmanager Software Tester  ';
+    assert.deepEqual(personProseCandidateSpans(ocrLines, { productChannel: 'standalone' }), [],
+      'the existing non-OCR workflow is not broadened by the OCR-only guard');
+    assert.deepEqual(personProseCandidateSpans(ocrLines, { productChannel: 'standalone', ocrLineReview: true })
+      .map(candidate => candidate.value), ['Max Mustermann'],
+    'an isolated OCR name needs a bound human choice, but the company and factual line do not');
+    assert.deepEqual(personProseCandidateSpans(ocrLines, { productChannel: 'cowork', ocrLineReview: true }), [],
+      'OCR-specific Standalone review does not broaden the Cowork path');
   });
   await testAsync('both actual publication routes block imported HMAC and numeric source lookalikes without explicit bound Keep or Redact', async () => {
     const { createBatchPseudonymRegistry, CONTRACT_VERSION, READABLE_CONTRACT_VERSION } =

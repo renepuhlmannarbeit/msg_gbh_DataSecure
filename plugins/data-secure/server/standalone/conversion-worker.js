@@ -3,10 +3,12 @@
 const path = require('node:path');
 const fs = require('node:fs');
 const childProcess = require('node:child_process');
+const { types } = require('node:util');
 const { resolveConversionRuntime } = require('./conversion-runtime-resolver');
 const { verifyNativeLauncherArtifact } = require('../native-launcher');
 const { verifyPosixSupervisor } = require('../posix-supervisor');
-const { createMarkdownExtraction, validateMarkdownExtraction, exactKeys, MAX_MARKDOWN_CHARS } = require('./markdown-contract');
+const { createMarkdownExtraction, validateMarkdownExtractionForOptions, exactKeys, MAX_MARKDOWN_CHARS } = require('./markdown-contract');
+const { validateContentOptions, serializeContentOptions } = require('../core/content-options');
 const { SOURCE_TYPES, ERROR_CODES, MAX_INPUT_BYTES } = require('../core/conversion-worker-contract');
 const ERROR_SET = new Set(ERROR_CODES);
 const DEFAULT_TIMEOUT_MS = 300_000;
@@ -15,6 +17,24 @@ const TERMINATION_GRACE_MS = 1500;
 // budget (base64 overhead included), independent of Markdown size.
 const MAX_RESPONSE_BYTES = MAX_MARKDOWN_CHARS * 6 + Math.ceil(2 * 1024 * 1024 / 3) * 4 + 256 * 1024;
 const error = code => Object.assign(new Error('Die lokale Markdown-Konvertierung konnte nicht abgeschlossen werden.'), { code });
+const intrinsicAborted = Object.getOwnPropertyDescriptor(AbortSignal.prototype, 'aborted').get;
+const intrinsicAddListener = EventTarget.prototype.addEventListener;
+const intrinsicRemoveListener = EventTarget.prototype.removeEventListener;
+
+function checkedAbortSignal(signal) {
+  if (signal === undefined) return undefined;
+  const check = () => {
+    if (!signal || types.isProxy(signal) || Object.getPrototypeOf(signal) !== AbortSignal.prototype ||
+        Reflect.ownKeys(Object.getOwnPropertyDescriptors(signal)).some(key =>
+          !Object.hasOwn(Object.getOwnPropertyDescriptor(signal, key), 'value'))) throw error('CONVERSION_INPUT_INVALID');
+  };
+  const read = () => { try { check(); return intrinsicAborted.call(signal); } catch { throw error('CONVERSION_INPUT_INVALID'); } };
+  read(); // Native brand check before runtime/source processing, no own getter.
+  return Object.freeze({ aborted: read,
+    subscribe(listener) { try { check(); intrinsicAddListener.call(signal, 'abort', listener, { once: true }); } catch { throw error('CONVERSION_INPUT_INVALID'); } },
+    unsubscribe(listener) { try { check(); intrinsicRemoveListener.call(signal, 'abort', listener); } catch { /* Cleanup cannot replace the bounded result. */ } }
+  });
+}
 
 // Classify the OS fact, not a guessed cause (for example antivirus software).
 // Raw vendor messages, executable paths and source content never escape here.
@@ -45,14 +65,16 @@ function nativeConversionExitCode(code, platform = process.platform) {
   return null;
 }
 
-function launch(runtime, sourceType, inputBytes, timeoutMs, omitDocxHeaderFooter, passiveObjects) {
+function launch(runtime, sourceType, inputBytes, timeoutMs, omitDocxHeaderFooter, passiveObjects, markdownOutput, contentOptions) {
   const server = path.resolve(__dirname, '..');
   const script = path.join(__dirname, 'conversion-worker-child.js');
   const nodeArgs = ['--no-warnings', '--permission', `--allow-fs-read=${server}`,
     '--allow-worker', '--allow-addons', '--disable-proto=throw', '--max-old-space-size=512',
     `--require=${path.join(server, 'network-deny.cjs')}`, script, sourceType, String(inputBytes),
     ...(omitDocxHeaderFooter ? ['omit-docx-header-footer'] : []),
-    ...(passiveObjects ? ['passive-document-objects'] : [])];
+    ...(passiveObjects ? ['passive-document-objects'] : []),
+    ...(markdownOutput ? [`markdown-output-${markdownOutput}`] : []),
+    ...(contentOptions ? [`content-options-v1:${Buffer.from(serializeContentOptions(contentOptions)).toString('base64url')}`] : [])];
   let command;
   if (process.platform === 'win32' && process.arch === 'x64') {
     command = path.join(server, 'native', 'windows-x64', 'datasecure-sandbox.exe');
@@ -69,11 +91,24 @@ function launch(runtime, sourceType, inputBytes, timeoutMs, omitDocxHeaderFooter
 }
 
 async function convertBuffer(bytes, extension, options = {}) {
-  if (!options || typeof options !== 'object' || Array.isArray(options) ||
-      Object.keys(options).some(key => !['signal', 'timeoutMs', 'omitDocxHeaderFooter', 'passiveObjects'].includes(key))) throw error('CONVERSION_INPUT_INVALID');
+  const allowed = ['signal', 'timeoutMs', 'omitDocxHeaderFooter', 'passiveObjects', 'markdownOutput', 'contentOptions'];
+  try {
+    if (!options || typeof options !== 'object' || ![Object.prototype, null].includes(Object.getPrototypeOf(options))) throw error('CONVERSION_INPUT_INVALID');
+    const descriptors = Object.getOwnPropertyDescriptors(options);
+    if (Reflect.ownKeys(descriptors).some(key => typeof key !== 'string' || !allowed.includes(key) ||
+        !descriptors[key].enumerable || !Object.hasOwn(descriptors[key], 'value'))) throw error('CONVERSION_INPUT_INVALID');
+    options = Object.fromEntries(Object.entries(descriptors).map(([key, descriptor]) => [key, descriptor.value]));
+  } catch { throw error('CONVERSION_INPUT_INVALID'); }
+  let contentOptions;
+  if (Object.hasOwn(options, 'contentOptions')) {
+    try { contentOptions = validateContentOptions(options.contentOptions); }
+    catch { throw error('CONVERSION_INPUT_INVALID'); }
+    if (Object.hasOwn(options, 'markdownOutput')) throw error('CONVERSION_INPUT_INVALID');
+  }
   const { signal, timeoutMs = DEFAULT_TIMEOUT_MS, omitDocxHeaderFooter = false, passiveObjects = false } = options;
-  if (signal !== undefined && !(signal instanceof AbortSignal)) throw error('CONVERSION_INPUT_INVALID');
-  if (signal?.aborted) throw error('REQUEST_CANCELLED');
+  const abortSignal = checkedAbortSignal(signal);
+  if (abortSignal?.aborted()) throw error('REQUEST_CANCELLED');
+  if (options.markdownOutput !== undefined && !['content-v1', 'notes-v1'].includes(options.markdownOutput)) throw error('CONVERSION_INPUT_INVALID');
   const suffix = typeof extension === 'string' ? extension.toLowerCase() : '';
   const type = Object.hasOwn(SOURCE_TYPES, suffix) ? SOURCE_TYPES[suffix] : null;
   if (!type) throw error('MARKDOWN_FORMAT_UNSUPPORTED');
@@ -81,10 +116,11 @@ async function convertBuffer(bytes, extension, options = {}) {
       typeof passiveObjects !== 'boolean' || (passiveObjects && !['pdf', 'pptx'].includes(type)) ||
       !(bytes instanceof Uint8Array) || !bytes.length || bytes.length > MAX_INPUT_BYTES ||
       !Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > DEFAULT_TIMEOUT_MS) throw error('CONVERSION_INPUT_INVALID');
+  if (contentOptions && ['png', 'bmp', 'jpeg'].includes(type) && !contentOptions.imageOcr) throw error('IMAGE_OCR_REQUIRED');
   const input = Buffer.from(bytes); // The worker cannot detach or mutate originals.
   const runtime = resolveConversionRuntime();
-  const invocation = launch(runtime, type, input.length, timeoutMs, omitDocxHeaderFooter, passiveObjects);
-  if (signal?.aborted) throw error('REQUEST_CANCELLED');
+  const invocation = launch(runtime, type, input.length, timeoutMs, omitDocxHeaderFooter, passiveObjects, options.markdownOutput, contentOptions);
+  if (abortSignal?.aborted()) throw error('REQUEST_CANCELLED');
   const environment = { DISABLE_SYSTEM_FONTS_LOAD: '1', PATH: '' };
   for (const key of ['SystemRoot', 'WINDIR']) if (process.env[key]) environment[key] = process.env[key];
   return new Promise((resolve, reject) => {
@@ -98,7 +134,7 @@ async function convertBuffer(bytes, extension, options = {}) {
       if (settled) return;
       settled = true;
       clearTimeout(timer); clearTimeout(grace);
-      signal?.removeEventListener('abort', abort);
+      abortSignal?.unsubscribe(abort);
       if (failure) reject(error(failure)); else resolve(result);
     };
     const stop = code => {
@@ -111,8 +147,10 @@ async function convertBuffer(bytes, extension, options = {}) {
     };
     const abort = () => stop('REQUEST_CANCELLED');
     const timer = setTimeout(() => stop('CONVERSION_TIMEOUT'), timeoutMs);
-    signal?.addEventListener('abort', abort, { once: true });
-    if (signal?.aborted) abort();
+    try {
+      abortSignal?.subscribe(abort);
+      if (abortSignal?.aborted()) abort();
+    } catch { stop('CONVERSION_INPUT_INVALID'); }
     child.once('error', failure => stop(conversionStartFailureCode(failure, invocation.command)));
     child.stdout.on('data', chunk => {
       size += chunk.length;
@@ -135,16 +173,19 @@ async function convertBuffer(bytes, extension, options = {}) {
       if (nativeFailure) { finish(nativeFailure); return; }
       try {
         const response = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks)));
+        const responseSchema = contentOptions ? 'datasecure-conversion-response/2' : 'datasecure-conversion-response/1';
         if (code === 2 && exactKeys(response, ['schema', 'ok', 'error_code']) && response.ok === false &&
-            response.schema === 'datasecure-conversion-response/1' && ERROR_SET.has(response.error_code)) {
+            response.schema === responseSchema && ERROR_SET.has(response.error_code)) {
           finish(response.error_code); return;
         }
         if (code !== 0 || !exactKeys(response, ['schema', 'ok', 'result']) || response.ok !== true ||
-            response.schema !== 'datasecure-conversion-response/1') throw error('CONVERSION_RESPONSE_INVALID');
-        validateMarkdownExtraction(response.result);
+            response.schema !== responseSchema) throw error('CONVERSION_RESPONSE_INVALID');
+        validateMarkdownExtractionForOptions(response.result, contentOptions);
         if (response.result.source_type !== type) throw error('CONVERSION_RESPONSE_INVALID');
         if (!inputFlushed) { finish('CONVERSION_INPUT_INCOMPLETE'); return; }
         finish(null, createMarkdownExtraction({ source_type: type, markdown: response.result.markdown, coverage: response.result.coverage,
+          ...(contentOptions ? { content_options: contentOptions } : {}),
+          ...(response.result.private_document_metadata ? { private_document_metadata: response.result.private_document_metadata } : {}),
           ...(response.result.ocr_contacts ? { ocr_contacts: response.result.ocr_contacts } : {}) }));
       } catch { finish('CONVERSION_RESPONSE_INVALID'); }
     });

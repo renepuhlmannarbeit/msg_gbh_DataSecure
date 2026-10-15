@@ -375,7 +375,7 @@ function safeStructuredSpans(spans) {
   return spans.filter((span) => span.type === 'CREDENTIAL' || !overlapsCredential(intervals, span));
 }
 
-// ASCII dot and hyphen can belong both to an IBAN grouping and to an email
+// ASCII dot, hyphen and slash can belong both to IBAN grouping and an email
 // local part. After a known fixed-length IBAN the email detector may therefore
 // start at the IBAN's final digit group ("... 00-anna@example.de"). Keep the
 // complete bank span and move only that overlapping email to the independently
@@ -392,7 +392,7 @@ function reconcileIbanEmailOverlaps(spans, identifierView, source) {
     for (let index = bankIndex; index < banks.length && banks[index].start < email.end; index++) {
       const bank = banks[index];
       if (!(email.start < bank.end && bank.end < email.end)) continue;
-      if (!/[.-]/u.test(identifierView[bank.end] || '')) continue;
+      if (!/[.\-/]/u.test(identifierView[bank.end] || '')) continue;
       const correctedStart = bank.end + 1;
       FOLLOWING_EMAIL_RE.lastIndex = correctedStart;
       const corrected = FOLLOWING_EMAIL_RE.exec(identifierView);

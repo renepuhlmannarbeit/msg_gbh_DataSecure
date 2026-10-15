@@ -1,4 +1,6 @@
 'use strict';
+const { CONTENT_BATCH_SCHEMA } = require('./content-options');
+const { processingModeForBatch } = require('./processing-mode');
 
 const MODES = Object.freeze({
   NEUTRAL: 'neutral',
@@ -19,6 +21,14 @@ function validateResultNamingMode(value, productChannel) {
 function resultNamingModeForBatch(state) {
   if (!state || typeof state !== 'object' || Array.isArray(state)) fail();
   const channel = state.product_channel || 'plugin';
+  if (state.schema === CONTENT_BATCH_SCHEMA) {
+    if (processingModeForBatch(state) === 'markdown-only') {
+      if (Object.hasOwn(state, 'output_naming_mode')) fail();
+      return MODES.SOURCE;
+    }
+    if (!Object.hasOwn(state, 'output_naming_mode')) fail();
+    return validateResultNamingMode(state.output_naming_mode, channel);
+  }
   if (state.schema === 'datasecure-batch/5' || state.processing_mode === 'markdown-only') {
     if (Object.hasOwn(state, 'output_naming_mode')) fail();
     return MODES.SOURCE;

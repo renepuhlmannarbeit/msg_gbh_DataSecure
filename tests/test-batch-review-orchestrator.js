@@ -22,7 +22,7 @@ function fixture(options = {}) {
   const events = [];
   const lifecycle = [];
   const items = [{ status: 'deferred_review', id: 1 }, { status: 'deferred_review', id: 2 }];
-  const state = { items, invalidated: false };
+  const state = { schema: 'datasecure-batch/4', items, invalidated: false };
   const drafts = [{ local: 1 }, { local: 2 }];
   const progress = { remaining: 0, retryable: 0, delivery_pending: 0, released: 0 };
   let writes = 0;
@@ -93,10 +93,30 @@ function fixture(options = {}) {
   return { orchestrator, token, active, events, lifecycle, items, state, drafts, progress, deps, writes: () => writes };
 }
 
+testAsync('review entry removes runtime option getters before contact reconstruction in both purposes and legacy', async () => {
+  const content = { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: true, imageOcr: false };
+  for (const mode of ['markdown-only', 'markdown-and-anonymize']) for (const legacy of [false, true])
+    for (const field of ['contentOptions', 'content_options', 'markdownOutput', 'scanOcr', 'imageOcr']) {
+      let reads = 0, captures = 0;
+      const f = fixture({ reviewContacts: async (_state, _items, deps) => {
+        captures++;
+        if (legacy) assert.equal(Object.hasOwn(deps, 'contentOptions'), false);
+        else assert.deepEqual(deps.contentOptions, content);
+        for (const alias of ['content_options', 'markdownOutput', 'scanOcr', 'imageOcr']) assert.equal(Object.hasOwn(deps, alias), false);
+        throw codedError('LOCAL_REVIEW_DEFERRED');
+      } });
+      Object.assign(f.state, { schema: legacy ? mode === 'markdown-only' ? 'datasecure-batch/5' : 'datasecure-batch/6' : 'datasecure-batch/7',
+        product_channel: 'standalone', processing_mode: mode, standalone_document_review: true, ...(legacy ? {} : { content_options: content }) });
+      Object.defineProperty(f.deps, field, { enumerable: true, get() { reads++; throw new Error('OPTION_GETTER_EXECUTED'); } });
+      assert.equal((await f.orchestrator.reviewDeferredBatch(f.token, f.deps)).error, 'LOCAL_REVIEW_DEFERRED');
+      assert.equal(reads, 0); assert.equal(captures, 1);
+    }
+});
+
 function findingFixture(counts, platform = 'darwin', standalone = false) {
   const items = counts.map((count, id) => ({ id: standalone ? id.toString(16).padStart(32, '0') : id,
     sha256: 'a'.repeat(64), count, source_label: `synthetic-${id}.txt`, status: 'deferred_review' }));
-  const state = { items, ...(standalone ? { token: 'd'.repeat(64), product_channel: 'standalone',
+  const state = { schema: 'datasecure-batch/4', items, ...(standalone ? { token: 'd'.repeat(64), product_channel: 'standalone',
     ...createBatchPseudonymState({ productChannel: 'standalone' }) } : {}) };
   const active = new Set();
   const captured = [];
@@ -141,9 +161,9 @@ function findingFixture(counts, platform = 'darwin', standalone = false) {
 function standaloneChoiceFixture(options = {}) {
   const count = MAX_STANDALONE_REVIEW_FINDINGS / 2 + 500;
   const token = 'c'.repeat(64);
-  const state = options.state || { token, product_channel: 'standalone',
+  const state = { schema: 'datasecure-batch/4', ...(options.state || { token, product_channel: 'standalone',
     ...createBatchPseudonymState({ productChannel: 'standalone' }),
-    items: [{ id: 0, status: 'deferred_review' }, { id: 1, status: 'deferred_review' }] };
+    items: [{ id: 0, status: 'deferred_review' }, { id: 1, status: 'deferred_review' }] }) };
   const captured = [];
   const uiGroups = [];
   const publications = [];
@@ -341,7 +361,7 @@ async function main() {
       const sequence = [];
       const value = createBatchReviewOrchestrator({
         SafeError, active, acquireActiveLock() {}, releaseActiveLock() { return true; },
-        readState: () => ({ items }), assertLocalExecutorAccess() {}, reconcilePublishedItems: () => false,
+        readState: () => ({ schema: 'datasecure-batch/4', items }), assertLocalExecutorAccess() {}, reconcilePublishedItems: () => false,
         reconcilePendingMappings: () => false, writeState() {}, markInterruptedItemsRetryable: () => 0,
         publicProgress: () => ({}), deferredReviewPlan: () => ({ ready: true, items }),
         captureDeferredReviewInput: async (_state, item) => {
@@ -385,7 +405,7 @@ async function main() {
   for (const useSourceEstimate of [true, false]) {
     await testAsync(`large reviews publish bounded groups without reconstructing the whole batch (source estimate ${useSourceEstimate})`, async () => {
       const items = Array.from({ length: 3 }, (_, id) => ({ id, size: useSourceEstimate ? 4_000_000 : 100, status: 'deferred_review' }));
-      const state = { items };
+      const state = { schema: 'datasecure-batch/4', items };
       const sequence = [];
       const active = new Set();
       const text = 'x'.repeat(4_000_000);
@@ -430,7 +450,7 @@ async function main() {
     let captures = 0;
     const value = createBatchReviewOrchestrator({
       SafeError, active: new Set(), acquireActiveLock() {}, releaseActiveLock() { return true; },
-      readState: () => ({ items }), assertLocalExecutorAccess() {}, reconcilePublishedItems: () => false,
+      readState: () => ({ schema: 'datasecure-batch/4', items }), assertLocalExecutorAccess() {}, reconcilePublishedItems: () => false,
       reconcilePendingMappings: () => false, writeState() {}, markInterruptedItemsRetryable: () => 0,
       publicProgress: () => ({}), deferredReviewPlan: () => ({ ready: true, items }),
       captureDeferredReviewInput: async () => { captures++; return { original_text: text, anonymized_text: text }; },

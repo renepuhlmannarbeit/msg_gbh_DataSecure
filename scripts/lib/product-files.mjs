@@ -26,6 +26,10 @@ const sharedStandaloneModules = new Set([
   'server/standalone/markdown-contract.js',
   'server/standalone/markdown-retention.js',
   'server/standalone/markdown-store.js',
+  // Inert private /4 publication dependencies of the shared document store.
+  // No public capability, Cowork command, UI or converter runtime is added.
+  'server/standalone/anonymized-artifact.js',
+  'server/standalone/anonymized-store.js',
   // The shared batch module references this inert Standalone-only sink.
   // Cowork has no UI/IPC action and never invokes it because the channel is guarded.
   'server/standalone/identity-ledger.js',

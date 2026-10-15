@@ -8,6 +8,9 @@ const { parseOoxml } = require('../ooxml');
 const { RESOURCE_LIMITS } = require('../resource-limits');
 const { createMarkdownExtraction, MAX_MARKDOWN_CHARS } = require('./markdown-contract');
 const { visualNotices } = require('./markdown-visuals');
+const { validateMarkdownOutput, officeContent } = require('./markdown-output-profile');
+const { literalText } = require('./readable-markdown');
+const { literalTableCell } = require('../core/markdown-literal-content');
 
 const SOURCE_TYPES = new Map([
   ['.txt', 'txt'], ['.md', 'md'], ['.markdown', 'md'], ['.csv', 'csv'],
@@ -31,13 +34,7 @@ class MarkdownExtractionError extends Error {
   }
 }
 
-function literalTableCell(value) {
-  return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-    .replace(/([\\`*_[\]{}()#+.!|])/g, '\\$1')
-    .replace(/ /g, '&#32;').replace(/\t/g, '&#9;').replace(/\r/g, '&#13;').replace(/\n/g, '<br>');
-}
-
-function extractCsv(source) {
+function extractCsv(source, literalGfm) {
   const { rows } = parseCsvDialect(source, { preserveRecords: true });
   if (!rows.length) throw new MarkdownExtractionError('CSV_EMPTY');
   const width = rows.reduce((maximum, row) => Math.max(maximum, row.length), 0);
@@ -56,19 +53,24 @@ function extractCsv(source) {
   append('| Zeile | ' + Array.from({ length: width }, (_, index) => `Spalte ${index + 1}`).join(' | ') + ' |');
   append('| --- | ' + Array.from({ length: width }, () => '---').join(' | ') + ' |');
   for (let index = 0; index < rows.length; index++) {
-    append(`| ${index + 1} | ` + Array.from({ length: width }, (_, column) => literalTableCell(rows[index][column] ?? '')).join(' | ') + ' |');
+    append(`| ${index + 1} | ` + Array.from({ length: width }, (_, column) => literalTableCell(rows[index][column] ?? '', true, literalGfm)).join(' | ') + ' |');
   }
   return lines.join('\n');
 }
 
-function extractMarkdownBuffer(buffer, extension, options = {}) {
+function extractMarkdownAndMedia(buffer, extension, options = {}, referencedImagesOnly = false) {
   if (!options || typeof options !== 'object' || Array.isArray(options) ||
-      Object.keys(options).some((key) => key !== 'omitDocxHeaderFooter') ||
+      Object.keys(options).some((key) => !['omitDocxHeaderFooter', 'markdownOutput'].includes(key)) ||
       (options.omitDocxHeaderFooter !== undefined && typeof options.omitDocxHeaderFooter !== 'boolean')) {
     throw new MarkdownExtractionError('CONVERSION_INPUT_INVALID');
   }
+  validateMarkdownOutput(options.markdownOutput);
   const source_type = SOURCE_TYPES.get(typeof extension === 'string' ? extension.toLowerCase() : '');
   if (!source_type) throw new MarkdownExtractionError('MARKDOWN_FORMAT_UNSUPPORTED');
+  // MD syntax transformation is asynchronous and belongs exclusively to the
+  // owned worker with pinned readers. Never accept this flag here and falsely
+  // return untransformed image markup as content-only output.
+  if (source_type === 'md' && options.markdownOutput === 'content-v1') throw new MarkdownExtractionError('CONVERSION_INPUT_INVALID');
   if (options.omitDocxHeaderFooter === true && source_type !== 'docx') {
     throw new MarkdownExtractionError('CONVERSION_INPUT_INVALID');
   }
@@ -78,19 +80,27 @@ function extractMarkdownBuffer(buffer, extension, options = {}) {
   if (buffer.length > maximumBytes) throw new MarkdownExtractionError('INPUT_FORMAT_LIMIT');
   try {
     let markdown;
+    let attachments = [];
     const reasons = new Set();
     if (source_type === 'txt' || source_type === 'md') {
       // UTF-8 BOM is encoding metadata. Otherwise keep source Unicode,
       // whitespace, line endings and punctuation exactly as decoded.
-      markdown = decodeUtf8Source(buffer);
+      const source = decodeUtf8Source(buffer);
+      markdown = source_type === 'txt' && options.markdownOutput === 'content-v1' ? literalText(source) : source;
     } else if (source_type === 'csv') {
-      markdown = extractCsv(decodeUtf8Source(buffer));
+      markdown = extractCsv(decodeUtf8Source(buffer), options.markdownOutput === 'content-v1');
     } else {
       const parsed = parseOoxml(buffer, `.${source_type}`, undefined, {
         preserveText: true,
+        ...(referencedImagesOnly ? { referencedImagesOnly: true } : {}),
+        ...(options.markdownOutput === 'content-v1' ? { literalMarkup: true } : {}),
         ...(options.omitDocxHeaderFooter === true ? { omitDocxHeaderFooter: true } : {})
       });
-      markdown = parsed.markdown;
+      // This is the relationship-checked parser result, not an enumeration of
+      // ZIP media files. Only the owned worker's internal Office OCR entrance
+      // receives these bytes; the public extraction record never contains them.
+      attachments = parsed.attachments;
+      markdown = options.markdownOutput === 'content-v1' ? officeContent(parsed.sections) : parsed.markdown;
       if (options.omitDocxHeaderFooter === true) reasons.add('DOCX_HEADER_FOOTER_EXCLUDED_BY_POLICY');
       if (parsed.warnings.length || source_type === 'xlsx' || source_type === 'pptx') reasons.add('SOURCE_COVERAGE_UNVERIFIED');
       if (parsed.attachments.length) {
@@ -99,12 +109,12 @@ function extractMarkdownBuffer(buffer, extension, options = {}) {
         // omission without embedding image bytes, XML or source filenames, and
         // never invent an image title/description. Retain all extracted prose,
         // table cells, chart data and text-box text above this fixed notice.
-        markdown += `${markdown ? '\n\n' : ''}${visualNotices({ image: true })}`;
+        if (options.markdownOutput !== 'content-v1') markdown += `${markdown ? '\n\n' : ''}${visualNotices({ image: true })}`;
       }
     }
     const reason_codes = [...reasons].sort();
-    return createMarkdownExtraction({ source_type, markdown,
-      coverage: { status: reason_codes.length ? 'incomplete' : 'complete', reason_codes } });
+    return { extraction: createMarkdownExtraction({ source_type, markdown,
+      coverage: { status: reason_codes.length ? 'incomplete' : 'complete', reason_codes } }), attachments };
   } catch (error) {
     if (error instanceof MarkdownExtractionError) throw error;
     const code = error?.code || error?.message;
@@ -112,4 +122,15 @@ function extractMarkdownBuffer(buffer, extension, options = {}) {
   }
 }
 
-module.exports = Object.freeze({ extractMarkdownBuffer, MarkdownExtractionError });
+function extractMarkdownBuffer(buffer, extension, options = {}) {
+  return extractMarkdownAndMedia(buffer, extension, options).extraction;
+}
+
+function extractOfficeMarkdownAndMedia(buffer, extension, options = {}) {
+  if (!['.docx', '.xlsx', '.pptx'].includes(typeof extension === 'string' ? extension.toLowerCase() : '')) {
+    throw new MarkdownExtractionError('CONVERSION_INPUT_INVALID');
+  }
+  return extractMarkdownAndMedia(buffer, extension, options, true);
+}
+
+module.exports = Object.freeze({ extractMarkdownBuffer, extractOfficeMarkdownAndMedia, MarkdownExtractionError });

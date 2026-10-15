@@ -3,7 +3,8 @@
 const path = require('path');
 const crypto = require('crypto');
 const { publishMarkdownArtifact } = require('./markdown-store');
-const { validateMarkdownExtraction, createMarkdownExtraction } = require('./markdown-contract');
+const { validateMarkdownExtractionForOptions, createMarkdownExtraction, MarkdownContractError } = require('./markdown-contract');
+const { contentOptionsForConsumer } = require('../core/content-options');
 const supportTrace = require('../gateway/support-trace');
 const { ERROR_CODES, LIFECYCLE_ERROR_CODES } = require('../core/conversion-worker-contract');
 const TRACE_ERRORS = new Set([...ERROR_CODES, ...LIFECYCLE_ERROR_CODES, 'REQUEST_CANCELLED', 'NONE']);
@@ -41,14 +42,19 @@ async function convertNext(_profile, deps = {}) {
     throw error;
   }
   try {
+    const contentOptions = contentOptionsForConsumer(deps, 'standalone');
+    const extension = path.extname(String(entry.name || '')).toLowerCase();
+    const sourceType = extension === '.jpg' ? 'jpeg' : extension === '.markdown' ? 'md' : extension.slice(1);
     const convert = deps.convertBuffer || require('./conversion-worker').convertBuffer;
     if (deps.onClaimed) await deps.onClaimed();
-    let extraction = await convert(bytes, path.extname(String(entry.name || '')).toLowerCase(), {
+    let extraction = await convert(bytes, extension, {
       signal: deps.signal, timeoutMs: deps.timeoutMs,
-      ...(['.pdf', '.pptx'].includes(path.extname(String(entry.name || '')).toLowerCase())
+      ...(contentOptions ? { contentOptions } : {}),
+      ...(['.pdf', '.pptx'].includes(extension)
         ? { passiveObjects: true } : {})
     });
-    validateMarkdownExtraction(extraction);
+    validateMarkdownExtractionForOptions(extraction, contentOptions);
+    if (extraction.source_type !== sourceType) throw new MarkdownContractError();
     const originalMarkdown = extraction.markdown;
     // "ok" confirms the closed coverage contract, not complete extraction.
     // The existing trace schema carries no quality fields: exact grades and
@@ -65,15 +71,25 @@ async function convertNext(_profile, deps = {}) {
       if (typeof deps.prepareOcrContacts !== 'function') throw Object.assign(new Error('LOCAL_REVIEW_DEFERRED'), { code: 'LOCAL_REVIEW_DEFERRED' });
       const markdown = await deps.prepareOcrContacts({ original_text: extraction.markdown, contacts: extraction.ocr_contacts,
         source_type: extraction.source_type, processing_mode: 'markdown-only' });
-      extraction = createMarkdownExtraction({ source_type: extraction.source_type,
-        markdown: `${markdown}\n\n> OCR-Kontaktwerte wurden lokal bestätigt oder korrigiert. Übrige OCR-Inhalte bleiben ungeprüft. Nicht anonymisiert: enthält Originalinhalte.`,
-        coverage: { status: extraction.coverage.status,
-          reason_codes: extraction.coverage.reason_codes.filter(code => code !== 'OCR_CONTACT_VALUES_UNVERIFIED') } });
+      if (markdown === null) {
+        if (deps.ocrContactReviewSkipped !== true) throw new MarkdownContractError();
+        // No answer was applied: preserve the original text, contact map and
+        // all uncertainty warnings. Do not claim contact confirmation.
+      } else {
+        const remainingReasons = extraction.coverage.reason_codes.filter(code => code !== 'OCR_CONTACT_VALUES_UNVERIFIED');
+        extraction = createMarkdownExtraction({ source_type: extraction.source_type,
+          ...(contentOptions ? { content_options: contentOptions } : {}),
+          ...(extraction.private_document_metadata ? { private_document_metadata: extraction.private_document_metadata } : {}),
+          markdown: contentOptions?.markdownOutput === 'content-v1' ? markdown : `${markdown}\n\n> OCR-Kontaktwerte wurden lokal bestätigt oder korrigiert. Übrige OCR-Inhalte bleiben ungeprüft. Nicht anonymisiert: enthält Originalinhalte.`,
+          coverage: { status: remainingReasons.length ? 'incomplete' : 'complete', reason_codes: remainingReasons } });
+      }
     }
     if (deps.signal?.aborted) { const error = new Error('REQUEST_CANCELLED'); error.code = 'REQUEST_CANCELLED'; throw error; }
     if (typeof deps.persistStandaloneDocumentReview === 'function') {
       await deps.persistStandaloneDocumentReview({ package_id: deps.artifactId,
-        original_text: originalMarkdown, markdown: extraction.markdown });
+        original_text: originalMarkdown, markdown: extraction.markdown,
+        ...(contentOptions ? { content_options: contentOptions, source_type: extraction.source_type,
+          ...(extraction.private_document_metadata ? { private_document_metadata: extraction.private_document_metadata } : {}) } : {}) });
     }
     const result = await publishMarkdownArtifact(extraction, deps.artifactId, deps);
     trace('converter_completed', 'ok');

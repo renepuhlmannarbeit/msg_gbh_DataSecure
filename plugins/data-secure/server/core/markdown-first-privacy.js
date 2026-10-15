@@ -1,15 +1,20 @@
 'use strict';
 
-const { createSourceExtraction } = require('./source-extraction-contract');
+const { createSourceExtraction, validateSourceExtractionForOptions, SourceExtractionError, exactKeys } = require('./source-extraction-contract');
+const { contentOptionsForConsumer, validateContentOptions } = require('./content-options');
+const { isPersonFieldLabel, CONTENT_PERSON_FIELD_POLICY } = require('./person-field-policy');
+const { types } = require('node:util');
 const { RESOURCE_LIMITS } = require('../resource-limits');
 
 const WIDE_EXTENSIONS = new Set(['.xlsx', '.pptx', '.pdf', '.png', '.jpg', '.jpeg', '.bmp']);
 const STANDALONE_EXTENSIONS = new Set(['.docx', ...WIDE_EXTENSIONS]);
+const CONTENT_EXTENSIONS = new Set(['.txt', '.md', '.markdown', '.csv', ...STANDALONE_EXTENSIONS]);
 // Cowork deliberately starts with the Office formats already handled by the
 // shipped isolated parser. PDF/OCR needs a separately packaged and proven
 // runtime and therefore remains outside this release boundary.
 const COWORK_EXTENSIONS = new Set(['.xlsx', '.pptx']);
 const SOURCE_TYPE_BY_EXTENSION = Object.freeze({
+  '.txt': 'txt', '.md': 'md', '.markdown': 'md', '.csv': 'csv',
   '.docx': 'docx', '.xlsx': 'xlsx', '.pptx': 'pptx', '.pdf': 'pdf', '.png': 'png',
   '.jpg': 'jpeg', '.jpeg': 'jpeg', '.bmp': 'bmp'
 });
@@ -39,7 +44,7 @@ function markdownCells(line) {
   return cells;
 }
 
-function promoteExplicitSensitiveTableHeaders(markdown) {
+function promoteExplicitSensitiveTableHeaders(markdown, literalHeaders = false) {
   const sourceLines = String(markdown || '').split('\n');
   // The direct OOXML parser separates rendered table rows with one empty
   // Markdown line. Compact only blanks between two table rows so the privacy
@@ -55,7 +60,12 @@ function promoteExplicitSensitiveTableHeaders(markdown) {
       generated.length !== sourceHeader.length) continue;
     if (!generated.every((value, column) => value === `Spalte ${column + 1}`) ||
       !separator.every((value) => /^:?-{3,}:?$/u.test(value))) continue;
-    if (!sourceHeader.some((value) => EXPLICIT_SENSITIVE_HEADER.test(value))) continue;
+    // Detect only the visible label of our own literal cell serializer. Keep
+    // the original header line unchanged; this view is never source output.
+    const label = value => literalHeaders ? require('../privacy/base').normalizeText(value.replace(/&#32;|&#9;|&#13;|<br>/gu,
+      encoded => ({ '&#32;': ' ', '&#9;': '\t', '&#13;': '\r', '<br>': '\n' })[encoded])).trim() : value;
+    if (!sourceHeader.some(value => EXPLICIT_SENSITIVE_HEADER.test(label(value)) ||
+        literalHeaders && isPersonFieldLabel(label(value), CONTENT_PERSON_FIELD_POLICY))) continue;
     lines[index] = lines[index + 2];
     lines.splice(index + 2, 1);
   }
@@ -71,8 +81,109 @@ function isWidePrivacyExtension(extension) {
   return WIDE_EXTENSIONS.has(String(extension || '').toLowerCase());
 }
 
-function isMarkdownFirstPrivacyExtension(extension, productChannel = 'standalone') {
-  return extensionsForChannel(productChannel).has(String(extension || '').toLowerCase());
+function isMarkdownFirstPrivacyExtension(extension, productChannel = 'standalone', contentOptions) {
+  if (contentOptions !== undefined) {
+    assertDataGraph(contentOptions);
+    validateContentOptions(contentOptions);
+    if (productChannel !== 'standalone') throw Object.assign(new Error('CONTENT_OPTIONS_FORBIDDEN'), { code: 'CONTENT_OPTIONS_FORBIDDEN' });
+  }
+  return (contentOptions ? CONTENT_EXTENSIONS : extensionsForChannel(productChannel))
+    .has(typeof extension === 'string' ? extension.toLowerCase() : '');
+}
+
+// Adapter guard before pure decoders: never execute getters/proxy traps on an
+// injected converter response. The finite graph is plain immutable JSON data;
+// callbacks/AbortSignal in the options envelope are deliberately not traversed.
+function assertDataGraph(value) {
+  const pending = [value]; let nodes = 0;
+  while (pending.length) {
+    const next = pending.pop();
+    if (!next || typeof next !== 'object') {
+      if (typeof next === 'function' || typeof next === 'symbol' || typeof next === 'bigint') throw new SourceExtractionError();
+      continue;
+    }
+    if (++nodes > 100_000 || types.isProxy(next)) throw new SourceExtractionError();
+    const array = Array.isArray(next), prototype = Object.getPrototypeOf(next);
+    if (array ? prototype !== Array.prototype : ![Object.prototype, null].includes(prototype)) throw new SourceExtractionError();
+    const descriptors = Object.getOwnPropertyDescriptors(next);
+    for (const key of Reflect.ownKeys(descriptors)) {
+      const descriptor = descriptors[key];
+      if (typeof key !== 'string' || !Object.hasOwn(descriptor, 'value') ||
+          (!descriptor.enumerable && !(array && key === 'length'))) throw new SourceExtractionError();
+      if (key !== 'length' || !array) pending.push(descriptor.value);
+    }
+  }
+}
+
+function privacyConsumerOptions(options) {
+  if (!options || typeof options !== 'object' || types.isProxy(options) || Array.isArray(options) ||
+      ![Object.prototype, null].includes(Object.getPrototypeOf(options))) throw new SourceExtractionError();
+  const descriptors = Object.getOwnPropertyDescriptors(options);
+  if (Reflect.ownKeys(descriptors).some(key => typeof key !== 'string' ||
+      !Object.hasOwn(descriptors[key], 'value') || !descriptors[key].enumerable)) throw new SourceExtractionError();
+  if (descriptors.contentOptions) assertDataGraph(descriptors.contentOptions.value);
+  if (descriptors.contentOptions && Reflect.ownKeys(descriptors).some(key => ![
+    'contentOptions', 'productChannel', 'ErrorType', 'convertBuffer', 'convertDocument', 'signal', 'timeoutMs'
+  ].includes(key))) throw new SourceExtractionError();
+  const productChannel = descriptors.productChannel ? descriptors.productChannel.value : 'standalone';
+  if (!['standalone', 'plugin'].includes(productChannel)) throw new SourceExtractionError();
+  return { productChannel, contentOptions: contentOptionsForConsumer(options, productChannel) };
+}
+
+function csvPrivacyMarkdown(bytes) {
+  if (bytes.length > RESOURCE_LIMITS.MAX_CSV_SOURCE_BYTES) throw Object.assign(new Error('INPUT_FORMAT_LIMIT'), { code: 'INPUT_FORMAT_LIMIT' });
+  const { decodeUtf8Source, parseCsvDialect } = require('../document-parser');
+  const { literalTableCell } = require('./markdown-literal-content');
+  try {
+    const { rows } = parseCsvDialect(decodeUtf8Source(bytes), { preserveRecords: true });
+    if (!rows.length) throw new Error('CSV_EMPTY');
+    const width = rows[0].length;
+    if (rows.some(row => row.length !== width && !(row.length === 1 && row[0] === ''))) throw new Error('CSV_ROW_WIDTH_INVALID');
+    const lines = []; let chars = 0;
+    const append = line => {
+      chars += line.length + 1;
+      if (chars > RESOURCE_LIMITS.MAX_TEXT_CHARS) throw new Error('TEXT_TOO_LARGE');
+      lines.push(line);
+    };
+    const row = values => '| ' + Array.from({ length: width }, (_, column) => literalTableCell(values[column] ?? '', true)).join(' | ') + ' |';
+    // Privacy semantics use the actual first record as header. Never trim,
+    // normalize, deduplicate, synthesize labels or discard blank data records.
+    append(row(rows[0])); append('| ' + Array.from({ length: width }, () => '---').join(' | ') + ' |');
+    for (const values of rows.slice(1)) append(row(values));
+    return lines.join('\n');
+  } catch (error) {
+    const code = new Set(['CSV_EMPTY', 'CSV_ROW_WIDTH_INVALID', 'CSV_QUOTE_INVALID', 'CSV_DELIMITER_AMBIGUOUS',
+      'TEXT_TOO_LARGE', 'TEXT_ENCODING_INVALID', 'TEXT_CONTROL_INVALID']).has(error.message) ? error.message : 'SOURCE_EXTRACTION_INVALID';
+    throw new SourceExtractionError(code);
+  }
+}
+
+function immutableData(value) {
+  if (!value || typeof value !== 'object') return value;
+  const copy = Array.isArray(value) ? value.map(immutableData)
+    : Object.fromEntries(Object.entries(value).map(([key, field]) => [key, immutableData(field)]));
+  return Object.freeze(copy);
+}
+
+function validatePrivacyExtractionForOptions(value, expectedOptions, expectedSourceType) {
+  assertDataGraph(value);
+  assertDataGraph(expectedOptions);
+  const keys = ['markdown', 'warnings', 'attachments', 'unreviewedVisualCount', 'requiresExplicitProfile',
+    'sourceType', 'sourceExtractionCoverage', 'sourceExtraction'];
+  if (Object.hasOwn(value || {}, 'ocrContacts')) keys.push('ocrContacts');
+  if (Object.hasOwn(value || {}, 'privateDocumentMetadata')) keys.push('privateDocumentMetadata');
+  if (!expectedOptions || !exactKeys(value, keys) || value.unreviewedVisualCount !== 0 || value.requiresExplicitProfile !== false ||
+      !Array.isArray(value.warnings) || value.warnings.length || !Array.isArray(value.attachments) || value.attachments.length) throw new SourceExtractionError();
+  const source = validateSourceExtractionForOptions(value.sourceExtraction, RESOURCE_LIMITS.MAX_TEXT_CHARS, expectedOptions);
+  if (source.source_type !== expectedSourceType || value.sourceType !== source.source_type || source.markdown !== value.markdown ||
+      JSON.stringify(source.coverage) !== JSON.stringify(value.sourceExtractionCoverage)) throw new SourceExtractionError();
+  if (Object.hasOwn(value, 'ocrContacts')) require('./ocr-contact-review').validateContacts(value.ocrContacts, source.markdown, source.source_type);
+  if (source.coverage.reason_codes.includes('OCR_CONTACT_VALUES_UNVERIFIED') !== Boolean(value.ocrContacts?.length)) throw new SourceExtractionError();
+  if (Object.hasOwn(value, 'privateDocumentMetadata')) {
+    if (source.source_type !== 'pdf') throw new SourceExtractionError();
+    require('./private-document-metadata').validatePrivateDocumentMetadata(value.privateDocumentMetadata);
+  }
+  return immutableData(value);
 }
 
 function coverageFailure(ErrorType = Error) {
@@ -90,10 +201,10 @@ function directParserCoverage(parsed) {
 }
 
 async function extractSourceForPrivacy(bytes, extension, options = {}) {
+  const { productChannel, contentOptions } = privacyConsumerOptions(options);
   const ErrorType = options.ErrorType || Error;
-  const productChannel = options.productChannel || 'standalone';
-  const normalizedExtension = String(extension || '').toLowerCase();
-  if (!Buffer.isBuffer(bytes) || !isMarkdownFirstPrivacyExtension(normalizedExtension, productChannel)) {
+  const normalizedExtension = typeof extension === 'string' ? extension.toLowerCase() : '';
+  if (!Buffer.isBuffer(bytes) || !isMarkdownFirstPrivacyExtension(normalizedExtension, productChannel, contentOptions)) {
     const failure = new ErrorType('Die lokale Privacy-Extraktion erhielt eine ungültige oder nicht freigegebene Quelle.');
     failure.code = 'FORMAT_COVERAGE_UNVERIFIED';
     throw failure;
@@ -105,12 +216,14 @@ async function extractSourceForPrivacy(bytes, extension, options = {}) {
     const convert = options.convertBuffer || require('../standalone/conversion-worker').convertBuffer;
     extraction = await convert(bytes, normalizedExtension, {
       signal: options.signal,
-      ...(normalizedExtension === '.docx' ? { omitDocxHeaderFooter: true } : {}),
+      ...(contentOptions ? { contentOptions } : {}),
+      ...(normalizedExtension === '.docx' && !contentOptions ? { omitDocxHeaderFooter: true } : {}),
       ...(['.pdf', '.pptx'].includes(normalizedExtension) ? { passiveObjects: true } : {}),
       ...(options.timeoutMs === undefined ? {} : { timeoutMs: options.timeoutMs })
     });
-    const { validateMarkdownExtraction } = require('../standalone/markdown-contract');
-    validateMarkdownExtraction(extraction);
+    assertDataGraph(extraction);
+    const { validateMarkdownExtractionForOptions } = require('../standalone/markdown-contract');
+    validateMarkdownExtractionForOptions(extraction, contentOptions);
     coverage = extraction.coverage;
   } else {
     const convert = options.convertDocument;
@@ -135,14 +248,14 @@ async function extractSourceForPrivacy(bytes, extension, options = {}) {
     failure.code = 'FORMAT_COVERAGE_UNVERIFIED';
     throw failure;
   }
-  const privacyMarkdown = ['docx', 'xlsx', 'pptx'].includes(expectedType)
-    ? promoteExplicitSensitiveTableHeaders(extraction.markdown) : extraction.markdown;
+  const privacyMarkdown = contentOptions && expectedType === 'csv' ? csvPrivacyMarkdown(bytes)
+    : ['docx', 'xlsx', 'pptx'].includes(expectedType) ? promoteExplicitSensitiveTableHeaders(extraction.markdown, Boolean(contentOptions)) : extraction.markdown;
   const neutral = createSourceExtraction({ source_type: expectedType,
-    markdown: privacyMarkdown, coverage }, RESOURCE_LIMITS.MAX_TEXT_CHARS);
+    markdown: privacyMarkdown, coverage, ...(contentOptions ? { content_options: contentOptions } : {}) }, RESOURCE_LIMITS.MAX_TEXT_CHARS);
   if (!neutral.markdown.trim() || neutral.coverage.reason_codes.includes('OCR_TEXT_EMPTY')) {
     throw coverageFailure(ErrorType);
   }
-  return Object.freeze({
+  const result = Object.freeze({
     markdown: neutral.markdown,
     warnings: Object.freeze([]),
     attachments: Object.freeze([]),
@@ -150,8 +263,11 @@ async function extractSourceForPrivacy(bytes, extension, options = {}) {
     requiresExplicitProfile: false,
     sourceType: neutral.source_type,
     sourceExtractionCoverage: neutral.coverage,
+    ...(contentOptions ? { sourceExtraction: neutral,
+      ...(extraction.private_document_metadata ? { privateDocumentMetadata: extraction.private_document_metadata } : {}) } : {}),
     ...(productChannel === 'standalone' && extraction.ocr_contacts ? { ocrContacts: extraction.ocr_contacts } : {})
   });
+  return contentOptions ? validatePrivacyExtractionForOptions(result, contentOptions, expectedType) : result;
 }
 
 module.exports = Object.freeze({
@@ -161,5 +277,6 @@ module.exports = Object.freeze({
   isWidePrivacyExtension,
   isMarkdownFirstPrivacyExtension,
   extractSourceForPrivacy,
+  validatePrivacyExtractionForOptions,
   promoteExplicitSensitiveTableHeaders
 });

@@ -21,6 +21,7 @@
     /^[a-f0-9]{64}$/u.test(row.output_sha256) && Number.isSafeInteger(row.revision) && row.revision >= 0 && row.revision <= 1000 &&
     typeof row.name === 'string' && row.name.length > 0 && row.name.length <= 1024 &&
     typeof row.approved === 'boolean' && ['markdown-only', 'markdown-and-anonymize'].includes(row.processing_mode) &&
+    (row.text_modified === undefined || typeof row.text_modified === 'boolean') &&
     Number.isSafeInteger(row.chunks) && row.chunks >= 1 && row.chunks <= 245;
   const sameDocumentBinding = (left, right) => left && right && left.document_id === right.document_id &&
     left.revision === right.revision && left.output_sha256 === right.output_sha256 &&
@@ -31,16 +32,42 @@
       result.approved === (action === 'approve') && result.local_ui_only === true && result.external_disclosure === false;
   }
   let batchId = null, documents = [], selected = new Set(), detail = null, ticket = 0, busy = false, exportRequest = null, knownExport = null;
+  let exportFolderNeeded = false;
+  let documentProblemCount = 0, documentOmissionCount = 0, processingComplete = false, confirmedCopy = null, loading = false;
+  let contentNotices = null, filterMode = 'notices';
   let loadedMarkdown = '', stateFresh = false, recoveryDraft = null, runMode = null;
-  let pendingMetadata = null, dialogSelection = null, dialogMode = null, dialogFocus = null;
+  let pendingMetadata = null, dialogSelection = null, dialogMode = null, dialogFocus = null, dialogFiles = null;
   let entityRows = [], entitySelected = new Set(), entityPage = 0, entityPages = 1, entityControls = [];
   let receiptControls = [];
+  let bulkReviewProgress = null;
+  let pendingDocumentChange = null;
   const mode = () => (pendingMetadata || detail || documents[0])?.processing_mode || runMode;
   const raw = () => mode() === 'markdown-only';
+  const visibleDocuments = () => {
+    if (!raw() || !contentNotices || exportRequest || filterMode === 'all') return documents;
+    if (filterMode === 'edited') return documents.filter(row => row.text_modified === true);
+    if (filterMode === 'without') return documents.filter(row => !contentNotices.has(row.document_id));
+    return documents.filter(row => contentNotices.has(row.document_id));
+  };
+  const currentTextState = row => row.text_modified === true ? 'Korrektur gespeichert' : 'Markdown verfügbar';
+  const noticeExplanation = codes => {
+    const messages = { SOURCE_COVERAGE_UNVERIFIED: 'Inhaltsübernahme nicht vollständig belegbar',
+      OCR_NOT_VERIFIED: 'OCR-Text nicht vollständig fachlich geprüft. Die Kontaktprüfung betrifft nur erkannte E-Mail-Adressen und Telefonnummern, nicht die übrigen Wörter, Zahlen oder Lesereihenfolge.',
+      OCR_CONTACT_VALUES_UNVERIFIED: 'Erkannte OCR-Kontaktwerte sind noch nicht bestätigt',
+      VISUAL_CONTENT_NOT_EXTRACTED: 'Bildinhalt nicht als Text übernommen',
+      OCR_TEXT_EMPTY: 'OCR lieferte keinen zusätzlichen Text',
+      PDF_OCR_SCOPE_UNVERIFIED: 'PDF-Bildbereich nicht eindeutig zugeordnet',
+      SCAN_OCR_DISABLED_BY_POLICY: 'Scan-OCR war ausgeschaltet',
+      IMAGE_OCR_DISABLED_BY_POLICY: 'Bild-OCR war ausgeschaltet' };
+    return codes.length ? codes.map(code => messages[code] || `Inhaltshinweis: ${code}`).join(' · ') :
+      'Inhaltsübernahme möglicherweise unvollständig';
+  };
   const dirty = () => Boolean(recoveryDraft || detail && raw() && $('document-markdown').value !== loadedMarkdown);
   const detailCurrent = () => stateFresh && detail && documents.some(row => sameDocumentBinding(detail, row));
   const namespace = mode => mode === 'markdown-only' ? 'DataSecure-Markdown-Korrektur' : 'DataSecure-KI-Export';
   const reasons = { DOCUMENT_REVIEW_STALE: 'Der Textstand hat sich geändert. Bitte neu laden und erneut prüfen.',
+    CONTENT_OPTIONS_BINDING_INVALID: 'Die Inhalts- oder OCR-Einstellungen passen nicht zum gespeicherten Prüfstand. Keine Freigabe oder neue Kopie wird daraus erzeugt. Bitte die Originaldateien für einen neuen Lauf auswählen.',
+    CONTENT_OPTIONS_BINDING_MISSING: 'Der unveränderliche Nachweis der Inhalts- und OCR-Auswahl fehlt. Dieser Prüfstand wird nicht freigegeben. Bitte die Originaldateien für einen neuen Lauf auswählen.',
     DOCUMENT_REVIEW_UNAPPROVED: 'Mindestens ein ausgewählter Textstand ist nicht freigegeben.',
     DOCUMENT_REVIEW_INVALID: 'Der gespeicherte Prüfstand oder seine Entscheidungsnachweise sind nicht konsistent. Es wird keine Freigabe daraus übernommen. Bitte neu laden; bei erneutem Fehler die genannten Quelldateien neu verarbeiten.',
     DOCUMENT_REVIEW_LIMIT: 'Dieser Prüfstand überschreitet eine sichere Bearbeitungsgrenze. Bitte kleinere Änderungen oder weniger Dokumente gemeinsam bearbeiten.',
@@ -53,11 +80,12 @@
     DOCUMENT_REVIEW_RESIDUAL_PII: 'Der geänderte Text enthält weiterhin mögliche personenbezogene Angaben. Die Freigabe wurde nicht gespeichert. Bitte die beibehaltenen Werte erneut prüfen oder ersetzen.',
     DOCUMENT_REVIEW_POLICY_CHANGED: 'Die gespeicherte Prüfung gehört zu einer älteren Datenschutzregel. Bitte diese Quelldatei mit der aktuellen Version neu verarbeiten.',
     AI_EXPORT_CONFLICT: 'Im Exportordner besteht ein Konflikt. Es wurde nichts überschrieben.',
-    AI_EXPORT_CONFIGURATION_REQUIRED: 'Bitte den Ergebnisordner einmal neu auswählen. Für diesen Export fehlt die sichere native Ordnerbindung; alte Exporte werden nicht automatisch umgestellt.',
-    AI_EXPORT_VOLUME_MISMATCH: 'Der Ergebnisordner liegt auf einem anderen Laufwerk als der private DataSecure-Bereich. Bitte für diesen Export einen Ordner auf demselben Laufwerk wählen. Es wird keine unsichere Kopieralternative verwendet.',
+    AI_EXPORT_CONFIGURATION_REQUIRED: 'Der Export wurde nicht gestartet: Für diesen Ordner fehlt die sichere native Ordnerbindung. Wähle hier „Ergebnisordner wählen/ändern“ und bestätige den Export danach erneut. Freigaben bleiben erhalten; alte Exporte werden nicht automatisch umgestellt.',
+    AI_EXPORT_VOLUME_MISMATCH: 'Der Export wurde nicht gestartet: Der Ergebnisordner liegt auf einem anderen Laufwerk als der private DataSecure-Bereich. Wähle hier einen Ordner auf demselben Laufwerk und bestätige danach erneut. Es wird keine unsichere Kopieralternative verwendet.',
     AI_EXPORT_UNCERTAIN: 'Der Exportzustand ist noch nicht eindeutig bestätigt. Bitte denselben Export erneut abgleichen. Vorhandene Ordner bleiben unverändert; es wird keine zweite Kopie angelegt.',
     AI_EXPORT_INCOMPLETE: 'Der Export ist noch nicht bestätigt. Bitte denselben Export erneut abgleichen; keine Freigabe wurde zurückgenommen.',
     AI_EXPORT_INVALID: 'Der gespeicherte Exportauftrag oder sein Beleg ist nicht gültig. Bitte den Stand neu laden; keine neue Kopie automatisch anlegen.',
+    DOCUMENT_EXPORT_NAME_INVALID: 'Mindestens ein ursprünglicher Dateiname ist plattformübergreifend nicht sicher verwendbar oder zu lang. Die ausgewählten Quelldateien prüfen und mit einem gültigen Basisnamen neu aufnehmen; es wird nichts stillschweigend umbenannt oder überschrieben.',
     AI_EXPORT_ABANDONED: 'Dieser unvollständige Export wurde ausdrücklich aufgegeben. Vorhandene Dateien bleiben unangetastet; für einen neuen Export die aktuellen Freigaben neu auswählen.',
     AI_EXPORT_ALREADY_COMPLETE: 'Der Export ist bereits abgeschlossen und kann nicht mehr aufgegeben werden. Bitte den Empfang derselben Kopie abgleichen.',
     STANDALONE_IDENTITY_MAPPING_MISSING: 'Die vertrauliche Zuordnung dieses gespeicherten Stands fehlt oder ist nicht lesbar. Es wird keine heutige Zuordnung als damaliger Stand ausgegeben. Bestehende Exportkopien bleiben davon getrennt.',
@@ -67,38 +95,102 @@
     STANDALONE_RESULT_OPEN_FAILED: 'Das Betriebssystem konnte den geprüften Exportordner nicht öffnen. Der Export wurde dadurch nicht verändert.',
     STANDALONE_RESULTS_MISSING: 'Der gespeicherte Exportordner ist nicht mehr vorhanden. Es wird keine neue Kopie automatisch angelegt.' };
   function status(text, error = false) { $('documents-status').textContent = text; $('documents-status').className = `notice${error ? ' error' : ''}`; }
+  function actionStatus(text, error = false) { const node = $('document-action-status'); node.hidden = !text;
+    node.textContent = text; node.className = `document-action-status${error ? ' error' : ''}`; }
   function showError(error, name = '') {
     let code = error?.code || error?.message || String(error);
-    try { code = JSON.parse(code).code || code; } catch {}
+    try {
+      const value = JSON.parse(code); code = value.code || code;
+      const details = value.details;
+      if (code === 'DOCUMENT_EXPORT_NAME_INVALID' && details && Object.keys(details).sort().join(',') === 'selection_count,selection_files' &&
+          Array.isArray(details.selection_files) && details.selection_files.length > 0 && details.selection_files.length <= 200 &&
+          details.selection_count === details.selection_files.length && details.selection_files.every(row => row &&
+            Object.keys(row).sort().join(',') === 'name,reason_code' && row.reason_code === code && typeof row.name === 'string' &&
+            row.name.length > 0 && row.name.length <= 1024 && !/[:\\\p{Cc}]/u.test(row.name) && !row.name.startsWith('/') &&
+            row.name.split('/').every(part => part && part !== '.' && part !== '..'))) name = details.selection_files.map(row => row.name).join(', ');
+    } catch {}
     if (!/^[A-Z][A-Z0-9_]{2,80}$/u.test(code)) code = 'DOCUMENT_REVIEW_INVALID';
     status(`${name ? `${name}: ` : ''}${reasons[code] || 'Der lokale Prüfstand konnte nicht sicher bestätigt werden. Erneut laden; nicht blind freigeben.'} (${code})`, true);
   }
+  function exportFolderError(error) {
+    let code = error?.code || error?.message || String(error);
+    try { code = JSON.parse(code).code || code; } catch {}
+    return !pendingMetadata && !knownExport && ['AI_EXPORT_CONFIGURATION_REQUIRED', 'AI_EXPORT_VOLUME_MISMATCH'].includes(code);
+  }
   function controls() {
     const blocked = busy || !stateFresh;
-    const rows = documents.filter(row => selected.has(row.document_id)), all = documents.length > 0 && rows.length === documents.length;
+    const shown = visibleDocuments(), rows = documents.filter(row => selected.has(row.document_id));
+    const selectedShown = shown.filter(row => selected.has(row.document_id));
+    const all = shown.length > 0 && selectedShown.length === shown.length;
+    const exportComplete = confirmedCopy?.batchId === batchId && confirmedCopy.selection.length === documents.length &&
+      documents.every(row => confirmedCopy.selection.some(copy => row.document_id === copy.document_id &&
+        row.revision === copy.revision && row.output_sha256 === copy.output_sha256));
+    window.__DATASECURE_RUN_GUIDE__?.documents({ batch_id: batchId, processing_mode: mode(), source: 'documents',
+      fresh: stateFresh, busy: busy || loading, document_count: documents.length, approved_count: documents.filter(row => row.approved).length,
+      problem_count: documentProblemCount, expected_omission_count: documentOmissionCount, processing_complete: processingComplete,
+      dirty: dirty(), export_pending: Boolean(exportRequest), export_complete: exportComplete });
+    $('documents-loading').hidden = Boolean(bulkReviewProgress) || !busy && !loading;
+    $('documents-loading-text').textContent = loading ? 'Dokumente und Hinweise werden geladen …' : 'DataSecure verarbeitet den lokalen Vorgang …';
+    $('documents-review-controls').hidden = Boolean(bulkReviewProgress);
+    $('documents-bulk-progress').hidden = !bulkReviewProgress;
+    if (bulkReviewProgress) {
+      $('documents-bulk-title').textContent = bulkReviewProgress.action === 'approve' ? 'Freigaben werden gespeichert' : 'Freigaben werden widerrufen';
+      $('documents-bulk-count').textContent = `${bulkReviewProgress.done} von ${bulkReviewProgress.total} Entscheidungen bestätigt. Noch keine KI-Kopie erstellt.`;
+      $('documents-bulk-meter').max = bulkReviewProgress.total;
+      $('documents-bulk-meter').value = bulkReviewProgress.done;
+    }
+    $('documents-view').setAttribute('aria-busy', String(busy || loading));
     $('documents-all').checked = all; $('documents-all').indeterminate = rows.length > 0 && !all;
+    $('documents-filter-bar').hidden = !raw();
+    $('documents-filter').value = raw() && contentNotices ? filterMode : 'all';
+    $('documents-filter').disabled = blocked || dirty() || Boolean(exportRequest) || !contentNotices;
+    $('documents-all-label').textContent = raw() ? 'Alle angezeigten auswählen' : 'Alle auswählen';
+    if (raw()) {
+      const warned = contentNotices ? documents.filter(row => contentNotices.has(row.document_id)).length : 0;
+      const edited = documents.filter(row => row.text_modified === true).length;
+      const options = $('documents-filter').children;
+      for (const [index, count] of [warned, edited, documents.length, documents.length - warned].entries())
+        if (options[index]) options[index].textContent = `${['Mit Hinweisen', 'Nachbearbeitet', 'Alle Dateien', 'Ohne Hinweise'][index]} (${count})`;
+      $('documents-filter-summary').textContent = contentNotices ?
+        `${shown.length} von ${documents.length} verfügbar · ${edited} mit gespeicherter Korrektur. Ein fehlender Hinweis ist keine Garantie für fehlerfreien OCR-Text.` :
+        'Dateibezogene Hinweise sind für diesen Lauf nicht sicher zuordenbar. Alle verfügbaren Dateien werden angezeigt.';
+    }
     $('documents-reload').disabled = busy;
     $('documents-identity-reference').hidden = mode() !== 'markdown-and-anonymize';
     $('documents-identities').disabled = blocked || dirty() || Boolean(recoveryDraft) || !documents.length;
-    $('documents-all').disabled = blocked || Boolean(exportRequest) || !documents.length;
-    $('documents-selected').textContent = `${rows.length} ausgewählt · ${documents.filter(row => row.approved).length} von ${documents.length} freigegeben`;
+    $('documents-all').disabled = blocked || Boolean(exportRequest) || !shown.length;
+    $('documents-selected').textContent = raw() ? `${rows.length} ausgewählt · ${shown.length} angezeigt · ${documents.length} Markdown-Dateien verfügbar`
+      : `${rows.length} ausgewählt · ${documents.filter(row => row.approved).length} von ${documents.length} freigegeben`;
+    $('documents-approve').hidden = raw(); $('documents-revoke').hidden = raw();
     $('documents-approve').disabled = blocked || dirty() || Boolean(exportRequest) || !rows.length; $('documents-revoke').disabled = blocked || dirty() || Boolean(exportRequest) || !rows.length;
-    $('documents-export').disabled = blocked || dirty() || !exportRequest && (!rows.length || rows.some(row => !row.approved));
-    $('documents-export').textContent = exportRequest ? knownExport || pendingMetadata?.status === 'completed' ? 'Empfang erneut abgleichen' : 'Export erneut abgleichen' : raw() ? 'Auswahl als Markdown-Kopie speichern' : 'Auswahl für KI exportieren';
-    $('documents-heading').textContent = raw() ? 'Markdown prüfen und korrigieren · nicht anonymisiert' : 'Prüfen und für KI exportieren';
-    $('documents-purpose').textContent = raw() ? 'Originaltext und Markdown vergleichen und Lesefehler korrigieren. Nicht anonymisiert: enthält Originalinhalte. Eine Freigabe bestätigt nur deine Textprüfung, keine anonymisierte KI-Weitergabe.' : 'Technische Verarbeitung ist noch keine Freigabe. Vergleiche Quelle und Markdown. Häkchen wählen nur aus; erst die Sammelaktion speichert deine Freigabe.';
+    $('documents-export').disabled = blocked || dirty() || !exportRequest && (!rows.length || !raw() && rows.some(row => !row.approved));
+    $('documents-export').textContent = exportRequest ? knownExport || pendingMetadata?.status === 'completed' ? 'Empfang erneut abgleichen' : pendingMetadata ? 'Export erneut abgleichen' : 'Export erneut versuchen' : raw() ? 'Zusätzliche Markdown-Kopie speichern' : 'Auswahl für KI exportieren';
+    $('documents-heading').textContent = raw() ? 'Markdown freiwillig nachbearbeiten · nicht anonymisiert' : 'Prüfen und für KI exportieren';
+    $('documents-purpose').textContent = raw() ? 'Die erstellten Markdown-Dateien sind bereits im Ergebnisordner nutzbar. Zum Vergleichen und Korrigieren den Dateinamen anklicken. Häkchen wählen nur Dateien für eine zusätzliche Kopie. „Korrektur speichern“ hält einen privaten Textstand fest; erst „Zusätzliche Kopie“ schreibt daraus eine verwendbare korrigierte Datei. Das ist keine weitere OCR-Pflichtprüfung; Originalinhalte bleiben erhalten.' : '1. Original und geplanten anonymisierten Markdown-Text vergleichen. 2. Häkchen wählen nur aus; „Auswahl freigeben“ speichert die Entscheidung. 3. „Auswahl für KI exportieren“ öffnet zuerst eine Vorschau; erst „Exportieren“ im Dialog erstellt eine lokale KI-Kopie – es erfolgt kein Upload. Spätere Änderungen heben betroffene Freigaben auf.';
     if (!mode()) {
-      $('documents-heading').textContent = 'Dokumentprüfstände dieses Laufs';
-      $('documents-purpose').textContent = 'Der Verarbeitungszweck ist nicht mehr belegbar. Daraus wird weder eine Anonymisierung noch eine Freigabe für KI abgeleitet.';
+      $('documents-heading').textContent = loading ? 'Dokumentprüfstände werden geladen' : 'Dokumentprüfstände dieses Laufs';
+      $('documents-purpose').textContent = loading
+        ? 'Bitte warten: DataSecure gleicht die gespeicherten Dokumentstände lokal ab. Bis zum Abschluss sind keine Freigabe und kein Export möglich.'
+        : 'Der Verarbeitungszweck ist nicht mehr belegbar. Daraus wird weder eine Anonymisierung noch eine Freigabe für KI abgeleitet.';
       $('documents-export').textContent = 'Keine belegbare Exportauswahl';
       $('documents-export').disabled = true;
     }
-    $('document-edit-hint').textContent = raw() ? 'Korrekturen ausdrücklich speichern. Jede Änderung hebt die bisherige Freigabe auf. Gespeicherte Markdown-Kopien enthalten Originalinhalte und sind nicht als anonymisierte KI-Weitergabe freigegeben.' : detail?.entity_review_available ? 'Erkannte Stellen unten gemeinsam behandeln. Der Originalvergleich zeigt die normalisierte Extraktionsfassung. Zusätzliche Maskierungen sperren überlappende Entitäten gegen versehentliche Wiederherstellung. Jede Änderung hebt die Freigabe auf.' : 'Für diesen älteren oder nicht vollständig rückverfolgbaren Prüfstand ist keine Entitätenbearbeitung verfügbar. Zusätzliche Maskierungen und Rückkehr zum technisch geprüften Basisstand bleiben möglich. Private Prüfstände gehören nicht in KI-Uploads.';
+    $('document-markdown-caption').textContent = raw() ? 'Markdown-Text (für Korrekturen bearbeitbar)' :
+      mode() === 'markdown-and-anonymize' ? 'Geplanter anonymisierter Markdown-Text (nur markieren)' : 'Markdown-Text (Modus wird geladen)';
+    $('documents-main-guide').hidden = mode() !== 'markdown-and-anonymize';
+    $('documents-approval-extras').hidden = mode() !== 'markdown-and-anonymize';
+    $('document-markdown').setAttribute('aria-label', $('document-markdown-caption').textContent);
+    $('document-edit-hint').textContent = raw() ? 'Du kannst den rechten Markdown-Text direkt bearbeiten. Korrekturen ausdrücklich speichern; die ursprünglich erzeugten Dateien bleiben unverändert. Für eine verwendbare korrigierte Datei die gewünschte Datei auswählen und zusätzlich eine Kopie speichern. Sie enthält Originalinhalte und ist nicht anonymisiert.' : !detail ? 'Wähle links ein Dokument, vergleiche Original und anonymisierten Entwurf und gib den geprüften Stand dann ausdrücklich frei. Das rechte Feld ist schreibgeschützt.' : 'Hauptweg: Original und anonymisierten Entwurf vergleichen, Datei links anhaken und oben „Auswahl freigeben“ wählen. Der rechte Text ist schreibgeschützt. Nur wenn du weitere Änderungen brauchst, öffne „Weitere Textänderungen (optional)“; sie werden erst nach gesonderter Bestätigung gespeichert und heben die betroffene Freigabe auf.';
     $('document-save-correction').hidden = !raw(); $('document-discard-correction').hidden = !raw();
     $('document-save-correction').disabled = blocked || !detailCurrent() || Boolean(recoveryDraft) || Boolean(exportRequest) || !dirty();
     $('document-discard-correction').disabled = busy || !dirty();
     $('document-markdown').readOnly = !raw() || blocked || Boolean(recoveryDraft) || Boolean(exportRequest);
-    $('document-redact').disabled = blocked || dirty() || Boolean(exportRequest) || !detailCurrent(); $('document-restore').disabled = blocked || dirty() || Boolean(exportRequest) || !detailCurrent();
+    $('document-extra-actions').hidden = raw() || !detailCurrent();
+    $('document-redact').hidden = raw();
+    $('document-redact').disabled = raw() || blocked || dirty() || Boolean(exportRequest) || !detailCurrent(); $('document-restore').disabled = blocked || dirty() || Boolean(exportRequest) || !detailCurrent();
+    $('document-change-confirm').hidden = !pendingDocumentChange;
+    $('document-change-save').disabled = blocked || !pendingDocumentChange || !detailCurrent() || !sameDocumentBinding(detail, pendingDocumentChange?.row);
+    $('document-change-cancel').disabled = busy;
     $('documents-back').disabled = busy;
     $('document-export-confirm').disabled = blocked;
     $('document-export-abandon').disabled = blocked || !$('document-export-abandon-check').checked;
@@ -106,10 +198,10 @@
     $('document-recovery-text').value = recoveryDraft?.text || '';
     $('document-recovery-label').textContent = recoveryDraft ? `${recoveryDraft.name}: nicht bestätigter Korrekturentwurf (Ausgangsstand ${recoveryDraft.revision}). Der Text bleibt hier erhalten; bei abweichendem gespeicherten Stand bitte vergleichen und benötigte Änderungen kopieren.` : '';
     $('document-recovery-discard').disabled = busy;
-    const position = documents.findIndex(row => row.document_id === detail?.document_id);
-    $('document-position').textContent = position < 0 ? '' : `${position + 1} von ${documents.length} Dateien`;
+    const position = shown.findIndex(row => row.document_id === detail?.document_id);
+    $('document-position').textContent = position < 0 ? '' : `${position + 1} von ${shown.length} angezeigten Dateien`;
     $('document-previous').disabled = blocked || dirty() || position <= 0;
-    $('document-next').disabled = blocked || dirty() || position < 0 || position >= documents.length - 1;
+    $('document-next').disabled = blocked || dirty() || position < 0 || position >= shown.length - 1;
     const scopeBlocked = $('entities-scope').value === 'run' && (!detail?.run_entity_review_available ||
       entityRows.some(row => entitySelected.has(row.entity_id) && row.run_eligible !== true));
     $('entities-apply').disabled = blocked || !detailCurrent() || Boolean(exportRequest) || !entitySelected.size || scopeBlocked;
@@ -124,7 +216,8 @@
     for (const { node, row, checkbox } of entityControls) { node.disabled = blocked || Boolean(exportRequest) || row.disabled; if (checkbox) node.checked = entitySelected.has(row.entity_id); }
     for (const node of receiptControls) node.disabled = blocked;
   }
-  function clearText() { detail = null; loadedMarkdown = ''; $('document-original').value = ''; $('document-markdown').value = '';
+  function clearText() { pendingDocumentChange = null; $('document-change-confirm').hidden = true; $('document-extra-actions').open = false;
+    detail = null; loadedMarkdown = ''; $('document-original').value = ''; $('document-markdown').value = ''; actionStatus('');
     entityRows = []; entitySelected.clear(); entityPage = 0; entityPages = 1; entityControls = [];
     $('entities-list').replaceChildren(); $('document-entities').hidden = true;
     $('document-name').textContent = 'Dokument auswählen'; $('document-revision').textContent = ''; controls(); }
@@ -173,20 +266,30 @@
     }));
     $('documents-export-receipts').hidden = receipts.length === 0;
   }
-  const exportSuccess = result => `${result.exported_count} Datei${result.exported_count === 1 ? '' : 'en'} exportiert: Ergebnisordner → ${namespace(result.processing_mode)} → ${result.folder_name}. ${result.processing_mode === 'markdown-only' ? 'Nicht anonymisiert: enthält Originalinhalte, nicht für KI-Weitergabe freigegeben.' : 'Nur neutrale Markdown-Dateien; keine privaten Begleitdaten.'}`;
+  const exportSuccess = result => `${result.exported_count} Datei${result.exported_count === 1 ? '' : 'en'} ${result.processing_mode === 'markdown-only' ? 'als zusätzliche Markdown-Kopie gespeichert' : 'exportiert'}: Ergebnisordner → ${namespace(result.processing_mode)} → ${result.folder_name}. ${result.processing_mode === 'markdown-only' ? 'Die ursprünglichen Markdown-Dateien sind unverändert; die Kopie enthält Originalinhalte und ist nicht anonymisiert.' : 'Nur neutrale Markdown-Dateien; keine privaten Begleitdaten.'}`;
   function render() {
     const list = $('documents-list'); list.replaceChildren();
-    for (const row of documents) {
+    for (const row of visibleDocuments()) {
       const item = make('div', undefined, `document-row${detail?.document_id === row.document_id ? ' active' : ''}`);
       const check = make('input'); check.type = 'checkbox'; check.checked = selected.has(row.document_id); check.disabled = busy || !stateFresh || Boolean(exportRequest);
       check.setAttribute('aria-label', `${row.name} auswählen`); check.addEventListener('change', () => {
         if (busy || !stateFresh || exportRequest) return; check.checked ? selected.add(row.document_id) : selected.delete(row.document_id); controls(); });
       const info = make('div'), show = make('button', row.name); show.disabled = busy || !stateFresh;
+      show.setAttribute('aria-label', `${row.name}: ${raw() ? 'vergleichen und korrigieren' : 'vergleichen'}`);
       show.addEventListener('click', () => loadDetail(row));
-      info.append(show, make('p', `${row.approved ? 'Freigegeben' : 'Prüfung offen'} · Stand ${row.revision}`, 'meta'));
+      info.append(show, make('p', `${raw() ? currentTextState(row) : row.approved ? 'Freigegeben' : 'Prüfung offen'} · Stand ${row.revision}`, 'meta'));
+      if (raw() && (contentNotices?.has(row.document_id) || row.text_modified === true)) {
+        const flags = make('div', undefined, 'document-flags');
+        if (contentNotices?.has(row.document_id)) flags.append(make('span', noticeExplanation(contentNotices.get(row.document_id)), 'warning'));
+        if (row.text_modified === true) flags.append(make('span', 'Korrektur gespeichert'));
+        info.append(flags);
+      }
       item.append(check, info); list.append(item);
     }
-    if (!documents.length) list.append(make('p', 'Keine verfügbaren Dokumentprüfstände.', 'meta'));
+    if (!visibleDocuments().length) list.append(make('p', documents.length && raw() && contentNotices ?
+      filterMode === 'notices' ? 'Keine verfügbaren Dateien mit Inhaltshinweisen. Für einen freiwilligen Vergleich „Alle Dateien“ wählen.' :
+      filterMode === 'edited' ? 'Noch keine gespeicherte Markdown-Korrektur. Andere Dateien über „Mit Hinweisen“ oder „Alle Dateien“ öffnen.' :
+      'Keine Dateien in dieser Ansicht.' : 'Keine verfügbaren Dokumentprüfstände.', 'meta'));
     controls();
   }
   function renderUnavailable(data) {
@@ -199,6 +302,7 @@
       SOURCE_FORMAT_NOT_RELEASED: 'Dieses Format ist für die lokale Verarbeitung nicht freigegeben.',
       PARSE_FAILED: 'Der Dateiinhalt konnte nicht vollständig gelesen werden. Die Quelldatei in der Ursprungsanwendung prüfen und eine neue Kopie auswählen.',
       SOURCE_READ_FAILED: 'Die Datei konnte nicht gelesen werden. Den lokalen Lesezugriff prüfen.',
+      MARKDOWN_CONTENT_TRANSFORM_FAILED: 'Die Markdown-Bildsyntax konnte nicht sicher in reinen Text umgewandelt werden. Die Originaldatei bleibt unverändert.',
       SOURCE_IDENTITY_CHANGED: 'Die Datei hat sich seit der Auswahl verändert. Eine unveränderte Kopie neu auswählen.',
       CONVERSION_EXECUTABLE_MISSING: 'Eine Konvertierungskomponente fehlt. Das vollständige App-Paket neu entpacken.',
       CONVERSION_EXECUTABLE_DENIED: 'Das Betriebssystem hat den Start der Konvertierung verweigert. Mit der IT prüfen; Schutzfunktionen nicht deaktivieren.',
@@ -220,14 +324,42 @@
         new Set([...missing, ...unknown, ...rejected, ...knownDocuments].map(row => row.document_id)).size !==
           missing.length + unknown.length + rejected.length + knownDocuments.length) throw Error('DOCUMENT_REVIEW_INVALID');
     const panel = $('documents-unavailable'); panel.replaceChildren(); panel.hidden = !missing.length && !unknown.length && !rejected.length;
-    const rows = make('ul');
-    for (const row of missing) rows.append(make('li', `${row.name || `Dokument ${row.document_id.slice(0, 8)}`}: Dokumentprüfstand fehlt oder ist nicht lesbar. Keine Freigabe oder Export aus diesem Prüfstand möglich.`));
-    for (const row of unknown) rows.append(make('li', `${row.name || `Dokument ${row.document_id.slice(0, 8)}`}: Früherer Ergebnisstatus nicht mehr belegbar. Die Quelldatei kann auch technisch gestoppt worden sein; keine erfolgreiche Verarbeitung oder Freigabe ableitbar.`));
-    for (const row of rejected) rows.append(make('li', `${row.name}: ${reasonText(row.reason_code)} (${row.reason_code}) Nicht verarbeitet; kein Dokumentprüfstand oder Export für diese Datei. Die Originaldatei bleibt unverändert.`));
-    if (!panel.hidden) panel.append(make('strong', 'Nicht verarbeitete oder nicht belegte Dateien'), rows);
+    let feedback = data.processing_mode === 'markdown-only' && window.__DATASECURE_PRESENTATION__?.validateConversionFeedback(data.conversion_feedback);
+    if (feedback && (unknown.length || feedback.result_count !== knownDocuments.length + missing.length ||
+        feedback.not_converted_count !== rejected.length || feedback.selected_count !== knownDocuments.length + missing.length + rejected.length)) feedback = null;
+    const omitted = rejected.filter(row => row.classification === 'ocr_omission' &&
+      ['IMAGE_OCR_REQUIRED', 'PDF_TEXT_UNAVAILABLE_BY_POLICY'].includes(row.reason_code));
+    const verifiedOmissions = data.processing_mode === 'markdown-and-anonymize' ? omitted :
+      feedback && !feedback.ocr_enabled && omitted.length === feedback.ocr_omitted_count ? omitted : [];
+    const privacyStops = rejected.filter(row => row.classification === 'privacy_stop' &&
+      ['AMBIGUITY_REVIEW_REQUIRED', 'RESIDUAL_PII'].includes(row.reason_code));
+    const errors = rejected.filter(row => !verifiedOmissions.includes(row) && !privacyStops.includes(row));
+    const group = (title, values, tone, explain) => {
+      if (!values.length) return;
+      const container = make('details', undefined, `file-notice-group ${tone}`);
+      container.append(make('summary', `${title} (${values.length})`));
+      for (const row of values) {
+        const item = make('details', undefined, 'file-notice');
+        item.append(make('summary', row.name || `Dokument ${row.document_id.slice(0, 8)}`), make('p', explain(row)));
+        const advice = window.__DATASECURE_PRESENTATION__?.failureAdvice(row.reason_code);
+        if (advice) item.append(make('p', `Was kann ich tun? ${advice}`, 'meta'));
+        if (row.reason_code) item.append(make('code', row.reason_code));
+        container.append(item);
+      }
+      panel.append(container);
+    };
+    group('Ohne OCR nicht umgewandelt', verifiedOmissions, 'warning', () => 'OCR war für diesen Lauf ausgeschaltet. Kein technischer Konvertierungsfehler. Für diese Bild- oder Scan-Datei wurde kein Markdown erstellt; das Original bleibt unverändert.');
+    group('Aus Datenschutzgründen angehalten', privacyStops, 'warning', row => `${reasonText(row.reason_code)} Für diese Datei gibt es keinen freigabefähigen Prüfstand und keinen KI-Export; das Original bleibt unverändert.`);
+    group('Dateien mit technischen Fehlern', errors, 'error', row => `${reasonText(row.reason_code)} Nicht verarbeitet; das Original bleibt unverändert.`);
+    group('Nicht verfügbare Prüfstände', missing, 'error', () => 'Dokumentprüfstand fehlt oder ist nicht lesbar. Keine Freigabe oder Export aus diesem Prüfstand möglich.');
+    group('Früherer Status unklar', unknown, 'warning', () => 'Früherer Ergebnisstatus nicht mehr belegbar. Die Quelldatei kann auch technisch gestoppt worden sein; keine erfolgreiche Verarbeitung oder Freigabe ableitbar.');
+    documentOmissionCount = verifiedOmissions.length;
+    documentProblemCount = missing.length + unknown.length + privacyStops.length + errors.length;
   }
   async function reload() {
     const expected = batchId, request = ++ticket;
+    pendingDocumentChange = null; $('document-change-confirm').hidden = true;
+    loading = true; stateFresh = false; controls();
     try {
     const data = await invoke('get_document_reviews', { batchId: expected });
     if (expected !== batchId || request !== ticket) return false;
@@ -240,7 +372,8 @@
           !/^[a-f0-9]{64}$/u.test(row.digest) || !['incomplete', 'completed'].includes(row.status) ||
           !['markdown-only', 'markdown-and-anonymize'].includes(row.processing_mode))))
       throw Error('AI_EXPORT_INVALID');
-    if (data.processing_mode !== undefined && data.processing_mode !== null &&
+    if (data.processing_complete !== undefined && typeof data.processing_complete !== 'boolean' ||
+        data.processing_mode !== undefined && data.processing_mode !== null &&
         !['markdown-only', 'markdown-and-anonymize'].includes(data.processing_mode) ||
         data.processing_mode && data.documents.some(row => row.processing_mode !== data.processing_mode)) throw Error('DOCUMENT_REVIEW_INVALID');
     const nextMode = data.processing_mode || data.documents[0]?.processing_mode || data.pending_exports?.[0]?.processing_mode || null;
@@ -248,6 +381,7 @@
       selected.clear(); clearText(); throw Error('DOCUMENT_REVIEW_INVALID');
     }
     runMode = nextMode;
+    processingComplete = data.processing_complete === true;
     if (runMode && data.pending_exports?.some(row => row.processing_mode !== runMode)) throw Error('AI_EXPORT_INVALID');
     renderUnavailable(data);
     // A checkbox and a visible comparison belong to one proven revision, not
@@ -257,13 +391,26 @@
     const previousName = detail?.name;
     const comparisonInvalidated = detail && !data.documents.some(row => sameDocumentBinding(detail, row));
     documents = data.documents;
+    const feedback = nextMode === 'markdown-only' && window.__DATASECURE_PRESENTATION__?.validateConversionFeedback(data.conversion_feedback);
+    const noticed = data.content_notices;
+    const released = [...documents, ...(data.unavailable || [])];
+    const validNotices = feedback && Array.isArray(noticed) && noticed.length === feedback.content_notice_count &&
+      feedback.result_count === released.length && feedback.not_converted_count === (data.not_processed_documents || []).length &&
+      feedback.selected_count === released.length + (data.not_processed_documents || []).length &&
+      new Set(noticed.map(row => row?.document_id)).size === noticed.length && noticed.every(row => row &&
+        /^[a-f0-9]{32}$/u.test(row.document_id) && typeof row.name === 'string' && row.name.length > 0 && row.name.length <= 1024 &&
+        Array.isArray(row.reason_codes) && row.reason_codes.length <= 20 &&
+        row.reason_codes.every(code => typeof code === 'string' && /^[A-Z][A-Z0-9_]{2,63}$/u.test(code)) &&
+        released.some(value => value.document_id === row.document_id && (!value.name || value.name === row.name)));
+    contentNotices = validNotices ? new Map(noticed.map(row => [row.document_id, row.reason_codes])) : null;
+    if (!contentNotices) filterMode = 'all';
     selected = new Set([...selected].filter(id => documents.some(row => row.document_id === id &&
       sameDocumentBinding(previousDocuments.get(id), row))));
     if (comparisonInvalidated) clearText();
     else if (detail) {
       detail = { ...documents.find(row => sameDocumentBinding(detail, row)) };
       $('document-name').textContent = detail.name;
-      $('document-revision').textContent = `Stand ${detail.revision} · ${detail.approved ? 'freigegeben' : 'noch nicht freigegeben'}`;
+      $('document-revision').textContent = `Stand ${detail.revision} · ${raw() ? currentTextState(detail) : detail.approved ? 'freigegeben' : 'noch nicht freigegeben'}`;
     }
     if (!exportRequest && data.pending_exports?.length) {
       const pending = data.pending_exports[0];
@@ -272,14 +419,18 @@
       selected = new Set(pending.selection.map(row => row.document_id));
     }
     if (exportRequest) pendingMetadata = data.pending_exports?.find(row => row.operation_id === exportRequest.operationId) || pendingMetadata;
+    if (detail && !visibleDocuments().some(row => row.document_id === detail.document_id)) clearText();
     renderReceipts(data.export_receipts || []);
     stateFresh = true;
     render();
-    if (exportRequest) status('Ein früherer Export wurde noch nicht bestätigt. „Export erneut abgleichen“ prüft genau diese gespeicherte Auswahl. Es wird kein neuer Export automatisch gestartet.');
+    if (exportRequest) status(pendingMetadata || knownExport
+      ? 'Ein früherer Export wurde noch nicht bestätigt. „Export erneut abgleichen“ prüft genau diese gespeicherte Auswahl. Es wird kein neuer Export automatisch gestartet.'
+      : 'Für diesen Export liegt noch kein bestätigter Beleg vor. Prüfe den Ergebnisordner und versuche denselben Auftrag nur ausdrücklich erneut; es wird nichts automatisch kopiert.');
     else if (data.unavailable?.length) status(`Prüfstände nicht verfügbar: ${data.unavailable.map(row => row.name || `Dokument ${row.document_id.slice(0, 8)}`).join(', ')}. Diese Dateien können nicht freigegeben oder für KI exportiert werden.`, true);
-    else status(`${comparisonInvalidated ? `${previousName}: Der zuvor angezeigte Dokumentstand hat sich geändert oder ist nicht mehr verfügbar. Vergleich und betroffene Auswahl wurden zurückgesetzt; bitte den aktuellen Stand erneut öffnen. ` : ''}${documents.length} Dokument${documents.length === 1 ? '' : 'e'} verfügbar. Zum Vergleichen den Dateinamen anklicken; Häkchen wählen für Sammelaktionen aus.`);
+    else status(`${comparisonInvalidated ? `${previousName}: Der zuvor angezeigte Dokumentstand hat sich geändert oder ist nicht mehr verfügbar. Vergleich und betroffene Auswahl wurden zurückgesetzt; bitte den aktuellen Stand erneut öffnen. ` : ''}${documents.length} Markdown-Datei${documents.length === 1 ? '' : 'en'} verfügbar. ${raw() ? contentNotices ? `${visibleDocuments().length} in der aktuellen Ansicht. Inhaltshinweise stammen aus dem Verarbeitungslauf; eine gespeicherte Korrektur löst sie nicht automatisch auf.` : 'Dateibezogene Hinweise nicht sicher zuordenbar; alle Dateien werden angezeigt.' : `${documents.filter(row => row.approved).length} von ${documents.length} aktuellen Dokumentständen freigegeben. ${data.export_receipts?.length ? `${data.export_receipts.length} abgeschlossene KI-Kopie${data.export_receipts.length === 1 ? '' : 'n'} mit Beleg vorhanden; die heutigen Textstände vor einer weiteren Kopie erneut prüfen.` : 'Noch keine abgeschlossene KI-Kopie mit Beleg vorhanden.'} Zum Vergleichen den Dateinamen anklicken; Häkchen wählen für Sammelaktionen aus.`}`);
     return true;
     } catch (error) { if (expected === batchId && request === ticket) { stateFresh = false; render(); } throw error; }
+    finally { if (expected === batchId && request === ticket) { loading = false; controls(); } }
   }
   async function loadDetail(row) {
     if (!row) return;
@@ -300,7 +451,7 @@
       detail = { ...row }; loadedMarkdown = markdown; $('document-original').value = original; $('document-markdown').value = markdown;
       $('entities-scope').value = row.run_entity_review_available ? 'run' : 'document';
       if (row.entity_review_available) await loadEntities(0, expected, request);
-      $('document-name').textContent = row.name; $('document-revision').textContent = `Stand ${row.revision} · ${row.approved ? 'freigegeben' : 'noch nicht freigegeben'}`;
+      $('document-name').textContent = row.name; $('document-revision').textContent = `Stand ${row.revision} · ${raw() ? currentTextState(row) : row.approved ? 'freigegeben' : 'noch nicht freigegeben'}`;
       status('Textvergleich geladen. Auswahl und Textmarkierung speichern noch keine Entscheidung.');
     } catch (error) { if (expected === batchId && request === ticket) showError(error, row.name); }
     finally { if (expected === batchId && request === ticket) { if (ownership !== busyGeneration) return; busy = false; render(); $('document-name').focus?.(); } }
@@ -389,11 +540,15 @@
   }
   async function decideRows(action, rows, ranges = []) {
     if (busy || !stateFresh || recoveryDraft || exportRequest || !batchId || !rows.length || dirty() && action !== 'correct') return;
+    if (action === 'redact' && raw()) return;
     if (rows.some(row => !documents.some(current => sameDocumentBinding(row, current))) ||
         ['correct', 'redact', 'restore_base'].includes(action) && !detailCurrent()) return;
     const draft = action === 'correct' ? { ...detail, text: $('document-markdown').value } : null;
     const connection = connectionGeneration;
-    const expected = batchId; let failed, confirmed = 0; const ownership = ++busyGeneration; busy = true; render(); status('Entscheidungen werden lokal gespeichert …');
+    const expected = batchId; let failed, confirmed = 0; const updates = []; const ownership = ++busyGeneration;
+    bulkReviewProgress = !raw() && ['approve', 'revoke'].includes(action) && rows.length > 1
+      ? { action, total: rows.length, done: 0 } : null;
+    busy = true; render(); status('Entscheidungen werden lokal gespeichert …');
     try {
       for (const row of rows) {
         try { const result = await invoke('decide_document_review', { batchId: expected, documentId: row.document_id,
@@ -402,11 +557,17 @@
           // Only an exactly bound acknowledgement may advance a selection
           // across our own mutation. An unrelated reload never gets this grant.
           documents = documents.map(value => value.document_id === row.document_id ? { ...result } : value);
-          confirmed++; }
+          confirmed++; updates.push(result);
+          if (bulkReviewProgress) { bulkReviewProgress.done = confirmed; controls(); } }
         catch (error) { failed = { error, name: row.name }; throw error; }
       }
       if (batchId !== expected) return;
-      exportRequest = null; clearText(); await reload(); status(`${rows.length} Entscheidung${rows.length === 1 ? '' : 'en'} gespeichert. ${raw() ? 'Eine Markdown-Kopie bleibt nicht anonymisiert.' : 'Ein KI-Export erfolgt nur über den eigenen Exportbutton.'}`);
+      exportRequest = null; clearText(); await reload();
+      status(raw() && action === 'correct' ? `${rows[0].name}: Korrektur als privater Textstand gespeichert. Die bereits erstellte Markdown-Datei bleibt unverändert. Für eine verwendbare korrigierte Datei diesen Stand auswählen und ausdrücklich eine zusätzliche Kopie speichern.` :
+        raw() && action === 'restore_base' ? `${rows[0].name}: Der technisch erzeugte Textstand wurde wiederhergestellt. Die ursprünglich erstellte Markdown-Datei bleibt unverändert.` :
+          !raw() && action === 'approve' ? `${rows.length} Freigabeentscheidung${rows.length === 1 ? '' : 'en'} gespeichert. Die Dokumente können später weiter geprüft werden; durch diese Freigabe wurde keine neue KI-Kopie erstellt. Dafür die freigegebenen Stände auswählen und die Exportvorschau ausdrücklich öffnen.` :
+          `${rows.length} Entscheidung${rows.length === 1 ? '' : 'en'} gespeichert. Ein KI-Export erfolgt nur über den eigenen Exportbutton.`);
+      return { batchId: expected, updates };
     } catch (error) { if (connection === connectionGeneration && batchId === expected) {
       for (const row of rows.slice(0, confirmed)) selected.delete(row.document_id);
       if (draft) recoveryDraft = draft;
@@ -415,26 +576,43 @@
       if (draft) $('documents-status').textContent += ' Dein Korrekturentwurf bleibt erhalten; den gespeicherten Stand neu laden, bevor du weiterarbeitest.';
       if (!stateFresh) $('documents-status').textContent += ' Der aktuelle Stand konnte nicht abgefragt werden. Änderungen bleiben bis zum Neuladen gesperrt.';
     } }
-    finally { if (batchId === expected) { if (ownership !== busyGeneration) return; busy = false; render(); } }
+    finally { if (batchId === expected) { if (ownership !== busyGeneration) return; busy = false; bulkReviewProgress = null; render(); } }
   }
   function renderExportDialog() {
     if (!dialogSelection) return;
     const isRaw = dialogMode === 'markdown-only', complete = Boolean(knownExport || pendingMetadata?.status === 'completed');
     $('document-export-title').textContent = complete ? 'Empfang der fertigen Kopie bestätigen' : isRaw ? 'Markdown-Kopie speichern' : 'Für KI exportieren';
-    $('document-export-purpose').textContent = isRaw ? 'Nicht anonymisiert. Enthält Originalinhalte. Diese Kopie ist nicht als anonymisierte KI-Weitergabe freigegeben.' : 'Nur die ausgewählten, ausdrücklich freigegebenen Markdown-Textstände werden kopiert.';
-    $('document-export-target').textContent = `Gebundener Ergebnisordner → ${namespace(dialogMode)} → ${exportRequest ? `Export-${exportRequest.operationId} (${pendingMetadata || knownExport ? 'gespeicherter Auftrag' : 'Bestätigung des Auftrags noch offen'})` : 'neuer Exportordner'}`;
-    $('document-export-files').replaceChildren(...dialogSelection.map((row, index) => make('li', `Dokument_${String(index + 1).padStart(2, '0')}.md`)));
-    $('document-export-confirm').textContent = complete ? 'Empfang bestätigen' : exportRequest ? 'Export erneut abgleichen' : isRaw ? 'Kopie speichern' : 'Exportieren';
+    $('document-export-purpose').textContent = isRaw ? `Nur ${dialogSelection.length === 1 ? 'diese eine ausgewählte Datei' : `diese ${dialogSelection.length} ausgewählten Dateien`} als zusätzliche Markdown-Kopie speichern. Bereits erzeugte Dateien bleiben unverändert. Nicht anonymisiert: Die Kopie enthält Originalinhalte.` : 'Nur die ausgewählten, ausdrücklich freigegebenen Markdown-Textstände werden kopiert.';
+    $('document-export-target').textContent = `Ergebnisordner (Bindung beim Export geprüft) → ${namespace(dialogMode)} → ${exportRequest ? `Export-${exportRequest.operationId} (${pendingMetadata || knownExport ? 'gespeicherter Auftrag' : 'Bestätigung des Auftrags noch offen'})` : 'neuer Exportordner'}`;
+    $('document-export-filenames-heading').textContent = isRaw ? 'Enthaltene Markdown-Dateien · gespeicherter Dateinamenplan' : 'Enthalten · neutrale Dateinamen';
+    $('document-export-confirm').textContent = complete ? 'Empfang bestätigen' : exportRequest ? pendingMetadata ? 'Export erneut abgleichen' : 'Export erneut versuchen' : isRaw ? 'Kopie speichern' : 'Exportieren';
+    $('document-export-configure').hidden = !!pendingMetadata || !!knownExport || complete || !!exportRequest && !exportFolderNeeded;
+    $('document-export-configure').disabled = busy;
     $('document-export-abandon-option').hidden = !pendingMetadata || complete;
     $('document-export-abandon').hidden = !pendingMetadata || complete;
     controls();
   }
-  function openExportDialog() {
+  async function openExportDialog() {
     if (busy || !stateFresh || dirty()) return;
     const rows = documents.filter(row => selected.has(row.document_id));
-    if (!exportRequest && (!rows.length || rows.some(row => !row.approved))) return;
+    if (!exportRequest && (!rows.length || !raw() && rows.some(row => !row.approved))) return;
     dialogSelection = exportRequest ? exportRequest.selection.map(row => ({ ...row })) : rows.map(({ document_id, revision, output_sha256 }) => ({ document_id, revision, output_sha256 }));
     dialogMode = pendingMetadata?.processing_mode || rows[0]?.processing_mode || (raw() ? 'markdown-only' : 'markdown-and-anonymize');
+    const expected = batchId, connection = connectionGeneration;
+    const ownership = ++busyGeneration; busy = true; render();
+    if (dialogMode !== 'markdown-only' && !exportRequest) status(`Exportvorschau für ${dialogSelection.length} Datei${dialogSelection.length === 1 ? '' : 'en'} wird lokal geprüft. Es wird noch keine KI-Kopie erstellt.`);
+    try {
+      const plan = await invoke('preview_document_export', { batchId: expected, operationId: exportRequest?.operationId || operationId(), selection: dialogSelection });
+      if (expected !== batchId || connection !== connectionGeneration) return;
+      if (plan?.ok !== true || plan.processing_mode !== dialogMode || plan.local_ui_only !== true || plan.external_disclosure !== false ||
+          !Array.isArray(plan.files) || plan.files.length !== dialogSelection.length || plan.files.some((file, index) =>
+            typeof file.name !== 'string' || !file.name.endsWith('.md') || /[\p{Cc}/\\]/u.test(file.name) || file.sha256 !== dialogSelection[index].output_sha256))
+        throw Error('AI_EXPORT_INVALID');
+      $('document-export-files').replaceChildren(...plan.files.map(file => make('li', file.name)));
+      dialogFiles = plan.files.map(file => ({ name: file.name, sha256: file.sha256 }));
+    } catch (error) { if (expected === batchId && connection === connectionGeneration) showError(error, rows.map(row => row.name).join(', ')); return; }
+    finally { if (ownership === busyGeneration && expected === batchId) { busy = false; render(); } }
+    if (!exportRequest) exportFolderNeeded = false;
     $('document-export-preview').hidden = false; $('document-export-result').hidden = true;
     $('document-export-confirm').hidden = false;
     $('document-export-close').textContent = 'Abbrechen';
@@ -444,12 +622,52 @@
   async function exportRows() {
     if (!stateFresh || dirty() || !validSelection(dialogSelection)) return;
     const rows = documents.filter(row => selected.has(row.document_id));
-    if (busy || !batchId || !exportRequest && (!rows.length || rows.some(row => !row.approved))) return;
+    if (busy || !batchId || !exportRequest && (!rows.length || !raw() && rows.some(row => !row.approved))) return;
     const connection = connectionGeneration;
     const expected = batchId;
+    if (raw() && !exportRequest) {
+      // This path is entered only by the explicit modal confirmation, never
+      // by opening a preview, loading a document or selecting a checkbox.
+      if (dialogMode !== 'markdown-only' || rows.some(row => row.processing_mode !== 'markdown-only') || !dialogFiles || rows.length !== dialogSelection.length ||
+          dialogSelection.some(value => !rows.some(row => row.document_id === value.document_id &&
+            row.revision === value.revision && row.output_sha256 === value.output_sha256))) { showError(Error('DOCUMENT_REVIEW_STALE')); return; }
+      const ownership = ++busyGeneration; busy = true; render();
+      $('document-export-configure').disabled = true;
+      status('Die ausgewählten Markdown-Stände werden für diese zusätzliche Kopie bestätigt …');
+      try {
+        const prepared = [];
+        for (const binding of dialogSelection) {
+          const row = documents.find(row => row.document_id === binding.document_id);
+          let result = row;
+          if (!row.approved) {
+            result = await invoke('decide_document_review', { batchId: expected, documentId: row.document_id,
+              decision: { action: 'approve', revision: binding.revision, output_sha256: binding.output_sha256,
+                ranges: [], operation_id: operationId() } });
+            if (!decisionAcknowledged(result, row, 'approve') || result.output_sha256 !== binding.output_sha256)
+              throw Error('DOCUMENT_REVIEW_STALE');
+            documents = documents.map(value => value.document_id === row.document_id ? { ...result } : value);
+          }
+          if (expected !== batchId || connection !== connectionGeneration) return;
+          prepared.push({ document_id: result.document_id, revision: result.revision, output_sha256: result.output_sha256 });
+        }
+        const plan = await invoke('preview_document_export', { batchId: expected, operationId: operationId(), selection: prepared });
+        if (expected !== batchId || connection !== connectionGeneration) return;
+        if (plan?.ok !== true || plan.processing_mode !== 'markdown-only' || plan.local_ui_only !== true || plan.external_disclosure !== false ||
+            JSON.stringify(plan.files) !== JSON.stringify(dialogFiles)) throw Error('DOCUMENT_REVIEW_STALE');
+        dialogSelection = prepared;
+      } catch (error) {
+        if (expected === batchId && connection === connectionGeneration) {
+          clearText(); await reload().catch(() => {}); showError(error, rows.map(row => row.name).join(', '));
+          $('documents-status').textContent += ' Keine zusätzliche Kopie gestartet. Einzelne Speicherbestätigungen können bereits gespeichert sein. Den aktuellen Stand neu abgleichen und bei Bedarf erneut ausdrücklich speichern.';
+        }
+        return;
+      } finally { if (expected === batchId && ownership === busyGeneration) { busy = false; render(); if ($('document-export-dialog').open) renderExportDialog(); } }
+    }
     if (!exportRequest) exportRequest = { batchId: expected, operationId: operationId(),
       selection: dialogSelection };
-    const ownership = ++busyGeneration; busy = true; render(); status('⚙ Die ausgewählten Textstände werden lokal kopiert und geprüft. Bitte warten.');
+    const ownership = ++busyGeneration; busy = true; render();
+    $('document-export-configure').disabled = true;
+    status('⚙ Die ausgewählten Textstände werden lokal kopiert und geprüft. Bitte warten.');
     $('document-export-result').hidden = false; $('document-export-result').textContent = $('documents-status').textContent;
     try {
       const request = exportRequest;
@@ -469,29 +687,60 @@
       if (receipt.ok !== true || receipt.operation_id !== result.operation_id || receipt.exported_count !== result.exported_count ||
           receipt.folder_name !== result.folder_name || receipt.local_ui_only !== true || receipt.external_disclosure !== false)
         throw Error('AI_EXPORT_INCOMPLETE');
+      confirmedCopy = { batchId: expected, selection: request.selection.map(row => ({ ...row })) };
       exportRequest = null; knownExport = null; pendingMetadata = null; await reload(); status(exportSuccess(result));
       $('document-export-title').textContent = dialogMode === 'markdown-only' ? 'Markdown-Kopie gespeichert' : 'Export fertig';
+      $('document-export-target').textContent = `Gebundener Ergebnisordner → ${namespace(dialogMode)} → ${result.folder_name} (abgeschlossen)`;
       $('document-export-preview').hidden = true; $('document-export-confirm').hidden = true;
+      $('document-export-configure').hidden = true;
+      exportFolderNeeded = false;
       $('document-export-abandon-option').hidden = true; $('document-export-abandon').hidden = true;
       $('document-export-close').textContent = 'Schließen';
     } catch (error) { if (connection === connectionGeneration && expected === batchId) {
       if (knownExport) status(`${exportSuccess(knownExport)} Die Kopie ist bestätigt; nur die Empfangsbestätigung konnte nicht abschließend abgeglichen werden. „Empfang erneut abgleichen“ verwendet denselben Export.`, true);
-      else { await reload().catch(() => {}); showError(error, rows.map(row => row.name).join(', ')); }
+      else { await reload().catch(() => {}); showError(error, rows.map(row => row.name).join(', ')); exportFolderNeeded = exportFolderError(error); }
       renderExportDialog();
     } }
-    finally { if (expected === batchId) { if (ownership !== busyGeneration) return; busy = false; render(); $('document-export-result').textContent = $('documents-status').textContent; } }
+    finally { if (expected === batchId) { if (ownership !== busyGeneration) return; busy = false; render(); if (exportRequest) renderExportDialog(); $('document-export-result').textContent = $('documents-status').textContent; } }
+  }
+  async function configureExportFolder() {
+    if (busy || !batchId || !$('document-export-dialog').open || $('document-export-preview').hidden ||
+        pendingMetadata || knownExport || exportRequest && !exportFolderNeeded) return;
+    const expected = batchId, connection = connectionGeneration, ownership = ++busyGeneration;
+    busy = true; renderExportDialog();
+    $('document-export-result').hidden = false;
+    $('document-export-result').textContent = 'Wähle den Ergebnisordner im lokalen Systemdialog. Es wird noch keine Datei exportiert.';
+    try {
+      const result = await invoke('configure_results');
+      if (expected !== batchId || connection !== connectionGeneration) return;
+      if (result?.cancelled === true) {
+        $('document-export-result').textContent = 'Ordnerwahl abgebrochen. Der Export wurde nicht gestartet; die Freigabe bleibt erhalten.';
+      } else if (result?.ok === true && result.configuration_changed === true && result.local_ui_only === true && result.external_disclosure === false &&
+          typeof result.result_folder === 'string' && result.result_folder.length > 0) {
+        exportFolderNeeded = false;
+        $('document-export-result').textContent = `Ergebnisordner sicher gewählt. Die Einstellung gilt auch für künftige Läufe; vorhandene Exporte bleiben am bisherigen Ort. Der bestehende Lauf und die Freigabe bleiben erhalten. Wähle „${exportRequest ? 'Export erneut versuchen' : dialogMode === 'markdown-only' ? 'Kopie speichern' : 'Exportieren'}“; es startet kein automatischer Export.`;
+      } else throw Error('AI_EXPORT_CONFIGURATION_REQUIRED');
+    } catch (error) {
+      if (expected === batchId && connection === connectionGeneration) {
+        showError(error);
+        $('document-export-result').textContent = $('documents-status').textContent;
+      }
+    } finally {
+      if (expected === batchId && ownership === busyGeneration) { busy = false; renderExportDialog(); }
+    }
   }
   window.__DATASECURE_DOCUMENTS__ = Object.freeze({
     invalidateConnection() {
-      connectionGeneration++; busyGeneration++; busy = false; ticket++; stateFresh = false; selected.clear();
+      connectionGeneration++; busyGeneration++; busy = false; bulkReviewProgress = null; loading = false; ticket++; stateFresh = false; selected.clear();
+      if ($('document-export-dialog').open) $('document-export-dialog').close();
       if (detail && raw() && dirty()) recoveryDraft = { document_id: detail.document_id, name: detail.name,
         revision: detail.revision, output_sha256: detail.output_sha256, text: $('document-markdown').value };
       // An export intent remains durable on the server. Forget its local
       // acknowledgement, not its operation; reload discovers that same receipt.
-      knownExport = null; documents = []; clearText(); renderReceipts(); render();
+      knownExport = null; confirmedCopy = null; documents = []; contentNotices = null; clearText(); renderReceipts(); render();
       status('Verbindung unterbrochen. Aktuelle Stände nach der Wiederverbindung neu laden; keine Entscheidung oder Exportbestätigung wird automatisch gesendet.', true);
     },
-    async open(id, options = {}) { if (busy || dirty()) return; batchId = id; documents = []; runMode = null; stateFresh = false; selected.clear(); exportRequest = null; knownExport = null; pendingMetadata = null; clearText(); renderUnavailable({}); renderReceipts(); render();
+    async open(id, options = {}) { if (busy || dirty()) return; batchId = id; bulkReviewProgress = null; confirmedCopy = null; documents = []; contentNotices = null; filterMode = 'notices'; runMode = null; processingComplete = false; stateFresh = false; selected.clear(); exportRequest = null; knownExport = null; pendingMetadata = null; exportFolderNeeded = false; clearText(); renderUnavailable({}); renderReceipts(); render();
       $('documents-run').textContent = `Lauf ${id.slice(0, 8)}`; status('Private Dokumentprüfstände werden geladen …');
       try {
         if (!await reload() || batchId !== id || options.exportPreview !== true) return;
@@ -500,11 +749,11 @@
         // a partial export or an automatic replay of an older pending intent.
         if (stateFresh && runMode === 'markdown-and-anonymize' && !exportRequest && documents.length &&
             documents.every(row => row.approved) && $('documents-unavailable').hidden) {
-          selected = new Set(documents.map(row => row.document_id)); render(); openExportDialog();
+          selected = new Set(documents.map(row => row.document_id)); render(); await openExportDialog();
         } else status('Der gespeicherte Stand wurde neu geladen. Die vollständige Exportvorschau ist noch nicht verfügbar; offene Prüfstände oder Exportaufträge zuerst abgleichen.', true);
       } catch (error) { if (batchId === id) showError(error); }
     },
-    async close() { if (busy || dirty()) { if (dirty()) status('Ungespeicherte Markdown-Korrektur zuerst speichern oder ausdrücklich verwerfen.'); return false; } connectionGeneration++; ticket++; batchId = null; documents = []; runMode = null; selected.clear(); exportRequest = null; knownExport = null; pendingMetadata = null;
+    async close() { if (busy || dirty()) { if (dirty()) status('Ungespeicherte Markdown-Korrektur zuerst speichern oder ausdrücklich verwerfen.'); return false; } connectionGeneration++; ticket++; loading = false; bulkReviewProgress = null; batchId = null; confirmedCopy = null; documents = []; contentNotices = null; filterMode = 'notices'; runMode = null; selected.clear(); exportRequest = null; knownExport = null; pendingMetadata = null; exportFolderNeeded = false;
       if ($('document-export-dialog').open) $('document-export-dialog').close();
       clearText(); renderReceipts(); render(); await invoke('close_document_reviews').catch(() => {}); return true; }
   });
@@ -520,7 +769,7 @@
       // Preserve the draft separately while loading the actual committed text.
       recoveryDraft = null; await loadDetail(row); recoveryDraft = draft;
       if (detail && row) {
-        if (loadedMarkdown === draft.text) { recoveryDraft = null; status(`${draft.name}: Der gespeicherte Text stimmt mit deinem Korrekturentwurf überein. Bitte erneut prüfen und freigeben.`); }
+        if (loadedMarkdown === draft.text) { recoveryDraft = null; status(`${draft.name}: Der gespeicherte Text stimmt mit deinem Korrekturentwurf überein. Du kannst bei Bedarf eine zusätzliche Markdown-Kopie speichern.`); }
         else if (row.revision === draft.revision && row.output_sha256 === draft.output_sha256) {
           $('document-markdown').value = draft.text; recoveryDraft = null; status(`${draft.name}: Korrekturentwurf wiederhergestellt, noch nicht gespeichert.`);
         } else status(`${draft.name}: Der gespeicherte Stand weicht ab. Dein Entwurf bleibt zum Vergleichen und Kopieren erhalten; er wird nicht automatisch darübergeschrieben.`, true);
@@ -530,14 +779,23 @@
     if ($('document-export-dialog').open) renderExportDialog();
   });
   $('document-recovery-discard').addEventListener('click', () => { if (busy) return; recoveryDraft = null; controls(); });
-  $('documents-all').addEventListener('change', () => { if (busy || !stateFresh || exportRequest) return; selected = new Set($('documents-all').checked ? documents.map(row => row.document_id) : []); render(); });
+  $('documents-filter').addEventListener('change', () => {
+    if (busy || !stateFresh || !raw() || !contentNotices || exportRequest || dirty()) { controls(); return; }
+    const next = $('documents-filter').value;
+    if (!['notices', 'edited', 'all', 'without'].includes(next) || next === filterMode) return;
+    filterMode = next; selected.clear();
+    if (detail && !visibleDocuments().some(row => row.document_id === detail.document_id)) clearText();
+    render(); status(`${visibleDocuments().length} von ${documents.length} Markdown-Dateien angezeigt. Die vorherige Auswahl wurde aufgehoben. Häkchen und „Vorherige/Nächste Datei“ gelten nur für diese Ansicht.`);
+  });
+  $('documents-all').addEventListener('change', () => { if (busy || !stateFresh || exportRequest) return;
+    const shown = visibleDocuments(); selected = new Set($('documents-all').checked ? shown.map(row => row.document_id) : []); render(); });
   $('entities-all').addEventListener('change', () => { if (busy || exportRequest) return;
     entitySelected = new Set($('entities-all').checked ? entityRows.filter(row => !row.disabled).map(row => row.entity_id) : []); controls(); });
   $('entities-apply').addEventListener('click', applyEntities);
   $('entities-scope').addEventListener('change', controls);
   $('entities-previous').addEventListener('click', () => changeEntityPage(-1)); $('entities-next').addEventListener('click', () => changeEntityPage(1));
   for (const [id, delta] of [['document-previous', -1], ['document-next', 1]]) $(id).addEventListener('click', () => {
-    const position = documents.findIndex(row => row.document_id === detail?.document_id), next = documents[position + delta];
+    const shown = visibleDocuments(), position = shown.findIndex(row => row.document_id === detail?.document_id), next = shown[position + delta];
     if (position >= 0 && next) loadDetail(next);
   });
   $('documents-approve').addEventListener('click', () => decideRows('approve', documents.filter(row => selected.has(row.document_id))));
@@ -545,6 +803,7 @@
   $('documents-export').addEventListener('click', openExportDialog);
   $('documents-identities').addEventListener('click', () => openIdentities());
   $('document-export-confirm').addEventListener('click', exportRows);
+  $('document-export-configure').addEventListener('click', configureExportFolder);
   $('document-export-close').addEventListener('click', () => $('document-export-dialog').close());
   $('document-export-dialog').addEventListener('keydown', event => {
     if (event.key !== 'Tab') return;
@@ -583,8 +842,59 @@
     decideRows('correct', [detail], [{ start, end: oldEnd, replacement: text.slice(start, end) }]);
   });
   $('document-redact').addEventListener('click', () => { const node = $('document-markdown');
-    if (!detailCurrent() || node.selectionStart === node.selectionEnd) { status('Im geplanten Markdown zuerst den zusätzlichen Textbereich markieren.'); return; }
-    decideRows('redact', [detail], [{ start: node.selectionStart, end: node.selectionEnd }]); });
-  $('document-restore').addEventListener('click', () => { if (detail) decideRows('restore_base', [detail]); });
+    if (!detailCurrent()) { actionStatus('Bitte zuerst links ein aktuelles Dokument öffnen.', true); return; }
+    const start = node.selectionStart, end = node.selectionEnd;
+    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start >= end) {
+      const message = 'Bitte den zusätzlich zu maskierenden Text im rechten Markdown-Feld markieren. Eine Markierung links im Originaltext genügt nicht.';
+      actionStatus(message, true); status(message, true); return;
+    }
+    pendingDocumentChange = { action: 'redact', row: { ...detail }, ranges: [{ start, end }] };
+    $('document-change-confirm-text').textContent = `${end - start} Zeichen in ${detail.name} markiert. Noch nichts geändert. „Maskierung jetzt speichern“ ersetzt nur diese Stelle, erzeugt einen neuen Prüfstand und hebt die Freigabe dieser Datei auf. Bereits erstellte KI-Kopien bleiben unverändert.`;
+    $('document-change-save').textContent = 'Maskierung jetzt speichern';
+    controls(); $('document-change-save').focus();
+    actionStatus('Maskierung vorbereitet, noch nicht gespeichert. Bitte die Auswirkung prüfen und ausdrücklich bestätigen oder abbrechen.');
+  });
+  $('document-restore').addEventListener('click', () => {
+    if (!detailCurrent() || raw()) return;
+    pendingDocumentChange = { action: 'restore_base', row: { ...detail }, ranges: [] };
+    $('document-change-confirm-text').textContent = `${detail.name}: Noch nichts geändert. Das Speichern stellt den automatisch erzeugten Basisstand dieser Datei wieder her und verwirft ihre späteren Text- und Entitätenänderungen. Die Freigabe wird aufgehoben; frühere KI-Kopien bleiben unverändert.`;
+    $('document-change-save').textContent = 'Basisstand jetzt wiederherstellen';
+    controls(); $('document-change-save').focus();
+    actionStatus('Wiederherstellung vorbereitet, noch nicht gespeichert. Bitte ausdrücklich bestätigen oder abbrechen.');
+  });
+  $('document-change-cancel').addEventListener('click', () => {
+    if (busy) return;
+    pendingDocumentChange = null; controls(); $('document-redact').focus();
+    actionStatus('Änderung abgebrochen. Der gespeicherte Textstand bleibt unverändert.');
+  });
+  $('document-change-save').addEventListener('click', async () => {
+    const pending = pendingDocumentChange;
+    if (!pending || !detailCurrent() || !sameDocumentBinding(detail, pending.row) || busy) {
+      pendingDocumentChange = null; controls();
+      actionStatus('Der vorbereitete Textstand ist nicht mehr aktuell. Bitte die Datei neu öffnen und die Änderung erneut prüfen.', true);
+      return;
+    }
+    pendingDocumentChange = null; controls();
+    actionStatus('Änderung wird lokal gespeichert …');
+    const result = await decideRows(pending.action, [detail], pending.ranges);
+    if (!result || batchId !== result.batchId) {
+      actionStatus('Änderung nicht sicher bestätigt. Bitte den Status oben und den gespeicherten Stand prüfen; nicht blind erneut klicken.', true);
+      return;
+    }
+    const updated = documents.find(row => sameDocumentBinding(row, result.updates[0]));
+    if (!stateFresh || !updated) {
+      actionStatus('Speicherbestätigung erhalten, aber der aktuelle Textstand konnte nicht eindeutig angezeigt werden. Bitte den gespeicherten Stand neu laden.', true);
+      return;
+    }
+    await loadDetail(updated);
+    if (!detail || !sameDocumentBinding(detail, updated)) {
+      actionStatus('Änderung gespeichert, der neue Text konnte aber nicht geöffnet werden. Bitte den gespeicherten Stand neu laden.', true);
+      return;
+    }
+    const message = pending.action === 'redact'
+      ? `${updated.name}: Zusätzliche Maskierung in Stand ${updated.revision} gespeichert. Prüfe rechts den Platzhalter [MANUAL_REDACTION]. Diese Datei ist noch nicht freigegeben; ein KI-Export wurde nicht gestartet.`
+      : `${updated.name}: Technisch geprüfter Basisstand als Stand ${updated.revision} gespeichert. Prüfe den Text erneut und gib diese Datei bei Bedarf ausdrücklich frei. Frühere KI-Kopien bleiben unverändert.`;
+    actionStatus(message); status(message);
+  });
   controls();
 })();

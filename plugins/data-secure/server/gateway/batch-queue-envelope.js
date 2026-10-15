@@ -3,19 +3,31 @@
 const path = require('node:path');
 const { RESOURCE_LIMITS } = require('../resource-limits');
 const { MODES, validateProcessingMode } = require('../core/processing-mode');
+const { assertLegacyContentOperation } = require('../core/content-options');
+const { assertContentStartOwner, contentStartOptions } = require('./content-start-boundary');
 
 const LOCAL_QUEUE_SCHEMA_INVALID = 'LOCAL_QUEUE_SCHEMA_INVALID';
 const PURPOSE_ERROR_CODES = Object.freeze([
-  'PROCESSING_MODE_INVALID', 'PROCESSING_MODE_FORBIDDEN', 'PRODUCT_CHANNEL_INVALID', 'RESULT_NAMING_MODE_INVALID'
+  'PROCESSING_MODE_INVALID', 'PROCESSING_MODE_FORBIDDEN', 'PRODUCT_CHANNEL_INVALID', 'RESULT_NAMING_MODE_INVALID',
+  'CONTENT_OPTIONS_INVALID', 'CONTENT_OPTIONS_FORBIDDEN', 'CONTENT_OPTIONS_NOT_READY', 'DOCUMENT_REVIEW_INVALID'
 ]);
 
-// A distinct message type makes old workers reject conversion requests rather
-// than silently ignoring an unknown purpose field and anonymizing the sources.
+// Distinct content-intake message types make old workers reject both new
+// purposes instead of silently interpreting a new contract as a legacy run.
 function validateBatchMessagePurpose(message, productChannel, existingMode) {
+  assertContentStartOwner(message);
   const type = message?.type;
-  const conversion = ['start-local-markdown-intake', 'start-local-markdown-batch'].includes(type);
-  const legacy = ['start-local-intake', 'start-local-batch'].includes(type);
+  const contentMarkdownIntake = type === 'start-local-content-markdown-intake';
+  const contentAnonymizeIntake = type === 'start-local-content-anonymize-intake';
+  const contentIntake = contentMarkdownIntake || contentAnonymizeIntake;
+  const conversion = contentMarkdownIntake || ['start-local-markdown-intake', 'start-local-markdown-batch'].includes(type);
+  const legacy = contentAnonymizeIntake || ['start-local-intake', 'start-local-batch'].includes(type);
   if (!conversion && !legacy) throw Object.assign(new Error('PROCESSING_MODE_INVALID'), { code: 'PROCESSING_MODE_INVALID' });
+  if (contentIntake) {
+    if (!contentStartOptions(message, 'content_options', productChannel))
+      throw Object.assign(new Error('CONTENT_OPTIONS_INVALID'), { code: 'CONTENT_OPTIONS_INVALID' });
+  } else assertLegacyContentOperation(message, 'content_options', productChannel,
+    type.endsWith('-intake') ? 'start' : 'resume');
   const mode = validateProcessingMode(Object.hasOwn(message, 'processing_mode')
     ? message.processing_mode : MODES.ANONYMIZE, productChannel);
   if ((conversion && mode !== MODES.MARKDOWN) || (legacy && mode !== MODES.ANONYMIZE) ||

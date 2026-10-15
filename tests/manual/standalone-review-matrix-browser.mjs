@@ -13,7 +13,7 @@ const contacts = buildContactBatch(['one.png', 'two.png'].map((source_label, ind
     image: { schema: 'datasecure-ocr-contact-image/1', source_width: 4, source_height: 3, x: 0, y: 0, width: 4, height: 3,
       png_base64: encodePng({ width: 4, height: 3, rgba: Buffer.alloc(48, index ? 180 : 255) }).toString('base64') } }] } }))).draft;
 const browser = await chromium.launch({ channel: process.platform === 'win32' ? 'msedge' : 'chrome', headless: true });
-async function scenario(draft, work) {
+async function scenario(draft, work, { embedded = false } = {}) {
   const preview = await startReviewPreview({ draft });
   const context = await browser.newContext({ viewport: { width: 1500, height: 1000 }, colorScheme: 'light' });
   try {
@@ -22,7 +22,7 @@ async function scenario(draft, work) {
     await context.addInitScript({ path: require.resolve('axe-core/axe.min.js') });
     const page = await context.newPage(), errors = [];
     page.on('pageerror', error => errors.push(String(error)));
-    await page.goto(`${preview.url}/review.html`); await page.locator('#review').waitFor({ state: 'visible' });
+    await page.goto(`${preview.url}/review.html${embedded ? '?embedded=1' : ''}`); await page.locator('#review').waitFor({ state: 'visible' });
     await work(page); assert.deepEqual(errors, []);
   } finally { await context.close(); await preview.close(); }
 }
@@ -37,14 +37,39 @@ try {
     await page.locator('#select-visible').check(); await page.locator('#bulk-treatment').selectOption('redact_organization');
     assert.equal(await page.locator('#release').isEnabled(), false, 'Mode is not a decision');
     await page.locator('#bulk-apply').click();
+    assert.equal(await page.locator('#matrix-body tr').count(), 0, 'Staged rows leave the open work queue');
+    assert.equal(await page.locator('#release').isEnabled(), true);
+    assert.deepEqual(await page.evaluate(() => window.previewSubmissions), [], 'Apply stages only; it must not submit');
+    await page.locator('#matrix-filter').selectOption('done');
     assert.match(await page.locator('#output-context').textContent(), /\[UNTERNEHMEN_…\]/u);
-    assert.equal(await page.locator('#matrix-body tr').count(), 1, 'Applied rows stay visible');
+    assert.equal(await page.locator('#matrix-body tr').count(), 1, 'Staged rows remain available for deliberate comparison');
+    await page.locator('.matrix-extra > summary').click();
     await page.locator('#undo').click(); assert.equal(await page.locator('#release').isEnabled(), false);
     const audit = await page.evaluate(() => axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa'] } }));
     assert.deepEqual(audit.violations.map(item => item.id), []);
   });
   await scenario(contacts, async page => {
     const rows = page.locator('#matrix-body tr'), input = index => rows.nth(index).locator('input[type=text]');
+    assert.match(await page.locator('#matrix-guide').textContent(), /keine 2 Konvertierungsfehler/u);
+    assert.equal(await page.locator('#matrix-document option').count(), 3);
+    await page.setViewportSize({ width: 390, height: 850 });
+    if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)) {
+      console.error('390px overflow', await page.evaluate(() => [...document.querySelectorAll('*')]
+        .filter(element => element.getBoundingClientRect().right > innerWidth + 1)
+        .slice(0, 12).map(element => ({ tag: element.tagName, id: element.id, className: element.className,
+          right: Math.round(element.getBoundingClientRect().right) }))));
+    }
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'OCR document filter reflows at 390px');
+    await page.setViewportSize({ width: 1500, height: 1000 });
+    const contactAudit = await page.evaluate(() => axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa'] } }));
+    assert.deepEqual(contactAudit.violations.map(item => item.id), [], 'Contact review retains labelled, accessible controls');
+    await page.locator('#matrix-document').selectOption('1');
+    assert.equal(await rows.count(), 1);
+    await page.locator('#select-visible').check();
+    await page.locator('#matrix-document').selectOption('2');
+    assert.equal(await rows.count(), 1);
+    assert.equal(await page.locator('#select-visible').isChecked(), false, 'Hidden document selection is cleared');
+    await page.locator('#matrix-document').selectOption('all');
     await input(0).fill('first@new.invalid'); await input(1).fill('not an email');
     await page.locator('#select-visible').check(); await apply(page, 'correct_contact');
     assert.match(await page.locator('#summary').textContent(), /^0 von/u);
@@ -59,6 +84,7 @@ try {
     assert.equal(await page.locator('#matrix-filter').inputValue(), 'all');
     assert.equal(await page.locator('#select-visible').isChecked(), false);
     assert.equal(await input(1).inputValue(), 'changed@new.invalid');
+    await page.locator('.matrix-extra > summary').click();
     await page.locator('#undo').click();
     assert.equal(await input(1).inputValue(), 'second@new.invalid', 'Undo restores the pending inputs before the whole Apply');
     assert.equal(await page.locator('#release').isEnabled(), false);
@@ -90,5 +116,29 @@ try {
     const directory = path.resolve('dist/engineering-review-bulk-browser-20261007'); fs.mkdirSync(directory, { recursive: true });
     await page.screenshot({ path: path.join(directory, 'review-bulk.png'), fullPage: true });
   });
+  await scenario(syntheticDraft(), async page => {
+    await page.setViewportSize({ width: 1366, height: 580 });
+    const pinned = page.locator('.matrix-actions-pinned');
+    assert.equal(await pinned.evaluate(element => getComputedStyle(element).position), 'sticky');
+    await page.evaluate(() => window.scrollTo(0, 220));
+    const bounds = await pinned.boundingBox();
+    assert.ok(bounds && bounds.y >= -1 && bounds.y < 20, 'Selection and Apply stay at the top of a short embedded review');
+    assert.ok(bounds.height < 220, 'Action area leaves room for the finding list and comparison');
+    assert.ok(await page.locator('#select-filtered').isVisible());
+    assert.ok(await page.locator('#bulk-apply').isVisible());
+    await page.locator('#select-filtered').focus();
+    assert.ok(await page.evaluate(() => { const r = document.activeElement.getBoundingClientRect();
+      return r.top >= 0 && r.bottom <= innerHeight; }), 'Keyboard focus remains visible in the pinned action area');
+    const directory = path.resolve('dist/engineering-review-bulk-browser-20261007'); fs.mkdirSync(directory, { recursive: true });
+    await page.screenshot({ path: path.join(directory, 'review-embedded-580px.png') });
+    await page.locator('#select-visible').check();
+    await apply(page, 'confirm_contact');
+    assert.ok(await page.evaluate(() => { const focused = document.activeElement.getBoundingClientRect();
+      const actions = document.querySelector('.matrix-actions-pinned').getBoundingClientRect();
+      return document.activeElement.id === 'exact-text' && focused.top >= actions.bottom - 1; }),
+    'After Apply, focus on the next comparison is not covered by the sticky actions');
+    await page.setViewportSize({ width: 683, height: 580 });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Embedded review reflows at 200%-equivalent width');
+  }, { embedded: true });
   console.log('REVIEW BULK BROWSER PASS: actual HTML/JS/CSS, single explicit Apply, no duplicate editors/actions, different per-row corrections, atomic validation, Undo, grouped contexts, privacy clearing, axe, pagination and 390–1920px reflow; synthetic IPC, no native claim');
 } finally { await browser.close(); }

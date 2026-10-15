@@ -1,6 +1,280 @@
 # Evidence-Matrix für aktive Arbeit
 
-Stand: 11.10.2026 · 3.2.0-rc159 · Standalone RC159 auf allen vier Zielplattformen veröffentlicht · Cowork bleibt RC151
+Stand: 14.10.2026 · 3.2.0-rc160 · lokale Erweiterung in Prüfung · veröffentlicht Standalone RC159 / Cowork RC151
+
+**BL-010.53.6/.7/.8, neuer Anonymisierungsweg r19:** Eigener
+`content-v1`-Zweckstart, private Zuordnung, Review-/Freigabe- und
+revisionsgebundener KI-Export sind in einem exakten lokalen Windows-ZIP
+paketiert. Vollständiger ZIP-Verifier und isolierter Sidecar-/Worker-Smoke
+Exit 0: vier anonymisierte Ergebnisse, ein benanntes fehlerhaftes CSV,
+4.500 Fundstellen in der ersten Gruppe, Vertagen und frischer Prozess,
+laufweite Personen-/Firmenentscheidung, genau ein ausgewählter neutraler
+KI-Export; Raw-Profil mit OCR aus/an und exakten Korrektur-/Kopierbytes
+ebenfalls grün. `test-standalone-history.js` sichert die Verlaufsprojektion
+ohne erneuten Vollstatus pro Altjournal ab; r19-Paketsmoke besteht nach dem
+vorherigen `get_run_history`-Rennfehler. Vollständige aktuelle Quell-/Rust-
+Suite Exit 0; 118 Windows-Rusttests bestanden, drei Helper bewusst ignoriert.
+Workspace- und Review-Headless-Browserprüfungen mit tatsächlichem HTML/CSS/JS,
+synthetischem IPC, Axe, Fokus/Dialog und 390–1920-px-Reflow bestehen.
+Native Windows-GUI, Mac-Hosts und menschliche Inhaltsprüfung
+sind **nicht** durch Sidecar-/Worker-Evidenz ersetzt.
+
+**BL-010.53.2/.3/.7/.8, OCR-an-Anwenderkorrektur:** 52 vom Anwender
+beobachtete Inhaltshinweise bei 133 OCR-an-Ergebnissen sind die Grundlage der
+neuen Vorauswahl, aber keine fachliche OCR-Referenzmessung. E0-
+Implementierung bindet Hinweise an Journal-ID/-Name und vollständige Zähler;
+bei fehlendem Beleg alle Dateien zeigen. Filterwechsel leert die Auswahl,
+Kopiervorschau nutzt nur angezeigte Zeilen. Ein gespeicherter Textunterschied
+bleibt nach Neustart sichtbar; reine Kopierzustimmung oder wiederhergestellter
+Basistext zählen nicht als Korrektur. E0-Gegenproben: 51 Dokumentfrontend-,
+41 Store-, 69 Workspace-, 41 Matrixfrontend- und 25 Projektionsgruppen,
+History-Komposition sowie tatsächliches HTML/CSS/JS mit synthetischem IPC,
+Axe und 390–1280px-Reflow. Das OCR-Kontakt-Opt-in wurde für 16 Dateien/97
+Werte sprachlich klargestellt: keine 97 Konvertierungsfehler, sondern eine
+freiwillig gewählte zusätzliche Vorabschlussprüfung aller Kandidaten.
+Dateifilter und gruppierte Auswahl verändern keine bereits vorgemerkten
+Entscheidungen; dafür bestehen Frontend- und echte Browsergegenproben.
+Exaktes Windows-r4-ZIP: Releasebuild, vollständiger Verifier und isolierter
+Sidecar-/Worker-Smoke in beiden OCR-Modi einschließlich Kontaktkorrektur,
+Neustart und Raw-Kopie bestanden. 118 Rusttests (3 ignorierte), Clippy und
+die vollständige Headless-Produktsuite (232 Dateien) bestanden. Native
+Windows-Anwenderprobe und Mac-Evidenz bleiben offen.
+
+**BL-010.53.2/.3/.7/.8, RC160-r3 Bedienkorrektur:** 49 Dokumentfrontend-,
+69 Workspace-/41 Dokumentstore-Gruppen und reale History-Komposition bestehen.
+Raw-Vorschau ohne Kopierbestätigung und echte verweigerte unbestätigte Exporte;
+gültige neue ACK-Revisionen, Lost-/Teil-/falscher ACK, veränderter Dateinamenplan,
+späte Ladeantwort, gelbe gebundene Auslassungen, laufgebundener Bereitstellungs-
+hinweis geprüft. Echter Headless-Browser mit synthetischem IPC: sichtbarer Loader,
+geschlossene Gruppen/Dateien, Raw ohne Freigabebutton, aktiver Start/Abschluss,
+eine Abschlusskarte, primärer Ergebnisbutton, Kopierdialog, Axe/Reflow390–1280px.
+Unabhängiger read-only Sicherheitsreview ohne neuen reproduzierten Blocker.
+Logs `dist/workflow-rc160-usability-*.log`, Bilder
+`dist/workflow-usability-design-20261014-r3/`. Neuer Windows-Releasebuild,
+vollständiger Verifier und Sidecar aus genau dem r3-ZIP bestanden
+(`usability-package-{build,verify,smoke}.log`). Raw-Dokumentklassifikation,
+Vorschau ohne Kopierzustimmung, tatsächliche Exportverweigerung vor Zustimmung,
+OCR-aus/-an, Korrektur, Originalnamen, exakte Kopie und Neustart geprüft.
+SHA-256 und Paketstatus in CURRENT_STATE; keine native Windows-/Mac-Bedienevidenz.
+
+Nachtrag r3: Gesamteingang mit 232 Headless-Dateien Exit 0, gezielte finale
+Workspace-/Frontend-/Browser-/24 Projektionsgruppen separat bestanden.
+Erster Anwenderbericht/Screenshot von RC160-r3 bestätigt die neue grüne
+133/116/17-OCR-aus-Abschlussansicht samt 35 eigenständigen Inhaltshinweisen.
+Begrenzte Windows-Bedienprobe, keine umfassende Inhalts-/UI-/Mac-Abnahme.
+
+**BL-010.53.2/.3/.7/.8, Markdown-Abschlusskorrektur 14.10.2026:**
+Erwartete OCR-aus-Auslassungen aus unabhängig gebundenem neuen Raw-Journal
+werden nur in der Anzeige von technischen Fehlern getrennt. Inhaltswarnungen
+erstellter Dateien sind eigenständig; keine Pflichtfreigabe für Raw-Ergebnisse.
+Ergebnisordner primär, Nachkorrektur optional, keine automatische OCR-Wahl.
+68 Workspace-/23 Projektionsgruppen, History-Policygegenproben und tatsächliche
+Headless-HTML/CSS/JS-/Axe-/Reflowprüfung grün (`completion-workspace-final.log`,
+`completion-design-final.log` unter `dist/workflow-rc160-`). Der gemeldete r1-
+Windows-Anwenderlauf und seine 116 bytegebundenen Dateien belegen nur diesen
+OCR-aus-Fall. R2-Bedienung und Mac bleiben eigene offene Nachweise.
+R2-Windows-Releasebuild, vollständiger Verifier und echter Sidecar aus dem
+frischen ZIP bestanden (`completion-package-build/verify/smoke.log` unter
+`dist/workflow-rc160-`). Gemeinsame OCR-aus-/OCR-an-Raw-Szenarien bestätigen
+neue Klassifizierung sowie unveränderte Nachkorrektur, Kollisionen, zusätzliche
+Kopie und Neustart. SHA-256 in CURRENT_STATE; kein nativer UI-Nachweis.
+Gesamteingang mit 232 Headless-Testdateien Exit 0 abgeschlossen;
+abschließende gezielte UI-/Browser-/Dokumentationsgegenproben separat wiederholt.
+Kein Frozen-Source-Nachweis für diesen Gesamtlauf; kein neues Online-Release.
+
+**Aktueller Raw-Appanschluss BL-010.53 / BL-050.6:** Gemeinsame OCR-Checkbox
+(aus als Standard), geschlossener Rust-/IPC-/Intake-Start, unveränderliche
+Laufoptionen und getrennte Kontaktprüfung implementiert. Tatsächlicher Windows-
+Sidecar: zwölf synthetische Quellen, ohne OCR acht Ergebnisse/vier benannte
+Stopps, mit OCR zwölf Ergebnisse/null Dateifehler; manuelle Korrektur,
+Freigabe, exakter Export mit Originalnamen und Neustart bestanden
+(`dist/workflow-rc160-markdown-format-sidecar-corrected.log`). Rust/Clippy
+bestanden; Headless-Designprüfung einschließlich Checkboxzuständen und
+390–1280px-Reflow bestanden (`markdown-app-rust.log`, `markdown-app-clippy.log`,
+`markdown-workspace-design-final.log`, jeweils `dist/workflow-rc160-`).
+Kein native GUI-Nachweis; Windows-/Mac-Bedienung `NOT_RUN`. Neue Inhaltsoptionen
+für Anonymisierung bleiben gesperrt. Frühere Startsperren unten sind historische
+Teilstände, kein aktueller Raw-Lieferstatus. Frischer Headless-Gesamtlauf:
+232 Dateien, Exit 0, unveränderte Quellen/Tests (`markdown-app-product-frozen-final.log`).
+118 Rusttests, Clippy, 65 Konvertergruppen ohne Skip, sieben Source-/Policy-
+und 19 Windows-native Office-/MD-Gruppen grün. Exaktes Windows-RC160-ZIP im
+frischen Engineeringordner gebaut; 1127 Inventareinträge und SHA-256 geprüft;
+Sidecar aus genau diesem Archiv mit beiden Zwecken sowie neuem Raw-Flow,
+Kontaktkorrektur, Vertagen/Neustart und exaktem korrigiertem Export bestanden.
+Logs `markdown-app-package-build/verify/smoke.log`, jeweils `dist/workflow-rc160-`;
+SHA-256/Abnahmegrenzen in CURRENT_STATE und `PRUEFUNG.json` neben dem ZIP.
+Für lokalen Windows-Anwendertest lieferbar, keine allgemeine Releasefreigabe.
+
+**Inhaltsbausteine BL-010.53 / BL-050.6, 14.10.2026 – teilweise implementiert:**
+49 MD-Syntaxfälle plus Literal-/Privacy-/Provenienzgegenproben, sieben Zweck-/
+Optionsvertragsgruppen, 13 CSV- und 159 PII-Fälle bestanden. 54 tatsächliche
+Windows-Konvertergruppen ohne Skip prüfen gepinnten isolierten Worker, TXT/CSV,
+Office-Supplements, PDF/OCR, Kontaktspannen und Containerabsätze. Unabhängige
+Renderer-/Privacy-Gegenprüfung bestätigt korrigierte Fälle; elf gültige maskierte
+Tabellen und sechs weiterhin gesperrte Strukturfehler getrennt geprüft.
+Frischer vollständiger Headless-Eingang mit 221 Dateien und unveränderten
+Produktquellen grün (`dist/workflow-rc160-product-headless-literals.log`, Exit 0),
+109 Windows-Rusttests, Clippy, Docs und strenge Plugin-/Marketplace-Struktur grün.
+Neu: Zehn reale Optionspersistenzgruppen und neun reine Zweckvertragsgruppen
+bestehen. `/7`-Journal, `/3`-Runanker, `/2`-Basis, `/3`-Intake und `/3`-OCR-HMAC
+prüfen Neustart, gültige Änderungen, Downgrade, Retention und gleiche Textbytes.
+Unabhängige Gegenprüfung bestätigt den begrenzten Persistenz-/Routingscope.
+222-Dateien-Headlesseingang nach der Zweckkorrektur ist grün
+(`dist/workflow-rc160-content-persistence-product-headless-final.log`, Exit 0).
+Der zuvor reproduzierte direkte Raw-Privacybeleg ist korrigiert; Belegerzeugung,
+Privacy-Capture und Review-Veröffentlichung erzwingen die gemeinsame Zweckprüfung.
+Gezielte Nachprüfung: `dist/workflow-rc160-content-purpose-enforcement.log`.
+Danach Vorstartabsicherung ergänzt: tatsächlicher Rust-Bodydecoder, feste
+Bereitschaftsablehnung und Sperren an direkten Legacy-/Resume-/Worker-Einstiegen.
+Vier interne Umgehungen unabhängig reproduziert und korrigiert; neun
+Bereitschaftsgruppen, zwölf reale Worker-Ablehnungen, 71 Startupfälle und
+14-Dateien-Nachtest grün (`dist/workflow-rc160-content-start-boundary.log`).
+36 unabhängige Gegenproben ohne Nebenwirkung/Getter-Auswertung, keine neue
+Extraktions- oder native Bedienfreigabe. Rust 115 grün, Clippy warning-free;
+der 223-Dateien-Gesamteingang dieses Vorstartschnitts besteht
+(`dist/workflow-rc160-content-start-product-headless.log`, Exit 0).
+Direkter neuer Konvertervertrag: elf geschlossene Vertrags-/Parentfehlergruppen,
+36 PDF-/Textfälle, 13 reine Coregruppen und 17 Artefaktfälle bestanden.
+Signalgetter/-fälschungen, breite Dublettenboxen, unbekannte Marked-Content-
+Sichtbarkeit und Vektorpaints regressionsgebunden korrigiert. 14 zusätzliche
+Signalgegenproben ohne Getter-/Proxy-Ausführung; Legacy-Regeln getrennt erhalten.
+Response/Extraction `/2` prüft Optionen und private PDF-Metadaten; keine neue
+Publikationsfreigabe. Native 62-Gruppen-Windows-Konverterprüfung nach letzter
+Legacy-Korrektur ohne Skip bestanden
+(`dist/workflow-rc160-content-converter-options-compat.log`, Exit 0);
+224-Dateien-Gesamtlauf an falscher Wortsubstringprüfung eines zufälligen HMAC
+gescheitert; geschlossenes Shape-/Digestorakel korrigiert, zehn Reviewchoices-
+Gruppen grün. Neuer Raw-Verbraucher: zwölf reale Consumergruppen einschließlich
+private Metadaten, Capture-/Korrektur-/Artefakt-/Exportbinding, Neustart,
+Lost-ACK und Legacy-Downgrade; 17 alte Raw-Batch-/Export- und sieben Retentions-
+gruppen grün. Drei unabhängige Gegenfälle regressionsgebunden geschlossen
+(Schema-/Options-Getter und generischer Replay-Downgrade); 30 Orchestrator-
+und 20 Itemgruppen bestehen. Eigenständiger unveränderlicher Exportowner
+sperrt Legacy-Adoption nach Verlust des ganzen Runordners; neue ordinary
+Anonymisierung benötigt weiterhin ihren echten Options-Publikationsbeleg.
+63 tatsächliche Windows-Konvertergruppen ohne Skip mit neuer Zehn-Quelltyp-
+Gruppe über Konvertierung/private Basis/frisches Lesen/synthetische Freigabe/
+Originalnamenexport bestanden (`dist/workflow-rc160-content-consumer-native-final.log`).
+Letzte Ownerhärtung separat gezielt geprüft; neue Gesamtregression eigenständig.
+Der zugehörige 225-Dateien-Headlesslauf ist inzwischen vollständig grün
+(`dist/workflow-rc160-content-consumer-product-headless.log`, Exit 0).
+Nachfolgender Privacy-Inhaltseingang: acht neue Adaptergruppen, sechs reine
+Sourcegruppen und 13 Raw-Consumergruppen bestehen. Echte Header/Blankrecords,
+vollständiges Options-/Quelltypecho, DOCX-Storys, exakte Kontakte/private Metadata
+und Legacy-/Cowork-Abgrenzung geprüft. Kontakt-only Coverage, seltene Werte
+unter literal gepaddeten Office-Headern und Proxy-Prototyp-Fallback zuerst rot
+bestätigt, anschließend korrigiert. Produktadapter schützen Reflexion; reine
+Decoder normalisieren Fremdfehler ohne native Imports oder Zero-Trap-Zusage.
+Neue vollständige Regression und native Windows-Konvertergegenprüfung dieses
+nachfolgenden Schnitts sind eigenständige Nachweise.
+Frischer Stand: 71 gemeinsame Inhaltsgruppen und Docs grün
+(`dist/workflow-rc160-privacy-input-boundaries-final.log`/`privacy-input-docs-final.log`);
+64 tatsächliche Windows-Konvertergruppen ohne Skip grün einschließlich echtem
+Office-Header-Gegenfall über Worker und Privacy-Engine
+(`dist/workflow-rc160-privacy-input-native-final.log`). 50 unabhängige Fremdfehler-
+und drei echte Längenproben bestätigen die Corefehlernormalisierung; acht
+Proxy-Prototypproben bestätigen die Operationssperre. Rust 115 bestanden,
+drei Helper-Einstiege ignoriert, Clippy warning-free. Vollständiger 226-Dateien-
+Gesamteingang grün (`dist/workflow-rc160-privacy-input-product-headless.log`, Exit 0),
+keine native Bedien- oder Mac-Abnahme daraus.
+Nachfolgende Feldsemantik: 13 Adapter-/14 reine Coregruppen grün; neuer reiner
+Matcher bleibt an den vollständigen Inhaltsvertrag gebunden, Legacy unverändert.
+NFD-/Zero-Width-Köpfe und inkonsistente Headerbreiten unabhängig rot bestätigt
+und korrigiert; gleiche semantische Ableitung in späterer privater Freigabe,
+policygebundener Tabellen-Cache und sachliche Negativköpfe. Neue Native-,
+Dokument- und Gesamtevidence separat. Neuer Locator ohne positionsgetreue
+Normalisierung stoppt benannt; die Positionsmap ist kein gelieferter Consumer.
+Frisch 77 gemeinsame Inhalts-, 64 reale Windows-Konverter- (kein Skip) und
+41 private Dokumentprüf-/Exportgruppen grün; Logs `dist/workflow-rc160-person-fields-*`.
+Rust 115/3 Helper ignoriert, Clippy, Docs und lokale strenge Manifestprüfung grün.
+Unabhängig vier ZIP/XML-, 60 Struktur-/Registry-, acht Locator-, sechs private
+FS- und 20 Reservierungsfälle. Synthetische `/3`-Paketstubs isolieren die private
+Policyprüfung; kein Beleg für die noch offene `/4`-Publikation. Neue komplette
+Regression bleibt separat, native Tauri-/Mac-Abnahme nicht ersetzt.
+Selektive PDF-Bereichszuordnung, Office-/MD-Bild-OCR und tatsächlicher neuer
+Anonymisierungs-Gesamtanschluss bleibt offen.
+Nachfolgender privater Publikationskern: 16 neue Gruppen, 27 Public-Reader-,
+41 Dokument-, 13 Raw-, 10 Persistenz-, 14 Core- und 10 Bereitschaftsgruppen grün.
+Eigener privater `/4`-Pool, echter Residualnachweis, erwarteter Manifesthash,
+Vor-/Nach-Rename-Prüfung, tatsächliche Node-Prozessabbrüche und frische Reads.
+Dokumentbasis `/2` und Publikationsreceipt `/2` binden Runanker/Optionen und
+prüfen auch beim Wiederöffnen; tatsächlicher Export `/7` enthält exakt die
+freigegebenen Bytes. Logs `dist/workflow-rc160-private-publication-*`.
+Zwei unabhängige Typ-/Proxy-Gegenfälle rot bestätigt und korrigiert.
+Der davor liegende Personenfeld-Gesamtlauf bestand mit 226 Headlessdateien;
+die neue Gesamtregression und native Format-/Tauri-/Mac-Abnahme bleiben getrennt.
+Nachfolgender privater Reader-/Recoveryanschluss: 30 Gruppen grün
+(`dist/workflow-rc160-private-recovery-artifact-final.log`), Runmitgliedschaft,
+gehaltene Elternkette, unabhängiger Manifesthash, echter Rename-Lost-ACK und
+Wiederaufnahme vor Mapping. Lokale Delivery ohne Capability/Plugin-ACK;
+aktuelle Terminalbelege lesen privat auch trotz altem Stat-Identity-Cache.
+Publisherkapazität am eigenen Stage. Drei weitere rote Consumerfälle
+(`private-recovery-consumers-red.log`) korrigiert. Die alte Gesamtregression
+stoppte an einer veralteten strikten Paketliste; das korrigierte Einzelgate
+besteht; der neue Gesamteingang mit 227 Headlessdateien ist vollständig grün
+(`private-recovery-product-headless.log`, Exit 0). Orchestrator, gebundene Mapping-Outbox
+und gewöhnlicher Export bleiben offen; Startbereitschaft bleibt gesperrt.
+Raw-Recovery bindet Runmitgliedschaft und Commitbelege. Raw-Stopps schreiben
+keine Anonymisierungs-Mappingzeilen; zwei weitere rote Gegenfälle korrigiert
+(`private-recovery-raw-stops-red.log`). Frische Rusttests 115 grün, drei Helper
+ignoriert, Clippy warning-free (`private-recovery-rust.log`, `private-recovery-clippy.log`).
+143 zusätzliche Consumer-/Legacygruppen grün (`private-recovery-consumers-final.log`),
+Docs, strenge lokale CLI und Diff grün. Build erneut am sauberen Quellcommit-Gate
+gestoppt, aktuelles RC160-Cowork-ZIP fehlt; kein neuer Paketnachweis.
+Nachfolgender Operationsschnitt: neun Gruppen mit echten gespeicherten
+Batch-/Review-Einstiegen und unabhängiger Ticket-/Quell-/Options-/Runbindung
+(`content-operation-authority.log`); `/7`-Migrationsfehler zuerst rot und
+korrigiert. 14 echte Lockgruppen, inklusive Austausch vor erster Epochaufnahme,
+Hardlink und altem `finally`; zwei unabhängige rote Gegenfälle korrigiert
+(`content-lock-review-red.log`). Der eigentliche neue Anonymisierungspfad und
+Prepared-Replay bleiben gesperrt, nicht als Format-/Publikations-PASS gewertet.
+Operationsgesamteingang: 228 Headlessdateien, Exit 0
+(`content-operation-product-headless.log`). Nachfolgend gleicher Textkern für
+Legacy und neuen Capture; 173 gezielte Gruppen und 20 echte Windows-Format-/
+Ausgabeprofilkombinationen bis zum Entwurf, ohne Basis oder Veröffentlichung
+(`shared-privacy-native.log`). Neue Gesamtregression und native Bedienung
+für diesen nachfolgenden Schnitt noch erforderlich.
+Unabhängig 90 Textkern-Differentialfälle; zwei Signal-Gegenfälle am tatsächlichen
+gespeicherten Review zuerst rot, dann korrigiert. 15 Operationsgruppen bestehen
+(`capture-signal-final.log`); eigene Signalherkunft, Intrinsics vor Getter/
+Spread/Kontaktphase und unveränderte Legacy-Truthiness, kein neuer GUI-Beleg.
+Textkern-/Signal-Gesamteingang: 229 Headlessdateien, Exit 0
+(`shared-privacy-product-headless.log`); tatsächlicher Windows-Konverter:
+65 Gruppen ohne Skip (`shared-privacy-native-owned-final.log`).
+Nachfolgende private Prepared-/Registryprimitiven: 31 Operationsgruppen
+(`prepared-operation-final-reviewed.log`). Echte Journal-/Run-/Snapshot-/
+Epochbindung, frische Node-Replays, unabhängiger create-only Runowner,
+Hash-/Policy-/Keep-/Frameprüfung, actual `/4`-Rename/Lost-ACK und genau eine
+Auditoperation. Unabhängig reproduzierte Hash-/Snapshot-/Finally-/Ownerfehler
+regressionsgebunden geschlossen. Keine OCR/Parser/Profilentscheidung auf Replay.
+Anschluss dieser Primitiven an den neuen produktiven Publikationsadapter sowie
+neuer Gesamteingang, native GUI-/Mac-/Releasepaketbelege bleiben offen.
+Der aktuelle vollständige Produkt-
+anschluss von Start/IPC/Optionen bis zum OCR-Worker, UI und neuer Tauri-/Mac-
+Paketbeleg bleiben offen.
+Sechs native Formularfälle `NOT_RUN`; Build stoppt am sauberen Quellcommit-Gate,
+aktuelles RC160-Cowork-ZIP fehlt. Keine Releasefreigabe daraus ableiten.
+
+**Weiterer Zielauftrag 13.10.2026:** Sechs verknüpfte Umsetzungs-/Abnahme-
+spezifikationen zu BL-010.53 vorhanden; vorhandene offene Queue/Folgegruppen
+gegen neue Nutzertexte und Zustandspriorisierung revalidieren. Inhalts-/OCR-
+Profile und neue native Bedienabnahme noch offen. Desktopsteuerung wieder
+autorisiert; dies ist keine durchgeführte Evidence. Keine API-Key-/API-Nutzung.
+
+**Lokale RC160-Erweiterung BL-010.53, 13.10.2026 – in Arbeit:** Unabhängige
+Workflow-/Rust-/Privacy-Gegenprüfungen, konkrete Regressionen und echte v2-
+Headless-Darstellung beider Zwecke (Fonts/Fokus/axe/Reflow) vorhanden.
+Lesbare PDF-/OCR-Absätze behalten Texte, Kontaktbezug und Nachkorrektur;
+raw ohne Anonymisierungsaktionen und neue Korrekturkopien mit Originalbasisnamen.
+Private autoritative Dateinamen-/Fehlerdetails und Rust-Namenpolicy; alte
+Exportpläne unverändert. Windows-Engineeringpaket RC160/r4, exakte Sidecar-
+Paketsmokes und frische 72-Varianten-Qualitätsbindung (`pass_with_warnings`) bestehen.
+219 Headless-Testdateien sind in zwei belegten Etappen abgedeckt; nach dem
+veralteten raw Namensorakel wurde der Pausentest samt restlichen 57 Dateien
+mit unveränderten Produktquellen ausgeführt. Keine monolithische PASS-Behauptung.
+34 Literal-/Identifier-, 159 PII-, 31 IBAN- und 109 Rustfälle bestehen. Keine
+native GUI-/Mac-Abnahme und keine neue Main-/Releasebereitstellung. Anwender
+priorisiert nun schrittweisen lokalen Windows-Test; Mac-Workflows zurückgestellt.
 
 **Aktuelle technische Bereitstellung BL-010.53, 11.10.2026 – erledigt:**
 [RC159](../RELEASE.md#rc159--standalone-auf-allen-zielplattformen) bindet

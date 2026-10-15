@@ -75,6 +75,7 @@ Abnahme.
 | `docs/REVIEW_STANDALONE_R9_2026-10-08.md` | zeitgebundener Review des unveröffentlichten Standalone-v2/r9-Arbeitsstands; reproduzierte Workflowfehler, native Kontrollgrenzen, frische Qualitätsmessung und präzise Test-/Paketgrenzen; Arbeit ausschließlich BL-010.53/BL-050.6 |
 | Plugin-/Skill-READMEs und Skilltexte | Installation, Betrieb und Modellablauf |
 | `CLAUDE.md`, `.claude/agents/*` | knapper Claude-Code-Projektkontext und versionierte Read-only-Prüfrollen; kein Produktvertrag |
+| `tasks/AUFTRAG-CODEX-RC160-WORKFLOW-INHALT.md`, `tasks/rc160-workflow/*` | aktueller schreibender Standalone-Auftrag, sechs Spezifikationen und Vorlage; Lieferstatus ausschließlich BL-010.53 |
 
 ## Historisch, nicht entscheidungsführend
 

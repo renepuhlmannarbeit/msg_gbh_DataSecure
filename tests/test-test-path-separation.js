@@ -10,12 +10,14 @@ const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 const runner = fs.readFileSync(path.join(__dirname, 'run-product-suite.js'), 'utf8');
 const workflow = (name) => fs.readFileSync(path.join(root, '.github', 'workflows', name), 'utf8');
 
-test('only cost-capped source CI excludes the resource-bound sidecar scenarios explicitly', () => {
+test('resource-bound sidecar and Office cases use their explicitly separated source and native gates', () => {
   const suite = require('./run-product-suite');
   const sidecar = 'tests/test-standalone-sidecar.js';
   assert.deepStrictEqual(suite.argumentsForFile('ci', sidecar), ['--source-only']);
   for (const profile of ['headless', 'full', 'native-ui']) assert.deepStrictEqual(suite.argumentsForFile(profile, sidecar), []);
-  for (const file of suite.baseFiles.filter(file => file !== sidecar)) assert.deepStrictEqual(suite.argumentsForFile('ci', file), []);
+  const office = 'tests/test-office-image-ocr.mjs';
+  for (const profile of ['ci', 'headless', 'full', 'native-ui']) assert.deepStrictEqual(suite.argumentsForFile(profile, office), ['--source-only']);
+  for (const file of suite.baseFiles.filter(file => file !== sidecar && file !== office)) assert.deepStrictEqual(suite.argumentsForFile('ci', file), []);
   const source = fs.readFileSync(path.join(root, sidecar), 'utf8');
   assert.match(source, /NOT_RUN in source-only CI/u);
   assert.match(source, /if \(!sourceOnly\)/u);
@@ -61,7 +63,7 @@ test('native conversion resources are required by PKG-04, not silently added to 
   const suite = require('./run-product-suite');
   const nativeTest = 'test-standalone-conversion-worker.mjs';
   assert.ok(![...suite.baseFiles.map(file => path.basename(file)), ...suite.ciFiles, ...suite.fullOnly].includes(nativeTest));
-  assert.strictEqual(pkg.scripts['test:standalone:conversion'], `node tests/${nativeTest}`);
+  assert.strictEqual(pkg.scripts['test:standalone:conversion'], `node tests/${nativeTest} && node tests/test-office-image-ocr.mjs`);
   const pkg04 = fs.readFileSync(path.join(root, 'scripts/run-pkg-04.ps1'), 'utf8');
   assert.ok(pkg04.indexOf("@('run', 'test:standalone:conversion')") < pkg04.indexOf("foreach ($label"));
   assert.match(pkg04, /Invoke-Checked 'npm.cmd' @\('run', 'test:standalone:conversion'\)/u);

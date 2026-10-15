@@ -493,6 +493,7 @@ function removeOwnedRoot(root, initial) {
     for (const scenario of [
       { name: 'document-markdown', mode: 'markdown-only' },
       { name: 'document-markdown-ocr', mode: 'markdown-only', ocr: true },
+      { name: 'document-content-markdown', mode: 'markdown-only', content: true },
       { name: 'document-anonymize', mode: 'markdown-and-anonymize' }
     ]) {
       const caseRoot = path.join(root, scenario.name); fs.mkdirSync(caseRoot);
@@ -511,6 +512,8 @@ function removeOwnedRoot(root, initial) {
       assert.equal(selected.ok, true);
       const started = await hostClient.send('start_admitted_batch', '2'.repeat(16), {
         processing_mode: scenario.mode, document_review: true,
+        ...(scenario.content ? { content_options: { schema: 'datasecure-content-options/1',
+          markdownOutput: 'content-v1', scanOcr: false, imageOcr: false } } : {}),
         ...(scenario.ocr ? { ocr_contact_review: true } : {}),
         ...(scenario.mode !== 'markdown-only' ? { output_naming_mode: 'neutral' } : {}),
         source_ids: selected.result.ui_context.source_catalogue.map(item => item.source_id),
@@ -552,6 +555,29 @@ function removeOwnedRoot(root, initial) {
       assert.equal((await hostClient.send('shutdown', '6'.repeat(16))).ok, true);
       assert.equal((await bounded(host.closed, 'document review sidecar did not stop', 10000)).code, 0);
       process.stdout.write(`✓ real v2 worker creates durable history and review contents: ${scenario.name}\n`);
+    }
+    {
+      const { runPackagedMarkdownScenario } = await import('./helpers/standalone-packaged-markdown.mjs');
+      const caseRoot = path.join(root, 'content-format-workflow'); fs.mkdirSync(caseRoot); fixtureRoots.push(caseRoot);
+      const env = isolatedEnvironment(caseRoot), sources = path.join(caseRoot, 'sources'); fs.mkdirSync(sources);
+      let host, client;
+      const launch = () => {
+        host = trackChild(childProcess.spawn(process.execPath, [path.join(packagedServer, 'standalone/desktop-sidecar.js')], {
+          stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, env
+        }), children);
+        client = protocolClient(host);
+        return value => { const { action, request_id, schema: _schema, ...fields } = value; return client.send(action, request_id, fields); };
+      };
+      const restart = async () => {
+        assert.equal((await client.send('shutdown', 'ee'.repeat(8))).ok, true);
+        assert.equal((await bounded(host.closed, 'content format host did not stop', 10000)).code, 0);
+        return launch();
+      };
+      const currentRequest = await runPackagedMarkdownScenario({ request: launch(), restart, sourceDirectory: sources });
+      const { runPackagedOcrScenario } = await import('./helpers/standalone-packaged-ocr-review.mjs');
+      await runPackagedOcrScenario({ request: currentRequest, restart, sourceDirectory: sources, markdownOnly: true, contentOnly: true });
+      assert.equal((await client.send('shutdown', 'ef'.repeat(8))).ok, true);
+      assert.equal((await bounded(host.closed, 'content format final host did not stop', 10000)).code, 0);
     }
     } else {
       process.stdout.write('Projected document/converter workflow: NOT_RUN in source-only CI; required by headless/full and native package gates.\n');

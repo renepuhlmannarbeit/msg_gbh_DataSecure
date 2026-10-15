@@ -1,3 +1,5 @@
+import { readFileSync } from 'node:fs';
+const productVersion = JSON.parse(readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version;
 // Synthetic UI adapter only. Never included in the Standalone artifact.
 export function workspacePreviewBridge() {
   return `(() => {
@@ -15,8 +17,16 @@ export function workspacePreviewBridge() {
     ];
     const largeCatalogueDemo = new URLSearchParams(window.location.search).get('demo') === 'large-catalogue';
     const demo = new URLSearchParams(window.location.search).get('demo');
-    const documentsDemo = ['documents', 'documents-raw'].includes(demo);
-    if (documentsDemo) { phase = 'results_available'; selectedCount = 3; mode = demo === 'documents-raw' ? 'markdown-only' : 'markdown-and-anonymize'; }
+    const activeCompletion = demo === 'active-completion-raw';
+    const completionDemo = ['completion-raw', 'completion-mixed'].includes(demo) || activeCompletion;
+    const feedback = { schema: 'datasecure-conversion-feedback/1', ocr_enabled: false,
+      selected_count: 133, result_count: 116, not_converted_count: 17, ocr_omitted_count: demo === 'completion-mixed' ? 16 : 17,
+      error_count: demo === 'completion-mixed' ? 1 : 0, content_notice_count: 35, pending_count: 0, complete: true };
+    if (completionDemo && !activeCompletion) { phase = 'results_available'; selectedCount = 133; mode = 'markdown-only'; }
+    const documentsDemo = ['documents', 'documents-raw', 'documents-raw-notices', 'documents-raw-filter'].includes(demo);
+    const documentNotices = demo === 'documents-raw-notices';
+    const documentFilter = demo === 'documents-raw-filter';
+    if (documentsDemo) { phase = 'results_available'; selectedCount = documentNotices ? 5 : 3; mode = demo.startsWith('documents-raw') ? 'markdown-only' : 'markdown-and-anonymize'; }
     const documentRows = [
       { document_id: id(1), name: 'Bewerbungen/Projektleitung/Lebenslauf-Erika-Linden.pdf', revision: 0, output_sha256: 'a'.repeat(64), approved: false, chunks: 1 },
       { document_id: id(2), name: 'Tabellen/Kontaktliste.xlsx', revision: 0, output_sha256: 'b'.repeat(64), approved: false, chunks: 1 },
@@ -27,7 +37,8 @@ export function workspacePreviewBridge() {
     const bodies = new Map(documentRows.map(row => [row.document_id, mode === 'markdown-only' ? original : initial]));
     documentRows.forEach(row => Object.assign(row, { processing_mode: mode || 'markdown-and-anonymize',
       entity_review_available: mode !== 'markdown-only', run_entity_review_available: mode !== 'markdown-only',
-      entity_count: mode === 'markdown-only' ? 0 : 2 }));
+      entity_count: mode === 'markdown-only' ? 0 : 2,
+      ...(mode === 'markdown-only' ? { text_modified: false } : {}) }));
     const digest = async value => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))),
       byte => byte.toString(16).padStart(2, '0')).join('');
     const privateResult = row => ({ ok: true, ...row, local_ui_only: true, external_disclosure: false });
@@ -36,7 +47,9 @@ export function workspacePreviewBridge() {
     const context = () => ({ ok: true, local_ui_only: true, external_disclosure: false,
       result_folder: 'Dokumente/DataSecure', source_catalogue: files, catalogue_revision: revision,
       source_folders: files.length ? [largeCatalogueDemo ? 'Dokumente/Synthetischer-Katalog' : 'Dokumente/Bewerbungen-Q3'] : [], selected_files: files.filter(f => f.selectable).map(f => f.name) });
-    const entries = () => ({ local_ui_only: true, external_disclosure: false, entries: [
+    const entries = () => ({ local_ui_only: true, external_disclosure: false, entries: completionDemo ? [{
+      batch_id: batch, created_at: '2026-10-14T11:36:28Z', processing_mode: mode, selected_count: 133, result_count: 116,
+      failed_count: 17, status: phase, resumable: false, results_available: true, result_location: 'available', conversion_feedback: feedback }] : [
       ...(phase !== 'ready' ? [{ batch_id: batch, created_at: '2026-10-07T09:15:00Z', processing_mode: mode,
         selected_count: selectedCount, result_count: phase === 'results_available' ? selectedCount : Math.max(0, selectedCount - 2), failed_count: 0,
         status: phase, resumable: phase === 'review_required', results_available: phase === 'results_available', ledger_available: false }] : []),
@@ -52,7 +65,7 @@ export function workspacePreviewBridge() {
           if (!adapter) throw Error('PREVIEW_REVIEW_NOT_READY');
           return adapter(command, args);
         }
-        if (command === 'frontend_ready') return { product_version: '3.2.0-rc158' };
+        if (command === 'frontend_ready') return { product_version: ${JSON.stringify(productVersion)} };
         if (command === 'get_ui_context') return context();
         if (command === 'get_run_history') return entries();
         if (command === 'get_document_review_history_summary') return privateResult({ available: args.batchId === batch,
@@ -67,10 +80,31 @@ export function workspacePreviewBridge() {
             document_count: exportReceipts[0].exported_count, recorded_at: null } : null });
         if (command === 'get_document_reviews') {
           for (const row of documentRows) row.output_sha256 = await digest(bodies.get(row.document_id));
-          return { local_ui_only: true, external_disclosure: false, documents: structuredClone(documentRows),
+          if (documentNotices) await new Promise(resolve => setTimeout(resolve, 450));
+          return { local_ui_only: true, external_disclosure: false, documents: structuredClone(documentRows), processing_mode: mode,
+            ...(documentFilter ? { conversion_feedback: { ...feedback, selected_count: 3, result_count: 3,
+              not_converted_count: 0, ocr_omitted_count: 0, error_count: 0, content_notice_count: 2,
+              ocr_enabled: true }, content_notices: [
+              { document_id: id(1), name: documentRows[0].name, reason_codes: ['SOURCE_COVERAGE_UNVERIFIED'] },
+              { document_id: id(2), name: documentRows[1].name, reason_codes: ['OCR_TEXT_UNCERTAIN'] }] } : {}),
+            ...(documentNotices ? { conversion_feedback: { ...feedback, selected_count: 5, result_count: 3,
+              not_converted_count: 2, ocr_omitted_count: 2, content_notice_count: 0 }, not_processed_documents: [
+              { document_id: id(4), name: 'Scans/Scan.png', reason_code: 'IMAGE_OCR_REQUIRED', classification: 'ocr_omission' },
+              { document_id: id(5), name: 'Scans/Archiv.pdf', reason_code: 'PDF_TEXT_UNAVAILABLE_BY_POLICY', classification: 'ocr_omission' }] } : {}),
             unavailable: [], pending_exports: structuredClone(pendingExports.slice(0, 1)), export_receipts: structuredClone(exportReceipts) };
         }
         if (command === 'close_document_reviews') return { ok: true };
+        if (command === 'preview_document_export') {
+          const used = new Set();
+          return { ok: true, processing_mode: mode, local_ui_only: true, external_disclosure: false,
+            files: args.selection.map((row, index) => {
+              const source = documentRows.find(value => value.document_id === row.document_id).name.split('/').at(-1);
+              const stem = source.replace(/\\.[^.]+$/, ''); let name = stem + '.md', suffix = 1;
+              while (used.has(name.normalize('NFC').toLowerCase())) name = stem + ' (' + (++suffix) + ').md';
+              used.add(name.normalize('NFC').toLowerCase());
+              return { name: mode === 'markdown-only' ? name : 'Dokument_' + String(index + 1).padStart(2, '0') + '.md', sha256: row.output_sha256 };
+            }) };
+        }
         if (command === 'open_document_export') {
           if (!exportReceipts.some(row => row.operation_id === args.operationId)) throw Error('AI_EXPORT_INVALID');
           return { ok: true, handoff_confirmed: true, external_disclosure: false };
@@ -112,6 +146,7 @@ export function workspacePreviewBridge() {
           else if (args.decision.action === 'redact') { for (const edit of [...args.decision.ranges].reverse()) text = text.slice(0, edit.start) + '[MANUAL_REDACTION]' + text.slice(edit.end); }
           else if (args.decision.action === 'restore_base') { text = mode === 'markdown-only' ? original : initial; entityChoices.delete(row.document_id); }
           bodies.set(row.document_id, text); row.output_sha256 = await digest(text);
+          if (mode === 'markdown-only') row.text_modified = text !== original;
           row.revision++; row.approved = args.decision.action === 'approve'; }
           return { ...privateResult(origin), scope: args.decision.scope || 'document', affected_count: affected.length }; }
         if (command === 'export_approved_documents') {
@@ -126,23 +161,30 @@ export function workspacePreviewBridge() {
           return result;
         }
         if (command === 'select_files' || command === 'select_folder') {
-          files = largeCatalogueDemo
-            ? Array.from({ length: 201 }, (_, n) => ({ name: 'Synthetischer-Katalog/Datei-' + String(n + 1).padStart(3, '0') + '.txt',
+          files = largeCatalogueDemo || activeCompletion
+            ? Array.from({ length: activeCompletion ? 133 : 201 }, (_, n) => ({ name: 'Synthetischer-Katalog/Datei-' + String(n + 1).padStart(3, '0') + '.txt',
               source_id: id(n + 1), bytes: 4, selectable: true, source_type: 'txt', ocr_required: null })) : examples;
           revision++; return { ui_context: context() };
         }
         if (command === 'cancel_admission') { files = []; revision++; return { ok: true }; }
         if (command === 'start_admitted_batch') { window.previewLastStart = args; selectedCount = args.sourceIds.length; files = []; mode = args.processingMode; phase = 'processing'; polls = 0; return { ok: true, batch_id: batch }; }
         if (command === 'get_public_state') {
-          if (phase === 'processing' && ++polls > 2) phase = 'review_required';
+          if (phase === 'processing' && ++polls > 2) phase = activeCompletion ? 'results_available' : 'review_required';
           return { state: phase, ...(phase !== 'ready' ? { batch_id: batch } : {}), processing_mode: mode, selected_count: phase === 'ready' ? 0 : selectedCount,
             results_available: phase === 'results_available',
             completed_count: phase === 'results_available' ? selectedCount : Math.max(0, selectedCount - 2),
             result_count: phase === 'results_available' ? selectedCount : Math.max(0, selectedCount - 2),
-            review_count: phase === 'review_required' ? Math.min(2, selectedCount) : 0, failed_count: 0 };
+            review_count: phase === 'review_required' ? Math.min(2, selectedCount) : 0, failed_count: 0,
+            ...(activeCompletion && phase === 'results_available' ? { result_count: 116, failed_count: 17,
+              batch_complete: true, conversion_feedback: feedback } : {}) };
         }
         if (command === 'continue_history_batch' || command === 'continue_current_batch' || command === 'open_embedded_review') return { ok: true };
         if (command === 'configure_results') return { cancelled: true };
+        if (command === 'get_run_failures' && completionDemo) return { local_ui_only: true, external_disclosure: false, available: true, total: 17,
+          conversion_feedback: feedback, files: Array.from({ length: 17 }, (_, n) => ({ name: n < 13 ? 'Scans/scan-' + (n + 1) + '.png' : 'Scans/scan-' + (n + 1) + '.pdf',
+            reason_code: demo === 'completion-mixed' && n === 0 ? 'SOURCE_READ_FAILED' : n < 13 ? 'IMAGE_OCR_REQUIRED' : 'PDF_TEXT_UNAVAILABLE_BY_POLICY',
+            classification: demo === 'completion-mixed' && n === 0 ? 'error' : 'ocr_omission' })),
+          content_notices: Array.from({ length: 35 }, (_, n) => ({ name: 'Berichte/Inhalt-' + (n + 1) + '.docx', reason_codes: ['SOURCE_COVERAGE_UNVERIFIED'] })) };
         if (command === 'get_run_failures') return { local_ui_only: true, external_disclosure: false,
           files: [{ name: 'Vertrag-passwortgeschützt.pdf', reason_code: 'PASSWORD_PROTECTED_DOCUMENT_UNSUPPORTED' }] };
         if (command.startsWith('open_')) return { ok: true };

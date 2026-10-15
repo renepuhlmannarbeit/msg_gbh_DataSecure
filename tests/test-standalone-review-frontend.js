@@ -91,7 +91,8 @@ function harness(sessions = null, allowOrganizationReview = false, singleFinding
   const window = { __TAURI__: { core: { invoke }, event: { async listen(name, callback) { listeners.set(name, callback); return () => {}; } } },
     setTimeout(callback) { timers.push(callback); return callback; },
     clearTimeout(callback) { const index = timers.indexOf(callback); if (index >= 0) timers.splice(index, 1); } };
-  vm.runInNewContext(source, { window, document: { getElementById: element, createElement }, TextDecoder, atob },
+  const presentation = fs.readFileSync(path.join(__dirname, '../apps/datasecure-standalone/frontend/workflow-presentation.js'), 'utf8');
+  vm.runInNewContext(presentation + '\n' + source, { window, document: { getElementById: element, createElement }, TextDecoder, atob },
     { filename: 'review.js' });
   return { element, callbacks, calls, draft, timers, listeners };
 }
@@ -186,7 +187,8 @@ testAsync('successive review groups stay in one window and only final completion
   await new Promise((resolve) => setImmediate(resolve));
   await h.timers.shift()();
   assert.strictEqual(h.calls.filter((call) => call.command === 'close_review_window').length, 1);
-  assert.match(h.element('waiting-text').textContent, /Fundstellenprüfung ist abgeschlossen.*Freigabestatus/u);
+  assert.match(h.element('waiting-text').textContent, /Prüfung dieses Laufs abgeschlossen.*Hauptfenster/u);
+  assert.doesNotMatch(h.element('waiting-text').textContent, /Freigabe und Export|Ergebnisprüfung.*geöffnet/u);
   assert.doesNotMatch(h.element('waiting-text').textContent, /Der Lauf ist abgeschlossen/u);
 });
 
@@ -665,9 +667,39 @@ function manyContactHarness() {
   } });
 }
 
+testAsync('OCR contact review filters by affected document without submitting or losing staged decisions', async () => {
+  const h = twoContactHarness(); await new Promise(resolve => setImmediate(resolve));
+  const filter = h.element('matrix-document');
+  assert.equal(h.element('matrix-document-label').hidden, false);
+  assert.equal(filter.children.length, 3);
+  assert.match(filter.children[1].textContent, /one\.png \(1 Werte\)/u);
+  assert.match(filter.children[2].textContent, /two\.png \(1 Werte\)/u);
+  filter.value = '1'; h.callbacks.get('matrix-document:change')();
+  assert.equal(h.element('matrix-body').children.length, 1);
+  assert.match(h.element('matrix-count').textContent, /^1 von 2 Zeilen/u);
+  selectAll(h); applySelected(h, 'confirm_contact');
+  assert.match(h.element('summary').textContent, /^1 von 2 OCR-Kontaktwerten/u);
+  filter.value = '2'; h.callbacks.get('matrix-document:change')();
+  assert.equal(h.element('matrix-body').children.length, 1);
+  assert.match(h.element('matrix-count').textContent, /0 angehakt/u);
+  assert.equal(h.element('release').disabled, true);
+  assert.equal(h.calls.some(call => call.command === 'submit_review'), false);
+  selectAll(h); applySelected(h, 'confirm_contact');
+  assert.equal(h.element('release').disabled, false);
+  assert.equal(h.calls.some(call => call.command === 'submit_review'), false);
+});
+
 testAsync('open-first bulk review replaces 50 staged rows with the remaining 14 and explains the explicit final handoff', async () => {
   const h = manyContactHarness(); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.element('matrix-title').textContent, 'OCR-Kontaktwerte vor Abschluss prüfen');
+  assert.match(h.element('summary').textContent, /0 von 64 OCR-Kontaktwerten.*1 Dokument betroffen/u);
+  assert.match(h.element('matrix-guide').textContent, /keine 64 Konvertierungsfehler/u);
+  assert.match(h.element('matrix-explanation').textContent, /Anwenden merkt Entscheidungen nur vor/u);
   assert.equal(h.element('matrix-filter').value, 'open');
+  assert.match(h.element('select-filtered').textContent, /64 gefilterten Zeilen.*alle Seiten/u);
+  assert.match(h.element('select-visible')['aria-label'], /Nur diese Seite.*50 Zeilen/u);
+  assert.match(h.element('bulk-hint').textContent, /Häkchen allein bestätigen nichts/u);
+  assert.match(h.element('release-hint').textContent, /Noch 64 Fundstellen offen/u);
   selectAll(h); applySelected(h, 'confirm_contact');
   assert.equal(h.element('matrix-body').children.length, 14);
   assert.match(h.element('exact-text').textContent, /^qa50@/u, 'Comparison follows the first remaining open row');
@@ -676,9 +708,10 @@ testAsync('open-first bulk review replaces 50 staged rows with the remaining 14 
   assert.equal(h.calls.some(call => call.command === 'submit_review'), false);
   selectAll(h); applySelected(h, 'confirm_contact');
   assert.equal(h.element('matrix-body').children.length, 0);
-  assert.match(h.element('matrix-empty').textContent, /Alle 64.*vorgemerkt.*Gruppe übergeben/u);
+  assert.match(h.element('matrix-empty').textContent, /Alle 64.*vorgemerkt.*64 OCR-Entscheidungen speichern und fortfahren/u);
   assert.equal(h.element('matrix-empty').hidden, false);
   assert.equal(h.element('release').disabled, false);
+  assert.match(h.element('release-hint').textContent, /Alle 64 Fundstellen vorgemerkt/u);
   assert.equal(h.element('release').focused, true);
   assert.equal(h.calls.some(call => call.command === 'submit_review'), false, 'Completing the list never auto-submits');
   h.element('matrix-filter').value = 'done'; h.callbacks.get('matrix-filter:change')();
@@ -693,6 +726,7 @@ testAsync('all filtered rows can be selected across pages without deciding; only
   const h = manyContactHarness(); await new Promise(resolve => setImmediate(resolve));
   h.callbacks.get('select-filtered')();
   assert.match(h.element('matrix-count').textContent, /64 angehakt/u);
+  assert.match(h.element('bulk-hint').textContent, /Auswahl allein bestätigt nichts/u);
   assert.match(h.element('summary').textContent, /^0 von/u);
   h.callbacks.get('matrix-next')();
   assert.match(h.element('matrix-count').textContent, /64 angehakt/u);
@@ -811,6 +845,15 @@ testAsync('a disconnected review blocks decisions and polling but still closes i
   assert.equal(h.calls.some(call => call.command === 'submit_review'), false);
   h.callbacks.get('close-review')(); await new Promise(resolve => setImmediate(resolve));
   assert.equal(h.calls.filter(call => call.command === 'close_review_window').length, 1);
+});
+
+testAsync('the explicit handoff button counts actual occurrence decisions, not grouped rows', async () => {
+  const h = harness(); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.element('release').textContent, '2 Entscheidungen speichern und fortfahren');
+  assert.equal(h.element('release').disabled, true);
+  selectAll(h); applySelected(h, 'keep');
+  assert.equal(h.element('release').disabled, false);
+  assert.equal(h.calls.some(call => call.command === 'submit_review'), false);
 });
 
 done();

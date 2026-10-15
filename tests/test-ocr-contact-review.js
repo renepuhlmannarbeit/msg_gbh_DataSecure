@@ -27,6 +27,14 @@ test('high-confidence plausible wrong addresses still require occurrence confirm
   assert.throws(() => validateContactAnswer({ action: 'skipped' }, draft));
   assert.equal(applyContactAnswer(input(), answer(draft)), text);
 });
+test('raw OCR contact review may be skipped without a fabricated contact decision', () => {
+  const draft = buildContactDraft({ ...input(), processing_mode: 'markdown-only' });
+  assert.deepEqual(validateContactAnswer({ action: 'skipped' }, draft), { action: 'skipped' });
+  assert.throws(() => validateContactAnswer({ action: 'skipped', decisions: [] }, draft));
+  const { buildContactBatch, resolveContactBatch } = require('../plugins/data-secure/server/gateway/ocr-contact-batch');
+  const bundle = buildContactBatch([{ source_label: 'source.png', input: { ...input(), processing_mode: 'markdown-only' } }]);
+  assert.deepEqual(resolveContactBatch(bundle, { action: 'skipped' }), { action: 'skipped', answers: [] });
+});
 test('a new Unicode address and a longer phone are corrected before the real privacy engine', () => {
   const source = input(), draft = buildContactDraft(source);
   const corrected = applyContactAnswer(source, answer(draft, { 0: 'amína@other.example.invalid', 1: '+49 (040) 987654321' }));
@@ -81,10 +89,15 @@ test('LF, CRLF, CR and mixed OCR line endings retain exact source positions and 
     ...(ocr_contacts === undefined ? {} : { ocr_contacts }) }));
   createMarkdownExtraction({ ...base, ocr_contacts: input().contacts });
 });
-test('foreign spans, overlaps, native-format maps and arbitrary fields fail closed', () => {
+test('foreign spans, overlaps, non-OCR formats and arbitrary fields fail closed', () => {
   for (const contacts of [[{ ...input().contacts[0], start: -1 }], [input().contacts[0], input().contacts[0]],
     [{ ...input().contacts[0], page: 0 }], [{ ...input().contacts[0], payload: 'raw' }]]) assert.throws(() => buildContactDraft({ ...input(), contacts }));
-  assert.throws(() => buildContactDraft({ ...input(), source_type: 'docx' }));
+  for (const source_type of ['txt', 'csv']) assert.throws(() => buildContactDraft({ ...input(), source_type }));
+  for (const source_type of ['docx', 'xlsx', 'pptx', 'md']) {
+    const owned = buildContactDraft({ ...input(), source_type });
+    assert.equal(owned.ambiguities.length, input().contacts.length);
+    validateContactDraft(owned);
+  }
   const draft = buildContactDraft(input());
   assert.throws(() => validateContactDraft({ ...draft, allow_organization_review: true }));
   assert.throws(() => validateContactDraft({ ...draft, anonymized_text: 'different' }));
@@ -170,6 +183,48 @@ test('transport contact shapes never authorize a contact action against an entit
   const decoded = new FrameDecoder().push(encodeFrame(message))[0];
   assert.throws(() => broker.submit(decoded.review_id, decoded.answer), error => error.code === 'STANDALONE_REVIEW_DECISION_INVALID');
   assert.equal(broker.session().ready, true);
+});
+testAsync('skipping a raw contact batch stores only the opt-out marker and leaves later values unconfirmed', async () => {
+  const { createBatchContactReview } = require('../plugins/data-secure/server/gateway/batch-contact-review');
+  const state = { schema: 'datasecure-batch/5', processing_mode: 'markdown-only' };
+  const items = [{ id: 'first', source_label: 'first.png' }, { id: 'second', source_label: 'second.png' }];
+  let stored = 0, reviews = 0, saved = 0;
+  const review = createBatchContactReview({ exactPendingEntry: () => ({}),
+    contactStore: { read: () => null, write: () => { stored++; } },
+    writeState: () => { saved++; },
+    convertNext: async () => ({ ...input(), processing_mode: 'markdown-only' }) });
+  await review(state, items, { reviewTextLocally: async () => { reviews++; return { action: 'skipped' }; } });
+  assert.equal(state.ocr_contact_review_skipped, true);
+  assert.equal(saved, 1); assert.equal(reviews, 1); assert.equal(stored, 0);
+  await review(state, items, { reviewTextLocally: async () => { throw Error('review unexpectedly reopened'); } });
+  assert.equal(saved, 1);
+});
+
+testAsync('run-wide raw skip at a split never opens another contact group or erases earlier confirmations', async () => {
+  const { createBatchContactReview } = require('../plugins/data-secure/server/gateway/batch-contact-review');
+  for (const skipGroup of [1, 2]) {
+    const state = { schema: 'datasecure-batch/5', processing_mode: 'markdown-only' };
+    const items = Array.from({ length: 4 }, (_, index) => ({ id: index, source_label: `raw-${index}.png`,
+      input: { ...input(Array(250).fill('E-Mail: same@wrong.invalid').join('\n')), processing_mode: 'markdown-only' } }));
+    const groups = [], stored = [], converted = [];
+    let saved = 0;
+    const review = createBatchContactReview({ exactPendingEntry: (_state, item) => item,
+      contactStore: { read: () => null, write: (_state, item) => { stored.push(item.id); } },
+      writeState: () => { assert.equal(state.ocr_contact_review_skipped, true); saved++; },
+      convertNext: async (_profile, deps) => { converted.push(deps.inputQueue[0].id); return deps.inputQueue[0].input; } });
+    const outcome = await review(state, items, { reviewTextLocally: async draft => {
+      groups.push(draft.ambiguities.length);
+      return groups.length === skipGroup ? { action: 'skipped' } : answer(draft);
+    } });
+    assert.deepEqual(outcome, { pauseBlocked: false });
+    assert.equal(state.ocr_contact_review_skipped, true); assert.equal(saved, 1);
+    assert.deepEqual(groups, Array(skipGroup).fill(250), 'no further draft after run-wide skip');
+    assert.deepEqual(stored, skipGroup === 1 ? [] : [0], 'only explicitly confirmed earlier documents retain answers');
+    assert.deepEqual(converted, Array.from({ length: skipGroup + 1 }, (_, index) => index),
+      'do not collect later inputs after the split saves the skip marker');
+    await review(state, items, { reviewTextLocally: async () => { throw Error('skipped run unexpectedly reopened'); } });
+    assert.equal(saved, 1);
+  }
 });
 test('multi-document contact adapter preserves exact Unicode/CRLF offsets and splits DIFFERENT corrections of identical readings', () => {
   const { buildContactBatch, resolveContactBatch } = require('../plugins/data-secure/server/gateway/ocr-contact-batch');

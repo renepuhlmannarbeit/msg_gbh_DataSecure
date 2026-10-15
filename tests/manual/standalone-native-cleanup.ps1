@@ -31,9 +31,23 @@ namespace DataSecure {
     private static string Identity(Info info) {
       return info.Volume.ToString("x8") + ":" + info.IndexHigh.ToString("x8") + info.IndexLow.ToString("x8");
     }
+    private static string ExtendedPath(string path) {
+      // The exact isolated ZIP contains names beyond MAX_PATH. The no-follow
+      // identity check must still inspect those entries instead of treating
+      // ERROR_PATH_NOT_FOUND as a vanished file.
+      if (String.IsNullOrEmpty(path) || path.Length < 3 || !Char.IsLetter(path[0]) ||
+          path[1] != ':' || path[2] != '\\' || path.IndexOf('/') >= 0) {
+        throw new InvalidOperationException("STANDALONE_NATIVE_IDENTITY_PATH_UNSAFE");
+      }
+      foreach (string segment in path.Split('\\')) {
+        if (segment == "." || segment == "..")
+          throw new InvalidOperationException("STANDALONE_NATIVE_IDENTITY_PATH_UNSAFE");
+      }
+      return @"\\?\" + path;
+    }
     public static string Read(string path) {
       // Metadata-only handle to the link itself, never its target.
-      using (var handle = CreateFile(path, 0, 7, IntPtr.Zero, 3, 0x02200000, IntPtr.Zero)) {
+      using (var handle = CreateFile(ExtendedPath(path), 0, 7, IntPtr.Zero, 3, 0x02200000, IntPtr.Zero)) {
         if (handle.IsInvalid) throw new InvalidOperationException("STANDALONE_NATIVE_IDENTITY_FAILED:" + Marshal.GetLastWin32Error());
         Info info;
         if (!GetFileInformationByHandle(handle, out info)) throw new InvalidOperationException("STANDALONE_NATIVE_IDENTITY_FAILED:" + Marshal.GetLastWin32Error());
@@ -71,7 +85,7 @@ namespace DataSecure {
       return substitute.Substring(4);
     }
     public static NativeTestMountPoint ReadMountPoint(string path) {
-      using (var handle = CreateFile(path, 0, 7, IntPtr.Zero, 3, 0x02200000, IntPtr.Zero)) {
+      using (var handle = CreateFile(ExtendedPath(path), 0, 7, IntPtr.Zero, 3, 0x02200000, IntPtr.Zero)) {
         if (handle.IsInvalid) throw new InvalidOperationException("STANDALONE_NATIVE_REPARSE_READ_FAILED");
         Info info;
         if (!GetFileInformationByHandle(handle, out info) || (info.Attributes & 0x410) != 0x410) {

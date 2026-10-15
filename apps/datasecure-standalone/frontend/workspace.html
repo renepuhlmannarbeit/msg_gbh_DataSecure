@@ -4,7 +4,7 @@
   <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
   <title>DataSecure Standalone</title>
   <link rel="stylesheet" href="design-tokens.css"><link rel="stylesheet" href="workspace.css">
-  <script src="workspace.js" defer></script><script src="document-review.js" defer></script>
+  <script src="workflow-presentation.js" defer></script><script src="workspace.js" defer></script><script src="document-review.js" defer></script>
 </head>
 <body>
 <main class="workspace">
@@ -21,16 +21,31 @@
     </div>
   </nav>
   <p id="feedback" class="notice" role="status" hidden></p>
+  <div id="connection-help" class="connection-help" role="group" aria-label="Hilfe bei unterbrochener Verbindung" hidden>
+    <p id="connection-status" role="status" aria-live="polite">Der letzte Laufstatus ist nicht bestätigt. Bitte keinen zweiten Lauf starten und keine Ergebnisse als vollständig ansehen. Die inhaltsfreie lokale Diagnose ist auch ohne Verbindung erreichbar.</p>
+    <button id="connection-retry" type="button">Verbindung und Laufstatus prüfen</button>
+    <button id="connection-diagnostics" type="button">Diagnose öffnen</button>
+  </div>
   <p id="job-announcement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></p>
+  <section id="run-guide" class="run-guide" aria-label="Aktueller Lauf und nächster Schritt" hidden>
+    <p id="run-guide-scope" class="meta"></p><h2 id="run-guide-title"></h2>
+    <ol id="run-guide-stages" class="run-stages" aria-label="Ablauf dieses Laufs"></ol>
+    <p id="run-guide-counts" class="meta"></p><p id="run-guide-next"></p>
+  </section>
   <section id="new-view" class="card" role="tabpanel" aria-labelledby="nav-new">
     <div id="setup">
       <div class="card-section">
         <h2 class="step-heading"><span class="step-number">1</span> Aufgabe wählen</h2>
         <fieldset class="task-cards"><legend class="sr-only">Verarbeitung</legend>
-          <label class="task-card"><input id="mode-markdown" name="mode" type="radio" value="markdown-only"><span><strong>Nur umwandeln</strong><span>Text aus Dokumenten, Tabellen, Folien, PDFs und Bildern in Markdown übernehmen. Scans per lokaler Texterkennung.</span><small>Originalinhalte bleiben erhalten – nicht anonymisiert</small></span></label>
-          <label class="task-card"><input id="mode-anonymize" name="mode" type="radio" value="markdown-and-anonymize"><span><strong>Umwandeln und anonymisieren</strong><span>Namen, Adressen, Kontaktdaten und Firmen im Markdown ersetzen.</span><small>Unklare Fundstellen vor der Bereitstellung lokal prüfen</small></span></label>
+          <label class="task-card"><input id="mode-markdown" name="mode" type="radio" value="markdown-only"><span><strong>Nur umwandeln</strong><span>Text und Tabellen als gut lesbare Markdown-Dateien übernehmen – ohne Bilder und Bildverweise.</span><small>Inhalte und ursprüngliche Dateinamen bleiben erhalten · nur die Endung wird .md</small></span></label>
+          <label class="task-card"><input id="mode-anonymize" name="mode" type="radio" value="markdown-and-anonymize"><span><strong>Umwandeln und anonymisieren</strong><span>Namen, Adressen, Kontaktdaten und Firmen im Markdown ersetzen.</span><small>Bei Bildern und Scans wird Text lokal per OCR gelesen. Erkannte Kontaktwerte und unklare Fundstellen müssen geprüft werden. Erst eine gesonderte Dokumentfreigabe erlaubt den KI-Export.</small></span></label>
         </fieldset>
-        <label id="ocr-option" class="option" hidden><input id="ocr-review" type="checkbox"> OCR-Kontaktwerte anhand des Originalbilds prüfen</label>
+        <div id="text-ocr-options" hidden>
+          <label class="option"><input id="text-ocr" type="checkbox" aria-describedby="text-ocr-help"> Text aus Scans, Bildern und Grafiken per OCR lesen</label>
+          <p id="text-ocr-help" class="muted">Nur nach deiner Auswahl: Texterkennung läuft ausschließlich lokal. Übernommen wird der erkannte Text, nicht das Bild oder dessen Code. Ohne Häkchen wird nur vorhandener Text gelesen; reine Scans und Bilddateien werden mit einem Hinweis gemeldet. OCR kann Zeichen falsch erkennen. Bei „Nur umwandeln“ ist die spätere Markdown-Nachkorrektur freiwillig; bei Anonymisierung bleiben Fundstellen- und Dokumentprüfung vor dem KI-Export erforderlich.</p>
+        </div>
+        <label id="ocr-option" class="option" hidden><input id="ocr-review" type="checkbox" aria-describedby="ocr-option-help"> E-Mail-Adressen und Telefonnummern aus OCR vor Abschluss mit dem Original vergleichen</label>
+        <p id="ocr-option-help" class="muted" hidden>Zusätzliche Prüfung nur bei eingeschalteter OCR: Wenn solche Werte erkannt wurden, hält der Lauf nach der aktuellen Verarbeitung an. Erst dann entscheidest du, ob du sie prüfst und korrigierst oder ungeprüft fortfährst. Die Texterkennung selbst bleibt in beiden Fällen aktiv. Wie viele Werte gefunden werden, ist vorher nicht bekannt; andere OCR-Texte werden dadurch nicht geprüft. Die spätere Markdown-Nachkorrektur bleibt freiwillig.</p>
       </div>
       <div id="file-section" class="card-section files-section">
         <h2 class="step-heading"><span class="step-number secondary">2</span> Dateien hinzufügen</h2>
@@ -59,11 +74,16 @@
       <div class="job-bar"><span class="meta uppercase">AUFTRAG</span><strong id="job-task"></strong><span class="divider">·</span><strong id="job-name"></strong><span id="job-count" class="meta"></span><button id="job-files-toggle" class="text-button trailing" aria-expanded="false" aria-controls="job-files">Dateien anzeigen ⌄</button></div>
       <ul id="job-files" class="job-files" hidden></ul>
       <div class="card-section job-content">
-        <div class="job-status"><span id="job-icon" class="status-icon" aria-hidden="true"></span><div><h2 id="job-title" tabindex="-1">Verarbeitung wird vorbereitet</h2><p id="job-description" class="muted"></p></div></div>
-        <div id="file-problems" class="file-problems" hidden><h3>Dateien mit Hinweisen</h3><div id="problem-list"></div></div>
+        <div id="job-status" class="job-status"><span id="job-icon" class="status-icon" aria-hidden="true"></span><div><h2 id="job-title" tabindex="-1">Verarbeitung wird vorbereitet</h2><p id="job-description" class="muted"></p></div></div>
         <progress id="job-progress" max="1" aria-label="Abgeschlossene Dateien"></progress>
         <p id="job-current" class="meta"></p>
         <div id="job-actions" class="button-row"></div>
+        <div id="job-skip-confirm" class="run-notice" hidden>
+          <p><strong>Ohne Vergleich der erkannten E-Mails und Telefonnummern fortfahren?</strong> Diese Werte werden nicht als richtig bestätigt. Der Markdown-Text bleibt unverändert und kann OCR-Lesefehler enthalten; die Dateien bleiben nicht anonymisiert. Bereits gespeicherte Korrekturen bleiben erhalten.</p>
+          <div class="button-row"><button id="job-skip-accept" type="button">Ungeprüft fortfahren</button><button id="job-skip-cancel" type="button">Doch vergleichen</button></div>
+        </div>
+        <details id="job-more" class="job-more" hidden><summary>Weitere Aktionen</summary><div id="job-secondary-actions" class="button-row"></div></details>
+        <details id="file-problems" class="file-problems" hidden><summary id="file-problems-summary">Hinweise zu diesem Lauf</summary><div id="problem-list"></div></details>
       </div>
     </div>
   </section>
@@ -79,34 +99,54 @@
     </div>
   </section>
   <section id="review-view" hidden role="tabpanel" aria-labelledby="nav-history"><div class="review-heading"><h2 id="review-heading" tabindex="-1">Lokale Prüfung</h2><span id="review-scope" class="meta">Entscheidungen gelten für diesen Lauf</span></div><iframe id="review-frame" title="Fundstellen gemeinsam prüfen" src="about:blank"></iframe></section>
-  <section id="documents-view" class="card" hidden role="tabpanel" aria-labelledby="documents-heading">
+  <section id="documents-view" class="card" hidden role="tabpanel" aria-labelledby="nav-history">
     <div class="card-section">
       <div class="section-heading"><div><span class="eyebrow">DOKUMENTPRÜFUNG · NUR LOKAL</span><h2 id="documents-heading" tabindex="-1">Prüfen und für KI exportieren</h2><p id="documents-run" class="meta"></p></div><button id="documents-back">Zur Verarbeitung</button></div>
       <p id="documents-purpose" class="muted">Technische Verarbeitung ist noch keine Freigabe. Vergleiche Quelle und Markdown. Häkchen wählen nur aus; erst die Sammelaktion speichert deine Freigabe.</p>
+      <ol id="documents-main-guide" class="document-main-guide" hidden><li><strong>Vergleichen:</strong> Links eine Datei öffnen und Originaltext mit dem geplanten anonymisierten Markdown rechts vergleichen.</li><li><strong>Freigeben:</strong> Nur geprüfte Dateien anhaken und „Auswahl freigeben“ klicken. Das speichert die Freigabe, erstellt aber noch keine KI-Kopie.</li><li><strong>Optional exportieren:</strong> Erst danach „Auswahl für KI exportieren“ wählen und den Kopiervorgang ausdrücklich bestätigen.</li></ol>
+      <div id="documents-loading" class="document-loading" role="status" hidden><span class="working" aria-hidden="true">⚙</span><strong id="documents-loading-text">Dokumente und Hinweise werden geladen …</strong></div>
       <p id="documents-status" class="notice" role="status"></p>
-      <section id="documents-unavailable" class="notice error" aria-label="Nicht verfügbare oder unklare Dokumentprüfstände" hidden></section>
+      <section id="documents-bulk-progress" class="document-bulk-progress" role="status" aria-live="polite" hidden><h3 id="documents-bulk-title">Freigaben werden gespeichert</h3><p id="documents-bulk-count"></p><progress id="documents-bulk-meter" value="0" max="1"></progress><p class="meta">Bitte dieses Fenster geöffnet lassen. Erst die bestätigten Entscheidungen zählen; danach wird der gespeicherte Stand erneut abgeglichen.</p></section>
+      <div id="documents-review-controls">
+      <section id="documents-unavailable" aria-label="Hinweise und nicht verfügbare Dateien" hidden></section>
       <button id="documents-reload" class="text-button">Gespeicherten Stand neu laden</button>
-      <div id="documents-identity-reference" class="button-row"><button id="documents-identities">Aktuelle Zuordnung (vertraulich)</button><p class="meta">Für die verfügbaren gespeicherten Dokumentstände, nicht für KI. Exportbelege öffnen ihre damalige Zuordnung separat. Keine automatische Löschung.</p></div>
+      <details id="documents-identity-reference" class="document-extra-actions"><summary>Vertrauliche Zuordnung ansehen (optional)</summary><div class="button-row"><button id="documents-identities">Aktuelle Zuordnung öffnen</button></div><p class="meta">Nur für die gespeicherten Dokumentstände, nicht für KI. Exportbelege öffnen ihre damalige Zuordnung separat. Keine automatische Löschung.</p></details>
       <section id="document-recovery-draft" class="file-problems" hidden aria-labelledby="document-recovery-label"><h3 id="document-recovery-label"></h3><textarea id="document-recovery-text" readonly spellcheck="false" aria-label="Nicht bestätigter Korrekturentwurf"></textarea><button id="document-recovery-discard">Diesen erhaltenen Entwurf ausdrücklich verwerfen</button></section>
       <details id="documents-export-receipts" hidden><summary>Gespeicherte Exportbelege</summary><p class="meta">Diese lokalen Belege dokumentieren abgeschlossene Kopiervorgänge, auch nach einer verlorenen Empfangsbestätigung. Sie prüfen nicht, ob Dateien später verändert oder gelöscht wurden. Eine vertrauliche Zuordnung gehört ausschließlich zu den damaligen exportierten Dokumentständen und wird nicht in den KI-Ordner kopiert.</p><ul id="documents-export-receipt-list"></ul></details>
-      <div class="documents-toolbar"><label><input id="documents-all" type="checkbox"> Alle auswählen</label><span id="documents-selected" class="meta">0 ausgewählt</span><span class="spacer"></span><button id="documents-approve">Auswahl freigeben</button><button id="documents-revoke">Freigaben widerrufen</button><button id="documents-export" class="primary">Auswahl für KI exportieren</button></div>
+      <div id="documents-filter-bar" class="documents-filter-bar" hidden><label for="documents-filter">Dateien anzeigen</label><select id="documents-filter"><option value="notices">Mit Hinweisen</option><option value="edited">Nachbearbeitet</option><option value="all">Alle Dateien</option><option value="without">Ohne Hinweise</option></select><span id="documents-filter-summary" class="meta" role="status"></span></div>
+      <div class="documents-toolbar"><label><input id="documents-all" type="checkbox"> <span id="documents-all-label">Alle auswählen</span></label><span id="documents-selected" class="meta">0 ausgewählt</span><span class="spacer"></span><button id="documents-approve">Auswahl freigeben</button><button id="documents-export" class="primary">Auswahl für KI exportieren</button></div>
+      <details id="documents-approval-extras" class="document-extra-actions" hidden><summary>Freigaben verwalten (optional)</summary><p class="meta">Wenn du einen Textstand doch noch nicht freigeben möchtest: betroffene Dateien anhaken und die Freigabe ausdrücklich widerrufen. Bereits erstellte KI-Kopien bleiben unverändert.</p><button id="documents-revoke">Freigaben widerrufen</button></details>
       <div class="documents-layout">
         <div id="documents-list" class="documents-list" aria-label="Dokumente dieses Laufs"></div>
         <div class="document-detail">
           <h3 id="document-name" tabindex="-1">Dokument auswählen</h3><p id="document-revision" class="meta"></p>
           <div class="button-row document-pagination"><button id="document-previous">Vorherige Datei</button><span id="document-position" class="meta"></span><button id="document-next">Nächste Datei</button></div>
-          <div class="document-comparison"><label>Extrahierter Originaltext<textarea id="document-original" readonly spellcheck="false" aria-label="Extrahierter Originaltext"></textarea></label><label>Geplanter Markdown-Text<textarea id="document-markdown" readonly spellcheck="false" aria-label="Geplanter Markdown-Text"></textarea></label></div>
-          <div class="button-row"><button id="document-redact">Markierten Text zusätzlich maskieren</button><button id="document-restore">Zum technisch geprüften Basisstand</button><button id="document-save-correction" hidden>Markdown-Korrektur speichern</button><button id="document-discard-correction" hidden>Eingaben verwerfen</button></div>
-          <p id="document-edit-hint" class="meta">Diese Textansicht zeigt noch keinen vollständigen Entitätenplan. Zusätzliche Maskierungen und Rückkehr zum Basisstand heben die Freigabe auf. Kein freies Einfügen von Originalwerten. Private Prüfstände bleiben lokal gespeichert und gehören nicht in KI-Uploads.</p>
+          <div class="document-comparison"><label>Extrahierter Originaltext<textarea id="document-original" readonly spellcheck="false" aria-label="Extrahierter Originaltext"></textarea></label><label><span id="document-markdown-caption">Geplanter Markdown-Text</span><textarea id="document-markdown" readonly spellcheck="false" aria-label="Geplanter Markdown-Text" aria-describedby="document-edit-hint"></textarea></label></div>
+          <p id="document-edit-hint" class="meta">Bitte zuerst ein Dokument wählen. Im Anonymisierungsweg ist der geplante Markdown-Text nur lesbar und markierbar; Änderungen erfolgen über die Prüfaktionen und benötigen danach eine neue Freigabe.</p>
+          <div class="button-row"><button id="document-save-correction" hidden>Markdown-Korrektur speichern</button><button id="document-discard-correction" hidden>Eingaben verwerfen</button></div>
+          <details id="document-extra-actions" class="document-extra-actions" hidden><summary>Weitere Textänderungen (optional)</summary>
+            <p class="meta">Nur nötig, wenn der geplante anonymisierte Text noch eine sensible Stelle enthält oder eine erkannte Stelle anders behandelt werden soll. Änderungen erzeugen einen neuen Prüfstand und heben die Freigabe der betroffenen Datei auf. Bereits erstellte KI-Kopien bleiben unverändert.</p>
+            <div class="button-row"><button id="document-redact">Zusätzliche Maskierung vorbereiten</button><button id="document-restore">Basisstand-Wiederherstellung vorbereiten</button></div>
+            <div id="document-change-confirm" class="document-change-confirm" hidden>
+              <p id="document-change-confirm-text" role="status"></p>
+              <div class="button-row"><button id="document-change-cancel" type="button">Abbrechen – nichts ändern</button><button id="document-change-save" type="button" class="primary">Änderung speichern</button></div>
+            </div>
           <section id="document-entities" hidden aria-labelledby="document-entities-heading">
             <h3 id="document-entities-heading">Erkannte Stellen gemeinsam bearbeiten</h3>
-            <p class="meta">Häkchen wählen nur aus. Gleiche vollständige Personen- oder Unternehmensidentitäten können gemeinsam im ganzen Lauf behandelt werden; nachweislich zugeordnete Aliasse folgen ihnen. Kontakte, nicht eindeutig zugeordnete Nachnamen und unklare Aliasse bleiben dateibezogen. Jede Änderung hebt betroffene Freigaben auf; vor dem Export wird jeder neue Text erneut geprüft.</p>
+            <ol class="entity-guide meta">
+              <li><strong>Wert ändern:</strong> Zeile anhaken, Behandlung wählen und „Auswahl anwenden“ klicken. Häkchen allein speichern nichts. „Technisch geprüfte Ersetzung“ stellt den automatischen Vorschlag wieder her.</li>
+              <li><strong>Geltung festlegen:</strong> „Nur diese Datei“ wirkt lokal. „Gesamten Lauf · gleiche Identität“ wirkt nur bei eindeutig zugeordneten Personen oder Unternehmen auch auf passende Dateien. Kontakte und unklare Zuordnungen bleiben dateibezogen.</li>
+              <li><strong>Vor Export prüfen:</strong> „Originalwert beibehalten“ kann ihn in der Ausgabe sichtbar lassen. Jede Änderung hebt betroffene Freigaben auf. Den neuen Text erneut vergleichen und ausdrücklich freigeben; ein KI-Export startet dadurch nicht.</li>
+            </ol>
             <div class="entities-toolbar"><label><input id="entities-all" type="checkbox"> Sichtbare auswählen</label><label>Behandlung <select id="entities-decision"><option value="default">Technisch geprüfte Ersetzung</option><option value="person">Als Person ersetzen</option><option value="organization">Als Unternehmen ersetzen</option><option value="keep">Originalwert beibehalten</option></select></label><label>Anwenden auf <select id="entities-scope"><option value="run">Gesamten Lauf · gleiche Identität</option><option value="document">Nur diese Datei</option></select></label><button id="entities-apply">Auswahl anwenden</button></div>
             <p id="entities-count" class="meta" role="status"></p>
             <div class="entity-table-wrap"><table class="entity-table"><thead><tr><th scope="col">Auswahl</th><th scope="col">Originalwert</th><th scope="col">Geplante Ausgabe</th><th scope="col">Status</th></tr></thead><tbody id="entities-list"></tbody></table></div>
             <div class="button-row"><button id="entities-previous">Zurück</button><span id="entities-page" class="meta"></span><button id="entities-next">Weiter</button></div>
           </section>
+          </details>
+          <p id="document-action-status" class="document-action-status" role="status" aria-live="polite" hidden></p>
         </div>
+      </div>
       </div>
     </div>
   </section>
@@ -114,12 +154,22 @@
     <div class="export-dialog-content">
       <h2 id="document-export-title">Auswahl exportieren</h2>
       <p id="document-export-purpose"></p><p id="document-export-target" class="path"></p>
-      <div id="document-export-preview"><h3>Enthalten · neutrale Dateinamen</h3><ul id="document-export-files"></ul>
+      <p class="meta">Der Ergebnisordner ist eine lokale Einstellung, die auch für künftige Läufe gilt. Vorhandene Exporte werden bei einer Änderung nicht verschoben. Die Ordnerwahl startet noch keine Kopie.</p>
+      <div id="document-export-preview"><h3 id="document-export-filenames-heading">Enthalten · neutrale Dateinamen</h3><ul id="document-export-files"></ul>
         <div class="export-exclusions"><h3>Nicht enthalten</h3><p>Originaldateien, Identitätszuordnung, Dateizuordnung, private Prüfstände und technische Begleitdateien.</p></div>
       </div>
       <p id="document-export-result" role="status" hidden></p>
       <label id="document-export-abandon-option" hidden><input id="document-export-abandon-check" type="checkbox"> Diesen unvollständigen Exportauftrag nicht weiter verfolgen. Bereits geschriebene Dateien werden nicht gelöscht.</label>
-      <div class="button-row"><button id="document-export-close" autofocus>Abbrechen</button><button id="document-export-abandon" hidden>Auftrag nicht weiter verfolgen</button><button id="document-export-confirm" class="primary">Exportieren</button></div>
+      <div class="button-row"><button id="document-export-close" autofocus>Abbrechen</button><button id="document-export-abandon" hidden>Auftrag nicht weiter verfolgen</button><button id="document-export-configure" hidden>Ergebnisordner wählen/ändern</button><button id="document-export-confirm" class="primary">Exportieren</button></div>
+    </div>
+  </dialog>
+  <dialog id="result-abandon-dialog" aria-modal="true" aria-labelledby="result-abandon-title" aria-describedby="result-abandon-purpose">
+    <div class="export-dialog-content">
+      <h2 id="result-abandon-title">Unvollständige Bereitstellung aufgeben?</h2>
+      <p id="result-abandon-purpose">DataSecure wird fehlende Ergebnisdateien dieses Anonymisierungslaufs nicht mehr automatisch kopieren. Originale und private Prüfstände bleiben unverändert. Bereits geschriebene Teilkopien bleiben im Ergebnisordner; sie werden weder gelöscht noch als vollständig oder für KI freigegeben markiert.</p>
+      <p id="result-abandon-counts" class="meta"></p>
+      <label><input id="result-abandon-check" type="checkbox"> Ich verstehe, dass DataSecure diesen Ergebnisexport dauerhaft nicht mehr fortsetzt.</label>
+      <div class="button-row"><button id="result-abandon-cancel" type="button">Nicht aufgeben</button><button id="result-abandon-accept" type="button" disabled>Bereitstellung dieses Laufs aufgeben</button></div>
     </div>
   </dialog>
   <footer class="page-footer"><span>Nur lokal · Originale bleiben unverändert · OCR und Extraktion können Auslassungen enthalten</span><span id="product-version"></span></footer>

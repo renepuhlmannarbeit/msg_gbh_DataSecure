@@ -6,9 +6,12 @@ const { SafeError } = require('../runtime');
 const { workPath, assertPlainWorkFile } = require('./batch-private-store');
 const { releaseOwnedLock } = require('./batch-lock-release');
 const { verifyMarkdownItem } = require('../standalone/markdown-store');
+const { isMarkdownBatch } = require('../core/processing-mode');
+const { contentOptionsForBatch } = require('../core/content-options');
+const { privatePublicationRecord, confirmPublication } = require('./standalone-anonymized-batch');
 
 function conversionBatch(state) {
-  return state?.schema === 'datasecure-batch/5' && state.processing_mode === 'markdown-only' && state.product_channel === 'standalone';
+  return isMarkdownBatch(state);
 }
 
 const WORK_NAME_RE = /^[0-9]{3}_[a-f0-9]{24}(?:\.[a-z0-9]+)?$/i;
@@ -33,13 +36,21 @@ function createBatchDelivery(options = {}) {
 
   function deliveryResult(state, item) {
     if (conversionBatch(state)) {
-      if (!verifyMarkdownItem(item)) throw new ErrorType('Das lokale Konvertat konnte nicht sicher verifiziert werden.');
+      if (!verifyMarkdownItem(item, contentOptionsForBatch(state))) throw new ErrorType('Das lokale Konvertat konnte nicht sicher verifiziert werden.');
       return { ok: true, artifact_id: item.artifact_id, processing_mode: 'markdown-only', anonymized: false,
         extraction_grade: item.extraction_grade, reason_codes: [...item.reason_codes],
         ...publicProgress(state), raw_content_sent_to_claude: false };
     }
+    if (contentOptionsForBatch(state)) {
+      const packageId = item?.package_id;
+      if (typeof packageId !== 'string') throw new ErrorType('Die lokale Paketkennung ist ungültig.');
+      const publication = privatePublicationRecord(packageId, state, item);
+      if (publication.state !== 'verified') throw new ErrorType('Das lokale Anonymisierungsergebnis konnte nicht sicher verifiziert werden.');
+      return { ok: true, package_id: packageId, processing_mode: 'markdown-and-anonymize', anonymized: true,
+        verification: 'passed', ...publicProgress(state), raw_content_sent_to_claude: false };
+    }
     const packageId = String(item?.package_id || '');
-    if (!regularPublishedPackage(packageId)) {
+    if (!regularPublishedPackage(packageId, state, item)) {
       throw new ErrorType('Das lokal veröffentlichte Paket konnte nicht sicher verifiziert werden.');
     }
     const readGrant = issueReadCapability(packageId);
@@ -99,15 +110,16 @@ function createBatchDelivery(options = {}) {
   function acknowledgeDeliveredPackage(token, packageId, deps = {}) {
     return enter(token, () => {
       const state = readState(token);
-      if (state.schema === 'datasecure-batch/5' || state.processing_mode === 'markdown-only') {
+      if (isMarkdownBatch(state)) {
         throw new ErrorType('Nicht anonymisierte Konvertate sind keine Claude-Übergaben.');
       }
+      if (contentOptionsForBatch(state)) throw new ErrorType('Diese Standalone-Ergebnisse bleiben lokal und sind keine bestätigbaren Plugin-Übergaben.');
       assertLocalExecutorAccess(state, deps.executorPid);
       const item = state.items.find((candidate) =>
         [deliveryPendingStatus, 'released'].includes(candidate.status) && candidate.package_id === packageId
       );
       if (!item) throw new ErrorType('Für dieses Paket liegt keine bestätigbare Batch-Übergabe vor.');
-      if (!regularPublishedPackage(packageId)) {
+      if (!regularPublishedPackage(packageId, state, item)) {
         throw new ErrorType('Das lokal veröffentlichte Paket konnte nicht sicher verifiziert werden.');
       }
       let changed = false;
@@ -142,16 +154,17 @@ function createBatchDelivery(options = {}) {
     }
     return enter(token, () => {
       const state = readState(token);
-      if (state.schema === 'datasecure-batch/5' || state.processing_mode === 'markdown-only') {
+      if (isMarkdownBatch(state)) {
         throw new ErrorType('Nicht anonymisierte Konvertate sind keine Claude-Übergaben.');
       }
+      if (contentOptionsForBatch(state)) throw new ErrorType('Diese Standalone-Ergebnisse bleiben lokal und sind keine bestätigbaren Plugin-Übergaben.');
       assertLocalExecutorAccess(state, deps.executorPid);
       // Validate the whole page before changing any acknowledgement.
       const items = packageIds.map((packageId) => {
         const item = state.items.find((candidate) =>
           [deliveryPendingStatus, 'released'].includes(candidate.status) && candidate.package_id === packageId
         );
-        if (!item || !regularPublishedPackage(packageId)) {
+        if (!item || !regularPublishedPackage(packageId, state, item)) {
           throw new ErrorType('Für mindestens ein Paket liegt keine bestätigbare Batch-Übergabe vor.');
         }
         return item;
@@ -192,9 +205,11 @@ function createBatchDelivery(options = {}) {
       const item = state.items.find((candidate) =>
         candidate.status === deliveryPendingStatus && (converting ? candidate.artifact_id : candidate.package_id) === packageId
       );
-      if (!item || !(converting ? verifyMarkdownItem(item) : regularPublishedPackage(packageId))) {
+      if (!item || !(converting ? verifyMarkdownItem(item, contentOptionsForBatch(state)) :
+        contentOptionsForBatch(state) ? privatePublicationRecord(packageId, state, item).state === 'verified' : regularPublishedPackage(packageId, state, item))) {
         throw new ErrorType('Das lokal veröffentlichte Paket konnte nicht sicher abgeschlossen werden.');
       }
+      if (!converting && contentOptionsForBatch(state)) confirmPublication(state, item);
       item.status = 'released';
       item.checkpoint = 'released_locally';
       if (!converting) item.analysis_acknowledged = false;

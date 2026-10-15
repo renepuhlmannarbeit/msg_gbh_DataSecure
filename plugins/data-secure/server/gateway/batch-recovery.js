@@ -7,6 +7,7 @@ const { TOKEN_RE, batchRoot, batchPath, safeRemoveWorkDirectory } = require('./b
 const { createBatchIntakeIntent, SUFFIX: INTAKE_SUFFIX } = require('./batch-intake-intent');
 const { releaseOwnedLock } = require('./batch-lock-release');
 const { batchReviewReady } = require('./batch-next-action');
+const { isMarkdownBatch } = require('../core/processing-mode');
 
 function createBatchRecovery(options = {}) {
   const io = options.io || fs;
@@ -138,8 +139,8 @@ function createBatchRecovery(options = {}) {
     const progress = publicProgress(latest, { skipResultProjection: true });
     const visible = visibleExportStatus(latest.token, progress.released);
     return Object.freeze({
-      ...(latest.schema === 'datasecure-batch/5' ? { processing_mode: 'markdown-only', warning_count: progress.warning_count || 0 } : {}),
-      ...(['datasecure-batch/5', 'datasecure-batch/6'].includes(latest.schema)
+      ...(['datasecure-batch/5', 'datasecure-batch/7'].includes(latest.schema) && isMarkdownBatch(latest) ? { processing_mode: 'markdown-only', warning_count: progress.warning_count || 0 } : {}),
+      ...(['datasecure-batch/5', 'datasecure-batch/6', 'datasecure-batch/7'].includes(latest.schema)
         && latest.items.some(item => item.error_code === 'CONVERSION_TERMINATION_UNCONFIRMED')
         ? { termination_unconfirmed: true } : {}),
       selected_count: progress.batch_total,
@@ -148,7 +149,10 @@ function createBatchRecovery(options = {}) {
       review_count: progress.deferred_review,
       review_ready: batchReviewReady(progress),
       result_count: visible.available === true ? visible.exported : 0,
+      ...(visible.abandoned === true || visible.pending > 0 || visible.completion_pending === true
+        ? { exported_count: visible.exported } : {}),
       export_pending_count: visible.pending,
+      ...(visible.abandoned === true ? { export_abandoned: true } : {}),
       ...(visible.completion_pending === true ? { completion_pending: true } : {}),
       // A processing checkpoint survives a dead worker. Only a live executor
       // proves current work; otherwise the recovery counters expose Resume.

@@ -6,34 +6,110 @@
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
 const { createSuite } = require('./helpers');
 const { createDocumentReviewStore } = require('../plugins/data-secure/server/gateway/standalone-document-review-store');
+const { StandaloneApplicationService, defaultDependencies } = require('../plugins/data-secure/server/standalone/application-service');
 const { createPrivateWorkStore } = require('../plugins/data-secure/server/gateway/private-work-store');
 const { bindDirectory } = require('../plugins/data-secure/server/core/bound-file-io');
 const { execFileSync } = require('node:child_process');
 const { validatePrivateMessage } = require('../plugins/data-secure/server/standalone/desktop-ipc');
 const { test, assert, done } = createSuite('Standalone document review / selected AI export');
 const root = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'datasecure-document-review-'));
+process.env.EU_PRIVACY_DATA_ROOT = path.join(root, 'artifact-private-data');
 const sha = value => crypto.createHash('sha256').update(value).digest('hex');
+test('document review only calls a run complete with matching durable result and failure counts', () => {
+  const id = 'a'.repeat(64), data = { processing_mode: 'markdown-and-anonymize', documents: [{ document_id: '1'.repeat(32) }],
+    unavailable: [], not_processed_documents: [{ document_id: '2'.repeat(32) }], unclassified_documents: [] };
+  const entry = { status: 'results_available', processing_mode: data.processing_mode,
+    selected_count: 2, result_count: 1, failed_count: 1 };
+  const service = { deps: { documentReviews: { list: () => data }, runHistory: { find: batchId => {
+    assert.equal(batchId, id); return entry;
+  } } } };
+  const read = () => StandaloneApplicationService.prototype.documentReviews.call(service, id);
+  assert.equal(read().processing_complete, true);
+  for (const change of [{ status: 'export_pending' }, { selected_count: 3 }, { result_count: 2 },
+    { failed_count: 0 }, { processing_mode: 'markdown-only' }]) {
+    Object.assign(entry, change);
+    assert.equal(read().processing_complete, false, JSON.stringify(change));
+    Object.assign(entry, { status: 'results_available', processing_mode: data.processing_mode,
+      selected_count: 2, result_count: 1, failed_count: 1 });
+  }
+  data.unclassified_documents = [{ document_id: '3'.repeat(32) }];
+  assert.equal(read().processing_complete, false);
+  assert.equal(Object.hasOwn(data, 'processing_complete'), false, 'stored review data is not mutated');
+});
+test('anonymization classifies OCR-off omissions only from matching bound run settings and stopped source', () => {
+  const id = 'b'.repeat(64), documentId = '4'.repeat(32);
+  const data = { processing_mode: 'markdown-and-anonymize', documents: [], unavailable: [], unclassified_documents: [],
+    not_processed_documents: [{ document_id: documentId, name: 'scan.png', reason_code: 'IMAGE_OCR_REQUIRED' }] };
+  const state = { schema: 'datasecure-batch/7', product_channel: 'standalone', processing_mode: data.processing_mode, token: id,
+    content_options: { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: false, imageOcr: false },
+    items: [{ id: documentId, source_label: 'scan.png', status: 'stopped', local_mapping_exported: true,
+      error_code: 'IMAGE_OCR_REQUIRED' }] };
+  const service = { deps: { documentReviews: { list: () => data }, readStates: () => [state],
+    runHistory: { find: () => ({ status: 'completed_without_results', processing_mode: data.processing_mode,
+      selected_count: 1, result_count: 0, failed_count: 1 }) } } };
+  const read = () => StandaloneApplicationService.prototype.documentReviews.call(service, id);
+  assert.equal(read().not_processed_documents[0].classification, 'ocr_omission');
+  state.content_options.scanOcr = true;
+  assert.equal(read().not_processed_documents[0].classification, 'error');
+  state.content_options.scanOcr = false; state.items[0].source_label = 'different.png';
+  assert.equal(read().not_processed_documents[0].classification, 'error');
+  assert.equal(Object.hasOwn(data.not_processed_documents[0], 'classification'), false);
+});
+test('anonymization labels a bound privacy stop without inventing a reviewable document', () => {
+  const id = 'c'.repeat(64), documentId = '5'.repeat(32);
+  const data = { processing_mode: 'markdown-and-anonymize', documents: [], unavailable: [], unclassified_documents: [],
+    not_processed_documents: [{ document_id: documentId, name: 'long.txt', reason_code: 'AMBIGUITY_REVIEW_REQUIRED' }] };
+  const state = { product_channel: 'standalone', processing_mode: data.processing_mode, token: id,
+    items: [{ id: documentId, source_label: 'long.txt', status: 'stopped', local_mapping_exported: true,
+      error_code: 'AMBIGUITY_REVIEW_REQUIRED' }] };
+  const service = { deps: { documentReviews: { list: () => data }, readStates: () => [state],
+    runHistory: { find: () => ({ status: 'completed_without_results', processing_mode: data.processing_mode,
+      selected_count: 1, result_count: 0, failed_count: 1 }) } } };
+  const read = () => StandaloneApplicationService.prototype.documentReviews.call(service, id);
+  assert.equal(read().not_processed_documents[0].classification, 'privacy_stop');
+  state.items[0].source_label = 'other.txt';
+  assert.equal(read().not_processed_documents[0].classification, 'error');
+  assert.equal(data.not_processed_documents[0].classification, undefined);
+});
 let n = 0;
-function fixture(v2 = false, traced = false, rejected = null) {
+function fixture(v2 = false, traced = false, rejected = null, fields = null) {
   const batchId = (++n).toString(16).padStart(64, '0'), dir = path.join(root, String(n));
   const output = path.join(dir, 'packages'), results = path.join(dir, 'results'), data = path.join(dir, 'private');
   for (const folder of [output, results, data]) fs.mkdirSync(folder, { recursive: true });
-  const original = 'Name: Anna Beispiel\nAnna Beispiel hat 42 Projekte.\nE-Mail: anna@example.invalid';
-  const items = [1, 2].map(index => ({ id: index.toString(16).padStart(32, '0'), name: `nested/Quelle-${index}.pdf`,
+  const original = fields?.original || 'Name: Anna Beispiel\nAnna Beispiel hat 42 Projekte.\nE-Mail: anna@example.invalid';
+  const items = Array.from({ length: fields?.documentCount || 2 }, (_unused, offset) => offset + 1).map(index => ({ id: (fields?.contentOptions ? n * 100 + index : index).toString(16).padStart(32, '0'), name: `nested/Quelle-${index}.pdf`,
     sha256: sha(traced ? original : 'original'), status: 'released' }));
   if (rejected) items.push(rejected);
   const state = { product_channel: 'standalone', processing_mode: 'markdown-and-anonymize', token: batchId, items,
-    ...(v2 ? { standalone_document_review: true } : {}) };
+    ...(v2 ? { standalone_document_review: true } : {}),
+    ...(fields?.contentOptions ? { schema: 'datasecure-batch/7', content_options: fields.contentOptions } : {}) };
   const create = () => createDocumentReviewStore({ dataRoot: data, outputRoot: () => output, resultRoot: () => results, expectedDocuments: () => items });
-  const captured = traced ? require('../plugins/data-secure/server/pii-engine').anonymize(original, 'general', { captureTransformPlan: true }) : null;
+  const captured = traced ? require('../plugins/data-secure/server/pii-engine').anonymize(original, 'general', { captureTransformPlan: true,
+    ...(fields?.contentOptions && !fields.legacyRedactor ? { productChannel: 'standalone', contentOptions: fields.contentOptions } : {}) }) : null;
   const store = create(), text = captured?.text || '# Inhalt\n[PERSON_001] hat 42 Projekte.\n';
   for (const item of items.filter(row => row !== rejected)) {
     const packageId = `ds_${item.id}`, packageDir = path.join(output, packageId); fs.mkdirSync(packageDir);
+    let boundArtifact;
+    if (fields?.contentOptions) {
+      const { createSourceExtraction } = require('../plugins/data-secure/server/core/source-extraction-contract');
+      const pub = require('../plugins/data-secure/server/standalone/anonymized-artifact');
+      const coverage = { status: 'complete', reason_codes: [] };
+      const proof = pub.verifyAnonymizedPublication({ markdown: text, profile: 'general', content_options: fields.contentOptions,
+        source_extraction: createSourceExtraction({ source_type: 'pdf', content_options: fields.contentOptions, coverage, markdown: original }, 8_000_000),
+        dictionary: captured.dictionary, strong_person_anchor: captured.strongPersonAnchor === true, reviewed_person_candidates: null });
+      boundArtifact = pub.createAnonymizedArtifact({ package_id: packageId, content_options: fields.contentOptions, source_type: 'pdf', profile: 'general',
+        operation_id: crypto.randomUUID(), created_at: new Date().toISOString(), coverage, markdown: text, verification_proof: proof });
+      const target = path.join(require('../plugins/data-secure/server/standalone/anonymized-store').anonymizedArtifactRoots().output, packageId);
+      fs.mkdirSync(target); fs.writeFileSync(path.join(target, `${packageId}.md`), text);
+      fs.writeFileSync(path.join(target, 'manifest.json'), JSON.stringify(boundArtifact.manifest));
+    }
     store.capture(state, item, { package_id: packageId, original_text: captured ? original : 'Anna Beispiel hat 42 Projekte.', markdown: text,
+      ...(fields?.contentOptions ? { content_options: fields.contentOptions, source_type: 'pdf', publication_binding: boundArtifact.expectation } : {}),
       ...(captured ? { transform_trace: captured.transform_trace, verification_context: {
         profile: 'general', dictionary: captured.dictionary, strong_person_anchor: captured.strongPersonAnchor === true,
         ruleset: require('../plugins/data-secure/server/privacy/policy').PRIVACY_RULESET_VERSION,
         credential_policy: require('../plugins/data-secure/server/privacy/policy').CREDENTIAL_CONTEXT_POLICY_VERSION,
+        ...(fields && Object.hasOwn(fields, 'policyMarker') ? { person_field_policy: fields.policyMarker } : {}),
         publication_frame: { prefix: '', suffix: '' }, reviewed_ranges: [] } } : {}) });
     fs.writeFileSync(path.join(packageDir, `${packageId}.md`), text);
     fs.writeFileSync(path.join(packageDir, 'manifest.json'), JSON.stringify({ schema: 'eu-privacy-package/3', package_id: packageId,
@@ -54,6 +130,29 @@ function faultOnce(predicate, action) {
     return original.apply(this, arguments); };
   try { action(); assert.equal(failed, true); } finally { fs.linkSync = original; }
 }
+
+test('private document approval reconstructs bound field policy and never accepts a self-selected marker', () => {
+  // New fixtures use a real residual proof and closed /4 artifact in the
+  // private pool. Their direct file creation is not a Tauri/start-flow test.
+  const contentOptions = { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: true, imageOcr: false };
+  const policyMarker = require('../plugins/data-secure/server/core/person-field-policy').CONTENT_PERSON_FIELD_POLICY;
+  for (const change of [{}, { policyMarker: 'legacy-person-fields/1' }, { policyMarker: 'unknown' }]) {
+    const f = fixture(true, true, null, { original: 'First Name: Qvx', contentOptions, ...change });
+    throwsCode(() => f.decision(0, 'approve'), 'DOCUMENT_REVIEW_POLICY_CHANGED');
+    assert.equal(f.create().list(f.batchId).documents[0].approved, false);
+  }
+  const explicit = fixture(true, true, null, { original: '| First Name |\n| --- |\n| Qvx |', contentOptions, policyMarker });
+  const row = explicit.row(0), entity = explicit.store.entities(explicit.batchId, row.document_id, row.revision, 0).entities.find(value => value.kind === 'PERSON');
+  assert.ok(entity);
+  explicit.store.decide(explicit.batchId, row.document_id, { action: 'entities', ranges: [], revision: row.revision,
+    output_sha256: row.output_sha256, operation_id: crypto.randomBytes(16).toString('hex'),
+    entity_decisions: [{ entity_id: entity.entity_id, decision: 'keep' }] });
+  throwsCode(() => explicit.decision(0, 'approve'), 'DOCUMENT_REVIEW_RESIDUAL_PII');
+  const valid = fixture(true, true, null, { original: 'Vollständiger Name: Qvx', contentOptions, policyMarker });
+  valid.decision(0, 'approve'); assert.equal(valid.create().list(valid.batchId).documents[0].approved, true);
+  const legacy = fixture(true, true, null, { policyMarker });
+  throwsCode(() => legacy.decision(0, 'approve'), 'DOCUMENT_REVIEW_POLICY_CHANGED');
+});
 
 const rejectedInput = () => ({ id: '9'.repeat(32), name: 'nested/defekt.docx', status: 'stopped',
   checkpoint: 'source_preflight_stopped', error_code: 'SOURCE_CONTAINER_CORRUPT', local_mapping_exported: true,
@@ -502,7 +601,8 @@ test('private IPC refuses arbitrary paths, inserted text and malformed revision 
 });
 test('plain Markdown corrections persist, revoke approval and never use the KI namespace', () => {
   const f = fixture(), item = { id: '5'.repeat(32), name: 'scan.pdf', sha256: sha('source'), status: 'released' };
-  const id = `dm_${item.id}`, markdown = 'E-Mail: anqa@example.invalid\n';
+  const { readableText } = require('../plugins/data-secure/server/standalone/readable-markdown');
+  const id = `dm_${item.id}`, markdown = '## Seite 1\n\n' + readableText('Name: Anna Beispiel\nE-Mail: anqa@example.invalid\nFHIR < SDK').markdown;
   const { createMarkdownArtifact, validateMarkdownArtifact } = require('../plugins/data-secure/server/standalone/markdown-artifact');
   const { createMarkdownExtraction } = require('../plugins/data-secure/server/standalone/markdown-contract');
   const artifact = createMarkdownArtifact(createMarkdownExtraction({ source_type: 'pdf', markdown, coverage: { status: 'complete', reason_codes: [] } }), id);
@@ -514,19 +614,123 @@ test('plain Markdown corrections persist, revoke approval and never use the KI n
       const text = fs.readFileSync(path.join(f.output, artifactId, `${artifactId}.md`), 'utf8'); validateMarkdownArtifact(manifest, text); return { manifest, markdown: text }; } });
   const store = create(); store.capture({ ...f.state, processing_mode: 'markdown-only' }, item, { package_id: id, original_text: markdown, markdown });
   let row = store.list(f.batchId).documents.find(row => row.document_id === item.id);
+  assert.equal(row.text_modified, false);
+  const unapprovedSelection = [{ document_id: row.document_id, revision: row.revision, output_sha256: row.output_sha256 }];
+  assert.deepEqual(create().previewExport(f.batchId, '9'.repeat(32), unapprovedSelection).files,
+    [{ name: 'scan.md', sha256: row.output_sha256 }], 'raw preview is read-only before copy consent');
+  assert.equal(create().list(f.batchId).documents[0].approved, false, 'preview does not approve');
+  throwsCode(() => create().exportApproved(f.batchId, '9'.repeat(32), unapprovedSelection), 'DOCUMENT_REVIEW_UNAPPROVED');
+  const anonSelection = f.selection(0);
+  throwsCode(() => f.store.previewExport(f.batchId, '9'.repeat(32), anonSelection), 'DOCUMENT_REVIEW_UNAPPROVED');
+  assert.equal(fs.existsSync(path.join(f.results, 'DataSecure-Markdown-Korrektur')), false, 'neither preview nor refused copy creates output');
   const decide = (action, ranges = []) => { const result = create().decide(f.batchId, item.id, { action, ranges, revision: row.revision,
     output_sha256: row.output_sha256, operation_id: crypto.randomBytes(16).toString('hex') }); row = result; };
-  decide('approve'); decide('correct', [{ start: 8, end: 12, replacement: 'anna' }]);
+  const originalApproval = store.list(f.batchId).documents.find(row => row.document_id === item.id);
+  decide('approve');
+  assert.equal(row.text_modified, false, 'copy consent alone is not a text correction');
+  const approvedSelection = [{ document_id: item.id, revision: row.revision, output_sha256: row.output_sha256 }];
+  const correctionStart = markdown.indexOf('anqa@');
+  decide('correct', [{ start: correctionStart, end: correctionStart + 4, replacement: 'anna' }]);
+  assert.equal(row.text_modified, true, 'the changed current text is marked after durable replay');
+  assert.equal(create().list(f.batchId).documents.find(value => value.document_id === item.id).text_modified, true,
+    'restart retains the correction state');
   assert.equal(row.approved, false); assert.equal(row.processing_mode, 'markdown-only');
+  throwsCode(() => create().decide(f.batchId, item.id, { action: 'redact', ranges: [{ start: 0, end: 4 }],
+    revision: row.revision, output_sha256: row.output_sha256, operation_id: 'f'.repeat(32) }), 'DOCUMENT_REVIEW_INVALID');
   assert.match(create().chunk(f.batchId, item.id, row.revision, 0).markdown, /anna@example/u);
+  assert.match(create().chunk(f.batchId, item.id, row.revision, 0).markdown, /Name: Anna Beispiel/u);
+  assert.match(create().chunk(f.batchId, item.id, row.revision, 0).markdown, /FHIR &lt; SDK/u);
+  assert.ok(row.revision > originalApproval.revision);
+  throwsCode(() => create().exportApproved(f.batchId, '8'.repeat(32), approvedSelection), 'DOCUMENT_REVIEW_STALE');
   assert.equal(fs.readFileSync(path.join(folder, `${id}.md`), 'utf8'), markdown);
-  decide('approve'); const result = create().exportApproved(f.batchId, '6'.repeat(32), [{ document_id: item.id, revision: row.revision, output_sha256: row.output_sha256 }]);
+  decide('approve'); const selection = [{ document_id: item.id, revision: row.revision, output_sha256: row.output_sha256 }];
+  assert.equal(row.text_modified, true, 'copy consent does not clear the saved correction marker');
+  const preview = create().previewExport(f.batchId, '6'.repeat(32), selection);
+  assert.deepEqual(preview.files, [{ name: 'scan.md', sha256: row.output_sha256 }]);
+  assert.equal(fs.existsSync(path.join(f.data, 'document-reviews', f.batchId, 'export-' + '6'.repeat(32) + '.json')), false, 'preview creates no intent');
+  const result = create().exportApproved(f.batchId, '6'.repeat(32), selection);
   assert.equal(result.anonymized, false); assert.equal(result.processing_mode, 'markdown-only');
-  assert.match(fs.readFileSync(path.join(f.results, 'DataSecure-Markdown-Korrektur', result.folder_name, 'Dokument_01.md'), 'utf8'), /anna@example/u);
+  assert.match(fs.readFileSync(path.join(f.results, 'DataSecure-Markdown-Korrektur', result.folder_name, 'scan.md'), 'utf8'), /anna@example/u);
   assert.equal(fs.existsSync(path.join(f.results, 'DataSecure-KI-Export')), false);
   throwsCode(() => create().resolveIdentityOverview(f.batchId, '6'.repeat(32)), 'STANDALONE_IDENTITY_MAPPING_MISSING');
   assert.equal(create().list(f.batchId).export_receipts[0].identity_overview_available, false);
-  const anon = f.row(0); throwsCode(() => f.store.decide(f.batchId, anon.document_id, { action: 'correct', ranges: [{ start: 0, end: 0, replacement: 'Anna Beispiel' }],
+  // A persisted old raw plan must keep its neutral names when actually copied
+  // by the new exporter; do not merely test a digest reader in isolation.
+  const legacyId = '4'.repeat(32), legacyFiles = [{ name: 'Dokument_01.md', sha256: row.output_sha256 }];
+  const legacyDigest = sha(JSON.stringify({ schema: 'datasecure-document-export/4', batch_id: f.batchId, operation_id: legacyId,
+    processing_mode: 'markdown-only', selection, identity_binding_sha256: null }));
+  fs.writeFileSync(path.join(f.data, 'document-reviews', f.batchId, `export-${legacyId}.json`), JSON.stringify({
+    schema: 'datasecure-document-export/4', batch_id: f.batchId, operation_id: legacyId, request_sha256: legacyDigest,
+    processing_mode: 'markdown-only', identity_binding_sha256: null, root: f.results,
+    root_identity: bindDirectory(f.results).chain[0].identity, files: legacyFiles, selection }));
+  assert.deepEqual(create().previewExport(f.batchId, legacyId, selection).files, legacyFiles);
+  const legacyCopy = create().exportApproved(f.batchId, legacyId, selection);
+  assert.match(fs.readFileSync(path.join(f.results, 'DataSecure-Markdown-Korrektur', legacyCopy.folder_name, 'Dokument_01.md'), 'utf8'), /anna@example/u);
+  const anon = f.row(0);
+  const opPath = path.join(f.data, 'document-reviews', f.batchId, 'export-' + '6'.repeat(32) + '.json');
+  decide('restore_base');
+  assert.equal(row.text_modified, false, 'restoring the generated baseline clears the current correction marker');
+  assert.equal(create().list(f.batchId).documents.find(value => value.document_id === item.id).text_modified, false);
+  assert.equal(fs.readFileSync(path.join(folder, `${id}.md`), 'utf8'), markdown, 'the originally generated file is unchanged');
+  const op = JSON.parse(fs.readFileSync(opPath));
+  assert.equal(op.schema, 'datasecure-document-export/6');
+  op.files[0].name = 'renamed.md'; fs.writeFileSync(opPath, JSON.stringify(op));
+  throwsCode(() => create().previewExport(f.batchId, '6'.repeat(32), selection), 'AI_EXPORT_INVALID');
+  throwsCode(() => f.store.decide(f.batchId, anon.document_id, { action: 'correct', ranges: [{ start: 0, end: 0, replacement: 'Anna Beispiel' }],
     revision: anon.revision, output_sha256: anon.output_sha256, operation_id: '7'.repeat(32) }), 'DOCUMENT_REVIEW_INVALID');
+});
+
+test('source spelling, collisions and native-safe leaf policy are shared and do not silently sanitize', () => {
+  const { safeMarkdownOutputNames, validMarkdownInventory } = require('../plugins/data-secure/server/core/markdown-output-names');
+  const items = ['a.pdf', 'a.docx', 'a (2).pdf', 'é.pdf', 'e\u0301.pdf', '🧪 Bericht.pdf'].map(source_label => ({ source_label }));
+  assert.deepEqual(safeMarkdownOutputNames(items), ['a.md', 'a (2).md', 'a (2) (2).md', 'é.md', 'e\u0301 (2).md', '🧪 Bericht.md']);
+  for (const source_label of ['CON.pdf', 'LPT1.pdf', 'COM¹.pdf', 'a:b.pdf', 'a?.pdf', '🧪'.repeat(64) + '.pdf']) {
+    assert.throws(() => safeMarkdownOutputNames([{ source_label }]), error => error.code === 'DOCUMENT_EXPORT_NAME_INVALID' && error.failed_files[0].name === source_label);
+  }
+  for (const names of [['../a.md'], ['a.md', 'A.md'], ['é.md', 'e\u0301.md'], ['a.txt'], ['a\u200b.md']]) assert.equal(validMarkdownInventory(names), false);
+});
+test('packaged standalone service wires the bound run states used to classify review omissions', () => {
+  const priorRoot = process.env.EU_PRIVACY_DATA_ROOT;
+  const priorWorkspace = process.env.EU_PRIVACY_ROOT;
+  const priorChannel = process.env.DATASECURE_PRODUCT_CHANNEL;
+  try {
+    const deps = defaultDependencies({ dataRoot: path.join(root, 'wired-review-dependencies') });
+    assert.equal(typeof deps.readStates, 'function');
+  } finally {
+    for (const [key, value] of [['EU_PRIVACY_DATA_ROOT', priorRoot], ['EU_PRIVACY_ROOT', priorWorkspace],
+      ['DATASECURE_PRODUCT_CHANNEL', priorChannel]]) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+  }
+});
+test('export preview validates a multi-document decision chain once, not once per file', () => {
+  const f = fixture();
+  f.decision(0, 'approve'); f.decision(1, 'approve');
+  const selection = f.store.list(f.batchId).documents.map(({ document_id, revision, output_sha256 }) =>
+    ({ document_id, revision, output_sha256 }));
+  const originalList = fs.readdirSync, run = path.join(f.data, 'document-reviews', f.batchId);
+  let journalListings = 0;
+  fs.readdirSync = function(folder) {
+    if (folder === run) journalListings++;
+    return originalList.apply(this, arguments);
+  };
+  try {
+    const preview = f.store.previewExport(f.batchId, 'e'.repeat(32), selection);
+    assert.equal(preview.files.length, 2);
+  } finally { fs.readdirSync = originalList; }
+  assert.equal(journalListings, 2, 'decision and commit lists must be enumerated once for the selected set');
+});
+if (process.env.DATASECURE_PREVIEW_STRESS === '1') test('synthetic 132-document preview stays below the former desktop deadline', () => {
+  const f = fixture(false, false, null, { documentCount: 132 });
+  for (const row of f.store.list(f.batchId).documents) f.store.decide(f.batchId, row.document_id,
+    { action: 'approve', ranges: [], revision: row.revision, output_sha256: row.output_sha256,
+      operation_id: crypto.randomBytes(16).toString('hex') });
+  const selection = f.store.list(f.batchId).documents.map(({ document_id, revision, output_sha256 }) =>
+    ({ document_id, revision, output_sha256 }));
+  const start = performance.now();
+  const plan = f.store.previewExport(f.batchId, 'f'.repeat(32), selection);
+  const elapsed = performance.now() - start;
+  assert.equal(plan.files.length, 132);
+  assert.ok(elapsed < 30_000, `synthetic 132-document preview took ${Math.round(elapsed)} ms`);
 });
 done();

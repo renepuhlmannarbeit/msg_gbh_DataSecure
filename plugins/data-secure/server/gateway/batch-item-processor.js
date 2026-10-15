@@ -7,11 +7,29 @@ const {
 } = require('./document-result-grade');
 const { validateCoverage } = require('../standalone/markdown-contract');
 const { verifyMarkdownItem } = require('../standalone/markdown-store');
-const { processingModeForBatch } = require('../core/processing-mode');
+const { isMarkdownBatch } = require('../core/processing-mode');
+const { contentOptionsForBatch } = require('../core/content-options');
+const { bindContentDependencies, bindContentReviewDependencies } = require('./content-consumer-dependencies');
+const { expectedPublication, confirmPublication } = require('./standalone-anonymized-batch');
 const { classifyPrepublicationError, applyRetryBudget, clearRetryBudget } = require('./prepublication-error');
 
+// The document-control lock is shared by the local UI and the worker across
+// runs. A brief read/edit of another document is not a defective source file.
+// Wait only for this exact contention; never remove or seize a foreign lock.
+async function retryDocumentControl(action, options = {}) {
+  const attempts = options.attempts ?? 50;
+  const delayMs = options.delayMs ?? 100;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try { return await action(); }
+    catch (error) {
+      if (error?.code !== 'STANDALONE_BUSY' || attempt + 1 === attempts) throw error;
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
+}
+
 function conversionBatch(state) {
-  return state?.schema === 'datasecure-batch/5' && state.processing_mode === 'markdown-only' && state.product_channel === 'standalone';
+  return isMarkdownBatch(state);
 }
 function conversionIdentity(value, expected) {
   if (value?.artifact_id !== expected || !/^[a-f0-9]{64}$/u.test(String(value.artifact_sha256 || '')) ||
@@ -104,11 +122,9 @@ function createBatchItemProcessor(options = {}) {
   }
 
   async function processSingleBatchItem(state, item, entry, deps = {}) {
-    if (state?.schema === 'datasecure-batch/5' || state?.processing_mode === 'markdown-only') processingModeForBatch(state);
     const converting = conversionBatch(state);
-    if (!converting && (state?.schema === 'datasecure-batch/5' || state?.processing_mode === 'markdown-only')) {
-      throw new SafeError('Die Konvertierung gehört ausschließlich zur lokalen Standalone-Anwendung.');
-    }
+    const contentOptions = contentOptionsForBatch(state), contentDependencies = contentOptions
+      ? bindContentReviewDependencies(state, deps).dependencies : bindContentDependencies(state, deps);
     const claimed = (options.claimStandaloneDocument || ((_state, action) => { action(); return true; }))(state, () => {
       item.status = 'processing';
       item.checkpoint = 'processing_started';
@@ -131,8 +147,12 @@ function createBatchItemProcessor(options = {}) {
         // intermediate parser progress. Avoid rewriting the whole batch
         // five times per document just to record transient phase changes.
       };
-      const result = await (converting ? (deps.convertNext || convertNext) : anonymizeNext)(state.profile, {
-        ...deps,
+      if (contentOptions && !converting && typeof options.runStandaloneItem !== 'function')
+        throw Object.assign(Error('CONTENT_OPTIONS_NOT_READY'), { code: 'CONTENT_OPTIONS_NOT_READY' });
+      const operation = converting ? (deps.convertNext || convertNext) :
+        contentOptions ? (_profile, hooks) => options.runStandaloneItem(state.token, item.id, hooks) : anonymizeNext;
+      const operationHooks = {
+        ...contentDependencies,
         productChannel: state.product_channel,
         inputQueue: [entry],
         copyClaim: true,
@@ -140,9 +160,13 @@ function createBatchItemProcessor(options = {}) {
         ...(converting ? { artifactId: expectedPackageId } : { packageId: expectedPackageId }),
         ...(converting && state.ocr_contact_review === true ? {
           ocrContactReview: true,
+          ocrContactReviewSkipped: state.ocr_contact_review_skipped === true,
           prepareOcrContacts: async input => {
             const stored = contactStore.read(state, item, input);
             if (stored !== null) return stored;
+            // Keep earlier exact answers; only unanswered contacts may stay
+            // unconfirmed after the user's durable run-wide opt-out.
+            if (state.ocr_contact_review_skipped === true) return null;
             if (deps.reviewOcrContacts !== true || typeof deps.reviewTextLocally !== 'function') {
               throw Object.assign(new Error('LOCAL_REVIEW_DEFERRED'), { code: 'LOCAL_REVIEW_DEFERRED' });
             }
@@ -155,8 +179,8 @@ function createBatchItemProcessor(options = {}) {
         } : {}),
         retainPublishedOnAfterPublishFailure: true,
         ...(state.product_channel === 'standalone' && state.standalone_document_review === true ? {
-          persistStandaloneDocumentReview: value => require('./standalone-document-review-store')
-            .createDocumentReviewStore().capture(state, item, value)
+          persistStandaloneDocumentReview: value => retryDocumentControl(() => require('./standalone-document-review-store')
+            .createDocumentReviewStore().capture(state, item, value))
         } : {}),
         ...(!converting && state.product_channel === 'standalone' && captureStandaloneIdentitySnapshot
           ? { persistStandaloneIdentitySnapshot: async ({ package_id, entries, unmapped_labels }) => {
@@ -187,6 +211,9 @@ function createBatchItemProcessor(options = {}) {
             return;
           }
           positiveDocumentResult(details?.document_result);
+          if (contentOptions && (details?.package_id !== expectedPackageId ||
+              JSON.stringify(details.publication_binding) !== JSON.stringify(expectedPublication(state, item))))
+            throw Object.assign(new SafeError('Die private Publikationsbindung ist ungültig.'), { code: 'STANDALONE_PUBLICATION_INVALID' });
           verifiedDocumentResult = details.document_result;
           incrementPrivateIoSummary(state.io_summary, 'final_gate_runs');
           checkpoint('package_verified', 'verification');
@@ -196,7 +223,7 @@ function createBatchItemProcessor(options = {}) {
           // Persist only the alias contract at the last durable processing
           // boundary. `package_verified` is diagnostic in-memory progress and
           // must not become a recovery promise before the atomic publication.
-          if (deps.persistPseudonymContext) {
+          if (!contentOptions && deps.persistPseudonymContext) {
             const transientCheckpoint = item.checkpoint;
             item.checkpoint = 'processing_started';
             try { deps.persistPseudonymContext(); }
@@ -214,24 +241,30 @@ function createBatchItemProcessor(options = {}) {
             publishedDocumentResult = conversionIdentity(details, expectedPackageId);
             if (JSON.stringify(publishedDocumentResult) !== JSON.stringify(verifiedDocumentResult)) throw publicationUnconfirmed();
             if (state.product_channel === 'standalone' && state.standalone_document_review === true)
-              require('./standalone-document-review-store').createDocumentReviewStore().recordPublication(state.token, item.id);
+              await retryDocumentControl(() => require('./standalone-document-review-store')
+                .createDocumentReviewStore().recordPublication(state.token, item.id));
             checkpoint('package_published', 'publication');
             return;
           }
           positiveDocumentResult(details?.document_result);
           if (!sameDocumentResult(details.document_result, verifiedDocumentResult)) throw publicationUnconfirmed();
           publishedDocumentResult = details.document_result;
+          if (contentOptions && JSON.stringify(details.publication_binding) !==
+              JSON.stringify(confirmPublication(state, item).publication_binding)) throw publicationUnconfirmed();
           if (state.product_channel === 'standalone' && state.standalone_document_review === true)
-            require('./standalone-document-review-store').createDocumentReviewStore().recordPublication(state.token, item.id);
+            await retryDocumentControl(() => require('./standalone-document-review-store')
+              .createDocumentReviewStore().recordPublication(state.token, item.id));
           checkpoint('package_published', 'publication');
         }
-      });
+      };
+      const result = await operation(state.profile, contentOptions && !converting
+        ? require('./bound-content-input').publicationHooksFromServices(operationHooks) : operationHooks);
       phaseRecorder.mark('publication');
       if (converting) {
         const identity = conversionIdentity(result, expectedPackageId);
         if (!packagePublished || publishCallbackCount !== 1 ||
             JSON.stringify(identity) !== JSON.stringify(verifiedDocumentResult) ||
-            JSON.stringify(identity) !== JSON.stringify(publishedDocumentResult) || !verifyMarkdownItem(identity)) {
+            JSON.stringify(identity) !== JSON.stringify(publishedDocumentResult) || !verifyMarkdownItem(identity, contentOptions)) {
           throw publicationUnconfirmed();
         }
         Object.assign(item, identity);
@@ -256,11 +289,14 @@ function createBatchItemProcessor(options = {}) {
         !sameDocumentResult(result?.document_result, publishedDocumentResult)) {
         throw publicationUnconfirmed();
       }
-      markMappingPending(item, expectedPackageId, result.document_result);
+      if (contentOptions && JSON.stringify(result?.publication_binding) !==
+          JSON.stringify(confirmPublication(state, item).publication_binding)) throw publicationUnconfirmed();
+      markMappingPending(item, expectedPackageId, result.document_result, state);
       clearRetryBudget(item);
       writeState(state);
       try {
-        ensureMappingOutbox(item.source_label || item.name, expectedPackageId, item.document_result);
+        if (contentOptions) require('./standalone-anonymized-mapping').ensurePrivateMappingIntent(state, item);
+        else ensureMappingOutbox(item.source_label || item.name, expectedPackageId, item.document_result);
         item.mapping_outbox_persisted = true;
       } catch {
         return {
@@ -275,7 +311,7 @@ function createBatchItemProcessor(options = {}) {
       try { cleanupTerminalWorkCopy(state, item, deps); }
       catch { item.work_copy_cleanup_pending = true; }
       try {
-        commitPendingMapping(item, expectedPackageId);
+        commitPendingMapping(item, expectedPackageId, state);
       } catch {
         // Preserve cleanup debt on this early return; the ordinary path
         // includes it in the final durable delivery checkpoint below.
@@ -329,7 +365,7 @@ function createBatchItemProcessor(options = {}) {
       }));
       const { code } = classified;
       if (code === 'BATCH_SNAPSHOT_CHANGED') {
-        invalidateUnpublishedBatchCopies(state, { ...deps, writeState }, item);
+        invalidateUnpublishedBatchCopies(state, { ...contentDependencies, writeState }, item);
       }
       item.status = classified.deferred
         ? deferredReviewStatus
@@ -345,18 +381,21 @@ function createBatchItemProcessor(options = {}) {
       item.error_code = code;
       if (item.status === 'stopped') {
         item.document_result = notProcessedDocumentResult(code);
-        item.local_mapping_exported = false;
+        if (converting) delete item.local_mapping_exported;
+        else item.local_mapping_exported = false;
         item.work_copy_cleanup_pending = true;
         // The stop decision is the authoritative commit point. Mapping and
         // cleanup are separately recoverable projections of that decision.
         writeState(state);
         try {
-          appendMapping(item.source_label || item.name, '', mappingStoppedStatus, {
-            mappingReference: item.id,
-            documentResult: item.document_result
-          });
-          item.local_mapping_exported = true;
-          writeState(state);
+          if (!converting) {
+            appendMapping(item.source_label || item.name, '', mappingStoppedStatus, {
+              mappingReference: item.id,
+              documentResult: item.document_result
+            });
+            item.local_mapping_exported = true;
+            writeState(state);
+          }
         } catch {
           return {
             ok: false,
@@ -376,7 +415,7 @@ function createBatchItemProcessor(options = {}) {
       } else {
         writeState(state);
       }
-      const localEvidenceExported = item.status === 'stopped' && item.local_mapping_exported !== true
+      const localEvidenceExported = !converting && item.status === 'stopped' && item.local_mapping_exported !== true
         ? false
         : writeTerminalEvidence(state);
       return {
@@ -384,7 +423,7 @@ function createBatchItemProcessor(options = {}) {
         error: code,
         message: publicFailureMessage(code, classified),
         ...publicProgress(state),
-        local_mapping_exported: item.status === 'stopped' ? item.local_mapping_exported : null,
+        local_mapping_exported: !converting && item.status === 'stopped' ? item.local_mapping_exported : null,
         local_evidence_exported: localEvidenceExported,
         raw_content_sent_to_claude: false
       };
@@ -394,4 +433,4 @@ function createBatchItemProcessor(options = {}) {
   return { processSingleBatchItem };
 }
 
-module.exports = { createBatchItemProcessor };
+module.exports = { createBatchItemProcessor, retryDocumentControl };

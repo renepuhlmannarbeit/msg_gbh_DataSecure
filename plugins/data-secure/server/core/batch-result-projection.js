@@ -1,4 +1,5 @@
 'use strict';
+const { isMarkdownBatch } = require('./processing-mode');
 
 const {
   GRADES,
@@ -47,8 +48,9 @@ function positivePackageMatches(item, verifyPositive) {
 function projectBatchResults(state, options = {}) {
   const items = Array.isArray(state?.items) ? state.items : [];
   if (items.length === 0) return unavailableProjection(0, false);
-  if (state.schema === 'datasecure-batch/5') {
-    if (state.processing_mode !== 'markdown-only' || state.product_channel !== 'standalone') return unavailableProjection(items.length);
+  let markdown;
+  try { markdown = isMarkdownBatch(state); } catch { return unavailableProjection(items.length); }
+  if (markdown) {
     const visibleCommit = options.visibleMarkdownCommit === true;
     const counts = emptyGradeCounts();
     for (const item of items) {
@@ -68,7 +70,7 @@ function projectBatchResults(state, options = {}) {
     return { grade_counts: counts, omission_counts: emptyOmissionCounts(), grades_verified: counts.unavailable === 0 };
   }
   if (state.schema === 'datasecure-batch/1') return unavailableProjection(items.length, false);
-  if (!['datasecure-batch/2', 'datasecure-batch/3', 'datasecure-batch/4', 'datasecure-batch/6'].includes(state.schema)) {
+  if (!['datasecure-batch/2', 'datasecure-batch/3', 'datasecure-batch/4', 'datasecure-batch/6', 'datasecure-batch/7'].includes(state.schema)) {
     return unavailableProjection(items.length, false);
   }
 

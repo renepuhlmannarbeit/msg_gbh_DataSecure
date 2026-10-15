@@ -129,7 +129,7 @@ function createReviewBroker() {
     current.bytes.fill(0);
     try { current.child.send({ type: 'standalone-review-answer', review_id: reviewId, answer: validated }); }
     catch { failed(current.child); throw failure('STANDALONE_REVIEW_SESSION_INVALID'); }
-    run.phase = validated.action === 'reviewed' ? 'publishing' : 'deferred';
+    run.phase = ['reviewed', 'skipped'].includes(validated.action) ? 'publishing' : 'deferred';
     lastReviewedBatchId = validated.action === 'reviewed' ? current.batchId : null;
     return { accepted: true, action: validated.action };
   }

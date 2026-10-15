@@ -49,6 +49,17 @@ test('desktop manifests, Rust package and artifact names use the product version
   for (const target of targets.targets) assert.ok(target.package_filename.includes(productVersion));
 });
 
+test('actual private sidecar name failures carry only bounded closed source details', () => {
+  const { desktopErrorCode } = require('../plugins/data-secure/server/core/desktop-error-contract');
+  const implementation = sidecar.slice(sidecar.indexOf('function publicError('), sidecar.indexOf('\nasync function dispatch('));
+  const publicError = new Function('path', 'desktopErrorCode', implementation + '\nreturn publicError;')(path, desktopErrorCode);
+  const detail = { name: 'bad?.pdf', reason_code: 'DOCUMENT_EXPORT_NAME_INVALID' };
+  assert.deepEqual(publicError('a'.repeat(16), { code: detail.reason_code, failed_files: [detail] }).error_details,
+    { selection_files: [detail], selection_count: 1 });
+  for (const bad of [{ ...detail, path: 'private path' }, { ...detail, name: '../secret.pdf' }, { ...detail, name: 'C:\\private.pdf' }, { ...detail, reason_code: 'raw reason' }])
+    assert.equal(publicError('a'.repeat(16), { code: detail.reason_code, failed_files: [bad] }).error_details, undefined);
+});
+
 test('all standard native packages open the real v2 workspace without an engineering override', () => {
   assert.strictEqual(config.app.windows.length, 1);
   assert.strictEqual(config.app.windows[0].label, 'main');
@@ -182,8 +193,21 @@ test('native review close is bound before visibility and never discovers a later
 });
 
 test('recursive admission uses a separate bounded deadline and an honest content-free heartbeat', () => {
-  assert.match(rust, /Duration::from_secs\(if matches!\(action, "admit_selected_sources" \| "export_approved_documents" \| "resolve_document_export" \| "resolve_document_identity_overview" \| "get_document_review_history_summary"\) \{ 300 \} else \{ 30 \}\)/u);
-  assert.match(rust, /let deadline = started \+ rpc_duration\(action\)/u);
+  const deadline = rust.slice(rust.indexOf('fn rpc_duration('), rust.indexOf('fn admission_transport_code('));
+  for (const action of ['admit_selected_sources', 'export_approved_documents', 'resolve_document_export',
+    'resolve_document_identity_overview', 'get_document_reviews', 'get_document_review_history_summary', 'get_run_history',
+    'get_review_session', 'resolve_current_results', 'resolve_local_ledger']) {
+    assert.ok(deadline.includes(`"${action}"`), `${action} needs a bounded export/recovery deadline`);
+  }
+  assert.match(deadline, /\{ 300 \}/u);
+  assert.match(deadline, /"get_public_state" \| "get_ui_context"\) \{ 120 \}/u);
+  assert.match(deadline, /else \{ 30 \}/u);
+  assert.match(rust, /let lock_deadline = started \+ rpc_lock_duration\(action\)/u);
+  assert.match(rust, /let bootstrap_deadline = Instant::now\(\) \+ rpc_bootstrap_duration\(\)/u);
+  assert.match(rust, /let deadline = Instant::now\(\) \+ rpc_duration\(action\)/u);
+  assert.ok(rust.indexOf('let deadline = Instant::now() + rpc_duration(action)') >
+    rust.indexOf('let spawned = ipc_transport::receive_until(&receiver, bootstrap_deadline'),
+  'the first request must get its own deadline after sidecar bootstrap');
   assert.match(rust, /STANDALONE_ADMISSION_TIMEOUT/u);
   const progress = rust.slice(rust.indexOf('fn admission_progress('), rust.indexOf('fn rpc_request('));
   assert.match(progress, /get_webview_window\("main"\)/u);

@@ -16,7 +16,7 @@ function reviewError(code, message) {
 function fixture(options = {}) {
   const events = [];
   const entry = { opaque_entry: true };
-  const state = { profile: 'personnel_profile', remove_images: true,
+  const state = { schema: 'datasecure-batch/4', profile: 'personnel_profile', remove_images: true,
     product_channel: options.productChannel || 'standalone', untouched: 'state' };
   const item = { id: 'item', untouched: 'item' };
   const stateBefore = structuredClone(state);
@@ -78,6 +78,15 @@ function fixture(options = {}) {
 }
 
 async function main() {
+  await testAsync('the direct privacy-capture entry rejects both raw schemas before source access', async () => {
+    for (const schema of ['datasecure-batch/5', 'datasecure-batch/7']) {
+      const value = fixture({ draft: { ambiguities: [{}] } }); Object.assign(value.state, { schema, processing_mode: 'markdown-only', remove_images: false,
+        ...(schema === 'datasecure-batch/7' ? { standalone_document_review: true, content_options: {
+          schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: true, imageOcr: false } } : {}) });
+      await assert.rejects(value.run(), error => error.code === 'PROCESSING_MODE_FORBIDDEN');
+      assert.deepEqual(value.events, []);
+    }
+  });
   await testAsync('a valid draft is captured in memory with the exact pipeline contract', async () => {
     const draft = { ambiguities: [{ kind: 'issuer' }], raw: 'local-only' };
     const value = fixture({ draft });

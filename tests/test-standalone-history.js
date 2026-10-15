@@ -25,6 +25,7 @@ const { readConfiguredResultRoot } = require('../plugins/data-secure/server/gate
 const reservation = require('../plugins/data-secure/server/gateway/batch-intake-reservation');
 const historyStore = require('../plugins/data-secure/server/gateway/standalone-history-store');
 const { createRunHistory } = require('../plugins/data-secure/server/standalone/run-history');
+const { conversionFeedback, isOcrOmission } = require('../plugins/data-secure/server/standalone/conversion-feedback');
 const identityLedger = require('../plugins/data-secure/server/standalone/identity-ledger');
 const { StandaloneApplicationService } = require('../plugins/data-secure/server/standalone/application-service');
 const { validateSelectedPathAsync, batchQueueFromSelection } = require('../plugins/data-secure/server/companion/file-picker');
@@ -87,6 +88,67 @@ function code(expected) { return (error) => error?.code === expected; }
 
 (async () => {
   try {
+    // Pure display policy inputs are not themselves journal authority. Product
+    // composition uses readStateForMaintenance's independent options anchor.
+    const displayState = { schema: 'datasecure-batch/7', product_channel: 'standalone', processing_mode: 'markdown-only',
+      content_options: { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: false, imageOcr: false },
+      items: [...Array.from({ length: 116 }, (_, index) => ({ status: 'released', extraction_grade: index < 35 ? 'incomplete' : 'complete',
+        reason_codes: index < 35 ? ['SOURCE_COVERAGE_UNVERIFIED'] : [] })),
+      ...Array.from({ length: 17 }, (_, index) => ({ status: 'stopped', error_code: index < 13 ? 'IMAGE_OCR_REQUIRED' : 'PDF_TEXT_UNAVAILABLE_BY_POLICY' }))] };
+    const before = JSON.stringify(displayState);
+    // Test the real service composition, not a self-declared UI checkbox.
+    const checkPresentation = () => {
+    const presentationState = { ...displayState, token: 'e'.repeat(64), items: [
+      { id: '1'.repeat(32), name: 'good.txt', status: 'released' },
+      { id: '2'.repeat(32), name: 'missing.txt', status: 'released' },
+      { id: '3'.repeat(32), name: 'scan.png', source_label: 'nested/scan.png', status: 'stopped', error_code: 'IMAGE_OCR_REQUIRED' }] };
+    const documentData = { processing_mode: 'markdown-only', documents: [{ document_id: '1'.repeat(32), name: 'good.txt' }],
+      unavailable: [{ document_id: '2'.repeat(32), name: 'missing.txt' }],
+      not_processed_documents: [{ document_id: '3'.repeat(32), name: 'nested/scan.png', reason_code: 'IMAGE_OCR_REQUIRED' }] };
+    let projectedState = presentationState, projectedDocuments = documentData;
+    const projectionHistory = createRunHistory({ readStates: () => projectedState ? [projectedState] : [] });
+    const projectionService = new StandaloneApplicationService({ dependencies: {
+      documentReviews: { list: () => structuredClone(projectedDocuments) }, runHistory: projectionHistory } });
+    assert.equal(projectionService.documentReviews(presentationState.token).not_processed_documents[0].classification, 'ocr_omission');
+    assert.equal(projectionService.documentReviews(presentationState.token).conversion_feedback.ocr_enabled, false);
+    projectedState = { ...presentationState, items: presentationState.items.map((item, index) => index === 0 ?
+      { ...item, extraction_grade: 'incomplete', reason_codes: ['SOURCE_COVERAGE_UNVERIFIED'] } : item) };
+    assert.deepEqual(projectionService.documentReviews(presentationState.token).content_notices,
+      [{ document_id: '1'.repeat(32), name: 'good.txt', reason_codes: ['SOURCE_COVERAGE_UNVERIFIED'] }],
+      'only the journal-bound released document receives a file-specific notice');
+    projectedDocuments = { ...documentData, documents: [{ ...documentData.documents[0], name: 'different.txt' }] };
+    assert.equal(projectionService.documentReviews(presentationState.token).content_notices, undefined,
+      'a mismatched display name cannot label another private review row');
+    projectedDocuments = documentData; projectedState = presentationState;
+    for (const patch of [{ name: 'another.png' }, { document_id: '4'.repeat(32) }, { reason_code: 'SOURCE_READ_FAILED' }]) {
+      projectedDocuments = { ...documentData, not_processed_documents: [{ ...documentData.not_processed_documents[0], ...patch }] };
+      assert.equal(projectionService.documentReviews(presentationState.token).conversion_feedback, undefined, 'mismatch grants no harmless label');
+    }
+    projectedDocuments = { ...documentData, unclassified_documents: [{ document_id: '5'.repeat(32), name: 'old.txt' }] };
+    assert.equal(projectionService.documentReviews(presentationState.token).conversion_feedback, undefined);
+    projectedDocuments = documentData; projectedState = null;
+    assert.equal(projectionService.documentReviews(presentationState.token).conversion_feedback, undefined, 'retired evidence never infers OCR-off');
+    projectedState = { ...presentationState, content_options: { ...presentationState.content_options, imageOcr: true, scanOcr: true } };
+    assert.equal(projectionService.documentReviews(presentationState.token).not_processed_documents[0].classification, 'error');
+    assert.equal(JSON.stringify(documentData), JSON.stringify(projectedDocuments), 'display merge does not mutate saved data');
+    };
+    assert.deepEqual(conversionFeedback(displayState), { schema: 'datasecure-conversion-feedback/1', ocr_enabled: false,
+      selected_count: 133, result_count: 116, not_converted_count: 17, ocr_omitted_count: 17, error_count: 0,
+      content_notice_count: 35, pending_count: 0, complete: true });
+    assert.equal(JSON.stringify(displayState), before, 'projection never mutates technical completion');
+    for (const extra of [{ product_channel: 'plugin' }, { processing_mode: 'markdown-and-anonymize' },
+      { schema: 'datasecure-batch/5' }, { content_options: { ...displayState.content_options, markdownOutput: 'notes-v1' } },
+      { content_options: null }]) assert.equal(conversionFeedback({ ...displayState, ...extra }), null);
+    const ocrOn = { ...displayState, content_options: { ...displayState.content_options, imageOcr: true, scanOcr: true } };
+    assert.equal(conversionFeedback(ocrOn).ocr_omitted_count, 0); assert.equal(conversionFeedback(ocrOn).error_count, 17);
+    for (const item of [{ status: 'retryable', error_code: 'IMAGE_OCR_REQUIRED' },
+      { status: 'mapping_pending', error_code: 'IMAGE_OCR_REQUIRED' },
+      { status: 'stopped', error_code: 'IMAGE_OCR_REQUIRED', local_mapping_exported: false },
+      { status: 'stopped', error_code: 'SOURCE_READ_FAILED' }]) assert.equal(isOcrOmission(displayState, item), false);
+    const mixed = structuredClone(displayState); mixed.items[116].error_code = 'CONVERSION_EXECUTABLE_DENIED';
+    assert.equal(conversionFeedback(mixed).error_count, 1); assert.equal(conversionFeedback(mixed).ocr_omitted_count, 16);
+    const retry = { ...displayState, items: [{ status: 'retryable', error_code: 'IMAGE_OCR_REQUIRED' }] };
+    assert.equal(conversionFeedback(retry).complete, false);
     assert.equal(readConfiguredResultRoot(), originalResultRoot,
       'real result-root admission must accept the physical history fixture');
     // The shared product loads the store without the Standalone UI adapter.
@@ -100,12 +162,64 @@ function code(expected) { return (error) => error?.code === expected; }
     historyStore.recordStandaloneExport(path.join(base, `re_${'9'.repeat(32)}.json`),
       { product_channel: 'standalone', complete: false }, path.join(base, 'missing-run'));
     assert.equal(fs.existsSync(historyDirectory), false, 'plugin and incomplete exports never write Standalone history');
+    checkPresentation();
 
     const older = stateFixture('a', -10000, { schema: 'datasecure-batch/5', processing_mode: 'markdown-only' });
     const newer = stateFixture('b', 0);
     const plugin = stateFixture('c', 1000, { product_channel: 'plugin' });
     let history = makeHistory();
     let snapshot = history.history();
+    // Startup/history projection must not begin a potentially long visible
+    // export while the native desktop is still waiting for its first reply.
+    const pendingExport = { ...older, schema: 'datasecure-batch/7',
+      processing_mode: 'markdown-and-anonymize', standalone_document_review: true,
+      content_options: { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1',
+        scanOcr: false, imageOcr: false },
+      items: [{ id: 'a'.repeat(32), name: 'synthetic.txt', status: 'released' }] };
+    let recoveryCalls = 0;
+    const recoveryHistory = createRunHistory({ readStates: () => [pendingExport], readExports: () => [],
+      recoverableStates: () => [], liveExecutor: () => false,
+      exportCompletedBatchResults: () => { recoveryCalls++; return { available: false }; } });
+    assert.ok(recoveryHistory.history({ recoverExports: false }).entries.some(row => row.batch_id === pendingExport.token));
+    assert.equal(recoveryCalls, 0, 'bootstrap projection cannot perform result export');
+    recoveryHistory.find(pendingExport.token);
+    assert.equal(recoveryCalls, 0, 'a lookup cannot unexpectedly start result export');
+    recoveryHistory.history();
+    assert.equal(recoveryCalls, 1, 'explicit history reconciliation resumes the pending export');
+    const completeOcrOff = { ...pendingExport, token: 'd'.repeat(64), items: [
+      { id: 'd'.repeat(32), name: 'synthetic.txt', status: 'released' },
+      { id: 'e'.repeat(32), name: 'scan.png', status: 'stopped', error_code: 'IMAGE_OCR_REQUIRED' }] };
+    const ocrHistory = createRunHistory({ readStates: () => [completeOcrOff], readExports: () => [],
+      recoverableStates: () => [], liveExecutor: () => false });
+    assert.equal(ocrHistory.history({ recoverExports: false }).entries.find(row =>
+      row.batch_id === completeOcrOff.token).expected_ocr_omission_count, 1,
+    'only a matching completed anonymization run exposes its expected OCR-off omission');
+    const mixedPrivacy = { ...completeOcrOff, items: [...completeOcrOff.items,
+      { id: 'f'.repeat(32), name: 'long.txt', status: 'stopped', error_code: 'AMBIGUITY_REVIEW_REQUIRED' }] };
+    const mixedHistory = createRunHistory({ readStates: () => [mixedPrivacy], readExports: () => [],
+      recoverableStates: () => [], liveExecutor: () => false });
+    assert.equal(mixedHistory.history({ recoverExports: false }).entries.find(row =>
+      row.batch_id === mixedPrivacy.token).privacy_stop_count, 1,
+    'a bound privacy stop remains distinct from both OCR omission and technical failure');
+    assert.deepEqual(mixedHistory.failures(mixedPrivacy.token).files.map(row => row.classification),
+      ['ocr_omission', 'privacy_stop'], 'file details preserve the same exact categories as the summary');
+    const ocrEnabled = { ...completeOcrOff, content_options: { ...completeOcrOff.content_options,
+      scanOcr: true, imageOcr: true } };
+    assert.equal(createRunHistory({ readStates: () => [ocrEnabled], readExports: () => [],
+      recoverableStates: () => [], liveExecutor: () => false }).history({ recoverExports: false }).entries.find(row =>
+      row.batch_id === completeOcrOff.token).expected_ocr_omission_count, undefined);
+    // History must project pause from the same journal snapshot. A separate
+    // full progress read for every old run can race a publishing worker and
+    // make the entire history unavailable while its rows are otherwise sound.
+    const pauseJournal = { ...older, standalone_pause_requested: true,
+      items: [{ status: 'pending', id: 'f'.repeat(32), name: 'synthetic.txt' }] };
+    let pauseWorkerLive = false;
+    const snapshotHistory = createRunHistory({ readStates: () => [pauseJournal], readExports: () => [],
+      recoverableStates: () => [], liveExecutor: () => pauseWorkerLive,
+      pauseProgress: () => { throw Error('a second progress read is not allowed'); } });
+    assert.equal(snapshotHistory.history().entries.find(row => row.batch_id === older.token).status, 'paused');
+    pauseWorkerLive = true;
+    assert.equal(snapshotHistory.history().entries.find(row => row.batch_id === older.token).status, 'processing');
     assert.deepEqual(snapshot.entries.map((entry) => entry.batch_id), [newer.token, older.token]);
     assert.equal(snapshot.local_ui_only, true);
     assert.equal(snapshot.external_disclosure, false);

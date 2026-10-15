@@ -387,6 +387,8 @@ test('a numeric email after a slash cannot be consumed by numerical extension', 
     const source = `${german} 1234567890123/${ending}`;
     assert.strictEqual(replaceStructured(source, []), '[BANK_DATA_REDACTED]/[EMAIL_REDACTED]');
   }
+  assert.strictEqual(replaceStructured('1234567890123/anna@example.de', []), '[EMAIL_REDACTED]',
+    'without a bank anchor the complete slash-bearing email remains one identifier');
 });
 
 test('a following IBAN after intervening groups is rescanned in full', () => {

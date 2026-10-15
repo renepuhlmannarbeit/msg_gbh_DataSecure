@@ -69,6 +69,32 @@ export function verifyConversionInventory(entries, prefix, manifest) {
   // and SHA256SUMS; all other conversion payload files must occur exactly once.
   assert.ok(files.has('RUNTIME.json') && files.has('THIRD_PARTY_NOTICES.txt'), 'CONVERSION_INVENTORIES_MISSING');
   verifyInventory(files, manifest.files, new Set(['RUNTIME.json', 'THIRD_PARTY_NOTICES.txt']), 'CONVERSION_MANIFEST');
+  // Earlier exact packages retain their historical inventory contract.
+  const hasSyntax = [...files.keys()].some(name => /^node_modules\/(?:mdast-util-from-markdown|parse5)\//u.test(name)) ||
+    manifest.packages?.some(item => ['mdast-util-from-markdown', 'parse5'].includes(item.name));
+  if (hasSyntax || manifest.syntax_reader_contract !== undefined) {
+    assert.equal(manifest.syntax_reader_contract, 'datasecure-markdown-syntax/1', 'CONVERSION_SYNTAX_CONTRACT_INVALID');
+    for (const [name, version] of [['mdast-util-from-markdown', '2.0.2'], ['parse5', '7.3.0']]) {
+      assert.ok(manifest.packages?.some(item => item.name === name && item.version === version && item.license === 'MIT'),
+        'CONVERSION_SYNTAX_PIN_MISSING');
+      assert.equal(JSON.parse(files.get(`node_modules/${name}/package.json`)).version, version, 'CONVERSION_SYNTAX_VERSION_INVALID');
+    }
+    const pending = ['mdast-util-from-markdown', 'parse5'], visited = new Set();
+    while (pending.length) {
+      const name = pending.pop();
+      if (visited.has(name)) continue;
+      visited.add(name);
+      assert.match(name, /^(?:@[a-z0-9._-]+\/)?[a-z0-9._-]+$/iu, 'CONVERSION_SYNTAX_DEPENDENCY_INVALID');
+      const metadataBytes = files.get(`node_modules/${name}/package.json`);
+      assert.ok(metadataBytes, 'CONVERSION_SYNTAX_DEPENDENCY_MISSING');
+      const metadata = JSON.parse(metadataBytes);
+      const records = manifest.packages.filter(item => item.name === name);
+      assert.equal(records.length, 1, 'CONVERSION_SYNTAX_PACKAGE_DUPLICATE');
+      assert.equal(metadata.name, name, 'CONVERSION_SYNTAX_DEPENDENCY_INVALID');
+      assert.equal(records[0].version, metadata.version, 'CONVERSION_SYNTAX_DEPENDENCY_INVALID');
+      pending.push(...Object.keys(metadata.dependencies || {}));
+    }
+  }
 }
 
 export function verifyArchiveChecksum(bytes, archive, checksum) {

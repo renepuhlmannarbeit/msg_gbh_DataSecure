@@ -1,6 +1,6 @@
 # Aktueller Testvertrag
 
-Stand: 08.10.2026 · 3.2.0-rc159
+Stand: 08.10.2026 · 3.2.0-rc160
 
 Das vollständige chronologische Testjournal bis RC84 liegt unverändert im
 [Archiv](archive/2026-09/testing/TESTING_HISTORY_THROUGH_RC84.md). Diese Datei
@@ -755,6 +755,17 @@ Pflichtfelder, den ungestarteten Vorlagenstatus und die GO-Grenze. Eine Vorlage
 mit `NOT_RUN` ist keine Evidence.
 
 ## Umgang mit Fehlern
+
+Für die neue Standalone-Inhaltssyntax ist vor den lokalen Konvertertests
+`npm ci --prefix native/markdown/pilot --ignore-scripts --no-audit --no-fund`
+erforderlich. Das ist ausschließlich ein Entwicklungs-/Buildschritt; Nutzer
+installieren oder laden keine Parser nach. `test-markdown-image-content.mjs`
+prüft die gepinnten Syntaxleser gegen unabhängige sichtbare Referenzen und das
+Test-only-CommonMark-Orakel. Der eigentliche Import unter Permission-/Netzwerk-
+Guard und nativem Supervisor wird von `test:standalone:conversion` geprüft.
+Der Parameter `markdownOutput` ist zunächst ein Konverterbaustein; ohne
+geschlossenen Intake-/Journal-/UI-Anschluss und OCR-Optionsabnahme keine
+gelieferte Inhaltsprofiloption daraus ableiten.
 
 Seit 08.10.2026 trennt die synthetische Qualitätsmessung gemäß DS-110 rohe
 OCR-Lesefehler von geprüfter Anonymisierung und Sachinhaltserhalt. Das normale

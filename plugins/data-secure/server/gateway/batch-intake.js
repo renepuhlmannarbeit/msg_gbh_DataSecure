@@ -4,6 +4,7 @@ const { notProcessedDocumentResult, normalizeDocumentResultReasonCode } = requir
 const { createBatchIntakeIntent } = require('./batch-intake-intent');
 const { DEFAULT_RETENTION_DAYS } = require('./retention');
 const { MODES, validateProcessingMode } = require('../core/processing-mode');
+const { contentStartOptions } = require('./content-start-boundary');
 const { MODES: RESULT_NAMING_MODES, validateResultNamingMode } = require('../core/result-naming-mode');
 
 function createBatchIntake(options = {}) {
@@ -89,6 +90,7 @@ function createBatchIntake(options = {}) {
   }
 
   function beginBatch(beginOptions = {}) {
+    const contentOptions = contentStartOptions(beginOptions, 'contentOptions', productChannel);
     // Resolve purpose before opening or copying any source. Explicit null or
     // unknown purposes must not silently become the historical default.
     const processingMode = validateProcessingMode(Object.hasOwn(beginOptions, 'processingMode')
@@ -201,7 +203,7 @@ function createBatchIntake(options = {}) {
       // The empty directory precedes the intent; no source byte is copied
       // until its ownership record has been durably written.
       intent = intakeIntent.create(token, new Date(now + ttl).toISOString(), workIdentity, {
-        processingMode, productChannel
+        processingMode, productChannel, ...(contentOptions ? { contentOptions } : {})
       });
       const items = admissionPlan.map((planned, index) => {
         const entry = planned.entry;
@@ -239,10 +241,11 @@ function createBatchIntake(options = {}) {
         };
       });
       state = {
-        schema: processingMode === MODES.MARKDOWN ? 'datasecure-batch/5'
+        schema: contentOptions ? 'datasecure-batch/7' : processingMode === MODES.MARKDOWN ? 'datasecure-batch/5'
           : productChannel === 'standalone' ? 'datasecure-batch/6' : 'datasecure-batch/4',
         product_channel: productChannel,
-        ...(processingMode === MODES.MARKDOWN ? { processing_mode: processingMode } : {}),
+        ...(processingMode === MODES.MARKDOWN || contentOptions ? { processing_mode: processingMode } : {}),
+        ...(contentOptions ? { content_options: contentOptions } : {}),
         ...(beginOptions.documentReview === true ? { standalone_document_review: true } : {}),
         ...(beginOptions.ocrContactReview === true ? { ocr_contact_review: true,
           ocr_review_seed: crypto.randomBytes(32).toString('base64url') } : {}),

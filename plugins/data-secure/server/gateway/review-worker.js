@@ -21,6 +21,7 @@ const standaloneChannel = process.env.DATASECURE_PRODUCT_CHANNEL === 'standalone
 const { recordWorkflowEvent } = require('./workflow-diagnostics');
 const { DETACHED_REVIEW_TIMEOUT_MS } = require('../companion/review-timeouts');
 const { terminalVisibleExport } = require('./result-export');
+const { assertLegacyContentOperation } = require('../core/content-options');
 
 let started = false;
 let activeBatchToken = null;
@@ -62,15 +63,25 @@ process.once('message', async (message) => {
     process.exit(2);
     return;
   }
-  started = true;
-  activeBatchToken = token;
-  clearTimeout(startDeadline);
   const notify = (payload) => new Promise((resolve) => {
     try {
       if (typeof process.send !== 'function') return resolve(false);
       process.send(payload, (error) => resolve(!error));
     } catch { resolve(false); }
   });
+  try {
+    assertLegacyContentOperation(message, 'content_options', standaloneChannel ? 'standalone' : 'plugin', 'resume');
+  } catch (error) {
+    clearTimeout(startDeadline);
+    await notify({ type: 'local-review-rejected',
+      error_code: ['CONTENT_OPTIONS_INVALID', 'CONTENT_OPTIONS_FORBIDDEN'].includes(error?.code)
+        ? error.code : 'CONTENT_OPTIONS_INVALID' });
+    process.exit(2);
+    return;
+  }
+  started = true;
+  activeBatchToken = token;
+  clearTimeout(startDeadline);
   // A send callback in the parent is only dispatch evidence. This fixed,
   // content-free envelope confirms that the loaded review worker accepted the
   // command before the tool reports a successful start.

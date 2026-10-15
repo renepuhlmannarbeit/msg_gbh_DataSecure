@@ -1,0 +1,10 @@
+{
+  "name": "datasecure-standalone-markdown-syntax",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Pinned offline syntax readers for the isolated Standalone converter; no rendering or network",
+  "dependencies": {
+    "mdast-util-from-markdown": "2.0.2",
+    "parse5": "7.3.0"
+  }
+}

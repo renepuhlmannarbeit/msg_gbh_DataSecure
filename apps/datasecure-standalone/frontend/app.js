@@ -30,6 +30,11 @@ const messages = {
   PROCESSING_MODE_INVALID: 'Bitte einen gültigen Verarbeitungsmodus auswählen. Der Stapel wurde nicht gestartet.',
   PROCESSING_MODE_FORBIDDEN: 'Dieser Verarbeitungsmodus ist hier nicht verfügbar. Der Stapel wurde nicht gestartet.',
   RESULT_NAMING_MODE_INVALID: 'Bitte eine gültige Benennung für anonymisierte Ergebnisse auswählen. Der Stapel wurde nicht gestartet.',
+  CONTENT_OPTIONS_INVALID: 'Die Inhalts- und OCR-Auswahl ist ungültig. Bitte die Auswahl neu prüfen.',
+  CONTENT_OPTIONS_NOT_READY: 'Die neuen Inhalts- und OCR-Optionen sind in diesem Entwicklungsstand noch nicht vollständig verfügbar. Die Auswahl bleibt erhalten; es wurde keine Verarbeitung gestartet.',
+  CONTENT_OPTIONS_FORBIDDEN: 'Diese Inhaltsoptionen gehören ausschließlich zur eigenständigen DataSecure-Anwendung.',
+  CONTENT_OPTIONS_BINDING_INVALID: 'Die gespeicherten Inhalts- oder OCR-Einstellungen passen nicht mehr zu diesem Lauf. Bitte die Originaldateien für einen neuen Lauf auswählen. Frühere Ergebnisse bleiben unverändert.',
+  CONTENT_OPTIONS_BINDING_MISSING: 'Der unveränderliche Nachweis der Inhalts- und OCR-Auswahl fehlt. Dieser Lauf wird nicht fortgesetzt. Bitte die Originaldateien für einen neuen Lauf auswählen.',
   MARKDOWN_CONVERSION_NOT_READY: 'Die installierte Version unterstützt diese Betriebsart nicht. Bitte die aktuelle Standalone-Version verwenden. Der Stapel wurde nicht gestartet; deine Dateiauswahl bleibt erhalten.',
   STANDALONE_NOTHING_TO_CONTINUE: 'Es gibt keinen fortsetzbaren Stapel.',
   BATCH_PSEUDONYM_CONTEXT_UNAVAILABLE: 'Dieser ältere Stapel verwendet nicht mehr den aktuellen Datenschutz-Regelsatz. Bitte die Originaldateien neu auswählen.',
@@ -102,7 +107,7 @@ let admissionFailureCode = null;
 let lastFailureDetailsKey = '';
 const views = ['home', 'process', 'results'];
 const admissionAvailableStates = new Set(['ready', 'results_available', 'completed_without_results',
-  'review_required', 'stopped', 'export_pending']);
+  'review_required', 'stopped', 'export_pending', 'export_abandoned']);
 const validMode = (mode) => ['markdown-only', 'markdown-and-anonymize'].includes(mode);
 const validOutputNamingMode = (mode) => ['neutral', 'source-with-suffix'].includes(mode);
 
@@ -405,7 +410,7 @@ function renderHistory(entries) {
   historyButtons = [];
   const liveRows = new Set();
   const states = { ready: 'Bereit', preparing: 'Vorbereitung', processing: 'Läuft',
-    review_required: 'Prüfung nötig', stopped: 'Unterbrochen', export_pending: 'Bereitstellung offen',
+    review_required: 'Prüfung nötig', stopped: 'Unterbrochen', export_pending: 'Bereitstellung offen', export_abandoned: 'Bereitstellung aufgegeben',
     results_available: 'Abgeschlossen', completed_without_results: 'Ohne Ergebnisse', blocked: 'Nicht bereit',
     completed: 'Abgeschlossen', failed: 'Fehlgeschlagen', interrupted: 'Unterbrochen' };
   const count = (value) => Number.isSafeInteger(value) && value >= 0 ? value : 0;
@@ -1060,16 +1065,19 @@ async function refresh() {
     if (admitted || operationInFlight || pageClosed || generation !== admissionGeneration) return;
     lastPublicState = state.state;
     if (currentSessionRunStarted && !suppressPriorTerminal &&
-        ['results_available', 'completed_without_results', 'review_required', 'stopped', 'export_pending'].includes(state.state)) {
+        ['results_available', 'completed_without_results', 'review_required', 'stopped', 'export_pending', 'export_abandoned'].includes(state.state)) {
       setProcessPhase('completion');
       byId('process-completion-title').textContent = state.state === 'review_required'
         ? 'Prüfung für diesen Lauf offen' : state.state === 'stopped'
           ? 'Fortsetzung für diesen Lauf möglich' : state.state === 'export_pending'
-            ? 'Bereitstellung dieses Laufs offen' : 'Dieser Lauf ist beendet';
+            ? 'Bereitstellung dieses Laufs offen' : state.state === 'export_abandoned'
+              ? 'Bereitstellung dieses Laufs aufgegeben' : 'Dieser Lauf ist beendet';
       byId('process-completion-help').textContent = state.state === 'review_required'
         ? 'Dieser Lauf benötigt noch eine lokale Entscheidung. Mit „Jetzt prüfen“ öffnest du die Prüfung direkt. Du kannst sie auch später im Verlauf fortsetzen.'
         : state.state === 'stopped'
           ? 'Dieser Lauf kann im Verlauf fortgesetzt werden; ein neuer Lauf bleibt davon getrennt.'
+        : state.state === 'export_abandoned'
+          ? 'Die automatische Bereitstellung wurde aufgegeben. Teilkopien bleiben erhalten; der Lauf hat keinen vollständigen Ergebnisordner und keine KI-Freigabe.'
         : state.state === 'export_pending'
           ? 'Die Bereitstellung dieses Laufs ist noch offen. Prüfe ihn im Verlauf, bevor du seine Ergebnisse verwendest.'
           : 'Der Lauf ist abgeschlossen. Ergebnisse und Fehlerhinweise bleiben im Verlauf; für weitere Dateien beginne einen neuen Lauf.';
@@ -1136,6 +1144,10 @@ async function refresh() {
       } else {
         status('Ergebnis wird bereitgestellt', `${state.export_pending_count} Ergebnis${state.export_pending_count === 1 ? ' wird' : 'se werden'} nach einer erneuten Ordnerprüfung bereitgestellt.`, '!');
       }
+      acknowledgeRenderedTerminalState(state.presentation_generation);
+    }
+    else if (state.state === 'export_abandoned') {
+      status('Bereitstellung aufgegeben', 'Fehlende Dateien werden nicht mehr automatisch kopiert. Teilkopien bleiben unverändert; keine vollständige Ergebnis- oder KI-Freigabe.', '!');
       acknowledgeRenderedTerminalState(state.presentation_generation);
     }
     else if (state.state === 'results_available') {

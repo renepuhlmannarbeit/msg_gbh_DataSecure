@@ -29,6 +29,25 @@ function remember(run, drafts, decision = 'keep') {
   })));
 }
 
+function assertPrivateChoiceShape(record) {
+  // Hashes/authenticators are opaque: random base64url can contain ordinary
+  // words such as "end". Inspect the closed payload, not substrings of hashes.
+  assert.deepStrictEqual(Object.keys(record).sort(), ['authentication', 'entries', 'schema']);
+  assert.strictEqual(record.schema, 'datasecure-standalone-review-choices/1');
+  const digest = value => {
+    assert.match(value, /^[A-Za-z0-9_-]{43}$/u);
+    const bytes = Buffer.from(value, 'base64url');
+    assert.strictEqual(bytes.length, 32);
+    assert.strictEqual(bytes.toString('base64url'), value);
+  };
+  digest(record.authentication);
+  for (const pair of record.entries) {
+    assert.deepStrictEqual(Object.keys(pair), ['0', '1']);
+    digest(pair[0]);
+    assert.ok(['keep', 'redact', 'redact_organization'].includes(pair[1]));
+  }
+}
+
 test('an exact entity spelling is reused across documents, phases, case and normalized Office whitespace', () => {
   const run = state();
   remember(run, [draft('CAPGEMINI INVENT')], 'redact_organization');
@@ -45,8 +64,7 @@ test('an exact entity spelling is reused across documents, phases, case and norm
 test('private choices contain no raw spellings and survive a journal-like JSON restart', () => {
   const run = state();
   remember(run, [draft('Erika Beispiel')], 'keep');
-  const encoded = JSON.stringify(run.standalone_review_choices);
-  assert.doesNotMatch(encoded, /erika|beispiel|original|start|end/iu);
+  assertPrivateChoiceShape(run.standalone_review_choices);
   const restored = JSON.parse(JSON.stringify(run));
   assert.strictEqual(validStandaloneReviewChoices(restored), true);
   assert.strictEqual(prepareStandaloneReviewChoices(restored, [draft('Erika Beispiel')]).openDrafts.length, 0);
@@ -99,7 +117,7 @@ test('a saved issuer choice resumes only its exact source, document, draft and o
     ambiguity_id: issuer.ambiguities[0].ambiguity_id, decision: 'keep' }] }], [item]);
   const restarted = JSON.parse(JSON.stringify(run));
   assert.equal(prepareStandaloneReviewChoices(restarted, [issuer], [item]).openDrafts.length, 0);
-  assert.doesNotMatch(JSON.stringify(run.standalone_review_choices), /Microsoft|credential|original_start/u);
+  assertPrivateChoiceShape(run.standalone_review_choices);
   for (const changed of [{ ...item, id: 'e'.repeat(32) }, { ...item, sha256: 'e'.repeat(64) }])
     assert.equal(prepareStandaloneReviewChoices(restarted, [issuer], [changed]).openDrafts.length, 1);
   const changed = structuredClone(issuer); changed.original_text += '\nChanged context';

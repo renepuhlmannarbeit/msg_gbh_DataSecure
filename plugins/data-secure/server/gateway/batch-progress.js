@@ -28,7 +28,13 @@ function createBatchProgress(deps) {
     // Full package hashing is restricted to terminal-evidence creation. Public
     // terminal progress performs only the durable O(n) file-identity binding.
     let durableProjection = null;
-    const hasExportedMarker = progress.complete && state.terminal_evidence?.status === 'exported';
+    // A frequently polled status snapshot only needs counters. Validating an
+    // exported marker would also re-bind every published package even when
+    // skipResultProjection was requested (and can exceed the desktop RPC
+    // deadline for a large run). The full projection remains mandatory for
+    // explicit result/evidence reads.
+    const hasExportedMarker = options.skipResultProjection !== true &&
+      progress.complete && state.terminal_evidence?.status === 'exported';
     if (hasExportedMarker) {
       try {
         const marker = validateMarker(state.terminal_evidence);
@@ -36,7 +42,7 @@ function createBatchProgress(deps) {
         const gradeCounts = record.schema === 'datasecure-batch-evidence/3' ? record.grade_counts : null;
         const omissionCounts = record.schema === 'datasecure-batch-evidence/3' ? record.omission_counts : null;
         const stateProjection = gradeCounts
-          ? projectBatchResults(state, { verifyPositive: (item) => publishedPackageRecord(item) })
+          ? projectBatchResults(state, { verifyPositive: (item) => publishedPackageRecord(item, state) })
           : null;
         if (record.counts.total === items.length && record.counts.released === progress.released && record.counts.stopped === progress.stopped &&
             gradeCounts && gradeCounts.complete + gradeCounts.usable_with_omissions === progress.released &&
@@ -51,7 +57,7 @@ function createBatchProgress(deps) {
     const projected = progress.complete && options.skipResultProjection !== true
       ? (hasExportedMarker
           ? (durableProjection || { grade_counts: emptyGradeCounts(items.length), omission_counts: emptyOmissionCounts(), grades_verified: false })
-          : projectBatchResults(state, { verifyPositive: (item) => publishedPackageRecord(item) }))
+          : projectBatchResults(state, { verifyPositive: (item) => publishedPackageRecord(item, state) }))
       : { grade_counts: emptyGradeCounts(items.length), omission_counts: emptyOmissionCounts(), grades_verified: false };
     return core.finalizeProgress(progress, projected);
   }

@@ -2116,7 +2116,55 @@ Wahrheitskorrektur und keine allgemeine Release-/Anonymitätsfreigabe daraus
 ableiten. Neun bekannte Roh-OCR-E-Mail-Abweichungen bleiben BL-050.6; stabile
 Workflow- und native Paket-/Bediennachweise haben Vorrang (BL-010.53/.51).
 
-**Prerelease-Testbereitstellung, 11.10.2026 (ausdrücklicher Anwenderauftrag):**
+**Präzisierung DS-085/DS-110, 13.10.2026 – zwei getrennte Zwecke:** Reine
+Markdown-Konvertierung und nachträgliche Markdown-Korrektur erhalten Inhalte
+und ursprüngliche Basisnamen; nur Endung und nötige Kollisionszusätze ändern
+sich. Keine Maskierungsaktion, Identitätsdatei oder anonymisierte Dateibenennung
+in diesem Weg. Die Anonymisierung behält ihre bisherigen Prüf-/Entitäten-/
+Freigabegrenzen und neutralen KI-Exportnamen. Neue raw Exportpläne binden die
+tatsächlichen Namen revisions-/hashgebunden; alte gespeicherte Pläne behalten
+unverändert ihre damaligen Namen und Wiederaufnahmebelege.
+
+PDF-/Bild-Extraktion erzeugt lesbare Absätze statt generierter seitenweiter
+Codeblöcke und zusätzlicher OCR-Überschriften. Erkannter Text, Dokumentinformationen,
+Seitenzuordnung, Kontaktkoordinaten und Originalbildprüfung bleiben erhalten.
+Keine erfundene OCR-Korrektur oder pauschale Zeichenlöschung; echte Unicodezeichen
+und echte Markdown-Codequellen bleiben Inhalt. Ein kurzer Hinweis benennt
+Auslassungen/Unsicherheit. Finale menschliche Nachkorrektur bleibt ausdrücklich
+möglich und widerruft frühere Freigaben. Das OCR-Häkchen ergänzt Kontaktprüfung,
+nicht Texterkennung oder Lesbarkeitsformatierung.
+
+Literal-/Quoted-Kontaktkorrekturen ändern den gemeinsamen Privacy-Kern;
+`de-business/4` trennt den neuen Prüfvertrag von früheren Freigaben. Bereits
+abgeschlossene Exportkopien bleiben historische Fakten; neue Kopien benötigen
+aktuelle Prüfung. Die laufende Arbeit wird zunächst nur als lokales RC160-
+Windows-Engineeringpaket getestet. Main, veröffentlichte RC159-Pakete und
+Cowork RC151 bleiben unverändert; neue Mac-Workflows vorerst zurückgestellt.
+Desktopbedienung weiterhin nicht autorisiert. Ein Browser-/Headless-Nachweis
+ist keine menschliche/native Windows-/Mac-Abnahme.
+
+**Spätere Zielpräzisierung DS-085/DS-110, 13.10.2026 – Inhaltsprofil und
+OCR-Wahl (noch nicht geliefert):** Neue Standalone-Läufe sollen standardmäßig
+nur Text und Tabellen ausgeben. Generierte Bild-/OCR-Hinweise und technische
+Container-Metadaten bleiben in der lokalen App beziehungsweise privaten
+Dokumentinformation, nicht im Nutztext. Reale Seitenprosa, Autorentitel,
+Tabellen, Diagrammdaten, Notizen, Legenden und textliche Alt-/Caption-Angaben
+bleiben erhalten. Echte MD-Bildknoten dürfen unter diesem gebundenen Profil
+syntaxbasiert durch ihren literal erhaltenen Alttext ersetzt werden;
+Code/Literale, Escapes und weiterhin verwendete normale Linkdefinitionen
+bleiben geschützt. Keine externe Bildabfrage und keine pauschale Zeichenlöschung.
+Scan-OCR ist für neue Läufe standardmäßig an und abschaltbar; zusätzliche
+Bild-/Grafik-OCR ist standardmäßig aus und nur ausdrücklich aktivierbar.
+Ein kleiner nativer Seitenkopf beweist keine vollständige Scan-Textschicht.
+Office-Bild-OCR ist erst nach wirklicher Implementierung und Prüfung erfüllt.
+Der versionierte Vertrag bindet beide Zwecke vor OCR-/Dokumentprüfung;
+alte Journale, Dokumentstände und Exportbytes behalten alte Semantik.
+Abnahme: [Aufgabe 6](../../tasks/rc160-workflow/06-markdown-ocr.md).
+Die lokale Desktopbedienung wurde für den fortlaufenden Auftrag erneut
+autorisiert. Frühere Nichtbediennachweise bleiben historische Fakten, keine
+aktuelle Berechtigungssperre. Keine zusätzlichen kostenpflichtigen Dienste.
+
+**Historischer Bereitstellungsauftrag vom 11.10.2026:**
 Der aktuelle RC159-v2-Stand soll auf `main` und als Prerelease für Windows x64,
 macOS Intel/Apple Silicon und Linux x64 glibc bereitgestellt werden. Der reguläre
 native Einstieg wird deshalb plattformübergreifend `workspace.html`; die ältere

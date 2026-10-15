@@ -1,6 +1,7 @@
 'use strict';
 
 const crypto = require('crypto');
+const { PERSON_LABEL, LEGACY_PERSON_FIELD_POLICY, CONTENT_PERSON_FIELD_POLICY, personFieldPattern, isPersonFieldLabel } = require('../core/person-field-policy');
 
 // JavaScript's \b is defined over [A-Za-z0-9_] only. In German documents that
 // silently breaks every pattern anchored around umlauts: /\bÖsterreichische/
@@ -45,7 +46,7 @@ const URL_RE = new RegExp(
 // nor an escaped domain survives redaction. This stays a source-coordinate
 // detector: the released text is never globally unescaped or re-rendered.
 const EMAIL_RE = new RegExp(
-  `${NB}(?:[\\p{L}\\p{N}]|\\\\?[._%+\\-])+@` +
+  `${NB}(?:(?:[\\p{L}\\p{N}]|\\\\?[.!#$%&'*+/=?^_\x60{|}~\\-])+|"(?:[^"\\\\\r\n]|\\\\+[^\r\n])*")@` +
     `(?:[\\p{L}\\p{N}](?:(?:[\\p{L}\\p{N}]|\\\\?-){0,61}[\\p{L}\\p{N}])?\\\\?\\.)+` +
     `(?:[\\p{L}]{2,63}|xn\\\\?-\\\\?-[a-z0-9-]{2,59})${NA}`,
   'giu'
@@ -407,8 +408,82 @@ function identifierDetectionText(s) {
 // different string (HTML entities, emphasis, links or inline HTML). This
 // bounded canonicalisation preserves visible wording while removing syntax
 // that can split identifiers. It never executes HTML and never fetches links.
-function canonicalizeRenderedText(s) {
+function canonicalizeRenderedText(s, personFieldPolicy = LEGACY_PERSON_FIELD_POLICY) {
+  const personLabel = personFieldPattern(personFieldPolicy);
   let value = normalizeText(s);
+  const named = {
+    nbsp:' ',tab:' ',newline:'\n',ensp:' ',emsp:' ',thinsp:' ',hairsp:' ',mediumspace:' ',verythinspace:' ',
+    amp:'&',lt:'<',gt:'>',quot:'"',apos:"'",period:'.',commat:'@',colon:':',semi:';',comma:',',sol:'/',bsol:'\\',
+    auml:'ä',ouml:'ö',uuml:'ü',auml_upper:'Ä',ouml_upper:'Ö',uuml_upper:'Ü',szlig:'ß',
+    eacute:'é',egrave:'è',ecirc:'ê',ccedil:'ç',ntilde:'ñ',aacute:'á',iacute:'í',oacute:'ó',uacute:'ú'
+  };
+  const decodeLayer = input => input
+    .replace(/&#(?:x([0-9a-f]{1,6})|([0-9]{1,7}));/giu, (match, hex, dec) => {
+      const code = Number.parseInt(hex || dec, hex ? 16 : 10);
+      if(!Number.isSafeInteger(code)||code<0||code>0x10ffff||(code>=0xd800&&code<=0xdfff))return '\uFFFD';
+      if((code<0x20&&!['9','10','13'].includes(String(code)))||(code>=0x7f&&code<=0x9f))return '\uFFFD';
+      return String.fromCodePoint(code);
+    })
+    .replace(/&([A-Za-z][A-Za-z0-9]{1,31});/gu, (match, rawName) => {
+      const exact = rawName === 'Auml' ? 'auml_upper' : rawName === 'Ouml' ? 'ouml_upper' : rawName === 'Uuml' ? 'uuml_upper' : rawName.toLocaleLowerCase('en-US');
+      return Object.hasOwn(named, exact) ? named[exact] : match;
+    });
+  value = require('./encoded-identifiers').normalizeEncodedIdentifiers(value, fragment => normalizeText(decodeLayer(fragment)), text => {
+    const ranges = [...text.matchAll(EMAIL_RE)].map(match => ({ start: match.index, end: match.index + match[0].length }));
+    // Use the actual structured grammar for ALL identifier classes. A code
+    // literal is no exemption for an encoded IP, card, credential or address.
+    ranges.push(...require('./structured').findStructuredSpans(text).map(({ start, end }) => ({ start, end })));
+    for (const match of text.matchAll(URL_RE)) ranges.push({ start: match.index, end: match.index + match[0].length });
+    const names = /(?<![\p{L}\p{M}])[\p{Lu}][\p{L}\p{M}'’\-]{1,63}(?:\s+[\p{Lu}][\p{L}\p{M}'’\-]{1,63}){1,3}/gu;
+    for (const match of text.matchAll(names)) if (looksName(match[0])) ranges.push({ start: match.index, end: match.index + match[0].length });
+    const fields = new RegExp(`(?:^|[\\r\\n|])(?:${personLabel}|Firma|Unternehmen|Arbeitgeber|Company(?: Name)?|Employer|Telefon|Phone|IBAN)\\s*[:=]\\s*([^\\r\\n;,|]+)`, 'giu');
+    for (const match of text.matchAll(fields)) if (/[\p{L}\p{N}]/u.test(match[1])) {
+      const start = match.index + match[0].length - match[1].length;
+      ranges.push({ start, end: start + match[1].length });
+    }
+    // Reuse actual context/table/name discovery rather than treating a code
+    // wrapper as a detector exemption (including non-Latin single names).
+    const projection = text.replace(/`+/gu, run => ' '.repeat(run.length));
+    const entities = require('./entities');
+    const values = [...entities.collectPersonSeeds(projection, 'general', null, null, personFieldPolicy).map(seed => seed.matchValue || seed.value),
+      ...entities.collectOrganizations(projection)];
+    for (const candidate of new Set(values)) {
+      const pattern = new RegExp(escapeRegExp(candidate).replace(/\s+/gu, '[ \\t]+'), 'giu');
+      for (const match of text.matchAll(pattern)) ranges.push({ start: match.index, end: match.index + match[0].length });
+    }
+    return ranges;
+  });
+  // Literal punctuation is content, not emphasis or HTML. Temporarily shield
+  // it from syntax removal, then restore it BEFORE privacy detection. Tokens
+  // cannot collide with source text and never escape this function. Keeping
+  // the literal Markdown escapes makes repeated review passes idempotent.
+  let probe = value;
+  for (let depth = 0; depth < 16; depth++) {
+    const next = probe.replace(/&#(?:x([0-9a-f]{1,6})|([0-9]{1,7}));/giu, (match, hex, dec) => {
+      const point = Number.parseInt(hex || dec, hex ? 16 : 10);
+      return point <= 0x10ffff && !(point >= 0xd800 && point <= 0xdfff) ? String.fromCodePoint(point) : match;
+    }).replace(/&amp;/giu, '&');
+    if (next === probe) break; probe = next;
+  }
+  // Fixed-size, checked prefixes avoid both decoded collisions and a source-
+  // sized regex. Unowned token indices can never manufacture replacement text.
+  let tokenPrefix;
+  const sourceDigest = crypto.createHash('sha256').update(value).digest();
+  for (let attempt = 0; attempt < 32; attempt++) {
+    const digest = crypto.createHash('sha256').update(sourceDigest).update(String(attempt)).digest();
+    // Two private-use characters keep intermediate growth bounded even for
+    // punctuation-heavy documents; never expand each escape by a 40-char ID.
+    const candidate = String.fromCharCode(0xe000 + digest.readUInt16BE(0) % 4096, 0xe000 + digest.readUInt16BE(2) % 4096);
+    if (!value.includes(candidate) && !probe.includes(candidate)) { tokenPrefix = candidate; break; }
+  }
+  if (!tokenPrefix) throw new Error('MARKDOWN_LITERAL_COLLISION');
+  const literals = [];
+  const shield = literal => { const token = tokenPrefix + literals.length + '\uE001'; literals.push(literal); return token; };
+  const literalMarkdown = text => text.replace(/[\\`*_[\]~&<>]/gu, '\\$&');
+  // Real fenced Markdown is not generated PDF prose. Return its contents
+  // before detection: retaining a fence grants no privacy exemption.
+  value = require('./markdown-literals').shieldMarkdownLiterals(value, shield, literalMarkdown);
+  value = value.replace(/(?:\\[!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])+/gu, shield);
   // Remove only actual, common HTML tags from the source representation.
   // Entity-escaped comparisons and programming generics are visible text and
   // must not turn into markup after entity decoding.
@@ -418,23 +493,6 @@ function canonicalizeRenderedText(s) {
   const htmlInlineTag = new RegExp(`<\\/?(?:${htmlInlineNames})(?:\\s[^<>\\n]{0,2000})?\\s*\\/?>`, 'giu');
   const htmlComment = /<!--[\s\S]*?-->/gu;
   value=value.replace(htmlComment,'').replace(htmlBoundaryTag,' ').replace(htmlInlineTag,'');
-  const named = {
-    nbsp:' ',tab:' ',newline:'\n',ensp:' ',emsp:' ',thinsp:' ',hairsp:' ',mediumspace:' ',verythinspace:' ',
-    amp:'&',lt:'<',gt:'>',quot:'"',apos:"'",period:'.',commat:'@',colon:':',semi:';',comma:',',sol:'/',bsol:'\\',
-    auml:'ä',ouml:'ö',uuml:'ü',auml_upper:'Ä',ouml_upper:'Ö',uuml_upper:'Ü',szlig:'ß',
-    eacute:'é',egrave:'è',ecirc:'ê',ccedil:'ç',ntilde:'ñ',aacute:'á',iacute:'í',oacute:'ó',uacute:'ú'
-  };
-  const decodeLayer = (input) => input
-    .replace(/&#(?:x([0-9a-f]{1,6})|([0-9]{1,7}));/giu, (match, hex, dec) => {
-      const code = Number.parseInt(hex || dec, hex ? 16 : 10);
-      if(!Number.isSafeInteger(code)||code<0||code>0x10ffff||(code>=0xd800&&code<=0xdfff))return '\uFFFD';
-      if((code<0x20&&!['9','10','13'].includes(String(code)))||(code>=0x7f&&code<=0x9f))return '\uFFFD';
-      return String.fromCodePoint(code);
-    })
-    .replace(/&([A-Za-z][A-Za-z0-9]{1,31});/gu, (match, rawName) => {
-      const exact = rawName === 'Auml' ? 'auml_upper' : rawName === 'Ouml' ? 'ouml_upper' : rawName === 'Uuml' ? 'uuml_upper' : rawName.toLocaleLowerCase('en-US');
-      return Object.prototype.hasOwnProperty.call(named, exact) ? named[exact] : match;
-    });
   for(let depth=0;depth<16;depth++){
     const decoded=decodeLayer(value);
     if(decoded===value)break;
@@ -455,7 +513,6 @@ function canonicalizeRenderedText(s) {
   value=value.replace(/__([^_\n]+)__/gu,'$1');
   value=value.replace(/(?<![\p{L}\p{N}\]])_([^_\n]+)_(?![\p{L}\p{N}\[])/gu,'$1');
   value=value.replace(/~~([^~\n]+)~~/gu,'$1');
-  value=value.replace(/`+([^`\n]+)`+/gu,'$1');
   // Tags introduced only by decoding visible text are not source markup.
   // Keep their angle brackets escaped so a later engine/review pass cannot
   // reinterpret (and delete) them. Ordinary entities still decode for PII
@@ -466,6 +523,11 @@ function canonicalizeRenderedText(s) {
   // A quoted angle bracket inside a literal tag can prevent the whole-tag
   // matcher from recognising it. Its opening still must remain inert.
   value=value.replace(new RegExp(`<(?=/?(?:${htmlBoundaryNames}|${htmlInlineNames})[\\s/>]|!--)`, 'giu'),'&lt;');
+  // Unknown tag-like words and comparisons are visible literals too. Never
+  // emit a newly decoded <value> that a Markdown renderer can hide as HTML.
+  value=value.replace(/<(?=[A-Za-z/!?])/gu,'&lt;');
+  value = value.replace(new RegExp(tokenPrefix + '([0-9]+)\uE001', 'gu'), (match, index) =>
+    Object.hasOwn(literals, index) ? literals[Number(index)] : match);
   return normalizeText(value).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/gu,'\uFFFD');
 }
 
@@ -528,13 +590,6 @@ function isStopToken(token) {
 // token and never count as name tokens themselves.
 const NAME_PARTICLE = '(?:von|vom|van|de|der|den|del|della|di|da|du|la|le|zu|zur|zum|y|e|of)';
 const NAME_PARTICLES = new Set(['von', 'vom', 'van', 'de', 'der', 'den', 'del', 'della', 'di', 'da', 'du', 'la', 'le', 'zu', 'zur', 'zum', 'y', 'e', 'of']);
-const PERSON_LABEL =
-  '(?:Name|Person|Full\\s+Name|Employee\\s+Name|Candidate\\s+Name|Contact\\s+Name|Mitarbeitername|Vorname|Nachname|Kunde|Kundin|Mitarbeiter(?:in)?|Bewerber(?:in)?' +
-  '|Ansprechpartner(?:in)?|Vertreter(?:in)?|Kontaktperson|(?:(?:Interner|Technischer|Fachlicher)\\s+)?Kontakt|Sachbearbeiter(?:in)?' +
-  '|Zuständige?|Verantwortliche?|Empfänger(?:in)?|Absender(?:in)?|Unterzeichner(?:in)?|Gesprächspartner(?:in)?' +
-  '|Betreuer(?:in)?|Berater(?:in)?|Teilnehmer(?:in)?|Autor(?:in)?|Verfasser(?:in)?|Manager(?:in)?' +
-  '|Eigentümer(?:in)?|Bearbeiter(?:in)?|(?:Zuletzt\\s+)?(?:geändert|erstellt)\\s+von' +
-  '|Author|Creator|Manager|Owner|Approver|Representative|Contact\\s+person|Last\\s+modified\\s+by|Modified\\s+by|Nom|Nombre|Naam|Имя|ФИО|Όνομα|姓名|氏名|이름)';
 
 function looksName(s) {
   const v = normalizeSpaces(s);
@@ -658,7 +713,9 @@ function splitTableRow(line) {
   }
   if (escaped) value += '\\';
   cells.push(value.trim());
-  return cells.length >= 2 ? cells : null;
+  // One-column GFM tables have an explicit outer pipe pair. Requiring both
+  // boundaries keeps arbitrary prose ending in a pipe from becoming context.
+  return cells.length >= 2 || (leading === 1 && source.length > 1 && source.endsWith('|')) ? cells : null;
 }
 
 // One pass per text: for every data row of a Markdown table, remember the
@@ -666,6 +723,7 @@ function splitTableRow(line) {
 // The cache holds the last text only; the engine scans one document at a time.
 let tableIndexText = null;
 let tableIndex = null;
+let tableIndexPolicy = null;
 
 function isSensitiveTableHeader(value) {
   const header = normalizeSensitiveLabel(value);
@@ -674,10 +732,8 @@ function isSensitiveTableHeader(value) {
     CREDENTIAL_LABEL_HEADER_RE.test(header);
 }
 
-const PERSON_TABLE_HEADER_RE = new RegExp(`^${PERSON_LABEL}:?$`, 'iu');
-
-function isResolvedSensitiveTableHeader(value) {
-  return isSensitiveTableHeader(value) || PERSON_TABLE_HEADER_RE.test(normalizeSensitiveLabel(value));
+function isResolvedSensitiveTableHeader(value, personFieldPolicy = LEGACY_PERSON_FIELD_POLICY) {
+  return isSensitiveTableHeader(value) || isPersonFieldLabel(normalizeSensitiveLabel(value), personFieldPolicy);
 }
 
 function combineHeaderRows(rows) {
@@ -716,7 +772,11 @@ function hasCredentialHeaderFragmentSequenceAtColumn(rows, column) {
     parts.includes(first) && parts.includes(last));
 }
 
-function buildTableIndex(text) {
+function buildTableIndex(text, personFieldPolicy) {
+  const personHeader = header => personFieldPolicy === CONTENT_PERSON_FIELD_POLICY &&
+    isPersonFieldLabel(normalizeSensitiveLabel(header), personFieldPolicy);
+  const sensitiveFragment = header => SENSITIVE_HEADER_FRAGMENT_RE.test(normalizeSensitiveLabel(header)) || personHeader(header);
+  const resolvedHeader = header => isSensitiveTableHeader(header) || personHeader(header);
   const src = String(text || '');
   const starts = [0];
   for (let i = 0; i < src.length; i++) if (src.charCodeAt(i) === 10) starts.push(i + 1);
@@ -737,7 +797,7 @@ function buildTableIndex(text) {
         precedingRows.unshift(preceding);
       }
       if (precedingRows.flat().some((header) =>
-        isSensitiveTableHeader(header) || SENSITIVE_HEADER_FRAGMENT_RE.test(normalizeSensitiveLabel(header)))) {
+        isSensitiveTableHeader(header) || sensitiveFragment(header))) {
         let unsafeRow = index + 1;
         while (unsafeRow < rows.length && splitTableRow(rows[unsafeRow])) {
           ambiguousSensitiveLines.add(unsafeRow++);
@@ -766,21 +826,21 @@ function buildTableIndex(text) {
     // need different reconstruction depths (for example API/Key beside
     // Benutzer/name); selecting one global depth would silently miss one.
     headers = headers.map((header, column) => {
-      if (isSensitiveTableHeader(header)) return header;
+      if (resolvedHeader(header)) return header;
       for (let count = 2; count <= candidates.length; count++) {
         const combined = normalizeSensitiveLabel(
           candidates.slice(-count).map((row) => row[column]).join(' ')
         );
-        if (isSensitiveTableHeader(combined)) return combined;
+        if (resolvedHeader(combined)) return combined;
       }
       return header;
     });
     const cleaned = headers.map((header) => normalizeSensitiveLabel(header.replace(/\s+\(\d+\)$/u, '')));
-    const resolvedSensitiveColumns = cleaned.map(isResolvedSensitiveTableHeader);
+    const resolvedSensitiveColumns = cleaned.map(header => isResolvedSensitiveTableHeader(header, personFieldPolicy));
     const hasSensitiveHeader = resolvedSensitiveColumns.some(Boolean);
     const headerHasSensitiveFragment = hasCredentialHeaderFragmentSequence(headerBlock) || headerBlock
       .flat()
-      .some((header) => SENSITIVE_HEADER_FRAGMENT_RE.test(normalizeSensitiveLabel(header)));
+      .some(sensitiveFragment);
     // Resolve ambiguity per column. A lone, separator-width header cannot be
     // a fragmented compound. In a real multi-row header, however, one valid
     // sensitive column must never mask an unresolved neighbour.
@@ -788,7 +848,7 @@ function buildTableIndex(text) {
       .some((resolved, column) => !resolved && (
         hasCredentialHeaderFragmentSequenceAtColumn(headerBlock, column) ||
         headerBlock.some((header) =>
-          SENSITIVE_HEADER_FRAGMENT_RE.test(normalizeSensitiveLabel(header[column] || '')))
+          sensitiveFragment(header[column] || ''))
       ));
     const overlongSensitiveHeader = (headerBlock.length > 3 && headerHasSensitiveFragment) ||
       (mismatchedHeaderWidth && headerHasSensitiveFragment);
@@ -809,22 +869,32 @@ function buildTableIndex(text) {
   return { starts, rows, headersByLine, ambiguousSensitiveLines };
 }
 
-function tableAnalysis(text) {
+function tableAnalysis(text, personFieldPolicy = LEGACY_PERSON_FIELD_POLICY) {
+  personFieldPattern(personFieldPolicy);
   const src = String(text || '');
-  if (tableIndexText !== src) {
-    tableIndex = buildTableIndex(src);
+  if (tableIndexText !== src || tableIndexPolicy !== personFieldPolicy) {
+    tableIndex = buildTableIndex(src, personFieldPolicy);
     tableIndexText = src;
+    tableIndexPolicy = personFieldPolicy;
   }
   return tableIndex;
 }
 
-function hasAmbiguousSensitiveTable(text) {
-  return tableAnalysis(text).ambiguousSensitiveLines.size > 0;
+function hasAmbiguousSensitiveTable(text, personFieldPolicy = LEGACY_PERSON_FIELD_POLICY) {
+  return tableAnalysis(text, personFieldPolicy).ambiguousSensitiveLines.size > 0;
 }
 
-function tableHeaderAt(text, index) {
+function assertPersonFieldStructure(text, personFieldPolicy = LEGACY_PERSON_FIELD_POLICY) {
+  personFieldPattern(personFieldPolicy);
+  if (personFieldPolicy === CONTENT_PERSON_FIELD_POLICY &&
+      (hasAmbiguousSensitiveTable(text, personFieldPolicy) || hasAmbiguousSensitiveTable(identifierDetectionText(text), personFieldPolicy))) {
+    throw Object.assign(new Error('Die Tabellenstruktur erlaubt keine sichere Zuordnung personenbezogener Felder.'), { code: 'RESIDUAL_PII' });
+  }
+}
+
+function tableHeaderAt(text, index, personFieldPolicy = LEGACY_PERSON_FIELD_POLICY) {
   const src = String(text || '');
-  const resolved = tableHeadersAt(src, index);
+  const resolved = tableHeadersAt(src, index, personFieldPolicy);
   if (!resolved) return null;
   const { line, lineStart, headers } = resolved;
   const offsetInLine = index - lineStart;
@@ -846,9 +916,9 @@ function tableHeaderAt(text, index) {
   return column < headers.length ? headers[column] : null;
 }
 
-function tableHeadersAt(text, index) {
+function tableHeadersAt(text, index, personFieldPolicy = LEGACY_PERSON_FIELD_POLICY) {
   const src = String(text || '');
-  tableAnalysis(src);
+  tableAnalysis(src, personFieldPolicy);
   const { starts, rows, headersByLine } = tableIndex;
   let lo = 0;
   let hi = starts.length - 1;
@@ -937,6 +1007,7 @@ module.exports = {
   tableHeaderAt,
   hasAmbiguousSensitiveTable,
   isResolvedSensitiveTableHeader,
+  assertPersonFieldStructure,
   normalizeSensitiveLabel,
   NAME_PARTICLE,
   NAME_PARTICLES,

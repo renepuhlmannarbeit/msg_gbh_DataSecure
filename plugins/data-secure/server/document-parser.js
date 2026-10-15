@@ -122,7 +122,15 @@ function csvMarkdownCell(value) {
     .replace(/\n/gu, '<br>');
 }
 
-function csvToMarkdown(source) {
+function csvToMarkdown(source, options = {}) {
+  if (!options || typeof options !== 'object' || Array.isArray(options) ||
+      Object.keys(options).some(key => key !== 'literalCells') ||
+      (Object.hasOwn(options, 'literalCells') && typeof options.literalCells !== 'boolean')) {
+    throw new TypeError('parser options are invalid');
+  }
+  // Only the explicit new Standalone path uses literal serialization. Old
+  // journals and Cowork keep their existing byte/coordinate contract.
+  const cell = options.literalCells === true ? require('./core/markdown-literal-content').literalTableCell : csvMarkdownCell;
   const normalizedSource = normalizeText(String(source || '')).replace(/\r\n?/gu, '\n');
   const { rows } = parseCsvDialect(normalizedSource);
   if (!rows.length) throw new Error('CSV_EMPTY');
@@ -136,9 +144,9 @@ function csvToMarkdown(source) {
     return count === 1 ? base : `${base} (${count})`;
   });
   const table = [
-    `| ${headers.map(csvMarkdownCell).join(' | ')} |`,
+    `| ${headers.map(value => cell(value)).join(' | ')} |`,
     `| ${headers.map(() => '---').join(' | ')} |`,
-    ...rows.slice(1).map((row) => `| ${row.map(csvMarkdownCell).join(' | ')} |`)
+    ...rows.slice(1).map((row) => `| ${row.map(value => cell(value)).join(' | ')} |`)
   ];
   return `# Tabelleninhalt\n\n${table.join('\n')}`;
 }

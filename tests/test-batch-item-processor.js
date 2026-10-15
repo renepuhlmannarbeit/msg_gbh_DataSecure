@@ -1,7 +1,7 @@
 'use strict';
 
 const { SafeError, convertDocument } = require('../plugins/data-secure/server/runtime');
-const { createBatchItemProcessor } = require('../plugins/data-secure/server/gateway/batch-item-processor');
+const { createBatchItemProcessor, retryDocumentControl } = require('../plugins/data-secure/server/gateway/batch-item-processor');
 const batchFacade = require('../plugins/data-secure/server/gateway/batch');
 const { createSuite } = require('./helpers');
 const { createBatchPseudonymRegistry, READABLE_CONTRACT_VERSION } = require('../plugins/data-secure/server/batch-pseudonym-registry');
@@ -33,6 +33,7 @@ function fixture(options = {}) {
   const entry = { sealed: true };
   const item = { id: '1'.repeat(32), name: 'private-source.txt', status: 'pending' };
   const state = {
+    schema: 'datasecure-batch/4',
     profile: 'general',
     product_channel: options.productChannel || 'plugin',
     remove_images: true,
@@ -43,6 +44,7 @@ function fixture(options = {}) {
   const expectedPackageId = `ds_${item.id}`;
   const processor = createBatchItemProcessor({
     SafeError,
+    contactStore: options.contactStore,
     nowMs: () => { clock += 10; return clock; },
     writeState(value, writeOptions) {
       writes.push({ snapshot: structuredClone(value), writeOptions });
@@ -162,6 +164,44 @@ function fixture(options = {}) {
 }
 
 async function main() {
+  await testAsync('short document-control contention waits without stealing a lock; persistent contention stays retryable', async () => {
+    let attempts = 0;
+    assert.equal(await retryDocumentControl(() => {
+      attempts++;
+      if (attempts < 3) throw codedError('STANDALONE_BUSY');
+      return 'captured';
+    }, { attempts: 3, delayMs: 1 }), 'captured');
+    assert.equal(attempts, 3);
+    attempts = 0;
+    await assert.rejects(retryDocumentControl(() => { attempts++; throw codedError('STANDALONE_BUSY'); },
+      { attempts: 2, delayMs: 1 }), { code: 'STANDALONE_BUSY' });
+    assert.equal(attempts, 2);
+    attempts = 0;
+    await assert.rejects(retryDocumentControl(() => { attempts++; throw codedError('DOCUMENT_REVIEW_INVALID'); },
+      { attempts: 3, delayMs: 1 }), { code: 'DOCUMENT_REVIEW_INVALID' });
+    assert.equal(attempts, 1);
+    assert.ok(batchFacade._test.retryableErrorCodes.includes('STANDALONE_BUSY'));
+  });
+  await testAsync('raw opt-out preserves the saved-answer lookup and only permits unconfirmed contact fallback for skipped runs', async () => {
+    for (const [skipped, stored] of [[true, 'E-Mail: corrected@unit.invalid'], [true, null], [false, null]]) {
+      let reads = 0, observed;
+      const value = fixture({ productChannel: 'standalone', contactStore: {
+        read() { reads++; return stored; }, write() { throw Error('no new contact decision expected'); }
+      } });
+      Object.assign(value.state, { schema: 'datasecure-batch/5', processing_mode: 'markdown-only',
+        remove_images: false, ocr_contact_review: true, ...(skipped ? { ocr_contact_review_skipped: true } : {}) });
+      value.deps.convertNext = async (_profile, hooks) => {
+        assert.equal(hooks.ocrContactReviewSkipped, skipped);
+        if (typeof hooks.prepareOcrContacts !== 'function') observed = 'MISSING_HOOK';
+        else try { observed = await hooks.prepareOcrContacts({ original_text: 'E-Mail: wrong@unit.invalid' }); }
+        catch (error) { observed = error.code; }
+        throw codedError('LOCAL_REVIEW_DEFERRED'); // This probe stops before publication.
+      };
+      await value.processor.processSingleBatchItem(value.state, value.item, value.entry, value.deps);
+      assert.equal(reads, 1, 'a saved answer must be read even after opt-out');
+      assert.equal(observed, skipped ? stored : 'LOCAL_REVIEW_DEFERRED');
+    }
+  });
   await testAsync('numbered reservations are durable before publication and a write failure forbids publication', async () => {
     for (const fail of [false, true]) {
       const secret = Buffer.alloc(32, 16);
@@ -332,6 +372,16 @@ async function main() {
     assert.strictEqual(value.events.filter((event) => event === 'mapping-stopped').length, 1);
     assert.ok(!value.events.includes('pipeline-publish'));
     assert.ok(value.writes.some((write) => write.snapshot.items[0].status === 'stopped'));
+  });
+
+  await testAsync('snapshot failure never evaluates ignored runtime option getters, including the cleanup dependencies', async () => {
+    for (const field of ['contentOptions', 'content_options', 'markdownOutput', 'scanOcr', 'imageOcr']) {
+      const value = fixture({ pipelineError: codedError('BATCH_SNAPSHOT_CHANGED') }); let reads = 0;
+      Object.defineProperty(value.deps, field, { enumerable: true, get() { reads++; throw new Error('OPTION_GETTER_EXECUTED'); } });
+      const result = await value.processor.processSingleBatchItem(value.state, value.item, value.entry, value.deps);
+      assert.equal(result.error, 'BATCH_SNAPSHOT_CHANGED'); assert.equal(reads, 0);
+      assert.ok(value.events.includes('invalidate'));
+    }
   });
 
   await testAsync('snapshot change invalidates only unpublished copies', async () => {

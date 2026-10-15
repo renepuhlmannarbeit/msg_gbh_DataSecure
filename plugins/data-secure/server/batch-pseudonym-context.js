@@ -15,6 +15,16 @@ const {
 } = require('./batch-pseudonym-registry');
 
 const ENCODED_SEED_RE = /^[A-Za-z0-9_-]{43}$/u;
+// Only registries opened by the actual action scope can be committed before
+// that scope's finally block. A matching seed or a caller exportState method
+// is not durable processing authority.
+const registryOwners = new WeakMap();
+function immutableRegistrySnapshot(value) {
+  return Object.freeze({ bindings: Object.freeze(value.bindings.map(row => Object.freeze([...row]))),
+    labels: Object.freeze(value.labels.map(row => Object.freeze([...row]))),
+    ...(value.known_alias_index ? { known_alias_index: Object.freeze({ schema: value.known_alias_index.schema,
+      starts: Object.freeze([...value.known_alias_index.starts]), attestation: value.known_alias_index.attestation }) } : {}) });
+}
 
 function unavailable(message = 'Der lokale Stapel-Pseudonymkontext ist nicht verfügbar.') {
   const error = new Error(message);
@@ -69,6 +79,10 @@ async function withBatchPseudonymRegistry(state, action, options = {}) {
       rulesetVersion: state.pseudonym_ruleset_version,
       persistedState: state.pseudonym_registry_state
     });
+    registryOwners.set(registry, { state, token: state.token, seed: state.pseudonym_seed,
+      contract: state.pseudonym_contract_version, ruleset: state.pseudonym_ruleset_version,
+      fingerprint: state.core_policy_fingerprint, initial: immutableRegistrySnapshot(registry.exportState()),
+      exportState: registry.exportState });
     return await action(registry);
   } catch (error) {
     // Processing failures retain their domain-specific error. Only context
@@ -78,20 +92,46 @@ async function withBatchPseudonymRegistry(state, action, options = {}) {
   } finally {
     try {
       if (registry) {
+        if (registryOwners.get(registry)?.commitRefused === true)
+          throw Object.assign(new Error('DOCUMENT_REVIEW_CONFLICT'), { code: 'DOCUMENT_REVIEW_CONFLICT' });
         const snapshot = registry.exportState();
         state.pseudonym_registry_state = snapshot;
         if (typeof options.persist === 'function') await options.persist(state);
       }
     } finally {
       if (registry) registry.dispose();
+      if (registry) registryOwners.delete(registry);
       if (Buffer.isBuffer(seed)) seed.fill(0);
     }
   }
+}
+
+function ownedRegistrySnapshot(registry, state) {
+  const owner = registryOwners.get(registry);
+  if (!owner || owner.token !== state.token || owner.seed !== state.pseudonym_seed ||
+      owner.contract !== state.pseudonym_contract_version || owner.ruleset !== state.pseudonym_ruleset_version ||
+      owner.fingerprint !== state.core_policy_fingerprint) throw unavailable();
+  // Invoke the captured native closure, not a reflected caller property.
+  return { initial: owner.initial, current: owner.exportState() };
+}
+function refuseOwnedRegistryPersist(registry) {
+  const owner = registryOwners.get(registry);
+  if (owner) owner.commitRefused = true;
+}
+function synchronizeOwnedRegistryCommit(registry, state, snapshot) {
+  const owner = registryOwners.get(registry);
+  ownedRegistrySnapshot(registry, state);
+  // The actual action's in-memory journal must carry the durable reservation
+  // before later checkpoint/mapping writes. Never expose the owner state.
+  owner.state.pseudonym_registry_state = immutableRegistrySnapshot(snapshot);
 }
 
 module.exports = {
   ENCODED_SEED_RE,
   createBatchPseudonymState,
   validateBatchPseudonymState,
-  withBatchPseudonymRegistry
+  withBatchPseudonymRegistry,
+  ownedRegistrySnapshot,
+  refuseOwnedRegistryPersist,
+  synchronizeOwnedRegistryCommit
 };

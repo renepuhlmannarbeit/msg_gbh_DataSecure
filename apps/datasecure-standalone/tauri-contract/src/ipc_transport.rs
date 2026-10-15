@@ -165,6 +165,19 @@ impl Drop for SpawnGuard {
 }
 
 impl Lifecycle {
+    // Data-free native observation only: never grants a successor or certifies an export.
+    pub fn recovery_phase(&self) -> &'static str {
+        if self.stopping.load(Ordering::Acquire) { return "closing"; }
+        let state = match self.state.0.try_lock() {
+            Ok(state) => state,
+            Err(TryLockError::WouldBlock) => return "checking",
+            Err(TryLockError::Poisoned(_)) => return "blocked",
+        };
+        if state.reconciliation_failed { "blocked" }
+        else if state.retiring || state.pending_spawns != 0 || state.active_native != 0 { "settling" }
+        else if state.active.is_some() { "owned" }
+        else { "idle" }
+    }
     pub fn begin_read_only(&self) -> Result<ReadOnlyGuard, String> {
         if self.stopping.load(Ordering::Acquire) { return Err(CLOSED.to_string()); }
         if self.read_only_active.compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire).is_err() {
@@ -332,6 +345,33 @@ pub fn writer(mut input: impl Write + Send + 'static) -> mpsc::Sender<WriteReque
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn native_recovery_phase_is_read_only_and_never_clears_a_block() {
+        let lifecycle = Lifecycle::default();
+        assert_eq!(lifecycle.recovery_phase(), "idle");
+        let pending = lifecycle.begin_spawn().unwrap();
+        assert_eq!(lifecycle.recovery_phase(), "settling");
+        drop(pending);
+        let native = lifecycle.begin_native().unwrap();
+        assert_eq!(lifecycle.recovery_phase(), "settling");
+        drop(native);
+        lifecycle.state.0.lock().unwrap().reconciliation_failed = true;
+        assert_eq!(lifecycle.recovery_phase(), "blocked");
+        assert!(lifecycle.begin_spawn().is_err(), "reading the phase cannot grant a successor");
+        lifecycle.stopping.store(true, Ordering::Release);
+        assert_eq!(lifecycle.recovery_phase(), "closing");
+    }
+    #[test]
+    fn poisoned_lifecycle_diagnostic_never_reports_waiting_as_safe() {
+        let lifecycle = Lifecycle::default(); let poison = lifecycle.clone();
+        assert!(std::thread::spawn(move || {
+            let _held = poison.state.0.lock().unwrap();
+            panic!("injected poisoned lifecycle mutex");
+        }).join().is_err());
+        assert_eq!(lifecycle.recovery_phase(), "blocked");
+        assert!(lifecycle.begin_spawn().is_err());
+    }
 
     #[test]
     fn ready_invalidates_commands_queued_during_recovery_but_not_first_start() {

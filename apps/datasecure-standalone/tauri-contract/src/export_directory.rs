@@ -59,6 +59,47 @@ impl RecoveredDirectory<'_> {
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ExpectedFile { pub name: String, pub bytes: u64, pub sha256: [u8; 32] }
+pub(crate) fn validate_export_names(mode: &str, files: &[ExpectedFile]) -> io::Result<()> {
+    let mut used = std::collections::HashSet::new();
+    for (index, file) in files.iter().enumerate() {
+        leaf(&file.name)?;
+        if mode == "markdown-and-anonymize" {
+            if file.name != format!("Dokument_{:02}.md", index + 1) { return Err(unsafe_io()); }
+        } else if mode == "markdown-only" {
+            let name = &file.name;
+            let stem = name.split('.').next().unwrap_or("").to_uppercase();
+            let device = ["CON", "PRN", "AUX", "NUL"].contains(&stem.as_str()) ||
+                ["COM", "LPT"].iter().any(|prefix| stem.strip_prefix(prefix).is_some_and(|suffix|
+                    suffix.len() == 1 && matches!(suffix.as_bytes()[0], b'1'..=b'9') || ["¹", "²", "³"].contains(&suffix)));
+            if name.len() <= 3 || !name.ends_with(".md") || device || name.chars().any(|c|
+                matches!(c, '<' | '>' | '"' | '|' | '?' | '*' | '\u{200b}'..='\u{200f}' | '\u{202a}'..='\u{202e}' | '\u{2060}'..='\u{206f}' | '\u{feff}')) {
+                return Err(unsafe_io());
+            }
+        } else { return Err(unsafe_io()); }
+        let key = icu_normalizer::ComposingNormalizer::new_nfc().normalize(&file.name).to_lowercase();
+        if !used.insert(key) { return Err(unsafe_io()); }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod filename_tests {
+    use super::*;
+    fn files(names: &[&str]) -> Vec<ExpectedFile> { names.iter().map(|name| ExpectedFile { name: (*name).into(), bytes: 1, sha256: [0;32] }).collect() }
+    #[test]
+    fn names_are_mode_bound_and_platform_safe() {
+        for names in [vec!["Quelle.md"], vec!["ä.md", "🧪 Bericht.md"], vec!["A.md", "A (2).md"]] {
+            assert!(validate_export_names("markdown-only", &files(&names)).is_ok());
+        }
+        for names in [vec!["CON.md"], vec!["LPT1.md"], vec!["COM¹.md"], vec!["../a.md"], vec!["a:b.md"], vec!["a?.md"],
+            vec!["a.md", "A.md"], vec!["é.md", "e\u{301}.md"], vec!["x.pdf"], vec!["a\u{200b}.md"]] {
+            assert!(validate_export_names("markdown-only", &files(&names)).is_err(), "{names:?}");
+        }
+        assert!(validate_export_names("markdown-only", &files(&[&format!("{}.md", "🧪".repeat(64))])).is_err());
+        assert!(validate_export_names("markdown-and-anonymize", &files(&["Quelle.md"])).is_err());
+        assert!(validate_export_names("markdown-and-anonymize", &files(&["Dokument_01.md"])).is_ok());
+    }
+}
 impl Directory {
     /// The expected identity must come from the prior authoritative native
     /// binding, not a fresh pathname stat after an untrusted mkdir.

@@ -1838,7 +1838,12 @@ test('escaped comparisons and programming generics remain visible content', () =
   const escaped = anonymizeVerified('Grenzwert &lt; 5 und Leistung &gt; 3', 'general');
   assert.strictEqual(escaped.text, 'Grenzwert < 5 und Leistung > 3');
   const generic = anonymizeVerified('List<Customer> und Map<String, Object>', 'general');
-  assert.strictEqual(generic.text, 'List<Customer> und Map<String, Object>');
+  // Raw custom tags are hidden by CommonMark HTML rendering. An escaped
+  // opening preserves the intended generic type words in the actual output.
+  const renderer = new (require('markdown-it'))('commonmark', { html: true });
+  const visible = renderer.parse(generic.text, {}).filter(token => token.type === 'inline')
+    .flatMap(token => token.children).map(token => token.content).join('');
+  assert.strictEqual(visible, 'List<Customer> und Map<String, Object>');
 });
 
 test('a one-word legal-form alias does not replace ordinary prose globally', () => {
