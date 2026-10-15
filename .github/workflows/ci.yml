@@ -76,6 +76,10 @@ jobs:
       - name: Install locked development-only test oracles
         run: npm ci --ignore-scripts --no-audit --no-fund
 
+      - name: Install locked local Markdown test runtime
+        if: ${{ steps.scope.outputs.run_product == 'true' }}
+        run: npm ci --prefix native/markdown/pilot --ignore-scripts --no-audit --no-fund
+
       - name: Run current documentation contracts
         if: ${{ steps.scope.outputs.run_docs == 'true' }}
         run: npm run test:docs

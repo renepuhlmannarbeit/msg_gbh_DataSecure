@@ -45,6 +45,7 @@ jobs:
           node-version: '22.23.2'
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm ci --prefix native/markdown/pilot --ignore-scripts --no-audit --no-fund
       - run: npm test
       - if: ${{ runner.os == 'Windows' }}
         run: npm run test:windows-visual
@@ -61,6 +62,7 @@ jobs:
           node-version: '22.23.2'
           cache: npm
       - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm ci --prefix native/markdown/pilot --ignore-scripts --no-audit --no-fund
       - name: Verify real Windows process birth lookup before product tests
         run: node tests/test-process-identity.js
       - run: npm run test:product:ci
