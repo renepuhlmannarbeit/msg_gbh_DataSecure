@@ -39,6 +39,17 @@ static REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 static DIAGNOSTIC_SESSION: OnceLock<String> = OnceLock::new();
 static NATIVE_SMOKE_PROFILE: OnceLock<Option<native_smoke::Profile>> = OnceLock::new();
 
+fn build_id() -> &'static str {
+    match option_env!("DATASECURE_BUILD_ID") {
+        Some(value) if value.len() == 40 && value.bytes().all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()) => value,
+        _ => "unidentified",
+    }
+}
+
+fn runtime_target() -> String {
+    format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH)
+}
+
 #[cfg(target_os = "windows")]
 fn windows_attributes_contain_reparse_point(attributes: u32) -> bool {
     attributes & 0x400 != 0
@@ -108,7 +119,9 @@ fn diagnostic_correlated_event(
         "session_id": diagnostic_session(),
         "event": event,
         "outcome": outcome,
-        "product_version": env!("CARGO_PKG_VERSION")
+        "product_version": env!("CARGO_PKG_VERSION"),
+        "build_id": build_id(),
+        "runtime_target": runtime_target()
     });
     if let Some(value) = action {
         record["action"] = json!(value);
@@ -501,11 +514,17 @@ fn configure_support_trace(command: &mut Command, setting: Option<&std::ffi::OsS
 }
 
 fn runtime_spawn_code(error: &std::io::Error) -> &'static str {
+    runtime_spawn_code_for_os(error, std::env::consts::OS)
+}
+
+fn runtime_spawn_code_for_os(error: &std::io::Error, os: &str) -> &'static str {
     match error.kind() {
         std::io::ErrorKind::NotFound => "STANDALONE_RUNTIME_MISSING",
         std::io::ErrorKind::PermissionDenied => "STANDALONE_RUNTIME_DENIED",
-        _ if matches!(error.raw_os_error(), Some(193 | 216)) && cfg!(windows) => "STANDALONE_RUNTIME_ARCHITECTURE_INVALID",
-        _ if matches!(error.raw_os_error(), Some(8)) && cfg!(unix) => "STANDALONE_RUNTIME_ARCHITECTURE_INVALID",
+        _ if os == "windows" && matches!(error.raw_os_error(), Some(193 | 216)) => "STANDALONE_RUNTIME_ARCHITECTURE_INVALID",
+        _ if os == "macos" && matches!(error.raw_os_error(), Some(86)) => "STANDALONE_RUNTIME_ARCHITECTURE_INVALID",
+        _ if os == "macos" && matches!(error.raw_os_error(), Some(85 | 88)) => "STANDALONE_RUNTIME_BINARY_INVALID",
+        _ if os != "windows" && matches!(error.raw_os_error(), Some(8)) => "STANDALONE_RUNTIME_ARCHITECTURE_INVALID",
         _ => "STANDALONE_RUNTIME_START_FAILED",
     }
 }
@@ -517,7 +536,7 @@ fn reserve_sidecar_generation(lifecycle: &ipc_transport::Lifecycle, generations:
     getrandom::fill(&mut entropy).map_err(|_| ipc_transport::FAILED.to_string())?;
     let generation: String = entropy.iter().map(|value| format!("{value:02x}")).collect();
     let mut retired = generations.lock().map_err(|_| ipc_transport::FAILED.to_string())?;
-    if retired.len() >= 16 { return Err("STANDALONE_CONNECTION_RECOVERY_BLOCKED".to_string()); }
+    if retired.len() >= 16 { return Err("STANDALONE_RECOVERY_ATTEMPTS_EXHAUSTED".to_string()); }
     let previous = retired.clone(); retired.push(generation.clone());
     Ok((guard, generation, previous))
 }
@@ -701,15 +720,20 @@ fn spawn_sidecar(app: &tauri::AppHandle, lifecycle: &ipc_transport::Lifecycle, s
     let ready = match ipc_transport::receive_until(&process.responses, deadline, &lifecycle.stopping) {
         Ok(Ok(frame)) => frame,
         Ok(Err(code)) | Err(code) => {
+            let cause = sidecar_bootstrap_diagnostic(&process.child, &code);
             diagnostic_event("sidecar_bootstrap_failed", None, "failed",
-                Some(sidecar_bootstrap_diagnostic(&process.child, &code)), None);
+                Some(&cause), None);
             return Err(code);
         }
     };
     if ready["schema"] != "datasecure-standalone-ready/1" || ready["owner_generation"] != process.owner_generation ||
-        ready.as_object().map_or(true, |fields| fields.len() != if ready["ok"] == true { 3 } else { 4 }) {
+        !matches!(ready["diagnostic_log"].as_str(), Some("ready" | "unavailable")) ||
+        ready.as_object().map_or(true, |fields| fields.len() != if ready["ok"] == true { 4 } else { 5 }) {
         diagnostic_event("sidecar_bootstrap_failed", None, "failed", Some("STANDALONE_SIDECAR_READY_INVALID"), None);
         return Err(ipc_transport::FAILED.to_string());
+    }
+    if ready["diagnostic_log"] == "unavailable" {
+        diagnostic_event("sidecar_diagnostic_unavailable", None, "failed", Some("STANDALONE_SIDECAR_DIAGNOSTIC_UNAVAILABLE"), None);
     }
     if ready["ok"] != true {
         let code = ready["error_code"].as_str().filter(|code| code.len() <= 80 &&
@@ -722,9 +746,8 @@ fn spawn_sidecar(app: &tauri::AppHandle, lifecycle: &ipc_transport::Lifecycle, s
     Ok(process)
 }
 
-fn sidecar_bootstrap_diagnostic(child: &ipc_transport::ChildControl, transport_code: &str) -> &'static str {
-    if transport_code == ipc_transport::TIMEOUT { return "STANDALONE_SIDECAR_READY_TIMEOUT"; }
-    if transport_code == ipc_transport::CLOSED { return "STANDALONE_SIDECAR_START_CANCELLED"; }
+fn sidecar_bootstrap_diagnostic(child: &ipc_transport::ChildControl, transport_code: &str) -> String {
+    if transport_code == ipc_transport::CLOSED { return "STANDALONE_SIDECAR_START_CANCELLED".into(); }
     // EOF can precede the kernel's exit notification by a few milliseconds.
     // A short, bounded observation improves the diagnosis without holding a
     // child lock, changing the recovery decision or blocking the GUI thread.
@@ -734,29 +757,36 @@ fn sidecar_bootstrap_diagnostic(child: &ipc_transport::ChildControl, transport_c
         std::thread::sleep(Duration::from_millis(10));
         status = child.exit_status();
     }
-    let Some(status) = status else { return "STANDALONE_SIDECAR_EOF_RUNNING"; };
-    if status.success() { return "STANDALONE_SIDECAR_EXIT_ZERO"; }
+    let Some(status) = status else {
+        return if transport_code == ipc_transport::TIMEOUT { "STANDALONE_SIDECAR_READY_TIMEOUT".into() }
+            else { "STANDALONE_SIDECAR_EOF_RUNNING".into() };
+    };
+    if status.success() { return "STANDALONE_SIDECAR_EXIT_ZERO".into(); }
     #[cfg(unix)]
     {
         use std::os::unix::process::ExitStatusExt;
         #[cfg(target_os = "macos")]
         match status.signal() {
-            Some(4) => return "STANDALONE_SIDECAR_SIGNAL_ILLEGAL_INSTRUCTION",
-            Some(6) => return "STANDALONE_SIDECAR_SIGNAL_ABORT",
-            Some(9) => return "STANDALONE_SIDECAR_SIGNAL_KILLED",
-            Some(10) => return "STANDALONE_SIDECAR_SIGNAL_BUS",
-            Some(11) => return "STANDALONE_SIDECAR_SIGNAL_SEGFAULT",
+            Some(4) => return "STANDALONE_SIDECAR_SIGNAL_ILLEGAL_INSTRUCTION".into(),
+            Some(6) => return "STANDALONE_SIDECAR_SIGNAL_ABORT".into(),
+            Some(9) => return "STANDALONE_SIDECAR_SIGNAL_KILLED".into(),
+            Some(10) => return "STANDALONE_SIDECAR_SIGNAL_BUS".into(),
+            Some(11) => return "STANDALONE_SIDECAR_SIGNAL_SEGFAULT".into(),
             _ => {},
         }
-        if status.signal().is_some() { return "STANDALONE_SIDECAR_SIGNAL_OTHER"; }
+        if let Some(signal) = status.signal() {
+            return if (1..=128).contains(&signal) { format!("STANDALONE_SIDECAR_SIGNAL_{signal}") }
+                else { "STANDALONE_SIDECAR_SIGNAL_OTHER".into() };
+        }
     }
     match status.code() {
-        Some(1) => "STANDALONE_SIDECAR_EXIT_ONE",
-        Some(70) => "STANDALONE_SIDECAR_EXIT_SEVENTY",
-        Some(126) => "STANDALONE_SIDECAR_EXIT_DENIED",
-        Some(127) => "STANDALONE_SIDECAR_EXIT_NOT_FOUND",
-        Some(_) => "STANDALONE_SIDECAR_EXIT_OTHER",
-        None => "STANDALONE_SIDECAR_EXIT_UNKNOWN",
+        Some(1) => "STANDALONE_SIDECAR_EXIT_ONE".into(),
+        Some(70) => "STANDALONE_SIDECAR_EXIT_SEVENTY".into(),
+        Some(126) => "STANDALONE_SIDECAR_EXIT_DENIED".into(),
+        Some(127) => "STANDALONE_SIDECAR_EXIT_NOT_FOUND".into(),
+        Some(code) if (0..=255).contains(&code) => format!("STANDALONE_SIDECAR_EXIT_{code}"),
+        Some(_) => "STANDALONE_SIDECAR_EXIT_OTHER".into(),
+        None => "STANDALONE_SIDECAR_EXIT_UNKNOWN".into(),
     }
 }
 
@@ -1134,7 +1164,8 @@ fn rpc_request(
         // Reserve under the same sidecar mutex, BEFORE consuming a recovery
         // generation. Retirement may have removed the process but still be
         // completing its lifecycle transition. Such reads are not bootstraps.
-        let (spawn_guard, owner_generation, retired_generations) = reserve_sidecar_generation(&state.lifecycle, &state.retired_owner_generations)?;
+        let (spawn_guard, owner_generation, retired_generations) = reserve_sidecar_generation(&state.lifecycle, &state.retired_owner_generations)
+            .inspect_err(|code| diagnostic_event("sidecar_start_blocked", None, "blocked", Some(code), None))?;
         let app = state.app.clone();
         let lifecycle = state.lifecycle.clone();
         let (sender, receiver) = mpsc::channel();
@@ -2176,17 +2207,32 @@ async fn open_identity_mappings_directory(state: State<'_, DesktopState>) -> Res
 #[tauri::command]
 async fn open_diagnostic_folder() -> Result<Value, String> {
     let directory = diagnostic_directory();
-    std::fs::create_dir_all(&directory)
+    diagnostic_log::ensure_directory(&directory)
         .map_err(|_| "STANDALONE_DIAGNOSTICS_OPEN_FAILED".to_string())?;
     let command = native_open_command(&directory, "directory")?;
-    native_open::handoff(command, |status| {
-        if !matches!(status, Ok(status) if status.success()) {
+    diagnostic_event("os_open_requested", Some("open_diagnostic_folder"), "progress", None, None);
+    #[cfg(target_os = "macos")]
+    {
+        let status = tauri::async_runtime::spawn_blocking(move || native_open::handoff_before_exit(command))
+            .await.map_err(|_| "STANDALONE_DIAGNOSTICS_OPEN_FAILED".to_string())?
+            .map_err(|_| "STANDALONE_DIAGNOSTICS_OPEN_FAILED".to_string())?;
+        if !status.success() {
             diagnostic_event("os_open_helper_failed", Some("open_diagnostic_folder"), "failed", Some("STANDALONE_OS_OPEN_HELPER_FAILED"), None);
+            return Err("STANDALONE_DIAGNOSTICS_OPEN_FAILED".into());
         }
-    })
-        .map_err(|_| "STANDALONE_DIAGNOSTICS_OPEN_FAILED".to_string())?;
-    diagnostic_event("diagnostic_folder_opened", None, "ready", None, None);
-    Ok(json!({ "ok": true, "opened": true, "external_disclosure": false }))
+        diagnostic_event("diagnostic_folder_opened", None, "ready", None, None);
+        Ok(json!({ "ok": true, "opened": true, "external_disclosure": false }))
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        native_open::handoff(command, |status| {
+            if !matches!(status, Ok(status) if status.success()) {
+                diagnostic_event("os_open_helper_failed", Some("open_diagnostic_folder"), "failed", Some("STANDALONE_OS_OPEN_HELPER_FAILED"), None);
+            }
+        }).map_err(|_| "STANDALONE_DIAGNOSTICS_OPEN_FAILED".to_string())?;
+        diagnostic_event("diagnostic_folder_open_handoff_confirmed", None, "ready", None, None);
+        Ok(json!({ "ok": true, "handoff_confirmed": true, "external_disclosure": false }))
+    }
 }
 #[tauri::command]
 fn get_native_recovery_status(state: State<'_, DesktopState>) -> Value {
@@ -2232,7 +2278,8 @@ fn frontend_ready(state: State<'_, DesktopState>, native_drop_ready: Option<bool
             }
         });
     }
-    json!({ "ok": true, "product_version": env!("CARGO_PKG_VERSION"),
+    json!({ "ok": true, "product_version": env!("CARGO_PKG_VERSION"), "build_id": build_id(),
+        "runtime_target": runtime_target(),
         "admission_prepared": state.admission_present.load(Ordering::Acquire) })
 }
 
@@ -2456,6 +2503,17 @@ mod tests {
             }
         }
         assert_eq!(generations.lock().unwrap().len(), 2); assert!(lifecycle.stop());
+    }
+
+    #[test]
+    fn exhausted_recovery_budget_has_its_own_cause_and_does_not_spawn() {
+        let lifecycle = ipc_transport::Lifecycle::default();
+        let generations = Mutex::new((0..16).map(|index| format!("{index:032x}")).collect());
+        assert_eq!(reserve_sidecar_generation(&lifecycle, &generations).err().as_deref(),
+            Some("STANDALONE_RECOVERY_ATTEMPTS_EXHAUSTED"));
+        assert_eq!(generations.lock().unwrap().len(), 16);
+        assert_eq!(lifecycle.recovery_phase(), "idle");
+        assert!(lifecycle.stop());
     }
 
     #[test]
@@ -3002,6 +3060,9 @@ mod tests {
         assert_eq!(runtime_spawn_code(&std::io::Error::other("private path")), "STANDALONE_RUNTIME_START_FAILED");
         #[cfg(windows)]
         assert_eq!(runtime_spawn_code(&std::io::Error::from_raw_os_error(193)), "STANDALONE_RUNTIME_ARCHITECTURE_INVALID");
+        assert_eq!(runtime_spawn_code_for_os(&std::io::Error::from_raw_os_error(86), "macos"), "STANDALONE_RUNTIME_ARCHITECTURE_INVALID");
+        assert_eq!(runtime_spawn_code_for_os(&std::io::Error::from_raw_os_error(85), "macos"), "STANDALONE_RUNTIME_BINARY_INVALID");
+        assert_eq!(runtime_spawn_code_for_os(&std::io::Error::from_raw_os_error(88), "macos"), "STANDALONE_RUNTIME_BINARY_INVALID");
     }
 
     #[cfg(target_os = "windows")]

@@ -26,10 +26,8 @@ pub fn report(directory: &Path, code: &str) -> io::Result<PathBuf> {
         "STANDALONE_DESKTOP_RESOURCE_FAILED", "STANDALONE_DESKTOP_ACCESS_DENIED",
         "STANDALONE_DESKTOP_IO_FAILED", "STANDALONE_DESKTOP_SETUP_FAILED", "STANDALONE_APPLICATION_RUN_FAILED"];
     if !allowed.contains(&code) { return Err(io::Error::new(io::ErrorKind::InvalidInput, "invalid startup code")); }
-    std::fs::create_dir_all(directory)?;
-    let file = directory.join("DataSecure-Startdiagnose.txt");
-    std::fs::write(&file, format!("DataSecure konnte seine Oberfläche nicht starten.\nFehlercode: {code}\n\nDies ist ein System-/Paketfehler, kein Fehler Ihrer Dokumente.\nBitte das vollständige Paket für Ihr Betriebssystem und Ihre Architektur verwenden.\nMit der IT Webview-Laufzeit, Ausführungsrechte und Sicherheitsrichtlinien prüfen. Schutzfunktionen nicht deaktivieren.\n\nDieser Ordner enthält inhaltsfreie Diagnoseprotokolle.\nAuch ohne Oberfläche: DataSecure mit --startup-diagnostics starten, um den Diagnoseordner zu öffnen.\n"))?;
-    Ok(file)
+    let body = format!("DataSecure konnte seine Oberfläche nicht starten.\nFehlercode: {code}\n\nDies ist ein System-/Paketfehler, kein Fehler Ihrer Dokumente.\nBitte das vollständige Paket für Ihr Betriebssystem und Ihre Architektur verwenden.\nMit der IT Webview-Laufzeit, Ausführungsrechte und Sicherheitsrichtlinien prüfen. Schutzfunktionen nicht deaktivieren.\n\nDieser Ordner enthält inhaltsfreie Diagnoseprotokolle.\nAuch ohne Oberfläche: DataSecure mit --startup-diagnostics starten, um den Diagnoseordner zu öffnen.\n");
+    crate::diagnostic_log::write_fresh(directory, "DataSecure-Startdiagnose", body.as_bytes())
 }
 
 #[cfg(test)]
@@ -51,13 +49,19 @@ mod tests {
     fn report_is_readable_without_webview_and_disk_failures_are_not_success() {
         let suffix = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
         let directory = std::env::temp_dir().join(format!("datasecure-startdiag-{}-{suffix}", std::process::id()));
+        std::fs::create_dir(&directory).unwrap();
+        let legacy = directory.join("DataSecure-Startdiagnose.txt");
+        std::fs::write(&legacy, "existing diagnostic must stay unchanged").unwrap();
         let file = report(&directory, "STANDALONE_WEBVIEW_UNAVAILABLE").unwrap();
+        assert_ne!(file, legacy);
+        assert_eq!(std::fs::read_to_string(&legacy).unwrap(), "existing diagnostic must stay unchanged");
         let text = std::fs::read_to_string(&file).unwrap();
         assert!(text.contains("--startup-diagnostics"));
         assert!(text.contains("kein Fehler Ihrer Dokumente"));
         assert!(!text.contains(&directory.to_string_lossy().to_string()));
         assert!(report(&file, "STANDALONE_WEBVIEW_UNAVAILABLE").is_err());
         std::fs::remove_file(file).unwrap();
+        std::fs::remove_file(legacy).unwrap();
         std::fs::remove_dir(directory).unwrap();
     }
 }

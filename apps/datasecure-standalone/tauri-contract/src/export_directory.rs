@@ -754,12 +754,14 @@ mod tests {
         let operation = Lifecycle::default().begin_native().unwrap();
         super::publish(source_parent, source_name, source, target_parent, target_name, &operation)
     }
-    use std::{fs, path::PathBuf};
+    use std::{fs, path::PathBuf, sync::atomic::{AtomicU64, Ordering}};
+    static FIXTURE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
     struct Fixture { path: PathBuf }
     impl Fixture {
         fn new() -> Self {
-            let path = std::env::temp_dir().join(format!("datasecure-export-capability-{}-{}", std::process::id(),
-                std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+            let path = std::env::temp_dir().join(format!("datasecure-export-capability-{}-{}-{}", std::process::id(),
+                std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos(),
+                FIXTURE_SEQUENCE.fetch_add(1, Ordering::Relaxed)));
             fs::create_dir(&path).unwrap();
             Self { path }
         }

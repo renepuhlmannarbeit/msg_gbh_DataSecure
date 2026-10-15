@@ -2,6 +2,27 @@
 
 Stand: 15.10.2026 · Produktstand 3.2.0-rc160 · veröffentlicht Standalone RC160 (Windows x64, macOS Intel/Apple Silicon) / Cowork RC151; Linux Standalone RC159 · Teilkopie-/Dauerblockadefall und menschliche Zielhost-Abnahme offen
 
+**P0 – M2-Neuprobe nach Quellreview:** Drei übermittelte Desktoplogs enthalten
+je 16 fehlgeschlagene IPC-Antworten. Quellfehler: automatisches
+Fünf-Sekunden-Retry verbrauchte die 16 sicheren Core-Besitzergenerationen
+und sperrte dann auch die manuelle Prüfung. Automatische Fehlstarts sind im
+Quellstand nach zwei Versuchen angehalten; ein ausdrücklich ausgelöster
+Statusversuch bleibt möglich, Lauf-/Exportaktionen werden nicht wiederholt.
+Exit-/Signal-/Mac-Architekturcodes, Sidecar-Logstatus, CI-Build-ID und
+linkfrei-exklusive Startdiagnose ergänzen den nächsten Diagnosebeleg.
+Lokale Tests grün, **neues Mac-Paket und M2-/Finder-/MDM-Test noch offen**.
+Beim nächsten echten Test nur synthetische Quellen verwenden, Build-ID
+ablesen und beide Diagnosearten sichern. Keine Schutzrichtlinie abschalten.
+
+**P1 – Mac-Codeplatzierung vor regulärer Verteilung:** Conversion-Node,
+POSIX-Supervisor und Canvas-Addon liegen in `Contents/Resources`. Apple
+weist ausführbaren Mach-O-Code `Contents/MacOS` bzw. `Frameworks` zu;
+Manifest-/Resolver-/Signatur-/Paketverträge müssen gemeinsam migriert
+werden, bevor Developer-ID-/Notarisierungs- und Browser-/Finder-Gates eine
+reguläre Auslieferung belegen können. Die konvertierungsbezogene Platzierung
+erklärt den früheren Startabbruch **nicht** nachweislich. Eigenständiges
+Paket-/Signatur-/Quarantine-Gate und reale M2-/IT-Prüfung offen.
+
 **P0 – macOS 26.2/M2 Start und Diagnose:** ARM-DMG und ZIP zeigen nach dem
 Start die Oberfläche, aber keinen lokalen Dienst. Drei Desktop-Logs enden
 nach `sidecar_spawned` mit `STANDALONE_IPC_FAILED`; das fehlende Sidecar-Log

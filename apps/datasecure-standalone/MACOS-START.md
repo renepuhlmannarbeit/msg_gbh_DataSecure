@@ -16,6 +16,23 @@ keine Administratorrechte. Eine gesperrte Terminal-App ist für die normalen
 Datei-/Ordnerbuttons keine Voraussetzung. Beide Aussagen sind keine
 Umgehungsempfehlung für Organisationsrichtlinien.
 
+Für die nächste gemeinsame M2-Probe erst ein **neues, ausdrücklich als
+Engineering-Testpaket gekennzeichnetes** Paket verwenden, nicht das
+unveränderte RC160. Im Fuß der Anwendung die kurze Build-ID und die
+tatsächlich laufende Architektur (ARM64 oder Intel) notieren.
+Nur eine Paketvariante in einem eigenen Testordner starten und zunächst
+synthetische Testdateien verwenden. Wenn schon die Verbindung fehlt,
+„Diagnose öffnen“ wählen und alle `desktop-interactions*.jsonl` sowie
+vorhandene `sidecar-interactions*.jsonl` aus diesem Diagnoseordner
+weitergeben. Fehlt die zweite Art, ausdrücklich „fehlt“ melden; nicht auf
+einen fehlenden Crashbericht als Entwarnung schließen. Falls die App
+„automatische Verbindungsversuche angehalten“ meldet, nach Sicherung der
+Diagnose einmal „Verbindung und Laufstatus prüfen“ wählen. Keine erneute
+Verarbeitung oder Exportaktion aus einem unbestätigten Status ableiten.
+Schlägt schon der Start des lokalen Core auf einem verwalteten Mac fehl,
+die IT um eine zeitpunktbezogene Prüfung der Ausführungsrichtlinien bitten;
+keine Gatekeeper- oder Endpoint-Schutzfunktion deaktivieren.
+
 ## Verarbeitung und Prüfung in RC160
 
 1. Nach der Installation unter **Neue Verarbeitung** zuerst **Nur umwandeln**
@@ -168,7 +185,7 @@ zum Beispiel für Apple Silicon:
 
 ```sh
 cd ~/Downloads
-shasum -a 256 -c DataSecure-Standalone-3.2.0-rc159-macos-arm64.zip.sha256
+shasum -a 256 -c DataSecure-Standalone-3.2.0-rc160-macos-arm64.zip.sha256
 ```
 
 Nur bei `OK` fortfahren. Den Versions- und Architekturnamen im Befehl an die

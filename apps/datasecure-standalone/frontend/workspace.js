@@ -53,8 +53,14 @@
     STANDALONE_SELECTION_INVALID: 'Die Auswahl ist nicht mehr aktuell oder überschreitet eine Grenze. Bitte Auswahl erneut prüfen.',
     STANDALONE_START_FAILED: 'Der Start ist nicht bestätigt. Nicht erneut starten; den Verlauf aktualisieren.',
     STANDALONE_IPC_FAILED: 'Die lokale Verbindung wurde unterbrochen. Status erneut laden; nicht blind neu starten.',
+    STANDALONE_RUNTIME_MISSING: 'Der lokale Core fehlt im App-Paket. Bitte das vollständige Paket neu installieren und die Diagnose prüfen.',
+    STANDALONE_RUNTIME_DENIED: 'Das Betriebssystem verweigert den Start des lokalen Core. Bitte mit der IT Rechte und Sicherheitsrichtlinien prüfen; Schutzfunktionen nicht deaktivieren.',
+    STANDALONE_RUNTIME_ARCHITECTURE_INVALID: 'Der lokale Core passt nicht zur Rechnerarchitektur. Bitte das richtige Mac- bzw. Windows-Paket installieren.',
+    STANDALONE_RUNTIME_BINARY_INVALID: 'Der lokale Core ist kein gültiges macOS-Programm. Bitte das vollständige Paket neu installieren und die Diagnose prüfen.',
+    STANDALONE_RUNTIME_START_FAILED: 'Der lokale Core konnte nicht gestartet werden. Bitte die Diagnose öffnen und mit der IT die Installation prüfen.',
     STANDALONE_CONNECTION_CHANGED: 'Die lokale Verbindung wird erneuert. Kein Start und keine Entscheidung werden automatisch wiederholt. Die Dateiauswahl muss danach erneut aufgenommen werden.',
     STANDALONE_CONNECTION_RECOVERY_BLOCKED: 'Der vorherige lokale Prozess oder Export ist noch nicht sicher beendet. DataSecure wartet; es wird kein zweiter Prozess gestartet. Bitte Diagnose prüfen, falls dieser Zustand bestehen bleibt.',
+    STANDALONE_RECOVERY_ATTEMPTS_EXHAUSTED: 'Zu viele lokale Startversuche sind fehlgeschlagen. Weitere Versuche sind in diesem Fenster gesperrt. Bitte die Diagnose sichern und die App kontrolliert neu starten; keinen Lauf oder Export blind wiederholen.',
     STANDALONE_ADMISSION_TIMEOUT: 'Die Aufnahme konnte innerhalb von fünf Minuten nicht bestätigt werden. Bitte den lokalen Zugriff prüfen.',
     SOURCE_FOLDER_FILE_LIMIT: 'Der sichere Quellenkatalog ist zu groß (höchstens 1.000 Dateien oder zu lange Dateilisten). Bitte einen kleineren Unterordner auswählen. Die bisherige Auswahl bleibt erhalten.',
     SOURCE_FOLDER_SIZE_LIMIT: 'Die aufgenommenen Dateien überschreiten zusammen 500 MB. Bitte einen kleineren Ordner auswählen.',
@@ -62,7 +68,8 @@
   };
   let catalogue = [], selected = new Set(), knownIds = new Set(), revision = 0, mode = '', expanded = new Map();
   let busy = false, closed = false, view = 'new', generation = 0, current = null, job = null;
-  let timer, refreshing = false, historyGeneration = 0, lastJobSignature = '', problemSignature = '', acknowledged;
+  let timer, refreshing = false, consecutiveConnectionFailures = 0, automaticRetryPaused = false;
+  let historyGeneration = 0, lastJobSignature = '', problemSignature = '', acknowledged;
   let lastJobAnnouncement = '';
   let guideSignature = '', documentGuide = null;
   let feedbackOwner = null;
@@ -169,8 +176,10 @@
     catch { return /^[A-Z][A-Z0-9_]{1,80}$/u.test(raw) ? raw : 'STANDALONE_OPERATION_FAILED'; } }
   function showError(error) { const code = errorCode(error); feedback(`${reasons[code] || 'Der lokale Vorgang konnte nicht abgeschlossen werden. Bitte Diagnose und aktuellen Laufstatus prüfen.'} (${code})`, true);
     $('connection-help').hidden = !(reconnecting || contextRequired || ['STANDALONE_IPC_FAILED', 'STANDALONE_IPC_TIMEOUT', 'STANDALONE_CONNECTION_CHANGED',
-      'STANDALONE_CONNECTION_RECOVERY_BLOCKED', 'STANDALONE_RUNTIME_START_FAILED', 'STANDALONE_RUNTIME_MISSING',
-      'STANDALONE_RUNTIME_DENIED'].includes(code)); }
+      'STANDALONE_CONNECTION_RECOVERY_BLOCKED', 'STANDALONE_RECOVERY_ATTEMPTS_EXHAUSTED',
+      'STANDALONE_RUNTIME_START_FAILED', 'STANDALONE_RUNTIME_MISSING',
+      'STANDALONE_RUNTIME_DENIED', 'STANDALONE_RUNTIME_ARCHITECTURE_INVALID',
+      'STANDALONE_RUNTIME_BINARY_INVALID'].includes(code)); }
   async function updateConnectionHelp() {
     const epoch = connectionEpoch;
     const generic = 'Der letzte Laufstatus ist nicht bestätigt. Kein zweiter Lauf wird gestartet. Bitte Verbindung und Laufstatus erneut prüfen oder die inhaltsfreie lokale Diagnose öffnen.';
@@ -923,9 +932,10 @@
       if (view === 'history' && focused?.startsWith('history-')) ($(focused) || $('nav-history')).focus();
     } catch { if (request === historyGeneration) historyUnavailable('Verlauf derzeit nicht erreichbar. „Aktualisieren“ prüft nur erneut die lokale Verbindung; es startet keinen Lauf. Wenn das bestehen bleibt, „Diagnose öffnen“ wählen.'); }
   }
-  function schedule(delay = 1600) { clearTimeout(timer); if (!closed) timer = setTimeout(refresh, delay); }
-  async function refresh() {
+  function schedule(delay = 1600) { clearTimeout(timer); if (!closed && !automaticRetryPaused) timer = setTimeout(refresh, delay); }
+  async function refresh(explicitRetry = false) {
     if (closed || refreshing) return; if (busy) { schedule(); return; }
+    if (explicitRetry) { automaticRetryPaused = false; clearTimeout(timer); }
     refreshing = true; const request = generation;
     try {
       const state = await invoke('get_public_state'); if (closed || request !== generation || busy) return;
@@ -943,7 +953,16 @@
       renderJob(state);
       if (view === 'history') await refreshHistory(true);
       if (state.state === 'blocked') feedback('Die lokale Verarbeitung ist nicht bereit. Bitte das vollständige Paket und die Diagnose prüfen.', true);
-    } catch (error) { if (!closed && request === generation) { showError(error); if (reconnecting) await updateConnectionHelp(); } }
+      consecutiveConnectionFailures = 0; automaticRetryPaused = false;
+    } catch (error) { if (!closed && request === generation) {
+      showError(error);
+      if (reconnecting) await updateConnectionHelp();
+      if (++consecutiveConnectionFailures >= 2) {
+        automaticRetryPaused = true;
+        $('connection-help').hidden = false;
+        $('connection-status').textContent += ' Automatische Verbindungsversuche sind angehalten. Öffne die Diagnose und prüfe danach die Verbindung ausdrücklich erneut; ein Lauf oder Export wird nicht automatisch wiederholt.';
+      }
+    } }
     finally { refreshing = false; schedule(['processing', 'preparing'].includes(current?.state) ? 1200 : 5000); }
   }
   async function configure() { const result = await perform('configure_results'); if (!result || result.cancelled) return;
@@ -1011,7 +1030,7 @@
     }
     const retry = $('connection-retry'); retry.disabled = true;
     retry.textContent = 'Verbindung wird geprüft …';
-    try { await updateConnectionHelp(); await refresh(); }
+    try { await updateConnectionHelp(); await refresh(true); }
     finally { retry.disabled = false; retry.textContent = 'Verbindung und Laufstatus prüfen'; }
   });
   $('identities').addEventListener('click', () => perform('open_identity_mappings_directory'));
@@ -1053,6 +1072,7 @@
           schedule(1200);
         } else if (contextRequired) {
           // Only status/context are reloaded. Never replay the failed command.
+          consecutiveConnectionFailures = 0; automaticRetryPaused = false;
           schedule(50);
         }
       }));
@@ -1098,7 +1118,13 @@
         (view === 'history' ? $('nav-history') : $('job-title')).focus();
       }));
       const ready = await invoke('frontend_ready', { nativeDropReady });
-      if (/^\d+\.\d+\.\d+-rc\d+$/u.test(ready.product_version)) $('product-version').textContent = `Version ${ready.product_version}`;
+      if (typeof ready?.product_version === 'string' && /^\d+\.\d+\.\d+-rc\d+$/u.test(ready.product_version)) {
+        const build = typeof ready.build_id === 'string' && /^[a-f0-9]{40}$/u.test(ready.build_id) ?
+          ` · Build ${ready.build_id.slice(0, 8)}` : '';
+        const target = ready.runtime_target === 'macos-aarch64' ? 'macOS ARM64' :
+          ready.runtime_target === 'macos-x86_64' ? 'macOS Intel' : '';
+        $('product-version').textContent = `Version ${ready.product_version}${build}${target ? ` · ${target}` : ''}`;
+      }
       const initialGeneration = generation, initialConnection = connectionEpoch;
       const initialContext = await invoke('get_ui_context');
       if (initialGeneration === generation && initialConnection === connectionEpoch) applyContext(initialContext);

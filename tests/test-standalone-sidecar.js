@@ -207,7 +207,8 @@ function removeOwnedRoot(root, initial) {
       const header = Buffer.alloc(4); header.writeUInt32BE(payload.length);
       host.stdin.write(Buffer.concat([header, payload]));
     }, ready => {
-      assert.deepStrictEqual(ready, { schema: 'datasecure-standalone-ready/1', owner_generation: 'c'.repeat(32), ok: true });
+      assert.deepStrictEqual(ready, { schema: 'datasecure-standalone-ready/1', owner_generation: 'c'.repeat(32),
+        ok: true, diagnostic_log: 'ready' });
       assert.equal(++readyCount, 1, 'bootstrap handshake precedes any ordinary private response');
     });
     const configured = await nativeClient.send('configure_results', '01'.repeat(8), {

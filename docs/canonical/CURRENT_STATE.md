@@ -2,6 +2,47 @@
 
 Stand: 15.10.2026 · 3.2.0-rc160 · veröffentlicht Standalone RC160 (Windows x64, macOS Intel/Apple Silicon) / Cowork RC151; Linux Standalone RC159
 
+### Mac-Quellreview nach dem M2-Fehlerbericht (noch kein neues Zielhost-Ergebnis)
+
+Zwei unabhängige Architekturrunden über Rust/Tauri, Node-Startkette,
+Bundlebau und macOS-Verteilung bestätigten: Die RC160-Logs belegen
+`sidecar_spawned`, **nicht** die Ausführung des JavaScript-Einstiegs oder
+ein erfolgreiches Core-Ready. Ohne damalige frühe Sidecar-/stderr-Spur ist
+die konkrete M2-Ursache weiterhin unbekannt. Die drei Nutzerlogs enthalten
+je genau 16 `STANDALONE_IPC_FAILED`-Antworten. Der Quellcode erklärte die
+anschließende Sackgasse: die Oberfläche wiederholte den fehlgeschlagenen
+Core-Start alle fünf Sekunden, während Rust nur 16 Wiederanlaufgenerationen
+für die sichere Besitzerablösung zulässt. Der aktuelle Quellstand hält die
+automatischen Verbindungsversuche nach zwei Fehlern an, bietet die explizite
+Statusprüfung weiter an und unterscheidet ein ausgeschöpftes Versuchskontingent
+von einem noch laufenden Vorgängerprozess. Kein Lauf/Export wird wiederholt.
+
+Weitere inhaltsfreie Diagnosekorrekturen im Quellstand: Mac-Errno `EBADARCH`
+und beschädigte Mach-O-Formate erhalten spezifische Codes; unbekannte
+begrenzte Core-Exitcodes/Signale werden numerisch klassifiziert. Das Ready-
+Protokoll meldet getrennt, ob der Sidecar-Diagnose-Sink schreiben konnte.
+Der CI-Build-Commit und die Zielarchitektur werden im Desktoplog und in der
+Oberfläche sichtbar; ein nicht identifizierbarer lokaler Build wird nicht erfunden.
+Die Startdiagnose legt ihre Datei jetzt exklusiv unter gebundenem, linkfreiem
+Verzeichnis an und überschreibt keine vorhandene Datei. Auf macOS meldet
+„Diagnose öffnen“ erst nach erfolgreichem `/usr/bin/open`-Exit Erfolg,
+nicht schon nach dessen Spawn. JavaScript-Syntax, Workspace-/Sidecar-
+Regressionspfade, die vollständige Standalone-Quellsuite, die getrennte
+Konvertierungs-/OCR-Suite, Clippy und 122 Rust-Unit-Tests einschließlich
+neuer Fehlerpfade bestanden lokal. Native M2-Bedienung und ein neues Paket
+stehen noch aus; die Quellsuite meldet native GUI-Abnahme ausdrücklich NOT_RUN.
+
+Der erneute Bundle-Quellvergleich fand ein **separates Mac-Verteilungsrisiko**:
+Conversion-Node, POSIX-Supervisor und ein natives Add-on liegen derzeit unter
+`Contents/Resources` statt an Apples vorgesehenen Code-Orten. Das ist für
+Signierung/Notarisierung vor einer regulären Verteilung zu migrieren und
+anschließend nativ zu prüfen. Diese Komponenten starten erst bei der
+Konvertierung und sind keine belegte Ursache des vorherigen ersten
+Core-Ready-Ausfalls. Das macOS-26-CI-Gate nutzt einen unquarantänisierten
+M1-Runner und ersetzt weder Browser-/Finder-/Gatekeeper noch den verwalteten
+M2 auf 26.2. RC160 bleibt als berichteter Teststand unverändert; keine
+neue Mac-Funktions- oder Releasefreigabe aus diesen Quellbefunden ableiten.
+
 ### macOS-26.2/M2-Rückmeldung: früher Core-Startabbruch (Paketgate grün, Zielhost offen)
 
 Auf dem verwalteten M2-Mac laden sowohl ARM-DMG als auch ZIP die Oberfläche,

@@ -10,17 +10,18 @@ const diagnosticDirectory = path.resolve(process.env.DATASECURE_STANDALONE_DIAGN
 const diagnosticLog = createBestEffortDiagnosticLog({ directory: diagnosticDirectory, name: 'sidecar-interactions.jsonl' });
 const diagnosticSession = /^[a-f0-9]{16,64}$/u.test(String(process.env.DATASECURE_STANDALONE_DIAGNOSTIC_SESSION || ''))
   ? process.env.DATASECURE_STANDALONE_DIAGNOSTIC_SESSION : null;
+let diagnosticLogAvailable = true;
 
 function diagnosticEvent(event, fields = {}) {
   try {
-    diagnosticLog.append(`${JSON.stringify({
+    if (!diagnosticLog.append(`${JSON.stringify({
       schema: 'datasecure-standalone-interaction/1', time_ms: Date.now(), component: 'sidecar',
       ...(diagnosticSession ? { session_id: diagnosticSession } : {}),
       event, outcome: fields.outcome || 'progress',
       ...(fields.action ? { action: fields.action } : {}),
       ...(fields.error_code ? { error_code: fields.error_code } : {})
-    })}\n`);
-  } catch { /* Diagnostics must never change product behavior. */ }
+    })}\n`)) diagnosticLogAvailable = false;
+  } catch { diagnosticLogAvailable = false; /* Diagnostics must never change product behavior. */ }
 }
 
 // Record a content-free phase before importing the product service. On a
@@ -80,7 +81,8 @@ try {
 // The owning native desktop waits for this exact private bootstrap proof before
 // dispatching an ordinary request. CLI/non-native adapters keep their protocol.
 if (nativeEnabled) writeFrame({ schema: 'datasecure-standalone-ready/1', owner_generation: ownerGeneration,
-  ok: !startupError, ...(startupError ? { error_code: desktopErrorCode(startupError.code) } : {}) });
+  ok: !startupError, diagnostic_log: diagnosticLogAvailable ? 'ready' : 'unavailable',
+  ...(startupError ? { error_code: desktopErrorCode(startupError.code) } : {}) });
 const decoder = new FrameDecoder({ validate: message => {
   if (nativeEnabled && [NATIVE_RESPONSE_SCHEMA, PUBLICATION_RESPONSE].includes(message?.schema)) return nativeChannel.accept(message);
   return validatePrivateMessage(message);

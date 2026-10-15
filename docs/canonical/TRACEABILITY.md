@@ -2,6 +2,38 @@
 
 Stand: 15.10.2026 · 3.2.0-rc160 · veröffentlicht Standalone RC160 (Windows x64, macOS Intel/Apple Silicon) / Cowork RC151; Linux Standalone RC159
 
+M2-Quellreview, Runde 2 → `desktop-interactions*.jsonl` (drei Dateien,
+je 16 `STANDALONE_IPC_FAILED`) gegen `main.rs:reserve_sidecar_generation`
+und `workspace.js:refresh` abgeglichen: die wiederholten Status-Reads
+verbrauchten das sichere Generationsbudget. Quellkorrektur hält automatische
+Fehlstarts nach zwei Versuchen an, erhält den expliziten nur lesenden
+Statusversuch und meldet die Budgetgrenze getrennt; `test-standalone-workspace.js`
+prüft die Sequenz ohne Start-Replay. `main.rs` klassifiziert Darwin-
+Architektur-/Binärfehler und begrenzte Exit-/Signalzahlen; `desktop-sidecar.js`
+meldet den ersten Diagnose-Schreibstatus im Ready-Frame. `diagnostic_log.rs`
+und `startup_diagnostics.rs` schreiben den frühen Textbeleg exklusiv/no-follow;
+`open_diagnostic_folder` wartet auf macOS begrenzt auf das Ergebnis von
+`/usr/bin/open`. Workflow bindet einen CI-Commit als sichtbare Build-ID;
+Desktop und Diagnose nennen zusätzlich die tatsächlich gebaute Architektur.
+Lokale vollständige Standalone-Quellsuite, separate Konvertierungs-/OCR-Suite,
+Dokumentationsgates, Clippy und Rust-Gates bestanden; reale Finder-/M2-Evidenz
+bleibt offen. Die Quellsuite markiert native GUI-Abnahme als NOT_RUN.
+Eine parallelisierte Windows-Rust-Testfixture verwendete zuvor nur PID und
+Zeitstempel und konnte mit `AlreadyExists` kollidieren; ein atomarer
+Testzähler verhindert diese falsche Negativmeldung, ohne Produktdateien zu ändern.
+
+Bundle-Review → `tauri.conf.json` projiziert die Serverruntime nach
+`Contents/Resources`; `standalone-conversion-runtime.mjs`/Mac-Workflow
+platzieren dort Mach-O-Node, POSIX-Supervisor und Canvas-Addon. Nach
+[Apple TN2206](https://developer.apple.com/library/archive/technotes/tn2206/)
+und [Bundle-Codeplatzierung](https://developer.apple.com/documentation/bundleresources/placing-content-in-a-bundle)
+ist das eine gesonderte Signierungs-/Distributionslücke. Der Core selbst
+liegt korrekt in `Contents/MacOS`, und die betroffenen Hilfsprogramme laufen
+erst bei Konvertierung: keine behauptete Kausalität zum ersten M2-IPC-Ausfall.
+Quarantine/Finder/MDM und M2/26.2 sind von den bisherigen CI-Gates nicht
+abgedeckt; [Apple Notarisierung](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution)
+ist vor regulärer Verteilung gesondert nachzuweisen.
+
 Mac-M2/macOS-26.2-Fehlerbericht → drei `desktop-interactions*.jsonl` belegen
 `runtime_resolved` → `sidecar_spawned` → IPC-Ausfall, ohne Sidecar-Log oder
 belegten Ergebnisordnerfehler. `main.rs`/`ipc_transport.rs` erfassen den

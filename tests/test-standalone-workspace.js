@@ -113,6 +113,49 @@ testAsync('no purpose is preselected and picking alone never starts processing',
   assert.equal(h.el('start').attrs['aria-disabled'], 'true');
 });
 
+testAsync('repeated core startup failures stop automatic attempts but keep an explicit status retry', async () => {
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_public_state') throw Error('STANDALONE_IPC_FAILED');
+    return fallback();
+  } });
+  await tick(); await tick();
+  assert.equal(h.calls.filter(call => call.command === 'get_public_state').length, 1);
+  await h.poll();
+  assert.equal(h.calls.filter(call => call.command === 'get_public_state').length, 2);
+  assert.match(h.el('connection-status').textContent, /Automatische Verbindungsversuche sind angehalten/u);
+  await h.poll();
+  assert.equal(h.calls.filter(call => call.command === 'get_public_state').length, 2);
+  await h.act('connection-retry'); await tick();
+  assert.equal(h.calls.filter(call => call.command === 'get_public_state').length, 3);
+  assert.equal(h.calls.some(call => call.command === 'start_admitted_batch'), false);
+});
+
+testAsync('failed context reload also consumes the bounded automatic recovery attempts', async () => {
+  let contextReads = 0;
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_ui_context' && ++contextReads > 1) throw Error('STANDALONE_IPC_FAILED');
+    return fallback();
+  } });
+  await tick(); await tick();
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 1, state: 'recovering' } });
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 1, state: 'ready' } });
+  await h.poll(); await h.poll();
+  assert.equal(contextReads, 3);
+  assert.match(h.el('connection-status').textContent, /Automatische Verbindungsversuche sind angehalten/u);
+  await h.poll();
+  assert.equal(contextReads, 3);
+});
+
+testAsync('footer identifies the actual Mac build and architecture without trusting arbitrary metadata', async () => {
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'frontend_ready') return { product_version: '3.2.0-rc160', build_id: 'a'.repeat(40),
+      runtime_target: 'macos-aarch64' };
+    return fallback();
+  } });
+  await tick(); await tick();
+  assert.equal(h.el('product-version').textContent, 'Version 3.2.0-rc160 · Build aaaaaaaa · macOS ARM64');
+});
+
 testAsync('raw OCR contact review is explicit opt-in, never preselected or silently enabled', async () => {
   for (const optIn of [false, true]) {
     const h = harness(); await tick(); await h.act('select-folder');

@@ -1,7 +1,7 @@
 //! Best-effort content-free diagnostic sink. Every written file is created
 //! exclusively by this process and remains open. No reopen, truncate, rename
 //! or deletion; namespace traversal is relative to held directory handles.
-use std::{fs::File, io::{self, Write}, path::Path, sync::Mutex};
+use std::{fs::File, io::{self, Write}, path::{Path, PathBuf}, sync::Mutex};
 
 const MAX_BYTES: u64 = 2 * 1024 * 1024;
 type Identity = (u64, u128);
@@ -58,6 +58,35 @@ pub fn status() -> &'static str {
         },
         Err(_) => "unavailable",
     }
+}
+
+pub fn ensure_directory(directory: &Path) -> io::Result<()> {
+    let binding = platform::directory(directory)?;
+    platform::check_directory(&binding)
+}
+
+/// Create a one-off startup report without ever opening an existing object.
+/// Use the same directory binding and no-follow creation as the JSONL sink:
+/// startup failure must not turn a pre-planted link into an arbitrary write.
+pub fn write_fresh(directory: &Path, stem: &str, body: &[u8]) -> io::Result<PathBuf> {
+    if stem.is_empty() || !stem.bytes().all(|byte| byte.is_ascii_alphanumeric() || byte == b'-') ||
+        body.is_empty() || body.len() > 16 * 1024 { return Err(unsafe_io()); }
+    let binding = platform::directory(directory)?;
+    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| unsafe_io())?.as_nanos();
+    for attempt in 0..3 {
+        let name = format!("{stem}-{}-{nanos:032x}-{attempt}.txt", std::process::id());
+        let Ok(mut file) = platform::create(&binding, &name) else { continue };
+        let identity = platform::identity(&file)?;
+        platform::check_directory(&binding)?;
+        file.write_all(body)?;
+        file.sync_all()?;
+        if platform::identity(&file)? != identity || file.metadata()?.len() != body.len() as u64 {
+            return Err(unsafe_io());
+        }
+        return Ok(directory.join(name));
+    }
+    Err(unsafe_io())
 }
 
 #[cfg(unix)]
