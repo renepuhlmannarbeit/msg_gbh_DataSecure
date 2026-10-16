@@ -48,9 +48,10 @@ kein Kausalbeweis auf dem betroffenen Host.
 
 ## Noch offene Abnahme
 
-1. Beide Mac-Runner müssen exakt den RC162-Commit mit realem Bundle, ZIP,
-   DMG, Konvertierung und Entitlement-Gate grün ausführen; der ARM-Runner auf
-   macOS 26 ist zusätzlich erforderlich.
+1. Erfüllt: Beide Mac-Runner führten exakt den RC162-Commit mit realem Bundle,
+   ZIP, DMG, Konvertierung und Entitlement-Gate grün aus; ARM lief auf macOS 26.
+   Die zwölf GitHub-Release-Assets stimmen in Größe und SHA-256 mit dem
+   geprüften lokalen Staging überein.
 2. Das heruntergeladene ARM-ZIP oder DMG muss auf dem betroffenen M2 nach
    Finder-Kopie in den eigenen Benutzerordner starten. Core-Ready, Datei-
    und Ordnerdialog sowie ein kleiner synthetischer Lauf müssen gelingen.

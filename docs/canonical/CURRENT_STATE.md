@@ -1,13 +1,13 @@
 # Aktueller Iststand
 
-Stand: 16.10.2026 · 3.2.0-rc162 RC162 in Vorbereitung (lokaler Quellstand; noch kein Paket oder M2-Abnahme); veröffentlicht RC161 (macOS Intel/Apple Silicon und Windows x64, Test-Pre-Release); Linux RC159 / Cowork RC151
+Stand: 16.10.2026 · 3.2.0-rc162 veröffentlicht als interner Standalone-Test-Pre-Release für Windows x64 und macOS Intel/Apple Silicon; M2-Zielhostabnahme offen; Linux RC159 / Cowork RC151
 
-### RC162: konkrete Mac-Signaturlücke und verbesserte Startdiagnose – Gates offen
+### RC162: konkrete Mac-Signaturlücke und verbesserte Startdiagnose – Paketgates bestanden
 
 Der RC161-Core wurde auf dem M2/macOS 26.2 tatsächlich gestartet und brach
 16-mal vor Ready mit `SIGTRAP` ab. Ein Quell- und Buildreview fand eine
 konkrete Signaturlücke: Tauri signierte den gebündelten Node-Core mit Hardened
-Runtime, entfernte dabei aber dessen JIT-Entitlement. Der lokale RC162-Stand
+Runtime, entfernte dabei aber dessen JIT-Entitlement. Der veröffentlichte RC162-Stand
 signiert nur diesen Core mit `com.apple.security.cs.allow-jit`, bindet die
 signierten Bytes neu an die Runtime-Evidence und versiegelt anschließend die
 App. Der Mac-Workflow prüft die endgültigen Entitlements, Runtime-Flags,
@@ -25,11 +25,12 @@ klaren Startstatus und sperrt die Dateidialoge; nach Trap gibt es keine
 endlose automatische Neustartfolge. Die manuelle Statusprüfung bleibt
 möglich und startet keine Datenverarbeitung.
 
-Der Windows-Quelltest und Rust/Clippy werden für diesen Kandidaten neu
-ausgeführt; Mac-Runner, signierte Paketbytes, Windows-Paket und realer
-M2-Finder-Test sind getrennte Gates. RC162 darf nicht als behoben beworben
-werden, bevor der betroffene Host Core-Ready und Datei-/Ordnerauswahl
-bestätigt. [Prüfvertrag und Grenzen](../acceptance/RC162_MAC_CORE_SIGNING_AND_DIAGNOSTICS_20261016.md).
+CI, Security, Windows-Paket und beide Mac-Runner bestanden auf Quellcommit
+`310925f59d76fddc955288eef3c3b0ef4297c232`. Alle zwölf Release-Assets
+wurden gegen lokale Größe und SHA-256 geprüft. Der reale M2-Finder-Test bleibt
+ein getrenntes Gate. RC162 darf nicht als auf dem betroffenen Rechner behoben
+beworben werden, bevor dort Core-Ready und Datei-/Ordnerauswahl bestätigt
+sind. [Prüfvertrag und Grenzen](../acceptance/RC162_MAC_CORE_SIGNING_AND_DIAGNOSTICS_20261016.md).
 
 ### Negativer M2-Zielhosttest von RC161 – Core vor Ready abgestürzt
 

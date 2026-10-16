@@ -2,10 +2,44 @@
 
 Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc162 · Veröffentlichungsnachtrag: 16.10.2026
 
-Der aktuelle Quellstand ist RC162-Entwicklungsstand. RC161 bleibt der
-veröffentlichte Standalone-Test-Pre-Release, bis RC162 aus einem geprüften,
-exakt gebundenen Commit mit den zugehörigen nativen Paketen veröffentlicht
-wird. Menschliche N3/N4-Produktionsfreigaben bleiben offen.
+Der aktuelle Quellstand ist RC162. Der Standalone-Test-Pre-Release ist aus
+einem exakt geprüften Commit veröffentlicht; Linux bleibt RC159 und Cowork
+RC151. Menschliche N3/N4-Produktionsfreigaben bleiben offen.
+
+### RC162 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
+
+Quellcommit `310925f59d76fddc955288eef3c3b0ef4297c232` ist an den
+annotierten Tag des [RC162-Pre-Releases](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc162)
+gebunden. Windows x64, Intel-Mac und Apple-Silicon-Mac stammen aus genau diesem
+Commit. Das unveränderte synthetische 100-Dateien-Testpaket aus RC160 ist
+beigefügt; sein alter Dateiname bezeichnet die Herkunft, nicht einen anderen
+App-Stand. Alle zwölf Assets wurden nach dem Upload einzeln gegen lokale
+Größe und SHA-256 geprüft; ZIPs bestanden zusätzliche Strukturprüfungen.
+
+| Gate auf dem exakten Releasecommit | Ergebnis und Grenze |
+|---|---|
+| [CI](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38924647206) und [Security](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38924646911) | Produkt-/Repository-Gates, JavaScript-/nativer CodeQL und Gitleaks bestanden. |
+| [macOS 26 ARM](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38924646832) | Finale Core-JIT-Entitlements, Signatur, Bundle-, ZIP-, DMG-, IPC- und Konverterstart bestanden. Kein Beleg für Finder-Kopie und Start auf dem betroffenen verwalteten M2. |
+| [macOS Intel](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38924646474) | Dieselben nativen Paket- und Startgates bestanden; keine menschliche Zielhost-Abnahme. |
+| [Windows x64](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38924646450) | Quell-/Rust-/Konverter-/Paket-/Determinismus-Gates und App-/Core-Start aus dem ZIP mit frischem Profil bestanden; keine bediente menschliche RC162-Abnahme. |
+
+| Archiv | Bytes | SHA-256 |
+|---|---:|---|
+| macOS Apple Silicon ZIP | 116187878 | `0e8a0514838470e0773192a33a04224b293d662109ffab6fd364026f45592678` |
+| macOS Apple Silicon DMG | 131902832 | `5b636c5ad3287179029b14d4fa618e3131443a5624dd14e98d44e72a1a83f0ae` |
+| macOS Intel ZIP | 120285968 | `37b1ed448fd9286969878bee8232386ff65c56e335aedaf4563817806fe112d4` |
+| macOS Intel DMG | 137256882 | `047db37cf028186f5eee521eaebd1d6dc073c030a029eb772bcf0ed8090f00ad` |
+| Windows x64 ZIP | 112010626 | `255e98847d02ad5099f5c032ea0cfbf94fcdc6b4c8b8fcefeeef6b649bd08938` |
+| Synthetisches Testdatenpaket (unverändert aus RC160) | 2369201 | `e73d316f896e6cd1523a0357e4f1c37397b0c9097e9eaf11ce47fb8c153bf010` |
+
+Der konkrete RC161-M2-Befund war ein Core-`SIGTRAP` vor Ready. RC162 korrigiert
+die im Mac-Build nachgewiesene fehlende JIT-Berechtigung des gehärteten
+Node-Cores und ergänzt frühe, inhaltsfreie Diagnosen. Dies ist eine plausible
+Fehlerursache, aber noch kein Kausal- oder Erfolgsbeleg auf dem betroffenen
+M2. Für die nächste Probe dort nur synthetische Daten verwenden und bei einem
+Fehler die Desktop- und gegebenenfalls Sidecar-Diagnosen sichern. Die
+Mac-Pakete sind ad-hoc-signiert, nicht Developer-ID-signiert oder notarisiert;
+keine Schutzrichtlinie deaktivieren. [Technischer Prüfvertrag](acceptance/RC162_MAC_CORE_SIGNING_AND_DIAGNOSTICS_20261016.md).
 
 ### RC161 – Standalone-Test-Pre-Release (macOS und Windows x64)
 
@@ -305,7 +339,9 @@ Kontaktwerten und produktübergreifender Abbruch-/Neustart-/Review-Gegenproben.
 Sechs native Windows-Formfälle und menschliche GUI-/Zielhostabnahme bleiben
 ausdrücklich `NOT_RUN`; kein sichtbares lokales Fenster wurde bedient.
 
-Der aktuelle Quellstand ist RC161-Entwicklungsstand und noch kein neu gebundener Paketkandidat. Cowork bleibt RC151.
+Zum damaligen Prüfzeitpunkt lag RC161 nur als ungebundener Entwicklungsstand
+vor; Cowork blieb RC151. Diese historische Notiz beschreibt nicht den
+heutigen Veröffentlichungsstatus.
 Die folgenden RC157-Anwendernachweise bleiben auf ihren damaligen Schnitt
 begrenzt; die neue technische RC158-Paketbindung steht im nächsten Abschnitt.
 ZIP-Verifikation, isolierter Paket-Smoke und
