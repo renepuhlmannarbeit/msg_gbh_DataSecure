@@ -1,6 +1,6 @@
 # Entscheidungs-Traceability
 
-Stand: 15.10.2026 · 3.2.0-rc161 · veröffentlicht Standalone RC161 (Mac-Test-Pre-Release), Windows RC160, Linux RC159 / Cowork RC151
+Stand: 16.10.2026 · 3.2.0-rc161 · veröffentlicht Standalone RC161 (Mac- und Windows-Test-Pre-Release), Linux RC159 / Cowork RC151
 
 RC161-Mac-Testveröffentlichung → annotierter Tag `v3.2.0-rc161` löst auf
 `f96c9e246997e52bf37f21930e2d0a3f978d68b2`; [Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc161).
@@ -13,6 +13,21 @@ melden je denselben Commit und Erfolg. Beide heruntergeladenen ZIPs bestanden
 stimmen in lokaler SHA-256 und Bytezahl exakt mit GitHubs Release-Asset-Digests
 überein. Das ist native Paket-/Start-/IPC-Evidenz, keine menschliche
 M2-/Finder-/MDM-Abnahme oder Developer-ID-/Notarisierungsfreigabe.
+Das synthetische 100-Dateien-Paket aus RC160 wurde für RC161 ohne Inhalts- oder
+Archivänderung übernommen; SHA-256 `e73d316f896e6cd1523a0357e4f1c37397b0c9097e9eaf11ce47fb8c153bf010`,
+Größe 2.369.201 Byte. Der Asset-Digest beider Releases und die lokale Datei
+stimmen überein. Der RC160-Dateiname dokumentiert die Herkunft, nicht eine
+RC161-Produktprüfung.
+
+Windows-RC161-Paketergänzung → [Gate 38864871810](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38864871810)
+lief auf exakt `f96c9e246997e52bf37f21930e2d0a3f978d68b2` und bestand native
+Quell-, Konverter-, Rust-, deterministische Archiv- und App-/Core-/v2-IPC-
+Prüfungen mit frischem Profil aus dem endgültigen ZIP. Das heruntergeladene
+ZIP bestand `verify-standalone-package.mjs` mit 1.129 Einträgen und zugehöriger
+`.sha256`; Größe 111.998.154 Byte und SHA-256
+`11b21608e7811b2c188c64a36499e8813a9886acd2fc061c117667c8eae15f74`
+stimmen mit dem GitHub-Release-Asset überein. Menschliche Windows-Bedienung
+und der verwaltete M2-Zielhost sind nicht durch diese Gates abgenommen.
 
 Mac-26-Supervisor-Nachprüfung →
 [Lauf 38786961975](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38786961975)

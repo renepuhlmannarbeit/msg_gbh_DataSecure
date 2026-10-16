@@ -1,8 +1,8 @@
 # Aktueller Iststand
 
-Stand: 15.10.2026 · 3.2.0-rc161 · veröffentlicht Standalone RC161 (macOS Intel/Apple Silicon, Test-Pre-Release); Windows RC160 / Linux RC159 / Cowork RC151
+Stand: 16.10.2026 · 3.2.0-rc161 · veröffentlicht Standalone RC161 (macOS Intel/Apple Silicon und Windows x64, Test-Pre-Release); Linux RC159 / Cowork RC151
 
-### RC161 als macOS-Test-Pre-Release veröffentlicht – M2-Zielhost weiter offen
+### RC161 als macOS- und Windows-Test-Pre-Release veröffentlicht – Zielhost-Abnahmen weiter offen
 
 Das [RC161-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc161)
 bindet den annotierten Tag an `f96c9e246997e52bf37f21930e2d0a3f978d68b2`.
@@ -18,10 +18,22 @@ bestanden auf genau diesem Commit. Der ARM-Lauf prüfte den App-/Core-Start,
 isolierte Konvertierung, signiertes Bundle, ZIP- und DMG-Vergleich und
 Paketkonvertierung; Intel prüfte dieselben Paketgrenzen. Diese Evidenz
 ersetzt **nicht** den Finder-/Quarantäne-/MDM-Test auf dem betroffenen
-M2/macOS 26.2. Die Ursache des RC160-Startfehlers bleibt unbekannt. RC161 ist
-ad-hoc-signiert, nicht Developer-ID-signiert oder notarisiert; ausschließlich
-synthetische Daten für die Neuprobe verwenden. Windows RC160 wird durch diesen
-Mac-only-Pre-Release nicht ersetzt.
+M2/macOS 26.2. Die Ursache des RC160-Startfehlers bleibt unbekannt. Die Mac-Pakete
+sind ad-hoc-signiert, nicht Developer-ID-signiert oder notarisiert; ausschließlich
+synthetische Daten für die Neuprobe verwenden. Das bereits auf RC160
+veröffentlichte synthetische 100-Dateien-Testpaket wurde unverändert auch beim
+RC161-Pre-Release bereitgestellt (SHA-256
+`e73d316f896e6cd1523a0357e4f1c37397b0c9097e9eaf11ce47fb8c153bf010`).
+Sein RC160-Dateiname ist beabsichtigt; genau der Ordner
+`DataSecure-RC160-Testdaten-100` ist als Eingabe zu wählen.
+Der [Windows-x64-Gate-Lauf 38864871810](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38864871810)
+aus demselben Tagcommit bestand Quell-, reale isolierte Konverter-, Rust-,
+deterministische Paket- und App-/Core-/v2-IPC-Prüfungen aus dem fertigen ZIP.
+Das aus dem Workflow heruntergeladene ZIP umfasst 111.998.154 Byte, SHA-256
+`11b21608e7811b2c188c64a36499e8813a9886acd2fc061c117667c8eae15f74`;
+Manifest und Prüfsummendatei bestanden, und der GitHub-Asset-Digest stimmt.
+Windows-Bedienung mit den synthetischen Testdaten ist **noch nicht** abgenommen;
+RC160 bleibt als früherer Vergleichsstand erhalten.
 
 ### Vorausgehende Nachprüfung des Mac-26-Supervisors (Engineering-Stand vor RC161)
 

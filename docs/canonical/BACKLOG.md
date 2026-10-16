@@ -1,8 +1,8 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 15.10.2026 · Produktstand 3.2.0-rc161 · veröffentlicht Standalone RC161 (Mac-Test-Pre-Release), Windows RC160, Linux RC159 / Cowork RC151 · Teilkopie-/Dauerblockadefall und menschliche Zielhost-Abnahme offen
+Stand: 16.10.2026 · Produktstand 3.2.0-rc161 · veröffentlicht Standalone RC161 (Mac- und Windows-Test-Pre-Release), Linux RC159 / Cowork RC151 · Teilkopie-/Dauerblockadefall und menschliche Zielhost-Abnahme offen
 
-**P0 – RC161-Zielhostprobe:** Das [Mac-Test-Pre-Release RC161](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc161)
+**P0 – RC161-Zielhostprobe:** Das [Test-Pre-Release RC161](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc161)
 ist aus `f96c9e2` nach grünen CI-, Security- und nativen ARM26-/Intel-Gates
 veröffentlicht. Auf dem verwalteten M2/macOS 26.2 ZIP oder DMG über den
 ursprünglichen Finder-/Benutzerordner-Weg mit **synthetischen** Daten prüfen:
@@ -11,6 +11,11 @@ Anonymisierung und Diagnosepaar. Sichtbare Build-ID und bei Fehlern beide
 inhaltsfreien Logarten erfassen. Kein Gatekeeper-/Endpoint-Bypass. Der M2-Befund
 und die Apple-Codeplatzierung/Developer-ID-/Notarisierung vor regulärer
 Mac-Auslieferung bleiben offen; Runner-Erfolg ist keine Zielhost-Abnahme.
+Das Windows-x64-ZIP aus demselben Releasecommit hat einen grünen nativen
+[Paket-/App-/Core-Gate-Lauf 38864871810](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38864871810),
+erfordert aber ebenfalls einen bedienten Zielhostlauf. Der unveränderte
+RC160-Testkorpus mit 100 synthetischen Eingaben und Prüfsumme liegt nun auch auf der RC161-Release-Seite; für beide
+Plattformen zunächst nur wenige kleine Quellen daraus wählen.
 
 **P0 – Supervisor-Fehler 121 auf macOS 26 (CI behoben, Zielhost offen):** Der erste aktuelle Gate-Lauf
 `38786961975` stoppte vor dem App-Bau im nativen Kurzprozess-Test. Phasen-

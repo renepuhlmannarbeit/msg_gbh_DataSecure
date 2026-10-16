@@ -1,16 +1,30 @@
 # Release- und Distributionsvertrag
 
-Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc161 · Veröffentlichungsnachtrag: 15.10.2026
+Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc161 · Veröffentlichungsnachtrag: 16.10.2026
 
-### RC161 – macOS-Test-Pre-Release (Apple Silicon und Intel)
+### RC161 – Standalone-Test-Pre-Release (macOS und Windows x64)
 
 Das [RC161-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc161)
 ist am 15.10.2026 aus Commit `f96c9e246997e52bf37f21930e2d0a3f978d68b2`
-als Mac-only-Teststand erschienen. Der annotierte Tag löst auf genau diesen
-Commit auf; Windows bleibt RC160, Linux RC159, Cowork RC151. Vier Mac-Pakete
+zunächst als Mac-Teststand erschienen. Der annotierte Tag löst auf genau diesen
+Commit auf; Linux bleibt RC159, Cowork RC151. Vier Mac-Pakete
 (ZIP und DMG je Architektur) und vier SHA-256-Dateien wurden nach dem
 Herunterladen strukturell und kryptographisch geprüft; alle acht Größen und
 GitHub-Asset-Digests stimmen mit lokalen Dateien überein.
+Am 16.10.2026 kam aus demselben unveränderten Tagcommit das native Windows-x64-ZIP
+samt SHA-256-Datei hinzu. Der [Windows-Gate-Lauf](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38864871810)
+bestand Quell-/Konverter-/Rust-Gates, deterministische Zweitverpackung und den
+Start aus genau dem ZIP mit frischem Profil und v2-IPC. Das heruntergeladene
+Paket bestand zusätzlich die Manifest-/Archiv-/Prüfsummenprüfung; GitHub-Größe
+und Asset-Digest stimmen mit der lokalen Datei überein. Ein menschlicher
+Windows-Bedienlauf mit den Testdaten steht weiterhin aus.
+Am 16.10.2026 wurde zusätzlich das unveränderte, bereits auf RC160
+veröffentlichte synthetische 100-Dateien-Testpaket samt SHA-256-Datei auf
+dieselbe RC161-Release-Seite aufgenommen. Die Prüfsumme des Pakets ist
+`e73d316f896e6cd1523a0357e4f1c37397b0c9097e9eaf11ce47fb8c153bf010`;
+sein RC160-Dateiname zeigt die unveränderte Herkunft an. Anleitung und Manifest
+liegen außerhalb des einzigen als Eingabe auszuwählenden Ordners
+`DataSecure-RC160-Testdaten-100`.
 
 | Gate auf dem exakten Releasecommit | Ergebnis und Grenze |
 |---|---|
@@ -18,6 +32,7 @@ GitHub-Asset-Digests stimmen mit lokalen Dateien überein.
 | [CI](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38805013420) und [Security](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38805013905) | Produkt-/Repository-Gates, JavaScript-/nativer CodeQL und vollständige Gitleaks-History bestanden. |
 | [macOS 26 ARM](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38805013790) | Nativer Supervisor-/Konverter-/Rust-/App-/Core-/ZIP-/DMG-Test bestanden. Kein verwalteter M2- oder Finder-/Quarantäne-Beleg. |
 | [macOS Intel](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38805013523) | Dieselben nativen Paketgrenzen bestanden. Keine menschliche Zielhost-Abnahme. |
+| [Windows x64](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/38864871810) | Native Quell-/Konverter-/Rust-/Paket-/Determinismus-Gates und App-/Core-Start aus dem fertigen ZIP bestanden; keine menschliche Bedienabnahme. |
 
 | Archiv | Bytes | SHA-256 |
 |---|---:|---|
@@ -25,10 +40,12 @@ GitHub-Asset-Digests stimmen mit lokalen Dateien überein.
 | macOS Apple Silicon DMG | 131303365 | `d8aa0ee5843b1c4cf74ff2996790e89614f2feb3203395d86545b4c8ee8f1cae` |
 | macOS Intel ZIP | 120271862 | `0b475e802f1e00f6fd21e0db5fe9c3a93526d933cc4ff6bbe55cef7674acdd0e` |
 | macOS Intel DMG | 136516941 | `390e87a14686d9eb5a0cd75366e82fc9b58f08d99ae9ae689e25cdb799c6c58a` |
+| Windows x64 ZIP | 111998154 | `11b21608e7811b2c188c64a36499e8813a9886acd2fc061c117667c8eae15f74` |
+| Synthetisches Testdatenpaket (unverändert aus RC160) | 2369201 | `e73d316f896e6cd1523a0357e4f1c37397b0c9097e9eaf11ce47fb8c153bf010` |
 
-RC161 ist nur für den erneuten M2-Test mit synthetischen Daten bestimmt.
+RC161 ist für gezielte Mac- und Windows-Tests mit synthetischen Daten bestimmt.
 Der ursprüngliche Startfehler auf dem verwalteten macOS-26.2-M2 ist noch nicht
-ursächlich bewiesen oder durch CI widerlegt. Die Pakete sind ad-hoc-signiert,
+ursächlich bewiesen oder durch CI widerlegt. Die Mac-Pakete sind ad-hoc-signiert,
 nicht Developer-ID-signiert oder notarisiert. Kein Schutzrichtlinien-Bypass;
 keine Produktionsfreigabe und keine allgemeine OCR-/Anonymitätsgarantie.
 
