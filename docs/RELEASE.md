@@ -2,6 +2,11 @@
 
 Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc162 · Veröffentlichungsnachtrag: 16.10.2026
 
+Der aktuelle Quellstand ist RC162-Entwicklungsstand. RC161 bleibt der
+veröffentlichte Standalone-Test-Pre-Release, bis RC162 aus einem geprüften,
+exakt gebundenen Commit mit den zugehörigen nativen Paketen veröffentlicht
+wird. Menschliche N3/N4-Produktionsfreigaben bleiben offen.
+
 ### RC161 – Standalone-Test-Pre-Release (macOS und Windows x64)
 
 Das [RC161-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc161)
