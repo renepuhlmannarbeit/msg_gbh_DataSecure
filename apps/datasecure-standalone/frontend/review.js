@@ -185,6 +185,13 @@ function documentName(id) {
   const documents = state.draft.contact_batch?.documents || state.draft.batch_review?.documents;
   return documents?.[index - 1]?.source_label || `Dokument ${index}`;
 }
+function contactRowContext(row) {
+  const documentIndex = state.documentPositions.get(row.id);
+  const documentCount = state.draft.contact_batch?.documents.length || state.draft.batch_review?.document_count || 1;
+  return `${documentName(row.id)}, Dokument ${documentIndex} von ${documentCount}, ` +
+    `Fundstelle ${state.candidateIndex.get(row.id) + 1} von ${state.draft.ambiguities.length}, ` +
+    `Seite/Bild ${row.candidate.page}, Zeile ${row.candidate.line}`;
+}
 function prepareRows() {
   state.rows = []; state.groups.clear(); state.rowById.clear(); state.candidateIndex.clear();
   const candidates = new Map(state.draft.ambiguities.map((item, index) => {
@@ -291,23 +298,35 @@ function renderTable() {
   for (const row of visible) {
     const tr = node('tr'); tr.dataset.row = row.id; tr.dataset.action = 'row';
     tr.dataset.active = String(row.ids.includes(state.draft.ambiguities[state.cursor].ambiguity_id));
+    const contact = state.draft.ocr_contact_review === true;
+    const contactContext = contact ? contactRowContext(row) : '';
     const selection = node('td'), checkbox = node('input'); checkbox.type = 'checkbox'; checkbox.checked = state.selected.has(row.id);
-    checkbox.dataset.row = row.id; checkbox.dataset.action = 'select'; checkbox.setAttribute('aria-label', `${row.exact} auswählen`);
+    checkbox.dataset.row = row.id; checkbox.dataset.action = 'select'; checkbox.setAttribute('aria-label', contact
+      ? `${row.exact} auswählen: ${contactContext}` : `${row.exact} auswählen`);
     selection.append(checkbox);
     const value = node('td'), details = node('button', row.exact);
-    details.dataset.row = row.id; details.dataset.action = 'details'; details.setAttribute('aria-label', `Original und Markdown vergleichen: ${row.exact}`);
+    details.dataset.row = row.id; details.dataset.action = 'details'; details.setAttribute('aria-label', contact
+      ? `Original und Markdown vergleichen: ${row.exact}, ${contactContext}` : `Original und Markdown vergleichen: ${row.exact}`);
     const metadata = node('div'), source = node('small', `${row.ids.length} Fundstelle${row.ids.length === 1 ? '' : 'n'} · ${row.names.join(', ')}`);
     metadata.className = 'row-meta'; source.title = source.textContent;
     value.append(details, metadata); metadata.append(source);
-    const contact = state.draft.ocr_contact_review === true;
     const choice = state.choices.get(row.id), action = node('td');
     action.hidden = !contact;
     if (contact) {
       const input = node('input'); input.type = 'text'; input.maxLength = 256; input.autocomplete = 'off'; input.spellcheck = false;
       input.value = state.inputs.get(row.id) ?? (choice?.decision === 'correct_contact' ? choice.replacement : '');
       input.placeholder = 'Nur bei Abweichung eingeben';
-      input.dataset.row = row.id; input.dataset.action = 'correction'; input.setAttribute('aria-label', `Korrigierter Kontaktwert: ${row.exact}`);
+      input.dataset.row = row.id; input.dataset.action = 'correction'; input.setAttribute('aria-label', `Korrigierter Kontaktwert: ${row.exact}, ${contactContext}`);
       action.append(input);
+      const matches = copyableContactRows(row);
+      if (matches.length) {
+        const copy = node('button', `Für ${matches.length} gleiche OCR-Lesart${matches.length === 1 ? '' : 'en'} vorschlagen`);
+        copy.type = 'button'; copy.className = 'contact-copy-button';
+        copy.dataset.row = row.id; copy.dataset.action = 'copy-correction';
+        copy.hidden = !validContact(input.value, row.candidate);
+        copy.setAttribute('aria-label', `Korrektur aus ${contactContext} für ${matches.length} weitere exakt gleiche OCR-Lesart${matches.length === 1 ? '' : 'en'} als Vorschlag einsetzen; andere Fundstellen bleiben offen`);
+        action.append(copy);
+      }
     }
     const done = row.ids.every(id => state.choices.has(id));
     const labels = { keep: 'Beibehalten', redact: 'Ersetzen', redact_organization: 'Unternehmen', confirm_contact: 'Unverändert', correct_contact: 'Korrigiert' };
@@ -327,6 +346,28 @@ function validContact(value, candidate) {
   return Boolean(value && value === value.trim() && value.length <= 256 && !/[\p{Cc}\p{Cf}\p{Cs}\[\]`<>|]/u.test(value) &&
     (candidate.contact_kind !== 'email' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(value)) &&
     (candidate.contact_kind !== 'phone' || (/^\+?[\d ()./-]{6,}$/u.test(value) && /\d/u.test(value))));
+}
+function copyableContactRows(row) {
+  if (state.draft?.ocr_contact_review !== true) return [];
+  return state.rows.filter(other => other.id !== row.id && other.exact === row.exact &&
+    other.candidate.contact_kind === row.candidate.contact_kind &&
+    !state.inputs.has(other.id) && !other.ids.some(id => state.choices.has(id)));
+}
+function copyContactCorrection(id) {
+  if (!state.draft || state.waiting || state.closed || state.disconnected) return;
+  const row = state.rowById.get(id), replacement = state.inputs.get(id);
+  if (!row || !validContact(replacement, row.candidate)) return;
+  const targets = copyableContactRows(row);
+  if (!targets.length) return;
+  // Copy only the typed proposal. Identical OCR output is not evidence that
+  // different source images contain the same value, so no decision is copied.
+  state.history.push(targets.map(target => [target.id, state.choices.get(target.id),
+    state.inputs.has(target.id), state.inputs.get(target.id)]));
+  for (const target of targets) state.inputs.set(target.id, replacement);
+  render();
+  el('matrix-message').textContent = `Korrektur in ${targets.length} weitere${targets.length === 1 ? '' : 'n'} Zeile${targets.length === 1 ? '' : 'n'} mit exakt gleicher OCR-Lesart als Vorschlag eingetragen. Jede Fundstelle bleibt offen: Original einzeln vergleichen, dann bewusst vormerken. Noch nicht gespeichert.`;
+  [...el('matrix-body').querySelectorAll('input[data-action="correction"]')]
+    .find(input => input.dataset.row === id)?.focus();
 }
 function bulkDecision(value) {
   if (!state.draft || state.waiting || !state.selected.size) return;
@@ -403,7 +444,7 @@ function render(table = true) {
     ? `Hauptweg: Kontaktwert mit dem Original vergleichen → Werte auswählen → unverändert oder korrigiert vormerken → am Ende speichern. ${items.length} erkannte E-Mail-/Telefonwerte in ${affectedDocuments} Dokumenten: Prüfkandidaten, keine ${items.length} Konvertierungsfehler.`
     : 'Diese Fundstellen brauchen eine Entscheidung. Wähle Zeilen aus, wende eine Behandlung an und speichere dann die vollständige Gruppe.';
   el('matrix-explanation').textContent = contact
-    ? 'Du hast diese zusätzliche Prüfung beim Start gewählt. Auch plausibel aussehende OCR-Werte zählen. Bestätige oder korrigiere sie nach dem Bildvergleich; andere OCR-Zeilen oder Markdown-Inhalte sind dadurch nicht geprüft. Anwenden merkt Entscheidungen nur vor. Erst der Abschlussknopf übergibt sie und setzt den Lauf fort.'
+    ? 'Du hast diese zusätzliche Prüfung beim Start gewählt. Auch plausibel aussehende OCR-Werte zählen. Bestätige oder korrigiere sie nach dem Bildvergleich; andere OCR-Zeilen oder Markdown-Inhalte sind dadurch nicht geprüft. Eine eingegebene Korrektur kannst du für exakt gleiche OCR-Lesarten als Vorschlag in weitere offene Zeilen einsetzen. Dort musst du das Original dennoch einzeln vergleichen und die Entscheidung ausdrücklich vormerken. Anwenden merkt Entscheidungen nur vor. Erst der Abschlussknopf übergibt sie und setzt den Lauf fort.'
     : 'Vorgemerkte Zeilen verschwinden aus „Noch offen“ und können unter „Vorgemerkt“ erneut betrachtet werden. Anwenden speichert noch nichts. Erst der Abschlussknopf übergibt alle Entscheidungen dieser Prüfgruppe.';
   el('summary').textContent = contact
     ? `${state.choices.size} von ${items.length} OCR-Kontaktwerten vorgemerkt · ${items.length - state.choices.size} offen · ${affectedDocuments} Dokument${affectedDocuments === 1 ? '' : 'e'} betroffen. Beim Start freiwillig gewählt; zum Abschluss dieses Laufs jetzt erforderlich.`
@@ -708,12 +749,22 @@ function changeContact(id, value, selectionStart, selectionEnd) {
   render(false);
   for (const item of el('matrix-body').querySelectorAll('[data-row]')) {
     if (item.dataset.action === 'row') item.dataset.active = String(item.dataset.row === id);
-    if (item.dataset.row !== id) continue;
-    if (item.dataset.action === 'status') { item.textContent = value ? 'Eingabe – noch offen' : 'Offen'; item.dataset.done = 'false'; }
+    if (item.dataset.action === 'copy-correction') {
+      const source = state.rowById.get(item.dataset.row);
+      const matches = copyableContactRows(source).length;
+      item.hidden = !matches || !validContact(state.inputs.get(source.id), source.candidate);
+      item.textContent = `Für ${matches} gleiche OCR-Lesart${matches === 1 ? '' : 'en'} vorschlagen`;
+      item.setAttribute('aria-label', `Korrektur aus ${contactRowContext(source)} für ${matches} weitere exakt gleiche OCR-Lesart${matches === 1 ? '' : 'en'} als Vorschlag einsetzen; andere Fundstellen bleiben offen`);
+    }
+    if (item.dataset.row === id && item.dataset.action === 'status') {
+      item.textContent = value ? 'Eingabe – noch offen' : 'Offen'; item.dataset.done = 'false';
+    }
   }
   updateBulk();
 }
 el('matrix-body').addEventListener('click', event => {
+  const copy = event.target.closest('[data-action="copy-correction"]');
+  if (copy) { copyContactCorrection(copy.dataset.row); return; }
   const target = event.target.closest('[data-action="details"]');
   const row = target && state.rowById.get(target.dataset.row);
   if (!row) return;

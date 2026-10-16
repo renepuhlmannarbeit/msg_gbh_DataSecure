@@ -10,6 +10,8 @@ const workflow = fs.readFileSync(file, 'utf8');
 const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 const packageLock = JSON.parse(fs.readFileSync(path.join(root, 'package-lock.json'), 'utf8'));
 const macosLaunch = fs.readFileSync(path.join(root, 'tests', 'manual', 'standalone-native-macos-launch.sh'), 'utf8');
+const coreJitEntitlements = fs.readFileSync(path.join(root, 'apps', 'datasecure-standalone',
+  'tauri-contract', 'macos-core-jit.entitlements.plist'), 'utf8');
 
 for (const regression of ['test-bound-file-io.js', 'test-retention.js', 'test-status-app-server.js',
   'test-status-app-artifacts.mjs', 'test-sea-source-evidence.mjs']) {
@@ -66,7 +68,10 @@ for (const expected of [
   'cargo clippy --all-targets --locked -- -D warnings',
   'npx --no-install tauri build --bundles app',
   'node scripts/finalize-standalone-macos-runtime-evidence.mjs',
-  'codesign --force --sign - "$bundle"',
+  'codesign --force --sign - --options runtime --entitlements "$entitlements" "$core"',
+  'codesign --force --sign - --options runtime "$bundle"',
+  "assert core == {'com.apple.security.cs.allow-jit': True}",
+  "assert not app.get('com.apple.security.cs.allow-jit')",
   'STANDALONE_MACOS_SIGNED_RUNTIME_EVIDENCE_INVALID',
   'STANDALONE_MACOS_RUNNING_CORE_INTEGRITY_CHECKED',
   'DATASECURE_BUNDLED_RUNTIME_REQUIRED=1',
@@ -93,6 +98,10 @@ for (const expected of [
   'compression-level: 0',
   'Human Gatekeeper, Finder picker, VoiceOver and workflow UAT remain open.'
 ]) assert.ok(workflow.includes(expected), `workflow is missing required evidence step: ${expected}`);
+
+assert.match(coreJitEntitlements, /<key>com\.apple\.security\.cs\.allow-jit<\/key>\s*<true\/>/u);
+assert.doesNotMatch(coreJitEntitlements, /allow-unsigned-executable-memory|disable-executable-page-protection|disable-library-validation|get-task-allow/u,
+  'the hardened Core needs narrowly scoped JIT, not the broader upstream development entitlements');
 
 assert.match(workflow, /if: \$\{\{ inputs\.upload_package == true \}\}[\s\S]*?uses: actions\/upload-artifact@[a-f0-9]{40}/u);
 

@@ -8,6 +8,19 @@ use std::{io, path::{Path, PathBuf}};
 
 fn error(code: &'static str) -> io::Error { io::Error::other(code) }
 fn hex(s: &str, n: usize) -> bool { s.len() == n && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) }
+fn require_same_volume(private_parent: Identity, destinations: &[Identity]) -> io::Result<()> {
+    if destinations.iter().any(|destination| destination.volume != private_parent.volume) {
+        return Err(error("AI_EXPORT_VOLUME_MISMATCH"));
+    }
+    Ok(())
+}
+fn validate_configuration_roots(public: Identity, private_parent: Identity) -> io::Result<()> {
+    if public == private_parent { return Err(error("STANDALONE_RESULT_ROOT_UNSAFE")); }
+    // Publication renames a staged directory atomically. A selected result
+    // root on another volume cannot use this transaction; reject the choice
+    // before provisioning the private operation namespace.
+    require_same_volume(private_parent, &[public])
+}
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ObjectId { pub volume: String, pub object: String, pub created_ns: String }
@@ -53,13 +66,18 @@ pub(crate) fn configure(root: &Path, data: &Path, nonce: &str, guard: &NativeGua
     guard.checkpoint().map_err(|_| error("STANDALONE_CLOSING"))?;
     let public = Directory::open_existing(root, None)?;
     let private_parent = Directory::open_existing(data, None)?;
-    if public.identity() == private_parent.identity() { return Err(error("STANDALONE_RESULT_ROOT_UNSAFE")); }
+    validate_configuration_roots(public.identity(), private_parent.identity())?;
+    let anonymize = public.bind_output_child("DataSecure-KI-Export")?;
+    require_same_volume(private_parent.identity(), &[anonymize.identity()])?;
+    let markdown = public.bind_output_child("DataSecure-Markdown-Korrektur")?;
+    // Existing output children can themselves be mount points even when the
+    // selected parent is on the private volume. Reject those before a private
+    // operation child is provisioned; Request::validate rechecks at export.
+    require_same_volume(private_parent.identity(), &[markdown.identity()])?;
     // Random exclusive child; a lost configuration reply leaves an orphan,
     // not a name that any subsequent configuration may adopt or repair.
     let private_name = format!("native-export-{nonce}");
     let private = private_parent.create_controlled_child(&private_name)?;
-    let anonymize = public.bind_output_child("DataSecure-KI-Export")?;
-    let markdown = public.bind_output_child("DataSecure-Markdown-Korrektur")?;
     private.sync()?; private_parent.sync()?; public.sync()?;
     Ok(Binding { schema: "datasecure-native-export-binding/1".into(), root: root.to_str()
         .ok_or_else(|| error("STANDALONE_RESULT_ROOT_UNSAFE"))?.into(), root_identity: public.identity().into(),
@@ -90,6 +108,11 @@ fn execute_inner(data: &Path, op: &Operation, command: &str, body: Option<(usize
     let target = public.open_bound_child(name, id.identity()?)?;
     let request = Request::new(op.batch_id.clone(), op.operation_id.clone(), op.request_sha256.clone(),
         op.processing_mode.clone(), op.files.clone(), &private, &target)?;
+    if command == "abandon" && Workspace::abandon_unbound(&private, &target, &request, guard)? {
+        parent.inspect_child(&op.binding.private_name, private.identity())?;
+        public.inspect_child(name, target.identity())?;
+        return Ok("abandoned");
+    }
     let workspace = Workspace::open(&private, &target, request, guard)?;
     let tx = workspace.transaction(guard)?;
     if let Some((index, bytes)) = body {
@@ -163,6 +186,25 @@ mod tests {
         }
     }
     #[test]
+    fn result_root_volume_mismatch_is_rejected_before_provisioning() {
+        let f = Fixture::new();
+        let public = Directory::open_existing(&f.path.join("public"), None).unwrap();
+        let private = Directory::open_existing(&f.path.join("private"), None).unwrap();
+        let mut other_volume = public.identity();
+        other_volume.volume ^= 1;
+        assert_eq!(validate_configuration_roots(other_volume, private.identity())
+            .unwrap_err().to_string(), "AI_EXPORT_VOLUME_MISMATCH");
+        assert_eq!(public_code(&validate_configuration_roots(other_volume, private.identity())
+            .unwrap_err()), "AI_EXPORT_VOLUME_MISMATCH");
+        assert_eq!(validate_configuration_roots(private.identity(), private.identity())
+            .unwrap_err().to_string(), "STANDALONE_RESULT_ROOT_UNSAFE");
+        assert!(validate_configuration_roots(public.identity(), private.identity()).is_ok());
+        assert_eq!(require_same_volume(private.identity(), &[public.identity(), other_volume])
+            .unwrap_err().to_string(), "AI_EXPORT_VOLUME_MISMATCH");
+        assert_eq!(fs::read_dir(f.path.join("private")).unwrap().count(), 0);
+        assert_eq!(fs::read_dir(f.path.join("public")).unwrap().count(), 0);
+    }
+    #[test]
     fn publication_worker_timeout_retains_ownership_and_reconciles_both_sides_of_real_rename() {
         use std::{sync::{mpsc, Mutex, Arc}, time::{Instant, Duration}, process::{Command, Stdio}};
         for phase in ["before_rename", "after_rename"] {
@@ -224,6 +266,31 @@ mod tests {
         assert_eq!(fs::read(target.join("Dokument_01.md")).unwrap(), b"hello");
         fs::write(target.join("extra.txt"), b"not authorized").unwrap();
         assert!(execute(&data, &op, "reconcile", &guard).is_err());
+    }
+    #[test]
+    fn abandoned_parent_intent_unblocks_the_exact_native_operation_only() {
+        let f = Fixture::new(); let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
+        let op = f.op(&guard); let data = f.path.join("private");
+        let parent = Directory::open_existing(&data, Some(op.binding.data_root_identity.identity().unwrap())).unwrap();
+        let private = parent.open_controlled_child(&op.binding.private_name,
+            op.binding.private_identity.identity().unwrap()).unwrap();
+        let public = Directory::open_existing(Path::new(&op.binding.root),
+            Some(op.binding.root_identity.identity().unwrap())).unwrap();
+        let target = public.open_bound_child("DataSecure-KI-Export",
+            op.binding.anonymize_identity.identity().unwrap()).unwrap();
+        let request = Request::new(op.batch_id.clone(), op.operation_id.clone(), op.request_sha256.clone(),
+            op.processing_mode.clone(), op.files.clone(), &private, &target).unwrap();
+        // Synthetic crash checkpoint: intent persisted, but no parent binding
+        // or publication was ever recorded.
+        private.write_record_atomic(&format!("{}-parents-intent.json", op.operation_id),
+            &serde_json::to_vec(&serde_json::json!({
+                "schema": "datasecure-native-export-parent-intent/1", "request": request
+            })).unwrap()).unwrap();
+        assert_eq!(public_code(&execute(&data, &op, "reconcile", &guard).unwrap_err()), "AI_EXPORT_UNCERTAIN");
+        assert_eq!(execute(&data, &op, "abandon", &guard).unwrap(), "abandoned");
+        assert_eq!(execute(&data, &op, "abandon", &guard).unwrap(), "abandoned");
+        assert_eq!(public_code(&execute(&data, &op, "publish", &guard).unwrap_err()), "AI_EXPORT_ABANDONED");
+        assert!(!f.path.join("public/DataSecure-KI-Export").join(format!("Export-{}", op.operation_id)).exists());
     }
     #[test]
     fn changed_body_namespace_and_existing_destination_cannot_be_adopted() {

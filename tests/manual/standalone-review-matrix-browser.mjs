@@ -52,6 +52,13 @@ try {
     const rows = page.locator('#matrix-body tr'), input = index => rows.nth(index).locator('input[type=text]');
     assert.match(await page.locator('#matrix-guide').textContent(), /keine 2 Konvertierungsfehler/u);
     assert.equal(await page.locator('#matrix-document option').count(), 3);
+    for (const [index, filename] of ['one.png', 'two.png'].entries()) {
+      for (const control of [rows.nth(index).locator('input[type=checkbox]'),
+        rows.nth(index).locator('button[data-action="details"]'), input(index)]) {
+        const label = await control.getAttribute('aria-label');
+        assert.match(label, new RegExp(`${filename.replace('.', '\\.')}.*Dokument ${index + 1} von 2, Fundstelle ${index + 1} von 2`, 'u'));
+      }
+    }
     await page.setViewportSize({ width: 390, height: 850 });
     if (await page.evaluate(() => document.documentElement.scrollWidth > innerWidth + 1)) {
       console.error('390px overflow', await page.evaluate(() => [...document.querySelectorAll('*')]
@@ -98,6 +105,25 @@ try {
     assert.equal(await page.locator('#contact-image').getAttribute('src'), '');
     assert.equal(await page.locator('#document-position').textContent(), '');
   });
+  await scenario(contacts, async page => {
+    const corrections = page.locator('#matrix-body input[data-action="correction"]');
+    const proposal = page.locator('#matrix-body button[data-action="copy-correction"]').first();
+    assert.equal(await proposal.isVisible(), false, 'a correction is required before proposing it elsewhere');
+    await corrections.first().fill('same@correct.invalid');
+    assert.equal(await proposal.isVisible(), true);
+    await page.setViewportSize({ width: 390, height: 850 });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1),
+      'the explicit proposal does not create mobile horizontal overflow');
+    await proposal.click();
+    assert.equal(await corrections.nth(1).inputValue(), 'same@correct.invalid');
+    assert.match(await page.locator('#summary').textContent(), /^0 von/u, 'the copied proposal confirms neither image');
+    assert.deepEqual(await page.evaluate(() => window.previewSubmissions), [], 'the proposal is never submitted');
+    assert.match(await page.locator('#matrix-message').textContent(), /Original einzeln vergleichen/u);
+    await page.locator('.matrix-extra > summary').click();
+    await page.locator('#undo').click();
+    assert.equal(await corrections.nth(1).inputValue(), '', 'one Undo restores only the copied proposal');
+    assert.equal(await corrections.first().inputValue(), 'same@correct.invalid');
+  });
   await scenario(syntheticDraft(), async page => {
     assert.equal(await page.locator('#matrix-body tr').count(), 50);
     await page.locator('#matrix-body input[type=checkbox]').first().check();
@@ -140,5 +166,5 @@ try {
     await page.setViewportSize({ width: 683, height: 580 });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Embedded review reflows at 200%-equivalent width');
   }, { embedded: true });
-  console.log('REVIEW BULK BROWSER PASS: actual HTML/JS/CSS, single explicit Apply, no duplicate editors/actions, different per-row corrections, atomic validation, Undo, grouped contexts, privacy clearing, axe, pagination and 390–1920px reflow; synthetic IPC, no native claim');
+  console.log('REVIEW BULK BROWSER PASS: actual HTML/JS/CSS, single explicit Apply, no duplicate editors/actions, bounded OCR correction proposals without implicit decisions, different per-row corrections, atomic validation, Undo, grouped contexts, privacy clearing, axe, pagination and 390–1920px reflow; synthetic IPC, no native claim');
 } finally { await browser.close(); }

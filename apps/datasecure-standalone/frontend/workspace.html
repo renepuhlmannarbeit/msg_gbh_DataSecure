@@ -46,6 +46,12 @@
         </div>
         <label id="ocr-option" class="option" hidden><input id="ocr-review" type="checkbox" aria-describedby="ocr-option-help"> E-Mail-Adressen und Telefonnummern aus OCR vor Abschluss mit dem Original vergleichen</label>
         <p id="ocr-option-help" class="muted" hidden>Zusätzliche Prüfung nur bei eingeschalteter OCR: Wenn solche Werte erkannt wurden, hält der Lauf nach der aktuellen Verarbeitung an. Erst dann entscheidest du, ob du sie prüfst und korrigierst oder ungeprüft fortfährst. Die Texterkennung selbst bleibt in beiden Fällen aktiv. Wie viele Werte gefunden werden, ist vorher nicht bekannt; andere OCR-Texte werden dadurch nicht geprüft. Die spätere Markdown-Nachkorrektur bleibt freiwillig.</p>
+        <fieldset id="output-naming" class="output-naming" hidden>
+          <legend>Dateinamen der anonymisierten Ergebnisse</legend>
+          <label class="option"><input id="naming-neutral" name="output-naming-mode" type="radio" value="neutral" checked> Neutrale Dateinamen (empfohlen)</label>
+          <label class="option"><input id="naming-source" name="output-naming-mode" type="radio" value="source-with-suffix"> Originalname mit „-anonymisiert“</label>
+          <p id="output-naming-help" class="muted">Diese Wahl gilt für die Ergebnisdateien dieses neuen Laufs und kann danach nicht geändert werden. Beim späteren KI-Export werden immer neutrale Dateinamen verwendet. Unterordner und die vertrauliche Zuordnungsdatei können Originalnamen enthalten; diese nicht ungeprüft weitergeben.</p>
+        </fieldset>
       </div>
       <div id="file-section" class="card-section files-section">
         <h2 class="step-heading"><span class="step-number secondary">2</span> Dateien hinzufügen</h2>
@@ -115,6 +121,10 @@
       <details id="documents-export-receipts" hidden><summary>Gespeicherte Exportbelege</summary><p class="meta">Diese lokalen Belege dokumentieren abgeschlossene Kopiervorgänge, auch nach einer verlorenen Empfangsbestätigung. Sie prüfen nicht, ob Dateien später verändert oder gelöscht wurden. Eine vertrauliche Zuordnung gehört ausschließlich zu den damaligen exportierten Dokumentständen und wird nicht in den KI-Ordner kopiert.</p><ul id="documents-export-receipt-list"></ul></details>
       <div id="documents-filter-bar" class="documents-filter-bar" hidden><label for="documents-filter">Dateien anzeigen</label><select id="documents-filter"><option value="notices">Mit Hinweisen</option><option value="edited">Nachbearbeitet</option><option value="all">Alle Dateien</option><option value="without">Ohne Hinweise</option></select><span id="documents-filter-summary" class="meta" role="status"></span></div>
       <div class="documents-toolbar"><label><input id="documents-all" type="checkbox"> <span id="documents-all-label">Alle auswählen</span></label><span id="documents-selected" class="meta">0 ausgewählt</span><span class="spacer"></span><button id="documents-approve">Auswahl freigeben</button><button id="documents-export" class="primary">Auswahl für KI exportieren</button></div>
+      <div id="documents-approve-confirm" class="document-change-confirm" hidden>
+        <p id="documents-approve-confirm-text" role="status"></p>
+        <div class="button-row"><button id="documents-approve-cancel">Zur Prüfung zurück</button><button id="documents-approve-proceed" class="primary">Nach eigener Prüfung freigeben</button></div>
+      </div>
       <details id="documents-approval-extras" class="document-extra-actions" hidden><summary>Freigaben verwalten (optional)</summary><p class="meta">Wenn du einen Textstand doch noch nicht freigeben möchtest: betroffene Dateien anhaken und die Freigabe ausdrücklich widerrufen. Bereits erstellte KI-Kopien bleiben unverändert.</p><button id="documents-revoke">Freigaben widerrufen</button></details>
       <div class="documents-layout">
         <div id="documents-list" class="documents-list" aria-label="Dokumente dieses Laufs"></div>

@@ -5,7 +5,7 @@
 // evidence of native Tauri/WebView or full privacy-detector correctness.
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
 const { createSuite } = require('./helpers');
-const { createDocumentReviewStore } = require('../plugins/data-secure/server/gateway/standalone-document-review-store');
+const { createDocumentReviewStore, CHUNK } = require('../plugins/data-secure/server/gateway/standalone-document-review-store');
 const { StandaloneApplicationService, defaultDependencies } = require('../plugins/data-secure/server/standalone/application-service');
 const { createPrivateWorkStore } = require('../plugins/data-secure/server/gateway/private-work-store');
 const { bindDirectory } = require('../plugins/data-secure/server/core/bound-file-io');
@@ -322,6 +322,25 @@ test('native JSON chunks never split a Unicode surrogate pair and reconstruct bo
   }
   assert.equal(parts.map(part => part.original_text).join(''), original);
   assert.equal(parts.map(part => part.markdown).join(''), markdown);
+});
+
+test('legacy review chunk count covers the canonical original actually displayed', () => {
+  const f = fixture(), item = { id: '7'.repeat(32), name: 'canonical.txt', sha256: sha('source'), status: 'released' };
+  const canonical = 'q'.repeat(CHUNK + 17), markdown = canonical;
+  const trace = require('../plugins/data-secure/server/privacy/transform-plan').createTransformTrace(canonical).finish(markdown);
+  f.items.push(item);
+  const packageId = `ds_${item.id}`, dir = path.join(f.output, packageId); fs.mkdirSync(dir);
+  f.store.capture(f.state, item, { package_id: packageId, original_text: 'short extraction preview', markdown,
+    transform_trace: trace });
+  fs.writeFileSync(path.join(dir, `${packageId}.md`), markdown);
+  fs.writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({ schema: 'eu-privacy-package/3', package_id: packageId,
+    document: `${packageId}.md`, verification: { text_residual_pii: 'passed' }, document_sha256: sha(markdown) }));
+  const row = f.store.list(f.batchId).documents.find(value => value.document_id === item.id);
+  assert.equal(row.chunks, 2);
+  const parts = Array.from({ length: row.chunks }, (_unused, index) => f.store.chunk(f.batchId, item.id, 0, index));
+  assert.equal(parts.map(part => part.original_text).join(''), canonical);
+  assert.equal(parts.map(part => part.markdown).join(''), markdown);
+  throwsCode(() => f.store.chunk(f.batchId, item.id, 0, 2), 'DOCUMENT_REVIEW_INVALID');
 });
 
 test('a snapshot without verified publication grants neither content access nor export', () => {
@@ -719,6 +738,23 @@ test('export preview validates a multi-document decision chain once, not once pe
     assert.equal(preview.files.length, 2);
   } finally { fs.readdirSync = originalList; }
   assert.equal(journalListings, 2, 'decision and commit lists must be enumerated once for the selected set');
+});
+test('anonymized export reuses one validated journal for file plan, identity overview and body copy', () => {
+  const f = fixture(false, false, null, { documentCount: 5 });
+  for (let index = 0; index < f.items.length; index++) f.decision(index, 'approve');
+  const selection = f.store.list(f.batchId).documents.map(({ document_id, revision, output_sha256 }) =>
+    ({ document_id, revision, output_sha256 }));
+  const originalList = fs.readdirSync, run = path.join(f.data, 'document-reviews', f.batchId);
+  let journalListings = 0;
+  fs.readdirSync = function(folder) {
+    if (folder === run && /\bat journal \(/u.test(new Error().stack || '')) journalListings++;
+    return originalList.apply(this, arguments);
+  };
+  try {
+    const result = f.store.exportApproved(f.batchId, 'd'.repeat(32), selection);
+    assert.equal(result.exported_count, selection.length);
+  } finally { fs.readdirSync = originalList; }
+  assert.equal(journalListings, 2, 'the complete export validates decision and commit lists once');
 });
 if (process.env.DATASECURE_PREVIEW_STRESS === '1') test('synthetic 132-document preview stays below the former desktop deadline', () => {
   const f = fixture(false, false, null, { documentCount: 132 });

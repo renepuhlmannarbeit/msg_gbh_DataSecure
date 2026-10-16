@@ -33,6 +33,25 @@ function editContact(h, value, index = 0) {
 function correctionValue(h, index = 0) {
   return h.element('matrix-body').querySelectorAll('input[data-action="correction"]').find(input => input.dataset.row === h.draft.ambiguities[index].ambiguity_id)?.value;
 }
+function copyButton(h, index = 0) {
+  return h.element('matrix-body').querySelectorAll('[data-row]').find(item => item.dataset.action === 'copy-correction' &&
+    item.dataset.row === h.draft.ambiguities[index].ambiguity_id);
+}
+function contactBatchDraft(values, kinds = values.map(() => 'phone')) {
+  const { buildContactDraft } = require('../plugins/data-secure/server/core/ocr-contact-review');
+  const original_text = values.join('\n');
+  let offset = 0;
+  const contacts = values.map((value, index) => {
+    const contact = { start: offset, end: offset + value.length, line: index + 1, page: 1, kind: kinds[index] };
+    offset += value.length + 1;
+    return contact;
+  });
+  const draft = buildContactDraft({ original_text, source_type: 'png', processing_mode: 'markdown-only', contacts });
+  draft.contact_batch = { schema: 'datasecure-ocr-contact-batch/1', documents: values.map((_, index) => ({
+    document_index: index + 1, source_label: `Dokument ${index + 1}`,
+    candidate_ids: [draft.ambiguities[index].ambiguity_id] })) };
+  return draft;
+}
 
 function harness(sessions = null, allowOrganizationReview = false, singleFinding = false, options = {}) {
   const callbacks = new Map();
@@ -122,6 +141,64 @@ testAsync('contact corrections and confirmations use distinct actions, preserve 
   assert.equal(submitted.args.answer.decisions[0].decision, 'confirm_contact');
   assert.ok(!Object.hasOwn(submitted.args.answer.decisions[0], 'replacement'));
   assert.equal(h.element('matrix-body').children.length, 0);
+});
+
+testAsync('one explicit OCR correction proposal fills exact duplicates across documents without confirming them', async () => {
+  const h = harness(null, false, false, { modifyDraft(draft) {
+    for (const key of Object.keys(draft)) delete draft[key];
+    Object.assign(draft, contactBatchDraft(['+49 30 5551002', '+49 30 5551002', '+49 30 5551003']));
+  } });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(copyButton(h)?.hidden, true);
+  editContact(h, '+49 30 5551009');
+  const button = copyButton(h);
+  assert.equal(button?.hidden, false);
+  assert.match(button.textContent, /1 gleiche OCR-Lesart/u);
+  h.callbacks.get('matrix-body')({ target: { closest: () => button } });
+  assert.equal(correctionValue(h, 1), '+49 30 5551009');
+  assert.equal(correctionValue(h, 2), '');
+  assert.equal(h.element('release').disabled, true, 'copying an input never confirms another source image');
+  assert.match(h.element('matrix-message').textContent, /Original einzeln vergleichen.*Noch nicht gespeichert/u);
+  h.callbacks.get('undo')();
+  assert.equal(correctionValue(h, 1), '', 'the entire proposal can be undone at once');
+  assert.equal(correctionValue(h, 0), '+49 30 5551009', 'the user-owned source correction remains');
+});
+
+testAsync('identical OCR values expose document and finding context on each accessible control', async () => {
+  const h = harness(null, false, false, { modifyDraft(draft) {
+    for (const key of Object.keys(draft)) delete draft[key];
+    Object.assign(draft, contactBatchDraft(['+49 30 5551002', '+49 30 5551002']));
+  } });
+  await new Promise(resolve => setImmediate(resolve));
+  const [first, second] = h.element('matrix-body').children;
+  for (const [row, documentIndex] of [[first, 1], [second, 2]]) {
+    const controls = [row.children[0].children[0], row.children[1].children[0], row.children[2].children[0]];
+    for (const control of controls) {
+      assert.match(control['aria-label'], /\+49 30 5551002/u);
+      assert.match(control['aria-label'], new RegExp(`Dokument ${documentIndex} von 2, Fundstelle ${documentIndex} von 2`, 'u'));
+      assert.match(control['aria-label'], /Seite\/Bild 1, Zeile [12]/u);
+    }
+  }
+  assert.notEqual(first.children[0].children[0]['aria-label'], second.children[0].children[0]['aria-label']);
+  editContact(h, '+49 30 5551009');
+  assert.match(copyButton(h)['aria-label'], /Dokument 1 von 2, Fundstelle 1 von 2/u);
+});
+
+testAsync('OCR correction proposals never overwrite another edit or cross a contact-kind boundary', async () => {
+  const h = harness(null, false, false, { modifyDraft(draft) {
+    for (const key of Object.keys(draft)) delete draft[key];
+    Object.assign(draft, contactBatchDraft(Array(4).fill('+49 30 5551002'), ['phone', 'phone', 'contact', 'phone']));
+  } });
+  await new Promise(resolve => setImmediate(resolve));
+  editContact(h, '+49 30 5551008', 1);
+  editContact(h, '+49 30 5551009', 0);
+  const button = copyButton(h);
+  assert.match(button.textContent, /1 gleiche OCR-Lesart/u);
+  h.callbacks.get('matrix-body')({ target: { closest: () => button } });
+  assert.equal(correctionValue(h, 1), '+49 30 5551008');
+  assert.equal(correctionValue(h, 2), '');
+  assert.equal(correctionValue(h, 3), '+49 30 5551009');
+  assert.equal(h.element('release').disabled, true);
 });
 
 testAsync('the exact current finding is named and one person decision covers every identical occurrence', async () => {

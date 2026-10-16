@@ -168,6 +168,11 @@ function code(expected) { return (error) => error?.code === expected; }
     const newer = stateFixture('b', 0);
     const plugin = stateFixture('c', 1000, { product_channel: 'plugin' });
     let history = makeHistory();
+    const captureCounts = history.captureDurableHistory();
+    assert.ok(Number.isSafeInteger(captureCounts.journal_count) && captureCounts.journal_count >= 2);
+    assert.ok(Number.isSafeInteger(captureCounts.export_count) && captureCounts.export_count >= 0);
+    assert.deepEqual(historyStore.readStandaloneSummaries().map(row => row.batch_id).sort(),
+      [older.token, newer.token].sort(), 'startup capture retains only standalone summaries before journal retention');
     let snapshot = history.history();
     // Startup/history projection must not begin a potentially long visible
     // export while the native desktop is still waiting for its first reply.
@@ -177,15 +182,36 @@ function code(expected) { return (error) => error?.code === expected; }
         scanOcr: false, imageOcr: false },
       items: [{ id: 'a'.repeat(32), name: 'synthetic.txt', status: 'released' }] };
     let recoveryCalls = 0;
+    let capturing = true;
     const recoveryHistory = createRunHistory({ readStates: () => [pendingExport], readExports: () => [],
-      recoverableStates: () => [], liveExecutor: () => false,
+      recoverableStates: () => { assert.equal(capturing, false, 'startup capture never scans resumable UI state'); return []; },
+      liveExecutor: () => false,
       exportCompletedBatchResults: () => { recoveryCalls++; return { available: false }; } });
-    assert.ok(recoveryHistory.history({ recoverExports: false }).entries.some(row => row.batch_id === pendingExport.token));
+    recoveryHistory.captureDurableHistory();
+    capturing = false;
     assert.equal(recoveryCalls, 0, 'bootstrap projection cannot perform result export');
+    assert.ok(recoveryHistory.history().entries.some(row => row.batch_id === pendingExport.token));
     recoveryHistory.find(pendingExport.token);
     assert.equal(recoveryCalls, 0, 'a lookup cannot unexpectedly start result export');
-    recoveryHistory.history();
+    const pendingRecovery = recoveryHistory.history({ recoverExports: true, recoverBatchId: pendingExport.token });
+    assert.deepEqual(pendingRecovery.export_recovery,
+      { batch_id: pendingExport.token, outcome: 'pending' },
+      'a failed-to-complete result projection is not reported as a successful copy');
     assert.equal(recoveryCalls, 1, 'explicit history reconciliation resumes the pending export');
+    assert.equal(recoveryHistory.history().export_recovery, undefined,
+      'passive history reads never inherit a stale recovery outcome');
+    assert.equal(recoveryCalls, 1, 'later display polls never repeat the export attempt');
+    assert.deepEqual(recoveryHistory.history({ recoverExports: true, recoverBatchId: pendingExport.token }).export_recovery,
+      { batch_id: pendingExport.token, outcome: 'not_attempted' },
+      'an immediate repeated request identifies the throttle instead of implying another attempt');
+    assert.equal(recoveryCalls, 1);
+    const throwingRecovery = createRunHistory({ readStates: () => [pendingExport], readExports: () => [],
+      recoverableStates: () => [], liveExecutor: () => false,
+      exportCompletedBatchResults: () => { throw Object.assign(new Error('SECRET PATH'), { code: 'EACCES' }); } });
+    const failedRecovery = throwingRecovery.history({ recoverExports: true, recoverBatchId: pendingExport.token });
+    assert.deepEqual(failedRecovery.export_recovery, { batch_id: pendingExport.token, outcome: 'failed' });
+    assert.doesNotMatch(JSON.stringify(failedRecovery), /SECRET PATH|EACCES|local_path/u,
+      'recovery errors expose neither filesystem locations nor raw exception details');
     const completeOcrOff = { ...pendingExport, token: 'd'.repeat(64), items: [
       { id: 'd'.repeat(32), name: 'synthetic.txt', status: 'released' },
       { id: 'e'.repeat(32), name: 'scan.png', status: 'stopped', error_code: 'IMAGE_OCR_REQUIRED' }] };
@@ -286,6 +312,9 @@ function code(expected) { return (error) => error?.code === expected; }
 
     const completed = completeFixture('d', 2000,
       [{ pseudonym: '[PERSON_001]', original: 'Synthetischer Testname' }]);
+    assert.deepEqual(history.history({ recoverExports: true, recoverBatchId: completed.token }).export_recovery,
+      { batch_id: completed.token, outcome: 'available' },
+      'a verified existing result requires no second copy attempt');
     const originalRun = exportsApi.visibleExportDirectory(completed.token);
     const completedTwo = completeFixture('e', 3000);
     const secondRun = exportsApi.visibleExportDirectory(completedTwo.token);

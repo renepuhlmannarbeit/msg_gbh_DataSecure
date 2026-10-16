@@ -19,7 +19,19 @@ function diagnosticEvent(event, fields = {}) {
       ...(diagnosticSession ? { session_id: diagnosticSession } : {}),
       event, outcome: fields.outcome || 'progress',
       ...(fields.action ? { action: fields.action } : {}),
-      ...(fields.error_code ? { error_code: fields.error_code } : {})
+      ...(fields.error_code ? { error_code: fields.error_code } : {}),
+      ...(['reconcile', 'staging', 'publish', 'acknowledge', 'abandon'].includes(fields.phase) ? { phase: fields.phase } : {}),
+      ...(Number.isSafeInteger(fields.completed_count) && fields.completed_count >= 0 && fields.completed_count <= 200
+        ? { completed_count: fields.completed_count } : {}),
+      ...(Number.isSafeInteger(fields.total_count) && fields.total_count >= 0 && fields.total_count <= 200
+        ? { total_count: fields.total_count } : {}),
+      ...(Number.isSafeInteger(fields.journal_count) && fields.journal_count >= 0 && fields.journal_count <= 1000000
+        ? { journal_count: fields.journal_count } : {}),
+      ...(Number.isSafeInteger(fields.export_count) && fields.export_count >= 0 && fields.export_count <= 1000000
+        ? { export_count: fields.export_count } : {}),
+      ...(fields.recovery_requested === true ? { recovery_requested: true } : {}),
+      ...(Number.isSafeInteger(fields.elapsed_ms) && fields.elapsed_ms >= 0 && fields.elapsed_ms <= 3600000
+        ? { elapsed_ms: fields.elapsed_ms } : {})
     })}\n`)) diagnosticLogAvailable = false;
   } catch { diagnosticLogAvailable = false; /* Diagnostics must never change product behavior. */ }
 }
@@ -49,8 +61,10 @@ let startupError;
 const nativeChannel = new NativeExportChannel({ write: value => writeFrame(value) });
 const nativeEnabled = process.env.DATASECURE_NATIVE_EXPORT_CHANNEL === '1';
 let nativeSession;
+let nativeExportStageStartedAt = 0;
 const ownerGeneration = process.env.DATASECURE_DOCUMENT_CONTROL_GENERATION;
 diagnosticEvent('sidecar_started', { outcome: 'ready' });
+const serviceStartedAt = Date.now();
 try {
   const owner = Number(process.env.DATASECURE_DOCUMENT_CONTROL_OWNER_PID);
   if (nativeEnabled && (!Number.isSafeInteger(owner) || owner <= 0 || owner !== process.ppid))
@@ -62,20 +76,49 @@ try {
     throw Object.assign(Error('STANDALONE_IPC_FAILED'), { code: 'STANDALONE_IPC_FAILED' });
   service = new StandaloneApplicationService({ ...(nativeEnabled ? {
     controlOwnerPid: owner, controlOwnerGeneration: ownerGeneration, retiredControlGenerations,
+    startupDiagnostic: diagnosticEvent,
     nativeExport: (operation, command, body) => {
       if (!nativeSession) return Promise.reject(Object.assign(Error('STANDALONE_IPC_FAILED'), { code: 'STANDALONE_IPC_FAILED' }));
-      return nativeSession.send('export_documents', { operation, command, ...(body ? { body } : {}) });
+      // Sparse, content-free checkpoints distinguish slow staging from a
+      // slow native publish. Never log operation IDs, names, paths or bodies.
+      const phase = command === 'write_body' ? 'staging' :
+        ['reconcile', 'publish', 'acknowledge', 'abandon'].includes(command) ? command : null;
+      const total = Array.isArray(operation?.files) ? operation.files.length : 0;
+      const completed = body?.final_chunk === true && Number.isSafeInteger(body.index) ? body.index + 1 : 0;
+      if (command === 'write_body' && body?.index === 0 && body?.offset === 0) {
+        nativeExportStageStartedAt = Date.now();
+        diagnosticEvent('native_export_phase', { phase: 'staging', outcome: 'started', total_count: total });
+      }
+      const checkpoint = phase && (command !== 'write_body' || completed > 0 &&
+        (completed === 1 || completed === total || completed % 25 === 0));
+      const started = Date.now();
+      if (checkpoint && command !== 'write_body') diagnosticEvent('native_export_phase', { phase, outcome: 'started', total_count: total });
+      return nativeSession.send('export_documents', { operation, command, ...(body ? { body } : {}) })
+        .then(result => {
+          if (checkpoint) diagnosticEvent('native_export_phase', { phase, outcome: 'ready',
+            completed_count: command === 'write_body' ? completed : undefined, total_count: total,
+            elapsed_ms: Date.now() - (command === 'write_body' && nativeExportStageStartedAt ? nativeExportStageStartedAt : started) });
+          return result;
+        }, error => {
+          // A failed body chunk may not be a 1/25/last-file checkpoint. Record
+          // that failure once with only the number of earlier complete files.
+          if (phase) diagnosticEvent('native_export_phase', { phase, outcome: 'failed',
+            completed_count: command === 'write_body' && Number.isSafeInteger(body?.index) ? body.index : undefined, total_count: total,
+            elapsed_ms: Date.now() - (command === 'write_body' && nativeExportStageStartedAt ? nativeExportStageStartedAt : started),
+            error_code: desktopErrorCode(error?.code) });
+          throw error;
+        });
     }
-  } : {}) });
+  } : { startupDiagnostic: diagnosticEvent }) });
   if (nativeEnabled && process.env.DATASECURE_BUNDLED_RUNTIME_REQUIRED === '1') {
     // initializeProduct has completed the mandatory signed-runtime check.
     diagnosticEvent('runtime_integrity_checked', { outcome: 'ready' });
   }
-  diagnosticEvent('service_initialized', { outcome: 'ready' });
+  diagnosticEvent('service_initialized', { outcome: 'ready', elapsed_ms: Date.now() - serviceStartedAt });
 } catch (error) {
   startupError = error;
   diagnosticEvent('service_initialization_failed', {
-    outcome: 'failed', error_code: desktopErrorCode(error?.code)
+    outcome: 'failed', error_code: desktopErrorCode(error?.code), elapsed_ms: Date.now() - serviceStartedAt
   });
 }
 // The owning native desktop waits for this exact private bootstrap proof before
@@ -169,7 +212,8 @@ async function dispatch(message) {
       ...(message.output_naming_mode ? { outputNamingMode: message.output_naming_mode } : {}) });
     case 'get_public_state': return service.status({ localUi: true });
     case 'get_ui_context': return service.uiContext();
-    case 'get_run_history': return service.history();
+    case 'get_run_history': return service.history({ recoverExports: message.recover_exports === true,
+      recoverBatchId: message.recover_batch_id || null });
     case 'get_run_failures': return service.runFailures(message.batch_id);
     case 'get_review_session': return service.reviewSession();
     case 'get_review_chunk': return service.reviewChunk(message.review_id, message.chunk_index);
@@ -246,7 +290,9 @@ process.stdin.on('data', (chunk) => {
     if ([NATIVE_RESPONSE_SCHEMA, PUBLICATION_RESPONSE].includes(message.schema)) continue;
     chain = chain.then(async () => {
       if (stopping) return;
-      diagnosticEvent('request_received', { action: message.action });
+      const startedAt = Date.now();
+      const recoveryRequested = message.action === 'get_run_history' && message.recover_exports === true;
+      diagnosticEvent('request_received', { action: message.action, recovery_requested: recoveryRequested });
       try {
         const result = await dispatch(message);
         if (stopping) return;
@@ -254,7 +300,8 @@ process.stdin.on('data', (chunk) => {
           ok: true, result };
         if (message.action === 'shutdown') {
           stopInput();
-          diagnosticEvent('response_ready', { action: message.action, outcome: 'ready' });
+          diagnosticEvent('response_ready', { action: message.action, outcome: 'ready', elapsed_ms: Date.now() - startedAt,
+            recovery_requested: recoveryRequested });
           // Permit the small acknowledgement to flush, but a dead/non-reading
           // desktop must not leave the host or queued requests alive forever.
           setTimeout(() => endHost(0, 'sidecar_shutdown'), 1000).unref();
@@ -262,14 +309,16 @@ process.stdin.on('data', (chunk) => {
             ? endHost(1, 'private_ipc_output_failed', 'DESKTOP_IPC_WRITE_FAILED')
             : endHost(0, 'sidecar_shutdown'));
         } else {
-          diagnosticEvent('response_ready', { action: message.action, outcome: 'ready' });
+          diagnosticEvent('response_ready', { action: message.action, outcome: 'ready', elapsed_ms: Date.now() - startedAt,
+            recovery_requested: recoveryRequested });
           writeFrame(response);
         }
       } catch (error) {
         if (stopping) { endHost(1, 'private_ipc_output_failed', 'DESKTOP_IPC_WRITE_FAILED'); return; }
         const response = publicError(message.request_id, error);
         diagnosticEvent('response_ready', {
-          action: message.action, outcome: 'failed', error_code: response.error_code
+          action: message.action, outcome: 'failed', error_code: response.error_code,
+          elapsed_ms: Date.now() - startedAt, recovery_requested: recoveryRequested
         });
         writeFrame(response);
       }

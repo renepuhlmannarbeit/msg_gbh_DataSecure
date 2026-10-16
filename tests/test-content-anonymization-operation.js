@@ -757,7 +757,7 @@ async function main() {
         row.export_id === path.basename(exporter.recordPath(stored.token), '.json'))?.abandoned, true);
       let recoveryAttempts = 0;
       const history = createHistory(() => { recoveryAttempts++; });
-      const entry = history.history({ recoverExports: true }).entries.find(row => row.batch_id === stored.token);
+      const entry = history.history({ recoverExports: true, recoverBatchId: stored.token }).entries.find(row => row.batch_id === stored.token);
       assert.equal(entry?.status, 'export_abandoned');
       assert.equal(entry?.results_available, false);
       assert.deepEqual([entry?.exported_count, entry?.export_pending_count], [0, 1]);

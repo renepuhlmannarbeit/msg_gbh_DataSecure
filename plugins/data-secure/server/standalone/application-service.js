@@ -135,6 +135,8 @@ function defaultDependencies(options = {}) {
   const { cleanupAbandonedWorkingJobs } = require('../gateway/orchestrator');
   const { startBatchMaintenance } = require('../gateway/batch-maintenance');
   const batchExecutor = require('../gateway/batch-executor');
+  // Diagnostics are optional and must never affect the product transaction.
+  const startupEvent = (event, fields) => { try { options.startupDiagnostic?.(event, fields); } catch {} };
   const reviewBroker = require('./review-broker').createReviewBroker();
   const intakeReservation = require('../gateway/batch-intake-reservation');
   const runHistory = createRunHistory({
@@ -161,7 +163,15 @@ function defaultDependencies(options = {}) {
         assertRootSeparation();
         // Capture existing summaries and original export destinations before
         // startup retention retires their source journals.
-        try { runHistory.history({ recoverExports: false }); } catch { /* optional history is repairable */ }
+        const captureStarted = Date.now();
+        startupEvent('history_capture_started', { outcome: 'started' });
+        let captureOutcome = 'ready', captureCounts = {};
+        try { captureCounts = runHistory.captureDurableHistory(); }
+        catch { captureOutcome = 'failed'; /* optional history is repairable */ }
+        startupEvent('history_capture_finished', { outcome: captureOutcome,
+          elapsed_ms: Date.now() - captureStarted, ...captureCounts });
+        const bootstrapStarted = Date.now();
+        startupEvent('product_bootstrap_started', { outcome: 'started' });
         const startup = initializeProduct({
           assertRootSeparation,
           verifyBundledRuntime,
@@ -190,6 +200,7 @@ function defaultDependencies(options = {}) {
             throw fixedFailure(outcome.code, 'Der lokale DataSecure-Core konnte nicht sicher gestartet werden.');
           }
         });
+        startupEvent('product_bootstrap_finished', { outcome: 'ready', elapsed_ms: Date.now() - bootstrapStarted });
         // A visible export may contain hundreds of files. Replaying it while
         // bootstrapping a 30-second desktop connection can kill the sidecar
         // mid-transaction and leave an unowned control lock. History explicitly
@@ -541,8 +552,8 @@ class StandaloneApplicationService {
       external_disclosure: false };
   }
 
-  history() {
-    return this.deps.runHistory.history();
+  history({ recoverExports = false, recoverBatchId = null } = {}) {
+    return this.deps.runHistory.history({ recoverExports, recoverBatchId });
   }
 
   abandonResultExport(batchId) {

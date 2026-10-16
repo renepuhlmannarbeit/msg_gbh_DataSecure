@@ -136,6 +136,14 @@ try {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.locator('#documents-all').check();
     if (!raw) { await page.locator('#documents-approve').click();
+      await page.locator('#documents-approve-confirm').waitFor({ state: 'visible' });
+      assert.match(await page.locator('#documents-approve-confirm-text').innerText(), /2 von 3.*nicht.*geöffnet/u);
+      await page.setViewportSize({ width: 390, height: 700 });
+      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'approval confirmation reflow');
+      const confirmationAudit = await page.evaluate(() => axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a','wcag2aa','wcag21aa'] } }));
+      assert.deepEqual(confirmationAudit.violations.map(row => row.id), [], 'approval confirmation axe');
+      await page.setViewportSize({ width: 1280, height: 900 });
+      await page.locator('#documents-approve-proceed').click();
       await page.waitForFunction(() => document.querySelector('#documents-selected').textContent.includes('3 von 3 freigegeben')); }
     await page.locator('#documents-export').click(); await page.locator('#document-export-dialog').waitFor({ state: 'visible' });
     const names = await page.locator('#document-export-files li').allTextContents();

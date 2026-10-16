@@ -239,6 +239,9 @@ function removeOwnedRoot(root, initial) {
     assert.strictEqual(status.ok, true);
     assert.strictEqual(status.result.product_channel, 'standalone');
     assert.strictEqual(status.result.external_disclosure, false);
+    const measuredRecovery = await client.send('get_run_history', 'ae'.repeat(8), {
+      recover_exports: true, recover_batch_id: 'b'.repeat(64) });
+    assert.strictEqual(measuredRecovery.ok, true);
     // A diagnostic failure must never break the actual framed application.
     const diagnosticSentinel = path.join(root, 'diagnostic-sentinel');
     fs.writeFileSync(diagnosticSentinel, 'foreign diagnostic target');
@@ -255,6 +258,10 @@ function removeOwnedRoot(root, initial) {
     assert.strictEqual(emptyHistory.ok, true);
     assert.strictEqual(emptyHistory.result.local_ui_only, true);
     assert.deepStrictEqual(emptyHistory.result.entries, []);
+    const explicitHistory = await client.send('get_run_history', 'ac'.repeat(8), { recover_exports: true,
+      recover_batch_id: 'b'.repeat(64) });
+    assert.strictEqual(explicitHistory.ok, true);
+    assert.deepStrictEqual(explicitHistory.result.entries, []);
     // Real private persistence -> application service -> framed error, not a
     // mocked error response. The fixture belongs only to this isolated host.
     const dataRoot = require('../plugins/data-secure/server/standalone/application-service').standaloneDataRoot({ environment, home: environment.HOME });
@@ -479,8 +486,16 @@ function removeOwnedRoot(root, initial) {
     assert.ok(bootstrapEvents.indexOf('sidecar_entry') >= 0);
     assert.ok(bootstrapEvents.indexOf('sidecar_entry') < bootstrapEvents.indexOf('sidecar_imports_ready'));
     assert.ok(bootstrapEvents.indexOf('sidecar_imports_ready') < bootstrapEvents.indexOf('service_initialized'));
-    assert.ok(events.some((event) => event.event === 'service_initialized'));
+    assert.ok(events.some((event) => event.event === 'service_initialized' && Number.isSafeInteger(event.elapsed_ms)));
+    assert.ok(events.some((event) => event.event === 'history_capture_started'));
+    assert.ok(events.some((event) => event.event === 'history_capture_finished' &&
+      Number.isSafeInteger(event.journal_count) && Number.isSafeInteger(event.export_count) &&
+      Number.isSafeInteger(event.elapsed_ms)));
+    assert.ok(events.some((event) => event.event === 'product_bootstrap_started'));
+    assert.ok(events.some((event) => event.event === 'product_bootstrap_finished' && Number.isSafeInteger(event.elapsed_ms)));
     assert.ok(events.some((event) => event.event === 'request_received' && event.action === 'get_public_state'));
+    assert.ok(events.some((event) => event.event === 'response_ready' && event.action === 'get_run_history' &&
+      event.recovery_requested === true && Number.isSafeInteger(event.elapsed_ms)));
     assert.ok(events.some((event) => event.session_id === 'a'.repeat(32)));
     assert.ok(!events.some((event) => event.session_id === 'invalid session'));
     assert.doesNotMatch(interactionLog, /source_paths|source_path|selected_files|raw_content|mapping|request_id/iu);

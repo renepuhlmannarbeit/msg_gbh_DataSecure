@@ -708,6 +708,13 @@ test('history IPC binds exact opaque run IDs and refuses paths, mode changes and
   }
   assert.throws(() => encodeFrame({ ...base, action: 'get_run_history', batch_id: 'b'.repeat(64) }),
     { code: 'DESKTOP_IPC_FIELD_INVALID' });
+  const explicitRecovery = { ...base, action: 'get_run_history', recover_exports: true,
+    recover_batch_id: 'b'.repeat(64) };
+  assert.deepStrictEqual(new FrameDecoder().push(encodeFrame(explicitRecovery)), [explicitRecovery]);
+  for (const recover_exports of [false, null, 1, 'true'])
+    assert.throws(() => encodeFrame({ ...explicitRecovery, recover_exports }), { code: 'DESKTOP_IPC_FIELD_INVALID' });
+  for (const recover_batch_id of [null, '', 'b'.repeat(63), 'B'.repeat(64), '/tmp/result'])
+    assert.throws(() => encodeFrame({ ...explicitRecovery, recover_batch_id }), { code: 'DESKTOP_IPC_FIELD_INVALID' });
   for (const message of [
     { ...base, action: 'get_run_failures' },
     { ...base, action: 'get_run_failures', batch_id: 'b'.repeat(64) }

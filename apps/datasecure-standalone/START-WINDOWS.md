@@ -1,9 +1,9 @@
 # DataSecure Standalone starten (Windows x64)
 
-Anleitung für den lokalen Windows-Testkandidaten **3.2.0-rc160** und die neue
-Oberfläche. Das lokal bereitgestellte RC160-ZIP vollständig entpacken und seine
-beiliegende Prüfsumme vergleichen. Der veröffentlichte RC159 bleibt unverändert;
-dieser Kandidat ist noch nicht online veröffentlicht. Es gibt keine abgeschlossene
+Anleitung für den Windows-Test-Pre-Release **3.2.0-rc162** und die neue
+Oberfläche. Das RC162-ZIP vollständig entpacken und seine
+beiliegende Prüfsumme vergleichen. Die früheren Releases bleiben unverändert.
+Es gibt keine abgeschlossene
 menschliche Plattform-, Bedien- oder Barrierefreiheitsfreigabe.
 
 ## Verarbeitung und Prüfung
@@ -188,4 +188,4 @@ Native technische Runner-Prüfungen ersetzen nicht die Bedienung auf deinem
 Gerät. Für formale Nachweise den
 [N3/N4-Testplan](../../docs/acceptance/FORMAL_UAT/README.md) verwenden.
 Der frühere bestätigte RC157-Anwenderlauf bleibt historische Evidenz seines
-damaligen Pakets und ist keine neue RC160-Abnahme.
+damaligen Pakets und ist keine neue RC162-Abnahme.

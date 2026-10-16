@@ -52,6 +52,12 @@ function validatePrivateMessage(message) {
   if (!PRIVATE_ACTIONS.has(message.action))
     fail('DESKTOP_IPC_ACTION_INVALID', 'Unbekannte Desktop-Aktion.');
   const allowedFields = new Set(['schema', 'request_id', 'action']);
+  if (message.action === 'get_run_history' && Object.hasOwn(message, 'recover_exports')) {
+    allowedFields.add('recover_exports');
+    allowedFields.add('recover_batch_id');
+    if (message.recover_exports !== true || !/^[a-f0-9]{64}$/u.test(message.recover_batch_id || ''))
+      fail('DESKTOP_IPC_FIELD_INVALID', 'Ungültige Ergebnisabgleich-Anfrage.');
+  }
   if (message.action === 'start_admitted_batch') {
     if (contentStartOptions(message, 'content_options', 'standalone')) allowedFields.add('content_options');
   } else assertLegacyContentOperation(message, 'content_options', 'standalone', 'resume');

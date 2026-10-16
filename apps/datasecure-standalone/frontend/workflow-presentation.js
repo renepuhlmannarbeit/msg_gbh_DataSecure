@@ -141,7 +141,11 @@
       set('delivery_pending', -1, 'Technische Bereitstellung noch offen', 'Ergebnisordner und Zugriffsrechte prüfen. Das ist noch kein abgeschlossener KI-Export.');
     else if (value.state === 'export_abandoned')
       set('delivery_abandoned', -1, 'Bereitstellung dieses Laufs aufgegeben', 'Fehlende Dateien werden nicht mehr automatisch kopiert. Teilkopien bleiben unverändert; keine vollständige Ergebnis- oder KI-Freigabe.');
-    else if (['stopped', 'failed', 'completed_without_results', 'blocked'].includes(value.state))
+    else if (value.state === 'completed_without_results') {
+      output.stages[0].status = 'warning';
+      set('completed_without_results', -1, 'Verarbeitung beendet ohne Ergebnisdateien',
+        'Für diesen Lauf wurden keine verwendbaren Markdown-Dateien erstellt. Betroffene Quelldateien und Gründe ansehen; es gibt nichts freizugeben oder zu exportieren. Ein neuer Lauf erfordert eine erneute Dateiauswahl.');
+    } else if (['stopped', 'failed', 'blocked'].includes(value.state))
       set('interrupted', -1, 'Verarbeitung noch nicht abgeschlossen', 'Betroffene Dateien und Ursache ansehen. Nur die angebotene zulässige Fortsetzung verwenden.');
     return output;
   }

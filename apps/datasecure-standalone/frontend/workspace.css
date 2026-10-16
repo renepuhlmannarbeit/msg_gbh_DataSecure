@@ -79,4 +79,8 @@ button{white-space:nowrap}:focus-visible{outline-offset:2px}
   .entity-table td[data-label]::before { content:attr(data-label) ': '; font-weight:600; }.entity-table .meta { margin:4px 0; }
 }
 .document-main-guide { margin: 0 0 1.2rem; padding: .9rem 1.1rem .9rem 2.2rem; background: #f0f7f4; border: 1px solid #d9e9e2; border-radius: 12px; line-height: 1.5; }
+.output-naming { margin-top: 18px; padding: 14px 16px; border: 1px solid var(--c-border); border-radius: var(--r-box); }
+.output-naming legend { padding: 0 4px; font-weight: 600; }
+.output-naming .option { display: block; margin: 8px 0; }
+.output-naming .muted { margin-top: 10px; }
 .document-main-guide li + li { margin-top: .45rem; }

@@ -38,6 +38,8 @@ const RESPONSE_SCHEMA: &str = "datasecure-standalone-private-response/1";
 static REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 static DIAGNOSTIC_SESSION: OnceLock<String> = OnceLock::new();
 static NATIVE_SMOKE_PROFILE: OnceLock<Option<native_smoke::Profile>> = OnceLock::new();
+#[cfg(target_os = "macos")]
+static MACOS_CORE_PROBE_ATTEMPTED: AtomicBool = AtomicBool::new(false);
 
 fn build_id() -> &'static str {
     match option_env!("DATASECURE_BUILD_ID") {
@@ -48,6 +50,61 @@ fn build_id() -> &'static str {
 
 fn runtime_target() -> String {
     format!("{}-{}", std::env::consts::OS, std::env::consts::ARCH)
+}
+
+#[cfg(target_os = "macos")]
+fn macos_product_version() -> Option<&'static str> {
+    static VERSION: OnceLock<Option<String>> = OnceLock::new();
+    VERSION.get_or_init(|| {
+        // Ask the kernel directly: a managed Mac may disallow a shell or CLI.
+        // Accept only a short numeric version, never a path or raw OS output.
+        let mut value = [0u8; 32];
+        let mut size = value.len();
+        let status = unsafe {
+            libc::sysctlbyname(b"kern.osproductversion\0".as_ptr().cast(),
+                value.as_mut_ptr().cast(), &mut size, std::ptr::null_mut(), 0)
+        };
+        if status != 0 || size == 0 || size > value.len() { return None; }
+        let version = value[..size].split(|byte| *byte == 0).next()?;
+        if version.is_empty() || version.len() > 16 ||
+            !version.iter().all(|byte| byte.is_ascii_digit() || *byte == b'.') {
+            return None;
+        }
+        String::from_utf8(version.to_vec()).ok()
+    }).as_deref()
+}
+
+#[cfg(target_os = "macos")]
+fn macos_quarantine_code(path: &Path) -> &'static str {
+    use std::{ffi::CString, os::unix::ffi::OsStrExt};
+    let Ok(path) = CString::new(path.as_os_str().as_bytes()) else {
+        return "STANDALONE_QUARANTINE_UNKNOWN";
+    };
+    // Inspect presence only; the extended-attribute value can contain a
+    // download origin and must never enter a product diagnostic.
+    let size = unsafe { libc::getxattr(path.as_ptr(), b"com.apple.quarantine\0".as_ptr().cast(),
+        std::ptr::null_mut(), 0, 0, 0) };
+    if size >= 0 { return "STANDALONE_QUARANTINE_PRESENT"; }
+    if std::io::Error::last_os_error().raw_os_error() == Some(libc::ENOATTR) {
+        "STANDALONE_QUARANTINE_ABSENT"
+    } else {
+        "STANDALONE_QUARANTINE_UNKNOWN"
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn diagnostic_macos_quarantine(executable: &Path) {
+    let core = macos_quarantine_code(executable);
+    diagnostic_event("core_quarantine_state", None,
+        if core == "STANDALONE_QUARANTINE_UNKNOWN" { "unavailable" } else { "ready" },
+        Some(core), None);
+    let bundle = executable.ancestors().find(|candidate|
+        candidate.extension() == Some(std::ffi::OsStr::new("app")));
+    let app = bundle.map(macos_quarantine_code).unwrap_or("STANDALONE_APP_BUNDLE_UNAVAILABLE");
+    diagnostic_event("app_quarantine_state", None,
+        if app == "STANDALONE_QUARANTINE_UNKNOWN" || app == "STANDALONE_APP_BUNDLE_UNAVAILABLE" {
+            "unavailable"
+        } else { "ready" }, Some(app), None);
 }
 
 #[cfg(target_os = "windows")]
@@ -90,7 +147,13 @@ fn diagnostic_event(
     error_code: Option<&str>,
     elapsed_ms: Option<u128>,
 ) {
-    diagnostic_correlated_event(event, action, outcome, error_code, elapsed_ms, None);
+    diagnostic_correlated_event(event, action, outcome, error_code, elapsed_ms, None, None);
+}
+
+fn diagnostic_process_event(event: &str, outcome: &str, error_code: Option<&str>,
+    elapsed_ms: Option<u128>, process_id: u32) {
+    diagnostic_correlated_event(event, None, outcome, error_code, elapsed_ms, None,
+        Some(process_id));
 }
 
 fn diagnostic_request_id(id: &str) -> Option<&str> {
@@ -101,7 +164,7 @@ fn diagnostic_request_id(id: &str) -> Option<&str> {
 fn diagnostic_ipc_event(event: &str, action: &str, id: &str, outcome: &str,
     error_code: Option<&str>, elapsed_ms: Option<u128>) {
     diagnostic_correlated_event(event, Some(action), outcome, error_code, elapsed_ms,
-        diagnostic_request_id(id));
+        diagnostic_request_id(id), None);
 }
 
 fn diagnostic_correlated_event(
@@ -111,6 +174,7 @@ fn diagnostic_correlated_event(
     error_code: Option<&str>,
     elapsed_ms: Option<u128>,
     request_id: Option<&str>,
+    process_id: Option<u32>,
 ) {
     let mut record = json!({
         "schema": "datasecure-standalone-interaction/1",
@@ -123,6 +187,10 @@ fn diagnostic_correlated_event(
         "build_id": build_id(),
         "runtime_target": runtime_target()
     });
+    #[cfg(target_os = "macos")]
+    if let Some(value) = macos_product_version() {
+        record["os_version"] = json!(value);
+    }
     if let Some(value) = action {
         record["action"] = json!(value);
     }
@@ -134,6 +202,9 @@ fn diagnostic_correlated_event(
     }
     if let Some(value) = request_id {
         record["request_id"] = json!(value);
+    }
+    if let Some(value) = process_id {
+        record["process_id"] = json!(value);
     }
     diagnostic_log::append(&diagnostic_directory(), &record);
 }
@@ -426,6 +497,44 @@ fn existing(candidates: impl IntoIterator<Item = PathBuf>) -> Option<PathBuf> {
     })
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum RuntimeComponent {
+    Core,
+    SidecarScript,
+    NetworkDeny,
+}
+
+impl RuntimeComponent {
+    fn diagnostic_code(self) -> &'static str {
+        match self {
+            Self::Core => "STANDALONE_BUNDLED_CORE_UNAVAILABLE",
+            Self::SidecarScript => "STANDALONE_BUNDLED_SIDECAR_UNAVAILABLE",
+            Self::NetworkDeny => "STANDALONE_BUNDLED_NETWORK_DENY_UNAVAILABLE",
+        }
+    }
+}
+
+fn required_runtime_component(
+    candidates: impl IntoIterator<Item = PathBuf>,
+    component: RuntimeComponent,
+) -> Result<PathBuf, RuntimeComponent> {
+    existing(candidates).ok_or(component)
+}
+
+fn missing_runtime_component(component: RuntimeComponent) -> String {
+    // A fixed component code identifies the broken package without persisting
+    // a path, while callers retain the existing user-facing missing-runtime
+    // error. Directories and symlinks remain ineligible as bundled files.
+    diagnostic_event(
+        "runtime_component_unavailable",
+        None,
+        "failed",
+        Some(component.diagnostic_code()),
+        None,
+    );
+    "STANDALONE_RUNTIME_MISSING".to_string()
+}
+
 // Tauri can return valid Windows resource paths in verbatim form (`\\?\C:\...`).
 // Node starts that executable, but rejects the verbatim working directory before
 // it can load the sidecar. Convert only the process-launch spelling after the
@@ -444,7 +553,7 @@ fn child_process_path(path: &Path) -> PathBuf {
     path.to_path_buf()
 }
 
-fn runtime_paths(app: &tauri::AppHandle) -> Result<(PathBuf, PathBuf), String> {
+fn runtime_paths(app: &tauri::AppHandle) -> Result<(PathBuf, PathBuf, PathBuf), String> {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let resource = app
         .path()
@@ -481,8 +590,8 @@ fn runtime_paths(app: &tauri::AppHandle) -> Result<(PathBuf, PathBuf), String> {
     if cfg!(debug_assertions) {
         executable_candidates.push(manifest.join("binaries").join(target));
     }
-    let executable =
-        existing(executable_candidates).ok_or_else(|| "STANDALONE_RUNTIME_MISSING".to_string())?;
+    let executable = required_runtime_component(executable_candidates, RuntimeComponent::Core)
+        .map_err(missing_runtime_component)?;
     let packaged_script = resource
         .join("server")
         .join("standalone")
@@ -501,9 +610,16 @@ fn runtime_paths(app: &tauri::AppHandle) -> Result<(PathBuf, PathBuf), String> {
                 .join("desktop-sidecar.js"),
         );
     }
-    let script =
-        existing(script_candidates).ok_or_else(|| "STANDALONE_RUNTIME_MISSING".to_string())?;
-    Ok((executable, script))
+    let script = required_runtime_component(script_candidates, RuntimeComponent::SidecarScript)
+        .map_err(missing_runtime_component)?;
+    let network_deny = script
+        .parent()
+        .and_then(Path::parent)
+        .map(|server| server.join("network-deny.cjs"))
+        .ok_or_else(|| missing_runtime_component(RuntimeComponent::NetworkDeny))?;
+    let network_deny = required_runtime_component([network_deny], RuntimeComponent::NetworkDeny)
+        .map_err(missing_runtime_component)?;
+    Ok((executable, script, network_deny))
 }
 
 fn configure_support_trace(command: &mut Command, setting: Option<&std::ffi::OsStr>) {
@@ -540,10 +656,89 @@ fn reserve_sidecar_generation(lifecycle: &ipc_transport::Lifecycle, generations:
     let previous = retired.clone(); retired.push(generation.clone());
     Ok((guard, generation, previous))
 }
+
+fn configure_core_environment(command: &mut Command, app: &tauri::AppHandle) {
+    command.env_clear();
+    for key in ["SYSTEMROOT", "WINDIR", "COMSPEC", "LANG", "LC_ALL", "LC_CTYPE"] {
+        if let Some(value) = std::env::var_os(key) { command.env(key, value); }
+    }
+    if let Some(profile) = NATIVE_SMOKE_PROFILE.get().and_then(Option::as_ref) {
+        for (key, value) in [
+            ("USERPROFILE", &profile.user_profile), ("HOME", &profile.user_profile),
+            ("LOCALAPPDATA", &profile.local_app_data), ("APPDATA", &profile.roaming_app_data),
+            ("XDG_DATA_HOME", &profile.xdg_data), ("TEMP", &profile.temp),
+            ("TMP", &profile.temp), ("TMPDIR", &profile.temp),
+        ] { command.env(key, value); }
+        command.env("DATASECURE_STANDALONE_DOCUMENTS_DIR", &profile.documents);
+    } else {
+        for key in ["TEMP", "TMP", "TMPDIR", "USERPROFILE", "HOME", "LOCALAPPDATA", "APPDATA", "XDG_DATA_HOME"] {
+            if let Some(value) = std::env::var_os(key) { command.env(key, value); }
+        }
+        if let Ok(documents) = app.path().document_dir() {
+            command.env("DATASECURE_STANDALONE_DOCUMENTS_DIR", documents);
+        }
+    }
+    command.env("DATASECURE_PRODUCT_CHANNEL", "standalone");
+    #[cfg(target_os = "macos")]
+    command.env("DATASECURE_BUNDLED_RUNTIME_REQUIRED", "1");
+    command.env("DATASECURE_STANDALONE_DIAGNOSTIC_SESSION", diagnostic_session());
+    command.env("DATASECURE_STANDALONE_DIAGNOSTIC_DIR", diagnostic_directory());
+}
+
+#[cfg(target_os = "macos")]
+fn macos_core_probe(app: &tauri::AppHandle, executable: &Path, script_directory: &Path) {
+    use std::os::unix::process::ExitStatusExt;
+    // Only a native trap before Ready initiates this once per app process.
+    // Neither stage opens a document, starts a run, or depends on a shell.
+    if MACOS_CORE_PROBE_ATTEMPTED.swap(true, Ordering::AcqRel) { return; }
+    for stage in ["core_probe_node", "core_probe_preloader"] {
+        let mut command = Command::new(child_process_path(executable));
+        configure_core_environment(&mut command, app);
+        command.current_dir(child_process_path(script_directory))
+            .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
+        if stage == "core_probe_node" {
+            command.arg("--version");
+        } else {
+            command.arg("--require=../network-deny.cjs")
+                .arg("-e").arg("process.exit(0)");
+        }
+        let started = Instant::now();
+        let Ok(mut child) = command.spawn() else {
+            diagnostic_event(stage, None, "failed", Some("STANDALONE_CORE_PROBE_SPAWN_FAILED"),
+                Some(started.elapsed().as_millis()));
+            break;
+        };
+        let pid = child.id();
+        let (outcome, code) = loop {
+            match child.try_wait() {
+                Ok(Some(status)) if status.success() => break ("ready", None),
+                Ok(Some(status)) => {
+                    let code = match status.signal() {
+                        Some(5) => "STANDALONE_CORE_PROBE_SIGNAL_TRAP",
+                        Some(_) => "STANDALONE_CORE_PROBE_SIGNAL_OTHER",
+                        None => "STANDALONE_CORE_PROBE_EXIT_NONZERO",
+                    };
+                    break ("failed", Some(code));
+                }
+                Err(_) => break ("failed", Some("STANDALONE_CORE_PROBE_WAIT_FAILED")),
+                Ok(None) if started.elapsed() >= Duration::from_secs(3) => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    break ("failed", Some("STANDALONE_CORE_PROBE_TIMEOUT"));
+                }
+                Ok(None) => std::thread::sleep(Duration::from_millis(20)),
+            }
+        };
+        diagnostic_process_event(stage, outcome, code, Some(started.elapsed().as_millis()), pid);
+        if outcome != "ready" { break; }
+    }
+}
+
 fn spawn_sidecar(app: &tauri::AppHandle, lifecycle: &ipc_transport::Lifecycle, spawn_guard: ipc_transport::SpawnGuard, deadline: Instant,
     owner_generation: String, retired_generations: Vec<String>) -> Result<SidecarProcess, String> {
+    let bootstrap_started = Instant::now();
     diagnostic_event("sidecar_starting", None, "progress", None, None);
-    let (executable, script) = runtime_paths(app).inspect_err(|code| {
+    let (executable, script, _network_deny) = runtime_paths(app).inspect_err(|code| {
         diagnostic_event(
             "runtime_resolution_failed",
             None,
@@ -553,70 +748,16 @@ fn spawn_sidecar(app: &tauri::AppHandle, lifecycle: &ipc_transport::Lifecycle, s
         );
     })?;
     diagnostic_event("runtime_resolved", None, "ready", None, None);
+    #[cfg(target_os = "macos")]
+    diagnostic_macos_quarantine(&executable);
     let script_directory = script
         .parent()
         .ok_or_else(|| "STANDALONE_RUNTIME_MISSING".to_string())?;
     let script_name = script
         .file_name()
         .ok_or_else(|| "STANDALONE_RUNTIME_MISSING".to_string())?;
-    let _network_deny = script_directory
-        .parent()
-        .map(|server| server.join("network-deny.cjs"))
-        .filter(|candidate| existing([candidate.clone()]).is_some())
-        .ok_or_else(|| "STANDALONE_RUNTIME_MISSING".to_string())?;
     let mut command = Command::new(child_process_path(&executable));
-    command.env_clear();
-    for key in [
-        "SYSTEMROOT",
-        "WINDIR",
-        "COMSPEC",
-        "LANG",
-        "LC_ALL",
-        "LC_CTYPE",
-    ] {
-        if let Some(value) = std::env::var_os(key) {
-            command.env(key, value);
-        }
-    }
-    if let Some(profile) = NATIVE_SMOKE_PROFILE.get().and_then(Option::as_ref) {
-        for (key, value) in [
-            ("USERPROFILE", &profile.user_profile),
-            ("HOME", &profile.user_profile),
-            ("LOCALAPPDATA", &profile.local_app_data),
-            ("APPDATA", &profile.roaming_app_data),
-            ("XDG_DATA_HOME", &profile.xdg_data),
-            ("TEMP", &profile.temp),
-            ("TMP", &profile.temp),
-            ("TMPDIR", &profile.temp),
-        ] {
-            command.env(key, value);
-        }
-    } else {
-        for key in [
-            "TEMP",
-            "TMP",
-            "TMPDIR",
-            "USERPROFILE",
-            "HOME",
-            "LOCALAPPDATA",
-            "APPDATA",
-            "XDG_DATA_HOME",
-        ] {
-            if let Some(value) = std::env::var_os(key) {
-                command.env(key, value);
-            }
-        }
-    }
-    // Windows Known Folders ignore an isolated child's USERPROFILE. The
-    // validated smoke profile must override this before product bootstrap.
-    if let Some(profile) = NATIVE_SMOKE_PROFILE.get().and_then(Option::as_ref) {
-        command.env("DATASECURE_STANDALONE_DOCUMENTS_DIR", &profile.documents);
-    } else if let Ok(documents) = app.path().document_dir() {
-        command.env("DATASECURE_STANDALONE_DOCUMENTS_DIR", documents);
-    }
-    command.env("DATASECURE_PRODUCT_CHANNEL", "standalone");
-    #[cfg(target_os = "macos")]
-    command.env("DATASECURE_BUNDLED_RUNTIME_REQUIRED", "1");
+    configure_core_environment(&mut command, app);
     command.env("DATASECURE_NATIVE_EXPORT_CHANNEL", "1");
     command.env("DATASECURE_DOCUMENT_CONTROL_OWNER_PID", std::process::id().to_string());
     command.env("DATASECURE_DOCUMENT_CONTROL_GENERATION", &owner_generation);
@@ -627,14 +768,6 @@ fn spawn_sidecar(app: &tauri::AppHandle, lifecycle: &ipc_transport::Lifecycle, s
     configure_support_trace(
         &mut command,
         std::env::var_os("EU_PRIVACY_SUPPORT_MODE").as_deref(),
-    );
-    command.env(
-        "DATASECURE_STANDALONE_DIAGNOSTIC_SESSION",
-        diagnostic_session(),
-    );
-    command.env(
-        "DATASECURE_STANDALONE_DIAGNOSTIC_DIR",
-        diagnostic_directory(),
     );
     command
         .current_dir(child_process_path(script_directory))
@@ -665,7 +798,9 @@ fn spawn_sidecar(app: &tauri::AppHandle, lifecycle: &ipc_transport::Lifecycle, s
         );
         code.to_string()
     })?;
-    diagnostic_event("sidecar_spawned", None, "ready", None, None);
+    let process_id = child.id();
+    diagnostic_process_event("sidecar_spawned", "ready", None,
+        Some(bootstrap_started.elapsed().as_millis()), process_id);
     let input = child.stdin.take();
     let output = child.stdout.take();
     if let Some(mut stderr) = child.stderr.take() {
@@ -684,8 +819,8 @@ fn spawn_sidecar(app: &tauri::AppHandle, lifecycle: &ipc_transport::Lifecycle, s
                 }
             }
             if !sample.is_empty() {
-                diagnostic_event("sidecar_stderr_classified", None, "failed",
-                    Some(classify_sidecar_stderr(&sample)), None);
+                diagnostic_process_event("sidecar_stderr_classified", "failed",
+                    Some(classify_sidecar_stderr(&sample)), None, process_id);
             }
         });
     }
@@ -721,28 +856,39 @@ fn spawn_sidecar(app: &tauri::AppHandle, lifecycle: &ipc_transport::Lifecycle, s
         Ok(Ok(frame)) => frame,
         Ok(Err(code)) | Err(code) => {
             let cause = sidecar_bootstrap_diagnostic(&process.child, &code);
-            diagnostic_event("sidecar_bootstrap_failed", None, "failed",
-                Some(&cause), None);
-            return Err(code);
+            diagnostic_process_event("sidecar_bootstrap_failed", "failed",
+                Some(&cause), Some(bootstrap_started.elapsed().as_millis()), process_id);
+            #[cfg(target_os = "macos")]
+            if cause == "STANDALONE_SIDECAR_SIGNAL_TRAP" {
+                macos_core_probe(app, &executable, script_directory);
+            }
+            // A native trap before Ready is not a transient IPC timeout.
+            // Preserve the fixed cause for the UI without exposing stderr or
+            // silently retrying a crashed executable as a healthy connection.
+            return Err(if cause == "STANDALONE_SIDECAR_SIGNAL_TRAP" { cause } else { code });
         }
     };
     if ready["schema"] != "datasecure-standalone-ready/1" || ready["owner_generation"] != process.owner_generation ||
         !matches!(ready["diagnostic_log"].as_str(), Some("ready" | "unavailable")) ||
         ready.as_object().map_or(true, |fields| fields.len() != if ready["ok"] == true { 4 } else { 5 }) {
-        diagnostic_event("sidecar_bootstrap_failed", None, "failed", Some("STANDALONE_SIDECAR_READY_INVALID"), None);
+        diagnostic_process_event("sidecar_bootstrap_failed", "failed", Some("STANDALONE_SIDECAR_READY_INVALID"),
+            Some(bootstrap_started.elapsed().as_millis()), process_id);
         return Err(ipc_transport::FAILED.to_string());
     }
     if ready["diagnostic_log"] == "unavailable" {
-        diagnostic_event("sidecar_diagnostic_unavailable", None, "failed", Some("STANDALONE_SIDECAR_DIAGNOSTIC_UNAVAILABLE"), None);
+        diagnostic_process_event("sidecar_diagnostic_unavailable", "failed", Some("STANDALONE_SIDECAR_DIAGNOSTIC_UNAVAILABLE"),
+            Some(bootstrap_started.elapsed().as_millis()), process_id);
     }
     if ready["ok"] != true {
         let code = ready["error_code"].as_str().filter(|code| code.len() <= 80 &&
             code.bytes().all(|value| value.is_ascii_uppercase() || value.is_ascii_digit() || value == b'_'))
             .unwrap_or(ipc_transport::FAILED);
-        diagnostic_event("sidecar_bootstrap_failed", None, "failed", Some(code), None);
+        diagnostic_process_event("sidecar_bootstrap_failed", "failed", Some(code),
+            Some(bootstrap_started.elapsed().as_millis()), process_id);
         return Err(code.to_string());
     }
-    diagnostic_event("sidecar_bootstrap_ready", None, "ready", None, None);
+    diagnostic_process_event("sidecar_bootstrap_ready", "ready", None,
+        Some(bootstrap_started.elapsed().as_millis()), process_id);
     Ok(process)
 }
 
@@ -768,6 +914,7 @@ fn sidecar_bootstrap_diagnostic(child: &ipc_transport::ChildControl, transport_c
         #[cfg(target_os = "macos")]
         match status.signal() {
             Some(4) => return "STANDALONE_SIDECAR_SIGNAL_ILLEGAL_INSTRUCTION".into(),
+            Some(5) => return "STANDALONE_SIDECAR_SIGNAL_TRAP".into(),
             Some(6) => return "STANDALONE_SIDECAR_SIGNAL_ABORT".into(),
             Some(9) => return "STANDALONE_SIDECAR_SIGNAL_KILLED".into(),
             Some(10) => return "STANDALONE_SIDECAR_SIGNAL_BUS".into(),
@@ -1059,6 +1206,20 @@ fn history_request(request_id: &str, action: &str, batch_id: &str) -> Result<Val
     )
 }
 
+fn run_history_request(request_id: &str, recover_exports: Option<bool>, recover_batch_id: Option<String>) -> Result<Value, String> {
+    let mut request = private_request(request_id, "get_run_history", None, &[], None, None)?;
+    match (recover_exports, recover_batch_id) {
+        (None, None) => {},
+        (Some(true), Some(batch_id)) if batch_id.len() == 64 && batch_id.bytes()
+            .all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)) => {
+            request["recover_exports"] = json!(true);
+            request["recover_batch_id"] = json!(batch_id);
+        },
+        _ => return Err("STANDALONE_HISTORY_INVALID".to_string()),
+    }
+    Ok(request)
+}
+
 fn removal_request(request_id: &str, selection_index: u64) -> Result<Value, String> {
     if selection_index >= MAX_BATCH_FILES as u64 {
         return Err("STANDALONE_SELECTION_INVALID".to_string());
@@ -1079,6 +1240,7 @@ fn history_rpc(state: &DesktopState, action: &str, batch_id: &str) -> Result<Val
 
 fn rpc_duration(action: &str) -> Duration {
     Duration::from_secs(if matches!(action, "admit_selected_sources" | "preview_document_export" | "export_approved_documents" |
+        "abandon_document_export" |
         "resolve_document_export" | "resolve_document_identity_overview" | "get_document_reviews" | "get_document_review_history_summary" |
         "get_run_history" | "get_review_session" | "resolve_current_results" | "resolve_local_ledger") { 300 }
         else if matches!(action, "get_public_state" | "get_ui_context") { 120 }
@@ -1645,9 +1807,14 @@ async fn get_public_state(state: State<'_, DesktopState>) -> Result<Value, Strin
 async fn get_ui_context(state: State<'_, DesktopState>) -> Result<Value, String> {
     blocking_rpc(state.inner().capture_connection(), "get_ui_context").await
 }
-#[tauri::command]
-async fn get_run_history(state: State<'_, DesktopState>) -> Result<Value, String> {
-    blocking_rpc(state.inner().capture_connection(), "get_run_history").await
+#[tauri::command(rename_all = "camelCase")]
+async fn get_run_history(state: State<'_, DesktopState>, recover_exports: Option<bool>, recover_batch_id: Option<String>) -> Result<Value, String> {
+    let owned = state.inner().capture_connection();
+    tauri::async_runtime::spawn_blocking(move || {
+        let id = request_id();
+        let request = run_history_request(&id, recover_exports, recover_batch_id)?;
+        rpc_request(&owned, "get_run_history", &id, request)
+    }).await.map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())?
 }
 
 #[tauri::command]
@@ -2479,6 +2646,20 @@ mod tests {
     }
 
     #[test]
+    fn bundled_runtime_components_have_distinct_content_free_missing_codes() {
+        let absent = std::env::temp_dir().join(format!("datasecure-absent-runtime-{}", request_id()));
+        assert!(!absent.exists());
+        for (component, expected) in [
+            (RuntimeComponent::Core, "STANDALONE_BUNDLED_CORE_UNAVAILABLE"),
+            (RuntimeComponent::SidecarScript, "STANDALONE_BUNDLED_SIDECAR_UNAVAILABLE"),
+            (RuntimeComponent::NetworkDeny, "STANDALONE_BUNDLED_NETWORK_DENY_UNAVAILABLE"),
+        ] {
+            assert_eq!(required_runtime_component([absent.clone()], component), Err(component));
+            assert_eq!(component.diagnostic_code(), expected);
+        }
+    }
+
+    #[test]
     fn retirement_completion_gap_does_not_consume_recovery_generations() {
         use std::process::{Command, Stdio};
         #[cfg(windows)]
@@ -2596,6 +2777,26 @@ mod tests {
         }
         assert!(history_request(&id, "get_run_history", &batch).is_err());
         assert!(history_request(&id, "start_admitted_batch", &batch).is_err());
+    }
+
+    #[test]
+    fn run_history_display_is_read_only_unless_exact_batch_recovery_is_requested() {
+        let id = "1".repeat(32);
+        let batch = "a".repeat(64);
+        let display = run_history_request(&id, None, None).unwrap();
+        assert_eq!(display["action"], "get_run_history");
+        assert_eq!(display.as_object().unwrap().len(), 3);
+        let recovery = run_history_request(&id, Some(true), Some(batch.clone())).unwrap();
+        assert_eq!(recovery["recover_exports"], true);
+        assert_eq!(recovery["recover_batch_id"], batch);
+        assert_eq!(recovery.as_object().unwrap().len(), 5);
+        for (flag, target) in [
+            (Some(true), None), (Some(false), Some(batch.clone())),
+            (None, Some(batch.clone())), (Some(true), Some("A".repeat(64))),
+            (Some(true), Some("a".repeat(63))),
+        ] {
+            assert_eq!(run_history_request(&id, flag, target).unwrap_err(), "STANDALONE_HISTORY_INVALID");
+        }
     }
 
     #[test]
@@ -3150,6 +3351,7 @@ mod tests {
     fn admission_has_its_own_bounded_deadline_and_honest_transport_failure() {
         assert_eq!(rpc_duration("admit_selected_sources"), Duration::from_secs(300));
         assert_eq!(rpc_duration("preview_document_export"), Duration::from_secs(300));
+        assert_eq!(rpc_duration("abandon_document_export"), Duration::from_secs(300));
         assert_eq!(rpc_duration("get_document_review_history_summary"), Duration::from_secs(300));
         assert_eq!(rpc_duration("get_document_reviews"), Duration::from_secs(300));
         assert_eq!(rpc_duration("get_run_history"), Duration::from_secs(300));

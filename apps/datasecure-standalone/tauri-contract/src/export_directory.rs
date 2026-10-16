@@ -251,6 +251,17 @@ impl Directory {
         self.check()?;
         Ok(identity)
     }
+    /// Negative evidence only, through the held parent capability. A present
+    /// non-directory, link, or inaccessible child is never treated as absent.
+    pub(crate) fn child_absent(&self, name: &str) -> io::Result<bool> {
+        leaf(name)?; self.check()?;
+        let result = match platform::open_child(&self.inner, name) {
+            Ok(_) => false,
+            Err(e) if e.kind() == io::ErrorKind::NotFound => true,
+            Err(e) => return Err(e),
+        };
+        self.check()?; Ok(result)
+    }
     /// Recovery opens only the already-known child object. It does not adopt a
     /// same-looking pathname or grant permission to overwrite its contents.
     pub fn open_known_child(&self, name: &str, expected: Identity) -> io::Result<RecoveredDirectory<'_>> {

@@ -102,6 +102,15 @@ async function run() {
     fs.writeFileSync(path.join(target, 'extra.txt'), 'not authorized');
     context('resolve_document_export', { batch_id: f.batchId, operation_id: op });
     await assert.rejects(f.store.resolveExport(f.batchId, op), { code: 'AI_EXPORT_CONFLICT' });
+    if (mode === 'markdown-and-anonymize') {
+      const privateRoot = path.join(data, binding.private_name);
+      const completedDigest = JSON.parse(fs.readFileSync(path.join(data, 'document-reviews', f.batchId, `export-${op}.json`))).request_sha256;
+      fs.unlinkSync(path.join(privateRoot, `${op}-parents-binding.json`));
+      context('abandon_document_export', { batch_id: f.batchId, operation_id: op, digest: completedDigest });
+      await assert.rejects(f.store.abandonExport(f.batchId, op, completedDigest), { code: 'AI_EXPORT_ALREADY_COMPLETE' });
+      assert.equal(fs.existsSync(path.join(privateRoot, `${op}-parents-abandoned.json`)), false,
+        'a saved completion must never be relabelled after a damaged native binding');
+    }
     console.log(`ok ${mode}: actual bytes, lost receipt, later revocation, ACK, resolve and tamper rejection`);
   }
   const f = fixture('markdown-only', ++i), op = crypto.randomBytes(16).toString('hex');

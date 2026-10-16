@@ -137,14 +137,20 @@ jobs:
       - name: Build the native signed macOS application bundle
         working-directory: apps/datasecure-standalone/tauri-contract
         run: npx --no-install tauri build --bundles app
-      - name: Bind the signed Core bytes inside the app and re-sign the outer bundle
+      - name: Give only the hardened Node Core its required JIT entitlement, bind bytes and re-sign the app
         shell: bash
         run: |
           set -euo pipefail
           bundle="apps/datasecure-standalone/tauri-contract/target/release/bundle/macos/DataSecure Standalone.app"
+          core="$bundle/Contents/MacOS/datasecure-core"
+          entitlements="apps/datasecure-standalone/tauri-contract/macos-core-jit.entitlements.plist"
+          # Tauri's shared macOS entitlements setting would grant JIT to the
+          # UI executable as well. Re-sign only Node, before its signed-byte
+          # evidence and the outer seal are generated.
+          codesign --force --sign - --options runtime --entitlements "$entitlements" "$core"
           node scripts/finalize-standalone-macos-runtime-evidence.mjs \
             --target "${{ matrix.target }}" --app "$bundle"
-          codesign --force --sign - "$bundle"
+          codesign --force --sign - --options runtime "$bundle"
           codesign --verify --deep --strict --verbose=2 "$bundle"
       - name: Verify bundle contract, signature and native architectures
         shell: bash
@@ -188,6 +194,27 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$bundle/Contents/Info.plist")" = "13.5"
           codesign --verify --deep --strict --verbose=2 "$bundle"
           codesign -dv --verbose=4 "$bundle" 2>&1 | grep -q '^Signature=adhoc$'
+          # A valid signature alone does not prove that V8 can create MAP_JIT
+          # pages. Verify the final signed Core and keep the UI unentitled.
+          core_entitlements="$(mktemp "${RUNNER_TEMP}/datasecure-core-entitlements.XXXXXX")"
+          app_entitlements="$(mktemp "${RUNNER_TEMP}/datasecure-app-entitlements.XXXXXX")"
+          codesign -d --entitlements :- "$sidecar" > "$core_entitlements" 2>/dev/null
+          codesign -d --entitlements :- "$app" > "$app_entitlements" 2>/dev/null || true
+          python3 - "$core_entitlements" "$app_entitlements" <<'PY'
+          import plistlib, sys
+          with open(sys.argv[1], 'rb') as stream:
+              core = plistlib.load(stream)
+          assert core == {'com.apple.security.cs.allow-jit': True}, 'Core must have only allow-jit'
+          try:
+              with open(sys.argv[2], 'rb') as stream:
+                  app = plistlib.load(stream)
+          except (ValueError, plistlib.InvalidFileException):
+              app = {}
+          assert not app.get('com.apple.security.cs.allow-jit'), 'UI must not have JIT'
+          PY
+          codesign -dv --verbose=4 "$sidecar" 2>&1 | grep -q 'flags=.*runtime'
+          codesign -dv --verbose=4 "$app" 2>&1 | grep -q 'flags=.*runtime'
+          rm -- "$core_entitlements" "$app_entitlements"
           for executable in "$app" "$sidecar" "$conversion_node" "$supervisor"; do
             test -x "$executable"
             test -z "$(find "$executable" ! -perm -005 -print -quit)"

@@ -1,23 +1,26 @@
 # DataSecure Standalone auf macOS starten
 
-Anleitung für den macOS-Test-Pre-Release **3.2.0-rc161**.
-[RC161-ZIP und DMG für Intel und Apple Silicon](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc161)
+Anleitung für den macOS-Test-Pre-Release **3.2.0-rc162**.
+[RC162-ZIP und DMG für Intel und Apple Silicon](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc162)
 mit der jeweils passenden Prüfsumme verwenden. Das Testpaket ist ad-hoc-signiert,
 nicht mit Apple Developer ID signiert oder notarisiert. Native technische
 Runner-Prüfungen ersetzen keine Finder-/Gatekeeper-/VoiceOver-/Bedienabnahme.
 
-**Bekannter Mac-26.2/M2-Prüfstopp:** Ein Nutzer meldete bei DMG und ZIP eine
-sofort unterbrochene lokale Verbindung. RC160 ist auf diesem Zielhost daher
-**nicht als funktionsfähig abgenommen**; auch RC161 ist zunächst nur eine
-gezielte Neuprobe mit synthetischen Daten. RC161 protokolliert den frühen
-Core-Start genauer und begrenzt automatische Wiederholungen. Das Kopieren
+**Bekannter Mac-26.2/M2-Prüfstopp:** Der Core von RC161 endete auf diesem
+Zielhost bei ZIP und DMG 16-mal vor seiner Bereitschaft mit Signal 5
+(`SIGTRAP`). RC162 korrigiert eine konkrete Lücke der ad-hoc-Signierung:
+Nur der gehärtete Node-Core erhält jetzt das benötigte JIT-Entitlement.
+Ein Test auf genau dem betroffenen M2 steht noch aus; RC162 ist deshalb
+**nicht als dort funktionsfähig abgenommen**. Der neue Stand protokolliert
+zusätzlich zwei inhaltsfreie, einmalige Startproben, falls der Core wieder
+vor Ready mit `SIGTRAP` endet. Das Kopieren
 der App in den eigenen Nutzerordner verlangt normalerweise
 keine Administratorrechte. Eine gesperrte Terminal-App ist für die normalen
 Datei-/Ordnerbuttons keine Voraussetzung. Beide Aussagen sind keine
 Umgehungsempfehlung für Organisationsrichtlinien.
 
-Für die nächste gemeinsame M2-Probe das **RC161-Testpaket**, nicht das
-unveränderte RC160 verwenden. Im Fuß der Anwendung die kurze Build-ID und die
+Für die nächste gemeinsame M2-Probe das **RC162-Testpaket**, nicht das
+unveränderte RC161 verwenden. Im Fuß der Anwendung die kurze Build-ID und die
 tatsächlich laufende Architektur (ARM64 oder Intel) notieren.
 Nur eine Paketvariante in einem eigenen Testordner starten und zunächst
 synthetische Testdateien verwenden. Wenn schon die Verbindung fehlt,
@@ -26,13 +29,16 @@ vorhandene `sidecar-interactions*.jsonl` aus diesem Diagnoseordner
 weitergeben. Fehlt die zweite Art, ausdrücklich „fehlt“ melden; nicht auf
 einen fehlenden Crashbericht als Entwarnung schließen. Falls die App
 „automatische Verbindungsversuche angehalten“ meldet, nach Sicherung der
-Diagnose einmal „Verbindung und Laufstatus prüfen“ wählen. Keine erneute
+Diagnose einmal „Verbindung und Laufstatus prüfen“ wählen. Die Diagnose enthält
+beim frühen Trap die festen Phasen `core_probe_node` und gegebenenfalls
+`core_probe_preloader`; diese prüfen nur den gebündelten Core, nicht Dateien.
+Keine erneute
 Verarbeitung oder Exportaktion aus einem unbestätigten Status ableiten.
 Schlägt schon der Start des lokalen Core auf einem verwalteten Mac fehl,
 die IT um eine zeitpunktbezogene Prüfung der Ausführungsrichtlinien bitten;
 keine Gatekeeper- oder Endpoint-Schutzfunktion deaktivieren.
 
-## Verarbeitung und Prüfung in RC161
+## Verarbeitung und Prüfung in RC162
 
 1. Nach der Installation unter **Neue Verarbeitung** zuerst **Nur umwandeln**
    oder **Umwandeln und anonymisieren** wählen. Dateien/Ordner hinzufügen,
@@ -158,15 +164,15 @@ und [Tauri-Builds mit GitHub Actions](https://v2.tauri.app/distribute/pipelines/
 
 ## Passendes Paket
 
-- Intel-Mac: [RC161-ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc161/DataSecure-Standalone-3.2.0-rc161-macos-x64.zip)
-  oder [RC161-DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc161/DataSecure-Standalone-3.2.0-rc161-macos-x64.dmg),
+- Intel-Mac: [RC162-ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc162/DataSecure-Standalone-3.2.0-rc162-macos-x64.zip)
+  oder [RC162-DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc162/DataSecure-Standalone-3.2.0-rc162-macos-x64.dmg),
   jeweils mit gleichnamiger `.sha256` auf der Release-Seite.
 - Apple Silicon (M1 oder neuer):
-  [RC161-ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc161/DataSecure-Standalone-3.2.0-rc161-macos-arm64.zip)
-  oder [RC161-DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc161/DataSecure-Standalone-3.2.0-rc161-macos-arm64.dmg),
+  [RC162-ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc162/DataSecure-Standalone-3.2.0-rc162-macos-arm64.zip)
+  oder [RC162-DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc162/DataSecure-Standalone-3.2.0-rc162-macos-arm64.dmg),
   jeweils mit gleichnamiger `.sha256` auf der Release-Seite.
 - Historische RC140-ZIPs: Intel mindestens macOS 15, ARM mindestens macOS 14.
-- Aktueller RC161-Binärvertrag: macOS 13.5 für beide Architekturen.
+- Aktueller RC162-Binärvertrag: macOS 13.5 für beide Architekturen.
   Die Paketgates laufen auf macOS 15 (Intel) und macOS 26 (ARM);
   die Zielhost-Abnahme auf M2/macOS 26.2 und macOS 13.5 bleibt offen.
 
@@ -185,7 +191,7 @@ zum Beispiel für Apple Silicon:
 
 ```sh
 cd ~/Downloads
-shasum -a 256 -c DataSecure-Standalone-3.2.0-rc161-macos-arm64.zip.sha256
+shasum -a 256 -c DataSecure-Standalone-3.2.0-rc162-macos-arm64.zip.sha256
 ```
 
 Nur bei `OK` fortfahren. Den Versions- und Architekturnamen im Befehl an die
@@ -206,7 +212,7 @@ beide Pakete gleich:
 2. **Nur** `DataSecure Standalone.app` aus diesem Ordner nach **Programme**
    oder für die isolierte M2-Neuprobe in einen eigenen Benutzer-Testordner
    ziehen; die App nicht direkt aus dem ZIP oder Downloads starten und keine
-   ältere RC160-App damit überschreiben.
+   ältere RC161-App damit überschreiben.
 3. Die App einmal normal öffnen.
 4. Nur wenn macOS wegen des nicht identifizierten Entwicklers oder der fehlenden
    Notarisierung blockiert und die Quelle samt Prüfsumme verifiziert wurde:

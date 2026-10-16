@@ -60,6 +60,7 @@ impl Request {
     }
     fn journal_name(&self) -> String { format!("journal-{}", self.operation_id) }
     fn staging_name(&self) -> String { format!("staging-{}", self.operation_id) }
+    fn published_name(&self) -> String { format!("Export-{}", self.operation_id) }
     fn record_name(&self, kind: &str) -> String { format!("{}-parents-{kind}.json", self.operation_id) }
 }
 #[derive(Eq, PartialEq, Serialize, Deserialize)]
@@ -68,6 +69,9 @@ struct Intent { schema: String, request: Request }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Binding { schema: String, request: Request, journal: ObjectId, staging: ObjectId }
+#[derive(Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct Abandoned { schema: String, request: Request }
 
 fn read<T: for<'de> Deserialize<'de>>(root: &Directory, name: &str) -> io::Result<Option<T>> {
     match root.read_bounded(name, LIMIT) {
@@ -109,6 +113,12 @@ impl<'a> Workspace<'a> {
         let intent = Intent { schema: "datasecure-native-export-parent-intent/1".into(), request: request.clone() };
         let previous = read::<Intent>(root, &request.record_name("intent"))?;
         let binding = read::<Binding>(root, &request.record_name("binding"))?;
+        let abandoned = read::<Abandoned>(root, &request.record_name("abandoned"))?;
+        if let Some(saved) = abandoned {
+            if saved != (Abandoned { schema: "datasecure-native-export-parent-abandoned/1".into(), request: request.clone() }) ||
+                previous.as_ref() != Some(&intent) || binding.is_some() { return Err(conflict()); }
+            return Err(error("AI_EXPORT_ABANDONED"));
+        }
         if previous.as_ref().is_some_and(|saved| saved != &intent) || previous.is_none() && binding.is_some() {
             return Err(conflict());
         }
@@ -138,6 +148,37 @@ impl<'a> Workspace<'a> {
         root.inspect_child(&request.journal_name(), journal.identity())?;
         root.inspect_child(&request.staging_name(), staging.identity())?;
         Ok(Self { root, target, request, journal, staging })
+    }
+    /// A crash before the parent binding cannot have reached a transaction or
+    /// publication through this broker. Allow only the exact saved intent to
+    /// be abandoned; retain orphan children, and permanently refuse any later
+    /// attempt to bind/publish the same operation. All ambiguity stays blocked.
+    pub fn abandon_unbound(root: &Directory, target: &Directory, request: &Request,
+        guard: &NativeGuard) -> io::Result<bool> {
+        request.validate()?;
+        if request.private_root != root.identity().into() || request.target != target.identity().into() { return Err(conflict()); }
+        root.verify_controlled()?;
+        guard.checkpoint().map_err(|_| error("STANDALONE_CLOSING"))?;
+        let _ownership = root.lock_control()?;
+        let intent = Intent { schema: "datasecure-native-export-parent-intent/1".into(), request: request.clone() };
+        let previous = read::<Intent>(root, &request.record_name("intent"))?;
+        let binding = read::<Binding>(root, &request.record_name("binding"))?;
+        let abandoned = read::<Abandoned>(root, &request.record_name("abandoned"))?;
+        if previous.as_ref().is_some_and(|saved| saved != &intent) || previous.is_none() && binding.is_some() ||
+            abandoned.is_some() && (previous.is_none() || binding.is_some()) { return Err(conflict()); }
+        if previous.is_none() || binding.is_some() { return Ok(false); }
+        // An existing public child could mean a lost publication after a
+        // damaged binding. Do not infer its ownership or touch it.
+        if !target.child_absent(&request.published_name()).map_err(|_| error("AI_EXPORT_UNCERTAIN"))? {
+            return Err(error("AI_EXPORT_UNCERTAIN"));
+        }
+        let marker = Abandoned { schema: "datasecure-native-export-parent-abandoned/1".into(), request: request.clone() };
+        if abandoned.as_ref().is_some_and(|saved| saved != &marker) { return Err(conflict()); }
+        put(root, &request.record_name("abandoned"), &marker, guard)?;
+        if !target.child_absent(&request.published_name()).map_err(|_| error("AI_EXPORT_UNCERTAIN"))? {
+            return Err(error("AI_EXPORT_UNCERTAIN"));
+        }
+        Ok(true)
     }
     pub fn transaction<'b>(&'b self, guard: &'b NativeGuard) -> io::Result<Transaction<'b>> {
         self.root.verify_controlled()?;
@@ -217,6 +258,49 @@ mod tests {
             else { assert_eq!(resumed.err().unwrap().to_string(), "AI_EXPORT_UNCERTAIN", "{cut}"); }
             assert_eq!(fs::read_dir(f.path.join("public")).unwrap().count(), 0);
         }
+    }
+    #[test]
+    fn exact_pre_binding_intent_can_be_abandoned_without_adopting_orphan_children() {
+        for cut in ["intent", "journal", "staging"] {
+            let f = Fixture::new(); let (r, t) = (f.open("private"), f.open("public"));
+            let request = f.request(&r, &t); let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
+            assert!(Workspace::open_checkpoints(&r, &t, request.clone(), &guard,
+                |phase| if phase == cut { Err(error("INJECTED_SETUP_FAILURE")) } else { Ok(()) }).is_err());
+            let journal_exists = f.path.join("private").join(request.journal_name()).exists();
+            let staging_exists = f.path.join("private").join(request.staging_name()).exists();
+            drop(r); drop(t);
+            let (r, t) = (f.open("private"), f.open("public"));
+            assert!(Workspace::abandon_unbound(&r, &t, &request, &guard).unwrap());
+            assert!(Workspace::abandon_unbound(&r, &t, &request, &guard).unwrap(), "idempotent {cut}");
+            assert_eq!(Workspace::open(&r, &t, request.clone(), &guard).err().unwrap().to_string(), "AI_EXPORT_ABANDONED");
+            assert_eq!(f.path.join("private").join(request.journal_name()).exists(), journal_exists);
+            assert_eq!(f.path.join("private").join(request.staging_name()).exists(), staging_exists);
+            assert_eq!(fs::read_dir(f.path.join("public")).unwrap().count(), 0);
+        }
+    }
+    #[test]
+    fn pre_binding_abandon_refuses_any_public_child_or_changed_request() {
+        let f = Fixture::new(); let (r, t) = (f.open("private"), f.open("public"));
+        let request = f.request(&r, &t); let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
+        assert!(Workspace::open_checkpoints(&r, &t, request.clone(), &guard,
+            |phase| if phase == "intent" { Err(error("INJECTED_SETUP_FAILURE")) } else { Ok(()) }).is_err());
+        let mut changed = request.clone(); changed.request_sha256 = "d".repeat(64);
+        assert_eq!(Workspace::abandon_unbound(&r, &t, &changed, &guard).unwrap_err().to_string(), "AI_EXPORT_CONFLICT");
+        fs::create_dir(f.path.join("public").join(request.published_name())).unwrap();
+        assert_eq!(Workspace::abandon_unbound(&r, &t, &request, &guard).unwrap_err().to_string(), "AI_EXPORT_UNCERTAIN");
+        assert!(!f.path.join("private").join(request.record_name("abandoned")).exists());
+    }
+    #[test]
+    fn lost_binding_after_publication_cannot_be_relabelled_as_abandoned() {
+        let f = Fixture::new(); let (r, t) = (f.open("private"), f.open("public"));
+        let request = f.request(&r, &t); let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
+        let workspace = Workspace::open(&r, &t, request.clone(), &guard).unwrap();
+        let tx = workspace.transaction(&guard).unwrap();
+        tx.write_body(0, b"hello").unwrap(); tx.prepare().unwrap(); assert_eq!(tx.commit().unwrap(), Status::Completed);
+        fs::remove_file(f.path.join("private").join(request.record_name("binding"))).unwrap();
+        assert_eq!(Workspace::abandon_unbound(&r, &t, &request, &guard).unwrap_err().to_string(), "AI_EXPORT_UNCERTAIN");
+        assert!(!f.path.join("private").join(request.record_name("abandoned")).exists());
+        assert_eq!(fs::read(f.path.join("public").join(request.published_name()).join("Dokument_01.md")).unwrap(), b"hello");
     }
     #[test]
     fn changed_scope_inventory_or_destination_cannot_reuse_a_parent_binding() {

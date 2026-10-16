@@ -792,6 +792,9 @@ function createDocumentReviewStore(options = {}) {
     }
     return result + text.slice(cursor);
   }
+  function reviewOriginal(value) {
+    return value.snapshot.transform_trace?.complete ? value.snapshot.transform_trace.canonical_input : value.snapshot.original_text;
+  }
   function metadata(value) { return { document_id: value.snapshot.document_id, name: value.snapshot.name,
     processing_mode: purpose(value.snapshot),
     revision: value.revision, output_sha256: value.output_sha256, approved: value.approved,
@@ -799,7 +802,7 @@ function createDocumentReviewStore(options = {}) {
     entity_review_available: Array.isArray(value.entities), entity_count: value.entities ? new Set(value.entities.map(row => row.entity_id)).size : 0,
     source_normalized: Boolean(value.snapshot.transform_trace?.complete),
     run_entity_review_available: purpose(value.snapshot) === ANONYMIZE && Boolean(runManifest(value.snapshot.batch_id)),
-    chunks: Math.max(1, Math.ceil(Math.max(value.snapshot.original_text.length, value.markdown.length) / CHUNK)) }; }
+    chunks: Math.max(1, Math.ceil(Math.max(reviewOriginal(value).length, value.markdown.length) / CHUNK)) }; }
   function listLocked(batchId) {
       const run = ensurePrivateDirectory(base(), batchId), documents = [], unavailable = [], events = journal(batchId);
       const manifest = runManifest(batchId), membership = publishedMembership(batchId, manifest);
@@ -873,7 +876,7 @@ function createDocumentReviewStore(options = {}) {
       if (revision !== value.revision) throw fail('DOCUMENT_REVIEW_STALE');
       if (!Number.isSafeInteger(index) || index < 0 || index >= meta.chunks) throw fail('DOCUMENT_REVIEW_INVALID');
       return { ok: true, local_ui_only: true, external_disclosure: false, ...meta, chunk_index: index,
-        original_text: textChunk(value.snapshot.transform_trace?.complete ? value.snapshot.transform_trace.canonical_input : value.snapshot.original_text, index),
+        original_text: textChunk(reviewOriginal(value), index),
         markdown: textChunk(value.markdown, index) };
     });
   }
@@ -985,10 +988,10 @@ function createDocumentReviewStore(options = {}) {
         local_ui_only: true, external_disclosure: false };
     });
   }
-  function saveIdentityOverview(batchId, selection) {
+  function saveIdentityOverview(batchId, selection, events) {
     const builder = createConfidentialOverview(batchId);
     for (const row of selection) {
-      const value = current(batchId, row.document_id);
+      const value = current(batchId, row.document_id, events);
       if (purpose(value.snapshot) !== ANONYMIZE) throw fail('DOCUMENT_ENTITY_UNAVAILABLE');
       if (value.revision !== row.revision || value.output_sha256 !== row.output_sha256) throw fail('DOCUMENT_REVIEW_STALE');
       builder.add({ document_id: row.document_id, name: value.snapshot.name, revision: value.revision,
@@ -1119,12 +1122,11 @@ function createDocumentReviewStore(options = {}) {
   }
   const isNativeOperation = op => op.schema === 'datasecure-document-export/5' ||
     ['datasecure-document-export/6', 'datasecure-document-export/7'].includes(op.schema) && Object.hasOwn(op, 'native_export');
-  function selectedFilePlan(batchId, selection, { rawPreview = false } = {}) {
+  function selectedFilePlan(batchId, selection, { rawPreview = false, events = journal(batchId) } = {}) {
     const sources = []; let mode, total = 0;
     // Validate the committed decision chain once for the whole selection.
     // Re-reading it in current() for every document makes a large approved
     // run quadratic and can outlive the desktop IPC deadline before preview.
-    const events = journal(batchId);
     // Retain metadata only. Preview must not materialize 200 document bodies,
     // traces and original texts before reaching the aggregate export budget.
     for (const row of selection) {
@@ -1273,8 +1275,8 @@ function createDocumentReviewStore(options = {}) {
         }
       }
       if (acknowledge) throw fail('AI_EXPORT_INCOMPLETE');
-      const plan = op ? { mode: op.processing_mode, files: op.files } : selectedFilePlan(batchId, selection);
       const events = journal(batchId);
+      const plan = op ? { mode: op.processing_mode, files: op.files } : selectedFilePlan(batchId, selection, { events });
       let mode, total = 0; const nativeFiles = [];
       for (const [index, row] of selection.entries()) {
         const value = current(batchId, row.document_id, events);
@@ -1292,7 +1294,7 @@ function createDocumentReviewStore(options = {}) {
         const binding = options.nativeBinding ? options.nativeBinding() : readConfiguredNativeExportBinding();
         if (!validNativeExportBinding(binding)) throw fail('AI_EXPORT_CONFIGURATION_REQUIRED');
         const inspected = inspectRoot(binding.root);
-        const identityBinding = mode === ANONYMIZE ? saveIdentityOverview(batchId, selection) : null;
+        const identityBinding = mode === ANONYMIZE ? saveIdentityOverview(batchId, selection, events) : null;
         const native = { binding, files: nativeFiles };
         const contentDigest = operationContentDigest(batchId);
         op = { schema: contentDigest ? 'datasecure-document-export/7' : mode === MARKDOWN ? 'datasecure-document-export/6' : 'datasecure-document-export/5', batch_id: batchId, operation_id: operationId,
@@ -1326,6 +1328,10 @@ function createDocumentReviewStore(options = {}) {
       if (!valid(operationId, 32) || !valid(digest, 64)) throw fail('AI_EXPORT_INVALID');
       const run = ensurePrivateDirectory(base(), batchId), op = readOperation(run, operationId);
       if (op.request_sha256 !== digest) throw fail('AI_EXPORT_CONFLICT');
+      // Do not create a native abandonment marker before checking the sidecar's
+      // own durable completion. A damaged parent binding must not relabel an
+      // already recorded copy as an unstarted operation.
+      if (fs.existsSync(path.join(run, `export-${operationId}-complete.json`))) throw fail('AI_EXPORT_ALREADY_COMPLETE');
       if (await nativeCall(op, 'abandon') !== 'abandoned') throw fail('AI_EXPORT_UNCERTAIN');
       if (fs.existsSync(path.join(run, `export-${operationId}-complete.json`))) throw fail('AI_EXPORT_CONFLICT');
       const abandonedFile = path.join(run, `export-${operationId}-abandoned.json`);
@@ -1412,10 +1418,10 @@ function createDocumentReviewStore(options = {}) {
         if (totalBytes > 500 * 1024 * 1024) throw fail('DOCUMENT_REVIEW_LIMIT');
       }
       if (!op) {
-        files = selectedFilePlan(batchId, selection).files;
+        files = selectedFilePlan(batchId, selection, { events }).files;
         if (exportRecords(run).pending.length >= 16) throw fail('DOCUMENT_REVIEW_LIMIT');
         const root = inspectRoot(options.resultRoot ? options.resultRoot() : readConfiguredResultRoot());
-        const identityBinding = mode === ANONYMIZE ? saveIdentityOverview(batchId, selection) : null;
+        const identityBinding = mode === ANONYMIZE ? saveIdentityOverview(batchId, selection, events) : null;
         const contentDigest = operationContentDigest(batchId);
         requestHash = operationDigest(batchId, operationId, mode, selection, identityBinding, undefined, mode === MARKDOWN || contentDigest ? files : undefined, contentDigest);
         op = { schema: contentDigest ? 'datasecure-document-export/7' : mode === MARKDOWN ? 'datasecure-document-export/6' : 'datasecure-document-export/4', batch_id: batchId, operation_id: operationId, request_sha256: requestHash,

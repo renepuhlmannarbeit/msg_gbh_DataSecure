@@ -21,6 +21,16 @@ test('pause request explains the exact file boundary', () => {
 for (const state of ['paused', 'stopped', 'failed', 'blocked', 'completed_without_results', 'export_pending', 'export_abandoned']) test(`${state} never completes future phases`, () => {
   assert.equal(processor({ state }).stages.filter(row => row.status === 'done').length, 0);
 });
+test('terminal run without results is complete, but has no approval or export', () => {
+  const result = processor({ state: 'completed_without_results', selected_count: 2, completed_count: 2,
+    result_count: 0, failed_count: 2 });
+  assert.equal(result.phase, 'completed_without_results');
+  assert.match(result.heading, /beendet ohne Ergebnisdateien/u);
+  assert.match(result.next, /nichts freizugeben oder zu exportieren/u);
+  assert.doesNotMatch(result.next, /noch nicht abgeschlossen/u);
+  assert.equal(result.stages[0].status, 'warning');
+  assert.equal(result.stages[2].status, 'pending');
+});
 test('abandoned visible export remains explicitly incomplete', () => {
   const result = processor({ state: 'export_abandoned', completed_count: 3 });
   assert.equal(result.phase, 'delivery_abandoned');

@@ -1,6 +1,144 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 16.10.2026 · Produktstand 3.2.0-rc161 · veröffentlicht Standalone RC161 (Mac- und Windows-Test-Pre-Release), Linux RC159 / Cowork RC151 · Teilkopie-/Dauerblockadefall und menschliche Zielhost-Abnahme offen
+Stand: 16.10.2026 · Produktstand 3.2.0-rc162 · veröffentlicht Standalone RC161 (Mac- und Windows-Test-Pre-Release), Linux RC159 / Cowork RC151 · Teilkopie-/Dauerblockadefall und menschliche Zielhost-Abnahme offen
+
+**P0 – M2/macOS 26.2: Core-Absturz vor Ready (RC161 ZIP und DMG):**
+Desktop-Diagnosen belegen 16 erfolgreiche Prozessstarts mit anschließendem
+Signal 5 innerhalb von ungefähr 35–75 ms; kein Sidecar-Ready. Die
+Datei-/Ordnerauswahl ist dadurch gesperrt. Spätere lokale Existenzprüfungen
+beheben das nicht. Prozess-ID, Bootstrap-Dauer, macOS-Version und nur die
+An-/Abwesenheit des Quarantäne-Merkmals werden im unveröffentlichten
+Entwicklungsstand zusätzlich inhaltsfrei protokolliert.
+Der feste SIGTRAP-Code wird im UI erklärt; die automatische Wiederholung
+hält beim ersten solchen Fehler an. Offen: eindeutige Absturzursache,
+gestufter Core-Preflight ohne Dokumentzugriff, heruntergeladenes Paket nach Finder-Kopie auf
+dem M2 prüfen sowie Apple-konforme Signierung/Notarisierung für reguläre
+Verteilung. Keinen Mac-Stand als funktionsfähig ausgeben, bevor der Zielhost
+Core-Ready und Dateidialoge mit synthetischen Daten belegt.
+[Evidenz](../acceptance/RC161_M2_CORE_START_SIGTRAP_20261016.md).
+
+**P1 – Mehrperspektiven-Review nach RC161 (nur lokaler Quellstand):**
+Laufwechsel mit ungespeichertem Entwurf nach Verbindungsabbruch, Anzeige von
+`completed_without_results`, alte kanonische Textabschnitte, wiederholte
+Journal-Lesung beim Export und zu spät erkannte Ergebnisordner-Volumes sind
+korrigiert. Inhaltsfreie Startup-/Recovery-Zeitmessung ergänzt die Diagnose,
+ohne den sicherheitsrelevanten Capture vor Retention asynchron zu machen.
+[Reviewbeleg](../acceptance/RC161_LOCAL_MULTIDIMENSION_REVIEW_20261016.md).
+Offen: 115-/200-Dateien-Zeitprofil auf neuem Stand, kontrollierte langsame
+Volumes und Absturzpunkte bei 1/mittlerer/letzter Datei, bediente Windows-
+Probe, verwalteter M2-Finder-Weg und reguläre Apple-Codeplatzierung/
+Developer-ID-/Notarisierung. Quellsuite bestanden; ein neues Paketgate offen;
+kein neuer Pre-Release.
+
+**P1 – weitere lokale Rückmelde-/Diagnoserunde, nicht veröffentlicht:**
+Ausdrückliche Ergebnis-Nachholung liefert `available`, `pending`,
+`not_attempted` oder `failed` nur für den angeforderten Lauf; die Oberfläche
+erklärt den Unterschied, ohne eine weitere Kopie oder einen zweiten Lauf
+automatisch zu starten. Geöffnete Verlaufsdetails erscheinen nach einem
+Statuswechsel nicht mehr leer. Der KI-Exportdialog zeigt verstrichene
+Wartezeit, aber keinen erfundenen Kopierfortschritt. OCR-Doppelwerte haben
+für Tastatur-/Screenreader-Bedienung den jeweiligen Dokument-/Fundstellen-
+Kontext im Namen. Frühe Mac-Startlogs unterscheiden drei gebündelte
+Komponenten ohne Pfade. Vollständige lokale Standalone-Suite einschließlich
+Rust bestanden; `r6`-Paketinventar, isolierter synthetischer Paket-Smoke und
+nativer Windows-Start mit Core-/IPC-Bereitschaft bestanden. Das Archiv ist
+unter `dist/engineering-rc161-local-20261016-r6/` unveröffentlicht, SHA-256
+`7f2cde39b132a772737b029fc621ab81db4317483094b6aff19c67aae9916f57`.
+Ein bedienter 115-Dateien-Langexport und der echte M2-Test bleiben offen.
+Der M2-Ursprungsfehler ist nicht nachträglich bewiesen. Weder RC161 noch
+das ältere lokale `r5`-Archiv enthalten diese Korrekturrunde.
+
+**P1 – Exportverständlichkeit und Dateinamenwahl nach RC161 (lokaler Quellstand,
+nicht veröffentlicht):** Die bestätigte KI-Kopie führte bisher mit weiterhin
+angehakten Dateien zur selben Exportaktion zurück und konnte dadurch wie ein
+zweiter notwendiger Schritt wirken. Nach bestätigtem Beleg bleibt die
+Erfolgsmeldung sichtbar, die Auswahl wird aufgehoben und der Knopf heißt
+„Weitere KI-Kopie erstellen“; eine weitere Kopie erfordert neue ausdrückliche
+Auswahl. Die frühere Wahl zwischen neutralen
+Ergebnisdateinamen (Standard) und Originalname mit „-anonymisiert“ ist für
+*neue Anonymisierungsläufe* wieder sichtbar. Sie ändert keinen bestehenden
+Lauf und nicht die bewusst stets neutral benannte KI-Kopie. Während des
+Kopierens nennt die Oberfläche Anzahl und mögliche mehrminütige Dauer,
+ohne einen Dateifortschritt vorzutäuschen. Frontendtests grün; native
+Bedienprobe des neuen Standes offen. Zeitlich passendes lokales
+Sidecarprotokoll: Exportvorschau 8,9 s, Kopierantwort 158,1 s für den ersten
+gemeldeten 115-Dateien-Export; eine zweite, gesondert angeforderte Kopie
+dauerte 148,9 s. Während der Kopien erreichten keine Statusanfragen den
+Sidecar. Der Desktop hält den lokalen IPC-Kanal exklusiv; seine 120-s-
+Statusabfrage kann daher vor einer erfolgreichen Kopie als
+`STANDALONE_IPC_TIMEOUT` enden. Hintergrund-Polling wird im
+Dokumentprüfstand während lokaler Aktionen nun ausgesetzt; eine zuvor
+gestartete Statusantwort löst währenddessen keinen falschen Fehlerbanner
+aus. Phasenmessung und sichere Beschleunigung bleiben offen; ein neuer
+Kopierversuch ist nicht nötig.
+Ein erfolgreicher erneuter Statusabruf ersetzt im lokalen Quellstand außerdem
+einen überholten Verbindungs-/IPC-Fehlerhinweis durch die präzise Aussage,
+dass nur Verbindung und Laufstatus wieder erreichbar sind. Der vorherige
+Befehl wird nicht wiederholt und muss weiterhin anhand von Verlauf und
+gespeichertem Beleg abgeglichen werden. Andere fachliche Fehler bleiben
+sichtbar. Das ist in RC161 noch nicht enthalten.
+
+**P1 – lokaler Review-/Diagnosestand nach RC161, nicht veröffentlicht:**
+Eine Freigabe von Dokumentständen, die in der aktuellen Prüfsitzung nicht
+geöffnet wurden, verlangt nun eine zweite ausdrückliche Bestätigung mit
+Anzahl und Hinweis auf die eigene Sichtprüfung. Auswahl und Revision werden
+vor dem Speichern erneut abgeglichen; das ist kein Nachweis, dass ein Mensch
+den Text tatsächlich gelesen hat. Die KI-Exportvorschau nennt jetzt auch die
+Gesamtzahl der Quellen und die nicht verfügbaren Prüfstände samt OCR-/
+Datenschutzgründen. Historische Exportbelege behaupten erst nach dem
+gesonderten Öffnen eine aktuelle Ordnerverfügbarkeit. Ein aktiver Kopierdialog
+lässt sich nicht mehr durch „Schließen“ oder Esc verstecken. Der Sidecar
+protokolliert begrenzte, inhaltsfreie Checkpoints für native Staging-,
+Publish-, Reconcile- und ACK-Phasen. Die lange Kopierdauer ist damit erst in
+einem **neuen** Lauf lokalisierbar, nicht rückwirkend bewiesen. Die
+sicherheitsrelevanten fsync-/Identitätsprüfungen und die 120-s-Grenze für
+normale Statusabfragen bleiben unverändert. Frontend-Tests bestanden;
+native Bedien-/Dauermessung dieses Quellstandes und M2-Test stehen aus.
+Die komplette Quellsuite und ein isolierter Windows-Paket-Smoke sind grün;
+das unveröffentlichte Engineering-ZIP `engineering-rc161-local-20261016-r2`
+bestand zusätzlich den nativen App-/Workspace-/Core-/IPC-Start. Die
+interaktive Prüfung der neuen Bestätigungsoberfläche, ein 115-Dateien-
+Zeitprofil mit den neuen Phasenlogs und die M2-Zielhostprobe fehlen noch.
+Der Tauri-Build überwacht das außerhalb des Cargo-Pakets eingebettete
+Frontend nun ausdrücklich; zuvor konnte ein erneut gepacktes ZIP trotz
+UI-Quelländerung dieselben alten Binary-Bytes enthalten. Eine reine
+Frontend-Änderung führte danach nachweislich zu einem neuen Native-Binary.
+Der frische lokale Windows-Testkandidat `engineering-rc161-local-20261016-r5`
+bestand Paket-Inventar, nativen Workspace-/Review-/Core-/IPC-Start und
+den vollständigen isolierten synthetischen Paket-Smoke (beide OCR-Varianten,
+Anonymisierung, Freigabe, Export, Neustart und Verlauf). Die bediente
+Zielhost-/Langexportmessung bleibt ein separates Gate; ältere `r3`/`r4`-
+Archive sind kein aktueller UI-Stand.
+
+**P1 – KI-Export vor Elternbindung (lokaler Quellstand, nicht veröffentlicht):**
+Ein gespeicherter Export-Intent ohne private Elternbindung konnte bisher
+`AI_EXPORT_UNCERTAIN` melden, aber die ausdrückliche Aufgabe nicht mehr
+ausführen. Die native Aufgabe prüft nun unter dem privaten Kontroll-Lock die
+exakte Anfrage, das Fehlen der Bindung und des öffentlichen Exportordners;
+sie setzt einen dauerhaften Aufgegeben-Marker statt eine Teilkopie zu
+löschen. Ein gespeicherter JS-Abschluss, vorhandener Zielordner oder
+widersprüchliche Belege blockieren die Aufgabe. Native und gekoppelte
+Node/Rust-Tests grün. Das lokal gebaute Windows-ZIP bestand native
+App-/Core-/IPC-Start- und synthetische Paketfunktionstests; ein bedienter
+Windows-Abbruchtest und M2-Zielhostbeleg sind offen. Andere
+Teilkopie-/Verbindungsabbruchfälle bleiben gesonderte Gates.
+
+**P1 – OCR-Kontaktprüfung/Startzeit nach RC161 (lokaler Quellstand, nicht
+veröffentlicht):** Exakt gleiche OCR-Lesarten können einen getippten
+Korrekturvorschlag per ausdrücklichem Klick erhalten; jede Fundstelle bleibt
+einzeln offen, andere Typen, bereits bearbeitete Zeilen und Entscheidungen
+bleiben unberührt. Vor der Startup-Retention wird nur noch die nötige
+dauerhafte Verlaufs-/Exportbindung aufgenommen, nicht die gesamte UI-Liste
+projiziert. Die Anzeige bleibt bei 20 jüngsten Läufen und wird erst beim
+Öffnen von „Verlauf“ ohne Ergebnisdatei-Kopie geladen. Start und regelmäßiges Polling lösen keine Exportnachholung
+mehr aus; nur „Bereitstellung erneut prüfen“ versucht sie für den gewählten
+Lauf. Während dieser expliziten Prüfung pausieren Hintergrundstatus und
+erneute Verlaufsabfragen auf dem exklusiven IPC-Kanal. Echte Lazy-History
+erst nach Zielhost-Messung entscheiden; fünf Zeilen
+allein beschleunigen den Core-Start
+nicht. Gesamte lokale Standalone-Quellsuite, natives Windows-Startgate und
+synthetische Paketfunktionstests grün; Bedien-/Zeitmessung auf Windows und
+Mac für diesen neuen Stand noch offen.
 
 **P0 – RC161-Zielhostprobe:** Das [Test-Pre-Release RC161](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc161)
 ist aus `f96c9e2` nach grünen CI-, Security- und nativen ARM26-/Intel-Gates

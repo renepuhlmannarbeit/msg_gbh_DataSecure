@@ -4,8 +4,9 @@
 use std::{fs::File, io::{self, Write}, path::{Path, PathBuf}, sync::Mutex};
 
 const MAX_BYTES: u64 = 2 * 1024 * 1024;
+const MAX_SEGMENTS: u8 = 8;
 type Identity = (u64, u128);
-struct Sink { file: File, directory: platform::Directory, identity: Identity, bytes: u64 }
+struct Sink { file: File, directory: platform::Directory, identity: Identity, bytes: u64, segments: u8 }
 enum State { Initial, Ready(Sink), Disabled }
 static STATE: Mutex<State> = Mutex::new(State::Initial);
 fn unsafe_io() -> io::Error { io::Error::other("DIAGNOSTIC_IO_UNSAFE") }
@@ -24,7 +25,25 @@ fn create(directory: &Path) -> io::Result<Sink> {
     };
     let identity = platform::identity(&file)?;
     if file.metadata()?.len() != 0 { return Err(unsafe_io()); }
-    Ok(Sink { file, directory, identity, bytes: 0 })
+    Ok(Sink { file, directory, identity, bytes: 0, segments: 1 })
+}
+
+fn rotate(sink: &mut Sink) -> io::Result<()> {
+    if sink.segments >= MAX_SEGMENTS || platform::identity(&sink.file)? != sink.identity ||
+        sink.file.metadata()?.len() != sink.bytes { return Err(unsafe_io()); }
+    platform::check_directory(&sink.directory)?;
+    let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| unsafe_io())?.as_nanos();
+    let name = format!("desktop-interactions.{}.{nanos:032x}.{}.jsonl",
+        std::process::id(), sink.segments + 1);
+    let file = platform::create(&sink.directory, &name)?;
+    let identity = platform::identity(&file)?;
+    if file.metadata()?.len() != 0 { return Err(unsafe_io()); }
+    sink.file = file;
+    sink.identity = identity;
+    sink.bytes = 0;
+    sink.segments += 1;
+    Ok(())
 }
 
 pub fn append(directory: &Path, record: &serde_json::Value) {
@@ -35,8 +54,12 @@ pub fn append(directory: &Path, record: &serde_json::Value) {
     let State::Ready(sink) = &mut *state else { return };
     let line = format!("{record}\n");
     let result = (|| -> io::Result<()> {
+        if line.len() as u64 > MAX_BYTES { return Err(unsafe_io()); }
+        if sink.bytes.checked_add(line.len() as u64).ok_or_else(unsafe_io)? > MAX_BYTES {
+            rotate(sink)?;
+        }
         let total = sink.bytes.checked_add(line.len() as u64).ok_or_else(unsafe_io)?;
-        if total > MAX_BYTES || platform::identity(&sink.file)? != sink.identity ||
+        if platform::identity(&sink.file)? != sink.identity ||
             sink.file.metadata()?.len() != sink.bytes { return Err(unsafe_io()); }
         platform::check_directory(&sink.directory)?;
         sink.file.write_all(line.as_bytes())?;
@@ -236,6 +259,26 @@ mod platform {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn rotation_keeps_the_previous_segment_and_creates_a_distinct_file() {
+        let root = std::env::temp_dir().join(format!("datasecure-diagnostic-rotation-{}-{}",
+            std::process::id(), std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        std::fs::create_dir(&root).unwrap();
+        let mut sink = create(&root).unwrap();
+        sink.file.write_all(b"old\n").unwrap();
+        sink.bytes = 4;
+        rotate(&mut sink).unwrap();
+        assert_eq!(sink.segments, 2);
+        sink.file.write_all(b"new\n").unwrap();
+        assert_eq!(std::fs::read(root.join("desktop-interactions.jsonl")).unwrap(), b"old\n");
+        let entries: Vec<_> = std::fs::read_dir(&root).unwrap().map(|entry| entry.unwrap().path()).collect();
+        assert_eq!(entries.len(), 2);
+        assert!(entries.iter().any(|path| path != &root.join("desktop-interactions.jsonl") &&
+            std::fs::read(path).unwrap() == b"new\n"));
+        drop(sink);
+        for path in entries { std::fs::remove_file(path).unwrap(); }
+        std::fs::remove_dir(root).unwrap();
+    }
     #[test]
     fn fresh_nested_sink_writes_a_readable_first_record() {
         let base = std::env::temp_dir();

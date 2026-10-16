@@ -1,6 +1,6 @@
 # Release- und Distributionsvertrag
 
-Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc161 · Veröffentlichungsnachtrag: 16.10.2026
+Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc162 · Veröffentlichungsnachtrag: 16.10.2026
 
 ### RC161 – Standalone-Test-Pre-Release (macOS und Windows x64)
 

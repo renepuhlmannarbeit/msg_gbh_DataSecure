@@ -14,6 +14,7 @@ body.embedded{background:var(--c-surface)}body.embedded main{max-width:none;padd
 .matrix-detail{border-left:1px solid var(--c-border);border-top:0;padding:0 0 0 20px}
 button{white-space:nowrap}button:focus-visible,input:focus-visible,select:focus-visible,pre:focus-visible,.exact:focus-visible{outline-offset:2px}
 td button{white-space:normal}
+td .contact-copy-button{margin-top:7px;color:var(--c-primary);font-size:12px;line-height:1.35;white-space:normal}
 body.embedded .table-scroll{max-height:clamp(240px,48vh,580px)}
 body.embedded .privacy{display:none}
 .matrix-heading{display:flex;align-items:center;justify-content:space-between;gap:8px 20px;flex-wrap:wrap}#matrix-progress{display:none;font-size:12px;color:var(--c-muted);margin:0}body.embedded #matrix-progress{display:block}

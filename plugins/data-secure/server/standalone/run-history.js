@@ -30,19 +30,39 @@ function regularFile(file) {
 
 function createRunHistory(deps) {
   const nextExportRecovery = new Map();
-  function collect({ recoverExports = false } = {}) {
+  function captureDurableHistory() {
+    // Retention may retire the source journals during product bootstrap. Keep
+    // their compact summaries and the original completed-export bindings
+    // before then, without projecting the UI list, checking every identity
+    // or attempting a potentially long result export on the startup path.
+    const states = deps.readStates();
+    for (const state of states) {
+      try { recordStandaloneState(state); } catch { /* journal remains authoritative */ }
+    }
+    const exports = deps.readExports();
+    for (const record of exports) {
+      if (record.directory && !boundRun(record.export_id, record.run_directory)) {
+        try { recordStandaloneExport(record.target, { product_channel: 'standalone', complete: record.complete }, record.directory); }
+        catch { /* an unbound path cannot become an action */ }
+      }
+    }
+    return { journal_count: states.length, export_count: exports.length };
+  }
+  function collect({ recoverExports = false, recoverBatchId = null } = {}) {
+    // This fixed result describes only this explicit request. The visible
+    // export helper deliberately collapses most filesystem failures into a
+    // pending result; neither paths nor raw exception messages leave the core.
+    let recoveryAttempted = false;
+    let recoveryFailed = false;
     const states = deps.readStates();
     const current = new Map();
+    const summaries = new Map();
     for (const state of states) {
       const summary = summarizeState(state);
       if (!summary || !validSummary(summary)) continue;
       current.set(summary.batch_id, state);
+      summaries.set(summary.batch_id, summary);
       try { recordStandaloneState(state); } catch { /* journal remains authoritative */ }
-    }
-    const summaries = new Map();
-    for (const state of states) {
-      const summary = summarizeState(state);
-      if (summary && validSummary(summary)) summaries.set(summary.batch_id, summary);
     }
     for (const summary of readStandaloneSummaries()) {
       if (!summaries.has(summary.batch_id)) summaries.set(summary.batch_id, summary);
@@ -56,6 +76,7 @@ function createRunHistory(deps) {
       const now = Date.now();
       const available = new Set(deps.readExports().filter(row => row.complete === true || row.abandoned === true).map(row => row.export_id));
       for (const [batchId, state] of current) {
+        if (recoverBatchId && batchId !== recoverBatchId) continue;
         const summary = summaries.get(batchId);
         if (!summary?.complete || summary.result_count < 1 || available.has(summary.export_id) ||
             isMarkdownBatch(state) || Boolean(deps.liveExecutor?.(state)) ||
@@ -63,8 +84,9 @@ function createRunHistory(deps) {
         try { if (!contentOptionsForBatch(state)) continue; }
         catch { continue; }
         nextExportRecovery.set(batchId, now + 2000);
+        recoveryAttempted = true;
         try { deps.exportCompletedBatchResults(batchId); }
-        catch { /* no result is claimed available until its own export receipt verifies */ }
+        catch { recoveryFailed = true; /* no result is claimed available until its own export receipt verifies */ }
       }
     }
     const byExport = new Map([...summaries.values()].map((row) => [row.export_id, row]));
@@ -84,7 +106,7 @@ function createRunHistory(deps) {
       }
     }
     const resumable = new Set(deps.recoverableStates().filter((state) => state.product_channel === 'standalone').map((state) => state.token));
-    return [...summaries.values()].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at) || b.batch_id.localeCompare(a.batch_id))
+    const entries = [...summaries.values()].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at) || b.batch_id.localeCompare(a.batch_id))
       .slice(0, 20).map((summary) => {
         const state = current.get(summary.batch_id);
         const savedExport = exports.get(summary.export_id);
@@ -144,14 +166,32 @@ function createRunHistory(deps) {
           ...(identityWarning ? { identity_mapping_warning: identityWarning } : {}),
           resumable: canResume, _run: run };
       });
+    if (!recoverExports) return { entries };
+    const summary = summaries.get(recoverBatchId);
+    const receipt = summary && exports.get(summary.export_id);
+    // A completed receipt alone does not prove that its bound directory is
+    // still usable. Do not claim success if it was moved or removed later.
+    let available = false;
+    if (summary?.result_count > 0 && receipt?.complete === true) {
+      try { available = Boolean(inspectBoundRun(summary.export_id, receipt.run_directory).path); }
+      catch { /* an unverified location is never reported available */ }
+    }
+    const outcome = available ? 'available' : recoveryFailed ? 'failed' :
+      recoveryAttempted ? 'pending' : 'not_attempted';
+    return { entries, export_recovery: { batch_id: recoverBatchId, outcome } };
   }
-  function history({ recoverExports = true } = {}) {
+  // Display queries must not perform a potentially long result publication.
+  // Recovery is an explicit, separately identified user action.
+  function history({ recoverExports = false, recoverBatchId = null } = {}) {
+    if (recoverExports) validateBatchId(recoverBatchId);
+    const projected = collect({ recoverExports, recoverBatchId });
     return { ok: true, local_ui_only: true, external_disclosure: false,
-      entries: collect({ recoverExports }).map(({ _run, ...entry }) => entry) };
+      entries: projected.entries.map(({ _run, ...entry }) => entry),
+      ...(projected.export_recovery ? { export_recovery: projected.export_recovery } : {}) };
   }
   function find(batchId) {
     validateBatchId(batchId);
-    const entry = collect().find((row) => row.batch_id === batchId);
+    const entry = collect().entries.find((row) => row.batch_id === batchId);
     if (!entry) throw failure('STANDALONE_HISTORY_MISSING');
     return entry;
   }
@@ -266,7 +306,8 @@ function createRunHistory(deps) {
       omissions: state.items.filter(item => isOcrOmission(state, item))
         .map(item => ({ document_id: item.id, name: item.source_label || item.name, reason_code: item.error_code })) };
   }
-  return { history, find, resolveResults, resolveLedger, resolveIdentityMapping, failures, reviewTargets, feedback, documentFeedback };
+  return { captureDurableHistory, history, find, resolveResults, resolveLedger, resolveIdentityMapping,
+    failures, reviewTargets, feedback, documentFeedback };
 }
 
 module.exports = { createRunHistory, validateBatchId };

@@ -1,6 +1,162 @@
 # Entscheidungs-Traceability
 
-Stand: 16.10.2026 · 3.2.0-rc161 · veröffentlicht Standalone RC161 (Mac- und Windows-Test-Pre-Release), Linux RC159 / Cowork RC151
+Stand: 16.10.2026 · 3.2.0-rc162 · veröffentlicht Standalone RC161 (Mac- und Windows-Test-Pre-Release), Linux RC159 / Cowork RC151
+
+M2-Zielhostfehler RC161 → Die deduplizierten Desktop-Ereignisse zeigen
+`runtime_resolved` und `sidecar_spawned`, danach 16-mal Signal 5 vor
+`sidecar_entry`/Ready. Der aktuelle lokale `tauri-contract/src/main.rs`
+protokolliert zusätzlich pro gestartetem Core eine Prozess-ID und
+Bootstrap-Dauer sowie die kurze, numerische macOS-Version und nur die
+An-/Abwesenheit des Quarantäne-Merkmals; `SIGTRAP`
+erhält einen festen Diagnosecode. Das ist eine Diagnoseverbesserung, kein
+Startfix. `frontend/workspace.js` zeigt diesen Code verständlich und stoppt
+die automatische Wiederholung nach dem ersten Trap. Die volle
+Standalone-Quellsuite besteht, die Finder-/M2-Probe
+fehlt; ein weiterer Mac-Release bleibt daran gebunden.
+[Negativer Testbeleg](../acceptance/RC161_M2_CORE_START_SIGTRAP_20261016.md).
+
+Lokale Mehrperspektiven-Nachprüfung (unveröffentlicht) →
+`frontend/document-review.js` und `frontend/workspace.js` verhindern einen
+äußeren Laufwechsel, solange der alte Prüfstand noch einen ungespeicherten
+Entwurf hält; `workflow-presentation.js` behandelt
+`completed_without_results` als eigenen terminalen Zustand.
+`standalone-document-review-store.js` verwendet für alte Prüftexte dieselbe
+kanonische Quelle in Metadaten und Chunks und reicht eine einmal geprüfte
+Entscheidungskette innerhalb der bestehenden Exportsperre an Dateiplan,
+Identitätsübersicht und Kopie. `native_export_broker.rs` prüft das
+Ergebnis-Volume bei Konfiguration; `application-service.js`,
+`run-history.js` und `desktop-sidecar.js` erfassen nur feste,
+inhaltsfreie Startup-/Recovery-Zähler und Dauern. Gezielte Frontend-,
+History-, Sidecar-, Dokument- und Rust-Regressionen wurden ergänzt.
+[Review und offene Gates](../acceptance/RC161_LOCAL_MULTIDIMENSION_REVIEW_20261016.md).
+Eine vollständige Quellsuite, frisches natives Windows-Paket und ein
+bedienter Mac-Lauf sind davon strikt getrennte Belege.
+
+Lokale Nach-RC161-Runde (unveröffentlicht) →
+`standalone/run-history.js` liefert nur auf ausdrückliche Anfrage ein
+laufgebundenes, festes `export_recovery`-Ergebnis. `frontend/workspace.js`
+validiert und benennt dieses Ergebnis und lädt bereits geöffnete
+Verlaufsdetails nach einem geänderten Snapshot neu. `frontend/document-review.js`
+zeigt beim blockierenden Export ausschließlich verstrichene Wartezeit;
+Abschluss bleibt an Beleg und ACK gebunden. `frontend/review.js` versieht
+gleiche OCR-Kontaktlesarten mit individuellen Dokument-/Fundstellen-Namen;
+die Entscheidung bleibt je Vorkommen. `tauri-contract/src/main.rs` schreibt
+pfadfreie Diagnosecodes für Core, Sidecar-Skript und Netzwerk-Sperrmodul.
+Gezielte `test-standalone-history.js`, `test-standalone-workspace.js`,
+`test-standalone-document-review-frontend.js`,
+`test-standalone-review-frontend.js`, Browser-/Reflow- und Rust-Tests
+sowie `npm run test:standalone` bestanden. `r6`-Paketinventar und isolierter
+synthetischer Paket-Smoke bestanden; nativer Windows-Start bestätigte
+Workspace, Reviewfenster und Core-/IPC-Bereitschaft, aber keine
+Dokumententscheidung. Das unveröffentlichte Archiv hat SHA-256
+`7f2cde39b132a772737b029fc621ab81db4317483094b6aff19c67aae9916f57`.
+Ein bedienter langer Export und M2-Abnahme sind separate Gates; RC161 und
+das ältere lokale `r5` enthalten diese Änderungen nicht.
+
+Nach-RC161-Bedienkorrektur (unveröffentlicht) →
+`frontend/workspace.html/js` macht DS-091s bestehende Option
+`source-with-suffix` nur vor Start eines neuen Anonymisierungslaufs wieder
+wählbar; Markdown-only sendet keine Anonymisierungsbenennung.
+`frontend/document-review.js` belässt die KI-Kopie neutral, nennt beim
+Warten Anzahl und mögliche mehrminütige Dauer ohne erfundenen Fortschritt,
+meldet ihren Abschluss ausdrücklich und hebt nach bestätigtem Beleg nur die flüchtige
+Häkchenauswahl auf; der Knopf heißt danach „Weitere KI-Kopie erstellen“.
+Eine zweite Kopie braucht eine neue Auswahl und explizite
+Bestätigung; gespeicherte Freigaben und Exportbelege bleiben unverändert.
+`frontend/workspace.js::refresh` sendet während `documentGuide.busy` keine
+Hintergrund-Statusabfrage über den exklusiven IPC-Kanal und macht eine zuvor
+gestartete, während der Dokumentaktion scheiternde Statusabfrage nicht zum
+scheinbaren Exportfehler; danach laufen Statusabfragen weiter.
+Ein nachfolgend erfolgreicher `get_public_state` ersetzt nur einen zuvor
+gezeigten Verbindungs-/IPC-Fehlerhinweis durch einen Hinweis auf erneut
+erreichbaren Laufstatus und weiterhin nötigen Belegabgleich. Fachliche
+Fehler werden nicht gelöscht und keine Mutation wird erneut gesendet;
+`test-standalone-workspace.js` deckt beide Fälle ab.
+`test-standalone-workspace.js` und
+`test-standalone-document-review-frontend.js` prüfen die Übergaben und den
+Abschluss und das Polling. Die lokal protokollierten zwei Kopieraufrufe
+(158,1 s und 148,9 s) sind getrennte Exportaufträge, nicht die schnelle
+Beleg-ACK derselben Kopie. Die Laufzeit ist Beobachtung, kein nachgewiesener
+Engpass im Code; Phasenmessung und Zielhostprobe offen.
+
+Nach-RC161-Review-/Diagnoseergänzung (unveröffentlicht) →
+`frontend/document-review.js` bindet die gesonderte Sammelfreigabe
+nicht geöffneter Dokumentstände an die aktuelle Auswahl und Revision;
+die technische Prüfung wird nicht als menschliche Sichtung ausgegeben.
+Der aktive Exportdialog lässt sich während der Kopie nicht verstecken;
+Vorschau und historische Belegtexte unterscheiden Exportumfang und
+aktuelle Verfügbarkeit. `desktop-sidecar.js` schreibt nur begrenzte,
+inhaltsfreie Native-Export-Phasen und Dokumentzahlen. Die Werte isolieren
+bei einem künftigen langsamen Lauf Staging/Publish/ACK, beweisen aber
+keinen Grund für die schon beobachteten 158/149 Sekunden. Die 120-s-
+Statusfrist, exklusive IPC-Sperre und native Sicherheitsgrenzen bleiben
+unverändert. `test-standalone-document-review-frontend.js` prüft
+Bestätigung, Bindungswechsel, Umfang und Dialogsperre; native Langzeit-
+Bedienung bleibt offen.
+Der vollständige lokale Standalone-Quelltest (einschließlich 126 Rust-Tests)
+und `verify-standalone-package.mjs`/`test-standalone-package-smoke.mjs`
+gegen das separat gebaute Windows-Engineering-ZIP waren grün. Der native
+Windows-Starttest mit Archivhash, Workspace, Reviewfenster und Core-/IPC-
+Bereitschaft bestand; er traf keine Dokumententscheidung. ZIP-SHA-256:
+`d5cb0382b278e98de7a71def64802fc5dcea4ac0fed1748713d0f9242a302fba`.
+Keine M2- oder manuelle Langexport-Abnahme daraus ableiten.
+`tauri-contract/build.rs` meldet das sibling `../frontend` als Cargo-
+Änderungsquelle, weil `tauri.conf.json` dessen Dateien ins native Binary
+einbettet. `test-standalone-desktop-contract.js` prüft diese Verbindung;
+ein Frontend-only-Gegenversuch führte danach zu einem neuen Release-Binary
+(SHA-256 vorher
+`de3811c14fd741ed305f61ba592d44e10d08e3af0258de588f3c4c4f860a35b5`,
+nachher `9ec7b6abcf9129ea241b417d0e14adc0947a90265417b7baaca35e227fd453a9`).
+Das danach gebaute, unveröffentlichte Windows-Archiv `r5` hat SHA-256
+`ab4a341fe56545a4eb70e631e4b1d8448a0431161c940b65aab557c0f91f66db`;
+Paket-Inventar, nativer Workspace-/Review-/Core-/IPC-Start und isolierter
+synthetischer Paket-Smoke mit beiden OCR-Varianten, Anonymisierung,
+Freigabe, Export, Neustart und Verlauf bestanden.
+`r3`/`r4` sind wegen bytegleichen veralteten Frontends kein Beleg für
+die aktuelle Bedienoberfläche.
+`standalone-workspace-design-browser.mjs` prüfte außerdem die tatsächliche
+Frontend-Seite mit synthetischem IPC, WCAG-Audit und schmalem Reflow der
+Bestätigung; dies ist kein nativer Klickbeleg.
+
+Nach-RC161-Quellstand (unveröffentlicht) → `frontend/review.js` bietet nur
+bei OCR-Kontaktprüfung einen expliziten Vorschlagskopier-Schritt für exakt
+gleiche Lesarten und gleichen Kontakttyp. Keine Entscheidung wird kopiert;
+vorhandene Eingaben bleiben erhalten, Undo stellt alle Ziele zusammen
+zurück. `test-standalone-review-frontend.js` deckt diese Grenzen ab; der
+serverseitige `ocr-contact-review.js`-Vertrag bleibt unverändert.
+`standalone/run-history.js::captureDurableHistory` speichert vor Retention
+dieselben aktuellen Zusammenfassungen und Exportbindungen ohne UI-Projektion
+oder Exportnachholung; `application-service.js` nutzt sie nur im Standalone-
+Bootstrap. Die UI fordert `get_run_history` erst beim Öffnen von „Verlauf“
+an; normales `get_run_history` darf private Kurzbelege aktualisieren, aber
+keine Ergebnisdateien kopieren. Nur die ausdrückliche
+Aktion „Bereitstellung erneut prüfen“ übergibt `recover_exports=true` und
+die exakt gewählte Laufkennung an Rust, IPC und Sidecar; andere Läufe werden
+nicht nachgeholt. `test-standalone-history.js`, `test-standalone-workspace.js`
+und `test-standalone.js` prüfen die Sicherung, die reine Projektion und den
+getrennten, laufgebundenen Recovery-Schritt. Ein expliziter Nachholaufruf
+sperrt konkurrierende Hintergrundstatus-/Verlaufsabfragen bis zu seinem Ende;
+der Workspace-Test hält hierfür den IPC-Aufruf offen und prüft Doppelklick
+und Polling;
+gemeinsamer Plugin-Bootstrap und 20-Zeilen-Grenze bleiben unverändert. Die
+[drei lokalen Markdown-Läufe](../acceptance/RC161_WINDOWS_THREE_RUN_AUDIT_20261016.md)
+sind als Belegdatei in Anzahl, Bytelänge und SHA-256 geprüft, nicht als
+inhaltliche OCR- oder native Mac-Abnahme.
+
+Nach-RC161-Export-Recovery (unveröffentlicht) →
+`tauri-contract/src/native_export_workspace.rs::abandon_unbound` prüft unter
+dem privaten Kontroll-Lock den exakt gebundenen Intent, fehlende
+Elternbindung und fehlenden öffentlichen Exportnamen und schreibt erst dann
+einen dauerhaften Aufgegeben-Marker. `export_directory.rs::child_absent`
+interpretiert nur `NotFound` als negative Evidenz. `native_export_broker.rs`
+schaltet ausschließlich den expliziten `abandon`-Befehl vor dem bisher
+blockierenden `Workspace::open` frei. `standalone-document-review-store.js`
+verweigert ihn bei bereits gespeichertem Abschluss. Ein späterer Publish
+derselben Operation wird verweigert; keine private oder öffentliche Datei
+wird bei der Aufgabe gelöscht. Rust-Unit-/Broker-Gegenfälle und
+`test-standalone-native-export.js` prüfen die gekoppelte Grenze mit
+synthetischen Daten. [Abnahmegrenzen](../acceptance/RC161_LOCAL_EXPORT_RECOVERY_20261016.md):
+Teilkopien und Zielhost-Bedienung nicht als erledigt markieren.
 
 RC161-Mac-Testveröffentlichung → annotierter Tag `v3.2.0-rc161` löst auf
 `f96c9e246997e52bf37f21930e2d0a3f978d68b2`; [Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc161).

@@ -11,6 +11,7 @@ const config = JSON.parse(fs.readFileSync(path.join(root, 'tauri-contract/tauri.
 const macConfig = JSON.parse(fs.readFileSync(path.join(root, 'tauri-contract/tauri.macos.conf.json'), 'utf8'));
 const capability = JSON.parse(fs.readFileSync(path.join(root, 'tauri-contract/capabilities/main.json'), 'utf8'));
 const cargo = fs.readFileSync(path.join(root, 'tauri-contract/Cargo.toml'), 'utf8');
+const buildScript = fs.readFileSync(path.join(root, 'tauri-contract/build.rs'), 'utf8');
 const rust = fs.readFileSync(path.join(root, 'tauri-contract/src/main.rs'), 'utf8');
 const frontend = fs.readFileSync(path.join(root, 'frontend/app.js'), 'utf8');
 const sidecar = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/standalone/desktop-sidecar.js'), 'utf8');
@@ -47,6 +48,12 @@ test('desktop manifests, Rust package and artifact names use the product version
   assert.strictEqual(config.version, productVersion);
   assert.match(cargo, new RegExp(`^version = "${productVersion.replaceAll('.', '\\.') }"$`, 'mu'));
   for (const target of targets.targets) assert.ok(target.package_filename.includes(productVersion));
+});
+
+test('native rebuild watches the sibling frontend embedded by Tauri on Windows and macOS', () => {
+  assert.equal(config.build.frontendDist, '../frontend');
+  assert.match(buildScript, /cargo:rerun-if-changed=\.\.\/frontend/u);
+  assert.match(buildScript, /tauri_build::build\(\)/u);
 });
 
 test('actual private sidecar name failures carry only bounded closed source details', () => {
@@ -114,6 +121,21 @@ test('both macOS packages require 13.5 and native target-host evidence', () => {
   assert.strictEqual(macConfig.bundle.macOS.signingIdentity, '-',
     'certificate-free macOS pilots require an explicit ad-hoc signature');
   assert.deepStrictEqual(macConfig.bundle.targets, ['app']);
+});
+
+test('Mac trap diagnosis isolates Node and its preloader without a shell or document arguments', () => {
+  const start = rust.indexOf('fn macos_core_probe('), end = rust.indexOf('fn spawn_sidecar(', start);
+  assert.ok(start > 0 && end > start);
+  const probe = rust.slice(start, end);
+  assert.match(probe, /MACOS_CORE_PROBE_ATTEMPTED\.swap\(true/u);
+  assert.match(probe, /Command::new\(child_process_path\(executable\)\)/u);
+  assert.match(probe, /configure_core_environment\(&mut command, app\)/u);
+  assert.match(probe, /command\.arg\("--version"\)/u);
+  assert.match(probe, /--require=\.\.\/network-deny\.cjs/u);
+  assert.match(probe, /Stdio::null\(\)/u);
+  assert.match(probe, /STANDALONE_CORE_PROBE_SIGNAL_TRAP/u);
+  assert.doesNotMatch(probe, /(?:Command::new\([^)]*(?:bash|zsh|cmd\.exe|powershell)|source_path|document_text)/iu);
+  assert.match(rust, /if cause == "STANDALONE_SIDECAR_SIGNAL_TRAP" \{\s*macos_core_probe\(app, &executable, script_directory\)/u);
 });
 
 test('Linux Standalone has an explicit AppImage and glibc baseline contract', () => {
@@ -194,7 +216,7 @@ test('native review close is bound before visibility and never discovers a later
 
 test('recursive admission uses a separate bounded deadline and an honest content-free heartbeat', () => {
   const deadline = rust.slice(rust.indexOf('fn rpc_duration('), rust.indexOf('fn admission_transport_code('));
-  for (const action of ['admit_selected_sources', 'export_approved_documents', 'resolve_document_export',
+  for (const action of ['admit_selected_sources', 'export_approved_documents', 'resolve_document_export', 'abandon_document_export',
     'resolve_document_identity_overview', 'get_document_reviews', 'get_document_review_history_summary', 'get_run_history',
     'get_review_session', 'resolve_current_results', 'resolve_local_ledger']) {
     assert.ok(deadline.includes(`"${action}"`), `${action} needs a bounded export/recovery deadline`);
