@@ -1,8 +1,21 @@
 # Formale N3/N4-Abnahme mit Windows und macOS
 
-Stand: 11.10.2026 · Standalone RC159 · Cowork RC151
+Stand: 16.10.2026 · Standalone Windows/macOS RC162 · Linux RC159 · Cowork RC151
 
-**Aktueller Kandidat für vier Standalone-Zielplattformen:** [RC159](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc159)
+**Aktueller Windows-/Mac-Standalone-Kandidat:** Das
+[RC162-Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc162)
+bindet Windows x64 und beide Mac-Architekturen an den exakten Quellcommit
+`310925f59d76fddc955288eef3c3b0ef4297c232`. Windows-PKG-04/INT-13 bestand zwei bytegleiche
+Paketbauten und den Start aus dem fertigen ZIP mit frischem
+Profil. Beide Mac-ZIPs und beide DMGs bestanden native Signatur-, Paket- und
+Startgates. Linux-Standalone und Cowork behalten RC159 beziehungsweise RC151;
+ihre Pakete dürfen nicht als RC162 ausgegeben werden. Die reale Finder-Kopie
+auf dem betroffenen M2/macOS 26.2 sowie menschliche N3/N4-Abnahmen bleiben
+offen. Eine RC162-Kampagne trägt die exakten Paket-Hashes und diesen Commit
+in ein eigenes ausgefülltes Kampagnenmanifest ein; die leere Vorlage ist
+keine abgeschlossene Evidenz.
+
+**Bisheriger Kandidat für vier Standalone-Zielplattformen:** [RC159](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc159)
 bindet Quellcommit `7af2a9d0268864a01b954e0175cae9f5a3616fe8`.
 Native Paket-/Startgates einschließlich geladener v2- und Prüfseite mit
 erfolgreicher IPC, ZIPs und beide DMGs bestehen. Wiederholte ZIP-Paketierung
