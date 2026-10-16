@@ -61,7 +61,7 @@ fn macos_product_version() -> Option<&'static str> {
         let mut value = [0u8; 32];
         let mut size = value.len();
         let status = unsafe {
-            libc::sysctlbyname(b"kern.osproductversion\0".as_ptr().cast(),
+            libc::sysctlbyname(c"kern.osproductversion".as_ptr(),
                 value.as_mut_ptr().cast(), &mut size, std::ptr::null_mut(), 0)
         };
         if status != 0 || size == 0 || size > value.len() { return None; }
@@ -82,7 +82,7 @@ fn macos_quarantine_code(path: &Path) -> &'static str {
     };
     // Inspect presence only; the extended-attribute value can contain a
     // download origin and must never enter a product diagnostic.
-    let size = unsafe { libc::getxattr(path.as_ptr(), b"com.apple.quarantine\0".as_ptr().cast(),
+    let size = unsafe { libc::getxattr(path.as_ptr(), c"com.apple.quarantine".as_ptr(),
         std::ptr::null_mut(), 0, 0, 0) };
     if size >= 0 { return "STANDALONE_QUARANTINE_PRESENT"; }
     if std::io::Error::last_os_error().raw_os_error() == Some(libc::ENOATTR) {
