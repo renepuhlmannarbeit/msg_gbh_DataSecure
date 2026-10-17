@@ -248,7 +248,13 @@ testAsync('real Markdown and anonymization stop after the active file and resume
     const history = require(path.join(server, 'standalone/run-history')).createRunHistory({
       readStates: () => [], readExports: () => [], recoverableStates: () => [], liveExecutor: () => false });
     assert.deepEqual(history.failures(id), { ok: true, available: true, total: 1,
-      files: [{ name, reason_code: rejected.error_code }], local_ui_only: true, external_disclosure: false },
+      files: [{ name, reason_code: rejected.error_code }],
+      // This legacy /2 run has no bound extraction-coverage contract. Its
+      // retained failure name is proven, but zero known notices is not proof
+      // of complete, notice-free provenance. Markdown has no such projection.
+      ...(mode === 'markdown-and-anonymize' ? { content_notice_count: 0,
+        content_notice_breakdown_complete: false, content_notices: [] } : {}),
+      local_ui_only: true, external_disclosure: false },
       'the real history failure action keeps names after processing journal expiry');
     assert.equal(fs.readFileSync(full, 'utf8'), 'not an Office container');
   }
@@ -282,7 +288,10 @@ testAsync('real Markdown and anonymization stop after the active file and resume
       const history = require(path.join(server, 'standalone/run-history')).createRunHistory({
         readStates: () => [], readExports: () => [], recoverableStates: () => [], liveExecutor: () => false });
       assert.deepEqual(history.failures(id), { ok: true, available: true, total: 1,
-        files: [{ name, reason_code: state.items[0].error_code }], local_ui_only: true, external_disclosure: false });
+        files: [{ name, reason_code: state.items[0].error_code }],
+        ...(mode === 'markdown-and-anonymize' ? { content_notice_count: 0,
+          content_notice_breakdown_complete: false, content_notices: [] } : {}),
+        local_ui_only: true, external_disclosure: false });
       assert.equal(fs.existsSync(path.join(batch._test.batchRoot(), `${id}.json`)), recovery === 'recoverBatches');
       assert.equal(fs.readFileSync(full, 'utf8'), 'not an Office container');
     }

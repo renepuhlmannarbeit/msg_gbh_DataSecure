@@ -24,6 +24,23 @@ nicht gelöscht oder überschrieben. Kein Push und kein GitHub-Release.
 Die bisherigen tieferen Revalidierungen und realen Race-/Exportgegenproben
 stehen im [Post-RC162-Prüfbericht](POST_RC162_BATCH_IPC_FOLDER_REVIEW_20261017.md).
 
+Die integrierte Regression fand anschließend einen veralteten exakten
+Testvertrag in `test-standalone-pause.js`: Der Test erwartete bei alten
+Anonymisierungsläufen keine Hinweisprojektion. Die reale Antwort behält
+Dateiname und Fehlergrund und kennzeichnet die alte Extraktionsbasis korrekt
+als unbekannt. Eine instrumentierte echte Gateway-Reproduktion und ein
+unabhängiger Quellenreview bestätigten das. Die exakte Erwartung enthält
+jetzt zusätzlich die drei Hinweisfelder; der Namens-/Grundvergleich bleibt
+unverändert streng. Dafür wurde kein Produktionscode gelockert.
+
+Die erste kanonische Suite wird mit ihrem ursprünglichen Fehlerprotokoll
+aufbewahrt. Die korrigierte Datei und alle nachfolgenden kanonischen Dateien
+laufen erneut; die zusätzliche neue Fingerprint-Datei wird separat geprüft.
+Der Abschlussnachweis nennt diese segmentierte Abdeckung, nicht einen
+angeblich fehlerfreien ursprünglichen Gesamtlauf. Die verbleibenden nativen
+Bedienungstests übernimmt der Anwender ausdrücklich selbst; weitere
+Desktopautomation ist nach seinem Stopp nicht autorisiert.
+
 Die zusätzliche Paketierungsprüfung berücksichtigt die dokumentierte
 [Cargo-Änderungserkennung](https://doc.rust-lang.org/cargo/reference/build-scripts.html#change-detection):
 `rerun-if-changed` verwendet Dateizeitstempel, während `rustc-env` Metadaten
