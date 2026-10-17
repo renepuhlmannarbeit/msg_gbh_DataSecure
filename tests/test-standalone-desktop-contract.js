@@ -53,7 +53,15 @@ test('desktop manifests, Rust package and artifact names use the product version
 test('native rebuild watches the sibling frontend embedded by Tauri on Windows and macOS', () => {
   assert.equal(config.build.frontendDist, '../frontend');
   assert.match(buildScript, /cargo:rerun-if-changed=\.\.\/frontend/u);
+  assert.match(buildScript, /cargo:rerun-if-changed=Info\.plist/u);
   assert.match(buildScript, /tauri_build::build\(\)/u);
+});
+
+test('macOS bundle explains first access to the default Documents result folder without claiming permission', () => {
+  const info = fs.readFileSync(path.join(root, 'tauri-contract/Info.plist'), 'utf8');
+  assert.match(info, /<key>NSDocumentsFolderUsageDescription<\/key>/u);
+  assert.match(info, /DataSecure speichert lokale Ergebnisse/u);
+  assert.doesNotMatch(info, /<key>(CFBundleIdentifier|CFBundleVersion|CFBundleExecutable)<\/key>/u);
 });
 
 test('actual private sidecar name failures carry only bounded closed source details', () => {
@@ -136,6 +144,16 @@ test('Mac trap diagnosis isolates Node and its preloader without a shell or docu
   assert.match(probe, /STANDALONE_CORE_PROBE_SIGNAL_TRAP/u);
   assert.doesNotMatch(probe, /(?:Command::new\([^)]*(?:bash|zsh|cmd\.exe|powershell)|source_path|document_text)/iu);
   assert.match(rust, /if cause == "STANDALONE_SIDECAR_SIGNAL_TRAP" \{\s*macos_core_probe\(app, &executable, script_directory\)/u);
+});
+
+test('early Windows NTSTATUS exits retain only fixed, content-free diagnostics', () => {
+  assert.match(rust, /#\[cfg\(windows\)\]\s*if let Some\(code\) = status\.code\(\)/u);
+  for (const [value, name] of [
+    ['0xC0000005', 'ACCESS_VIOLATION'], ['0xC000001D', 'ILLEGAL_INSTRUCTION'],
+    ['0xC000007B', 'INVALID_IMAGE'], ['0xC0000135', 'DLL_MISSING'],
+    ['0xC0000142', 'DLL_INIT_FAILED']
+  ]) assert.match(rust, new RegExp(`${value} => Some\\("STANDALONE_SIDECAR_WINDOWS_${name}"\\)`, 'u'));
+  assert.match(rust, /if known_early_exit \{ cause \} else \{ code \}/u);
 });
 
 test('Linux Standalone has an explicit AppImage and glibc baseline contract', () => {
@@ -225,6 +243,8 @@ test('recursive admission uses a separate bounded deadline and an honest content
   assert.match(deadline, /"get_public_state" \| "get_ui_context"\) \{ 120 \}/u);
   assert.match(deadline, /else \{ 30 \}/u);
   assert.match(rust, /let lock_deadline = started \+ rpc_lock_duration\(action\)/u);
+  assert.match(deadline, /fn rpc_lock_duration\(action: &str\).*?Duration::from_secs\(5\)/su);
+  assert.match(rust, /fn rpc_lock_transport_code\(_action: &str, code: String\).*?"STANDALONE_IPC_BUSY"/su);
   assert.match(rust, /let bootstrap_deadline = Instant::now\(\) \+ rpc_bootstrap_duration\(\)/u);
   assert.match(rust, /let deadline = Instant::now\(\) \+ rpc_duration\(action\)/u);
   assert.ok(rust.indexOf('let deadline = Instant::now() + rpc_duration(action)') >
@@ -389,6 +409,27 @@ test('native drag-drop shares admission with pickers and keeps an explicit Start
   assert.match(html, /id="select-folder"/u);
   assert.match(html, /value="" selected/u, 'purpose is an explicit user choice, not a startup default');
   assert.doesNotMatch(frontend, /invoke\(['"](?:convert|convert_only|start_conversion)/u);
+});
+
+test('diagnostic bundles use a closed native save command independent of Core and renderer filesystem access', () => {
+  const workspace = fs.readFileSync(path.join(root, 'frontend/workspace.js'), 'utf8');
+  const bundle = fs.readFileSync(path.join(root, 'tauri-contract/src/diagnostic_bundle.rs'), 'utf8');
+  const directory = fs.readFileSync(path.join(root, 'tauri-contract/src/export_directory.rs'), 'utf8');
+  assert.ok(capability.permissions.includes('allow-save-diagnostic-bundle'));
+  const reviewCapability = JSON.parse(fs.readFileSync(path.join(root, 'tauri-contract/capabilities/review.json'), 'utf8'));
+  assert.ok(!reviewCapability.permissions.includes('allow-save-diagnostic-bundle'));
+  const command = rust.slice(rust.indexOf('async fn save_diagnostic_bundle('), rust.indexOf('\n#[tauri::command]', rust.indexOf('async fn save_diagnostic_bundle(')));
+  assert.match(command, /rfd::FileDialog::new\(\)[\s\S]*save_file\(\)/u);
+  assert.doesNotMatch(command.replace(/\/\/[^\n]*/gu, ''), /DesktopState|rpc\(|rpc_request|Command::new|configure_results/u);
+  assert.match(command, /diagnostic_bundle::save/u);
+  assert.match(bundle, /serde\(deny_unknown_fields\)/u);
+  assert.match(bundle, /Directory::open_existing\(parent, None\)/u);
+  assert.match(bundle, /directory\.write_new\(name, &bytes\)/u);
+  assert.match(bundle, /untrusted_logs_resanitized_not_authenticity_proof/u);
+  assert.match(directory, /Only diagnostics share WRITE/u);
+  const handler = workspace.slice(workspace.indexOf('async function saveDiagnosticBundle()'), workspace.indexOf("$('diagnostic-save').addEventListener"));
+  assert.match(handler, /invoke\('save_diagnostic_bundle'\)/u);
+  assert.doesNotMatch(handler.replace(/\/\/[^\n]*/gu, ''), /perform\(|setBusy\(|showError\(|feedback\(/u);
 });
 
 test('processing purpose crosses only the explicit desktop Start and cannot change on resume', () => {

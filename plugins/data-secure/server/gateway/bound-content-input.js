@@ -11,6 +11,50 @@ const invalid = () => Object.assign(new SafeError('Der interne Inhaltsanschluss 
 const CAPTURE = ['pseudonymRegistry', 'abortSignal', 'convertBuffer', 'timeoutMs', 'prepareOcrContacts', 'captureOcrInput', 'onOcrSourceCaptured'];
 const PUBLICATION = ['pseudonymRegistry', 'abortSignal', 'convertBuffer', 'timeoutMs', 'prepareOcrContacts', 'reviewText',
   'persistStandaloneIdentitySnapshot', 'beforePublish', 'afterPublish', 'onClaimed', 'onExtracted', 'onDetected'];
+function automaticallyRedactOcrContacts(input) {
+  require('../core/ocr-contact-review').validateContacts(input.contacts, input.original_text, input.source_type);
+  const unmappable = () => Object.assign(new SafeError('OCR-Kontaktbereiche konnten nicht eindeutig auf die lokale Textfassung abgebildet werden.'),
+    { code: 'OCR_CONTACT_REVIEW_INVALID' });
+  // Apply the entire validated corridor, including broken OCR spellings.
+  // This is actual redaction, never a forged confirm_contact answer.
+  const rawEdits = input.contacts.map(contact => {
+    const kind = contact.kind === 'email' ? 'EMAIL' : contact.kind === 'phone' ? 'PHONE' : 'CONTACT';
+    return { start: contact.start, end: contact.end,
+      original: input.original_text.slice(contact.start, contact.end), replacement: `[${kind}_REDACTED]`, kind };
+  });
+  const { applyEdits } = require('../privacy/transform-plan');
+  const { canonicalizeRenderedText } = require('../privacy/base');
+  const { CONTENT_PERSON_FIELD_POLICY: policy } = require('../core/person-field-policy');
+  const canonical = canonicalizeRenderedText(input.original_text, policy);
+  // Real OCR puts contact values inside literal Markdown code spans. Masking
+  // within those wrappers would turn generated placeholders into escaped
+  // source literals and break the independently checked prepared replay.
+  // Map the exact validated corridors through rendering before redaction.
+  // Plain markers avoid Markdown punctuation and are never detector input.
+  const reserved = /DataSecureOcrBoundary9[0-9]{5}End/gu;
+  if (input.original_text.match(reserved) || canonical.match(reserved)) throw unmappable();
+  const markers = rawEdits.map((_edit, index) => `DataSecureOcrBoundary${String(900000 + index)}End`);
+  const protectedText = applyEdits(input.original_text, rawEdits.map((edit, index) => ({ ...edit, replacement: markers[index] })));
+  const normalized = canonicalizeRenderedText(protectedText, policy), locations = [...normalized.matchAll(reserved)];
+  if (locations.length !== markers.length || locations.some((match, index) => match[0] !== markers[index])) throw unmappable();
+  let reconstructed = '', cursor = 0;
+  const edits = rawEdits.map((edit, index) => {
+    const location = locations[index];
+    reconstructed += normalized.slice(cursor, location.index);
+    const original = canonicalizeRenderedText(edit.original, policy), start = reconstructed.length;
+    if (!original) throw unmappable();
+    reconstructed += original; cursor = location.index + location[0].length;
+    return Object.freeze({ start, end: reconstructed.length, original, replacement: edit.replacement, kind: edit.kind });
+  });
+  reconstructed += normalized.slice(cursor);
+  // Whole-source equality proves the mapping, including repeated contacts.
+  // Context-dependent markup that cannot be reconstructed is never guessed.
+  if (reconstructed !== canonical) throw unmappable();
+  const text = applyEdits(canonical, edits);
+  if (text.length > RESOURCE_LIMITS.MAX_TEXT_CHARS) throw invalid();
+  return Object.freeze({ text, source_redaction: Object.freeze({ schema: 'datasecure-automatic-ocr-redaction/1',
+    original_text: input.original_text, edits: Object.freeze(edits) }) });
+}
 function checkedContentHooks(value, kind) {
   if (!['capture', 'publication'].includes(kind) || !value || typeof value !== 'object' || types.isProxy(value) ||
       ![Object.prototype, null].includes(Object.getPrototypeOf(value))) throw invalid();
@@ -43,11 +87,17 @@ async function extractBoundContentInput(context, hooks) {
   }), context.content_options, context.source_type);
   check();
   if (hooks.onExtracted) { await hooks.onExtracted(converted); check(); }
-  let extraction = converted.sourceExtraction;
+  let extraction = converted.sourceExtraction, sourceRedaction;
   if (converted.ocrContacts?.length) {
     const input = Object.freeze({ original_text: extraction.markdown, contacts: converted.ocrContacts, source_type: context.source_type });
-    if (hooks.onOcrSourceCaptured) { await hooks.onOcrSourceCaptured(input); check(); }
-    const corrected = hooks.prepareOcrContacts ? await hooks.prepareOcrContacts(input) : null;
+    let corrected;
+    if (context.review_policy === 'automatic-conservative') {
+      const masked = automaticallyRedactOcrContacts(input);
+      corrected = masked.text; sourceRedaction = masked.source_redaction;
+    } else {
+      if (hooks.onOcrSourceCaptured) { await hooks.onOcrSourceCaptured(input); check(); }
+      corrected = hooks.prepareOcrContacts ? await hooks.prepareOcrContacts(input) : null;
+    }
     check();
     if (corrected === null && hooks.captureOcrInput === true) return Object.freeze({ kind: 'ocr-contact', ocr_contact_input: input });
     if (corrected === null) throw Object.assign(new SafeError('OCR-Kontaktwerte benötigen eine lokale Bestätigung vor der Anonymisierung.'), { code: 'LOCAL_REVIEW_DEFERRED' });
@@ -57,6 +107,7 @@ async function extractBoundContentInput(context, hooks) {
       coverage: { status: reasons.length ? 'incomplete' : 'complete', reason_codes: reasons } }, RESOURCE_LIMITS.MAX_TEXT_CHARS);
   }
   return Object.freeze({ kind: 'source', extraction,
+    ...(sourceRedaction ? { source_redaction: sourceRedaction } : {}),
     ...(converted.privateDocumentMetadata ? { private_document_metadata: converted.privateDocumentMetadata } : {}) });
 }
 // An internal producer builds this small graph from already checked services.
@@ -71,4 +122,4 @@ function publicationHooksFromServices(value) {
   }
   return hooks;
 }
-module.exports = Object.freeze({ checkedContentHooks, extractBoundContentInput, publicationHooksFromServices });
+module.exports = Object.freeze({ checkedContentHooks, extractBoundContentInput, publicationHooksFromServices, automaticallyRedactOcrContacts });

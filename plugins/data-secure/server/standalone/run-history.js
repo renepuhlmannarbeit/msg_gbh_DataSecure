@@ -5,13 +5,16 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
+const { dataRoot } = require('../runtime');
+const { bindDirectory, assertDirectory } = require('../core/bound-file-io');
 const identityLedger = require('./identity-ledger');
 const { conversionFeedback, isOcrOmission, isAnonymizationOcrOmission, isAnonymizationPrivacyStop,
   hasContentNotice } = require('./conversion-feedback');
 const { contentOptionsForBatch } = require('../core/content-options');
 const { isMarkdownBatch } = require('../core/processing-mode');
 const { SCHEMA, failure, validateBatchId, historyProgress, validSummary, summarizeState,
-  readStandaloneSummaries, recordStandaloneState, recordStandaloneExport, boundRun, inspectBoundRun } = require('../gateway/standalone-history-store');
+  readStandaloneSummary, readStandaloneSummaries, readStandaloneContentNoticeSummary, recordStandaloneContentNoticeSummary,
+  recordStandaloneState, recordStandaloneExport, captureStandaloneExports, boundRun, inspectBoundRun } = require('../gateway/standalone-history-store');
 
 const MAPPING = 'DataSecure-Zuordnung.csv';
 function safeLocalLabel(name) {
@@ -27,9 +30,41 @@ function regularFile(file) {
   try { const stat = fs.lstatSync(file); return stat.isFile() && !stat.isSymbolicLink(); }
   catch { return false; }
 }
+function readSavedTargetSummary(batchId) {
+  const directory = path.join(dataRoot(), 'standalone-run-history'), file = path.join(directory, `${batchId}.json`);
+  try { fs.lstatSync(file); }
+  catch (error) {
+    if (error?.code === 'ENOENT') return null;
+    throw failure('STANDALONE_HISTORY_UNAVAILABLE');
+  }
+  try {
+    // The list reader validates this container through historyRoot(). Preserve
+    // that parent boundary without creating it during a targeted read.
+    const binding = bindDirectory(directory), summary = readStandaloneSummary(batchId);
+    if (!summary) throw failure('STANDALONE_HISTORY_UNAVAILABLE');
+    assertDirectory(binding);
+    return summary;
+  } catch { throw failure('STANDALONE_HISTORY_UNAVAILABLE'); }
+}
 
 function createRunHistory(deps) {
   const nextExportRecovery = new Map();
+  // Identifier relationships only, learned from the legacy list projection.
+  // Never cache a path, completion counter or permission from a previous read.
+  const legacyExportIds = new Map();
+  const exactReaders = typeof deps.readState === 'function' && typeof deps.readExport === 'function';
+  function readTargetState(batchId) {
+    validateBatchId(batchId);
+    if (typeof deps.readState === 'function') {
+      const state = deps.readState(batchId);
+      if (state && (state.token !== batchId || state.product_channel !== 'standalone'))
+        throw failure('STANDALONE_HISTORY_INVALID');
+      return state;
+    }
+    // Older injected adapters retain their existing contract. Production
+    // supplies the bound, read-only one-journal reader below.
+    return deps.readStates().find(state => state.token === batchId && state.product_channel === 'standalone');
+  }
   function captureDurableHistory() {
     // Retention may retire the source journals during product bootstrap. Keep
     // their compact summaries and the original completed-export bindings
@@ -37,34 +72,36 @@ function createRunHistory(deps) {
     // or attempting a potentially long result export on the startup path.
     const states = deps.readStates();
     for (const state of states) {
-      try { recordStandaloneState(state); } catch { /* journal remains authoritative */ }
+      try { recordStandaloneState(state, { reconstructContentNotices: false }); } catch { /* journal remains authoritative */ }
     }
-    const exports = deps.readExports();
-    for (const record of exports) {
-      if (record.directory && !boundRun(record.export_id, record.run_directory)) {
-        try { recordStandaloneExport(record.target, { product_channel: 'standalone', complete: record.complete }, record.directory); }
-        catch { /* an unbound path cannot become an action */ }
-      }
-    }
-    return { journal_count: states.length, export_count: exports.length };
+    const exports = captureStandaloneExports(() => deps.readExports(), { useIndex: deps.captureExportIndex === true });
+    return { journal_count: states.length, ...exports };
   }
-  function collect({ recoverExports = false, recoverBatchId = null } = {}) {
+  function collect({ recoverExports = false, recoverBatchId = null, targetBatchId = null } = {}) {
     // This fixed result describes only this explicit request. The visible
     // export helper deliberately collapses most filesystem failures into a
     // pending result; neither paths nor raw exception messages leave the core.
     let recoveryAttempted = false;
     let recoveryFailed = false;
-    const states = deps.readStates();
+    let recoveryExportSnapshot = null;
+    const targetState = targetBatchId ? readTargetState(targetBatchId) : null;
+    const states = targetBatchId ? (targetState ? [targetState] : []) : deps.readStates();
     const current = new Map();
     const summaries = new Map();
     for (const state of states) {
       const summary = summarizeState(state);
       if (!summary || !validSummary(summary)) continue;
+      // Persistence belongs to worker state writes and the pre-retention
+      // startup capture. A delayed list reader must not write its older
+      // snapshot over a newer worker completion.
       current.set(summary.batch_id, state);
       summaries.set(summary.batch_id, summary);
-      try { recordStandaloneState(state); } catch { /* journal remains authoritative */ }
     }
-    for (const summary of readStandaloneSummaries()) {
+    const savedSummary = targetBatchId && !current.has(targetBatchId) ? readSavedTargetSummary(targetBatchId) : null;
+    if (savedSummary && savedSummary.export_id !==
+        `re_${crypto.createHash('sha256').update(targetBatchId).digest('hex').slice(0, 32)}`)
+      throw failure('STANDALONE_HISTORY_INVALID');
+    for (const summary of targetBatchId ? (savedSummary ? [savedSummary] : []) : readStandaloneSummaries({ includeContentNotices: false })) {
       if (!summaries.has(summary.batch_id)) summaries.set(summary.batch_id, summary);
     }
     // A review worker can finish before its optional visible-export attempt
@@ -74,7 +111,8 @@ function createRunHistory(deps) {
     // persistently unavailable destination cannot block every UI poll.
     if (recoverExports && typeof deps.exportCompletedBatchResults === 'function') {
       const now = Date.now();
-      const available = new Set(deps.readExports().filter(row => row.complete === true || row.abandoned === true).map(row => row.export_id));
+      recoveryExportSnapshot = deps.readExports();
+      const available = new Set(recoveryExportSnapshot.filter(row => row.complete === true || row.abandoned === true).map(row => row.export_id));
       for (const [batchId, state] of current) {
         if (recoverBatchId && batchId !== recoverBatchId) continue;
         const summary = summaries.get(batchId);
@@ -91,23 +129,43 @@ function createRunHistory(deps) {
     }
     const byExport = new Map([...summaries.values()].map((row) => [row.export_id, row]));
     const exports = new Map();
-    for (const record of deps.readExports()) {
+    const targetExport = targetBatchId ? deps.readExport(targetBatchId,
+      { legacyExportId: legacyExportIds.get(targetBatchId) || null }) : null;
+    // Reuse only within this call and only if no export function was invoked.
+    // Even a throwing mutation may have made durable progress: read afresh.
+    const exportRows = targetBatchId ? (targetExport ? [targetExport] : []) :
+      recoveryExportSnapshot && !recoveryAttempted ? recoveryExportSnapshot : deps.readExports();
+    for (const record of exportRows) {
       exports.set(record.export_id, record);
       // Old exports may survive the owning journal. Their stable synthetic ID
       // cannot ever be used as a batch token; resume requires a current journal.
       if (!byExport.has(record.export_id)) {
-        const batchId = crypto.createHash('sha256').update(`standalone-history:${record.export_id}`).digest('hex');
+        const syntheticId = crypto.createHash('sha256').update(`standalone-history:${record.export_id}`).digest('hex');
+        const batchId = targetBatchId || syntheticId;
         const summary = { schema: SCHEMA, batch_id: batchId, ...record.summary, export_id: record.export_id };
-        if (validSummary(summary)) summaries.set(batchId, summary);
+        if (validSummary(summary)) {
+          summaries.set(batchId, summary);
+          if (!targetBatchId) legacyExportIds.set(syntheticId, record.export_id);
+        }
       }
-      if (record.directory && !boundRun(record.export_id, record.run_directory)) {
+      if (!targetBatchId && record.directory && !boundRun(record.export_id, record.run_directory)) {
         try { recordStandaloneExport(record.target, { product_channel: 'standalone', complete: record.complete }, record.directory); }
         catch { /* an unbound path cannot become an action */ }
       }
     }
-    const resumable = new Set(deps.recoverableStates().filter((state) => state.product_channel === 'standalone').map((state) => state.token));
-    const entries = [...summaries.values()].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at) || b.batch_id.localeCompare(a.batch_id))
-      .slice(0, 20).map((summary) => {
+    const selected = [...summaries.values()].sort((a, b) => Date.parse(b.created_at) - Date.parse(a.created_at) || b.batch_id.localeCompare(a.batch_id))
+      .slice(0, 20);
+    const recoveryCandidates = selected.filter(summary => !summary.complete && current.has(summary.batch_id));
+    const resumable = new Set();
+    if (recoveryCandidates.length) {
+      // Production has exact bound readers. Preserve the previous one-call
+      // contract for injected legacy adapters that may ignore a batchId filter.
+      const candidates = new Set(recoveryCandidates.map(summary => summary.batch_id));
+      const rows = exactReaders ? recoveryCandidates.flatMap(summary => deps.recoverableStates({ batchId: summary.batch_id }))
+        : deps.recoverableStates(targetBatchId ? { batchId: targetBatchId } : {});
+      for (const state of rows) if (state.product_channel === 'standalone' && candidates.has(state.token)) resumable.add(state.token);
+    }
+    const entries = selected.map((summary) => {
         const state = current.get(summary.batch_id);
         const savedExport = exports.get(summary.export_id);
         const location = summary.result_count === 0 || savedExport?.complete !== true ? { availability: 'not_created' }
@@ -139,6 +197,8 @@ function createRunHistory(deps) {
                   ? 'export_abandoned' : 'export_pending')
             : 'failed';
         const { schema, export_id, complete, ...fields } = summary;
+        if (summary.processing_mode === 'markdown-and-anonymize' && summary.complete)
+          Object.assign(fields, readStandaloneContentNoticeSummary(summary.batch_id, summary.result_count));
         const problems = state ? problemItems(state).length : summary.failed_count;
         const identityEligible = summary.result_count > 0 && status === 'results_available' &&
           summary.processing_mode !== 'markdown-only';
@@ -153,6 +213,9 @@ function createRunHistory(deps) {
         const privacyStops = summary.complete && Array.isArray(state?.items)
           ? state.items.filter(item => isAnonymizationPrivacyStop(state, item)).length : 0;
         return { ...fields, status, result_location: location.availability, results_available: Boolean(run), ledger_available: ledger,
+          // A live, matching journal can prove that zero OCR/privacy reasons
+          // really means zero. A compact summary after retention cannot.
+          failure_reason_breakdown_complete: Boolean(state && summary.complete && Array.isArray(state.items)),
           ...(['export_pending', 'export_abandoned'].includes(status) && savedExport ? { exported_count: savedExport.exported_count,
             export_pending_count: savedExport.pending_count } : {}),
           ...(feedback ? { conversion_feedback: feedback } : {}),
@@ -191,7 +254,7 @@ function createRunHistory(deps) {
   }
   function find(batchId) {
     validateBatchId(batchId);
-    const entry = collect().entries.find((row) => row.batch_id === batchId);
+    const entry = collect(exactReaders ? { targetBatchId: batchId } : {}).entries.find((row) => row.batch_id === batchId);
     if (!entry) throw failure('STANDALONE_HISTORY_MISSING');
     return entry;
   }
@@ -211,7 +274,7 @@ function createRunHistory(deps) {
     // The journal can expire while the human mapping intentionally remains.
     // While it still exists, re-materialize on access so a transient locked
     // document cannot leave a stale partial view after later releases.
-    const current = deps.readStates().find(state => state.product_channel === 'standalone' && state.token === batchId);
+    const current = readTargetState(batchId);
     if (current) {
       try { identityLedger.materialize(current); }
       catch { throw failure('STANDALONE_IDENTITY_MAPPING_INVALID'); }
@@ -232,8 +295,16 @@ function createRunHistory(deps) {
     // Names are read on demand, never from the content-free history summary
     // or diagnostic log. V2 intake rejections also have durable private metadata
     // and therefore survive expiry of the processing journal.
-    const state = deps.readStates().find(candidate => candidate.token === batchId &&
-      candidate.product_channel === 'standalone');
+    const state = readTargetState(batchId);
+    let contentNotices;
+    if (entry.processing_mode === 'markdown-and-anonymize') {
+      // Explicit on-demand metadata audit. Unlike the periodic history/status
+      // path, revalidate the immutable source coverage of every released basis.
+      contentNotices = require('./anonymization-notices').anonymizationContentNotices(batchId,
+        { state, expectedCount: entry.result_count });
+      try { recordStandaloneContentNoticeSummary(batchId, contentNotices, entry.result_count); }
+      catch { /* details remain usable even if the compact projection cannot be saved */ }
+    }
     if (!state) {
       let rejected = [];
       try {
@@ -250,6 +321,7 @@ function createRunHistory(deps) {
       // Never let an older summary counter erase that durable evidence.
       const total = Math.max(entry.failed_count, rejected.length);
       return { ok: true, available: rejected.length === total, total, files: rejected,
+        ...(contentNotices || {}),
         local_ui_only: true, external_disclosure: false };
     }
     const stopped = problemItems(state);
@@ -273,6 +345,7 @@ function createRunHistory(deps) {
     const pendingFiles = pending.slice(0, 200).map(item => ({ name: item.source_label || item.name }))
       .filter(item => safeLocalLabel(item.name));
     return { ok: true, available: true, total: stopped.length, files,
+      ...(contentNotices || {}),
       ...(feedback ? { conversion_feedback: feedback,
         content_notices: state.items.filter(hasContentNotice).map(item => ({ name: item.source_label || item.name,
           reason_codes: (item.reason_codes || []).filter(code => /^[A-Z][A-Z0-9_]{2,63}$/u.test(code)) }))
@@ -282,19 +355,18 @@ function createRunHistory(deps) {
   }
   function reviewTargets(batchId) {
     validateBatchId(batchId);
-    const state = deps.readStates().find(candidate => candidate.token === batchId &&
-      candidate.product_channel === 'standalone');
+    const state = readTargetState(batchId);
     if (!state) return [];
     return (state.items || []).filter(item => item.status === 'deferred_review')
       .slice(0, 200).map(item => item.source_label || item.name).filter(safeLocalLabel);
   }
   function feedback(batchId) {
     validateBatchId(batchId);
-    return conversionFeedback(deps.readStates().find(state => state.token === batchId && state.product_channel === 'standalone'));
+    return conversionFeedback(readTargetState(batchId));
   }
   function documentFeedback(batchId) {
     validateBatchId(batchId);
-    const state = deps.readStates().find(state => state.token === batchId && state.product_channel === 'standalone');
+    const state = readTargetState(batchId);
     const projected = conversionFeedback(state);
     if (!projected) return null;
     const notices = state.items.filter(hasContentNotice).map(item => ({ document_id: item.id,
@@ -306,8 +378,12 @@ function createRunHistory(deps) {
       omissions: state.items.filter(item => isOcrOmission(state, item))
         .map(item => ({ document_id: item.id, name: item.source_label || item.name, reason_code: item.error_code })) };
   }
+  function contentNoticeSummary(batchId, expectedCount) {
+    validateBatchId(batchId);
+    return readStandaloneContentNoticeSummary(batchId, expectedCount);
+  }
   return { captureDurableHistory, history, find, resolveResults, resolveLedger, resolveIdentityMapping,
-    failures, reviewTargets, feedback, documentFeedback };
+    failures, reviewTargets, feedback, documentFeedback, contentNoticeSummary };
 }
 
 module.exports = { createRunHistory, validateBatchId };

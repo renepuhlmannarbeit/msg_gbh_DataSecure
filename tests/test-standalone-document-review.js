@@ -11,7 +11,7 @@ const { createPrivateWorkStore } = require('../plugins/data-secure/server/gatewa
 const { bindDirectory } = require('../plugins/data-secure/server/core/bound-file-io');
 const { execFileSync } = require('node:child_process');
 const { validatePrivateMessage } = require('../plugins/data-secure/server/standalone/desktop-ipc');
-const { test, assert, done } = createSuite('Standalone document review / selected AI export');
+const { test, testAsync, assert, done } = createSuite('Standalone document review / selected AI export');
 const root = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'datasecure-document-review-'));
 process.env.EU_PRIVACY_DATA_ROOT = path.join(root, 'artifact-private-data');
 const sha = value => crypto.createHash('sha256').update(value).digest('hex');
@@ -81,6 +81,7 @@ function fixture(v2 = false, traced = false, rejected = null, fields = null) {
     sha256: sha(traced ? original : 'original'), status: 'released' }));
   if (rejected) items.push(rejected);
   const state = { product_channel: 'standalone', processing_mode: 'markdown-and-anonymize', token: batchId, items,
+    ...(fields?.reviewPolicy ? { standalone_review_policy: fields.reviewPolicy } : {}),
     ...(v2 ? { standalone_document_review: true } : {}),
     ...(fields?.contentOptions ? { schema: 'datasecure-batch/7', content_options: fields.contentOptions } : {}) };
   const create = () => createDocumentReviewStore({ dataRoot: data, outputRoot: () => output, resultRoot: () => results, expectedDocuments: () => items });
@@ -130,6 +131,33 @@ function faultOnce(predicate, action) {
     return original.apply(this, arguments); };
   try { action(); assert.equal(failed, true); } finally { fs.linkSync = original; }
 }
+
+test('Fastweg auto-approves only its verified published basis and never reapproves an edited or revoked revision', () => {
+  const fields = { contentOptions: { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: false, imageOcr: false },
+    policyMarker: require('../plugins/data-secure/server/core/person-field-policy').CONTENT_PERSON_FIELD_POLICY,
+    reviewPolicy: 'automatic-conservative' };
+  const f = fixture(true, true, null, fields), listed = f.store.list(f.batchId);
+  assert.equal(listed.review_policy, fields.reviewPolicy);
+  assert.ok(listed.documents.every(row => row.approved && row.revision === 0 && row.approval_basis === 'automatic'));
+  assert.equal(f.store.historySummary(f.batchId).automatically_approved_count, 2);
+  assert.deepEqual(f.create().list(f.batchId).documents, listed.documents, 'restart reconstructs exact published basis, no extra approval event');
+  assert.equal(fs.existsSync(path.join(f.results, 'DataSecure-KI-Export')), false, 'automatic approval is not export');
+  f.decision(0, 'revoke');
+  assert.equal(f.create().list(f.batchId).documents[0].approved, false);
+  assert.equal(f.row(0).approval_basis, null);
+  f.decision(1, 'redact', [{ start: f.text.indexOf('42'), end: f.text.indexOf('42') + 2 }]);
+  assert.equal(f.create().list(f.batchId).documents[1].approved, false);
+  f.decision(1, 'restore_base');
+  assert.equal(f.row(1).approved, false, 'restored text is a new revision, never an automatic basis');
+  f.decision(1, 'approve');
+  assert.equal(f.row(1).approval_basis, 'manual');
+  assert.equal(f.store.historySummary(f.batchId).automatically_approved_count, 0);
+  const g = fixture(true, true, null, fields), manifest = path.join(g.data, 'document-reviews', g.batchId, 'manifest.json');
+  const saved = JSON.parse(fs.readFileSync(manifest, 'utf8'));
+  assert.equal(saved.schema, 'datasecure-document-run/4');
+  delete saved.review_policy; fs.writeFileSync(manifest, JSON.stringify(saved));
+  throwsCode(() => g.create().list(g.batchId), 'STANDALONE_REVIEW_POLICY_INVALID');
+});
 
 test('private document approval reconstructs bound field policy and never accepts a self-selected marker', () => {
   // New fixtures use a real residual proof and closed /4 artifact in the
@@ -449,6 +477,140 @@ test('same decision acknowledgement is idempotent, altered operation is rejected
   const a = f.store.decide(f.batchId, value.document_id, request), b = f.create().decide(f.batchId, value.document_id, request);
   assert.deepEqual(a, b); throwsCode(() => f.store.decide(f.batchId, value.document_id, { ...request, action: 'revoke' }), 'DOCUMENT_REVIEW_CONFLICT');
 });
+
+const batchSelection = f => f.store.list(f.batchId).documents.map(({ document_id, revision, output_sha256 }) =>
+  ({ document_id, revision, output_sha256 }));
+const batchRequest = (f, action = 'approve', operationId = crypto.randomBytes(16).toString('hex')) =>
+  ({ action, operation_id: operationId, selection: batchSelection(f) });
+
+test('a selected approval or revocation has one durable commit and an exact retry creates no second revision', () => {
+  const f = fixture(true, false, null, { documentCount: 3 }), request = batchRequest(f);
+  const approved = f.store.decideBatch(f.batchId, request), run = path.join(f.data, 'document-reviews', f.batchId);
+  assert.deepEqual(Object.keys(approved).sort(), ['affected_count', 'documents', 'external_disclosure', 'local_ui_only', 'ok', 'operation_id']);
+  assert.equal(approved.affected_count, 3); assert.equal(approved.operation_id, request.operation_id);
+  assert.ok(approved.documents.every(row => row.approved && row.revision === 1));
+  assert.deepEqual(fs.readdirSync(run).filter(file => /^commit-/u.test(file)), ['commit-000001.json']);
+  assert.deepEqual(fs.readdirSync(run).filter(file => /^decision-/u.test(file)), ['decision-000001.json']);
+  const proof = JSON.parse(fs.readFileSync(path.join(run, 'commit-000001.json')));
+  assert.equal(proof.record.schema, 'datasecure-run-decision/2');
+  assert.equal(proof.record.scope, 'selection'); assert.equal(proof.record.targets.length, 3);
+  // Property order is not an operation change; selection order is bound.
+  const retry = { selection: request.selection.map(row => ({ revision: row.revision,
+    output_sha256: row.output_sha256, document_id: row.document_id })), operation_id: request.operation_id, action: request.action };
+  assert.deepEqual(f.create().decideBatch(f.batchId, retry), approved);
+  assert.deepEqual(f.create().list(f.batchId).documents, approved.documents);
+  throwsCode(() => f.store.decideBatch(f.batchId, { ...request, action: 'revoke' }), 'DOCUMENT_REVIEW_CONFLICT');
+  throwsCode(() => f.store.decideBatch(f.batchId, { ...request, selection: [...request.selection].reverse() }), 'DOCUMENT_REVIEW_CONFLICT');
+  const revoked = f.store.decideBatch(f.batchId, batchRequest(f, 'revoke'));
+  assert.ok(revoked.documents.every(row => !row.approved && row.revision === 2));
+  assert.equal(fs.readdirSync(run).filter(file => /^commit-/u.test(file)).length, 2);
+  throwsCode(() => f.create().decideBatch(f.batchId, request), 'DOCUMENT_REVIEW_STALE');
+});
+
+test('a selected decision validates all revisions and hashes before committing any approval', () => {
+  for (const changed of [{ revision: 1 }, { output_sha256: 'a'.repeat(64) }]) {
+    const f = fixture(true), request = batchRequest(f);
+    Object.assign(request.selection.at(-1), changed);
+    throwsCode(() => f.store.decideBatch(f.batchId, request), 'DOCUMENT_REVIEW_STALE');
+    assert.ok(f.create().list(f.batchId).documents.every(row => !row.approved && row.revision === 0));
+    assert.equal(fs.readdirSync(path.join(f.data, 'document-reviews', f.batchId)).filter(file => /^commit-/u.test(file)).length, 0);
+  }
+  const f = fixture(true), request = batchRequest(f);
+  request.selection.at(-1).document_id = 'f'.repeat(32);
+  assert.throws(() => f.store.decideBatch(f.batchId, request));
+  assert.ok(f.create().list(f.batchId).documents.every(row => !row.approved && row.revision === 0));
+});
+
+test('the maximum 200-document approval reads one journal and commits one complete selection', () => {
+  const f = fixture(true, false, null, { documentCount: 200 }), request = batchRequest(f);
+  const run = path.join(f.data, 'document-reviews', f.batchId), originalList = fs.readdirSync;
+  let journalLists = 0, approved;
+  fs.readdirSync = function(target, ...args) { if (path.resolve(target) === run) journalLists++; return originalList.call(this, target, ...args); };
+  try { approved = f.store.decideBatch(f.batchId, request); }
+  finally { fs.readdirSync = originalList; }
+  assert.equal(journalLists, 2, 'one journal validation scans decision and proof files once each');
+  assert.equal(approved.affected_count, 200);
+  assert.ok(approved.documents.every(row => row.approved && row.revision === 1));
+  assert.equal(fs.readdirSync(run).filter(file => /^commit-/u.test(file)).length, 1);
+  assert.deepEqual(f.create().list(f.batchId).documents, approved.documents);
+});
+
+test('selected approval preserves purpose-bound residual and policy checks without a partial grant', () => {
+  const contentOptions = { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: true, imageOcr: false };
+  const policyMarker = require('../plugins/data-secure/server/core/person-field-policy').CONTENT_PERSON_FIELD_POLICY;
+  const safe = fixture(true, true, null, { original: 'Vollständiger Name: Qvx', contentOptions, policyMarker });
+  assert.ok(safe.store.decideBatch(safe.batchId, batchRequest(safe)).documents.every(row => row.approved && row.revision === 1));
+  const f = fixture(true, true, null, { original: 'Vollständiger Name: Qvx', contentOptions, policyMarker });
+  const row = f.row(1), entity = f.store.entities(f.batchId, row.document_id, row.revision, 0).entities.find(value => value.kind === 'PERSON');
+  assert.ok(entity);
+  f.store.decide(f.batchId, row.document_id, { action: 'entities', ranges: [], revision: row.revision,
+    output_sha256: row.output_sha256, operation_id: crypto.randomBytes(16).toString('hex'),
+    entity_decisions: [{ entity_id: entity.entity_id, decision: 'keep' }] });
+  throwsCode(() => f.store.decideBatch(f.batchId, batchRequest(f)), 'DOCUMENT_REVIEW_RESIDUAL_PII');
+  const after = f.create().list(f.batchId).documents;
+  assert.equal(after[0].revision, 0); assert.ok(after.every(value => !value.approved));
+  // A revocation is still possible for an unsafe candidate; no new export grant.
+  assert.ok(f.store.decideBatch(f.batchId, batchRequest(f, 'revoke')).documents.every(value => !value.approved));
+  const legacyPolicy = fixture(true, true, null, { contentOptions });
+  throwsCode(() => legacyPolicy.store.decideBatch(legacyPolicy.batchId, batchRequest(legacyPolicy)), 'DOCUMENT_REVIEW_POLICY_CHANGED');
+  assert.ok(legacyPolicy.create().list(legacyPolicy.batchId).documents.every(value => !value.approved && value.revision === 0));
+});
+
+test('selected decisions enforce a closed approve/revoke request with at most 200 unique bound documents', () => {
+  const f = fixture(true), original = batchRequest(f), malformed = [
+    null, [], { ...original, action: 'redact' }, { ...original, ranges: [] }, { ...original, operation_id: 'bad' },
+    { ...original, selection: [] }, { ...original, selection: [original.selection[0], original.selection[0]] },
+    { ...original, selection: Array.from({ length: 201 }, (_, index) => ({ ...original.selection[0], document_id: (index + 1).toString(16).padStart(32, '0') })) },
+    { ...original, selection: [{ ...original.selection[0], extra: true }] },
+    { ...original, selection: [{ ...original.selection[0], revision: -1 }] },
+    { ...original, selection: [{ ...original.selection[0], output_sha256: null }] }
+  ];
+  for (const request of malformed) throwsCode(() => f.store.decideBatch(f.batchId, request), 'DOCUMENT_REVIEW_INVALID');
+  assert.ok(f.create().list(f.batchId).documents.every(row => row.revision === 0 && !row.approved));
+  const single = f.selection(0)[0], operationId = '8'.repeat(32);
+  f.store.decide(f.batchId, single.document_id, { action: 'approve', ranges: [], operation_id: operationId,
+    revision: single.revision, output_sha256: single.output_sha256 });
+  throwsCode(() => f.store.decideBatch(f.batchId, { ...original, operation_id: operationId }), 'DOCUMENT_REVIEW_CONFLICT');
+});
+
+test('a missing selected-decision projection recovers the complete atomic commit after acknowledgement loss', () => {
+  for (const action of ['approve', 'revoke']) {
+    const f = fixture(true), run = path.join(f.data, 'document-reviews', f.batchId);
+    if (action === 'revoke') f.store.decideBatch(f.batchId, batchRequest(f));
+    const request = batchRequest(f, action), sequence = action === 'approve' ? 1 : 2, suffix = String(sequence).padStart(6, '0');
+    faultOnce(target => target.endsWith(`decision-${suffix}.json`), () => assert.throws(() => f.store.decideBatch(f.batchId, request)));
+    assert.equal(fs.existsSync(path.join(run, `commit-${suffix}.json`)), true);
+    assert.equal(fs.existsSync(path.join(run, `decision-${suffix}.json`)), false);
+    const result = f.create().decideBatch(f.batchId, request);
+    assert.ok(result.documents.every(row => row.approved === (action === 'approve') && row.revision === sequence));
+    assert.equal(fs.existsSync(path.join(run, `decision-${suffix}.json`)), true);
+    assert.equal(fs.readdirSync(run).filter(file => /^commit-/u.test(file)).length, sequence);
+  }
+});
+
+test('a failed selected-decision commit publishes no document approval and can be retried exactly', () => {
+  const f = fixture(true), request = batchRequest(f);
+  faultOnce(target => target.endsWith('commit-000001.json'), () => assert.throws(() => f.store.decideBatch(f.batchId, request)));
+  assert.ok(f.create().list(f.batchId).documents.every(row => !row.approved && row.revision === 0));
+  assert.ok(f.create().decideBatch(f.batchId, request).documents.every(row => row.approved && row.revision === 1));
+});
+
+test('a rehashed batch journal cannot change the selection binding or smuggle edits into an approval', () => {
+  for (const change of [record => { record.targets[0].event.revision += 1; },
+    record => { record.targets[0].event.action = 'redact'; record.targets[0].event.approved = false; },
+    record => { record.targets[0].event.ranges = [{ start: 0, end: 1 }]; },
+    record => { record.targets[0].event.output_sha256 = 'f'.repeat(64); },
+    record => { record.targets[1].event.action = 'revoke'; record.targets[1].event.approved = false; }]) {
+    const f = fixture(true), request = batchRequest(f);
+    f.store.decideBatch(f.batchId, request);
+    const run = path.join(f.data, 'document-reviews', f.batchId), proofPath = path.join(run, 'commit-000001.json');
+    const proof = JSON.parse(fs.readFileSync(proofPath)), record = proof.record;
+    change(record); const { event_sha256: _old, ...body } = record;
+    record.event_sha256 = sha(JSON.stringify(body)); proof.event_sha256 = record.event_sha256;
+    fs.writeFileSync(proofPath, JSON.stringify(proof)); fs.writeFileSync(path.join(run, 'decision-000001.json'), JSON.stringify(record));
+    throwsCode(() => f.create().list(f.batchId), 'DOCUMENT_REVIEW_INVALID');
+  }
+});
 test('completed export lost acknowledgement reconciles after later revocation, without copying again', () => {
   const f = fixture(); f.decision(0, 'approve'); const selected = f.selection(0), op = 'd'.repeat(32);
   const a = f.store.exportApproved(f.batchId, op, selected); f.decision(0, 'revoke');
@@ -690,6 +852,15 @@ test('plain Markdown corrections persist, revoke approval and never use the KI n
   decide('restore_base');
   assert.equal(row.text_modified, false, 'restoring the generated baseline clears the current correction marker');
   assert.equal(create().list(f.batchId).documents.find(value => value.document_id === item.id).text_modified, false);
+  const restored = create().list(f.batchId).documents.find(value => value.document_id === item.id);
+  const rawSelection = [{ document_id: restored.document_id, revision: restored.revision, output_sha256: restored.output_sha256 }];
+  const rawApproved = create().decideBatch(f.batchId, { action: 'approve', operation_id: '2'.repeat(32), selection: rawSelection });
+  assert.equal(rawApproved.documents[0].processing_mode, 'markdown-only');
+  assert.equal(rawApproved.documents[0].approved, true); assert.equal(rawApproved.documents[0].text_modified, false);
+  const mixedSelection = [f.selection(0)[0], { document_id: item.id, revision: rawApproved.documents[0].revision,
+    output_sha256: rawApproved.documents[0].output_sha256 }];
+  throwsCode(() => create().decideBatch(f.batchId, { action: 'approve', operation_id: '3'.repeat(32), selection: mixedSelection }), 'DOCUMENT_REVIEW_INVALID');
+  assert.equal(f.row(0).revision, 0, 'mixed-purpose selection cannot partially approve the first document');
   assert.equal(fs.readFileSync(path.join(folder, `${id}.md`), 'utf8'), markdown, 'the originally generated file is unchanged');
   const op = JSON.parse(fs.readFileSync(opPath));
   assert.equal(op.schema, 'datasecure-document-export/6');
@@ -756,6 +927,70 @@ test('anonymized export reuses one validated journal for file plan, identity ove
   } finally { fs.readdirSync = originalList; }
   assert.equal(journalListings, 2, 'the complete export validates decision and commit lists once');
 });
+test('new export combines planning, residual checks and identity capture but rereads every source before copy', () => {
+  const f = fixture(true, true, null, { documentCount: 5,
+    contentOptions: { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: false, imageOcr: false },
+    policyMarker: require('../plugins/data-secure/server/core/person-field-policy').CONTENT_PERSON_FIELD_POLICY });
+  const request = batchRequest(f), approved = f.store.decideBatch(f.batchId, request);
+  const selection = approved.documents.map(({ document_id, revision, output_sha256 }) => ({ document_id, revision, output_sha256 }));
+  const open = fs.openSync, engine = require('../plugins/data-secure/server/pii-engine'), residual = engine.scanResidual;
+  let sources = 0, residuals = 0;
+  fs.openSync = function(file, ...args) {
+    if (typeof file === 'string' && file.endsWith(`${path.sep}base.json`)) sources++;
+    return open.call(this, file, ...args);
+  };
+  engine.scanResidual = function(...args) { residuals++; return residual.apply(this, args); };
+  let result;
+  try { result = f.store.exportApproved(f.batchId, 'e'.repeat(32), selection); }
+  finally { fs.openSync = open; engine.scanResidual = residual; }
+  assert.equal(sources, selection.length * 2, 'one preparation pass and an independent fresh copy pass');
+  assert.equal(residuals, selection.length, 'every candidate retains its residual gate');
+  const target = path.join(f.results, 'DataSecure-KI-Export', result.folder_name);
+  assert.ok(fs.readdirSync(target).every(name => fs.readFileSync(path.join(target, name), 'utf8') === f.text));
+  const reference = f.store.resolveIdentityOverview(f.batchId, 'e'.repeat(32));
+  assert.ok(fs.readFileSync(reference.local_path, 'utf8').includes('Anna Beispiel'), 'the reference retains the same traced identities');
+  assert.equal(f.store.exportApproved(f.batchId, 'e'.repeat(32), selection, true).exported_count, selection.length);
+});
+test('source corruption after combined preparation is still rejected before a completed copy receipt', () => {
+  const f = fixture(true, true, null, { documentCount: 3,
+    contentOptions: { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: false, imageOcr: false },
+    policyMarker: require('../plugins/data-secure/server/core/person-field-policy').CONTENT_PERSON_FIELD_POLICY });
+  const approved = f.store.decideBatch(f.batchId, batchRequest(f));
+  const selection = approved.documents.map(({ document_id, revision, output_sha256 }) => ({ document_id, revision, output_sha256 }));
+  const link = fs.linkSync, operation = '9'.repeat(32); let changed = false;
+  fs.linkSync = function(from, to, ...args) {
+    if (!changed && to.endsWith(`export-${operation}-1-owner.json`)) {
+      changed = true; const id = `ds_${f.items[2].id}`;
+      const output = require('../plugins/data-secure/server/standalone/anonymized-store').anonymizedArtifactRoots().output;
+      fs.writeFileSync(path.join(output, id, `${id}.md`), 'synthetic changed package');
+    }
+    return link.call(this, from, to, ...args);
+  };
+  try { throwsCode(() => f.store.exportApproved(f.batchId, operation, selection), 'DOCUMENT_REVIEW_INVALID'); }
+  finally { fs.linkSync = link; }
+  assert.equal(changed, true);
+  assert.equal(fs.existsSync(path.join(f.data, 'document-reviews', f.batchId, `export-${operation}-complete.json`)), false);
+});
+test('automatic basis approval is freshly reverified for copy without a duplicate preparation residual scan', () => {
+  const f = fixture(true, true, null, { documentCount: 2, reviewPolicy: 'automatic-conservative',
+    contentOptions: { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: false, imageOcr: false },
+    policyMarker: require('../plugins/data-secure/server/core/person-field-policy').CONTENT_PERSON_FIELD_POLICY });
+  const selection = f.store.list(f.batchId).documents.map(({ document_id, revision, output_sha256 }) => ({ document_id, revision, output_sha256 }));
+  const engine = require('../plugins/data-secure/server/pii-engine'), residual = engine.scanResidual; let checks = 0;
+  engine.scanResidual = function(...args) { checks++; return residual.apply(this, args); };
+  try { assert.equal(f.store.exportApproved(f.batchId, '6'.repeat(32), selection).exported_count, selection.length); }
+  finally { engine.scanResidual = residual; }
+  assert.equal(checks, selection.length * 2, 'each fresh current() verifies the automatic basis, in preparation and before copying');
+});
+test('membership read fast path still rejects changed source bindings instead of repairing or trusting them', () => {
+  const f = fixture(true), approved = f.store.decideBatch(f.batchId, batchRequest(f));
+  const selection = approved.documents.map(({ document_id, revision, output_sha256 }) => ({ document_id, revision, output_sha256 }));
+  const receipt = path.join(f.data, 'document-reviews', f.batchId, `published-${selection[0].document_id}.json`);
+  const changed = { ...JSON.parse(fs.readFileSync(receipt)), source_sha256: 'f'.repeat(64) };
+  fs.writeFileSync(receipt, JSON.stringify(changed));
+  throwsCode(() => f.store.previewExport(f.batchId, '5'.repeat(32), selection), 'DOCUMENT_REVIEW_CONFLICT');
+  assert.deepEqual(JSON.parse(fs.readFileSync(receipt)), changed, 'a conflicting existing receipt is never overwritten');
+});
 if (process.env.DATASECURE_PREVIEW_STRESS === '1') test('synthetic 132-document preview stays below the former desktop deadline', () => {
   const f = fixture(false, false, null, { documentCount: 132 });
   for (const row of f.store.list(f.batchId).documents) f.store.decide(f.batchId, row.document_id,
@@ -768,5 +1003,44 @@ if (process.env.DATASECURE_PREVIEW_STRESS === '1') test('synthetic 132-document 
   const elapsed = performance.now() - start;
   assert.equal(plan.files.length, 132);
   assert.ok(elapsed < 30_000, `synthetic 132-document preview took ${Math.round(elapsed)} ms`);
+});
+testAsync('native preparation streams independently revalidated bodies with a single preparation pass', async () => {
+  const f = fixture(true, false, null, { documentCount: 3 }), approved = f.store.decideBatch(f.batchId, batchRequest(f));
+  const selection = approved.documents.map(({ document_id, revision, output_sha256 }) => ({ document_id, revision, output_sha256 }));
+  const identity = { volume: '1', object: '1', created_ns: '1' }, bodies = new Map();
+  const binding = { schema: 'datasecure-native-export-binding/1', root: f.results, private_name: `native-export-${'1'.repeat(32)}`,
+    root_identity: identity, data_root_identity: identity, private_identity: identity, anonymize_identity: identity, markdown_identity: identity };
+  let complete = false, ackStatus = 'acknowledged'; const nativeCommands = [];
+  const native = createDocumentReviewStore({ dataRoot: f.data, outputRoot: () => f.output, nativeBinding: () => binding,
+    nativeExport: async (op, command, body) => {
+      nativeCommands.push(command);
+      if (command === 'write_body') {
+        const previous = bodies.get(body.index) || Buffer.alloc(0); assert.equal(previous.length, body.offset);
+        const bytes = Buffer.concat([previous, Buffer.from(body.hex, 'hex')]); bodies.set(body.index, bytes);
+        if (body.final_chunk) { assert.equal(bytes.toString(), f.text); assert.equal(sha(bytes), Buffer.from(op.files[body.index].sha256).toString('hex')); }
+        return body.final_chunk ? 'staged' : 'receiving';
+      }
+      if (command === 'publish') { complete = true; return 'completed'; }
+      if (command === 'reconcile') return complete ? 'completed' : 'unprepared';
+      if (command === 'acknowledge') return ackStatus;
+      throw Error('UNEXPECTED_NATIVE_COMMAND');
+    } });
+  const open = fs.openSync; let sources = 0;
+  fs.openSync = function(file, ...args) { if (typeof file === 'string' && file.endsWith(`${path.sep}base.json`)) sources++;
+    return open.call(this, file, ...args); };
+  let result;
+  try { result = await native.exportApproved(f.batchId, '8'.repeat(32), selection); }
+  finally { fs.openSync = open; }
+  assert.equal(sources, selection.length * 2); assert.equal(bodies.size, selection.length);
+  f.decision(0, 'revoke');
+  ackStatus = 'prepared';
+  await assert.rejects(native.exportApproved(f.batchId, '8'.repeat(32), selection, true), { code: 'AI_EXPORT_INCOMPLETE' });
+  assert.equal(fs.existsSync(path.join(f.data, 'document-reviews', f.batchId, `export-${'8'.repeat(32)}-acknowledged.json`)), false,
+    'a non-ACK status cannot become a saved receipt acknowledgement');
+  ackStatus = 'acknowledged'; nativeCommands.length = 0;
+  assert.deepEqual(await native.exportApproved(f.batchId, '8'.repeat(32), selection, true), result,
+    'the lost-ACK path still reconciles only the existing completed copy after revocation');
+  assert.deepEqual(nativeCommands, ['acknowledge'], 'native ACK already revalidates the complete copy, without a preceding duplicate reconcile');
+  await assert.rejects(native.exportApproved(f.batchId, '7'.repeat(32), selection), { code: 'DOCUMENT_REVIEW_STALE' });
 });
 done();

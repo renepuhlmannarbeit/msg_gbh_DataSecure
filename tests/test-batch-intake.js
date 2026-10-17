@@ -56,7 +56,7 @@ function fixture(options = {}) {
     workPath: () => work,
     copySnapshotFile(from, to, stat) {
       const intent = JSON.parse(fs.readFileSync(path.join(root, `${token}.intake`), 'utf8'));
-      assert.strictEqual(intent.schema, 'datasecure-intake/1', 'ownership is durable before any source copying');
+      assert.strictEqual(intent.schema, options.expectedIntakeSchema || 'datasecure-intake/1', 'ownership is durable before any source copying');
       events.push(`copy:${from}:${to}`);
       fs.copyFileSync(from, to);
       return { size: stat.size, sha256: 'b'.repeat(64) };
@@ -621,6 +621,35 @@ test('a planning trust failure occurs before work, capacity and journal mutation
     assert.strictEqual(fs.existsSync(item.work), false);
     assert.strictEqual(fs.existsSync(item.journal), false);
   } finally { item.cleanup(); }
+});
+
+test('conservative automatic intake seals the policy only for the new Standalone anonymization contract', () => {
+  const contentOptions = { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: true, imageOcr: false };
+  for (const automatic of [false, true]) {
+    let captured;
+    const item = fixture({ productChannel: 'standalone', expectedIntakeSchema: 'datasecure-intake/3',
+      captureDocumentRun: state => { captured = structuredClone(state); } });
+    try {
+      const result = item.begin([item.queueEntry()], { processingMode: 'markdown-and-anonymize', documentReview: true, contentOptions,
+        ...(automatic ? { reviewPolicy: 'automatic-conservative' } : {}) });
+      assert.equal(result.ok, true);
+      const stored = JSON.parse(fs.readFileSync(item.journal));
+      assert.equal(stored.schema, 'datasecure-batch/7');
+      assert.equal(stored.standalone_review_policy, automatic ? 'automatic-conservative' : undefined);
+      assert.equal(Object.hasOwn(stored, 'standalone_review_policy'), automatic);
+      assert.deepEqual(captured, stored);
+    } finally { item.cleanup(); }
+  }
+  for (const change of [{ reviewPolicy: null }, { reviewPolicy: 'guided' }, { processingMode: 'markdown-only' },
+    { review_policy: 'automatic-conservative' }]) {
+    const item = fixture({ productChannel: 'standalone', captureDocumentRun() {} });
+    try {
+      assert.throws(() => item.begin([item.queueEntry()], { processingMode: 'markdown-and-anonymize', documentReview: true,
+        contentOptions, reviewPolicy: 'automatic-conservative', ...change }), error => error.code === 'STANDALONE_REVIEW_POLICY_INVALID');
+      assert.equal(item.events.length, 0, 'invalid policy is refused before source metadata, copies or journal work');
+      assert.equal(fs.existsSync(item.journal), false);
+    } finally { item.cleanup(); }
+  }
 });
 
 done();

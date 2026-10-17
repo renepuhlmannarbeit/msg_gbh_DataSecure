@@ -40,7 +40,11 @@ async function reviewSingleBatchTextLocally(input, state, item, deps = {}) {
   // Raw-derived draft data stays in memory and reaches only the native review
   // helper over stdin. It is never returned through MCP or stored in a journal.
   if ((input.ambiguities || []).length === 0) return { text: input.anonymized_text };
-  // Standalone always enters the explicit app-owned review, including a
+  if (state.product_channel === 'standalone' &&
+      require('../core/standalone-review-policy').reviewPolicyForBatch(state) === 'automatic-conservative') {
+    return conservativelyReviewedBatchText(input);
+  }
+  // Guided Standalone enters the explicit app-owned review, including a
   // one-file run. Reviewed replay uses reviewedBatchText, not this native route.
   // Cowork retains its existing direct single-document dialog behavior.
   if (state.product_channel === 'standalone') {
@@ -159,8 +163,22 @@ function reviewedBatchText(input, decisions, options = {}) {
   const text = applyManualRedactions(input.anonymized_text, redactions, {
     allowOrganizationReview: input.allowOrganizationReview === true || input.allow_organization_review === true
   });
-  if (options.validateOnly !== true) input.confirmPersonReview?.(activeDecisions, redactions, text);
+  if (options.validateOnly !== true) {
+    if (options.automatic === true) {
+      if (typeof input.confirmAutomaticReview !== 'function')
+        throw localReviewError('LOCAL_REVIEW_CANCELLED', 'Die automatische Maskierung konnte nicht mit der tatsächlichen Textfassung gebunden werden.');
+      input.confirmAutomaticReview(activeDecisions, redactions, text);
+    } else input.confirmPersonReview?.(activeDecisions, redactions, text);
+  }
   return { text };
 }
 
-module.exports = { localReviewError, reviewSingleBatchTextLocally, reviewedBatchText };
+function conservativelyReviewedBatchText(input) {
+  if (!Array.isArray(input?.ambiguities))
+    throw localReviewError('LOCAL_REVIEW_CANCELLED', 'Die automatische Maskierung hat keine gültige Fundstellenfassung.');
+  return reviewedBatchText(input, input.ambiguities.map(candidate => ({
+    ambiguity_id: candidate.ambiguity_id, decision: 'redact'
+  })), { automatic: true });
+}
+
+module.exports = { localReviewError, reviewSingleBatchTextLocally, reviewedBatchText, conservativelyReviewedBatchText };

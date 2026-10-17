@@ -51,10 +51,22 @@ function reservePersonReviewCandidates(text, registry, allowOrganizationReview =
 }
 
 function prepareTextPrivacyReview({ text, profile, productChannel, consumerOptions = {}, registry, captureTrace = false,
-  technicalReviewRequired = false, ocrLineReview = false }) {
+  technicalReviewRequired = false, ocrLineReview = false, sourceRedaction = null }) {
   const fieldContext = personFieldContextForConsumer(consumerOptions), fieldOptions = fieldContext.consumerOptions;
   const personReview = reservePersonReviewCandidates(text, registry, productChannel === 'standalone', profile, fieldOptions, ocrLineReview);
-  const transform = captureTrace ? createTransformTrace(personReview.original) : null;
+  if (sourceRedaction && (productChannel !== 'standalone' || sourceRedaction.schema !== 'datasecure-automatic-ocr-redaction/1' ||
+      typeof sourceRedaction.original_text !== 'string' || sourceRedaction.original_text.length > LIMITS.MAX_TEXT_CHARS ||
+      !Array.isArray(sourceRedaction.edits) || sourceRedaction.edits.length > 5000 || sourceRedaction.edits.some(edit =>
+        !['EMAIL', 'PHONE', 'CONTACT'].includes(edit?.kind) || edit.replacement !== `[${edit.kind}_REDACTED]`) ||
+      applyEdits(canonicalizeRenderedText(sourceRedaction.original_text, fieldContext.policy), sourceRedaction.edits) !== text)) throw invalid();
+  const sourceOriginal = sourceRedaction ? sourceRedaction.original_text : personReview.original;
+  const canonicalSource = sourceRedaction ? canonicalizeRenderedText(sourceOriginal, fieldContext.policy) : sourceOriginal;
+  const transform = captureTrace ? createTransformTrace(canonicalSource) : null;
+  if (transform && sourceRedaction) {
+    transform.append('automatic-ocr-redaction', canonicalSource, text, sourceRedaction.edits);
+    if (text !== personReview.original) transform.append('canonicalization', text, personReview.original,
+      [{ start: 0, end: text.length, original: text, replacement: personReview.original, kind: 'NORMALIZATION' }]);
+  }
   if (transform) transform.append('reserve', personReview.original, personReview.masked, personReview.mask_edits);
   const anon = anonymizeMarkdown(personReview.masked, profile, { ...fieldOptions, registry, deferPersonReview: true,
     ...(transform ? { captureTransformPlan: true } : {}) });
@@ -71,16 +83,23 @@ function prepareTextPrivacyReview({ text, profile, productChannel, consumerOptio
         finding.start >= candidate.anonymized_start && finding.end <= candidate.anonymized_end)), { productChannel })];
   const ambiguities = [...organizationAmbiguities, ...personAmbiguities];
   const binding = createPersonReviewBinding(anon.text, ambiguities, { productChannel, allowOrganizationReview: productChannel === 'standalone' });
+  function confirmReview(decisions, redactions, resultText, phase) {
+    binding.confirm(decisions, redactions, resultText);
+    if (transform) transform.append(phase, anon.text, resultText,
+      [...redactions].sort((a, b) => a.start - b.start || a.end - b.end).map(edit => ({ start: edit.start, end: edit.end,
+        original: anon.text.slice(edit.start, edit.end), replacement: edit.replacement || '[MANUAL_REDACTION]',
+        kind: /^\[PERSON_/u.test(edit.replacement || '') ? 'PERSON' :
+          /^\[(?:UNTERNEHMEN|ORGANISATION)_/u.test(edit.replacement || '') ? 'ORGANIZATION' : 'MANUAL_REDACTION' })));
+  }
   const draft = Object.freeze({ original_text: personReview.original, anonymized_text: anon.text, profile,
     detected_identifiers: anon.entityCount, ambiguities,
     ...(productChannel === 'standalone' ? { allowOrganizationReview: true } : {}),
     confirmPersonReview(decisions, redactions, resultText) {
-      binding.confirm(decisions, redactions, resultText);
-      if (transform) transform.append('human-review', anon.text, resultText,
-        [...redactions].sort((a, b) => a.start - b.start || a.end - b.end).map(edit => ({ start: edit.start, end: edit.end,
-          original: anon.text.slice(edit.start, edit.end), replacement: edit.replacement || '[MANUAL_REDACTION]',
-          kind: /^\[PERSON_/u.test(edit.replacement || '') ? 'PERSON' :
-            /^\[(?:UNTERNEHMEN|ORGANISATION)_/u.test(edit.replacement || '') ? 'ORGANIZATION' : 'MANUAL_REDACTION' })));
+      confirmReview(decisions, redactions, resultText, 'human-review');
+    },
+    confirmAutomaticReview(decisions, redactions, resultText) {
+      if (productChannel !== 'standalone' || decisions.some(choice => choice.decision !== 'redact')) throw invalid();
+      confirmReview(decisions, redactions, resultText, 'automatic-review');
     },
     replacementForAmbiguity(candidate, kind = 'PERSON') {
       if (!['person_prose_ambiguous', 'person_residual_ambiguous'].includes(candidate?.type) || candidate.replacement_kind !== 'PERSON')
@@ -91,13 +110,18 @@ function prepareTextPrivacyReview({ text, profile, productChannel, consumerOptio
     }, technical_review_required: technicalReviewRequired });
   const value = Object.freeze({ draft, profile, entityCount: anon.entityCount, passes: anon.passes,
     reidentificationRisk: anon.reidentificationRisk, organizationAmbiguities, personAmbiguities, ambiguities });
-  operations.set(value, { anon, personReview, transform, binding, fieldContext, fieldOptions, profile, resolved: false });
+  operations.set(value, { anon, personReview, transform, binding, fieldContext, fieldOptions, profile, productChannel,
+    sourceOriginal, resolved: false });
   return value;
 }
 
-async function resolveTextPrivacyReview(value, reviewText, { checkAbort = () => {} } = {}) {
+async function resolveTextPrivacyReview(value, reviewText, { checkAbort = () => {}, reviewPolicy = 'manual' } = {}) {
   const state = operations.get(value);
   if (!state || state.resolved) throw invalid();
+  if (!['manual', 'automatic-conservative'].includes(reviewPolicy) ||
+      reviewPolicy === 'automatic-conservative' && state.productChannel !== 'standalone') throw invalid();
+  if (reviewPolicy === 'automatic-conservative')
+    reviewText = require('./batch-review-policy').conservativelyReviewedBatchText;
   if (value.ambiguities.length && !reviewText)
     throw Object.assign(new SafeError('Mehrdeutige Personen- oder Organisationsnamen benötigen eine lokale Entscheidung vor der Freigabe.'), { code: 'AMBIGUITY_REVIEW_REQUIRED' });
   let text = state.anon.text;
@@ -129,7 +153,7 @@ function finalizeTextPrivacyReview(value, reviewedText, { prefix, suffix }) {
     reviewed_ranges: reviewedPersonRanges(reviewedPersonCandidates, canonicalizeRenderedText(markdown, fieldContext.policy)).map(range => ({
       start: range.start + prefix.length - canonicalizeRenderedText(prefix, fieldContext.policy).length,
       end: range.end + prefix.length - canonicalizeRenderedText(prefix, fieldContext.policy).length })) };
-  return Object.freeze({ markdown, original_text: personReview.original, dictionary: anon.dictionary,
+  return Object.freeze({ markdown, original_text: state.sourceOriginal, dictionary: anon.dictionary,
     strong_person_anchor: anon.strongPersonAnchor === true, reviewed_person_candidates: reviewedPersonCandidates,
     transform_trace: transform ? transform.finish(markdown) : null, verification_context: context });
 }

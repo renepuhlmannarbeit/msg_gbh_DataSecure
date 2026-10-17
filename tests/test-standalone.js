@@ -11,7 +11,7 @@ const {
 } = require('../plugins/data-secure/server/standalone/application-service');
 const { run, parse } = require('../plugins/data-secure/server/standalone/cli');
 const {
-  encodeFrame, FrameDecoder, MAX_FRAME_BYTES, MAX_ADMISSION_PATH_BYTES, PRIVATE_ACTIONS
+  encodeFrame, FrameDecoder, MAX_FRAME_BYTES, MAX_ADMISSION_PATH_BYTES, PRIVATE_ACTIONS, validatePrivateMessage
 } = require('../plugins/data-secure/server/standalone/desktop-ipc');
 const {
   batchQueueFromSelection, validateSelectedPathAsync
@@ -71,6 +71,53 @@ test('Standalone has an isolated product namespace and a simple default output',
   assert.strictEqual(defaultResultRoot({ home: '/ignored', environment: {
     DATASECURE_STANDALONE_DOCUMENTS_DIR: '/mounted/Documents'
   } }), path.join('/mounted/Documents', 'SecureDataMsg'));
+});
+
+test('fresh installation tolerates an absent result folder until a real start needs one', () => {
+  const operations = [];
+  const home = path.join(os.tmpdir(), 'datasecure-fresh-user');
+  const expected = defaultResultRoot({ home });
+  const service = new StandaloneApplicationService({ home, dependencies: fakeDependencies({
+    readConfiguredResultRoot: () => '',
+    latestProductResultDirectory: () => '',
+    fs: { mkdirSync(root) { operations.push(['mkdir', root]); } },
+    resultOutputDirectory({ root }) { operations.push(['output', root]); return path.join(root, 'DataSecure-Output'); },
+    saveConfiguredResultRoot(root) { operations.push(['save', root]); }
+  }) });
+  assert.equal(service.uiContext().result_folder, expected);
+  assert.equal(service.uiContext().result_folder_is_default, true);
+  assert.equal(service.uiContext().result_folder_status, 'unconfigured');
+  assert.deepEqual(operations, [], 'reading a fresh UI must not require or create a result folder');
+  assert.equal(service.ensureResultRoot(), expected);
+  assert.deepEqual(operations, [['mkdir', expected], ['output', expected], ['save', expected]]);
+  const unavailable = new StandaloneApplicationService({ home, dependencies: fakeDependencies({
+    readConfiguredResultRoot: () => '',
+    fs: { mkdirSync() { throw Object.assign(Error('private path'), { code: 'EACCES' }); } }
+  }) });
+  assert.throws(() => unavailable.ensureResultRoot(), { code: 'STANDALONE_RESULT_ROOT_UNAVAILABLE' });
+});
+
+test('a lost configured destination never becomes a fresh default or an authorized display path', () => {
+  const recorded = path.join(os.tmpdir(), 'datasecure-offline-results');
+  const operations = [];
+  const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+    readConfiguredResultRoot: () => '',
+    readConfiguredResultRootStatus: () => ({ status: 'unavailable', root: '', recorded_root: recorded }),
+    fs: { mkdirSync(root) { operations.push(['mkdir', root]); } },
+    resultOutputDirectory({ root }) { operations.push(['output', root]); },
+    saveConfiguredResultRoot(root) { operations.push(['save', root]); }
+  }) });
+  const context = service.uiContext();
+  assert.equal(context.result_folder_status, 'unavailable');
+  assert.equal(context.result_folder, '');
+  assert.equal(context.result_folder_is_default, false);
+  assert.equal(context.result_folder_recorded, recorded);
+  assert.throws(() => service.ensureResultRoot(), error => {
+    assert.equal(error.code, 'STANDALONE_RESULT_ROOT_UNAVAILABLE');
+    assert.ok(!error.message.includes(recorded), 'failure contracts remain path-free');
+    return true;
+  });
+  assert.deepEqual(operations, [], 'a lost configured target never creates or saves another destination');
 });
 
 test('Standalone accepts Windows LOCALAPPDATA virtualization when directory identity is unchanged', () => {
@@ -196,6 +243,25 @@ test('Standalone consumes one combined journal snapshot per public status poll',
   assert.strictEqual(snapshots, 1);
   assert.strictEqual(service.status({ localUi: true }).batch_id, batchId,
     'only the private desktop snapshot carries the exact observed run');
+});
+
+test('an incomplete non-resumable run with partial results never claims finished processing', () => {
+  const batchId = 'a'.repeat(64);
+  const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+    publicStatusSnapshot: () => ({
+      current: { engine_ready: true, local_intake_pending: false, batch_processing_active: false,
+        recoverable_batches: 0, batches_awaiting_resume: 0 },
+      latest: { selected_count: 3, completed_count: 1, result_count: 1, failed_count: 0,
+        review_count: 0, review_ready: false, export_pending_count: 0,
+        processing: false, resumable: false, complete: false },
+      observed_batch_id: batchId, observed_is_active: false, observed_recoverable: false
+    })
+  }) });
+  service.observedBatchId = batchId;
+  const status = service.status({ localUi: true });
+  assert.strictEqual(status.state, 'failed');
+  assert.strictEqual(status.batch_complete, false);
+  assert.strictEqual(status.result_count, 1, 'partial private work remains distinguishable from completion');
 });
 
 test('review window sees terminal completion only after the final review group', () => {
@@ -612,7 +678,7 @@ test('Standalone UI contract limits source details to the local display', () => 
     'select_files', 'select_folder', 'remove_admitted_source', 'cancel_admission', 'start_admitted_batch',
     'get_public_state', 'get_ui_context', 'get_run_history', 'get_run_failures', 'open_history_results', 'open_history_ledger',
     'open_history_identity_mapping', 'open_identity_mappings_directory', 'continue_history_batch', 'pause_batch', 'abandon_result_export', 'skip_ocr_contact_review',
-    'get_document_reviews', 'get_document_review_history_summary', 'close_document_reviews', 'get_document_review_chunk', 'get_document_entities', 'decide_document_review', 'export_approved_documents', 'abandon_document_export', 'open_document_export', 'open_document_identity_overview',
+    'get_document_reviews', 'get_document_review_history_summary', 'close_document_reviews', 'get_document_review_chunk', 'get_document_entities', 'decide_document_review', 'decide_document_review_batch', 'export_approved_documents', 'abandon_document_export', 'open_document_export', 'open_document_identity_overview',
     'open_review_window', 'open_embedded_review', 'close_review_window', 'get_review_session', 'get_review_chunk', 'submit_review',
     'continue_review_session',
     'ack_terminal_presented', 'continue_current_batch', 'configure_results',
@@ -625,7 +691,7 @@ test('Standalone UI contract limits source details to the local display', () => 
     'resolve_history_results', 'resolve_history_ledger', 'resolve_history_identity_mapping',
     'resolve_identity_mappings_directory',
     'continue_history_batch', 'pause_batch', 'skip_ocr_contact_review', 'abandon_result_export',
-    'get_document_reviews', 'get_document_review_history_summary', 'get_document_review_chunk', 'get_document_entities', 'decide_document_review', 'preview_document_export', 'export_approved_documents', 'abandon_document_export', 'resolve_document_export', 'resolve_document_identity_overview',
+    'get_document_reviews', 'get_document_review_history_summary', 'get_document_review_chunk', 'get_document_entities', 'decide_document_review', 'decide_document_review_batch', 'preview_document_export', 'export_approved_documents', 'abandon_document_export', 'resolve_document_export', 'resolve_document_identity_overview',
     'get_review_session', 'get_review_chunk', 'submit_review', 'continue_review_session', 'shutdown'
   ]);
 });
@@ -636,6 +702,18 @@ test('Standalone exposes history ledgers only when the backend marks the anonymi
   assert.match(source, /command: 'open_history_ledger'[^\n]*available: entry\.ledger_available === true/u);
   assert.doesNotMatch(source, /command: 'open_history_ledger'[^\n]*available:.*failed_count/u);
   assert.match(source, /Für reine Konvertierung wird keine Zuordnungsdatei erstellt/u);
+});
+
+test('private batch-decision transport accepts only exact bounded approve/revoke selections', () => {
+  const decision = { action: 'approve', operation_id: '1'.repeat(32), selection: [
+    { document_id: '2'.repeat(32), revision: 0, output_sha256: '3'.repeat(64) }] };
+  const message = { schema: 'datasecure-standalone-private-ipc/1', request_id: 'a'.repeat(16),
+    action: 'decide_document_review_batch', batch_id: 'b'.repeat(64), decision };
+  assert.deepEqual(validatePrivateMessage(message), message);
+  for (const change of [null, { ...decision, action: 'redact' }, { ...decision, selection: [] },
+    { ...decision, selection: [null] }, { ...decision, selection: [decision.selection[0], decision.selection[0]] },
+    { ...decision, selection: [{ ...decision.selection[0], revision: 1000 }] }, { ...decision, bypass: true }])
+    assert.throws(() => validatePrivateMessage({ ...message, decision: change }), error => error.code === 'DOCUMENT_REVIEW_INVALID');
 });
 
 test('private desktop IPC is framed, bounded and independent of line endings', () => {
@@ -854,6 +932,8 @@ async function admittedServiceCase() {
     ui_context: {
       ok: true,
       result_folder: FIXTURE_RESULT_ROOT,
+      result_folder_status: 'available',
+      result_folder_recorded: FIXTURE_RESULT_ROOT,
       latest_result_folder: FIXTURE_RESULT_RUN,
       result_folder_is_default: false,
       source_kind: 'files',
@@ -869,6 +949,8 @@ async function admittedServiceCase() {
   assert.deepStrictEqual(service.uiContext(), {
     ok: true,
     result_folder: FIXTURE_RESULT_ROOT,
+    result_folder_status: 'available',
+    result_folder_recorded: FIXTURE_RESULT_ROOT,
     latest_result_folder: FIXTURE_RESULT_RUN,
     result_folder_is_default: false,
     source_kind: 'files',
@@ -884,6 +966,8 @@ async function admittedServiceCase() {
     ui_context: {
       ok: true,
       result_folder: FIXTURE_RESULT_ROOT,
+      result_folder_status: 'available',
+      result_folder_recorded: FIXTURE_RESULT_ROOT,
       latest_result_folder: FIXTURE_RESULT_RUN,
       result_folder_is_default: false,
       source_kind: 'files',

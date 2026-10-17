@@ -205,11 +205,36 @@ function code(expected) { return (error) => error?.code === expected; }
       { batch_id: pendingExport.token, outcome: 'not_attempted' },
       'an immediate repeated request identifies the throttle instead of implying another attempt');
     assert.equal(recoveryCalls, 1);
-    const throwingRecovery = createRunHistory({ readStates: () => [pendingExport], readExports: () => [],
+    let noMutationReads = 0;
+    const noMutation = createRunHistory({ readStates: () => [{ ...pendingExport, items: [{ id: 'a'.repeat(32),
+      name: 'stopped.txt', status: 'stopped', error_code: 'SOURCE_READ_FAILED' }] }],
+      readExports: () => { noMutationReads++; return []; }, recoverableStates: () => [], liveExecutor: () => false,
+      exportCompletedBatchResults() { throw Error('NO_RESULT_MUST_NOT_EXPORT'); } });
+    assert.equal(noMutation.history({ recoverExports: true, recoverBatchId: pendingExport.token }).export_recovery.outcome, 'not_attempted');
+    assert.equal(noMutationReads, 1, 'one invocation reuses its export snapshot when no mutation was attempted');
+    let mutationReads = 0;
+    const throwingRecovery = createRunHistory({ readStates: () => [pendingExport], readExports: () => { mutationReads++; return []; },
       recoverableStates: () => [], liveExecutor: () => false,
       exportCompletedBatchResults: () => { throw Object.assign(new Error('SECRET PATH'), { code: 'EACCES' }); } });
     const failedRecovery = throwingRecovery.history({ recoverExports: true, recoverBatchId: pendingExport.token });
     assert.deepEqual(failedRecovery.export_recovery, { batch_id: pendingExport.token, outcome: 'failed' });
+    assert.equal(mutationReads, 2, 'even a throwing export may have persisted progress and requires a fresh read');
+    const candidateStates = Array.from({ length: 25 }, (_, index) => ({ ...pendingExport,
+      token: crypto.createHash('sha256').update(`candidate-${index}`).digest('hex'),
+      created_at: new Date(Date.UTC(2099, 0, 1, 0, 0, index)).toISOString(),
+      items: [{ id: 'a'.repeat(32), name: 'candidate.txt', status: 'retryable', error_code: 'PROCESSING_INTERRUPTED' }] }));
+    const candidateMap = new Map(candidateStates.map(state => [state.token, state])), recoveryQueries = [];
+    const candidateDeps = { readStates: () => candidateStates, readExports: () => [], liveExecutor: () => false,
+      recoverableStates({ batchId }) { recoveryQueries.push(batchId); return [candidateMap.get(batchId)]; } };
+    const selectedCandidates = createRunHistory({ ...candidateDeps, readState: token => candidateMap.get(token), readExport: () => null }).history();
+    assert.equal(selectedCandidates.entries.length, 20); assert.equal(recoveryQueries.length, 20);
+    assert.deepEqual(new Set(recoveryQueries), new Set(selectedCandidates.entries.map(row => row.batch_id)),
+      'fresh recovery reads are bounded to the visible incomplete candidates, never older hidden rows');
+    let legacyRecoveryReads = 0;
+    const legacyCandidates = createRunHistory({ ...candidateDeps,
+      recoverableStates() { legacyRecoveryReads++; return candidateStates; } }).history();
+    assert.equal(legacyRecoveryReads, 1, 'an injected legacy adapter keeps its single unfiltered callback contract');
+    assert.ok(legacyCandidates.entries.every(row => row.resumable));
     assert.doesNotMatch(JSON.stringify(failedRecovery), /SECRET PATH|EACCES|local_path/u,
       'recovery errors expose neither filesystem locations nor raw exception details');
     const completeOcrOff = { ...pendingExport, token: 'd'.repeat(64), items: [
@@ -220,6 +245,9 @@ function code(expected) { return (error) => error?.code === expected; }
     assert.equal(ocrHistory.history({ recoverExports: false }).entries.find(row =>
       row.batch_id === completeOcrOff.token).expected_ocr_omission_count, 1,
     'only a matching completed anonymization run exposes its expected OCR-off omission');
+    assert.equal(ocrHistory.history({ recoverExports: false }).entries.find(row =>
+      row.batch_id === completeOcrOff.token).failure_reason_breakdown_complete, true,
+    'a matching live journal proves its full failure breakdown even when one category is zero');
     const mixedPrivacy = { ...completeOcrOff, items: [...completeOcrOff.items,
       { id: 'f'.repeat(32), name: 'long.txt', status: 'stopped', error_code: 'AMBIGUITY_REVIEW_REQUIRED' }] };
     const mixedHistory = createRunHistory({ readStates: () => [mixedPrivacy], readExports: () => [],
@@ -367,6 +395,7 @@ function code(expected) { return (error) => error?.code === expected; }
     assert.deepEqual(history.failures(allStopped.token), {
       ok: true, available: true, total: 1,
       files: [{ name: 'blocked.docx', reason_code: 'DOCX_STRUCTURE_UNSUPPORTED' }],
+      content_notice_count: 0, content_notice_breakdown_complete: false, content_notices: [],
       local_ui_only: true, external_disclosure: false
     });
     assert.doesNotMatch(JSON.stringify(history.history()), /blocked\.docx/u,
@@ -376,7 +405,8 @@ function code(expected) { return (error) => error?.code === expected; }
     assert.deepEqual(failureService.runFailures(), history.failures(allStopped.token),
       'current failure details belong to the observed run, never the newest different run');
     assert.deepEqual(failureService.runFailures(completed.token), {
-      ok: true, available: true, total: 0, files: [], local_ui_only: true, external_disclosure: false
+      ok: true, available: true, total: 0, files: [], local_ui_only: true, external_disclosure: false,
+      content_notice_count: 0, content_notice_breakdown_complete: false, content_notices: []
     }, 'an explicit successful run never borrows failures from the observed run');
     failureService.observedBatchId = null;
     assert.throws(() => failureService.runFailures(), code('STANDALONE_HISTORY_MISSING'),
@@ -387,13 +417,15 @@ function code(expected) { return (error) => error?.code === expected; }
     });
     assert.deepEqual(summaryOnly.failures(allStopped.token), {
       ok: true, available: false, total: 1, files: [],
+      content_notice_count: 0, content_notice_breakdown_complete: false, content_notices: [],
       local_ui_only: true, external_disclosure: false
     });
     const retainedRejection = { document_id: '4'.repeat(32), name: 'nested/rejected.docx', reason_code: 'SOURCE_CONTAINER_CORRUPT' };
     const retained = rows => createRunHistory({ readStates: () => [], readExports: exportsApi.readStandaloneExportHistory,
       recoverableStates: () => [], liveExecutor: () => false, readRejectedInputs: () => rows }).failures(allStopped.token);
     assert.deepEqual(retained([retainedRejection]), { ok: true, available: true, total: 1,
-      files: [{ name: 'nested/rejected.docx', reason_code: 'SOURCE_CONTAINER_CORRUPT' }], local_ui_only: true, external_disclosure: false });
+      files: [{ name: 'nested/rejected.docx', reason_code: 'SOURCE_CONTAINER_CORRUPT' }], local_ui_only: true, external_disclosure: false,
+      content_notice_count: 0, content_notice_breakdown_complete: false, content_notices: [] });
     const mappingPending = stateFixture('5', 1501, { items: [{ id: '5'.repeat(32), name: 'pending-rejection.docx',
       status: 'preflight_mapping_pending', checkpoint: 'source_preflight_rejected', local_mapping_exported: false,
       error_code: 'SOURCE_CONTAINER_CORRUPT' }] });
@@ -403,6 +435,7 @@ function code(expected) { return (error) => error?.code === expected; }
         ...retainedRejection, document_id: mappingPending.items[0].id, name: 'pending-rejection.docx' }] });
     assert.deepEqual(afterJournalLoss.failures(mappingPending.token), { ok: true, available: true, total: 1,
       files: [{ name: 'pending-rejection.docx', reason_code: 'SOURCE_CONTAINER_CORRUPT' }],
+      content_notice_count: 0, content_notice_breakdown_complete: false, content_notices: [],
       local_ui_only: true, external_disclosure: false }, 'durable source rejection outranks a stale terminal counter');
     for (const invalid of [null, [retainedRejection, retainedRejection], [{ ...retainedRejection, name: '../foreign.docx' }],
       [{ ...retainedRejection, document_id: 'unknown' }], [{ ...retainedRejection, reason_code: 'arbitrary text' }]])

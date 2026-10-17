@@ -42,12 +42,13 @@ function freshRead(f) {
   assert.equal(read.status, 0, read.stderr); assert.equal(read.error, undefined);
   return JSON.parse(read.stdout);
 }
-function batchFixture(f, status = 'processing') {
+function batchFixture(f, status = 'processing', reviewPolicy) {
   const id = f.input.package_id.slice(3);
   const item = { id, name: `synthetic-source.${f.input.source_type}`, sha256: hash(f.proofInput.source_extraction.markdown), status };
   const state = { schema: 'datasecure-batch/7', token: id.padStart(64, '0'), profile: f.input.profile, product_channel: 'standalone',
     created_at: new Date().toISOString(), expires_at: new Date(Date.now() + 86400000).toISOString(),
-    processing_mode: 'markdown-and-anonymize', standalone_document_review: true, content_options: f.input.content_options, items: [item] };
+    processing_mode: 'markdown-and-anonymize', standalone_document_review: true, content_options: f.input.content_options, items: [item],
+    ...(reviewPolicy ? { standalone_review_policy: reviewPolicy } : {}) };
   const review = require('../plugins/data-secure/server/gateway/standalone-document-review-store').createDocumentReviewStore();
   review.captureRun(state);
   const policy = require('../plugins/data-secure/server/privacy/policy');
@@ -518,6 +519,145 @@ async function main() {
     fs.writeFileSync(receiptPath, receipt);
     fs.writeFileSync(path.join(folder(f), 'manifest.json'), JSON.stringify({ ...f.created.manifest, schema: 'eu-privacy-package/3' }));
     assert.equal(createReview().list(batchId).unavailable.length, 1, 'cached receipt must not skip the /4 reader');
+  });
+  await testAsync('bound source-coverage notices survive history reconstruction without reading document bodies or granting approvals', async () => {
+    const f = fixture('pdf', options('content-v1', true, true), 'general',
+      { status: 'incomplete', reason_codes: ['OCR_NOT_VERIFIED'] });
+    const b = batchFixture(f);
+    await store.publishAnonymizedArtifact(f.input, { beforePublish: b.capture,
+      afterPublish() { b.review.recordPublication(b.state.token, b.item.id); } });
+    b.item.status = 'released'; b.item.package_id = f.input.package_id;
+    const { anonymizationContentNotices } = require('../plugins/data-secure/server/standalone/anonymization-notices');
+    const historyStore = require('../plugins/data-secure/server/gateway/standalone-history-store');
+    const { createRunHistory } = require('../plugins/data-secure/server/standalone/run-history');
+    const { StandaloneApplicationService } = require('../plugins/data-secure/server/standalone/application-service');
+    const expected = { content_notice_count: 1, content_notice_breakdown_complete: true,
+      content_notices: [{ name: b.item.name, reason_codes: ['OCR_NOT_VERIFIED'] }] };
+    const dependencies = (rows = [b.state]) => ({ readStates: () => rows, readExports: () => [],
+      recoverableStates: () => [], liveExecutor: () => false });
+    const open = fs.openSync; let bodyReads = 0, metadataReads = 0;
+    try {
+      fs.openSync = function(file, ...args) {
+        if (typeof file === 'string' && file.endsWith('.md')) { bodyReads++; throw Error('BODY_READ_FORBIDDEN'); }
+        if (typeof file === 'string' && /document-reviews|standalone-anonymized-artifacts/u.test(file)) metadataReads++;
+        return open.call(this, file, ...args);
+      };
+      assert.deepEqual(anonymizationContentNotices(b.state.token, { state: b.state, expectedCount: 1 }), expected);
+      const summary = historyStore.recordStandaloneState(b.state);
+      assert.equal(summary.content_notice_count, 1); assert.equal(summary.content_notice_breakdown_complete, true);
+      const history = createRunHistory(dependencies());
+      const beforePoll = metadataReads;
+      assert.equal(history.history().entries.find(row => row.batch_id === b.state.token).content_notice_count, 1);
+      const service = new StandaloneApplicationService({ dependencies: { runHistory: history,
+        publicStatusSnapshot: () => ({ observed_batch_id: b.state.token, current: { engine_ready: true },
+          latest: { processing_mode: 'markdown-and-anonymize', result_count: 1, selected_count: 1, completed_count: 1, complete: true } }) } });
+      service.observedBatchId = b.state.token;
+      const current = service.status({ localUi: true });
+      assert.equal(current.warning_count, 1); assert.equal(current.content_notice_count, 1);
+      assert.equal(current.content_notice_breakdown_complete, true);
+      assert.equal(metadataReads, beforePoll, 'status and history polls must read only compact summaries, not every artifact');
+      const details = history.failures(b.state.token);
+      assert.equal(details.total, 0); assert.deepEqual(details.content_notices, expected.content_notices);
+      assert.equal(details.content_notice_breakdown_complete, true);
+      const retained = createRunHistory(dependencies([]));
+      const afterRetention = retained.failures(b.state.token);
+      assert.deepEqual(afterRetention.content_notices, expected.content_notices);
+      assert.equal(afterRetention.content_notice_breakdown_complete, true,
+        'immutable publication/membership metadata reconstructs source coverage after journal retirement');
+      assert.equal(bodyReads, 0);
+    } finally { fs.openSync = open; }
+    assert.equal(f.created.manifest.document_result.grade, 'complete', 'extraction notice does not change privacy proof scope');
+    assert.equal(b.review.list(b.state.token).documents[0].approved, false, 'a notice projection cannot create approval');
+    const documentService = new StandaloneApplicationService({ dependencies: { documentReviews: b.review,
+      runHistory: createRunHistory(dependencies()), readStates: () => [b.state] } });
+    assert.equal(documentService.documentReviews(b.state.token).content_notice_count, 1);
+    assert.equal(documentService.documentReviews(b.state.token).content_notice_breakdown_complete, true);
+    const summaryFile = path.join(process.env.EU_PRIVACY_DATA_ROOT, 'standalone-run-history', `${b.state.token}.json`);
+    const summaryBefore = fs.readFileSync(summaryFile);
+    const newer = { ...JSON.parse(summaryBefore), selected_count: 2, result_count: 2, completed_count: 2 };
+    const rename = fs.renameSync; let concurrentCompletion = false;
+    try {
+      fs.renameSync = function(from, to, ...args) {
+        if (to === path.join(path.dirname(summaryFile), `notices-${b.state.token}.json`)) {
+          concurrentCompletion = true; fs.writeFileSync(summaryFile, JSON.stringify(newer));
+        }
+        return rename.call(this, from, to, ...args);
+      };
+      assert.equal(historyStore.recordStandaloneContentNoticeSummary(b.state.token,
+        { content_notice_count: 0, content_notice_breakdown_complete: false }, 1), true);
+      assert.equal(concurrentCompletion, true);
+      assert.equal(historyStore.readStandaloneSummary(b.state.token).result_count, 2,
+        'a late notice observation never rewrites a newer worker completion');
+      assert.deepEqual(historyStore.readStandaloneContentNoticeSummary(b.state.token, 2),
+        { content_notice_count: 0, content_notice_breakdown_complete: false },
+        'an older observation count is not attached to a newer completion');
+    } finally { fs.renameSync = rename; fs.writeFileSync(summaryFile, summaryBefore); }
+    try {
+      const delayedHistory = createRunHistory({ ...dependencies(), readStates() {
+        fs.writeFileSync(summaryFile, JSON.stringify(newer));
+        return [b.state];
+      } });
+      delayedHistory.history();
+      assert.equal(historyStore.readStandaloneSummary(b.state.token).result_count, 2,
+        'history list reads never persist their older in-memory state over a newer completion');
+    } finally { fs.writeFileSync(summaryFile, summaryBefore); }
+    const publicationFile = path.join(process.env.EU_PRIVACY_DATA_ROOT, 'document-reviews', b.state.token, b.item.id, 'published.json');
+    const receipt = JSON.parse(fs.readFileSync(publicationFile));
+    fs.writeFileSync(publicationFile, JSON.stringify({ ...receipt, publication_binding: { ...receipt.publication_binding, manifest_sha256: '0'.repeat(64) } }));
+    const broken = anonymizationContentNotices(b.state.token, { state: b.state, expectedCount: 1 });
+    assert.deepEqual(broken, { content_notice_count: 0, content_notice_breakdown_complete: false, content_notices: [] },
+      'changed publication pin is unknown, never proof of notice-free coverage');
+    assert.equal(createRunHistory(dependencies()).failures(b.state.token).content_notice_breakdown_complete, false);
+    assert.deepEqual(historyStore.readStandaloneContentNoticeSummary(b.state.token, 1),
+      { content_notice_count: 1, content_notice_breakdown_complete: false },
+      'lost provenance marks the present audit incomplete but retains the historical known minimum');
+    fs.writeFileSync(publicationFile, JSON.stringify(receipt));
+    const savedSummary = historyStore.readStandaloneSummary(b.state.token);
+    const cacheFile = path.join(process.env.EU_PRIVACY_DATA_ROOT, 'standalone-run-history', `notices-${b.state.token}.json`);
+    fs.renameSync(cacheFile, `${cacheFile}.inline-migration-test`);
+    fs.writeFileSync(summaryFile, JSON.stringify({ ...savedSummary, content_notice_count: 1, content_notice_breakdown_complete: false }));
+    const migrated = historyStore.recordStandaloneState(b.state, { reconstructContentNotices: false });
+    assert.equal(migrated.content_notice_count, 1);
+    assert.deepEqual(historyStore.readStandaloneContentNoticeSummary(b.state.token, 1),
+      { content_notice_count: 1, content_notice_breakdown_complete: false },
+      'startup/list capture migrates the earlier inline minimum without reading document bodies');
+    const { content_notice_count, content_notice_breakdown_complete, ...legacy } = savedSummary;
+    assert.equal(historyStore.validSummary(legacy), true);
+    fs.writeFileSync(path.join(process.env.EU_PRIVACY_DATA_ROOT, 'standalone-run-history', `${b.state.token}.json`), JSON.stringify(legacy));
+    fs.writeFileSync(path.join(process.env.EU_PRIVACY_DATA_ROOT, 'standalone-run-history', `notices-${b.state.token}.json`), '{}');
+    assert.deepEqual(historyStore.readStandaloneContentNoticeSummary(b.state.token, 1),
+      { content_notice_count: 0, content_notice_breakdown_complete: false }, 'missing or corrupt cached basis remains explicitly unknown');
+    assert.deepEqual(anonymizationContentNotices('f'.repeat(64), { expectedCount: 1 }),
+      { content_notice_count: 0, content_notice_breakdown_complete: false, content_notices: [] });
+    const runManifest = path.join(process.env.EU_PRIVACY_DATA_ROOT, 'document-reviews', b.state.token, 'manifest.json');
+    const runBytes = fs.readFileSync(runManifest), manifest = JSON.parse(runBytes);
+    for (const rejected of [null, {}, [{ document_id: b.item.id, name: b.item.name, reason_code: 'SOURCE_CONTAINER_CORRUPT' }],
+      [{ document_id: 'f'.repeat(32), name: 'synthetic.txt', reason_code: 'ARBITRARY_ERROR' }]]) {
+      fs.writeFileSync(runManifest, JSON.stringify({ ...manifest, preflight_rejections: rejected }));
+      assert.equal(anonymizationContentNotices(b.state.token, { state: b.state, expectedCount: 1 }).content_notice_breakdown_complete, false,
+        'malformed or overlapping run membership never becomes a complete coverage projection');
+    }
+    fs.writeFileSync(runManifest, runBytes);
+  });
+  await testAsync('notice-free coverage requires matching real publication evidence, not OCR-switch inference', async () => {
+    const f = fixture(), b = batchFixture(f, 'processing', 'automatic-conservative');
+    await store.publishAnonymizedArtifact(f.input, { beforePublish: b.capture,
+      afterPublish() { b.review.recordPublication(b.state.token, b.item.id); } });
+    b.item.status = 'released'; b.item.package_id = f.input.package_id;
+    const { anonymizationContentNotices } = require('../plugins/data-secure/server/standalone/anonymization-notices');
+    assert.deepEqual(anonymizationContentNotices(b.state.token, { state: b.state, expectedCount: 1 }),
+      { content_notice_count: 0, content_notice_breakdown_complete: true, content_notices: [] });
+    assert.deepEqual(anonymizationContentNotices(b.state.token, { state: { ...b.state, profile: 'auto' }, expectedCount: 1 }),
+      { content_notice_count: 0, content_notice_breakdown_complete: true, content_notices: [] },
+      'automatic profile selection permits the actual validated publication profile');
+    assert.equal(require('../plugins/data-secure/server/gateway/standalone-history-store').recordStandaloneState(b.state).review_policy,
+      'automatic-conservative', 'Fastway /4 membership and terminal coverage snapshot retain the immutable policy');
+    const { standalone_review_policy, ...changedPolicyState } = b.state;
+    assert.equal(anonymizationContentNotices(b.state.token, { state: changedPolicyState, expectedCount: 1 }).content_notice_breakdown_complete, false);
+    assert.equal(anonymizationContentNotices(b.state.token, { state: { ...b.state, profile: 'customer' }, expectedCount: 1 })
+      .content_notice_breakdown_complete, false);
+    assert.equal(anonymizationContentNotices(b.state.token, { state: b.state, expectedCount: 2 })
+      .content_notice_breakdown_complete, false);
   });
   await testAsync('actual pre-rename process death cleans only owned staging, never adopting its uncommitted text', () => crashAt('before'));
   await testAsync('actual post-rename process death recovers the ownership receipt and preserves exact committed bytes', () => crashAt('after'));

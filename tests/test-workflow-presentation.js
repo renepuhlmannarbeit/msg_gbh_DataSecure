@@ -1,7 +1,7 @@
 'use strict';
 const { createSuite } = require('./helpers');
 const { test, assert, done } = createSuite('Standalone display-only workflow projection');
-const { projectRun, failureAdvice, conversionSummary, validateConversionFeedback } = require('../apps/datasecure-standalone/frontend/workflow-presentation');
+const { projectRun, failureAdvice, conversionSummary, validateConversionFeedback, contentNoticeSummary } = require('../apps/datasecure-standalone/frontend/workflow-presentation');
 const id = 'a'.repeat(64);
 const processor = extra => projectRun({ batch_id: id, processing_mode: 'markdown-and-anonymize',
   source: 'processor', selected_count: 3, completed_count: 0, failed_count: 0, ...extra });
@@ -53,7 +53,50 @@ test('opted-in raw OCR contact review names the purpose without implying anonymi
 test('technical completion is not a human approval or KI export', () => {
   const result = processor({ state: 'results_available', completed_count: 3 });
   assert.equal(result.phase, 'documents'); assert.equal(result.stages[2].status, 'current'); assert.equal(result.stages[3].status, 'pending');
-  assert.match(result.next, /noch keine menschliche Freigabe/u);
+  assert.match(result.heading, /Anonymisierungslauf abgeschlossen/u);
+  assert.match(result.next, /noch vergleichen und freigeben/u);
+  assert.match(result.next, /kein KI-Export erfolgt automatisch/u);
+});
+
+test('successful anonymization keeps source coverage hints separate from completion and approval', () => {
+  const value = { state: 'results_available', completed_count: 3, result_count: 3,
+    content_notice_count: 2, content_notice_breakdown_complete: true };
+  const result = processor(value);
+  assert.match(result.heading, /abgeschlossen mit Hinweisen/u);
+  assert.match(result.next, /2 erstellte Dateien.*Inhaltshinweise/u);
+  assert.equal(result.stages[0].status, 'warning');
+  assert.equal(result.stages[2].status, 'current');
+  const clean = processor({ ...value, content_notice_count: 0 });
+  assert.equal(clean.heading, 'Anonymisierungslauf abgeschlossen');
+});
+
+test('old or malformed coverage summaries cannot prove absence of source hints', () => {
+  const owner = { processing_mode: 'markdown-and-anonymize', result_count: 3,
+    content_notice_count: 0, content_notice_breakdown_complete: true };
+  assert.equal(contentNoticeSummary(owner).attention, false);
+  for (const extra of [{ content_notice_count: undefined }, { content_notice_count: -1 },
+    { content_notice_count: 4 }, { content_notice_count: '0' }, { content_notice_breakdown_complete: false }]) {
+    const result = contentNoticeSummary({ ...owner, ...extra });
+    assert.equal(result.complete, false); assert.equal(result.attention, true);
+    assert.match(result.description, /nicht vollständig verfügbar/u);
+  }
+  assert.equal(contentNoticeSummary({ ...owner, processing_mode: 'markdown-only' }), null);
+  assert.match(contentNoticeSummary({ ...owner, content_notice_count: 1, content_notice_breakdown_complete: false }).description,
+    /^Mindestens 1 erstellte Datei/u);
+});
+
+test('automatic approvals of available files cannot close a still-running batch', () => {
+  const incomplete = documents({ approved_count: 3, automatically_approved_count: 3, processing_complete: false });
+  assert.equal(incomplete.heading, 'Bisher verfügbare Dokumente automatisch freigegeben');
+  assert.match(incomplete.next, /Laufabschluss ist noch nicht bestätigt/u);
+  const complete = documents({ approved_count: 3, automatically_approved_count: 3 });
+  assert.equal(complete.heading, 'Schnellweg abgeschlossen · automatisch freigegeben');
+  assert.match(complete.next, /nicht manuell geprüft/u);
+  const status = processor({ state: 'results_available', completed_count: 3, review_policy: 'automatic-conservative' });
+  assert.match(status.heading, /abgeschlossen/u); assert.match(status.next, /Erstfreigabe erfolgt automatisch/u);
+  assert.equal(status.stages[1].label, 'Fundstellen automatisch behandeln');
+  assert.equal(status.stages[2].label, 'Automatische Erstfreigabe');
+  assert.equal(status.stages[3].status, 'pending', 'policy does not prove a current KI copy');
 });
 test('raw completion keeps optional correction and unmasked contents explicit', () => {
   const result = processor({ state: 'results_available', processing_mode: 'markdown-only', completed_count: 3 });

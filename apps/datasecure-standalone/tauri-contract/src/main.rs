@@ -2,16 +2,19 @@
 
 mod native_smoke;
 mod ipc_transport;
+mod ipc_activity;
 mod review_window;
 mod native_open;
 mod startup_diagnostics;
 mod diagnostic_log;
+mod diagnostic_bundle;
 mod export_directory;
 mod export_private_security;
 mod native_export_channel;
 mod native_export_broker;
 mod native_export_transaction;
 mod native_export_workspace;
+mod source_fingerprint;
 mod content_start;
 
 use serde_json::{json, Value};
@@ -226,6 +229,7 @@ impl Drop for SidecarProcess {
 struct DesktopState {
     app: AppHandle,
     sidecar: Arc<Mutex<Option<SidecarProcess>>>,
+    activity: ipc_activity::Tracker,
     connection_epoch: Arc<AtomicU64>,
     expected_connection_epoch: u64,
     retired_owner_generations: Arc<Mutex<Vec<String>>>,
@@ -243,6 +247,7 @@ struct DesktopState {
 impl Clone for DesktopState {
     fn clone(&self) -> Self {
         Self { app: self.app.clone(), sidecar: self.sidecar.clone(), lifecycle: self.lifecycle.clone(),
+            activity: self.activity.clone(),
             connection_epoch: self.connection_epoch.clone(),
             expected_connection_epoch: self.expected_connection_epoch,
             retired_owner_generations: self.retired_owner_generations.clone(),
@@ -865,7 +870,26 @@ fn spawn_sidecar(app: &tauri::AppHandle, lifecycle: &ipc_transport::Lifecycle, s
             // A native trap before Ready is not a transient IPC timeout.
             // Preserve the fixed cause for the UI without exposing stderr or
             // silently retrying a crashed executable as a healthy connection.
-            return Err(if cause == "STANDALONE_SIDECAR_SIGNAL_TRAP" { cause } else { code });
+            // Return only fixed, content-free OS failure classes. A generic
+            // transport timeout still retains its transport code; no request
+            // is replayed after either kind of startup failure.
+            let known_early_exit = matches!(cause.as_str(),
+                "STANDALONE_SIDECAR_SIGNAL_TRAP" |
+                "STANDALONE_SIDECAR_SIGNAL_ABORT" |
+                "STANDALONE_SIDECAR_SIGNAL_KILLED" |
+                "STANDALONE_SIDECAR_SIGNAL_ILLEGAL_INSTRUCTION" |
+                "STANDALONE_SIDECAR_SIGNAL_BUS" |
+                "STANDALONE_SIDECAR_SIGNAL_SEGFAULT" |
+                "STANDALONE_SIDECAR_EXIT_DENIED" |
+                "STANDALONE_SIDECAR_EXIT_NOT_FOUND" |
+                "STANDALONE_SIDECAR_WINDOWS_ACCESS_VIOLATION" |
+                "STANDALONE_SIDECAR_WINDOWS_ILLEGAL_INSTRUCTION" |
+                "STANDALONE_SIDECAR_WINDOWS_INVALID_IMAGE" |
+                "STANDALONE_SIDECAR_WINDOWS_DLL_MISSING" |
+                "STANDALONE_SIDECAR_WINDOWS_DLL_INIT_FAILED" |
+                "STANDALONE_SIDECAR_WINDOWS_STACK_OVERFLOW" |
+                "STANDALONE_SIDECAR_WINDOWS_STACK_BUFFER_OVERRUN");
+            return Err(if known_early_exit { cause } else { code });
         }
     };
     if ready["schema"] != "datasecure-standalone-ready/1" || ready["owner_generation"] != process.owner_generation ||
@@ -925,6 +949,22 @@ fn sidecar_bootstrap_diagnostic(child: &ipc_transport::ChildControl, transport_c
             return if (1..=128).contains(&signal) { format!("STANDALONE_SIDECAR_SIGNAL_{signal}") }
                 else { "STANDALONE_SIDECAR_SIGNAL_OTHER".into() };
         }
+    }
+    #[cfg(windows)]
+    if let Some(code) = status.code() {
+        // Windows may report an NTSTATUS as a signed i32. Preserve only
+        // documented, allowlisted classes, never arbitrary exit text.
+        let diagnostic = match code as u32 {
+            0xC0000005 => Some("STANDALONE_SIDECAR_WINDOWS_ACCESS_VIOLATION"),
+            0xC000001D => Some("STANDALONE_SIDECAR_WINDOWS_ILLEGAL_INSTRUCTION"),
+            0xC000007B => Some("STANDALONE_SIDECAR_WINDOWS_INVALID_IMAGE"),
+            0xC0000135 => Some("STANDALONE_SIDECAR_WINDOWS_DLL_MISSING"),
+            0xC0000142 => Some("STANDALONE_SIDECAR_WINDOWS_DLL_INIT_FAILED"),
+            0xC00000FD => Some("STANDALONE_SIDECAR_WINDOWS_STACK_OVERFLOW"),
+            0xC0000409 => Some("STANDALONE_SIDECAR_WINDOWS_STACK_BUFFER_OVERRUN"),
+            _ => None,
+        };
+        if let Some(value) = diagnostic { return value.into(); }
     }
     match status.code() {
         Some(1) => "STANDALONE_SIDECAR_EXIT_ONE".into(),
@@ -1063,12 +1103,23 @@ fn mode_rejected_before_start(result: &Result<Value, String>) -> bool {
     matches!(result, Err(code) if matches!(code.as_str(),
         "PROCESSING_MODE_INVALID" | "PROCESSING_MODE_FORBIDDEN" | "MARKDOWN_CONVERSION_NOT_READY" |
         "STANDALONE_SELECTION_INVALID" | "CONTENT_OPTIONS_INVALID" | "CONTENT_OPTIONS_FORBIDDEN" |
-        "CONTENT_OPTIONS_NOT_READY"))
+        "CONTENT_OPTIONS_NOT_READY" | "STANDALONE_REVIEW_POLICY_INVALID" | "STANDALONE_RESULT_ROOT_UNAVAILABLE" |
+        "STANDALONE_IPC_BUSY" | "STANDALONE_BUSY"))
 }
 
-fn validate_start_content_body(body: &tauri::ipc::InvokeBody, document_review: bool) -> Result<Option<Value>, String> {
+#[derive(Debug, PartialEq)]
+struct ValidatedStartContent { options: Option<Value>, review_policy: Option<String> }
+
+fn validate_start_content_body(body: &tauri::ipc::InvokeBody, document_review: bool) -> Result<ValidatedStartContent, String> {
     match body {
-        tauri::ipc::InvokeBody::Json(value) => content_start::decode_start(value, document_review),
+        tauri::ipc::InvokeBody::Json(value) => {
+            let options = content_start::decode_start(value, document_review)?;
+            // The closed raw-body validator above checks policy presence,
+            // exact spelling, mode and the trusted document surface together.
+            // Read that same validated body, not a second command argument.
+            let review_policy = value.get("reviewPolicy").and_then(Value::as_str).map(str::to_owned);
+            Ok(ValidatedStartContent { options, review_policy })
+        },
         tauri::ipc::InvokeBody::Raw(_) => Err("CONTENT_OPTIONS_INVALID".into()),
     }
 }
@@ -1240,22 +1291,31 @@ fn history_rpc(state: &DesktopState, action: &str, batch_id: &str) -> Result<Val
 
 fn rpc_duration(action: &str) -> Duration {
     Duration::from_secs(if matches!(action, "admit_selected_sources" | "preview_document_export" | "export_approved_documents" |
-        "abandon_document_export" |
+        "abandon_document_export" | "decide_document_review_batch" |
         "resolve_document_export" | "resolve_document_identity_overview" | "get_document_reviews" | "get_document_review_history_summary" |
-        "get_run_history" | "get_review_session" | "resolve_current_results" | "resolve_local_ledger") { 300 }
+        "get_run_history" | "get_run_failures" | "resolve_history_results" | "resolve_history_ledger" |
+        "resolve_history_identity_mapping" | "get_review_session" | "resolve_current_results" | "resolve_local_ledger") { 300 }
         else if matches!(action, "get_public_state" | "get_ui_context") { 120 }
         else { 30 })
 }
 
 fn rpc_lock_duration(action: &str) -> Duration {
-    // The first display read may need to verify a large saved run before the
-    // sidecar sends Ready. Other display reads can queue behind that startup;
-    // neither event is the duration of the request itself.
+    // A long export/history read owns the serial Core. A status lookup must
+    // not sit behind it for 120 seconds and then report a false disconnect.
+    // The distinct BUSY result leaves the owning request and connection intact.
     if matches!(action, "get_public_state" | "get_ui_context") {
-        Duration::from_secs(120)
+        Duration::from_secs(5)
     } else {
         rpc_duration(action)
     }
+}
+
+fn rpc_lock_transport_code(_action: &str, code: String) -> String {
+    // No request bytes have been sent while waiting for ownership. Queue
+    // exhaustion says nothing about connection health or mutation outcome.
+    if code == ipc_transport::TIMEOUT {
+        "STANDALONE_IPC_BUSY".into()
+    } else { code }
 }
 
 fn rpc_bootstrap_duration() -> Duration { Duration::from_secs(120) }
@@ -1298,7 +1358,16 @@ fn rpc_request(
         return Err("STANDALONE_IPC_FAILED".to_string());
     }
     let mut process_guard = ipc_transport::lock_until(&state.sidecar, lock_deadline, &state.lifecycle.stopping)
-        .map_err(|code| admission_transport_code(action, code)).inspect_err(early_failure)?;
+        .map_err(|code| {
+            let code = rpc_lock_transport_code(action, code);
+            if code == "STANDALONE_IPC_BUSY" {
+                diagnostic_ipc_event("ipc_request_queue_busy", action, id, "blocked", Some(&code), Some(started.elapsed().as_millis()));
+            } else { early_failure(&code); }
+            code
+        })?;
+    let activity = state.activity.begin(action);
+    let export_reporter = request.get("operation_id").and_then(Value::as_str)
+        .and_then(|operation_id| activity.export_reporter(operation_id));
     // Capture happens explicitly at command ingress, before a
     // blocking task can queue behind another RPC. A stale mutation is never
     // dispatched to a replacement service with a fresh source catalogue.
@@ -1315,6 +1384,7 @@ fn rpc_request(
         }
     }
     if process_guard.is_none() {
+        activity.set_phase("bootstrap");
         // After a broken connection only display reads may bootstrap its
         // successor. A mutation must be explicitly invoked after Ready.
         if state.connection_epoch.load(Ordering::Acquire) != 0 &&
@@ -1356,6 +1426,7 @@ fn rpc_request(
     // starts a fresh bounded action window. Expired startup time must never
     // kill a healthy sidecar in the middle of its very first display read.
     let deadline = Instant::now() + rpc_duration(action);
+    activity.set_phase("waiting");
     let result = (|| {
         let process = process_guard
             .as_mut()
@@ -1370,8 +1441,12 @@ fn rpc_request(
         loop {
             let frame = ipc_transport::receive_until_with_progress(&process.responses, deadline, &state.lifecycle.stopping,
                 || admission_progress(state, action, "validating", started.elapsed().as_millis()))??;
+            if matches!(frame.get("schema").and_then(Value::as_str), Some(native_export_channel::PUBLICATION_REQUEST | native_export_channel::REQUEST_SCHEMA)) {
+                activity.set_phase("native");
+            }
             let publication_reply = if frame.get("schema").and_then(Value::as_str) == Some(native_export_channel::PUBLICATION_REQUEST) {
-                native_export_channel::handle_publication(&frame, &request, &mut publication, &state.lifecycle, &native_export_data_root()?, deadline)?
+                native_export_channel::handle_publication_with_activity(&frame, &request, &mut publication, &state.lifecycle,
+                    &native_export_data_root()?, deadline, export_reporter.clone())?
             } else { None };
             if let Some(reply) = publication_reply.or(native_export_channel::handle(&frame, &request, &mut native_handled, &state.lifecycle, deadline)?) {
                 native_bound = reply.get("ok").and_then(Value::as_bool) == Some(true);
@@ -1379,6 +1454,7 @@ fn rpc_request(
                 let (sent, completed) = mpsc::channel();
                 process.writes.send((payload, sent)).map_err(|_| ipc_transport::FAILED.to_string())?;
                 ipc_transport::receive_until(&completed, deadline, &state.lifecycle.stopping)??;
+                activity.set_phase("waiting");
             } else {
                 native_export_channel::validate_completion(&frame, &request, native_bound)?;
                 break Ok(frame);
@@ -1752,7 +1828,7 @@ async fn start_admitted_batch(
 ) -> Result<Value, String> {
     let document_review = state.app.get_webview_window("main")
         .and_then(|window| window.url().ok()).map(|url| workspace_catalogue_path(url.path())).unwrap_or(false);
-    let content_options = validate_start_content_body(request.body(), document_review)?;
+    let ValidatedStartContent { options: content_options, review_policy } = validate_start_content_body(request.body(), document_review)?;
     let mode = validate_processing_mode(processing_mode.as_deref())?;
     validate_output_naming_mode(output_naming_mode.as_deref(), mode)?;
     let contact_review = validate_ocr_contact_review(mode, ocr_contact_review)?;
@@ -1769,6 +1845,9 @@ async fn start_admitted_batch(
         )?;
         if contact_review {
             request["ocr_contact_review"] = json!(true);
+        }
+        if let Some(policy) = review_policy {
+            request["review_policy"] = json!(policy);
         }
         if source_ids.is_some() || catalogue_revision.is_some() {
             let ids = source_ids.ok_or("STANDALONE_SELECTION_INVALID")?;
@@ -2129,6 +2208,13 @@ async fn decide_document_review(window: tauri::WebviewWindow, state: State<'_, D
 }
 
 #[tauri::command(rename_all = "camelCase")]
+async fn decide_document_review_batch(window: tauri::WebviewWindow, state: State<'_, DesktopState>,
+    batch_id: String, decision: Value) -> Result<Value, String> {
+    document_review_rpc(window, state.inner().capture_connection(), batch_id, "decide_document_review_batch",
+        json!({ "decision": decision })).await
+}
+
+#[tauri::command(rename_all = "camelCase")]
 async fn preview_document_export(window: tauri::WebviewWindow, state: State<'_, DesktopState>,
     batch_id: String, operation_id: String, selection: Value) -> Result<Value, String> {
     document_review_rpc(window, state.inner().capture_connection(), batch_id, "preview_document_export",
@@ -2402,10 +2488,47 @@ async fn open_diagnostic_folder() -> Result<Value, String> {
     }
 }
 #[tauri::command]
+async fn save_diagnostic_bundle() -> Result<Value, String> {
+    // No DesktopState, Core RPC, run ownership or result-folder configuration:
+    // diagnostics remain available during bootstrap failure or disconnected IPC.
+    let _guard = diagnostic_bundle::SaveGuard::begin()
+        .ok_or_else(|| "STANDALONE_DIAGNOSTIC_SAVE_BUSY".to_string())?;
+    diagnostic_event("diagnostic_bundle_requested", None, "progress", None, None);
+    let stamp = SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_secs();
+    let selected = tauri::async_runtime::spawn_blocking(move || rfd::FileDialog::new()
+        .set_title("Diagnosepaket als neue Datei speichern")
+        .set_file_name(format!("DataSecure-Diagnose-{stamp}.json"))
+        .add_filter("DataSecure-Diagnose (JSON)", &["json"]).save_file())
+        .await.map_err(|_| {
+            diagnostic_event("diagnostic_bundle_failed", None, "failed", Some("STANDALONE_DIAGNOSTIC_SAVE_FAILED"), None);
+            "STANDALONE_DIAGNOSTIC_SAVE_FAILED".to_string()
+        })?;
+    let Some(destination) = selected else {
+        diagnostic_event("diagnostic_bundle_cancelled", None, "cancelled", None, None);
+        return Ok(json!({ "ok": true, "cancelled": true, "saved": false, "local_ui_only": true, "external_disclosure": false }));
+    };
+    let result = tauri::async_runtime::spawn_blocking(move || diagnostic_bundle::save(&diagnostic_directory(), &destination))
+        .await.map_err(|_| {
+            diagnostic_event("diagnostic_bundle_failed", None, "failed", Some("STANDALONE_DIAGNOSTIC_SAVE_FAILED"), None);
+            "STANDALONE_DIAGNOSTIC_SAVE_FAILED".to_string()
+        })?;
+    match result {
+        Ok(partial) => {
+            diagnostic_event("diagnostic_bundle_saved", None, "ready", None, None);
+            Ok(json!({ "ok": true, "saved": true, "cancelled": false, "partial": partial,
+                "local_ui_only": true, "external_disclosure": false }))
+        }
+        Err(_) => {
+            diagnostic_event("diagnostic_bundle_failed", None, "failed", Some("STANDALONE_DIAGNOSTIC_SAVE_FAILED"), None);
+            Err("STANDALONE_DIAGNOSTIC_SAVE_FAILED".into())
+        }
+    }
+}
+#[tauri::command]
 fn get_native_recovery_status(state: State<'_, DesktopState>) -> Value {
     // Independent of the sidecar, including while IPC is blocked. This
     // snapshot never authorizes a new run, a release, or an export.
-    json!({ "phase": state.lifecycle.recovery_phase(), "diagnostic_log": diagnostic_log::status(), "local_ui_only": true,
+    json!({ "phase": state.lifecycle.recovery_phase(), "activity": state.activity.snapshot(), "diagnostic_log": diagnostic_log::status(), "local_ui_only": true,
         "external_disclosure": false })
 }
 #[tauri::command]
@@ -2462,6 +2585,7 @@ fn begin_native_exit(state: DesktopState) {
 }
 
 fn main() {
+    source_fingerprint::retain();
     if std::env::args_os().nth(1).is_some_and(|value| value == "--startup-diagnostics") {
         let directory = diagnostic_directory();
         if std::fs::create_dir_all(&directory).is_err() { std::process::exit(70); }
@@ -2502,6 +2626,7 @@ fn main() {
             let state = DesktopState {
                 app: app.handle().clone(),
                 sidecar: Arc::new(Mutex::new(None)),
+                activity: ipc_activity::Tracker::default(),
                 connection_epoch: Arc::new(AtomicU64::new(0)),
                 expected_connection_epoch: 0,
                 retired_owner_generations: Arc::new(Mutex::new(Vec::new())),
@@ -2580,6 +2705,7 @@ fn main() {
             get_document_review_chunk,
             get_document_entities,
             decide_document_review,
+            decide_document_review_batch,
             export_approved_documents,
             preview_document_export,
             abandon_document_export,
@@ -2595,6 +2721,7 @@ fn main() {
             open_current_results,
             open_local_ledger,
             open_diagnostic_folder,
+            save_diagnostic_bundle,
             get_native_recovery_status,
             report_blocked_picker,
             shutdown,
@@ -3053,6 +3180,10 @@ mod tests {
             "PROCESSING_MODE_FORBIDDEN",
             "MARKDOWN_CONVERSION_NOT_READY",
             "CONTENT_OPTIONS_INVALID",
+            "STANDALONE_RESULT_ROOT_UNAVAILABLE",
+            "STANDALONE_REVIEW_POLICY_INVALID",
+            "STANDALONE_IPC_BUSY",
+            "STANDALONE_BUSY",
             "CONTENT_OPTIONS_FORBIDDEN",
             "CONTENT_OPTIONS_NOT_READY",
         ] {
@@ -3071,14 +3202,34 @@ mod tests {
     #[test]
     fn actual_invoke_body_decodes_raw_contract_and_keeps_legacy_json() {
         assert_eq!(validate_start_content_body(&tauri::ipc::InvokeBody::Json(
-            json!({ "processingMode": "markdown-only" })), false).unwrap(), None);
+            json!({ "processingMode": "markdown-only" })), false).unwrap(), ValidatedStartContent { options: None, review_policy: None });
         let content = json!({ "schema": "datasecure-content-options/1", "markdownOutput": "content-v1",
             "scanOcr": true, "imageOcr": false });
         assert_eq!(validate_start_content_body(&tauri::ipc::InvokeBody::Json(
-            json!({ "processingMode": "markdown-only", "contentOptions": content })), true).unwrap(), Some(content));
+            json!({ "processingMode": "markdown-only", "contentOptions": content })), true).unwrap(),
+            ValidatedStartContent { options: Some(content), review_policy: None });
         assert_eq!(validate_start_content_body(&tauri::ipc::InvokeBody::Json(
             json!({ "processingMode": "markdown-only", "contentOptions": null })), true).unwrap_err(), "CONTENT_OPTIONS_INVALID");
         assert_eq!(validate_start_content_body(&tauri::ipc::InvokeBody::Raw(vec![]), true).unwrap_err(), "CONTENT_OPTIONS_INVALID");
+    }
+    #[test]
+    fn start_policy_comes_only_from_the_same_closed_raw_content_contract() {
+        let content = json!({ "schema": "datasecure-content-options/1", "markdownOutput": "content-v1",
+            "scanOcr": true, "imageOcr": false });
+        let body = json!({ "processingMode": "markdown-and-anonymize", "contentOptions": content,
+            "reviewPolicy": "automatic-conservative" });
+        let decoded = validate_start_content_body(&tauri::ipc::InvokeBody::Json(body.clone()), true).unwrap();
+        assert_eq!(decoded.options, Some(content));
+        assert_eq!(decoded.review_policy.as_deref(), Some("automatic-conservative"));
+        assert_eq!(validate_start_content_body(&tauri::ipc::InvokeBody::Json(body.clone()), false).unwrap_err(), "STANDALONE_REVIEW_POLICY_INVALID");
+        for value in [Value::Null, json!(true), json!("automatic"), json!({})] {
+            let mut invalid = body.clone(); invalid["reviewPolicy"] = value;
+            assert_eq!(validate_start_content_body(&tauri::ipc::InvokeBody::Json(invalid), true).unwrap_err(), "STANDALONE_REVIEW_POLICY_INVALID");
+        }
+        let mut missing = body.clone(); missing.as_object_mut().unwrap().remove("contentOptions");
+        assert_eq!(validate_start_content_body(&tauri::ipc::InvokeBody::Json(missing), true).unwrap_err(), "STANDALONE_REVIEW_POLICY_INVALID");
+        let mut alias = body; alias["review_policy"] = alias.as_object_mut().unwrap().remove("reviewPolicy").unwrap();
+        assert_eq!(validate_start_content_body(&tauri::ipc::InvokeBody::Json(alias), true).unwrap_err(), "CONTENT_OPTIONS_INVALID");
     }
 
     #[test]
@@ -3351,18 +3502,28 @@ mod tests {
     fn admission_has_its_own_bounded_deadline_and_honest_transport_failure() {
         assert_eq!(rpc_duration("admit_selected_sources"), Duration::from_secs(300));
         assert_eq!(rpc_duration("preview_document_export"), Duration::from_secs(300));
+        assert_eq!(rpc_duration("decide_document_review_batch"), Duration::from_secs(300));
         assert_eq!(rpc_duration("abandon_document_export"), Duration::from_secs(300));
         assert_eq!(rpc_duration("get_document_review_history_summary"), Duration::from_secs(300));
         assert_eq!(rpc_duration("get_document_reviews"), Duration::from_secs(300));
         assert_eq!(rpc_duration("get_run_history"), Duration::from_secs(300));
+        for action in ["get_run_failures", "resolve_history_results", "resolve_history_ledger", "resolve_history_identity_mapping"] {
+            assert_eq!(rpc_duration(action), Duration::from_secs(300), "{action}");
+            assert_eq!(rpc_lock_duration(action), Duration::from_secs(300), "{action}");
+        }
+        assert_eq!(rpc_duration("export_approved_documents"), Duration::from_secs(300), "progress never extends the mutation deadline");
         assert_eq!(rpc_duration("get_review_session"), Duration::from_secs(300));
         assert_eq!(rpc_duration("get_public_state"), Duration::from_secs(120));
         assert_eq!(rpc_duration("get_ui_context"), Duration::from_secs(120));
         assert_eq!(rpc_duration("submit_review"), Duration::from_secs(30));
-        assert_eq!(rpc_lock_duration("get_ui_context"), Duration::from_secs(120));
-        assert_eq!(rpc_lock_duration("get_public_state"), Duration::from_secs(120));
+        assert_eq!(rpc_lock_duration("get_ui_context"), Duration::from_secs(5));
+        assert_eq!(rpc_lock_duration("get_public_state"), Duration::from_secs(5));
         assert_eq!(rpc_lock_duration("get_run_history"), Duration::from_secs(300));
         assert_eq!(rpc_lock_duration("submit_review"), Duration::from_secs(30));
+        assert_eq!(rpc_lock_transport_code("get_public_state", ipc_transport::TIMEOUT.into()), "STANDALONE_IPC_BUSY");
+        assert_eq!(rpc_lock_transport_code("get_ui_context", ipc_transport::TIMEOUT.into()), "STANDALONE_IPC_BUSY");
+        assert_eq!(rpc_lock_transport_code("submit_review", ipc_transport::TIMEOUT.into()), "STANDALONE_IPC_BUSY");
+        assert_eq!(rpc_lock_transport_code("admit_selected_sources", ipc_transport::TIMEOUT.into()), "STANDALONE_IPC_BUSY");
         assert_eq!(rpc_bootstrap_duration(), Duration::from_secs(120));
         assert_eq!(admission_transport_code("admit_selected_sources", ipc_transport::TIMEOUT.to_string()),
             "STANDALONE_ADMISSION_TIMEOUT");

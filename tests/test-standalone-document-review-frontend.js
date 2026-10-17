@@ -7,14 +7,16 @@ const { testAsync, assert, done } = createSuite('Standalone document review rend
 const source = fs.readFileSync(path.join(__dirname, '../apps/datasecure-standalone/frontend/document-review.js'), 'utf8');
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const textTree = node => [node.textContent, ...(node.children || []).map(textTree)].join(' ');
+const isDecision = call => ['decide_document_review', 'decide_document_review_batch'].includes(call.command);
 function harness(options = {}) {
   const nodes = new Map(), calls = [], guides = [], rows = [1, 2].map(n => ({ name: `Quelle-${n}.pdf`, document_id: String(n).repeat(32), revision: 0,
     output_sha256: String(n).repeat(64), chunks: 1, approved: false, processing_mode: 'markdown-and-anonymize' }));
-  const intervals = new Set(); let now = 0;
+  const intervals = new Set(); let now = 0, wallClockOffset = 0;
   const document = { activeElement: null };
-  const create = tag => ({ tag, children: [], events: new Map(), textContent: '', value: '', disabled: false, checked: false, isConnected: true,
+  const create = tag => ({ tag, children: [], events: new Map(), dataset: {}, textContent: '', value: '', disabled: false, checked: false, isConnected: true,
     append(...values) { this.children.push(...values); }, replaceChildren(...values) { this.children = values; },
     setAttribute() {}, focus() { this.focused = true; document.activeElement = this; }, addEventListener(event, fn) { this.events.set(event, fn); },
+    click() { this.events.get('click')?.(); },
     setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; },
     showModal() { this.open = true; }, close() { this.open = false; this.events.get('close')?.(); } });
   const el = id => { if (!nodes.has(id)) nodes.set(id, create('div')); return nodes.get(id); };
@@ -28,6 +30,16 @@ function harness(options = {}) {
       original_text: 'Anna Beispiel: 42 Projekte.', markdown: options.maskAfterRevision && rows.find(row => row.document_id === args.documentId).revision > 0 ?
         '[PERSON_001]: [MANUAL_REDACTION] Projekte.' : options.strictBindings ? `Stand ${rows.find(row => row.document_id === args.documentId).revision}` :
           '[PERSON_001]: 42 Projekte.', local_ui_only: true, external_disclosure: false };
+    if (command === 'decide_document_review_batch') {
+      const selected = args.decision.selection.map(binding => {
+        const row = rows.find(row => row.document_id === binding.document_id);
+        if (options.strictBindings) { assert.equal(binding.revision, row.revision); assert.equal(binding.output_sha256, row.output_sha256); }
+        return row;
+      });
+      for (const row of selected) { row.revision++; row.approved = args.decision.action === 'approve'; }
+      return { ok: true, operation_id: args.decision.operation_id, affected_count: selected.length,
+        documents: structuredClone(selected), local_ui_only: true, external_disclosure: false };
+    }
     if (command === 'decide_document_review') { const row = rows.find(row => row.document_id === args.documentId);
       if (options.strictBindings) { assert.equal(args.decision.revision, row.revision); assert.equal(args.decision.output_sha256, row.output_sha256); }
       row.revision++; row.approved = args.decision.action === 'approve';
@@ -38,14 +50,15 @@ function harness(options = {}) {
   };
   const window = { __TAURI__: { core: { invoke } } };
   document.getElementById = el; document.createElement = create;
-  const clock = class extends Date { static now() { return now; } };
-  const context = vm.createContext({ document, window, crypto: crypto.webcrypto, Date: clock,
+  const clock = class extends Date { static now() { return now + wallClockOffset; } };
+  const context = vm.createContext({ document, window, crypto: crypto.webcrypto, Date: clock, performance: { now: () => now },
     setInterval(fn) { intervals.add(fn); return fn; }, clearInterval(fn) { intervals.delete(fn); } });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../apps/datasecure-standalone/frontend/workflow-presentation.js'), 'utf8'), context);
   window.__DATASECURE_RUN_GUIDE__ = { documents(value) { guides.push(window.__DATASECURE_PRESENTATION__.projectRun(value)); } };
   vm.runInContext(source, context);
-  return { el, calls, rows, guides, api: window.__DATASECURE_DOCUMENTS__,
+  return { el, document, calls, rows, guides, api: window.__DATASECURE_DOCUMENTS__,
     advance(milliseconds) { now += milliseconds; for (const fn of [...intervals]) fn(); },
+    adjustWallClock(milliseconds) { wallClockOffset += milliseconds; },
     activeIntervals() { return intervals.size; },
     async act(target, event = 'click') { (typeof target === 'string' ? el(target) : target).events.get(event)?.(); await tick();
       if (target === 'documents-approve' && !options.explicitApproval && !el('documents-approve-confirm').hidden) {
@@ -66,6 +79,56 @@ testAsync('completed anonymization run no longer claims its processing completio
   assert.match(h.el('document-edit-hint').textContent, /Wähle links ein Dokument/u);
   assert.equal(h.calls.some(call => ['decide_document_review', 'export_approved_documents'].includes(call.command)), false);
 });
+
+testAsync('document guide retains source OCR hints independently of successful publication and later approval', async () => {
+  const h = harness({ invoke(command) {
+    if (command === 'get_document_reviews') return { documents: structuredClone(h.rows), processing_mode: 'markdown-and-anonymize',
+      processing_complete: true, unavailable: [], not_processed_documents: [], content_notice_count: 1,
+      content_notice_breakdown_complete: true, local_ui_only: true, external_disclosure: false };
+  } });
+  h.rows.forEach(row => { row.approved = true; });
+  await h.api.open('a'.repeat(64));
+  assert.equal(h.guides.at(-1).phase, 'approved');
+  assert.equal(h.guides.at(-1).stages[0].status, 'warning');
+  assert.match(h.guides.at(-1).next, /1 erstellte Datei enthält Inhaltshinweise/u);
+  assert.doesNotMatch(h.guides.at(-1).next, /Laufabschluss ist noch nicht bestätigt/u);
+  assert.equal(h.calls.some(call => isDecision(call) || call.command === 'export_approved_documents'), false);
+});
+testAsync('Fastweg displays automatic provenance and exports only after explicit user intent without duplicate approval', async () => {
+  const h = harness({ invoke(command) {
+    if (command === 'get_document_reviews') return { documents: structuredClone(h.rows), processing_mode: 'markdown-and-anonymize',
+      review_policy: 'automatic-conservative', processing_complete: true, unavailable: [], not_processed_documents: [],
+      local_ui_only: true, external_disclosure: false };
+  } });
+  for (const row of h.rows) Object.assign(row, { approved: true, approval_basis: 'automatic', review_policy: 'automatic-conservative' });
+  await h.api.open('a'.repeat(64));
+  assert.match(h.el('documents-purpose').textContent, /nicht manuell geprüft/u);
+  assert.match(textTree(h.el('documents-list')), /Automatisch freigegeben/u);
+  assert.equal(h.el('documents-main-guide').hidden, true);
+  assert.equal(h.guides.at(-1).heading, 'Schnellweg abgeschlossen · automatisch freigegeben');
+  assert.equal(h.calls.some(call => isDecision(call) || call.command === 'export_approved_documents'), false);
+  await h.all();
+  assert.equal(h.el('documents-approve').disabled, true);
+  assert.equal(h.el('documents-export').disabled, false);
+  await h.act('documents-export');
+  assert.equal(h.el('document-export-dialog').open, true);
+  assert.equal(h.calls.some(call => isDecision(call) || call.command === 'export_approved_documents'), false);
+  await h.act('document-export-confirm');
+  assert.equal(h.calls.filter(call => call.command === 'export_approved_documents').length, 2, 'copy and receipt acknowledgment');
+  assert.equal(h.calls.some(isDecision), false);
+});
+
+testAsync('automatic provenance cannot be asserted by an unbound row or a non-basis revision', async () => {
+  for (const change of [{ revision: 1 }, { review_policy: undefined }, { approved: false }]) {
+    const h = harness();
+    Object.assign(h.rows[0], { review_policy: 'automatic-conservative', approval_basis: 'automatic', approved: true }, change);
+    await h.api.open('a'.repeat(64));
+    assert.equal(h.el('documents-export').disabled, true);
+    assert.match(h.el('documents-status').textContent, /nicht konsistent/u);
+    assert.equal(h.calls.some(isDecision), false);
+  }
+});
+
 testAsync('loading a private review never claims the run purpose is missing before the reply arrives', async () => {
   let complete;
   const pending = new Promise(resolve => { complete = resolve; });
@@ -111,9 +174,11 @@ testAsync('bound privacy stop has its own non-reviewable category and accurate n
 });
 testAsync('checkboxes only select; explicit bulk approval covers exactly the selected documents', async () => {
   const h = harness(); await h.api.open('a'.repeat(64)); await h.all();
-  assert.equal(h.calls.some(call => call.command === 'decide_document_review'), false);
+  assert.equal(h.calls.some(isDecision), false);
   assert.equal(h.el('documents-export').disabled, true);
-  await h.act('documents-approve'); assert.equal(h.calls.filter(call => call.command === 'decide_document_review').length, 2);
+  await h.act('documents-approve'); assert.equal(h.calls.filter(isDecision).length, 1);
+  assert.equal(h.calls.find(isDecision).command, 'decide_document_review_batch');
+  assert.deepEqual(h.calls.find(isDecision).args.decision.selection.map(row => row.document_id), h.rows.map(row => row.document_id));
   assert.equal(h.el('documents-export').disabled, false);
 });
 
@@ -134,7 +199,7 @@ testAsync('unopened anonymized documents require a separate bound human confirma
   await h.act('documents-approve');
   assert.match(h.el('documents-approve-confirm-text').textContent, /1 von 2.*nicht.*geöffnet/u);
   await h.act('documents-approve-proceed');
-  assert.equal(h.calls.filter(call => call.command === 'decide_document_review').length, 2);
+  assert.equal(h.calls.filter(isDecision).length, 1);
 });
 
 testAsync('export preview exposes available scope and excluded OCR/privacy sources before copying', async () => {
@@ -152,10 +217,10 @@ testAsync('export preview exposes available scope and excluded OCR/privacy sourc
 });
 
 testAsync('bulk approval shows only its confirmed progress until the saved state is reloaded', async () => {
-  let finish;
+  let finish, request;
   const pending = new Promise(resolve => { finish = resolve; });
   const h = harness({ invoke(command, args) {
-    if (command === 'decide_document_review' && args.documentId === '1'.repeat(32)) return pending;
+    if (command === 'decide_document_review_batch') { request = args.decision; return pending; }
   } });
   await h.api.open('a'.repeat(64)); await h.all();
   h.el('documents-approve').events.get('click')();
@@ -164,8 +229,8 @@ testAsync('bulk approval shows only its confirmed progress until the saved state
   assert.equal(h.el('documents-review-controls').hidden, true);
   assert.equal(h.el('documents-bulk-progress').hidden, false);
   assert.match(h.el('documents-bulk-count').textContent, /0 von 2 Entscheidungen bestätigt/u);
-  h.rows[0].revision++; h.rows[0].approved = true;
-  finish({ ok: true, ...structuredClone(h.rows[0]), local_ui_only: true, external_disclosure: false });
+  h.rows.forEach(row => { row.revision++; row.approved = true; });
+  finish({ ok: true, operation_id: request.operation_id, affected_count: 2, documents: structuredClone(h.rows), local_ui_only: true, external_disclosure: false });
   await approving; await tick();
   assert.equal(h.el('documents-review-controls').hidden, false);
   assert.equal(h.el('documents-bulk-progress').hidden, true);
@@ -315,9 +380,9 @@ testAsync('every terminal processing reason remains display-only and cannot bloc
       assert.ok(text.includes('nested/03-defekt.csv') && text.includes(reason));
       if (reason === 'PARSE_FAILED') assert.match(text, /Dateiinhalt.*gelesen/u);
       await h.all(); await h.act('documents-approve');
-      const decisions = h.calls.filter(call => call.command === 'decide_document_review');
-      assert.equal(decisions.length, processingMode === 'markdown-only' ? 0 : 2);
-      assert.ok(decisions.every(call => call.args.documentId !== '3'.repeat(32)), 'a problem row never grants approval authority');
+      const decisions = h.calls.filter(isDecision);
+      assert.equal(decisions.length, processingMode === 'markdown-only' ? 0 : 1);
+      assert.ok(decisions.every(call => call.args.decision.selection.every(row => row.document_id !== '3'.repeat(32))), 'a problem row never grants approval authority');
       assert.equal(h.calls.some(call => call.command === 'export_approved_documents'), false);
     }
   }
@@ -475,7 +540,7 @@ testAsync('export dialog previews neutral names and cancel starts no operation a
   assert.match(h.el('documents-selected').textContent, /0 ausgewählt/u);
   assert.equal(h.el('documents-export').textContent, 'Weitere KI-Kopie erstellen');
   assert.equal(h.el('documents-export').disabled, true, 'a second copy needs a new explicit selection');
-  assert.match(h.el('documents-purpose').textContent, /musst nichts erneut exportieren/u);
+  assert.match(h.el('documents-purpose').textContent, /kein erneuter Export nötig/u);
 });
 
 testAsync('an in-flight native copy cannot be hidden by close or Escape before its receipt arrives', async () => {
@@ -570,7 +635,7 @@ testAsync('an incomplete export retries the same operation and selection, never 
   assert.match(h.el('documents-status').textContent, /2 Dateien exportiert/u);
 });
 testAsync('lost decision acknowledgement reconciles state without losing the affected filename and reason', async () => {
-  const h = harness({ invoke(command) { if (command === 'decide_document_review') throw Error('DOCUMENT_REVIEW_STALE'); } });
+  const h = harness({ invoke(command) { if (command === 'decide_document_review_batch') throw Error('DOCUMENT_REVIEW_STALE'); } });
   await h.api.open('a'.repeat(64)); await h.all(); await h.act('documents-approve');
   assert.match(h.el('documents-status').textContent, /Quelle-1\.pdf.*DOCUMENT_REVIEW_STALE/u);
   assert.equal(h.calls.filter(call => call.command === 'get_document_reviews').length, 2);
@@ -578,20 +643,21 @@ testAsync('lost decision acknowledgement reconciles state without losing the aff
 });
 
 testAsync('an unbound success acknowledgement is not counted as a confirmed document decision', async () => {
-  const h = harness({ invoke(command) { if (command === 'decide_document_review') return { ok: true }; } });
+  const h = harness({ invoke(command) { if (command === 'decide_document_review_batch') return { ok: true }; } });
   await h.api.open('a'.repeat(64)); await h.all(); await h.act('documents-approve');
-  assert.equal(h.calls.filter(call => call.command === 'decide_document_review').length, 1);
-  assert.match(h.el('documents-status').textContent, /0 Entscheidungen bestätigt.*Quelle-1\.pdf.*1 weitere Datei/u);
+  assert.equal(h.calls.filter(isDecision).length, 1);
+  assert.match(h.el('documents-status').textContent, /gemeinsame Speicherbestätigung ist unklar.*Quelle-1\.pdf/u);
   assert.equal(h.el('documents-export').disabled, true);
 });
 
 testAsync('approval cannot adopt an acknowledgement for different Markdown bytes', async () => {
-  const h = harness({ invoke(command) {
-    if (command === 'decide_document_review') return { ok: true, ...structuredClone(h.rows[0]), revision: 1,
-      output_sha256: 'f'.repeat(64), approved: true, local_ui_only: true, external_disclosure: false };
+  const h = harness({ invoke(command, args) {
+    if (command === 'decide_document_review_batch') return { ok: true, operation_id: args.decision.operation_id, affected_count: 2,
+      documents: h.rows.map(row => ({ ...row, revision: 1, output_sha256: 'f'.repeat(64), approved: true })),
+      local_ui_only: true, external_disclosure: false };
   } });
   await h.api.open('a'.repeat(64)); await h.all(); await h.act('documents-approve');
-  assert.match(h.el('documents-status').textContent, /0 Entscheidungen bestätigt.*DOCUMENT_REVIEW_STALE/u);
+  assert.match(h.el('documents-status').textContent, /gemeinsame Speicherbestätigung ist unklar.*DOCUMENT_REVIEW_STALE/u);
   assert.equal(h.el('documents-export').disabled, true);
 });
 
@@ -672,6 +738,7 @@ testAsync('a first anonymized export can bind its result folder before any copy 
       result_folder: 'C:\\synthetic-results', local_ui_only: true, external_disclosure: false };
   } });
   await h.api.open('a'.repeat(64)); await h.all(); await h.act('documents-approve');
+  assert.equal(h.el('documents-completion').hidden, true, 'approval alone is not a completed KI copy');
   await h.act('documents-export');
   assert.equal(h.el('document-export-configure').hidden, false);
   assert.match(h.el('document-export-target').textContent, /Bindung beim Export geprüft/u);
@@ -683,6 +750,13 @@ testAsync('a first anonymized export can bind its result folder before any copy 
   await h.act('document-export-confirm');
   assert.equal(h.calls.filter(call => call.command === 'export_approved_documents').length, 2,
     'only the explicit confirmation may start a copy and its acknowledgement');
+  assert.equal(h.el('documents-completion').hidden, false, 'confirmed export remains visible after the dialog');
+  assert.equal(h.el('documents-completion-title').textContent, 'KI-Kopie abgeschlossen');
+  assert.match(h.el('documents-completion-text').textContent, /lokal kopiert.*bestätigt.*nicht automatisch wiederholt/u);
+  let openedSummaryBatchId = null;
+  h.el('nav-history').addEventListener('click', () => { openedSummaryBatchId = h.el('nav-history').dataset.openSummaryBatchId; });
+  await h.act('documents-completion-history');
+  assert.equal(openedSummaryBatchId, 'a'.repeat(64), 'the completion link requests the exact run summary');
   assert.equal(h.el('document-export-configure').hidden, true);
   await h.act('document-export-configure');
   assert.equal(h.calls.filter(call => call.command === 'configure_results').length, 1,
@@ -717,7 +791,7 @@ testAsync('folder choice stays unavailable while an anonymized export is still c
   assert.match(h.el('document-export-result').textContent, /2 Textstände.*mehrere Minuten.*nicht erneut starten/u);
   assert.equal(h.activeIntervals(), 1);
   h.advance(71000);
-  assert.match(h.el('document-export-result').textContent, /Seit 1 Minuten 11 Sekunden.*Ein Dateifortschritt liegt nicht vor/u);
+  assert.match(h.el('document-export-result').textContent, /Seit 1 Minute 11 Sekunden.*Dateifortschritt ist momentan nicht verfügbar/u);
   await h.act('document-export-configure');
   assert.equal(h.calls.some(call => call.command === 'configure_results'), false);
   finish(); await tick(); await tick();
@@ -742,6 +816,168 @@ testAsync('connection loss stops export elapsed-time announcements without claim
   finish(); await tick(); await tick();
   assert.doesNotMatch(h.el('documents-status').textContent, /Dateien exportiert|Export fertig/u);
   assert.equal(h.activeIntervals(), 0);
+});
+
+async function observedCopy(observation, extra = () => undefined) {
+  let release, request;
+  const pending = new Promise(resolve => { release = resolve; });
+  const h = harness({ invoke(command, args) {
+    if (command === 'get_native_recovery_status') return observation(request);
+    if (command === 'export_approved_documents' && !args.acknowledge) {
+      request = args;
+      return pending.then(() => ({ ok: true, operation_id: args.operationId, exported_count: args.selection.length,
+        folder_name: `Export-${args.operationId}`, local_ui_only: true, external_disclosure: false }));
+    }
+    return extra(command, args);
+  } });
+  h.rows.forEach(row => { row.approved = true; });
+  await h.api.open('a'.repeat(64)); await h.all(); await h.act('documents-export'); await h.act('document-export-confirm');
+  return { h, request, async finish() { release(); await tick(); await tick(); } };
+}
+const nativeProgress = (request, changes = {}) => ({ phase: 'owned', local_ui_only: true, external_disclosure: false,
+  activity: { state: 'active', active: true, action: 'export_approved_documents', phase: 'native', elapsed_ms: 100,
+    export_progress: { operation_id: request.operationId, phase: 'copying', staged_count: 1, total_count: request.selection.length, ...changes } } });
+
+testAsync('export progress uses only the bound independent native snapshot and never treats staged files as completion', async () => {
+  let phase = 'copying', staged = 1;
+  const copy = await observedCopy(request => nativeProgress(request, { phase, staged_count: staged }));
+  const { h } = copy;
+  try {
+    assert.equal(h.document.activeElement, h.el('document-export-result'));
+    h.advance(2000); await tick();
+    assert.match(h.el('document-export-result').textContent, /1 von 2 Dateien.*Zwischenbereich/u);
+    staged = 2; h.advance(2000); await tick();
+    assert.match(h.el('document-export-result').textContent, /2 von 2 Dateien.*Danach.*geprüft/u);
+    assert.equal(h.el('document-export-close').disabled, true);
+    assert.doesNotMatch(h.el('document-export-title').textContent, /fertig|gespeichert/u);
+    phase = 'verifying'; h.advance(2000); await tick();
+    assert.match(h.el('document-export-result').textContent, /prüft die kopierten Dateien/u);
+    phase = 'receipt'; h.advance(2000); await tick();
+    assert.match(h.el('document-export-result').textContent, /Abschlussbeleg/u);
+    assert.equal(h.calls.filter(call => call.command === 'export_approved_documents').length, 1);
+    assert.equal(h.calls.some(call => ['get_public_state', 'get_run_history'].includes(call.command)), false);
+  } finally { await copy.finish(); }
+  assert.equal(h.activeIntervals(), 0);
+  assert.match(h.el('documents-status').textContent, /2 Dateien exportiert/u);
+});
+
+testAsync('foreign malformed or unavailable native export progress cannot claim success or expose arbitrary text', async () => {
+  for (const variant of ['foreign', 'total', 'overflow', 'fraction', 'phase', 'extra', 'action', 'disclosure', 'idle', 'blocked', 'failure']) {
+    const copy = await observedCopy(request => {
+      if (variant === 'failure') throw Error('PRIVATE/source.txt');
+      const value = nativeProgress(request);
+      const progress = value.activity.export_progress;
+      if (variant === 'foreign') progress.operation_id = 'f'.repeat(32);
+      if (variant === 'total') progress.total_count = 3;
+      if (variant === 'overflow') progress.staged_count = 3;
+      if (variant === 'fraction') progress.staged_count = 0.5;
+      if (variant === 'phase') progress.phase = 'completed';
+      if (variant === 'extra') progress.path = 'PRIVATE/source.txt';
+      if (variant === 'action') value.activity.action = 'get_run_history';
+      if (variant === 'disclosure') value.external_disclosure = true;
+      if (variant === 'idle') value.activity.state = 'idle';
+      if (variant === 'blocked') value.phase = 'blocked';
+      return value;
+    });
+    try {
+      copy.h.advance(2000); await tick();
+      assert.match(copy.h.el('document-export-result').textContent, /Dateifortschritt ist momentan nicht verfügbar/u, variant);
+      assert.doesNotMatch(copy.h.el('document-export-result').textContent, /PRIVATE|Kopie ist bestätigt|Dateien exportiert/u, variant);
+      assert.equal(copy.h.calls.filter(call => call.command === 'export_approved_documents').length, 1, variant);
+    } finally { await copy.finish(); }
+  }
+});
+
+testAsync('a blocked progress read cannot queue more native observations or fail the ongoing export', async () => {
+  let finishRead;
+  const pending = new Promise(resolve => { finishRead = resolve; });
+  const copy = await observedCopy(() => pending);
+  try {
+    copy.h.advance(2000); await tick();
+    for (let n = 0; n < 5; n++) copy.h.advance(60_000);
+    assert.equal(copy.h.calls.filter(call => call.command === 'get_native_recovery_status').length, 1);
+    assert.match(copy.h.el('document-export-result').textContent, /5 Minuten/u);
+    await copy.finish();
+    const complete = copy.h.el('document-export-result').textContent;
+    finishRead(nativeProgress(copy.request, { staged_count: 0 })); await tick();
+    assert.equal(copy.h.el('document-export-result').textContent, complete, 'late progress cannot replace the accepted receipt');
+    assert.equal(copy.h.activeIntervals(), 0);
+  } finally { finishRead({}); await copy.finish(); }
+});
+
+testAsync('export elapsed time is monotonic across system clock corrections', async () => {
+  const copy = await observedCopy(() => ({ phase: 'idle', local_ui_only: true, external_disclosure: false }));
+  try {
+    copy.h.advance(71_000); await tick();
+    assert.match(copy.h.el('document-export-result').textContent, /1 Minute 11 Sekunden/u);
+    copy.h.adjustWallClock(3_600_000); copy.h.advance(10_000); await tick();
+    assert.match(copy.h.el('document-export-result').textContent, /1 Minute 21 Sekunden/u);
+    copy.h.adjustWallClock(-7_200_000); copy.h.advance(10_000); await tick();
+    assert.match(copy.h.el('document-export-result').textContent, /1 Minute 31 Sekunden/u);
+  } finally { await copy.finish(); }
+});
+
+testAsync('connection loss discards a late native observation without replaying the export', async () => {
+  let finishRead;
+  const pending = new Promise(resolve => { finishRead = resolve; });
+  const copy = await observedCopy(() => pending);
+  try {
+    copy.h.advance(2000); await tick(); copy.h.api.invalidateConnection();
+    const message = copy.h.el('documents-status').textContent;
+    finishRead(nativeProgress(copy.request, { staged_count: 2 })); await tick();
+    assert.equal(copy.h.el('documents-status').textContent, message);
+    assert.equal(copy.h.activeIntervals(), 0);
+    assert.equal(copy.h.calls.filter(call => call.command === 'export_approved_documents').length, 1);
+  } finally { finishRead({}); await copy.finish(); }
+});
+
+testAsync('a slow document reload after receipt cannot restart waiting announcements for the finished copy', async () => {
+  let finishReload, holdReload = false;
+  const pending = new Promise(resolve => { finishReload = resolve; });
+  const copy = await observedCopy(request => nativeProgress(request), command => {
+    if (command === 'get_document_reviews' && holdReload) return pending;
+  });
+  try {
+    holdReload = true; await copy.finish();
+    assert.equal(copy.h.activeIntervals(), 0, 'receipt ends the heartbeat before optional display reload');
+    copy.h.advance(120_000);
+    assert.match(copy.h.el('documents-status').textContent, /2 Dateien exportiert/u);
+    assert.doesNotMatch(copy.h.el('document-export-result').textContent, /Dateifortschritt|Seit/u);
+    assert.equal(copy.h.el('document-export-title').textContent, 'Export fertig');
+    assert.equal(copy.h.el('document-export-close').disabled, false);
+    assert.equal(copy.h.document.activeElement, copy.h.el('document-export-close'));
+    await copy.h.act('document-export-close');
+    assert.equal(copy.h.el('document-export-dialog').open, false, 'a completed copy can be dismissed while display reload is still pending');
+    finishReload({ documents: structuredClone(copy.h.rows), unavailable: [], local_ui_only: true, external_disclosure: false }); await tick();
+  } finally { finishReload({ documents: [], unavailable: [], local_ui_only: true, external_disclosure: false }); await copy.finish(); }
+});
+
+testAsync('a different pending export discovered after ACK cannot rewrite the completed dialog', async () => {
+  let acknowledged = false, h;
+  const other = 'f'.repeat(32);
+  const copy = await observedCopy(request => nativeProgress(request), (command, args) => {
+    if (command === 'export_approved_documents' && args.acknowledge) acknowledged = true;
+    if (command === 'get_document_reviews' && acknowledged) return {
+      documents: structuredClone(h.rows), unavailable: [], local_ui_only: true, external_disclosure: false,
+      pending_exports: [{ operation_id: other, digest: 'd'.repeat(64), status: 'incomplete',
+        processing_mode: 'markdown-and-anonymize', selection: structuredClone(copy.request.selection) }]
+    };
+  });
+  h = copy.h;
+  try {
+    await copy.finish();
+    assert.equal(h.el('document-export-title').textContent, 'Export fertig');
+    assert.match(h.el('document-export-target').textContent, new RegExp(copy.request.operationId));
+    assert.doesNotMatch(h.el('document-export-target').textContent, new RegExp(other));
+    assert.equal(h.el('document-export-confirm').hidden, true);
+    assert.equal(h.calls.filter(call => call.command === 'export_approved_documents').length, 2);
+    await h.act('document-export-close'); await h.act('documents-export');
+    assert.match(h.el('document-export-target').textContent, new RegExp(other));
+    assert.notEqual(h.el('document-export-title').textContent, 'Export fertig');
+    assert.equal(h.el('document-export-confirm').hidden, false);
+    assert.equal(h.calls.filter(call => call.command === 'export_approved_documents').length, 2,
+      'the other durable intent needs its own explicit confirmation');
+  } finally { await copy.finish(); }
 });
 
 testAsync('missing native export binding offers a direct folder picker and retries only after explicit confirmation', async () => {
@@ -884,7 +1120,7 @@ testAsync('basis reset also requires explicit saving and invalidates the affecte
   const h = harness(); await h.api.open('a'.repeat(64)); await h.all(); await h.act('documents-approve');
   await h.act(h.el('documents-list').children[0].children[1].children[0]);
   await h.act('document-restore');
-  assert.equal(h.calls.filter(call => call.command === 'decide_document_review').length, 2);
+  assert.equal(h.calls.filter(isDecision).length, 1);
   await h.act('document-change-save'); await tick(); await tick();
   const call = h.calls.filter(row => row.command === 'decide_document_review').at(-1);
   assert.equal(call.args.decision.action, 'restore_base');
@@ -1055,7 +1291,7 @@ testAsync('unbound or mismatched notice evidence falls back to all files without
     assert.match(h.el('documents-filter-summary').textContent, /nicht sicher zuordenbar/u);
   }
 });
-for (const mixed of [false, true]) testAsync(`${mixed ? 'mixed' : 'rejected-only'} sources show fixed reasons without automatic export preview`, async () => {
+for (const mixed of [false, true]) testAsync(`${mixed ? 'mixed' : 'rejected-only'} sources show fixed reasons and preview only explicitly requested available approvals`, async () => {
   const available = mixed ? [{ name: 'good.txt', document_id: '1'.repeat(32), revision: 0,
     output_sha256: '1'.repeat(64), chunks: 1, approved: true, processing_mode: 'markdown-and-anonymize' }] : [];
   const h = harness({ invoke(command) {
@@ -1067,20 +1303,21 @@ for (const mixed of [false, true]) testAsync(`${mixed ? 'mixed' : 'rejected-only
   const panel = h.el('documents-unavailable'), contents = JSON.stringify(panel.children);
   assert.equal(panel.hidden, false); assert.match(contents, /nested\/defekt\.docx/u); assert.match(contents, /SOURCE_CONTAINER_CORRUPT/u);
   assert.match(contents, /Dateicontainer ist beschädigt/u);
-  assert.equal(h.el('documents-export').disabled, true, 'no automatic selection');
-  assert.equal(h.el('document-export-dialog').open, undefined);
+  assert.equal(h.el('documents-export').disabled, !mixed);
+  assert.equal(h.el('document-export-dialog').open, mixed ? true : undefined);
+  if (mixed) assert.match(h.el('document-export-purpose').textContent, /1 ausgewählte.*2 Quelldateien.*1 davon/u);
   assert.equal(h.calls.some(call => call.command === 'export_approved_documents'), false);
 });
 
-testAsync('connection loss stops a bulk approval before the next document', async () => {
+testAsync('connection loss invalidates the one bulk reply without dispatching another decision', async () => {
   let finish;
   const pending = new Promise(resolve => { finish = resolve; });
-  const h = harness({invoke(command) { if (command === 'decide_document_review') return pending; }});
+  const h = harness({invoke(command) { if (command === 'decide_document_review_batch') return pending; }});
   await h.api.open('a'.repeat(64)); await h.all(); await h.act('documents-approve');
   h.api.invalidateConnection();
   finish({ok: true, ...h.rows[0], revision: 1, approved: true, local_ui_only: true, external_disclosure: false});
   await tick(); await tick();
-  assert.equal(h.calls.filter(call => call.command === 'decide_document_review').length, 1);
+  assert.equal(h.calls.filter(isDecision).length, 1);
   assert.match(h.el('documents-status').textContent, /Verbindung unterbrochen/u);
   assert.equal(h.el('documents-approve').disabled, true);
 });
@@ -1160,12 +1397,15 @@ testAsync('raw copy preparation stops on lost, mismatched or partial ACK and cha
   for (const failure of ['lost', 'hash', 'revision', 'mode', 'partial', 'plan']) {
     let decisions = 0, previews = 0;
     const h = harness({ invoke(command, args) {
-      if (command === 'decide_document_review') {
-        decisions++; const row = h.rows.find(row => row.document_id === args.documentId);
-        if (failure === 'lost' || failure === 'partial' && decisions === 2) { row.approved = true; row.revision++; throw Error('STANDALONE_CONNECTION_LOST'); }
-        if (['hash', 'revision', 'mode'].includes(failure)) return { ok: true, ...row, approved: true, revision: failure === 'revision' ? 7 : row.revision + 1,
+      if (command === 'decide_document_review_batch') {
+        decisions++;
+        if (failure === 'plan') return;
+        const updated = h.rows.map(row => ({ ...row, approved: true, revision: failure === 'revision' ? 7 : row.revision + 1,
           output_sha256: failure === 'hash' ? 'f'.repeat(64) : row.output_sha256,
-          processing_mode: failure === 'mode' ? 'markdown-and-anonymize' : 'markdown-only', local_ui_only: true, external_disclosure: false };
+          processing_mode: failure === 'mode' ? 'markdown-and-anonymize' : 'markdown-only' }));
+        if (failure === 'lost') { h.rows.forEach(row => { row.approved = true; row.revision++; }); throw Error('STANDALONE_CONNECTION_LOST'); }
+        return { ok: true, operation_id: args.decision.operation_id, affected_count: h.rows.length,
+          documents: failure === 'partial' ? updated.slice(0, 1) : updated, local_ui_only: true, external_disclosure: false };
       }
       if (command === 'preview_document_export' && failure === 'plan' && ++previews === 2)
         return { ok: true, processing_mode: 'markdown-only', local_ui_only: true, external_disclosure: false,
@@ -1175,7 +1415,9 @@ testAsync('raw copy preparation stops on lost, mismatched or partial ACK and cha
     await h.api.open('a'.repeat(64)); await h.all(); await h.export(); await tick(); await tick();
     assert.equal(h.calls.some(call => call.command === 'export_approved_documents'), false, failure);
     assert.match(h.el('documents-status').textContent, /Keine zusätzliche Kopie gestartet/u, failure);
-    assert.ok(decisions <= (failure === 'partial' || failure === 'plan' ? 2 : 1));
+    assert.equal(h.el('document-export-dialog').open, false, failure);
+    assert.match(h.el('documents-status').textContent, /erneut auswählen.*neue Kopiervorschau/u, failure);
+    assert.equal(decisions, 1);
     const before = h.calls.length; await tick(); assert.equal(h.calls.length, before, 'no automatic retry');
   }
 });

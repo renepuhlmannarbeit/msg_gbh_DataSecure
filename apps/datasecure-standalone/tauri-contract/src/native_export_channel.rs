@@ -1,7 +1,7 @@
 //! Internal sidecar callbacks, not WebView commands or a generic filesystem API.
 //! Picker binding, bounded body transfer and durable native publication.
 //! There is no helper process, renderer filesystem API or recursive RPC.
-use crate::{export_directory::Directory, ipc_transport::{self, Lifecycle}};
+use crate::{export_directory::Directory, ipc_transport::{self, Lifecycle}, ipc_activity::{ExportPhase, ExportReporter}};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::{path::Path, sync::mpsc, time::Instant};
@@ -12,7 +12,10 @@ pub const PUBLICATION_REQUEST: &str = "datasecure-native-export-request/2";
 pub const PUBLICATION_RESPONSE: &str = "datasecure-native-export-response/2";
 const MAX_PUBLICATION_FRAMES: u64 = 9000; // 500 MiB / 64 KiB + <=200 file boundaries + control frames
 #[derive(Default)]
-pub(crate) struct PublicationState { sequence: u32, native_id: Option<String>, operation: Option<Value>, body: Option<(usize, Vec<u8>)> }
+pub(crate) struct PublicationState {
+    sequence: u32, native_id: Option<String>, operation: Option<Value>, body: Option<(usize, Vec<u8>)>,
+    #[cfg(test)] native_worker_dispatches: usize,
+}
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ConfigureRequest { schema: String, request_id: String, native_id: String, sequence: u32, action: String, root: String }
@@ -24,7 +27,7 @@ struct ExportRequest { schema: String, request_id: String, native_id: String, se
 #[serde(deny_unknown_fields)]
 struct BodyChunk { index: usize, offset: usize, hex: String, final_chunk: bool }
 fn receive_body(state: &mut PublicationState, op: &crate::native_export_broker::Operation, chunk: BodyChunk,
-    data: &Path, guard: &ipc_transport::NativeGuard) -> std::io::Result<&'static str> {
+    data: &Path, guard: Option<&ipc_transport::NativeGuard>, reporter: Option<&ExportReporter>) -> std::io::Result<&'static str> {
     let invalid = || std::io::Error::other("AI_EXPORT_CONFLICT");
     let file = op.files.get(chunk.index).ok_or_else(invalid)?;
     if file.bytes > 32_000_000 || chunk.hex.len() > 2 * 65536 || chunk.hex.len() % 2 != 0 ||
@@ -42,35 +45,81 @@ fn receive_body(state: &mut PublicationState, op: &crate::native_export_broker::
         bytes.push(digit(pair[0]) * 16 + digit(pair[1]));
     }
     if chunk.final_chunk != (bytes.len() as u64 == file.bytes) { return Err(invalid()); }
+    if let Some(reporter) = reporter { reporter.phase(ExportPhase::Copying, op.files.len()); }
     if !chunk.final_chunk { return Ok("receiving"); }
+    // The inline decoder has no native I/O capability. A final chunk can only
+    // stage bytes in the separately registered native worker below.
+    let guard = guard.ok_or_else(invalid)?;
     let (index, bytes) = state.body.take().ok_or_else(invalid)?;
-    crate::native_export_broker::write_body(data, op, index, &bytes, guard)
-}
-pub(crate) fn handle_publication(frame: &Value, outer: &Value, state: &mut PublicationState,
-    lifecycle: &Lifecycle, data: &Path, deadline: Instant) -> Result<Option<Value>, String> {
-    if frame.get("schema").and_then(Value::as_str) != Some(PUBLICATION_REQUEST) { return Ok(None); }
-    // Register ownership BEFORE spawning. A timed-out receiver cannot release
-    // a native writer or terminate the sidecar whose control lock it still uses.
-    let guard = lifecycle.begin_native_until(deadline)?;
-    run_publication(frame, outer, state, lifecycle, data, deadline, guard)
-}
-pub(crate) fn run_publication(frame: &Value, outer: &Value, state: &mut PublicationState,
-    lifecycle: &Lifecycle, data: &Path, deadline: Instant, guard: ipc_transport::NativeGuard) -> Result<Option<Value>, String> {
-    let frame = frame.clone(); let outer = outer.clone(); let data = data.to_path_buf();
-    let mut owned = std::mem::take(state);
-    let (send, receive) = mpsc::channel();
-    std::thread::Builder::new().name("native-export-publication".into()).spawn(move || {
-        let result = handle_publication_owned(&frame, &outer, &mut owned, &guard, &data);
-        drop(guard); // I/O, reconciliation, capabilities and locks have ended.
-        let _ = send.send((owned, result)); // No pipe writer or sidecar access.
-    }).map_err(|_| ipc_transport::FAILED.to_string())?;
-    let (next, result) = ipc_transport::receive_until(&receive, deadline, &lifecycle.stopping)?;
-    *state = next;
+    let result = crate::native_export_broker::write_body(data, op, index, &bytes, guard);
+    if matches!(result, Ok("staged")) {
+        if let Some(reporter) = reporter { reporter.staged_file(index, op.files.len()); }
+    }
     result
 }
-fn handle_publication_owned(frame: &Value, outer: &Value, state: &mut PublicationState,
-    guard: &ipc_transport::NativeGuard, data: &Path) -> Result<Option<Value>, String> {
+#[cfg(test)]
+pub(crate) fn handle_publication(frame: &Value, outer: &Value, state: &mut PublicationState,
+    lifecycle: &Lifecycle, data: &Path, deadline: Instant) -> Result<Option<Value>, String> {
+    handle_publication_with_activity(frame, outer, state, lifecycle, data, deadline, None)
+}
+pub(crate) fn handle_publication_with_activity(frame: &Value, outer: &Value, state: &mut PublicationState,
+    lifecycle: &Lifecycle, data: &Path, deadline: Instant, reporter: Option<ExportReporter>) -> Result<Option<Value>, String> {
+    if frame.get("schema").and_then(Value::as_str) != Some(PUBLICATION_REQUEST) { return Ok(None); }
+    if frame["action"] == "export_documents" && frame["command"] == "write_body" &&
+        frame.get("body").and_then(|body| body.get("final_chunk")) == Some(&Value::Bool(false)) {
+        // Classification is not authorization: the same closed deserializer,
+        // sequence, exact outer selection and stable operation checks run below.
+        // Only bounded memory work runs on the already-blocking RPC thread.
+        let guard = lifecycle.begin_native_until(deadline)?;
+        return run_inline_publication(frame, outer, state, data, guard, reporter.as_ref());
+    }
+    // Register ownership BEFORE spawning. A timed-out receiver cannot release
+    // a native writer or terminate the sidecar whose control lock it still uses.
+    PublicationWorker::new(lifecycle, data, deadline, reporter)?.run(frame, outer, state)
+}
+fn run_inline_publication(frame: &Value, outer: &Value, state: &mut PublicationState,
+    data: &Path, guard: ipc_transport::NativeGuard, reporter: Option<&ExportReporter>) -> Result<Option<Value>, String> {
     guard.checkpoint()?;
+    let result = handle_publication_owned(frame, outer, state, None, data, reporter);
+    #[cfg(test)] guard.test_event("after_inline_chunk");
+    if let Err(code) = guard.checkpoint() { state.body = None; return Err(code); }
+    result
+}
+#[cfg(test)]
+pub(crate) fn run_publication(frame: &Value, outer: &Value, state: &mut PublicationState,
+    lifecycle: &Lifecycle, data: &Path, deadline: Instant, guard: ipc_transport::NativeGuard) -> Result<Option<Value>, String> {
+    PublicationWorker { lifecycle, data, deadline, guard, reporter: None }.run(frame, outer, state)
+}
+// One handoff owns the write guard and its original absolute deadline. The
+// receiver borrows lifecycle state; only the worker owns native I/O authority.
+struct PublicationWorker<'a> {
+    lifecycle: &'a Lifecycle, data: &'a Path, deadline: Instant,
+    guard: ipc_transport::NativeGuard, reporter: Option<ExportReporter>,
+}
+impl<'a> PublicationWorker<'a> {
+    fn new(lifecycle: &'a Lifecycle, data: &'a Path, deadline: Instant, reporter: Option<ExportReporter>) -> Result<Self, String> {
+        let guard = lifecycle.begin_native_until(deadline)?;
+        Ok(Self { lifecycle, data, deadline, guard, reporter })
+    }
+    fn run(self, frame: &Value, outer: &Value, state: &mut PublicationState) -> Result<Option<Value>, String> {
+        let Self { lifecycle, data, deadline, guard, reporter } = self;
+        let frame = frame.clone(); let outer = outer.clone(); let data = data.to_path_buf();
+        let mut owned = std::mem::take(state);
+        let (send, receive) = mpsc::channel();
+        std::thread::Builder::new().name("native-export-publication".into()).spawn(move || {
+            #[cfg(test)] { owned.native_worker_dispatches += 1; }
+            let result = guard.checkpoint().and_then(|()|
+                handle_publication_owned(&frame, &outer, &mut owned, Some(&guard), &data, reporter.as_ref()));
+            drop(guard); // I/O, reconciliation, capabilities and locks have ended.
+            let _ = send.send((owned, result)); // No pipe writer or sidecar access.
+        }).map_err(|_| ipc_transport::FAILED.to_string())?;
+        let (next, result) = ipc_transport::receive_until(&receive, deadline, &lifecycle.stopping)?;
+        *state = next;
+        result
+    }
+}
+fn handle_publication_owned(frame: &Value, outer: &Value, state: &mut PublicationState,
+    guard: Option<&ipc_transport::NativeGuard>, data: &Path, reporter: Option<&ExportReporter>) -> Result<Option<Value>, String> {
     let invalid = || ipc_transport::FAILED.to_string();
     let sequence = frame.get("sequence").and_then(Value::as_u64).ok_or_else(invalid)?;
     let native_id = frame.get("native_id").and_then(Value::as_str).ok_or_else(invalid)?;
@@ -89,7 +138,7 @@ fn handle_publication_owned(frame: &Value, outer: &Value, state: &mut Publicatio
             outer["source_paths"].as_array().filter(|v| v.len() == 1).and_then(|v| v[0].as_str()) != Some(&request.root) {
             return Err(invalid());
         }
-        crate::native_export_broker::configure(Path::new(&request.root), data, native_id, guard)
+        crate::native_export_broker::configure(Path::new(&request.root), data, native_id, guard.ok_or_else(invalid)?)
             .map(|binding| { response["binding"] = json!(binding); })
     } else {
         let request: ExportRequest = serde_json::from_value(frame.clone()).map_err(|_| invalid())?;
@@ -116,13 +165,33 @@ fn handle_publication_owned(frame: &Value, outer: &Value, state: &mut Publicatio
         let operation = serde_json::to_value(op).map_err(|_| invalid())?;
         if state.operation.as_ref().is_some_and(|saved| saved != &operation) { return Err(invalid()); }
         state.operation = Some(operation);
+        let reporter = reporter.filter(|reporter| action == "export_approved_documents" && reporter.matches_operation(&op.operation_id));
+        // The existing closed frame, exact outer request/selection and stable
+        // operation binding above remain the observation ingress boundary.
+        // Reporters have no filesystem authority and never skip broker checks.
         let result = if request.command == "write_body" {
-            receive_body(state, op, request.body.ok_or_else(invalid)?, data, guard)
+            receive_body(state, op, request.body.ok_or_else(invalid)?, data, guard, reporter)
         } else {
             if request.body.is_some() || state.body.is_some() { return Err(invalid()); }
-            crate::native_export_broker::execute(data, op, &request.command, guard)
+            if let Some(reporter) = reporter {
+                reporter.phase(match request.command.as_str() {
+                    "publish" => ExportPhase::Verifying,
+                    "acknowledge" => ExportPhase::Receipt,
+                    _ => ExportPhase::Preparing,
+                }, op.files.len());
+            }
+            crate::native_export_broker::execute(data, op, &request.command, guard.ok_or_else(invalid)?)
         };
         if result.is_err() { state.body = None; }
+        if let (Some(reporter), Ok(status)) = (reporter, &result) {
+            match *status {
+                "prepared" => reporter.phase(ExportPhase::Verifying, op.files.len()),
+                // A verified earlier copy/ACK is not a new staging pass. Keep
+                // the actual count and only describe receipt reconciliation.
+                "completed" | "acknowledged" => reporter.phase(ExportPhase::Receipt, op.files.len()),
+                _ => {},
+            }
+        }
         result
             .map(|status| { response["status"] = json!(status); })
     };
@@ -207,6 +276,61 @@ mod tests {
     use super::*;
     use crate::export_directory::Identity;
     use std::time::Duration;
+    use crate::{ipc_activity::Tracker, export_directory::ExpectedFile, native_export_broker::Operation};
+    use sha2::{Digest, Sha256};
+    struct ExportFixture { root: std::path::PathBuf }
+    impl ExportFixture {
+        fn new() -> Self {
+            let root = std::env::temp_dir().join(format!("datasecure-native-progress-{}-{}", std::process::id(),
+                std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+            std::fs::create_dir(&root).unwrap();
+            let parent = Directory::open_existing(&root, None).unwrap();
+            parent.create_controlled_child("private").unwrap(); parent.create_controlled_child("public").unwrap();
+            Self { root }
+        }
+        fn data(&self) -> std::path::PathBuf { self.root.join("private") }
+        fn operation(&self, lifecycle: &Lifecycle) -> Operation {
+            let guard = lifecycle.begin_native().unwrap();
+            let binding = crate::native_export_broker::configure(&self.root.join("public"), &self.data(), &"d".repeat(32), &guard).unwrap();
+            Operation { batch_id: "a".repeat(64), operation_id: "b".repeat(32), request_sha256: "c".repeat(64),
+                processing_mode: "markdown-and-anonymize".into(), binding,
+                files: [b"hello", b"world"].into_iter().enumerate().map(|(index, bytes)| ExpectedFile {
+                    name: format!("Dokument_{:02}.md", index + 1), bytes: 5, sha256: Sha256::digest(bytes).into() }).collect() }
+        }
+    }
+    impl Drop for ExportFixture {
+        fn drop(&mut self) {
+            assert_eq!(self.root.parent().unwrap(), std::env::temp_dir());
+            assert!(self.root.file_name().unwrap().to_string_lossy().starts_with("datasecure-native-progress-"));
+            let mut pending = vec![self.root.clone()];
+            while let Some(path) = pending.pop() {
+                let metadata = std::fs::symlink_metadata(&path).unwrap(); assert!(!metadata.file_type().is_symlink());
+                #[cfg(windows)] { use std::os::windows::fs::MetadataExt; assert_eq!(metadata.file_attributes() & 0x400, 0); }
+                if metadata.is_dir() { pending.extend(std::fs::read_dir(path).unwrap().map(|entry| entry.unwrap().path())); }
+                else { assert!(metadata.is_file()); }
+            }
+            std::fs::remove_dir_all(&self.root).unwrap();
+        }
+    }
+    fn export_outer(op: &Operation, acknowledge: bool) -> Value {
+        json!({ "request_id": "0000000000000001", "action": "export_approved_documents", "batch_id": op.batch_id,
+            "operation_id": op.operation_id, "acknowledge": acknowledge,
+            "selection": op.files.iter().enumerate().map(|(index, file)| json!({
+                "document_id": format!("{index:032x}"), "revision": 1,
+                "output_sha256": file.sha256.iter().map(|byte| format!("{byte:02x}")).collect::<String>() })).collect::<Vec<_>>() })
+    }
+    fn export_frame(op: &Operation, outer: &Value, sequence: u32, command: &str, body: Option<Value>) -> Value {
+        let mut value = json!({ "schema": PUBLICATION_REQUEST, "request_id": outer["request_id"], "native_id": "e".repeat(32),
+            "sequence": sequence, "action": "export_documents", "command": command, "operation": op });
+        if let Some(body) = body { value["body"] = body; }
+        // Actual wire-shaped JSON crosses the production closed Deserialize
+        // boundary and native worker/handle path, not an injected stage status.
+        serde_json::from_slice(&serde_json::to_vec(&value).unwrap()).unwrap()
+    }
+    fn publish_frame(frame: &Value, outer: &Value, state: &mut PublicationState, lifecycle: &Lifecycle,
+        fixture: &ExportFixture, reporter: &ExportReporter) -> Value {
+        handle_publication_with_activity(frame, outer, state, lifecycle, &fixture.data(), deadline(), Some(reporter.clone())).unwrap().unwrap()
+    }
     fn deadline() -> Instant { Instant::now() + Duration::from_secs(2) }
     fn handle(frame: &Value, outer: &Value, used: &mut bool, lifecycle: &Lifecycle) -> Result<Option<Value>, String> {
         super::handle(frame, outer, used, lifecycle, deadline())
@@ -270,5 +394,229 @@ mod tests {
         assert!(lifecycle.stop(), "only read-only work can finish after shutdown");
         assert_eq!(lifecycle.begin_read_only().err().unwrap(), ipc_transport::CLOSED);
         release.send(()).unwrap(); finished.recv_timeout(Duration::from_secs(1)).unwrap();
+    }
+    #[test]
+    fn real_native_frames_count_only_successful_final_files_and_never_report_export_success() {
+        let fixture = ExportFixture::new(); let lifecycle = Lifecycle::default(); let op = fixture.operation(&lifecycle);
+        let outer = export_outer(&op, false); let mut state = PublicationState::default();
+        let tracker = Tracker::default(); let activity = tracker.begin("export_approved_documents");
+        let reporter = activity.export_reporter(&op.operation_id).unwrap();
+        let partial = export_frame(&op, &outer, 1, "write_body", Some(json!({ "index": 0, "offset": 0, "hex": "6865", "final_chunk": false })));
+        assert_eq!(publish_frame(&partial, &outer, &mut state, &lifecycle, &fixture, &reporter)["status"], "receiving");
+        assert_eq!(state.native_worker_dispatches, 0, "a pure memory chunk creates no worker");
+        assert_eq!(tracker.snapshot()["export_progress"]["staged_count"], 0);
+        let final_part = export_frame(&op, &outer, 2, "write_body", Some(json!({ "index": 0, "offset": 2, "hex": "6c6c6f", "final_chunk": true })));
+        assert_eq!(publish_frame(&final_part, &outer, &mut state, &lifecycle, &fixture, &reporter)["status"], "staged");
+        assert_eq!(state.native_worker_dispatches, 1, "final-body I/O still uses the native worker");
+        assert_eq!(tracker.snapshot()["export_progress"]["staged_count"], 1);
+        let duplicate = export_frame(&op, &outer, 3, "write_body", Some(json!({ "index": 0, "offset": 0, "hex": "68656c6c6f", "final_chunk": true })));
+        assert_eq!(publish_frame(&duplicate, &outer, &mut state, &lifecycle, &fixture, &reporter)["status"], "staged");
+        assert_eq!(tracker.snapshot()["export_progress"]["staged_count"], 1);
+        let wrong = export_frame(&op, &outer, 4, "write_body", Some(json!({ "index": 1, "offset": 0, "hex": "77726f6e67", "final_chunk": true })));
+        assert_eq!(publish_frame(&wrong, &outer, &mut state, &lifecycle, &fixture, &reporter)["ok"], false);
+        assert_eq!(tracker.snapshot()["export_progress"]["staged_count"], 1);
+        let second = export_frame(&op, &outer, 5, "write_body", Some(json!({ "index": 1, "offset": 0, "hex": "776f726c64", "final_chunk": true })));
+        assert_eq!(publish_frame(&second, &outer, &mut state, &lifecycle, &fixture, &reporter)["status"], "staged");
+        assert_eq!(tracker.snapshot()["export_progress"]["staged_count"], 2);
+        assert_eq!(tracker.snapshot()["export_progress"]["phase"], "copying");
+        let publish = export_frame(&op, &outer, 6, "publish", None);
+        assert_eq!(publish_frame(&publish, &outer, &mut state, &lifecycle, &fixture, &reporter)["status"], "completed");
+        let snapshot = tracker.snapshot();
+        assert_eq!(snapshot["state"], "active"); assert_eq!(snapshot["export_progress"]["phase"], "receipt");
+        assert!(snapshot["export_progress"].get("completed").is_none());
+        let text = snapshot.to_string(); assert!(!text.contains("hello")); assert!(!text.contains("Dokument_"));
+        assert!(!text.contains(&fixture.root.to_string_lossy().to_string()));
+        assert_eq!(std::fs::read(fixture.root.join(format!("public/DataSecure-KI-Export/Export-{}/Dokument_01.md", op.operation_id))).unwrap(), b"hello");
+        drop(activity); assert_eq!(tracker.snapshot()["state"], "idle");
+
+        // A fresh request for an existing copy/ACK does no new staging and
+        // cannot manufacture total/total merely from a completed receipt.
+        let activity = tracker.begin("export_approved_documents"); let reporter = activity.export_reporter(&op.operation_id).unwrap();
+        let outer = export_outer(&op, true); let mut state = PublicationState::default();
+        for (sequence, command) in [(1, "reconcile"), (2, "acknowledge")] {
+            let frame = export_frame(&op, &outer, sequence, command, None);
+            assert_eq!(publish_frame(&frame, &outer, &mut state, &lifecycle, &fixture, &reporter)["ok"], true);
+            assert_eq!(tracker.snapshot()["export_progress"]["staged_count"], 0);
+            assert_eq!(tracker.snapshot()["export_progress"]["phase"], "receipt");
+        }
+    }
+    #[test]
+    fn full_size_intermediate_chunks_use_no_worker_or_filesystem_authority() {
+        let fixture = ExportFixture::new(); let lifecycle = Lifecycle::default(); let mut op = fixture.operation(&lifecycle);
+        let bytes = vec![b'x'; 2 * 65536 + 17];
+        op.files = vec![ExpectedFile { name: "Dokument_01.md".into(), bytes: bytes.len() as u64,
+            sha256: Sha256::digest(&bytes).into() }];
+        let outer = export_outer(&op, false); let mut state = PublicationState::default();
+        let private = fixture.data().join(&op.binding.private_name);
+        for (part, chunk) in bytes.chunks(65536).enumerate() {
+            let final_chunk = (part + 1) * 65536 >= bytes.len();
+            let frame = export_frame(&op, &outer, part as u32 + 1, "write_body", Some(json!({
+                "index": 0, "offset": part * 65536,
+                "hex": chunk.iter().map(|byte| format!("{byte:02x}")).collect::<String>(), "final_chunk": final_chunk })));
+            let response = handle_publication(&frame, &outer, &mut state, &lifecycle, &fixture.data(), deadline()).unwrap().unwrap();
+            assert_eq!(response["status"], if final_chunk { "staged" } else { "receiving" });
+            assert_eq!(state.native_worker_dispatches, usize::from(final_chunk));
+            if !final_chunk { assert_eq!(std::fs::read_dir(&private).unwrap().count(), 0, "no intent, stage or lock before final I/O"); }
+        }
+        let frame = export_frame(&op, &outer, 4, "publish", None);
+        assert_eq!(handle_publication(&frame, &outer, &mut state, &lifecycle, &fixture.data(), deadline()).unwrap().unwrap()["status"], "completed");
+        assert_eq!(state.native_worker_dispatches, 2);
+        assert_eq!(std::fs::read(fixture.root.join(format!("public/DataSecure-KI-Export/Export-{}/Dokument_01.md", op.operation_id))).unwrap(), bytes);
+    }
+    #[test]
+    fn inline_chunks_keep_closed_authorization_bounds_and_never_stage_an_early_final_body() {
+        let fixture = ExportFixture::new(); let lifecycle = Lifecycle::default(); let op = fixture.operation(&lifecycle);
+        let outer = export_outer(&op, false);
+        let first = export_frame(&op, &outer, 1, "write_body", Some(json!({ "index": 0, "offset": 0, "hex": "6865", "final_chunk": false })));
+        for (field, value) in [("extra", json!(true)), ("request_id", json!("wrong")),
+            ("native_id", json!("F".repeat(32))), ("sequence", json!(2))] {
+            let mut frame = first.clone(); frame[field] = value;
+            let mut state = PublicationState::default();
+            assert!(handle_publication(&frame, &outer, &mut state, &lifecycle, &fixture.data(), deadline()).is_err());
+            assert_eq!(state.native_worker_dispatches, 0);
+        }
+        let mut bad_outer = outer.clone(); bad_outer["selection"][0]["output_sha256"] = json!("0".repeat(64));
+        assert!(handle_publication(&first, &bad_outer, &mut PublicationState::default(), &lifecycle, &fixture.data(), deadline()).is_err());
+        let mut unknown_body = first.clone(); unknown_body["body"]["extra"] = json!(true);
+        assert!(handle_publication(&unknown_body, &outer, &mut PublicationState::default(), &lifecycle, &fixture.data(), deadline()).is_err());
+        for (field, value) in [("index", json!(200)), ("offset", json!(1)), ("hex", json!("6")),
+            ("hex", json!("GG")), ("hex", json!("00".repeat(65537)))] {
+            let mut bad_body = first.clone(); bad_body["body"][field] = value;
+            let mut rejected = PublicationState::default();
+            assert_eq!(handle_publication(&bad_body, &outer, &mut rejected, &lifecycle, &fixture.data(), deadline()).unwrap().unwrap()["ok"], false, "{field}");
+            assert_eq!(rejected.native_worker_dispatches, 0);
+        }
+        let mut state = PublicationState::default();
+        assert_eq!(handle_publication(&first, &outer, &mut state, &lifecycle, &fixture.data(), deadline()).unwrap().unwrap()["status"], "receiving");
+        let mut changed = export_frame(&op, &outer, 2, "write_body", Some(json!({ "index": 0, "offset": 2, "hex": "6c", "final_chunk": false })));
+        changed["operation"]["request_sha256"] = json!("f".repeat(64));
+        assert!(handle_publication(&changed, &outer, &mut state, &lifecycle, &fixture.data(), deadline()).is_err());
+        let false_final = export_frame(&op, &outer, 2, "write_body", Some(json!({ "index": 0, "offset": 2, "hex": "6c6c6f", "final_chunk": false })));
+        assert_eq!(handle_publication(&false_final, &outer, &mut state, &lifecycle, &fixture.data(), deadline()).unwrap().unwrap()["ok"], false);
+        assert!(state.body.is_none()); assert_eq!(state.native_worker_dispatches, 0);
+        assert_eq!(std::fs::read_dir(fixture.data().join(&op.binding.private_name)).unwrap().count(), 0);
+    }
+    #[test]
+    fn inline_chunks_honor_absolute_deadlines_and_shutdown_after_decoding() {
+        let fixture = ExportFixture::new(); let lifecycle = Lifecycle::default(); let op = fixture.operation(&lifecycle);
+        let outer = export_outer(&op, false); let mut state = PublicationState::default();
+        let frame = export_frame(&op, &outer, 1, "write_body", Some(json!({ "index": 0, "offset": 0, "hex": "6865", "final_chunk": false })));
+        assert_eq!(handle_publication(&frame, &outer, &mut state, &lifecycle, &fixture.data(), Instant::now()).unwrap_err(), ipc_transport::TIMEOUT);
+        assert!(state.body.is_none()); assert_eq!(state.sequence, 0);
+        let shutdown = lifecycle.clone();
+        let guard = lifecycle.begin_native_until(deadline()).unwrap().with_test_event(move |phase| {
+            if phase == "after_inline_chunk" { shutdown.stopping.store(true, std::sync::atomic::Ordering::Release); }
+        });
+        assert_eq!(run_inline_publication(&frame, &outer, &mut state, &fixture.data(), guard, None).unwrap_err(), ipc_transport::CLOSED);
+        assert!(state.body.is_none()); assert_eq!(state.native_worker_dispatches, 0);
+        assert_eq!(std::fs::read_dir(fixture.data().join(&op.binding.private_name)).unwrap().count(), 0);
+        assert!(lifecycle.stop(), "inline memory work leaves no outstanding native worker");
+    }
+    #[test]
+    fn inline_result_after_the_original_deadline_is_discarded_without_extending_it() {
+        let fixture = ExportFixture::new(); let lifecycle = Lifecycle::default(); let op = fixture.operation(&lifecycle);
+        let outer = export_outer(&op, false); let mut state = PublicationState::default();
+        let frame = export_frame(&op, &outer, 1, "write_body", Some(json!({ "index": 0, "offset": 0, "hex": "6865", "final_chunk": false })));
+        let until = Instant::now() + Duration::from_secs(2);
+        let decoded = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false)); let observed = decoded.clone();
+        let guard = lifecycle.begin_native_until(until).unwrap().with_test_event(move |phase| {
+            if phase == "after_inline_chunk" {
+                observed.store(true, std::sync::atomic::Ordering::Release);
+                std::thread::sleep(until.saturating_duration_since(Instant::now()));
+            }
+        });
+        assert_eq!(run_inline_publication(&frame, &outer, &mut state, &fixture.data(), guard, None).unwrap_err(), ipc_transport::TIMEOUT);
+        assert!(decoded.load(std::sync::atomic::Ordering::Acquire), "exercise the post-decode deadline, not just expired ingress");
+        assert!(state.body.is_none()); assert_eq!(state.native_worker_dispatches, 0);
+        assert_eq!(std::fs::read_dir(fixture.data().join(&op.binding.private_name)).unwrap().count(), 0);
+        assert!(lifecycle.stop());
+    }
+    #[test]
+    fn invalid_native_frames_and_foreign_reporters_cannot_create_export_progress() {
+        let fixture = ExportFixture::new(); let lifecycle = Lifecycle::default(); let op = fixture.operation(&lifecycle);
+        let outer = export_outer(&op, false); let tracker = Tracker::default(); let activity = tracker.begin("export_approved_documents");
+        let reporter = activity.export_reporter(&op.operation_id).unwrap();
+        let frame = export_frame(&op, &outer, 1, "reconcile", None);
+        for (field, value) in [("request_id", json!("wrong")), ("native_id", json!("A".repeat(32))),
+            ("sequence", json!(2)), ("extra", json!("PRIVATE")), ("command", json!("abandon"))] {
+            let mut invalid = frame.clone(); invalid[field] = value;
+            assert!(handle_publication_with_activity(&invalid, &outer, &mut PublicationState::default(), &lifecycle,
+                &fixture.data(), deadline(), Some(reporter.clone())).is_err(), "{field}");
+            assert!(tracker.snapshot().get("export_progress").is_none());
+        }
+        for (field, value) in [("action", json!("preview_document_export")), ("batch_id", json!("f".repeat(64))),
+            ("operation_id", json!("f".repeat(32))), ("selection", json!([{ "output_sha256": "0".repeat(64) }]))] {
+            let mut invalid = outer.clone(); invalid[field] = value;
+            assert!(handle_publication_with_activity(&frame, &invalid, &mut PublicationState::default(), &lifecycle,
+                &fixture.data(), deadline(), Some(reporter.clone())).is_err(), "outer {field}");
+            assert!(tracker.snapshot().get("export_progress").is_none());
+        }
+        let wrong_body = export_frame(&op, &outer, 1, "write_body", Some(json!({ "index": 0, "offset": 0, "hex": "PRIVATE", "final_chunk": true })));
+        assert_eq!(publish_frame(&wrong_body, &outer, &mut PublicationState::default(), &lifecycle, &fixture, &reporter)["ok"], false);
+        assert!(tracker.snapshot().get("export_progress").is_none());
+        drop(activity);
+        let foreign = tracker.begin("export_approved_documents"); let reporter = foreign.export_reporter(&"f".repeat(32)).unwrap();
+        assert_eq!(publish_frame(&frame, &outer, &mut PublicationState::default(), &lifecycle, &fixture, &reporter)["ok"], true);
+        assert!(tracker.snapshot().get("export_progress").is_none(), "matching tracker token cannot substitute another operation ID");
+    }
+    #[test]
+    fn native_prepared_resume_verifies_without_inventing_files_written_by_the_new_request() {
+        let fixture = ExportFixture::new(); let lifecycle = Lifecycle::default(); let op = fixture.operation(&lifecycle);
+        {
+            let guard = lifecycle.begin_native().unwrap();
+            for (index, bytes) in [b"hello", b"world"].into_iter().enumerate() {
+                crate::native_export_broker::write_body(&fixture.data(), &op, index, bytes, &guard).unwrap();
+            }
+            let private = Directory::open_existing(&fixture.data().join(&op.binding.private_name), None).unwrap();
+            let target = Directory::open_existing(&fixture.root.join("public/DataSecure-KI-Export"), None).unwrap();
+            let request = crate::native_export_workspace::Request::new(op.batch_id.clone(), op.operation_id.clone(),
+                op.request_sha256.clone(), op.processing_mode.clone(), op.files.clone(), &private, &target).unwrap();
+            let workspace = crate::native_export_workspace::Workspace::open(&private, &target, request, &guard).unwrap();
+            workspace.transaction(&guard).unwrap().prepare().unwrap();
+        }
+        let tracker = Tracker::default(); let activity = tracker.begin("export_approved_documents");
+        let reporter = activity.export_reporter(&op.operation_id).unwrap();
+        let outer = export_outer(&op, false); let mut state = PublicationState::default();
+        let reconcile = export_frame(&op, &outer, 1, "reconcile", None);
+        assert_eq!(publish_frame(&reconcile, &outer, &mut state, &lifecycle, &fixture, &reporter)["status"], "prepared");
+        assert_eq!(tracker.snapshot()["export_progress"]["phase"], "verifying");
+        assert_eq!(tracker.snapshot()["export_progress"]["staged_count"], 0);
+        let publish = export_frame(&op, &outer, 2, "publish", None);
+        assert_eq!(publish_frame(&publish, &outer, &mut state, &lifecycle, &fixture, &reporter)["status"], "completed");
+        assert_eq!(tracker.snapshot()["export_progress"]["phase"], "receipt");
+        assert_eq!(tracker.snapshot()["export_progress"]["staged_count"], 0);
+    }
+    #[test]
+    fn timed_out_native_worker_cannot_change_a_successor_activity_after_actual_rename() {
+        use std::sync::{Arc, Mutex};
+        let fixture = ExportFixture::new(); let lifecycle = Lifecycle::default(); let op = fixture.operation(&lifecycle);
+        let guard = lifecycle.begin_native().unwrap();
+        for (index, bytes) in [b"hello", b"world"].into_iter().enumerate() {
+            crate::native_export_broker::write_body(&fixture.data(), &op, index, bytes, &guard).unwrap();
+        }
+        drop(guard);
+        let tracker = Tracker::default(); let activity = tracker.begin("export_approved_documents");
+        let reporter = activity.export_reporter(&op.operation_id).unwrap();
+        let (arrive, arrived) = mpsc::channel(); let (release, released) = mpsc::channel();
+        let released = Arc::new(Mutex::new(released));
+        let deadline = Instant::now() + Duration::from_secs(2);
+        let guard = lifecycle.begin_native_until(deadline).unwrap().with_test_event(move |phase| {
+            if phase == "after_rename" { arrive.send(()).unwrap(); released.lock().unwrap().recv().unwrap(); }
+        });
+        let outer = export_outer(&op, false); let frame = export_frame(&op, &outer, 1, "publish", None);
+        let worker_lifecycle = lifecycle.clone(); let data = fixture.data();
+        let waiting = std::thread::spawn(move || PublicationWorker { lifecycle: &worker_lifecycle, data: &data,
+            deadline, guard, reporter: Some(reporter) }.run(&frame, &outer, &mut PublicationState::default()));
+        arrived.recv_timeout(Duration::from_secs(5)).unwrap();
+        assert_eq!(tracker.snapshot()["export_progress"]["phase"], "verifying");
+        assert_eq!(waiting.join().unwrap().unwrap_err(), ipc_transport::TIMEOUT);
+        drop(activity);
+        let next = tracker.begin("export_approved_documents"); let next_reporter = next.export_reporter(&op.operation_id).unwrap();
+        next_reporter.phase(ExportPhase::Preparing, 2);
+        release.send(()).unwrap();
+        assert!(lifecycle.stop(), "the real native worker must end before its fixture is removed");
+        assert_eq!(tracker.snapshot()["export_progress"]["phase"], "preparing");
+        assert_eq!(tracker.snapshot()["export_progress"]["staged_count"], 0);
+        assert_eq!(std::fs::read(fixture.root.join(format!("public/DataSecure-KI-Export/Export-{}/Dokument_02.md", op.operation_id))).unwrap(), b"world");
     }
 }

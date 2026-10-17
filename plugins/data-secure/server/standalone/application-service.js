@@ -118,11 +118,11 @@ function defaultDependencies(options = {}) {
   const sourceFolder = require('../companion/source-folder');
   const resultFolder = require('../gateway/result-folder-config');
   const supportTrace = require('../gateway/support-trace');
-  const { replayPendingResultExports, readStandaloneExportHistory, abandonPendingResultExport } = require('../gateway/result-export');
+  const { replayPendingResultExports, readStandaloneExportHistory, readStandaloneExportHistoryEntry, abandonPendingResultExport } = require('../gateway/result-export');
   const {
     continueMostRecentBatch, openBatchPackageProtection, recoverBatches,
     replayMappingOutbox, cleanupExpiredBatchSnapshots, recoverableBatchStatus, productStatusSnapshot,
-    latestProductBatchStatus, latestProductResultDirectory, readStandaloneHistoryStates,
+    latestProductBatchStatus, latestProductResultDirectory, readStandaloneHistoryStates, readStandaloneHistoryState,
     standaloneRecoverableStates, continueStandaloneBatch, requestStandalonePause, skipStandaloneOcrContactReview,
     exportCompletedBatchResults
   } = require('../gateway/batch');
@@ -141,7 +141,12 @@ function defaultDependencies(options = {}) {
   const intakeReservation = require('../gateway/batch-intake-reservation');
   const runHistory = createRunHistory({
     readStates: readStandaloneHistoryStates,
+    readState: readStandaloneHistoryState,
     readExports: readStandaloneExportHistory,
+    readExport: readStandaloneExportHistoryEntry,
+    // Only this concrete on-disk reader has the capture inventory contract.
+    // Injected/test/other product adapters always retain the full capture.
+    captureExportIndex: true,
     exportCompletedBatchResults,
     recoverableStates: standaloneRecoverableStates,
     liveExecutor: require('../gateway/batch-active-lock').liveLocalExecutor
@@ -149,6 +154,7 @@ function defaultDependencies(options = {}) {
   return {
     runHistory,
     readStates: readStandaloneHistoryStates,
+    readState: readStandaloneHistoryState,
     abandonPendingResultExport,
     documentReviews: require('../gateway/standalone-document-review-store').createDocumentReviewStore({
       nativeExport: options.nativeExport, controlOwnerPid: options.controlOwnerPid,
@@ -168,6 +174,9 @@ function defaultDependencies(options = {}) {
         let captureOutcome = 'ready', captureCounts = {};
         try { captureCounts = runHistory.captureDurableHistory(); }
         catch { captureOutcome = 'failed'; /* optional history is repairable */ }
+        if (captureOutcome === 'ready') startupEvent(captureCounts.export_capture_reused === true
+          ? 'history_capture_reused' : 'history_capture_full', { outcome: 'ready',
+          journal_count: captureCounts.journal_count, export_count: captureCounts.export_count });
         startupEvent('history_capture_finished', { outcome: captureOutcome,
           elapsed_ms: Date.now() - captureStarted, ...captureCounts });
         const bootstrapStarted = Date.now();
@@ -260,6 +269,7 @@ function defaultDependencies(options = {}) {
     reserveIntake: require('../gateway/batch-intake-reservation').reserveIntake,
     releaseIntake: require('../gateway/batch-intake-reservation').releaseIntake,
     readConfiguredResultRoot: resultFolder.readConfiguredResultRoot,
+    readConfiguredResultRootStatus: resultFolder.readConfiguredResultRootStatus,
     saveConfiguredResultRoot: resultFolder.saveConfiguredResultRoot,
     resultOutputDirectory: resultFolder.resultOutputDirectory,
     isNetworkResultFolder: resultFolder.isNetworkResultFolder,
@@ -410,13 +420,34 @@ class StandaloneApplicationService {
     return this.continueHistoryBatch(batchId, signal);
   }
 
+  resultRootStatus() {
+    if (typeof this.deps.readConfiguredResultRootStatus === 'function')
+      return this.deps.readConfiguredResultRootStatus();
+    // Older dependency adapters expose only a usable target or no setting.
+    // Production always supplies the richer status above.
+    const root = this.deps.readConfiguredResultRoot();
+    return { status: root ? 'available' : 'unconfigured', root, recorded_root: root };
+  }
+
   ensureResultRoot() {
-    const configured = this.deps.readConfiguredResultRoot();
-    if (configured) return configured;
+    const configured = this.resultRootStatus();
+    if (configured.status === 'available' && configured.root) return configured.root;
+    if (configured.status !== 'unconfigured')
+      throw fixedFailure('STANDALONE_RESULT_ROOT_UNAVAILABLE',
+        'Der gespeicherte Ergebnisordner ist nicht mehr sicher verfügbar. Bitte den bisherigen Ordner wieder verfügbar machen oder einen anderen lokalen Ordner auswählen.');
     const selected = defaultResultRoot({ home: this.home });
-    this.deps.fs.mkdirSync(selected, { recursive: true, mode: 0o700 });
-    this.deps.resultOutputDirectory({ root: selected });
-    this.deps.saveConfiguredResultRoot(selected);
+    try {
+      this.deps.fs.mkdirSync(selected, { recursive: true, mode: 0o700 });
+      this.deps.resultOutputDirectory({ root: selected });
+      this.deps.saveConfiguredResultRoot(selected);
+    } catch {
+      // A fresh installation has no result folder. Failure to create it
+      // (for example managed macOS Documents access) is a start refusal,
+      // never a Core bootstrap crash or a reason to return a false folder.
+      // The user may select a different local destination explicitly.
+      throw fixedFailure('STANDALONE_RESULT_ROOT_UNAVAILABLE',
+        'Der vorgeschlagene Ergebnisordner konnte nicht sicher angelegt werden. Bitte in den Einstellungen einen verfügbaren lokalen Ordner auswählen.');
+    }
     return selected;
   }
 
@@ -481,10 +512,12 @@ class StandaloneApplicationService {
             ? 'export_abandoned'
           : exportPending > 0 || completionPending
             ? 'export_pending'
-          : packages > 0
+          : latest?.complete === true && packages > 0
             ? 'results_available'
             : latest?.complete === true && failed > 0
               ? 'completed_without_results'
+            : latest?.complete === false
+              ? 'failed'
             : 'ready';
     const currentBatchId = currentRunObserved ? this.observedBatchId
       : (!snapshot ? (this.observedBatchId || undefined) : undefined);
@@ -502,13 +535,27 @@ class StandaloneApplicationService {
             feedback.not_converted_count === failed) conversionFeedback = feedback;
       } catch { /* missing or changed evidence retains the conservative status */ }
     }
+    let contentNotices;
+    if (localUi === true && currentBatchId && (latest?.processing_mode || MODES.ANONYMIZE) === MODES.ANONYMIZE) {
+      contentNotices = { content_notice_count: 0, content_notice_breakdown_complete: false };
+      try {
+        const value = this.deps.runHistory?.contentNoticeSummary?.(currentBatchId, packages);
+        if (value && Number.isSafeInteger(value.content_notice_count) && value.content_notice_count >= 0 &&
+            value.content_notice_count <= packages && typeof value.content_notice_breakdown_complete === 'boolean') contentNotices = {
+          content_notice_count: value.content_notice_count, content_notice_breakdown_complete: value.content_notice_breakdown_complete };
+      } catch { /* a missing projection is unknown, never confirmed notice freedom */ }
+    }
     return {
       ok: current.engine_ready === true,
       product_channel: PRODUCT_CHANNEL,
       state,
       ...(localUi === true && /^[a-f0-9]{64}$/u.test(currentBatchId || '') ? { batch_id: currentBatchId } : {}),
       processing_mode: latest?.processing_mode || MODES.ANONYMIZE,
-      warning_count: Number.isSafeInteger(latest?.warning_count) ? latest.warning_count : 0,
+      ...(localUi === true && currentBatchId && latest?.review_policy === 'automatic-conservative'
+        ? { review_policy: latest.review_policy } : {}),
+      warning_count: Math.max(Number.isSafeInteger(latest?.warning_count) ? latest.warning_count : 0,
+        contentNotices?.content_notice_count || 0),
+      ...(contentNotices || {}),
       ...(latest?.termination_unconfirmed === true ? { termination_unconfirmed: true } : {}),
       preparing,
       processing,
@@ -565,7 +612,8 @@ class StandaloneApplicationService {
     if (entry.processing_mode !== MODES.ANONYMIZE ||
         !['export_pending', 'export_abandoned'].includes(entry.status))
       throw fixedFailure('RESULT_EXPORT_ABANDON_UNAVAILABLE', 'Nur die offene Bereitstellung eines abgeschlossenen Anonymisierungslaufs kann aufgegeben werden.');
-    const state = this.deps.readStates().find(row => row.token === batchId && row.product_channel === PRODUCT_CHANNEL);
+    const state = typeof this.deps.readState === 'function' ? this.deps.readState(batchId)
+      : this.deps.readStates().find(row => row.token === batchId && row.product_channel === PRODUCT_CHANNEL);
     if (!state) throw fixedFailure('RESULT_EXPORT_ABANDON_UNAVAILABLE', 'Der Lauf ist lokal nicht mehr vollständig belegbar.');
     let receipt;
     try { receipt = this.deps.abandonPendingResultExport(state); }
@@ -592,11 +640,21 @@ class StandaloneApplicationService {
     } catch { /* missing or contradictory evidence is never a confirmed run completion */ }
     const verified = { ...data, processing_complete: processingComplete };
     if (data.processing_mode !== MODES.MARKDOWN) {
+      Object.assign(verified, { content_notice_count: 0, content_notice_breakdown_complete: false });
+      try {
+        const count = data.documents.length + (data.unavailable?.length || 0);
+        const notices = this.deps.runHistory.contentNoticeSummary?.(batchId, count);
+        if (notices && Number.isSafeInteger(notices.content_notice_count) && notices.content_notice_count >= 0 &&
+            notices.content_notice_count <= count && typeof notices.content_notice_breakdown_complete === 'boolean')
+          Object.assign(verified, { content_notice_count: notices.content_notice_count,
+            content_notice_breakdown_complete: notices.content_notice_breakdown_complete });
+      } catch { /* unavailable provenance must not be shown as proof of notice-free source coverage */ }
       // A deliberate OCR-off omission is not a converter defect. Classify it
       // only when the same private run binds both disabled OCR switches and
       // the exact stopped source, reason and name. Older runs stay neutral.
       try {
-        const state = this.deps.readStates().find(row => row.token === batchId && row.product_channel === PRODUCT_CHANNEL);
+        const state = typeof this.deps.readState === 'function' ? this.deps.readState(batchId)
+          : this.deps.readStates().find(row => row.token === batchId && row.product_channel === PRODUCT_CHANNEL);
         if (state.processing_mode === MODES.ANONYMIZE && Array.isArray(data.not_processed_documents)) {
           const omissions = new Map(state.items.filter(item => isAnonymizationOcrOmission(state, item))
             .map(item => [item.id, item]));
@@ -635,6 +693,7 @@ class StandaloneApplicationService {
   documentReviewChunk(batchId, documentId, revision, index) { return this.deps.documentReviews.chunk(batchId, documentId, revision, index); }
   documentEntities(batchId, documentId, revision, page) { return this.deps.documentReviews.entities(batchId, documentId, revision, page); }
   decideDocumentReview(batchId, documentId, request) { return this.deps.documentReviews.decide(batchId, documentId, request); }
+  decideDocumentReviewBatch(batchId, request) { return this.deps.documentReviews.decideBatch(batchId, request); }
   exportApprovedDocuments(batchId, operationId, selection, acknowledge = false) { return this.deps.documentReviews.exportApproved(batchId, operationId, selection, acknowledge); }
   previewDocumentExport(batchId, operationId, selection) { return this.deps.documentReviews.previewExport(batchId, operationId, selection); }
   abandonDocumentExport(batchId, operationId, digest) { return this.deps.documentReviews.abandonExport(batchId, operationId, digest); }
@@ -932,7 +991,7 @@ class StandaloneApplicationService {
 
   projectUiContext({ selected, queue, sourceIds, rejectedSources, revision }) {
     this.observeCurrentRun();
-    const configured = this.deps.readConfiguredResultRoot();
+    const configured = this.resultRootStatus();
     let latestResultFolder = '';
     // Reading the visible context is also the upgrade/recovery boundary for an
     // already completed run.  Older export records did not contain the fields
@@ -951,9 +1010,14 @@ class StandaloneApplicationService {
     catch { /* A local display hint must never affect processing. */ }
     return {
       ok: true,
-      result_folder: configured || defaultResultRoot({ home: this.home }),
+      result_folder: configured.status === 'available' ? configured.root
+        : configured.status === 'unconfigured' ? defaultResultRoot({ home: this.home }) : '',
+      result_folder_status: configured.status,
+      // Local display hint only; never pass an unavailable recorded path to
+      // start, export or native folder operations as an authorized destination.
+      result_folder_recorded: configured.recorded_root || '',
       latest_result_folder: latestResultFolder,
-      result_folder_is_default: !configured,
+      result_folder_is_default: configured.status === 'unconfigured',
       source_kind: selected?.sourceKind || null,
       source_folders: selected ? [...selected.sourceFolders] : [],
       selected_files: selected ? [...selected.selectedFiles] : [],
@@ -974,11 +1038,14 @@ class StandaloneApplicationService {
     if (options && typeof options === 'object' && Object.hasOwn(options, 'content_options'))
       throw fixedFailure('CONTENT_OPTIONS_INVALID', 'Ungültiger Inhaltsvertrag.');
     if (!options || typeof options !== 'object' || Array.isArray(options) ||
-        Object.keys(options).some((key) => !['profile', 'processingMode', 'outputNamingMode', 'ocrContactReview', 'documentReview', 'sourceIds', 'catalogueRevision', 'contentOptions'].includes(key))) {
+        Object.keys(options).some((key) => !['profile', 'processingMode', 'outputNamingMode', 'ocrContactReview', 'documentReview', 'sourceIds', 'catalogueRevision', 'contentOptions', 'reviewPolicy'].includes(key))) {
       throw fixedFailure('PROCESSING_MODE_INVALID', 'Ungültiger Verarbeitungsmodus.');
     }
     const contentOptions = require('../gateway/content-start-boundary').contentStartOptions(options, 'contentOptions', PRODUCT_CHANNEL);
     const processingMode = assertRunnableProcessingMode(options.processingMode, PRODUCT_CHANNEL);
+    const reviewPolicy = Object.hasOwn(options, 'reviewPolicy')
+      ? require('../core/standalone-review-policy').validateReviewPolicy(options.reviewPolicy, {
+        productChannel: PRODUCT_CHANNEL, processingMode, documentReview: options.documentReview, contentOptions }) : undefined;
     if (Object.hasOwn(options, 'documentReview') && options.documentReview !== true)
       throw fixedFailure('DOCUMENT_REVIEW_INVALID', 'Ungültiger lokaler Dokumentprüfauftrag.');
     if (Object.hasOwn(options, 'ocrContactReview') && (processingMode !== MODES.MARKDOWN || options.ocrContactReview !== true)) {
@@ -1023,6 +1090,7 @@ class StandaloneApplicationService {
       const started = this.deps.startLocalIntakeExecutor(queue, profile, {
         intakeReservationId: reservation.reservation_id, signal, processingMode,
         ...(contentOptions ? { contentOptions } : {}),
+        ...(reviewPolicy ? { reviewPolicy } : {}),
         ...(options.ocrContactReview === true ? { ocrContactReview: true } : {}),
         ...(options.documentReview === true ? { documentReview: true } : {}),
         ...(outputNamingMode ? { outputNamingMode } : {})

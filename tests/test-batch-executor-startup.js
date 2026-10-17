@@ -126,6 +126,7 @@ function fixture(role, firstChild) {
       if (name === '../resource-limits') return require('../plugins/data-secure/server/resource-limits');
       if (name === '../core/processing-mode') return require('../plugins/data-secure/server/core/processing-mode');
       if (name === '../core/content-options') return require('../plugins/data-secure/server/core/content-options');
+      if (name === '../core/standalone-review-policy') return require('../plugins/data-secure/server/core/standalone-review-policy');
       if (name === './content-start-boundary') return require('../plugins/data-secure/server/gateway/content-start-boundary');
       if (name === '../core/result-naming-mode') return require('../plugins/data-secure/server/core/result-naming-mode');
       if (name === './batch') return batch;
@@ -195,6 +196,27 @@ function fixture(role, firstChild) {
 }
 
 function initialCases(test) {
+test('automatic Standalone intake passes the exact policy to its worker; resume cannot override a stored policy', () => {
+  const contentOptions = { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: true, imageOcr: false };
+  const child = fakeChild(), f = fixture('intake', child);
+  assert.equal(f.start({ env: { DATASECURE_PRODUCT_CHANNEL: 'standalone' }, processingMode: 'markdown-and-anonymize',
+    documentReview: true, contentOptions, reviewPolicy: 'automatic-conservative' }).ok, true);
+  assert.equal(child.messages[0].review_policy, 'automatic-conservative');
+  assert.equal(child.messages[0].type, 'start-local-content-anonymize-intake');
+  assert.equal(child.messages[0].reviewPolicy, undefined);
+  for (const role of ['batch', 'review']) for (const field of ['reviewPolicy', 'review_policy', 'standalone_review_policy']) {
+    const blocked = fixture(role, fakeChild());
+    assert.throws(() => blocked.start({ [field]: 'automatic-conservative' }), error => error.code === 'STANDALONE_REVIEW_POLICY_INVALID');
+    assert.equal(blocked.launched.length, 0);
+  }
+  for (const change of [{ reviewPolicy: null }, { reviewPolicy: 'guided' }, { processingMode: 'markdown-only' }]) {
+    const blocked = fixture('intake', fakeChild());
+    assert.throws(() => blocked.start({ env: { DATASECURE_PRODUCT_CHANNEL: 'standalone' }, processingMode: 'markdown-and-anonymize',
+      documentReview: true, contentOptions, reviewPolicy: 'automatic-conservative', ...change }), error => error.code === 'STANDALONE_REVIEW_POLICY_INVALID');
+    assert.equal(blocked.launched.length, 0);
+  }
+});
+
 test('an invalid private intake queue is rejected before a child is launched', () => {
   const f = fixture('intake', fakeChild());
   assert.throws(() => f.api.startLocalIntakeExecutor([

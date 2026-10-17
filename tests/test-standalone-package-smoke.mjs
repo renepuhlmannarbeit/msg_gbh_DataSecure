@@ -10,6 +10,7 @@ import { runPackagedReviewScenario } from './helpers/standalone-packaged-review.
 import { runPackagedOcrScenario, runPackagedOcrSkipScenario } from './helpers/standalone-packaged-ocr-review.mjs';
 import { runPackagedMarkdownScenario } from './helpers/standalone-packaged-markdown.mjs';
 import { runPackagedAnonymizedOcrScenario } from './helpers/standalone-packaged-anonymized-ocr.mjs';
+import { runPackagedFastReviewScenario } from './helpers/standalone-packaged-fast-review.mjs';
 import { office, passivePresentation, embeddedWorkbookPresentation, image, pdf, text as conversionText } from './helpers/conversion-fixtures.mjs';
 
 const require = createRequire(import.meta.url);
@@ -635,6 +636,7 @@ try {
   await runPackagedOcrSkipScenario({ request, sourceDirectory });
   request = await runPackagedMarkdownScenario({ request, sourceDirectory, restart: restartReviewSidecar });
   await runPackagedAnonymizedOcrScenario({ request, sourceDirectory });
+  request = await runPackagedFastReviewScenario({ request, sourceDirectory, restart: restartReviewSidecar });
   const log = fs.readFileSync(path.join(environment.DATASECURE_STANDALONE_DIAGNOSTIC_DIR, 'sidecar-interactions.jsonl'), 'utf8');
   for (const row of historyRows) assert.ok(!log.includes(row.batch_id), 'run identifiers stay out of diagnostics');
   assert.ok(!log.includes(exactRun) && !log.includes(convertedRun));

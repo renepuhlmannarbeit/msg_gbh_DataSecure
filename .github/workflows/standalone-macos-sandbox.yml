@@ -192,6 +192,7 @@ jobs:
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$bundle/Contents/Info.plist")" = "$(node -p "require('./apps/datasecure-standalone/tauri-contract/tauri.macos.conf.json').version")"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$bundle/Contents/Info.plist")" = "$(node -p "require('./apps/datasecure-standalone/tauri-contract/tauri.macos.conf.json').bundle.macOS.bundleVersion")"
           test "$(/usr/libexec/PlistBuddy -c 'Print :LSMinimumSystemVersion' "$bundle/Contents/Info.plist")" = "13.5"
+          test "$(/usr/libexec/PlistBuddy -c 'Print :NSDocumentsFolderUsageDescription' "$bundle/Contents/Info.plist")" = "DataSecure speichert lokale Ergebnisse in deinem Dokumente-Ordner, wenn du keinen anderen Ergebnisordner auswählst."
           codesign --verify --deep --strict --verbose=2 "$bundle"
           codesign -dv --verbose=4 "$bundle" 2>&1 | grep -q '^Signature=adhoc$'
           # A valid signature alone does not prove that V8 can create MAP_JIT

@@ -10,6 +10,8 @@ use sha2::{Digest, Sha256};
 use std::io;
 
 const MAX_RECORD: usize = 128 * 1024;
+#[cfg(test)]
+std::thread_local! { static PLAN_DIGEST_COMPUTATIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; }
 fn failure(code: &'static str) -> io::Error { io::Error::other(code) }
 fn conflict() -> io::Error { failure("AI_EXPORT_CONFLICT") }
 fn hex(value: &str, size: usize) -> bool {
@@ -60,6 +62,7 @@ impl Plan {
         Ok(())
     }
     fn digest(&self) -> io::Result<[u8; 32]> {
+        #[cfg(test)] PLAN_DIGEST_COMPUTATIONS.with(|count| count.set(count.get() + 1));
         Ok(Sha256::digest(serde_json::to_vec(self).map_err(|_| conflict())?).into())
     }
     fn stage_name(&self) -> String { format!("stage-{}", self.operation_id) }
@@ -72,6 +75,7 @@ pub(crate) enum Status { Unprepared, Prepared, Completed, Acknowledged, Abandone
 struct Record { schema: String, plan_sha256: [u8; 32], stage: Option<ObjectId> }
 pub(crate) struct Transaction<'a> {
     journal: &'a Directory, staging: &'a Directory, target: &'a Directory, plan: Plan, guard: &'a NativeGuard,
+    plan_sha256: [u8; 32],
     _control: export_directory::ControlLock,
 }
 impl<'a> Transaction<'a> {
@@ -85,7 +89,10 @@ impl<'a> Transaction<'a> {
         staging.verify_controlled()?;
         guard.checkpoint().map_err(|_| failure("STANDALONE_CLOSING"))?;
         let control = journal.lock_control()?;
-        let tx = Self { journal, staging, target, plan, guard, _control: control };
+        // The owned plan is immutable for this instance. Reusing its digest
+        // never reuses journal evidence, directory authority or inventory facts.
+        let plan_sha256 = plan.digest()?;
+        let tx = Self { journal, staging, target, plan, guard, plan_sha256, _control: control };
         tx.put("intent", &tx.plan)?;
         // Closed record dependencies matter even when a later receipt exists.
         tx.evidence()?;
@@ -116,11 +123,11 @@ impl<'a> Transaction<'a> {
         self.journal.sync()
     }
     fn record(&self, kind: &str, stage: Option<Identity>) -> io::Result<()> {
-        self.put(kind, &Record { schema: format!("datasecure-native-export-{kind}/1"), plan_sha256: self.plan.digest()?, stage: stage.map(Into::into) })
+        self.put(kind, &Record { schema: format!("datasecure-native-export-{kind}/1"), plan_sha256: self.plan_sha256, stage: stage.map(Into::into) })
     }
     fn existing(&self, kind: &str) -> io::Result<Option<Option<Identity>>> {
         let Some(record) = self.read::<Record>(kind)? else { return Ok(None); };
-        if record.schema != format!("datasecure-native-export-{kind}/1") || record.plan_sha256 != self.plan.digest()? { return Err(conflict()); }
+        if record.schema != format!("datasecure-native-export-{kind}/1") || record.plan_sha256 != self.plan_sha256 { return Err(conflict()); }
         Ok(Some(record.stage.map(|id| id.identity()).transpose()?))
     }
     fn evidence(&self) -> io::Result<(Option<Identity>, bool, bool, bool, bool, bool)> {
@@ -184,10 +191,16 @@ impl<'a> Transaction<'a> {
         let identity = identity.ok_or_else(conflict)?;
         match self.target.open_known_child(&self.plan.target_name(), identity) {
             Ok(output) => {
+                #[cfg(test)] self.guard.test_event("reconcile_inventory");
                 output.verify_inventory(&self.plan.files)?;
-                self.record("complete", Some(identity))?;
-                // Keep this read-only capability alive through durable receipt.
-                output.verify_inventory(&self.plan.files)?;
+                if !complete {
+                    self.record("complete", Some(identity))?;
+                    // A new durable receipt still requires verification on
+                    // both sides of its write. Existing complete evidence was
+                    // freshly checked above; no duplicate body pass is needed.
+                    #[cfg(test)] self.guard.test_event("reconcile_inventory");
+                    output.verify_inventory(&self.plan.files)?;
+                }
                 Ok(if ack { Status::Acknowledged } else { Status::Completed })
             },
             Err(error) if error.kind() == io::ErrorKind::NotFound && !complete => {
@@ -230,6 +243,7 @@ impl<'a> Transaction<'a> {
             Status::Completed | Status::Acknowledged => {
                 self.record("ack", self.evidence()?.0)?; Ok(Status::Acknowledged)
             },
+            Status::Abandoned => Err(failure("AI_EXPORT_ABANDONED")),
             _ => Err(failure("AI_EXPORT_INCOMPLETE")),
         }
     }
@@ -309,6 +323,69 @@ mod tests {
         assert_eq!(tx.commit().unwrap(), Status::Acknowledged);
         assert_eq!(fs::read_dir(f.path.join("target")).unwrap().count(), 1);
         assert_eq!(tx.abandon().unwrap_err().to_string(), "AI_EXPORT_ALREADY_COMPLETE");
+    }
+    #[test]
+    fn completed_reconciliation_reads_inventory_once_and_never_caches_changed_bodies_or_evidence() {
+        use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+        let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+        let lifecycle = Lifecycle::default(); let passes = Arc::new(AtomicUsize::new(0)); let observed = passes.clone();
+        let guard = lifecycle.begin_native().unwrap().with_test_event(move |phase| {
+            if phase == "reconcile_inventory" { observed.fetch_add(1, Ordering::Relaxed); }
+        });
+        let before = PLAN_DIGEST_COMPUTATIONS.with(|count| count.get());
+        let tx = Transaction::open(&j, &s, &t, f.plan(&j, &s, &t), &guard).unwrap();
+        assert_eq!(PLAN_DIGEST_COMPUTATIONS.with(|count| count.get()) - before, 1);
+        tx.write_body(0, b"hello").unwrap(); tx.prepare().unwrap(); publish_without_receipt(&tx);
+        assert_eq!(tx.reconcile().unwrap(), Status::Completed);
+        assert_eq!(passes.swap(0, Ordering::Relaxed), 2, "first receipt still verifies before AND after its durable write");
+        assert_eq!(tx.reconcile().unwrap(), Status::Completed);
+        assert_eq!(passes.swap(0, Ordering::Relaxed), 1);
+        assert_eq!(tx.acknowledge().unwrap(), Status::Acknowledged);
+        assert_eq!(passes.swap(0, Ordering::Relaxed), 1);
+        assert_eq!(tx.reconcile().unwrap(), Status::Acknowledged);
+        assert_eq!(passes.swap(0, Ordering::Relaxed), 1);
+        assert_eq!(PLAN_DIGEST_COMPUTATIONS.with(|count| count.get()) - before, 1, "all records reuse only this immutable plan digest");
+        let output = f.path.join("target").join(tx.plan.target_name()).join("Dokument_01.md");
+        fs::write(&output, b"HELLO").unwrap();
+        assert!(tx.reconcile().is_err(), "an earlier complete/ACK is never cached content authority");
+        assert!(tx.acknowledge().is_err());
+        fs::write(&output, b"hello").unwrap();
+        fs::write(f.path.join("journal").join(tx.name("started")), b"{}").unwrap();
+        assert!(tx.reconcile().is_err(), "existing complete/ACK never hides damaged dependencies");
+    }
+    #[test]
+    fn direct_acknowledgement_preserves_abandoned_and_incomplete_semantics_without_creating_a_copy() {
+        let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+        let guard = Lifecycle::default().begin_native().unwrap();
+        let tx = Transaction::open(&j, &s, &t, f.plan(&j, &s, &t), &guard).unwrap();
+        assert_eq!(tx.acknowledge().unwrap_err().to_string(), "AI_EXPORT_INCOMPLETE");
+        tx.write_body(0, b"hello").unwrap(); tx.prepare().unwrap();
+        assert_eq!(tx.acknowledge().unwrap_err().to_string(), "AI_EXPORT_INCOMPLETE", "prepared is not permission to publish during ACK");
+        assert_eq!(tx.abandon().unwrap(), Status::Abandoned);
+        assert_eq!(tx.acknowledge().unwrap_err().to_string(), "AI_EXPORT_ABANDONED");
+        assert_eq!(fs::read_dir(f.path.join("target")).unwrap().count(), 0);
+        assert!(j.read_bounded(&tx.name("ack"), MAX_RECORD).is_err());
+    }
+    #[test]
+    fn newly_written_complete_receipt_still_checks_changed_content_after_the_durable_write() {
+        use std::sync::{Arc, atomic::{AtomicUsize, Ordering}};
+        let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+        let output = f.path.join("target").join(format!("Export-{}", "b".repeat(32))).join("Dokument_01.md");
+        let changed = output.clone(); let passes = Arc::new(AtomicUsize::new(0)); let observed = passes.clone();
+        let guard = Lifecycle::default().begin_native().unwrap().with_test_event(move |phase| {
+            if phase == "reconcile_inventory" && observed.fetch_add(1, Ordering::Relaxed) == 1 {
+                fs::write(&changed, b"WRONG").unwrap();
+            }
+        });
+        let tx = Transaction::open(&j, &s, &t, f.plan(&j, &s, &t), &guard).unwrap();
+        tx.write_body(0, b"hello").unwrap(); tx.prepare().unwrap(); publish_without_receipt(&tx);
+        assert!(tx.reconcile().is_err(), "post-receipt verification must refuse changed content");
+        assert_eq!(passes.load(Ordering::Relaxed), 2);
+        assert!(j.read_bounded(&tx.name("complete"), MAX_RECORD).is_ok(), "test reached the actual durable receipt boundary");
+        assert!(tx.acknowledge().is_err());
+        assert!(j.read_bounded(&tx.name("ack"), MAX_RECORD).is_err());
+        fs::write(output, b"hello").unwrap();
+        assert_eq!(tx.reconcile().unwrap(), Status::Completed);
     }
     #[test]
     fn abandonment_reconciles_an_actual_rename_before_reporting_no_export() {

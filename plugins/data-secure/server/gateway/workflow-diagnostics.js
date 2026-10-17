@@ -37,6 +37,7 @@ const EVENTS = new Set([
   'automatic_review_started', 'automatic_review_finished',
   'automatic_review_claim_failed', 'automatic_review_failed',
   'automatic_review_release_failed',
+  'content_operation_failed',
   'startup_refused', 'terminal_state_delegated_to_product_ui',
   'local_results_reuse_started', 'local_results_reuse_page', 'local_results_reuse_finished',
   'local_results_reuse_cancelled', 'local_results_reuse_failed', 'local_results_reuse_expired'
@@ -45,7 +46,8 @@ const OUTCOMES = new Set(['progress', 'ok', 'stopped']);
 const PHASES = new Set([
   'none', 'complete', 'awaiting_local_review', 'awaiting_explicit_resume',
   'awaiting_local_mapping_repair', 'awaiting_delivery_acknowledgement',
-  'ready_for_next_document', 'invalid_local_state'
+  'ready_for_next_document', 'invalid_local_state',
+  'content_prepare', 'content_extract', 'content_privacy', 'content_verify', 'content_publish', 'content_ack'
 ]);
 const ERROR_CODES = new Set(require('./diagnostic-causes').WORKFLOW_ERROR_CODES);
 

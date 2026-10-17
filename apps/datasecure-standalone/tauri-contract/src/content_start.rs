@@ -9,7 +9,7 @@ const INVALID: &str = "CONTENT_OPTIONS_INVALID";
 const NOT_READY: &str = "CONTENT_OPTIONS_NOT_READY";
 const START_FIELDS: &[&str] = &[
     "processingMode", "outputNamingMode", "ocrContactReview", "sourceIds",
-    "catalogueRevision", "contentOptions",
+    "catalogueRevision", "contentOptions", "reviewPolicy",
 ];
 
 #[derive(Deserialize, Serialize)]
@@ -42,6 +42,13 @@ pub fn decode_start(body: &Value, document_review: bool) -> Result<Option<Value>
     let fields = body.as_object().ok_or(INVALID)?;
     if fields.keys().any(|key| !START_FIELDS.contains(&key.as_str())) {
         return Err(INVALID.into());
+    }
+    if let Some(policy) = fields.get("reviewPolicy") {
+        if policy.as_str() != Some("automatic-conservative") || !document_review ||
+            fields.get("processingMode").and_then(Value::as_str) != Some("markdown-and-anonymize") ||
+            fields.get("contentOptions").is_none() {
+            return Err("STANDALONE_REVIEW_POLICY_INVALID".into());
+        }
     }
     match fields.get("contentOptions") {
         None => Ok(None),
@@ -142,5 +149,21 @@ mod tests {
         for body in [Value::Null, json!([]), json!(0), json!("raw")] {
             assert_eq!(decode_start(&body, true).unwrap_err(), INVALID);
         }
+    }
+
+    #[test]
+    fn automatic_review_is_explicit_and_bound_to_the_actual_content_surface() {
+        let request = json!({ "processingMode": "markdown-and-anonymize", "contentOptions": contract(),
+            "reviewPolicy": "automatic-conservative" });
+        assert_eq!(decode_start(&request, true).unwrap(), Some(contract()));
+        assert_eq!(decode_start(&request, false).unwrap_err(), "STANDALONE_REVIEW_POLICY_INVALID");
+        for value in [Value::Null, json!(false), json!("automatic"), json!({})] {
+            let mut wrong = request.clone(); wrong["reviewPolicy"] = value;
+            assert_eq!(decode_start(&wrong, true).unwrap_err(), "STANDALONE_REVIEW_POLICY_INVALID");
+        }
+        let mut raw = request.clone(); raw["processingMode"] = json!("markdown-only");
+        assert_eq!(decode_start(&raw, true).unwrap_err(), "STANDALONE_REVIEW_POLICY_INVALID");
+        let mut legacy = request; legacy.as_object_mut().unwrap().remove("contentOptions");
+        assert_eq!(decode_start(&legacy, true).unwrap_err(), "STANDALONE_REVIEW_POLICY_INVALID");
     }
 }

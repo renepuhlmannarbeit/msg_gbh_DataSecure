@@ -60,6 +60,41 @@ function fixedStorageFailure(action) {
 }
 
 try {
+  test('result destination status distinguishes first installation, lost target and replacement', f => {
+    assert.deepStrictEqual(result.readConfiguredResultRootStatus(), {
+      status: 'unconfigured', root: '', recorded_root: ''
+    });
+    assert.strictEqual(fs.existsSync(f.data), false, 'status reads never create a first-install setting');
+    result.saveConfiguredResultRoot(f.visible);
+    assert.deepStrictEqual(result.readConfiguredResultRootStatus(), {
+      status: 'available', root: f.visible, recorded_root: f.visible
+    });
+    const savedConfiguration = configBytes(result);
+    const moved = path.join(f.scope, 'temporarily-unmounted');
+    fs.renameSync(f.visible, moved);
+    assert.deepStrictEqual(result.readConfiguredResultRootStatus(), {
+      status: 'unavailable', root: '', recorded_root: f.visible
+    });
+    assert.strictEqual(result.readConfiguredResultRoot(), '', 'display-only paths never become usable targets');
+    assert.strictEqual(fs.existsSync(f.visible), false, 'a status read must not recreate a lost destination');
+    fs.mkdirSync(f.visible);
+    assert.deepStrictEqual(result.readConfiguredResultRootStatus(), {
+      status: 'unavailable', root: '', recorded_root: f.visible
+    });
+    assert.deepStrictEqual(configBytes(result), savedConfiguration, 'unavailable reads never replace the original identity');
+    fs.renameSync(f.visible, path.join(f.scope, 'replacement'));
+    fs.renameSync(moved, f.visible);
+    assert.strictEqual(result.readConfiguredResultRootStatus().status, 'available', 'the original target can recover without a new choice');
+  });
+  test('an explicit missing environment destination is unavailable, never a first installation', f => {
+    const missing = path.join(f.scope, 'offline-target');
+    process.env.EU_PRIVACY_RESULT_ROOT = missing;
+    assert.deepStrictEqual(result.readConfiguredResultRootStatus(), {
+      status: 'unavailable', root: '', recorded_root: missing
+    });
+    assert.strictEqual(fs.existsSync(missing), false);
+    assert.strictEqual(fs.existsSync(f.data), false);
+  });
   test('separate roots persist, resolve and reset without changing published output', f => {
     privacy.saveConfiguredPrivacyRoot(f.private);
     result.saveConfiguredResultRoot(f.visible);

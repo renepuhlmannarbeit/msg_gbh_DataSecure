@@ -6,6 +6,7 @@ import { readRegular, hashRegular, sha256, verifyTargetEvidence, readContract } 
 import { loadCargoLicenseInventory } from './lib/cargo-license-inventory.mjs';
 import { standaloneFontLicense } from './lib/standalone-font-license.mjs';
 import boundFileIo from '../plugins/data-secure/server/core/bound-file-io.js';
+import { standaloneBuildFingerprint, assertStandaloneBuildFingerprint, assertStandaloneSourceUnchanged, assertStandaloneRuntimeSource } from './lib/standalone-build-fingerprint.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const font = standaloneFontLicense(root);
@@ -30,6 +31,9 @@ const appSource = path.resolve(root, appArgument);
 if (path.basename(appSource) !== 'DataSecure Standalone.app' || !fs.statSync(appSource).isDirectory()) {
   throw new Error('STANDALONE_MACOS_APP_INVALID');
 }
+const sourceIdentity = standaloneBuildFingerprint(root), sourceFingerprint = sourceIdentity.fingerprint;
+const desktopSource = path.join(appSource, 'Contents', 'MacOS', 'datasecure-standalone');
+let desktopVerified = false;
 
 const folderName = `DataSecure-Standalone-${version}-${productTarget}`;
 const stageParent = path.join(root, 'dist', `standalone-macos-package-stage-${productTarget}`);
@@ -58,6 +62,10 @@ function copyRegular(source, destination, mode = null) {
   try { checked = boundFileIo.readBoundFileRecord(source, { maximum: 256 * 1024 * 1024, maxLinks: 2, checkCtime: true }); }
   catch { throw new Error('STANDALONE_MACOS_SOURCE_UNSAFE'); }
   const { bytes, stat: before } = checked;
+  if (path.resolve(source) === desktopSource) {
+    assertStandaloneBuildFingerprint(bytes, sourceFingerprint);
+    desktopVerified = true;
+  }
   fs.mkdirSync(path.dirname(destination), { recursive: true });
   fs.writeFileSync(destination, bytes, { flag: 'wx', mode: mode ?? Number(before.mode & 0o777n) });
   if (!bytes.equals(boundFileIo.readBoundFile(destination, { maximum: bytes.length, minimum: bytes.length, checkCtime: true }))) {
@@ -93,6 +101,13 @@ function inventory(directory, ignored = new Set()) {
 
 safeResetStage();
 copyTree(appSource, path.join(stage, appRelative));
+if (!desktopVerified) throw new Error('STANDALONE_DESKTOP_SOURCE_MARKER_MISSING');
+assertStandaloneBuildFingerprint(readRegular(path.join(stage, appRelative, 'Contents/MacOS/datasecure-standalone'),
+  64 * 1024 * 1024), sourceFingerprint);
+// A newly compiled shell must not certify an older generated JS projection.
+// Compare common source bytes only; native addons/signatures stay target-local.
+assertStandaloneRuntimeSource(path.join(stage, appRelative, 'Contents/Resources/server'), sourceIdentity);
+assertStandaloneSourceUnchanged(root, sourceFingerprint);
 
 const contract = readContract(root);
 const runtimeTarget = contract.targets.find((candidate) => candidate.id === productTarget);
@@ -159,6 +174,7 @@ const payload = inventory(stage);
 const manifest = {
   schema: 'datasecure-standalone-package/1', product: 'DataSecure Standalone', version,
   target: productTarget, rust_target: target.rust_target, release_status: 'engineering_pilot',
+  source_fingerprint: sourceFingerprint,
   minimum_system_version: target.minimum_system_version,
   signing: 'adhoc', requires_claude: false, requires_cowork: false,
   requires_node_install: false, requires_rust_install: false, requires_network: false,
@@ -172,6 +188,7 @@ const archiveFiles = collectFiles(stageParent).map((file) => {
   const relative = file.archivePath.slice(folderName.length + 1);
   return { ...file, mode: executablePaths.has(relative) ? 0o100755 : 0o100644 };
 });
+assertStandaloneSourceUnchanged(root, sourceFingerprint);
 fs.rmSync(output, { force: true });
 fs.rmSync(`${output}.sha256`, { force: true });
 const archive = writeZip(output, archiveFiles);

@@ -6,26 +6,27 @@ use std::{fs::File, io::{self, Write}, path::{Path, PathBuf}, sync::Mutex};
 const MAX_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_SEGMENTS: u8 = 8;
 type Identity = (u64, u128);
-struct Sink { file: File, directory: platform::Directory, identity: Identity, bytes: u64, segments: u8 }
+struct Sink { file: File, name: String, directory: platform::Directory, identity: Identity, bytes: u64, segments: u8 }
 enum State { Initial, Ready(Sink), Disabled }
 static STATE: Mutex<State> = Mutex::new(State::Initial);
 fn unsafe_io() -> io::Error { io::Error::other("DIAGNOSTIC_IO_UNSAFE") }
 
 fn create(directory: &Path) -> io::Result<Sink> {
     let directory = platform::directory(directory)?;
-    let file = match platform::create(&directory, "desktop-interactions.jsonl") {
-        Ok(file) => file,
+    let (file, name) = match platform::create(&directory, "desktop-interactions.jsonl") {
+        Ok(file) => (file, "desktop-interactions.jsonl".to_string()),
         Err(_) => {
             // A collision never grants permission to append to an existing
             // object. This alternative is also atomically create-if-absent.
             let nanos = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH)
                 .map_err(|_| unsafe_io())?.as_nanos();
-            platform::create(&directory, &format!("desktop-interactions.{}.{nanos:032x}.jsonl", std::process::id()))?
+            let name = format!("desktop-interactions.{}.{nanos:032x}.jsonl", std::process::id());
+            (platform::create(&directory, &name)?, name)
         }
     };
     let identity = platform::identity(&file)?;
     if file.metadata()?.len() != 0 { return Err(unsafe_io()); }
-    Ok(Sink { file, directory, identity, bytes: 0, segments: 1 })
+    Ok(Sink { file, name, directory, identity, bytes: 0, segments: 1 })
 }
 
 fn rotate(sink: &mut Sink) -> io::Result<()> {
@@ -40,6 +41,7 @@ fn rotate(sink: &mut Sink) -> io::Result<()> {
     let identity = platform::identity(&file)?;
     if file.metadata()?.len() != 0 { return Err(unsafe_io()); }
     sink.file = file;
+    sink.name = name;
     sink.identity = identity;
     sink.bytes = 0;
     sink.segments += 1;
@@ -81,6 +83,12 @@ pub fn status() -> &'static str {
         },
         Err(_) => "unavailable",
     }
+}
+
+/// Only a process-created fixed leaf, never a supplied path. Helps the bounded
+/// support snapshot retain this session even when old diagnostics fill its cap.
+pub(crate) fn current_segment() -> Option<String> {
+    STATE.lock().ok().and_then(|state| match &*state { State::Ready(sink) => Some(sink.name.clone()), _ => None })
 }
 
 pub fn ensure_directory(directory: &Path) -> io::Result<()> {

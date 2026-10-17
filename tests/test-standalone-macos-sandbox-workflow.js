@@ -74,6 +74,7 @@ for (const expected of [
   "assert not app.get('com.apple.security.cs.allow-jit')",
   'STANDALONE_MACOS_SIGNED_RUNTIME_EVIDENCE_INVALID',
   'STANDALONE_MACOS_RUNNING_CORE_INTEGRITY_CHECKED',
+  'Print :NSDocumentsFolderUsageDescription',
   'DATASECURE_BUNDLED_RUNTIME_REQUIRED=1',
   'DataSecure Standalone.app',
   'codesign --verify --deep --strict',

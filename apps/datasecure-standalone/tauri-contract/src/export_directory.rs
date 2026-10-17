@@ -171,6 +171,38 @@ impl Directory {
             platform::regular_identity(&platform::read_file(&self.inner, name)?)? != identity { return Err(unsafe_io()); }
         self.check()?; Ok(bytes)
     }
+    /// Diagnostic-only inventory. Unlike export evidence, an append-only log
+    /// may grow during collection. The caller receives a bounded tail and
+    /// must label truncation/growth; this never validates an export or journal.
+    pub(crate) fn diagnostic_names(&self) -> io::Result<Vec<String>> {
+        self.check()?;
+        let names = platform::list_names(&self.inner, 128)?;
+        self.check()?; Ok(names)
+    }
+    pub(crate) fn diagnostic_modified(&self, name: &str) -> io::Result<u128> {
+        leaf(name)?; self.check()?;
+        let file = platform::read_diagnostic_file(&self.inner, name)?;
+        platform::regular_identity(&file)?;
+        let stamp = file.metadata()?.modified()?.duration_since(std::time::UNIX_EPOCH).map_err(|_| unsafe_io())?.as_millis();
+        self.check()?; Ok(stamp)
+    }
+    pub(crate) fn diagnostic_snapshot(&self, name: &str, limit: usize) -> io::Result<(Vec<u8>, bool, bool)> {
+        if limit > 256 * 1024 { return Err(unsafe_io()); }
+        leaf(name)?; self.check()?;
+        let mut file = platform::read_diagnostic_file(&self.inner, name)?;
+        let identity = platform::regular_identity(&file)?;
+        let before = file.metadata()?.len();
+        let length = before.min(limit as u64);
+        file.seek(SeekFrom::Start(before - length))?;
+        let mut bytes = vec![0; length as usize];
+        file.read_exact(&mut bytes)?;
+        let after = file.metadata()?.len();
+        if after < before || platform::regular_identity(&file)? != identity ||
+            platform::regular_identity(&platform::read_diagnostic_file(&self.inner, name)?)? != identity {
+            return Err(unsafe_io());
+        }
+        self.check()?; Ok((bytes, before > length, after > before))
+    }
     pub fn sync(&self) -> io::Result<()> { self.check()?; platform::sync_directory(&self.inner)?; self.check() }
     /// Cross-process cooperative serialization for the controlled native
     /// journal. The OS releases ownership on process exit; never unlink it.
@@ -456,6 +488,7 @@ mod platform {
         opened(unsafe { libc::openat(parent.file.as_raw_fd(), name.as_ptr(),
             libc::O_RDONLY | libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK) })
     }
+    pub fn read_diagnostic_file(parent: &Directory, name: &str) -> io::Result<File> { read_file(parent, name) }
     pub fn lock_control(parent: &Directory) -> io::Result<ControlLock> {
         let name = c"export-control.lock";
         let file = opened(unsafe { libc::openat(parent.file.as_raw_fd(), name.as_ptr(),
@@ -655,6 +688,23 @@ mod platform {
     pub fn create_file(parent: &Directory, name: &str) -> io::Result<File> { relative(&parent.file, std::ffi::OsStr::new(name), false, true, false) }
     pub fn create_record(parent: &Directory, name: &str) -> io::Result<File> { relative_owned(&parent.file, std::ffi::OsStr::new(name), false, true, false, true) }
     pub fn read_file(parent: &Directory, name: &str) -> io::Result<File> { relative(&parent.file, std::ffi::OsStr::new(name), false, false, false) }
+    pub fn read_diagnostic_file(parent: &Directory, name: &str) -> io::Result<File> {
+        // Only diagnostics share WRITE with the live append sink. Do not
+        // weaken the immutable export/journal readers above.
+        let mut wide: Vec<u16> = std::ffi::OsStr::new(name).encode_wide().collect();
+        if wide.is_empty() || wide.len() > 255 || wide.iter().any(|c| [0, 47, 58, 92].contains(c)) { return Err(unsafe_io()); }
+        let mut text = UnicodeString { length: (wide.len() * 2) as u16, maximum_length: (wide.len() * 2) as u16, buffer: wide.as_mut_ptr() };
+        let mut attributes = ObjectAttributes { length: std::mem::size_of::<ObjectAttributes>() as u32,
+            root: parent.file.as_raw_handle(), name: &mut text, attributes: 0x40 | 0x1000,
+            security: std::ptr::null_mut(), quality: std::ptr::null_mut() };
+        let mut status = IoStatus { status: 0, information: 0 };
+        let mut handle: Handle = std::ptr::null_mut();
+        let result = unsafe { NtCreateFile(&mut handle, 0x0010_0081, &mut attributes, &mut status,
+            std::ptr::null(), 0x80, 3, 1, 0x20 | 0x0020_0000 | 0x40, std::ptr::null_mut(), 0) };
+        if result < 0 { return Err(io::Error::from_raw_os_error(unsafe { RtlNtStatusToDosError(result) } as i32)); }
+        if handle.is_null() { return Err(unsafe_io()); }
+        Ok(unsafe { File::from_raw_handle(handle) })
+    }
     pub fn lock_control(parent: &Directory) -> io::Result<ControlLock> {
         Ok(ControlLock { file: relative_policy(&parent.file, std::ffi::OsStr::new("export-control.lock"), false, false, false, false, true)? })
     }

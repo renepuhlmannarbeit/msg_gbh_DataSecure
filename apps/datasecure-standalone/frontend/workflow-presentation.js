@@ -35,14 +35,27 @@
           : value.ocr_omitted_count ? 'Keine Ergebnisdateien vorhanden. Wenn du den Bild- oder Scantext benötigst, die Originaldateien für einen neuen Lauf mit OCR auswählen.'
             : 'Keine Ergebnisdateien vorhanden. Die Fehlerursachen und betroffenen Dateien ansehen; Originale bleiben unverändert.') };
   }
+  function contentNoticeSummary(owner) {
+    if (owner?.processing_mode !== 'markdown-and-anonymize') return null;
+    const valid = integer(owner.content_notice_count) && integer(owner.result_count) &&
+      owner.content_notice_count <= owner.result_count;
+    const count = valid ? owner.content_notice_count : 0;
+    const complete = valid && owner.content_notice_breakdown_complete === true;
+    return { count, complete, attention: count > 0 || !complete,
+      description: (count ? `${complete ? '' : 'Mindestens '}${count} erstellte Datei${count === 1 ? ' enthält' : 'en enthalten'} Inhaltshinweise, zum Beispiel zur Texterkennung oder zu ausgelassenen Inhalten. ` : '') +
+        (!complete ? 'Inhaltshinweise sind für diesen gespeicherten Stand nicht vollständig verfügbar; fehlende Angaben bedeuten nicht, dass alles fehlerfrei übernommen wurde. ' : '') +
+        (count ? 'Die Dateien wurden erstellt; der Lauf ist deshalb nicht erneut offen.' : '') };
+  }
   function projectRun(value) {
     if (!value || !['processor', 'review', 'documents'].includes(value.source) || !/^[a-f0-9]{64}$/u.test(value.batch_id || '') ||
         !['markdown-only', 'markdown-and-anonymize'].includes(value.processing_mode)) return null;
     const raw = value.processing_mode === 'markdown-only';
+    const fast = !raw && value.review_policy === 'automatic-conservative';
     const contactReviewActive = raw && (value.source === 'review' || value.state === 'review_required' ||
       value.state === 'processing' && value.review_count > 0);
     const labels = raw ? ['Text übernehmen', contactReviewActive ? 'Gewählte OCR-Kontaktprüfung' : 'Markdown nachkorrigieren (optional)', 'Markdown-Dateien']
-      : ['Text übernehmen', 'Fundstellen prüfen', 'Dokumente freigeben', 'Für KI exportieren'];
+      : ['Text übernehmen', fast ? 'Fundstellen automatisch behandeln' : 'Fundstellen prüfen',
+        fast ? 'Automatische Erstfreigabe' : 'Dokumente freigeben', 'Für KI exportieren'];
     const output = { batchId: value.batch_id, raw, phase: 'unknown', heading: 'Laufstatus abgleichen',
       next: 'Gespeicherten Stand neu laden. Keine Freigabe oder Export daraus ableiten.',
       busy: false, stages: labels.map(label => ({ label, status: 'pending' })) };
@@ -78,10 +91,23 @@
       if (raw) output.stages[review].status = value.dirty === true ? 'current' : 'optional';
       output.counts = raw ? `${value.document_count} Markdown-Dateien verfügbar · Nachkorrektur freiwillig`
         : `${value.approved_count} von ${value.document_count} verfügbaren Dokumenten freigegeben`;
+      if (!raw && integer(value.automatically_approved_count) && value.automatically_approved_count > 0 &&
+          value.automatically_approved_count <= value.approved_count) {
+        output.counts += ` · ${value.automatically_approved_count} automatisch, nicht manuell geprüft`;
+        if (output.phase === 'approved') {
+          output.heading = wholeRun ? 'Schnellweg abgeschlossen · automatisch freigegeben' : 'Bisher verfügbare Dokumente automatisch freigegeben';
+          output.next = 'Keine erneute Dokumentfreigabe nötig. Für eine lokale KI-Kopie die gewünschten Dateien auswählen und den Export ausdrücklich bestätigen. Die Ergebnisse wurden nicht manuell geprüft.';
+        }
+      }
       if (!wholeRun) output.next += ' Der Laufabschluss ist noch nicht bestätigt; verfügbare Dokumente sind nicht der gesamte Stapel.';
       if (value.problem_count) output.next += ` ${value.problem_count} Dateien sind nicht vollständig verfügbar; betroffene Dateien ansehen.`;
       if (integer(value.expected_omission_count) && value.expected_omission_count > 0)
         output.next += ` OCR war ausgeschaltet; ${value.expected_omission_count} Bild- oder Scan-Datei${value.expected_omission_count === 1 ? ' wurde' : 'en wurden'} deshalb nicht umgewandelt. Das ist kein technischer Fehler.`;
+      if (!raw && wholeRun) {
+        const notices = contentNoticeSummary(value);
+        if (notices.attention) output.stages[0].status = 'warning';
+        if (notices.description) output.next += ` ${notices.description}`;
+      }
       return output;
     }
     const total = integer(value.selected_count) ? value.selected_count : 0;
@@ -134,7 +160,16 @@
       output.stages[0].status = failed ? 'warning' : 'done';
       if (raw) { const summary = conversionSummary(value); output.stages[1].status = 'optional'; set('converted', 2,
         summary?.heading || 'Textübernahme abgeschlossen', summary?.description || 'Markdown-Dateien öffnen. Nachkorrektur ist optional; Inhalte sind nicht anonymisiert.'); }
-      else { output.stages[1].status = 'done'; set('documents', 2, 'Dokumentprüfung offen', 'Die technische Verarbeitung ist abgeschlossen. Dokumente nachprüfen; noch keine menschliche Freigabe und kein KI-Export.'); }
+      else {
+        output.stages[1].status = 'done';
+        const notices = contentNoticeSummary(value);
+        if (notices.attention) output.stages[0].status = 'warning';
+        set('documents', 2, failed || value.warning_count > 0 || notices.attention ? 'Anonymisierungslauf abgeschlossen mit Hinweisen' : 'Anonymisierungslauf abgeschlossen',
+          value.review_policy === 'automatic-conservative'
+            ? 'Schnellweg: Die Erstfreigabe erfolgt automatisch, nicht durch einen Menschen. Ergebnisse und aktuellen Freigabestand öffnen; eine KI-Kopie nur ausdrücklich erstellen. Nachträgliche Änderungen können Freigaben aufgehoben haben.'
+            : 'Die Verarbeitung ist fertig. Für eine KI-Kopie die gewünschten Dokumente noch vergleichen und freigeben. Keine weitere Datei wird verarbeitet; kein KI-Export erfolgt automatisch.');
+        if (notices.description) output.next += ` ${notices.description}`;
+      }
     } else if (value.state === 'paused')
       set('paused', -1, 'Dieser Lauf ist pausiert', 'Verarbeitung fortsetzen, wenn du bereit bist. Es wird keine neue Datei automatisch gestartet.');
     else if (value.state === 'export_pending')
@@ -168,7 +203,7 @@
     if (code === 'LOCAL_MAPPING_PENDING') return 'Den zugehörigen Lauf fortsetzen, um genau diese Bereitstellung erneut abzugleichen.';
     return 'Den gespeicherten Laufstatus und die inhaltsfreie Diagnose prüfen. Nicht blind neu starten; die genaue Ursache ist noch nicht bestätigt.';
   }
-  const api = Object.freeze({ projectRun, failureAdvice, validateConversionFeedback, conversionSummary });
+  const api = Object.freeze({ projectRun, failureAdvice, validateConversionFeedback, conversionSummary, contentNoticeSummary });
   if (typeof module === 'object' && module.exports) module.exports = api;
   else Object.defineProperty(window, '__DATASECURE_PRESENTATION__', { value: api });
 })();

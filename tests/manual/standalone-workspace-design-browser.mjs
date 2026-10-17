@@ -59,8 +59,13 @@ try {
       assert.ok((await page.locator('#history-list').innerText()).includes('Lauf abgeschlossen mit Hinweisen'));
       await page.locator(prefix + '-problems').click();
       assert.equal(await page.locator(prefix + '-files .problem-card').count(), 0);
-    } else { await page.locator(prefix + '-problems-main.primary').click();
-      assert.equal(await page.locator(prefix + '-files .problem-card').count(), 1); }
+    } else {
+      await page.locator(prefix + '-results.primary').waitFor();
+      assert.equal(await page.locator(prefix + '-problems').isVisible(), true);
+      await page.locator(prefix + '-problems').click();
+      assert.equal(await page.locator('#history-list .history-row').first().getAttribute('data-outcome'), 'partial');
+      assert.equal(await page.locator(prefix + '-files .problem-card').count(), 1);
+    }
     assert.equal(await page.locator(prefix + '-files .notice-card').count(), demo === 'completion-raw' ? 52 : 51);
     const content = page.locator(prefix + '-files details'); await content.locator('summary').click();
     assert.equal(await content.locator('.notice-card').count(), 35);
@@ -226,6 +231,104 @@ try {
   }
   await page.setViewportSize({ width: 1280, height: 900 }); await page.locator('#file-problems > summary').click();
   await page.screenshot({ path: path.join(evidence, 'active-run-completed.png'), fullPage: true });
+  await page.goto(preview.url + '/workspace.html?demo=documents-fast'); await page.locator('#nav-history').click();
+  const fastPrefix = '#history-' + 'b'.repeat(64);
+  assert.match(await page.locator('#history-list .history-row').first().innerText(), /Anonymisierungslauf abgeschlossen – mit Hinweisen/u);
+  await page.locator(fastPrefix + '-problems').click();
+  const sourceHints = page.locator(fastPrefix + '-files details'); await sourceHints.locator('summary').click();
+  assert.equal(await sourceHints.locator('.notice-card').count(), 2);
+  assert.match(await sourceHints.innerText(), /Automatisch erkannter Text kann Lesefehler enthalten/u);
+  for (const [width, height] of [[1280,900], [720,560], [390,700]]) {
+    await page.setViewportSize({ width, height });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Fastweg history hints reflow ' + width);
+    const audit = await page.evaluate(() => axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a','wcag2aa','wcag21aa'] } }));
+    assert.deepEqual(audit.violations.map(row => ({ id: row.id, targets: row.nodes.map(node => node.target) })), [], 'Fastweg history hints axe ' + width);
+  }
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.screenshot({ path: path.join(evidence, 'fastweg-completed-with-ocr-hints.png'), fullPage: true });
+  await page.locator('#history-' + 'b'.repeat(64) + '-documents').click();
+  await page.waitForFunction(() => document.querySelector('#documents-purpose').textContent.includes('3 automatisch freigegeben'));
+  assert.equal(await page.locator('#documents-main-guide').isVisible(), false);
+  assert.equal(await page.locator('#run-guide-title').innerText(), 'Schnellweg abgeschlossen · automatisch freigegeben');
+  await page.locator('#documents-all').check();
+  assert.equal(await page.locator('#documents-approve').isEnabled(), false);
+  assert.equal(await page.locator('#documents-export').isEnabled(), true);
+  for (const [width, height] of [[1280,900], [720,560], [390,700]]) {
+    await page.setViewportSize({ width, height });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Fastweg reflow ' + width);
+    const audit = await page.evaluate(() => axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a','wcag2aa','wcag21aa'] } }));
+    assert.deepEqual(audit.violations.map(row => ({ id: row.id, targets: row.nodes.map(node => node.target) })), [], 'Fastweg axe ' + width);
+  }
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.screenshot({ path: path.join(evidence, 'fastweg-automatic-approval.png'), fullPage: true });
+  await page.locator('#documents-export').click();
+  await page.locator('#document-export-dialog').waitFor({ state: 'visible' });
+  assert.match(await page.locator('#document-export-purpose').innerText(), /automatische Erstfreigabe, keine menschliche Prüfung/u);
+  await page.evaluate(() => {
+    const original = window.__TAURI__.core.invoke;
+    const observed = window.previewExportObservation = { phase: 'copying', staged: 1, request: null, finish: null };
+    window.__TAURI__.core.invoke = async (command, args) => {
+      if (command === 'export_approved_documents' && !args.acknowledge) {
+        observed.request = args;
+        return new Promise(resolve => { observed.finish = async () => resolve(await original(command, args)); });
+      }
+      if (command === 'get_native_recovery_status') return { phase: 'owned', local_ui_only: true, external_disclosure: false,
+        activity: { state: 'active', active: true, action: 'export_approved_documents', phase: 'native', elapsed_ms: 100,
+          export_progress: { operation_id: observed.request.operationId, phase: observed.phase,
+            staged_count: observed.staged, total_count: observed.request.selection.length } } };
+      return original(command, args);
+    };
+  });
+  await page.locator('#document-export-confirm').click();
+  await page.waitForFunction(() => document.querySelector('#document-export-result').textContent.includes('1 von 3 Dateien'));
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'document-export-result');
+  assert.equal(await page.locator('#document-export-close').isEnabled(), false);
+  assert.notEqual(await page.locator('#document-export-title').innerText(), 'Export fertig');
+  for (const [width, height] of [[1280,900], [720,560], [390,700]]) {
+    await page.setViewportSize({ width, height });
+    assert.ok(await page.locator('#document-export-dialog').evaluate(node => node.scrollWidth <= node.clientWidth + 1), 'observed export reflow ' + width);
+    const audit = await page.evaluate(() => axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a','wcag2aa','wcag21aa'] } }));
+    assert.deepEqual(audit.violations.map(row => ({ id: row.id, targets: row.nodes.map(node => node.target) })), [], 'observed export axe ' + width);
+  }
+  await page.screenshot({ path: path.join(evidence, 'native-progress-synthetic-ui.png'), fullPage: true });
+  await page.evaluate(() => { window.previewExportObservation.phase = 'verifying'; });
+  await page.waitForFunction(() => document.querySelector('#document-export-result').textContent.includes('prüft die kopierten Dateien'));
+  await page.evaluate(() => window.previewExportObservation.finish());
+  await page.waitForFunction(() => document.querySelector('#document-export-title').textContent === 'Export fertig');
+  assert.equal(await page.locator('#document-export-close').isEnabled(), true);
+  assert.equal(await page.evaluate(() => document.activeElement.id), 'document-export-close');
+  await page.locator('#document-export-close').click();
+
+  // Exercise the actual support controls with failed Core IPC. The save reply
+  // is synthetic: this proves layout/status ownership, not a native file dialog.
+  await page.goto(preview.url + '/workspace.html');
+  await page.waitForFunction(() => !document.querySelector('#boot-status') || document.querySelector('#boot-status').hidden);
+  await page.evaluate(() => {
+    const original = window.__TAURI__.core.invoke;
+    let saves = 0;
+    window.__TAURI__.core.invoke = async (command, args) => {
+      if (command === 'get_public_state') throw Error('STANDALONE_IPC_FAILED');
+      if (command === 'get_native_recovery_status') return { phase: 'idle', diagnostic_log: 'ready', local_ui_only: true, external_disclosure: false };
+      if (command === 'save_diagnostic_bundle') return ++saves === 1
+        ? { ok: true, cancelled: true, saved: false, external_disclosure: false }
+        : { ok: true, cancelled: false, saved: true, partial: true, external_disclosure: false };
+      return original(command, args);
+    };
+  });
+  await page.locator('#connection-help').waitFor({ state: 'visible' });
+  await page.locator('#connection-diagnostic-save').click();
+  assert.match(await page.locator('#connection-diagnostic-save-status').innerText(), /Abgebrochen/u);
+  await page.locator('#nav-settings').click();
+  await page.locator('#diagnostic-save').click();
+  assert.match(await page.locator('#diagnostic-save-status').innerText(), /lokal gespeichert.*gekennzeichnet.*nichts hochgeladen/u);
+  assert.equal(await page.locator('#connection-help').isVisible(), true, 'support save cannot clear the connection failure');
+  for (const [width, height] of [[1280,900], [720,560], [390,700]]) {
+    await page.setViewportSize({ width, height });
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'disconnected support reflow ' + width);
+    const audit = await page.evaluate(() => axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a','wcag2aa','wcag21aa'] } }));
+    assert.deepEqual(audit.violations.map(row => ({ id: row.id, targets: row.nodes.map(node => node.target) })), [], 'disconnected support axe ' + width);
+  }
+  await page.screenshot({ path: path.join(evidence, 'disconnected-diagnostic-package.png'), fullPage: true });
   assert.deepEqual(errors, []);
   console.log('WORKSPACE DESIGN PASS: actual v2 pages, both purposes, comparisons, raw masking exclusion, approval, authoritative filenames, computed fonts, dialog/focus, axe and 390–1280px reflow; synthetic IPC, headless, not native acceptance');
 } finally { await context.close(); await preview.close(); await browser.close(); }

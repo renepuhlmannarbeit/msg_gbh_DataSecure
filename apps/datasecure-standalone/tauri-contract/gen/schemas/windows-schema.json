@@ -243,6 +243,12 @@
           "markdownDescription": "Speichert eine revisionsgebundene Freigabe oder zusätzliche feste Maskierung."
         },
         {
+          "description": "Speichert die genaue Auswahl revisionsgebundener Freigaben oder Widerrufe als gemeinsame Entscheidung.",
+          "type": "string",
+          "const": "allow-decide-document-review-batch",
+          "markdownDescription": "Speichert die genaue Auswahl revisionsgebundener Freigaben oder Widerrufe als gemeinsame Entscheidung."
+        },
+        {
           "description": "Exportiert nur explizit ausgewählte freigegebene Dokumentrevisionen ohne private Begleitdaten.",
           "type": "string",
           "const": "allow-export-approved-documents",
@@ -409,6 +415,12 @@
           "type": "string",
           "const": "allow-report-blocked-picker",
           "markdownDescription": "Protokolliert nur erlaubte Picker-Aktionen und feste UI-Blockgründe ohne Dateiinhalte oder Pfade."
+        },
+        {
+          "description": "Speichert nach nativer Zielauswahl ein neu bereinigtes begrenztes Diagnosepaket; ohne Core, Dokumentinhalte oder Überschreiben.",
+          "type": "string",
+          "const": "allow-save-diagnostic-bundle",
+          "markdownDescription": "Speichert nach nativer Zielauswahl ein neu bereinigtes begrenztes Diagnosepaket; ohne Core, Dokumentinhalte oder Überschreiben."
         },
         {
           "description": "Öffnet die native Mehrfach-Dateiauswahl und übergibt Pfade nur an den lokalen Core.",

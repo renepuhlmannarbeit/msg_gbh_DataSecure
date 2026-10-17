@@ -9,6 +9,7 @@ import { writeConversionRuntime } from './lib/standalone-conversion-runtime.mjs'
 import { loadCargoLicenseInventory } from './lib/cargo-license-inventory.mjs';
 import { standaloneFontLicense } from './lib/standalone-font-license.mjs';
 import boundFileIo from '../plugins/data-secure/server/core/bound-file-io.js';
+import { standaloneBuildFingerprint, assertStandaloneBuildFingerprint, assertStandaloneSourceUnchanged } from './lib/standalone-build-fingerprint.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const font = standaloneFontLicense(root);
@@ -55,6 +56,7 @@ function copyCargoExecutable(source, relative) {
   let bytes;
   try { bytes = boundFileIo.readBoundFile(source, { minimum: 1024, maximum: 64 * 1024 * 1024, maxLinks: 2, checkCtime: true }); }
   catch { throw new Error('STANDALONE_EXECUTABLE_UNSAFE'); }
+  assertStandaloneBuildFingerprint(bytes, sourceFingerprint);
   const destination = path.join(stage, relative);
   fs.writeFileSync(destination, bytes, { flag: 'wx', mode: 0o700 });
   if (!bytes.equals(boundFileIo.readBoundFile(destination, { maximum: bytes.length, minimum: bytes.length, checkCtime: true }))) {
@@ -84,6 +86,7 @@ const target = contract.targets.find((candidate) => candidate.id === productTarg
 const runtimeBytes = readRegular(runtime, 128 * 1024 * 1024);
 const licenseBytes = readRegular(runtimeLicense, 2 * 1024 * 1024);
 verifyTargetEvidence(runtimeEvidence, runtimeBytes, licenseBytes, target, contract);
+const sourceFingerprint = standaloneBuildFingerprint(root).fingerprint;
 
 copyCargoExecutable(executable, 'DataSecure Standalone.exe');
 copyFile(runtime, `datasecure-core-${rustTarget}.exe`, 0o700);
@@ -144,6 +147,7 @@ const payload = inventory(stage);
 const manifest = {
   schema: 'datasecure-standalone-package/1', product: 'DataSecure Standalone', version,
   target: productTarget, rust_target: rustTarget, release_status: 'engineering_pilot',
+  source_fingerprint: sourceFingerprint,
   requires_claude: false, requires_cowork: false, requires_node_install: false,
   requires_rust_install: false, requires_network: false, requires_webview2: true,
   files: payload
@@ -154,6 +158,7 @@ fs.writeFileSync(path.join(stage, 'SHA256SUMS'), `${hashes.map((file) => `${file
 
 const archiveFiles = collectFiles(stageParent).map((file) => ({ ...file,
   mode: file.archivePath.endsWith('.exe') ? 0o100755 : 0o100644 }));
+assertStandaloneSourceUnchanged(root, sourceFingerprint);
 if (!engineeringDirectory) fs.rmSync(output, { force: true });
 const archive = writeZip(output, archiveFiles);
 const zipBytes = readRegular(output, 512 * 1024 * 1024);

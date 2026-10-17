@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { SafeError } = require('../runtime');
+const { SafeError, dataRoot } = require('../runtime');
 const { processingModeForBatch } = require('../core/processing-mode');
 const { convertNext } = require('../standalone/convert-next');
 const identityLedger = require('../standalone/identity-ledger');
@@ -501,8 +501,27 @@ function readStandaloneHistoryStates() {
   return states;
 }
 
-function standaloneRecoverableStates() {
-  return recoverableBatchStates().filter((state) => state.product_channel === 'standalone');
+function readStandaloneHistoryState(token) {
+  const unavailable = code => Object.assign(new SafeError('Der ausgewählte lokale Lauf ist nicht mehr verfügbar.'), { code });
+  if (typeof token !== 'string' || !TOKEN_RE.test(token)) throw unavailable('STANDALONE_HISTORY_INVALID');
+  // Absence after retention is normal. Do not create a fresh batch directory,
+  // or turn a malformed existing journal into an apparently retired run.
+  try { fs.lstatSync(path.join(dataRoot(), 'batches', `${token}.json`)); }
+  catch (error) {
+    if (error?.code === 'ENOENT') return null;
+    throw unavailable('STANDALONE_HISTORY_UNAVAILABLE');
+  }
+  try {
+    const state = readStateForMaintenance(token);
+    return state.product_channel === 'standalone' ? state : null;
+  } catch (error) {
+    if (error?.code === 'BATCH_PRODUCT_CHANNEL_MISMATCH') throw unavailable('STANDALONE_HISTORY_MISSING');
+    throw unavailable('STANDALONE_HISTORY_UNAVAILABLE');
+  }
+}
+
+function standaloneRecoverableStates(options = {}) {
+  return recoverableBatchStates(options).filter((state) => state.product_channel === 'standalone');
 }
 
 const { invalidateUnpublishedBatchCopies } = createBatchSnapshotInvalidation({
@@ -813,4 +832,4 @@ const { runLocalBatchExecutor } = createBatchExecutorRunner({
   maxBatchFiles: LIMITS.MAX_BATCH_FILES
 });
 
-module.exports = { consumeContentOperation, requestStandalonePause, skipStandaloneOcrContactReview, readStandaloneHistoryStates, standaloneRecoverableStates, continueStandaloneBatch, readBatchProcessingMode, beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, productStatusSnapshot, latestProductBatchStatus, latestProductResultDirectory, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, finalizePublishedPackageLocally, listBatchResults, completedLocalOnlyCandidates, verifyCompletedLocalOnlyGeneration, claimLocalBatchExecutor, releaseLocalBatchExecutor, reserveTerminalNotice, markTerminalNoticePresented, releaseTerminalNoticeReservation, claimTerminalNotice, readBatchProgress, exportCompletedBatchResults, runLocalBatchExecutor, recoverBatches, replayMappingOutbox, cleanupExpiredBatchSnapshots, openBatchPackageProtection, _test: { withDurableBatchPseudonymRegistry, batchRoot, workPath, activeLockPath, writeState, readState, readStateForMaintenance, publicProgress, batchUserStatus, assertStagingCapacity, preflightOoxmlContainers, planBatchAdmission, acquireActiveLock, releaseActiveLock, validActiveLock, retryReleasedWorkCopyCleanup, packageIdForItem, publishedPackageRecord, publishedPackageState, regularPublishedPackage, reconcilePublishedItems, reconcilePendingMappings, reconcilePreflightStoppedMappings, commitPendingMapping, replayMappingOutbox, markInterruptedItemsRetryable, maintainBeforeNext, recoverableBatchStates, productStatusSnapshot, latestProductBatchStatus, latestProductResultDirectory, localCleanupStatus, reviewSingleBatchTextLocally, captureDeferredReviewInput, reviewedBatchText, resultCursor, parseResultCursor, liveLocalExecutor, completedLocalOnlyCandidates, retryableErrorCodes: Object.freeze([...RETRYABLE_CODES]), writeFully, syncParentDirectory, openBatchPackageProtection, writeTerminalEvidence, repairPendingEvidenceOutbox } };
+module.exports = { consumeContentOperation, requestStandalonePause, skipStandaloneOcrContactReview, readStandaloneHistoryState, readStandaloneHistoryStates, standaloneRecoverableStates, continueStandaloneBatch, readBatchProcessingMode, beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, productStatusSnapshot, latestProductBatchStatus, latestProductResultDirectory, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, finalizePublishedPackageLocally, listBatchResults, completedLocalOnlyCandidates, verifyCompletedLocalOnlyGeneration, claimLocalBatchExecutor, releaseLocalBatchExecutor, reserveTerminalNotice, markTerminalNoticePresented, releaseTerminalNoticeReservation, claimTerminalNotice, readBatchProgress, exportCompletedBatchResults, runLocalBatchExecutor, recoverBatches, replayMappingOutbox, cleanupExpiredBatchSnapshots, openBatchPackageProtection, _test: { withDurableBatchPseudonymRegistry, batchRoot, workPath, activeLockPath, writeState, readState, readStateForMaintenance, publicProgress, batchUserStatus, assertStagingCapacity, preflightOoxmlContainers, planBatchAdmission, acquireActiveLock, releaseActiveLock, validActiveLock, retryReleasedWorkCopyCleanup, packageIdForItem, publishedPackageRecord, publishedPackageState, regularPublishedPackage, reconcilePublishedItems, reconcilePendingMappings, reconcilePreflightStoppedMappings, commitPendingMapping, replayMappingOutbox, markInterruptedItemsRetryable, maintainBeforeNext, recoverableBatchStates, productStatusSnapshot, latestProductBatchStatus, latestProductResultDirectory, localCleanupStatus, reviewSingleBatchTextLocally, captureDeferredReviewInput, reviewedBatchText, resultCursor, parseResultCursor, liveLocalExecutor, completedLocalOnlyCandidates, retryableErrorCodes: Object.freeze([...RETRYABLE_CODES]), writeFully, syncParentDirectory, openBatchPackageProtection, writeTerminalEvidence, repairPendingEvidenceOutbox } };

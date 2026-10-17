@@ -37,6 +37,7 @@ const baseFiles = [
   'tests/test-standalone-workspace.js',
   'tests/test-workflow-presentation.js', 'tests/test-markdown-start-transport.js', 'tests/test-office-image-ocr.mjs', 'tests/test-office-image-relevance.js',
   'tests/test-standalone-document-review.js', 'tests/test-standalone-document-review-frontend.js',
+  'tests/test-standalone-review-policy.js', 'tests/test-standalone-automatic-privacy.js',
   'tests/test-private-transform-trace.js', 'tests/test-standalone-entities.js', 'tests/test-standalone-run-entities.js',
   'tests/test-standalone-confidential-overview.js',
   'tests/test-standalone-review-preview.mjs',
@@ -44,6 +45,8 @@ const baseFiles = [
   'tests/test-standalone-review-choices.js',
   'tests/test-standalone-review-ipc.js',
   'tests/test-standalone-history.js',
+  'tests/test-standalone-history-targeted.js',
+  'tests/test-standalone-startup-history-capture.js',
   'tests/test-standalone-identity-ledger.js',
   'tests/test-standalone-sidecar.js',
   'tests/test-native-export-channel.js',
@@ -53,6 +56,7 @@ const baseFiles = [
   'tests/test-native-smoke-integrity.js',
   'tests/test-standalone-package.js',
   'tests/test-standalone-package-integrity.mjs',
+  'tests/test-standalone-build-fingerprint.mjs',
   'tests/test-processing-mode.js', 'tests/test-content-options-persistence.js', 'tests/test-content-start-readiness.js', 'tests/test-content-anonymization-operation.js', 'tests/test-conversion-content-contract.js', 'tests/test-content-consumer-binding.js', 'tests/test-content-privacy-extraction.js', 'tests/test-markdown-artifact.js', 'tests/test-markdown-extractor.js',
   'tests/test-standalone-pdf-text-layout.js',
   'tests/test-source-extraction-contract.js', 'tests/test-wide-privacy-extraction.js',
@@ -121,6 +125,7 @@ const ciFiles = [
 ];
 
 const fullOnly = [
+  'test-standalone-fast-review-ipc.js',
   'test-markdown-image-content.mjs',
   'test-standalone-native-export.js',
   // Copied product projections and separate real processes belong to the

@@ -50,10 +50,18 @@ function ensureConfigDirectory() {
   }
   return directory;
 }
-function readRecord() {
+function displayRoot(root) {
+  return typeof root === 'string' && root.length <= 32768 && path.isAbsolute(root) && !/\p{Cc}/u.test(root)
+    ? path.resolve(root) : '';
+}
+function readRecordStatus() {
+  let recordedRoot = '', configurationRead = false;
   try {
     const file = configPath();
-    const value = JSON.parse(readBoundFile(file, { maximum: MAX_CONFIG_BYTES, minimum: 1 }));
+    const bytes = readBoundFile(file, { maximum: MAX_CONFIG_BYTES, minimum: 1 });
+    configurationRead = true;
+    const value = JSON.parse(bytes);
+    recordedRoot = displayRoot(value?.root);
     const keys = Object.keys(value || {}).sort().join(',');
     const legacy = value?.schema === LEGACY_SCHEMA && keys === 'identity,root,schema';
     const native = value?.schema === NATIVE_SCHEMA && keys === 'identity,native_identity,notices,root,schema' && validNativeDirectoryIdentity(value.native_identity) ||
@@ -62,22 +70,34 @@ function readRecord() {
     const isCurrent = (native || value?.schema === SCHEMA && keys === 'identity,notices,root,schema') &&
       value.notices && Object.keys(value.notices).sort().join(',') === 'network,sync' &&
       typeof value.notices.network === 'boolean' && typeof value.notices.sync === 'boolean';
-    if ((!legacy && !isCurrent) || typeof value.root !== 'string' || !value.identity) return null;
+    if ((!legacy && !isCurrent) || typeof value.root !== 'string' || !value.identity)
+      return { status: 'unavailable', recorded_root: recordedRoot };
     const inspected = inspectRoot(value.root);
     return sameIdentity(inspected.identity, value.identity) ? {
-      ...value,
-      notices: isCurrent ? value.notices : { sync: false, network: false }
-    } : null;
-  } catch { return null; }
+      status: 'available', recorded_root: inspected.root,
+      record: { ...value, notices: isCurrent ? value.notices : { sync: false, network: false } }
+    } : { status: 'unavailable', recorded_root: recordedRoot };
+  } catch (error) {
+    // A missing selected destination is not a new installation. Once the
+    // configuration was read, every target/read/identity failure is unavailable.
+    return { status: error?.code === 'ENOENT' && !configurationRead ? 'unconfigured' : 'unavailable',
+      recorded_root: recordedRoot };
+  }
 }
-function readConfiguredResultRoot() {
+function readRecord() { return readRecordStatus().record || null; }
+function readConfiguredResultRootStatus() {
   assertRootSeparation();
   const environment = String(process.env.EU_PRIVACY_RESULT_ROOT || '').trim();
   if (environment) {
-    try { return inspectRoot(environment).root; } catch { return ''; }
+    try {
+      const root = inspectRoot(environment).root;
+      return { status: 'available', root, recorded_root: root };
+    } catch { return { status: 'unavailable', root: '', recorded_root: displayRoot(environment) }; }
   }
-  return readRecord()?.root || '';
+  const value = readRecordStatus();
+  return { status: value.status, root: value.record?.root || '', recorded_root: value.recorded_root };
 }
+function readConfiguredResultRoot() { return readConfiguredResultRootStatus().root; }
 // The last recorded destination path, even when its identity no longer
 // matches (replaced folder). It is never used as an export target – only to
 // keep shielding that path from becoming a source again.
@@ -217,7 +237,7 @@ function isNetworkResultFolder(root, platform = process.platform) {
 }
 
 module.exports = {
-  CONFIG_NAME, SCHEMA, LEGACY_SCHEMA, NATIVE_SCHEMA, EXPORT_SCHEMA, configPath, inspectRoot, readConfiguredResultRoot, recordedResultRootPath, readConfiguredNativeRootBinding, readConfiguredNativeExportBinding,
+  CONFIG_NAME, SCHEMA, LEGACY_SCHEMA, NATIVE_SCHEMA, EXPORT_SCHEMA, configPath, inspectRoot, readConfiguredResultRoot, readConfiguredResultRootStatus, recordedResultRootPath, readConfiguredNativeRootBinding, readConfiguredNativeExportBinding,
   saveConfiguredResultRoot, clearConfiguredResultRoot, resultOutputDirectory,
   consumeConfiguredResultNotices, isCommonSyncFolder, isNetworkResultFolder, visibleResultTreeOverlaps
 };

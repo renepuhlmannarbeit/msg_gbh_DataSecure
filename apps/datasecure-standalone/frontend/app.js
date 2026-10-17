@@ -55,6 +55,7 @@ const messages = {
   STARTUP_FAILED: 'Der lokale DataSecure-Core hat den Start sicher verweigert.',
   STANDALONE_IPC_FAILED: 'Die lokale Verbindung zum DataSecure-Core wurde unterbrochen und wird beim nächsten Versuch neu gestartet.',
   STANDALONE_IPC_TIMEOUT: 'Die lokale Verarbeitung antwortete nicht rechtzeitig. Die Verbindung wird beim nächsten Versuch neu gestartet.',
+  STANDALONE_IPC_BUSY: 'DataSecure bearbeitet noch einen anderen lokalen Vorgang. Diese Aktion wurde noch nicht an den Core gesendet. Bitte nach dessen Abschluss erneut wählen.',
   STANDALONE_ADMISSION_TIMEOUT: 'Die Aufnahme der Auswahl wurde nach fünf Minuten ohne Bestätigung beendet. Es wurde kein Stapel gestartet. Die vorbereitete Auswahl ist nicht mehr verfügbar; bitte Dateien oder Ordner erneut auswählen. Bei erneutem Fehler die lokalen Zugriffsrechte und „Diagnose öffnen“ prüfen.',
   STANDALONE_RESULT_ROOT_UNSAFE: 'Der Ergebnisordner darf nicht im privaten DataSecure-Bereich liegen.',
   STANDALONE_RESULT_OPEN_FAILED: 'Der Ergebnisordner konnte nicht geöffnet werden.',
@@ -1065,17 +1066,19 @@ async function refresh() {
     if (admitted || operationInFlight || pageClosed || generation !== admissionGeneration) return;
     lastPublicState = state.state;
     if (currentSessionRunStarted && !suppressPriorTerminal &&
-        ['results_available', 'completed_without_results', 'review_required', 'stopped', 'export_pending', 'export_abandoned'].includes(state.state)) {
+        ['results_available', 'completed_without_results', 'review_required', 'stopped', 'failed', 'export_pending', 'export_abandoned'].includes(state.state)) {
       setProcessPhase('completion');
       byId('process-completion-title').textContent = state.state === 'review_required'
         ? 'Prüfung für diesen Lauf offen' : state.state === 'stopped'
-          ? 'Fortsetzung für diesen Lauf möglich' : state.state === 'export_pending'
+          ? 'Fortsetzung für diesen Lauf möglich' : state.state === 'failed' ? 'Verarbeitung unterbrochen' : state.state === 'export_pending'
             ? 'Bereitstellung dieses Laufs offen' : state.state === 'export_abandoned'
               ? 'Bereitstellung dieses Laufs aufgegeben' : 'Dieser Lauf ist beendet';
       byId('process-completion-help').textContent = state.state === 'review_required'
         ? 'Dieser Lauf benötigt noch eine lokale Entscheidung. Mit „Jetzt prüfen“ öffnest du die Prüfung direkt. Du kannst sie auch später im Verlauf fortsetzen.'
         : state.state === 'stopped'
           ? 'Dieser Lauf kann im Verlauf fortgesetzt werden; ein neuer Lauf bleibt davon getrennt.'
+        : state.state === 'failed'
+          ? 'Der vollständige Abschluss dieses Laufs ist nicht bestätigt. Bitte den gespeicherten Stand und die Diagnose prüfen.'
         : state.state === 'export_abandoned'
           ? 'Die automatische Bereitstellung wurde aufgegeben. Teilkopien bleiben erhalten; der Lauf hat keinen vollständigen Ergebnisordner und keine KI-Freigabe.'
         : state.state === 'export_pending'
@@ -1168,6 +1171,8 @@ async function refresh() {
       status('Keine Ergebnisse erstellt', `${state.failed_count} Datei${state.failed_count === 1 ? ' wurde' : 'en wurden'} sicher gestoppt. Es ist kein${converting ? ' Markdown-' : ' anonymisiertes '}Ergebnis verfügbar. Betroffene Dateien stehen unten und im Verlauf. ${details}`, '!');
       acknowledgeRenderedTerminalState(state.presentation_generation);
     }
+    else if (state.state === 'failed') { acknowledgedPresentationGeneration = null;
+      status('Verarbeitung unterbrochen', 'Der vollständige Laufabschluss ist nicht bestätigt. Bitte im Verlauf den gespeicherten Stand und die Diagnose prüfen.', '!'); }
     else if (state.state === 'blocked') { acknowledgedPresentationGeneration = null; status('Nicht bereit', 'Der lokale DataSecure-Core konnte nicht gestartet werden.'); }
     else {
       acknowledgedPresentationGeneration = null;

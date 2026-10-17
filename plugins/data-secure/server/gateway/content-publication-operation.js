@@ -17,7 +17,9 @@ async function publishPersistedContent(context, suppliedHooks) {
   context.assertPseudonymRegistry(hooks.pseudonymRegistry);
   if (!storageStatus().safe) throw Object.assign(new SafeError('Der lokale Datenschutzordner ist kein zulässiger Speicherort.'), { code: 'UNSAFE_STORAGE_LOCATION' });
   const check = () => { context.revalidate(); hooks.checkAbort(); };
-  let prepared = context.preparedReplay(), committed = false, barrierError;
+  let prepared, committed = false, barrierError;
+  let phase = 'content_prepare';
+  const started = Date.now();
   const details = () => Object.freeze({ package_id: context.package_id, profile: prepared.artifact.manifest.profile,
     document_sha256: prepared.artifact.expectation.document_sha256, document_result: prepared.artifact.manifest.document_result,
     publication_binding: prepared.artifact.expectation });
@@ -27,11 +29,13 @@ async function publishPersistedContent(context, suppliedHooks) {
     return retainAudit(prepared.audit_receipt);
   }
   try {
+    prepared = context.preparedReplay();
     // Existing committed bytes are discovered before cancellation can demote
     // them to a parser stop. A saved prepared state is never re-extracted.
     const record = context.publicationRecord();
     if (record.state === 'unsafe') throw Object.assign(Error('STANDALONE_PUBLICATION_INVALID'), { code: 'STANDALONE_PUBLICATION_INVALID' });
     if (record.state === 'verified') {
+      phase = 'content_ack';
       committed = true;
       if (!prepared || JSON.stringify(record.publication_binding) !== JSON.stringify(prepared.artifact.expectation)) throw unconfirmed();
       if (hooks.beforePublish) { await hooks.beforePublish(details()); context.assertOwnedEpoch(); }
@@ -39,17 +43,22 @@ async function publishPersistedContent(context, suppliedHooks) {
     } else {
       check();
       if (!prepared) {
+        phase = 'content_extract';
         const source = await extractBoundContentInput(context, hooks); check();
+        phase = 'content_privacy';
         const profile = context.profile === 'auto' ? detectProfileFromMarkdown(source.extraction.markdown) : context.profile;
         const operation = prepareTextPrivacyReview({ text: source.extraction.markdown, profile, productChannel: 'standalone',
           consumerOptions: { productChannel: 'standalone', contentOptions: context.content_options }, registry: hooks.pseudonymRegistry,
           captureTrace: true, technicalReviewRequired: source.extraction.coverage.status !== 'complete',
-          ocrLineReview: source.extraction.coverage.reason_codes.includes('OCR_NOT_VERIFIED') });
+          ocrLineReview: source.extraction.coverage.reason_codes.includes('OCR_NOT_VERIFIED'),
+          sourceRedaction: source.source_redaction || null });
         if (hooks.onDetected) { await hooks.onDetected({ profile, detected_identifiers: operation.entityCount }); check(); }
-        const reviewed = await resolveTextPrivacyReview(operation, hooks.reviewText, { checkAbort: check }); check();
+        const reviewed = await resolveTextPrivacyReview(operation, hooks.reviewText,
+          { checkAbort: check, reviewPolicy: context.review_policy || 'manual' }); check();
         // Both converters already render their selected content/notes profile.
         // No Legacy compliance claim, image reference or raw OCR notice follows.
         const final = finalizeTextPrivacyReview(operation, reviewed, { prefix: '', suffix: '' });
+        phase = 'content_verify';
         const proof = verifyAnonymizedPublication({ markdown: final.markdown, profile, content_options: context.content_options,
           source_extraction: source.extraction, dictionary: final.dictionary, strong_person_anchor: final.strong_person_anchor,
           reviewed_person_candidates: final.reviewed_person_candidates });
@@ -73,8 +82,10 @@ async function publishPersistedContent(context, suppliedHooks) {
           catch { /* absent/incomplete private reference remains separately visible */ }
           check();
         }
+        phase = 'content_prepare';
         const witness = context.commitPreparedRegistry(hooks.pseudonymRegistry, artifact.expectation.manifest_sha256);
         check();
+        phase = 'content_prepare';
         context.capturePrepared({ package_id: context.package_id, content_options: context.content_options, source_type: context.source_type,
           original_text: final.original_text, markdown: final.markdown, transform_trace: final.transform_trace,
           verification_context: final.verification_context, publication_binding: artifact.expectation,
@@ -83,6 +94,7 @@ async function publishPersistedContent(context, suppliedHooks) {
         prepared = context.preparedReplay(); if (!prepared) throw unconfirmed();
       }
       check();
+      phase = 'content_publish';
       await publishAnonymizedArtifact(prepared.publication_input, {
         beforePublish: async value => { check(); if (hooks.beforePublish) await hooks.beforePublish(value); check(); },
         publishPackage(from, to) {
@@ -97,9 +109,15 @@ async function publishPersistedContent(context, suppliedHooks) {
       });
       committed = true;
     }
+    phase = 'content_ack';
     const retained = retainCommittedAudit();
     return Object.freeze({ ok: true, ...details(), audit_receipt_retained: retained, raw_content_sent_to_claude: false });
   } catch (error) {
+    // Unknown faults still have a useful fixed boundary. Never log the raw
+    // exception, source, path, identities or payload, even during testing.
+    try { require('./workflow-diagnostics').recordWorkflowEvent({ event: 'content_operation_failed', phase,
+      outcome: 'stopped', error_code: error?.code || 'INTERNAL_FAILURE', duration_ms: Date.now() - started }); }
+    catch { /* A failed diagnostic sink cannot change publication/recovery. */ }
     if (committed || error?.code === 'BATCH_PUBLICATION_UNCONFIRMED') {
       if (prepared) { try { retainCommittedAudit(); } catch { /* recover exact receipt, never retract committed bytes */ } }
       throw unconfirmed();

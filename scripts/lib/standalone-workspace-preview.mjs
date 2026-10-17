@@ -23,7 +23,8 @@ export function workspacePreviewBridge() {
       selected_count: 133, result_count: 116, not_converted_count: 17, ocr_omitted_count: demo === 'completion-mixed' ? 16 : 17,
       error_count: demo === 'completion-mixed' ? 1 : 0, content_notice_count: 35, pending_count: 0, complete: true };
     if (completionDemo && !activeCompletion) { phase = 'results_available'; selectedCount = 133; mode = 'markdown-only'; }
-    const documentsDemo = ['documents', 'documents-raw', 'documents-raw-notices', 'documents-raw-filter'].includes(demo);
+    const documentsDemo = ['documents', 'documents-fast', 'documents-raw', 'documents-raw-notices', 'documents-raw-filter'].includes(demo);
+    const fastDemo = demo === 'documents-fast';
     const documentNotices = demo === 'documents-raw-notices';
     const documentFilter = demo === 'documents-raw-filter';
     if (documentsDemo) { phase = 'results_available'; selectedCount = documentNotices ? 5 : 3; mode = demo.startsWith('documents-raw') ? 'markdown-only' : 'markdown-and-anonymize'; }
@@ -38,6 +39,7 @@ export function workspacePreviewBridge() {
     documentRows.forEach(row => Object.assign(row, { processing_mode: mode || 'markdown-and-anonymize',
       entity_review_available: mode !== 'markdown-only', run_entity_review_available: mode !== 'markdown-only',
       entity_count: mode === 'markdown-only' ? 0 : 2,
+      ...(fastDemo ? { review_policy: 'automatic-conservative', approved: true, approval_basis: 'automatic' } : {}),
       ...(mode === 'markdown-only' ? { text_modified: false } : {}) }));
     const digest = async value => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(value))),
       byte => byte.toString(16).padStart(2, '0')).join('');
@@ -51,6 +53,8 @@ export function workspacePreviewBridge() {
       batch_id: batch, created_at: '2026-10-14T11:36:28Z', processing_mode: mode, selected_count: 133, result_count: 116,
       failed_count: 17, status: phase, resumable: false, results_available: true, result_location: 'available', conversion_feedback: feedback }] : [
       ...(phase !== 'ready' ? [{ batch_id: batch, created_at: '2026-10-07T09:15:00Z', processing_mode: mode,
+        ...(fastDemo ? { review_policy: 'automatic-conservative', result_location: 'available',
+          content_notice_count: 2, content_notice_breakdown_complete: true } : {}),
         selected_count: selectedCount, result_count: phase === 'results_available' ? selectedCount : Math.max(0, selectedCount - 2), failed_count: 0,
         status: phase, resumable: phase === 'review_required', results_available: phase === 'results_available', ledger_available: false }] : []),
       { batch_id: 'c'.repeat(64), created_at: '2026-10-06T14:22:00Z', processing_mode: 'markdown-only', selected_count: 3,
@@ -69,6 +73,7 @@ export function workspacePreviewBridge() {
         if (command === 'get_ui_context') return context();
         if (command === 'get_run_history') return entries();
         if (command === 'get_document_review_history_summary') return privateResult({ available: args.batchId === batch,
+          ...(fastDemo ? { review_policy: 'automatic-conservative', automatically_approved_count: documentRows.filter(row => row.approval_basis === 'automatic' && row.approved).length } : {}),
           processing_mode: mode, reviewable_count: documentRows.length, approved_count: documentRows.filter(row => row.approved).length,
           unavailable_count: 0, unclassified_source_count: 0, recorded_export_count: exportReceipts.length,
           current_exported_count: documentRows.filter(row => [...completedSelections.values()].some(selection => selection.some(item =>
@@ -82,6 +87,8 @@ export function workspacePreviewBridge() {
           for (const row of documentRows) row.output_sha256 = await digest(bodies.get(row.document_id));
           if (documentNotices) await new Promise(resolve => setTimeout(resolve, 450));
           return { local_ui_only: true, external_disclosure: false, documents: structuredClone(documentRows), processing_mode: mode,
+            ...(fastDemo ? { review_policy: 'automatic-conservative', processing_complete: true,
+              content_notice_count: 2, content_notice_breakdown_complete: true } : {}),
             ...(documentFilter ? { conversion_feedback: { ...feedback, selected_count: 3, result_count: 3,
               not_converted_count: 0, ocr_omitted_count: 0, error_count: 0, content_notice_count: 2,
               ocr_enabled: true }, content_notices: [
@@ -128,6 +135,17 @@ export function workspacePreviewBridge() {
                 disabled: start < 0, output_start: Math.max(0, start), output_end: Math.max(0, start) + (start < 0 ? 0 : replacement.length),
                 source_start: original.indexOf(value), source_end: original.indexOf(value) + value.length };
             }) };
+        }
+        if (command === 'decide_document_review_batch') {
+          const chosen = args.decision.selection.map(binding => {
+            const row = documentRows.find(value => value.document_id === binding.document_id);
+            if (!row || row.revision !== binding.revision || row.output_sha256 !== binding.output_sha256)
+              throw Error('DOCUMENT_REVIEW_STALE');
+            return row;
+          });
+          for (const row of chosen) { row.revision++; row.approved = args.decision.action === 'approve'; }
+          return { ok: true, operation_id: args.decision.operation_id, affected_count: chosen.length,
+            documents: chosen.map(privateResult), local_ui_only: true, external_disclosure: false };
         }
         if (command === 'decide_document_review') { const origin = documentRows.find(row => row.document_id === args.documentId);
           const affected = args.decision.action === 'entities' && args.decision.scope === 'run' ? documentRows : [origin];
@@ -185,6 +203,9 @@ export function workspacePreviewBridge() {
             reason_code: demo === 'completion-mixed' && n === 0 ? 'SOURCE_READ_FAILED' : n < 13 ? 'IMAGE_OCR_REQUIRED' : 'PDF_TEXT_UNAVAILABLE_BY_POLICY',
             classification: demo === 'completion-mixed' && n === 0 ? 'error' : 'ocr_omission' })),
           content_notices: Array.from({ length: 35 }, (_, n) => ({ name: 'Berichte/Inhalt-' + (n + 1) + '.docx', reason_codes: ['SOURCE_COVERAGE_UNVERIFIED'] })) };
+        if (command === 'get_run_failures' && fastDemo) return { local_ui_only: true, external_disclosure: false,
+          available: true, total: 0, files: [], content_notice_count: 2, content_notice_breakdown_complete: true,
+          content_notices: documentRows.slice(0, 2).map(row => ({ name: row.name, reason_codes: ['OCR_NOT_VERIFIED'] })) };
         if (command === 'get_run_failures') return { local_ui_only: true, external_disclosure: false,
           files: [{ name: 'Vertrag-passwortgeschützt.pdf', reason_code: 'PASSWORD_PROTECTED_DOCUMENT_UNSUPPORTED' }] };
         if (command.startsWith('open_')) return { ok: true };

@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { readBoundFile, readBoundFileRecord, assertDirectory } = require('../core/bound-file-io');
+const { readBoundFile, readBoundFileRecord, bindDirectory, assertDirectory } = require('../core/bound-file-io');
 const { identity: privateIdentity, safeUnlinkBoundPrivateFile } = require('./bound-private-file');
 const { dataRoot } = require('../runtime');
 const { safeResolvePackage, readVerifiedFile } = require('./package-store');
@@ -307,14 +307,14 @@ function writeRecord(target, value) {
     try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch {}
   }
 }
-function readRecord(target) {
+function readRecord(target, options) {
   // Up to 200 relative source labels (1024 characters each), JSON escaping,
   // fixed error codes and hashes must fit without relaxing item/string bounds.
   let value;
   try { value = JSON.parse(readBoundFile(target, { maximum: 1024 * 1024, minimum: 1 })); }
   catch { throw new Error('RESULT_EXPORT_STATE_UNSAFE'); }
   if (!validRecord(value)) throw new Error('RESULT_EXPORT_STATE_UNSAFE');
-  assertRecordContentAnchor(target, value);
+  assertRecordContentAnchor(target, value, options);
   return value;
 }
 // This content-free receipt is an irreversible instruction not to resume an
@@ -400,10 +400,13 @@ function ensureContentExportOwner(state, target) {
   createPrivateWorkStore({ privateRoot: directory, maxBytes: 4096 }).writeFile(path.join(directory, name), Buffer.from(JSON.stringify(binding)));
   if (JSON.stringify(readExportOwner(name)) !== JSON.stringify(binding)) throw new Error('RESULT_EXPORT_STATE_UNSAFE');
 }
-function assertRecordContentAnchor(target, record) {
+function assertRecordContentAnchor(target, record, { expectedBatchId = null, reviewOwners = null } = {}) {
   const name = path.basename(target), reviews = path.join(dataRoot(), 'document-reviews');
   if (!RECORD_RE.test(name)) throw new Error('RESULT_EXPORT_STATE_UNSAFE');
   const owner = readExportOwner(name);
+  if (expectedBatchId !== null && (!/^[a-f0-9]{64}$/u.test(expectedBatchId) ||
+      `re_${crypto.createHash('sha256').update(expectedBatchId).digest('hex').slice(0, 32)}.json` !== name ||
+      owner && owner.batch_id !== expectedBatchId)) throw new Error('RESULT_EXPORT_STATE_UNSAFE');
   const contentBound = [CONTENT_MARKDOWN_SCHEMA, CONTENT_ANONYMIZED_SCHEMA].includes(record.schema);
   if (owner && (!contentBound || record.batch_id !== owner.batch_id ||
       record.processing_mode !== owner.processing_mode ||
@@ -411,8 +414,25 @@ function assertRecordContentAnchor(target, record) {
   // Discover ownership from the independent run directory, not from optional
   // fields/version in the mutable export record. A legacy disguise may delete
   // both batch_id and content_options; the record path still binds its owner.
-  const matches = fs.existsSync(reviews) ? fs.readdirSync(reviews).filter(token => /^[a-f0-9]{64}$/u.test(token) &&
-    `re_${crypto.createHash('sha256').update(token).digest('hex').slice(0, 32)}.json` === name) : [];
+  // An exact caller supplies the full batch token. A global history caller
+  // supplies its guarded name inventory; other callers retain the name scan.
+  // None trusts the mutable record's batch_id as its ownership authority.
+  const knownToken = expectedBatchId;
+  let matches;
+  if (knownToken) {
+    // existsSync follows links and hides access errors. A dangling anchor must
+    // still cross bindPlainDirectory below, never fall back to an old record.
+    try { fs.lstatSync(path.join(reviews, knownToken)); matches = [knownToken]; }
+    catch (error) {
+      if (error?.code !== 'ENOENT') throw new Error('RESULT_EXPORT_STATE_UNSAFE');
+      matches = [];
+    }
+  } else if (reviewOwners) {
+    matches = reviewOwners.matches(name);
+  } else {
+    matches = fs.existsSync(reviews) ? fs.readdirSync(reviews).filter(token => /^[a-f0-9]{64}$/u.test(token) &&
+      `re_${crypto.createHash('sha256').update(token).digest('hex').slice(0, 32)}.json` === name) : [];
+  }
   if (matches.length > 1) throw new Error('RESULT_EXPORT_STATE_UNSAFE');
   if (!matches.length) {
     if (owner || contentBound) throw new Error('RESULT_EXPORT_STATE_UNSAFE');
@@ -421,14 +441,15 @@ function assertRecordContentAnchor(target, record) {
   const token = matches[0], directory = bindPlainDirectory(path.join(reviews, token), bindPlainDirectory(reviews));
   const anchor = JSON.parse(readBoundFile(path.join(directory.path, 'manifest.json'), { maximum: 1024 * 1024, minimum: 1,
     validateParents: () => assertDirectoryBinding(directory) }));
-  const bound = anchor.schema === 'datasecure-document-run/3';
+  const bound = ['datasecure-document-run/3', 'datasecure-document-run/4'].includes(anchor.schema);
   if (bound !== contentBound || anchor.batch_id !== token ||
       anchor.processing_mode !== (record.processing_mode || 'markdown-and-anonymize') || bound &&
       (record.batch_id !== token || serializeContentOptions(anchor.content_options) !== serializeContentOptions(record.content_options)))
     throw new Error('RESULT_EXPORT_STATE_UNSAFE');
   require('./standalone-document-review-store').createDocumentReviewStore().assertContentBinding({
     schema: bound ? 'datasecure-batch/7' : 'datasecure-batch/4', token, product_channel: record.product_channel,
-    processing_mode: anchor.processing_mode, standalone_document_review: true, ...(bound ? { content_options: record.content_options } : {}) });
+    processing_mode: anchor.processing_mode, standalone_document_review: true, ...(bound ? { content_options: record.content_options } : {}),
+    ...(anchor.schema === 'datasecure-document-run/4' ? { standalone_review_policy: anchor.review_policy } : {}) });
 }
 function runDirectoryName(createdAt) {
   const date = new Date(createdAt);
@@ -1134,40 +1155,155 @@ function replayPendingResultExports() {
 
 // Private Standalone history uses durable export plans even after journal
 // retention. Only neutral counters leave this module; source labels do not.
-function readStandaloneExportHistory() {
-  let entries;
-  try { entries = fs.readdirSync(outboxDirectory(), { withFileTypes: true }); } catch { return []; }
-  const rows = [];
-  for (const entry of entries) {
-    if (!entry.isFile() || !RECORD_RE.test(entry.name)) continue;
+function standaloneExportHistoryRow(target, record) {
+  if (record.product_channel !== 'standalone') return null;
+  const waiver = readExportWaiver(target, record);
+  const stamp = /^Lauf-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})-[a-f0-9]{8}$/u.exec(record.run_directory);
+  if (!stamp) throw new Error('RESULT_EXPORT_STATE_UNSAFE');
+  const created = `${stamp[1]}-${stamp[2]}-${stamp[3]}T${stamp[4]}:${stamp[5]}:${stamp[6]}.000Z`;
+  if (!Number.isFinite(Date.parse(created))) throw new Error('RESULT_EXPORT_STATE_UNSAFE');
+  let directory = '';
+  if (record.complete === true) {
     try {
-      const target = path.join(outboxDirectory(), entry.name);
-      const record = readRecord(target);
-      if (record.product_channel !== 'standalone') continue;
-      const waiver = readExportWaiver(target, record);
-      const stamp = /^Lauf-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})-[a-f0-9]{8}$/u.exec(record.run_directory);
-      if (!stamp) continue;
-      const created = `${stamp[1]}-${stamp[2]}-${stamp[3]}T${stamp[4]}:${stamp[5]}:${stamp[6]}.000Z`;
-      if (!Number.isFinite(Date.parse(created))) continue;
-      let directory = '';
-      if (record.complete === true) {
-        try {
-          const destination = activeDestination(record, { create: false });
-          if (destination && destination.id === record.destination_id) {
-            directory = bindPlainDirectory(path.join(destination.output.path, record.run_directory), destination.output).path;
-          }
-        } catch { /* old or missing destinations remain unavailable */ }
-      }
-      const failed = record.stopped_items?.length || 0;
-      rows.push({ export_id: path.basename(entry.name, '.json'), target, directory, run_directory: record.run_directory, complete: record.complete,
-        exported_count: exportedCount(record), pending_count: record.items.length - exportedCount(record),
-        ...(waiver ? { abandoned: true } : {}),
-        summary: { created_at: created, processing_mode: record.processing_mode === 'markdown-only' ? 'markdown-only' : 'markdown-and-anonymize',
-          selected_count: record.items.length + failed, result_count: record.items.length, failed_count: failed,
-          completed_count: record.items.length + failed, review_count: 0, complete: true } });
-    } catch { /* damaged, legacy, or unsafe records never become local UI state */ }
+      const destination = activeDestination(record, { create: false });
+      if (destination && destination.id === record.destination_id)
+        directory = bindPlainDirectory(path.join(destination.output.path, record.run_directory), destination.output).path;
+    } catch { /* original history binding, not this convenience path, authorizes opening */ }
   }
-  return rows;
+  const failed = record.stopped_items?.length || 0;
+  return { export_id: path.basename(target, '.json'), target, directory, run_directory: record.run_directory, complete: record.complete,
+    exported_count: exportedCount(record), pending_count: record.items.length - exportedCount(record),
+    ...(waiver ? { abandoned: true } : {}),
+    summary: { created_at: created, processing_mode: record.processing_mode === 'markdown-only' ? 'markdown-only' : 'markdown-and-anonymize',
+      selected_count: record.items.length + failed, result_count: record.items.length, failed_count: failed,
+      completed_count: record.items.length + failed, review_count: 0, complete: true } };
+}
+
+function readStandaloneExportHistoryEntry(batchId, { legacyExportId = null } = {}) {
+  const failed = code => Object.assign(new Error('Der ausgewählte lokale Lauf ist nicht mehr verfügbar.'), { code });
+  if (typeof batchId !== 'string' || !/^[a-f0-9]{64}$/u.test(batchId)) throw failed('STANDALONE_HISTORY_INVALID');
+  let exportId = `re_${crypto.createHash('sha256').update(batchId).digest('hex').slice(0, 32)}`;
+  let expectedBatchId = batchId;
+  if (legacyExportId !== null) {
+    if (!/^re_[a-f0-9]{32}$/u.test(legacyExportId) ||
+        crypto.createHash('sha256').update(`standalone-history:${legacyExportId}`).digest('hex') !== batchId)
+      throw failed('STANDALONE_HISTORY_INVALID');
+    exportId = legacyExportId;
+    // The synthetic list ID is not an actual batch token. Read the independent
+    // owner afresh; ancient exports without one retain only the name scan.
+    try { expectedBatchId = readExportOwner(`${exportId}.json`)?.batch_id || null; }
+    catch { throw failed('STANDALONE_HISTORY_UNAVAILABLE'); }
+  }
+  const directory = path.join(dataRoot(), 'result-export-state'), target = path.join(directory, `${exportId}.json`);
+  try { fs.lstatSync(target); }
+  catch (error) {
+    if (error?.code === 'ENOENT') return null;
+    throw failed('STANDALONE_HISTORY_UNAVAILABLE');
+  }
+  try {
+    // No mkdir, replay, publication or binding backfill on this read path.
+    const binding = bindPlainDirectory(directory);
+    const row = standaloneExportHistoryRow(target, readRecord(target, { expectedBatchId }));
+    assertDirectoryBinding(binding);
+    return row;
+  } catch { throw failed('STANDALONE_HISTORY_UNAVAILABLE'); }
+}
+
+class HistoryMembershipChanged extends Error {}
+function historyReviewOwners() {
+  const root = bindDirectory(dataRoot()), directory = path.join(root.path, 'document-reviews');
+  let binding = null;
+  // Include every matching NAME, not just directories. A file or a dangling
+  // symlink with an owner's token must still fail the real anchor reader.
+  const names = () => fs.readdirSync(directory).filter(token => /^[a-f0-9]{64}$/u.test(token)).sort();
+  let initial = [], byExport = new Map();
+  function refresh() {
+    // Preserve any already-bound namespace across the one permitted rebuild.
+    // A replacement parent must not become a fresh starting point on retry.
+    assertDirectory(root);
+    if (binding) assertDirectory(binding);
+    else {
+      try { binding = bindDirectory(directory); }
+      catch (error) { if (error?.code !== 'ENOENT') throw error; }
+    }
+    initial = binding ? names() : []; byExport = new Map();
+    for (const token of initial) {
+      const name = `re_${crypto.createHash('sha256').update(token).digest('hex').slice(0, 32)}.json`;
+      if (!byExport.has(name)) byExport.set(name, []);
+      byExport.get(name).push(token);
+    }
+    if (binding) assertDirectory(binding);
+    assertDirectory(root);
+  }
+  refresh();
+  return {
+    refresh,
+    matches(name) { return byExport.get(name) || []; },
+    assertUnchanged() {
+      assertDirectory(root);
+      if (!binding) {
+        try { fs.lstatSync(directory); }
+        catch (error) { if (error?.code === 'ENOENT') return; throw error; }
+        // First creation by a live worker is normal. Bind this exact physical
+        // object before permitting a rebuild; a file/link cannot qualify.
+        binding = bindDirectory(directory);
+        assertDirectory(root);
+        throw new HistoryMembershipChanged();
+      }
+      assertDirectory(binding);
+      const current = names();
+      assertDirectory(binding);
+      if (current.length !== initial.length || current.some((name, index) => name !== initial[index])) {
+        // Only ordinary new directories qualify as a live-writer race. Lost
+        // names, links, access errors or replacement identities fail closed.
+        const previous = new Set(initial), present = new Set(current);
+        if (initial.some(name => !present.has(name))) throw new Error('RESULT_EXPORT_STATE_UNSAFE');
+        for (const name of current) if (!previous.has(name)) bindDirectory(path.join(directory, name));
+        assertDirectory(binding);
+        throw new HistoryMembershipChanged();
+      }
+    }
+  };
+}
+
+function readStandaloneExportHistory() {
+  let entries, directory;
+  try {
+    directory = bindDirectory(outboxDirectory());
+    entries = fs.readdirSync(directory.path, { withFileTypes: true });
+  } catch { return []; }
+  let reviewOwners;
+  try { reviewOwners = historyReviewOwners(); }
+  catch { throw Object.assign(new Error('RESULT_EXPORT_STATE_UNSAFE'), { code: 'RESULT_EXPORT_STATE_UNSAFE' }); }
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const rows = [];
+    for (const entry of entries) {
+      if (!entry.isFile() || !RECORD_RE.test(entry.name)) continue;
+      try {
+        const target = path.join(directory.path, entry.name);
+        const row = standaloneExportHistoryRow(target, readRecord(target, { reviewOwners }));
+        if (row) rows.push(row);
+      } catch { /* damaged, legacy, or unsafe records never become local UI state */ }
+    }
+    // An ordinary new run may appear while a different worker is publishing.
+    // Discard this projection and rebuild once. No stale row, mutation, sleep,
+    // unbounded retry or new parent authority crosses this read-only boundary.
+    try {
+      reviewOwners.assertUnchanged(); assertDirectory(directory);
+      return rows;
+    } catch (error) {
+      if (error instanceof HistoryMembershipChanged && attempt === 0) {
+        try {
+          assertDirectory(directory);
+          reviewOwners.refresh();
+          entries = fs.readdirSync(directory.path, { withFileTypes: true });
+          assertDirectory(directory);
+          continue;
+        } catch { /* a replaced or unreadable namespace must not be adopted */ }
+      }
+      throw Object.assign(new Error('RESULT_EXPORT_STATE_UNSAFE'), { code: 'RESULT_EXPORT_STATE_UNSAFE' });
+    }
+  }
 }
 // Detached workers attach the visible export to their single terminal
 // envelope. A non-terminal batch has no visible export; an exporter failure
@@ -1191,7 +1327,7 @@ function terminalVisibleExport(completed, exporter) {
 
 module.exports = {
   SCHEMA, MARKDOWN_SCHEMA, CONTENT_MARKDOWN_SCHEMA, CONTENT_ANONYMIZED_SCHEMA, LEGACY_MARKDOWN_SCHEMA, LEGACY_SCHEMA, VISIBLE_MAPPING_FILE, recordPath, validRecord, exportCompletedState, replayPendingResultExports, visibleExportStatus,
-  visibleExportDirectory, terminalVisibleExport, readStandaloneExportHistory, abandonPendingResultExport,
+  visibleExportDirectory, terminalVisibleExport, readStandaloneExportHistory, readStandaloneExportHistoryEntry, abandonPendingResultExport,
   completedMarkdownExportMatches,
   _test: { activeDestination, ensurePlainDirectory, bindPlainDirectory, assertDirectoryBinding,
     acquireExportClaim, releaseExportClaim, claimPath, markdownOutputNames }

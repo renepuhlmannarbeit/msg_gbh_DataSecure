@@ -65,6 +65,7 @@ async function runWorker(reviewOutcome, initial = waiting) {
       if (name === './batch') return batch;
       if (name === '../core/processing-mode') return processingMode;
       if (name === '../core/content-options') return require('../plugins/data-secure/server/core/content-options');
+      if (name === '../core/standalone-review-policy') return require('../plugins/data-secure/server/core/standalone-review-policy');
       if (name === '../core/result-naming-mode') return resultNamingMode;
       if (name === './batch-intake-reservation') return { releaseIntake: () => true, RESERVATION_ID_RE: /^[a-f0-9]{64}$/u };
       if (name === './result-export') return {

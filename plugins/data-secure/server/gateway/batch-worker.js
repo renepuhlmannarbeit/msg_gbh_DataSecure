@@ -22,6 +22,7 @@ const { continueIntoLocalReview } = require('./automatic-local-review');
 const { validateBatchQueueEnvelope, validateBatchMessagePurpose, LOCAL_QUEUE_SCHEMA_INVALID, PURPOSE_ERROR_CODES } = require('./batch-queue-envelope');
 const { MODES } = require('../core/processing-mode');
 const { optionalContentOptions } = require('../core/content-options');
+const { validateReviewPolicy } = require('../core/standalone-review-policy');
 const { MODES: RESULT_NAMING_MODES, validateResultNamingMode } = require('../core/result-naming-mode');
 
 let started = false;
@@ -60,14 +61,20 @@ process.once('message', async (message) => {
   let processingMode;
   let outputNamingMode;
   let contentOptions;
+  let reviewPolicy;
   try {
     // Validate caller options before even reading a resume journal. The new
     // message is intentionally unknown to old workers: never an ignored field.
     validateBatchMessagePurpose(message, standaloneChannel ? 'standalone' : 'plugin');
+    if ('reviewPolicy' in message || 'standalone_review_policy' in message ||
+        'review_policy' in message && (!Object.hasOwn(message, 'review_policy') || !isNewIntake))
+      throw Object.assign(Error('STANDALONE_REVIEW_POLICY_INVALID'), { code: 'STANDALONE_REVIEW_POLICY_INVALID' });
     const existingMode = isExistingBatch ? readBatchProcessingMode(message.batch_token) : undefined;
     processingMode = validateBatchMessagePurpose(message, standaloneChannel ? 'standalone' : 'plugin', existingMode);
     if (['start-local-content-markdown-intake', 'start-local-content-anonymize-intake'].includes(message.type))
       contentOptions = optionalContentOptions(message, 'content_options', standaloneChannel ? 'standalone' : 'plugin');
+    if (Object.hasOwn(message, 'review_policy')) reviewPolicy = validateReviewPolicy(message.review_policy,
+      { productChannel: standaloneChannel ? 'standalone' : 'plugin', processingMode, documentReview: message.document_review, contentOptions });
     if (Object.hasOwn(message, 'document_review') &&
         (!isNewIntake || !standaloneChannel || ![MODES.ANONYMIZE, MODES.MARKDOWN].includes(processingMode) || message.document_review !== true))
       throw Object.assign(new Error('DOCUMENT_REVIEW_INVALID'), { code: 'DOCUMENT_REVIEW_INVALID' });
@@ -85,7 +92,7 @@ process.once('message', async (message) => {
     }
   } catch (error) {
     await notify({ type: isNewIntake ? 'local-intake-rejected' : 'local-batch-rejected',
-      error_code: PURPOSE_ERROR_CODES.includes(error?.code) ? error.code : 'PROCESSING_MODE_INVALID' });
+      error_code: [...PURPOSE_ERROR_CODES, 'STANDALONE_REVIEW_POLICY_INVALID'].includes(error?.code) ? error.code : 'PROCESSING_MODE_INVALID' });
     if (isNewIntake) releaseIntake(reservationId);
     process.exit(2);
     return;
@@ -104,6 +111,7 @@ process.once('message', async (message) => {
         profile: message.profile || 'auto',
         processingMode,
         ...(contentOptions ? { contentOptions } : {}),
+        ...(reviewPolicy ? { reviewPolicy } : {}),
         ...(message.ocr_contact_review === true ? { ocrContactReview: true } : {}),
         ...(message.document_review === true ? { documentReview: true } : {}),
         ...(outputNamingMode ? { outputNamingMode } : {}),

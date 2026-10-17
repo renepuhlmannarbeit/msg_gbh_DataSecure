@@ -144,6 +144,11 @@ description = "Öffnet ausschließlich den festen lokalen Ordner mit inhaltsfrei
 commands.allow = ["open_diagnostic_folder"]
 
 [[permission]]
+identifier = "allow-save-diagnostic-bundle"
+description = "Speichert nach nativer Zielauswahl ein neu bereinigtes begrenztes Diagnosepaket; ohne Core, Dokumentinhalte oder Überschreiben."
+commands.allow = ["save_diagnostic_bundle"]
+
+[[permission]]
 identifier = "allow-get-native-recovery-status"
 description = "Liest nur die inhaltsfreie native Prozess-Abgleichphase, ohne den Core-Prozess aufzurufen."
 commands.allow = ["get_native_recovery_status"]
@@ -196,6 +201,11 @@ commands.allow = ["get_document_entities"]
 identifier = "allow-decide-document-review"
 description = "Speichert eine revisionsgebundene Freigabe oder zusätzliche feste Maskierung."
 commands.allow = ["decide_document_review"]
+
+[[permission]]
+identifier = "allow-decide-document-review-batch"
+description = "Speichert die genaue Auswahl revisionsgebundener Freigaben oder Widerrufe als gemeinsame Entscheidung."
+commands.allow = ["decide_document_review_batch"]
 
 [[permission]]
 identifier = "allow-preview-document-export"

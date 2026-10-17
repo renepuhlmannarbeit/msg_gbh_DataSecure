@@ -245,7 +245,8 @@ async function anonymizePersistedStandalone(ticket, suppliedHooks) {
     const privacy = prepareTextPrivacyReview({ text, profile: effective, productChannel: 'standalone',
       consumerOptions: { productChannel: 'standalone', contentOptions: context.content_options }, registry: hooks.pseudonymRegistry,
       captureTrace: true, technicalReviewRequired: extraction.coverage.status !== 'complete',
-      ocrLineReview: extraction.coverage.reason_codes.includes('OCR_NOT_VERIFIED') });
+      ocrLineReview: extraction.coverage.reason_codes.includes('OCR_NOT_VERIFIED'),
+      sourceRedaction: source.source_redaction || null });
     context.revalidate(); hooks.checkAbort();
     // No resolver, basis capture, publication proof, stage, audit or mapping is
     // reachable from this endpoint, including an empty ambiguity collection.

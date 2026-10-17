@@ -14,8 +14,10 @@ for (const p of [data, results, packages]) fs.mkdirSync(p, { mode: 0o700 });
 const child = spawn('cargo', ['test', '--locked', 'native_export_broker::tests::pipe_helper', '--', '--ignored', '--exact', '--nocapture', '--test-threads=1'],
   { cwd: path.resolve(__dirname, '../apps/datasecure-standalone/tauri-contract'), stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
 let stderr = '', outer, binding, seq = 0, nativeSession, loseNextPublish = false, poisonedBody = false;
+const nativeCommands = [];
 child.stderr.on('data', bytes => { stderr = `${stderr}${bytes}`.slice(-8192); });
 const channel = new NativeExportChannel({ write: frame => {
+  if (frame.command) nativeCommands.push(frame.command);
   if (poisonedBody && frame.command === 'write_body') {
     frame.body.hex = frame.body.hex.replace(/^../u, '00'); poisonedBody = false;
   }
@@ -92,7 +94,9 @@ async function run() {
     assert.deepEqual(fs.readdirSync(target), [expectedName]);
     assert.equal(fs.readFileSync(path.join(target, expectedName), 'utf8'), f.text);
     f.decide('revoke'); // lost completion must still reconcile this earlier exact copy
+    const beforeAck = nativeCommands.length;
     assert.equal((await exportCall(f, op, true)).exported_count, 1);
+    assert.deepEqual(nativeCommands.slice(beforeAck), ['acknowledge'], 'one native ACK owns the fresh target check, not reconcile plus ACK');
     assert.equal(f.store.historySummary(f.batchId).current_exported_count, 0);
     assert.equal(f.store.historySummary(f.batchId).pending_confirmation_count, 0);
     context('resolve_document_export', { batch_id: f.batchId, operation_id: op });
@@ -102,6 +106,9 @@ async function run() {
     fs.writeFileSync(path.join(target, 'extra.txt'), 'not authorized');
     context('resolve_document_export', { batch_id: f.batchId, operation_id: op });
     await assert.rejects(f.store.resolveExport(f.batchId, op), { code: 'AI_EXPORT_CONFLICT' });
+    const beforeTamperedAck = nativeCommands.length;
+    await assert.rejects(exportCall(f, op, true), { code: 'AI_EXPORT_CONFLICT' });
+    assert.deepEqual(nativeCommands.slice(beforeTamperedAck), ['acknowledge'], 'a corrupt completed copy is never acknowledged or republished');
     if (mode === 'markdown-and-anonymize') {
       const privateRoot = path.join(data, binding.private_name);
       const completedDigest = JSON.parse(fs.readFileSync(path.join(data, 'document-reviews', f.batchId, `export-${op}.json`))).request_sha256;

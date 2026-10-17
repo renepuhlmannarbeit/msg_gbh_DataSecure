@@ -30,6 +30,9 @@ const sharedStandaloneModules = new Set([
   // No public capability, Cowork command, UI or converter runtime is added.
   'server/standalone/anonymized-artifact.js',
   'server/standalone/anonymized-store.js',
+  // Small, content-free coverage projection called only by the channel-guarded
+  // history sink. This grants no additional public capability.
+  'server/standalone/anonymization-notices.js',
   // The shared batch module references this inert Standalone-only sink.
   // Cowork has no UI/IPC action and never invokes it because the channel is guarded.
   'server/standalone/identity-ledger.js',

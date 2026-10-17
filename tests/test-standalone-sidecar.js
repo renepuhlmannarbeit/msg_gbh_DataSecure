@@ -608,6 +608,8 @@ function removeOwnedRoot(root, initial) {
       const currentRequest = await runPackagedMarkdownScenario({ request: launch(), restart, sourceDirectory: sources });
       const { runPackagedOcrScenario } = await import('./helpers/standalone-packaged-ocr-review.mjs');
       await runPackagedOcrScenario({ request: currentRequest, restart, sourceDirectory: sources, markdownOnly: true, contentOnly: true });
+      const { runPackagedFastReviewScenario } = await import('./helpers/standalone-packaged-fast-review.mjs');
+      await runPackagedFastReviewScenario({ request: currentRequest, restart, sourceDirectory: sources });
       assert.equal((await client.send('shutdown', 'ef'.repeat(8))).ok, true);
       assert.equal((await bounded(host.closed, 'content format final host did not stop', 10000)).code, 0);
     }

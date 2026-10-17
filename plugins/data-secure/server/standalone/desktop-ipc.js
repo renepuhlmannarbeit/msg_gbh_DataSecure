@@ -20,7 +20,7 @@ const PRIVATE_ACTIONS = new Set([
   'resolve_history_results', 'resolve_history_ledger', 'resolve_history_identity_mapping',
   'resolve_identity_mappings_directory',
   'continue_history_batch', 'pause_batch', 'skip_ocr_contact_review', 'abandon_result_export',
-  'get_document_reviews', 'get_document_review_history_summary', 'get_document_review_chunk', 'get_document_entities', 'decide_document_review', 'preview_document_export', 'export_approved_documents', 'abandon_document_export', 'resolve_document_export', 'resolve_document_identity_overview',
+  'get_document_reviews', 'get_document_review_history_summary', 'get_document_review_chunk', 'get_document_entities', 'decide_document_review', 'decide_document_review_batch', 'preview_document_export', 'export_approved_documents', 'abandon_document_export', 'resolve_document_export', 'resolve_document_identity_overview',
   'get_review_session', 'get_review_chunk', 'submit_review', 'continue_review_session', 'shutdown'
 ]);
 
@@ -63,7 +63,7 @@ function validatePrivateMessage(message) {
   } else assertLegacyContentOperation(message, 'content_options', 'standalone', 'resume');
   if (['resolve_history_results', 'resolve_history_ledger', 'resolve_history_identity_mapping',
     'continue_history_batch', 'pause_batch', 'skip_ocr_contact_review', 'abandon_result_export', 'get_document_reviews', 'get_document_review_history_summary', 'get_document_review_chunk', 'get_document_entities',
-    'decide_document_review', 'preview_document_export', 'export_approved_documents', 'abandon_document_export', 'resolve_document_export', 'resolve_document_identity_overview'].includes(message.action)) {
+    'decide_document_review', 'decide_document_review_batch', 'preview_document_export', 'export_approved_documents', 'abandon_document_export', 'resolve_document_export', 'resolve_document_identity_overview'].includes(message.action)) {
     allowedFields.add('batch_id');
     if (typeof message.batch_id !== 'string' || !/^[a-f0-9]{64}$/u.test(message.batch_id))
       fail('STANDALONE_HISTORY_INVALID', 'Ungültige lokale Laufkennung.');
@@ -89,6 +89,12 @@ function validatePrivateMessage(message) {
     }
     allowedFields.add('processing_mode');
     validateProcessingMode(message.processing_mode, 'standalone');
+    if (Object.hasOwn(message, 'review_policy')) {
+      allowedFields.add('review_policy');
+      require('../core/standalone-review-policy').validateReviewPolicy(message.review_policy, {
+        productChannel: 'standalone', processingMode: message.processing_mode,
+        documentReview: message.document_review, contentOptions: message.content_options });
+    }
     if (Object.hasOwn(message, 'ocr_contact_review')) {
       allowedFields.add('ocr_contact_review');
       if (message.processing_mode !== 'markdown-only' || message.ocr_contact_review !== true)
@@ -117,6 +123,18 @@ function validatePrivateMessage(message) {
     if (!Number.isSafeInteger(message.revision) || message.revision < 0 || message.revision > 10000 ||
         !Number.isSafeInteger(message.chunk_index) || message.chunk_index < 0 || message.chunk_index > 1024)
       fail('DOCUMENT_REVIEW_INVALID', 'Ungültiger Dokumentabschnitt.');
+  }
+  if (message.action === 'decide_document_review_batch') {
+    allowedFields.add('decision');
+    const value = message.decision;
+    if (!value || Object.keys(value).sort().join(',') !== 'action,operation_id,selection' ||
+        !['approve', 'revoke'].includes(value.action) || !/^[a-f0-9]{32}$/u.test(value.operation_id || '') ||
+        !Array.isArray(value.selection) || value.selection.length < 1 || value.selection.length > 200 ||
+        value.selection.some(row => !row || Object.keys(row).sort().join(',') !== 'document_id,output_sha256,revision' ||
+          !/^[a-f0-9]{32}$/u.test(row.document_id || '') || !/^[a-f0-9]{64}$/u.test(row.output_sha256 || '') ||
+          !Number.isSafeInteger(row.revision) || row.revision < 0 || row.revision >= 1000) ||
+        new Set(value.selection.map(row => row.document_id)).size !== value.selection.length)
+      fail('DOCUMENT_REVIEW_INVALID', 'Ungültige gemeinsame Dokumententscheidung.');
   }
   if (message.action === 'decide_document_review') {
     allowedFields.add('decision');

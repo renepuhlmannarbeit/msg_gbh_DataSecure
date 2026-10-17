@@ -5,6 +5,7 @@ const { createBatchIntakeIntent } = require('./batch-intake-intent');
 const { DEFAULT_RETENTION_DAYS } = require('./retention');
 const { MODES, validateProcessingMode } = require('../core/processing-mode');
 const { contentStartOptions } = require('./content-start-boundary');
+const { validateReviewPolicy } = require('../core/standalone-review-policy');
 const { MODES: RESULT_NAMING_MODES, validateResultNamingMode } = require('../core/result-naming-mode');
 
 function createBatchIntake(options = {}) {
@@ -95,6 +96,11 @@ function createBatchIntake(options = {}) {
     // unknown purposes must not silently become the historical default.
     const processingMode = validateProcessingMode(Object.hasOwn(beginOptions, 'processingMode')
       ? beginOptions.processingMode : MODES.ANONYMIZE, productChannel);
+    if ('review_policy' in beginOptions || 'standalone_review_policy' in beginOptions ||
+        'reviewPolicy' in beginOptions && !Object.hasOwn(beginOptions, 'reviewPolicy'))
+      throw Object.assign(Error('STANDALONE_REVIEW_POLICY_INVALID'), { code: 'STANDALONE_REVIEW_POLICY_INVALID' });
+    const reviewPolicy = Object.hasOwn(beginOptions, 'reviewPolicy') ? validateReviewPolicy(beginOptions.reviewPolicy,
+      { productChannel, processingMode, documentReview: beginOptions.documentReview, contentOptions }) : undefined;
     if (Object.hasOwn(beginOptions, 'documentReview') &&
         (beginOptions.documentReview !== true || productChannel !== 'standalone'))
       throw Object.assign(new Error('DOCUMENT_REVIEW_INVALID'), { code: 'DOCUMENT_REVIEW_INVALID' });
@@ -247,6 +253,7 @@ function createBatchIntake(options = {}) {
         ...(processingMode === MODES.MARKDOWN || contentOptions ? { processing_mode: processingMode } : {}),
         ...(contentOptions ? { content_options: contentOptions } : {}),
         ...(beginOptions.documentReview === true ? { standalone_document_review: true } : {}),
+        ...(reviewPolicy ? { standalone_review_policy: reviewPolicy } : {}),
         ...(beginOptions.ocrContactReview === true ? { ocr_contact_review: true,
           ocr_review_seed: crypto.randomBytes(32).toString('base64url') } : {}),
         ...(processingMode !== MODES.MARKDOWN && productChannel === 'standalone'

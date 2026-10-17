@@ -1,6 +1,176 @@
 # Aktueller Iststand
 
-Stand: 16.10.2026 · 3.2.0-rc162 veröffentlicht als interner Standalone-Test-Pre-Release für Windows x64 und macOS Intel/Apple Silicon; M2-Zielhostabnahme offen; Linux RC159 / Cowork RC151
+Stand: 17.10.2026 · 3.2.0-rc163 lokaler Windows-Testkandidat in Vorbereitung; veröffentlicht bleibt Standalone RC162 für Windows und beide Mac-Architekturen; M2-Zielhostabnahme offen; Linux RC159 / Cowork RC151
+
+### RC163: lokales Windows-Testpaket und gemeinsamer Quellstand-Freeze
+
+Auf ausdrücklichen Auftrag werden die verbliebenen Clippy-Befunde ohne
+Lint-Unterdrückung bereinigt und der integrierte Stand erneut geprüft.
+Getrennte Quellenreviews decken Rust/IPC/OS-Besitz, fachliche Benutzerführung
+und die Paket-/Runtime-Projektion ab. Erst nach den Prüfungen werden der
+vorgesehene Quellstand und seine gesperrten Abhängigkeiten lokal festgehalten
+und daraus ein neues Windows-ZIP in einem eigenen Engineering-Verzeichnis
+gebaut. Alte Releasearchive und fremde temporäre Dateien bleiben unberührt.
+
+Die spätere ARM-Mac-Version soll exakt denselben eingefrorenen Quellstand
+mit demselben Feature-Stack verwenden. Ein Windows-Paket oder Quellenreview
+ersetzt weder einen Mac-Build noch die ausdrücklich spätere M2-Probe.
+Kein GitHub-Release, Push, macOS-Runner oder Produktions-GO ist beauftragt.
+[RC163-Prüf- und Freeze-Nachweis](../acceptance/RC163_LOCAL_WINDOWS_CANDIDATE_20261017.md).
+
+### Lokal umgesetzte Durchsatzrunde: Arbeit sparen, Schutzgrenzen erhalten
+
+Nichtfinale native Speicherchunks benötigen keinen neuen OS-Thread;
+endgültige Schreib- und Steuerbefehle behalten ihren Worker und NativeGuard.
+Ein direkter nativer ACK prüft die fertige Kopie einmal frisch statt vierfach;
+ein erstmals gespeicherter Abschlussbeleg behält beide Inventardurchgänge.
+Der unveränderliche Plan-Digest wird nur pro Transaktionsinstanz wiederverwendet.
+
+Die globale History inventarisiert Owner-Namen pro Aufruf und prüft den
+Bestand am Ende erneut: im 320er-Dateisystemprofil zwei statt 320 Auflistungen.
+Recovery und Hinweisdateien werden erst für die höchstens 20 sichtbaren
+Kandidaten gelesen; ältere Ergebnisse bleiben erhalten. Ein zusätzlicher
+echter Sidecar-Lauf fand ein Rennen mit gerade neu angelegten Review-Ordnern.
+Die veraltete reine Leseprojektion wird dafür einmal vollständig verworfen
+und unter denselben Namespace-Bindungen frisch aufgebaut. Austausch, Links,
+entfernte Namen und erneuter Bestandswechsel bleiben geschlossen.
+
+Unabhängige Quellenreviews und gezielte Gegenproben prüfen diese Änderungen.
+Windows-Rust 162 bestanden / 3 regulär ignoriert, Store 62/62, Service 64/64,
+echte Node→Rust-Kopie und Produktisolation grün. Keine parallelen Schreiber,
+persistenten Freigabecaches oder gelockerten OS-/Hashprüfungen. Früher
+Retention-Capture und absolute 300-Sekunden-Exportfrist bleiben bestehen.
+M2, native Paketabnahme und eine neue Version bleiben späteren Schritten
+vorbehalten. Einzelheiten stehen im bestehenden Post-RC162-Prüfbericht.
+
+### Lokal fortgeführt: Exportbeobachtung und laufgenaue History
+
+Alle bisherigen lokalen Änderungen sind erhalten. Die lokale Fortsetzung
+ergänzt eine nur beobachtende, an den genauen Exportauftrag gebundene native
+Fortschrittsanzeige. Gestagte Dateien sind noch kein fertiger Export; Erfolg
+bleibt an Abschlussbeleg und ACK gebunden. Native Statusabfragen umgehen nur
+den seriellen Core-Lock, nicht dessen Prüfungen oder Schreibautorität.
+
+Ein erneuter Quellenreview fand außerdem zwei Folgeprobleme: Die fertige
+Kopie blieb während des optionalen Dokument-Neuladens scheinbar offen, und
+einzelne History-Detailaktionen hatten trotz globaler Leser nur 30 Sekunden
+Budget. Der Erfolgsdialog wird jetzt vor diesem Reload abgeschlossen und
+schließbar. Ein weiterer offener Auftrag kann diesen Dialog nicht mehr auf
+seine eigene Kennung umstellen. Die Fortschrittsmeldung steht vor der langen
+Dateiliste und erhält nach ausdrücklichem Start den Fokus; nach ACK führt er
+auf „Schließen“.
+
+Produktive History-Detail- und Öffnungsaktionen lesen ihren genauen Lauf,
+statt den gesamten Bestand zu projizieren. Vier solche Aktionen verwenden
+jetzt die bestehende 300-Sekunden-Leserklasse. Der echte Dateisystemtest mit
+128 fremden Läufen zeigt keine fremden Dateiöffnungen oder globalen
+Verlaufsauflistungen; Retention, Beschädigung und Originalordnerbindung bleiben
+geprüft. Windows-Rust 155 bestanden / 3 ignoriert, Renderer 84/84,
+Workspace 135/135, echte Node→Rust-Kopie, Sidecar-/OCR-/Fastweg-Kette,
+Produktisolation und erneute Headless-Fokus-/Reflow-/axe-Probe sind grün.
+Das Exportbudget wird durch Fortschrittsmeldungen nicht verlängert. M2-Test,
+neues Paket und Veröffentlichung bleiben späteren Gates vorbehalten.
+
+### Performance und Diagnose lokal umgesetzt, M2-Test später
+
+Der M2-Zielhosttest ist auf Wunsch des Anwenders bis zu einer später neu
+erzeugten, zur Entwicklung passenden Testversion zurückgestellt. Aktuell
+wurden Exportleistung, früher Verlaufs-Capture und ein auch ohne Core
+nutzbares Diagnosepaket weiterentwickelt und getrennt quellenbasiert geprüft.
+Keine neue Version oder Release wird in dieser lokalen Runde erstellt.
+
+Neue Exporte führen Planung, Restdatenprüfung und Zuordnung gemeinsam aus;
+der frische Quelldurchgang vor der Kopie bleibt erhalten (zwei statt vier
+vollständige Lesedurchgänge). Unveränderte frühe Export-Sicherung verwendet
+einen an tatsächliche Bytes gebundenen Capture-Index. Der 320er-Metadaten-
+Profillauf reduzierte wiederholte Review-Listen von 320 auf eins; keine
+Freigabe oder aktuelle Zielprüfung wird aus dem Index abgeleitet. Geänderte
+Grundlagen erzwingen weiterhin den vollständigen Abgleich.
+
+Ein einzelnes lokales JSON-Diagnosepaket lässt sich auch bei Core-Ausfall
+speichern. Es enthält nur erneut validierte technische Felder und nennt
+fehlende, verworfene und gekürzte Teile. Windows-spezifisches Append-Sharing
+gilt nur für den Diagnoseleser; Export-/Journaldateien bleiben streng geprüft.
+Die Integritäts-/Integrationstest-Matrix trennt gemeinsame Fachregeln von
+Windows- und macOS-Datei-, Prozess-, Dialog- und Paketnachweisen.
+Erneut grün: Store 62/62, Windows-Rust 147 bestanden / 3 ignoriert,
+echte Node→Rust-Exportintegration, Produktisolation und Headless-Reflow/axe.
+Native Speicherdialoge und neue Windows-/Mac-Pakete sind noch nicht abgenommen.
+
+### Erstinstallation und fehlender Ergebnisordner
+
+Im unveröffentlichten Stand wird zusätzlich ein ausdrücklich wählbarer
+**Schnellweg für Standalone-Anonymisierung** integriert. Die gespeicherte,
+unveränderliche Policy behandelt bekannte Mehrdeutigkeiten und OCR-Kontaktbereiche
+durch automatische Maskierung; sie erfindet keine menschlichen Bestätigungen.
+Nur ein tatsächlich veröffentlichter, erneut technisch geprüfter Basisstand
+erhält die gekennzeichnete automatische Erstfreigabe. Änderungen und Widerruf
+bleiben nach Neustart unfreigegeben, bis eine neue ausdrückliche Freigabe erfolgt.
+Der KI-Export startet weiterhin nur ausdrücklich. Alte Läufe und das Plugin
+erhalten die Automatik nicht nachträglich.
+
+Die direkte Quellcode-Gegenprüfung fand und korrigierte zusätzlich falsche
+Abschlussüberschriften bei teilweise verfügbaren Dokumenten und nach fertiger
+Automatik. Die aktuelle Laufkarte nennt den technischen Abschluss prominent;
+der aktuelle Dokument-/Kopiestatus bleibt davon getrennt. Native Startablehnungen
+vor Workerübergabe (fehlender Ergebnisordner oder noch nicht gesendete,
+wartende Anfrage) erhalten die vorbereitete Auswahl.
+Der tatsächliche projizierte Runtime-Durchlauf mit getrennten Core-/Worker-
+Prozessen und echter OCR ist bestanden: drei automatisch freigegebene Ergebnisse,
+ein korrekt ausgeschlossenes defektes CSV, Neustart, dauerhafter Widerruf und
+eine nur ausdrücklich ausgelöste KI-Kopie. Dabei gefundene Kanonisierungs- und
+`/4`-Ergebnisexportlücken wurden korrigiert. Der neue Stand ist damit noch kein
+neu gebautes oder nativ abgenommenes Windows-/Mac-Paket. Die abschließende
+Gesamtregression wird getrennt dokumentiert; einzelne grüne Kerneltests sind
+kein Releasebeleg.
+
+Die Standalone-Gesamtregression ist inzwischen einschließlich Rust (137
+bestanden, drei ignoriert) und tatsächlicher Sidecar-/Worker-/Exportabläufe
+bestanden. Spätere Korrekturen der OCR-Hinweisanzeige werden durch gezielte
+Publikations-, History-, Service-, Renderer- und echte Fastweg-Tests ergänzt.
+Erfolgreich erzeugte Dateien mit OCR-/Quellenhinweisen bleiben abgeschlossen,
+erscheinen aber nicht mehr als hinweisfrei. Der separate kleine Hinweis-Cache
+verhindert Rückschreiben alter Laufzähler und erhält bekannte Mindestzahlen;
+die Verlaufsliste liest statt alte Zustände über neue Workerabschlüsse zu
+schreiben. Regelmäßige Statusabfragen lesen dafür keine Dokumentkörper.
+Native Windows-Bedienabnahme und M2-Zielhosttest bleiben offen.
+
+Die lokale Nach-RC162-Runde unterscheidet inzwischen auch verlorene oder
+ersetzte bereits konfigurierte Ordner von einer Erstinstallation. Solche
+Ziele werden nicht automatisch durch den Standard ersetzt. „Ordner erneut
+prüfen“ erkennt den zurückgebrachten Originalordner und erhält die Dateiauswahl.
+
+Sammelfreigabe und Widerruf mehrerer Dokumente verwenden lokal einen gemeinsamen
+revisionsgebundenen Auftrag und Commit. Wartende, noch nicht gesendete
+Core-Anfragen liefern `STANDALONE_IPC_BUSY`. Ein separater Rust-Aktivitätsspeicher
+bleibt über den nativen Status auch bei belegtem Core-Kanal lesbar. Er meldet
+Aktivität, keine Freigabe oder fertige Kopie. Bekannte nicht verarbeitete Quellen
+verhindern keine ausdrücklich angeforderte Vorschau der verfügbaren freigegebenen
+Dokumente; deren Ausnahmen bleiben im Dialog sichtbar.
+[Review und Prüfgrenzen](../acceptance/POST_RC162_BATCH_IPC_FOLDER_REVIEW_20261017.md).
+
+Ein noch nicht existierender Ergebnisordner ist beim ersten Start ein
+erwarteter Zustand. Die Root-Trennungsprüfung akzeptiert fehlende
+Konfiguration; die Oberfläche zeigt zunächst nur den vorgeschlagenen
+Ordner. Erst bei einem ausdrücklich gestarteten Lauf wird der Ordner
+angelegt und gebunden. Scheitert das (etwa an einem verwalteten
+`Documents`-Ordner), verweigert der lokale Stand den Lauf jetzt mit dem
+festen, pfadfreien Code `STANDALONE_RESULT_ROOT_UNAVAILABLE` und empfiehlt
+eine explizite andere Ordnerwahl. Das ist **nicht** die Erklärung für den
+RC161-M2-Absturz: Die Diagnose belegte den Prozessabbruch vor der ersten
+Sidecar-JavaScript-Initialisierung und vor jedem Aufruf dieser Funktion.
+Das lokale Mac-Bundle enthält nun außerdem eine verständliche
+`NSDocumentsFolderUsageDescription` für eine mögliche macOS-Nachfrage beim
+Zugriff auf „Dokumente“. Dieser Text erteilt weder selbst eine Berechtigung
+noch umgeht er Organisationsrichtlinien; der gebaute Bundle-Inhalt muss auf
+einem Mac noch geprüft werden.
+
+Die lokale Nach-RC162-Runde macht außerdem den abgeschlossenen Null-Ergebnis-
+Lauf im Verlauf nur mit konsistenten gespeicherten Zählern prominent, trennt
+vollständig belegte Null-Ausnahmegründe von nach Aufbewahrungsende unbekannten
+Gründen und zeigt zusätzliche feste Windows-/Mac-Startursachen an. Diese
+Änderungen sind **nicht** Bestandteil des veröffentlichten RC162 und noch
+keine Zielhost-Abnahme. [Priorisierter Arbeitsplan](BACKLOG.md#integrierter-arbeitsplan-nach-rc162-einfachheit-ohne-falsche-sicherheit).
 
 ### RC162: konkrete Mac-Signaturlücke und verbesserte Startdiagnose – Paketgates bestanden
 

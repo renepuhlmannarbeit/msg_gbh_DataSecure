@@ -5,6 +5,7 @@
 const crypto = require('node:crypto');
 const path = require('node:path');
 const { contentOptionsForBatch } = require('../core/content-options');
+const { reviewPolicyForBatch } = require('../core/standalone-review-policy');
 const { assertAnonymizationBatch } = require('../core/processing-mode');
 const { validateBatchPseudonymState, ownedRegistrySnapshot, refuseOwnedRegistryPersist, synchronizeOwnedRegistryCommit } = require('../batch-pseudonym-context');
 const registryCommit = require('./prepared-registry-commit');
@@ -27,6 +28,7 @@ function createContentOperationAuthority(services) {
     if (typeof token !== 'string' || !TOKEN.test(token) || typeof itemId !== 'string' || !ID.test(itemId) ||
         !['capture', 'publication'].includes(kind) || services.active.has(token) !== true) throw invalid();
     const state = services.readStateForMaintenance(token), contentOptions = contentOptionsForBatch(state);
+    const reviewPolicy = reviewPolicyForBatch(state);
     assertAnonymizationBatch(state);
     const candidates = state.items.filter(item => item.id === itemId), item = candidates[0];
     if (!contentOptions || state.schema !== 'datasecure-batch/7' || state.product_channel !== 'standalone' ||
@@ -43,6 +45,7 @@ function createContentOperationAuthority(services) {
     if (!['txt', 'md', 'csv', 'docx', 'xlsx', 'pptx', 'pdf', 'png', 'jpeg', 'bmp'].includes(sourceType) ||
         !Number.isSafeInteger(item.size) || item.size < 1 || typeof item.sha256 !== 'string' || !TOKEN.test(item.sha256)) throw invalid();
     const identity = Object.freeze({ batch_id: token, document_id: itemId, kind, content_options: contentOptions,
+      ...(reviewPolicy ? { review_policy: reviewPolicy } : {}),
       profile: state.profile, source_type: sourceType, source_name: item.name, source_label: member.name,
       source_sha256: item.sha256, source_bytes: item.size, work_name: item.work_name,
       created_at: state.created_at, expires_at: state.expires_at, package_id: `ds_${itemId}`, output_naming_mode: state.output_naming_mode,

@@ -22,7 +22,19 @@ async function main() {
     { name: 'resume options are rejected before reading a nonexistent journal', flag: true, channel: 'standalone',
       extra: { type: 'start-local-batch', content_options: { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: true, imageOcr: false } }, error: 'CONTENT_OPTIONS_FORBIDDEN' },
     { name: 'plugin cannot carry a standalone content contract', flag: true, channel: 'plugin',
-      extra: { content_options: { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: true, imageOcr: false } }, error: 'CONTENT_OPTIONS_FORBIDDEN' }
+      extra: { content_options: { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: true, imageOcr: false } }, error: 'CONTENT_OPTIONS_FORBIDDEN' },
+    { name: 'legacy intake cannot silently ignore automatic review policy', flag: true, channel: 'standalone',
+      extra: { review_policy: 'automatic-conservative' }, error: 'STANDALONE_REVIEW_POLICY_INVALID' },
+    { name: 'explicit null automatic review policy is rejected before intake acceptance', flag: true, channel: 'standalone',
+      extra: { type: 'start-local-content-anonymize-intake', review_policy: null,
+        content_options: { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: true, imageOcr: false } },
+      error: 'STANDALONE_REVIEW_POLICY_INVALID' },
+    { name: 'Raw content worker cannot acquire automatic anonymization policy', flag: true, channel: 'standalone',
+      extra: { type: 'start-local-content-markdown-intake', processing_mode: 'markdown-only', review_policy: 'automatic-conservative',
+        content_options: { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: true, imageOcr: false } },
+      error: 'STANDALONE_REVIEW_POLICY_INVALID' },
+    { name: 'resume review policy is rejected before reading a nonexistent journal', flag: true, channel: 'standalone',
+      extra: { type: 'start-local-batch', review_policy: 'automatic-conservative' }, error: 'STANDALONE_REVIEW_POLICY_INVALID' }
   ]) await testAsync(scenario.name, async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-worker-review-reject-'));
     const worker = path.join(__dirname, '../plugins/data-secure/server/gateway/batch-worker.js');

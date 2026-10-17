@@ -75,7 +75,14 @@ function createBatchRecovery(options = {}) {
     const owner = readActiveLock();
     if (!callOptions.ignoreActiveLock && owner && processAlive(owner.pid)) return states;
     let entries = [];
-    try { entries = io.readdirSync(rootPath(), { withFileTypes: true }); } catch { return states; }
+    if (Object.hasOwn(callOptions, 'batchId')) {
+      // A targeted display/availability query retains the same lock, expiry,
+      // intake-owner and recovery-policy checks, without opening other runs.
+      if (typeof callOptions.batchId !== 'string' || !tokenPattern.test(callOptions.batchId)) return states;
+      entries = [{ name: `${callOptions.batchId}.json`, isFile: () => true }];
+    } else {
+      try { entries = io.readdirSync(rootPath(), { withFileTypes: true }); } catch { return states; }
+    }
     for (const entry of entries) {
       if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
       const token = entry.name.slice(0, -'.json'.length);
@@ -136,9 +143,11 @@ function createBatchRecovery(options = {}) {
 
   function projectProductBatchStatus(latest) {
     if (!latest) return null;
+    const reviewPolicy = require('../core/standalone-review-policy').reviewPolicyForBatch(latest);
     const progress = publicProgress(latest, { skipResultProjection: true });
     const visible = visibleExportStatus(latest.token, progress.released);
     return Object.freeze({
+      ...(reviewPolicy ? { review_policy: reviewPolicy } : {}),
       ...(['datasecure-batch/5', 'datasecure-batch/7'].includes(latest.schema) && isMarkdownBatch(latest) ? { processing_mode: 'markdown-only', warning_count: progress.warning_count || 0 } : {}),
       ...(['datasecure-batch/5', 'datasecure-batch/6', 'datasecure-batch/7'].includes(latest.schema)
         && latest.items.some(item => item.error_code === 'CONVERSION_TERMINATION_UNCONFIRMED')

@@ -205,6 +205,7 @@ async function dispatch(message) {
     case 'remove_admitted_source': return service.removeAdmittedSource(message.selection_index);
     case 'cancel_admission': return service.cancelAdmission();
     case 'start_admitted_batch': return service.startAdmittedBatch({ processingMode: message.processing_mode,
+      ...(Object.hasOwn(message, 'review_policy') ? { reviewPolicy: message.review_policy } : {}),
       ...(Object.hasOwn(message, 'content_options') ? { contentOptions: message.content_options } : {}),
       ...(message.source_ids ? { sourceIds: message.source_ids, catalogueRevision: message.catalogue_revision } : {}),
       ...(message.ocr_contact_review === true ? { ocrContactReview: true } : {}),
@@ -228,6 +229,7 @@ async function dispatch(message) {
     case 'get_document_review_chunk': return service.documentReviewChunk(message.batch_id, message.document_id, message.revision, message.chunk_index);
     case 'get_document_entities': return service.documentEntities(message.batch_id, message.document_id, message.revision, message.page);
     case 'decide_document_review': return service.decideDocumentReview(message.batch_id, message.document_id, message.decision);
+    case 'decide_document_review_batch': return service.decideDocumentReviewBatch(message.batch_id, message.decision);
     case 'export_approved_documents': return service.exportApprovedDocuments(message.batch_id, message.operation_id, message.selection, message.acknowledge === true);
     case 'preview_document_export': return service.previewDocumentExport(message.batch_id, message.operation_id, message.selection);
     case 'abandon_document_export': return service.abandonDocumentExport(message.batch_id, message.operation_id, message.digest);

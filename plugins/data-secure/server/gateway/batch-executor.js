@@ -28,6 +28,7 @@ const { validateBatchQueueEnvelope, validateBatchMessagePurpose, LOCAL_QUEUE_SCH
 const { MODES, validateProcessingMode } = require('../core/processing-mode');
 const { assertLegacyContentOperation } = require('../core/content-options');
 const { contentStartOptions, contentStartEnvironment } = require('./content-start-boundary');
+const { validateReviewPolicy } = require('../core/standalone-review-policy');
 const { MODES: RESULT_NAMING_MODES, validateResultNamingMode } = require('../core/result-naming-mode');
 const { RESOURCE_LIMITS } = require('../resource-limits');
 
@@ -406,6 +407,8 @@ function durableBatchStateProgress(token, type, options = {}) {
 }
 
 function startLocalBatchExecutor(token, options = {}) {
+  if (['reviewPolicy', 'review_policy', 'standalone_review_policy'].some(field => field in options))
+    throw Object.assign(Error('STANDALONE_REVIEW_POLICY_INVALID'), { code: 'STANDALONE_REVIEW_POLICY_INVALID' });
   assertLegacyContentOperation(options, 'contentOptions',
     (options.env || process.env).DATASECURE_PRODUCT_CHANNEL || 'plugin', 'resume');
   if (!TOKEN_RE.test(String(token || ''))) throw new SafeError('Batch-Sitzung ist ungültig.');
@@ -525,12 +528,17 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
   const startEnvironment = contentStartEnvironment(options, process.env);
   const startChannel = startEnvironment.DATASECURE_PRODUCT_CHANNEL || 'plugin';
   const contentOptions = contentStartOptions(options, 'contentOptions', startChannel);
+  if ('review_policy' in options || 'standalone_review_policy' in options ||
+      'reviewPolicy' in options && !Object.hasOwn(options, 'reviewPolicy'))
+    throw Object.assign(Error('STANDALONE_REVIEW_POLICY_INVALID'), { code: 'STANDALONE_REVIEW_POLICY_INVALID' });
   // Later lifecycle callbacks receive the same own environment, never a
   // caller-mutated or inherited getter disguised as the previously checked one.
   options = { ...options, env: startEnvironment };
   const processingMode = validateProcessingMode(Object.hasOwn(options, 'processingMode')
     ? options.processingMode : MODES.ANONYMIZE, startChannel);
   const productChannel = startChannel;
+  const reviewPolicy = Object.hasOwn(options, 'reviewPolicy') ? validateReviewPolicy(options.reviewPolicy,
+    { productChannel, processingMode, documentReview: options.documentReview, contentOptions }) : undefined;
   if (Object.hasOwn(options, 'documentReview') &&
       (options.documentReview !== true || productChannel !== 'standalone'))
     throw Object.assign(new Error('DOCUMENT_REVIEW_INVALID'), { code: 'DOCUMENT_REVIEW_INVALID' });
@@ -666,7 +674,7 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
         return;
       }
       if (Object.keys(message).length === 2 && message.type === 'local-intake-rejected' &&
-          [LOCAL_QUEUE_SCHEMA_INVALID, ...PURPOSE_ERROR_CODES].includes(message.error_code)) {
+          [LOCAL_QUEUE_SCHEMA_INVALID, ...PURPOSE_ERROR_CODES, 'STANDALONE_REVIEW_POLICY_INVALID'].includes(message.error_code)) {
         settleIpc(ipcAcknowledgementError(message.error_code, message.error_code));
         lifecycle({ event: 'intake_ipc_failed', outcome: 'stopped', item_count: itemCount,
           error_code: message.error_code });
@@ -719,6 +727,7 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
         ...(outputNamingMode ? { output_naming_mode: outputNamingMode } : {}),
         ...(options.ocrContactReview === true ? { ocr_contact_review: true } : {}),
         ...(options.documentReview === true ? { document_review: true } : {}),
+        ...(reviewPolicy ? { review_policy: reviewPolicy } : {}),
         ...(contentOptions ? { content_options: contentOptions } : {}),
         queue: queue.map((entry) => ({
           name: entry.name, full: entry.full, sourceBytes: entry.sourceBytes,
@@ -776,6 +785,8 @@ function reviewStartErrorCode(error) {
 // Cowork receives a bounded start acknowledgement immediately and never sees
 // the token or waits for the review window to close.
 function startLocalReviewExecutor(token, options = {}) {
+  if (['reviewPolicy', 'review_policy', 'standalone_review_policy'].some(field => field in options))
+    throw Object.assign(Error('STANDALONE_REVIEW_POLICY_INVALID'), { code: 'STANDALONE_REVIEW_POLICY_INVALID' });
   assertLegacyContentOperation(options, 'contentOptions',
     (options.env || process.env).DATASECURE_PRODUCT_CHANNEL || 'plugin', 'resume');
   if (!TOKEN_RE.test(String(token || ''))) throw new SafeError('Batch-Sitzung ist ungültig.');

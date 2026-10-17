@@ -22,6 +22,7 @@ const { processingModeForBatch, isMarkdownBatch } = require('../core/processing-
 const { CONTENT_BATCH_SCHEMA, contentOptionsForBatch } = require('../core/content-options');
 const { contentOptionsDigest } = require('./content-options-binding');
 const { resultNamingModeForBatch } = require('../core/result-naming-mode');
+const { reviewPolicyForBatch } = require('../core/standalone-review-policy');
 const { validateCoverage, MAX_MARKDOWN_CHARS } = require('../standalone/markdown-contract');
 
 const SCHEMA = 'datasecure-batch/4';
@@ -80,6 +81,7 @@ function createBatchJournalStore(options = {}) {
     return `${state.product_channel || 'plugin'}:${processingModeForBatch(state)}:${resultNamingModeForBatch(state)}` +
       (state.ocr_contact_review === true ? `:ocr:${state.ocr_review_seed}` : ':ocr-off') +
       (state.standalone_document_review === true ? ':document-review' : ':document-review-off') +
+      `:review-policy:${reviewPolicyForBatch(state) || 'guided'}` +
       (content ? `:content:${contentOptionsDigest(content)}` : ':legacy-content');
   }
 
@@ -275,6 +277,7 @@ function createBatchJournalStore(options = {}) {
   }
 
   function validPseudonymState(state) {
+    try { reviewPolicyForBatch(state); } catch { return false; }
     if (Object.hasOwn(state || {}, 'ocr_contact_review_skipped') &&
         (state.ocr_contact_review_skipped !== true || state.product_channel !== 'standalone' ||
           state.processing_mode !== 'markdown-only' || state.ocr_contact_review !== true)) return false;

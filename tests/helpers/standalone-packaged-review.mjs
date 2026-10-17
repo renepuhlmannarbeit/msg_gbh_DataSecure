@@ -194,8 +194,13 @@ export async function runPackagedReviewScenario({ request: initialRequest, resta
     assert.ok(documents.documents.every(document => document.approved === false), 'technical success never grants human approval');
     const document = documents.documents[0];
     const decision = { action: 'approve', operation_id: crypto.randomBytes(16).toString('hex'),
-      output_sha256: document.output_sha256, revision: document.revision, ranges: [] };
-    const approved = await send('decide_document_review', { batch_id: row.batch_id, document_id: document.document_id, decision });
+      selection: documents.documents.map(value => ({ document_id: value.document_id, revision: value.revision, output_sha256: value.output_sha256 })) };
+    const batch = await send('decide_document_review_batch', { batch_id: row.batch_id, decision });
+    assert.equal(batch.operation_id, decision.operation_id); assert.equal(batch.affected_count, 4);
+    assert.ok(batch.documents.every(value => value.approved && value.revision === 1));
+    assert.deepEqual(await send('decide_document_review_batch', { batch_id: row.batch_id, decision }), batch,
+      'the real sidecar repeats only the acknowledgement of the exact common commit');
+    const approved = batch.documents.find(value => value.document_id === document.document_id);
     assert.equal(approved.approved, true, JSON.stringify({ ok: approved.ok,
       keys: Object.keys(approved), reason_code: approved.reason_code }));
     const operationId = crypto.randomBytes(16).toString('hex');

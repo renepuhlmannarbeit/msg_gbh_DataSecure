@@ -1,6 +1,114 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 16.10.2026 · Produktstand 3.2.0-rc162 · veröffentlicht Standalone RC161 (Mac- und Windows-Test-Pre-Release), Linux RC159 / Cowork RC151 · Teilkopie-/Dauerblockadefall und menschliche Zielhost-Abnahme offen
+Stand: 17.10.2026 · Produktstand 3.2.0-rc163 · veröffentlicht Standalone RC162 (Windows und beide Mac-Architekturen; M2-Abnahme offen), Linux RC159 / Cowork RC151 · lokaler Arbeitsstand nach RC162 noch nicht veröffentlicht
+
+## Integrierter Arbeitsplan nach RC162: Einfachheit ohne falsche Sicherheit
+
+Aktueller Auftrag RC163: Clippy-Befunde strukturell bereinigen, integrierte
+Regression ausführen, unabhängige Rust-/Workflow-/Paketreviews abschließen,
+Quellstand und Lockdateien lokal festhalten, frisches Windows-Engineering-ZIP
+erstellen und dessen Integrität, tatsächliche Prozesskette sowie native
+Bedienung prüfen. Die spätere M2-Version wird aus demselben Quellstand gebaut;
+kein Mac-Erfolg wird aus dem Windows-Test abgeleitet. Keine Veröffentlichung
+oder Änderung bestehender Releasearchive in diesem Auftrag.
+
+Lokal umgesetzte Durchsatzrunde: nichtfinale Datenchunks ohne Threadneustart;
+fertige Kopien pro ACK frisch einmal statt vierfach prüfen; unveränderlichen
+Plan-Digest nur innerhalb der Transaktionsinstanz wiederverwenden. Globale
+History-Namenssuche aufruflokal linear: 2 statt 320 Owner-Auflistungen;
+das vollständige Capture-Profil liest 1.280 statt 103.040 Einträge. Recovery- und
+Hinweiszugriffe erst nach Auswahl der höchstens 20 sichtbaren Zeilen.
+Echte Sidecar-Gegenprobe fand zusätzlich normale neue Review-Ordner während
+der Lektüre: höchstens ein vollständig frischer Leseversuch unter denselben
+Elternbindungen, kein Wiederholen von Lauf/Export. Quellreviews, echte
+Node→Rust-Kette und Windows-Rust 162/0/3 sowie Store 62/62 grün.
+Kein Mutex-Multiplexing, kein Lockverlust bei Timeout, kein M2-Test/Release.
+
+Lokal nach Neustart fortgeführt: Native Exportphasen und tatsächlich in der
+aktuellen Anfrage gestagte Dateien sind unabhängig vom Core-Lock beobachtbar;
+aus Aktivität wird niemals Erfolg abgeleitet. Erfolgsdialog nach dauerhaftem
+ACK sofort abschließen, optionalen Anzeige-Reload davon trennen und gegen
+einen dabei entdeckten anderen Auftrag schützen. History-Detail- und
+Öffnungsaktionen lesen gezielt ihren Lauf; vier bisher ungleich klassifizierte
+Leser verwenden die bestehende 300-Sekunden-Klasse. Das Exportbudget wird
+nicht verlängert. Rust 155 bestanden / 3 ignoriert, Renderer 84/84,
+128-Fremdläufe-Dateisystemprobe ohne globale Auflistung/fremde Dateiöffnungen,
+echte Prozessketten und Headless-Fokus/axe/Reflow grün. Kein neuer Release
+in dieser Runde; native Windows-/Mac-Paketabnahme bleibt ein eigenes Gate.
+
+Die getrennten Windows-, macOS- und Fach-/Bedienreviews wurden gegen
+Startkette, IPC, Verlaufs- und Dokumentzustand sowie die Tests abgeglichen.
+„Verarbeitung abgeschlossen“ belegt nur die technische Arbeit am Lauf;
+Dokumentfreigabe und KI-Kopie sind eigene, revisionsgebundene Tatsachen.
+Ein Hinweis schließt einen Lauf nicht wieder auf. Ein bekannter
+Datenschutzstopp oder eine unklare OCR-Fundstelle darf dagegen nicht als
+technisch sicher anonymisierte und geprüfte Datei dargestellt werden.
+
+### Lokal abgeschlossene Performance- und Diagnoserunde
+
+Der Anwender verschiebt die M2-Zielhostprobe ausdrücklich auf eine später
+neu erzeugte Testversion, die dann dem weiterentwickelten Quellstand
+entspricht. Das ist kein bestandenes Mac-Gate und blockiert die lokale
+Entwicklung nicht. Drei unabhängige Ketten wurden lokal umgesetzt:
+
+1. Export mit 115/200 synthetischen, tatsächlich gespeicherten Dokumenten
+   profilieren und nur redundante Arbeit innerhalb einer gesperrten Aktion
+   reduzieren. Keine dauerhaften Freigabe-/Integritätscaches.
+2. Den frühen Capture vor Retention bei vielen alten Läufen verschlanken.
+   Ein Index oder eine Zusammenfassung ist niemals Freigabe-/Exportautorität;
+   beschädigte oder fehlende Evidenz muss auf sicheren Abgleich zurückfallen.
+3. Ein inhaltsfreies Diagnosepaket ausdrücklich lokal speichern können,
+   einschließlich fehlender/unlesbarer Bestandteile. Ohne Core-Verbindung,
+   Shell, Adminrechte oder Hochladen; vorhandene Logs vor Weitergabe erneut
+   begrenzt und feldgebunden validieren. Keine Rohkopie beliebiger Dateien.
+
+Ergebnis: neue Exporte benötigen zwei statt vier vollständiger
+Quelldurchgänge, ohne den frischen Kopierdurchgang oder Zielbelege zu
+entfernen. Der frühe Capture verwendet bei unveränderten gebundenen Bytes
+einen Index; der 320er-Profillauf reduzierte wiederholte Review-Listen von
+320 auf eins (21,028 → 7,418 s Capture allein, Windows-Einzelmessung).
+„Diagnosepaket speichern“ erzeugt eine erneut bereinigte lokale JSON-Datei
+auch ohne Core; fehlende/gekürzte Teile sind gekennzeichnet. Store 62/62,
+Rust 147 bestanden / 3 ignoriert, echte Node→Rust-Kopie und erneute
+Headless-Oberflächenprobe grün. Native Picker und neue OS-Pakete bleiben offen.
+
+Quellreview, Messung und Negativfälle sind je Kette nötig. Eine neue
+Versionsnummer, Veröffentlichung und Windows-/Mac-Downloadpakete sind nicht
+Teil dieser lokalen Runde; sie folgen später aus einem festgelegten Stand.
+
+Zusatzauftrag: Integritätsprüfungen und Integrationstests nach Schutzwirkung,
+Vertrauensgrenze und Betriebssystem bewerten. Redundante Aufrufe innerhalb
+einer gebundenen Aktion dürfen entfallen; neue oder veränderbare Übergaben
+benötigen weiter einen eigenen Nachweis. Gemeinsame Inhalts-/Freigaberegeln
+bleiben einheitlich, native Datei-/Prozess-/Paketprüfungen sind getrennte
+Windows- und macOS-Gates. Die konkrete Prüfmatrix steht im Reviewbeleg.
+
+| Priorität | Vorhaben und Sicherheitsgrenze | Stand / Nachweis vor Abschluss |
+| --- | --- | --- |
+| P0 | M2/macOS 26.2: RC162 nach Download, Finder-Kopie und normaler Benutzeranmeldung mit Core-Ready, Datei-/Ordnerdialog, synthetischem Lauf und Diagnose prüfen. Keine Richtlinie abschalten. | **offen:** CI-Start und Signaturprüfung ersetzen diesen verwalteten Zielhost nicht; frühere RC161-SIGTRAP-Ursache bleibt plausible, nicht bewiesene JIT-Signaturlücke. |
+| P0 | Lange Aktionen dürfen die serielle Rust-/Core-IPC-Verbindung nicht als ausgefallen erscheinen lassen. Status und Bereitstellung bleiben nicht wiederholbar, bis ihre gespeicherte Antwort geklärt ist. | **lokal erweitert:** jede vor Versand abgelaufene Queue-Anfrage liefert jetzt `STANDALONE_IPC_BUSY`; ein unabhängiger Rust-Aktivitätsspeicher bleibt lesbar, während der Core-Kanal belegt ist. Kein Auftrag wird wiederholt und Aktivität belegt keinen Abschluss. Serieller Durchsatz, langes Warten und die Zielhostprobe bleiben offen. |
+| P0 | Core-Startfehler auf beiden OS vor Ready mit inhaltsfreien festen Ursachen protokollieren; Nutzer erhält sichere Wiederholungsanweisung statt Endlosschleife. | **lokal erweitert:** macOS-Signal- und Windows-NTSTATUS-Klassen sichtbar; nativer Zielhosttest und Fehler-Injektion für ZIP/DMG/Windows bleiben offen. Keine Rohpfade, Dateinamen, Dokumente oder ungeprüften `stderr` in Diagnose. |
+| P1 | Verlauf erst bei Bedarf rendern, Status während eines echten Abgleichs als „wird geprüft“ statt null anzeigen; den frühen dauerhaften Capture vor Aufbewahrungsbereinigung nicht blind asynchron machen. | **lokal umgesetzt:** Anzeige und inhaltsgebundener Capture-Index; 320er-FS-Profil und Negativfälle für Austausch, Beschädigung, gleiche Größe/mtime und Windows-Junction bestanden. Detail-/Öffnungsaktionen lesen nun den genauen Lauf; 128 fremde Läufe ohne fremde Dateiöffnungen/globale Auflistung geprüft. Index ist keine Freigabe-/Zielautorität. Geänderte Capture-Grundlagen brauchen weiterhin den vollen Abgleich; inkrementeller Capture-Leser und native Mac-Messung offen. Fünf statt 20 sichtbarer Zeilen allein spart diesen Aufwand nicht. |
+| P1 | Abschluss für erfolgreich, mit Hinweisen, ohne Ergebnisse und fehlgeschlagen prominent und laufgebunden zeigen; KI-Kopie gesondert belegen. Hilfen in Alltagssprache, optionale Sonderfunktionen einklappen. | **lokal erweitert:** auch Null-Ergebnis-Karte nur bei konsistentem Beleg; Tastatur-/Screenreader-/bediente OS-Proben bleiben offen. |
+| P1 | Erfolgreiche Anonymisierung darf vorhandene OCR-/Quellenhinweise nicht als Hinweisfreiheit ausgeben. | **lokal umgesetzt:** gebundene kleine Publikationsmetadaten liefern den Hinweisstatus. Eigener gesperrter Projektionscache erhält bekannte Mindestzahlen; Detailabfragen und Verlaufslisten überschreiben keine neueren Worker-Abschlüsse. Altbasis bleibt unbekannt. UI zeigt grün abgeschlossen plus gelben Hinweis und direkte Details, ohne Dokumentgrad, Freigabe oder Exportrecht zu verändern. Echte OCR-/Neustartkette und gezielte Race-/Migrationsfälle geprüft; native Paketabnahme offen. |
+| P1 | Freigabe vieler Dokumente von seriellen Einzelbefehlen auf einen revisionsgebundenen, idempotenten Batch-Befehl umstellen, ohne Teilfehler als Gesamterfolg auszugeben. | **lokal umgesetzt:** Oberfläche, Rust/ACL, privater IPC, Service und Store verwenden eine gemeinsame Auswahlentscheidung. 200 gespeicherte Dokumente, ein Journalabgleich, ein Commit; stale/Restbefund/Commitfehler und verlorene Antworten werden geprüft. Tatsächliche Laufzeit und native Bedienprobe des neuen Pakets offen. |
+| P1 | Export von 115–200 Dateien: Vorschau, Kopieren, Verifikation und Beleg jeweils inhaltsfrei zeitlich messen; UI zeigt verstrichene Zeit und trennt „arbeitet“ von „fertig“. | **lokal erweitert:** feste Phasendiagnose, monotone Dauer und auftragsgebundener nativer Dateizähler ohne Core-Lock. Gestagt ist nicht fertig; Erfolg nach ACK unabhängig vom Anzeige-Reload und geschützt vor anderem offenen Auftrag. Vorbereitung zusammengeführt, zwei statt vier Quelldurchgänge, Restdaten-/Zielprüfung und Lost-ACK unverändert. 115er-Node- und 200er-JS-Nativevorbereitungsprofil dokumentiert; letzteres ist keine Rust-/Mac-Durchsatzmessung. Echte Node→Rust-Integration grün; langsame Volumes, absolute 300-Sekunden-Exportfrist, verbleibende Wartezeit und native Paketprobe offen. |
+| P1 | Diagnose bei fehlendem oder beschäftigtem Core als einzelne lokale Datei speichern, ohne private Daten weiterzugeben. | **lokal umgesetzt:** nativer unabhängiger Save-Befehl, geschlossene erneute Feldvalidierung, aktuelle/tail-priorisierte Logs, feste Ressourcenlimits und ehrliche Unvollständigkeit. Windows-Hardlink-/Junction-/Append-Fälle und Disconnected-/Busy-UI geprüft. Native Dialogbedienung beider OS bleibt Paketgate. |
+| P1 | OCR-Kontaktwerte mit identischer Normalform dokumentübergreifend gemeinsam behandeln, aber nur bei exakter Übereinstimmung und ausdrücklich gebundener Auswahl; abweichende Zeichen bleiben sichtbar. | **teilweise umgesetzt:** Auswahlhilfe für Doppelwerte vorhanden; native 97-Fundstellen-Probe und Nachweis gegen versehentliche Gleichsetzung unterschiedlicher Werte offen. |
+| P1 | OCR-Schalter und Hilfetext fachlich angleichen; Scan-/Bild-OCR getrennt nur mit durchgängiger Auswahlbindung und Ergebnistests. | **revalidiert:** Der gemeinsame ausdrückliche OCR-Schalter bleibt im Hauptweg. Bei selektiver PDF-OCR verlangt der vorhandene Core eine Bereichsentscheidung (`PDF_OCR_SCOPE_UNVERIFIED`); zwei bloße Schalter würden Dateien zusätzlich anhalten. Hilfetext korrigiert. Eine getrennte Bereichsauswahl ist eine optionale spätere Funktion, kein stiller Standardwechsel. |
+| P1 | Dateinamenwahl beim Anonymisierungslauf, Freigabe und anschließenden Export verständlich unterscheiden; nach erfolgreicher KI-Kopie nicht zu einer scheinbar offenen Pflichtaktion zurückkehren. | **lokal teilweise umgesetzt:** Name plus „-anonymisiert“ ist für neue Läufe wieder wählbar; KI-Kopien bleiben neutral benannt. Nach Beleg wird die Auswahl aufgehoben. Native Langlauf-/Bedienprobe offen. |
+| P1 | Erstinstallation ohne vorhandenen Ergebnisordner als normalen Zustand behandeln; Schreibverweigerung beim ersten echten Lauf verständlich abfangen. | **lokal umgesetzt:** nur der Start legt den Standardordner an, `STANDALONE_RESULT_ROOT_UNAVAILABLE` verweist auf eine ausdrückliche andere lokale Ordnerwahl. Das Mac-Bundle erklärt den Zugriff auf „Dokumente“ in seiner System-Berechtigungsbeschreibung; dies erteilt selbst keine Berechtigung. Quelltest für fehlende Konfiguration und verweigerte Anlage bestanden; nativer verwalteter Mac- und Windows-Erststart noch offen. Der RC161-SIGTRAP trat bereits vor dieser Logik auf. |
+| P1 | macOS-Speicherort beim ersten Lauf: „Dokumente“ bleibt ein Vorschlag für benutzerseitige Ergebnisse; verweigerte oder verlorene Ziele ausdrücklich erneut prüfen oder ändern. | **lokal umgesetzt:** Konfigurationszustand und Identität sind gebunden, verlorene Ziele wechseln nicht zum Standard. Die UI bietet „Ordner erneut prüfen“ und erhält die Auswahl. Native Ordnerwahl bleibt vorhanden; tatsächliche TCC-/Core-Schreibprobe auf M2 offen. Vor Core-Ready behebt ein anderer Ergebnisordner den frühen Prozessabbruch nicht. |
+| P1 | Fastweg: bekannte Unsicherheiten ohne manuelle Rückfragen behandeln, Herkunft ehrlich zeigen und KI-Export getrennt halten. | **lokal integriert:** ausdrückliche Startwahl `automatic-conservative`, geschlossene Übergabe bis zum Worker, unveränderlicher Journal-/Manifestanker. Bekannte Mehrdeutigkeiten und OCR-Kontaktkorridore werden maskiert, nicht menschlich bestätigt. Nur tatsächlich veröffentlichte, endgeprüfte Revision 0 erhält Erstfreigabe; Änderung/Widerruf bleibt wirksam. Echte projizierte Core-/Worker-/OCR-Kette mit Neustart und ausdrücklichem KI-Export bestanden. Dabei gefundene Kanonisierungs-, Profil- und `/4`-Exportübergaben korrigiert. Neu gebautes Windows-/Mac-Paket, bediente Windows-Probe und M2-Abnahme bleiben gesonderte offene Gates. |
+| P2 | Ein gemeinsamer fachlicher Core mit kleinen OS-Adaptern statt getrennten Produktkopien. Mac-Bundle-Code Apple-konform platzieren, Developer-ID-Signierung/Notarisierung für reguläre Verteilung ergänzen; Windows-Dateidialog, Prozessende und Paket-Smoke separat abnehmen. | **offen:** ZIP/DMG-CI und Windows-Start sind Teilnachweise, keine verwaltete M2- oder vollständige Windows-Abnahme. |
+
+Reihenfolge: zuerst P0-Verbindungs- und Startkette mit reproduzierbarer
+Zielhostdiagnose, dann die langsamen revisionsgebundenen Aktionen, dann
+Fastweg nur mit ausdrücklich geklärter Aussagekraft des Freigabestatus.
+Ein neuer Release wird erst aus einem erneut verifizierten, unveränderten
+Quellstand und den jeweiligen Zielhost-Gates abgeleitet.
+
+[Quellcodeketten, unabhängige Revalidierung und Grenzen dieser Runde](../acceptance/POST_RC162_BATCH_IPC_FOLDER_REVIEW_20261017.md).
 
 **P0 – M2/macOS 26.2: Core-Absturz vor Ready (RC161 ZIP und DMG):**
 Desktop-Diagnosen belegen 16 erfolgreiche Prozessstarts mit anschließendem

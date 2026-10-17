@@ -38,12 +38,18 @@ async function run(argv = process.argv.slice(2), options = {}) {
       const messages = {
         blocked: 'DataSecure ist nicht bereit.',
         processing: 'Die Dateien werden lokal verarbeitet.',
+        preparing: 'Die lokale Verarbeitung wird vorbereitet.',
+        paused: 'Der Lauf ist pausiert. Gespeicherte Ergebnisse bleiben erhalten.',
+        failed: 'Die Verarbeitung ist unterbrochen; ein vollständiger Laufabschluss ist nicht bestätigt. Bitte den gespeicherten Laufstatus prüfen.',
+        export_abandoned: 'Die Bereitstellung wurde aufgegeben. Ein vollständiger Ergebnisordner ist nicht bestätigt.',
         review_required: 'Eine lokale Prüfung ist erforderlich.',
         stopped: 'Ein unterbrochener Stapel kann fortgesetzt werden.',
         export_pending: status.completion_pending === true
           ? 'Die lokale Abschlussübersicht wird bereitgestellt.'
           : 'Anonymisierte Ergebnisse werden lokal bereitgestellt.',
-        results_available: `${status.result_count} anonymisierte Ergebnisse sind verfügbar.`,
+        results_available: status.processing_mode === 'markdown-only'
+          ? `${status.result_count} Markdown-Ergebnisse sind verfügbar. Nicht anonymisiert.`
+          : `${status.result_count} anonymisierte Ergebnisse sind verfügbar.`,
         completed_without_results: `${status.failed_count} Datei${status.failed_count === 1 ? ' wurde' : 'en wurden'} sicher gestoppt; es ist kein anonymisiertes Ergebnis verfügbar.`,
         ready: 'DataSecure ist bereit.'
       };

@@ -34,6 +34,15 @@
     "raw_correction": "markdown-only-bounded-explicit-range-replacement",
     "ai_export": "selected-approved-current-anonymization-revisions-only",
     "raw_export": "separate-non-anonymized-markdown-copy-namespace",
+    "automatic_initial_approval": {
+      "default_enabled": false,
+      "start_policy": "automatic-conservative",
+      "purpose": "standalone-markdown-and-anonymize-content-contract-only",
+      "uncertainty": "mask-known-ambiguities-and-ocr-contact-corridors-before-existing-final-gates",
+      "authority": "immutable-run-policy-verified-published-basis-revision-zero-only",
+      "provenance": "automatic-not-human-reviewed",
+      "later_edit_or_revocation": "never-automatically-reapproved"
+    },
     "automatic_export": false
   },
   "renderer_receives_open_target": false,
@@ -74,6 +83,7 @@
     "export_abandoned",
     "results_available",
     "completed_without_results",
+    "failed",
     "blocked"
   ],
   "commands": [
@@ -100,6 +110,7 @@
     "get_document_review_chunk",
     "get_document_entities",
     "decide_document_review",
+    "decide_document_review_batch",
     "export_approved_documents",
     "abandon_document_export",
     "open_document_export",

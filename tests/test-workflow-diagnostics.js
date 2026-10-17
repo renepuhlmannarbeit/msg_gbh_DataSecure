@@ -54,6 +54,15 @@ test('workflow events retain only fixed lifecycle metadata', () => {
   assert.doesNotMatch(encoded, /Mitarbeiterprofil|Personal|Mustermann|secret|raw_content|filename|path|hash|message/i);
 });
 
+test('failed content stages retain a fixed boundary and time without reflecting the original exception', () => {
+  for (const phase of ['content_prepare', 'content_extract', 'content_privacy', 'content_verify', 'content_publish', 'content_ack']) {
+    const value = sanitizeWorkflowEvent({ event: 'content_operation_failed', phase, outcome: 'stopped',
+      duration_ms: 1234, error_code: 'PRIVATE_SENTINEL', message: 'private@example.invalid', path: '/private/source.png' }, { now: NOW });
+    assert.equal(value.event, 'content_operation_failed'); assert.equal(value.phase, phase); assert.equal(value.duration_ms, 1234);
+    assert.equal(value.error_code, 'INTERNAL_FAILURE'); assert.doesNotMatch(JSON.stringify(value), /PRIVATE_SENTINEL|private@example|source\.png/u);
+  }
+});
+
 test('recorded lifecycle identifies a notice boundary without document data', () => {
   const dataRoot = path.join(base, 'lifecycle');
   for (const [index, event] of [

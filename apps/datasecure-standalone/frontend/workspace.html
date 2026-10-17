@@ -25,6 +25,8 @@
     <p id="connection-status" role="status" aria-live="polite">Der letzte Laufstatus ist nicht bestätigt. Bitte keinen zweiten Lauf starten und keine Ergebnisse als vollständig ansehen. Die inhaltsfreie lokale Diagnose ist auch ohne Verbindung erreichbar.</p>
     <button id="connection-retry" type="button">Verbindung und Laufstatus prüfen</button>
     <button id="connection-diagnostics" type="button">Diagnose öffnen</button>
+    <button id="connection-diagnostic-save" type="button">Diagnosepaket speichern</button>
+    <p id="connection-diagnostic-save-status" class="meta" role="status" aria-live="polite" hidden></p>
   </div>
   <p id="job-announcement" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></p>
   <section id="run-guide" class="run-guide" aria-label="Aktueller Lauf und nächster Schritt" hidden>
@@ -38,11 +40,16 @@
         <h2 class="step-heading"><span class="step-number">1</span> Aufgabe wählen</h2>
         <fieldset class="task-cards"><legend class="sr-only">Verarbeitung</legend>
           <label class="task-card"><input id="mode-markdown" name="mode" type="radio" value="markdown-only"><span><strong>Nur umwandeln</strong><span>Text und Tabellen als gut lesbare Markdown-Dateien übernehmen – ohne Bilder und Bildverweise.</span><small>Inhalte und ursprüngliche Dateinamen bleiben erhalten · nur die Endung wird .md</small></span></label>
-          <label class="task-card"><input id="mode-anonymize" name="mode" type="radio" value="markdown-and-anonymize"><span><strong>Umwandeln und anonymisieren</strong><span>Namen, Adressen, Kontaktdaten und Firmen im Markdown ersetzen.</span><small>Bei Bildern und Scans wird Text lokal per OCR gelesen. Erkannte Kontaktwerte und unklare Fundstellen müssen geprüft werden. Erst eine gesonderte Dokumentfreigabe erlaubt den KI-Export.</small></span></label>
+          <label class="task-card"><input id="mode-anonymize" name="mode" type="radio" value="markdown-and-anonymize"><span><strong>Umwandeln und anonymisieren</strong><span>Namen, Adressen, Kontaktdaten und Firmen im Markdown ersetzen.</span><small>Text aus Bildern und Scans wird nur gelesen, wenn du unten OCR einschaltest. Erkannte Kontaktwerte und unklare Fundstellen können eine Prüfung erfordern. Erst eine gesonderte Dokumentfreigabe erlaubt den KI-Export.</small></span></label>
         </fieldset>
+        <div id="fast-anonymize-option" hidden>
+          <label class="option"><input id="fast-anonymize" type="checkbox" aria-describedby="fast-anonymize-help"> Schnellweg: automatisch anonymisieren und freigeben</label>
+          <p id="fast-anonymize-help" class="muted">Erkannte persönliche Angaben und bekannte unklare Stellen werden automatisch ersetzt. Erfolgreiche Ergebnisse sind automatisch freigegeben, aber nicht manuell geprüft. Dabei kann mehr Text entfernt werden; Fehler bleiben möglich. Eine KI-Kopie erstellst du anschließend selbst – kein Upload.</p>
+          <details class="history-help"><summary>Was macht der Schnellweg mit unsicheren Stellen?</summary><p>Bekannte mehrdeutige Fundstellen werden maskiert statt dir zur Entscheidung vorgelegt. Auch erkannte E-Mail-/Telefonbereiche aus Bildern werden vollständig ersetzt, ohne ihre OCR-Schreibweise als richtig zu bestätigen. Die technischen Abschlussprüfungen bleiben aktiv. Nicht lesbare oder nicht sicher prüfbare Dateien werden mit einem Grund ausgelassen. Du kannst fertige Ergebnisse später freiwillig nachbearbeiten; jede Änderung hebt ihre Freigabe auf.</p></details>
+        </div>
         <div id="text-ocr-options" hidden>
           <label class="option"><input id="text-ocr" type="checkbox" aria-describedby="text-ocr-help"> Text aus Scans, Bildern und Grafiken per OCR lesen</label>
-          <p id="text-ocr-help" class="muted">Nur nach deiner Auswahl: Texterkennung läuft ausschließlich lokal. Übernommen wird der erkannte Text, nicht das Bild oder dessen Code. Ohne Häkchen wird nur vorhandener Text gelesen; reine Scans und Bilddateien werden mit einem Hinweis gemeldet. OCR kann Zeichen falsch erkennen. Bei „Nur umwandeln“ ist die spätere Markdown-Nachkorrektur freiwillig; bei Anonymisierung bleiben Fundstellen- und Dokumentprüfung vor dem KI-Export erforderlich.</p>
+          <p id="text-ocr-help" class="muted">Nur nach deiner Auswahl: Texterkennung läuft ausschließlich lokal. Übernommen wird der erkannte Text, nicht das Bild oder dessen Code. Ohne Häkchen wird nur vorhandener Text gelesen; reine Scans und Bilddateien werden mit einem Hinweis gemeldet. OCR kann Zeichen falsch erkennen. Bei „Nur umwandeln“ ist die spätere Markdown-Nachkorrektur freiwillig. Bei geführter Anonymisierung entscheidest du über offene Fundstellen und Dokumentfreigabe selbst; im Schnellweg geschieht dies automatisch durch Maskierung und gekennzeichnete Erstfreigabe.</p>
         </div>
         <label id="ocr-option" class="option" hidden><input id="ocr-review" type="checkbox" aria-describedby="ocr-option-help"> E-Mail-Adressen und Telefonnummern aus OCR vor Abschluss mit dem Original vergleichen</label>
         <p id="ocr-option-help" class="muted" hidden>Zusätzliche Prüfung nur bei eingeschalteter OCR: Wenn solche Werte erkannt wurden, hält der Lauf nach der aktuellen Verarbeitung an. Erst dann entscheidest du, ob du sie prüfst und korrigierst oder ungeprüft fortfährst. Die Texterkennung selbst bleibt in beiden Fällen aktiv. Wie viele Werte gefunden werden, ist vorher nicht bekannt; andere OCR-Texte werden dadurch nicht geprüft. Die spätere Markdown-Nachkorrektur bleibt freiwillig.</p>
@@ -72,7 +79,7 @@
         </div>
       </div>
       <div class="card-footer start-row">
-        <div class="destination"><span class="meta">Ergebnisse werden gespeichert in</span><strong id="destination">Wird geladen …</strong><button id="change-destination" class="text-button">Ordner ändern</button></div>
+        <div class="destination"><span class="meta">Ergebnisse werden gespeichert in</span><strong id="destination">Wird geladen …</strong><button id="retry-destination" class="text-button" hidden>Ordner erneut prüfen</button><button id="change-destination" class="text-button">Ordner ändern</button></div>
         <div class="start-control"><button id="start" class="primary" aria-disabled="true" aria-describedby="start-hint">Verarbeitung starten <span aria-hidden="true">→</span></button><span id="start-hint" class="meta">Bitte Aufgabe und Dateien auswählen.</span></div>
       </div>
     </div>
@@ -95,12 +102,14 @@
   </section>
   <section id="history-view" class="card" role="tabpanel" aria-labelledby="nav-history" hidden>
     <div class="card-section"><div class="section-heading"><div><h2>Deine letzten Verarbeitungen</h2><p class="muted">Offene Prüfungen und Ergebnisse bleiben diesem Gerät zugeordnet.</p></div><button id="refresh-history">Aktualisieren</button></div>
-    <p id="history-status" class="meta" role="status"></p><div id="history-list" class="history-list"></div></div>
+    <p id="history-status" class="meta" role="status"></p>
+    <details class="history-help"><summary>Was bedeutet „fertig“ bei einer Anonymisierung?</summary><p><strong>Lauf abgeschlossen:</strong> DataSecure hat alle ausgewählten Dateien bearbeitet oder mit einem Grund ausgelassen. Auch ein Lauf mit Hinweisen ist abgeschlossen. <strong>Dokumente freigegeben:</strong> Im geführten Weg bestätigst du die gewünschten Ergebnisse selbst; im Schnellweg erfolgt die Erstfreigabe automatisch und ist entsprechend gekennzeichnet. <strong>KI-Kopie abgeschlossen:</strong> Die ausdrücklich ausgewählten, freigegebenen Textstände wurden in einen lokalen Exportordner kopiert. Keine dieser Stufen lädt etwas zu einer KI hoch.</p></details>
+    <div id="history-list" class="history-list"></div></div>
   </section>
   <section id="settings-view" class="card" role="tabpanel" aria-labelledby="nav-settings" hidden>
     <div class="card-section"><h2>Einstellungen</h2><p class="muted">Alles bleibt lokal. Kein Konto und kein App-Passwort erforderlich.</p>
-      <div class="setting-row"><div><h3>Ergebnisordner</h3><p id="settings-destination" class="path"></p><p class="meta">Änderungen gelten für künftige Verarbeitungen.</p></div><button id="configure-results">Ordner ändern</button></div>
-      <div class="setting-row"><div><h3>Diagnose</h3><p class="meta">Technische Fehlercodes, ohne Dateinamen, Pfade oder Dokumentinhalte.</p></div><button id="diagnostics">Diagnose öffnen</button></div>
+      <div class="setting-row"><div><h3>Ergebnisordner</h3><p id="settings-destination" class="path"></p><p class="meta">Änderungen gelten für künftige Verarbeitungen.</p></div><div class="button-row"><button id="retry-results" hidden>Ordner erneut prüfen</button><button id="configure-results">Ordner ändern</button></div></div>
+      <div class="setting-row"><div><h3>Diagnose</h3><p class="meta">Für die Fehlersuche: ein lokales JSON-Diagnosepaket ohne Dokumentinhalte, Dateinamen oder Pfade speichern. Fehlende oder gekürzte Protokolle werden im Paket gekennzeichnet. Es wird nichts hochgeladen.</p><p id="diagnostic-save-status" class="meta" role="status" aria-live="polite" hidden></p></div><div class="button-row"><button id="diagnostics">Diagnose öffnen</button><button id="diagnostic-save" type="button">Diagnosepaket speichern</button></div></div>
       <div class="setting-row"><div><h3>Vertrauliche Zuordnungen</h3><p class="meta">Enthalten echte Identitäten. Nicht an KI weitergeben. Keine automatische Löschung.</p></div><button id="identities">Lokalen Ordner öffnen</button></div>
     </div>
   </section>
@@ -112,6 +121,7 @@
       <ol id="documents-main-guide" class="document-main-guide" hidden><li><strong>Vergleichen:</strong> Links eine Datei öffnen und Originaltext mit dem geplanten anonymisierten Markdown rechts vergleichen.</li><li><strong>Freigeben:</strong> Nur geprüfte Dateien anhaken und „Auswahl freigeben“ klicken. Das speichert die Freigabe, erstellt aber noch keine KI-Kopie.</li><li><strong>Optional exportieren:</strong> Erst danach „Auswahl für KI exportieren“ wählen und den Kopiervorgang ausdrücklich bestätigen.</li></ol>
       <div id="documents-loading" class="document-loading" role="status" hidden><span class="working" aria-hidden="true">⚙</span><strong id="documents-loading-text">Dokumente und Hinweise werden geladen …</strong></div>
       <p id="documents-status" class="notice" role="status"></p>
+      <section id="documents-completion" class="document-completion" aria-label="Abgeschlossene lokale Kopie" hidden><h3 id="documents-completion-title">Lokale Kopie abgeschlossen</h3><p id="documents-completion-text"></p><button id="documents-completion-history" type="button">Abschluss im Verlauf ansehen</button></section>
       <section id="documents-bulk-progress" class="document-bulk-progress" role="status" aria-live="polite" hidden><h3 id="documents-bulk-title">Freigaben werden gespeichert</h3><p id="documents-bulk-count"></p><progress id="documents-bulk-meter" value="0" max="1"></progress><p class="meta">Bitte dieses Fenster geöffnet lassen. Erst die bestätigten Entscheidungen zählen; danach wird der gespeicherte Stand erneut abgeglichen.</p></section>
       <div id="documents-review-controls">
       <section id="documents-unavailable" aria-label="Hinweise und nicht verfügbare Dateien" hidden></section>
@@ -127,7 +137,7 @@
       </div>
       <details id="documents-approval-extras" class="document-extra-actions" hidden><summary>Freigaben verwalten (optional)</summary><p class="meta">Wenn du einen Textstand doch noch nicht freigeben möchtest: betroffene Dateien anhaken und die Freigabe ausdrücklich widerrufen. Bereits erstellte KI-Kopien bleiben unverändert.</p><button id="documents-revoke">Freigaben widerrufen</button></details>
       <div class="documents-layout">
-        <div id="documents-list" class="documents-list" aria-label="Dokumente dieses Laufs"></div>
+        <div id="documents-list" class="documents-list" role="region" tabindex="0" aria-label="Dokumente dieses Laufs"></div>
         <div class="document-detail">
           <h3 id="document-name" tabindex="-1">Dokument auswählen</h3><p id="document-revision" class="meta"></p>
           <div class="button-row document-pagination"><button id="document-previous">Vorherige Datei</button><span id="document-position" class="meta"></span><button id="document-next">Nächste Datei</button></div>
@@ -165,10 +175,10 @@
       <h2 id="document-export-title">Auswahl exportieren</h2>
       <p id="document-export-purpose"></p><p id="document-export-target" class="path"></p>
       <p class="meta">Der Ergebnisordner ist eine lokale Einstellung, die auch für künftige Läufe gilt. Vorhandene Exporte werden bei einer Änderung nicht verschoben. Die Ordnerwahl startet noch keine Kopie.</p>
+      <p id="document-export-result" role="status" tabindex="0" hidden></p>
       <div id="document-export-preview"><h3 id="document-export-filenames-heading">Enthalten · neutrale Dateinamen</h3><ul id="document-export-files"></ul>
         <div class="export-exclusions"><h3>Nicht enthalten</h3><p>Originaldateien, Identitätszuordnung, Dateizuordnung, private Prüfstände und technische Begleitdateien.</p></div>
       </div>
-      <p id="document-export-result" role="status" hidden></p>
       <label id="document-export-abandon-option" hidden><input id="document-export-abandon-check" type="checkbox"> Diesen unvollständigen Exportauftrag nicht weiter verfolgen. Bereits geschriebene Dateien werden nicht gelöscht.</label>
       <div class="button-row"><button id="document-export-close" autofocus>Abbrechen</button><button id="document-export-abandon" hidden>Auftrag nicht weiter verfolgen</button><button id="document-export-configure" hidden>Ergebnisordner wählen/ändern</button><button id="document-export-confirm" class="primary">Exportieren</button></div>
     </div>

@@ -140,6 +140,23 @@ testAsync('repeated core startup failures stop automatic attempts but keep an ex
   assert.equal(h.calls.some(call => call.command === 'start_admitted_batch'), false);
 });
 
+testAsync('a busy serial Core status lookup is not treated as a disconnection or retried mutation', async () => {
+  let reads = 0;
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_public_state' && ++reads <= 2) throw Error('STANDALONE_IPC_BUSY');
+    return fallback();
+  } });
+  await tick(); await tick();
+  assert.equal(reads, 1);
+  assert.doesNotMatch(h.el('feedback').textContent, /Verbindung.*unterbrochen|STANDALONE_IPC_BUSY/u);
+  await h.poll();
+  assert.equal(reads, 2);
+  assert.doesNotMatch(h.el('connection-status').textContent, /Automatische Verbindungsversuche sind angehalten/u);
+  await h.poll();
+  assert.equal(reads, 3);
+  assert.equal(h.calls.some(call => call.command === 'start_admitted_batch'), false);
+});
+
 testAsync('a native Mac core trap is explained and stops automatic retry after the first failure', async () => {
   const h = harness({ invoke(command, args, fallback) {
     if (command === 'get_public_state') throw Error('STANDALONE_SIDECAR_SIGNAL_TRAP');
@@ -156,6 +173,67 @@ testAsync('a native Mac core trap is explained and stops automatic retry after t
   assert.equal(h.calls.some(call => call.command === 'start_admitted_batch'), false);
 });
 
+testAsync('an explicit busy status check can read native activity while Core is occupied and never replays work', async () => {
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_public_state') throw Error('STANDALONE_IPC_BUSY');
+    if (command === 'get_native_recovery_status') return { phase: 'owned', local_ui_only: true, external_disclosure: false,
+      activity: { state: 'active', active: true, action: 'export_approved_documents', phase: 'native', elapsed_ms: 42000 } };
+    return fallback();
+  } });
+  await tick(); await tick(); await h.act('connection-retry'); await tick();
+  assert.match(h.el('feedback').textContent, /ausgewählte Kopie.*42 Sekunden.*Abschluss steht noch aus/u);
+  assert.equal(h.calls.some(call => ['start_admitted_batch', 'export_approved_documents', 'decide_document_review_batch'].includes(call.command)), false);
+});
+
+testAsync('a missing configured destination stays visible and blocks Start until an explicit folder change', async () => {
+  let unavailable = true;
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_ui_context') return { ...fallback(), result_folder: '', result_folder_status: 'unavailable' };
+    if (command === 'select_folder') { const result = fallback(); result.ui_context.result_folder_status = 'unavailable'; return result; }
+    if (command === 'configure_results') { unavailable = false; return { local_ui_only: true, external_disclosure: false, result_folder: 'New local results' }; }
+    return fallback();
+  } });
+  await tick(); await tick(); await h.act('select-folder'); h.el('mode-markdown').checked = true; await h.act('mode-markdown', 'change');
+  assert.match(h.el('destination').textContent, /Bisheriger Ergebnisordner nicht verfügbar/u);
+  await h.act('start'); assert.equal(h.calls.some(call => call.command === 'start_admitted_batch'), false);
+  await h.act('configure-results'); assert.equal(unavailable, false);
+  assert.equal(h.el('destination').textContent, 'New local results');
+  await h.act('start'); assert.equal(h.calls.filter(call => call.command === 'start_admitted_batch').length, 1);
+});
+
+testAsync('a restored original destination can be rechecked without a restart or a new selection', async () => {
+  let available = false;
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_ui_context') return { ...fallback(), result_folder_status: available ? 'available' : 'unavailable',
+      result_folder: available ? 'Original local results' : '' };
+    if (command === 'select_folder') { const result = fallback(); result.ui_context.result_folder_status = 'unavailable'; return result; }
+    return fallback();
+  } });
+  await tick(); await h.act('select-folder'); h.el('mode-markdown').checked = true; await h.act('mode-markdown', 'change');
+  assert.equal(h.el('retry-destination').hidden, false);
+  const selectedIds = h.model.catalogue.filter(row => row.selectable).map(row => row.source_id);
+  available = true; await h.act('retry-destination');
+  assert.equal(h.el('retry-destination').hidden, true); assert.equal(h.el('destination').textContent, 'Original local results');
+  await h.act('start');
+  assert.deepEqual(h.calls.find(call => call.command === 'start_admitted_batch').args.sourceIds, selectedIds);
+  assert.equal(h.calls.filter(call => call.command === 'select_folder').length, 1);
+  assert.equal(h.calls.some(call => call.command === 'configure_results'), false);
+});
+
+testAsync('a native Windows loader failure is distinguished from IPC timeout and not retried automatically', async () => {
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_public_state') throw Error('STANDALONE_SIDECAR_WINDOWS_DLL_MISSING');
+    return fallback();
+  } });
+  await tick(); await tick();
+  assert.equal(h.calls.filter(call => call.command === 'get_public_state').length, 1);
+  assert.match(h.el('feedback').textContent, /Programmkomponente fehlt/u);
+  assert.match(h.el('connection-status').textContent, /Automatische Verbindungsversuche sind angehalten/u);
+  await h.poll();
+  assert.equal(h.calls.filter(call => call.command === 'get_public_state').length, 1);
+  assert.equal(h.calls.some(call => call.command === 'start_admitted_batch'), false);
+});
+
 testAsync('a trap during initial context loading blocks pickers and waits for explicit retry', async () => {
   const h = harness({ invoke(command, args, fallback) {
     if (command === 'get_ui_context') throw Error('STANDALONE_SIDECAR_SIGNAL_TRAP');
@@ -168,6 +246,22 @@ testAsync('a trap during initial context loading blocks pickers and waits for ex
   assert.equal(h.calls.filter(call => call.command === 'select_folder').length, 0);
   await h.poll();
   assert.equal(h.calls.filter(call => call.command === 'get_public_state').length, 0);
+  assert.equal(h.calls.some(call => call.command === 'start_admitted_batch'), false);
+});
+
+testAsync('a busy initial Core context waits without claiming a broken connection', async () => {
+  let contexts = 0;
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_ui_context' && ++contexts === 1) throw Error('STANDALONE_IPC_BUSY');
+    return fallback();
+  } });
+  await tick(); await tick();
+  assert.match(h.el('feedback').textContent, /Core beendet noch einen Vorgang/u);
+  assert.doesNotMatch(h.el('feedback').textContent, /Verbindung.*unterbrochen/u);
+  await h.act('select-folder');
+  assert.equal(h.calls.filter(call => call.command === 'select_folder').length, 0);
+  await h.poll();
+  assert.equal(contexts, 2);
   assert.equal(h.calls.some(call => call.command === 'start_admitted_batch'), false);
 });
 
@@ -285,6 +379,25 @@ testAsync('anonymization can retain a source filename with suffix only when expl
   await h.act('start');
   const args = h.calls.find(call => call.command === 'start_admitted_batch').args;
   assert.equal(args.outputNamingMode, 'source-with-suffix');
+});
+
+testAsync('Fastweg is explicit for a new anonymization and cannot leak into raw or later tasks', async () => {
+  const h = harness(); await tick(); await h.act('select-folder');
+  h.el('mode-anonymize').checked = true; await h.act('mode-anonymize', 'change');
+  assert.equal(h.el('fast-anonymize-option').hidden, false); assert.equal(h.el('fast-anonymize').checked, false);
+  h.el('fast-anonymize').checked = true; await h.act('fast-anonymize', 'change'); await h.act('start');
+  assert.equal(h.calls.find(call => call.command === 'start_admitted_batch').args.reviewPolicy, 'automatic-conservative');
+  h.model.state = { state: 'results_available', batch_id: A, processing_mode: 'markdown-and-anonymize',
+    selected_count: 3, completed_count: 3, result_count: 3, results_available: true };
+  await h.poll();
+  await h.act(h.el('job-actions').children.find(node => node.textContent === 'Neue Verarbeitung'));
+  assert.equal(h.el('fast-anonymize').checked, false);
+  await h.act('select-folder'); h.el('mode-anonymize').checked = true; await h.act('mode-anonymize', 'change');
+  h.el('fast-anonymize').checked = true;
+  h.el('mode-markdown').checked = true; await h.act('mode-markdown', 'change');
+  assert.equal(h.el('fast-anonymize').checked, false); assert.equal(h.el('fast-anonymize-option').hidden, true);
+  await h.act('start');
+  assert.equal(h.calls.filter(call => call.command === 'start_admitted_batch').at(-1).args.reviewPolicy, undefined);
 });
 
 testAsync('Markdown-only does not send anonymization naming even after changing the setup choice', async () => {
@@ -489,6 +602,124 @@ testAsync('history loads approval metadata only on demand and distinguishes old 
   assert.equal(h.calls.filter(row => row.command === 'get_document_review_history_summary').length, 2);
 });
 
+testAsync('the completed-copy link loads only its own durable history summary after explicit navigation', async () => {
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_document_review_history_summary') return reviewSummary({ reviewable_count: 2,
+      approved_count: 2, recorded_export_count: 1, current_exported_count: 2 });
+    return fallback();
+  } }); await tick();
+  h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', selected_count: 2,
+    result_count: 2, failed_count: 0, status: 'results_available', results_available: true, result_location: 'available' }];
+  h.el('nav-history').dataset.openSummaryBatchId = B;
+  await h.act('nav-history'); await tick();
+  assert.equal(h.el('nav-history').dataset.openSummaryBatchId, undefined);
+  assert.equal(h.el(`history-${B}-summary`).hidden, false);
+  assert.equal(h.calls.filter(call => call.command === 'get_document_review_history_summary').length, 1);
+  assert.match(h.el('history-list').textContent, /KI-Kopie mit Abschlussbeleg/u);
+  assert.equal(h.doc.activeElement, h.el('history-list').children[0]);
+  noAutomaticDecision(h);
+});
+
+testAsync('a failed post-copy history read never re-labels a completed copy as absent', async () => {
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_document_review_history_summary') throw Error('STANDALONE_IPC_TIMEOUT');
+    return fallback();
+  } }); await tick();
+  h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', selected_count: 2,
+    result_count: 2, failed_count: 0, status: 'results_available', results_available: true, result_location: 'available' }];
+  h.el('nav-history').dataset.openSummaryBatchId = B;
+  await h.act('nav-history'); await tick();
+  assert.match(h.el(`history-${B}-summary`).textContent, /Prüfstatus nicht verfügbar/u);
+  assert.match(h.el('history-list').textContent, /Anonymisierungslauf abgeschlossen/u);
+  assert.doesNotMatch(h.el('history-list').textContent, /0\/2 freigegeben|noch keine abgeschlossene Kopie belegt/u);
+  noAutomaticDecision(h);
+});
+
+testAsync('a failed reload removes stale approval and KI-copy claims from the completion card', async () => {
+  let reads = 0;
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_document_review_history_summary') {
+      if (++reads > 1) throw Error('STANDALONE_IPC_TIMEOUT');
+      return reviewSummary({ reviewable_count: 2, approved_count: 2,
+        recorded_export_count: 1, current_exported_count: 2 });
+    }
+    return fallback();
+  } }); await tick();
+  h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', selected_count: 2,
+    result_count: 2, failed_count: 0, status: 'results_available', results_available: true, result_location: 'available' }];
+  await h.act('nav-history'); await h.act(`history-${B}-summary-toggle`);
+  assert.match(h.el('history-list').textContent, /Für diesen Stand ist kein weiterer Export nötig/u);
+  await h.act(`history-${B}-summary-reload`);
+  assert.match(h.el(`history-${B}-summary`).textContent, /Prüfstatus nicht verfügbar/u);
+  assert.match(h.el('history-list').textContent, /Freigaben und KI-Kopien sind derzeit nicht bestätigt/u);
+  assert.doesNotMatch(h.el('history-list').textContent, /Für diesen Stand ist kein weiterer Export nötig/u);
+  noAutomaticDecision(h);
+});
+
+testAsync('a long approval-summary read suspends background Core polls on Windows and Mac', async () => {
+  let resolveSummary;
+  const waiting = new Promise(resolve => { resolveSummary = resolve; });
+  const h = harness({ invoke(command, args, fallback) {
+    return command === 'get_document_review_history_summary' ? waiting : fallback();
+  } }); await tick();
+  h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', selected_count: 2,
+    result_count: 2, failed_count: 0, status: 'results_available', results_available: true, result_location: 'available' }];
+  await h.act('nav-history'); await h.act(`history-${B}-summary-toggle`);
+  const before = h.calls.filter(call => call.command === 'get_public_state').length;
+  const historyBefore = h.calls.filter(call => call.command === 'get_run_history').length;
+  await h.act('refresh-history');
+  assert.equal(h.calls.filter(call => call.command === 'get_run_history').length, historyBefore,
+    'a manual list reload must not queue behind a long review summary');
+  await h.poll();
+  assert.equal(h.calls.filter(call => call.command === 'get_public_state').length, before);
+  await h.act('connection-retry');
+  assert.match(h.el('connection-status').textContent, /Prüfstatus wird gerade lokal abgeglichen/u);
+  assert.equal(h.calls.filter(call => call.command === 'get_public_state').length, before);
+  resolveSummary(reviewSummary({ reviewable_count: 2 })); await tick();
+  await h.poll();
+  assert.ok(h.calls.filter(call => call.command === 'get_public_state').length > before);
+  noAutomaticDecision(h);
+});
+
+testAsync('a status poll queued before a history-summary read cannot leave a false timeout after it ends', async () => {
+  let rejectStatus, stallNext = false;
+  const stalled = new Promise((_, reject) => { rejectStatus = reject; });
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_public_state' && stallNext) { stallNext = false; return stalled; }
+    if (command === 'get_document_review_history_summary') return reviewSummary({ reviewable_count: 2 });
+    return fallback();
+  } }); await tick();
+  h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', selected_count: 2,
+    result_count: 2, failed_count: 0, status: 'results_available', results_available: true, result_location: 'available' }];
+  await h.act('nav-history');
+  stallNext = true;
+  const queuedPoll = h.poll(); await tick();
+  await h.act(`history-${B}-summary-toggle`);
+  rejectStatus(Error('STANDALONE_IPC_TIMEOUT')); await queuedPoll;
+  assert.doesNotMatch(h.el('feedback').textContent, /STANDALONE_IPC_TIMEOUT/u);
+  await h.poll();
+  assert.match(h.el(`history-${B}-summary`).textContent, /Dokumentprüfung/u);
+  noAutomaticDecision(h);
+});
+
+testAsync('a retired Core summary read cannot block status polling on the replacement connection', async () => {
+  let resolveSummary;
+  const waiting = new Promise(resolve => { resolveSummary = resolve; });
+  const h = harness({ invoke(command, args, fallback) {
+    return command === 'get_document_review_history_summary' ? waiting : fallback();
+  } }); await tick();
+  h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', selected_count: 2,
+    result_count: 2, failed_count: 0, status: 'results_available', results_available: true, result_location: 'available' }];
+  await h.act('nav-history'); await h.act(`history-${B}-summary-toggle`);
+  const before = h.calls.filter(call => call.command === 'get_public_state').length;
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 1, state: 'recovering' } });
+  await tick(); await h.poll();
+  assert.ok(h.calls.filter(call => call.command === 'get_public_state').length > before);
+  resolveSummary(reviewSummary({ reviewable_count: 2 })); await tick();
+  assert.doesNotMatch(h.el('history-list').textContent, /KI-Kopie mit Abschlussbeleg/u);
+  noAutomaticDecision(h);
+});
+
 testAsync('plain Markdown history never advertises text approval or saved raw copies as anonymized KI exports', async () => {
   const h = harness({ invoke(command, args, fallback) {
     if (command === 'get_document_review_history_summary') return { ok: true, local_ui_only: true, external_disclosure: false, available: true,
@@ -625,6 +856,26 @@ testAsync('one history click opens the actual document renderer with 72 unapprov
   assert.equal(h.calls.some(call => call.command === 'get_document_review_history_summary'), false);
   assert.equal(h.el('documents-approve').disabled, true); assert.equal(h.el('documents-export').disabled, true);
   noAutomaticDecision(h);
+});
+
+testAsync('historical document guide uses the selected batch proof, not the latest run status', async () => {
+  const h = harness({ documentRenderer: true, invoke(command, args, fallback) {
+    if (command === 'get_document_reviews') return { ...documentResponse('markdown-and-anonymize', 2),
+      // This case isolates batch ownership. Missing historical content proof
+      // correctly produces a warning and is tested separately below.
+      processing_complete: true, content_notice_count: 0,
+      content_notice_breakdown_complete: true, content_notices: [] };
+    return fallback();
+  } }); await tick();
+  h.model.state = { state: 'processing', batch_id: A, processing_mode: 'markdown-and-anonymize',
+    selected_count: 1, completed_count: 0, batch_complete: false };
+  h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', result_count: 2,
+    selected_count: 2, failed_count: 0, status: 'results_available' }];
+  await h.act('nav-history'); await h.act(`history-${B}-documents`);
+  assert.equal(h.el('run-guide').hidden, false);
+  assert.doesNotMatch(h.el('run-guide-next').textContent, /Laufabschluss ist noch nicht bestätigt/u);
+  assert.equal(h.el('run-guide-stages').children[0].dataset.status, 'done');
+  assert.equal(h.el('run-guide-scope').textContent.includes(B.slice(0, 8)), true);
 });
 
 testAsync('document copy suspends background status polling and resumes it after the copy', async () => {
@@ -785,7 +1036,7 @@ testAsync('fresh approval summary improves the next action without changing an a
     [{ status: 'review_required', resumable: true }, 'Jetzt prüfen'],
     [{ status: 'stopped', resumable: true, failed_count: 1 }, 'Fortsetzen'],
     [{ status: 'export_pending' }, 'Bereitstellung erneut prüfen'],
-    [{ status: 'results_available', failed_count: 1 }, 'Probleme ansehen']
+    [{ status: 'results_available', failed_count: 1 }, 'Exportvorschau']
   ]) {
     const h = harness({ invoke(command, args, fallback) {
       return command === 'get_document_review_history_summary' ? reviewSummary() : fallback();
@@ -794,12 +1045,12 @@ testAsync('fresh approval summary improves the next action without changing an a
     await h.act('nav-history'); await h.act(`history-${B}-summary-toggle`);
     const main = h.nodes.find(node => node.isConnected && node.attrs['data-history-main'] === 'true');
     assert.equal(main?.textContent || null, label);
-    if (label === 'Bereitstellung erneut prüfen' || label === 'Probleme ansehen') {
+    if (label === 'Bereitstellung erneut prüfen') {
       await h.act(main); assert.equal(h.calls.some(call => call.command === 'continue_history_batch'), false);
     }
-    if (label === 'Probleme ansehen') {
-      assert.equal(h.el(`history-${B}-files`).hidden, false);
-      assert.equal(h.doc.activeElement, h.el(`history-${B}-files`));
+    if (label === 'Exportvorschau') {
+      assert.equal(h.el(`history-${B}-problems`).hidden, false, 'file failures remain a visible parallel action');
+      assert.equal(h.calls.some(call => call.command === 'continue_history_batch'), false);
     }
   }
 });
@@ -875,9 +1126,15 @@ testAsync('anonymization history separates a privacy stop from OCR omissions and
   await h.act('nav-history');
   assert.match(h.el('history-list').textContent,
     /17 ohne OCR nicht umgewandelt · 1 aus Datenschutzgründen angehalten · 0 technische Fehler/u);
-  assert.equal(h.el(`history-${B}-problems-main`).textContent, 'Prüfhalte ansehen');
-  assert.equal(h.el(`history-${B}-documents`).textContent, 'Prüfung öffnen');
-  await h.act(`history-${B}-problems-main`);
+  assert.equal(h.el(`history-${B}-problems-main`), undefined);
+  assert.equal(h.el(`history-${B}-documents`).textContent, 'Dokumente und Freigaben öffnen');
+  assert.equal(h.el(`history-${B}-problems`).textContent, '18 Ausnahmen ansehen');
+  assert.match(h.el('history-list').textContent, /Anonymisierungslauf abgeschlossen – mit Hinweisen/u);
+  const completion = h.el('history-list').children[0].children[0].children.find(node => node.className === 'history-completion');
+  assert.ok(completion.children[0].textContent.includes('✓!'), 'completion and warning have distinct visible marks');
+  assert.equal(h.el('history-list').children[0].dataset.outcome, 'partial');
+  assert.equal(h.calls.some(call => call.command === 'get_document_review_history_summary'), false);
+  await h.act(`history-${B}-problems`);
   assert.match(h.el(`history-${B}-files`).textContent, /1 Datei ohne OCR nicht umgewandelt/u);
   assert.ok(h.el(`history-${B}-files`).children.some(node => node.className === 'notice-card' && /scan.png/u.test(node.textContent)));
   assert.ok(h.el(`history-${B}-files`).children.some(node => node.className === 'problem-card' && /Datenschutz-Prüfstopp/u.test(node.textContent)));
@@ -897,8 +1154,148 @@ testAsync('privacy stop stays visible without hiding completed processing and 13
   await h.act(`history-${B}-summary-toggle`);
   assert.match(h.el('history-list').textContent,
     /Verarbeitung beendet · 132\/132 freigegeben · aktueller Stand noch nicht als KI-Kopie belegt/u);
-  assert.equal(h.el(`history-${B}-problems-main`).textContent, 'Prüfhalte ansehen');
+  assert.equal(h.el(`history-${B}-problems-main`), undefined);
+  assert.equal(h.el(`history-${B}-problems`).textContent, '1 Ausnahme ansehen');
   assert.match(h.el(`history-${B}-summary`).textContent, /KI-Kopie: noch keine abgeschlossene Kopie belegt/u);
+});
+
+testAsync('successful OCR anonymization exposes content hints directly without reopening or failing the run', async () => {
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_run_failures') return { local_ui_only: true, external_disclosure: false, files: [],
+      content_notice_count: 1, content_notice_breakdown_complete: true,
+      content_notices: [{ name: 'scan.png', reason_codes: ['OCR_NOT_VERIFIED'] }] };
+    return fallback();
+  }}); await tick();
+  h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', selected_count: 2,
+    result_count: 2, failed_count: 0, status: 'results_available', results_available: true, result_location: 'available',
+    content_notice_count: 1, content_notice_breakdown_complete: true }];
+  await h.act('nav-history');
+  const row = h.el('history-list').children[0];
+  assert.match(row.textContent, /Anonymisierungslauf abgeschlossen – mit Hinweisen/u);
+  assert.match(row.textContent, /1 erstellte Datei enthält Inhaltshinweise/u);
+  assert.equal(row.dataset.outcome, 'partial');
+  assert.equal(h.el(`history-${B}-problems`).textContent, 'Hinweise ansehen');
+  assert.equal(h.el(`history-${B}-problems`).parent.className, 'history-actions');
+  await h.act(`history-${B}-problems`);
+  assert.match(h.el(`history-${B}-files`).textContent, /Automatisch erkannter Text kann Lesefehler enthalten/u);
+  assert.doesNotMatch(row.textContent, /Verarbeitung noch nicht abgeschlossen/u);
+  noAutomaticDecision(h);
+});
+
+testAsync('retained anonymization history cannot present missing content evidence as zero hints', async () => {
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_run_failures') return { local_ui_only: true, external_disclosure: false, files: [],
+      content_notice_count: 0, content_notice_breakdown_complete: false, content_notices: [] };
+    return fallback();
+  }}); await tick();
+  h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', selected_count: 2,
+    result_count: 2, failed_count: 0, status: 'results_available', results_available: true, result_location: 'available' }];
+  await h.act('nav-history');
+  assert.match(h.el('history-list').textContent, /Inhaltshinweise.*nicht vollständig verfügbar/u);
+  await h.act(`history-${B}-problems`);
+  assert.match(h.el(`history-${B}-files`).textContent, /keine Bestätigung fehlerfreier Texterkennung/u);
+  h.model.entries[0] = { ...h.model.entries[0], content_notice_count: 0, content_notice_breakdown_complete: true };
+  await h.act('refresh-history');
+  assert.match(h.el('history-list').textContent, /Anonymisierungslauf abgeschlossen/u);
+  assert.doesNotMatch(h.el('history-list').textContent, /abgeschlossen – mit Hinweisen/u);
+  noAutomaticDecision(h);
+});
+
+testAsync('current completed anonymization announces OCR hints and keeps their details available', async () => {
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_run_failures') return { local_ui_only: true, external_disclosure: false, files: [],
+      content_notice_count: 1, content_notice_breakdown_complete: true,
+      content_notices: [{ name: 'scan.png', reason_codes: ['OCR_NOT_VERIFIED'] }] };
+    return fallback();
+  }}); await tick();
+  await h.act('select-folder'); h.el('mode-anonymize').checked = true;
+  await h.act('mode-anonymize', 'change'); await h.act('start');
+  h.model.state = { ...h.model.state, state: 'results_available', processing_mode: 'markdown-and-anonymize',
+    selected_count: 3, completed_count: 3, result_count: 3, failed_count: 0, results_available: true,
+    warning_count: 1, content_notice_count: 1, content_notice_breakdown_complete: true };
+  await h.poll(); await tick();
+  assert.equal(h.el('job-title').textContent, 'Anonymisierungslauf abgeschlossen mit Hinweisen');
+  assert.equal(h.el('job-icon').textContent, '✓ !');
+  assert.equal(h.el('file-problems').hidden, false);
+  assert.match(h.el('job-announcement').textContent, /1 erstellte Datei enthält Inhaltshinweise/u);
+  assert.match(h.el('problem-list').textContent, /Automatisch erkannter Text kann Lesefehler enthalten/u);
+  assert.equal(h.calls.some(call => call.command === 'continue_current_batch'), false);
+  assert.equal(h.calls.filter(call => call.command === 'start_admitted_batch').length, 1);
+  assert.equal(h.calls.some(call => ['decide_document_review', 'decide_document_review_batch', 'export_approved_documents'].includes(call.command)), false);
+});
+
+testAsync('a single technical file failure does not turn a usable anonymization run into a failed run', async () => {
+  const h = harness(); await tick();
+  h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', selected_count: 133,
+    result_count: 114, failed_count: 19, expected_ocr_omission_count: 17, privacy_stop_count: 1,
+    status: 'results_available', results_available: true, result_location: 'available' }];
+  await h.act('nav-history');
+  const row = h.el('history-list').children[0];
+  assert.equal(row.dataset.outcome, 'partial');
+  assert.match(row.textContent, /Anonymisierungslauf abgeschlossen – mit Dateifehlern/u);
+  assert.match(row.textContent, /1 Datei hat einen technischen Fehler/u);
+  assert.equal(h.el(`history-${B}-documents`).textContent, 'Dokumente und Freigaben öffnen');
+  assert.equal(h.el(`history-${B}-problems`).textContent, 'Betroffene Dateien');
+});
+
+testAsync('an explicit live zero-reason breakdown distinguishes a real file error from expired reasons', async () => {
+  const h = harness(); await tick();
+  h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', selected_count: 2,
+    result_count: 1, failed_count: 1, failure_reason_breakdown_complete: true,
+    status: 'results_available', results_available: true, result_location: 'available' }];
+  await h.act('nav-history');
+  assert.match(h.el('history-list').textContent, /Anonymisierungslauf abgeschlossen – mit Dateifehlern/u);
+  assert.match(h.el('history-list').textContent, /1 Datei hat einen technischen Fehler/u);
+});
+
+testAsync('retained history without source-journal reasons never invents technical file failures', async () => {
+  const h = harness(); await tick();
+  h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', selected_count: 133,
+    result_count: 115, failed_count: 18, status: 'results_available',
+    results_available: true, result_location: 'available' }];
+  await h.act('nav-history');
+  const row = h.el('history-list').children[0];
+  assert.equal(row.dataset.outcome, 'partial');
+  assert.match(row.textContent, /Anonymisierungslauf abgeschlossen – mit ungeklärten Ausnahmen/u);
+  assert.match(row.textContent, /18 Dateien wurden nicht verarbeitet; die Gründe sind im kompakten Verlauf nicht mehr klassifiziert/u);
+  assert.doesNotMatch(row.textContent, /18 technische Fehler|mit Dateifehlern/u);
+  assert.equal(h.el(`history-${B}-documents`).textContent, 'Dokumente und Freigaben öffnen');
+  assert.equal(h.el(`history-${B}-problems`).textContent, 'Betroffene Dateien');
+  h.model.entries[0] = { ...h.model.entries[0], expected_ocr_omission_count: 0 };
+  await h.act('refresh-history');
+  assert.doesNotMatch(h.el('history-list').textContent, /18 technische Fehler|mit Dateifehlern/u);
+  noAutomaticDecision(h);
+});
+
+testAsync('unbound or inconsistent history counts cannot manufacture a completed-run badge', async () => {
+  const h = harness(); await tick();
+  h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', selected_count: 3,
+    result_count: 2, failed_count: 0, status: 'results_available', results_available: true, result_location: 'available' }];
+  await h.act('nav-history');
+  assert.doesNotMatch(h.el('history-list').textContent, /Anonymisierungslauf abgeschlossen/u);
+  h.model.entries[0] = { ...h.model.entries[0], failed_count: 1, result_location: 'unsafe' };
+  await h.act('refresh-history');
+  assert.doesNotMatch(h.el('history-list').textContent, /Anonymisierungslauf abgeschlossen/u);
+});
+
+testAsync('a total processing failure is red, while an OCR-off all-omitted run is a finished warning', async () => {
+  const h = harness(); await tick();
+  h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', selected_count: 1,
+    result_count: 0, failed_count: 1, status: 'failed', resumable: false }];
+  await h.act('nav-history');
+  assert.equal(h.el('history-list').children[0].dataset.outcome, 'error');
+  assert.match(h.el('history-list').textContent, /Der Lauf wurde nicht abgeschlossen/u);
+  h.model.entries[0] = { ...h.model.entries[0], status: 'completed_without_results',
+    expected_ocr_omission_count: 1 };
+  await h.act('refresh-history');
+  assert.equal(h.el('history-list').children[0].dataset.outcome, 'partial');
+  assert.match(h.el('history-list').textContent, /Verarbeitung ist beendet, aber keine Datei wurde umgewandelt/u);
+  assert.match(h.el('history-list').textContent, /Verarbeitung beendet – keine Ergebnisse erstellt/u);
+  assert.match(h.el('history-list').textContent, /Es gibt keine freizugebenden oder für KI kopierbaren Ergebnisse/u);
+  h.model.entries[0] = { ...h.model.entries[0], failed_count: 0 };
+  await h.act('refresh-history');
+  assert.doesNotMatch(h.el('history-list').textContent, /Verarbeitung beendet – keine Ergebnisse erstellt/u,
+    'inconsistent retained counts cannot assert a finished empty run');
 });
 
 testAsync('exact current export coverage and pending debt determine the explicit history action', async () => {
@@ -954,10 +1351,11 @@ for (const failure of [false, true]) testAsync(`late ${failure ? 'failed' : 'suc
   h.model.entries = [{ batch_id: B, processing_mode: 'markdown-only', result_count: 2, status: 'results_available' }];
   await h.act('nav-history'); await h.act(`history-${B}-summary-toggle`);
   await h.act('nav-new'); await h.act('nav-history');
-  const before = h.el(`history-${B}-summary`).textContent;
   if (failure) reject(Error('STANDALONE_IPC_FAILED'));
   else resolve({ ok: true, available: false, local_ui_only: true, external_disclosure: false });
-  await tick(); assert.equal(h.el(`history-${B}-summary`).textContent, before);
+  await tick();
+  assert.match(h.el(`history-${B}-summary`).textContent, /Prüfstatus nach Ansichtswechsel nicht bestätigt/u);
+  assert.doesNotMatch(h.el(`history-${B}-summary`).textContent, /älteren Lauf|nicht verfügbar|abgeschlossene Kopie/u);
 });
 
 testAsync('unavailable history summary shows a reason and offers reload without zero counts or mutations', async () => {
@@ -1115,6 +1513,59 @@ testAsync('connection recovery clears stale source IDs and reloads display only 
   assert.match(h.el('feedback').textContent, /wiederhergestellt/u);
   assert.equal(h.el('connection-help').hidden, true);
   assert.equal(h.el('start').attrs['aria-disabled'], 'true');
+});
+
+testAsync('diagnostic bundle saves and cancels independently while Core is disconnected and preserves the recovery banner', async () => {
+  let result = { ok: true, saved: true, cancelled: false, partial: true, local_ui_only: true, external_disclosure: false };
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'save_diagnostic_bundle') { assert.equal(args, undefined); return result; }
+    return fallback();
+  } });
+  await tick();
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 1, state: 'recovering' } });
+  await tick();
+  const banner = h.el('connection-status').textContent;
+  const mutations = h.calls.filter(call => ['start_admitted_batch', 'continue_current_batch', 'export_approved_documents'].includes(call.command)).length;
+  await h.act('connection-diagnostic-save');
+  assert.equal(h.calls.at(-1).command, 'save_diagnostic_bundle');
+  assert.match(h.el('connection-diagnostic-save-status').textContent, /lokal gespeichert.*gekennzeichnet/u);
+  assert.equal(h.el('connection-help').hidden, false);
+  assert.equal(h.el('connection-status').textContent, banner);
+  result = { ok: true, saved: false, cancelled: true, local_ui_only: true, external_disclosure: false };
+  await h.act('diagnostic-save');
+  assert.match(h.el('diagnostic-save-status').textContent, /Abgebrochen/u);
+  assert.equal(h.el('connection-help').hidden, false);
+  assert.equal(h.calls.filter(call => ['start_admitted_batch', 'continue_current_batch', 'export_approved_documents'].includes(call.command)).length, mutations);
+});
+
+testAsync('diagnostic save remains available during an owned long operation without releasing global busy ownership', async () => {
+  let release;
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'select_folder') return new Promise(resolve => { release = () => resolve(fallback()); });
+    if (command === 'save_diagnostic_bundle') return { ok: true, saved: true, cancelled: false, partial: false, external_disclosure: false };
+    return fallback();
+  } });
+  await tick(); await h.act('select-folder');
+  assert.equal(h.el('configure-results').disabled, true);
+  assert.equal(h.el('diagnostic-save').disabled, false);
+  await h.act('diagnostic-save');
+  assert.match(h.el('diagnostic-save-status').textContent, /lokal gespeichert/u);
+  assert.equal(h.el('configure-results').disabled, true, 'diagnostics cannot release another operation\'s busy token');
+  release(); await tick();
+  assert.equal(h.el('configure-results').disabled, false);
+});
+
+testAsync('diagnostic save failure is not a connection failure and never exposes vendor text or claims success', async () => {
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'save_diagnostic_bundle') throw Error('PRIVATE/person/source.pdf');
+    return fallback();
+  } });
+  await tick(); await h.act('diagnostic-save');
+  const message = h.el('diagnostic-save-status').textContent;
+  assert.match(message, /konnte nicht bestätigt werden/u);
+  assert.doesNotMatch(message, /PRIVATE|source\.pdf/u);
+  assert.equal(h.el('connection-help').hidden, true);
+  assert.equal(h.el('diagnostic-save').disabled, false);
 });
 testAsync('picker clicks during recovery explain the block and record a content-free native event', async () => {
   const h = harness(); await tick();
@@ -1352,7 +1803,7 @@ for (const purpose of ['markdown-only', 'markdown-and-anonymize']) testAsync(`on
   const primary = h.el('job-actions').children.filter(node => node.className === 'primary');
   assert.equal(primary.length, 1);
   assert.equal(primary[0].id, purpose === 'markdown-only' ? 'job-action-results' : 'job-action-documents');
-  assert.match(h.el('job-title').textContent, purpose === 'markdown-only' ? /Textübernahme abgeschlossen/u : /Dokumentprüfung offen/u);
+  assert.match(h.el('job-title').textContent, purpose === 'markdown-only' ? /Textübernahme abgeschlossen/u : /Anonymisierungslauf abgeschlossen/u);
 });
 
 for (const purpose of ['markdown-only', 'markdown-and-anonymize']) {
@@ -1414,7 +1865,7 @@ testAsync('bound raw completion makes results primary, explains omissions and se
   assert.ok(files.children.some(node => node.tagName === 'DETAILS' && /Inhaltshinweisen/u.test(node.textContent)));
   assert.doesNotMatch(row.textContent, /Freigaben und Exporte|17 Probleme/u);
 });
-testAsync('a real failure remains primary and red next to expected raw omissions', async () => {
+testAsync('a real file error stays visible without hiding usable raw results', async () => {
   const fb = conversionFeedback({ ocr_omitted_count: 16, error_count: 1 });
   const h = harness({ invoke(command, args, fallback) {
     if (command === 'get_run_failures') return { local_ui_only: true, external_disclosure: false, conversion_feedback: fb,
@@ -1424,7 +1875,10 @@ testAsync('a real failure remains primary and red next to expected raw omissions
   } }); await tick();
   h.model.entries = [{ batch_id: B, processing_mode: 'markdown-only', status: 'results_available', selected_count: 133,
     result_count: 116, failed_count: 17, results_available: true, conversion_feedback: fb }];
-  await h.act('nav-history'); await h.act(`history-${B}-problems-main`);
+  await h.act('nav-history');
+  assert.equal(h.el(`history-${B}-results`).textContent, 'Ergebnisordner öffnen');
+  assert.equal(h.el('history-list').children[0].dataset.outcome, 'partial');
+  await h.act(`history-${B}-problems`);
   assert.match(h.el('history-list').textContent, /Lauf abgeschlossen mit Fehlern/u);
   assert.ok(h.el(`history-${B}-files`).children.some(node => node.className === 'problem-card' && /Defekt.pdf/u.test(node.textContent)));
   assert.ok(h.el(`history-${B}-files`).children.some(node => node.className === 'notice-card' && /Scan.png/u.test(node.textContent)));
@@ -1445,7 +1899,8 @@ testAsync('expired or missing raw evidence cannot turn stopped files into harmle
   h.model.entries = [{ batch_id: B, processing_mode: 'markdown-only', status: 'results_available', selected_count: 133,
     result_count: 116, failed_count: 17, results_available: true }];
   await h.act('nav-history');
-  assert.equal(h.el(`history-${B}-problems-main`).textContent, 'Probleme ansehen');
+  assert.equal(h.el(`history-${B}-results`).textContent, 'Ergebnisordner öffnen');
+  assert.equal(h.el(`history-${B}-problems`).textContent, 'Betroffene Dateien');
   assert.doesNotMatch(h.el('history-list').textContent, /0 technische Fehler|ohne OCR nicht umgewandelt/u);
 });
 testAsync('the actual job and common guide use the backend terminal total without double counting omissions', async () => {
