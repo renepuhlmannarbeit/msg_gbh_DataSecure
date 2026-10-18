@@ -13,6 +13,8 @@ import { MAX_CORE_BYTES, ENTITLEMENTS_XML, canonicalBytes, finalSealPlan, assert
   assertFinalMachO, finalInputHashes, buildFinalRecords } from './final-core-contract.mjs';
 const basicEnv = Object.freeze({ PATH: '/usr/bin:/bin:/usr/sbin:/sbin', LANG: 'C', LC_ALL: 'C' });
 const fileLimit = 128 * 1024 * 1024;
+// Build-host diagnostics only: fixed role labels, never input paths/contents.
+const phase = role => process.stderr.write('MAC_CORE_PRODUCER_PHASE:' + role + '\n');
 export const readFileBounded = readProducerFileBounded;
 export function assertProducerRepository(repository, moduleUrl = import.meta.url, io = fs) {
   // Bind source paths, shared-reader observations and consumer output to this
@@ -95,6 +97,7 @@ export function revalidatePythonIdentity(options, identity) {
   return expected.sha256;
 }
 async function inspectTools(options, signal) {
+  phase('inspect_apple_toolchain');
   const developer = cleanPosix(await execRead('/usr/bin/xcode-select', ['-p'], signal), 'developer');
   const selected = { ...basicEnv, DEVELOPER_DIR: developer };
   const version = await execRead('/usr/bin/xcodebuild', ['-version'], signal, selected);
@@ -103,6 +106,7 @@ async function inspectTools(options, signal) {
   const tools = { developer, sdk, xcode: version, sdkVersion: await execRead('/usr/bin/xcrun', ['--sdk', 'macosx', '--show-sdk-version'], signal, selected) };
   const toolIdentities = Object.create(null);
   for (const [key, name] of [['clang', 'clang'], ['clangxx', 'clang++'], ['ar', 'ar'], ['nm', 'nm'], ['lipo', 'lipo'], ['otool', 'otool']]) {
+    phase('read_tool_' + key);
     const invocation = await execRead('/usr/bin/xcrun', ['--sdk', 'macosx', '--find', name], signal, selected);
     const identity = appleToolInvocation(key, invocation, fs.realpathSync.native(invocation), developer);
     const digest = sha256(readFileBounded(identity.realpath, 512 * 1024 * 1024));
@@ -111,6 +115,7 @@ async function inspectTools(options, signal) {
     toolIdentities[key] = { ...identity, sha256: digest };
   }
   tools.clangVersion = await execRead(tools.clang, ['--version'], signal, selected);
+  phase('read_python');
   const pythonIdentity = capturePythonIdentity(options);
   revalidatePythonIdentity(options, pythonIdentity);
   const arch = options.arch === 'arm64' ? 'arm64' : 'x86_64';
@@ -123,6 +128,7 @@ async function inspectTools(options, signal) {
   assertNativeHost(facts, options.arch);
   const toolHashes = Object.create(null);
   for (const file of new Set(['/usr/bin/arch', '/usr/bin/make', '/usr/bin/tar', '/usr/bin/xcrun', '/usr/bin/xcodebuild', '/usr/bin/codesign', '/usr/bin/plutil', options.python])) {
+    phase(file === options.python ? 'revalidate_python' : 'read_system_' + path.basename(file));
     const real = fs.realpathSync.native(file);
     toolHashes[real] = file === options.python ? revalidatePythonIdentity(options, pythonIdentity) :
       sha256(readFileBounded(real, 512 * 1024 * 1024));
@@ -230,6 +236,7 @@ export async function main(argv = process.argv.slice(2)) {
     assertAmbient(process.env, process.execArgv);
   }
   assertProducerRepository(options.repository);
+  if (options.mode === 'build') phase('verify_source_inputs');
   const inputs = verifySourceInputs(options['source-archive'], options.repository);
   if (options.mode === 'check-source') return { outcome: 'PINNED_SOURCE_INPUTS_MATCH', pins: PINS,
     source_only: true, build_started: false, product_trusted_attestation: false };
@@ -245,6 +252,7 @@ export async function main(argv = process.argv.slice(2)) {
     const pin = CONVERTER_PINS[options.arch];
     const converterBytes = verifyBytes('official converter archive', readFileBounded(options['converter-archive']), pin);
     const inspection = await inspectTools(options, abort.signal);
+    phase('private_output_and_capacity');
     await checkPrivateParent(options['output-parent'], abort.signal);
     const resourceProfile = assertBuildCapacity(os.totalmem(), options.jobs);
     const space = fs.statfsSync(options['output-parent'], { bigint: true });
@@ -265,6 +273,7 @@ export async function main(argv = process.argv.slice(2)) {
       producer_helper_sha256: sha256(readFileBounded(new URL('./producer-io-lifecycle.mjs', import.meta.url))),
       bound_file_io_sha256: sha256(readFileBounded(path.join(options.repository, 'plugins/data-secure/server/core/bound-file-io.js'))),
       product_trusted_attestation: false, status: 'STARTED_NOT_TRUSTED' });
+    phase('prepare_pinned_source');
     const prepared = await prepareSource(plan.job, inputs, abort.signal);
     const converter = await prepareConverter(plan.job, options, converterBytes, abort.signal);
     const converterBefore = binaryRecord(converter);

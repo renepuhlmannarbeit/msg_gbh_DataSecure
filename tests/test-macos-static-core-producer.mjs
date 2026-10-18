@@ -517,11 +517,12 @@ await check('R2 observed Python exchange during actual inspectTools cannot reach
   const options = { python: f.filename, arch: 'arm64', 'python-sha256': contract.sha256(f.bytes) };
   const start = driver.indexOf('async function inspectTools('), end = driver.indexOf('async function tarMembers(', start);
   let calls = 0;
+  const phases = [];
   const context = { process: { platform: 'darwin', version: 'v22.23.2', arch: 'arm64' }, basicEnv: {}, rosettaProbe: 'MODEL_ONLY',
     fs: { realpathSync: { native: file => file } }, cleanPosix: contract.cleanPosix, appleToolInvocation: contract.appleToolInvocation,
     sha256: contract.sha256, readFileBounded: file => Buffer.from('model Apple tool: ' + file),
     capturePythonIdentity: identity.capturePythonIdentity, revalidatePythonIdentity: identity.revalidatePythonIdentity,
-    assertNativeHost: contract.assertNativeHost, fail: contract.fail,
+    assertNativeHost: contract.assertNativeHost, fail: contract.fail, phase: value => phases.push(value),
     execRead(exe, args) {
       if (exe.endsWith('xcode-select')) return '/Developer';
       if (exe.endsWith('xcodebuild')) return 'Xcode 16.0\nBuild version MODEL';
@@ -539,6 +540,7 @@ await check('R2 observed Python exchange during actual inspectTools cannot reach
     } };
   vm.runInNewContext(driver.slice(start, end) + '\nthis.run = inspectTools;', context);
   await assert.rejects(context.run(options), { code: 'BOUND_FILE_CHANGED' }); assert.equal(calls, 1);
+  assert.ok(phases.includes('read_python'));
 });
 await check('R2 Python revalidation is wired before/after Configure+Make and before provenance+commit', async () => {
   for (const label of ['configure', 'make']) {
