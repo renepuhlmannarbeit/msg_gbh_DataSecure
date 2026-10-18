@@ -60,6 +60,18 @@ oder als grüne Finder-/Gatekeeper-/M2-Anwenderprüfung ausgegeben.
 
 ## Noch zu binden
 
+Native Vorläufe 39154063265/39154325186 stoppten vor Kompilierung mit
+BOUND_FILE_UNSAFE. Feste Phasendiagnose isolierte /usr/bin/make. Run39154532657
+belegt reguläre Rootdatei0755, drei Root0755-Ancestors, nlink78. Das ist ein
+System-Shim, kein beschädigter privater Input. Separater build-only Leser für
+geschlossene /usr/bin-Toolrollen misst read-only die tatsächliche Datei mit
+O_NOFOLLOW/O_NONBLOCK, vollständiger FD-/Namens-/Zeit-/Linkzahlbindung und
+einmaligem Close; kein zurückgegebenes Rewrite-Token.35 Gegenfälle grün.
+Allgemeiner Producer-/Produktleser bleibt nlink1. Hash des Shims ist keine
+atomare Exec-Bindung oder vollständige ACL-Attestierung der Toolchain; bekannte
+Vertrauensannahme über die unveränderliche Runner-Systemnamespace bleibt.
+Fehlversuche bleiben erhalten und werden nicht als Buildnachweis gezählt.
+
 Vor Dispatch nochmals am Quellcode gegengeprüft und korrigiert: nativer
 Gateaufruf benötigt einen absoluten kanonischen App-Pfad. Der Standard-ARM-
 Runner hat7GB RAM; die alte pauschale8GiB-Abweisung war damit unerfüllbar.

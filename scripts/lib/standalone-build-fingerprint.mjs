@@ -38,6 +38,7 @@ export const SOURCE_INPUT_FILES = Object.freeze([
   'scripts/lib/macos-core-artifact.mjs', 'scripts/lib/macos-core-process-lifecycle.mjs',
   'scripts/macos-static-core/build-contract.mjs', 'scripts/macos-static-core/build-driver.mjs',
   'scripts/macos-static-core/final-core-contract.mjs', 'scripts/macos-static-core/producer-io-lifecycle.mjs',
+  'scripts/macos-static-core/system-tool-reader.mjs',
   'scripts/lib/ownership-guard-artifact.mjs',
   'scripts/prepare-standalone-runtime.mjs', 'scripts/build-runtime-target.mjs',
   'scripts/build-standalone-package.mjs', 'scripts/build-standalone-macos-package.mjs',

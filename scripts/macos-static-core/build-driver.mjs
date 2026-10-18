@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { readAppleSystemTool } from './system-tool-reader.mjs';
 import { readProducerFileBounded, readProducerFileRecord, revalidateProducerFileRecord, rewriteProducerFileRecord,
   syncProducerFileRecord, syncProducerDirectory, writeProducerFresh, producerFileObservation, producerIoFailure, runProducerBuildStep, producerProcessFailure,
   runProducerTool, producerToolFailure } from './producer-io-lifecycle.mjs';
@@ -145,7 +146,7 @@ async function inspectTools(options, signal) {
         mode: Number(info.mode & 0o777n), ancestry }) + '\n');
     }
     toolHashes[real] = file === options.python ? revalidatePythonIdentity(options, pythonIdentity) :
-      sha256(readFileBounded(real, 512 * 1024 * 1024));
+      sha256(readAppleSystemTool(path.basename(file), real));
   }
   for (const identity of Object.values(toolIdentities)) {
     const real = fs.realpathSync.native(identity.invocation);
@@ -285,6 +286,7 @@ export async function main(argv = process.argv.slice(2)) {
       final_contract_sha256: sha256(readFileBounded(new URL('./final-core-contract.mjs', import.meta.url))),
       process_contract_sha256: sha256(readFileBounded(new URL('../lib/macos-core-process-lifecycle.mjs', import.meta.url))),
       producer_helper_sha256: sha256(readFileBounded(new URL('./producer-io-lifecycle.mjs', import.meta.url))),
+      system_tool_reader_sha256: sha256(readFileBounded(new URL('./system-tool-reader.mjs', import.meta.url))),
       bound_file_io_sha256: sha256(readFileBounded(path.join(options.repository, 'plugins/data-secure/server/core/bound-file-io.js'))),
       product_trusted_attestation: false, status: 'STARTED_NOT_TRUSTED' });
     phase('prepare_pinned_source');
