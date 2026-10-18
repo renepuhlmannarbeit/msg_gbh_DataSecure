@@ -159,7 +159,11 @@ async function inspectTools(options, signal) {
   return { tools, facts, pythonFacts, pythonIdentity, toolHashes, toolIdentities };
 }
 async function tarMembers(archive, prefix, signal) {
-  const members = (await execRead('/usr/bin/tar', ['-tf', archive], signal)).split('\n');
+  // BSD tar renders valid non-ASCII source-fixture names as backslash-octal
+  // under LC_ALL=C. Ask for UTF-8 display, never unescape arbitrary backslashes
+  // or relax the namespace rules. Compiler/Configure locale remains C.
+  const members = (await execRead('/usr/bin/tar', ['-tf', archive], signal,
+    { ...basicEnv, LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8' })).split('\n');
   const unsafe = members.filter(name => !name.startsWith(prefix + '/') || /[\\:\r]|(^|\/)\.\.($|\/)/u.test(name));
   if (members.length < 2 || members.length > 100000 || unsafe.length || new Set(members).size !== members.length) {
     process.stderr.write('MAC_CORE_PINNED_ARCHIVE_FACTS:' + JSON.stringify({ prefix, count: members.length,
@@ -175,7 +179,8 @@ async function prepareSource(job, inputs, signal) {
   const archive = job + '/inputs/node-v22.23.2.tar.xz';
   writeFresh(archive, inputs['node-v22.23.2.tar.xz']);
   const members = await tarMembers(archive, 'node-v22.23.2', signal);
-  const listing = (await execRead('/usr/bin/tar', ['-tvf', archive], signal)).split('\n');
+  const listing = (await execRead('/usr/bin/tar', ['-tvf', archive], signal,
+    { ...basicEnv, LANG: 'en_US.UTF-8', LC_ALL: 'en_US.UTF-8' })).split('\n');
   if (listing.length !== members.length || listing.some(line => !/^[-d]/u.test(line))) fail('SOURCE_ARCHIVE_NONREGULAR_MEMBER');
   await runProducerTool({ executable: '/usr/bin/tar', args: ['-xf', archive, '-C', job + '/source'], cwd: job },
     basicEnv, { signal, label: 'source_extract', timeoutMs: 60000, maximum: 1024 * 1024 });

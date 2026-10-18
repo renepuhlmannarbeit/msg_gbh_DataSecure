@@ -18,6 +18,23 @@ const producer = path.join(root, 'scripts/macos-static-core');
 const source = name => fs.readFileSync(path.join(producer, name), 'utf8');
 const helper = source('producer-io-lifecycle.mjs');
 const driver = source('build-driver.mjs');
+await (async () => {
+  const start = driver.indexOf('async function tarMembers('), end = driver.indexOf('async function prepareSource(', start);
+  let listing = 'node-v22.23.2/\nnode-v22.23.2/test/新建文件夹/a.json';
+  const context = { basicEnv: { PATH: '/usr/bin:/bin:/usr/sbin:/sbin', LANG: 'C', LC_ALL: 'C' },
+    process: { stderr: { write() {} } }, fail: contract.fail,
+    async execRead(exe, args, signal, env) {
+      assert.equal(exe, '/usr/bin/tar'); assert.equal(env.LANG, 'en_US.UTF-8');
+      assert.equal(env.LC_ALL, 'en_US.UTF-8'); return listing;
+    }
+  };
+  vm.runInNewContext(driver.slice(start, end) + '\nthis.run = tarMembers;', context);
+  assert.equal((await context.run('/vendor/source.tar.xz', 'node-v22.23.2')).length, 2);
+  for (const unsafe of ['node-v22.23.2/../escape', 'node-v22.23.2/test/\\346', '/absolute', 'foreign/a']) {
+    listing = 'node-v22.23.2/\n' + unsafe;
+    await assert.rejects(context.run('/vendor/source.tar.xz', 'node-v22.23.2'), { code: 'ARCHIVE_MEMBERS_UNSAFE_OR_DUPLICATED' });
+  }
+})();
 const sharedSource = fs.readFileSync(path.join(root, 'plugins/data-secure/server/core/bound-file-io.js'), 'utf8');
 let passed = 0;
 const results = [];
