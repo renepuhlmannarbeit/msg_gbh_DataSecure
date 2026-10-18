@@ -204,6 +204,9 @@ jobs:
           node tests/test-import-macos-core-candidate.mjs
           node tests/test-uat-fixture-generation.js
           node tests/test-legacy-input-migration.js
+          node tests/test-process-identity.js
+          node tests/test-batch-executor-boundaries.js
+          node tests/test-standalone-intake-failure.js
           npm run test:standalone
       - name: Run the real isolated converter-worker boundary
         run: npm run test:standalone:conversion

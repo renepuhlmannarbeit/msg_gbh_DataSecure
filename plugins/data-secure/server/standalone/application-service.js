@@ -339,6 +339,7 @@ function defaultDependencies(options = {}) {
     submitReview: reviewBroker.submit,
     acknowledgeStandaloneTerminalNotice: batchExecutor.acknowledgeStandaloneTerminalNotice,
     pendingStandaloneTerminalNoticeGeneration: batchExecutor.pendingStandaloneTerminalNoticeGeneration,
+    clearStandaloneIntakeFailureNotice: batchExecutor.clearStandaloneIntakeFailureNotice,
     continueMostRecentBatch,
     openFolder: require('../gateway/common').openFolder,
     revealFile: require('../gateway/common').revealFile,
@@ -416,6 +417,7 @@ class StandaloneApplicationService {
     this.selectionContext = null;
     this.observedBatchId = null;
     this.terminalPresentation = null;
+    this.intakeAttempt = null;
     this.startup = this.deps.initializeProduct?.();
   }
 
@@ -541,6 +543,56 @@ class StandaloneApplicationService {
     return snapshot;
   }
 
+  clearIntakeFailure(attempt) {
+    const receipt = attempt?.failure;
+    if (receipt) {
+      try { this.deps.clearStandaloneIntakeFailureNotice?.(receipt.token, receipt.generation); }
+      catch { /* display invalidation grants no cleanup or worker authority */ }
+    }
+    if (attempt) attempt.failure = null;
+    if (this.terminalPresentation?.intakeAttempt === attempt) this.terminalPresentation = null;
+  }
+
+  invalidateIntakeAttempt() {
+    this.clearIntakeFailure(this.intakeAttempt);
+    this.intakeAttempt = null;
+  }
+
+  beginIntakeAttempt() {
+    this.invalidateIntakeAttempt();
+    const attempt = { token: null, checkpointToken: null, failure: null };
+    this.intakeAttempt = attempt;
+    return { attempt,
+      onIntakeFailure: (token, generation) => {
+        if (typeof token !== 'string' || !/^[a-f0-9]{64}$/u.test(token) ||
+            !Number.isSafeInteger(generation) || generation < 1) return false;
+        if (this.intakeAttempt !== attempt || attempt.checkpointToken ||
+            attempt.token && attempt.token !== token) {
+          try { this.deps.clearStandaloneIntakeFailureNotice?.(token, generation); } catch {}
+          return false;
+        }
+        // First receipt wins. Duplicate/late callbacks cannot refresh a notice
+        // generation or re-arm an already rendered failure.
+        if (attempt.failure) return attempt.failure.token === token && attempt.failure.generation === generation;
+        attempt.failure = { token, generation, rendered: false };
+        return true;
+      },
+      onIntakeCheckpoint: token => {
+        if (this.intakeAttempt !== attempt || typeof token !== 'string' || !/^[a-f0-9]{64}$/u.test(token) ||
+            attempt.token && attempt.token !== token) return;
+        attempt.checkpointToken = token;
+        this.clearIntakeFailure(attempt);
+      }
+    };
+  }
+
+  bindIntakeAttempt(attempt, token) {
+    if (this.intakeAttempt !== attempt) return;
+    attempt.token = token;
+    if (attempt.checkpointToken && attempt.checkpointToken !== token) attempt.checkpointToken = null;
+    if (attempt.failure?.token !== token || attempt.checkpointToken) this.clearIntakeFailure(attempt);
+  }
+
   status({ localUi = false } = {}) {
     const snapshot = this.observeCurrentRun();
     const current = snapshot?.current || this.deps.lightweightStatus();
@@ -578,8 +630,19 @@ class StandaloneApplicationService {
     const preparing = intakePending && !processing;
     const selected = Number.isSafeInteger(latest?.selected_count) ? latest.selected_count : 0;
     const completed = Number.isSafeInteger(latest?.completed_count) ? latest.completed_count : 0;
+    const currentBatchId = currentRunObserved ? this.observedBatchId
+      : (!snapshot ? (this.observedBatchId || undefined) : undefined);
+    const attempt = this.intakeAttempt;
+    if (attempt && latest && currentBatchId === attempt.token) {
+      attempt.checkpointToken = attempt.token;
+      this.clearIntakeFailure(attempt);
+    }
+    const intakeFailure = attempt?.failure && !attempt.checkpointToken && attempt.token === attempt.failure.token &&
+      (!this.observedBatchId || this.observedBatchId === attempt.token) ? attempt.failure : null;
     const state = current.engine_ready !== true
       ? 'blocked'
+      : intakeFailure
+        ? 'start_failed'
       : preparing
         ? 'preparing'
       : latest?.paused === true
@@ -601,13 +664,14 @@ class StandaloneApplicationService {
             : latest?.complete === false
               ? 'failed'
             : 'ready';
-    const currentBatchId = currentRunObserved ? this.observedBatchId
-      : (!snapshot ? (this.observedBatchId || undefined) : undefined);
-    const presentationGeneration = currentBatchId || !snapshot
+    const presentationGeneration = intakeFailure
+      ? (intakeFailure.rendered ? null : intakeFailure.generation)
+      : currentBatchId || !snapshot
       ? this.deps.pendingStandaloneTerminalNoticeGeneration?.(currentBatchId)
       : null;
     this.terminalPresentation = Number.isSafeInteger(presentationGeneration) && presentationGeneration > 0
-      ? { generation: presentationGeneration, batchId: currentBatchId } : null;
+      ? { generation: presentationGeneration, batchId: intakeFailure?.token || currentBatchId,
+        ...(intakeFailure ? { intakeAttempt: attempt } : {}) } : null;
     let conversionFeedback;
     if (localUi === true && currentBatchId && latest?.processing_mode === MODES.MARKDOWN && !processing && !preparing) {
       try {
@@ -631,7 +695,9 @@ class StandaloneApplicationService {
       ok: current.engine_ready === true,
       product_channel: PRODUCT_CHANNEL,
       state,
-      ...(localUi === true && /^[a-f0-9]{64}$/u.test(currentBatchId || '') ? { batch_id: currentBatchId } : {}),
+      ...(localUi === true && !intakeFailure && /^[a-f0-9]{64}$/u.test(currentBatchId || '') ? { batch_id: currentBatchId } : {}),
+      ...(intakeFailure ? { intake_failure: { ...(localUi === true ? { intake_id: intakeFailure.token } : {}), error_code: 'STANDALONE_START_FAILED',
+        worker_active: intakePending || processing } } : {}),
       processing_mode: latest?.processing_mode || MODES.ANONYMIZE,
       ...(localUi === true && currentBatchId && latest?.review_policy === 'automatic-conservative'
         ? { review_policy: latest.review_policy } : {}),
@@ -672,6 +738,20 @@ class StandaloneApplicationService {
 
   acknowledgeTerminalPresented(presentationGeneration) {
     const presented = this.terminalPresentation;
+    const attempt = this.intakeAttempt, receipt = attempt?.failure;
+    if (presented?.intakeAttempt) {
+      const acknowledged = presented.intakeAttempt === attempt && presented.generation === presentationGeneration &&
+        receipt?.generation === presentationGeneration && !receipt.rendered && !attempt.checkpointToken &&
+        attempt.token === receipt.token && (!this.observedBatchId || this.observedBatchId === receipt.token);
+      if (acknowledged) {
+        receipt.rendered = true;
+        this.terminalPresentation = null;
+        // The retained receipt is still renderable after the bounded worker ACK
+        // slot expired. Its local render ACK never marks a journal presented.
+        try { this.deps.acknowledgeStandaloneTerminalNotice?.(presentationGeneration, receipt.token); } catch {}
+      }
+      return { ok: true, acknowledged: acknowledged === true, external_disclosure: false };
+    }
     const acknowledged = presented?.generation === presentationGeneration &&
       (!this.observedBatchId || presented.batchId === this.observedBatchId) &&
       this.deps.acknowledgeStandaloneTerminalNotice?.(presentationGeneration, presented.batchId) === true;
@@ -842,6 +922,7 @@ class StandaloneApplicationService {
       // Keep observing this exact run through its terminal state, even when a
       // newer historical run exists or worker acknowledgement is uncertain.
       this.observedBatchId = batchId;
+      this.invalidateIntakeAttempt();
       this.terminalPresentation = null;
       this.selectionContext = null;
       const action = batchNextAction(continued);
@@ -1025,6 +1106,7 @@ class StandaloneApplicationService {
       this.rejectedSources = rejectedSources;
       this.admissionRevision = nextRevision;
       this.selectionContext = nextSelection;
+      this.invalidateIntakeAttempt();
       return result;
     } catch (error) {
       if (signal?.aborted || error?.code === 'LOCAL_SELECTION_CANCELLED') {
@@ -1037,6 +1119,7 @@ class StandaloneApplicationService {
   }
 
   cancelAdmission() {
+    this.invalidateIntakeAttempt();
     this.admittedQueue = null;
     this.selectionContext = null;
     this.sourceIds.clear();
@@ -1051,6 +1134,7 @@ class StandaloneApplicationService {
       throw fixedFailure('STANDALONE_SELECTION_INVALID', 'Die ausgewählte Datei ist nicht mehr in der vorbereiteten Auswahl.');
     }
     const [removed] = this.admittedQueue.splice(selectionIndex, 1);
+    this.invalidateIntakeAttempt();
     this.sourceIds.delete(selectedPathIdentity(removed.full));
     this.admissionRevision++;
     if (this.admittedQueue.length === 0) {
@@ -1167,7 +1251,9 @@ class StandaloneApplicationService {
       reservation = this.deps.reserveIntake();
       this.observedBatchId = null;
       this.terminalPresentation = null;
+      const { attempt, ...intakeCallbacks } = this.beginIntakeAttempt();
       const started = this.deps.startLocalIntakeExecutor(queue, profile, {
+        ...intakeCallbacks,
         intakeReservationId: reservation.reservation_id, signal, processingMode,
         ...(contentOptions ? { contentOptions } : {}),
         ...(reviewPolicy ? { reviewPolicy } : {}),
@@ -1185,13 +1271,15 @@ class StandaloneApplicationService {
       this.admissionRevision++;
       if (this.selectionContext) this.selectionContext = { ...this.selectionContext,
         selectedFiles: queue.map(item => item.sourceLabel || item.name) };
+      let batchToken;
       try {
-        const batchToken = confirmedIntakeBatchToken(started);
+        batchToken = confirmedIntakeBatchToken(started);
+        this.bindIntakeAttempt(attempt, batchToken);
         await confirmedIntakeStart(started);
         // Bind the run returned by the actual intake contract immediately.
         // A small batch may already be terminal before the first status poll;
         // observing only live workers would then lose its result card.
-        this.observedBatchId = batchToken;
+        if (this.intakeAttempt === attempt) this.observedBatchId = batchToken;
       } catch {
         // Once the reservation has been delegated, a missing acknowledgement
         // is an uncertain start. Never reuse the same admission: the worker may
@@ -1200,7 +1288,7 @@ class StandaloneApplicationService {
         throw fixedFailure('STANDALONE_START_FAILED', 'Der lokale Start wurde nicht bestätigt. Bitte den Status prüfen und die Dateien nicht erneut starten.');
       }
       this.trace('standalone_batch_accepted', { outcome: 'ok', item_count: queue.length });
-      return { ok: true, event: 'batch_accepted', batch_id: this.observedBatchId,
+      return { ok: true, event: 'batch_accepted', batch_id: batchToken,
         selected_count: queue.length, external_disclosure: false };
     } finally {
       if (reservation && !transferred) this.deps.releaseIntake(reservation.reservation_id);
@@ -1275,13 +1363,16 @@ class StandaloneApplicationService {
       this.trace('standalone_picker_completed', { trace_id: traceId, outcome: 'ok', item_count: selected.length });
       this.observedBatchId = null;
       this.terminalPresentation = null;
+      const { attempt, ...intakeCallbacks } = this.beginIntakeAttempt();
       const started = this.deps.startLocalIntakeExecutor(selected, profile, {
+        ...intakeCallbacks,
         intakeReservationId: reservation.reservation_id, signal
       });
       transferred = true;
       const batchToken = confirmedIntakeBatchToken(started);
+      this.bindIntakeAttempt(attempt, batchToken);
       await confirmedIntakeStart(started);
-      this.observedBatchId = batchToken;
+      if (this.intakeAttempt === attempt) this.observedBatchId = batchToken;
       this.trace('standalone_batch_accepted', { trace_id: traceId, outcome: 'ok', item_count: selected.length });
       return {
         ok: true,

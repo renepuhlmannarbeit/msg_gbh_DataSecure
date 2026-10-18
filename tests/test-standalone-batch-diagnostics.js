@@ -250,6 +250,7 @@ function reviewExecutorFixture(platform) {
     } };
     if (id === '../runtime') return { SafeError: Error };
     if (id === './batch') return batch;
+    if (id === './process-identity') return require('../plugins/data-secure/server/gateway/process-identity');
     if (id === '../companion/completion-summary') return {
       showBatchStateNoticeConfirmed() { assert.fail('no completion UI from a diagnostic'); },
       showLocalIntakeNoticeConfirmed() { assert.fail('no failure UI from a diagnostic'); }

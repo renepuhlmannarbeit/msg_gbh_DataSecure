@@ -11,9 +11,16 @@
     export_pending: 'Bereitstellung offen', export_abandoned: 'Bereitstellung aufgegeben',
     failed: 'Verarbeitung unterbrochen', blocked: 'Nicht bereit' };
   const reasons = {
+    PROCESS_IDENTITY_UNAVAILABLE: 'Der lokale Verarbeitungsprozess konnte nicht eindeutig zugeordnet werden. Der nächste Verarbeitungsschritt wurde vorsichtshalber nicht gestartet. Bitte die Diagnose sichern und den Laufstatus prüfen.',
+    PROCESS_IDENTITY_ACCESS_DENIED: 'Das Betriebssystem verweigert die Abfrage zur sicheren Prozesszuordnung. Bitte die Diagnose sichern und mit der IT prüfen; keine Schutzfunktion abschalten.',
+    PROCESS_IDENTITY_TOOL_MISSING: 'Das Hilfsprogramm zur sicheren Prozesszuordnung fehlt oder ist nicht erreichbar. Bitte die Diagnose sichern und das vollständige Paket sowie die Systemkonfiguration prüfen.',
+    PROCESS_IDENTITY_TIMEOUT: 'Die Abfrage zur sicheren Prozesszuordnung hat nicht rechtzeitig geantwortet. Bitte den Laufstatus und die Diagnose prüfen; keinen zweiten Lauf blind starten.',
+    PROCESS_IDENTITY_OUTPUT_INVALID: 'Die Antwort zur sicheren Prozesszuordnung war nicht verwertbar. Der Lauf wurde vorsichtshalber angehalten. Bitte die Diagnose sichern.',
+    PROCESS_IDENTITY_PROBE_FAILED: 'Die sichere Prozesszuordnung ist fehlgeschlagen. Die Ursache ist noch nicht bestätigt. Bitte die Diagnose sichern und den Laufstatus prüfen.',
     STANDALONE_HISTORY_ACTIVE: 'Dieser Lauf hat noch offene oder nicht bestätigte Vorgänge. Er bleibt sichtbar. Ausblenden beendet keinen Lauf und bricht keinen Export ab.',
     STANDALONE_HISTORY_VISIBILITY_INVALID: 'Die Anzeigepräferenz konnte nicht sicher gelesen oder gespeichert werden. Es wurden keine Laufdateien gelöscht.',
     STANDALONE_DATA_ROOT_UNSAFE: 'Der interne App-Datenordner konnte nicht sicher geöffnet oder neu angelegt werden. Das ist nicht der Ergebnisordner. Bitte die Diagnose sichern und Zugriff sowie Installation mit der IT prüfen. Vorhandene Daten nicht löschen und Schutzfunktionen nicht abschalten.',
+    UNSAFE_STORAGE_LOCATION: 'Die Trennung zwischen internen App-Daten und Ergebnisordnern konnte nicht sicher geprüft werden. Ein gespeicherter Speicherort kann unzugänglich oder ungeeignet sein. Bitte die Diagnose sichern; vorhandene Daten nicht löschen und Schutzfunktionen nicht abschalten.',
     STANDALONE_OWNERSHIP_RUNTIME_DENIED: 'Das Betriebssystem verweigert den Zugriff auf die Komponente zur Prozessabsicherung. Bitte das vollständige Paket und die Berechtigungen mit der IT prüfen; Schutzfunktionen nicht abschalten.',
     STANDALONE_OWNERSHIP_SIGNATURE_REFUSED: 'macOS hat beim Laden der Prozessabsicherung einen Signatur- oder Bibliotheksprüfungsfehler gemeldet. Bitte die Diagnose sichern und ein korrekt signiertes Paket verwenden. Gatekeeper und Bibliotheksprüfung nicht abschalten.',
     STANDALONE_OWNERSHIP_RUNTIME_LOAD_FAILED: 'Die native Komponente zur Prozessabsicherung konnte trotz passendem Dateinachweis nicht geladen werden. Bitte die Diagnose sichern und die Installation mit der IT prüfen.',
@@ -591,7 +598,7 @@
     const tooLarge = chosen.length > 200 || bytes > 500 * 1024 * 1024;
     const hint = bootstrapFailure ? 'Der lokale Core ist nicht bereit. Bitte Diagnose und Startursache prüfen.'
       : reconnecting ? 'Die lokale Verbindung wird wiederhergestellt. Bitte warten.' : busy ? 'Ein lokaler Vorgang ist aktiv. Bitte warten.'
-      : ['preparing', 'processing'].includes(current?.state) ? 'Ein Lauf ist noch nicht abgeschlossen. Öffne seine Laufdetails und warte auf den Abschluss oder pausiere ihn ausdrücklich.'
+      : ['preparing', 'processing'].includes(current?.state) || current?.intake_failure?.worker_active === true ? 'Ein Lauf ist noch nicht abgeschlossen. Öffne seine Laufdetails und warte auf den Abschluss oder pausiere ihn ausdrücklich.'
       : !mode && !chosen.length ? 'Bitte Aufgabe und Dateien auswählen.'
       : !mode ? 'Bitte zuerst eine Aufgabe auswählen.' : !chosen.length ? 'Bitte mindestens eine geeignete Datei anhaken.'
       : tooLarge ? 'Auswahl zu groß.' : resultFolderUnavailable ? 'Der bisherige Ergebnisordner ist nicht verfügbar. Stelle ihn wieder bereit oder wähle unten „Ordner ändern“.' : '';
@@ -817,7 +824,7 @@
     else { showView('details', entry.batch_id); await refresh(); $('job-title').focus(); }
   }
   async function newJob() {
-    if (busy || ['preparing', 'processing'].includes(current?.state)) return;
+    if (busy || ['preparing', 'processing'].includes(current?.state) || current?.intake_failure?.worker_active === true) return;
     if (!await perform('cancel_admission')) return;
     job = null; catalogue = []; knownIds.clear(); selected.clear(); mode = ''; current = null; generation++;
     lastJobAnnouncement = ''; $('job-announcement').textContent = '';
@@ -933,6 +940,24 @@
     } catch { if (!isCurrent()) return; target.replaceChildren(element('p', 'Die Dateiliste konnte nicht geladen werden. Der Lauf wird nicht erneut gestartet.', 'meta'),
       button('Dateiliste erneut laden', () => problems(target, batchId))); }
   }
+  function acknowledgeRenderedNotice(state, intakeFailure = false) {
+    const presentationGeneration = state.presentation_generation, owner = job, connection = connectionEpoch;
+    if (!Number.isSafeInteger(presentationGeneration) || presentationGeneration < 1 || acknowledged === presentationGeneration) return;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      // A render scheduled in another view, superseded attempt, connection or
+      // journal state proves no visible receipt. ACK carries no action rights.
+      if (closed || connection !== connectionEpoch || job !== owner || view !== 'details' ||
+          runDetails?.batchId !== owner?.batchId || $('job').hidden || $('details-view').hidden ||
+          current?.presentation_generation !== presentationGeneration || acknowledged === presentationGeneration ||
+          (intakeFailure ? current?.state !== 'start_failed' || current?.intake_failure?.intake_id !== owner.batchId ||
+            current?.intake_failure?.error_code !== 'STANDALONE_START_FAILED' : current?.batch_id !== owner.batchId)) return;
+      acknowledged = presentationGeneration;
+      invoke('ack_terminal_presented', { presentationGeneration }).then(result => {
+        if (result?.acknowledged !== true && acknowledged === presentationGeneration) acknowledged = null;
+      }).catch(() => { if (acknowledged === presentationGeneration) acknowledged = null; });
+    }));
+  }
+
   function renderJob(state) {
     if (!job) return;
     reconcileFeedback(state);
@@ -946,6 +971,30 @@
       const node = button(label, handler, primary); node.id = `job-action-${id}`; return node;
     };
     const reviewProjection = boundRunReview(state);
+    if (state.state === 'start_failed' && state.intake_failure?.intake_id === job.batchId &&
+        state.intake_failure?.error_code === 'STANDALONE_START_FAILED') {
+      // This card belongs to the started intake, not to a fabricated journal,
+      // document failure list, completion receipt or resumable history entry.
+      const signature = JSON.stringify(['intake_failure', job.batchId, state.intake_failure]);
+      if (signature === lastJobSignature) { acknowledgeRenderedNotice(state, true); return; }
+      lastJobSignature = signature;
+      $('job-icon').textContent = '!'; $('job-icon').className = 'status-icon';
+      $('job-status').className = 'job-status';
+      $('job-title').textContent = 'Lokaler Start nicht bestätigt';
+      $('job-description').className = 'run-notice';
+      $('job-description').textContent = 'Die lokale Vorbereitung konnte nicht sicher abgeschlossen werden. Für diesen Start liegt kein bestätigter gespeicherter Lauf vor. Die Dateien werden nicht automatisch erneut gestartet.' +
+        (state.intake_failure.worker_active === true ? ' Das Ende des lokalen Prozesses ist noch nicht bestätigt. Bitte warten.'
+          : ' Für einen neuen Versuch die Dateien ausdrücklich neu auswählen.');
+      $('job-progress').hidden = true; $('job-current').textContent = '';
+      $('job-actions').replaceChildren(...(state.intake_failure.worker_active === true ? [] : [action('new', 'Neue Verarbeitung', newJob)]));
+      $('job-secondary-actions').replaceChildren(); $('job-more').hidden = true; $('file-problems').hidden = true;
+      const announcement = `intake-failure:${job.batchId}:${state.intake_failure.worker_active === true}`;
+      if (announcement !== lastJobAnnouncement) {
+        lastJobAnnouncement = announcement;
+        $('job-announcement').textContent = $('job-title').textContent + '. ' + $('job-description').textContent;
+      }
+      restoreActionFocus(); acknowledgeRenderedNotice(state, true); return;
+    }
     if (state.state === 'ready') {
       // Service readiness is not a completion receipt for a retained old job.
       // Do not silently call newJob(): it would cancel an admitted selection.
@@ -977,7 +1026,9 @@
       restoreActionFocus();
       $('file-problems').hidden = true; return;
     }
-    const signature = JSON.stringify([state, reviewProjection]); if (signature === lastJobSignature) return; lastJobSignature = signature;
+    const signature = JSON.stringify([state, reviewProjection]);
+    if (signature === lastJobSignature) { acknowledgeRenderedNotice(state); return; }
+    lastJobSignature = signature;
     $('job-progress').hidden = false;
     const working = ['preparing', 'processing'].includes(state.state);
     const rawResults = state.processing_mode === 'markdown-only', anonymousResults = state.processing_mode === 'markdown-and-anonymize';
@@ -1057,11 +1108,7 @@
         : `Dateien mit Hinweisen${failed ? ` (${failed})` : ''}`;
     const key = `${job.batchId}:${failed}:${state.state}:${summary?.content_notice_count || 0}:${contentNotices?.count}:${contentNotices?.complete}`;
     if (!$('file-problems').hidden && problemSignature !== key) { problemSignature = key; problems($('problem-list'), job.batchId); }
-    if (state.presentation_generation && acknowledged !== state.presentation_generation) {
-      acknowledged = state.presentation_generation;
-      requestAnimationFrame(() => requestAnimationFrame(() => invoke('ack_terminal_presented', { presentationGeneration: state.presentation_generation })
-        .catch(() => { acknowledged = null; })));
-    }
+    acknowledgeRenderedNotice(state);
   }
   function historySummary(container, entry, updateAction, hasMainLoader = false) {
     const status = element('p', entry.processing_mode === 'markdown-only'

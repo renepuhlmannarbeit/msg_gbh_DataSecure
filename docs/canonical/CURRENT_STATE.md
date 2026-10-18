@@ -15,7 +15,17 @@ dann hashgebunden vor Cargo akzeptieren. Windows neu vom selben Finalcommit.
 Details und offene tatsächliche Gates in docs/acceptance/RC164_SHARED_RELEASE_20261018.md.
 Keine Desktopsteuerung, M2-Anwendertest später, Timer PAUSED, alte Pakete erhalten.
 
-### R8 – fünf registrierte Verlaufsläufe, Abschlussprüfung läuft
+Zusätzlicher Rechte-/Startreview: make/nlink78 war eine eigene build-only-
+Fehlannahme, keine verweigerte App-Berechtigung. Rust-IO-/Prozessidentitäts-
+Fehlerklassen, frühestes In-App-Fehlerbild und natives Admission-Gate nach
+bestätigtem Workerende sind korrigiert und unabhängig am Produktionscode
+gegengeprüft. Keine Rechte-/Sicherheitslockerung. Normales lokales Mac-Profil
+benötigt im geprüften Ablauf kein sudo, Xcode, Terminal oder Full-Disk-Access;
+TCC-/Endpoint-/Altpfad-/Shared-Home-Grenzen bleiben offen dokumentiert. Kein
+Beweis für die Ursache des alten M2-SIGTRAP. Gezielte Folgeprüfung und native
+Mac-Artefaktbindung weiter erforderlich; Details im RC164-Abnahmebericht.
+
+### R8 – fünf registrierte Verlaufsläufe, Quellenbaseline gesichert
 
 Quellena08125d2… (328 Produktinputs): eigenes privates Fünferregister vor normalen Journal-/Export-/
 Summary-/Präferenz-Detailreads und vor Start-/Ordner-Exportcapture; kein globaler
@@ -28,10 +38,11 @@ keine Recovery und erzeugt keinen globalen UI-Fallback. Offenzähler gilt für
 die fünf dargestellten Verlaufsläufe, nicht für sämtliche erhaltenen Journale.
 Zwei unabhängige KI-Quellenreviews mit Korrekturen und Gegenprüfung; kein Mac-
 Laufzeitnachweis. Gezielte History-/Frontend-/Sidecar-/Start-I/O-/Dokugates grün;
-neuer unveränderter266-Dateien-/Paketlauf unter
-dist/rc163-r8-history-final3-20261018 läuft. Native Prepare/Clippy/211 Rusttests
-(3 ignoriert)/Release sind dort mit unveränderten Inputs bestanden. R7 ist noch das zuletzt vollständig
-gebundene Paket, nicht bereits R8. R8-final ist eine rote obsolete IPC-Testannahme;
+unveränderte266/266-Dateien plus10/10 Zusatzgates und alle vier Paketgates unter
+dist/rc163-r8-history-final3-20261018 bestanden. Native Prepare/Clippy/211 Rusttests
+(3 ignoriert)/Release sind dort mit unveränderten Inputs bestanden. R7 ist noch
+das zuletzt lokal übergebene Paket; R8 ist eine unveröffentlichte Engineering-
+Baseline für RC164. R8-final ist eine rote obsolete IPC-Testannahme;
 R8-final2 wurde während Folgeentwicklung am eigenen Driver/Kind beendet.
 Nur final3 kann neuer Abschlussbeleg sein. Details: docs/acceptance/RC163_R8_HISTORY_WINDOW_20261018.md.
 Desktop beim Nutzer, M2 später, keine Veröffentlichung; Timer PAUSED.

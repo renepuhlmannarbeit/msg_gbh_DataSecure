@@ -87,7 +87,7 @@ function harness(options = {}) {
   };
   const window = { __TAURI__: { core: { invoke }, event: { listen: async (name, callback) => { listeners.set(name, callback); return () => listeners.delete(name); } } },
     addEventListener() {} };
-  const context = vm.createContext({ window, document: doc, requestAnimationFrame: fn => fn(),
+  const context = vm.createContext({ window, document: doc, requestAnimationFrame: options.requestAnimationFrame || (fn => fn()),
     crypto: require('node:crypto').webcrypto,
     setTimeout: fn => { timers.add(fn); return fn; }, clearTimeout: fn => timers.delete(fn),
     setInterval: fn => { intervals.add(fn); return fn; }, clearInterval: fn => intervals.delete(fn) });
@@ -3695,6 +3695,97 @@ testAsync('a degraded export inventory keeps valid rows and never advertises aut
   assert.equal(h.el(`history-${B}-results`), undefined);
   assert.equal(h.el(`history-${B}-delivery`), undefined);
   assert.equal(h.el(`history-${B}-documents`).attrs['data-history-main'], 'true');
+});
+
+testAsync('actual Executor -> Service -> public state renders a journal-free intake failure and ACKs only its visible two-frame receipt', async () => {
+  const { createFixture } = require('./test-standalone-intake-failure');
+  const f = createFixture(), frames = [];
+  const frame = () => { const pending = frames.splice(0); for (const callback of pending) callback(); };
+  const h = harness({ requestAnimationFrame: callback => frames.push(callback),
+    async invoke(command, args, fallback) {
+      if (command === 'get_public_state') return f.service.status({ localUi: true });
+      if (command === 'get_ui_context') return f.service.uiContext();
+      if (command === 'select_folder') return f.admit();
+      if (command === 'start_admitted_batch') {
+        // Native IPC transports JSON; do not pass a VM prototype directly into
+        // the Service's intentionally strict plain-object content contract.
+        const result = f.service.startAdmittedBatch({ ...JSON.parse(JSON.stringify(args)), documentReview: true });
+        result.catch(() => {});
+        f.children.at(-1)?.emit('message', { type: 'local-intake-accepted' });
+        return result;
+      }
+      if (command === 'ack_terminal_presented') return f.service.acknowledgeTerminalPresented(args.presentationGeneration);
+      if (command === 'cancel_admission') return f.service.cancelAdmission();
+      return fallback();
+    }
+  });
+  try {
+    await selectAndStart(h);
+    assert.equal(f.starts.length, 1);
+    const started = f.starts[0], state = f.fail(started);
+    await h.poll();
+    assert.equal(h.el('details-view').hidden, false); assert.equal(h.el('job').hidden, false);
+    assert.equal(h.el('job-title').textContent, 'Lokaler Start nicht bestätigt');
+    assert.match(h.el('job-description').textContent, /kein bestätigter gespeicherter Lauf/u);
+    assert.match(h.el('job-description').textContent, /Ende des lokalen Prozesses ist noch nicht bestätigt/u);
+    assert.equal(h.el('job-progress').hidden, true); assert.equal(h.el('file-problems').hidden, true);
+    assert.equal(h.el('job-actions').children.length, 0, 'a live failed child offers no new start');
+    assert.equal(h.calls.filter(call => call.command === 'ack_terminal_presented').length, 0);
+    frame(); assert.equal(h.calls.filter(call => call.command === 'ack_terminal_presented').length, 0);
+    await h.act('nav-settings'); frame(); await tick();
+    assert.equal(h.calls.filter(call => call.command === 'ack_terminal_presented').length, 0, 'hidden receipt is not acknowledged');
+    started.child.exit(); await h.poll();
+    assert.equal(f.service.status({ localUi: true }).presentation_generation, state.presentation_generation);
+    await h.act('nav-details');
+    assert.equal(h.el('job-title').textContent, 'Lokaler Start nicht bestätigt');
+    assert.ok(h.el('job-action-new')); assert.equal(h.el('job-action-resume'), undefined);
+    assert.equal(h.el('job-action-results'), undefined); assert.equal(h.el('job-action-documents'), undefined);
+    frame(); frame(); await tick();
+    const acknowledgements = h.calls.filter(call => call.command === 'ack_terminal_presented');
+    assert.equal(acknowledgements.length, 1); assert.equal(acknowledgements[0].args.presentationGeneration, state.presentation_generation);
+    const announcements = h.el('job-announcement').textUpdates;
+    await h.poll(); frame(); frame(); await tick();
+    assert.equal(h.el('job-title').textContent, 'Lokaler Start nicht bestätigt', 'message survives its render ACK and child exit');
+    assert.equal(h.el('job-announcement').textUpdates, announcements, 'unchanged polling/ACK does not repeat the live failure announcement');
+    assert.equal(h.calls.filter(call => call.command === 'ack_terminal_presented').length, 1);
+    assert.equal(f.starts.length, 1, 'polling/navigation/ACK never restarts the intake');
+    assert.equal(f.historyCalls, 0); assert.equal(f.osDialogs, 0);
+  } finally { f.close(); }
+});
+
+testAsync('superseded job/attempt cannot ACK an old journal-free failure even when the display reuses the same batch reference', async () => {
+  const frames = [], h = harness({ requestAnimationFrame: callback => frames.push(callback),
+    invoke(command, _args, fallback) {
+      if (command === 'ack_terminal_presented') return { ok: true, acknowledged: true };
+      return fallback();
+    }
+  });
+  const flush = () => { for (let round = 0; round < 3; round++) { const pending = frames.splice(0); for (const callback of pending) callback(); } };
+  await selectAndStart(h);
+  h.model.state = { state: 'start_failed', intake_failure: { intake_id: A, error_code: 'STANDALONE_START_FAILED', worker_active: false }, presentation_generation: 81 };
+  await h.poll(); assert.equal(h.el('job-title').textContent, 'Lokaler Start nicht bestätigt');
+  await h.act('job-action-new');
+  await h.act('select-folder'); h.el('mode-markdown').checked = true; await h.act('mode-markdown', 'change'); await h.act('start');
+  h.model.state = { state: 'start_failed', intake_failure: { intake_id: A, error_code: 'STANDALONE_START_FAILED', worker_active: false }, presentation_generation: 82 };
+  await h.poll(); flush(); await tick();
+  const acknowledgements = h.calls.filter(call => call.command === 'ack_terminal_presented');
+  assert.deepEqual(acknowledgements.map(call => call.args.presentationGeneration), [82]);
+  assert.equal(h.calls.filter(call => call.command === 'start_admitted_batch').length, 2, 'only the two explicit user starts run');
+});
+
+testAsync('ordinary journal notice rendered while hidden is ACKed only after revisiting the same unchanged visible card', async () => {
+  const frames = [], h = harness({ requestAnimationFrame: callback => frames.push(callback),
+    invoke(command, _args, fallback) { return command === 'ack_terminal_presented' ? { ok: true, acknowledged: true } : fallback(); }
+  });
+  const flush = () => { for (let round = 0; round < 3; round++) { const pending = frames.splice(0); for (const callback of pending) callback(); } };
+  await selectAndStart(h); await h.act('nav-settings');
+  h.model.state = { state: 'results_available', batch_id: A, processing_mode: 'markdown-only', selected_count: 3,
+    completed_count: 3, failed_count: 0, result_count: 3, results_available: true, presentation_generation: 91 };
+  await h.poll(); flush(); await tick();
+  assert.equal(h.calls.filter(call => call.command === 'ack_terminal_presented').length, 0);
+  await h.act('nav-details'); flush(); await tick();
+  assert.equal(h.calls.filter(call => call.command === 'ack_terminal_presented').length, 1);
+  assert.equal(h.calls.find(call => call.command === 'ack_terminal_presented').args.presentationGeneration, 91);
 });
 
 done();

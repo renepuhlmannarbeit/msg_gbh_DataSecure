@@ -102,6 +102,8 @@ const baseFiles = [
   'tests/test-debug-skill-contract.js',
   'tests/test-package-staging.js', 'tests/test-safe-private-tree.js', 'tests/test-private-root-session.js',
   'tests/test-package-staging-integration.js', 'tests/test-batch-executor-startup.js',
+  'tests/test-batch-executor-boundaries.js',
+  'tests/test-standalone-intake-failure.js',
   'tests/test-batch-queue-envelope.js', 'tests/test-batch-worker-queue-rejection.js',
   'tests/test-completion-summary.js', 'tests/test-completion-summary-confirmed.js',
   'tests/test-worker-terminal-presentation.js', 'tests/test-workflow-diagnostics.js', 'tests/test-workflow-diagnostics-concurrency.js', 'tests/test-transient-rename-retry.js', 'tests/test-diagnostic-causes.js', 'tests/test-startup-guard.js',

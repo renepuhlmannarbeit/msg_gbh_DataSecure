@@ -59,6 +59,7 @@ function fixture(options = {}) {
     processInstanceIdentity(pid) {
       return alive.has(pid) ? identity(pid) : null;
     },
+    ...(options.requireProcessInstanceIdentity ? { requireProcessInstanceIdentity: options.requireProcessInstanceIdentity } : {}),
     ...(options.otherLiveExecutor ? { otherLiveExecutor(value) { events.push(`other:${value}`); return options.otherLiveExecutor(value); } } : {})
   });
   return { lease, events, state: () => clone(persisted) };
@@ -84,6 +85,19 @@ test('invalid or conclusively dead candidate PID fails before taking the global 
     assert.throws(() => lease.claimLocalBatchExecutor(token, pid), /nicht sicher gestartet/i);
     assert.deepStrictEqual(events, Number.isSafeInteger(pid) && pid > 0 ? [`alive:${pid}`] : []);
   }
+});
+
+test('a failed required birth probe preserves its fixed cause before any lock or journal write', () => {
+  const error = Object.assign(Error('PROCESS_IDENTITY_ACCESS_DENIED'), { code: 'PROCESS_IDENTITY_ACCESS_DENIED' });
+  let calls = 0;
+  const f = fixture({ alive: [222], requireProcessInstanceIdentity: pid => {
+    assert.equal(pid, 222); calls++; throw error;
+  } });
+  assert.throws(() => f.lease.claimLocalBatchExecutor(token, 222), actual => actual === error);
+  assert.equal(calls, 1); assert.deepEqual(f.events, ['alive:222']);
+  assert.deepEqual(f.state(), { token, remaining: 1 });
+  const unavailable = fixture({ alive: [222], identities: { 222: null } });
+  assert.throws(() => unavailable.lease.claimLocalBatchExecutor(token, 222), { code: 'PROCESS_IDENTITY_UNAVAILABLE' });
 });
 
 test('a stale marker is durably replaced and the public response exposes no lease fields', () => {

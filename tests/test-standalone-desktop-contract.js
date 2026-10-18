@@ -43,6 +43,14 @@ test('bootstrap refusals latch natively before notification and only explicit ep
   assert.match(rust, /source_fingerprint::diagnostic_build_id\(option_env!\("DATASECURE_BUILD_ID"\)\)/u);
 });
 
+test('the early root-boundary refusal keeps its storage class without claiming native policy attribution', () => {
+  const { desktopErrorCode } = require('../plugins/data-secure/server/core/desktop-error-contract');
+  assert.equal(desktopErrorCode('PRIVACY_STORAGE_UNSAFE'), 'UNSAFE_STORAGE_LOCATION');
+  assert.equal(desktopErrorCode('PRIVATE PATH /name.docx'), 'STANDALONE_OPERATION_FAILED');
+  const workspace = fs.readFileSync(path.join(root, 'frontend/workspace.js'), 'utf8');
+  assert.match(workspace, /UNSAFE_STORAGE_LOCATION: 'Die Trennung zwischen internen App-Daten und Ergebnisordnern/u);
+});
+
 test('closed desktop errors preserve identity and capacity facts and their renderer recovery hints', () => {
   const { DESKTOP_ERROR_CODES, desktopErrorCode } = require('../plugins/data-secure/server/core/desktop-error-contract');
   assert.equal(new Set(DESKTOP_ERROR_CODES).size, DESKTOP_ERROR_CODES.length);

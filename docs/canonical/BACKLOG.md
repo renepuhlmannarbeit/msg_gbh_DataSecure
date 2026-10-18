@@ -12,15 +12,27 @@ Veröffentlichung geschlossen. Native Artefakte, Approval, finaler gemeinsamer
 Quellcommit, neue Windows-/Mac-Pakete und Uploadreadback noch offen.
 Keine Desktopsteuerung; realer M2-Anwendertest später. Alte Archive erhalten.
 
-## R8 – echtes Fünferfenster implementiert; gebundene Abschlussprüfung läuft
+Rechte-/Restriktionsgegenreview lokal implementiert: sichere Prozessidentität
+mit festen Ursachen statt pauschalem Startfehler, frühe Rootfehlerklasse,
+Rust-Denied-Erhaltung ohne Core-Fallback, ausschließlich In-App-Intakefehler
+mit versuchsgebundener sichtbarer Karte sowie sichere neue native Auswahl
+erst nach explizit bestätigter Worker-Inaktivität. Unabhängige Quellenreviews
+und Gegenfix enthalten; gezielter Folge-/Rustnachweis wird im RC164-Bericht
+gebunden. Keine Admin-/Sicherheitslockerung, keine ursprüngliche M2-Ursache
+behauptet. Spätere echte Mac-Abnahme enthält frisches Profil, TCC-Zustimmung/
+Ablehnung, alte gesperrte Ziele, Finder/ZIP/DMG, Unternehmensrichtlinien und
+Hilfsprozesszuordnung. Diese Gates bleiben neben Producer/Consumer/Release offen.
+
+## R8 – echtes Fünferfenster implementiert; gebundene Baseline bestanden
 
 Nutzerwunsch nur fünf neueste Läufe: Register/normaler Verlauf/Capture auf fünf
 IDs vor Detaillesungen begrenzt; keine Altdateilöschung oder sechstes Nachrücken.
 Einmalige begrenzte Suchmetadatenmigration, Legacy-Locator, echte/Alias-Deduplikation,
 exakte Detail-ID durch Rust/privateIPC/Service, gemeinsame Exportgruppenbindung.
 Registerausfall von verpflichtender Summary-/Recovery-/Ledgerpflege getrennt.
-Quellena08125d2… (328 Inputs); Quellengegenreviews und gezielte Gates grün. Vollsuite266 Dateien
-und neues R8-ZIP werden separat gebunden; Native Prepare/Clippy/211Rusttests
+Quellena08125d2… (328 Inputs); Quellengegenreviews und gezielte Gates grün. Vollsuite266/266
+plus10/10 Zusatzgates und vier Paketgates bestanden; R8-ZIP als unveröffentlichte
+Engineeringbaseline gebunden. Native Prepare/Clippy/211Rusttests
 (3 ignoriert)/Release mit unveränderten Inputs bestanden. R7 bleibt unverändert.
 Belege: dist/rc163-r8-history-final3-20261018 und
 docs/acceptance/RC163_R8_HISTORY_WINDOW_20261018.md. M2 und Windows-Anwenderabnahme

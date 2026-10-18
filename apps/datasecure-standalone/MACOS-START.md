@@ -28,8 +28,13 @@ Verlaufsliste wird nicht automatisch beim Start geöffnet.
 
 **Bekannter Mac-26.2/M2-Prüfstopp:** Der Core von RC161 endete auf diesem
 Zielhost bei ZIP und DMG 16-mal vor seiner Bereitschaft mit Signal 5
-(`SIGTRAP`). RC162 korrigiert eine konkrete Lücke der ad-hoc-Signierung:
-Nur der gehärtete Node-Core erhält jetzt das benötigte JIT-Entitlement.
+(`SIGTRAP`). RC162 ergänzte das benötigte JIT-Entitlement des gehärteten
+Node-Core; damit ist die Ursache des M2-Traps noch nicht bewiesen. Im aktuellen
+Paketentwurf bleibt die Rust-Oberfläche ohne JIT-Ausnahme; der statische
+Produkt-Core erhält ausschließlich `allow-jit`. Der getrennte offizielle
+Konverter-Node besitzt seine gepinnten Hersteller-Entitlements, darunter
+ebenfalls `allow-jit` sowie `disable-library-validation`. Das ist keine
+zusätzliche Ausnahme für den Produkt-Core und keine Dateizugriffsberechtigung.
 Ein Test auf genau dem betroffenen M2 steht noch aus; RC162 ist deshalb
 **nicht als dort funktionsfähig abgenommen**. Der neue Stand protokolliert
 zusätzlich zwei inhaltsfreie, einmalige Startproben, falls der Core wieder
@@ -58,6 +63,44 @@ Verarbeitung oder Exportaktion aus einem unbestätigten Status ableiten.
 Schlägt schon der Start des lokalen Core auf einem verwalteten Mac fehl,
 die IT um eine zeitpunktbezogene Prüfung der Ausführungsrichtlinien bitten;
 keine Gatekeeper- oder Endpoint-Schutzfunktion deaktivieren.
+
+### Welche Zugriffe die App tatsächlich braucht
+
+Die App läuft als normaler angemeldeter Benutzer. Für das Starten einer
+Finder-Kopie im eigenen Nutzerordner und die normale Verarbeitung ist kein
+Administratorbetrieb vorgesehen. Xcode, make, ein installiertes Node.js und
+eine freigeschaltete Terminal-App sind keine Installationsvoraussetzungen.
+Die App startet aber gebündelte Verarbeitungs-/Konverterprozesse und fragt
+zur sicheren Prozesszuordnung `/bin/ps` ab. Eine IT-Richtlinie, die solche
+Prozesse sperrt, kann die Verarbeitung verhindern; das ist nicht dasselbe wie
+eine nur gesperrte Terminal-App. Neue feste `PROCESS_IDENTITY_*`-Fehlercodes
+unterscheiden verweigerte, fehlende, verspätete und ungültige Prozessabfragen,
+ohne Prozessdaten oder Systemfehlermeldungen in die Diagnose zu übernehmen.
+
+Interne Arbeitsdaten liegen unter
+`~/Library/Application Support/SecureDataMsg-Standalone`, nicht im App-Paket.
+Dieser private Bereich benötigt lokalen APFS-/HFS-Speicher und sichere
+Eigentümer-/Zugriffsverhältnisse. Ein freigegebenes Netzwerk-Home, fremde
+Schreibrechte oder umgeleitete interne Ordner können deshalb bewusst
+abgewiesen werden. Die App repariert solche Rechte nicht ungefragt.
+
+Für ausgewählte Eingaben braucht die App Leserechte, für den Ergebnisordner
+Schreibrechte. macOS kann für Dokumente, Schreibtisch oder Downloads eine
+gesonderte Zustimmung verlangen. Der erste noch nicht vorhandene
+Standard-Ergebnisordner wird erst beim ausdrücklichen Start angelegt;
+eine verweigerte Anlage wird als `STANDALONE_RESULT_ROOT_UNAVAILABLE`
+gemeldet. Bereits gespeicherte, unzugängliche Speicherorte können auch eine
+frühe Sicherheitsprüfung verhindern. Eine Developer-ID-Signatur würde diese
+Dateirechte oder Datenschutz-Zustimmungen nicht ersetzen. Für den normalen
+Weg sind weder pauschaler Festplattenvollzugriff noch Bedienungshilfen- oder
+Bildschirmaufnahme-Rechte vorgesehen. Ein lokales ad-hoc-Seal ist jedoch
+keine Developer-ID/Notarisierung: Erstöffnungs- und Organisationssperren
+bleiben auf dem tatsächlichen Mac gesondert zu prüfen.
+Bei wechselnden ad-hoc-Testbuilds kann macOS Datenschutz-Zustimmungen erneut
+verlangen, weil eine versionsübergreifend stabile Entwickleridentität fehlt.
+Die Hilfsprozesse müssen für macOS außerdem der gestarteten App zuordenbar
+bleiben. Deshalb gehört eine echte Finder-Probe mit Dateien-/Ordnerzustimmung
+und deren Ablehnung zur Abnahme; ein Headless-Runner ersetzt diese nicht.
 
 ## Verarbeitung und Prüfung
 

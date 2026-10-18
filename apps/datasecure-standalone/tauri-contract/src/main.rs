@@ -407,7 +407,16 @@ fn dropped_source_kind(paths: &[PathBuf]) -> Result<&'static str, String> {
     }
 }
 
-fn state_allows_new_admission(state: Option<&str>) -> bool {
+fn state_allows_new_admission(current: &Value) -> bool {
+    let state = current.get("state").and_then(Value::as_str);
+    if state == Some("start_failed") {
+        // No journal exists for this attempt. Only explicit, confirmed worker
+        // inactivity admits a fresh selection; absent/malformed status is not
+        // permission to retry. The service rechecks live activity on admission.
+        return current.pointer("/intake_failure/error_code").and_then(Value::as_str)
+            == Some("STANDALONE_START_FAILED")
+            && current.pointer("/intake_failure/worker_active").and_then(Value::as_bool) == Some(false);
+    }
     matches!(
         state,
         Some(
@@ -434,7 +443,7 @@ fn admit_native_sources(
         return Err("STANDALONE_BUSY".to_string());
     }
     let current = rpc(state, "get_public_state", None, &[], None, None)?;
-    if !state_allows_new_admission(current.get("state").and_then(Value::as_str)) {
+    if !state_allows_new_admission(&current) {
         return Err("STANDALONE_BUSY".to_string());
     }
     // Bind tolerant catalogue admission to the actual v2 main asset. The
@@ -552,12 +561,33 @@ fn request_id() -> String {
     format!("{nanos:016x}{sequence:016x}")
 }
 
-fn existing(candidates: impl IntoIterator<Item = PathBuf>) -> Option<PathBuf> {
-    candidates.into_iter().find(|candidate| {
-        std::fs::symlink_metadata(candidate)
-            .map(|metadata| metadata.is_file() && !metadata.file_type().is_symlink())
-            .unwrap_or(false)
-    })
+fn existing(
+    candidates: impl IntoIterator<Item = PathBuf>,
+    mut metadata: impl FnMut(&Path) -> std::io::Result<std::fs::Metadata>,
+) -> std::io::Result<Option<PathBuf>> {
+    for candidate in candidates {
+        match metadata(&candidate) {
+            Ok(metadata) if metadata.is_file() && !metadata.file_type().is_symlink() => return Ok(Some(candidate)),
+            // A denied packaged candidate is not absence and never authorizes
+            // trying another Core or a development-checkout fallback.
+            Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => return Err(error),
+            _ => {}
+        }
+    }
+    Ok(None)
+}
+
+fn runtime_lookup_code(error: &std::io::Error) -> &'static str {
+    if error.kind() == std::io::ErrorKind::PermissionDenied {
+        "STANDALONE_RUNTIME_DENIED"
+    } else { "STANDALONE_RUNTIME_MISSING" }
+}
+
+fn runtime_resource_code(error: &tauri::utils::Error) -> &'static str {
+    match error {
+        tauri::utils::Error::Io(error) => runtime_lookup_code(error),
+        _ => "STANDALONE_RUNTIME_MISSING",
+    }
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -577,25 +607,45 @@ impl RuntimeComponent {
     }
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct RuntimeComponentFailure {
+    component: RuntimeComponent,
+    code: &'static str,
+}
+
 fn required_runtime_component(
     candidates: impl IntoIterator<Item = PathBuf>,
     component: RuntimeComponent,
-) -> Result<PathBuf, RuntimeComponent> {
-    existing(candidates).ok_or(component)
+) -> Result<PathBuf, RuntimeComponentFailure> {
+    required_runtime_component_with_metadata(candidates, component, |candidate| std::fs::symlink_metadata(candidate))
+}
+
+fn required_runtime_component_with_metadata(
+    candidates: impl IntoIterator<Item = PathBuf>,
+    component: RuntimeComponent,
+    metadata: impl FnMut(&Path) -> std::io::Result<std::fs::Metadata>,
+) -> Result<PathBuf, RuntimeComponentFailure> {
+    existing(candidates, metadata)
+        .map_err(|error| RuntimeComponentFailure { component, code: runtime_lookup_code(&error) })?
+        .ok_or(RuntimeComponentFailure { component, code: "STANDALONE_RUNTIME_MISSING" })
 }
 
 fn missing_runtime_component(component: RuntimeComponent) -> String {
+    runtime_component_failure(RuntimeComponentFailure { component, code: "STANDALONE_RUNTIME_MISSING" })
+}
+
+fn runtime_component_failure(failure: RuntimeComponentFailure) -> String {
     // A fixed component code identifies the broken package without persisting
-    // a path, while callers retain the existing user-facing missing-runtime
-    // error. Directories and symlinks remain ineligible as bundled files.
+    // a path or OS message. Access refusal remains distinct from absence;
+    // directories and symlinks remain ineligible as bundled files.
     diagnostic_event(
         "runtime_component_unavailable",
         None,
         "failed",
-        Some(component.diagnostic_code()),
+        Some(failure.component.diagnostic_code()),
         None,
     );
-    "STANDALONE_RUNTIME_MISSING".to_string()
+    failure.code.to_string()
 }
 
 // Tauri can return valid Windows resource paths in verbatim form (`\\?\C:\...`).
@@ -618,10 +668,10 @@ fn child_process_path(path: &Path) -> PathBuf {
 
 fn runtime_paths(app: &tauri::AppHandle) -> Result<(PathBuf, PathBuf, PathBuf), String> {
     let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    let resource = app
-        .path()
-        .resource_dir()
-        .map_err(|_| "STANDALONE_RUNTIME_MISSING".to_string())?;
+    // Use the same Tauri resolver, before PathResolver erases its IO cause as
+    // UnknownPath (including current_exe/Resources canonicalization refusal).
+    let resource = tauri::utils::platform::resource_dir(app.package_info(), &app.env())
+        .map_err(|error| runtime_resource_code(&error).to_string())?;
     #[cfg(not(target_os = "macos"))]
     let target = if cfg!(target_os = "windows") {
         "datasecure-core-x86_64-pc-windows-msvc.exe"
@@ -633,9 +683,11 @@ fn runtime_paths(app: &tauri::AppHandle) -> Result<(PathBuf, PathBuf, PathBuf), 
         "datasecure-core-x86_64-unknown-linux-gnu"
     };
     #[cfg(not(target_os = "macos"))]
-    let executable_directory = std::env::current_exe()
-        .ok()
-        .and_then(|value| value.parent().map(Path::to_path_buf));
+    let executable_directory = match std::env::current_exe() {
+        Ok(value) => value.parent().map(Path::to_path_buf),
+        Err(error) if error.kind() == std::io::ErrorKind::PermissionDenied => return Err(runtime_lookup_code(&error).into()),
+        Err(_) => None,
+    };
     #[cfg(not(target_os = "macos"))]
     let bundled_name = if cfg!(target_os = "windows") {
         "datasecure-core.exe"
@@ -660,10 +712,10 @@ fn runtime_paths(app: &tauri::AppHandle) -> Result<(PathBuf, PathBuf, PathBuf), 
         executable_candidates.push(manifest.join("binaries").join(target));
     }
     #[cfg(target_os = "macos")]
-    let executable_candidates = vec![std::env::current_exe().map_err(|_| "STANDALONE_RUNTIME_MISSING".to_string())?
+    let executable_candidates = vec![std::env::current_exe().map_err(|error| runtime_lookup_code(&error).to_string())?
         .parent().ok_or("STANDALONE_RUNTIME_MISSING")?.join("datasecure-core")];
     let executable = required_runtime_component(executable_candidates, RuntimeComponent::Core)
-        .map_err(missing_runtime_component)?;
+        .map_err(runtime_component_failure)?;
     let packaged_script = resource
         .join("server")
         .join("standalone")
@@ -683,14 +735,14 @@ fn runtime_paths(app: &tauri::AppHandle) -> Result<(PathBuf, PathBuf, PathBuf), 
         );
     }
     let script = required_runtime_component(script_candidates, RuntimeComponent::SidecarScript)
-        .map_err(missing_runtime_component)?;
+        .map_err(runtime_component_failure)?;
     let network_deny = script
         .parent()
         .and_then(Path::parent)
         .map(|server| server.join("network-deny.cjs"))
         .ok_or_else(|| missing_runtime_component(RuntimeComponent::NetworkDeny))?;
     let network_deny = required_runtime_component([network_deny], RuntimeComponent::NetworkDeny)
-        .map_err(missing_runtime_component)?;
+        .map_err(runtime_component_failure)?;
     Ok((executable, script, network_deny))
 }
 
@@ -786,13 +838,16 @@ fn macos_core_probe(app: &tauri::AppHandle, executable: &Path, script_directory:
                 .arg("-e").arg("process.exit(0)");
         }
         let started = Instant::now();
-        if macos_core::bind(executable, started + Duration::from_secs(3)).is_err() {
-            diagnostic_event(stage, None, "failed", Some("STANDALONE_RUNTIME_BINARY_INVALID"), None); break;
+        if let Err(code) = macos_core::bind(executable, started + Duration::from_secs(3)) {
+            diagnostic_event(stage, None, "failed", Some(&code), None); break;
         }
-        let Ok(mut child) = command.spawn() else {
-            diagnostic_event(stage, None, "failed", Some("STANDALONE_CORE_PROBE_SPAWN_FAILED"),
-                Some(started.elapsed().as_millis()));
-            break;
+        let mut child = match command.spawn() {
+            Ok(child) => child,
+            Err(error) => {
+                diagnostic_event(stage, None, "failed", Some(runtime_spawn_code(&error)),
+                    Some(started.elapsed().as_millis()));
+                break;
+            }
         };
         let pid = child.id();
         let (outcome, code) = loop {
@@ -3016,9 +3071,86 @@ mod tests {
             (RuntimeComponent::SidecarScript, "STANDALONE_BUNDLED_SIDECAR_UNAVAILABLE"),
             (RuntimeComponent::NetworkDeny, "STANDALONE_BUNDLED_NETWORK_DENY_UNAVAILABLE"),
         ] {
-            assert_eq!(required_runtime_component([absent.clone()], component), Err(component));
+            assert_eq!(required_runtime_component([absent.clone()], component),
+                Err(RuntimeComponentFailure { component, code: "STANDALONE_RUNTIME_MISSING" }));
             assert_eq!(component.diagnostic_code(), expected);
         }
+    }
+
+    #[test]
+    fn bundled_runtime_lookup_refusal_stops_before_any_candidate_fallback() {
+        let missing = PathBuf::from("synthetic-missing");
+        let denied = PathBuf::from("synthetic-denied");
+        let fallback = PathBuf::from("synthetic-fallback");
+        for component in [RuntimeComponent::Core, RuntimeComponent::SidecarScript, RuntimeComponent::NetworkDeny] {
+            for candidates in [vec![denied.clone(), fallback.clone()], vec![missing.clone(), denied.clone(), fallback.clone()]] {
+                let mut visited = Vec::new();
+                let result = required_runtime_component_with_metadata(candidates.clone(), component, |candidate| {
+                    visited.push(candidate.to_path_buf());
+                    if candidate == missing.as_path() {
+                        Err(std::io::Error::new(std::io::ErrorKind::NotFound, "PRIVATE vendor path"))
+                    } else if candidate == denied.as_path() {
+                        Err(std::io::Error::new(std::io::ErrorKind::PermissionDenied, "PRIVATE vendor path"))
+                    } else { panic!("a denied candidate must not inspect its fallback") }
+                });
+                let expected = RuntimeComponentFailure { component, code: "STANDALONE_RUNTIME_DENIED" };
+                assert_eq!(result, Err(expected));
+                assert!(!format!("{expected:?}").contains("PRIVATE"));
+                assert_eq!(visited, candidates[..candidates.len() - 1]);
+            }
+        }
+    }
+
+    #[test]
+    fn bundled_runtime_missing_and_directory_candidates_remain_ineligible() {
+        let directory = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        let file = directory.join("Cargo.toml");
+        let missing = directory.join(format!("absent-runtime-{}", request_id()));
+        assert!(!missing.exists());
+        assert_eq!(required_runtime_component([missing.clone(), directory.clone()], RuntimeComponent::Core),
+            Err(RuntimeComponentFailure { component: RuntimeComponent::Core, code: "STANDALONE_RUNTIME_MISSING" }));
+        assert_eq!(required_runtime_component([missing, directory, file.clone()], RuntimeComponent::Core), Ok(file));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn bundled_runtime_symlinks_remain_ineligible() {
+        let directory = std::env::temp_dir().join(format!("datasecure-runtime-link-{}", request_id()));
+        std::fs::create_dir(&directory).expect("exclusive test directory");
+        let file = directory.join("synthetic-core");
+        let link = directory.join("synthetic-link");
+        std::fs::write(&file, b"synthetic").expect("test file");
+        std::os::unix::fs::symlink(&file, &link).expect("test symlink");
+        assert_eq!(required_runtime_component([link.clone()], RuntimeComponent::Core),
+            Err(RuntimeComponentFailure { component: RuntimeComponent::Core, code: "STANDALONE_RUNTIME_MISSING" }));
+        assert_eq!(required_runtime_component([link.clone(), file.clone()], RuntimeComponent::Core), Ok(file.clone()));
+        std::fs::remove_file(link).expect("remove test symlink");
+        std::fs::remove_file(file).expect("remove test file");
+        std::fs::remove_dir(directory).expect("remove empty test directory");
+    }
+
+    #[test]
+    fn bundled_runtime_lookup_errors_have_only_fixed_content_free_codes() {
+        for (kind, expected) in [
+            (std::io::ErrorKind::PermissionDenied, "STANDALONE_RUNTIME_DENIED"),
+            (std::io::ErrorKind::NotFound, "STANDALONE_RUNTIME_MISSING"),
+            (std::io::ErrorKind::Other, "STANDALONE_RUNTIME_MISSING"),
+        ] {
+            assert_eq!(runtime_lookup_code(&std::io::Error::new(kind, "PRIVATE vendor path")), expected);
+        }
+    }
+
+    #[test]
+    fn bundled_runtime_resource_lookup_preserves_refusal_without_vendor_text() {
+        for (kind, expected) in [
+            (std::io::ErrorKind::PermissionDenied, "STANDALONE_RUNTIME_DENIED"),
+            (std::io::ErrorKind::NotFound, "STANDALONE_RUNTIME_MISSING"),
+            (std::io::ErrorKind::Other, "STANDALONE_RUNTIME_MISSING"),
+        ] {
+            let error = tauri::utils::Error::Io(std::io::Error::new(kind, "PRIVATE vendor path"));
+            assert_eq!(runtime_resource_code(&error), expected);
+        }
+        assert_eq!(runtime_resource_code(&tauri::utils::Error::UnsupportedPlatform), "STANDALONE_RUNTIME_MISSING");
     }
 
     #[test]
@@ -3120,12 +3252,31 @@ mod tests {
             "stopped",
             "export_pending",
         ] {
-            assert!(state_allows_new_admission(Some(state)), "{state}");
+            assert!(state_allows_new_admission(&json!({ "state": state })), "{state}");
         }
         for state in ["preparing", "processing", "blocked", "unknown"] {
-            assert!(!state_allows_new_admission(Some(state)), "{state}");
+            assert!(!state_allows_new_admission(&json!({ "state": state })), "{state}");
         }
-        assert!(!state_allows_new_admission(None));
+        assert!(!state_allows_new_admission(&json!({})));
+    }
+
+    #[test]
+    fn failed_intake_admission_requires_explicit_confirmed_worker_end() {
+        let ended = json!({ "state": "start_failed", "intake_failure": {
+            "error_code": "STANDALONE_START_FAILED", "worker_active": false } });
+        assert!(state_allows_new_admission(&ended));
+        for active in [json!(true), Value::Null, json!("false"), json!(0), json!({})] {
+            let mut status = ended.clone();
+            status["intake_failure"]["worker_active"] = active;
+            assert!(!state_allows_new_admission(&status), "unknown or active worker: {status}");
+        }
+        for failure in [Value::Null, json!({}), json!({ "worker_active": false }),
+            json!({ "error_code": "OTHER", "worker_active": false }),
+            json!({ "error_code": "STANDALONE_START_FAILED" })] {
+            let status = json!({ "state": "start_failed", "intake_failure": failure });
+            assert!(!state_allows_new_admission(&status), "incomplete failure receipt: {status}");
+        }
+        assert!(!state_allows_new_admission(&json!({ "state": "processing", "intake_failure": ended["intake_failure"] })));
     }
 
     #[test]
@@ -3695,6 +3846,8 @@ mod tests {
     #[test]
     fn runtime_spawn_errors_are_safe_categories_not_raw_os_messages() {
         assert_eq!(runtime_spawn_code(&std::io::Error::new(std::io::ErrorKind::PermissionDenied, "private path")), "STANDALONE_RUNTIME_DENIED");
+        assert_eq!(runtime_spawn_code_for_os(&std::io::Error::new(std::io::ErrorKind::PermissionDenied, "private path"), "macos"),
+            "STANDALONE_RUNTIME_DENIED");
         assert_eq!(runtime_spawn_code(&std::io::Error::new(std::io::ErrorKind::NotFound, "private path")), "STANDALONE_RUNTIME_MISSING");
         assert_eq!(runtime_spawn_code(&std::io::Error::other("private path")), "STANDALONE_RUNTIME_START_FAILED");
         #[cfg(windows)]

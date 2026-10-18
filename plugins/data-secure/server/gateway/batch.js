@@ -39,7 +39,7 @@ const { createBatchNextMaintenance } = require('./batch-next-maintenance');
 const { createBatchProcessingOrchestrator } = require('./batch-processing-orchestrator');
 const { createBatchProcessingAdmission } = require('./batch-processing-admission');
 const { releaseOwnedLock } = require('./batch-lock-release');
-const { processInstanceIdentity } = require('./process-identity');
+const { processInstanceIdentity, requireProcessInstanceIdentity } = require('./process-identity');
 const { exportCompletedState, exportCompletedStateAsync, visibleExportStatus, visibleExportDirectory } = require('./result-export');
 const { planBatchAdmission } = require('./batch-source-admission');
 const { localReviewError, reviewSingleBatchTextLocally, reviewedBatchText } = require('./batch-review-policy');
@@ -385,6 +385,7 @@ const {
   writeState,
   publicProgress,
   processInstanceIdentity,
+  requireProcessInstanceIdentity,
   // The claimant holds the global item lock at this point, so the scan must
   // ignore that lock and look at every other journal's durable lease instead.
   otherLiveExecutor: (token) => recoverableBatchStates({ ignoreActiveLock: true, includeActiveExecutors: true })

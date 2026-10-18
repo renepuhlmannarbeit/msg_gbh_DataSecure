@@ -149,6 +149,7 @@ function fixture(role, firstChild, faults = {}) {
       if (name === './content-start-boundary') return require('../plugins/data-secure/server/gateway/content-start-boundary');
       if (name === '../core/result-naming-mode') return require('../plugins/data-secure/server/core/result-naming-mode');
       if (name === './batch') return batch;
+      if (name === './process-identity') return require('../plugins/data-secure/server/gateway/process-identity');
       if (name === './workflow-diagnostics') return { recordWorkflowEvent: event => records.push(event) };
       if (name === './batch-execution-diagnostic') return require('../plugins/data-secure/server/gateway/batch-execution-diagnostic');
       if (name === './batch-intake-reservation') return {

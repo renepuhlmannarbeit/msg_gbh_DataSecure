@@ -78,9 +78,10 @@ function createBatchExecutorLease(deps) {
 
   function claimLocalBatchExecutor(token, pid) {
     const candidateAlive = Number.isSafeInteger(pid) && pid > 0 && processAlive(pid);
-    const processBirthId = candidateAlive ? processInstanceIdentity(pid) : null;
+    const processBirthId = candidateAlive ? (deps.requireProcessInstanceIdentity || processInstanceIdentity)(pid) : null;
     if (!candidateAlive || !processBirthId) {
-      throw new SafeError('Der lokale Stapelprozessor konnte nicht sicher gestartet werden.');
+      throw Object.assign(new SafeError('Der lokale Stapelprozessor konnte nicht sicher gestartet werden.'),
+        { code: 'PROCESS_IDENTITY_UNAVAILABLE' });
     }
     let epoch;
     const result = transaction(token, () => {

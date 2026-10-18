@@ -33,17 +33,45 @@ const { contentStartOptions, contentStartEnvironment } = require('./content-star
 const { validateReviewPolicy } = require('../core/standalone-review-policy');
 const { MODES: RESULT_NAMING_MODES, validateResultNamingMode } = require('../core/result-naming-mode');
 const { RESOURCE_LIMITS } = require('../resource-limits');
+const { ERROR_CODES: PROCESS_IDENTITY_ERROR_CODES } = require('./process-identity');
 
 const TOKEN_RE = /^[a-f0-9]{64}$/;
+const PROCESS_IDENTITY_ERRORS = new Set(PROCESS_IDENTITY_ERROR_CODES);
+
+function ownErrorCode(error) {
+  if (!error || typeof error !== 'object' || types.isProxy(error)) return undefined;
+  return Object.getOwnPropertyDescriptor(error, 'code')?.value;
+}
+
+function processIdentityErrorCode(error) {
+  const code = ownErrorCode(error);
+  return PROCESS_IDENTITY_ERRORS.has(code) ? code : undefined;
+}
 // Mirrors PARENT_ACK_TYPE in ./worker-terminal-presentation.js (kept literal so
 // the executor keeps its narrow dependency surface). The parent sends it after
-// it has durably claimed the terminal notice; the detached worker then ends
-// without presenting a second window.
+// confirmed presentation and, when a checkpoint exists, its durable presented
+// transition; the detached worker then ends without a second window.
 const TERMINAL_NOTICE_ACK = 'local-terminal-notice-claimed';
 const pendingIntakes = new Map();
 const STANDALONE_RENDER_ACK_MS = 2500;
 let standalonePendingNotice = null;
 let standalonePresentationGeneration = 0;
+
+function nextStandalonePresentationGeneration() {
+  standalonePresentationGeneration = standalonePresentationGeneration >= Number.MAX_SAFE_INTEGER
+    ? 1 : standalonePresentationGeneration + 1;
+  return standalonePresentationGeneration;
+}
+
+// Private service invalidation only. Cancelling a superseded pre-checkpoint
+// display is neither renderer evidence nor a worker/journal acknowledgement.
+function clearStandaloneIntakeFailureNotice(token, generation) {
+  const pending = standalonePendingNotice;
+  if (!pending?.intakeFailure || pending.token !== token || pending.generation !== generation) return false;
+  clearTimeout(pending.timer);
+  standalonePendingNotice = null;
+  return true;
+}
 
 // The durable journal decides who presents the terminal notice: this parent
 // while it is still alive, otherwise the detached worker (the Cowork host may
@@ -95,17 +123,14 @@ function terminalNoticeTransaction(token, options = {}) {
   }
 }
 
-function presentTerminalNoticeAsParent(token, child, show, lifecycle, options = {}, itemCount) {
+function presentTerminalNoticeAsParent(token, child, show, lifecycle, options = {}, itemCount, checkpointCreated = true) {
   const productChannel = String(options.env?.DATASECURE_PRODUCT_CHANNEL || process.env.DATASECURE_PRODUCT_CHANNEL || 'plugin');
   if (productChannel === 'standalone') {
     // Receiving an envelope in the sidecar is not visibility evidence. The
     // renderer acknowledges after a paint opportunity. Standalone never opens
     // a Cowork completion dialog; missing presentation is recovered via its UI.
     if (standalonePendingNotice) return false;
-    standalonePresentationGeneration = standalonePresentationGeneration >= Number.MAX_SAFE_INTEGER
-      ? 1
-      : standalonePresentationGeneration + 1;
-    const generation = standalonePresentationGeneration;
+    const generation = nextStandalonePresentationGeneration();
     const timer = setTimeout(() => {
       if (standalonePendingNotice?.generation !== generation) return;
       standalonePendingNotice = null;
@@ -113,12 +138,17 @@ function presentTerminalNoticeAsParent(token, child, show, lifecycle, options = 
         ...(itemCount ? { item_count: itemCount } : {}), error_code: 'LOCAL_NOTICE_FAILED' });
     }, STANDALONE_RENDER_ACK_MS);
     timer.unref?.();
-    standalonePendingNotice = { child, lifecycle, itemCount, timer, generation, token };
+    standalonePendingNotice = { child, lifecycle, itemCount, timer, generation, token,
+      intakeFailure: checkpointCreated === false };
     lifecycle({ event: 'completion_notice_delegated_to_product_ui', outcome: 'progress',
       ...(itemCount ? { item_count: itemCount } : {}) });
     return true;
   }
-  const transaction = terminalNoticeTransaction(token, options);
+  // Before the first checkpoint there is no journal to reserve or mark. Keep
+  // the same confirmed-presentation/ACK boundary, without creating durable
+  // state or acknowledging a failed native presenter.
+  const transaction = checkpointCreated ? terminalNoticeTransaction(token, options) :
+    { mark: () => true, release: () => true };
   if (!transaction) return false;
   lifecycle({ event: 'completion_notice_started', outcome: 'progress', ...(itemCount ? { item_count: itemCount } : {}) });
   const failed = () => {
@@ -127,14 +157,15 @@ function presentTerminalNoticeAsParent(token, child, show, lifecycle, options = 
       ...(itemCount ? { item_count: itemCount } : {}), error_code: 'LOCAL_NOTICE_FAILED' });
     return false;
   };
-  const presented = () => {
+  const presented = (confirmed) => {
+    if (confirmed === false) return failed();
     let marked = false;
     try { marked = transaction.mark() !== false; } catch { marked = false; }
     if (!marked) return failed();
     lifecycle({ event: 'completion_notice_dispatched', outcome: 'ok', ...(itemCount ? { item_count: itemCount } : {}) });
-    // A worker is released only after both native spawn confirmation and the
-    // durable presented transition. Parent death/error before then leaves it
-    // free to take over after its bounded grace period.
+    // A worker is released only after native confirmation and, where a journal
+    // exists, the durable presented transition. Parent death/error before then
+    // leaves it free to take over after its bounded grace period.
     acknowledgeTerminalNotice(child);
     return true;
   };
@@ -144,7 +175,7 @@ function presentTerminalNoticeAsParent(token, child, show, lifecycle, options = 
       outcome.then(presented, failed).catch(() => {});
       return true;
     }
-    return presented();
+    return presented(outcome);
   } catch {
     return failed();
   }
@@ -541,10 +572,14 @@ function startLocalBatchExecutor(token, options = {}) {
     };
     Object.defineProperty(response, 'ipcAcknowledgement', { value: acceptance.promise, enumerable: false });
     return response;
-  } catch {
-    if (worker) worker.fail('LOCAL_WORKER_SPAWN_FAILED');
-    else lifecycle({ event: 'intake_ipc_failed', outcome: 'stopped', error_code: 'LOCAL_WORKER_SPAWN_FAILED' });
-    throw new SafeError('Der lokale Stapelprozessor konnte nicht sicher gestartet werden.');
+  } catch (error) {
+    const identityCode = processIdentityErrorCode(error);
+    const code = identityCode || 'LOCAL_WORKER_SPAWN_FAILED';
+    if (worker) worker.fail(code);
+    else lifecycle({ event: 'intake_ipc_failed', outcome: 'stopped', error_code: code });
+    const failure = new SafeError('Der lokale Stapelprozessor konnte nicht sicher gestartet werden.');
+    if (identityCode) failure.code = identityCode;
+    throw failure;
   }
 }
 
@@ -640,18 +675,20 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
     const showFailureNotice = (stage) => {
       if (intake.noticeShown) return;
       intake.noticeShown = true;
-      // Before the checkpoint there is no journal to arbitrate; the worker then
-      // presents only when this parent never acknowledged.
-      if (intake.checkpointCreated) {
-        presentTerminalNoticeAsParent(token, child, () => showIntakeNotice(stage), lifecycle, options, itemCount);
-        return;
+      const checkpointCreated = intake.checkpointCreated || stage === 'after_checkpoint';
+      presentTerminalNoticeAsParent(token, child, () => showIntakeNotice(stage), lifecycle,
+        options, itemCount, checkpointCreated);
+      if (productChannel === 'standalone' && !checkpointCreated && typeof options.onIntakeFailure === 'function') {
+        // This is a private attempt receipt, not an invented journal result.
+        // Keep a unique render generation even if an older terminal UI notice
+        // owns the bounded worker-ACK slot. The service can retain the receipt
+        // after that slot times out or this child has already exited.
+        const generation = pendingStandaloneTerminalNoticeGeneration(token) || nextStandalonePresentationGeneration();
+        try {
+          if (options.onIntakeFailure(token, generation) === false)
+            clearStandaloneIntakeFailureNotice(token, generation);
+        } catch { /* optional UI receipt never changes worker/checkpoint state */ }
       }
-      // Before the first checkpoint there is no durable journal. Presenting
-      // locally is still preferred over leaving a failed intake invisible.
-      lifecycle({ event: 'completion_notice_started', outcome: 'progress', item_count: itemCount });
-      try { showIntakeNotice(stage); lifecycle({ event: 'completion_notice_dispatched', outcome: 'ok', item_count: itemCount }); }
-      catch { lifecycle({ event: 'completion_notice_failed', outcome: 'stopped', item_count: itemCount,
-        error_code: 'LOCAL_NOTICE_FAILED' }); }
     };
     // Bounded worker-side acknowledgement. The handoff counts as confirmed only
     // when the worker reports that it received and accepted the private intake
@@ -734,6 +771,7 @@ function startLocalIntakeExecutor(queue, profile = 'auto', options = {}) {
       }
       if (message.type === 'local-intake-checkpoint-created') {
         intake.checkpointCreated = true;
+        try { options.onIntakeCheckpoint?.(token); } catch { /* observational, not checkpoint authority */ }
         lifecycle({ event: 'intake_checkpoint_created', outcome: 'ok', item_count: itemCount });
       }
       if (message.type === 'local-intake-processing-started') {
@@ -815,9 +853,11 @@ function contentFreeReviewStart(progress, started) {
 }
 
 function reviewStartErrorCode(error) {
-  if (error?.code === 'ENOENT') return 'LOCAL_REVIEW_START_MISSING';
-  if (['EACCES', 'EPERM'].includes(error?.code)) return 'LOCAL_REVIEW_START_DENIED';
-  if (['ENOEXEC', 'EFTYPE'].includes(error?.code)) return 'LOCAL_REVIEW_START_ARCHITECTURE';
+  const code = ownErrorCode(error);
+  if (PROCESS_IDENTITY_ERRORS.has(code)) return code;
+  if (code === 'ENOENT') return 'LOCAL_REVIEW_START_MISSING';
+  if (['EACCES', 'EPERM'].includes(code)) return 'LOCAL_REVIEW_START_DENIED';
+  if (['ENOEXEC', 'EFTYPE'].includes(code)) return 'LOCAL_REVIEW_START_ARCHITECTURE';
   return 'LOCAL_REVIEW_START_FAILED';
 }
 
@@ -927,12 +967,14 @@ function startLocalReviewExecutor(token, options = {}) {
     Object.defineProperty(response, 'ipcAcknowledgement', { value: acceptance.promise, enumerable: false });
     return response;
   } catch (error) {
-    if (worker) worker.fail('LOCAL_WORKER_SPAWN_FAILED');
-    else lifecycle({ event: 'review_ipc_failed', outcome: 'stopped', error_code: 'LOCAL_WORKER_SPAWN_FAILED' });
+    const identityCode = processIdentityErrorCode(error);
+    const workerCode = identityCode || 'LOCAL_WORKER_SPAWN_FAILED';
+    if (worker) worker.fail(workerCode);
+    else lifecycle({ event: 'review_ipc_failed', outcome: 'stopped', error_code: workerCode });
     const code = reviewStartErrorCode(error);
     options.appReview?.startFailed?.(token, code, child, attempt);
     const failure = new SafeError('Die lokale Stapelprüfung konnte nicht sicher gestartet werden.');
-    if (options.appReview) failure.code = code;
+    if (options.appReview || identityCode) failure.code = code;
     throw failure;
   }
 }
@@ -944,6 +986,6 @@ module.exports = {
   WORKER_ENV_KEYS, batchWorkerEnvironment, localBatchStateProgress, terminalIntakeProgress,
   startLocalBatchExecutor, startLocalIntakeExecutor, startLocalReviewExecutor,
   localIntakeActive, localReviewActive, acknowledgeStandaloneTerminalNotice,
-  pendingStandaloneTerminalNoticeGeneration,
+  pendingStandaloneTerminalNoticeGeneration, clearStandaloneIntakeFailureNotice,
   _test: { contentFreeReviewStart }
 };

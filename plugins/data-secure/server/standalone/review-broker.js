@@ -2,6 +2,7 @@
 
 const { validateReviewResult } = require('../companion/text-review');
 const { MAX_STANDALONE_REVIEW_FINDINGS } = require('../gateway/standalone-review-budget');
+const { ERROR_CODES: PROCESS_IDENTITY_ERROR_CODES } = require('../gateway/process-identity');
 
 const CHUNK_BYTES = 128 * 1024;
 const MAX_DRAFT_BYTES = 40 * 1024 * 1024;
@@ -41,6 +42,7 @@ function createReviewBroker() {
       'LOCAL_REVIEW_CANCELLED', 'LOCAL_REVIEW_FAILED', 'LOCAL_REVIEW_WORKER_EXITED',
       'LOCAL_REVIEW_START_MISSING', 'LOCAL_REVIEW_START_DENIED',
       'LOCAL_REVIEW_START_ARCHITECTURE', 'LOCAL_REVIEW_START_FAILED',
+      ...PROCESS_IDENTITY_ERROR_CODES,
       'BATCH_REVIEW_RECONSTRUCTION_FAILED'].includes(code) ? code : 'LOCAL_REVIEW_FAILED';
   }
 

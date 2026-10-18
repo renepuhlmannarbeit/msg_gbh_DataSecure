@@ -4,11 +4,34 @@ const fs = require('node:fs');
 const crypto = require('node:crypto');
 const childProcess = require('node:child_process');
 const path = require('node:path');
+const { types } = require('node:util');
 const { processAlive } = require('./process-liveness');
 const { verifyNativeLauncherArtifact } = require('../native-launcher');
 
 const ID_RE = /^[a-f0-9]{64}$/u;
+const ERROR_CODES = Object.freeze(['PROCESS_IDENTITY_UNAVAILABLE', 'PROCESS_IDENTITY_ACCESS_DENIED',
+  'PROCESS_IDENTITY_TOOL_MISSING', 'PROCESS_IDENTITY_TIMEOUT', 'PROCESS_IDENTITY_OUTPUT_INVALID',
+  'PROCESS_IDENTITY_PROBE_FAILED']);
 const cache = new Map();
+
+function identityFailure(code) {
+  return Object.assign(new Error(code), { code });
+}
+
+function ownCode(error) {
+  if (!error || typeof error !== 'object' || types.isProxy(error)) return undefined;
+  return Object.getOwnPropertyDescriptor(error, 'code')?.value;
+}
+
+function assertProbeSucceeded(result) {
+  const code = ownCode(result?.error);
+  if (['EACCES', 'EPERM'].includes(code)) throw identityFailure('PROCESS_IDENTITY_ACCESS_DENIED');
+  if (code === 'ENOENT') throw identityFailure('PROCESS_IDENTITY_TOOL_MISSING');
+  if (code === 'ETIMEDOUT') throw identityFailure('PROCESS_IDENTITY_TIMEOUT');
+  if (code === 'ENOBUFS') throw identityFailure('PROCESS_IDENTITY_OUTPUT_INVALID');
+  if (result?.error || result?.signal || result?.status !== 0)
+    throw identityFailure('PROCESS_IDENTITY_PROBE_FAILED');
+}
 
 function digest(value) {
   return crypto.createHash('sha256').update(String(value), 'utf8').digest('hex');
@@ -32,8 +55,9 @@ function windowsBirth(pid, spawnSync = childProcess.spawnSync, verifyArtifact = 
     encoding: 'utf8', windowsHide: true, shell: false, timeout: 2000,
     maxBuffer: 128, env: {}
   });
+  assertProbeSucceeded(result);
   const ticks = String(result?.stdout || '').trim();
-  if (result?.status !== 0 || !/^\d{10,20}$/u.test(ticks)) return null;
+  if (!/^\d{10,20}$/u.test(ticks)) throw identityFailure('PROCESS_IDENTITY_OUTPUT_INVALID');
   return digest(`win32:${ticks}`);
 }
 
@@ -42,28 +66,42 @@ function macosBirth(pid, spawnSync = childProcess.spawnSync) {
     encoding: 'utf8', windowsHide: true, shell: false, timeout: 2000,
     maxBuffer: 256, env: { PATH: '/usr/bin:/bin', LC_ALL: 'C', LANG: 'C' }
   });
+  assertProbeSucceeded(result);
   const started = String(result?.stdout || '').trim().replace(/\s+/gu, ' ');
-  if (result?.status !== 0 || !/^[A-Z][a-z]{2} [A-Z][a-z]{2}\s+\d{1,2} \d{2}:\d{2}:\d{2} \d{4}$/u.test(started)) return null;
+  if (!/^[A-Z][a-z]{2} [A-Z][a-z]{2}\s+\d{1,2} \d{2}:\d{2}:\d{2} \d{4}$/u.test(started))
+    throw identityFailure('PROCESS_IDENTITY_OUTPUT_INVALID');
   return digest(`darwin:${started}`);
 }
 
-function processInstanceIdentity(pid, options = {}) {
-  if (!Number.isSafeInteger(pid) || pid <= 0) return null;
+// Claims require an identity, not merely a live PID. Preserve the fixed cause
+// for that path, while observers below deliberately retain their null/unknown
+// contract. No vendor text, stderr, start time, PID or path is diagnostic data.
+function requireProcessInstanceIdentity(pid, options = {}) {
+  if (!Number.isSafeInteger(pid) || pid <= 0) throw identityFailure('PROCESS_IDENTITY_UNAVAILABLE');
   const alive = options.processAlive || processAlive;
-  if (!alive(pid)) return null;
   const platform = options.platform || process.platform;
   const key = `${platform}:${pid}`;
-  if (pid === (options.currentPid || process.pid) && cache.has(key)) return cache.get(key);
   let identity = null;
   try {
+    if (!alive(pid)) throw identityFailure('PROCESS_IDENTITY_UNAVAILABLE');
+    if (pid === (options.currentPid || process.pid) && cache.has(key)) return cache.get(key);
     if (platform === 'linux') identity = linuxBirth(pid, options.fs || fs);
     else if (platform === 'win32') identity = windowsBirth(pid, options.spawnSync || childProcess.spawnSync,
       options.verifyArtifact || verifyNativeLauncherArtifact);
     else if (platform === 'darwin') identity = macosBirth(pid, options.spawnSync || childProcess.spawnSync);
-  } catch { identity = null; }
-  if (!ID_RE.test(String(identity || ''))) return null;
+  } catch (error) {
+    const code = ownCode(error);
+    throw identityFailure(ERROR_CODES.includes(code) ? code :
+      ['EACCES', 'EPERM'].includes(code) ? 'PROCESS_IDENTITY_ACCESS_DENIED' : 'PROCESS_IDENTITY_PROBE_FAILED');
+  }
+  if (!ID_RE.test(String(identity || ''))) throw identityFailure('PROCESS_IDENTITY_UNAVAILABLE');
   if (pid === (options.currentPid || process.pid)) cache.set(key, identity);
   return identity;
+}
+
+function processInstanceIdentity(pid, options = {}) {
+  try { return requireProcessInstanceIdentity(pid, options); }
+  catch { return null; }
 }
 
 // `unknown` deliberately blocks recovery. Only a dead process or a different
@@ -78,4 +116,5 @@ function processInstanceState(pid, expectedIdentity, options = {}) {
   return actual === expectedIdentity ? 'same' : 'different';
 }
 
-module.exports = { ID_RE, processInstanceIdentity, processInstanceState, _test: { linuxBirth, windowsBirth, macosBirth } };
+module.exports = { ID_RE, ERROR_CODES, processInstanceIdentity, requireProcessInstanceIdentity,
+  processInstanceState, _test: { linuxBirth, windowsBirth, macosBirth } };

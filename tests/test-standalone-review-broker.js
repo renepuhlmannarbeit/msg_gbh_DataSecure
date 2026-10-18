@@ -15,6 +15,18 @@ const draft = buildReviewDraft(original, original, 'general', [{
   original_start: 0, original_end: 12, anonymized_start: 0, anonymized_end: 12
 }], { allowDefer: true });
 
+test('only the closed identity vocabulary survives an early start failure, without stale-attempt authority', () => {
+  const codes = require('../plugins/data-secure/server/gateway/process-identity').ERROR_CODES;
+  for (const code of [...codes, 'PROCESS_IDENTITY_PRIVATE_VENDOR']) {
+    const broker = createReviewBroker(), attempt = broker.beginAttempt(batchId);
+    broker.startFailed(batchId, code, null, Object.freeze({}));
+    assert.equal(broker.session().error_code, undefined);
+    broker.startFailed(batchId, code, null, attempt);
+    assert.equal(broker.session().error_code, codes.includes(code) ? code : 'LOCAL_REVIEW_FAILED');
+    assert.equal(broker.session().worker_active, false);
+  }
+});
+
 function child() {
   const messages = [];
   return { messages, send(message) { messages.push(message); } };
