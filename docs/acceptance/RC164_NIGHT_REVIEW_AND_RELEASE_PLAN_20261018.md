@@ -1,6 +1,6 @@
 # RC164 – fortgesetzter Abschlussauftrag
 
-## Live-Region-Folgekorrektur, 19.10., 00:02 UTC
+## Live-Region-Folgekorrektur, 18.10., 23:57 UTC
 
 Die tatsächliche Workspacequelle unterscheidet nun die erste Terminalphase
 eines Laufs von späteren Wiederankündigungen behaltenen Zustands. Ein echter

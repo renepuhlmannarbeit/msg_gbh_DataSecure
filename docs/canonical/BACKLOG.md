@@ -4,7 +4,7 @@ Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Pre-Release in Vorbe
 
 ## Aktuelle Nacht-Fortsetzung (ersetzt ältere Freigabeangaben)
 
-Neu19.10.00:02UTC: Live-Region-Folgekorrektur samt357 gezielten Gegenfällen
+Neu18.10.23:57UTC: Live-Region-Folgekorrektur samt357 gezielten Gegenfällen
 grün, Produktionsdiff direkt gegengelesen. Vor finaler Freigabe weiteres
 unabhängiges Gegenlesen (bisherige zusätzliche Agenten wegen Kapazität nicht
 verfügbar), unveränderter Gesamtfreeze und neues natives Paket/GUI nötig.
