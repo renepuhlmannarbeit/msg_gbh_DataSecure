@@ -537,6 +537,7 @@ async function sendAnswer(answer) {
   if (state.waiting || (state.closed || state.disconnected) || !state.reviewId) return;
   invalidateLoads();
   const generation = state.generation;
+  const markdownContact = state.draft?.ocr_contact_review === true && state.draft.processing_mode === 'markdown-only';
   const pending = { reviewId: state.reviewId, action: answer.action,
     choices: new Map(state.choices), inputs: new Map(state.inputs), history: state.history.slice(), cursor: state.cursor };
   state.waiting = true;
@@ -550,7 +551,9 @@ async function sendAnswer(answer) {
     state.waiting = false;
     setWaiting(answer.action === 'deferred'
       ? 'Prüfung vertagt. Der Lauf bleibt im Verlauf unter „Prüfung offen“ und kann dort fortgesetzt werden.'
-      : 'Entscheidungen gespeichert. Weitere Fundstellen werden geprüft. Bitte warten; die nächste Gruppe erscheint hier. Dokumentfreigabe und Export folgen gesondert.',
+      : markdownContact
+        ? 'OCR-Kontaktentscheidungen gespeichert. DataSecure setzt die Markdown-Umwandlung fort. Weitere Kontaktgruppen erscheinen hier bei Bedarf. Eine Dokumentfreigabe zur Anonymisierung ist nicht erforderlich. Den Abschlussstatus siehst du beim Lauf im Hauptfenster.'
+        : 'Entscheidungen gespeichert. Weitere Fundstellen werden geprüft. Bitte warten; die nächste Gruppe erscheint hier. Dokumentfreigabe und Export folgen gesondert.',
     answer.action === 'reviewed');
     if (answer.action === 'reviewed') schedulePoll();
   } catch {

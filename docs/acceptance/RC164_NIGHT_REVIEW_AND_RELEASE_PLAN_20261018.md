@@ -1,5 +1,39 @@
 # RC164 – fortgesetzter Abschlussauftrag
 
+## Neuester Checkpoint, 18.10.2026, 23:18 UTC
+
+7b13d349ae85d37b08e13b8421d2be4de1fc5447 korrigiert die isolierte
+Windows-Shortroot-Annahme eng begrenzt. Rust228/3ignoriert, Clippy, Release und
+Paketgates bestanden mit unveränderten Inputs. Echter unverändert entpackter
+DataSecure-Shortroot startet App/Core. Quellengegenreview und Negativfälle
+bestätigen: keine Erweiterung der reservierten Profile oder falscher OS-Layouts.
+
+Checkpoint03-Headless bleibt ROT:207/272 Dateien vor Startup-Replay-Test208,
+inputs_unchanged=true. Der Test erhielt die geschlossene Fehlersummary statt
+Erfolg, ohne ausreichende damalige Lifecycle-Diagnose. Ursache nicht bewiesen.
+Neue Tests ersetzen Scheduling<50ms und 2s-Coldstartannahmen durch kausale
+Deferral-/Shared-Memory-Wait-/Exit-Orakel; Konstruktor, Crash, Deadline und
+ungültige Summarys werden getrennt geprüft. Gegenreview fand und korrigierte
+auch eine verlorene Testweckung sowie /var-/private/var-Tempdrift. Unabhängiger
+Watchdog/Cleanup, acht gezielte Fälle bestanden; erneuter Gesamtfreeze folgt.
+Keine Produktionsdeadline gelockert, kein alter roter Nachweis überschrieben.
+
+Echte GUI am7b13d349-Engineeringpaket bestätigt OCR-Kontaktprüfung, geführte
+Dokumentfreigabe und einmaligen nativen Export von exakt zwei neutralen MD;
+Hashgleichheit und Abwesenheit privater Begleitdateien geprüft. Schließen und
+expliziter Rückweg zum Verlauf funktionieren; gezielter Statusabgleich bestätigt
+2/2 heutige Stände in einem Abschlussbeleg, kein zweiter Export nötig.
+Am vorherigen2e12c0f-Paket wurden zusätzlich308.372s Denkpause, verworfene
+ungespeicherte Vormerkung und erhaltene gespeicherte OCR-Entscheidung über
+zwei normale Neustarts bestätigt. Profile/Archive getrennt erhalten.
+Das ist Vorabnachweis, keine Abnahme des finalen gemeinsamen Releasepakets.
+
+GUI-Befund reine Markdown-OCR: Zwischenmeldung versprach fälschlich spätere
+Anonymisierungsfreigabe. Zweckgebundene Copy nach bestätigtem Speichern
+korrigiert, Vertragsprüfung vor clearDraft,52 tatsächliche Frontendfälle grün
+und unabhängig gegengelesen. Keine Änderung der Entscheidung/Antwortaktionen.
+Mac-Producer39167676290 weiterhin aktiv, keine Coreapproval oder Veröffentlichung.
+
 Nutzerauftrag am 18.10.2026 abends (Europe/Berlin): gezielte Blockerbehebung,
 mehrere Quellen-/Gegenreviews und echte Windows-Desktopabnahme, anschließend
 Windows x64 und macOS ARM64/Intel als gemeinsamer Pre-Release. Windows-ZIP

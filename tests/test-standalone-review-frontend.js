@@ -152,6 +152,40 @@ testAsync('contact corrections and confirmations use distinct actions, preserve 
   assert.equal(h.element('matrix-body').children.length, 0);
 });
 
+testAsync('confirmed OCR handoff copy follows the loaded purpose before clearing its draft', async () => {
+  const { buildContactDraft } = require('../plugins/data-secure/server/core/ocr-contact-review');
+  for (const markdown of [true, false]) {
+    const h = harness(null, false, true, { modifyDraft(draft) {
+      for (const key of Object.keys(draft)) delete draft[key];
+      Object.assign(draft, buildContactDraft({ original_text: 'a@b.invalid', source_type: 'png',
+        ...(markdown ? { processing_mode: 'markdown-only' } : {}),
+        contacts: [{ start: 0, end: 11, line: 1, page: 1, kind: 'email' }] }));
+    } });
+    await new Promise(resolve => setImmediate(resolve));
+    selectAll(h); applySelected(h, 'confirm_contact');
+    h.callbacks.get('release')(); await new Promise(resolve => setImmediate(resolve));
+    assert.equal(h.calls.filter(call => call.command === 'submit_review').length, 1);
+    assert.equal(h.element('matrix-body').children.length, 0, 'private draft cleared after confirmed handoff');
+    const message = h.element('waiting-text').textContent;
+    if (markdown) {
+      assert.match(message, /OCR-Kontaktentscheidungen gespeichert.*Markdown-Umwandlung fort/u);
+      assert.match(message, /Dokumentfreigabe zur Anonymisierung ist nicht erforderlich/u);
+      assert.doesNotMatch(message, /Dokumentfreigabe und Export folgen|Export abgeschlossen/u);
+    } else assert.match(message, /Dokumentfreigabe und Export folgen gesondert/u);
+  }
+});
+
+testAsync('Markdown contact deferral does not claim a saved decision or document approval', async () => {
+  const h = harness(null, false, true, { modifyDraft(draft) {
+    for (const key of Object.keys(draft)) delete draft[key];
+    Object.assign(draft, contactBatchDraft(['a@b.invalid'], ['email']));
+  } });
+  await new Promise(resolve => setImmediate(resolve));
+  h.callbacks.get('defer')(); await new Promise(resolve => setImmediate(resolve));
+  assert.match(h.element('waiting-text').textContent, /Prüfung vertagt/u);
+  assert.doesNotMatch(h.element('waiting-text').textContent, /Entscheidungen gespeichert|Dokumentfreigabe/u);
+});
+
 testAsync('one explicit OCR correction proposal fills exact duplicates across documents without confirming them', async () => {
   const h = harness(null, false, false, { modifyDraft(draft) {
     for (const key of Object.keys(draft)) delete draft[key];

@@ -4,6 +4,13 @@ Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Pre-Release in Vorbe
 
 ## Aktuelle Nacht-Fortsetzung (ersetzt ältere Freigabeangaben)
 
+Neu23:18UTC: Shortroot-Fix7b13d349 samt echtem nativen Start bestätigt.
+GUI02/03/06 und vorheriger05-Neustartgegenfall vorab geprüft, kein Final-PASS.
+Headless-Checkpoint03 nach207/272 ROT, alte Ursache nicht behaupten; neue
+kausale Replay-Testorakel (8 Fälle, zwei unabhängige Testgegenfixes) und
+zweckrichtige OCR-Speichermeldung (52 Frontendfälle) gezielt grün. Neuer
+unveränderter Gesamtquellenlauf vor Freigabe nötig; alte Belege erhalten.
+
 Bestehender Thread-Heartbeat erneut ACTIVE, alle30min; Windows-Desktopabnahme
 durch Hauptagent ausdrücklich erlaubt, nur gebundener Kandidat/synthetische
 Daten, keine Schutz-/Rechteänderungen. Alte PAUSED-/Desktopverbote unten sind

@@ -4,6 +4,16 @@ Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Test-Pre-Release in 
 
 ### Aktueller Nachtauftrag – neuere Autorität vor historischen Abschnitten
 
+Neu23:18UTC:7b13d349 löst die isolierte Windows-Shortroot-Prüfung; echter
+unverändert entpackter App/Core-Start, OCR, geführte Freigabe, einmaliger Export
+und korrekter gezielter Verlaufsbeleg bestätigt. Vorabnachweise, kein Finalrelease.
+Native228/3ignoriert und Paketgates grün/Inputs unverändert. Checkpoint03-
+Headless ROT nach207/272 (Startup-Replay-Test208), Ursache mangels damaliger
+Lifecycle-Diagnose unbekannt. Kausale Testorakel samt unabhängigen Gegenfixes
+und reine Markdown-OCR-Copykorrektur gezielt grün; neuer Gesamtfreeze folgt.
+Frühere Checkpoint02- oder GUI-Nachweise widerlegen diesen roten Lauf nicht.
+Details/Hashbindungen im neuesten Abschnitt des Nachtplans; Macproducer aktiv.
+
 Windows-Desktopfreigabe ausdrücklich erneut erteilt: allein der Hauptagent,
 gebundener neuer Kandidat und synthetische Testkampagne; keine Sicherheits- oder
 Berechtigungsänderungen. Bestehender Thread-Heartbeat wieder ACTIVE, alle30min,
