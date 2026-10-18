@@ -160,8 +160,12 @@ async function inspectTools(options, signal) {
 }
 async function tarMembers(archive, prefix, signal) {
   const members = (await execRead('/usr/bin/tar', ['-tf', archive], signal)).split('\n');
-  if (members.length < 2 || members.length > 100000 || members.some(name => !name.startsWith(prefix + '/') || /[\\:\r]|(^|\/)\.\.($|\/)/u.test(name)) || new Set(members).size !== members.length)
+  const unsafe = members.filter(name => !name.startsWith(prefix + '/') || /[\\:\r]|(^|\/)\.\.($|\/)/u.test(name));
+  if (members.length < 2 || members.length > 100000 || unsafe.length || new Set(members).size !== members.length) {
+    process.stderr.write('MAC_CORE_PINNED_ARCHIVE_FACTS:' + JSON.stringify({ prefix, count: members.length,
+      unique: new Set(members).size, unsafe: unsafe.length, first_unsafe: unsafe.slice(0, 2).map(name => name.slice(0, 160)) }) + '\n');
     fail('ARCHIVE_MEMBERS_UNSAFE_OR_DUPLICATED');
+  }
   return members;
 }
 async function prepareSource(job, inputs, signal) {
@@ -291,6 +295,7 @@ export async function main(argv = process.argv.slice(2)) {
       product_trusted_attestation: false, status: 'STARTED_NOT_TRUSTED' });
     phase('prepare_pinned_source');
     const prepared = await prepareSource(plan.job, inputs, abort.signal);
+    phase('prepare_official_converter');
     const converter = await prepareConverter(plan.job, options, converterBytes, abort.signal);
     const converterBefore = binaryRecord(converter);
     // The producer itself must be invoked with the matching official Node,
