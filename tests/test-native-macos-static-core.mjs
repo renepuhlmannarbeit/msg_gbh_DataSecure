@@ -281,7 +281,10 @@ export async function runNativeMacGate(options) {
   // Host gate also applies to programmatic callers, before preflight/fixture IO.
   parseNativeMacArgs(['--app', options.app, '--target', options.target]);
   const checked = preflightNativeMacGate(options), helper = path.join(here, 'helpers/mac-static-core-participant.cjs');
-  const helperPin = digest(bound.readBoundFile(helper, { minimum: 1, maximum: 128 * 1024, checkCtime: true }));
+  const aclHelper = path.join(here, 'helpers/native-macos-ownership-acl-fixture.cjs');
+  const helperDigest = () => digest(Buffer.from(JSON.stringify([helper, aclHelper].map(file =>
+    digest(bound.readBoundFile(file, { minimum: 1, maximum: 128 * 1024, checkCtime: true }))))));
+  const helperPin = helperDigest();
   const fixture = createFixture(), peers = [], receipts = [];
   const deadline = performance.now() + 30000;
   let failed = false, primary, phase = 'process_start', complete = false, cleanupConfirmed = false;
@@ -290,7 +293,7 @@ export async function runNativeMacGate(options) {
       artifactSha256: checked.build.artifactSha256 });
     for (let n = 0; n < 2; n++) {
       checked.unchanged();
-      assert.equal(digest(bound.readBoundFile(helper, { maximum: 128 * 1024, checkCtime: true })), helperPin);
+      assert.equal(helperDigest(), helperPin);
       peers.push(participant(checked.core, helper, { app: options.app, server: checked.server, root: fixture.root,
         scope: fixture.scope, target: options.target, core_sha256: checked.build.artifact.core.sha256,
         artifact_sha256: checked.build.artifactSha256 }, environment, deadline));
@@ -315,8 +318,11 @@ export async function runNativeMacGate(options) {
     assert.deepEqual(await a.request('admit'), { busy: false, callbacks: 1, reentrant: true });
     phase = 'worker_admission';
     assert.deepEqual(await a.request('worker_free'), { builtin: true, busy: false, callbacks: 1, reentrant: true, exited: true, normal: true });
+    phase = 'acl_presence_and_roles';
+    assert.deepEqual(await a.request('acl_matrix'), { cases: 6, empty_private_acl: true, benign_home_ancestor: true,
+      additional_mutation_grants_refused: true, private_aces_refused: true, fixture_cleanup_confirmed: true });
     fixture.unchangedAnchor(); checked.unchanged();
-    assert.equal(digest(bound.readBoundFile(helper, { maximum: 128 * 1024, checkCtime: true })), helperPin);
+    assert.equal(helperDigest(), helperPin);
     complete = true;
   } catch (error) { failed = true; primary = error; }
   finally {
@@ -345,7 +351,8 @@ export async function runNativeMacGate(options) {
     fixture_preserved: fixture.status() === 'preserved',
     coverage: { two_core_processes: complete, normal_fork_ipc: complete, worker_builtin_environment: complete,
       process_and_worker_contention: complete, synchronous_root_admission_release: complete,
-      epoch: 'NOT_RUN', pause: 'NOT_RUN', lease: 'NOT_RUN', adversarial_acl_matrix: 'NOT_RUN', gui: 'NOT_RUN' } };
+      acl_presence_and_role_matrix: complete,
+      epoch: 'NOT_RUN', pause: 'NOT_RUN', lease: 'NOT_RUN', adversarial_acl_matrix: complete ? 'PARTIAL' : 'NOT_RUN', gui: 'NOT_RUN' } };
   if (failed) { const error = failure(fixedCode(primary)); error.report = result; throw error; }
   return result;
 }

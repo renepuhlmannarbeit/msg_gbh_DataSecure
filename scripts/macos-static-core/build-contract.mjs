@@ -5,8 +5,8 @@ export const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 export const fail = code => { throw Object.assign(Error(code), { code }); };
 export const PINS = Object.freeze({
   'node-v22.23.2.tar.xz': 'bbe768df8d5815d7fa76124052985332452e0a4742d39f32027550d1aab8f6fb',
-  'macos-core-source.mjs': '931d45d99bc11b96b5dd3bf7cf78ebdd942a59080a436be3a8372b42b45fb4a4',
-  'inputs/ownership-guard.c': 'c1a46654683e14c38d01adc7fd783047af0532eccf8356ca187b783fcd5438f1',
+  'macos-core-source.mjs': '0790f00c9158ddae9ba398f293781f4836fee14ed24f1ac01b3379c5cffe7551',
+  'inputs/ownership-guard.c': 'fc67b47255db619ccb95658d544a92190ac325760cecd9d6206db5189c206d1d',
   'inputs/ownership-guard-link.cc': 'd08ad564c1978b8af425b0b6159860ef99817fcd7e0cf2bb5bf020f57b673c5e',
   'inputs/ownership-guard-link.h': 'a6e63701421b23f70a1440ad63f3a13337597f48efeb0b048acfe4c75701a2e7',
 });
@@ -19,7 +19,7 @@ export const REPOSITORY_INPUTS = Object.freeze({
 export const PATCHED = Object.freeze({
   'src/api/environment.cc': '61efdad541b3b0730a08da31e0eeb64e94f8c2249b234d03fd2efd17e7bb9d96',
   'node.gyp': 'f7ef9762e798fc9ef3da2dd901b30d01cceb0e004a6bc34573fcffa7fd2cef33',
-  'src/datasecure/ownership-guard.c': 'c4061e7fa7a02660e48a8e36a22c1b5220c5a2242771c8579470155ee7dfd8d8',
+  'src/datasecure/ownership-guard.c': '3f287003ab8eb1562b325e8a51aad8b06f1e6a2b5249629cbc03ac569441dbe9',
   'src/datasecure/ownership-guard-link.cc': PINS['inputs/ownership-guard-link.cc'],
   'src/datasecure/ownership-guard-link.h': PINS['inputs/ownership-guard-link.h'],
 });

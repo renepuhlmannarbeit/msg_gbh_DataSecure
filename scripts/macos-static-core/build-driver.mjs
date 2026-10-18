@@ -249,6 +249,14 @@ async function runBuildStep(step, env, job, label, signal) {
 function binaryRecord(file, maximum = MAX_CORE_BYTES) {
   return producerFileObservation(readProducerFileRecord(file, maximum));
 }
+export function assertNativeAclProbe(value) {
+  const expected = { cases: 6, empty_private_acl: true, benign_home_ancestor: true,
+    additional_mutation_grants_refused: true, private_aces_refused: true, fixture_cleanup_confirmed: true };
+  if (!value || typeof value !== 'object' || Array.isArray(value) ||
+      Object.keys(value).sort().join(',') !== Object.keys(expected).sort().join(',') ||
+      Object.entries(expected).some(([key, wanted]) => value[key] !== wanted)) fail('CORE_NATIVE_ACL_PROBE_INVALID');
+  return value;
+}
 async function candidateEvidence(core, converter, options, tools, env, signal) {
   const arch = await execRead(tools.lipo, ['-archs', core], signal, env);
   if (arch !== (options.arch === 'arm64' ? 'arm64' : 'x86_64')) fail('CORE_MACHO_ARCH_MISMATCH');
@@ -370,6 +378,14 @@ export async function main(argv = process.argv.slice(2)) {
     assertRoleSeparation(core, converterAfter);
     phase('native_role_probes_started');
     const checks = await candidateEvidence(plan.output, converter, options, inspection.tools, plan.environment, abort.signal);
+    phase('native_acl_policy_probe_started');
+    const aclFixture = path.join(options.repository, 'tests/helpers/native-macos-ownership-acl-fixture.cjs');
+    const aclFixtureRecord = readProducerFileRecord(aclFixture, 128 * 1024);
+    const aclProbe = assertNativeAclProbe(JSON.parse(await execRead(plan.output, [aclFixture], abort.signal, plan.environment, plan.job)));
+    revalidateProducerFileRecord(aclFixtureRecord);
+    checks.aclProbe = { ...aclProbe, fixture_sha256: sha256(aclFixtureRecord.bytes), core_sha256: core.sha256 };
+    writeEvidence(plan.job, 'ACL-NATIVE-PROBE.json', checks.aclProbe);
+    phase('native_acl_policy_probe_finished');
     // Execution/probing may not alter the final bytes. No re-sealing or
     // re-attestation is permitted to hide later mutation.
     if (binaryRecord(plan.output).sha256 !== core.sha256 ||

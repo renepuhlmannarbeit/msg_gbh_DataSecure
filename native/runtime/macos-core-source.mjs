@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto';
 export const VERSION = '22.23.2';
 export const ARCHIVE_SHA256 = 'bbe768df8d5815d7fa76124052985332452e0a4742d39f32027550d1aab8f6fb';
-export const GUARD_SHA256 = 'c1a46654683e14c38d01adc7fd783047af0532eccf8356ca187b783fcd5438f1';
+export const GUARD_SHA256 = 'fc67b47255db619ccb95658d544a92190ac325760cecd9d6206db5189c206d1d';
 export const SOURCE_SHA256 = Object.freeze({
   'src/api/environment.cc': '203fbbc587ff81566a9011374b2812ba84d313d218cb49d7fbf00e9f901e156f',
   'src/node.h': 'bc47b118a731e9663b145e4823ebc7f31237140d6ea95417519d894d7a0498cb',

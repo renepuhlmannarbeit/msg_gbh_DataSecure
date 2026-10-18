@@ -10,7 +10,7 @@ import * as timers from 'node:timers';
 import * as contract from '../scripts/macos-static-core/build-contract.mjs';
 import * as final from '../scripts/macos-static-core/final-core-contract.mjs';
 import { readMacCoreBuildProcessLifecycle } from '../scripts/lib/macos-core-process-lifecycle.mjs';
-import { main, assertProducerRepository, capturePythonIdentity, revalidatePythonIdentity } from '../scripts/macos-static-core/build-driver.mjs';
+import { main, assertProducerRepository, capturePythonIdentity, revalidatePythonIdentity, assertNativeAclProbe } from '../scripts/macos-static-core/build-driver.mjs';
 import * as realHelper from '../scripts/macos-static-core/producer-io-lifecycle.mjs';
 
 const root = path.resolve(path.dirname(url.fileURLToPath(import.meta.url)), '..');
@@ -909,6 +909,37 @@ await check('fixed-tool callers: actual candidate evidence awaits every role pro
   const primary = Object.assign(Error('fixed'), { code: 'PRODUCER_TOOL_DEADLINE' });
   context.execRead = async () => { throw primary; };
   await assert.rejects(context.run(core, converter, { arch: 'arm64' }, tools, environment, signal), error => error === primary);
+});
+
+await check('native ACL proof is closed, mandatory and bound to the final sealed Core before artifact publication', async () => {
+  const expected = { cases: 6, empty_private_acl: true, benign_home_ancestor: true,
+    additional_mutation_grants_refused: true, private_aces_refused: true, fixture_cleanup_confirmed: true };
+  assert.deepEqual(assertNativeAclProbe(expected), expected);
+  for (const malformed of [null, [], {}, { ...expected, cases: '6' }, { ...expected, cases: 5 },
+    { ...expected, fixture_cleanup_confirmed: false }, { ...expected, private_aces_refused: false },
+    { ...expected, extra: 'not accepted' }]) assert.throws(() => assertNativeAclProbe(malformed), { code: 'CORE_NATIVE_ACL_PROBE_INVALID' });
+  const calls = [], bytes = Buffer.from('source-bound-native-fixture'), record = { bytes };
+  const signal = new AbortController().signal, environment = Object.freeze({ LANG: 'C' });
+  const context = { path, options: { repository: '/repo' }, plan: { output: '/private/final-core', job: '/private/job' },
+    abort: { signal }, checks: {}, core: { sha256: 'a'.repeat(64) }, sha256: contract.sha256, assertNativeAclProbe,
+    phase(value) { calls.push(['phase', value]); },
+    readProducerFileRecord(file, maximum) { calls.push(['read', file, maximum]); return record; },
+    revalidateProducerFileRecord(value) { assert.equal(value, record); calls.push(['revalidate']); },
+    async execRead(exe, args, actualSignal, env, cwd) {
+      assert.equal(exe, '/private/final-core'); assert.deepEqual(Array.from(args), [path.join('/repo', 'tests/helpers/native-macos-ownership-acl-fixture.cjs')]);
+      assert.equal(actualSignal, signal); assert.equal(env, environment); assert.equal(cwd, '/private/job');
+      calls.push(['native']); return JSON.stringify(expected);
+    },
+    writeEvidence(job, name, proof) { assert.equal(job, '/private/job'); assert.equal(name, 'ACL-NATIVE-PROBE.json');
+      assert.equal(proof.core_sha256, 'a'.repeat(64)); assert.equal(proof.fixture_sha256, contract.sha256(bytes)); calls.push(['evidence']); }
+  };
+  context.plan.environment = environment;
+  const block = actualDriverBlock("    phase('native_acl_policy_probe_started');", '    // Execution/probing may not alter');
+  await vm.runInNewContext('(async()=>{' + block + '})()', context);
+  assert.deepEqual(calls.map(row => row[0]), ['phase', 'read', 'native', 'revalidate', 'evidence', 'phase']);
+  calls.length = 0; context.execRead = async () => JSON.stringify({ ...expected, private_aces_refused: false });
+  await assert.rejects(vm.runInNewContext('(async()=>{' + block + '})()', context), { code: 'CORE_NATIVE_ACL_PROBE_INVALID' });
+  assert.equal(calls.some(row => row[0] === 'evidence'), false, 'failed native policy never publishes success evidence');
 });
 
 await check('build-only budgets remain finite and fit within the hosted runner window', async () => {

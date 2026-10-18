@@ -230,7 +230,8 @@ static bool private_permissions(NativeFile file) {
   if (fstatx_np(file, &st, security) != 0 || st.st_uid != geteuid() || (st.st_mode & 0022) != 0 ||
       filesec_query_property(security, FILESEC_ACL, &present) != 0) goto done;
   if (present == 0) { ok = true; goto done; }
-  if (present != 1 || filesec_get_property(security, FILESEC_ACL, &acl) != 0 || !acl || acl == (acl_t)1 || acl_valid(acl) != 0) goto done;
+  /* filesec_query_property returns a validity bitmask (ACL is 1<<5), not 1. */
+  if (present < 0 || filesec_get_property(security, FILESEC_ACL, &acl) != 0 || !acl || acl == (acl_t)1 || acl_valid(acl) != 0) goto done;
   errno = 0;
   if (acl_get_entry(acl, ACL_FIRST_ENTRY, &entry) == -1 && errno == EINVAL && entry == NULL) ok = true;
 done:
@@ -255,7 +256,8 @@ static bool namespace_permissions(NativeFile parent, const Identity *child) {
       ((st.st_mode & 0022) != 0 && !(st.st_mode & S_ISVTX)) ||
       filesec_query_property(security, FILESEC_ACL, &present) != 0) goto done;
   if (present == 0) { ok = true; goto done; }
-  if (present != 1 || filesec_get_property(security, FILESEC_ACL, &acl) != 0 || !acl || acl == (acl_t)1 || acl_valid(acl) != 0) goto done;
+  /* Positive presence does not approve any ACE; the full policy follows. */
+  if (present < 0 || filesec_get_property(security, FILESEC_ACL, &acl) != 0 || !acl || acl == (acl_t)1 || acl_valid(acl) != 0) goto done;
   const acl_permset_mask_t readonly = (acl_permset_mask_t)(ACL_READ_DATA | ACL_EXECUTE | ACL_READ_ATTRIBUTES |
     ACL_READ_EXTATTRIBUTES | ACL_READ_SECURITY | ACL_SYNCHRONIZE);
   const acl_permset_mask_t known = readonly | (acl_permset_mask_t)(ACL_WRITE_DATA | ACL_APPEND_DATA | ACL_DELETE |

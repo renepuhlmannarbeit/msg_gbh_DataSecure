@@ -125,6 +125,70 @@ test('MODEL: actual helper release consumes its capability once; false/undefined
     factory: { close() { throw fail('CLEANUP_SECONDARY'); } } });
   assert.deepEqual(capture(primary.release), { threw: true, value: undefined });
 });
+function aclFixtureModel(mode = 'normal', platform = 'darwin') {
+  const source = fs.readFileSync(path.join(directory, 'helpers/native-macos-ownership-acl-fixture.cjs'), 'utf8');
+  const scope = '/temporary/datasecure-macos-acl-native-model', entries = new Map(), aclWrites = [], roots = new Set(), guards = new Set();
+  let next = 1n, calls = 0, context;
+  const plain = stat => ({ ...stat, isDirectory: () => stat.directory, isFile: () => !stat.directory, isSymbolicLink: () => false });
+  function add(name, directory = true, mode = 0o700n) {
+    assert.ok(!entries.has(name)); entries.set(name, { directory, dev: 1n, ino: next++, birthtimeNs: 1n, uid: 501n,
+      mode, nlink: 1n, size: 0n, acl: [] });
+  }
+  const io = { realpathSync: { native: name => name },
+    mkdtempSync(prefix) { calls++; assert.equal(prefix, '/temporary/datasecure-macos-acl-native-'); add(scope); return scope; },
+    mkdirSync(name, options) { assert.equal(options.mode, 0o700); assert.ok(entries.has(path.posix.dirname(name))); add(name); },
+    lstatSync(name) { assert.ok(entries.has(name)); return plain(entries.get(name)); },
+    chmodSync(name, value) { assert.ok(entries.has(name)); entries.get(name).mode = BigInt(value); },
+    readdirSync(name) { return vm.runInContext('JSON.parse(' + JSON.stringify(JSON.stringify([...entries.keys()]
+      .filter(value => value !== scope && path.posix.dirname(value) === name).map(value => path.posix.basename(value)))) + ')', context); },
+    unlinkSync(name) { assert.ok(name.endsWith('/ownership-control.lock') && entries.has(name)); entries.delete(name); },
+    rmdirSync(name) { assert.equal(io.readdirSync(name).length, 0); assert.ok(entries.has(name)); entries.delete(name); } };
+  const api = { abi: 1, createRoot(leaf) {
+    const parent = entries.get(path.posix.dirname(leaf)), own = entries.get(leaf);
+    const denied = mode === 'reject-benign' || own.acl.length !== 0 || parent.acl.some(line => / allow (?:delete_child|add_file)$/u.test(line));
+    if (denied && mode !== 'accept-unsafe') throw fail('OWNERSHIP_GUARD_UNSAFE');
+    const value = { leaf }; roots.add(value); return value;
+  }, tryAcquire(owner) { assert.ok(roots.has(owner)); const value = { owner }; guards.add(value);
+    add(owner.leaf + '/ownership-control.lock', false, 0o600n); return value; },
+  assertHeld(guard) { assert.ok(guards.has(guard)); return true; },
+  release(guard) { assert.ok(guards.delete(guard)); return mode !== 'false-release'; },
+  closeRoot(owner) { assert.ok(roots.delete(owner)); return true; } };
+  context = vm.createContext({ module: { exports: {} }, process: { platform, arch: 'arm64', version: 'v22.23.2', geteuid: () => 501 },
+    console: { log: () => assert.fail('import must not execute native gate') }, require(name) {
+      if (name === 'node:assert/strict') return assert;
+      if (name === 'node:fs') return io;
+      if (name === 'node:os') return { tmpdir: () => '/temporary' };
+      if (name === 'node:path') return path.posix;
+      if (name === 'node:child_process') return { execFileSync(command, args, options) {
+        assert.equal(command, '/bin/chmod'); assert.equal(args[0], '-E'); assert.equal(args.length, 2);
+        assert.equal(options.shell, false); assert.equal(options.timeout, 1000);
+        assert.ok(entries.has(args[1]) && entries.get(args[1]).directory, 'never alter an existing external directory');
+        assert.ok(args[1] === scope || args[1].startsWith(scope + '/'));
+        assert.ok(options.input.endsWith('\n')); entries.get(args[1]).acl = options.input.split('\n').filter(Boolean);
+        aclWrites.push(args[1]);
+      } };
+      assert.fail('unexpected fixture dependency');
+    } });
+  vm.runInContext(source, context, { timeout: 500 });
+  return { run: () => context.module.exports.runNativeMacOwnershipAclCases(api), entries, roots, guards, aclWrites,
+    get calls() { return calls; } };
+}
+test('MODEL: actual native ACL fixture exercises six roles and clears only its new bound objects', () => {
+  const f = aclFixtureModel(), value = f.run();
+  assert.equal(value.cases, 6); assert.equal(value.empty_private_acl, true);
+  assert.equal(value.benign_home_ancestor, true); assert.equal(value.additional_mutation_grants_refused, true);
+  assert.equal(value.private_aces_refused, true); assert.equal(value.fixture_cleanup_confirmed, true);
+  assert.equal(f.roots.size, 0); assert.equal(f.guards.size, 0); assert.equal(f.entries.size, 0);
+  assert.ok(f.aclWrites.length > 12);
+});
+for (const mode of ['reject-benign', 'accept-unsafe', 'false-release'])
+  test('MODEL: actual native ACL fixture cannot report PASS for ' + mode, () => {
+    const f = aclFixtureModel(mode); assert.throws(f.run); assert.ok(f.entries.size > 0, 'failed fixture remains for diagnosis');
+  });
+test('MODEL: native ACL fixture refuses a non-Darwin host before any fixture IO', () => {
+  const f = aclFixtureModel('normal', 'win32'); assert.throws(f.run); assert.equal(f.calls, 0); assert.equal(f.entries.size, 0);
+});
+
 test('MODEL: real runner dispatch is explicit Darwin-only, old Windows artifact plans unchanged', () => {
   const runner = fs.readFileSync(path.join(directory, 'run-product-suite.js'), 'utf8'), spawns = [];
   const context = vm.createContext({ module: { exports: {} }, console: { log() {}, error() {} },
@@ -201,6 +265,8 @@ function lifecycleModel(mode = 'normal') {
         case 'admit': value = ++this.admits === 1 ? { busy: true, callbacks: 0 } : { busy: false, callbacks: 1, reentrant: true }; break;
         case 'worker_busy': value = { builtin: true, busy: true, callbacks: 0, exited: true, normal: true }; break;
         case 'worker_free': value = { builtin: true, busy: false, callbacks: 1, reentrant: true, exited: true, normal: true }; break;
+        case 'acl_matrix': value = { cases: 6, empty_private_acl: true, benign_home_ancestor: true,
+          additional_mutation_grants_refused: true, private_aces_refused: true, fixture_cleanup_confirmed: true }; break;
         case 'release':
           if (this.index === 0 && ++this.releases === 2) { ok = false; value = 'MAC_NATIVE_NO_HELD_CAPABILITY'; }
           else value = { released: true, root_closed: true };

@@ -6,7 +6,7 @@
     "archive": "node-v22.23.2.tar.xz",
     "sha256": "bbe768df8d5815d7fa76124052985332452e0a4742d39f32027550d1aab8f6fb"
   },
-  "guard_source_sha256": "c1a46654683e14c38d01adc7fd783047af0532eccf8356ca187b783fcd5438f1",
+  "guard_source_sha256": "fc67b47255db619ccb95658d544a92190ac325760cecd9d6206db5189c206d1d",
   "static_binding": {
     "name": "datasecure_ownership_guard",
     "abi": 1,

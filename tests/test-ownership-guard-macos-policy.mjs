@@ -15,6 +15,8 @@ const policy = source.slice(start + '#else\n'.length, end);
 assert.match(policy, /namespace_permissions\(current, &root->ids\[i\]\)/u);
 assert.match(policy, /namespace_permissions\(root->dirs\[i - 1\], &id\)/u);
 assert.match(policy, /private_permissions\(root->dirs\[root->depth - 1\]\)/u);
+assert.equal((policy.match(/if \(present < 0 \|\| filesec_get_property/gu) || []).length, 2);
+assert.doesNotMatch(policy, /present\s*(?:!=|==)\s*1\b/u);
 assert.doesNotMatch(policy, /\b(?:chmod|fchmod|chown|fchown|acl_set_file|acl_set_fd|fchmodx_np)\s*\(/u);
 
 const harness = String.raw`
@@ -37,7 +39,9 @@ const harness = String.raw`
 #define S_ISREG(m) (((m) & 0170000) == 0100000)
 #define MNT_LOCAL 0x1000
 #define MNT_IGNORE_OWNERSHIP 0x200000
-#define FILESEC_ACL 1
+#define FILESEC_ACL 5
+/* Apple Libc gen/filesec.c FS_VALID_ACL: deliberately independent of product. */
+#define FS_VALID_ACL (1<<5)
 #define ACL_FIRST_ENTRY 0
 #define ACL_NEXT_ENTRY (-1)
 #define ACL_EXTENDED_ALLOW 1
@@ -73,7 +77,7 @@ typedef struct { Identity stat; struct statfs volume; struct ModelAcl acl; int p
 static Node nodes[3];
 static int live_security, live_acl, checks;
 static int init_fail, stat_fail, fs_fail, query_fail, get_fail, null_acl, sentinel_acl,
-  valid_fail, tag_fail, mask_fail, free_fail, entry_error, null_entry, replace_name;
+  valid_fail, tag_fail, mask_fail, free_fail, entry_error, null_entry, entry_status, end_nonnull, replace_name;
 static void expect(int actual, int expected, const char *name) {
   ++checks; if (!!actual != !!expected) { fprintf(stderr, "model failure: %s\n", name); exit(1); }
 }
@@ -91,10 +95,11 @@ static int fstat(int fd, struct stat *st) { if (stat_fail) return -1; *st = node
 static int fstatx_np(int fd, struct stat *st, filesec_t value) { value->fd = fd; return fstat(fd, st); }
 static int fstatfs(int fd, struct statfs *volume) { if (fs_fail) return -1; *volume = nodes[fd].volume; return 0; }
 static int filesec_query_property(filesec_t value, int property, int *present) {
-  (void)property; if (query_fail) return -1; *present = nodes[value->fd].present; return 0;
+  expect(property == FILESEC_ACL, true, "public FILESEC_ACL ABI");
+  if (query_fail) return -1; *present = nodes[value->fd].present; return 0;
 }
 static int filesec_get_property(filesec_t value, int property, acl_t *acl) {
-  (void)property; if (get_fail) return -1;
+  expect(property == FILESEC_ACL, true, "public FILESEC_ACL read ABI"); if (get_fail) return -1;
   if (null_acl) { *acl = NULL; return 0; } if (sentinel_acl) { *acl = (acl_t)1; return 0; }
   *acl = &nodes[value->fd].acl; (*acl)->cursor = -1; ++live_acl; return 0;
 }
@@ -102,9 +107,10 @@ static int acl_valid(acl_t acl) { (void)acl; return valid_fail ? -1 : 0; }
 static int acl_free(void *acl) { (void)acl; --live_acl; return free_fail ? -1 : 0; }
 static int acl_get_entry(acl_t acl, int which, acl_entry_t *entry) {
   if (entry_error) { errno = entry_error; return -1; }
+  if (entry_status) return entry_status;
   int index = which == ACL_FIRST_ENTRY ? 0 : acl->cursor + 1;
   if (null_entry) return 0;
-  if (index >= acl->count) { errno = EINVAL; return -1; } /* Darwin leaves *entry unchanged. */
+  if (index >= acl->count) { if (end_nonnull) *entry = &acl->entries[0]; errno = EINVAL; return -1; } /* Darwin leaves *entry unchanged. */
   *entry = &acl->entries[index]; acl->cursor = index; return 0;
 }
 static int acl_get_tag_type(acl_entry_t entry, acl_tag_t *tag) { if (tag_fail) return -1; *tag = entry->tag; return 0; }
@@ -129,7 +135,7 @@ static void reset(void) {
   expect(live_security == 0 && live_acl == 0, true, "no security/ACL leak");
   memset(nodes, 0, sizeof(nodes));
   init_fail = stat_fail = fs_fail = query_fail = get_fail = null_acl = sentinel_acl = valid_fail =
-    tag_fail = mask_fail = free_fail = entry_error = null_entry = replace_name = 0;
+    tag_fail = mask_fail = free_fail = entry_error = null_entry = entry_status = end_nonnull = replace_name = 0;
   for (int i = 0; i < 3; ++i) {
     nodes[i].stat.st_uid = i == 0 ? 0 : 501; nodes[i].stat.st_mode = 0040000 | (i == 2 ? 0700 : 0755);
     nodes[i].stat.st_dev = 1; nodes[i].stat.st_ino = (uint64_t)(10 + i); nodes[i].stat.st_nlink = 1;
@@ -143,7 +149,7 @@ static void tree(const char *name, bool wanted) {
   expect(live_security == 0 && live_acl == 0, true, "balanced security/ACL cleanup");
 }
 static void ace(int tag, uint64_t permissions) {
-  nodes[1].present = 1; nodes[1].acl.count = 1; nodes[1].acl.entries[0].tag = tag;
+  nodes[1].present = FS_VALID_ACL; nodes[1].acl.count = 1; nodes[1].acl.entries[0].tag = tag;
   nodes[1].acl.entries[0].permissions = permissions;
 }
 int main(void) {
@@ -161,9 +167,10 @@ int main(void) {
   reset(); nodes[1].volume.f_flags = 0; tree("nonlocal ancestor", false);
   reset(); nodes[2].stat.st_uid = 0; tree("leaf still current UID only", false);
   reset(); nodes[2].stat.st_mode |= 0020; tree("leaf still no broad writes", false);
-  reset(); nodes[1].present = 1; tree("empty ACL Darwin -1/EINVAL", true);
+  reset(); nodes[1].present = FS_VALID_ACL; tree("present=32 empty ancestor ACL Darwin -1/EINVAL", true);
+  reset(); nodes[2].present = FS_VALID_ACL; tree("present=32 empty private ACL Darwin -1/EINVAL", true);
   reset(); ace(ACL_EXTENDED_DENY, ACL_DELETE); tree("Home deny delete ancestor", true);
-  reset(); nodes[2].present = 1; nodes[2].acl.count = 1;
+  reset(); nodes[2].present = FS_VALID_ACL; nodes[2].acl.count = 1;
   nodes[2].acl.entries[0].tag = ACL_EXTENDED_DENY; nodes[2].acl.entries[0].permissions = ACL_DELETE;
   tree("leaf still refuses nonempty deny ACL", false);
   const unsigned readbits[] = {2, 8, 128, 512, 2048, 1048576};
@@ -182,19 +189,33 @@ int main(void) {
   reset(); ace(ACL_EXTENDED_DENY, UINT64_C(1)<<40); tree("unknown deny bit", false);
   reset(); ace(ACL_EXTENDED_ALLOW, ACL_READ_DATA); tag_fail = 1; tree("tag API failure", false);
   reset(); ace(ACL_EXTENDED_ALLOW, ACL_READ_DATA); mask_fail = 1; tree("mask API failure", false);
-  reset(); nodes[1].present = 2; tree("unknown ACL presence", false);
-  reset(); nodes[1].present = 1; null_acl = 1; tree("NULL ACL", false);
-  reset(); nodes[1].present = 1; sentinel_acl = 1; tree("removal sentinel ACL", false);
-  reset(); nodes[1].present = 1; valid_fail = 1; tree("invalid ACL", false);
-  reset(); nodes[1].present = 1; get_fail = 1; tree("ACL copy failure", false);
+  for (int value = 1; value <= 64; value *= 2) {
+    reset(); nodes[1].present = value; nodes[2].present = value; tree("presence is nonzero, not literal one", true);
+  }
+  reset(); nodes[1].present = -1; tree("negative ancestor presence", false);
+  reset(); nodes[2].present = -1; tree("negative private presence", false);
+  reset(); nodes[1].present = FS_VALID_ACL; null_acl = 1; tree("NULL ACL", false);
+  reset(); nodes[1].present = FS_VALID_ACL; sentinel_acl = 1; tree("removal sentinel ACL", false);
+  reset(); nodes[1].present = FS_VALID_ACL; valid_fail = 1; tree("invalid ACL", false);
+  reset(); nodes[1].present = FS_VALID_ACL; get_fail = 1; tree("ACL copy failure", false);
+  reset(); nodes[2].present = FS_VALID_ACL; null_acl = 1; tree("private NULL ACL", false);
+  reset(); nodes[2].present = FS_VALID_ACL; sentinel_acl = 1; tree("private removal sentinel ACL", false);
+  reset(); nodes[2].present = FS_VALID_ACL; valid_fail = 1; tree("private invalid ACL", false);
+  reset(); nodes[2].present = FS_VALID_ACL; get_fail = 1; tree("private ACL copy failure", false);
+  reset(); nodes[2].present = FS_VALID_ACL; free_fail = 1; tree("private ACL cleanup failure", false);
   reset(); query_fail = 1; tree("ACL presence failure", false);
   reset(); fs_fail = 1; tree("volume query failure", false);
   reset(); stat_fail = 1; tree("stat failure", false);
   reset(); init_fail = 1; tree("security allocation failure", false);
-  reset(); nodes[1].present = 1; free_fail = 1; tree("ACL cleanup failure", false);
-  reset(); nodes[1].present = 1; entry_error = EIO; tree("iterator error not end", false);
-  reset(); nodes[1].present = 1; null_entry = 1; tree("success without entry", false);
-  reset(); nodes[1].present = 1; nodes[1].acl.count = 128;
+  reset(); nodes[1].present = FS_VALID_ACL; free_fail = 1; tree("ACL cleanup failure", false);
+  reset(); nodes[1].present = FS_VALID_ACL; entry_error = EIO; tree("iterator error not end", false);
+  reset(); nodes[1].present = FS_VALID_ACL; null_entry = 1; tree("success without entry", false);
+  reset(); nodes[1].present = FS_VALID_ACL; entry_status = 1; tree("POSIX one is not Darwin entry success", false);
+  reset(); nodes[1].present = FS_VALID_ACL; end_nonnull = 1; tree("Darwin end must leave NULL untouched", false);
+  reset(); nodes[2].present = FS_VALID_ACL; entry_error = EIO; tree("private iterator error not end", false);
+  reset(); nodes[2].present = FS_VALID_ACL; entry_status = 1; tree("private POSIX one is not success", false);
+  reset(); nodes[2].present = FS_VALID_ACL; end_nonnull = 1; tree("private end must leave NULL untouched", false);
+  reset(); nodes[1].present = FS_VALID_ACL; nodes[1].acl.count = 128;
   for (int i = 0; i < 128; ++i) nodes[1].acl.entries[i] = (struct ModelEntry){ACL_EXTENDED_DENY, ACL_DELETE};
   tree("exact public entry bound", true);
   nodes[1].acl.count = 129; nodes[1].acl.entries[128] = (struct ModelEntry){ACL_EXTENDED_DENY, ACL_DELETE};

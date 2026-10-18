@@ -160,7 +160,7 @@ jobs:
             -cf "$GITHUB_WORKSPACE/core-candidate/${CORE_TARGET}-core.tar" -C "$output" \
             datasecure-core FINAL-CORE.json BUILD-PROVENANCE.json LICENSE.node.txt
           for record in BUILD-INTENT.json BUILD-CANDIDATE.json PREPARED-SOURCE.json COMPILE-CONTRACT.json \
-            CONFIGURE-PROCESS.json MAKE-PROCESS.json configure.log make.log; do
+            CONFIGURE-PROCESS.json MAKE-PROCESS.json ACL-NATIVE-PROBE.json configure.log make.log; do
             test -f "$output/$record"
             cp "$output/$record" "$GITHUB_WORKSPACE/core-candidate/$record"
           done
@@ -190,6 +190,7 @@ jobs:
             ${{ steps.private.outputs.repository }}/dist/macos-static-core/${{ matrix.target }}/CONFIGURE-PROCESS.json
             ${{ steps.private.outputs.repository }}/dist/macos-static-core/${{ matrix.target }}/MAKE-PROCESS.json
             ${{ steps.private.outputs.repository }}/dist/macos-static-core/${{ matrix.target }}/COMPILE-CONTRACT.json
+            ${{ steps.private.outputs.repository }}/dist/macos-static-core/${{ matrix.target }}/ACL-NATIVE-PROBE.json
             ${{ steps.private.outputs.repository }}/dist/macos-static-core/${{ matrix.target }}/configure.log
             ${{ steps.private.outputs.repository }}/dist/macos-static-core/${{ matrix.target }}/make.log
           if-no-files-found: warn

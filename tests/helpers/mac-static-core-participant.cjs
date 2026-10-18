@@ -149,6 +149,11 @@ if (!isMainThread) {
         case 'admit': result = admission(); break;
         case 'worker_busy': result = await workerProbe(true); break;
         case 'worker_free': result = await workerProbe(false); break;
+        case 'acl_matrix':
+          if (worker || held) throw fail('MAC_NATIVE_PARTICIPANT_FAILED');
+          result = require('./native-macos-ownership-acl-fixture.cjs')
+            .runNativeMacOwnershipAclCases(staticGuard.loadStaticOwnershipGuard(descriptor));
+          break;
         case 'shutdown':
           if (worker || held) throw fail('MAC_NATIVE_PARTICIPANT_FAILED');
           result = { stopped: true }; stopping = true; clearTimeout(watchdog); break;
