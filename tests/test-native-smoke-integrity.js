@@ -363,61 +363,89 @@ testAsync('the actual extracted execution tree rejects edited, missing, addition
   }
 });
 
-testAsync('native campaign rejects a changed extracted runtime before either launch or a PASS receipt', async () => {
+testAsync('native campaign resolves supported package roots and rejects changed runtimes before launch or a PASS receipt', async () => {
   const source = fs.readFileSync(path.join(__dirname, 'manual/standalone-native-review-campaign.mjs'), 'utf8');
-  assert.match(source, /for \(const phase of ocr \? \[1, 2, 3\] : \[1, 2\]\) \{\s+verifyCandidate\(scope, metadata\);/u);
+  assert.match(source, /for \(const phase of ocr \? \[1, 2, 3\] : \[1, 2\]\) \{\s+const product = verifyCandidate\(scope, metadata\);/u);
   assert.match(source, /assertPackagedReviewOutputs\(outputs\)/u);
   if (!['win32', 'darwin'].includes(process.platform)) return;
   const { writeZip, readCentralModes } = await import('../scripts/lib/zip.mjs');
   const { verifyExtractedCandidate } = await import('./helpers/standalone-candidate-integrity.mjs');
   const { removePackageSmokeScope } = await import('./helpers/standalone-package-scope.mjs');
   const parent = fs.realpathSync.native(os.tmpdir());
-  const scope = path.join(parent, `.tmp-standalone-native-${crypto.randomUUID().replaceAll('-', '')}`);
-  // Keep the two owned fixture trees on the same volume: Windows runners put
-  // TEMP on C: and the checkout on D:, so cleanup rename cannot cross them.
-  const archiveScope = fs.mkdtempSync(path.join(parent, '.tmp-standalone-package-'));
   const target = process.platform === 'win32' ? 'windows-x64' : `macos-${process.arch}`, version = 'synthetic';
-  const prefix = `DataSecure-Standalone-${version}-${target}/`;
+  const historical = `DataSecure-Standalone-${version}-${target}`;
+  const layouts = process.platform === 'win32' ? [
+    { roots: ['DataSecure'], accepted: true }, { roots: [historical], accepted: true },
+    { roots: ['Other'], accepted: false }, { roots: ['datasecure'], accepted: false },
+    { roots: ['DataSecure-extra'], accepted: false },
+    { roots: [`DataSecure-Standalone-other-${target}`], accepted: false },
+    { roots: ['DataSecure', historical], accepted: false }
+  ] : [{ roots: [historical], accepted: true }];
   const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
   const entries = new Map([['server/module.js', Buffer.from('verified runtime')]]);
   const manifest = { files: [...entries].map(([name, bytes]) => ({ path: name, bytes: bytes.length,
     sha256: digest(bytes), executable: false })) };
   entries.set('STANDALONE-MANIFEST.json', Buffer.from(JSON.stringify(manifest)));
   entries.set('SHA256SUMS', Buffer.from([...entries].map(([name, bytes]) => `${digest(bytes)}  ${name}`).join('\n') + '\n'));
-  const archive = path.join(archiveScope, 'synthetic.zip');
-  fs.mkdirSync(scope);
-  try {
-    const info = path.join(scope, 'NATIVE-REVIEW-CAMPAIGN.json'), receipt = path.join(scope, 'NATIVE-REVIEW-RECEIPT.json');
-    for (const [name, value] of entries) {
-      const destination = path.join(scope, 'candidate', ...`${prefix}${name}`.split('/'));
-      fs.mkdirSync(path.dirname(destination), { recursive: true }); fs.writeFileSync(destination, value, { flag: 'wx' });
-      if (process.platform !== 'win32') fs.chmodSync(destination, 0o644);
-    }
-    writeZip(archive, [...entries].map(([name]) => ({
-      fullPath: path.join(scope, 'candidate', ...`${prefix}${name}`.split('/')),
-      archivePath: prefix + name, mode: 0o100644
-    })));
-    const bytes = fs.readFileSync(archive);
-    const metadata = { archive, archive_sha256: digest(bytes), target, version, operator_attestation: true };
-    verifyExtractedCandidate(path.join(scope, 'candidate'),
-      new Map([...entries].map(([name, value]) => [prefix + name, value])), readCentralModes(bytes));
-    fs.writeFileSync(info, JSON.stringify(metadata)); fs.writeFileSync(receipt, JSON.stringify({ status: 'NOT_RUN' }));
-    fs.writeFileSync(path.join(scope, 'candidate', ...`${prefix}server/module.js`.split('/')), 'edited after verified extraction');
-    for (const mode of ['--check', '--launch']) {
-      fs.writeFileSync(info, JSON.stringify(metadata));
-      const result = spawnSync(process.execPath, [path.join(__dirname, 'manual/standalone-native-review-campaign.mjs'), mode, scope],
+  for (const { roots, accepted } of layouts) {
+    const scope = path.join(parent, `.tmp-standalone-native-${crypto.randomUUID().replaceAll('-', '')}`);
+    // Keep the two owned fixture trees on the same volume: Windows runners put
+    // TEMP on C: and the checkout on D:, so cleanup rename cannot cross them.
+    const archiveScope = fs.mkdtempSync(path.join(parent, '.tmp-standalone-package-'));
+    const packaged = new Map(roots.flatMap(root => [...entries].map(([name, value]) => [`${root}/${name}`, value])));
+    const prefix = `${roots[0]}/`;
+    const archive = path.join(archiveScope, 'synthetic.zip');
+    fs.mkdirSync(scope);
+    try {
+      const info = path.join(scope, 'NATIVE-REVIEW-CAMPAIGN.json'), receipt = path.join(scope, 'NATIVE-REVIEW-RECEIPT.json');
+      for (const [name, value] of packaged) {
+        const destination = path.join(scope, 'candidate', ...name.split('/'));
+        fs.mkdirSync(path.dirname(destination), { recursive: true }); fs.writeFileSync(destination, value, { flag: 'wx' });
+        if (process.platform !== 'win32') fs.chmodSync(destination, 0o644);
+      }
+      writeZip(archive, [...packaged].map(([name]) => ({
+        fullPath: path.join(scope, 'candidate', ...name.split('/')),
+        archivePath: name, mode: 0o100644
+      })));
+      const bytes = fs.readFileSync(archive);
+      const metadata = { archive, archive_sha256: digest(bytes), target, version, operator_attestation: true };
+      verifyExtractedCandidate(path.join(scope, 'candidate'), packaged, readCentralModes(bytes));
+      fs.writeFileSync(info, JSON.stringify(metadata)); fs.writeFileSync(receipt, JSON.stringify({ status: 'NOT_RUN' }));
+      // A clean supported archive reaches the next evidence gate, never PASS:
+      // no native sessions or operator interaction are manufactured by this test.
+      const checked = spawnSync(process.execPath, [path.join(__dirname, 'manual/standalone-native-review-campaign.mjs'), '--check', scope],
         { encoding: 'utf8', windowsHide: true, timeout: 5000 });
-      assert.notEqual(result.status, 0); assert.match(result.stderr, /CANDIDATE_FILE_CHANGED/u);
+      assert.notEqual(checked.status, 0);
+      assert.match(checked.stderr, accepted ? /CAMPAIGN_RESTART_NOT_OBSERVED/u : /STANDALONE_ZIP_ROOT_INVALID/u, roots.join(','));
       assert.equal(JSON.parse(fs.readFileSync(receipt, 'utf8')).status, 'NOT_RUN');
-      assert.equal(digest(fs.readFileSync(archive)), metadata.archive_sha256);
+      if (!accepted) continue;
+      // Deliberately no native executable: observe the exact launch pathname
+      // through ENOENT without opening a GUI or creating a native process.
+      const executable = path.join(scope, 'candidate', roots[0], ...(target === 'windows-x64'
+        ? ['DataSecure Standalone.exe'] : ['DataSecure Standalone.app', 'Contents', 'MacOS', 'datasecure-standalone']));
+      assert.equal(fs.existsSync(executable), false);
+      const launch = spawnSync(process.execPath, [path.join(__dirname, 'manual/standalone-native-review-campaign.mjs'), '--launch', scope],
+        { encoding: 'utf8', windowsHide: true, timeout: 5000 });
+      assert.notEqual(launch.status, 0); assert.match(launch.stderr, /ENOENT/u);
+      assert.ok(launch.stderr.includes(executable), `launch must use the verified root: ${roots[0]}`);
+      assert.equal(JSON.parse(fs.readFileSync(receipt, 'utf8')).status, 'NOT_RUN');
+      fs.writeFileSync(path.join(scope, 'candidate', ...`${prefix}server/module.js`.split('/')), 'edited after verified extraction');
+      for (const mode of ['--check', '--launch']) {
+        fs.writeFileSync(info, JSON.stringify(metadata));
+        const result = spawnSync(process.execPath, [path.join(__dirname, 'manual/standalone-native-review-campaign.mjs'), mode, scope],
+          { encoding: 'utf8', windowsHide: true, timeout: 5000 });
+        assert.notEqual(result.status, 0); assert.match(result.stderr, /CANDIDATE_FILE_CHANGED/u);
+        assert.equal(JSON.parse(fs.readFileSync(receipt, 'utf8')).status, 'NOT_RUN');
+        assert.equal(digest(fs.readFileSync(archive)), metadata.archive_sha256);
+      }
+    } finally {
+      // Reuse the checked per-entry cleanup implementation by moving only this
+      // inspected, ordinary synthetic campaign tree into its owned smoke scope.
+      assert.equal(path.dirname(scope), parent); assert.equal(fs.realpathSync.native(scope), scope);
+      assert.ok(fs.lstatSync(scope).isDirectory() && !fs.lstatSync(scope).isSymbolicLink());
+      const destination = path.join(archiveScope, 'campaign'); fs.renameSync(scope, destination);
+      removePackageSmokeScope(parent, archiveScope);
     }
-  } finally {
-    // Reuse the checked per-entry cleanup implementation by moving only this
-    // inspected, ordinary synthetic campaign tree into its owned smoke scope.
-    assert.equal(path.dirname(scope), parent); assert.equal(fs.realpathSync.native(scope), scope);
-    assert.ok(fs.lstatSync(scope).isDirectory() && !fs.lstatSync(scope).isSymbolicLink());
-    const destination = path.join(archiveScope, 'campaign'); fs.renameSync(scope, destination);
-    removePackageSmokeScope(parent, archiveScope);
   }
 });
 

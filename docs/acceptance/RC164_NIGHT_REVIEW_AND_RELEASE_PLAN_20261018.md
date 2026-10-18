@@ -124,3 +124,47 @@ den tatsächlichen Leafimport, statt die Produktionsprüfung zu entfernen;
 Neu vorbereitete Desktopkampagnenprüfung nun auch in kanonischer Headlessliste
 (272 Dateien); einzeln ebenfalls bestanden. Roter alter Bericht bleibt erhalten.
 Noch kein finaler Quellen-/Releasefreeze: Mac-Core-Approval fehlt weiterhin.
+
+## Zweiter Zwischencheck und echte Windows-GUI (22:20–22:25 UTC)
+
+Quellen2e12c0fdc67f7174d047dd9e26b069d49eb8973a, Produktfingerprint weiterhin
+be7bd169d0a7e777acc4f0c21022626c16d3d628870c934fe216dfa84f5de879:
+272/272 Headlessdateien plus10/10 Zusatzgates, Windows-Native-Prepare/Clippy/
+228 Rusttests (3 ignoriert)/Release sowie Paket-Inventar/Guard/Schnellweg-
+Inhaltsorakel/100-Datei-Markdowncorpus bestanden. Sämtliche Driver melden
+inputs_unchanged=true. Evidenzen create-only in dist/rc164-night-checkpoint-20261018-02.
+Noch kein gemeinsamer Finalfreeze und kein Mac-/M2-PASS; beide Producer laufen.
+
+Echter nativer GUI-Vorversuch am exakt hashgebundenen Engineering-ZIP:
+Archiv76374acfbf2a23e84862c3fd2bfe33841c1d5e686a8578972580accfaf20e5c7,
+EXE4838440a882a2ae9e7d605bab7e35a36d27c4c709aa8778b8a122166dc0f8908.
+Der isolierte Smoke-Start endet bei neuem Windows-Innenordner DataSecure mit65
+vor Logs. Unabhängiges Quellengegenlesen bestätigt eine alte Präfixannahme in
+native_smoke.rs; kein Beweis eines normalen Nutzerprofil-Startabbruchs. Der
+separate native-review-campaign-Launcher hatte dieselbe alte Windowsannahme.
+Minimaler Fix: exakt DataSecure zusätzlich nur unter Windows; Reservierungs-,
+Elternpfad-, EXE-, Umgebungs- und Reparsebindung bleiben. Entsprechende Rust-/
+JS-Gegenfälle für beide gültigen Roots und falsche Layouts ergänzen; neuer Build
+und realer Shortroot-Start sind vor Abschluss erforderlich.
+
+Um andere GUI-Orakel während des unveränderten Checkpoints zu prüfen, wurde nur
+der eigene entpackte Temp-Fixtureordner nach vollständiger Typ-/Reparse-/Hash-
+Prüfung in den historischen erlaubten Namen umbenannt. ZIP/Stage unverändert,
+kein bestehendes Nutzerprofil verändert. Das ist ausdrücklich KEIN bestandener
+Shortroot-Smoke. Dort tatsächlicher Erststart/Core/Picker erfolgreich:
+
+- Fall01 Markdown: zwei vollständige MD, eine erwartete OCR-Auslassung, klare
+  Abschlussanzeige; Originalhashes unverändert. Lauf2462742e…
+- Fall04 Schnellweg+OCR: drei Ergebnisse,3/3 sichtbar automatisch/nicht manuell
+  freigegeben. Tatsächliche Inhalte geprüft: Identifikatoren ersetzt, Fließtext
+  und6×7-Tabelleninhalt erhalten. Laufc50e80ec…
+- Ein ausdrücklicher nativer Exportf710c230…: exakt drei neutrale MD, Hashes
+  gleich den aktuellen Ergebnisbytes, keine privaten Begleitdateien. Dialog
+  bestätigt Abschluss; danach prominente Abschlusskarte und leere Exportauswahl,
+  kein zweiter Export nötig. Verlaufnavigation ausdrücklich betätigt.
+- Neuer Dateientwurf nach Verbrauch tatsächlich leer, persistente Optionen/Ziel
+  bleiben erhalten. Fall05 hat echte OCR-Prüfung; eine Entscheidung seit
+  22:24:04UTC nur vorgemerkt. Fünfminütige Denkpause/Vertagen/Neustart noch offen.
+
+Dies sind gebundene Vorabnachweise, keine Abnahme des noch fehlenden finalen
+gemeinsamen Windows-/Mac-Pakets. Detailbindung: GUI-PREAPPROVAL.json.

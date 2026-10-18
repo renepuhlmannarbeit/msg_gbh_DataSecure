@@ -30,6 +30,15 @@ Testannahme gestoppt; diese ergänzt und11/11 wieder grün. Roter Bericht bleibt
 Desktopkampagnenprüfung jetzt im kanonischen272er-Plan. Neuer vollständiger
 Durchlauf erforderlich; Mac-Producer weiter aktiv. Details im Nachtplan.
 
+Neu22:20UTC: Zweiter Checkpoint2e12c0f vollständig272/272+10/10 Headless,
+Windows-Native228/3ignoriert und Paket/100-Datei-Corpus bestanden, Inputs
+unverändert. Echte Windows-GUI hat zusätzlich eine alte Windows-Shortroot-
+Annahme im isolierten Smokeprofil entdeckt (Exit65 vor Logs); eng begrenzte
+Korrektur samt Gegenfällen in Arbeit. In explizit umbenannter eigener Temp-
+Fixture funktionieren Core/Picker/Markdown/Schnellweg und nativer Export mit
+exakt3MD ohne private Begleitdaten. Kein Shortroot-/Finalpaket-/Mac-PASS daraus;
+Denkpause/Vertagen/Neustart sowie finale gemeinsame Artefakte bleiben offen.
+
 ### RC164 – beide Mac-Build-/Testjobs kostenbestätigt
 
 R8-Funktionsstand wurde bytegleich in einen getrennten Release-Worktree

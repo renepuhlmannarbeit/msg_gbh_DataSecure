@@ -137,14 +137,13 @@ fn validate(
                     == Some("AppDir")
         }
     };
-    if product.parent() != Some(candidate.as_path())
-        || !product
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("")
-            .starts_with("DataSecure-Standalone-")
-        || !executable_matches
-    {
+    let product_name = product
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("");
+    let product_matches = product_name.starts_with("DataSecure-Standalone-")
+        || layout == PackageLayout::Windows && product_name == "DataSecure";
+    if product.parent() != Some(candidate.as_path()) || !product_matches || !executable_matches {
         return Err(ERROR.into());
     }
     for relative in [
@@ -395,6 +394,44 @@ mod tests {
             |key| variables.get(key).cloned()
         )
         .is_err());
+        // Current Windows ZIPs have a short root. Only that exact spelling is
+        // additional authority; the historical root above remains supported.
+        for (relative, accepted) in [
+            ("candidate/DataSecure", true),
+            ("candidate/datasecure", false),
+            ("candidate/DataSecure-extra", false),
+            ("candidate/Other", false),
+            ("candidate/nested/DataSecure", false),
+            ("DataSecure", false),
+        ] {
+            let product = root.join(relative);
+            std::fs::create_dir_all(&product).unwrap();
+            let candidate_exe = product.join("DataSecure Standalone.exe");
+            std::fs::write(&candidate_exe, b"synthetic executable identity only").unwrap();
+            let result = validate(&root, &candidate_exe, PackageLayout::Windows, |key| {
+                variables.get(key).cloned()
+            });
+            assert_eq!(result.is_ok(), accepted, "{relative}");
+            if accepted {
+                assert_eq!(result.unwrap().documents, profile.documents);
+                assert!(validate(&root, &candidate_exe, PackageLayout::Windows, |_| None).is_err());
+                assert_eq!(
+                    select_profile(&candidate_exe, Some(PackageLayout::Windows), |_| None)
+                        .unwrap_err(),
+                    ERROR
+                );
+                let wrong = product.join("not-the-app.exe");
+                std::fs::write(&wrong, b"wrong identity").unwrap();
+                assert!(validate(&root, &wrong, PackageLayout::Windows, |key| {
+                    variables.get(key).cloned()
+                })
+                .is_err());
+                std::fs::remove_file(wrong).unwrap();
+            }
+            std::fs::remove_file(candidate_exe).unwrap();
+            std::fs::remove_dir(product).unwrap();
+        }
+        std::fs::remove_dir(root.join("candidate/nested")).unwrap();
         // Delete only enumerated owned paths, never traverse an injected link.
         std::fs::remove_file(&exe).unwrap();
         for relative in [
@@ -474,6 +511,18 @@ mod tests {
             .is_err()
         );
         std::fs::remove_file(wrong).unwrap();
+        let product = root.join("candidate/DataSecure-Standalone-test-macos-arm64");
+        let short_product = root.join("candidate/DataSecure");
+        std::fs::rename(&product, &short_product).unwrap();
+        let short_executable =
+            short_product.join("DataSecure Standalone.app/Contents/MacOS/datasecure-standalone");
+        assert!(
+            validate(&root, &short_executable, PackageLayout::Macos, |key| {
+                variables.get(key).cloned()
+            })
+            .is_err()
+        );
+        std::fs::rename(short_product, product).unwrap();
         std::fs::remove_file(executable).unwrap();
         for relative in [
             "candidate/DataSecure-Standalone-test-macos-arm64/DataSecure Standalone.app/Contents/MacOS",
@@ -560,6 +609,17 @@ mod tests {
             .is_err()
         );
         std::fs::remove_file(wrong).unwrap();
+        let product = root.join("candidate/DataSecure-Standalone-test-linux-x64-glibc");
+        let short_product = root.join("candidate/DataSecure");
+        std::fs::rename(&product, &short_product).unwrap();
+        let short_executable = short_product.join("AppDir/usr/bin/datasecure-standalone");
+        assert!(
+            validate(&root, &short_executable, PackageLayout::Linux, |key| {
+                variables.get(key).cloned()
+            })
+            .is_err()
+        );
+        std::fs::rename(short_product, product).unwrap();
         std::fs::remove_file(executable).unwrap();
         for relative in [
             "candidate/DataSecure-Standalone-test-linux-x64-glibc/AppDir/usr/bin",

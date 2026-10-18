@@ -26,6 +26,12 @@ historisch. Maßgeblich: RC164_NIGHT_REVIEW_AND_RELEASE_PLAN_20261018.md.
 - Aktive gesperrte Ziele werden nicht unsicher übersprungen. Ein settings-only
   Ersatzordner-Modus wäre ein separater Architekturumbau und ist nicht als
   erledigter Startfix auszugeben. Ausführliche Gründe/Aliasgegenfälle im Nachtplan.
+- Neuer GUI-Quellenbefund: isolierter Rust-Smokestart und separater Review-
+  Campaign-Launcher akzeptieren alten Windows-ZIP-Root, nicht neuen DataSecure-
+  Shortroot. Engen Windows-only-Fix samt Negativfällen gegenlesen, neu bauen und
+  echten Shortrootstart wiederholen. Voller Checkpoint2e12c0f272/272+10/10,
+  Native228 und Paketgates sind unverändert bestanden, widerlegen diesen Befund
+  nicht. Echte GUI-Teilnachweise/ausstehende Fälle im aktuellen Nachtplan.
 
 ## RC164 – gemeinsame native Paketierung
 

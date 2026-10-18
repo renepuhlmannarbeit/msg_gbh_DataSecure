@@ -14,6 +14,7 @@ import { packagedReviewFixtures, assertPackagedReviewOutputs } from '../helpers/
 import { packagedOcrFixtures, assertPackagedOcrOutputs, contactReferences, correctedPhone, correctionSentinel } from '../helpers/standalone-packaged-ocr-review.mjs';
 import { verifyExtractedCandidate } from '../helpers/standalone-candidate-integrity.mjs';
 import { verifyStandaloneInventory, verifyArchiveChecksum } from '../../scripts/lib/standalone-package-integrity.mjs';
+import { windowsPackagePrefix } from '../../scripts/lib/standalone-windows-layout.mjs';
 import { nativeDiagnosticEvents } from '../helpers/native-diagnostic-events.mjs';
 
 const require = createRequire(import.meta.url);
@@ -51,7 +52,8 @@ function verifyCandidate(scope, metadata) {
   const bytes = fs.readFileSync(metadata.archive);
   assert.equal(hash(bytes), metadata.archive_sha256, 'CAMPAIGN_ARCHIVE_CHANGED');
   const entries = readZip(bytes, { maxEntries: 15000, maxUncompressed: 768 * 1024 * 1024 });
-  const prefix = `DataSecure-Standalone-${metadata.version}-${metadata.target}/`;
+  const prefix = metadata.target === 'windows-x64' ? windowsPackagePrefix(entries, metadata.version)
+    : `DataSecure-Standalone-${metadata.version}-${metadata.target}/`;
   const relative = new Map([...entries].map(([name, value]) => {
     assert.ok(name.startsWith(prefix), 'CAMPAIGN_ARCHIVE_ROOT_INVALID');
     return [name.slice(prefix.length), value];
@@ -59,6 +61,7 @@ function verifyCandidate(scope, metadata) {
   const manifest = JSON.parse(relative.get('STANDALONE-MANIFEST.json'));
   verifyStandaloneInventory(relative, manifest);
   verifyExtractedCandidate(path.join(scope, 'candidate'), entries, readCentralModes(bytes));
+  return path.join(scope, 'candidate', prefix.slice(0, -1));
 }
 function check(scope) {
   scope = checkedScope(scope);
@@ -108,9 +111,6 @@ async function launch(scope) {
   metadata.operator_attestation = false;
   fs.writeFileSync(path.join(scope, infoName), JSON.stringify(metadata, null, 2) + '\n');
   writeReceipt(scope, metadata, 'NOT_RUN');
-  const product = path.join(scope, 'candidate', `DataSecure-Standalone-${metadata.version}-${metadata.target}`);
-  const executable = process.platform === 'win32' ? path.join(product, 'DataSecure Standalone.exe')
-    : path.join(product, 'DataSecure Standalone.app', 'Contents', 'MacOS', 'datasecure-standalone');
   const environment = { PATH: process.platform === 'win32' ? '' : '/usr/bin:/bin',
     DATASECURE_STANDALONE_NATIVE_SMOKE_ROOT: scope, WEBVIEW2_USER_DATA_FOLDER: path.join(scope, 'webview', 'main') };
   for (const key of ['SystemRoot', 'WINDIR', 'ComSpec']) if (process.env[key]) environment[key] = process.env[key];
@@ -121,7 +121,9 @@ async function launch(scope) {
   const ocr = metadata.campaign_kind === 'ocr-contact';
   try {
     for (const phase of ocr ? [1, 2, 3] : [1, 2]) {
-      verifyCandidate(scope, metadata);
+      const product = verifyCandidate(scope, metadata);
+      const executable = process.platform === 'win32' ? path.join(product, 'DataSecure Standalone.exe')
+        : path.join(product, 'DataSecure Standalone.app', 'Contents', 'MacOS', 'datasecure-standalone');
       process.stdout.write(phase === 1
         ? `\n1. Ergebnisordner auf ${path.join(scope, 'Ergebnisse')} setzen.\n2. Quellenordner ${path.join(scope, 'Quellen')} anonymisieren.\n3. Im Lauf die Prüfung öffnen, „Später entscheiden“ wählen und die App normal schließen.\n`
         : ocr
