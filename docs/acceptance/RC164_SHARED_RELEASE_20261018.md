@@ -146,7 +146,11 @@ Dieser Nachweis liegt vor dem zusätzlichen Admission-/Dokumentationsgegenfix.
 Der breitere parallel gestartete CI-Entwicklungslauf unter
 dist/rc164-permission-regression-20261018 ist nach diesem neuen Gegenbefund
 kein finaler Quellenfreeze: Änderungen werden nicht versteckt, sein Vor-/Nach-
-Fingerprint muss sie kenntlich machen. Gezielter Folgelauf wird separat unter
+Fingerprint macht sie kenntlich. Der Lauf endete um19:45:44UTC mit207/207
+grünen Einzeldateien und Prozessstatus0; der umgebende Nachweis verweigert
+korrekt passed=true, weil Quelle/Gitcommit während der Gegenfixrunde wechselten
+(inputs_unchanged=false, Driverexit1). Nicht als neuer unveränderter Vollnachweis
+zählen. Gezielter Folgelauf wurde separat unter
 dist/rc164-permission-review-final2-20261018 gebunden:21/21 bestanden, unveränderte
 Inputs, Commit2a6d4670aa4873f59526272629d84cb3a2f9717e,
 Produktfingerprint18597ed43c4a1afbb98a2e0a66514697d73f4e6367d28ac4f2e67f4381c7cb3d.
