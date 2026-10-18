@@ -49,6 +49,10 @@ test('the early root-boundary refusal keeps its storage class without claiming n
   assert.equal(desktopErrorCode('PRIVATE PATH /name.docx'), 'STANDALONE_OPERATION_FAILED');
   const workspace = fs.readFileSync(path.join(root, 'frontend/workspace.js'), 'utf8');
   assert.match(workspace, /UNSAFE_STORAGE_LOCATION: 'Die Trennung zwischen internen App-Daten und Ergebnisordnern/u);
+  assert.equal(desktopErrorCode('STANDALONE_RESULT_ROOT_ACCESS_DENIED'), 'STANDALONE_RESULT_ROOT_ACCESS_DENIED');
+  assert.match(sidecar, /rootSeparationFailure\(error\) === 'active_public_access_denied'/u);
+  assert.match(sidecar, /error_code: desktopErrorCode\(startupError\?\.code\)/u);
+  assert.match(sidecar, /ok: !startupError/u, 'a classified refusal still cannot become Ready');
 });
 
 test('closed desktop errors preserve identity and capacity facts and their renderer recovery hints', () => {
@@ -179,13 +183,28 @@ test('Mac trap diagnosis isolates Node and its preloader without a shell or docu
   const start = rust.indexOf('fn macos_core_probe('), end = rust.indexOf('fn spawn_sidecar(', start);
   assert.ok(start > 0 && end > start);
   const probe = rust.slice(start, end);
-  assert.match(probe, /MACOS_CORE_PROBE_ATTEMPTED\.swap\(true/u);
+  const observer = fs.readFileSync(path.join(root, 'tauri-contract/src/diagnostic_probe.rs'), 'utf8');
+  assert.match(observer, /self\.attempted\.swap\(true, Ordering::AcqRel\)/u);
   assert.match(probe, /Command::new\(child_process_path\(executable\)\)/u);
   assert.match(probe, /configure_core_environment\(&mut command, app\)/u);
   assert.match(probe, /command\.arg\("--version"\)/u);
   assert.match(probe, /--require=\.\.\/network-deny\.cjs/u);
   assert.match(probe, /Stdio::null\(\)/u);
   assert.match(probe, /STANDALONE_CORE_PROBE_SIGNAL_TRAP/u);
+  assert.match(probe, /diagnostic_probe::schedule\(move \|slot\|/u);
+  const scheduled = probe.slice(probe.indexOf('diagnostic_probe::schedule(move |slot|'));
+  assert.doesNotMatch(scheduled, /\bapp\b|\blifecycle\b|\bspawn_guard\b|\.wait\(/u);
+  assert.match(scheduled, /slot\.observe\(\|\| command\.spawn\(\), started\)/u);
+  assert.match(observer, /OBSERVE_LIMIT: Duration = Duration::from_secs\(3\)/u);
+  assert.match(observer, /CLEANUP_LIMIT: Duration = Duration::from_secs\(1\)/u);
+  assert.match(observer, /if result\.end_confirmed \{ held\.take\(\); \}/u);
+  assert.match(observer, /if held\.is_some\(\) \{ return Err\(StartFailure::Unavailable\); \}/u);
+  assert.doesNotMatch(observer, /\.wait\(|process::Command|Lifecycle|SpawnGuard|AppHandle/u);
+  for (const code of ['OBSERVER_UNAVAILABLE', 'END_UNCONFIRMED', 'KILL_DENIED', 'KILL_FAILED'])
+    assert.ok(observer.includes(`STANDALONE_CORE_PROBE_${code}`));
+  const diagnosticBundle = fs.readFileSync(path.join(root, 'tauri-contract/src/diagnostic_bundle.rs'), 'utf8');
+  assert.match(diagnosticBundle, /include_str!\("diagnostic_probe\.rs"\)/u);
+  assert.match(diagnosticBundle, /core_probe_observer core_probe_cleanup/u);
   assert.doesNotMatch(probe, /(?:Command::new\([^)]*(?:bash|zsh|cmd\.exe|powershell)|source_path|document_text)/iu);
   assert.match(rust, /if cause == "STANDALONE_SIDECAR_SIGNAL_TRAP" \{\s*macos_core_probe\(app, &executable, script_directory\)/u);
 });

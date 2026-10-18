@@ -46,6 +46,7 @@
     RESULT_EXPORT_STATE_UNSAFE: 'Der gespeicherte Exportstand ist nicht sicher lesbar. Nichts wurde als abgeschlossen bestätigt; bitte die lokale Diagnose prüfen.',
     AI_EXPORT_VOLUME_MISMATCH: 'Dieser Ergebnisordner liegt auf einem anderen Laufwerk als der private DataSecure-Bereich. Für die sichere, atomare Bereitstellung einen lokalen Ordner auf demselben Laufwerk wählen. Die bisherige Ordnerwahl und vorhandene Ergebnisse bleiben unverändert.',
     STANDALONE_RESULT_ROOT_UNAVAILABLE: 'Der Ergebnisordner ist nicht verfügbar oder konnte nicht angelegt werden. Stelle den bisherigen Speicherort wieder bereit oder wähle unter „Einstellungen“ einen anderen lokalen Ordner. Es wurde kein Lauf gestartet.',
+    STANDALONE_RESULT_ROOT_ACCESS_DENIED: 'Auf den eingestellten Ergebnisordner wurde der Zugriff verweigert. DataSecure hält den Start an, statt einen unbestätigten Speicherort zu verwenden. Stelle den bisherigen Ordnerzugriff wieder her oder lasse die Zugriffsrechte durch eure IT prüfen. Vorhandene Laufdaten nicht löschen.',
     LOCAL_MAPPING_PENDING: 'Die lokale Ergebniszuordnung dieser Datei ist noch nicht gespeichert. Lauf fortsetzen, um sie erneut abzugleichen.',
     SOURCE_FORMAT_UNSUPPORTED: 'Dieses Dateiformat wird nicht unterstützt.', SOURCE_FILE_EMPTY: 'Die Datei ist leer.',
     SOURCE_FORMAT_SIZE_LIMIT: 'Die Datei überschreitet die Einzeldateigrenze ihres Formats.',
@@ -352,7 +353,9 @@
     $('feedback').textContent = `${reasons[bootstrapFailure.code] || 'Der lokale Core konnte nicht sicher gestartet werden. Bitte die Diagnose sichern und die Installation prüfen.'} (${bootstrapFailure.code})`;
     $('feedback').hidden = false; $('feedback').className = 'notice error';
     $('connection-help').hidden = false;
-    $('connection-status').textContent = 'Der lokale Core konnte keine Verbindung herstellen. Dateiauswahl und Ergebnisordner bleiben absichtlich gesperrt. Automatische Verbindungsversuche sind angehalten. Bitte zuerst die Diagnose sichern und die Ursache prüfen; danach die Verbindung ausdrücklich erneut prüfen. Ein Lauf oder Export wurde nicht erneut gestartet.';
+    $('connection-status').textContent = bootstrapFailure.code === 'STANDALONE_RESULT_ROOT_ACCESS_DENIED'
+      ? 'Der lokale Dienst hat eine Zugriffsverweigerung am eingestellten Ergebnisziel gemeldet. In diesem Startzustand kann der Ordner nicht in der App gewechselt werden. Nach Wiederherstellung des Zugriffs „Verbindung und Laufstatus prüfen“ wählen. Kein Lauf oder Export wurde erneut gestartet.'
+      : 'Der lokale Core konnte keine Verbindung herstellen. Dateiauswahl und Ergebnisordner bleiben absichtlich gesperrt. Automatische Verbindungsversuche sind angehalten. Bitte zuerst die Diagnose sichern und die Ursache prüfen; danach die Verbindung ausdrücklich erneut prüfen. Ein Lauf oder Export wurde nicht erneut gestartet.';
   }
   function holdBootstrapFailure(epoch, code, nativeBound = false) {
     if (!Number.isSafeInteger(epoch) || epoch < 0 || !/^[A-Z][A-Z0-9_]{1,80}$/u.test(code) ||
@@ -1318,6 +1321,9 @@
               ? `${count(entry.selected_count)} Dateien · ${count(entry.result_count)} Ergebnisse · ${unknownStops} nicht verarbeitet (Gründe im Verlauf nicht mehr klassifiziert)`
             : `${count(entry.selected_count)} Dateien · ${count(entry.result_count)} Ergebnisse · ${count(entry.failed_count)} ${anonymous ? count(entry.failed_count) === 1 ? 'Datei nicht verarbeitet' : 'Dateien nicht verarbeitet' : count(entry.failed_count) === 1 ? 'Problem' : 'Probleme'}`), 'history-meta'),
           stateLabel);
+        const titleId = `history-${entry.batch_id}-title`, identityId = `history-${entry.batch_id}-identity`;
+        detail.children[0].id = titleId;
+        row.setAttribute('aria-labelledby', `${titleId} ${identityId}`);
         if (conversion) {
           detail.append(element('p', conversion.description, 'history-next'));
           if (conversion.content_notice_count) detail.append(element('p',
@@ -1329,7 +1335,8 @@
           `${count(entry.exported_count)} Dateien wurden zuvor sichtbar kopiert; ${count(entry.export_pending_count)} fehlende Dateien werden nicht mehr automatisch ergänzt. Teilkopien bleiben unverändert. Keine vollständige Freigabe zur Weitergabe.`, 'history-next'));
         if (entry.status === 'export_pending') detail.append(element('p',
           '„Bereitstellung erneut prüfen“ kann fehlende Ergebnisdateien dieses Laufs lokal ergänzen. Es startet keinen neuen Verarbeitungslauf und erstellt keinen Export.', 'history-next'));
-        detail.append(element('p', `Lauf ${entry.batch_id.slice(0, 8)}`, 'history-run-id path'));
+        const runIdentity = element('p', `Lauf ${entry.batch_id.slice(0, 8)}`, 'history-run-id path');
+        runIdentity.id = identityId; detail.append(runIdentity);
         const disclosure = element('details', undefined, 'history-disclosure');
         disclosure.id = `history-${entry.batch_id}-disclosure`;
         disclosure.open = Boolean(detailsBatchId);
@@ -1419,7 +1426,12 @@
         }
         const actions = element('div', undefined, 'history-actions');
         const action = (key, label, callback, primary = false) => {
-          const node = button(label, callback, primary); node.id = `history-${entry.batch_id}-${key}`; return node;
+          const node = button(label, callback, primary); node.id = `history-${entry.batch_id}-${key}`;
+          // Self-reference preserves the current visible label even when a
+          // later summary changes the next action. Local run context makes
+          // repeated controls unambiguous in UIA/VoiceOver; no paths or content.
+          node.setAttribute('aria-labelledby', `${node.id} ${titleId} ${identityId}`);
+          return node;
         };
         const working = ['preparing', 'processing'].includes(entry.status);
         const connected = !reconnecting && !contextRequired;

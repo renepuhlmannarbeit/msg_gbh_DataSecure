@@ -2,6 +2,29 @@
 
 Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Test-Pre-Release in Vorbereitung; noch keine neue Veröffentlichung oder Zielhostabnahme.
 
+### Aktueller Nachtauftrag – neuere Autorität vor historischen Abschnitten
+
+Windows-Desktopfreigabe ausdrücklich erneut erteilt: allein der Hauptagent,
+gebundener neuer Kandidat und synthetische Testkampagne; keine Sicherheits- oder
+Berechtigungsänderungen. Bestehender Thread-Heartbeat wieder ACTIVE, alle30min,
+keine neue Duplikatautomation. Neuester Plan und Gatefolge:
+docs/acceptance/RC164_NIGHT_REVIEW_AND_RELEASE_PLAN_20261018.md und
+RC164_DESKTOP_PLAYBOOK_20261018.md. Nachfolgende ältere PAUSED-/Desktopverbote
+beschreiben ihre damalige Runde, nicht die aktuelle Freigabe.
+
+C-Guard-P1 (filesec_query_property liefert ACL-Bitmaske32, nicht ausschließlich1)
+in 7d0ee31dc65ce31ce54f1b4a1a0cefa348ef7071 korrigiert; beide nativen Producer
+in Run39167676290 kompilieren. E6f4-Producer39165027153 gezielt cancelled und
+nicht geeignet. FINAL-Core-Approval, gemeinsamer endgültiger Quellcommit,
+native Consumer, final gebundene Windowsgates/GUI und Releaseupload noch offen.
+Aktuelle Folgekorrekturen: kein IO an retirierte verweigerte Reservierungen,
+enges macOS-Deny-delete-Parenthandling, nichtblockierender begrenzter Diagnose-
+Observer, eindeutige Accessibility-Namen. Aktiv verweigertes Ergebnisziel bleibt
+fail-closed mit neuer exakter Diagnose; kein unsicherer In-App-Ersatzordner-Fallback.
+Ein weiterer P2-Fix hält Ordnerwechsel während tatsächlicher Workerlebensdauer
+gesperrt und verlegt native Provisionierung hinter die Service-Busyprüfung.
+Quellengegenreviews und gezielte Gates grün, noch kein finaler Paketnachweis.
+
 ### RC164 – beide Mac-Build-/Testjobs kostenbestätigt
 
 R8-Funktionsstand wurde bytegleich in einen getrennten Release-Worktree

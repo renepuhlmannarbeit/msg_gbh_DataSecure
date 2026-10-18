@@ -9,11 +9,18 @@ const path = require('path');
 const { dataRoot } = require('../runtime');
 const { readReservations, publishReservations, SCHEMA } = require('./root-reservations');
 const verifiedSettingsParents = new Map();
+// Classification only, never an authority to skip a boundary. Weak membership
+// binds the cause to our actual exception without retaining vendor text/paths.
+const deniedCanonicalFailures = new WeakSet(), deniedPublicFailures = new WeakSet();
 
-function unsafe() {
+function unsafe(origin) {
   const error = new Error('PRIVACY_STORAGE_UNSAFE');
   error.code = 'PRIVACY_STORAGE_UNSAFE';
+  if (origin?.code === 'EACCES' || origin?.code === 'EPERM') deniedCanonicalFailures.add(error);
   return error;
+}
+function rootSeparationFailure(error) {
+  return deniedPublicFailures.has(error) ? 'active_public_access_denied' : 'unsafe_or_unconfirmed';
 }
 
 function canonicalPath(target) {
@@ -30,7 +37,7 @@ function canonicalPath(target) {
       // but must never permit a not-yet-created alias of a private directory.
       return ['win32', 'darwin'].includes(process.platform) ? resolved.toLowerCase() : resolved;
     } catch (error) {
-      if (error.code !== 'ENOENT') throw unsafe();
+      if (error.code !== 'ENOENT') throw unsafe(error);
       const parent = path.dirname(probe);
       if (parent === probe) throw unsafe();
       suffix.unshift(path.basename(probe));
@@ -118,26 +125,61 @@ function rootConfiguration(options = {}) {
   return { internal, privateRoots, publicRoots };
 }
 
+function comparisonPath(root) {
+  const resolved = path.resolve(root);
+  return ['win32', 'darwin'].includes(process.platform) ? resolved.toLowerCase() : resolved;
+}
+function historicalCanonicalPath(root) {
+  // Reservations published by this leaf already contain canonical absolute
+  // paths. Keep legacy normalized case spellings, but never repair an ambiguous
+  // record or resolve its retired target merely to retain a negative boundary.
+  if (typeof root !== 'string' || root.includes('\0') || !path.isAbsolute(root) || path.resolve(root) !== root) throw unsafe();
+  return comparisonPath(root);
+}
+
 function checkConfiguration(configuration) {
   const historical = readReservations(configuration.internal);
+  const historicalPaths = { private: [], public: [] };
+  const records = new Map();
+  for (const record of historical) {
+    const root = historicalCanonicalPath(record.root);
+    historicalPaths[record.kind].push(root);
+    records.set(`${record.kind}\0${root}`, record);
+  }
   const canonicalCache = new Map();
   const canonical = root => {
-    const key = ['win32', 'darwin'].includes(process.platform) ? path.resolve(root).toLowerCase() : path.resolve(root);
+    const key = comparisonPath(root);
     if (!canonicalCache.has(key)) canonicalCache.set(key, canonicalPath(root));
     return canonicalCache.get(key);
   };
-  const privateRoots = [...new Set([...configuration.privateRoots, ...historical.filter(item => item.kind === 'private').map(item => item.root)])];
-  const publicRoots = [...new Set([...configuration.publicRoots, ...historical.filter(item => item.kind === 'public').map(item => item.root)])];
-  // Validate the private paths even without a result destination, before a
-  // writer could follow a bad/non-directory path. Canonicalization resolves
-  // existing prefixes and does not create a missing future directory.
-  const privatePaths = [...new Set(privateRoots.map(canonical))];
-  for (const visible of publicRoots) {
-    const visiblePath = canonical(visible);
-    for (const privatePath of privatePaths) if (canonicalPathsOverlap(privatePath, visiblePath)) throw unsafe();
+  // Every live root is still freshly canonicalized, even if the same spelling
+  // has a reservation. Historical metadata is never an I/O capability/cache.
+  // In particular, EACCES/EPERM may hide a newly redirected result leaf OR
+  // ancestor into private storage. An exact old public reservation cannot
+  // prove today's separation or authorize private bootstrap writes/Ready.
+  const privatePaths = [...new Set(configuration.privateRoots.map(canonical))];
+  const publicPaths = [...new Set(configuration.publicRoots.map(root => {
+    try { return canonical(root); }
+    catch (error) { if (deniedCanonicalFailures.has(error)) deniedPublicFailures.add(error); throw error; }
+  }))];
+  const disjoint = (privateRoots, publicRoots) => {
+    for (const privateRoot of privateRoots) {
+      for (const publicRoot of publicRoots) if (canonicalPathsOverlap(privateRoot, publicRoot)) throw unsafe();
+    }
+  };
+  disjoint([...privatePaths, ...historicalPaths.private], [...publicPaths, ...historicalPaths.public]);
+  // An old name must not change roles by being redirected to another location.
+  // Check requested names as well as fresh canonical targets against history;
+  // only live/live comparisons retain their existing canonical-only semantics.
+  disjoint(configuration.privateRoots.map(comparisonPath), historicalPaths.public);
+  disjoint(historicalPaths.private, configuration.publicRoots.map(comparisonPath));
+  for (const [kind, roots] of [['private', privatePaths], ['public', publicPaths]]) {
+    for (const root of roots) {
+      const key = `${kind}\0${root}`;
+      if (!records.has(key)) records.set(key, { schema: SCHEMA, kind, root });
+    }
   }
-  return [...privatePaths.map(root => ({ schema: SCHEMA, kind: 'private', root })),
-    ...publicRoots.map(canonical).map(root => ({ schema: SCHEMA, kind: 'public', root }))];
+  return [...records.values()];
 }
 
 function assertRootSeparation(options = {}) { checkConfiguration(rootConfiguration(options)); return true; }
@@ -159,4 +201,4 @@ function reserveRootSeparation(options = {}) {
   return true;
 }
 
-module.exports = { canonicalPath, pathsOverlap, assertRootSeparation, reserveRootSeparation };
+module.exports = { canonicalPath, pathsOverlap, assertRootSeparation, reserveRootSeparation, rootSeparationFailure };

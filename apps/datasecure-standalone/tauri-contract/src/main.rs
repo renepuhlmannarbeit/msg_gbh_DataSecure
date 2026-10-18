@@ -8,6 +8,8 @@ mod native_open;
 mod startup_diagnostics;
 mod diagnostic_log;
 mod diagnostic_bundle;
+#[cfg(any(target_os = "macos", test))]
+mod diagnostic_probe;
 mod export_directory;
 mod export_private_security;
 mod native_export_channel;
@@ -45,8 +47,6 @@ const RESPONSE_SCHEMA: &str = "datasecure-standalone-private-response/1";
 static REQUEST_SEQUENCE: AtomicU64 = AtomicU64::new(1);
 static DIAGNOSTIC_SESSION: OnceLock<String> = OnceLock::new();
 static NATIVE_SMOKE_PROFILE: OnceLock<Option<native_smoke::Profile>> = OnceLock::new();
-#[cfg(target_os = "macos")]
-static MACOS_CORE_PROBE_ATTEMPTED: AtomicBool = AtomicBool::new(false);
 
 fn build_id() -> &'static str {
     source_fingerprint::diagnostic_build_id(option_env!("DATASECURE_BUILD_ID"))
@@ -823,55 +823,74 @@ fn configure_core_environment(command: &mut Command, app: &tauri::AppHandle) {
 #[cfg(target_os = "macos")]
 fn macos_core_probe(app: &tauri::AppHandle, executable: &Path, script_directory: &Path) {
     use std::os::unix::process::ExitStatusExt;
-    // Only a native trap before Ready initiates this once per app process.
-    // Neither stage opens a document, starts a run, or depends on a shell.
-    if MACOS_CORE_PROBE_ATTEMPTED.swap(true, Ordering::AcqRel) { return; }
-    for stage in ["core_probe_node", "core_probe_preloader"] {
+    // Compose only the two fixed, read-only commands before scheduling. No
+    // Child exists until the diagnostic thread was successfully started.
+    let commands: [Command; 2] = std::array::from_fn(|index| {
         let mut command = Command::new(child_process_path(executable));
         configure_core_environment(&mut command, app);
         command.current_dir(child_process_path(script_directory))
             .stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null());
-        if stage == "core_probe_node" {
+        if index == 0 {
             command.arg("--version");
         } else {
             command.arg("--require=../network-deny.cjs")
                 .arg("-e").arg("process.exit(0)");
         }
-        let started = Instant::now();
-        if let Err(code) = macos_core::bind(executable, started + Duration::from_secs(3)) {
-            diagnostic_event(stage, None, "failed", Some(&code), None); break;
-        }
-        let mut child = match command.spawn() {
-            Ok(child) => child,
-            Err(error) => {
-                diagnostic_event(stage, None, "failed", Some(runtime_spawn_code(&error)),
-                    Some(started.elapsed().as_millis()));
-                break;
+        command
+    });
+    let executable = executable.to_path_buf();
+    // Capture commands and a fixed Core path only: never AppHandle, Lifecycle,
+    // SpawnGuard, a user request, document path or any publication capability.
+    let scheduled = diagnostic_probe::schedule(move |slot| {
+        let observer_started = Instant::now();
+        diagnostic_event("core_probe_observer", None, "started", None, None);
+        for (mut command, stage) in commands.into_iter().zip(["core_probe_node", "core_probe_preloader"]) {
+            let started = Instant::now();
+            if let Err(code) = macos_core::bind(&executable, started + Duration::from_secs(3)) {
+                diagnostic_event(stage, None, "failed", Some(&code), None); break;
             }
-        };
-        let pid = child.id();
-        let (outcome, code) = loop {
-            match child.try_wait() {
-                Ok(Some(status)) if status.success() => break ("ready", None),
-                Ok(Some(status)) => {
+            let observed = match slot.observe(|| command.spawn(), started) {
+                Ok(observed) => observed,
+                Err(diagnostic_probe::StartFailure::Spawn(error)) => {
+                    diagnostic_event(stage, None, "failed", Some(runtime_spawn_code(&error)),
+                        Some(started.elapsed().as_millis())); break;
+                }
+                Err(diagnostic_probe::StartFailure::Unavailable) => {
+                    diagnostic_event(stage, None, "unavailable", Some(diagnostic_probe::OBSERVER_UNAVAILABLE),
+                        Some(started.elapsed().as_millis())); break;
+                }
+            };
+            let (outcome, code) = if let Some(reason) = observed.failure {
+                ("failed", Some(reason.code()))
+            } else if let Some(status) = observed.status {
+                if status.success() { ("ready", None) } else {
                     let code = match status.signal() {
                         Some(5) => "STANDALONE_CORE_PROBE_SIGNAL_TRAP",
                         Some(_) => "STANDALONE_CORE_PROBE_SIGNAL_OTHER",
                         None => "STANDALONE_CORE_PROBE_EXIT_NONZERO",
                     };
-                    break ("failed", Some(code));
+                    ("failed", Some(code))
                 }
-                Err(_) => break ("failed", Some("STANDALONE_CORE_PROBE_WAIT_FAILED")),
-                Ok(None) if started.elapsed() >= Duration::from_secs(3) => {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    break ("failed", Some("STANDALONE_CORE_PROBE_TIMEOUT"));
-                }
-                Ok(None) => std::thread::sleep(Duration::from_millis(20)),
+            } else { ("failed", Some(diagnostic_probe::StopReason::WaitFailed.code())) };
+            diagnostic_process_event(stage, outcome, code, Some(observed.elapsed.as_millis()), observed.process_id);
+            let cleanup_codes = [observed.kill.error_code(),
+                (observed.cleanup_wait_failed && observed.failure != Some(diagnostic_probe::StopReason::WaitFailed))
+                    .then_some(diagnostic_probe::StopReason::WaitFailed.code()),
+                (!observed.end_confirmed).then_some(diagnostic_probe::END_UNCONFIRMED)];
+            for code in cleanup_codes.into_iter().flatten() {
+                diagnostic_process_event("core_probe_cleanup", "failed", Some(code),
+                    Some(observed.elapsed.as_millis()), observed.process_id);
             }
-        };
-        diagnostic_process_event(stage, outcome, code, Some(started.elapsed().as_millis()), pid);
-        if outcome != "ready" { break; }
+            // Failure, even a late zero exit, never starts the second stage.
+            if outcome != "ready" { break; }
+        }
+        // Observer completion is not a healthy-Core/exit/recovery certificate.
+        // A support snapshot taken earlier can see the unmatched start record.
+        diagnostic_event("core_probe_observer", None, "stopped", None,
+            Some(observer_started.elapsed().as_millis()));
+    });
+    if scheduled == diagnostic_probe::ScheduleOutcome::Unavailable {
+        diagnostic_event("core_probe_observer", None, "unavailable", Some(diagnostic_probe::OBSERVER_UNAVAILABLE), None);
     }
 }
 

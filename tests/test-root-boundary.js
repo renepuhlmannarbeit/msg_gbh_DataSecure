@@ -58,8 +58,89 @@ function fixedStorageFailure(action) {
     return true;
   });
 }
+function withTargetFailure(target, operation, code, action) {
+  const comparable = value => ['win32', 'darwin'].includes(process.platform) ? path.resolve(value).toLowerCase() : path.resolve(value);
+  const requested = comparable(target);
+  const original = operation === 'realpath' ? fs.realpathSync.native : fs[operation];
+  let calls = 0;
+  const failing = (value, ...args) => {
+    if (typeof value === 'string' && comparable(value) === requested) {
+      calls++;
+      throw Object.assign(new Error(`NATIVE_PRIVATE_DETAIL ${target}`), { code });
+    }
+    return original(value, ...args);
+  };
+  if (operation === 'realpath') fs.realpathSync.native = failing;
+  else fs[operation] = failing;
+  try { return action(() => calls); }
+  finally {
+    if (operation === 'realpath') fs.realpathSync.native = original;
+    else fs[operation] = original;
+  }
+}
+function assertStartupPreflight() {
+  // The real shared bootstrap and root gate; later phases only record order.
+  // No engine, maintenance process or native macOS permission is simulated.
+  const { initializeProduct } = require('../plugins/data-secure/server/core/product-bootstrap');
+  const phases = ['verifyBundledRuntime', 'ensureDurableRuntime', 'migrateLegacyAuditReceipts',
+    'openBatchPackageProtection', 'cleanupLocalData', 'cleanupUiJobs', 'recoverBatches',
+    'replayMappingOutbox', 'startBatchMaintenance', 'migrateLegacyInput', 'cleanupAbandonedWorkingJobs'];
+  const calls = [];
+  const deps = Object.fromEntries(phases.map(name => [name, () => {
+    calls.push(name);
+    return { failures: 0, active: false, ids: [], complete: true, stop() {} };
+  }]));
+  deps.assertRootSeparation = () => { boundary.assertRootSeparation(); calls.push('separation'); };
+  deps.cleanupExpiredBatchSnapshots = () => {};
+  deps.refuseStartup = () => { assert.fail('a retired destination cannot refuse safe startup'); };
+  initializeProduct(deps);
+  assert.deepStrictEqual(calls, ['separation', ...phases], 'no recovery or cleanup phase may be skipped');
+}
 
 try {
+  for (const code of ['EACCES', 'EPERM']) for (const phase of ['second_preflight', 'later_bootstrap']) {
+    test(`actual standalone refusal adapter preserves ${code} from ${phase} without fabricating Ready`, f => {
+      result.saveConfiguredResultRoot(f.visible);
+      boundary.assertRootSeparation(); // actual first Standalone preflight
+      const serviceSource = fs.readFileSync(require.resolve('../plugins/data-secure/server/standalone/application-service'), 'utf8');
+      const start = serviceSource.indexOf('refuseStartup: (error) => {');
+      const end = serviceSource.indexOf('\n          }', start);
+      assert.ok(start >= 0 && end > start);
+      // Run the actual adapter function bytes, not a hand-copied wrapper. The
+      // diagnostic writer alone is replaced to keep this test write-free after
+      // refusal. This is a source adapter / real filesystem countercase, not
+      // native macOS TCC evidence.
+      let refusalCount = 0, originalError;
+      const refuse = require('node:vm').runInNewContext(`(${serviceSource.slice(start, end).replace('refuseStartup: ', '')}\n})`, {
+        refuseStartup(error) { assert.equal(error, originalError); refusalCount++; return { code: 'UNSAFE_STORAGE_LOCATION' }; },
+        rootSeparationFailure: boundary.rootSeparationFailure,
+        ownershipErrorCode: () => null,
+        fixedFailure: (value, message) => Object.assign(Error(message), { code: value })
+      });
+      const phases = ['verifyBundledRuntime', 'ensureDurableRuntime', 'migrateLegacyAuditReceipts',
+        'openBatchPackageProtection', 'cleanupLocalData', 'cleanupUiJobs', 'recoverBatches',
+        'replayMappingOutbox', 'startBatchMaintenance', 'cleanupExpiredBatchSnapshots',
+        'migrateLegacyInput', 'cleanupAbandonedWorkingJobs'];
+      const later = [];
+      const deps = Object.fromEntries(phases.map(name => [name, () => {
+        later.push(name); return { failures: 0, active: false, ids: [], complete: true, stop() {} };
+      }]));
+      const denied = () => withTargetFailure(f.visible, 'lstatSync', code, () => {
+        try { boundary.assertRootSeparation(); } catch (error) { originalError = error; throw error; }
+      });
+      deps.assertRootSeparation = phase === 'second_preflight' ? denied : boundary.assertRootSeparation;
+      if (phase === 'later_bootstrap') deps.cleanupLocalData = denied;
+      deps.refuseStartup = refuse;
+      assert.throws(() => require('../plugins/data-secure/server/core/product-bootstrap').initializeProduct(deps), error => {
+        assert.equal(error, originalError);
+        assert.equal(boundary.rootSeparationFailure(error), 'active_public_access_denied');
+        assert.equal(error.code, 'PRIVACY_STORAGE_UNSAFE');
+        return true;
+      });
+      assert.equal(refusalCount, 1);
+      assert.ok(!later.includes('recoverBatches'), 'no recovery or successful Ready may follow the refusal');
+    });
+  }
   test('result destination status distinguishes first installation, lost target and replacement', f => {
     assert.deepStrictEqual(result.readConfiguredResultRootStatus(), {
       status: 'unconfigured', root: '', recorded_root: ''
@@ -276,6 +357,228 @@ try {
     privacy.saveConfiguredPrivacyRoot(next);
     privacy.clearConfiguredPrivacyRoot();
     for (const selected of [f.private, next, f.data, f.scope]) blocked(() => result.saveConfiguredResultRoot(selected));
+  });
+  for (const code of ['EACCES', 'EPERM']) {
+    for (const operation of ['lstatSync', 'realpath']) {
+      test(`retired public root ${operation} ${code} cannot block startup, status or a safe selection`, f => {
+        result.saveConfiguredResultRoot(f.visible);
+        const next = path.join(f.scope, 'next-visible'), newest = path.join(f.scope, 'newest-visible');
+        fs.mkdirSync(next); fs.mkdirSync(newest);
+        result.saveConfiguredResultRoot(next);
+        const directory = reservations.directory(f.data);
+        const before = new Map(fs.readdirSync(directory).map(name => [name, fs.readFileSync(path.join(directory, name))]));
+        withTargetFailure(f.visible, operation, code, calls => {
+          assertStartupPreflight();
+          assert.strictEqual(result.readConfiguredResultRoot(), next);
+          assert.ok(fs.statSync(roots().output).isDirectory());
+          result.resultOutputDirectory();
+          result.saveConfiguredResultRoot(newest);
+          assert.strictEqual(result.readConfiguredResultRoot(), newest);
+          result.clearConfiguredResultRoot();
+          assert.strictEqual(result.readConfiguredResultRootStatus().status, 'unconfigured');
+          assert.strictEqual(calls(), 0, 'historical target paths must not be touched, not merely caught');
+          fixedStorageFailure(() => boundary.assertRootSeparation({ resultRoot: f.visible }));
+          assert.throws(() => result.resultOutputDirectory({ root: f.visible }), error => error.code === code,
+            'a reservation never authorizes an export into its inaccessible target');
+          assert.ok(calls() > 0, 'an explicitly reused destination still requires fresh canonicalization');
+        });
+        for (const [name, bytes] of before) assert.deepStrictEqual(fs.readFileSync(path.join(directory, name)), bytes,
+          'safe transitions preserve existing reservation bytes and filenames');
+        for (const selected of [f.visible, path.join(f.visible, 'private'), f.scope]) blocked(() => privacy.saveConfiguredPrivacyRoot(selected));
+      });
+      test(`retired private root ${operation} ${code} remains a boundary without blocking safe private roots`, f => {
+        fs.mkdirSync(f.private);
+        privacy.saveConfiguredPrivacyRoot(f.private);
+        const next = path.join(f.scope, 'next-private');
+        privacy.saveConfiguredPrivacyRoot(next);
+        result.saveConfiguredResultRoot(f.visible);
+        withTargetFailure(f.private, operation, code, calls => {
+          assertStartupPreflight();
+          assert.strictEqual(roots().root, next);
+          assert.strictEqual(result.readConfiguredResultRoot(), f.visible);
+          privacy.clearConfiguredPrivacyRoot();
+          assert.strictEqual(roots().root, path.join(f.data, 'workspace'));
+          assert.strictEqual(calls(), 0);
+          fixedStorageFailure(() => boundary.assertRootSeparation({ privacyRoot: f.private }));
+          assert.ok(calls() > 0, 'a historical private reservation cannot authorize its live reuse');
+        });
+        blocked(() => result.saveConfiguredResultRoot(f.private));
+      });
+      for (const kind of ['private', 'public']) {
+        test(`active ${kind} root ${operation} ${code} still refuses reads, writes and replacement`, f => {
+          fs.mkdirSync(f.private);
+          privacy.saveConfiguredPrivacyRoot(f.private);
+          result.saveConfiguredResultRoot(f.visible);
+          const target = kind === 'private' ? f.private : f.visible;
+          const next = path.join(f.scope, 'next-visible'); fs.mkdirSync(next);
+          const privacyBefore = configBytes(privacy), resultBefore = configBytes(result);
+          withTargetFailure(target, operation, code, calls => {
+            let actualFailure;
+            try { boundary.assertRootSeparation(); } catch (error) { actualFailure = error; }
+            assert.ok(actualFailure);
+            assert.strictEqual(boundary.rootSeparationFailure(actualFailure), kind === 'public' ? 'active_public_access_denied' : 'unsafe_or_unconfirmed');
+            assert.strictEqual(boundary.rootSeparationFailure(Object.assign(Error(actualFailure.message), actualFailure)), 'unsafe_or_unconfirmed',
+              'a copied code/property bag cannot impersonate our actual canonical failure');
+            fixedStorageFailure(() => boundary.assertRootSeparation());
+            fixedStorageFailure(() => roots());
+            fixedStorageFailure(() => result.readConfiguredResultRootStatus());
+            fixedStorageFailure(() => result.saveConfiguredResultRoot(next));
+            fixedStorageFailure(() => privacy.clearConfiguredPrivacyRoot());
+            fixedStorageFailure(() => result.clearConfiguredResultRoot());
+            assert.ok(calls() >= 6, 'a reservation never substitutes for active-root I/O');
+          });
+          assert.deepStrictEqual(configBytes(privacy), privacyBefore);
+          assert.deepStrictEqual(configBytes(result), resultBefore);
+          assert.strictEqual(fs.existsSync(path.join(f.private, 'Output')), false);
+          assert.strictEqual(fs.existsSync(path.join(next, 'DataSecure-Output')), false);
+        });
+      }
+    }
+  }
+  for (const code of ['EIO', 'ENOTDIR']) {
+    test(`public-root ${code} is not misclassified as a proven access refusal`, f => {
+      result.saveConfiguredResultRoot(f.visible);
+      withTargetFailure(f.visible, 'lstatSync', code, () => {
+        let failure; try { boundary.assertRootSeparation(); } catch (error) { failure = error; }
+        assert.ok(failure); assert.strictEqual(boundary.rootSeparationFailure(failure), 'unsafe_or_unconfirmed');
+      });
+    });
+  }
+  for (const code of ['EACCES', 'EPERM']) {
+    for (const operation of ['lstatSync', 'realpath']) {
+      for (const redirection of ['leaf', 'ancestor']) {
+        test(`a current public ${redirection} alias hidden by ${operation} ${code} cannot borrow its old reservation for Ready`, f => {
+          const workspace = path.join(f.data, 'workspace');
+          fs.mkdirSync(workspace, { recursive: true, mode: 0o700 });
+          const publicParent = path.join(f.scope, 'public-parent');
+          if (redirection === 'ancestor') fs.mkdirSync(publicParent);
+          const selected = redirection === 'leaf' ? f.visible : path.join(publicParent, 'results');
+          if (redirection === 'ancestor') fs.mkdirSync(selected);
+          result.saveConfiguredResultRoot(selected);
+          const reserved = boundary.canonicalPath(selected), before = configBytes(result);
+          assert.ok(reservations.readReservations(f.data).some(record => record.kind === 'public' && record.root === reserved),
+            'the counterexample has the exact valid canonical reservation, not a missing/legacy record');
+          if (redirection === 'ancestor') fs.mkdirSync(path.join(workspace, 'results'));
+          fs.renameSync(redirection === 'leaf' ? selected : publicParent, path.join(f.scope, 'original-public'));
+          fs.symlinkSync(workspace, redirection === 'leaf' ? selected : publicParent, process.platform === 'win32' ? 'junction' : 'dir');
+          assert.strictEqual(boundary.pathsOverlap(workspace, selected), true,
+            'the actual current result path is demonstrably inside the active private tree');
+          const next = path.join(f.scope, 'new-public'); fs.mkdirSync(next);
+          withTargetFailure(selected, operation, code, calls => {
+            // A history-only projection passes, even though the actual active A
+            // is now private. This is a countermodel, NOT permission to reset:
+            // reserveRootSeparation must still validate current and next roots.
+            assert.strictEqual(boundary.assertRootSeparation({ resetResult: true }), true);
+            fixedStorageFailure(() => boundary.assertRootSeparation());
+            fixedStorageFailure(() => roots());
+            fixedStorageFailure(() => result.readConfiguredResultRootStatus());
+            fixedStorageFailure(() => result.saveConfiguredResultRoot(next));
+            assert.ok(calls() >= 4);
+          });
+          const worker = `
+            const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+            const [target,operation,code,home]=process.argv.slice(1);
+            const comparable=value=>['win32','darwin'].includes(process.platform)?path.resolve(value).toLowerCase():path.resolve(value);
+            const original=operation==='realpath'?fs.realpathSync.native:fs[operation];
+            const failing=(value,...args)=>{if(typeof value==='string'&&comparable(value)===comparable(target))throw Object.assign(Error('NATIVE_PRIVATE_DETAIL'),{code});return original(value,...args)};
+            if(operation==='realpath')fs.realpathSync.native=failing;else fs[operation]=failing;
+            const {StandaloneApplicationService}=require(${JSON.stringify(require.resolve('../plugins/data-secure/server/standalone/application-service'))});
+            const phases=[];let service,error;
+            try { service=new StandaloneApplicationService({home,dataRoot:process.env.EU_PRIVACY_DATA_ROOT,startupDiagnostic:event=>phases.push(event)}); }
+            catch(caught){error=caught;}
+            finally { service?.startup?.batchMaintenance?.stop();if(operation==='realpath')fs.realpathSync.native=original;else fs[operation]=original; }
+            assert.equal(error?.code,'PRIVACY_STORAGE_UNSAFE','unknown active aliases must not become service Ready');
+            assert.equal(error?.message,'PRIVACY_STORAGE_UNSAFE');
+            assert.equal(phases.includes('product_bootstrap_finished'),false);
+          `;
+          const child = spawnSync(process.execPath, ['-e', worker, selected, operation, code, f.scope], {
+            env: { ...process.env }, encoding: 'utf8', timeout: 30000, windowsHide: true
+          });
+          assert.ifError(child.error);
+          assert.strictEqual(child.status, 0, child.stderr);
+          assert.deepStrictEqual(configBytes(result), before);
+          assert.strictEqual(fs.existsSync(path.join(workspace, 'Output')), false, 'no private processing tree before separation');
+          assert.strictEqual(fs.existsSync(path.join(f.data, 'batches')), false, 'no recovery journal writes before separation');
+          assert.strictEqual(fs.existsSync(path.join(next, 'DataSecure-Output')), false);
+        });
+      }
+    }
+  }
+  test('a retired public name redirected to private storage remains a negative role boundary', f => {
+    fs.mkdirSync(f.private); privacy.saveConfiguredPrivacyRoot(f.private);
+    result.saveConfiguredResultRoot(f.visible);
+    const next = path.join(f.scope, 'next-visible'); fs.mkdirSync(next);
+    result.saveConfiguredResultRoot(next);
+    fs.renameSync(f.visible, path.join(f.scope, 'original-visible'));
+    fs.symlinkSync(f.private, f.visible, process.platform === 'win32' ? 'junction' : 'dir');
+    assertStartupPreflight();
+    assert.strictEqual(roots().root, f.private);
+    const before = configBytes(privacy);
+    for (const selected of [f.visible, path.join(f.visible, 'new-private')]) {
+      fixedStorageFailure(() => boundary.assertRootSeparation({ privacyRoot: selected }));
+      fixedStorageFailure(() => privacy.saveConfiguredPrivacyRoot(selected));
+    }
+    fixedStorageFailure(() => boundary.assertRootSeparation({ resultRoot: f.visible }));
+    assert.throws(() => result.resultOutputDirectory({ root: f.visible }), /RESULT_ROOT_UNSAFE/u);
+    assert.deepStrictEqual(configBytes(privacy), before);
+    assert.strictEqual(fs.existsSync(path.join(f.private, 'DataSecure-Output')), false);
+  });
+  test('a retired private name redirected to public storage cannot become a public destination', f => {
+    fs.mkdirSync(f.private); privacy.saveConfiguredPrivacyRoot(f.private);
+    const next = path.join(f.scope, 'next-private'); privacy.saveConfiguredPrivacyRoot(next);
+    result.saveConfiguredResultRoot(f.visible);
+    fs.renameSync(f.private, path.join(f.scope, 'original-private'));
+    fs.symlinkSync(f.visible, f.private, process.platform === 'win32' ? 'junction' : 'dir');
+    assertStartupPreflight();
+    fixedStorageFailure(() => boundary.assertRootSeparation({ resultRoot: f.private }));
+    assert.throws(() => result.resultOutputDirectory({ root: f.private }), /RESULT_ROOT_UNSAFE/u);
+    assert.strictEqual(fs.existsSync(path.join(f.visible, 'DataSecure-Output')), false);
+  });
+  test('fresh aliases still resolve against historical public boundaries after selection and reset', f => {
+    result.saveConfiguredResultRoot(f.visible); result.clearConfiguredResultRoot();
+    const alias = path.join(f.scope, 'fresh-alias');
+    fs.symlinkSync(f.visible, alias, process.platform === 'win32' ? 'junction' : 'dir');
+    for (const selected of [alias, path.join(alias, 'new-private')]) blocked(() => privacy.saveConfiguredPrivacyRoot(selected));
+    assert.strictEqual(fs.existsSync(path.join(f.visible, 'new-private')), false);
+  });
+  test('legacy schema-1 normalized reservation spellings stay immutable and retain role protection', f => {
+    const spelling = ['win32', 'darwin'].includes(process.platform) ? f.visible.toUpperCase() : f.visible;
+    reservations.publishReservations(f.data, [{ kind: 'public', root: spelling }]);
+    const directory = reservations.directory(f.data), name = fs.readdirSync(directory)[0];
+    const bytes = fs.readFileSync(path.join(directory, name));
+    const original = reservations.readReservations(f.data)[0];
+    assert.deepStrictEqual(original, { schema: 'datasecure-root-reservation/1', kind: 'public', root: spelling });
+    withTargetFailure(f.visible, 'lstatSync', 'EACCES', calls => {
+      assertStartupPreflight(); boundary.reserveRootSeparation();
+      assert.strictEqual(calls(), 0);
+    });
+    assert.deepStrictEqual(fs.readFileSync(path.join(directory, name)), bytes);
+    assert.deepStrictEqual(reservations.readReservations(f.data).filter(record => record.kind === 'public'), [original]);
+    blocked(() => privacy.saveConfiguredPrivacyRoot(path.join(f.visible, 'private')));
+  });
+  for (const shape of ['dot', 'parent', 'trailing-separator', 'nul']) {
+    test(`ambiguous ${shape} historical paths fail closed instead of becoming lexical authority`, f => {
+      const value = boundary.canonicalPath(f.visible);
+      const root = shape === 'dot' ? `${value}${path.sep}.` : shape === 'parent' ? `${value}${path.sep}child${path.sep}..` :
+        shape === 'trailing-separator' ? `${value}${path.sep}` : `${value}\0suffix`;
+      reservations.publishReservations(f.data, [{ kind: 'public', root }]);
+      const directory = reservations.directory(f.data), name = fs.readdirSync(directory)[0];
+      const bytes = fs.readFileSync(path.join(directory, name));
+      fixedStorageFailure(() => roots());
+      fixedStorageFailure(() => boundary.reserveRootSeparation());
+      assert.deepStrictEqual(fs.readFileSync(path.join(directory, name)), bytes);
+      assert.strictEqual(fs.existsSync(path.join(f.data, 'workspace')), false);
+    });
+  }
+  test('conflicting historical roles still refuse startup without touching retired targets', f => {
+    const root = boundary.canonicalPath(f.visible);
+    reservations.publishReservations(f.data, [{ kind: 'private', root }, { kind: 'public', root: path.join(root, 'released') }]);
+    withTargetFailure(f.visible, 'lstatSync', 'EACCES', calls => {
+      fixedStorageFailure(() => boundary.assertRootSeparation());
+      fixedStorageFailure(() => roots());
+      assert.strictEqual(calls(), 0, 'a lexical history conflict is already authoritative');
+    });
+    assert.strictEqual(fs.existsSync(path.join(f.data, 'workspace')), false);
   });
   test('corrupt or linked historical reservation records fail closed rather than being ignored', f => {
     result.saveConfiguredResultRoot(f.visible);

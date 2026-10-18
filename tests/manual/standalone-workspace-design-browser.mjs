@@ -66,6 +66,11 @@ try {
       assert.equal(await page.locator('#history-list .history-row').first().getAttribute('data-outcome'), 'partial');
       assert.equal(await page.locator(prefix + '-files .problem-card').count(), 1);
     }
+    const main = page.locator('#history-list [data-history-main="true"]').first();
+    const accessibleName = [await main.innerText(), await page.locator(prefix + '-title').innerText(),
+      await page.locator(prefix + '-identity').innerText()].join(' ');
+    assert.equal(await page.getByRole('button', { name: accessibleName, exact: true }).count(), 1,
+      'browser accessibility name contains the live visible label and the exact local run context');
     assert.equal(await page.locator(prefix + '-files .notice-card').count(), demo === 'completion-raw' ? 52 : 51);
     const content = page.locator(prefix + '-files details'); await content.locator('summary').click();
     assert.equal(await content.locator('.notice-card').count(), 35);

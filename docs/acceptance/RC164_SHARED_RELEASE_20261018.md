@@ -4,8 +4,11 @@ Nutzerauftrag vom 18.10.2026: neuesten implementierten Featurestand als dieselbe
 Version für Windows x64, macOS Apple Silicon und Intel bereitstellen. Die
 frühere ungefähre Nummer139/140 wird nicht rückwärts übernommen: Quellversion
 ist 3.2.0-rc164. Beide nativen Mac-Build-/Testjobs und deren private Runner-Minuten
-sind ausdrücklich freigegeben. Keine Desktopbedienung, M2-Anwendertest später.
-Timer bleibt PAUSED; keine Developer-ID, Apple-Einreichung oder Storeverteilung.
+sind ausdrücklich freigegeben. Nachfolgender ausdrücklicher Nachtauftrag erlaubt
+Windows-Desktopabnahme durch den Hauptagenten mit gebundenem Kandidaten und
+synthetischen Daten; M2-Anwendertest später. Bestehender Thread-Heartbeat wieder
+ACTIVE alle30min. Aktueller Plan: RC164_NIGHT_REVIEW_AND_RELEASE_PLAN_20261018.md.
+Keine Developer-ID, Apple-Einreichung oder Storeverteilung.
 
 ## Gemeinsamer Funktionsstand
 
@@ -99,7 +102,7 @@ sind verschiedene Mechanismen. Developer-ID gewährt keinen Documents-Zugriff.
 | --- | --- | --- |
 | App-Bundle, Core und Ressourcen lesen; Core ausführen | Bereits vor Ready; normale Lese-/Such-/Ausführungsrechte, passende Architektur und gültiges lokales Seal | Kein Schreiben ins Bundle, kein sudo. Gatekeeper, Hardened Runtime und Endpoint-Richtlinien können separat verweigern; Exit/Signal und begrenzte Startproben werden protokolliert. |
 | Eigener privater Datenbereich unter ~/Library/Application Support/SecureDataMsg-Standalone | Vor Ready; Benutzerrechte, lokales APFS/HFS, sichere Eigentümer-/ACL-/Namespaceverhältnisse | Das sind zusätzliche eigene Integritätsanforderungen, keine mit Developer-ID erlangbaren Rechte. Ungeeignete Netzwerk-/Shared-/ACL-Speicher werden vorsichtshalber abgewiesen, nicht automatisch umberechtigt. |
-| Gespeicherte und reservierte historische Ergebniswurzeln | Teilweise vor Ready; lstat/realpath zur Trennung privater/öffentlicher Bereiche | Auch ein früher verweigerter Altpfad kann Ready verhindern. Ein fehlender neuer Standardordner allein tut das nicht. Trennprüfung bleibt erhalten; frühere pauschale Fehlerklasse wird auf UNSAFE_STORAGE_LOCATION abgebildet, ohne TCC als bewiesene Ursache auszugeben. |
+| Gespeicherte aktuelle und reservierte historische Ergebniswurzeln | Aktive Ziele vor Ready frisch kanonisieren; retirierte Reservierungen nur als negative Namespacegrenzen aus validierten Metadaten vergleichen | Retirierte verweigerte Altziele werden nicht erneut angefasst. Ein aktiv konfiguriertes verweigertes Ziel bleibt gesperrt: Alias-/Junction-Überlappung darf nicht übersprungen werden. Exakte neue Klasse STANDALONE_RESULT_ROOT_ACCESS_DENIED nur bei tatsächlichem EACCES/EPERM; keine behauptete TCC-Ursache. Ein fehlender neuer Standardordner allein verhindert Ready nicht. |
 | Standardziel Documents/SecureDataMsg | Pfad beim Start nur berechnet; Anlegen erst beim ausdrücklichen Verarbeitungsstart | TCC/Files-and-Folders möglich. Fehler STANDALONE_RESULT_ROOT_UNAVAILABLE; kein pauschaler Vollzugriff, Adminmodus oder Zertifikat als Reparatur. |
 | Dateien/Ordner auswählen und Quellen lesen | Nach Benutzeraktion; native rfd/macOS-Panel, danach gebundene Quellenaufnahme | Normaler Standalone-Auswahlweg benötigt weder Terminal.app noch AppleScript. Auswahl allein überstimmt keine POSIX-/ACL- oder Organisationssperre; SOURCE_ACCESS_DENIED bleibt explizit. |
 | Ergebnisse/Exporte schreiben | Nach Auftrag; lokales Ziel, gebundene Verzeichnisidentität, für atomare Bereitstellung gleiches Volume | AI_EXPORT_VOLUME_MISMATCH ist eine eigene Transaktionsgrenze, keine behauptete Apple-Rechteverweigerung. Originale, interne Zuordnungen und Prüfstände werden nicht pauschal weitergegeben. |

@@ -13,7 +13,10 @@ pub(crate) fn verify_namespace_parent(file: &File) -> io::Result<()> {
     if !metadata.is_dir() || metadata.uid() != unsafe { libc::geteuid() } || metadata.mode() & 0o022 != 0 {
         return Err(unsafe_permissions());
     }
-    no_extended_acl(file)
+    #[cfg(target_os = "macos")]
+    { darwin_acl(file, true) }
+    #[cfg(not(target_os = "macos"))]
+    { no_extended_acl(file) }
 }
 
 #[cfg(unix)]
@@ -40,6 +43,11 @@ fn no_extended_acl(file: &File) -> io::Result<()> {
 
 #[cfg(target_os = "macos")]
 fn no_extended_acl(file: &File) -> io::Result<()> {
+    darwin_acl(file, false)
+}
+
+#[cfg(target_os = "macos")]
+fn darwin_acl(file: &File, allow_parent_delete_protection: bool) -> io::Result<()> {
     use std::{ffi::c_void, os::fd::AsRawFd};
     extern "C" {
         fn filesec_init() -> *mut c_void;
@@ -53,6 +61,47 @@ fn no_extended_acl(file: &File) -> io::Result<()> {
         fn acl_valid(acl: *mut c_void) -> i32;
         fn acl_get_entry(acl: *mut c_void, entry_id: i32, entry: *mut *mut c_void) -> i32;
         fn acl_free(value: *mut c_void) -> i32;
+        fn acl_dup(acl: *mut c_void) -> *mut c_void;
+        fn acl_get_tag_type(entry: *mut c_void, tag: *mut i32) -> i32;
+        fn acl_get_permset_mask_np(entry: *mut c_void, mask: *mut u64) -> i32;
+        fn acl_get_flagset_np(object: *mut c_void, flags: *mut *mut c_void) -> i32;
+        fn acl_clear_flags_np(flags: *mut c_void) -> i32;
+        fn acl_size(acl: *mut c_void) -> isize;
+        fn acl_copy_ext(buffer: *mut c_void, acl: *mut c_void, size: isize) -> isize;
+    }
+    // Public namespace parents may have the usual deny-delete protection.
+    // This is NOT an exception for a private child: those still require an
+    // empty ACL. Require exactly one DENY DELETE and no ACL/entry flags.
+    // Compare public-API serializations with a flag-cleared in-memory duplicate
+    // to reject even unknown flag bits without depending on opaque ACL layout.
+    // No filesystem ACL, mode, owner or principal is changed by this inspection.
+    fn delete_protection_only(acl: *mut c_void, entry: *mut c_void) -> bool {
+        let (mut tag, mut permissions) = (0, 0u64);
+        if entry.is_null() || unsafe { acl_get_tag_type(entry, &mut tag) } != 0 ||
+            unsafe { acl_get_permset_mask_np(entry, &mut permissions) } != 0 ||
+            !darwin_delete_protection_entry(tag, permissions) { return false; }
+        let mut next = std::ptr::null_mut();
+        let lookup = unsafe { acl_get_entry(acl, -1, &mut next) }; // ACL_NEXT_ENTRY
+        if !darwin_acl_empty(0, lookup, io::Error::last_os_error().raw_os_error(), next.is_null()) { return false; }
+        let copy = unsafe { acl_dup(acl) };
+        if copy.is_null() { return false; }
+        let matches = (|| {
+            let mut copied_entry = std::ptr::null_mut();
+            if unsafe { acl_get_entry(copy, 0, &mut copied_entry) } != 0 || copied_entry.is_null() { return false; }
+            for object in [copy, copied_entry] {
+                let mut flags = std::ptr::null_mut();
+                if unsafe { acl_get_flagset_np(object, &mut flags) } != 0 || flags.is_null() ||
+                    unsafe { acl_clear_flags_np(flags) } != 0 { return false; }
+            }
+            let size = unsafe { acl_size(acl) };
+            if !(1..=8192).contains(&size) || unsafe { acl_size(copy) } != size { return false; }
+            let mut original = vec![0u8; size as usize];
+            let mut cleared = vec![0u8; size as usize];
+            (unsafe { acl_copy_ext(original.as_mut_ptr().cast(), acl, size) }) == size &&
+                (unsafe { acl_copy_ext(cleared.as_mut_ptr().cast(), copy, size) }) == size && original == cleared
+        })();
+        let freed = unsafe { acl_free(copy) };
+        matches && freed == 0
     }
     struct Security(*mut c_void);
     impl Drop for Security { fn drop(&mut self) { unsafe { filesec_free(self.0); } } }
@@ -80,19 +129,27 @@ fn no_extended_acl(file: &File) -> io::Result<()> {
     let mut entry = std::ptr::null_mut();
     let result = if valid == 0 { unsafe { acl_get_entry(acl, 0, &mut entry) } } else { -2 }; // ACL_FIRST_ENTRY
     let error = io::Error::last_os_error().raw_os_error();
-    let freed = unsafe { acl_free(acl) };
     // Darwin differs from Linux: zero means an entry WAS FOUND. A valid
     // fd-derived ACL with FIRST_ENTRY == -1/EINVAL and no entry is empty.
     // The validity proof precedes lookup so an invalid ACL is not accepted as
-    // empty just because it also reports EINVAL. Reject every actual entry,
-    // including deny-only and inherited entries; never silently rewrite it.
-    if freed != 0 || !darwin_acl_empty(valid, result, error, entry.is_null()) { return Err(unsafe_permissions()); }
+    // empty just because it also reports EINVAL. Only a namespace parent has
+    // the narrow, non-inheriting deny-delete exception; private children do not.
+    let accepted = darwin_acl_empty(valid, result, error, entry.is_null()) ||
+        allow_parent_delete_protection && valid == 0 && result == 0 &&
+        delete_protection_only(acl, entry);
+    let freed = unsafe { acl_free(acl) };
+    if freed != 0 || !accepted { return Err(unsafe_permissions()); }
     Ok(())
 }
 
 #[cfg(any(target_os = "macos", test))]
 fn darwin_acl_empty(valid: i32, lookup: i32, error: Option<i32>, entry_null: bool) -> bool {
     valid == 0 && lookup == -1 && error == Some(22) && entry_null // Darwin EINVAL
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn darwin_delete_protection_entry(tag: i32, permissions: u64) -> bool {
+    tag == 2 && permissions == 1 << 4 // ACL_EXTENDED_DENY, ACL_DELETE
 }
 
 #[cfg(test)]
@@ -106,6 +163,14 @@ mod tests {
             (-1, -1, Some(22), true), (0, -1, Some(5), true), (0, -1, None, true),
             (0, -1, Some(22), false), (0, 1, None, true),
         ] { assert!(!darwin_acl_empty(valid, lookup, error, entry_null)); }
+    }
+    #[test]
+    fn parent_delete_protection_never_accepts_grants_or_additional_rights() {
+        assert!(darwin_delete_protection_entry(2, 16));
+        for (tag, rights) in [(1, 16), (0, 16), (3, 16), (2, 0), (2, 2),
+            (2, 16 | 4), (2, 16 | 32), (2, 16 | 64), (2, u64::MAX)] {
+            assert!(!darwin_delete_protection_entry(tag, rights));
+        }
     }
 }
 
@@ -135,6 +200,9 @@ mod native_macos_tests {
             Self { file: File::open(&path).unwrap(), path }
         }
         fn acl(&self, entry_kind: Option<(i32, i32)>) {
+            self.acl_with_permission(entry_kind, 2); // READ_DATA / LIST_DIRECTORY
+        }
+        fn acl_with_permission(&self, entry_kind: Option<(i32, i32)>, permission: i32) {
             struct Acl(*mut c_void);
             impl Drop for Acl { fn drop(&mut self) { assert_eq!(unsafe { acl_free(self.0) }, 0); } }
             let mut acl = Acl(unsafe { acl_init(1) }); assert!(!acl.0.is_null());
@@ -147,7 +215,7 @@ mod native_macos_tests {
                 assert_eq!(unsafe { acl_set_qualifier(entry, uuid.as_ptr().cast()) }, 0);
                 let mut perms = std::ptr::null_mut();
                 assert_eq!(unsafe { acl_get_permset(entry, &mut perms) }, 0);
-                assert_eq!(unsafe { acl_add_perm(perms, 2) }, 0); // READ_DATA / LIST_DIRECTORY
+                assert_eq!(unsafe { acl_add_perm(perms, permission) }, 0);
                 if flags != 0 {
                     let mut flagset = std::ptr::null_mut();
                     assert_eq!(unsafe { acl_get_flagset_np(entry, &mut flagset) }, 0);
@@ -164,6 +232,7 @@ mod native_macos_tests {
             assert!(fs::symlink_metadata(&self.path).unwrap().is_dir());
             assert!(!fs::symlink_metadata(&self.path).unwrap().file_type().is_symlink());
             assert_eq!(fs::read_dir(&self.path).unwrap().count(), 0);
+            self.acl(None); // Only this exclusive synthetic fixture, through its held fd.
             fs::remove_dir(&self.path).unwrap();
         }
     }
@@ -184,6 +253,29 @@ mod native_macos_tests {
         }
         fixture.acl(None);
         verify_private(&fixture.file).unwrap();
+    }
+    #[test]
+    fn actual_darwin_noninheriting_delete_protection_allows_parent_but_not_private_leaf() {
+        let fixture = Fixture::new();
+        fixture.acl_with_permission(Some((2, 0)), 16); // ACL_EXTENDED_DENY / ACL_DELETE
+        verify_namespace_parent(&fixture.file).unwrap();
+        assert!(verify_private(&fixture.file).is_err());
+        let parent = crate::export_directory::Directory::open_existing(&fixture.path, None).unwrap();
+        let child = parent.create_controlled_child("private-child").unwrap();
+        child.verify_controlled().unwrap();
+        drop(child);
+        fs::remove_dir(fixture.path.join("private-child")).unwrap();
+    }
+    #[test]
+    fn actual_darwin_delete_protection_with_inheritance_still_refuses_before_mkdir() {
+        let fixture = Fixture::new();
+        for flags in [16, 32, 64, 128, 256, 32 | 64] {
+            fixture.acl_with_permission(Some((2, flags)), 16);
+            assert!(verify_namespace_parent(&fixture.file).is_err());
+            let parent = crate::export_directory::Directory::open_existing(&fixture.path, None).unwrap();
+            assert!(parent.create_controlled_child("must-not-exist").is_err());
+            assert!(!fixture.path.join("must-not-exist").exists());
+        }
     }
     #[test]
     fn actual_darwin_inheritable_parent_acl_refuses_provisioning_before_mkdir() {

@@ -299,6 +299,28 @@ function withRealReservation(child, nativeRecordModel, action) {
 }
 
 function initialCases(test) {
+for (const role of roles) {
+  test(`${role}: a live worker blocks destination changes after its processing lease ends, until real exit`, () => {
+    const child = fakeChild();
+    const f = fixture(role, child);
+    assert.equal(f.api.localWorkerActive(), false);
+    f.start();
+    assert.equal(f.api.localWorkerActive(), true);
+    const token = child.messages[0].batch_token;
+    f.replaceLease({ token }); // processing has ended; export may still be running
+    assert.equal(f.leaseState(token).local_executor_pid, undefined);
+    child.emit('disconnect');
+    child.emit('error', privateError());
+    assert.equal(child.kills, 1);
+    assert.equal(f.api.localWorkerActive(), true, 'error, disconnect and kill do not prove termination');
+    child.exit(1);
+    assert.equal(f.api.localWorkerActive(), false);
+    child.emit('exit', 1); // duplicate notifications cannot release a successor
+    assert.equal(f.api.localWorkerActive(), false);
+    f.drain();
+  });
+}
+
 test('automatic Standalone intake passes the exact policy to its worker; resume cannot override a stored policy', () => {
   const contentOptions = { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: true, imageOcr: false };
   const child = fakeChild(), f = fixture('intake', child);
@@ -1263,6 +1285,7 @@ async function realNoPidProbe() {
     assert.strictEqual(exited, false, 'failed spawn emits error/close, not exit');
     f.drain();
     assert.strictEqual(f.active(), false);
+    assert.strictEqual(f.api.localWorkerActive(), false, 'a never-started child cannot leave a live-worker slot');
     assert.strictEqual(f.claims.length, 0);
     assert.strictEqual(f.releases.length, 0);
     assertBoundedDiagnostics(f);

@@ -176,7 +176,7 @@ function defaultDependencies(options = {}) {
   } = require('../gateway/batch');
   const { cleanupLocalData } = require('../gateway/retention');
   const { initializeProduct } = require('../core/product-bootstrap');
-  const { assertRootSeparation } = require('../gateway/root-boundary');
+  const { assertRootSeparation, rootSeparationFailure } = require('../gateway/root-boundary');
   const { verifyBundledRuntime, refuseStartup } = require('../gateway/startup-guard');
   const { migrateLegacyAuditReceipts } = require('../gateway/audit');
   const { cleanupCompanionJobs } = require('../companion/retention');
@@ -285,6 +285,10 @@ function defaultDependencies(options = {}) {
           // enough to return the fixed refusal code to its local UI.
           refuseStartup: (error) => {
             const outcome = refuseStartup(error, { exit: () => {} });
+            // Preserve the exact leaf-issued exception through a later shared
+            // bootstrap refusal; the sidecar's WeakSet cause is not forgeable
+            // and cannot survive replacing this error with a generic wrapper.
+            if (rootSeparationFailure(error) === 'active_public_access_denied') throw error;
             throw fixedFailure(ownershipErrorCode(error) || outcome.code, 'Der lokale DataSecure-Core konnte nicht sicher gestartet werden.');
           }
         });
@@ -333,6 +337,7 @@ function defaultDependencies(options = {}) {
     startLocalReviewExecutor: (token, executorOptions) => batchExecutor.startLocalReviewExecutor(token, {
       ...workerDiagnostics({ ...executorOptions }), appReview: reviewBroker
     }),
+    localWorkerActive: batchExecutor.localWorkerActive,
     reviewSession: reviewBroker.session,
     reviewContinuationBatchId: reviewBroker.boundBatchId,
     reviewChunk: reviewBroker.chunk,
@@ -1406,21 +1411,31 @@ class StandaloneApplicationService {
     if (this.interactionActive) throw fixedFailure('STANDALONE_BUSY', 'Eine lokale Auswahl ist bereits geöffnet.');
     this.interactionActive = true;
     try {
-      const status = this.deps.lightweightStatus();
-      if (status.local_intake_pending || status.batch_processing_active) {
-        throw fixedFailure('STANDALONE_BUSY', 'Der Ergebnisordner kann während einer Verarbeitung nicht geändert werden.');
-      }
+      const assertIdle = () => {
+        const status = this.deps.lightweightStatus();
+        if (status.local_intake_pending || status.batch_processing_active || this.deps.localWorkerActive?.()) {
+          throw fixedFailure('STANDALONE_BUSY', 'Der Ergebnisordner kann während einer Verarbeitung nicht geändert werden.');
+        }
+      };
+      assertIdle();
       const selected = options.path || await this.deps.pickFolderAsync({ signal: options.signal, purpose: 'result' });
       const dataRoot = process.env.EU_PRIVACY_DATA_ROOT || standaloneDataRoot();
       if (pathsOverlap(dataRoot, selected)) {
         throw fixedFailure('STANDALONE_RESULT_ROOT_UNSAFE', 'Der Ergebnisordner muss außerhalb des privaten DataSecure-Bereichs liegen.');
       }
+      // The native broker provisions directories. Never invoke it before the
+      // busy check or outside this service's interaction exclusion. Recheck
+      // after every async selection/provisioning boundary before saving.
+      assertIdle();
+      const nativeExport = typeof options.prepareNativeExport === 'function'
+        ? await options.prepareNativeExport() : options.nativeExport;
+      assertIdle();
       try {
         if (typeof this.deps.runHistory?.captureExistingExportBindings === 'function') this.deps.runHistory.captureExistingExportBindings();
         else this.deps.runHistory?.history(); // Legacy adapter, not production.
       } catch { /* retain every safely readable prior export binding */ }
       this.deps.resultOutputDirectory({ root: selected });
-      this.deps.saveConfiguredResultRoot(selected, { nativeIdentity: options.nativeIdentity, nativeExport: options.nativeExport });
+      this.deps.saveConfiguredResultRoot(selected, { nativeIdentity: options.nativeIdentity, nativeExport });
       let replay = null;
       try { replay = this.deps.replayPendingResultExports?.() || null; }
       catch { replay = { pending: true }; }

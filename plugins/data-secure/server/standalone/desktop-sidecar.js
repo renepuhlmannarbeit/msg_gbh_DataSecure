@@ -54,13 +54,14 @@ function diagnosticEvent(event, fields = {}) {
 // evidence because all imports preceded the first diagnostic event.
 diagnosticEvent('sidecar_entry', { outcome: 'ready' });
 let StandaloneApplicationService, FrameDecoder, MAX_FRAME_BYTES, validatePrivateMessage;
-let NativeExportChannel, NATIVE_RESPONSE_SCHEMA, PUBLICATION_RESPONSE, desktopErrorCode, batchDiagnosticCodes;
+let NativeExportChannel, NATIVE_RESPONSE_SCHEMA, PUBLICATION_RESPONSE, desktopErrorCode, batchDiagnosticCodes, rootSeparationFailure;
 try {
   ({ StandaloneApplicationService } = require('./application-service'));
   ({ FrameDecoder, MAX_FRAME_BYTES, validatePrivateMessage } = require('./desktop-ipc'));
   ({ NativeExportChannel, RESPONSE_SCHEMA: NATIVE_RESPONSE_SCHEMA, PUBLICATION_RESPONSE } = require('./native-export-channel'));
   const { DESKTOP_ERROR_CODES } = require('../core/desktop-error-contract');
   ({ desktopErrorCode } = require('../core/desktop-error-contract'));
+  ({ rootSeparationFailure } = require('../gateway/root-boundary'));
   batchDiagnosticCodes = new Set([...DESKTOP_ERROR_CODES,
     ...require('../gateway/diagnostic-causes').WORKFLOW_ERROR_CODES,
     ...require('../core/document-result-grade').REASON_CODES]);
@@ -133,9 +134,13 @@ try {
   }
   diagnosticEvent('service_initialized', { outcome: 'ready', elapsed_ms: Date.now() - serviceStartedAt });
 } catch (error) {
-  startupError = error;
+  // A real public-root permission refusal is not a missing/trapped Core or a
+  // proven TCC decision. Keep strict refusal, but expose its fixed actual class.
+  // Do not accept a caller-set property as proof and never make a partial Ready.
+  startupError = rootSeparationFailure(error) === 'active_public_access_denied'
+    ? Object.assign(Error('STANDALONE_RESULT_ROOT_ACCESS_DENIED'), { code: 'STANDALONE_RESULT_ROOT_ACCESS_DENIED' }) : error;
   diagnosticEvent('service_initialization_failed', {
-    outcome: 'failed', error_code: desktopErrorCode(error?.code), elapsed_ms: Date.now() - serviceStartedAt
+    outcome: 'failed', error_code: desktopErrorCode(startupError?.code), elapsed_ms: Date.now() - serviceStartedAt
   });
 }
 // The owning native desktop waits for this exact private bootstrap proof before
@@ -259,11 +264,12 @@ async function dispatch(message) {
       if (message.native_export_binding === true && !nativeEnabled)
         throw Object.assign(Error('STANDALONE_IPC_FAILED'), { code: 'STANDALONE_IPC_FAILED' });
       if (nativeEnabled && message.native_export_binding === true) {
-        // Reject current AND historical private/public overlap before native
-        // provisioning, not after a potentially unsafe destination write.
-        require('../gateway/root-boundary').assertRootSeparation({ resultRoot: message.source_paths[0] });
-        const nativeExport = await nativeChannel.configureExportRoot(message);
-        return service.configureResults({ path: message.source_paths[0], nativeExport });
+        return service.configureResults({ path: message.source_paths[0], prepareNativeExport: () => {
+          // The service first excludes live work and holds interactionActive.
+          // Reject private/public overlap before native provisioning as well.
+          require('../gateway/root-boundary').assertRootSeparation({ resultRoot: message.source_paths[0] });
+          return nativeChannel.configureExportRoot(message);
+        } });
       }
       return service.configureResults({ path: message.source_paths[0] });
     }

@@ -42,6 +42,7 @@ const CONTROLLED_CREATE_EVENTS: &str = "native_controlled_create_failed";
 const BATCH_WORKER_EVENTS: &str = "batch_worker_failed";
 const BATCH_WORKER_PHASES: &str = "item_epoch_release registry_finalize local_delivery_verify executor_lease_release processing result_export_prepare result_export_claim result_export_plan result_export_copy result_export_claim_release";
 const CAPTURE_EVENTS: &str = "history_capture_full history_capture_reused";
+const PROBE_EVENTS: &str = "core_probe_observer core_probe_cleanup";
 const RECOVERY_EVENTS: &str = "sidecar_exited_before_response";
 const OWNERSHIP_EVENTS: &str = "ownership_control_check_started ownership_control_check_finished ownership_control_check_failed private_namespace_bound";
 const OUTCOMES: &str = "ready failed progress blocked unavailable started stopped error cancelled waiting bootstrapping validating rejected accepted no_selection";
@@ -52,7 +53,7 @@ fn code(value: &str) -> bool {
     // These are compile-time product sources, not runtime file reads. Only
     // complete fixed code literals qualify; no prefix-based vendor text pass.
     value.len() <= 100 && value.bytes().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_') &&
-        [include_str!("main.rs"), include_str!("ipc_transport.rs"), include_str!("startup_diagnostics.rs"),
+        [include_str!("main.rs"), include_str!("ipc_transport.rs"), include_str!("startup_diagnostics.rs"), include_str!("diagnostic_probe.rs"),
          include_str!("../../../../plugins/data-secure/server/core/desktop-error-contract.js"),
          include_str!("../../../../plugins/data-secure/server/standalone/desktop-sidecar.js")]
             .iter().any(|source| literal(source, value)) &&
@@ -100,7 +101,7 @@ fn sanitize(bytes: &[u8], component: &str, correlation: &mut Correlation) -> Opt
     // Derived Deserialize rejects duplicate fields as well as unknown fields.
     let record: Record = serde_json::from_slice(bytes).ok()?;
     if record.schema != "datasecure-standalone-interaction/1" || record.component != component ||
-        record.time_ms > 4_102_444_800_000 || !(member(&record.event, EVENTS) || member(&record.event, CAPTURE_EVENTS) || member(&record.event, RECOVERY_EVENTS) || member(&record.event, OWNERSHIP_EVENTS) || member(&record.event, CONFIGURE_EVENTS) || member(&record.event, BATCH_WORKER_EVENTS) || member(&record.event, CONTROLLED_CREATE_EVENTS)) ||
+        record.time_ms > 4_102_444_800_000 || !(member(&record.event, EVENTS) || member(&record.event, CAPTURE_EVENTS) || member(&record.event, PROBE_EVENTS) || member(&record.event, RECOVERY_EVENTS) || member(&record.event, OWNERSHIP_EVENTS) || member(&record.event, CONFIGURE_EVENTS) || member(&record.event, BATCH_WORKER_EVENTS) || member(&record.event, CONTROLLED_CREATE_EVENTS)) ||
         !member(&record.outcome, OUTCOMES) ||
         record.session_id.as_deref().is_some_and(|v| !hex(v)) ||
         record.request_id.as_deref().is_some_and(|v| !hex(v)) ||
@@ -404,6 +405,22 @@ mod tests {
             assert!(sanitize(&serde_json::to_vec(&raw).unwrap(), "desktop", &mut Correlation::default()).is_some(), "{event}/{outcome}");
         }
         let mut raw = record(); raw["outcome"] = json!("vendor private path");
+        assert!(sanitize(&serde_json::to_vec(&raw).unwrap(), "desktop", &mut Correlation::default()).is_none());
+    }
+    #[test]
+    fn diagnostic_probe_cleanup_codes_survive_without_accepting_vendor_codes() {
+        for error in ["STANDALONE_CORE_PROBE_OBSERVER_UNAVAILABLE", "STANDALONE_CORE_PROBE_END_UNCONFIRMED",
+            "STANDALONE_CORE_PROBE_KILL_DENIED", "STANDALONE_CORE_PROBE_KILL_FAILED",
+            "STANDALONE_CORE_PROBE_TIMEOUT", "STANDALONE_CORE_PROBE_WAIT_FAILED"] {
+            for event in ["core_probe_observer", "core_probe_cleanup"] {
+                let mut raw = record(); raw["event"] = json!(event); raw["outcome"] = json!("failed");
+                raw["error_code"] = json!(error);
+                let output = sanitize(&serde_json::to_vec(&raw).unwrap(), "desktop", &mut Correlation::default()).unwrap();
+                assert_eq!(output["error_code"], error);
+            }
+        }
+        let mut raw = record(); raw["event"] = json!("core_probe_cleanup"); raw["outcome"] = json!("failed");
+        raw["error_code"] = json!("STANDALONE_CORE_PROBE_VENDOR_TEXT");
         assert!(sanitize(&serde_json::to_vec(&raw).unwrap(), "desktop", &mut Correlation::default()).is_none());
     }
     #[test]

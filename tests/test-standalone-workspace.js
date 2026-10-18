@@ -309,6 +309,16 @@ testAsync(`a bootstrap rights refusal survives ${initial ? 'initial context' : '
     'continue_history_batch', 'export_approved_documents', 'decide_document_review_batch'].includes(call.command)), false);
 });
 
+testAsync('an active result-root access refusal is actionable without claiming a trapped Core or offering an unavailable in-app folder change', async () => {
+  const h = harness(); await tick();
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 1, state: 'bootstrap_failed', error_code: 'STANDALONE_RESULT_ROOT_ACCESS_DENIED' } });
+  assert.match(h.el('feedback').textContent, /Ergebnisordner.*Zugriff verweigert/u);
+  assert.match(h.el('connection-status').textContent, /Ordner nicht in der App gewechselt/u);
+  assert.doesNotMatch(h.el('connection-status').textContent, /Core konnte keine Verbindung|Zertifikat|Vollzugriff|Gatekeeper/u);
+  await h.act('configure-results'); await h.poll();
+  assert.equal(h.calls.some(call => ['configure_results', 'start_admitted_batch', 'export_approved_documents'].includes(call.command)), false);
+});
+
 testAsync('a native bootstrap snapshot preserves the cause when the event is delayed and never grants retry by itself', async () => {
   let h, refuse = false;
   const failure = { epoch: 1, error_code: 'STANDALONE_OWNERSHIP_STORAGE_UNSAFE' };
@@ -3650,6 +3660,32 @@ testAsync('history status is first and later summary updates preserve title and 
   assert.equal(detail.children.find(row => row.className === 'history-title').textContent, title);
   assert.equal(detail.children.find(row => row.className === 'history-meta' && row !== h.el(`history-${B}-state`)).textContent, counters);
   assert.match(h.el(`history-${B}-state`).textContent, /Export im Abgleich/u);
+});
+
+testAsync('history accessibility names bind repeated controls to their own visible run and follow action changes', async () => {
+  const h = harness({ invoke(command, _args, fallback) {
+    return command === 'get_document_review_history_summary' ? reviewSummary({ approved_count: 2,
+      reviewable_count: 2, current_exported_count: 0 }) : fallback();
+  } }); await tick();
+  h.model.entries = [A, B].map(batch_id => ({ batch_id, created_at: '2026-10-18T11:15:00Z',
+    processing_mode: 'markdown-and-anonymize', selected_count: 2, result_count: 2, failed_count: 0,
+    status: 'results_available', result_location: 'available', results_available: true }));
+  await h.act('nav-history');
+  for (const batchId of [A, B]) {
+    const prefix = `history-${batchId}`, row = h.el(`${prefix}-title`).parent.parent;
+    assert.equal(row.attrs['aria-labelledby'], `${prefix}-title ${prefix}-identity`);
+    assert.equal(h.el(`${prefix}-identity`).textContent, `Lauf ${batchId.slice(0, 8)}`);
+    for (const key of ['documents', 'details', 'results', 'more', 'visibility']) {
+      const control = h.el(`${prefix}-${key}`);
+      assert.equal(control.attrs['aria-labelledby'], `${control.id} ${prefix}-title ${prefix}-identity`);
+      assert.equal(control.attrs['aria-label'], undefined, 'no stale duplicate of a changing visible label');
+    }
+  }
+  const main = h.el(`history-${B}-documents`), binding = main.attrs['aria-labelledby'];
+  await toggleHistorySummary(h, B);
+  assert.equal(main.textContent, 'Exportvorschau');
+  assert.equal(main.attrs['aria-labelledby'], binding, 'self-reference follows the live label without replacing run context');
+  assert.equal(h.calls.some(call => ['start_admitted_batch', 'continue_history_batch', 'export_approved_documents'].includes(call.command)), false);
 });
 
 testAsync('history hiding is explicit, persistent through the backend and never deletes or repeats work', async () => {

@@ -1,0 +1,110 @@
+# RC164 – fortgesetzter Abschlussauftrag
+
+Nutzerauftrag am 18.10.2026 abends (Europe/Berlin): gezielte Blockerbehebung,
+mehrere Quellen-/Gegenreviews und echte Windows-Desktopabnahme, anschließend
+Windows x64 und macOS ARM64/Intel als gemeinsamer Pre-Release. Windows-ZIP
+zusätzlich lokal. Desktopfreigabe erneut ausdrücklich erteilt; allein der
+Hauptagent bedient die Anwendung, mit ausschließlich synthetischen Testdaten.
+Keine Nutzerdateien, bestehenden Evidenzen oder älteren Pakete überschreiben.
+Der bestehende Thread-Heartbeat datasecure-lokales-backlog-fortsetzen wurde
+auf ausdrücklichen Nachtauftrag erneut aktiviert (alle 30 Minuten; keine
+Duplikatautomation). Keine Zertifikatssuche, Developer-ID,
+Apple-Einreichung oder Storeverteilung. Kein Abschalten von Gatekeeper,
+Core-Library-Validation oder Hardened Runtime, keine Umrechte bestehender Daten.
+
+## Reihenfolge und Freigabekriterien
+
+1. Bestätigte Quellenblocker zuerst beheben; bestehende grüne Tests widerlegen
+   neue Befunde nicht. Gezielte echte Fehlergegenfälle und unabhängiges
+   Produktionsgegenlesen nach jedem Fix. Höchstens drei begrenzte KI-Agenten
+   gleichzeitig; keine Unteragenten oder Inter-Agent-Nachrichten.
+2. Native Mac-Core-Quelle samt C/API-Verträgen vor der teuren Kompilierung
+   einfrieren. Ein Producer mit falschem Guard ist kein geeigneter Nachweis.
+   Tatsächliche ARM-/Intel-Compiler-, Seal- und Rollenproben anschließend lesen.
+3. Erst vollständig geprüfte FINAL-CORE-Metadatenhashes freigeben. Core und
+   offizieller Konverter bleiben verschiedene Artefaktrollen. Ad-hoc-Sealing
+   benötigt kein Apple-Zertifikat, ist aber keine Notarisierung/Vertrauensgarantie.
+4. Gemeinsamen endgültigen Gitcommit und Produktfingerprint für alle Targets
+   einfrieren; Headless-, Rust-, Native-/Paketgates mit unveränderten Inputs.
+5. Echte Windows-GUI aus dem gebundenen Releasepaket testen: Erststart,
+   Ordner-/Dateidialoge, Markdown, geführte Anonymisierung, Schnellweg, OCR,
+   Vertagen/Denkpause/Neustart, Freigabe, Export, Abschlussnavigation,
+   Fünferverlauf/Ausblenden und neuer leerer Dateientwurf. Abweichungen beheben
+   und betroffene Gates mit neuem Binding wiederholen, keine Erfolgserfindung.
+6. Nur geeignete Downloadpakete veröffentlichen: Windows-ZIP, beide Mac-ZIPs
+   und DMGs, Prüfsummen und unveränderte synthetische Testdaten. Remoteassets
+   erneut lesen/hashprüfen, Pre-Release-Flag und Tagsource verifizieren.
+
+## Prüfrollen (risikobasiert, keine feste Obergrenze an Runden)
+
+| Rolle | Konkreter Quellenschwerpunkt | Erforderlicher Nachweis |
+| --- | --- | --- |
+| macOS-/Apple-Silicon | Finder/App/Core/Worker, JIT, Architektur, Ad-hoc-Rollen | tatsächliche native Start-/Rollenproben; M2/Finder später gesondert |
+| Rust-/IPC-Systeme | Lebenszyklus, Termination, Fristen, Ready-/ACK-Übergänge | Sourcegegenreview und native Rust-/Transportgates |
+| Windows-/WebView2 | Ressourcen, Prozesse, Picker, NTFS, Paketpfade | gebundener Windowsbuild und echte GUI |
+| Dateirechte-/OS-API | ACL-Boolean/Bitmasken, Eigentümer, Volume, Pfadkanten | offizielle API/OS-Quelle plus native Gegenfälle |
+| Architektur-/Wiederanlauf | voller Bootstrap, Recovery, gesperrte aktive/alte Ziele | kein halbfertiges Ready, keine erfundenen Schreibrechte |
+| Paket-/Releaseengineering | Sourcepins, Bundlelayout, Metadaten, ZIP/DMG | tatsächliche Artefakte und gemeinsamer Quellcommit |
+| Dokumente-/OCR | Extraction, Kontaktwerte, Normalisierung, Dateiformate | echte Corpusinhalte, Originale unverändert |
+| Datenschutz-/Security | Schnellweg, Freigaben, Grenzen, Manipulation, Logs | Negativ-/Missbrauchsgegenfälle, kein pauschales All-clear |
+| UX-/Barrierefreiheit | Namen, Fokus, Navigation, Status, optionale Aktionen | reale DOM-/Browserprüfung und native Accessibility-Beobachtung |
+| Unabhängige Testarchitektur | Mocks, Orakel, Coverage, Quellen-/Paketbindung | Tests nicht mit Produktion verwechseln; offenes NOT_RUN ausweisen |
+
+KI-Prüfrollen ersetzen keine zertifizierten Fachpersonen und sind keine
+100-Prozent-Garantie. Quellenlesen, native CI-Ausführung, echte Desktopabnahme
+und späterer M2-Test sind verschiedene Nachweise. Sicherheits-/Unternehmens-
+Sperren dürfen nicht übergangen oder als reparierte App-Fehler bezeichnet werden.
+
+## Aktuelle bestätigte Folgepunkte
+
+- Retirierte verweigerte Ergebnisziele: negativer Reservationsvergleich statt
+  erneutem lstat/realpath des alten Ziels; aktive Ziele weiterhin strikt.
+- Rust-Mac-Exportparent: normales nichtvererbendes deny-delete darf keinen
+  privaten Zugriff oder unsichere ACL legitimieren; native Gegenfälle erforderlich.
+- Diagnoseprobe: kein unbeschränktes wait unter dem Produkt-Startguard;
+  separater einmaliger Observer mit ehrlichem unbestätigtem Prozessende.
+- **Korrigierter P1:** C-Guard erwartete filesec-ACL-present==1, Apple liefert bei
+  vorhandener ACL einen positiven Bitmaskenwert (32). Beide Stellen und
+  tatsächliche C-Sourcepins in 7d0ee31dc65ce31ce54f1b4a1a0cefa348ef7071 korrigiert.
+  Run39165027153
+  aus e6f4bb65… deshalb am 18.10.2026 gezielt abgebrochen, kein geeigneter Core.
+  Neuer Producer39167676290 läuft für beide Architekturen; tatsächliche
+  Kompilierung und ACL-NATIVE-PROBE.json noch abzuwarten. 129 Producerassertionen,
+  1042 C-/API-Modellassertionen und Windows-Guard114 grün ersetzen ihn nicht.
+- Aktuell gespeichertes verweigertes Ergebnisziel: unabhängig revalidierte
+  Alias-Gegenfälle verbieten einen pauschalen Ready-/Ersatzordner-Fallback.
+  Neue feste Klasse STANDALONE_RESULT_ROOT_ACCESS_DENIED nur für tatsächlichen
+  EACCES/EPERM bei aktueller öffentlicher Kanonisierung, ohne Pfad-/Fehlertext.
+  In diesem verweigerten Startzustand bleibt der In-App-Ordnerwechsel bewusst
+  unzugänglich; aktueller Zugriff muss erst wieder verfügbar sein. Kein
+  behaupteter Zertifikats-/TCC-/Core-Crash-Befund. Ein isolierter Settingsmodus
+  wäre ein gesonderter Transaktions-/Epochumbau, nicht implementiert.
+- **Korrigierter P2:** Ein Fortsetzungsworker konnte seine Verarbeitungslease
+  vor dem sichtbaren Export beenden. configureResults sah dadurch fälschlich
+  Leerlauf. Konkrete ChildProcess-Lebensdauer wird jetzt bis bestätigtem exit
+  unabhängig verfolgt; keine Freigabe durch ACK, Disconnect, Fehler oder kill.
+  Native Provisionierung liegt innerhalb der Service-Interaktionssperre nach
+  Busyprüfung, mit erneuter Prüfung nach jedem asynchronen Übergang. Unabhängiges
+  Quellengegenreview bestätigt den konkreten Same-Sidecar-Fix. Kein globaler
+  Lebensdauernachweis für beliebige separate Desktopinstanzen/verwaiste Worker.
+  Gezielte Executor91 und Service76 grün; kein GUI-Nachweis daraus.
+- Schnellere Desktopprüfung: eindeutige, dynamisch korrekte zugängliche Namen,
+  feste bestehende DOM-IDs, versionsgebundener Testleitfaden, create-only
+  synthetische Ordner und getrennte Laufzeit-/Toolmessung. Keine blinden Klickfolgen.
+  Create-only Kampagne: C:/Users/arkud/Documents/Software DataSecure/RC164-Desktop-Test-20261018-7b8d41ac.
+  Zehn definierte Fälle, 14 hashgeprüfte Kopien; Kandidatenbinding und Desktopabnahme
+  weiterhin NOT_RUN. Root85, Desktopvertrag37 und Workspace338 gezielt grün.
+  Ein Folgegegenreview fand den Verlust der neuen Rootursache in der späteren
+  Bootstrap-Refusalhülle: Der Adapter bewahrt jetzt nach seiner Diagnose nur bei
+  tatsächlicher WeakSet-Klassifikation exakt den Originalfehler. Vier zusätzliche
+  reale Root-FS-/Sourceadapter-Gegenfälle (EACCES/EPERM, zweite/spätere Prüfung)
+  und erneuter unabhängiger Quellengegenreview bestätigen die Korrektur.
+  Vollständiges reales Sidecar-/Worker-/OCR-/Restart-IPC-Gate ebenfalls grün;
+  dessen Paketprojektion ist ausdrücklich keine native Windows-GUI-Abnahme.
+
+## Zielhostgrenzen
+
+Frisches tatsächliches M2-/Organisationsprofil, TCC-Zustimmung/Ablehnung,
+Finderquarantäne/Erstöffnungswarnung und verwaltete Ausführungssperren müssen
+später am echten Gerät geprüft werden. Kein generischer SIGTRAP beweist eine
+Berechtigungsursache. Kein Quellenmodell wird als solche Abnahme ausgegeben.

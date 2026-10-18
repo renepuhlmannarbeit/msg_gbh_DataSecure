@@ -2,6 +2,31 @@
 
 Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Pre-Release in Vorbereitung.
 
+## Aktuelle Nacht-Fortsetzung (ersetzt ältere Freigabeangaben)
+
+Bestehender Thread-Heartbeat erneut ACTIVE, alle30min; Windows-Desktopabnahme
+durch Hauptagent ausdrücklich erlaubt, nur gebundener Kandidat/synthetische
+Daten, keine Schutz-/Rechteänderungen. Alte PAUSED-/Desktopverbote unten sind
+historisch. Maßgeblich: RC164_NIGHT_REVIEW_AND_RELEASE_PLAN_20261018.md.
+
+- Quellenfixes: retirierte Wurzeln ohne Altziel-I/O; Rust-Mac-ACL-Parent;
+  Diagnose-Observer ohne blockierendes wait; zugängliche Lauf-/Aktionsnamen;
+  feste konkrete Diagnose für aktiv verweigertes Ergebnisziel statt Core-Crash.
+- C-ACL-Bitmasken-P1 in7d0ee31 korrigiert und unabhängig gegengelesen. Producer
+  39167676290 läuft ARM/Intel, realer finaler ACL-Test verpflichtend. Nicht den
+  gezielt abgebrochenen e6f4-Producer39165027153 verwenden.
+- Neuer P2-Quellenfix/Gegenreview: Prozessbeobachtung bis exit schützt vor
+  Ordnerwechsel zwischen Verarbeitungslease-Ende und Export. Native Provisionierung
+  erst nach Busyprüfung, Interaktionssperre über Await, danach erneut prüfen.
+- Noch offen: beide tatsächlichen Coreartefakte prüfen/freigeben, finalen
+  gemeinsamen Windows-/Mac-Quellstand einfrieren, unveränderte Gesamtregression,
+  native Consumer-/ZIP-/DMG-Gates, Windowspaket und echte GUI, lokales Windows-ZIP,
+  Pre-Release samt Testdaten/Prüfsummen und Remote-Readback. Echter M2/Finder/TCC
+  später; CI/Modelle sind keine Anwenderabnahme.
+- Aktive gesperrte Ziele werden nicht unsicher übersprungen. Ein settings-only
+  Ersatzordner-Modus wäre ein separater Architekturumbau und ist nicht als
+  erledigter Startfix auszugeben. Ausführliche Gründe/Aliasgegenfälle im Nachtplan.
+
 ## RC164 – gemeinsame native Paketierung
 
 Aktueller Auftrag und Gates: docs/acceptance/RC164_SHARED_RELEASE_20261018.md.

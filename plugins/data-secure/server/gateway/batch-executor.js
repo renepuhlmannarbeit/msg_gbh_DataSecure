@@ -53,6 +53,10 @@ function processIdentityErrorCode(error) {
 // transition; the detached worker then ends without a second window.
 const TERMINAL_NOTICE_ACK = 'local-terminal-notice-claimed';
 const pendingIntakes = new Map();
+// Processing leases can end before the same worker finishes its visible
+// export. Keep a separate process-lifetime observation for configuration
+// changes; an ACK, disconnect, failed send or successful kill is not an exit.
+const liveWorkers = new Set();
 const STANDALONE_RENDER_ACK_MS = 2500;
 let standalonePendingNotice = null;
 let standalonePresentationGeneration = 0;
@@ -258,12 +262,14 @@ function releaseWorkerOwnership(action, lifecycle, review = false, itemCount) {
 function observeWorker(child, onFailure, onExit, classifyNativeError) {
   if (!child || typeof child.once !== 'function') throw new Error('invalid child');
   const pid = Number.isSafeInteger(child.pid) && child.pid > 0 ? child.pid : null;
+  if (pid !== null) liveWorkers.add(child);
   let ended = false;
   let failed = false;
   let terminationRequested = false;
   function end(code) {
     if (ended) return;
     ended = true;
+    liveWorkers.delete(child);
     onExit(code, failed, pid);
   }
   function fail(code) {
@@ -981,11 +987,12 @@ function startLocalReviewExecutor(token, options = {}) {
 
 function localIntakeActive() { return pendingIntakes.size > 0; }
 function localReviewActive() { return pendingReviews.size > 0; }
+function localWorkerActive() { return liveWorkers.size > 0; }
 
 module.exports = {
   WORKER_ENV_KEYS, batchWorkerEnvironment, localBatchStateProgress, terminalIntakeProgress,
   startLocalBatchExecutor, startLocalIntakeExecutor, startLocalReviewExecutor,
-  localIntakeActive, localReviewActive, acknowledgeStandaloneTerminalNotice,
+  localIntakeActive, localReviewActive, localWorkerActive, acknowledgeStandaloneTerminalNotice,
   pendingStandaloneTerminalNoticeGeneration, clearStandaloneIntakeFailureNotice,
   _test: { contentFreeReviewStart }
 };

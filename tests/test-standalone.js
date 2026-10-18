@@ -1634,6 +1634,64 @@ async function missingLedgerCase() {
   await testAsync('a missing worker acknowledgement consumes the admission exactly once', uncertainAdmissionStartCase);
   await testAsync('an incomplete worker start contract consumes the admission and fails closed', invalidAdmissionStartContractCase);
   await testAsync('a saved result folder remains successful when export replay is deferred', resultFolderReplayFailureCase);
+  await testAsync('result configuration refuses live post-processing workers before native provisioning', async () => {
+    const calls = [];
+    const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+      localWorkerActive: () => true,
+      saveConfiguredResultRoot() { calls.push('save'); },
+      resultOutputDirectory() { calls.push('mkdir'); }
+    }) });
+    await assert.rejects(service.configureResults({ path: FIXTURE_RESULT_ROOT,
+      prepareNativeExport: async () => { calls.push('native'); } }), { code: 'STANDALONE_BUSY' });
+    assert.deepEqual(calls, []);
+    assert.equal(service.interactionActive, false);
+  });
+  await testAsync('native destination provisioning is inside the service interaction and precedes the exact saved binding', async () => {
+    let release;
+    const calls = [], binding = { sentinel: 'exact native binding' };
+    const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+      localWorkerActive: () => false,
+      saveConfiguredResultRoot(selected, options) { assert.equal(selected, FIXTURE_RESULT_ROOT);
+        assert.equal(options.nativeExport, binding); calls.push('save'); }
+    }) });
+    const configured = service.configureResults({ path: FIXTURE_RESULT_ROOT,
+      prepareNativeExport: () => { calls.push('native'); return new Promise(resolve => { release = resolve; }); } });
+    assert.equal(service.interactionActive, true);
+    await assert.rejects(service.configureResults({ path: FIXTURE_RESULT_ROOT }), { code: 'STANDALONE_BUSY' });
+    assert.deepEqual(calls, ['native']);
+    release(binding);
+    assert.equal((await configured).configuration_changed, true);
+    assert.deepEqual(calls, ['native', 'save']);
+    assert.equal(service.interactionActive, false);
+  });
+  await testAsync('work appearing during folder selection or native provisioning cannot commit a new destination', async () => {
+    for (const phase of ['selection', 'provision']) {
+      let release, busy = false;
+      const calls = [];
+      const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+        localWorkerActive: () => busy,
+        pickFolderAsync: () => new Promise(resolve => { release = () => resolve(FIXTURE_RESULT_ROOT); }),
+        saveConfiguredResultRoot() { calls.push('save'); },
+        resultOutputDirectory() { calls.push('mkdir'); }
+      }) });
+      const configured = service.configureResults({ ...(phase === 'provision' ? { path: FIXTURE_RESULT_ROOT } : {}),
+        prepareNativeExport: () => { calls.push('native'); return new Promise(resolve => { release = resolve; }); } });
+      busy = true; release();
+      await assert.rejects(configured, { code: 'STANDALONE_BUSY' });
+      assert.deepEqual(calls, phase === 'provision' ? ['native'] : []);
+      assert.equal(service.interactionActive, false);
+    }
+  });
+  await testAsync('native destination refusal leaves interaction reusable and settings unchanged', async () => {
+    let saved = 0;
+    const service = new StandaloneApplicationService({ dependencies: fakeDependencies({ saveConfiguredResultRoot() { saved++; } }) });
+    await assert.rejects(service.configureResults({ path: FIXTURE_RESULT_ROOT,
+      prepareNativeExport: async () => { throw Object.assign(Error('refused'), { code: 'AI_EXPORT_CONFLICT' }); } }),
+    { code: 'AI_EXPORT_CONFLICT' });
+    assert.equal(saved, 0); assert.equal(service.interactionActive, false);
+    assert.equal((await service.configureResults({ path: FIXTURE_RESULT_ROOT })).configuration_changed, true);
+    assert.equal(saved, 1);
+  });
   await testAsync('a network result folder remains allowed and produces a visible notice', networkResultFolderNoticeCase);
   await testAsync('a running batch stops a second start with a fixed domain code', busyCase);
   await testAsync('a rejected batch or review lease never becomes a false continuation success', rejectedContinuationCase);
