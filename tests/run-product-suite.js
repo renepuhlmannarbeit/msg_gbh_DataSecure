@@ -68,6 +68,7 @@ const baseFiles = [
   'tests/test-standalone-terminal-failures.js',
   'tests/test-standalone-document-control.js',
   'tests/test-standalone-desktop-contract.js', 'tests/test-markitdown-contract.js',
+  'tests/test-standalone-desktop-acceptance.mjs',
   'tests/test-native-smoke-integrity.js',
   'tests/test-standalone-package.js',
   'tests/test-standalone-package-integrity.mjs',

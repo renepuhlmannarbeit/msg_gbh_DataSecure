@@ -108,3 +108,19 @@ Frisches tatsächliches M2-/Organisationsprofil, TCC-Zustimmung/Ablehnung,
 Finderquarantäne/Erstöffnungswarnung und verwaltete Ausführungssperren müssen
 später am echten Gerät geprüft werden. Kein generischer SIGTRAP beweist eine
 Berechtigungsursache. Kein Quellenmodell wird als solche Abnahme ausgegeben.
+
+## Nächtlicher Zwischencheck (18.10., 21:52 UTC)
+
+Quellencommit55752593604ede2e7f9a65adbd3ccbfa3eea0705,
+Produktfingerprintbe7bd169d0a7e777acc4f0c21022626c16d3d628870c934fe216dfa84f5de879
+(332 Produktinputs), unverändert geprüft unter
+dist/rc164-night-checkpoint-20261018-01. Windows-Native-Prepare, Clippy,
+228 Rusttests (3 explizit ignoriert) und Releasebuild bestanden; kein GUI-/Mac-PASS.
+Headless stoppte nach53/271 bei Diagnose-Testdatei54: deren enge VM-Importliste
+kannte den neuen root-boundary-Import nicht und warf selbst beim Import.
+Produktionsstart-/Sidecargate war separat erfolgreich. Testmodell ergänzt jetzt
+den tatsächlichen Leafimport, statt die Produktionsprüfung zu entfernen;
+11/11 Diagnosefälle sowie15/15 Testpfadtrennung erneut grün.
+Neu vorbereitete Desktopkampagnenprüfung nun auch in kanonischer Headlessliste
+(272 Dateien); einzeln ebenfalls bestanden. Roter alter Bericht bleibt erhalten.
+Noch kein finaler Quellen-/Releasefreeze: Mac-Core-Approval fehlt weiterhin.

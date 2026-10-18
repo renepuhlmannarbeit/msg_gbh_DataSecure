@@ -76,6 +76,7 @@ function sidecarFixture(options = {}) {
       if (name === './application-service') return { StandaloneApplicationService: Service };
       if (name === './desktop-ipc') return { FrameDecoder: Decoder, MAX_FRAME_BYTES: 1048576, validatePrivateMessage: () => true };
       if (name === './native-export-channel') return { NativeExportChannel: Channel };
+      if (name === '../gateway/root-boundary') return require('../plugins/data-secure/server/gateway/root-boundary');
       if (name === '../gateway/diagnostic-causes') return { WORKFLOW_ERROR_CODES };
       if (name === '../core/document-result-grade') return { REASON_CODES };
       assert.equal(name, '../core/desktop-error-contract'); return { desktopErrorCode, DESKTOP_ERROR_CODES };

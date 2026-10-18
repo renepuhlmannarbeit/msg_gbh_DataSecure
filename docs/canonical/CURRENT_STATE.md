@@ -24,6 +24,11 @@ fail-closed mit neuer exakter Diagnose; kein unsicherer In-App-Ersatzordner-Fall
 Ein weiterer P2-Fix hält Ordnerwechsel während tatsächlicher Workerlebensdauer
 gesperrt und verlegt native Provisionierung hinter die Service-Busyprüfung.
 Quellengegenreviews und gezielte Gates grün, noch kein finaler Paketnachweis.
+Zwischencheck5575259: Windows-Prepare/Clippy/228 Rusttests/Release mit unveränderten
+Inputs bestanden (3 ignoriert). Headless53/271 vor enger, veralteter VM-Import-
+Testannahme gestoppt; diese ergänzt und11/11 wieder grün. Roter Bericht bleibt.
+Desktopkampagnenprüfung jetzt im kanonischen272er-Plan. Neuer vollständiger
+Durchlauf erforderlich; Mac-Producer weiter aktiv. Details im Nachtplan.
 
 ### RC164 – beide Mac-Build-/Testjobs kostenbestätigt
 
