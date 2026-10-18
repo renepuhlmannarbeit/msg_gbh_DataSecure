@@ -22,8 +22,10 @@ bestätigtem Workerende sind korrigiert und unabhängig am Produktionscode
 gegengeprüft. Keine Rechte-/Sicherheitslockerung. Normales lokales Mac-Profil
 benötigt im geprüften Ablauf kein sudo, Xcode, Terminal oder Full-Disk-Access;
 TCC-/Endpoint-/Altpfad-/Shared-Home-Grenzen bleiben offen dokumentiert. Kein
-Beweis für die Ursache des alten M2-SIGTRAP. Gezielte Folgeprüfung und native
-Mac-Artefaktbindung weiter erforderlich; Details im RC164-Abnahmebericht.
+Beweis für die Ursache des alten M2-SIGTRAP. Gezielte Folgeprüfung21/21 mit
+unveränderten Inputs, Windows-Rust216 bestanden/3 regulär ignoriert sowie
+Release-Clippy grün. Native Mac-Artefaktbindung und finaler gemeinsamer
+Quellen-/Paketnachweis weiter erforderlich; Details im RC164-Abnahmebericht.
 
 ### R8 – fünf registrierte Verlaufsläufe, Quellenbaseline gesichert
 

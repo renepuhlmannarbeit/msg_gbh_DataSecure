@@ -17,8 +17,9 @@ mit festen Ursachen statt pauschalem Startfehler, frühe Rootfehlerklasse,
 Rust-Denied-Erhaltung ohne Core-Fallback, ausschließlich In-App-Intakefehler
 mit versuchsgebundener sichtbarer Karte sowie sichere neue native Auswahl
 erst nach explizit bestätigter Worker-Inaktivität. Unabhängige Quellenreviews
-und Gegenfix enthalten; gezielter Folge-/Rustnachweis wird im RC164-Bericht
-gebunden. Keine Admin-/Sicherheitslockerung, keine ursprüngliche M2-Ursache
+und Gegenfix enthalten;21/21 unveränderte gezielte Folgegates, Windows-Rust216
+bestanden/3 regulär ignoriert sowie Release-Clippy im RC164-Bericht gebunden.
+Keine Admin-/Sicherheitslockerung, keine ursprüngliche M2-Ursache
 behauptet. Spätere echte Mac-Abnahme enthält frisches Profil, TCC-Zustimmung/
 Ablehnung, alte gesperrte Ziele, Finder/ZIP/DMG, Unternehmensrichtlinien und
 Hilfsprozesszuordnung. Diese Gates bleiben neben Producer/Consumer/Release offen.

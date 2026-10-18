@@ -147,8 +147,11 @@ Der breitere parallel gestartete CI-Entwicklungslauf unter
 dist/rc164-permission-regression-20261018 ist nach diesem neuen Gegenbefund
 kein finaler Quellenfreeze: Änderungen werden nicht versteckt, sein Vor-/Nach-
 Fingerprint muss sie kenntlich machen. Gezielter Folgelauf wird separat unter
-dist/rc164-permission-review-final2-20261018 gebunden; voller gemeinsamer
-Quellen-/Paketnachweis erst nach tatsächlicher Mac-Core-Approval.
+dist/rc164-permission-review-final2-20261018 gebunden:21/21 bestanden, unveränderte
+Inputs, Commit2a6d4670aa4873f59526272629d84cb3a2f9717e,
+Produktfingerprint18597ed43c4a1afbb98a2e0a66514697d73f4e6367d28ac4f2e67f4381c7cb3d.
+Das sind gezielte Entwicklungsnachweise, kein fertiger Pre-Release. Voller
+gemeinsamer Quellen-/Paketnachweis erst nach tatsächlicher Mac-Core-Approval.
 Nach dem Admissiongegenfix: Windows-Rust216 bestanden,0 fehlgeschlagen,
 3 ausdrücklich ignorierte Subprozess-Checkpoints; Release-Clippy all-targets
 mit -D warnings bestanden. Das Darwin-Modul, Unix-Linkgegenfall sowie native
