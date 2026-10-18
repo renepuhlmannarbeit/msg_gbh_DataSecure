@@ -258,7 +258,7 @@ jobs:
       - name: Require native static Core process, worker and filesystem ownership gates
         run: >-
           node tests/test-native-macos-static-core.mjs
-          --app "apps/datasecure-standalone/tauri-contract/target/release/bundle/macos/DataSecure Standalone.app"
+          --app "${{ github.workspace }}/apps/datasecure-standalone/tauri-contract/target/release/bundle/macos/DataSecure Standalone.app"
           --target "${{ matrix.target }}"
       - name: Verify bundle contract, signature and native architectures
         shell: bash

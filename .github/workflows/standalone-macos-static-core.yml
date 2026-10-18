@@ -46,8 +46,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          arm='{"os":"macos-15","target":"macos-arm64","arch":"arm64","archive_sha256":"61130f394c1630d211dd50aecc4353d379480f36d3ac913cd85dbba1aed585c6"}'
-          intel='{"os":"macos-15-intel","target":"macos-x64","arch":"x64","archive_sha256":"58e99022c2ff89395576cc7fd4d98cea24bb68081475d5f88b801ee8729fb026"}'
+          arm='{"os":"macos-15","target":"macos-arm64","arch":"arm64","jobs":"1","archive_sha256":"61130f394c1630d211dd50aecc4353d379480f36d3ac913cd85dbba1aed585c6"}'
+          intel='{"os":"macos-15-intel","target":"macos-x64","arch":"x64","jobs":"3","archive_sha256":"58e99022c2ff89395576cc7fd4d98cea24bb68081475d5f88b801ee8729fb026"}'
           case "$REQUESTED_TARGET" in
             both) matrix="{\"include\":[$arm,$intel]}" ;;
             macos-arm64) matrix="{\"include\":[$arm]}" ;;
@@ -128,6 +128,7 @@ jobs:
           PRODUCER_PYTHON: ${{ steps.private.outputs.python }}
           CORE_ARCH: ${{ matrix.arch }}
           CORE_TARGET: ${{ matrix.target }}
+          CORE_JOBS: ${{ matrix.jobs }}
         run: |
           set -euo pipefail
           test -x "$PRODUCER_PYTHON"
@@ -141,7 +142,7 @@ jobs:
             --source-archive="$TASK_PARENT/archives/node-v22.23.2.tar.xz" \
             --converter-archive="$TASK_PARENT/archives/node-v22.23.2-darwin-${CORE_ARCH}.tar.gz" \
             --output-parent="$REPOSITORY/dist/macos-static-core" --job-name="$CORE_TARGET" \
-            --jobs=3 --python="$PRODUCER_PYTHON" --python-sha256="$python_sha"
+            --jobs="$CORE_JOBS" --python="$PRODUCER_PYTHON" --python-sha256="$python_sha"
       - name: Package exact consumer inputs and independent-review records
         shell: bash
         env:

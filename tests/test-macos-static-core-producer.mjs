@@ -23,6 +23,19 @@ let passed = 0;
 const results = [];
 async function check(name, callback) { await callback(); passed++; results.push(name); }
 const tick = () => new Promise(resolve => setImmediate(resolve));
+await check('build capacity permits a standard 7GB ARM runner only with one compiler', () => {
+  const gib = 1024 ** 3;
+  for (const bytes of [6 * gib, 7_000_000_000, 7 * gib]) {
+    assert.equal(contract.assertBuildCapacity(bytes, '1').profile, 'serial_low_memory');
+    for (const jobs of ['2', '3', '4']) assert.throws(() => contract.assertBuildCapacity(bytes, jobs),
+      { code: 'MEMORY_AND_PARALLELISM_PROFILE_UNSUPPORTED' });
+  }
+  for (const jobs of ['1', '2', '3', '4']) assert.equal(contract.assertBuildCapacity(8 * gib, jobs).profile, 'standard');
+  for (const bytes of [0, 6 * gib - 1, NaN, Infinity, '8589934592'])
+    assert.throws(() => contract.assertBuildCapacity(bytes, '1'), { code: 'MEMORY_AND_PARALLELISM_PROFILE_UNSUPPORTED' });
+  for (const jobs of ['0', '5', '01', '', null]) assert.throws(() => contract.assertBuildCapacity(14 * gib, jobs),
+    { code: 'MEMORY_AND_PARALLELISM_PROFILE_UNSUPPORTED' });
+});
 
 function successfulProcess(step) {
   return { schema: 'datasecure-mac-producer-process/1', step, cause: 'success', spawned: true,

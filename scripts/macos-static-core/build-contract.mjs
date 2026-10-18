@@ -122,6 +122,18 @@ export function assertNativeHost(facts, arch) {
   // Narrow native provisioning profile, not all versions Configure accepts.
   if (!/^3\.(?:13|14)\./u.test(facts.pythonVersion || '')) fail('PYTHON_VERSION_UNSUPPORTED');
 }
+export function assertBuildCapacity(memoryBytes, jobs) {
+  // Upstream's 8GB recommendation is for four simultaneous compilers, not a
+  // runtime ABI/security requirement. Standard hosted ARM Macs have 7GB.
+  // Permit those only with a single compiler; never turn an undersized host
+  // into implicit parallelism or change swap/system policy to force a build.
+  const gib = 1024 ** 3;
+  if (!Number.isSafeInteger(memoryBytes) || memoryBytes < 6 * gib ||
+      !/^[1-4]$/u.test(String(jobs)) || memoryBytes < 8 * gib && String(jobs) !== '1')
+    fail('MEMORY_AND_PARALLELISM_PROFILE_UNSUPPORTED');
+  return Object.freeze({ memory_bytes: memoryBytes, jobs: Number(jobs),
+    profile: memoryBytes < 8 * gib ? 'serial_low_memory' : 'standard' });
+}
 export function childEnvironment(job, tools) {
   // Deliberate allowlist, not a spread of process.env. HOME/USERPROFILE are
   // absent; GYP_CONFIG_DIR is an explicitly new empty private directory.

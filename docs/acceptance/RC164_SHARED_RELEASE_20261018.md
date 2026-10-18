@@ -60,6 +60,17 @@ oder als grüne Finder-/Gatekeeper-/M2-Anwenderprüfung ausgegeben.
 
 ## Noch zu binden
 
+Vor Dispatch nochmals am Quellcode gegengeprüft und korrigiert: nativer
+Gateaufruf benötigt einen absoluten kanonischen App-Pfad. Der Standard-ARM-
+Runner hat7GB RAM; die alte pauschale8GiB-Abweisung war damit unerfüllbar.
+Node22.23.2 empfiehlt8GB für vier parallele Compiler und nennt Reduzierung
+der Jobzahl als Gegenmaßnahme. Neuer im Producer selbst erzwungener Vertrag:
+unter6GiB kein Build,6–unter8GiB nur ein Compiler, darüber1–4. ARM seriell,
+Intel drei Jobs; tatsächlicher Speicher-/Buildnachweis weiterhin native Pflicht.
+Keine größere Runnerklasse, kein Swap-/OS-Tuning, keine Schutzlockerung.
+126 Producer-Quellenmodelle,52 Importgegenfälle,24 native Gate-Quellenmodelle,
+Workflow-/Fingerprint-/Dokumentationsverträge grün. Das sind keine Mac-PASS.
+
 Producer-Run-IDs, tatsächliche Architekturergebnisse, geprüfte Approvalhashes,
 finaler gemeinsamer Gitcommit/Produktfingerprint, Windows-/Mac-Pakethashes,
 native Gateergebnisse und Pre-Release-URL werden nach tatsächlichem Abschluss

@@ -19,7 +19,9 @@ assert.match(source, /sudo \/usr\/bin\/install -d -m 700 -o/u);
 assert.doesNotMatch(source, /chmod -R|chmod [0-7]+ \/Users|chmod [0-7]+ \/opt\b|chmod -N|xattr -[cdr]|spctl --|approved_artifacts:|--deep --sign/u);
 assert.match(source, /env -i PATH=\/usr\/bin:\/bin:\/usr\/sbin:\/sbin LANG=C LC_ALL=C/u);
 assert.match(source, /"\$TASK_PARENT\/official-node" "\$REPOSITORY\/scripts\/macos-static-core\/build-driver\.mjs" build/u);
-assert.match(source, /--jobs=3 --python="\$PRODUCER_PYTHON" --python-sha256="\$python_sha"/u);
+assert.match(source, /"arch":"arm64","jobs":"1"/u);
+assert.match(source, /"arch":"x64","jobs":"3"/u);
+assert.match(source, /--jobs="\$CORE_JOBS" --python="\$PRODUCER_PYTHON" --python-sha256="\$python_sha"/u);
 assert.match(source, /COPYFILE_DISABLE=1 tar --format=ustar --no-xattrs --no-acls/u);
 assert.match(source, /datasecure-core FINAL-CORE\.json BUILD-PROVENANCE\.json LICENSE\.node\.txt/u);
 assert.match(source, /DataSecure-Mac-Core-\$\{\{ matrix\.target \}\}-\$\{\{ github\.sha \}\}/u);
@@ -27,3 +29,6 @@ assert.match(source, /NOT automatically approved/u);
 assert.match(source, /if: \$\{\{ failure\(\) && steps\.private\.outputs\.repository != '' \}\}/u);
 assert.doesNotMatch(source, /gh release|git push|native\/runtime\/standalone-macos-core\.json.*write/u);
 console.log('PASS static Core producer workflow source contract; native macOS NOT_RUN');
+const consumer = fs.readFileSync(new URL('../.github/workflows/standalone-macos-sandbox.yml', import.meta.url), 'utf8');
+assert.match(consumer, /node tests\/test-native-macos-static-core\.mjs\n\s+--app "\$\{\{ github\.workspace \}\}\/apps\//u,
+  'the native gate requires an absolute canonical app argument, not a relative package path');

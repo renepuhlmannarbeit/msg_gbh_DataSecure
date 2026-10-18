@@ -7,7 +7,7 @@ import { readProducerFileBounded, readProducerFileRecord, revalidateProducerFile
   syncProducerFileRecord, syncProducerDirectory, writeProducerFresh, producerFileObservation, producerIoFailure, runProducerBuildStep, producerProcessFailure,
   runProducerTool, producerToolFailure } from './producer-io-lifecycle.mjs';
 import { PINS, REPOSITORY_INPUTS, PATCHED, BUILD_SOURCE_PINS, CONVERTER_PINS, sha256, fail, verifyBytes, cleanPosix, appleToolInvocation,
-  parseArguments, assertAmbient, assertNativeHost, commandPlan, checkCompileDatabase,
+  parseArguments, assertAmbient, assertNativeHost, assertBuildCapacity, commandPlan, checkCompileDatabase,
   checkConfiguredVariables, assertRoleSeparation } from './build-contract.mjs';
 import { MAX_CORE_BYTES, ENTITLEMENTS_XML, canonicalBytes, finalSealPlan, assertSealDetails,
   assertFinalMachO, finalInputHashes, buildFinalRecords } from './final-core-contract.mjs';
@@ -246,7 +246,7 @@ export async function main(argv = process.argv.slice(2)) {
     const converterBytes = verifyBytes('official converter archive', readFileBounded(options['converter-archive']), pin);
     const inspection = await inspectTools(options, abort.signal);
     await checkPrivateParent(options['output-parent'], abort.signal);
-    if (os.totalmem() < 8 * 1024 ** 3) fail('EIGHT_GIB_MEMORY_PROFILE_REQUIRED');
+    const resourceProfile = assertBuildCapacity(os.totalmem(), options.jobs);
     const space = fs.statfsSync(options['output-parent'], { bigint: true });
     if (space.bavail * space.bsize < 12n * 1024n ** 3n) fail('TWELVE_GIB_FREE_SPACE_REQUIRED');
     plan = commandPlan(options, inspection.tools);
@@ -257,7 +257,7 @@ export async function main(argv = process.argv.slice(2)) {
     await checkPrivateParent(plan.job, abort.signal);
     for (const part of ['inputs', 'source', 'tmp', 'gyp-config', 'official-converter']) mkdirFresh(plan.job + '/' + part);
     writeEvidence(plan.job, 'BUILD-INTENT.json', { schema: 'mac-cert-02-build-intent/1', plan, pins: PINS,
-      converter_archive_sha256: pin, python_sha256: options['python-sha256'], inspection,
+      converter_archive_sha256: pin, python_sha256: options['python-sha256'], inspection, resource_profile: resourceProfile,
       driver_sha256: sha256(readFileBounded(fileURLToPath(import.meta.url))),
       contract_sha256: sha256(readFileBounded(new URL('./build-contract.mjs', import.meta.url))),
       final_contract_sha256: sha256(readFileBounded(new URL('./final-core-contract.mjs', import.meta.url))),
