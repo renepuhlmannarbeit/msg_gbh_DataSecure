@@ -6,9 +6,11 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { isolatedSidecarEnvironment, removePackageSmokeScope } from '../helpers/standalone-package-scope.mjs';
+import { windowsPackagePrefix } from '../../scripts/lib/standalone-windows-layout.mjs';
 
 const require = createRequire(import.meta.url);
 const { readZip } = require('../../plugins/data-secure/server/zip-reader.js');
+const { desktopErrorCode } = require('../../plugins/data-secure/server/core/desktop-error-contract.js');
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const archive = path.resolve(process.argv[2] || '');
 assert.ok(fs.statSync(archive).isFile(), 'pass the exact standalone ZIP as first argument');
@@ -24,10 +26,14 @@ const install = path.join(scope, 'Paket mit Leerzeichen');
 const source = path.join(scope, 'Korpus');
 const results = path.join(scope, 'Ergebnisse');
 const hash = (file) => crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
-if (expectedArchiveSha256) assert.equal(hash(archive), expectedArchiveSha256, 'archive SHA-256 mismatch');
 let child;
 let closed = false;
 let closePromise;
+let succeeded = false;
+let primaryFailed = false;
+let workersQuiescent = false;
+let report;
+function note(value) { try { process.stderr.write(value); } catch { /* never replace the exact primary failure */ } }
 
 function frame(value) {
   const body = Buffer.from(JSON.stringify(value));
@@ -80,13 +86,21 @@ function protocolClient(processHandle, stderr) {
   });
 }
 
+async function bounded(promise, milliseconds, code) {
+  let timer;
+  try {
+    return await Promise.race([promise, new Promise((_, reject) => {
+      timer = setTimeout(() => reject(Object.assign(new Error(code), { code })), milliseconds);
+    })]);
+  } finally { clearTimeout(timer); }
+}
+
 async function boundedChildClose(processHandle, promise) {
-  if (!processHandle || closed || processHandle.exitCode !== null) return;
-  processHandle.kill();
-  await Promise.race([
-    promise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error('STANDALONE_CORPUS_CLEANUP_TIMEOUT')), 5000))
-  ]);
+  if (!processHandle || closed) return;
+  if (processHandle.exitCode === null && processHandle.signalCode === null) processHandle.kill();
+  // exitCode is not a close receipt, and closing this host never proves that
+  // its intentionally detached batch worker has finished using the fixture.
+  await bounded(promise, 5000, 'STANDALONE_CORPUS_CLEANUP_TIMEOUT');
 }
 
 function relativeFiles(directory) {
@@ -103,10 +117,11 @@ function relativeFiles(directory) {
 }
 
 try {
+  if (expectedArchiveSha256) assert.equal(hash(archive), expectedArchiveSha256, 'archive SHA-256 mismatch');
   fs.mkdirSync(install);
   fs.mkdirSync(results);
   const entries = readZip(fs.readFileSync(archive), { maxEntries: 2000, maxUncompressed: 512 * 1024 * 1024 });
-  const prefix = `DataSecure-Standalone-${version}-windows-x64/`;
+  const prefix = windowsPackagePrefix(entries, version);
   for (const [name, bytes] of entries) {
     assert.ok(name.startsWith(prefix));
     const relative = name.slice(prefix.length);
@@ -135,8 +150,14 @@ try {
   child.stderr.on('data', (chunk) => { stderr.value = (stderr.value + chunk.toString('utf8')).slice(-4096); });
   const send = protocolClient(child, stderr);
   let sequence = 1;
-  const request = (action, body = {}) => send({ schema: 'datasecure-standalone-private-ipc/1',
-    request_id: (sequence++).toString(16).padStart(16, '0'), action, ...body });
+  const request = async (action, body = {}) => {
+    const answer = await send({ schema: 'datasecure-standalone-private-ipc/1',
+      request_id: (sequence++).toString(16).padStart(16, '0'), action, ...body });
+    // The first failing response must survive finally with its closed public
+    // cause, not merely "false !== true" or a later fixture cleanup exception.
+    assert.equal(answer?.ok, true, `STANDALONE_CORPUS_RESPONSE_FAILED:${action}:${desktopErrorCode(answer?.error_code)}`);
+    return answer;
+  };
 
   assert.equal((await request('get_public_state')).ok, true);
   const admission = await request('admit_selected_sources', { source_kind: 'folder', source_paths: [source] });
@@ -161,9 +182,19 @@ try {
   assert.equal(terminal.state, 'results_available');
   assert.equal(terminal.result_count, 100);
   assert.equal(terminal.failed_count, 0);
+  assert.equal(terminal.batch_complete, true, 'STANDALONE_CORPUS_WORKER_QUIESCENCE_UNCONFIRMED');
+  assert.equal(terminal.preparing, false, 'STANDALONE_CORPUS_WORKER_QUIESCENCE_UNCONFIRMED');
+  assert.equal(terminal.processing, false, 'STANDALONE_CORPUS_WORKER_QUIESCENCE_UNCONFIRMED');
+  // This isolated harness started exactly one intake and no review. The
+  // production pending-intake map is removed only on the worker's actual exit;
+  // with processing=false, preparing=false proves that map is also empty.
+  // A terminal journal alone, a shutdown ACK or a departed sidecar cannot.
+  workersQuiescent = true;
   const context = await request('get_ui_context');
   assert.equal(context.ok, true);
-  const run = context.result.latest_result_folder;
+  assert.equal(context.result.latest_result_folder, '', 'UI context must not implicitly resolve historical results');
+  const resolved = await request('resolve_history_results', { batch_id: started.result.batch_id });
+  const run = resolved.result.local_path;
   assert.equal(path.dirname(run), path.join(results, 'DataSecure-Markdown'));
   assert.equal(fs.existsSync(path.join(run, 'DataSecure-Zuordnung.csv')), false);
   const outputs = relativeFiles(run);
@@ -178,17 +209,28 @@ try {
   assert.equal(history.result.entries[0].processing_mode, 'markdown-only');
   assert.equal(history.result.entries[0].result_count, 100);
   await request('shutdown');
-  const exitCode = await Promise.race([
-    closePromise,
-    new Promise((_, reject) => setTimeout(() => reject(new Error('STANDALONE_CORPUS_SHUTDOWN_TIMEOUT')), 10000))
-  ]);
+  const exitCode = await bounded(closePromise, 10000, 'STANDALONE_CORPUS_SHUTDOWN_TIMEOUT');
   assert.equal(exitCode, 0);
-  process.stdout.write(`${JSON.stringify({ schema: 'datasecure-standalone-package-corpus/1', version,
+  report = { schema: 'datasecure-standalone-package-corpus/1', version,
     archive_sha256: hash(archive), mode: 'markdown-only', selected: 100, results: 100,
     failures: 0, mapping: false, relative_tree_preserved: true, source_hashes_unchanged: true,
-    processing_ms: processingMilliseconds, harness_duration_ms: Date.now() - startedAt })}\n`);
+    processing_ms: processingMilliseconds, harness_duration_ms: Date.now() - startedAt };
+  succeeded = true;
+} catch (error) {
+  primaryFailed = true;
+  throw error;
 } finally {
-  await boundedChildClose(child, closePromise);
-  if (process.env.DATASECURE_SMOKE_KEEP === '1') process.stderr.write(`STANDALONE_CORPUS_KEPT:${scope}\n`);
+  let closeError;
+  try { await boundedChildClose(child, closePromise); }
+  catch (error) {
+    closeError = error;
+    note('STANDALONE_CORPUS_SECONDARY:STANDALONE_CORPUS_CLEANUP_UNCONFIRMED\n');
+  }
+  // Never partially destroy failure evidence, or race an autonomous worker.
+  // In particular ENOENT is not ignored or turned into cleanup authority.
+  if (primaryFailed || !succeeded || !workersQuiescent || !closed || closeError || process.env.DATASECURE_SMOKE_KEEP === '1')
+    note(`STANDALONE_CORPUS_KEPT:${scope}\n`);
   else removePackageSmokeScope(repo, scope);
+  if (closeError && !primaryFailed) throw closeError;
 }
+process.stdout.write(`${JSON.stringify(report)}\n`);

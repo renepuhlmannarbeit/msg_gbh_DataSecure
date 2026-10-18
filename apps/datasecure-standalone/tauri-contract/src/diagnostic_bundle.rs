@@ -31,10 +31,20 @@ struct Record {
     action: Option<String>, error_code: Option<String>, phase: Option<String>,
     completed_count: Option<u64>, total_count: Option<u64>, journal_count: Option<u64>, export_count: Option<u64>,
     recovery_requested: Option<bool>, elapsed_ms: Option<u64>,
+    configure_stage: Option<crate::native_export_broker::ConfigureStage>,
+    io_error_kind: Option<String>, raw_os_error: Option<i32>,
+    controlled_create: Option<crate::export_directory::ControlledDirectoryCreateFailure>,
 }
 const EVENTS: &str = "core_quarantine_state app_quarantine_state sidecar_retirement_finished drop_received drop_rejected drop_admitted runtime_component_unavailable sidecar_starting runtime_resolution_failed runtime_resolved sidecar_spawn_failed sidecar_spawned sidecar_stderr_classified sidecar_bootstrap_failed sidecar_diagnostic_unavailable sidecar_bootstrap_ready admission_progress ipc_request_started ipc_request_failed ipc_request_queue_busy sidecar_start_blocked ipc_request_sent sidecar_retirement_failed ipc_response_invalid ipc_response_error ipc_response_ok os_open_requested os_open_helper_failed os_open_handoff_failed os_open_handoff_confirmed picker_requested picker_blocked picker_invocation_started picker_failed picker_no_selection picker_completed local_target_validation_failed diagnostic_folder_opened diagnostic_folder_open_handoff_confirmed ui_picker_blocked frontend_ready review_window_open_failed sidecar_shutdown application_started webview_profile_ready webview_profile_ready workspace_page_loaded setup_started setup_completed application_run_failed page_loaded review_page_loaded core_probe_node core_probe_preloader sidecar_entry sidecar_imports_ready sidecar_import_failed sidecar_started native_export_phase runtime_integrity_checked service_initialized service_initialization_failed local_target_requested local_target_resolved local_target_resolution_failed request_received response_ready private_ipc_invalid private_ipc_output_failed request_chain_failed private_ipc_truncated private_ipc_closed private_ipc_input_failed history_capture_started history_capture_finished product_bootstrap_started product_bootstrap_finished diagnostic_bundle_requested diagnostic_bundle_saved diagnostic_bundle_cancelled diagnostic_bundle_failed";
 fn member(value: &str, vocabulary: &str) -> bool { vocabulary.split_whitespace().any(|item| item == value) }
+const CONFIGURE_EVENTS: &str = "native_configure_failed";
+const CONTROLLED_CREATE_EVENTS: &str = "native_controlled_create_failed";
+const BATCH_WORKER_EVENTS: &str = "batch_worker_failed";
+const BATCH_WORKER_PHASES: &str = "item_epoch_release registry_finalize local_delivery_verify executor_lease_release processing result_export_prepare result_export_claim result_export_plan result_export_copy result_export_claim_release";
 const CAPTURE_EVENTS: &str = "history_capture_full history_capture_reused";
+const RECOVERY_EVENTS: &str = "sidecar_exited_before_response";
+const OWNERSHIP_EVENTS: &str = "ownership_control_check_started ownership_control_check_finished ownership_control_check_failed private_namespace_bound";
+const OUTCOMES: &str = "ready failed progress blocked unavailable started stopped error cancelled waiting bootstrapping validating rejected accepted no_selection";
 fn literal(source: &str, value: &str) -> bool {
     source.contains(&format!("\"{value}\"")) || source.contains(&format!("'{value}'"))
 }
@@ -47,6 +57,29 @@ fn code(value: &str) -> bool {
          include_str!("../../../../plugins/data-secure/server/standalone/desktop-sidecar.js")]
             .iter().any(|source| literal(source, value)) &&
         ["STANDALONE_", "SOURCE_", "STARTUP_", "DOCUMENT_", "AI_EXPORT_", "RESULT_", "CONTENT_", "OCR_", "BATCH_", "RUNTIME_", "DURABLE_", "LOCAL_REVIEW_", "DESKTOP_IPC_", "PROCESSING_", "MARKDOWN_", "UNSAFE_STORAGE_"].iter().any(|prefix| value.starts_with(prefix))
+}
+fn catalogue_literal(source: &str, start: &str, end: &str, value: &str) -> bool {
+    source.split_once(start).and_then(|(_, tail)| tail.split_once(end))
+        .is_some_and(|(body, _)| literal(body, value))
+}
+fn batch_worker_code(value: &str) -> bool {
+    // Exact compile-time catalogue regions, including spread-in converter and
+    // cause catalogues. No broad prefix or arbitrary source literal is enough.
+    if value.is_empty() || value.len() > 100 || !value.bytes().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_') {
+        return false;
+    }
+    let desktop = include_str!("../../../../plugins/data-secure/server/core/desktop-error-contract.js");
+    let reason = include_str!("../../../../plugins/data-secure/server/core/document-result-grade.js");
+    let conversion = include_str!("../../../../plugins/data-secure/server/core/conversion-worker-contract.js");
+    let workflow = include_str!("../../../../plugins/data-secure/server/gateway/diagnostic-causes.js");
+    let cause_key = format!("{value}: ");
+    catalogue_literal(desktop, "const DESKTOP_ERROR_CODES = Object.freeze([", "]);", value) ||
+        catalogue_literal(reason, "const REASON_CODES = new Set([", "]);", value) ||
+        catalogue_literal(conversion, "LIFECYCLE_ERROR_CODES: Object.freeze([", "]),", value) ||
+        catalogue_literal(conversion, "  ERROR_CODES: Object.freeze([", "])", value) ||
+        catalogue_literal(workflow, "const WORKFLOW_ERROR_CODES = Object.freeze([...new Set([", "])]);", value) ||
+        workflow.split_once("const CAUSES = Object.freeze({").and_then(|(_, tail)| tail.split_once("});"))
+            .is_some_and(|(body, _)| body.lines().any(|line| line.trim_start().starts_with(&cause_key)))
 }
 fn action(value: &str) -> bool {
     value.len() <= 64 && value.bytes().all(|b| b.is_ascii_lowercase() || b == b'_') &&
@@ -67,13 +100,14 @@ fn sanitize(bytes: &[u8], component: &str, correlation: &mut Correlation) -> Opt
     // Derived Deserialize rejects duplicate fields as well as unknown fields.
     let record: Record = serde_json::from_slice(bytes).ok()?;
     if record.schema != "datasecure-standalone-interaction/1" || record.component != component ||
-        record.time_ms > 4_102_444_800_000 || !(member(&record.event, EVENTS) || member(&record.event, CAPTURE_EVENTS)) ||
-        !member(&record.outcome, "ready failed progress blocked unavailable started stopped error cancelled waiting bootstrapping validating rejected accepted") ||
+        record.time_ms > 4_102_444_800_000 || !(member(&record.event, EVENTS) || member(&record.event, CAPTURE_EVENTS) || member(&record.event, RECOVERY_EVENTS) || member(&record.event, OWNERSHIP_EVENTS) || member(&record.event, CONFIGURE_EVENTS) || member(&record.event, BATCH_WORKER_EVENTS) || member(&record.event, CONTROLLED_CREATE_EVENTS)) ||
+        !member(&record.outcome, OUTCOMES) ||
         record.session_id.as_deref().is_some_and(|v| !hex(v)) ||
         record.request_id.as_deref().is_some_and(|v| !hex(v)) ||
         record.action.as_deref().is_some_and(|v| !action(v)) ||
-        record.error_code.as_deref().is_some_and(|v| !code(v)) ||
-        record.phase.as_deref().is_some_and(|v| !member(v, "reconcile staging publish acknowledge abandon")) ||
+        record.error_code.as_deref().is_some_and(|v| if record.event == "batch_worker_failed" { !batch_worker_code(v) } else { !code(v) }) ||
+        record.phase.as_deref().is_some_and(|v| !member(v, if record.event == "batch_worker_failed"
+            { BATCH_WORKER_PHASES } else { "reconcile staging publish acknowledge abandon" })) ||
         record.completed_count.is_some_and(|n| n > 200) || record.total_count.is_some_and(|n| n > 200) ||
         record.journal_count.is_some_and(|n| n > 1_000_000) || record.export_count.is_some_and(|n| n > 1_000_000) ||
         record.elapsed_ms.is_some_and(|n| n > 86_400_000) ||
@@ -83,7 +117,41 @@ fn sanitize(bytes: &[u8], component: &str, correlation: &mut Correlation) -> Opt
         record.runtime_target.as_deref().is_some_and(|v| !member(v, "windows-x86_64 windows-aarch64 macos-x86_64 macos-aarch64 linux-x86_64 linux-aarch64")) {
         return None;
     }
+    if record.event == "batch_worker_failed" && (component != "sidecar" || record.outcome != "failed" ||
+        record.phase.is_none() || record.error_code.is_none() ||
+        record.session_id.is_some() || record.request_id.is_some() || record.process_id.is_some() ||
+        record.product_version.is_some() || record.build_id.is_some() || record.runtime_target.is_some() || record.os_version.is_some() ||
+        record.action.is_some() || record.completed_count.is_some() || record.total_count.is_some() ||
+        record.journal_count.is_some() || record.export_count.is_some() || record.recovery_requested.is_some() || record.elapsed_ms.is_some()) {
+        return None;
+    }
+    let configuring = record.event == "native_configure_failed";
+    if configuring {
+        if component != "desktop" || record.action.as_deref() != Some("configure_results") ||
+            record.outcome != "failed" || record.configure_stage.is_none() || record.error_code.is_some() ||
+            record.io_error_kind.as_deref().is_none_or(|kind| !crate::native_export_broker::valid_configure_io_kind(kind)) {
+            return None;
+        }
+    } else if record.configure_stage.is_some() || record.io_error_kind.is_some() || record.raw_os_error.is_some() {
+        return None;
+    }
+    let controlled_create = record.event == "native_controlled_create_failed";
+    if controlled_create {
+        if component != "desktop" || record.outcome != "failed" || record.action.is_some() ||
+            record.error_code.is_some() || record.phase.is_some() ||
+            record.controlled_create.as_ref().is_none_or(|failure| !failure.is_failure()) {
+            return None;
+        }
+    } else if record.controlled_create.is_some() {
+        return None;
+    }
     let mut output = json!({ "time_ms": record.time_ms, "event": record.event, "outcome": record.outcome });
+    if controlled_create { output["controlled_create"] = json!(record.controlled_create); }
+    if configuring {
+        output["configure_stage"] = json!(record.configure_stage);
+        output["io_error_kind"] = json!(record.io_error_kind);
+        output["raw_os_error"] = json!(record.raw_os_error);
+    }
     // Correlation is retained, but attacker-controlled opaque identifiers and
     // old build identifiers are never copied into the support file.
     if let Some(value) = record.session_id { output["session_index"] = json!(index(&mut correlation.sessions, value)); }
@@ -99,7 +167,11 @@ fn component(name: &str) -> Option<&'static str> {
     for (prefix, kind) in [("desktop-interactions", "desktop"), ("sidecar-interactions", "sidecar")] {
         if name == format!("{prefix}.jsonl") { return Some(kind); }
         if let Some(suffix) = name.strip_prefix(&format!("{prefix}.")).and_then(|v| v.strip_suffix(".jsonl")) {
-            let valid = if kind == "sidecar" { suffix.len() == 32 && hex(suffix) } else {
+            let valid = if kind == "sidecar" {
+                let parts: Vec<_> = suffix.split('.').collect();
+                (parts.len() == 1 || parts.len() == 2 && matches!(parts[1], "2" | "3" | "4" | "5" | "6" | "7" | "8")) &&
+                    parts[0].len() == 32 && hex(parts[0])
+            } else {
                 let parts: Vec<_> = suffix.split('.').collect();
                 (parts.len() == 2 || parts.len() == 3 && matches!(parts[2], "2" | "3" | "4" | "5" | "6" | "7" | "8")) &&
                     !parts[0].is_empty() && parts[0].len() <= 10 && parts[0].bytes().all(|b| b.is_ascii_digit()) &&
@@ -118,6 +190,9 @@ fn component(name: &str) -> Option<&'static str> {
 }
 
 pub(crate) fn collect(path: &Path) -> Value {
+    collect_with_segments(path, crate::diagnostic_log::current_segment(), crate::diagnostic_log::sidecar_segments())
+}
+fn collect_with_segments(path: &Path, current: Option<String>, sidecars: Vec<String>) -> Value {
     let mut sources = Vec::new();
     let mut records = 0usize; let mut lines = 0usize;
     let mut correlation = Correlation::default();
@@ -131,20 +206,30 @@ pub(crate) fn collect(path: &Path) -> Value {
         Err(_) => { inventory = "missing_or_unreadable"; Vec::new() }
     };
     names.retain(|name| { let known = component(name).is_some(); if !known { ignored += 1; } known });
-    let current = crate::diagnostic_log::current_segment();
     if let Some(name) = &current {
         if component(name).is_some() && !names.contains(name) { names.push(name.clone()); }
+    }
+    // Native-supplied bounded owner leaves survive inventory overflow. Probe
+    // only the closed grammar, never a caller-supplied pathname or arbitrary
+    // directory traversal. Missing unused rotation leaves are not log failures.
+    for name in sidecars.iter().take(128) {
+        if component(name) == Some("sidecar") && !names.contains(name) &&
+            directory.as_ref().is_ok_and(|dir| dir.diagnostic_modified(name).is_ok()) {
+            names.push(name.clone());
+        }
     }
     // Native mtime is only a best-effort recency hint, not authenticity proof.
     // The actual current desktop segment takes priority even if it is still
     // open and Windows has not yet committed its last-write timestamp.
     let mut ranked: Vec<_> = names.into_iter().map(|name| {
         let stamp = directory.as_ref().ok().and_then(|dir| dir.diagnostic_modified(&name).ok()).unwrap_or(0);
-        let owned = current.as_ref() == Some(&name);
-        (std::cmp::Reverse((owned, stamp)), name)
+        let rank = if current.as_ref() == Some(&name) { 0 } else {
+            sidecars.iter().take(128).position(|known| known == &name).map(|index| index + 1).unwrap_or(129)
+        };
+        (rank, std::cmp::Reverse(stamp), name)
     }).collect();
     ranked.sort();
-    let mut names: Vec<_> = ranked.into_iter().map(|(_, name)| name).collect();
+    let mut names: Vec<_> = ranked.into_iter().map(|(_, _, name)| name).collect();
     // Keep the newest Sidecar beside the active desktop segment. A history
     // full of desktop retries must not crowd out the only Core-side evidence.
     if let Some(position) = names.iter().position(|name| component(name) == Some("sidecar")) {
@@ -209,17 +294,18 @@ pub(crate) fn collect(path: &Path) -> Value {
     let _ = &mut build;
     json!({ "schema": "datasecure-diagnostic-bundle/1", "build": build,
         "created_at_ms": std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default().as_millis(),
-        "snapshot": "bounded_non_atomic_tail", "selection": "current_desktop_then_best_effort_native_mtime",
+        "snapshot": "bounded_non_atomic_tail", "selection": "native_owner_segments_then_best_effort_native_mtime",
         "trust": "untrusted_logs_resanitized_not_authenticity_proof",
         "inventory": inventory, "source_limit_reached": source_limit, "ignored_entries": ignored,
-        "desktop_sink_status": crate::diagnostic_log::status(), "sources": sources,
+        "desktop_sink_status": crate::diagnostic_log::status(), "desktop_writer": crate::diagnostic_log::snapshot(), "sources": sources,
         "limits": { "files": MAX_FILES, "bytes_per_file": MAX_FILE_BYTES, "records": MAX_RECORDS, "lines": MAX_LINES, "line_bytes": MAX_LINE_BYTES },
         "external_disclosure": false, "contains_document_contents": false })
 }
 pub(crate) fn save(source: &Path, destination: &Path) -> io::Result<bool> {
     let bundle = collect(source);
     let partial = bundle["inventory"] != "available" || bundle["source_limit_reached"] == true ||
-        bundle["desktop_sink_status"] == "unavailable" || bundle["sources"].as_array().ok_or_else(unsafe_io)?.iter().any(|part|
+        bundle["desktop_sink_status"] == "unavailable" || bundle["desktop_writer"]["pending_records"].as_u64().unwrap_or(0) > 0 ||
+        bundle["desktop_writer"]["dropped_records"].as_u64().unwrap_or(0) > 0 || bundle["sources"].as_array().ok_or_else(unsafe_io)?.iter().any(|part|
             part["status"] != "snapshot" && part["status"] != "missing_optional" || part["byte_limit_reached"] == true || part["grew_during_read"] == true ||
             part["incomplete_last_line"] == true || part["record_limit_reached"] == true || part["rejected_lines"].as_u64().unwrap_or(0) > 0);
     let bytes = serde_json::to_vec(&bundle).map_err(|_| unsafe_io())?;
@@ -263,7 +349,7 @@ mod tests {
         assert_eq!(output["product_version"], "3.2.0-rc161");
         assert_eq!(output["runtime_target"], "macos-aarch64");
         assert_eq!(output["os_version"], "26.2");
-        for event in CAPTURE_EVENTS.split_whitespace() {
+        for event in CAPTURE_EVENTS.split_whitespace().chain(OWNERSHIP_EVENTS.split_whitespace()) {
             let mut capture = raw.clone(); capture["event"] = json!(event);
             capture["component"] = json!("sidecar");
             assert!(sanitize(&serde_json::to_vec(&capture).unwrap(), "sidecar", &mut correlation).is_some());
@@ -281,6 +367,206 @@ mod tests {
         let duplicate = serde_json::to_string(&raw).unwrap().replacen("{", "{\"outcome\":\"PRIVATE\",", 1);
         assert!(sanitize(duplicate.as_bytes(), "desktop", &mut correlation).is_none());
         assert!(sanitize(&serde_json::to_vec(&raw).unwrap(), "sidecar", &mut correlation).is_none());
+    }
+    #[test]
+    fn fixed_production_events_and_recovery_picker_outcomes_survive_closed_sanitizer() {
+        let mut count = 0;
+        for (source, calls, component) in [
+            (include_str!("main.rs"), &["diagnostic_event(", "diagnostic_process_event(", "diagnostic_ipc_event("][..], "desktop"),
+            (include_str!("../../../../plugins/data-secure/server/standalone/desktop-sidecar.js"), &["diagnosticEvent("][..], "sidecar"),
+            (include_str!("../../../../plugins/data-secure/server/standalone/application-service.js"), &["startupEvent("][..], "sidecar")
+        ] {
+            for call in calls {
+                for (_, rest) in source.match_indices(call).map(|(index, _)| (index, source[index + call.len()..].trim_start())) {
+                    let Some(quote) = rest.chars().next().filter(|ch| matches!(ch, '\'' | '"')) else { continue; };
+                    let Some(end) = rest[1..].find(quote) else { continue; };
+                    let event = &rest[1..end + 1];
+                    let mut raw = record(); raw["component"] = json!(component); raw["event"] = json!(event);
+                    if event == "batch_worker_failed" {
+                        raw["outcome"] = json!("failed"); raw["phase"] = json!("processing");
+                        raw["error_code"] = json!("STANDALONE_OPERATION_FAILED");
+                        raw.as_object_mut().unwrap().remove("session_id");
+                    }
+                    assert!(sanitize(&serde_json::to_vec(&raw).unwrap(), component, &mut Correlation::default()).is_some(), "{event}");
+                    count += 1;
+                }
+            }
+        }
+        assert!(count > 60, "producer inventory must actually exercise product call sites");
+        // These values are conditional/dynamic arguments in the real producer.
+        for (event, outcome) in [("sidecar_exited_before_response", "failed"), ("picker_no_selection", "no_selection"),
+            ("core_probe_node", "ready"), ("core_probe_preloader", "failed"), ("history_capture_full", "ready"),
+            ("history_capture_reused", "ready"), ("private_ipc_closed", "stopped")] {
+            assert!(literal(include_str!("main.rs"), event) ||
+                literal(include_str!("../../../../plugins/data-secure/server/standalone/desktop-sidecar.js"), event) ||
+                literal(include_str!("../../../../plugins/data-secure/server/standalone/application-service.js"), event));
+            let mut raw = record(); raw["event"] = json!(event); raw["outcome"] = json!(outcome);
+            assert!(sanitize(&serde_json::to_vec(&raw).unwrap(), "desktop", &mut Correlation::default()).is_some(), "{event}/{outcome}");
+        }
+        let mut raw = record(); raw["outcome"] = json!("vendor private path");
+        assert!(sanitize(&serde_json::to_vec(&raw).unwrap(), "desktop", &mut Correlation::default()).is_none());
+    }
+    #[test]
+    fn configure_diagnostics_keep_only_the_closed_native_stage_kind_and_integer_os_code() {
+        let raw = json!({ "schema": "datasecure-standalone-interaction/1", "time_ms": 10,
+            "component": "desktop", "event": "native_configure_failed", "outcome": "failed",
+            "action": "configure_results", "configure_stage": "private_create",
+            "io_error_kind": "PermissionDenied", "raw_os_error": 5 });
+        let output = sanitize(&serde_json::to_vec(&raw).unwrap(), "desktop", &mut Correlation::default()).unwrap();
+        assert_eq!(output["configure_stage"], "private_create");
+        assert_eq!(output["io_error_kind"], "PermissionDenied");
+        assert_eq!(output["raw_os_error"], 5);
+        let mut no_os = raw.clone(); no_os["raw_os_error"] = Value::Null;
+        assert_eq!(sanitize(&serde_json::to_vec(&no_os).unwrap(), "desktop", &mut Correlation::default()).unwrap()["raw_os_error"], Value::Null);
+        for (key, value) in [("configure_stage", json!("/PRIVATE/path")),
+            ("io_error_kind", json!("/PRIVATE/vendor-error")), ("raw_os_error", json!("5")),
+            ("raw_os_error", json!(2147483648u64)), ("component", json!("sidecar")),
+            ("event", json!("ipc_request_failed")), ("action", json!("get_public_state")),
+            ("outcome", json!("ready")), ("error_code", json!("AI_EXPORT_CONFLICT")),
+            ("path", json!("/PRIVATE/path")), ("acl", json!("D:P")), ("message", json!("vendor text"))] {
+            let mut bad = raw.clone(); bad[key] = value;
+            assert!(sanitize(&serde_json::to_vec(&bad).unwrap(), "desktop", &mut Correlation::default()).is_none(), "{key}");
+        }
+        for key in ["configure_stage", "io_error_kind"] {
+            let mut bad = raw.clone(); bad.as_object_mut().unwrap().remove(key);
+            assert!(sanitize(&serde_json::to_vec(&bad).unwrap(), "desktop", &mut Correlation::default()).is_none());
+        }
+        let duplicate = serde_json::to_string(&raw).unwrap().replacen("{", "{\"raw_os_error\":5,", 1);
+        assert!(sanitize(duplicate.as_bytes(), "desktop", &mut Correlation::default()).is_none());
+    }
+    #[test]
+    fn batch_worker_failure_is_only_a_closed_sidecar_stage_and_catalogue_code() {
+        let raw = json!({ "schema": "datasecure-standalone-interaction/1", "time_ms": 10,
+            "component": "sidecar", "event": "batch_worker_failed", "outcome": "failed",
+            "phase": "item_epoch_release", "error_code": "STANDALONE_OWNERSHIP_CONTROL_BUSY" });
+        for phase in BATCH_WORKER_PHASES.split_whitespace() {
+            let mut row = raw.clone(); row["phase"] = json!(phase);
+            let output = sanitize(&serde_json::to_vec(&row).unwrap(), "sidecar", &mut Correlation::default()).unwrap();
+            assert_eq!(output, json!({ "time_ms": 10, "event": "batch_worker_failed", "outcome": "failed",
+                "phase": phase, "error_code": "STANDALONE_OWNERSHIP_CONTROL_BUSY" }));
+        }
+        for (key, value) in [("component", json!("desktop")), ("outcome", json!("stopped")),
+            ("phase", json!("reconcile")), ("phase", json!("/PRIVATE/vendor")),
+            ("error_code", json!("OWNERSHIP_GUARD_BUSY")), ("error_code", json!("STANDALONE_PRIVATE_PERSON")),
+            ("error_code", json!("STANDALONE_SIDECAR_SIGNAL_TRAP")), ("error_code", json!("/PRIVATE/vendor")),
+            ("session_id", json!("abcdef0123456789")), ("request_id", json!("abcdef0123456789")),
+            ("process_id", json!(42)), ("build_id", json!("unidentified")),
+            ("product_version", json!("3.2.0-rc163")), ("runtime_target", json!("macos-aarch64")),
+            ("os_version", json!("26.2")), ("action", json!("get_public_state")),
+            ("completed_count", json!(1)), ("total_count", json!(1)), ("journal_count", json!(1)),
+            ("export_count", json!(1)), ("recovery_requested", json!(true)), ("elapsed_ms", json!(1)),
+            ("message", json!("PRIVATE source text")), ("stack", json!("/PRIVATE/vendor")),
+            ("path", json!("/PRIVATE/vendor")), ("batch_id", json!("a".repeat(64))),
+            ("document_id", json!("a".repeat(32))), ("classification", json!("PRIVATE"))] {
+            let mut bad = raw.clone(); bad[key] = value;
+            assert!(sanitize(&serde_json::to_vec(&bad).unwrap(), "sidecar", &mut Correlation::default()).is_none(), "{key}");
+        }
+        for code in ["RESIDUAL_PII", "IMAGE_OCR_REQUIRED", "CSV_QUOTE_INVALID", "CONVERSION_TIMEOUT",
+            "LOCAL_WORKER_EXITED", "MCP_ARGUMENT_INVALID", "INTERNAL_FAILURE", "DOCUMENT_REVIEW_CONFLICT",
+            "RESULT_EXPORT_SOURCE_INVALID", "RESULT_EXPORT_RELEASE_UNCONFIRMED", "RESULT_EXPORT_IO_FAILED",
+            "RESULT_EXPORT_PLAN_FAILED", "RESULT_EXPORT_COPY_FAILED", "RESULT_EXPORT_CLAIM_UNAVAILABLE"] {
+            let mut row = raw.clone(); row["error_code"] = json!(code);
+            assert_eq!(sanitize(&serde_json::to_vec(&row).unwrap(), "sidecar", &mut Correlation::default()).unwrap()["error_code"], code);
+        }
+        for not_a_code in ["IMAGES_REMOVED_BY_REQUEST", "VISUAL_ASSETS_WITHHELD_LOCALLY", "COMPLETE", "STANDALONE_PRIVATE_PERSON", "BATCH_PRIVATE_VENDOR"] {
+            assert!(!batch_worker_code(not_a_code), "{not_a_code}");
+        }
+        assert!(sanitize(&serde_json::to_vec(&raw).unwrap(), "desktop", &mut Correlation::default()).is_none());
+        for key in ["phase", "error_code"] {
+            let mut missing = raw.clone(); missing.as_object_mut().unwrap().remove(key);
+            assert!(sanitize(&serde_json::to_vec(&missing).unwrap(), "sidecar", &mut Correlation::default()).is_none());
+        }
+        let duplicate = serde_json::to_string(&raw).unwrap().replacen("{", "{\"phase\":\"processing\",", 1);
+        assert!(sanitize(duplicate.as_bytes(), "sidecar", &mut Correlation::default()).is_none());
+        let mut other = raw.clone(); other["event"] = json!("native_export_phase");
+        assert!(sanitize(&serde_json::to_vec(&other).unwrap(), "sidecar", &mut Correlation::default()).is_none(),
+            "worker stages must not widen unrelated export events");
+    }
+    #[test]
+    fn controlled_create_diagnostics_keep_only_the_closed_status_payload() {
+        let raw = json!({ "schema": "datasecure-standalone-interaction/1", "time_ms": 10,
+            "component": "desktop", "event": "native_controlled_create_failed", "outcome": "failed",
+            "controlled_create": { "context": "controlled_directory_first_create",
+                "nt_status": 0xc000_0022u32, "mapped_os_error": 5, "io_information_class": "0" } });
+        for information in ["0", "1", "2", "3", "4", "5", "unknown"] {
+            for (status, mapped) in [(0x8000_0000u32, 0u32), (0xc000_0022, 5), (u32::MAX, u32::MAX)] {
+                let mut valid = raw.clone();
+                valid["controlled_create"]["io_information_class"] = json!(information);
+                valid["controlled_create"]["nt_status"] = json!(status);
+                valid["controlled_create"]["mapped_os_error"] = json!(mapped);
+                let output = sanitize(&serde_json::to_vec(&valid).unwrap(), "desktop", &mut Correlation::default()).unwrap();
+                assert_eq!(output["controlled_create"], valid["controlled_create"]);
+                assert!(output.get("raw_os_error").is_none());
+                assert!(output.get("action").is_none());
+            }
+        }
+        for (key, value) in [("context", json!("PRIVATE/path")), ("context", json!("private_create")),
+            ("nt_status", json!(0)), ("nt_status", json!(0x7fff_ffffu32)), ("nt_status", json!(-1)),
+            ("nt_status", json!(4294967296u64)), ("nt_status", json!("3221225506")),
+            ("mapped_os_error", json!(-1)), ("mapped_os_error", json!(4294967296u64)),
+            ("mapped_os_error", json!("5")), ("io_information_class", json!(0)),
+            ("io_information_class", json!("6")), ("io_information_class", json!(u64::MAX)),
+            ("io_information_class", json!("PRIVATE/path")), ("status", json!(0xc000_0022u32)),
+            ("information", json!(u64::MAX)), ("path", json!("PRIVATE/path")),
+            ("handle", json!(123456)), ("acl", json!("D:P")), ("sid", json!("S-1-5-21-PRIVATE")),
+            ("message", json!("vendor error"))] {
+            let mut bad = raw.clone(); bad["controlled_create"][key] = value;
+            assert!(sanitize(&serde_json::to_vec(&bad).unwrap(), "desktop", &mut Correlation::default()).is_none(), "{key}");
+        }
+        for (key, value) in [("component", json!("sidecar")), ("event", json!("ipc_request_failed")),
+            ("outcome", json!("ready")), ("action", json!("configure_results")),
+            ("error_code", json!("AI_EXPORT_CONFLICT")), ("phase", json!("staging")),
+            ("configure_stage", json!("private_create")), ("io_error_kind", json!("Uncategorized")),
+            ("raw_os_error", json!(4395)), ("path", json!("PRIVATE/path")),
+            ("controlled_create", Value::Null)] {
+            let mut bad = raw.clone(); bad[key] = value;
+            assert!(sanitize(&serde_json::to_vec(&bad).unwrap(), "desktop", &mut Correlation::default()).is_none(), "{key}");
+        }
+        let mut mixed = raw.clone();
+        mixed["event"] = json!("native_configure_failed"); mixed["action"] = json!("configure_results");
+        mixed["configure_stage"] = json!("private_create"); mixed["io_error_kind"] = json!("Uncategorized");
+        mixed["raw_os_error"] = json!(4395);
+        assert!(sanitize(&serde_json::to_vec(&mixed).unwrap(), "desktop", &mut Correlation::default()).is_none());
+        assert!(sanitize(&serde_json::to_vec(&raw).unwrap(), "sidecar", &mut Correlation::default()).is_none());
+        for key in ["context", "nt_status", "mapped_os_error", "io_information_class"] {
+            let mut missing = raw.clone(); missing["controlled_create"].as_object_mut().unwrap().remove(key);
+            assert!(sanitize(&serde_json::to_vec(&missing).unwrap(), "desktop", &mut Correlation::default()).is_none());
+            let mut null = raw.clone(); null["controlled_create"][key] = Value::Null;
+            assert!(sanitize(&serde_json::to_vec(&null).unwrap(), "desktop", &mut Correlation::default()).is_none());
+        }
+        let mut missing = raw.clone(); missing.as_object_mut().unwrap().remove("controlled_create");
+        assert!(sanitize(&serde_json::to_vec(&missing).unwrap(), "desktop", &mut Correlation::default()).is_none());
+        let encoded = serde_json::to_string(&raw).unwrap();
+        let duplicate_top = encoded.replacen("{",
+            &format!("{{\"controlled_create\":{},", raw["controlled_create"]), 1);
+        assert!(sanitize(duplicate_top.as_bytes(), "desktop", &mut Correlation::default()).is_none());
+        for key in ["context", "nt_status", "mapped_os_error", "io_information_class"] {
+            let duplicate = encoded.replacen("\"controlled_create\":{",
+                &format!("\"controlled_create\":{{\"{key}\":{},", raw["controlled_create"][key]), 1);
+            assert_ne!(duplicate, encoded);
+            assert!(sanitize(duplicate.as_bytes(), "desktop", &mut Correlation::default()).is_none());
+        }
+    }
+
+    #[test]
+    fn inventory_overflow_retains_current_native_desktop_and_rotated_core_without_unbounded_scan() {
+        let root = root();
+        for n in 0..140 { std::fs::write(root.join(format!("sidecar-interactions.{n:032x}.jsonl")), format!("{}\n", record())).unwrap(); }
+        let desktop = "desktop-interactions.50101.000000000000000018df08c63413f240.2.jsonl";
+        let core = "sidecar-interactions.abcdef0123456789abcdef0123456789.8.jsonl";
+        let mut raw = record(); raw["time_ms"] = json!(123);
+        std::fs::write(root.join(desktop), format!("{raw}\n")).unwrap();
+        raw["time_ms"] = json!(456); raw["component"] = json!("sidecar"); raw["event"] = json!("response_ready");
+        std::fs::write(root.join(core), format!("{raw}\n")).unwrap();
+        let hints = vec![core.to_string(), "sidecar-interactions.abcdef0123456789abcdef0123456789.7.jsonl".into(), "../PRIVATE.jsonl".into()];
+        let bundle = collect_with_segments(&root, Some(desktop.into()), hints);
+        assert_eq!(bundle["inventory"], "unreadable_or_limit");
+        let parts = bundle["sources"].as_array().unwrap();
+        assert!(parts.iter().any(|p| p["component"] == "desktop" && p["records"][0]["time_ms"] == 123));
+        assert!(parts.iter().any(|p| p["component"] == "sidecar" && p["records"][0]["time_ms"] == 456));
+        assert!(!bundle.to_string().contains("PRIVATE"));
+        assert_eq!(std::fs::read_dir(&root).unwrap().count(), 142, "collection never cleans old evidence");
+        cleanup(root);
     }
     #[test]
     fn missing_sources_and_tampered_logs_are_explicit_and_never_copied() {
@@ -389,7 +675,9 @@ mod tests {
         assert_eq!(component("desktop-interactions.50101.000000000000000018df08c63413f240.jsonl"), Some("desktop"));
         assert_eq!(component("desktop-interactions.50101.000000000000000018df08c63413f240.8.jsonl"), Some("desktop"));
         assert_eq!(component("sidecar-interactions.abcdef0123456789abcdef0123456789.jsonl"), Some("sidecar"));
-        for name in ["desktop-interactions 1.jsonl", "../desktop-interactions.jsonl", "sidecar-interactions.PRIVATE.jsonl", "source.jsonl"] { assert_eq!(component(name), None); }
+        assert_eq!(component("sidecar-interactions.abcdef0123456789abcdef0123456789.8.jsonl"), Some("sidecar"));
+        for name in ["desktop-interactions 1.jsonl", "../desktop-interactions.jsonl", "sidecar-interactions.PRIVATE.jsonl", "source.jsonl",
+            "sidecar-interactions.abcdef0123456789abcdef0123456789.9.jsonl", "sidecar-interactions.abcdef0123456789abcdef0123456789.1.jsonl"] { assert_eq!(component(name), None); }
     }
     #[cfg(unix)]
     #[test]

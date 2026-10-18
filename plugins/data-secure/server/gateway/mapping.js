@@ -31,8 +31,13 @@ const GRADE_LABELS = Object.freeze({
   [GRADES.NOT_PROCESSED]: 'Sicher nicht verarbeitet'
 });
 const LEGACY_GRADE_LABEL = 'Ergebnisgrad für älteres Paket nicht verfügbar';
+const SOURCE_ID_PREFIX = ' Dateinamenbezug v2: ';
 const OUTBOX_V1_KEYS = ['entry_id', 'original_basename', 'package_id', 'schema', 'state'].sort();
 const OUTBOX_V2_KEYS = [...OUTBOX_V1_KEYS, 'document_result'].sort();
+
+function quoteCsvField(value) {
+  return `"${String(value ?? '').replace(/"/g, '""')}"`;
+}
 
 function csvField(value) {
   let text = String(value ?? '');
@@ -40,8 +45,26 @@ function csvField(value) {
   // formula when the user opens the local mapping.
   // Excel and similar tools may ignore leading whitespace (including a BOM)
   // before evaluating a formula. Treat those prefixes as formula-significant too.
-  if (/^[\s\uFEFF]*[=+\-@]/u.test(text)) text = `'${text}`;
-  return `"${text.replace(/"/g, '""')}"`;
+  // Escape a literal leading apostrophe as well. Otherwise "-x" and "'-x"
+  // would serialize identically and an idempotent retry could conflate them.
+  if (/^[\s\uFEFF]*['=+\-@]/u.test(text)) text = `'${text}`;
+  return quoteCsvField(text);
+}
+
+function sourceIdentityNote(note, name) {
+  // The old six-column CSV has no encoding version. Bind new rows to the raw
+  // source spelling without changing the public columns or interpreting a
+  // legacy protection apostrophe as part of a newer encoding.
+  return note + SOURCE_ID_PREFIX + crypto.createHash('sha256').update(name, 'utf8').digest('hex');
+}
+
+function legacyRowMatches(existing, values) {
+  if (existing[5] !== values[5] || existing.slice(1, 5).some((value, index) => value !== values[index + 1])) return false;
+  const encoded = existing[0];
+  // In the historical encoding "'-x" could denote either -x or '-x. No CSV
+  // reader can recover missing provenance; preserve it for explicit repair.
+  if (/^'[\s\uFEFF]*[=+\-@]/u.test(encoded)) return false;
+  return encoded === values[0];
 }
 
 function parseQuotedRows(text) {
@@ -119,7 +142,10 @@ function normalizeExistingMapping(previous) {
     `Bisheriger Status: ${status}. ${note}`
   ]);
   return {
-    text: HEADER + rows.map((row) => row.map(csvField).join(';')).join('\r\n') + (rows.length ? '\r\n' : ''),
+    // Parsed legacy fields already carry their spreadsheet protection. Quote
+    // their bytes, but do not protect them a second time or interpret the
+    // historically ambiguous apostrophe as an unescaping instruction.
+    text: HEADER + rows.map((row) => row.map(quoteCsvField).join(';')).join('\r\n') + (rows.length ? '\r\n' : ''),
     rows
   };
 }
@@ -394,18 +420,24 @@ function appendMapping(originalName, packageId, status = RELEASED, options = {})
       ? `Lokale Zuordnung ${mappingReference}; nicht an Claude übertragen.`
       : FIXED_NOTE;
     const presentation = resultPresentation(documentResult);
-    const rowValues = [name, result, presentation.grade, presentation.omissions, presentation.reason, note];
+    const legacyValues = [name, result, presentation.grade, presentation.omissions, presentation.reason, note];
+    const rowValues = [...legacyValues.slice(0, 5), sourceIdentityNote(note, name)];
     const row = rowValues.map(csvField).join(';') + '\r\n';
     // A process can disappear after atomically replacing the CSV but before it
     // records that fact in its private batch snapshot. Retrying that exact local
     // commit must be safe: duplicate rows would make the user-facing mapping
     // ambiguous and could cause a recovered package to look like a second run.
     const existingRows = normalizeExistingMapping(previous).rows;
-    const exactMatch = existingRows.some((existing) => JSON.stringify(existing) === JSON.stringify(rowValues));
+    // Compare in the same *encoded* representation. CSV parsing deliberately
+    // retains the formula-protection apostrophe; stripping it would conflate
+    // a literal apostrophe name with the protected form of a different name.
+    const encodedValues = parseQuotedRows(row)[0];
+    const exactMatch = existingRows.some((existing) => JSON.stringify(existing) === JSON.stringify(encodedValues) ||
+      legacyRowMatches(existing, legacyValues));
     if (exactMatch) return false;
     const packageAlreadyMapped = validReleased && existingRows.some((existing) => existing[1] === result);
     const stoppedAlreadyMapped = validStopped && mappingReference && existingRows.some((existing) =>
-      existing[5] === `Lokale Zuordnung ${mappingReference}; nicht an Claude übertragen.`);
+      (existing[5] === note || existing[5].startsWith(note + SOURCE_ID_PREFIX)));
     if (packageAlreadyMapped || stoppedAlreadyMapped) {
       throw new SafeError('Der lokale Zuordnungsexport enthält einen widersprüchlichen Ergebnisgrad.');
     }

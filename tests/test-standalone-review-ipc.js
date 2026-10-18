@@ -6,6 +6,7 @@ const os = require('node:os');
 const path = require('node:path');
 const childProcess = require('node:child_process');
 const { encodeFrame } = require('../plugins/data-secure/server/standalone/desktop-ipc');
+const { desktopErrorCode } = require('../plugins/data-secure/server/core/desktop-error-contract');
 
 const root = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'datasecure-review-ipc-'));
 const initial = fs.lstatSync(root);
@@ -31,11 +32,14 @@ const child = childProcess.spawn(process.execPath, [
   `--require=${path.join(__dirname, 'lib/standalone-review-ipc-fault.cjs')}`,
   path.join(__dirname, '../plugins/data-secure/server/standalone/desktop-sidecar.js')
 ], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, env: environment });
-const closed = new Promise((resolve) => child.once('close', (code) => resolve(code)));
+let childClosed = false;
+const closed = new Promise((resolve) => child.once('close', (code) => { childClosed = true; resolve(code); }));
 let buffer = Buffer.alloc(0);
 let stderr = '';
 let sequence = 0;
 const waiters = new Map();
+const failedResponses = [];
+function note(value) { try { process.stderr.write(value); } catch { /* never replace the exact primary failure */ } }
 child.stderr.on('data', (chunk) => { stderr += chunk.toString('utf8'); });
 child.stdin.on('error', () => {});
 child.once('exit', (code) => {
@@ -55,20 +59,38 @@ child.stdout.on('data', (chunk) => {
     waiters.delete(answer.request_id); clearTimeout(waiter.timer); waiter.resolve(answer);
   }
 });
-function send(action, fields = {}) {
+async function send(action, fields = {}, expectedError) {
   const id = (++sequence).toString(16).padStart(16, '0');
-  return new Promise((resolve, reject) => {
+  const answer = await new Promise((resolve, reject) => {
     const timer = setTimeout(() => { waiters.delete(id); reject(new Error(`IPC timeout: ${action}: ${stderr}`)); }, 10000);
     waiters.set(id, { resolve, reject, timer });
     child.stdin.write(encodeFrame({ schema: 'datasecure-standalone-private-ipc/1', request_id: id, action, ...fields }));
   });
+  const code = desktopErrorCode(answer?.error_code);
+  if (answer?.ok === false && failedResponses.length < 32)
+    failedResponses.push(Object.freeze({ action, error_code: code }));
+  const failure = `STANDALONE_REVIEW_IPC_RESPONSE_FAILED:${action}:${code}`;
+  if (expectedError === undefined) assert.equal(answer?.ok, true, failure);
+  else {
+    assert.equal(answer?.ok, false, failure);
+    assert.equal(answer?.error_code, expectedError, failure);
+  }
+  return answer;
+}
+async function bounded(promise, milliseconds, code) {
+  let timer;
+  try {
+    return await Promise.race([promise, new Promise((_, reject) => {
+      timer = setTimeout(() => reject(Object.assign(new Error(code), { code })), milliseconds);
+    })]);
+  } finally { clearTimeout(timer); }
 }
 async function until(check, description, timeout = 15000) {
   const deadline = Date.now() + timeout;
   for (;;) {
     const value = await check();
     if (value) return value;
-    assert.ok(Date.now() < deadline, `${description}; ${stderr}`);
+    assert.ok(Date.now() < deadline, `STANDALONE_REVIEW_IPC_WAIT_TIMEOUT:${description}`);
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
 }
@@ -102,7 +124,9 @@ function cleanOwnedRoot() {
 }
 
 (async () => {
-  let cleanupSafe = false;
+  let succeeded = false;
+  let primaryFailed = false;
+  let workersQuiescent = false;
   try {
     const source = path.join(root, 'synthetic.md');
     const text = 'Name: Max Mustermann\nE-Mail: max@example.org\n' +
@@ -123,7 +147,7 @@ function cleanOwnedRoot() {
     }, 'real automatic anonymization must produce an open review');
     fs.writeFileSync(path.join(root, 'fail-next-review'), 'fault injection');
     const firstReviewStart = await send('continue_history_batch', { batch_id: entry.batch_id });
-    assert.equal(firstReviewStart.ok, true, JSON.stringify(firstReviewStart));
+    assert.equal(firstReviewStart.ok, true);
     const failed = await until(async () => {
       const value = await session();
       return value.phase === 'failed' && value.retry_available === true ? value : false;
@@ -176,7 +200,8 @@ function cleanOwnedRoot() {
     const laterReady = await until(async () => { const value = await session(); return value.ready ? value : false; }, 'second draft');
     const laterDraft = await readDraft(laterReady);
     const invalid = await send('submit_review', { review_id: laterReady.review_id, answer: { action: 'reviewed',
-      redactions: [], decisions: [{ ambiguity_id: 'person:v1:unknown', decision: 'redact_organization' }] } });
+      redactions: [], decisions: [{ ambiguity_id: 'person:v1:unknown', decision: 'redact_organization' }] } },
+    'STANDALONE_REVIEW_DECISION_INVALID');
     assert.equal(invalid.ok, false);
     assert.equal(invalid.error_code, 'STANDALONE_REVIEW_DECISION_INVALID');
     assert.equal((await session()).ready, true, 'broker authorization failure never consumes the real draft');
@@ -190,26 +215,55 @@ function cleanOwnedRoot() {
     assert.deepEqual(resumedDraft.ambiguities, laterDraft.ambiguities);
     assert.equal((await send('submit_review', { review_id: resumed.review_id, answer: { action: 'reviewed', redactions: [],
       decisions: resumedDraft.ambiguities.map((candidate) => ({ ambiguity_id: candidate.ambiguity_id, decision: 'keep' })) } })).ok, true);
-    await until(async () => (await session()).run_complete === true, 'second run must finish after explicit human keep');
+    await until(async () => {
+      const value = await session();
+      return value.run_complete === true && value.worker_active === false;
+    }, 'second run must finish and its review worker must exit after explicit human keep');
+    const finalState = await send('get_public_state');
+    assert.equal(finalState.result.preparing, false, 'STANDALONE_REVIEW_IPC_QUIESCENCE_UNCONFIRMED');
+    assert.equal(finalState.result.processing, false, 'STANDALONE_REVIEW_IPC_QUIESCENCE_UNCONFIRMED');
+    assert.equal(finalState.result.batch_complete, true, 'STANDALONE_REVIEW_IPC_QUIESCENCE_UNCONFIRMED');
+    // Both intakes passed the real non-preparing review boundary above; the
+    // final review also reports worker_active=false only after its actual exit.
+    // Neither journal completion nor shutting down the sidecar suffices alone.
+    workersQuiescent = true;
     const log = fs.readFileSync(path.join(environment.DATASECURE_STANDALONE_DIAGNOSTIC_DIR, 'sidecar-interactions.jsonl'), 'utf8');
     assert.doesNotMatch(log, /SYNTHETISCHER|Mustermann|synthetic\.md|max@example/u);
-    process.stdout.write('✓ real Standalone sidecar → worker → broker → serialized corporate answer → typed publication; first-draft fault/retry; invalid answer; defer/resume\n');
+    succeeded = true;
+  } catch (error) {
+    primaryFailed = true;
+    throw error;
   } finally {
-    if (child.exitCode === null && child.signalCode === null) {
-      try {
-        const current = await session();
-        if (current.ready) await send('submit_review', { review_id: current.review_id, answer: { action: 'deferred' } });
-        await send('shutdown');
-      } catch { child.kill(); }
+    let closeError;
+    try {
+      if (child.exitCode === null && child.signalCode === null) {
+        try {
+          const current = await session();
+          if (current.ready) await send('submit_review', { review_id: current.review_id, answer: { action: 'deferred' } });
+          await send('shutdown');
+        } catch { child.kill(); }
+      }
+      await bounded(closed, 5000, 'STANDALONE_REVIEW_IPC_CLOSE_UNCONFIRMED');
+      // Receipts supplement (but cannot replace) the actual public exit
+      // boundary. Success requires all four review launches; an earlier failure
+      // waits only for observed workers and never receives cleanup authority.
+      await until(() => {
+        const spawned = fs.readdirSync(root).filter((name) => /^review-spawn-\d+\.json$/u.test(name));
+        return (!succeeded || spawned.length >= 4) && spawned.every((name) =>
+          fs.existsSync(path.join(root, name.replace('review-spawn-', 'review-exit-'))));
+      }, 'own review workers must exit before fixture cleanup', 27000);
+    } catch (error) {
+      closeError = error;
+      note('STANDALONE_REVIEW_IPC_SECONDARY:STANDALONE_REVIEW_IPC_CLEANUP_UNCONFIRMED\n');
     }
-    await until(() => child.exitCode !== null || child.signalCode !== null, 'own sidecar must close', 5000);
-    await closed;
-    // Each explicitly instrumented worker has a bounded lifetime and an exit
-    // receipt. Do not kill any process using a potentially recycled PID.
-    await until(() => fs.readdirSync(root).filter((name) => /^review-spawn-\d+\.json$/u.test(name))
-      .every((name) => fs.existsSync(path.join(root, name.replace('review-spawn-', 'review-exit-')))),
-    'own review workers must exit before fixture cleanup', 27000);
-    cleanupSafe = true;
-    if (cleanupSafe) cleanOwnedRoot();
+    // A failed test retains its whole fresh scope even if workers later exit.
+    // Unknown quiescence is never permission to remove live work or evidence.
+    if (!primaryFailed && succeeded && workersQuiescent && childClosed && !closeError) cleanOwnedRoot();
+    else note(`STANDALONE_REVIEW_IPC_KEPT:${root}\n`);
+    if (closeError && !primaryFailed) throw closeError;
   }
-})().catch((error) => { console.error(error); process.exitCode = 1; });
+  process.stdout.write('✓ real Standalone sidecar → worker → broker → serialized corporate answer → typed publication; first-draft fault/retry; invalid answer; defer/resume\n');
+})().catch((error) => {
+  note(`STANDALONE_REVIEW_IPC_FAILED_RESPONSES:${JSON.stringify(failedResponses)}\n`);
+  console.error(error); process.exitCode = 1;
+});

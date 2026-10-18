@@ -5,6 +5,8 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { readCentralModes } from '../scripts/lib/zip.mjs';
+import { windowsPackagePrefix } from '../scripts/lib/standalone-windows-layout.mjs';
+import { loadMacStaticCore, assertMacCoreBundle } from '../scripts/lib/macos-core-artifact.mjs';
 import { isolatedSidecarEnvironment, removePackageSmokeScope } from './helpers/standalone-package-scope.mjs';
 import { runPackagedReviewScenario } from './helpers/standalone-packaged-review.mjs';
 import { runPackagedOcrScenario, runPackagedOcrSkipScenario } from './helpers/standalone-packaged-ocr-review.mjs';
@@ -115,7 +117,8 @@ try {
   const archiveBytes = fs.readFileSync(zip);
   const entries = readZip(archiveBytes, { maxEntries: 15000, maxUncompressed: 768 * 1024 * 1024 });
   const modes = readCentralModes(archiveBytes);
-  const prefix = `DataSecure-Standalone-${version}-${productTarget}/`;
+  const prefix = productTarget === 'windows-x64' ? windowsPackagePrefix(entries, version) :
+    `DataSecure-Standalone-${version}-${productTarget}/`;
   for (const [name, bytes] of entries) {
     assert.ok(name.startsWith(prefix));
     const relative = name.slice(prefix.length);
@@ -145,6 +148,15 @@ try {
   const server = process.platform === 'darwin' ? path.join(bundle, 'Resources', 'server') : path.join(launchRoot, 'server');
   const runtime = process.platform === 'darwin' ? path.join(bundle, 'MacOS', 'datasecure-core')
     : path.join(launchRoot, 'datasecure-core-x86_64-pc-windows-msvc.exe');
+  if (process.platform === 'darwin') {
+    const checkedCore = loadMacStaticCore(root, productTarget);
+    assertMacCoreBundle(path.join(launchRoot, 'DataSecure Standalone.app'), checkedCore);
+    environment.DATASECURE_PRODUCT_CHANNEL = 'standalone';
+    environment.DATASECURE_BUNDLED_RUNTIME_REQUIRED = '1';
+    environment.DATASECURE_MACOS_STATIC_CORE_SHA256 = checkedCore.artifact.core.sha256;
+    environment.DATASECURE_MACOS_STATIC_CORE_ARTIFACT_SHA256 = checkedCore.artifactSha256;
+    // This existing direct-IPC smoke is not the Rust native-export broker gate.
+  }
   const sidecar = path.join(server, 'standalone', 'desktop-sidecar.js');
   const deny = path.join(server, 'network-deny.cjs');
   assert.equal(fs.statSync(deny).isFile(), true);

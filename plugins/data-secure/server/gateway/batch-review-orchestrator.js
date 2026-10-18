@@ -1,6 +1,8 @@
 'use strict';
 
-const { releaseOwnedLock } = require('./batch-lock-release');
+const { releaseOwnedLock, releaseOwnedEpochWithBusyRetry } = require('./batch-lock-release');
+const { recordBatchExecutionFailure, blockDocumentStabilization, ownErrorCode } = require('./batch-execution-diagnostic');
+const { isDocumentControlBusy, isOwnershipControlFailure } = require('./prepublication-error');
 const { isMarkdownBatch } = require('../core/processing-mode');
 const { bindContentReviewDependencies } = require('./content-consumer-dependencies');
 const { prepareStandaloneReviewChoices, mergeStandaloneReviewChoices,
@@ -11,6 +13,11 @@ const { MAX_STANDALONE_REVIEW_FINDINGS, standaloneReviewSizeError } = require('.
 
 // Covers both per-document separator labels (at most 100 documents).
 const REVIEW_LABEL_BUDGET = 64;
+function isReviewControlFailure(error) {
+  const code = ownErrorCode(error);
+  return isDocumentControlBusy(error) || isOwnershipControlFailure(error) ||
+    code === 'STANDALONE_PAUSE_CONTROL_BUSY' || code === 'STANDALONE_PAUSE_CONTROL_INVALID';
+}
 function draftCharacters(draft) {
   return Math.max(String(draft?.original_text || '').length, String(draft?.anonymized_text || '').length);
 }
@@ -40,7 +47,7 @@ function createBatchReviewOrchestrator(options = {}) {
     if (active.has(token)) throw new SafeError('Für diese Batch-Sitzung läuft bereits eine Verarbeitung.');
     acquireActiveLock(token);
     active.add(token);
-    let primaryError = false, ownedEpoch;
+    let primaryError = false, ownedEpoch, primaryFailure;
     try {
       if (options.captureOwnedEpoch) ownedEpoch = options.captureOwnedEpoch(token);
       const state = readState(token);
@@ -72,7 +79,7 @@ function createBatchReviewOrchestrator(options = {}) {
             ...(deps.localFinalize === true ? { locally_released: 0 } : { packages: [] }) });
         }
         catch (error) {
-          if (error?.code === 'STANDALONE_PAUSE_CONTROL_INVALID') throw error;
+          if (isReviewControlFailure(error)) throw error;
           const code = error?.code || 'BATCH_REVIEW_RECONSTRUCTION_FAILED';
           markDeferredReview(state, items, code);
           writeState(state);
@@ -184,7 +191,7 @@ function createBatchReviewOrchestrator(options = {}) {
         }
         lifecycle({ event: 'review_reconstruction_finished', outcome: 'ok', item_count: selected.length });
       } catch (error) {
-        if (error?.code === 'STANDALONE_PAUSE_CONTROL_INVALID') throw error;
+        if (isReviewControlFailure(error)) throw error;
         lifecycle({ event: 'review_reconstruction_failed', outcome: 'stopped', item_count: items.length,
           error_code: ['LOCAL_REVIEW_TOO_LARGE', 'LOCAL_REVIEW_CANCELLED'].includes(error?.code) ? error.code : 'LOCAL_REVIEW_FAILED' });
         markDeferredReview(state, items.slice(reviewedCount), error?.code || 'BATCH_REVIEW_RECONSTRUCTION_FAILED');
@@ -227,6 +234,7 @@ function createBatchReviewOrchestrator(options = {}) {
         if (uiDrafts.length) lifecycle({ event: 'review_ui_finished', outcome: outcome.action === 'reviewed' ? 'ok' : 'stopped',
           item_count: uiDrafts.length, error_code: outcome.action === 'reviewed' ? 'NONE' : 'LOCAL_REVIEW_CANCELLED' });
       } catch (error) {
+        if (isReviewControlFailure(error)) throw error;
         const code = ['LOCAL_REVIEW_TOO_LARGE', 'LOCAL_REVIEW_TIMEOUT', 'LOCAL_REVIEW_CANCELLED'].includes(error?.code) ? error.code : 'LOCAL_REVIEW_FAILED';
         lifecycle({ event: 'review_ui_failed', outcome: 'stopped', item_count: selected.length, error_code: code });
         markDeferredReview(state, items.slice(reviewedCount), code);
@@ -279,10 +287,24 @@ function createBatchReviewOrchestrator(options = {}) {
       };
     } catch (error) {
       primaryError = true;
+      primaryFailure = error;
       throw error;
     } finally {
-      active.delete(token);
-      releaseOwnedLock(ownedEpoch ? () => options.releaseOwnedEpoch(ownedEpoch) : releaseActiveLock, token, SafeError, primaryError);
+      try {
+        if (ownedEpoch) {
+          await releaseOwnedEpochWithBusyRetry(options.releaseOwnedEpoch, ownedEpoch, SafeError, primaryError, {
+            delay: options.releaseDelay,
+            onFailure: error => {
+              if (primaryError) blockDocumentStabilization(primaryFailure);
+              (options.recordBatchFailure || recordBatchExecutionFailure)('item_epoch_release', error);
+            }
+          });
+        } else releaseOwnedLock(releaseActiveLock, token, SafeError, primaryError);
+      } finally {
+        // No new review may enter while this exact epoch is still releasing.
+        // Backoff happens only after each synchronous guard lifetime has ended.
+        active.delete(token);
+      }
     }
   }
 

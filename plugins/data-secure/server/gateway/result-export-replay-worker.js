@@ -1,5 +1,8 @@
 'use strict';
 
+if (process.platform === 'darwin' && process.env.DATASECURE_NATIVE_EXPORT_CHANNEL === '1')
+  require('../core/ownership-control').assertNativeOwnershipRuntime();
+
 // Startup recovery runs outside the MCP event loop.  Export records and every
 // file operation remain governed by result-export's fail-closed contracts; a
 // worker failure merely leaves the durable record pending for a later retry.

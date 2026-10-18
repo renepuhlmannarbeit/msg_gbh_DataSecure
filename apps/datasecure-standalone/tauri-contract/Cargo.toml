@@ -1,9 +1,10 @@
 [package]
 name = "datasecure-standalone"
-version = "3.2.0-rc163"
+version = "3.2.0-rc164"
 description = "Lokale DataSecure-Anonymisierung ohne Claude oder Cloud"
 edition = "2021"
-rust-version = "1.77.2"
+# Supported source-build floor follows the verified, pinned product toolchain.
+rust-version = "1.98.1"
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }

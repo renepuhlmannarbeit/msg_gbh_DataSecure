@@ -81,7 +81,8 @@ foreach ($label in @('candidate-a', 'candidate-b')) {
         'tests/manual/standalone-native-windows-launch.ps1', '-Archive', $candidateArchive, '-AssertReviewWindow')
     $expanded = Join-Path $candidateDirectory 'expanded'
     Expand-Archive -LiteralPath $candidateArchive -DestinationPath $expanded
-    $productRoot = Join-Path $expanded "DataSecure-Standalone-$($package.version)-windows-x64"
+    $productDirectory = Resolve-StandaloneProductDirectory $expanded ([string] $package.version)
+    $productRoot = Join-Path $expanded $productDirectory
     $candidates += [ordered]@{
         label = $label
         archive = $candidateArchive

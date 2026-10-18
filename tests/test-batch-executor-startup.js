@@ -1,6 +1,8 @@
 'use strict';
 
-// No keyring, journal files, dialogs or real timeout windows. The final probe
+// No keyring, dialogs or real timeout windows. A narrow reservation fixture
+// below uses real owner-record files with an EXPLICIT injected guard model,
+// never a claimed native guard/OS-process integration test. The final probe
 // uses a separate Node process solely to verify real ENOENT event ordering.
 // EventEmitter deliberately preserves Node's fatal unhandled `error` behavior.
 const fs = require('node:fs');
@@ -11,6 +13,7 @@ const { createSuite } = require('./helpers');
 
 const assert = require('node:assert');
 const { createReviewBroker } = require('../plugins/data-secure/server/standalone/review-broker');
+const { createBatchExecutorLease } = require('../plugins/data-secure/server/gateway/batch-executor-lease');
 const filename = path.join(__dirname, '../plugins/data-secure/server/gateway/batch-executor.js');
 const source = fs.readFileSync(filename, 'utf8');
 const TOKEN = 'a'.repeat(64);
@@ -51,7 +54,7 @@ function fakeChild(pid = 4321, options = {}) {
   return child;
 }
 
-function fixture(role, firstChild) {
+function fixture(role, firstChild, faults = {}) {
   const children = [firstChild];
   const launched = [];
   const records = [];
@@ -59,6 +62,7 @@ function fixture(role, firstChild) {
   const noticeOptions = [];
   const claims = [];
   const releases = [];
+  const claimProofs = [], claimMetadata = new WeakMap(), leaseStates = new Map();
   const timers = new Set();
   let owner = null;
   let randomCounter = 0;
@@ -72,21 +76,35 @@ function fixture(role, firstChild) {
     result_omission_counts: { images_removed_by_request: 0, visual_assets_withheld_locally: 0 },
     result_grades_verified: false
   };
+  // Actual production capability issuer/releaser. IO and kernel transaction
+  // are explicit RAM models; the claim proof itself is never a fake DTO.
+  const leaseModel = createBatchExecutorLease({ SafeError, currentPid: () => 0,
+    processAlive: pid => launched.some(child => child.pid === pid && child.alive),
+    processInstanceIdentity: pid => {
+      const index = launched.findIndex(child => child.pid === pid && child.alive);
+      return index < 0 ? null : String(index + 1).padStart(64, '0');
+    },
+    liveLocalExecutor: state => launched.some(child => child.pid === state.local_executor_pid && child.alive),
+    withSynchronousActiveLock: (_token, action) => action(),
+    readState: token => structuredClone(leaseStates.get(token) || { token }),
+    writeState(state) {
+      leaseStates.set(state.token, structuredClone(state));
+      owner = state.local_executor_pid ? { token: state.token, pid: state.local_executor_pid } : null;
+    }, publicProgress: () => ({ ...progress }) });
   const batch = {
     readBatchProcessingMode() { return 'markdown-and-anonymize'; },
     claimLocalBatchExecutor(token, pid) {
       claims.push({ token, pid });
-      if (owner && launched.some(child => child.pid === owner.pid && child.alive)) {
-        throw new SafeError('Ein lokaler Stapel wird bereits verarbeitet.');
-      }
-      owner = { token, pid };
-      return { ...progress };
+      const proof = leaseModel.claimLocalBatchExecutor(token, pid);
+      claimMetadata.set(proof, { token, pid }); claimProofs.push(proof);
+      return proof;
     },
-    releaseLocalBatchExecutor(token, pid) {
-      releases.push({ token, pid, alive: launched.some(child => child.pid === pid && child.alive) });
-      if (owner?.token !== token || owner?.pid !== pid) return false;
-      owner = null;
-      return true;
+    releaseLocalBatchExecutor() { assert.fail('a parent may never invoke legacy/self release'); },
+    releaseClaimedLocalBatchExecutor(proof) {
+      const { token, pid } = claimMetadata.get(proof) || {};
+      releases.push({ token, pid, proof, alive: launched.some(child => child.pid === pid && child.alive) });
+      if (faults.releaseExecutorError) throw faults.releaseExecutorError;
+      return leaseModel.releaseClaimedLocalBatchExecutor(proof);
     },
     readBatchProgress() {
       if (!journalReadable) throw privateError();
@@ -122,6 +140,7 @@ function fixture(role, firstChild) {
     clearTimeout(timer) { timers.delete(timer); },
     require(name) {
       if (name === 'crypto') return { randomBytes: size => Buffer.alloc(size, ++randomCounter) };
+      if (name === 'node:util') return require('node:util');
       if (name === '../runtime') return { SafeError };
       if (name === '../resource-limits') return require('../plugins/data-secure/server/resource-limits');
       if (name === '../core/processing-mode') return require('../plugins/data-secure/server/core/processing-mode');
@@ -131,11 +150,13 @@ function fixture(role, firstChild) {
       if (name === '../core/result-naming-mode') return require('../plugins/data-secure/server/core/result-naming-mode');
       if (name === './batch') return batch;
       if (name === './workflow-diagnostics') return { recordWorkflowEvent: event => records.push(event) };
+      if (name === './batch-execution-diagnostic') return require('../plugins/data-secure/server/gateway/batch-execution-diagnostic');
       if (name === './batch-intake-reservation') return {
         RESERVATION_ID_RE: /^[a-f0-9]{64}$/,
         reserveIntake: () => ({ reservation_id: 'd'.repeat(64) }),
         delegateIntake: () => true,
-        releaseIntake: () => true
+        releaseIntake: () => true,
+        ...faults.reservation
       };
       if (name === './batch-queue-envelope') {
         return require('../plugins/data-secure/server/gateway/batch-queue-envelope');
@@ -168,7 +189,9 @@ function fixture(role, firstChild) {
   }, { filename, timeout: 1000 });
   const api = module.exports;
   return {
-    api, records, notices, noticeOptions, claims, releases, launched,
+    api, records, notices, noticeOptions, claims, releases, launched, claimProofs,
+    leaseState: token => structuredClone(leaseStates.get(token)),
+    replaceLease(state) { leaseStates.set(state.token, structuredClone(state)); },
     owner: () => owner,
     queue: child => children.push(child),
     loseJournal() { journalReadable = false; },
@@ -193,6 +216,85 @@ function fixture(role, firstChild) {
       }
     }
   };
+}
+
+function withRealReservation(child, nativeRecordModel, action) {
+  const os = require('node:os');
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'ds-executor-reservation-'));
+  const envKeys = ['EU_PRIVACY_DATA_ROOT', 'EU_PRIVACY_ROOT', 'DATASECURE_NATIVE_EXPORT_CHANNEL'];
+  const saved = envKeys.map(key => [key, process.env[key]]);
+  const releaseAttempts = [];
+  let renamedTarget, injected = false, held = false;
+  process.env.EU_PRIVACY_DATA_ROOT = base;
+  process.env.EU_PRIVACY_ROOT = path.join(base, 'workspace');
+  if (nativeRecordModel) process.env.DATASECURE_NATIVE_EXPORT_CHANNEL = '1';
+  else delete process.env.DATASECURE_NATIVE_EXPORT_CHANNEL;
+  const clean = directory => {
+    if (directory !== base && !directory.startsWith(`${base}${path.sep}`)) throw Error('fixture cleanup escaped root');
+    const entries = fs.readdirSync(directory).map(name => {
+      const target = path.join(directory, name);
+      return { target, stat: fs.lstatSync(target) };
+    });
+    for (const { target, stat } of entries) {
+      if (stat.isSymbolicLink()) throw Error('fixture symlink refused');
+      if (stat.isDirectory()) clean(target);
+      else if (stat.isFile()) fs.unlinkSync(target);
+      else throw Error('fixture special object refused');
+    }
+    fs.rmdirSync(directory);
+  };
+  try {
+    const { createBatchIntakeReservation } = require('../plugins/data-secure/server/gateway/batch-intake-reservation');
+    const io = { ...fs, constants: fs.constants,
+      renameSync(from, to) {
+        assert.strictEqual(held, true);
+        const result = fs.renameSync(from, to); // the publication really committed
+        if (!injected) renamedTarget = to;
+        return result;
+      },
+      lstatSync(target, options) {
+        if (!injected && target === renamedTarget) {
+          injected = true;
+          throw Object.assign(new Error('post-rename metadata EIO'), { code: 'EIO' });
+        }
+        return fs.lstatSync(target, options);
+      }
+    };
+    const gate = createBatchIntakeReservation({ fs: io,
+      process: { pid: process.pid, kill(pid) {
+        if (pid === process.pid || pid === child.pid && child.alive) return true;
+        throw Object.assign(new Error('dead fixture process'), { code: 'ESRCH' });
+      } },
+      // Source-protocol fault seam only. This deliberately does NOT load the
+      // Windows/macOS native guard, even when exercising its record schema.
+      withOwnershipControl(root, callback) {
+        assert.strictEqual(root, base); assert.strictEqual(held, false); held = true;
+        try { return callback({ assertHeld() { assert.strictEqual(held, true); } }); }
+        finally { held = false; }
+      }
+    });
+    const reservation = { ...gate,
+      delegateIntake(id, pid) {
+        gate.delegateIntake(id, pid);
+        // The publisher may now heal the one-shot metadata EIO itself. Keep
+        // this caller regression independent of that fix: explicitly lose the
+        // outer transition ACK after the REAL delegate record was committed
+        // and remembered. This is a second, disclosed boundary fault seam,
+        // not evidence that a native guard release actually failed here.
+        throw Object.assign(new Error('modeled lost outer delegation ACK'), { code: 'EIO' });
+      },
+      releaseIntake(id) {
+        releaseAttempts.push({ id, alive: child.alive });
+        return gate.releaseIntake(id);
+      }
+    };
+    action({ gate, reservation, releaseAttempts, injected: () => injected });
+  } finally {
+    for (const [key, value] of saved) {
+      if (value === undefined) delete process.env[key]; else process.env[key] = value;
+    }
+    clean(base);
+  }
 }
 
 function initialCases(test) {
@@ -313,10 +415,236 @@ function assertEndedAndRetry(f, child, role) {
   f.drain();
 }
 
+function executionDiagnosticCases(test) {
+  for (const role of ['batch', 'intake']) test(`${role}: fixed execution diagnostics are observational and never settle ACK or lease`, () => {
+    const child = fakeChild(), f = fixture(role, child), forwarded = [];
+    const started = f.start({ requireIpcAcknowledgement: true, recordWorkflowEvent: event => forwarded.push(event) });
+    const releases = f.releases.length, notices = f.notices.length;
+    const valid = { type: 'local-batch-diagnostic', phase: 'item_epoch_release',
+      error_code: 'STANDALONE_OWNERSHIP_CONTROL_BUSY' };
+    child.emit('message', valid);
+    assert.strictEqual(forwarded.filter(event => event.event === 'batch_worker_failed').length, 1);
+    assert.strictEqual(forwarded.find(event => event.event === 'batch_worker_failed').phase, valid.phase);
+    for (const bad of [{ ...valid, token: TOKEN }, { ...valid, phase: PRIVATE_DETAIL },
+      { ...valid, error_code: PRIVATE_DETAIL }, { ...valid, error_code: 'PRIVATE_ERROR_CODE' }]) child.emit('message', bad);
+    assert.strictEqual(forwarded.filter(event => event.event === 'batch_worker_failed').length, 1);
+    assert.strictEqual(f.releases.length, releases);
+    assert.strictEqual(f.notices.length, notices);
+    assert.strictEqual(child.kills, 0);
+    assert.ok(f.active(), 'diagnostics cannot end or release live work');
+    assert.ok(!JSON.stringify(forwarded).includes(PRIVATE_DETAIL));
+    assert.ok(f.records.every(event => event.event !== 'batch_worker_failed'), 'explicit parent recorder owns the bridge');
+    // A diagnostic did not acknowledge: the real acceptance message is still required.
+    child.emit('message', { type: role === 'batch' ? 'local-batch-accepted' : 'local-intake-accepted' });
+    assert.strictEqual(typeof started.ipcAcknowledgement?.then, 'function');
+    child.exit(0); f.drain();
+  });
+}
+
+async function productionReviewDiagnosticCase(testAsync) {
+  await testAsync('review: the actual production parent forwards only closed diagnostics without ACK, broker or restart authority', async () => {
+    // The listener and launcher below come from the actual required module,
+    // not a copied listener or decoder-only model. Only this owned child's OS
+    // launch/lease are explicit seams; no journal or product root is touched.
+    const api = require('../plugins/data-secure/server/gateway/batch-executor');
+    const child = fakeChild(54321), broker = createReviewBroker(), forwarded = [];
+    let launches = 0, claims = 0, releases = 0, receives = 0, notices = 0, reads = 0;
+    let leaseState = { token: TOKEN };
+    const leaseModel = createBatchExecutorLease({ SafeError, currentPid: () => 0,
+      processAlive: pid => pid === child.pid && child.alive,
+      processInstanceIdentity: pid => pid === child.pid && child.alive ? 'f'.repeat(64) : null,
+      liveLocalExecutor: value => value.local_executor_pid === child.pid && child.alive,
+      withSynchronousActiveLock: (_token, action) => action(),
+      readState: () => structuredClone(leaseState), writeState: value => { leaseState = structuredClone(value); },
+      publicProgress: () => ({ complete: false, batch_phase: 'awaiting_local_review', batch_total: 1,
+        released: 0, stopped: 0, deferred_review: 1, remaining: 0, retryable: 0,
+        delivery_pending: 0, mapping_pending: 0, processing: 0 }) });
+    const appReview = { ...broker, receive(...args) { receives++; return broker.receive(...args); } };
+    const started = api.startLocalReviewExecutor(TOKEN, {
+      env: { DATASECURE_PRODUCT_CHANNEL: 'standalone' },
+      requireIpcAcknowledgement: true, ipcAckTimeoutMs: 5000, appReview,
+      forkProcess(file) { launches++; assert.equal(path.basename(file), 'review-worker.js'); return child; },
+      claimLocalBatchExecutor(token, pid) {
+        claims++; assert.equal(token, TOKEN); assert.equal(pid, child.pid);
+        return leaseModel.claimLocalBatchExecutor(token, pid);
+      },
+      releaseClaimedLocalBatchExecutor(proof) { releases++; return leaseModel.releaseClaimedLocalBatchExecutor(proof); },
+      recordWorkflowEvent: event => forwarded.push(event),
+      showBatchStateNotice() { notices++; return true; }
+    });
+    let acknowledged = false;
+    started.ipcAcknowledgement.then(() => { acknowledged = true; }, () => {});
+    try {
+      child.callbacks[0](null); // dispatch is not worker acceptance
+      const before = broker.session();
+      const valid = { type: 'local-batch-diagnostic', phase: 'item_epoch_release', error_code: 'STANDALONE_OWNERSHIP_CONTROL_BUSY' };
+      child.emit('message', valid);
+      const expected = forwarded.filter(event => event.event === 'batch_worker_failed');
+      assert.equal(expected.length, 1); assert.equal(expected[0].outcome, 'stopped');
+      assert.equal(expected[0].phase, valid.phase); assert.equal(expected[0].error_code, valid.error_code);
+      assert.deepEqual(Object.keys(expected[0]).sort(), ['error_code', 'event', 'outcome', 'phase', 'run_id']);
+      for (const bad of [{ ...valid, batch_token: TOKEN }, { ...valid, private: PRIVATE_DETAIL },
+        { ...valid, review_id: 'b'.repeat(32) }, { ...valid, accepted: true },
+        { ...valid, phase: PRIVATE_DETAIL }, { ...valid, error_code: PRIVATE_DETAIL },
+        { ...valid, error_code: 'STANDALONE_OWNERSHIP_CONTROL_BUSY_EXTRA' }, Object.create(valid),
+        Object.setPrototypeOf({ ...valid }, {})]) child.emit('message', bad);
+      for (const key of ['type', 'phase', 'error_code']) {
+        const bad = Object.defineProperty({ ...valid }, key, { enumerable: true,
+          get() { reads++; throw privateError(); } });
+        assert.doesNotThrow(() => child.emit('message', bad));
+      }
+      const symbolic = { ...valid, [Symbol('private')]: PRIVATE_DETAIL };
+      child.emit('message', symbolic);
+      const proxied = new Proxy(valid, { get() { reads++; throw privateError(); },
+        getOwnPropertyDescriptor() { reads++; throw privateError(); } });
+      assert.doesNotThrow(() => child.emit('message', proxied));
+      await Promise.resolve();
+      assert.equal(reads, 0); assert.equal(acknowledged, false);
+      assert.equal(forwarded.filter(event => event.event === 'batch_worker_failed').length, 1);
+      assert.deepEqual(broker.session(), before); assert.equal(receives, 0);
+      assert.equal(releases, 0); assert.equal(notices, 0); assert.equal(child.kills, 0);
+      assert.equal(launches, 1); assert.equal(claims, 1); assert.equal(child.messages.length, 1);
+      assert.equal(api.localReviewActive(), true);
+      child.emit('message', { type: 'local-review-accepted' });
+      await started.ipcAcknowledgement;
+      assert.equal(acknowledged, true, 'only the real acceptance frame confirms the start');
+      const reviewId = 'b'.repeat(32);
+      child.emit('message', { type: 'standalone-review-draft', review_id: reviewId, batch_token: TOKEN,
+        draft: { schema: 'data-secure-text-review/3', original_text: 'synthetic', anonymized_text: 'synthetic',
+          ambiguities: [], allow_defer: true } });
+      assert.equal(broker.session().ready, true); assert.equal(receives, 1);
+      const ready = broker.session();
+      child.emit('message', valid);
+      assert.deepEqual(broker.session(), ready, 'a diagnostic cannot consume, fail or replace the real draft');
+      assert.equal(receives, 1); assert.equal(releases, 0); assert.equal(notices, 0);
+      assert.equal(child.messages.length, 1, 'diagnostics cannot send a review answer');
+      assert.equal(forwarded.filter(event => event.event === 'batch_worker_failed').length, 2);
+      assert.doesNotMatch(JSON.stringify(forwarded), /PRIVATE|customer-secret|batch_token|[a-f0-9]{64}/u);
+    } finally { child.exit(0); }
+    assert.equal(api.localReviewActive(), false); assert.equal(releases, 1);
+    assert.equal(launches, 1, 'no diagnostic grants a child restart');
+  });
+}
+
+async function executionDiagnosticProbe() {
+  const { test, testAsync, done } = createSuite('Batch execution diagnostic parent bridge MODEL');
+  executionDiagnosticCases(test);
+  await productionReviewDiagnosticCase(testAsync);
+  await done();
+}
+
 async function main() {
   // The ENOENT subprocess is a probe, not an unfinalized empty test suite.
   const { test, testAsync, done } = createSuite('Batch executor startup boundary');
   initialCases(test);
+  executionDiagnosticCases(test);
+  await productionReviewDiagnosticCase(testAsync);
+  for (const nativeRecordModel of [false, true]) {
+    test(`intake: real post-rename EIO plus lost outer ACK retains live delegate until confirmed exit (${nativeRecordModel ? 'native-schema guard MODEL' : 'source adapter'})`, () => {
+      const child = fakeChild();
+      withRealReservation(child, nativeRecordModel, ({ gate, reservation, releaseAttempts, injected }) => {
+        const reserved = gate.reserveIntake();
+        const f = fixture('intake', child, { reservation });
+        assertSafeStartFailure(() => f.start({ intakeReservationId: reserved.reservation_id }));
+        assert.strictEqual(injected(), true, 'real rename must precede the one-shot EIO');
+        assert.strictEqual(child.messages.length, 0, 'no queue was delivered after the lost delegation ACK');
+        assert.strictEqual(child.kills, 1);
+        assert.strictEqual(child.alive, true, 'kill success is not exit evidence');
+        assert.strictEqual(f.active(), true, 'uncertain delegation retains its local pending slot');
+        assert.strictEqual(releaseAttempts.length, 0, 'never attempt release while the uncertain delegate is alive');
+        const published = JSON.parse(fs.readFileSync(gate.reservationPath(), 'utf8'));
+        assert.strictEqual(published.delegate.pid, child.pid);
+        assert.strictEqual(published.schema, `datasecure-intake-reservation/${nativeRecordModel ? 3 : 2}`);
+        assert.strictEqual(gate.intakeReservationActive(), true);
+        assert.throws(() => gate.reserveIntake());
+        assert.doesNotThrow(() => child.exit(1));
+        assert.deepStrictEqual(releaseAttempts, [{ id: reserved.reservation_id, alive: false }]);
+        assert.strictEqual(f.active(), false);
+        assert.strictEqual(gate.intakeReservationActive(), false);
+        assert.strictEqual(fs.existsSync(gate.reservationPath()), false);
+        const replacement = gate.reserveIntake();
+        child.emit('exit', 1); child.emit('error', privateError());
+        assert.strictEqual(releaseAttempts.length, 1, 'duplicate/stale events cannot release a newer reservation');
+        assert.strictEqual(JSON.parse(fs.readFileSync(gate.reservationPath())).reservation_id, replacement.reservation_id);
+        assert.strictEqual(gate.releaseIntake(reserved.reservation_id), false);
+        assert.strictEqual(gate.releaseIntake(replacement.reservation_id), true);
+        f.drain(); assertBoundedDiagnostics(f);
+      });
+    });
+    test(`intake: exit after lost delegation ACK never deletes a byte-identical replacement (${nativeRecordModel ? 'native-schema guard MODEL' : 'source adapter'})`, () => {
+      const child = fakeChild();
+      withRealReservation(child, nativeRecordModel, ({ gate, reservation, releaseAttempts, injected }) => {
+        const reserved = gate.reserveIntake();
+        const f = fixture('intake', child, { reservation });
+        assertSafeStartFailure(() => f.start({ intakeReservationId: reserved.reservation_id }));
+        assert.strictEqual(injected(), true);
+        const target = gate.reservationPath(), bytes = fs.readFileSync(target);
+        const original = fs.lstatSync(target, { bigint: true });
+        const replacement = `${target}.replacement-model`;
+        fs.writeFileSync(replacement, bytes, { flag: 'wx', mode: 0o600 });
+        fs.renameSync(replacement, target);
+        assert.notStrictEqual(fs.lstatSync(target, { bigint: true }).ino, original.ino);
+        assert.doesNotThrow(() => child.exit(1));
+        assert.deepStrictEqual(releaseAttempts, [{ id: reserved.reservation_id, alive: false }]);
+        assert.strictEqual(f.active(), false);
+        assert.deepStrictEqual(fs.readFileSync(target), bytes, 'matching JSON/PID/ID is not the original file epoch');
+        assert.strictEqual(gate.releaseIntake(reserved.reservation_id), false);
+        assert.strictEqual(gate.intakeReservationActive(), true, 'foreign epoch stays fail-closed');
+        f.drain(); assertBoundedDiagnostics(f);
+      });
+    });
+  }
+  for (const code of ['OWNERSHIP_GUARD_BUSY', 'OWNERSHIP_GUARD_CLOSE_UNCONFIRMED']) {
+    for (const role of roles) await testAsync(`${role}: ${code} during exit release cannot escape or replace the primary IPC failure`, async () => {
+      const child = fakeChild();
+      const releaseError = Object.assign(privateError(), { code });
+      const broker = role === 'review' ? createReviewBroker() : undefined;
+      const f = fixture(role, child, { releaseExecutorError: releaseError });
+      const intakeReleases = [];
+      const started = f.start({ requireIpcAcknowledgement: true, ...(broker ? { appReview: broker } : {}),
+        ...(role === 'intake' ? { releaseIntake(id) { intakeReleases.push({ id, alive: child.alive }); throw releaseError; } } : {}) });
+      if (role === 'intake') child.emit('message', { type: 'local-intake-checkpoint-created' });
+      child.callbacks[0](privateError());
+      await assert.rejects(started.ipcAcknowledgement, { code: 'LOCAL_IPC_FAILED' });
+      const primaryBrokerError = broker?.session().error_code;
+      assertRetainedWhileAlive(f, child, role);
+      assert.doesNotThrow(() => child.exit(1), 'native release exception must not escape the EventEmitter callback');
+      await assert.rejects(started.ipcAcknowledgement, { code: 'LOCAL_IPC_FAILED' });
+      const expectedReleases = role === 'intake' ? 0 : 1;
+      assert.strictEqual(f.releases.length, expectedReleases, 'only a parent with its actual claim proof attempts lease cleanup');
+      if (expectedReleases) {
+        assert.strictEqual(f.releases[0].alive, false);
+        assert.strictEqual(f.releases[0].proof, f.claimProofs[0]);
+      }
+      if (role === 'intake') {
+        assert.strictEqual(intakeReleases.length, 1); assert.strictEqual(intakeReleases[0].alive, false);
+      }
+      if (role !== 'batch') assert.strictEqual(f.active(), false, 'local bookkeeping completes despite a retained durable owner');
+      if (broker) {
+        assert.strictEqual(broker.session().worker_active, false);
+        assert.strictEqual(broker.session().error_code, primaryBrokerError);
+      }
+      child.emit('exit', 1); child.emit('error', privateError());
+      assert.strictEqual(f.releases.length, expectedReleases, 'cleanup is not repeated after an uncertain release');
+      f.drain(); assertBoundedDiagnostics(f);
+      assert.ok(f.records.some(record => record.error_code === (role === 'review' ? 'LOCAL_REVIEW_RELEASE_FAILED' : 'LOCAL_WORKER_EXITED')));
+    });
+  }
+  for (const role of ['batch', 'review']) test(role + ': delayed exit preserves a replacement lease and passes only the actual original claim proof', () => {
+    const child = fakeChild(), f = fixture(role, child);
+    f.start();
+    const proof = f.claimProofs[0], original = f.leaseState(TOKEN);
+    const replacement = { ...original, local_executor_birth_id: 'c'.repeat(64), local_executor_lease_id: 'd'.repeat(32) };
+    f.replaceLease(replacement); child.exit(0); f.drain();
+    assert.deepStrictEqual(f.leaseState(TOKEN), replacement);
+    assert.strictEqual(f.releases.length, 1); assert.strictEqual(f.releases[0].proof, proof);
+    child.emit('exit', 0); assert.strictEqual(f.releases.length, 1);
+  });
+  test('intake: release exception after a failed spawn never replaces the bounded primary start refusal', () => {
+    const f = fixture('intake', privateError());
+    assertSafeStartFailure(() => f.start({ releaseIntake() { throw Object.assign(privateError(), { code: 'OWNERSHIP_GUARD_BUSY' }); } }));
+    assert.strictEqual(f.active(), false); assertBoundedDiagnostics(f);
+  });
   for (const role of roles) {
     test(`${role}: synchronous launcher exception records only a bounded start failure`, () => {
       const f = fixture(role, privateError());
@@ -943,5 +1271,6 @@ async function realNoPidProbe() {
   console.log('ENOENT probe: batch, intake, review passed');
 }
 
-(process.argv.includes('--enoent-probe') ? realNoPidProbe() : main())
+(process.argv.includes('--execution-diagnostic-probe') ? executionDiagnosticProbe() :
+  process.argv.includes('--enoent-probe') ? realNoPidProbe() : main())
   .catch(error => { console.error(error); process.exitCode = 1; });

@@ -399,9 +399,9 @@ function historyCell(row, value, tag = 'td') {
   return cell;
 }
 function renderHistory(entries) {
-  const snapshot = JSON.stringify(entries.slice(0, 20));
+  const snapshot = JSON.stringify(entries.slice(0, 5));
   if (snapshot === lastHistorySnapshot) {
-    byId('history-feedback').textContent = historyButtons.length > 0 ? 'Bis zu 20 zuletzt angelegte Läufe. Nicht verfügbare Aktionen sind deaktiviert.' : 'Noch keine lokalen Läufe vorhanden.';
+    byId('history-feedback').textContent = historyButtons.length > 0 ? 'Die letzten 5 Läufe. Nicht verfügbare Aktionen sind deaktiviert.' : 'Keine Läufe im aktuellen Fünfer-Verlauf sichtbar.';
     updateHistoryAvailability();
     return;
   }
@@ -415,7 +415,7 @@ function renderHistory(entries) {
     results_available: 'Abgeschlossen', completed_without_results: 'Ohne Ergebnisse', blocked: 'Nicht bereit',
     completed: 'Abgeschlossen', failed: 'Fehlgeschlagen', interrupted: 'Unterbrochen' };
   const count = (value) => Number.isSafeInteger(value) && value >= 0 ? value : 0;
-  for (const entry of entries.slice(0, 20)) {
+  for (const entry of entries.slice(0, 5)) {
     if (!entry || typeof entry.batch_id !== 'string' || !entry.batch_id) continue;
     liveRows.add(entry.batch_id);
     const signature = JSON.stringify(entry);
@@ -547,12 +547,12 @@ function renderHistory(entries) {
   for (const [id, record] of historyRows) {
     if (!liveRows.has(id)) { record.live = false; historyRows.delete(id); }
   }
-  const ordered = entries.slice(0, 20).map(entry => historyRows.get(entry?.batch_id)?.row).filter(Boolean);
+  const ordered = entries.slice(0, 5).map(entry => historyRows.get(entry?.batch_id)?.row).filter(Boolean);
   for (const child of Array.from(body.children)) if (!ordered.includes(child)) body.removeChild(child);
   ordered.forEach((row, index) => { if (body.children[index] !== row) body.insertBefore(row, body.children[index] || null); });
   const hasRows = historyButtons.length > 0;
   byId('history-table').hidden = !hasRows;
-  byId('history-feedback').textContent = hasRows ? 'Bis zu 20 zuletzt angelegte Läufe. Nicht verfügbare Aktionen sind deaktiviert.' : 'Noch keine lokalen Läufe vorhanden.';
+  byId('history-feedback').textContent = hasRows ? 'Die letzten 5 Läufe. Nicht verfügbare Aktionen sind deaktiviert.' : 'Keine Läufe im aktuellen Fünfer-Verlauf sichtbar.';
   updateHistoryAvailability();
 }
 async function refreshHistory(force = false) {

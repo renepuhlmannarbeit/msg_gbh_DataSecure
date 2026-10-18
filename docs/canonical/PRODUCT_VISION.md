@@ -117,7 +117,7 @@ den ganzen Stapel vernichten oder eine erneute Auswahl erzwingen.
 - Standalone startet immer auf **Start** mit einer kurzen Erklärung beider
   Funktionen. **Verarbeiten** und die Betriebsart sind anfangs nicht vorbelegt.
   Abschluss, Neustart und vorhandene Stapel wechseln die Ansicht nicht automatisch.
-  **Verlauf** zeigt die letzten 20 Verarbeitungen, neueste zuerst, mit Datum,
+  **Verlauf** zeigt die letzten 5 Verarbeitungen, neueste zuerst, mit Datum,
   Betriebsart, Dateizählern und Status. Ergebnisse und Fortsetzung sind jeweils
   an genau diesen Lauf gebunden; die Zuordnung ist nur für Anonymisierungsläufe
   verfügbar. Die Anzeigegrenze löscht nichts.

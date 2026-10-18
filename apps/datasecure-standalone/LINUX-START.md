@@ -38,13 +38,13 @@ auf den unterstützten Linux-Distributionen.
    Dokumentprüfung desselben Laufs. Quelle und geplantes Markdown vergleichen,
    gewünschte Dokumente auswählen und **Auswahl freigeben** wählen.
    Fundstellenabschluss allein ist keine Dokumentfreigabe.
-4. **Auswahl für KI exportieren** kopiert nach ausdrücklicher Bestätigung nur
+4. **Auswahl exportieren** kopiert nach ausdrücklicher Bestätigung nur
    freigegebene aktuelle Markdown-Stände in einen normalen separaten Ordner.
    Originale, Identitäts-/Dateizuordnung und private Prüfstände bleiben draußen.
    Den technischen Laufordner nicht pauschal an eine KI weitergeben.
 5. **Später entscheiden**, Pause und Fortsetzen sind an den konkreten Lauf
    gebunden; weitere Eingaben gehören in eine neue Verarbeitung. Der Verlauf
-   zeigt höchstens 20 Verarbeitungen. **Ergebnisse prüfen und freigeben** öffnet
+   zeigt höchstens 5 Verarbeitungen. **Ergebnisse prüfen und freigeben** öffnet
    bei Anonymisierung die spätere Dokumentprüfung. Verbindungsverlust führt
    nicht zu blinder Wiederholung von Entscheidungen oder Exportbestätigungen.
 

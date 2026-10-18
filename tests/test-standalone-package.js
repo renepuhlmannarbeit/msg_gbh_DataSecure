@@ -10,6 +10,91 @@ const { test } = require('node:test');
 
 const root = path.resolve(__dirname, '..');
 
+test('Windows ZIP readers accept only the short root or the exact historical versioned root', async () => {
+  const { WINDOWS_PACKAGE_ROOT, windowsPackageRoots, windowsPackagePrefix } =
+    await import('../scripts/lib/standalone-windows-layout.mjs');
+  const version = '3.2.0-rc163';
+  const roots = windowsPackageRoots(version);
+  assert.deepEqual(roots, ['DataSecure', `DataSecure-Standalone-${version}-windows-x64`]);
+  for (const name of roots) {
+    const entries = new Map([[`${name}/STANDALONE-MANIFEST.json`, Buffer.from('{}')],
+      [`${name}/server/standalone/desktop-sidecar.js`, Buffer.from('payload')]]);
+    assert.equal(windowsPackagePrefix(entries, version), `${name}/`);
+    entries.set('unexpected.txt', Buffer.from('outside'));
+    assert.throws(() => windowsPackagePrefix(entries, version), /STANDALONE_ZIP_ROOT_INVALID/u);
+  }
+  for (const names of [[], ['Other'], ['datasecure'], ['DataSecure-Standalone-3.2.0-rc162-windows-x64'], roots]) {
+    const entries = new Map(names.map(name => [`${name}/STANDALONE-MANIFEST.json`, Buffer.from('{}')]));
+    assert.throws(() => windowsPackagePrefix(entries, version), /STANDALONE_ZIP_ROOT_INVALID/u);
+  }
+  assert.throws(() => windowsPackageRoots('../unsafe'), /STANDALONE_PACKAGE_VERSION_INVALID/u);
+  const deepest = 'server/standalone/conversion-runtime/node_modules/micromark-core-commonmark/dev/lib/partial-non-lazy-continuation.d.ts';
+  const explorer = path.win32.join('C:\\Users\\arkud\\Documents\\Software DataSecure\\RC163-R6-Test-20261018', roots[1]);
+  assert.equal(path.win32.join(explorer, roots[1], deepest).length, 278);
+  assert.equal(path.win32.join(explorer, WINDOWS_PACKAGE_ROOT, deepest).length, 243);
+});
+
+test('Windows build and package gates share the short-root contract without changing macOS layout', async () => {
+  const { SOURCE_INPUT_FILES } = await import('../scripts/lib/standalone-build-fingerprint.mjs');
+  assert.ok(SOURCE_INPUT_FILES.includes('scripts/lib/standalone-windows-layout.mjs'));
+  const build = fs.readFileSync(path.join(root, 'scripts/build-standalone-package.mjs'), 'utf8');
+  assert.match(build, /const folderName = WINDOWS_PACKAGE_ROOT/u);
+  assert.match(build, /`\$\{packageName\}\.zip`/u);
+  assert.match(build, /name: packageName, documentNamespace:/u);
+  for (const file of ['scripts/verify-standalone-package.mjs', 'tests/test-standalone-package-smoke.mjs',
+    'tests/manual/standalone-package-corpus.mjs', 'tests/manual/standalone-packaged-fast-content-oracle.mjs']) {
+    assert.match(fs.readFileSync(path.join(root, file), 'utf8'), /windowsPackagePrefix\(entries,/u, file);
+  }
+  const loader = fs.readFileSync(path.join(root, 'tests/manual/standalone-windows-ownership-load.mjs'), 'utf8');
+  assert.match(loader, /windowsPackageRoots\(manifest\.version\)\.includes\(path\.basename\(installation\)\)/u);
+  const smoke = fs.readFileSync(path.join(root, 'tests/test-standalone-package-smoke.mjs'), 'utf8');
+  assert.match(smoke, /productTarget === 'windows-x64' \? windowsPackagePrefix\(entries, version\) :/u);
+  assert.match(smoke, /`DataSecure-Standalone-\$\{version\}-\$\{productTarget\}\/`/u);
+  const release = fs.readFileSync(path.join(root, 'scripts/run-pkg-04.ps1'), 'utf8');
+  assert.match(release, /Resolve-StandaloneProductDirectory \$expanded/u);
+});
+
+test('PowerShell package resolution accepts current and historical roots and rejects ambiguous or mismatched packages', async () => {
+  if (process.platform !== 'win32') return;
+  const { removePackageSmokeScope } = await import('./helpers/standalone-package-scope.mjs');
+  const scope = fs.mkdtempSync(path.join(root, '.tmp-standalone-package-'));
+  const version = '3.2.0-rc163', historical = `DataSecure-Standalone-${version}-windows-x64`;
+  const create = (name, manifestVersion = version) => {
+    const directory = path.join(scope, name);
+    fs.mkdirSync(directory);
+    fs.writeFileSync(path.join(directory, 'STANDALONE-MANIFEST.json'), JSON.stringify({
+      schema: 'datasecure-standalone-package/1', target: 'windows-x64', version: manifestVersion
+    }));
+  };
+  const remove = name => {
+    const directory = path.join(scope, name);
+    assert.equal(path.dirname(directory), scope);
+    assert.ok(fs.lstatSync(directory).isDirectory() && !fs.lstatSync(directory).isSymbolicLink());
+    fs.unlinkSync(path.join(directory, 'STANDALONE-MANIFEST.json'));
+    fs.rmdirSync(directory);
+  };
+  const resolve = () => execFileSync('powershell.exe', ['-NoProfile', '-Command',
+    "$ErrorActionPreference = 'Stop'; . $env:DATASECURE_LAYOUT_HOST; Resolve-StandaloneProductDirectory $env:DATASECURE_LAYOUT_FIXTURE '3.2.0-rc163'"],
+  { encoding: 'utf8', windowsHide: true, timeout: 10000, stdio: 'pipe', env: { ...process.env,
+    DATASECURE_LAYOUT_HOST: path.join(root, 'tests/manual/standalone-native-host.ps1'), DATASECURE_LAYOUT_FIXTURE: scope } }).trim();
+  try {
+    create('DataSecure');
+    assert.equal(resolve(), 'DataSecure');
+    create(historical);
+    assert.throws(resolve, /STANDALONE_NATIVE_PACKAGE_ROOT_INVALID/u);
+    remove('DataSecure');
+    assert.equal(resolve(), historical);
+    remove(historical);
+    for (const name of ['Other', 'datasecure', 'DataSecure-Standalone-3.2.0-rc162-windows-x64']) {
+      create(name);
+      assert.throws(resolve, /STANDALONE_NATIVE_PACKAGE_ROOT_INVALID/u);
+      remove(name);
+    }
+    create('DataSecure', '3.2.0-rc162');
+    assert.throws(resolve, /STANDALONE_NATIVE_PACKAGE_ROOT_INVALID/u);
+  } finally { removePackageSmokeScope(root, scope); }
+});
+
 function ensureFixtureParent(repositoryRoot) {
   const repositoryInfo = fs.lstatSync(repositoryRoot);
   assert.ok(repositoryInfo.isDirectory() && !repositoryInfo.isSymbolicLink());
@@ -79,7 +164,17 @@ test('standalone package build uses pinned runtime and a closed resource project
   const prepare = fs.readFileSync(path.join(root, 'scripts', 'prepare-standalone-runtime.mjs'), 'utf8');
   const build = fs.readFileSync(path.join(root, 'scripts', 'build-standalone-package.mjs'), 'utf8');
   const config = JSON.parse(fs.readFileSync(path.join(root, 'apps', 'datasecure-standalone', 'tauri-contract', 'tauri.conf.json')));
-  assert.doesNotMatch(prepare, /process\.execPath/u);
+  // The host Node may run a build-time compiler helper; it must never become
+  // the installed sidecar. Verify the actual runtime-byte binding separately.
+  assert.match(prepare, /const runtimeBytes = readRegular\(source, 128 \* 1024 \* 1024\)/u);
+  assert.match(prepare, /verifyTargetEvidence\(evidence, runtimeBytes, licenseBytes, runtimeTarget, contract\)/u);
+  assert.match(prepare, /const ownershipSupported = target\.product_target === 'windows-x64'/u);
+  assert.match(prepare, /target\.product_target\.startsWith\('macos-'\) \? loadMacStaticCore\(root, target\.product_target\) : null/u);
+  assert.match(prepare, /const coreBytes = customCore \? customCore\.bytes : runtimeBytes/u);
+  assert.match(prepare, /fs\.writeFileSync\(destination, coreBytes,/u);
+  assert.match(prepare, /readRegular\(destination, 128 \* 1024 \* 1024\)\.equals\(coreBytes\)/u);
+  assert.deepEqual(prepare.match(/process\.execPath/gu), ['process.execPath']);
+  assert.match(prepare, /spawnSync\(process\.execPath, \[path\.join\(root, 'scripts\/build-ownership-guard\.mjs'\)/u);
   assert.match(prepare, /verifyTargetEvidence/u);
   assert.equal(config.bundle.resources['generated-runtime/server'], 'server');
   assert.doesNotMatch(JSON.stringify(config.bundle.resources), /plugins\/data-secure\/server/u);

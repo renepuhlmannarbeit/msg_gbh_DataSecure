@@ -44,18 +44,21 @@ function markdownCells(line) {
   return cells;
 }
 
-function promoteExplicitSensitiveTableHeaders(markdown, literalHeaders = false) {
-  const sourceLines = String(markdown || '').split('\n');
+function sensitiveTableHeaderPlan(markdown, literalHeaders) {
+  const source = String(markdown || '');
+  const sourceLines = source.split('\n');
   // The direct OOXML parser separates rendered table rows with one empty
   // Markdown line. Compact only blanks between two table rows so the privacy
   // table grammar sees the same structure as the Standalone converter while
   // all non-table whitespace remains untouched.
-  const lines = sourceLines.filter((line, index) => !(line.trim() === '' &&
+  // Line ordinals, not per-character maps or duplicate line objects, retain
+  // exact origin identities while keeping the existing bounded text budget.
+  const lines = sourceLines.map((_line, index) => index).filter(index => !(sourceLines[index].trim() === '' &&
     markdownCells(sourceLines[index - 1]) && markdownCells(sourceLines[index + 1])));
   for (let index = 0; index + 2 < lines.length; index++) {
-    const generated = markdownCells(lines[index]);
-    const separator = markdownCells(lines[index + 1]);
-    const sourceHeader = markdownCells(lines[index + 2]);
+    const generated = markdownCells(sourceLines[lines[index]]);
+    const separator = markdownCells(sourceLines[lines[index + 1]]);
+    const sourceHeader = markdownCells(sourceLines[lines[index + 2]]);
     if (!generated || !separator || !sourceHeader || generated.length !== separator.length ||
       generated.length !== sourceHeader.length) continue;
     if (!generated.every((value, column) => value === `Spalte ${column + 1}`) ||
@@ -69,7 +72,54 @@ function promoteExplicitSensitiveTableHeaders(markdown, literalHeaders = false) 
     lines[index] = lines[index + 2];
     lines.splice(index + 2, 1);
   }
-  return lines.join('\n');
+  return { source, sourceLines, lines, markdown: lines.map(index => sourceLines[index]).join('\n') };
+}
+
+function promoteExplicitSensitiveTableHeaders(markdown, literalHeaders = false) {
+  return sensitiveTableHeaderPlan(markdown, literalHeaders).markdown;
+}
+
+function remapTableOcrContacts(plan, contacts, sourceType) {
+  const { validateContacts } = require('./ocr-contact-review');
+  validateContacts(contacts, plan.source, sourceType);
+  let lineIndex = 0, sourceStart = 0;
+  const located = contacts.map(contact => {
+    // Contacts are validated in source order and never cross a line. Retained
+    // line ordinals carry exact UTF-16 provenance even when a header is moved.
+    // No search by value: identical contacts/images must remain distinct.
+    while (lineIndex < plan.sourceLines.length &&
+        sourceStart + plan.sourceLines[lineIndex].length <= contact.start) {
+      sourceStart += plan.sourceLines[lineIndex].length + 1;
+      lineIndex++;
+    }
+    const line = plan.sourceLines[lineIndex];
+    if (line === undefined || contact.start < sourceStart ||
+        contact.end > sourceStart + line.length) throw new SourceExtractionError('OCR_CONTACT_REVIEW_INVALID');
+    return { contact, lineIndex, sourceStart };
+  });
+  // Only contact-bearing source lines need a target entry (at most 5,000),
+  // independently of the number of unrelated source lines.
+  const targetStarts = new Map(located.map(item => [item.lineIndex, undefined]));
+  let targetStart = 0;
+  for (const index of plan.lines) {
+    if (targetStarts.has(index)) targetStarts.set(index, targetStart);
+    targetStart += plan.sourceLines[index].length + 1;
+  }
+  const remapped = located.map(({ contact, lineIndex: originalLine, sourceStart: originalStart }) => {
+    const target = targetStarts.get(originalLine);
+    if (target === undefined) throw new SourceExtractionError('OCR_CONTACT_REVIEW_INVALID');
+    const delta = target - originalStart;
+    const mapped = { ...contact, start: contact.start + delta, end: contact.end + delta };
+    if (plan.markdown.slice(mapped.start, mapped.end) !== plan.source.slice(contact.start, contact.end)) {
+      throw new SourceExtractionError('OCR_CONTACT_REVIEW_INVALID');
+    }
+    return Object.freeze(mapped);
+  }).sort((left, right) => left.start - right.start);
+  // Deleted generated lines cannot silently discard an OCR corridor. Moving a
+  // real header can reorder corridors; the unchanged strict validator checks
+  // the complete output map again, including overlap and private image limits.
+  validateContacts(remapped, plan.markdown, sourceType);
+  return Object.freeze(remapped);
 }
 
 function extensionsForChannel(productChannel) {
@@ -248,8 +298,12 @@ async function extractSourceForPrivacy(bytes, extension, options = {}) {
     failure.code = 'FORMAT_COVERAGE_UNVERIFIED';
     throw failure;
   }
+  const tablePlan = ['docx', 'xlsx', 'pptx'].includes(expectedType)
+    ? sensitiveTableHeaderPlan(extraction.markdown, Boolean(contentOptions)) : null;
   const privacyMarkdown = contentOptions && expectedType === 'csv' ? csvPrivacyMarkdown(bytes)
-    : ['docx', 'xlsx', 'pptx'].includes(expectedType) ? promoteExplicitSensitiveTableHeaders(extraction.markdown, Boolean(contentOptions)) : extraction.markdown;
+    : tablePlan ? tablePlan.markdown : extraction.markdown;
+  const ocrContacts = productChannel === 'standalone' && extraction.ocr_contacts
+    ? tablePlan ? remapTableOcrContacts(tablePlan, extraction.ocr_contacts, expectedType) : extraction.ocr_contacts : undefined;
   const neutral = createSourceExtraction({ source_type: expectedType,
     markdown: privacyMarkdown, coverage, ...(contentOptions ? { content_options: contentOptions } : {}) }, RESOURCE_LIMITS.MAX_TEXT_CHARS);
   if (!neutral.markdown.trim() || neutral.coverage.reason_codes.includes('OCR_TEXT_EMPTY')) {
@@ -265,7 +319,7 @@ async function extractSourceForPrivacy(bytes, extension, options = {}) {
     sourceExtractionCoverage: neutral.coverage,
     ...(contentOptions ? { sourceExtraction: neutral,
       ...(extraction.private_document_metadata ? { privateDocumentMetadata: extraction.private_document_metadata } : {}) } : {}),
-    ...(productChannel === 'standalone' && extraction.ocr_contacts ? { ocrContacts: extraction.ocr_contacts } : {})
+    ...(ocrContacts ? { ocrContacts } : {})
   });
   return contentOptions ? validatePrivacyExtractionForOptions(result, contentOptions, expectedType) : result;
 }

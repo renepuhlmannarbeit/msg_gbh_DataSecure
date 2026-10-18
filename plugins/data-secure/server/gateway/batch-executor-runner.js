@@ -1,7 +1,8 @@
 'use strict';
 
 const { SafeError } = require('../runtime');
-const { notProcessedDocumentResult } = require('./document-result-grade');
+const { notProcessedDocumentResult, isDocumentResultReasonCode } = require('./document-result-grade');
+const { ownErrorCode, recordBatchExecutionFailure, documentStabilizationBlocked } = require('./batch-execution-diagnostic');
 const { appendMapping, STOPPED } = require('./mapping');
 const { classifyPrepublicationError, applyRetryBudget } = require('./prepublication-error');
 const { isMarkdownBatch } = require('../core/processing-mode');
@@ -26,21 +27,27 @@ function createBatchExecutorRunner(options = {}) {
   const deliveryPendingStatus = options.deliveryPendingStatus || 'delivery_pending';
   const maxBatchFiles = options.maxBatchFiles || 100;
   const pauseRequested = options.pauseRequested || (() => false);
+  const recordFailure = (phase, error) => {
+    try { (options.recordBatchFailure || recordBatchExecutionFailure)(phase, error); }
+    catch { /* fixed evidence never changes processing or release */ }
+  };
 
   function isPureConversion(state) {
     return isMarkdownBatch(state);
   }
 
-  // A worker-level exception can happen outside the per-document catch, for
-  // example while restoring a policy-bound pseudonym context. Leaving the
-  // claimed item as `pending` or `processing` would advertise an endless
-  // Continue loop. Convert every still-open item into the same bounded error
-  // policy used by the normal item processor. Published and mapping-only work
-  // is deliberately untouched because it has its own idempotent recovery.
+  // A worker/control failure is not a document decision for unstarted sources.
+  // Only an explicitly coded document failure may stabilize an actually active,
+  // unpublished item. Unknown/ownership faults remain failclosed checkpoints
+  // for explicit recovery; pending/retryable/published work is never demoted.
   function stabilizeUnhandledFailure(token, error) {
+    if (documentStabilizationBlocked(error)) return;
+    const code = ownErrorCode(error);
+    if (code === 'INTERNAL_FAILURE' || !(isDocumentResultReasonCode(code) || retryableCodes.has(code))) return;
     const state = readState(token);
     const conversion = isPureConversion(state);
-    const affected = state.items.filter((item) => ['pending', 'processing', 'retryable'].includes(item.status));
+    const affected = state.items.filter((item) => item.status === 'processing' &&
+      !Object.hasOwn(item, 'package_id') && !Object.hasOwn(item, 'artifact_id'));
     if (!affected.length) return;
     const stopped = [];
     for (const item of affected) {
@@ -115,11 +122,14 @@ function createBatchExecutorRunner(options = {}) {
     if (!liveLocalExecutor(claimed) || claimed.local_executor_pid !== executorPid) {
       throw new ErrorType('Der lokale Stapelprozessor besitzt keine gültige Ausführungsberechtigung.');
     }
-    let lastProgress = publicProgress(claimed);
     let interrupted = false;
     let lifecycleEntered = false;
-    let primaryError = null;
+    let primaryFailed = false;
+    let failurePhase = 'processing';
     try {
+      // Progress can fail while acquiring its read guard. The validated lease
+      // still belongs to this executor and must pass through exact cleanup.
+      let lastProgress = publicProgress(claimed);
       if (!Array.isArray(claimed.items) || claimed.items.length < 1 || claimed.items.length > maxBatchFiles) {
         throw new ErrorType('Der lokale Stapelzustand ist ungültig.');
       }
@@ -143,7 +153,9 @@ function createBatchExecutorRunner(options = {}) {
           const state = readState(token);
           const pending = state.items.find((item) => item.status === deliveryPendingStatus);
           if (!pending) break;
+          failurePhase = 'local_delivery_verify';
           lastProgress = finalizePublishedPackageLocally(token, pending.artifact_id || pending.package_id, { ...batchDeps, executorPid });
+          failurePhase = 'processing';
           continue;
         }
         if (lastProgress.mapping_pending > 0) {
@@ -166,14 +178,17 @@ function createBatchExecutorRunner(options = {}) {
           break;
         }
         if (typeof result.package_id === 'string' || typeof result.artifact_id === 'string') {
+          failurePhase = 'local_delivery_verify';
           lastProgress = finalizePublishedPackageLocally(token, result.artifact_id || result.package_id, { ...batchDeps, executorPid });
+          failurePhase = 'processing';
           continue;
         }
         const after = `${lastProgress.completed}:${lastProgress.remaining}:${lastProgress.delivery_pending}`;
         if (before === after) break;
       }
     } catch (error) {
-      primaryError = error;
+      primaryFailed = true;
+      recordFailure(failurePhase, error);
       if (lifecycleEntered && !String(error?.code || '').startsWith('STANDALONE_PAUSE_')) {
         try { stabilizeUnhandledFailure(token, error); }
         catch { /* preserve the primary failure; recovery will see the last durable state */ }
@@ -181,11 +196,13 @@ function createBatchExecutorRunner(options = {}) {
       throw error;
     } finally {
       try {
-        if (releaseLocalBatchExecutor(token, executorPid) !== true && !primaryError) {
-          throw new ErrorType('Der lokale Stapelprozessor konnte seine Ausführungsberechtigung nicht sicher freigeben.');
+        if ((await releaseLocalBatchExecutor(token, executorPid)) !== true) {
+          throw Object.assign(new ErrorType('Der lokale Stapelprozessor konnte seine Ausführungsberechtigung nicht sicher freigeben.'),
+            { code: 'STANDALONE_OWNERSHIP_CONTROL_UNCONFIRMED' });
         }
       } catch (releaseError) {
-        if (!primaryError) throw releaseError;
+        recordFailure('executor_lease_release', releaseError);
+        if (!primaryFailed) throw releaseError;
       }
     }
     // Publication and stopped-item paths already attempt this commit. Reconcile

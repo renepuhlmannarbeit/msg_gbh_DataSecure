@@ -296,6 +296,13 @@ function validateParserResult(value, expectedExt) {
 }
 
 async function convertDocument(source, options = {}) {
+  if (process.platform === 'darwin') {
+    // Old journals without content_options must stop, not parse documents in a
+    // capability-bearing Core. No automatic journal rewrite or policy upgrade.
+    if (process.env.DATASECURE_NATIVE_EXPORT_CHANNEL === '1')
+      throw safeError('Alte lokale Läufe benötigen den getrennten Konverter.', 'PARSER_ISOLATION_FAILED');
+    require('./core/macos-static-ownership-guard').assertParserCore('PARSER_ISOLATION_FAILED');
+  }
   if (options.signal?.aborted) {
     throw safeError('Der isolierte Dokumentparser wurde auf Anforderung beendet.', 'REQUEST_CANCELLED');
   }

@@ -30,7 +30,7 @@ fn receive_body(state: &mut PublicationState, op: &crate::native_export_broker::
     data: &Path, guard: Option<&ipc_transport::NativeGuard>, reporter: Option<&ExportReporter>) -> std::io::Result<&'static str> {
     let invalid = || std::io::Error::other("AI_EXPORT_CONFLICT");
     let file = op.files.get(chunk.index).ok_or_else(invalid)?;
-    if file.bytes > 32_000_000 || chunk.hex.len() > 2 * 65536 || chunk.hex.len() % 2 != 0 ||
+    if file.bytes > 32_000_000 || chunk.hex.len() > 2 * 65536 || !chunk.hex.len().is_multiple_of(2) ||
         !chunk.hex.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)) ||
         chunk.hex.is_empty() && file.bytes != 0 { return Err(invalid()); }
     if state.body.is_none() {
@@ -40,7 +40,7 @@ fn receive_body(state: &mut PublicationState, op: &crate::native_export_broker::
     let (index, bytes) = state.body.as_mut().ok_or_else(invalid)?;
     if *index != chunk.index || bytes.len() != chunk.offset ||
         bytes.len().checked_add(chunk.hex.len() / 2).ok_or_else(invalid)? > file.bytes as usize { return Err(invalid()); }
-    for pair in chunk.hex.as_bytes().chunks_exact(2) {
+    for pair in chunk.hex.as_bytes().as_chunks::<2>().0 {
         let digit = |v: u8| if v.is_ascii_digit() { v - b'0' } else { v - b'a' + 10 };
         bytes.push(digit(pair[0]) * 16 + digit(pair[1]));
     }

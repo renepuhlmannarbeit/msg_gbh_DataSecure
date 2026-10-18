@@ -48,6 +48,7 @@ const {
 const { anonymizePersonnel } = require('./personnel');
 const { reviewedPersonRanges, importedSourceMarkerCandidates } = require('./residual-person-review');
 const { findStructuredSpans, scanStructured, replaceStructured } = require('./structured');
+const { scanNumericIdentifierResiduals } = require('./numeric-identifier-residual');
 const { placeholderSpans, maskPlaceholders, applySpans } = require('./spans');
 const {
   credentialContextSpans,
@@ -830,6 +831,11 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
     .filter((f) => !(f.type === 'URL' && isProtectedProfessionalDomain(clean,f.start,f.end,credentialRanges)))
     .filter((f) => f.type === 'CREDENTIAL' || !insideCredentialValue(f.start, f.end))
     .map((f) => ({ type: f.type, text: f.type === 'CREDENTIAL' ? '' : f.text }));
+  for (const finding of scanNumericIdentifierResiduals(clean)) {
+    if (insideCredentialValue(finding.start, finding.end)) continue;
+    if (!out.some((current) => current.type === finding.type && current.text === finding.text))
+      out.push({ type: finding.type, text: finding.text });
+  }
   // This dependency is internal and is always the actual canonical parser
   // source in the publication workflow, never a user/MCP provenance claim.
   // Inspect imported variable-payload labels (numeric IDs as well as HMACs)

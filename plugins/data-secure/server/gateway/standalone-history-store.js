@@ -16,6 +16,7 @@ const { createBatchProgress } = require('./batch-progress');
 const { RESOURCE_LIMITS } = require('../resource-limits');
 const { createBatchActiveLock } = require('./batch-active-lock');
 const { withDocumentControl } = require('./standalone-document-control');
+const historyWindow = require('./standalone-history-window');
 
 const ID_RE = /^[a-f0-9]{64}$/u;
 const EXPORT_RE = /^re_[a-f0-9]{32}$/u;
@@ -170,6 +171,10 @@ function recordStandaloneState(state, options = {}) {
     catch { return { ...summary, ...noticeSummary(previous, summary.result_count) }; /* preserve disk evidence; project current facts */ }
   }
   writeJson(summary.batch_id, summary);
+  // Display membership is not a prerequisite for preserving a journal before
+  // expiry, nor may its failure skip document/identity worker hooks.
+  try { historyWindow.registerHistory(summary, historyWindowMigration); }
+  catch { /* the independently read UI index fails closed; durable run facts remain valid */ }
   if (summary.processing_mode === 'markdown-and-anonymize' && summary.complete) {
     if (options.reconstructContentNotices !== false && state.schema === 'datasecure-batch/7') {
       // This is the actual terminal state-write path, not a status/list poll.
@@ -183,21 +188,143 @@ function recordStandaloneState(state, options = {}) {
   }
   return summary;
 }
-function readStandaloneSummaries({ includeContentNotices = true } = {}) {
-  let files = [];
-  try { files = fs.readdirSync(historyRoot(), { withFileTypes: true }); } catch { /* live journals still available */ }
+function readStandaloneSummaries({ includeContentNotices = true, omitBatchIds = [], batchIds = null } = {}) {
+  // Only a caller's already validated, current journal projection can make its
+  // duplicate compact summary unnecessary. This set lives for one call; it is
+  // neither a persisted inventory nor an authority for a later result action.
+  const omitted = new Set(Array.isArray(omitBatchIds)
+    ? omitBatchIds.filter(value => typeof value === 'string' && ID_RE.test(value)) : []);
+  let files, directory;
+  try {
+    // Creating/validating this private namespace once avoids repeating the full
+    // parent walk for every retained row. Pin the original namespace for the
+    // whole read, so a replaced parent cannot contribute a mixed projection.
+    directory = bindDirectory(historyRoot());
+    files = batchIds === null ? fs.readdirSync(directory.path, { withFileTypes: true })
+      : batchIds.map(id => ({ name: `${validateBatchId(id)}.json`, isFile: () => true }));
+    assertDirectory(directory);
+  } catch { return []; } // live journals still available
   const summaries = [];
   for (const entry of files) {
     if (!entry.isFile() || !/^[a-f0-9]{64}\.json$/u.test(entry.name)) continue;
+    if (omitted.has(entry.name.slice(0, -5))) continue;
     try {
-      const value = readJson(path.join(historyRoot(), entry.name));
+      const value = readJson(path.join(directory.path, entry.name));
       if (validSummary(value) && exportId(value.batch_id) === value.export_id && entry.name === `${value.batch_id}.json`) {
         summaries.push(includeContentNotices && value.processing_mode === 'markdown-and-anonymize' && value.complete
           ? { ...value, ...readStandaloneContentNoticeSummary(value.batch_id, value.result_count) } : value);
       }
     } catch { /* damaged metadata never becomes a row or action */ }
   }
-  return summaries;
+  try { assertDirectory(directory); return summaries; }
+  catch { return []; } // never publish rows borrowed from a replacement namespace
+}
+function historyWindowMigration() {
+  // Old installations have random journal IDs. Discover dates ONCE from small
+  // retained summaries, not from full journals or document/export manifests.
+  // Recovery separately preserves a summary before it can retire a journal.
+  const directory = bindDirectory(historyRoot());
+  const names = () => fs.readdirSync(directory.path).filter(name => /^[a-f0-9]{64}\.json$/u.test(name)).sort();
+  const initial = names(), rows = [];
+  if (initial.length > 10000) throw failure('STANDALONE_HISTORY_UNAVAILABLE');
+  let bytes = 0;
+  for (const name of initial) {
+    const file = path.join(directory.path, name);
+    let stat;
+    try { stat = fs.lstatSync(file, { bigint: true }); }
+    catch (error) { if (error?.code === 'ENOENT') continue; throw error; }
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.size < 1n || stat.size > 32768n)
+      continue; // an unsafe/damaged old projection is not a lookup candidate
+    bytes += Number(stat.size);
+    if (bytes > 64 * 1024 * 1024) throw failure('STANDALONE_HISTORY_UNAVAILABLE');
+    let value;
+    try { value = readJson(file); } catch { continue; } // damaged projection is not a candidate
+    if (validSummary(value) && value.batch_id === name.slice(0, -5) && exportId(value.batch_id) === value.export_id)
+      rows.push({ batch_id: value.batch_id, created_at: new Date(value.created_at).toISOString() });
+  }
+  const knownExports = new Set(rows.map(row => exportId(row.batch_id)));
+  const exportsPath = path.join(dataRoot(), 'result-export-state');
+  let exportsDirectory;
+  try { exportsDirectory = bindDirectory(exportsPath); }
+  catch (error) { if (error?.code !== 'ENOENT') throw error; }
+  if (exportsDirectory) {
+    const exportNames = () => fs.readdirSync(exportsDirectory.path).filter(name => /^re_[a-f0-9]{32}\.json$/u.test(name)).sort();
+    const initialExports = exportNames();
+    if (initial.length + initialExports.length > 10000) throw failure('STANDALONE_HISTORY_UNAVAILABLE');
+    for (const name of initialExports) {
+      if (knownExports.has(name.slice(0, -5))) continue;
+      let record;
+      try {
+        const raw = readBoundFile(path.join(exportsDirectory.path, name), { directory: exportsDirectory, maximum: 1024 * 1024, minimum: 1 });
+        bytes += raw.length;
+        if (bytes > 64 * 1024 * 1024) throw failure('STANDALONE_HISTORY_UNAVAILABLE');
+        record = JSON.parse(raw);
+      } catch (error) {
+        if (error?.code === 'STANDALONE_HISTORY_UNAVAILABLE') throw error;
+        continue;
+      }
+      // Search metadata, not a validated export receipt. Only the selected
+      // five are later resolved with the full existing owner/anchor reader.
+      const stamp = /^Lauf-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})-[a-f0-9]{8}$/u.exec(record?.run_directory);
+      if (record?.product_channel !== 'standalone' || !stamp || !Array.isArray(record.items) ||
+          !/^datasecure-result-export\/[1-6]$/u.test(record.schema)) continue;
+      let created_at = `${stamp[1]}-${stamp[2]}-${stamp[3]}T${stamp[4]}:${stamp[5]}:${stamp[6]}.000Z`;
+      if (!Number.isFinite(Date.parse(created_at)) || new Date(created_at).toISOString() !== created_at) continue;
+      const id = name.slice(0, -5);
+      let actualBatch = ID_RE.test(record.batch_id || '') && exportId(record.batch_id) === id ? record.batch_id : null;
+      if (!actualBatch) {
+        try {
+          const ownerBytes = readBoundFile(path.join(dataRoot(), 'result-export-owners', name), { maximum: 4096, minimum: 1 });
+          bytes += ownerBytes.length;
+          const owner = JSON.parse(ownerBytes);
+          if (owner.schema === 'datasecure-content-export-owner/1' && owner.product_channel === 'standalone' &&
+              owner.record_name === name && ID_RE.test(owner.batch_id || '') && exportId(owner.batch_id) === id)
+            actualBatch = owner.batch_id;
+        } catch { /* no lookup authority is invented from an unreadable owner */ }
+      }
+      if (bytes > 64 * 1024 * 1024) throw failure('STANDALONE_HISTORY_UNAVAILABLE');
+      if (actualBatch) {
+        try {
+          const rawJournal = readBoundFile(path.join(dataRoot(), 'batches', `${actualBatch}.json`), { maximum: 2 * 1024 * 1024, minimum: 1 });
+          bytes += rawJournal.length;
+          const journal = JSON.parse(rawJournal);
+          if (journal.token === actualBatch && journal.product_channel === 'standalone' && typeof journal.created_at === 'string' && Number.isFinite(Date.parse(journal.created_at)))
+            created_at = new Date(journal.created_at).toISOString();
+        } catch { /* an export-only search date is not a journal completion proof */ }
+        if (bytes > 64 * 1024 * 1024) throw failure('STANDALONE_HISTORY_UNAVAILABLE');
+        rows.push({ batch_id: actualBatch, created_at }); continue;
+      }
+      const batch_id = crypto.createHash('sha256').update(`standalone-history:${id}`).digest('hex');
+      rows.push({ batch_id, created_at, legacy_export_id: id });
+    }
+    assertDirectory(exportsDirectory);
+    if (JSON.stringify(exportNames()) !== JSON.stringify(initialExports)) throw failure('STANDALONE_HISTORY_UNAVAILABLE');
+    assertDirectory(exportsDirectory);
+  }
+  assertDirectory(directory);
+  if (JSON.stringify(names()) !== JSON.stringify(initial)) throw failure('STANDALONE_HISTORY_UNAVAILABLE');
+  assertDirectory(directory);
+  const selected = historyWindow.selectHistoryEntries(rows);
+  // Persist only selected legacy locators, not thousands of old lookup files.
+  // These selected locators outlive later eviction, without becoming approval,
+  // directory-binding, ownership or replay authority.
+  for (const row of selected) if (row.legacy_export_id)
+    writeJson(`legacy-${row.batch_id}`, { schema: 'datasecure-standalone-history-locator/1',
+      batch_id: row.batch_id, legacy_export_id: row.legacy_export_id });
+  assertDirectory(directory); return selected;
+}
+function readRecentHistory() { return historyWindow.readRecentHistory(historyWindowMigration); }
+function readHistoryLocator(batchId) {
+  validateBatchId(batchId);
+  try {
+    const directory = bindDirectory(path.join(dataRoot(), 'standalone-run-history'));
+    const row = JSON.parse(readBoundFile(path.join(directory.path, `legacy-${batchId}.json`), { directory, maximum: 4096, minimum: 1 }));
+    if (row?.schema !== 'datasecure-standalone-history-locator/1' || row.batch_id !== batchId ||
+        Object.keys(row).sort().join(',') !== 'batch_id,legacy_export_id,schema' || !EXPORT_RE.test(row.legacy_export_id) ||
+        crypto.createHash('sha256').update(`standalone-history:${row.legacy_export_id}`).digest('hex') !== batchId)
+      throw failure('STANDALONE_HISTORY_UNAVAILABLE');
+    return row.legacy_export_id;
+  } catch (error) { if (error?.code === 'ENOENT') return null; throw failure('STANDALONE_HISTORY_UNAVAILABLE'); }
 }
 function directoryBinding(target) {
   if (typeof target !== 'string' || !path.isAbsolute(target)) throw failure('STANDALONE_RESULTS_MISSING');
@@ -376,5 +503,6 @@ function inspectBoundRun(id, expectedRunName) {
 function boundRun(id, expectedRunName) { return inspectBoundRun(id, expectedRunName).path || ''; }
 
 module.exports = { SCHEMA, failure, validateBatchId, historyProgress, validSummary, summarizeState,
+  readRecentHistory, readHistoryLocator,
   readStandaloneSummaries, readStandaloneSummary, readStandaloneContentNoticeSummary, recordStandaloneContentNoticeSummary,
   recordStandaloneState, recordStandaloneExport, captureStandaloneExports, boundRun, inspectBoundRun };

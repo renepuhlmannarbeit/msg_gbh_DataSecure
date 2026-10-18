@@ -6,10 +6,18 @@
 const XML_NS = 'http://www.w3.org/XML/1998/namespace';
 const XMLNS_NS = 'http://www.w3.org/2000/xmlns/';
 const SPACE = /[ \t\r\n]/u;
-const INVALID_CHAR = /[^\u0009\u000a\u000d\u0020-\ud7ff\ue000-\ufffd\u{10000}-\u{10ffff}]/u;
+// XML 1.0 Char plus the existing OOXML product restriction against U+007F..
+// U+009F. Apply the same policy to source literals (including CDATA/comments/
+// attributes) and decoded references before a renderer can normalize them.
+const INVALID_CHAR = /[^\u0009\u000a\u000d\u0020-\u007e\u00a0-\ud7ff\ue000-\ufffd\u{10000}-\u{10ffff}]/u;
+
+function assertXmlCharacters(source, error) {
+  if (typeof source !== 'string' || INVALID_CHAR.test(source)) throw error();
+}
 
 function readXml(source, { decode, error, start, text, end }) {
-  if (typeof source !== 'string' || !source || INVALID_CHAR.test(source)) throw error();
+  assertXmlCharacters(source, error);
+  if (!source) throw error();
   const tag = /<(\/)?([A-Za-z_][\w.:-]*)(?=[ \t\r\n/>])((?:[^<>"']|"[^"<]*"|'[^'<]*')*)>/y;
   const attribute = /([A-Za-z_][\w.:-]*)[ \t\r\n]*=[ \t\r\n]*(?:"([^"<]*)"|'([^'<]*)')/y;
   const stack = [];
@@ -35,7 +43,9 @@ function readXml(source, { decode, error, start, text, end }) {
     }
     if (source.startsWith('<!--', cursor)) {
       const limit = source.indexOf('-->', cursor + 4);
-      if (limit < 0 || source.slice(cursor + 4, limit).includes('--') || source[limit - 1] === '-') throw error();
+      if (limit < 0) throw error();
+      const body = source.slice(cursor + 4, limit);
+      if (body.includes('--') || body.endsWith('-')) throw error();
       cursor = limit + 3;
       continue;
     }
@@ -121,4 +131,4 @@ function readXml(source, { decode, error, start, text, end }) {
   return root;
 }
 
-module.exports = Object.freeze({ readXml });
+module.exports = Object.freeze({ readXml, assertXmlCharacters });

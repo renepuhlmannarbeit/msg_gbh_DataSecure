@@ -4,7 +4,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { createSuite } = require('./helpers');
-const { csvField, appendMapping, mappingPath, mappingLockPath, HEADER, LEGACY_HEADER } = require('../plugins/data-secure/server/gateway/mapping');
+const { csvField, appendMapping, mappingPath, mappingLockPath, normalizeExistingMapping, HEADER, LEGACY_HEADER } = require('../plugins/data-secure/server/gateway/mapping');
 const { releasedDocumentResult, notProcessedDocumentResult } = require('../plugins/data-secure/server/gateway/document-result-grade');
 
 const PACKAGE_A = `ds_${'1'.repeat(32)}`;
@@ -25,6 +25,78 @@ test('formula-looking fields are neutralized even after leading spreadsheet whit
   }
   assert.strictEqual(csvField(' normal.txt'), '" normal.txt"');
   assert.strictEqual(csvField('normal.txt'), '"normal.txt"');
+});
+
+test('formula-safe and literal-apostrophe names have distinct idempotent commits', () => {
+  const exportsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-mapping-encoding-'));
+  const roots = () => ({ exports: exportsRoot });
+  try {
+    const names = ['-report.txt', '=report.txt', '+report.txt', '@report.txt', ' @report.txt',
+      '\uFEFF=report.txt', "'-report.txt", "''-report.txt", "'normal.txt", 'report.txt'];
+    assert.equal(new Set(names.map(csvField)).size, names.length);
+    for (const [index, name] of names.entries()) {
+      const id = `ds_${(index + 1).toString(16).padStart(32, '0')}`;
+      assert.equal(appendMapping(name, id, undefined, { roots, documentResult: COMPLETE }), true);
+      const committed = fs.readFileSync(mappingPath({ roots }), 'utf8');
+      assert.equal(appendMapping(name, id, undefined, { roots, documentResult: COMPLETE }), false);
+      assert.equal(fs.readFileSync(mappingPath({ roots }), 'utf8'), committed);
+      const reference = (index + 100).toString(16).padStart(32, '0');
+      const stopped = { roots, mappingReference: reference, documentResult: notProcessedDocumentResult('SOURCE_TEXT_INVALID') };
+      assert.equal(appendMapping(name, '', 'sicher gestoppt', stopped), true);
+      assert.equal(appendMapping(name, '', 'sicher gestoppt', stopped), false);
+      assert.throws(() => appendMapping(name + '.other', id, undefined, { roots, documentResult: COMPLETE }), /widersprüchlichen Ergebnisgrad/u);
+    }
+    assert.throws(() => appendMapping("'-report.txt", `ds_${'1'.padStart(32, '0')}`, undefined,
+      { roots, documentResult: COMPLETE }), /widersprüchlichen Ergebnisgrad/u);
+  } finally {
+    // This fixture owns exactly one CSV and no nested user data.
+    const entries = fs.readdirSync(exportsRoot);
+    assert.deepEqual(entries, [path.basename(mappingPath({ roots }))]);
+    fs.unlinkSync(mappingPath({ roots })); fs.rmdirSync(exportsRoot);
+  }
+});
+
+test('legacy header migration quotes protected bytes without applying apostrophe protection again', () => {
+  const names = ["'-report.txt", "''-report.txt", "'normal.txt", "' @report.txt", 'normal.txt'];
+  // These are already parsed legacy CSV values, not unescaped source names.
+  const quote = text => `"${text.replace(/"/g, '""')}"`;
+  const legacy = LEGACY_HEADER + names.map((name, index) =>
+    [name, `ds_${(index + 1).toString(16).padStart(32, '0')}`, 'freigegeben', 'Lokale Zuordnung.']
+      .map(quote).join(';')).join('\r\n') + '\r\n';
+  const upgraded = normalizeExistingMapping(legacy);
+  assert.deepEqual(upgraded.rows.map(row => row[0]), names);
+  const reread = normalizeExistingMapping(upgraded.text);
+  assert.deepEqual(reread.rows.map(row => row[0]), names);
+  assert.equal(normalizeExistingMapping(reread.text).text, upgraded.text);
+});
+
+test('six-column legacy apostrophe rows retry without conflating newly encoded names', () => {
+  const exportsRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-mapping-v1-retry-'));
+  const roots = () => ({ exports: exportsRoot });
+  const target = mappingPath({ roots });
+  const quote = text => `"${text.replace(/"/g, '""')}"`;
+  const row = (name, id, note = 'Lokale Zuordnung; nicht an Claude übertragen.') =>
+    [name, id, 'Vollständig verarbeitet', '', '', note].map(quote).join(';') + '\r\n';
+  try {
+    const legacy = HEADER + row("'report.txt", PACKAGE_A) + row("''report.txt", PACKAGE_B);
+    fs.writeFileSync(target, legacy, { flag: 'wx' });
+    assert.equal(appendMapping("'report.txt", PACKAGE_A, undefined, { roots, documentResult: COMPLETE }), false);
+    assert.equal(appendMapping("''report.txt", PACKAGE_B, undefined, { roots, documentResult: COMPLETE }), false);
+    assert.throws(() => appendMapping("'report.txt", PACKAGE_B, undefined, { roots, documentResult: COMPLETE }), /widersprüchlichen/u);
+    assert.equal(fs.readFileSync(target, 'utf8'), legacy);
+    fs.writeFileSync(target, HEADER + row("'-report.txt", PACKAGE_A));
+    for (const ambiguous of ['-report.txt', "'-report.txt"]) {
+      assert.throws(() => appendMapping(ambiguous, PACKAGE_A, undefined, { roots, documentResult: COMPLETE }), /widersprüchlichen/u);
+    }
+    const reference = '7'.repeat(32), stopped = notProcessedDocumentResult('SOURCE_TEXT_INVALID');
+    const oldStopped = HEADER + ["'stopped.txt", '', 'Sicher nicht verarbeitet', '', 'SOURCE_TEXT_INVALID',
+      `Lokale Zuordnung ${reference}; nicht an Claude übertragen.`].map(quote).join(';') + '\r\n';
+    fs.writeFileSync(target, oldStopped);
+    assert.equal(appendMapping("'stopped.txt", '', 'sicher gestoppt', { roots, mappingReference: reference, documentResult: stopped }), false);
+    assert.equal(fs.readFileSync(target, 'utf8'), oldStopped);
+  } finally {
+    fs.unlinkSync(target); fs.rmdirSync(exportsRoot);
+  }
 });
 
 test('a linked mapping target is refused before external content can be read or replaced', () => {

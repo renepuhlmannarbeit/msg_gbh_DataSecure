@@ -1,0 +1,191 @@
+name: Manual version-bound macOS static Core producer
+
+on:
+  workflow_call:
+    inputs:
+      target:
+        type: string
+        default: both
+        required: true
+      confirm_private_runner_minutes:
+        type: boolean
+        default: false
+        required: true
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Native architecture to produce; both starts two macOS jobs.
+        type: choice
+        options: [both, macos-arm64, macos-x64]
+        default: both
+        required: true
+      confirm_private_runner_minutes:
+        description: I authorize the included or billable private-repository macOS build/test minutes.
+        type: boolean
+        default: false
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: standalone-static-core-${{ github.ref }}-${{ inputs.target }}
+  cancel-in-progress: false
+
+jobs:
+  select-target:
+    if: ${{ inputs.confirm_private_runner_minutes == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+    steps:
+      - id: select
+        env:
+          REQUESTED_TARGET: ${{ inputs.target }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          arm='{"os":"macos-15","target":"macos-arm64","arch":"arm64","archive_sha256":"61130f394c1630d211dd50aecc4353d379480f36d3ac913cd85dbba1aed585c6"}'
+          intel='{"os":"macos-15-intel","target":"macos-x64","arch":"x64","archive_sha256":"58e99022c2ff89395576cc7fd4d98cea24bb68081475d5f88b801ee8729fb026"}'
+          case "$REQUESTED_TARGET" in
+            both) matrix="{\"include\":[$arm,$intel]}" ;;
+            macos-arm64) matrix="{\"include\":[$arm]}" ;;
+            macos-x64) matrix="{\"include\":[$intel]}" ;;
+            *) exit 64 ;;
+          esac
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+
+  produce:
+    name: Native static Core (${{ matrix.target }})
+    needs: select-target
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.select-target.outputs.matrix) }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.13'
+          architecture: ${{ matrix.arch }}
+      - name: Create a fresh private build checkout, without changing existing directory permissions
+        id: private
+        shell: bash
+        env:
+          CORE_ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          umask 077
+          [[ "$GITHUB_SHA" =~ ^[a-f0-9]{40}$ ]]
+          [[ "$GITHUB_RUN_ID" =~ ^[1-9][0-9]*$ && "$GITHUB_RUN_ATTEMPT" =~ ^[1-9][0-9]*$ ]]
+          [[ "$CORE_ARCH" == arm64 || "$CORE_ARCH" == x64 ]]
+          # A normal runner home can have a harmless deny-delete ACL. Do not
+          # remove that ACL or weaken the producer policy: use a new directory
+          # below a root-owned, non-writable, non-redirected build ancestor.
+          test -d /opt && test ! -L /opt
+          task_parent="/opt/datasecure-core-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-${CORE_ARCH}"
+          test ! -e "$task_parent" && test ! -L "$task_parent"
+          sudo /usr/bin/install -d -m 700 -o "$(id -un)" -g "$(id -gn)" "$task_parent"
+          test -d "$task_parent" && test ! -L "$task_parent"
+          repository="$task_parent/repository"
+          git clone --no-hardlinks --no-checkout "$GITHUB_WORKSPACE" "$repository"
+          git -C "$repository" checkout --detach "$GITHUB_SHA"
+          test "$(git -C "$repository" rev-parse HEAD)" = "$GITHUB_SHA"
+          mkdir -m 700 "$repository/dist" "$repository/dist/macos-static-core" "$task_parent/archives"
+          echo "parent=$task_parent" >> "$GITHUB_OUTPUT"
+          echo "repository=$repository" >> "$GITHUB_OUTPUT"
+          echo "python=$(python -I -S -c 'import os,sys; print(os.path.realpath(sys.executable))')" >> "$GITHUB_OUTPUT"
+      - name: Fetch and verify the exact source and official interpreter archives
+        shell: bash
+        env:
+          TASK_PARENT: ${{ steps.private.outputs.parent }}
+          CORE_ARCH: ${{ matrix.arch }}
+          CONVERTER_SHA256: ${{ matrix.archive_sha256 }}
+        run: |
+          set -euo pipefail
+          cd "$TASK_PARENT/archives"
+          curl --fail --silent --show-error --location --retry 3 --output node-v22.23.2.tar.xz \
+            https://nodejs.org/dist/v22.23.2/node-v22.23.2.tar.xz
+          echo 'bbe768df8d5815d7fa76124052985332452e0a4742d39f32027550d1aab8f6fb  node-v22.23.2.tar.xz' | shasum -a 256 --check
+          archive="node-v22.23.2-darwin-${CORE_ARCH}.tar.gz"
+          curl --fail --silent --show-error --location --retry 3 --output "$archive" \
+            "https://nodejs.org/dist/v22.23.2/$archive"
+          echo "$CONVERTER_SHA256  $archive" | shasum -a 256 --check
+          # Extract only the one regular driver executable from the hash-pinned
+          # official archive; npm/npx links never enter the producer tree.
+          member="node-v22.23.2-darwin-${CORE_ARCH}/bin/node"
+          tar -tvf "$archive" "$member" | grep -q '^-'
+          tar -xOf "$archive" "$member" > "$TASK_PARENT/official-node"
+          chmod 700 "$TASK_PARENT/official-node"
+          "$TASK_PARENT/official-node" --version
+      - name: Compile, seal and probe the source-bound static Core
+        shell: bash
+        env:
+          TASK_PARENT: ${{ steps.private.outputs.parent }}
+          REPOSITORY: ${{ steps.private.outputs.repository }}
+          PRODUCER_PYTHON: ${{ steps.private.outputs.python }}
+          CORE_ARCH: ${{ matrix.arch }}
+          CORE_TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          test -x "$PRODUCER_PYTHON"
+          python_sha="$(shasum -a 256 "$PRODUCER_PYTHON" | awk '{print $1}')"
+          [[ "$python_sha" =~ ^[a-f0-9]{64}$ ]]
+          # The producer rejects ambient Node/Python/compiler overrides. Its
+          # own pinned contract selects Xcode, SDK, compiler and deployment ABI.
+          env -i PATH=/usr/bin:/bin:/usr/sbin:/sbin LANG=C LC_ALL=C \
+            "$TASK_PARENT/official-node" "$REPOSITORY/scripts/macos-static-core/build-driver.mjs" build \
+            --role=mutating-core --arch="$CORE_ARCH" --repository="$REPOSITORY" \
+            --source-archive="$TASK_PARENT/archives/node-v22.23.2.tar.xz" \
+            --converter-archive="$TASK_PARENT/archives/node-v22.23.2-darwin-${CORE_ARCH}.tar.gz" \
+            --output-parent="$REPOSITORY/dist/macos-static-core" --job-name="$CORE_TARGET" \
+            --jobs=3 --python="$PRODUCER_PYTHON" --python-sha256="$python_sha"
+      - name: Package exact consumer inputs and independent-review records
+        shell: bash
+        env:
+          REPOSITORY: ${{ steps.private.outputs.repository }}
+          CORE_TARGET: ${{ matrix.target }}
+        run: |
+          set -euo pipefail
+          output="$REPOSITORY/dist/macos-static-core/$CORE_TARGET"
+          test -f "$output/FINAL-CORE.json"
+          mkdir "$GITHUB_WORKSPACE/core-candidate"
+          COPYFILE_DISABLE=1 tar --format=ustar --no-xattrs --no-acls \
+            -cf "$GITHUB_WORKSPACE/core-candidate/${CORE_TARGET}-core.tar" -C "$output" \
+            datasecure-core FINAL-CORE.json BUILD-PROVENANCE.json LICENSE.node.txt
+          for record in BUILD-INTENT.json BUILD-CANDIDATE.json PREPARED-SOURCE.json COMPILE-CONTRACT.json \
+            CONFIGURE-PROCESS.json MAKE-PROCESS.json configure.log make.log; do
+            test -f "$output/$record"
+            cp "$output/$record" "$GITHUB_WORKSPACE/core-candidate/$record"
+          done
+          shasum -a 256 "$GITHUB_WORKSPACE/core-candidate/${CORE_TARGET}-core.tar"
+          {
+            echo "### Static Core candidate — NOT automatically approved"
+            echo "- Source commit: $GITHUB_SHA"
+            echo "- Target: $CORE_TARGET"
+            echo "- Local ad-hoc seal only; no Developer ID or Apple submission."
+            echo "- Approval and full native CLI/Worker/ownership/package tests remain separate gates."
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload the source-bound candidate for explicit review
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: DataSecure-Mac-Core-${{ matrix.target }}-${{ github.sha }}
+          path: core-candidate/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+      - name: Preserve failed build diagnostics without uploading build inputs or an incomplete Core
+        if: ${{ failure() && steps.private.outputs.repository != '' }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: DataSecure-Mac-Core-Failure-${{ matrix.target }}-${{ github.sha }}
+          path: |
+            ${{ steps.private.outputs.repository }}/dist/macos-static-core/${{ matrix.target }}/BUILD-*.json
+            ${{ steps.private.outputs.repository }}/dist/macos-static-core/${{ matrix.target }}/CONFIGURE-PROCESS.json
+            ${{ steps.private.outputs.repository }}/dist/macos-static-core/${{ matrix.target }}/MAKE-PROCESS.json
+            ${{ steps.private.outputs.repository }}/dist/macos-static-core/${{ matrix.target }}/configure.log
+            ${{ steps.private.outputs.repository }}/dist/macos-static-core/${{ matrix.target }}/make.log
+          if-no-files-found: warn
+          retention-days: 7

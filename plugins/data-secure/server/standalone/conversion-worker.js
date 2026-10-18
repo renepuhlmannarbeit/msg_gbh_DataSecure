@@ -69,6 +69,7 @@ function launch(runtime, sourceType, inputBytes, timeoutMs, omitDocxHeaderFooter
   const server = path.resolve(__dirname, '..');
   const script = path.join(__dirname, 'conversion-worker-child.js');
   const nodeArgs = ['--no-warnings', '--permission', `--allow-fs-read=${server}`,
+    ...(runtime.canvasNative ? [`--allow-fs-read=${runtime.canvasNative}`] : []),
     '--allow-worker', '--allow-addons', '--disable-proto=throw', '--max-old-space-size=512',
     `--require=${path.join(server, 'network-deny.cjs')}`, script, sourceType, String(inputBytes),
     ...(omitDocxHeaderFooter ? ['omit-docx-header-footer'] : []),
@@ -122,6 +123,9 @@ async function convertBuffer(bytes, extension, options = {}) {
   const invocation = launch(runtime, type, input.length, timeoutMs, omitDocxHeaderFooter, passiveObjects, options.markdownOutput, contentOptions);
   if (abortSignal?.aborted()) throw error('REQUEST_CANCELLED');
   const environment = { DISABLE_SYSTEM_FONTS_LOAD: '1', PATH: '' };
+  // Only the verified fixed macOS bundle role may select the native addon.
+  // Ambient NAPI_RS_* / NODE_* settings are deliberately not inherited.
+  if (runtime.canvasNative) environment.NAPI_RS_NATIVE_LIBRARY_PATH = runtime.canvasNative;
   for (const key of ['SystemRoot', 'WINDIR']) if (process.env[key]) environment[key] = process.env[key];
   return new Promise((resolve, reject) => {
     let child;

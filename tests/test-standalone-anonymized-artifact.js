@@ -471,6 +471,20 @@ async function main() {
     failure(() => store.readAnonymizedArtifact(f.input.package_id, f.expectation));
     store.recoverAnonymizedStages(); failure(() => store.readAnonymizedArtifact(f.input.package_id, f.expectation));
   });
+  await testAsync('a committed callback refusal remains observable privately without changing the recovery envelope', async () => {
+    const f = fixture();
+    const original = Object.assign(Error('PRIVATE_CALLBACK_PAYLOAD'), { code: 'OWNERSHIP_GUARD_BUSY' });
+    await assert.rejects(store.publishAnonymizedArtifact(f.input, { afterPublish() { throw original; } }), error => {
+      assert.equal(error.code, 'BATCH_PUBLICATION_UNCONFIRMED');
+      assert.equal(store.publicationFailureCause(error), original);
+      assert.equal(Object.hasOwn(error, 'cause'), false);
+      assert.doesNotMatch(JSON.stringify(error), /PRIVATE_CALLBACK_PAYLOAD|OWNERSHIP_GUARD_BUSY/u);
+      return true;
+    });
+    assert.equal(freshRead(f).text, f.input.markdown);
+    const foreign = Object.assign(Error('foreign'), { code: 'STANDALONE_PUBLICATION_INVALID' });
+    assert.equal(store.publicationFailureCause(foreign), foreign);
+  });
   await testAsync('links, unknown members and invalid UTF-8 do not become a verified artifact', async () => {
     const f = fixture(); await store.publishAnonymizedArtifact(f.input); const target = folder(f);
     const manifest = path.join(target, 'manifest.json'), alias = path.join(root, 'linked-synthetic-manifest.json');

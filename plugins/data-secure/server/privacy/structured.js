@@ -1,4 +1,5 @@
 'use strict';
+const { isIP } = require('node:net');
 
 const {
   EMAIL_RE,
@@ -110,6 +111,7 @@ const DETECTORS = [
   {
     type: 'CREDENTIAL',
     re: CREDENTIAL_FIELD_RE,
+    identifierView: true,
     placeholder: '[CREDENTIAL_REDACTED]',
     priority: 96,
     valueGroup: 2,
@@ -141,6 +143,7 @@ const DETECTORS = [
   {
     type: 'CREDIT_CARD',
     re: CREDIT_RE,
+    identifierView: true,
     placeholder: '[BANK_DATA_REDACTED]',
     priority: 87,
     accept: (value) => luhnValid(value)
@@ -157,12 +160,14 @@ const DETECTORS = [
   {
     type: 'DE_SOCIAL_SECURITY',
     re: DE_SV_RE,
+    identifierView: true,
     placeholder: '[ID_REDACTED]',
     priority: 84
   },
   {
     type: 'DE_TAX_ID',
     re: DE_TAX_RE,
+    identifierView: true,
     placeholder: '[ID_REDACTED]',
     priority: 83,
     accept: (value, text, index) => hasLabelBefore(text, index, DE_TAX_LABEL_RE)
@@ -170,6 +175,7 @@ const DETECTORS = [
   {
     type: 'REFERENCE_ID',
     re: LABELED_ID_RE,
+    identifierView: true,
     placeholder: '[ID_REDACTED]',
     priority: 82,
     valueGroup: 3,
@@ -180,6 +186,7 @@ const DETECTORS = [
     // identifier cell below "| Personalnummer |" belongs to that label.
     type: 'REFERENCE_ID',
     re: TABLE_ID_CELL_RE,
+    identifierView: true,
     placeholder: '[ID_REDACTED]',
     priority: 82,
     accept: (value, text, index) => {
@@ -190,6 +197,7 @@ const DETECTORS = [
   {
     type: 'DATE_OF_BIRTH',
     re: DATE_OF_BIRTH_RE,
+    identifierView: true,
     placeholder: '[DATE_REDACTED]',
     priority: 81,
     accept: (value, text, index) => hasLabelBefore(text, index, DATE_OF_BIRTH_LABEL_RE)
@@ -197,6 +205,7 @@ const DETECTORS = [
   {
     type: 'VEHICLE_PLATE',
     re: VEHICLE_PLATE_RE,
+    identifierView: true,
     placeholder: '[ID_REDACTED]',
     priority: 81,
     accept: (value, text, index) => hasLabelBefore(text, index, VEHICLE_PLATE_LABEL_RE)
@@ -224,14 +233,17 @@ const DETECTORS = [
   {
     type: 'IP',
     re: IP_RE,
+    identifierView: true,
     placeholder: '[IP_REDACTED]',
     priority: 78
   },
   {
     type: 'IPV6',
     re: IPV6_RE,
+    identifierView: true,
     placeholder: '[IP_REDACTED]',
-    priority: 78
+    priority: 78,
+    accept: value => isIP(value) === 6
   },
   {
     type: 'STREET_ADDRESS',
@@ -324,7 +336,7 @@ function findCredentialTableSpans(text) {
         // header directly: the separator and every row width were just checked.
         // No inference is made for generic headers or person-shaped cell text.
         const header = resolved?.headers[column] ?? (headers.length === 1 ? headers[0].value : null);
-        if (header === null || !CREDENTIAL_LABEL_HEADER_RE.test(header)) continue;
+        if (header === null || !CREDENTIAL_LABEL_HEADER_RE.test(identifierDetectionText(header))) continue;
         // A marker elsewhere in this credential cell cannot vouch for the
         // remaining source value. Nor is an email/person marker evidence that
         // a password was removed. Only a whole-cell credential/manual redaction

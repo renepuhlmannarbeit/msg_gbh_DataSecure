@@ -142,7 +142,7 @@ testAsync('loading a private review never claims the run purpose is missing befo
     processing_complete: true, unavailable: [], not_processed_documents: [],
     local_ui_only: true, external_disclosure: false });
   await opening;
-  assert.match(h.el('documents-heading').textContent, /Prüfen und für KI exportieren/u);
+  assert.match(h.el('documents-heading').textContent, /Prüfen und Dateien exportieren/u);
 });
 testAsync('bound OCR-off omissions in anonymization are notices, not technical converter errors', async () => {
   const h = harness({ invoke(command) {
@@ -454,7 +454,7 @@ testAsync('current and export-specific identity buttons send only their exact id
   await h.api.open(batch); assert.equal(h.el('documents-identity-reference').hidden, false);
   await h.act('documents-identities');
   assert.deepEqual(h.calls.find(call => call.command === 'open_document_identity_overview').args, { batchId: batch });
-  assert.match(h.el('documents-status').textContent, /keine Freigabe und kein KI-Export/u);
+  assert.match(h.el('documents-status').textContent, /keine Freigabe und kein Export/u);
   const frozen = h.el('documents-export-receipt-list').children[0].children[2];
   await h.act(frozen);
   assert.deepEqual(h.calls.filter(call => call.command === 'open_document_identity_overview').at(-1).args,
@@ -530,15 +530,19 @@ testAsync('export dialog previews neutral names and cancel starts no operation a
   assert.equal(h.el('document-export-dialog').open, true);
   assert.equal(h.calls.some(call => call.command === 'export_approved_documents'), false);
   assert.equal(h.el('document-export-files').children[0].textContent, 'Dokument_01.md');
+  assert.match(h.el('documents-status').textContent, /Exportvorschau geprüft.*keine neue Kopie.*„Exportieren“/u);
+  assert.doesNotMatch(h.el('documents-status').textContent, /wird lokal geprüft/u);
   await h.act('document-export-close'); assert.equal(h.el('document-export-dialog').open, false);
+  assert.match(h.el('documents-status').textContent, /keine neue Kopie/u);
+  assert.equal(h.calls.some(call => call.command === 'export_approved_documents'), false);
   assert.equal(h.el('documents-export').focused, true);
-  await h.export(); assert.equal(h.el('document-export-title').textContent, 'Export fertig');
+  await h.export(); assert.equal(h.el('document-export-title').textContent, 'Export abgeschlossen');
   assert.match(h.el('document-export-target').textContent, /Export-[a-f0-9]+ \(abgeschlossen\)/u);
   assert.doesNotMatch(h.el('document-export-target').textContent, /noch offen/u);
   assert.equal(h.el('document-export-confirm').hidden, true);
   assert.match(h.el('documents-status').textContent, /nicht erneut ausführen/u);
   assert.match(h.el('documents-selected').textContent, /0 ausgewählt/u);
-  assert.equal(h.el('documents-export').textContent, 'Weitere KI-Kopie erstellen');
+  assert.equal(h.el('documents-export').textContent, 'Weitere Dateien exportieren');
   assert.equal(h.el('documents-export').disabled, true, 'a second copy needs a new explicit selection');
   assert.match(h.el('documents-purpose').textContent, /kein erneuter Export nötig/u);
 });
@@ -563,7 +567,7 @@ testAsync('an in-flight native copy cannot be hidden by close or Escape before i
   assert.equal(prevented, true);
   releaseCopy(); await tick(); await tick(); await tick();
   assert.equal(h.el('document-export-close').disabled, false);
-  assert.equal(h.el('document-export-title').textContent, 'Export fertig');
+  assert.equal(h.el('document-export-title').textContent, 'Export abgeschlossen');
   await h.act('document-export-close');
   assert.equal(h.el('document-export-dialog').open, false);
 });
@@ -577,7 +581,7 @@ testAsync('a document-list read failure after durable export ACK never offers th
   await h.api.open('a'.repeat(64)); await h.all(); await h.export(); await tick();
   assert.equal(h.calls.filter(call => call.command === 'export_approved_documents').length, 2,
     'the copy and its durable receipt were both confirmed');
-  assert.equal(h.el('document-export-title').textContent, 'Export fertig');
+  assert.equal(h.el('document-export-title').textContent, 'Export abgeschlossen');
   assert.match(h.el('documents-status').textContent, /kein zweiter Export nötig/u);
   assert.match(h.el('documents-selected').textContent, /0 ausgewählt/u);
   assert.equal(h.el('documents-export').disabled, true, 'fresh document state is required before another copy');
@@ -751,7 +755,7 @@ testAsync('a first anonymized export can bind its result folder before any copy 
   assert.equal(h.calls.filter(call => call.command === 'export_approved_documents').length, 2,
     'only the explicit confirmation may start a copy and its acknowledgement');
   assert.equal(h.el('documents-completion').hidden, false, 'confirmed export remains visible after the dialog');
-  assert.equal(h.el('documents-completion-title').textContent, 'KI-Kopie abgeschlossen');
+  assert.equal(h.el('documents-completion-title').textContent, 'Export abgeschlossen');
   assert.match(h.el('documents-completion-text').textContent, /lokal kopiert.*bestätigt.*nicht automatisch wiederholt/u);
   let openedSummaryBatchId = null;
   h.el('nav-history').addEventListener('click', () => { openedSummaryBatchId = h.el('nav-history').dataset.openSummaryBatchId; });
@@ -814,7 +818,7 @@ testAsync('connection loss stops export elapsed-time announcements without claim
   assert.equal(h.activeIntervals(), 0);
   assert.match(h.el('documents-status').textContent, /Verbindung unterbrochen/u);
   finish(); await tick(); await tick();
-  assert.doesNotMatch(h.el('documents-status').textContent, /Dateien exportiert|Export fertig/u);
+  assert.doesNotMatch(h.el('documents-status').textContent, /Dateien exportiert|Export abgeschlossen/u);
   assert.equal(h.activeIntervals(), 0);
 });
 
@@ -943,14 +947,103 @@ testAsync('a slow document reload after receipt cannot restart waiting announcem
     copy.h.advance(120_000);
     assert.match(copy.h.el('documents-status').textContent, /2 Dateien exportiert/u);
     assert.doesNotMatch(copy.h.el('document-export-result').textContent, /Dateifortschritt|Seit/u);
-    assert.equal(copy.h.el('document-export-title').textContent, 'Export fertig');
+    assert.equal(copy.h.el('document-export-title').textContent, 'Export abgeschlossen');
     assert.equal(copy.h.el('document-export-close').disabled, false);
+    assert.equal(copy.h.el('documents-completion').hidden, false, 'durable receipt is visible before the optional read finishes');
+    assert.equal(copy.h.el('documents-completion-history').disabled, false, 'optional display read cannot hold navigation hostage');
+    assert.equal(copy.h.el('documents-completion-details').disabled, false);
+    assert.equal(copy.h.guides.at(-1).phase, 'copy_confirmed');
+    assert.equal(copy.h.api.canOpen('b'.repeat(64)), true, 'read-only navigation is not gated on the optional read');
+    assert.equal(copy.h.el('documents-approve').disabled, true, 'stale bindings cannot authorize another mutation');
+    assert.equal(copy.h.el('documents-reload').disabled, true, 'no duplicate read is queued');
     assert.equal(copy.h.document.activeElement, copy.h.el('document-export-close'));
     await copy.h.act('document-export-close');
     assert.equal(copy.h.el('document-export-dialog').open, false, 'a completed copy can be dismissed while display reload is still pending');
+    assert.equal(copy.h.document.activeElement, copy.h.el('documents-completion-history'));
+    assert.equal(await copy.h.api.close(), true);
     finishReload({ documents: structuredClone(copy.h.rows), unavailable: [], local_ui_only: true, external_disclosure: false }); await tick();
+    assert.equal(copy.h.el('documents-completion').hidden, true, 'late read cannot resurrect a closed surface');
   } finally { finishReload({ documents: [], unavailable: [], local_ui_only: true, external_disclosure: false }); await copy.finish(); }
 });
+
+testAsync('a failed post-ACK read keeps the copy complete but blocks changes until an explicit fresh read', async () => {
+  let fail = false;
+  const copy = await observedCopy(request => nativeProgress(request), command => {
+    if (command === 'get_document_reviews' && fail) throw Error('READ_FAILED');
+  });
+  try {
+    fail = true; await copy.finish(); await tick();
+    assert.equal(copy.h.el('documents-completion').hidden, false);
+    assert.equal(copy.h.el('document-export-title').textContent, 'Export abgeschlossen');
+    assert.match(copy.h.el('documents-status').textContent, /kein zweiter Export nötig/u);
+    assert.equal(copy.h.el('documents-approve').disabled, true);
+    assert.equal(copy.h.api.canOpen('b'.repeat(64)), true);
+    fail = false; await copy.h.act('documents-reload');
+    assert.equal(copy.h.el('documents-completion').hidden, false);
+    assert.equal(copy.h.calls.filter(call => call.command === 'export_approved_documents').length, 2);
+  } finally { await copy.finish(); }
+});
+
+for (const outcome of ['success', 'failure']) {
+  testAsync(`reopening the same run retires an older post-ACK ${outcome} response`, async () => {
+    let finishOld, rejectOld, holdNext = false;
+    const oldRead = new Promise((resolve, reject) => { finishOld = resolve; rejectOld = reject; });
+    const copy = await observedCopy(request => nativeProgress(request), command => {
+      if (command === 'get_document_reviews' && holdNext) { holdNext = false; return oldRead; }
+    });
+    const response = () => ({ documents: structuredClone(copy.h.rows), unavailable: [],
+      local_ui_only: true, external_disclosure: false });
+    try {
+      holdNext = true; await copy.finish();
+      await copy.h.act('document-export-close');
+      await copy.h.api.open('a'.repeat(64)); await copy.h.all();
+      const freshStatus = copy.h.el('documents-status').textContent;
+      assert.equal(copy.h.el('documents-export').disabled, false);
+      assert.equal(copy.h.el('documents-all').disabled, false);
+      if (outcome === 'failure') rejectOld(Error('OLD_POST_ACK_READ_FAILED'));
+      else finishOld(response());
+      await tick(); await tick();
+      assert.equal(copy.h.el('documents-status').textContent, freshStatus,
+        'a retired display read cannot replace the reopened run status');
+      assert.equal(copy.h.el('documents-export').disabled, false, 'the newer bindings remain fresh');
+      assert.equal(copy.h.el('documents-all').disabled, false);
+      assert.equal(copy.h.calls.filter(call => call.command === 'export_approved_documents').length, 2,
+        'only the original explicit copy and its ACK were sent');
+    } finally { finishOld(response()); await copy.finish(); }
+  });
+}
+
+for (const mode of ['markdown-only', 'markdown-and-anonymize']) {
+  testAsync(`a newer ${mode} view ignores an older same-run opening failure, not its own failure`, async () => {
+    let rejectOld, reads = 0, failCurrent = false;
+    const oldRead = new Promise((resolve, reject) => { rejectOld = reject; });
+    const h = harness({ invoke(command) {
+      if (command !== 'get_document_reviews') return;
+      if (++reads === 1) return oldRead;
+      if (failCurrent) throw Error('DOCUMENT_REVIEW_INVALID');
+    } });
+    h.rows.forEach(row => { row.processing_mode = mode; row.approved = true; });
+    const oldOpen = h.api.open('a'.repeat(64)); await tick();
+    try {
+      await h.api.open('a'.repeat(64)); await h.all();
+      const freshStatus = h.el('documents-status').textContent;
+      const freshClass = h.el('documents-status').className;
+      assert.equal(h.el('documents-export').disabled, false);
+      rejectOld(Error('DOCUMENT_REVIEW_INVALID')); await oldOpen;
+      assert.equal(h.el('documents-status').textContent, freshStatus,
+        'the retired opening error cannot contradict the newer fresh view');
+      assert.equal(h.el('documents-status').className, freshClass);
+      assert.equal(h.el('documents-export').disabled, false);
+      assert.equal(h.el('documents-all').disabled, false);
+      assert.equal(h.calls.some(call => isDecision(call) || call.command === 'export_approved_documents'), false);
+      failCurrent = true; await h.api.open('a'.repeat(64));
+      assert.match(h.el('documents-status').textContent, /DOCUMENT_REVIEW_INVALID/u,
+        'an error belonging to the current view must remain visible');
+      assert.equal(h.el('documents-export').disabled, true);
+      assert.equal(h.el('documents-all').disabled, true);
+    } finally { rejectOld(Error('DOCUMENT_REVIEW_INVALID')); await oldOpen; }
+  });
+}
 
 testAsync('a different pending export discovered after ACK cannot rewrite the completed dialog', async () => {
   let acknowledged = false, h;
@@ -966,14 +1059,15 @@ testAsync('a different pending export discovered after ACK cannot rewrite the co
   h = copy.h;
   try {
     await copy.finish();
-    assert.equal(h.el('document-export-title').textContent, 'Export fertig');
+    assert.equal(h.el('document-export-title').textContent, 'Export abgeschlossen');
     assert.match(h.el('document-export-target').textContent, new RegExp(copy.request.operationId));
     assert.doesNotMatch(h.el('document-export-target').textContent, new RegExp(other));
     assert.equal(h.el('document-export-confirm').hidden, true);
+    assert.match(h.el('documents-status').textContent, /anderer früherer Export.*nicht die gerade abgeschlossene Kopie/u);
     assert.equal(h.calls.filter(call => call.command === 'export_approved_documents').length, 2);
     await h.act('document-export-close'); await h.act('documents-export');
     assert.match(h.el('document-export-target').textContent, new RegExp(other));
-    assert.notEqual(h.el('document-export-title').textContent, 'Export fertig');
+    assert.notEqual(h.el('document-export-title').textContent, 'Export abgeschlossen');
     assert.equal(h.el('document-export-confirm').hidden, false);
     assert.equal(h.calls.filter(call => call.command === 'export_approved_documents').length, 2,
       'the other durable intent needs its own explicit confirmation');
@@ -1492,6 +1586,90 @@ testAsync('connection-loss draft remains bound to its original run when another 
   assert.equal(h.api.canOpen(second), true);
   await h.api.open(second);
   assert.equal(h.api.activeBatchId(), second);
+});
+
+function completedHarness(options = {}) {
+  const h = harness({ explicitApproval: options.explicitApproval, invoke(command) {
+    if (command === 'get_document_reviews') {
+      if (options.failRead) throw Error('STANDALONE_IPC_FAILED');
+      return { documents: structuredClone(options.empty ? [] : h.rows), processing_mode: 'markdown-and-anonymize',
+        processing_complete: options.complete !== false, content_notice_count: 0, content_notice_breakdown_complete: true,
+        export_receipts: options.receipt ? [{ operation_id: 'e'.repeat(32), folder_name: 'Export-' + 'e'.repeat(32),
+          exported_count: 2, processing_mode: 'markdown-and-anonymize' }] : [],
+        unavailable: [], not_processed_documents: options.omission ? [{ document_id: '3'.repeat(32), name: 'scan.png',
+          classification: 'ocr_omission', reason_code: 'IMAGE_OCR_REQUIRED' }] : [],
+        local_ui_only: true, external_disclosure: false };
+    }
+  } });
+  return h;
+}
+
+testAsync('completion card separates completed processing, selection, final approval and optional export', async () => {
+  const h = completedHarness(); await h.api.open('a'.repeat(64));
+  assert.equal(h.el('documents-completion').hidden, false);
+  assert.equal(h.el('documents-completion-title').textContent, 'Verarbeitung abgeschlossen – Dokumentprüfung offen');
+  await h.all();
+  assert.equal(h.el('documents-completion-title').textContent, 'Verarbeitung abgeschlossen – Dokumentprüfung offen');
+  await h.act('documents-approve');
+  assert.equal(h.el('documents-completion-title').textContent, 'Dokumentprüfung abgeschlossen');
+  assert.match(h.el('documents-completion-text').textContent, /Alle 2 verfügbaren.*freigegeben.*Export wurde dadurch nicht erstellt/u);
+  assert.equal(h.calls.some(row => row.command === 'export_approved_documents'), false);
+  assert.equal(h.api.activeBatchId(), 'a'.repeat(64), 'approval never navigates away');
+});
+
+testAsync('partial and revoked approvals cannot claim a completed document review', async () => {
+  const h = completedHarness(); await h.api.open('a'.repeat(64));
+  h.rows[0].approved = true; await h.act('documents-reload');
+  assert.match(h.el('documents-completion-title').textContent, /Dokumentprüfung offen/u);
+  h.rows[1].approved = true; await h.act('documents-reload');
+  assert.equal(h.el('documents-completion-title').textContent, 'Dokumentprüfung abgeschlossen');
+  await h.all(); await h.act('documents-revoke');
+  assert.match(h.el('documents-completion-title').textContent, /Dokumentprüfung offen/u);
+  assert.equal(h.calls.some(row => row.command === 'export_approved_documents'), false);
+});
+
+testAsync('available approvals can finish with expected omissions without releasing omitted sources', async () => {
+  const h = completedHarness({ omission: true }); h.rows.forEach(row => { row.approved = true; });
+  await h.api.open('a'.repeat(64));
+  assert.equal(h.el('documents-completion-title').textContent, 'Dokumentprüfung abgeschlossen · mit Hinweisen');
+  assert.match(h.el('documents-completion-text').textContent, /Alle 2 verfügbaren Dokumentstände.*Nicht verfügbare Quellen sind weder freigegeben noch exportiert/u);
+});
+
+for (const option of [{ complete: false }, { empty: true }, { failRead: true }])
+  testAsync('no completion from incomplete, empty or failed read: ' + JSON.stringify(option), async () => {
+    const h = completedHarness(option); h.rows.forEach(row => { row.approved = true; });
+    await h.api.open('a'.repeat(64));
+    assert.equal(h.el('documents-completion').hidden, true);
+    assert.equal(h.calls.some(row => row.command === 'export_approved_documents'), false);
+  });
+
+testAsync('an approval still awaiting confirmation is not presented as completed', async () => {
+  const h = completedHarness({ explicitApproval: true }); await h.api.open('a'.repeat(64));
+  await h.all(); await h.act('documents-approve');
+  assert.equal(h.el('documents-approve-confirm').hidden, false);
+  assert.equal(h.el('documents-completion').hidden, true);
+  assert.equal(h.calls.some(isDecision), false);
+  await h.act('documents-approve-cancel');
+  assert.match(h.el('documents-completion-title').textContent, /Dokumentprüfung offen/u);
+});
+
+testAsync('existing receipts do not turn document completion into an invitation to repeat export', async () => {
+  const h = completedHarness({ receipt: true }); h.rows.forEach(row => { row.approved = true; });
+  await h.api.open('a'.repeat(64));
+  assert.equal(h.el('documents-completion-title').textContent, 'Dokumentprüfung abgeschlossen');
+  assert.match(h.el('documents-completion-text').textContent, /Exportbelege sind bereits vorhanden.*Alte Belege bestätigen nicht automatisch den heutigen Textstand/u);
+  assert.doesNotMatch(h.el('documents-completion-text').textContent, /Ein Export wurde dadurch nicht erstellt/u);
+  assert.equal(h.calls.some(row => row.command === 'export_approved_documents'), false);
+});
+
+testAsync('completion navigation fallback requests the exact history summary without mutation', async () => {
+  const h = completedHarness(), navigations = [];
+  h.rows.forEach(row => { row.approved = true; });
+  await h.api.open('a'.repeat(64));
+  h.el('nav-history').addEventListener('click', () => navigations.push(h.el('nav-history').dataset.openSummaryBatchId));
+  await h.act('documents-completion-history');
+  assert.deepEqual(navigations, ['a'.repeat(64)]);
+  assert.equal(h.calls.some(row => isDecision(row) || row.command === 'export_approved_documents'), false);
 });
 
 done();

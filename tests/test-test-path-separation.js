@@ -137,6 +137,55 @@ test('every current product test is reachable through an npm script or the produ
   assert.deepStrictEqual(orphaned, [], `tests referenced by no npm script or runner: ${orphaned.join(', ')}`);
 });
 
+test('the native lease-finish probe is reachable only with an explicit artifact and trusted runtime digest', () => {
+  const suite = require('./run-product-suite');
+  const args = ['explicit-build-manifest.json', 'a'.repeat(64)];
+  for (const platform of ['win32', 'darwin']) {
+    const plan = suite.artifactBoundPlan('native-lease-finish', args, platform);
+    assert.deepStrictEqual(plan, { file: 'tests/test-native-executor-lease-finish.js', args });
+    assert.notStrictEqual(plan.args, args, 'the plan must not retain mutable caller arguments');
+  }
+  for (const invalid of [[], ['manifest'], ['', args[1]], ['x\0y', args[1]], ['manifest', 'bad'], [...args, 'extra']]) {
+    assert.throws(() => suite.artifactBoundPlan('native-lease-finish', invalid, 'win32'), /NATIVE_ARTIFACT_ARGUMENT_INVALID/);
+  }
+  assert.throws(() => suite.artifactBoundPlan('native-lease-finish', args, 'linux'), /NATIVE_ARTIFACT_ARGUMENT_INVALID/);
+  for (const profile of ['ci', 'headless']) {
+    assert.ok(!suite.executionPlan(profile).headlessFiles.includes(suite.artifactBoundFiles['native-lease-finish']));
+  }
+});
+
+
+test('Windows processing admission is an explicit artifact-bound probe, never source CI or Darwin evidence', () => {
+  const suite = require('./run-product-suite');
+  const args = ['explicit-current-guard-build.json', 'b'.repeat(64)];
+  const file = 'tests/test-native-processing-admission.js';
+  assert.strictEqual(suite.artifactBoundFiles['native-processing-admission'], file);
+  const plan = suite.artifactBoundPlan('native-processing-admission', args, 'win32');
+  assert.deepStrictEqual(plan, { file, args });
+  assert.notStrictEqual(plan.args, args);
+  assert.notStrictEqual(file, suite.artifactBoundFiles['native-lease-finish']);
+  for (const platform of ['darwin', 'linux', 'freebsd']) {
+    assert.throws(() => suite.artifactBoundPlan('native-processing-admission', args, platform), /NATIVE_ARTIFACT_ARGUMENT_INVALID/);
+  }
+  for (const invalid of [[], ['manifest'], ['', args[1]], ['  ', args[1]], ['x\0y', args[1]],
+    ['manifest', 'bad'], ['manifest', 'B'.repeat(64)], [...args, 'extra']]) {
+    assert.throws(() => suite.artifactBoundPlan('native-processing-admission', invalid, 'win32'), /NATIVE_ARTIFACT_ARGUMENT_INVALID/);
+  }
+  for (const profile of ['ci', 'headless', 'full', 'native-ui']) {
+    const flags = ['full', 'native-ui'].includes(profile) ? ['--allow-native-ui'] : [];
+    const normal = suite.executionPlan(profile, flags, 'win32');
+    assert.ok(!normal.headlessFiles.includes(file) && !normal.nativeFiles.includes(file),
+      'native artifact probe must never be auto-scheduled in an ordinary profile');
+  }
+  const source = fs.readFileSync(path.join(root, file), 'utf8');
+  assert.doesNotMatch(source, /[a-f0-9]{64}/u, 'no fixed release/source/Node digest inside the native test');
+  assert.doesNotMatch(source, /dist[\\/]/u, 'no abandoned Dist artifact dependency');
+  assert.match(source, /process\.argv\[3\]/u, 'trusted runtime digest stays explicit');
+  assert.match(source, /manifest\.source_sha256, report\.native_source_sha256/u,
+    'actual checkout C source must bind to the explicit build manifest');
+  assert.match(source, /darwin_evidence: false/u);
+});
+
 test('every project script a test addresses by path exists and is tracked by Git', () => {
   // tests/fixtures/ is ignored wholesale, so a helper forked from there never
   // reaches a clone and its test dies with a generic exit code instead of

@@ -107,13 +107,22 @@ function harness(sessions = null, allowOrganizationReview = false, singleFinding
     return options.invoke ? options.invoke(command, args, normalInvoke) : normalInvoke(command, args);
   };
   const listeners = new Map();
-  const window = { __TAURI__: { core: { invoke }, event: { async listen(name, callback) { listeners.set(name, callback); return () => {}; } } },
+  const windowCallbacks = new Map(); let unlistens = 0;
+  const window = { __TAURI__: { core: { invoke }, event: { async listen(name, callback) {
+      const permissions = JSON.parse(fs.readFileSync(path.join(__dirname, '../apps/datasecure-standalone/tauri-contract/capabilities/review.json'))).permissions;
+      if (!permissions.includes('core:event:allow-listen')) throw Error('ACL denied');
+      const register = () => { listeners.set(name, callback); return () => { unlistens++; listeners.delete(name); }; };
+      return options.listen ? options.listen(name, callback, register) : register();
+    } } },
+    addEventListener(type, callback) { windowCallbacks.set(type, callback); },
     setTimeout(callback) { timers.push(callback); return callback; },
     clearTimeout(callback) { const index = timers.indexOf(callback); if (index >= 0) timers.splice(index, 1); } };
+  if (options.eventUnavailable) delete window.__TAURI__.event;
+  if (options.embedded) { window.location = { search: '?embedded=1' }; window.parent = { __DATASECURE_REVIEW__: { invoke } }; }
   const presentation = fs.readFileSync(path.join(__dirname, '../apps/datasecure-standalone/frontend/workflow-presentation.js'), 'utf8');
-  vm.runInNewContext(presentation + '\n' + source, { window, document: { getElementById: element, createElement }, TextDecoder, atob },
+  vm.runInNewContext(presentation + '\n' + source, { window, document: { getElementById: element, createElement, body: { classList: { add() {} } } }, TextDecoder, atob },
     { filename: 'review.js' });
-  return { element, callbacks, calls, draft, timers, listeners };
+  return { element, callbacks, calls, draft, timers, listeners, windowCallbacks, unlistens: () => unlistens };
 }
 
 testAsync('contact corrections and confirmations use distinct actions, preserve literal spelling and clear private input after submission', async () => {
@@ -350,6 +359,23 @@ testAsync('the working indicator is decorative and respects reduced motion', asy
   assert.match(css, /prefers-reduced-motion:reduce/u);
 });
 
+testAsync('accepted explicit defer stops waiting without polling, restarting or approving another step', async () => {
+  const h = harness(null, false, false, { embedded: true, invoke(command, args, normal) {
+    if (command === 'submit_review') return { accepted: true, action: 'deferred' };
+    return normal(command, args);
+  } });
+  await new Promise(resolve => setImmediate(resolve));
+  const before = h.calls.length;
+  await h.callbacks.get('defer')(); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.element('work-indicator').hidden, true);
+  assert.match(h.element('waiting-text').textContent, /Prüfung vertagt.*im Verlauf/u);
+  assert.doesNotMatch(h.element('waiting-text').textContent, /bitte warten|arbeitet weiter/iu);
+  assert.equal(h.timers.length, 0, 'the accepted deferral adds no automatic poll');
+  const added = h.calls.slice(before);
+  assert.deepEqual(added.map(call => call.command), ['submit_review']);
+  assert.equal(added[0].args.answer.action, 'deferred');
+  assert.equal(h.element('continue-review').hidden, true);
+});
 testAsync('waiting view offers an explicit safe close action', async () => {
   const h = harness([{ ready: false, run_complete: false }]);
   await new Promise((resolve) => setImmediate(resolve));
@@ -922,6 +948,80 @@ testAsync('a disconnected review blocks decisions and polling but still closes i
   assert.equal(h.calls.some(call => call.command === 'submit_review'), false);
   h.callbacks.get('close-review')(); await new Promise(resolve => setImmediate(resolve));
   assert.equal(h.calls.filter(call => call.command === 'close_review_window').length, 1);
+});
+
+testAsync('review ACL grants only event receive/cleanup and listener failure blocks private reads visibly', async () => {
+  const permissions = JSON.parse(fs.readFileSync(path.join(__dirname, '../apps/datasecure-standalone/tauri-contract/capabilities/review.json'))).permissions;
+  assert.deepEqual(permissions.filter(value => value.startsWith('core:')).sort(), ['core:event:allow-listen', 'core:event:allow-unlisten']);
+  for (const options of [{ eventUnavailable: true }, { listen() { throw Error('PRIVATE_VENDOR_ERROR'); } }, { listen() { return null; } }]) {
+    const h = harness(null, false, false, options); await new Promise(resolve => setImmediate(resolve));
+    assert.equal(h.calls.length, 0); assert.equal(h.element('review').hidden, true);
+    assert.match(h.element('waiting-text').textContent, /LOCAL_REVIEW_EVENT_UNAVAILABLE/u);
+    assert.doesNotMatch(h.element('waiting-text').textContent, /PRIVATE_VENDOR/u);
+    h.callbacks.get('retry')(); h.callbacks.get('release')();
+    assert.equal(h.calls.length, 0);
+    await h.callbacks.get('close-review')();
+    assert.equal(h.calls.filter(call => call.command === 'close_review_window').length, 1);
+  }
+});
+
+testAsync('registration precedes private loading and late registration is cleaned after navigation', async () => {
+  let allowRegistration;
+  const registration = new Promise(resolve => { allowRegistration = resolve; });
+  const h = harness(null, false, false, { async listen(_name, _callback, register) { await registration; return register(); } });
+  h.callbacks.get('retry')(); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.calls.length, 0);
+  h.windowCallbacks.get('beforeunload')(); allowRegistration();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.calls.length, 0); assert.equal(h.unlistens(), 1); assert.equal(h.listeners.size, 0);
+  const live = harness(); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(live.element('review').hidden, false);
+  live.windowCallbacks.get('beforeunload')(); assert.equal(live.unlistens(), 1);
+});
+
+testAsync('recovery during a private chunk read discards its late result and all private display state', async () => {
+  let allowChunk;
+  const pending = new Promise(resolve => { allowChunk = resolve; });
+  const h = harness(null, false, false, { async invoke(command, args, normal) {
+    if (command === 'get_review_chunk') await pending;
+    return normal(command, args);
+  } });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.calls.filter(call => call.command === 'get_review_chunk').length, 1);
+  h.listeners.get('datasecure-connection')({ payload: { state: 'recovering', epoch: 2 } });
+  allowChunk(); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.element('review').hidden, true); assert.equal(h.element('matrix-body').children.length, 0);
+  for (const id of ['exact-text', 'source-context', 'output-context']) assert.equal(h.element(id).textContent, '');
+  assert.equal(h.element('contact-image').src, '');
+  assert.match(h.element('waiting-text').textContent, /verworfen/u);
+  const count = h.calls.length; h.callbacks.get('retry')(); h.callbacks.get('release')();
+  await new Promise(resolve => setImmediate(resolve)); assert.equal(h.calls.length, count);
+});
+
+testAsync('recovery during submission cannot restore staged private decisions from a late failure', async () => {
+  let rejectSubmission;
+  const pending = new Promise((_resolve, reject) => { rejectSubmission = reject; });
+  const h = harness(null, false, false, { invoke(command, args, normal) {
+    return command === 'submit_review' ? pending : normal(command, args);
+  } });
+  await new Promise(resolve => setImmediate(resolve)); selectAll(h); applySelected(h, 'keep');
+  h.callbacks.get('release')();
+  assert.equal(h.calls.filter(call => call.command === 'submit_review').length, 1);
+  h.listeners.get('datasecure-connection')({ payload: { state: 'recovering', epoch: 3 } });
+  rejectSubmission(Error('PRIVATE_LATE_FAILURE')); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.element('review').hidden, true); assert.equal(h.element('matrix-body').children.length, 0);
+  assert.doesNotMatch(h.element('waiting-text').textContent, /PRIVATE_LATE_FAILURE/u);
+  const count = h.calls.length; h.callbacks.get('retry')(); h.callbacks.get('release')();
+  await new Promise(resolve => setImmediate(resolve)); assert.equal(h.calls.length, count);
+});
+
+testAsync('embedded review relies on its workspace owner without requiring a second event API', async () => {
+  const h = harness(null, false, false, { embedded: true, eventUnavailable: true });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.element('review').hidden, false); assert.equal(h.listeners.size, 0);
+  h.windowCallbacks.get('beforeunload')();
+  const count = h.calls.length; h.callbacks.get('retry')();
+  assert.equal(h.calls.length, count);
 });
 
 testAsync('the explicit handoff button counts actual occurrence decisions, not grouped rows', async () => {

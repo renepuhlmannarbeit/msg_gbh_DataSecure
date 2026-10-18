@@ -10,6 +10,7 @@ const { contentOptionsForBatch, serializeContentOptions } = require('../core/con
 const { assertAnonymizationBatch } = require('../core/processing-mode');
 const { createDocumentReviewStore } = require('./standalone-document-review-store');
 const { anonymizedArtifactRoots, readAnonymizedArtifact } = require('../standalone/anonymized-store');
+const { isDocumentControlBusy, isOwnershipControlFailure } = require('./prepublication-error');
 const invalid = () => Object.assign(Error('STANDALONE_PUBLICATION_INVALID'), { code: 'STANDALONE_PUBLICATION_INVALID' });
 
 function isBoundAnonymization(state) {
@@ -23,6 +24,9 @@ function expectedPublication(state, item) {
   const review = createDocumentReviewStore();
   const member = review.assertDocumentBinding(state, item);
   const expected = review.publicationExpectation(state.token, item.id);
+  return validateExpectedPublication(state, member, expected);
+}
+function validateExpectedPublication(state, member, expected) {
   const extension = path.extname(member.name).slice(1).toLowerCase();
   const sourceType = extension === 'jpg' ? 'jpeg' : extension === 'markdown' ? 'md' : extension;
   if (expected.package_id !== `ds_${member.document_id}` || expected.source_type !== sourceType ||
@@ -30,7 +34,17 @@ function expectedPublication(state, item) {
       (state.profile !== 'auto' && expected.profile !== state.profile)) throw invalid();
   return expected;
 }
+async function expectedPublicationAsync(state, item) {
+  if (!isBoundAnonymization(state)) throw invalid();
+  const review = createDocumentReviewStore();
+  const member = review.assertDocumentBinding(state, item);
+  const expected = await review.publicationExpectationAsync(state.token, item.id);
+  return validateExpectedPublication(state, member, expected);
+}
 function privatePublicationRecord(packageId, state, item) {
+  return readPublicationRecord(packageId, state, item, () => expectedPublication(state, item));
+}
+function readPublicationRecord(packageId, state, item, loadExpected) {
   const record = status => ({ state: status, document_result: null });
   try {
     if (!isBoundAnonymization(state) || typeof packageId !== 'string' || packageId !== `ds_${item?.id}`) throw invalid();
@@ -47,11 +61,16 @@ function privatePublicationRecord(packageId, state, item) {
           createDocumentReviewStore().hasPublicationEvidence(state, item)) return record('unsafe');
       return record('missing');
     }
-    const expectation = expectedPublication(state, item);
+    const expectation = loadExpected();
     const value = readAnonymizedArtifact(packageId, expectation);
     assertDirectory(directory);
     return { state: 'verified', document_result: value.manifest.document_result, publication_binding: expectation };
-  } catch { return record('unsafe'); }
+  } catch (error) {
+    // An unavailable controller did not inspect the expected bytes. It is
+    // neither corruption nor evidence of absence/reprocessing permission.
+    if (isDocumentControlBusy(error) || isOwnershipControlFailure(error)) throw error;
+    return record('unsafe');
+  }
 }
 function confirmPublication(state, item) {
   const record = privatePublicationRecord(`ds_${item.id}`, state, item);
@@ -59,4 +78,13 @@ function confirmPublication(state, item) {
   createDocumentReviewStore().recordPublication(state.token, item.id);
   return record;
 }
-module.exports = Object.freeze({ isBoundAnonymization, expectedPublication, privatePublicationRecord, confirmPublication });
+async function confirmPublicationAsync(state, item) {
+  // Separate small synchronous transactions. Reconcile still performs the full
+  // artifact AND membership write, never a readonly receipt substitution.
+  const expectation = await expectedPublicationAsync(state, item);
+  const record = readPublicationRecord(`ds_${item.id}`, state, item, () => expectation);
+  if (record.state !== 'verified') throw invalid();
+  await createDocumentReviewStore().recordPublicationAsync(state.token, item.id);
+  return record;
+}
+module.exports = Object.freeze({ isBoundAnonymization, expectedPublication, privatePublicationRecord, confirmPublication, confirmPublicationAsync });

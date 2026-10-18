@@ -2,12 +2,21 @@
 
 const path = require('node:path');
 const fs = require('node:fs');
+const { performance } = require('node:perf_hooks');
 const { createPrivateWorkStore } = require('./private-work-store');
 const { batchRoot } = require('./batch-private-store');
-const { createBatchActiveLock } = require('./batch-active-lock');
+const { dataRoot } = require('../runtime');
+const { createBatchActiveLock, ACTIVE_LOCK_BUSY } = require('./batch-active-lock');
+const { ownErrorCode } = require('./batch-execution-diagnostic');
 
 const MAX_GENERATION = 1000000;
 const fail = code => Object.assign(new Error(code), { code });
+function synchronous(callback, ...args) {
+  if (callback.constructor?.name === 'AsyncFunction') throw fail('OWNERSHIP_GUARD_ASYNC_FORBIDDEN');
+  const result = callback(...args);
+  if (result && typeof result.then === 'function') throw fail('OWNERSHIP_GUARD_ASYNC_FORBIDDEN');
+  return result;
+}
 function generation(state) {
   const value = state.standalone_control_generation ?? 0;
   if (!Number.isSafeInteger(value) || value < 0 || value > MAX_GENERATION) throw fail('STANDALONE_PAUSE_INVALID');
@@ -16,19 +25,48 @@ function generation(state) {
 function createStandalonePause(options = {}) {
   const root = options.root || batchRoot;
   const io = options.fs || fs;
+  const withOwnershipControl = options.withOwnershipControl || require('../core/ownership-control').withOwnershipControl;
+  const now = options.now || (() => performance.now());
+  const retryDelay = options.retryDelay || (milliseconds => {
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, milliseconds);
+  });
   const store = () => createPrivateWorkStore({ privateRoot: root(), fs: io, maxBytes: 1024 });
-  const gate = createBatchActiveLock({ fs: io, lockPath: () => path.join(root(), 'standalone-control.lock') });
+  const gate = createBatchActiveLock({ fs: io, withOwnershipControl, onFailure: options.onFailure,
+    lockPath: () => path.join(root(), 'standalone-control.lock') });
   function control(token, action) {
-    const deadline = Date.now() + 5000;
+    const deadline = now() + 5000;
     for (;;) {
-      try { gate.acquireActiveLock(token); break; }
-      catch { if (Date.now() >= deadline) throw fail('STANDALONE_PAUSE_CONTROL_BUSY');
-        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10); }
+      let entered = false, actionFailed = false, primary;
+      try {
+        // The shared helper owns acquire/action/release under one reentrant
+        // guard, with single-attempt publication and cleanup (no held sleeps).
+        return gate.withSynchronousActiveLock(token, () => {
+          entered = true;
+          try { return synchronous(action); }
+          catch (error) { actionFailed = true; primary = error; throw error; }
+        });
+      } catch (error) {
+        // Never replay an action, including one that itself threw Busy or a
+        // thenable-refusal. Preserve its original exception identity.
+        if (actionFailed) throw primary;
+        if (entered) {
+          if (error?.code === 'STANDALONE_OWNERSHIP_CONTROL_UNCONFIRMED') throw fail('STANDALONE_PAUSE_CONTROL_INVALID');
+          throw error;
+        }
+        const logicalCollision = typeof ACTIVE_LOCK_BUSY === 'string' && error?.code === ACTIVE_LOCK_BUSY;
+        if (logicalCollision) {
+          // A native live logical owner cannot be in a different valid sync
+          // transaction while this root is held by a reentrant outer caller.
+          if (process.env.DATASECURE_NATIVE_EXPORT_CHANNEL === '1')
+            throw fail('STANDALONE_PAUSE_CONTROL_BUSY');
+        }
+        const acquisitionBusy = logicalCollision || error?.code === 'OWNERSHIP_GUARD_BUSY';
+        if (!acquisitionBusy) throw error;
+        if (now() >= deadline) throw fail('STANDALONE_PAUSE_CONTROL_BUSY');
+        // The helper has already left its guarded lifetime before this wait.
+        retryDelay(10);
+      }
     }
-    let primary;
-    try { return action(); }
-    catch (error) { primary = error; throw error; }
-    finally { if (!gate.releaseActiveLock(token) && !primary) throw fail('STANDALONE_PAUSE_CONTROL_INVALID'); }
   }
   function target(state) {
     if (state.product_channel !== 'standalone' || !/^[a-f0-9]{64}$/u.test(state.token || '')) throw fail('STANDALONE_PAUSE_INVALID');
@@ -49,6 +87,31 @@ function createStandalonePause(options = {}) {
     if (state.product_channel !== 'standalone') return false;
     return control(state.token, () => checkedRequested(state));
   }
+  function observeRequested(state) {
+    if (state.product_channel !== 'standalone') return false;
+    // Progress is an observation, not admission to process another document.
+    // Use the SAME root guard as every control writer (not the batches root),
+    // without publishing a second logical owner merely to display counters.
+    // Native callers are serialized/reentrant; the explicit legacy adapter
+    // still performs the full bound marker read. All errors remain failures.
+    const ownershipRoot = dataRoot(), deadline = now() + 5000;
+    for (;;) {
+      let entered = false;
+      try {
+        return withOwnershipControl(ownershipRoot, () => {
+          entered = true;
+          return checkedRequested(state);
+        });
+      } catch (error) {
+        // Preserve the previous bounded pre-admission tolerance for another
+        // writer. Never retry a marker read, an entered callback or close.
+        const remaining = deadline - now();
+        if (entered || ownErrorCode(error) !== 'OWNERSHIP_GUARD_BUSY' || remaining <= 0) throw error;
+        retryDelay(Math.min(10, remaining)); // no guard is held here
+        if (now() >= deadline) throw error;
+      }
+    }
+  }
   function checkedRequested(state) {
     try { return readRequested(state); }
     catch { throw fail('STANDALONE_PAUSE_CONTROL_INVALID'); }
@@ -64,8 +127,8 @@ function createStandalonePause(options = {}) {
     return true;
   }
   function request(stateOrRead) {
-    const initial = typeof stateOrRead === 'function' ? stateOrRead() : stateOrRead;
-    return control(initial.token, () => writeRequest(typeof stateOrRead === 'function' ? stateOrRead() : initial));
+    const initial = typeof stateOrRead === 'function' ? synchronous(stateOrRead) : stateOrRead;
+    return control(initial.token, () => writeRequest(typeof stateOrRead === 'function' ? synchronous(stateOrRead) : initial));
   }
   function resume(state, persist) {
     if (state.product_channel !== 'standalone') return false;
@@ -73,7 +136,7 @@ function createStandalonePause(options = {}) {
       if (checkedRequested(state)) {
         if (generation(state) === MAX_GENERATION) throw fail('STANDALONE_PAUSE_INVALID');
         state.standalone_control_generation = generation(state) + 1;
-        persist?.(state);
+        if (persist) synchronous(persist, state);
         return true;
       }
       return false;
@@ -83,13 +146,13 @@ function createStandalonePause(options = {}) {
   // not the asynchronous converter lifetime. Pause acceptance and that exact
   // boundary are serialized; reading/hash-checking the copy may precede it.
   function claim(state, action) {
-    if (state.product_channel !== 'standalone') { action(); return true; }
+    if (state.product_channel !== 'standalone') { synchronous(action); return true; }
     return control(state.token, () => {
       if (checkedRequested(state)) return false;
-      action();
+      synchronous(action);
       return true;
     });
   }
-  return Object.freeze({ requested, request, resume, claim });
+  return Object.freeze({ requested, observeRequested, request, resume, claim });
 }
 module.exports = { createStandalonePause, generation, MAX_GENERATION };

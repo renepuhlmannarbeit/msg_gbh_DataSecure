@@ -19,6 +19,9 @@ const legacyFiles = new Set([
 // of Cowork. The processing-mode gate still forbids markdown-only in a plugin.
 const sharedStandaloneModules = new Set([
   'server/standalone/conversion-runtime-resolver.js',
+  // Inert fixed macOS path roles used by shared resolver/supervisor code;
+  // this does not ship a converter runtime or add a Cowork capability.
+  'server/standalone/macos-bundle-layout.js',
   'server/standalone/conversion-worker-contract.js',
   'server/standalone/conversion-worker.js',
   'server/standalone/convert-next.js',

@@ -15,7 +15,11 @@ mod native_export_broker;
 mod native_export_transaction;
 mod native_export_workspace;
 mod source_fingerprint;
+#[cfg(target_os = "macos")]
+mod macos_core;
 mod content_start;
+#[cfg(windows)]
+mod private_namespace;
 
 use serde_json::{json, Value};
 use std::{
@@ -45,10 +49,7 @@ static NATIVE_SMOKE_PROFILE: OnceLock<Option<native_smoke::Profile>> = OnceLock:
 static MACOS_CORE_PROBE_ATTEMPTED: AtomicBool = AtomicBool::new(false);
 
 fn build_id() -> &'static str {
-    match option_env!("DATASECURE_BUILD_ID") {
-        Some(value) if value.len() == 40 && value.bytes().all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()) => value,
-        _ => "unidentified",
-    }
+    source_fingerprint::diagnostic_build_id(option_env!("DATASECURE_BUILD_ID"))
 }
 
 fn runtime_target() -> String {
@@ -212,12 +213,49 @@ fn diagnostic_correlated_event(
     diagnostic_log::append(&diagnostic_directory(), &record);
 }
 
+// Constructed only from a fixed native stage, ErrorKind enum name and i32 OS
+// code. Never append io::Error Display/Debug, pathnames, ACLs or Binding values.
+fn diagnostic_native_configure_failure(failure: native_export_broker::ConfigureFailure) {
+    let record = json!({
+        "schema": "datasecure-standalone-interaction/1",
+        "time_ms": SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),
+        "component": "desktop", "session_id": diagnostic_session(),
+        "event": "native_configure_failed", "action": "configure_results", "outcome": "failed",
+        "product_version": env!("CARGO_PKG_VERSION"), "build_id": build_id(), "runtime_target": runtime_target(),
+        "configure_stage": failure.stage, "io_error_kind": failure.io_error_kind,
+        "raw_os_error": failure.raw_os_error
+    });
+    diagnostic_log::append(&diagnostic_directory(), &record);
+}
+
+// Only a failed Windows NtCreateFile with a non-null creation descriptor
+// produces this fixed, content-free event. It is not a renderer error or a
+// configure-only claim: other controlled directory callers use the same gate.
+#[cfg(windows)]
+fn diagnostic_native_controlled_directory_create_failure(
+    failure: export_directory::ControlledDirectoryCreateFailure,
+) {
+    let record = json!({
+        "schema": "datasecure-standalone-interaction/1",
+        "time_ms": SystemTime::now().duration_since(UNIX_EPOCH).unwrap_or_default().as_millis(),
+        "component": "desktop", "session_id": diagnostic_session(),
+        "event": "native_controlled_create_failed", "outcome": "failed",
+        "product_version": env!("CARGO_PKG_VERSION"), "build_id": build_id(), "runtime_target": runtime_target(),
+        "controlled_create": failure
+    });
+    diagnostic_log::append(&diagnostic_directory(), &record);
+}
+
 struct SidecarProcess {
     child: ipc_transport::ChildControl,
     writes: mpsc::Sender<ipc_transport::WriteRequest>,
     responses: Receiver<Result<Value, String>>,
     owner_generation: String,
     unusable: bool,
+    #[cfg(windows)]
+    namespace: Arc<private_namespace::PreparedNamespace>,
+    #[cfg(windows)]
+    namespace_identity: export_directory::Identity,
 }
 
 impl Drop for SidecarProcess {
@@ -232,6 +270,7 @@ struct DesktopState {
     activity: ipc_activity::Tracker,
     connection_epoch: Arc<AtomicU64>,
     expected_connection_epoch: u64,
+    bootstrap_retry_epoch: Option<u64>,
     retired_owner_generations: Arc<Mutex<Vec<String>>>,
     lifecycle: ipc_transport::Lifecycle,
     exit_gate: ipc_transport::ExitGate,
@@ -250,6 +289,7 @@ impl Clone for DesktopState {
             activity: self.activity.clone(),
             connection_epoch: self.connection_epoch.clone(),
             expected_connection_epoch: self.expected_connection_epoch,
+            bootstrap_retry_epoch: self.bootstrap_retry_epoch,
             retired_owner_generations: self.retired_owner_generations.clone(),
             exit_gate: self.exit_gate.clone(), selection_busy: self.selection_busy.clone(),
             admission_present: self.admission_present.clone(), frontend_ready: self.frontend_ready.clone(),
@@ -264,17 +304,35 @@ impl DesktopState {
     fn capture_connection(&self) -> Self {
         let mut captured = self.clone();
         captured.expected_connection_epoch = self.connection_epoch.load(Ordering::Acquire);
+        captured.bootstrap_retry_epoch = None;
         captured
     }
 }
 
 fn invalidate_connection(state: &DesktopState) {
-    let epoch = state.connection_epoch.fetch_add(1, Ordering::AcqRel) + 1;
+    invalidate_connection_with_bootstrap_failure(state, None);
+}
+
+fn invalidate_connection_with_bootstrap_failure(state: &DesktopState, bootstrap_code: Option<&str>) {
+    let observed = state.lifecycle.record_connection_change(&state.connection_epoch, bootstrap_code);
+    let (epoch, failure) = match observed {
+        Ok(snapshot) => (snapshot.connection_epoch, snapshot.failure),
+        // A poisoned lifecycle can never produce a resolution receipt. Still
+        // invalidate queued ingress and retain the fixed fail-closed cause.
+        Err(_) => {
+            let epoch = state.connection_epoch.fetch_add(1, Ordering::AcqRel) + 1;
+            (epoch, Some(ipc_transport::BootstrapFailure { epoch, code: ipc_transport::FAILED.into() }))
+        }
+    };
     state.admission_present.store(false, Ordering::Release);
     state.embedded_review_active.store(false, Ordering::Release);
     if let Ok(mut binding) = state.review_window_binding.lock() { binding.opened(); }
     if let Ok(mut binding) = state.document_review_batch.lock() { *binding = None; }
-    let _ = state.app.emit("datasecure-connection", json!({ "epoch": epoch, "state": "recovering" }));
+    let event = if bootstrap_code.is_some() {
+        let code = failure.as_ref().map(|failure| failure.code.as_str()).unwrap_or(ipc_transport::FAILED);
+        json!({ "epoch": epoch, "state": "bootstrap_failed", "error_code": code })
+    } else { json!({ "epoch": epoch, "state": "recovering" }) };
+    let _ = state.app.emit("datasecure-connection", event);
 }
 
 // Requested while holding the sidecar mutex, but drained/reaped without it.
@@ -564,6 +622,7 @@ fn runtime_paths(app: &tauri::AppHandle) -> Result<(PathBuf, PathBuf, PathBuf), 
         .path()
         .resource_dir()
         .map_err(|_| "STANDALONE_RUNTIME_MISSING".to_string())?;
+    #[cfg(not(target_os = "macos"))]
     let target = if cfg!(target_os = "windows") {
         "datasecure-core-x86_64-pc-windows-msvc.exe"
     } else if cfg!(all(target_os = "macos", target_arch = "aarch64")) {
@@ -573,18 +632,22 @@ fn runtime_paths(app: &tauri::AppHandle) -> Result<(PathBuf, PathBuf, PathBuf), 
     } else {
         "datasecure-core-x86_64-unknown-linux-gnu"
     };
+    #[cfg(not(target_os = "macos"))]
     let executable_directory = std::env::current_exe()
         .ok()
         .and_then(|value| value.parent().map(Path::to_path_buf));
+    #[cfg(not(target_os = "macos"))]
     let bundled_name = if cfg!(target_os = "windows") {
         "datasecure-core.exe"
     } else {
         "datasecure-core"
     };
+    #[cfg(not(target_os = "macos"))]
     let mut executable_candidates = vec![
         resource.join(target),
         resource.join("binaries").join(target),
     ];
+    #[cfg(not(target_os = "macos"))]
     if let Some(directory) = executable_directory {
         // Tauri removes the target-triple suffix from externalBin entries and
         // puts the executable next to the application binary. Keep the exact
@@ -592,9 +655,13 @@ fn runtime_paths(app: &tauri::AppHandle) -> Result<(PathBuf, PathBuf, PathBuf), 
         executable_candidates.push(directory.join(bundled_name));
         executable_candidates.push(directory.join(target));
     }
+    #[cfg(not(target_os = "macos"))]
     if cfg!(debug_assertions) {
         executable_candidates.push(manifest.join("binaries").join(target));
     }
+    #[cfg(target_os = "macos")]
+    let executable_candidates = vec![std::env::current_exe().map_err(|_| "STANDALONE_RUNTIME_MISSING".to_string())?
+        .parent().ok_or("STANDALONE_RUNTIME_MISSING")?.join("datasecure-core")];
     let executable = required_runtime_component(executable_candidates, RuntimeComponent::Core)
         .map_err(missing_runtime_component)?;
     let packaged_script = resource
@@ -650,9 +717,15 @@ fn runtime_spawn_code_for_os(error: &std::io::Error, os: &str) -> &'static str {
     }
 }
 
+#[cfg(test)]
 fn reserve_sidecar_generation(lifecycle: &ipc_transport::Lifecycle, generations: &Mutex<Vec<String>>)
     -> Result<(ipc_transport::SpawnGuard, String, Vec<String>), String> {
-    let guard = lifecycle.begin_spawn()?;
+    reserve_sidecar_generation_for_retry(lifecycle, generations, None)
+}
+
+fn reserve_sidecar_generation_for_retry(lifecycle: &ipc_transport::Lifecycle, generations: &Mutex<Vec<String>>,
+    retry_epoch: Option<u64>) -> Result<(ipc_transport::SpawnGuard, String, Vec<String>), String> {
+    let guard = lifecycle.begin_bootstrap(retry_epoch)?;
     let mut entropy = [0u8; 16];
     getrandom::fill(&mut entropy).map_err(|_| ipc_transport::FAILED.to_string())?;
     let generation: String = entropy.iter().map(|value| format!("{value:02x}")).collect();
@@ -684,6 +757,11 @@ fn configure_core_environment(command: &mut Command, app: &tauri::AppHandle) {
         }
     }
     command.env("DATASECURE_PRODUCT_CHANNEL", "standalone");
+    #[cfg(not(target_os = "macos"))]
+    command.env("DATASECURE_OWNERSHIP_GUARD_SHA256", source_fingerprint::ownership_guard_sha256());
+    #[cfg(target_os = "macos")]
+    { command.env("DATASECURE_MACOS_STATIC_CORE_SHA256", source_fingerprint::macos_static_core_sha256());
+      command.env("DATASECURE_MACOS_STATIC_CORE_ARTIFACT_SHA256", source_fingerprint::macos_static_core_artifact_sha256()); }
     #[cfg(target_os = "macos")]
     command.env("DATASECURE_BUNDLED_RUNTIME_REQUIRED", "1");
     command.env("DATASECURE_STANDALONE_DIAGNOSTIC_SESSION", diagnostic_session());
@@ -708,6 +786,9 @@ fn macos_core_probe(app: &tauri::AppHandle, executable: &Path, script_directory:
                 .arg("-e").arg("process.exit(0)");
         }
         let started = Instant::now();
+        if macos_core::bind(executable, started + Duration::from_secs(3)).is_err() {
+            diagnostic_event(stage, None, "failed", Some("STANDALONE_RUNTIME_BINARY_INVALID"), None); break;
+        }
         let Ok(mut child) = command.spawn() else {
             diagnostic_event(stage, None, "failed", Some("STANDALONE_CORE_PROBE_SPAWN_FAILED"),
                 Some(started.elapsed().as_millis()));
@@ -763,9 +844,26 @@ fn spawn_sidecar(app: &tauri::AppHandle, lifecycle: &ipc_transport::Lifecycle, s
         .ok_or_else(|| "STANDALONE_RUNTIME_MISSING".to_string())?;
     let mut command = Command::new(child_process_path(&executable));
     configure_core_environment(&mut command, app);
+    #[cfg(windows)]
+    let namespace = {
+        let prepared = private_namespace::prepare(&native_export_data_root()?)
+            .map_err(|_| "STANDALONE_DATA_ROOT_UNSAFE".to_string())?;
+        let prepared = Arc::new(prepared);
+        let handoff = prepared.handoff().map_err(|_| "STANDALONE_DATA_ROOT_UNSAFE".to_string())?;
+        command.env(private_namespace::CHILD_ROOT_ENV, handoff.root);
+        diagnostic_event("private_namespace_bound", None, "ready", Some(match handoff.origin {
+            private_namespace::Origin::Created => "STANDALONE_NAMESPACE_CREATED",
+            private_namespace::Origin::ExistingCandidate => "STANDALONE_NAMESPACE_EXISTING_CANDIDATE",
+        }), None);
+        prepared
+    };
     command.env("DATASECURE_NATIVE_EXPORT_CHANNEL", "1");
     command.env("DATASECURE_DOCUMENT_CONTROL_OWNER_PID", std::process::id().to_string());
     command.env("DATASECURE_DOCUMENT_CONTROL_GENERATION", &owner_generation);
+    // Native-only diagnostic namespace: eight fixed leaves remain discoverable
+    // when old logs exceed the inventory cap. No renderer path crosses IPC.
+    command.env("DATASECURE_STANDALONE_DIAGNOSTIC_SEGMENT", &owner_generation);
+    diagnostic_log::remember_sidecar_generation(&owner_generation);
     command.env("DATASECURE_RETIRED_CONTROL_GENERATIONS", serde_json::to_string(&retired_generations)
         .map_err(|_| ipc_transport::FAILED.to_string())?);
     // Optional, explicitly enabled content-free support trace. No arbitrary
@@ -792,6 +890,16 @@ fn spawn_sidecar(app: &tauri::AppHandle, lifecycle: &ipc_transport::Lifecycle, s
         use std::os::windows::process::CommandExt;
         command.creation_flags(0x08000000);
     }
+    #[cfg(windows)]
+    namespace.verify_binding().map_err(|_| "STANDALONE_DATA_ROOT_UNSAFE".to_string())?;
+    #[cfg(windows)]
+    let namespace_identity = namespace.handoff()
+        .map_err(|_| "STANDALONE_DATA_ROOT_UNSAFE".to_string())?.identity;
+    #[cfg(target_os = "macos")]
+    let core_binding = macos_core::bind(&executable, deadline)?;
+    #[cfg(target_os = "macos")]
+    { if Instant::now() >= deadline { return Err(ipc_transport::TIMEOUT.into()); }
+      if lifecycle.stopping.load(Ordering::Acquire) { return Err(ipc_transport::CLOSED.into()); } }
     let mut child = command.spawn().map_err(|error| {
         let code = runtime_spawn_code(&error);
         diagnostic_event(
@@ -829,6 +937,9 @@ fn spawn_sidecar(app: &tauri::AppHandle, lifecycle: &ipc_transport::Lifecycle, s
             }
         });
     }
+    #[cfg(windows)]
+    let child = ipc_transport::ChildControl::new_with_lifetime_pin(child, namespace.clone());
+    #[cfg(not(windows))]
     let child = ipc_transport::ChildControl::new(child);
     spawn_guard.register(child.clone())?;
     if Instant::now() >= deadline {
@@ -856,6 +967,10 @@ fn spawn_sidecar(app: &tauri::AppHandle, lifecycle: &ipc_transport::Lifecycle, s
         responses,
         owner_generation,
         unusable: false,
+        #[cfg(windows)]
+        namespace,
+        #[cfg(windows)]
+        namespace_identity,
     };
     let ready = match ipc_transport::receive_until(&process.responses, deadline, &lifecycle.stopping) {
         Ok(Ok(frame)) => frame,
@@ -894,7 +1009,7 @@ fn spawn_sidecar(app: &tauri::AppHandle, lifecycle: &ipc_transport::Lifecycle, s
     };
     if ready["schema"] != "datasecure-standalone-ready/1" || ready["owner_generation"] != process.owner_generation ||
         !matches!(ready["diagnostic_log"].as_str(), Some("ready" | "unavailable")) ||
-        ready.as_object().map_or(true, |fields| fields.len() != if ready["ok"] == true { 4 } else { 5 }) {
+        ready.as_object().is_none_or(|fields| fields.len() != if ready["ok"] == true { 4 } else { 5 }) {
         diagnostic_process_event("sidecar_bootstrap_failed", "failed", Some("STANDALONE_SIDECAR_READY_INVALID"),
             Some(bootstrap_started.elapsed().as_millis()), process_id);
         return Err(ipc_transport::FAILED.to_string());
@@ -911,6 +1026,10 @@ fn spawn_sidecar(app: &tauri::AppHandle, lifecycle: &ipc_transport::Lifecycle, s
             Some(bootstrap_started.elapsed().as_millis()), process_id);
         return Err(code.to_string());
     }
+    #[cfg(target_os = "macos")]
+    core_binding.verify_again(deadline)?;
+    #[cfg(windows)]
+    publication_data_root(&process)?;
     diagnostic_process_event("sidecar_bootstrap_ready", "ready", None,
         Some(bootstrap_started.elapsed().as_millis()), process_id);
     Ok(process)
@@ -1257,8 +1376,16 @@ fn history_request(request_id: &str, action: &str, batch_id: &str) -> Result<Val
     )
 }
 
-fn run_history_request(request_id: &str, recover_exports: Option<bool>, recover_batch_id: Option<String>) -> Result<Value, String> {
+fn run_history_request(request_id: &str, recover_exports: Option<bool>, recover_batch_id: Option<String>, include_hidden: Option<bool>, batch_id: Option<String>) -> Result<Value, String> {
     let mut request = private_request(request_id, "get_run_history", None, &[], None, None)?;
+    if let Some(batch_id) = batch_id {
+        if recover_exports.is_some() || recover_batch_id.is_some() || include_hidden.is_some()
+            || batch_id.len() != 64 || !batch_id.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)) {
+            return Err("STANDALONE_HISTORY_INVALID".to_string());
+        }
+        request["batch_id"] = json!(batch_id);
+        return Ok(request);
+    }
     match (recover_exports, recover_batch_id) {
         (None, None) => {},
         (Some(true), Some(batch_id)) if batch_id.len() == 64 && batch_id.bytes()
@@ -1268,7 +1395,20 @@ fn run_history_request(request_id: &str, recover_exports: Option<bool>, recover_
         },
         _ => return Err("STANDALONE_HISTORY_INVALID".to_string()),
     }
+    match include_hidden {
+        None => {},
+        Some(true) => request["include_hidden"] = json!(true),
+        Some(false) => return Err("STANDALONE_HISTORY_INVALID".to_string()),
+    }
     Ok(request)
+}
+
+fn run_history_visibility_request(request_id: &str, batch_id: &str, hidden: bool) -> Result<Value, String> {
+    if batch_id.len() != 64 || !batch_id.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)) {
+        return Err("STANDALONE_HISTORY_INVALID".to_string());
+    }
+    Ok(json!({ "schema": IPC_SCHEMA, "request_id": request_id, "action": "set_run_history_visibility",
+        "batch_id": batch_id, "hidden": hidden }))
 }
 
 fn removal_request(request_id: &str, selection_index: u64) -> Result<Value, String> {
@@ -1293,7 +1433,7 @@ fn rpc_duration(action: &str) -> Duration {
     Duration::from_secs(if matches!(action, "admit_selected_sources" | "preview_document_export" | "export_approved_documents" |
         "abandon_document_export" | "decide_document_review_batch" |
         "resolve_document_export" | "resolve_document_identity_overview" | "get_document_reviews" | "get_document_review_history_summary" |
-        "get_run_history" | "get_run_failures" | "resolve_history_results" | "resolve_history_ledger" |
+        "get_run_history" | "set_run_history_visibility" | "get_run_failures" | "resolve_history_results" | "resolve_history_ledger" |
         "resolve_history_identity_mapping" | "get_review_session" | "resolve_current_results" | "resolve_local_ledger") { 300 }
         else if matches!(action, "get_public_state" | "get_ui_context") { 120 }
         else { 30 })
@@ -1396,31 +1536,36 @@ fn rpc_request(
         // Reserve under the same sidecar mutex, BEFORE consuming a recovery
         // generation. Retirement may have removed the process but still be
         // completing its lifecycle transition. Such reads are not bootstraps.
-        let (spawn_guard, owner_generation, retired_generations) = reserve_sidecar_generation(&state.lifecycle, &state.retired_owner_generations)
+        let retry_epoch = if action == "get_public_state" { state.bootstrap_retry_epoch } else { None };
+        let (spawn_guard, owner_generation, retired_generations) = reserve_sidecar_generation_for_retry(&state.lifecycle, &state.retired_owner_generations, retry_epoch)
             .inspect_err(|code| diagnostic_event("sidecar_start_blocked", None, "blocked", Some(code), None))?;
         let app = state.app.clone();
         let lifecycle = state.lifecycle.clone();
         let (sender, receiver) = mpsc::channel();
         let bootstrap_deadline = Instant::now() + rpc_bootstrap_duration();
-        std::thread::Builder::new().name("sidecar-bootstrap".into()).spawn(move || {
+        let bootstrap = std::thread::Builder::new().name("sidecar-bootstrap".into()).spawn(move || {
             let _ = sender.send(spawn_sidecar(&app, &lifecycle, spawn_guard, bootstrap_deadline, owner_generation, retired_generations));
-        }).map_err(|_| ipc_transport::FAILED.to_string())?;
-        let spawned = ipc_transport::receive_until(&receiver, bootstrap_deadline, &state.lifecycle.stopping)
-            .and_then(|result| result).map_err(|code| admission_transport_code(action, code));
+        });
+        let spawned = bootstrap.map_err(|_| ipc_transport::FAILED.to_string()).and_then(|_| {
+            ipc_transport::receive_until(&receiver, bootstrap_deadline, &state.lifecycle.stopping)
+                .and_then(|result| result)
+        }).map_err(|code| admission_transport_code(action, code));
         match spawned {
             Ok(process) => *process_guard = Some(process),
             Err(code) => {
                 // Invalidate queued commands even if no service reached Ready.
-                invalidate_connection(state);
+                invalidate_connection_with_bootstrap_failure(state, Some(&code));
                 early_failure(&code);
                 return Err(code);
             }
         }
+        // Record the cleared cause and new ingress epoch atomically before
+        // notification. The receipt is historical, never a workspace certificate.
+        let ready = state.lifecycle.confirm_bootstrap_ready(state.expected_connection_epoch, &state.connection_epoch)?;
         state.retired_owner_generations.lock().map_err(|_| ipc_transport::FAILED.to_string())?.clear();
-        // A recovered Ready is a new ingress boundary too: commands queued
-        // while bootstrap was running must not gain authority retroactively.
-        let epoch = ipc_transport::ready_connection_epoch(&state.connection_epoch);
-        let _ = state.app.emit("datasecure-connection", json!({ "epoch": epoch, "state": "ready" }));
+        let resolution = ready.resolution.map(|value| json!({ "failure_epoch": value.failure_epoch, "ready_epoch": value.ready_epoch }));
+        let _ = state.app.emit("datasecure-connection", json!({
+            "epoch": ready.connection_epoch, "state": "ready", "bootstrap_resolution": resolution }));
     }
     // A successful Ready (or a queued request obtaining the sidecar mutex)
     // starts a fresh bounded action window. Expired startup time must never
@@ -1446,7 +1591,7 @@ fn rpc_request(
             }
             let publication_reply = if frame.get("schema").and_then(Value::as_str) == Some(native_export_channel::PUBLICATION_REQUEST) {
                 native_export_channel::handle_publication_with_activity(&frame, &request, &mut publication, &state.lifecycle,
-                    &native_export_data_root()?, deadline, export_reporter.clone())?
+                    &publication_data_root(process)?, deadline, export_reporter.clone())?
             } else { None };
             if let Some(reply) = publication_reply.or(native_export_channel::handle(&frame, &request, &mut native_handled, &state.lifecycle, deadline)?) {
                 native_bound = reply.get("ok").and_then(Value::as_bool) == Some(true);
@@ -1481,8 +1626,11 @@ fn rpc_request(
             );
             if let Some(process) = process_guard.as_mut() {
                 process.unusable = true;
-                schedule_sidecar_retirement(state, process).inspect_err(|_| diagnostic_event(
-                    "sidecar_retirement_failed", None, "failed", Some("STANDALONE_CONNECTION_RECOVERY_BLOCKED"), None)).ok();
+                schedule_sidecar_retirement(state, process).inspect_err(|code| {
+                    if let Some(diagnostic) = ipc_transport::retirement_failure_diagnostic(code) {
+                        diagnostic_event("sidecar_retirement_failed", None, "failed", Some(diagnostic), None);
+                    }
+                }).ok();
             }
             invalidate_connection(state);
             return Err(code);
@@ -1499,8 +1647,11 @@ fn rpc_request(
         );
         if let Some(process) = process_guard.as_mut() {
             process.unusable = true;
-            schedule_sidecar_retirement(state, process).inspect_err(|_| diagnostic_event(
-                "sidecar_retirement_failed", None, "failed", Some("STANDALONE_CONNECTION_RECOVERY_BLOCKED"), None)).ok();
+            schedule_sidecar_retirement(state, process).inspect_err(|code| {
+                if let Some(diagnostic) = ipc_transport::retirement_failure_diagnostic(code) {
+                    diagnostic_event("sidecar_retirement_failed", None, "failed", Some(diagnostic), None);
+                }
+            }).ok();
         }
         invalidate_connection(state);
         return Err("STANDALONE_IPC_FAILED".to_string());
@@ -1539,6 +1690,21 @@ fn native_export_data_root() -> Result<PathBuf, String> {
         return Ok(base.join("SecureDataMsg-Standalone"));
     }
     native_export_broker::private_data_root().map_err(|_| "STANDALONE_DATA_ROOT_UNSAFE".into())
+}
+
+// Publication must address the same native object passed to this Core, not
+// resolve LOCALAPPDATA independently under another token/virtualized spelling.
+fn publication_data_root(process: &SidecarProcess) -> Result<PathBuf, String> {
+    #[cfg(windows)]
+    {
+        let handoff = process.namespace.handoff().map_err(|_| "STANDALONE_DATA_ROOT_UNSAFE".to_string())?;
+        if handoff.identity != process.namespace_identity {
+            return Err("STANDALONE_DATA_ROOT_UNSAFE".into());
+        }
+        Ok(handoff.root.to_path_buf())
+    }
+    #[cfg(not(windows))]
+    { let _ = process; native_export_data_root() }
 }
 
 async fn blocking_rpc(state: DesktopState, action: &'static str) -> Result<Value, String> {
@@ -1878,21 +2044,33 @@ fn validate_ocr_contact_review(mode: &str, value: Option<bool>) -> Result<bool, 
         _ => Err("OCR_CONTACT_REVIEW_INVALID".to_string()),
     }
 }
-#[tauri::command]
-async fn get_public_state(state: State<'_, DesktopState>) -> Result<Value, String> {
-    blocking_rpc(state.inner().capture_connection(), "get_public_state").await
+#[tauri::command(rename_all = "camelCase")]
+async fn get_public_state(state: State<'_, DesktopState>, retry_bootstrap: Option<bool>) -> Result<Value, String> {
+    let mut owned = state.inner().capture_connection();
+    if retry_bootstrap == Some(true) { owned.bootstrap_retry_epoch = Some(owned.expected_connection_epoch); }
+    blocking_rpc(owned, "get_public_state").await
 }
 #[tauri::command]
 async fn get_ui_context(state: State<'_, DesktopState>) -> Result<Value, String> {
     blocking_rpc(state.inner().capture_connection(), "get_ui_context").await
 }
 #[tauri::command(rename_all = "camelCase")]
-async fn get_run_history(state: State<'_, DesktopState>, recover_exports: Option<bool>, recover_batch_id: Option<String>) -> Result<Value, String> {
+async fn get_run_history(state: State<'_, DesktopState>, recover_exports: Option<bool>, recover_batch_id: Option<String>, include_hidden: Option<bool>, batch_id: Option<String>) -> Result<Value, String> {
     let owned = state.inner().capture_connection();
     tauri::async_runtime::spawn_blocking(move || {
         let id = request_id();
-        let request = run_history_request(&id, recover_exports, recover_batch_id)?;
+        let request = run_history_request(&id, recover_exports, recover_batch_id, include_hidden, batch_id)?;
         rpc_request(&owned, "get_run_history", &id, request)
+    }).await.map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())?
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn set_run_history_visibility(state: State<'_, DesktopState>, batch_id: String, hidden: bool) -> Result<Value, String> {
+    let owned = state.inner().capture_connection();
+    tauri::async_runtime::spawn_blocking(move || {
+        let id = request_id();
+        let request = run_history_visibility_request(&id, &batch_id, hidden)?;
+        rpc_request(&owned, "set_run_history_visibility", &id, request)
     }).await.map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())?
 }
 
@@ -2249,6 +2427,48 @@ async fn open_document_export(window: tauri::WebviewWindow, state: State<'_, Des
     open_local_target(&target, "directory", "open_document_export")
 }
 
+fn recorded_document_export_request(id: &str, batch_id: &str, operation_id: &str) -> Result<Value, String> {
+    if batch_id.len() != 64 || operation_id.len() != 32 ||
+        !batch_id.bytes().chain(operation_id.bytes()).all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)) {
+        return Err("AI_EXPORT_INVALID".to_string());
+    }
+    Ok(json!({ "schema": IPC_SCHEMA, "request_id": id, "action": "resolve_document_export",
+        "batch_id": batch_id, "operation_id": operation_id }))
+}
+
+fn recorded_document_export_surface(window: &tauri::WebviewWindow, state: &DesktopState) -> Result<(), String> {
+    // The receipt belongs to durable history; opening it never restores a
+    // document review binding or grants a new decision/export capability.
+    document_review_surface(window, state, None)?;
+    if state.expected_connection_epoch != state.connection_epoch.load(Ordering::Acquire) {
+        return Err("STANDALONE_CONNECTION_CHANGED".to_string());
+    }
+    if state.lifecycle.stopping.load(Ordering::Acquire) { return Err(ipc_transport::CLOSED.to_string()); }
+    Ok(())
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn open_recorded_document_export(window: tauri::WebviewWindow, state: State<'_, DesktopState>,
+    batch_id: String, operation_id: String) -> Result<Value, String> {
+    let owned = state.inner().capture_connection();
+    recorded_document_export_surface(&window, &owned)?;
+    let id = request_id();
+    let request = recorded_document_export_request(&id, &batch_id, &operation_id)?;
+    let resolver = owned.clone();
+    let resolved = tauri::async_runtime::spawn_blocking(move || {
+        // The resolver revalidates the receipt, directory and every file hash.
+        // It may reconcile metadata for a previously published copy, but
+        // never publishes a new copy or acknowledges receipt on this route.
+        // No renderer-supplied path crosses IPC.
+        rpc_request(&resolver, "resolve_document_export", &id, request)
+    }).await.map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())??;
+    let target = validate_local_target(resolved, "directory")?;
+    // A connection/window change during resolution must prevent OS handoff;
+    // use the ingress epoch, never a fresh capture after the await.
+    recorded_document_export_surface(&window, &owned)?;
+    open_local_target(&target, "directory", "open_recorded_document_export")
+}
+
 #[tauri::command(rename_all = "camelCase")]
 async fn open_document_identity_overview(window: tauri::WebviewWindow, state: State<'_, DesktopState>,
     batch_id: String, operation_id: Option<String>) -> Result<Value, String> {
@@ -2460,7 +2680,9 @@ async fn open_identity_mappings_directory(state: State<'_, DesktopState>) -> Res
 #[tauri::command]
 async fn open_diagnostic_folder() -> Result<Value, String> {
     let directory = diagnostic_directory();
-    diagnostic_log::ensure_directory(&directory)
+    let ensure = directory.clone();
+    tauri::async_runtime::spawn_blocking(move || diagnostic_log::ensure_directory(&ensure)).await
+        .map_err(|_| "STANDALONE_DIAGNOSTICS_OPEN_FAILED".to_string())?
         .map_err(|_| "STANDALONE_DIAGNOSTICS_OPEN_FAILED".to_string())?;
     let command = native_open_command(&directory, "directory")?;
     diagnostic_event("os_open_requested", Some("open_diagnostic_folder"), "progress", None, None);
@@ -2528,7 +2750,17 @@ async fn save_diagnostic_bundle() -> Result<Value, String> {
 fn get_native_recovery_status(state: State<'_, DesktopState>) -> Value {
     // Independent of the sidecar, including while IPC is blocked. This
     // snapshot never authorizes a new run, a release, or an export.
-    json!({ "phase": state.lifecycle.recovery_phase(), "activity": state.activity.snapshot(), "diagnostic_log": diagnostic_log::status(), "local_ui_only": true,
+    // The failure, historical receipt and current epoch come from one lock;
+    // neither a null failure nor a phase string proves that a Core is healthy.
+    let (connection_epoch, failure, resolution) = match state.lifecycle.bootstrap_snapshot(&state.connection_epoch) {
+        Ok(snapshot) => (Some(snapshot.connection_epoch), snapshot.failure, snapshot.resolution),
+        Err(_) => (None, Some(ipc_transport::BootstrapFailure {
+            epoch: state.connection_epoch.load(Ordering::Acquire), code: ipc_transport::FAILED.into() }), None),
+    };
+    let failure = failure.map(|failure| json!({ "epoch": failure.epoch, "error_code": failure.code }));
+    let resolution = resolution.map(|value| json!({ "failure_epoch": value.failure_epoch, "ready_epoch": value.ready_epoch }));
+    json!({ "phase": state.lifecycle.recovery_phase(), "connection_epoch": connection_epoch,
+        "bootstrap_failure": failure, "bootstrap_resolution": resolution, "activity": state.activity.snapshot(), "diagnostic_log": diagnostic_log::status(), "diagnostic_writer": diagnostic_log::snapshot(), "local_ui_only": true,
         "external_disclosure": false })
 }
 #[tauri::command]
@@ -2629,6 +2861,7 @@ fn main() {
                 activity: ipc_activity::Tracker::default(),
                 connection_epoch: Arc::new(AtomicU64::new(0)),
                 expected_connection_epoch: 0,
+                bootstrap_retry_epoch: None,
                 retired_owner_generations: Arc::new(Mutex::new(Vec::new())),
                 lifecycle: ipc_transport::Lifecycle::default(),
                 exit_gate: ipc_transport::ExitGate::default(),
@@ -2687,6 +2920,7 @@ fn main() {
             get_public_state,
             get_ui_context,
             get_run_history,
+            set_run_history_visibility,
             open_review_window,
             open_embedded_review,
             close_review_window,
@@ -2710,6 +2944,7 @@ fn main() {
             preview_document_export,
             abandon_document_export,
             open_document_export,
+            open_recorded_document_export,
             open_document_identity_overview,
             open_history_results,
             open_history_ledger,
@@ -2825,6 +3060,25 @@ mod tests {
     }
 
     #[test]
+    fn held_bootstrap_failure_blocks_display_reads_without_consuming_generation_budget() {
+        let lifecycle = ipc_transport::Lifecycle::default();
+        let generations = Mutex::new(vec!["a".repeat(32)]);
+        lifecycle.hold_bootstrap_failure(1, "STANDALONE_OWNERSHIP_STORAGE_UNSAFE").unwrap();
+        for _ in 0..20 {
+            assert_eq!(reserve_sidecar_generation_for_retry(&lifecycle, &generations, None).err().as_deref(),
+                Some("STANDALONE_OWNERSHIP_STORAGE_UNSAFE"));
+        }
+        assert_eq!(generations.lock().unwrap().len(), 1);
+        assert!(reserve_sidecar_generation_for_retry(&lifecycle, &generations, Some(0)).is_err());
+        let (pending, _, previous) = reserve_sidecar_generation_for_retry(&lifecycle, &generations, Some(1)).unwrap();
+        assert_eq!(previous.len(), 1);
+        assert!(reserve_sidecar_generation_for_retry(&lifecycle, &generations, Some(1)).is_err());
+        assert_eq!(generations.lock().unwrap().len(), 2); drop(pending);
+        assert!(lifecycle.bootstrap_failure().unwrap().is_some());
+        assert!(lifecycle.stop());
+    }
+
+    #[test]
     fn tolerant_catalogue_is_bound_to_the_v2_asset_not_the_legacy_or_review_page() {
         assert!(workspace_catalogue_path("/workspace.html"));
         assert!(workspace_catalogue_path("workspace.html"));
@@ -2910,10 +3164,28 @@ mod tests {
     fn run_history_display_is_read_only_unless_exact_batch_recovery_is_requested() {
         let id = "1".repeat(32);
         let batch = "a".repeat(64);
-        let display = run_history_request(&id, None, None).unwrap();
+        let display = run_history_request(&id, None, None, None, None).unwrap();
         assert_eq!(display["action"], "get_run_history");
         assert_eq!(display.as_object().unwrap().len(), 3);
-        let recovery = run_history_request(&id, Some(true), Some(batch.clone())).unwrap();
+        let hidden = run_history_request(&id, None, None, Some(true), None).unwrap();
+        assert_eq!(hidden["include_hidden"], true);
+        assert_eq!(hidden.as_object().unwrap().len(), 4);
+        let detail = run_history_request(&id, None, None, None, Some(batch.clone())).unwrap();
+        assert_eq!(detail["batch_id"], batch);
+        assert_eq!(detail.as_object().unwrap().len(), 4);
+        assert!(run_history_request(&id, None, None, None, Some("../bad".to_string())).is_err());
+        assert!(run_history_request(&id, None, None, Some(true), Some(batch.clone())).is_err());
+        assert!(run_history_request(&id, Some(true), Some(batch.clone()), None, Some(batch.clone())).is_err());
+        assert_eq!(run_history_request(&id, None, None, Some(false), None).unwrap_err(), "STANDALONE_HISTORY_INVALID");
+        for hidden in [false, true] {
+            let change = run_history_visibility_request(&id, &batch, hidden).unwrap();
+            assert_eq!(change["action"], "set_run_history_visibility");
+            assert_eq!(change["batch_id"], batch);
+            assert_eq!(change["hidden"], hidden);
+            assert_eq!(change.as_object().unwrap().len(), 5);
+        }
+        assert!(run_history_visibility_request(&id, "../outside", true).is_err());
+        let recovery = run_history_request(&id, Some(true), Some(batch.clone()), None, None).unwrap();
         assert_eq!(recovery["recover_exports"], true);
         assert_eq!(recovery["recover_batch_id"], batch);
         assert_eq!(recovery.as_object().unwrap().len(), 5);
@@ -2922,7 +3194,7 @@ mod tests {
             (None, Some(batch.clone())), (Some(true), Some("A".repeat(64))),
             (Some(true), Some("a".repeat(63))),
         ] {
-            assert_eq!(run_history_request(&id, flag, target).unwrap_err(), "STANDALONE_HISTORY_INVALID");
+            assert_eq!(run_history_request(&id, flag, target, None, None).unwrap_err(), "STANDALONE_HISTORY_INVALID");
         }
     }
 
@@ -3274,6 +3546,21 @@ mod tests {
             Some("neutral"), None, false).unwrap();
         assert!(legacy.get("content_options").is_none());
         assert!(legacy.get("document_review").is_none());
+    }
+
+    #[test]
+    fn recorded_export_request_has_only_exact_receipt_identifiers() {
+        let batch = "a".repeat(64);
+        let operation = "b".repeat(32);
+        let request = recorded_document_export_request("0123456789abcdef", &batch, &operation).unwrap();
+        assert_eq!(request, json!({ "schema": IPC_SCHEMA, "request_id": "0123456789abcdef",
+            "action": "resolve_document_export", "batch_id": batch, "operation_id": operation }));
+        for (batch, operation) in [("a".repeat(63), "b".repeat(32)), ("a".repeat(65), "b".repeat(32)),
+            ("a".repeat(64), "b".repeat(31)), ("a".repeat(64), "b".repeat(33)),
+            ("A".repeat(64), "b".repeat(32)), ("a".repeat(64), "B".repeat(32)),
+            ("g".repeat(64), "b".repeat(32)), ("a".repeat(64), "../export".to_string())] {
+            assert_eq!(recorded_document_export_request("0123456789abcdef", &batch, &operation).unwrap_err(), "AI_EXPORT_INVALID");
+        }
     }
 
     #[test]

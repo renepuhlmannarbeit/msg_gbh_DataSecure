@@ -5,6 +5,8 @@ const os = require('os');
 const path = require('path');
 const crypto = require('crypto');
 const childProcess = require('child_process');
+const vm = require('vm');
+const { EventEmitter } = require('events');
 const { createSuite } = require('./helpers');
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'data-secure-ipc-'));
@@ -414,7 +416,105 @@ test('stdio server boots with the session key on inherited fd 3 and no network c
   assert.strictEqual(ready.network_listener, false);
   const source = fs.readFileSync(server, 'utf8');
   assert.match(source, /readBootstrapSecret\(fd = 3\)/);
-  assert.doesNotMatch(source, /process\.env|createServer|listen\(|http|net\./i);
+  assert.doesNotMatch(source, /createServer|listen\(|http|net\./i);
+});
+
+// Execute the actual entry source with explicitly modeled OS/stdio boundaries.
+// The real session implementation still validates and copies the FD-only key;
+// this is not a native Darwin Core/signature proof or a synthetic picker run.
+function stdioStartupFixture(options = {}) {
+  const source = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/companion/stdio-server.js'), 'utf8');
+  const events = [], envReads = [], output = [], input = new EventEmitter();
+  const bytes = options.bytes || secret;
+  let consumed = 0, scratch, sessionSecret;
+  const environment = new Proxy({
+    DATASECURE_NATIVE_EXPORT_CHANNEL: options.channel,
+    COMPANION_SESSION_KEY: Buffer.alloc(32, 83).toString('hex')
+  }, {
+    get(target, name) {
+      envReads.push(name);
+      assert.strictEqual(name, 'DATASECURE_NATIVE_EXPORT_CHANNEL', 'only the fixed native-role selector is an environment input');
+      return target[name];
+    }
+  });
+  function run() {
+    vm.runInNewContext(source, {
+      Buffer,
+      process: {
+        platform: options.platform || 'darwin', env: environment, stdin: input,
+        stdout: { write(value) { events.push('stdout'); output.push(JSON.parse(value)); } }
+      },
+      require(name) {
+        if (name === '../core/ownership-control') return { assertNativeOwnershipRuntime() {
+          events.push('native-runtime');
+          if (options.guardError) throw options.guardError;
+        } };
+        if (name === 'fs') return { readSync(fd, target, offset, length) {
+          events.push('read-fd'); scratch = target;
+          assert.strictEqual(fd, 3);
+          assert.ok(length > 0 && length <= 33);
+          const count = Math.min(length, bytes.length - consumed);
+          bytes.copy(target, offset, consumed, consumed + count); consumed += count;
+          return count;
+        } };
+        if (name === 'readline') return { createInterface({ input: selected }) {
+          assert.strictEqual(selected, input); return input;
+        } };
+        if (name === '../runtime') return require('../plugins/data-secure/server/runtime');
+        if (name === './ipc-session') return { createCompanionSession(received) {
+          events.push('session'); sessionSecret = Buffer.from(received.secret);
+          return createCompanionSession(received);
+        } };
+        assert.fail('unexpected entry dependency: ' + name);
+      }
+    }, { filename: 'actual-companion-stdio-startup.js', timeout: 1000 });
+  }
+  return { run, events, envReads, output, consumed: () => consumed,
+    scratch: () => scratch, sessionSecret: () => sessionSecret };
+}
+
+test('stdio startup reads only the native selector, never an environment session key', () => {
+  for (const [platform, channel, native] of [
+    ['win32', '1', false], ['linux', '1', false], ['darwin', undefined, false],
+    ['darwin', '0', false], ['darwin', 'true', false], ['darwin', '1', true]
+  ]) {
+    const f = stdioStartupFixture({ platform, channel }); f.run();
+    assert.deepStrictEqual(f.envReads, platform === 'darwin' ? ['DATASECURE_NATIVE_EXPORT_CHANNEL'] : []);
+    assert.strictEqual(f.events.filter(event => event === 'native-runtime').length, native ? 1 : 0);
+    if (native) assert.strictEqual(f.events[0], 'native-runtime', 'native validation precedes private bootstrap/session/ready');
+    assert.deepStrictEqual(f.sessionSecret(), secret);
+    assert.strictEqual(f.consumed(), 32);
+    assert.ok(f.scratch().every(byte => byte === 0));
+    assert.strictEqual(f.output.length, 1);
+    assert.strictEqual(f.output[0].type, 'ready');
+    assert.strictEqual(f.output[0].ipc_version, IPC_VERSION);
+    assert.strictEqual(f.output[0].authenticated_frames, true);
+    assert.strictEqual(f.output[0].model_authority, false);
+    assert.doesNotMatch(JSON.stringify(f.output), /COMPANION_SESSION_KEY|53535353/);
+  }
+});
+
+test('native Darwin startup rejects an invalid Core before reading the secret or emitting ready', () => {
+  const failure = Object.assign(new Error('synthetic fixed native failure'), { code: 'OWNERSHIP_GUARD_INTEGRITY_FAILED' });
+  const f = stdioStartupFixture({ platform: 'darwin', channel: '1', guardError: failure });
+  assert.throws(f.run, error => error === failure);
+  assert.deepStrictEqual(f.events, ['native-runtime']);
+  assert.strictEqual(f.consumed(), 0);
+  assert.strictEqual(f.sessionSecret(), undefined);
+  assert.deepStrictEqual(f.output, []);
+});
+
+test('environment key canaries cannot replace a short or oversized inherited bootstrap', () => {
+  for (const length of [0, 31, 33]) {
+    const f = stdioStartupFixture({ platform: 'darwin', channel: '1', bytes: Buffer.alloc(length, 61) });
+    assert.throws(f.run, /Ungültiger privater Companion-Bootstrap/);
+    assert.strictEqual(f.events[0], 'native-runtime');
+    assert.strictEqual(f.sessionSecret(), undefined);
+    assert.deepStrictEqual(f.output, []);
+    assert.ok(f.consumed() <= 33);
+    assert.ok(f.scratch().every(byte => byte === 0));
+    assert.deepStrictEqual(f.envReads, ['DATASECURE_NATIVE_EXPORT_CHANNEL']);
+  }
 });
 
 done();

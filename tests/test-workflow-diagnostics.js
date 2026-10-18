@@ -20,7 +20,8 @@ const NOW = Date.UTC(2026, 7, 24, 12, 0, 0);
 
 test('every shared cause survives both the workflow journal and its actual support mirror', () => {
   const { CAUSE_CODES, WORKFLOW_ERROR_CODES } = require('../plugins/data-secure/server/gateway/diagnostic-causes');
-  const { supportTraceStatus } = require('../plugins/data-secure/server/gateway/support-trace');
+  const { sanitizeSupportTrace, supportTraceStatus, _test: { readSupportTrace } } =
+    require('../plugins/data-secure/server/gateway/support-trace');
   const dataRoot = path.join(base, 'shared-catalog');
   const env = { EU_PRIVACY_SUPPORT_MODE: '1' };
   for (const [index, error_code] of WORKFLOW_ERROR_CODES.entries()) {
@@ -31,14 +32,24 @@ test('every shared cause survives both the workflow journal and its actual suppo
   }
   const workflow = workflowDiagnosticStatus(100, { dataRoot, env, now: NOW + 1000 });
   const support = supportTraceStatus(200, { dataRoot, env, now: NOW + 1000 });
+  const supportEvents = readSupportTrace({ dataRoot, env, now: NOW + 1000 });
   assert.strictEqual(workflow.returned_events, 50, 'the public status remains bounded');
+  assert.strictEqual(support.returned_events, Math.min(200, WORKFLOW_ERROR_CODES.length),
+    'the support status keeps its independent public response cap');
   assert.strictEqual(workflow.retained_events, WORKFLOW_ERROR_CODES.length);
+  assert.strictEqual(support.retained_events, WORKFLOW_ERROR_CODES.length);
   assert.deepStrictEqual(_test.readWorkflowEvents({ dataRoot, env, now: NOW + 1000 })
     .map(event => event.error_code).sort(), [...WORKFLOW_ERROR_CODES].sort());
-  assert.deepStrictEqual(support.events.map(event => event.error_code).sort(), [...WORKFLOW_ERROR_CODES].sort());
-  assert.ok(CAUSE_CODES.every(code => support.events.some(event => event.error_code === code)));
-  assert.doesNotMatch(JSON.stringify({ workflow, support }), /PRIVATE_SENTINEL/u);
-  assert.strictEqual(sanitizeWorkflowEvent({ error_code: 'PRIVATE_CODE' }).error_code, 'INTERNAL_FAILURE');
+  // Catalogue growth must not be confused with normalization or loss merely
+  // because the public status deliberately returns fewer retained records.
+  assert.deepStrictEqual(supportEvents.map(event => event.error_code).sort(), [...WORKFLOW_ERROR_CODES].sort());
+  assert.ok(CAUSE_CODES.every(code => supportEvents.some(event => event.error_code === code)));
+  assert.doesNotMatch(JSON.stringify({ workflow, support, supportEvents }), /PRIVATE_SENTINEL/u);
+  for (const error_code of ['PRIVATE_CODE', 'CSV_PRIVATE_PERSON', 'CONVERSION_PRIVATE_PERSON',
+    'STANDALONE_PRIVATE_PERSON', 'BATCH_PRIVATE_PERSON', 'RESIDUAL_PRIVATE_PERSON']) {
+    assert.strictEqual(sanitizeWorkflowEvent({ error_code }).error_code, 'INTERNAL_FAILURE');
+    assert.strictEqual(sanitizeSupportTrace({ error_code }, { env }).error_code, 'INTERNAL_FAILURE');
+  }
 });
 
 test('workflow events retain only fixed lifecycle metadata', () => {
@@ -60,6 +71,15 @@ test('failed content stages retain a fixed boundary and time without reflecting 
       duration_ms: 1234, error_code: 'PRIVATE_SENTINEL', message: 'private@example.invalid', path: '/private/source.png' }, { now: NOW });
     assert.equal(value.event, 'content_operation_failed'); assert.equal(value.phase, phase); assert.equal(value.duration_ms, 1234);
     assert.equal(value.error_code, 'INTERNAL_FAILURE'); assert.doesNotMatch(JSON.stringify(value), /PRIVATE_SENTINEL|private@example|source\.png/u);
+  }
+});
+
+test('fixed publication recovery causes survive diagnostic normalization without exception payloads', () => {
+  for (const error_code of ['BATCH_OWNERSHIP_CHANGED', 'BATCH_PUBLICATION_UNCONFIRMED', 'STANDALONE_PUBLICATION_INVALID']) {
+    const value = sanitizeWorkflowEvent({ event: 'content_operation_failed', phase: 'content_ack', outcome: 'stopped',
+      error_code, message: 'PRIVATE_PAYLOAD', path: '/private/source.png' }, { now: NOW });
+    assert.equal(value.error_code, error_code);
+    assert.doesNotMatch(JSON.stringify(value), /PRIVATE_PAYLOAD|source\.png/u);
   }
 });
 

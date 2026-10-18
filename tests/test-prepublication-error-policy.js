@@ -5,7 +5,9 @@ const {
   classifyPrepublicationError,
   applyRetryBudget,
   clearRetryBudget,
-  preserveOpaqueErrorCode
+  preserveOpaqueErrorCode,
+  isDocumentControlBusy,
+  isOwnershipControlFailure
 } = require('../plugins/data-secure/server/gateway/prepublication-error');
 
 const { test, done, assert } = createSuite('Prepublication error policy');
@@ -86,6 +88,40 @@ test('a different transient code starts a separate bounded sequence', () => {
   assert.equal(changed.retryFailures, 1);
   assert.equal(changed.retryable, true);
   assert.deepEqual(item, { retry_failure_code: 'REQUEST_CANCELLED', retry_failure_count: 1 });
+});
+
+test('document-control admission never consumes or clears an existing parser budget', () => {
+  const busy = Object.assign(Error('fixed contention'), { code: 'STANDALONE_BUSY' });
+  const pending = classifyPrepublicationError(busy, retryable);
+  assert.deepEqual(pending, { code: 'STANDALONE_BUSY', retryable: true, deferred: false });
+  for (const initial of [{}, { retry_failure_code: 'PARSER_TIMEOUT', retry_failure_count: 2 },
+    { retry_failure_code: 'STANDALONE_BUSY', retry_failure_count: 3 }]) {
+    const item = { ...initial };
+    for (let repeat = 0; repeat < 100; repeat++) {
+      const result = applyRetryBudget(item, pending);
+      assert.equal(result.code, 'STANDALONE_BUSY'); assert.equal(result.retryable, true);
+      assert.equal(result.exhausted, false); assert.deepEqual(item, initial);
+    }
+  }
+  const parser = { retry_failure_code: 'PARSER_TIMEOUT', retry_failure_count: 2 };
+  applyRetryBudget(parser, pending);
+  assert.equal(applyRetryBudget(parser, classifyPrepublicationError({ code: 'PARSER_TIMEOUT' }, retryable)).code, 'RETRY_LIMIT_EXCEEDED');
+});
+
+test('control classification reads only own data codes, never foreign getters or proxy traps', () => {
+  let effects = 0;
+  for (const value of [{ get code() { effects++; return 'STANDALONE_BUSY'; } },
+    Object.create({ code: 'STANDALONE_BUSY' }), new Proxy({}, { get() { effects++; }, getOwnPropertyDescriptor() { effects++; } })]) {
+    assert.equal(isDocumentControlBusy(value), false); assert.equal(isOwnershipControlFailure(value), false);
+    assert.equal(classifyPrepublicationError(value, retryable).code, 'INTERNAL_FAILURE');
+    assert.equal(preserveOpaqueErrorCode(value, Error('safe')).code, undefined);
+  }
+  assert.equal(effects, 0);
+  for (const code of ['BATCH_OWNERSHIP_CHANGED', 'OWNERSHIP_GUARD_BUSY', 'OWNERSHIP_GUARD_UNSAFE', 'OWNERSHIP_GUARD_CLOSE_UNCONFIRMED',
+    'STANDALONE_OWNERSHIP_STORAGE_UNSAFE', 'STANDALONE_OWNERSHIP_CONTROL_UNCONFIRMED']) {
+    const error = Object.assign(Error('fixed refusal'), { code });
+    assert.equal(isDocumentControlBusy(error), false); assert.equal(isOwnershipControlFailure(error), true);
+  }
 });
 
 done();

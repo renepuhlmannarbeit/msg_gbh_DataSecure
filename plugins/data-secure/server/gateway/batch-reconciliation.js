@@ -17,7 +17,7 @@ const {
 } = require('./document-result-grade');
 const { packageIdentityMatches } = require('./package-identity');
 const { artifactRoot, readMarkdownArtifact, metadata, verifyMarkdownItem } = require('../standalone/markdown-store');
-const { applyRetryBudget, clearRetryBudget } = require('./prepublication-error');
+const { applyRetryBudget, clearRetryBudget, isDocumentControlBusy, isOwnershipControlFailure } = require('./prepublication-error');
 const { isMarkdownBatch } = require('../core/processing-mode');
 const { contentOptionsForBatch, serializeContentOptions } = require('../core/content-options');
 const { privatePublicationRecord, confirmPublication } = require('./standalone-anonymized-batch');
@@ -78,7 +78,10 @@ function createBatchReconciliation(options = {}) {
     if (state) {
       try {
         if (contentOptionsForBatch(state)) return privatePublicationRecord(packageId, state, item);
-      } catch { return record('unsafe'); }
+      } catch (error) {
+        if (isDocumentControlBusy(error) || isOwnershipControlFailure(error)) throw error;
+        return record('unsafe');
+      }
     }
     if (!/^ds_[a-f0-9]{32}$/i.test(String(packageId || ''))) return record('unsafe');
     let output;
@@ -186,7 +189,8 @@ function createBatchReconciliation(options = {}) {
         item.checkpoint = 'delivery_pending';
         delete item.error_code;
         changed = true;
-      } catch {
+      } catch (error) {
+        if (isDocumentControlBusy(error) || isOwnershipControlFailure(error)) throw error;
         // Keep the verified package and durable pending state local. Never
         // manufacture a stopped row or expose mapping identity through MCP.
       }

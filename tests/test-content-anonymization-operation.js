@@ -562,6 +562,72 @@ async function main() {
       await assert.rejects(anonymizePersistedStandalone(fake, hooks), error => error.code === 'CONTENT_OPTIONS_BINDING_INVALID');
     assert.equal(effects, 0);
   });
+  await testAsync('real prepared content survives exhausted control admission without parser budget use and resumes without extraction', async () => {
+    const f = authorizedFixture(); let p, controller;
+    try {
+      p = await preparedFixture(f);
+      p.review.capturePrepared(p.state, p.item, p.basis, p.prepared, p.context);
+      const preparedFile = path.join(process.env.EU_PRIVACY_DATA_ROOT, 'document-reviews', f.state.token, f.item.id, 'prepared-publication.json');
+      const preparedBytes = fs.readFileSync(preparedFile);
+      p.context.dispose(); f.release();
+      const queued = batch._test.readStateForMaintenance(f.state.token);
+      Object.assign(queued.items[0], { status: 'pending', checkpoint: 'sealed', retry_failure_code: 'PARSER_TIMEOUT', retry_failure_count: 2 });
+      batch._test.writeState(queued);
+      controller = createBatchActiveLock({ lockPath: () => path.join(process.env.EU_PRIVACY_DATA_ROOT, 'document-reviews', 'control.lock') });
+      controller.acquireActiveLock('f'.repeat(64));
+      const pending = await batch.processBatchNext(f.state.token);
+      assert.equal(pending.error, 'STANDALONE_BUSY');
+      const durable = batch._test.readStateForMaintenance(f.state.token).items[0];
+      assert.equal(durable.status, 'retryable'); assert.equal(durable.checkpoint, 'retryable');
+      assert.equal(durable.error_code, 'STANDALONE_BUSY'); assert.equal(durable.document_result, undefined);
+      assert.equal(durable.retry_failure_code, 'PARSER_TIMEOUT'); assert.equal(durable.retry_failure_count, 2);
+      assert.deepEqual(fs.readFileSync(preparedFile), preparedBytes); assert.deepEqual(fs.readFileSync(f.source), f.bytes);
+      assert.equal(controller.releaseActiveLock('f'.repeat(64)), true); controller = null;
+      batch.resumeBatch(f.state.token);
+      // No converter runtime is installed in this suite: reaching a real /4
+      // publication therefore proves prepared replay, not a second extraction.
+      const resumed = await batch.processBatchNext(f.state.token);
+      assert.equal(resumed.package_id, p.basis.package_id); assert.equal(resumed.document_result.grade, 'complete');
+      assert.equal(resumed.error, undefined);
+      assert.deepEqual(fs.readFileSync(preparedFile), preparedBytes); assert.deepEqual(fs.readFileSync(f.source), f.bytes);
+    } finally { if (controller) controller.releaseActiveLock('f'.repeat(64)); p?.context.dispose(); f.release(); }
+  });
+  await testAsync('real post-rename control exhaustion keeps exact published bytes pending and recovery adopts without parser replay', async () => {
+    const f = authorizedFixture(); let p, controller, renames = 0;
+    const rename = fs.renameSync;
+    try {
+      p = await preparedFixture(f); p.review.capturePrepared(p.state, p.item, p.basis, p.prepared, p.context);
+      p.context.dispose(); f.release();
+      const queued = batch._test.readStateForMaintenance(f.state.token);
+      Object.assign(queued.items[0], { status: 'pending', checkpoint: 'sealed', retry_failure_code: 'PARSER_TIMEOUT', retry_failure_count: 2 });
+      batch._test.writeState(queued);
+      const artifact = path.join(process.env.EU_PRIVACY_DATA_ROOT, 'standalone-anonymized-artifacts', 'Output', p.basis.package_id);
+      fs.renameSync = function(from, to) {
+        const result = rename.apply(this, arguments);
+        if (to === artifact) {
+          renames++;
+          controller = createBatchActiveLock({ lockPath: () => path.join(process.env.EU_PRIVACY_DATA_ROOT, 'document-reviews', 'control.lock') });
+          controller.acquireActiveLock('e'.repeat(64));
+        }
+        return result;
+      };
+      const result = await batch.processBatchNext(f.state.token);
+      fs.renameSync = rename;
+      assert.equal(result.error, 'BATCH_PUBLICATION_UNCONFIRMED'); assert.equal(renames, 1);
+      const durable = batch._test.readStateForMaintenance(f.state.token).items[0];
+      assert.equal(durable.status, 'processing'); assert.equal(durable.checkpoint, 'package_published');
+      assert.equal(durable.document_result, undefined); assert.equal(durable.retry_failure_code, 'PARSER_TIMEOUT'); assert.equal(durable.retry_failure_count, 2);
+      const before = new Map(fs.readdirSync(artifact).map(name => [name, fs.readFileSync(path.join(artifact, name))]));
+      assert.deepEqual([...before.keys()].sort(), [p.basis.package_id + '.md', 'manifest.json'].sort());
+      assert.equal(controller.releaseActiveLock('e'.repeat(64)), true); controller = null;
+      batch.resumeBatch(f.state.token);
+      const recovered = batch._test.readStateForMaintenance(f.state.token).items[0];
+      assert.ok(['mapping_pending', 'delivery_pending'].includes(recovered.status));
+      assert.equal(recovered.package_id, p.basis.package_id); assert.equal(recovered.document_result.grade, 'complete');
+      for (const [name, bytes] of before) assert.deepEqual(fs.readFileSync(path.join(artifact, name)), bytes);
+      assert.equal(renames, 1); assert.deepEqual(fs.readFileSync(f.source), f.bytes);
+    } finally { fs.renameSync = rename; if (controller) controller.releaseActiveLock('e'.repeat(64)); p?.context.dispose(); f.release(); }
+  });
   await testAsync('production saved-run entry reports the absent real converter, not a false encryption error', async () => {
     const f = fixture(), copy = path.join(f.work, f.item.work_name);
     const original = fs.readFileSync(f.source), sealed = fs.readFileSync(copy);

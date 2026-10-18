@@ -418,6 +418,8 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
 }
 
 async function main() {
+  if (process.platform === 'darwin')
+    require('../core/macos-static-ownership-guard').assertParserCore('CONVERSION_POLICY_FAILED');
   if (globalThis.__DATASECURE_NETWORK_DENY_ACTIVE__ !== true || !process.permission || process.permission.has('fs.write') ||
       process.env.DISABLE_SYSTEM_FONTS_LOAD !== '1') fail('CONVERSION_POLICY_FAILED');
   const type = process.argv[2];

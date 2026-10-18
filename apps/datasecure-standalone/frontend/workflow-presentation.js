@@ -46,6 +46,66 @@
         (!complete ? 'Inhaltshinweise sind für diesen gespeicherten Stand nicht vollständig verfügbar; fehlende Angaben bedeuten nicht, dass alles fehlerfrei übernommen wurde. ' : '') +
         (count ? 'Die Dateien wurden erstellt; der Lauf ist deshalb nicht erneut offen.' : '') };
   }
+  // Historical receipts cover available result revisions, not every source.
+  // Journal-proven OCR omissions and privacy stops remain explicit warnings.
+  // Neither classification grants release or copy authority for those sources.
+  function historyReviewProjection(entry, data) {
+    const keys = ['reviewable_count', 'approved_count', 'unavailable_count', 'unclassified_source_count',
+      'current_exported_count', 'pending_export_count', 'pending_incomplete_count', 'pending_confirmation_count'];
+    const omitted = entry?.expected_ocr_omission_count === undefined ? 0 : entry.expected_ocr_omission_count;
+    const privacyStops = entry?.privacy_stop_count === undefined ? 0 : entry.privacy_stop_count;
+    const notProcessed = data?.not_processed_count === undefined ? 0 : data.not_processed_count;
+    if (!entry || !/^[a-f0-9]{64}$/u.test(entry.batch_id || '') || entry.processing_mode !== 'markdown-and-anonymize' ||
+        entry.status !== 'results_available' || entry.results_available !== true || entry.result_location !== 'available' ||
+        entry.resumable === true || entry.processing === true || entry.completion_pending === true ||
+        !integer(entry.selected_count) || entry.selected_count < 1 || !integer(entry.result_count) || entry.result_count < 1 ||
+        !integer(entry.failed_count) || entry.result_count + entry.failed_count !== entry.selected_count ||
+        entry.completed_count !== undefined && entry.completed_count !== entry.selected_count ||
+        entry.problem_count !== undefined && (!integer(entry.problem_count) || entry.problem_count > entry.failed_count) ||
+        !integer(omitted) || !integer(privacyStops) || omitted + privacyStops !== entry.failed_count ||
+        entry.failed_count > 0 && entry.failure_reason_breakdown_complete !== true ||
+        !data || data.ok !== true || data.local_ui_only !== true || data.external_disclosure !== false || data.available !== true ||
+        data.processing_mode !== entry.processing_mode || keys.some(key => !integer(data[key])) ||
+        !integer(notProcessed) || notProcessed !== entry.failed_count ||
+        data.reviewable_count !== entry.result_count || data.reviewable_count + notProcessed !== entry.selected_count ||
+        data.approved_count > data.reviewable_count || data.unavailable_count !== 0 || data.unclassified_source_count !== 0 ||
+        data.current_exported_count > data.reviewable_count || !Number.isSafeInteger(data.recorded_export_count) || data.recorded_export_count < 0 ||
+        data.current_exported_count > 0 && data.recorded_export_count === 0 ||
+        data.pending_export_count !== data.pending_incomplete_count + data.pending_confirmation_count ||
+        entry.review_policy !== undefined && entry.review_policy !== 'automatic-conservative' ||
+        (entry.review_policy ?? null) !== (data.review_policy ?? null) ||
+        data.review_policy !== undefined && (data.review_policy !== 'automatic-conservative' ||
+          !integer(data.automatically_approved_count) || data.automatically_approved_count > data.approved_count)) return null;
+    const projection = projectRun({ ...entry, source: 'documents', fresh: true, processing_complete: true,
+      document_count: data.reviewable_count, approved_count: data.approved_count, problem_count: 0,
+      expected_omission_count: omitted,
+      automatically_approved_count: data.automatically_approved_count ?? 0,
+      export_pending: data.pending_export_count > 0,
+      export_complete: data.recorded_export_count > 0 && data.current_exported_count === data.reviewable_count });
+    if (projection.phase === 'exported') {
+      projection.heading = 'Export mit Abschlussbeleg' + (notProcessed ? ' · Lauf mit Hinweisen' : '');
+      projection.next = projection.next.replace('Die bestätigte Kopie kannst du über den gespeicherten Exportbeleg öffnen.',
+        'Die ' + data.reviewable_count + ' verfügbaren Ergebnisstände sind freigegeben und in gespeicherten Abschlussbelegen erfasst. Für diesen Stand ist kein weiterer Export nötig. Gespeicherte Kopien werden beim Öffnen erneut geprüft.');
+    }
+    if (notProcessed) {
+      projection.stages[0].status = 'warning';
+      projection.counts += ' · ' + entry.result_count + ' von ' + entry.selected_count + ' Quellen als Ergebnis verfügbar';
+      if (omitted) projection.counts += ' · ' + omitted + ' ohne OCR nicht umgewandelt';
+      if (privacyStops) {
+        projection.stages[1].status = 'warning';
+        projection.counts += ' · ' + privacyStops + ' aus Datenschutzgründen angehalten';
+        projection.next += ' ' + privacyStops + (privacyStops === 1 ? ' Quelle wurde' : ' Quellen wurden') +
+          ' aus Datenschutzgründen angehalten. Für ' + (privacyStops === 1 ? 'diese Quelle gibt' : 'diese Quellen gibt') + ' es keinen freigabefähigen Prüfstand.';
+      }
+      projection.next += ' Die ' + (notProcessed === 1 ? 'nicht verarbeitete Quelle ist' : notProcessed + ' nicht verarbeiteten Quellen sind') +
+        ' weder freigegeben noch im Export enthalten.';
+    }
+    projection.expected_omission_count = omitted;
+    projection.privacy_stop_count = privacyStops;
+    projection.not_processed_count = notProcessed;
+    projection.counts = 'Abgeglichener Stand: ' + projection.counts;
+    return projection;
+  }
   function projectRun(value) {
     if (!value || !['processor', 'review', 'documents'].includes(value.source) || !/^[a-f0-9]{64}$/u.test(value.batch_id || '') ||
         !['markdown-only', 'markdown-and-anonymize'].includes(value.processing_mode)) return null;
@@ -55,7 +115,7 @@
       value.state === 'processing' && value.review_count > 0);
     const labels = raw ? ['Text übernehmen', contactReviewActive ? 'Gewählte OCR-Kontaktprüfung' : 'Markdown nachkorrigieren (optional)', 'Markdown-Dateien']
       : ['Text übernehmen', fast ? 'Fundstellen automatisch behandeln' : 'Fundstellen prüfen',
-        fast ? 'Automatische Erstfreigabe' : 'Dokumente freigeben', 'Für KI exportieren'];
+        fast ? 'Automatische Erstfreigabe' : 'Dokumente freigeben', 'Dateien exportieren'];
     const output = { batchId: value.batch_id, raw, phase: 'unknown', heading: 'Laufstatus abgleichen',
       next: 'Gespeicherten Stand neu laden. Keine Freigabe oder Export daraus ableiten.',
       busy: false, stages: labels.map(label => ({ label, status: 'pending' })) };
@@ -64,6 +124,17 @@
       if (index >= 0) output.stages[index].status = 'current';
     };
     if (value.source === 'documents') {
+      // A durable ACK is a historical fact even while the optional current
+      // document list is stale. It grants no fresh approval/export authority.
+      if ((value.busy === true || value.fresh !== true) && integer(value.confirmed_copy_count) &&
+          value.confirmed_copy_count > 0 && value.confirmed_copy_count <= 200 && value.export_pending !== true) {
+        output.phase = 'copy_confirmed';
+        output.heading = raw ? 'Markdown-Kopie abgeschlossen' : 'Export abgeschlossen';
+        output.stages[raw ? 2 : 3].status = 'done';
+        output.counts = `${value.confirmed_copy_count} ausgewählte Dateien bestätigt kopiert`;
+        output.next = 'Diese Kopie ist abgeschlossen. Den Verlauf kannst du öffnen; der heutige Dokumentstatus wird getrennt geprüft. Bis dahin bleiben Änderungen und neue Kopien gesperrt.';
+        return output;
+      }
       if (value.busy === true) { output.busy = true; output.heading = 'Lokaler Prüfvorgang läuft'; output.next = 'Bitte warten. Der gespeicherte Stand wird abgeglichen; noch keine neue Freigabe oder Kopie ableiten.'; return output; }
       if (value.fresh !== true || !integer(value.document_count) || !integer(value.approved_count) ||
           value.approved_count > value.document_count || !integer(value.problem_count)) return output;
@@ -78,14 +149,14 @@
           value.approved_count === value.document_count) {
         if (wholeRun && value.problem_count === 0) {
           output.stages[review].status = 'done'; output.stages[copy].status = 'done';
-          Object.assign(output, { phase: 'exported', heading: raw ? 'Markdown-Kopie gespeichert' : 'KI-Export abgeschlossen',
+          Object.assign(output, { phase: 'exported', heading: raw ? 'Markdown-Kopie gespeichert' : 'Export abgeschlossen',
             next: 'Die bestätigte Kopie kannst du über den gespeicherten Exportbeleg öffnen.' });
         } else set('selection_exported', copy, raw ? 'Markdown-Auswahl gespeichert' : 'Ausgewählte Dokumente exportiert',
           'Die ausgewählte Kopie ist bestätigt. Weitere Dateien und den Abschluss dieses Laufs gesondert prüfen.');
       } else if (!raw && value.document_count > 0 && value.approved_count === value.document_count) {
         output.stages[review].status = wholeRun ? 'done' : 'pending';
         set('approved', copy, raw ? 'Textprüfung gespeichert' : 'Verfügbare Dokumente freigegeben',
-          raw ? 'Korrigierte Markdown-Kopie ausdrücklich speichern. Sie enthält Originalinhalte.' : 'Freigegebene Dokumente auswählen und den KI-Export ausdrücklich bestätigen.');
+          raw ? 'Korrigierte Markdown-Kopie ausdrücklich speichern. Sie enthält Originalinhalte.' : 'Freigegebene Dokumente auswählen und den Export ausdrücklich bestätigen.');
       } else set('documents', review, raw ? 'Markdown prüfen und korrigieren' : 'Dokumentprüfung offen',
         raw ? 'Nachkorrektur ist optional. Bereits konvertierte Dateien sind nicht anonymisiert.' : 'Vollständige Dokumente vergleichen und gewünschte aktuelle Stände freigeben.');
       if (raw) output.stages[review].status = value.dirty === true ? 'current' : 'optional';
@@ -96,7 +167,7 @@
         output.counts += ` · ${value.automatically_approved_count} automatisch, nicht manuell geprüft`;
         if (output.phase === 'approved') {
           output.heading = wholeRun ? 'Schnellweg abgeschlossen · automatisch freigegeben' : 'Bisher verfügbare Dokumente automatisch freigegeben';
-          output.next = 'Keine erneute Dokumentfreigabe nötig. Für eine lokale KI-Kopie die gewünschten Dateien auswählen und den Export ausdrücklich bestätigen. Die Ergebnisse wurden nicht manuell geprüft.';
+          output.next = 'Keine erneute Dokumentfreigabe nötig. Für einen lokalen Export die gewünschten Dateien auswählen und den Export ausdrücklich bestätigen. Die Ergebnisse wurden nicht manuell geprüft.';
         }
       }
       if (!wholeRun) output.next += ' Der Laufabschluss ist noch nicht bestätigt; verfügbare Dokumente sind nicht der gesamte Stapel.';
@@ -136,6 +207,9 @@
       else if (phase === 'complete') set('review_complete', -1, raw ? 'OCR-Kontaktprüfung abgeschlossen' : 'Fundstellenprüfung abgeschlossen', raw
         ? 'Zum Abschluss dieses Markdown-Laufs zurückkehren. Nachbearbeitung ist optional; keine weitere Pflichtfreigabe. Inhalte sind nicht anonymisiert.'
         : 'Die Dokumentprüfung desselben Laufs wird geöffnet. Freigabe und Export folgen gesondert.');
+      else if (phase === 'deferred') set('review_deferred', 1, raw ? 'OCR-Kontaktprüfung vertagt' : 'Fundstellenprüfung vertagt', raw
+        ? 'Zum Markdown-Lauf zurückkehren und die gewählte Kontaktprüfung später im Verlauf ausdrücklich fortsetzen. Kontaktwerte bleiben ungeprüft; Inhalte sind nicht anonymisiert.'
+        : 'Zum Lauf zurückkehren und die Prüfung später im Verlauf ausdrücklich fortsetzen. Offene Fundstellen bleiben ungeprüft. Weder Dokumentfreigabe noch Export sind damit bestätigt.');
       else if (phase === 'continue') set('review_continue', 1, raw ? 'Weitere OCR-Kontaktwerte sind bereit' : 'Weitere Fundstellen sind bereit', raw
         ? 'Die gewählte Kontaktprüfung im selben Bereich fortsetzen. Die übrigen OCR-Texte werden dadurch nicht automatisch geprüft.'
         : 'Die nächste Prüfung im selben Bereich fortsetzen; noch keine Dokumentfreigabe.');
@@ -166,16 +240,16 @@
         if (notices.attention) output.stages[0].status = 'warning';
         set('documents', 2, failed || value.warning_count > 0 || notices.attention ? 'Anonymisierungslauf abgeschlossen mit Hinweisen' : 'Anonymisierungslauf abgeschlossen',
           value.review_policy === 'automatic-conservative'
-            ? 'Schnellweg: Die Erstfreigabe erfolgt automatisch, nicht durch einen Menschen. Ergebnisse und aktuellen Freigabestand öffnen; eine KI-Kopie nur ausdrücklich erstellen. Nachträgliche Änderungen können Freigaben aufgehoben haben.'
-            : 'Die Verarbeitung ist fertig. Für eine KI-Kopie die gewünschten Dokumente noch vergleichen und freigeben. Keine weitere Datei wird verarbeitet; kein KI-Export erfolgt automatisch.');
+            ? 'Schnellweg: Die Erstfreigabe erfolgt automatisch, nicht durch einen Menschen. Ergebnisse und aktuellen Freigabestand öffnen; einen Export nur ausdrücklich erstellen. Nachträgliche Änderungen können Freigaben aufgehoben haben.'
+            : 'Die Verarbeitung ist fertig. Für einen Export die gewünschten Dokumente noch vergleichen und freigeben. Keine weitere Datei wird verarbeitet; kein Export erfolgt automatisch.');
         if (notices.description) output.next += ` ${notices.description}`;
       }
     } else if (value.state === 'paused')
       set('paused', -1, 'Dieser Lauf ist pausiert', 'Verarbeitung fortsetzen, wenn du bereit bist. Es wird keine neue Datei automatisch gestartet.');
     else if (value.state === 'export_pending')
-      set('delivery_pending', -1, 'Technische Bereitstellung noch offen', 'Ergebnisordner und Zugriffsrechte prüfen. Das ist noch kein abgeschlossener KI-Export.');
+      set('delivery_pending', -1, 'Technische Bereitstellung noch offen', 'Ergebnisordner und Zugriffsrechte prüfen. Das ist noch kein abgeschlossener Export.');
     else if (value.state === 'export_abandoned')
-      set('delivery_abandoned', -1, 'Bereitstellung dieses Laufs aufgegeben', 'Fehlende Dateien werden nicht mehr automatisch kopiert. Teilkopien bleiben unverändert; keine vollständige Ergebnis- oder KI-Freigabe.');
+      set('delivery_abandoned', -1, 'Bereitstellung dieses Laufs aufgegeben', 'Fehlende Dateien werden nicht mehr automatisch kopiert. Teilkopien bleiben unverändert; keine vollständige Freigabe zur Weitergabe.');
     else if (value.state === 'completed_without_results') {
       output.stages[0].status = 'warning';
       set('completed_without_results', -1, 'Verarbeitung beendet ohne Ergebnisdateien',
@@ -199,11 +273,11 @@
     if (['SOURCE_FORMAT_UNSUPPORTED', 'SOURCE_TYPE_MISMATCH', 'SOURCE_COMPOUND_BINARY_UNSUPPORTED', 'SOURCE_FORMAT_NOT_RELEASED'].includes(code)) return 'Die Datei in der Ursprungsanwendung in einem unterstützten Format speichern und separat neu auswählen.';
     if (['SOURCE_READ_FAILED', 'SOURCE_IDENTITY_CHANGED', 'SOURCE_CONTAINER_CORRUPT', 'SOURCE_TEXT_INVALID', 'PARSE_FAILED'].includes(code)) return 'Die Quelldatei und den lokalen Lesezugriff prüfen; anschließend eine korrigierte Kopie neu auswählen.';
     if (['LOCAL_REVIEW_TOO_LARGE', 'SOURCE_FORMAT_SIZE_LIMIT', 'CONVERSION_RESOURCE_LIMIT', 'CONVERSION_TIMEOUT'].includes(code)) return 'Das Dokument in kleinere Teile aufteilen und diese neu auswählen. Keine Prüfschritte überspringen.';
-    if (['RESIDUAL_PII', 'AMBIGUITY_REVIEW_REQUIRED'].includes(code)) return 'Für diese Datei wurde kein freigabefähiger Prüfstand erstellt. Sie einzeln neu anonymisieren; bei erneutem Halt den Fehlercode über „Diagnose öffnen“ prüfen. Nicht an KI weitergeben.';
+    if (['RESIDUAL_PII', 'AMBIGUITY_REVIEW_REQUIRED'].includes(code)) return 'Für diese Datei wurde kein freigabefähiger Prüfstand erstellt. Sie einzeln neu anonymisieren; bei erneutem Halt den Fehlercode über „Diagnose öffnen“ prüfen. Nicht weitergeben.';
     if (code === 'LOCAL_MAPPING_PENDING') return 'Den zugehörigen Lauf fortsetzen, um genau diese Bereitstellung erneut abzugleichen.';
     return 'Den gespeicherten Laufstatus und die inhaltsfreie Diagnose prüfen. Nicht blind neu starten; die genaue Ursache ist noch nicht bestätigt.';
   }
-  const api = Object.freeze({ projectRun, failureAdvice, validateConversionFeedback, conversionSummary, contentNoticeSummary });
+  const api = Object.freeze({ projectRun, historyReviewProjection, failureAdvice, validateConversionFeedback, conversionSummary, contentNoticeSummary });
   if (typeof module === 'object' && module.exports) module.exports = api;
   else Object.defineProperty(window, '__DATASECURE_PRESENTATION__', { value: api });
 })();

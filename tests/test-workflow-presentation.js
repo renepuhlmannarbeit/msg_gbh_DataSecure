@@ -34,8 +34,20 @@ test('terminal run without results is complete, but has no approval or export', 
 test('abandoned visible export remains explicitly incomplete', () => {
   const result = processor({ state: 'export_abandoned', completed_count: 3 });
   assert.equal(result.phase, 'delivery_abandoned');
-  assert.match(result.next, /keine vollständige Ergebnis- oder KI-Freigabe/u);
+  assert.match(result.next, /keine vollständige Freigabe zur Weitergabe/u);
 });
+for (const processing_mode of ['markdown-only', 'markdown-and-anonymize'])
+  test(processing_mode + ': confirmed review deferral is an open user step, not background activity or completion', () => {
+    const value = processor({ source: 'review', processing_mode, review_phase: 'deferred' });
+    assert.equal(value.phase, 'review_deferred'); assert.equal(value.busy, false);
+    assert.match(value.heading, /vertagt/u); assert.match(value.next, /im Verlauf ausdrücklich fortsetzen/u);
+    assert.doesNotMatch(value.heading + ' ' + value.next, /arbeitet weiter|werden vorbereitet|bitte warten/iu);
+    assert.equal(value.stages[1].status, 'current');
+    assert.equal(value.stages.slice(2).some(stage => stage.status === 'done'), false);
+    if (processing_mode === 'markdown-only') {
+      assert.match(value.next, /nicht anonymisiert/u); assert.doesNotMatch(value.next, /Dokumentfreigabe/u);
+    } else assert.match(value.next, /Weder Dokumentfreigabe noch Export sind damit bestätigt/u);
+  });
 test('a partial review cannot claim all source extraction complete', () => {
   const result = processor({ source: 'review', completed_count: 1 }); assert.equal(result.phase, 'review'); assert.equal(result.stages[0].status, 'pending');
 });
@@ -55,7 +67,7 @@ test('technical completion is not a human approval or KI export', () => {
   assert.equal(result.phase, 'documents'); assert.equal(result.stages[2].status, 'current'); assert.equal(result.stages[3].status, 'pending');
   assert.match(result.heading, /Anonymisierungslauf abgeschlossen/u);
   assert.match(result.next, /noch vergleichen und freigeben/u);
-  assert.match(result.next, /kein KI-Export erfolgt automatisch/u);
+  assert.match(result.next, /kein Export erfolgt automatisch/u);
 });
 
 test('successful anonymization keeps source coverage hints separate from completion and approval', () => {
@@ -106,6 +118,17 @@ test('stale, busy, corrupt or empty document states never imply completion', () 
   for (const extra of [{ fresh: false }, { busy: true }, { approved_count: 4 }, { document_count: 0, approved_count: 0 }]) {
     const result = documents(extra); assert.equal(result.stages.filter(row => row.status === 'done').length, 0);
   }
+});
+test('a durable copy receipt is separate from a stale document projection', () => {
+  for (const extra of [{ fresh: false }, { busy: true }, { fresh: false, busy: true }]) {
+    const result = documents({ ...extra, confirmed_copy_count: 2 });
+    assert.equal(result.phase, 'copy_confirmed');
+    assert.match(result.next, /Kopie ist abgeschlossen.*Änderungen.*gesperrt/u);
+    assert.equal(result.stages[0].status, 'pending', 'a copy receipt is not a full processing receipt');
+  }
+  for (const confirmed_copy_count of [-1, 0, 201, '2'])
+    assert.notEqual(documents({ fresh: false, confirmed_copy_count }).phase, 'copy_confirmed');
+  assert.notEqual(documents({ fresh: false, confirmed_copy_count: 2, export_pending: true }).phase, 'copy_confirmed');
 });
 test('partial approvals show actual available counts', () => {
   const result = documents({ approved_count: 2 }); assert.equal(result.phase, 'documents'); assert.match(result.counts, /^2 von 3/u);
@@ -186,6 +209,135 @@ test('raw follow-up contacts and waiting are not document approval or full OCR v
     assert.doesNotMatch(result.next, /Dokumentfreigabe|OCR.*vollständig geprüft/u);
     assert.notEqual(result.phase, 'review_complete');
   }
+});
+
+const { historyReviewProjection } = require('../apps/datasecure-standalone/frontend/workflow-presentation');
+const receiptEntry = extra => ({ batch_id: id, processing_mode: 'markdown-and-anonymize', status: 'results_available',
+  selected_count: 2, result_count: 2, failed_count: 0, results_available: true, result_location: 'available', ...extra });
+const receiptSummary = extra => ({ ok: true, local_ui_only: true, external_disclosure: false, available: true,
+  processing_mode: 'markdown-and-anonymize', reviewable_count: 2, approved_count: 2, unavailable_count: 0,
+  unclassified_source_count: 0, recorded_export_count: 1, current_exported_count: 2,
+  pending_export_count: 0, pending_incomplete_count: 0, pending_confirmation_count: 0, ...extra });
+
+test('bound history snapshot: current approvals and stored copy receipts improve the guide without inventing a byte recheck', () => {
+  const result = historyReviewProjection(receiptEntry(), receiptSummary());
+  assert.equal(result.phase, 'exported'); assert.equal(result.stages[2].status, 'done'); assert.equal(result.stages[3].status, 'done');
+  assert.match(result.next, /kein weiterer Export nötig.*beim Öffnen erneut geprüft/u);
+  assert.doesNotMatch(result.next, /noch vergleichen und freigeben/u);
+});
+test('bound history snapshot: approvals, older copies and pending copies stay distinct', () => {
+  const approved = historyReviewProjection(receiptEntry(), receiptSummary({ current_exported_count: 0 }));
+  assert.equal(approved.phase, 'approved'); assert.equal(approved.stages[3].status, 'current');
+  const unapproved = historyReviewProjection(receiptEntry(), receiptSummary({ approved_count: 1 }));
+  assert.equal(unapproved.phase, 'documents'); assert.equal(unapproved.stages[3].status, 'pending');
+  const pending = historyReviewProjection(receiptEntry(), receiptSummary({ pending_export_count: 1, pending_confirmation_count: 1 }));
+  assert.equal(pending.phase, 'export_pending'); assert.doesNotMatch(pending.next, /kein weiterer Export nötig/u);
+});
+test('bound history snapshot: active, paused, erroneous, incomplete, raw and mismatched summaries cannot improve a processor guide', () => {
+  for (const change of [{status:'processing'},{status:'paused'},{status:'failed'},{resumable:true},{processing:true},
+    {completion_pending:true},{failed_count:1},{selected_count:3},{result_count:1},{result_location:'unknown'},
+    {results_available:false},{processing_mode:'markdown-only'},{batch_id:'old'}])
+    assert.equal(historyReviewProjection(receiptEntry(change), receiptSummary()), null);
+  for (const change of [{available:false},{local_ui_only:false},{external_disclosure:true},{reviewable_count:1},
+    {unavailable_count:1},{unclassified_source_count:1},{not_processed_count:1},{approved_count:3},
+    {recorded_export_count:0},{current_exported_count:3},{pending_export_count:1},
+    {review_policy:'automatic-conservative',automatically_approved_count:2},{processing_mode:'markdown-only'}])
+    assert.equal(historyReviewProjection(receiptEntry(), receiptSummary(change)), null);
+  assert.equal(historyReviewProjection(receiptEntry(), null), null);
+});
+test('bound history snapshot: the automatic policy and source-coverage warnings remain visible after copy completion', () => {
+  const result = historyReviewProjection(receiptEntry({review_policy:'automatic-conservative',
+    content_notice_count:1,content_notice_breakdown_complete:true}),
+    receiptSummary({review_policy:'automatic-conservative',automatically_approved_count:2}));
+  assert.equal(result.phase,'exported'); assert.match(result.counts,/2 automatisch, nicht manuell geprüft/u);
+  assert.match(result.next,/Inhaltshinweise/u); assert.equal(result.stages[0].status,'warning');
+});
+
+test('bound history snapshot: 2 result revisions from 3 sources close approval and copy while retaining the journal-proven OCR warning',()=>{
+  const {isAnonymizationOcrOmission}=require('../plugins/data-secure/server/standalone/conversion-feedback');
+  const state={schema:'datasecure-batch/7',product_channel:'standalone',processing_mode:'markdown-and-anonymize',
+    content_options:{schema:'datasecure-content-options/1',markdownOutput:'content-v1',scanOcr:false,imageOcr:false},
+    items:[{status:'released'},{status:'released'},{status:'stopped',error_code:'IMAGE_OCR_REQUIRED',local_mapping_exported:true}]};
+  const omitted=state.items.filter(item=>isAnonymizationOcrOmission(state,item)).length;
+  assert.equal(omitted,1);
+  assert.equal(isAnonymizationOcrOmission(state,{...state.items[2],error_code:'INTERNAL_FAILURE'}),false);
+  assert.equal(isAnonymizationOcrOmission({...state,content_options:{...state.content_options,scanOcr:true,imageOcr:true}},state.items[2]),false);
+  const result=historyReviewProjection(receiptEntry({selected_count:3,completed_count:3,failed_count:1,
+    expected_ocr_omission_count:omitted,failure_reason_breakdown_complete:true,
+    content_notice_count:0,content_notice_breakdown_complete:true}),receiptSummary({not_processed_count:1}));
+  assert.equal(result.phase,'exported');assert.match(result.counts,/2 von 2 verfügbaren Dokumenten freigegeben/u);
+  assert.match(result.counts,/2 von 3 Quellen als Ergebnis verfügbar.*1 ohne OCR nicht umgewandelt/u);
+  assert.match(result.next,/2 verfügbaren Ergebnisstände.*kein weiterer Export nötig/u);
+  assert.match(result.next,/1 Bild- oder Scan-Datei.*nicht umgewandelt.*kein technischer Fehler/u);
+  assert.match(result.next,/nicht verarbeitete Quelle ist weder freigegeben noch im Export enthalten/u);
+  assert.equal(result.stages[0].status,'warning');assert.equal(result.stages[2].status,'done');assert.equal(result.stages[3].status,'done');
+  assert.doesNotMatch(result.next,/3 verfügbaren Ergebnisstände|3 von 3.*freigegeben/u);
+});
+test('bound history snapshot: 2-of-3 totals reject unknown, technical, legacy and incoherent failure ledgers',()=>{
+  const entry=receiptEntry({selected_count:3,completed_count:3,failed_count:1,expected_ocr_omission_count:1,failure_reason_breakdown_complete:true});
+  const data=receiptSummary({not_processed_count:1});
+  for(const extra of [{failure_reason_breakdown_complete:false},{failure_reason_breakdown_complete:undefined},
+    {expected_ocr_omission_count:0},{expected_ocr_omission_count:2},{expected_ocr_omission_count:'1'},{expected_ocr_omission_count:null},
+    {privacy_stop_count:1},{privacy_stop_count:null},{selected_count:4},{completed_count:2},{result_count:1},{failed_count:0},{problem_count:2}])
+    assert.equal(historyReviewProjection({...entry,...extra},data),null);
+  for(const extra of [{not_processed_count:undefined},{not_processed_count:null},{not_processed_count:0},{not_processed_count:2},{not_processed_count:'1'},
+    {reviewable_count:1},{reviewable_count:3},{unavailable_count:1},{unclassified_source_count:1},
+    {approved_count:3},{current_exported_count:3},{recorded_export_count:0}])
+    assert.equal(historyReviewProjection(entry,{...data,...extra}),null);
+  const old=historyReviewProjection(entry,{...data,current_exported_count:0});
+  assert.equal(old.phase,'approved');assert.equal(old.stages[0].status,'warning');assert.notEqual(old.stages[3].status,'done');
+  const revoked=historyReviewProjection(entry,{...data,approved_count:1});
+  assert.equal(revoked.phase,'documents');assert.equal(revoked.stages[3].status,'pending');
+  const pending=historyReviewProjection(entry,{...data,pending_export_count:1,pending_confirmation_count:1});
+  assert.equal(pending.phase,'export_pending');assert.doesNotMatch(pending.next,/kein weiterer Export nötig/u);
+});
+
+function classifiedStopSummary(results,omitted,privacyStops){
+  const {isAnonymizationOcrOmission,isAnonymizationPrivacyStop}=require('../plugins/data-secure/server/standalone/conversion-feedback');
+  const state={schema:'datasecure-batch/7',product_channel:'standalone',processing_mode:'markdown-and-anonymize',
+    content_options:{schema:'datasecure-content-options/1',markdownOutput:'content-v1',scanOcr:false,imageOcr:false},
+    items:[...Array.from({length:results},()=>({status:'released'})),
+      ...Array.from({length:omitted},()=>({status:'stopped',error_code:'IMAGE_OCR_REQUIRED',local_mapping_exported:true})),
+      ...Array.from({length:privacyStops},(_,index)=>({status:'stopped',error_code:index%2?'AMBIGUITY_REVIEW_REQUIRED':'RESIDUAL_PII',local_mapping_exported:true}))]};
+  const ocr=state.items.filter(item=>isAnonymizationOcrOmission(state,item)).length;
+  const privacy=state.items.filter(item=>isAnonymizationPrivacyStop(state,item)).length;
+  assert.equal(ocr,omitted);assert.equal(privacy,privacyStops);
+  assert.equal(isAnonymizationPrivacyStop(state,{status:'stopped',error_code:'INTERNAL_FAILURE',local_mapping_exported:true}),false);
+  assert.equal(isAnonymizationPrivacyStop(state,{status:'stopped',error_code:'RESIDUAL_PII',local_mapping_exported:false}),false);
+  return {entry:receiptEntry({selected_count:state.items.length,completed_count:state.items.length,result_count:results,
+    failed_count:omitted+privacyStops,expected_ocr_omission_count:ocr,privacy_stop_count:privacy,
+    failure_reason_breakdown_complete:true,content_notice_count:0,content_notice_breakdown_complete:true}),
+    data:receiptSummary({reviewable_count:results,approved_count:results,current_exported_count:results,not_processed_count:omitted+privacyStops})};
+}
+for(const [results,ocr,privacy]of [[2,0,1],[115,17,1],[2,0,2]])test('bound history snapshot: classified privacy/OCR '+[results,ocr,privacy].join('/')+' closes only available result revisions',()=>{
+  const {entry,data}=classifiedStopSummary(results,ocr,privacy),value=historyReviewProjection(entry,data),stopped=ocr+privacy;
+  assert.equal(value.phase,'exported');assert.equal(value.stages[0].status,'warning');assert.equal(value.stages[1].status,'warning');
+  assert.equal(value.stages[2].status,'done');assert.equal(value.stages[3].status,'done');
+  assert.match(value.counts,new RegExp(results+' von '+results+' verfügbaren Dokumenten freigegeben','u'));
+  assert.match(value.counts,new RegExp(results+' von '+entry.selected_count+' Quellen als Ergebnis verfügbar','u'));
+  assert.match(value.next,new RegExp(privacy+' Quelle'+(privacy===1?' wurde':'n wurden')+' aus Datenschutzgründen angehalten','u'));
+  assert.match(value.next,/keinen freigabefähigen Prüfstand/u);
+  assert.match(value.next,stopped===1?/nicht verarbeitete Quelle ist weder freigegeben noch im Export enthalten/u:
+    new RegExp(stopped+' nicht verarbeiteten Quellen sind weder freigegeben noch im Export enthalten','u'));
+  assert.match(value.next,/kein weiterer Export nötig/u);
+  if(ocr)assert.match(value.counts,new RegExp(ocr+' ohne OCR nicht umgewandelt','u'));
+});
+test('bound history snapshot: 133-source classification cannot absorb an unknown or technical remainder',()=>{
+  const {entry,data}=classifiedStopSummary(115,17,1);
+  for(const change of [{privacy_stop_count:undefined},{privacy_stop_count:0},{privacy_stop_count:2},{privacy_stop_count:'1'},
+    {privacy_stop_count:null},{expected_ocr_omission_count:18},{failure_reason_breakdown_complete:false},
+    {selected_count:134,completed_count:134,failed_count:19}])assert.equal(historyReviewProjection({...entry,...change},data),null);
+  // One extra terminal technical stop is fully counted in the failure ledger,
+  // but not classified as an OCR omission or privacy stop. It stays unknown here.
+  assert.equal(historyReviewProjection({...entry,selected_count:134,completed_count:134,failed_count:19},
+    {...data,not_processed_count:19}),null);
+  for(const change of [{not_processed_count:17},{not_processed_count:19},{unavailable_count:1},
+    {unclassified_source_count:1},{reviewable_count:114},{approved_count:116},{current_exported_count:116}])
+    assert.equal(historyReviewProjection(entry,{...data,...change}),null);
+  const old=historyReviewProjection(entry,{...data,current_exported_count:114});assert.equal(old.phase,'approved');
+  const pending=historyReviewProjection(entry,{...data,pending_export_count:1,pending_confirmation_count:1});
+  assert.equal(pending.phase,'export_pending');assert.doesNotMatch(pending.next,/kein weiterer Export nötig/u);
+  const empty=classifiedStopSummary(0,17,1);assert.equal(historyReviewProjection(empty.entry,empty.data),null);
 });
 
 done();

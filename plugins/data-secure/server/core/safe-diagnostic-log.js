@@ -35,12 +35,17 @@ function createBestEffortDiagnosticLog(options) {
   const directory = path.resolve(options.directory);
   const name = options.name;
   if (!/^[a-z-]+\.jsonl$/u.test(name)) throw failure();
+  // Only the native desktop supplies this optional generation. Its closed,
+  // bounded namespace can be probed without enumerating an unbounded folder.
+  const segmentKey = options.segmentKey;
+  if (segmentKey !== undefined && !/^[a-f0-9]{32}$/u.test(segmentKey)) throw failure();
   const maximum = options.maximum ?? 2 * 1024 * 1024;
   const maxSegments = options.maxSegments ?? 8;
   if (!Number.isSafeInteger(maximum) || maximum < 1 || !Number.isSafeInteger(maxSegments) ||
-      maxSegments < 1 || maxSegments > 32) throw failure();
+      maxSegments < 1 || maxSegments > 32 || segmentKey && maxSegments > 8) throw failure();
   const randomBytes = options.randomBytes || crypto.randomBytes;
-  let target = path.join(directory, name), segments = 1, disabled = false;
+  let target = path.join(directory, segmentKey ? `${name.slice(0, -6)}.${segmentKey}.jsonl` : name);
+  let segments = 1, disabled = false, ownedIdentity;
   function append(serialized) {
     let fd;
     try {
@@ -54,11 +59,14 @@ function createBestEffortDiagnosticLog(options) {
       try { named = io.lstatSync(target, { bigint: true }); }
       catch (error) { if (error?.code !== 'ENOENT') throw error; }
       if (named && (!named.isFile() || named.isSymbolicLink() || named.nlink !== 1n)) throw failure();
+      // A generation collision is never permission to append to old/foreign
+      // evidence. Every later append is still bound to the first held identity.
+      if (segmentKey && (named ? !ownedIdentity || !sameObject(named, ownedIdentity) : ownedIdentity)) throw failure();
       if (named && named.size + BigInt(bytes.length) > BigInt(maximum)) {
         if (segments >= maxSegments) return false;
-        const nonce = randomBytes(16).toString('hex');
+        const nonce = segmentKey || randomBytes(16).toString('hex');
         if (!/^[a-f0-9]{32}$/u.test(nonce)) throw failure();
-        candidate = path.join(directory, `${name.slice(0, -6)}.${nonce}.jsonl`);
+        candidate = path.join(directory, `${name.slice(0, -6)}.${nonce}${segmentKey ? `.${segments + 1}` : ''}.jsonl`);
         rotating = true;
         named = undefined;
       }
@@ -80,6 +88,7 @@ function createBestEffortDiagnosticLog(options) {
       if (!opened.isFile() || opened.nlink !== 1n || opened.size + BigInt(bytes.length) > BigInt(maximum)) throw failure();
       validate();
       if (rotating) { target = candidate; segments++; }
+      if (segmentKey) ownedIdentity = identity;
       let offset = 0;
       while (offset < bytes.length) {
         validate();

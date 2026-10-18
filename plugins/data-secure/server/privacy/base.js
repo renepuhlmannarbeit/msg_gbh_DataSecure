@@ -151,13 +151,20 @@ const BIC_RE = new RegExp(`${NB}${BIC_SHAPE}${NA}`, 'gu');
 const BIC_LABEL_RE = /(?:bic|swift(?:[\s\-]?code)?|bank\s?identifier\s?code)\s*\.?\s*:?\s*$/i;
 
 const IP_RE = new RegExp(
-  `${NB}(?:(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)\\.){3}(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)${NA}`,
+  // A four-component prefix/suffix of a longer dotted version is not an IP.
+  // Keep a sentence-final period outside the address (it has no next digit).
+  `(?<![\\p{L}\\p{N}_]|\\d\\.)(?:(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)\\.){3}` +
+    `(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)(?![\\p{L}\\p{N}_]|\\.\\d)`,
   'gu'
 );
 
 const IPV6_PART = '[A-F0-9]{1,4}';
+const IPV4_TAIL = '(?:(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)\\.){3}(?:25[0-5]|2[0-4]\\d|1?\\d?\\d)';
+// IPv4-embedded IPv6 still identifies the complete host. Do not redact only
+// its IPv4 suffix; the longest valid IPv6 candidate owns the whole source span.
+const IPV6_WITH_IPV4 = `(?:(?:${IPV6_PART}:){6}|(?:${IPV6_PART}(?::${IPV6_PART}){0,4})?::(?:${IPV6_PART}:){0,4})${IPV4_TAIL}`;
 const IPV6_RE = new RegExp(
-  `${NB}(?:(?:${IPV6_PART}:){7}${IPV6_PART}|(?:${IPV6_PART}:){1,7}:|` +
+  `${NB}(?:${IPV6_WITH_IPV4}|(?:${IPV6_PART}:){7}${IPV6_PART}|(?:${IPV6_PART}:){1,7}:|` +
     `(?:${IPV6_PART}:){1,6}:${IPV6_PART}|(?:${IPV6_PART}:){1,5}(?::${IPV6_PART}){1,2}|` +
     `(?:${IPV6_PART}:){1,4}(?::${IPV6_PART}){1,3}|(?:${IPV6_PART}:){1,3}(?::${IPV6_PART}){1,4}|` +
     `(?:${IPV6_PART}:){1,2}(?::${IPV6_PART}){1,5}|${IPV6_PART}:(?:(?::${IPV6_PART}){1,6})|` +
@@ -403,6 +410,12 @@ function identifierDetectionText(s) {
     character === '\u2024' ? '.' : String.fromCharCode(character.charCodeAt(0) - 0xFEE0));
 }
 
+function assertPrivacyTextCharacters(value) {
+  if (typeof value !== 'string' || /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F\uFFFD]/u.test(value)) {
+    throw Object.assign(new Error('Die Zeichendarstellung erlaubt keine sichere Datenschutzprüfung.'), { code: 'RESIDUAL_PII' });
+  }
+}
+
 // The privacy engine receives Markdown, including parser-generated Markdown.
 // Detecting only source syntax is unsafe because a renderer can reveal a
 // different string (HTML entities, emphasis, links or inline HTML). This
@@ -430,6 +443,25 @@ function canonicalizeRenderedText(s, personFieldPolicy = LEGACY_PERSON_FIELD_POL
     });
   value = require('./encoded-identifiers').normalizeEncodedIdentifiers(value, fragment => normalizeText(decodeLayer(fragment)), text => {
     const ranges = [...text.matchAll(EMAIL_RE)].map(match => ({ start: match.index, end: match.index + match[0].length }));
+    // A code/escape is not a privacy exemption for an encoded card. Unknown
+    // characters may separate whole digit groups in this PROBE. Retain the
+    // original coordinates and route only a positive complete Luhn corridor
+    // to the actual character gate; never repair output or join LF/CR. Runs
+    // (not one optional separator) cover repeated controls without a limit-
+    // driven prefix match in a longer numeric corridor. Bare entity examples
+    // have no positive card and remain literal.
+    if (text.includes('\uFFFD')) {
+      const view = identifierDetectionText(text);
+      for (const match of view.matchAll(/\d+(?:[ \t\-\uFFFD]+\d+)+/gu)) {
+        const end = match.index + match[0].length;
+        // Consume the whole corridor FIRST. Regex word-boundary assertions
+        // here could backtrack to a valid-looking prefix or restart inside a
+        // rejected 20-digit token. Two units suffice for one Unicode scalar.
+        if (/[\p{L}\p{N}_]$/u.test(view.slice(Math.max(0, match.index - 2), match.index)) ||
+            /^[\p{L}\p{N}_]/u.test(view.slice(end, end + 2))) continue;
+        if (match[0].includes('\uFFFD') && luhnValid(match[0])) ranges.push({ start: match.index, end });
+      }
+    }
     // Use the actual structured grammar for ALL identifier classes. A code
     // literal is no exemption for an encoded IP, card, credential or address.
     ranges.push(...require('./structured').findStructuredSpans(text).map(({ start, end }) => ({ start, end })));
@@ -528,7 +560,17 @@ function canonicalizeRenderedText(s, personFieldPolicy = LEGACY_PERSON_FIELD_POL
   value=value.replace(/<(?=[A-Za-z/!?])/gu,'&lt;');
   value = value.replace(new RegExp(tokenPrefix + '([0-9]+)\uE001', 'gu'), (match, index) =>
     Object.hasOwn(literals, index) ? literals[Number(index)] : match);
-  return normalizeText(value).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/gu,'\uFFFD');
+  const canonical = normalizeText(value);
+  // Never turn an unknown source character into a harmless-looking separator:
+  // 4111<C1>1111... became 4111<U+FFFD>1111... and escaped both privacy scans.
+  // Check the ACTUAL rendered text only, after restoring inert code/escapes.
+  // Temporary entity-decoding probes stay non-throwing so an ASCII example
+  // such as `&#133;` is not mistaken for an active control.
+  // U+FFFD is valid Unicode, but deliberately not a releasable privacy input:
+  // neither its missing original character nor an old replacement is known.
+  // Keep TAB/CR/LF and ordinary Unicode prose; do not join lines or repair data.
+  assertPrivacyTextCharacters(canonical);
+  return canonical;
 }
 
 function normalizeSpaces(s) {
@@ -987,6 +1029,7 @@ module.exports = {
   normalizeText,
   identifierDetectionText,
   canonicalizeRenderedText,
+  assertPrivacyTextCharacters,
   INVISIBLE_RE,
   normalizeSpaces,
   key,

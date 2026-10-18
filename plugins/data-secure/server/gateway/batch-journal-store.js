@@ -63,6 +63,13 @@ function createBatchJournalStore(options = {}) {
   const maxBatchFiles = options.maxBatchFiles || RESOURCE_LIMITS.MAX_BATCH_FILES;
   const assertZeroDayWorkAvailable = options.assertZeroDayWorkAvailable;
   const journalBindings = new WeakMap();
+  const journalDigests = new WeakMap();
+  // Process-local negative work hints, never persisted permission or state.
+  // The fresh held journal bytes must still match on every use. Only status
+  // readers may skip an unobserved terminal run; mutations/recovery/retention
+  // always use their original full reader and object-bound journal authority.
+  const terminalStatusHints = new Map();
+  const statusProcessAlive = options.processAlive || require('./process-liveness').processAlive;
   const purposeBindings = new WeakMap();
   const assertContentBinding = options.assertContentBinding || ((state, check) =>
     require('./standalone-document-review-store').createDocumentReviewStore({ dataRoot: options.documentReviewDataRoot })
@@ -157,6 +164,7 @@ function createBatchJournalStore(options = {}) {
   // unconditional; only the two power-loss flushes are skipped.
   function writeState(state, writeOptions = {}) {
     assertProductChannel(state);
+    terminalStatusHints.delete(path.resolve(pathForToken(state.token)));
     rejectEncryptedState(state);
     if (!validPseudonymState(state)) throw new Error('BATCH_PSEUDONYM_STATE_INVALID');
     const durable = writeOptions.durable !== false;
@@ -251,6 +259,7 @@ function createBatchJournalStore(options = {}) {
           parentAfter.dev !== parentBefore.dev || parentAfter.ino !== parentBefore.ino) throw new Error('unsafe');
       const record = JSON.parse(bytes.toString('utf8'));
       if (!record || typeof record !== 'object' || Array.isArray(record)) throw new Error('unsafe');
+      journalDigests.set(record, crypto.createHash('sha256').update(bytes).digest('hex'));
       journalBindings.set(record, Object.freeze({
         target: path.resolve(target),
         parent: path.resolve(parent),
@@ -264,6 +273,7 @@ function createBatchJournalStore(options = {}) {
   }
 
   function removeState(state) {
+    terminalStatusHints.delete(path.resolve(pathForToken(state.token)));
     const binding = journalBindings.get(state);
     if (!binding) throw new Error('BATCH_JOURNAL_BINDING_MISSING');
     const removed = safeUnlinkBoundPrivateFile(pathForToken(state.token), { io, binding, randomBytes });
@@ -531,10 +541,31 @@ function createBatchJournalStore(options = {}) {
     if (state.product_channel === 'standalone') assertContentBinding(state);
     purposeBindings.set(state, purposeOf(state));
     rejectRenamedEncryptedCopies(state);
+    if (state.product_channel === 'standalone' && state.invalidated !== true &&
+        state.items.every(item => ['released', 'stopped'].includes(item.status) &&
+          item.local_mapping_exported !== false && item.work_copy_cleanup_pending !== true) &&
+        !(state.zero_day_work === true && state.zero_day_work_cleaned !== true)) {
+      const key = path.resolve(pathForToken(token));
+      terminalStatusHints.set(key, { digest: journalDigests.get(state), binding: journalBindings.get(state),
+        executor: state.local_executor_pid, intake: state.intake_owner_pid });
+      if (terminalStatusHints.size > 1024) terminalStatusHints.delete(terminalStatusHints.keys().next().value);
+    }
     return state;
   }
 
-  return { writeState, readState, readStateForMaintenance, removeState };
+  function terminalStatusUnchanged(token) {
+    const key = path.resolve(pathForToken(token)), hint = terminalStatusHints.get(key);
+    if (!hint) return false;
+    try {
+      for (const pid of [hint.executor, hint.intake])
+        if (Number.isSafeInteger(pid) && pid > 0 && statusProcessAlive(pid)) return false;
+      const fresh = readJournalRecord(token);
+      if (journalDigests.get(fresh) === hint.digest &&
+          JSON.stringify(journalBindings.get(fresh)) === JSON.stringify(hint.binding)) return true;
+    } catch { /* unknown/changed/removed bytes must take the full original path */ }
+    terminalStatusHints.delete(key); return false;
+  }
+  return { writeState, readState, readStateForMaintenance, terminalStatusUnchanged, removeState };
 }
 
 module.exports = { SCHEMA, MARKDOWN_SCHEMA, NAMED_ANONYMIZATION_SCHEMA, ENCRYPTED_SCHEMA, V2_SCHEMA, LEGACY_SCHEMA, MAX_JOURNAL_BYTES, createBatchJournalStore };

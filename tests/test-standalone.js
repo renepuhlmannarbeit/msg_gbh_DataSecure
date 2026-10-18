@@ -73,6 +73,27 @@ test('Standalone has an isolated product namespace and a simple default output',
   } }), path.join('/mounted/Documents', 'SecureDataMsg'));
 });
 
+test('native Windows namespace uses only the host-bound canonical root without a fallback', () => {
+  const root = 'C:\\Users\\synthetic\\AppData\\Local\\SecureDataMsg-Standalone';
+  const environment = { LOCALAPPDATA: 'C:\\different-token', DATASECURE_NATIVE_EXPORT_CHANNEL: '1',
+    DATASECURE_STANDALONE_NAMESPACE_ROOT: root };
+  assert.equal(standaloneDataRoot({ platform: 'win32', environment }), root);
+  const lowerLeaf = root.replace('SecureDataMsg-Standalone', 'securedatamsg-standalone');
+  assert.equal(standaloneDataRoot({ platform: 'win32', environment: {
+    ...environment, DATASECURE_STANDALONE_NAMESPACE_ROOT: lowerLeaf
+  } }), lowerLeaf, 'keep the native canonical spelling; only the fixed Windows leaf comparison ignores case');
+  for (const invalid of [undefined, '', 'relative', '\\\\server\\share\\SecureDataMsg-Standalone',
+    root + '\\..', root + '\\', 'C:\\private\\other-product', root + '\0']) {
+    assert.throws(() => standaloneDataRoot({ platform: 'win32', environment: {
+      ...environment, DATASECURE_STANDALONE_NAMESPACE_ROOT: invalid
+    } }), { code: 'STANDALONE_DATA_ROOT_UNSAFE' });
+  }
+  // A future Mac adapter must be implemented separately; Windows' native
+  // handoff variable cannot redirect the current Mac/source namespace.
+  assert.equal(standaloneDataRoot({ platform: 'darwin', environment, home: '/Users/synthetic' }),
+    '/Users/synthetic/Library/Application Support/SecureDataMsg-Standalone');
+});
+
 test('fresh installation tolerates an absent result folder until a real start needs one', () => {
   const operations = [];
   const home = path.join(os.tmpdir(), 'datasecure-fresh-user');
@@ -146,6 +167,96 @@ test('Standalone still rejects a redirected POSIX data root', () => {
     platform: 'linux', dataRoot: root, environment: {},
     fs: { mkdirSync() {}, lstatSync: () => directory, statSync: () => directory, realpathSync }
   }), (error) => error?.code === 'STANDALONE_DATA_ROOT_UNSAFE');
+});
+
+// IO-order model around the actual namespace activator. The native primitive
+// itself is covered by real target-specific gates, not by this injected guard.
+function nativeNamespaceOrderProbe(nativeError, diagnosticsThrow = false) {
+  const Module = require('node:module'), originalLoad = Module._load;
+  const originalChannel = process.env.DATASECURE_NATIVE_EXPORT_CHANNEL;
+  const caller = require.resolve('../plugins/data-secure/server/standalone/application-service');
+  const root = path.join(os.tmpdir(), 'datasecure-namespace-order-model');
+  const events = [], environment = {};
+  const directory = { dev: 7, ino: 42, isDirectory: () => true, isSymbolicLink: () => false };
+  const io = { mkdirSync(candidate) { events.push(candidate === root ? 'mkdir-root' : 'mkdir-workspace'); },
+    lstatSync: () => directory, statSync: () => directory,
+    realpathSync: Object.assign(value => value, { native: value => value }) };
+  Module._load = function(request, parent, ...rest) {
+    if (parent?.filename === caller && request === '../core/ownership-control') return {
+      withOwnershipControl(candidate, action) {
+        assert.equal(candidate, root); events.push('native-check');
+        if (nativeError) throw Object.assign(Error('private vendor detail must not escape'), { code: nativeError });
+        return action({ assertHeld() { events.push('held'); return true; } });
+      }
+    };
+    return originalLoad.call(this, request, parent, ...rest);
+  };
+  process.env.DATASECURE_NATIVE_EXPORT_CHANNEL = '1';
+  let result, error;
+  try {
+    result = activateStandaloneNamespace({ dataRoot: root, fs: io, environment,
+      startupDiagnostic(event) { events.push(event); if (diagnosticsThrow) throw Error('unavailable diagnostic'); } });
+  } catch (caught) { error = caught; }
+  finally {
+    Module._load = originalLoad;
+    if (originalChannel === undefined) delete process.env.DATASECURE_NATIVE_EXPORT_CHANNEL;
+    else process.env.DATASECURE_NATIVE_EXPORT_CHANNEL = originalChannel;
+  }
+  return { events, environment, result, error, root };
+}
+
+const nativeRootOrder = process.platform === 'win32' ? [] : ['mkdir-root'];
+
+test('native Windows never falls back to JavaScript mkdir when its host root is absent (IO-order model)', () => {
+  if (process.platform !== 'win32') return;
+  const before = process.env.DATASECURE_NATIVE_EXPORT_CHANNEL;
+  const environment = {}, writes = [];
+  process.env.DATASECURE_NATIVE_EXPORT_CHANNEL = '1';
+  try {
+    assert.throws(() => activateStandaloneNamespace({
+      dataRoot: path.join(os.tmpdir(), 'synthetic-missing-native-root'), environment,
+      fs: { mkdirSync(value) { writes.push(value); }, lstatSync() { throw Object.assign(Error('absent'), { code: 'ENOENT' }); } }
+    }), { code: 'STANDALONE_DATA_ROOT_UNSAFE' });
+    assert.deepEqual(writes, []);
+    assert.deepEqual(environment, {});
+  } finally {
+    if (before === undefined) delete process.env.DATASECURE_NATIVE_EXPORT_CHANNEL;
+    else process.env.DATASECURE_NATIVE_EXPORT_CHANNEL = before;
+  }
+});
+
+test('native namespace refusal precedes every workspace child write (IO-order model)', () => {
+  if (!['win32', 'darwin'].includes(process.platform)) return;
+  const outcome = nativeNamespaceOrderProbe('OWNERSHIP_GUARD_UNSAFE');
+  assert.equal(outcome.error?.code, 'STANDALONE_OWNERSHIP_STORAGE_UNSAFE');
+  assert.equal(outcome.error.message.includes('private vendor detail'), false);
+  assert.deepEqual(outcome.events, [...nativeRootOrder, 'ownership_control_check_started', 'native-check', 'ownership_control_check_failed']);
+  assert.deepEqual(outcome.environment, {}, 'refusal exposes no active workspace namespace');
+});
+
+test('native namespace readiness is required before workspace creation (IO-order model)', () => {
+  if (!['win32', 'darwin'].includes(process.platform)) return;
+  const outcome = nativeNamespaceOrderProbe(null);
+  assert.equal(outcome.error, undefined);
+  assert.equal(outcome.result, outcome.root);
+  assert.deepEqual(outcome.events, [...nativeRootOrder, 'ownership_control_check_started', 'native-check', 'held',
+    'ownership_control_check_finished', 'mkdir-workspace']);
+  assert.equal(outcome.environment.EU_PRIVACY_ROOT, path.join(outcome.root, 'workspace'));
+});
+
+test('native namespace contention keeps its fixed cause and writes no child (IO-order model)', () => {
+  if (!['win32', 'darwin'].includes(process.platform)) return;
+  const outcome = nativeNamespaceOrderProbe('OWNERSHIP_GUARD_BUSY');
+  assert.equal(outcome.error?.code, 'STANDALONE_OWNERSHIP_CONTROL_BUSY');
+  assert.equal(outcome.events.includes('mkdir-workspace'), false);
+});
+
+test('unavailable diagnostics cannot waive the native namespace gate (IO-order model)', () => {
+  if (!['win32', 'darwin'].includes(process.platform)) return;
+  const outcome = nativeNamespaceOrderProbe('OWNERSHIP_GUARD_UNSAFE', true);
+  assert.equal(outcome.error?.code, 'STANDALONE_OWNERSHIP_STORAGE_UNSAFE');
+  assert.equal(outcome.events.includes('native-check'), true);
+  assert.equal(outcome.events.includes('mkdir-workspace'), false);
 });
 
 testAsync('direct OCR-contact opt-out does not forge a confirmation or interrupt another run', async () => {
@@ -676,9 +787,9 @@ test('Standalone UI contract limits source details to the local display', () => 
   assert.ok(contract.forbidden_payload_fields.includes('raw_content'));
   assert.deepStrictEqual(contract.commands, [
     'select_files', 'select_folder', 'remove_admitted_source', 'cancel_admission', 'start_admitted_batch',
-    'get_public_state', 'get_ui_context', 'get_run_history', 'get_run_failures', 'open_history_results', 'open_history_ledger',
+    'get_public_state', 'get_ui_context', 'get_run_history', 'set_run_history_visibility', 'get_run_failures', 'open_history_results', 'open_history_ledger',
     'open_history_identity_mapping', 'open_identity_mappings_directory', 'continue_history_batch', 'pause_batch', 'abandon_result_export', 'skip_ocr_contact_review',
-    'get_document_reviews', 'get_document_review_history_summary', 'close_document_reviews', 'get_document_review_chunk', 'get_document_entities', 'decide_document_review', 'decide_document_review_batch', 'export_approved_documents', 'abandon_document_export', 'open_document_export', 'open_document_identity_overview',
+    'get_document_reviews', 'get_document_review_history_summary', 'close_document_reviews', 'get_document_review_chunk', 'get_document_entities', 'decide_document_review', 'decide_document_review_batch', 'export_approved_documents', 'abandon_document_export', 'open_document_export', 'open_recorded_document_export', 'open_document_identity_overview',
     'open_review_window', 'open_embedded_review', 'close_review_window', 'get_review_session', 'get_review_chunk', 'submit_review',
     'continue_review_session',
     'ack_terminal_presented', 'continue_current_batch', 'configure_results',
@@ -687,7 +798,7 @@ test('Standalone UI contract limits source details to the local display', () => 
   assert.deepStrictEqual([...PRIVATE_ACTIONS], [
     'admit_selected_sources', 'remove_admitted_source', 'cancel_admission', 'start_admitted_batch',
     'get_public_state', 'get_ui_context', 'ack_terminal_presented', 'continue_current_batch', 'configure_results',
-    'resolve_current_results', 'resolve_local_ledger', 'get_run_history', 'get_run_failures',
+    'resolve_current_results', 'resolve_local_ledger', 'get_run_history', 'set_run_history_visibility', 'get_run_failures',
     'resolve_history_results', 'resolve_history_ledger', 'resolve_history_identity_mapping',
     'resolve_identity_mappings_directory',
     'continue_history_batch', 'pause_batch', 'skip_ocr_contact_review', 'abandon_result_export',
@@ -784,8 +895,12 @@ test('history IPC binds exact opaque run IDs and refuses paths, mode changes and
     assert.throws(() => encodeFrame({ ...valid, processing_mode: 'markdown-only' }), { code: 'DESKTOP_IPC_FIELD_INVALID' });
     assert.throws(() => encodeFrame({ ...valid, source_paths: ['/tmp/result'] }), { code: 'DESKTOP_IPC_SOURCE_UNEXPECTED' });
   }
-  assert.throws(() => encodeFrame({ ...base, action: 'get_run_history', batch_id: 'b'.repeat(64) }),
-    { code: 'DESKTOP_IPC_FIELD_INVALID' });
+  const detail = { ...base, action: 'get_run_history', batch_id: 'b'.repeat(64) };
+  assert.deepStrictEqual(new FrameDecoder().push(encodeFrame(detail)), [detail]);
+  assert.throws(() => encodeFrame({ ...detail, include_hidden: true }), { code: 'STANDALONE_HISTORY_INVALID' });
+  assert.throws(() => encodeFrame({ ...detail, recover_exports: true, recover_batch_id: detail.batch_id }),
+    { code: 'STANDALONE_HISTORY_INVALID' });
+  assert.throws(() => encodeFrame({ ...detail, source_paths: ['/tmp/result'] }), { code: 'DESKTOP_IPC_SOURCE_UNEXPECTED' });
   const explicitRecovery = { ...base, action: 'get_run_history', recover_exports: true,
     recover_batch_id: 'b'.repeat(64) };
   assert.deepStrictEqual(new FrameDecoder().push(encodeFrame(explicitRecovery)), [explicitRecovery]);
@@ -1532,5 +1647,31 @@ async function missingLedgerCase() {
   await testAsync('Standalone reveals only the exact mapping of the latest visible run and never returns its path', openLedgerCase);
   await testAsync('Standalone refuses a missing local ledger without opening a folder', missingLedgerCase);
   test('the private desktop host resolves one exact completed run and its run-scoped mapping', privateTargetResolutionCase);
+  await testAsync('production root and selection display performs no historical observation or result resolution', async () => {
+    let observations = 0, resolutions = 0;
+    const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+      publicStatusSnapshot() { observations++; throw Error('UNREQUESTED_HISTORY_STATUS'); },
+      runHistory: { resolveResults() { resolutions++; throw Error('UNREQUESTED_HISTORY_RESULT'); } }
+    }) });
+    service.observedBatchId = 'a'.repeat(64);
+    const context = service.uiContext();
+    assert.strictEqual(context.latest_result_folder, '');
+    assert.strictEqual(observations, 0);
+    assert.strictEqual(resolutions, 0);
+    assert.ok(context.result_folder, 'the configured/default result root is still described');
+  });
+  await testAsync('production folder choice captures bindings without projecting every historical result', async () => {
+    const calls = [];
+    const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+      runHistory: { captureExistingExportBindings() { calls.push('capture'); },
+        captureDurableHistory() { throw Error('INTERACTIVE_JOURNAL_CAPTURE'); },
+        history() { throw Error('GLOBAL_HISTORY_PROJECTION'); } },
+      saveConfiguredResultRoot() { calls.push('save'); },
+      replayPendingResultExports() { calls.push('pending'); return { pending: 0 }; }
+    }) });
+    const result = await service.configureResults({ path: 'C:\\New Results' });
+    assert.strictEqual(result.configuration_changed, true);
+    assert.deepStrictEqual(calls, ['capture', 'save', 'pending']);
+  });
   done();
 })();

@@ -621,19 +621,18 @@ try {
   };
   const claimFailurePath = _test.claimPath(recordPath(claimFailureState.token));
   const realUnlink = fs.unlinkSync;
-  const realClaimRename = fs.renameSync;
   let releaseAttempts = 0;
-  fs.renameSync = (target, destination) => {
+  fs.unlinkSync = (target) => {
     if (path.resolve(String(target)) === path.resolve(claimFailurePath)) {
       releaseAttempts++;
       throw Object.assign(new Error('SIMULATED_CLAIM_BUSY'), { code: 'EPERM' });
     }
-    return realClaimRename(target, destination);
+    return realUnlink(target);
   };
   try {
     assert.deepStrictEqual(exportCompletedState(claimFailureState),
       { exported: 0, pending: 1, available: false });
-  } finally { fs.renameSync = realClaimRename; }
+  } finally { fs.unlinkSync = realUnlink; }
   assert.strictEqual(releaseAttempts, 4, 'claim release uses the bounded transient retry contract');
   assert.strictEqual(fs.existsSync(claimFailurePath), true, 'the uncertain owned claim remains recoverable');
   fs.unlinkSync(claimFailurePath);
@@ -648,15 +647,15 @@ try {
   assert.deepStrictEqual(exportCompletedState(replayClaimState), { exported: 0, pending: 1, available: false });
   process.env.EU_PRIVACY_RESULT_ROOT = bindingCowork;
   const replayClaimPath = _test.claimPath(recordPath(replayClaimState.token));
-  fs.renameSync = (target, destination) => {
+  fs.unlinkSync = (target) => {
     if (path.resolve(String(target)) === path.resolve(replayClaimPath)) {
       throw Object.assign(new Error('SIMULATED_REPLAY_CLAIM_BUSY'), { code: 'EPERM' });
     }
-    return realClaimRename(target, destination);
+    return realUnlink(target);
   };
   let uncertainReplay;
   try { uncertainReplay = replayPendingResultExports(); }
-  finally { fs.renameSync = realClaimRename; }
+  finally { fs.unlinkSync = realUnlink; }
   assert.ok(uncertainReplay.failures >= 1, 'replay reports a persistent claim-release failure');
   assert.ok(uncertainReplay.pending >= 1, 'replay keeps the uncertain record pending');
   assert.strictEqual(fs.existsSync(replayClaimPath), true);

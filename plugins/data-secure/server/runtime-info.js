@@ -37,7 +37,7 @@ function runtimeInfo() {
       // Detached Standalone workers run from the private durable cache under
       // the normalized launcher name. They remain hash-bound by the copied
       // evidence and must not silently fall back to host-node semantics.
-      const durableExpected = standalone
+      const durableExpected = standalone && process.platform !== 'darwin'
         ? path.resolve(__dirname, '..', 'runtime', process.platform === 'win32' ? 'datasecure-node.exe' : 'datasecure-node')
         : null;
       for (const executable of [expected, durableExpected].filter(Boolean)) {
@@ -56,7 +56,9 @@ function runtimeInfo() {
     runtime_mode: selfContained ? 'self_contained_node' : 'host_node',
     runtime_target: target,
     runtime_dependency_install: !selfContained,
-    host_node_required: !selfContained
+    host_node_required: !selfContained,
+    ...(selfContained && process.platform === 'darwin' && process.env.DATASECURE_PRODUCT_CHANNEL === 'standalone'
+      ? { runtime_role: 'mutating-core', runtime_origin: 'datasecure-static-ownership-core/1' } : {})
   };
 }
 

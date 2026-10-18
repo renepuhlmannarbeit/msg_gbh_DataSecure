@@ -14,22 +14,22 @@ const complete = { status: 'complete', reason_codes: [] };
 
 // Protocol fault injection against the actual parent implementation, not an
 // OCR/platform proof. Native semantics run in the separate packaged worker gate.
-function injectedParent(response, code = 0) {
+function injectedParent(response, code = 0, runtimeOverrides = {}) {
   const file = path.resolve(__dirname, '../plugins/data-secure/server/standalone/conversion-worker.js');
   const loaded = new Module(file);
   loaded.filename = file;
   loaded.paths = Module._nodeModulePaths(path.dirname(file));
   let invocation;
   loaded.require = function(name) {
-      if (name === 'node:child_process') return { spawn(command, args) {
-        invocation = { command, args };
+      if (name === 'node:child_process') return { spawn(command, args, options) {
+        invocation = { command, args, options };
         const child = new EventEmitter();
         child.stdout = new EventEmitter(); child.stderr = new EventEmitter(); child.stdin = new EventEmitter();
         child.stdin.end = (_bytes, callback) => { callback(); queueMicrotask(() => { child.stdout.emit('data', Buffer.from(JSON.stringify(response))); child.emit('close', code); }); };
         child.stdin.destroy = () => {}; child.kill = () => true;
         return child;
       } };
-      if (name === './conversion-runtime-resolver') return { resolveConversionRuntime: () => ({ root: 'synthetic-runtime', node: 'synthetic-node' }) };
+      if (name === './conversion-runtime-resolver') return { resolveConversionRuntime: () => ({ root: 'synthetic-runtime', node: 'synthetic-node', ...runtimeOverrides }) };
       if (name === '../native-launcher') return { verifyNativeLauncherArtifact() {} };
       if (name === '../posix-supervisor') return { verifyPosixSupervisor: () => ({ available: true, executable: 'synthetic-supervisor' }) };
       return name.startsWith('.') ? require(path.resolve(path.dirname(file), name)) : require(name);
@@ -106,6 +106,24 @@ function injectedParent(response, code = 0) {
     assert.equal(parent.invocation().args.some(value => value.startsWith('markdown-output-')), false);
     await assert.rejects(injectedParent({ schema: 'datasecure-conversion-response/2', ok: true, result: current })
       .convert(Buffer.from('Text'), '.txt', {}), { code: 'CONVERSION_RESPONSE_INVALID' });
+  });
+  await testAsync('relocated macOS addon gets one exact read grant and no ambient native-loader override', async () => {
+    const current = contract.createMarkdownExtraction({ source_type: 'txt', markdown: 'Text', coverage: complete, content_options: choices() });
+    const response = { schema: 'datasecure-conversion-response/2', ok: true, result: current };
+    const addon = path.resolve('Synthetic app.app/Contents/Frameworks/skia.darwin-arm64.node');
+    const parent = injectedParent(response, 0, { canvasNative: addon });
+    await parent.convert(Buffer.from('Text'), '.txt', { contentOptions: choices() });
+    const invocation = parent.invocation();
+    assert.equal(invocation.options.env.NAPI_RS_NATIVE_LIBRARY_PATH, addon);
+    assert.equal(invocation.options.env.PATH, '');
+    assert.equal(invocation.options.shell, false);
+    assert.equal(invocation.args.filter(value => value === `--allow-fs-read=${addon}`).length, 1);
+    assert.equal(invocation.args.includes(`--allow-fs-read=${path.dirname(addon)}`), false);
+    assert.equal(invocation.options.env.NODE_OPTIONS, undefined);
+    const unchanged = injectedParent(response);
+    await unchanged.convert(Buffer.from('Text'), '.txt', { contentOptions: choices() });
+    assert.equal(unchanged.invocation().options.env.NAPI_RS_NATIVE_LIBRARY_PATH, undefined);
+    assert.equal(unchanged.invocation().args.filter(value => value.startsWith('--allow-fs-read=')).length, 1);
   });
   await testAsync('null, partial, aliases, inherited fields and conflicting profiles never reach a converter', async () => {
     for (const options of [

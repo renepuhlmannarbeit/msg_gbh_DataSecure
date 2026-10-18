@@ -42,8 +42,9 @@ function fixture(options = {}) {
   };
   let clock = 100;
   const expectedPackageId = `ds_${item.id}`;
-  const processor = createBatchItemProcessor({
+  const processor = (options.createProcessor || createBatchItemProcessor)({
     SafeError,
+    runStandaloneItem: options.runStandaloneItem,
     contactStore: options.contactStore,
     nowMs: () => { clock += 10; return clock; },
     writeState(value, writeOptions) {
@@ -164,6 +165,86 @@ function fixture(options = {}) {
 }
 
 async function main() {
+  await testAsync('content callbacks retry only complete metadata checks, never the item operation or publication', async () => {
+    const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm'), { createRequire } = require('node:module');
+    const source = require.resolve('../plugins/data-secure/server/gateway/batch-item-processor'), local = createRequire(source);
+    const policy = local('./prepublication-error');
+    for (const failure of ['short', 'before-busy', 'after-busy', 'hard']) {
+      let expectedReads = 0, confirmations = 0, operations = 0, publications = 0;
+      const binding = { fixed: 'expected-publication' }, loaded = { exports: {} };
+      const hard = codedError('BATCH_OWNERSHIP_CHANGED');
+      const overrides = {
+        './prepublication-error': { ...policy, retryDocumentControl: action => policy.retryDocumentControl(action, { attempts: 3, delayMs: 0 }) },
+        './standalone-anonymized-batch': {
+          expectedPublication() {
+            expectedReads++;
+            if (failure === 'hard') throw hard;
+            if (failure === 'before-busy' || failure === 'short' && expectedReads === 1) throw codedError('STANDALONE_BUSY');
+            return binding;
+          },
+          confirmPublication() {
+            confirmations++;
+            if (failure === 'after-busy' || failure === 'short' && confirmations === 1) throw codedError('STANDALONE_BUSY');
+            return { publication_binding: binding };
+          }
+        },
+        './standalone-document-review-store': { createDocumentReviewStore: () => ({ recordPublication() {} }) },
+        './standalone-anonymized-mapping': { ensurePrivateMappingIntent() {} }
+      };
+      vm.runInThisContext(`(function(require,module,exports,__filename,__dirname){${fs.readFileSync(source, 'utf8')}\n})`, { filename: source })(
+        request => Object.hasOwn(overrides, request) ? overrides[request] : local(request), loaded, loaded.exports, source, path.dirname(source));
+      let value;
+      value = fixture({ productChannel: 'standalone', createProcessor: loaded.exports.createBatchItemProcessor,
+        runStandaloneItem: async (_token, id, hooks) => {
+          operations++; assert.equal(id, value.item.id);
+          const result = { package_id: value.expectedPackageId, document_result: COMPLETE_DOCUMENT_RESULT, publication_binding: binding };
+          await hooks.beforePublish(result); publications++; await hooks.afterPublish(result); return result;
+        } });
+      Object.assign(value.state, { schema: 'datasecure-batch/7', processing_mode: 'markdown-and-anonymize', token: 'a'.repeat(64),
+        standalone_document_review: true, content_options: { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: false, imageOcr: false } });
+      Object.assign(value.item, { retry_failure_code: 'PARSER_TIMEOUT', retry_failure_count: 2 });
+      if (failure === 'hard') {
+        await assert.rejects(value.processor.processSingleBatchItem(value.state, value.item, value.entry), error => error === hard);
+        assert.equal(expectedReads, 1); assert.equal(publications, 0); assert.equal(value.writes.length, 1);
+      } else {
+        const result = await value.processor.processSingleBatchItem(value.state, value.item, value.entry);
+        if (failure === 'short') {
+          assert.equal(result.package_id, value.expectedPackageId); assert.equal(value.item.status, 'delivery_pending');
+          assert.equal(expectedReads, 2); assert.equal(confirmations, 3); assert.equal(publications, 1);
+        } else {
+          const durable = value.writes.at(-1).snapshot.items[0];
+          assert.equal(durable.status, failure === 'before-busy' ? 'retryable' : 'processing');
+          assert.equal(durable.checkpoint, failure === 'before-busy' ? 'retryable' : 'package_published');
+          assert.equal(durable.document_result, undefined); assert.equal(durable.retry_failure_code, 'PARSER_TIMEOUT'); assert.equal(durable.retry_failure_count, 2);
+          assert.equal(publications, failure === 'before-busy' ? 0 : 1);
+          assert.equal(value.events.includes('cleanup'), false); assert.equal(value.events.includes('mapping-stopped'), false);
+        }
+      }
+      assert.equal(operations, 1, 'metadata contention never replays the item operation');
+    }
+  });
+  await testAsync('persistent control contention is durably retryable without consuming an earlier parser budget', async () => {
+    const value = fixture({ pipelineError: codedError('STANDALONE_BUSY'), productChannel: 'standalone' });
+    Object.assign(value.item, { retry_failure_code: 'PARSER_TIMEOUT', retry_failure_count: 2 });
+    for (let repeat = 0; repeat < 5; repeat++) {
+      const result = await value.processor.processSingleBatchItem(value.state, value.item, value.entry, value.deps);
+      assert.equal(result.error, 'STANDALONE_BUSY');
+      const durable = value.writes.at(-1).snapshot.items[0];
+      assert.equal(durable.status, 'retryable'); assert.equal(durable.checkpoint, 'retryable');
+      assert.equal(durable.error_code, 'STANDALONE_BUSY'); assert.equal(durable.document_result, undefined);
+      assert.equal(durable.retry_failure_code, 'PARSER_TIMEOUT'); assert.equal(durable.retry_failure_count, 2);
+      assert.equal(value.events.includes('cleanup'), false); assert.equal(value.events.includes('mapping-stopped'), false);
+    }
+  });
+  await testAsync('hard ownership failures retain identity and cannot authorize a document stop or cleanup', async () => {
+    for (const code of ['BATCH_OWNERSHIP_CHANGED', 'OWNERSHIP_GUARD_BUSY', 'OWNERSHIP_GUARD_UNSAFE', 'OWNERSHIP_GUARD_CLOSE_UNCONFIRMED']) {
+      const original = codedError(code), value = fixture({ pipelineError: original });
+      await assert.rejects(value.processor.processSingleBatchItem(value.state, value.item, value.entry, value.deps), error => error === original);
+      assert.equal(value.item.status, 'processing'); assert.equal(value.writes.length, 1);
+      assert.equal(value.item.document_result, undefined); assert.equal(value.item.retry_failure_count, undefined);
+      assert.equal(value.events.includes('cleanup'), false); assert.equal(value.events.includes('mapping-stopped'), false);
+    }
+  });
   await testAsync('short document-control contention waits without stealing a lock; persistent contention stays retryable', async () => {
     let attempts = 0;
     assert.equal(await retryDocumentControl(() => {
@@ -180,6 +261,15 @@ async function main() {
     await assert.rejects(retryDocumentControl(() => { attempts++; throw codedError('DOCUMENT_REVIEW_INVALID'); },
       { attempts: 3, delayMs: 1 }), { code: 'DOCUMENT_REVIEW_INVALID' });
     assert.equal(attempts, 1);
+    for (const code of ['OWNERSHIP_GUARD_BUSY', 'OWNERSHIP_GUARD_UNSAFE', 'OWNERSHIP_GUARD_CLOSE_UNCONFIRMED', 'BATCH_OWNERSHIP_CHANGED']) {
+      const refusal = codedError(code); attempts = 0;
+      await assert.rejects(retryDocumentControl(() => { attempts++; throw refusal; }, { attempts: 3, delayMs: 0 }), error => error === refusal);
+      assert.equal(attempts, 1, 'only the translated document admission Busy may be retried');
+    }
+    let getters = 0;
+    const foreign = { get code() { getters++; return 'STANDALONE_BUSY'; } };
+    await assert.rejects(retryDocumentControl(() => { throw foreign; }, { attempts: 3, delayMs: 0 }), error => error === foreign);
+    assert.equal(getters, 0);
     assert.ok(batchFacade._test.retryableErrorCodes.includes('STANDALONE_BUSY'));
   });
   await testAsync('raw opt-out preserves the saved-answer lookup and only permits unconfirmed contact fallback for skipped runs', async () => {

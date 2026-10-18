@@ -315,10 +315,10 @@
           "markdownDescription": "Liest betroffene Dateinamen und feste Fehlercodes nur lokal für den ausgewählten Standalone-Lauf."
         },
         {
-          "description": "Zeigt höchstens 20 lokale Standalone-Läufe ohne Dokumentinhalte.",
+          "description": "Zeigt höchstens 5 lokale Standalone-Läufe ohne Dokumentinhalte.",
           "type": "string",
           "const": "allow-get-run-history",
-          "markdownDescription": "Zeigt höchstens 20 lokale Standalone-Läufe ohne Dokumentinhalte."
+          "markdownDescription": "Zeigt höchstens 5 lokale Standalone-Läufe ohne Dokumentinhalte."
         },
         {
           "description": "Liest ausschließlich für die lokale Oberfläche den gewählten Quell- und Ergebnisort.",
@@ -387,6 +387,12 @@
           "markdownDescription": "Öffnet nur den lokalen Ordner der privaten Zuordnung; die Oberfläche erhält weder Pfad noch Inhalt."
         },
         {
+          "description": "Open only an existing verified export receipt from the main workspace, without activating document review.",
+          "type": "string",
+          "const": "allow-open-recorded-document-export",
+          "markdownDescription": "Open only an existing verified export receipt from the main workspace, without activating document review."
+        },
+        {
           "description": "Öffnet ausschließlich das lokale Standalone-Prüffenster.",
           "type": "string",
           "const": "allow-open-review-window",
@@ -433,6 +439,12 @@
           "type": "string",
           "const": "allow-select-folder",
           "markdownDescription": "Öffnet die native Ordnerauswahl und übergibt den Pfad nur an den lokalen Core."
+        },
+        {
+          "description": "Blendet ausschließlich abgeschlossene lokale Verlaufszeilen aus oder wieder ein; löscht keine Laufdaten.",
+          "type": "string",
+          "const": "allow-set-run-history-visibility",
+          "markdownDescription": "Blendet ausschließlich abgeschlossene lokale Verlaufszeilen aus oder wieder ein; löscht keine Laufdaten."
         },
         {
           "description": "Beendet den privaten lokalen Core-Prozess.",

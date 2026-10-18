@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import path from 'node:path';
+import layout from '../../plugins/data-secure/server/standalone/macos-bundle-layout.js';
 
 const sha256 = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const MANIFEST = 'STANDALONE-MANIFEST.json';
@@ -64,6 +65,19 @@ export function verifyStandaloneInventory(entries, manifest) {
 export function verifyConversionInventory(entries, prefix, manifest) {
   const files = new Map([...entries].filter(([name]) => name.startsWith(prefix))
     .map(([name, bytes]) => [name.slice(prefix.length), bytes]));
+  if (manifest.native_layout !== undefined) {
+    assert.equal(manifest.native_layout, layout.LAYOUT, 'CONVERSION_NATIVE_LAYOUT_INVALID');
+    assert.equal(manifest.native_inventory_finalized, true, 'CONVERSION_NATIVE_NOT_FINALIZED');
+    const suffix = 'Resources/server/standalone/conversion-runtime/';
+    assert.ok(prefix.endsWith(suffix), 'CONVERSION_NATIVE_PREFIX_INVALID');
+    const contents = prefix.slice(0, -suffix.length);
+    for (const record of Object.values(layout.nativeRoles(manifest.target)).filter(record => record.inventory)) {
+      assert.ok(!files.has(record.inventory), 'CONVERSION_NATIVE_DUPLICATE');
+      const bytes = entries.get(`${contents}${record.destination}`);
+      assert.ok(Buffer.isBuffer(bytes), 'CONVERSION_NATIVE_MISSING');
+      files.set(record.inventory, bytes);
+    }
+  }
   // RUNTIME.json and the generated license summary are appended after the
   // conversion inventory. Both are covered by the enclosing package manifest
   // and SHA256SUMS; all other conversion payload files must occur exactly once.

@@ -1,6 +1,8 @@
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import boundFileIo from '../../plugins/data-secure/server/core/bound-file-io.js';
+import supervisor from '../../plugins/data-secure/server/posix-supervisor.js';
 
 export const POSIX_SUPERVISOR_TARGETS = Object.freeze([
   { id: 'macos-x64', platform: 'darwin', arch: 'x64' },
@@ -8,9 +10,15 @@ export const POSIX_SUPERVISOR_TARGETS = Object.freeze([
   { id: 'linux-x64', platform: 'linux', arch: 'x64' }
 ]);
 
-function assertRegular(file, code) {
-  const stat = fs.lstatSync(file);
-  if (!stat.isFile() || stat.isSymbolicLink()) throw new Error(code);
+function readArtifact(file, minimum, maximum, code) {
+  try { return boundFileIo.readBoundFileRecord(file, { minimum, maximum, checkCtime: true }); }
+  catch { throw new Error(code); }
+}
+function assertBinding(record, code) {
+  try {
+    boundFileIo.assertDirectory(record.directory);
+    if (!boundFileIo.sameFile(fs.lstatSync(record.path, { bigint: true }), record.identity)) throw new Error('changed');
+  } catch { throw new Error(code); }
 }
 
 function matchesTarget(bytes, target) {
@@ -35,13 +43,17 @@ export function verifyPosixSupervisorArtifacts(nativeRoot) {
     const executable = path.join(directory, 'datasecure-sandbox');
     const checksum = `${executable}.sha256`;
     if (!fs.existsSync(executable) || !fs.existsSync(checksum)) throw new Error(`POSIX_SUPERVISOR_TARGET_INCOMPLETE:${target.id}`);
-    assertRegular(executable, `POSIX_SUPERVISOR_EXECUTABLE_UNSAFE:${target.id}`);
-    assertRegular(checksum, `POSIX_SUPERVISOR_CHECKSUM_UNSAFE:${target.id}`);
-    const bytes = fs.readFileSync(executable);
-    const expected = fs.readFileSync(checksum, 'utf8').trim();
+    const executableRead = readArtifact(executable, 64, supervisor.MAX_SUPERVISOR_BYTES,
+      `POSIX_SUPERVISOR_EXECUTABLE_UNSAFE:${target.id}`);
+    const checksumRead = readArtifact(checksum, 64, supervisor.MAX_CHECKSUM_BYTES,
+      `POSIX_SUPERVISOR_CHECKSUM_UNSAFE:${target.id}`);
+    const bytes = executableRead.bytes;
+    const expected = checksumRead.bytes.toString('utf8').trim();
     const actual = crypto.createHash('sha256').update(bytes).digest('hex');
     if (!matchesTarget(bytes, target)) throw new Error(`POSIX_SUPERVISOR_TARGET_MISMATCH:${target.id}`);
     if (!/^[a-f0-9]{64}$/u.test(expected) || expected !== actual) throw new Error(`POSIX_SUPERVISOR_INTEGRITY_FAILED:${target.id}`);
+    assertBinding(executableRead, `POSIX_SUPERVISOR_EXECUTABLE_UNSAFE:${target.id}`);
+    assertBinding(checksumRead, `POSIX_SUPERVISOR_CHECKSUM_UNSAFE:${target.id}`);
     included.push(target.id);
   }
   return included;

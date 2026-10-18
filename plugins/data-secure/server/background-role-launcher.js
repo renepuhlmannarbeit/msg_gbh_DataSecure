@@ -39,6 +39,33 @@ function seaEnvironment(source) {
 function launchBackgroundRole(role, options = {}) {
   if (typeof role !== 'string' || !Object.hasOwn(ROLE_FLAGS, role) ||
       !options || typeof options !== 'object') invalid();
+  if (process.platform === 'darwin' && process.env.DATASECURE_NATIVE_EXPORT_CHANNEL === '1') {
+    const { assertNativeOwnershipRuntime } = require('./core/ownership-control');
+    assertNativeOwnershipRuntime();
+    // Native detached workers retain the existing App bundle; do not activate
+    // the generic durable cache or let callers select a different executable.
+    for (const key of SEA_FORBIDDEN_OVERRIDES) if (options[key] !== undefined) invalid();
+    if (process.env.DATASECURE_DURABLE_RUNTIME_ROOT) invalid();
+    const environment = seaEnvironment(options.env);
+    for (const key of ['DATASECURE_NATIVE_EXPORT_CHANNEL', 'DATASECURE_PRODUCT_CHANNEL', 'DATASECURE_MACOS_STATIC_CORE_SHA256', 'DATASECURE_MACOS_STATIC_CORE_ARTIFACT_SHA256',
+      'EU_PRIVACY_DATA_ROOT', 'EU_PRIVACY_ROOT']) {
+      if (typeof process.env[key] !== 'string' || !process.env[key] ||
+          environment[key] !== process.env[key]) invalid();
+    }
+    if (environment.DATASECURE_DURABLE_RUNTIME_ROOT) invalid();
+    const spawnOptions = role === 'companion' ? {
+      stdio: ['pipe', 'pipe', 'ignore', 'pipe'], windowsHide: true, shell: false, env: environment
+    } : {
+      detached: true, windowsHide: true, stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
+      execArgv: [`--require=${path.join(__dirname, 'network-deny.cjs')}`],
+      execPath: process.execPath, env: environment, serialization: 'json'
+    };
+    assertNativeOwnershipRuntime();
+    return role === 'companion'
+      ? childProcess.spawn(process.execPath, [`--require=${path.join(__dirname, 'network-deny.cjs')}`,
+        path.join(__dirname, 'companion', 'stdio-server.js')], spawnOptions)
+      : childProcess.fork(path.join(__dirname, 'gateway', `${role}-worker.js`), [], spawnOptions);
+  }
   let sea;
   try { sea = require('node:sea').isSea(); } catch { invalid(); }
   if (sea !== true && sea !== false) invalid();

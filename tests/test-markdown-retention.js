@@ -39,11 +39,132 @@ function journal(items) {
   return state;
 }
 function sweep() {
-  const protection = openBatchPackageProtection();
   return cleanupLocalData({ roots: roots(), scope: 'all', includeMarkdownArtifacts: true,
-    now: NOW, retentionDays: 7, protectedIds: protection.ids, outputProtectionComplete: protection.complete });
+    now: NOW, retentionDays: 7, outputProtectionComplete: false,
+    getBatchPackageProtection: openBatchPackageProtection });
 }
 async function run() {
+  await testAsync('absent and identity-bound empty stores need no journal scan and are never created by cleanup', async () => {
+    const directory = path.join(process.env.EU_PRIVACY_DATA_ROOT, 'markdown-artifacts');
+    let scans = 0;
+    const getProtection = () => { scans++; throw new Error('must not scan'); };
+    assert.strictEqual(fs.existsSync(process.env.EU_PRIVACY_DATA_ROOT), false);
+    assert.deepStrictEqual(cleanupMarkdownArtifacts({ cutoff: NOW, getProtection }), { removed: 0, errors: 0, skipped: false });
+    assert.strictEqual(fs.existsSync(process.env.EU_PRIVACY_DATA_ROOT), false);
+    assert.strictEqual(scans, 0);
+    artifactRoot();
+    assert.deepStrictEqual(cleanupMarkdownArtifacts({ cutoff: NOW, getProtection }), { removed: 0, errors: 0, skipped: false });
+    const retention = cleanupLocalData({ roots: roots(), includeMarkdownArtifacts: true, scope: 'output',
+      now: NOW, getBatchPackageProtection: getProtection });
+    assert.strictEqual(retention.removed_markdown_artifacts, 0);
+    assert.strictEqual(retention.markdown_cleanup_skipped, false);
+    assert.strictEqual(retention.output_protection_complete, false);
+    assert.strictEqual(retention.output_cleanup_skipped, true);
+    assert.strictEqual(scans, 0);
+    assert.deepStrictEqual(fs.readdirSync(directory), []);
+  });
+  await testAsync('denied, linked or replaced empty stores cannot claim an empty successful inspection', async () => {
+    const directory = artifactRoot(), held = path.join(process.env.EU_PRIVACY_DATA_ROOT, 'retention-held-store');
+    const original = { readdir: fs.readdirSync, lstat: fs.lstatSync };
+    let scans = 0, swapped = false;
+    const getProtection = () => { scans++; return { ids: new Set(), complete: true }; };
+    for (const failure of ['denied', 'linked', 'replaced']) {
+      try {
+        fs.readdirSync = (target, ...args) => {
+          if (target !== directory) return original.readdir(target, ...args);
+          if (failure === 'denied') throw Object.assign(new Error('denied'), { code: 'EACCES' });
+          const entries = original.readdir(target, ...args);
+          if (failure === 'replaced' && !swapped) {
+            fs.renameSync(directory, held); fs.mkdirSync(directory); swapped = true;
+          }
+          return entries;
+        };
+        fs.lstatSync = (target, ...args) => {
+          const stat = original.lstat(target, ...args);
+          if (failure === 'linked' && target === directory) return new Proxy(stat, {
+            get(value, key) { return key === 'isSymbolicLink' ? () => true : Reflect.get(value, key); }
+          });
+          return stat;
+        };
+        const result = cleanupMarkdownArtifacts({ cutoff: NOW, getProtection });
+        assert.deepStrictEqual(result, { removed: 0, errors: 1, skipped: true }, failure);
+        assert.strictEqual(scans, 0);
+      } finally {
+        fs.readdirSync = original.readdir; fs.lstatSync = original.lstat;
+        if (swapped) { fs.rmdirSync(directory); fs.renameSync(held, directory); swapped = false; }
+      }
+    }
+  });
+  await testAsync('fresh artifacts and unknown names do not trigger lazy protection or deletion', async () => {
+    const fresh = await fixture('fresh-no-scan.txt');
+    const unknown = path.join(artifactRoot(), 'pending-unknown.txt'); fs.writeFileSync(unknown, 'keep');
+    let scans = 0;
+    const result = cleanupMarkdownArtifacts({ cutoff: NOW - 7 * DAY,
+      getProtection() { scans++; return { ids: new Set(), complete: true }; } });
+    assert.deepStrictEqual(result, { removed: 0, errors: 0, skipped: false });
+    assert.strictEqual(scans, 0);
+    assert.strictEqual(verifyMarkdownItem(fresh), true);
+    assert.strictEqual(fs.readFileSync(unknown, 'utf8'), 'keep');
+    fs.unlinkSync(unknown);
+  });
+  await testAsync('an expired candidate requests protection once and preserves it on an unknown or failed proof', async () => {
+    const item = await fixture('unknown-protection.txt'); old(item);
+    for (const protection of [null, { ids: new Set(), complete: false }, { ids: [], complete: true }, 'throw']) {
+      let scans = 0;
+      const result = cleanupLocalData({ roots: roots(), includeMarkdownArtifacts: true, scope: 'output', now: NOW,
+        getBatchPackageProtection() { scans++; if (protection === 'throw') throw new Error('denied'); return protection; } });
+      assert.strictEqual(scans, 1);
+      assert.strictEqual(result.removed_markdown_artifacts, 0);
+      assert.strictEqual(result.markdown_cleanup_skipped, true);
+      assert.strictEqual(result.output_protection_complete, false);
+      assert.strictEqual(verifyMarkdownItem(item), true);
+    }
+    const cleanup = cleanupMarkdownArtifacts({ cutoff: NOW,
+      getProtection: () => ({ ids: new Set(), complete: true }) });
+    assert.strictEqual(cleanup.removed, 1, 'only the expired candidate is removed after a complete proof');
+  });
+  await testAsync('replacement of the artifact store during the full supplier scan stops before deletion', async () => {
+    const item = await fixture('store-swap.txt'); old(item);
+    const directory = artifactRoot(), held = path.join(process.env.EU_PRIVACY_DATA_ROOT, 'retention-held-store');
+    let scans = 0;
+    try {
+      const result = cleanupMarkdownArtifacts({ cutoff: NOW, getProtection() {
+        scans++; fs.renameSync(directory, held); fs.mkdirSync(directory);
+        return { ids: new Set(), complete: true };
+      } });
+      assert.deepStrictEqual(result, { removed: 0, errors: 1, skipped: true });
+      assert.strictEqual(scans, 1);
+      assert.strictEqual(fs.existsSync(path.join(held, item.artifact_id)), true);
+      assert.deepStrictEqual(fs.readdirSync(directory), []);
+    } finally { fs.rmdirSync(directory); fs.renameSync(held, directory); }
+    assert.strictEqual(verifyMarkdownItem(item), true);
+    assert.strictEqual(cleanupMarkdownArtifacts({ cutoff: NOW,
+      getProtection: () => ({ ids: new Set(), complete: true }) }).removed, 1);
+  });
+  await testAsync('lazy candidates retain the full per-journal completed-export verification', async () => {
+    const completed = await fixture('lazy-completed.txt'); old(completed);
+    const pending = await fixture('lazy-pending.txt'); old(pending);
+    const completedState = journal([completed]);
+    const pendingState = journal([pending]);
+    assert.strictEqual(exportCompletedState(completedState).available, true);
+    let scans = 0;
+    const checked = [];
+    const reader = createBatchRetentionProtection({ batchRoot: () => journals,
+      completedMarkdownExportMatches(state) {
+        checked.push(state.token);
+        return completedMarkdownExportMatches(state);
+      } });
+    const result = cleanupLocalData({ roots: roots(), includeMarkdownArtifacts: true, scope: 'output', now: NOW,
+      getBatchPackageProtection() { scans++; return reader.openBatchPackageProtection(); } });
+    assert.strictEqual(scans, 1);
+    assert.deepStrictEqual(checked.sort(), [completedState.token, pendingState.token].sort());
+    assert.strictEqual(result.output_protection_complete, true);
+    assert.strictEqual(result.markdown_cleanup_skipped, false);
+    assert.strictEqual(result.removed_markdown_artifacts, 1);
+    assert.strictEqual(fs.existsSync(path.join(artifactRoot(), completed.artifact_id)), false);
+    assert.strictEqual(verifyMarkdownItem(pending), true);
+    assert.strictEqual(completedMarkdownExportMatches(completedState), true);
+  });
   await testAsync('only expired committed private dm copies are removed; originals and visible basename-preserving Markdown survive', async () => {
     const item = await fixture(); old(item);
     const state = journal([item]);
@@ -106,6 +227,11 @@ async function run() {
     const result = cleanupMarkdownArtifacts({ cutoff: NOW, force: true, protectedIds: protection.ids, protectionComplete: protection.complete });
     assert.strictEqual(result.removed, 0); assert.strictEqual(result.skipped, true);
     assert.ok(fs.existsSync(path.join(artifactRoot(), item.artifact_id)));
+      const combined = cleanupLocalData({ roots: roots(), scope: 'output', includeMarkdownArtifacts: true,
+        force: true, now: NOW, protectedIds: protection.ids, outputProtectionComplete: false });
+      assert.strictEqual(combined.output_protection_complete, false, 'force is not a successful Markdown protection inspection');
+      assert.strictEqual(combined.removed_markdown_artifacts, 0);
+      assert.strictEqual(combined.markdown_cleanup_skipped, true);
     fs.unlinkSync(malformed);
   });
   await testAsync('a generated-looking directory containing an additional source file stops the plan before deletion', async () => {

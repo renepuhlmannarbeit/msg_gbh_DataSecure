@@ -48,7 +48,7 @@ const standaloneWindows = releaseWorkflow.split('  standalone-windows:')[1];
 assert.ok(standaloneWindows, 'the existing workflow provides exact Windows Standalone evidence without local desktop use');
 assert.match(standaloneWindows, /inputs\.scope == 'standalone_windows' && inputs\.confirm_runner_minutes == true/u);
 for (const required of ['runs-on: windows-latest', 'test:standalone', 'test:standalone:conversion',
-  'cargo clippy --all-targets --locked -- -D warnings', 'cargo build',
+  'cargo clippy --all-targets --locked -- -D warnings', 'npm run build:standalone:windows',
   'verify-standalone-package.mjs', 'test-standalone-package-smoke.mjs',
   '-AssertReviewWindow -AssertWorkspace -EmitEvidence', 'STANDALONE_PACKAGE_NOT_DETERMINISTIC', 'retention-days: 1']) {
   assert.ok(standaloneWindows.includes(required), required);
@@ -76,7 +76,7 @@ const entries = new Map(projected.map(file => [file.archivePath, fs.readFileSync
 // Inert private publication contracts are transitive dependencies of the shared
 // document store, not a Cowork capability or a shipped extraction runtime.
 const commonModules = ['anonymization-notices.js', 'anonymized-artifact.js', 'anonymized-store.js', 'confidential-overview.js', 'conversion-runtime-resolver.js', 'conversion-worker-contract.js', 'conversion-worker.js',
-  'convert-next.js', 'identity-ledger.js', 'markdown-artifact.js', 'markdown-contract.js', 'markdown-retention.js', 'markdown-store.js'];
+  'convert-next.js', 'identity-ledger.js', 'macos-bundle-layout.js', 'markdown-artifact.js', 'markdown-contract.js', 'markdown-retention.js', 'markdown-store.js'];
 assert.deepEqual([...entries.keys()].filter(name => name.startsWith('server/standalone/')).sort(),
   commonModules.map(name => `server/standalone/${name}`).sort());
 assert.deepEqual(verifyProductRelativeRequires(entries), { ok: true });

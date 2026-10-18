@@ -1,0 +1,22 @@
+{
+  "schema": "datasecure-windows-native-policy/1",
+  "target": "windows-x64",
+  "minimum_os": "Windows 10",
+  "desktop_crt": "static",
+  "requires_visual_cpp_redistributable": false,
+  "security_servicing": "rebuild_and_redistribute_on_toolset_crt_security_update",
+  "maintenance_owner": "DataSecure release maintainers",
+  "rationale": "The portable offline ZIP must work for a standard user without an administrator-installed Visual C++ runtime. Microsoft prefers centrally serviced dynamic CRTs for installer deployments; this portable product deliberately accepts responsibility for rebuilding and redistributing the entire app after toolset/CRT security updates. No DLL is copied from a developer machine or downloaded at runtime.",
+  "validation_limits": "PE normal and delay-import gates prove the declared direct native dependency closure, not successful startup, WebView2 availability, runtime LoadLibrary behavior, organizational execution policy or clean-VM acceptance.",
+  "sources": [
+    "https://doc.rust-lang.org/reference/linkage.html#static-and-dynamic-c-runtimes",
+    "https://learn.microsoft.com/en-us/cpp/windows/deployment-in-visual-cpp?view=msvc-170"
+  ],
+  "system_dlls": [
+    "advapi32.dll", "bcrypt.dll", "bcryptprimitives.dll", "comctl32.dll", "comdlg32.dll",
+    "crypt32.dll", "dbghelp.dll", "dwmapi.dll", "gdi32.dll", "iphlpapi.dll", "kernel32.dll",
+    "msvcrt.dll", "ntdll.dll", "ole32.dll", "oleaut32.dll", "propsys.dll", "rpcrt4.dll",
+    "secur32.dll", "setupapi.dll", "shell32.dll", "shlwapi.dll", "ucrtbase.dll", "user32.dll",
+    "userenv.dll", "uxtheme.dll", "version.dll", "winmm.dll", "ws2_32.dll"
+  ]
+}

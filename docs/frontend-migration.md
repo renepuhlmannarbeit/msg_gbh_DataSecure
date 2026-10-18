@@ -3,6 +3,24 @@
 Stand: 2026-10-08. Referenz: `codex_auftrag_datasecure/ARBEITSAUFTRAG.md`,
 Design-Tokens und klickbarer Prototyp. Einzige Arbeitsliste: BL-010.53.
 
+## Aktueller lokaler R6 Prozess und Navigationsauftrag vom 18.10.2026
+
+Die Nutzergegenprobe von RC163-R5 zeigt einen Navigationsmangel: Dokument- und
+Fundstellenprüfung sind keine Verlaufsliste, wurden aber als aktiver „Verlauf“
+gekennzeichnet. Ein bestätigter Export endete weiterhin in der Prüffläche.
+Der gezielte Umbau trennt Liste und laufgebundene Details, hält häufige
+Ergebnis-/Hinweisaktionen direkt sichtbar und ordnet Diagnose als optionale
+Unterstützung ein. Die Umsetzung wird aktuell gegen die unveränderten
+Freigabe-/Revision-/Hash-/ACK-/Entwurfsschutzverträge geprüft.
+
+Verbindlicher aktueller Prozessvertrag mit elf Aktivitäts- und elf
+Sequenzdiagrammen sowie Klick-/Statusmatrix:
+[RC163-R6 Workflowreview](acceptance/RC163_R6_WORKFLOW_REVIEW_20261018.md).
+Der aktive Arbeitsstand steht in CURRENT_STATE und BACKLOG; ältere datierte
+Navigationsentscheidungen unten sind Entwicklungshistorie, nicht zusätzliche
+heutige Pflichten. Keine Desktopbedienung oder Timerfortsetzung ist erlaubt;
+headless Browsermodelle ersetzen keine neue menschliche Windows-/Mac-Abnahme.
+
 **Bereitstellungsnachtrag 11.10.2026:** Die neue Oberfläche ist mit RC159 der
 reguläre Einstieg aller vier veröffentlichten Standalone-Testpakete, gebunden
 an `7af2a9d0268864a01b954e0175cae9f5a3616fe8`. Native Paket-/Start-, CI- und
@@ -41,7 +59,9 @@ remappter Position und lokalem Bildausschnitt, spätere Korrekturen weiterhin
 möglich. Das Checkbox-Häkchen aktiviert zusätzliche Kontaktprüfung, nicht OCR
 oder die Lesbarkeitsformatierung. Echte Markdownquellen sind davon ausgenommen.
 Quellescapes, echte Fences und erlaubte korrigierte Kontaktzeichen werden im
-Privacy-Kern literal erhalten und trotzdem vollständig geprüft (`de-business/4`).
+Privacy-Kern literal erhalten und trotzdem geprüft (`de-business/5`). Nicht
+eindeutig darstellbare Steuer-/Ersatzzeichen stoppen die Anonymisierung; reine
+ASCII-Beispiele in Code werden nicht als aktive Zeichen interpretiert.
 Kodierte Identifier innerhalb solcher Literale erhalten keine Datenschutz-
 Ausnahme: Nur nachweisbare Identifierbereiche werden mit Originalkoordinaten
 dekodiert; gewöhnlicher Beispieltext wie `&amp;` bleibt literal. Explizite

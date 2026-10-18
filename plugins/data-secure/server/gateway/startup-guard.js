@@ -149,6 +149,8 @@ function verifyBundledRuntime(options = {}) {
     throw Object.assign(new Error('bundled runtime not identified'), { code: 'RUNTIME_INTEGRITY_FAILED' });
   }
   if (info.runtime_mode !== 'self_contained_node' || !info.runtime_target) return { checked: false, reason: 'host_node' };
+  if (process.platform === 'darwin' && process.env.DATASECURE_PRODUCT_CHANNEL === 'standalone')
+    return require('../core/macos-static-runtime-evidence').verify(info.runtime_target);
   const io = options.fs || fs;
   const evidenceFile = options.evidenceFile || path.resolve(__dirname, '..', '..', 'RUNTIME-EVIDENCE.json');
   const executable = options.executable || process.execPath;

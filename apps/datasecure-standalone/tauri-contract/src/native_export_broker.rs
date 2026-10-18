@@ -61,26 +61,66 @@ pub(crate) fn private_data_root() -> io::Result<PathBuf> {
     base.filter(|p| p.is_absolute()).map(|p| p.join("SecureDataMsg-Standalone"))
         .ok_or_else(|| error("STANDALONE_DATA_ROOT_UNSAFE"))
 }
+/// Only fixed stages and standard-library kind names cross the diagnostic boundary.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ConfigureStage {
+    Nonce, Guard, PublicOpen, DataOpen, Roots, AnonymizeBind, AnonymizeVolume,
+    MarkdownBind, MarkdownVolume, PrivateCreate, PrivateSync, DataSync, PublicSync, RootEncoding,
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize)]
+pub(crate) struct ConfigureFailure {
+    pub stage: ConfigureStage,
+    pub io_error_kind: String,
+    pub raw_os_error: Option<i32>,
+}
+pub(crate) fn valid_configure_io_kind(value: &str) -> bool {
+    // ErrorKind Debug prints an enum name, not the io::Error payload. Keep a
+    // closed export vocabulary and use Other for a future/unknown kind.
+    const KINDS: &str = "NotFound PermissionDenied ConnectionRefused ConnectionReset HostUnreachable NetworkUnreachable ConnectionAborted NotConnected AddrInUse AddrNotAvailable NetworkDown BrokenPipe AlreadyExists WouldBlock NotADirectory IsADirectory DirectoryNotEmpty ReadOnlyFilesystem FilesystemLoop StaleNetworkFileHandle InvalidInput InvalidData TimedOut WriteZero StorageFull NotSeekable QuotaExceeded FileTooLarge ResourceBusy ExecutableFileBusy Deadlock CrossesDevices TooManyLinks InvalidFilename ArgumentListTooLong Interrupted Unsupported UnexpectedEof OutOfMemory InProgress Other Uncategorized";
+    KINDS.split_whitespace().any(|kind| kind == value)
+}
+impl ConfigureFailure {
+    fn capture(stage: ConfigureStage, error: &io::Error) -> Self {
+        let kind = format!("{:?}", error.kind());
+        Self { stage, io_error_kind: if valid_configure_io_kind(&kind) { kind } else { "Other".into() },
+            raw_os_error: error.raw_os_error() }
+    }
+}
+fn configure_step<T>(stage: ConfigureStage, result: io::Result<T>,
+    observe: &mut impl FnMut(ConfigureFailure)) -> io::Result<T> {
+    // Inspect the original error before public_code erases its OS identity.
+    // Return that exact error: diagnostics never substitute transaction results.
+    result.inspect_err(|error| observe(ConfigureFailure::capture(stage, error)))
+}
 pub(crate) fn configure(root: &Path, data: &Path, nonce: &str, guard: &NativeGuard) -> io::Result<Binding> {
-    if !hex(nonce, 32) { return Err(error("AI_EXPORT_INVALID")); }
-    guard.checkpoint().map_err(|_| error("STANDALONE_CLOSING"))?;
-    let public = Directory::open_existing(root, None)?;
-    let private_parent = Directory::open_existing(data, None)?;
-    validate_configuration_roots(public.identity(), private_parent.identity())?;
-    let anonymize = public.bind_output_child("DataSecure-KI-Export")?;
-    require_same_volume(private_parent.identity(), &[anonymize.identity()])?;
-    let markdown = public.bind_output_child("DataSecure-Markdown-Korrektur")?;
+    configure_observed(root, data, nonce, guard, crate::diagnostic_native_configure_failure)
+}
+pub(crate) fn configure_observed(root: &Path, data: &Path, nonce: &str, guard: &NativeGuard,
+    mut observe: impl FnMut(ConfigureFailure)) -> io::Result<Binding> {
+    use ConfigureStage::*;
+    configure_step(Nonce, if hex(nonce, 32) { Ok(()) } else { Err(error("AI_EXPORT_INVALID")) }, &mut observe)?;
+    configure_step(Guard, guard.checkpoint().map_err(|_| error("STANDALONE_CLOSING")), &mut observe)?;
+    let public = configure_step(PublicOpen, Directory::open_existing(root, None), &mut observe)?;
+    let private_parent = configure_step(DataOpen, Directory::open_existing(data, None), &mut observe)?;
+    configure_step(Roots, validate_configuration_roots(public.identity(), private_parent.identity()), &mut observe)?;
+    let anonymize = configure_step(AnonymizeBind, public.bind_output_child("DataSecure-KI-Export"), &mut observe)?;
+    configure_step(AnonymizeVolume, require_same_volume(private_parent.identity(), &[anonymize.identity()]), &mut observe)?;
+    let markdown = configure_step(MarkdownBind, public.bind_output_child("DataSecure-Markdown-Korrektur"), &mut observe)?;
     // Existing output children can themselves be mount points even when the
     // selected parent is on the private volume. Reject those before a private
     // operation child is provisioned; Request::validate rechecks at export.
-    require_same_volume(private_parent.identity(), &[markdown.identity()])?;
+    configure_step(MarkdownVolume, require_same_volume(private_parent.identity(), &[markdown.identity()]), &mut observe)?;
     // Random exclusive child; a lost configuration reply leaves an orphan,
     // not a name that any subsequent configuration may adopt or repair.
     let private_name = format!("native-export-{nonce}");
-    let private = private_parent.create_controlled_child(&private_name)?;
-    private.sync()?; private_parent.sync()?; public.sync()?;
-    Ok(Binding { schema: "datasecure-native-export-binding/1".into(), root: root.to_str()
-        .ok_or_else(|| error("STANDALONE_RESULT_ROOT_UNSAFE"))?.into(), root_identity: public.identity().into(),
+    let private = configure_step(PrivateCreate, private_parent.create_controlled_child(&private_name), &mut observe)?;
+    configure_step(PrivateSync, private.sync(), &mut observe)?;
+    configure_step(DataSync, private_parent.sync(), &mut observe)?;
+    configure_step(PublicSync, public.sync(), &mut observe)?;
+    let root = configure_step(RootEncoding, root.to_str()
+        .ok_or_else(|| error("STANDALONE_RESULT_ROOT_UNSAFE")), &mut observe)?;
+    Ok(Binding { schema: "datasecure-native-export-binding/1".into(), root: root.into(), root_identity: public.identity().into(),
         data_root_identity: private_parent.identity().into(), private_name, private_identity: private.identity().into(),
         anonymize_identity: anonymize.identity().into(), markdown_identity: markdown.identity().into() })
 }
@@ -315,6 +355,28 @@ mod tests {
         Directory::open_existing(&data, None).unwrap().create_controlled_child(&op.binding.private_name).unwrap();
         assert!(execute(&data, &op, "publish", &guard).is_err());
     }
+    #[test]
+    fn configure_failure_diagnostics_preserve_kind_and_os_code_without_error_payload() {
+        let original = io::Error::new(io::ErrorKind::PermissionDenied, "/PRIVATE/raw-source.txt: vendor detail");
+        let mut observed = Vec::new();
+        let result: io::Result<()> = configure_step(ConfigureStage::PrivateCreate, Err(original),
+            &mut |failure| observed.push(failure));
+        let returned = result.unwrap_err();
+        assert_eq!(returned.kind(), io::ErrorKind::PermissionDenied);
+        assert_eq!(returned.to_string(), "/PRIVATE/raw-source.txt: vendor detail");
+        assert_eq!(public_code(&returned), "AI_EXPORT_CONFLICT");
+        assert_eq!(observed.len(), 1);
+        let bytes = serde_json::to_value(&observed[0]).unwrap();
+        assert_eq!(bytes, serde_json::json!({ "stage": "private_create",
+            "io_error_kind": "PermissionDenied", "raw_os_error": null }));
+        assert!(!bytes.to_string().contains("PRIVATE"));
+        let original = io::Error::from_raw_os_error(5);
+        let captured = ConfigureFailure::capture(ConfigureStage::MarkdownBind, &original);
+        assert_eq!(captured.raw_os_error, Some(5));
+        assert_eq!(captured.io_error_kind, format!("{:?}", original.kind()));
+        assert_eq!(public_code(&original), "AI_EXPORT_CONFLICT");
+        assert!(!valid_configure_io_kind("/PRIVATE/path"));
+    }
     /// Test-only pipe harness for the real Node store + native callback test.
     /// No test path override, loop or protocol is compiled into release builds.
     #[test]
@@ -324,8 +386,29 @@ mod tests {
         for line in io::stdin().lock().lines() {
             let input: serde_json::Value = serde_json::from_str(&line.unwrap()).unwrap();
             if input["outer"]["request_id"] != last { state = PublicationState::default(); last = input["outer"]["request_id"].clone(); }
-            let response = handle_publication(&input["frame"], &input["outer"], &mut state, &lifecycle, Path::new(input["data"].as_str().unwrap()),
-                std::time::Instant::now() + std::time::Duration::from_secs(30));
+            // The crash campaign supplies this test-only cut over its owned
+            // stdin. Release builds do not contain this helper or its cuts.
+            let cut = input["test_cut"].as_str().unwrap_or("").to_string();
+            assert!(["", "before_rename", "after_rename", "after_ack"].contains(&cut.as_str()));
+            let deadline = std::time::Instant::now() + std::time::Duration::from_secs(30);
+            let response = if ["before_rename", "after_rename"].contains(&cut.as_str()) && input["frame"]["command"] == "publish" {
+                let guard = lifecycle.begin_native_until(deadline).unwrap().with_test_event(move |phase| {
+                    if phase == cut {
+                        println!("NATIVE_KILL_READY:{phase}"); io::stdout().flush().unwrap();
+                        loop { std::thread::park(); }
+                    }
+                });
+                crate::native_export_channel::run_publication(&input["frame"], &input["outer"], &mut state,
+                    &lifecycle, Path::new(input["data"].as_str().unwrap()), deadline, guard)
+            } else {
+                handle_publication(&input["frame"], &input["outer"], &mut state, &lifecycle,
+                    Path::new(input["data"].as_str().unwrap()), deadline)
+            };
+            if input["test_cut"] == "after_ack" && input["frame"]["command"] == "acknowledge" &&
+                response.as_ref().ok().and_then(|value| value.as_ref()).is_some_and(|value| value["status"] == "acknowledged") {
+                println!("NATIVE_KILL_READY:after_ack"); io::stdout().flush().unwrap();
+                loop { std::thread::park(); }
+            }
             let value = match response { Ok(Some(v)) => v, other => serde_json::json!({ "harness_error": format!("{other:?}") }) };
             println!("NATIVE:{value}"); io::stdout().flush().unwrap();
         }

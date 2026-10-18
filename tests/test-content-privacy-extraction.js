@@ -101,6 +101,131 @@ testAsync('exact contact provenance and private metadata survive only in the pri
     assert.throws(() => validatePrivacyExtractionForOptions({ ...result, ...change }, contract, 'pdf'));
 });
 
+testAsync('Office table edits preserve exact repeated OCR corridors across formats, profiles and line endings', async () => {
+  const { appendOfficeOcr } = require('../plugins/data-secure/server/standalone/office-image-ocr');
+  const { buildContactDraft, applyContactAnswer } = require('../plugins/data-secure/server/core/ocr-contact-review');
+  const { automaticallyRedactOcrContacts } = require('../plugins/data-secure/server/gateway/bound-content-input');
+  const email = 'same@example.invalid', phone = '+49 30 5551002';
+  for (const type of ['docx', 'xlsx', 'pptx']) for (const profile of ['content-v1', 'notes-v1'])
+    for (const newline of ['\n', '\r\n']) for (const tail of ['', ' Fachtext 42: keine Freigabe. '.repeat(12)]) {
+      const contract = options({ markdownOutput: profile, imageOcr: true });
+      const native = ['# Δ 😀 e\u0301', '', '| Spalte 1 | Spalte 2 |', '', '| --- | --- |', '',
+        '| Name | Kennzahl |', '', '| Qvx | 42 |', '', `Native Quelle: ${email}`].join(newline);
+      const imageText = `Bild 😀 e\u0301${newline}E-Mail: ${email}${newline}Telefon: ${phone}${tail}`;
+      const emailStart = imageText.indexOf(email), phoneStart = imageText.indexOf(phone);
+      const image = createMarkdownExtraction({ source_type: 'png', markdown: imageText, content_options: contract,
+        coverage: { status: 'incomplete', reason_codes: ['OCR_CONTACT_VALUES_UNVERIFIED', 'OCR_NOT_VERIFIED'] },
+        ocr_contacts: [{ start: emailStart, end: emailStart + email.length, page: 1, line: 2, kind: 'email' },
+          { start: phoneStart, end: phoneStart + phone.length, page: 1, line: 3, kind: 'phone' }] });
+      const converted = appendOfficeOcr(source(type, native, contract), [image, image], contract);
+      const originalContacts = JSON.stringify(converted.ocr_contacts);
+      const result = await extractSourceForPrivacy(Buffer.from('synthetic'), '.' + type,
+        { contentOptions: contract, convertBuffer: async () => converted });
+      // Independent text oracle: explicitly state retained rows and separators;
+      // never derive the expected output with the function under test.
+      const expectedNative = ['# Δ 😀 e\u0301', '', '| Name | Kennzahl |', '| --- | --- |',
+        '| Qvx | 42 |', '', `Native Quelle: ${email}`].join(newline);
+      const expected = expectedNative + '\n\n' + imageText + '\n\n' + imageText;
+      assert.equal(result.markdown, expected, `${type}/${profile}/${JSON.stringify(newline)}`);
+      const firstImageStart = expectedNative.length + 2, secondImageStart = firstImageStart + imageText.length + 2;
+      assert.deepEqual(result.ocrContacts.map(item => [item.start, item.end, item.page, item.line, item.kind]),
+        [firstImageStart, secondImageStart].flatMap((offset, index) => [
+          [offset + emailStart, offset + emailStart + email.length, index + 1, 2, 'email'],
+          [offset + phoneStart, offset + phoneStart + phone.length, index + 1, 3, 'phone']
+        ]));
+      assert.deepEqual(result.ocrContacts.map(item => result.markdown.slice(item.start, item.end)), [email, phone, email, phone]);
+      assert.equal(JSON.stringify(converted.ocr_contacts), originalContacts, 'converter provenance is never mutated');
+      assert.ok(result.sourceExtractionCoverage.reason_codes.includes('OCR_CONTACT_VALUES_UNVERIFIED'));
+      const input = { original_text: result.markdown, source_type: type, contacts: result.ocrContacts };
+      const draft = buildContactDraft(input);
+      assert.deepEqual(draft.ambiguities.map(item => result.markdown.slice(item.original_start, item.original_end)), [email, phone, email, phone]);
+      const corrected = applyContactAnswer(input, { action: 'reviewed', redactions: [], decisions: draft.ambiguities.map((item, index) =>
+        index === 0 ? { ambiguity_id: item.ambiguity_id, decision: 'correct_contact', replacement: 'corrected@example.invalid' }
+          : { ambiguity_id: item.ambiguity_id, decision: 'confirm_contact' }) });
+      assert.equal(corrected, expectedNative + '\n\n' + imageText.replace(email, 'corrected@example.invalid') + '\n\n' + imageText,
+        'guided correction changes the first OCR occurrence, never an identical native or second-image occurrence');
+      const automatic = automaticallyRedactOcrContacts(input);
+      assert.equal((automatic.text.match(/\[EMAIL_REDACTED\]/gu) || []).length, 2);
+      assert.equal((automatic.text.match(/\[PHONE_REDACTED\]/gu) || []).length, 2);
+      assert.ok(automatic.text.includes(`Native Quelle: ${email}`), 'exact OCR masking must not widen to a same-valued native occurrence');
+      assert.ok(automatic.text.includes('Qvx') && automatic.text.includes('42'), 'OCR operation preserves unrelated table facts');
+      assert.ok(!automatic.text.includes(phone));
+    }
+});
+
+testAsync('moved real table header preserves contact identity and private image evidence without value lookup', async () => {
+  const { encodePng } = require('../plugins/data-secure/server/images/png');
+  const png = encodePng({ width: 1, height: 1, rgba: Buffer.from([255, 255, 255, 255]) });
+  const image = { schema: 'datasecure-ocr-contact-image/1', source_width: 1, source_height: 1,
+    x: 0, y: 0, width: 1, height: 1, png_base64: png.toString('base64') };
+  const email = 'same@example.invalid', contract = options({ imageOcr: true });
+  const raw = `| Spalte 1 | Spalte 2 |\n| --- | --- |\n| Name | ${email} |\n| Qvx | ${email} |`;
+  const first = raw.indexOf(email), second = raw.indexOf(email, first + email.length);
+  const converted = source('docx', raw, contract, { coverage: { status: 'incomplete', reason_codes: ['OCR_CONTACT_VALUES_UNVERIFIED'] },
+    ocr_contacts: [first, second].map((start, index) => ({ start, end: start + email.length, page: index + 1,
+      line: index + 3, kind: 'email', image })) });
+  const result = await extractSourceForPrivacy(Buffer.from('synthetic'), '.docx', { contentOptions: contract, convertBuffer: async () => converted });
+  assert.equal(result.markdown, `| Name | ${email} |\n| --- | --- |\n| Qvx | ${email} |`);
+  assert.deepEqual(result.ocrContacts.map(item => result.markdown.slice(item.start, item.end)), [email, email]);
+  assert.deepEqual(result.ocrContacts.map(item => [item.page, item.line, item.image]), [[1, 3, image], [2, 4, image]]);
+  assert.ok(Object.isFrozen(result.ocrContacts) && Object.isFrozen(result.ocrContacts[0].image));
+});
+
+testAsync('deleted table structure and malformed contact maps fail closed instead of silently losing or relocating contacts', async () => {
+  const contract = options({ imageOcr: true });
+  const raw = '| Spalte 1 |\n   \n| --- |\n| Name |\n| Qvx |\n\nE-Mail: same@example.invalid';
+  for (const type of ['docx', 'xlsx', 'pptx']) {
+    for (const [start, end] of [[2, 10], [raw.indexOf('   '), raw.indexOf('   ') + 3]]) {
+      const converted = source(type, raw, contract, { coverage: { status: 'incomplete', reason_codes: ['OCR_CONTACT_VALUES_UNVERIFIED'] },
+        ocr_contacts: [{ start, end, page: 1, line: 1, kind: 'contact' }] });
+      await assert.rejects(extractSourceForPrivacy(Buffer.from('synthetic'), '.' + type,
+        { contentOptions: contract, convertBuffer: async () => converted }), { code: 'OCR_CONTACT_REVIEW_INVALID' });
+    }
+    const valid = source(type, raw, contract, { coverage: { status: 'incomplete', reason_codes: ['OCR_CONTACT_VALUES_UNVERIFIED'] },
+      ocr_contacts: [{ start: raw.indexOf('same@'), end: raw.length, page: 1, line: 7, kind: 'email' }] });
+    for (const badContacts of [
+      [{ ...valid.ocr_contacts[0], end: raw.length + 1 }],
+      [{ ...valid.ocr_contacts[0], start: raw.indexOf('Qvx') }],
+      [valid.ocr_contacts[0], valid.ocr_contacts[0]]
+    ]) await assert.rejects(extractSourceForPrivacy(Buffer.from('synthetic'), '.' + type,
+      { contentOptions: contract, convertBuffer: async () => ({ ...valid, ocr_contacts: badContacts }) }), { code: 'OCR_CONTACT_REVIEW_INVALID' });
+  }
+});
+
+testAsync('legacy Office extraction remaps contact offsets without changing its coverage or source contract', async () => {
+  for (const type of ['docx', 'xlsx', 'pptx']) {
+    const email = 'qa@example.invalid';
+    const raw = `| Spalte 1 |\n\n| --- |\n\n| Name |\n\n| Qvx |\n\nE-Mail: ${email}`;
+    const converted = source(type, raw, null, { coverage: { status: 'incomplete', reason_codes: ['OCR_CONTACT_VALUES_UNVERIFIED'] },
+      ocr_contacts: [{ start: raw.indexOf(email), end: raw.length, page: 1, line: 1, kind: 'email' }] });
+    const result = await extractSourceForPrivacy(Buffer.from('synthetic'), '.' + type, { convertBuffer: async () => converted });
+    assert.equal(result.markdown, `| Name |\n| --- |\n| Qvx |\n\nE-Mail: ${email}`);
+    assert.equal(result.markdown.slice(result.ocrContacts[0].start, result.ocrContacts[0].end), email);
+    assert.equal(Object.hasOwn(result, 'sourceExtraction'), false);
+    assert.deepEqual(result.sourceExtractionCoverage, converted.coverage);
+  }
+});
+
+testAsync('multiple Office tables accumulate exact shifts while no-op and consecutive blank lines retain their source bytes', async () => {
+  const contract = options({ imageOcr: true }), email = 'qa@example.invalid';
+  for (const [raw, expected] of [
+    [`😀 Native Quelle\n\nE-Mail: ${email}`, `😀 Native Quelle\n\nE-Mail: ${email}`],
+    [`| Spalte 1 |\n\n| --- |\n\n| Kennzahl |\n\n| 42 |\n\nE-Mail: ${email}`,
+      `| Spalte 1 |\n| --- |\n| Kennzahl |\n| 42 |\n\nE-Mail: ${email}`],
+    [`| Spalte 1 |\n\n\n| --- |\n\n\n| Name |\n\nE-Mail: ${email}`,
+      `| Spalte 1 |\n\n\n| --- |\n\n\n| Name |\n\nE-Mail: ${email}`],
+    [`| Spalte 1 |\n| --- |\n| Name |\n| Qvx |\n\nZwischenstand 😀\n\n| Spalte 1 |\n\n| --- |\n\n| Firma |\n\n| Qzx |\n\nE-Mail: ${email}`,
+      `| Name |\n| --- |\n| Qvx |\n\nZwischenstand 😀\n\n| Firma |\n| --- |\n| Qzx |\n\nE-Mail: ${email}`]
+  ]) {
+    const converted = source('docx', raw, contract, { coverage: { status: 'incomplete', reason_codes: ['OCR_CONTACT_VALUES_UNVERIFIED'] },
+      ocr_contacts: [{ start: raw.indexOf(email), end: raw.length, page: 2, line: 1, kind: 'email' }] });
+    const result = await extractSourceForPrivacy(Buffer.from('synthetic'), '.docx', { contentOptions: contract, convertBuffer: async () => converted });
+    assert.equal(result.markdown, expected);
+    assert.equal(result.ocrContacts[0].start, expected.indexOf(email));
+    assert.equal(result.ocrContacts[0].end, expected.length);
+  }
+});
+
 testAsync('literal padded, tabbed and duplicate Office headers retain sensitive field semantics', async () => {
   const { zipStore } = require('./lib/zip'), { opcControlEntries } = require('./lib/opc');
   const { extractMarkdownBuffer } = require('../plugins/data-secure/server/standalone/markdown-extractor');

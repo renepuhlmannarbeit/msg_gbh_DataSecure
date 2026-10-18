@@ -1,12 +1,35 @@
 # DataSecure Standalone starten (Windows x64)
 
-Anleitung für den Windows-Test-Pre-Release **3.2.0-rc162** und die neue
-Oberfläche. Das RC162-ZIP vollständig entpacken und seine
-beiliegende Prüfsumme vergleichen. Die früheren Releases bleiben unverändert.
+Anleitung für das beiliegende Windows-x64-Testpaket. Die genaue Version und
+Build-ID stehen im App-Fuß und in `STANDALONE-MANIFEST.json`; diese Anleitung
+ist kein Nachweis für ein anderes oder bereits veröffentlichtes Paket.
+Das ZIP vollständig entpacken und seine beiliegende Prüfsumme vergleichen.
+Im neuen Paket heißt der enthaltene Programmordner kurz `DataSecure`. Alle
+seine Dateien zusammenlassen; nicht nur die EXE herauskopieren. In einen neuen,
+möglichst kurzen lokalen Zielordner entpacken, nicht über eine ältere Version.
+Die früheren Releases bleiben unverändert.
 Es gibt keine abgeschlossene
 menschliche Plattform-, Bedien- oder Barrierefreiheitsfreigabe.
 
 ## Verarbeitung und Prüfung
+
+**Orientierung:** Unter **Neue Verarbeitung** stellst du einen neuen Auftrag
+zusammen. **Verlauf** ist die kompakte Liste deiner bisherigen Läufe. Nach
+dem Start oder Öffnen eines Laufs erscheint zusätzlich **Laufdetails** mit
+seiner Laufkennung. Dort gehören Fortschritt, Prüfung, Dokumente und Abschluss
+zu genau diesem Lauf. Ein Reiterwechsel startet oder bestätigt nichts.
+Ausführliche Erklärungen lassen sich aufklappen; der Abschlussstatus bleibt
+sichtbar. Der Ergebnisordner und vorhandene Hinweise sind direkt erreichbar.
+Nach einem gestarteten Lauf ist dessen Dateiauswahl verbraucht; **Neue Verarbeitung**
+beginnt wieder ohne diese Dateien. Eine neu vorbereitete, noch nicht gestartete
+Auswahl bleibt beim bloßen Reiterwechsel erhalten.
+
+Abgeschlossene Läufe lassen sich über **Weitere Aktionen → Aus Verlauf ausblenden**
+aus der normalen Liste entfernen. Das löscht keine Dateien, Ergebnisse oder
+Zuordnungen. **Ausgeblendete Läufe anzeigen** macht sie wieder erreichbar. Offene
+Vorgänge und einige Alteinträge ohne ausreichende Laufmetadaten sind geschützt.
+Die Sicherheitsprüfung für Wiederaufnahme und Aufbewahrung bleibt beim Start
+aktiv; die App öffnet dabei nicht automatisch die vollständige Verlaufsliste.
 
 1. `DataSecure Standalone.exe` doppelklicken. Voraussetzung: Windows 10/11 x64
    mit vorhandenem Microsoft Edge WebView2. DataSecure lädt keine Runtime nach.
@@ -31,8 +54,9 @@ menschliche Plattform-, Bedien- oder Barrierefreiheitsfreigabe.
    Andernfalls sind Entscheidungen zu allen gefundenen Kontaktwerten nötig,
    damit dieser Prüfschritt abgeschlossen wird. Beim Anonymisierungsweg darf
    eine erforderliche Fundstellenprüfung nicht auf diese Weise umgangen werden.
-   Die Anonymisierung verlangt unabhängig von dieser optionalen OCR-Kontaktwahl
-   eine Fundstellenprüfung, danach Dokumentfreigabe und einen gesonderten KI-Export.
+   Bei geführter Anonymisierung folgen die erforderliche Fundstellenprüfung,
+   Dokumentfreigabe und ein gesonderter Export. Alternativ kannst du vor
+   dem Start den unten erläuterten **Schnellweg** ausdrücklich einschalten.
    Die Kontaktprüfung bestätigt ohnehin keine übrigen OCR-Zeilen. Mit oder
    ohne das zweite Häkchen ist später eine freiwillige Markdown-Nachkorrektur
    möglich; sie ist keine zweite OCR-Pflichtprüfung.
@@ -64,31 +88,34 @@ menschliche Plattform-, Bedien- oder Barrierefreiheitsfreigabe.
    die Checkbox im Tabellenkopf gilt nur für die aktuelle Seite. **Anwenden**
    merkt Entscheidungen zunächst vor; erst der Abschlussknopf speichert die
    vollständig bearbeitete Gruppe. Offen-Filter, weitere Seiten und Folgegruppen
-   beachten. Es wird nichts automatisch bestätigt.
+   beachten. Im geführten Weg wird hier nichts automatisch bestätigt.
    Der Original-/Markdown-Vergleich gehört jeweils zum angezeigten Punkt.
    OCR-Kontaktwerte mit den Originalbildpixeln vergleichen. **Als Person**,
    **Als Unternehmen** und **Beibehalten** sind unterschiedliche Entscheidungen;
    nachweislich gleiche vollständige Werte gelten für den betreffenden Lauf.
    Bei **Nur umwandeln** kehrst du nach bestätigtem Abschluss der gewählten
-   Kontaktprüfung zur Laufseite beziehungsweise zum Verlauf zurück, von dem
-   aus du sie geöffnet hast. Es wird keine zweite Prüfseite automatisch
+   Kontaktprüfung zur Übersicht desselben Laufs unter **Laufdetails** zurück.
+   Es wird keine zweite Prüfseite automatisch
    geöffnet. **Ergebnisordner öffnen** bleibt der normale nächste Schritt;
    der Text ist weiterhin nicht anonymisiert.
 6. Nach Abschluss aller Fundstellengruppen öffnet sich bei Anonymisierung die
-   Dokumentprüfung **desselben Laufs**. Das ist noch kein KI-Export:
+   Dokumentprüfung **desselben Laufs**. Das ist noch kein Export:
    Originaltext und geplantes Markdown vergleichen, gewünschte Dokumente
    auswählen und **Auswahl freigeben** wählen. Änderungen heben betroffene
-   Freigaben auf. Über **Ergebnisse prüfen und freigeben** im Verlauf lässt
-   sich die Dokumentprüfung später wieder öffnen.
-7. **Auswahl für KI exportieren** wählen und den angezeigten Auftrag
+   Freigaben auf. Über **Laufdetails** im Verlauf lässt sich die Dokumentprüfung
+   später wieder öffnen.
+7. **Auswahl exportieren** wählen und den angezeigten Auftrag
    ausdrücklich bestätigen. Nur freigegebene aktuelle Markdown-Stände werden
    in einen **normalen separaten Ordner** kopiert. Originale, Identitäts- und
    Dateizuordnung, private Prüfstände und technische Begleitdateien sind nicht
-   enthalten. Der technische Laufordner ist nicht dieser KI-Exportordner.
+   enthalten. Der technische Laufordner kann Prüf- und Zuordnungsdateien enthalten;
+   der separate Exportordner enthält nur die ausgewählten freigegebenen
+   Markdown-Dateien. Die exportierten Markdown-Dateien kannst du auch ohne KI
+   verwenden. DataSecure lädt nichts hoch.
 
 **Später entscheiden** verschiebt die Prüfung des konkreten Laufs. Noch nicht
 übergebene Eingaben sind nicht gespeichert. Der **Verlauf** enthält höchstens
-20 Verarbeitungen mit jeweils eigenen Aktionen; Fortsetzen oder Prüfen wählt
+5 Verarbeitungen mit jeweils eigenen Aktionen; Fortsetzen oder Prüfen wählt
 keinen anderen Lauf. Nach Verbindungsverlust werden Starts, Entscheidungen und
 Exportbestätigungen nicht blind wiederholt. Den gespeicherten Stand bewusst
 neu laden und die angezeigte Wiederherstellung abwarten.
@@ -129,7 +156,10 @@ und muss vor einem erneuten Kopierauftrag abgeglichen werden.
 Nach bestätigtem Start bleibst du auf der Laufseite. Der erfolgreiche Abschluss
 ist grün und nennt erstellte Dateien, OCR-aus-Auslassungen und technische Fehler
 getrennt. **Ergebnisordner öffnen** steht direkt unter dem Status.
-**Weitere Aktionen** und **Hinweise zu diesem Lauf** sind zunächst geschlossen.
+Ausführliche Laufdetails, **Weitere Aktionen** und **Hinweise zu diesem Lauf**
+sind zunächst geschlossen. **Vertrauliche Zuordnungen (optional)** enthält
+die unterschiedlichen Datei-/Identitätszuordnungen. Diese gehören nicht in
+einen Export; der Ergebnisordner und Hinweise sind keine versteckten Zusatzwege.
 Die optionale Nachkorrektur zeigt Laden sichtbar; Hinweise sind nach Ursache
 gruppiert, jede Datei lässt sich einzeln öffnen. OCR-aus-Hinweise sind gelb,
 technische Fehler rot. Ein unbestätigter Ergebnisordner bleibt als Hinweis
@@ -144,11 +174,15 @@ komplexe Layouts können Lesefehler oder Auslassungen verursachen. Im synthetisc
 Qualitätskorpus bleiben neun rohe OCR-E-Mail-Abweichungen als bekannte Warnung.
 
 Technische Ergebnisse liegen unter `DataSecure-Markdown/Lauf-…` beziehungsweise
-`DataSecure-Output/Lauf-…`. Anonymisierung nutzt neutrale Ergebnisnamen.
+`DataSecure-Output/Lauf-…`. Anonymisierung nutzt standardmäßig neutrale Ergebnisnamen.
+Vor einem neuen Lauf kannst du stattdessen **Originalname mit „-anonymisiert“**
+wählen. Dateinamen können personenbezogene Angaben enthalten; diese Wahl ist
+daher keine Anonymisierung der Namen. Sie gilt nur für die Ergebnisdateien
+dieses Laufs. Spätere Exporte erhalten immer neutrale Namen.
 Die lokale `DataSecure-Zuordnung.csv` und
 `VERTRAULICH-NICHT-HOCHLADEN` enthalten Originalangaben. **Nie den gesamten
-Laufordner an eine KI geben.** Stattdessen den getrennten freigegebenen
-KI-Export verwenden. Die Identitätszuordnung wird nicht automatisch gelöscht.
+Laufordner weitergeben.** Stattdessen den getrennten freigegebenen
+Export verwenden. Die Identitätszuordnung wird nicht automatisch gelöscht.
 Reine Markdown-Konvertierung erzeugt keine Dateizuordnung.
 Auch nach „Markdown nachkorrigieren“ behalten neue Kopien den ursprünglichen
 Basisnamen mit `.md`; bei Kollisionen gibt es eindeutige Zusätze. Dieser Weg
@@ -184,8 +218,49 @@ bereits den Prozessstart blockiert, kann die App keinen Bericht schreiben.
 Betriebssystemmeldung und Prüfsumme mit der IT prüfen; Schutzfunktionen nicht
 pauschal deaktivieren. Das Testpaket besitzt keine Windows-Codesignatur.
 
+Meldet die geöffnete App einen unsicheren **internen App-Datenordner**, ist
+damit nicht dein Ergebnisordner gemeint. Bei der ersten Verwendung legt der
+native Windows-Host seinen fehlenden privaten Datenbereich mit eigenen
+Zugriffsrechten an. Vorhandene Datenordner und Berechtigungen werden niemals
+automatisch repariert oder gelöscht. Bei einer Ablehnung **Diagnosepaket
+speichern** und den Zugriff mit der IT prüfen; keine Sperrdateien entfernen.
+Dateiauswahl und Verarbeitung bleiben bis dahin gesperrt. Automatische
+Startversuche sind nach einem solchen Startfehler angehalten. **Verbindung
+und Laufstatus prüfen** erlaubt einen ausdrücklichen neuen Verbindungsversuch,
+startet aber keinen früheren Lauf oder Export erneut.
+
 Native technische Runner-Prüfungen ersetzen nicht die Bedienung auf deinem
 Gerät. Für formale Nachweise den
 [N3/N4-Testplan](../../docs/acceptance/FORMAL_UAT/README.md) verwenden.
 Der frühere bestätigte RC157-Anwenderlauf bleibt historische Evidenz seines
-damaligen Pakets und ist keine neue RC162-Abnahme.
+damaligen Pakets und ist keine Abnahme dieses Pakets.
+
+## Schnellweg und klarer Abschluss
+
+**Schnellweg: automatisch anonymisieren und freigeben** ist vor jedem neuen
+Anonymisierungslauf ausdrücklich zu wählen. Bekannte unklare Stellen und
+erkannte OCR-Kontaktbereiche werden automatisch maskiert, nicht als richtig
+erkannt bestätigt. Die unveränderten erstellten Basisstände erhalten eine
+gekennzeichnete automatische Erstfreigabe, keine menschliche Prüfung.
+Nicht lesbare oder technisch nicht sicher prüfbare Dateien werden mit Grund
+ausgelassen. Eine spätere Änderung oder ein Widerruf hebt die betroffene
+Freigabe auf; sie wird nicht beim nächsten Laden automatisch wieder erteilt.
+Der Export bleibt auch im Schnellweg ein ausdrücklicher Auftrag.
+
+**Lauf abgeschlossen – mit Hinweisen** ist ein abgeschlossener technischer
+Lauf, kein weiter laufender Prüfschritt. Hinweise und ausgelassene Dateien
+bleiben gelb sichtbar. **Export abgeschlossen** bedeutet zusätzlich, dass
+die ausgewählten freigegebenen Textstände lokal kopiert und bestätigt wurden.
+Du musst diesen Export nicht wiederholen. Das anschließende Nachladen der
+Dokumentanzeige ist davon getrennt; weitere Änderungen benötigen einen
+frischen Stand. **Zur Laufübersicht** im Erfolgsdialog führt zur Übersicht
+desselben Laufs, nicht erneut zur Dokumentprüfung. Du musst weder die Freigabe
+noch den Export wiederholen. Kein Schritt lädt automatisch Daten ins Internet
+hoch.
+
+Bei Problemen unter **Einstellungen** oder in der Fehlerhilfe
+**Diagnosepaket speichern** wählen; diese Funktion ist ohne Core-Verbindung
+verfügbar. Sie ist kein notwendiger Export- oder Abschlussschritt. Sie speichert eine
+neue lokale JSON-Datei, keine Dokumentinhalte oder Quellpfade. Fehlende,
+gekürzte oder verworfene Ereignisse werden gekennzeichnet. Die Diagnose ist
+bestmöglich, aber kein lückenloses Auditprotokoll und keine Exportbestätigung.

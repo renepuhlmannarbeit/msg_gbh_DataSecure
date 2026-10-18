@@ -35,8 +35,13 @@ commands.allow = ["get_ui_context"]
 
 [[permission]]
 identifier = "allow-get-run-history"
-description = "Zeigt höchstens 20 lokale Standalone-Läufe ohne Dokumentinhalte."
+description = "Zeigt höchstens 5 lokale Standalone-Läufe ohne Dokumentinhalte."
 commands.allow = ["get_run_history"]
+
+[[permission]]
+identifier = "allow-set-run-history-visibility"
+description = "Blendet ausschließlich abgeschlossene lokale Verlaufszeilen aus oder wieder ein; löscht keine Laufdaten."
+commands.allow = ["set_run_history_visibility"]
 
 [[permission]]
 identifier = "allow-get-run-failures"
@@ -226,6 +231,11 @@ commands.allow = ["abandon_document_export"]
 identifier = "allow-open-document-export"
 description = "Open only an existing verified document export resolved privately by its run and operation identifiers."
 commands.allow = ["open_document_export"]
+
+[[permission]]
+identifier = "allow-open-recorded-document-export"
+description = "Open only an existing verified export receipt from the main workspace, without activating document review."
+commands.allow = ["open_recorded_document_export"]
 
 [[permission]]
 identifier = "allow-open-document-identity-overview"

@@ -24,9 +24,17 @@ function initializeProduct(deps) {
     deps.verifyBundledRuntime();
     deps.ensureDurableRuntime();
     deps.migrateLegacyAuditReceipts();
-    const protection = deps.openBatchPackageProtection();
-    deps.cleanupLocalData({ trigger: 'startup', protectedIds: protection.ids,
-      outputProtectionComplete: protection.complete });
+    if (deps.standaloneLazyRetentionProtection === true) {
+      // Automatic Output retention never deletes user results. Standalone may
+      // defer the journal scan until private Markdown cleanup has candidates;
+      // no scan is represented as an unknown protection set, never complete.
+      deps.cleanupLocalData({ trigger: 'startup', outputProtectionComplete: false,
+        getBatchPackageProtection: () => deps.openBatchPackageProtection() });
+    } else {
+      const protection = deps.openBatchPackageProtection();
+      deps.cleanupLocalData({ trigger: 'startup', protectedIds: protection.ids,
+        outputProtectionComplete: protection.complete });
+    }
     deps.cleanupUiJobs({ trigger: 'startup' });
     const recovery = deps.recoverBatches();
     const mapping = deps.replayMappingOutbox();

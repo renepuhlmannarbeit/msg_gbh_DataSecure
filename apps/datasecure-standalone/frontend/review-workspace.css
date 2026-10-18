@@ -28,13 +28,17 @@ body.embedded .privacy{display:none}
 body.embedded .matrix-actions-pinned{position:sticky;top:0;z-index:3;box-shadow:0 5px 10px -10px var(--c-ink)}
 body.embedded #handoff-note{font-size:12px;margin:8px 0 0}body.embedded .matrix-pages{margin-top:8px}body.embedded .matrix-pages button{padding:8px 12px}
 body.embedded #matrix-message:empty{display:none}
-body.embedded .finish{position:sticky;bottom:0;background:var(--c-surface);z-index:2}
-/* Keep the actual selected value visible while comparing the text below it. */
-@media(min-width:901px){body.embedded #exact-text{position:sticky;top:3px;z-index:1}}
-@media(min-width:901px){body.embedded main{height:100dvh;display:flex;flex-direction:column}body.embedded #review{display:flex;flex-direction:column;flex:1;min-height:0}body.embedded .matrix-layout{flex:1;min-height:180px}body.embedded .matrix-list{display:flex;flex-direction:column;min-height:0}body.embedded .table-scroll{flex:1;min-height:120px;max-height:none}body.embedded .matrix-detail{min-height:0;overflow:auto;padding-right:8px}body.embedded #handoff-note{font-size:12px;margin:12px 0 0}body.embedded .finish{margin-top:12px;padding-top:12px;flex:none}}
-/* Short desktop windows scroll the header instead of crushing the comparison
-   and list to a fraction of a row. The explicit handoff stays reachable. */
-@media(min-width:901px) and (max-height:600px){body.embedded main{height:auto;min-height:100dvh}body.embedded .matrix-layout{flex:none;height:360px;min-height:360px}}
+/* Embedded review has one vertical scroll owner: its document. Do not nest
+   independently scrolling table, comparison and text panels inside it. */
+body.embedded main{height:auto;min-height:0}
+body.embedded .table-scroll,body.embedded .matrix-detail,body.embedded pre{max-height:none;overflow:visible}
+body.embedded .contact-image-scroll{max-height:none;overflow-x:auto}
+body.embedded #contact-image{max-width:100%;height:auto}
+body.embedded .matrix-actions-pinned,body.embedded .finish{position:static;box-shadow:none}
+body.embedded .finish{background:var(--c-surface);margin-top:12px;padding-top:12px}
+body.embedded button,body.embedded .bulk-actions select{white-space:normal;max-width:100%;min-width:0;overflow-wrap:anywhere}
+body.embedded .matrix-toolbar label{min-width:0;max-width:100%}
+body.embedded .matrix-toolbar select{min-width:0;flex:1}
 @media(max-width:900px),(max-height:440px){body.embedded .matrix-actions-pinned{position:static;box-shadow:none}}
 @media(max-width:900px){.matrix-layout{grid-template-columns:1fr}.matrix-detail{padding:20px 0 0;border-left:0;border-top:1px solid var(--c-border)}.comparison{grid-template-columns:1fr 1fr}.table-scroll{max-height:360px}}
 @media(max-width:650px){main,body.embedded main{padding:16px}section#review,.waiting{padding:16px}.comparison{grid-template-columns:1fr}.correction-column{width:43%}.finish #release{flex:1 1 100%;min-width:0;max-width:100%}}

@@ -39,10 +39,14 @@ function bridge(draft) {
     const bytes = new TextEncoder().encode(JSON.stringify(draft));
     const data = btoa(Array.from(bytes, byte => String.fromCharCode(byte)).join(''));
     window.previewSubmissions = []; let ended = false, reviewed = false;
-    window.__TAURI__ = { core: { invoke: async (command, args) => {
+    const listeners = new Map();
+    window.__TAURI__ = { event: { listen: async (name, callback) => {
+      if (name !== 'datasecure-connection') throw Error('Unsupported development-only event');
+      listeners.set(name, callback); return () => listeners.delete(name);
+    } }, core: { invoke: async (command, args) => {
       if (command === 'get_review_session') return ended ? { ready: false, run_complete: true } : { ready: true, review_id: 'a'.repeat(32), chunk_count: 1 };
       if (command === 'get_review_chunk') return { review_id: 'a'.repeat(32), index: 0, data };
-      if (command === 'submit_review') { window.previewSubmissions.push(args.answer); ended = true; reviewed = args.answer?.action === 'reviewed'; return { accepted: true }; }
+      if (command === 'submit_review') { window.previewSubmissions.push(args.answer); ended = true; reviewed = args.answer?.action === 'reviewed'; return { accepted: true, action: args.answer?.action }; }
       if (command === 'close_review_window') { if (window.parent !== window) window.parent.dispatchEvent(new CustomEvent('preview-review-closed', { detail: { reviewed } })); return { ok: true }; }
       throw Error('Unsupported development-only command');
     } } };

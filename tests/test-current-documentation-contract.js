@@ -441,13 +441,49 @@ test('all shipped Standalone start guides describe v2 staged review, explicit ap
     const reviewAction = file === 'START-WINDOWS.md'
       ? 'Entscheidungen speichern' : 'Gruppe übergeben und weiter';
     for (const label of ['Neue Verarbeitung', 'Verarbeitung starten', reviewAction,
-      'Auswahl freigeben', 'Auswahl für KI exportieren']) {
+      'Auswahl freigeben', 'Auswahl exportieren']) {
       assert.ok(text.includes(label), `${file} omits current action ${label}`);
     }
     assert.match(text, /normalen separaten Ordner/u, file);
     assert.match(text, /nicht anonymisiert/u, file);
     assert.match(text, /Identitäts.*(?:nicht|bleiben)/u, file);
     assert.doesNotMatch(text, /Die Ansicht Verarbeiten zeigt zunächst den Abschluss/u, file);
+  }
+});
+
+test('current Standalone export wording explains general-purpose files without migrating receipt paths', () => {
+  const frontend = 'apps/datasecure-standalone/frontend/';
+  for (const file of ['workspace.html', 'workspace.js', 'document-review.js', 'workflow-presentation.js']) {
+    const text = read(frontend + file);
+    assert.doesNotMatch(text, /KI-Kopie|KI-Kopien|Auswahl für KI exportieren|Für KI exportieren/u, file);
+  }
+  const html = read(frontend + 'workspace.html'), renderer = read(frontend + 'document-review.js');
+  assert.match(html, /freigegebenen Textstände wurden in einen lokalen Exportordner kopiert/u);
+  assert.match(html, /Der Ergebnisordner kann Prüf- und Zuordnungsdateien enthalten/u);
+  assert.match(html, /Markdown-Dateien kannst du auch ohne KI verwenden/u);
+  assert.match(renderer, /'DataSecure-KI-Export'/u, 'existing physical receipt namespace stays unchanged');
+  for (const file of ['START-WINDOWS.md', 'MACOS-START.md'])
+    assert.match(read('apps/datasecure-standalone/' + file).replace(/\s+/gu, ' '), /auch ohne KI verwenden/u, file);
+});
+
+test('Windows and macOS shipped guides follow package identity and both review paths', () => {
+  for (const file of ['START-WINDOWS.md', 'MACOS-START.md']) {
+    const guide = read(`apps/datasecure-standalone/${file}`).replace(/\*\*/gu, '').replace(/\s+/gu, ' ');
+    assert.match(guide, /Anleitung für das beiliegende/u);
+    assert.match(guide, /STANDALONE-MANIFEST\.json/u);
+    assert.match(guide, /Schnellweg.*automatisch anonymisieren und freigeben/u);
+    assert.match(guide, /keine menschliche Prüfung/u);
+    assert.match(guide, /Originalname mit „-anonymisiert“/u);
+    assert.match(guide, /spätere Exporte erhalten immer neutrale Namen/iu);
+    assert.match(guide, /Einstellungen.*Diagnosepaket speichern/u);
+    assert.match(guide, /ohne Core-Verbindung/u);
+    assert.match(guide, /kein notwendiger Export- oder Abschlussschritt/u);
+    assert.match(guide, /kein lückenloses Auditprotokoll/u);
+    assert.match(guide, /Neue Verarbeitung/u);
+    assert.match(guide, /Verlauf/u);
+    assert.match(guide, /Laufdetails/u);
+    assert.match(guide, /Zur Laufübersicht.*desselben Laufs/u);
+    assert.doesNotMatch(guide, /Anleitung für den .*Pre-Release .*rc\d+/u);
   }
 });
 
@@ -566,7 +602,7 @@ test('home and exact-run history stay aligned with the accepted navigation decis
   assert.strictEqual(ui.initial_processing_mode, null);
   assert.strictEqual(product.default_processing_mode, null);
   assert.strictEqual(ui.automatic_result_navigation, false);
-  assert.strictEqual(ui.history.limit, 20);
+  assert.strictEqual(ui.history.limit, 5);
   assert.strictEqual(ui.history.actions_bound_to, 'batch_id');
   for (const file of ['PRODUCT_VISION.md', 'PRODUCT.md', 'STANDALONE_ARCHITECTURE.md',
     'BACKLOG.md', 'UML_ARCHITECTURE.md', 'TRACEABILITY.md', 'CURRENT_STATE.md']) {

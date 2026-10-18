@@ -21,6 +21,16 @@ const PROFILES = new Set(['customer', 'applicant', 'personnel_profile', 'contrac
 let auditWriteErrors = 0;
 const UNKNOWN_POLICY_VERSION = 'legacy/unknown';
 const preparedAuditRuns = new WeakSet();
+const RECEIPT_SCHEMAS = new Set([1, 2, 3, 4].map(version => `data-secure-audit-receipt/${version}`));
+// Batch evidence has its own durable outbox in this directory. Its coordinator
+// owns validation/recovery; an audit migration must never reinterpret its bytes.
+function isReceiptEntry(name) {
+  return name.endsWith('.json') && !name.startsWith('batch_evidence_pending_');
+}
+function isReceiptCandidate(record) {
+  return record !== null && typeof record === 'object' && !Array.isArray(record) &&
+    (record.schema === undefined || RECEIPT_SCHEMAS.has(record.schema));
+}
 
 function boundedInteger(value) {
   const n = Number(value);
@@ -203,8 +213,9 @@ function reconcileReleasedPackageReceipts() {
     const r = roots();
     const retained = new Set();
     for (const entry of fs.readdirSync(r.audit, { withFileTypes: true })) {
-      if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+      if (!entry.isFile() || !isReceiptEntry(entry.name)) continue;
       const raw = JSON.parse(fs.readFileSync(path.join(r.audit, entry.name), 'utf8'));
+      if (!isReceiptCandidate(raw)) throw new Error('AUDIT_RECEIPT_SCHEMA_INVALID');
       const clean = sanitizeReceipt(raw);
       if (JSON.stringify(raw) === JSON.stringify(clean)) retained.add(clean.operation_id);
     }
@@ -272,7 +283,7 @@ function inspectAuditDirectory({ migrate = false } = {}) {
     return result;
   }
   for (const entry of entries) {
-    if (!entry.name.endsWith('.json')) continue;
+    if (!isReceiptEntry(entry.name)) continue;
     if (!entry.isFile()) {
       result.legacy_pending++;
       continue;
@@ -288,6 +299,7 @@ function inspectAuditDirectory({ migrate = false } = {}) {
     }
     let canonical;
     try {
+      if (!isReceiptCandidate(raw)) throw new Error('AUDIT_RECEIPT_SCHEMA_INVALID');
       canonical = sanitizeReceipt(raw);
     } catch {
       result.legacy_pending++;

@@ -11,6 +11,8 @@ function send(value) {
 }
 
 try {
+  if (process.platform === 'darwin')
+    require('./core/macos-static-ownership-guard').assertParserCore('PARSER_ISOLATION_FAILED');
   // Check the real Node boundary before loading any parser module or reading
   // document bytes. Node's native-addon permission scope is singular: 'addon'.
   const deniedScopes = ['fs.write', 'child', 'worker', 'addon', 'inspector', 'wasi'];

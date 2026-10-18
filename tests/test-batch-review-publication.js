@@ -41,8 +41,9 @@ function fixture(options = {}) {
   const state = { schema: 'datasecure-batch/4', profile: 'general', remove_images: false, items };
   const drafts = [draft('a-1', 'FIRST'), draft('a-2', 'SECOND')];
   let current = 0;
-  const publication = createBatchReviewPublication({
+  const publication = (options.createPublication || createBatchReviewPublication)({
     invalidDecisionError: reviewError,
+    publishStandaloneReviewedItem: options.publishStandaloneReviewedItem,
     retryableCodes: new Set(['PARSER_TIMEOUT']),
     reviewedBatchText(input, decisions) {
       const expected = new Set((input.ambiguities || []).map((entry) => entry.ambiguity_id));
@@ -118,6 +119,91 @@ function fixture(options = {}) {
 }
 
 async function main() {
+  await testAsync('guided content callbacks retry only metadata and persist an exhausted post-publish checkpoint', async () => {
+    const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm'), { createRequire } = require('node:module');
+    const source = require.resolve('../plugins/data-secure/server/gateway/batch-review-publication'), local = createRequire(source);
+    const policy = local('./prepublication-error');
+    for (const failure of ['short', 'before-busy', 'after-busy', 'hard']) {
+      let expectedReads = 0, confirmations = 0, operations = 0, publications = 0;
+      const binding = { fixed: 'review-publication' }, loaded = { exports: {} }, hard = reviewError('BATCH_OWNERSHIP_CHANGED');
+      const overrides = {
+        './prepublication-error': { ...policy, retryDocumentControl: action => policy.retryDocumentControl(action, { attempts: 3, delayMs: 0 }) },
+        './standalone-anonymized-batch': {
+          expectedPublication() {
+            expectedReads++;
+            if (failure === 'hard') throw hard;
+            if (failure === 'before-busy' || failure === 'short' && expectedReads === 1) throw reviewError('STANDALONE_BUSY');
+            return binding;
+          },
+          confirmPublication() {
+            confirmations++;
+            if (failure === 'after-busy' || failure === 'short' && confirmations === 1) throw reviewError('STANDALONE_BUSY');
+            return { publication_binding: binding };
+          }
+        },
+        './standalone-document-review-store': { createDocumentReviewStore: () => ({ recordPublication() {} }) },
+        './standalone-anonymized-mapping': { ensurePrivateMappingIntent() {} }
+      };
+      vm.runInThisContext(`(function(require,module,exports,__filename,__dirname){${fs.readFileSync(source, 'utf8')}\n})`, { filename: source })(
+        request => Object.hasOwn(overrides, request) ? overrides[request] : local(request), loaded, loaded.exports, source, path.dirname(source));
+      const value = fixture({ createPublication: loaded.exports.createBatchReviewPublication,
+        publishStandaloneReviewedItem: async (_token, id, hooks) => {
+          operations++; const result = { package_id: `ds_${id}`, document_result: COMPLETE_DOCUMENT_RESULT, publication_binding: binding };
+          await hooks.beforePublish(result); publications++; await hooks.afterPublish(result); return result;
+        } });
+      Object.assign(value.state, { schema: 'datasecure-batch/7', processing_mode: 'markdown-and-anonymize', token: 'a'.repeat(64), product_channel: 'standalone',
+        standalone_document_review: true, content_options: { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: false, imageOcr: false } });
+      Object.assign(value.items[0], { retry_failure_code: 'PARSER_TIMEOUT', retry_failure_count: 2 });
+      const call = () => value.publication.publishReviewedBatch(value.state, value.items, value.drafts, [
+        { document_index: 1, decisions: [decision('a-1')] }, { document_index: 2, decisions: [decision('a-2')] }
+      ]);
+      if (failure === 'hard') {
+        await assert.rejects(call(), error => error === hard);
+        assert.equal(expectedReads, 1); assert.equal(value.writes.length, 1); assert.equal(publications, 0);
+      } else {
+        const result = await call();
+        if (failure === 'short') {
+          assert.equal(result.packages.length, 2); assert.equal(expectedReads, 3); assert.equal(confirmations, 5);
+          assert.equal(operations, 2); assert.equal(publications, 2);
+        } else {
+          const durable = value.writes.at(-1).snapshot.items[0];
+          assert.equal(durable.status, failure === 'before-busy' ? 'retryable' : 'processing');
+          assert.equal(durable.checkpoint, failure === 'before-busy' ? 'retryable' : 'package_published');
+          assert.equal(durable.document_result, undefined); assert.equal(durable.retry_failure_code, 'PARSER_TIMEOUT'); assert.equal(durable.retry_failure_count, 2);
+          assert.equal(result.recoveryBlocked, true); assert.equal(value.items[1].status, 'deferred_review');
+          assert.equal(value.events.includes('cleanup:first'), false); assert.equal(value.events.includes('mapping-stopped:first'), false);
+          assert.equal(publications, failure === 'before-busy' ? 0 : 1);
+        }
+      }
+      if (failure !== 'short') assert.equal(operations, 1, 'metadata contention cannot replay publication or start another source');
+    }
+  });
+  await testAsync('standalone control contention leaves a durable pending item and does not attempt the next reviewed source', async () => {
+    const value = fixture({ pipelineFailure: 'first', pipelineFailureCode: 'STANDALONE_BUSY' });
+    value.state.product_channel = 'standalone';
+    Object.assign(value.items[0], { retry_failure_code: 'PARSER_TIMEOUT', retry_failure_count: 2 });
+    const result = await value.publication.publishReviewedBatch(value.state, value.items, value.drafts, [
+      { document_index: 1, decisions: [decision('a-1')] }, { document_index: 2, decisions: [decision('a-2')] }
+    ]);
+    const pending = value.writes.at(-1).snapshot.items[0];
+    assert.equal(pending.status, 'retryable'); assert.equal(pending.checkpoint, 'retryable'); assert.equal(pending.error_code, 'STANDALONE_BUSY');
+    assert.equal(pending.retry_failure_code, 'PARSER_TIMEOUT'); assert.equal(pending.retry_failure_count, 2);
+    assert.equal(pending.document_result, undefined); assert.equal(result.recoveryBlocked, true);
+    assert.equal(value.events.includes('anonymize:second'), false); assert.equal(value.events.includes('cleanup:first'), false);
+    assert.equal(value.events.includes('mapping-stopped:first'), false); assert.equal(value.items[1].status, 'deferred_review');
+  });
+  await testAsync('hard ownership loss in reviewed publication is not a source failure or retry-budget event', async () => {
+    for (const code of ['BATCH_OWNERSHIP_CHANGED', 'OWNERSHIP_GUARD_UNSAFE', 'OWNERSHIP_GUARD_CLOSE_UNCONFIRMED']) {
+      const value = fixture({ pipelineFailure: 'first', pipelineFailureCode: code });
+      await assert.rejects(value.publication.publishReviewedBatch(value.state, value.items, value.drafts, [
+        { document_index: 1, decisions: [decision('a-1')] }, { document_index: 2, decisions: [decision('a-2')] }
+      ]), error => error.code === code);
+      assert.equal(value.items[0].status, 'processing'); assert.equal(value.items[0].document_result, undefined);
+      assert.equal(value.items[0].retry_failure_count, undefined); assert.equal(value.writes.length, 1);
+      assert.equal(value.events.includes('anonymize:second'), false); assert.equal(value.events.includes('cleanup:first'), false);
+      assert.equal(value.events.includes('mapping-stopped:first'), false);
+    }
+  });
   await testAsync('the direct privacy-publication entry rejects raw before binding decisions or changing state', async () => {
     for (const schema of ['datasecure-batch/5', 'datasecure-batch/7']) {
       const value = fixture(); Object.assign(value.state, { schema, product_channel: 'standalone', processing_mode: 'markdown-only',

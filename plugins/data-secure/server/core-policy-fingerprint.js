@@ -45,6 +45,7 @@ const CORE_POLICY_FILES = Object.freeze([
   'privacy/entities.js',
   'privacy/iban-boundary.js',
   'privacy/markdown-literals.js',
+  'privacy/numeric-identifier-residual.js',
   'privacy/person-ambiguities.js',
   'privacy/personnel.js',
   'privacy/policy.js',

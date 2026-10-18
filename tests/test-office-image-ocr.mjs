@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import childProcess from 'node:child_process';
+import zlib from 'node:zlib';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { writeStandaloneRuntime } from '../scripts/lib/standalone-runtime-projection.mjs';
@@ -12,7 +13,7 @@ import { fromMarkdown } from '../native/markdown/pilot/node_modules/mdast-util-f
 import { parseFragment } from '../native/markdown/pilot/node_modules/parse5/dist/index.js';
 const require = createRequire(import.meta.url);
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const { zipStore } = require('./lib/zip');
+const { zipStore, crc32 } = require('./lib/zip');
 const { opcControlEntries } = require('./lib/opc');
 const { encodePng, decodePng } = require('../plugins/data-secure/server/images/png');
 const { encodeBmp } = require('../plugins/data-secure/server/images/bmp');
@@ -31,25 +32,32 @@ const nativeText = 'NATIVE ORIGINAL § € ± →';
 const relations = rows => `<Relationships xmlns="${PR}">${rows.map(([id, kind, target, mode]) =>
   `<Relationship Id="${id}" Type="${R}/${kind}" Target="${target}"${mode ? ` TargetMode="${mode}"` : ''}/>`).join('')}</Relationships>`;
 
-function office(type, media, relationship = 'internal') {
+function office(type, media, relationship = 'internal', sensitiveTable = false) {
   const root = { docx: 'word', xlsx: 'xl', pptx: 'ppt' }[type];
   const imageRows = media.map((item, index) => [`img${index}`, relationship === 'wrong-type' ? 'hyperlink' : 'image',
     relationship === 'external' ? 'https://never-read.invalid/private.png' : `${type === 'docx' ? '' : '../'}media/image${index}.${item.ext}`,
     relationship === 'external' ? 'External' : undefined]);
+  const wordTable = sensitiveTable ? '<w:tbl>' + ['Name', 'Qvx'].map(text =>
+    `<w:tr><w:tc><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:tc></w:tr>`).join('') + '</w:tbl>' : '';
+  const sheetRows = (sensitiveTable ? ['Name', 'Qvx', nativeText] : [nativeText]).map((text, index) =>
+    `<row r="${index + 1}"><c r="A${index + 1}" t="inlineStr"><is><t>${text}</t></is></c></row>`).join('');
+  const slideTable = sensitiveTable ? '<p:graphicFrame><a:graphic><a:graphicData><a:tbl>' + ['Name', 'Qvx'].map(text =>
+    `<a:tr><a:tc><a:txBody><a:p><a:r><a:t>${text}</a:t></a:r></a:p></a:txBody></a:tc></a:tr>`).join('') +
+    '</a:tbl></a:graphicData></a:graphic></p:graphicFrame>' : '';
   const entries = type === 'docx' ? [
-    ['word/document.xml', `<w:document xmlns:w="${W}" xmlns:a="${A}" xmlns:r="${R}"><w:body><w:p><w:r><w:t>${nativeText}</w:t></w:r></w:p>${media.map((_, index) => `<w:p><w:r><w:drawing><a:blip r:embed="img${index}"/></w:drawing></w:r></w:p>`).join('')}</w:body></w:document>`],
+    ['word/document.xml', `<w:document xmlns:w="${W}" xmlns:a="${A}" xmlns:r="${R}"><w:body><w:p><w:r><w:t>${nativeText}</w:t></w:r></w:p>${wordTable}${media.map((_, index) => `<w:p><w:r><w:drawing><a:blip r:embed="img${index}"/></w:drawing></w:r></w:p>`).join('')}</w:body></w:document>`],
     ...(relationship === 'orphan' ? [] : [['word/_rels/document.xml.rels', relations(imageRows)]])
   ] : type === 'xlsx' ? [
     ['xl/workbook.xml', `<workbook xmlns="${S}" xmlns:r="${R}"><sheets><sheet name="Tabelle" sheetId="1" r:id="s1"/></sheets></workbook>`],
     ['xl/_rels/workbook.xml.rels', relations([['s1', 'worksheet', 'worksheets/sheet1.xml']])],
-    ['xl/worksheets/sheet1.xml', `<worksheet xmlns="${S}" xmlns:r="${R}"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>${nativeText}</t></is></c></row></sheetData><drawing r:id="d1"/></worksheet>`],
+    ['xl/worksheets/sheet1.xml', `<worksheet xmlns="${S}" xmlns:r="${R}"><sheetData>${sheetRows}</sheetData><drawing r:id="d1"/></worksheet>`],
     ['xl/worksheets/_rels/sheet1.xml.rels', relations([['d1', 'drawing', '../drawings/drawing1.xml']])],
     ['xl/drawings/drawing1.xml', `<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="${A}" xmlns:r="${R}">${media.map((_, index) => `<xdr:pic><a:blip r:embed="img${index}"/></xdr:pic>`).join('')}</xdr:wsDr>`],
     ...(relationship === 'orphan' ? [] : [['xl/drawings/_rels/drawing1.xml.rels', relations(imageRows)]])
   ] : [
     ['ppt/presentation.xml', `<p:presentation xmlns:p="${P}" xmlns:r="${R}"><p:sldIdLst><p:sldId id="256" r:id="s1"/></p:sldIdLst></p:presentation>`],
     ['ppt/_rels/presentation.xml.rels', relations([['s1', 'slide', 'slides/slide1.xml']])],
-    ['ppt/slides/slide1.xml', `<p:sld xmlns:p="${P}" xmlns:a="${A}" xmlns:r="${R}"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>${nativeText}</a:t></a:r></a:p></p:txBody></p:sp>${media.map((_, index) => `<p:pic><a:blip r:embed="img${index}"/></p:pic>`).join('')}</p:spTree></p:cSld></p:sld>`],
+    ['ppt/slides/slide1.xml', `<p:sld xmlns:p="${P}" xmlns:a="${A}" xmlns:r="${R}"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>${nativeText}</a:t></a:r></a:p></p:txBody></p:sp>${slideTable}${media.map((_, index) => `<p:pic><a:blip r:embed="img${index}"/></p:pic>`).join('')}</p:spTree></p:cSld></p:sld>`],
     ...(relationship === 'orphan' ? [] : [['ppt/slides/_rels/slide1.xml.rels', relations(imageRows)]])
   ];
   return zipStore([...opcControlEntries(type), ...entries, ...media.map((item, index) => [`${root}/media/image${index}.${item.ext}`, item.bytes])]);
@@ -58,6 +66,21 @@ function office(type, media, relationship = 'internal') {
 let passed = 0;
 async function check(label, fn) { await fn(); passed++; process.stdout.write(`PASS ${label}\n`); }
 const tiny = encodePng({ width: 1, height: 1, rgba: Buffer.from([255, 255, 255, 255]) });
+const transparentSamples = ['iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAAAAADRSSBWAAAAAnRSTlMAAHaTzTgAAAALSURBVHicY2D4DwABAgEAQr68aAAAAABJRU5ErkJggg==',
+  'iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAABnRSTlMAAAAAAABupgeRAAAAD0lEQVR4nGNgYGD4//8/AAYBAv4CsjmuAAAAAElFTkSuQmCC'].map(value => Buffer.from(value, 'base64'));
+function whiteKeyPng({ width, height, rgba }) {
+  const chunk = (type, data) => {
+    const name = Buffer.from(type), out = Buffer.alloc(12 + data.length); out.writeUInt32BE(data.length);
+    name.copy(out, 4); data.copy(out, 8); out.writeUInt32BE(crc32(Buffer.concat([name, data])), 8 + data.length); return out;
+  };
+  const header = Buffer.alloc(13); header.writeUInt32BE(width); header.writeUInt32BE(height, 4); header[8] = 8; header[9] = 2;
+  const raw = Buffer.alloc((width * 3 + 1) * height); let offset = 0;
+  for (let y = 0; y < height; y++) { raw[offset++] = 0; for (let x = 0; x < width; x++) {
+    const pixel = (y * width + x) * 4; for (let channel = 0; channel < 3; channel++) raw[offset++] = rgba[pixel + channel];
+  } }
+  return Buffer.concat([Buffer.from('89504e470d0a1a0a','hex'), chunk('IHDR', header), chunk('tRNS', Buffer.from([0,255,0,255,0,255])),
+    chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+}
 for (const type of ['docx', 'xlsx', 'pptx']) await check(`${type}: only internal image relationships expose media to OCR`, () => {
   const input = office(type, [{ ext: 'png', bytes: tiny }]);
   const own = extractOfficeMarkdownAndMedia(input, `.${type}`, { markdownOutput: 'content-v1' });
@@ -84,6 +107,21 @@ await check('office image plan rejects unsupported media and aggregate pixel bud
   assert.throws(() => imageSize(Buffer.from([0xff, 0xd8, 0xff, 0xda]), 'jpeg'), { code: 'CONVERSION_IMAGE_INVALID' });
 });
 const readers = { fromMarkdown, parseFragment };
+await check('tRNS pixels survive actual Office relationships and Markdown media mapping without coordinate changes', () => {
+  for (const bytes of transparentSamples) {
+    for (const type of ['docx','xlsx','pptx']) {
+      const own = extractOfficeMarkdownAndMedia(office(type, [{ ext: 'png', bytes }]), `.${type}`, { markdownOutput: 'content-v1' });
+      const plan = prepareOfficeImagePlan(own.attachments);
+      assert.deepEqual([plan[0].width, plan[0].height, plan[0].ordinal], [2,1,1]);
+      assert.deepEqual([...decodePng(plan[0].bytes).rgba], [0,0,0,0,255,255,255,255]); plan[0].bytes.fill(0);
+    }
+    const source = `😀 Caption ![Literal](data:image/png;base64,${bytes.toString('base64')}) after`;
+    const mapped = extractMarkdownImageMedia(source, readers), plan = prepareOfficeImagePlan(mapped.media);
+    assert.equal(mapped.markdown, '😀 Caption Literal after');
+    assert.equal(mapped.media[0].start, '😀 Caption Literal'.length);
+    assert.deepEqual([...decodePng(plan[0].bytes).rgba], [0,0,0,0,255,255,255,255]); plan[0].bytes.fill(0);
+  }
+});
 const tinyUri = `data:image/png;base64,${tiny.toString('base64')}`;
 await check('actual Markdown AST/HTML nodes yield only canonical embedded raster media; captions and code stay intact', () => {
   for (const source of [
@@ -173,6 +211,31 @@ if (process.argv.includes('--source-only')) {
       ['-e', rasterFixture, path.join(runtime, 'node_modules/@napi-rs/canvas')],
       { windowsHide: true, encoding: 'utf8', timeout: 30000, maxBuffer: 4 * 1024 * 1024 }));
     const png = Buffer.from(generated.png, 'base64'), jpg = Buffer.from(generated.jpg, 'base64'), bmp = encodeBmp(decodePng(png));
+    await check(`${target}: actual worker composes tRNS against white on direct Office and Markdown routes`, async () => {
+      for (const bytes of transparentSamples) {
+        diagnostics = '';
+        await assert.rejects(convertBuffer(bytes, '.png', { contentOptions: options(true) }), { code: 'CONVERSION_OCR_TEXT_EMPTY' });
+        for (const type of ['docx','xlsx','pptx']) {
+          const converted = await convertBuffer(office(type, [{ ext: 'png', bytes }]), `.${type}`, { contentOptions: options(true) });
+          assert.match(converted.markdown, /NATIVE ORIGINAL/u); assert.equal(converted.ocr_contacts, undefined);
+        }
+        const converted = await convertBuffer(Buffer.from(`😀 Caption ![Literal](data:image/png;base64,${bytes.toString('base64')}) after`), '.md', { contentOptions: options(true) });
+        assert.equal(converted.markdown, '😀 Caption Literal after');
+        assert.doesNotMatch(diagnostics, /CONVERSION_OCR_(?:STARTING|READY)/u, 'invisible black is not contrasting OCR input');
+      }
+      const transparent = whiteKeyPng(decodePng(png)), original = decodePng(png), changed = decodePng(transparent);
+      assert.deepEqual([changed.width, changed.height], [original.width, original.height]);
+      for (let index = 0; index < changed.rgba.length; index += 4) for (let c = 0; c < 3; c++) {
+        const a = changed.rgba[index + 3];
+        assert.equal(Math.round((changed.rgba[index+c]*a+255*(255-a))/255), original.rgba[index+c]);
+      }
+      const visible = await convertBuffer(office('docx', [{ ext: 'png', bytes: transparent }]), '.docx', { contentOptions: options(true) });
+      assert.match(visible.markdown, /RASTER ORIGINAL/u); assert.ok(visible.ocr_contacts?.length >= 2);
+      for (const contact of visible.ocr_contacts) {
+        assert.ok(visible.markdown.slice(contact.start, contact.end).length > 0); assert.equal(contact.page, 1);
+        if (contact.image) assert.deepEqual([contact.image.source_width, contact.image.source_height], [1500,450]);
+      }
+    });
     for (const type of ['docx', 'xlsx', 'pptx']) for (const [ext, bytes] of [['png', png], ['jpg', jpg], ['bmp', bmp]]) {
       await check(`${target}: real ${type} ${ext} raster OCR and exact private contact spans`, async () => {
         const source = office(type, [{ ext, bytes }]), before = hash(source);
@@ -188,6 +251,32 @@ if (process.argv.includes('--source-only')) {
         }
       });
     }
+    for (const type of ['docx', 'xlsx', 'pptx']) await check(`${target}: actual ${type} table promotion preserves two-image OCR provenance for guided and fast paths`, async () => {
+      const { extractSourceForPrivacy } = require(path.join(server, 'core/markdown-first-privacy'));
+      const { buildContactDraft, applyContactAnswer } = require(path.join(server, 'core/ocr-contact-review'));
+      const { automaticallyRedactOcrContacts } = require(path.join(server, 'gateway/bound-content-input'));
+      const bytes = office(type, [{ ext: 'png', bytes: png }, { ext: 'png', bytes: png }], 'internal', true), before = hash(bytes);
+      const converted = await convertBuffer(bytes, '.' + type, { contentOptions: options(true) });
+      assert.match(converted.markdown, /Spalte 1/u, 'fixture must exercise an actual synthetic table header');
+      assert.ok(converted.ocr_contacts?.length >= 4);
+      const originalValues = converted.ocr_contacts.map(item => converted.markdown.slice(item.start, item.end));
+      assert.ok(originalValues.every(value => value.includes('@') || value.includes('555')), 'actual OCR recognized contact values');
+      const result = await extractSourceForPrivacy(bytes, '.' + type, { contentOptions: options(true), convertBuffer: async () => converted });
+      assert.doesNotMatch(result.markdown, /Spalte 1/u);
+      assert.match(result.markdown, /\| Name \|/u); assert.match(result.markdown, /\| Qvx \|/u);
+      assert.deepEqual(result.ocrContacts.map(item => result.markdown.slice(item.start, item.end)), originalValues);
+      assert.deepEqual(result.ocrContacts.map(item => [item.page, item.line, item.kind, item.image]),
+        converted.ocr_contacts.map(item => [item.page, item.line, item.kind, item.image]));
+      const input = { original_text: result.markdown, source_type: type, contacts: result.ocrContacts }, draft = buildContactDraft(input);
+      assert.equal(applyContactAnswer(input, { action: 'reviewed', redactions: [], decisions: draft.ambiguities.map(item =>
+        ({ ambiguity_id: item.ambiguity_id, decision: 'confirm_contact' })) }), result.markdown);
+      const masked = automaticallyRedactOcrContacts(input);
+      assert.match(masked.text, /NATIVE ORIGINAL/u); assert.match(masked.text, /Qvx/u);
+      assert.doesNotMatch(masked.text, /@|555/u);
+      assert.equal((masked.text.match(/\[EMAIL_REDACTED\]/gu) || []).length, 2);
+      assert.equal((masked.text.match(/\[PHONE_REDACTED\]/gu) || []).length, 2);
+      assert.equal(hash(bytes), before);
+    });
     await check(`${target}: two office images retain separate crop coordinates and global Markdown offsets`, async () => {
       const result = await convertBuffer(office('docx', [{ ext: 'png', bytes: png }, { ext: 'png', bytes: png }]), '.docx', { contentOptions: options(true) });
       assert.ok(result.ocr_contacts.some(item => item.page === 1)); assert.ok(result.ocr_contacts.some(item => item.page === 2));

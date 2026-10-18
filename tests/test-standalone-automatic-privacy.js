@@ -31,7 +31,7 @@ const finalize = async (operation, reviewPolicy = 'automatic-conservative', revi
   await kernel.resolveTextPrivacyReview(operation, reviewText, { reviewPolicy }), { prefix: '', suffix: '' });
 const code = expected => error => error.code === expected;
 
-function fixture(kind = 'publication', extension = 'txt', text = 'CAPGEMINI INVENT\nName: Anna Beispiel\nE-Mail: anna@example.invalid\n') {
+function fixture(kind = 'publication', extension = 'txt', text = 'CAPGEMINI INVENT\nName: Anna Beispiel\nE-Mail: anna@example.invalid\n', contentOptions = options) {
   const token = crypto.randomBytes(32).toString('hex'), id = crypto.randomBytes(16).toString('hex'), bytes = Buffer.from(text);
   const source = path.join(scope, `source-${id}.${extension}`); fs.writeFileSync(source, bytes);
   const item = { id, name: `synthetic-source.${extension}`, size: bytes.length,
@@ -40,7 +40,7 @@ function fixture(kind = 'publication', extension = 'txt', text = 'CAPGEMINI INVE
     status: kind === 'capture' ? 'deferred_review' : 'processing',
     checkpoint: kind === 'capture' ? 'awaiting_local_review' : 'processing_started' };
   const state = { schema: 'datasecure-batch/7', token, product_channel: 'standalone', processing_mode: 'markdown-and-anonymize',
-    standalone_document_review: true, standalone_review_policy: 'automatic-conservative', content_options: options,
+    standalone_document_review: true, standalone_review_policy: 'automatic-conservative', content_options: contentOptions,
     profile: 'general', remove_images: false, output_naming_mode: 'neutral', created_at: new Date().toISOString(),
     expires_at: '2099-01-01T00:00:00.000Z', io_summary: createPrivateIoSummary(),
     ...createBatchPseudonymState({ productChannel: 'standalone' }), items: [item] };
@@ -54,6 +54,173 @@ function fixture(kind = 'publication', extension = 'txt', text = 'CAPGEMINI INVE
     exactPendingEntry: (saved, member) => exactPendingEntry(saved, member, { privateWorkStore: store, workPath: () => work }) });
   const context = authority.consume(authority.issue(token, id, kind));
   return { state, item, source, bytes, review, context, release() { context.dispose(); lock.releaseActiveLock(token); } };
+}
+
+const textOptions = Object.freeze({ ...options, imageOcr: false });
+let markdownReaders;
+async function realTextConverter(bytes, extension, settings) {
+  // Exactly the direct TXT / content-v1 Markdown branches in the conversion
+  // worker, with its real pinned readers. No manufactured extraction or PII
+  // result, native-loader substitution, or disabled ownership guard is used.
+  assert.ok(['.txt', '.md'].includes(extension));
+  assert.deepEqual(settings.contentOptions, textOptions);
+  const { extractMarkdownBuffer } = require('../plugins/data-secure/server/standalone/markdown-extractor');
+  const raw = extractMarkdownBuffer(bytes, extension, extension === '.md' ? {} : { markdownOutput: 'content-v1' });
+  let markdown = raw.markdown;
+  if (extension === '.md') {
+    if (!markdownReaders) {
+      const { pathToFileURL } = require('node:url');
+      const root = path.resolve(__dirname, '../native/markdown/pilot/node_modules');
+      for (const [name, version] of [['mdast-util-from-markdown', '2.0.2'], ['parse5', '7.3.0']])
+        assert.equal(JSON.parse(fs.readFileSync(path.join(root, name, 'package.json'))).version, version);
+      const { fromMarkdown } = await import(pathToFileURL(path.join(root, 'mdast-util-from-markdown/index.js')).href);
+      const { parseFragment } = await import(pathToFileURL(path.join(root, 'parse5/dist/index.js')).href);
+      markdownReaders = { fromMarkdown, parseFragment };
+    }
+    const transformed = require('../plugins/data-secure/server/standalone/markdown-image-content').markdownImageContent(markdown, markdownReaders);
+    assert.equal(transformed.imageNodesRemoved, false, 'these fixtures contain no omitted images');
+    markdown = transformed.markdown;
+  }
+  return require('../plugins/data-secure/server/standalone/markdown-contract').createMarkdownExtraction({
+    source_type: raw.source_type, markdown, coverage: raw.coverage, content_options: settings.contentOptions });
+}
+function publishTextFixture(f) {
+  return withBatchPseudonymRegistry(batch._test.readStateForMaintenance(f.state.token), registry =>
+    require('../plugins/data-secure/server/gateway/content-publication-operation').publishPersistedContent(f.context, {
+      pseudonymRegistry: registry, convertBuffer: realTextConverter,
+      reviewText() { throw Error('automatic text must not invoke a human reviewer'); },
+      afterPublish() { f.review.recordPublication(f.state.token, f.item.id); }
+    }));
+}
+function exportTextFixture(f, row) {
+  const operation = crypto.randomBytes(16).toString('hex');
+  const selection = [{ document_id: row.document_id, revision: row.revision, output_sha256: row.output_sha256 }];
+  const preview = f.review.previewExport(f.state.token, operation, selection);
+  assert.equal(preview.ok, true);
+  const exported = f.review.exportApproved(f.state.token, operation, selection);
+  assert.equal(exported.ok, true); assert.equal(exported.exported_count, 1);
+  const reference = f.review.resolveExport(f.state.token, operation);
+  assert.equal(reference.target_kind, 'directory');
+  assert.deepEqual(fs.readdirSync(reference.local_path), ['Dokument_01.md']);
+  return fs.readFileSync(path.join(reference.local_path, 'Dokument_01.md'), 'utf8');
+}
+async function assertUnsafeTextStopped(extension, text) {
+  const f = fixture('publication', extension, text, textOptions);
+  try {
+    let stopped;
+    try { await publishTextFixture(f); } catch (error) { stopped = error; }
+    // Exercise review and actual file export even in the pre-fix red phase:
+    // a test which stops at a direct engine assertion would miss this bypass.
+    const listed = f.review.list(f.state.token), row = listed.documents[0];
+    let exported;
+    if (row?.approved) exported = exportTextFixture(f, row);
+    assert.deepEqual(fs.readFileSync(f.source), f.bytes);
+    assert.ok(stopped, `unsafe text must stop before publication (approved=${row?.approved === true}, exported=${exported !== undefined})`);
+    assert.equal(stopped.code, 'RESIDUAL_PII', 'fixed content-free policy failure, not an unrelated extraction/ownership fault');
+    assert.deepEqual(listed.documents, []);
+    assert.equal(exported, undefined);
+    const pool = require('../plugins/data-secure/server/standalone/anonymized-store').anonymizedArtifactRoots().output;
+    assert.equal(fs.existsSync(path.join(pool, f.context.package_id)), false, 'no unsafe private package may be published');
+  } finally { f.release(); }
+}
+async function assertTextExportsExactly(extension, source, expected) {
+  const f = fixture('publication', extension, source, textOptions);
+  try {
+    assert.equal((await publishTextFixture(f)).ok, true);
+    const base = JSON.parse(fs.readFileSync(path.join(process.env.EU_PRIVACY_DATA_ROOT, 'document-reviews', f.state.token, f.item.id, 'base.json')));
+    assert.equal(base.markdown, expected); assert.equal(replayTransformTrace(base.transform_trace), expected);
+    const row = f.review.list(f.state.token).documents[0];
+    assert.equal(row.approved, true); assert.equal(row.approval_basis, 'automatic');
+    assert.equal(exportTextFixture(f, row), expected, 'verify actual selected-export bytes, not only an in-memory draft');
+    assert.deepEqual(fs.readFileSync(f.source), f.bytes);
+  } finally { f.release(); }
+}
+
+function historicalUnsafeTextFixture() {
+  // Frozen output was produced by the real pre-fix engine, publication proof,
+  // artifact constructor and transform trace (Node 22.23.2). Restore that saved
+  // state instead of rerunning a now-fixed anonymizer to construct the test.
+  // No verifier is mocked and no fresh WeakMap publication proof is invented.
+  const saved = structuredClone(require('./fixtures/standalone-unsafe-canonical-pre-fix.json'));
+  const policy = require('../plugins/data-secure/server/privacy/policy');
+  assert.equal(crypto.createHash('sha256').update(JSON.stringify(saved.manifest)).digest('hex'), saved.expectation.manifest_sha256,
+    'the frozen pre-fix package really has the recorded byte binding');
+  // Rebind ONLY public compatibility markers and their manifest checksum to
+  // the running version. This synthetic same-ruleset variant must exercise
+  // today's text gate, not pass just because de-business/4 became /5. The old
+  // unsafe bytes, source, trace, dictionary and claimed verification stay exact;
+  // no current anonymizer/verifier is used to regenerate or bless that claim.
+  saved.manifest.privacy_ruleset = saved.verification_context.ruleset = policy.PRIVACY_RULESET_VERSION;
+  saved.manifest.credential_context_policy = saved.verification_context.credential_policy = policy.CREDENTIAL_CONTEXT_POLICY_VERSION;
+  saved.manifest.gateway_version = require('../plugins/data-secure/server/version').VERSION;
+  saved.expectation.manifest_sha256 = crypto.createHash('sha256').update(JSON.stringify(saved.manifest)).digest('hex');
+  const token = crypto.randomBytes(32).toString('hex'), id = saved.manifest.package_id.slice(3);
+  const privateRoot = path.join(scope, 'historical-unsafe-private'), resultRoot = path.join(scope, 'historical-unsafe-results');
+  fs.mkdirSync(privateRoot); fs.mkdirSync(resultRoot);
+  const item = { id, name: 'synthetic-historical.txt', sha256: saved.manifest.document_sha256, status: 'released' };
+  const state = { schema: 'datasecure-batch/7', token, product_channel: 'standalone', processing_mode: 'markdown-and-anonymize',
+    standalone_document_review: true, standalone_review_policy: 'automatic-conservative', content_options: saved.manifest.content_options, items: [item] };
+  const create = () => createDocumentReviewStore({ dataRoot: privateRoot, resultRoot: () => resultRoot, expectedDocuments: () => [item] });
+  const review = create(), manifestBytes = Buffer.from(JSON.stringify(saved.manifest));
+  assert.equal(crypto.createHash('sha256').update(manifestBytes).digest('hex'), saved.expectation.manifest_sha256);
+  assert.equal(replayTransformTrace(saved.transform_trace), saved.markdown);
+  const pool = require('../plugins/data-secure/server/standalone/anonymized-store').anonymizedArtifactRoots().output;
+  const artifact = path.join(pool, saved.manifest.package_id); fs.mkdirSync(artifact);
+  fs.writeFileSync(path.join(artifact, saved.manifest.document), saved.markdown);
+  fs.writeFileSync(path.join(artifact, 'manifest.json'), manifestBytes);
+  review.capture(state, item, { package_id: saved.manifest.package_id, content_options: state.content_options, source_type: 'txt',
+    publication_binding: saved.expectation, original_text: saved.markdown, markdown: saved.markdown,
+    transform_trace: saved.transform_trace, verification_context: saved.verification_context });
+  review.recordPublication(token, id);
+  // Structural/package integrity still succeeds. Only fresh text safety may
+  // refuse the old automatic approval; a stale version/hash is not the oracle.
+  assert.equal(require('../plugins/data-secure/server/standalone/anonymized-store')
+    .readAnonymizedArtifact(saved.manifest.package_id, saved.expectation).markdown, saved.markdown);
+  return { token, item, create, resultRoot, selection: [{ document_id: id, revision: 0, output_sha256: saved.manifest.document_sha256 }] };
+}
+
+function legacyTraceFreeTextFixture(text) {
+  // Valid legacy /1 review basis plus a real /3 package, without a trace or
+  // self-selected policy context. Current approval must still apply the text
+  // boundary; absence of provenance cannot exempt already saved characters.
+  const token = crypto.randomBytes(32).toString('hex'), id = crypto.randomBytes(16).toString('hex');
+  const dir = fs.mkdtempSync(path.join(scope, 'legacy-text-'));
+  const privateRoot = path.join(dir, 'private'), outputRoot = path.join(dir, 'packages'), resultRoot = path.join(dir, 'results');
+  for (const folder of [privateRoot, outputRoot, resultRoot]) fs.mkdirSync(folder);
+  const digest = crypto.createHash('sha256').update(text).digest('hex'), packageId = `ds_${id}`;
+  const item = { id, name: 'synthetic-legacy.txt', sha256: digest, status: 'released' };
+  const state = { token, product_channel: 'standalone', processing_mode: 'markdown-and-anonymize', standalone_document_review: true, items: [item] };
+  const create = () => createDocumentReviewStore({ dataRoot: privateRoot, outputRoot: () => outputRoot,
+    resultRoot: () => resultRoot, expectedDocuments: () => [item] });
+  const review = create(), target = path.join(outputRoot, packageId); fs.mkdirSync(target);
+  fs.writeFileSync(path.join(target, `${packageId}.md`), text);
+  fs.writeFileSync(path.join(target, 'manifest.json'), JSON.stringify({ schema: 'eu-privacy-package/3', package_id: packageId,
+    document: `${packageId}.md`, verification: { text_residual_pii: 'passed' }, document_sha256: digest }));
+  review.capture(state, item, { package_id: packageId, original_text: text, markdown: text });
+  review.recordPublication(token, id);
+  return { token, id, create, resultRoot };
+}
+
+function cleanupSyntheticScope() {
+  const temporaryRoot = fs.realpathSync.native(os.tmpdir());
+  assert.equal(path.dirname(scope), temporaryRoot);
+  assert.match(path.basename(scope), /^datasecure-automatic-privacy-[A-Za-z0-9]+$/u);
+  assert.equal(fs.realpathSync.native(scope), scope);
+  const entries = [];
+  function inspect(target) {
+    const relative = path.relative(scope, target);
+    assert.ok(target === scope || relative && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+    const stat = fs.lstatSync(target);
+    assert.equal(stat.isSymbolicLink(), false, 'never traverse/remove a linked test fixture');
+    assert.ok(stat.isDirectory() || stat.isFile());
+    if (stat.isDirectory()) for (const name of fs.readdirSync(target)) inspect(path.join(target, name));
+    entries.push({ target, directory: stat.isDirectory() });
+  }
+  inspect(scope);
+  for (const entry of entries) {
+    if (entry.directory) fs.rmdirSync(entry.target);
+    else fs.unlinkSync(entry.target);
+  }
 }
 
 test('automatic OCR masks complete validated corridors without correcting or approving their spelling', () => {
@@ -86,6 +253,16 @@ test('repeated literal OCR contacts retain exact ordered corridors and marker co
 });
 
 async function main() {
+  await testAsync('fullwidth identifiers cannot survive guided or automatic publication gates', async () => {
+    const { identifierCases, professionalText } = require('./lib/identifier-compatibility');
+    for (const policy of ['manual', 'automatic-conservative']) {
+      const raw = [professionalText, ...identifierCases.map(({label,value}) => label + value)].join('\n');
+      const final = await finalize(prepare(raw), policy);
+      assert.equal(final.markdown, [professionalText, ...identifierCases.map(({label,replacement}) => label + replacement)].join('\n'));
+      assert.equal(replayTransformTrace(final.transform_trace), final.markdown);
+      assert.equal(final.transform_trace.canonical_input, raw);
+    }
+  });
   if (process.argv.includes('--real-ocr')) await testAsync('actual packaged OCR outputs publish through the saved automatic source context', async () => {
     const { writeStandaloneRuntime } = await import('../scripts/lib/standalone-runtime-projection.mjs');
     const { writeConversionRuntime } = await import('../scripts/lib/standalone-conversion-runtime.mjs');
@@ -208,6 +385,28 @@ async function main() {
       assert.equal(f.review.list(f.state.token).documents.length, 0);
     } finally { f.release(); }
   });
+  await testAsync('postcommit callback diagnostics preserve the fixed acknowledgement boundary and real code', async () => {
+    const f = fixture();
+    const refusal = Object.assign(Error('PRIVATE_CALLBACK_DIAGNOSTIC_SENTINEL'), { code: 'BATCH_OWNERSHIP_CHANGED' });
+    try {
+      await assert.rejects(withBatchPseudonymRegistry(batch._test.readStateForMaintenance(f.state.token), registry =>
+        require('../plugins/data-secure/server/gateway/content-publication-operation').publishPersistedContent(f.context, {
+          pseudonymRegistry: registry,
+          async convertBuffer(bytes, extension, settings) {
+            const raw = require('../plugins/data-secure/server/standalone/markdown-extractor').extractMarkdownBuffer(bytes, extension,
+              { markdownOutput: settings.contentOptions.markdownOutput });
+            return require('../plugins/data-secure/server/standalone/markdown-contract').createMarkdownExtraction({
+              source_type: raw.source_type, markdown: raw.markdown, coverage: raw.coverage, content_options: settings.contentOptions });
+          },
+          afterPublish() { throw refusal; }
+        })), error => error === refusal);
+      const events = require('../plugins/data-secure/server/gateway/workflow-diagnostics')._test.readWorkflowEvents();
+      assert.ok(events.some(row => row.event === 'content_operation_failed' && row.phase === 'content_ack' &&
+        row.outcome === 'stopped' && row.error_code === 'BATCH_OWNERSHIP_CHANGED'));
+      assert.doesNotMatch(JSON.stringify(events), /PRIVATE_CALLBACK_DIAGNOSTIC_SENTINEL|anna@example/u);
+      assert.deepEqual(fs.readFileSync(f.source), f.bytes);
+    } finally { f.release(); }
+  });
   await testAsync('bound automatic OCR bypasses review-store hooks and retains only genuine coverage limitations', async () => {
     const f = fixture('capture', 'png', 'opaque synthetic bitmap fixture');
     try {
@@ -261,6 +460,82 @@ async function main() {
       assert.deepEqual(fs.readdirSync(process.env.EU_PRIVACY_RESULT_ROOT), []);
     } finally { f.release(); }
   });
-  await done();
+  for (const extension of ['txt', 'md']) {
+    for (const [label, separator] of [['C1-80', '\u0080'], ['C1-NEL', '\u0085'], ['C1-9f', '\u009f'], ['replacement-character', '\ufffd']])
+      await testAsync(`${extension} raw ${label} cannot split card groups into an automatically approved export`, () =>
+        assertUnsafeTextStopped(extension, ['4111', '1111', '1111', '1111'].join(separator)));
+    for (const [label, separator] of [['C0', '\u0001'], ['DEL', '\u007f']])
+      await testAsync(`${extension} preserves the existing raw ${label} source rejection`, async () => {
+        const f = fixture('publication', extension, ['4111', '1111', '1111', '1111'].join(separator), textOptions);
+        try {
+          await assert.rejects(publishTextFixture(f), code('TEXT_CONTROL_INVALID'));
+          assert.deepEqual(f.review.list(f.state.token).documents, []);
+          assert.deepEqual(fs.readFileSync(f.source), f.bytes);
+        } finally { f.release(); }
+      });
+    await testAsync(`${extension} ordinary card-group spaces still redact before actual selected export`, () =>
+      assertTextExportsExactly(extension, '4111 1111 1111 1111', '[BANK_DATA_REDACTED]'));
+  }
+  for (const [label, reference] of [['numeric-C0-null', '&#0;'], ['numeric-C0', '&#31;'], ['numeric-DEL', '&#127;'],
+    ['numeric-C1', '&#133;'], ['hex-C1', '&#x85;'], ['numeric-replacement-character', '&#xfffd;']])
+    await testAsync(`active Markdown ${label} cannot publish or export split card groups`, () =>
+      assertUnsafeTextStopped('md', ['4111', '1111', '1111', '1111'].join(reference)));
+  // Isolated ASCII explanations are literal content; a full Luhn-valid card
+  // corridor is a different safety case, even inside a code/escape wrapper.
+  const literalReferences = '&#0; / &#133; / &#xfffd;';
+  const escapedReferences = '\\&#0; / \\&#133; / \\&#xfffd;';
+  await testAsync('TXT numeric-looking reference spellings remain genuine escaped literal bytes through export', () =>
+    assertTextExportsExactly('txt', literalReferences, escapedReferences));
+  await testAsync('explicitly escaped Markdown numeric references remain literal through repeated gates and export', () =>
+    assertTextExportsExactly('md', escapedReferences, escapedReferences));
+  await testAsync('inline-code ASCII numeric references are literal, not decoded unsafe controls', () =>
+    assertTextExportsExactly('md', '`' + literalReferences + '`', escapedReferences));
+  await testAsync('fenced-code ASCII numeric references are preserved exactly, not decoded unsafe controls', () => {
+    const fenced = '```text\n' + literalReferences + '\n```';
+    return assertTextExportsExactly('md', fenced, fenced);
+  });
+  await testAsync('valid TAB CR and LF remain releasable Markdown content', () =>
+    assertTextExportsExactly('md', 'Sachlicher\tInhalt\r\nFortsetzung', 'Sachlicher\tInhalt\r\nFortsetzung'));
+  await testAsync('an actual replacement character inside code has no literal-ASCII exemption', () =>
+    assertUnsafeTextStopped('md', '`4111\ufffd1111\ufffd1111\ufffd1111`'));
+  const cardReferences = '4111&#133;1111&#133;1111&#133;1111';
+  await testAsync('TXT escaping cannot hide a complete numeric-reference card corridor from the safety probe', () =>
+    assertUnsafeTextStopped('txt', cardReferences));
+  await testAsync('explicit Markdown escaping cannot hide a complete numeric-reference card corridor', () =>
+    assertUnsafeTextStopped('md', cardReferences.replace(/&/gu, '\\&')));
+  await testAsync('inline code cannot exempt a complete numeric-reference card corridor', () =>
+    assertUnsafeTextStopped('md', '`' + cardReferences + '`'));
+  await testAsync('fenced code cannot exempt a complete numeric-reference card corridor', () =>
+    assertUnsafeTextStopped('md', '```text\n' + cardReferences + '\n```'));
+  await testAsync('a saved pre-fix U+FFFD publication loses automatic approval and cannot preview or create a new export under the same ruleset', () => {
+    const f = historicalUnsafeTextFixture(), current = f.create();
+    // Read/preview/export are independent fresh operations: collect all three
+    // before asserting so the red phase exercises actual selected-export IO.
+    const listed = current.list(f.token), attempt = action => {
+      try { return { result: action() }; } catch (error) { return { error }; }
+    };
+    const preview = attempt(() => f.create().previewExport(f.token, 'd'.repeat(32), f.selection));
+    const exported = attempt(() => f.create().exportApproved(f.token, 'c'.repeat(32), f.selection));
+    assert.deepEqual({ reviewable: listed.documents.length, unavailable: listed.unavailable.map(row => row.reason_code),
+      preview_error: preview.error?.code || null, export_error: exported.error?.code || null },
+    { reviewable: 0, unavailable: ['DOCUMENT_REVIEW_RESIDUAL_PII'],
+      preview_error: 'DOCUMENT_REVIEW_RESIDUAL_PII', export_error: 'DOCUMENT_REVIEW_RESIDUAL_PII' });
+    assert.deepEqual(fs.readdirSync(f.resultRoot), [], 'unsafe old approval may not create a new public export');
+  });
+  for (const [label, text] of [['replacement', '4111\ufffd1111\ufffd1111\ufffd1111'], ['raw-C1', '4111\u00851111\u00851111\u00851111'],
+    ['C1-in-comment', '<!--\u0085-->Sachlicher Inhalt'], ['replacement-in-comment', '<!--\ufffd-->Sachlicher Inhalt'],
+    ['C1-in-attribute', '<span title="\u0085">Sachlicher Inhalt</span>'],
+    ['replacement-in-attribute', '<span title="\ufffd">Sachlicher Inhalt</span>']])
+    await testAsync(`trace-free legacy ${label} text cannot obtain a current approval or export`, () => {
+      const f = legacyTraceFreeTextFixture(text), current = f.create(), row = current.list(f.token).documents[0];
+      assert.equal(row.approved, false);
+      assert.throws(() => current.decide(f.token, f.id, { action: 'approve', ranges: [], revision: row.revision,
+        output_sha256: row.output_sha256, operation_id: crypto.randomBytes(16).toString('hex') }), code('DOCUMENT_REVIEW_RESIDUAL_PII'));
+      assert.equal(f.create().list(f.token).documents[0].approved, false);
+      const selected = [{ document_id: row.document_id, revision: row.revision, output_sha256: row.output_sha256 }];
+      assert.throws(() => f.create().exportApproved(f.token, crypto.randomBytes(16).toString('hex'), selected), code('DOCUMENT_REVIEW_UNAPPROVED'));
+      assert.deepEqual(fs.readdirSync(f.resultRoot), []);
+    });
+  await done(cleanupSyntheticScope);
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

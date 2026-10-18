@@ -45,6 +45,44 @@ test('plugin and Standalone can share one ordered fail-closed startup transactio
   });
 });
 
+test('only an explicit Standalone opt-in defers protection acquisition inside startup retention', () => {
+  const item = fixture({ standaloneLazyRetentionProtection: true });
+  initializeProduct(item.deps);
+  assert.deepStrictEqual(item.calls.map(entry => entry.name), [
+    'storage.preflight', 'runtime.verify', 'runtime.ensure', 'audit.migrate',
+    'retention.cleanup', 'ui.cleanup', 'batch.recover', 'mapping.replay',
+    'maintenance.start', 'legacy.migrate', 'working.cleanup'
+  ]);
+  const cleanup = item.calls[4].args[0];
+  assert.strictEqual(cleanup.trigger, 'startup');
+  assert.strictEqual(cleanup.outputProtectionComplete, false, 'unrequested protection is unknown, not complete');
+  assert.strictEqual(Object.hasOwn(cleanup, 'protectedIds'), false);
+  assert.strictEqual(typeof cleanup.getBatchPackageProtection, 'function');
+  for (const value of [undefined, false, 'true', 1]) {
+    const eager = fixture({ standaloneLazyRetentionProtection: value });
+    initializeProduct(eager.deps);
+    assert.strictEqual(eager.calls[4].name, 'output.protect');
+    assert.deepStrictEqual(eager.calls[5].args[0], {
+      trigger: 'startup', protectedIds: ['x'], outputProtectionComplete: true
+    });
+  }
+});
+
+test('needed lazy protection still runs before UI cleanup, recovery and maintenance', () => {
+  const item = fixture({ standaloneLazyRetentionProtection: true });
+  item.deps.cleanupLocalData = options => {
+    item.calls.push({ name: 'retention.enter' });
+    assert.deepStrictEqual(options.getBatchPackageProtection(), { ids: ['x'], complete: true });
+    item.calls.push({ name: 'retention.exit' });
+  };
+  initializeProduct(item.deps);
+  assert.deepStrictEqual(item.calls.map(entry => entry.name), [
+    'storage.preflight', 'runtime.verify', 'runtime.ensure', 'audit.migrate',
+    'retention.enter', 'output.protect', 'retention.exit', 'ui.cleanup',
+    'batch.recover', 'mapping.replay', 'maintenance.start', 'legacy.migrate', 'working.cleanup'
+  ]);
+});
+
 test('a post-maintenance recovery failure stops maintenance and refuses startup once', () => {
   const item = fixture({ recoverBatches: () => {
     item.calls.push({ name: 'batch.recover', args: [] });

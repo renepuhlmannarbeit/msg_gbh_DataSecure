@@ -509,6 +509,9 @@ try {
         return
     }
     Expand-Archive -LiteralPath $archivePath -DestinationPath $extractedRoot -Force
+    $productDirectory = Resolve-StandaloneProductDirectory $extractedRoot $expectedVersion
+    $executable = Join-Path $extractedRoot "$productDirectory\DataSecure Standalone.exe"
+    $startInfo = New-IsolatedStartInfo $executable
     if (-not (Test-Path -LiteralPath $executable -PathType Leaf)) {
         throw "STANDALONE_NATIVE_EXECUTABLE_MISSING: $executable"
     }

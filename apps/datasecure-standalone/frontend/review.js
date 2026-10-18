@@ -12,7 +12,7 @@ const el = (id) => document.getElementById(id);
 const state = { draft: null, reviewId: null, cursor: 0, choices: new Map(), history: [],
   rows: [], rowById: new Map(), candidateIndex: new Map(), groups: new Map(), selected: new Set(), inputs: new Map(), page: 0,
   waiting: false, submitted: false, closed: false, disconnected: false, continuing: false, continuationAvailable: false,
-  generation: 0, loadGeneration: null, pollTimer: null, pollFailures: 0,
+  generation: 0, loadGeneration: null, pollTimer: null, pollFailures: 0, connectionReady: embedded,
   uncertainAnswer: null, continuationFailure: null, continuationSnapshot: null, lastSession: null };
 const START_FAILURE_TEXT = Object.freeze({
   LOCAL_REVIEW_START_MISSING: 'Eine benötigte lokale Laufzeit oder Prüfkomponente wurde nicht gefunden.',
@@ -576,7 +576,7 @@ function decodeChunks(parts) {
 }
 
 async function poll() {
-  if (!invoke || state.draft || (state.closed || state.disconnected) || state.continuing || state.waiting || state.loadGeneration !== null) return;
+  if (!invoke || !state.connectionReady || state.draft || (state.closed || state.disconnected) || state.continuing || state.waiting || state.loadGeneration !== null) return;
   cancelPoll();
   const generation = state.generation;
   state.loadGeneration = generation;
@@ -828,10 +828,36 @@ el('release').addEventListener('click', () => {
 el('retry').addEventListener('click', poll);
 el('continue-review').addEventListener('click', continueReview);
 el('close-review').addEventListener('click', closeReviewWindow);
-window.__TAURI__?.event?.listen('datasecure-connection', event => {
-  if (event.payload?.state !== 'recovering') return;
-  invalidateLoads(); clearDraft(); state.disconnected = true;
-  setWaiting('Die lokale Verbindung wurde unterbrochen. Nicht übergebene Entscheidungen wurden verworfen. Bitte dieses Prüffenster schließen und den Lauf in der Hauptansicht erneut öffnen.');
-})?.catch(() => {});
+let unlistenConnection = null, pageDisposed = false;
+function disconnectReview(message) {
+  invalidateLoads(); clearDraft(); state.disconnected = true; state.connectionReady = false;
+  state.waiting = false; state.continuing = false; state.continuationAvailable = false;
+  state.uncertainAnswer = null; state.continuationFailure = null; state.continuationSnapshot = null; state.lastSession = null;
+  setWaiting(message); el('retry').disabled = true;
+}
+window.addEventListener('beforeunload', () => {
+  pageDisposed = true; state.closed = true; invalidateLoads(); clearDraft();
+  unlistenConnection?.(); unlistenConnection = null;
+});
+async function startReview() {
+  // The embedded surface is retired by its owning workspace on recovery. A
+  // separate native window must establish its own receiver BEFORE reading PII.
+  if (!embedded) {
+    try {
+      if (typeof window.__TAURI__?.event?.listen !== 'function') throw Error('listener unavailable');
+      const unlisten = await window.__TAURI__.event.listen('datasecure-connection', event => {
+        if (pageDisposed || state.closed || event.payload?.state !== 'recovering') return;
+        disconnectReview('Die lokale Verbindung wurde unterbrochen. Nicht übergebene Entscheidungen wurden verworfen. Bitte dieses Prüffenster schließen und den Lauf in der Hauptansicht erneut öffnen.');
+      });
+      if (typeof unlisten !== 'function') throw Error('listener unavailable');
+      if (pageDisposed) { unlisten(); return; }
+      unlistenConnection = unlisten; state.connectionReady = !state.disconnected;
+    } catch {
+      if (!pageDisposed) disconnectReview('Die sichere Verbindungsüberwachung konnte nicht gestartet werden (LOCAL_REVIEW_EVENT_UNAVAILABLE). Bitte dieses Prüffenster schließen und die Prüfung in der Hauptansicht erneut öffnen.');
+      return;
+    }
+  }
+  await poll();
+}
 setWaiting('Die lokale Verarbeitung bereitet die Fundstellen vor. Bitte dieses Fenster offen lassen.', true);
-poll();
+startReview();

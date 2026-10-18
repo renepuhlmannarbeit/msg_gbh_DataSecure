@@ -1,6 +1,7 @@
 // Read the actual deployment contract, including Node addons. Info.plist alone
 // cannot establish whether every executable can load on the advertised macOS.
 import path from 'node:path';
+import layout from '../../plugins/data-secure/server/standalone/macos-bundle-layout.js';
 
 const MACHO = new Set([0xfeedfacf, 0xfeedface, 0xcefaedfe, 0xcffaedfe,
   0xcafebabe, 0xbebafeca, 0xcafebabf, 0xbfbafeca]);
@@ -47,22 +48,31 @@ export function inspectMachO(bytes) {
     offset += size;
   }
   if (offset !== end || minimum === null) fail('COMMANDS_INVALID');
-  return { architecture, minimum, minimumVersion: versionString(minimum), libraries, rpaths, signed };
+  return { architecture, fileType: bytes.readUInt32LE(12), minimum, minimumVersion: versionString(minimum), libraries, rpaths, signed };
 }
 
-export function verifyMacNativeContract(entries, { target, minimumVersion }) {
+export function verifyMacNativeContract(entries, { target, minimumVersion, bundleRoot = null }) {
   if (!['macos-x64', 'macos-arm64'].includes(target)) fail('TARGET_INVALID');
   if (!/^\d{1,3}\.\d{1,3}(?:\.\d{1,3})?$/u.test(minimumVersion)) fail('VERSION_INVALID');
   const [major, minor, patch = 0] = minimumVersion.split('.').map(Number);
   if (minor > 255 || patch > 255) fail('VERSION_INVALID');
   const maximum = major * 65536 + minor * 256 + patch;
+  const expected = bundleRoot ? new Map([
+    [`${bundleRoot}/Contents/MacOS/datasecure-standalone`, 2],
+    [`${bundleRoot}/Contents/MacOS/datasecure-core`, 2],
+    ...Object.entries(layout.nativeRoles(target)).map(([role, record]) =>
+      [`${bundleRoot}/Contents/${record.destination}`, role === 'canvas' ? 6 : 2])
+  ]) : null;
   const report = [];
   for (const [name, bytes] of entries) {
     const native = inspectMachO(bytes);
     if (!native) {
       if (/\.(?:node|dylib)$/u.test(name)) fail(`BINARY_INVALID:${name}`);
+      if (expected && [`${bundleRoot}/Contents/MacOS/`, `${bundleRoot}/Contents/Frameworks/`]
+        .some(prefix => name.startsWith(prefix))) fail(`BUNDLE_CODE_INVALID:${name}`);
       continue;
     }
+    if (expected && (!expected.has(name) || expected.get(name) !== native.fileType)) fail(`BUNDLE_LOCATION_INVALID:${name}`);
     if (native.architecture !== target.slice(6)) fail(`ARCHITECTURE_MISMATCH:${name}`);
     if (native.minimum > maximum) fail(`MINIMUM_TOO_HIGH:${name}:${native.minimumVersion}`);
     // The current product needs only macOS system libraries. A future bundled
@@ -79,5 +89,6 @@ export function verifyMacNativeContract(entries, { target, minimumVersion }) {
     report.push({ path: name, ...native });
   }
   if (!report.length) fail('BINARIES_MISSING');
+  if (expected && report.length !== expected.size) fail('BUNDLE_CODE_MISSING');
   return report;
 }

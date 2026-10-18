@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { readBoundFile, readBoundFileRecord, bindDirectory, assertDirectory } = require('../core/bound-file-io');
-const { identity: privateIdentity, safeUnlinkBoundPrivateFile } = require('./bound-private-file');
+const { ownerRecordIo } = require('./batch-active-lock');
 const { dataRoot } = require('../runtime');
 const { safeResolvePackage, readVerifiedFile } = require('./package-store');
 const { inspectRoot, readConfiguredResultRoot, resultOutputDirectory } = require('./result-folder-config');
@@ -13,7 +13,8 @@ const { processAlive } = require('./process-liveness');
 const { csvField } = require('./mapping');
 const { readMarkdownArtifact, verifyMarkdownItem } = require('../standalone/markdown-store');
 const { readAnonymizedArtifact } = require('../standalone/anonymized-store');
-const { confirmPublication } = require('./standalone-anonymized-batch');
+const { confirmPublication, confirmPublicationAsync } = require('./standalone-anonymized-batch');
+const { admitSynchronousOwnership } = require('./synchronous-ownership-admission');
 const identityLedger = require('../standalone/identity-ledger');
 const { validateCoverage, MAX_MARKDOWN_CHARS } = require('../standalone/markdown-contract');
 const { RESOURCE_LIMITS } = require('../resource-limits');
@@ -41,9 +42,11 @@ const RECORD_RE = /^re_[a-f0-9]{32}\.json$/u;
 // removed while a concurrent worker may still be writing it.
 const TEMPORARY_RECORD_RE = /^re_[a-f0-9]{32}\.json\.\d+\.[a-f0-9]{8}\.tmp$/u;
 const CLAIM_RE = /^re_[a-f0-9]{32}\.json\.claim$/u;
+const PREPARED_CLAIM_RE = /^re_[a-f0-9]{32}\.json\.claim\.prepared-[a-f0-9]{32}\.tmp$/u;
 const WAIVER_RE = /^re_[a-f0-9]{32}\.json\.waived$/u;
 const PACKAGE_RE = /^ds_[a-f0-9]{32}$/u;
 const CLAIM_SCHEMA = 'datasecure-result-export-claim/1';
+const NATIVE_CLAIM_SCHEMA = 'datasecure-result-export-claim/2';
 const WAIVER_SCHEMA = 'datasecure-result-export-waiver/1';
 const CLAIM_ID_RE = /^[a-f0-9]{32}$/u;
 const TRANSIENT_CLAIM_CODES = new Set(['EPERM', 'EACCES', 'EBUSY']);
@@ -89,74 +92,138 @@ function recordPath(token) {
 function claimPath(target) { return `${target}.claim`; }
 function waiverPath(target) { return `${target}.waived`; }
 function validClaim(value) {
-  return exactKeys(value, ['schema', 'claim_id', 'pid', 'created_at']) && value.schema === CLAIM_SCHEMA &&
-    CLAIM_ID_RE.test(value.claim_id) && Number.isSafeInteger(value.pid) && value.pid > 0 &&
+  const keys = ['schema', 'claim_id', 'pid', 'created_at'];
+  if (value?.prepared_nonce !== undefined) keys.push('prepared_nonce');
+  return exactKeys(value, keys) && [CLAIM_SCHEMA, NATIVE_CLAIM_SCHEMA].includes(value.schema) &&
+    (value.schema !== NATIVE_CLAIM_SCHEMA || typeof value.prepared_nonce === 'string') &&
+    (value.prepared_nonce === undefined || CLAIM_ID_RE.test(value.prepared_nonce)) &&
+    typeof value.claim_id === 'string' && CLAIM_ID_RE.test(value.claim_id) && Number.isSafeInteger(value.pid) && value.pid > 0 &&
     typeof value.created_at === 'string' && Number.isFinite(Date.parse(value.created_at));
 }
-function readClaim(target) {
-  try {
-    const checked = readBoundFileRecord(target, { maximum: 1024, minimum: 1 });
-    const { stat: opened } = checked;
-    const value = JSON.parse(checked.bytes);
-    return validClaim(value) ? { value, dev: opened.dev, ino: opened.ino, size: opened.size, checked } : null;
-  } catch { return null; }
+function readClaim(target, io = fs) {
+  const record = ownerRecordIo.readOwnerRecord(target, validClaim, io, 1024);
+  return record.state === 'valid' ? record : null;
 }
-function removeClaimIfUnchanged(target, expected, attempts = 1) {
+function removeClaimIfUnchanged(target, expected, guard, io, attempts = 1) {
   for (let attempt = 0; attempt < attempts; attempt += 1) {
-    const current = readClaim(target);
-    if (!current || current.value.claim_id !== expected.value.claim_id || current.dev !== expected.dev ||
-        current.ino !== expected.ino || current.size !== expected.size) return false;
+    const current = readClaim(target, io);
+    if (!current || JSON.stringify(current.value) !== JSON.stringify(expected.value) ||
+        current.identity.dev !== expected.identity.dev || current.identity.ino !== expected.identity.ino ||
+        current.identity.size !== expected.identity.size || current.identity.birth !== expected.identity.birth) return false;
     try {
-      const { checked } = current;
-      const parent = checked.directory.chain[0].identity;
-      safeUnlinkBoundPrivateFile(target, { binding: {
-        target: checked.path, parent: checked.directory.path, file: privateIdentity(checked.stat),
-        parentIdentity: { dev: parent.dev, ino: parent.ino }
-      }, validate: () => assertDirectory(checked.directory) });
+      guard.assertHeld();
+      io.unlinkSync(target);
       return true;
     }
     catch (error) {
+      if (String(error?.code).startsWith('OWNERSHIP_GUARD_')) throw error;
       if (!TRANSIENT_CLAIM_CODES.has(error?.retry_code || error?.code) || attempt === attempts - 1) return false;
       claimRetryDelay(10 * (attempt + 1));
     }
   }
   return false;
 }
-function acquireExportClaim(recordTarget) {
+const ownedExportClaims = new WeakMap();
+const claimControl = (deps, action) => (deps.withOwnershipControl || require('../core/ownership-control').withOwnershipControl)(dataRoot(), action);
+function acquireExportClaimInternal(recordTarget, deps, guard, singleAttempt = false) {
+  const io = deps.fs || fs;
   const target = claimPath(recordTarget);
-  const existing = readClaim(target);
+  const existing = readClaim(target, io);
   if (existing) {
-    if (processAlive(existing.value.pid) || !removeClaimIfUnchanged(target, existing)) return null;
-  } else if (fs.existsSync(target)) {
+    const expectedSchema = process.env.DATASECURE_NATIVE_EXPORT_CHANNEL === '1' ? NATIVE_CLAIM_SCHEMA : CLAIM_SCHEMA;
+    if (existing.value.schema !== expectedSchema ||
+        processAlive(existing.value.pid) || !removeClaimIfUnchanged(target, existing, guard, io)) return null;
+  } else if (io.existsSync(target)) {
     // A malformed, replaced or permission-hidden private claim is never stolen.
     return null;
   }
-  const value = { schema: CLAIM_SCHEMA, claim_id: crypto.randomBytes(16).toString('hex'),
+  const value = { schema: process.env.DATASECURE_NATIVE_EXPORT_CHANNEL === '1' ? NATIVE_CLAIM_SCHEMA : CLAIM_SCHEMA,
+    claim_id: crypto.randomBytes(16).toString('hex'),
     pid: process.pid, created_at: new Date().toISOString() };
-  let descriptor;
   try {
-    descriptor = fs.openSync(target, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL |
-      (fs.constants.O_NOFOLLOW || 0), 0o600);
-    writeFully(descriptor, Buffer.from(`${JSON.stringify(value)}\n`, 'utf8'), fs);
-    fs.fsyncSync(descriptor);
-    fs.closeSync(descriptor);
-    descriptor = undefined;
-    syncParentDirectory(target, fs, process.platform);
-    const claim = readClaim(target);
-    return claim?.value.claim_id === value.claim_id ? claim : null;
+    const record = ownerRecordIo.publishOwnerRecord(target, value, guard, io, undefined, singleAttempt);
+    // Only this opaque object's identity is a release capability. Reflecting
+    // claim_id/PID from a file (or cloning this object) does not acquire it.
+    const claim = Object.freeze({ value: Object.freeze({ ...record.value }) });
+    ownedExportClaims.set(claim, { target, record });
+    return claim;
   } catch (error) {
     if (error?.code === 'EEXIST') return null;
     throw error;
-  } finally {
-    try { if (descriptor !== undefined) fs.closeSync(descriptor); } catch {}
   }
 }
-function releaseExportClaim(recordTarget, claim) {
-  return claim ? removeClaimIfUnchanged(claimPath(recordTarget), claim, 4) : false;
+function acquireExportClaim(recordTarget, deps = {}) {
+  return claimControl(deps, guard => acquireExportClaimInternal(recordTarget, deps, guard));
+}
+function releaseExportClaimInternal(recordTarget, claim, deps, guard, singleAttempt = false) {
+  const owned = ownedExportClaims.get(claim);
+  if (!owned || owned.target !== claimPath(recordTarget)) return false;
+  const released = removeClaimIfUnchanged(owned.target, owned.record, guard, deps.fs || fs, singleAttempt ? 1 : 4);
+  if (released) ownedExportClaims.delete(claim);
+  return released;
+}
+function releaseExportClaim(recordTarget, claim, deps = {}) {
+  return claimControl(deps, guard => releaseExportClaimInternal(recordTarget, claim, deps, guard));
+}
+function admittedClaim(action, deps) {
+  const root = dataRoot();
+  const control = deps.withOwnershipControl || require('../core/ownership-control').withOwnershipControl;
+  return admitSynchronousOwnership(callback => control(root, callback), action,
+    { delay: deps.admissionDelay, monotonicNow: deps.monotonicNow });
+}
+function acquireExportClaimAsync(recordTarget, deps = {}) {
+  return admittedClaim(guard => acquireExportClaimInternal(recordTarget, deps, guard, true), deps);
+}
+function releaseExportClaimAsync(recordTarget, claim, deps = {}) {
+  return admittedClaim(guard => releaseExportClaimInternal(recordTarget, claim, deps, guard, true), deps);
 }
 function exactKeys(value, keys) {
   return value && typeof value === 'object' && !Array.isArray(value) &&
     Object.keys(value).sort().join(',') === [...keys].sort().join(',');
+}
+function guardDiagnostic(outcome, error) {
+  // Preserve a bounded internal cause without widening serialized public
+  // export/status envelopes or retaining arbitrary OS messages/private paths.
+  if (/^OWNERSHIP_GUARD_[A-Z_]+$/u.test(error?.code || ''))
+    Object.defineProperty(outcome, 'ownership_error_code', { value: error.code });
+  return outcome;
+}
+// Observation only. The exact catalog is NOT processing, ACK, release or retry
+// authority. Existing public pending/success envelopes remain unchanged.
+const RESULT_EXPORT_DIAGNOSTIC_CODES = new Set([
+  'RESULT_EXPORT_ABANDON_UNAVAILABLE', 'RESULT_EXPORT_BATCH_INCOMPLETE', 'RESULT_EXPORT_BUSY',
+  'RESULT_EXPORT_CONFLICT', 'RESULT_EXPORT_DESTINATION_CHANGED', 'RESULT_EXPORT_DESTINATION_UNBOUND',
+  'RESULT_EXPORT_MAPPING_CONFLICT', 'RESULT_EXPORT_MAPPING_SOURCE_INVALID', 'RESULT_EXPORT_MODE_INVALID',
+  'RESULT_EXPORT_PATH_UNSAFE', 'RESULT_EXPORT_PRODUCT_CHANNEL_INVALID', 'RESULT_EXPORT_SOURCE_INVALID',
+  'RESULT_EXPORT_STATE_CONFLICT', 'RESULT_EXPORT_STATE_UNSAFE', 'RESULT_EXPORT_VERIFY_FAILED',
+  'RESULT_EXPORT_PLAN_FAILED', 'RESULT_EXPORT_COPY_FAILED', 'RESULT_EXPORT_RELEASE_UNCONFIRMED',
+  'RESULT_EXPORT_IO_FAILED', 'RESULT_EXPORT_TERMINAL_INVALID', 'RESULT_EXPORT_CLAIM_FAILED',
+  'RESULT_EXPORT_PREPARE_FAILED', 'RESULT_EXPORT_CLAIM_UNAVAILABLE'
+]);
+const RESULT_EXPORT_IO_CODES = new Set(['EIO', 'EACCES', 'EPERM', 'ENOSPC', 'EDQUOT', 'EROFS', 'EMFILE', 'ENFILE']);
+function recordResultExportFailure(phase, error) {
+  try {
+    const { types } = require('node:util');
+    const { ownErrorCode, diagnosticCode, recordBatchExecutionFailure } = require('./batch-execution-diagnostic');
+    const raw = ownErrorCode(error);
+    // Keep this export-specific IO projection stable when other observers add
+    // raw IO names to the shared vocabulary. Exact local export messages retain
+    // their existing precedence over the generic IO fallback below.
+    let code = RESULT_EXPORT_IO_CODES.has(raw) ? 'INTERNAL_FAILURE' : diagnosticCode(error);
+    if (code === 'INTERNAL_FAILURE' && raw !== 'INTERNAL_FAILURE') {
+      // Existing local export errors historically use an exact fixed message,
+      // not .code. Never accept a prefix, payload, inherited value or getter.
+      const message = error && typeof error === 'object' && !types.isProxy(error)
+        ? Object.getOwnPropertyDescriptor(error, 'message')?.value : undefined;
+      code = typeof message === 'string' && RESULT_EXPORT_DIAGNOSTIC_CODES.has(message) ? message :
+        RESULT_EXPORT_IO_CODES.has(raw) ? 'RESULT_EXPORT_IO_FAILED' :
+        phase === 'result_export_claim_release' ? 'RESULT_EXPORT_RELEASE_UNCONFIRMED' :
+        phase === 'result_export_copy' ? 'RESULT_EXPORT_COPY_FAILED' :
+        phase === 'result_export_claim' ? 'RESULT_EXPORT_CLAIM_FAILED' :
+        phase === 'result_export_prepare' ? 'RESULT_EXPORT_PREPARE_FAILED' : 'RESULT_EXPORT_PLAN_FAILED';
+    }
+    recordBatchExecutionFailure(phase, Object.assign(new Error(code), { code }));
+  } catch { /* diagnosis never changes the pending result or release lifecycle */ }
 }
 function validSourceLabel(value) {
   const label = String(value || '');
@@ -473,6 +540,9 @@ function packageItem(packageId, index, sourceLabel, outputFile) {
 }
 function contentAnonymizedItem(state, item, index, outputFile) {
   const published = confirmPublication(state, item);
+  return contentAnonymizedItemFromPublication(item, index, outputFile, published);
+}
+function contentAnonymizedItemFromPublication(item, index, outputFile, published) {
   const artifact = readAnonymizedArtifact(item.package_id, published.publication_binding);
   if (artifact.manifest.document_sha256 !== published.publication_binding.document_sha256 ||
       JSON.stringify(artifact.manifest.document_result) !== JSON.stringify(item.document_result))
@@ -524,7 +594,7 @@ function activeDestination(record, options = {}) {
     output: outputBinding
   };
 }
-function ensureRecord(state) {
+function* ensureRecordSteps(state) {
   const contentOptions = contentOptionsForBatch(state);
   require('./standalone-document-review-store').createDocumentReviewStore().assertContentBinding(state);
   const converting = isMarkdownBatch(state);
@@ -554,19 +624,23 @@ function ensureRecord(state) {
       ? released.map((_item, index) => `Dokument-${String(index + 1).padStart(3, '0')}-konvertiert.md`)
       : markdownOutputNames(released.map((item) => ({ source_label: String(item.source_label || item.name || '') })))
     : [];
-  const items = released.map((item, index) => {
-    if (!converting) return contentOptions
-      ? completedAnonymizedRecord ? planItem(existingPlan.items[index]) : contentAnonymizedItem(state, item, index,
-        existingPlan?.items?.length === released.length ? existingPlan.items[index].file : anonymizedNames[index])
-      : packageItem(item.package_id, index, item.source_label || item.name,
-        existingPlan?.items?.length === released.length ? existingPlan.items[index].file : anonymizedNames[index]);
+  const items = [];
+  for (const [index, item] of released.entries()) {
+    if (!converting) {
+      const outputFile = existingPlan?.items?.length === released.length ? existingPlan.items[index].file : anonymizedNames[index];
+      items.push(contentOptions
+        ? completedAnonymizedRecord ? planItem(existingPlan.items[index])
+          : contentAnonymizedItemFromPublication(item, index, outputFile, yield { kind: 'publication', state, item })
+        : packageItem(item.package_id, index, item.source_label || item.name, outputFile));
+      continue;
+    }
     if (!completedMarkdownRecord && !verifyMarkdownItem(item, contentOptions)) throw new Error('RESULT_EXPORT_SOURCE_INVALID');
     const sourceLabel = String(item.source_label || item.name || '');
     if (!validSourceLabel(sourceLabel)) throw new Error('RESULT_EXPORT_MAPPING_SOURCE_INVALID');
-    return { artifact_id: item.artifact_id, artifact_bytes: item.artifact_bytes,
+    items.push({ artifact_id: item.artifact_id, artifact_bytes: item.artifact_bytes,
       file: markdownNames[index], sha256: item.artifact_sha256,
-      source_label: sourceLabel, extraction_grade: item.extraction_grade, reason_codes: [...item.reason_codes] };
-  });
+      source_label: sourceLabel, extraction_grade: item.extraction_grade, reason_codes: [...item.reason_codes] });
+  }
   const stoppedItems = state.product_channel === 'standalone'
     ? state.items.filter((item) => item.status === 'stopped').map((item) => ({
       source_label: String(item.source_label || item.name || ''),
@@ -604,6 +678,33 @@ function ensureRecord(state) {
     ...(stoppedItems.length ? { stopped_items: stoppedItems } : {}) };
   writeRecord(target, value);
   return { target, value };
+}
+// Both drivers run the same plan exactly once. Only a yielded small ownership
+// transaction may await admission; parsing, validation and plan writes do not
+// restart. Exceptions re-enter the generator so its original finally executes.
+function runSynchronousSteps(iterator, resolve) {
+  let step = iterator.next();
+  while (!step.done) {
+    let value, error, failed = false;
+    try { value = resolve(step.value); } catch (caught) { error = caught; failed = true; }
+    step = failed ? iterator.throw(error) : iterator.next(value);
+  }
+  return step.value;
+}
+async function runAsyncSteps(iterator, resolve) {
+  let step = iterator.next();
+  while (!step.done) {
+    let value, error, failed = false;
+    try { value = await resolve(step.value); } catch (caught) { error = caught; failed = true; }
+    step = failed ? iterator.throw(error) : iterator.next(value);
+  }
+  return step.value;
+}
+function ensureRecord(state) {
+  return runSynchronousSteps(ensureRecordSteps(state), operation => confirmPublication(operation.state, operation.item));
+}
+function ensureRecordAsync(state) {
+  return runAsyncSteps(ensureRecordSteps(state), operation => confirmPublicationAsync(operation.state, operation.item));
 }
 // Once a complete, identity-bound visible conversion was committed,
 // the private dm copy may expire. This proves the historical export transaction,
@@ -697,7 +798,7 @@ function ensureResultParent(destination, run, relativeFile) {
   assertDirectoryBinding(parent, parent.path === run.path ? destination.output : null);
   return { parent, leaf, target: path.join(parent.path, leaf) };
 }
-function exportOne(destination, run, item, contentOptions, contentRecord) {
+function* exportOneSteps(destination, run, item, contentOptions, contentRecord) {
   assertDirectoryBinding(destination.root);
   assertDirectoryBinding(destination.output, destination.root);
   assertDirectoryBinding(run, destination.output);
@@ -725,8 +826,7 @@ function exportOne(destination, run, item, contentOptions, contentRecord) {
         JSON.stringify(m.reason_codes) !== JSON.stringify(item.reason_codes)) throw new Error('RESULT_EXPORT_SOURCE_INVALID');
     bytes = Buffer.from(artifact.markdown, 'utf8');
   } else if (contentRecord?.schema === CONTENT_ANONYMIZED_SCHEMA) {
-    const expectation = require('./standalone-document-review-store').createDocumentReviewStore()
-      .publicationExpectation(contentRecord.batch_id, item.package_id.slice(3));
+    const expectation = yield { batchId: contentRecord.batch_id, documentId: item.package_id.slice(3) };
     if (expectation.package_id !== item.package_id ||
         serializeContentOptions(expectation.content_options) !== serializeContentOptions(contentRecord.content_options))
       throw new Error('RESULT_EXPORT_SOURCE_INVALID');
@@ -786,6 +886,14 @@ function exportOne(destination, run, item, contentOptions, contentRecord) {
     try { if (descriptor !== undefined) fs.closeSync(descriptor); } catch {}
     try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch {}
   }
+}
+function exportOne(destination, run, item, contentOptions, contentRecord) {
+  return runSynchronousSteps(exportOneSteps(destination, run, item, contentOptions, contentRecord), operation =>
+    require('./standalone-document-review-store').createDocumentReviewStore().publicationExpectation(operation.batchId, operation.documentId));
+}
+function exportOneAsync(destination, run, item, contentOptions, contentRecord) {
+  return runAsyncSteps(exportOneSteps(destination, run, item, contentOptions, contentRecord), operation =>
+    require('./standalone-document-review-store').createDocumentReviewStore().publicationExpectationAsync(operation.batchId, operation.documentId));
 }
 function visibleMappingBytes(record) {
   if (![SCHEMA, CONTENT_ANONYMIZED_SCHEMA, LEGACY_MARKDOWN_SCHEMA].includes(record.schema) ||
@@ -918,7 +1026,7 @@ function abandonPendingResultExport(state) {
 // persists every single success immediately, so a later failure of a sibling
 // item can never make an already written (and possibly user-deleted) result
 // eligible again. Throws after persisting the progress when an item fails.
-function exportOpenItems(target, record, destination) {
+function* exportOpenItemsSteps(target, record, destination) {
   let current = record;
   if (!current.destination_id) {
     // A partially written legacy record without a destination binding cannot
@@ -936,7 +1044,7 @@ function exportOpenItems(target, record, destination) {
   for (let index = 0; index < current.items.length; index++) {
     const item = current.items[index];
     if (item.exported === true) continue;
-    exportOne(destination, run, item, current.schema === CONTENT_MARKDOWN_SCHEMA ? current.content_options : undefined, current);
+    yield { destination, run, item, contentOptions: current.schema === CONTENT_MARKDOWN_SCHEMA ? current.content_options : undefined, record: current };
     const items = current.items.map((entry, position) => position === index ? { ...planItem(entry), exported: true } : entry);
     current = { ...current, items };
     writeRecord(target, current);
@@ -959,6 +1067,14 @@ function exportOpenItems(target, record, destination) {
   return current;
 }
 
+function exportOpenItems(target, record, destination) {
+  return runSynchronousSteps(exportOpenItemsSteps(target, record, destination), operation =>
+    exportOne(operation.destination, operation.run, operation.item, operation.contentOptions, operation.record));
+}
+function exportOpenItemsAsync(target, record, destination) {
+  return runAsyncSteps(exportOpenItemsSteps(target, record, destination), operation =>
+    exportOneAsync(operation.destination, operation.run, operation.item, operation.contentOptions, operation.record));
+}
 function visibleExportStatus(token, expectedReleased = 0) {
   const expected = Number.isSafeInteger(expectedReleased) && expectedReleased >= 0 ? expectedReleased : 0;
   try {
@@ -1018,30 +1134,41 @@ function publishStandaloneIdentityIfPossible(state) {
 // record – is a fail-closed "pending" result and never an exception: the
 // terminal batch outcome must not be presented as a processing stop, and no
 // internal result is touched.
-function exportCompletedState(state) {
+function* exportCompletedStateSteps(state) {
   try {
     if (state.product_channel === 'standalone') require('./standalone-history-store').recordStandaloneState(state);
   }
   catch { /* the durable batch/export records remain authoritative */ }
   const target = recordPath(state.token);
   let claim;
-  try { claim = acquireExportClaim(target); }
-  catch { return { exported: 0, pending: releasedCount(state), available: false }; }
-  if (!claim) return { exported: 0, pending: releasedCount(state), available: false };
+  try { claim = yield { kind: 'claim', target }; }
+  catch (error) { recordResultExportFailure('result_export_claim', error); return guardDiagnostic({ exported: 0, pending: releasedCount(state), available: false }, error); }
+  if (!claim) {
+    // No capability was minted: null also covers unsafe/unreadable claims and
+    // failed stale-owner cleanup, not exclusively live-owner contention.
+    recordResultExportFailure('result_export_claim', Object.assign(new Error('RESULT_EXPORT_CLAIM_UNAVAILABLE'), { code: 'RESULT_EXPORT_CLAIM_UNAVAILABLE' }));
+    return { exported: 0, pending: releasedCount(state), available: false };
+  }
   let plan;
   let outcome;
   let released = false;
   try {
-    outcome = (() => {
+    outcome = yield* (function* () {
       try {
         if (waiverExists(target)) {
           const record = readRecord(target);
           const waiver = readExportWaiver(target, record);
           return { exported: waiver.exported_count, pending: waiver.pending_count, available: false };
         }
-      } catch { return { exported: 0, pending: releasedCount(state), available: false }; }
-      try { plan = ensureRecord(state); }
-      catch { return { exported: 0, pending: releasedCount(state), available: false }; }
+      } catch (error) {
+        recordResultExportFailure('result_export_plan', error);
+        return { exported: 0, pending: releasedCount(state), available: false };
+      }
+      try { plan = yield { kind: 'plan', state }; }
+      catch (error) {
+        recordResultExportFailure('result_export_plan', error);
+        return { exported: 0, pending: releasedCount(state), available: false };
+      }
       if (plan.value.items.length === 0 && !plan.value.stopped_items?.length) return { exported: 0, pending: 0, available: true };
       // A current all-stopped run has no user result to publish. Preserve its
       // private stopped-item evidence for status/history, but do not create an
@@ -1073,20 +1200,50 @@ function exportCompletedState(state) {
       try {
         const destination = activeDestination(plan.value);
         if (!destination) return pendingResult();
-        const finished = exportOpenItems(plan.target, readRecord(plan.target), destination);
+        const finished = yield { kind: 'copy', target: plan.target, record: readRecord(plan.target), destination };
         if (finished.complete === true) publishStandaloneIdentityIfPossible(state);
         return finished.complete === true ? { exported: total, pending: 0, available: true } : pendingResult();
-      } catch {
+      } catch (error) {
+        recordResultExportFailure('result_export_copy', error);
         return pendingResult();
       }
     })();
-  } finally { released = releaseExportClaim(target, claim); }
-  return released ? outcome : { exported: 0, pending: releasedCount(state), available: false };
+  } finally {
+    try {
+      released = yield { kind: 'release', target, claim };
+      if (released !== true) recordResultExportFailure('result_export_claim_release',
+        Object.assign(new Error('RESULT_EXPORT_RELEASE_UNCONFIRMED'), { code: 'RESULT_EXPORT_RELEASE_UNCONFIRMED' }));
+    }
+    catch (error) {
+      recordResultExportFailure('result_export_claim_release', error);
+      outcome = guardDiagnostic({ exported: 0, pending: releasedCount(state), available: false }, error);
+    }
+  }
+  return released || outcome?.ownership_error_code ? outcome : { exported: 0, pending: releasedCount(state), available: false };
+}
+function exportCompletedState(state) {
+  return runSynchronousSteps(exportCompletedStateSteps(state), operation => {
+    if (operation.kind === 'claim') return acquireExportClaim(operation.target);
+    if (operation.kind === 'plan') return ensureRecord(operation.state);
+    if (operation.kind === 'release') return releaseExportClaim(operation.target, operation.claim);
+    if (operation.kind === 'copy') return exportOpenItems(operation.target, operation.record, operation.destination);
+    throw new Error('RESULT_EXPORT_STATE_UNSAFE');
+  });
+}
+function exportCompletedStateAsync(state) {
+  return runAsyncSteps(exportCompletedStateSteps(state), operation => {
+    if (operation.kind === 'claim') return acquireExportClaimAsync(operation.target);
+    if (operation.kind === 'plan') return ensureRecordAsync(operation.state);
+    if (operation.kind === 'release') return releaseExportClaimAsync(operation.target, operation.claim);
+    if (operation.kind === 'copy') return exportOpenItemsAsync(operation.target, operation.record, operation.destination);
+    throw new Error('RESULT_EXPORT_STATE_UNSAFE');
+  });
 }
 function replayPendingResultExports() {
   let exported = 0;
   let pending = 0;
   let failures = 0;
+  let ownershipError;
   let entries;
   try { entries = fs.readdirSync(outboxDirectory(), { withFileTypes: true }); }
   catch { return { exported, pending, failures: 1 }; }
@@ -1094,6 +1251,7 @@ function replayPendingResultExports() {
     if (!entry.isFile() || entry.isSymbolicLink()) { failures++; continue; }
     if (TEMPORARY_RECORD_RE.test(entry.name)) continue;
     if (CLAIM_RE.test(entry.name)) continue;
+    if (PREPARED_CLAIM_RE.test(entry.name)) continue;
     if (WAIVER_RE.test(entry.name)) continue;
     if (!RECORD_RE.test(entry.name)) { failures++; continue; }
     const exportedBeforeEntry = exported;
@@ -1139,9 +1297,12 @@ function replayPendingResultExports() {
         pending += Math.max(0, remaining);
         throw error;
       }
-    } catch { failures++; }
+    } catch (error) { failures++; if (/^OWNERSHIP_GUARD_[A-Z_]+$/u.test(error?.code || '')) ownershipError = error; }
     finally {
-      if (claim && !releaseExportClaim(target, claim)) {
+      let released = !claim;
+      try { if (claim) released = releaseExportClaim(target, claim); }
+      catch (error) { if (/^OWNERSHIP_GUARD_[A-Z_]+$/u.test(error?.code || '')) ownershipError = error; }
+      if (!released) {
         let itemCount = 0;
         try { itemCount = readRecord(target).items.length; } catch { /* retain fail-closed zero */ }
         exported = exportedBeforeEntry;
@@ -1150,7 +1311,7 @@ function replayPendingResultExports() {
       }
     }
   }
-  return { exported, pending, failures };
+  return guardDiagnostic({ exported, pending, failures }, ownershipError);
 }
 
 // Private Standalone history uses durable export plans even after journal
@@ -1266,7 +1427,27 @@ function historyReviewOwners() {
   };
 }
 
-function readStandaloneExportHistory() {
+function readStandaloneExportHistory({ omitBatchIds = [], batchIds = null, legacyExportIds = {} } = {}) {
+  if (batchIds !== null) {
+    if (!Array.isArray(batchIds) || batchIds.length > 5 || batchIds.some(id => typeof id !== 'string' || !/^[a-f0-9]{64}$/u.test(id)))
+      throw Object.assign(new Error('STANDALONE_HISTORY_INVALID'), { code: 'STANDALONE_HISTORY_INVALID' });
+    const rows = [], root = bindDirectory(dataRoot());
+    try {
+      let directory;
+      try { directory = bindDirectory(path.join(root.path, 'result-export-state')); }
+      catch (error) { if (error?.code !== 'ENOENT') throw error; assertDirectory(root); return []; }
+      for (const batchId of new Set(batchIds)) {
+        if (omitBatchIds.includes(batchId)) continue;
+        assertDirectory(directory);
+        const row = readStandaloneExportHistoryEntry(batchId, { legacyExportId: legacyExportIds[batchId] || null });
+        if (row) rows.push(row);
+        assertDirectory(directory);
+      }
+      assertDirectory(directory); assertDirectory(root); return rows;
+    } catch { throw Object.assign(new Error('RESULT_EXPORT_STATE_UNSAFE'), { code: 'RESULT_EXPORT_STATE_UNSAFE' }); }
+  }
+  const omitted = new Set(omitBatchIds.filter(token => typeof token === 'string' && /^[a-f0-9]{64}$/u.test(token))
+    .map(token => `re_${crypto.createHash('sha256').update(token).digest('hex').slice(0, 32)}.json`));
   let entries, directory;
   try {
     directory = bindDirectory(outboxDirectory());
@@ -1279,6 +1460,7 @@ function readStandaloneExportHistory() {
     const rows = [];
     for (const entry of entries) {
       if (!entry.isFile() || !RECORD_RE.test(entry.name)) continue;
+      if (omitted.has(entry.name)) continue;
       try {
         const target = path.join(directory.path, entry.name);
         const row = standaloneExportHistoryRow(target, readRecord(target, { reviewOwners }));
@@ -1317,18 +1499,30 @@ function terminalVisibleExport(completed, exporter) {
     if (!visible || ![visible.exported, visible.pending].every(Number.isSafeInteger) || typeof visible.available !== 'boolean' ||
         visible.exported < 0 || visible.pending < 0 || visible.exported + visible.pending !== released ||
         (visible.pending > 0 && visible.available)) {
+      recordResultExportFailure('result_export_prepare',
+        Object.assign(new Error('RESULT_EXPORT_TERMINAL_INVALID'), { code: 'RESULT_EXPORT_TERMINAL_INVALID' }));
       return { exported: 0, pending: released, available: false };
     }
     return { exported: visible.exported, pending: visible.pending, available: visible.available };
-  } catch {
+  } catch (error) {
+    recordResultExportFailure('result_export_prepare', error);
     return { exported: 0, pending: released, available: false };
   }
 }
 
+async function terminalVisibleExportAsync(completed, exporter) {
+  if (completed?.complete !== true) return { exported: 0, pending: 0, available: false };
+  // Retain the existing terminal DTO validator and diagnostics, not an ACK.
+  let visible;
+  try { visible = await exporter(); }
+  catch (error) { return terminalVisibleExport(completed, () => { throw error; }); }
+  return terminalVisibleExport(completed, () => visible);
+}
+
 module.exports = {
-  SCHEMA, MARKDOWN_SCHEMA, CONTENT_MARKDOWN_SCHEMA, CONTENT_ANONYMIZED_SCHEMA, LEGACY_MARKDOWN_SCHEMA, LEGACY_SCHEMA, VISIBLE_MAPPING_FILE, recordPath, validRecord, exportCompletedState, replayPendingResultExports, visibleExportStatus,
-  visibleExportDirectory, terminalVisibleExport, readStandaloneExportHistory, readStandaloneExportHistoryEntry, abandonPendingResultExport,
+  SCHEMA, MARKDOWN_SCHEMA, CONTENT_MARKDOWN_SCHEMA, CONTENT_ANONYMIZED_SCHEMA, LEGACY_MARKDOWN_SCHEMA, LEGACY_SCHEMA, VISIBLE_MAPPING_FILE, recordPath, validRecord, exportCompletedState, exportCompletedStateAsync, replayPendingResultExports, visibleExportStatus,
+  visibleExportDirectory, terminalVisibleExport, terminalVisibleExportAsync, readStandaloneExportHistory, readStandaloneExportHistoryEntry, abandonPendingResultExport,
   completedMarkdownExportMatches,
   _test: { activeDestination, ensurePlainDirectory, bindPlainDirectory, assertDirectoryBinding,
-    acquireExportClaim, releaseExportClaim, claimPath, markdownOutputNames }
+    acquireExportClaim, releaseExportClaim, acquireExportClaimAsync, releaseExportClaimAsync, claimPath, markdownOutputNames }
 };

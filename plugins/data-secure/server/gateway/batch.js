@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { SafeError, dataRoot } = require('../runtime');
+const { withOwnershipControl } = require('../core/ownership-control');
 const { processingModeForBatch } = require('../core/processing-mode');
 const { convertNext } = require('../standalone/convert-next');
 const identityLedger = require('../standalone/identity-ledger');
@@ -28,6 +29,7 @@ const { createBatchDiscard } = require('./batch-discard');
 const { createBatchContinuation } = require('./batch-continuation');
 const { createBatchSnapshotInvalidation } = require('./batch-snapshot-invalidation');
 const { createBatchExecutorRunner } = require('./batch-executor-runner');
+const { createBatchExecutorLeaseFinish } = require('./batch-executor-lease-finish');
 const { createBatchReviewCapture } = require('./batch-review-capture');
 const { createBatchReviewState } = require('./batch-review-state');
 const { createBatchReviewPublication } = require('./batch-review-publication');
@@ -35,9 +37,10 @@ const { createBatchReviewOrchestrator } = require('./batch-review-orchestrator')
 const { createBatchItemProcessor } = require('./batch-item-processor');
 const { createBatchNextMaintenance } = require('./batch-next-maintenance');
 const { createBatchProcessingOrchestrator } = require('./batch-processing-orchestrator');
+const { createBatchProcessingAdmission } = require('./batch-processing-admission');
 const { releaseOwnedLock } = require('./batch-lock-release');
 const { processInstanceIdentity } = require('./process-identity');
-const { exportCompletedState, visibleExportStatus, visibleExportDirectory } = require('./result-export');
+const { exportCompletedState, exportCompletedStateAsync, visibleExportStatus, visibleExportDirectory } = require('./result-export');
 const { planBatchAdmission } = require('./batch-source-admission');
 const { localReviewError, reviewSingleBatchTextLocally, reviewedBatchText } = require('./batch-review-policy');
 const { writeFully, syncParentDirectory } = require('./batch-journal-io');
@@ -58,7 +61,9 @@ const {
   assertOwnedEpoch,
   releaseOwnedEpoch,
   acquireActiveLock,
-  releaseActiveLock
+  acquireActiveLockOnce,
+  releaseActiveLock,
+  withSynchronousActiveLock
 } = require('./batch-active-lock');
 const {
   createPhaseRecorder,
@@ -115,6 +120,21 @@ function preserveStandaloneDocumentRun(state) {
     require('./standalone-document-review-store').createDocumentReviewStore().captureRun(state);
 }
 
+function preserveStandaloneHistory(state) {
+  if (state.product_channel !== 'standalone') return;
+  const store = require('./standalone-history-store');
+  const expected = store.summarizeState(state);
+  if (!expected || !store.validSummary(expected)) throw new Error('STANDALONE_HISTORY_UNAVAILABLE');
+  store.recordStandaloneState(state, { reconstructContentNotices: false });
+  const saved = store.readStandaloneSummary(state.token);
+  if (!saved || Object.entries(expected).some(([key, value]) => saved[key] !== value))
+    throw new Error('STANDALONE_HISTORY_UNAVAILABLE');
+}
+function preserveStandaloneBeforeExpiry(state) {
+  preserveStandaloneHistory(state);
+  preserveStandaloneDocumentRun(state);
+}
+
 function requestStandalonePause(token) {
   if (!TOKEN_RE.test(String(token || ''))) throw Object.assign(new SafeError('Ungültige lokale Laufkennung.'), { code: 'STANDALONE_HISTORY_INVALID' });
   const state = readStateForMaintenance(token);
@@ -133,28 +153,31 @@ function skipStandaloneOcrContactReview(token) {
   const unavailable = () => Object.assign(new SafeError('Die OCR-Kontaktprüfung dieses Laufs kann derzeit nicht übersprungen werden.'),
     { code: 'OCR_CONTACT_SKIP_UNAVAILABLE' });
   if (!TOKEN_RE.test(String(token || '')) || active.has(token)) throw unavailable();
-  try { acquireActiveLock(token); } catch { throw unavailable(); }
-  active.add(token);
-  let primaryError = false;
+  let entered = false;
   try {
-    const state = readState(token);
-    if (state.product_channel !== 'standalone' || state.processing_mode !== 'markdown-only' ||
-        state.ocr_contact_review !== true || state.invalidated === true ||
-        Date.now() > Date.parse(state.expires_at) || liveLocalExecutor(state)) throw unavailable();
-    const deferred = state.items.filter(item => item.status === DEFERRED_REVIEW);
-    if (!deferred.length || state.ocr_contact_review_skipped === true) throw unavailable();
-    state.ocr_contact_review_skipped = true;
-    for (const item of deferred) {
-      item.status = 'pending';
-      item.checkpoint = 'ocr_contact_review_skipped';
-      delete item.error_code;
-    }
-    writeState(state);
-    return { ok: true, skipped: true, ...publicProgress(state), raw_content_sent_to_claude: false };
-  } catch (error) { primaryError = true; throw error; }
-  finally {
-    active.delete(token);
-    releaseOwnedLock(releaseActiveLock, token, SafeError, primaryError);
+    return withSynchronousActiveLock(token, () => {
+      entered = true;
+      active.add(token);
+      try {
+        const state = readState(token);
+        if (state.product_channel !== 'standalone' || state.processing_mode !== 'markdown-only' ||
+            state.ocr_contact_review !== true || state.invalidated === true ||
+            Date.now() > Date.parse(state.expires_at) || liveLocalExecutor(state)) throw unavailable();
+        const deferred = state.items.filter(item => item.status === DEFERRED_REVIEW);
+        if (!deferred.length || state.ocr_contact_review_skipped === true) throw unavailable();
+        state.ocr_contact_review_skipped = true;
+        for (const item of deferred) {
+          item.status = 'pending';
+          item.checkpoint = 'ocr_contact_review_skipped';
+          delete item.error_code;
+        }
+        writeState(state);
+        return { ok: true, skipped: true, ...publicProgress(state), raw_content_sent_to_claude: false };
+      } finally { active.delete(token); }
+    });
+  } catch (error) {
+    if (!entered && !/^(?:OWNERSHIP_GUARD_|STANDALONE_OWNERSHIP_)/u.test(error?.code || '')) throw unavailable();
+    throw error;
   }
 }
 
@@ -180,9 +203,9 @@ function batchTtlMs() {
   return retentionDays() * 24 * 60 * 60 * 1000;
 }
 
-const { writeState, readState, readStateForMaintenance, removeState } = createBatchJournalStore({
+const { writeState, readState, readStateForMaintenance, terminalStatusUnchanged, removeState } = createBatchJournalStore({
   productChannel: String(process.env.DATASECURE_PRODUCT_CHANNEL || 'plugin'),
-  beforeExpiryCleanup: preserveStandaloneDocumentRun,
+  beforeExpiryCleanup: preserveStandaloneBeforeExpiry,
   onStateWritten: (state) => {
     if (state.product_channel === 'standalone') {
       require('./standalone-history-store').recordStandaloneState(state);
@@ -214,22 +237,27 @@ const withDurableBatchPseudonymRegistry = (state, action) => {
   const epoch = captureOwnedEpoch(state.token);
   let liveRegistry;
   return withBatchPseudonymRegistry(state, registry => { liveRegistry = registry; return action(registry); }, { persist: () => {
-    assertOwnedEpoch(epoch);
-    const current = readStateForMaintenance(state.token);
-    const { ownedRegistrySnapshot } = require('../batch-pseudonym-context');
-    // The scope owns this registry; retrieve it through a closed local capture,
-    // not by a caller descriptor or by overwriting the latest journal object.
-    const owned = ownedRegistrySnapshot(liveRegistry, current);
-    const seed = validateBatchPseudonymState(current);
     try {
-      const { checkedState } = require('./prepared-registry-commit');
-      const persisted = JSON.stringify(checkedState(current.pseudonym_registry_state, seed, { allowEmptyInitial: true }));
-      const initial = JSON.stringify(checkedState(owned.initial, seed)), final = checkedState(owned.current, seed);
-      if (persisted !== initial && persisted !== JSON.stringify(final))
-        throw Object.assign(Error('DOCUMENT_REVIEW_CONFLICT'), { code: 'DOCUMENT_REVIEW_CONFLICT' });
-      current.pseudonym_registry_state = final;
-      assertOwnedEpoch(epoch); writeState(current); assertOwnedEpoch(epoch);
-    } finally { seed.fill(0); }
+      assertOwnedEpoch(epoch);
+      const current = readStateForMaintenance(state.token);
+      const { ownedRegistrySnapshot } = require('../batch-pseudonym-context');
+      // The scope owns this registry; retrieve it through a closed local capture,
+      // not by a caller descriptor or by overwriting the latest journal object.
+      const owned = ownedRegistrySnapshot(liveRegistry, current);
+      const seed = validateBatchPseudonymState(current);
+      try {
+        const { checkedState } = require('./prepared-registry-commit');
+        const persisted = JSON.stringify(checkedState(current.pseudonym_registry_state, seed, { allowEmptyInitial: true }));
+        const initial = JSON.stringify(checkedState(owned.initial, seed)), final = checkedState(owned.current, seed);
+        if (persisted !== initial && persisted !== JSON.stringify(final))
+          throw Object.assign(Error('DOCUMENT_REVIEW_CONFLICT'), { code: 'DOCUMENT_REVIEW_CONFLICT' });
+        current.pseudonym_registry_state = final;
+        assertOwnedEpoch(epoch); writeState(current); assertOwnedEpoch(epoch);
+      } finally { seed.fill(0); }
+    } catch (error) {
+      require('./batch-execution-diagnostic').recordBatchExecutionFailure('registry_finalize', error);
+      throw error;
+    }
   } });
 };
 
@@ -304,7 +332,7 @@ const {
 });
 
 const { batchUserStatus, publicProgress } = createBatchProgress({
-  pauseRequested: standalonePause.requested,
+  observePauseRequested: standalonePause.observeRequested,
   deliveryPendingStatus: DELIVERY_PENDING,
   deferredReviewStatus: DEFERRED_REVIEW,
   mappingPendingStatus: MAPPING_PENDING,
@@ -344,13 +372,15 @@ const { beginBatch } = createBatchIntake({
 const {
   assertLocalExecutorAccess,
   claimLocalBatchExecutor,
-  releaseLocalBatchExecutor
+  releaseLocalBatchExecutor,
+  releaseClaimedLocalBatchExecutor
 } = createBatchExecutorLease({
   SafeError,
   processAlive,
   liveLocalExecutor,
   acquireActiveLock,
   releaseActiveLock,
+  withSynchronousActiveLock,
   readState,
   writeState,
   publicProgress,
@@ -389,6 +419,7 @@ const {
   active,
   acquireActiveLock,
   releaseActiveLock,
+  withSynchronousActiveLock,
   readState,
   writeState,
   assertLocalExecutorAccess,
@@ -418,6 +449,9 @@ const {
   recoverBatches,
   cleanupExpiredBatchSnapshots
 } = createBatchRecovery({
+  terminalStatusUnchanged,
+  captureStandaloneHistory: preserveStandaloneHistory,
+  beforeStateRemoval: preserveStandaloneHistory,
   captureDocumentRun: preserveStandaloneDocumentRun,
   io: fs,
   randomBytes: crypto.randomBytes,
@@ -431,6 +465,7 @@ const {
   processAlive,
   acquireActiveLock,
   releaseActiveLock,
+  withSynchronousActiveLock,
   liveLocalExecutor,
   publicProgress,
   exportCompletedState,
@@ -472,6 +507,7 @@ const { resumeBatch, continueMostRecentBatch, continueStandaloneBatch } = create
   active,
   acquireActiveLock,
   releaseActiveLock,
+  withSynchronousActiveLock,
   readState,
   readStateForMaintenance,
   writeState,
@@ -487,12 +523,17 @@ const { resumeBatch, continueMostRecentBatch, continueStandaloneBatch } = create
   preflightMappingPendingStatus: PREFLIGHT_MAPPING_PENDING
 });
 
-function readStandaloneHistoryStates() {
+function readStandaloneHistoryStates({ omitBatchIds = [], batchIds = null } = {}) {
   const states = [];
+  const omitted = new Set(omitBatchIds.filter(token => typeof token === 'string' && TOKEN_RE.test(token)));
   let entries;
-  try { entries = fs.readdirSync(batchRoot(), { withFileTypes: true }); } catch { return states; }
+  if (batchIds !== null && (!Array.isArray(batchIds) || batchIds.length > 5 || batchIds.some(id => !TOKEN_RE.test(id))))
+    throw Object.assign(new SafeError('Ungültige Verlaufsansicht.'), { code: 'STANDALONE_HISTORY_INVALID' });
+  try { entries = batchIds === null ? fs.readdirSync(batchRoot(), { withFileTypes: true })
+    : [...new Set(batchIds)].map(id => ({ name: `${id}.json`, isFile: () => true })); } catch { return states; }
   for (const entry of entries) {
     if (!entry.isFile() || !/^[a-f0-9]{64}\.json$/u.test(entry.name)) continue;
+    if (omitted.has(entry.name.slice(0, -5))) continue;
     try {
       const state = readStateForMaintenance(entry.name.slice(0, -5));
       if (state.product_channel === 'standalone') states.push(state);
@@ -655,6 +696,7 @@ const { processBatchNext: processBatchNextInternal } = createBatchProcessingOrch
   SafeError,
   active,
   acquireActiveLock,
+  acquireProcessingOwner: createBatchProcessingAdmission({ dataRoot, withOwnershipControl, acquireActiveLock: acquireActiveLockOnce }),
   releaseActiveLock,
   readState,
   assertLocalExecutorAccess,
@@ -684,15 +726,10 @@ async function processBatchNext(token, deps = {}) {
 function finishZeroDayOperation(token) {
   // Lifecycle finalization is another state mutation and therefore uses the
   // same cross-process ownership lock as processing, delivery and maintenance.
-  acquireActiveLock(token);
-  let primaryError = false;
-  try {
+  return withSynchronousActiveLock(token, () => {
     const state = readStateForMaintenance(token);
     return finishZeroDayWork(state) ? state : null;
-  } catch (error) {
-    primaryError = true;
-    throw error;
-  } finally { releaseOwnedLock(releaseActiveLock, token, SafeError, primaryError); }
+  });
 }
 
 function readBatchProgress(token) {
@@ -708,6 +745,15 @@ function exportCompletedBatchResults(token) {
   const progress = publicProgress(state);
   if (progress.complete !== true) return { exported: 0, pending: 0, available: false };
   return exportCompletedState(state);
+}
+
+async function exportCompletedBatchResultsAsync(token) {
+  const state = readState(token);
+  // Completion facts only here. Full per-package and membership validation is
+  // mandatory in the awaited export plan, not a redundant synchronous probe.
+  const progress = publicProgress(state, { skipResultProjection: true });
+  if (progress.complete !== true) return { exported: 0, pending: 0, available: false };
+  return exportCompletedStateAsync(state);
 }
 
 // Exactly one local presenter may show the content-free terminal notice of a
@@ -809,6 +855,10 @@ function claimTerminalNotice(token, presenter) {
   return reserved.ok === true && markTerminalNoticePresented(token, presenter, reserved.reservation_id);
 }
 
+const releaseAndFinishLocalBatchExecutor = createBatchExecutorLeaseFinish({
+  dataRoot, withOwnershipControl, releaseLocalBatchExecutor, finishZeroDayOperation
+});
+
 const { runLocalBatchExecutor } = createBatchExecutorRunner({
   pauseRequested: standalonePause.requested,
   SafeError,
@@ -822,14 +872,10 @@ const { runLocalBatchExecutor } = createBatchExecutorRunner({
   finalizePublishedPackageLocally,
   cleanupTerminalWorkCopy,
   writeTerminalEvidence,
-  releaseLocalBatchExecutor(token, pid) {
-    const released = releaseLocalBatchExecutor(token, pid);
-    if (released) finishZeroDayOperation(token);
-    return released;
-  },
+  releaseLocalBatchExecutor: releaseAndFinishLocalBatchExecutor,
   deliveryPendingStatus: DELIVERY_PENDING,
   retryableCodes: RETRYABLE_CODES,
   maxBatchFiles: LIMITS.MAX_BATCH_FILES
 });
 
-module.exports = { consumeContentOperation, requestStandalonePause, skipStandaloneOcrContactReview, readStandaloneHistoryState, readStandaloneHistoryStates, standaloneRecoverableStates, continueStandaloneBatch, readBatchProcessingMode, beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, productStatusSnapshot, latestProductBatchStatus, latestProductResultDirectory, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, finalizePublishedPackageLocally, listBatchResults, completedLocalOnlyCandidates, verifyCompletedLocalOnlyGeneration, claimLocalBatchExecutor, releaseLocalBatchExecutor, reserveTerminalNotice, markTerminalNoticePresented, releaseTerminalNoticeReservation, claimTerminalNotice, readBatchProgress, exportCompletedBatchResults, runLocalBatchExecutor, recoverBatches, replayMappingOutbox, cleanupExpiredBatchSnapshots, openBatchPackageProtection, _test: { withDurableBatchPseudonymRegistry, batchRoot, workPath, activeLockPath, writeState, readState, readStateForMaintenance, publicProgress, batchUserStatus, assertStagingCapacity, preflightOoxmlContainers, planBatchAdmission, acquireActiveLock, releaseActiveLock, validActiveLock, retryReleasedWorkCopyCleanup, packageIdForItem, publishedPackageRecord, publishedPackageState, regularPublishedPackage, reconcilePublishedItems, reconcilePendingMappings, reconcilePreflightStoppedMappings, commitPendingMapping, replayMappingOutbox, markInterruptedItemsRetryable, maintainBeforeNext, recoverableBatchStates, productStatusSnapshot, latestProductBatchStatus, latestProductResultDirectory, localCleanupStatus, reviewSingleBatchTextLocally, captureDeferredReviewInput, reviewedBatchText, resultCursor, parseResultCursor, liveLocalExecutor, completedLocalOnlyCandidates, retryableErrorCodes: Object.freeze([...RETRYABLE_CODES]), writeFully, syncParentDirectory, openBatchPackageProtection, writeTerminalEvidence, repairPendingEvidenceOutbox } };
+module.exports = { consumeContentOperation, requestStandalonePause, skipStandaloneOcrContactReview, readStandaloneHistoryState, readStandaloneHistoryStates, standaloneRecoverableStates, continueStandaloneBatch, readBatchProcessingMode, beginBatch, processBatchNext, reviewDeferredBatch, resumeBatch, continueMostRecentBatch, discardIncompleteBatches, recoverableBatchStatus, productStatusSnapshot, latestProductBatchStatus, latestProductResultDirectory, localCleanupStatus, acknowledgeDeliveredPackage, acknowledgeDeliveredPackages, finalizePublishedPackageLocally, listBatchResults, completedLocalOnlyCandidates, verifyCompletedLocalOnlyGeneration, claimLocalBatchExecutor, releaseLocalBatchExecutor, releaseClaimedLocalBatchExecutor, reserveTerminalNotice, markTerminalNoticePresented, releaseTerminalNoticeReservation, claimTerminalNotice, readBatchProgress, exportCompletedBatchResults, exportCompletedBatchResultsAsync, runLocalBatchExecutor, recoverBatches, replayMappingOutbox, cleanupExpiredBatchSnapshots, openBatchPackageProtection, _test: { withDurableBatchPseudonymRegistry, batchRoot, workPath, activeLockPath, writeState, readState, readStateForMaintenance, publicProgress, batchUserStatus, assertStagingCapacity, preflightOoxmlContainers, planBatchAdmission, acquireActiveLock, releaseActiveLock, validActiveLock, retryReleasedWorkCopyCleanup, packageIdForItem, publishedPackageRecord, publishedPackageState, regularPublishedPackage, reconcilePublishedItems, reconcilePendingMappings, reconcilePreflightStoppedMappings, commitPendingMapping, replayMappingOutbox, markInterruptedItemsRetryable, maintainBeforeNext, recoverableBatchStates, productStatusSnapshot, latestProductBatchStatus, latestProductResultDirectory, localCleanupStatus, reviewSingleBatchTextLocally, captureDeferredReviewInput, reviewedBatchText, resultCursor, parseResultCursor, liveLocalExecutor, completedLocalOnlyCandidates, retryableErrorCodes: Object.freeze([...RETRYABLE_CODES]), writeFully, syncParentDirectory, openBatchPackageProtection, writeTerminalEvidence, repairPendingEvidenceOutbox } };

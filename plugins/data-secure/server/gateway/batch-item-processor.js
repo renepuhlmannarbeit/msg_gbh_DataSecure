@@ -11,22 +11,7 @@ const { isMarkdownBatch } = require('../core/processing-mode');
 const { contentOptionsForBatch } = require('../core/content-options');
 const { bindContentDependencies, bindContentReviewDependencies } = require('./content-consumer-dependencies');
 const { expectedPublication, confirmPublication } = require('./standalone-anonymized-batch');
-const { classifyPrepublicationError, applyRetryBudget, clearRetryBudget } = require('./prepublication-error');
-
-// The document-control lock is shared by the local UI and the worker across
-// runs. A brief read/edit of another document is not a defective source file.
-// Wait only for this exact contention; never remove or seize a foreign lock.
-async function retryDocumentControl(action, options = {}) {
-  const attempts = options.attempts ?? 50;
-  const delayMs = options.delayMs ?? 100;
-  for (let attempt = 0; attempt < attempts; attempt++) {
-    try { return await action(); }
-    catch (error) {
-      if (error?.code !== 'STANDALONE_BUSY' || attempt + 1 === attempts) throw error;
-      await new Promise(resolve => setTimeout(resolve, delayMs));
-    }
-  }
-}
+const { classifyPrepublicationError, applyRetryBudget, clearRetryBudget, retryDocumentControl, isOwnershipControlFailure } = require('./prepublication-error');
 
 function conversionBatch(state) {
   return isMarkdownBatch(state);
@@ -71,6 +56,8 @@ function createBatchItemProcessor(options = {}) {
   }
 
   function publicFailureMessage(code, classification = {}) {
+    if (code === 'STANDALONE_BUSY')
+      return 'Die lokale Dokumentverwaltung ist vorübergehend belegt. Das Dokument bleibt unverändert zur ausdrücklichen Fortsetzung erhalten.';
     const fixed = {
       BATCH_SNAPSHOT_CHANGED: 'Der bestätigte Dateistapel wurde verändert. Die unveröffentlichten privaten Kopien wurden sicher gestoppt.',
       CONVERSION_TERMINATION_UNCONFIRMED: 'Die Verarbeitung wurde unterbrochen. Das Ende des Konvertierungsprozesses konnte nicht bestätigt werden. Weitere Dateien werden nicht gestartet.',
@@ -84,7 +71,7 @@ function createBatchItemProcessor(options = {}) {
       return 'Die lokale Verarbeitung wurde technisch unterbrochen. Sie kann ausdrücklich fortgesetzt werden.';
     }
     if (code === 'RESIDUAL_PII') {
-      return 'Die Datenschutzprüfung hat mögliche Identifikatoren gefunden. Das Dokument wurde nicht freigegeben.';
+      return 'Die Datenschutzprüfung hat mögliche Identifikatoren oder unlesbare Zeichen gefunden. Das Dokument wurde nicht freigegeben. Bitte eine lesbare Kopie der Quelldatei prüfen.';
     }
     return 'Die Datei wurde sicher nicht verarbeitet. Es wurde kein Paket freigegeben. Bitte die Diagnose prüfen.';
   }
@@ -212,7 +199,7 @@ function createBatchItemProcessor(options = {}) {
           }
           positiveDocumentResult(details?.document_result);
           if (contentOptions && (details?.package_id !== expectedPackageId ||
-              JSON.stringify(details.publication_binding) !== JSON.stringify(expectedPublication(state, item))))
+              JSON.stringify(details.publication_binding) !== JSON.stringify(await retryDocumentControl(() => expectedPublication(state, item)))))
             throw Object.assign(new SafeError('Die private Publikationsbindung ist ungültig.'), { code: 'STANDALONE_PUBLICATION_INVALID' });
           verifiedDocumentResult = details.document_result;
           incrementPrivateIoSummary(state.io_summary, 'final_gate_runs');
@@ -250,7 +237,7 @@ function createBatchItemProcessor(options = {}) {
           if (!sameDocumentResult(details.document_result, verifiedDocumentResult)) throw publicationUnconfirmed();
           publishedDocumentResult = details.document_result;
           if (contentOptions && JSON.stringify(details.publication_binding) !==
-              JSON.stringify(confirmPublication(state, item).publication_binding)) throw publicationUnconfirmed();
+              JSON.stringify((await retryDocumentControl(() => confirmPublication(state, item))).publication_binding)) throw publicationUnconfirmed();
           if (state.product_channel === 'standalone' && state.standalone_document_review === true)
             await retryDocumentControl(() => require('./standalone-document-review-store')
               .createDocumentReviewStore().recordPublication(state.token, item.id));
@@ -290,7 +277,7 @@ function createBatchItemProcessor(options = {}) {
         throw publicationUnconfirmed();
       }
       if (contentOptions && JSON.stringify(result?.publication_binding) !==
-          JSON.stringify(confirmPublication(state, item).publication_binding)) throw publicationUnconfirmed();
+          JSON.stringify((await retryDocumentControl(() => confirmPublication(state, item))).publication_binding)) throw publicationUnconfirmed();
       markMappingPending(item, expectedPackageId, result.document_result, state);
       clearRetryBudget(item);
       writeState(state);
@@ -338,6 +325,9 @@ function createBatchItemProcessor(options = {}) {
       writeState(state);
       return { ...result, ...publicProgress(state), raw_content_sent_to_claude: false };
     } catch (error) {
+      // A failed ownership boundary is not a decision about this document and
+      // cannot authorize another journal write or source-copy cleanup here.
+      if (isOwnershipControlFailure(error)) throw error;
       if (packagePublished) {
         return publishedFailure(state, item, expectedPackageId, error);
       }

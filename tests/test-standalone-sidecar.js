@@ -82,6 +82,11 @@ function isolatedEnvironment(root) {
     fs.mkdirSync(env[key], { recursive: true });
   }
   if (process.platform === 'win32') {
+    // Native pipe probes below provision their synthetic leaf explicitly.
+    // Ordinary/blocked source fixtures must retain their own setup contract.
+    env.DATASECURE_STANDALONE_NAMESPACE_ROOT = path.join(env.LOCALAPPDATA, 'SecureDataMsg-Standalone');
+  }
+  if (process.platform === 'win32') {
     env.HOMEDRIVE = path.parse(env.USERPROFILE).root.replace(/[\\/]$/u, '');
     env.HOMEPATH = env.USERPROFILE.slice(env.HOMEDRIVE.length);
   }
@@ -159,6 +164,18 @@ function removeOwnedRoot(root, initial) {
 (async () => {
   const root = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'datasecure-standalone-ipc-'));
   const initial = fs.lstatSync(root);
+  if (process.platform === 'win32') {
+    // Newly created, still-empty synthetic root only. This machine's TEMP can
+    // grant sandbox accounts write access; product code must not weaken its
+    // ACL check just to accept that test fixture.
+    assert.deepEqual(fs.readdirSync(root), []);
+    const system = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32');
+    const account = childProcess.execFileSync(path.join(system, 'whoami.exe'), ['/user', '/fo', 'csv', '/nh'],
+      { encoding: 'utf8', windowsHide: true });
+    const sid = account.match(/"(S-1-[0-9-]+)"/u)?.[1]; assert.ok(sid);
+    childProcess.execFileSync(path.join(system, 'icacls.exe'), [root, '/inheritance:r', '/grant:r', `*${sid}:(OI)(CI)F`],
+      { windowsHide: true, stdio: 'pipe' });
+  }
   const children = [];
   const fixtureRoots = [];
   const environment = isolatedEnvironment(root);
@@ -179,6 +196,27 @@ function removeOwnedRoot(root, initial) {
     });
     assert.equal(unsupportedNative.ok, false);
     assert.equal(unsupportedNative.error_code, 'STANDALONE_IPC_FAILED', 'requested native capability never silently falls back');
+    const nativeGuardTarget = ['win32', 'darwin'].includes(process.platform);
+    if (sourceOnly && nativeGuardTarget) {
+      const missingRoot = path.join(root, 'native-unverified'); fs.mkdirSync(missingRoot);
+      const missingEnv = isolatedEnvironment(missingRoot);
+      Object.assign(missingEnv, { DATASECURE_NATIVE_EXPORT_CHANNEL: '1',
+        DATASECURE_DOCUMENT_CONTROL_OWNER_PID: String(process.pid), DATASECURE_DOCUMENT_CONTROL_GENERATION: 'c'.repeat(32) });
+      if (process.platform === 'win32') fs.mkdirSync(missingEnv.DATASECURE_STANDALONE_NAMESPACE_ROOT);
+      const host = trackChild(childProcess.spawn(process.execPath, [sidecarFile], {
+        stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, env: missingEnv
+      }), children);
+      let readyCount = 0;
+      const refusedClient = protocolClient(host, () => assert.fail('no native operation before verified bootstrap'), ready => {
+        assert.equal(ready.ok, false); assert.equal(ready.error_code, 'STANDALONE_OWNERSHIP_RUNTIME_INVALID'); readyCount++;
+      });
+      const refused = await refusedClient.send('get_public_state', '01'.repeat(8));
+      assert.equal(refused.ok, false); assert.equal(refused.error_code, 'STANDALONE_OWNERSHIP_RUNTIME_INVALID');
+      assert.equal(readyCount, 1);
+      await refusedClient.send('shutdown', '02'.repeat(8));
+      assert.equal((await bounded(host.closed, 'unverified native host did not stop')).code, 0);
+    }
+    if (!sourceOnly || !nativeGuardTarget) {
     // Real process/pipe/configuration integration. This emulates the desktop
     // response only, not the native filesystem identity implementation (Rust
     // tests exercise that separately with actual directory handles).
@@ -186,9 +224,19 @@ function removeOwnedRoot(root, initial) {
     const nativeEnv = isolatedEnvironment(nativeRoot);
     delete nativeEnv.EU_PRIVACY_RESULT_ROOT;
     nativeEnv.DATASECURE_NATIVE_EXPORT_CHANNEL = '1';
+    if (process.platform === 'win32') fs.mkdirSync(nativeEnv.DATASECURE_STANDALONE_NAMESPACE_ROOT);
     nativeEnv.DATASECURE_DOCUMENT_CONTROL_OWNER_PID = String(process.pid);
     nativeEnv.DATASECURE_DOCUMENT_CONTROL_GENERATION = 'c'.repeat(32);
-    const nativeHost = trackChild(childProcess.spawn(process.execPath, [sidecarFile], {
+    nativeEnv.DATASECURE_STANDALONE_DIAGNOSTIC_SEGMENT = 'c'.repeat(32);
+    let nativeArgs = [sidecarFile];
+    if (nativeGuardTarget) {
+      const { loadOwnershipGuardBuild } = await import('../scripts/lib/ownership-guard-artifact.mjs');
+      const build = loadOwnershipGuardBuild(path.resolve(__dirname, '..'), process.platform === 'win32' ? 'windows-x64' : `macos-${process.arch}`);
+      nativeEnv.DATASECURE_TEST_OWNERSHIP_MANIFEST = build.manifestFile;
+      nativeEnv.DATASECURE_TEST_OWNERSHIP_SERVER = path.dirname(path.dirname(sidecarFile));
+      nativeArgs = [`--require=${path.join(__dirname, 'helpers/ownership-control-test-preload.cjs')}`, sidecarFile];
+    }
+    const nativeHost = trackChild(childProcess.spawn(process.execPath, nativeArgs, {
       stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, env: nativeEnv
     }), children);
     let callbacks = 0, readyCount = 0, deny = false;
@@ -234,6 +282,15 @@ function removeOwnedRoot(root, initial) {
     assert.equal(callbacks, 2, 'legacy request cannot silently acquire a native binding');
     assert.equal(JSON.parse(fs.readFileSync(configFile, 'utf8')).schema, 'datasecure-result-root/2');
     nativeHost.stdin.end(); assert.equal((await bounded(nativeHost.closed, 'native callback host did not close')).code, 0);
+    const nativeDiagnosticNames = fs.readdirSync(nativeEnv.DATASECURE_STANDALONE_DIAGNOSTIC_DIR);
+    assert.deepEqual(nativeDiagnosticNames, [`sidecar-interactions.${'c'.repeat(32)}.jsonl`]);
+    const nativeRecords = fs.readFileSync(path.join(nativeEnv.DATASECURE_STANDALONE_DIAGNOSTIC_DIR, nativeDiagnosticNames[0]), 'utf8')
+      .trim().split('\n').map(line => JSON.parse(line));
+    assert.ok(nativeRecords.some(record => record.event === 'service_initialized' && record.outcome === 'ready'));
+    assert.ok(nativeRecords.some(record => record.event === 'private_ipc_closed' && record.outcome === 'stopped'));
+    assert.ok(nativeRecords.every(record => record.component === 'sidecar' && record.schema === 'datasecure-standalone-interaction/1'));
+    if (nativeGuardTarget) assert.ok(nativeRecords.some(record => record.event === 'ownership_control_check_finished'));
+    }
     const status = await client.send('get_public_state', 'a'.repeat(16));
     assert.strictEqual(status.schema, 'datasecure-standalone-private-response/1');
     assert.strictEqual(status.ok, true);
@@ -489,7 +546,7 @@ function removeOwnedRoot(root, initial) {
     assert.ok(events.some((event) => event.event === 'service_initialized' && Number.isSafeInteger(event.elapsed_ms)));
     assert.ok(events.some((event) => event.event === 'history_capture_started'));
     assert.ok(events.some((event) => event.event === 'history_capture_finished' &&
-      Number.isSafeInteger(event.journal_count) && Number.isSafeInteger(event.export_count) &&
+      event.journal_count === 0 && Number.isSafeInteger(event.export_count) &&
       Number.isSafeInteger(event.elapsed_ms)));
     assert.ok(events.some((event) => event.event === 'product_bootstrap_started'));
     assert.ok(events.some((event) => event.event === 'product_bootstrap_finished' && Number.isSafeInteger(event.elapsed_ms)));

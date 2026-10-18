@@ -15,7 +15,7 @@ const MAX_PRESENTATION_GENERATION = Number.MAX_SAFE_INTEGER;
 const PRIVATE_ACTIONS = new Set([
   'admit_selected_sources', 'remove_admitted_source', 'cancel_admission', 'start_admitted_batch',
   'get_public_state', 'get_ui_context', 'ack_terminal_presented', 'continue_current_batch', 'configure_results',
-  'resolve_current_results', 'resolve_local_ledger', 'get_run_history',
+  'resolve_current_results', 'resolve_local_ledger', 'get_run_history', 'set_run_history_visibility',
   'get_run_failures',
   'resolve_history_results', 'resolve_history_ledger', 'resolve_history_identity_mapping',
   'resolve_identity_mappings_directory',
@@ -52,6 +52,20 @@ function validatePrivateMessage(message) {
   if (!PRIVATE_ACTIONS.has(message.action))
     fail('DESKTOP_IPC_ACTION_INVALID', 'Unbekannte Desktop-Aktion.');
   const allowedFields = new Set(['schema', 'request_id', 'action']);
+  if (message.action === 'get_run_history' && Object.hasOwn(message, 'batch_id')) {
+    allowedFields.add('batch_id');
+    if (typeof message.batch_id !== 'string' || !/^[a-f0-9]{64}$/u.test(message.batch_id) ||
+        Object.hasOwn(message, 'recover_exports') || Object.hasOwn(message, 'include_hidden'))
+      fail('STANDALONE_HISTORY_INVALID', 'Ungültige lokale Laufkennung.');
+  }
+  if (message.action === 'get_run_history' && Object.hasOwn(message, 'include_hidden')) {
+    allowedFields.add('include_hidden');
+    if (message.include_hidden !== true) fail('DESKTOP_IPC_FIELD_INVALID', 'Ungültige Verlaufsansicht.');
+  }
+  if (message.action === 'set_run_history_visibility') {
+    allowedFields.add('hidden');
+    if (typeof message.hidden !== 'boolean') fail('DESKTOP_IPC_FIELD_INVALID', 'Ungültige Verlaufsansicht.');
+  }
   if (message.action === 'get_run_history' && Object.hasOwn(message, 'recover_exports')) {
     allowedFields.add('recover_exports');
     allowedFields.add('recover_batch_id');
@@ -62,7 +76,7 @@ function validatePrivateMessage(message) {
     if (contentStartOptions(message, 'content_options', 'standalone')) allowedFields.add('content_options');
   } else assertLegacyContentOperation(message, 'content_options', 'standalone', 'resume');
   if (['resolve_history_results', 'resolve_history_ledger', 'resolve_history_identity_mapping',
-    'continue_history_batch', 'pause_batch', 'skip_ocr_contact_review', 'abandon_result_export', 'get_document_reviews', 'get_document_review_history_summary', 'get_document_review_chunk', 'get_document_entities',
+    'continue_history_batch', 'set_run_history_visibility', 'pause_batch', 'skip_ocr_contact_review', 'abandon_result_export', 'get_document_reviews', 'get_document_review_history_summary', 'get_document_review_chunk', 'get_document_entities',
     'decide_document_review', 'decide_document_review_batch', 'preview_document_export', 'export_approved_documents', 'abandon_document_export', 'resolve_document_export', 'resolve_document_identity_overview'].includes(message.action)) {
     allowedFields.add('batch_id');
     if (typeof message.batch_id !== 'string' || !/^[a-f0-9]{64}$/u.test(message.batch_id))

@@ -1,8 +1,8 @@
 # Release- und Distributionsvertrag
 
-Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc163 · Veröffentlichungsnachtrag: 16.10.2026
+Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc164 · Veröffentlichungsnachtrag: 16.10.2026
 
-Der aktuelle Quellstand ist RC163-Entwicklungsstand und noch kein neu gebundener Paketkandidat. Der Standalone-Test-Pre-Release ist aus
+Der aktuelle Quellstand ist RC164-Entwicklungsstand und noch kein neu gebundener Paketkandidat. Der Standalone-Test-Pre-Release ist aus
 einem exakt geprüften Commit veröffentlicht; Linux bleibt RC159 und Cowork
 RC151. Menschliche N3/N4-Produktionsfreigaben bleiben offen.
 

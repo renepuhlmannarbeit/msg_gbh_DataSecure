@@ -2,10 +2,12 @@
 
 const { SafeError } = require('../plugins/data-secure/server/runtime');
 const { createBatchReviewOrchestrator } = require('../plugins/data-secure/server/gateway/batch-review-orchestrator');
+const { createBatchContactReview } = require('../plugins/data-secure/server/gateway/batch-contact-review');
 const batchFacade = require('../plugins/data-secure/server/gateway/batch');
 const { reviewBatchTextLocally } = require('../plugins/data-secure/server/companion/text-review');
 const { createBatchPseudonymState } = require('../plugins/data-secure/server/batch-pseudonym-context');
 const { MAX_STANDALONE_REVIEW_FINDINGS } = require('../plugins/data-secure/server/gateway/standalone-review-budget');
+const { documentStabilizationBlocked } = require('../plugins/data-secure/server/gateway/batch-execution-diagnostic');
 const { createSuite } = require('./helpers');
 
 const { test, testAsync, done, assert } = createSuite('Batch review orchestration boundary');
@@ -21,6 +23,7 @@ function fixture(options = {}) {
   const active = options.active || new Set();
   const events = [];
   const lifecycle = [];
+  const releaseDiagnostics = [];
   const items = [{ status: 'deferred_review', id: 1 }, { status: 'deferred_review', id: 2 }];
   const state = { schema: 'datasecure-batch/4', items, invalidated: false };
   const drafts = [{ local: 1 }, { local: 2 }];
@@ -35,10 +38,23 @@ function fixture(options = {}) {
       if (options.releaseError) throw options.releaseError;
       return options.refuseRelease !== true;
     },
+    ...(options.epoch ? {
+      captureOwnedEpoch(value) { events.push('epoch:capture'); assert.equal(value, token); return options.epoch; },
+      releaseOwnedEpoch(value) {
+        events.push('release:epoch');
+        assert.strictEqual(value, options.epoch);
+        return options.releaseEpoch ? options.releaseEpoch(value) : true;
+      },
+      releaseDelay: options.releaseDelay,
+      recordBatchFailure(phase, error) {
+        releaseDiagnostics.push({ phase, error_code: error.code });
+        options.recordBatchFailure?.(phase, error);
+      }
+    } : {}),
     readState(value) { events.push(`read:${value}`); if (options.readError) throw options.readError; return state; },
     assertLocalExecutorAccess(value, pid) { events.push(`lease:${pid}`); assert.strictEqual(value, state); if (options.leaseError) throw options.leaseError; },
-    reconcilePublishedItems() { events.push('reconcile:published'); return options.publishedReconciled === true; },
-    reconcilePendingMappings() { events.push('reconcile:mapping'); return options.mappingReconciled === true; },
+    reconcilePublishedItems() { events.push('reconcile:published'); if (options.publishedError) throw options.publishedError; return options.publishedReconciled === true; },
+    reconcilePendingMappings() { events.push('reconcile:mapping'); if (options.mappingError) throw options.mappingError; return options.mappingReconciled === true; },
     writeState() { writes++; events.push('write'); if (options.writeErrorCall === writes) throw new Error('write failed'); },
     markInterruptedItemsRetryable() { events.push('recover:interrupted'); return options.interrupted || 0; },
     publicProgress() { events.push('progress'); return { ...progress }; },
@@ -90,7 +106,7 @@ function fixture(options = {}) {
     currentPlatform: () => 'test-platform'
   });
   const deps = { executorPid: 77, marker: 'caller', onReviewLifecycle(event) { lifecycle.push(event); } };
-  return { orchestrator, token, active, events, lifecycle, items, state, drafts, progress, deps, writes: () => writes };
+  return { orchestrator, token, active, events, lifecycle, releaseDiagnostics, items, state, drafts, progress, deps, writes: () => writes };
 }
 
 testAsync('review entry removes runtime option getters before contact reconstruction in both purposes and legacy', async () => {
@@ -219,6 +235,180 @@ function standaloneChoiceFixture(options = {}) {
 }
 
 async function main() {
+  for (const stage of ['contacts', 'capture', 'ui']) {
+    await testAsync(`${stage} preserves fixed control refusals without deferring, writing or replaying review work`, async () => {
+      for (const code of ['STANDALONE_BUSY', 'OWNERSHIP_GUARD_BUSY', 'OWNERSHIP_GUARD_UNSAFE',
+        'OWNERSHIP_GUARD_CLOSE_UNCONFIRMED', 'STANDALONE_OWNERSHIP_STORAGE_UNSAFE', 'BATCH_OWNERSHIP_CHANGED',
+        'STANDALONE_PAUSE_CONTROL_BUSY', 'STANDALONE_PAUSE_CONTROL_INVALID']) {
+        const failure = codedError(code);
+        let contacts = 0;
+        const value = fixture(stage === 'contacts' ? { reviewContacts: async () => { contacts++; throw failure; } }
+          : stage === 'capture' ? { captureErrorAt: 1, captureError: failure } : { uiError: failure });
+        if (stage === 'contacts') value.state.product_channel = 'standalone';
+        const before = JSON.stringify(value.state);
+        await assert.rejects(value.orchestrator.reviewDeferredBatch(value.token, value.deps), error => error === failure);
+        assert.equal(JSON.stringify(value.state), before, code);
+        assert.equal(value.writes(), 0); assert.ok(!value.events.some(event => event.startsWith('defer:')));
+        assert.equal(value.events.filter(event => event === 'publish').length, 0);
+        assert.equal(value.events.filter(event => event === 'ui').length, stage === 'ui' ? 1 : 0);
+        assert.equal(value.events.filter(event => event.startsWith('capture:')).length,
+          stage === 'contacts' ? 0 : stage === 'capture' ? 1 : 2);
+        assert.equal(contacts, stage === 'contacts' ? 1 : 0);
+        assert.ok(!value.lifecycle.some(event => event.event.endsWith('_failed')));
+        assert.equal(value.active.size, 0); assert.equal(value.events.at(-1), 'release:token');
+      }
+    });
+  }
+  for (const boundary of ['before-ocr', 'after-answers']) {
+    await testAsync(`actual contact-review ${boundary} pause refusal preserves the journal and any already confirmed answers`, async () => {
+      for (const code of ['STANDALONE_PAUSE_CONTROL_BUSY', 'STANDALONE_PAUSE_CONTROL_INVALID']) {
+        const failure = codedError(code), answers = [];
+        let claims = 0, captures = 0, prompts = 0, contactJournalWrites = 0;
+        const original = 'E-Mail: contact@example.invalid';
+        const input = { source_type: 'png', original_text: original,
+          contacts: [{ start: 8, end: original.length, page: 1, line: 1, kind: 'email' }] };
+        // Actual grouping, draft validation and per-source answer resolution;
+        // only extraction/storage and the failing synchronous claim are seams.
+        const reviewContacts = createBatchContactReview({
+          captureDeferredReviewInput: async () => { captures++; return { ocr_contact_input: input }; },
+          convertNext() { assert.fail('this is an anonymization contact review'); },
+          exactPendingEntry() { assert.fail('content capture supplies this private input'); },
+          contactStore: { write(_state, item, value, answer) { answers.push({ item, input: value, answer }); } },
+          writeState() { contactJournalWrites++; },
+          claimStandaloneDocument(_state, action) {
+            claims++;
+            if (boundary === 'before-ocr' || claims === 4) throw failure;
+            action(); return true;
+          }
+        });
+        const value = fixture({ reviewContacts });
+        Object.assign(value.state, { schema: 'datasecure-batch/6', product_channel: 'standalone', processing_mode: 'markdown-and-anonymize' });
+        value.items.forEach((item, index) => { item.source_label = `synthetic-contact-${index + 1}.png`; });
+        const before = JSON.stringify(value.state);
+        await assert.rejects(value.orchestrator.reviewDeferredBatch(value.token, { ...value.deps,
+          reviewTextLocally: async draft => {
+            prompts++;
+            return { action: 'reviewed', redactions: [], decisions: draft.ambiguities.map(candidate => ({
+              ambiguity_id: candidate.ambiguity_id, decision: 'confirm_contact' })) };
+          }
+        }), error => error === failure);
+        assert.equal(JSON.stringify(value.state), before);
+        assert.equal(value.writes(), 0); assert.equal(contactJournalWrites, 0);
+        assert.equal(claims, boundary === 'before-ocr' ? 1 : 4);
+        assert.equal(captures, boundary === 'before-ocr' ? 0 : 2);
+        assert.equal(prompts, boundary === 'before-ocr' ? 0 : 1);
+        assert.equal(answers.length, boundary === 'before-ocr' ? 0 : 2);
+        for (const [index, confirmed] of answers.entries()) {
+          assert.strictEqual(confirmed.item, value.items[index]); assert.strictEqual(confirmed.input, input);
+          assert.deepEqual(confirmed.answer, { action: 'reviewed', redactions: [],
+            decisions: [{ ambiguity_id: 'ocr-contact:v1:000001', decision: 'confirm_contact' }] });
+        }
+        assert.ok(!value.events.some(event => event.startsWith('defer:') || event === 'ui' || event === 'publish'));
+        assert.equal(value.active.size, 0); assert.equal(value.events.at(-1), 'release:token');
+      }
+    });
+  }
+  await testAsync('a near-match Busy code remains an ordinary review error, not control admission', async () => {
+    for (const code of ['STANDALONE_BUSY_EXTRA', 'STANDALONE_PAUSE_CONTROL_BUSY_EXTRA', 'STANDALONE_PAUSE_CONTROL_INVALID_EXTRA']) {
+      const value = fixture({ uiError: codedError(code) });
+      const result = await value.orchestrator.reviewDeferredBatch(value.token, value.deps);
+      assert.equal(result.error, 'LOCAL_REVIEW_FAILED');
+      assert.equal(value.writes(), 1);
+      assert.ok(value.items.every(item => item.error_code === 'LOCAL_REVIEW_FAILED'));
+    }
+  });
+  await testAsync('review keeps its active lifecycle through all four Busy waits and releases only the identical epoch', async () => {
+    const epoch = Object.freeze({}), delays = [];
+    let releases = 0, value, settled = false, kernelHeld = false;
+    value = fixture({ epoch,
+      releaseEpoch(actual) {
+        assert.strictEqual(actual, epoch); assert.equal(value.active.has(value.token), true);
+        kernelHeld = true;
+        try { if (++releases <= 4) throw codedError('OWNERSHIP_GUARD_BUSY'); return true; }
+        finally { kernelHeld = false; }
+      },
+      releaseDelay(milliseconds) {
+        assert.equal(kernelHeld, false, 'the synchronous release attempt ended before waiting');
+        assert.equal(value.active.has(value.token), true);
+        return new Promise(resolve => delays.push({ milliseconds, resolve }));
+      }
+    });
+    const running = value.orchestrator.reviewDeferredBatch(value.token, value.deps);
+    running.then(() => { settled = true; }, () => { settled = true; });
+    for (let index = 0; index < 4; index++) {
+      await new Promise(resolve => setImmediate(resolve));
+      assert.equal(delays.length, index + 1); assert.equal(releases, index + 1);
+      assert.equal(settled, false); assert.equal(value.active.has(value.token), true);
+      await assert.rejects(value.orchestrator.reviewDeferredBatch(value.token, value.deps), /bereits/u);
+      assert.equal(value.events.filter(event => event === 'acquire:token').length, 1, 'never reacquire or replay');
+      delays[index].resolve();
+    }
+    assert.equal((await running).ok, true);
+    assert.deepEqual(delays.map(delay => delay.milliseconds), [10, 25, 50, 100]);
+    assert.equal(releases, 5); assert.equal(value.active.size, 0);
+    assert.equal(value.events.filter(event => event.startsWith('capture:')).length, 2);
+    assert.equal(value.events.filter(event => event === 'ui').length, 1);
+    assert.equal(value.events.filter(event => event === 'publish').length, 1);
+    assert.equal(value.events.filter(event => event === 'epoch:capture').length, 1);
+    assert.ok(!value.events.includes('release:token')); assert.deepEqual(value.releaseDiagnostics, []);
+  });
+  await testAsync('a primary reconciliation Busy is preserved after a transient epoch-release Busy without document writes', async () => {
+    const primary = codedError('STANDALONE_BUSY'), epoch = Object.freeze({}), delays = [];
+    let releases = 0, value;
+    value = fixture({ epoch, publishedError: primary,
+      releaseEpoch() { assert.equal(value.active.has(value.token), true); if (++releases === 1) throw codedError('OWNERSHIP_GUARD_BUSY'); return true; },
+      releaseDelay: async milliseconds => { assert.equal(value.active.has(value.token), true); delays.push(milliseconds); }
+    });
+    await assert.rejects(value.orchestrator.reviewDeferredBatch(value.token, value.deps), error => error === primary);
+    assert.deepEqual(delays, [10]); assert.equal(releases, 2); assert.equal(value.writes(), 0);
+    assert.equal(value.events.filter(event => event === 'reconcile:published').length, 1);
+    assert.ok(!value.events.some(event => event.startsWith('capture:') || event === 'ui' || event === 'publish'));
+    assert.equal(value.active.size, 0); assert.deepEqual(value.releaseDiagnostics, []);
+    assert.equal(documentStabilizationBlocked(primary), false);
+  });
+  await testAsync('persistent Busy, false, close, unsafe and non-Busy epoch release never report successful review', async () => {
+    for (const [mode, expected, attempts] of [
+      ['OWNERSHIP_GUARD_BUSY', 'STANDALONE_OWNERSHIP_CONTROL_BUSY', 5],
+      ['false', 'STANDALONE_OWNERSHIP_CONTROL_UNCONFIRMED', 1],
+      ['OWNERSHIP_GUARD_CLOSE_UNCONFIRMED', 'STANDALONE_OWNERSHIP_CONTROL_UNCONFIRMED', 1],
+      ['OWNERSHIP_GUARD_UNSAFE', 'STANDALONE_OWNERSHIP_STORAGE_UNSAFE', 1],
+      ['EIO', 'STANDALONE_OWNERSHIP_CONTROL_UNCONFIRMED', 1]
+    ]) {
+      const delays = [], epoch = Object.freeze({}); let releases = 0, value;
+      value = fixture({ epoch,
+        releaseEpoch() {
+          releases++; assert.equal(value.active.has(value.token), true);
+          if (mode === 'false') return false;
+          throw codedError(mode, 'PRIVATE_RELEASE_MESSAGE_MUST_NOT_ESCAPE');
+        },
+        releaseDelay: async milliseconds => { assert.equal(value.active.has(value.token), true); delays.push(milliseconds); }
+      });
+      await assert.rejects(value.orchestrator.reviewDeferredBatch(value.token, value.deps), error => error.code === expected);
+      assert.equal(releases, attempts); assert.deepEqual(delays, attempts === 5 ? [10, 25, 50, 100] : []);
+      assert.equal(value.events.filter(event => event === 'acquire:token').length, 1);
+      assert.equal(value.events.filter(event => event === 'publish').length, 1);
+      assert.deepEqual(value.releaseDiagnostics, [{ phase: 'item_epoch_release', error_code: expected }]);
+      assert.equal(value.active.size, 0);
+    }
+  });
+  await testAsync('exhausted epoch release keeps the exact primary and closed secondary evidence even if the observer throws', async () => {
+    for (const mode of ['OWNERSHIP_GUARD_BUSY', 'false', 'OWNERSHIP_GUARD_CLOSE_UNCONFIRMED', 'EIO']) {
+      const primary = codedError('STANDALONE_BUSY'), epoch = Object.freeze({}), delays = [];
+      let releases = 0, value;
+      value = fixture({ epoch, publishedError: primary,
+        releaseEpoch() { releases++; assert.equal(value.active.has(value.token), true); if (mode === 'false') return false; throw codedError(mode); },
+        releaseDelay: async milliseconds => { assert.equal(value.active.has(value.token), true); delays.push(milliseconds); },
+        recordBatchFailure() { assert.equal(value.active.has(value.token), true); throw new Error('observer failure'); }
+      });
+      await assert.rejects(value.orchestrator.reviewDeferredBatch(value.token, value.deps), error => error === primary);
+      assert.equal(releases, mode === 'OWNERSHIP_GUARD_BUSY' ? 5 : 1);
+      assert.deepEqual(delays, mode === 'OWNERSHIP_GUARD_BUSY' ? [10, 25, 50, 100] : []);
+      assert.equal(value.writes(), 0); assert.equal(value.active.size, 0);
+      assert.equal(documentStabilizationBlocked(primary), true);
+      assert.deepEqual(value.releaseDiagnostics, [{ phase: 'item_epoch_release',
+        error_code: mode === 'OWNERSHIP_GUARD_BUSY' ? 'STANDALONE_OWNERSHIP_CONTROL_BUSY' : 'STANDALONE_OWNERSHIP_CONTROL_UNCONFIRMED' }]);
+    }
+  });
   await testAsync('early contact cancellation preserves empty delivery shape and releases the exact owned lock', async () => {
     for (const localFinalize of [false, true]) {
       const value = fixture({ reviewContacts: async () => { throw codedError('LOCAL_REVIEW_CANCELLED'); } });
@@ -560,7 +750,7 @@ async function main() {
     assert.strictEqual(typeof batchFacade.processBatchNext, 'function');
   });
 
-  await testAsync('release failure propagates after the shared active guard is cleared', async () => {
+  await testAsync('legacy release failure propagates with the shared active guard cleared after its attempt', async () => {
     const value = fixture({ refuseRelease: true });
     await assert.rejects(
       value.orchestrator.reviewDeferredBatch(value.token, value.deps),

@@ -1,5 +1,8 @@
 'use strict';
 
+if (process.platform === 'darwin' && process.env.DATASECURE_NATIVE_EXPORT_CHANNEL === '1')
+  require('../core/ownership-control').assertNativeOwnershipRuntime();
+
 const {
   beginBatch,
   claimLocalBatchExecutor,
@@ -8,19 +11,20 @@ const {
   reviewDeferredBatch,
   readBatchProgress,
   readBatchProcessingMode,
-  exportCompletedBatchResults,
+  exportCompletedBatchResultsAsync,
   reserveTerminalNotice,
   markTerminalNoticePresented,
   releaseTerminalNoticeReservation
 } = require('./batch');
 const { releaseIntake, RESERVATION_ID_RE } = require('./batch-intake-reservation');
-const { terminalVisibleExport } = require('./result-export');
+const { terminalVisibleExportAsync } = require('./result-export');
 const { presentTerminalEnvelope } = require('./worker-terminal-presentation');
 const { showBatchStateNoticeConfirmed, showLocalIntakeNoticeConfirmed } = require('../companion/completion-summary');
 const { recordWorkflowEvent } = require('./workflow-diagnostics');
 const { continueIntoLocalReview } = require('./automatic-local-review');
 const { validateBatchQueueEnvelope, validateBatchMessagePurpose, LOCAL_QUEUE_SCHEMA_INVALID, PURPOSE_ERROR_CODES } = require('./batch-queue-envelope');
 const { MODES } = require('../core/processing-mode');
+const { recordBatchExecutionFailure } = require('./batch-execution-diagnostic');
 const { optionalContentOptions } = require('../core/content-options');
 const { validateReviewPolicy } = require('../core/standalone-review-policy');
 const { MODES: RESULT_NAMING_MODES, validateResultNamingMode } = require('../core/result-naming-mode');
@@ -164,7 +168,7 @@ process.once('message', async (message) => {
     // The durable processing result is authoritative. A failing visible export
     // stays pending for the next start or folder change; it never converts the
     // completed batch into the "stopped" failure envelope below.
-    const visibleExport = terminalVisibleExport(completed, () => exportCompletedBatchResults(message.batch_token));
+    const visibleExport = await terminalVisibleExportAsync(completed, () => exportCompletedBatchResultsAsync(message.batch_token));
     // Every automatic run ends with exactly one bounded local state envelope,
     // including non-terminal rest states such as review, mapping repair or an
     // explicit resume. No token, source identifier or document content crosses
@@ -208,6 +212,7 @@ process.once('message', async (message) => {
     }
     process.exit(0);
   } catch (error) {
+    recordBatchExecutionFailure('processing', error);
     if (isNewIntake) releaseIntake(reservationId);
     const stage = checkpointCreated || isExistingBatch ? 'after_checkpoint' : 'before_checkpoint';
     try {

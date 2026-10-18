@@ -68,12 +68,30 @@ function builderFixture() {
     'scripts/build-standalone-package.mjs', 'scripts/build-standalone-macos-package.mjs',
     'scripts/lib/standalone-build-fingerprint.mjs', 'scripts/lib/standalone-runtime-projection.mjs',
     'scripts/lib/standalone-conversion-runtime.mjs', 'scripts/lib/bundled-runtime.mjs',
+    'scripts/lib/standalone-windows-layout.mjs',
+    'scripts/lib/windows-native-contract.mjs', 'native/runtime/standalone-windows-runtime.json',
+    'plugins/data-secure/server/standalone/macos-bundle-layout.js',
     'scripts/lib/zip.mjs', 'scripts/lib/cargo-license-inventory.mjs', 'scripts/lib/standalone-font-license.mjs',
     'plugins/data-secure/server/core/bound-file-io.js', 'plugins/data-secure/server/zip-reader.js',
     'native/runtime/runtime-contract.json', 'apps/datasecure-standalone/desktop-targets.json',
     'apps/datasecure-standalone/frontend/fonts/InterVariable.woff2',
     'apps/datasecure-standalone/frontend/fonts/LICENSE-Inter.txt'
   ]) write(scope, relative, fs.readFileSync(path.join(repository, ...relative.split('/'))));
+  // This fixture isolates the common-source marker refusal, not target-native
+  // addon verification (covered by the separate ownership artifact gate).
+  write(scope, 'scripts/lib/ownership-guard-artifact.mjs',
+    "export const loadOwnershipGuardBuild=()=>({artifact:{sha256:'a'.repeat(64)}});\n" +
+    "export const assertOwnershipGuardMarker=()=>{}; export const writeOwnershipGuardRuntime=()=>{};\n");
+  // The Mac builder now checks its independently approved Core and native seal
+  // before copying. This fixture isolates the COMMON source-marker refusal;
+  // no synthetic native artefact is approved and no native Mac seal is run.
+  // If the real marker refusal is lost, the later boundary must fail distinctly.
+  write(scope, 'scripts/lib/macos-core-artifact.mjs',
+    "export const loadMacStaticCore=()=>({});\n" +
+    "export const assertMacCoreBundle=()=>{}; export const verifyMacBundleSeal=()=>{}; export const assertMacCoreMarkers=()=>{};\n" +
+    "export const macRuntimeEvidence=()=>{throw Error('UNEXPECTED_COMMON_MARKER_BYPASS')};\n" +
+    "export const canonicalBytes=()=>{throw Error('UNEXPECTED_COMMON_MARKER_BYPASS')};\n" +
+    "export const verifyMacCorePackage=()=>{throw Error('UNEXPECTED_COMMON_MARKER_BYPASS')};\n");
   write(scope, 'package.json', '{"version":"0.0.0-fixture","private":true}\n');
   const contract = JSON.parse(fs.readFileSync(path.join(scope, 'native/runtime/runtime-contract.json')));
   const target = contract.targets.find(target => target.id === 'windows-x64');
@@ -116,6 +134,7 @@ test('changed productive bytes invalidate compiled identity even with an unchang
     const compiled = Buffer.concat([Buffer.from('native fixture\0'), marker(initial)]);
     for (const relative of [
       'apps/datasecure-standalone/frontend/fixture.txt',
+      'apps/datasecure-standalone/START-WINDOWS.md', 'apps/datasecure-standalone/MACOS-START.md',
       'apps/datasecure-standalone/tauri-contract/src/fixture.txt',
       'apps/datasecure-standalone/tauri-contract/build.rs',
       'apps/datasecure-standalone/tauri-contract/tauri.macos.conf.json',
@@ -224,14 +243,19 @@ test('the actual Rust build script hashes current inputs and its marker survives
     const fingerprint = standaloneBuildFingerprint(scope).fingerprint;
     const nativeSource = path.join(repository, 'apps/datasecure-standalone/tauri-contract/src/source_fingerprint.rs').split(path.sep).join('/');
     const source = path.join(scope, 'marker-main.rs'), binary = path.join(scope, process.platform === 'win32' ? 'marker-main.exe' : 'marker-main');
-    fs.writeFileSync(source, `#[path = ${JSON.stringify(nativeSource)}]\nmod source_fingerprint;\nfn main() { source_fingerprint::retain(); }\n`);
+    fs.writeFileSync(source, `#[path = ${JSON.stringify(nativeSource)}]\nmod source_fingerprint;\nfn main() { source_fingerprint::retain();\n#[cfg(not(target_os="macos"))] assert_eq!(source_fingerprint::ownership_guard_sha256().len(),64);\n#[cfg(target_os="macos")] { assert_eq!(source_fingerprint::macos_static_core_sha256().len(),64); assert_eq!(source_fingerprint::macos_static_core_artifact_sha256().len(),64); }\nassert_eq!(source_fingerprint::diagnostic_build_id(None), &env!("DATASECURE_SOURCE_FINGERPRINT")[..40]); }\n`);
     const candidates = ['rustc', path.join(os.homedir(), '.cargo', 'bin', process.platform === 'win32' ? 'rustc.exe' : 'rustc')];
     const compiler = candidates.find(candidate => spawnSync(candidate, ['--version'], { windowsHide: true, encoding: 'utf8' }).status === 0);
     assert.ok(compiler, 'this native build contract requires the Rust compiler');
     const result = spawnSync(compiler, ['--edition=2021', '-D', 'warnings', '-C', 'opt-level=s', '-C', 'lto', '-C', 'strip=symbols', '-o', binary, source],
-      { env: { ...process.env, DATASECURE_SOURCE_FINGERPRINT: fingerprint }, encoding: 'utf8', windowsHide: true, timeout: 60000 });
+      { env: { ...process.env, DATASECURE_SOURCE_FINGERPRINT: fingerprint,
+        DATASECURE_OWNERSHIP_GUARD_SHA256: 'a'.repeat(64),
+        DATASECURE_MACOS_STATIC_CORE_SHA256: 'b'.repeat(64),
+        DATASECURE_MACOS_STATIC_CORE_ARTIFACT_SHA256: 'c'.repeat(64) }, encoding: 'utf8', windowsHide: true, timeout: 60000 });
     assert.equal(result.status, 0, `${result.error || ''}\n${result.stderr}`);
     assertStandaloneBuildFingerprint(fs.readFileSync(binary), fingerprint);
+    const markerRun = spawnSync(binary, [], { encoding: 'utf8', windowsHide: true, timeout: 60000 });
+    assert.equal(markerRun.status, 0, `${markerRun.error || ''}\n${markerRun.stderr}`);
     // Compile the real build script with only Tauri's downstream copy step
     // stubbed. Its Node invocation, root resolution and Cargo directives run.
     const stub = path.join(scope, 'tauri-build-stub.rs'), library = path.join(scope, 'libtauri_build.rlib');
@@ -245,8 +269,31 @@ test('the actual Rust build script hashes current inputs and its marker survives
     { encoding: 'utf8', windowsHide: true, timeout: 60000 });
     assert.equal(buildResult.status, 0, buildResult.stderr);
     const observed = spawnSync(buildScript, [], { encoding: 'utf8', windowsHide: true, timeout: 60000,
-      env: { ...process.env, CARGO_MANIFEST_DIR: path.join(repository, 'apps/datasecure-standalone/tauri-contract') } });
+      env: { ...process.env, CARGO_MANIFEST_DIR: path.join(repository, 'apps/datasecure-standalone/tauri-contract'),
+        TARGET: 'x86_64-unknown-linux-gnu' } });
     assert.equal(observed.status, 0, `${observed.error || ''}\n${observed.stderr}`);
     assert.ok(observed.stdout.includes(cargoFingerprintDirectives(repository)));
+    const manifestDirectory = path.join(repository, 'apps/datasecure-standalone/tauri-contract');
+    const missingStaticCrt = spawnSync(buildScript, [], { encoding: 'utf8', windowsHide: true, timeout: 60000,
+      env: { ...process.env, CARGO_MANIFEST_DIR: manifestDirectory,
+        TARGET: 'x86_64-unknown-linux-gnu', CARGO_CFG_TARGET_OS: 'windows', CARGO_CFG_TARGET_FEATURE: 'sse,sse2' } });
+    assert.notEqual(missingStaticCrt.status, 0);
+    assert.match(missingStaticCrt.stderr, /WINDOWS_NATIVE_STATIC_CRT_REQUIRED/u);
+    for (const [target, features] of [['windows', 'crt-static,sse,sse2']]) {
+      const accepted = spawnSync(buildScript, [], { encoding: 'utf8', windowsHide: true, timeout: 60000,
+        env: { ...process.env, CARGO_MANIFEST_DIR: manifestDirectory,
+          // Isolate the OS-specific static-CRT condition from availability of
+          // target-native modules; actual native Cargo builds test those pins.
+          TARGET: 'x86_64-unknown-linux-gnu', CARGO_CFG_TARGET_OS: target, CARGO_CFG_TARGET_FEATURE: features } });
+      assert.equal(accepted.status, 0, `${target}: ${accepted.stderr}`);
+    }
+    // An artificial macOS target-OS flag with a Linux TARGET must no longer
+    // bypass the separate Mac static-Core verifier as the old addon gate did.
+    // Actual accepted Mac pins require the separate native target build.
+    const mismatchedMacTarget = spawnSync(buildScript, [], { encoding: 'utf8', windowsHide: true, timeout: 60000,
+      env: { ...process.env, CARGO_MANIFEST_DIR: manifestDirectory,
+        TARGET: 'x86_64-unknown-linux-gnu', CARGO_CFG_TARGET_OS: 'macos', CARGO_CFG_TARGET_FEATURE: 'neon' } });
+    assert.notEqual(mismatchedMacTarget.status, 0);
+    assert.match(mismatchedMacTarget.stderr, /STANDALONE_MACOS_STATIC_CORE_INVALID/u);
   } finally { cleanup(scope); }
 });

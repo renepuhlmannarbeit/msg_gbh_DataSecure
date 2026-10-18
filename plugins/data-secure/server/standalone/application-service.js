@@ -5,6 +5,7 @@ const os = require('node:os');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { RESOURCE_LIMITS } = require('../resource-limits');
+const { ownershipErrorCode, observeOwnershipOutcome } = require('../core/ownership-diagnostics');
 const { MODES, assertRunnableProcessingMode } = require('../core/processing-mode');
 const { assertLegacyContentOperation } = require('../core/content-options');
 const { isAnonymizationOcrOmission, isAnonymizationPrivacyStop } = require('./conversion-feedback');
@@ -50,6 +51,17 @@ function standaloneDataRoot(options = {}) {
   const platform = options.platform || process.platform;
   const pathApi = platform === 'win32' ? path.win32 : path.posix;
   const environment = options.environment || process.env;
+  if (platform === 'win32' && environment.DATASECURE_NATIVE_EXPORT_CHANNEL === '1') {
+    const bound = environment.DATASECURE_STANDALONE_NAMESPACE_ROOT;
+    // Native bootstrap provisions and pins this exact drive-absolute root.
+    // No fallback to a differently virtualized LOCALAPPDATA or JS mkdir.
+    if (typeof bound !== 'string' || !/^[a-z]:[\\/]/iu.test(bound) ||
+        bound.includes('\0') || pathApi.basename(bound).toLowerCase() !== 'securedatamsg-standalone' ||
+        pathApi.resolve(bound) !== bound) {
+      throw fixedFailure('STANDALONE_DATA_ROOT_UNSAFE', 'Der lokale DataSecure-Bereich ist nicht sicher.');
+    }
+    return bound;
+  }
   const home = options.home || os.homedir();
   const base = platform === 'win32'
     ? String(environment.LOCALAPPDATA || pathApi.join(home, 'AppData', 'Local'))
@@ -66,6 +78,23 @@ function defaultResultRoot(options = {}) {
   return path.join(documents, 'SecureDataMsg');
 }
 
+function assertNativeStandaloneNamespace(privateRoot, options) {
+  if (process.env.DATASECURE_NATIVE_EXPORT_CHANNEL !== '1' || !['win32', 'darwin'].includes(process.platform)) return;
+  const { withOwnershipControl } = require('../core/ownership-control');
+  const { desktopErrorCode } = require('../core/desktop-error-contract');
+  try { options.startupDiagnostic?.('ownership_control_check_started', { outcome: 'started' }); }
+  catch { /* optional diagnostic only */ }
+  try { withOwnershipControl(privateRoot, guard => guard.assertHeld()); }
+  catch (error) {
+    const code = desktopErrorCode(error?.code);
+    try { options.startupDiagnostic?.('ownership_control_check_failed', { outcome: 'failed', error_code: code }); }
+    catch { /* refusal remains authoritative */ }
+    throw fixedFailure(code, 'Die lokale Prozessabsicherung konnte nicht bestätigt werden. Bitte die Diagnose und das vollständige App-Paket prüfen.');
+  }
+  try { options.startupDiagnostic?.('ownership_control_check_finished', { outcome: 'ready' }); }
+  catch { /* optional diagnostic only */ }
+}
+
 function activateStandaloneNamespace(options = {}) {
   const environment = options.environment || process.env;
   const platform = options.platform || process.platform;
@@ -73,14 +102,23 @@ function activateStandaloneNamespace(options = {}) {
   const root = pathApi.resolve(options.dataRoot || standaloneDataRoot(options));
   const io = options.fs || fs;
   const workspace = pathApi.join(root, 'workspace');
+  const sameIdentity = (left, right) => Boolean(left && right && left.dev === right.dev && left.ino === right.ino);
+  if (process.platform === 'darwin' && process.env.DATASECURE_NATIVE_EXPORT_CHANNEL === '1') {
+    try { require('../core/ownership-control').assertNativeOwnershipRuntime(); }
+    catch (error) {
+      throw fixedFailure(require('../core/desktop-error-contract').desktopErrorCode(error?.code),
+        'Die lokale Prozessabsicherung konnte nicht bestätigt werden. Bitte das vollständige App-Paket prüfen.');
+    }
+  }
   try {
-    io.mkdirSync(root, { recursive: true, mode: 0o700 });
+    if (!(platform === 'win32' && process.env.DATASECURE_NATIVE_EXPORT_CHANNEL === '1')) {
+      io.mkdirSync(root, { recursive: true, mode: 0o700 });
+    }
     const named = io.lstatSync(root);
     const opened = io.statSync(root);
     const real = io.realpathSync.native ? io.realpathSync.native(root) : io.realpathSync(root);
     const realOpened = io.statSync(real);
     const comparable = (value) => platform === 'win32' ? pathApi.resolve(value).toLowerCase() : pathApi.resolve(value);
-    const sameIdentity = (left, right) => Boolean(left && right && left.dev === right.dev && left.ino === right.ino);
     // Windows may transparently virtualize LOCALAPPDATA for a packaged desktop
     // process. In that case the visible path and native realpath differ although
     // both handles identify the same directory. Reject links and identity
@@ -91,6 +129,16 @@ function activateStandaloneNamespace(options = {}) {
         !sameIdentity(opened, realOpened) || redirectedOutsideWindows) {
       throw fixedFailure('STANDALONE_DATA_ROOT_UNSAFE', 'Der lokale DataSecure-Bereich ist nicht sicher.');
     }
+  } catch (error) {
+    if (error?.code === 'STANDALONE_DATA_ROOT_UNSAFE') throw error;
+    throw fixedFailure('STANDALONE_DATA_ROOT_UNSAFE', 'Der lokale DataSecure-Bereich ist nicht sicher.');
+  }
+  // A native desktop must establish ownership before creating any workspace
+  // child or loading history/recovery. Windows mkdir(mode:0700) does not set a
+  // private DACL; the native host provisions missing roots separately. Never
+  // repair an unsafe existing namespace or downgrade to the source adapter.
+  assertNativeStandaloneNamespace(root, options);
+  try {
     io.mkdirSync(workspace, { recursive: true, mode: 0o700 });
     const workspaceStat = io.lstatSync(workspace);
     const workspaceOpened = io.statSync(workspace);
@@ -112,7 +160,7 @@ function defaultDependencies(options = {}) {
   // Namespace selection must happen before any gateway module is loaded. This
   // makes Standalone journals, settings, review data and exports invisible to
   // the optional Claude/MCP product even when both are installed.
-  activateStandaloneNamespace(options);
+  const privateRoot = activateStandaloneNamespace(options);
   const { createRunHistory } = require('./run-history');
   const filePicker = require('../companion/file-picker');
   const sourceFolder = require('../companion/source-folder');
@@ -137,28 +185,57 @@ function defaultDependencies(options = {}) {
   const batchExecutor = require('../gateway/batch-executor');
   // Diagnostics are optional and must never affect the product transaction.
   const startupEvent = (event, fields) => { try { options.startupDiagnostic?.(event, fields); } catch {} };
+  const { recordWorkflowEvent } = require('../gateway/workflow-diagnostics');
+  const { desktopErrorCode, DESKTOP_ERROR_CODES } = require('../core/desktop-error-contract');
+  const { WORKFLOW_ERROR_CODES } = require('../gateway/diagnostic-causes');
+  const { REASON_CODES } = require('../core/document-result-grade');
+  const workerCodes = new Set([...DESKTOP_ERROR_CODES, ...WORKFLOW_ERROR_CODES, ...REASON_CODES]);
+  const { types } = require('node:util');
+  const workerPhases = new Set(['item_epoch_release', 'registry_finalize', 'local_delivery_verify', 'executor_lease_release', 'processing', 'result_export_prepare', 'result_export_claim', 'result_export_plan', 'result_export_copy', 'result_export_claim_release']);
+  const workerDiagnostics = (executorOptions = {}) => {
+    const recorder = typeof executorOptions.recordWorkflowEvent === 'function'
+      ? executorOptions.recordWorkflowEvent : recordWorkflowEvent;
+    return { ...executorOptions, recordWorkflowEvent(record) {
+      let recorded = false;
+      try { recorded = recorder(record); } catch { /* keep both sinks best-effort */ }
+      try {
+        if (!record || typeof record !== 'object' || types.isProxy(record)) return recorded;
+        const field = key => Object.getOwnPropertyDescriptor(record, key)?.value;
+        if (field('event') === 'batch_worker_failed' && field('outcome') === 'stopped') {
+          const phase = field('phase'), code = field('error_code'), mapped = desktopErrorCode(code);
+          startupEvent('batch_worker_failed', { outcome: 'failed',
+            phase: workerPhases.has(phase) ? phase : 'processing',
+            error_code: mapped !== 'STANDALONE_OPERATION_FAILED' ? mapped : workerCodes.has(code) ? code : mapped });
+        }
+      } catch { /* no record property or diagnostic sink may affect a batch */ }
+      return recorded;
+    } };
+  };
   const reviewBroker = require('./review-broker').createReviewBroker();
   const intakeReservation = require('../gateway/batch-intake-reservation');
+  const documentReviews = require('../gateway/standalone-document-review-store').createDocumentReviewStore({
+    nativeExport: options.nativeExport, controlOwnerPid: options.controlOwnerPid,
+    controlOwnerGeneration: options.controlOwnerGeneration, retiredControlGenerations: options.retiredControlGenerations });
   const runHistory = createRunHistory({
     readStates: readStandaloneHistoryStates,
     readState: readStandaloneHistoryState,
     readExports: readStandaloneExportHistory,
     readExport: readStandaloneExportHistoryEntry,
-    // Only this concrete on-disk reader has the capture inventory contract.
-    // Injected/test/other product adapters always retain the full capture.
-    captureExportIndex: true,
-    exportCompletedBatchResults,
+    recentHistory: require('../gateway/standalone-history-store').readRecentHistory,
+    exportCompletedBatchResults: (...args) => observeOwnershipOutcome(exportCompletedBatchResults(...args), startupEvent),
     recoverableStates: standaloneRecoverableStates,
-    liveExecutor: require('../gateway/batch-active-lock').liveLocalExecutor
+    liveExecutor: require('../gateway/batch-active-lock').liveLocalExecutor,
+    pendingDocumentExports(batchId) {
+      const summary = documentReviews.historySummary(batchId);
+      return summary.available === true ? summary.pending_export_count !== 0 : null;
+    }
   });
   return {
     runHistory,
     readStates: readStandaloneHistoryStates,
     readState: readStandaloneHistoryState,
     abandonPendingResultExport,
-    documentReviews: require('../gateway/standalone-document-review-store').createDocumentReviewStore({
-      nativeExport: options.nativeExport, controlOwnerPid: options.controlOwnerPid,
-      controlOwnerGeneration: options.controlOwnerGeneration, retiredControlGenerations: options.retiredControlGenerations }),
+    documentReviews,
     continueStandaloneBatch,
     requestStandalonePause,
     skipStandaloneOcrContactReview,
@@ -167,12 +244,13 @@ function defaultDependencies(options = {}) {
         // Even optional history can touch internal files; reject conflicting
         // roots before that first access, then recheck in the shared bootstrap.
         assertRootSeparation();
-        // Capture existing summaries and original export destinations before
-        // startup retention retires their source journals.
+        // Preserve original export destinations. Journal summaries are now
+        // captured from the validated recovery snapshot before journal expiry,
+        // not by a redundant historical UI scan before the same bootstrap.
         const captureStarted = Date.now();
         startupEvent('history_capture_started', { outcome: 'started' });
         let captureOutcome = 'ready', captureCounts = {};
-        try { captureCounts = runHistory.captureDurableHistory(); }
+        try { captureCounts = { journal_count: 0, ...runHistory.captureExistingExportBindings() }; }
         catch { captureOutcome = 'failed'; /* optional history is repairable */ }
         if (captureOutcome === 'ready') startupEvent(captureCounts.export_capture_reused === true
           ? 'history_capture_reused' : 'history_capture_full', { outcome: 'ready',
@@ -190,6 +268,7 @@ function defaultDependencies(options = {}) {
           // improving worker lifetime.
           ensureDurableRuntime: () => ({ active: false, reason: 'standalone_package_persistent' }),
           migrateLegacyAuditReceipts,
+          standaloneLazyRetentionProtection: true,
           openBatchPackageProtection,
           cleanupLocalData,
           cleanupUiJobs: cleanupCompanionJobs,
@@ -206,7 +285,7 @@ function defaultDependencies(options = {}) {
           // enough to return the fixed refusal code to its local UI.
           refuseStartup: (error) => {
             const outcome = refuseStartup(error, { exit: () => {} });
-            throw fixedFailure(outcome.code, 'Der lokale DataSecure-Core konnte nicht sicher gestartet werden.');
+            throw fixedFailure(ownershipErrorCode(error) || outcome.code, 'Der lokale DataSecure-Core konnte nicht sicher gestartet werden.');
           }
         });
         startupEvent('product_bootstrap_finished', { outcome: 'ready', elapsed_ms: Date.now() - bootstrapStarted });
@@ -230,7 +309,8 @@ function defaultDependencies(options = {}) {
       };
     },
     publicStatusSnapshot(selectedBatchId) {
-      const snapshot = productStatusSnapshot(PRODUCT_CHANNEL, { localUiSelection: true, selectedBatchId });
+      const snapshot = productStatusSnapshot(PRODUCT_CHANNEL, { localUiSelection: true, selectedBatchId,
+        skipUnobservedTerminal: true });
       return Object.freeze({
         current: Object.freeze({
           engine_ready: true,
@@ -245,11 +325,13 @@ function defaultDependencies(options = {}) {
     },
     latestProductBatchStatus,
     latestProductResultDirectory,
-    replayPendingResultExports,
-    startLocalIntakeExecutor: batchExecutor.startLocalIntakeExecutor,
-    startLocalBatchExecutor: batchExecutor.startLocalBatchExecutor,
-    startLocalReviewExecutor: (token, options) => batchExecutor.startLocalReviewExecutor(token, {
-      ...options, appReview: reviewBroker
+    replayPendingResultExports: () => observeOwnershipOutcome(replayPendingResultExports(), startupEvent),
+    startLocalIntakeExecutor: (queue, profile, executorOptions) =>
+      batchExecutor.startLocalIntakeExecutor(queue, profile, workerDiagnostics(executorOptions)),
+    startLocalBatchExecutor: (token, executorOptions) =>
+      batchExecutor.startLocalBatchExecutor(token, workerDiagnostics(executorOptions)),
+    startLocalReviewExecutor: (token, executorOptions) => batchExecutor.startLocalReviewExecutor(token, {
+      ...workerDiagnostics({ ...executorOptions }), appReview: reviewBroker
     }),
     reviewSession: reviewBroker.session,
     reviewContinuationBatchId: reviewBroker.boundBatchId,
@@ -599,8 +681,12 @@ class StandaloneApplicationService {
       external_disclosure: false };
   }
 
-  history({ recoverExports = false, recoverBatchId = null } = {}) {
-    return this.deps.runHistory.history({ recoverExports, recoverBatchId });
+  history({ recoverExports = false, recoverBatchId = null, includeHidden = false, batchId = null } = {}) {
+    return this.deps.runHistory.history({ recoverExports, recoverBatchId, includeHidden, batchId });
+  }
+
+  setRunHistoryVisibility(batchId, hidden) {
+    return this.deps.runHistory.setVisibility(batchId, hidden);
   }
 
   abandonResultExport(batchId) {
@@ -990,24 +1076,18 @@ class StandaloneApplicationService {
   }
 
   projectUiContext({ selected, queue, sourceIds, rejectedSources, revision }) {
-    this.observeCurrentRun();
     const configured = this.resultRootStatus();
     let latestResultFolder = '';
-    // Reading the visible context is also the upgrade/recovery boundary for an
-    // already completed run.  Older export records did not contain the fields
-    // required for the run-scoped mapping.  Resolve with ensureExport so the
-    // UI never advertises a completed run whose visible projection is stale.
-    try {
-      latestResultFolder = this.observedBatchId
-        ? this.deps.runHistory.resolveResults(this.observedBatchId).local_path
-        // Compatibility-only callers without the run-scoped snapshot predate
-        // the desktop history. Production starts with no current result; older
-        // result folders are resolved only from their exact History row.
-        : !this.deps.publicStatusSnapshot
-          ? this.deps.latestProductResultDirectory?.(PRODUCT_CHANNEL, { ensureExport: true, latestBatchOnly: true }) || ''
-          : '';
+    // Root/selection display is not a request to inspect an old run, scan its
+    // journal or repair an export. Production uses exact explicit result
+    // actions for that work. Preserve only the legacy adapter's old hint.
+    if (!this.deps.publicStatusSnapshot) {
+      try {
+        latestResultFolder = this.observedBatchId
+          ? this.deps.runHistory.resolveResults(this.observedBatchId).local_path
+          : this.deps.latestProductResultDirectory?.(PRODUCT_CHANNEL, { ensureExport: true, latestBatchOnly: true }) || '';
+      } catch { /* A legacy display hint never authorizes a file action. */ }
     }
-    catch { /* A local display hint must never affect processing. */ }
     return {
       ok: true,
       result_folder: configured.status === 'available' ? configured.root
@@ -1244,7 +1324,10 @@ class StandaloneApplicationService {
       if (pathsOverlap(dataRoot, selected)) {
         throw fixedFailure('STANDALONE_RESULT_ROOT_UNSAFE', 'Der Ergebnisordner muss außerhalb des privaten DataSecure-Bereichs liegen.');
       }
-      try { this.deps.runHistory?.history(); } catch { /* retain every safely readable prior export binding */ }
+      try {
+        if (typeof this.deps.runHistory?.captureExistingExportBindings === 'function') this.deps.runHistory.captureExistingExportBindings();
+        else this.deps.runHistory?.history(); // Legacy adapter, not production.
+      } catch { /* retain every safely readable prior export binding */ }
       this.deps.resultOutputDirectory({ root: selected });
       this.deps.saveConfiguredResultRoot(selected, { nativeIdentity: options.nativeIdentity, nativeExport: options.nativeExport });
       let replay = null;

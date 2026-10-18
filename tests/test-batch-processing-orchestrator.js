@@ -101,7 +101,7 @@ await testAsync('read, lease, invalidation and maintenance failures release exac
     assert.strictEqual(h.active.has(h.token), false, phase);
     assert.strictEqual(h.calls.filter(([name]) => name === 'release').length, 1, phase);
     const release = h.calls.find(([name]) => name === 'release');
-    assert.strictEqual(release[2], false, phase);
+    assert.strictEqual(release[2], true, phase);
     assert.strictEqual(h.calls.some(([name]) => ['delivery', 'entry', 'process'].includes(name)), false, phase);
   }
 });
@@ -254,7 +254,7 @@ await testAsync('delivery promise also retains ownership and release failures re
     error instanceof TestSafeError && /nicht sicher freigegeben/u.test(error.message));
   assert.strictEqual(h.active.has(h.token), false);
   const release = h.calls.find(([name]) => name === 'release');
-  assert.strictEqual(release[2], false);
+  assert.strictEqual(release[2], true);
 });
 
 await testAsync('the batch composition root retains its public processing facade', async () => {

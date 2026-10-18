@@ -1,6 +1,7 @@
 'use strict';
 
-const { releaseOwnedLock } = require('./batch-lock-release');
+const { releaseOwnedLock, releaseOwnedEpochWithBusyRetry } = require('./batch-lock-release');
+const { recordBatchExecutionFailure, blockDocumentStabilization } = require('./batch-execution-diagnostic');
 const { isMarkdownBatch } = require('../core/processing-mode');
 
 function createBatchProcessingOrchestrator(options = {}) {
@@ -26,10 +27,22 @@ function createBatchProcessingOrchestrator(options = {}) {
     if (active.has(token)) {
       throw new SafeError('Für diese Batch-Sitzung läuft bereits eine Verarbeitung.');
     }
-    acquireActiveLock(token);
+    // Reserve in-process exclusion before the first possible admission await.
     active.add(token);
-    let primaryError = false, ownedEpoch;
+    let acquired = false, primaryError = false, ownedEpoch, primaryFailure;
     try {
+      if (typeof options.acquireProcessingOwner === 'function') {
+        const admission = options.acquireProcessingOwner(token);
+        const confirmed = admission && typeof admission.then === 'function' ? await admission : admission;
+        if (confirmed !== true) throw Object.assign(new SafeError('Die lokale Verarbeitungssperre wurde nicht bestätigt.'),
+          { code: 'STANDALONE_OWNERSHIP_CONTROL_UNCONFIRMED' });
+      } else {
+        // Explicit source/legacy contract only; never bypass native admission.
+        if (process.env.DATASECURE_NATIVE_EXPORT_CHANNEL === '1' && ['win32', 'darwin'].includes(process.platform))
+          throw Object.assign(new SafeError('Die native Verarbeitungssperre ist nicht verfügbar.'), { code: 'OWNERSHIP_GUARD_UNAVAILABLE' });
+        acquireActiveLock(token);
+      }
+      acquired = true;
       if (options.captureOwnedEpoch) ownedEpoch = options.captureOwnedEpoch(token);
       const state = readState(token);
       if (require('../core/content-options').contentOptionsForBatch(state))
@@ -108,10 +121,24 @@ function createBatchProcessingOrchestrator(options = {}) {
           } : deps));
     } catch (error) {
       primaryError = true;
+      primaryFailure = error;
       throw error;
     } finally {
-      active.delete(token);
-      releaseOwnedLock(ownedEpoch ? () => options.releaseOwnedEpoch(ownedEpoch) : releaseActiveLock, token, SafeError, primaryError);
+      try {
+        if (acquired && ownedEpoch) {
+          const releaseEpoch = options.releaseOwnedEpoch;
+          await releaseOwnedEpochWithBusyRetry(releaseEpoch, ownedEpoch, SafeError, primaryError, {
+            delay: options.releaseDelay,
+            onFailure: error => {
+              if (primaryError) blockDocumentStabilization(primaryFailure);
+              (options.recordBatchFailure || recordBatchExecutionFailure)('item_epoch_release', error);
+            }
+          });
+        } else if (acquired) releaseOwnedLock(releaseActiveLock, token, SafeError, primaryError);
+      } finally {
+        // Keep in-process exclusion through every backoff and release attempt.
+        active.delete(token);
+      }
     }
   }
 

@@ -1,6 +1,898 @@
 # Aktueller Iststand
 
-Stand: 17.10.2026 · 3.2.0-rc163 lokaler Windows-Testkandidat in Vorbereitung; veröffentlicht bleibt Standalone RC162 für Windows und beide Mac-Architekturen; M2-Zielhostabnahme offen; Linux RC159 / Cowork RC151
+Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Test-Pre-Release in Vorbereitung; noch keine neue Veröffentlichung oder Zielhostabnahme.
+
+### RC164 – beide Mac-Build-/Testjobs kostenbestätigt
+
+R8-Funktionsstand wurde bytegleich in einen getrennten Release-Worktree
+übernommen und die Version auf RC164 geschnitten. Native Mac-Producer-/Consumer-
+Verkabelung wird ergänzt: bisher leere Core-Approval und kein nativer Final-Core
+sind ein echter Buildblocker, keine durch Windows-Tests gelöste Kleinigkeit.
+App/Core-Härtung und Core-Library-Validation bleiben erhalten; nur statischer
+Guard im mutierenden Core, offizieller Konverter separat. Keine Developer-ID
+oder Apple-Einreichung. Beide Mac-Architekturen erst tatsächlich bauen/reviewen,
+dann hashgebunden vor Cargo akzeptieren. Windows neu vom selben Finalcommit.
+Details und offene tatsächliche Gates in docs/acceptance/RC164_SHARED_RELEASE_20261018.md.
+Keine Desktopsteuerung, M2-Anwendertest später, Timer PAUSED, alte Pakete erhalten.
+
+### R8 – fünf registrierte Verlaufsläufe, Abschlussprüfung läuft
+
+Quellena08125d2… (328 Produktinputs): eigenes privates Fünferregister vor normalen Journal-/Export-/
+Summary-/Präferenz-Detailreads und vor Start-/Ordner-Exportcapture; kein globaler
+Captureindex dort. Ausblenden/fehlende Daten lassen keinen sechsten Lauf nachrücken.
+Dateien bleiben erhalten. Einmalige begrenzte metadata-only-Bestandsübernahme
+mit echter Batch-ID/Aliaszusammenführung und dauerhaftem Legacy-Locator.
+Exakte alte Aktionen/Details sowie verpflichtende Summarysicherung und volle
+Recovery/Retention bleiben gesondert erhalten. Ein Registerfehler verhindert
+keine Recovery und erzeugt keinen globalen UI-Fallback. Offenzähler gilt für
+die fünf dargestellten Verlaufsläufe, nicht für sämtliche erhaltenen Journale.
+Zwei unabhängige KI-Quellenreviews mit Korrekturen und Gegenprüfung; kein Mac-
+Laufzeitnachweis. Gezielte History-/Frontend-/Sidecar-/Start-I/O-/Dokugates grün;
+neuer unveränderter266-Dateien-/Paketlauf unter
+dist/rc163-r8-history-final3-20261018 läuft. Native Prepare/Clippy/211 Rusttests
+(3 ignoriert)/Release sind dort mit unveränderten Inputs bestanden. R7 ist noch das zuletzt vollständig
+gebundene Paket, nicht bereits R8. R8-final ist eine rote obsolete IPC-Testannahme;
+R8-final2 wurde während Folgeentwicklung am eigenen Driver/Kind beendet.
+Nur final3 kann neuer Abschlussbeleg sein. Details: docs/acceptance/RC163_R8_HISTORY_WINDOW_20261018.md.
+Desktop beim Nutzer, M2 später, keine Veröffentlichung; Timer PAUSED.
+Grenze: vollständige Kaltstart-Crash-Recovery kann weiterhin ältere Journale
+lesen und bleibt bestandsabhängig. Kein Null-Alt-I/O- oder Sofortstartversprechen.
+
+### R7-Startoptimierung – lokaler Windows-Testkandidat, 18.10., 16:39 UTC
+
+Produktfingerprint4dda62d7… (327 Inputs), Einzelheiten:
+docs/acceptance/RC163_R7_STARTUP_REVIEW_20261018.md.
+Redundante Journalaufnahme entfernt, vollständige Recovery/Expiry-Erhaltung
+beibehalten; frische Byte-/Identitätsgebundene negative Terminalhinweise nur
+für nicht ausgewählte Statusleser. Bereits vorhandene unveränderliche Capture-
+Metadaten ohne Neuschreiben prüfen, pro Operation gebundenen Kontext nutzen,
+Lazy-Controlgate erst innerhalb nativer Admission initialisieren. Standalone-
+Retention fordert Journalschutz erst bei tatsächlichen Markdown-Kandidaten an.
+Windows-ZIP-Innenroot DataSecure verkürzt; keine Registry-/Rechteänderung.
+Unabhängige Quellengegenreviews erfolgt, Gegenfälle korrigiert. Vollsuite265/265
+Dateien plus10/10 Zusatzgates, Windows-Prepare/Clippy/211 Rusttests/Release
+(3 regulär ignoriert) und alle vier Paketgates bestanden. Unveränderte327
+Produkt- und536 Test-/Scriptinputs; Testmanifest3becc4ea1196568e6c932e6f084e32b6d87e9e5ff62574e7b2febc74ba702ed9.
+Gebundene FINAL-Dateien und Startprofil unter dist/rc163-r7-startup-final2-20261018.
+ZIPf4326166f7955a0ddbc4fa2617a2f3bb111d85052045cf156e2ab6f2015accb5,
+EXE73b3af31b64d8d5b040fed5ece2143f06880159cd14ca98f9cf7b46d710dbb6a.
+Paket100/100 Dateien mit unveränderten Inputs und Schnellweg-/Export-/Neustart-
+Oracle bestanden. Diese Inhaltsgates nutzen den Quell-/Legacyadapter; native
+Sperr-/Epoch-/Pausengates und echter Core-Start ohne Ergebnisordner separat grün.
+Keine native GUI-/Mac-Abnahme daraus ableiten. Neuer kurzer Übergabeordner:
+C:/Users/arkud/Documents/Software DataSecure/RC163-R7; LOCAL-HANDOFF.json belegt
+die tatsächliche Kopie. Quelloverlay und SOURCE-SNAPSHOT.json sichern denselben
+Featurestand für späteres Macbuilding. Vorheriges R7-Zwischenpaket
+mit langsamem Start und rotem obsolete-Corpus-Gate nicht zur Abnahme empfehlen.
+R6, alte rote Evidenzen und Benutzerläufe unverändert. M2 später, Timer PAUSED,
+keine Desktopbedienung. Kein Anspruch auf null historische Sicherheitsreads.
+Messgrenze: acht synthetische Altläufe etwa1s,320 im instrumentierten Profil39s;
+echte Startdauer mit Nutzerbestand sowie Windows-/spätere M2-Abnahme bleiben offen.
+
+### Neue R6-UAT-Folgeentwicklung, 18.10.2026
+
+Nutzer testet das eingefrorene R6-Paket selbst weiter; keine Desktopbedienung.
+Umgesetzte Folgearbeiten: nutzbare Reviewfläche, prominenter Dokumentabschluss ohne
+Auto-Navigation, Status zuerst im Verlauf, konsumierten Dateibaum wirklich
+leeren und dauerhaftes reines Ausblenden abgeschlossener Läufe mit früher
+Filterung der Anzeigeleser. Der konsumierte Dateibaum wird auch im DOM geleert;
+ein ungestarteter neuer Entwurf bleibt beim Reiterwechsel erhalten. Produktstand
+8c5e535b… (326 Inputs): elf gezielte Node-Testdateien, beide Headless-Browsergates,
+Windows-Clippy und 211 Rusttests bestanden (3 ignoriert). Zwei letzte P2-
+Gegenfälle zu Summary-Rennen/Offenzähler korrigiert und unabhängig gegengeprüft.
+Kein neues ZIP, keine neue Vollsuite und keine native Mac-Abnahme für diesen
+Folgestand. Details und offene Performance-/Paket-/Zielhostgrenzen:
+docs/acceptance/RC163_R6_UAT_FOLLOWUP_20261018.md.
+Der nachfolgende grüne Quellenfreeze244d86f4… gilt für das bisherige R6-Paket,
+nicht automatisch für diese gezielt geprüften Folgeänderungen. Timer PAUSED.
+
+### Aktueller Abschluss: lokaler R6-Windows-Testkandidat, 18.10., 12:53 UTC
+
+Gemeinsamer Quellenfreeze:
+244d86f4d94fe5ad51bd7a7c76297bd763ecf5f822a8d3f6661638f182ed7064
+(325 Produktinputs). Maßgebliche Nachweise unter
+dist/rc163-r6-workflow-final5-20261018:
+
+- Vollsuite262/262 Testdateien und9/9 Zusatzgates bestanden, unveränderte
+  Produkt- und532 Test-/Scriptinputs. Testmanifest75c727698aa096fd577ca8a741a2c58b98827237d316515f2e65f6b3c9d7b25d.
+- Windows-Prepare/Clippy/211 Rusttests/Release bestanden;3 regulär ignorierte
+  Helfer sind keine weiteren bestandenen Tests.
+- Alle vier Paketgates bestanden, darunter100/100 Markdown-Dateien mit
+  unveränderten Originalen und Schnellweg-Inhalts-/Export-/Neustartgegenprobe.
+  Diese Corpus-/Exportgates nutzen ausdrücklich den Quell-/Legacyadapter;
+  native Windows-C-Sperr-/Epoch-/Admissiongates werden getrennt ausgeführt.
+- Eigenes neues ZIP unter engineering-rc163-r6-workflow-final-20261018:
+  f56963aac356f71f0806419f49f608b4b019eb5f107c5b3d69f5bf2bf9cb7d96.
+  EXE c35cf5397fd74274962f7694ebff50638046b9a96204510b9c3c37654ec9f95f.
+- Elf Hauptfunktionen/22 Diagramme und sämtliche R6-Klick-/ACK-/Zielansichten
+  im Prozessreview; heutige zusätzliche Quellengegenreviews in final5/
+  INDEPENDENT-SOURCE-REVIEW.md. Zwei finale synthetische Browseransichten
+  zusätzlich visuell gelesen; keine native Desktopbedienung daraus ableiten.
+
+Zur manuellen Windows-Abnahme bereit, nicht bereits vom Nutzer abgenommen.
+Echte Darwin-/Core-/Worker-/APFS-/Finder-/ZIP-/DMG-/M2-Gates bleiben offen;
+kein Quellenmodell ersetzt sie. Source-Snapshot hält diesen Featurestand
+fest; eine spätere Mac-Artefaktapproval verändert die Produktidentity und
+erfordert anschließendes erneutes Binding beider Pakete. Keine Veröffentlichung,
+kein Push, keine Desktopbedienung; Timer PAUSED. Alte Pakete/rote Belege behalten.
+
+### Historische R6-Paketgegenbefunde und Korrekturen
+
+Der anschließende 100-Dateien-Pakettest ist trotz grünem Quellen-/Rustlauf
+fehlgeschlagen. Das lokale R6-ZIP e16dfe2d… unter engineering-rc163-r6-workflow-
+20261018 ist deshalb **nicht zur Abnahme empfohlen**. PACKAGE-FINAL.json unter
+dist/rc163-r6-workflow-final2-20261018 ist passed:false; nicht überschreiben.
+Nach fünf dauerhaft übernommenen Ergebnissen scheiterte publicProgress beim
+Pausestatus. Die logische Kontrollsperre verlor dabei den ursprünglichen
+Fehlercode; eine konkrete OS-Ursache ist aus INTERNAL_FAILURE nicht bewiesen.
+Die Statusanzeige wird vom mutierenden Pauseneintritt getrennt, unter demselben
+dataRoot-Ownershipguard mit unveränderter gebundener Markerprüfung. Mutierende
+request/resume/claim/requested bleiben maßgeblich. Gegenreview und erneuter
+Paketnachweis laufen; kein alter grüner Beleg hebt diesen roten Befund auf.
+Der Testfixture nutzt ausdrücklich den Legacy-/Quelladapter, nicht den
+Tauri-Native-Exportbroker. Native Windows-Sperrnachweise werden separat geführt.
+Timer bleibt PAUSED; keine Desktopbedienung, Veröffentlichung oder Bereinigung.
+
+Enger Quellenfix umgesetzt und unabhängig gegengeprüft: Progress erhält nur
+observeRequested; tatsächliche Processing-/Executor-/Dokumentgrenzen behalten
+requested bzw. claim. Fehlercodes aus Lockpublikationen bleiben geschlossen
+klassifiziert statt namenlos. Zieltests29 Pausecontrol,14 tatsächliche Factory-
+Kompositionen,14 Delivery-/Diagnosefälle,37 ActiveLockfälle und820 Assertions
+über254 Recordtransaktionen grün. Nativer Windows-Pausebeleg25 native
+Konkurrenzprüfungen:19 blockiert/6 erlaubt,5 Observerreads unter demselben Guard.
+Dies beweist nicht rückwirkend die Ursache des alten Paketabbruchs.
+Zwischenfreeze ddfe11bd… unter final3 ist nach einem zusätzlichen Sanitizer-
+Gegenbefund bewusst durch Stoppen ausschließlich des eigenen synthetischen
+Blatttests beendet:31/262,0/9; kein Produktfehler an Datei32 behaupten.
+FINAL bleibt passed:false/inputs_unchanged:false. Das enge SafeError-/Proxy-
+Problem ist korrigiert und negativ unabhängig gegengeprüft.
+Folgefreeze90f8584b… unter final4 bestand Windows-Prepare/Clippy/211 Rusttests/
+Release sowie alle vier Paketgates; ZIP5469b68e… Corpus100/100, unveränderte
+Inputs. Dieser Quellstand ist trotzdem überholt: Gegenreview zeigte neues
+Verfügbarkeitsrisiko bei sofortigem Observer-Kernel-BUSY, initialem Progress
+vor Worker-finally und als Verbindungsfehler gezähltem Read-BUSY. Volltest4
+deshalb bewusst am eigenen synthetischen Blatttest69 unterbrochen:68/262,0/9,
+Inputs geändert, kein PASS und kein behaupteter Produktfehler an Test69.
+ZIP5469b68e… ist nicht der endgültige R6-Abnahmekandidat.
+Die drei eng begrenzten BUSY-/Cleanupkorrekturen sind umgesetzt: Observer
+wartet ausschließlich vor Guardcallback auf eigenes Kernel-BUSY, höchstens
+5000ms monotones Aufnahmewartebudget, ohne logischen Besitzer; Marker-/Close-
+Fehler bleiben endgültig. Initialer Runner-Progress liegt nach Leaseprüfung
+im try/finally. Nur Status-/Kontextread-BUSY stoppt das Polling nicht als
+Verbindungsdefekt und bestätigt weder Ready noch einen Befehl. Native Ready-
+Beschreibungen verdecken keinen unbestätigten Laufstatus.
+Gezielter unveränderter Acht-Dateien-Cut bestanden; eigenständige Gegenreviews
+und Windows-Konkurrenznachweis erhalten. Neuer final5-Quellenfreeze
+244d86f4d94fe5ad51bd7a7c76297bd763ecf5f822a8d3f6661638f182ed7064
+ist inzwischen vollständig unverändert bestanden, siehe aktuellen Abschluss oben.
+
+### Neuer ausdrücklicher Auftrag vom 18.10.: R6-Prozess und Navigation
+
+Der Nutzer hat nach der Übergabe gezielt weitere lokale Entwicklung beauftragt:
+pro Hauptfunktion Aktivitäts- und Sequenzdiagramm, Quellengegenreview und
+Umsetzung der Navigations-/Abschlussvereinfachungen. Der Timer bleibt PAUSED,
+die Desktopfreigabe aufgehoben. Diese neue Arbeit ist keine automatische
+Fortsetzung des alten Timerauftrags. R5-Pakete und Evidenzen bleiben eingefroren.
+
+Der zweite R5-Volltest ist beendet, nicht mehr laufend: 225/262 Dateien grün,
+Abbruch an tests/test-companion-ipc.js, 0/8 Zusatzgates, unveränderte Inputs.
+HEADLESS-FINAL.json unter dist/rc163-r5-integrated-final2-20261018 bleibt rot.
+Eine überbreite Testassertion verbot den legitimen exakten Native-Mac-Selector
+im Startpfad. Nur der Test wurde präzisiert, inklusive tatsächlichem FD3-Start,
+Mac-Guard-vor-Secret und negativen Environment-Key-Gegenfällen; unabhängiger
+Wiederlauf 29/29. Produktcode und Timeoutfristen dafür unverändert. Kein
+Gesamt-PASS aus diesem Einzeltest ableiten.
+
+R6-Vertrag: docs/acceptance/RC163_R6_WORKFLOW_REVIEW_20261018.md. Elf
+Funktionspaare bilden Mensch/Klick, Befehle, ACK, Zielansicht und Ausnahmen ab.
+UI-Implementierung und gezielte unabhängige Gegenreviews sind durchgeführt:
+eigener laufgebundener Detailsbereich, kompakter Verlauf, direkte Ergebnisse/
+Hinweise, private Zuordnungen optional, ACK-Abschluss zur gleichen Übersicht.
+„KI-Kopie“ heißt in der Oberfläche nun Export; die Dateien sind allgemein
+verwendbar. Physische Altnamen/APIs und Freigabe-/Hashgrenzen bleiben erhalten.
+Zusätzlich korrigiert und negativ gegengeprüft: verspäteter Dokument-Close,
+Öffnen eines dauerhaften Exportbelegs nach Close, höhere-Ready-Snapshotretirement,
+startbereiter Nachfolgelauf mit altem Job und leere Details nach Summarykonkurrenz.
+Workspace302, Dokumentrenderer89, andere Frontends46+50, Darstellung46 und
+Anleitungsvertrag29 grün. Neue negative Gegenproben nicht entfernt; erste rote
+Zwischenläufe bleiben erhalten. Die Tests sind keine native Anwenderabnahme.
+
+Mac-Producer-P3 ist als begrenzter asynchroner Toollifecycle implementiert;
+Producer125 und Consumer105 plus unabhängige Toolreihenfolge-/Abort-/Closemodelle
+geprüft. Keine echte Darwin-Toolausführung und kein nativer Mac-Nachweis.
+Der neue gemeinsame Produktfingerprint lautet
+6b4cda0147ae502d137a9759b3366f1148e24cc2cc46de42b68a9fd60b1a8b80.
+Erster R6-Gesamtlauf ist korrekt rot beendet: 58/262 grün, dann Desktop-
+Quellenassertion, weil sie „acknowledge“ im erklärenden Kommentar als Aufruf
+wertete; 0/9 Zusatzgates. Der enge Testfix entfernt nur vollständige
+Zeilenkommentare aus der geprüften Codeansicht; identische Verbote plus drei
+eingebaute negative Mutationen und 18 unabhängige RAM-Mutationen bleiben rot
+bei echtem verbotenem Code. Produktfingerprint unverändert. Dieser rote
+Erstbeleg bleibt unter dist/rc163-r6-workflow-final-20261018 erhalten.
+Neuer kompletter create-only Lauf bestanden: 262/262 Dateien und 9/9
+Zusatzgates, unveränderte 325 Produktinputs und 532 Test-/Scriptinputs.
+Windows-Prepare/Clippy/211 Rusttests/Release ebenfalls erneut bestanden;
+3 regulär ignorierte Testhelfer sind kein zusätzlicher PASS. Maßgebliche
+FINAL-Belege: dist/rc163-r6-workflow-final2-20261018. Das eigene R6-Windows-
+ZIP wird dort separat gebaut und geprüft; R5-ZIP bleibt unverändert.
+Die nachfolgenden älteren Übergabeformulierungen sind historisch.
+
+### Aktuelle Übergabe an den Nutzer, 18.10., 09:25 UTC
+
+Nach ausdrücklicher Klarstellung des Nutzers am 18.10. ist der Timerauftrag
+datasecure-lokales-backlog-fortsetzen per App-Tool auf PAUSED gesetzt;
+keine automatische Fortsetzung. Der Nutzer testet selbst am Desktop.
+Der bereits gestartete, begrenzte Vollsuite-Prozess schreibt seinen eigenen
+Endbeleg; vor dessen tatsächlichem Vorliegen bleibt der Gesamtnachweis offen.
+Keine neue Entwicklung oder Folgeprüfung automatisch starten. Ein eventuelles
+unfertiges Mac-Producer-P3-Delta bleibt unangewandt und ausdrücklich offen.
+
+Die Desktopfreigabe ist ausdrücklich aufgehoben. Keine weitere UI-Bedienung,
+auch nicht aufgrund älterer Automationsanweisungen. Die App bleibt unter der
+Kontrolle des Nutzers. Ein neuer OCR-/Vertagen-Test ist vorbereitet, aber noch
+nicht gestartet; der letzte Ordnerdialogaufruf wurde mit Escape unterbrochen.
+Aktuelles eigenes Testziel ist noch Software DataSecure/RC163-R5-Final-Test-
+20261018, nicht das ursprüngliche Software DataSecure/Ergebnisse. Keine
+heimliche Einstellungsänderung oder Wiederherstellung über Dateizugriffe.
+
+Neuer Windows-Kandidat, gemeinsamer Fingerprint
+30b4f6a9ecaecb0d29fd1da341191384711f3825ed69e959a67afd67262080bd
+(325 Produktinputs): ZIP unter dist/engineering-rc163-r5-integrated-final-
+20261018, SHA256 eb1c08aa623393b84c1ff4029790cb7ef86837b17c3af1694e6bc38bb11fcbd0.
+Alle vier Paketgates bestanden, einschließlich echtem 100-Dateien-Corpus.
+Prepare/Clippy/210 Rusttests/Release erneut unverändert bestanden; drei regulär
+ignorierte Rusthelfer sind keine zusätzlich bestandenen Prüfungen.
+
+Normale Explorer-Bedienung des exakten Pakets bestätigt:
+
+- Fast+OCR d3611dc1…: 3/3 automatisch freigegeben, sichtbarer Erstexportplan
+  vollständig, keine Claimreste. Vorschauabbruch ohne Kopie; danach genau eine
+  explizite KI-Kopie mit 3 bytegleichen neutralen Markdown-Dateien. Verlauf
+  zeigt Abschluss mit Hinweis, Freigaben und Kopie korrekt; kein zweiter Export
+  erforderlich. FRESH-FAST-SUCCESS.json bindet dies an Paket und Outputbytes.
+- Geführter Lauf 67b68b62…: OCR aus, Originalnamen mit -anonymisiert; 2/3
+  Ergebnisse, ein erwarteter IMAGE_OCR_REQUIRED-Stopp. Beide tatsächlichen
+  Vergleiche geöffnet, danach einmalige Sammelfreigabe 2/2 und korrekte frische
+  äußere Statusanzeige. Kein KI-Export dieses Laufs angefordert. Eigene
+  Eingaben bleiben erhalten; dies ist keine Wiederaufnahmeprüfung.
+
+Die erste abschließende Headless-Runde blieb korrekt rot bei Datei69/262:
+ein altes Mac-Ladegate-Modell kannte die neue Static-Core-Approval-Seam nicht.
+Enger Testfix mit vier negativen Rollen-/Pinfällen: 42/42 bestanden, Produkt
+unverändert. Neuer vollständiger 262+8-Lauf unter dist/rc163-r5-integrated-
+final2-20261018 läuft noch; kein Gesamt-PASS und keine Gesamtabnahme behaupten.
+Keine Quell-/Test-/Skriptedits während dieses Laufs.
+
+Native Mac-Gate-Nachbesserung NG-01/02 integriert und unabhängig gegengelesen:
+späte Protokollfehler bleiben gelatcht; begrenzte Beendigung/Detach und ehrlicher
+Cleanupstatus. 24 Modelle und vier ursprüngliche Gegenmodelle grün. Das ist
+weiter kein Darwin-/M2-/Paketnachweis. Alle echten Mac-Artefaktgates bleiben
+offen; approved_artifacts ist unverändert leer. Keine externe Veröffentlichung.
+
+Enger abschließender Producer-/Final-Core-Quellenreview bestätigt keinen
+weiteren P1/P2. Konkreter P3-Robustheitsrest: fünf synchrone Toollaunchstellen
+haben nur Node-SIGTERM-Timeouts, keine harte Deadline; kein tatsächlicher
+Apple-Tool-Hänger wurde beobachtet. Ein getrenntes unangewandtes Async-Tool-
+Delta mit begrenztem Close/Detach und erneutem finalem Abortcheck wird
+vorbereitet. Der laufende Windows-Freeze bleibt unverändert. Die übrigen
+offenen Toolnamespace-/Home-ACL-/Nachfahren-/APFS-Punkte sind ausdrücklich
+Provisionierungsannahmen oder native Gates, keine neu bewiesenen P1/P2.
+Bericht: dist/mac-static-core-open-gates-review-20261018/REPORT.md.
+
+### Maßgebliche Integration, 18.10., nach 08:44 UTC
+
+Der folgende Stand ersetzt die älteren Aussagen „Workerfix in Vorbereitung“
+und „Mac-Consumer unangewandt“. Die zeitlich bezeichneten Fehlversuche darunter
+bleiben historische Nachweise, keine aktuelle kumulative Offenenliste.
+
+- Awaited Worker-Erstbereitstellung integriert: begrenzte Nur-Voreintritts-
+  Admission für Publikationsbeleg, Exportclaim und Plan. Kein Callback-/Copy-
+  Replay, kein Kernelguard über await, identische opaque Claimfreigabe. Beide
+  Worker warten auf das tatsächliche Ergebnis. 50 gezielte Quellenfälle und
+  eine echte Windows-C-Gegenprobe mit 84 Assertions bestanden; abschließender
+  unveränderter Gesamtstand und normale Explorer-Bedienung noch erforderlich.
+- Mac-Static-Core-Consumer39, Provenienzregression, versionierter Producer-R2,
+  Layout-/Loader-/Controltests angewandt. Eigene Guardfunktion wird statisch
+  in den eigenen Node22-Core eingebunden; Windows behält seinen Addonpfad.
+  Gemeinsame Requireclosure227 und frühe Pin-/Rollenprüfung erhalten.
+- Producer-Prozessbelege sind jetzt verpflichtend in Provenienzschema /2 und
+  damit im Artefaktdigest gebunden. Beide Gruppenabschlussbooleans bleiben
+  ehrlich unbestätigt; Child-close ist kein Beweis für alle Nachfahren.
+  106 Producer- und 105 Consumer-Quellen-/Childmodelle bestanden. Kein echter
+  Mac-Build, keine Artefaktfreigabe oder Signier-/Paketbehauptung daraus.
+- Parser-Negativrolle korrigiert: nur der exakte eigene Node-Missing-name-
+  Fehler beweist das Fehlen des Builtins, kein beliebiges ERR_INVALID_MODULE.
+- Neues Helper-/Producerinventar in der gemeinsamen Sourceidentity. Vorläufiger
+  Fingerprint30b4f6a9ecaecb0d29fd1da341191384711f3825ed69e959a67afd67262080bd
+  (325 Eingaben); noch kein finales Handoff-ZIP daraus.
+
+Mac bleibt vor nativer Abnahme gesperrt: approved_artifacts ist leer; echte
+arm64-/x64-Corebytes, unabhängige Artefaktpins, native Prozess-/Worker-/APFS-
+Gates und ZIP-/DMG-/Finderstart fehlen. Developer-ID wird nicht vorausgesetzt;
+ein lokaler ad-hoc Seal ist keine Gatekeeper-/Organisationsfreigabe. Der
+offizielle getrennte Converter behält seine Vendorentitlements. Offene
+Producergrenzen (Toolnamespace, konservative ACLpolicy, Nachfahrenabbruch)
+nicht als abgeschlossen darstellen. Keine macOS-Schutzfunktion abschalten.
+
+Die Windows-Quelle wird für denselben fachlichen Featurestack archiviert.
+Aktuelle Aufnahme inzwischen vorhanden: dist/rc163-r5-integrated-final2-
+20261018/source-snapshot/RC163-R5-INTEGRATED-SOURCE.zip, 873 Dateien plus
+Manifest, SHA25681c24e69b0477a1a784a5327d1e757d5614efc96fc009d2169e9734522d80426.
+Alle Mitglieder unabhängig bytegeprüft. Selektives Overlay auf Baseline
+ec7460741291707b0d0aab4cab3459154bb4bec9, kein autarker Checkout mit Dependencies
+oder nativen Mac-Artefakten; RECONSTRUCTION.md beschreibt die Grenze.
+Spätere echte Mac-Artefaktapproval verändert die gemeinsame Policy/Identity;
+danach müssen beide Zielpakete erneut an dieselbe finale Sourceidentity
+gebunden werden. Kein nachträgliches Umetikettieren eines alten Windows-ZIPs.
+
+### Laufende Fortsetzung: Exportdiagnose und Schließvorgang, 18.10.
+
+08:21 UTC: Zusätzliche feste Delivery-Unterphasen und geschlossene Ursachen
+integriert, ursprünglicher Wurf/Commit-/Releasefolge unverändert. Export-IO-
+Kompatibilität nach echter Regression korrigiert; 49 gezielte Node22-Fälle grün.
+Quellfreeze 75812d876adac0385b3c9a77a4823f1c03c154a8c2f274a997428c4c78dc83f0:
+Prepare/Clippy/210 Rusttests/Release unverändert bestanden. Neues Diagnose-ZIP
+SHA256 d9b3396f15098109ba25fb3772fc08ca2519efd1d41aabc74a15583e222334bf,
+vier Paketgates bestanden, darunter echter isolierter 100-Dateien-Corpus
+(100 Ergebnisse, 0 Fehler, 79,1 s). Der frühere 41-Dateien-Abbruch ist damit
+nicht kausal erklärt oder als behoben bewiesen. Auch die beiden neuen
+Gegenläufe desselben unveränderten Pakets sind bestanden (insgesamt drei
+frische 100/100-Läufe). Dies ist keine native GUI-/Mac-Abnahme.
+
+Normale Explorer-Fastsession ist vollständig geschlossen, ursprüngliches
+Ergebnisziel wiederhergestellt; kein zusätzlicher falscher Retirealarm und
+keine zugeordneten Prozesse zurück. Ihre belegte Plan/STANDALONE_BUSY-Ursache
+bleibt offen; awaited Nur-Voreintritts-Workerfix wird separat vorbereitet.
+
+08:07 UTC: Neues tatsächliches Diagnoseergebnis auf Paket 5a1a5274, ZIP
+ace9b49ab15804abe3cedf1f1566f828bb99fbdf4b6f1ad30da57105b8cbf70f:
+210 Rusttests/Clippy/Release bestanden, Paketgates 3/4; isolierter 100-Dateien-
+Corpus stoppt an local_delivery_verify/INTERNAL_FAILURE nach 41 Freigaben.
+Sein eigener Profil-/Prozessscope ist bestätigt; keine GUIeinstellungen dadurch
+geändert. Einzelursache wird weiter eingegrenzt, kein Gesamt-PASS.
+
+Normaler Explorerstart bestätigt Originalsetting und neue Testordnerwahl.
+Abweichender direkter sky.launch_app-Start sieht dagegen alten Default und
+scheitert im privaten Native-Create mit NTSTATUS c000050b/4395. Der kontrollierte
+Startwegvergleich gelingt mit unveränderten Bytes; daraus weder ACLrepair noch
+Entfernen von OBJ_DONT_REPARSE ableiten. Benutzerweg maßgeblich dokumentieren.
+
+Genau ein neuer Fast+OCR-GUIlauf 6ff3451f…: drei private Ergebnisse freigegeben,
+kein Exportplan, keine sichtbaren Dateien, keine Lease/Claim zurück. Jetzt ist
+die feste Erstursache result_export_plan/STANDALONE_BUSY tatsächlich erhalten
+(Sidecarsession 94775d3c…, Zeit 1792310614718). Kein Historyretry/AI-Export.
+Separater awaited Workerpfad mit begrenzter Nur-Voreintritts-Admission in Arbeit;
+keine Verarbeitung/Copywiederholung und kein Guard über await vorgesehen.
+Originalergebnisziel per UI erneut sichtbar bestätigt, App normal geschlossen.
+
+Diagnose-R2 und zusätzliche Review-Executor-Brücke integriert; 35 gezielte JS-
+Fälle bestanden. Aktueller Quellfingerprint nach dieser Brücke:
+79922fcd5b83e691f2a4daf9d12a4b302d4d825f7e75c6ab284fb930ce94ee7f.
+5a1-Paket enthält diese letzte Brücke noch nicht. Mac-Producer-V1 vor Integration
+mit zwei P2 (unsichere Reopens/Pythonpinabweichung) zurückgewiesen; R2 in Arbeit.
+Keine Mac-Artefaktfreigabe oder Developer-ID-/Schutzlockerung.
+
+Der f45-Fastlauf bleibt ein belegter funktionaler Nicht-PASS: drei private
+Ergebnisse vorhanden, erster sichtbarer Exportplan nicht erhalten. Erste
+Claimakquise und unabhängiger Contentowner sind belegt; die ursprüngliche
+Exception zwischen Owner und Plancommit ist nicht protokolliert. Keine
+historische Busy-Ursache erfinden und keinen gesamten Export wiederholen.
+Getrennte inhaltsfreie Plan-/Copy-/Claimrelease-Diagnose in Arbeit.
+
+Normales Alt+F4 des f45-Kandidaten ist dagegen bestätigt: auf den irreführenden
+Retire-Alarm folgt nach acht Millisekunden shutdown ready; beide zugeordneten
+Prozesse sind beendet. Enger Rust-P3-Fix jetzt integriert: ausschließlich exakt
+STANDALONE_CLOSING unterdrückt den zusätzlichen RecoveryBlocked-Alarm. Die
+ursprüngliche IPC-Closing-Diagnose, echte Fehler, Prozess-/Rootpins und Exit70
+bleiben erhalten. Sechs gezielte Retirement-Rusttests auf Windows bestanden,
+darunter beide neuen Regressionen; kein neuer Gesamtlauf/Paket-PASS daraus.
+
+Mac-Static-Core bleibt unangewandte Implementierungsbasis mit echten offenen
+Producer-/Native-Test-/Artefaktgates. Erneuter Abgleich gegen den aktuellen Baum
+läuft parallel. Benutzerdateien, bestehende Rechte und alte Läufe unverändert.
+
+Ursprüngliches Ergebnisziel inzwischen per nativer Appauswahl wiederhergestellt
+und sichtbar bestätigt. Eigene App normal geschlossen; keine App-/Coreprozesse
+dieses Stagepfads mehr vorhanden. Der eigene ungeplante Fastfall bleibt dabei
+unverändert: Plan fehlt, alter Claim vorhanden. Beleg
+ORIGINAL-RESULT-SETTING-RESTORED.json im f45-Nachweisordner.
+
+### f45bfbf – erster echter Fast-Folgefall bleibt offen, 18.10.
+
+Korrigierter gemeinsamer Freeze f45bfbf12a1248854570ef10f47317b93210cc09713ecc7409f109ce5481c058:
+208 Rusttests, Clippy/Release und vier Paketgates unverändert bestanden.
+ZIP unter dist/engineering-rc163-r5-processing-admission-final-20261018/,
+SHA256 b78a98da350cf1487a607f0087f7bebded5e7b9291ba334a23e969b1ea681c02.
+**Noch nicht funktional zur Übergabe freigeben.**
+
+Echter C1-GUI-Erstlauf a9b1ae49… verarbeitet alle drei absichtlich problematischen
+Quellen und stoppt sie jeweils mit RESIDUAL_PII; keine Publikation oder KI-Kopie,
+keine Lease zurück. Auch die vollständige Zahlenreferenz im Code ist kein
+Datenschutz-Ausnahmetatbestand. Beleg C1-STOP-SUCCESS.json, kein erneuter Start.
+
+Anschließender Standard-Fast+OCR-Lauf 6556f59e… / 11a3bae9: drei private
+released/released_locally, History complete/result_count=3, Worker Exit0 und
+keine Lease. Sichtbarer Output bleibt aber leer; Oberfläche zeigt korrekt
+Bereitstellung offen. Kein History-Reparatur-/Exportretry ausgelöst. Claimdatei
+vorhanden, finaler Exportplan fehlt; genauer ursprünglicher Fehler ist in den
+derzeitigen Logs nicht erkennbar. Direkte Export-/Diagnoseanalyse läuft.
+FRESH-FAST-PENDING.json und beide geschlossenen Sessions erhalten.
+
+Eigene App normal geschlossen, keine Prozesse dieses Kandidaten mehr gefunden.
+Nur der eigene synthetische Ergebnisordner ist während der noch laufenden
+Gegenprüfung weiter als Appziel ausgewählt; vor Handoff ursprüngliches Ziel
+C:\\Users\\arkud\\Documents\\Software DataSecure\\Ergebnisse per UI wiederherstellen.
+
+Beide neuen dauerhaften Gegenproben sind jetzt registriert: tatsächlich
+ausgeführte batch.js-Komposition mit historischer Rotkontrolle (12/12), eigener
+Windows-ArtifactBoundPlan für echte C-Admission (57 Prüfungen, normale Childenden).
+Nicht automatisch in CI; explizites Manifest und Runtimehash erforderlich.
+Der e5c-Gesamtlauf beendet 255/255 + 7/7 ohne Testfehler, wegen geänderter Eingaben
+aber korrekt inputs_unchanged=false/passed=false. Kein neuer unveränderter
+Gesamt-PASS dieses f45-Produkts und kein Mac-/Clean-machine-PASS.
+
+### Verarbeitungseintritt und tatsächliche Verdrahtung, 18.10., 06:59 UTC
+
+Der frühere unveränderte 36641cba-Gesamtlauf ist mit 254/254 + 7/7 bestanden.
+Die echten Fast-/Vertagen-/Exportteilerfolge dieses Stands bleiben gültig;
+der anschließende C1-Ersteintrittsfehler bleibt jedoch ebenfalls erhalten.
+
+Enger Fix integriert: Processing-Admission wiederholt ausschließlich echten
+Kernel-Busy vor Callbackeintritt, asynchron und begrenzt. Kein Dokument-/
+Maintenance-Replay, kein Guard über await und kein Release unbestätigter Owner.
+19 neue und 13 bestehende Kontrollflussfälle bestanden. Beide P3-Statusdeltas
+ebenfalls integriert; 386 fokussierte Frontendfälle und separater Quellenreview
+ohne neuen bestätigten P1/P2. Noch keine neue Bedienabnahme daraus ableiten.
+
+Zusätzlicher Integrationsfehler sofort vor der Übergabe gefunden: beim Apply
+stand die Admissionoption im ähnlichen Review- statt Processingblock. Der e5c-
+Zwischenkandidat und seine ZIP sind deshalb **nicht zu verwenden**. Quellenfix
+jetzt exakt gegen Revision-2-Zielhash geprüft (batch.js 31ad5c6b…); tatsächliche
+Kompositionsregression in Vorbereitung. Der begonnene e5c-Gesamtlauf wird durch
+die Korrektur nicht nachträglich zu einem unveränderten PASS. Paketgates geben
+wegen Sourcewechsel trotz vier bestandener Einzelgates korrekt passed=false.
+
+Echte Windows-C-Zweiprozessprobe auf neuer eigener privater Fixture: 64 Prüfungen
+bestanden, transient 0→1 Aktion, persistent nach 4,695 s null Aktionen, normales
+Child-Exit/Close. Nur Rechte der neu angelegten synthetischen Fixture gesetzt;
+keine Benutzer-/Apprechte verändert. Ursprünglicher verweigerter Tempversuch
+und historische Belege bleiben erhalten. Neuer Windowsbuild/Kandidat läuft
+unter dist/rc163-r5-processing-admission-final-20261018/.
+
+Mac bleibt echte offene Implementierungs-/Packagingarbeit: statischer Provider,
+versionierter Producer und native Testmigration sind noch nicht Produkt; finale
+arm64-/x64-Cores samt Freigabepins fehlen. Nicht als bloß ausstehenden M2-Klick
+oder als bereits gelöste Library-Validation-Grenze darstellen. Keine Apple-
+Schutzlockerung, Zertifikats-/Runner-/Releaseaktion aus dieser Runde.
+
+### Reale Bediengegenprobe, 18.10., 06:07–06:39 UTC
+
+Freeze 36641cba: nativer Windowsbuild (208 Rust, Clippy, Release) und vier
+Paketgates einschließlich 100-Dateien-Corpus bestanden. Neuer frischer
+Schnellweg mit OCR tatsächlich 3/3 sichtbar bereitgestellt und automatisch
+freigegeben. Vorschau abgebrochen: keine Kopie. Anschließend genau ein
+ausdrücklicher Export, drei bytegleiche neutrale Markdown-Dateien ohne private
+Begleitdateien. Auftragskarte, Schrittanzeige und abgeglichene Verlaufs-Laufkarte
+zeigen Abschluss mit Hinweisen und 3/3 Kopie; keine Wiederholung nötig.
+
+Geführter eigener OCR-Lauf: ungespeicherte Korrektur, Vertagen, normales Ende,
+Explorerneustart ohne Autorun, bewusste Wiederaufnahme und mehrminütige offene
+Prüfung, zwei OCR- und eine Personenentscheidung, Originalvergleich und eine
+manuelle Dokumentfreigabe bestanden. Sechs erwartete Identifikatormasken im
+sichtbaren Ergebnis, keine ungespeicherte Korrektur und keine KI-Kopie dieses
+Laufs. Zwei P3-Anzeigelücken dabei bestätigt: vertagte Schrittanzeige bleibt
+auf Warten; zurückbehaltene Auftragskarte übernimmt frische Dokumentfreigabe
+noch nicht. Kumulatives enges Delta mit 386 RAM-Fällen vorbereitet, unangewandt.
+
+**Neuer früher Busy-Stopp:** zusätzlicher frischer C1-Fastlauf 610d803b… /
+3191e870 stoppt vor erster Verarbeitung an OWNERSHIP_CONTROL_BUSY. Alle drei
+Quellen pending/sealed, keine Lease/Publikation/Freigabe/Kopie. Das ist kein
+Datenschutztest-PASS. Direkte frühe Kontrollflussanalyse läuft. Keine blinde
+Fortsetzung. Vier authentische geschlossene Sitzungslogs und drei gefilterte
+GUI-/Hashbelege unter `dist/rc163-r5-lease-completion-20261018/` erhalten.
+Originale Ergebniseinstellung wiederhergestellt, eigene App normal beendet.
+
+Erster unveränderter 254+7-Lauf endet bei Datei 151 an fehlender kanonischer
+Erreichbarkeit der neuen nativen Leaseprobe, ausdrücklich kein Gesamt-PASS.
+Nun eigenständiger argumentgebundener Einstieg im zentralen Runner, keine
+Aufnahme in quellenbasierte CI und kein Produktbytewechsel. Direkte Probe
+bestanden. Neuer unveränderter Gesamtlauf unter
+`dist/rc163-r5-final-gates-20261018/` aktiv. Kein Produkt-/Testedit währenddessen.
+
+Mac: Consumer/Producer/Layoutdelta weiterhin unangewandt. Zusätzlicher
+Producer-Hardening-Folgediff schließt nichtblockierende gebundene Reads und
+direktes Exit/Close-Handling in Modellen (31 Fälle). Keine reale Prozessbaum-,
+Compiler-, Core-, Paket- oder Finderattestation. Beide finalen Coreartefakte,
+Pins, native Testmigration und normaler M2-/Intel-Erststart bleiben offen.
+
+### Integrierte Abschlussrunde, 18.10., 05:56 UTC
+
+Der unveränderte 6e5d-Gesamtlauf ist mit **252/252 + 6/6**, Eingaben
+unverändert, beendet. Dies ist ein gültiger automatisierter Nachweis dieses
+alten Stands, aber keine Heilung seines echten frischen Fast-GUI-Fehlers.
+
+GUI-12 nun im Quellcode korrigiert: ein äußerer synchroner Rootguard für
+Leasefreigabe und anschließende Lifecycle-Transaktion, zwei sequenzielle
+logische Owner. Nur exaktes Kernel-Acquire-Busy vor Callbackeintritt erlaubt
+endlichen asynchronen Backoff (höchstens elf Versuche, angeforderte Wartezeit
+4.585 ms, monotone 5-s-Grenze für neue Versuche). Kein Aktions-/Parser-/
+Publikationsreplay und kein Guard über await. Runner wartet auf den Abschluss,
+auch falsy Primärfehler bleiben erhalten.
+
+Parent-Endecallbacks verwenden nun den tatsächlichen Claim als WeakMap-
+Capability mit privater zufälliger Lease-Nonce. Keine nachträgliche PID-
+Autorität; separate Worker dürfen nur ihre eigene bestätigte Prozessinstanz
+freigeben. Intake-Parent erfindet keine workerseitige Capability. Alte Journale
+bleiben lesbar, keine Datenmigration und keine Rechteänderung.
+
+16 fokussierte Suite-Dateien bestanden auf dem zusammengeführten Erststand.
+Nach zusätzlichem Anzeige-Cachefix 252 Workspace-/89 Dokumentrendererfälle
+grün. Zwei getrennte direkte Quellengegenreviews bestätigen die jeweiligen
+Deltas ohne neuen P1/P2; kleine Cache-/ID-Reste wurden gezielt geschlossen.
+Neue native Windows-Zweiprozessprobe mit realem C-Guard und echten Journal-
+Fixturebytes besteht für Non-Zero-/Zero-Day: einmalige Schritte, konkurrierendes
+Kind genau zwischen den Schritten verweigert, danach zugelassen, fünf Kinder
+bestätigt beendet. Synthetischer Finishadapter ist ausdrücklich kein Beleg
+des gesamten Dokument-/Retentionspfads.
+
+Neuer Freeze `36641cba0998b7d7cf1c39a4e921e449fd42c78ae73b5faa8f2d792f45d4b81b`:
+nativer Gesamtbuild und **254+7**-Gesamtlauf gestartet. Neue Belege unter
+`dist/rc163-r5-lease-completion-20261018/`; neue ZIP und reale Fast-/Vertagen-/
+Neustart-/Exportgegenproben stehen noch aus. Keine Freigabe daraus ableiten.
+
+Mac: ergänzender Zwei-Dateien-Testmigrationspatch für drei Bundle-Rollen
+vorbereitet, weiter unangewandt. Echte Static-Core-Gates benötigen den
+gebundenen App-/Core-Kontext, nicht nur einen ausgetauschten Manifestnamen.
+Keine Scheingates oder erdachten Freigabepins; M2/Intel bleiben unbewiesen.
+
+### Echte Folgeprüfung 18.10., 05:10–05:37 UTC
+
+6e5d ist weiterhin **kein funktional abgenommener Kandidat**. Vier Paketgates
+grün/unverändert; der neue vollständige Headlesslauf ist noch aktiv. Der alte
+c76b-Lauf bestand 252+6 Dateien, aber mit geänderten Eingaben und deshalb
+ausdrücklich keinem Gesamt-PASS.
+
+Praktisch bestanden: Fortsetzung des eigenen früheren Schnellwegs, 3/3 lokal
+freigegeben, sechs vorherige Publikationsdateien unverändert. Neuer geführter
+Lauf mit 2/3 Ergebnissen und erwarteter OCR-aus-Auslassung: Originalvergleich,
+zwei Freigaben, Vorschauabbruch ohne Kopie, danach genau eine bytegleiche
+KI-Kopie. Obere Schrittanzeige und Verlaufs-Laufkarte zeigen denselben
+bestätigten Abschluss mit Hinweisen; Originale unverändert.
+
+**GUI-12/P2 bestätigt:** Ein frischer Schnellweg mit OCR erstellt privat 3/3
+Ergebnisse, erreicht aber die sichtbare Bereitstellung nicht. Der Wrapper
+gibt die Executorlease erfolgreich frei und eröffnet für die auch bei
+Nicht-Zero-Day-Läufen aufgerufene Lifecycle-Nacharbeit erneut einen Guard.
+Dortiges Kernel-Busy wirft vor dem sichtbaren Export. Zwei unabhängige
+Quellenreviews bestätigen diesen Pfad; der konkrete konkurrierende Aufruf
+ist nicht bewiesen. Keine blinde Wiederholung oder Exportauslösung.
+Zusätzlicher Parent-Exit-/PID-Reuse-Vertrag wird eng gegengeprüft.
+
+Eigene geschlossene Originalprotokolle und gefilterter Lauf-/Hashbeleg unter
+`dist/rc163-r5-review-control-20261018/FRESH-FAST-FAILURE.json`. Ursprünglicher
+Ergebnisordner in der App wiederhergestellt, eigene App normal beendet.
+Alle privaten Publikationen und historischen Fehlerbelege bleiben erhalten.
+Korrekturen zunächst als getrennte Deltas vorbereiten, um den laufenden
+Gesamttest nicht nachträglich zu entwerten. Keine macOS- oder M2-Abnahme.
+
+### Neuer unveränderter Kandidat, 18.10., 05:06 UTC
+
+Quellfingerprint `6e5d75478ff62a3700b653a74c38240d28b13da9af52515803471fbf3111bd77`:
+Prepare, Clippy, 208 Rusttests (drei reguläre Helfer ignoriert) und Release
+bestanden, Eingaben unverändert. Review-Orchestrator-P2 inklusive echter
+Pause-Control-Verweigerungen vor/nach OCR-Antworten korrigiert; Review-Parent
+leitet feste Diagnosen ohne zusätzliche Autorität weiter. 40 Orchestrator-
+und 86 Startupfälle sowie 3 Diagnoseproben grün; begrenzter Gegenreview ohne
+neuen bestätigten Delta-P1/P2.
+
+ZIP create-only unter `dist/engineering-rc163-r5-review-control-20261018/`,
+SHA256 `da0834d1c41f80d7cee0f637545f89a248040c03c3acdda2ae04b7ce3d26d8cc`.
+Archiv/Staging/EXE-Fingerprint bytegeprüft, weitere Paketgates noch laufend.
+835 Quellen-/Prüf-/Builddateien separat in `source-snapshot/RC163-R5-SOURCE.zip`
+bytegeprüft erhalten, Quellbeleg unter `dist/rc163-r5-review-control-20261018/`.
+Keine funktionale Abnahme oder Veröffentlichung daraus ableiten.
+
+Der ältere c76b-Volltest hat inzwischen die frühere Review-IPC-Fehlerstelle
+passiert, bleibt aufgrund Inputänderung trotzdem kein gültiger Gesamtnachweis.
+Neuer unveränderter Headless-Gesamtlauf folgt nach seinem Ende. Der eigene
+alte Schnellweg hat noch zwei freigegebene und ein publiziertes/unbestätigtes
+Ergebnis; alle drei Originalpublikationen sind vor der neuen GUI-Fortsetzung
+gehasht (`OWNED-FAST-BEFORE.json`). Keine weitere Fortsetzung erfolgt blind.
+
+Mac-Delta mechanisch erneut geprüft, weiterhin unangewandt: zusätzlich sind
+Relocator-/Layouttests auf drei Rollen, echte Static-Core-Konkurrenzgates und
+die kontrollierte Artefaktzuführung im Workflow nötig. Beide echten versiegelten
+Core-Artefakte/Pins fehlen. Windows-Erfolg ersetzt weder diese Integration noch
+Finder-/ZIP-/DMG-/M2-Nachweise; kein Abschalten von OS-Schutzmaßnahmen.
+
+### Folgerunde 18.10., 04:55 UTC: Dokument- und Reviewkontrolle
+
+Dokument-Metadaten verwenden jetzt die synchrone Guardtransaktion. Die genau
+drei asynchronen Exportlebensdauern geben dieselbe vor Aktionsbeginn erfasste
+Epoche nach begrenztem Busy-Backoff frei. Tatsächliche native Konkurrenzprobe:
+20/20 (14 verweigert, 6 erlaubt), darunter ein separat gestarteter echter
+Guard-Konkurrent während eines Async-Exports; Aktion genau einmal, eigene
+Epoche anschließend freigegeben. Kein OS-Schutz oder realer ACL verändert.
+
+Acquire-Busy wird nicht mehr als beschädigte/missing Publikation gewertet.
+Einzelne idempotente Metadatenoperationen haben begrenzte Wiederholungen;
+keine Wiederholung von Parser, Datenschutzverarbeitung oder Publikation.
+Postcommit bleibt bei fehlender Bestätigung erhalten. 101 gezielte Fälle
+und 50 automatische Datenschutzfälle bestanden, kein Gesamtnachweis.
+
+Im anschließenden Aufruferreview zwei weitere P2 im Review-Orchestrator:
+einmaliger Epoch-Release trotz Busy sowie Controlfehler als Deferred-Review
+mit Journalwrite. Beide werden eng korrigiert und separat gegengeprüft.
+Der währenddessen gestartete Freeze `c76bdd86…` ist wegen geänderter Eingaben
+kein gültiger Kandidat: Rust/Clippy/Release erfolgreich, aber dessen
+Gesamtbeleg ausdrücklich `inputs_unchanged=false`, `passed=false`.
+Keine Teilnachweise zusammenaddieren. Neuer unveränderter Freeze folgt.
+
+### Neuer realer Befund, 18.10., 04:25–04:43 UTC
+
+Auch `0f47c66c…` ist **noch kein Abnahmekandidat**. Rust/Clippy/Release grün,
+Vollsuite bei 40/252 am Review-IPC abgebrochen. Corpus-Gate scheiterte zuerst
+an einem Statusfehler; sein Cleanup überschrieb die Ursache und löschte noch
+verwendete eigene Testsnapshots. Harness nun korrigiert: Fehlercodes und
+Fehlscope bleiben erhalten; Cleanup nur nach bestätigter Quieszenz/Close.
+
+Echte Explorer-Fortsetzung des eigenen Schnellwegs übernimmt CSV bytegleich
+und verarbeitet TXT; PNG bleibt nach Publikation unbestätigt. Keine weitere
+blinde Fortsetzung/kein Export. Neue Dokument-Control-Release-Lücke bestätigt
+und synchrone Storeaktionen umgestellt; genau drei native Exportlebensdauern
+bleiben asynchron. Zusätzlich Sourceadapter-EEXIST-Race typisiert, Diagnose-
+Ursache über Postcommit erhalten und Fertig-Häkchen bei nichtterminalem Halt
+entfernt. Native Konkurrenzprobe einschließlich Dokumentkontrolle 17/17 grün.
+Async-Export-Release-Busy wird noch eng nachgesichert; Acquire-Kontention
+gegen echte Integritätsfehler im Publikationsreader zusätzlich gegenprüfen.
+
+Authentische geschlossene Sitzung und eigener Lauf:
+`dist/rc163-r5-sync-control-20261018/FAST-RESUME-GUI.json`.
+Ursprünglicher Ergebnisordner per UI wiederhergestellt, App normal beendet.
+Weitere Freigabe-/GUI-Gates werden erst mit neuem gebundenem Quellstand
+wiederholt (`dist/rc163-r5-document-control-20261018/`). Mac-Static-Core bleibt
+unangewandt und unbewiesen; kein neues M2-/Intel-/Clean-VM-PASS.
+
+### Folgerunde 18.10., synchrone Steuerung
+
+GUI-06-Korrektur und UX-07-Abschlussanzeige sind im aktuellen Quellcode
+integriert, noch nicht im vorangegangenen `dc11477b…`-ZIP. Acquire/Aktion/
+exakte eigene Freigabe teilen für synchrone Mutationen eine Capability;
+asynchrone Verarbeitung bleibt getrennt. Zwei unabhängige begrenzte
+Quellenreviews ohne neuen bestätigten Delta-P1/P2. Main: native
+Zweiprozessprobe 14/14, Pause-Control 21/21, Active-Lock 30/30, Delivery 23/23,
+Gateway 50/50, Workspace 244/244, Workflow 44/44, Dokumentprüfer 89/89 grün.
+Vollfreeze/Build/Paket-/GUI-Gegenprobe folgt unter
+`dist/rc163-r5-sync-control-20261018/`; diese Einzelnachweise sind keine neue
+Gesamtabnahme. Details und Mac-Grenzen:
+`docs/acceptance/RC163_R5_SYNC_CONTROL_20261018.md`.
+
+### Nachtlauf 18.10., Stand 03:50 UTC: neue echte Bediengegenprobe
+
+Der lokale Quellstand `dc11477b60e01cc04cdc5d1ff66be131c07286e820263117cffc35bdff6267af`
+ist gebunden gebaut: 208 Rusttests bestanden, drei reguläre Helfer ignoriert,
+Clippy/Release und vier isolierte Paketgates grün. ZIP:
+`dist/engineering-rc163-r5-epoch-release-20261018/`, SHA256
+`b7d3b78de73595bc3f084b09d9cf1d9300ab31c2c6fbc592ef639b8b59a8b4c8`.
+Normaler Explorer-Start, eigener frischer Ergebnisordner, Aufnahme von drei
+synthetischen Quellen und geführte Anonymisierung praktisch bestanden:
+zwei Ergebnisse, eine erwartete OCR-aus-Auslassung. Beide Ergebnisse im
+Originalvergleich geprüft und ausdrücklich freigegeben. Vorschauabbruch
+erzeugt keine Kopie; danach genau ein ausdrücklicher Export mit zwei neutralen
+Markdown-Dateien. Kopien hashgleich zu Ergebnissen, Originale unverändert,
+synthetische Identifikatoren entfernt, Sachinhalte erhalten. Nachweis
+`dist/rc163-r5-epoch-release-20261018/NORMAL-GUI-BYTES.json`.
+
+**Keine Gesamtabnahme:** Die Laufkarte im Verlauf belegt den fertigen Export
+korrekt, während die obere Schrittanzeige und Auftragskarte noch zur Freigabe
+auffordern (neuer UX/P2). Der anschließende Schnellweg mit OCR scheitert
+ohne Pauseklick am Steuerungssperrübergang: erst
+`STANDALONE_OWNERSHIP_CONTROL_BUSY`, dann `STANDALONE_PAUSE_CONTROL_BUSY`.
+Die logische Pause-Steuerungssperre bleibt beim lebenden Sidecar; erste CSV
+privat publiziert, weitere zwei Quellen unverarbeitet/pending, kein Export.
+Authentische Sitzung und geschlossener Fallnachweis unter
+`dist/rc163-r5-epoch-release-20261018/FAST-*`. App geordnet geschlossen;
+keine alten Locks, ACLs, Profile oder Läufe geändert. Bisheriger Ergebnisordner
+ist nach dieser Fehlerrunde noch über die App zurückzustellen.
+
+Der breite 251+5-Lauf bestand 172 Testdateien, brach dann wegen eines fehlenden
+VM-Mock-Moduls im Worker-Orchestrierungstest ab. Produkt-/Prüfeingaben bis
+Laufende unverändert; ausdrücklich kein vollständiges PASS. Testharness wird
+mit echtem geschlossenem Diagnosehelper berichtigt, danach neuer Gesamtlauf.
+Pause-Transaktion und Abschlussanzeige werden unabhängig direkt am Quellcode
+gegengeprüft und korrigiert. Kein M2-/Mac-/Clean-VM-Nachweis.
+
+02:58 UTC: echter normaler Explorer-Start c0bf bestätigt Konfiguration und
+Dateiauswahl, aber erster synthetischer geführter Anonymisierungslauf ist
+NICHT bestanden: eigene CSV privat publiziert/delivery_pending, nachfolgende
+TXT/PNG sicher mit INTERNAL_FAILURE gestoppt. Kein blindes Fortsetzen oder
+Export; weitere Bedienfälle bis Ursachenklärung nicht ausgeführt. Originale
+unverändert, vorheriger Ergebnisordner über UI wiederhergestellt, App geordnet
+beendet. Originaldiagnosepaar, App-Diagnosepaket und eigener Batch gesichert
+unter dist/rc163-r5-configure-probe-20261018/EXPLORER-*.
+Quellenreview des tatsächlichen Finalisierungs-/Journal-/Reviewübergangs läuft.
+Alle vier c0bf-Paketgates grün (einschließlich Quelladapter-Schnellweg, NICHT
+native Rust-Veröffentlichung); vollständiger 249+4-Lauf um 03:11 UTC bestanden,
+Produkt- und Prüfeingaben unverändert. Kein
+vollständiges PASS/keine Bedienabnahme aus den technischen Gates ableiten.
+
+Vorangehende Diagnose-/Startkontextbelege (02:24–02:45 UTC):
+`c0bf60a95a9369d2bd83d78fb2bc62cf2ae9e32ded5314123d69993238cdc75c`.
+Wichtige Revalidierung 02:45 UTC: normaler Explorer-Doppelklick desselben
+c0bf-Pakets zeigt die echte bisherige Ergebniseinstellung und speichert den
+Wechsel zum eigenen frischen Testziel erfolgreich. GUI-04 wurde bisher im
+Sky-/exec-Startkontext beobachtet; dessen AppData-Neuanlagen werden trotz
+fehlender Package-Identity-Abfrage physisch in den Codex-LocalCache umgeleitet.
+Keine Package-Identity/keine aktive Legacy-UAC-Virtualisierung beweisen also
+NICHT die Abwesenheit dieser Dateisystemumleitung. Keine Schutzflags oder
+Bestandsrechte gelockert, keine Profile migriert. Produktiver Root bleibt.
+Quellengebundener nativer Komplettlauf: 203 Rusttests/3 ignorierte Helfer,
+Clippy/Release grün. c0bf-ZIP 07087106b4088a1700cc6565b2378a5e6a39bfdcf534714d0f9bc7bb721bd6ac,
+1140 Einträge/112312003 Bytes inventar-/stagegleich. Positiver normaler
+Ordnerwechsel war noch keine funktionale Lauf-/Exportabnahme; deren danach
+fehlgeschlagener Lauf steht oben. Vier Paketgates mittlerweile bestanden;
+vollständiger 249+4-Lauf bei unverändertem c0bf-Quellstand bestanden
+(HEADLESS-FINAL.json). Der reale GUI-05-Lauffehler bleibt davon unberührt.
+Native Configure-Stufen/geschlossene IO-Klasse/optionaler OS-Code werden ohne
+Pfade oder Fehlerpayload erfasst und im Diagnoseexport erhalten. Kontexttext
+erklärt die unveränderte bisherige Einstellung. Zwei unabhängige Quellenreads,
+211 Workspace- und 35 Desktop-Vertragsfälle grün; Clippy sowie drei gezielte
+Rustfälle grün. Tatsächliche Node/C-Sperre während Rust-Configure: frischer
+Owner-only- und vorhandener Capability-Root beide erfolgreich, ACLs erhalten.
+Die synthetische Probe allein löste GUI-04 ausdrücklich NICHT auf. Die
+anschließende Startkontext-Gegenprobe oben ist getrennt zu bewerten.
+Keine Mac-/vollständige Bedienabnahme behauptet.
+Der getrennte 1dcf-Restlauf 46–249 bestand 204/204 plus vier Zusatzgates
+bei unveränderten Inputs; weiterhin kein vollständiger 249+4-PASS.
+
+Vorheriger 1dcf-Nachweis: Der bestehende Windows-Root ist nicht
+allein wegen Capability-ACEs als fremd beschreibbar zu bewerten. Die zwei
+Quellenreviews und 11 native Windows-Authz-In-Memory-Gegenfälle bestätigen
+den bisherigen Fehlalarm. Rechte und Daten bleiben unverändert; die enge
+SID-Klassifizierung und historische Bootstrap-Auflösung sind im Produkt
+korrigiert: 114 native Guard- und 239 Integrationsassertions sowie 200
+Rusttests, Clippy und Releasebuild grün. Neuer 249+4-Gesamtlauf/Paketierung
+laufen. Fingerprint `1dcf663b411706eebf582772d8564e2d1135dfcbdb29ca4723800f1afff7868b`.
+Noch kein positiver GUI-/Mac-/Clean-VM-Nachweis dieses Standes.
+Kein pauschales Abschalten der Schutzprüfung.
+
+Echte anschließende 1dcf-GUI-Probe: bestehender privater Root wird jetzt
+akzeptiert, Core/Status/Kontext erreichbar. Ordnerdialog geöffnet und eigener
+neuer Testzielordner erreicht, aber native Provisionierung antwortet
+`AI_EXPORT_CONFLICT`, bevor die Konfiguration gespeichert wird (GUI-04/P2,
+Ursache noch nicht bewiesen). Zwei leere eigene Ausgabeunterordner bleiben
+erhalten; keine Dokumentläufe gestartet, alte Konfiguration und ACLs erhalten.
+App normal beendet, Diagnosepaar gesichert. ZIP bleibt nicht abgenommen.
+Alle vier isolierten Paketgates grün. Neuer 249+4-Lauf brach bei Datei46
+an fehlendem kanonischem Guard-Buildinput ab, 45 bestanden; korrekter
+kanonischer Guard inzwischen gebaut, identische Binärbytes. Diagnostischer
+Restlauf ab46 separat; kein vollständiges PASS daraus ableiten.
+
+### 18.10.2026: R5-Quellenkorrekturen in Arbeit, keine neue Abnahme
+
+Der zusätzliche intensive Standalone-Review des R4-Quellstands fand elf neue
+Befunde (1 P1, 8 P2, 2 P3). Sie werden auf ausdrücklichen Auftrag korrigiert,
+zuerst die Identifier-/Residual-Lücke. Frühere grüne R4-Nachweise sind kein
+Gegenbeweis zu diesen neuen Fällen. Bestehende Test-ZIPs bleiben unverändert;
+neue Quellenänderungen sind nicht in ihnen enthalten. Die elf Ausgangsbefunde
+samt mehreren Folgekorrekturen sind implementiert und gegengeprüft. Der stabile
+62c-Endlauf bestand 249/249 Headless-Dateien bei unveränderten Inputs;
+Windows-Rust/Clippy und isolierte Paketgates sind grün. Eine neue unabhängige
+Gegenprobe bestätigt dennoch einen P1: literale C1-Zeichen in Office-Text/CDATA
+lassen Identifikatorziffern bis zur automatischen Freigabe und zum Export
+erhalten. Der gebaute R5-Zwischenkandidat ist deshalb NICHT zur Abnahme
+empfohlen. OOXML-Eingang, gemeinsamer Privacytext und tatsächliche Exportbytes
+sind inzwischen korrigiert, einschließlich zwei nachgebesserter Folge-P2 und
+Regex-Fehlalarm. Abschließende unabhängige 37 API-Gegenproben ohne weiteren
+bestätigten Delta-Befund; 164 PII- und 49 Publikations-/Exportfälle grün.
+Neuer stabiler Endlauf a395: 249/249 plus vier explizite Zusatzgates bestanden,
+Produkt-/Prüfinputs unverändert. Der gebundene Windows-Build und das neue ZIP
+`dist/engineering-rc163-r5-c1-20261018/` sind fertig; Paketgates, echtes
+Core-/Guard-Laden, synthetischer Korpus und Quellenadapter-Inhaltsoracle
+sind grün. Echte anschließende Windows-GUI-Probe im normalen Profil scheitert
+jedoch vor Ready an STANDALONE_OWNERSHIP_STORAGE_UNSAFE; keine Bedienfälle
+bestanden. Konkrete Ursache wird fälschlich durch generische Recoverytexte
+verdeckt, 15 automatische Neustarts; Quellenrennen und Testlücke bestätigt
+(GUI-01/P1). Diagnosen außerdem build_id=unidentified (GUI-02/P2). Kein
+Rechte-/Guard-Bypass; diese Fixes vor neuem Paket. Sichere Windows-Erstanlage
+(GUI-03/P2) zusätzlich quellenbestätigt: nativer geschützter Leaf statt
+unsicherer Node-ACL-Vererbung, bestehende Roots niemals automatisch reparieren.
+GUI-01/02 und Erstanlage lokal implementiert. Neue 7d53-Runde: Clippy,
+196 Rusttests / 3 regulär ignorierte Helfer und Releasebuild grün; drei
+echte Rust→Node→C-Namespaceproben. Neues ZIP gebaut und inventargeprüft.
+Negative echte GUI bestätigt feste Ursache, korrekte Build-ID, nur 1+1
+bewusste Starts und Diagnoseexport ohne Core. Positiver Bedienweg bleibt
+am bestehenden unsicheren Root gesperrt; Rechte unverändert. Zusätzlicher
+P3 bei unbekannter nativer Fehler-Epoch/Snapshotausfall inzwischen behoben;
+171 Workspace-/34 Vertragsfälle sowie neuer b28e-Rust-/Clippy-/Buildlauf grün.
+7d53-Breitlauf war rot an einem alten Guard-entfernenden Teststub (14/14
+gezielt nachgebessert), alle vier 7d53- und b28e-Paketgates grün. b28e-Breitlauf
+rot bei Datei 60/249 an weiterer veralteter Modellannahme; 38/38 nachgebessert,
+diagnostischer Restlauf 61–249 separat. Kein vollständiger grüner Endlauf.
+Ein weiterer P2 nach Ready und anschließendem Kontextfehler ist
+bestätigt und wird getrennt korrigiert. Alle bisherigen R5-ZIPs
+bleiben NICHT zur Bedienabnahme empfohlen.
+Kein akzeptierter finaler R5-Quellfreeze; a395 ist ein unveränderter
+fehlgeschlagener Evidenzsnapshot mit eigenem Quellenarchiv. Regelversion de-business/5 übernimmt alte
+Datenschutzfreigaben nicht stillschweigend; U+FFFD stoppt konservativ.
+Neu erlaubt: Windows-Desktopprüfung, ausschließlich zentral beim Hauptagenten,
+nach korrigiertem Paket. Kein M2-, Runner-, Push- oder Releasevorgang.
+Mac-Folgeauftrag MAC-CERT-01..04 aktiv: eigener versionsgebundener Core mit
+statisch eingebundenem Guard, ohne Developer-ID/Apple-Einreichung und ohne
+Abschaltung von Library Validation. Reiner Node-Quellprototyp vorbereitet,
+noch kein Mac-Build-/Ladenachweis. Lokales ARM64-ad-hoc-Sealing bleibt von
+externer Apple-Signierung zu unterscheiden. Spätere Mac-Integration benötigt
+neuen gemeinsamen Quellfreeze und erneute Windows-Regression.
+[Arbeitsbacklog und spätere Nachweise](../acceptance/RC163_R5_FIX_REVIEW_20261018.md).
+
+## Historische Nachweise bis R4 (kein aktueller R5-Abschluss)
+
+Stand: 17.10.2026 · 3.2.0-rc164 lokaler Windows-R4-Final-Testkandidat gebaut und ohne GUI geprüft; veröffentlicht bleibt Standalone RC162 für Windows und beide Mac-Architekturen; native Windows-/M2-Zielhostabnahme offen; Linux RC159 / Cowork RC151
+
+### Gezielter R3-Abschlussreview: zusätzliche Fixes F13/F14
+
+Der eingefrorene R3-Quellstand und sein ZIP sind unverändert gegengeprüft.
+Windows- und Mac-Review fanden keinen weiteren OS-spezifischen P1/P2.
+Der Architekturreview fand eine fehlende frühe Manifestbindung bei
+Einzelentscheidungen (F13); die zusätzliche Frontend-Gegenprobe bestätigte
+eine alte Post-ACK-Antwort nach Wiederöffnung desselben Laufs (F14).
+Beides ist im gemeinsamen Code korrigiert und unabhängig gegengeprüft; F14
+schützt auch verspätete Fehler einer älteren initialen Öffnungsanfrage.
+Final **242/242 Headless-Dateien**, **167 Rust-Tests / 3 regulär ignorierte
+Testhelfer**, Clippy, **89 Rendererfälle**, echter Node→Rust-Export und acht
+echte Zwei-Prozess-Abbrüche bestanden. Der Gesamtlauf bestätigt unveränderte
+Produkt- und Testdateien vom Anfang bis zum Ende. Vollständige isolierte
+Paketprobe und Inhaltsoracle am endgültigen ZIP ebenfalls bestanden.
+
+Aktueller gemeinsamer Quellenfingerabdruck:
+`95113c1e8d31a193186d0f47a1008f536f99be4c94dd453c8823afb806bacd6a`.
+Das endgültige lokale Paket liegt unter
+`dist/engineering-rc163-post-review-20261017-r4-final/`;
+Quellen und Lockdateien für den späteren Mac-Build unter
+`dist/rc163-r3-final-review-20261017/RC163-R4-SOURCE.zip` mit separatem Freeze.
+Das Vorabpaket `...-r4/` enthält den letzten F14-Catch-Fix nicht und ist
+nicht der aktuelle Testkandidat. R3-Archive bleiben unverändert.
+Keine Desktopbedienung, Mac-Runner, M2-Probe oder Veröffentlichung.
+Echte Windows-/Clean-VM-Abnahme, native Mac-Kompilierung und Pfadraces,
+Signier-/Ladeprüfung, Developer-ID/Notarisierung und M2/Finder bleiben offen.
+[Abschlussreview und neue Nachweise](../acceptance/RC163_R3_FINAL_REVIEW_20261017.md).
+
+### Voriger R3-Nachweis: Standalone-Fixrunde, nicht das alte RC163-R2-Paket
+
+Der neue Auftrag konzentriert sich auf Windows/macOS-Standalone. F01–F12
+sind lokal im Quellcode bearbeitet: exakte Office-/OCR-Koordinaten, statische Windows-CRT
+mit tatsächlichem PE-Gate, nicht blockierender nativer Diagnoseworker,
+aktuelle Core-Segmente im begrenzten Diagnoseexport, unabhängig sichtbarer
+Kopieabschluss und Diagnosezugang im Modal, aufruflokal sparsamere History,
+kumulativer Kopie-/OCR-Hinweisstatus und paketgebundene Startanleitungen.
+Die allgemeine History-Inventur bleibt bewusst frisch und O(N); kein
+persistent gespeicherter Freigabe-/Integritätscache wurde eingeführt.
+Der zusätzliche F11-Kontext bindet Journal und Dokumentprojektion an dasselbe
+frühe Manifest. Der Mac-Relocator verwendet native verzeichnisrelative
+Build-Mutationen; seine echte Apple-Clang-/Race-Probe bleibt vor Mac-Paketen
+zwingend und hier NOT_RUN.
+
+Unabhängiger Quellengegenreview und gezielte Tests sind erfolgt; die
+breite Headless-Regression mit 239 Dateien ist bestanden; neue und während
+des Reviews geänderte kritische Gates wurden zusätzlich separat ausgeführt.
+Für diesen damaligen R3-Nachweis wird kein einzelner 242-Dateien-Lauf behauptet;
+der neuere R4-Final-Gesamtlauf steht oben. Die vollständige isolierte
+Paketprobe mit beiden Zwecken, OCR, Vertagen/Neustart, Schnellweg, Widerruf,
+Export und Verlaufs-/Zielordnerabgleich ist ebenfalls bestanden.
+Native Windows-Rust-Tests/Clippy, 29 echte Office-/OCR-Gruppen, 16 Kontextfälle,
+62 Backendfälle, acht echte Node-/Rust-Prozessabbrüche und der unabhängige
+Inhaltsoracle am neuen Windows-R3-ZIP sind bestanden. Der Release-Build und
+das 112.212.581-Byte-ZIP samt tatsächlichen PE-Imports sind geprüft.
+Quellenfingerabdruck: `c129d14f15071def661ae8dc21ff60012efd5fec5806f49ad58926fe4d610a18`.
+Das neue Paket liegt separat unter
+`dist/engineering-rc163-post-review-20261017-r3/`.
+Kein Desktop wurde bedient,
+kein Release/Push/Runner ausgelöst. Das frühere RC163-R2-ZIP ist unverändert
+und enthält diese neuen Fixes nicht. Die spätere M2-Probe bleibt ein eigenes
+Gate mit demselben neuen Quellen-Freeze wie Windows. Developer-ID und
+Notarisierung sind offen. H01/H02 für Cowork sind zurückgestellt; das
+ausdrücklich gewählte Hostvertrauen bleibt unverändert und ist dokumentiert.
+[Befunde, Quellentscheidungen, Nachweise und offene Grenzen](../acceptance/RC163_POST_REVIEW_FIXES_20261017.md).
 
 ### RC163: lokales Windows-Testpaket und gemeinsamer Quellstand-Freeze
 

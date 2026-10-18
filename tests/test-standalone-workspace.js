@@ -20,7 +20,10 @@ function harness(options = {}) {
   const createElement = tag => {
     const node = { tagName: tag.toUpperCase(), id: '', children: [], parent: null, attrs: {}, events: new Map(), dataset: {},
       hidden: false, disabled: false, checked: false, indeterminate: false, open: false, tabIndex: 0, value: '', className: '', ownText: '', textUpdates: 0,
-      append(...children) { for (const child of children) { child.parent = this; this.children.push(child); } },
+      append(...children) { for (const child of children) {
+        if (child.parent) child.parent.children = child.parent.children.filter(existing => existing !== child);
+        child.parent = this; this.children.push(child);
+      } },
       replaceChildren(...children) { for (const child of this.children) child.parent = null; this.children = []; this.ownText = ''; this.append(...children); },
       addEventListener(event, callback) { this.events.set(event, callback); },
       setAttribute(key, value) { this.attrs[key] = String(value); }, removeAttribute(key) { delete this.attrs[key]; },
@@ -66,6 +69,7 @@ function harness(options = {}) {
       if (command === 'cancel_admission') { model.catalogue = []; return { ok: true }; }
       if (command === 'start_admitted_batch') {
         model.state = { state: 'processing', batch_id: A, processing_mode: args.processingMode, selected_count: args.sourceIds.length };
+        model.catalogue = []; model.revision++;
         return { ok: true, batch_id: A };
       }
       if (command === 'continue_history_batch') {
@@ -101,6 +105,24 @@ function catalogue() {
     { name: 'One/Inner/B.docx', source_id: id(2), bytes: 20, selectable: true },
     { name: 'Two/C.txt', source_id: id(3), bytes: 30, selectable: true },
     { name: 'Two/Bad.zip', selectable: false, reason_code: 'SOURCE_FORMAT_UNSUPPORTED' }];
+}
+function descendants(node, predicate) {
+  return node.children.flatMap(child => [...(predicate(child) ? [child] : []), ...descendants(child, predicate)]);
+}
+function withClass(node, name) { return descendants(node, child => child.className.split(/\s+/u).includes(name)); }
+async function toggleHistorySummary(h, batchId) {
+  const toggle = h.el(`history-${batchId}-summary-toggle`);
+  assert.ok(toggle, 'the selected run has an explicit status disclosure');
+  if (toggle.closest('[hidden]')) await h.act(`history-${batchId}-more`);
+  assert.equal(toggle.closest('[hidden]'), null, 'status lookup is initiated by an actually visible control');
+  await h.act(toggle);
+}
+function selectedRun(h, batchId) {
+  assert.equal(h.el('details-view').hidden, false);
+  assert.equal(h.el('nav-details').attrs['aria-selected'], 'true');
+  assert.equal(h.el('nav-details').attrs['aria-controls'], 'details-view');
+  assert.equal(h.el('nav-history').attrs['aria-controls'], 'history-view');
+  assert.equal(h.el('details-run-id').textContent, `Lauf-ID: ${batchId}`);
 }
 async function selectAndStart(h) {
   await tick(); await h.act('select-folder'); h.el('mode-markdown').checked = true; await h.act('mode-markdown', 'change'); await h.act('start');
@@ -140,25 +162,362 @@ testAsync('repeated core startup failures stop automatic attempts but keep an ex
   assert.equal(h.calls.some(call => call.command === 'start_admitted_batch'), false);
 });
 
-testAsync('a busy serial Core status lookup is not treated as a disconnection or retried mutation', async () => {
+for (const code of ['STANDALONE_IPC_BUSY', 'STANDALONE_OWNERSHIP_CONTROL_BUSY', 'STANDALONE_PAUSE_CONTROL_BUSY'])
+testAsync(`${code}: two busy status reads keep polling until a real status arrives`, async () => {
   let reads = 0;
   const h = harness({ invoke(command, args, fallback) {
-    if (command === 'get_public_state' && ++reads <= 2) throw Error('STANDALONE_IPC_BUSY');
+    if (command === 'get_public_state' && ++reads <= 2) throw Error(code);
     return fallback();
   } });
   await tick(); await tick();
   assert.equal(reads, 1);
-  assert.doesNotMatch(h.el('feedback').textContent, /Verbindung.*unterbrochen|STANDALONE_IPC_BUSY/u);
+  assert.doesNotMatch(h.el('feedback').textContent, /Verbindung.*unterbrochen|STANDALONE_(?:IPC|OWNERSHIP_CONTROL|PAUSE_CONTROL)_BUSY/u);
   await h.poll();
   assert.equal(reads, 2);
   assert.doesNotMatch(h.el('connection-status').textContent, /Automatische Verbindungsversuche sind angehalten/u);
   await h.poll();
   assert.equal(reads, 3);
+  assert.equal(h.el('connection-help').hidden, true);
+  assert.equal(h.calls.some(call => call.command === 'get_native_recovery_status'), false,
+    'automatic Busy handling does not add another native read');
   assert.equal(h.calls.some(call => call.command === 'start_admitted_batch'), false);
+});
+
+for (const code of ['STANDALONE_OWNERSHIP_CONTROL_BUSY', 'STANDALONE_PAUSE_CONTROL_BUSY'])
+for (const readCommand of ['get_public_state', 'get_ui_context'])
+testAsync(`${code} during explicit ${readCommand} keeps status unconfirmed despite native Ready and activity`, async () => {
+  let refuse = true;
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === readCommand && refuse) throw Error(code);
+    if (command === 'get_native_recovery_status') return { phase: 'owned', connection_epoch: 1,
+      bootstrap_failure: null, bootstrap_resolution: null, diagnostic_log: 'available', diagnostic_writer: {},
+      local_ui_only: true, external_disclosure: false,
+      activity: { state: 'active', active: true, action: 'export_approved_documents', phase: 'native', elapsed_ms: 42000 } };
+    return fallback();
+  } });
+  await tick(); await tick();
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 1, state: 'ready' } });
+  await h.act('connection-retry'); await tick();
+  assert.match(h.el('feedback').textContent, /Vorgang.*Zustand.*noch nicht bestätigt/u);
+  assert.match(h.el('feedback').textContent, /ausgewählte Kopie.*42 Sekunden.*Abschluss steht noch aus/u,
+    'the real nonempty native activity description supplements the unconfirmed status');
+  assert.doesNotMatch(h.el('feedback').textContent, /wiederhergestellt|abgeschlossen|Pause noch nicht bestätigt/u);
+  assert.equal(h.el('feedback').className, 'notice');
+  if (readCommand === 'get_ui_context') {
+    await h.act('select-folder');
+    assert.equal(h.calls.filter(call => call.command === 'select_folder').length, 0);
+    assert.match(h.el('start-hint').textContent, /Verbindung wird wiederhergestellt/u);
+  }
+  const before = h.calls.filter(call => call.command === readCommand).length;
+  await h.poll();
+  assert.equal(h.calls.filter(call => call.command === readCommand).length, before + 1,
+    'explicit Busy does not stop the next automatic read');
+  assert.match(h.el('feedback').textContent, /Verbindung und Laufstatus sind noch nicht bestätigt/u);
+  assert.equal(h.el('job').hidden, true, 'native Ready and a busy read cannot acknowledge a run');
+  assert.equal(h.calls.some(call => ['start_admitted_batch', 'continue_history_batch',
+    'export_approved_documents', 'decide_document_review_batch'].includes(call.command)), false);
+  refuse = false; await h.poll();
+  assert.doesNotMatch(h.el('feedback').textContent, /Verbindung und Laufstatus sind noch nicht bestätigt/u,
+    'a successful status/context read retires its earlier Busy notice');
+  await h.act('select-folder');
+  assert.equal(h.calls.filter(call => call.command === 'select_folder').length, 1,
+    'only an actual successful context releases the picker guard');
+});
+
+for (const code of ['STANDALONE_OWNERSHIP_RUNTIME_INVALID', 'STANDALONE_OWNERSHIP_CONTROL_UNCONFIRMED',
+  'STANDALONE_IPC_TIMEOUT', 'STANDALONE_PAUSE_CONTROL_INVALID', 'STANDALONE_BUSY', 'STANDALONE_OWNERSHIP_CONTROL_BUSY_UNKNOWN'])
+testAsync(`${code}: hard errors and other Busy names still stop automatic status reads`, async () => {
+  let reads = 0;
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_public_state') { reads++; throw Error(code); }
+    return fallback();
+  } });
+  await tick(); await tick(); await h.poll();
+  const expected = ['STANDALONE_OWNERSHIP_RUNTIME_INVALID', 'STANDALONE_OWNERSHIP_CONTROL_UNCONFIRMED'].includes(code) ? 1 : 2;
+  assert.equal(reads, expected);
+  assert.match(h.el('connection-status').textContent, /Automatische Verbindungsversuche sind angehalten/u);
+  await h.poll(); assert.equal(reads, expected);
+  assert.equal(h.calls.some(call => call.command === 'start_admitted_batch'), false);
+});
+
+for (const code of ['STANDALONE_OWNERSHIP_CONTROL_BUSY', 'STANDALONE_PAUSE_CONTROL_BUSY'])
+testAsync(`${code}: a rejected start remains an error and is never replayed by polling`, async () => {
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'start_admitted_batch') throw Error(code);
+    return fallback();
+  } });
+  await selectAndStart(h);
+  assert.equal(h.calls.filter(call => call.command === 'start_admitted_batch').length, 1);
+  assert.match(h.el('feedback').textContent, new RegExp(code, 'u'));
+  assert.equal(h.el('feedback').className, 'notice error');
+  assert.equal(h.el('job').hidden, true, 'Busy does not acknowledge a new run');
+  for (let n = 0; n < 3; n++) await h.poll();
+  assert.equal(h.calls.filter(call => call.command === 'start_admitted_batch').length, 1);
+  assert.equal(h.el('job').hidden, true);
+});
+
+for (const initial of [true, false]) for (const eventFirst of [true, false])
+testAsync(`a bootstrap rights refusal survives ${initial ? 'initial context' : 'replacement status'} generations with event ${eventFirst ? 'before' : 'after'} rejection`, async () => {
+  const code = 'STANDALONE_OWNERSHIP_STORAGE_UNSAFE';
+  let h, refuse = initial, epoch = initial ? 0 : 1;
+  let lastFailure;
+  const emit = payload => h.listeners.get('datasecure-connection')({ payload });
+  h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_native_recovery_status' && lastFailure) return { phase: 'owned',
+      bootstrap_failure: { epoch: lastFailure.epoch, error_code: code }, local_ui_only: true, external_disclosure: false };
+    if (refuse && (command === 'get_public_state' || initial && command === 'get_ui_context')) {
+      lastFailure = { epoch: ++epoch, state: 'bootstrap_failed', error_code: code };
+      const failure = lastFailure;
+      if (eventFirst) emit(failure); else setImmediate(() => emit(failure));
+      throw Error(code);
+    }
+    if (!refuse && command === 'get_public_state' && args?.retryBootstrap === true) emit({ epoch: ++epoch, state: 'ready' });
+    return fallback();
+  } });
+  await tick(); await tick();
+  if (!initial) {
+    refuse = true; emit({ epoch: 1, state: 'recovering' }); await h.poll(); await tick();
+  }
+  const before = h.calls.filter(call => ['get_public_state', 'get_ui_context', 'get_run_history'].includes(call.command)).length;
+  const banner = h.el('feedback').textContent;
+  assert.match(banner, /Zugriffsrechte.*Identität.*STANDALONE_OWNERSHIP_STORAGE_UNSAFE/u);
+  assert.doesNotMatch(banner, /alte Sitzung|Verbindung unterbrochen/u);
+  assert.match(h.el('connection-status').textContent, /Automatische Verbindungsversuche sind angehalten/u);
+  assert.equal(h.el('connection-help').hidden, false);
+  for (let n = 0; n < 20; n++) await h.poll();
+  await h.act('nav-history'); await h.act('refresh-history');
+  emit(lastFailure); emit({ epoch: lastFailure.epoch, state: 'recovering' });
+  await h.act('select-folder'); await h.act('configure-results');
+  await h.act('connection-diagnostics'); await tick();
+  assert.equal(h.calls.filter(call => ['get_public_state', 'get_ui_context', 'get_run_history'].includes(call.command)).length, before,
+    'timers, duplicate events and History cannot bypass the held refusal');
+  assert.equal(h.el('feedback').textContent, banner, 'picker/help/diagnostic updates cannot replace the fixed cause');
+  await h.act('connection-retry'); await tick();
+  const retry = h.calls.filter(call => call.command === 'get_public_state').at(-1);
+  assert.equal(retry.args?.retryBootstrap, true, 'only the explicit status command requests another bootstrap');
+  const afterRetry = h.calls.filter(call => call.command === 'get_public_state').length;
+  for (let n = 0; n < 10; n++) await h.poll();
+  assert.equal(h.calls.filter(call => call.command === 'get_public_state').length, afterRetry);
+  assert.equal(h.el('feedback').textContent, banner);
+  const staleFailure = lastFailure;
+  refuse = false; await h.act('connection-retry'); await tick();
+  assert.match(h.el('feedback').textContent, /wiederhergestellt/u);
+  assert.equal(h.el('connection-help').hidden, true);
+  emit(staleFailure); await tick();
+  assert.doesNotMatch(h.el('feedback').textContent, /STANDALONE_OWNERSHIP_STORAGE_UNSAFE/u);
+  assert.equal(h.calls.some(call => ['select_folder', 'configure_results', 'start_admitted_batch',
+    'continue_history_batch', 'export_approved_documents', 'decide_document_review_batch'].includes(call.command)), false);
+});
+
+testAsync('a native bootstrap snapshot preserves the cause when the event is delayed and never grants retry by itself', async () => {
+  let h, refuse = false;
+  const failure = { epoch: 1, error_code: 'STANDALONE_OWNERSHIP_STORAGE_UNSAFE' };
+  h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_native_recovery_status' && refuse) return { phase: 'owned', bootstrap_failure: failure,
+      local_ui_only: true, external_disclosure: false };
+    if (command === 'get_public_state' && refuse) throw Error(failure.error_code);
+    return fallback();
+  } });
+  await tick(); refuse = true;
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 1, state: 'recovering' } }); await tick();
+  assert.match(h.el('feedback').textContent, /STANDALONE_OWNERSHIP_STORAGE_UNSAFE/u);
+  const before = h.calls.filter(call => call.command === 'get_public_state').length;
+  await h.poll(); assert.equal(h.calls.filter(call => call.command === 'get_public_state').length, before);
+  h.listeners.get('datasecure-connection')({ payload: { ...failure, state: 'bootstrap_failed' } });
+  await h.act('nav-history'); assert.equal(h.calls.some(call => call.command === 'get_run_history'), false);
+});
+
+testAsync('one explicit bootstrap retry remains single-flight and Ready resolution does not resume polling without context', async () => {
+  let h, refuse = false, release, contextFails = false, nativeReady = false;
+  const resolution = { failure_epoch: 1, ready_epoch: 2 };
+  h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_native_recovery_status' && refuse) return { phase: 'owned', connection_epoch: nativeReady ? 2 : 1,
+      bootstrap_failure: nativeReady ? null : { epoch: 1, error_code: 'STANDALONE_OWNERSHIP_STORAGE_UNSAFE' },
+      bootstrap_resolution: nativeReady ? resolution : null, local_ui_only: true, external_disclosure: false };
+    if (command === 'get_ui_context' && contextFails) throw Error('STANDALONE_IPC_BUSY');
+    if (command === 'get_public_state' && refuse) return new Promise(resolve => { release = () => {
+      nativeReady = true;
+      h.listeners.get('datasecure-connection')({ payload: { epoch: 2, state: 'ready', bootstrap_resolution: resolution } });
+      resolve(fallback());
+    }; });
+    return fallback();
+  } });
+  await tick(); refuse = true;
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 1, state: 'bootstrap_failed',
+    error_code: 'STANDALONE_OWNERSHIP_STORAGE_UNSAFE' } });
+  await h.act('connection-retry'); await h.act('connection-retry');
+  assert.equal(h.calls.filter(call => call.command === 'get_public_state' && call.args?.retryBootstrap === true).length, 1);
+  contextFails = true; release(); await tick(); await tick();
+  assert.doesNotMatch(h.el('feedback').textContent, /wiederhergestellt/u, 'Ready is not a workspace certificate');
+  assert.equal(h.el('connection-help').hidden, false);
+  const reads = h.calls.filter(call => ['get_public_state', 'get_ui_context'].includes(call.command)).length;
+  for (let n = 0; n < 5; n++) await h.poll();
+  assert.equal(h.calls.filter(call => ['get_public_state', 'get_ui_context'].includes(call.command)).length, reads);
+});
+
+testAsync('native failure snapshot advances the UI epoch before retry so a delayed original event cannot stale its successful status', async () => {
+  let h, firstContext = true;
+  const failure = { epoch: 1, error_code: 'STANDALONE_OWNERSHIP_STORAGE_UNSAFE' };
+  h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_ui_context' && firstContext) { firstContext = false; throw Error(failure.error_code); }
+    if (command === 'get_native_recovery_status') return { phase: 'idle', bootstrap_failure: failure,
+      local_ui_only: true, external_disclosure: false };
+    if (command === 'get_public_state' && args?.retryBootstrap === true) {
+      h.listeners.get('datasecure-connection')({ payload: { ...failure, state: 'bootstrap_failed' } });
+      h.listeners.get('datasecure-connection')({ payload: { epoch: 2, state: 'ready' } });
+    }
+    return fallback();
+  } });
+  await tick(); await tick();
+  assert.match(h.el('feedback').textContent, /STANDALONE_OWNERSHIP_STORAGE_UNSAFE/u);
+  await h.act('connection-retry'); await tick();
+  assert.equal(h.calls.filter(call => call.command === 'get_public_state').length, 1);
+  assert.equal(h.calls.filter(call => call.command === 'get_ui_context').length, 2);
+  assert.match(h.el('feedback').textContent, /wiederhergestellt/u);
+  assert.equal(h.el('connection-help').hidden, true);
+});
+
+for (const code of ['STANDALONE_OWNERSHIP_STORAGE_UNSAFE', 'STANDALONE_OWNERSHIP_SIGNATURE_REFUSED'])
+testAsync(`resolved ${code} stays retired when successful status/context precede Ready and the old failure arrives again`, async () => {
+  let h, firstContext = true;
+  const failure = { epoch: 1, state: 'bootstrap_failed', error_code: code };
+  h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_native_recovery_status') return { phase: 'owned',
+      bootstrap_failure: { epoch: failure.epoch, error_code: code }, local_ui_only: true, external_disclosure: false };
+    if (command === 'get_ui_context' && firstContext) {
+      firstContext = false; h.listeners.get('datasecure-connection')({ payload: failure }); throw Error(code);
+    }
+    // Deliberately return real successful renderer DTOs without delivering
+    // Ready yet: native events and invoke responses have independent timing.
+    return fallback();
+  } });
+  await tick(); await tick();
+  assert.ok(h.el('feedback').textContent.includes(code));
+  await h.act('connection-retry'); await tick();
+  assert.match(h.el('feedback').textContent, /wiederhergestellt/u);
+  assert.equal(h.el('connection-help').hidden, true);
+  assert.equal(h.calls.filter(call => call.command === 'get_public_state').length, 1);
+  h.listeners.get('datasecure-connection')({ payload: failure });
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 2, state: 'ready' } });
+  await tick();
+  assert.match(h.el('feedback').textContent, /wiederhergestellt/u);
+  assert.equal(h.el('connection-help').hidden, true, 'the resolved old epoch must not latch a second time');
+  const newerCode = code === 'STANDALONE_OWNERSHIP_STORAGE_UNSAFE'
+    ? 'STANDALONE_OWNERSHIP_SIGNATURE_REFUSED' : 'STANDALONE_OWNERSHIP_STORAGE_UNSAFE';
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 3, state: 'bootstrap_failed', error_code: newerCode } });
+  assert.ok(h.el('feedback').textContent.includes(newerCode), 'a strictly newer failure must still latch');
+  await h.poll(); assert.equal(h.calls.filter(call => call.command === 'get_public_state').length, 1);
+});
+
+for (const code of ['STANDALONE_OWNERSHIP_STORAGE_UNSAFE', 'STANDALONE_OWNERSHIP_SIGNATURE_REFUSED'])
+for (const bad of ['unavailable', 'missing', 'epoch-string', 'epoch-zero', 'code-raw', 'extra-field', 'disclosure', 'phase', 'stale'])
+testAsync(`unbound ${code} cannot bootstrap with ${bad} snapshot; a later fresh snapshot allows one retry before delayed failure/Ready`, async () => {
+  let h, firstContext = true, good = false;
+  const nativeEpoch = bad === 'stale' ? 2 : 1;
+  const failure = { epoch: nativeEpoch, error_code: code };
+  const snapshot = () => ({ phase: 'owned', bootstrap_failure: { ...failure }, local_ui_only: true, external_disclosure: false });
+  h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_ui_context' && firstContext) { firstContext = false; throw Error(code); }
+    if (command === 'get_native_recovery_status') {
+      if (good) return snapshot();
+      if (bad === 'unavailable') throw Error('PRIVATE_VENDOR_PATH');
+      const value = snapshot();
+      if (bad === 'missing') delete value.bootstrap_failure;
+      if (bad === 'epoch-string') value.bootstrap_failure.epoch = String(nativeEpoch);
+      if (bad === 'epoch-zero') value.bootstrap_failure.epoch = 0;
+      if (bad === 'code-raw') value.bootstrap_failure.error_code = 'PRIVATE_VENDOR_PATH /secret';
+      if (bad === 'extra-field') value.bootstrap_failure.vendor = 'PRIVATE_VENDOR_PATH';
+      if (bad === 'disclosure') value.external_disclosure = true;
+      if (bad === 'phase') value.phase = 'PRIVATE_VENDOR_PATH';
+      if (bad === 'stale') value.bootstrap_failure.epoch = 1;
+      return value;
+    }
+    if (command === 'get_public_state') assert.equal(args?.retryBootstrap, true);
+    return fallback();
+  } });
+  await tick(); await tick();
+  // Only the actual initial invoke catch supplies provisional UI epoch 0;
+  // no native failure authority is hidden in the default mock.
+  if (bad === 'stale') h.listeners.get('datasecure-connection')({ payload: { ...failure, state: 'bootstrap_failed' } });
+  const banner = h.el('feedback').textContent;
+  await h.act('connection-retry'); await tick();
+  assert.equal(h.calls.filter(call => call.command === 'get_public_state').length, 0);
+  assert.equal(h.calls.filter(call => call.command === 'get_ui_context').length, 1);
+  assert.equal(h.el('feedback').textContent, banner);
+  assert.match(h.el('connection-status').textContent, /kein neuer Core-Start angefordert/iu);
+  assert.doesNotMatch(h.el('connection-status').textContent, /PRIVATE_VENDOR_PATH/u);
+  assert.equal(h.el('connection-retry').disabled, false);
+  for (let n = 0; n < 3; n++) await h.poll();
+  await h.act('nav-history'); await h.act('connection-diagnostics');
+  assert.equal(h.calls.filter(call => ['get_public_state', 'get_run_history'].includes(call.command)).length, 0);
+  good = true; await h.act('connection-retry'); await tick();
+  assert.equal(h.calls.filter(call => call.command === 'get_public_state').length, 1);
+  assert.equal(h.calls.filter(call => call.command === 'get_ui_context').length, 2);
+  assert.match(h.el('feedback').textContent, /wiederhergestellt/u);
+  // Success intentionally precedes both the original failure event and Ready.
+  h.listeners.get('datasecure-connection')({ payload: { ...failure, state: 'bootstrap_failed' } });
+  h.listeners.get('datasecure-connection')({ payload: { epoch: nativeEpoch + 1, state: 'ready' } });
+  await tick();
+  assert.match(h.el('feedback').textContent, /wiederhergestellt/u);
+  assert.equal(h.el('connection-help').hidden, true);
+  h.listeners.get('datasecure-connection')({ payload: { epoch: nativeEpoch + 2, state: 'bootstrap_failed', error_code: code } });
+  assert.ok(h.el('feedback').textContent.includes(code), 'a newer native failure must still latch');
+  await h.poll(); assert.equal(h.calls.filter(call => call.command === 'get_public_state').length, 1);
+  assert.equal(h.calls.some(call => ['start_admitted_batch', 'continue_history_batch', 'export_approved_documents',
+    'decide_document_review_batch'].includes(call.command)), false);
+});
+
+for (const code of ['STANDALONE_OWNERSHIP_STORAGE_UNSAFE', 'STANDALONE_OWNERSHIP_SIGNATURE_REFUSED'])
+testAsync(`a stale in-flight snapshot for ${code} cannot authorize retry after a newer native failure`, async () => {
+  let h, firstContext = true, resolveSnapshot, good = false;
+  const nativeSnapshot = epoch => ({ phase: 'owned', bootstrap_failure: { epoch, error_code: code },
+    local_ui_only: true, external_disclosure: false });
+  h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_ui_context' && firstContext) { firstContext = false; throw Error(code); }
+    if (command === 'get_native_recovery_status') return good ? nativeSnapshot(2)
+      : new Promise(resolve => { resolveSnapshot = resolve; });
+    return fallback();
+  } });
+  await tick(); await tick(); await h.act('connection-retry'); await h.act('connection-retry');
+  assert.equal(h.calls.filter(call => call.command === 'get_native_recovery_status').length, 1,
+    'a second click while the fresh snapshot is pending must not create another retry intent');
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 2, state: 'bootstrap_failed', error_code: code } });
+  resolveSnapshot(nativeSnapshot(1)); await tick(); await tick();
+  assert.equal(h.calls.filter(call => call.command === 'get_public_state').length, 0);
+  assert.ok(h.el('feedback').textContent.includes(code));
+  good = true; await h.act('connection-retry'); await tick();
+  assert.equal(h.calls.filter(call => call.command === 'get_public_state').length, 1);
+  assert.equal(h.calls.filter(call => call.command === 'get_ui_context').length, 2);
+  assert.match(h.el('feedback').textContent, /wiederhergestellt/u);
+});
+
+testAsync('ordinary explicit status without a native failure proof never sets the bootstrap retry flag', async () => {
+  const h = harness(); await tick(); await tick(); await h.act('connection-retry'); await tick();
+  assert.equal(h.calls.some(call => call.command === 'get_public_state' && call.args?.retryBootstrap === true), false);
+});
+
+for (const code of ['STANDALONE_DATA_ROOT_UNSAFE', 'STANDALONE_OWNERSHIP_RUNTIME_INVALID', 'STANDALONE_OWNERSHIP_RUNTIME_DENIED',
+  'STANDALONE_OWNERSHIP_SIGNATURE_REFUSED', 'STANDALONE_OWNERSHIP_RUNTIME_LOAD_FAILED'])
+testAsync(`${code} keeps the platform-specific startup reason without automatic reconnect`, async () => {
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_ui_context') throw Error(code);
+    return fallback();
+  } });
+  await tick(); await tick();
+  assert.ok(h.el('feedback').textContent.includes(code));
+  const banner = h.el('feedback').textContent;
+  for (let n = 0; n < 5; n++) await h.poll();
+  await h.act('nav-history'); await h.act('connection-diagnostics');
+  assert.equal(h.el('feedback').textContent, banner);
+  assert.equal(h.calls.filter(call => ['get_public_state', 'get_run_history'].includes(call.command)).length, 0);
+  assert.equal(h.el('connection-help').hidden, false);
 });
 
 testAsync('a native Mac core trap is explained and stops automatic retry after the first failure', async () => {
   const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_native_recovery_status') return { phase: 'owned',
+      bootstrap_failure: { epoch: 1, error_code: 'STANDALONE_SIDECAR_SIGNAL_TRAP' },
+      local_ui_only: true, external_disclosure: false };
     if (command === 'get_public_state') throw Error('STANDALONE_SIDECAR_SIGNAL_TRAP');
     return fallback();
   } });
@@ -249,19 +608,29 @@ testAsync('a trap during initial context loading blocks pickers and waits for ex
   assert.equal(h.calls.some(call => call.command === 'start_admitted_batch'), false);
 });
 
-testAsync('a busy initial Core context waits without claiming a broken connection', async () => {
+for (const code of ['STANDALONE_IPC_BUSY', 'STANDALONE_OWNERSHIP_CONTROL_BUSY', 'STANDALONE_PAUSE_CONTROL_BUSY'])
+testAsync(`${code}: two busy context reads retain picker gating and allow the next real context`, async () => {
   let contexts = 0;
   const h = harness({ invoke(command, args, fallback) {
-    if (command === 'get_ui_context' && ++contexts === 1) throw Error('STANDALONE_IPC_BUSY');
+    if (command === 'get_ui_context' && ++contexts <= 2) throw Error(code);
     return fallback();
   } });
   await tick(); await tick();
-  assert.match(h.el('feedback').textContent, /Core beendet noch einen Vorgang/u);
+  assert.match(h.el('feedback').textContent, code === 'STANDALONE_IPC_BUSY'
+    ? /Core beendet noch einen Vorgang/u : /Vorgang.*Zustand.*noch nicht bestätigt/u);
   assert.doesNotMatch(h.el('feedback').textContent, /Verbindung.*unterbrochen/u);
   await h.act('select-folder');
   assert.equal(h.calls.filter(call => call.command === 'select_folder').length, 0);
   await h.poll();
   assert.equal(contexts, 2);
+  await h.act('select-folder');
+  assert.equal(h.calls.filter(call => call.command === 'select_folder').length, 0);
+  assert.match(h.el('start-hint').textContent, /Verbindung wird wiederhergestellt/u);
+  assert.doesNotMatch(h.el('feedback').textContent, /wiederhergestellt|abgeschlossen/u);
+  assert.doesNotMatch(h.el('connection-status').textContent, /Automatische Verbindungsversuche sind angehalten/u);
+  await h.poll(); assert.equal(contexts, 3);
+  await h.act('select-folder');
+  assert.equal(h.calls.filter(call => call.command === 'select_folder').length, 1);
   assert.equal(h.calls.some(call => call.command === 'start_admitted_batch'), false);
 });
 
@@ -455,7 +824,8 @@ testAsync('confirmed Start highlights only its real working history row, display
     return value;
   } });
   await selectAndStart(h);
-  assert.equal(h.el('new-view').hidden, false, 'confirmed processing stays on the active run page');
+  assert.equal(h.el('new-view').hidden, true, 'confirmed processing selects its run details');
+  selectedRun(h, A);
   assert.equal(h.el('history-view').hidden, true);
   await h.act('nav-history');
   assert.equal(h.el('history-view').hidden, false);
@@ -523,34 +893,34 @@ testAsync('historical continuation adopts the exact run instead of rendering the
   const h = harness(); await selectAndStart(h);
   h.model.entries = [{ batch_id: B, created_at: '2026-10-07T09:00:00Z', processing_mode: 'markdown-and-anonymize', selected_count: 7, resumable: true, status: 'stopped' }];
   await h.act('nav-history');
-  const resume = h.el('history-list').children[0].children[1].children.find(node => node.textContent === 'Fortsetzen');
+  const resume = h.el(`history-${B}-continue`);
   await h.act(resume);
   assert.equal(h.el('job-name').textContent, `Lauf ${B.slice(0, 8)}`);
   assert.equal(h.el('job-count').textContent, '7 Dateien'); assert.equal(h.el('job-files-toggle').hidden, true);
   h.model.state = { state: 'review_required', batch_id: B, review_count: 7 }; await h.poll();
   await h.act(h.el('job-actions').children.find(node => node.textContent === 'Jetzt prüfen'));
   assert.equal(h.calls.filter(call => call.command === 'continue_history_batch').at(-1).args.batchId, B);
-  assert.equal(h.el('nav-history').attrs['aria-selected'], 'true'); assert.equal(h.doc.activeElement.id, 'review-heading');
+  selectedRun(h, B); assert.equal(h.doc.activeElement.id, 'review-heading');
   assert.equal(h.el('review-heading').textContent, `Prüfen: Lauf ${B.slice(0, 8)}`);
   assert.equal(h.el('review-scope').textContent, '7 Dateien · Entscheidungen gelten für diesen Lauf');
   await h.window.__DATASECURE_REVIEW__.invoke('close_review_window');
   h.listeners.get('datasecure-review-closed')({payload: {closed: true, review_generation: 1}}); await tick();
-  assert.equal(h.el('review-view').hidden, true); assert.equal(h.el('new-view').hidden, false);
-  assert.equal(h.doc.activeElement.id, 'job-title');
+  assert.equal(h.el('review-view').hidden, true); selectedRun(h, B);
+  assert.equal(h.doc.activeElement.id, 'details-heading');
 });
-testAsync('review opened directly from history returns focus to stable history navigation', async () => {
+testAsync('review opened directly from history returns focus to the same run overview', async () => {
   const h = harness(); await tick();
   h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', selected_count: 7, resumable: true, status: 'review_required' }];
   await h.act('nav-history');
-  const review = h.el('history-list').children[0].children[1].children.find(node => node.textContent === 'Jetzt prüfen');
+  const review = h.el(`history-${B}-continue`);
   await h.act(review);
   assert.equal(h.el('review-view').hidden, false);
-  assert.equal(h.el('nav-history').attrs['aria-controls'], 'review-view');
+  selectedRun(h, B);
   assert.equal(h.el('review-heading').textContent, `Prüfen: Lauf ${B.slice(0, 8)}`);
   await h.window.__DATASECURE_REVIEW__.invoke('close_review_window');
   h.listeners.get('datasecure-review-closed')({payload: {closed: true, review_generation: 1}}); await tick();
-  assert.equal(h.el('history-view').hidden, false);
-  assert.equal(h.doc.activeElement.id, 'nav-history');
+  selectedRun(h, B);
+  assert.equal(h.doc.activeElement.id, 'details-heading');
 });
 testAsync('the same run retains its known friendly title and selected file list when opened from history', async () => {
   const h = harness(); await selectAndStart(h);
@@ -586,13 +956,13 @@ testAsync('history loads approval metadata only on demand and distinguishes old 
   h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', selected_count: 3, result_count: 3, status: 'results_available' }];
   await h.act('nav-history'); await h.poll();
   assert.equal(h.calls.some(row => row.command === 'get_document_review_history_summary'), false, 'ordinary polling never replays all documents');
-  await h.act(`history-${B}-summary-toggle`);
+  await toggleHistorySummary(h, B);
   const summary = h.el(`history-${B}-summary`);
   assert.match(summary.textContent, /Dokumentprüfung: 0 von 2 verfügbaren Dokumentständen freigegeben/u);
   assert.match(summary.textContent, /1 Dokumentprüfstände nicht verfügbar/u);
   assert.match(summary.textContent, /1 Quelldateien mit unklarem früheren Ergebnisstatus/u);
   assert.match(summary.textContent, /vollständige Freigabe dieses Laufs ist nicht belegbar/u);
-  assert.match(summary.textContent, /KI-Kopie: 3 abgeschlossene Exporte mit Beleg/u);
+  assert.match(summary.textContent, /Export: 3 abgeschlossene Exporte mit Beleg/u);
   assert.match(summary.textContent, /1 unvollständige Exportaufträge · 1 fertige Kopien mit offener Empfangsbestätigung/u);
   const reload = h.el(`history-${B}-summary-reload`); reload.focus(); await h.poll();
   assert.equal(h.el(`history-${B}-summary-reload`), reload); assert.equal(h.doc.activeElement, reload);
@@ -615,7 +985,7 @@ testAsync('the completed-copy link loads only its own durable history summary af
   assert.equal(h.el('nav-history').dataset.openSummaryBatchId, undefined);
   assert.equal(h.el(`history-${B}-summary`).hidden, false);
   assert.equal(h.calls.filter(call => call.command === 'get_document_review_history_summary').length, 1);
-  assert.match(h.el('history-list').textContent, /KI-Kopie mit Abschlussbeleg/u);
+  assert.match(h.el('history-list').textContent, /Export mit Abschlussbeleg/u);
   assert.equal(h.doc.activeElement, h.el('history-list').children[0]);
   noAutomaticDecision(h);
 });
@@ -647,11 +1017,11 @@ testAsync('a failed reload removes stale approval and KI-copy claims from the co
   } }); await tick();
   h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', selected_count: 2,
     result_count: 2, failed_count: 0, status: 'results_available', results_available: true, result_location: 'available' }];
-  await h.act('nav-history'); await h.act(`history-${B}-summary-toggle`);
+  await h.act('nav-history'); await toggleHistorySummary(h, B);
   assert.match(h.el('history-list').textContent, /Für diesen Stand ist kein weiterer Export nötig/u);
   await h.act(`history-${B}-summary-reload`);
   assert.match(h.el(`history-${B}-summary`).textContent, /Prüfstatus nicht verfügbar/u);
-  assert.match(h.el('history-list').textContent, /Freigaben und KI-Kopien sind derzeit nicht bestätigt/u);
+  assert.match(h.el('history-list').textContent, /Freigaben und Exporte sind derzeit nicht bestätigt/u);
   assert.doesNotMatch(h.el('history-list').textContent, /Für diesen Stand ist kein weiterer Export nötig/u);
   noAutomaticDecision(h);
 });
@@ -664,7 +1034,7 @@ testAsync('a long approval-summary read suspends background Core polls on Window
   } }); await tick();
   h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', selected_count: 2,
     result_count: 2, failed_count: 0, status: 'results_available', results_available: true, result_location: 'available' }];
-  await h.act('nav-history'); await h.act(`history-${B}-summary-toggle`);
+  await h.act('nav-history'); await toggleHistorySummary(h, B);
   const before = h.calls.filter(call => call.command === 'get_public_state').length;
   const historyBefore = h.calls.filter(call => call.command === 'get_run_history').length;
   await h.act('refresh-history');
@@ -694,7 +1064,7 @@ testAsync('a status poll queued before a history-summary read cannot leave a fal
   await h.act('nav-history');
   stallNext = true;
   const queuedPoll = h.poll(); await tick();
-  await h.act(`history-${B}-summary-toggle`);
+  await toggleHistorySummary(h, B);
   rejectStatus(Error('STANDALONE_IPC_TIMEOUT')); await queuedPoll;
   assert.doesNotMatch(h.el('feedback').textContent, /STANDALONE_IPC_TIMEOUT/u);
   await h.poll();
@@ -710,13 +1080,13 @@ testAsync('a retired Core summary read cannot block status polling on the replac
   } }); await tick();
   h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', selected_count: 2,
     result_count: 2, failed_count: 0, status: 'results_available', results_available: true, result_location: 'available' }];
-  await h.act('nav-history'); await h.act(`history-${B}-summary-toggle`);
+  await h.act('nav-history'); await toggleHistorySummary(h, B);
   const before = h.calls.filter(call => call.command === 'get_public_state').length;
   h.listeners.get('datasecure-connection')({ payload: { epoch: 1, state: 'recovering' } });
   await tick(); await h.poll();
   assert.ok(h.calls.filter(call => call.command === 'get_public_state').length > before);
   resolveSummary(reviewSummary({ reviewable_count: 2 })); await tick();
-  assert.doesNotMatch(h.el('history-list').textContent, /KI-Kopie mit Abschlussbeleg/u);
+  assert.doesNotMatch(h.el('history-list').textContent, /Export mit Abschlussbeleg/u);
   noAutomaticDecision(h);
 });
 
@@ -729,13 +1099,13 @@ testAsync('plain Markdown history never advertises text approval or saved raw co
     return fallback();
   }}); await tick();
   h.model.entries = [{ batch_id: B, processing_mode: 'markdown-only', selected_count: 2, result_count: 2, status: 'results_available' }];
-  await h.act('nav-history'); await h.act(`history-${B}-summary-toggle`);
+  await h.act('nav-history'); await toggleHistorySummary(h, B);
   const text = h.el(`history-${B}-summary`).textContent;
   assert.match(text, /Optionale Kopien: 1 von 2 verfügbaren Dokumentständen zum Kopieren bestätigt/u);
   assert.match(text, /1 zusätzliche Markdown-Kopien gespeichert · nicht anonymisiert/u);
   assert.match(text, /ursprünglichen Markdown-Ergebnisse.*keine Freigabe erforderlich/u);
   assert.equal(h.el(`history-${B}-summary-toggle`).textContent, 'Nachkorrekturen und Kopien');
-  assert.doesNotMatch(text, /abgeschlossene KI-Exporte|menschlich freigegeben|Neuester datierter/u);
+  assert.doesNotMatch(text, /abgeschlossene Exporte|menschlich freigegeben|Neuester datierter/u);
 });
 
 testAsync('changed history rows reload an expanded review summary instead of leaving an empty panel', async () => {
@@ -749,7 +1119,7 @@ testAsync('changed history rows reload an expanded review summary instead of lea
   } }); await tick();
   h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', result_count: 2,
     selected_count: 2, status: 'results_available' }];
-  await h.act('nav-history'); await h.act(`history-${B}-summary-toggle`);
+  await h.act('nav-history'); await toggleHistorySummary(h, B);
   assert.match(h.el(`history-${B}-summary`).textContent, /0 von 2/u);
   approved = 1; h.model.entries[0] = { ...h.model.entries[0], approved_count: 1 };
   await h.poll(); await tick();
@@ -760,14 +1130,14 @@ testAsync('changed history rows reload an expanded review summary instead of lea
 testAsync('history has one next action and keyboard disclosure retains its state across a changed poll', async () => {
   const h = harness(); await tick();
   h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', result_count: 2,
-    results_available: true, ledger_available: true, status: 'results_available' }];
+    results_available: true, ledger_available: true, status: 'stopped', resumable: true }];
   await h.act('nav-history');
   const extra = h.el(`history-${B}-extra`), more = h.el(`history-${B}-more`);
   const main = h.nodes.filter(node => node.isConnected && node.attrs['data-history-main'] === 'true');
-  assert.equal(main.length, 1); assert.equal(main[0].textContent, 'Dokumente und Freigaben öffnen');
+  assert.equal(main.length, 1); assert.equal(main[0].textContent, 'Fortsetzen');
   assert.equal(h.el(`history-${B}-summary`).hidden, true, 'metadata is secondary, not an extra primary click');
-  assert.equal(extra.children.includes(h.el(`history-${B}-summary-toggle`)), false,
-    'approval and export status is directly reachable without expanding extra actions');
+  assert.equal(extra.children.includes(h.el(`history-${B}-summary-toggle`)), true,
+    'approval and export status is an explicit optional action');
   assert.equal(extra.hidden, true); assert.equal(more.attrs['aria-expanded'], 'false');
   assert.equal(more.attrs['aria-controls'], extra.id);
   assert.ok(extra.children.every(node => node.className !== 'primary'));
@@ -785,7 +1155,7 @@ testAsync('secondary status loading never locks the direct document action', asy
   }}); await tick();
   h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', result_count: 2, status: 'results_available' }];
   await h.act('nav-history'); const main = h.el(`history-${B}-documents`);
-  await h.act(`history-${B}-summary-toggle`);
+  await toggleHistorySummary(h, B);
   assert.equal(main.disabled, false); assert.equal(h.el(`history-${B}-summary-reload`).disabled, true);
   resolve(reviewSummary()); await tick();
   assert.equal(main.disabled, false); assert.equal(main.textContent, 'Exportvorschau');
@@ -799,7 +1169,7 @@ testAsync('collapsing an in-flight approval summary keeps the direct action and 
   }}); await tick();
   h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', result_count: 2, status: 'results_available' }];
   await h.act('nav-history'); const main = h.el(`history-${B}-documents`);
-  await h.act(`history-${B}-summary-toggle`); await h.act(`history-${B}-summary-toggle`);
+  await toggleHistorySummary(h, B); await toggleHistorySummary(h, B);
   assert.equal(main.disabled, false); assert.equal(h.el(`history-${B}-summary`).hidden, true);
   resolve(reviewSummary()); await tick(); await h.poll();
   assert.equal(main.disabled, false); assert.equal(main.textContent, 'Dokumente und Freigaben öffnen');
@@ -816,7 +1186,7 @@ testAsync('finishing a native folder action cannot restore a superseded summary 
   h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', result_count: 2,
     results_available: true, status: 'results_available' }];
   await h.act('nav-history'); const main = h.el(`history-${B}-documents`);
-  await h.act(`history-${B}-summary-toggle`); await h.act(`history-${B}-more`); await h.act(`history-${B}-results`);
+  await toggleHistorySummary(h, B); await h.act(`history-${B}-results`);
   resolveSummary(reviewSummary()); await tick(); assert.equal(main.disabled, true, 'native command remains in flight');
   resolveFolder({ ok: true }); await tick();
   assert.equal(main.disabled, false); assert.equal(main.textContent, 'Dokumente und Freigaben öffnen');
@@ -842,6 +1212,169 @@ function noAutomaticDecision(h) {
     'abandon_document_export', 'start_admitted_batch'].includes(call.command)), false);
 }
 
+testAsync('R6 New always exposes setup while the same selected run has a separate read-only details tab', async () => {
+  const h = harness(); await selectAndStart(h);
+  selectedRun(h, A); assert.equal(h.el('job').hidden, false);
+  const before = h.calls.length;
+  await h.act('nav-new');
+  assert.equal(h.el('new-view').hidden, false); assert.equal(h.el('setup').hidden, false);
+  assert.equal(h.el('job').hidden, true); assert.equal(h.el('details-view').hidden, true);
+  await h.act('nav-details'); selectedRun(h, A);
+  assert.equal(h.el('job').hidden, false);
+  assert.equal(h.calls.slice(before).some(call => ['start_admitted_batch', 'continue_history_batch',
+    'continue_current_batch', 'continue_review_session', 'cancel_admission'].includes(call.command)), false);
+});
+
+testAsync('R6 New can explicitly start a successor after confirmed terminal completion without resetting the previous run', async () => {
+  const h=harness();await selectAndStart(h);
+  h.model.state={...h.model.state,state:'results_available',batch_complete:true,results_available:true};await h.poll();
+  await h.act('nav-new');await h.act('select-folder');
+  assert.equal(h.el('start').attrs['aria-disabled'],'false');
+  await h.act('start');
+  assert.equal(h.calls.filter(call=>call.command==='start_admitted_batch').length,2);
+  assert.equal(h.calls.filter(call=>call.command==='cancel_admission').length,0,'predecessor need not be cleared to start valid admitted sources');
+});
+
+testAsync('R6 New explains an active predecessor rather than advertising a start it will silently ignore', async () => {
+  const h=harness();await selectAndStart(h);await h.act('nav-new');await h.act('select-folder');
+  assert.equal(h.el('start').attrs['aria-disabled'],'true');
+  assert.match(h.el('start-hint').textContent,/Lauf.*noch nicht abgeschlossen/u);
+  await h.act('start');assert.equal(h.calls.filter(call=>call.command==='start_admitted_batch').length,1);
+});
+
+for(const leaveEarly of [false,true])testAsync(`R6 historical details delayed by a summary ${leaveEarly?'do not replace a later destination':'load without a second click'}`,async()=>{
+  let finishSummary;
+  const h=harness({invoke(command,args,fallback){
+    if(command==='get_document_review_history_summary')return new Promise(resolve=>{finishSummary=resolve});
+    return fallback();
+  }});await tick();
+  h.model.entries=[{batch_id:A,processing_mode:'markdown-and-anonymize',status:'results_available',result_count:1,selected_count:1}];
+  await h.act('nav-history');await toggleHistorySummary(h,A);await h.act(`history-${A}-details`);
+  selectedRun(h,A);assert.match(h.el('run-history-detail').textContent,/geladen|abgeglichen/u);
+  if(leaveEarly)await h.act('nav-settings');
+  finishSummary({ok:true,local_ui_only:true,external_disclosure:false,available:false});await tick();await h.poll();
+  if(leaveEarly){assert.equal(h.el('settings-view').hidden,false);assert.equal(h.el('details-view').hidden,true)}
+  else {selectedRun(h,A);assert.equal(h.el(`history-${A}-details`),undefined,'the detail card does not point to a duplicate detail view');
+    assert.ok(h.el(`history-${A}-disclosure`),'same run card loaded after old read retires')}
+  assert.equal(h.calls.some(call=>['continue_history_batch','start_admitted_batch','export_approved_documents','decide_document_review'].includes(call.command)),false);
+});
+
+testAsync('R6 a historical overview and collapsed details never continue, approve or copy that run', async () => {
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_document_review_history_summary') return reviewSummary();
+    return fallback();
+  } }); await tick();
+  h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', status: 'stopped',
+    resumable: true, selected_count: 2, result_count: 1, failed_count: 0 }];
+  await h.act('nav-history');
+  assert.equal(h.el('run-guide').hidden, true, 'the list has no global guide for an implicit run');
+  const before = h.calls.length;
+  await h.act(`history-${B}-details`); selectedRun(h, B);
+  assert.equal(h.el('history-view').hidden, true); assert.equal(h.el('job').hidden, true);
+  const disclosure = h.el(`history-${B}-disclosure`);
+  assert.equal(disclosure.open, true); disclosure.open = false;
+  await h.act(disclosure, 'toggle'); await h.poll();
+  assert.equal(h.calls.slice(before).some(call => ['continue_history_batch', 'continue_current_batch',
+    'continue_review_session', 'open_embedded_review', 'decide_document_review',
+    'decide_document_review_batch', 'preview_document_export', 'export_approved_documents'].includes(call.command)), false);
+});
+
+testAsync('R6 rapid documents A to History to Settings shares one delayed native close and keeps the last destination', async () => {
+  let finishClose;
+  const h = harness({ documentRenderer: true, invoke(command, args, fallback) {
+    if (command === 'get_document_reviews') { assert.equal(args.batchId, A); return documentResponse('markdown-only', 1); }
+    if (command === 'close_document_reviews') return new Promise(resolve => { finishClose = resolve; });
+    return fallback();
+  } }); await tick();
+  h.model.entries = [{ batch_id: A, processing_mode: 'markdown-only', status: 'results_available', result_count: 1 }];
+  await h.act('nav-history'); await h.act(`history-${A}-more`); await h.act(`history-${A}-documents`);
+  selectedRun(h, A); assert.equal(h.window.__DATASECURE_DOCUMENTS__.activeBatchId(), A);
+  await h.act('nav-history');
+  assert.equal(h.window.__DATASECURE_DOCUMENTS__.activeBatchId(), null, 'the actual renderer clears ownership before native close settles');
+  await h.act('nav-settings');
+  assert.equal(h.calls.filter(call => call.command === 'close_document_reviews').length, 1);
+  finishClose({ ok: true }); await tick(); await tick();
+  assert.equal(h.el('settings-view').hidden, false); assert.equal(h.el('documents-view').hidden, true);
+  assert.equal(h.el('nav-settings').attrs['aria-selected'], 'true');
+  assert.equal(h.el('nav-history').attrs['aria-controls'], 'history-view');
+  assert.equal(h.el('details-run-id').textContent, `Lauf-ID: ${A}`);
+  noAutomaticDecision(h);
+});
+
+for (const refusal of ['dirty', 'busy']) testAsync(`R6 ${refusal} document navigation refuses without changing run identity or private context`, async () => {
+  let finishReload, hold = false;
+  const response = documentResponse('markdown-only', 1);
+  const h = harness({ documentRenderer: true, invoke(command, args, fallback) {
+    if (command === 'get_document_reviews') return hold ? new Promise(resolve => { finishReload = resolve; }) : response;
+    if (command === 'get_document_review_chunk') return { ...response.documents[0], chunk_index: 0,
+      original_text: 'Synthetic private source', markdown: 'Synthetic private draft', local_ui_only: true, external_disclosure: false };
+    return fallback();
+  } }); await tick();
+  h.model.entries = [A, B].map(batch_id => ({ batch_id, processing_mode: 'markdown-only', status: 'results_available', result_count: 1 }));
+  await h.act('nav-history'); await h.act(`history-${A}-more`); await h.act(`history-${A}-documents`);
+  if (refusal === 'dirty') {
+    await h.act(descendants(h.el('documents-list'), node => node.tagName === 'BUTTON')[0]);
+    h.el('document-markdown').value = 'Unsaved draft bound to A'; await h.act('document-markdown', 'input');
+  } else { hold = true; await h.act('documents-reload'); }
+  const before = h.calls.length, title = h.el('documents-run').textContent, draft = h.el('document-markdown').value;
+  await h.act('nav-history'); await h.act('nav-settings'); await h.act('nav-new');
+  selectedRun(h, A); assert.equal(h.el('documents-view').hidden, false);
+  assert.equal(h.window.__DATASECURE_DOCUMENTS__.activeBatchId(), A);
+  assert.equal(h.el('documents-run').textContent, title); assert.equal(h.el('document-markdown').value, draft);
+  assert.equal(h.calls.slice(before).some(call => call.command === 'close_document_reviews'), false);
+  assertNoExportOrRestart(h);
+  if (finishReload) { finishReload(response); await tick(); }
+});
+
+for (const wrongAck of [false, true]) testAsync(`R6 completed copy ${wrongAck ? 'rejects a foreign operation ACK' : 'returns after its exact durable ACK'} without replay`, async () => {
+  let acknowledge;
+  const response = documentResponse('markdown-and-anonymize', 1);
+  response.documents[0].approved = true;
+  const h = harness({ documentRenderer: true, invoke(command, args, fallback) {
+    if (command === 'get_document_reviews') return response;
+    if (command === 'close_document_reviews') return { ok: true };
+    if (command === 'preview_document_export') return { ok: true, processing_mode: 'markdown-and-anonymize',
+      files: [{ name: 'Dokument_01.md', sha256: args.selection[0].output_sha256 }], local_ui_only: true, external_disclosure: false };
+    if (command === 'export_approved_documents') {
+      assert.equal(args.batchId, A);
+      const receipt = { ok: true, operation_id: args.operationId, exported_count: 1,
+        folder_name: `Export-${args.operationId}`, local_ui_only: true, external_disclosure: false };
+      if (args.acknowledge) return new Promise(resolve => { acknowledge = () => resolve({ ...receipt,
+        ...(wrongAck ? { operation_id: 'e'.repeat(32) } : {}) }); });
+      return receipt;
+    }
+    return fallback();
+  } }); await tick();
+  h.model.entries = [{ batch_id: A, processing_mode: 'markdown-and-anonymize', status: 'results_available', result_count: 1 }];
+  await h.act('nav-history'); await h.act(`history-${A}-documents`);
+  h.el('documents-all').checked = true; await h.act('documents-all', 'change');
+  await h.act('documents-export'); await h.act('document-export-confirm');
+  assert.equal(h.el('document-export-close').disabled, true); selectedRun(h, A);
+  assert.equal(h.el('documents-view').hidden, false); assert.equal(h.el('details-receipt').hidden, true);
+  acknowledge(); await tick(); await tick();
+  const exports = h.calls.filter(call => call.command === 'export_approved_documents');
+  assert.equal(exports.length, 2); assert.equal(exports[1].args.acknowledge, true);
+  assert.equal(exports[0].args.operationId, exports[1].args.operationId);
+  assert.deepEqual(exports[0].args.selection, exports[1].args.selection);
+  if (wrongAck) {
+    assert.notEqual(h.el('document-export-title').textContent, 'Export abgeschlossen');
+    await h.act('document-export-close'); assert.equal(h.el('documents-view').hidden, false);
+    assert.equal(h.el('details-receipt').hidden, true);
+  } else {
+    assert.equal(h.el('document-export-title').textContent, 'Export abgeschlossen');
+    await h.act('document-export-close'); await tick(); selectedRun(h, A);
+    assert.equal(h.el('documents-view').hidden, false, 'closing the success dialog retains the last completed step');
+    assert.equal(h.el('documents-completion').hidden, false);
+    assert.equal(h.el('details-overview-panel').hidden, true, 'receipt belongs to the separate hidden overview');
+    await h.act('documents-completion-details'); await tick(); selectedRun(h, A);
+    assert.equal(h.el('documents-view').hidden, true); assert.equal(h.el('details-receipt').hidden, false);
+    assert.match(h.el('details-receipt-text').textContent, new RegExp(exports[0].args.operationId, 'u'));
+    await h.act('nav-history'); await h.act('nav-details');
+  }
+  assert.equal(h.calls.filter(call => call.command === 'export_approved_documents').length, 2);
+  assert.equal(h.calls.some(call => ['decide_document_review', 'continue_history_batch', 'start_admitted_batch'].includes(call.command)), false);
+});
+
 testAsync('one history click opens the actual document renderer with 72 unapproved results, not a metadata summary', async () => {
   const h = harness({ documentRenderer: true, invoke(command, args, fallback) {
     if (command === 'get_document_reviews') { assert.equal(args.batchId, B); return documentResponse(); }
@@ -850,7 +1383,7 @@ testAsync('one history click opens the actual document renderer with 72 unapprov
   h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', result_count: 72, status: 'results_available' }];
   await h.act('nav-history'); await h.act(`history-${B}-documents`);
   assert.equal(h.el('documents-view').hidden, false); assert.equal(h.el('history-view').hidden, true);
-  assert.equal(h.el('nav-history').attrs['aria-controls'], 'documents-view');
+  selectedRun(h, B);
   assert.equal(h.el('documents-list').children.length, 72);
   assert.equal(h.el('documents-selected').textContent, '0 ausgewählt · 0 von 72 freigegeben');
   assert.equal(h.calls.some(call => call.command === 'get_document_review_history_summary'), false);
@@ -933,7 +1466,7 @@ for (const mode of ['markdown-and-anonymize']) testAsync(`owned final review ope
   await h.listeners.get('datasecure-review-closed')({payload: {closed: true, review_generation: 1}}); await closing;
   assert.equal(h.el('review-frame').src, 'about:blank'); assert.equal(h.el('review-view').hidden, true);
   assert.equal(h.el('documents-view').hidden, false); assert.equal(h.el('history-view').hidden, true);
-  assert.equal(h.el('documents-run').textContent, `Lauf ${B.slice(0, 8)}`);
+  assert.equal(h.el('documents-run').textContent, `Lauf-ID: ${B}`);
   assert.equal(h.el('documents-list').children.length, 72); assert.equal(h.doc.activeElement.id, 'documents-heading');
   assert.match(h.el('feedback').textContent, /Fundstellenprüfung abgeschlossen.*ausdrücklich frei/u);
   assert.equal(h.el('documents-all').checked, false); noAutomaticDecision(h);
@@ -953,7 +1486,7 @@ for (const purpose of ['markdown-only', 'markdown-and-anonymize']) testAsync(`${
   await h.window.__DATASECURE_REVIEW__.invoke('get_review_session');
   await h.window.__DATASECURE_REVIEW__.invoke('close_review_window');
   await h.listeners.get('datasecure-review-closed')({payload: {closed: true, review_generation: 1}});
-  assert.equal(h.el('history-view').hidden, false); assert.equal(h.el('documents-view').hidden, true);
+  selectedRun(h, B); assert.equal(h.el('documents-view').hidden, true);
   assert.equal(h.calls.some(call => call.command === 'get_document_reviews'), false);
 });
 
@@ -970,7 +1503,7 @@ testAsync('failed closure cannot advance and missing document component gives a 
   const absent = harness(); await tick();
   absent.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', result_count: 72, status: 'results_available' }];
   await absent.act('nav-history'); await absent.act(`history-${B}-documents`);
-  assert.equal(absent.el('history-view').hidden, false);
+  selectedRun(absent, B);
   assert.match(absent.el('feedback').textContent, /gespeicherten Entscheidungen bleiben erhalten.*STANDALONE_DOCUMENT_VIEW_UNAVAILABLE/u);
   noAutomaticDecision(absent);
 });
@@ -991,7 +1524,7 @@ testAsync('an old native close generation cannot close a successor even while it
   assert.equal(h.el('review-view').hidden, false);
   resolveClose({ ok: true }); await closing;
   await h.listeners.get('datasecure-review-closed')({ payload: { closed: true, review_generation: 2 } });
-  assert.equal(h.el('history-view').hidden, false);
+  selectedRun(h, B);
 });
 
 testAsync('late completion from a retired connection cannot mark a newly opened review complete', async () => {
@@ -1010,7 +1543,7 @@ testAsync('late completion from a retired connection cannot mark a newly opened 
   resolveSession({ ready: false, run_complete: true }); await rejected;
   await h.window.__DATASECURE_REVIEW__.invoke('close_review_window');
   await h.listeners.get('datasecure-review-closed')({ payload: { closed: true, review_generation: 2 } });
-  assert.equal(h.el('history-view').hidden, false);
+  selectedRun(h, B);
   assert.equal(h.calls.some(call => call.command === 'get_document_reviews'), false);
 });
 
@@ -1027,7 +1560,7 @@ testAsync('manual closure freezes the known phase; a late status reply cannot tu
   await h.window.__DATASECURE_REVIEW__.invoke('close_review_window');
   resolveSession({ ready: false, run_complete: true }); await rejected;
   await h.listeners.get('datasecure-review-closed')({ payload: { closed: true, review_generation: 1 } });
-  assert.equal(h.el('history-view').hidden, false); assert.equal(h.el('documents-view').hidden, true);
+  selectedRun(h, B); assert.equal(h.el('documents-view').hidden, true);
   assert.equal(h.calls.some(call => call.command === 'get_document_reviews'), false);
 });
 testAsync('fresh approval summary improves the next action without changing an active, resumable or failed run', async () => {
@@ -1042,7 +1575,7 @@ testAsync('fresh approval summary improves the next action without changing an a
       return command === 'get_document_review_history_summary' ? reviewSummary() : fallback();
     }}); await tick();
     h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', result_count: 2, ...state }];
-    await h.act('nav-history'); await h.act(`history-${B}-summary-toggle`);
+    await h.act('nav-history'); await toggleHistorySummary(h, B);
     const main = h.nodes.find(node => node.isConnected && node.attrs['data-history-main'] === 'true');
     assert.equal(main?.textContent || null, label);
     if (label === 'Bereitstellung erneut prüfen') {
@@ -1108,8 +1641,8 @@ testAsync('completed anonymization with bound OCR-off omissions leads to documen
   assert.match(row.textContent, /18 ohne OCR nicht umgewandelt · 0 technische Fehler/u);
   assert.equal(h.el(`history-${B}-documents`).textContent, 'Dokumente und Freigaben öffnen');
   assert.equal(h.nodes.some(node => node.isConnected && node.id === `history-${B}-problems-main`), false);
-  await h.act(`history-${B}-summary-toggle`);
-  assert.match(row.textContent, /Verarbeitung beendet · 0\/115 freigegeben · 18 ohne OCR nicht umgewandelt/u);
+  await toggleHistorySummary(h, B);
+  assert.match(row.textContent, /Verarbeitung beendet · 0\/115 freigegeben · Export gesondert prüfen · 18 ohne OCR nicht umgewandelt/u);
   assert.equal(h.el(`history-${B}-documents`).textContent, 'Dokumente und Freigaben öffnen');
   assert.equal(h.calls.some(call => ['decide_document_review', 'export_approved_documents'].includes(call.command)), false);
 });
@@ -1130,8 +1663,8 @@ testAsync('anonymization history separates a privacy stop from OCR omissions and
   assert.equal(h.el(`history-${B}-documents`).textContent, 'Dokumente und Freigaben öffnen');
   assert.equal(h.el(`history-${B}-problems`).textContent, '18 Ausnahmen ansehen');
   assert.match(h.el('history-list').textContent, /Anonymisierungslauf abgeschlossen – mit Hinweisen/u);
-  const completion = h.el('history-list').children[0].children[0].children.find(node => node.className === 'history-completion');
-  assert.ok(completion.children[0].textContent.includes('✓!'), 'completion and warning have distinct visible marks');
+  const marks = withClass(h.el('history-list'), 'history-completion-marks')[0];
+  assert.ok(marks.textContent.includes('✓!'), 'completion and warning have distinct visible marks');
   assert.equal(h.el('history-list').children[0].dataset.outcome, 'partial');
   assert.equal(h.calls.some(call => call.command === 'get_document_review_history_summary'), false);
   await h.act(`history-${B}-problems`);
@@ -1151,12 +1684,12 @@ testAsync('privacy stop stays visible without hiding completed processing and 13
     results_available: true, result_location: 'available' }];
   await h.act('nav-history');
   assert.match(h.el('history-list').textContent, /Verarbeitung beendet/u);
-  await h.act(`history-${B}-summary-toggle`);
+  await toggleHistorySummary(h, B);
   assert.match(h.el('history-list').textContent,
-    /Verarbeitung beendet · 132\/132 freigegeben · aktueller Stand noch nicht als KI-Kopie belegt/u);
+    /Verarbeitung beendet · 132\/132 freigegeben · aktueller Stand noch nicht als Export belegt/u);
   assert.equal(h.el(`history-${B}-problems-main`), undefined);
   assert.equal(h.el(`history-${B}-problems`).textContent, '1 Ausnahme ansehen');
-  assert.match(h.el(`history-${B}-summary`).textContent, /KI-Kopie: noch keine abgeschlossene Kopie belegt/u);
+  assert.match(h.el(`history-${B}-summary`).textContent, /Export: noch kein abgeschlossener Export belegt/u);
 });
 
 testAsync('successful OCR anonymization exposes content hints directly without reopening or failing the run', async () => {
@@ -1291,7 +1824,7 @@ testAsync('a total processing failure is red, while an OCR-off all-omitted run i
   assert.equal(h.el('history-list').children[0].dataset.outcome, 'partial');
   assert.match(h.el('history-list').textContent, /Verarbeitung ist beendet, aber keine Datei wurde umgewandelt/u);
   assert.match(h.el('history-list').textContent, /Verarbeitung beendet – keine Ergebnisse erstellt/u);
-  assert.match(h.el('history-list').textContent, /Es gibt keine freizugebenden oder für KI kopierbaren Ergebnisse/u);
+  assert.match(h.el('history-list').textContent, /Es gibt keine freizugebenden oder exportierbaren Ergebnisse/u);
   h.model.entries[0] = { ...h.model.entries[0], failed_count: 0 };
   await h.act('refresh-history');
   assert.doesNotMatch(h.el('history-list').textContent, /Verarbeitung beendet – keine Ergebnisse erstellt/u,
@@ -1319,26 +1852,41 @@ testAsync('exact current export coverage and pending debt determine the explicit
     await tick(); h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', result_count: 2,
       result_location: location, status: 'results_available' }];
     await h.act('nav-history');
-    const main = h.el(`history-${B}-documents`); await h.act(`history-${B}-summary-toggle`);
+    const main = h.el(`history-${B}-documents`); await toggleHistorySummary(h, B);
     assert.equal(main.textContent, label); assert.equal(main.className === 'primary', primary);
     if (summary.pending_export_count)
-      assert.match(h.el('history-list').children[0].children[0].children[2].textContent, /KI-Kopie im Abgleich/u);
+      assert.match(h.el(`history-${B}-state`).textContent, /Export im Abgleich/u);
     await h.act(main); assert.deepEqual(opened, [[B, { exportPreview: label === 'Exportvorschau' }]]);
     assert.equal(h.calls.some(call => ['decide_document_review', 'export_approved_documents', 'continue_history_batch'].includes(call.command)), false);
   }
 });
 
-testAsync('a deleted result folder has no next-action button while private review remains an explicit extra', async () => {
+testAsync('a deleted result folder blocks only file opening, not independent private document review', async () => {
   const h = harness({ invoke(command, args, fallback) {
     return command === 'get_document_review_history_summary' ? reviewSummary() : fallback();
   }}); await tick();
   h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', result_count: 2,
     failed_count: 1, status: 'results_available', result_location: 'missing', results_available: false }];
-  await h.act('nav-history'); await h.act(`history-${B}-summary-toggle`);
-  assert.equal(h.nodes.some(node => node.isConnected && node.attrs['data-history-main'] === 'true'), false);
-  assert.equal(h.el('history-list').children[0].children[0].children[2].textContent, 'Ergebnisordner fehlt');
-  assert.ok(h.el(`history-${B}-extra`).children.some(node => node.textContent === 'Prüfung öffnen'));
+  await h.act('nav-history'); await toggleHistorySummary(h, B);
+  assert.equal(h.el(`history-${B}-documents`).attrs['data-history-main'], 'true');
+  assert.match(h.el(`history-${B}-state`).textContent, /Ergebnisordner fehlt/u);
+  assert.equal(h.el(`history-${B}-results`), undefined);
   assert.equal(h.calls.some(call => call.command.startsWith('open_')), false);
+});
+
+testAsync('expected OCR omissions cannot hide a confirmed copy or make optional review the primary action', async () => {
+  const h = harness({ invoke(command, args, fallback) {
+    return command === 'get_document_review_history_summary' ? reviewSummary({ current_exported_count: 2,
+      not_processed_count: 1 }) : fallback();
+  }}); await tick();
+  h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', selected_count: 3,
+    completed_count: 3, result_count: 2, failed_count: 1, expected_ocr_omission_count: 1,
+    privacy_stop_count: 0, results_available: true, result_location: 'available', status: 'results_available' }];
+  await h.act('nav-history'); await toggleHistorySummary(h, B);
+  const label = h.el(`history-${B}-state`).textContent;
+  assert.match(label, /Export mit Abschlussbeleg.*1 ohne OCR nicht umgewandelt/u);
+  assert.equal(h.el(`history-${B}-documents`).textContent, 'Prüfung öffnen');
+  assert.notEqual(h.el(`history-${B}-documents`).className, 'primary');
 });
 
 for (const failure of [false, true]) testAsync(`late ${failure ? 'failed' : 'successful'} approval summary is discarded after navigation`, async () => {
@@ -1349,7 +1897,7 @@ for (const failure of [false, true]) testAsync(`late ${failure ? 'failed' : 'suc
     ? ++reads === 1 ? delayed : new Promise(() => {}) : fallback(); }});
   await tick();
   h.model.entries = [{ batch_id: B, processing_mode: 'markdown-only', result_count: 2, status: 'results_available' }];
-  await h.act('nav-history'); await h.act(`history-${B}-summary-toggle`);
+  await h.act('nav-history'); await toggleHistorySummary(h, B);
   await h.act('nav-new'); await h.act('nav-history');
   if (failure) reject(Error('STANDALONE_IPC_FAILED'));
   else resolve({ ok: true, available: false, local_ui_only: true, external_disclosure: false });
@@ -1366,7 +1914,7 @@ testAsync('unavailable history summary shows a reason and offers reload without 
     return fallback();
   }}); await tick();
   h.model.entries = [{ batch_id: B, processing_mode: 'markdown-only', result_count: 2, status: 'results_available' }];
-  await h.act('nav-history'); await h.act(`history-${B}-summary-toggle`);
+  await h.act('nav-history'); await toggleHistorySummary(h, B);
   assert.match(h.el(`history-${B}-summary`).textContent, /älteren, nicht übernehmbaren Prüfvertrag/u);
   assert.doesNotMatch(h.el(`history-${B}-summary`).textContent, /0 von|0 abgeschlossene/u);
   assert.equal(h.el(`history-${B}-summary-reload`).disabled, false);
@@ -1389,7 +1937,7 @@ testAsync('automatic history updates preserve expanded file problems and stable 
   await h.act(buttonId); assert.equal(h.el(filesId).hidden, true);
 });
 testAsync('job progress preserves keyboard focus and completion returns removed actions to the stable heading', async () => {
-  const h = harness(); await selectAndStart(h); await h.act('nav-new');
+  const h = harness(); await selectAndStart(h); await h.act('nav-details');
   h.el('job-action-pause').focus();
   h.model.state = { ...h.model.state, completed_count: 1, current_file: 'One/A.txt' }; await h.poll();
   assert.equal(h.doc.activeElement, h.el('job-action-pause')); assert.equal(h.doc.activeElement.isConnected, true);
@@ -1471,7 +2019,7 @@ testAsync('a live run after reconnect adopts only the server-bound identity and 
   assert.equal(h.el('job-files').children.length, 0);
 });
 testAsync('the embedded command facade is closed and available only during an explicitly opened review', async () => {
-  const h = harness(); await selectAndStart(h); await h.act('nav-new');
+  const h = harness(); await selectAndStart(h); await h.act('nav-details');
   await assert.rejects(h.window.__DATASECURE_REVIEW__.invoke('get_review_session'), /SURFACE_INVALID/u);
   h.model.state = { state: 'review_required', batch_id: A, review_count: 3 }; await h.poll();
   await h.act(h.el('job-actions').children.find(node => node.textContent === 'Jetzt prüfen'));
@@ -1481,7 +2029,7 @@ testAsync('the embedded command facade is closed and available only during an ex
   await h.window.__DATASECURE_REVIEW__.invoke('close_review_window').catch(() => {});
   assert.equal(h.calls.at(-1).command, 'close_review_window');
   h.listeners.get('datasecure-review-closed')({payload: {closed: true, review_generation: 1}}); await tick();
-  assert.equal(h.doc.activeElement.id, 'job-title', 'status refresh cannot remove the focus return target');
+  assert.equal(h.doc.activeElement.id, 'details-heading', 'status refresh cannot remove the focus return target');
   await assert.rejects(h.window.__DATASECURE_REVIEW__.invoke('submit_review', {}), /SURFACE_INVALID/u);
 });
 testAsync('connection recovery clears stale source IDs and reloads display only without replaying Start', async () => {
@@ -1548,8 +2096,10 @@ testAsync('diagnostic save remains available during an owned long operation with
   await tick(); await h.act('select-folder');
   assert.equal(h.el('configure-results').disabled, true);
   assert.equal(h.el('diagnostic-save').disabled, false);
-  await h.act('diagnostic-save');
+  assert.equal(h.el('document-export-diagnostic-save').disabled, false);
+  await h.act('document-export-diagnostic-save');
   assert.match(h.el('diagnostic-save-status').textContent, /lokal gespeichert/u);
+  assert.match(h.el('document-export-diagnostic-status').textContent, /lokal gespeichert/u);
   assert.equal(h.el('configure-results').disabled, true, 'diagnostics cannot release another operation\'s busy token');
   release(); await tick();
   assert.equal(h.el('configure-results').disabled, false);
@@ -1819,6 +2369,104 @@ for (const purpose of ['markdown-only', 'markdown-and-anonymize']) {
     assert.ok(!primary.some(node => node.id === 'job-action-documents'));
   });
 }
+// Actual workspace bridge + shared projector. Native DTOs are explicit RAM
+// models; no child process, OCR, file publication or native acceptance is claimed.
+async function openDeferredGuideFixture(purpose, invoke) {
+  const h = harness({ invoke }); await tick();
+  h.model.entries = [{ batch_id: B, processing_mode: purpose, selected_count: 1, resumable: true, status: 'review_required' }];
+  await h.act('nav-history'); await h.act('history-' + B + '-continue');
+  return h;
+}
+function assertNoReviewAutorun(h, before) {
+  assert.equal(h.calls.slice(before).some(call => ['start_admitted_batch', 'continue_history_batch',
+    'continue_current_batch', 'continue_review_session', 'decide_document_review', 'export_approved_documents'].includes(call.command)), false);
+}
+for (const purpose of ['markdown-and-anonymize', 'markdown-only'])
+testAsync(purpose + ': accepted native defer immediately retires the waiting guide and polling cannot resurrect it', async () => {
+  let session = { ready: true, review_id: 'a'.repeat(32), chunk_count: 1 };
+  const h = await openDeferredGuideFixture(purpose, (command, args, fallback) => {
+    if (command === 'get_review_session') return session;
+    if (command === 'submit_review') return { accepted: true, action: 'deferred' };
+    if (command === 'continue_review_session') return { ok: true, event: 'batch_continued' };
+    return fallback();
+  });
+  const bridge = h.window.__DATASECURE_REVIEW__;
+  await bridge.invoke('get_review_session');
+  const before = h.calls.length;
+  await bridge.invoke('submit_review', { reviewId: 'a'.repeat(32), answer: { action: 'deferred' } });
+  assert.match(h.el('run-guide-title').textContent, /vertagt/u);
+  assert.match(h.el('run-guide-next').textContent, /im Verlauf ausdrücklich fortsetzen/u);
+  assert.doesNotMatch(h.el('run-guide-next').textContent, /arbeitet weiter|bitte warten/iu);
+  await h.poll();
+  assert.match(h.el('run-guide-title').textContent, /vertagt/u);
+  assert.equal(h.el('review-view').hidden, false);
+  assert.equal(h.el('run-guide-stages').children.slice(2).some(stage => stage.dataset.status === 'done'), false);
+  assertNoReviewAutorun(h, before);
+  session = { ready: false, phase: 'deferred', worker_active: false, run_complete: false, continuation_available: false };
+  await bridge.invoke('get_review_session');
+  assert.match(h.el('run-guide-title').textContent, /vertagt/u);
+  session = { ready: false, phase: 'retry_available', worker_active: false, run_complete: false, continuation_available: true };
+  await bridge.invoke('get_review_session');
+  assert.match(h.el('run-guide-title').textContent, /sind bereit/u);
+  assertNoReviewAutorun(h, before);
+  await bridge.invoke('continue_review_session');
+  assert.match(h.el('run-guide-title').textContent, /werden vorbereitet/u);
+  assert.equal(h.calls.slice(before).filter(call => call.command === 'continue_review_session').length, 1);
+});
+for (const purpose of ['markdown-and-anonymize', 'markdown-only'])
+testAsync(purpose + ': native deferred snapshot is understood without a click or manufactured approval', async () => {
+  const h = await openDeferredGuideFixture(purpose, (command, args, fallback) => command === 'get_review_session'
+    ? { ready: false, phase: 'deferred', worker_active: false, run_complete: false } : fallback());
+  const before = h.calls.length; await h.window.__DATASECURE_REVIEW__.invoke('get_review_session');
+  assert.match(h.el('run-guide-title').textContent, /vertagt/u); assertNoReviewAutorun(h, before);
+});
+for (const result of [null, { accepted: false, action: 'deferred' }, { accepted: true }, { accepted: true, action: 'reviewed' }])
+testAsync('defer guide requires the exact native accepted/action DTO: ' + JSON.stringify(result), async () => {
+  const h = await openDeferredGuideFixture('markdown-and-anonymize', (command, args, fallback) => command === 'submit_review' ? result : fallback());
+  const before = h.calls.length;
+  await h.window.__DATASECURE_REVIEW__.invoke('submit_review', { reviewId: 'a'.repeat(32), answer: { action: 'deferred' } });
+  assert.doesNotMatch(h.el('run-guide-title').textContent, /vertagt/u);
+  assertNoReviewAutorun(h, before);
+});
+for (const late of ['preparing', 'ready', 'complete', 'error'])
+testAsync('accepted defer cannot be overwritten by an older native session ' + late, async () => {
+  let settle, reject;
+  const pending = new Promise((resolve, fail) => { settle = resolve; reject = fail; });
+  const h = await openDeferredGuideFixture('markdown-and-anonymize', (command, args, fallback) => {
+    if (command === 'get_review_session') return pending;
+    if (command === 'submit_review') return { accepted: true, action: 'deferred' };
+    return fallback();
+  });
+  const bridge = h.window.__DATASECURE_REVIEW__, read = bridge.invoke('get_review_session');
+  const observed = late === 'error' ? assert.rejects(read, /OLD_READ_FAILED/u) : read;
+  await bridge.invoke('submit_review', { reviewId: 'a'.repeat(32), answer: { action: 'deferred' } });
+  if (late === 'error') reject(Error('OLD_READ_FAILED'));
+  else settle(late === 'complete' ? { ready: false, run_complete: true } : { ready: late === 'ready', phase: late });
+  await observed;
+  assert.match(h.el('run-guide-title').textContent, /vertagt/u);
+  await bridge.invoke('close_review_window');
+  await h.listeners.get('datasecure-review-closed')({ payload: { closed: true, review_generation: 1 } });
+  selectedRun(h, B);
+  assert.equal(h.calls.some(call => call.command === 'get_document_reviews'), false, 'old complete cannot open a mandatory result review');
+});
+testAsync('late accepted defer from a retired native connection cannot relabel a successor review', async () => {
+  let finish;
+  const pending = new Promise(resolve => { finish = resolve; });
+  const h = await openDeferredGuideFixture('markdown-and-anonymize', (command, args, fallback) => {
+    if (command === 'submit_review') return pending;
+    if (command === 'get_review_session') return { ready: true, review_id: 'b'.repeat(32), chunk_count: 1 };
+    return fallback();
+  });
+  const old = h.window.__DATASECURE_REVIEW__.invoke('submit_review', { reviewId: 'a'.repeat(32), answer: { action: 'deferred' } });
+  const refused = assert.rejects(old, /SURFACE_INVALID/u);
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 1, state: 'recovering' } });
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 1, state: 'ready' } }); await h.poll();
+  await h.act('history-' + B + '-continue'); await h.window.__DATASECURE_REVIEW__.invoke('get_review_session');
+  finish({ accepted: true, action: 'deferred' }); await refused;
+  assert.doesNotMatch(h.el('run-guide-title').textContent, /vertagt/u);
+  assert.equal(h.el('review-view').hidden, false);
+});
+
 testAsync('native review readiness, not the opened iframe, controls the common guide', async () => {
   let session = { ready: false, phase: 'preparing', worker_active: true };
   const h = harness({ invoke(command, args, fallback) { return command === 'get_review_session' ? session : fallback(); } });
@@ -1925,7 +2573,7 @@ testAsync('a delivery notice is scoped to its run and retires only after its con
   h.model.entries = [{ batch_id: B, processing_mode: 'markdown-only', status: 'export_pending', selected_count: 2,
     result_count: 2, failed_count: 0 }];
   await h.act('nav-history');
-  assert.match(h.el('history-list').textContent, /Ergebnisdateien dieses Laufs lokal ergänzen.*keine KI-Kopie/u);
+  assert.match(h.el('history-list').textContent, /Ergebnisdateien dieses Laufs lokal ergänzen.*keinen Export/u);
   assert.ok(h.calls.filter(call => call.command === 'get_run_history').every(call => call.args === undefined),
     'startup and ordinary display reads cannot publish a pending result export');
   const pending = h.el('history-list').children[0].children[1].children.find(node => /Bereitstellung/u.test(node.textContent));
@@ -2041,7 +2689,7 @@ testAsync('connection change releases an obsolete recovery lock without adopting
     'a late old-session response cannot restore stale history actions');
 });
 
-for (const origin of ['new', 'history']) testAsync(`owned raw contact completion returns to ${origin}, never opens a second mandatory review`, async () => {
+for (const origin of ['new', 'history']) testAsync(`owned raw contact completion from ${origin} returns to its run details, never opens a second mandatory review`, async () => {
   const h = harness({ documentRenderer: true, invoke(command, args, fallback) {
     if (command === 'get_review_session') return { ready: false, run_complete: true };
     if (command === 'get_document_reviews') return documentResponse('markdown-only');
@@ -2073,16 +2721,15 @@ for (const origin of ['new', 'history']) testAsync(`owned raw contact completion
   const closing = h.window.__DATASECURE_REVIEW__.invoke('close_review_window');
   await h.listeners.get('datasecure-review-closed')({payload: {closed: true, review_generation: 1}}); await closing; await tick();
   assert.equal(h.el('documents-view').hidden, true);
-  assert.equal(h.el(`${origin}-view`).hidden, false);
+  selectedRun(h, batchId);
   assert.equal(h.calls.some(call => call.command === 'get_document_reviews'), false);
   assert.match(h.el('feedback').textContent, /OCR-Kontaktprüfung abgeschlossen/u);
-  assert.doesNotMatch(h.el('feedback').textContent, /ausdrücklich frei|KI-Export/u);
+  assert.doesNotMatch(h.el('feedback').textContent, /ausdrücklich frei|Export/u);
   assert.equal(h.calls.filter(call => call.command === 'start_admitted_batch').length, startsBefore);
   assert.equal(h.calls.some(call => ['decide_document_review', 'export_approved_documents', 'abandon_document_export'].includes(call.command)), false);
   await h.listeners.get('datasecure-review-closed')({payload: {closed: true, review_generation: 1}});
-  assert.equal(h.el(`${origin}-view`).hidden, false);
-  if (origin === 'history') await h.act(`history-${batchId}-documents`);
-  else await h.act('job-action-documents');
+  selectedRun(h, batchId);
+  await h.act('job-action-documents');
   assert.equal(h.el('documents-view').hidden, false, 'explicit optional editing remains available');
   assert.equal(h.calls.filter(call => call.command === 'start_admitted_batch').length, startsBefore);
   assert.equal(h.calls.some(call => ['decide_document_review', 'export_approved_documents', 'abandon_document_export'].includes(call.command)), false);
@@ -2098,7 +2745,7 @@ testAsync('unknown review purpose cannot fall through to anonymized document nav
   await h.window.__DATASECURE_REVIEW__.invoke('get_review_session');
   await h.window.__DATASECURE_REVIEW__.invoke('close_review_window');
   await h.listeners.get('datasecure-review-closed')({payload: {closed: true, review_generation: 1}});
-  assert.equal(h.el('history-view').hidden, false); assert.equal(h.el('documents-view').hidden, true);
+  selectedRun(h, B); assert.equal(h.el('documents-view').hidden, true);
   assert.match(h.el('feedback').textContent, /Verarbeitungszweck.*nicht bestätigt/u);
   assert.equal(h.calls.some(call => call.command === 'get_document_reviews'), false);
   assert.equal(h.el('job-task').textContent, 'Verarbeitungszweck nicht bestätigt');
@@ -2112,6 +2759,7 @@ testAsync('unknown review purpose cannot fall through to anonymized document nav
   assert.match(h.el('job-description').textContent, /unbestätigtem Verarbeitungszweck/u);
   assert.doesNotMatch(h.el('job-description').textContent, /anonymisiert/u);
   assert.equal(h.el('job-action-documents').textContent, 'Prüfstände ansehen');
+  await h.act('nav-history');
   assert.equal(h.el(`history-${B}-documents`).textContent, 'Prüfstände ansehen');
   assert.doesNotMatch(h.el('history-list').textContent, /Anonymisierung|freigeben/u);
   noAutomaticDecision(h);
@@ -2146,6 +2794,907 @@ testAsync('cross-volume result folder is rejected with an actionable explanation
   await h.act('configure-results');
   assert.match(h.el('feedback').textContent, /anderen Laufwerk.*selben Laufwerk/u);
   assert.equal(h.el('destination').textContent, previous);
+});
+
+for (const button of ['configure-results', 'change-destination'])
+for (const [form, failure] of [
+  ['Error', () => Error('AI_EXPORT_CONFLICT')],
+  ['string', () => 'AI_EXPORT_CONFLICT'],
+  ['coded vendor error', () => ({ code: 'AI_EXPORT_CONFLICT', message: '/vendor/private/raw-path' })],
+  ['JSON rejection', () => JSON.stringify({ code: 'AI_EXPORT_CONFLICT', detail: '/vendor/private/raw-path' })]
+])
+testAsync('result folder conflict: ' + button + ' uses fixed configuration guidance for ' + form, async () => {
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'configure_results') throw failure();
+    return fallback();
+  } });
+  await tick(); await h.act('select-folder');
+  h.el('mode-markdown').checked = true; await h.act('mode-markdown', 'change');
+  const before = { destination: h.el('destination').textContent, settings: h.el('settings-destination').textContent,
+    catalogue: h.el('catalogue').textContent, start: h.el('start').attrs['aria-disabled'] };
+  await h.act(button);
+  const message = h.el('feedback').textContent;
+  assert.match(message, /Ergebnisordner konnte nicht sicher vorbereitet werden/u);
+  assert.match(message, /bisherige Einstellung bleibt unverändert/u);
+  assert.match(message, /kein Dokumentlauf und kein Export gestartet/u);
+  assert.match(message, /Diagnose und aktuellen Laufstatus prüfen; keinen Lauf oder Export blind wiederholen/u);
+  assert.match(message, /\(AI_EXPORT_CONFLICT\)$/u);
+  assert.doesNotMatch(message, /vendor|raw-path|Rechte|Berechtigung|Zugriff verweigert/u);
+  assert.equal(h.el('destination').textContent, before.destination);
+  assert.equal(h.el('settings-destination').textContent, before.settings);
+  assert.equal(h.el('catalogue').textContent, before.catalogue);
+  assert.equal(h.el('start').attrs['aria-disabled'], before.start);
+  assert.equal(h.el(button).disabled, false);
+  assert.equal(h.el('connection-help').hidden, true, 'a destination conflict is not a connection failure');
+  for (let i = 0; i < 3; i++) await h.poll();
+  assert.equal(h.el('feedback').textContent, message, 'status reads do not erase this command failure');
+  assert.equal(h.calls.filter(call => call.command === 'configure_results').length, 1);
+  assert.equal(h.calls.some(call => ['start_admitted_batch', 'continue_current_batch', 'continue_history_batch',
+    'export_approved_documents', 'decide_document_review', 'decide_document_review_batch'].includes(call.command)), false);
+});
+
+testAsync('result folder conflict: the same code from another perform command keeps generic guidance', async () => {
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'open_identity_mappings_directory') throw Error('AI_EXPORT_CONFLICT');
+    return fallback();
+  } });
+  await tick(); await h.act('identities');
+  assert.equal(h.el('feedback').textContent,
+    'Der lokale Vorgang konnte nicht abgeschlossen werden. Bitte Diagnose und aktuellen Laufstatus prüfen. (AI_EXPORT_CONFLICT)');
+  assert.equal(h.calls.some(call => call.command === 'configure_results'), false);
+});
+
+testAsync('result folder conflict: an unscoped native-drop error keeps generic guidance', async () => {
+  const h = harness(); await tick();
+  h.listeners.get('datasecure-native-drop')({ payload: { phase: 'failed', error_code: 'AI_EXPORT_CONFLICT' } });
+  assert.equal(h.el('feedback').textContent,
+    'Der lokale Vorgang konnte nicht abgeschlossen werden. Bitte Diagnose und aktuellen Laufstatus prüfen. (AI_EXPORT_CONFLICT)');
+});
+
+testAsync('result folder conflict: unknown configure failure never becomes a preparation diagnosis or raw text', async () => {
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'configure_results') throw Error('/vendor/private/raw-path: access denied');
+    return fallback();
+  } });
+  await tick(); await h.act('configure-results');
+  assert.equal(h.el('feedback').textContent,
+    'Der lokale Vorgang konnte nicht abgeschlossen werden. Bitte Diagnose und aktuellen Laufstatus prüfen. (STANDALONE_OPERATION_FAILED)');
+});
+
+testAsync('result folder conflict: a configure IPC failure retains connectivity guidance', async () => {
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'configure_results') throw Error('STANDALONE_IPC_FAILED');
+    return fallback();
+  } });
+  await tick(); await h.act('configure-results');
+  assert.match(h.el('feedback').textContent, /Verbindung wurde unterbrochen/u);
+  assert.doesNotMatch(h.el('feedback').textContent, /bisherige Einstellung bleibt unverändert/u);
+  assert.equal(h.el('connection-help').hidden, false);
+});
+
+testAsync('result folder conflict: busy ownership never replays a pending configuration', async () => {
+  let reject;
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'configure_results') return new Promise((resolve, fail) => { reject = fail; });
+    return fallback();
+  } });
+  await tick(); await h.act('configure-results'); await h.act('change-destination');
+  assert.equal(h.calls.filter(call => call.command === 'configure_results').length, 1);
+  assert.equal(h.el('configure-results').disabled, true);
+  reject(Error('AI_EXPORT_CONFLICT')); await tick();
+  assert.match(h.el('feedback').textContent, /bisherige Einstellung bleibt unverändert/u);
+  assert.equal(h.el('configure-results').disabled, false);
+  assert.equal(h.calls.filter(call => call.command === 'configure_results').length, 1);
+});
+
+for (const code of ['STANDALONE_OWNERSHIP_STORAGE_UNSAFE', 'STANDALONE_OWNERSHIP_SIGNATURE_REFUSED'])
+testAsync('result folder conflict: a later configuration rejection cannot replace ' + code, async () => {
+  let reject;
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'configure_results') return new Promise((resolve, fail) => { reject = fail; });
+    return fallback();
+  } });
+  await tick(); await h.act('configure-results');
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 1, state: 'bootstrap_failed', error_code: code } });
+  const message = h.el('feedback').textContent;
+  reject(Error('AI_EXPORT_CONFLICT')); await tick();
+  assert.equal(h.el('feedback').textContent, message);
+  assert.match(message, new RegExp(code, 'u'));
+  assert.doesNotMatch(message, /bisherige Einstellung bleibt unverändert/u);
+  await h.act('change-destination'); await h.act('select-files'); await h.act('start'); await h.poll();
+  assert.equal(h.calls.filter(call => call.command === 'configure_results').length, 1);
+  assert.equal(h.calls.some(call => ['select_files', 'start_admitted_batch', 'export_approved_documents'].includes(call.command)), false);
+  assert.equal(h.el('connection-help').hidden, false);
+});
+
+testAsync('result folder conflict: a late refusal cannot overwrite recovery or release its picker guard', async () => {
+  let reject;
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'configure_results') return new Promise((resolve, fail) => { reject = fail; });
+    return fallback();
+  } });
+  await tick(); await h.act('configure-results');
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 1, state: 'recovering' } });
+  await tick(); const message = h.el('feedback').textContent;
+  reject(Error('AI_EXPORT_CONFLICT')); await tick(); await h.act('change-destination');
+  assert.equal(h.el('feedback').textContent, message);
+  assert.doesNotMatch(message, /bisherige Einstellung bleibt unverändert/u);
+  assert.equal(h.calls.filter(call => call.command === 'configure_results').length, 1);
+  assert.equal(h.calls.some(call => ['start_admitted_batch', 'export_approved_documents'].includes(call.command)), false);
+  assert.equal(h.el('connection-help').hidden, false);
+});
+
+for (const cancelled of [true, false])
+testAsync('result folder conflict: ' + (cancelled ? 'cancelled' : 'successful') + ' selection keeps its existing contract', async () => {
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'configure_results') return cancelled ? { ok: true, cancelled: true } : {
+      ok: true, local_ui_only: true, external_disclosure: false, result_folder: 'New local results' };
+    return fallback();
+  } });
+  await tick(); const previous = h.el('destination').textContent; await h.act('configure-results');
+  assert.equal(h.el('destination').textContent, cancelled ? previous : 'New local results');
+  assert.equal(h.el('settings-destination').textContent, cancelled ? previous : 'New local results');
+  if (!cancelled) assert.match(h.el('feedback').textContent, /Ergebnisordner gespeichert/u);
+  assert.doesNotMatch(h.el('feedback').textContent, /AI_EXPORT_CONFLICT|konnte nicht sicher vorbereitet werden/u);
+  assert.equal(h.calls.some(call => ['start_admitted_batch', 'export_approved_documents'].includes(call.command)), false);
+});
+
+/* Historical bootstrap resolution regressions: actual native snapshot/event DTOs. */
+for (const delivery of ['event', 'lost'])
+for (const failedRead of ['get_public_state', 'get_ui_context'])
+for (const code of ['STANDALONE_IPC_BUSY', 'STANDALONE_OWNERSHIP_CONTROL_BUSY', 'STANDALONE_PAUSE_CONTROL_BUSY'])
+testAsync('historical resolution: ' + delivery + ' Ready then ' + failedRead + ' ' + code + ' recovers only on another click', async () => {
+  let h, initial = true, ready = false, reject = true, holdContext, deferContext = false;
+  const failure = { epoch: 1, error_code: 'STANDALONE_OWNERSHIP_STORAGE_UNSAFE' };
+  const resolution = { failure_epoch: 1, ready_epoch: 2 };
+  const snapshot = () => ({ phase: 'owned', connection_epoch: ready ? 2 : 1,
+    bootstrap_failure: ready ? null : { ...failure }, bootstrap_resolution: ready ? { ...resolution } : null,
+    activity: { state: 'idle', active: false }, diagnostic_log: 'available', diagnostic_writer: {},
+    local_ui_only: true, external_disclosure: false });
+  h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_ui_context' && initial) { initial = false; throw Error(failure.error_code); }
+    if (command === 'get_native_recovery_status') return snapshot();
+    if (command === 'get_public_state' && args?.retryBootstrap === true) {
+      ready = true;
+      if (delivery === 'event') h.listeners.get('datasecure-connection')({
+        payload: { epoch: 2, state: 'ready', bootstrap_resolution: { ...resolution } } });
+    }
+    if (ready && command === failedRead && reject) { reject = false; throw Error(code); }
+    if (command === 'get_ui_context' && deferContext) return new Promise(resolve => { holdContext = () => resolve(fallback()); });
+    return fallback();
+  } });
+  await tick(); await tick(); await h.act('connection-retry'); await tick();
+  assert.doesNotMatch(h.el('feedback').textContent, /wiederhergestellt/u);
+  const first = h.calls.length;
+  for (let n = 0; n < 4; n++) await h.poll();
+  await h.act('select-files'); await h.act('configure-results');
+  assert.equal(h.calls.slice(first).some(call => ['get_public_state', 'get_ui_context', 'select_files', 'configure_results'].includes(call.command)), false,
+    'explicit recovery remains paused and mutations blocked even after native Ready');
+  deferContext = true; const before = h.calls.length;
+  await h.act('connection-retry'); await h.act('connection-retry'); await tick();
+  assert.equal(typeof holdContext, 'function', 'second click must reach current context');
+  assert.doesNotMatch(h.el('feedback').textContent, /wiederhergestellt/u);
+  await h.act('select-files');
+  assert.equal(h.calls.slice(before).some(call => call.command === 'select_files'), false);
+  holdContext(); await tick(); await tick();
+  const reads = h.calls.slice(before).filter(call => ['get_public_state', 'get_ui_context'].includes(call.command));
+  assert.deepEqual(reads.map(call => [call.command, call.args]), [['get_public_state', undefined], ['get_ui_context', undefined]]);
+  assert.equal(h.calls.filter(call => call.args?.retryBootstrap === true).length, 1);
+  assert.match(h.el('feedback').textContent, /wiederhergestellt/u);
+  assert.equal(h.el('connection-help').hidden, true);
+  h.listeners.get('datasecure-connection')({ payload: { ...failure, state: 'bootstrap_failed' } });
+  assert.equal(h.el('connection-help').hidden, true);
+});
+
+for (const delivery of ['event', 'lost', 'late'])
+testAsync('historical resolution: ' + delivery + ' Ready survives real context timeout, retirement and later ordinary status bootstrap', async () => {
+  let h, initial = true, nativeEpoch = 1, nativeFailure = true, phase = 'idle', timeout = true, retired = false, spawns = 0, blocked = 0;
+  const failure = { epoch: 1, error_code: 'STANDALONE_OWNERSHIP_STORAGE_UNSAFE' };
+  const resolution = { failure_epoch: 1, ready_epoch: 2 };
+  const readyEvent = () => h.listeners.get('datasecure-connection')({
+    payload: { epoch: 2, state: 'ready', bootstrap_resolution: { ...resolution } } });
+  h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_ui_context' && initial) { initial = false; throw Error(failure.error_code); }
+    if (command === 'get_native_recovery_status') return { phase, connection_epoch: nativeEpoch,
+      bootstrap_failure: nativeFailure ? { ...failure } : null, bootstrap_resolution: nativeFailure ? null : { ...resolution },
+      local_ui_only: true, external_disclosure: false };
+    if (command === 'get_public_state' && args?.retryBootstrap === true) {
+      assert.equal(nativeFailure, true); nativeFailure = false; nativeEpoch = 2; phase = 'owned'; spawns++;
+      if (delivery === 'event') readyEvent();
+    } else if (command === 'get_public_state' && nativeEpoch === 3) {
+      assert.equal(args?.retryBootstrap, undefined, 'resolved failure must not authorize another bootstrap override');
+      if (!retired) { blocked++; throw Error('STANDALONE_CONNECTION_RECOVERY_BLOCKED'); }
+      spawns++; nativeEpoch = 4; phase = 'owned';
+      h.listeners.get('datasecure-connection')({ payload: { epoch: 4, state: 'ready', bootstrap_resolution: { ...resolution } } });
+    }
+    if (command === 'get_ui_context' && timeout) {
+      timeout = false; nativeEpoch = 3; phase = 'settling';
+      // Actual native transport-error contract: unusable + retirement + new epoch.
+      h.listeners.get('datasecure-connection')({ payload: { epoch: 3, state: 'recovering' } });
+      if (delivery === 'late') readyEvent();
+      throw Error('STANDALONE_IPC_TIMEOUT');
+    }
+    return fallback();
+  } });
+  await tick(); await tick(); await h.act('connection-retry'); await tick(); await tick();
+  const afterTimeout = h.calls.length;
+  for (let n = 0; n < 4; n++) await h.poll();
+  assert.equal(h.calls.slice(afterTimeout).some(call => ['get_public_state', 'get_ui_context'].includes(call.command)), false);
+  await h.act('connection-retry'); await tick();
+  assert.equal(blocked, 1, 'normal status must reach and obey the native unconfirmed-retirement gate');
+  assert.equal(spawns, 1); assert.doesNotMatch(h.el('feedback').textContent, /wiederhergestellt/u);
+  retired = true; phase = 'idle';
+  await h.act('connection-retry'); await tick(); await tick();
+  assert.equal(spawns, 2); assert.equal(h.calls.filter(call => call.args?.retryBootstrap === true).length, 1);
+  assert.match(h.el('feedback').textContent, /wiederhergestellt/u);
+  // Receipt Ready 2 did not rewind epoch 3: delayed Ready 2 cannot hide newer failure 3.
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 5, state: 'bootstrap_failed', error_code: 'STANDALONE_OWNERSHIP_RUNTIME_INVALID' } });
+  readyEvent();
+  assert.match(h.el('feedback').textContent, /STANDALONE_OWNERSHIP_RUNTIME_INVALID/u);
+});
+
+for (const bad of ['missing', 'null', 'wrong-failure', 'same-ready', 'future-ready', 'extra', 'string',
+  'stale-snapshot', 'missing-current', 'missing-null', 'disclosure', 'phase'])
+testAsync('historical resolution rejects ' + bad + ' receipt/snapshot and does not fall through to ordinary status', async () => {
+  let h, initial = true, ready = false;
+  const failure = { epoch: 1, error_code: 'STANDALONE_OWNERSHIP_STORAGE_UNSAFE' };
+  h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_ui_context' && initial) { initial = false; throw Error(failure.error_code); }
+    if (command === 'get_native_recovery_status') {
+      if (!ready) return { phase: 'idle', connection_epoch: 1, bootstrap_failure: failure, bootstrap_resolution: null,
+        local_ui_only: true, external_disclosure: false };
+      const value = { phase: 'owned', connection_epoch: 2, bootstrap_failure: null,
+        bootstrap_resolution: { failure_epoch: 1, ready_epoch: 2 }, local_ui_only: true, external_disclosure: false };
+      if (bad === 'missing') delete value.bootstrap_resolution;
+      if (bad === 'null') value.bootstrap_resolution = null;
+      if (bad === 'wrong-failure') value.bootstrap_resolution.failure_epoch = 0;
+      if (bad === 'same-ready') value.bootstrap_resolution.ready_epoch = 1;
+      if (bad === 'future-ready') value.bootstrap_resolution.ready_epoch = 3;
+      if (bad === 'extra') value.bootstrap_resolution.vendor = '/private/raw';
+      if (bad === 'string') value.bootstrap_resolution.ready_epoch = '2';
+      if (bad === 'stale-snapshot') value.connection_epoch = 0;
+      if (bad === 'missing-current') delete value.connection_epoch;
+      if (bad === 'missing-null') delete value.bootstrap_failure;
+      if (bad === 'disclosure') value.external_disclosure = true;
+      if (bad === 'phase') value.phase = 'vendor/raw';
+      return value;
+    }
+    if (command === 'get_public_state' && args?.retryBootstrap === true) { ready = true; throw Error('STANDALONE_IPC_BUSY'); }
+    return fallback();
+  } });
+  await tick(); await tick(); await h.act('connection-retry'); await tick();
+  const before = h.calls.length; await h.act('connection-retry'); await tick();
+  assert.equal(h.calls.slice(before).some(call => ['get_public_state', 'get_ui_context'].includes(call.command)), false);
+  assert.match(h.el('feedback').textContent, /STANDALONE_OWNERSHIP_STORAGE_UNSAFE/u);
+});
+
+testAsync('historical resolution never binds provisional invoke epoch zero or erases a newer native failure', async () => {
+  let h, currentFailure = null;
+  const resolution = { failure_epoch: 1, ready_epoch: 2 };
+  h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_ui_context') throw Error('STANDALONE_OWNERSHIP_STORAGE_UNSAFE');
+    if (command === 'get_native_recovery_status') return { phase: 'idle', connection_epoch: currentFailure ? 3 : 2,
+      bootstrap_failure: currentFailure, bootstrap_resolution: resolution, local_ui_only: true, external_disclosure: false };
+    if (command === 'get_public_state') throw Error('STANDALONE_OWNERSHIP_RUNTIME_INVALID');
+    return fallback();
+  } });
+  await tick(); await tick();
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 2, state: 'ready', bootstrap_resolution: resolution } });
+  await h.act('connection-retry'); await tick();
+  assert.equal(h.calls.filter(call => call.command === 'get_public_state').length, 0, 'unbound invoke error is not failure 1');
+  currentFailure = { epoch: 3, error_code: 'STANDALONE_OWNERSHIP_RUNTIME_INVALID' };
+  h.listeners.get('datasecure-connection')({ payload: { ...currentFailure, state: 'bootstrap_failed' } });
+  await h.act('connection-retry'); await tick();
+  assert.equal(h.calls.filter(call => call.command === 'get_public_state').at(-1).args.retryBootstrap, true);
+  assert.match(h.el('feedback').textContent, /STANDALONE_OWNERSHIP_RUNTIME_INVALID/u);
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 2, state: 'ready', bootstrap_resolution: resolution } });
+  assert.match(h.el('feedback').textContent, /STANDALONE_OWNERSHIP_RUNTIME_INVALID/u);
+});
+
+testAsync('historical resolution snapshot stays single-flight and cannot resolve a replaced failure', async () => {
+  let h, initial = true, ready = false, resolveSnapshot;
+  const failure = { epoch: 1, error_code: 'STANDALONE_OWNERSHIP_STORAGE_UNSAFE' };
+  h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_ui_context' && initial) { initial = false; throw Error(failure.error_code); }
+    if (command === 'get_native_recovery_status') return ready ? new Promise(resolve => { resolveSnapshot = resolve; })
+      : { phase: 'idle', connection_epoch: 1, bootstrap_failure: failure, bootstrap_resolution: null, local_ui_only: true, external_disclosure: false };
+    if (command === 'get_public_state' && args?.retryBootstrap === true) { ready = true; throw Error('STANDALONE_IPC_BUSY'); }
+    return fallback();
+  } });
+  await tick(); await tick(); await h.act('connection-retry'); await tick();
+  const before = h.calls.length; await h.act('connection-retry'); await h.act('connection-retry');
+  assert.equal(h.calls.slice(before).filter(call => call.command === 'get_native_recovery_status').length, 1);
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 3, state: 'bootstrap_failed', error_code: 'STANDALONE_OWNERSHIP_RUNTIME_INVALID' } });
+  resolveSnapshot({ phase: 'idle', connection_epoch: 2, bootstrap_failure: null,
+    bootstrap_resolution: { failure_epoch: 1, ready_epoch: 2 }, local_ui_only: true, external_disclosure: false });
+  await tick(); await tick();
+  assert.equal(h.calls.slice(before).some(call => ['get_public_state', 'get_ui_context'].includes(call.command)), false);
+  assert.match(h.el('feedback').textContent, /STANDALONE_OWNERSHIP_RUNTIME_INVALID/u);
+});
+
+testAsync('historical resolution never unlocks mutations or automatic retry on an invalid current context', async () => {
+  let h, initial = true, ready = false, invalid = true;
+  const failure = { epoch: 1, error_code: 'STANDALONE_OWNERSHIP_STORAGE_UNSAFE' };
+  const resolution = { failure_epoch: 1, ready_epoch: 2 };
+  h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_ui_context' && initial) { initial = false; throw Error(failure.error_code); }
+    if (command === 'get_native_recovery_status') return { phase: ready ? 'owned' : 'idle', connection_epoch: ready ? 2 : 1,
+      bootstrap_failure: ready ? null : failure, bootstrap_resolution: ready ? resolution : null,
+      local_ui_only: true, external_disclosure: false };
+    if (command === 'get_public_state' && args?.retryBootstrap === true) {
+      ready = true;
+      h.listeners.get('datasecure-connection')({ payload: { epoch: 2, state: 'ready', bootstrap_resolution: resolution } });
+    }
+    if (command === 'get_ui_context' && ready && invalid) return { ...fallback(), local_ui_only: false };
+    return fallback();
+  } });
+  await tick(); await tick(); await h.act('connection-retry'); await tick();
+  assert.doesNotMatch(h.el('feedback').textContent, /wiederhergestellt/u);
+  const before = h.calls.length;
+  for (let n = 0; n < 3; n++) await h.poll();
+  await h.act('select-files'); await h.act('configure-results');
+  assert.equal(h.calls.slice(before).some(call => ['get_public_state', 'get_ui_context', 'select_files', 'configure_results'].includes(call.command)), false);
+  invalid = false; await h.act('connection-retry'); await tick(); await tick();
+  assert.match(h.el('feedback').textContent, /wiederhergestellt/u);
+  assert.equal(h.calls.filter(call => call.args?.retryBootstrap === true).length, 1);
+});
+
+// Same actual workspace/DOM harness as all other transitions. No test-only
+// renderer hook, private state injection, native process or file IO is added.
+async function finishedAnonymousWorkspace(options = {}, omitted = 0, privacyStops = 0, resultCount = 2) {
+  const h = harness(options); await tick();
+  h.model.state = { state:'processing', batch_id:A, processing_mode:'markdown-and-anonymize',
+    selected_count:resultCount + omitted + privacyStops, completed_count:0, failed_count:0, batch_complete:false };
+  await h.poll();
+  h.model.state = { state:'results_available', batch_id:A, processing_mode:'markdown-and-anonymize',
+    selected_count:resultCount + omitted + privacyStops, completed_count:resultCount + omitted + privacyStops, result_count:resultCount, failed_count:omitted + privacyStops, batch_complete:true, results_available:true,
+    content_notice_count:0, content_notice_breakdown_complete:true };
+  h.model.entries = [{batch_id:A, processing_mode:'markdown-and-anonymize', status:'results_available',
+    selected_count:resultCount + omitted + privacyStops, completed_count:resultCount + omitted + privacyStops, result_count:resultCount, failed_count:omitted + privacyStops, results_available:true, result_location:'available',
+    ...(omitted ? {expected_ocr_omission_count:omitted} : {}),
+    ...(privacyStops ? {privacy_stop_count:privacyStops} : {}),
+    ...(omitted + privacyStops ? {failure_reason_breakdown_complete:true} : {}),
+    content_notice_count:0,content_notice_breakdown_complete:true}];
+  await h.poll(); return h;
+}
+async function openFinishedSnapshot(h) {
+  h.el('nav-history').dataset.openSummaryBatchId = A;
+  await h.act('nav-history'); await tick();
+  const disclosure = h.el(`history-${A}-disclosure`);
+  assert.equal(h.el('run-guide').hidden, true, 'history never exposes an implicit global guide');
+  disclosure.open = true; await h.act(disclosure, 'toggle');
+  assert.equal(disclosure.open, true, 'the asserted completion stages are explicitly expanded');
+}
+const fullCopySummary = extra => reviewSummary({recorded_export_count:1,current_exported_count:2,...extra});
+
+// Actual workspace + document renderer, with explicit native DTO models.
+// Approval remains an explicit user action. No native process or GUI claim.
+async function documentApprovalWorkspace({ approved = false, omitted = 0, privacyStops = 0, resultCount = 1 } = {}) {
+  const rows = documentResponse('markdown-and-anonymize', resultCount).documents.map(row => ({ ...row, approved }));
+  const backend = { rows, failReload: false, deferReload: null };
+  const h = await finishedAnonymousWorkspace({ documentRenderer: true, invoke(command, args, fallback) {
+    if (command === 'get_document_reviews') {
+      if (backend.failReload) throw Error('DOCUMENT_REVIEW_INVALID');
+      const data = { local_ui_only: true, external_disclosure: false, processing_mode: 'markdown-and-anonymize',
+        processing_complete: true, documents: structuredClone(backend.rows), unavailable: [], unclassified_documents: [],
+        not_processed_documents: [], content_notice_count: 0, content_notice_breakdown_complete: true, content_notices: [] };
+      return backend.deferReload ? backend.deferReload(data) : data;
+    }
+    if (command === 'decide_document_review') {
+      assert.equal(args.batchId, A);
+      const row = backend.rows.find(row => row.document_id === args.documentId);
+      assert.equal(args.decision.revision, row.revision); assert.equal(args.decision.output_sha256, row.output_sha256);
+      assert.ok(['approve', 'revoke'].includes(args.decision.action));
+      row.revision++; row.approved = args.decision.action === 'approve';
+      return { ok: true, ...structuredClone(row), local_ui_only: true, external_disclosure: false };
+    }
+    if (command === 'close_document_reviews') return { ok: true };
+    return fallback();
+  } }, omitted, privacyStops, resultCount);
+  await h.act('job-action-documents');
+  return { h, backend };
+}
+function assertNoExportOrRestart(h) {
+  assert.equal(h.calls.some(call => ['preview_document_export', 'export_approved_documents',
+    'continue_history_batch', 'continue_current_batch', 'continue_review_session', 'start_admitted_batch'].includes(call.command)), false);
+}
+testAsync('document approval snapshot: actual explicit 1/1 approval survives nav-details without claiming an export', async () => {
+  const { h } = await documentApprovalWorkspace();
+  assert.match(h.el('run-guide-title').textContent, /Dokumentprüfung offen/u);
+  h.el('documents-all').checked = true; await h.act('documents-all', 'change');
+  await h.act('documents-approve'); assert.equal(h.el('documents-approve-confirm').hidden, false);
+  await h.act('documents-approve-proceed'); await tick();
+  assert.match(h.el('documents-selected').textContent, /1 von 1 freigegeben/u);
+  assert.match(h.el('run-guide-title').textContent, /Verfügbare Dokumente freigegeben/u);
+  assert.equal(h.el('run-guide-stages').children[3].dataset.status, 'current');
+  await h.act('nav-details'); await tick();
+  selectedRun(h, A); assert.equal(h.el('documents-view').hidden, true);
+  assert.match(h.el('job-description').textContent, /Freigegebene Dokumente auswählen/u);
+  assert.doesNotMatch(h.el('job-description').textContent, /noch vergleichen und freigeben|kein weiterer Export nötig|Export abgeschlossen/u);
+  assert.equal(h.el('job-action-documents').textContent, 'Freigaben / Exportvorschau');
+  assert.match(h.el('job-announcement').textContent, /Freigegebene Dokumente auswählen/u);
+  await h.poll();
+  assert.equal(h.el('job-action-documents').textContent, 'Freigaben / Exportvorschau');
+  assert.equal(h.calls.filter(call => call.command === 'decide_document_review').length, 1);
+  assert.equal(h.calls.some(call => call.command === 'get_document_review_history_summary'), false);
+  assertNoExportOrRestart(h);
+});
+testAsync('document approval snapshot: freshly loaded approvals can improve the retained job, not copied status', async () => {
+  const { h } = await documentApprovalWorkspace({ approved: true, resultCount: 2 });
+  await h.act('nav-details'); await tick();
+  assert.equal(h.el('job-action-documents').textContent, 'Freigaben / Exportvorschau');
+  assert.doesNotMatch(h.el('job-description').textContent, /kein weiterer Export nötig|noch vergleichen und freigeben/u);
+  assert.equal(h.calls.some(call => call.command === 'decide_document_review'), false); assertNoExportOrRestart(h);
+});
+for (const patch of [
+  { fresh: false }, { busy: true }, { dirty: true }, { processing_complete: false },
+  { document_count: 2 }, { approved_count: 0 }, { result_count: 2 }, { problem_count: 1 },
+  { expected_omission_count: 1 }, { review_policy: 'automatic-conservative' },
+  { export_pending: true }, { export_complete: true }
+]) testAsync('document approval snapshot: superseding unconfirmed/incompatible metadata retires approval ' + JSON.stringify(patch), async () => {
+  const { h } = await documentApprovalWorkspace({ approved: true });
+  h.window.__DATASECURE_RUN_GUIDE__.documents({ batch_id: A, source: 'documents', processing_mode: 'markdown-and-anonymize',
+    fresh: true, busy: false, dirty: false, processing_complete: true, document_count: 1, result_count: 1, approved_count: 1,
+    problem_count: 0, expected_omission_count: 0, export_pending: false, export_complete: false,
+    content_notice_count: 0, content_notice_breakdown_complete: true, ...patch });
+  // Boundary-only metadata probe. Actual renderer lifecycle/ACK behavior is
+  // covered above and below; its internal busy/draft state is not overwritten.
+  await h.act('nav-details'); await tick();
+  assert.equal(h.el('job-action-documents').textContent, 'Dokumente prüfen / Export');
+  assert.doesNotMatch(h.el('job-description').textContent, /Freigegebene Dokumente auswählen|kein weiterer Export nötig/u);
+  assertNoExportOrRestart(h);
+});
+for (const state of ['processing', 'paused', 'failed', 'export_pending'])
+testAsync('document approval snapshot: a later public ' + state + ' cannot retain approval for the job', async () => {
+  const { h } = await documentApprovalWorkspace({ approved: true });
+  h.model.state = { ...h.model.state, state }; await h.poll(); await h.act('nav-details'); await tick();
+  assert.doesNotMatch(h.el('job-description').textContent, /Freigegebene Dokumente auswählen|kein weiterer Export nötig/u);
+  assertNoExportOrRestart(h);
+});
+testAsync('document approval snapshot: actual reload with revocation retires the former approval', async () => {
+  const { h, backend } = await documentApprovalWorkspace({ approved: true });
+  backend.rows[0].approved = false; backend.rows[0].revision++;
+  await h.act('documents-reload'); await h.act('nav-details'); await tick();
+  assert.equal(h.el('job-action-documents').textContent, 'Dokumente prüfen / Export'); assertNoExportOrRestart(h);
+});
+testAsync('document approval snapshot: failed actual reload retires the former approval', async () => {
+  const { h, backend } = await documentApprovalWorkspace({ approved: true });
+  backend.failReload = true; await h.act('documents-reload'); await h.act('nav-details'); await tick();
+  assert.equal(h.el('job-action-documents').textContent, 'Dokumente prüfen / Export'); assertNoExportOrRestart(h);
+});
+testAsync('document approval snapshot: connection retirement and late actual reload cannot restore old approval', async () => {
+  const { h, backend } = await documentApprovalWorkspace({ approved: true });
+  let finish; backend.deferReload = data => new Promise(resolve => { finish = () => resolve(data); });
+  await h.act('documents-reload');
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 1, state: 'recovering' } });
+  finish(); await tick(); await tick();
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 1, state: 'ready' } }); await h.poll();
+  await h.act('nav-details'); await tick();
+  assert.equal(h.el('job-action-documents').textContent, 'Dokumente prüfen / Export'); assertNoExportOrRestart(h);
+});
+testAsync('document approval snapshot: another run cannot relabel the retained job', async () => {
+  const { h } = await documentApprovalWorkspace({ approved: true });
+  await h.act('nav-history'); await tick();
+  h.model.entries.push({ ...h.model.entries[0], batch_id: B }); await h.act('refresh-history');
+  await h.act('history-' + B + '-documents'); await h.act('nav-details'); await tick();
+  assert.equal(h.el('job-action-documents').textContent, 'Dokumente prüfen / Export'); assertNoExportOrRestart(h);
+});
+testAsync('document approval snapshot: ordinary command generation retires the display-only approval', async () => {
+  const { h } = await documentApprovalWorkspace({ approved: true });
+  await h.act('nav-details'); await tick(); await h.act('job-action-results');
+  assert.equal(h.el('job-action-documents').textContent, 'Dokumente prüfen / Export'); assertNoExportOrRestart(h);
+});
+for (const exceptions of [{ omitted: 1 }, { privacyStops: 1 }])
+testAsync('document approval snapshot: partial-source runs still require the existing classified history contract ' + JSON.stringify(exceptions), async () => {
+  const { h } = await documentApprovalWorkspace({ approved: true, ...exceptions });
+  await h.act('nav-details'); await tick();
+  assert.equal(h.el('job-action-documents').textContent, 'Dokumente prüfen / Export');
+  assert.match(h.el('job-description').textContent, /1 Datei mit Problemen/u);
+  assertNoExportOrRestart(h);
+});
+
+testAsync('bound history snapshot: the actual guide, completion warning and nav-details job agree after a confirmed copy', async () => {
+  const h = await finishedAnonymousWorkspace({ invoke:(command,args,fallback) =>
+    command === 'get_document_review_history_summary' ? fullCopySummary() : fallback() });
+  await openFinishedSnapshot(h);
+  assert.match(h.el('history-' + A + '-guide-title').textContent,/Export mit Abschlussbeleg/u);
+  assert.match(h.el('history-' + A + '-guide-next').textContent,/kein weiterer Export nötig/u);
+  assert.equal(h.el('history-' + A + '-guide-stages').children[2].dataset.status,'done');
+  assert.equal(h.el('history-' + A + '-guide-stages').children[3].dataset.status,'done');
+  const row = h.el('history-list').children[0];
+  assert.doesNotMatch(row.textContent,/Ob Dokumentfreigabe und Export abgeschlossen sind, wird getrennt geprüft/u);
+  await h.act('nav-details');
+  assert.match(h.el('job-description').textContent,/kein weiterer Export nötig/u);
+  assert.doesNotMatch(h.el('job-description').textContent,/noch vergleichen und freigeben/u);
+  assert.equal(h.el('job-action-documents').textContent,'Prüfung öffnen (optional)');
+  assert.notEqual(h.el('job-action-documents').className,'primary');
+  assert.match(h.el('job-announcement').textContent,/kein weiterer Export nötig/u);
+  const statusReads = h.calls.filter(call=>call.command==='get_public_state').length;
+  await h.poll();
+  assert.ok(h.calls.filter(call=>call.command==='get_public_state').length>statusReads);
+  assert.match(h.el('job-description').textContent,/kein weiterer Export nötig/u);
+  noAutomaticDecision(h);
+});
+testAsync('bound history snapshot: fresh approvals without a current copy improve both views, not to export success', async () => {
+  const h = await finishedAnonymousWorkspace({invoke:(command,args,fallback)=>
+    command==='get_document_review_history_summary'?fullCopySummary({current_exported_count:0}):fallback()});
+  await openFinishedSnapshot(h);
+  assert.equal(h.el('history-' + A + '-guide-stages').children[2].dataset.status,'done');
+  assert.equal(h.el('history-' + A + '-guide-stages').children[3].dataset.status,'current');
+  assert.doesNotMatch(h.el('history-' + A + '-guide-next').textContent,/kein weiterer Export nötig/u);
+  await h.act('nav-details');
+  assert.equal(h.el('job-action-documents').textContent,'Freigaben / Exportvorschau');
+  assert.doesNotMatch(h.el('job-description').textContent,/noch vergleichen und freigeben|kein weiterer Export nötig/u);
+  noAutomaticDecision(h);
+});
+testAsync('bound history snapshot: a pending copy never becomes export success despite complete older receipts', async () => {
+  const h = await finishedAnonymousWorkspace({invoke:(command,args,fallback)=>command==='get_document_review_history_summary'
+    ?fullCopySummary({pending_export_count:1,pending_confirmation_count:1}):fallback()});
+  await openFinishedSnapshot(h);
+  assert.match(h.el('history-' + A + '-guide-next').textContent,/Denselben Export abgleichen/u);
+  assert.doesNotMatch(h.el('history-' + A + '-guide-next').textContent,/kein weiterer Export nötig/u);
+  await h.act('nav-details'); assert.equal(h.el('job-action-documents').textContent,'Export abgleichen');
+  noAutomaticDecision(h);
+});
+testAsync('bound history snapshot: failed reload removes guide, job and completion-footer success together', async () => {
+  let fail = false;
+  const h=await finishedAnonymousWorkspace({invoke:(command,args,fallback)=>{
+    if(command==='get_document_review_history_summary'){if(fail)throw Error('STANDALONE_IPC_TIMEOUT');return fullCopySummary()}
+    return fallback();
+  }});await openFinishedSnapshot(h);fail=true;await h.act('history-'+A+'-summary-reload');
+  assert.doesNotMatch(h.el('history-' + A + '-guide-next').textContent,/kein weiterer Export nötig/u);
+  assert.equal(h.el('history-' + A + '-guide-stages').children[3].dataset.status,'pending');
+  assert.match(h.el('history-list').textContent,/Ob Dokumentfreigabe und Export abgeschlossen sind, wird getrennt geprüft/u);
+  await h.act('nav-details');assert.doesNotMatch(h.el('job-description').textContent,/kein weiterer Export nötig/u);
+  assert.equal(h.el('job-action-documents').textContent,'Dokumente prüfen / Export');noAutomaticDecision(h);
+});
+testAsync('bound history snapshot: another run summary cannot improve the current run or its job', async () => {
+  const h=await finishedAnonymousWorkspace({invoke:(command,args,fallback)=>command==='get_document_review_history_summary'?fullCopySummary():fallback()});
+  h.model.entries.push({...h.model.entries[0],batch_id:B});await h.act('nav-history');await toggleHistorySummary(h, B);
+  assert.equal(h.el('run-guide').hidden, true);
+  assert.match(h.el('history-' + B + '-guide-title').textContent,/Export mit Abschlussbeleg/u);
+  assert.equal(h.el('history-' + A + '-guide-stages').children[3].dataset.status,'pending');
+  await h.act('nav-details');assert.doesNotMatch(h.el('job-description').textContent,/kein weiterer Export nötig/u);noAutomaticDecision(h);
+});
+for(const state of ['processing','paused','failed','export_pending']) testAsync('bound history snapshot: '+state+' current status overrides an older finished history snapshot',async()=>{
+  const h=await finishedAnonymousWorkspace({invoke:(command,args,fallback)=>command==='get_document_review_history_summary'?fullCopySummary():fallback()});
+  h.model.state={...h.model.state,state};await h.poll();await openFinishedSnapshot(h);
+  assert.doesNotMatch(h.el('history-' + A + '-guide-next').textContent,/kein weiterer Export nötig/u);
+  assert.notEqual(h.el('history-' + A + '-guide-stages').children[3].dataset.status,'done');
+  await h.act('nav-details');assert.doesNotMatch(h.el('job-description').textContent,/kein weiterer Export nötig/u);noAutomaticDecision(h);
+});
+for(const transition of ['navigation','connection','generation']) testAsync('bound history snapshot: late response after '+transition+' cannot promote the guide or job',async()=>{
+  let resolve;const pending=new Promise(yes=>{resolve=yes});
+  const h=await finishedAnonymousWorkspace({invoke:(command,args,fallback)=>command==='get_document_review_history_summary'?pending:fallback()});
+  await openFinishedSnapshot(h);
+  if(transition==='navigation')await h.act('nav-new');
+  else if(transition==='connection'){h.listeners.get('datasecure-connection')({payload:{epoch:1,state:'recovering'}});await tick()}
+  else { await h.act('history-'+A+'-more'); await h.act('history-'+A+'-results'); }
+  resolve(fullCopySummary());await tick();await tick();
+  assert.doesNotMatch(h.el('job-description').textContent,/kein weiterer Export nötig/u);
+  assert.ok(h.el('run-guide').hidden||h.el('history-' + A + '-guide-stages').children[3].dataset.status!=='done');noAutomaticDecision(h);
+});
+testAsync('bound history snapshot: entering the actual document renderer retires the cached current-approval projection',async()=>{
+  let opened=false;
+  const h=await finishedAnonymousWorkspace({documentRenderer:true,invoke:(command,args,fallback)=>{
+    if(command==='get_document_review_history_summary')return fullCopySummary(opened?{approved_count:0,current_exported_count:0}:{});
+    if(command==='get_document_reviews'){opened=true;return {...documentResponse('markdown-and-anonymize',2),processing_complete:true,content_notice_count:0,content_notice_breakdown_complete:true,content_notices:[]}}
+    return fallback();
+  }});
+  await openFinishedSnapshot(h);await h.act('history-'+A+'-documents');
+  assert.equal(h.el('documents-view').hidden,false);await h.act('documents-back');await tick();
+  await h.act('nav-details');assert.doesNotMatch(h.el('job-description').textContent,/kein weiterer Export nötig/u);noAutomaticDecision(h);
+});
+
+testAsync('bound history snapshot: a higher native Ready immediately retires the previous connection snapshot',async()=>{
+  const h=await finishedAnonymousWorkspace({invoke:(command,args,fallback)=>command==='get_document_review_history_summary'?fullCopySummary():fallback()});
+  await openFinishedSnapshot(h);
+  h.listeners.get('datasecure-connection')({payload:{epoch:1,state:'ready'}});await tick();
+  assert.doesNotMatch(h.el('history-' + A + '-guide-next').textContent,/kein weiterer Export nötig/u);
+  await h.act('nav-details');assert.doesNotMatch(h.el('job-description').textContent,/kein weiterer Export nötig/u);noAutomaticDecision(h);
+});
+
+testAsync('bound history snapshot: retired read cannot publish or release a successor read after higher Ready',async()=>{
+  let reads=0,resolveOld,resolveFresh;
+  const oldRead=new Promise(resolve=>{resolveOld=resolve}),freshRead=new Promise(resolve=>{resolveFresh=resolve});
+  const h=await finishedAnonymousWorkspace({invoke:(command,args,fallback)=>command==='get_document_review_history_summary'
+    ?++reads===1?fullCopySummary():reads===2?oldRead:freshRead:fallback()});
+  await openFinishedSnapshot(h);
+  await h.act('history-'+A+'-summary-reload');
+  h.listeners.get('datasecure-connection')({payload:{epoch:1,state:'ready'}});await tick();
+  assert.doesNotMatch(h.el('history-'+A+'-guide-next').textContent,/kein weiterer Export nötig/u);
+  await h.act('history-'+A+'-summary-reload');assert.equal(reads,3,'replacement connection can perform its own read');
+  resolveOld(fullCopySummary());await tick();
+  assert.doesNotMatch(h.el('history-'+A+'-guide-next').textContent,/kein weiterer Export nötig/u);
+  assert.equal(h.el('history-'+A+'-summary').attrs['aria-busy'],'true','retired finally cannot release successor');
+  assert.equal(h.el('history-'+A+'-summary-reload').disabled,true);
+  resolveFresh(fullCopySummary({approved_count:0,current_exported_count:0,recorded_export_count:0}));await tick();
+  assert.equal(h.el('history-'+A+'-summary-reload').disabled,false);
+  assert.equal(h.el('history-'+A+'-guide-stages').children[3].dataset.status,'pending');
+  const statusReads=h.calls.filter(call=>call.command==='get_public_state').length;
+  await h.poll();assert.ok(h.calls.filter(call=>call.command==='get_public_state').length>statusReads,'retired ownership cannot block later polling');
+  noAutomaticDecision(h);
+});
+testAsync('bound history snapshot: loading and unavailable metadata cannot retain earlier success',async()=>{
+  let resolve,reads=0;const pending=new Promise(yes=>{resolve=yes});
+  const h=await finishedAnonymousWorkspace({invoke:(command,args,fallback)=>command==='get_document_review_history_summary'?(++reads===1?fullCopySummary():pending):fallback()});
+  await openFinishedSnapshot(h);await h.act('history-'+A+'-summary-reload');
+  assert.doesNotMatch(h.el('history-' + A + '-guide-next').textContent,/kein weiterer Export nötig/u);
+  assert.doesNotMatch(h.el('job-description').textContent,/kein weiterer Export nötig/u);
+  resolve({ok:true,local_ui_only:true,external_disclosure:false,available:false});await tick();
+  assert.equal(h.el('history-' + A + '-guide-stages').children[3].dataset.status,'pending');noAutomaticDecision(h);
+});
+
+testAsync('bound history snapshot: the actual 3-source 2-result OCR-off completion stays yellow and closes only its two result revisions',async()=>{
+  const h=await finishedAnonymousWorkspace({invoke:(command,args,fallback)=>command==='get_document_review_history_summary'
+    ?fullCopySummary({not_processed_count:1}):fallback()},1);
+  assert.equal(h.model.state.selected_count,3);assert.equal(h.model.state.completed_count,3);
+  assert.equal(h.model.state.result_count,2);assert.equal(h.model.state.failed_count,1);
+  assert.equal(Object.hasOwn(h.model.state,'expected_ocr_omission_count'),false,'public status has no invented omission classifier');
+  await openFinishedSnapshot(h);
+  assert.equal(h.calls.filter(call=>call.command==='get_document_review_history_summary').at(-1).args.batchId,A);
+  assert.match(h.el('history-' + A + '-guide-title').textContent,/Export mit Abschlussbeleg.*Hinweisen/u);
+  assert.match(h.el('history-' + A + '-guide-counts').textContent,/2 von 2 verfügbaren Dokumenten freigegeben.*2 von 3 Quellen.*1 ohne OCR nicht umgewandelt/u);
+  assert.equal(h.el('history-' + A + '-guide-stages').children[0].dataset.status,'warning','existing CSS renders warning yellow');
+  for(const index of [1,2,3])assert.equal(h.el('history-' + A + '-guide-stages').children[index].dataset.status,'done');
+  assert.match(h.el('history-' + A + '-guide-next').textContent,/kein weiterer Export nötig.*1 Bild- oder Scan-Datei.*nicht umgewandelt/u);
+  assert.match(h.el('history-' + A + '-guide-next').textContent,/nicht verarbeitete Quelle ist weder freigegeben noch im Export enthalten/u);
+  assert.equal(h.el('history-list').children[0].dataset.outcome,'partial');
+  assert.match(h.el('history-list').textContent,/1 ohne OCR nicht umgewandelt/u);
+  await h.act('nav-details');
+  assert.match(h.el('job-title').textContent,/abgeschlossen mit Hinweisen/u);assert.match(h.el('job-icon').textContent,/!/u);
+  assert.match(h.el('job-description').textContent,/2 verfügbaren Ergebnisstände.*kein weiterer Export nötig.*1 Bild- oder Scan-Datei.*nicht umgewandelt/u);
+  assert.doesNotMatch(h.el('job-description').textContent,/noch vergleichen und freigeben|1 Datei mit Problemen|3 verfügbaren Ergebnisstände/u);
+  assert.equal(h.el('job-action-documents').textContent,'Prüfung öffnen (optional)');
+  assert.equal(h.el('job-description').className,'run-notice','existing warning styling keeps the omitted source visibly yellow on nav-details');
+  await h.poll();assert.equal(h.el('job-description').className,'run-notice');
+  assert.equal(h.el('file-problems').hidden,false,'the omitted source notice remains reachable');
+  noAutomaticDecision(h);
+});
+for(const kind of ['missing-ledger','unavailable','unknown','old-copy','pending','technical','status-count-mismatch'])
+  testAsync('bound history snapshot: 2-of-3 '+kind+' never becomes all-clear or a 3-source export claim',async()=>{
+    const data=fullCopySummary({not_processed_count:1});
+    if(kind==='missing-ledger')delete data.not_processed_count;
+    if(kind==='unavailable'){data.reviewable_count=1;data.approved_count=1;data.current_exported_count=1;data.unavailable_count=1}
+    if(kind==='unknown'){data.reviewable_count=1;data.approved_count=1;data.current_exported_count=1;data.unclassified_source_count=1}
+    if(kind==='old-copy')data.current_exported_count=0;
+    if(kind==='pending'){data.pending_export_count=1;data.pending_confirmation_count=1}
+    const h=await finishedAnonymousWorkspace({invoke:(command,args,fallback)=>command==='get_document_review_history_summary'?data:fallback()},1);
+    if(kind==='technical')delete h.model.entries[0].expected_ocr_omission_count;
+    if(kind==='status-count-mismatch'){h.model.state={...h.model.state,result_count:1};await h.poll()}
+    await openFinishedSnapshot(h);
+    assert.doesNotMatch(h.el('history-' + A + '-guide-next').textContent,/kein weiterer Export nötig|3 verfügbaren Ergebnisstände|3 von 3.*freigegeben/u);
+    assert.notEqual(h.el('history-' + A + '-guide-stages').children[3].dataset.status,'done');
+    await h.act('nav-details');assert.doesNotMatch(h.el('job-description').textContent,/kein weiterer Export nötig/u);noAutomaticDecision(h);
+  });
+
+testAsync('bound history snapshot: a different public run permanently retires the 2-of-3 snapshot before the old run returns',async()=>{
+  const h=await finishedAnonymousWorkspace({invoke:(command,args,fallback)=>command==='get_document_review_history_summary'
+    ?fullCopySummary({not_processed_count:1}):fallback()},1);
+  await openFinishedSnapshot(h);await h.act('nav-details');const saved={...h.model.state};
+  h.model.state={...saved,batch_id:B};await h.poll();
+  assert.equal(h.el('job-description').className,'muted');
+  h.model.state=saved;await h.poll();
+  assert.doesNotMatch(h.el('job-description').textContent,/kein weiterer Export nötig/u);
+  assert.equal(h.el('job-description').className,'muted');noAutomaticDecision(h);
+});
+
+for(const [results,ocr,privacy]of [[2,0,1],[115,17,1]])testAsync('bound history snapshot: actual classified completion '+[results,ocr,privacy].join('/')+' keeps every stopped source excluded and yellow',async()=>{
+  const stopped=ocr+privacy,total=results+stopped;
+  const h=await finishedAnonymousWorkspace({invoke:(command,args,fallback)=>command==='get_document_review_history_summary'
+    ?fullCopySummary({reviewable_count:results,approved_count:results,current_exported_count:results,not_processed_count:stopped}):fallback()},ocr,privacy,results);
+  assert.equal(h.model.state.selected_count,total);assert.equal(h.model.state.completed_count,total);
+  assert.equal(h.model.state.result_count,results);assert.equal(h.model.state.failed_count,stopped);
+  assert.equal(Object.hasOwn(h.model.state,'expected_ocr_omission_count'),false);
+  assert.equal(Object.hasOwn(h.model.state,'privacy_stop_count'),false);
+  await openFinishedSnapshot(h);
+  assert.equal(h.calls.filter(call=>call.command==='get_document_review_history_summary').at(-1).args.batchId,A);
+  assert.match(h.el('history-' + A + '-guide-title').textContent,/Export mit Abschlussbeleg.*Hinweisen/u);
+  assert.match(h.el('history-' + A + '-guide-counts').textContent,new RegExp(results+' von '+results+' verfügbaren Dokumenten freigegeben','u'));
+  assert.match(h.el('history-' + A + '-guide-counts').textContent,new RegExp(results+' von '+total+' Quellen als Ergebnis verfügbar','u'));
+  assert.match(h.el('history-' + A + '-guide-counts').textContent,new RegExp(privacy+' aus Datenschutzgründen angehalten','u'));
+  for(const index of [0,1])assert.equal(h.el('history-' + A + '-guide-stages').children[index].dataset.status,'warning');
+  for(const index of [2,3])assert.equal(h.el('history-' + A + '-guide-stages').children[index].dataset.status,'done');
+  assert.match(h.el('history-' + A + '-guide-next').textContent,/kein weiterer Export nötig.*aus Datenschutzgründen angehalten/u);
+  assert.match(h.el('history-' + A + '-guide-next').textContent,stopped===1?/nicht verarbeitete Quelle ist weder freigegeben noch im Export enthalten/u:
+    new RegExp(stopped+' nicht verarbeiteten Quellen sind weder freigegeben noch im Export enthalten','u'));
+  assert.equal(h.el('history-list').children[0].dataset.outcome,'partial');
+  assert.match(h.el('history-list').textContent,new RegExp(privacy+' aus Datenschutzgründen angehalten','u'));
+  await h.act('nav-details');
+  assert.equal(h.el('job-description').className,'run-notice');assert.match(h.el('job-title').textContent,/abgeschlossen mit Hinweisen/u);
+  assert.match(h.el('job-description').textContent,new RegExp(results+' verfügbaren Ergebnisstände.*kein weiterer Export nötig','u'));
+  assert.match(h.el('job-description').textContent,/aus Datenschutzgründen angehalten.*keinen freigabefähigen Prüfstand/u);
+  assert.doesNotMatch(h.el('job-description').textContent,new RegExp(total+' verfügbaren Ergebnisstände|'+stopped+' Dateien mit Problemen|noch vergleichen und freigeben','u'));
+  if(ocr)assert.match(h.el('job-description').textContent,new RegExp(ocr+' Bild- oder Scan-Dateien.*nicht umgewandelt','u'));
+  assert.equal(h.el('job-action-documents').textContent,'Prüfung öffnen (optional)');assert.equal(h.el('file-problems').hidden,false);
+  noAutomaticDecision(h);
+});
+for(const kind of ['technical-remainder','unknown-reason','legacy-classification','incoherent-ledger','unavailable-result','old-copy','pending-copy'])
+  testAsync('bound history snapshot: mixed OCR/privacy '+kind+' cannot become an all-clear completion',async()=>{
+    const data=fullCopySummary({reviewable_count:115,approved_count:115,current_exported_count:115,not_processed_count:18});
+    if(kind==='incoherent-ledger')data.not_processed_count=17;
+    if(kind==='unavailable-result'){data.reviewable_count=114;data.approved_count=114;data.current_exported_count=114;data.unavailable_count=1}
+    if(kind==='old-copy')data.current_exported_count=114;
+    if(kind==='pending-copy'){data.pending_export_count=1;data.pending_confirmation_count=1}
+    const h=await finishedAnonymousWorkspace({invoke:(command,args,fallback)=>command==='get_document_review_history_summary'?data:fallback()},17,1,115);
+    if(kind==='technical-remainder'){
+      h.model.entries[0]={...h.model.entries[0],selected_count:134,completed_count:134,failed_count:19};data.not_processed_count=19;
+      h.model.state={...h.model.state,selected_count:134,completed_count:134,failed_count:19};await h.poll();
+    }
+    if(kind==='unknown-reason')delete h.model.entries[0].privacy_stop_count;
+    if(kind==='legacy-classification')h.model.entries[0].failure_reason_breakdown_complete=false;
+    await openFinishedSnapshot(h);
+    assert.doesNotMatch(h.el('history-' + A + '-guide-next').textContent,/kein weiterer Export nötig|133 verfügbaren Ergebnisstände|134 verfügbaren Ergebnisstände/u);
+    assert.notEqual(h.el('history-' + A + '-guide-stages').children[3].dataset.status,'done');
+    await h.act('nav-details');assert.doesNotMatch(h.el('job-description').textContent,/kein weiterer Export nötig/u);noAutomaticDecision(h);
+  });
+
+testAsync('an incomplete or unconfirmed run never displays the successful completion check', async () => {
+  for (const state of ['stopped', 'review_required', 'paused', 'export_pending', 'export_abandoned', 'failed', 'blocked']) {
+    const h = harness(); await selectAndStart(h);
+    h.model.state = { state, batch_id: A, processing_mode: 'markdown-and-anonymize', selected_count: 3,
+      completed_count: 2, result_count: 2, failed_count: 0, review_count: 0, batch_complete: false };
+    await h.poll();
+    assert.equal(h.el('job-icon').textContent, state === 'paused' ? 'Ⅱ' : '!');
+    assert.equal(h.el('job-status').className.includes('success'), false);
+  }
+});
+
+for (const batchId of [A, B, undefined]) testAsync('service Ready after an OCR-omission completion retires the old card, batch=' + String(batchId), async () => {
+  const h = await finishedAnonymousWorkspace({ invoke(command, args, fallback) {
+    if (command === 'configure_results') {
+      h.model.state = { state: 'ready', ...(batchId ? { batch_id: batchId } : {}) };
+      return { local_ui_only: true, external_disclosure: false, result_folder: 'New local results' };
+    }
+    return fallback();
+  } }, 1);
+  assert.match(h.el('job-title').textContent, /abgeschlossen mit Hinweisen/u);
+  await h.act('nav-settings'); await h.act('configure-results'); await h.poll(); await h.act('nav-new');
+  assert.equal(h.el('job-title').textContent, 'Kein aktiver Lauf');
+  assert.doesNotMatch(h.el('job-icon').textContent, /✓/u);
+  assert.equal(h.el('job-status').className, 'job-status'); assert.equal(h.el('job-progress').hidden, true);
+  assert.equal(h.el('job-action-history').textContent, 'Verlauf öffnen');
+  assert.equal(h.el('job-action-results'), undefined); assert.equal(h.el('job-action-documents'), undefined);
+  assert.equal(h.calls.some(call => call.command === 'cancel_admission'), false);
+  h.model.state = { state: 'processing', batch_id: A, processing_mode: 'markdown-and-anonymize',
+    selected_count: 3, completed_count: 1, result_count: 1, failed_count: 0, review_count: 0 };
+  await h.poll();
+  assert.equal(h.el('job-progress').hidden, false); assert.equal(h.el('job-icon').textContent, '⚙');
+});
+
+testAsync('incomplete delivery offers primary history navigation without an automatic retry or copy', async () => {
+  const h = await finishedAnonymousWorkspace({}, 1);
+  h.model.state = { ...h.model.state, state: 'export_pending' }; await h.poll();
+  assert.equal(h.el('job-icon').textContent, '!');
+  assert.equal(h.el('job-action-history').textContent, 'Bereitstellung im Verlauf prüfen');
+  assert.equal(h.nodes.filter(node => node.isConnected && node.id === 'job-action-history').length, 1);
+  assert.match(h.el('job-description').textContent, /noch nicht bestätigt/u);
+  assert.doesNotMatch(h.el('job-description').textContent, /Zugriffsrechte/u);
+  const before = h.calls.length; await h.act('job-action-history');
+  assert.equal(h.el('history-view').hidden, false);
+  assert.equal(h.calls.slice(before).some(call => ['continue_history_batch', 'continue_current_batch', 'export_approved_documents'].includes(call.command)), false);
+});
+
+for (const interim of ['ready', 'ready-missing-id', 'mismatch']) testAsync('returning from ' + interim + ' restores the identical processing DTO and live announcement', async () => {
+  const h = harness(); await selectAndStart(h);
+  const processing = { ...h.model.state };
+  assert.match(h.el('job-icon').className, /working/u);
+  h.model.state = interim === 'mismatch' ? { ...processing, batch_id: B }
+    : { state: 'ready', ...(interim === 'ready' ? { batch_id: A } : {}) };
+  await h.poll();
+  assert.equal(h.el('job-icon').className, 'status-icon');
+  assert.equal(h.el('job-progress').hidden, true);
+  h.model.state = processing; await h.poll();
+  assert.match(h.el('job-icon').className, /working/u);
+  assert.equal(h.el('job-progress').hidden, false);
+  assert.equal(h.el('job-action-pause').textContent, 'Pausieren');
+  assert.match(h.el('job-announcement').textContent, /Verarbeitung bleibt lokal/u);
+  assert.doesNotMatch(h.el('job-announcement').textContent, /Kein aktiver Lauf|Status gehört nicht/u);
+});
+
+testAsync('consumed source rows disappear from the actual New tab after a terminal run', async () => {
+  const h = harness(); await selectAndStart(h);
+  h.model.state = { ...h.model.state, state: 'results_available', batch_complete: true, results_available: true };
+  await h.poll(); await h.act('nav-history'); await h.act('nav-new');
+  assert.equal(h.el('catalogue').hidden, true);
+  assert.equal(h.el('source-tree').children.length, 0);
+  assert.equal(h.el('drop-zone').hidden, false);
+  assert.equal(h.el('selection-count').textContent, '0 von 0 ausgewählt');
+  assert.equal(h.el('start').attrs['aria-disabled'], 'true');
+  await h.act('start');
+  assert.equal(h.calls.filter(call => call.command === 'start_admitted_batch').length, 1);
+  assert.equal(h.calls.filter(call => call.command === 'cancel_admission').length, 0);
+});
+
+testAsync('a newly prepared unstarted selection survives History and New tab navigation', async () => {
+  const h = harness(); await selectAndStart(h);
+  h.model.state = { ...h.model.state, state: 'results_available', batch_complete: true, results_available: true };
+  await h.poll(); await h.act('nav-new'); await h.act('select-folder');
+  const source = h.model.catalogue.find(row => row.selectable), checkbox = h.el(`source-${source.source_id}`);
+  checkbox.checked = false; await h.act(checkbox, 'change');
+  h.el('text-ocr').checked = true; await h.act('text-ocr', 'change');
+  const selection = h.el('selection-count').textContent;
+  await h.act('nav-history'); await h.act('nav-new');
+  assert.equal(h.el('catalogue').hidden, false);
+  assert.equal(h.el(`source-${source.source_id}`).checked, false);
+  assert.equal(h.el('selection-count').textContent, selection);
+  assert.equal(h.el('text-ocr').checked, true);
+  assert.equal(h.calls.filter(call => call.command === 'cancel_admission').length, 0);
+});
+
+testAsync('a lost Start ACK consumes only its local selection without an unbound cancellation or replay', async () => {
+  const h = harness({ invoke(command, _args, fallback) {
+    if (command === 'start_admitted_batch') { fallback(); throw Error('STANDALONE_IPC_TIMEOUT'); }
+    return fallback();
+  } });
+  await selectAndStart(h); await h.act('nav-new');
+  assert.equal(h.el('source-tree').children.length, 0);
+  assert.equal(h.el('catalogue').hidden, true);
+  assert.equal(h.calls.filter(call => call.command === 'cancel_admission').length, 0);
+  assert.equal(h.calls.filter(call => call.command === 'start_admitted_batch').length, 1);
+});
+
+testAsync('history status is first and later summary updates preserve title and file counts', async () => {
+  const h = harness({ invoke(command, _args, fallback) {
+    return command === 'get_document_review_history_summary' ? reviewSummary({ pending_export_count: 1,
+      pending_confirmation_count: 1 }) : fallback();
+  } }); await tick();
+  h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', selected_count: 2,
+    result_count: 2, failed_count: 0, status: 'results_available', result_location: 'available', results_available: true }];
+  await h.act('nav-history');
+  const detail = h.el('history-list').children[0].children[0];
+  assert.match(detail.children[0].className, /history-status-heading/u);
+  const title = detail.children.find(row => row.className === 'history-title').textContent;
+  const counters = detail.children.find(row => row.className === 'history-meta' && row !== h.el(`history-${B}-state`)).textContent;
+  await toggleHistorySummary(h, B);
+  assert.equal(detail.children.find(row => row.className === 'history-title').textContent, title);
+  assert.equal(detail.children.find(row => row.className === 'history-meta' && row !== h.el(`history-${B}-state`)).textContent, counters);
+  assert.match(h.el(`history-${B}-state`).textContent, /Export im Abgleich/u);
+});
+
+testAsync('history hiding is explicit, persistent through the backend and never deletes or repeats work', async () => {
+  let hidden = false;
+  const entry = { batch_id: B, status: 'results_available', processing_mode: 'markdown-and-anonymize',
+    result_count: 2, selected_count: 2, failed_count: 0, results_available: true, result_location: 'available' };
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_run_history') return { local_ui_only: true, external_disclosure: false,
+      entries: hidden && !args?.includeHidden ? [] : [{ ...entry, hidden }], hidden_count: hidden ? 1 : 0, open_count: 0 };
+    if (command === 'set_run_history_visibility') { assert.equal(args.batchId, B); hidden = args.hidden;
+      return { ok: true, batch_id: B, hidden, local_ui_only: true, external_disclosure: false }; }
+    return fallback();
+  } }); await tick(); await h.act('nav-history'); await h.act(`history-${B}-more`);
+  await h.act(`history-${B}-visibility`);
+  assert.equal(hidden, true); assert.equal(h.el('history-list').children.length, 0);
+  assert.match(h.el('history-status').textContent, /Keine sichtbaren/u);
+  h.el('history-include-hidden').checked = true; await h.act('history-include-hidden', 'change');
+  assert.equal(h.calls.filter(row => row.command === 'get_run_history').at(-1).args.includeHidden, true);
+  assert.equal(h.el(`history-${B}-visibility`).textContent, 'Wieder im Verlauf anzeigen');
+  await h.act(`history-${B}-visibility`); assert.equal(hidden, false);
+  assert.equal(h.calls.some(row => /delete|remove|abandon|start_|continue_|export_approved/u.test(row.command)), false);
+});
+
+testAsync('open work and export-only legacy entries never advertise a supported hide action', async () => {
+  const h = harness(); await tick();
+  h.model.entries = [{ batch_id: A, status: 'review_required', resumable: true },
+    { batch_id: B, status: 'results_available', visibility_supported: false }];
+  await h.act('nav-history');
+  assert.equal(h.el(`history-${A}-visibility`).disabled, true);
+  assert.equal(h.el(`history-${B}-visibility`).disabled, true);
+  assert.equal(h.calls.some(row => row.command === 'set_run_history_visibility'), false);
+});
+
+testAsync('a degraded export inventory keeps valid rows and never advertises automatic recovery', async () => {
+  const h = harness({ invoke(command, _args, fallback) {
+    if (command === 'get_run_history') return { local_ui_only: true, external_disclosure: false, history_degraded: true,
+      entries: [{ batch_id: B, processing_mode: 'markdown-and-anonymize', status: 'results_available', result_count: 2,
+        selected_count: 2, failed_count: 0, result_location: 'unknown', results_available: false }] };
+    return fallback();
+  } }); await tick(); await h.act('nav-history');
+  assert.equal(h.el('history-list').children.length, 1);
+  assert.match(h.el('history-status').textContent, /momentan nicht bestätigbar/u);
+  assert.equal(h.el(`history-${B}-results`), undefined);
+  assert.equal(h.el(`history-${B}-delivery`), undefined);
+  assert.equal(h.el(`history-${B}-documents`).attrs['data-history-main'], 'true');
 });
 
 done();

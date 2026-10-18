@@ -15,7 +15,7 @@ const { opcControlEntries } = require('./lib/opc');
 const runtime = path.join(__dirname, '..', 'plugins', 'data-secure', 'server');
 const { convertDocument, SafeError } = require(path.join(runtime, 'runtime.js'));
 const {
-  parseOoxml, MAX_EMBEDDED_DEPTH, MAX_EMBEDDED_DOCUMENTS, MAX_EMBEDDED_BYTES,
+  parseOoxml, xmlDecode, MAX_EMBEDDED_DEPTH, MAX_EMBEDDED_DOCUMENTS, MAX_EMBEDDED_BYTES,
   MAX_EMBEDDED_EXPANDED_BYTES
 } = require(path.join(runtime, 'ooxml.js'));
 const { readZip, inspectZipDirectory, inspectZipDirectoryFromFd, ZipError } = require(path.join(runtime, 'zip-reader.js'));
@@ -70,6 +70,38 @@ function embeddedDocx(paragraphs, embedded, relationshipType = 'package') {
   ]);
 }
 
+function xmlTextPackage(type, value, propertyName = 'Kontakt &amp;lt;') {
+  const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const S = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+  const P = 'http://schemas.openxmlformats.org/presentationml/2006/main';
+  const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
+  const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const metadata = [
+    ['docProps/core.xml', `<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:creator>${value}</dc:creator></cp:coreProperties>`, 'application/vnd.openxmlformats-package.core-properties+xml', 'http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties'],
+    ['docProps/app.xml', `<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties"><Manager>${value}</Manager></Properties>`, 'application/vnd.openxmlformats-officedocument.extended-properties+xml', `${R}/extended-properties`],
+    ['docProps/custom.xml', `<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/custom-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><property fmtid="{D5CDD505-2E9C-101B-9397-08002B2CF9AE}" pid="2" name="${propertyName}"><vt:lpwstr>${value}</vt:lpwstr></property></Properties>`, 'application/vnd.openxmlformats-officedocument.custom-properties+xml', `${R}/custom-properties`]
+  ];
+  const rels = (items) => `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">${items.map(([id, kind, target]) => `<Relationship Id="${id}" Type="${R}/${kind}" Target="${target}"/>`).join('')}</Relationships>`;
+  const main = type === 'docx' ? [
+    ['word/document.xml', `<w:document xmlns:w="${W}"><w:body><w:p><w:r><w:t>${value}</w:t></w:r></w:p></w:body></w:document>`]
+  ] : type === 'xlsx' ? [
+    ['xl/workbook.xml', `<workbook xmlns="${S}" xmlns:r="${R}"><sheets><sheet name="Quelle &amp;lt;" sheetId="1" r:id="sheet"/></sheets></workbook>`],
+    ['xl/_rels/workbook.xml.rels', rels([['sheet', 'worksheet', 'worksheets/sheet1.xml'], ['strings', 'sharedStrings', 'sharedStrings.xml']])],
+    ['xl/worksheets/sheet1.xml', `<worksheet xmlns="${S}"><sheetData><row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="inlineStr"><is><t>${value}</t></is></c></row></sheetData></worksheet>`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml'],
+    ['xl/sharedStrings.xml', `<sst xmlns="${S}" count="1" uniqueCount="1"><si><t>${value}</t></si></sst>`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml']
+  ] : [
+    ['ppt/presentation.xml', `<p:presentation xmlns:p="${P}" xmlns:r="${R}"><p:sldIdLst><p:sldId id="256" r:id="slide"/></p:sldIdLst></p:presentation>`],
+    ['ppt/_rels/presentation.xml.rels', rels([['slide', 'slide', 'slides/slide1.xml']])],
+    ['ppt/slides/slide1.xml', `<p:sld xmlns:p="${P}" xmlns:a="${A}"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>${value}</a:t></a:r></a:p></p:txBody></p:sp><p:graphicFrame><a:graphic><a:graphicData><a:tbl><a:tr><a:tc><a:txBody><a:p><a:r><a:t>${value}</a:t></a:r></a:p></a:txBody></a:tc></a:tr></a:tbl></a:graphicData></a:graphic></p:graphicFrame></p:spTree></p:cSld></p:sld>`, 'application/vnd.openxmlformats-officedocument.presentationml.slide+xml']
+  ];
+  const controls = opcControlEntries(type, { additionalOverrides: [...metadata, ...main]
+    .filter(item => item[2]).map(([part, , contentType]) => ({ part, contentType })) });
+  controls[0][1] = controls[0][1].replace('</Types>', '<Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/></Types>');
+  controls[1][1] = controls[1][1].replace('</Relationships>', metadata.map(([part, , , kind], index) =>
+    `<Relationship Id="metadata${index}" Type="${kind}" Target="${part}"/>`).join('') + '</Relationships>');
+  return zipStore([...controls, ...main, ...metadata].map(([name, data]) => [name, data]));
+}
+
 // ---------------------------------------------------------------------------
 // DOCX
 // ---------------------------------------------------------------------------
@@ -113,6 +145,320 @@ test('DOCX XML entities are decoded', () => {
   const result = parseOoxml(docx(['M&amp;A Beratung &#8211; 2026', 'Preis &lt; 100 &#8364;']), '.docx');
   assertPresent(result.markdown, 'M&A Beratung', 'ampersand entity');
   assertPresent(result.markdown, 'Preis < 100 €', 'less-than and numeric entities');
+});
+
+test('XML references are decoded once in text and attributes, never by rescanning their output', () => {
+  const { readXml } = require(path.join(runtime, 'xml-reader'));
+  const cases = [['&amp;lt;', '&lt;'], ['&#38;lt;', '&lt;'], ['&#x26;lt;', '&lt;'],
+    ['&#x26;#38;lt;', '&#38;lt;'], ['&amp;#x41;', '&#x41;'], ['&#x26;bogus;', '&bogus;'],
+    ['&#00065;&#x000041;', 'AA'], ['&#x10000;&#x10FFFF;', '\u{10000}\u{10ffff}'],
+    ['&quot;&apos;&gt;', '"\'>']];
+  for (const [encoded, expected] of cases) {
+    assert.equal(xmlDecode(encoded), expected);
+    for (const quote of ['"', "'"]) {
+      let attribute, text = '';
+      readXml(`<r a=${quote}${encoded}${quote}>${encoded}</r>`, { decode: xmlDecode,
+        error: () => Error('XML_INVALID'), start(node) { attribute = node.attributes.get('{}a'); }, text(value) { text += value; } });
+      assert.equal(attribute, expected); assert.equal(text, expected);
+    }
+  }
+  let cdata = '';
+  readXml('<r><![CDATA[&#38;lt; &AMP;]]></r>', { decode: xmlDecode, error: () => Error('XML_INVALID'), text(value) { cdata += value; } });
+  assert.equal(cdata, '&#38;lt; &AMP;', 'CDATA is literal, not a source reference token');
+  for (const invalid of ['&AMP;', '&Lt;', '&#X26;', '&unknown;', '&amp', '&#;', '&#x;', '&#-1;',
+    '&#xGG;', '&#0;', '&#xDFFF;', '&#xFFFE;', '&#65535;', '&#x110000;', '&#999999999999999999999999;']) {
+    assert.throws(() => xmlDecode(invalid), { code: 'OOXML_XML_CHARACTER_INVALID' });
+    for (const xml of [`<r a="${invalid}"/>`, `<r>${invalid}</r>`])
+      assert.throws(() => readXml(xml, { decode: xmlDecode, error: () => Error('XML_INVALID') }), { code: 'OOXML_XML_CHARACTER_INVALID' });
+    assert.throws(() => parseOoxml(docx([invalid]), '.docx'), { code: 'OOXML_XML_CHARACTER_INVALID' });
+  }
+});
+
+test('equivalent XML spellings preserve Office bodies and decoded attributes across DOCX XLSX PPTX', () => {
+  const S = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+  const P = 'http://schemas.openxmlformats.org/presentationml/2006/main';
+  const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
+  const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const rels = (target, kind) => `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="s1" Type="${R}/${kind}" Target="${target}"/></Relationships>`;
+  for (const type of ['docx', 'xlsx', 'pptx']) {
+    const outputs = ['&amp;lt;', '&#38;lt;', '&#x26;lt;'].map(encoded => {
+      const bytes = type === 'docx' ? docx([`Body ${encoded}`], [['docProps/custom.xml',
+        `<Properties><property name="${encoded}"><vt:lpwstr xmlns:vt="urn:fixture-vt">Value ${encoded}</vt:lpwstr></property></Properties>`]]) :
+        zipStore([...opcControlEntries(type), ...(type === 'xlsx' ? [
+          ['xl/workbook.xml', `<workbook xmlns="${S}" xmlns:r="${R}"><sheets><sheet name="${encoded}" sheetId="1" r:id="s1"/></sheets></workbook>`],
+          ['xl/_rels/workbook.xml.rels', rels('worksheets/sheet1.xml', 'worksheet')],
+          ['xl/worksheets/sheet1.xml', `<worksheet xmlns="${S}"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Body ${encoded}</t></is></c></row></sheetData></worksheet>`]
+        ] : [
+          ['ppt/presentation.xml', `<p:presentation xmlns:p="${P}" xmlns:r="${R}"><p:sldIdLst><p:sldId id="256" r:id="s1"/></p:sldIdLst></p:presentation>`],
+          ['ppt/_rels/presentation.xml.rels', rels('slides/slide1.xml', 'slide')],
+          ['ppt/slides/slide1.xml', `<p:sld xmlns:p="${P}" xmlns:a="${A}"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>Body ${encoded}</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>`]
+        ])]);
+      const value = parseOoxml(bytes, `.${type}`, undefined, { preserveText: true, literalMarkup: true });
+      assert.ok(value.markdown.includes('Body &amp;lt;'), `${type}: the visible text is the literal &lt;`);
+      return { markdown: value.markdown, warnings: value.warnings };
+    });
+    assert.deepEqual(outputs[1], outputs[0]); assert.deepEqual(outputs[2], outputs[0]);
+  }
+});
+
+test('CDATA and equivalent source references retain identical Office bodies, metadata and DrawingML table text', () => {
+  const { extractMarkdownBuffer } = require(path.join(runtime, 'standalone/markdown-extractor'));
+  const reference = 'A &amp; B &lt; C &gt; D', cdata = '<![CDATA[A & B < C > D]]>';
+  for (const type of ['docx', 'xlsx', 'pptx']) {
+    const expected = xmlTextPackage(type, reference);
+    for (const encoded of [cdata, 'A &amp;<![CDATA[ B < C > D]]>', '<![CDATA[A & B]]><![CDATA[ < C > D]]>']) {
+      const bytes = xmlTextPackage(type, encoded);
+      for (const options of [{}, { preserveText: true, literalMarkup: true }]) {
+        const baseline = parseOoxml(expected, `.${type}`, undefined, options);
+        const actual = parseOoxml(bytes, `.${type}`, undefined, options);
+        assert.equal(actual.markdown, baseline.markdown, type);
+        assert.deepEqual(actual.sections, baseline.sections, type);
+        assert.deepEqual(actual.warnings, baseline.warnings, type);
+      }
+      const actual = extractMarkdownBuffer(bytes, `.${type}`, { markdownOutput: 'content-v1' });
+      assert.deepEqual(actual, extractMarkdownBuffer(expected, `.${type}`, { markdownOutput: 'content-v1' }), type);
+      assert.ok(actual.markdown.includes('A &amp; B &lt; C &gt; D'));
+      assert.ok(actual.markdown.includes('Kontakt &amp;lt;'), 'property-name attributes are still decoded once');
+      assert.doesNotMatch(actual.markdown, /<!\[CDATA\[|<!--cdata-->/u, 'serialization markers are not output text');
+    }
+  }
+});
+
+test('comments and processing instructions cannot manufacture closing Office structure or join entity tokens', () => {
+  const { extractMarkdownBuffer } = require(path.join(runtime, 'standalone/markdown-extractor'));
+  const lookalikes = '</dc:creator> </vt:lpwstr> </property> </a:t> </a:p> </a:tbl>';
+  for (const type of ['docx', 'xlsx', 'pptx']) {
+    for (const token of ['<!---->', '<!-- -->', `<!-- ${lookalikes} -->`, `<?probe ${lookalikes}?>`]) {
+      const bytes = xmlTextPackage(type, `A${token}B`), expected = xmlTextPackage(type, 'AB');
+      for (const options of [{}, { preserveText: true, literalMarkup: true }])
+        assert.deepEqual(parseOoxml(bytes, `.${type}`, undefined, options),
+          parseOoxml(expected, `.${type}`, undefined, options));
+      assert.deepEqual(extractMarkdownBuffer(bytes, `.${type}`, { markdownOutput: 'content-v1' }),
+        extractMarkdownBuffer(expected, `.${type}`, { markdownOutput: 'content-v1' }));
+      assert.throws(() => extractMarkdownBuffer(xmlTextPackage(type, `&am${token}p;`), `.${type}`,
+        { markdownOutput: 'content-v1' }));
+    }
+    for (const token of ['<!-- bad -- comment -->', '<??>', '<?XML version="1.0"?>'])
+      assert.throws(() => extractMarkdownBuffer(xmlTextPackage(type, `A${token}B`), `.${type}`,
+        { markdownOutput: 'content-v1' }));
+  }
+});
+
+test('DOCX main-story lexical checks do not depend on metadata or the image-OCR extraction entrance', () => {
+  const { extractMarkdownBuffer, extractOfficeMarkdownAndMedia } = require(path.join(runtime, 'standalone/markdown-extractor'));
+  const entrances = [
+    bytes => extractMarkdownBuffer(bytes, '.docx', { markdownOutput: 'content-v1' }),
+    bytes => extractOfficeMarkdownAndMedia(bytes, '.docx', { markdownOutput: 'content-v1' }).extraction
+  ];
+  const baseline = docx(['AB']);
+  for (const token of ['<!---->', '<!--- -->', '<!-- </w:t> </w:p> <![CDATA[ &unknown; -->',
+    '<?probe?>', '<?probe </w:t> <!-- &unknown; ?>']) {
+    const bytes = docx([`A${token}B`]);
+    for (const extract of entrances) assert.deepEqual(extract(bytes), extract(baseline), token);
+  }
+  for (const token of ['<!--bad--->', '<!--bad--inside-->', '<!------>', '<!--->', '<??>',
+    '<?xml?>', '<?xml version="1.0"?>', '<?XML version="1.0"?>']) {
+    for (const extract of entrances) assert.throws(() => extract(docx([`A${token}B`])), { code: 'DOCX_STRUCTURE_UNSAFE' }, token);
+  }
+  const original = readZip(baseline);
+  for (const declaration of ['<?xml version="1.0"?>', '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>',
+    '\ufeff<?xml version="1.0" encoding="utf-8"?>']) {
+    const entries = new Map(original); entries.set('word/document.xml', Buffer.from(declaration + entries.get('word/document.xml')));
+    for (const extract of entrances) assert.deepEqual(extract(zipStore([...entries])), extract(baseline));
+  }
+  for (const declaration of [' <?xml version="1.0"?>', '<!----><?xml version="1.0"?>',
+    '<?XML version="1.0"?>', '<?xml version="1.1"?>', '<?xml version="1.0" encoding="UTF-16"?>',
+    '<?xml version="1.0"?><?xml version="1.0"?>']) {
+    const entries = new Map(original); entries.set('word/document.xml', Buffer.from(declaration + entries.get('word/document.xml')));
+    for (const extract of entrances) assert.throws(() => extract(zipStore([...entries])), { code: 'DOCX_STRUCTURE_UNSAFE' });
+  }
+});
+
+test('DOCX lexical validation includes secondary stories and skipped Word regions without changing their coverage', () => {
+  const { extractMarkdownBuffer, extractOfficeMarkdownAndMedia } = require(path.join(runtime, 'standalone/markdown-extractor'));
+  const { reviewDocx, W, MC } = require('./lib/docx-review-fixtures');
+  const entrances = [
+    bytes => extractMarkdownBuffer(bytes, '.docx', { markdownOutput: 'content-v1' }),
+    bytes => extractOfficeMarkdownAndMedia(bytes, '.docx', { markdownOutput: 'content-v1' }).extraction
+  ];
+  const paragraph = value => `<w:p><w:r><w:t>${value}</w:t></w:r></w:p>`;
+  const story = (name, root, value) => docx(['MAIN'], [
+    [`word/${name}.xml`, `<w:${root} xmlns:w="${W}">${paragraph(value)}</w:${root}>`],
+    ['word/_rels/document.xml.rels', '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
+      `<Relationship Id="story" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${root === 'hdr' ? 'header' : root === 'ftr' ? 'footer' : root}" Target="${name}.xml"/></Relationships>`]
+  ]);
+  const containers = [
+    ...[['header1', 'hdr'], ['footer1', 'ftr'], ['comments', 'comments'], ['footnotes', 'footnotes'], ['endnotes', 'endnotes']]
+      .map(([name, root]) => value => story(name, root, value)),
+    value => reviewDocx(`<w:p><w:r><w:instrText>${value}</w:instrText><w:t>VISIBLE</w:t></w:r></w:p>`),
+    value => reviewDocx(`<mc:AlternateContent xmlns:mc="${MC}"><mc:Choice Requires="vendor">${paragraph(value)}</mc:Choice><mc:Fallback>${paragraph('VISIBLE')}</mc:Fallback></mc:AlternateContent>`)
+  ];
+  for (const container of containers) {
+    for (const token of ['<!---->', '<!-- </w:t> </w:p> -->', '<?probe </w:t>?>'])
+      for (const extract of entrances) assert.deepEqual(extract(container(`A${token}B`)), extract(container('AB')));
+    for (const token of ['<!--bad--->', '<!--bad--inside-->', '<??>', '<?xml version="1.0"?>'])
+      for (const extract of entrances) assert.throws(() => extract(container(`A${token}B`)), { code: 'DOCX_STRUCTURE_UNSAFE' });
+  }
+  for (const token of ['<!--bad--->', '<??>', '<?xml version="1.0"?>']) {
+    const bytes = story('header1', 'hdr', `A${token}B`);
+    // Output omission is not permission to downgrade malformed XML to a
+    // semantic coverage warning. The lexical error remains source failure.
+    assert.throws(() => extractMarkdownBuffer(bytes, '.docx', { markdownOutput: 'content-v1', omitDocxHeaderFooter: true }),
+      { code: 'DOCX_STRUCTURE_UNSAFE' });
+    assert.throws(() => extractOfficeMarkdownAndMedia(bytes, '.docx', { markdownOutput: 'content-v1', omitDocxHeaderFooter: true }),
+      { code: 'DOCX_STRUCTURE_UNSAFE' });
+  }
+  const cdata = '<![CDATA[<!--bad---> <??> &unknown; </w:t>]]>';
+  const literal = '&lt;!--bad---&gt; &lt;??&gt; &amp;unknown; &lt;/w:t&gt;';
+  for (const extract of entrances) assert.deepEqual(extract(docx([cdata])), extract(docx([literal])));
+});
+
+test('CDATA closing-tag lookalikes and a literal CDATA opener never become Office structure', () => {
+  const { extractMarkdownBuffer } = require(path.join(runtime, 'standalone/markdown-extractor'));
+  const literal = 'A & B </a:t> </a:p> </a:tc> </a:tbl> </dc:creator> </vt:lpwstr> </property> <w:t> <![CDATA[ C';
+  const escaped = literal.replace(/&/gu, '&amp;').replace(/</gu, '&lt;').replace(/>/gu, '&gt;');
+  for (const type of ['docx', 'xlsx', 'pptx']) {
+    const bytes = xmlTextPackage(type, `<![CDATA[${literal}]]>`), baseline = xmlTextPackage(type, escaped);
+    for (const options of [{}, { preserveText: true, literalMarkup: true }]) {
+      const actual = parseOoxml(bytes, `.${type}`, undefined, options);
+      const expected = parseOoxml(baseline, `.${type}`, undefined, options);
+      assert.equal(actual.markdown, expected.markdown, type);
+      assert.deepEqual(actual.sections, expected.sections, type);
+    }
+    assert.equal(extractMarkdownBuffer(bytes, `.${type}`, { markdownOutput: 'content-v1' }).markdown,
+      extractMarkdownBuffer(baseline, `.${type}`, { markdownOutput: 'content-v1' }).markdown, type);
+  }
+});
+
+test('CDATA reference spellings are literal and escaped or nested references are never decoded twice', () => {
+  const { extractMarkdownBuffer } = require(path.join(runtime, 'standalone/markdown-extractor'));
+  const markdown = require('markdown-it')({ html: true }), { decodeHTML } = require('entities');
+  for (const type of ['docx', 'xlsx', 'pptx']) for (const literal of ['&lt;', '&#x41;', '&amp;#x41;', '&unknown; &#0; &AMP;']) {
+    const escaped = literal.replace(/&/gu, '&amp;');
+    const expected = extractMarkdownBuffer(xmlTextPackage(type, escaped), `.${type}`, { markdownOutput: 'content-v1' });
+    const actual = extractMarkdownBuffer(xmlTextPackage(type, `<![CDATA[${literal}]]>`), `.${type}`, { markdownOutput: 'content-v1' });
+    assert.equal(actual.markdown, expected.markdown, `${type}/${literal}`);
+    const visible = decodeHTML(markdown.render(actual.markdown).replace(/<[^>]*>/gu, ''));
+    assert.ok(visible.includes(literal), `${type}/${literal}`);
+  }
+});
+
+test('OOXML character policy rejects raw and referenced C1 controls before any selected text is normalized', () => {
+  const { readXml } = require(path.join(runtime, 'xml-reader'));
+  const { extractMarkdownBuffer } = require(path.join(runtime, 'standalone/markdown-extractor'));
+  const invalid = () => Object.assign(new Error('FIXED_XML_FAILURE'), { code: 'OOXML_XML_CHARACTER_INVALID' });
+  // Include both edges and every intermediate code point, not just NEL.
+  for (let point = 0x7f; point <= 0x9f; point++) {
+    const raw = String.fromCodePoint(point);
+    for (const value of [raw, `&#${point};`, `&#x${point.toString(16)};`]) {
+      assert.throws(() => xmlDecode(value), { code: 'OOXML_XML_CHARACTER_INVALID' });
+      assert.throws(() => readXml(`<r a="${value}">${value}</r>`, { decode: xmlDecode, error: invalid }),
+        { code: 'OOXML_XML_CHARACTER_INVALID' });
+    }
+    assert.throws(() => readXml(`<r><![CDATA[${raw}]]></r>`, { decode: xmlDecode, error: invalid }),
+      { code: 'OOXML_XML_CHARACTER_INVALID' });
+    for (const type of ['docx', 'xlsx', 'pptx']) for (const value of [raw, `<![CDATA[${raw}]]>`, `&#${point};`, `&#x${point.toString(16)};`]) {
+      assert.throws(() => extractMarkdownBuffer(xmlTextPackage(type, `4111${value}1111`), `.${type}`,
+        { markdownOutput: 'content-v1' }), { code: 'OOXML_XML_CHARACTER_INVALID' }, `${type}/U+${point.toString(16)}`);
+    }
+  }
+});
+
+test('each Office body table metadata and attribute path rejects raw C1 independently of other valid parts', () => {
+  const { extractMarkdownBuffer } = require(path.join(runtime, 'standalone/markdown-extractor'));
+  const paths = {
+    docx: [['word/document.xml', 'Unchanged']],
+    xlsx: [['xl/sharedStrings.xml', 'Unchanged'], ['xl/worksheets/sheet1.xml', 'Unchanged'], ['xl/workbook.xml', 'Quelle &amp;lt;']],
+    pptx: [['ppt/slides/slide1.xml', 'Unchanged', 0], ['ppt/slides/slide1.xml', 'Unchanged', 1]]
+  };
+  for (const type of ['docx', 'xlsx', 'pptx']) {
+    const baseline = xmlTextPackage(type, 'Unchanged');
+    const metadata = ['docProps/core.xml', 'docProps/app.xml', 'docProps/custom.xml'].map(part => [part, 'Unchanged']);
+    for (const [part, marker, occurrence = 0] of [...paths[type], ...metadata, ['docProps/custom.xml', 'Kontakt &amp;lt;']]) {
+      for (const value of ['4111\u007f1111', '<![CDATA[4111\u00851111]]>', '4111&#159;1111']) {
+        // CDATA is not legal attribute markup; use a raw control there.
+        const replacement = marker === 'Unchanged' ? value : '4111\u009f1111';
+        const entries = readZip(baseline), source = entries.get(part).toString('utf8');
+        const offset = occurrence === 0 ? source.indexOf(marker) : source.indexOf(marker, source.indexOf(marker) + marker.length);
+        assert.ok(offset >= 0, `${type}/${part}/${occurrence}`);
+        entries.set(part, Buffer.from(source.slice(0, offset) + replacement + source.slice(offset + marker.length)));
+        const bytes = zipStore([...entries]);
+        for (const run of [() => parseOoxml(bytes, `.${type}`),
+          () => extractMarkdownBuffer(bytes, `.${type}`, { markdownOutput: 'content-v1' })]) {
+          assert.throws(run, error => error.code === 'OOXML_XML_CHARACTER_INVALID' &&
+            !/4111|Unchanged|docProps|sheet1|slide1/u.test(error.message), `${type}/${part}/${occurrence}`);
+        }
+      }
+    }
+  }
+});
+
+test('OOXML character policy preserves valid Unicode XML whitespace and literal CDATA reference spellings', () => {
+  const { readXml } = require(path.join(runtime, 'xml-reader'));
+  const { extractMarkdownBuffer } = require(path.join(runtime, 'standalone/markdown-extractor'));
+  const allowed = '\t\n\r ~\u00a0Ä€\u{1f642}';
+  assert.equal(xmlDecode(allowed), allowed);
+  let text = '';
+  readXml(`<r><![CDATA[${allowed} &#127; &#x85; &unknown;]]></r>`, { decode: xmlDecode,
+    error: () => Error('XML_INVALID'), text(value) { text += value; } });
+  assert.equal(text, `${allowed} &#127; &#x85; &unknown;`);
+  for (const type of ['docx', 'xlsx', 'pptx']) {
+    const literal = 'Ä€\u{1f642} &#127; &#x85; &unknown;';
+    const actual = extractMarkdownBuffer(xmlTextPackage(type, `<![CDATA[${literal}]]>`), `.${type}`, { markdownOutput: 'content-v1' });
+    const escaped = extractMarkdownBuffer(xmlTextPackage(type, literal.replace(/&/gu, '&amp;')), `.${type}`, { markdownOutput: 'content-v1' });
+    assert.equal(actual.markdown, escaped.markdown);
+    assert.match(actual.markdown, /Ä€🙂/u);
+  }
+});
+
+test('CDATA cannot hide invalid source entities, numeric controls, raw XML controls or nested scalar markup', () => {
+  const { extractMarkdownBuffer } = require(path.join(runtime, 'standalone/markdown-extractor'));
+  const invalid = ['&unknown;', 'A & B', '&#0;', '&#127;', '&#x85;', '&#xD800;', '&#x110000;',
+    '&am<![CDATA[p;]]>', '&#6<![CDATA[5;]]>', '<![CDATA[A & B]]>&unknown;',
+    '<![CDATA[\u0000]]>', '<![CDATA[\u001f]]>', '<nested>private</nested>'];
+  for (const type of ['docx', 'xlsx', 'pptx']) for (const value of invalid) {
+    const bytes = xmlTextPackage(type, value);
+    for (const run of [() => parseOoxml(bytes, `.${type}`, undefined, { preserveText: true }),
+      () => extractMarkdownBuffer(bytes, `.${type}`, { markdownOutput: 'content-v1' })]) {
+      assert.throws(run, error => {
+        assert.ok(['OOXML_XML_CHARACTER_INVALID', 'DOCX_STRUCTURE_UNSAFE', 'XLSX_STRUCTURE_UNSAFE', 'PPTX_STRUCTURE_UNSAFE'].includes(error.code));
+        assert.doesNotMatch(error.message, /private|unknown|nested|CDATA/u);
+        return true;
+      }, `${type}/${JSON.stringify(value)}`);
+    }
+  }
+});
+
+test('each DOCX metadata scalar independently rejects invalid entities across CDATA boundaries and leaves attributes one-pass', () => {
+  const { extractMarkdownBuffer } = require(path.join(runtime, 'standalone/markdown-extractor'));
+  const baseline = xmlTextPackage('docx', 'Unchanged');
+  for (const part of ['docProps/core.xml', 'docProps/app.xml', 'docProps/custom.xml']) {
+    for (const value of ['&unknown;', '&#0;', '&#127;', '&#xD800;', '&am<![CDATA[p;]]>',
+      '&#6<![CDATA[5;]]>', '<![CDATA[\u0000]]>', '<![CDATA[unfinished', '<nested>private</nested>']) {
+      const entries = readZip(baseline);
+      entries.set(part, Buffer.from(entries.get(part).toString('utf8').replace('Unchanged', value)));
+      const bytes = zipStore([...entries]);
+      for (const run of [() => parseOoxml(bytes, '.docx'),
+        () => extractMarkdownBuffer(bytes, '.docx', { markdownOutput: 'content-v1' })]) {
+        assert.throws(run, { code: 'OOXML_XML_CHARACTER_INVALID' }, `${part}/${JSON.stringify(value)}`);
+      }
+    }
+  }
+  for (const attribute of ['&unknown;', '&#0;', '&#xD800;']) {
+    const bytes = xmlTextPackage('docx', '<![CDATA[Unchanged]]>', attribute);
+    assert.throws(() => extractMarkdownBuffer(bytes, '.docx', { markdownOutput: 'content-v1' }),
+      { code: 'OOXML_XML_CHARACTER_INVALID' }, attribute);
+  }
+});
+
+testAsync('independent pinned Mammoth oracle agrees on source reference text in complete DOCX packages', async () => {
+  const mammoth = require('mammoth');
+  for (const encoded of ['&amp;lt;', '&#38;lt;', '&#x26;lt;']) {
+    const bytes = docx([encoded]);
+    const independent = await mammoth.extractRawText({ buffer: bytes });
+    assert.equal(independent.value.trim(), '&lt;'); assert.deepEqual(independent.messages, []);
+    assert.equal(parseOoxml(bytes, '.docx', undefined, { preserveText: true, literalMarkup: true }).markdown, '&amp;lt;');
+  }
 });
 
 test('DOCX numeric XML references cannot hide identifiers with forbidden controls', () => {

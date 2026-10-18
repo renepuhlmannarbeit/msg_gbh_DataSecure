@@ -11,6 +11,16 @@
     export_pending: 'Bereitstellung offen', export_abandoned: 'Bereitstellung aufgegeben',
     failed: 'Verarbeitung unterbrochen', blocked: 'Nicht bereit' };
   const reasons = {
+    STANDALONE_HISTORY_ACTIVE: 'Dieser Lauf hat noch offene oder nicht bestätigte Vorgänge. Er bleibt sichtbar. Ausblenden beendet keinen Lauf und bricht keinen Export ab.',
+    STANDALONE_HISTORY_VISIBILITY_INVALID: 'Die Anzeigepräferenz konnte nicht sicher gelesen oder gespeichert werden. Es wurden keine Laufdateien gelöscht.',
+    STANDALONE_DATA_ROOT_UNSAFE: 'Der interne App-Datenordner konnte nicht sicher geöffnet oder neu angelegt werden. Das ist nicht der Ergebnisordner. Bitte die Diagnose sichern und Zugriff sowie Installation mit der IT prüfen. Vorhandene Daten nicht löschen und Schutzfunktionen nicht abschalten.',
+    STANDALONE_OWNERSHIP_RUNTIME_DENIED: 'Das Betriebssystem verweigert den Zugriff auf die Komponente zur Prozessabsicherung. Bitte das vollständige Paket und die Berechtigungen mit der IT prüfen; Schutzfunktionen nicht abschalten.',
+    STANDALONE_OWNERSHIP_SIGNATURE_REFUSED: 'macOS hat beim Laden der Prozessabsicherung einen Signatur- oder Bibliotheksprüfungsfehler gemeldet. Bitte die Diagnose sichern und ein korrekt signiertes Paket verwenden. Gatekeeper und Bibliotheksprüfung nicht abschalten.',
+    STANDALONE_OWNERSHIP_RUNTIME_LOAD_FAILED: 'Die native Komponente zur Prozessabsicherung konnte trotz passendem Dateinachweis nicht geladen werden. Bitte die Diagnose sichern und die Installation mit der IT prüfen.',
+    STANDALONE_OWNERSHIP_CONTROL_BUSY: 'Ein anderer lokaler Vorgang sichert gerade seinen Zustand. Es wurde kein neuer Lauf oder Export gestartet. Bitte kurz warten und den Status erneut prüfen.',
+    STANDALONE_OWNERSHIP_RUNTIME_INVALID: 'Eine Komponente zur sicheren Prozessabstimmung fehlt, ist beschädigt oder kann nicht geladen werden. Bitte das vollständige App-Paket neu entpacken und die Diagnose mit der IT prüfen. Schutzfunktionen nicht abschalten.',
+    STANDALONE_OWNERSHIP_STORAGE_UNSAFE: 'Die Zugriffsrechte oder die Identität des privaten DataSecure-Ordners konnten nicht sicher bestätigt werden. Bitte die Diagnose sichern und die Rechte mit der IT prüfen; keine Ordner oder Sperrdateien manuell löschen.',
+    STANDALONE_OWNERSHIP_CONTROL_UNCONFIRMED: 'Das sichere Ende einer lokalen Prozessabsicherung ist nicht bestätigt. Bitte die Diagnose sichern und DataSecure kontrolliert schließen. Keinen Lauf oder Export blind wiederholen.',
     CONTENT_OPTIONS_INVALID: 'Die Inhalts- und OCR-Auswahl ist ungültig. Bitte die Auswahl neu prüfen.',
     STANDALONE_REVIEW_POLICY_INVALID: 'Der Schnellweg ist für diese Aufgabe nicht verfügbar. Bitte die Aufgabe und Optionen neu wählen.',
     CONTENT_OPTIONS_NOT_READY: 'Die neuen Inhalts- und OCR-Optionen sind in diesem Entwicklungsstand noch nicht vollständig verfügbar. Die Auswahl bleibt erhalten; es wurde keine Verarbeitung gestartet.',
@@ -39,7 +49,7 @@
     PASSWORD_PROTECTED_DOCUMENT_UNSUPPORTED: 'Die Datei ist passwortgeschützt. Kein Entsperren in DataSecure möglich.',
     LOCAL_REVIEW_TOO_LARGE: 'Die lokale Prüfgrenze wurde überschritten. Das Dokument in kleinere Teile aufteilen.',
     AMBIGUITY_REVIEW_REQUIRED: 'Die Datenschutzprüfung konnte den Inhalt nicht sicher freigeben.',
-    RESIDUAL_PII: 'Die abschließende Prüfung hat noch mögliche personenbezogene Inhalte gefunden.',
+    RESIDUAL_PII: 'Die abschließende Prüfung hat mögliche personenbezogene Inhalte oder unlesbare Zeichen gefunden. Eine lesbare Kopie der Quelldatei prüfen und neu verarbeiten.',
     PARSE_FAILED: 'Der Dateiinhalt konnte nicht vollständig gelesen werden. Die Quelldatei in der Ursprungsanwendung prüfen und eine neue Kopie auswählen.',
     CONVERSION_EXECUTABLE_DENIED: 'Das Betriebssystem hat den Start der Konvertierung verweigert. Mit der IT prüfen; Schutzfunktionen nicht deaktivieren.',
     CONVERSION_EXECUTABLE_MISSING: 'Eine Konvertierungskomponente fehlt. Das vollständige Paket neu entpacken.',
@@ -86,6 +96,12 @@
     STANDALONE_DOCUMENT_VIEW_UNAVAILABLE: 'Die Ergebnisprüfung konnte nicht geöffnet werden. Bitte das vollständige App-Paket verwenden. Die gespeicherten Entscheidungen bleiben erhalten; kein Lauf wurde neu gestartet.'
   };
   const terminalCoreStartupCodes = new Set([
+    'STANDALONE_DATA_ROOT_UNSAFE',
+    'STANDALONE_OWNERSHIP_STORAGE_UNSAFE', 'STANDALONE_OWNERSHIP_RUNTIME_INVALID',
+    'STANDALONE_OWNERSHIP_RUNTIME_DENIED', 'STANDALONE_OWNERSHIP_SIGNATURE_REFUSED',
+    'STANDALONE_OWNERSHIP_RUNTIME_LOAD_FAILED', 'STANDALONE_OWNERSHIP_CONTROL_UNCONFIRMED',
+    'STANDALONE_RUNTIME_START_FAILED', 'STANDALONE_RUNTIME_MISSING', 'STANDALONE_RUNTIME_DENIED',
+    'STANDALONE_RUNTIME_ARCHITECTURE_INVALID', 'STANDALONE_RUNTIME_BINARY_INVALID',
     'STANDALONE_SIDECAR_SIGNAL_TRAP', 'STANDALONE_SIDECAR_SIGNAL_ABORT',
     'STANDALONE_SIDECAR_SIGNAL_KILLED', 'STANDALONE_SIDECAR_SIGNAL_ILLEGAL_INSTRUCTION',
     'STANDALONE_SIDECAR_SIGNAL_BUS', 'STANDALONE_SIDECAR_SIGNAL_SEGFAULT',
@@ -96,18 +112,109 @@
     'STANDALONE_SIDECAR_WINDOWS_DLL_INIT_FAILED', 'STANDALONE_SIDECAR_WINDOWS_STACK_OVERFLOW',
     'STANDALONE_SIDECAR_WINDOWS_STACK_BUFFER_OVERRUN'
   ]);
+  // Only rejected status/context reads may be polled again on these exact
+  // contention codes. They grant no Ready state or command acknowledgement.
+  const transientReadBusyCodes = new Set(['STANDALONE_IPC_BUSY',
+    'STANDALONE_OWNERSHIP_CONTROL_BUSY', 'STANDALONE_PAUSE_CONTROL_BUSY']);
+  function readBusyMessage(code) {
+    return code === 'STANDALONE_IPC_BUSY' ? reasons.STANDALONE_IPC_BUSY
+      : 'Ein anderer lokaler Vorgang sichert gerade seinen Zustand. Verbindung und Laufstatus sind noch nicht bestätigt. Bitte kurz warten und den Status erneut prüfen.';
+  }
   let catalogue = [], selected = new Set(), knownIds = new Set(), revision = 0, mode = '', expanded = new Map();
+  let consumedAdmission = null;
   let busy = false, closed = false, view = 'new', generation = 0, current = null, job = null;
   let timer, refreshing = false, bootstrapping = true, consecutiveConnectionFailures = 0, automaticRetryPaused = false;
   let historyGeneration = 0, historyRecoveryBusy = false, historySummaryReads = 0,
     historySummaryReadGeneration = 0, historySummaryOwnershipEpoch = 0,
     lastJobSignature = '', problemSignature = '', acknowledged;
   let lastJobAnnouncement = '';
-  let guideSignature = '', documentGuide = null;
+  let guideSignature = '', documentGuide = null, runReviewSnapshot = null;
+  // Navigation owns only a run reference and confirmed display metadata. It
+  // never grants decision, continuation or export authority.
+  let runDetails = null, detailsGeneration = 0, navigationGeneration = 0, documentClose = null;
+  const validBatchId = value => typeof value === 'string' && /^[a-f0-9]{64}$/u.test(value);
+  const isDetailsView = () => ['details', 'documents', 'review'].includes(view);
+  function selectRunDetails(batchId) {
+    if (!validBatchId(batchId)) return false;
+    if (runDetails?.batchId !== batchId || runDetails.connection !== connectionEpoch)
+      runDetails = { batchId, connection: connectionEpoch, generation: ++detailsGeneration, receipt: null };
+    $('nav-details').hidden = false;
+    $('details-run-id').textContent = `Lauf-ID: ${batchId}`;
+    return true;
+  }
+  function renderRunReceipt() {
+    const receipt = runDetails?.connection === connectionEpoch ? runDetails.receipt : null;
+    $('details-receipt').hidden = !receipt;
+    setControlDisabled($('details-open-copy'), !receipt || reconnecting || contextRequired);
+    setControlDisabled($('details-open-documents'), !receipt || reconnecting || contextRequired);
+    if (!receipt) return;
+    $('details-receipt-title').textContent = receipt.processing_mode === 'markdown-only' ? 'Zusätzliche Markdown-Kopie abgeschlossen' : 'Export mit Abschlussbeleg';
+    $('details-receipt-text').textContent = `${receipt.exported_count} ausgewählte Dokumentstände wurden lokal kopiert und ihr Empfang bestätigt. Für diese Kopie ist kein weiterer Export nötig. Ordner: ${receipt.folder_name}.`;
+  }
+  function boundRunReview(state) {
+    const saved = runReviewSnapshot;
+    if (!saved) return null;
+    if (saved.connection !== connectionEpoch || saved.generation !== generation || saved.job !== job ||
+        state?.batch_id !== saved.batchId || state.processing_mode !== 'markdown-and-anonymize' ||
+        state.state !== 'results_available' || state.batch_complete !== true || state.results_available !== true ||
+        state.preparing === true || state.processing === true || state.resumable === true || state.completion_pending === true ||
+        state.termination_unconfirmed === true || state.selected_count !== saved.total || state.completed_count !== saved.total ||
+        state.result_count !== saved.results || state.failed_count !== saved.failed ||
+        (state.review_policy ?? null) !== saved.policy) { runReviewSnapshot = null; return null; }
+    return saved.projection;
+  }
+  function updateRunReview(entry, data) {
+    const projection = window.__DATASECURE_PRESENTATION__?.historyReviewProjection(entry, data);
+    const matches = job?.batchId === entry.batch_id && current?.batch_id === entry.batch_id;
+    if (projection && matches && (view === 'history' || view === 'details' && runDetails?.batchId === entry.batch_id) && !busy && !reconnecting && !contextRequired) {
+      runReviewSnapshot = { batchId: entry.batch_id, connection: connectionEpoch, generation, job,
+        total: entry.selected_count, results: entry.result_count, failed: entry.failed_count, policy: entry.review_policy ?? null, projection };
+      boundRunReview(current); // Reject a history/current-status disagreement.
+    } else if (runReviewSnapshot?.batchId === entry.batch_id) runReviewSnapshot = null;
+    else return;
+    lastJobSignature = '';
+    if (job && current) renderJob(current); else refreshRunGuide();
+  }
+  function clearRunReview() {
+    if (!runReviewSnapshot) return;
+    runReviewSnapshot = null; lastJobSignature = '';
+    if (job && current) renderJob(current); else refreshRunGuide();
+  }
+  function rememberDocumentApproval(metadata) {
+    // The already validated, explicitly open document renderer can supply a
+    // display-only approval snapshot for the same completed job. It grants no
+    // new decision/export authority and cannot certify omitted/unknown sources.
+    const results = metadata.document_count;
+    const projection = !closed && !busy && !reconnecting && !contextRequired &&
+      job?.batchId === metadata.batch_id && job.task === 'markdown-and-anonymize' &&
+      current?.batch_id === metadata.batch_id && metadata.processing_mode === 'markdown-and-anonymize' &&
+      metadata.fresh === true && metadata.busy === false && metadata.dirty === false &&
+      metadata.processing_complete === true && Number.isSafeInteger(results) && results > 0 && results <= 200 &&
+      metadata.result_count === results && metadata.approved_count === results &&
+      metadata.problem_count === 0 && metadata.expected_omission_count === 0 &&
+      metadata.export_pending === false && metadata.export_complete === false
+      ? window.__DATASECURE_PRESENTATION__?.projectRun(metadata) : null;
+    if (projection?.phase === 'approved') {
+      runReviewSnapshot = { batchId: metadata.batch_id, connection: connectionEpoch, generation, job,
+        total: results, results, failed: 0, policy: metadata.review_policy ?? null, projection };
+      boundRunReview(current); // Still require exact terminal public counts/policy.
+    } else if (runReviewSnapshot?.batchId === metadata.batch_id) runReviewSnapshot = null;
+    else return;
+    lastJobSignature = '';
+  }
   let feedbackOwner = null;
+  function renderStageList(target, stages) {
+    target.replaceChildren(...stages.map(stage => {
+      const item = document.createElement('li'); item.textContent = stage.label; item.dataset.status = stage.status;
+      if (stage.status === 'current') item.setAttribute('aria-current', 'step');
+      item.setAttribute('aria-label', `${stage.label}: ${{ current: 'aktueller Schritt', done: 'belegt abgeschlossen', pending: 'noch nicht bestätigt', optional: 'optional', warning: 'abgeschlossen mit Dateiproblemen' }[stage.status]}`);
+      return item;
+    }));
+  }
   function refreshRunGuide() {
+    renderRunReceipt();
     const panel = $('run-guide');
-    if (closed || view === 'settings' || view === 'new' && job ||
+    if (closed || !isDetailsView() || view === 'details' ||
         view === 'documents' && documentGuide?.processing_mode === 'markdown-only' || reconnecting || contextRequired) { panel.hidden = true; return; }
     // The document service proves completion for the exact opened batch. The
     // public status can describe another (newer) run and cannot replace it.
@@ -116,7 +223,8 @@
           processing_mode: reviewOrigin.processingMode,
           review_phase: reviewOrigin.stage || 'waiting', source: 'review' }
         : job && current?.batch_id === job.batchId ? { ...current, source: 'processor' } : null;
-    const projection = window.__DATASECURE_PRESENTATION__?.projectRun(metadata);
+    const projection = (metadata?.source === 'processor' && boundRunReview(current)) ||
+      window.__DATASECURE_PRESENTATION__?.projectRun(metadata);
     panel.hidden = !projection;
     if (!projection) { guideSignature = ''; return; }
     const signature = JSON.stringify(projection); if (signature === guideSignature) return; guideSignature = signature;
@@ -124,17 +232,34 @@
     $('run-guide-title').textContent = projection.heading;
     $('run-guide-counts').textContent = projection.counts || '';
     $('run-guide-next').textContent = projection.next;
-    $('run-guide-stages').replaceChildren(...projection.stages.map(stage => {
-      const item = document.createElement('li'); item.textContent = stage.label; item.dataset.status = stage.status;
-      if (stage.status === 'current') item.setAttribute('aria-current', 'step');
-      item.setAttribute('aria-label', `${stage.label}: ${{ current: 'aktueller Schritt', done: 'belegt abgeschlossen', pending: 'noch nicht bestätigt', optional: 'optional', warning: 'abgeschlossen mit Dateiproblemen' }[stage.status]}`);
-      return item;
-    }));
+    renderStageList($('run-guide-stages'), projection.stages);
   }
   Object.defineProperty(window, '__DATASECURE_RUN_GUIDE__', { value: Object.freeze({
     documents(metadata) {
       if (view !== 'documents' || !metadata || metadata.source !== 'documents' || metadata.batch_id !== documentGuide?.batch_id) return;
-      documentGuide = metadata; refreshRunGuide();
+      documentGuide = metadata; rememberDocumentApproval(metadata); refreshRunGuide();
+    },
+    overview(batchId) {
+      if (view === 'documents' && batchId === documentGuide?.batch_id) showView('details', batchId);
+    },
+    history(batchId) {
+      if (!closed && view === 'documents' && batchId === documentGuide?.batch_id && batchId === runDetails?.batchId)
+        showView('history');
+    },
+    exportCompleted(receipt) {
+      if (closed || view !== 'documents' || reconnecting || contextRequired ||
+          receipt?.batch_id !== documentGuide?.batch_id || receipt.batch_id !== runDetails?.batchId ||
+          receipt.source !== 'documents' || receipt.local_ui_only !== true || receipt.external_disclosure !== false ||
+          !/^[a-f0-9]{32}$/u.test(receipt.operation_id || '') ||
+          !['markdown-only', 'markdown-and-anonymize'].includes(receipt.processing_mode) ||
+          !Number.isSafeInteger(receipt.exported_count) || receipt.exported_count < 1 || receipt.exported_count > 200 ||
+          !new RegExp(`^Export-${receipt.operation_id}(?:-(?:[2-9]|1[0-6]))?$`, 'u').test(receipt.folder_name || '')) return;
+      // Copy only the closed, content-free ACK receipt. A failed optional read
+      // afterwards cannot downgrade it or authorize another copy.
+      // Keep the acknowledged last step visible. Navigation is a separate
+      // user action, through Zum Verlauf or Laufdetails on the same surface.
+      runDetails.receipt = { ...receipt };
+      renderRunReceipt();
     }
   }) });
   const unlisteners = [];
@@ -144,13 +269,23 @@
   const expandedHistorySummaries = new Set();
   const expandedHistoryExtras = new Set();
   const historySummaryRequests = new WeakMap();
+  const historySummaryRetirements = new Set();
   let historySummaryEpoch = 0;
   let historySignature = '';
+  let includeHiddenHistory = false;
   let requestedHistorySummaryBatchId = null;
   let lastError = null;
   let reviewOrigin = null, documentsOrigin = 'history', admitting = false;
   let pendingResultAbandon = null;
   let connectionEpoch = 0, reconnecting = false, contextRequired = false;
+  // Native bootstrap failures outlive ordinary request/render generations.
+  // Native Ready may resolve the old refusal, not certify workspace recovery.
+  // Explicit recovery keeps automatic reads paused until status + valid context.
+  let bootstrapFailure = null;
+  let bootstrapRecoveryPending = false;
+  let resolvedBootstrapEpoch = -1;
+  let receiveConnectionState = null;
+  let connectionRetryChecking = false;
   let resultFolderUnavailable = false;
   let busyGeneration = 0, dropOwnership = null;
   // Webview runtimes do not uniformly inject their API into child frames.
@@ -165,21 +300,31 @@
       // Completion is learned only from this owned native session, never a
       // child-frame claim or the number of rendered/staged decisions.
       if (command === 'close_review_window') owner.closing = true;
-      if (command === 'submit_review' || command === 'continue_review_session') { owner.complete = false; owner.stage = 'waiting'; refreshRunGuide(); }
+      if (command === 'submit_review' || command === 'continue_review_session') {
+        owner.phaseGeneration++; owner.complete = false; owner.stage = 'waiting'; refreshRunGuide();
+      }
+      const phaseGeneration = owner.phaseGeneration;
       try {
         const result = await invoke(command, args);
         if (command !== 'close_review_window' && (owner !== reviewOrigin || owner.closing)) throw Error('STANDALONE_REVIEW_SURFACE_INVALID');
-        if (command === 'get_review_session') {
+        if (command === 'submit_review' && phaseGeneration === owner.phaseGeneration &&
+            result?.accepted === true && result.action === 'deferred') {
+          // Only this owned native acknowledgement confirms deferral. The child
+          // intentionally does not poll after it; a click alone is not evidence.
+          owner.complete = false; owner.stage = 'deferred'; refreshRunGuide();
+        }
+        if (command === 'get_review_session' && phaseGeneration === owner.phaseGeneration) {
           owner.complete = result?.ready === false && result.run_complete === true;
           owner.stage = owner.complete ? 'complete' : result?.ready === true ? 'ready'
-            : ['failed', 'unbound', 'export_pending'].includes(result?.phase) ? result.phase
+            : ['failed', 'unbound', 'export_pending', 'deferred'].includes(result?.phase) ? result.phase
               : result?.continuation_available === true ? 'continue' : 'waiting';
           refreshRunGuide();
         }
         return result;
       } catch (error) {
         if (owner === reviewOrigin && command === 'close_review_window') owner.closing = false;
-        if (owner === reviewOrigin && ['submit_review', 'continue_review_session', 'get_review_session'].includes(command)) {
+        if (owner === reviewOrigin && phaseGeneration === owner.phaseGeneration &&
+            ['submit_review', 'continue_review_session', 'get_review_session'].includes(command)) {
           owner.stage = 'uncertain'; refreshRunGuide();
         }
         throw error;
@@ -194,7 +339,45 @@
     if (className) node.className = className; return node; };
   const button = (label, action, primary = false) => { const node = element('button', label, primary ? 'primary' : '');
     node.addEventListener('click', () => { if (!node.disabled) action(); }); return node; };
-  function feedback(message, error = false, owner = null) { feedbackOwner = owner; $('feedback').textContent = message; $('feedback').hidden = !message;
+  function renderBootstrapFailure() {
+    if (!bootstrapFailure) return;
+    feedbackOwner = { kind: 'bootstrap-failed' };
+    $('feedback').textContent = `${reasons[bootstrapFailure.code] || 'Der lokale Core konnte nicht sicher gestartet werden. Bitte die Diagnose sichern und die Installation prüfen.'} (${bootstrapFailure.code})`;
+    $('feedback').hidden = false; $('feedback').className = 'notice error';
+    $('connection-help').hidden = false;
+    $('connection-status').textContent = 'Der lokale Core konnte keine Verbindung herstellen. Dateiauswahl und Ergebnisordner bleiben absichtlich gesperrt. Automatische Verbindungsversuche sind angehalten. Bitte zuerst die Diagnose sichern und die Ursache prüfen; danach die Verbindung ausdrücklich erneut prüfen. Ein Lauf oder Export wurde nicht erneut gestartet.';
+  }
+  function holdBootstrapFailure(epoch, code, nativeBound = false) {
+    if (!Number.isSafeInteger(epoch) || epoch < 0 || !/^[A-Z][A-Z0-9_]{1,80}$/u.test(code) ||
+        bootstrapFailure && epoch < bootstrapFailure.epoch) return;
+    if (bootstrapFailure?.epoch === epoch) {
+      if (nativeBound && bootstrapFailure.code === code) bootstrapFailure.nativeBound = true;
+      renderBootstrapFailure(); return;
+    }
+    bootstrapFailure = { epoch, code, nativeBound };
+    automaticRetryPaused = true; clearTimeout(timer);
+    reconnecting = true; contextRequired = true; updateStart(); renderBootstrapFailure();
+  }
+  function retireResolvedBootstrap(resolution, observedEpoch) {
+    if (!bootstrapFailure?.nativeBound || !resolution || typeof resolution !== 'object' ||
+        Array.isArray(resolution) || Object.keys(resolution).length !== 2 ||
+        !Number.isSafeInteger(resolution.failure_epoch) || !Number.isSafeInteger(resolution.ready_epoch) ||
+        !Number.isSafeInteger(observedEpoch) || resolution.failure_epoch !== bootstrapFailure.epoch ||
+        resolution.ready_epoch <= resolution.failure_epoch || resolution.ready_epoch > observedEpoch ||
+        resolution.failure_epoch <= resolvedBootstrapEpoch) return false;
+    resolvedBootstrapEpoch = Math.max(resolvedBootstrapEpoch, resolution.failure_epoch);
+    bootstrapFailure = null;
+    // Historical Ready does not rewind a newer recovery epoch or unlock work.
+    reconnecting = true; contextRequired = true; updateStart();
+    if (bootstrapRecoveryPending) automaticRetryPaused = true;
+    feedback('Der frühere Startfehler ist nativ erledigt. Verbindung und gespeicherter Laufstatus sind noch nicht bestätigt.', false, { kind: 'connection-unconfirmed' });
+    $('connection-help').hidden = false;
+    $('connection-status').textContent = 'Der frühere Startfehler ist nativ erledigt. Verbindung und gespeicherter Laufstatus sind noch nicht bestätigt. Bitte ausdrücklich erneut prüfen; kein Lauf oder Export wird wiederholt.';
+    return true;
+  }
+  function feedback(message, error = false, owner = null) {
+    if (bootstrapFailure) { renderBootstrapFailure(); return; }
+    feedbackOwner = owner; $('feedback').textContent = message; $('feedback').hidden = !message;
     $('feedback').className = `notice${error ? ' error' : ''}`; $('connection-help').hidden = true; }
   function deliveryFeedback(batchId) {
     feedback('Der Ergebnisordner dieses Laufs ist noch nicht als bereit bestätigt. DataSecure gleicht den Stand erneut ab. Wenn der Hinweis bestehen bleibt, die Hinweise dieses Laufs prüfen; keine neue Kopie starten.', false,
@@ -224,13 +407,19 @@
   function errorCode(error) { const raw = error?.code || error?.message || String(error);
     try { const value = JSON.parse(raw); return /^[A-Z][A-Z0-9_]{1,80}$/u.test(value?.code) ? value.code : 'STANDALONE_OPERATION_FAILED'; }
     catch { return /^[A-Z][A-Z0-9_]{1,80}$/u.test(raw) ? raw : 'STANDALONE_OPERATION_FAILED'; } }
-  function showError(error) { const code = errorCode(error);
+  function showError(error, command = null) { const code = errorCode(error);
+    if (bootstrapFailure) { renderBootstrapFailure(); return; }
     const connectionError = ['STANDALONE_IPC_FAILED', 'STANDALONE_IPC_TIMEOUT', 'STANDALONE_CONNECTION_CHANGED',
       'STANDALONE_CONNECTION_RECOVERY_BLOCKED', 'STANDALONE_RECOVERY_ATTEMPTS_EXHAUSTED',
       'STANDALONE_RUNTIME_START_FAILED', 'STANDALONE_RUNTIME_MISSING',
       'STANDALONE_RUNTIME_DENIED', 'STANDALONE_RUNTIME_ARCHITECTURE_INVALID',
       'STANDALONE_RUNTIME_BINARY_INVALID'].includes(code) || terminalCoreStartupCodes.has(code);
-    feedback(`${reasons[code] || 'Der lokale Vorgang konnte nicht abgeschlossen werden. Bitte Diagnose und aktuellen Laufstatus prüfen.'} (${code})`, true,
+    // This refusal precedes the configuration commit, not a document export.
+    // Keep the same code in other commands under its existing error contract.
+    const reason = command === 'configure_results' && code === 'AI_EXPORT_CONFLICT'
+      ? 'Der gewählte Ergebnisordner konnte nicht sicher vorbereitet werden. Die bisherige Einstellung bleibt unverändert. Durch diese Ordnerwahl wurde kein Dokumentlauf und kein Export gestartet. Bitte Diagnose und aktuellen Laufstatus prüfen; keinen Lauf oder Export blind wiederholen.'
+      : reasons[code] || 'Der lokale Vorgang konnte nicht abgeschlossen werden. Bitte Diagnose und aktuellen Laufstatus prüfen.';
+    feedback(`${reason} (${code})`, true,
       connectionError ? { kind: 'connection-unconfirmed' } : null);
     $('connection-help').hidden = !(reconnecting || contextRequired || connectionError); }
   function activeCoreDescription(activity) {
@@ -247,12 +436,38 @@
     if (snapshot?.phase === 'blocked') return 'Das sichere Ende des lokalen Dienstes oder Exports konnte nicht bestätigt werden. Bitte die Diagnose öffnen und den gespeicherten Laufstatus prüfen.';
     return activeCoreDescription(snapshot?.activity);
   }
+  function explainUnboundBootstrapRetry() {
+    renderBootstrapFailure();
+    $('connection-status').textContent += ' Der aktuelle Startfehler konnte vom Programm noch nicht zuverlässig bestätigt werden. Es wurde kein neuer Core-Start angefordert. Bitte die Diagnose sichern und die Verbindung später ausdrücklich erneut prüfen.';
+  }
   async function updateConnectionHelp() {
-    const epoch = connectionEpoch;
+    const epoch = connectionEpoch, request = generation, heldFailure = bootstrapFailure;
     const generic = 'Der letzte Laufstatus ist nicht bestätigt. Kein zweiter Lauf wird gestartet. Bitte Verbindung und Laufstatus erneut prüfen oder die inhaltsfreie lokale Diagnose öffnen.';
     try {
       const snapshot = await invoke('get_native_recovery_status');
-      if (closed || !reconnecting || epoch !== connectionEpoch) return;
+      if (closed || !reconnecting || epoch !== connectionEpoch || request !== generation || heldFailure !== bootstrapFailure) return null;
+      const failure = snapshot?.bootstrap_failure;
+      const trustedFailure = snapshot?.local_ui_only === true && snapshot.external_disclosure === false &&
+        ['idle', 'owned', 'settling', 'checking', 'blocked'].includes(snapshot.phase) &&
+        failure && typeof failure === 'object' && !Array.isArray(failure) && Object.keys(failure).length === 2 &&
+        Number.isSafeInteger(failure.epoch) && failure.epoch > 0 && failure.epoch >= connectionEpoch &&
+        failure.epoch > resolvedBootstrapEpoch && typeof failure.error_code === 'string' &&
+        /^[A-Z][A-Z0-9_]{1,79}$/u.test(failure.error_code);
+      if (trustedFailure) receiveConnectionState?.({ payload: { ...failure, state: 'bootstrap_failed' } });
+      const trustedResolution = snapshot?.local_ui_only === true && snapshot.external_disclosure === false &&
+        ['idle', 'owned', 'settling', 'checking', 'blocked', 'closing'].includes(snapshot.phase) &&
+        failure === null && Number.isSafeInteger(snapshot.connection_epoch) && snapshot.connection_epoch >= connectionEpoch;
+      if (trustedResolution && retireResolvedBootstrap(snapshot.bootstrap_resolution, snapshot.connection_epoch)) {
+        connectionEpoch = Math.max(connectionEpoch, snapshot.connection_epoch);
+      }
+      if (bootstrapFailure) {
+        renderBootstrapFailure();
+        // One private, single-use proof for this exact fresh snapshot. The
+        // provisional epoch from an invoke error is not native authority.
+        return trustedFailure && failure.epoch === connectionEpoch && failure.epoch === bootstrapFailure.epoch &&
+          failure.error_code === bootstrapFailure.code
+          ? { failure: bootstrapFailure, connectionEpoch, generation, used: false } : null;
+      }
       const message = {
         closing: 'DataSecure schließt erst, wenn der lokale Dienst sicher beendet ist. Nicht als abgeschlossenen Lauf ansehen.',
         checking: 'DataSecure ermittelt den sicheren Prozesszustand. Bitte kurz warten und den Laufstatus erneut prüfen.',
@@ -266,8 +481,11 @@
         $('connection-status').textContent += ' Das lokale Diagnoseprotokoll konnte nicht geschrieben werden. Bitte die IT über diesen Hinweis informieren.';
       }
     } catch {
-      if (!closed && reconnecting && epoch === connectionEpoch) $('connection-status').textContent = generic;
+      if (!closed && reconnecting && epoch === connectionEpoch) {
+        if (bootstrapFailure) renderBootstrapFailure(); else $('connection-status').textContent = generic;
+      }
     }
+    return null;
   }
   function setControlDisabled(node, value) {
     // A background read may finish while a native command holds the global
@@ -280,7 +498,7 @@
     if (value === busy) return;
     busy = value;
     if (value) for (const node of document.querySelectorAll('button:not(.nav-tab), input')) {
-      if (['diagnostics', 'connection-diagnostics', 'diagnostic-save', 'connection-diagnostic-save'].includes(node.id)) continue;
+      if (['diagnostics', 'connection-diagnostics', 'diagnostic-save', 'connection-diagnostic-save', 'document-export-diagnostic-save'].includes(node.id)) continue;
       disabledBeforeBusy.set(node, node.disabled); node.disabled = true;
     }
     else { for (const [node, disabled] of disabledBeforeBusy) node.disabled = disabled; disabledBeforeBusy.clear(); }
@@ -291,6 +509,7 @@
   async function explainBlockedPicker(command, reason) {
     if (!['select_files', 'select_folder', 'configure_results'].includes(command)) return;
     await invoke('report_blocked_picker', { action: command, reason }).catch(() => {});
+    if (bootstrapFailure) { renderBootstrapFailure(); return; }
     if (reason === 'reconnecting') {
       $('connection-help').hidden = false;
       $('connection-status').textContent = 'Dateiauswahl und Ergebnisordner sind erst nach der wiederhergestellten lokalen Verbindung verfügbar. Bitte „Verbindung und Laufstatus prüfen“ wählen.';
@@ -302,41 +521,78 @@
     if (closed) return null;
     if (busy || reconnecting) { await explainBlockedPicker(command, reconnecting ? 'reconnecting' : 'busy'); return null; }
     const connection = connectionEpoch;
-    generation++; lastError = null; const ownership = beginBusy();
+    generation++; clearRunReview(); lastError = null; const ownership = beginBusy();
     try { const result = await invoke(command, args); return connection === connectionEpoch ? result : null; }
-    catch (error) { if (connection !== connectionEpoch) return null; lastError = errorCode(error); showError(error); return null; }
+    catch (error) { if (connection !== connectionEpoch) return null; lastError = errorCode(error); showError(error, command); return null; }
     finally { endBusy(ownership); }
   }
-  function showView(next) {
-    if (closed) return;
+  function showView(next, batchId = runDetails?.batchId, receipt = null) {
+    if (closed || !['new', 'history', 'settings', 'details', 'documents', 'review'].includes(next)) return;
+    const navigation = ++navigationGeneration, connection = connectionEpoch;
     if (view === 'documents' && next !== 'documents') {
-      window.__DATASECURE_DOCUMENTS__?.close().then(ok => {
-        if (ok) { view = ''; showView(next); }
-        else requestedHistorySummaryBatchId = null;
+      // close() clears its batch synchronously, then awaits native revocation.
+      // Share that exact close transaction across rapid tab clicks: a second
+      // click must not capture a null owner or revoke a successor's binding.
+      const owner = documentGuide?.batch_id, renderer = window.__DATASECURE_DOCUMENTS__;
+      let closing = documentClose;
+      if (!closing || closing.connection !== connection || closing.owner !== owner) {
+        if (!validBatchId(owner) || renderer?.activeBatchId?.() !== owner || typeof renderer.close !== 'function') return;
+        closing = { owner, connection, promise: null }; documentClose = closing;
+        closing.promise = Promise.resolve().then(() => renderer.close());
+      }
+      const currentClose = () => documentClose === closing && navigation === navigationGeneration &&
+        connection === connectionEpoch && view === 'documents' && owner === documentGuide?.batch_id;
+      closing.promise.then(ok => {
+        if (!currentClose()) return;
+        documentClose = null;
+        if (ok) { view = ''; showView(next, batchId, receipt); }
+      }).catch(() => {
+        if (!currentClose()) return;
+        documentClose = null;
+        feedback('Die Dokumentansicht konnte noch nicht geschlossen werden. Den aktuellen Stand prüfen; ungespeicherte Änderungen nicht verwerfen.', true);
       }); return;
     }
     // Never discard an unsubmitted review on ordinary navigation.
     if (view === 'review' && next !== 'review') { feedback('Bitte die Prüfung mit „Später entscheiden“ oder „Zur Verarbeitung“ verlassen. Nicht übergebene Eingaben bleiben sonst nur in dieser Ansicht.'); return; }
+    if (['details', 'documents', 'review'].includes(next) && !selectRunDetails(batchId)) return;
     if (next !== view) {
       historySummaryEpoch++;
       // Re-entering history must not present a previous approval snapshot as
       // current after document edits. Polling unchanged rows still keeps focus.
-      if (next === 'history') historySignature = '';
+      if (next === 'history') { historySignature = ''; clearRunReview(); }
+      else if (!['new', 'history', 'details'].includes(next)) clearRunReview();
     }
     view = next;
+    if (receipt && runDetails?.batchId === receipt.batch_id) runDetails.receipt = receipt;
+    const ownJob = runDetails?.batchId === job?.batchId;
+    $('setup').hidden = false;
+    $('job').hidden = next !== 'details' || !ownJob || Boolean(runDetails?.receipt);
+    $('run-history-detail').hidden = next !== 'details' || ownJob && !runDetails?.receipt;
+    $('details-overview-panel').hidden = next !== 'details';
+    $('details-overview').hidden = next === 'details' || next === 'review';
+    renderRunReceipt();
+    if (next === 'details' && ownJob && current && !runDetails.receipt) renderJob(current);
     refreshRunGuide();
-    for (const name of ['new', 'history', 'settings', 'review', 'documents']) $(name + '-view').hidden = name !== next;
-    for (const name of ['new', 'history', 'settings']) { const node = $('nav-' + name); const active = name === (['review', 'documents'].includes(next) ? 'history' : next);
+    for (const name of ['new', 'history', 'settings', 'details']) $(name + '-view').hidden = name !== (isDetailsView() ? 'details' : next);
+    for (const name of ['review', 'documents']) $(name + '-view').hidden = name !== next;
+    for (const name of ['new', 'history', 'details', 'settings']) { const node = $('nav-' + name); const active = name === (isDetailsView() ? 'details' : next);
       node.className = `nav-tab${name === 'settings' ? ' settings-tab' : ''}${active ? ' active' : ''}`;
       node.setAttribute('aria-selected', String(active)); node.tabIndex = active ? 0 : -1;
-      node.setAttribute('aria-controls', name === 'history' && ['review', 'documents'].includes(next) ? next + '-view' : name + '-view'); }
+      node.setAttribute('aria-controls', name + '-view'); }
     if (next === 'history') refreshHistory();
+    else if (next === 'details' && (!ownJob || runDetails.receipt)) {
+      historySignature = ''; requestedHistorySummaryBatchId = runDetails.batchId;
+      refreshHistory(false, null, runDetails.batchId);
+    }
   }
   function updateStart() {
     const chosen = catalogue.filter(item => item.selectable && selected.has(item.source_id));
     const bytes = chosen.reduce((total, item) => total + count(item.bytes), 0);
     const tooLarge = chosen.length > 200 || bytes > 500 * 1024 * 1024;
-    const hint = reconnecting ? 'Die lokale Verbindung wird wiederhergestellt. Bitte warten.' : busy ? 'Ein lokaler Vorgang ist aktiv. Bitte warten.' : !mode && !chosen.length ? 'Bitte Aufgabe und Dateien auswählen.'
+    const hint = bootstrapFailure ? 'Der lokale Core ist nicht bereit. Bitte Diagnose und Startursache prüfen.'
+      : reconnecting ? 'Die lokale Verbindung wird wiederhergestellt. Bitte warten.' : busy ? 'Ein lokaler Vorgang ist aktiv. Bitte warten.'
+      : ['preparing', 'processing'].includes(current?.state) ? 'Ein Lauf ist noch nicht abgeschlossen. Öffne seine Laufdetails und warte auf den Abschluss oder pausiere ihn ausdrücklich.'
+      : !mode && !chosen.length ? 'Bitte Aufgabe und Dateien auswählen.'
       : !mode ? 'Bitte zuerst eine Aufgabe auswählen.' : !chosen.length ? 'Bitte mindestens eine geeignete Datei anhaken.'
       : tooLarge ? 'Auswahl zu groß.' : resultFolderUnavailable ? 'Der bisherige Ergebnisordner ist nicht verfügbar. Stelle ihn wieder bereit oder wähle unten „Ordner ändern“.' : '';
     $('start').setAttribute('aria-disabled', String(Boolean(hint)));
@@ -354,8 +610,8 @@
     $('naming-neutral').disabled = busy || mode !== 'markdown-and-anonymize';
     $('naming-source').disabled = busy || mode !== 'markdown-and-anonymize';
     $('output-naming-help').textContent = $('naming-source').checked
-      ? 'Der Originaldateiname bleibt sichtbar und erhält „-anonymisiert“. Nur wählen, wenn Datei- und Ordnernamen keine personenbezogenen Angaben enthalten. Diese Wahl gilt nur für die Ergebnisdateien dieses neuen Laufs; spätere KI-Kopien erhalten immer neutrale Namen.'
-      : 'Empfohlen: Neutrale Ergebnisdateinamen vermeiden Angaben im Dateinamen. Unterordner und die vertrauliche Zuordnungsdatei können Originalnamen enthalten; diese nicht ungeprüft weitergeben. Spätere KI-Kopien erhalten immer neutrale Namen.';
+      ? 'Der Originaldateiname bleibt sichtbar und erhält „-anonymisiert“. Nur wählen, wenn Datei- und Ordnernamen keine personenbezogenen Angaben enthalten. Diese Wahl gilt nur für die Ergebnisdateien dieses neuen Laufs; spätere Exporte erhalten immer neutrale Namen.'
+      : 'Empfohlen: Neutrale Ergebnisdateinamen vermeiden Angaben im Dateinamen. Unterordner und die vertrauliche Zuordnungsdatei können Originalnamen enthalten; diese nicht ungeprüft weitergeben. Spätere Exporte erhalten immer neutrale Namen.';
     $('ocr-review').disabled = busy || mode !== 'markdown-only' || !$('text-ocr').checked;
     return !hint;
   }
@@ -447,6 +703,10 @@
     $('destination').textContent = destination; $('settings-destination').textContent = destination;
     $('retry-destination').hidden = !resultFolderUnavailable; $('retry-results').hidden = !resultFolderUnavailable;
     if (!Array.isArray(context.source_catalogue)) return;
+    // A delayed context from before Start may still contain the consumed
+    // sources. It must not turn a finished job into another prepared job.
+    if (consumedAdmission?.connection === connectionEpoch && Number.isSafeInteger(context.catalogue_revision) &&
+        context.catalogue_revision <= consumedAdmission.revision) return;
     catalogue = context.source_catalogue.filter(item => safeLabel(item.name) &&
       (item.selectable === false || item.selectable === true && /^[a-f0-9]{32}$/u.test(item.source_id)));
     revision = context.catalogue_revision;
@@ -470,8 +730,18 @@
       feedback('Dateien aufgenommen. Häkchen prüfen und dann starten.'); $('select-all').focus(); } catch (error) { showError(error); }
   }
   async function clearFiles() { if (!await perform('cancel_admission')) return; catalogue = []; selected.clear(); knownIds.clear(); expanded.clear(); renderTree(); feedback(''); }
+  function consumeAdmission() {
+    if (Number.isSafeInteger(revision)) consumedAdmission = { connection: connectionEpoch, revision };
+    catalogue = []; selected.clear(); knownIds.clear(); expanded.clear(); admitting = false;
+    $('add-options').hidden = true; $('add-more').setAttribute('aria-expanded', 'false');
+    $('set-name').textContent = 'Dateiauswahl';
+    renderTree();
+  }
   async function start() {
-    if (!updateStart() || job) return;
+    // A completed predecessor remains selectable in Laufdetails. Its display
+    // reference is not a lock on an explicitly admitted successor; native/Core
+    // admission still owns the actual processing/concurrency permission.
+    if (!updateStart()) return;
     const files = catalogue.filter(item => item.selectable && selected.has(item.source_id));
     const snapshot = { task: mode, name: $('set-name').textContent, files: files.map(item => item.name) };
     const args = { processingMode: mode, sourceIds: files.map(item => item.source_id), catalogueRevision: revision };
@@ -480,23 +750,26 @@
     if (mode === 'markdown-and-anonymize') args.outputNamingMode = $('naming-source').checked ? 'source-with-suffix' : 'neutral';
     else if (ocr && $('ocr-review').checked) args.ocrContactReview = true;
     if (mode === 'markdown-and-anonymize' && $('fast-anonymize').checked) args.reviewPolicy = 'automatic-conservative';
+    const startConnection = connectionEpoch;
     const result = await perform('start_admitted_batch', args);
+    if (startConnection !== connectionEpoch) return;
     if (!result) {
       if (lastError === 'STANDALONE_RESULT_ROOT_UNAVAILABLE') {
         const context = await perform('get_ui_context');
         if (context) { try { applyContext(context); } catch (error) { showError(error); } }
       }
       if (['STANDALONE_START_FAILED', 'STANDALONE_IPC_FAILED', 'STANDALONE_IPC_TIMEOUT'].includes(lastError)) {
-        await invoke('cancel_admission').catch(() => {});
-        catalogue = []; selected.clear(); knownIds.clear(); renderTree();
+        // The command may already have consumed this admission. Do not send
+        // an unbound follow-up cancellation that could hit a newer selection.
+        consumeAdmission();
         feedback('Der Start ist nicht bestätigt. Die Auswahl wird nicht nochmals gestartet. Bitte im Verlauf den tatsächlichen Laufstatus prüfen.', true);
         showView('history');
       }
       schedule(500); return;
     }
-    adoptRun({ ...snapshot, batchId: result.batch_id, selectedCount: files.length }); catalogue = []; selected.clear(); knownIds.clear();
+    adoptRun({ ...snapshot, batchId: result.batch_id, selectedCount: files.length }); consumeAdmission();
     feedback('');
-    showView('new'); $('job-title').focus(); await refresh();
+    showView('details', job.batchId); $('job-title').focus(); await refresh();
   }
   function adoptRun(run) {
     job = run; mode = run.task;
@@ -516,20 +789,20 @@
     if (!/^[a-f0-9]{64}$/u.test(batchId || '')) { showError(Error('STANDALONE_SELECTION_INVALID')); return; }
     const documentView = window.__DATASECURE_DOCUMENTS__;
     if (typeof documentView?.open !== 'function' || typeof documentView?.canOpen !== 'function') {
-      showView(origin === 'new' ? 'new' : 'history');
+      showView('details', batchId);
       showError(Error('STANDALONE_DOCUMENT_VIEW_UNAVAILABLE')); return;
     }
     // A draft or running decision belongs to the previously opened batch.
     // Do not change the outer run guide before the document view accepts the
     // transition; otherwise the heading and actual private text disagree.
     if (!documentView.canOpen(batchId)) {
-      if (documentView.activeBatchId?.()) { showView('documents'); $('documents-heading').focus(); }
+      if (documentView.activeBatchId?.()) { showView('documents', documentView.activeBatchId()); $('documents-heading').focus(); }
       return;
     }
-    documentsOrigin = origin === 'new' ? 'new' : 'history';
+    documentsOrigin = 'details';
     documentGuide = { batch_id: batchId, processing_mode: job?.batchId === batchId ? job.task : null, source: 'documents', fresh: false };
-    $('documents-back').textContent = documentsOrigin === 'history' ? 'Zum Verlauf' : 'Zur Verarbeitung';
-    showView('documents'); $('documents-heading').focus();
+    $('documents-back').textContent = 'Zur Laufübersicht';
+    showView('documents', batchId); $('documents-heading').focus();
     if (view !== 'documents') return;
     try { await documentView.open(batchId, { exportPreview }); }
     catch (error) { showError(error); }
@@ -541,7 +814,7 @@
     adoptRun({ batchId: entry.batch_id, task: entry.processing_mode, name: previous?.name || `Lauf ${entry.batch_id.slice(0, 8)}`,
       files: previous?.files || [], selectedCount: count(entry.selected_count) });
     if (review) await beginReview(entry.batch_id, false);
-    else { showView('new'); await refresh(); $('job-title').focus(); }
+    else { showView('details', entry.batch_id); await refresh(); $('job-title').focus(); }
   }
   async function newJob() {
     if (busy || ['preparing', 'processing'].includes(current?.state)) return;
@@ -572,12 +845,12 @@
     }
     const purpose = job?.batchId === batchId ? job.task : current?.batch_id === batchId ? current.processing_mode : null;
     reviewOrigin = { view, batchId, processingMode: ['markdown-only', 'markdown-and-anonymize'].includes(purpose) ? purpose : null,
-      nativeGeneration: opened.review_generation, complete: false, closing: false, stage: 'waiting' };
+      nativeGeneration: opened.review_generation, phaseGeneration: 0, complete: false, closing: false, stage: 'waiting' };
     $('review-heading').textContent = `Prüfen: ${job?.batchId === batchId ? job.name : `Lauf ${batchId.slice(0, 8)}`}`;
     $('review-scope').textContent = job?.batchId === batchId
       ? `${job.selectedCount} Dateien · Entscheidungen gelten für diesen Lauf`
       : 'Entscheidungen gelten für diesen Lauf';
-    $('review-frame').src = 'review.html?embedded=1'; showView('review');
+    $('review-frame').src = 'review.html?embedded=1'; showView('review', batchId);
     feedback(''); $('review-heading').focus();
   }
   function offerSkipOcrContactReview(batchId, selectedCount = 0) {
@@ -587,7 +860,7 @@
       adoptRun({ batchId, task: 'markdown-only', name: `Lauf ${batchId.slice(0, 8)}`,
         files: [], selectedCount });
     }
-    showView('new');
+    showView('details', batchId);
     $('job-skip-confirm').hidden = false;
     $('job-skip-accept').focus();
   }
@@ -666,20 +939,46 @@
     refreshRunGuide();
     // Only replace focus that this render actually removes. Background updates
     // must never move the user out of navigation, a dialog or another panel.
-    const focusedAction = view === 'new' && document.activeElement?.id?.startsWith('job-action-')
+    const focusedAction = view === 'details' && runDetails?.batchId === job?.batchId && document.activeElement?.id?.startsWith('job-action-')
       ? document.activeElement.id : null;
     const restoreActionFocus = () => { if (focusedAction) ($(focusedAction) || $('job-title')).focus(); };
     const action = (id, label, handler, primary = false) => {
       const node = button(label, handler, primary); node.id = `job-action-${id}`; return node;
     };
+    const reviewProjection = boundRunReview(state);
+    if (state.state === 'ready') {
+      // Service readiness is not a completion receipt for a retained old job.
+      // Do not silently call newJob(): it would cancel an admitted selection.
+      lastJobSignature = ''; lastJobAnnouncement = '';
+      $('job-icon').textContent = '·'; $('job-icon').className = 'status-icon';
+      $('job-status').className = 'job-status';
+      $('job-title').textContent = 'Kein aktiver Lauf';
+      $('job-description').className = 'muted';
+      $('job-description').textContent = 'DataSecure ist bereit. Den gespeicherten Abschluss oder offene Schritte eines früheren Laufs im Verlauf ansehen.';
+      $('job-progress').hidden = true; $('job-current').textContent = '';
+      $('job-actions').replaceChildren(action('history', 'Verlauf öffnen', () => showView('history'), true),
+        action('new', 'Neue Verarbeitung', newJob));
+      $('job-secondary-actions').replaceChildren(); $('job-more').hidden = true;
+      $('file-problems').hidden = true;
+      $('job-announcement').textContent = 'Kein aktiver Lauf. Den früheren Laufstatus im Verlauf ansehen.';
+      restoreActionFocus(); return;
+    }
     if (state.batch_id !== job.batchId) {
+      lastJobSignature = ''; lastJobAnnouncement = '';
+      $('job-icon').textContent = '…'; $('job-icon').className = 'status-icon';
+      $('job-status').className = 'job-status';
+      $('job-progress').hidden = true; $('job-current').textContent = '';
+      $('job-description').className = 'muted';
       $('job-title').textContent = 'Laufstatus wird abgeglichen';
       $('job-description').textContent = 'Der angezeigte Status gehört nicht bestätigt zu diesem Lauf. Bitte den Verlauf aktualisieren.';
+      $('job-announcement').textContent = 'Laufstatus wird abgeglichen. ' + $('job-description').textContent;
       $('job-actions').replaceChildren(action('history', 'Verlauf öffnen', () => showView('history')));
+      $('job-secondary-actions').replaceChildren(); $('job-more').hidden = true;
       restoreActionFocus();
       $('file-problems').hidden = true; return;
     }
-    const signature = JSON.stringify(state); if (signature === lastJobSignature) return; lastJobSignature = signature;
+    const signature = JSON.stringify([state, reviewProjection]); if (signature === lastJobSignature) return; lastJobSignature = signature;
+    $('job-progress').hidden = false;
     const working = ['preparing', 'processing'].includes(state.state);
     const rawResults = state.processing_mode === 'markdown-only', anonymousResults = state.processing_mode === 'markdown-and-anonymize';
     const summary = window.__DATASECURE_PRESENTATION__?.conversionSummary(state);
@@ -687,8 +986,11 @@
     const contentNotices = window.__DATASECURE_PRESENTATION__?.contentNoticeSummary(state);
     const anonymousAttention = state.failed_count || state.warning_count || contentNotices?.attention;
     const fastRun = completedAnonymous && state.review_policy === 'automatic-conservative';
+    // Success is positive evidence for a terminal outcome, never the fallback
+    // for an unknown state, a deferred decision or an incomplete delivery.
     $('job-icon').textContent = working ? '⚙' : completedAnonymous ? anonymousAttention ? '✓ !' : '✓'
-      : summary && !summary.error_count ? '✓' : state.failed_count || state.review_count ? '!' : '✓';
+      : summary ? summary.error_count ? '!' : summary.ocr_omitted_count || summary.content_notice_count ? '✓ !' : '✓'
+      : state.state === 'paused' ? 'Ⅱ' : '!';
     $('job-icon').className = `status-icon${working ? ' working' : ''}`;
     $('job-status').className = `job-status${completedAnonymous || summary && !summary.error_count ? ' success' : ''}`;
     $('job-title').textContent = summary?.heading || (state.state === 'results_available'
@@ -696,26 +998,28 @@
         ? 'Anonymisierungslauf abgeschlossen mit Hinweisen' : 'Anonymisierungslauf abgeschlossen' : 'Verarbeitungszweck nicht bestätigt'
       : states[state.state] || 'Status wird geprüft');
     const total = count(state.selected_count) || job.selectedCount, done = count(state.completed_count), failed = count(state.failed_count), reviews = count(state.review_count);
+    $('job-description').className = reviewProjection?.not_processed_count ? 'run-notice' : 'muted';
     $('job-description').textContent = summary?.description || (state.state === 'review_required' ? state.processing_mode === 'markdown-only'
       ? `${reviews} Datei${reviews === 1 ? '' : 'en'} warten auf deine Entscheidung. Du kannst erkannte E-Mail-Adressen und Telefonnummern mit dem Originalbild vergleichen oder ohne diese zusätzliche Prüfung fortfahren. Die Werte sind beim Fortfahren nicht als richtig bestätigt; OCR-Lesefehler bleiben möglich. Danach läuft die Markdown-Umwandlung weiter.`
       : `${reviews} Datei${reviews === 1 ? ' benötigt' : 'en benötigen'} eine lokale Entscheidung. Jetzt prüfen oder später fortsetzen.`
       : working ? state.pause_requested ? 'Pause angefordert. Die aktuelle Datei einschließlich Bereitstellung und Zuordnung wird fertiggestellt; danach beginnt keine weitere Datei.' : `${done} von ${total} Dateien abgeschlossen. Bitte warten; die Verarbeitung bleibt lokal.`
-      : state.state === 'results_available' ? `${count(state.result_count)} ${rawResults ? 'Markdown-Ergebnisse (nicht anonymisiert)' : anonymousResults ? 'technisch geprüfte anonymisierte Ergebnisse' : 'Ergebnisse mit unbestätigtem Verarbeitungszweck'} verfügbar.${failed ? ` ${failed} Datei${failed === 1 ? '' : 'en'} mit Problemen.` : ''}`
+      : state.state === 'results_available' ? `${count(state.result_count)} ${rawResults ? 'Markdown-Ergebnisse (nicht anonymisiert)' : anonymousResults ? 'technisch geprüfte anonymisierte Ergebnisse' : 'Ergebnisse mit unbestätigtem Verarbeitungszweck'} verfügbar.${failed && reviewProjection?.not_processed_count !== failed ? ` ${failed} Datei${failed === 1 ? '' : 'en'} mit Problemen.` : ''}`
       : state.state === 'stopped' ? 'Der lokale Zwischenstand ist gespeichert. Fortsetzen verarbeitet nur noch offene Schritte.'
       : state.state === 'paused' ? 'Der Lauf ist pausiert. Fortsetzen verarbeitet nur offene Dateien. Die privaten Arbeitskopien unterliegen weiterhin der eingestellten Aufbewahrung.'
-      : state.state === 'export_pending' ? 'Die lokale Bereitstellung ist noch offen. Ergebnisordner und Zugriffsrechte prüfen. Im Verlauf kannst du die fehlende Bereitstellung ausdrücklich fortsetzen; dabei können Ergebnisdateien lokal ergänzt werden, aber keine KI-Kopie entstehen.'
+      : state.state === 'export_pending' ? 'Die sichtbare Bereitstellung der Ergebnisse ist noch nicht bestätigt. Im Verlauf kannst du den gespeicherten Stand prüfen und fehlende Ergebnisdateien ausdrücklich bereitstellen lassen. Dabei wird kein Export erstellt; bereits vorhandene Dateien bleiben erhalten.'
       : state.state === 'export_abandoned' ? 'Die automatische Bereitstellung wurde für diesen Lauf aufgegeben. Teilkopien bleiben unverändert; es gibt keine vollständige Ergebnisfreigabe.'
       : 'Der aktuelle Status bleibt diesem Lauf zugeordnet.');
-    if (completedAnonymous) $('job-description').textContent += fastRun
-      ? ' Schnellweg: Die Erstfreigabe erfolgt automatisch, nicht manuell. Den aktuellen Freigabestand bei den Ergebnissen öffnen; Änderungen oder ein Widerruf können Freigaben aufgehoben haben. Eine KI-Kopie wird nur auf deinen Auftrag erstellt.'
-      : ' Der Lauf verarbeitet keine weiteren Dateien. Für eine KI-Kopie die gewünschten Ergebnisse noch vergleichen und freigeben. Du kannst diese Dokumentprüfung auch später öffnen.';
-    if (completedAnonymous && contentNotices?.description) $('job-description').textContent += ` ${contentNotices.description}`;
+    if (completedAnonymous && reviewProjection) $('job-description').textContent += ' ' + reviewProjection.next;
+    else if (completedAnonymous) $('job-description').textContent += fastRun
+      ? ' Schnellweg: Die Erstfreigabe erfolgt automatisch, nicht manuell. Den aktuellen Freigabestand bei den Ergebnissen öffnen; Änderungen oder ein Widerruf können Freigaben aufgehoben haben. Ein Export wird nur auf deinen Auftrag erstellt.'
+      : ' Der Lauf verarbeitet keine weiteren Dateien. Für einen Export die gewünschten Ergebnisse noch vergleichen und freigeben. Du kannst diese Dokumentprüfung auch später öffnen.';
+    if (completedAnonymous && !reviewProjection && contentNotices?.description) $('job-description').textContent += ` ${contentNotices.description}`;
     $('job-progress').max = Math.max(1, total); if (state.state === 'preparing') $('job-progress').removeAttribute('value');
     else $('job-progress').value = Math.min(total, done);
     $('job-current').textContent = safeLabel(state.current_file) ? state.current_file : '';
     // Stable live region: announce meaningful phase changes and the first
     // failure, not every filename/count update. No synthetic percentage.
-    const announcement = `${job.batchId}:${state.state}:${Boolean(state.pause_requested)}:${Boolean(failed)}${working ? '' : `:${done}:${failed}:${reviews}:${count(state.result_count)}:${contentNotices?.count}:${contentNotices?.complete}`}`;
+    const announcement = `${job.batchId}:${state.state}:${Boolean(state.pause_requested)}:${Boolean(failed)}${working ? '' : `:${done}:${failed}:${reviews}:${count(state.result_count)}:${contentNotices?.count}:${contentNotices?.complete}:${JSON.stringify(reviewProjection)}`}`;
     if (announcement !== lastJobAnnouncement) {
       lastJobAnnouncement = announcement;
       $('job-announcement').textContent = `${$('job-title').textContent}. ${working && !state.pause_requested
@@ -734,14 +1038,15 @@
     if (state.processing_mode === 'markdown-only' && state.state === 'review_required')
       actions.append(action('skip-ocr', 'Ohne diesen Vergleich fortfahren', () => offerSkipOcrContactReview(job.batchId)));
     if (['stopped', 'paused'].includes(state.state)) actions.append(action('resume', 'Verarbeitung fortsetzen', async () => { if (await perform('continue_current_batch')) { lastJobSignature = ''; await refresh(); } }, true));
+    if (state.state === 'export_pending') actions.append(action('history', 'Bereitstellung im Verlauf prüfen', () => showView('history'), true));
     if (state.state === 'results_available' && state.results_available && !working) actions.append(action('results', 'Ergebnisordner öffnen', () => perform('open_history_results', { batchId: job.batchId }), rawResults && !(summary ? summary.error_count : failed)));
-    if (state.state === 'results_available' && state.results_available && !working) (anonymousResults ? actions : secondary).append(action('documents', rawResults ? 'Markdown nachkorrigieren (optional)' : anonymousResults ? 'Dokumente prüfen / KI-Export' : 'Prüfstände ansehen', () => openDocuments(job.batchId), anonymousResults));
+    if (state.state === 'results_available' && state.results_available && !working) (anonymousResults ? actions : secondary).append(action('documents', rawResults ? 'Markdown nachkorrigieren (optional)' : anonymousResults ? reviewProjection?.phase === 'exported' ? 'Prüfung öffnen (optional)' : reviewProjection?.phase === 'approved' ? 'Freigaben / Exportvorschau' : reviewProjection?.phase === 'export_pending' ? 'Export abgleichen' : 'Dokumente prüfen / Export' : 'Prüfstände ansehen', () => openDocuments(job.batchId), anonymousResults && reviewProjection?.phase !== 'exported'));
     if (state.state === 'export_pending' && anonymousResults) secondary.append(action('abandon-export', 'Bereitstellung aufgeben …', () =>
       offerAbandonResultExport({ batch_id: job.batchId, status: state.state, processing_mode: state.processing_mode,
         result_count: state.result_count, failed_count: state.failed_count,
         exported_count: state.exported_count, export_pending_count: state.export_pending_count })));
     if (!working) actions.append(action('new', 'Neue Verarbeitung', newJob));
-    secondary.append(action('history', 'Im Verlauf ansehen', () => showView('history')));
+    if (state.state !== 'export_pending') secondary.append(action('history', 'Im Verlauf ansehen', () => showView('history')));
     $('job-more').hidden = !secondary.children.length;
     restoreActionFocus();
     $('file-problems').hidden = !failed && !summary?.content_notice_count && !(completedAnonymous && contentNotices?.attention) && state.state !== 'stopped';
@@ -764,8 +1069,8 @@
     status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
     const contents = element('div');
     const load = async () => {
-      if (busy || closed || view !== 'history') return;
-      const epoch = historySummaryEpoch, token = {};
+      if (busy || closed || !(view === 'history' || view === 'details' && runDetails?.batchId === entry.batch_id)) return;
+      const epoch = historySummaryEpoch, connection = connectionEpoch, requestGeneration = generation, token = {};
       historySummaryRequests.set(container, token); setControlDisabled(reload, true); contents.replaceChildren();
       reload.hidden = updateAction({ loading: true }) === true;
       status.textContent = entry.processing_mode === 'markdown-only' ? 'Optionale Nachkorrekturen und gespeicherte Kopien werden abgeglichen …'
@@ -776,12 +1081,13 @@
       // connection timeout in a background poll.
       const ownershipEpoch = historySummaryOwnershipEpoch;
       historySummaryReads++; historySummaryReadGeneration++;
-      const active = () => !closed && view === 'history' && epoch === historySummaryEpoch &&
+      const active = () => !closed && (view === 'history' || view === 'details' && runDetails?.batchId === entry.batch_id) && epoch === historySummaryEpoch &&
+        connection === connectionEpoch && !reconnecting && !contextRequired &&
         container.isConnected && !container.hidden && historySummaryRequests.get(container) === token;
       try {
         const data = await invoke('get_document_review_history_summary', { batchId: entry.batch_id });
         if (!active()) return;
-        if (busy) throw Error('STANDALONE_BUSY');
+        if (busy || requestGeneration !== generation) throw Error('STANDALONE_BUSY');
         if (data.ok !== true || data.local_ui_only !== true || data.external_disclosure !== false || typeof data.available !== 'boolean')
           throw Error('DOCUMENT_REVIEW_INVALID');
         if (!data.available) {
@@ -809,16 +1115,16 @@
           ? `Optionale Kopien: ${data.approved_count} von ${data.reviewable_count} verfügbaren Dokumentständen zum Kopieren bestätigt. Die ursprünglichen Markdown-Ergebnisse sind bereits erstellt; dafür ist keine Freigabe erforderlich.`
           : `Dokumentprüfung: ${data.approved_count} von ${data.reviewable_count} verfügbaren Dokumentständen freigegeben. Du kannst sie später erneut prüfen; eine Änderung hebt die betroffene Freigabe auf.`, 'history-meta'));
         if (data.review_policy) contents.append(element('p',
-          `Schnellweg: ${data.automatically_approved_count} aktuelle Dokumentstände automatisch freigegeben, nicht manuell geprüft. Nachträgliche Änderungen benötigen eine neue Freigabe; der KI-Export erfolgt nur auf deinen Auftrag.`, 'history-meta'));
-        if (data.unavailable_count) contents.append(element('p', `${data.unavailable_count} Dokumentprüfstände nicht verfügbar. Betroffene Dateien in „${raw ? 'Markdown nachkorrigieren' : 'Dokumente prüfen / KI-Export'}“ ansehen.`, 'history-meta'));
+          `Schnellweg: ${data.automatically_approved_count} aktuelle Dokumentstände automatisch freigegeben, nicht manuell geprüft. Nachträgliche Änderungen benötigen eine neue Freigabe; der Export erfolgt nur auf deinen Auftrag.`, 'history-meta'));
+        if (data.unavailable_count) contents.append(element('p', `${data.unavailable_count} Dokumentprüfstände nicht verfügbar. Betroffene Dateien in „${raw ? 'Markdown nachkorrigieren' : 'Dokumente prüfen / Export'}“ ansehen.`, 'history-meta'));
         if (data.unclassified_source_count) contents.append(element('p', `${data.unclassified_source_count} Quelldateien mit unklarem früheren Ergebnisstatus. Die vollständige Freigabe dieses Laufs ist nicht belegbar. Dateinamen in der Dokumentansicht ansehen.`, 'history-meta'));
         if (rejectedCount) contents.append(element('p', raw
           ? `${rejectedCount} Quelldateien nicht umgewandelt. Gründe und Namen unter den Hinweisen dieses Laufs ansehen.`
           : `${rejectedCount} Quelldateien wurden nicht verarbeitet. Dateinamen und Gründe in der Dokumentansicht ansehen; sie sind nicht freigegeben oder exportiert.`, 'history-meta'));
         contents.append(element('p', raw
           ? `${data.recorded_export_count} zusätzliche Markdown-Kopien gespeichert · nicht anonymisiert. Das zählt nicht die bereits erstellten Dateien im Ergebnisordner.`
-          : `KI-Kopie: ${data.recorded_export_count ? data.recorded_export_count === 1 ? '1 abgeschlossener Export mit Beleg' : `${data.recorded_export_count} abgeschlossene Exporte mit Beleg` : 'noch keine abgeschlossene Kopie belegt'}. Frühere Kopien sind keine Freigabe des heutigen Stands.`, 'history-meta'));
-        if (!raw) contents.append(element('p', `${data.current_exported_count} von ${data.reviewable_count} aktuellen Dokumentständen in gespeicherten Abschlussbelegen erfasst. Die heutigen Kopien werden erst beim Öffnen erneut geprüft.`, 'history-meta'));
+          : `Export: ${data.recorded_export_count ? data.recorded_export_count === 1 ? '1 abgeschlossener Export mit Beleg' : `${data.recorded_export_count} abgeschlossene Exporte mit Beleg` : 'noch kein abgeschlossener Export belegt'}. Frühere Exporte sind keine Freigabe des heutigen Stands.`, 'history-meta'));
+        if (!raw) contents.append(element('p', `${data.current_exported_count} von ${data.reviewable_count} aktuellen Dokumentständen in gespeicherten Abschlussbelegen erfasst. Die exportierten Dateien werden erst beim Öffnen erneut geprüft.`, 'history-meta'));
         const last = data.last_recorded_export;
         if (last) {
           if (!['markdown-only', 'markdown-and-anonymize'].includes(last.processing_mode) ||
@@ -834,7 +1140,7 @@
         status.textContent = raw ? data.pending_export_count
           ? 'Eine zusätzliche Markdown-Kopie hat noch eine offene Bestätigung. In der Nachkorrektur abgleichen, nicht erneut kopieren. Die ursprünglichen Ergebnisdateien bleiben erhalten.'
           : 'Optionale Nachkorrekturen und zusätzliche Kopien. Für den normalen Markdown-Abschluss ist hier kein weiterer Schritt erforderlich.'
-          : 'Verarbeitung beendet; Dokumentfreigaben und KI-Kopien sind getrennte Schritte. Abgeglichene Momentaufnahme: Nach Änderungen erneut laden.';
+          : 'Verarbeitung beendet; Dokumentfreigaben und Exporte sind getrennte Schritte. Abgeglichene Momentaufnahme: Nach Änderungen erneut laden.';
         reload.hidden = updateAction(data) === true;
       } catch (error) {
         if (active()) {
@@ -851,7 +1157,7 @@
         }
         if (container.isConnected && historySummaryRequests.get(container) === token) {
           setControlDisabled(reload, false); reload.textContent = 'Prüfstatus erneut laden'; container.removeAttribute('aria-busy');
-          if (epoch !== historySummaryEpoch || view !== 'history') {
+          if (epoch !== historySummaryEpoch || !(view === 'history' || view === 'details' && runDetails?.batchId === entry.batch_id)) {
             contents.replaceChildren();
             status.textContent = 'Prüfstatus nach Ansichtswechsel nicht bestätigt. Bitte erneut laden.';
             reload.hidden = false;
@@ -863,24 +1169,34 @@
     reload.id = `history-${entry.batch_id}-summary-reload`;
     reload.hidden = hasMainLoader;
     container.append(status, contents, reload);
-    const cancel = () => {
+    const reset = message => {
       historySummaryRequests.delete(container); setControlDisabled(reload, false); container.removeAttribute('aria-busy');
-      contents.replaceChildren(); status.textContent = 'Abgleich geschlossen. Bei Bedarf den Prüfstatus neu laden.';
+      contents.replaceChildren(); status.textContent = message;
       reload.hidden = updateAction(null) === true;
     };
+    const cancel = () => reset('Abgleich geschlossen. Bei Bedarf den Prüfstatus neu laden.');
+    historySummaryRetirements.add(() => {
+      if (container.isConnected) reset('Prüfstatus nach Verbindungswechsel nicht bestätigt. Bitte erneut laden.');
+    });
     return { load, cancel };
   }
   function historyUnavailable(message) {
     // Old rows still contain clickable actions bound to an unconfirmed
     // connection. Never leave them looking usable while the sidecar is gone.
-    historySignature = '';
+    historySignature = ''; historySummaryEpoch++; clearRunReview();
+    historySummaryRetirements.clear();
     $('history-list').replaceChildren();
+    $('run-history-detail').replaceChildren(element('p', message, 'notice'));
     $('open-count').hidden = true;
     $('history-status').textContent = message;
   }
-  async function refreshHistory(quiet = false, recoverBatchId = null) {
+  async function refreshHistory(quiet = false, recoverBatchId = null, detailsBatchId = null) {
+    if (bootstrapFailure) { historyUnavailable('Der lokale Core ist nicht bereit. Bitte die angezeigte Startursache und die Diagnose prüfen.'); renderBootstrapFailure(); return; }
     if (historyRecoveryBusy) return;
     if (historySummaryReads) {
+      if (detailsBatchId && view === 'details' && runDetails?.batchId === detailsBatchId) {
+        $('run-history-detail').replaceChildren(element('p', 'Laufdetails werden geladen, sobald der laufende Statusabgleich beendet ist …', 'notice'));
+      }
       if (!quiet) $('history-status').textContent = 'Ein gespeicherter Prüfstatus wird gerade abgeglichen. Danach den Verlauf erneut laden; es wird kein Lauf gestartet.';
       return;
     }
@@ -889,24 +1205,41 @@
     if (recovering) historyRecoveryBusy = true;
     const ownership = recovering ? beginBusy() : null;
     const request = ++historyGeneration;
+    const route = detailsBatchId ? runDetails : null, connection = connectionEpoch;
     const reopenedSummaries = [];
     if (!quiet) $('history-status').textContent = recovering ? 'Die Bereitstellung dieses Laufs wird geprüft. Bitte warten …' : 'Lokaler Verlauf wird geladen …';
     try {
-      const data = await invoke('get_run_history', recoverBatchId ? { recoverExports: true, recoverBatchId } : undefined);
-      if (closed || request !== historyGeneration) return;
+      const historyArgs = { ...(recoverBatchId ? { recoverExports: true, recoverBatchId } : {}),
+        ...(detailsBatchId && !recoverBatchId ? { batchId: detailsBatchId } : {}),
+        ...(includeHiddenHistory && !detailsBatchId ? { includeHidden: true } : {}) };
+      const data = await invoke('get_run_history', Object.keys(historyArgs).length ? historyArgs : undefined);
+      if (closed || request !== historyGeneration || connection !== connectionEpoch ||
+          detailsBatchId && (view !== 'details' || runDetails !== route)) return;
       if (data.local_ui_only !== true || data.external_disclosure !== false || !Array.isArray(data.entries)) throw Error('STANDALONE_HISTORY_INVALID');
       if (recovering) recoveryFeedback(data.export_recovery, recoverBatchId);
-      $('history-status').textContent = data.entries.length ? 'Bis zu 20 zuletzt angelegte Verarbeitungen · neueste zuerst' : 'Noch keine lokalen Verarbeitungen vorhanden.';
-      const signature = JSON.stringify([data.entries, job?.batchId || null, reconnecting, contextRequired]);
+      $('history-status').textContent = data.entries.length ? 'Die letzten 5 Verarbeitungen · neueste zuerst' : 'Keine Verarbeitungen in den letzten 5 Verlaufseinträgen sichtbar.';
+      if (data.history_degraded === true) $('history-status').textContent += ' Einige alte Dateistände sind momentan nicht bestätigbar. Die übrigen Laufdaten bleiben sichtbar; es werden keine fehlenden Dateien automatisch neu angelegt.';
+      const signature = JSON.stringify([data.entries, job?.batchId || null, reconnecting, contextRequired, detailsBatchId, includeHiddenHistory]);
       // Polling must not replace focused controls or expanded file details
       // when the history did not change. Changes retain their explicit state.
       if (signature === historySignature) return;
+      clearRunReview();
       const focused = document.activeElement?.id;
-      const list = $('history-list'); list.replaceChildren();
-      const open = data.entries.filter(entry => entry.resumable || ['processing', 'export_pending'].includes(entry.status)).length;
+      const list = $(detailsBatchId ? 'run-history-detail' : 'history-list');
+      // One rendered ownership tree: no duplicate per-run IDs or detached
+      // summary buttons that can act on another selected run.
+      historySummaryRetirements.clear();
+      $('history-list').replaceChildren(); $('run-history-detail').replaceChildren();
+      const open = Number.isSafeInteger(data.open_count) && data.open_count >= 0 ? data.open_count
+        : data.entries.filter(entry => entry.resumable || ['processing', 'export_pending'].includes(entry.status)).length;
       $('open-count').textContent = `${open} offen`; $('open-count').hidden = !open;
-      for (const entry of data.entries.slice(0, 20)) {
+      $('history-visibility-status').textContent = (Number.isSafeInteger(data.hidden_count) && data.hidden_count > 0
+        ? `${data.hidden_count} abgeschlossene Läufe ausgeblendet. ` : '') +
+        'Der Verlauf berücksichtigt nur die letzten 5 Läufe. Ältere Läufe rücken beim Ausblenden nicht nach. Dateien und gespeicherte Entscheidungen bleiben erhalten.';
+      for (const entry of data.entries.slice(0, 5)) {
         if (!/^[a-f0-9]{64}$/u.test(entry.batch_id)) continue;
+        if (detailsBatchId && entry.batch_id !== detailsBatchId) continue;
+        if (!detailsBatchId && entry.hidden === true && !includeHiddenHistory) continue;
         reconcileFeedback(entry);
         const row = element('article', undefined, 'history-row'), detail = element('div');
         const conversion = window.__DATASECURE_PRESENTATION__?.conversionSummary(entry);
@@ -927,15 +1260,17 @@
         const privacyStops = anonymous && reasonBreakdownValid ? count(entry.privacy_stop_count) : 0;
         const technicalProblems = anonymous && reasonBreakdownValid ? failedFiles - expectedOcr - privacyStops : 0;
         const unknownStops = anonymous && !reasonBreakdownValid ? failedFiles : 0;
-        detail.append(element('h3', `${raw ? 'Markdown-Konvertierung' : anonymous ? 'Anonymisierung' : 'Verarbeitungszweck nicht bestätigt'} · ${dateLabel}`, 'history-title'),
+        const stateLabel = element('p', conversion?.heading || (entry.status === 'results_available' ? entry.processing_mode === 'markdown-only'
+          ? 'Textübernahme abgeschlossen · nicht anonymisiert' : anonymous ? 'Verarbeitung beendet · Freigaben und Export getrennt prüfen' : 'Technisch verarbeitet · Verarbeitungszweck nicht bestätigt'
+          : states[entry.status] || 'Nicht verfügbar'), 'history-meta');
+        stateLabel.id = `history-${entry.batch_id}-state`;
+        detail.append(element('p', `${raw ? 'Markdown-Konvertierung' : anonymous ? 'Anonymisierung' : 'Verarbeitungszweck nicht bestätigt'} · ${dateLabel}`, 'history-title'),
           element('p', conversion?.counts || (anonymous && reasonBreakdownValid
             ? `${count(entry.selected_count)} Dateien · ${count(entry.result_count)} Ergebnisse · ${expectedOcr} ohne OCR nicht umgewandelt${privacyStops ? ` · ${privacyStops} aus Datenschutzgründen angehalten` : ''} · ${technicalProblems} technische Fehler`
             : anonymous && unknownStops
               ? `${count(entry.selected_count)} Dateien · ${count(entry.result_count)} Ergebnisse · ${unknownStops} nicht verarbeitet (Gründe im Verlauf nicht mehr klassifiziert)`
             : `${count(entry.selected_count)} Dateien · ${count(entry.result_count)} Ergebnisse · ${count(entry.failed_count)} ${anonymous ? count(entry.failed_count) === 1 ? 'Datei nicht verarbeitet' : 'Dateien nicht verarbeitet' : count(entry.failed_count) === 1 ? 'Problem' : 'Probleme'}`), 'history-meta'),
-          element('p', conversion?.heading || (entry.status === 'results_available' ? entry.processing_mode === 'markdown-only'
-            ? 'Textübernahme abgeschlossen · nicht anonymisiert' : anonymous ? 'Verarbeitung beendet · Freigaben und KI-Kopie getrennt prüfen' : 'Technisch verarbeitet · Verarbeitungszweck nicht bestätigt'
-            : states[entry.status] || 'Nicht verfügbar'), 'history-meta'));
+          stateLabel);
         if (conversion) {
           detail.append(element('p', conversion.description, 'history-next'));
           if (conversion.content_notice_count) detail.append(element('p',
@@ -944,10 +1279,14 @@
             : conversion.error_count || conversion.ocr_omitted_count || conversion.content_notice_count ? 'partial' : 'complete';
         }
         if (entry.status === 'export_abandoned') detail.append(element('p',
-          `${count(entry.exported_count)} Dateien wurden zuvor sichtbar kopiert; ${count(entry.export_pending_count)} fehlende Dateien werden nicht mehr automatisch ergänzt. Teilkopien bleiben unverändert. Keine vollständige Ergebnis- oder KI-Freigabe.`, 'history-next'));
+          `${count(entry.exported_count)} Dateien wurden zuvor sichtbar kopiert; ${count(entry.export_pending_count)} fehlende Dateien werden nicht mehr automatisch ergänzt. Teilkopien bleiben unverändert. Keine vollständige Freigabe zur Weitergabe.`, 'history-next'));
         if (entry.status === 'export_pending') detail.append(element('p',
-          '„Bereitstellung erneut prüfen“ kann fehlende Ergebnisdateien dieses Laufs lokal ergänzen. Es startet keinen neuen Verarbeitungslauf und erstellt keine KI-Kopie.', 'history-next'));
-        const stateLabel = detail.children[2];
+          '„Bereitstellung erneut prüfen“ kann fehlende Ergebnisdateien dieses Laufs lokal ergänzen. Es startet keinen neuen Verarbeitungslauf und erstellt keinen Export.', 'history-next'));
+        detail.append(element('p', `Lauf ${entry.batch_id.slice(0, 8)}`, 'history-run-id path'));
+        const disclosure = element('details', undefined, 'history-disclosure');
+        disclosure.id = `history-${entry.batch_id}-disclosure`;
+        disclosure.open = Boolean(detailsBatchId);
+        disclosure.append(element('summary', 'Ausführliche Laufdetails'));
         if (conversion) stateLabel.className = 'history-outcome';
         if (anonymous && entry.status === 'failed' && !entry.resumable) {
           row.dataset.outcome = 'error';
@@ -977,7 +1316,7 @@
                 : technicalProblems ? 'Mindestens eine Datei hatte einen technischen Fehler. '
                   : 'Die Dateien wurden angehalten oder ohne OCR nicht umgewandelt. ') +
               'Der Lauf verarbeitet keine weiteren Dateien.', 'history-completion-detail'),
-              element('p', 'Es gibt keine freizugebenden oder für KI kopierbaren Ergebnisse. Betroffene Dateien prüfen; bei Bedarf einen neuen Lauf mit passenden Einstellungen starten.', 'history-completion-next'));
+              element('p', 'Es gibt keine freizugebenden oder exportierbaren Ergebnisse. Betroffene Dateien prüfen; bei Bedarf einen neuen Lauf mit passenden Einstellungen starten.', 'history-completion-next'));
             detail.append(completion);
           }
         }
@@ -987,7 +1326,7 @@
           entry.result_count + entry.failed_count === entry.selected_count;
         const finished = entry.status === 'results_available' && !entry.resumable &&
           entry.results_available === true && entry.result_location === 'available' && verifiedTotals;
-        let finishDetail = null;
+        let finishDetail = null, finishNext = null, historyGuide = null;
         let finishedProcessingText = '';
         if (finished && anonymous) {
           const completion = element('section', undefined, 'history-completion');
@@ -1005,11 +1344,29 @@
           finishedProcessingText = `${count(entry.result_count)} von ${count(entry.selected_count)} Dateien wurden als anonymisierte Markdown-Entwürfe erstellt. ${expectedOcr ? `${expectedOcr} wurden ohne OCR nicht umgewandelt. ` : ''}${privacyStops ? `${privacyStops} wurden aus Datenschutzgründen angehalten. ` : ''}${technicalProblems ? `${technicalProblems} ${technicalProblems === 1 ? 'Datei hat einen technischen Fehler' : 'Dateien haben technische Fehler'}. ` : ''}${unknownStops ? `${unknownStops} ${unknownStops === 1 ? 'Datei wurde' : 'Dateien wurden'} nicht verarbeitet; die Gründe sind im kompakten Verlauf nicht mehr klassifiziert. ` : ''}Der Lauf verarbeitet keine weiteren Dateien.`;
           if (contentNotices?.description) finishedProcessingText += ` ${contentNotices.description}`;
           finishDetail = element('p', finishedProcessingText, 'history-completion-detail');
-          const next = element('p', 'Die technische Verarbeitung ist fertig. Ob Dokumentfreigabe und KI-Kopie abgeschlossen sind, wird getrennt geprüft; bitte nichts allein aus diesem Status an KI weitergeben.', 'history-completion-next');
+          const next = finishNext = element('p', 'Die technische Verarbeitung ist fertig. Ob Dokumentfreigabe und Export abgeschlossen sind, wird getrennt geprüft; bitte nichts allein aus diesem Status weitergeben.', 'history-completion-next');
           const title = element('div', undefined, 'history-completion-title'); title.append(marks, headline);
-          completion.append(title, finishDetail, next);
+          // The processing outcome is always visible. Only the long
+          // explanation and revision-bound approval/copy stages are folded.
+          detail.append(title);
+          completion.append(finishDetail, next);
+          const guideTitle = element('h4'), guideCounts = element('p', '', 'history-meta');
+          const guideStages = element('ol', undefined, 'run-stages');
+          for (const [suffix, node] of [['title', guideTitle], ['counts', guideCounts], ['next', next], ['stages', guideStages]])
+            node.id = `history-${entry.batch_id}-guide-${suffix}`;
+          guideStages.setAttribute('aria-label', 'Gespeicherter Ablauf dieses Laufs');
+          historyGuide = projection => {
+            const baseline = window.__DATASECURE_PRESENTATION__?.projectRun({ ...entry, source: 'processor',
+              state: entry.status, completed_count: entry.selected_count });
+            const selected = projection || baseline;
+            if (!selected) { guideTitle.textContent = 'Freigabe- und Kopiestand noch unbestätigt'; guideCounts.textContent = ''; guideStages.replaceChildren(); return; }
+            guideTitle.textContent = selected.heading; guideCounts.textContent = selected.counts || '';
+            renderStageList(guideStages, selected.stages);
+          };
+          historyGuide(null);
+          completion.append(guideTitle, guideCounts, guideStages);
           if (entry.review_policy === 'automatic-conservative') completion.append(element('p',
-            'Schnellweg: Die unveränderten erstellten Basisstände werden automatisch freigegeben, nicht manuell geprüft. Den aktuellen Freigabe- und Kopiestatus unten bei Bedarf abgleichen. Kein automatischer KI-Export.', 'history-completion-detail'));
+            'Schnellweg: Die unveränderten erstellten Basisstände werden automatisch freigegeben, nicht manuell geprüft. Den aktuellen Freigabe- und Exportstatus unten bei Bedarf abgleichen. Kein automatischer Export.', 'history-completion-detail'));
           detail.append(completion);
           row.dataset.outcome = count(entry.failed_count) || contentNotices?.attention ? 'partial' : 'complete';
         }
@@ -1031,15 +1388,19 @@
           detail.append(activity);
         }
         const missingLocation = !working && !entry.resumable && entry.result_location === 'missing';
-        if (missingLocation) stateLabel.textContent = 'Ergebnisordner fehlt';
+        if (missingLocation) {
+          stateLabel.textContent = verifiedTotals && entry.status === 'results_available'
+            ? 'Verarbeitung abgeschlossen · Ergebnisordner fehlt' : 'Ergebnisordner fehlt';
+          detail.append(element('p', 'Der bisherige Ergebnisordner ist nicht mehr vorhanden. Gespeicherte Dokumentprüfstände können unabhängig davon geöffnet werden. Es wird kein Ersatzordner und kein neuer Export automatisch angelegt.', 'history-meta'));
+        }
         else if (!working && !entry.resumable && ['unsafe', 'unknown'].includes(entry.result_location))
           stateLabel.textContent = 'Ergebnisordner nicht sicher verfügbar';
         const baseStateLabel = stateLabel.textContent;
         const hasProblems = conversion ? Boolean(conversion.error_count) : Boolean(privacyStops || technicalProblems || unknownStops || count(entry.problem_count) > failedFiles);
         let showProblems = () => {};
         const baseAction = active ? { key: 'activity', label: 'Verarbeitung anzeigen', primary: true,
-          run: () => { showView('new'); $('job-title').focus(); } }
-          : missingLocation ? null : entry.resumable ? { key: 'continue', label: entry.status === 'review_required' ? 'Jetzt prüfen' : 'Fortsetzen',
+          run: () => { showView('details', entry.batch_id); $('job-title').focus(); } }
+          : entry.resumable ? { key: 'continue', label: entry.status === 'review_required' ? 'Jetzt prüfen' : 'Fortsetzen',
           primary: true, run: () => resumeRun(entry, entry.status === 'review_required') }
           : entry.status === 'export_pending' ? { key: 'delivery', label: 'Bereitstellung erneut prüfen', primary: true,
             run: async () => { deliveryFeedback(entry.batch_id); await refreshHistory(false, entry.batch_id); await refresh(); } }
@@ -1052,6 +1413,9 @@
         let mainAction = baseAction;
         const main = baseAction ? action(baseAction.key, baseAction.label, () => mainAction.run(), baseAction.primary) : null;
         if (main) { main.setAttribute('data-history-main', 'true'); actions.append(main); }
+        if (!detailsBatchId) actions.append(action('details', 'Laufdetails', () => {
+          showView('details', entry.batch_id); $('details-heading').focus();
+        }));
         const extra = element('div', undefined, 'history-extra'); extra.hidden = !expandedHistoryExtras.has(entry.batch_id);
         extra.id = `history-${entry.batch_id}-extra`;
         const more = action('more', 'Weitere Aktionen', () => {
@@ -1060,10 +1424,36 @@
         });
         more.setAttribute('aria-expanded', String(!extra.hidden)); more.setAttribute('aria-controls', extra.id);
         const addExtra = (key, text, callback) => extra.append(action(key, text, callback));
-        if (entry.results_available && baseAction?.key !== 'results') addExtra('results', 'Ergebnisordner', () => perform('open_history_results', { batchId: entry.batch_id }));
+        const visibility = action('visibility', entry.hidden === true ? 'Wieder im Verlauf anzeigen' : 'Aus Verlauf ausblenden', async () => {
+          const hidden = entry.hidden !== true;
+          const result = await perform('set_run_history_visibility', { batchId: entry.batch_id, hidden });
+          if (!result) return;
+          if (result.ok !== true || result.batch_id !== entry.batch_id || result.hidden !== hidden ||
+              result.local_ui_only !== true || result.external_disclosure !== false) {
+            feedback('Die Anzeigeänderung ist nicht bestätigt. Verlauf erneut laden; es wurden keine Laufdateien gelöscht.', true); return;
+          }
+          historySignature = '';
+          await refreshHistory();
+          feedback(hidden ? 'Lauf aus dem normalen Verlauf ausgeblendet. Es wurden keine Dateien oder Entscheidungen gelöscht.'
+            : 'Lauf wieder im Verlauf sichtbar. Es wurde keine Verarbeitung und kein Export gestartet.');
+        });
+        visibility.disabled = entry.hidden !== true && (entry.visibility_supported === false || entry.resumable === true || entry.processing === true || entry.completion_pending === true ||
+          !['results_available','completed_without_results','export_abandoned'].includes(entry.status) ||
+          count(entry.export_pending_count) > 0 || count(entry.pending_export_count) > 0);
+        if (visibility.disabled) visibility.title = entry.visibility_supported === false
+          ? 'Dieser ältere Eintrag hat keine eigene gespeicherte Laufkennung für eine dauerhafte Anzeigepräferenz. Seine Dateien bleiben unverändert.'
+          : 'Offene oder noch nicht bestätigte Vorgänge können nicht ausgeblendet werden.';
+        extra.append(visibility);
+        if (entry.results_available && baseAction?.key !== 'results') actions.append(action('results', 'Ergebnisordner', () => perform('open_history_results', { batchId: entry.batch_id })));
         if (entry.status !== 'export_abandoned' && entry.result_count > 0 && baseAction?.key !== 'documents') addExtra('documents', raw ? 'Markdown nachkorrigieren (optional)' : anonymous ? 'Prüfung öffnen' : 'Prüfstände ansehen', () => openDocuments(entry.batch_id));
-        if (entry.ledger_available) addExtra('ledger', 'Dateizuordnung', () => perform('open_history_ledger', { batchId: entry.batch_id }));
-        if (entry.identity_mapping_available) addExtra('identities', 'Basiszuordnung (vertraulich)', () => perform('open_history_identity_mapping', { batchId: entry.batch_id }));
+        if (entry.ledger_available || entry.identity_mapping_available) {
+          const privateGroup = element('details', undefined, 'history-private');
+          privateGroup.append(element('summary', 'Vertrauliche Zuordnungen (optional)'),
+            element('p', 'Enthalten echte Identitäten oder Dateinamen. Nicht weitergeben. Öffnen verändert keine Freigabe oder Kopie.', 'history-meta'));
+          if (entry.ledger_available) privateGroup.append(action('ledger', 'Dateizuordnung öffnen', () => perform('open_history_ledger', { batchId: entry.batch_id })));
+          if (entry.identity_mapping_available) privateGroup.append(action('identities', 'Basiszuordnung öffnen', () => perform('open_history_identity_mapping', { batchId: entry.batch_id })));
+          disclosure.append(privateGroup);
+        }
         if (raw && entry.status === 'review_required' && entry.resumable)
           addExtra('skip-ocr', 'Ohne E-Mail-/Telefonvergleich fortfahren', () => offerSkipOcrContactReview(entry.batch_id, count(entry.selected_count)));
         if (anonymous && entry.status === 'export_pending' && !working)
@@ -1072,27 +1462,36 @@
         // active worker or unprocessed work. File exceptions remain directly
         // visible beside usable results; document opening reloads revisions.
         const updateAction = data => {
+          updateRunReview(entry, data);
+          const candidate = window.__DATASECURE_PRESENTATION__?.historyReviewProjection(entry, data);
+          const ownCurrent = job?.batchId === entry.batch_id && current?.batch_id === entry.batch_id;
+          const displayProof = candidate && (!ownCurrent || boundRunReview(current)) ? candidate : null;
+          if (historyGuide) historyGuide(displayProof);
+          if (finishNext) {
+            finishNext.textContent = displayProof ? displayProof.next :
+              'Die technische Verarbeitung ist fertig. Ob Dokumentfreigabe und Export abgeschlossen sind, wird getrennt geprüft; bitte nichts allein aus diesem Status weitergeben.';
+          }
           // A privacy stop does not erase independently confirmed approvals,
           // and a missing export receipt is not a processing failure.
           if (finishDetail && (data?.available !== true || data.loading))
             finishDetail.textContent = `${finishedProcessingText} ${data?.loading
-              ? 'Freigaben und KI-Kopien werden anhand der gespeicherten Belege neu geprüft.'
-              : 'Freigaben und KI-Kopien sind derzeit nicht bestätigt. Bitte den Prüfstatus erneut laden.'}`;
+              ? 'Freigaben und Exporte werden anhand der gespeicherten Belege neu geprüft.'
+              : 'Freigaben und Exporte sind derzeit nicht bestätigt. Bitte den Prüfstatus erneut laden.'}`;
           if (anonymous && entry.status === 'results_available' && !missingLocation &&
               data?.available === true && !data.loading) {
-            const copy = data.pending_export_count ? 'KI-Kopie im Abgleich' :
-              data.current_exported_count === data.reviewable_count && data.reviewable_count > 0 ? 'KI-Kopie mit Abschlussbeleg' :
-                'aktueller Stand noch nicht als KI-Kopie belegt';
+            const copy = data.pending_export_count ? 'Export im Abgleich' :
+              data.current_exported_count === data.reviewable_count && data.reviewable_count > 0 ? 'Export mit Abschlussbeleg' :
+                'aktueller Stand noch nicht als Export belegt';
             stateLabel.textContent = `Verarbeitung beendet · ${data.approved_count}/${data.reviewable_count} freigegeben · ${copy}`;
             if (finishDetail) {
               const coverage = data.pending_export_count
-                ? 'Eine KI-Kopie wird noch abgeglichen. Bitte keinen zweiten Export starten.'
+                ? 'Ein Export wird noch abgeglichen. Bitte keinen zweiten Export starten.'
                 : data.reviewable_count > 0 && data.approved_count === data.reviewable_count &&
                     data.current_exported_count === data.reviewable_count && data.recorded_export_count > 0
-                  ? `Die ${data.reviewable_count} verfügbaren Dokumentstände sind freigegeben und in abgeschlossenen KI-Kopien belegt. Für diesen Stand ist kein weiterer Export nötig.`
+                  ? `Die ${data.reviewable_count} verfügbaren Dokumentstände sind freigegeben und in abgeschlossenen Exporten belegt. Für diesen Stand ist kein weiterer Export nötig.`
                   : data.approved_count === data.reviewable_count && data.reviewable_count > 0
-                    ? 'Alle verfügbaren Dokumentstände sind freigegeben. Eine KI-Kopie dieses aktuellen Stands ist noch nicht vollständig belegt.'
-                    : `${data.approved_count} von ${data.reviewable_count} verfügbaren Dokumentständen sind freigegeben. Für KI noch nicht freigegebene Dokumente ausdrücklich prüfen.`;
+                    ? 'Alle verfügbaren Dokumentstände sind freigegeben. Ein Export dieses aktuellen Stands ist noch nicht vollständig belegt.'
+                    : `${data.approved_count} von ${data.reviewable_count} verfügbaren Dokumentständen sind freigegeben. Noch nicht freigegebene Dokumente ausdrücklich prüfen.`;
               finishDetail.textContent = `${finishedProcessingText} ${coverage}`;
             }
           }
@@ -1113,25 +1512,29 @@
             else if (data.unavailable_count || data.unclassified_source_count || count(data.not_processed_count) > expectedOcr + privacyStops) {
               mainAction.label = 'Prüfstände ansehen';
               stateLabel.textContent = `Verarbeitung beendet · ${data.approved_count}/${data.reviewable_count} freigegeben · Prüfstände unvollständig`;
-            } else if (expectedOcr) {
-              stateLabel.textContent = `Verarbeitung beendet · ${data.approved_count}/${data.reviewable_count} freigegeben · ${expectedOcr} ohne OCR nicht umgewandelt`;
             } else if (data.reviewable_count > 0 && data.approved_count === data.reviewable_count) {
               if (data.current_exported_count === data.reviewable_count) {
                 mainAction = { ...mainAction, label: 'Prüfung öffnen', primary: false };
-                stateLabel.textContent = `Verarbeitung beendet · ${data.approved_count}/${data.reviewable_count} freigegeben · KI-Kopie mit Abschlussbeleg`;
+                stateLabel.textContent = `Verarbeitung beendet · ${data.approved_count}/${data.reviewable_count} freigegeben · Export mit Abschlussbeleg`;
               } else {
                 mainAction = { ...mainAction, label: 'Exportvorschau', run: () => openDocuments(entry.batch_id, true) };
-                stateLabel.textContent = `Verarbeitung beendet · ${data.approved_count}/${data.reviewable_count} freigegeben · ${data.pending_export_count ? 'KI-Kopie im Abgleich' : 'aktueller Stand noch nicht als KI-Kopie belegt'}`;
+                stateLabel.textContent = `Verarbeitung beendet · ${data.approved_count}/${data.reviewable_count} freigegeben · ${data.pending_export_count ? 'Export im Abgleich' : 'aktueller Stand noch nicht als Export belegt'}`;
               }
             } else {
-              stateLabel.textContent = `Verarbeitung beendet · ${data.approved_count}/${data.reviewable_count} freigegeben · KI-Kopie gesondert prüfen`;
+              stateLabel.textContent = `Verarbeitung beendet · ${data.approved_count}/${data.reviewable_count} freigegeben · Export gesondert prüfen`;
             }
           }
           // A pending durable copy takes precedence over an OCR omission or
           // the generic next-action label. Otherwise an in-flight/recoverable
           // export can appear completed simply because the row has results.
           if (anonymous && data?.available === true && !data.loading && data.pending_export_count)
-            stateLabel.textContent = `Verarbeitung beendet · ${data.approved_count}/${data.reviewable_count} freigegeben · KI-Kopie im Abgleich`;
+            stateLabel.textContent = `Verarbeitung beendet · ${data.approved_count}/${data.reviewable_count} freigegeben · Export im Abgleich`;
+          // Expected OCR omissions are an additional notice, not a replacement
+          // for the independently confirmed copy status or the next action.
+          if (anonymous && data?.available === true && !data.loading && expectedOcr)
+            stateLabel.textContent += ` · ${expectedOcr} ohne OCR nicht umgewandelt`;
+          if (missingLocation && !stateLabel.textContent.includes('Ergebnisordner fehlt'))
+            stateLabel.textContent += ' · Ergebnisordner fehlt';
           main.textContent = mainAction.label; main.className = mainAction.primary ? 'primary' : '';
           return false;
         };
@@ -1155,8 +1558,7 @@
           // After a restart the run-history record only proves technical
           // completion. Surface the authoritative approval/export lookup
           // directly, without implying that approval is still outstanding.
-          if (anonymous && !working) actions.append(toggle);
-          else extra.append(toggle);
+          extra.append(toggle);
           row.append(summary);
           if (requestedSummary) requestedHistorySummaryBatchId = null;
         }
@@ -1177,20 +1579,34 @@
             problems(files, entry.batch_id); files.focus();
           };
           files.tabIndex = -1; files.setAttribute('role', 'region'); files.setAttribute('aria-label', conversion || contentNotices?.attention ? 'Hinweise und Dateifehler dieses Laufs' : 'Dateiprobleme dieses Laufs');
-          if (entry.result_count > 0 && (hasProblems || conversion?.content_notice_count || contentNotices?.attention))
-            actions.append(toggle);
-          else extra.append(toggle);
+          actions.append(toggle);
           row.append(files);
           if (!files.hidden) problems(files, entry.batch_id);
         }
+        // Counts/outcome, run ID, results and warnings stay directly visible.
+        // Long explanatory prose and optional private mappings start collapsed.
+        for (const child of [...detail.children]) {
+          if (child.className === 'history-next' || child.className === 'history-completion') disclosure.append(child);
+        }
         if (extra.children.length) actions.append(more, extra);
+        detail.append(disclosure);
+        // Status comes first in reading, keyboard and visual order. Keep the
+        // explicit status reference: later approval reads must not rewrite
+        // the date or counters merely because the layout was reorganized.
+        const statusHeading = [...detail.children].find(child => child.className === 'history-completion-title') || stateLabel;
+        statusHeading.className += ' history-status-heading';
+        detail.replaceChildren(statusHeading, ...[...detail.children].filter(child => child !== statusHeading));
         list.append(row);
         if (focusRequestedSummary) { row.tabIndex = -1; row.focus(); }
       }
       requestedHistorySummaryBatchId = null;
+      if (detailsBatchId && !list.children.length) list.append(element('p', 'Dieser Lauf ist im geladenen Verlauf nicht verfügbar. Die Lauf-ID bleibt ausgewählt; es wurde kein anderer Lauf übernommen.', 'notice'));
+      else if (!detailsBatchId && !list.children.length && data.hidden_count > 0)
+        $('history-status').textContent = 'Keine sichtbaren abgeschlossenen Läufe. Über „Ausgeblendete Läufe anzeigen“ kannst du sie wieder aufrufen.';
       historySignature = signature;
       if (view === 'history' && focused?.startsWith('history-')) ($(focused) || $('nav-history')).focus();
-    } catch { if (request === historyGeneration) {
+    } catch { if (request === historyGeneration && connection === connectionEpoch &&
+        (!detailsBatchId || view === 'details' && runDetails === route)) {
       if (recovering) feedback('Die Bereitstellung konnte nicht bestätigt werden. Den aktuellen Laufstatus und die Diagnose prüfen; keinen zweiten Lauf oder Export blind starten.', true,
         { batchId: recoverBatchId, kind: 'delivery-pending' });
       historyUnavailable(recovering
@@ -1202,59 +1618,93 @@
       // A changed history snapshot rebuilds its rows. Expanded summaries
       // must not reappear as empty panels; load them only after an exclusive
       // recovery has released the local IPC channel. No unopened row is read.
-      if (reopenedSummaries.length && !closed && request === historyGeneration && view === 'history')
+      if (reopenedSummaries.length && !closed && request === historyGeneration && (view === 'history' || view === 'details' && runDetails === route))
         Promise.resolve().then(async () => {
           for (const { summary, load } of reopenedSummaries) {
-            if (closed || request !== historyGeneration || view !== 'history') break;
+            if (closed || request !== historyGeneration || !(view === 'history' || view === 'details' && runDetails === route)) break;
             if (summary.isConnected && !summary.hidden) await load();
           }
         });
     }
   }
   function schedule(delay = 1600) { clearTimeout(timer); if (!closed && !automaticRetryPaused) timer = setTimeout(refresh, delay); }
-  async function refresh(explicitRetry = false) {
+  async function refresh(explicitRetry = false, bootstrapRetryProof = null) {
+    if (bootstrapFailure && !explicitRetry) { renderBootstrapFailure(); return; }
     if (closed || refreshing) return; if (busy || bootstrapping) { schedule(); return; }
     // A document decision or native copy owns the single local IPC channel.
     // Background status reads can otherwise time out while a healthy export
     // holds it for minutes and leave a false red connection banner behind.
     if (historyRecoveryBusy || historySummaryReads || !explicitRetry && view === 'documents' && documentGuide?.busy) { schedule(); return; }
-    if (explicitRetry) { automaticRetryPaused = false; clearTimeout(timer); }
+    const bootstrapRetryAuthorized = Boolean(explicitRetry && bootstrapRetryProof && !bootstrapRetryProof.used &&
+      bootstrapFailure && bootstrapRetryProof.failure === bootstrapFailure &&
+      bootstrapRetryProof.connectionEpoch === connectionEpoch && bootstrapRetryProof.generation === generation);
+    if (bootstrapFailure && explicitRetry && !bootstrapRetryAuthorized) { explainUnboundBootstrapRetry(); return; }
+    if (bootstrapRetryAuthorized) { bootstrapRetryProof.used = true; bootstrapRecoveryPending = true; }
+    if (explicitRetry) { automaticRetryPaused = Boolean(bootstrapFailure || bootstrapRecoveryPending); clearTimeout(timer); }
     refreshing = true; const request = generation, summaryReadAtStart = historySummaryReadGeneration;
+    let pendingRead = 'get_public_state';
     try {
-      const state = await invoke('get_public_state'); if (closed || request !== generation || busy || historyRecoveryBusy ||
+      const state = await invoke('get_public_state', bootstrapRetryAuthorized ? { retryBootstrap: true } : undefined);
+      pendingRead = null;
+      if (closed || request !== generation || busy || historyRecoveryBusy ||
         historySummaryReads || summaryReadAtStart !== historySummaryReadGeneration ||
         view === 'documents' && documentGuide?.busy) return;
       if (contextRequired || explicitRetry && resultFolderUnavailable) {
         const recoveredConnection = contextRequired;
+        pendingRead = 'get_ui_context';
         const context = await invoke('get_ui_context');
+        pendingRead = null;
         if (closed || request !== generation || busy || historySummaryReads || summaryReadAtStart !== historySummaryReadGeneration) return;
         applyContext(context); contextRequired = false; reconnecting = false;
+        if (bootstrapFailure) resolvedBootstrapEpoch = Math.max(resolvedBootstrapEpoch, bootstrapFailure.epoch);
+        bootstrapFailure = null; bootstrapRecoveryPending = false; updateStart();
         if (recoveredConnection) feedback('Lokale Verbindung wiederhergestellt. Gespeicherte Läufe bleiben erhalten; kein Start und keine Entscheidung wurden automatisch wiederholt. Eine frühere Dateiauswahl bitte neu aufnehmen.');
       }
-      current = state;
+      current = state; updateStart();
       if (!job && !catalogue.length && /^[a-f0-9]{64}$/u.test(state.batch_id || '') && ['preparing', 'processing'].includes(state.state)) {
         adoptRun({ batchId: state.batch_id, task: state.processing_mode, name: `Lauf ${state.batch_id.slice(0, 8)}`,
           files: [], selectedCount: count(state.selected_count) });
       }
       renderJob(state);
-      if (view === 'history' && !historySummaryReads) await refreshHistory(true);
+      if (!historySummaryReads) {
+        if (view === 'history') await refreshHistory(true);
+        else if (view === 'details' && runDetails?.connection === connectionEpoch && !$('run-history-detail').hidden)
+          await refreshHistory(true, null, runDetails.batchId);
+      }
       if (state.state === 'blocked') feedback('Die lokale Verarbeitung ist nicht bereit. Bitte das vollständige Paket und die Diagnose prüfen.', true);
       else if (feedbackOwner?.kind === 'connection-unconfirmed') feedback(
         'Lokale Verbindung und Laufstatus sind wieder erreichbar. Ein zuvor unterbrochener Befehl wurde nicht erneut ausgeführt; seinen Abschluss bitte im Verlauf und anhand gespeicherter Belege prüfen.');
+      else if (feedbackOwner?.kind === 'read-busy') feedback('');
       consecutiveConnectionFailures = 0; automaticRetryPaused = false;
-    } catch (error) { if (!closed && request === generation && !historyRecoveryBusy && !historySummaryReads &&
+    } catch (error) {
+      if (bootstrapFailure) { if (!closed) renderBootstrapFailure(); return; }
+      const readCode = errorCode(error), transientBusyRead = pendingRead !== null && transientReadBusyCodes.has(readCode);
+      if (bootstrapRecoveryPending) {
+        // Native Ready ended the old refusal, not this explicit recovery attempt.
+        // Keep every mutation blocked and require another deliberate status check.
+        if (!closed && request === generation) {
+          if (transientBusyRead) feedback(readBusyMessage(readCode), false, { kind: 'read-busy' }); else showError(error);
+          if (terminalCoreStartupCodes.has(errorCode(error))) holdBootstrapFailure(connectionEpoch, errorCode(error));
+          automaticRetryPaused = true; $('connection-help').hidden = false;
+        }
+        return;
+      }
+      if (!closed && request === generation && !historyRecoveryBusy && !historySummaryReads &&
       summaryReadAtStart === historySummaryReadGeneration && !(view === 'documents' && documentGuide?.busy)) {
-      if (errorCode(error) === 'STANDALONE_IPC_BUSY') {
+      if (transientBusyRead) {
         if (explicitRetry) {
           let description = '';
           try { const snapshot = await invoke('get_native_recovery_status');
             if (snapshot?.local_ui_only === true && snapshot.external_disclosure === false) description = nativeCoreDescription(snapshot);
           } catch { /* Busy is still distinct from a failed connection. */ }
-          if (!closed && request === generation) feedback(description || reasons.STANDALONE_IPC_BUSY);
+          if (!closed && request === generation) feedback(readCode === 'STANDALONE_IPC_BUSY'
+            ? description || readBusyMessage(readCode)
+            : [readBusyMessage(readCode), description].filter(Boolean).join(' '), false, { kind: 'read-busy' });
         }
         return;
       }
       showError(error);
+      if (terminalCoreStartupCodes.has(errorCode(error))) { holdBootstrapFailure(connectionEpoch, errorCode(error)); return; }
       if (reconnecting) await updateConnectionHelp();
       if (++consecutiveConnectionFailures >= 2 || terminalCoreStartupCodes.has(errorCode(error))) {
         automaticRetryPaused = true;
@@ -1274,7 +1724,8 @@
       : 'Der Ergebnisordner ist wieder verfügbar. Du kannst die ausgewählten Dateien jetzt starten.'); }
     catch (error) { showError(error); }
   }
-  for (const [index, name] of ['new', 'history', 'settings'].entries()) {
+  const navigationTabs = ['new', 'history', 'details', 'settings'];
+  for (const name of navigationTabs) {
     $('nav-' + name).addEventListener('click', () => {
       if (name === 'history') {
         const requested = $('nav-history').dataset.openSummaryBatchId;
@@ -1284,10 +1735,20 @@
       }
       showView(name);
     });
-    $('nav-' + name).addEventListener('keydown', event => { const names = ['new', 'history', 'settings'];
-      const target = event.key === 'ArrowRight' ? (index + 1) % 3 : event.key === 'ArrowLeft' ? (index + 2) % 3 : event.key === 'Home' ? 0 : event.key === 'End' ? 2 : -1;
+    $('nav-' + name).addEventListener('keydown', event => {
+      const names = navigationTabs.filter(item => !$('nav-' + item).hidden), index = names.indexOf(name);
+      const target = event.key === 'ArrowRight' ? (index + 1) % names.length : event.key === 'ArrowLeft' ? (index + names.length - 1) % names.length : event.key === 'Home' ? 0 : event.key === 'End' ? names.length - 1 : -1;
       if (target < 0) return; event.preventDefault(); names.forEach((item, i) => { $('nav-' + item).tabIndex = i === target ? 0 : -1; }); $('nav-' + names[target]).focus(); });
   }
+  $('details-overview').addEventListener('click', () => showView('details'));
+  $('details-open-copy').addEventListener('click', () => {
+    const owner = runDetails, receipt = owner?.receipt;
+    if (view !== 'details' || owner?.connection !== connectionEpoch || !receipt) return;
+    perform('open_recorded_document_export', { batchId: owner.batchId, operationId: receipt.operation_id });
+  });
+  $('details-open-documents').addEventListener('click', () => {
+    if (view === 'details' && runDetails?.connection === connectionEpoch) openDocuments(runDetails.batchId);
+  });
   for (const id of ['mode-markdown', 'mode-anonymize']) $(id).addEventListener('change', () => {
     mode = $(id).value;
     if (mode !== 'markdown-and-anonymize') { $('naming-neutral').checked = true; $('naming-source').checked = false; $('fast-anonymize').checked = false; }
@@ -1333,6 +1794,10 @@
     await refresh();
   });
   $('refresh-history').addEventListener('click', () => { historySignature = ''; refreshHistory(); }); $('configure-results').addEventListener('click', configure); $('change-destination').addEventListener('click', configure);
+  $('history-include-hidden').addEventListener('change', () => {
+    includeHiddenHistory = $('history-include-hidden').checked;
+    historySignature = ''; refreshHistory();
+  });
   $('retry-destination').addEventListener('click', recheckDestination); $('retry-results').addEventListener('click', recheckDestination);
   $('documents-back').addEventListener('click', () => showView(documentsOrigin));
   async function openDiagnostics() {
@@ -1347,12 +1812,12 @@
   async function saveDiagnosticBundle() {
     if (closed || diagnosticSaveBusy) return;
     diagnosticSaveBusy = true;
-    const buttons = [$('diagnostic-save'), $('connection-diagnostic-save')];
+    const buttons = [$('diagnostic-save'), $('connection-diagnostic-save'), $('document-export-diagnostic-save')];
     const status = text => {
-      $('diagnostic-save-status').textContent = text;
-      $('diagnostic-save-status').hidden = !text;
-      $('connection-diagnostic-save-status').textContent = text;
-      $('connection-diagnostic-save-status').hidden = !text;
+      for (const id of ['diagnostic-save-status', 'connection-diagnostic-save-status', 'document-export-diagnostic-status']) {
+        $(id).textContent = text;
+        $(id).hidden = !text;
+      }
     };
     for (const button of buttons) button.disabled = true;
     status('Speicherort für eine neue JSON-Diagnosedatei wählen. Die lokale Verbindung ist dafür nicht erforderlich.');
@@ -1381,32 +1846,60 @@
   }
   $('diagnostic-save').addEventListener('click', saveDiagnosticBundle);
   $('connection-diagnostic-save').addEventListener('click', saveDiagnosticBundle);
+  $('document-export-diagnostic-save').addEventListener('click', saveDiagnosticBundle);
   $('connection-retry').addEventListener('click', async () => {
-    if (closed) return;
+    if (closed || connectionRetryChecking) return;
     if (historySummaryReads) {
+      if (bootstrapFailure) { renderBootstrapFailure(); return; }
       $('connection-status').textContent = 'Der gespeicherte Prüfstatus wird gerade lokal abgeglichen. Bitte den Abschluss abwarten und dann die Verbindung erneut prüfen; es wird kein neuer Lauf gestartet.';
       return;
     }
     if (refreshing) {
+      if (bootstrapFailure) { renderBootstrapFailure(); return; }
       $('connection-status').textContent = 'Die lokale Verbindung und der Laufstatus werden bereits geprüft. Bitte das Ergebnis abwarten; es wird kein neuer Lauf gestartet.';
       return;
     }
-    const retry = $('connection-retry'); retry.disabled = true;
+    const retry = $('connection-retry'); retry.disabled = true; connectionRetryChecking = true;
     retry.textContent = 'Verbindung wird geprüft …';
-    try { await updateConnectionHelp(); await refresh(true); }
-    finally { retry.disabled = false; retry.textContent = 'Verbindung und Laufstatus prüfen'; }
+    try {
+      const bootstrapRetryProof = await updateConnectionHelp();
+      if (bootstrapFailure && !bootstrapRetryProof) { explainUnboundBootstrapRetry(); return; }
+      await refresh(true, bootstrapRetryProof);
+    } finally { connectionRetryChecking = false; retry.disabled = false; retry.textContent = 'Verbindung und Laufstatus prüfen'; }
   });
   $('identities').addEventListener('click', () => perform('open_identity_mappings_directory'));
   window.addEventListener('beforeunload', () => { closed = true; clearTimeout(timer); for (const unlisten of unlisteners) unlisten(); $('review-frame').src = 'about:blank'; });
   (async () => {
     updateStart();
+    let initialContextReadPending = false;
     try {
-      unlisteners.push(await window.__TAURI__.event.listen('datasecure-connection', event => {
+      receiveConnectionState = event => {
         const data = event.payload;
-        if (closed || !Number.isSafeInteger(data?.epoch) || data.epoch < 0 || data.epoch < connectionEpoch ||
-            !['recovering', 'ready'].includes(data.state)) return;
+        if (closed || !Number.isSafeInteger(data?.epoch) || data.epoch < 0) return;
+        // A historical Ready receipt can resolve failure 1 even after recovery
+        // advanced to epoch 3. It must not make epoch 2 the current connection.
+        if (data.state === 'ready') retireResolvedBootstrap(data.bootstrap_resolution, data.epoch);
+        if (data.epoch < connectionEpoch ||
+            data.epoch <= resolvedBootstrapEpoch ||
+            !['recovering', 'ready', 'bootstrap_failed'].includes(data.state) ||
+            data.state === 'bootstrap_failed' && !/^[A-Z][A-Z0-9_]{1,80}$/u.test(data.error_code || '')) return;
+        if (bootstrapFailure && data.epoch <= bootstrapFailure.epoch && data.epoch <= connectionEpoch) { renderBootstrapFailure(); return; }
+        const changedConnection = connectionEpoch !== data.epoch;
         connectionEpoch = data.epoch;
-        if (data.state === 'recovering') {
+        if (changedConnection) {
+          // A newer Ready may arrive without an intermediate Recovering
+          // event. Retire both the global proof and every rendered row's
+          // approval/copy projection; an old read/finally cannot own the new
+          // channel or restore a completion claim afterwards.
+          historySummaryOwnershipEpoch++;
+          if (historySummaryReads) historySummaryReadGeneration++;
+          historySummaryReads = 0;
+          historySummaryEpoch++; historyGeneration++; historySignature = '';
+          for (const retire of historySummaryRetirements) retire();
+          clearRunReview(); renderRunReceipt();
+        }
+        if (data.state === 'recovering' || data.state === 'bootstrap_failed') {
+          if (data.state === 'bootstrap_failed') holdBootstrapFailure(data.epoch, data.error_code, true);
           busyGeneration++; historyRecoveryBusy = false; dropOwnership = null; setBusy(false);
           // Pending reads belong to the retired Core connection. Their late
           // finally blocks must not keep the replacement connection locked.
@@ -1417,7 +1910,9 @@
           $('review-frame').src = 'about:blank'; reviewOrigin = null;
           window.__DATASECURE_DOCUMENTS__?.invalidateConnection();
           if (view === 'review' || view === 'documents') { view = ''; showView('history'); }
-          historyUnavailable('Verbindung unterbrochen. Der zuletzt angezeigte Verlauf ist nicht bestätigt. DataSecure versucht die sichere Wiederverbindung; kein Lauf wird erneut gestartet.');
+          historyUnavailable(bootstrapFailure
+            ? 'Der lokale Core konnte nicht sicher gestartet werden. Der Verlauf ist derzeit nicht erreichbar; bitte die angezeigte Startursache und die Diagnose prüfen.'
+            : 'Verbindung unterbrochen. Der zuletzt angezeigte Verlauf ist nicht bestätigt. DataSecure versucht die sichere Wiederverbindung; kein Lauf wird erneut gestartet.');
           $('run-guide').hidden = true;
           if (!$('job').hidden) {
             $('job-title').textContent = 'Laufstatus wird nach Verbindungsausfall geprüft';
@@ -1431,17 +1926,22 @@
             $('file-problems').hidden = true;
           }
           renderTree(); updateStart();
+          if (bootstrapFailure) { renderBootstrapFailure(); return; }
           feedback('Lokale Verbindung unterbrochen. DataSecure wartet auf das sichere Ende der alten Sitzung und verbindet sich erneut. Nicht gespeicherte Prüfentscheidungen wurden nicht übertragen.', true);
           $('connection-help').hidden = false;
           $('connection-status').textContent = 'Der letzte Laufstatus ist nicht bestätigt. DataSecure prüft den sicheren Zustand des alten lokalen Dienstes. Bitte keinen zweiten Lauf starten.';
           void updateConnectionHelp();
           schedule(1200);
         } else if (contextRequired) {
+          if (bootstrapFailure) return; // The owning explicit status check must also validate context.
           // Only status/context are reloaded. Never replay the failed command.
-          consecutiveConnectionFailures = 0; automaticRetryPaused = false;
-          schedule(50);
+          if (!bootstrapRecoveryPending) {
+            consecutiveConnectionFailures = 0; automaticRetryPaused = false;
+            schedule(50);
+          }
         }
-      }));
+      };
+      unlisteners.push(await window.__TAURI__.event.listen('datasecure-connection', receiveConnectionState));
       let nativeDropReady = false;
       try { unlisteners.push(await window.__TAURI__.event.listen('datasecure-native-drop', event => {
         const data = event.payload; if (closed || data.epoch !== undefined && data.epoch !== connectionEpoch) return;
@@ -1469,7 +1969,7 @@
         $('review-frame').src = 'about:blank'; reviewOrigin = null;
         view = ''; lastJobSignature = '';
         if (origin.complete && origin.processingMode === 'markdown-and-anonymize') {
-          feedback('Fundstellenprüfung abgeschlossen. Prüfe jetzt die Ergebnisse dieses Laufs und gib die gewünschten Dokumente ausdrücklich frei. Deine bisherigen Entscheidungen sind übernommen; noch kein KI-Export.');
+          feedback('Fundstellenprüfung abgeschlossen. Prüfe jetzt die Ergebnisse dieses Laufs und gib die gewünschten Dokumente ausdrücklich frei. Deine bisherigen Entscheidungen sind übernommen; noch kein Export.');
           await openDocuments(origin.batchId, false, origin.view);
           refresh(); return;
         }
@@ -1477,11 +1977,11 @@
           feedback('OCR-Kontaktprüfung abgeschlossen. Keine weitere Pflichtprüfung für diesen Markdown-Lauf. Nachbearbeitung ist freiwillig; die Dateien sind nicht anonymisiert.');
         else if (origin.complete)
           feedback('Prüfung abgeschlossen. Der Verarbeitungszweck ist nicht bestätigt; den Status dieses Laufs abgleichen. Keine Freigabe oder Kopie wurde ausgelöst.');
-        showView(origin.view === 'history' ? 'history' : 'new'); refresh();
+        showView('details', origin.batchId); refresh();
         // The action row is recreated by the next status response. Returning
         // focus to its old launch button would immediately drop it to <body>.
         // A stable destination keeps keyboard users at the same run/context.
-        (view === 'history' ? $('nav-history') : $('job-title')).focus();
+        $('details-heading').focus();
       }));
       const ready = await invoke('frontend_ready', { nativeDropReady });
       if (typeof ready?.product_version === 'string' && /^\d+\.\d+\.\d+-rc\d+$/u.test(ready.product_version)) {
@@ -1495,7 +1995,9 @@
       reconnecting = true; contextRequired = true; updateStart();
       feedback('Der lokale Core wird gestartet und der gespeicherte Zustand geprüft. Dateiauswahl und Ergebnisordner sind bis zur bestätigten Verbindung gesperrt.', false,
         { kind: 'bootstrap' });
+      initialContextReadPending = true;
       const initialContext = await invoke('get_ui_context');
+      initialContextReadPending = false;
       if (initialGeneration === generation && initialConnection === connectionEpoch) {
         applyContext(initialContext); reconnecting = false; contextRequired = false; updateStart();
         if (feedbackOwner?.kind === 'bootstrap') feedback('');
@@ -1507,15 +2009,17 @@
       await refresh();
     } catch (error) {
       bootstrapping = false; reconnecting = true; contextRequired = true; updateStart();
-      if (errorCode(error) === 'STANDALONE_IPC_BUSY') {
-        feedback('Der lokale Core beendet noch einen Vorgang. Der Verbindungsstatus wird erneut geprüft; es wird nichts automatisch gestartet oder exportiert.');
+      if (bootstrapFailure) { renderBootstrapFailure(); return; }
+      if (initialContextReadPending && transientReadBusyCodes.has(errorCode(error))) {
+        feedback(errorCode(error) === 'STANDALONE_IPC_BUSY'
+          ? 'Der lokale Core beendet noch einen Vorgang. Der Verbindungsstatus wird erneut geprüft; es wird nichts automatisch gestartet oder exportiert.'
+          : readBusyMessage(errorCode(error)), false, { kind: 'read-busy' });
         schedule();
         return;
       }
       showError(error);
       if (terminalCoreStartupCodes.has(errorCode(error))) {
-        automaticRetryPaused = true;
-        $('connection-status').textContent = 'Der lokale Core konnte keine Verbindung herstellen. Dateiauswahl und Ergebnisordner bleiben absichtlich gesperrt. Bitte zuerst die Diagnose sichern; ein Lauf oder Export wurde nicht gestartet.';
+        holdBootstrapFailure(connectionEpoch, errorCode(error));
       } else schedule();
     }
   })();

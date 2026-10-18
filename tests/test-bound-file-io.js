@@ -315,6 +315,27 @@ test('diagnostic rotation is exclusive and never replaces or removes old archive
   const segment = fs.readdirSync(directory).find(name => /^sidecar-interactions\.[a-f0-9]{32}\.jsonl$/u.test(name));
   assert.equal(fs.readFileSync(path.join(directory, segment), 'utf8'), 'two\n');
 });
+
+test('native diagnostic generation has eight discoverable exclusive leaves and rejects substitution', () => {
+  const { directory } = fixture(), segmentKey = 'ab'.repeat(16);
+  const log = createBestEffortDiagnosticLog({ directory, name: 'sidecar-interactions.jsonl',
+    segmentKey, maximum: 4, maxSegments: 8 });
+  for (let n = 1; n <= 8; n++) assert.equal(log.append('one\n'), true);
+  assert.equal(log.append('end\n'), false);
+  const expected = Array.from({ length: 8 }, (_, i) => `sidecar-interactions.${segmentKey}${i ? `.${i + 1}` : ''}.jsonl`);
+  for (const name of expected) assert.equal(fs.readFileSync(path.join(directory, name), 'utf8'), 'one\n');
+  const collided = createBestEffortDiagnosticLog({ directory, name: 'sidecar-interactions.jsonl', segmentKey });
+  assert.equal(collided.append('foreign\n'), false);
+  assert.equal(fs.readFileSync(path.join(directory, expected[0]), 'utf8'), 'one\n');
+  assert.throws(() => createBestEffortDiagnosticLog({ directory, name: 'sidecar-interactions.jsonl', segmentKey: '../private' }));
+
+  const second = fixture(), target = path.join(second.directory, `sidecar-interactions.${segmentKey}.jsonl`);
+  const bound = createBestEffortDiagnosticLog({ directory: second.directory, name: 'sidecar-interactions.jsonl', segmentKey });
+  assert.equal(bound.append('one\n'), true);
+  fs.renameSync(target, `${target}.old`); fs.writeFileSync(target, 'sentinel');
+  assert.equal(bound.append('two\n'), false);
+  assert.equal(fs.readFileSync(target, 'utf8'), 'sentinel');
+});
 test('diagnostics reject a pre-existing hardlink and an open-time foreign substitution without writing', () => {
   for (const scenario of ['hardlink', 'swap']) {
     const { directory, foreign } = fixture(); const target = path.join(directory, 'sidecar-interactions.jsonl');

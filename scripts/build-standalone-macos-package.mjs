@@ -7,6 +7,8 @@ import { loadCargoLicenseInventory } from './lib/cargo-license-inventory.mjs';
 import { standaloneFontLicense } from './lib/standalone-font-license.mjs';
 import boundFileIo from '../plugins/data-secure/server/core/bound-file-io.js';
 import { standaloneBuildFingerprint, assertStandaloneBuildFingerprint, assertStandaloneSourceUnchanged, assertStandaloneRuntimeSource } from './lib/standalone-build-fingerprint.mjs';
+import layout from '../plugins/data-secure/server/standalone/macos-bundle-layout.js';
+import { loadMacStaticCore, assertMacCoreMarkers, assertMacCoreBundle, verifyMacBundleSeal, macRuntimeEvidence, canonicalBytes, verifyMacCorePackage } from './lib/macos-core-artifact.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const font = standaloneFontLicense(root);
@@ -32,6 +34,9 @@ if (path.basename(appSource) !== 'DataSecure Standalone.app' || !fs.statSync(app
   throw new Error('STANDALONE_MACOS_APP_INVALID');
 }
 const sourceIdentity = standaloneBuildFingerprint(root), sourceFingerprint = sourceIdentity.fingerprint;
+const coreBuild = loadMacStaticCore(root, productTarget);
+assertMacCoreBundle(appSource, coreBuild);
+verifyMacBundleSeal(appSource, coreBuild);
 const desktopSource = path.join(appSource, 'Contents', 'MacOS', 'datasecure-standalone');
 let desktopVerified = false;
 
@@ -43,8 +48,7 @@ const output = path.join(root, 'dist', target.package_filename);
 const executablePaths = new Set([
   `${appRelative}/Contents/MacOS/datasecure-standalone`,
   `${appRelative}/Contents/MacOS/datasecure-core`,
-  `${appRelative}/Contents/Resources/server/standalone/conversion-runtime/node`,
-  `${appRelative}/Contents/Resources/server/native/${productTarget}/datasecure-sandbox`
+  ...['conversion_node', 'sandbox'].map(role => `${appRelative}/Contents/${layout.nativeRoles(productTarget)[role].destination}`)
 ]);
 
 function safeResetStage() {
@@ -64,6 +68,7 @@ function copyRegular(source, destination, mode = null) {
   const { bytes, stat: before } = checked;
   if (path.resolve(source) === desktopSource) {
     assertStandaloneBuildFingerprint(bytes, sourceFingerprint);
+    assertMacCoreMarkers(bytes, coreBuild);
     desktopVerified = true;
   }
   fs.mkdirSync(path.dirname(destination), { recursive: true });
@@ -80,6 +85,8 @@ function copyTree(source, destination) {
   if (!stat.isDirectory()) throw new Error('STANDALONE_MACOS_APP_ENTRY_INVALID');
   fs.mkdirSync(destination, { mode: stat.mode & 0o777 });
   for (const entry of fs.readdirSync(source, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+    if (['datasecure-relocate-native', 'relocate-bundle-native.c', 'macos-build-tools', 'macos-build-tools-test'].includes(entry.name))
+      throw new Error('STANDALONE_MACOS_BUILD_TOOL_IN_APP');
     const from = path.join(source, entry.name);
     const to = path.join(destination, entry.name);
     if (entry.isDirectory()) copyTree(from, to);
@@ -102,6 +109,8 @@ function inventory(directory, ignored = new Set()) {
 safeResetStage();
 copyTree(appSource, path.join(stage, appRelative));
 if (!desktopVerified) throw new Error('STANDALONE_DESKTOP_SOURCE_MARKER_MISSING');
+assertMacCoreBundle(path.join(stage, appRelative), coreBuild);
+verifyMacBundleSeal(path.join(stage, appRelative), coreBuild);
 assertStandaloneBuildFingerprint(readRegular(path.join(stage, appRelative, 'Contents/MacOS/datasecure-standalone'),
   64 * 1024 * 1024), sourceFingerprint);
 // A newly compiled shell must not certify an older generated JS projection.
@@ -128,14 +137,10 @@ for (const [source, destination] of [
   [path.join(root, 'apps', 'datasecure-standalone', 'MACOS-START.md'), 'MACOS-START.md']
 ]) copyRegular(source, path.join(stage, destination), 0o600);
 
-const evidence = {
-  schema: 'datasecure-standalone-runtime-evidence/1',
-  targets: [{ target: productTarget, node_version: contract.node_version,
-    archive: runtimeEvidence.archive, archive_sha256: runtimeEvidence.archive_sha256,
-    bytes: runtimeEvidence.bytes, sha256: runtimeEvidence.sha256,
-    license_bytes: runtimeEvidence.license_bytes, license_sha256: runtimeEvidence.license_sha256,
-    runtime_probe: runtimeEvidence.runtime_probe }]
-};
+const evidence = macRuntimeEvidence(coreBuild);
+fs.writeFileSync(path.join(stage, 'MACOS-CORE-ARTIFACT.json'), canonicalBytes(coreBuild.artifact), { flag: 'wx' });
+fs.writeFileSync(path.join(stage, 'MACOS-CORE-PROVENANCE.json'), coreBuild.provenanceBytes, { flag: 'wx' });
+fs.writeFileSync(path.join(stage, 'LICENSE.custom-node.txt'), coreBuild.licenseBytes, { flag: 'wx' });
 fs.writeFileSync(path.join(stage, 'RUNTIME-EVIDENCE.json'), `${JSON.stringify(evidence, null, 2)}\n`, { flag: 'wx' });
 
 const cargoManifest = path.join(root, 'apps', 'datasecure-standalone', 'tauri-contract', 'Cargo.toml');
@@ -144,6 +149,8 @@ fs.writeFileSync(path.join(stage, 'RUST-LICENSE-INVENTORY.json'), `${JSON.string
 const conversionPath = path.join(stage, appRelative, 'Contents', 'Resources', 'server', 'standalone', 'conversion-runtime');
 const conversion = JSON.parse(fs.readFileSync(path.join(conversionPath, 'RUNTIME.json'), 'utf8'));
 if (conversion.target !== productTarget) throw new Error('STANDALONE_MACOS_CONVERSION_TARGET_INVALID');
+if (conversion.native_layout !== layout.LAYOUT || conversion.native_inventory_finalized !== true)
+  throw new Error('STANDALONE_MACOS_NATIVE_LAYOUT_INVALID');
 const sbom = {
   spdxVersion: 'SPDX-2.3', dataLicense: 'CC0-1.0', SPDXID: 'SPDXRef-DOCUMENT',
   name: folderName, documentNamespace: `https://internal.msg.example/datasecure/${version}/${productTarget}`,
@@ -152,7 +159,12 @@ const sbom = {
     font.package,
     { name: 'DataSecure Standalone', SPDXID: 'SPDXRef-DataSecure', versionInfo: version,
       downloadLocation: 'NOASSERTION', filesAnalyzed: false, licenseConcluded: 'LicenseRef-Proprietary', licenseDeclared: 'LicenseRef-Proprietary' },
-    { name: 'Node.js', SPDXID: 'SPDXRef-Nodejs', versionInfo: contract.node_version,
+    { name: 'DataSecure static Node Core', SPDXID: 'SPDXRef-DataSecureCore', versionInfo: coreBuild.artifact.node_version,
+      downloadLocation: 'NOASSERTION', filesAnalyzed: false, licenseConcluded: 'NOASSERTION', licenseDeclared: 'NOASSERTION',
+      checksums: [{ algorithm: 'SHA256', checksumValue: coreBuild.artifact.core.sha256 }],
+      comment: 'Own build from ' + coreBuild.artifact.upstream.archive + '; source SHA256 ' + coreBuild.artifact.upstream.sha256 +
+        '; artifact SHA256 ' + coreBuild.artifactSha256 + '; LICENSE.custom-node.txt; MACOS-CORE-PROVENANCE.json.' },
+    { name: 'Node.js official converter', SPDXID: 'SPDXRef-Nodejs', versionInfo: contract.node_version,
       downloadLocation: `https://nodejs.org/dist/v${contract.node_version}/${runtimeTarget.archive}`,
       checksums: [{ algorithm: 'SHA256', checksumValue: runtimeEvidence.archive_sha256 }],
       filesAnalyzed: false, licenseConcluded: 'NOASSERTION', licenseDeclared: 'NOASSERTION' },
@@ -184,6 +196,8 @@ fs.writeFileSync(path.join(stage, 'STANDALONE-MANIFEST.json'), `${JSON.stringify
 const hashes = inventory(stage, new Set(['SHA256SUMS']));
 fs.writeFileSync(path.join(stage, 'SHA256SUMS'), `${hashes.map((file) => `${file.sha256}  ${file.path}`).join('\n')}\n`, { flag: 'wx' });
 
+const checkedEntries = new Map(collectFiles(stage).map(file => [file.archivePath, readRegular(file.fullPath, 256 * 1024 * 1024)]));
+verifyMacCorePackage(checkedEntries, coreBuild, appRelative);
 const archiveFiles = collectFiles(stageParent).map((file) => {
   const relative = file.archivePath.slice(folderName.length + 1);
   return { ...file, mode: executablePaths.has(relative) ? 0o100755 : 0o100644 };

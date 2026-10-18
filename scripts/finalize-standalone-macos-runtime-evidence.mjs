@@ -2,6 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { hashRegular, readRegular } from './lib/bundled-runtime.mjs';
+import { finalizeMacNativeInventory } from './lib/macos-bundle-native.mjs';
+import { loadMacStaticCore, assertMacCoreBundle, macRuntimeEvidence, canonicalBytes } from './lib/macos-core-artifact.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const argument = (name) => {
@@ -21,22 +23,18 @@ if (path.basename(app) !== 'DataSecure Standalone.app' ||
 }
 const signedCore = path.join(app, 'Contents', 'MacOS', 'datasecure-core');
 const destination = path.join(app, 'Contents', 'Resources', 'RUNTIME-EVIDENCE.json');
-const source = path.join(root, 'dist', target, 'runtime-evidence.json');
-const sourceEvidence = JSON.parse(readRegular(source, 64 * 1024).toString('utf8'));
-if (sourceEvidence.target !== target || !/^[a-f0-9]{64}$/u.test(sourceEvidence.sha256) ||
-    sourceEvidence.bytes < 1) {
-  throw new Error('STANDALONE_MACOS_EVIDENCE_SOURCE_INVALID');
-}
+const build = loadMacStaticCore(root, target);
+if (fs.existsSync(destination)) throw new Error('STANDALONE_MACOS_EVIDENCE_ALREADY_FINALIZED');
+assertMacCoreBundle(app, build); // compare to pre-Cargo approval, never adopt new bytes
 const stat = fs.lstatSync(signedCore);
 if (!stat.isFile() || stat.isSymbolicLink() || stat.size < 1 || stat.size > 128 * 1024 * 1024) {
   throw new Error('STANDALONE_MACOS_EVIDENCE_CORE_INVALID');
 }
-const evidence = {
-  schema: 'datasecure-standalone-runtime-evidence/1',
-  targets: [{ target, bytes: stat.size, sha256: hashRegular(signedCore, 128 * 1024 * 1024),
-    source_sha256: sourceEvidence.sha256, node_version: sourceEvidence.node_version }]
-};
+const evidence = macRuntimeEvidence(build);
+if (hashRegular(signedCore, 128 * 1024 * 1024) !== build.artifact.core.sha256) throw new Error('STANDALONE_MACOS_CORE_CHANGED_AFTER_CARGO');
+finalizeMacNativeInventory(app, target);
+fs.writeFileSync(path.join(app, 'Contents/Resources/MACOS-CORE-ARTIFACT.json'), canonicalBytes(build.artifact), { flag: 'wx', mode: 0o644 });
 fs.writeFileSync(destination, `${JSON.stringify(evidence, null, 2)}\n`, { flag: 'wx', mode: 0o644 });
 fs.chmodSync(destination, 0o644);
 process.stdout.write(`${JSON.stringify({ ok: true, target, signed_core_bytes: stat.size,
-  source_differs_after_signing: evidence.targets[0].sha256 !== sourceEvidence.sha256 })}\n`);
+  source_differs_after_signing: false, artifact_sha256: build.artifactSha256 })}\n`);

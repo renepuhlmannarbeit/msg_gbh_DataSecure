@@ -1,5 +1,8 @@
 'use strict';
 
+if (process.platform === 'darwin' && process.env.DATASECURE_NATIVE_EXPORT_CHANNEL === '1')
+  require('../core/ownership-control').assertNativeOwnershipRuntime();
+
 const crypto = require('node:crypto');
 
 // The local human review must outlive the short Cowork tool call.  This worker
@@ -10,7 +13,7 @@ const {
   reviewDeferredBatch,
   releaseLocalBatchExecutor,
   readBatchProgress,
-  exportCompletedBatchResults,
+  exportCompletedBatchResultsAsync,
   reserveTerminalNotice,
   markTerminalNoticePresented,
   releaseTerminalNoticeReservation
@@ -20,7 +23,7 @@ const { presentTerminalEnvelope } = require('./worker-terminal-presentation');
 const standaloneChannel = process.env.DATASECURE_PRODUCT_CHANNEL === 'standalone';
 const { recordWorkflowEvent } = require('./workflow-diagnostics');
 const { DETACHED_REVIEW_TIMEOUT_MS } = require('../companion/review-timeouts');
-const { terminalVisibleExport } = require('./result-export');
+const { terminalVisibleExportAsync } = require('./result-export');
 const { assertLegacyContentOperation } = require('../core/content-options');
 
 let started = false;
@@ -104,7 +107,7 @@ process.once('message', async (message) => {
     }
     // A failing visible export must not discard the completed local review
     // result; the released packages stay pending for the next export replay.
-    const visibleExport = terminalVisibleExport(result, () => exportCompletedBatchResults(token));
+    const visibleExport = await terminalVisibleExportAsync(result, () => exportCompletedBatchResultsAsync(token));
     const presentedResult = {
       ...result,
       result_exported_count: visibleExport.exported,

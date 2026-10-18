@@ -50,10 +50,18 @@ button{white-space:nowrap}:focus-visible{outline-offset:2px}
 .file-add{border-top:1px solid var(--c-border);padding:12px 16px;display:flex;align-items:center;gap:12px;flex-wrap:wrap}
 .file-add .button-row button{font-size:13px;padding:6px 12px}
 .selection-limit{padding:12px 16px;color:var(--c-danger-ink);background:var(--c-danger-bg);border-top:1px solid var(--c-danger-border);font-size:13px}
-.workspace:has(#review-view:not([hidden])){padding-top:20px;gap:16px}
+.workspace:has(#review-view:not([hidden])){max-width:none;width:100%;padding:16px 24px;gap:12px}
 .workspace:has(#review-view:not([hidden])) .brand-header{display:none}
-.workspace:has(#review-view:not([hidden])) #review-frame{height:calc(100dvh - 180px);min-height:420px}
-@media(min-width:901px){.workspace:has(#review-view:not([hidden])){height:100dvh;padding-bottom:16px}.workspace:has(#review-view:not([hidden])) #review-view{display:flex;flex:1;min-height:420px;flex-direction:column}.workspace:has(#review-view:not([hidden])) #review-frame{flex:1;min-height:0;height:auto}.workspace:has(#review-view:not([hidden])) .navigation,.workspace:has(#review-view:not([hidden])) .page-footer{flex:none}}
+.workspace:has(#review-view:not([hidden])) #review-frame{height:80dvh;min-height:0}
+/* The review lives inside details-view. Every parent must participate in the
+   height chain; otherwise only the toolbar fits while the work is clipped. */
+.workspace:has(#review-view:not([hidden])) .run-guide{padding:8px 12px;margin:0}
+.workspace:has(#review-view:not([hidden])) .run-guide h2{font-size:16px;margin:4px 0}
+.workspace:has(#review-view:not([hidden])) #run-guide-stages,.workspace:has(#review-view:not([hidden])) #run-guide-counts,.workspace:has(#review-view:not([hidden])) #run-guide-next{display:none}
+.workspace:has(#review-view:not([hidden])) .run-context{margin:0 0 8px}
+.workspace:has(#review-view:not([hidden])) .run-context h2{font-size:16px}
+.workspace:has(#review-view:not([hidden])) .review-heading{margin-bottom:8px;flex-wrap:wrap}
+@media(min-width:901px) and (min-height:700px){.workspace:has(#review-view:not([hidden])){height:100dvh}.workspace:has(#review-view:not([hidden])) #details-view,.workspace:has(#review-view:not([hidden])) #review-view{display:flex;flex:1;min-width:0;min-height:0;flex-direction:column}.workspace:has(#review-view:not([hidden])) #review-frame{flex:1;min-height:0;height:auto}.workspace:has(#review-view:not([hidden])) .navigation,.workspace:has(#review-view:not([hidden])) .page-footer,.workspace:has(#review-view:not([hidden])) .run-context,.workspace:has(#review-view:not([hidden])) .review-heading{flex:none}}
 @media(max-width:720px){.workspace{padding:24px 16px 40px;gap:20px}h1{font-size:28px}.task-cards{grid-template-columns:1fr}.card-section{padding:20px}.card-footer{padding:20px}.nav-tab{padding:12px 8px;font-size:14px}.nav-tab.settings-tab{font-size:13px}.nav-tab.settings-tab span{display:none}.file-row{padding-left:44px;flex-wrap:wrap}.file-row .reason{margin-left:28px}.start-control{width:100%;align-items:stretch}.start-control span{max-width:none}.setting-row,.history-row{display:flex;flex-direction:column}.history-actions{justify-content:flex-start}.job-bar{padding:16px 20px}.review-heading{align-items:flex-start;flex-direction:column}#review-frame{min-height:760px}.drop-zone{padding:24px 16px}}
 #document-export-dialog { width: min(560px, calc(100vw - 32px)); max-height: 90dvh; overflow: auto; padding: 0; border: 1px solid var(--c-border); border-radius: var(--r-card); color: var(--c-ink); background: var(--c-surface); }
 #document-export-dialog::backdrop { background: rgba(20,32,27,.45); }
@@ -91,3 +99,17 @@ button{white-space:nowrap}:focus-visible{outline-offset:2px}
 .output-naming .option { display: block; margin: 8px 0; }
 .output-naming .muted { margin-top: 10px; }
 .document-main-guide li + li { margin-top: .45rem; }
+.nav-tabs{flex-wrap:wrap}
+.run-context{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap;margin:8px 0 16px}
+.run-context>div{min-width:0}.run-context .path{font-size:var(--fs-meta);color:var(--c-muted);margin-top:6px}
+.history-run-id{font-size:var(--fs-meta);color:var(--c-muted);margin-top:6px}
+.history-completion-title{margin-top:12px}.history-completion-title h4{margin:0;font-size:18px;line-height:1.35}
+.history-disclosure{margin-top:12px}.history-disclosure>summary,.history-private>summary{font-weight:600;cursor:pointer;padding:8px 0}
+.history-private{margin-top:12px}.history-private button{margin:8px 8px 0 0}
+.history-review-summary{grid-column:1/-1}.history-completion .run-stages{margin-top:12px}
+@media(max-width:720px){.run-context{margin-top:0}.history-completion-title{align-items:flex-start}.history-completion-title h4{font-size:16px}}
+.history-status-heading{margin:0 0 10px;font-size:18px;font-weight:700;line-height:1.35;overflow-wrap:anywhere}
+.history-status-heading.history-completion-title{margin-top:0}
+.history-title{font-size:14px;color:var(--c-muted)}
+.history-row>div{min-width:0}.history-actions{align-content:start}
+.history-visibility{display:flex;flex-direction:column;gap:8px}.history-visibility label{display:flex;align-items:center;gap:8px;flex-wrap:wrap}

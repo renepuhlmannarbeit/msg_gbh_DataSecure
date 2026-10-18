@@ -23,18 +23,54 @@ on:
         required: true
         default: false
         type: boolean
+      produce_static_core:
+        description: Build candidate Core artifacts through the reusable producer instead of running package evidence.
+        required: false
+        default: false
+        type: boolean
+      core_candidate_run_id:
+        description: Decimal run ID containing the independently reviewed final Core artifacts in this repository.
+        required: false
+        default: ''
+        type: string
+      core_candidate_source_sha:
+        description: Full lowercase 40-character source commit of the final Core candidate artifacts.
+        required: false
+        default: ''
+        type: string
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
-  group: standalone-macos-sandbox-${{ github.ref }}-${{ inputs.target }}
-  cancel-in-progress: true
+  group: standalone-macos-sandbox-${{ github.ref }}-${{ inputs.target }}-${{ inputs.produce_static_core }}
+  cancel-in-progress: ${{ inputs.produce_static_core != true }}
 
 jobs:
+  validate-producer-target:
+    name: Validate the explicitly approved Core producer target
+    if: ${{ inputs.confirm_private_runner_minutes == true && inputs.produce_static_core == true }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - shell: bash
+        env:
+          CORE_PRODUCER_TARGET: ${{ inputs.target }}
+        run: |
+          set -euo pipefail
+          [[ "$CORE_PRODUCER_TARGET" =~ ^(both|macos-arm64|macos-x64)$ ]]
+  produce-static-core:
+    name: Produce final sealed Core candidates for independent review
+    needs: validate-producer-target
+    if: ${{ inputs.confirm_private_runner_minutes == true && inputs.produce_static_core == true }}
+    uses: ./.github/workflows/standalone-macos-static-core.yml
+    with:
+      target: ${{ inputs.target }}
+      confirm_private_runner_minutes: ${{ inputs.confirm_private_runner_minutes }}
   select-target:
     name: Select explicitly approved target
-    if: ${{ inputs.confirm_private_runner_minutes == true }}
+    if: ${{ inputs.confirm_private_runner_minutes == true && inputs.produce_static_core != true }}
     runs-on: ubuntu-latest
     timeout-minutes: 2
     outputs:
@@ -42,9 +78,15 @@ jobs:
     steps:
       - id: select
         shell: bash
+        env:
+          CORE_CANDIDATE_RUN_ID: ${{ inputs.core_candidate_run_id }}
+          CORE_CANDIDATE_SOURCE_SHA: ${{ inputs.core_candidate_source_sha }}
+          REQUESTED_TARGET: ${{ inputs.target }}
         run: |
           set -euo pipefail
-          case "${{ inputs.target }}" in
+          [[ "$CORE_CANDIDATE_RUN_ID" =~ ^[1-9][0-9]{0,19}$ ]]
+          [[ "$CORE_CANDIDATE_SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          case "$REQUESTED_TARGET" in
             macos-x64)
               matrix='{"include":[{"os":"macos-15-intel","target":"macos-x64","rust_arch":"x86_64","sidecar":"datasecure-core-x86_64-apple-darwin","archive":"node-v22.23.2-darwin-x64.tar.gz","sha256":"58e99022c2ff89395576cc7fd4d98cea24bb68081475d5f88b801ee8729fb026"}]}'
               ;;
@@ -122,10 +164,44 @@ jobs:
           echo "${{ matrix.sha256 }}  ${{ matrix.archive }}" | shasum -a 256 --check
           node scripts/build-runtime-target.mjs --target "${{ matrix.target }}" \
             --archive "${{ matrix.archive }}" --output "dist/${{ matrix.target }}"
+      - name: Download only the exact final Core candidate from the fixed repository run
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
+        with:
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ inputs.core_candidate_run_id }}
+          name: DataSecure-Mac-Core-${{ matrix.target }}-${{ inputs.core_candidate_source_sha }}
+          path: ${{ runner.temp }}/datasecure-core-candidate-${{ matrix.target }}
+      - name: Import four regular Core candidate files without granting artifact approval
+        env:
+          CORE_CANDIDATE_DIRECTORY: ${{ runner.temp }}/datasecure-core-candidate-${{ matrix.target }}
+        run: >-
+          node scripts/import-macos-core-candidate.mjs --target "${{ matrix.target }}"
+          --input "$CORE_CANDIDATE_DIRECTORY"
+      - name: Require the independently reviewed final ad-hoc sealed static Core before Prepare or Cargo
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/lib/macos-core-artifact.mjs --verify "$PWD" "${{ matrix.target }}"
+          core="dist/macos-static-core/${{ matrix.target }}/datasecure-core"
+          # The fixed approved input must already have its FINAL seal. Never
+          # re-sign it after Cargo or promote MAC-CERT-02 candidate evidence here.
+          codesign --verify --strict --verbose=2 "$core"
+          codesign -dv --verbose=4 "$core" 2>&1 | grep -q '^Signature=adhoc$'
+          codesign -dv --verbose=4 "$core" 2>&1 | grep -q 'flags=.*runtime'
+          entitlements="$(mktemp "${RUNNER_TEMP}/datasecure-final-core-entitlements.XXXXXX")"
+          codesign -d --entitlements :- "$core" > "$entitlements" 2>/dev/null
+          python3 - "$entitlements" <<'PY'
+          import plistlib, sys
+          with open(sys.argv[1], 'rb') as stream:
+              assert plistlib.load(stream) == {'com.apple.security.cs.allow-jit': True}
+          PY
+          rm -- "$entitlements"
       - name: Project the self-contained target runtime
         run: node scripts/prepare-standalone-runtime.mjs
       - name: Run product, conversion, Rust and workflow contracts
         run: |
+          node tests/test-import-macos-core-candidate.mjs
           node tests/test-uat-fixture-generation.js
           node tests/test-legacy-input-migration.js
           npm run test:standalone
@@ -134,24 +210,56 @@ jobs:
       - name: Require warning-free native Rust code
         working-directory: apps/datasecure-standalone/tauri-contract
         run: cargo clippy --all-targets --locked -- -D warnings
-      - name: Build the native signed macOS application bundle
+      - name: Build the byte-preserving intermediate app; explicit outer sealing follows
         working-directory: apps/datasecure-standalone/tauri-contract
-        run: npx --no-install tauri build --bundles app
-      - name: Give only the hardened Node Core its required JIT entitlement, bind bytes and re-sign the app
+        run: npx --no-install tauri build --bundles app --no-sign
+      - name: Require unchanged pre-Cargo Core and compiled markers immediately after Tauri
+        run: >-
+          node scripts/lib/macos-core-artifact.mjs --app "${{ github.workspace }}" "${{ matrix.target }}"
+          "apps/datasecure-standalone/tauri-contract/target/release/bundle/macos/DataSecure Standalone.app"
+      - name: Build the source-bound descriptor-relative relocation tool outside the app
+        run: node scripts/build-standalone-macos-relocator.mjs
+      - name: Prove native relocation and descriptor-bound parent replacement behavior
+        run: node tests/manual/standalone-macos-relocator-native.mjs
+      - name: Relocate native code into fixed Apple bundle code locations
+        run: >-
+          node scripts/relocate-standalone-macos-native.mjs --target "${{ matrix.target }}"
+          --app "apps/datasecure-standalone/tauri-contract/target/release/bundle/macos/DataSecure Standalone.app"
+      - name: Preserve final inner Core bytes, finalize resources and seal only the outer hardened app
         shell: bash
         run: |
           set -euo pipefail
           bundle="apps/datasecure-standalone/tauri-contract/target/release/bundle/macos/DataSecure Standalone.app"
           core="$bundle/Contents/MacOS/datasecure-core"
+          addon_arch="${{ matrix.target }}"
+          addon_arch="${addon_arch#macos-}"
           entitlements="apps/datasecure-standalone/tauri-contract/macos-core-jit.entitlements.plist"
-          # Tauri's shared macOS entitlements setting would grant JIT to the
-          # UI executable as well. Re-sign only Node, before its signed-byte
-          # evidence and the outer seal are generated.
-          codesign --force --sign - --options runtime --entitlements "$entitlements" "$core"
+          # Tauri --no-sign is only a copy phase. The approved Core was sealed
+          # before Cargo; this step must never mutate or newly attest its bytes.
+          node scripts/lib/macos-core-artifact.mjs --app "$PWD" "${{ matrix.target }}" "$bundle"
+          # Preserve the hash-pinned vendor converter interpreter signature.
+          # Its broader upstream entitlements are audited below, not silently
+          # replaced with an untested ad-hoc library-validation policy.
+          for native in "$bundle/Contents/MacOS/datasecure-conversion-node" \
+            "$bundle/Contents/MacOS/datasecure-sandbox" \
+            "$bundle/Contents/Frameworks/skia.darwin-${addon_arch}.node"; do
+            codesign --verify --strict --verbose=2 "$native"
+          done
           node scripts/finalize-standalone-macos-runtime-evidence.mjs \
             --target "${{ matrix.target }}" --app "$bundle"
           codesign --force --sign - --options runtime "$bundle"
+          node scripts/lib/macos-core-artifact.mjs --app "$PWD" "${{ matrix.target }}" "$bundle"
           codesign --verify --deep --strict --verbose=2 "$bundle"
+      - name: Require the hardened static Core builtin and real ownership startup
+        run: >-
+          node tests/manual/standalone-macos-ownership-load.mjs
+          --app "apps/datasecure-standalone/tauri-contract/target/release/bundle/macos/DataSecure Standalone.app"
+          --target "${{ matrix.target }}"
+      - name: Require native static Core process, worker and filesystem ownership gates
+        run: >-
+          node tests/test-native-macos-static-core.mjs
+          --app "apps/datasecure-standalone/tauri-contract/target/release/bundle/macos/DataSecure Standalone.app"
+          --target "${{ matrix.target }}"
       - name: Verify bundle contract, signature and native architectures
         shell: bash
         run: |
@@ -165,14 +273,20 @@ jobs:
           const crypto = require('node:crypto');
           const [app, target] = process.argv.slice(2);
           const manifest = JSON.parse(fs.readFileSync(path.join(app, 'Contents/Resources/RUNTIME-EVIDENCE.json'), 'utf8'));
-          const entry = manifest.targets.find((item) => item.target === target);
+          const entry = manifest.target === target ? manifest.core : null;
           const bytes = fs.readFileSync(path.join(app, 'Contents/MacOS/datasecure-core'));
-          if (manifest.schema !== 'datasecure-standalone-runtime-evidence/1' ||
+          if (manifest.schema !== 'datasecure-standalone-macos-runtime-evidence/2' ||
               entry?.bytes !== bytes.length || entry?.sha256 !== crypto.createHash('sha256').update(bytes).digest('hex')) {
             throw new Error('STANDALONE_MACOS_SIGNED_RUNTIME_EVIDENCE_INVALID');
           }
           NODE
-          DATASECURE_PRODUCT_CHANNEL=standalone DATASECURE_BUNDLED_RUNTIME_REQUIRED=1 "$sidecar" - "$bundle" "${{ matrix.target }}" <<'NODE'
+          proof="$(node scripts/lib/macos-core-artifact.mjs --verify "$PWD" "${{ matrix.target }}")"
+          core_sha="$(printf '%s' "$proof" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).core_sha256))')"
+          artifact_sha="$(printf '%s' "$proof" | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>process.stdout.write(JSON.parse(s).artifact_sha256))')"
+          [[ "$core_sha" =~ ^[a-f0-9]{64}$ && "$artifact_sha" =~ ^[a-f0-9]{64}$ ]]
+          DATASECURE_PRODUCT_CHANNEL=standalone DATASECURE_BUNDLED_RUNTIME_REQUIRED=1 DATASECURE_NATIVE_EXPORT_CHANNEL=1 \
+            DATASECURE_MACOS_STATIC_CORE_SHA256="$core_sha" DATASECURE_MACOS_STATIC_CORE_ARTIFACT_SHA256="$artifact_sha" \
+            "$sidecar" - "$bundle" "${{ matrix.target }}" <<'NODE'
           const path = require('node:path');
           const [app, target] = process.argv.slice(2);
           const server = path.resolve(app, 'Contents/Resources/server');
@@ -184,8 +298,8 @@ jobs:
           }
           process.stdout.write('STANDALONE_MACOS_RUNNING_CORE_INTEGRITY_CHECKED\n');
           NODE
-          conversion_node="$bundle/Contents/Resources/server/standalone/conversion-runtime/node"
-          supervisor="$bundle/Contents/Resources/server/native/${{ matrix.target }}/datasecure-sandbox"
+          conversion_node="$bundle/Contents/MacOS/datasecure-conversion-node"
+          supervisor="$bundle/Contents/MacOS/datasecure-sandbox"
           test -f "$bundle/Contents/Info.plist"
           test -d "$bundle/Contents/Resources/server/standalone/conversion-runtime"
           test "$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$bundle/Contents/Info.plist")" = "de.msg.datasecure.standalone"
@@ -199,9 +313,11 @@ jobs:
           # pages. Verify the final signed Core and keep the UI unentitled.
           core_entitlements="$(mktemp "${RUNNER_TEMP}/datasecure-core-entitlements.XXXXXX")"
           app_entitlements="$(mktemp "${RUNNER_TEMP}/datasecure-app-entitlements.XXXXXX")"
+          conversion_entitlements="$(mktemp "${RUNNER_TEMP}/datasecure-conversion-entitlements.XXXXXX")"
           codesign -d --entitlements :- "$sidecar" > "$core_entitlements" 2>/dev/null
           codesign -d --entitlements :- "$app" > "$app_entitlements" 2>/dev/null || true
-          python3 - "$core_entitlements" "$app_entitlements" <<'PY'
+          codesign -d --entitlements :- "$conversion_node" > "$conversion_entitlements" 2>/dev/null
+          python3 - "$core_entitlements" "$app_entitlements" "$conversion_entitlements" <<'PY'
           import plistlib, sys
           with open(sys.argv[1], 'rb') as stream:
               core = plistlib.load(stream)
@@ -212,10 +328,22 @@ jobs:
           except (ValueError, plistlib.InvalidFileException):
               app = {}
           assert not app.get('com.apple.security.cs.allow-jit'), 'UI must not have JIT'
+          # Existing official Node 22.23.2 development entitlements. This is
+          # engineering evidence, NOT a Developer-ID/notarization release gate.
+          with open(sys.argv[3], 'rb') as stream:
+              converter = plistlib.load(stream)
+          assert converter == {key: True for key in [
+              'com.apple.security.cs.allow-jit',
+              'com.apple.security.cs.allow-unsigned-executable-memory',
+              'com.apple.security.cs.disable-executable-page-protection',
+              'com.apple.security.cs.allow-dyld-environment-variables',
+              'com.apple.security.cs.disable-library-validation',
+              'com.apple.security.get-task-allow'
+          ]}, 'Pinned vendor converter entitlement inventory changed'
           PY
           codesign -dv --verbose=4 "$sidecar" 2>&1 | grep -q 'flags=.*runtime'
           codesign -dv --verbose=4 "$app" 2>&1 | grep -q 'flags=.*runtime'
-          rm -- "$core_entitlements" "$app_entitlements"
+          rm -- "$core_entitlements" "$app_entitlements" "$conversion_entitlements"
           for executable in "$app" "$sidecar" "$conversion_node" "$supervisor"; do
             test -x "$executable"
             test -z "$(find "$executable" ! -perm -005 -print -quit)"
@@ -229,11 +357,8 @@ jobs:
           test -z "$(find "$bundle/Contents/Resources/server" -type d ! -perm -005 -print -quit)"
           test -z "$(find "$bundle/Contents/Resources/server" -type f ! -perm -004 -print -quit)"
           find "$bundle" -type f \( -name '*.node' -o -name '*.dylib' \) -exec codesign --verify --strict --verbose=2 {} +
-          if cmp -s "dist/${{ matrix.target }}/node" "$sidecar"; then
-            echo 'BUNDLED_RUNTIME_BYTE_EQUAL=true'
-          else
-            echo 'BUNDLED_RUNTIME_BYTE_EQUAL=false'
-          fi
+          cmp "dist/macos-static-core/${{ matrix.target }}/datasecure-core" "$sidecar"
+          echo 'CUSTOM_CORE_PRE_CARGO_BYTES_PRESERVED=true'
           codesign -dv --verbose=4 "$sidecar" 2>&1 | grep -E '^(CodeDirectory|Signature=|Runtime Version=|TeamIdentifier=)' || true
           if find "$bundle" -print | grep -E '/(?:\.claude-plugin|skills|Claude|Cowork)(/|$)|/\.mcp\.json$'; then
             exit 1
@@ -284,12 +409,13 @@ jobs:
           trap cleanup EXIT
           ditto -x -k "$archive" "$extraction"
           packaged_app="$extraction/DataSecure-Standalone-${version}-${{ matrix.target }}/DataSecure Standalone.app"
+          node scripts/lib/macos-core-artifact.mjs --app "$PWD" "${{ matrix.target }}" "$packaged_app"
           codesign --verify --deep --strict --verbose=2 "$packaged_app"
           for executable in \
             "$packaged_app/Contents/MacOS/datasecure-standalone" \
             "$packaged_app/Contents/MacOS/datasecure-core" \
-            "$packaged_app/Contents/Resources/server/standalone/conversion-runtime/node" \
-            "$packaged_app/Contents/Resources/server/native/${{ matrix.target }}/datasecure-sandbox"; do
+            "$packaged_app/Contents/MacOS/datasecure-conversion-node" \
+            "$packaged_app/Contents/MacOS/datasecure-sandbox"; do
             test "$(lipo -archs "$executable")" = "${{ matrix.rust_arch }}"
             codesign --verify --strict --verbose=2 "$executable"
           done
@@ -337,6 +463,7 @@ jobs:
           test -L "$mount/Applications"
           test "$(readlink "$mount/Applications")" = /Applications
           diff -qr "$bundle" "$mount/DataSecure Standalone.app"
+          node scripts/lib/macos-core-artifact.mjs --app "$PWD" "${{ matrix.target }}" "$mount/DataSecure Standalone.app"
           codesign --verify --deep --strict --verbose=2 "$mount/DataSecure Standalone.app"
           bash tests/manual/standalone-native-macos-launch.sh \
             --app "$mount/DataSecure Standalone.app" --target "${{ matrix.target }}" --version "$version"
@@ -361,7 +488,7 @@ jobs:
           bundle="apps/datasecure-standalone/tauri-contract/target/release/bundle/macos/DataSecure Standalone.app"
           app="$bundle/Contents/MacOS/datasecure-standalone"
           sidecar="$bundle/Contents/MacOS/datasecure-core"
-          supervisor="$bundle/Contents/Resources/server/native/${{ matrix.target }}/datasecure-sandbox"
+          supervisor="$bundle/Contents/MacOS/datasecure-sandbox"
           {
             echo "### DataSecure Standalone macOS target evidence"
             echo "- Commit: \`${GITHUB_SHA}\`"

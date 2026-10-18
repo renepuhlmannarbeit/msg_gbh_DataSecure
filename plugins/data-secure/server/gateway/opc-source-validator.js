@@ -148,7 +148,9 @@ function parseXml(text, expectedNamespace, expectedRoot) {
     if (/\S/u.test(text.slice(offset, open))) throw new OpcValidationError();
     if (text.startsWith('<!--', open)) {
       const end = text.indexOf('-->', open + 4);
-      if (end < 0 || text.slice(open + 4, end).includes('--')) throw new OpcValidationError();
+      if (end < 0) throw new OpcValidationError();
+      const comment = text.slice(open + 4, end);
+      if (comment.includes('--') || comment.endsWith('-')) throw new OpcValidationError();
       offset = end + 3;
       continue;
     }

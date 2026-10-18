@@ -159,7 +159,9 @@ jobs:
       - name: Compile the actual v2 desktop and verify its portable archive
         run: |
           $ErrorActionPreference = 'Stop'
-          cargo build --manifest-path apps/datasecure-standalone/tauri-contract/Cargo.toml --release --locked
+          # This entrypoint builds inside the crate, loading both the pinned
+          # rust-toolchain.toml and the target-scoped static-CRT Cargo config.
+          npm run build:standalone:windows
           if ($LASTEXITCODE) { exit $LASTEXITCODE }
           node scripts/build-standalone-package.mjs
           if ($LASTEXITCODE) { exit $LASTEXITCODE }

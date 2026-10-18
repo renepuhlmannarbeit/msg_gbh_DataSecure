@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const { EventEmitter } = require('events');
+const { createBatchExecutorLease } = require('../plugins/data-secure/server/gateway/batch-executor-lease');
 const { createSuite } = require('./helpers');
 const {
   startLocalReviewExecutor,
@@ -37,17 +38,29 @@ test('review starts in a detached worker and returns immediately without the tok
   const events = [];
   let forked;
   let claimed;
-  let released;
+  let released, claimProof;
+  let leaseState = { token };
+  // Explicit RAM IO/kernel model around the actual claim-capability factory.
+  const leaseModel = createBatchExecutorLease({ SafeError: Error, currentPid: () => 0,
+    processAlive: pid => pid === child.pid,
+    processInstanceIdentity: pid => pid === child.pid ? 'a'.repeat(64) : null,
+    liveLocalExecutor: state => state.local_executor_pid === child.pid,
+    withSynchronousActiveLock: (_token, action) => action(),
+    readState: () => structuredClone(leaseState), writeState: value => { leaseState = structuredClone(value); },
+    publicProgress: () => ({ batch_total: 4, released: 2, stopped: 0,
+      deferred_review: 2, batch_phase: 'awaiting_local_review' }) });
   const result = startLocalReviewExecutor(token, {
     forkProcess(worker, args, options) { forked = { worker, args, options }; return child; },
     claimLocalBatchExecutor(value, pid) {
       claimed = { value, pid };
-      return {
-        ok: true, batch_token: value, batch_total: 4, released: 2, stopped: 0,
-        deferred_review: 2, batch_phase: 'awaiting_local_review'
-      };
+      claimProof = leaseModel.claimLocalBatchExecutor(value, pid);
+      return claimProof;
     },
-    releaseLocalBatchExecutor(value, pid) { released = { value, pid }; return true; },
+    releaseClaimedLocalBatchExecutor(proof) {
+      assert.strictEqual(proof, claimProof);
+      released = { value: token, pid: child.pid };
+      return leaseModel.releaseClaimedLocalBatchExecutor(proof);
+    },
     recordWorkflowEvent(event) { events.push(event); return true; }
   });
   assert.ok(forked.worker.endsWith(path.join('gateway', 'review-worker.js')));

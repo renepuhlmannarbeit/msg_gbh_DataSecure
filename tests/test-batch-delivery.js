@@ -5,6 +5,7 @@ const os = require('os');
 const path = require('path');
 
 const { createBatchDelivery } = require('../plugins/data-secure/server/gateway/batch-delivery');
+const { createBatchActiveLock } = require('../plugins/data-secure/server/gateway/batch-active-lock');
 const { createSuite } = require('./helpers');
 
 const { test, done, assert } = createSuite('Batch delivery boundary');
@@ -35,6 +36,7 @@ function fixture(options = {}) {
   let failWrite = options.failWrite === true;
   const delivery = createBatchDelivery({
     active,
+    ...(options.withSynchronousActiveLock ? { withSynchronousActiveLock: options.withSynchronousActiveLock } : {}),
     path: { join: (left, right) => `${left}/${right}` },
     workPath: (batchToken) => `work:${batchToken}`,
     io: {
@@ -71,20 +73,24 @@ function fixture(options = {}) {
       return options.refuseRelease !== true;
     },
     readState(batchToken) {
+      options.assertTransaction?.();
       events.push(`read:${batchToken}`);
       if (options.readError) throw options.readError;
       return structuredClone(durable);
     },
     writeState(state) {
+      options.assertTransaction?.();
       events.push('write');
       if (failWrite) throw new Error('WRITE_FAILED');
       durable = structuredClone(state);
     },
     assertLocalExecutorAccess(_state, pid) {
+      options.assertTransaction?.();
       events.push(`access:${pid ?? 'default'}`);
       if (options.accessError) throw options.accessError;
     },
     regularPublishedPackage(packageId) {
+      options.assertTransaction?.();
       events.push(`verify:${packageId}`);
       return packages.has(packageId);
     },
@@ -94,6 +100,7 @@ function fixture(options = {}) {
     },
     publicProgress: (state) => ({ complete: state.items.every((entry) => entry.status === 'released') }),
     writeTerminalEvidence(state) {
+      options.assertTransaction?.();
       if (state.terminal_evidence?.status === 'exported') return true;
       events.push('evidence');
       return true;
@@ -217,6 +224,172 @@ test('a refused or failed lock release cannot report delivery success', () => {
   for (const options of [{ refuseRelease: true }, { releaseError: new Error('EPERM') }]) {
     const value = fixture(options);
     assert.throws(() => value.delivery.acknowledgeDeliveredPackage(token, ids[0]), /nicht sicher freigegeben/u);
+  }
+});
+
+// Actual active-lock file publication/revalidation/unlink, with a deliberately
+// injected kernel lifetime model. Delivery journals/work bytes below retain
+// the existing private RAM adapter; this is not a native OS competition gate.
+function synchronousDeliveryFixture(options, run) {
+  const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'ds-delivery-transaction-')));
+  const identity = fs.lstatSync(base, { bigint: true });
+  const target = path.join(base, 'active-processing.json');
+  const active = new Set(), diagnostics = [];
+  let held = false, entries = 0;
+  const owner = createBatchActiveLock({ lockPath: () => target,
+    fs: { ...fs, constants: fs.constants, unlinkSync(name) {
+      if (name === target && options.unlinkError) throw options.unlinkError;
+      return fs.unlinkSync(name);
+    } },
+    onFailure(record) { diagnostics.push(record); },
+    withOwnershipControl(_root, action) {
+      assert.equal(held, false, 'only one outer control acquisition is needed');
+      entries++;
+      if (options.controlError) throw options.controlError;
+      held = true;
+      let result, primary, failed = false;
+      try { result = action({ assertHeld() { assert.equal(held, true); } }); }
+      catch (error) { primary = error; failed = true; }
+      finally { held = false; }
+      if (failed) throw primary;
+      if (options.closeError) throw options.closeError;
+      return result;
+    }
+  });
+  const value = fixture({ ...options, active,
+    withSynchronousActiveLock: owner.withSynchronousActiveLock,
+    acquireError: new Error('SEPARATED_ACQUIRE_MUST_NOT_RUN'),
+    releaseError: new Error('SEPARATED_RELEASE_MUST_NOT_RUN'),
+    assertTransaction() {
+      assert.equal(held, true);
+      assert.equal(active.has(token), true);
+      assert.equal(owner.readActiveLock().token, token);
+      assert.equal(owner.readActiveLock().pid, process.pid);
+    }
+  });
+  try { run({ ...value, owner, active, diagnostics, target, entries: () => entries }); }
+  finally {
+    const current = fs.lstatSync(base, { bigint: true });
+    assert.ok(current.isDirectory() && !current.isSymbolicLink());
+    assert.equal(current.dev, identity.dev); assert.equal(current.ino, identity.ino);
+    assert.equal(path.dirname(base), fs.realpathSync.native(os.tmpdir()));
+    // Preflight all exact, freshly-created fixture files before deleting any.
+    // No recursive fallback, reparse traversal or user-data cleanup.
+    const files = fs.readdirSync(base).map(name => path.join(base, name));
+    for (const file of files) {
+      const stat = fs.lstatSync(file);
+      assert.ok(stat.isFile() && !stat.isSymbolicLink());
+      assert.equal(path.dirname(file), base);
+      assert.equal(fs.realpathSync.native(file), file);
+    }
+    for (const file of files) fs.unlinkSync(file);
+    fs.rmdirSync(base);
+  }
+}
+
+const synchronousDeliveryCalls = [
+  ['acknowledgeDeliveredPackage', [token, ids[0]]],
+  ['acknowledgeDeliveredPackages', [token, ids.slice(0, 2)]],
+  ['finalizePublishedPackageLocally', [token, ids[0]]]
+];
+
+test('all three synchronous delivery mutations use one real own-file transaction without release reacquisition', () => {
+  for (const [method, args] of synchronousDeliveryCalls) {
+    const pending = method === 'acknowledgeDeliveredPackages' ? [item(0), item(1)] : [item(0)];
+    synchronousDeliveryFixture({ state: { token, items: pending },
+      files: pending.map(entry => [workName(entry), 'file']) }, value => {
+      assert.equal(value.delivery[method](...args).ok, true);
+      assert.equal(value.entries(), 1);
+      assert.equal(value.active.size, 0);
+      assert.equal(fs.existsSync(value.target), false);
+      assert.ok(value.durable().items.every(entry => entry.status === 'released'));
+      assert.ok(value.durable().items.every(entry => entry.analysis_acknowledged === (method !== 'finalizePublishedPackageLocally')));
+      assert.equal(value.events.filter(event => event === 'write').length, 1);
+      assert.equal(value.events.filter(event => event === 'evidence').length, 1);
+      assert.equal(value.events.some(event => /^(acquire|release):/u.test(event)), false);
+    });
+  }
+});
+
+test('synchronous multi-ack still verifies its entire page before touching any state or source bytes', () => {
+  const pending = [item(0), item(1)];
+  synchronousDeliveryFixture({ state: { token, items: pending }, packages: [ids[0]],
+    files: pending.map(entry => [workName(entry), 'file']) }, value => {
+    assert.throws(() => value.delivery.acknowledgeDeliveredPackages(token, ids.slice(0, 2)), /mindestens ein Paket/u);
+    assert.deepEqual(value.durable().items.map(entry => entry.status), ['delivery_pending', 'delivery_pending']);
+    assert.equal(value.events.some(event => event === 'write' || event === 'evidence' || event.startsWith('unlink:')), false);
+    assert.equal(value.active.size, 0); assert.equal(value.entries(), 1);
+    assert.equal(fs.existsSync(value.target), false);
+  });
+});
+
+test('synchronous repeated ACKs retain the existing durable no-op contract', () => {
+  synchronousDeliveryFixture({ state: { token, items: [item(0, 'released', { acknowledged: true })],
+    terminal_evidence: { status: 'exported' } } }, value => {
+    value.delivery.acknowledgeDeliveredPackage(token, ids[0]);
+    value.delivery.acknowledgeDeliveredPackages(token, [ids[0]]);
+    assert.equal(value.entries(), 2); assert.equal(value.active.size, 0);
+    assert.equal(value.events.some(event => event === 'write' || event === 'evidence' || event.startsWith('unlink:')), false);
+    assert.equal(fs.existsSync(value.target), false);
+  });
+});
+
+test('synchronous delivery never acknowledges success after exact-own cleanup or native close refusal', () => {
+  for (const [method, args] of synchronousDeliveryCalls) {
+    for (const close of [false, true]) {
+      const closeError = Object.assign(new Error('fixed native close refusal'), { code: 'OWNERSHIP_GUARD_CLOSE_UNCONFIRMED' });
+      synchronousDeliveryFixture({ state: { token, items: [item(0), item(1)] },
+        ...(close ? { closeError } : { unlinkError: Object.assign(new Error('fixed unlink refusal'), { code: 'EPERM' }) }) }, value => {
+        assert.throws(() => value.delivery[method](...args), error => close ? error === closeError :
+          error.code === 'STANDALONE_OWNERSHIP_CONTROL_UNCONFIRMED');
+        assert.equal(value.active.size, 0); assert.equal(value.entries(), 1);
+        assert.equal(value.durable().items[0].status, 'released', 'retain the durable transition, never manufacture a success ACK');
+        assert.equal(fs.existsSync(value.target), !close);
+      });
+    }
+  }
+});
+
+test('synchronous delivery preserves its primary error and closed secondary diagnostic on failed cleanup', () => {
+  const primary = new Error('private read refusal');
+  for (const [method, args] of synchronousDeliveryCalls) {
+    synchronousDeliveryFixture({ state: { token, items: [item(0), item(1)] }, readError: primary,
+      unlinkError: Object.assign(new Error('private scanner cause'), { code: 'EPERM' }) }, value => {
+      assert.throws(() => value.delivery[method](...args), error => error === primary);
+      assert.equal(value.active.size, 0); assert.equal(value.entries(), 1);
+      assert.equal(fs.existsSync(value.target), true);
+      assert.equal(value.events.includes('write'), false);
+      assert.deepEqual(value.diagnostics, [{ phase: 'processing', error_code: 'STANDALONE_OWNERSHIP_CONTROL_UNCONFIRMED' }]);
+      assert.equal(Object.isFrozen(value.diagnostics[0]), true);
+    });
+  }
+});
+
+test('synchronous delivery preserves native acquisition refusals without reading or changing the journal', () => {
+  for (const code of ['OWNERSHIP_GUARD_BUSY', 'OWNERSHIP_GUARD_UNSAFE', 'OWNERSHIP_GUARD_UNAVAILABLE']) {
+    const controlError = Object.assign(new Error('fixed native refusal'), { code });
+    synchronousDeliveryFixture({ controlError }, value => {
+      for (const [method, args] of synchronousDeliveryCalls) {
+        assert.throws(() => value.delivery[method](...args), error => error === controlError);
+        assert.equal(value.active.size, 0); assert.equal(fs.existsSync(value.target), false);
+      }
+      assert.deepEqual(value.events, []);
+    });
+  }
+});
+
+test('missing native delivery wiring fails closed instead of selecting the legacy adapter', () => {
+  if (!['win32', 'darwin'].includes(process.platform)) return;
+  const value = fixture();
+  const previous = process.env.DATASECURE_NATIVE_EXPORT_CHANNEL;
+  try {
+    process.env.DATASECURE_NATIVE_EXPORT_CHANNEL = '1';
+    for (const [method, args] of synchronousDeliveryCalls)
+      assert.throws(() => value.delivery[method](...args), error => error.code === 'OWNERSHIP_GUARD_UNAVAILABLE');
+    assert.deepEqual(value.events, []);
+  } finally {
+    if (previous === undefined) delete process.env.DATASECURE_NATIVE_EXPORT_CHANNEL;
+    else process.env.DATASECURE_NATIVE_EXPORT_CHANNEL = previous;
   }
 });
 

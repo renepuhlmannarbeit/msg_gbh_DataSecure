@@ -4,6 +4,8 @@
   "windows": ["review"],
   "local": true,
   "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
     "allow-get-review-session",
     "allow-close-review-window",
     "allow-get-review-chunk",

@@ -7,7 +7,8 @@ function Resolve-StandaloneArchiveIdentity([string] $ArchivePath, [string] $Fall
         }
         return [pscustomobject]@{
             Version = $FallbackVersion
-            ProductDirectory = "DataSecure-Standalone-$FallbackVersion-windows-x64"
+            ProductDirectory = 'DataSecure'
+            HistoricalProductDirectory = "DataSecure-Standalone-$FallbackVersion-windows-x64"
         }
     }
     $baseName = [System.IO.Path]::GetFileNameWithoutExtension($ArchivePath)
@@ -20,8 +21,33 @@ function Resolve-StandaloneArchiveIdentity([string] $ArchivePath, [string] $Fall
     $version = $match.Groups['version'].Value
     [pscustomobject]@{
         Version = $version
-        ProductDirectory = "DataSecure-Standalone-$version-windows-x64"
+        ProductDirectory = 'DataSecure'
+        HistoricalProductDirectory = "DataSecure-Standalone-$version-windows-x64"
     }
+}
+
+function Resolve-StandaloneProductDirectory([string] $ExpandedRoot, [string] $Version) {
+    $identity = Resolve-StandaloneArchiveIdentity '' $Version
+    $root = Get-Item -LiteralPath $ExpandedRoot -Force -ErrorAction Stop
+    if (-not $root.PSIsContainer -or ($root.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+        throw 'STANDALONE_NATIVE_PACKAGE_ROOT_INVALID'
+    }
+    $children = @(Get-ChildItem -LiteralPath $ExpandedRoot -Force -ErrorAction Stop)
+    if ($children.Count -ne 1 -or -not $children[0].PSIsContainer -or
+        ($children[0].Attributes -band [System.IO.FileAttributes]::ReparsePoint) -or
+        @($identity.ProductDirectory, $identity.HistoricalProductDirectory) -cnotcontains $children[0].Name) {
+        throw 'STANDALONE_NATIVE_PACKAGE_ROOT_INVALID'
+    }
+    $manifestFile = Get-Item -LiteralPath (Join-Path $children[0].FullName 'STANDALONE-MANIFEST.json') -Force -ErrorAction Stop
+    if ($manifestFile.PSIsContainer -or ($manifestFile.Attributes -band [System.IO.FileAttributes]::ReparsePoint)) {
+        throw 'STANDALONE_NATIVE_PACKAGE_ROOT_INVALID'
+    }
+    $manifest = Get-Content -Raw -LiteralPath $manifestFile.FullName -ErrorAction Stop | ConvertFrom-Json -ErrorAction Stop
+    if ($manifest.schema -cne 'datasecure-standalone-package/1' -or
+        $manifest.version -cne $Version -or $manifest.target -cne 'windows-x64') {
+        throw 'STANDALONE_NATIVE_PACKAGE_ROOT_INVALID'
+    }
+    return $children[0].Name
 }
 
 function Remove-StandaloneDesktopEnvironmentOverrides($StartInfo) {
@@ -71,7 +97,9 @@ if ($ValidateContract) {
     $historical = Resolve-StandaloneArchiveIdentity 'C:\evidence\DataSecure-Standalone-3.2.0-rc109-windows-x64.zip' 'ignored'
     $current = Resolve-StandaloneArchiveIdentity '' '3.2.0-rc111'
     if ($historical.Version -ne '3.2.0-rc109' -or
-        $current.ProductDirectory -ne 'DataSecure-Standalone-3.2.0-rc111-windows-x64') {
+        $historical.HistoricalProductDirectory -ne 'DataSecure-Standalone-3.2.0-rc109-windows-x64' -or
+        $current.ProductDirectory -ne 'DataSecure' -or
+        $current.HistoricalProductDirectory -ne 'DataSecure-Standalone-3.2.0-rc111-windows-x64') {
         throw 'STANDALONE_NATIVE_ARCHIVE_CONTRACT_INVALID'
     }
     $invalid = $null

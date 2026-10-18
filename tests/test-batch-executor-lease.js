@@ -32,7 +32,7 @@ function fixture(options = {}) {
       events.push(`acquire:${value}`);
       if (options.acquireError) throw options.acquireError;
     },
-    releaseActiveLock(value) { events.push(`release:${value}`); return releaseResults.shift() ?? true; },
+    releaseActiveLock(value) { events.push(`release:${value}`); if (options.releaseError) throw options.releaseError; return releaseResults.shift() ?? true; },
     readState(value) {
       events.push(`read:${value}`);
       if (options.readError) throw options.readError;
@@ -55,6 +55,7 @@ function fixture(options = {}) {
       };
     },
     nowIso: () => fixedTime,
+    currentPid: () => options.currentPid ?? 222,
     processInstanceIdentity(pid) {
       return alive.has(pid) ? identity(pid) : null;
     },
@@ -198,6 +199,19 @@ test('a failed global-lock release never reports a successful lease transition',
   assert.strictEqual(releasing.state().local_executor_pid, undefined, 'the durable release is retained');
 });
 
+test('native release errors preserve a primary claim failure and never escape nonthrowing cleanup', () => {
+  const releaseError = Object.assign(new Error('OWNERSHIP_GUARD_BUSY'), { code: 'OWNERSHIP_GUARD_BUSY' });
+  const primary = new Error('primary journal failure');
+  const failed = fixture({ alive: [222], readError: primary, releaseError });
+  assert.throws(() => failed.lease.claimLocalBatchExecutor(token, 222), error => error === primary);
+  const claimed = fixture({ alive: [222], releaseError });
+  assert.throws(() => claimed.lease.claimLocalBatchExecutor(token, 222), error => error === releaseError);
+  const releasing = fixture({ state: { token, remaining: 1, local_executor_pid: 222,
+    local_executor_birth_id: birth(222) }, alive: [222], releaseError });
+  assert.strictEqual(releasing.lease.releaseLocalBatchExecutor(token, 222), false);
+  assert.strictEqual(releasing.state().local_executor_pid, undefined, 'retain the actual durable lease change, not a success ACK');
+});
+
 test('release requires the exact PID and lock failures leave the journal untouched', () => {
   const original = { token, remaining: 1, local_executor_pid: 222, local_executor_started_at: fixedTime,
     local_executor_birth_id: birth(222) };
@@ -205,7 +219,7 @@ test('release requires the exact PID and lock failures leave the journal untouch
   assert.strictEqual(mismatch.lease.releaseLocalBatchExecutor(token, 333), false);
   assert.deepStrictEqual(mismatch.state(), original);
   assert.ok(!mismatch.events.includes('write'));
-  assert.strictEqual(mismatch.events.at(-1), `release:${token}`);
+  assert.deepStrictEqual(mismatch.events, [], 'a foreign legacy PID has no cleanup authority');
 
   const blocked = fixture({ state: original, acquireError: new Error('lock unavailable') });
   assert.strictEqual(blocked.lease.releaseLocalBatchExecutor(token, 222), false);
@@ -233,6 +247,7 @@ test('a terminal non-runnable state preserves the established no-write contract'
 test('the batch composition root keeps the public executor facade', () => {
   assert.strictEqual(typeof batch.claimLocalBatchExecutor, 'function');
   assert.strictEqual(typeof batch.releaseLocalBatchExecutor, 'function');
+  assert.strictEqual(typeof batch.releaseClaimedLocalBatchExecutor, 'function');
   assert.strictEqual(typeof batch.runLocalBatchExecutor, 'function');
 });
 

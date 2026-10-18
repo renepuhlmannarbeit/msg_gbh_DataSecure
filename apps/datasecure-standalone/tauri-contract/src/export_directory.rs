@@ -12,6 +12,133 @@
 use sha2::{Digest, Sha256};
 use std::{fs::File, io::{self, Read, Seek, SeekFrom, Write}, path::Path};
 
+// Closed diagnostic data only: no names, handles, descriptors or error text.
+// String labels "0".."5"/"unknown" are classes, never raw ULONG_PTR values.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub(crate) enum ControlledCreateContext {
+    #[serde(rename = "controlled_directory_first_create")]
+    ControlledDirectoryFirstCreate,
+}
+#[derive(Clone, Copy, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+pub(crate) enum CreateInformationClass {
+    #[serde(rename = "0")] Zero,
+    #[serde(rename = "1")] One,
+    #[serde(rename = "2")] Two,
+    #[serde(rename = "3")] Three,
+    #[serde(rename = "4")] Four,
+    #[serde(rename = "5")] Five,
+    #[serde(rename = "unknown")] Unknown,
+}
+impl CreateInformationClass {
+    #[cfg(any(windows, test))]
+    fn classify(information: usize) -> Self {
+        match information {
+            0 => Self::Zero, 1 => Self::One, 2 => Self::Two,
+            3 => Self::Three, 4 => Self::Four, 5 => Self::Five,
+            _ => Self::Unknown,
+        }
+    }
+}
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ControlledDirectoryCreateFailure {
+    pub context: ControlledCreateContext,
+    pub nt_status: u32,
+    pub mapped_os_error: u32,
+    pub io_information_class: CreateInformationClass,
+}
+impl ControlledDirectoryCreateFailure {
+    pub(crate) fn is_failure(&self) -> bool { self.nt_status & 0x8000_0000 != 0 }
+}
+#[cfg(any(windows, test))]
+struct RelativeCreateFailure {
+    directory: bool, create: bool, has_security: bool,
+    nt_status: i32, mapped_os_error: u32, information: usize,
+}
+#[cfg(any(windows, test))]
+fn failed_relative_create(attempt: RelativeCreateFailure,
+    observe: impl FnOnce(ControlledDirectoryCreateFailure)) -> io::Error {
+    // Preserve the original mapped error before invoking any diagnostic sink.
+    // The NtCreateFile return value is authoritative here, not the reserved
+    // pointer/status union. Information may still contain its initial zero;
+    // its closed class is not proof that the kernel wrote it or created a file.
+    let original = io::Error::from_raw_os_error(attempt.mapped_os_error as i32);
+    if attempt.nt_status < 0 && attempt.directory && attempt.create && attempt.has_security {
+        observe(ControlledDirectoryCreateFailure {
+            context: ControlledCreateContext::ControlledDirectoryFirstCreate,
+            nt_status: attempt.nt_status as u32, mapped_os_error: attempt.mapped_os_error,
+            io_information_class: CreateInformationClass::classify(attempt.information),
+        });
+    }
+    original
+}
+
+#[cfg(test)]
+mod controlled_create_diagnostic_tests {
+    use super::*;
+
+    #[test]
+    fn only_failed_controlled_directory_first_create_is_observed() {
+        for directory in [false, true] {
+            for create in [false, true] {
+                for has_security in [false, true] {
+                    for nt_status in [0, 0x103, i32::MIN, 0xc000_0022u32 as i32] {
+                        let mut observed = Vec::new();
+                        let original = io::Error::from_raw_os_error(4395);
+                        let returned = failed_relative_create(RelativeCreateFailure {
+                            directory, create, has_security, nt_status,
+                            mapped_os_error: 4395, information: 0,
+                        }, |failure| observed.push(failure));
+                        assert_eq!(returned.raw_os_error(), original.raw_os_error());
+                        assert_eq!(returned.kind(), original.kind());
+                        assert_eq!(observed.len(), usize::from(nt_status < 0 && directory && create && has_security));
+                    }
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn returned_status_bits_and_original_mapped_error_are_preserved() {
+        for nt_status in [i32::MIN, 0xc000_0022u32 as i32, -1] {
+            for mapped_os_error in [0, 5, 4395, u32::MAX] {
+                let original = io::Error::from_raw_os_error(mapped_os_error as i32);
+                let mut observed = None;
+                let returned = failed_relative_create(RelativeCreateFailure {
+                    directory: true, create: true, has_security: true,
+                    nt_status, mapped_os_error, information: 4,
+                }, |failure| observed = Some(failure));
+                assert_eq!(returned.raw_os_error(), original.raw_os_error());
+                assert_eq!(returned.kind(), original.kind());
+                assert_eq!(returned.to_string(), original.to_string());
+                let failure = observed.unwrap();
+                assert_eq!(failure.nt_status, nt_status as u32);
+                assert_eq!(failure.mapped_os_error, mapped_os_error);
+                assert!(failure.is_failure());
+                assert_eq!(failure.io_information_class, CreateInformationClass::Four);
+            }
+        }
+    }
+
+    #[test]
+    fn pointer_sized_information_never_becomes_diagnostic_data() {
+        for (information, expected) in [(0, "0"), (1, "1"), (2, "2"), (3, "3"),
+            (4, "4"), (5, "5"), (6, "unknown"), (usize::MAX, "unknown")] {
+            let mut observed = None;
+            let _ = failed_relative_create(RelativeCreateFailure {
+                directory: true, create: true, has_security: true,
+                nt_status: 0xc000_0022u32 as i32, mapped_os_error: 5, information,
+            }, |failure| observed = Some(failure));
+            let value = serde_json::to_value(observed.unwrap()).unwrap();
+            assert_eq!(value, serde_json::json!({
+                "context": "controlled_directory_first_create",
+                "nt_status": 0xc000_0022u32, "mapped_os_error": 5,
+                "io_information_class": expected,
+            }));
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct Identity { pub volume: u64, pub object: u128, pub created_ns: u128 }
 
@@ -620,7 +747,13 @@ mod platform {
         let result = unsafe { NtCreateFile(&mut handle, access, &mut attributes, &mut status,
             std::ptr::null(), 0x80, if control { 0 } else if inspect_held { 7 } else if directory { 3 } else { 1 }, if control { 3 } else if create { 2 } else { 1 },
             0x20 | 0x0020_0000 | if directory { 1 } else { 0x40 }, std::ptr::null_mut(), 0) };
-        if result < 0 { return Err(io::Error::from_raw_os_error(unsafe { RtlNtStatusToDosError(result) } as i32)); }
+        if result < 0 {
+            let mapped_os_error = unsafe { RtlNtStatusToDosError(result) };
+            return Err(failed_relative_create(RelativeCreateFailure {
+                directory, create, has_security: !security.is_null(),
+                nt_status: result, mapped_os_error, information: status.information,
+            }, crate::diagnostic_native_controlled_directory_create_failure));
+        }
         if handle.is_null() { return Err(unsafe_io()); }
         Ok(unsafe { File::from_raw_handle(handle) })
     }
@@ -714,9 +847,9 @@ mod platform {
             let header = buffer.get(offset..offset + 12).ok_or_else(unsafe_io)?;
             let next = u32::from_le_bytes(header[..4].try_into().map_err(|_| unsafe_io())?) as usize;
             let length = u32::from_le_bytes(header[8..12].try_into().map_err(|_| unsafe_io())?) as usize;
-            if length == 0 || length > 510 || length % 2 != 0 { return Err(unsafe_io()); }
+            if length == 0 || length > 510 || !length.is_multiple_of(2) { return Err(unsafe_io()); }
             let text = buffer.get(offset + 12..offset + 12 + length).ok_or_else(unsafe_io)?;
-            let wide: Vec<u16> = text.chunks_exact(2).map(|pair| u16::from_le_bytes([pair[0], pair[1]])).collect();
+            let wide: Vec<u16> = text.as_chunks::<2>().0.iter().map(|pair| u16::from_le_bytes([pair[0], pair[1]])).collect();
             let name = String::from_utf16(&wide).map_err(|_| unsafe_io())?;
             if !matches!(name.as_str(), "." | "..") {
                 leaf(&name)?;
@@ -724,7 +857,7 @@ mod platform {
                 names.push(name);
             }
             if next == 0 { return Ok(()); }
-            if next < 12 + length || next % 4 != 0 || offset + next >= buffer.len() { return Err(unsafe_io()); }
+            if next < 12 + length || !next.is_multiple_of(4) || offset + next >= buffer.len() { return Err(unsafe_io()); }
             offset += next;
         }
     }

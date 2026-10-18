@@ -19,6 +19,11 @@ Die vollständigen Lizenztexte bleiben bei den jeweiligen Komponenten unter
 `server/standalone/conversion-runtime/`. Dessen `RUNTIME.json` bindet
 Versionen und Dateihashes; `THIRD_PARTY_NOTICES.txt` führt auch transitive
 JavaScript-Abhängigkeiten auf. Das Paket-SBOM inventarisiert diese Komponenten.
+Im macOS-App-Bundle liegen Konverter-Node und Sandbox unter `Contents/MacOS/`,
+die native Canvas-Bibliothek unter `Contents/Frameworks/`. JavaScript,
+Paketmetadaten, Modelle und Lizenzdateien bleiben unter `Contents/Resources/`.
+Das gemeinsame `RUNTIME.json` bindet die nativen Dateien über feste Rollen;
+Dateipfade aus Benutzereingaben oder Umgebungsvariablen wählen sie nicht aus.
 MarkItDown/Python wird für diesen Produktpfad nicht mitgeliefert oder benötigt.
 
 DataSecure selbst ist proprietär; maßgeblich ist `LICENSE`.

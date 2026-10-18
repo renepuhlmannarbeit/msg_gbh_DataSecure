@@ -8,15 +8,19 @@ import { writeStandaloneRuntime } from './lib/standalone-runtime-projection.mjs'
 import { writeConversionRuntime } from './lib/standalone-conversion-runtime.mjs';
 import { loadCargoLicenseInventory } from './lib/cargo-license-inventory.mjs';
 import { standaloneFontLicense } from './lib/standalone-font-license.mjs';
+import { verifyWindowsCrtPolicy, verifyWindowsNativeContract } from './lib/windows-native-contract.mjs';
 import boundFileIo from '../plugins/data-secure/server/core/bound-file-io.js';
 import { standaloneBuildFingerprint, assertStandaloneBuildFingerprint, assertStandaloneSourceUnchanged } from './lib/standalone-build-fingerprint.mjs';
+import { loadOwnershipGuardBuild, writeOwnershipGuardRuntime, assertOwnershipGuardMarker } from './lib/ownership-guard-artifact.mjs';
+import { WINDOWS_PACKAGE_ROOT } from './lib/standalone-windows-layout.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const font = standaloneFontLicense(root);
 const version = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8')).version;
 const productTarget = 'windows-x64';
 const rustTarget = 'x86_64-pc-windows-msvc';
-const folderName = `DataSecure-Standalone-${version}-${productTarget}`;
+const packageName = `DataSecure-Standalone-${version}-${productTarget}`;
+const folderName = WINDOWS_PACKAGE_ROOT;
 const args = process.argv.slice(2);
 if (args.length && (args.length !== 2 || args[0] !== '--engineering-directory' ||
     !/^engineering-[a-z0-9-]{1,64}$/u.test(args[1]))) throw new Error('STANDALONE_BUILD_ARGUMENT_INVALID');
@@ -29,7 +33,7 @@ if (engineeringDirectory) {
 }
 const stageParent = engineeringDirectory ? path.join(engineeringDirectory, 'stage') : path.join(root, 'dist', 'standalone-package-stage');
 const stage = path.join(stageParent, folderName);
-const output = path.join(engineeringDirectory || path.join(root, 'dist'), `${folderName}.zip`);
+const output = path.join(engineeringDirectory || path.join(root, 'dist'), `${packageName}.zip`);
 
 function safeResetStage() {
   if (engineeringDirectory) {
@@ -57,6 +61,8 @@ function copyCargoExecutable(source, relative) {
   try { bytes = boundFileIo.readBoundFile(source, { minimum: 1024, maximum: 64 * 1024 * 1024, maxLinks: 2, checkCtime: true }); }
   catch { throw new Error('STANDALONE_EXECUTABLE_UNSAFE'); }
   assertStandaloneBuildFingerprint(bytes, sourceFingerprint);
+  assertOwnershipGuardMarker(bytes, ownershipBuild.artifact.sha256);
+  verifyWindowsNativeContract(new Map([[relative, bytes]]), windowsPolicy);
   const destination = path.join(stage, relative);
   fs.writeFileSync(destination, bytes, { flag: 'wx', mode: 0o700 });
   if (!bytes.equals(boundFileIo.readBoundFile(destination, { maximum: bytes.length, minimum: bytes.length, checkCtime: true }))) {
@@ -87,6 +93,9 @@ const runtimeBytes = readRegular(runtime, 128 * 1024 * 1024);
 const licenseBytes = readRegular(runtimeLicense, 2 * 1024 * 1024);
 verifyTargetEvidence(runtimeEvidence, runtimeBytes, licenseBytes, target, contract);
 const sourceFingerprint = standaloneBuildFingerprint(root).fingerprint;
+const ownershipBuild = loadOwnershipGuardBuild(root, productTarget);
+const windowsPolicyBytes = readRegular(path.join(root, 'native/runtime/standalone-windows-runtime.json'), 64 * 1024);
+const windowsPolicy = verifyWindowsCrtPolicy(JSON.parse(windowsPolicyBytes));
 
 copyCargoExecutable(executable, 'DataSecure Standalone.exe');
 copyFile(runtime, `datasecure-core-${rustTarget}.exe`, 0o700);
@@ -99,11 +108,23 @@ writeStandaloneRuntime(
   productTarget
 );
 writeConversionRuntime(root, path.join(stage, 'server', 'standalone', 'conversion-runtime'), productTarget);
+writeOwnershipGuardRuntime(root, productTarget, path.join(stage, 'server'));
 copyFile(runtimeLicense, 'LICENSE.node.txt');
 copyFile(font.licensePath, 'LICENSE-Inter.txt');
 copyFile(path.join(root, 'LICENSE'), 'LICENSE');
 copyFile(path.join(root, 'apps', 'datasecure-standalone', 'THIRD_PARTY_NOTICES.md'), 'THIRD_PARTY_NOTICES.md');
 copyFile(path.join(root, 'apps', 'datasecure-standalone', 'START-WINDOWS.md'), 'START-WINDOWS.md');
+fs.writeFileSync(path.join(stage, 'WINDOWS-NATIVE-POLICY.json'), windowsPolicyBytes, { flag: 'wx' });
+// Inspect the bytes actually staged for this ZIP, including Node addons. A
+// Cargo flag, source marker or developer-machine startup cannot prove this.
+const nativeEntries = new Map(collectFiles(stage).filter(file => /\.(?:exe|dll|node)$/iu.test(file.archivePath))
+  .map(file => [file.archivePath, readRegular(file.fullPath, 160 * 1024 * 1024)]));
+const windowsNativeEvidence = {
+  schema: 'datasecure-windows-native-evidence/1', policy_sha256: sha256(windowsPolicyBytes),
+  clean_standard_user_vm_start: 'NOT_RUN',
+  files: verifyWindowsNativeContract(nativeEntries, windowsPolicy)
+};
+fs.writeFileSync(path.join(stage, 'WINDOWS-NATIVE-EVIDENCE.json'), `${JSON.stringify(windowsNativeEvidence, null, 2)}\n`, { flag: 'wx' });
 
 const evidence = {
   schema: 'datasecure-standalone-runtime-evidence/1',
@@ -120,7 +141,7 @@ const rustLicenses = loadCargoLicenseInventory(cargoManifest, rustTarget);
 fs.writeFileSync(path.join(stage, 'RUST-LICENSE-INVENTORY.json'), `${JSON.stringify(rustLicenses, null, 2)}\n`, { flag: 'wx' });
 const sbom = {
   spdxVersion: 'SPDX-2.3', dataLicense: 'CC0-1.0', SPDXID: 'SPDXRef-DOCUMENT',
-  name: folderName, documentNamespace: `https://internal.msg.example/datasecure/${version}/${productTarget}`,
+  name: packageName, documentNamespace: `https://internal.msg.example/datasecure/${version}/${productTarget}`,
   creationInfo: { created: '2026-09-04T00:00:00Z', creators: ['Tool: DataSecure standalone package builder'] },
   packages: [
     font.package,
@@ -150,6 +171,7 @@ const manifest = {
   source_fingerprint: sourceFingerprint,
   requires_claude: false, requires_cowork: false, requires_node_install: false,
   requires_rust_install: false, requires_network: false, requires_webview2: true,
+  requires_visual_cpp_redistributable: false, windows_crt: windowsPolicy.desktop_crt,
   files: payload
 };
 fs.writeFileSync(path.join(stage, 'STANDALONE-MANIFEST.json'), `${JSON.stringify(manifest, null, 2)}\n`, { flag: 'wx' });

@@ -1,5 +1,8 @@
 'use strict';
 
+const crypto = require('node:crypto');
+const { types } = require('node:util');
+
 function createBatchExecutorLease(deps) {
   const {
     SafeError,
@@ -12,6 +15,20 @@ function createBatchExecutorLease(deps) {
     publicProgress
   } = deps;
   const nowIso = deps.nowIso || (() => new Date().toISOString());
+  const currentPid = deps.currentPid || (() => process.pid);
+  const randomBytes = deps.randomBytes || crypto.randomBytes;
+  // The public claim DTO is unchanged. Only this exact successful result object
+  // carries process-local release authority; JSON, copies and IPC cannot mint it.
+  const claimedEpochs = new WeakMap();
+  const clearLease = state => {
+    delete state.local_executor_pid;
+    delete state.local_executor_started_at;
+    delete state.local_executor_birth_id;
+    delete state.local_executor_lease_id;
+  };
+  const ordinaryBusy = error => error && typeof error === 'object' && !types.isProxy(error) &&
+    ['OWNERSHIP_GUARD_BUSY', 'STANDALONE_OWNERSHIP_CONTROL_BUSY'].includes(
+      Object.getOwnPropertyDescriptor(error, 'code')?.value);
   const processInstanceIdentity = deps.processInstanceIdentity;
   if (typeof processInstanceIdentity !== 'function') throw new Error('PROCESS_IDENTITY_PROVIDER_REQUIRED');
   const leaseLive = (state) => {
@@ -26,12 +43,29 @@ function createBatchExecutorLease(deps) {
   // journal still has a live executor.
   const otherLiveExecutor = deps.otherLiveExecutor || (() => false);
 
+  function transaction(token, action) {
+    if (typeof deps.withSynchronousActiveLock === 'function') return deps.withSynchronousActiveLock(token, action);
+    // Existing source/test adapters have a separate legacy lock protocol. A
+    // real native composition must wire the explicit transaction, never fall
+    // back to separated native acquire/release calls after a wiring mistake.
+    if (process.env.DATASECURE_NATIVE_EXPORT_CHANNEL === '1' && ['win32', 'darwin'].includes(process.platform))
+      throw Object.assign(new SafeError('Die native Sperrtransaktion ist nicht verfügbar.'), { code: 'OWNERSHIP_GUARD_UNAVAILABLE' });
+    acquireActiveLock(token);
+    let failed = false;
+    try { return action(); }
+    catch (error) { failed = true; throw error; }
+    finally {
+      let released = false;
+      try { released = releaseActiveLock(token) === true; }
+      catch (error) { if (!failed) throw error; }
+      if (!released && !failed) throw new SafeError('Die lokale Stapelsperre konnte nicht sicher freigegeben werden.');
+    }
+  }
+
   function assertLocalExecutorAccess(state, executorPid) {
     if (!leaseLive(state)) {
       if (state.local_executor_pid !== undefined) {
-        delete state.local_executor_pid;
-        delete state.local_executor_started_at;
-        delete state.local_executor_birth_id;
+        clearLease(state);
         writeState(state);
       }
       return;
@@ -48,9 +82,8 @@ function createBatchExecutorLease(deps) {
     if (!candidateAlive || !processBirthId) {
       throw new SafeError('Der lokale Stapelprozessor konnte nicht sicher gestartet werden.');
     }
-    acquireActiveLock(token);
-    let primaryError = null;
-    try {
+    let epoch;
+    const result = transaction(token, () => {
       const state = readState(token);
       if (leaseLive(state)) {
         throw new SafeError('Dieser Dokumentstapel wird bereits vollständig lokal verarbeitet.');
@@ -58,9 +91,7 @@ function createBatchExecutorLease(deps) {
       if (otherLiveExecutor(token)) {
         throw new SafeError('Ein anderer lokaler DataSecure-Stapel wird bereits verarbeitet.');
       }
-      delete state.local_executor_pid;
-      delete state.local_executor_started_at;
-      delete state.local_executor_birth_id;
+      clearLease(state);
       const progress = publicProgress(state);
       if (progress.complete || (
         progress.remaining === 0 && progress.delivery_pending === 0 && progress.mapping_pending === 0 &&
@@ -71,41 +102,60 @@ function createBatchExecutorLease(deps) {
       state.local_executor_pid = pid;
       state.local_executor_birth_id = processBirthId;
       state.local_executor_started_at = nowIso();
+      state.local_executor_lease_id = randomBytes(16).toString('hex');
+      if (!/^[a-f0-9]{32}$/u.test(state.local_executor_lease_id)) throw new TypeError('EXECUTOR_LEASE_ID_INVALID');
+      epoch = Object.freeze({ token, pid, birth: processBirthId,
+        started: state.local_executor_started_at, leaseId: state.local_executor_lease_id });
       writeState(state);
       return { ok: true, ...publicProgress(state), raw_content_sent_to_claude: false };
+    });
+    // Register only after the FULL transaction, including kernel guard close.
+    // A committed journal followed by an uncertain ACK has no issued capability.
+    if (epoch) claimedEpochs.set(result, epoch);
+    return result;
+  }
+
+  function releaseClaimedLocalBatchExecutor(proof) {
+    const epoch = claimedEpochs.get(proof);
+    if (!epoch) return false;
+    let entered = false;
+    try {
+      const released = transaction(epoch.token, () => {
+        entered = true;
+        const state = readState(epoch.token);
+        if (state.token !== epoch.token || state.local_executor_pid !== epoch.pid || state.local_executor_birth_id !== epoch.birth ||
+            state.local_executor_started_at !== epoch.started || state.local_executor_lease_id !== epoch.leaseId) return false;
+        clearLease(state);
+        writeState(state);
+        return true;
+      });
+      claimedEpochs.delete(proof);
+      return released;
     } catch (error) {
-      primaryError = error;
+      // Only pre-action kernel contention retains this SAME capability. A write,
+      // namespace, close or other uncertain outcome never becomes retry authority.
+      if (entered || !ordinaryBusy(error)) claimedEpochs.delete(proof);
       throw error;
-    } finally {
-      const released = releaseActiveLock(token);
-      if (!released && !primaryError) {
-        throw new SafeError('Die lokale Stapelsperre konnte nicht sicher freigegeben werden.');
-      }
     }
   }
 
   function releaseLocalBatchExecutor(token, pid) {
-    try { acquireActiveLock(token); } catch { return false; }
-    let releasedLease = false;
+    // Compatibility/self-worker path. A parent must use its original claim
+    // capability, never re-probe a possibly reused foreign PID after child exit.
     try {
-      const state = readState(token);
-      const processBirthId = processInstanceIdentity(pid);
-      if (state.local_executor_pid !== pid || !processBirthId || state.local_executor_birth_id !== processBirthId) return false;
-      delete state.local_executor_pid;
-      delete state.local_executor_started_at;
-      delete state.local_executor_birth_id;
-      writeState(state);
-      releasedLease = true;
-    } catch {
-      releasedLease = false;
-    } finally {
-      const releasedLock = releaseActiveLock(token);
-      if (!releasedLock) releasedLease = false;
-    }
-    return releasedLease;
+      if (pid !== currentPid()) return false;
+      return transaction(token, () => {
+        const state = readState(token);
+        const processBirthId = processInstanceIdentity(pid);
+        if (state.local_executor_pid !== pid || !processBirthId || state.local_executor_birth_id !== processBirthId) return false;
+        clearLease(state);
+        writeState(state);
+        return true;
+      });
+    } catch { return false; } // Compatibility/self-worker cleanup remains nonthrowing.
   }
 
-  return { assertLocalExecutorAccess, claimLocalBatchExecutor, releaseLocalBatchExecutor };
+  return { assertLocalExecutorAccess, claimLocalBatchExecutor, releaseLocalBatchExecutor, releaseClaimedLocalBatchExecutor };
 }
 
 module.exports = { createBatchExecutorLease };

@@ -7,20 +7,33 @@ const { createBestEffortDiagnosticLog } = require('../core/safe-diagnostic-log')
 
 const diagnosticDirectory = path.resolve(process.env.DATASECURE_STANDALONE_DIAGNOSTIC_DIR ||
   path.join(os.tmpdir(), 'SecureDataMsg-Standalone'));
-const diagnosticLog = createBestEffortDiagnosticLog({ directory: diagnosticDirectory, name: 'sidecar-interactions.jsonl' });
+const diagnosticSegment = /^[a-f0-9]{32}$/u.test(String(process.env.DATASECURE_STANDALONE_DIAGNOSTIC_SEGMENT || ''))
+  ? process.env.DATASECURE_STANDALONE_DIAGNOSTIC_SEGMENT : undefined;
+const diagnosticLog = createBestEffortDiagnosticLog({ directory: diagnosticDirectory, name: 'sidecar-interactions.jsonl',
+  ...(diagnosticSegment ? { segmentKey: diagnosticSegment } : {}) });
 const diagnosticSession = /^[a-f0-9]{16,64}$/u.test(String(process.env.DATASECURE_STANDALONE_DIAGNOSTIC_SESSION || ''))
   ? process.env.DATASECURE_STANDALONE_DIAGNOSTIC_SESSION : null;
 let diagnosticLogAvailable = true;
+const BATCH_WORKER_PHASES = ['item_epoch_release', 'registry_finalize', 'local_delivery_verify', 'executor_lease_release', 'processing', 'result_export_prepare', 'result_export_claim', 'result_export_plan', 'result_export_copy', 'result_export_claim_release'];
 
 function diagnosticEvent(event, fields = {}) {
   try {
+    // Batch failures are code/stage evidence, never worker/run/session IDs or
+    // an arbitrary workflow record. Re-project even the trusted service hook.
+    if (event === 'batch_worker_failed') {
+      const code = fields.error_code, mapped = desktopErrorCode(code);
+      fields = { outcome: 'failed',
+        phase: BATCH_WORKER_PHASES.includes(fields.phase) ? fields.phase : 'processing',
+        error_code: mapped !== 'STANDALONE_OPERATION_FAILED' ? mapped : batchDiagnosticCodes.has(code) ? code : mapped };
+    }
     if (!diagnosticLog.append(`${JSON.stringify({
       schema: 'datasecure-standalone-interaction/1', time_ms: Date.now(), component: 'sidecar',
-      ...(diagnosticSession ? { session_id: diagnosticSession } : {}),
+      ...(diagnosticSession && event !== 'batch_worker_failed' ? { session_id: diagnosticSession } : {}),
       event, outcome: fields.outcome || 'progress',
       ...(fields.action ? { action: fields.action } : {}),
       ...(fields.error_code ? { error_code: fields.error_code } : {}),
-      ...(['reconcile', 'staging', 'publish', 'acknowledge', 'abandon'].includes(fields.phase) ? { phase: fields.phase } : {}),
+      ...((event === 'batch_worker_failed' ? BATCH_WORKER_PHASES : ['reconcile', 'staging', 'publish', 'acknowledge', 'abandon'])
+        .includes(fields.phase) ? { phase: fields.phase } : {}),
       ...(Number.isSafeInteger(fields.completed_count) && fields.completed_count >= 0 && fields.completed_count <= 200
         ? { completed_count: fields.completed_count } : {}),
       ...(Number.isSafeInteger(fields.total_count) && fields.total_count >= 0 && fields.total_count <= 200
@@ -41,12 +54,16 @@ function diagnosticEvent(event, fields = {}) {
 // evidence because all imports preceded the first diagnostic event.
 diagnosticEvent('sidecar_entry', { outcome: 'ready' });
 let StandaloneApplicationService, FrameDecoder, MAX_FRAME_BYTES, validatePrivateMessage;
-let NativeExportChannel, NATIVE_RESPONSE_SCHEMA, PUBLICATION_RESPONSE, desktopErrorCode;
+let NativeExportChannel, NATIVE_RESPONSE_SCHEMA, PUBLICATION_RESPONSE, desktopErrorCode, batchDiagnosticCodes;
 try {
   ({ StandaloneApplicationService } = require('./application-service'));
   ({ FrameDecoder, MAX_FRAME_BYTES, validatePrivateMessage } = require('./desktop-ipc'));
   ({ NativeExportChannel, RESPONSE_SCHEMA: NATIVE_RESPONSE_SCHEMA, PUBLICATION_RESPONSE } = require('./native-export-channel'));
+  const { DESKTOP_ERROR_CODES } = require('../core/desktop-error-contract');
   ({ desktopErrorCode } = require('../core/desktop-error-contract'));
+  batchDiagnosticCodes = new Set([...DESKTOP_ERROR_CODES,
+    ...require('../gateway/diagnostic-causes').WORKFLOW_ERROR_CODES,
+    ...require('../core/document-result-grade').REASON_CODES]);
   diagnosticEvent('sidecar_imports_ready', { outcome: 'ready' });
 } catch (error) {
   const code = error?.code === 'MODULE_NOT_FOUND' ? 'STANDALONE_SIDECAR_MODULE_MISSING'
@@ -214,7 +231,8 @@ async function dispatch(message) {
     case 'get_public_state': return service.status({ localUi: true });
     case 'get_ui_context': return service.uiContext();
     case 'get_run_history': return service.history({ recoverExports: message.recover_exports === true,
-      recoverBatchId: message.recover_batch_id || null });
+      recoverBatchId: message.recover_batch_id || null, includeHidden: message.include_hidden === true, batchId: message.batch_id || null });
+    case 'set_run_history_visibility': return service.setRunHistoryVisibility(message.batch_id, message.hidden);
     case 'get_run_failures': return service.runFailures(message.batch_id);
     case 'get_review_session': return service.reviewSession();
     case 'get_review_chunk': return service.reviewChunk(message.review_id, message.chunk_index);

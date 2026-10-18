@@ -56,6 +56,17 @@ test('a real minimal DOCX OPC package passes every control and CRC gate', () => 
   });
 });
 
+test('OPC control comments use XML grammar: empty is valid, trailing or embedded double hyphens are not', () => {
+  const controls = Object.fromEntries(opcControlEntries('docx'));
+  for (const [key, part] of [['contentTypes', '[Content_Types].xml'], ['relationships', '_rels/.rels']]) {
+    for (const [index, comment] of ['<!---->', '<!-- ordinary -->', '<!--bad--->', '<!--bad--inside-->'].entries()) {
+      const xml = controls[part].replace(/(<(?:Types|Relationships)\b[^>]*>)/u, `$1${comment}`);
+      const result = inspect(`comment-${key}-${index}.docx`, docx({ [key]: xml }));
+      assert.equal(result.verdict === 'candidate', index < 2, `${key}: ${comment}`);
+    }
+  }
+});
+
 test('standard package metadata relationships remain valid DOCX candidates', () => {
   const result = inspect('standard-package-metadata.docx', docx({}, [], { standardPackageMetadata: true }));
   assert.strictEqual(result.verdict, 'candidate');

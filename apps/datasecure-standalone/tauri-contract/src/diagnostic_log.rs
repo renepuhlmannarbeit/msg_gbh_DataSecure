@@ -1,15 +1,98 @@
 //! Best-effort content-free diagnostic sink. Every written file is created
 //! exclusively by this process and remains open. No reopen, truncate, rename
 //! or deletion; namespace traversal is relative to held directory handles.
-use std::{fs::File, io::{self, Write}, path::{Path, PathBuf}, sync::Mutex};
+use std::{fs::File, io::{self, Write}, path::{Path, PathBuf}, sync::{Arc, Mutex, OnceLock,
+    atomic::{AtomicU8, AtomicU64, Ordering}, mpsc::{self, SyncSender, TrySendError}}};
 
 const MAX_BYTES: u64 = 2 * 1024 * 1024;
 const MAX_SEGMENTS: u8 = 8;
 type Identity = (u64, u128);
 struct Sink { file: File, name: String, directory: platform::Directory, identity: Identity, bytes: u64, segments: u8 }
 enum State { Initial, Ready(Sink), Disabled }
-static STATE: Mutex<State> = Mutex::new(State::Initial);
+const QUEUE_CAPACITY: usize = 256;
+const MAX_RECORD_BYTES: usize = 4096;
+#[derive(Default)]
+struct Metrics {
+    status: AtomicU8, pending: AtomicU64, dropped: AtomicU64, written: AtomicU64,
+    // This mutex protects only a tiny in-memory leaf, never any disk operation.
+    segment: Mutex<Option<String>>,
+}
+impl Metrics {
+    fn status(&self) -> &'static str {
+        match self.status.load(Ordering::Acquire) { 1 => "ready", 2 => "unavailable", _ => "not_started" }
+    }
+    fn snapshot(&self) -> serde_json::Value {
+        serde_json::json!({ "status": self.status(),
+            "pending_records": self.pending.load(Ordering::Acquire),
+            "dropped_records": self.dropped.load(Ordering::Acquire),
+            "written_records": self.written.load(Ordering::Acquire) })
+    }
+}
+struct Entry { directory: PathBuf, line: String }
+struct Writer { queue: SyncSender<Entry>, metrics: Arc<Metrics> }
+static WRITER: OnceLock<Writer> = OnceLock::new();
+static SIDECAR_GENERATIONS: Mutex<Vec<String>> = Mutex::new(Vec::new());
 fn unsafe_io() -> io::Error { io::Error::other("DIAGNOSTIC_IO_UNSAFE") }
+
+impl Writer {
+    fn start(mut write: impl FnMut(&Path, &str) -> io::Result<String> + Send + 'static)
+        -> (Self, io::Result<std::thread::JoinHandle<()>>) {
+        let (queue, receiver) = mpsc::sync_channel::<Entry>(QUEUE_CAPACITY);
+        let metrics = Arc::new(Metrics::default()); let worker = Arc::clone(&metrics);
+        let thread = std::thread::Builder::new().name("datasecure-diagnostic-writer".into()).spawn(move || {
+            while let Ok(entry) = receiver.recv() {
+                if worker.status.load(Ordering::Acquire) == 2 {
+                    worker.dropped.fetch_add(1, Ordering::Relaxed);
+                } else {
+                    match write(&entry.directory, &entry.line) {
+                        Ok(name) => {
+                            if let Ok(mut segment) = worker.segment.lock() { *segment = Some(name); }
+                            worker.written.fetch_add(1, Ordering::Relaxed);
+                            worker.status.store(1, Ordering::Release);
+                        }
+                        Err(_) => {
+                            worker.dropped.fetch_add(1, Ordering::Relaxed);
+                            worker.status.store(2, Ordering::Release);
+                        }
+                    }
+                }
+                worker.pending.fetch_sub(1, Ordering::Release);
+            }
+        });
+        if thread.is_err() { metrics.status.store(2, Ordering::Release); }
+        (Self { queue, metrics }, thread)
+    }
+    fn append(&self, directory: &Path, record: &serde_json::Value) {
+        let line = format!("{record}\n");
+        if line.len() > MAX_RECORD_BYTES || self.metrics.status.load(Ordering::Acquire) == 2 {
+            self.metrics.dropped.fetch_add(1, Ordering::Relaxed); return;
+        }
+        self.metrics.pending.fetch_add(1, Ordering::Relaxed);
+        // No send(), file open, metadata call or writer-held I/O lock is allowed
+        // on a GUI, recovery-status, IPC or frontend-readiness call path.
+        if let Err(error) = self.queue.try_send(Entry { directory: directory.to_path_buf(), line }) {
+            self.metrics.pending.fetch_sub(1, Ordering::Release);
+            self.metrics.dropped.fetch_add(1, Ordering::Relaxed);
+            if matches!(error, TrySendError::Disconnected(_)) { self.metrics.status.store(2, Ordering::Release); }
+        }
+    }
+}
+
+fn writer() -> &'static Writer {
+    WRITER.get_or_init(|| {
+        let mut state = State::Initial;
+        // Dropping the JoinHandle detaches this one best-effort thread. Shutdown
+        // never waits for an unavailable filesystem or for a diagnostic flush.
+        Writer::start(move |directory, line| {
+            if matches!(state, State::Initial) {
+                state = match create(directory) { Ok(sink) => State::Ready(sink), Err(_) => State::Disabled };
+            }
+            let State::Ready(sink) = &mut state else { return Err(unsafe_io()); };
+            write_line(sink, line)?;
+            Ok(sink.name.clone())
+        }).0
+    })
+}
 
 fn create(directory: &Path) -> io::Result<Sink> {
     let directory = platform::directory(directory)?;
@@ -48,47 +131,60 @@ fn rotate(sink: &mut Sink) -> io::Result<()> {
     Ok(())
 }
 
-pub fn append(directory: &Path, record: &serde_json::Value) {
-    let Ok(mut state) = STATE.lock() else { return };
-    if matches!(*state, State::Initial) {
-        *state = match create(directory) { Ok(sink) => State::Ready(sink), Err(_) => State::Disabled };
+fn write_line(sink: &mut Sink, line: &str) -> io::Result<()> {
+    if line.len() as u64 > MAX_BYTES { return Err(unsafe_io()); }
+    if sink.bytes.checked_add(line.len() as u64).ok_or_else(unsafe_io)? > MAX_BYTES {
+        rotate(sink)?;
     }
-    let State::Ready(sink) = &mut *state else { return };
-    let line = format!("{record}\n");
-    let result = (|| -> io::Result<()> {
-        if line.len() as u64 > MAX_BYTES { return Err(unsafe_io()); }
-        if sink.bytes.checked_add(line.len() as u64).ok_or_else(unsafe_io)? > MAX_BYTES {
-            rotate(sink)?;
-        }
-        let total = sink.bytes.checked_add(line.len() as u64).ok_or_else(unsafe_io)?;
-        if platform::identity(&sink.file)? != sink.identity ||
-            sink.file.metadata()?.len() != sink.bytes { return Err(unsafe_io()); }
-        platform::check_directory(&sink.directory)?;
-        sink.file.write_all(line.as_bytes())?;
-        if platform::identity(&sink.file)? != sink.identity || sink.file.metadata()?.len() != total {
-            return Err(unsafe_io());
-        }
-        sink.bytes = total;
-        Ok(())
-    })();
-    if result.is_err() { *state = State::Disabled; }
+    let total = sink.bytes.checked_add(line.len() as u64).ok_or_else(unsafe_io)?;
+    if platform::identity(&sink.file)? != sink.identity ||
+        sink.file.metadata()?.len() != sink.bytes { return Err(unsafe_io()); }
+    platform::check_directory(&sink.directory)?;
+    sink.file.write_all(line.as_bytes())?;
+    if platform::identity(&sink.file)? != sink.identity || sink.file.metadata()?.len() != total {
+        return Err(unsafe_io());
+    }
+    sink.bytes = total;
+    Ok(())
+}
+pub fn append(directory: &Path, record: &serde_json::Value) {
+    writer().append(directory, record);
 }
 
 pub fn status() -> &'static str {
-    match STATE.lock() {
-        Ok(state) => match *state {
-            State::Initial => "not_started",
-            State::Ready(_) => "ready",
-            State::Disabled => "unavailable",
-        },
-        Err(_) => "unavailable",
-    }
+    WRITER.get().map(|writer| writer.metrics.status()).unwrap_or("not_started")
+}
+
+/// Atomic, content-free counters; a concurrent write can finish between loads.
+/// No caller waits for a flush. Pending/lost records make partial snapshots
+/// explicit instead of claiming that a support export is complete.
+pub(crate) fn snapshot() -> serde_json::Value {
+    let Some(writer) = WRITER.get() else {
+        return serde_json::json!({ "status": "not_started", "pending_records": 0, "dropped_records": 0, "written_records": 0 });
+    };
+    writer.metrics.snapshot()
 }
 
 /// Only a process-created fixed leaf, never a supplied path. Helps the bounded
 /// support snapshot retain this session even when old diagnostics fill its cap.
 pub(crate) fn current_segment() -> Option<String> {
-    STATE.lock().ok().and_then(|state| match &*state { State::Ready(sink) => Some(sink.name.clone()), _ => None })
+    WRITER.get().and_then(|writer| writer.metrics.segment.lock().ok().and_then(|name| name.clone()))
+}
+
+/// A native-created owner generation, never a document/renderer path. Remember
+/// bounded recent owners so failed startup evidence survives reconnection too.
+pub(crate) fn remember_sidecar_generation(generation: &str) {
+    if generation.len() != 32 || !generation.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) { return; }
+    if let Ok(mut generations) = SIDECAR_GENERATIONS.lock() {
+        generations.retain(|old| old != generation);
+        generations.insert(0, generation.to_string()); generations.truncate(16);
+    }
+}
+pub(crate) fn sidecar_segments() -> Vec<String> {
+    let generations = SIDECAR_GENERATIONS.lock().map(|generations| generations.clone()).unwrap_or_default();
+    generations.iter().flat_map(|generation|
+        (1..=8).rev().map(move |segment| if segment == 1 { format!("sidecar-interactions.{generation}.jsonl") }
+            else { format!("sidecar-interactions.{generation}.{segment}.jsonl") })).collect()
 }
 
 pub fn ensure_directory(directory: &Path) -> io::Result<()> {
@@ -296,11 +392,55 @@ mod tests {
         let directory = root.join("temp/SecureDataMsg-Standalone");
         std::fs::create_dir_all(&directory).unwrap();
         platform::directory(&directory).unwrap();
-        append(&directory, &serde_json::json!({ "event": "application_started" }));
+        let mut sink = create(&directory).unwrap();
+        write_line(&mut sink, "{\"event\":\"application_started\"}\n").unwrap();
         assert_eq!(std::fs::read(directory.join("desktop-interactions.jsonl")).unwrap(), b"{\"event\":\"application_started\"}\n");
-        *STATE.lock().unwrap() = State::Initial;
+        drop(sink);
         assert!(root.file_name().unwrap().to_string_lossy().starts_with(".tmp-standalone-native-"));
         std::fs::remove_dir_all(root).unwrap();
+    }
+    #[test]
+    fn blocked_sink_never_blocks_enqueue_or_log_free_recovery_snapshot() {
+        use std::sync::Barrier;
+        let entered = Arc::new(Barrier::new(2)); let release = Arc::new(Barrier::new(2));
+        let worker_entered = Arc::clone(&entered); let worker_release = Arc::clone(&release);
+        let mut first = true;
+        let (writer, thread) = Writer::start(move |_, _| {
+            if first { first = false; worker_entered.wait(); worker_release.wait(); }
+            Ok("desktop-interactions.jsonl".into())
+        });
+        let record = serde_json::json!({ "event": "frontend_ready" });
+        writer.append(Path::new("unused-test-path"), &record);
+        entered.wait(); // The disk sink is deterministically blocked here.
+        let started = std::time::Instant::now();
+        for _ in 0..QUEUE_CAPACITY + 7 { writer.append(Path::new("unused-test-path"), &record); }
+        assert_eq!(writer.metrics.pending.load(Ordering::Acquire), QUEUE_CAPACITY as u64 + 1);
+        assert_eq!(writer.metrics.dropped.load(Ordering::Acquire), 7);
+        assert_eq!(writer.metrics.status.load(Ordering::Acquire), 0);
+        assert_eq!(writer.metrics.snapshot()["pending_records"], QUEUE_CAPACITY + 1);
+        assert_eq!(writer.metrics.snapshot()["dropped_records"], 7);
+        assert_eq!(writer.metrics.status(), "not_started");
+        let _ = status(); let _ = snapshot(); let _ = current_segment();
+        assert!(started.elapsed() < std::time::Duration::from_secs(1));
+        release.wait();
+        let metrics = Arc::clone(&writer.metrics); drop(writer); thread.unwrap().join().unwrap();
+        assert_eq!(metrics.pending.load(Ordering::Acquire), 0);
+        assert_eq!(metrics.written.load(Ordering::Acquire), QUEUE_CAPACITY as u64 + 1);
+        assert_eq!(metrics.dropped.load(Ordering::Acquire), 7);
+    }
+    #[test]
+    fn failed_writer_counts_loss_and_never_retries_an_uncertain_sink() {
+        let attempts = Arc::new(AtomicU64::new(0)); let worker_attempts = Arc::clone(&attempts);
+        let (writer, thread) = Writer::start(move |_, _| {
+            worker_attempts.fetch_add(1, Ordering::Relaxed); Err(unsafe_io())
+        });
+        let record = serde_json::json!({ "event": "application_started" });
+        for _ in 0..10 { writer.append(Path::new("unused-test-path"), &record); }
+        let metrics = Arc::clone(&writer.metrics); drop(writer); thread.unwrap().join().unwrap();
+        assert_eq!(attempts.load(Ordering::Acquire), 1);
+        assert_eq!(metrics.status.load(Ordering::Acquire), 2);
+        assert_eq!(metrics.dropped.load(Ordering::Acquire), 10);
+        assert_eq!(metrics.pending.load(Ordering::Acquire), 0);
     }
     #[test]
     fn exclusive_sink_preserves_existing_log_and_archive() {

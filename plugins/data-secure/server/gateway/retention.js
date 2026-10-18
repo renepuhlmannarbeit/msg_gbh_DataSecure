@@ -465,15 +465,23 @@ function cleanupLocalData(options = {}) {
   // can opt in explicitly with their own EU_PRIVACY_DATA_ROOT.
   if (fsApi === fs && (options.includeMarkdownArtifacts === true || !options.roots) &&
       (scopes.includes('output') || options.scope === undefined)) {
-    let protection = options.protectedIds instanceof Set
-      ? { ids: options.protectedIds, complete: options.outputProtectionComplete === true }
-      : { ids: new Set(), complete: false };
-    if (!(options.protectedIds instanceof Set)) {
-      try { protection = require('./batch-retention-protection').createBatchRetentionProtection().openBatchPackageProtection(); }
-      catch { /* Unknown ownership protects all conversion artifacts. */ }
-    }
+    if (!(options.protectedIds instanceof Set) && !force) result.output_protection_complete = false;
     const conversion = require('../standalone/markdown-retention').cleanupMarkdownArtifacts({
-      cutoff, force, protectedIds: protection.ids, protectionComplete: protection.complete
+      cutoff, force, protectedIds: options.protectedIds,
+      protectionComplete: options.outputProtectionComplete === true,
+      getProtection() {
+        let protection = { ids: new Set(), complete: false };
+        try {
+          protection = options.protectedIds instanceof Set
+            ? { ids: options.protectedIds, complete: options.outputProtectionComplete === true }
+            : typeof options.getBatchPackageProtection === 'function'
+              ? options.getBatchPackageProtection()
+              : require('./batch-retention-protection').createBatchRetentionProtection().openBatchPackageProtection();
+        } catch { /* Unknown ownership protects all conversion artifacts. */ }
+        // Forced legacy Output cleanup is not proof of Markdown ownership.
+        result.output_protection_complete = protection?.complete === true && protection.ids instanceof Set;
+        return protection;
+      }
     });
     result.removed_markdown_artifacts = conversion.removed;
     result.markdown_cleanup_skipped = conversion.skipped;

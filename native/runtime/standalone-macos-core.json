@@ -1,0 +1,16 @@
+{
+  "schema": "datasecure-macos-static-core-policy/1",
+  "node_version": "22.23.2",
+  "maximum_core_bytes": 134217728,
+  "upstream": {
+    "archive": "node-v22.23.2.tar.xz",
+    "sha256": "bbe768df8d5815d7fa76124052985332452e0a4742d39f32027550d1aab8f6fb"
+  },
+  "guard_source_sha256": "c1a46654683e14c38d01adc7fd783047af0532eccf8356ca187b783fcd5438f1",
+  "static_binding": {
+    "name": "datasecure_ownership_guard",
+    "abi": 1,
+    "napi": 8
+  },
+  "approved_artifacts": []
+}

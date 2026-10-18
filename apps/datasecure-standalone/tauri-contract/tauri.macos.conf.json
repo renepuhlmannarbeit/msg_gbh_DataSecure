@@ -5,9 +5,10 @@
       "app"
     ],
     "macOS": {
-      "bundleVersion": "163",
+      "bundleVersion": "164",
       "minimumSystemVersion": "13.5",
-      "signingIdentity": "-"
+      "signingIdentity": "-",
+      "hardenedRuntime": true
     }
   }
 }

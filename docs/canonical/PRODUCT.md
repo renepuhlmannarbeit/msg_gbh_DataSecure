@@ -1,6 +1,6 @@
 # Produktvertrag: GBH DataSecure
 
-Stand: 11.10.2026 · 3.2.0-rc163 · Ist-Zustand RC163 · Standalone RC159 auf allen vier Zielplattformen veröffentlicht · Cowork bleibt RC151
+Stand: 11.10.2026 · 3.2.0-rc164 · Ist-Zustand RC164 · Standalone RC159 auf allen vier Zielplattformen veröffentlicht · Cowork bleibt RC151
 
 Die aktuellen RC159-Standalone-Pakete für Windows, beide Mac-Architekturen und Linux binden
 Quellcommit `7af2a9d0268864a01b954e0175cae9f5a3616fe8`.
@@ -73,7 +73,7 @@ Originale, private Prüfstände und Zuordnungen werden nicht mitkopiert.
 Fundstellenabschluss ist weder Dokumentfreigabe noch Exportabschluss.
 
 **Später entscheiden** lässt einen gespeicherten Lauf offen; unübergebene
-Eingaben sind nicht gespeichert. **Verlauf** zeigt bis zu 20 Verarbeitungen mit
+Eingaben sind nicht gespeichert. **Verlauf** berücksichtigt nur die letzten 5 Verarbeitungen mit
 eigenen Aktionen; **Ergebnisse prüfen und freigeben** öffnet dort direkt die
 Dokumentliste. Neustart/Verbindungsverlust wiederholen Starts, Entscheidungen
 oder Exportbestätigungen nicht blind. Der gespeicherte Stand muss bewusst

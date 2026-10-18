@@ -124,6 +124,38 @@ test('package audit normalizes a real ENOSPC after a positive capacity check', (
   assert.deepStrictEqual(fs.readdirSync(packageDir), []);
 });
 
+test('receipt migration never rewrites the separate evidence outbox namespace', () => {
+  const evidence = require('../plugins/data-secure/server/gateway/batch-evidence');
+  const dir = roots().audit;
+  const record = evidence.evidenceRecord({ schema: 'datasecure-batch/4', profile: 'general',
+    created_at: '2026-08-26T10:00:00.000Z', items: [{ status: 'stopped', error_code: 'SOURCE_TEXT_INVALID',
+      document_result: require('../plugins/data-secure/server/gateway/document-result-grade').notProcessedDocumentResult('SOURCE_TEXT_INVALID') }] },
+    '2026-08-26T11:00:00.000Z', 'a'.repeat(32));
+  evidence.createPendingEvidence(record, { auditDir: dir });
+  const pending = path.join(dir, `batch_evidence_pending_${record.receipt_id}.json`);
+  const original = fs.readFileSync(pending);
+  const broken = path.join(dir, `batch_evidence_pending_${'b'.repeat(32)}.json`);
+  fs.writeFileSync(broken, '{');
+  try {
+    assert.equal(migrateLegacyAuditReceipts().migration_errors, 0);
+    assert.deepEqual(fs.readFileSync(pending), original);
+    assert.equal(fs.readFileSync(broken, 'utf8'), '{', 'malformed evidence is owned by evidence recovery, not receipt migration');
+    fs.unlinkSync(broken);
+    assert.equal(evidence.listPendingEvidence({ auditDir: dir }).length, 1);
+    assert.equal(evidence.createPendingEvidence(record, { auditDir: dir }), false);
+    const unknown = path.join(dir, 'unknown-schema.json');
+    const unknownBytes = JSON.stringify({ schema: 'other-product/1', private: 'synthetic' });
+    fs.writeFileSync(unknown, unknownBytes);
+    try {
+      assert.equal(migrateLegacyAuditReceipts().migration_errors, 1);
+      assert.equal(fs.readFileSync(unknown, 'utf8'), unknownBytes);
+    } finally { fs.unlinkSync(unknown); }
+  } finally {
+    if (fs.existsSync(broken)) fs.unlinkSync(broken);
+    evidence.removePendingEvidence(record, { auditDir: dir });
+  }
+});
+
 test('legacy audit migration removes fingerprints atomically and is idempotent', () => {
   const dir = roots().audit;
   const legacy = path.join(dir, 'legacy.json');

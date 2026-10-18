@@ -2,6 +2,9 @@
 
 const { createBatchRecovery } = require('../plugins/data-secure/server/gateway/batch-recovery');
 const { createBatchProgress } = require('../plugins/data-secure/server/gateway/batch-progress');
+const { createBatchTerminalEvidence } = require('../plugins/data-secure/server/gateway/batch-terminal-evidence');
+const { notProcessedDocumentResult } = require('../plugins/data-secure/server/gateway/document-result-grade');
+const { initializeProduct } = require('../plugins/data-secure/server/core/product-bootstrap');
 const { createSuite } = require('./helpers');
 
 const { test, done, assert } = createSuite('Batch recovery orchestration');
@@ -67,6 +70,8 @@ function fixture(options = {}) {
       if (!value) throw new Error('missing');
       return value;
     },
+    ...(options.beforeStateRemoval ? { beforeStateRemoval: options.beforeStateRemoval } : {}),
+    ...(options.captureStandaloneHistory ? { captureStandaloneHistory: options.captureStandaloneHistory } : {}),
     removeState(value) {
       events.push(`unlink:${value.token}`);
       if (options.unlinkFailure === value.token) throw new Error('UNLINK_FAILED');
@@ -143,6 +148,12 @@ function fixture(options = {}) {
       reconcileTerminalEvidence(value) {
         events.push(`evidence:${value.token}`);
         return options.evidenceFailure === value.token ? false : true;
+      }
+    } : {}),
+    ...(options.terminalEvidenceWriter ? {
+      reconcileTerminalEvidence(value) {
+        events.push(`evidence:${value.token}`);
+        return options.terminalEvidenceWriter(value);
       }
     } : {}),
     deliveryPendingStatus: 'delivery_pending',
@@ -425,6 +436,20 @@ test('lock acquisition failure skips recovery without touching journals and root
   assert.strictEqual(unreadable.events.filter((event) => event.startsWith('release:')).length, 1);
 });
 
+test('native boundary refusals are not misreported as an ordinary active maintenance skip', () => {
+  for (const method of ['recoverBatches', 'cleanupExpiredBatchSnapshots']) {
+    for (const code of ['OWNERSHIP_GUARD_ACCESS_DENIED', 'OWNERSHIP_GUARD_UNSAFE',
+      'OWNERSHIP_GUARD_CLOSE_UNCONFIRMED', 'OWNERSHIP_GUARD_UNAVAILABLE']) {
+      const failure = Object.assign(new Error(code), { code });
+      const item = fixture({ acquireError: failure, states: [state(tokens[0])] });
+      assert.throws(() => item.recovery[method](), error => error === failure);
+      assert.ok(!item.events.includes('readdir'));
+    }
+    const busy = fixture({ acquireError: Object.assign(new Error('busy'), { code: 'OWNERSHIP_GUARD_BUSY' }) });
+    assert.strictEqual(busy.recovery[method]().skipped_active, true);
+  }
+});
+
 test('mixed recovery isolates malformed and live-executor journals and writes one ordered final state', () => {
   const malformed = state(tokens[0]);
   const live = state(tokens[1], { live: true, interrupted: 1 });
@@ -556,6 +581,134 @@ test('evidence outbox and terminal repair run under the same lock without changi
   assert.strictEqual(item.events.filter((event) => event.startsWith('release:')).length, 1);
 });
 
+test('failed evidence repair preserves its last owning journal in both expiry paths', () => {
+  for (const operation of ['recoverBatches', 'cleanupExpiredBatchSnapshots']) {
+    const expired = state(tokens[0], { expires_at: past, items: [{ status: 'stopped' }] });
+    const item = fixture({ states: [expired], enableEvidence: true, evidenceFailure: tokens[0] });
+    const result = item.recovery[operation]();
+    assert.equal(result.removed, 0); assert.equal(result.failures, 1);
+    assert.equal(item.events.some(event => /^(remove-work|unlink):/u.test(event)), false);
+  }
+});
+
+function markdownState(schema, status = 'pending') {
+  return { ...state(tokens[0], { expires_at: past, items: [{ id: '1'.repeat(32), name: 'input.txt', status }] }),
+    schema, product_channel: 'standalone', processing_mode: 'markdown-only', remove_images: false,
+    ...(schema === 'datasecure-batch/7' ? { standalone_document_review: true,
+      content_options: { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: false, imageOcr: false } } : {}) };
+}
+
+function bootstrap(recovery, events) {
+  return initializeProduct({
+    assertRootSeparation() {}, verifyBundledRuntime() {}, ensureDurableRuntime() {}, migrateLegacyAuditReceipts() {},
+    openBatchPackageProtection: () => ({ ids: new Set(), complete: true }),
+    cleanupLocalData() {}, cleanupUiJobs() {},
+    recoverBatches: () => recovery.recoverBatches(),
+    replayMappingOutbox: () => ({ failures: 0 }),
+    startBatchMaintenance: () => ({ stop() { events.push('maintenance-stop'); } }),
+    cleanupExpiredBatchSnapshots: () => recovery.cleanupExpiredBatchSnapshots(),
+    migrateLegacyInput: () => ({ failures: 0, active: false }),
+    cleanupAbandonedWorkingJobs: () => ({ failures: 0 }),
+    refuseStartup() { events.push('startup-refused'); }
+  });
+}
+
+test('expired non-terminal Markdown runs do not owe evidence, using the real progress and evidence wrappers', () => {
+  const coordinator = createBatchTerminalEvidence({ publicProgress });
+  for (const schema of ['datasecure-batch/5', 'datasecure-batch/7']) {
+    for (const status of ['pending', 'processing', 'retryable', 'deferred_review', 'delivery_pending']) {
+      for (const operation of ['recoverBatches', 'cleanupExpiredBatchSnapshots']) {
+        const value = markdownState(schema, status);
+        assert.equal(publicProgress(value, { skipResultProjection: true }).complete, false);
+        // This is the actual production return contract, not a false-returning
+        // test stub: a non-terminal Markdown run has no completion evidence.
+        assert.equal(coordinator.writeTerminalEvidence(value), false);
+        const item = fixture({ states: [value], enableDocumentCapture: true,
+          terminalEvidenceWriter: coordinator.writeTerminalEvidence });
+        const result = item.recovery[operation]();
+        assert.equal(result.removed, 1, `${schema} ${status} ${operation}`);
+        assert.equal(result.failures, 0);
+        assert.equal(item.events.includes(`evidence:${value.token}`), false);
+        assert.equal(item.events.filter(event => event === `unlink:${value.token}`).length, 1);
+        assert.equal(item.events.filter(event => event.startsWith('release:')).length, 1);
+        if (schema === 'datasecure-batch/7') assert.ok(item.events.indexOf(`document-run:${value.token}`) <
+          item.events.indexOf(`remove-work:${value.token}`), 'preserve the modern document run before expiry cleanup');
+      }
+    }
+  }
+});
+
+test('the actual bootstrap starts after expiry cleanup of incomplete legacy and current Markdown runs', () => {
+  const coordinator = createBatchTerminalEvidence({ publicProgress });
+  for (const schema of ['datasecure-batch/5', 'datasecure-batch/7']) {
+    const value = markdownState(schema);
+    const item = fixture({ states: [value], enableDocumentCapture: true,
+      terminalEvidenceWriter: coordinator.writeTerminalEvidence });
+    const started = bootstrap(item.recovery, item.events);
+    assert.equal(started.recovery.removed, 1); assert.equal(started.recovery.failures, 0);
+    assert.equal(item.events.includes('startup-refused'), false);
+    started.batchMaintenance.stop();
+  }
+});
+
+function realTerminalFixture() {
+  const value = { ...state(tokens[0], { expires_at: past, items: [{ id: '1'.repeat(32), status: 'stopped',
+    error_code: 'INTERNAL_FAILURE', document_result: notProcessedDocumentResult('INTERNAL_FAILURE') }] }),
+  schema: 'datasecure-batch/4', product_channel: 'standalone', profile: 'general', remove_images: false,
+  created_at: '2026-08-23T12:00:00.000Z' };
+  let blocked = true, writes = 0, appends = 0;
+  const pending = new Map();
+  // The real coordinator constructs and validates the actual evidence record.
+  // Only its durable I/O dependencies are replaced by this private RAM store.
+  const coordinator = createBatchTerminalEvidence({ publicProgress, nowIso: () => future,
+    randomBytes: () => Buffer.alloc(16, 3), writeState() { writes++; },
+    createPendingEvidence(record) {
+      if (blocked) throw new Error('simulated pending-store failure');
+      pending.set(record.receipt_id, record);
+    },
+    appendEvidenceRecord(record) { assert.equal(pending.get(record.receipt_id), record); appends++; },
+    removePendingEvidence(record) { pending.delete(record.receipt_id); }
+  });
+  return { value, writer: coordinator.writeTerminalEvidence, repair() { blocked = false; },
+    counts: () => ({ writes, appends, pending: pending.size }) };
+}
+
+test('real failed terminal evidence retains its journal in both expiry paths and permits cleanup after repair', () => {
+  for (const operation of ['recoverBatches', 'cleanupExpiredBatchSnapshots']) {
+    const terminal = realTerminalFixture();
+    assert.equal(publicProgress(terminal.value, { skipResultProjection: true }).complete, true);
+    const item = fixture({ states: [terminal.value], terminalEvidenceWriter: terminal.writer });
+    const failed = item.recovery[operation]();
+    assert.equal(failed.failures, 1); assert.equal(failed.removed, 0);
+    assert.equal(terminal.value.terminal_evidence.status, 'pending');
+    assert.equal(item.events.some(event => /^(remove-work|unlink):/u.test(event)), false);
+    terminal.repair();
+    const repaired = item.recovery[operation]();
+    assert.equal(repaired.failures, 0); assert.equal(repaired.removed, 1);
+    assert.equal(terminal.value.terminal_evidence.status, 'exported');
+    assert.deepEqual(terminal.counts(), { writes: 2, appends: 1, pending: 0 });
+    assert.equal(item.events.filter(event => event === `unlink:${terminal.value.token}`).length, 1);
+    assert.equal(item.events.filter(event => event.startsWith('release:')).length, 2);
+  }
+});
+
+test('the actual bootstrap refuses failed terminal evidence and starts after the same owning receipt is repaired', () => {
+  const terminal = realTerminalFixture();
+  const item = fixture({ states: [terminal.value], terminalEvidenceWriter: terminal.writer });
+  assert.throws(() => bootstrap(item.recovery, item.events), /Batch recovery failed closed/u);
+  assert.equal(item.events.includes('startup-refused'), true);
+  assert.equal(item.events.some(event => /^(remove-work|unlink):/u.test(event)), false);
+  assert.equal(item.events.filter(event => event === 'maintenance-stop').length, 1);
+  const receiptId = terminal.value.terminal_evidence.receipt_id;
+  terminal.repair();
+  const started = bootstrap(item.recovery, item.events);
+  assert.equal(started.recovery.removed, 1); assert.equal(started.recovery.failures, 0);
+  assert.equal(terminal.value.terminal_evidence.receipt_id, receiptId);
+  assert.equal(terminal.value.terminal_evidence.status, 'exported');
+  assert.deepEqual(terminal.counts(), { writes: 2, appends: 1, pending: 0 });
+  started.batchMaintenance.stop();
+});
+
 test('lock release errors remain visible instead of reporting a false successful maintenance result', () => {
   for (const options of [{ releaseError: new Error('EPERM') }, { refuseRelease: true }]) {
     const item = fixture(options);
@@ -571,6 +724,23 @@ test('the batch composition root preserves public and internal recovery facades'
   }
   assert.strictEqual(typeof batch._test.recoverableBatchStates, 'function');
   assert.strictEqual(typeof batch._test.localCleanupStatus, 'function');
+});
+
+test('every expiry removal preserves summaries even after startup recovery was skipped', () => {
+  for (const operation of ['recoverBatches', 'cleanupExpiredBatchSnapshots']) {
+    let preserved = false;
+    const value = { ...state(tokens[0], { expires_at: past, items: [{ status: 'stopped' }] }), product_channel: 'standalone' };
+    const item = fixture({ states: [value], beforeStateRemoval(current) {
+      assert.equal(current, value); preserved = true; item.events.push('preserve-summary');
+    } });
+    assert.equal(item.recovery[operation]().removed, 1);
+    assert.equal(preserved, true);
+    assert.ok(item.events.indexOf('preserve-summary') < item.events.indexOf(`remove-work:${tokens[0]}`));
+    const blocked = fixture({ states: [value], beforeStateRemoval() { throw Error('SUMMARY_WRITE_UNCONFIRMED'); } });
+    assert.equal(blocked.recovery[operation]().removed, 0);
+    assert.equal(blocked.events.some(event => /^(unlink|remove-work):/u.test(event)), false,
+      'a failed durable summary readback never authorizes removing the last journal');
+  }
 });
 
 done();

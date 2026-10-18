@@ -53,6 +53,26 @@ function createBatchRecovery(options = {}) {
   const ErrorType = options.SafeError || SafeError;
   const recoverableState = options.recoverableState || (() => true);
 
+  function transaction(token, action) {
+    if (typeof options.withSynchronousActiveLock === 'function') return options.withSynchronousActiveLock(token, action);
+    if (process.env.DATASECURE_NATIVE_EXPORT_CHANNEL === '1' && ['win32', 'darwin'].includes(process.platform))
+      throw Object.assign(new ErrorType('Die native Sperrtransaktion ist nicht verfügbar.'), { code: 'OWNERSHIP_GUARD_UNAVAILABLE' });
+    // Preserve the separate legacy/source adapter; native wiring is mandatory.
+    acquireActiveLock(token);
+    let failed = false;
+    try { return action(); }
+    catch (error) { failed = true; throw error; }
+    finally { releaseOwnedLock(releaseActiveLock, token, ErrorType, failed); }
+  }
+
+  function terminalEvidenceRepairFailed(state) {
+    // A non-terminal Markdown wrapper returns false too: it has no completion
+    // record yet, not broken evidence. Use the same non-hashing terminal facts
+    // as the evidence coordinator before making receipt repair an expiry gate.
+    if (!reconcileTerminalEvidence || publicProgress(state, { skipResultProjection: true }).complete !== true) return false;
+    return reconcileTerminalEvidence(state) === false;
+  }
+
   function intakeToken(entry) {
     if (!entry.isFile() || !entry.name.endsWith(INTAKE_SUFFIX)) return null;
     const token = entry.name.slice(0, -INTAKE_SUFFIX.length);
@@ -88,6 +108,7 @@ function createBatchRecovery(options = {}) {
       const token = entry.name.slice(0, -'.json'.length);
       if (!tokenPattern.test(token)) continue;
       try {
+        if (options.terminalStatusUnchanged?.(token) === true) continue;
         const state = readMaintenanceState(token);
         if (state.zero_day_work === true && state.zero_day_work_cleaned !== true &&
             !liveLocalExecutor(state) && !processAlive(state.intake_owner_pid)) continue;
@@ -210,6 +231,8 @@ function createBatchRecovery(options = {}) {
       const token = entry.name.slice(0, -'.json'.length);
       if (!tokenPattern.test(token)) continue;
       try {
+        if (observeRun && selection.skipUnobservedTerminal === true && token !== selectedToken &&
+            options.terminalStatusUnchanged?.(token) === true) continue;
         const candidate = readMaintenanceState(token);
         const expiresAt = Date.parse(candidate.expires_at);
         const live = liveLocalExecutor(candidate);
@@ -327,122 +350,135 @@ function createBatchRecovery(options = {}) {
     let removed = 0;
     let failures = 0;
     const token = maintenanceToken();
+    let entered = false;
     try {
-      acquireActiveLock(token);
-    } catch {
-      return { recovered, removed, failures, skipped_active: true };
-    }
-    let primaryError = false;
-    try {
-      if (repairPendingEvidenceOutbox) {
-        try { repairPendingEvidenceOutbox(); } catch { /* evidence repair never blocks batch recovery */ }
-      }
-      let entries = [];
-      try { entries = io.readdirSync(rootPath(), { withFileTypes: true }); }
-      catch { return { recovered, removed, failures: 1, skipped_active: false }; }
-      for (const entry of entries) {
-        const orphanToken = intakeToken(entry);
-        if (orphanToken) {
-          try { if (intakeIntent.cleanup(orphanToken, now)) removed++; } catch { failures++; }
-          continue;
+      return transaction(token, () => {
+        entered = true;
+        if (repairPendingEvidenceOutbox) {
+          try { repairPendingEvidenceOutbox(); } catch { /* evidence repair never blocks batch recovery */ }
         }
-        if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
-        const tokenFromName = entry.name.slice(0, -'.json'.length);
-        if (!tokenPattern.test(tokenFromName)) continue;
-        try {
-          const state = readMaintenanceState(tokenFromName);
-          if (liveLocalExecutor(state)) continue;
-          if (state.zero_day_work === true && !processAlive(state.intake_owner_pid)) finishZeroDayWork(state);
-          // Repair the intake journal -> private metadata crash gap before
-          // mapping can advance and before the only owning journal expires.
-          // A conflicting existing manifest is never overwritten or inferred.
-          preserveDocumentRun(state);
-          if (now > Date.parse(state.expires_at)) {
-            if (reconcileTerminalEvidence) reconcileTerminalEvidence(state);
-            removeWorkDirectory(state.token);
-            removeState(state);
-            removed++;
+        let entries = [];
+        try { entries = io.readdirSync(rootPath(), { withFileTypes: true }); }
+        catch { return { recovered, removed, failures: 1, skipped_active: false }; }
+        for (const entry of entries) {
+          const orphanToken = intakeToken(entry);
+          if (orphanToken) {
+            try { if (intakeIntent.cleanup(orphanToken, now)) removed++; } catch { failures++; }
             continue;
           }
-          let changed = false;
-          // Ordering is the crash contract: adopt a fully published package
-          // before any lingering processing item can become retryable.
-          if (reconcilePublishedItems(state)) {
-            changed = true;
-            recovered++;
-          }
-          if (reconcilePendingMappings(state)) {
-            changed = true;
-            recovered++;
-          }
-          if (reconcilePreflightStoppedMappings(state)) {
-            changed = true;
-            recovered++;
-          }
-          const interrupted = markInterruptedItemsRetryable(state);
-          if (interrupted > 0) {
-            changed = true;
-            recovered += interrupted;
-          }
-          if (retryReleasedWorkCopyCleanup(state).changed) changed = true;
-          if (changed) writeState(state);
-          if (reconcileTerminalEvidence) reconcileTerminalEvidence(state);
-        } catch { failures++; }
-      }
-      return { recovered, removed, failures, skipped_active: false };
+          if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+          const tokenFromName = entry.name.slice(0, -'.json'.length);
+          if (!tokenPattern.test(tokenFromName)) continue;
+          try {
+            const state = readMaintenanceState(tokenFromName);
+            if (liveLocalExecutor(state)) continue;
+            // This already validated snapshot is held by the recovery
+            // transaction. Preserve old summaries here before expiry, rather
+            // than re-reading every journal in a separate startup UI pass.
+            if (state.product_channel === 'standalone') {
+              try { options.captureStandaloneHistory?.(state); } catch { /* journal remains authoritative */ }
+            }
+            if (state.zero_day_work === true && !processAlive(state.intake_owner_pid)) finishZeroDayWork(state);
+            // Repair the intake journal -> private metadata crash gap before
+            // mapping can advance and before the only owning journal expires.
+            // A conflicting existing manifest is never overwritten or inferred.
+            preserveDocumentRun(state);
+            if (now > Date.parse(state.expires_at)) {
+              // Do not discard the last recoverable receipt when its outbox or
+              // final export is temporarily unavailable. A failed transparency
+              // repair is not permission to delete its owning journal.
+              if (terminalEvidenceRepairFailed(state)) { failures++; continue; }
+              options.beforeStateRemoval?.(state);
+              removeWorkDirectory(state.token);
+              removeState(state);
+              removed++;
+              continue;
+            }
+            let changed = false;
+            // Ordering is the crash contract: adopt a fully published package
+            // before any lingering processing item can become retryable.
+            if (reconcilePublishedItems(state)) {
+              changed = true;
+              recovered++;
+            }
+            if (reconcilePendingMappings(state)) {
+              changed = true;
+              recovered++;
+            }
+            if (reconcilePreflightStoppedMappings(state)) {
+              changed = true;
+              recovered++;
+            }
+            const interrupted = markInterruptedItemsRetryable(state);
+            if (interrupted > 0) {
+              changed = true;
+              recovered += interrupted;
+            }
+            if (retryReleasedWorkCopyCleanup(state).changed) changed = true;
+            if (changed) writeState(state);
+            if (reconcileTerminalEvidence) reconcileTerminalEvidence(state);
+          } catch { failures++; }
+        }
+        return { recovered, removed, failures, skipped_active: false };
+      });
     } catch (error) {
-      primaryError = true;
+      if (!entered) {
+        // Ordinary contention alone is a maintenance skip, never a missing or
+        // unsafe native boundary. Release/action errors are never swallowed.
+        if (typeof error?.code === 'string' && error.code.startsWith('OWNERSHIP_GUARD_') &&
+            error.code !== 'OWNERSHIP_GUARD_BUSY') throw error;
+        return { recovered, removed, failures, skipped_active: true };
+      }
       throw error;
-    } finally {
-      releaseOwnedLock(releaseActiveLock, token, ErrorType, primaryError);
     }
   }
 
   function cleanupExpiredBatchSnapshots(callOptions = {}) {
     const token = maintenanceToken();
-    try {
-      acquireActiveLock(token);
-    } catch {
-      return { removed: 0, failures: 0, skipped_active: true };
-    }
+    let entered = false;
     let removed = 0;
     let failures = 0;
-    let primaryError = false;
-    const now = Number(callOptions.now || nowMs());
     try {
-      if (repairPendingEvidenceOutbox) {
-        try { repairPendingEvidenceOutbox(); } catch { /* retention remains authoritative */ }
-      }
-      let entries = [];
-      try { entries = io.readdirSync(rootPath(), { withFileTypes: true }); }
-      catch { return { removed, failures: 1, skipped_active: false }; }
-      for (const entry of entries) {
-        const orphanToken = intakeToken(entry);
-        if (orphanToken) {
-          try { if (intakeIntent.cleanup(orphanToken, now)) removed++; } catch { failures++; }
-          continue;
+      return transaction(token, () => {
+        entered = true;
+        const now = Number(callOptions.now || nowMs());
+        if (repairPendingEvidenceOutbox) {
+          try { repairPendingEvidenceOutbox(); } catch { /* retention remains authoritative */ }
         }
-        if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
-        const tokenFromName = entry.name.slice(0, -'.json'.length);
-        if (!tokenPattern.test(tokenFromName)) continue;
-        try {
-          const state = readMaintenanceState(tokenFromName);
-          if (liveLocalExecutor(state)) continue;
-          if (state.zero_day_work === true && !processAlive(state.intake_owner_pid)) finishZeroDayWork(state);
-          if (now <= Date.parse(state.expires_at)) continue;
-          preserveDocumentRun(state);
-          if (reconcileTerminalEvidence) reconcileTerminalEvidence(state);
-          removeWorkDirectory(state.token);
-          removeState(state);
-          removed++;
-        } catch { failures++; }
-      }
-      return { removed, failures, skipped_active: false };
+        let entries = [];
+        try { entries = io.readdirSync(rootPath(), { withFileTypes: true }); }
+        catch { return { removed, failures: 1, skipped_active: false }; }
+        for (const entry of entries) {
+          const orphanToken = intakeToken(entry);
+          if (orphanToken) {
+            try { if (intakeIntent.cleanup(orphanToken, now)) removed++; } catch { failures++; }
+            continue;
+          }
+          if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
+          const tokenFromName = entry.name.slice(0, -'.json'.length);
+          if (!tokenPattern.test(tokenFromName)) continue;
+          try {
+            const state = readMaintenanceState(tokenFromName);
+            if (liveLocalExecutor(state)) continue;
+            if (state.zero_day_work === true && !processAlive(state.intake_owner_pid)) finishZeroDayWork(state);
+            if (now <= Date.parse(state.expires_at)) continue;
+            preserveDocumentRun(state);
+            if (terminalEvidenceRepairFailed(state)) { failures++; continue; }
+            options.beforeStateRemoval?.(state);
+            removeWorkDirectory(state.token);
+            removeState(state);
+            removed++;
+          } catch { failures++; }
+        }
+        return { removed, failures, skipped_active: false };
+      });
     } catch (error) {
-      primaryError = true;
+      if (!entered) {
+        if (typeof error?.code === 'string' && error.code.startsWith('OWNERSHIP_GUARD_') &&
+            error.code !== 'OWNERSHIP_GUARD_BUSY') throw error;
+        return { removed, failures, skipped_active: true };
+      }
       throw error;
-    } finally {
-      releaseOwnedLock(releaseActiveLock, token, ErrorType, primaryError);
     }
   }
 

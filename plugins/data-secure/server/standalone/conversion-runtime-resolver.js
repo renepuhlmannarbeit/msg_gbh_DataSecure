@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
 const { readBoundFileRecord } = require('../core/bound-file-io');
+const { LAYOUT, bundleContext, roleFile } = require('./macos-bundle-layout');
 const fail = () => { throw Object.assign(new Error('Die lokale Konvertierungslaufzeit fehlt oder ist beschädigt.'),
   { code: 'CONVERSION_RUNTIME_UNAVAILABLE' }); };
 let cached;
@@ -26,6 +27,11 @@ function resolveConversionRuntime() {
     const target = process.platform === 'win32' ? `windows-${process.arch}`
       : process.platform === 'darwin' ? `macos-${process.arch}`
         : process.platform === 'linux' && process.arch === 'x64' ? 'linux-x64-glibc' : null;
+    const bundle = bundleContext(path.resolve(__dirname, '..'));
+    if ((bundle && (manifest.native_layout !== LAYOUT || manifest.native_inventory_finalized !== true)) ||
+        (!bundle && (manifest.native_layout !== undefined || manifest.native_inventory_finalized !== undefined))) fail();
+    const nativeFiles = new Map(bundle ? ['conversion_node', 'canvas'].map(role =>
+      [bundle.roles[role].inventory, roleFile(bundle, role)]) : []);
     if (manifest.schema !== 'datasecure-conversion-runtime/1' || manifest.target !== target ||
         manifest.node_file !== (process.platform === 'win32' ? 'node.exe' : 'node') ||
         !Array.isArray(manifest.files) || !manifest.files.length || manifest.files.length > 4096 ||
@@ -45,10 +51,12 @@ function resolveConversionRuntime() {
       seen.add(entry.path);
       total += entry.bytes;
       if (total > 384 * 1024 * 1024) fail();
-      const file = path.join(root, ...entry.path.split('/'));
+      const file = nativeFiles.get(entry.path) || path.join(root, ...entry.path.split('/'));
       // Reject directory redirection too, before opening native libraries.
       let parent = path.dirname(file);
-      while (parent !== root) {
+      const boundary = bundle ? bundle.app : root;
+      while (parent !== boundary) {
+        if (parent === path.dirname(parent)) fail();
         const stat = fs.lstatSync(parent);
         if (!stat.isDirectory() || stat.isSymbolicLink()) fail();
         parent = path.dirname(parent);
@@ -65,11 +73,12 @@ function resolveConversionRuntime() {
     for (const required of [manifest.node_file, 'LICENSE.node.txt', 'models/deu.traineddata', 'models/eng.traineddata',
       'node_modules/pdfjs-dist/legacy/build/pdf.mjs', 'node_modules/tesseract.js/src/index.js', 'node_modules/@napi-rs/canvas/index.js',
       'node_modules/mdast-util-from-markdown/index.js', 'node_modules/mdast-util-from-markdown/package.json',
-      'node_modules/parse5/dist/index.js', 'node_modules/parse5/package.json']) {
+      'node_modules/parse5/dist/index.js', 'node_modules/parse5/package.json', ...nativeFiles.keys()]) {
       if (!seen.has(required)) fail();
     }
     cached = { manifestIdentity: manifestRead.identity, identities };
-    return Object.freeze({ root, node: path.join(root, manifest.node_file) });
+    return Object.freeze({ root, node: nativeFiles.get(manifest.node_file) || path.join(root, manifest.node_file),
+      ...(bundle ? { canvasNative: roleFile(bundle, 'canvas') } : {}) });
   } catch { fail(); }
 }
 

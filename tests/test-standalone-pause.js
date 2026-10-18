@@ -70,7 +70,7 @@ test('private pause transport accepts only the exact run and no paths or mode ch
 // Actual gateway intake, immutable private snapshots, real TXT conversion /
 // privacy engine, publication, mapping and lease lifecycle. The only hook
 // requests pause after the production active-file claim. No converter mock.
-testAsync('real Markdown and anonymization stop after the active file and resume without reprocessing it', async () => {
+const projectedBatchCases = testAsync('real Markdown and anonymization stop after the active file and resume without reprocessing it', async () => {
   process.env.DATASECURE_PRODUCT_CHANNEL = 'standalone';
   process.env.EU_PRIVACY_DATA_ROOT = path.join(root, 'data');
   process.env.EU_PRIVACY_ROOT = path.join(root, 'workspace');
@@ -106,7 +106,7 @@ testAsync('real Markdown and anonymization stop after the active file and resume
       processing_duration_ms: item.processing_duration_ms });
     const originalRelease = releaseFacts(before.items[0]);
     const restart = execFileSync(process.execPath, ['-e', `const b=require(${JSON.stringify(path.join(server, 'gateway/batch'))});process.stdout.write(JSON.stringify(b.readBatchProgress('${id}')));`],
-      { cwd: path.join(__dirname, '..'), env: process.env, encoding: 'utf8' });
+      { cwd: path.join(__dirname, '..'), env: process.env, encoding: 'utf8', windowsHide: true, timeout: 30000 });
     assert.equal(JSON.parse(restart).paused, true, 'fresh process reads durable pause');
     assert.equal(batch.continueStandaloneBatch(id).ok, true);
     assert.equal(batch.claimLocalBatchExecutor(id, process.pid).ok, true);
@@ -297,4 +297,114 @@ testAsync('real Markdown and anonymization stop after the active file and resume
     }
   }
 });
+testAsync('projected OCR-review opt-out changes only deferred Markdown work and releases its real owner on refusal', async () => {
+  // Reuse the actual projected runtime, offline converter and fresh private
+  // roots above, after its executor lifecycles have settled. No journal state,
+  // converter result, contact answer or batch service is fabricated here.
+  await projectedBatchCases;
+  const server = path.join(root, 'server'), batch = require(path.join(server, 'gateway/batch'));
+  const markdownStore = require(path.join(server, 'standalone/markdown-store'));
+  const { image } = await import('./helpers/conversion-fixtures.mjs');
+  const canvas = image(true), context = canvas.getContext('2d');
+  let png;
+  try {
+    context.font = '40px Arial';
+    context.fillText('Boris Quastenbach', 35, 90);
+    context.fillText('Kontakt: qa11@quality.example.invalid', 35, 170);
+    png = canvas.toBuffer('image/png');
+  } finally { canvas.width = canvas.height = 1; }
+  const sourceBytes = [Buffer.from('SYNTHETISCHER OCR-OPT-OUT-TEST\nBereits veröffentlichter Sachinhalt: 42 Projekte.\n'), png];
+  const queue = ['ocr-skip-published.txt', 'ocr-skip-contact.png'].map((name, index) => {
+    const full = path.join(root, 'sources', name);
+    fs.writeFileSync(full, sourceBytes[index]);
+    return { full, name, sourceBytes: sourceBytes[index].length };
+  });
+  const id = batch.beginBatch({ expectedCount: queue.length, profile: 'general', productChannel: 'standalone',
+    processingMode: 'markdown-only', ocrContactReview: true, documentReview: true, queue }).batch_token;
+  assert.equal(batch.claimLocalBatchExecutor(id, process.pid).ok, true);
+  const deferred = await batch.runLocalBatchExecutor(id, { executorPid: process.pid });
+  assert.equal(deferred.complete, false); assert.equal(deferred.deferred_review, 1);
+  const before = batch._test.readState(id), journal = path.join(batch._test.batchRoot(), `${id}.json`);
+  assert.equal(before.product_channel, 'standalone'); assert.equal(before.processing_mode, 'markdown-only');
+  assert.equal(before.ocr_contact_review, true); assert.notEqual(before.ocr_contact_review_skipped, true);
+  assert.equal(before.items[0].status, 'released'); assert.equal(before.items[1].status, 'deferred_review');
+  assert.equal(before.items[1].error_code, 'LOCAL_REVIEW_DEFERRED');
+  assert.equal(JSON.parse(fs.readFileSync(journal, 'utf8')).items[1].status, 'deferred_review');
+  const publishedItem = structuredClone(before.items[0]);
+  const publishedFolder = path.join(markdownStore.artifactRoot(), publishedItem.artifact_id);
+  const publishedBytes = new Map(fs.readdirSync(publishedFolder).map(name => [name, fs.readFileSync(path.join(publishedFolder, name))]));
+  const assertPublishedUnchanged = () => {
+    assert.deepEqual(batch._test.readState(id).items[0], publishedItem, 'the full released journal item is immutable');
+    assert.deepEqual(fs.readdirSync(publishedFolder), [...publishedBytes.keys()]);
+    for (const [name, bytes] of publishedBytes)
+      assert.deepEqual(fs.readFileSync(path.join(publishedFolder, name)), bytes, 'published Markdown and manifest bytes are unchanged');
+  };
+  const contactAnswers = () => fs.readdirSync(batch._test.workPath(id)).filter(name => name.endsWith('.ocrreview'));
+  assert.deepEqual(contactAnswers(), [], 'deferral did not invent a reviewed contact record');
+  const ownerFile = batch._test.activeLockPath();
+  assert.equal(fs.existsSync(ownerFile), false);
+  const unavailable = error => error?.code === 'OCR_CONTACT_SKIP_UNAVAILABLE';
+
+  // A real live owner, even in this PID and for the same token, cannot be
+  // adopted by the new synchronous transaction or removed on its refusal.
+  assert.equal(batch._test.acquireActiveLock(id), true);
+  try {
+    const ownerBytes = fs.readFileSync(ownerFile), ownerStat = fs.lstatSync(ownerFile, { bigint: true });
+    const journalBytes = fs.readFileSync(journal), owner = JSON.parse(ownerBytes);
+    assert.equal(owner.token, id); assert.equal(owner.pid, process.pid);
+    assert.throws(() => batch.skipStandaloneOcrContactReview(id), unavailable);
+    const after = fs.lstatSync(ownerFile, { bigint: true });
+    assert.deepEqual([after.dev, after.ino, after.birthtimeNs], [ownerStat.dev, ownerStat.ino, ownerStat.birthtimeNs]);
+    assert.deepEqual(fs.readFileSync(ownerFile), ownerBytes); assert.deepEqual(fs.readFileSync(journal), journalBytes);
+  } finally { assert.equal(batch._test.releaseActiveLock(id), true); }
+
+  // This refusal happens AFTER the transaction acquired its own real owner.
+  // Its validation error must release that owner, without changing the lease.
+  assert.equal(batch.claimLocalBatchExecutor(id, process.pid).ok, true);
+  try {
+    const journalBytes = fs.readFileSync(journal);
+    assert.throws(() => batch.skipStandaloneOcrContactReview(id), unavailable);
+    assert.deepEqual(fs.readFileSync(journal), journalBytes);
+    assert.equal(fs.existsSync(ownerFile), false, 'validation failure releases its acquired owner');
+    assert.equal(batch._test.acquireActiveLock(id), true);
+    assert.equal(batch._test.releaseActiveLock(id), true, 'a real subsequent acquisition and release still succeeds');
+  } finally { assert.equal(batch.releaseLocalBatchExecutor(id, process.pid), true); }
+
+  const wrongMode = batch.beginBatch({ expectedCount: 1, profile: 'general', productChannel: 'standalone',
+    processingMode: 'markdown-and-anonymize', queue: [queue[0]] }).batch_token;
+  const wrongJournal = path.join(batch._test.batchRoot(), `${wrongMode}.json`), wrongBytes = fs.readFileSync(wrongJournal);
+  assert.throws(() => batch.skipStandaloneOcrContactReview(wrongMode), unavailable);
+  assert.deepEqual(fs.readFileSync(wrongJournal), wrongBytes, 'wrong processing mode is not rewritten');
+  assert.equal(fs.existsSync(ownerFile), false, 'wrong-mode failure releases its acquired owner');
+
+  const skipped = batch.skipStandaloneOcrContactReview(id), pending = batch._test.readState(id);
+  assert.equal(skipped.ok, true); assert.equal(skipped.skipped, true); assert.equal(skipped.complete, false);
+  assert.equal(skipped.deferred_review, 0); assert.equal(skipped.remaining, 1); assert.equal(skipped.raw_content_sent_to_claude, false);
+  assert.equal(pending.ocr_contact_review_skipped, true); assert.equal(pending.ocr_contact_review, true);
+  assert.equal(pending.ocr_review_seed, before.ocr_review_seed); assert.equal(Object.hasOwn(pending, 'pseudonym_seed'), false);
+  assert.equal(pending.items[1].status, 'pending'); assert.equal(pending.items[1].checkpoint, 'ocr_contact_review_skipped');
+  assert.equal(Object.hasOwn(pending.items[1], 'error_code'), false);
+  assert.deepEqual(contactAnswers(), [], 'the opt-out marker is NOT a contact confirmation');
+  assert.equal(fs.existsSync(ownerFile), false); assertPublishedUnchanged();
+  const skippedJournal = fs.readFileSync(journal);
+  assert.throws(() => batch.skipStandaloneOcrContactReview(id), unavailable, 'a second opt-out cannot replay the mutation');
+  assert.deepEqual(fs.readFileSync(journal), skippedJournal); assert.equal(fs.existsSync(ownerFile), false);
+
+  assert.equal(batch.claimLocalBatchExecutor(id, process.pid).ok, true);
+  let prompts = 0;
+  const complete = await batch.runLocalBatchExecutor(id, { executorPid: process.pid, reviewOcrContacts: true,
+    reviewTextLocally: async () => { prompts++; throw new Error('opt-out must not synthesize or request a contact answer'); } });
+  assert.equal(complete.complete, true); assert.equal(prompts, 0); assertPublishedUnchanged();
+  const final = batch._test.readState(id), converted = final.items[1];
+  assert.equal(converted.status, 'released');
+  const artifact = markdownStore.readMarkdownArtifact(converted.artifact_id, final.content_options);
+  assert.equal(artifact.manifest.anonymized, false);
+  assert.ok(artifact.manifest.reason_codes.includes('OCR_CONTACT_VALUES_UNVERIFIED'), 'skipped contact uncertainty remains explicit');
+  assert.ok(artifact.manifest.reason_codes.includes('OCR_NOT_VERIFIED'), 'general OCR uncertainty is not promoted to verified');
+  assert.match(artifact.markdown, /quality\.example\.invalid/u);
+  assert.doesNotMatch(artifact.markdown, /OCR-Kontaktwerte wurden lokal bestätigt oder korrigiert/u);
+  assert.deepEqual(contactAnswers(), []); assert.equal(fs.existsSync(ownerFile), false);
+  queue.forEach((item, index) => assert.deepEqual(fs.readFileSync(item.full), sourceBytes[index], 'selected source bytes stay unchanged'));
+});
+
 done();

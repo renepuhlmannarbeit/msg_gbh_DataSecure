@@ -11,7 +11,15 @@ const { createStage, assertStage, publishStage, discardStage, recoverAbandonedSt
 const { MAX_MARKDOWN_CHARS } = require('./markdown-contract');
 const { createAnonymizedArtifact, validateExpectation, validateAnonymizedArtifactForExpectation } = require('./anonymized-artifact');
 const invalid = () => Object.assign(new Error('STANDALONE_PUBLICATION_INVALID'), { code: 'STANDALONE_PUBLICATION_INVALID' });
-const unconfirmed = () => Object.assign(new Error('BATCH_PUBLICATION_UNCONFIRMED'), { code: 'BATCH_PUBLICATION_UNCONFIRMED' });
+// Observation only: retain the real callback refusal across the mandatory
+// postcommit recovery envelope. Never put raw causes into a public response.
+const publicationFailures = new WeakMap();
+const unconfirmed = cause => {
+  const error = Object.assign(new Error('BATCH_PUBLICATION_UNCONFIRMED'), { code: 'BATCH_PUBLICATION_UNCONFIRMED' });
+  if (cause !== undefined) publicationFailures.set(error, cause);
+  return error;
+};
+const publicationFailureCause = error => publicationFailures.has(error) ? publicationFailures.get(error) : error;
 
 // Fixed private namespace, never a caller-selected path and never roots().output.
 // Legacy public listing/capabilities cannot discover its ds_ identities.
@@ -79,7 +87,7 @@ async function publishAnonymizedArtifact(input, hooks = {}) {
     if (hooks.afterPublish) await hooks.afterPublish(details);
     return details;
   } catch (error) {
-    if (committed) throw unconfirmed();
+    if (committed) throw unconfirmed(error);
     throw normalizePostPreflightWriteError(error);
   } finally {
     if (!committed) discardStage(stage);
@@ -88,5 +96,5 @@ async function publishAnonymizedArtifact(input, hooks = {}) {
 function inspectAnonymizedStaging() { return inspectStaging({ roots: anonymizedArtifactRoots() }); }
 function recoverAnonymizedStages() { return recoverAbandonedStages({ roots: anonymizedArtifactRoots() }); }
 
-module.exports = Object.freeze({ anonymizedArtifactRoots, readAnonymizedArtifact, publishAnonymizedArtifact,
+module.exports = Object.freeze({ anonymizedArtifactRoots, readAnonymizedArtifact, publishAnonymizedArtifact, publicationFailureCause,
   inspectAnonymizedStaging, recoverAnonymizedStages });

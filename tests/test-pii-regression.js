@@ -1229,6 +1229,58 @@ test('identifier compatibility detection preserves source spelling, hashes and U
   }
 });
 
+test('numeric residual verification survives a regression of the redactor view flags', () => {
+  const { DETECTORS } = require('../plugins/data-secure/server/privacy/structured');
+  const classes = new Set(['DE_TAX_ID', 'CREDIT_CARD', 'IP', 'IPV6', 'DE_SOCIAL_SECURITY']);
+  const saved = DETECTORS.map(detector => detector.identifierView);
+  try {
+    // Failure injection on the actual production table, not a fake scanner.
+    for (const detector of DETECTORS) if (classes.has(detector.type)) detector.identifierView = false;
+    for (const { type, label, value } of identifierCases.filter(item => classes.has(item.type))) {
+      assert.ok(pii.scanResidual(label + value).some(hit => hit.type === type && hit.text === value), type);
+      if (['IP', 'IPV6'].includes(type)) for (const punctuation of ['.', '...', ')', '].']) {
+        assert.ok(pii.scanResidual(label + value + punctuation).some(hit => hit.type === type && hit.text === value), punctuation);
+      }
+    }
+  } finally { DETECTORS.forEach((detector, index) => { detector.identifierView = saved[index]; }); }
+  for (const source of ['Version: １.２.３', 'Version: 1.2.3.4.5', 'Version: １．２．３．４．５',
+    'Build: １．２．３．４．５．６', 'Menge: １２３４５６７８９０１ Stück',
+    'Kreditkarte: ４１１１ １１１１ １１１１ １１１２', 'Steuerung: ２６９５４３７１８２７', professionalText]) {
+    assert.deepEqual(pii.scanResidual(source), [], source);
+    assert.equal(anonymize(source, 'general').text, source);
+  }
+});
+
+test('projected credential fields and table headers never disclose numeric secrets in findings', () => {
+  for (const label of ['Passwort', 'PIN']) for (const value of ['5555555555554444', '192.168.1.1', '2001:db8::1']) {
+    for (const source of [fullwidth(label + ': ' + value), `| ${fullwidth(label)} |\n| --- |\n| ${fullwidth(value)} |`]) {
+      const result = anonymize(source, 'general');
+      assert.ok(result.findings.length);
+      assert.ok(result.findings.every(hit => hit.type === 'CREDENTIAL' && !Object.hasOwn(hit, 'value_hash')));
+      const residual = pii.scanResidual(source);
+      assert.ok(residual.length);
+      assert.ok(residual.every(hit => hit.type === 'CREDENTIAL' && hit.text === ''));
+      assert.deepEqual(pii.scanResidual(result.text), []);
+    }
+  }
+});
+
+test('independent IPv6 gate bounds the address rather than its sentence punctuation', () => {
+  const { scanNumericIdentifierResiduals } = require('../plugins/data-secure/server/privacy/numeric-identifier-residual');
+  const ip = fullwidth('ffff:ffff:ffff:ffff:ffff:ffff:255.255.255.255');
+  for (const punctuation of ['', '.', '...']) {
+    const hits = scanNumericIdentifierResiduals(ip + punctuation);
+    assert.ok(hits.some(hit => hit.type === 'IPV6' && hit.text === ip));
+  }
+  for (const value of ['ffff:ffff:ffff:ffff:ffff:ffff:255.255.255.255', '::ffff:192.168.1.1', '2001:db8::192.168.1.1']) {
+    for (const source of [value, fullwidth(value)]) for (const punctuation of ['', '.', '...']) {
+      const result = anonymize('IPv6: ' + source + punctuation, 'general');
+      assert.equal(result.text, 'IPv6: [IP_REDACTED]' + punctuation);
+      assert.deepEqual(pii.scanResidual(result.text), []);
+    }
+  }
+});
+
 test('compatibility labels stay column-bound and the independent telephone gate stays broader', () => {
   const phone = fullwidth('030 12345678');
   const header = fullwidth('Telefon');
@@ -1671,8 +1723,51 @@ test('entity projection is idempotent and cannot introduce forbidden controls', 
     assert.strictEqual(twice, once, source);
   }
   for (const source of ['Text: &#0; Ende', 'Text: &#1; Ende']) {
-    const output = anonymize(source, 'general').text;
-    assert.doesNotMatch(output, /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/u);
+    assert.throws(() => anonymize(source, 'general'), error => error.code === 'RESIDUAL_PII');
+  }
+});
+
+test('unrecoverable rendered characters stop privacy instead of splitting identifiers', () => {
+  const { canonicalizeRenderedText } = require('../plugins/data-secure/server/privacy/base');
+  const unsafe = [String.fromCharCode(0), String.fromCharCode(0x1f),
+    ...Array.from({ length: 33 }, (_unused, index) => String.fromCharCode(0x7f + index)), '\uFFFD'];
+  for (const separator of unsafe) {
+    const source = ['4111', '1111', '1111', '1111'].join(separator);
+    for (const run of [() => canonicalizeRenderedText(source), () => pii.anonymize(source, 'general'),
+      () => pii.scanResidual(source, 'general'), () => anonymizeMarkdown(source, 'general')]) {
+      assert.throws(run, error => error.code === 'RESIDUAL_PII' && !error.message.includes('4111'));
+    }
+  }
+  for (const entity of ['&#0;', '&#127;', '&#133;', '&#x85;', '&#65533;', '&#xFFFD;', '&amp;#133;', '&copy;']) {
+    assert.throws(() => anonymizeMarkdown(`Text: ${entity} Ende`, 'general'), error => error.code === 'RESIDUAL_PII');
+  }
+  for (const entity of ['&#0;', '&#133;', '&#x85;', '&#65533;', '&amp;#133;', '&#133;&#133;']) {
+    const card = ['4111', '1111', '1111', '1111'].join(entity);
+    for (const source of [card, '`' + card + '`', card.replace(/&/gu, '\\&'), '```text\n' + card + '\n```']) {
+      assert.throws(() => anonymizeMarkdown(source, 'general'), error => error.code === 'RESIDUAL_PII');
+    }
+  }
+});
+
+test('the privacy character gate preserves inert ASCII entity examples and normal Unicode whitespace', () => {
+  const { canonicalizeRenderedText } = require('../plugins/data-secure/server/privacy/base');
+  for (const literal of ['`&#133;`', '`&#65533;`', '\\&#133;', '```text\n&#0; &copy;\n```']) {
+    const output = canonicalizeRenderedText(literal);
+    assert.doesNotMatch(output, /[\u007f-\u009f\uFFFD]/u);
+    assert.match(output, /&#(?:0|133|65533);/u);
+    assert.equal(canonicalizeRenderedText(output), output);
+  }
+  const text = 'API\t42\r\nÄ€🙂 © m²\n';
+  assert.equal(canonicalizeRenderedText(text), text);
+  assert.equal(anonymizeMarkdown(text, 'general').text, text);
+  assert.equal(anonymizeMarkdown('4111 1111 1111 1111', 'general').text, '[BANK_DATA_REDACTED]');
+  for (const corridor of ['4111&#133;1111&#133;1111&#133;1111&#133;1234x',
+    'x1234&#133;4111&#133;1111&#133;1111&#133;1111',
+    '4111&#133;1111&#133;1111&#133;1111&#133;1234',
+    '𐐀1234&#133;4111&#133;1111&#133;1111&#133;1111']) {
+    for (const value of [corridor, fullwidth(corridor).replace(/＆＃１３３；/gu, '&#133;')]) {
+      assert.doesNotThrow(() => anonymizeMarkdown('`' + value + '`', 'general'));
+    }
   }
 });
 

@@ -9,7 +9,8 @@ const {
   positiveDocumentResult,
   sameDocumentResult
 } = require('./document-result-grade');
-const { classifyPrepublicationError, applyRetryBudget, clearRetryBudget } = require('./prepublication-error');
+const { classifyPrepublicationError, applyRetryBudget, clearRetryBudget, retryDocumentControl,
+  isDocumentControlBusy, isOwnershipControlFailure } = require('./prepublication-error');
 
 function createBatchReviewPublication(options = {}) {
   const anonymizeNext = options.anonymizeNext;
@@ -154,8 +155,8 @@ function createBatchReviewPublication(options = {}) {
           packageId: packageIdForItem(item),
           retainPublishedOnAfterPublishFailure: true,
           ...(state.product_channel === 'standalone' && state.standalone_document_review === true ? {
-            persistStandaloneDocumentReview: value => require('./standalone-document-review-store')
-              .createDocumentReviewStore().capture(state, item, value)
+            persistStandaloneDocumentReview: value => retryDocumentControl(() => require('./standalone-document-review-store')
+              .createDocumentReviewStore().capture(state, item, value))
           } : {}),
           ...(state.product_channel === 'standalone' && contactStore ? { prepareOcrContacts: (input) => {
             const text = contactStore.read(state, item, input);
@@ -175,7 +176,7 @@ function createBatchReviewPublication(options = {}) {
           beforePublish: async (details) => {
             positiveDocumentResult(details?.document_result);
             if (contentOptionsForBatch(state) && (details?.package_id !== packageIdForItem(item) ||
-                JSON.stringify(details.publication_binding) !== JSON.stringify(expectedPublication(state, item)))) throw invalidBinding();
+                JSON.stringify(details.publication_binding) !== JSON.stringify(await retryDocumentControl(() => expectedPublication(state, item))))) throw invalidBinding();
             verifiedDocumentResult = details.document_result;
             item.checkpoint = 'package_verified';
             if (!contentOptions && pseudonymRegistry) state.pseudonym_registry_state = pseudonymRegistry.exportState();
@@ -192,9 +193,9 @@ function createBatchReviewPublication(options = {}) {
             if (!sameDocumentResult(details.document_result, verifiedDocumentResult)) throw unconfirmedPublication();
             publishedDocumentResult = details.document_result;
             if (contentOptionsForBatch(state) && JSON.stringify(details.publication_binding) !==
-                JSON.stringify(confirmPublication(state, item).publication_binding)) throw unconfirmedPublication();
+                JSON.stringify((await retryDocumentControl(() => confirmPublication(state, item))).publication_binding)) throw unconfirmedPublication();
             if (state.product_channel === 'standalone' && state.standalone_document_review === true)
-              require('./standalone-document-review-store').createDocumentReviewStore().recordPublication(state.token, item.id);
+              await retryDocumentControl(() => require('./standalone-document-review-store').createDocumentReviewStore().recordPublication(state.token, item.id));
             item.checkpoint = 'package_published';
             writeState(state, { durable: false });
           }
@@ -213,7 +214,7 @@ function createBatchReviewPublication(options = {}) {
           throw unconfirmedPublication();
         }
         if (contentOptionsForBatch(state) && JSON.stringify(result.publication_binding) !==
-            JSON.stringify(confirmPublication(state, item).publication_binding)) throw unconfirmedPublication();
+            JSON.stringify((await retryDocumentControl(() => confirmPublication(state, item))).publication_binding)) throw unconfirmedPublication();
         markMappingPending(item, result.package_id, result.document_result, state);
         clearRetryBudget(item);
         writeState(state);
@@ -254,6 +255,7 @@ function createBatchReviewPublication(options = {}) {
         if (deps.localFinalize === true) locallyReleased++;
         else packages.push(deliveryResult(state, item));
       } catch (error) {
+        if (isOwnershipControlFailure(error)) throw error;
         if (publicationContractFailed) throw error;
         if (!packagePublished && error?.code === 'BATCH_PUBLICATION_UNCONFIRMED') {
           // The /4 publisher may have committed its rename before our callback
@@ -276,6 +278,9 @@ function createBatchReviewPublication(options = {}) {
           item.package_id = publishedPackageId;
           item.error_code = 'PROCESSING_INTERRUPTED';
           item.work_copy_cleanup_pending = true;
+          delete item.document_result;
+          delete item.mapping_outbox_persisted;
+          writeState(state);
           failed++;
           if (state.product_channel === 'standalone') { recoveryBlocked = true; break; }
           continue;
@@ -311,6 +316,7 @@ function createBatchReviewPublication(options = {}) {
         }
         failed++;
         writeState(state);
+        if (isDocumentControlBusy(error) && state.product_channel === 'standalone') { recoveryBlocked = true; break; }
       }
     }
     return { packages, locallyReleased, failed, processed, pauseBlocked, recoveryBlocked };

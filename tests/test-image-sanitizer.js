@@ -133,6 +133,80 @@ test('PNG greyscale and truecolour inputs are normalised to RGBA', () => {
   assert.deepStrictEqual(pixelAt(img, 1, 0), [0xc0, 0xc0, 0xc0, 255]);
 });
 
+// Fixture writer only: never use the product RGBA encoder to manufacture a
+// tRNS input (it cannot express that PNG colour model).
+function transparencyChunk(type, data) {
+  const kind = Buffer.from(type), out = Buffer.alloc(data.length + 12);
+  out.writeUInt32BE(data.length); kind.copy(out, 4); data.copy(out, 8);
+  out.writeUInt32BE(crc32(Buffer.concat([kind, data])), data.length + 8);
+  return out;
+}
+function transparencyFixture(colorType, transparent, placement = 'before', filter = 0) {
+  const channels = { 0: 1, 2: 3, 4: 2, 6: 4 }[colorType];
+  const rows = [Buffer.from(Array(channels).fill(0).concat(Array(channels).fill(255))),
+    Buffer.from(Array(channels).fill(127).concat(Array(channels).fill(0)))];
+  const header = Buffer.alloc(13); header.writeUInt32BE(2); header.writeUInt32BE(2, 4); header[8] = 8; header[9] = colorType;
+  const prediction = (a, b, c) => {
+    const p = a + b - c, distances = [Math.abs(p-a), Math.abs(p-b), Math.abs(p-c)];
+    return [a,b,c][distances.indexOf(Math.min(...distances))];
+  };
+  const raw = Buffer.concat(rows.map((row, y) => Buffer.from([filter, ...row.map((value, x) => {
+    const a = row[x-channels] || 0, b = rows[y-1]?.[x] || 0, c = rows[y-1]?.[x-channels] || 0;
+    return (value - [0, a, b, Math.floor((a+b)/2), prediction(a,b,c)][filter]) & 255;
+  })])));
+  const image = transparencyChunk('IDAT', zlib.deflateSync(raw));
+  const trns = transparent === null ? [] : [transparencyChunk('tRNS', transparent)];
+  return Buffer.concat([Buffer.from('89504e470d0a1a0a','hex'), transparencyChunk('IHDR', header),
+    ...(placement === 'before' ? trns : []), image, ...(placement === 'after' ? trns : []),
+    ...(placement === 'duplicate' ? trns.concat(trns) : []), transparencyChunk('IEND', Buffer.alloc(0))]);
+}
+
+test('PNG tRNS has exact alpha and unchanged pixel coordinates for gray/RGB and every scanline filter', () => {
+  for (const type of [0,2]) for (const filter of [0,1,2,3,4]) {
+    const bytes = transparencyFixture(type, Buffer.alloc(type === 0 ? 2 : 6), 'before', filter);
+    const before = Buffer.from(bytes), decoded = decodePng(bytes);
+    assert.deepEqual([decoded.width, decoded.height], [2,2]);
+    assert.deepEqual([...decoded.rgba], [0,0,0,0, 255,255,255,255, 127,127,127,255, 0,0,0,0]);
+    assert.deepEqual(decodePng(encodePng(decoded)).rgba, decoded.rgba);
+    assert.deepEqual(bytes, before);
+    const opaque = decodePng(transparencyFixture(type, null, 'before', filter));
+    assert.deepEqual([...opaque.rgba].filter((_value, index) => index % 4 === 3), [255,255,255,255]);
+  }
+  // PNG 3 specifies masking unused high sample bits for an 8-bit image.
+  assert.equal(decodePng(transparencyFixture(0, Buffer.from([1,0]))).rgba[3], 0);
+  for (const type of [4,6]) {
+    const rgba = decodePng(transparencyFixture(type, null)).rgba;
+    assert.deepEqual([...rgba].filter((_value, index) => index % 4 === 3), [0,255,127,0]);
+  }
+  const header = Buffer.alloc(13); header.writeUInt32BE(4); header.writeUInt32BE(1,4); header[8] = 8; header[9] = 2;
+  const almost = Buffer.concat([Buffer.from('89504e470d0a1a0a','hex'), transparencyChunk('IHDR',header),
+    transparencyChunk('tRNS',Buffer.from([0,1,0,2,0,3])),
+    transparencyChunk('IDAT',zlib.deflateSync(Buffer.from([0, 1,2,3, 1,2,4, 1,3,3, 0,2,3]))), transparencyChunk('IEND',Buffer.alloc(0))]);
+  assert.deepEqual([...decodePng(almost).rgba], [1,2,3,0, 1,2,4,255, 1,3,3,255, 0,2,3,255], 'all three key samples must match exactly');
+});
+
+test('independent fixed PNG samples flatten to white instead of exposing transparent black as OCR contrast', () => {
+  // Independently decoded by System.Drawing.Bitmap: pixel alpha [0,255].
+  const samples = ['iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAAAAADRSSBWAAAAAnRSTlMAAHaTzTgAAAALSURBVHicY2D4DwABAgEAQr68aAAAAABJRU5ErkJggg==',
+    'iVBORw0KGgoAAAANSUhEUgAAAAIAAAABCAIAAAB7QOjdAAAABnRSTlMAAAAAAABupgeRAAAAD0lEQVR4nGNgYGD4//8/AAYBAv4CsjmuAAAAAElFTkSuQmCC'];
+  for (const encoded of samples) {
+    const decoded = decodePng(Buffer.from(encoded, 'base64'));
+    assert.deepEqual([...decoded.rgba], [0,0,0,0,255,255,255,255]);
+    const white = [...decoded.rgba].map((value, i, rgba) => i%4 === 3 ? 255 : Math.round((value*rgba[i-i%4+3]+255*(255-rgba[i-i%4+3]))/255));
+    assert.deepEqual(white, Array(8).fill(255));
+  }
+});
+
+test('PNG malformed tRNS fails before pixels: length, duplicate, position, alpha colour type and CRC', () => {
+  for (const bytes of [transparencyFixture(0, Buffer.alloc(1)), transparencyFixture(2, Buffer.alloc(2)),
+    transparencyFixture(0, Buffer.alloc(2), 'duplicate'), transparencyFixture(0, Buffer.alloc(2), 'after'),
+    transparencyFixture(4, Buffer.alloc(2)), transparencyFixture(6, Buffer.alloc(6))]) {
+    assert.throws(() => decodePng(bytes), error => error instanceof ImageSafetyError);
+  }
+  const crc = transparencyFixture(2, Buffer.alloc(6)); crc[crc.indexOf(Buffer.from('tRNS')) + 4] ^= 1;
+  assert.throws(() => decodePng(crc), error => error instanceof ImageSafetyError);
+});
+
 test('a non PNG buffer is refused', () => {
   assert.throws(() => decodePng(Buffer.alloc(40)), (e) => e instanceof ImageSafetyError);
 });

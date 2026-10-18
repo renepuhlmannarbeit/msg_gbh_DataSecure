@@ -1,9 +1,36 @@
 'use strict';
 
 const { normalizeDocumentResultReasonCode } = require('./document-result-grade');
+const { types } = require('node:util');
 
 const ERROR_CODE = /^[A-Z][A-Z0-9_]{2,63}$/u;
 const MAX_SAME_ERROR_FAILURES = 3;
+function ownCode(error) {
+  if (!error || typeof error !== 'object' || types.isProxy(error)) return '';
+  const value = Object.getOwnPropertyDescriptor(error, 'code')?.value;
+  return typeof value === 'string' && value.length <= 100 ? value : '';
+}
+const isDocumentControlBusy = error => ownCode(error) === 'STANDALONE_BUSY';
+const isOwnershipControlFailure = error => {
+  const code = ownCode(error);
+  return code === 'BATCH_OWNERSHIP_CHANGED' || /^(?:OWNERSHIP_GUARD_|STANDALONE_OWNERSHIP_)/u.test(code);
+};
+
+// Only idempotent document metadata operations belong here, never extraction,
+// privacy processing, publication, registry actions or an entire callback.
+// The synchronous control attempt has ended before the event-loop wait.
+async function retryDocumentControl(action, options = {}) {
+  const attempts = options.attempts ?? 50, delayMs = options.delayMs ?? 100;
+  if (typeof action !== 'function' || !Number.isSafeInteger(attempts) || attempts < 1 || attempts > 50 ||
+      !Number.isSafeInteger(delayMs) || delayMs < 0 || delayMs > 1000) throw new TypeError('DOCUMENT_CONTROL_RETRY_INVALID');
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try { return await action(); }
+    catch (error) {
+      if (!isDocumentControlBusy(error) || attempt + 1 === attempts) throw error;
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+    }
+  }
+}
 
 // Preserve only an opaque machine code while an untrusted implementation
 // error is converted into a SafeError. Messages, paths, stacks and arbitrary
@@ -11,7 +38,8 @@ const MAX_SAME_ERROR_FAILURES = 3;
 // still authoritative and collapses codes outside the product catalogue to
 // INTERNAL_FAILURE.
 function preserveOpaqueErrorCode(source, target) {
-  if (ERROR_CODE.test(String(source?.code || ''))) target.code = source.code;
+  const code = ownCode(source);
+  if (ERROR_CODE.test(code)) target.code = code;
   return target;
 }
 
@@ -22,15 +50,14 @@ function preserveOpaqueErrorCode(source, target) {
 // `processing` checkpoint.
 function classifyPrepublicationError(error, retryableCodes, options = {}) {
   const deferredCode = options.deferredCode || null;
-  const raw = typeof error?.code === 'string' && error.code.length > 0
-    ? error.code
-    : 'INTERNAL_FAILURE';
-  const code = raw === deferredCode || retryableCodes.has(raw)
+  const raw = ownCode(error) || 'INTERNAL_FAILURE';
+  const controlBusy = isDocumentControlBusy(error);
+  const code = controlBusy || raw === deferredCode || retryableCodes.has(raw)
     ? raw
     : normalizeDocumentResultReasonCode(raw);
   return Object.freeze({
     code,
-    retryable: retryableCodes.has(code),
+    retryable: controlBusy || retryableCodes.has(code),
     deferred: deferredCode !== null && code === deferredCode
   });
 }
@@ -40,6 +67,10 @@ function classifyPrepublicationError(error, retryableCodes, options = {}) {
 // the user can never be trapped in an endless Continue loop. A different
 // transient cause starts its own bounded sequence.
 function applyRetryBudget(item, classification, limit = MAX_SAME_ERROR_FAILURES) {
+  // Control admission says nothing about the document. It neither consumes
+  // nor clears an earlier parser-failure budget, even after repeated resumes.
+  if (classification.code === 'STANDALONE_BUSY' && classification.retryable)
+    return Object.freeze({ ...classification, retryFailures: 0, exhausted: false });
   if (!classification.retryable) return Object.freeze({ ...classification, retryFailures: 0, exhausted: false });
   const previous = item?.retry_failure_code === classification.code &&
     Number.isSafeInteger(item?.retry_failure_count) && item.retry_failure_count > 0
@@ -69,5 +100,8 @@ module.exports = {
   classifyPrepublicationError,
   applyRetryBudget,
   clearRetryBudget,
-  preserveOpaqueErrorCode
+  preserveOpaqueErrorCode,
+  isDocumentControlBusy,
+  isOwnershipControlFailure,
+  retryDocumentControl
 };

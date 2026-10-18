@@ -17,6 +17,8 @@ const os = require('node:os');
 
 const baseFiles = [
   'tests/test-test-harness.js',
+  'tests/test-macos-static-core-workflow.mjs',
+  'tests/test-import-macos-core-candidate.mjs',
   'tests/test-native-ui-boundary.js',
   'tests/test-bound-file-io.js',
   'tests/test-hocr-choice-groups.mjs',
@@ -37,6 +39,7 @@ const baseFiles = [
   'tests/test-standalone-workspace.js',
   'tests/test-workflow-presentation.js', 'tests/test-markdown-start-transport.js', 'tests/test-office-image-ocr.mjs', 'tests/test-office-image-relevance.js',
   'tests/test-standalone-document-review.js', 'tests/test-standalone-document-review-frontend.js',
+  'tests/test-standalone-document-review-context.js',
   'tests/test-standalone-review-policy.js', 'tests/test-standalone-automatic-privacy.js',
   'tests/test-private-transform-trace.js', 'tests/test-standalone-entities.js', 'tests/test-standalone-run-entities.js',
   'tests/test-standalone-confidential-overview.js',
@@ -46,9 +49,20 @@ const baseFiles = [
   'tests/test-standalone-review-ipc.js',
   'tests/test-standalone-history.js',
   'tests/test-standalone-history-targeted.js',
+  'tests/test-standalone-history-visibility.js',
+    'tests/test-standalone-history-window.js',
   'tests/test-standalone-startup-history-capture.js',
+  'tests/test-standalone-status-throughput.js',
+  'tests/test-standalone-startup-io.js',
   'tests/test-standalone-identity-ledger.js',
   'tests/test-standalone-sidecar.js',
+  'tests/test-standalone-batch-diagnostics.js', 'tests/test-batch-epoch-release-busy.js',
+  'tests/test-batch-executor-lease-finish.js', 'tests/test-batch-executor-claim-capability.js',
+  'tests/test-batch-processing-admission.js',
+  'tests/test-batch-processing-composition.js',
+  'tests/test-result-export-diagnostics.js',
+  'tests/test-worker-result-export-async.js',
+  'tests/test-standalone-pause-control.js',
   'tests/test-native-export-channel.js',
   'tests/test-standalone-terminal-failures.js',
   'tests/test-standalone-document-control.js',
@@ -57,6 +71,18 @@ const baseFiles = [
   'tests/test-standalone-package.js',
   'tests/test-standalone-package-integrity.mjs',
   'tests/test-standalone-build-fingerprint.mjs',
+  'tests/test-windows-native-contract.mjs',
+  'tests/test-ownership-guard-build-contract.mjs',
+  'tests/test-ownership-control.js',
+  'tests/test-ownership-guard-artifact.mjs',
+  'tests/test-ownership-load-lifecycle.mjs',
+  'tests/test-ownership-guard-loader.js',
+  'tests/test-ownership-diagnostics.js',
+  'tests/test-ownership-record-transitions.js',
+  'tests/test-macos-bundle-layout.mjs',
+  'tests/test-macos-core-artifact-provenance.mjs',
+  'tests/test-macos-static-core-producer.mjs',
+  'tests/test-native-macos-static-core-contract.mjs',
   'tests/test-processing-mode.js', 'tests/test-content-options-persistence.js', 'tests/test-content-start-readiness.js', 'tests/test-content-anonymization-operation.js', 'tests/test-conversion-content-contract.js', 'tests/test-content-consumer-binding.js', 'tests/test-content-privacy-extraction.js', 'tests/test-markdown-artifact.js', 'tests/test-markdown-extractor.js',
   'tests/test-standalone-pdf-text-layout.js',
   'tests/test-source-extraction-contract.js', 'tests/test-wide-privacy-extraction.js',
@@ -128,6 +154,7 @@ const fullOnly = [
   'test-standalone-fast-review-ipc.js',
   'test-markdown-image-content.mjs',
   'test-standalone-native-export.js',
+  'test-standalone-native-export-recovery.js',
   // Copied product projections and separate real processes belong to the
   // full local gate, not the cost-capped source CI profile.
   'test-core-policy-binding.mjs',
@@ -155,7 +182,7 @@ const fullOnly = [
   'test-batch-snapshot-invalidation.js', 'test-batch-executor-runner.js',
   'test-batch-review-capture.js', 'test-batch-review-state.js',
   'test-batch-review-orchestrator.js',
-  'test-batch-journal-store.js', 'test-batch-reconciliation.js', 'test-batch-delivery.js',
+  'test-batch-journal-store.js', 'test-batch-reconciliation.js', 'test-batch-delivery.js', 'test-batch-local-delivery-diagnostics.js',
   'test-batch-mapping-maintenance.js', 'test-local-review-executor.js',
   'test-native-picker-lifecycle.js', 'test-legacy-input-migration.js', 'test-rc80-semantics.js',
   // Product tests that were referenced by no npm script at all.
@@ -167,6 +194,39 @@ const fullOnly = [
 
 const nativeUiFiles = ['test-native-windows-forms.js'];
 const nativeUiCaseCount = 6;
+
+// Resource-bound probes are explicit canonical entry points, never silently
+// inserted into source CI. They validate the supplied artifact and runtime
+// digests themselves and do not open desktop forms.
+const artifactBoundFiles = Object.freeze({
+  'native-lease-finish': 'tests/test-native-executor-lease-finish.js',
+  'native-processing-admission': 'tests/test-native-processing-admission.js'
+});
+
+const macStaticCoreFile = 'tests/test-native-macos-static-core.mjs';
+
+function macStaticCorePlan(args = [], platform = process.platform, arch = process.arch) {
+  if (platform !== 'darwin' || !['arm64', 'x64'].includes(arch) ||
+      args.length !== 4 || args[0] !== '--app' || args[2] !== '--target' ||
+      typeof args[1] !== 'string' || !args[1].trim() || /[\0\r\n]/u.test(args[1]) ||
+      args[3] !== 'macos-' + arch) {
+    throw configurationError('MACOS_STATIC_CORE_ARGUMENT_INVALID',
+      'Usage on matching Darwin host: node tests/run-product-suite.js native-macos-static-core --app <DataSecure Standalone.app> --target <macos-arm64|macos-x64>');
+  }
+  return { file: macStaticCoreFile, args: [...args] };
+}
+
+function artifactBoundPlan(profile, args = [], platform = process.platform) {
+  // Static-Core/Darwin admission needs its own future native context gate.
+  const applicable = profile === 'native-processing-admission' ? platform === 'win32' : ['win32', 'darwin'].includes(platform);
+  if (!Object.hasOwn(artifactBoundFiles, profile) || !applicable ||
+      args.length !== 2 || typeof args[0] !== 'string' || !args[0].trim() || args[0].includes('\0') ||
+      typeof args[1] !== 'string' || !/^[a-f0-9]{64}$/u.test(args[1])) {
+    throw configurationError('NATIVE_ARTIFACT_ARGUMENT_INVALID',
+      'Usage: node tests/run-product-suite.js <native-lease-finish|native-processing-admission> <build-manifest> <trusted-node-sha256>');
+  }
+  return { file: artifactBoundFiles[profile], args: [...args] };
+}
 
 function configurationError(code, message, exitCode = 64) {
   return Object.assign(new Error(`${code}: ${message}`), { code, exitCode });
@@ -231,7 +291,8 @@ function duplicateEntries() {
 }
 
 function run(file, args = []) {
-  const result = spawnSync(process.execPath, [file, ...args], { cwd: process.cwd(), stdio: 'inherit', shell: false });
+  const nodeFlags = file === 'tests/test-macos-core-artifact-provenance.mjs' ? ['--experimental-vm-modules'] : [];
+  const result = spawnSync(process.execPath, [...nodeFlags, file, ...args], { cwd: process.cwd(), stdio: 'inherit', shell: false });
   if (result.error) throw result.error;
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
@@ -244,6 +305,18 @@ function argumentsForFile(profile, file) {
 
 function main() {
   const profile = process.argv[2] || 'ci';
+  if (profile === 'native-macos-static-core') {
+    const probe = macStaticCorePlan(process.argv.slice(3));
+    run(probe.file, probe.args);
+    console.log('Explicit Mac Static-Core minimum gate passed; Epoch/Pause/Lease/ACL and GUI acceptance remain separate NOT_RUN gates.');
+    return;
+  }
+  if (Object.hasOwn(artifactBoundFiles, profile)) {
+    const probe = artifactBoundPlan(profile, process.argv.slice(3));
+    run(probe.file, probe.args);
+    console.log(`Explicit ${profile} probe passed; document pipeline and native GUI acceptance remain separate.`);
+    return;
+  }
   // Validate consent and platform BEFORE fixtures, temporary roots or children.
   const plan = executionPlan(profile, process.argv.slice(3));
   const duplicates = duplicateEntries();
@@ -271,7 +344,7 @@ function main() {
 }
 
 module.exports = { baseFiles, ciFiles, fullOnly, nativeUiFiles, nativeUiCaseCount, duplicateEntries,
-  executionPlan, nativeUiAuthorization, nativeCoverageStatus, argumentsForFile };
+  executionPlan, nativeUiAuthorization, nativeCoverageStatus, argumentsForFile, artifactBoundFiles, artifactBoundPlan, macStaticCorePlan };
 
 if (require.main === module) {
   try { main(); }

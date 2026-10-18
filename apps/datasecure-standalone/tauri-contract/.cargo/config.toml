@@ -1,3 +1,5 @@
 [target.x86_64-pc-windows-msvc]
-rustflags = ["-C", "link-arg=/Brepro"]
+# Portable offline ZIPs cannot depend on a machine-wide Visual C++ install.
+# Toolset/CRT security updates require a rebuilt and redistributed application.
+rustflags = ["-C", "link-arg=/Brepro", "-C", "target-feature=+crt-static"]
 

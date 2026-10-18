@@ -3,7 +3,7 @@ const productVersion = JSON.parse(readFileSync(new URL('../../package.json', imp
 // Synthetic UI adapter only. Never included in the Standalone artifact.
 export function workspacePreviewBridge() {
   return `(() => {
-    const listeners = new Map(); let files = [], revision = 0, mode = '', phase = 'ready', polls = 0, selectedCount = 0;
+    const listeners = new Map(); let files = [], revision = 0, mode = '', phase = 'ready', polls = 0, selectedCount = 0, reviewGeneration = 0;
     const id = n => String(n).padStart(32, '0'), batch = 'b'.repeat(64);
     const examples = [
       { name: 'Bewerbungen/Projektleitung/Lebenslauf-Erika-Linden.pdf', source_id: id(1), bytes: 84200, selectable: true, source_type: 'pdf', ocr_required: null },
@@ -112,8 +112,8 @@ export function workspacePreviewBridge() {
               return { name: mode === 'markdown-only' ? name : 'Dokument_' + String(index + 1).padStart(2, '0') + '.md', sha256: row.output_sha256 };
             }) };
         }
-        if (command === 'open_document_export') {
-          if (!exportReceipts.some(row => row.operation_id === args.operationId)) throw Error('AI_EXPORT_INVALID');
+        if (command === 'open_document_export' || command === 'open_recorded_document_export') {
+          if (args.batchId !== batch || !exportReceipts.some(row => row.operation_id === args.operationId)) throw Error('AI_EXPORT_INVALID');
           return { ok: true, handoff_confirmed: true, external_disclosure: false };
         }
         if (command === 'open_document_identity_overview') {
@@ -196,7 +196,8 @@ export function workspacePreviewBridge() {
             ...(activeCompletion && phase === 'results_available' ? { result_count: 116, failed_count: 17,
               batch_complete: true, conversion_feedback: feedback } : {}) };
         }
-        if (command === 'continue_history_batch' || command === 'continue_current_batch' || command === 'open_embedded_review') return { ok: true };
+        if (command === 'open_embedded_review') return { ok: true, review_generation: ++reviewGeneration };
+        if (command === 'continue_history_batch' || command === 'continue_current_batch') return { ok: true };
         if (command === 'configure_results') return { cancelled: true };
         if (command === 'get_run_failures' && completionDemo) return { local_ui_only: true, external_disclosure: false, available: true, total: 17,
           conversion_feedback: feedback, files: Array.from({ length: 17 }, (_, n) => ({ name: n < 13 ? 'Scans/scan-' + (n + 1) + '.png' : 'Scans/scan-' + (n + 1) + '.pdf',

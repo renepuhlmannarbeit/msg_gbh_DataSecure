@@ -1,10 +1,30 @@
 # DataSecure Standalone auf macOS starten
 
-Anleitung für den macOS-Test-Pre-Release **3.2.0-rc162**.
-[RC162-ZIP und DMG für Intel und Apple Silicon](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc162)
-mit der jeweils passenden Prüfsumme verwenden. Das Testpaket ist ad-hoc-signiert,
+Anleitung für das beiliegende macOS-Testpaket. Version, Build-ID und
+Architektur stehen im App-Fuß und in `STANDALONE-MANIFEST.json`.
+ZIP oder DMG mit der jeweils passenden Prüfsumme desselben Releases oder
+Engineering-Artefakts verwenden. Diese Anleitung beweist keine erfolgreiche
+Abnahme eines neu gebauten Pakets. Das Testpaket ist ad-hoc-signiert,
 nicht mit Apple Developer ID signiert oder notarisiert. Native technische
 Runner-Prüfungen ersetzen keine Finder-/Gatekeeper-/VoiceOver-/Bedienabnahme.
+
+**Orientierung der gemeinsamen Oberfläche:** **Neue Verarbeitung** dient zur
+Vorbereitung, **Verlauf** zeigt kompakte frühere Läufe. Nach dem Start oder
+Öffnen eines Laufs erscheint **Laufdetails** mit seiner Kennung. Dort sind
+Übersicht, Prüfung und Dokumente eindeutig diesem Lauf zugeordnet; ein
+Reiterwechsel erteilt weder Freigabe noch Exportauftrag. Abschluss und
+Hinweise bleiben sichtbar, ausführliche Erklärungen sind aufklappbar.
+Ergebnisordner und Hinweise sind direkt erreichbar; vertrauliche Zuordnungen
+sind als optionale, nicht zur Weitergabe bestimmte Angaben gruppiert. Diese gemeinsame
+UI-Beschreibung ersetzt nicht den noch offenen nativen Mac-Nachweis.
+Nach einem gestarteten Lauf ist dessen Dateiauswahl verbraucht. Eine noch nicht
+gestartete neue Auswahl bleibt beim bloßen Reiterwechsel erhalten. Abgeschlossene
+Läufe lassen sich über **Weitere Aktionen → Aus Verlauf ausblenden** aus der
+normalen Liste entfernen; Dateien, Ergebnisse und Zuordnungen bleiben bestehen.
+**Ausgeblendete Läufe anzeigen** macht sie wieder erreichbar. Offene Vorgänge
+und einige Alteinträge ohne ausreichende Laufmetadaten sind geschützt.
+Start-Recovery und Aufbewahrungsprüfung bleiben aktiv; die vollständige
+Verlaufsliste wird nicht automatisch beim Start geöffnet.
 
 **Bekannter Mac-26.2/M2-Prüfstopp:** Der Core von RC161 endete auf diesem
 Zielhost bei ZIP und DMG 16-mal vor seiner Bereitschaft mit Signal 5
@@ -19,8 +39,9 @@ keine Administratorrechte. Eine gesperrte Terminal-App ist für die normalen
 Datei-/Ordnerbuttons keine Voraussetzung. Beide Aussagen sind keine
 Umgehungsempfehlung für Organisationsrichtlinien.
 
-Für die nächste gemeinsame M2-Probe das **RC162-Testpaket**, nicht das
-unveränderte RC161 verwenden. Im Fuß der Anwendung die kurze Build-ID und die
+Für die nächste gemeinsame M2-Probe ein neu erzeugtes ARM-Testpaket aus
+demselben Quellen-Freeze wie die Windows-Testversion verwenden, nicht ein
+unverändertes älteres Paket. Im Fuß der Anwendung die kurze Build-ID und die
 tatsächlich laufende Architektur (ARM64 oder Intel) notieren.
 Nur eine Paketvariante in einem eigenen Testordner starten und zunächst
 synthetische Testdateien verwenden. Wenn schon die Verbindung fehlt,
@@ -38,7 +59,24 @@ Schlägt schon der Start des lokalen Core auf einem verwalteten Mac fehl,
 die IT um eine zeitpunktbezogene Prüfung der Ausführungsrichtlinien bitten;
 keine Gatekeeper- oder Endpoint-Schutzfunktion deaktivieren.
 
-## Verarbeitung und Prüfung in RC162
+## Verarbeitung und Prüfung
+
+Die folgenden manuellen Prüfschritte gelten für den **geführten Weg**.
+Vor einem neuen Anonymisierungslauf kannst du stattdessen ausdrücklich
+**Schnellweg: automatisch anonymisieren und freigeben** wählen. Bekannte
+mehrdeutige Fundstellen und erkannte OCR-Kontaktbereiche werden dann maskiert,
+nicht als richtig erkannt bestätigt. Erstellte unveränderte Basisstände
+erhalten eine gekennzeichnete automatische Erstfreigabe, keine menschliche
+Prüfung. Nicht lesbare oder technisch nicht sicher prüfbare Dateien werden
+mit Grund ausgelassen. Spätere Änderungen und Widerrufe werden nicht beim
+Laden automatisch wieder freigegeben. Der Export bleibt ein eigener,
+ausdrücklicher Auftrag. Automatik ist keine Anonymitätsgarantie.
+
+Für neue anonymisierte Ergebnisdateien sind neutrale Namen empfohlen.
+Alternativ **Originalname mit „-anonymisiert“** wählen, wenn die Namen keine
+sensiblen Angaben enthalten. Diese Wahl gilt nur für diesen neuen Lauf;
+spätere Exporte erhalten immer neutrale Namen. Unterordner und die
+vertrauliche Zuordnung können Originalnamen enthalten.
 
 1. Nach der Installation unter **Neue Verarbeitung** zuerst **Nur umwandeln**
    oder **Umwandeln und anonymisieren** wählen. Dateien/Ordner hinzufügen,
@@ -54,15 +92,28 @@ keine Gatekeeper- oder Endpoint-Schutzfunktion deaktivieren.
 3. Nach Fundstellenabschluss öffnet sich bei Anonymisierung direkt die
    Dokumentprüfung desselben Laufs. Quelle und geplantes Markdown vergleichen,
    gewünschte Dokumente auswählen und **Auswahl freigeben** wählen.
-   Das ist ein eigener Schritt; technische Verarbeitung ist noch keine Freigabe.
-4. **Auswahl für KI exportieren** kopiert nach ausdrücklicher Bestätigung
+   Das ist im geführten Weg ein eigener Schritt; technische Verarbeitung ist
+   noch keine menschliche Freigabe. Im Schnellweg ist die automatische
+   Erstfreigabe ausdrücklich gekennzeichnet, ein weiterer Vergleich freiwillig.
+4. **Auswahl exportieren** kopiert nach ausdrücklicher Bestätigung
    ausschließlich freigegebene aktuelle Markdown-Stände in einen normalen
    separaten Ordner. Originale, Identitäts-/Dateizuordnung, private Prüfstände
    und Begleitdateien werden nicht mitkopiert. Den technischen Laufordner
-   niemals pauschal an eine KI weitergeben.
-5. **Später entscheiden**, Pause und Fortsetzung gehören zum konkreten Lauf.
-   Der Verlauf zeigt höchstens 20 Verarbeitungen. **Ergebnisse prüfen und
-   freigeben** öffnet bei Anonymisierung die spätere Dokumentprüfung.
+   niemals pauschal weitergeben: Er kann Prüf- und Zuordnungsdateien enthalten.
+   Der separate Exportordner enthält nur die ausgewählten freigegebenen
+   Markdown-Dateien. Die exportierten Markdown-Dateien kannst du auch ohne KI
+   verwenden. DataSecure lädt nichts hoch.
+5. **Lauf abgeschlossen – mit Hinweisen** ist ebenfalls abgeschlossen.
+   Gelbe Hinweise öffnen keinen fertigen Lauf wieder. Dokumentfreigabe und
+   **Export abgeschlossen** sind getrennte, revisionsgebundene Tatsachen.
+   Eine bestätigte Kopie nicht wiederholen, nur weil die Dokumentanzeige
+   danach noch lädt. Weitere Änderungen benötigen einen frischen Stand.
+   Im Erfolgsdialog **Zur Laufübersicht** wählen: Die Übersicht desselben Laufs
+   wird geöffnet, kein erneuter Prüfschritt oder Export. Diagnose ist kein
+   Pflichtabschluss.
+6. **Später entscheiden**, Pause und Fortsetzung gehören zum konkreten Lauf.
+   Der Verlauf berücksichtigt nur die letzten 5 Verarbeitungen. Über **Laufdetails** die spätere
+   Dokumentprüfung öffnen.
    Neue Dateien gehören nach dem Start in eine neue Verarbeitung.
    Verbindungsverlust wiederholt Entscheidungen und Exportbestätigungen nicht blind.
 
@@ -164,6 +215,11 @@ und [Tauri-Builds mit GitHub Actions](https://v2.tauri.app/distribute/pipelines/
 
 ## Passendes Paket
 
+Apple Silicon (M1, M2 oder neuer) verwendet **macos-arm64**, Intel-Macs
+**macos-x64**. Eine Intel-App unter Rosetta ersetzt weder einen ARM-Test noch
+einen echten Intel-Test. Die folgenden RC162-Links sind **historische
+Downloadreferenzen**, nicht das neue Entwicklungspaket oder dessen Abnahme:
+
 - Intel-Mac: [RC162-ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc162/DataSecure-Standalone-3.2.0-rc162-macos-x64.zip)
   oder [RC162-DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc162/DataSecure-Standalone-3.2.0-rc162-macos-x64.dmg),
   jeweils mit gleichnamiger `.sha256` auf der Release-Seite.
@@ -172,7 +228,7 @@ und [Tauri-Builds mit GitHub Actions](https://v2.tauri.app/distribute/pipelines/
   oder [RC162-DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc162/DataSecure-Standalone-3.2.0-rc162-macos-arm64.dmg),
   jeweils mit gleichnamiger `.sha256` auf der Release-Seite.
 - Historische RC140-ZIPs: Intel mindestens macOS 15, ARM mindestens macOS 14.
-- Aktueller RC162-Binärvertrag: macOS 13.5 für beide Architekturen.
+- Deklarierter Binärvertrag: macOS 13.5 für beide Architekturen.
   Die Paketgates laufen auf macOS 15 (Intel) und macOS 26 (ARM);
   die Zielhost-Abnahme auf M2/macOS 26.2 und macOS 13.5 bleibt offen.
 
@@ -245,6 +301,19 @@ einfach installierbare macOS-Version bewerben.
 
 ## Zielhost-Abnahme
 
+Bei Start-/Exportproblemen unter **Einstellungen** oder in der Fehlerhilfe
+**Diagnosepaket speichern** wählen. Die Funktion ist ohne Core-Verbindung
+erreichbar und kein notwendiger Export- oder Abschlussschritt. Einen neuen
+lokalen JSON-Dateinamen wählen. Es erfolgt kein Upload; Dokumentinhalte,
+Dateinamen und Quellpfade gehören nicht ins Diagnosepaket. Fehlende, gekürzte
+oder verworfene Protokolle sind gekennzeichnet. Die Diagnose ist bestmöglich,
+kein lückenloses Auditprotokoll und kein Beweis eines Exportabschlusses.
+
+Ein fehlender Ergebnisordner bei der Erstinstallation ist kein bestätigter
+Core-Absturzgrund. Ein nicht verfügbares Ziel bewusst ändern. macOS kann für
+geschützte Ordner wie „Dokumente“ eine Erlaubnis verlangen. Eine Ablehnung
+oder die Sperre separater nativer Prozesse mit der IT klären, nicht umgehen.
+
 Die Freigabe erfordert je einen nativen Lauf auf Intel und Apple Silicon:
 
 - echter Browser-Download beider Release-Dateien, externe ZIP-Prüfsumme,
@@ -267,11 +336,11 @@ Die Freigabe erfordert je einen nativen Lauf auf Intel und Apple Silicon:
   Folgeschritte im selben Prüffenster, Vertagen/Neustart/Fortsetzen;
 - nach Fundstellenabschluss direkt Dokumentprüfung desselben Laufs; Freigaben
   nur für ausdrücklich gewählte aktuelle Dokumentstände;
-- getrennter bestätigter KI-Export in einen normalen Ordner ohne Originale,
+- getrennter bestätigter Export in einen normalen Ordner ohne Originale,
   Zuordnungen oder private Prüfstände; Änderungen widerrufen betroffene Freigaben;
 - große lokale Prüfgruppen und verständliche technische Fehler; Dialogfehler
   dürfen nicht als Benutzerentscheidung „Später“ erscheinen;
-- Verlauf mit höchstens 20 laufgebundenen Karten; alle Aktionen gehören zum
+- Verlauf mit höchstens 5 laufgebundenen Karten; alle Aktionen gehören zum
   gewählten Lauf, keine Bestätigung allein durch Status-Momentaufnahmen;
 - falsches Architekturpaket stoppt verständlich;
 - keine Rosetta-Pflicht auf Apple Silicon;

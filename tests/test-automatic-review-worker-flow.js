@@ -3,14 +3,19 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const vm = require('node:vm');
+const { createRequire } = require('node:module');
 const { createSuite } = require('./helpers');
 const { continueIntoLocalReview } = require('../plugins/data-secure/server/gateway/automatic-local-review');
+const { readBatchExecutionDiagnostic } = require('../plugins/data-secure/server/gateway/batch-execution-diagnostic');
 const processingMode = require('../plugins/data-secure/server/core/processing-mode');
 const resultNamingMode = require('../plugins/data-secure/server/core/result-naming-mode');
 
 const { testAsync, done, assert } = createSuite('Automatic review worker orchestration contract');
 const workerFile = path.join(__dirname, '..', 'plugins', 'data-secure', 'server', 'gateway', 'batch-worker.js');
 const workerSource = fs.readFileSync(workerFile, 'utf8');
+const diagnosticFile = path.join(path.dirname(workerFile), 'batch-execution-diagnostic.js');
+const diagnosticSource = fs.readFileSync(diagnosticFile, 'utf8');
+const diagnosticRequire = createRequire(diagnosticFile);
 const token = 'b'.repeat(64);
 const waiting = Object.freeze({
   ok: true, complete: false, batch_phase: 'awaiting_local_review', batch_total: 2,
@@ -29,7 +34,7 @@ const complete = Object.freeze({
   result_grades_verified: true, raw_content_sent_to_claude: false
 });
 
-async function runWorker(reviewOutcome, initial = waiting) {
+async function runWorker(reviewOutcome, initial = waiting, { executorError = null } = {}) {
   const calls = { review: 0, claim: 0, release: 0, exports: 0, presentations: 0, notices: 0, events: [], sent: [], exits: [] };
   const listeners = {};
   const fakeProcess = {
@@ -41,7 +46,7 @@ async function runWorker(reviewOutcome, initial = waiting) {
   };
   const batch = {
     readBatchProcessingMode(value) { assert.strictEqual(value, token); return processingMode.MODES.ANONYMIZE; },
-    async runLocalBatchExecutor() { return initial; },
+    async runLocalBatchExecutor() { if (executorError) throw executorError; return initial; },
     claimLocalBatchExecutor(value, pid) { calls.claim++; assert.strictEqual(value, token); assert.strictEqual(pid, 8080); return { ok: true }; },
     releaseLocalBatchExecutor(value, pid) { calls.release++; assert.strictEqual(value, token); assert.strictEqual(pid, 8080); return true; },
     async reviewDeferredBatch(value, options) {
@@ -52,11 +57,25 @@ async function runWorker(reviewOutcome, initial = waiting) {
       return reviewOutcome;
     },
     readBatchProgress() { return waiting; },
-    exportCompletedBatchResults() { calls.exports++; return { exported: 2, pending: 0, available: true }; },
+    async exportCompletedBatchResultsAsync() { calls.exports++; return { exported: 2, pending: 0, available: true }; },
     reserveTerminalNotice() { return { ok: true, reservation_id: 'c'.repeat(32) }; },
     markTerminalNoticePresented() { return true; },
     releaseTerminalNoticeReservation() { return true; }
   };
+  const workflowDiagnostics = { recordWorkflowEvent(event) { calls.events.push(event); return true; } };
+  const diagnosticModule = { exports: {} };
+  // Execute the actual diagnostic helper with the same worker process boundary.
+  // Only its observational sink is local: real normalization/closed vocabularies
+  // and DTO construction remain intact, without writing a real workflow spool.
+  vm.runInNewContext(diagnosticSource, {
+    module: diagnosticModule, exports: diagnosticModule.exports, process: fakeProcess,
+    require(name) {
+      if (name === './workflow-diagnostics') return workflowDiagnostics;
+      if (['node:util', '../core/ownership-diagnostics', './diagnostic-causes'].includes(name))
+        return diagnosticRequire(name);
+      throw new Error(`Unexpected diagnostic dependency ${name}`);
+    }
+  }, { filename: diagnosticFile, timeout: 1000 });
   const module = { exports: {} };
   vm.runInNewContext(workerSource, {
     module, exports: module.exports, process: fakeProcess,
@@ -69,7 +88,7 @@ async function runWorker(reviewOutcome, initial = waiting) {
       if (name === '../core/result-naming-mode') return resultNamingMode;
       if (name === './batch-intake-reservation') return { releaseIntake: () => true, RESERVATION_ID_RE: /^[a-f0-9]{64}$/u };
       if (name === './result-export') return {
-        terminalVisibleExport(progress, exporter) {
+        async terminalVisibleExportAsync(progress, exporter) {
           return progress.complete === true ? exporter() : { exported: 0, pending: 0, available: false };
         }
       };
@@ -85,7 +104,8 @@ async function runWorker(reviewOutcome, initial = waiting) {
         showBatchStateNoticeConfirmed(progress, options) { calls.notices++; calls.notice = progress; calls.noticeOptions = options; return true; },
         showLocalIntakeNoticeConfirmed() { throw new Error('unexpected failure notice'); }
       };
-      if (name === './workflow-diagnostics') return { recordWorkflowEvent(event) { calls.events.push(event); return true; } };
+      if (name === './workflow-diagnostics') return workflowDiagnostics;
+      if (name === './batch-execution-diagnostic') return diagnosticModule.exports;
       if (name === './automatic-local-review') return { continueIntoLocalReview };
       if (name === './batch-queue-envelope') {
         return require('../plugins/data-secure/server/gateway/batch-queue-envelope');
@@ -145,6 +165,61 @@ async function main() {
     assert.strictEqual(calls.presentations, 1);
     assert.strictEqual(calls.notices, 1);
     assert.strictEqual(calls.envelope.batch_phase, 'complete');
+  });
+
+  await testAsync('an executor failure uses the real closed diagnostic channel without granting review or export', async () => {
+    const error = Object.assign(new Error('private executor document text'), {
+      code: 'OWNERSHIP_GUARD_BUSY', path: '/private/customer.txt', batch_token: token, pid: 9999
+    });
+    const calls = await runWorker(null, waiting, { executorError: error });
+    assert.strictEqual(calls.review, 0);
+    assert.strictEqual(calls.claim, 0);
+    assert.strictEqual(calls.exports, 0);
+    assert.strictEqual(calls.presentations, 1);
+    assert.strictEqual(calls.envelope.type, 'local-batch-stopped');
+    assert.strictEqual(calls.envelope.stage, 'after_checkpoint');
+    assert.deepStrictEqual(calls.exits, [1]);
+    // JSON transport also removes the VM realm boundary, as real IPC does.
+    const sent = JSON.parse(JSON.stringify(calls.sent));
+    assert.deepStrictEqual(sent, [{ type: 'local-batch-accepted' }, {
+      type: 'local-batch-diagnostic', phase: 'processing', error_code: 'STANDALONE_OWNERSHIP_CONTROL_BUSY'
+    }]);
+    const record = readBatchExecutionDiagnostic(sent[1]);
+    assert.deepStrictEqual(record, {
+      event: 'batch_worker_failed', outcome: 'stopped', phase: 'processing',
+      error_code: 'STANDALONE_OWNERSHIP_CONTROL_BUSY'
+    });
+    assert.strictEqual(Object.isFrozen(record), true);
+    assert.deepStrictEqual(JSON.parse(JSON.stringify(calls.events)), [record]);
+    assert.doesNotMatch(JSON.stringify(calls), /private executor document text|customer\.txt|batch_token|9999|bbbb/u);
+  });
+
+  await testAsync('unknown executor causes stay internal and extended or accessor diagnostic DTOs are rejected', async () => {
+    const error = Object.assign(new Error('private unknown executor text'), {
+      code: '/private/unknown-cause.txt', source: '/private/source.txt'
+    });
+    const calls = await runWorker(null, waiting, { executorError: error });
+    const sent = JSON.parse(JSON.stringify(calls.sent));
+    assert.deepStrictEqual(sent, [{ type: 'local-batch-accepted' }, {
+      type: 'local-batch-diagnostic', phase: 'processing', error_code: 'INTERNAL_FAILURE'
+    }]);
+    assert.strictEqual(calls.envelope.error_code, 'INTERNAL_FAILURE');
+    assert.strictEqual(calls.exports, 0);
+    assert.deepStrictEqual(calls.exits, [1]);
+    const message = sent[1];
+    assert.strictEqual(readBatchExecutionDiagnostic(message).error_code, 'INTERNAL_FAILURE');
+    for (const [key, value] of [['batch_token', token], ['path', '/private/source.txt'], ['pid', 9999]])
+      assert.strictEqual(readBatchExecutionDiagnostic({ ...message, [key]: value }), null);
+    assert.strictEqual(readBatchExecutionDiagnostic({ ...message, phase: 'unknown' }), null);
+    assert.strictEqual(readBatchExecutionDiagnostic({ ...message, error_code: 'PRIVATE_UNKNOWN_CAUSE' }), null);
+    let getterCalls = 0;
+    const accessor = { ...message };
+    Object.defineProperty(accessor, 'error_code', {
+      enumerable: true, get() { getterCalls++; return 'INTERNAL_FAILURE'; }
+    });
+    assert.strictEqual(readBatchExecutionDiagnostic(accessor), null);
+    assert.strictEqual(getterCalls, 0, 'closed DTO reading must not execute caller getters');
+    assert.doesNotMatch(JSON.stringify(calls), /private unknown executor text|unknown-cause\.txt|source\.txt/u);
   });
   done();
 }

@@ -12,6 +12,7 @@ const contacts = buildContactBatch(['one.png', 'two.png'].map((source_label, ind
   input: { original_text: 'E-Mail: same@wrong.invalid', source_type: 'png', contacts: [{ start: 8, end: 26, page: 1, line: 1, kind: 'email',
     image: { schema: 'datasecure-ocr-contact-image/1', source_width: 4, source_height: 3, x: 0, y: 0, width: 4, height: 3,
       png_base64: encodePng({ width: 4, height: 3, rgba: Buffer.alloc(48, index ? 180 : 255) }).toString('base64') } }] } }))).draft;
+const evidence = fs.mkdtempSync(path.resolve('dist/engineering-review-bulk-browser-'));
 const browser = await chromium.launch({ channel: process.platform === 'win32' ? 'msedge' : 'chrome', headless: true });
 async function scenario(draft, work, { embedded = false } = {}) {
   const preview = await startReviewPreview({ draft });
@@ -139,32 +140,31 @@ try {
       assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), `Reflow at ${width}px`);
     }
     await page.setViewportSize({ width: 1500, height: 1000 });
-    const directory = path.resolve('dist/engineering-review-bulk-browser-20261007'); fs.mkdirSync(directory, { recursive: true });
-    await page.screenshot({ path: path.join(directory, 'review-bulk.png'), fullPage: true });
+    await page.screenshot({ path: path.join(evidence, 'review-bulk.png'), fullPage: true });
   });
   await scenario(syntheticDraft(), async page => {
     await page.setViewportSize({ width: 1366, height: 580 });
     const pinned = page.locator('.matrix-actions-pinned');
-    assert.equal(await pinned.evaluate(element => getComputedStyle(element).position), 'sticky');
+    assert.equal(await pinned.evaluate(element => getComputedStyle(element).position), 'static',
+      'short embedded views reserve no competing sticky action overlay');
     await page.evaluate(() => window.scrollTo(0, 220));
-    const bounds = await pinned.boundingBox();
-    assert.ok(bounds && bounds.y >= -1 && bounds.y < 20, 'Selection and Apply stay at the top of a short embedded review');
-    assert.ok(bounds.height < 220, 'Action area leaves room for the finding list and comparison');
+    for (const selector of ['.table-scroll', '.matrix-detail', 'pre'])
+      assert.equal(await page.locator(selector).first().evaluate(element =>
+        ['auto', 'scroll'].includes(getComputedStyle(element).overflowY)), false,
+      'the embedded document owns vertical scrolling, not ' + selector);
     assert.ok(await page.locator('#select-filtered').isVisible());
     assert.ok(await page.locator('#bulk-apply').isVisible());
     await page.locator('#select-filtered').focus();
     assert.ok(await page.evaluate(() => { const r = document.activeElement.getBoundingClientRect();
-      return r.top >= 0 && r.bottom <= innerHeight; }), 'Keyboard focus remains visible in the pinned action area');
-    const directory = path.resolve('dist/engineering-review-bulk-browser-20261007'); fs.mkdirSync(directory, { recursive: true });
-    await page.screenshot({ path: path.join(directory, 'review-embedded-580px.png') });
+      return r.top >= 0 && r.bottom <= innerHeight; }), 'Keyboard focus brings the action into view');
+    await page.screenshot({ path: path.join(evidence, 'review-embedded-580px.png') });
     await page.locator('#select-visible').check();
     await apply(page, 'confirm_contact');
     assert.ok(await page.evaluate(() => { const focused = document.activeElement.getBoundingClientRect();
-      const actions = document.querySelector('.matrix-actions-pinned').getBoundingClientRect();
-      return document.activeElement.id === 'exact-text' && focused.top >= actions.bottom - 1; }),
-    'After Apply, focus on the next comparison is not covered by the sticky actions');
+      return document.activeElement.id === 'exact-text' && focused.top >= 0 && focused.bottom <= innerHeight; }),
+    'After Apply, the next comparison is focused and visible without an action overlay');
     await page.setViewportSize({ width: 683, height: 580 });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Embedded review reflows at 200%-equivalent width');
   }, { embedded: true });
-  console.log('REVIEW BULK BROWSER PASS: actual HTML/JS/CSS, single explicit Apply, no duplicate editors/actions, bounded OCR correction proposals without implicit decisions, different per-row corrections, atomic validation, Undo, grouped contexts, privacy clearing, axe, pagination and 390–1920px reflow; synthetic IPC, no native claim');
+  console.log('REVIEW BULK BROWSER PASS: actual HTML/JS/CSS, single explicit Apply, no duplicate editors/actions, bounded OCR correction proposals without implicit decisions, different per-row corrections, atomic validation, Undo, grouped contexts, privacy clearing, axe, pagination and 390–1920px reflow; synthetic IPC, no native claim; evidence=' + evidence);
 } finally { await browser.close(); }

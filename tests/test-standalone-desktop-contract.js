@@ -19,6 +19,30 @@ const nativeSmoke = fs.readFileSync(path.join(__dirname, 'manual/standalone-nati
 const productVersion = require('../package.json').version;
 const iconDirectory = path.join(root, 'tauri-contract/icons');
 
+test('bootstrap refusals latch natively before notification and only explicit epoch-bound status can request a successor', () => {
+  const transport = fs.readFileSync(path.join(root, 'tauri-contract/src/ipc_transport.rs'), 'utf8');
+  const workspace = fs.readFileSync(path.join(root, 'frontend/workspace.js'), 'utf8');
+  const invalidation = rust.slice(rust.indexOf('fn invalidate_connection_with_bootstrap_failure('), rust.indexOf('// Requested while holding the sidecar mutex'));
+  assert.match(invalidation, /record_connection_change\(&state\.connection_epoch, bootstrap_code\)/u);
+  assert.ok(invalidation.indexOf('record_connection_change(') < invalidation.indexOf('state.app.emit('));
+  assert.match(invalidation, /"state": "bootstrap_failed", "error_code": code/u);
+  const rpc = rust.slice(rust.indexOf('fn rpc_request('), rust.indexOf('fn native_export_data_root('));
+  assert.match(rpc, /if action == "get_public_state" \{ state\.bootstrap_retry_epoch \} else \{ None \}/u);
+  assert.match(rpc, /invalidate_connection_with_bootstrap_failure\(state, Some\(&code\)\)/u);
+  const confirmReady = rpc.indexOf('confirm_bootstrap_ready(state.expected_connection_epoch, &state.connection_epoch)');
+  assert.ok(confirmReady >= 0 && confirmReady < rpc.indexOf('state.app.emit("datasecure-connection"', confirmReady));
+  assert.ok(transport.includes('let ready_epoch = ready_connection_epoch(current_epoch)'));
+  assert.match(rust, /if retry_bootstrap == Some\(true\) \{ owned\.bootstrap_retry_epoch = Some\(owned\.expected_connection_epoch\); \}/u);
+  assert.match(rust, /captured\.bootstrap_retry_epoch = None/u);
+  assert.match(rust, /"bootstrap_failure": failure/u);
+  assert.match(transport, /if retry_epoch != Some\(failure\.epoch\) \{ return Err\(failure\.code\.clone\(\)\); \}/u);
+  assert.match(transport, /state\.active\.as_ref\(\)\.is_some_and\(\|child\| !child\.exited\(\)\)/u);
+  assert.match(workspace, /bootstrapRetryAuthorized \? \{ retryBootstrap: true \} : undefined/u);
+  assert.match(workspace, /bootstrapRetryProof\.failure === bootstrapFailure/u);
+  assert.match(workspace, /if \(bootstrapRetryAuthorized\) \{ bootstrapRetryProof\.used = true; bootstrapRecoveryPending = true/u);
+  assert.match(rust, /source_fingerprint::diagnostic_build_id\(option_env!\("DATASECURE_BUILD_ID"\)\)/u);
+});
+
 test('closed desktop errors preserve identity and capacity facts and their renderer recovery hints', () => {
   const { DESKTOP_ERROR_CODES, desktopErrorCode } = require('../plugins/data-secure/server/core/desktop-error-contract');
   assert.equal(new Set(DESKTOP_ERROR_CODES).size, DESKTOP_ERROR_CODES.length);
@@ -48,6 +72,18 @@ test('desktop manifests, Rust package and artifact names use the product version
   assert.strictEqual(config.version, productVersion);
   assert.match(cargo, new RegExp(`^version = "${productVersion.replaceAll('.', '\\.') }"$`, 'mu'));
   for (const target of targets.targets) assert.ok(target.package_filename.includes(productVersion));
+});
+
+test('the supported Rust minimum matches the pinned product build toolchain', () => {
+  const toolchain = fs.readFileSync(path.join(root, 'tauri-contract/rust-toolchain.toml'), 'utf8');
+  const minimum = cargo.match(/^rust-version\s*=\s*"(\d+\.\d+\.\d+)"\s*$/mu)?.[1];
+  const pinned = toolchain.match(/^channel\s*=\s*"(\d+\.\d+\.\d+)"\s*$/mu)?.[1];
+  assert.ok(minimum && pinned, 'the source-build contract must name exact stable toolchain versions');
+  assert.equal(minimum, pinned, 'do not advertise a lower, unverified MSRV than the supported product toolchain');
+  assert.match(cargo, /icu_normalizer\s*=\s*\{\s*version\s*=\s*"=2\.3\.0"/u);
+  const [major, minor] = minimum.split('.').map(Number);
+  assert.ok(major > 1 || (major === 1 && minor >= 88),
+    'the directly pinned ICU normalizer already requires at least Rust 1.88');
 });
 
 test('native rebuild watches the sibling frontend embedded by Tauri on Windows and macOS', () => {
@@ -247,8 +283,9 @@ test('recursive admission uses a separate bounded deadline and an honest content
   assert.match(rust, /fn rpc_lock_transport_code\(_action: &str, code: String\).*?"STANDALONE_IPC_BUSY"/su);
   assert.match(rust, /let bootstrap_deadline = Instant::now\(\) \+ rpc_bootstrap_duration\(\)/u);
   assert.match(rust, /let deadline = Instant::now\(\) \+ rpc_duration\(action\)/u);
-  assert.ok(rust.indexOf('let deadline = Instant::now() + rpc_duration(action)') >
-    rust.indexOf('let spawned = ipc_transport::receive_until(&receiver, bootstrap_deadline'),
+  const bootstrapWait = rust.indexOf('ipc_transport::receive_until(&receiver, bootstrap_deadline');
+  assert.ok(bootstrapWait >= 0, 'the real bootstrap receive must exist; a missing search cannot pass as offset -1');
+  assert.ok(rust.indexOf('let deadline = Instant::now() + rpc_duration(action)') > bootstrapWait,
   'the first request must get its own deadline after sidecar bootstrap');
   assert.match(rust, /STANDALONE_ADMISSION_TIMEOUT/u);
   const progress = rust.slice(rust.indexOf('fn admission_progress('), rust.indexOf('fn rpc_request('));
@@ -466,6 +503,9 @@ test('the native Windows smoke exercises the visible WebView lifecycle', () => {
   assert.match(nativeSmoke, /Resolve-StandaloneArchiveIdentity/u);
   const host = fs.readFileSync(path.join(__dirname, 'manual/standalone-native-host.ps1'), 'utf8');
   assert.match(host, /DataSecure-Standalone-\$version-windows-x64/u);
+  assert.match(host, /ProductDirectory = 'DataSecure'/u);
+  assert.match(host, /HistoricalProductDirectory/u);
+  assert.match(nativeSmoke, /Resolve-StandaloneProductDirectory \$extractedRoot \$expectedVersion/u);
 });
 
 test('history actions are separately permissioned and carry only exact batch identity to the private host', () => {
@@ -482,6 +522,61 @@ test('history actions are separately permissioned and carry only exact batch ide
   assert.match(sidecar, /continueHistoryBatch\(message\.batch_id\)/u);
   assert.match(frontend, /batchId: entry\.batch_id/u);
   assert.match(rust, /history_local_target\(resolved, kind, resolve_action == "resolve_history_identity_mapping"\)/u);
+});
+
+test('recorded export opening survives document close without gaining document authority', () => {
+  const commandStart = rust.indexOf('async fn open_recorded_document_export(');
+  const commandEnd = rust.indexOf('\n#[tauri::command', commandStart);
+  const command = rust.slice(commandStart, commandEnd);
+  const surface = rust.slice(rust.indexOf('fn recorded_document_export_surface('), commandStart);
+  const request = rust.slice(rust.indexOf('fn recorded_document_export_request('), rust.indexOf('fn recorded_document_export_surface('));
+  const boundStart = rust.indexOf('async fn open_document_export(');
+  const bound = rust.slice(boundStart, rust.indexOf('fn recorded_document_export_request(', boundStart));
+  assert.ok(commandStart >= 0 && commandEnd > commandStart);
+  assert.match(command, /batch_id: String, operation_id: String\) -> Result<Value, String>/u);
+  assert.equal((command.match(/capture_connection\(\)/gu) || []).length, 1, 'capture only at command ingress');
+  assert.equal((command.match(/recorded_document_export_surface\(&window, &owned\)\?/gu) || []).length, 2,
+    'enforce the current main surface and captured connection before resolve and immediately before handoff');
+  const resolve = command.indexOf('rpc_request(&resolver, "resolve_document_export", &id, request)');
+  const target = command.indexOf('validate_local_target(resolved, "directory")?');
+  const finalGuard = command.lastIndexOf('recorded_document_export_surface(&window, &owned)?');
+  const handoff = command.indexOf('open_local_target(&target, "directory", "open_recorded_document_export")');
+  assert.ok(resolve > 0 && target > resolve && finalGuard > target && handoff > finalGuard);
+  assert.match(surface, /document_review_surface\(window, state, None\)\?/u);
+  assert.match(surface, /expected_connection_epoch != state\.connection_epoch\.load\(Ordering::Acquire\)/u);
+  assert.match(surface, /state\.lifecycle\.stopping\.load\(Ordering::Acquire\)/u);
+  assert.match(request, /batch_id\.len\(\) != 64 \|\| operation_id\.len\(\) != 32/u);
+  assert.match(request, /batch_id\.bytes\(\)\.chain\(operation_id\.bytes\(\)\)/u);
+  assert.match(request, /c\.is_ascii_digit\(\) \|\| \(b'a'\.\.=b'f'\)\.contains\(&c\)/u);
+  assert.deepEqual([...request.matchAll(/"([a-z_]+)":/gu)].map(match => match[1]),
+    ['schema', 'request_id', 'action', 'batch_id', 'operation_id']);
+  // Comments describe the refusal of mutation; they are not executable calls.
+  // Keep the same forbidden vocabulary for code, and prove actual injected
+  // mutations still fail rather than deleting this negative boundary check.
+  const forbidden = /document_review_rpc|Some\(&batch_id\)|document_review_batch|decide_document|export_approved_documents|acknowledge|selection|source_paths/u;
+  const codeOnly = text => text.replace(/^\s*\/\/[^\n]*$/gmu, '');
+  assert.doesNotMatch(codeOnly(command + surface + request), forbidden);
+  assert.doesNotMatch(codeOnly('// never acknowledge or export_approved_documents\nlet operation_id = receipt;'), forbidden);
+  for (const mutation of ['acknowledge_receipt();', 'export_approved_documents();', 'document_review_batch = Some(&batch_id);'])
+    assert.throws(() => assert.doesNotMatch(codeOnly(command + surface + request + '\n' + mutation), forbidden));
+  assert.match(bound, /document_review_rpc\(window\.clone\(\)/u);
+  assert.match(bound, /document_review_surface\(&window, &state, Some\(&batch_id\)\)\?/u);
+  const permissions = fs.readFileSync(path.join(root, 'tauri-contract/permissions/commands.toml'), 'utf8');
+  const review = JSON.parse(fs.readFileSync(path.join(root, 'tauri-contract/capabilities/review.json'), 'utf8'));
+  assert.ok(capability.permissions.includes('allow-open-recorded-document-export'));
+  assert.ok(!review.permissions.includes('allow-open-recorded-document-export'));
+  assert.match(permissions, /commands\.allow = \["open_recorded_document_export"\]/u);
+  assert.match(rust.slice(rust.indexOf('.invoke_handler(tauri::generate_handler![')), /\bopen_recorded_document_export,/u);
+  const generated = JSON.parse(fs.readFileSync(path.join(root, 'tauri-contract/gen/schemas/capabilities.json'), 'utf8'));
+  assert.ok(generated['main-window'].permissions.includes('allow-open-recorded-document-export'));
+  assert.ok(!generated['review-window'].permissions.includes('allow-open-recorded-document-export'));
+  const manifests = JSON.parse(fs.readFileSync(path.join(root, 'tauri-contract/gen/schemas/acl-manifests.json'), 'utf8'));
+  assert.deepEqual(manifests['__app-acl__'].permissions['allow-open-recorded-document-export'].commands,
+    { allow: ['open_recorded_document_export'], deny: [] });
+  for (const name of ['desktop-schema.json', 'windows-schema.json']) {
+    assert.match(fs.readFileSync(path.join(root, 'tauri-contract/gen/schemas', name), 'utf8'),
+      /"const": "allow-open-recorded-document-export"/u);
+  }
 });
 
 test('every documented UI command has a narrow native permission and explicit surface ownership', () => {
@@ -652,6 +747,28 @@ test('macOS instructions use a narrow Gatekeeper exception without terminal bypa
   assert.match(guide, /sichtbare menschliche Abnahme bleibt offen/u);
   assert.match(guide, /upload_package/u);
   assert.match(guide, /einem Tag Aufbewahrung/u);
+});
+
+test('historical Bootstrap resolution is coherent native metadata, never a live-Core claim or bootstrap override', () => {
+  const transport = fs.readFileSync(path.join(root, 'tauri-contract/src/ipc_transport.rs'), 'utf8');
+  const workspace = fs.readFileSync(path.join(root, 'frontend/workspace.js'), 'utf8');
+  assert.ok(transport.includes('pub struct BootstrapResolution'));
+  assert.ok(transport.includes('state.bootstrap_resolution = Some(BootstrapResolution { failure_epoch: failure.epoch, ready_epoch })'));
+  assert.ok(transport.includes('Self::bootstrap_snapshot_locked(&state, current_epoch)'));
+  assert.ok(rust.includes('"connection_epoch": connection_epoch'));
+  assert.ok(rust.includes('"bootstrap_resolution": resolution'));
+  assert.ok(workspace.includes('!bootstrapFailure?.nativeBound'));
+  assert.ok(workspace.includes('request !== generation || heldFailure !== bootstrapFailure'));
+  assert.ok(workspace.includes('Boolean(bootstrapFailure || bootstrapRecoveryPending)'));
+  assert.ok(workspace.includes('if (!bootstrapRecoveryPending)'));
+  assert.ok(workspace.indexOf("if (data.state === 'ready') retireResolvedBootstrap") <
+    workspace.indexOf('if (data.epoch < connectionEpoch'));
+  const resolution = workspace.slice(workspace.indexOf('function retireResolvedBootstrap('), workspace.indexOf('function feedback('));
+  assert.ok(resolution.includes('reconnecting = true; contextRequired = true'));
+  assert.ok(!resolution.includes('reconnecting = false'));
+  assert.ok(!resolution.includes('connectionEpoch ='));
+  const rpc = rust.slice(rust.indexOf('fn rpc_request('), rust.indexOf('fn native_export_data_root('));
+  assert.ok(!rpc.includes('read_existing_epoch') && !rpc.includes('ready_read_epoch'));
 });
 
 done();

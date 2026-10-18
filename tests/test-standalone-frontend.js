@@ -1343,8 +1343,8 @@ async function failureReasonCategoriesCase() {
 
 async function historyRowBindingCase() {
   const batchId = '<img src=x onerror=bad()> exact-run-7';
-  const entries = Array.from({ length: 25 }, (_, index) => historyEntry(index === 7 ? batchId : `run-${index}`, {
-    processing_mode: 'markdown-and-anonymize', ledger_available: true, resumable: index === 7,
+  const entries = Array.from({ length: 25 }, (_, index) => historyEntry(index === 2 ? batchId : `run-${index}`, {
+    processing_mode: 'markdown-and-anonymize', ledger_available: true, resumable: index === 2,
     result_count: 2, failed_count: 0
   }));
   const harness = await frontendHarness({
@@ -1354,15 +1354,15 @@ async function historyRowBindingCase() {
   });
   await harness.click('tab-results');
   await settleFrontend();
-  assert.strictEqual(harness.elements['history-body'].children.length, 20);
-  assert.strictEqual(harness.elements['history-body'].children[7].children[0].attributes.scope, 'row');
-  assert.strictEqual(harness.elements['history-body'].children[7].children[0].children[0].textContent, `Lauf ${batchId.slice(-8)}`);
-  const buttons = rowActions(harness.elements, 7);
+  assert.strictEqual(harness.elements['history-body'].children.length, 5);
+  assert.strictEqual(harness.elements['history-body'].children[2].children[0].attributes.scope, 'row');
+  assert.strictEqual(harness.elements['history-body'].children[2].children[0].children[0].textContent, `Lauf ${batchId.slice(-8)}`);
+  const buttons = rowActions(harness.elements, 2);
   assert.strictEqual(buttons.length, 4);
   assert.strictEqual(rowActions(harness.elements, 0)[2].disabled, true, 'private mapping is absent');
   assert.strictEqual(rowActions(harness.elements, 0)[3].disabled, true);
   assert.match(rowActions(harness.elements, 0)[3].title, /Keine Fortsetzung/u);
-  const feedback = harness.elements['history-body'].children[7].children[4].children.at(-1);
+  const feedback = harness.elements['history-body'].children[2].children[4].children.at(-1);
   assert.strictEqual(feedback.attributes.role, 'status');
   assert.strictEqual(feedback.hidden, true);
   for (const button of buttons.filter(button => !button.disabled)) {
@@ -1506,7 +1506,7 @@ function selectionActionsStayAboveLongFileListsCase() {
   await testAsync('each stopped file has its full extension, a fixed reason and an appropriate recovery step', failureReasonCategoriesCase);
   await testAsync('first start distinguishes a proposed result folder from a chosen one', firstRunResultFolderGuidanceCase);
   await testAsync('tabs use manual activation and roving arrow, Home and End focus', accessibleTabsCase);
-  await testAsync('history renders at most 20 rows and every action binds its exact batch ID', historyRowBindingCase);
+  await testAsync('history renders at most 5 rows and every action binds its exact batch ID', historyRowBindingCase);
   await testAsync('private identity mapping opens locally without a delete action', privateIdentityHistoryCase);
   await testAsync('history preserves focus, ignores progress polls and rejects stale replies and actions', historyFreshnessCase);
   await testAsync('history requires a local-only envelope and explains disabled actions', historyPrivacyAndAvailabilityCase);

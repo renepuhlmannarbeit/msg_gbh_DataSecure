@@ -377,12 +377,12 @@ testAsync('every post-claim failure releases once and success uses fresh final p
   assert.strictEqual(typeof batchFacade.runLocalBatchExecutor, 'function');
 });
 
-testAsync('unhandled post-claim failures become durable terminal decisions instead of endless resume loops', async () => {
+testAsync('active known document failures stabilize but unstarted unknown conversion faults stay pending', async () => {
   const policyError = Object.assign(new Error('private detail'), { code: 'BATCH_PSEUDONYM_CONTEXT_UNAVAILABLE' });
   const anonymization = fixture({
     state: {
       schema: 'datasecure-batch/6', product_channel: 'standalone', token, local_executor_pid: pid,
-      items: [{ id: 'a'.repeat(32), name: 'source.docx', status: 'pending' }],
+      items: [{ id: 'a'.repeat(32), name: 'source.docx', status: 'processing' }],
       io_summary: {}, progress: progress({ remaining: 1 })
     },
     failProcessAt: 1,
@@ -409,9 +409,9 @@ testAsync('unhandled post-claim failures become durable terminal decisions inste
     failProcessAt: 1
   });
   await assert.rejects(conversion.run(), /PROCESS_FAILED/);
-  assert.strictEqual(conversion.state().items[0].status, 'stopped');
-  assert.strictEqual(conversion.state().items[0].local_mapping_exported, true,
-    'pure conversion has no mapping debt');
+  assert.strictEqual(conversion.state().items[0].status, 'pending');
+  assert.strictEqual(conversion.state().items[0].local_mapping_exported, undefined,
+    'an unstarted source receives no fabricated terminal mapping decision');
   assert.strictEqual(conversion.stoppedMappings(), 0, 'pure conversion never writes a mapping row');
 });
 
@@ -424,6 +424,7 @@ testAsync('only catalogued transient worker failures remain resumable and exhaus
   };
   for (let attempt = 1; attempt <= 3; attempt++) {
     state.local_executor_pid = pid;
+    state.items[0].status = 'processing'; // real item claim, not an unstarted source
     const transient = Object.assign(new Error('timeout detail'), { code: 'CONVERSION_TIMEOUT' });
     const value = fixture({ state, failProcessAt: 1, processError: transient });
     await assert.rejects(value.run(), (error) => error === transient);
@@ -454,6 +455,7 @@ testAsync('production start causes need explicit resume and stop after three fai
       io_summary: {}, progress: progress({ remaining: 1 })
     };
     for (let attempt = 1; attempt <= 3; attempt++) {
+      state.items[1].status = 'processing'; // explicit resumed item was actually claimed
       const failure = Object.assign(new Error('private native detail'), { code });
       const value = fixture({ state, retryableCodes, failProcessAt: 1, processError: failure });
       await assert.rejects(value.run(), error => error === failure);
@@ -485,7 +487,7 @@ testAsync('production safety failures stop immediately and never become a retrya
     const failure = Object.assign(new Error('private native detail'), { code });
     const value = fixture({
       state: { schema: 'datasecure-batch/5', processing_mode: 'markdown-only', product_channel: 'standalone',
-        token, local_executor_pid: pid, items: [{ id: 'c'.repeat(32), name: 'source.pdf', status: 'pending' }],
+        token, local_executor_pid: pid, items: [{ id: 'c'.repeat(32), name: 'source.pdf', status: 'processing' }],
         io_summary: {}, progress: progress({ remaining: 1 }) },
       retryableCodes: new Set(batchFacade._test.retryableErrorCodes), failProcessAt: 1, processError: failure
     });

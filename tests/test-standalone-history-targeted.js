@@ -205,7 +205,7 @@ try {
   let list;
   try { list = listHistory.history(); }
   finally { fs.openSync = originalOpen; }
-  assert.equal(list.entries.length, 20); assert.equal(list.entries.find(row => row.batch_id === retryId).resumable, true);
+  assert.equal(list.entries.length, 5); assert.equal(list.entries.find(row => row.batch_id === retryId).resumable, true);
   assert.deepEqual(recoveryQueries, [retryId], 'complete or invisible runs receive no second recovery scan');
   for (const token of [...foreign, targetId]) assert.equal(journalOpens.get(token), 1);
   assert.equal(journalOpens.get(retryId), 2, 'the one displayed incomplete candidate is freshly policy-validated');
@@ -236,8 +236,19 @@ try {
         content_notice_breakdown_complete: true }, 1), true);
       return state;
     });
-    const measuredNotices = live => {
-      const originalLstat = fs.lstatSync, accesses = new Map();
+    const measuredNotices = (live, compatibilitySummaryReads = 0) => {
+      const originalLstat = fs.lstatSync, originalOpen = fs.openSync, originalMkdir = fs.mkdirSync;
+      const accesses = new Map();
+      let summaryReads = 0, historyPreparations = 0;
+      fs.openSync = function(file, ...args) {
+        if (typeof file === 'string' && path.dirname(file) === path.join(noticeData, 'standalone-run-history') &&
+            /^[a-f0-9]{64}\.json$/u.test(path.basename(file))) summaryReads++;
+        return originalOpen.call(this, file, ...args);
+      };
+      fs.mkdirSync = function(file, ...args) {
+        if (path.resolve(file) === path.resolve(noticeData)) historyPreparations++;
+        return originalMkdir.call(this, file, ...args);
+      };
       fs.lstatSync = function(file, ...args) {
         if (typeof file === 'string' && path.dirname(file) === path.join(noticeData, 'standalone-run-history') &&
             /^notices-[a-f0-9]{64}\.json$/u.test(path.basename(file)))
@@ -247,20 +258,69 @@ try {
       let result;
       try { result = createRunHistory({ readStates: () => live, readExports: () => [],
         recoverableStates: () => [], liveExecutor: () => false }).history(); }
-      finally { fs.lstatSync = originalLstat; }
-      assert.equal(result.entries.length, 20);
-      assert.equal([...accesses.values()].reduce((a, b) => a + b, 0), 20,
-        'only the twenty selected rows read a notice cache, including retained/live overlays');
-      assert.equal(accesses.size, 20); noticeFacts.push({ live_overlays: live.length, notice_accesses: accesses.size });
+      finally { fs.lstatSync = originalLstat; fs.openSync = originalOpen; fs.mkdirSync = originalMkdir; }
+      assert.equal(result.entries.length, 5);
+      assert.equal([...accesses.values()].reduce((a, b) => a + b, 0), 5,
+        'only the five selected rows read a notice cache, including retained/live overlays');
+      assert.equal(summaryReads, states.length - live.length + compatibilitySummaryReads,
+        'a fresh live journal replaces only its own duplicate summary read within this request');
+      assert.equal(historyPreparations, 1,
+        'header inventory prepares the private namespace once, not once per retained summary');
+      assert.equal(accesses.size, 5); noticeFacts.push({ live_overlays: live.length, notice_accesses: accesses.size,
+        summary_reads: summaryReads, compatibility_summary_reads: compatibilitySummaryReads,
+        history_preparations: historyPreparations });
       return result;
     };
     assert.ok(measuredNotices([]).entries.every(row => row.content_notice_count === 1 && row.content_notice_breakdown_complete));
     const overlays = states.slice(-10);
     assert.ok(measuredNotices(overlays).entries.every(row => row.content_notice_count === 1 && row.content_notice_breakdown_complete));
+    assert.ok(measuredNotices(states).entries.every(row => row.content_notice_count === 1 && row.content_notice_breakdown_complete),
+      'even a fully live inventory retains the twenty rows and independent notice reads');
+    const active = { ...states.at(-1), items: [{ ...states.at(-1).items[0], status: 'deferred_review' }] };
+    const liveChanged = createRunHistory({ readStates: () => [active], readExports: () => [],
+      recoverableStates: () => [active], liveExecutor: () => false }).history().entries.find(row => row.batch_id === active.token);
+    assert.equal(liveChanged.completed_count, 0, 'the old saved completion cannot override a changed live journal');
+    assert.equal(liveChanged.review_count, 1); assert.equal(liveChanged.status, 'review_required');
+    const savedSummaryPath = path.join(noticeData, 'standalone-run-history', `${states.at(-1).token}.json`);
+    const savedSummaryBytes = fs.readFileSync(savedSummaryPath);
+    try {
+      fs.writeFileSync(savedSummaryPath, '{broken');
+      const projection = live => createRunHistory({ readStates: () => live, readExports: () => [],
+        recoverableStates: () => [], liveExecutor: () => false }).history();
+      assert.ok(projection([states.at(-1)]).entries.some(row => row.batch_id === states.at(-1).token),
+        'a corrupt redundant projection cannot hide a valid current journal');
+      assert.equal(projection([]).entries.some(row => row.batch_id === states.at(-1).token), false,
+        'after journal retirement, a prior call cannot lend authority to the corrupt saved projection');
+    } finally { fs.writeFileSync(savedSummaryPath, savedSummaryBytes); }
+    const historyDirectory = path.join(noticeData, 'standalone-run-history');
+    const movedHistory = `${historyDirectory}-held-original`;
+    const close = fs.closeSync, open = fs.openSync;
+    let firstSummaryFd, replaced = false;
+    try {
+      fs.openSync = function(file, ...args) {
+        const fd = open.call(this, file, ...args);
+        if (firstSummaryFd === undefined && typeof file === 'string' && path.dirname(file) === historyDirectory &&
+            /^[a-f0-9]{64}\.json$/u.test(path.basename(file))) firstSummaryFd = fd;
+        return fd;
+      };
+      fs.closeSync = function(fd, ...args) {
+        const result = close.call(this, fd, ...args);
+        if (!replaced && fd === firstSummaryFd) {
+          fs.renameSync(historyDirectory, movedHistory); fs.mkdirSync(historyDirectory); replaced = true;
+        }
+        return result;
+      };
+      assert.deepEqual(store.readStandaloneSummaries({ includeContentNotices: false }), [],
+        'a namespace replaced after the first held summary read cannot publish a mixed inventory');
+      assert.equal(replaced, true);
+    } finally {
+      fs.openSync = open; fs.closeSync = close;
+      if (replaced) { fs.rmdirSync(historyDirectory); fs.renameSync(movedHistory, historyDirectory); }
+    }
     const lost = states.at(-1).token, corrupt = states.at(-2).token;
     fs.unlinkSync(path.join(noticeData, 'standalone-run-history', `notices-${lost}.json`));
     fs.writeFileSync(path.join(noticeData, 'standalone-run-history', `notices-${corrupt}.json`), '{');
-    const unavailable = measuredNotices(overlays);
+    const unavailable = measuredNotices(overlays, 1);
     for (const token of [lost, corrupt]) {
       const row = unavailable.entries.find(item => item.batch_id === token);
       assert.equal(row.content_notice_count, 0); assert.equal(row.content_notice_breakdown_complete, false,
@@ -271,6 +331,31 @@ try {
     assert.ok(store.readStandaloneSummaries({ includeContentNotices: false }).every(row => !Object.hasOwn(row, 'content_notice_count')),
       'header-only selection neither reads nor invents a notice classification');
   } finally { process.env.EU_PRIVACY_DATA_ROOT = savedData; }
+  // One lost owner namespace degrades only the read-only list, never exact
+  // resolvers or an explicit retry/publication request.
+  const lostInventory = () => { throw Object.assign(Error('fixed inventory failure'), { code: 'RESULT_EXPORT_STATE_UNSAFE' }); };
+  const unrelatedTerminal = writeState('e'.repeat(64), [{ id: 'e'.repeat(32), name: 'unrelated-terminal.txt',
+    status: 'stopped', checkpoint: 'stopped', error_code: 'SOURCE_READ_FAILED' }], 1000001);
+  const degradedHistory = createRunHistory({ ...deps,
+    readStates: () => [{ ...target, created_at: new Date(now + 1000000).toISOString() }, unrelatedTerminal],
+    readExports: lostInventory, readExport: lostInventory });
+  const degraded = degradedHistory.history();
+  assert.equal(degraded.history_degraded, true);
+  assert.equal(degraded.open_count, 0, 'unknown export availability is not an invented open task');
+  const historical = degraded.entries.find(row => row.batch_id === targetId);
+  assert.equal(historical.status, 'results_available', 'historical processing completion is retained');
+  assert.equal(historical.result_location, 'unknown');
+  assert.equal(historical.results_available, false);
+  assert.equal(historical.ledger_available, false);
+  assert.ok(degraded.entries.length > 1, 'unrelated validated summaries remain visible');
+  assert.equal(degraded.entries.some(row => row.status === 'export_pending' && row.batch_id === targetId), false,
+    'unknown inventory is not permission to repair or copy');
+  assert.throws(() => degradedHistory.resolveResults(targetId), code('RESULT_EXPORT_STATE_UNSAFE'));
+  assert.throws(() => degradedHistory.history({ recoverExports: true, recoverBatchId: targetId }), code('RESULT_EXPORT_STATE_UNSAFE'));
+  const activeDegraded = createRunHistory({ ...deps,
+    readStates: () => [target, unrelatedTerminal], readExports: lostInventory,
+    liveExecutor: state => state.token === unrelatedTerminal.token }).history();
+  assert.equal(activeDegraded.open_count, 1, 'independently proven live work remains counted with missing inventory');
   const previousData = process.env.EU_PRIVACY_DATA_ROOT, freshData = path.join(root, 'fresh-private');
   try {
     process.env.EU_PRIVACY_DATA_ROOT = freshData;

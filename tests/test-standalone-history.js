@@ -173,6 +173,24 @@ function code(expected) { return (error) => error?.code === expected; }
     assert.ok(Number.isSafeInteger(captureCounts.export_count) && captureCounts.export_count >= 0);
     assert.deepEqual(historyStore.readStandaloneSummaries().map(row => row.batch_id).sort(),
       [older.token, newer.token].sort(), 'startup capture retains only standalone summaries before journal retention');
+    // A picker may finish after a worker publishes a newer summary. The
+    // interactive binding capture must neither read old journals nor replace
+    // that newer summary with its stale snapshot.
+    const newerSummaryPath = path.join(historyDirectory, `${newer.token}.json`);
+    let journalCaptureReads = 0, publishedSummary;
+    const bindingOnly = createRunHistory({
+      readStates() { journalCaptureReads++; return [newer]; },
+      readExports() {
+        historyStore.recordStandaloneState({ ...newer, items: [{ id: 'b'.repeat(32), name: 'synthetic.txt',
+          status: 'stopped', checkpoint: 'stopped', error_code: 'SOURCE_READ_FAILED' }] });
+        publishedSummary = fs.readFileSync(newerSummaryPath);
+        return [];
+      }
+    });
+    assert.equal(bindingOnly.captureExistingExportBindings().export_count, 0);
+    assert.equal(journalCaptureReads, 0, 'interactive capture never reads stale journal snapshots');
+    assert.deepEqual(fs.readFileSync(newerSummaryPath), publishedSummary, 'a newer worker summary survives unchanged');
+    historyStore.recordStandaloneState(newer);
     let snapshot = history.history();
     // Startup/history projection must not begin a potentially long visible
     // export while the native desktop is still waiting for its first reply.
@@ -227,9 +245,10 @@ function code(expected) { return (error) => error?.code === expected; }
     const candidateDeps = { readStates: () => candidateStates, readExports: () => [], liveExecutor: () => false,
       recoverableStates({ batchId }) { recoveryQueries.push(batchId); return [candidateMap.get(batchId)]; } };
     const selectedCandidates = createRunHistory({ ...candidateDeps, readState: token => candidateMap.get(token), readExport: () => null }).history();
-    assert.equal(selectedCandidates.entries.length, 20); assert.equal(recoveryQueries.length, 20);
-    assert.deepEqual(new Set(recoveryQueries), new Set(selectedCandidates.entries.map(row => row.batch_id)),
-      'fresh recovery reads are bounded to the visible incomplete candidates, never older hidden rows');
+    assert.equal(selectedCandidates.entries.length, 5); assert.equal(recoveryQueries.length, 5);
+    assert.equal(selectedCandidates.open_count, 5, 'history counters describe only the five registered runs; actual recovery is separate');
+    assert.deepEqual(new Set(recoveryQueries), new Set(candidateStates.slice(-5).map(row => row.token)),
+      'history revalidates only its five candidates, not older open work');
     let legacyRecoveryReads = 0;
     const legacyCandidates = createRunHistory({ ...candidateDeps,
       recoverableStates() { legacyRecoveryReads++; return candidateStates; } }).history();
@@ -501,7 +520,7 @@ function code(expected) { return (error) => error?.code === expected; }
     assert.equal(terminalState.resumable, false, 'other paused histories cannot replace this terminal presentation');
     assert.equal(terminalState.presentation_generation, undefined);
     assert.equal(observing.acknowledgeTerminalPresented(70).acknowledged, false);
-    assert.equal(observing.uiContext().latest_result_folder, markdownRun);
+    assert.equal(observing.uiContext().latest_result_folder, '', 'root display does not resolve a historical result');
     assert.equal(observing.resolveResults().local_path, markdownRun);
     assert.throws(() => observing.resolveLedger(), code('STANDALONE_LEDGER_MISSING'));
     assert.equal(history.find(markdown.token).ledger_available, false);
@@ -524,8 +543,10 @@ function code(expected) { return (error) => error?.code === expected; }
       'a new intake binds the exact returned run even when it finishes before the first status poll');
     assert.equal(observing.status().selected_count, 1,
       'a just-confirmed run that is already terminal remains current before the first poll');
-    assert.equal(observing.uiContext().latest_result_folder, originalRun,
-      'the fast terminal run resolves its own result instead of a newer historical folder');
+    assert.equal(observing.uiContext().latest_result_folder, '',
+      'even the fast terminal run is resolved only by an explicit result action');
+    assert.equal(observing.resolveResults().local_path, originalRun,
+      'the explicit action still resolves only the exact observed run');
 
     // Restart and source retention do not lose summary or original destination.
     const retiredJournal = path.join(batch._test.batchRoot(), `${completed.token}.json`);
@@ -648,14 +669,15 @@ function code(expected) { return (error) => error?.code === expected; }
       batch._test.writeState(state);
     }
     snapshot = makeHistory().history();
-    assert.equal(snapshot.entries.length, 20);
+    assert.equal(snapshot.entries.length, 5);
     assert.equal(snapshot.entries[0].batch_id, (1024).toString(16).padStart(64, '0'));
-    assert.equal(snapshot.entries.at(-1).batch_id, (1005).toString(16).padStart(64, '0'));
-    assert.throws(() => history.resolveResults(completedTwo.token), code('STANDALONE_HISTORY_MISSING'), 'out-of-window stale IDs fail closed');
-    assert.equal(fs.existsSync(olderIdentity), true, 'last-20 history never deletes an older human mapping');
+    assert.equal(snapshot.entries.at(-1).batch_id, (1020).toString(16).padStart(64, '0'));
+    assert.equal(history.resolveResults(completedTwo.token).local_path, secondRun,
+      'a display-window eviction is not a permission or deletion boundary for an explicit, freshly verified action');
+    assert.equal(fs.existsSync(olderIdentity), true, 'last-five history never deletes an older human mapping');
     assert.equal(path.dirname(path.dirname(olderIdentity)), identityLedger.resolveDirectory(),
       'the private directory action keeps older mappings locally reachable');
-    assert.equal(fs.existsSync(secondRun), true, 'last-20 retention never deletes visible results');
+    assert.equal(fs.existsSync(secondRun), true, 'last-five history never deletes visible results');
     process.stdout.write('STANDALONE HISTORY PASS\n');
   } finally {
     if (path.dirname(base) !== temporaryRoot || !path.basename(base).startsWith('datasecure-standalone-history-')) throw new Error('TEST_CLEANUP_TARGET_INVALID');

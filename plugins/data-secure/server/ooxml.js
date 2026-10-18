@@ -3,7 +3,7 @@
 const path = require('path');
 const { readZip, ZipError } = require('./zip-reader');
 const { createXlsxReader } = require('./xlsx-structure');
-const { readXml } = require('./xml-reader');
+const { readXml, assertXmlCharacters } = require('./xml-reader');
 const { validateOpcControls } = require('./gateway/opc-source-validator');
 
 const MAX_EMBEDDED_DEPTH = 3;
@@ -15,31 +15,27 @@ const SUPPORTED_EMBEDDED = /^(?:word|xl|ppt)\/embeddings\/[^/]+\.(docx|xlsx|pptx
 function xmlDecode(s='') {
   const decodeCodePoint = (digits, radix) => {
     const value = Number.parseInt(digits, radix);
-    // Deliberately stricter than XML 1.0 for C1 controls: those characters can
-    // split identifiers without being visible in Markdown or residual scans.
-    if (!Number.isSafeInteger(value) || value <= 0 || value > 0x10ffff ||
-        (value >= 0xd800 && value <= 0xdfff) ||
-        (value < 0x20 && ![0x09, 0x0a, 0x0d].includes(value)) ||
-        (value >= 0x7f && value <= 0x9f)) {
-      const error = new Error('OOXML enthält ein unzulässiges XML-Zeichen.');
-      error.code = 'OOXML_XML_CHARACTER_INVALID';
-      throw error;
-    }
-    return String.fromCodePoint(value);
+    if (!Number.isSafeInteger(value) || value < 0 || value > 0x10ffff) throw xmlTextError();
+    const character = String.fromCodePoint(value);
+    assertXmlCharacters(character, xmlTextError);
+    return character;
   };
   const source = String(s);
+  assertXmlCharacters(source, xmlTextError);
   // XML defines exactly five named entities. Leaving an unknown entity or a
   // naked ampersand in extracted text can split identifiers before the PII
   // gate and must therefore fail closed.
-  if (/&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[0-9a-f]+;)/iu.test(source)) {
+  if (/&(?!amp;|lt;|gt;|quot;|apos;|#\d+;|#x[0-9a-fA-F]+;)/u.test(source)) {
     const error = new Error('OOXML enthält eine ungültige XML-Entität.');
     error.code = 'OOXML_XML_CHARACTER_INVALID';
     throw error;
   }
-  return source
-    .replace(/&#x([0-9a-f]+);/gi, (_,h)=>decodeCodePoint(h,16))
-    .replace(/&#([0-9]+);/g, (_,d)=>decodeCodePoint(d,10))
-    .replace(/&lt;/g,'<').replace(/&gt;/g,'>').replace(/&quot;/g,'"').replace(/&apos;/g,"'").replace(/&amp;/g,'&');
+  // One pass over SOURCE tokens only. An ampersand produced by a reference is
+  // data, not a second reference opener (XML 1.0 sections 4.1 and 4.4.2).
+  const named = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
+  return source.replace(/&(amp|lt|gt|quot|apos|#\d+|#x[0-9a-fA-F]+);/gu, (_token, value) =>
+    value[0] !== '#' ? named[value] : value[1] === 'x'
+      ? decodeCodePoint(value.slice(2), 16) : decodeCodePoint(value.slice(1), 10));
 }
 
 const OFFICE_RELATIONSHIP_NAMESPACES = Object.freeze([
@@ -58,10 +54,79 @@ function relationshipKind(value) {
   }
   return null;
 }
+function xmlTextError() {
+  return Object.assign(new Error('OOXML enthält ungültigen XML-Text.'), { code: 'OOXML_XML_CHARACTER_INVALID' });
+}
+const XML_NON_TEXT_FAILURES = new WeakSet();
+function validateXmlNonTextToken(source, start, end, error = xmlTextError, allowLeadingDeclaration = true) {
+  const token = source.slice(start, end);
+  // Comments/PIs have the same lexical contract in every structural reader,
+  // including skipped Word regions. Only the original part's true beginning
+  // (optionally after its BOM), never a selected body, may carry XMLDecl.
+  const declaration = allowLeadingDeclaration && start === (source.charCodeAt(0) === 0xfeff ? 1 : 0) &&
+    /^<\?xml(?=[ \t\r\n])/u.test(token);
+  try { readXml(declaration ? `${token}<text/>` : `<text>${token}</text>`, { decode: xmlDecode, error }); }
+  catch (failure) {
+    // Lexical XML failure is not an unsupported Word feature. Keep that fact
+    // private while the existing fixed public error crosses coverage catches.
+    XML_NON_TEXT_FAILURES.add(failure); throw failure;
+  }
+}
+function xmlTextSource(xml) {
+  const source = String(xml);
+  assertXmlCharacters(source, xmlTextError);
+  if (!/<!\[CDATA\[|<!--|<\?/u.test(source)) return source;
+  // The legacy structural selectors below must not mistake a literal closing
+  // tag inside CDATA for markup. Serialize CDATA as equivalent escaped text
+  // before selecting spans. Neutralize comments/PIs as token boundaries too:
+  // their literal closing-tag lookalikes must not become structure selectors.
+  const parts = [], tag = /<(?:[^<>"']|"[^"<]*"|'[^'<]*')*>/y;
+  let cursor = 0, copied = 0;
+  while (cursor < source.length) {
+    const next = source.indexOf('<', cursor);
+    if (next < 0) break;
+    cursor = next;
+    const special = source.startsWith('<!--', cursor) ? ['-->', 4]
+      : source.startsWith('<?', cursor) ? ['?>', 2]
+        : source.startsWith('<![CDATA[', cursor) ? [']]>', 9] : null;
+    if (special) {
+      const end = source.indexOf(special[0], cursor + special[1]);
+      if (end < 0) throw xmlTextError();
+      if (special[1] === 9) {
+        const literal = source.slice(cursor + 9, end);
+        // Preserve token boundaries: invalid `&am<![CDATA[p;]]>` must not
+        // become a newly valid `&amp;` reference after this serialization.
+        parts.push(source.slice(copied, cursor), '<!--cdata-->',
+          literal.replace(/&/gu, '&amp;').replace(/</gu, '&lt;').replace(/>/gu, '&gt;'), '<!--cdata-->');
+        copied = end + 3;
+      } else {
+        validateXmlNonTextToken(source, cursor, end + special[0].length);
+        parts.push(source.slice(copied, cursor), '<!--xml-boundary-->');
+        copied = end + special[0].length;
+      }
+      cursor = end + special[0].length;
+    } else {
+      tag.lastIndex = cursor;
+      if (!tag.exec(source)) throw xmlTextError();
+      cursor = tag.lastIndex;
+    }
+  }
+  parts.push(source.slice(copied));
+  return parts.join('');
+}
+function xmlScalarText(source) {
+  const chunks = [];
+  // Decode only source character-data tokens. CDATA is already serialized
+  // literally above; comments/PIs split tokens without becoming source text.
+  // These Office values have simple content, never nested element markup.
+  readXml(`<text>${source}</text>`, { decode: xmlDecode, error: xmlTextError,
+    start(node) { if (node.parent) throw xmlTextError(); }, text(value) { chunks.push(value); } });
+  return chunks.join('');
+}
 function stripTags(s='') { return xmlDecode(String(s).replace(/<[^>]+>/g,' ')).replace(/\s+/g,' ').trim(); }
 function textTags(xml, tag='a:t') {
   const re = new RegExp(`<${tag.replace(':','\\:')}\\b[^>]*>([\\s\\S]*?)<\\/${tag.replace(':','\\:')}>`,'gi');
-  const out=[]; let m; while((m=re.exec(xml))) out.push(xmlDecode(m[1])); return out;
+  const source = xmlTextSource(xml), out=[]; let m; while((m=re.exec(source))) out.push(xmlScalarText(m[1])); return out;
 }
 function contentType(name) {
   const e=path.extname(name).toLowerCase();
@@ -270,13 +335,13 @@ function metadataSection(entries, sourcePart, fields, options = {}) {
 }
 function customMetadataSection(entries, options = {}) {
   const sourcePart='docProps/custom.xml',data=entries.get(sourcePart);if(!data)return null;
-  const xml=data.toString('utf8'),lines=[];let match;const properties=/<property\b([^>]*)>([\s\S]*?)<\/property>/gi;
+  const xml=xmlTextSource(data.toString('utf8')),lines=[];let match;const properties=/<property\b([^>]*)>([\s\S]*?)<\/property>/gi;
   const scalar=/^\s*<vt:(lpwstr|bstr|i1|i2|i4|i8|int|ui1|ui2|ui4|ui8|uint|r4|r8|decimal|bool|filetime|date|cy|error)\b[^>]*>([\s\S]*?)<\/vt:\1>\s*$/i;
-  while((match=properties.exec(xml))){const rawName=xmlDecode(/\bname=["']([^"']+)["']/i.exec(match[1])?.[1]||'');const name=options.preserveText ? extractionText(rawName,false,options.literalMarkup) : rawName.trim();const valueMatch=scalar.exec(match[2]);const value=valueMatch?(options.preserveText ? extractionText(xmlDecode(valueMatch[2]),false,options.literalMarkup) : stripTags(valueMatch[2])):'';if(name&&value)lines.push(`- ${name}: ${value}`);}
+  while((match=properties.exec(xml))){const rawName=xmlDecode(/\bname=["']([^"']+)["']/i.exec(match[1])?.[1]||'');const name=options.preserveText ? extractionText(rawName,false,options.literalMarkup) : rawName.trim();const valueMatch=scalar.exec(match[2]);const rawValue=valueMatch?xmlScalarText(valueMatch[2]):'';const value=options.preserveText ? extractionText(rawValue,false,options.literalMarkup) : rawValue.replace(/\s+/g,' ').trim();if(name&&value)lines.push(`- ${name}: ${value}`);}
   return lines.length?{kind:'metadata',source_part:sourcePart,markdown:`## Benutzerdefinierte Dokumentmetadaten\n\n${lines.join('\n')}`}:null;
 }
 function customMetadataWarnings(entries) {
-  const data=entries.get('docProps/custom.xml');if(!data)return[];const xml=data.toString('utf8');let unsupported=0,match;
+  const data=entries.get('docProps/custom.xml');if(!data)return[];const xml=xmlTextSource(data.toString('utf8'));let unsupported=0,match;
   const properties=/<property\b[^>]*>([\s\S]*?)<\/property>/gi;
   const scalar=/^\s*<vt:(lpwstr|bstr|i1|i2|i4|i8|int|ui1|ui2|ui4|ui8|uint|r4|r8|decimal|bool|filetime|date|cy|error)\b[^>]*>[\s\S]*?<\/vt:\1>\s*$/i;
   while((match=properties.exec(xml)))if(!scalar.test(match[1]))unsupported++;
@@ -322,7 +387,7 @@ function renderPptTable(table, options = {}) {
     (normalized.length > 1 ? '\n' + normalized.slice(1).map((cells) => '| ' + cells.join(' | ') + ' |').join('\n') : '');
 }
 function pptSlideTableSections(xml, sourcePart, options = {}) {
-  const source = String(xml);
+  const source = xmlTextSource(xml);
   const opened = (source.match(/<a:tbl\b/gi) || []).length;
   const closed = (source.match(/<\/a:tbl\s*>/gi) || []).length;
   const tables = []; let match;
@@ -401,6 +466,7 @@ function normalizedWordQName(qname, namespaces, attribute = false) {
 
 function wordPartScope(xml, rootTag, onElement) {
   const source = String(xml);
+  assertXmlCharacters(source, xmlTextError);
   if (!source || /<!DOCTYPE|<!ENTITY/iu.test(source)) throw wordStructureError();
   const stack = [];
   const output = [];
@@ -479,6 +545,7 @@ function wordPartScope(xml, rootTag, onElement) {
     if (special) {
       const end = source.indexOf(special[0], cursor + special[1]);
       if (end === -1) throw wordStructureError();
+      if (special[1] !== 9) validateXmlNonTextToken(source, cursor, end + special[0].length, wordStructureError);
       append(source.slice(cursor, end + special[0].length));
       cursor = end + special[0].length;
       continue;
@@ -595,6 +662,7 @@ function parseWordStructure(body, options = {}) {
     if (special) {
       const end = body.indexOf(special[0], cursor + special[1]);
       if (end === -1) throw wordStructureError();
+      if (special[1] !== 9) validateXmlNonTextToken(body, cursor, end + special[0].length, wordStructureError, false);
       if (special[1] === 9 && !frame.skipped) {
         if (frame.name !== 'w:t') throw wordStructureError();
         frame.node.pending.push(body.slice(cursor + special[1], end));
@@ -809,7 +877,7 @@ function hasCompleteWordRoot(xml, rootTag) {
   // same bounded parser used for rendering also proves that the complete XML
   // scope closes and that a misleading `w:` binding is not accepted.
   try { return wordPartScope(xml, rootTag).found; }
-  catch { return false; }
+  catch (error) { if (XML_NON_TEXT_FAILURES.has(error)) throw error; return false; }
 }
 function hasCompleteXmlRoot(xml, rootTag) {
   // XLSX has no single mandatory namespace prefix. A truncated part must not
@@ -825,7 +893,7 @@ function docxReferencedHeaderFooter(entries) {
   if (!main) return { present: false, orderedParts: [], issues: 1 };
   let body;
   try { body = wordPartScope(main.toString('utf8'), 'body').body; }
-  catch { return { present: false, orderedParts: [], issues: 1 }; }
+  catch (error) { if (XML_NON_TEXT_FAILURES.has(error)) throw error; return { present: false, orderedParts: [], issues: 1 }; }
   const references = [];
   for (const match of body.matchAll(/<w:(headerReference|footerReference)\b([^>]*)>/giu)) {
     const id = /\br:id=["']([^"']+)["']/iu.exec(match[2])?.[1];
@@ -1181,7 +1249,7 @@ function docxCoverageWarnings(entries) {
         if (BLOCKED_WORD_CONTENT.has(element)) blockedContent = true;
         inspectComment(name, element, attributes, namespaces, parent);
       }).body; }
-      catch { unsupported++; continue; }
+      catch (error) { if (XML_NON_TEXT_FAILURES.has(error)) throw error; unsupported++; continue; }
       // Until a namespace-aware field/revision/math renderer exists, these
       // inhaltsfähigen constructs must stop instead of silently disappearing.
       const blocked = [
@@ -1194,7 +1262,7 @@ function docxCoverageWarnings(entries) {
     if (name === 'word/settings.xml') {
       try {
         if (/<w:docVar\b/iu.test(wordPartScope(data.toString('utf8'), 'settings').body)) unsupported++;
-      } catch { unsupported++; }
+      } catch (error) { if (XML_NON_TEXT_FAILURES.has(error)) throw error; unsupported++; }
     }
   }
   // Rendering a correctly related story under an unrelated content type is
@@ -1598,9 +1666,9 @@ function drawingText(xml) {
   // Joining adjacent rich-text runs must not invent paragraph boundaries.
   // Keep explicit line breaks and paragraphs, including numeric note text.
   const paragraphs=[];
-  for(const paragraph of String(xml).matchAll(/<a:p\b[^>]*>([\s\S]*?)<\/a:p>/gi)) {
+  for(const paragraph of xmlTextSource(xml).matchAll(/<a:p\b[^>]*>([\s\S]*?)<\/a:p>/gi)) {
     const parts=[];
-    for(const token of paragraph[1].matchAll(/<a:t\b[^>]*>([\s\S]*?)<\/a:t>|<a:br\b[^>]*\/?\s*>/gi))parts.push(token[1]===undefined?'\n':xmlDecode(token[1]));
+    for(const token of paragraph[1].matchAll(/<a:t\b[^>]*>([\s\S]*?)<\/a:t>|<a:br\b[^>]*\/?\s*>/gi))parts.push(token[1]===undefined?'\n':xmlScalarText(token[1]));
     paragraphs.push(parts.join(''));
   }
   return paragraphs.join('\n\n');
@@ -1759,11 +1827,16 @@ function parseOoxml(buffer, ext, context, options = {}) {
       .map(([name,data])=>[name,data.toString('utf8')]));
     validateOpcControls({declaredType:ext.slice(1),entries:new Set(entries.keys()),controlParts});
   }
-  if(options.preserveText){
-    for(const [name,data]of entries)if(/\.(?:xml|rels)$/i.test(name)){
-      try{new TextDecoder('utf-8',{fatal:true}).decode(data);}
+  // One source-character gate precedes every body, metadata, image-scope and
+  // legacy selector path. Never rely on a selected text decoder to see raw
+  // CDATA or on a later Markdown normalization to retain a hidden control.
+  for(const [name,data]of entries)if(/\.(?:xml|rels)$/i.test(name)){
+    let source;
+    if(options.preserveText){
+      try{source=new TextDecoder('utf-8',{fatal:true}).decode(data);}
       catch{const error=new Error('OOXML-Zeichencodierung ist ungültig.');error.code='OOXML_ENCODING_INVALID';throw error;}
-    }
+    }else source=data.toString('utf8');
+    assertXmlCharacters(source,xmlTextError);
   }
   if(state.depth>0){
     let expanded=0;for(const data of entries.values())expanded+=data.length;

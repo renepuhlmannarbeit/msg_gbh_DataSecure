@@ -5,7 +5,9 @@ const { storageStatus, detectProfileFromMarkdown } = require('./common');
 const { checkedContentHooks, extractBoundContentInput } = require('./bound-content-input');
 const { prepareTextPrivacyReview, resolveTextPrivacyReview, finalizeTextPrivacyReview } = require('./privacy-text-operation');
 const { verifyAnonymizedPublication, createAnonymizedArtifact } = require('../standalone/anonymized-artifact');
-const { readAnonymizedArtifact, publishAnonymizedArtifact } = require('../standalone/anonymized-store');
+const { readAnonymizedArtifact, publishAnonymizedArtifact, publicationFailureCause } = require('../standalone/anonymized-store');
+const { diagnosticCode } = require('./batch-execution-diagnostic');
+const { retryDocumentControl, isOwnershipControlFailure } = require('./prepublication-error');
 const { sanitizeReceipt, retainAudit } = require('./audit');
 const { renameWithTransientRetry } = require('./batch-journal-io');
 const path = require('node:path');
@@ -29,10 +31,10 @@ async function publishPersistedContent(context, suppliedHooks) {
     return retainAudit(prepared.audit_receipt);
   }
   try {
-    prepared = context.preparedReplay();
+    prepared = await retryDocumentControl(() => context.preparedReplay());
     // Existing committed bytes are discovered before cancellation can demote
     // them to a parser stop. A saved prepared state is never re-extracted.
-    const record = context.publicationRecord();
+    const record = await retryDocumentControl(() => context.publicationRecord());
     if (record.state === 'unsafe') throw Object.assign(Error('STANDALONE_PUBLICATION_INVALID'), { code: 'STANDALONE_PUBLICATION_INVALID' });
     if (record.state === 'verified') {
       phase = 'content_ack';
@@ -86,12 +88,13 @@ async function publishPersistedContent(context, suppliedHooks) {
         const witness = context.commitPreparedRegistry(hooks.pseudonymRegistry, artifact.expectation.manifest_sha256);
         check();
         phase = 'content_prepare';
-        context.capturePrepared({ package_id: context.package_id, content_options: context.content_options, source_type: context.source_type,
+        const preparedSnapshot = { package_id: context.package_id, content_options: context.content_options, source_type: context.source_type,
           original_text: final.original_text, markdown: final.markdown, transform_trace: final.transform_trace,
           verification_context: final.verification_context, publication_binding: artifact.expectation,
-          ...(source.private_document_metadata ? { private_document_metadata: source.private_document_metadata } : {}) },
-        { manifest_json: JSON.stringify(artifact.manifest), audit_receipt: receipt, registry_commit: witness });
-        prepared = context.preparedReplay(); if (!prepared) throw unconfirmed();
+          ...(source.private_document_metadata ? { private_document_metadata: source.private_document_metadata } : {}) };
+        const preparedRecord = { manifest_json: JSON.stringify(artifact.manifest), audit_receipt: receipt, registry_commit: witness };
+        await retryDocumentControl(() => context.capturePrepared(preparedSnapshot, preparedRecord));
+        prepared = await retryDocumentControl(() => context.preparedReplay()); if (!prepared) throw unconfirmed();
       }
       check();
       phase = 'content_publish';
@@ -102,6 +105,7 @@ async function publishPersistedContent(context, suppliedHooks) {
           renameWithTransientRetry(from, to);
         },
         afterPublish: async value => {
+          phase = 'content_ack';
           committed = true; context.assertOwnedEpoch();
           if (hooks.afterPublish) await hooks.afterPublish(value);
           context.assertOwnedEpoch();
@@ -113,11 +117,16 @@ async function publishPersistedContent(context, suppliedHooks) {
     const retained = retainCommittedAudit();
     return Object.freeze({ ok: true, ...details(), audit_receipt_retained: retained, raw_content_sent_to_claude: false });
   } catch (error) {
+    const cause = publicationFailureCause(error);
     // Unknown faults still have a useful fixed boundary. Never log the raw
     // exception, source, path, identities or payload, even during testing.
     try { require('./workflow-diagnostics').recordWorkflowEvent({ event: 'content_operation_failed', phase,
-      outcome: 'stopped', error_code: error?.code || 'INTERNAL_FAILURE', duration_ms: Date.now() - started }); }
+      outcome: 'stopped', error_code: diagnosticCode(cause), duration_ms: Date.now() - started }); }
     catch { /* A failed diagnostic sink cannot change publication/recovery. */ }
+    // Lost ownership is a control failure, not a defective source document or
+    // permission to journal another stop. Retain the committed/prepared bytes
+    // for exact recovery while preserving this original failure identity.
+    if (isOwnershipControlFailure(cause)) throw cause;
     if (committed || error?.code === 'BATCH_PUBLICATION_UNCONFIRMED') {
       if (prepared) { try { retainCommittedAudit(); } catch { /* recover exact receipt, never retract committed bytes */ } }
       throw unconfirmed();

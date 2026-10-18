@@ -6,6 +6,10 @@ import { createRequire } from 'node:module';
 import { readCentralModes } from './lib/zip.mjs';
 import { verifyStandaloneFontNotice } from './lib/standalone-font-license.mjs';
 import { verifyStandaloneInventory, verifyConversionInventory, verifyArchiveChecksum } from './lib/standalone-package-integrity.mjs';
+import crypto from 'node:crypto';
+import { verifyWindowsCrtPolicy, verifyWindowsNativeContract } from './lib/windows-native-contract.mjs';
+import { verifyOwnershipGuardPackage } from './lib/ownership-guard-artifact.mjs';
+import { windowsPackagePrefix } from './lib/standalone-windows-layout.mjs';
 
 const require = createRequire(import.meta.url);
 const { readZip } = require('../plugins/data-secure/server/zip-reader.js');
@@ -15,7 +19,7 @@ const archive = process.argv[2] || path.join(root, 'dist', `DataSecure-Standalon
 const bytes = fs.readFileSync(archive);
 const entries = readZip(bytes, { maxEntries: 5000, maxUncompressed: 512 * 1024 * 1024 });
 const modes = readCentralModes(bytes);
-const prefix = `DataSecure-Standalone-${version}-windows-x64/`;
+const prefix = windowsPackagePrefix(entries, version);
 const relative = new Map();
 for (const [name, value] of entries) {
   assert.ok(name.startsWith(prefix), 'STANDALONE_ZIP_ROOT_INVALID');
@@ -35,7 +39,8 @@ for (const required of ['DataSecure Standalone.exe', 'datasecure-core-x86_64-pc-
   'server/native/windows-x64/datasecure-sandbox.exe',
   'server/native/windows-x64/datasecure-sandbox.sha256',
   'STANDALONE-MANIFEST.json', 'SBOM.spdx.json', 'RUST-LICENSE-INVENTORY.json', 'SHA256SUMS', 'LICENSE', 'LICENSE.node.txt',
-  'THIRD_PARTY_NOTICES.md', 'START-WINDOWS.md']) assert.ok(relative.has(required), `STANDALONE_ZIP_REQUIRED:${required}`);
+  'THIRD_PARTY_NOTICES.md', 'START-WINDOWS.md', 'WINDOWS-NATIVE-POLICY.json',
+  'WINDOWS-NATIVE-EVIDENCE.json']) assert.ok(relative.has(required), `STANDALONE_ZIP_REQUIRED:${required}`);
 
 const manifest = JSON.parse(relative.get('STANDALONE-MANIFEST.json'));
 assert.equal(manifest.schema, 'datasecure-standalone-package/1');
@@ -43,7 +48,18 @@ assert.equal(manifest.version, version);
 assert.equal(manifest.target, 'windows-x64');
 assert.equal(manifest.requires_node_install, false);
 assert.equal(manifest.requires_rust_install, false);
+assert.equal(manifest.requires_visual_cpp_redistributable, false);
+assert.equal(manifest.windows_crt, 'static');
 verifyStandaloneInventory(relative, manifest);
+verifyOwnershipGuardPackage(relative, 'windows-x64');
+const windowsPolicyBytes = relative.get('WINDOWS-NATIVE-POLICY.json');
+const windowsPolicy = verifyWindowsCrtPolicy(JSON.parse(windowsPolicyBytes));
+const nativeReport = verifyWindowsNativeContract(new Map([...relative].filter(([name]) => /\.(?:exe|dll|node)$/iu.test(name))), windowsPolicy);
+const nativeEvidence = JSON.parse(relative.get('WINDOWS-NATIVE-EVIDENCE.json'));
+assert.equal(nativeEvidence.schema, 'datasecure-windows-native-evidence/1');
+assert.equal(nativeEvidence.policy_sha256, crypto.createHash('sha256').update(windowsPolicyBytes).digest('hex'));
+assert.equal(nativeEvidence.clean_standard_user_vm_start, 'NOT_RUN');
+assert.deepEqual(nativeEvidence.files, nativeReport, 'STANDALONE_NATIVE_EVIDENCE_MISMATCH');
 const rustLicenses = JSON.parse(relative.get('RUST-LICENSE-INVENTORY.json'));
 assert.equal(rustLicenses.schema, 'datasecure-rust-license-inventory/1');
 assert.ok(rustLicenses.components.length > 0);

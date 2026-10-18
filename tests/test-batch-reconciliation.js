@@ -77,7 +77,7 @@ function fixture(options = {}) {
     appendMapping(name, id, status, settings) {
       events.push(`append:${name}:${id}`);
       mappingCalls.push({ phase: 'append', name, id, status, settings });
-      if (failure === 'append') throw new Error('APPEND_FAILED');
+      if (failure === 'append') throw options.mappingError || new Error('APPEND_FAILED');
     },
     removeMappingOutbox() {
       events.push('remove');
@@ -325,6 +325,69 @@ test('raw preflight stops settle their metadata without an anonymization mapping
     assert.equal(mappingCalls.length, 0);
     assert.equal(reconciliation.reconcilePreflightStoppedMappings(state), false);
   }
+});
+
+test('synchronous mapping reconciliation propagates control failures without waits or a delivery/stop decision', () => {
+  for (const code of ['STANDALONE_BUSY', 'BATCH_OWNERSHIP_CHANGED', 'OWNERSHIP_GUARD_UNSAFE']) {
+    const original = Object.assign(Error('fixed control refusal'), { code });
+    const value = fixture({ mappingFailure: 'append', mappingError: original });
+    const item = { id: 'a'.repeat(32), name: 'source.txt', package_id: packageId, status: 'mapping_pending', document_result: completeResult };
+    assert.throws(() => value.reconciliation.reconcilePendingMappings({ schema: 'datasecure-batch/4', items: [item] }), error => error === original);
+    assert.equal(item.status, 'mapping_pending'); assert.equal(item.document_result, completeResult);
+    assert.equal(item.retry_failure_count, undefined); assert.equal(value.events.includes('remove'), false);
+  }
+});
+
+test('content publication readers preserve control failures separately from exact byte states', () => {
+  // Actual reader/reconciliation functions; only the filesystem observation
+  // and document-control admission are explicit models (no native claim).
+  const vm = require('node:vm'), { createRequire } = require('node:module');
+  const load = (relative, overrides) => {
+    const filename = require.resolve(relative), localRequire = createRequire(filename), result = { exports: {} };
+    vm.runInThisContext(`(function(require,module,exports,__filename,__dirname){${fs.readFileSync(filename, 'utf8')}\n})`, { filename })(
+      request => Object.hasOwn(overrides, request) ? overrides[request] : localRequire(request), result, result.exports, filename, path.dirname(filename));
+    return result.exports;
+  };
+  const item = { id: 'a'.repeat(32), status: 'processing', checkpoint: 'processing_started' };
+  const state = { schema: 'datasecure-batch/7', product_channel: 'standalone', standalone_document_review: true,
+    processing_mode: 'markdown-and-anonymize', profile: 'general', token: 'b'.repeat(64), items: [item],
+    content_options: { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: true, imageOcr: true } };
+  const expected = { package_id: packageId, source_type: 'png', profile: 'general', content_options: state.content_options };
+  let refusal, absent = false;
+  const reader = load('../plugins/data-secure/server/gateway/standalone-anonymized-batch', {
+    'node:fs': { lstatSync() { if (absent) throw Object.assign(Error('absent'), { code: 'ENOENT' }); return {}; } },
+    '../core/bound-file-io': { bindDirectory: () => ({}), assertDirectory() {} },
+    './standalone-document-review-store': { createDocumentReviewStore: () => ({
+      assertDocumentBinding: () => ({ document_id: item.id, name: 'source.png' }), hasPublicationEvidence: () => false,
+      publicationExpectation() { if (refusal) throw refusal; return expected; }, recordPublication() {}
+    }) },
+    '../standalone/anonymized-store': { anonymizedArtifactRoots: () => ({ output: path.join(fixtureRoot, 'RAM-output') }),
+      readAnonymizedArtifact: () => ({ manifest: { document_result: completeResult } }) }
+  });
+  const reconciliation = load('../plugins/data-secure/server/gateway/batch-reconciliation', {
+    './standalone-anonymized-batch': reader
+  }).createBatchReconciliation();
+  for (const code of ['STANDALONE_BUSY', 'BATCH_OWNERSHIP_CHANGED', 'OWNERSHIP_GUARD_BUSY', 'OWNERSHIP_GUARD_UNSAFE',
+    'OWNERSHIP_GUARD_CLOSE_UNCONFIRMED', 'STANDALONE_OWNERSHIP_CONTROL_UNCONFIRMED']) {
+    refusal = Object.assign(Error('fixed control refusal'), { code });
+    assert.throws(() => reader.privatePublicationRecord(packageId, state, item), error => error === refusal);
+    assert.throws(() => reader.confirmPublication(state, item), error => error === refusal);
+    assert.throws(() => reconciliation.publishedPackageRecord(packageId, state, item), error => error === refusal);
+    const before = structuredClone(item);
+    assert.throws(() => reconciliation.reconcilePublishedItems(state), error => error === refusal);
+    assert.deepEqual(item, before);
+    assert.throws(() => reconciliation.markInterruptedItemsRetryable(state), error => error === refusal);
+    assert.deepEqual(item, before, 'control unavailability cannot manufacture retry or stop decisions');
+  }
+  refusal = Object.assign(Error('invalid expected body'), { code: 'DOCUMENT_REVIEW_INVALID' });
+  assert.equal(reader.privatePublicationRecord(packageId, state, item).state, 'unsafe');
+  assert.equal(reconciliation.publishedPackageRecord(packageId, state, item).state, 'unsafe');
+  refusal = undefined;
+  assert.equal(reader.privatePublicationRecord(packageId, state, item).state, 'verified');
+  absent = true;
+  assert.equal(reader.privatePublicationRecord(packageId, state, item).state, 'missing');
+  item.checkpoint = 'package_published';
+  assert.equal(reader.privatePublicationRecord(packageId, state, item).state, 'unsafe', 'committed locator is never absence permission');
 });
 
 test('the batch composition root preserves every reconciliation test facade', () => {

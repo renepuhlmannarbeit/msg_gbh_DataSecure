@@ -22,6 +22,12 @@ function companionEnvironment(source = process.env) {
     const upper = key.toUpperCase();
     if (ENV_ALLOWLIST.has(upper) || upper.startsWith('EU_PRIVACY_')) result[key] = value;
   }
+  if (process.platform === 'darwin' && source.DATASECURE_NATIVE_EXPORT_CHANNEL === '1') {
+    for (const key of ['DATASECURE_NATIVE_EXPORT_CHANNEL', 'DATASECURE_PRODUCT_CHANNEL',
+      'DATASECURE_MACOS_STATIC_CORE_SHA256', 'DATASECURE_MACOS_STATIC_CORE_ARTIFACT_SHA256']) {
+      if (typeof source[key] === 'string') result[key] = source[key];
+    }
+  }
   return result;
 }
 
