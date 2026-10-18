@@ -4,6 +4,19 @@ Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Pre-Release in Vorbe
 
 ## Aktuelle Nacht-Fortsetzung (ersetzt ältere Freigabeangaben)
 
+Neu19.10.00:02UTC: Live-Region-Folgekorrektur samt357 gezielten Gegenfällen
+grün, Produktionsdiff direkt gegengelesen. Vor finaler Freigabe weiteres
+unabhängiges Gegenlesen (bisherige zusätzliche Agenten wegen Kapazität nicht
+verfügbar), unveränderter Gesamtfreeze und neues natives Paket/GUI nötig.
+
+Neu23:50UTC: Gesamtcheckpoint04/8da562e272/272+10/10 unverändert bestanden.
+Zusätzliche reale Windows-GUI-Orakel07/09/10 und08-Delta bestätigt, Inputs14/14
+unverändert, nur eigene reversible Fehlordnerprobe wiederhergestellt. Kein
+Finalrelease aus alten EXE ableiten. Neuer Quellenfix in Arbeit: falsche
+Screenreader-Wiederankündigung behaltenen alten Abschlusses nach Snapshotverlust;
+aktuelle echte Hintergrund-Fertigmeldung und Warnungen müssen erhalten bleiben.
+Finale Quellen-/Pakete-/Mac-Core-/Uploadgates weiterhin offen.
+
 Neu23:18UTC: Shortroot-Fix7b13d349 samt echtem nativen Start bestätigt.
 GUI02/03/06 und vorheriger05-Neustartgegenfall vorab geprüft, kein Final-PASS.
 Headless-Checkpoint03 nach207/272 ROT, alte Ursache nicht behaupten; neue

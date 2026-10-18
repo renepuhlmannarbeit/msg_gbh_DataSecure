@@ -19,7 +19,7 @@ function harness(options = {}) {
   const doc = { activeElement: null };
   const createElement = tag => {
     const node = { tagName: tag.toUpperCase(), id: '', children: [], parent: null, attrs: {}, events: new Map(), dataset: {},
-      hidden: false, disabled: false, checked: false, indeterminate: false, open: false, tabIndex: 0, value: '', className: '', ownText: '', textUpdates: 0,
+      hidden: false, disabled: false, checked: false, indeterminate: false, open: false, tabIndex: 0, value: '', className: '', ownText: '', textUpdates: 0, textHistory: [],
       append(...children) { for (const child of children) {
         if (child.parent) child.parent.children = child.parent.children.filter(existing => existing !== child);
         child.parent = this; this.children.push(child);
@@ -33,7 +33,7 @@ function harness(options = {}) {
       closest(selector) { assert.equal(selector, '[hidden]'); for (let n = this; n; n = n.parent) if (n.hidden) return n; return null; },
       get isConnected() { let n = this; while (n.parent) n = n.parent; return [...roots.values()].includes(n); },
       get textContent() { return this.ownText + this.children.map(child => child.textContent).join(''); },
-      set textContent(text) { for (const child of this.children) child.parent = null; this.children = []; this.ownText = String(text); this.textUpdates++; }
+      set textContent(text) { for (const child of this.children) child.parent = null; this.children = []; this.ownText = String(text); this.textUpdates++; this.textHistory.push(this.ownText); }
     };
     nodes.push(node); return node;
   };
@@ -3313,7 +3313,7 @@ testAsync('bound history snapshot: the actual guide, completion warning and nav-
   assert.equal(h.el('history-' + A + '-guide-stages').children[3].dataset.status,'done');
   const row = h.el('history-list').children[0];
   assert.doesNotMatch(row.textContent,/Ob Dokumentfreigabe und Export abgeschlossen sind, wird getrennt geprüft/u);
-  await h.act('nav-details');
+  await h.act(`history-${A}-details`);
   assert.match(h.el('job-description').textContent,/kein weiterer Export nötig/u);
   assert.doesNotMatch(h.el('job-description').textContent,/noch vergleichen und freigeben/u);
   assert.equal(h.el('job-action-documents').textContent,'Prüfung öffnen (optional)');
@@ -3325,6 +3325,193 @@ testAsync('bound history snapshot: the actual guide, completion warning and nav-
   assert.match(h.el('job-description').textContent,/kein weiterer Export nötig/u);
   noAutomaticDecision(h);
 });
+
+testAsync('terminal announcements: exported predecessor stays silent through a new Markdown draft and cancelled extra picker, then returns neutral once', async () => {
+  let picks = 0;
+  const draft = [{ name: 'Draft.txt', source_id: id(21), bytes: 9, selectable: true }];
+  const h = await finishedAnonymousWorkspace({ catalogue: draft, invoke(command, args, fallback) {
+    if (command === 'get_document_review_history_summary') return fullCopySummary();
+    if (command === 'select_files' && ++picks === 2) return { cancelled: true };
+    return fallback();
+  } });
+  await openFinishedSnapshot(h); await h.act(`history-${A}-details`);
+  const region = h.el('job-announcement');
+  assert.match(region.textContent, /kein weiterer Export nötig/u);
+  const departing = region.textHistory.length;
+  await h.act('nav-new');
+  assert.deepEqual(region.textHistory.slice(departing), [''], 'leaving clears the old terminal announcement without a transient replacement');
+  h.el('mode-markdown').checked = true; await h.act('mode-markdown', 'change');
+  await h.act('select-files');
+  assert.equal(h.el('selection-count').textContent, '1 von 1 ausgewählt');
+  await h.act('add-more'); await h.act('add-files');
+  assert.equal(picks, 2);
+  assert.equal(h.el('selection-count').textContent, '1 von 1 ausgewählt');
+  assert.equal(h.el(`source-${id(21)}`).checked, true);
+  assert.equal(h.el('mode-markdown').checked, true);
+  assert.equal(h.el('start').attrs['aria-disabled'], 'false');
+  const reads = h.calls.filter(call => call.command === 'get_public_state').length;
+  await h.poll(); await h.poll();
+  assert.ok(h.calls.filter(call => call.command === 'get_public_state').length > reads);
+  assert.equal(region.textContent, '');
+  assert.deepEqual(region.textHistory.slice(departing), [''], 'accepted intake, cancellation and polling cannot announce the retained predecessor');
+  assert.equal(h.calls.filter(call => call.command === 'cancel_admission').length, 0);
+  const returning = region.textUpdates;
+  await h.act('nav-details'); selectedRun(h, A);
+  assert.equal(h.el('job').hidden, false, 'the predecessor job itself is retained');
+  assert.equal(region.textUpdates, returning + 1);
+  assert.match(region.textContent, /aktuellen Freigabe- und Exportstand.*prüfen/u);
+  assert.doesNotMatch(region.textContent, /noch vergleichen und freigeben|kein weiterer Export nötig/u,
+    'the invalidated export snapshot is neither preserved nor turned into a missing-approval claim');
+  await h.poll(); await h.act('nav-details');
+  assert.equal(region.textUpdates, returning + 1, 'unchanged visible status is announced exactly once');
+  await h.act('nav-new');
+  const immediateReturn = region.textUpdates;
+  await h.act('nav-details');
+  assert.equal(region.textUpdates, immediateReturn + 1, 'return also announces once without an intervening hidden poll');
+  await h.act('nav-new');
+  assert.equal(h.el('selection-count').textContent, '1 von 1 ausgewählt');
+  assert.equal(h.el('mode-markdown').checked, true);
+  assertNoExportOrRestart(h);
+});
+
+for (const destination of ['history', 'settings']) testAsync(`terminal announcements: departing to ${destination} cannot transiently announce snapshot invalidation in the former Details view`, async () => {
+  const h = await finishedAnonymousWorkspace({ invoke: (command, args, fallback) =>
+    command === 'get_document_review_history_summary' ? fullCopySummary() : fallback() });
+  await openFinishedSnapshot(h); await h.act(`history-${A}-details`);
+  const region = h.el('job-announcement');
+  assert.match(region.textContent, /kein weiterer Export nötig/u);
+  const before = region.textHistory.length;
+  await h.act('nav-' + destination); await h.poll();
+  assert.equal(region.textContent, '');
+  assert.deepEqual(region.textHistory.slice(before), [''], 'clearRunReview must use the destination before view assignment');
+  assertNoExportOrRestart(h);
+});
+
+for (const state of ['results_available', 'completed_without_results', 'export_abandoned', 'failed'])
+testAsync(`terminal announcements: ${state} is scoped to the visible owned card and reannounced once on return`, async () => {
+  const h = await finishedAnonymousWorkspace();
+  h.model.state = { ...h.model.state, state }; await h.poll();
+  await h.act('nav-history'); await h.act(`history-${A}-details`);
+  const region = h.el('job-announcement');
+  assert.ok(region.textContent);
+  const before = region.textHistory.length;
+  await h.act('nav-new'); await h.poll();
+  assert.deepEqual(region.textHistory.slice(before), ['']);
+  const returning = region.textUpdates;
+  await h.act('nav-details');
+  assert.equal(region.textUpdates, returning + 1);
+  await h.poll();
+  assert.equal(region.textUpdates, returning + 1);
+  assertNoExportOrRestart(h);
+});
+
+testAsync('terminal announcements: a foreign historical Details card cannot announce the retained current job', async () => {
+  const h = await finishedAnonymousWorkspace({ invoke: (command, args, fallback) =>
+    command === 'get_document_review_history_summary'
+      ? { ok: true, local_ui_only: true, external_disclosure: false, available: false } : fallback() });
+  h.model.entries.push({ ...h.model.entries[0], batch_id: B });
+  await h.act('nav-history'); await h.act(`history-${A}-details`);
+  const region = h.el('job-announcement'), before = region.textHistory.length;
+  await h.act('nav-history'); await h.act(`history-${B}-details`); selectedRun(h, B);
+  assert.equal(h.el('job').hidden, true);
+  await h.poll();
+  assert.equal(region.textContent, '');
+  assert.deepEqual(region.textHistory.slice(before), ['']);
+  await h.act('nav-history');
+  const returning = region.textUpdates;
+  await h.act(`history-${A}-details`); selectedRun(h, A);
+  assert.equal(h.el('job').hidden, false);
+  assert.equal(region.textUpdates, returning + 1);
+  await h.poll(); assert.equal(region.textUpdates, returning + 1);
+  assertNoExportOrRestart(h);
+});
+
+testAsync('terminal announcements: the actual acknowledged copy receipt hides the job card and keeps its old terminal poll silent', async () => {
+  const response = documentResponse('markdown-and-anonymize', 2);
+  response.processing_complete = true;
+  for (const row of response.documents) row.approved = true;
+  const h = await finishedAnonymousWorkspace({ documentRenderer: true, invoke(command, args, fallback) {
+    if (command === 'get_document_review_history_summary') return fullCopySummary();
+    if (command === 'get_document_reviews') return response;
+    if (command === 'close_document_reviews') return { ok: true };
+    if (command === 'preview_document_export') return { ok: true, processing_mode: 'markdown-and-anonymize',
+      files: args.selection.map((row, index) => ({ name: `Dokument_${index + 1}.md`, sha256: row.output_sha256 })),
+      local_ui_only: true, external_disclosure: false };
+    if (command === 'export_approved_documents') return { ok: true, operation_id: args.operationId, exported_count: 2,
+      folder_name: `Export-${args.operationId}`, local_ui_only: true, external_disclosure: false };
+    return fallback();
+  } });
+  await h.act('nav-history'); await h.act(`history-${A}-details`);
+  const region = h.el('job-announcement'), before = region.textHistory.length;
+  await h.act('job-action-documents');
+  h.el('documents-all').checked = true; await h.act('documents-all', 'change');
+  await h.act('documents-export'); await h.act('document-export-confirm'); await tick();
+  assert.equal(h.el('document-export-title').textContent, 'Export abgeschlossen');
+  await h.act('document-export-close'); await h.act('documents-completion-details'); await tick();
+  selectedRun(h, A);
+  assert.equal(h.el('details-receipt').hidden, false);
+  assert.equal(h.el('job').hidden, true);
+  await h.poll(); await h.act('nav-new'); await h.poll(); await h.act('nav-details'); await h.poll();
+  assert.equal(h.el('details-receipt').hidden, false);
+  assert.equal(h.el('job').hidden, true);
+  assert.equal(region.textContent, '');
+  assert.deepEqual(region.textHistory.slice(before), ['']);
+  const copies = h.calls.filter(call => call.command === 'export_approved_documents');
+  assert.equal(copies.length, 2, 'only the explicitly requested copy and its exact ACK were sent');
+  assert.equal(copies[1].args.acknowledge, true);
+  assert.equal(copies[0].args.operationId, copies[1].args.operationId);
+  assert.equal(h.calls.some(call => ['decide_document_review', 'start_admitted_batch', 'continue_history_batch'].includes(call.command)), false);
+});
+
+for (const [state, text] of [['preparing', /vorbereitet/iu], ['processing', /Pause angefordert/u],
+  ['review_required', /Entscheidung/u], ['paused', /pausiert/iu], ['export_pending', /Bereitstellung/iu],
+  ['ready', /Kein aktiver Lauf/u], ['start_failed', /Lokaler Start nicht bestätigt/u]])
+testAsync(`terminal announcement scoping leaves ${state} background warnings unchanged`, async () => {
+  const h = harness(); await selectAndStart(h); await h.act('nav-new');
+  const region = h.el('job-announcement'), before = region.textUpdates;
+  h.model.state = { ...h.model.state, state, ...(state === 'processing' ? { pause_requested: true } : {}),
+    ...(state === 'review_required' ? { review_count: 1 } : {}),
+    ...(state === 'start_failed' ? { intake_failure: { intake_id: A, error_code: 'STANDALONE_START_FAILED', worker_active: true } } : {}) };
+  await h.poll();
+  assert.equal(h.el('new-view').hidden, false);
+  assert.match(region.textContent, text);
+  assert.equal(region.textUpdates, before + 1);
+  assert.equal(h.calls.filter(call => call.command === 'start_admitted_batch').length, 1);
+  assert.equal(h.calls.some(call => ['decide_document_review', 'export_approved_documents', 'continue_current_batch'].includes(call.command)), false);
+});
+
+testAsync('terminal announcement scoping preserves the first real background processing error without repeating each count', async () => {
+  const h = harness(); await selectAndStart(h); await h.act('nav-new');
+  const region = h.el('job-announcement'), before = region.textUpdates;
+  h.model.state = { ...h.model.state, failed_count: 1 }; await h.poll();
+  assert.match(region.textContent, /Dateien mit Hinweisen/u);
+  assert.equal(region.textUpdates, before + 1);
+  h.model.state = { ...h.model.state, failed_count: 2 }; await h.poll();
+  assert.equal(region.textUpdates, before + 1);
+  assert.equal(h.el('new-view').hidden, false);
+});
+
+for (const destination of ['history', 'settings']) testAsync(`terminal announcements: a running job still announces its first real background completion in ${destination} once`, async () => {
+  const h = harness(); await selectAndStart(h); await h.act('nav-' + destination);
+  const region = h.el('job-announcement'), before = region.textHistory.length;
+  h.model.state = { ...h.model.state, state: 'results_available', completed_count: 3,
+    result_count: 3, results_available: true, batch_complete: true };
+  await h.poll();
+  assert.equal(h.el(destination + '-view').hidden, false);
+  assert.match(region.textContent, /Textübernahme abgeschlossen/u,
+    'the first genuine terminal transition is not a stale snapshot replay');
+  const completion = region.textContent;
+  await h.poll(); await h.poll();
+  assert.deepEqual(region.textHistory.slice(before).filter(Boolean), [completion],
+    'background polling cannot repeat the terminal phase');
+  const returning = region.textUpdates;
+  await h.act('nav-details');
+  assert.equal(region.textUpdates, returning + 1, 'the same retained card still announces once on explicit return');
+  await h.poll(); assert.equal(region.textUpdates, returning + 1);
+  assert.equal(h.calls.filter(call => call.command === 'start_admitted_batch').length, 1);
+  assert.equal(h.calls.some(call => ['decide_document_review', 'export_approved_documents', 'continue_current_batch'].includes(call.command)), false);
+});
+
 testAsync('bound history snapshot: fresh approvals without a current copy improve both views, not to export success', async () => {
   const h = await finishedAnonymousWorkspace({invoke:(command,args,fallback)=>
     command==='get_document_review_history_summary'?fullCopySummary({current_exported_count:0}):fallback()});

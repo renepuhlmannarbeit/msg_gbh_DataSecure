@@ -1,5 +1,69 @@
 # RC164 – fortgesetzter Abschlussauftrag
 
+## Live-Region-Folgekorrektur, 19.10., 00:02 UTC
+
+Die tatsächliche Workspacequelle unterscheidet nun die erste Terminalphase
+eines Laufs von späteren Wiederankündigungen behaltenen Zustands. Ein echter
+Hintergrundabschluss bleibt einmal hörbar; spätere Snapshotinvalidierung kann
+außerhalb der eigenen sichtbaren Laufkarte keinen alten Abschluss erneut
+ansagen. Verlassen leert die Region, explizite Rückkehr kündigt genau einmal
+an. Ein unbekannter Freigabe-/Exportstand behauptet weder fehlende Freigabe
+noch bestätigten Export. Aktive Warnungen, Snapshotverwerfung und ACK-/Aktion-
+Autorität sind unverändert. Nur Frontend und Frontendgegenfälle geändert.
+
+Implementierungsagent und anschließendes direktes Quellengegenlesen des
+Hauptagenten; verifizierter Node22.23.2:357 Workspacefälle bestanden, Diffcheck
+bestanden. Die vom Hauptagenten geforderte Gegenprobe für die erste echte
+Hintergrund-Fertigmeldung wurde vor Abschluss ergänzt. Zwei zusätzliche
+unabhängige Agentenanfragen waren wegen Modellkapazität nicht ausführbar;
+kein erfundenes Agenten-PASS. Weiteres unabhängiges Gegenlesen bleibt vor der
+finalen Paketfreigabe offen. Echter GUI-/Screenreader-Nachweis dieser Bytes
+steht noch aus. Neuer unveränderter Gesamtfreeze folgt, kein Finalrelease.
+
+## Gesamtregression und weitere echte GUI-Orakel, 18.10., 23:50 UTC
+
+Checkpoint04, Quellen8da562ede71afbde8dfa906880e0c2a304e878c2,
+Produktfingerprintfe092886fab7186cfef9e6c0e7ad0392ea36d67af6ff669f40af0078956cb8b4:
+272/272 Headlessdateien plus10/10 Zusatzgates bestanden, inputs_unchanged=true.
+546 Test-/Scriptinputs mit Manifestf963cfe913b00b800c0dcee19006d05abb067f502977dac8901d5762f1116410.
+Roter Checkpoint03 bleibt erhalten; sein ursprünglicher Replay-Fehler wurde
+nicht rückwirkend erklärt. Neuer kausaler Test und tatsächliche Frontendquelle
+sind in diesem grünen Gesamtlauf enthalten. Kein nativer Mac-PASS daraus.
+
+Weitere tatsächliche Windows-Bediennachweise am noch getrennten7b13d349-EXE:
+
+- Abbruch zusätzlicher Datei- und Zielpicker erhält exakt eine neue Auswahl
+  und das vorherige Ziel, startet nichts und erzeugt keinen technischen Fehler.
+  Ungestarteter Entwurf bleibt beim bloßen Reiterwechsel erhalten; verbrauchter
+  alter Dateibaum war beim neuen Entwurf leer.
+- Eigener neuer Lauf09647d03 erzeugt exakt eine nicht anonymisierte MD. Nach
+  normalem Prozessende nur dessen neu erzeugten Laufordner reversibel umbenannt.
+  Neustart und Verlauf funktionieren, genaue Karte „Ergebnisordner fehlt“,
+  kein unbestätigter Ergebnisöffner, keine automatische Ersatzanlage/Kopie.
+  Andere Ziele bleiben wählbar. Anschließend nur diesen Testordner wieder an
+  seinen ursprünglichen Namen zurückgestellt; Ergebnisbytes unverändert.
+- Sechs weitere echte GUI-Markdownstarts im Fall07, jeweils dieselbe Golden-TXT:
+  exakt fünf neueste IDs in korrekter Reihenfolge. Neuesten Eintrag ausdrücklich
+  ausgeblendet: vier bleiben, kein sechster Nachrücker. Ausgeblendete anzeigen:
+  dieselben fünf einschließlich markiertem Eintrag. Nach normalem Neustart
+  bleibt die Ausblendung bestehen. Alle sechs581-Byte-MD bleiben hashgleich.
+- Alle14 synthetischen Originalkopien nach Abschluss gegen Größen/SHA256 des
+  unveränderten Kampagnenmanifests geprüft. Keine Nutzerläufe oder bestehenden
+  Profile geändert. Eigene App/Core normal geschlossen; Profile/Evidenzen erhalten.
+
+Neue echte GUI-Folgeabweichung: globale Screenreader-Liveregion kann einen
+behaltenen alten Abschluss nach Picker/Snapshotinvalidierung erneut mit falschem
+Freigabehinweis ankündigen. Zwei unabhängige Produktionsgegenreviews bestätigen
+Displayursache, keinen Inhalts-/Freigabe-/Exportverlust. Neutraler unbekannter
+Freigabestand und kontextgebundene Wiederankündigung in Arbeit; erstmalige echte
+Hintergrund-Fertigmeldung und aktive Warnungen müssen erhalten bleiben.
+Diese Folgekorrektur ist ausdrücklich noch nicht im obigen grünen Freeze.
+Abgleich: [W3C Status Messages](https://www.w3.org/WAI/WCAG21/Understanding/status-messages),
+[ARIA22](https://www.w3.org/WAI/WCAG21/Techniques/aria/ARIA22).
+Der inzwischen aufgezeichnete GUI-Detailbeleg liegt in checkpoint03/GUI-PREAPPROVAL.json.
+Das ist mehrstufige agentische Vorabprüfung, keine finale native Abnahme aller
+Quell-/Plattformpakete. Coreproducer39167676290 weiterhin aktiv.
+
 ## Neuester Checkpoint, 18.10.2026, 23:18 UTC
 
 7b13d349ae85d37b08e13b8421d2be4de1fc5447 korrigiert die isolierte

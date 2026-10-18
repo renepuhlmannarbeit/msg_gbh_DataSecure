@@ -4,6 +4,24 @@ Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Test-Pre-Release in 
 
 ### Aktueller Nachtauftrag – neuere Autorität vor historischen Abschnitten
 
+Neu19.10.00:02UTC: Live-Region-Folgekorrektur implementiert: erste echte
+Hintergrund-Terminalphase erhalten, alte versteckte Wiederankündigung stumm,
+Rückkehr genau einmal, unbekannte Freigabe neutral.357 Workspacegegenfälle
+mit gepinntem Node grün, Hauptagent hat tatsächlichen Diff gegengelesen.
+Zusätzliche unabhängige Agentengegenprüfung wegen Kapazität noch offen;
+ebenso neuer Gesamtfreeze und native Prüfung der neuen Bytes. Kein Release.
+
+Neu23:50UTC: Checkpoint04/8da562e vollständig272/272+10/10 grün bei unveränderten
+Inputs (Fingerprintfe092886…); kein Mac-/Finalpaket-PASS. Weitere echte GUI-
+Vorabfälle7b13d349 bestanden: Pickerabbruch ohne Auswahlverlust, fehlender
+synthetischer Laufordner ohne Start-/Verlaufblockade, Fünfergrenze nach sechs
+echten Läufen, reines Ausblenden ohne Nachrücken/Dateilöschung samt Neustart.
+14/14 Originalkopien bytegleich; reversible Fehlordnerprobe zurückgestellt.
+Neue globale Screenreader-Wiederankündigung eines behaltenen alten Abschlusses
+quellbestätigt; neutrale/kontextgebundene Meldung wird nach diesem Freeze
+korrigiert, ohne erste Hintergrund-Fertigmeldung oder aktive Warnung zu verlieren.
+Noch kein gemeinsamer Abschlussfreeze, beide Mac-Coreproducer aktiv.
+
 Neu23:18UTC:7b13d349 löst die isolierte Windows-Shortroot-Prüfung; echter
 unverändert entpackter App/Core-Start, OCR, geführte Freigabe, einmaliger Export
 und korrekter gezielter Verlaufsbeleg bestätigt. Vorabnachweise, kein Finalrelease.

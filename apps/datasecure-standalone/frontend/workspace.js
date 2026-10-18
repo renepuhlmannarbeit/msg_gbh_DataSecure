@@ -135,7 +135,9 @@
   let historyGeneration = 0, historyRecoveryBusy = false, historySummaryReads = 0,
     historySummaryReadGeneration = 0, historySummaryOwnershipEpoch = 0,
     lastJobSignature = '', problemSignature = '', acknowledged;
-  let lastJobAnnouncement = '';
+  let lastJobAnnouncement = '', lastJobAnnouncementTerminal = false;
+  const terminalAnnouncementStates = new Set(['results_available', 'completed_without_results', 'export_abandoned', 'failed']);
+  const announcedTerminalPhases = new Set();
   let guideSignature = '', documentGuide = null, runReviewSnapshot = null;
   // Navigation owns only a run reference and confirmed display metadata. It
   // never grants decision, continuation or export authority.
@@ -149,6 +151,17 @@
     $('nav-details').hidden = false;
     $('details-run-id').textContent = `Lauf-ID: ${batchId}`;
     return true;
+  }
+  function ownJobCardVisible(announcementView = view) {
+    return announcementView === 'details' && Boolean(job) && runDetails?.batchId === job.batchId && !runDetails.receipt;
+  }
+  function clearHiddenTerminalAnnouncement(announcementView = view, terminal = lastJobAnnouncementTerminal) {
+    if (!terminal || ownJobCardVisible(announcementView)) return;
+    if (lastJobAnnouncement || $('job-announcement').textContent) {
+      lastJobSignature = ''; lastJobAnnouncement = '';
+      if ($('job-announcement').textContent) $('job-announcement').textContent = '';
+    }
+    lastJobAnnouncementTerminal = false;
   }
   function renderRunReceipt() {
     const receipt = runDetails?.connection === connectionEpoch ? runDetails.receipt : null;
@@ -183,10 +196,10 @@
     lastJobSignature = '';
     if (job && current) renderJob(current); else refreshRunGuide();
   }
-  function clearRunReview() {
+  function clearRunReview(announcementView = view) {
     if (!runReviewSnapshot) return;
     runReviewSnapshot = null; lastJobSignature = '';
-    if (job && current) renderJob(current); else refreshRunGuide();
+    if (job && current) renderJob(current, announcementView); else refreshRunGuide();
   }
   function rememberDocumentApproval(metadata) {
     // The already validated, explicitly open document renderer can supply a
@@ -569,11 +582,12 @@
       historySummaryEpoch++;
       // Re-entering history must not present a previous approval snapshot as
       // current after document edits. Polling unchanged rows still keeps focus.
-      if (next === 'history') { historySignature = ''; clearRunReview(); }
-      else if (!['new', 'history', 'details'].includes(next)) clearRunReview();
+      if (next === 'history') { historySignature = ''; clearRunReview(next); }
+      else if (!['new', 'history', 'details'].includes(next)) clearRunReview(next);
     }
     view = next;
     if (receipt && runDetails?.batchId === receipt.batch_id) runDetails.receipt = receipt;
+    clearHiddenTerminalAnnouncement();
     const ownJob = runDetails?.batchId === job?.batchId;
     $('setup').hidden = false;
     $('job').hidden = next !== 'details' || !ownJob || Boolean(runDetails?.receipt);
@@ -783,7 +797,8 @@
   }
   function adoptRun(run) {
     job = run; mode = run.task;
-    lastJobAnnouncement = ''; $('job-announcement').textContent = '';
+    announcedTerminalPhases.clear();
+    lastJobAnnouncement = ''; lastJobAnnouncementTerminal = false; $('job-announcement').textContent = '';
     $('setup').hidden = true; $('job').hidden = false;
     $('job-task').textContent = run.task === 'markdown-only' ? 'Nur umwandeln'
       : run.task === 'markdown-and-anonymize' ? 'Umwandeln und anonymisieren' : 'Verarbeitungszweck nicht bestätigt';
@@ -830,7 +845,8 @@
     if (busy || ['preparing', 'processing'].includes(current?.state) || current?.intake_failure?.worker_active === true) return;
     if (!await perform('cancel_admission')) return;
     job = null; catalogue = []; knownIds.clear(); selected.clear(); mode = ''; current = null; generation++;
-    lastJobAnnouncement = ''; $('job-announcement').textContent = '';
+    announcedTerminalPhases.clear();
+    lastJobAnnouncement = ''; lastJobAnnouncementTerminal = false; $('job-announcement').textContent = '';
     $('mode-markdown').checked = false; $('mode-anonymize').checked = false;
     $('text-ocr').checked = false; $('ocr-review').checked = false;
     $('fast-anonymize').checked = false;
@@ -961,7 +977,7 @@
     }));
   }
 
-  function renderJob(state) {
+  function renderJob(state, announcementView = view) {
     if (!job) return;
     reconcileFeedback(state);
     refreshRunGuide();
@@ -993,7 +1009,7 @@
       $('job-secondary-actions').replaceChildren(); $('job-more').hidden = true; $('file-problems').hidden = true;
       const announcement = `intake-failure:${job.batchId}:${state.intake_failure.worker_active === true}`;
       if (announcement !== lastJobAnnouncement) {
-        lastJobAnnouncement = announcement;
+        lastJobAnnouncement = announcement; lastJobAnnouncementTerminal = false;
         $('job-announcement').textContent = $('job-title').textContent + '. ' + $('job-description').textContent;
       }
       restoreActionFocus(); acknowledgeRenderedNotice(state, true); return;
@@ -1001,7 +1017,7 @@
     if (state.state === 'ready') {
       // Service readiness is not a completion receipt for a retained old job.
       // Do not silently call newJob(): it would cancel an admitted selection.
-      lastJobSignature = ''; lastJobAnnouncement = '';
+      lastJobSignature = ''; lastJobAnnouncement = ''; lastJobAnnouncementTerminal = false;
       $('job-icon').textContent = '·'; $('job-icon').className = 'status-icon';
       $('job-status').className = 'job-status';
       $('job-title').textContent = 'Kein aktiver Lauf';
@@ -1016,7 +1032,7 @@
       restoreActionFocus(); return;
     }
     if (state.batch_id !== job.batchId) {
-      lastJobSignature = ''; lastJobAnnouncement = '';
+      lastJobSignature = ''; lastJobAnnouncement = ''; lastJobAnnouncementTerminal = false;
       $('job-icon').textContent = '…'; $('job-icon').className = 'status-icon';
       $('job-status').className = 'job-status';
       $('job-progress').hidden = true; $('job-current').textContent = '';
@@ -1029,7 +1045,14 @@
       restoreActionFocus();
       $('file-problems').hidden = true; return;
     }
-    const signature = JSON.stringify([state, reviewProjection]);
+    const terminalAnnouncement = terminalAnnouncementStates.has(state.state);
+    // Preserve the first genuine completion/failure of a background job. Only
+    // later replays or display-snapshot changes need the visible owned card.
+    const announceJob = !terminalAnnouncement || ownJobCardVisible(announcementView) || !announcedTerminalPhases.has(state.state);
+    if (!announceJob) clearHiddenTerminalAnnouncement(announcementView, terminalAnnouncement);
+    // A retained terminal card can be rendered while hidden. Returning to that
+    // exact card still needs one announcement, even when its DTO is unchanged.
+    const signature = JSON.stringify([state, reviewProjection, terminalAnnouncement ? announceJob : null]);
     if (signature === lastJobSignature) { acknowledgeRenderedNotice(state); return; }
     lastJobSignature = signature;
     $('job-progress').hidden = false;
@@ -1066,7 +1089,7 @@
     if (completedAnonymous && reviewProjection) $('job-description').textContent += ' ' + reviewProjection.next;
     else if (completedAnonymous) $('job-description').textContent += fastRun
       ? ' Schnellweg: Die Erstfreigabe erfolgt automatisch, nicht manuell. Den aktuellen Freigabestand bei den Ergebnissen öffnen; Änderungen oder ein Widerruf können Freigaben aufgehoben haben. Ein Export wird nur auf deinen Auftrag erstellt.'
-      : ' Der Lauf verarbeitet keine weiteren Dateien. Für einen Export die gewünschten Ergebnisse noch vergleichen und freigeben. Du kannst diese Dokumentprüfung auch später öffnen.';
+      : ' Der Lauf verarbeitet keine weiteren Dateien. Den aktuellen Freigabe- und Exportstand bei den Ergebnissen prüfen.';
     if (completedAnonymous && !reviewProjection && contentNotices?.description) $('job-description').textContent += ` ${contentNotices.description}`;
     $('job-progress').max = Math.max(1, total); if (state.state === 'preparing') $('job-progress').removeAttribute('value');
     else $('job-progress').value = Math.min(total, done);
@@ -1074,8 +1097,9 @@
     // Stable live region: announce meaningful phase changes and the first
     // failure, not every filename/count update. No synthetic percentage.
     const announcement = `${job.batchId}:${state.state}:${Boolean(state.pause_requested)}:${Boolean(failed)}${working ? '' : `:${done}:${failed}:${reviews}:${count(state.result_count)}:${contentNotices?.count}:${contentNotices?.complete}:${JSON.stringify(reviewProjection)}`}`;
-    if (announcement !== lastJobAnnouncement) {
-      lastJobAnnouncement = announcement;
+    if (announceJob && announcement !== lastJobAnnouncement) {
+      lastJobAnnouncement = announcement; lastJobAnnouncementTerminal = terminalAnnouncement;
+      if (terminalAnnouncement) announcedTerminalPhases.add(state.state);
       $('job-announcement').textContent = `${$('job-title').textContent}. ${working && !state.pause_requested
         ? `Die Verarbeitung bleibt lokal.${failed ? ' Dateien mit Hinweisen sind im Lauf aufgeführt.' : ''}`
         : $('job-description').textContent}`;
