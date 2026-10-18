@@ -63,7 +63,10 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.select-target.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 150
+    # Serial V8 compilation exceeded the previous 120-minute make watchdog.
+    # Keep five hours for make, with bounded setup/seal/upload time below the
+    # six-hour standard hosted-runner limit. No larger runner or OS tuning.
+    timeout-minutes: 330
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
@@ -186,6 +189,7 @@ jobs:
             ${{ steps.private.outputs.repository }}/dist/macos-static-core/${{ matrix.target }}/BUILD-*.json
             ${{ steps.private.outputs.repository }}/dist/macos-static-core/${{ matrix.target }}/CONFIGURE-PROCESS.json
             ${{ steps.private.outputs.repository }}/dist/macos-static-core/${{ matrix.target }}/MAKE-PROCESS.json
+            ${{ steps.private.outputs.repository }}/dist/macos-static-core/${{ matrix.target }}/COMPILE-CONTRACT.json
             ${{ steps.private.outputs.repository }}/dist/macos-static-core/${{ matrix.target }}/configure.log
             ${{ steps.private.outputs.repository }}/dist/macos-static-core/${{ matrix.target }}/make.log
           if-no-files-found: warn

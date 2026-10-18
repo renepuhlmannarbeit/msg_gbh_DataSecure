@@ -323,6 +323,7 @@ export function syncProducerDirectory(directory, model = {}) {
 
 // Only the producer calls this API. The last argument is a model-test seam,
 // never selected from CLI/environment or forwarded to the built Core.
+export const BUILD_STEP_TIMEOUTS = Object.freeze({ configure: 10 * 60 * 1000, make: 5 * 60 * 60 * 1000 });
 export async function runProducerBuildStep(step, environment, job, label, signal, model = {}) {
   if (!['configure', 'make'].includes(label) || !signal || typeof signal.aborted !== 'boolean' ||
       typeof signal.addEventListener !== 'function' || typeof signal.removeEventListener !== 'function')
@@ -331,9 +332,12 @@ export async function runProducerBuildStep(step, environment, job, label, signal
   const io = model.io || fs, start = model.spawn || spawn;
   const killGroup = model.killGroup || ((pid, requested) => process.kill(-pid, requested));
   const later = model.setTimeout || setTimeout, cancel = model.clearTimeout || clearTimeout;
-  const timeoutMs = model.timeoutMs ?? (label === 'configure' ? 10 * 60 * 1000 : 2 * 60 * 60 * 1000);
+  // Native evidence showed healthy serial V8 compilation still active after
+  // two hours on the standard 7-GB ARM runner. This is a BUILD-only budget;
+  // product RPC/worker/ownership deadlines are deliberately unaffected.
+  const timeoutMs = model.timeoutMs ?? BUILD_STEP_TIMEOUTS[label];
   const reapMs = model.reapMs ?? 5000;
-  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > 2 * 60 * 60 * 1000 ||
+  if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1 || timeoutMs > BUILD_STEP_TIMEOUTS[label] ||
       !Number.isSafeInteger(reapMs) || reapMs < 1 || reapMs > 5000)
     throw fixed('BUILD_STEP_ARGUMENT_INVALID');
   const log = io.openSync(path.join(job, label + '.log'), 'wx', 0o600);

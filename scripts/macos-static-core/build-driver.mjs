@@ -224,9 +224,27 @@ async function prepareConverter(job, options, bytes, signal) {
   return root + '/bin/node';
 }
 async function runBuildStep(step, env, job, label, signal) {
-  const lifecycle = await runProducerBuildStep(step, env, job, label, signal);
-  writeEvidence(job, label.toUpperCase() + '-PROCESS.json', lifecycle);
-  return lifecycle;
+  if (!['configure', 'make'].includes(label)) fail('BUILD_STEP_ARGUMENT_INVALID');
+  phase(label + '_started');
+  const started = process.hrtime.bigint();
+  // A bounded metadata heartbeat is not compiler progress or completion proof.
+  // Never read/print raw build output here; the private logs remain artifacts.
+  const heartbeat = setInterval(() => {
+    try {
+      const info = fs.lstatSync(job + '/' + label + '.log');
+      const bytes = info.isFile() && !info.isSymbolicLink() && info.nlink === 1 &&
+        Number.isSafeInteger(info.size) && info.size >= 0 && info.size <= 512 * 1024 * 1024 ? info.size : null;
+      process.stderr.write('MAC_CORE_PRODUCER_PROGRESS:' + JSON.stringify({ step: label,
+        elapsed_ms: Number((process.hrtime.bigint() - started) / 1000000n), log_bytes: bytes }) + '\n');
+    } catch { /* diagnostics cannot change process supervision or build trust */ }
+  }, 60000);
+  heartbeat.unref();
+  try {
+    const lifecycle = await runProducerBuildStep(step, env, job, label, signal);
+    writeEvidence(job, label.toUpperCase() + '-PROCESS.json', lifecycle);
+    phase(label + '_finished');
+    return lifecycle;
+  } finally { clearInterval(heartbeat); }
 }
 function binaryRecord(file, maximum = MAX_CORE_BYTES) {
   return producerFileObservation(readProducerFileRecord(file, maximum));
@@ -326,6 +344,7 @@ export async function main(argv = process.argv.slice(2)) {
     // is deliberately NOT invoked by this producer; it must see these bytes.
     writeFresh(plan.output, readFileBounded(prepared.root + '/out/Release/node', MAX_CORE_BYTES), 0o700);
     const unsigned = binaryRecord(plan.output);
+    phase('seal_started');
     const sealing = finalSealPlan(plan.output, plan.job);
     writeFresh(sealing.entitlements, ENTITLEMENTS_XML);
     const runSealTool = async (step, input) => {
@@ -349,6 +368,7 @@ export async function main(argv = process.argv.slice(2)) {
     const core = binaryRecord(plan.output), converterAfter = binaryRecord(converter);
     if (converterAfter.sha256 !== converterBefore.sha256 || converterAfter.dev !== converterBefore.dev || converterAfter.ino !== converterBefore.ino) fail('OFFICIAL_CONVERTER_CHANGED');
     assertRoleSeparation(core, converterAfter);
+    phase('native_role_probes_started');
     const checks = await candidateEvidence(plan.output, converter, options, inspection.tools, plan.environment, abort.signal);
     // Execution/probing may not alter the final bytes. No re-sealing or
     // re-attestation is permitted to hide later mutation.

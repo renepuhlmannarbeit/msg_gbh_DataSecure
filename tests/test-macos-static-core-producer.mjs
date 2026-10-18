@@ -911,6 +911,39 @@ await check('fixed-tool callers: actual candidate evidence awaits every role pro
   await assert.rejects(context.run(core, converter, { arch: 'arm64' }, tools, environment, signal), error => error === primary);
 });
 
+await check('build-only budgets remain finite and fit within the hosted runner window', async () => {
+  assert.equal(Object.isFrozen(realHelper.BUILD_STEP_TIMEOUTS), true);
+  assert.deepEqual(realHelper.BUILD_STEP_TIMEOUTS, { configure: 600000, make: 18000000 });
+  assert.match(fs.readFileSync(path.join(root, '.github/workflows/standalone-macos-static-core.yml'), 'utf8'), /timeout-minutes: 330/u);
+  for (const label of ['configure', 'make']) {
+    await assert.rejects(realHelper.runProducerBuildStep({}, {}, '/unused', label, new AbortController().signal,
+      { timeoutMs: realHelper.BUILD_STEP_TIMEOUTS[label] + 1 }), { code: 'BUILD_STEP_ARGUMENT_INVALID' });
+  }
+});
+await check('build heartbeat is bounded metadata, never compiler/exit proof, and stops on success or failure', async () => {
+  for (const rejected of [false, true]) {
+    const phases = [], lines = [], records = [], primary = Error('synthetic process refusal');
+    let pulse, stopped = 0, detached = 0, ticks = 0;
+    const timer = { unref() { detached++; } };
+    const context = { fail: contract.fail, phase: value => phases.push(value), JSON,
+      process: { hrtime: { bigint: () => BigInt(++ticks) * 1000000000n }, stderr: { write: line => lines.push(line) } },
+      fs: { lstatSync(file) { assert.equal(file, '/private/job/make.log'); return {
+        isFile: () => true, isSymbolicLink: () => false, nlink: 1, size: 1234 }; } },
+      setInterval(callback, ms) { assert.equal(ms, 60000); pulse = callback; return timer; },
+      clearInterval(handle) { assert.equal(handle, timer); stopped++; },
+      writeEvidence(job, name, value) { records.push([job, name, value]); },
+      async runProducerBuildStep() { pulse(); if (rejected) throw primary; return { child_end_confirmed: true }; }
+    };
+    vm.runInNewContext(actualDriverBlock('async function runBuildStep(', 'function binaryRecord(') + '\nthis.run = runBuildStep;', context);
+    if (rejected) await assert.rejects(context.run({}, {}, '/private/job', 'make', {}), error => error === primary);
+    else assert.equal((await context.run({}, {}, '/private/job', 'make', {})).child_end_confirmed, true);
+    assert.equal(detached, 1); assert.equal(stopped, 1); assert.equal(lines.length, 1);
+    assert.equal(lines[0], 'MAC_CORE_PRODUCER_PROGRESS:{"step":"make","elapsed_ms":1000,"log_bytes":1234}\n');
+    assert.deepEqual(phases, rejected ? ['make_started'] : ['make_started', 'make_finished']);
+    assert.equal(records.length, rejected ? 0 : 1);
+  }
+});
+
 console.log(JSON.stringify({ schema: 'mac-static-core-producer-source-model-test/3', node: process.version,
   passed, failed: 0, native_macos: 'NOT_RUN', native_build: 'NOT_RUN', actual_signals: 'NONE',
   artifact_approval: 'NONE', filesystem_writes: 'NONE', results }, null, 2));
