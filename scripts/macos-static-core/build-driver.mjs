@@ -130,6 +130,20 @@ async function inspectTools(options, signal) {
   for (const file of new Set(['/usr/bin/arch', '/usr/bin/make', '/usr/bin/tar', '/usr/bin/xcrun', '/usr/bin/xcodebuild', '/usr/bin/codesign', '/usr/bin/plutil', options.python])) {
     phase(file === options.python ? 'revalidate_python' : 'read_system_' + path.basename(file));
     const real = fs.realpathSync.native(file);
+    if (file === '/usr/bin/make') {
+      const info = fs.lstatSync(real, { bigint: true });
+      const ancestry = [];
+      for (let current = path.dirname(real); ; current = path.dirname(current)) {
+        const parent = fs.lstatSync(current, { bigint: true });
+        ancestry.push({ directory: parent.isDirectory(), symlink: parent.isSymbolicLink(),
+          uid: String(parent.uid), mode: Number(parent.mode & 0o777n) });
+        if (path.dirname(current) === current) break;
+      }
+      process.stderr.write('MAC_CORE_SYSTEM_MAKE_FACTS:' + JSON.stringify({
+        canonical_name: path.basename(real), file: info.isFile(), symlink: info.isSymbolicLink(),
+        links: String(info.nlink), bytes: String(info.size), uid: String(info.uid),
+        mode: Number(info.mode & 0o777n), ancestry }) + '\n');
+    }
     toolHashes[real] = file === options.python ? revalidatePythonIdentity(options, pythonIdentity) :
       sha256(readFileBounded(real, 512 * 1024 * 1024));
   }
