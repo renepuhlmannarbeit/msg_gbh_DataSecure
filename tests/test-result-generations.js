@@ -239,6 +239,17 @@ function metadataScope(label) {
   const directory = fs.mkdtempSync(path.join(root, `${label}-`));
   return { directory, filename: putMetadata(directory) };
 }
+function assertGenerationReceiptInventory(receiptBytes, mode, count, folder) {
+  const receipt = JSON.parse(receiptBytes), anonymize = mode === 'markdown-and-anonymize';
+  const expected = Array.from({ length: count }, (_, index) => anonymize
+    ? `Dokument_${String(index + 1).padStart(2, '0')}.md` : `Quelle-${index + 1}.md`);
+  if (anonymize) expected.push('Vertraulich/Dateizuordnung.csv', 'Vertraulich/Personen-Pseudonym-Zuordnung.txt');
+  assert.equal(receipt.schema, `datasecure-results-generation-complete/${anonymize ? 2 : 1}`);
+  assert.deepEqual(receipt.files.map(file => file.name).sort(), expected.sort(), 'receipt has exactly the MD and required companion roles, never OS metadata');
+  for (const file of receipt.files) assert.equal(file.sha256, sha(fs.readFileSync(path.join(folder, file.name))));
+  if (anonymize) assert.equal(receipt.confidential_directory.path, path.join(folder, 'Vertraulich'));
+  else assert.equal(Object.hasOwn(receipt, 'confidential_directory'), false);
+}
 async function run() {
   if (process.platform === 'darwin') {
   for (const mode of ['markdown-only', 'markdown-and-anonymize'])
@@ -264,7 +275,7 @@ async function run() {
     assert.equal(f.store.list(f.batchId).result_publication.state, 'current');
     assert.equal(f.store.list(f.batchId).result_publication.count, 2);
     assert.ok(fs.readFileSync(receipt).equals(receiptBytes), 'OS metadata cannot be added to an existing private receipt');
-    assert.equal(JSON.parse(receiptBytes).files.length, 2);
+    assertGenerationReceiptInventory(receiptBytes, mode, 2, firstFolder);
     f.edit(1); const next = await f.publish(), nextFolder = f.target(next);
     assert.notEqual(next.result_publication.generation_id, first.result_publication.generation_id);
     assert.equal(next.result_publication.count, 2); assert.equal(fs.existsSync(path.join(nextFolder, '.DS_Store')), false);
@@ -411,6 +422,9 @@ async function run() {
     assert.equal(all.length, 2); assert.ok(all.every(name => name.endsWith('.md')));
     assert.equal((await f.resolve()).local_path, f.bound.directory.path);
     assert.equal(f.calls.length, 0, 'initial/list never invoke correction publication');
+    f.edit(); const result = await f.publish();
+    assertGenerationReceiptInventory(fs.readFileSync(path.join(data, 'document-reviews', f.batchId,
+      `results-generation-${result.result_publication.generation_id}-complete.json`)), 'markdown-only', 2, f.target(result));
   });
   for (const mode of ['markdown-only', 'markdown-and-anonymize']) for (const partial of [true, false])
   await testAsync(`${mode}: validated incomplete initial publication (partial=${partial}) stays pending without readable authority`, async () => {
@@ -477,6 +491,8 @@ async function run() {
     f.edit(); const result = await f.publish();
     assert.equal(result.result_publication.count, 2); assert.equal(f.row(0).approved, false);
     assert.deepEqual(fs.readdirSync(f.target(result)).sort(), ['Dokument_01.md', 'Dokument_02.md', 'Vertraulich']);
+    assertGenerationReceiptInventory(fs.readFileSync(path.join(data, 'document-reviews', f.batchId,
+      `results-generation-${result.result_publication.generation_id}-complete.json`)), 'markdown-and-anonymize', 2, f.target(result));
     const nextCsv = fs.readFileSync(path.join(f.target(result), 'Vertraulich/Dateizuordnung.csv'), 'utf8');
     assert.match(nextCsv, /Dokument_01\.md/u); assert.doesNotMatch(nextCsv, /Dokument-001-anonymisiert/u);
     assert.equal(fs.readFileSync(path.join(f.bound.directory.path, 'Vertraulich/Dateizuordnung.csv'), 'utf8'), csv);

@@ -55,3 +55,29 @@ Kein 100-Prozent-Lauffähigkeits- oder Produktionsfreigabeversprechen.
 
 Neue create-only Belege: `dist/rc167-result-companions-source01-20261020`.
 Kein Kopieren früherer FINALs, GUI-Proofs oder alter ZIPs als neuen Nachweis.
+
+## Erster nativer Mac-Gegenlauf
+
+Appcommit `030ffe5b1b0762a6c97590ca555d7d7e9216098d`, Fingerprint
+`734b9bcb4da56bc7d50d69366b5d5328cc0d429f1e8bd295c12972605308dd36`/334.
+Run39331968008: ARM118332154655 scheiterte im echten Darwin-Generationenfall
+mit67PASS/1FAIL an einer alten Testannahme: Abschlussbeleg pauschal nur2Dateien,
+tatsächlich korrekt2MD plus2Pflichtbegleitdateien. Nachfolgende neue Companion-
+Fälle desselben Tests bestanden. Keine Produkt-/Corecrashdiagnose daraus.
+Intel118332154688 wurde nach diesem belegten ungeeigneten gemeinsamen Teststand
+gezielt abgebrochen, nicht als eigener PASS/FAIL ausgegeben. Beide Jobs beendet;
+keine lokalen neuen Gesamt-/Build-Freezejobs liefen während der Korrektur.
+
+Enger Testfix verlangt nun exakte MD-Namen plus genau die zwei festen Rollen,
+ihre tatsächlichen Hashes und gebundenen vertraulichen Ordner; `.DS_Store` wird
+weiterhin nicht kopiert, gezählt oder belegt. Dasselbe neue Orakel wird auch
+im tatsächlichen Windows-Anonymisierungsfall aufgerufen. Kein Produktionsdelta
+oder gelockerter Inventarvertrag. Neue Quellgegenprüfung und frische gemeinsame
+Build-/Regressionsbelege unter Source02 erforderlich; Source01 bleibt historisch.
+Unabhängiger Quellengegenreview korrigierte außerdem vor dem nächsten Freeze
+die neue Testnamensannahme: reine Konvertierung dieser Fixture heißt
+`Quelle-1.md`/`Quelle-2.md`, nicht neutral `Dokument_01.md`/`Dokument_02.md`.
+Die beiden Betriebsarten rufen das exakte Receiptorakel jetzt auch außerhalb
+des Darwinzweigs auf. Der erste Windows-65erLauf mit bereits korrektem
+Anonymisierungsorakel war grün; die nächste Gesamtregression muss zusätzlich
+die neue Markdown-Aufrufstelle und beide neuen echten Mac-Läufe nachweisen.
