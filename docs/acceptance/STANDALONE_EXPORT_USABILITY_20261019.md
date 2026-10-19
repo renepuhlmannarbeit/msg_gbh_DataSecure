@@ -285,3 +285,43 @@ Offizielle Referenzen, am 19.10.2026 geprüft:
 - [Apple: Zugriff auf Dateien und Ordner](https://support.apple.com/en-euro/guide/mac-help/mchld5a35146/mac): Berechtigung bleibt Benutzer-/OS-Entscheidung, kein Pfad als Zugriffsbeweis.
 - [Node 22.23.2 fs Stats](https://nodejs.org/download/release/v22.23.2/docs/api/fs.html#class-fsstats) und [Implementierung der Zeitprojektion](https://raw.githubusercontent.com/nodejs/node/v22.23.2/lib/internal/fs/utils.js): Node-Zahlenprojektion von nativer Identität unterscheiden.
 - [Microsoft: BY_HANDLE_FILE_INFORMATION](https://learn.microsoft.com/en-us/windows/win32/api/fileapi/ns-fileapi-by_handle_file_information): Volume/Index und Grenze gegenüber 128-Bit-Identitäten; keine geratene ReFS-Bindung.
+
+### Zweiter eingefrorener Versuch: Testorakel vor neuer gemeinsamer Freigabe
+
+`ca587b25f267437cbc4d6f85eb22264e9da20908`, Fingerprint
+`f47596a989afa6337eb5bbb51e00664eeee11cd880472ae5a433749cde9b93d5`/332,
+unter `dist/rc165-usability-source02-20261019`: Windows Native/Prepare/Clippy/
+232 Rusttests (3 ignoriert)/Release und fünf Paketgates bestanden, Inputs
+unverändert. Der Paketkorpus bestand 100/100 Dateien mit unveränderten Originalen.
+Das Zwischen-ZIP ist **kein freigegebener Endstand**: Headless stoppte nach
+59/280 Dateien bei der erneuten finalen Workerprüfung; alle Szenario-Endprüfungen
+und die sechs Host-/sechs Worker-Closebelege waren zuvor erfolgreich.
+
+Die kausale Gegenprüfung am erhaltenen Fixture `datasecure-standalone-ipc-SidKSS`
+belegt PID-Reuse: der Worker87484 meldete Exit0 um 11:28:11.172 UTC;
+derselben PID wurde um 11:28:56.940 UTC ein fremder Edgeprozess zugeordnet.
+Die alte späte `kill(pid, 0)`-Abfrage verwechselte diesen mit dem beendeten
+Worker. Kein fremder Prozess beendet, keine rote Evidence oder Fixture gelöscht.
+Primärprotokolle/Forensik: `dist/rc165-usability-failure-review-20261019`.
+
+Der reine Testfix bindet die Geburtsidentität im laufenden Worker und verlangt
+passende Spawn-/Entry-/Exitbelege. Nur `dead` oder `different` beendet den Join;
+`unknown`, Probe-/Lesefehler und die unveränderte Fünfsekundengrenze bleiben hart.
+Bei den beobachteten Writerrollen bleibt die vollständige generationsgebundene
+Kette bis zum tatsächlichen ChildProcess-Close maßgeblich; eine spätere fremde
+PID kann diesen Beleg nicht entwerten. Node dokumentiert Close nach Prozessende
+und Schließen der Stdio: [Node22.23.2 ChildProcess](https://nodejs.org/download/release/v22.23.2/docs/api/child_process.html#event-close).
+59 Integrityfälle inklusive sechs kausaler Joingegenfälle bestanden; unabhängiges
+tatsächliches Quellengegenlesen ohne bestätigten Restblocker. Danach echter
+Windows-Sidecarlauf vollständig bestanden: vier Dokumentzwecke, OCR-/Schnellweg,
+sieben Ende-/EOF-/Fehlerfälle und exakte sechs Host-/sechs Worker-Closebelege.
+Modelle sind keine native Mac-Zielhostabnahme; Gesamtregression folgt frisch.
+
+Mac-Consumer39244694663 scheiterte auf ARM separat im neuen Unix-Test:
+Der Test legte selbst `settings.original` neben `settings` an und erwartete
+fälschlich nur einen Eintrag. Der native Aufruf war zuvor verweigert und der
+öffentliche Root leer. Das korrigierte Testorakel prüft exakte Namen, beide
+unveränderten Settingsdateien und fehlende Nonce in Original-/Ersatznamespace.
+Unabhängig kausal gegengelesen; keine Produktions-, ACL- oder Sealingänderung.
+Intel wurde nach dem bestätigten ARM-Testfehler gezielt abgebrochen, nicht als
+grün gewertet. Beide Consumer benötigen neue Läufe am neuen gemeinsamen Commit.

@@ -22,6 +22,14 @@ Detailvertrag, Diagramme und gezielter Testplan:
 [Standalone-Exportvereinfachung](../acceptance/STANDALONE_EXPORT_USABILITY_20261019.md).
 Die einzige aktive Arbeitsliste bleibt `BACKLOG.md`.
 
+RC165-Source02/ca587b25: Windows Native/Clippy/232 Rusttests (3 ignoriert) und
+fünf Paketgates grün, Inputs unverändert. Headless rot nach59/280 wegen kausal
+belegter PID-Wiederverwendung im Testteardown; ARM-Consumer rot wegen eines
+falschen Inhaltszählorakels im Unix-Test. Testfixes implementiert/gegengelesen,
+59 gezielte Integrityfälle grün. Keine Produktlockerung, kein RC165-Release.
+Frischer gemeinsamer Commit und vollständige Windows-/Mac-Endbelege folgen.
+Alte rote Nachweise und der fremde Edgeprozess bleiben unangetastet.
+
 ### Neuester verbindlicher Stand – Veröffentlichung 19.10.2026
 
 [RC164-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc164)

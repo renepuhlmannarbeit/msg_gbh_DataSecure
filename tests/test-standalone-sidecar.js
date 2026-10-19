@@ -142,23 +142,13 @@ async function waitForFile(file, timeout = 10000) {
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
 
-function processAlive(pid) {
-  try { process.kill(pid, 0); return true; }
-  catch (error) { if (error.code === 'ESRCH') return false; throw error; }
-}
-
 async function workerEnded(root) {
   const spawnedFile = path.join(root, 'worker-spawned.json');
   if (!fs.existsSync(spawnedFile)) return;
   const spawned = JSON.parse(fs.readFileSync(spawnedFile, 'utf8'));
   const exited = await waitForFile(path.join(root, 'worker-exit.json'), 22000);
-  assert.strictEqual(exited.pid, spawned.pid);
-  const deadline = Date.now() + 5000;
-  while (processAlive(exited.pid)) {
-    assert.ok(Date.now() < deadline, 'own fixture worker did not end; preserve its test directory');
-    await new Promise((resolve) => setTimeout(resolve, 25));
-  }
-  return exited;
+  const entered = JSON.parse(fs.readFileSync(path.join(root, 'worker-identity.json'), 'utf8'));
+  return require('./lib/standalone-worker-end.cjs').awaitWorkerEnd(spawned, entered, exited);
 }
 
 function removeOwnedRoot(root, initial) {

@@ -167,9 +167,10 @@ async function main() {
     await assert.rejects(w.api.drain(w.scope, h.child), code('WRITER_PROBE_HOST_CLOSED_BEFORE_DRAIN'));
     assert.throws(() => w.api.assertAllClosed(w.scope));
   });
-  await test('close receipt with a still-live pid cannot authorize shutdown', async () => {
+  await test('original child close remains proof when another process reuses its numeric pid', async () => {
     const w = world(), h = w.host(), a = h.worker(); a.exit(); a.close(); w.living.add(a.pid);
-    await rejectDrain(w, h); assert.equal(w.time(), 22000);
+    await w.api.drain(w.scope, h.child); h.close();
+    assert.equal(w.api.assertAllClosed(w.scope).workers, 1);
   });
   await test('all workers share one original deadline even when late metadata arrives', async () => {
     const w = world(), h = w.host(), a = h.worker(), b = h.worker(); a.end();
@@ -181,10 +182,11 @@ async function main() {
     await assert.rejects(w.api.drain(w.scope, h.child), code('WRITER_PROBE_DEADLINE'));
     assert.equal(w.time(), 22000); assert.equal(w.sleeps.length, 1);
   });
-  await test('uncertain liveness propagates EPERM without retry or success', async () => {
+  await test('original child close is used without querying an unrelated late pid', async () => {
     const e = Object.assign(new Error('uncertain synthetic liveness'), { code: 'EPERM' });
     const w = world({ alive() { throw e; } }), h = w.host(); h.worker().end();
-    await assert.rejects(w.api.drain(w.scope, h.child), value => value === e); assert.equal(w.sleeps.length, 0);
+    await w.api.drain(w.scope, h.child); h.close();
+    assert.equal(w.api.assertAllClosed(w.scope).workers, 1);
   });
   await test('drain precedes shutdown/hostclose/restart and seals exact census', async () => {
     const w = world(), h = w.host(), a = h.worker(); a.end(); await w.api.drain(w.scope, h.child); w.events.push('drain');

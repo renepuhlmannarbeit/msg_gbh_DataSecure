@@ -347,17 +347,35 @@ mod tests {
             let data = f.path.join("private"); let root = f.path.join("public");
             let swapped = if replace_data { data.clone() } else { data.join("settings") };
             let changed = swapped.clone();
+            let replacement_bytes = bytes.clone();
+            let nonce = "c".repeat(32);
             let lifecycle = Lifecycle::default();
             let guard = lifecycle.begin_native().unwrap().with_test_event(move |point| {
                 if point != "configured_before_provision" { return; }
                 fs::rename(&changed, changed.with_extension("original")).unwrap();
                 fs::create_dir(&changed).unwrap();
                 let settings = if replace_data { let path = changed.join("settings"); fs::create_dir(&path).unwrap(); path } else { changed.clone() };
-                fs::write(settings.join("result-root.json"), &bytes).unwrap();
+                fs::write(settings.join("result-root.json"), &replacement_bytes).unwrap();
             });
-            assert!(prepare_configured(&root, &data, &"c".repeat(32), &admission, &digest, &guard).is_err());
+            assert!(prepare_configured(&root, &data, &nonce, &admission, &digest, &guard).is_err());
             assert_eq!(fs::read_dir(root).unwrap().count(), 0);
-            assert_eq!(fs::read_dir(data).unwrap().count(), 1, "no nonce provisioned in replacement namespace");
+            let names = |directory: &Path| {
+                let mut entries = fs::read_dir(directory).unwrap().map(|entry| entry.unwrap().file_name().into_string().unwrap()).collect::<Vec<_>>();
+                entries.sort(); entries
+            };
+            let original_data = if replace_data { data.with_extension("original") } else { data.clone() };
+            let original_settings = if replace_data { original_data.join("settings") } else { data.join("settings.original") };
+            let replacement_settings = data.join("settings");
+            assert_eq!(names(&data), if replace_data { vec!["settings"] } else { vec!["settings", "settings.original"] });
+            if replace_data { assert_eq!(names(&original_data), vec!["settings"]); }
+            let private_name = format!("native-export-{nonce}");
+            for private in [&original_data, &data] {
+                assert_eq!(fs::symlink_metadata(private.join(&private_name)).unwrap_err().kind(), io::ErrorKind::NotFound, "no nonce in original or replacement namespace");
+            }
+            for settings in [&original_settings, &replacement_settings] {
+                assert_eq!(names(settings), vec!["result-root.json"]);
+                assert_eq!(fs::read(settings.join("result-root.json")).unwrap(), bytes, "original and replacement settings bytes stay unchanged");
+            }
         }
     }
     #[test]

@@ -1200,6 +1200,62 @@ test('actual multi-generation observer rejects incomplete writers and preserves 
   assert.match(result.stdout, /ENGINEERING_MODEL PASS 31; real_workers=0; scopes retained/u);
 });
 
+// These exercise the exact detached-worker join used by the real sidecar test.
+// No OS process is created by these clock/state counterexamples.
+function workerEndModel(states) {
+  const { awaitWorkerEnd } = require('./lib/standalone-worker-end.cjs');
+  const spawned = { pid: 4242 }, entered = { pid: 4242, identity: 'a'.repeat(64) };
+  const exited = { ...entered, code: 0 }, calls = [], sleeps = [];
+  let now = 0;
+  return { spawned, entered, exited, calls, sleeps, time: () => now,
+    run: (changes = {}) => awaitWorkerEnd(spawned, entered, exited, {
+      now: () => now, sleep: async ms => { sleeps.push(ms); now += ms; },
+      state: (pid, identity) => { calls.push({ pid, identity });
+        const value = states.length > 1 ? states.shift() : states[0];
+        if (value instanceof Error) throw value;
+        return value; }, ...changes
+    }) };
+}
+testAsync('detached join accepts dead or reused PID only with original matching entry and exit identity', async () => {
+  for (const current of ['dead', 'different']) {
+    const m = workerEndModel([current]); assert.equal(await m.run(), m.exited);
+    assert.deepEqual(m.calls, [{ pid: 4242, identity: 'a'.repeat(64) }]); assert.deepEqual(m.sleeps, []);
+  }
+});
+testAsync('detached join uses the actual process-instance classifier for same PID with different birth', async () => {
+  const { processInstanceState } = require('../plugins/data-secure/server/gateway/process-identity');
+  const m = workerEndModel([]);
+  assert.equal(await m.run({ state: (pid, identity) => processInstanceState(pid, identity, {
+    processAlive: () => true, processInstanceIdentity: () => 'b'.repeat(64)
+  }) }), m.exited);
+});
+testAsync('detached join does not accept live original or unknown identity before unchanged five-second deadline', async () => {
+  for (const current of ['same', 'unknown']) {
+    const m = workerEndModel([current]); await assert.rejects(m.run(), /own fixture worker did not end/u);
+    assert.equal(m.time(), 5000); assert.equal(m.sleeps.length, 200);
+  }
+});
+testAsync('detached join waits for original instance end without adopting a new late identity', async () => {
+  const m = workerEndModel(['same', 'unknown', 'dead']); assert.equal(await m.run(), m.exited);
+  assert.equal(m.time(), 50); assert.ok(m.calls.every(call => call.identity === m.entered.identity));
+});
+testAsync('detached join refuses missing or mismatched entry/exit membership before any probe', async () => {
+  for (const mutate of [m => { delete m.entered.identity; }, m => { m.entered.pid++; },
+    m => { m.exited.pid++; }, m => { m.exited.identity = 'b'.repeat(64); },
+    m => { m.spawned.pid = 0; }, m => { m.exited.code = null; }]) {
+    const m = workerEndModel(['dead']); mutate(m); await assert.rejects(m.run());
+    assert.deepEqual(m.calls, []); assert.deepEqual(m.sleeps, []);
+  }
+});
+testAsync('detached join retains exact probe failure and rejects completion after deadline', async () => {
+  const primary = Object.assign(new Error('probe denied'), { code: 'EPERM' });
+  const m = workerEndModel([primary]); await assert.rejects(m.run(), value => value === primary);
+  assert.deepEqual(m.sleeps, []);
+  const late = workerEndModel([]); let now = 0;
+  await assert.rejects(late.run({ now: () => now, state: () => { now = 5000; return 'dead'; } }),
+    /worker identity probe exceeded join deadline/u);
+});
+
 function contentWorkflowLaunchSource() {
   const source = fs.readFileSync(path.join(__dirname, 'test-standalone-sidecar.js'), 'utf8');
   const start = source.indexOf("const caseRoot = path.join(root, 'content-format-workflow')");

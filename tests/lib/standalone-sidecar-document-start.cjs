@@ -12,7 +12,10 @@ assert.match(path.basename(path.dirname(root)), /^datasecure-standalone-ipc-/u);
 assert.ok(fs.lstatSync(root).isDirectory() && !fs.lstatSync(root).isSymbolicLink());
 const worker = path.join(path.dirname(root), 'packaged-server/gateway/batch-worker.js');
 if (path.resolve(process.argv[1]) === worker) {
-  process.on('exit', code => fs.writeFileSync(path.join(root, 'worker-exit.json'), JSON.stringify({ pid: process.pid, code })));
+  const identity = require('../../plugins/data-secure/server/gateway/process-identity')
+    .requireProcessInstanceIdentity(process.pid);
+  fs.writeFileSync(path.join(root, 'worker-identity.json'), JSON.stringify({ pid: process.pid, identity }), { flag: 'wx' });
+  process.on('exit', code => fs.writeFileSync(path.join(root, 'worker-exit.json'), JSON.stringify({ pid: process.pid, identity, code }), { flag: 'wx' }));
   const batch = require(path.join(path.dirname(worker), 'batch'));
   const run = batch.runLocalBatchExecutor;
   batch.runLocalBatchExecutor = async (...args) => {

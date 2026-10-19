@@ -120,7 +120,6 @@ function installObserver(environment = process.env, view = process, cp = childPr
 }
 function makeObserver(options = {}) {
   const io = options.io || fs, clock = options.clock || { now: () => performance.now(), sleep: ms => new Promise(resolve => setTimeout(resolve, ms)) };
-  const alive = options.alive || (value => { try { process.kill(value, 0); return true; } catch (error) { if (error.code === 'ESRCH') return false; throw error; } });
   const fixtureBase = io.realpathSync(options.fixtureBase || os.tmpdir()), scopes = new WeakMap();
   const limits = { ...CAPS, ...options.limits };
   for (const key of Object.keys(CAPS)) check(Number.isInteger(limits[key]) && limits[key] > 0 && limits[key] <= CAPS[key], 'LIMITS');
@@ -192,10 +191,13 @@ function makeObserver(options = {}) {
     for (const intent of snap.intents.filter(row => row.host === generation.id)) {
       const rows = ['spawn', 'entry', 'exit', 'close'].map(type => get(snap, type, generation.id, intent.id));
       if (rows.some(row => !row)) { ready = false; continue; }
-      const [spawn, start, exit, close] = rows;
+      const [spawn, , exit, close] = rows;
       check(rows.every(row => row.role === intent.role && row.pid === spawn.pid), 'WORKER_PID');
       check(exit.code === 0 && close.code === 0 && close.signal === null, 'WORKER_FAILED');
-      within(ctx); if (alive(start.pid)) ready = false; within(ctx);
+      // The receipt is emitted only by the original ChildProcess.close event,
+      // after that child ended and its stdio closed. A late numeric PID probe
+      // can inspect an unrelated reused process; it adds no lifecycle proof.
+      within(ctx);
     }
     return ready;
   }

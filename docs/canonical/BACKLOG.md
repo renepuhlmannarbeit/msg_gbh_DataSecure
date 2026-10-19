@@ -21,6 +21,15 @@ Detailvertrag und gezielter manueller Testplan samt je Aktivitäts-/Sequenzdiagr
 [Exportvereinfachung](../acceptance/STANDALONE_EXPORT_USABILITY_20261019.md).
 Keine neue Apple-Signierung, Notarisierung, Rechteerhöhung oder Schutzabschaltung.
 
+Aktuelles Endgate: Source02/ca587b25 ist insgesamt rot trotz grüner Windows-
+Native-/232Rust-/Paketgates. Kausale Testfixes für PID-Reuse und Unix-
+Settings-Sicherungsordner implementiert und unabhängig gegengelesen, 59 gezielte
+Integrityfälle grün. Noch erforderlich: echte Sidecar-Gegenprüfung, neuer
+gemeinsamer Commit, komplette frische Gesamt-/Native-/Paketgates und beide
+Mac-Consumer. Danach RC165 Windows lokal und neuer GitHub-Pre-Release für alle
+drei Architekturen ausdrücklich beauftragt. Nutzer-Desktoptests bleiben offen;
+keine Agenten-Appstarts. Details/rote Forensik im Exportvereinfachungsnachweis.
+
 Auslöser: reale RC164-Mac26.2-ARM64-Protokolle belegen fehlende Exporteinrichtung
 vor erfolgreicher Ordnerwahl und anschließendem Drei-Dateien-Export samt ACK.
 Drei Read-Busy-Antworten sind Konkurrenzzustände, kein belegter Coreabsturz.

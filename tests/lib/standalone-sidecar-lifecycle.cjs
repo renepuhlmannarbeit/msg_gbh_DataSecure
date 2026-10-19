@@ -21,7 +21,10 @@ if (path.resolve(process.argv[1]) === batchFile) {
   const batch = require('../../plugins/data-secure/server/gateway/batch');
   const run = batch.runLocalBatchExecutor;
   const exitRecord = path.join(root, 'worker-exit.json');
-  process.on('exit', (code) => fs.writeFileSync(exitRecord, JSON.stringify({ pid: process.pid, code })));
+  const identity = require('../../plugins/data-secure/server/gateway/process-identity')
+    .requireProcessInstanceIdentity(process.pid);
+  fs.writeFileSync(path.join(root, 'worker-identity.json'), JSON.stringify({ pid: process.pid, identity }), { flag: 'wx' });
+  process.on('exit', (code) => fs.writeFileSync(exitRecord, JSON.stringify({ pid: process.pid, identity, code }), { flag: 'wx' }));
   const deadline = setTimeout(() => process.exit(72), 20_000);
   batch.runLocalBatchExecutor = async (...args) => {
     const [token] = args;
