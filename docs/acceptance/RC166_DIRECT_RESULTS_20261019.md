@@ -171,6 +171,17 @@ Mehrere unabhängige tatsächliche JS-/Rust-/Architektur-Quellengegenreviews,
 darunter der behobene Windows-Reparse-Vertragsunterschied. Keine neue native
 Mac- oder Desktopabnahme aus diesen Windows-/Quellenmodellen behaupten.
 
+Source06: Windows250Rust/Clippy/Release und5Paketgates samt100Dateienkorpus
+bestanden mit unveränderten Inputs. ARM39302263855 bestätigte56Generationen-
+undMetadatenfälle aufechtemDarwin, scheiterteaberanderübersehenenMetatest-
+Regex tests/test-standalone-package.js:394 zumselbenLedgercode. Exakt diese
+eine weitere Testannahme korrigiert, RuntimeB-/Nonfallback- und History-
+RESULTS-vs-LEDGER-Orakel unverändert. Unabhängiger tatsächlicher Referenzscan
+fand keinen zweiten entsprechenden Metatest. Intel gezielt abgebrochen;
+lokale Gesamtprüfung nach38Dateien/laufender39 gezielt beendet, kein FINAL-PASS.
+Keine Produktänderung gegenüber Source06; Source07 muss neue gemeinsame
+Git-/Paket-/Gesamt-/Mac-Belege liefern. Ältere ZIPs werden nicht umetikettiert.
+
 - Quellen auswählen und verarbeiten. OCR bleibt separat; geführte Fundstellen-
   und gewählte OCR-Prüfung bleiben vor dem Abschluss.
 - Nach erfolgreicher technischer Bereitstellung: **Ergebnisordner öffnen**.

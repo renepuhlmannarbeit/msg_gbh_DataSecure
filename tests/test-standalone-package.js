@@ -391,7 +391,7 @@ test('package smoke exercises a real failed CSV without exposing a false result 
   assert.match(smoke, /failedSourceName = 'synthetisch-offenes-zitat\.csv'/u);
   assert.match(smoke, /failedRun, '', 'an all-stopped run does not expose an empty result folder'/u);
   assert.match(smoke, /failedTerminal\.ledger_available, false/u);
-  assert.match(smoke, /resolvedFailureMapping\.error_code, 'STANDALONE_RESULTS_MISSING'/u);
+  assert.match(smoke, /resolvedFailureMapping\.error_code, 'STANDALONE_LEDGER_MISSING'/u);
   for (const [name, action, code] of [
     ['failedHistoryResults', 'resolve_history_results', 'STANDALONE_RESULTS_MISSING'],
     ['failedHistoryLedger', 'resolve_history_ledger', 'STANDALONE_LEDGER_MISSING']
