@@ -4,6 +4,17 @@ Arbeitsversion: **3.2.0-rc166**, Entwicklung und erneute Paketprüfung; veröffe
 
 ### Aktuelle Umsetzung nach weiterem Nutzertest – RC166
 
+Die direkte Ergebnisbereitstellung ist implementiert; neue gemeinsame
+Endgates folgen als Source06. Source05 bleibt ungeeignet: Diagnosekatalogtest
+überschritt die unveränderte300er-Retention und ARM-ZIP-Smoke erwartete den
+alten Fehlercode statt exakt LEDGER_MISSING. Reine Testkorrekturen, kein
+Produktcap-/Fallbackwechsel. Zusätzlich P2-Finderkompatibilität eng korrigiert:
+nur öffentliche neue macOS-Results tolerieren reguläre begrenzte `.DS_Store`, ohne
+deren Inhalt zu prüfen/übernehmen. Private Stage/Legacy und MD-Bindungen bleiben
+strikt. Windows verweigert diese zusätzlichen Dateien weiter, da Node dort
+nicht alle Reparse-Arten unterscheiden kann; keine automatische Bereinigung.
+Windows/Mac-Desktopabnahme weiter ausschließlich durch Nutzer/Kollegen.
+
 Neuer verbindlicher Zusatzauftrag: normale Dokumentauswahl/Freigabe/Export nach
 dem Lauf entfällt. Notwendige OCR-/Fundstellenprüfungen bleiben; fertige Dateien
 und optionale Korrekturen werden technisch gebunden bereitgestellt. Neue

@@ -4,7 +4,7 @@
 //! Records are exclusive, bounded, handle-relative and immutable. No cleanup,
 //! copy fallback, adoption of unknown stages, or automatic new attempts.
 #![allow(dead_code)]
-use crate::{export_directory::{self, Directory, ExpectedFile, Identity}, ipc_transport::NativeGuard};
+use crate::{export_directory::{self, Directory, ExpectedFile, Identity, RecoveredDirectory}, ipc_transport::NativeGuard};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::io;
@@ -211,6 +211,15 @@ impl<'a> Transaction<'a> {
     }
     /// Reconcile before retry, ACK and abandonment. A receipt alone is never
     /// evidence that the exact destination still exists with the same contents.
+    fn verify_published_inventory(&self, output: &RecoveredDirectory<'_>) -> io::Result<()> {
+        // Only this already-published public target gains the exact metadata
+        // exception. Its Results role is part of the durable hashed plan.
+        if self.plan.publication_role == Some(PublicationRole::Results) {
+            output.verify_public_results_inventory(&self.plan.files)
+        } else {
+            output.verify_inventory(&self.plan.files)
+        }
+    }
     pub fn reconcile(&self) -> io::Result<Status> {
         let (identity, prepared, started, complete, ack, abandoned) = self.evidence()?;
         if abandoned { return Ok(Status::Abandoned); }
@@ -219,14 +228,14 @@ impl<'a> Transaction<'a> {
         match self.target.open_known_child(&self.plan.target_name(), identity) {
             Ok(output) => {
                 #[cfg(test)] self.guard.test_event("reconcile_inventory");
-                output.verify_inventory(&self.plan.files)?;
+                self.verify_published_inventory(&output)?;
                 if !complete {
                     self.record("complete", Some(identity))?;
                     // A new durable receipt still requires verification on
                     // both sides of its write. Existing complete evidence was
                     // freshly checked above; no duplicate body pass is needed.
                     #[cfg(test)] self.guard.test_event("reconcile_inventory");
-                    output.verify_inventory(&self.plan.files)?;
+                    self.verify_published_inventory(&output)?;
                 }
                 Ok(if ack { Status::Acknowledged } else { Status::Completed })
             },
@@ -249,7 +258,7 @@ impl<'a> Transaction<'a> {
         if abandoned { return Ok(Status::Abandoned); }
         if !complete { return Err(failure("AI_EXPORT_INCOMPLETE")); }
         let output = self.target.open_known_child(&self.plan.target_name(), identity.ok_or_else(conflict)?)?;
-        output.verify_inventory(&self.plan.files)?;
+        self.verify_published_inventory(&output)?;
         Ok(if ack { Status::Acknowledged } else { Status::Completed })
     }
     pub fn commit(&self) -> io::Result<Status> {
@@ -416,6 +425,99 @@ mod tests {
         assert_eq!(tx.commit().unwrap(), Status::Acknowledged);
         assert_eq!(fs::read_dir(f.path.join("target")).unwrap().count(), 1);
         assert_eq!(tx.abandon().unwrap_err().to_string(), "AI_EXPORT_ALREADY_COMPLETE");
+    }
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn results_public_metadata_does_not_change_receipts_or_turn_read_into_completion() {
+        let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+        let guard = Lifecycle::default().begin_native().unwrap();
+        let plan = f.plan(&j, &s, &t).with_publication_role(Some(PublicationRole::Results));
+        let tx = Transaction::open(&j, &s, &t, plan, &guard).unwrap();
+        tx.write_body(0, b"hello").unwrap(); tx.prepare().unwrap(); publish_without_receipt(&tx);
+        let output = f.path.join("target").join(tx.plan.target_name());
+        let metadata = output.join(".DS_Store"); fs::write(&metadata, b"Finder-one").unwrap();
+        let completion = f.path.join("journal").join(tx.name("complete"));
+        assert_eq!(tx.inspect_completed().unwrap_err().to_string(), "AI_EXPORT_INCOMPLETE");
+        assert!(!completion.exists(), "metadata grants no receipt-repair authority to history");
+        assert_eq!(tx.reconcile().unwrap(), Status::Completed);
+        let complete_bytes = fs::read(&completion).unwrap();
+        assert_eq!(tx.plan.files.len(), 1);
+        assert!(!String::from_utf8_lossy(&serde_json::to_vec(&tx.plan).unwrap()).contains(".DS_Store"));
+        fs::write(&metadata, b"Finder-two-longer-and-opaque").unwrap();
+        assert_eq!(tx.inspect_completed().unwrap(), Status::Completed);
+        assert_eq!(fs::read(&completion).unwrap(), complete_bytes);
+        assert_eq!(tx.acknowledge().unwrap(), Status::Acknowledged);
+        let ack = f.path.join("journal").join(tx.name("ack")); let ack_bytes = fs::read(&ack).unwrap();
+        fs::write(&metadata, b"Finder-three").unwrap();
+        assert_eq!(tx.reconcile().unwrap(), Status::Acknowledged);
+        assert_eq!(tx.inspect_completed().unwrap(), Status::Acknowledged);
+        assert_eq!(fs::read(&completion).unwrap(), complete_bytes); assert_eq!(fs::read(&ack).unwrap(), ack_bytes);
+        assert_eq!(fs::read_dir(f.path.join("target")).unwrap().count(), 1, "no second result generation");
+        fs::write(output.join("Dokument_01.md"), b"WRONG").unwrap();
+        assert!(tx.reconcile().is_err()); assert!(tx.inspect_completed().is_err()); assert!(tx.acknowledge().is_err());
+        assert_eq!(fs::read(&metadata).unwrap(), b"Finder-three");
+    }
+    #[cfg(windows)]
+    #[test]
+    fn windows_results_metadata_refusal_preserves_receipts_read_only_semantics_and_files() {
+        for completed in [false, true] {
+            let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+            let guard = Lifecycle::default().begin_native().unwrap();
+            let plan = f.plan(&j, &s, &t).with_publication_role(Some(PublicationRole::Results));
+            let tx = Transaction::open(&j, &s, &t, plan, &guard).unwrap();
+            tx.write_body(0, b"hello").unwrap(); tx.prepare().unwrap();
+            if completed { assert_eq!(tx.commit().unwrap(), Status::Completed); }
+            else { publish_without_receipt(&tx); }
+            let completion = f.path.join("journal").join(tx.name("complete"));
+            let before = if completed { Some(fs::read(&completion).unwrap()) } else { None };
+            let output = f.path.join("target").join(tx.plan.target_name());
+            let metadata = output.join(".DS_Store"); fs::write(&metadata, b"transported Finder metadata").unwrap();
+            assert!(tx.reconcile().is_err()); assert!(tx.inspect_completed().is_err()); assert!(tx.acknowledge().is_err());
+            match before {
+                Some(bytes) => assert_eq!(fs::read(&completion).unwrap(), bytes),
+                None => assert!(!completion.exists(), "no receipt repair when public inventory is refused"),
+            }
+            assert!(j.read_bounded(&tx.name("ack"), MAX_RECORD).is_err());
+            assert_eq!(fs::read(&metadata).unwrap(), b"transported Finder metadata");
+            assert_eq!(fs::read(output.join("Dokument_01.md")).unwrap(), b"hello");
+            assert_eq!(fs::read_dir(output).unwrap().count(), 2);
+            assert_eq!(fs::read_dir(f.path.join("target")).unwrap().count(), 1, "no regeneration or second copy");
+        }
+    }
+    #[test]
+    fn metadata_never_enters_private_prepare_or_commit_for_either_role() {
+        for role in [None, Some(PublicationRole::Results)] {
+            for boundary in ["before-prepare", "after-prepare"] {
+                let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+                let guard = Lifecycle::default().begin_native().unwrap();
+                let plan = f.plan(&j, &s, &t).with_publication_role(role);
+                let tx = Transaction::open(&j, &s, &t, plan, &guard).unwrap();
+                tx.write_body(0, b"hello").unwrap();
+                if boundary == "after-prepare" { tx.prepare().unwrap(); }
+                let metadata = f.path.join("staging").join(tx.plan.stage_name()).join(".DS_Store");
+                fs::write(&metadata, b"not permitted in private stage").unwrap();
+                if boundary == "before-prepare" { assert!(tx.prepare().is_err()); }
+                assert!(tx.commit().is_err(), "{role:?}/{boundary}");
+                assert_eq!(fs::read_dir(f.path.join("target")).unwrap().count(), 0);
+                assert!(j.read_bounded(&tx.name("started"), MAX_RECORD).is_err());
+                assert!(j.read_bounded(&tx.name("complete"), MAX_RECORD).is_err());
+                assert!(j.read_bounded(&tx.name("ack"), MAX_RECORD).is_err());
+                assert_eq!(fs::read(&metadata).unwrap(), b"not permitted in private stage");
+            }
+        }
+    }
+    #[test]
+    fn legacy_public_export_stays_strict_and_metadata_never_receives_an_ack() {
+        let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+        let guard = Lifecycle::default().begin_native().unwrap();
+        let tx = Transaction::open(&j, &s, &t, f.plan(&j, &s, &t), &guard).unwrap();
+        tx.write_body(0, b"hello").unwrap(); tx.prepare().unwrap(); assert_eq!(tx.commit().unwrap(), Status::Completed);
+        let completion = f.path.join("journal").join(tx.name("complete")); let bytes = fs::read(&completion).unwrap();
+        let metadata = f.path.join("target").join(tx.plan.target_name()).join(".DS_Store");
+        fs::write(&metadata, b"Finder").unwrap();
+        assert!(tx.reconcile().is_err()); assert!(tx.inspect_completed().is_err()); assert!(tx.acknowledge().is_err());
+        assert_eq!(fs::read(&completion).unwrap(), bytes); assert!(j.read_bounded(&tx.name("ack"), MAX_RECORD).is_err());
+        assert_eq!(fs::read(&metadata).unwrap(), b"Finder");
     }
     #[test]
     fn completed_reconciliation_reads_inventory_once_and_never_caches_changed_bodies_or_evidence() {

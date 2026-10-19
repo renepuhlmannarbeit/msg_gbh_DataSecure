@@ -48,6 +48,10 @@ alten Ergebnisse überschreiben. Windows und Mac erhalten denselben Plan.
   Keine weitere Auswahl/Freigabe/Kopie erforderlich. Frühere Stände bleiben
   erhalten; der Ordneröffner führt auf den aktuellen bestätigten Stand.
 - App normal schließen, neu öffnen, denselben Lauf/Ordner öffnen; Korrektur bleibt.
+- Auf Mac den bestätigten Ergebnisordner im Finder ansehen, Darstellung ändern
+  und danach erneut öffnen/nachkorrigieren. Eine reguläre Finder-`.DS_Store`
+  darf den MD-Stand nicht blockieren und wird nicht in den nächsten Stand kopiert.
+  Solche OS-Metadaten sind nicht anonymisiert: nur gewünschte MD weitergeben.
 
 ## 5. Zusätzliche Maskierung und Wiederherstellung
 

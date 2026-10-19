@@ -194,12 +194,28 @@ async function run() {
     assert.deepEqual(fs.readdirSync(target), [name]);
     assert.deepEqual(fs.readFileSync(path.join(target, name)), body);
     assert.equal(await send('acknowledge'), 'acknowledged', 'this is a software receipt, not a fabricated human approval');
+    const metadata = path.join(target, '.DS_Store');
+    fs.writeFileSync(metadata, 'opaque OS display metadata', { flag: 'wx' });
+    if (process.platform !== 'darwin') {
+      context('resolve_history_results', { batch_id: batchId });
+      await assert.rejects(send('reconcile'), { code: 'AI_EXPORT_CONFLICT' }, 'non-Mac metadata never gains an exception');
+      assert.equal(fs.readFileSync(metadata, 'utf8'), 'opaque OS display metadata', 'no automatic metadata repair/removal');
+      const leaf = fs.lstatSync(metadata); assert.ok(leaf.isFile() && !leaf.isSymbolicLink() && leaf.nlink === 1);
+      fs.unlinkSync(metadata); // Only this newly created, exact synthetic leaf.
+    }
     context('publish_result_documents', { batch_id: batchId });
     assert.equal(await send('reconcile'), 'acknowledged');
     assert.equal(await send('publish'), 'acknowledged');
     assert.equal(fs.readdirSync(path.dirname(target)).filter(value => value === path.basename(target)).length, 1);
     context('resolve_history_results', { batch_id: batchId });
     assert.equal(await send('reconcile'), 'acknowledged');
+    if (process.platform === 'darwin') {
+      fs.writeFileSync(metadata, 'changed OS metadata, not anonymized or part of the document plan');
+      context('resolve_history_results', { batch_id: batchId });
+      assert.equal(await send('reconcile'), 'acknowledged');
+    }
+    assert.equal(operation.files.length, 1);
+    assert.ok(operation.files.every(file => file.name.endsWith('.md')));
     for (const command of ['publish', 'acknowledge', 'abandon']) {
       context('resolve_history_results', { batch_id: batchId });
       await assert.rejects(send(command), { code: 'STANDALONE_IPC_FAILED' }, `history cannot ${command}`);
@@ -254,6 +270,8 @@ async function run() {
     } finally { delete process.env.EU_PRIVACY_RESULT_ROOT; }
     assert.deepEqual(initial.files.map(file => file.name).sort(), ['nested/Quelle-1.md', 'nested/Quelle-2.md']);
     const initialBytes = initial.files.map(file => fs.readFileSync(path.join(initial.directory.path, file.name)));
+    if (process.platform === 'darwin') for (const folder of [initial.directory.path, path.join(initial.directory.path, 'nested')])
+      fs.writeFileSync(path.join(folder, '.DS_Store'), 'opaque initial OS metadata', { flag: 'wx' });
     assert.ok(store.list(batchId).documents.every(row => row.approved === false), 'no fabricated initial human approval');
     const edit = replacement => {
       const row = store.list(batchId).documents.find(row => row.document_id === state.items[0].id);
@@ -271,6 +289,7 @@ async function run() {
     assert.match(fs.readFileSync(path.join(directory, 'Quelle-1.md'), 'utf8'), /42 korrigierte Projekte/u);
     assert.deepEqual(fs.readFileSync(path.join(directory, 'Quelle-2.md')), initialBytes[1]);
     assert.ok(store.list(batchId).documents.every(row => row.approved === false), 'publication is not human approval');
+    if (process.platform === 'darwin') fs.writeFileSync(path.join(directory, '.DS_Store'), 'opaque current OS metadata', { flag: 'wx' });
     assert.equal((await publish()).result_publication.generation_id, generation);
     edit('42 nochmals'); loseNextPublish = true;
     await assert.rejects(publish(), { code: 'STANDALONE_IPC_TIMEOUT' });
@@ -280,6 +299,7 @@ async function run() {
     context('resolve_history_results', { batch_id: batchId });
     const resolved = await store.resolveResultsGeneration(batchId);
     assert.equal(resolved.local_path, path.join(results, 'DataSecure-Markdown-Korrektur', `Ergebnisse-${resumed.result_publication.generation_id}`));
+    assert.deepEqual(fs.readdirSync(resolved.local_path).sort(), ['Quelle-1.md', 'Quelle-2.md'], 'OS metadata is never propagated to a new generation');
     assert.match(fs.readFileSync(path.join(resolved.local_path, 'Quelle-1.md'), 'utf8'), /42 nochmals korrigierte Projekte/u);
     for (const [index, file] of initial.files.entries())
       assert.deepEqual(fs.readFileSync(path.join(initial.directory.path, file.name)), initialBytes[index], 'initial files are preserved');

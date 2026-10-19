@@ -201,6 +201,14 @@ impl RecoveredDirectory<'_> {
         self.parent.inspect_child(&self.name, self.directory.identity)?;
         Ok(())
     }
+    /// Public results only. The parent/name and every promised Markdown leaf
+    /// remain bound; the one opaque Finder metadata leaf is never authority.
+    pub fn verify_public_results_inventory(&self, expected: &[ExpectedFile]) -> io::Result<()> {
+        self.parent.inspect_child(&self.name, self.directory.identity)?;
+        self.directory.verify_public_results_inventory(expected)?;
+        self.parent.inspect_child(&self.name, self.directory.identity)?;
+        Ok(())
+    }
 }
 /// Flat, neutral export inventory. Sizes are exact, not an allocation hint.
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -484,11 +492,44 @@ impl Directory {
     /// link, changed identity/length and digest mismatch. This is not an ACL or
     /// snapshot guarantee against a writer already authorized to this object.
     pub fn verify_inventory(&self, expected: &[ExpectedFile]) -> io::Result<()> {
+        self.verify_inventory_policy(expected, false)
+    }
+    /// Explicit public-results capability, not a general hidden-file filter.
+    /// Only the actual macOS target tolerates opaque Finder metadata. Other
+    /// targets, private stages and legacy exports retain strict inventories.
+    pub fn verify_public_results_inventory(&self, expected: &[ExpectedFile]) -> io::Result<()> {
+        if expected.iter().any(|file| file.name == ".DS_Store") { return Err(unsafe_io()); }
+        self.verify_inventory_policy(expected, cfg!(target_os = "macos"))
+    }
+    fn verify_public_results_names(&self, expected: &[String], public_results: bool) -> io::Result<()> {
+        let limit = expected.len().checked_add(if public_results { 1 } else { 0 }).ok_or_else(unsafe_io)?;
+        let mut actual = platform::list_names(&self.inner, limit)?;
+        if public_results {
+            if let Some(index) = actual.iter().position(|name| name == ".DS_Store") {
+                // Opaque OS metadata: no parser, digest, receipt, selection or
+                // persistent identity. The existing held-parent opener refuses
+                // symlinks/reparse points, and regular_identity requires one link.
+                let metadata = platform::read_file(&self.inner, ".DS_Store")?;
+                let identity = platform::regular_identity(&metadata)?;
+                if metadata.metadata()?.len() > 1024 * 1024 { return Err(unsafe_io()); }
+                let named = platform::read_file(&self.inner, ".DS_Store")?;
+                if platform::regular_identity(&named)? != identity ||
+                    named.metadata()?.len() > 1024 * 1024 || metadata.metadata()?.len() > 1024 * 1024 ||
+                    platform::regular_identity(&metadata)? != identity { return Err(unsafe_io()); }
+                actual.remove(index);
+            }
+        }
+        if actual.as_slice() != expected { return Err(unsafe_io()); }
+        self.check()
+    }
+    fn verify_inventory_policy(&self, expected: &[ExpectedFile], public_results: bool) -> io::Result<()> {
         if expected.is_empty() || expected.len() > 200 { return Err(unsafe_io()); }
         let mut names = Vec::with_capacity(expected.len());
         let mut total = 0u64;
         for item in expected {
             leaf(&item.name)?;
+            // Metadata can be tolerated, never promoted into promised output.
+            if public_results && item.name == ".DS_Store" { return Err(unsafe_io()); }
             if item.bytes > 32_000_000 { return Err(unsafe_io()); }
             total = total.checked_add(item.bytes).ok_or_else(unsafe_io)?;
             if total > 500 * 1024 * 1024 { return Err(unsafe_io()); }
@@ -497,7 +538,7 @@ impl Directory {
         names.sort();
         if names.windows(2).any(|pair| pair[0] == pair[1]) { return Err(unsafe_io()); }
         self.check()?;
-        if platform::list_names(&self.inner, expected.len())? != names { return Err(unsafe_io()); }
+        self.verify_public_results_names(&names, public_results)?;
         for item in expected {
             let mut file = platform::read_file(&self.inner, &item.name)?;
             let identity = platform::regular_identity(&file)?;
@@ -523,7 +564,7 @@ impl Directory {
             let named = platform::read_file(&self.inner, &item.name)?;
             if platform::regular_identity(&named)? != identity { return Err(unsafe_io()); }
         }
-        if platform::list_names(&self.inner, expected.len())? != names { return Err(unsafe_io()); }
+        self.verify_public_results_names(&names, public_results)?;
         self.check()
     }
     pub fn write_new(&self, name: &str, bytes: &[u8]) -> io::Result<()> {
@@ -1168,6 +1209,104 @@ mod tests {
         assert!(parent.open_known_child("missing", identity).is_err());
         assert!(parent.open_known_child("../old-stage", identity).is_err());
         parent.open_known_child("old-stage", identity).unwrap().verify_inventory(&[expected("Dokument_01.md", b"same bytes")]).unwrap();
+    }
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn public_results_tolerate_only_bounded_opaque_finder_metadata_and_its_changes() {
+        let f = Fixture::new(); let parent = f.directory();
+        let output = parent.create_private_child("Ergebnisse-test").unwrap();
+        output.write_new("Dokument_01.md", b"approved").unwrap();
+        let files = [expected("Dokument_01.md", b"approved")];
+        let identity = output.identity(); drop(output);
+        let recovered = parent.open_known_child("Ergebnisse-test", identity).unwrap();
+        recovered.verify_public_results_inventory(&files).unwrap();
+        let metadata = f.path.join("Ergebnisse-test/.DS_Store");
+        for bytes in [Vec::new(), b"Finder-one".to_vec(), vec![0x5a; 1024 * 1024], b"Finder-two-changed".to_vec()] {
+            fs::write(&metadata, &bytes).unwrap();
+            recovered.verify_public_results_inventory(&files).unwrap();
+            assert!(recovered.verify_inventory(&files).is_err(), "strict inventory never accepts OS metadata");
+            assert_eq!(fs::read(&metadata).unwrap(), bytes, "metadata is not repaired or rewritten");
+            assert_eq!(fs::read(f.path.join("Ergebnisse-test/Dokument_01.md")).unwrap(), b"approved");
+        }
+        fs::write(&metadata, vec![0u8; 1024 * 1024 + 1]).unwrap();
+        assert!(recovered.verify_public_results_inventory(&files).is_err());
+        fs::remove_file(&metadata).unwrap();
+        recovered.verify_public_results_inventory(&files).unwrap();
+    }
+    #[cfg(windows)]
+    #[test]
+    fn windows_public_results_refuse_regular_finder_metadata_even_through_recovery() {
+        let f = Fixture::new(); let parent = f.directory();
+        let output = parent.create_private_child("Ergebnisse-test").unwrap();
+        output.write_new("Dokument_01.md", b"approved").unwrap();
+        let files = [expected("Dokument_01.md", b"approved")];
+        output.verify_public_results_inventory(&files).unwrap();
+        output.write_new(".DS_Store", b"transported Finder metadata").unwrap();
+        assert!(output.verify_public_results_inventory(&files).is_err(), "a caller cannot enable a macOS exception on Windows");
+        let identity = output.identity(); drop(output);
+        let recovered = parent.open_known_child("Ergebnisse-test", identity).unwrap();
+        assert!(recovered.verify_public_results_inventory(&files).is_err());
+        assert!(recovered.verify_inventory(&files).is_err());
+        assert_eq!(fs::read(f.path.join("Ergebnisse-test/.DS_Store")).unwrap(), b"transported Finder metadata");
+        assert_eq!(fs::read(f.path.join("Ergebnisse-test/Dokument_01.md")).unwrap(), b"approved");
+        assert_eq!(fs::read_dir(f.path.join("Ergebnisse-test")).unwrap().count(), 2, "no repair or deletion");
+    }
+    #[test]
+    fn public_results_refuse_metadata_directories_hardlinks_and_promised_metadata() {
+        for kind in ["directory", "hardlink", "promised"] {
+            let f = Fixture::new(); let parent = f.directory();
+            let output = parent.create_private_child("public").unwrap();
+            output.write_new("Dokument_01.md", b"approved").unwrap();
+            let files = [expected("Dokument_01.md", b"approved")];
+            let metadata = f.path.join("public/.DS_Store");
+            match kind {
+                "directory" => fs::create_dir(&metadata).unwrap(),
+                "hardlink" => {
+                    fs::write(&metadata, b"Finder").unwrap();
+                    fs::hard_link(&metadata, f.path.join("metadata-alias")).unwrap();
+                },
+                "promised" => {
+                    fs::write(&metadata, b"not approved").unwrap();
+                    assert!(output.verify_public_results_inventory(&[
+                        expected("Dokument_01.md", b"approved"), expected(".DS_Store", b"not approved")]).is_err());
+                    continue;
+                },
+                _ => unreachable!(),
+            }
+            assert!(output.verify_public_results_inventory(&files).is_err(), "{kind}");
+            assert_eq!(fs::read(f.path.join("public/Dokument_01.md")).unwrap(), b"approved");
+        }
+    }
+    #[cfg(unix)]
+    #[test]
+    fn public_results_never_follow_a_finder_metadata_symlink() {
+        let f = Fixture::new(); let parent = f.directory();
+        let output = parent.create_private_child("public").unwrap();
+        output.write_new("Dokument_01.md", b"approved").unwrap();
+        let foreign = f.path.join("foreign"); fs::write(&foreign, b"private").unwrap();
+        std::os::unix::fs::symlink(&foreign, f.path.join("public/.DS_Store")).unwrap();
+        assert!(output.verify_public_results_inventory(&[expected("Dokument_01.md", b"approved")]).is_err());
+        assert_eq!(fs::read(&foreign).unwrap(), b"private");
+        fs::remove_file(f.path.join("public/.DS_Store")).unwrap();
+    }
+    #[test]
+    fn public_results_still_refuse_unknown_dotfiles_csv_md_and_changed_markdown() {
+        for extra in [".unknown", ".ds_store", "._Dokument_01.md", "private.csv", "private.md"] {
+            let f = Fixture::new(); let parent = f.directory();
+            let output = parent.create_private_child("public").unwrap();
+            output.write_new("Dokument_01.md", b"approved").unwrap();
+            if cfg!(target_os = "macos") && extra != ".ds_store" { output.write_new(".DS_Store", b"Finder").unwrap(); }
+            output.write_new(extra, b"not promised").unwrap();
+            assert!(output.verify_public_results_inventory(&[expected("Dokument_01.md", b"approved")]).is_err(), "{extra}");
+        }
+        let f = Fixture::new(); let parent = f.directory();
+        let output = parent.create_private_child("public").unwrap();
+        output.write_new("Dokument_01.md", b"approved").unwrap();
+        let files = [expected("Dokument_01.md", b"approved")];
+        output.verify_public_results_inventory(&files).unwrap();
+        if cfg!(target_os = "macos") { output.write_new(".DS_Store", b"Finder").unwrap(); }
+        fs::write(f.path.join("public/Dokument_01.md"), b"tampered").unwrap();
+        assert!(output.verify_public_results_inventory(&files).is_err());
     }
     #[test]
     fn recovery_cannot_confirm_the_original_name_after_it_is_replaced() {

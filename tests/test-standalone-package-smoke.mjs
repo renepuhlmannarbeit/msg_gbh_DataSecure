@@ -358,7 +358,7 @@ try {
   const resolvedFailureMapping = await request({ schema: 'datasecure-standalone-private-ipc/1',
     request_id: '8'.repeat(16), action: 'resolve_local_ledger' });
   assert.equal(resolvedFailureMapping.ok, false);
-  assert.equal(resolvedFailureMapping.error_code, 'STANDALONE_RESULTS_MISSING');
+  assert.equal(resolvedFailureMapping.error_code, 'STANDALONE_LEDGER_MISSING');
   assert.deepEqual(fs.readFileSync(failedSource), failedOriginal, 'the parser failure must not modify its source');
   assert.equal(fs.readFileSync(mapping, 'utf8'), mappingText, 'the previous successful mapping remains unchanged');
   sourceFiles.forEach((file, index) => assert.deepEqual(fs.readFileSync(file), originals[index]));

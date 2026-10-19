@@ -20,31 +20,38 @@ const NOW = Date.UTC(2026, 7, 24, 12, 0, 0);
 
 test('every shared cause survives both the workflow journal and its actual support mirror', () => {
   const { CAUSE_CODES, WORKFLOW_ERROR_CODES } = require('../plugins/data-secure/server/gateway/diagnostic-causes');
-  const { sanitizeSupportTrace, supportTraceStatus, _test: { readSupportTrace } } =
+  const { sanitizeSupportTrace, supportTraceStatus, MAX_EVENTS: MAX_SUPPORT_EVENTS, _test: { readSupportTrace } } =
     require('../plugins/data-secure/server/gateway/support-trace');
-  const dataRoot = path.join(base, 'shared-catalog');
-  const env = { EU_PRIVACY_SUPPORT_MODE: '1' };
-  for (const [index, error_code] of WORKFLOW_ERROR_CODES.entries()) {
-    assert.strictEqual(sanitizeWorkflowEvent({ error_code }).error_code, error_code);
-    assert.strictEqual(recordWorkflowEvent({ event: 'mcp_start_response', outcome: 'stopped',
-      error_code, timestamp: new Date(NOW + index).toISOString(), message: 'PRIVATE_SENTINEL' },
-    { dataRoot, env, now: NOW + 1000 }), true);
+  const env = { EU_PRIVACY_SUPPORT_MODE: '1' }, observedWorkflow = [], supportEvents = [];
+  const chunkSize = Math.min(MAX_WORKFLOW_EVENTS, MAX_SUPPORT_EVENTS);
+  assert.ok(Number.isSafeInteger(chunkSize) && chunkSize > 0);
+  assert.strictEqual(MAX_WORKFLOW_EVENTS, 300, 'catalogue growth must not raise the product retention cap');
+  // Exercise every code through BOTH real journals without expecting a single
+  // bounded retention scope to retain an arbitrarily growing catalogue.
+  for (let offset = 0; offset < WORKFLOW_ERROR_CODES.length; offset += chunkSize) {
+    const codes = WORKFLOW_ERROR_CODES.slice(offset, offset + chunkSize);
+    const dataRoot = path.join(base, `shared-catalog-${offset}`);
+    for (const [index, error_code] of codes.entries()) {
+      assert.strictEqual(sanitizeWorkflowEvent({ error_code }).error_code, error_code);
+      assert.strictEqual(recordWorkflowEvent({ event: 'mcp_start_response', outcome: 'stopped',
+        error_code, timestamp: new Date(NOW + index).toISOString(), message: 'PRIVATE_SENTINEL' },
+      { dataRoot, env, now: NOW + 1000 }), true);
+    }
+    const workflow = workflowDiagnosticStatus(100, { dataRoot, env, now: NOW + 1000 });
+    const support = supportTraceStatus(200, { dataRoot, env, now: NOW + 1000 });
+    const workflowChunk = _test.readWorkflowEvents({ dataRoot, env, now: NOW + 1000 });
+    const supportChunk = readSupportTrace({ dataRoot, env, now: NOW + 1000 });
+    assert.strictEqual(workflow.returned_events, Math.min(50, codes.length), 'the public status remains bounded');
+    assert.strictEqual(support.returned_events, Math.min(200, codes.length), 'the support response cap remains independent');
+    assert.strictEqual(workflow.retained_events, codes.length); assert.strictEqual(support.retained_events, codes.length);
+    assert.deepStrictEqual(workflowChunk.map(event => event.error_code).sort(), [...codes].sort());
+    assert.deepStrictEqual(supportChunk.map(event => event.error_code).sort(), [...codes].sort());
+    assert.doesNotMatch(JSON.stringify({ workflow, support, supportChunk }), /PRIVATE_SENTINEL/u);
+    observedWorkflow.push(...workflowChunk); supportEvents.push(...supportChunk);
   }
-  const workflow = workflowDiagnosticStatus(100, { dataRoot, env, now: NOW + 1000 });
-  const support = supportTraceStatus(200, { dataRoot, env, now: NOW + 1000 });
-  const supportEvents = readSupportTrace({ dataRoot, env, now: NOW + 1000 });
-  assert.strictEqual(workflow.returned_events, 50, 'the public status remains bounded');
-  assert.strictEqual(support.returned_events, Math.min(200, WORKFLOW_ERROR_CODES.length),
-    'the support status keeps its independent public response cap');
-  assert.strictEqual(workflow.retained_events, WORKFLOW_ERROR_CODES.length);
-  assert.strictEqual(support.retained_events, WORKFLOW_ERROR_CODES.length);
-  assert.deepStrictEqual(_test.readWorkflowEvents({ dataRoot, env, now: NOW + 1000 })
-    .map(event => event.error_code).sort(), [...WORKFLOW_ERROR_CODES].sort());
-  // Catalogue growth must not be confused with normalization or loss merely
-  // because the public status deliberately returns fewer retained records.
+  assert.deepStrictEqual(observedWorkflow.map(event => event.error_code).sort(), [...WORKFLOW_ERROR_CODES].sort());
   assert.deepStrictEqual(supportEvents.map(event => event.error_code).sort(), [...WORKFLOW_ERROR_CODES].sort());
   assert.ok(CAUSE_CODES.every(code => supportEvents.some(event => event.error_code === code)));
-  assert.doesNotMatch(JSON.stringify({ workflow, support, supportEvents }), /PRIVATE_SENTINEL/u);
   for (const error_code of ['PRIVATE_CODE', 'CSV_PRIVATE_PERSON', 'CONVERSION_PRIVATE_PERSON',
     'STANDALONE_PRIVATE_PERSON', 'BATCH_PRIVATE_PERSON', 'RESIDUAL_PRIVATE_PERSON']) {
     assert.strictEqual(sanitizeWorkflowEvent({ error_code }).error_code, 'INTERNAL_FAILURE');

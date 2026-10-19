@@ -149,7 +149,7 @@
   const namespace = mode => mode === 'markdown-only' ? 'DataSecure-Markdown-Korrektur' : 'DataSecure-KI-Export';
   const reasons = { DOCUMENT_REVIEW_STALE: 'Der Textstand hat sich geändert. Bitte neu laden und erneut prüfen.',
     RESULT_PUBLICATION_INVALID: 'Die Änderung kann bereits gespeichert sein, aber der neue Ergebnisstand ist noch nicht bestätigt. Bereitstellung erneut prüfen; nichts blind nochmals ändern.',
-    RESULT_PUBLICATION_CONFLICT: 'Der neue Ergebnisstand konnte wegen eines Dateikonflikts nicht sicher bereitgestellt werden. Frühere Ordner bleiben unverändert; den gespeicherten Stand prüfen.',
+    RESULT_PUBLICATION_CONFLICT: 'Der neue Ergebnisstand konnte wegen eines Dateikonflikts nicht sicher bereitgestellt werden. Zusätzliche oder veränderte Dateien prüfen; unter Windows zählt auch eine hineinkopierte .DS_Store dazu. Die App entfernt oder überschreibt nichts. Frühere Ordner bleiben unverändert; den gespeicherten Stand prüfen.',
     STANDALONE_IPC_BUSY: 'DataSecure bearbeitet noch einen anderen lokalen Vorgang. Diese Anfrage wurde noch nicht gesendet. Bitte den Abschluss abwarten und den gespeicherten Stand anschließend neu laden.',
     CONTENT_OPTIONS_BINDING_INVALID: 'Die Inhalts- oder OCR-Einstellungen passen nicht zum gespeicherten Prüfstand. Keine Freigabe oder neue Kopie wird daraus erzeugt. Bitte die Originaldateien für einen neuen Lauf auswählen.',
     CONTENT_OPTIONS_BINDING_MISSING: 'Der unveränderliche Nachweis der Inhalts- und OCR-Auswahl fehlt. Dieser Prüfstand wird nicht freigegeben. Bitte die Originaldateien für einen neuen Lauf auswählen.',
@@ -244,7 +244,7 @@
       if (hasHints) completionTitle += ' · mit Hinweisen';
       completionText = `Der Lauf verarbeitet keine weiteren Dateien. ${documents.length} ${documents.length === 1 ? 'Ergebnis ist' : 'Ergebnisse sind'} verfügbar. ` +
         (unsettled ? 'Der aktuelle Nachbearbeitungsstand ist noch nicht als Ergebnisdateien bestätigt. Bereitstellung erneut prüfen; frühere Ergebnisordner bleiben unverändert. '
-          : 'Den Ergebnisordner öffnen und Dateien dort auswählen oder weiterverwenden. Keine zusätzliche Freigabe oder Exportbestätigung nötig. ') +
+          : 'Den Ergebnisordner öffnen und Markdown-Dateien dort auswählen oder weiterverwenden. Keine zusätzliche Freigabe oder Exportbestätigung nötig. Zusätzliche Betriebssystem-Metadaten sind nicht geprüft oder anonymisiert; nicht mit weitergeben. ') +
         (raw() ? 'Die Dateien sind nicht anonymisiert. ' : automatic() ? 'Bekannte unklare Fundstellen wurden automatisch maskiert, nicht manuell geprüft. ' : '') +
         (hasHints ? 'Hinweise und nicht verfügbare Quellen bleiben gesondert aufgeführt. Nicht verfügbare Quellen sind nicht in den Ergebnisdateien enthalten. ' : '') +
         'Es erfolgte kein Upload.';

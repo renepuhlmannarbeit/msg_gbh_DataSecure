@@ -377,6 +377,39 @@ test('Standalone status uses the latest product batch instead of historical glob
   assert.strictEqual(status.results_available, true);
 });
 
+test('current ledger resolution stays on failed batch B and never borrows the successful batch A mapping', () => {
+  const batchA = 'a'.repeat(64), batchB = 'b'.repeat(64), reads = [], observations = [];
+  const missing = Object.assign(new Error('synthetic current ledger missing'), { code: 'STANDALONE_LEDGER_MISSING' });
+  const prior = { ok: true, target_kind: 'file',
+    local_path: path.join(FIXTURE_RESULT_RUN, 'DataSecure-Zuordnung.csv'), external_disclosure: false };
+  let fallbackCalls = 0;
+  const noFallback = () => { fallbackCalls++; assert.fail('current ledger must not resolve or reopen another result'); };
+  const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+    publicStatusSnapshot(id) {
+      observations.push(id); assert.strictEqual(id, batchB);
+      return { observed_batch_id: batchB, observed_is_active: false };
+    },
+    runHistory: {
+      resolveLedger(id) {
+        reads.push(id);
+        if (id === batchA) return prior;
+        assert.strictEqual(id, batchB); throw missing;
+      },
+      resolveResults: noFallback
+    },
+    latestProductResultDirectory: noFallback, replayPendingResultExports: noFallback,
+    fs: { mkdirSync: noFallback, existsSync: noFallback }
+  }) });
+  service.observedBatchId = batchB;
+  assert.deepStrictEqual(service.resolveHistoryLedger(batchA), prior, 'A remains available only through its explicit target');
+  assert.strictEqual(service.observedBatchId, batchB, 'an explicit historic read must not replace the current run');
+  reads.length = 0;
+  service.resolveResults = noFallback;
+  assert.throws(() => service.resolveLedger(), error => error === missing, 'preserve the exact B-ledger refusal');
+  assert.deepStrictEqual(reads, [batchB]); assert.deepStrictEqual(observations, [batchB]);
+  assert.strictEqual(service.observedBatchId, batchB); assert.strictEqual(fallbackCalls, 0);
+});
+
 test('Standalone consumes one combined journal snapshot per public status poll', () => {
   let snapshots = 0;
   const batchId = 'a'.repeat(64);

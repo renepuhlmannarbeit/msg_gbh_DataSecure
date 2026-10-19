@@ -4,6 +4,15 @@ Arbeitsversion: **3.2.0-rc166**, Umsetzung und neue gemeinsame Windows-/macOS-Te
 
 ## Aktueller Auftrag – Nutzerbefunde als RC166 umsetzen und neu prüfen
 
+**COMPAT-PUBLIC-METADATA-01:** Neuer P2 aus tatsächlichem JS-/Rustreview:
+öffentliche neue macOS-Results müssen reguläre begrenzte Finder-`.DS_Store` zulassen,
+ohne Metadaten in MD-Inventar/Receipt/Generation zu übernehmen. Eng implementiert;
+private Stage/Legacy/Fremdnamen/MD-Hashes bleiben strikt. Gezielte Gegenprüfung
+und neuer Source06-Freeze, keine Übernahme alter Source05-Pakete als Release.
+Source05-Headless130/282 und ARM-ZIP-Smoke scheiterten an zwei veralteten
+Testannahmen (Retention300 vs Katalog303; fehlender aktueller Ledger), beide
+testseitig korrigiert. Frische gesamte Windows-/Mac-Belege bleiben erforderlich.
+
 **UX-DIRECT-RESULTS-01 (neu ausdrücklich beauftragt, in Umsetzung):** Nach den
 notwendigen OCR-/Fundstellenprüfungen direkt Ergebnisordner öffnen; zweite
 Dokumentauswahl/Freigabe/Export entfernen. Optionale Korrekturen automatisch

@@ -147,8 +147,11 @@ vertrauliche Zuordnung können Originalnamen enthalten.
    Dokumentauswahl, Pflichtfreigabe oder Exportbestätigung entfällt.
 4. Nach bestätigter technischer Bereitstellung **Ergebnisordner öffnen** wählen.
    Neue fertige MD-Ordner enthalten keine Originale, Identitäts-/Dateizuordnung,
-   privaten Prüfstände oder technischen Begleitdateien. Dateien im Finder selbst
-   auswählen; sie sind auch ohne KI verwendbar. DataSecure lädt nichts hoch.
+   privaten Prüfstände oder von DataSecure erzeugten technischen Begleitdateien.
+   Finder kann zusätzliche `.DS_Store`-Anzeige-Metadaten anlegen. Diese sind
+   nicht geprüft oder anonymisiert und gehören nicht zur Weitergabe: im Finder
+   nur die gewünschten Markdown-Dateien auswählen, nicht ungeprüft den gesamten
+   Ordner verpacken. Die MD sind auch ohne KI verwendbar. DataSecure lädt nichts hoch.
    Bei alten Laufordnern können vertrauliche Beilagen erhalten sein; diese nicht
    rückwirkend als neue bereinigte Ausgabe ansehen. Technische Prüfungen bleiben.
 5. **Lauf abgeschlossen – mit Hinweisen** ist ebenfalls abgeschlossen.

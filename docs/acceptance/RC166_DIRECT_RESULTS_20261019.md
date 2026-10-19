@@ -124,6 +124,53 @@ wurde nach35Dateien gezielt beendet. Keine Source04-Freigabe; neuer Source05-Fre
 
 ## Anwendervertrag
 
+Source05 ist nicht freigabefähig: Headless130/282 scheiterte am gewachsenen
+Diagnosekatalog303 bei unveränderter Produktretention300. ARM39298183966
+scheiterte nach erfolgreichen nativen Start-/Konvertierungsgates am veralteten
+Smokeorakel für den aktuellen fehlenden Zuordnungsbeleg. Der richtige Code
+ist exakt LEDGER_MISSING; keine Übernahme der Zuordnung eines älteren Laufs.
+Intel wurde für diesen ungeeigneten Stand gezielt abgebrochen. Die beiden
+reinen Testkorrekturen werden nicht als behobene Produktfehler ausgewiesen.
+
+Neuer P2-Quellenbefund: Eine reguläre Finder-`.DS_Store` innerhalb öffentlicher
+neuer Ergebnisse löste bisher einen Inventarkonflikt aus. Nur dort gilt jetzt
+eine eng begrenzte macOS-Ausnahme: exakter Name, regulär, ein Link, höchstens1MiB
+pro Datei und8MiB pro ganzem rekursivem JS-Inventar. Metadaten werden nicht
+gelesen, geparst, kopiert, gehasht oder in Dokumentzahl/Manifest/Receipt
+aufgenommen. Ihr Inhalt darf sich zwischen Ordneröffnungen ändern; Name allein
+beweist weder Finderherkunft noch Datenschutzfreiheit. Keine Ausnahme für
+andere Dotdateien, CSV, fremde MD, Unterordner, Symlinks/Hardlinks oder geänderte
+Dokumentbytes. Native private Stage/Prepare/Commit und Legacyexport bleiben
+strikt. Die Rolle `results` ist im nativen Plan gehasht, kein Renderer-Schalter.
+Der Kollegendatenbestand besitzt nur Container-`.DS_Store`; das beweist keinen
+früheren Runfehler. [Apple beschreibt diese Finder-Metadaten](https://support.apple.com/en-ie/102064).
+Die JS-Prüfung nutzt [Node22-BigInt-fstat](https://nodejs.org/download/release/v22.23.2/docs/api/fs.html#fsfstatsyncfd-options)
+am gehaltenen, nur lesend/nichtfolgend geöffneten Handle, keine OS-Einstellung
+und keine neue Berechtigung. Weiterer unabhängiger P2-Gegenreview zeigte:
+[Nodes Windows-libuv](https://raw.githubusercontent.com/nodejs/node/v22.23.2/deps/uv/src/win/fs.c)
+projiziert nicht jede Reparse-Art als Symlink. Daher stammt das Gate ausschließlich
+aus dem tatsächlichen Darwin-Prozess bzw. Rust-Compiletarget, nicht aus einem
+DTO oder gespeicherter Plattform. Windows behält die strikte Inventarprüfung:
+auch eine vom Mac hineinkopierte reguläre `.DS_Store` ist dort ein Konflikt,
+ohne automatische Löschung/Reparatur. Gemeinsamer Fachablauf, ausdrücklich
+abweichende OS-Metadatenkompatibilität; kein neuer Windows-Addon-/Mac-Core-ABI.
+Neue vollständige Source06-Belege folgen.
+
+Gezielte aktuelle Nachweise vor Source06: 53 Generationen-/Metadatenfälle
+bestanden auf Windows, echte Darwin-Positivfälle dort ausdrücklich NOT_RUN;
+Darwin-Algorithmusgegenfälle laufen als klar benanntes Quellenmodell. Der
+erste Parent-Swap-Test scheiterte an Windows-NoDeleteSharing statt tatsächlichem
+Elternwechsel. Die neue Testnaht tauscht den Elternordner vor dem Open und
+verschiebt dasselbe Blatt hinein; Eltern- statt bloßer Blattidentität ist nun
+das echte Gegenorakel. Kein Produktfix oder nachträglich grüner alter Lauf.
+Rusts6 gezielte Windowsfälle und Clippy bestanden. Die echte Node→Rust-Pipe
+prüft beide Rollen, Windows-Metadatenverweigerung, Defaultordner-/5→/6,
+vollständige Korrekturgeneration, Lost ACK, neue Storeinstanz und Tamperverweigerung.
+Renderer156/Workspace419/Präsentation49 sowie Standalone87/Diagnostik13 grün.
+Mehrere unabhängige tatsächliche JS-/Rust-/Architektur-Quellengegenreviews,
+darunter der behobene Windows-Reparse-Vertragsunterschied. Keine neue native
+Mac- oder Desktopabnahme aus diesen Windows-/Quellenmodellen behaupten.
+
 - Quellen auswählen und verarbeiten. OCR bleibt separat; geführte Fundstellen-
   und gewählte OCR-Prüfung bleiben vor dem Abschluss.
 - Nach erfolgreicher technischer Bereitstellung: **Ergebnisordner öffnen**.
@@ -195,6 +242,9 @@ Fachcommit ändern dessen Wahrheit nicht und dürfen keinen Erfolg vortäuschen.
 Neue Erstordner enthalten keine Quellnamenzuordnungen oder Identitätsübersichten.
 Diese bleiben getrennt privat erreichbar. Alte Laufordner werden nicht bereinigt
 und nicht rückwirkend als ausschließlich weiterverwendbare MD beworben.
+DataSecure produziert dort MD, Betriebssysteme können zusätzliche Anzeige-
+Metadaten anlegen. Diese sind weder geprüft noch anonymisiert; zum Teilen nur
+die gewünschten MD auswählen, nicht ungeprüft den ganzen Ordner verpacken.
 
 ## Zwingende neue Gegenorakel
 

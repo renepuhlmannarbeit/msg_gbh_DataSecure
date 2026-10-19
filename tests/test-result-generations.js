@@ -3,6 +3,7 @@
 // BigInt filesystem identities. Native callbacks below are an explicit model,
 // NOT evidence of the Rust broker, packaged OS UI or a native Mac transaction.
 const fs = require('node:fs'), os = require('node:os'), path = require('node:path'), crypto = require('node:crypto');
+const vm = require('node:vm');
 const { createSuite } = require('./helpers');
 const { testAsync, test, assert, done } = createSuite('Standalone direct results / immutable correction generations');
 const root = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'datasecure-results-generations-'));
@@ -14,6 +15,25 @@ delete process.env.DATASECURE_NATIVE_EXPORT_CHANNEL;
 const { createDocumentReviewStore } = require('../plugins/data-secure/server/gateway/standalone-document-review-store');
 const exporter = require('../plugins/data-secure/server/gateway/result-export');
 const { bindDirectory, assertDirectory } = require('../plugins/data-secure/server/core/bound-file-io');
+const { createPublicResultMetadataInspector, MAX_METADATA_BYTES, MAX_METADATA_TOTAL_BYTES } =
+  require('../plugins/data-secure/server/core/public-result-metadata');
+// Execute the ACTUAL helper source in an isolated synthetic Darwin context.
+// Its IO and bound-file imports remain real Node filesystem implementations.
+// These cases exercise the branch algorithm, not macOS APIs/O_NOFOLLOW,
+// Finder, the native Rust transaction, or a real Darwin-process admission.
+function metadataSourceModel(platform = 'darwin') {
+  const file = require.resolve('../plugins/data-secure/server/core/public-result-metadata');
+  const model = { exports: {} };
+  vm.runInNewContext(fs.readFileSync(file, 'utf8'), { module: model, process: Object.freeze({ platform }),
+    require(specifier) {
+      if (specifier === 'node:fs') return fs;
+      if (specifier === 'node:path') return path;
+      if (specifier === './bound-file-io') return require('../plugins/data-secure/server/core/bound-file-io');
+      throw Error('unexpected metadata source-model import');
+    } }, { filename: file, timeout: 1000 });
+  return model.exports;
+}
+const createModelMetadataInspector = metadataSourceModel().createPublicResultMetadataInspector;
 const { validatePrivateMessage } = require('../plugins/data-secure/server/standalone/desktop-ipc');
 const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const content = { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: false, imageOcr: false };
@@ -22,7 +42,7 @@ let serial = 0;
 // This builder deliberately invokes the real initial exporter, not a fabricated
 // initialResultPublication dependency. It is also the fixture contract used by
 // the separate real Node->Rust pipe test (which has its own native callback).
-async function fixture({ mode = 'markdown-only', count = 2, legacy = false } = {}) {
+async function fixture({ mode = 'markdown-only', count = 2, legacy = false, separateFolders = false } = {}) {
   const batchId = (++serial).toString(16).padStart(64, '0'), results = path.join(root, `results-${serial}`);
   fs.mkdirSync(results); process.env.EU_PRIVACY_RESULT_ROOT = results;
   const state = { schema: 'datasecure-batch/7', token: batchId, product_channel: 'standalone', processing_mode: mode,
@@ -80,7 +100,8 @@ async function fixture({ mode = 'markdown-only', count = 2, legacy = false } = {
   const store = createDocumentReviewStore(options);
   for (let index = 0; index < count; index++) {
     const id = (serial * 100 + index + 1).toString(16).padStart(32, '0');
-    const item = { id, name: `nested/Quelle-${index + 1}.txt`, source_label: `nested/Quelle-${index + 1}.txt`,
+    const sourceLabel = `${separateFolders ? `folder-${index + 1}` : 'nested'}/Quelle-${index + 1}.txt`;
+    const item = { id, name: sourceLabel, source_label: sourceLabel,
       sha256: sha(original), status: 'released' };
     state.items.push(item);
   }
@@ -151,7 +172,185 @@ function sameByteSwap(folder) {
   };
   copy(old, folder);
 }
+function putMetadata(folder, bytes = Buffer.from('opaque Finder metadata; not a document')) {
+  const filename = path.join(folder, '.DS_Store');
+  fs.writeFileSync(filename, bytes, { flag: 'wx', mode: 0o600 });
+  return filename;
+}
+function metadataFolders(initial) {
+  return [...new Set([initial.directory.path,
+    ...initial.files.map(file => path.dirname(path.join(initial.directory.path, file.name)))])];
+}
+function addResultTamper(folder, files, kind) {
+  const named = path.join(folder, '.DS_Store');
+  if (kind === 'directory') fs.mkdirSync(named);
+  else if (kind === 'hardlink') {
+    const source = path.join(root, `metadata-hardlink-source-${serial}`);
+    fs.writeFileSync(source, 'synthetic metadata'); fs.linkSync(source, named);
+  } else if (kind === 'symlink') {
+    const source = path.join(root, `metadata-symlink-source-${serial}`);
+    fs.writeFileSync(source, 'synthetic metadata'); fs.symlinkSync(source, named, 'file');
+  } else putMetadata(folder, kind === 'oversize' ? Buffer.alloc(MAX_METADATA_BYTES + 1) : undefined);
+  if (kind === 'unknown-dot') fs.writeFileSync(path.join(folder, '.private'), 'private');
+  if (kind === 'csv') fs.writeFileSync(path.join(folder, 'private.csv'), 'private');
+  if (kind === 'md-tamper') fs.appendFileSync(path.join(folder, files[0]), '\nchanged');
+}
+function symlinksAuthorized() {
+  const source = path.join(root, 'metadata-symlink-capability-source');
+  const link = path.join(root, 'metadata-symlink-capability-link');
+  fs.writeFileSync(source, 'synthetic');
+  try { fs.symlinkSync(source, link, 'file'); }
+  catch (error) {
+    if (!['EPERM', 'EACCES', 'ENOTSUP', 'EOPNOTSUPP'].includes(error.code)) throw error;
+    console.log('  NOT_RUN metadata symlink countercases: OS permission unavailable; no rights changed');
+    return false;
+  }
+  fs.unlinkSync(link); return true;
+}
+function metadataScope(label) {
+  const directory = fs.mkdtempSync(path.join(root, `${label}-`));
+  return { directory, filename: putMetadata(directory) };
+}
 async function run() {
+  if (process.platform === 'darwin') {
+  for (const mode of ['markdown-only', 'markdown-and-anonymize'])
+  await testAsync(`Darwin process / ${mode}: opaque metadata survives initial/gen opening but is never copied, counted or receipted`, async () => {
+    const f = await fixture({ mode });
+    const bindingFile = path.join(data, 'result-publication-bindings', `${f.batchId}.json`);
+    const initialBinding = fs.readFileSync(bindingFile);
+    const metadata = metadataFolders(f.bound).map(folder => putMetadata(folder));
+    assert.equal((await f.resolve()).local_path, f.bound.directory.path); assert.equal(f.calls.length, 0);
+    assert.equal(exporter.initialResultPublication(f.batchId).files.length, 2);
+    assert.ok(fs.readFileSync(bindingFile).equals(initialBinding), 'metadata never changes the immutable binding');
+    // OS metadata may change content and even object between separate opens.
+    fs.writeFileSync(metadata[0], Buffer.from('new opaque content'));
+    assert.equal((await f.resolve()).local_path, f.bound.directory.path);
+    fs.renameSync(metadata[0], path.join(root, `retired-metadata-${serial}`)); putMetadata(f.bound.directory.path);
+    assert.equal((await f.resolve()).local_path, f.bound.directory.path);
+    f.edit(); const first = await f.publish(), firstFolder = f.target(first);
+    assert.equal(first.result_publication.count, 2); assert.equal(fs.existsSync(path.join(firstFolder, '.DS_Store')), false);
+    assert.ok([...f.operations.values()].every(record => JSON.parse(record.operation).files.every(file => file.name.endsWith('.md'))));
+    const receipt = path.join(data, 'document-reviews', f.batchId, `results-generation-${first.result_publication.generation_id}-complete.json`);
+    const receiptBytes = fs.readFileSync(receipt); putMetadata(firstFolder);
+    assert.equal((await f.resolve()).local_path, firstFolder);
+    assert.equal(f.store.list(f.batchId).result_publication.state, 'current');
+    assert.equal(f.store.list(f.batchId).result_publication.count, 2);
+    assert.ok(fs.readFileSync(receipt).equals(receiptBytes), 'OS metadata cannot be added to an existing private receipt');
+    assert.equal(JSON.parse(receiptBytes).files.length, 2);
+    f.edit(1); const next = await f.publish(), nextFolder = f.target(next);
+    assert.notEqual(next.result_publication.generation_id, first.result_publication.generation_id);
+    assert.equal(next.result_publication.count, 2); assert.equal(fs.existsSync(path.join(nextFolder, '.DS_Store')), false);
+    assert.equal((await f.resolve()).local_path, nextFolder);
+    assert.equal(fs.existsSync(path.join(firstFolder, '.DS_Store')), true, 'no metadata deletion or repair');
+    assert.ok(f.store.list(f.batchId).documents.every(row => !row.approved));
+  });
+  await testAsync('Darwin process: one complete recursive initial inventory shares the inclusive 8-MiB metadata budget', async () => {
+    const f = await fixture({ count: 8, separateFolders: true }), folders = metadataFolders(f.bound);
+    assert.equal(folders.length, 9, 'root plus eight promised source subfolders');
+    assert.equal(MAX_METADATA_TOTAL_BYTES, 8 * MAX_METADATA_BYTES);
+    for (const folder of folders.slice(0, 8)) putMetadata(folder, Buffer.alloc(MAX_METADATA_BYTES));
+    assert.equal((await f.resolve()).local_path, f.bound.directory.path, 'exactly 8 MiB remains valid');
+    putMetadata(folders[8], Buffer.from('x'));
+    await rejects(() => f.resolve(), 'RESULT_PUBLICATION_CONFLICT'); f.edit();
+    await rejects(() => f.publish(), 'RESULT_PUBLICATION_CONFLICT'); assert.equal(f.calls.length, 0);
+  });
+  } else {
+    console.log(`  NOT_RUN real Darwin metadata initial/generation/budget cases: actual host ${process.platform}; no Mac API or O_NOFOLLOW PASS`);
+    for (const phase of ['initial', 'generation'])
+    await testAsync(`${process.platform} actual process: regular .DS_Store blocks ${phase} opening/publication without repair`, async () => {
+      const f = await fixture(); let folder, files;
+      if (phase === 'generation') {
+        f.edit(); const result = await f.publish(); folder = f.target(result);
+        files = JSON.parse(f.operations.get(result.result_publication.generation_id).operation).files.map(file => file.name);
+      } else { folder = f.bound.directory.path; files = f.bound.files.map(file => file.name); }
+      const originalBytes = files.map(name => fs.readFileSync(path.join(folder, name)));
+      const metadata = putMetadata(folder), metadataBytes = fs.readFileSync(metadata);
+      const metadataIdentity = fs.lstatSync(metadata, { bigint: true });
+      const names = fs.readdirSync(folder).sort(), operations = f.operations.size, calls = f.calls.length;
+      await rejects(() => f.resolve(), 'RESULT_PUBLICATION_CONFLICT');
+      f.edit(1); await rejects(() => f.publish(), 'RESULT_PUBLICATION_CONFLICT');
+      assert.equal(f.calls.length, calls); assert.equal(f.operations.size, operations, 'no new native publication or repair');
+      assert.deepEqual(fs.readdirSync(folder).sort(), names); assert.deepEqual(fs.readFileSync(metadata), metadataBytes);
+      const after = fs.lstatSync(metadata, { bigint: true });
+      for (const key of ['dev', 'ino', 'birthtimeNs', 'size', 'mtimeNs', 'ctimeNs', 'nlink']) assert.equal(after[key], metadataIdentity[key]);
+      for (const [index, name] of files.entries()) assert.deepEqual(fs.readFileSync(path.join(folder, name)), originalBytes[index]);
+    });
+  }
+  test('actual host gate cannot be enabled by a caller-supplied Darwin directory descriptor', () => {
+    if (process.platform === 'darwin') {
+      const inspect = metadataSourceModel('win32').createPublicResultMetadataInspector();
+      assert.equal(inspect({ platform: 'darwin' }, '.DS_Store'), false, 'source-model Windows gate remains closed');
+      return;
+    }
+    let touches = 0;
+    const fake = { platform: 'darwin', get io() { touches++; throw Error('unexpected IO'); },
+      get path() { touches++; throw Error('unexpected path'); } };
+    assert.equal(createPublicResultMetadataInspector()(fake, '.DS_Store'), false);
+    assert.equal(touches, 0, 'real non-Darwin module denies the exception before touching a descriptor');
+  });
+  test('SOURCE-MODEL Darwin-branch algorithm shares the bounded metadata budget across real directories', () => {
+    const directory = fs.mkdtempSync(path.join(root, 'metadata-budget-model-'));
+    const inspect = createModelMetadataInspector();
+    assert.equal(MAX_METADATA_TOTAL_BYTES, 8 * MAX_METADATA_BYTES);
+    for (let index = 0; index < 9; index++) {
+      const child = path.join(directory, String(index)); fs.mkdirSync(child);
+      putMetadata(child, Buffer.alloc(index < 8 ? MAX_METADATA_BYTES : 1));
+      if (index < 8) assert.equal(inspect(bindDirectory(child), '.DS_Store'), true);
+      else assert.throws(() => inspect(bindDirectory(child), '.DS_Store'), { code: 'PUBLIC_RESULT_METADATA_UNSAFE' });
+    }
+  });
+  const metadataTampers = ['oversize', 'directory', 'hardlink', 'unknown-dot', 'csv', 'md-tamper'];
+  if (symlinksAuthorized()) metadataTampers.push('symlink');
+  for (const phase of ['initial', 'generation']) for (const kind of metadataTampers)
+  await testAsync(`${phase}: metadata exception still refuses ${kind} before another publication`, async () => {
+    const f = await fixture(); let folder, files;
+    if (phase === 'generation') {
+      f.edit(); const result = await f.publish(); folder = f.target(result);
+      files = JSON.parse(f.operations.get(result.result_publication.generation_id).operation).files.map(file => file.name);
+    } else { folder = f.bound.directory.path; files = f.bound.files.map(file => file.name); }
+    addResultTamper(folder, files, kind);
+    const before = fs.readdirSync(folder).sort(), calls = f.calls.length;
+    await rejects(() => f.resolve(), 'RESULT_PUBLICATION_CONFLICT');
+    f.edit(1); await rejects(() => f.publish(), 'RESULT_PUBLICATION_CONFLICT');
+    assert.equal(f.calls.length, calls); assert.deepEqual(fs.readdirSync(folder).sort(), before);
+  });
+  test('SOURCE-MODEL Darwin-branch algorithm never reads/parses/hashes opaque metadata', () => {
+    const f = metadataScope('opaque'), io = Object.create(fs);
+    let reads = 0, opens = 0, closes = 0;
+    io.openSync = (...args) => { opens++; return fs.openSync(...args); };
+    io.closeSync = fd => { closes++; return fs.closeSync(fd); };
+    for (const method of ['readSync', 'readFileSync', 'readvSync']) io[method] = () => { reads++; throw Error('metadata must remain opaque'); };
+    const inspect = createModelMetadataInspector(), directory = bindDirectory(f.directory, { io });
+    assert.equal(inspect(directory, '.DS_Store'), true); assert.equal(reads, 0); assert.equal(opens, 1); assert.equal(closes, 1);
+    assert.equal(inspect(directory, '.private'), false); assert.equal(opens, 1, 'unknown names are not an exception');
+    fs.writeFileSync(f.filename, 'different content and size');
+    assert.equal(createModelMetadataInspector()(directory, '.DS_Store'), true);
+  });
+  for (const fault of ['close', 'parent-swap', 'leaf-swap', 'missing-after-lstat'])
+  test(`SOURCE-MODEL Darwin-branch descriptor algorithm refuses ${fault} without retry or repair`, () => {
+    const f = metadataScope(fault), io = Object.create(fs); let opens = 0, closes = 0, swaps = 0;
+    io.openSync = (...args) => {
+      opens++;
+      if (fault === 'leaf-swap') {
+        fs.renameSync(f.filename, path.join(root, `${path.basename(f.directory)}-retired`)); putMetadata(f.directory);
+      }
+      if (fault === 'missing-after-lstat') fs.unlinkSync(f.filename);
+      if (fault === 'parent-swap') {
+        // Node's ordinary Windows read handle can prevent a directory rename.
+        // Replace before opening, then move the SAME leaf into the new parent:
+        // fstat identity alone is deliberately insufficient to catch this race.
+        const retired = f.directory + '-retired';
+        fs.renameSync(f.directory, retired); fs.mkdirSync(f.directory);
+        fs.renameSync(path.join(retired, '.DS_Store'), f.filename); swaps++;
+      }
+      return fs.openSync(...args);
+    };
+    io.closeSync = fd => { closes++; fs.closeSync(fd); if (fault === 'close') throw Error('synthetic close failure'); };
+    const directory = bindDirectory(f.directory, { io });
+    assert.throws(() => createModelMetadataInspector()(directory, '.DS_Store'), { code: 'PUBLIC_RESULT_METADATA_UNSAFE' });
+    assert.equal(opens, 1, 'no general retry'); assert.equal(closes, fault === 'missing-after-lstat' ? 0 : 1, 'consume each descriptor once');
+    if (fault === 'parent-swap') assert.equal(swaps, 1, 'the real parent replacement must have occurred');
+  });
   test('publication request is closed and cannot carry renderer selection, authority or paths', () => {
     const message = { schema: 'datasecure-standalone-private-ipc/1', request_id: '1'.repeat(16), action: 'publish_result_documents', batch_id: 'a'.repeat(64) };
     assert.equal(validatePrivateMessage(message).action, message.action);

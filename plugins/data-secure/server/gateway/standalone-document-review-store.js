@@ -13,6 +13,7 @@ const { createPrivateWorkStore } = require('../gateway/private-work-store');
 const { createBatchActiveLock } = require('../gateway/batch-active-lock');
 const { withDocumentControl, withSynchronousDocumentControl } = require('./standalone-document-control');
 const { readBoundFile, readBoundFileRecord, bindDirectory, assertDirectory } = require('../core/bound-file-io');
+const { createPublicResultMetadataInspector } = require('../core/public-result-metadata');
 const { readConfiguredResultRoot, inspectRoot, readConfiguredNativeExportBinding } = require('../gateway/result-folder-config');
 const { validNativeExportBinding } = require('../core/native-directory-identity');
 const { syncParentDirectory } = require('../gateway/batch-journal-io');
@@ -1670,10 +1671,11 @@ function createDocumentReviewStore(options = {}) {
           JSON.stringify(receipt.files[index].identity) !== JSON.stringify(record.identity))) throw fail('RESULT_PUBLICATION_CONFLICT');
       return { name: file.name, sha256, identity: record.identity };
     });
-    const actual = [];
+    const actual = [], inspectMetadata = createPublicResultMetadataInspector();
     function inventory(folder, prefix = '') {
       const binding = bindDirectory(folder); assertDirectory(directory);
       for (const entry of fs.readdirSync(folder, { withFileTypes: true })) {
+        if (inspectMetadata(binding, entry.name)) continue;
         if (entry.isSymbolicLink() || !entry.isDirectory() && !entry.isFile() || actual.length > 1000) throw fail('RESULT_PUBLICATION_CONFLICT');
         const name = prefix + entry.name;
         if (entry.isDirectory()) {

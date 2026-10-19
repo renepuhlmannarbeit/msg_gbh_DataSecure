@@ -23,6 +23,7 @@ const { isMarkdownBatch } = require('../core/processing-mode');
 const { contentOptionsForBatch, validateContentOptions, serializeContentOptions } = require('../core/content-options');
 const { ensurePrivateDirectory } = require('./common');
 const { createPrivateWorkStore } = require('./private-work-store');
+const { createPublicResultMetadataInspector } = require('../core/public-result-metadata');
 
 const SCHEMA = 'datasecure-result-export/2';
 const MARKDOWN_SCHEMA = 'datasecure-result-export/4';
@@ -1277,6 +1278,9 @@ function serialDirectory(binding) {
   return { path: binding.path, real: binding.real, chain: binding.chain, platform: binding.platform };
 }
 function assertInitialInventory(directory, files) {
+  // Called only by the new RESULT_LAYOUT capture/opener. Legacy paths never
+  // acquire this exception, and the inspector is shared by the whole tree.
+  const inspectMetadata = createPublicResultMetadataInspector();
   const expectedFiles = new Set(files.map(file => file.name)), expectedDirectories = new Set();
   for (const name of expectedFiles) {
     const segments = name.split('/');
@@ -1287,6 +1291,8 @@ function assertInitialInventory(directory, files) {
     const { folder, prefix } = pending.pop(), bound = bindDirectory(folder);
     assertDirectory(directory);
     for (const entry of fs.readdirSync(folder, { withFileTypes: true })) {
+      try { if (inspectMetadata(bound, entry.name)) continue; }
+      catch { throw resultExportFailure('RESULT_EXPORT_CONFLICT'); }
       const name = prefix + entry.name;
       if (entry.isSymbolicLink()) throw resultExportFailure('RESULT_EXPORT_CONFLICT');
       if (entry.isDirectory() && expectedDirectories.has(name)) pending.push({ folder: path.join(folder, entry.name), prefix: name + '/' });
@@ -1380,7 +1386,8 @@ function initialResultPublication(batchId, verifyFiles = true) {
     }
     // Initial results are reusable Markdown just like later generations. The
     // opener must not silently include user-added private files or follow a
-    // replaced/symlinked subtree. Walk only the finite promised folder set.
+    // replaced/symlinked subtree. Walk only the finite promised folder set;
+    // opaque, bounded Finder metadata is not part of the Markdown inventory.
     assertInitialInventory(directory, value.files);
   }
   return { ...value, binding_sha256: crypto.createHash('sha256').update(bytes).digest('hex') };

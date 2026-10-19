@@ -106,7 +106,13 @@ aktiv; die App öffnet dabei nicht automatisch die vollständige Verlaufsliste.
 7. **Ergebnisordner öffnen** führt zu den fertigen Dateien. Diese kannst du im
    Dateimanager selbst auswählen und auch ohne KI verwenden. Die neuen fertigen
    MD-Ordner enthalten keine Originale, vertraulichen Zuordnungen, privaten
-   Prüfstände oder technischen Begleitdateien. Bei alten Läufen können solche
+   Prüfstände oder von DataSecure erzeugten technischen Begleitdateien.
+   Betriebssysteme können zusätzliche Anzeige-Metadaten wie `.DS_Store`
+   hinzufügen. Diese sind nicht geprüft oder anonymisiert: nur die gewünschten
+   Markdown-Dateien weitergeben, nicht ungeprüft den gesamten Ordner verpacken.
+   Unter Windows bleibt eine hinzugelegte `.DS_Store` ein Dateikonflikt; die App
+   entfernt oder repariert solche Dateien nicht automatisch.
+   Bei alten Läufen können solche
    Beilagen weiterhin vorhanden sein; alte Ordner werden nicht bereinigt.
    DataSecure lädt nichts hoch. Eine technische Prüfung garantiert weder
    vollständige Anonymität noch fachliche Fehlerfreiheit.
