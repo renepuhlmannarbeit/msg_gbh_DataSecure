@@ -43,6 +43,20 @@ als Gegenprüfung, nicht als Anlass für einen nachgebauten ARIA-Widget.
 
 ## Noch erforderliche Paketgates
 
+Erster eingefrorener Versuch8ca7b2ce: Windows Native und fünf Paketgates grün,
+Gesamt-Endlauf ROT bei Datei71 nach70 bestandenen Dateien; Eingaben unverändert.
+Der letzte Volume-Propagationstest hatte eine ungeeignete /2-Fixture:
+gespeicherte Number-Inode10133099162735664, tatsächliche BigInt-Inode
+10133099162735665. Die JS-/Rust-Prüfungen verweigern diese bereits gerundete
+Identität korrekt vor dem nativen Callback. Unabhängig an Primärfixture und
+Produktionsquellen bestätigt; kein als transient erklärter FAIL. Ausschließlich
+die Testvorbedingung für native Fehlerweitergabe nutzt nun die bestehende /3-
+Fixture und prüft den tatsächlichen Root/admission-Callback. Die getrennte
+Unsafe-Number-Negative mit Callbackzahl0 bleibt. Keine Produkt-/Schutzänderung.
+Alte rote FINALs und Zwischenpakete bleiben erhalten und werden nicht freigegeben.
+Korrigierter Test10/10grün; drei unabhängige In-Memory-Produktmutanten für
+umbenannten/verschluckten Volumefehler und doppelten Callback jeweils gezielt rot.
+
 Nach dem gemeinsamen Commit: neuer unveränderter Headless-Endlauf samt
 Zusatzgates, Windows-Prepare/Clippy/Rust/Release und fünf Paketgates. Beide
 Mac-Consumer auf exakt demselben Appcommit mit vorhandenen genehmigten

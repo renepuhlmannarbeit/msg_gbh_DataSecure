@@ -73,8 +73,13 @@ test('unconfigured, missing and environment-only roots never become implicit per
   finally { delete process.env.EU_PRIVACY_RESULT_ROOT; }
 });
 test('a native volume refusal is not relabelled or retried and leaves settings unchanged', async () => {
-  const f = fixture(); let calls = 0;
-  await assert.rejects(config.prepareConfiguredNativeExportBinding(() => {
+  // Exercise native error propagation, not legacy Number admission. On NTFS a
+  // real /2 inode may already be rounded above 2^53-1 and must be refused before
+  // this callback. The separate unsafe-number case retains that early refusal.
+  const f = fixture('datasecure-result-root/3'); let calls = 0;
+  await assert.rejects(config.prepareConfiguredNativeExportBinding(snapshot => {
+    assert.equal(snapshot.root, f.root);
+    assert.deepEqual(snapshot.admission, { kind: 'native', identity: id });
     calls++; throw Object.assign(Error('AI_EXPORT_VOLUME_MISMATCH'), { code: 'AI_EXPORT_VOLUME_MISMATCH' });
   }), { code: 'AI_EXPORT_VOLUME_MISMATCH' });
   assert.equal(calls, 1); assert.deepEqual(fs.readFileSync(config.configPath()), f.bytes);
