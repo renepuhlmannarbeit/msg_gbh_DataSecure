@@ -12,6 +12,14 @@ Keine Developer-ID, Apple-Einreichung oder Storeverteilung.
 
 ## Neuester geprüfter Windows-Quellstand, 19.10.2026
 
+Neuer Mac-Zwischenstand01:13UTC: ARM-Coreproducer erfolgreich; tatsächlicher
+Core4a15d677… und kanonischer Metadatenhash97ee40f2… importiert und anhand echter
+Compiler-/finaler Link-/Binär-/ACL-Protokolle gegengelesen. Beide unabhängigen
+Reviews: geeigneter Consumerkandidat, kein Aufnahmeblocker. Intelproducer
+läuft; Policy bleibt bis gemeinsamem Intelreview leer. Native Produkt-
+Consumer, gemeinsamer Appfreeze und endgültige Pakete sind weiter erforderlich.
+Die nachfolgende Angabe „beide Producer laufen“ beschreibt den vorherigen Stand.
+
 187e1602138d086596ac379f22504fa096b86233 / Fingerprint1730ad82… ist mit
 272/272+10/10, Native228/3ignoriert/Clippy/Release und fünf Paketgates vollständig
 unverändert geprüft (checkpoint06). Neues Windows-ZIPa55ebade… bleibt ein

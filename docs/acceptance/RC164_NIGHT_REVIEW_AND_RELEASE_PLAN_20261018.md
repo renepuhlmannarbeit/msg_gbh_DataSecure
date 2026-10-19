@@ -1,5 +1,42 @@
 # RC164 – fortgesetzter Abschlussauftrag
 
+## Tatsächlicher ARM64-Corekandidat, 19.10.2026, 01:13 UTC
+
+Producer39167676290 auf7d0ee31dc65ce31ce54f1b4a1a0cefa348ef7071:
+ARM-Job117793988152 erfolgreich abgeschlossen01:13:44UTC. Artefakt12157112454
+mit exakt sourcegebundenem Namen heruntergeladen; GH-ZIP-Digest
+13e29eb61374df44a36bf0752cb3b548202ace9ea119a68eb7be647454ba6f74.
+Create-only Import des geschlossenen Vierdatei-TAR angenommen, keine Approval
+allein durch Download/Import. Tatsächliche Dateien und Reviewaufzeichnung unter
+dist/rc164-mac-core-review-20261019/macos-arm64 und ARM64-IDENTITY-AND-INITIAL-REVIEW.md.
+
+Core115958192Bytes/SHA2564a15d677070f42dfb4746308653b42f9de5cf1cac3beb386a364117288214d3d;
+kanonischer FINAL-CORE-Metadatenhash
+97ee40f251f96892c382b17b39ab0fceddb0531fe87b228db48e38d3e0fb232e;
+kanonischer Provenienzhash
+e7c9bd9956a4157925ab571d33645a51c4afabde6d1cbf7b4b05ee1fba809441.
+Separater unveränderter offizieller Converter18e387c9…; alle vier Sourcepins
+und Lizenzhash passen. Tatsächliches make.log zeigt environment.cc4530,
+Guard-C9456/NAPI8, Adapter9457/NAPI8, Archiv9458 und finalen node-Link9510
+mit libnode.a/force_load und Guardarchiv. Configure/Make exit+close0 ohne
+Kill-/Cleanupfehler; direktes Childende bestätigt, Gruppenende nicht bestätigt.
+
+Native finale ACL-Probe: sechs Fälle, fünf Flags true, Cleanup bestätigt;
+Corehash und tatsächlicher Fixturehash236079b2… passen. Aufgezeichnete Rollen:
+CoreABI1/Methoden vorhanden, Converter ohne Binding. Direkte Binärinspektion:
+ThinARM64, Deployment11.0, ausschließlich Systembibliotheken, keine Rpaths;
+eingebettete ad-hoc/Runtime-Flags und ausschließlich allow-jit. Das Windowslesen
+ist keine erneute native kryptographische codesign-Verifikation.
+
+Beide unabhängigen tatsächlichen Compiler-/Link-/Binär-/ACL-/Identitätsreviews:
+geeignet als ARM-Consumerkandidat, kein bestätigter Aufnahmeblocker. Zweiter
+Reviewer reproduzierte zusätzlich alle fünf vorbereiteten Sourcehashes aus
+neun Originaldateien des gepinnten Archivs und verglich den separaten offiziellen
+Converter direkt mit dessen Archiv. Intelproducer weiterhin aktiv.
+Policy noch leer bis gemeinsamem Intelreview; finaler Appfreeze und native Consumer,
+finale Windowspakete/GUI sowie Release/Remoteprüfung weiterhin offen.
+Kein App-/ZIP-/DMG-/Finder-/M2-Abnahme-PASS aus diesem Corekandidaten.
+
 ## Unveränderter Gesamtcheckpoint06, 19.10.2026, 00:57 UTC
 
 Produktquellen187e1602138d086596ac379f22504fa096b86233, Fingerprint

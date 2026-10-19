@@ -4,6 +4,12 @@ Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Pre-Release in Vorbe
 
 ## Aktuelle Nacht-Fortsetzung (ersetzt ältere Freigabeangaben)
 
+Neu19.10.01:13UTC: tatsächlicher ARM-Core importiert und anhand echter Compiler-/
+finaler Link-/Sealmetadaten-/ACL-Belege überprüft. Beide unabhängigen Reviews:
+geeigneter Consumerkandidat, kein Aufnahmeblocker. Intelproducer
+weiter aktiv. Policyapproval beider Targets, gemeinsamer finaler Appfreeze,
+native Consumer, finale Windows-/Mac-Pakete/GUI und Release bleiben offen.
+
 Neu19.10.00:57UTC: Checkpoint06/187e160/1730ad82… vollständig272/272+10/10,
 Native228/3ignoriert/Clippy/Release und fünf Paketgates unverändert bestanden.
 Neues Windows-ZIPa55ebade… bleibt ungeprüfter GUI-Zwischenkandidat, kein Release.

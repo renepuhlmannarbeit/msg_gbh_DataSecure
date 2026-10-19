@@ -4,6 +4,14 @@ Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Test-Pre-Release in 
 
 ### Aktueller Nachtauftrag – neuere Autorität vor historischen Abschnitten
 
+Neu19.10.01:13UTC: ARM-Coreproducer117793988152 erfolgreich. Artefakt12157112454
+create-only importiert, Core4a15d677…/kanonische FINAL-Metadaten97ee40f2… anhand
+echter Compile-/Archiv-/finaler Link-/Binär-/ACL-Belege geprüft. Beide unabhängigen
+Gegenreviews ohne Aufnahmeblocker, einschließlich reproduzierter Sourcepins.
+Intelproducer weiter aktiv.
+Noch keine Policy-/App-/Releasefreigabe; native Consumer und gemeinsamer finaler
+App-/Paket-/GUI-/Uploadabschluss bleiben offen. Details im aktuellen Nachtplan.
+
 Neu19.10.00:57UTC: Checkpoint06/187e160/1730ad82… vollständig272/272+10/10,
 Native228/3ignoriert/Clippy/Release und5 Paketgates grün, alle Inputs unverändert.
 Neues ZIPa55ebade…/EXE503ef35d… ist unveröffentlicht, keine neue GUI-Abnahme.
