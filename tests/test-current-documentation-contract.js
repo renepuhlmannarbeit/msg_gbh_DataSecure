@@ -438,8 +438,7 @@ test('main README gives direct Windows and macOS Standalone installation paths',
 test('Windows and Mac describe required reviews followed by direct results; published Linux retains its old contract', () => {
   for (const file of ['START-WINDOWS.md', 'MACOS-START.md']) {
     const text = read(`apps/datasecure-standalone/${file}`).replace(/\*\*/gu, '').replace(/\s+/gu, ' ');
-    const reviewAction = file === 'START-WINDOWS.md'
-      ? 'Entscheidungen speichern' : 'Gruppe übergeben und weiter';
+    const reviewAction = 'Entscheidungen speichern und fortfahren';
     for (const label of ['Neue Verarbeitung', 'Verarbeitung starten', reviewAction,
       'Ergebnisordner öffnen']) {
       assert.ok(text.includes(label), `${file} omits current action ${label}`);
@@ -473,6 +472,46 @@ test('current Standalone export wording explains general-purpose files without m
   assert.match(renderer, /'DataSecure-KI-Export'/u, 'existing physical receipt namespace stays unchanged');
   for (const file of ['START-WINDOWS.md', 'MACOS-START.md'])
     assert.match(read('apps/datasecure-standalone/' + file).replace(/\s+/gu, ' '), /auch ohne KI (?:verwenden|verwendbar)/u, file);
+});
+
+test('complete Windows and Mac guides do not contradict mandatory result companions or restore a second export step', () => {
+  const obsolete = [
+    /nicht Teil der neuen fertigen MD-Ordner/u,
+    /Neue fertige MD-Ordner enthalten keine Originale, Identitäts-\/Dateizuordnung/u,
+    /nach Fundstellenabschluss direkt Dokumentprüfung desselben Laufs; Freigaben/u,
+    /getrennter bestätigter Export in einen normalen Ordner ohne Originale, Zuordnungen/u,
+    /Gruppe übergeben und weiter/u,
+    /Text aus Scans, Bildern und Grafiken per OCR lesen/u,
+    /Behandlung wählen und anwenden/u
+  ];
+  const markup = read('apps/datasecure-standalone/frontend/review.html');
+  const workspace = read('apps/datasecure-standalone/frontend/workspace.html');
+  const actionLabels = [
+    /<button id="bulk-apply"[^>]*>([^<]+)<\/button>/u.exec(markup)?.[1],
+    /<label for="bulk-treatment">([^<]+)<\/label>/u.exec(markup)?.[1],
+    /<button id="release"[^>]*>([^<]+)<\/button>/u.exec(markup)?.[1],
+    /<input id="text-ocr"[^>]*> ([^<]+)<\/label>/u.exec(workspace)?.[1]
+  ];
+  assert.ok(actionLabels.every(label => typeof label === 'string' && label.length));
+  const validate = source => {
+    const text = source.replace(/\*\*/gu, '').replace(/\s+/gu, ' ');
+    for (const name of ['Vertraulich', 'Dateizuordnung.csv', 'Personen-Pseudonym-Zuordnung.txt']) assert.ok(text.includes(name));
+    assert.match(text, /Originalangaben: nicht weitergeben oder hochladen/u);
+    assert.match(text, /ohne (?:weitere|zusätzliche) Aktion/u);
+    for (const label of actionLabels) assert.ok(text.includes(label), `guide must use actual UI label ${label}`);
+    for (const pattern of obsolete) assert.doesNotMatch(text, pattern);
+  };
+  for (const name of ['START-WINDOWS.md', 'MACOS-START.md']) {
+    const text = read('apps/datasecure-standalone/' + name); validate(text);
+    for (const paragraph of [
+      'nicht Teil der neuen fertigen MD-Ordner',
+      'Neue fertige MD-Ordner enthalten keine Originale, Identitäts-/Dateizuordnung',
+      'nach Fundstellenabschluss direkt Dokumentprüfung desselben Laufs; Freigaben',
+      'getrennter bestätigter Export in einen normalen Ordner ohne Originale, Zuordnungen',
+      'Gruppe übergeben und weiter', 'Text aus Scans, Bildern und Grafiken per OCR lesen',
+      'Behandlung wählen und anwenden'
+    ]) assert.throws(() => validate(text + '\n' + paragraph), 'a contradictory later paragraph must fail the whole-guide guard');
+  }
 });
 
 test('Windows and macOS shipped guides follow package identity and both review paths', () => {

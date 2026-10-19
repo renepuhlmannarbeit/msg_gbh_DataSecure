@@ -104,3 +104,48 @@ Projektionen müssen exakte Modulbytes enthalten und bei Entfernen genau dieses
 Leafs scheitern. Vorschlag unabhängig gegengelesen; Source03 benötigt nach dem
 engen Fix neue gemeinsame Commit-/Regressions-/Plattformbelege. Source02 bleibt
 als fehlgeschlagen dokumentiert; seine Nativebelege ersetzen Source03 nicht.
+
+## Source03 – tatsächliche Archivprüfung vor Übergabe
+
+Appcommit `a80dcf8a32c69254ca8774ee77f54756dffba7e1`, gleicher Fingerprint.
+Windows Native265Rust(3ignoriert)/Clippy/Release und alle5Paketgates bestanden,
+100/100Dateien, Originale und sämtliche570Inputs unverändert. ZIP112382120Bytes,
+SHA256 `104e5e6bf83cff15397d1695c9cb4cb2470bb0050068b1908f1298a98a6fa2a1`;
+EXE `5d69996f33d44e5724d224bbe06aee92c37264b8b87b47f432643203dcea7c25`.
+Unabhängiger tatsächlicher Archivgegenreview bestätigt alle1150Einträge,231
+gemeinsame Serverdateien und eingebetteten Commit/FP, findet aber einen P2-
+Anleitungswiderspruch: Ein späterer Absatz sagt weiterhin, neue Ergebnisordner
+enthielten keine Zuordnungen. Vollständiges Lesen beider Guides zeigt denselben
+Alttext und einen veralteten zweiten Freigabe-/Export-Prüfschritt auch auf Mac.
+
+Keine bloße nachträgliche ZIP-Textänderung: Guides gehören zum Produktfingerprint.
+Der eigene Headless-Prozessbaum wurde nach59fertigenDateien während Datei60
+gezielt beendet, keine erfolgreiche HEADLESS-FINAL erzeugt; synthetische
+Zwischenstände erhalten. Eigener gebundener DriverPID46648 und sein Prozessbaum
+beendet, Nutzer-App nicht bedient/beendet. Beide Macjobs39333563395 gezielt
+abgebrochen, nicht als native App-/Paket-PASS ausgegeben. Alle Jobs vor Änderung
+beendet. Source03 bleibt ungeeignet für Übergabe; seine grünen Teilgates sind
+keine spätere Source04-Abnahme.
+
+Enge Anleitungsbereinigung beschreibt beide Pflichtdateien in Erst-/Korrektur-
+ständen und die vertrauliche Weitergabegrenze konsistent. Historische optionale
+Zuordnungsaktionen werden ausdrücklich auf alte Läufe begrenzt. Mac-Zielhostplan
+folgt dem bereits implementierten Direktablauf; historische RC161-M2-Gegenbelege
+bleiben als historisch gekennzeichnet. Tatsächliche Standardrunner ARM14/Intel15
+von optionalem26Profil getrennt. Neuer vollständiger Guide-Gegenfall lehnt die
+alten widersprüchlichen Absätze auch bei korrekter Einleitung ab. Keine neue
+Fach-/Autorisierungs-/OS-Schutzänderung, aber neuer gemeinsamer Freeze nötig.
+Der vollständige Bediengegenreview fand zusätzlich drei veraltete Button-/
+Schrittnamen. Beide Guides nennen nun tatsächliche OCR-Option, Phase2 und
+„Auf Auswahl anwenden“ sowie den dynamisch gezählten Speichern-/OCR-Knopf.
+Der Dokumentvertrag übernimmt diese Texte aus dem tatsächlichen UI-Markup
+und verweigert auch die alten Beschriftungen in späteren Absätzen. Apples
+offizielle Erstöffnungs- und Ordnerzugriffshinweise separat nachgelesen und
+im Mac-Guide verlinkt; keine neue OS-Rechte- oder Sicherheitsanforderung.
+
+Finaler unabhängiger Gegenreview der vier tatsächlichen Änderungen ohne
+bestätigten Restbefund. Guidepins Windows `9178c3cd115eb8af060a4f66e3ab92718e2b5803cdae332d7669285c4e38b8c8`,
+Mac `084a568727263fd4e237bcd839847a8921e2032f4fcaf4c61af0381bd694f04f`;
+Dokumentvertrag `0fc6dac7e1f53cbb7565d49a64af8f393539fccc27c5d6552052b91ae9daeb6a`.
+Aktueller Dokumentvertrag30/30 bestanden. Source04 muss neue unveränderte
+Endgates nachweisen; keine Übernahme der historischen Teil-PASS aus Source03.

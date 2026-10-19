@@ -32,7 +32,7 @@ und einige Alteinträge ohne ausreichende Laufmetadaten sind geschützt.
 Start-Recovery und Aufbewahrungsprüfung bleiben aktiv; die vollständige
 Verlaufsliste wird nicht automatisch beim Start geöffnet.
 
-**Bekannter Mac-26.2/M2-Prüfstopp:** Der Core von RC161 endete auf diesem
+**Historischer RC161-Mac-26.2/M2-Prüfstopp, kein Befund dieses Pakets:** Der damalige Core endete auf diesem
 Zielhost bei ZIP und DMG 16-mal vor seiner Bereitschaft mit Signal 5
 (`SIGTRAP`). RC162 ergänzte das benötigte JIT-Entitlement des gehärteten
 Node-Core; damit ist die Ursache des M2-Traps noch nicht bewiesen. Im aktuellen
@@ -108,6 +108,11 @@ Die Hilfsprozesse müssen für macOS außerdem der gestarteten App zuordenbar
 bleiben. Deshalb gehört eine echte Finder-Probe mit Dateien-/Ordnerzustimmung
 und deren Ablehnung zur Abnahme; ein Headless-Runner ersetzt diese nicht.
 
+Apple beschreibt [Erstöffnung und Warnungen](https://support.apple.com/en-ie/102445)
+getrennt vom [Zugriff auf Dateien und Ordner](https://support.apple.com/en-ie/guide/mac-help/mchld5a35146/mac).
+Eine app-spezifische Erstöffnungsentscheidung gewährt nicht automatisch Zugriff
+auf Dokumente oder andere geschützte Ordner.
+
 ## Verarbeitung und Prüfung
 
 Die folgenden manuellen Prüfschritte gelten für **Selbst entscheiden**, die
@@ -134,7 +139,7 @@ während **Nachkorrektur öffnen (optional)** die Textbearbeitung öffnet.
 Für neue anonymisierte Ergebnisdateien sind neutrale Namen empfohlen.
 Alternativ **Originalname mit „-anonymisiert“** wählen, wenn die Namen keine
 sensiblen Angaben enthalten. Diese Wahl gilt nur für diesen neuen Lauf;
-spätere Exporte erhalten immer neutrale Namen. Unterordner und die
+neue nachbearbeitete Anonymisierungsstände erhalten neutrale Namen. Unterordner und die
 vertrauliche Zuordnung können Originalnamen enthalten.
 
 1. Nach der Installation unter **Neue Verarbeitung** zuerst **Nur umwandeln**
@@ -142,9 +147,12 @@ vertrauliche Zuordnung können Originalnamen enthalten.
    gewünschte Dateien anhaken und das Ergebnisziel kontrollieren.
    **Verarbeitung starten** beginnt höchstens 200 Dateien / 500 MB.
    Auswahl oder Drag-and-drop allein startet nichts.
-2. **Jetzt prüfen** öffnet die Fundstellen dieses Laufs. Checkboxen wählen nur
-   aus. Gemeinsame Behandlungen sind zunächst vorgemerkt; erst **Gruppe
-   übergeben und weiter** speichert die vollständig bearbeitete Gruppe.
+2. **Jetzt prüfen** öffnet die Fundstellen dieses Laufs. Unter **1. Werte auswählen**
+   Zeilen anhaken, unter **2. Entscheidung wählen** eine Behandlung wählen und
+   **Auf Auswahl anwenden** klicken. Dies merkt Entscheidungen nur vor. Erst
+   **Entscheidungen speichern und fortfahren** speichert die vollständig bearbeitete
+   Gruppe. Die Anzahl steht vor dem Buttontext; bei OCR lautet er
+   **OCR-Entscheidungen speichern und fortfahren**.
    Offen-Filter, weitere Seiten und Folgegruppen beachten. Original-/Markdown-
    Vergleich und OCR-Originalbildausschnitt gehören zum angezeigten Punkt.
    Personen- und Unternehmensentscheidungen bleiben unterscheidbar.
@@ -152,8 +160,13 @@ vertrauliche Zuordnung können Originalnamen enthalten.
    Laufs** zurück. Die Maskierungen sind bereits angewendet; eine zusätzliche
    Dokumentauswahl, Pflichtfreigabe oder Exportbestätigung entfällt.
 4. Nach bestätigter technischer Bereitstellung **Ergebnisordner öffnen** wählen.
-   Neue fertige MD-Ordner enthalten keine Originale, Identitäts-/Dateizuordnung,
-   privaten Prüfstände oder von DataSecure erzeugten technischen Begleitdateien.
+   Neue Anonymisierungsstände enthalten die fertigen Markdown-Dateien und den
+   getrennten Unterordner **Vertraulich** mit **Dateizuordnung.csv** und
+   **Personen-Pseudonym-Zuordnung.txt**. Beide Dateien sind ohne weitere Aktion
+   vorhanden; auch jeder neue Korrekturstand erhält seine passenden Zuordnungen.
+   **Vertraulich enthält Originalangaben: nicht weitergeben oder hochladen.**
+   Originaldateien und private Prüfstände werden nicht in den Ergebnisstand kopiert.
+   Reine Markdown-Konvertierung erzeugt keine Zuordnungen.
    Finder kann zusätzliche `.DS_Store`-Anzeige-Metadaten anlegen. Diese sind
    nicht geprüft oder anonymisiert und gehören nicht zur Weitergabe: im Finder
    nur die gewünschten Markdown-Dateien auswählen, nicht ungeprüft den gesamten
@@ -293,7 +306,8 @@ Downloadreferenzen**, nicht das neue Entwicklungspaket oder dessen Abnahme:
   jeweils mit gleichnamiger `.sha256` auf der Release-Seite.
 - Historische RC140-ZIPs: Intel mindestens macOS 15, ARM mindestens macOS 14.
 - Deklarierter Binärvertrag: macOS 13.5 für beide Architekturen.
-  Die Paketgates laufen auf macOS 15 (Intel) und macOS 26 (ARM);
+  Die regulären Paketgates laufen auf macOS 15 (Intel) und macOS 14 (ARM).
+  Das optionale macOS-26-Profil ist ein gesonderter Nachweis;
   die Zielhost-Abnahme auf M2/macOS 26.2 und macOS 13.5 bleibt offen.
 
 Node, PDF-Parser, Canvas-Bilddecoder, Tesseract-WASM und deutsche/englische
@@ -398,10 +412,12 @@ Die Freigabe erfordert je einen nativen Lauf auf Intel und Apple Silicon:
   Extraktions-/Anonymisierungsstatus, neutrale Ergebnisnamen, Personen/Firmen;
 - Sammelbehandlung zunächst vorgemerkt, vollständige Gruppenübergabe,
   Folgeschritte im selben Prüffenster, Vertagen/Neustart/Fortsetzen;
-- nach Fundstellenabschluss direkt Dokumentprüfung desselben Laufs; Freigaben
-  nur für ausdrücklich gewählte aktuelle Dokumentstände;
-- getrennter bestätigter Export in einen normalen Ordner ohne Originale,
-  Zuordnungen oder private Prüfstände; Änderungen widerrufen betroffene Freigaben;
+- nach erforderlichem Fundstellenabschluss direkt Ergebnisordner desselben
+  Laufs, ohne zweite Dokumentauswahl, Pflichtfreigabe oder Exportbestätigung;
+- neue Anonymisierung: beide Zuordnungen im getrennten Unterordner Vertraulich;
+  nur gewünschte anonymisierte Markdown-Dateien weitergeben, nicht Vertraulich;
+- optionale Nachbearbeitung erzeugt einen vollständigen neuen Stand mit aktuellen
+  MD und beiden passenden Zuordnungen; ältere Stände bleiben erhalten;
 - große lokale Prüfgruppen und verständliche technische Fehler; Dialogfehler
   dürfen nicht als Benutzerentscheidung „Später“ erscheinen;
 - Verlauf mit höchstens 5 laufgebundenen Karten; alle Aktionen gehören zum

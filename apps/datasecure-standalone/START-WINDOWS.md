@@ -36,7 +36,7 @@ aktiv; die App öffnet dabei nicht automatisch die vollständige Verlaufsliste.
 2. Unter **Neue Verarbeitung** die Aufgabe **Nur umwandeln** (Zweck:
    **Nur in Markdown umwandeln**) oder **Umwandeln und anonymisieren** wählen.
    Anfangs ist keine Aufgabe vorbelegt; Auswahl allein verarbeitet nichts.
-   Für beide Aufgaben ist **Text aus Scans, Bildern und Grafiken per OCR lesen**
+   Für beide Aufgaben ist **Text aus Bildern und Scans lesen (OCR)**
    zunächst aus. Anhaken, wenn auch Rastertext übernommen werden soll. Ohne
    Häkchen liest die App nur vorhandenen Text; reine Scans und Bilddateien
    erhalten einen benannten Hinweis statt eines leeren Ergebnisses.
@@ -82,12 +82,14 @@ aktiv; die App öffnet dabei nicht automatisch die vollständige Verlaufsliste.
    und insbesondere den Anonymisierungsweg, nicht zusätzliche Pflichtschritte
    für einen abgeschlossenen Markdown-Lauf.
 5. Bei **Jetzt prüfen** die Fundstellenprüfung direkt am Lauf öffnen.
-   Die sichtbaren Schritte sind **1. Werte auswählen**, **2. Behandlung wählen
-   und anwenden** und **3. Entscheidungen speichern**. Checkboxen wählen nur
+   Die sichtbaren Schritte sind **1. Werte auswählen**, **2. Entscheidung wählen**
+   und **3. Entscheidungen speichern**. Checkboxen wählen nur
    aus. **Alle gefilterten Zeilen auswählen** gilt auch für weitere Listenseiten;
-   die Checkbox im Tabellenkopf gilt nur für die aktuelle Seite. **Anwenden**
-   merkt Entscheidungen zunächst vor; erst der Abschlussknopf speichert die
-   vollständig bearbeitete Gruppe. Offen-Filter, weitere Seiten und Folgegruppen
+   die Checkbox im Tabellenkopf gilt nur für die aktuelle Seite. **Auf Auswahl anwenden**
+   merkt Entscheidungen zunächst vor; erst **Entscheidungen speichern und fortfahren**
+   speichert die vollständig bearbeitete Gruppe. Die Anzahl steht vor dem Buttontext;
+   bei OCR lautet er **OCR-Entscheidungen speichern und fortfahren**.
+   Offen-Filter, weitere Seiten und Folgegruppen
    beachten. Im geführten Weg wird hier nichts automatisch bestätigt.
    Der Original-/Markdown-Vergleich gehört jeweils zum angezeigten Punkt.
    OCR-Kontaktwerte mit den Originalbildpixeln vergleichen. **Als Person**,
@@ -165,9 +167,11 @@ Nach bestätigtem Start bleibst du auf der Laufseite. Der erfolgreiche Abschluss
 ist grün und nennt erstellte Dateien, OCR-aus-Auslassungen und technische Fehler
 getrennt. **Ergebnisordner öffnen** steht direkt unter dem Status.
 Ausführliche Laufdetails, **Weitere Aktionen** und **Hinweise zu diesem Lauf**
-sind zunächst geschlossen. **Vertrauliche Zuordnungen (optional)** enthält
-die unterschiedlichen Datei-/Identitätszuordnungen. Diese gehören nicht in
-einen Export; der Ergebnisordner und Hinweise sind keine versteckten Zusatzwege.
+sind zunächst geschlossen. Neue Anonymisierungsstände enthalten beide
+vertraulichen Zuordnungen direkt unter **Vertraulich** im Ergebnisordner;
+ein zusätzlicher Zuordnungsbutton ist nicht erforderlich. Nur historische Läufe
+können getrennte optionale Zuordnungsaktionen besitzen. Die vertraulichen Dateien
+nicht zusammen mit den anonymisierten Markdown-Dateien weitergeben.
 Die optionale Nachkorrektur zeigt Laden sichtbar; Hinweise sind nach Ursache
 gruppiert, jede Datei lässt sich einzeln öffnen. OCR-aus-Hinweise sind gelb,
 technische Fehler rot. Ein unbestätigter Ergebnisordner bleibt als Hinweis
@@ -187,8 +191,12 @@ Vor einem neuen Lauf kannst du stattdessen **Originalname mit „-anonymisiert�
 wählen. Dateinamen können personenbezogene Angaben enthalten; diese Wahl ist
 daher keine Anonymisierung der Namen. Sie gilt nur für die Ergebnisdateien
 dieses Laufs. Neue nachbearbeitete Anonymisierungsstände erhalten neutrale Namen.
-Vertrauliche Datei-/Identitätszuordnungen sind getrennt über optionale Aktionen
-erreichbar und nicht Teil der neuen fertigen MD-Ordner. In älteren Laufordnern
+Vertrauliche Datei-/Identitätszuordnungen liegen getrennt von den Markdown-
+Dateien unter `Vertraulich/Dateizuordnung.csv` und
+`Vertraulich/Personen-Pseudonym-Zuordnung.txt` im neuen anonymisierten Ergebnisstand.
+**Vertraulich enthält Originalangaben: nicht weitergeben oder hochladen.**
+Beide Dateien sind ohne zusätzliche Aktion vorhanden, auch im neuen vollständigen
+Stand nach einer gespeicherten Nachbearbeitung. In älteren Laufordnern
 können `DataSecure-Zuordnung.csv` und `VERTRAULICH-NICHT-HOCHLADEN` weiterhin
 Originalangaben enthalten; diese alten Ordner nicht pauschal weitergeben.
 Die Identitätszuordnung wird nicht automatisch gelöscht.
