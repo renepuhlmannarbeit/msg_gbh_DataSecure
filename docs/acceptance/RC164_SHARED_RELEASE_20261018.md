@@ -12,6 +12,14 @@ Keine Developer-ID, Apple-Einreichung oder Storeverteilung.
 
 ## Neuester geprüfter Windows-Quellstand, 19.10.2026
 
+Neuer gemeinsamer Schnitt nach02:06UTC: Beide Coreproducer erfolgreich,
+Intel zusätzlich von Main und zwei unabhängigen KI-Reviewern anhand echter
+Compile-/finaler Link-/Binär-/ACL-/Sourcebelege geprüft. Ausschließlich die
+kanonischen FINAL-Metadatenhashes97ee40f2… (ARM) und17450b40… (Intel) explizit
+in die Policy aufgenommen. Dieser Schnitt ist für die neuen gemeinsamen
+App-/Paketgates bestimmt, noch nicht als fertiger Release freigegeben.
+Ältere Angaben „Producer läuft/Policy leer“ beschreiben frühere Checkpoints.
+
 Neuer Mac-Zwischenstand01:13UTC: ARM-Coreproducer erfolgreich; tatsächlicher
 Core4a15d677… und kanonischer Metadatenhash97ee40f2… importiert und anhand echter
 Compiler-/finaler Link-/Binär-/ACL-Protokolle gegengelesen. Beide unabhängigen

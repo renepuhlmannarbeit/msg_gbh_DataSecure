@@ -1,5 +1,35 @@
 # RC164 – fortgesetzter Abschlussauftrag
 
+## Beide nativen Corekandidaten geprüft; gemeinsamer Appfreeze, 19.10.2026
+
+Inteljob117793987554 erfolgreich02:06:09UTC; Producer39167676290 insgesamt
+SUCCESS auf7d0ee31dc65ce31ce54f1b4a1a0cefa348ef7071. Artefakt12158898052
+mit exaktem Target/Run/Source heruntergeladen, strikter Vierdatei-Import grün.
+Tatsächlicher Intel-Core118588944Bytes/SHA256
+9e9502104ad4c22789fc46b591e4394fa5f92d7e38ed003b7138096571107c28;
+kanonischer FINAL-Metadatenhash
+17450b40b31b577377ce58e83411c550f2f25cf328dca905bf8ab0166aeb7189;
+kanonischer Provenienzhash
+0b8c4331a1e9dde5eceb5d22201f6e880be1b4ba73220c86ac2231eaf538dfb3.
+
+Main und zwei unabhängige KI-Reviewer lasen echte C11-/C++20-/NAPI8-Compile-
+und finale node-Linkbefehle, TAR-/Binär-/Lizenz-/Provenienzbytes, native finale
+ACL-/Rollenbelege und Sourcepins. Originalquelltransform reproduziert und
+separater offizieller Converter direkt gegen gepinntes Archiv geprüft.
+Kein bestätigter Aufnahmeblocker. ThinIntel/Deployment11.0/Systemlibs/noRpaths,
+eingebettetes Ad-hoc/Runtime/exakt allow-jit; ein Reviewer prüfte offline alle
+CodeDirectory-Seitenhashes. Keine neue native codesign-Ausführung auf Windows.
+Konkrete Belege: dist/rc164-mac-core-review-20261019/INTEL-IDENTITY-AND-REVIEW.md.
+
+Nur die zwei tatsächlich gegengeprüften kanonischen FINAL-Metadatenhashes
+werden explizit in native/runtime/standalone-macos-core.json freigegeben.
+Coreproducer-Provenienzcommit bleibt getrennt vom nun einzufrierenden
+gemeinsamen Appcommit. Kein Feature-/Schutz-/Autorisierungsumbau daraus.
+Anschließend native Consumer für beide Targets, neuer unveränderter kompletter
+Windows-Quellen-/Rust-/Paketlauf und tatsächliche GUI-Abnahme exakt neuer Bytes.
+Erst danach passende Downloads lokal und als Pre-Release bereitstellen.
+Noch kein allgemeiner Mac-, M2-, Finder-, Crash-/Prozessbaum- oder Release-PASS.
+
 ## Tatsächlicher ARM64-Corekandidat, 19.10.2026, 01:13 UTC
 
 Producer39167676290 auf7d0ee31dc65ce31ce54f1b4a1a0cefa348ef7071:

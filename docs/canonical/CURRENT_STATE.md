@@ -4,6 +4,13 @@ Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Test-Pre-Release in 
 
 ### Aktueller Nachtauftrag – neuere Autorität vor historischen Abschnitten
 
+Neu19.10.nach02:06UTC: Beide Coreproducer39167676290 erfolgreich. Intel-Core
+9e950210…/kanonische Metadaten17450b40… anhand tatsächlicher Compile-/Link-/
+Binär-/ACL-/Originalquellenbelege von Main und zwei unabhängigen Reviewern
+ohne Aufnahmeblocker geprüft. Beide konkreten Metadatenhashes in Policy
+freigegeben; gemeinsamer Appfreeze und neue unveränderte Windows-/Mac-
+Consumer-/Paket-/GUI-Gates folgen. Noch kein Release-/M2-/Finder-PASS.
+
 Neu19.10.01:13UTC: ARM-Coreproducer117793988152 erfolgreich. Artefakt12157112454
 create-only importiert, Core4a15d677…/kanonische FINAL-Metadaten97ee40f2… anhand
 echter Compile-/Archiv-/finaler Link-/Binär-/ACL-Belege geprüft. Beide unabhängigen

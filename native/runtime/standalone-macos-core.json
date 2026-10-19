@@ -12,5 +12,14 @@
     "abi": 1,
     "napi": 8
   },
-  "approved_artifacts": []
+  "approved_artifacts": [
+    {
+      "target": "macos-arm64",
+      "artifact_sha256": "97ee40f251f96892c382b17b39ab0fceddb0531fe87b228db48e38d3e0fb232e"
+    },
+    {
+      "target": "macos-x64",
+      "artifact_sha256": "17450b40b31b577377ce58e83411c550f2f25cf328dca905bf8ab0166aeb7189"
+    }
+  ]
 }

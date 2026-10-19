@@ -4,6 +4,12 @@ Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Pre-Release in Vorbe
 
 ## Aktuelle Nacht-Fortsetzung (ersetzt ältere Freigabeangaben)
 
+Neu19.10.nach02:06UTC: Intelproducer ebenfalls erfolgreich; Main und zwei
+unabhängige tatsächliche Artefakt-/Sourcegegenreviews ohne Aufnahmeblocker.
+Beide konkreten kanonischen FINAL-Metadatenhashes freigegeben. Offen jetzt
+gemeinsamer Appfreeze, native Macconsumer, neue unveränderte Windows-
+Gesamt-/Rust-/Paketgates, exakte GUI-Abnahme, lokale Übergabe und Pre-Release.
+
 Neu19.10.01:13UTC: tatsächlicher ARM-Core importiert und anhand echter Compiler-/
 finaler Link-/Sealmetadaten-/ACL-Belege überprüft. Beide unabhängigen Reviews:
 geeigneter Consumerkandidat, kein Aufnahmeblocker. Intelproducer
