@@ -4,6 +4,18 @@ Arbeitsversion: **3.2.0-rc166**, Umsetzung und neue gemeinsame Windows-/macOS-Te
 
 ## Aktueller Auftrag – Nutzerbefunde als RC166 umsetzen und neu prüfen
 
+**VERIFY-HEARTBEAT-ORDER-01:** Source08-ARM erhielt Antwort42, verlangte aber
+nach einem vorher gestarteten1150ms-Producer fälschlich mindestens einen
+Heartbeat. Vor Receiverstart oder am Timeout-Rand verfügbare Antworten dürfen
+korrekt ohne Progress zurückkehren. Konkreter nativer Schedulerpfad unbekannt.
+Nur cfg(test) geändert: Antwort im ersten echten Callback, exakt1Heartbeat;
+separater bereits gefüllter Kanal exakt0. Produktionscode/Intervall/Deadline
+unverändert, Main und unabhängiger tatsächlicher Quellenreview,2Rusttests PASS.
+Source08-Windows252Rust/Clippy/Release/Paket5 bleibt historische Evidenz;
+Headless59Dateien bewusst abgebrochen, Intel gezielt cancelled. Kein kompletter
+Source08-PASS oder Manifestdiagnose aus dem frühen ARM-Fehler. Frische gemeinsame
+Source09-Endgates erforderlich; kein behobener Produktfehler behauptet.
+
 **BUILD-MAC-MANIFEST-01:** Source07 ARM118234561544 verweigert vor Truncate
 einen Statvergleich. Konkretes Feld/Ursache noch unbekannt; derselbe Stand
 bestand Intel118234561581 vollständig. Enges Diagnoseinstrument mit

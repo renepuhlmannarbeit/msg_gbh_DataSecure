@@ -5,6 +5,21 @@ bleiben Nutzer-/Kollegenaufgabe. Keine neue Automation.
 
 ## Neuer enger Gegenlauf nach Source07
 
+Source08/439b446f bestand Windows252Rusttests (3ignoriert), Clippy/Release
+und fünfPaketgates mit unveränderten Inputs. ARM118264213145 scheiterte
+vor Manifestfinalisierung an einer Test-Zeitannahme: Antwort42 war richtig,
+aber ein vorher1150ms schlafender Producer garantiert keinen Heartbeat im
+Receiver. Bereits verfügbare Antworten beenden den Produktionswait korrekt
+ohne Progress. Der konkrete native Schedulingpfad ist nicht aufgezeichnet.
+Der testseitige kausale Ersatz lässt42 erst aus dem ersten echten Callback zu,
+verlangt exakt1Heartbeat und separat0bei vorgefülltem Kanal. Beide gezielten
+Rusttests bestanden; der tatsächliche Empfangscode bleibt bytegleich,
+Produktionsintervall1s und Testdeadline3s unverändert. Kein Retry oder Produktfix.
+Main und unabhängiger tatsächlicher Quellengegenreview abgeschlossen.
+Headless59Dateien sowie Intel wurden gezielt beendet; alle eigenen Source08-
+Freezejobs waren vor der Änderung geschlossen. Alte rote/abgebrochene und grüne
+Einzelbelege bleiben erhalten. Source09 benötigt neue gemeinsame Endgates.
+
 Source07/85c0b1c ist ungeeignet:220/282Headlessdateien bestanden, danach
 native Erstordneradmission verweigert, Inputs unverändert. Ursache nicht
 vorwegnehmen; echte Node/Rust-Fixture und Primärlog bleiben erhalten.

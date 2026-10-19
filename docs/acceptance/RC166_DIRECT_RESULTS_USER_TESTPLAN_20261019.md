@@ -7,13 +7,20 @@ Paketname, Appcommit und Prüfsummen werden bei tatsächlicher Übergabe ergänz
 Alle Desktoptests sind **offen** und werden vom Nutzer/Kollegen durchgeführt.
 
 Die vorhandenen synthetischen Eingaben verwenden. Je Fall ausschließlich
-`EINGABEN` wählen und einen neuen leeren Ergebnisunterordner anlegen; keine
-alten Ergebnisse überschreiben. Windows und Mac erhalten denselben Plan.
+`EINGABEN` wählen und außer der unten ausdrücklich beschriebenen Defaultprobe
+einen neuen leeren Ergebnisunterordner wählen; keine alten Ergebnisse
+überschreiben. Windows und Mac erhalten denselben Plan.
 
 ## 1. Markdown ohne OCR
 
 - „Neue Verarbeitung“ → „Nur umwandeln“, OCR aus.
 - Die drei vorgesehenen Eingaben des normalen Konvertierungsfalls wählen.
+- Nur bei einem tatsächlich noch unkonfigurierten Profil: den vorgeschlagenen
+  Default-Ergebnisordner beibehalten und durch den Lauf anlegen lassen; nicht
+  vorher manuell anlegen und für die spätere Ergebnisöffnung nicht neu wählen.
+  Ein vorhandenes Profil behält seine Einstellung. Keine Nutzerordner oder
+  Profile löschen, um Erstinstallation vorzutäuschen; diesen Fall dann als
+  Bestandsprofiltest kennzeichnen.
 - Starten und bis zum tatsächlichen Abschluss warten.
 - „Ergebnisordner öffnen“ wählen.
 - Erwartung: keine zweite Dokumentauswahl, Freigabe oder Exportbestätigung;

@@ -1006,14 +1006,30 @@ mod tests {
     #[test]
     fn wait_heartbeat_is_content_free_and_never_outlives_response() {
         let (sender, receiver) = mpsc::channel();
-        let producer = std::thread::spawn(move || {
-            std::thread::sleep(Duration::from_millis(1150)); sender.send(42).unwrap();
-        });
+        // Admit the response only after the actual production progress branch
+        // has run. A producer's earlier wall-clock sleep cannot establish this
+        // ordering: its response may legitimately be queued before the receiver
+        // is scheduled, or win a recv_timeout boundary without any heartbeat.
+        let mut sender = Some(sender);
+        let stopping = AtomicBool::new(false);
+        let mut heartbeats = 0;
+        assert_eq!(receive_until_with_progress(&receiver, Instant::now() + Duration::from_secs(3),
+            &stopping, || {
+                heartbeats += 1;
+                sender.take().expect("only one heartbeat before the admitted response")
+                    .send(42).unwrap();
+            }).unwrap(), 42);
+        assert_eq!(heartbeats, 1, "one genuine heartbeat, then the response ends this wait");
+        assert!(sender.is_none(), "the response was admitted by the genuine heartbeat only");
+    }
+    #[test]
+    fn already_queued_response_never_emits_a_wait_heartbeat() {
+        let (sender, receiver) = mpsc::channel();
+        sender.send(42).unwrap();
         let stopping = AtomicBool::new(false);
         let mut heartbeats = 0;
         assert_eq!(receive_until_with_progress(&receiver, Instant::now() + Duration::from_secs(3),
             &stopping, || heartbeats += 1).unwrap(), 42);
-        assert!(heartbeats >= 1);
-        producer.join().unwrap();
+        assert_eq!(heartbeats, 0, "an available response needs no wait heartbeat");
     }
 }

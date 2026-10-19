@@ -4,6 +4,22 @@ Arbeitsversion: **3.2.0-rc166**, Entwicklung und erneute Paketprüfung; veröffe
 
 ### Aktuelle Umsetzung nach weiterem Nutzertest – RC166
 
+Source08/`439b446f3a0dae1270ee6d3a518fae6f8507c4db` ist ebenfalls kein
+Freigabestand: Windows252Rusttests (3ignoriert), Clippy/Release und fünf
+Paketgates bestanden mit unveränderten Inputs. ARM118264213145 in39312131308
+empfing die richtige Antwort, scheiterte aber an einer ungültigen Zeitannahme
+im Heartbeattest. Eine bereits verfügbare Antwort braucht keinen Heartbeat;
+welche native Schedulingfolge eintrat, ist nicht protokolliert. Der neue
+deterministische Test lässt die Antwort erst im echten Progresscallback zu
+und verlangt exakt einen Heartbeat; ein separater vorgefüllter Kanal verlangt
+null. Produktionsintervall, Deadline und Empfangscode bleiben unverändert.
+Zwei gezielte echte Rusttests bestanden. Main und unabhängiger tatsächlicher
+Quellengegenreview bestätigen die Testvertragskorrektur, keinen Produktfix.
+Headless wurde nach59Dateien gezielt beendet, Intel gezielt abgebrochen;
+alle Source08-Jobs waren vor der Änderung beendet. Alte Belege bleiben erhalten.
+Der neue gemeinsame Source09 muss alle Endgates erneut durchlaufen. Die zwei
+historischen Source07-Verweigerungsursachen bleiben ausdrücklich ungeklärt.
+
 Neuer Source07-Gegenlauf auf `85c0b1c478d751966e8ca1ca5127f7f5ae3038b4`
 ist nicht freigabefähig:220/282Headlessdateien bestanden, danach native
 Erstordneradmission mit `AI_EXPORT_CONFIGURATION_REQUIRED` verweigert;
