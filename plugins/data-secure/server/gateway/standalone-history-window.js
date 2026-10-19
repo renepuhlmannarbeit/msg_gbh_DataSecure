@@ -13,6 +13,7 @@ const { createBatchActiveLock } = require('./batch-active-lock');
 const { withSynchronousDocumentControl } = require('./standalone-document-control');
 
 const LIMIT = 5;
+const READ_ATTEMPTS = 3;
 const SCHEMA = 'datasecure-standalone-history-window/1';
 const ID = /^[a-f0-9]{64}$/u;
 const LOCK_TOKEN = crypto.createHash('sha256').update(SCHEMA).digest('hex');
@@ -43,17 +44,28 @@ function select(rows) {
 }
 function read(directory) {
   const target = path.join(directory.path, 'recent.json');
-  try {
-    const record = readBoundFileRecord(target, { directory, maximum: 4096, minimum: 1 });
-    const value = JSON.parse(record.bytes);
-    if (value?.schema !== SCHEMA || Object.keys(value).sort().join(',') !== 'entries,schema' ||
-        !Array.isArray(value.entries) || value.entries.length > LIMIT ||
-        JSON.stringify(select(value.entries)) !== JSON.stringify(value.entries)) throw fail();
-    return { entries: value.entries, record };
-  } catch (error) {
-    if (error?.code === 'ENOENT') { assertDirectory(directory); return null; }
-    // A damaged index never triggers an automatic global scan on each poll.
-    throw fail();
+  for (let attempt = 0; attempt < READ_ATTEMPTS; attempt++) {
+    try {
+      // A legitimate publisher can atomically replace the index between the
+      // leaf's lstat/open/postcheck. Retry the whole boundary, never its bytes
+      // alone, and keep the original directory binding on every attempt.
+      const record = readBoundFileRecord(target, { directory, maximum: 4096, minimum: 1 });
+      const value = JSON.parse(record.bytes);
+      if (value?.schema !== SCHEMA || Object.keys(value).sort().join(',') !== 'entries,schema' ||
+          !Array.isArray(value.entries) || value.entries.length > LIMIT ||
+          JSON.stringify(select(value.entries)) !== JSON.stringify(value.entries)) throw fail();
+      return { entries: value.entries, record };
+    } catch (error) {
+      if (error?.code === 'BOUND_FILE_CHANGED' && attempt + 1 < READ_ATTEMPTS) continue;
+      if (error?.code === 'ENOENT' && attempt === 0) {
+        // Only an initially absent leaf in this unchanged namespace permits
+        // first-install migration. A changed-then-missing leaf must not scan
+        // old runs, create a lock or repair an index on a read-only retry.
+        try { assertDirectory(directory); return null; } catch { throw fail(); }
+      }
+      // Unsafe/close/schema errors and sustained changes remain unavailable.
+      throw fail();
+    }
   }
 }
 function transaction(action) {

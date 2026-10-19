@@ -12,6 +12,34 @@ Keine Developer-ID, Apple-Einreichung oder Storeverteilung.
 
 ## Neuester geprüfter Windows-Quellstand, 19.10.2026
 
+Nach04:15UTC: unabhängiger Store- und nativer Harnessabschlussgegenreview
+ohne weiteren bestätigten Produktionsbefund. Index21PASS/22(1Windows-NOT_RUN),
+Migration21/21/echteIPC erneut grün; native Readiness39/39 sowie Workflow/Pfade
+grün. Zwei Produktionsfixes: Fingerprint a55afd65f30f23e30409a41c4a032fdad7d14fa6635ebb1e0b59b1f8026e41ec.
+Handoffproof-Rollen, aktuelle Testinputs und tatsächliche ZIP-EXE-Bytes werden
+nun zusätzlich gebunden; unabhängiger Quellenabschlussreview ohne Restbefund abgeschlossen.
+Frische275+10/Native/Paket/Mac/GUI/Releasegates bleiben danach Pflicht.
+
+Neu nach03:45UTC: final3 af55717 vollständig272/272+10/10, Native228 und fünf
+Paketgates unverändert grün. Danach zwei echte Historyraces korrigiert und
+gezielt gegengeprüft: Index21PASS/22 mit einem ehrlichen Windows-NOT_RUN,
+Migration21/21; Eltern-/Close-/Unsafe-/Budgetgrenzen erhalten. Test-only-
+Fehlergrenzdiagnose mit tatsächlichen Quellengegenreviews und realer IPC grün.
+Intel-App-Gate ROT wegen bestätigtem veraltetem Lognamen im Testharness;
+ob daneben echte Startfehler bestehen, bleibt offen. Bounded session-/owner-
+gebundene native Reader gerade in Abschlussprüfung. Kein neuer final4-Freeze,
+keine vollständige neue GUI/Mac-/Releaseabnahme; Details im aktuellen Nachtplan.
+
+Neu nach03:30UTC: af55717 /4a880940… Windows-Native und fünf Paketgates
+unverändert grün, Headless noch aktiv. Macconsumer39193987747 ARM ROT in echtem
+Verlaufs-IPC vor Fehlerinjektion; konkrete native Ursache noch unbewiesen.
+Separat mit zwei echten Prozessen ein legitimes atomic-publish/read-Rennen des
+Produktionsindex kausal reproduziert. Begrenzter Readfix erst nach laufendem
+Freeze samt Gegenfällen/Gegenreview. Kein Schutzbypass und kein Core-Neubau.
+Windows-GUI auf exakt gebundenem af55717-Paket nur Fall01 bestanden, übrige neun
+NOT_RUN; App/Core normal beendet. Neues gemeinsames Paket nach Produktfix nötig,
+keine Umdeutung alter FINALs oder Veröffentlichung des roten Consumerstands.
+
 Neu nach03:13UTC: b772 vollständig272/272+10/10, Native228/Clippy/Release und
 fünf Paketgates unverändert grün; beide Macconsumer desselben Schnitts ROT.
 Danach zwei Darwin-Testverträge eng korrigiert, Produktionsfingerprint bleibt

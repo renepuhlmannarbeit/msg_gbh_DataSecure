@@ -1,5 +1,5 @@
 'use strict';
-const { readHeldBytes, readBoundFile, readBoundFileRecord, bindDirectory, assertDirectory } = require('../core/bound-file-io');
+const { readHeldBytes, readBoundFile, readBoundFileRecord, bindDirectory, assertDirectory, fileIdentity, sameFile } = require('../core/bound-file-io');
 
 // Private, content-free run summaries outlive the source-copy/journal retention
 // window. Export bindings are separate files because workers and UI readers may
@@ -223,95 +223,163 @@ function historyWindowMigration() {
   // Old installations have random journal IDs. Discover dates ONCE from small
   // retained summaries, not from full journals or document/export manifests.
   // Recovery separately preserves a summary before it can retire a journal.
-  const directory = bindDirectory(historyRoot());
-  const names = () => fs.readdirSync(directory.path).filter(name => /^[a-f0-9]{64}\.json$/u.test(name)).sort();
-  const initial = names(), rows = [];
-  if (initial.length > 10000) throw failure('STANDALONE_HISTORY_UNAVAILABLE');
-  let bytes = 0;
-  for (const name of initial) {
-    const file = path.join(directory.path, name);
-    let stat;
-    try { stat = fs.lstatSync(file, { bigint: true }); }
-    catch (error) { if (error?.code === 'ENOENT') continue; throw error; }
-    if (!stat.isFile() || stat.isSymbolicLink() || stat.size < 1n || stat.size > 32768n)
-      continue; // an unsafe/damaged old projection is not a lookup candidate
-    bytes += Number(stat.size);
-    if (bytes > 64 * 1024 * 1024) throw failure('STANDALONE_HISTORY_UNAVAILABLE');
-    let value;
-    try { value = readJson(file); } catch { continue; } // damaged projection is not a candidate
-    if (validSummary(value) && value.batch_id === name.slice(0, -5) && exportId(value.batch_id) === value.export_id)
-      rows.push({ batch_id: value.batch_id, created_at: new Date(value.created_at).toISOString() });
-  }
-  const knownExports = new Set(rows.map(row => exportId(row.batch_id)));
-  const exportsPath = path.join(dataRoot(), 'result-export-state');
-  let exportsDirectory;
-  try { exportsDirectory = bindDirectory(exportsPath); }
-  catch (error) { if (error?.code !== 'ENOENT') throw error; }
-  if (exportsDirectory) {
-    const exportNames = () => fs.readdirSync(exportsDirectory.path).filter(name => /^re_[a-f0-9]{32}\.json$/u.test(name)).sort();
-    const initialExports = exportNames();
-    if (initial.length + initialExports.length > 10000) throw failure('STANDALONE_HISTORY_UNAVAILABLE');
-    for (const name of initialExports) {
-      if (knownExports.has(name.slice(0, -5))) continue;
-      let record;
-      try {
-        const raw = readBoundFile(path.join(exportsDirectory.path, name), { directory: exportsDirectory, maximum: 1024 * 1024, minimum: 1 });
-        bytes += raw.length;
-        if (bytes > 64 * 1024 * 1024) throw failure('STANDALONE_HISTORY_UNAVAILABLE');
-        record = JSON.parse(raw);
-      } catch (error) {
-        if (error?.code === 'STANDALONE_HISTORY_UNAVAILABLE') throw error;
-        continue;
+  const retrySnapshot = Symbol('history migration snapshot changed');
+  const unavailable = () => failure('STANDALONE_HISTORY_UNAVAILABLE');
+  let bytes = 0, entries = 0, budgetExceeded = false;
+  // Count actual read work, including bytes read before a later failed check.
+  // Reserve a throwing read's requested bytes conservatively as well.
+  const io = { ...fs, readSync(fd, buffer, offset, length, position) {
+    if (length > 64 * 1024 * 1024 - bytes) { budgetExceeded = true; throw unavailable(); }
+    bytes += length;
+    const count = fs.readSync(fd, buffer, offset, length, position);
+    if (Number.isSafeInteger(count) && count >= 0 && count <= length) bytes -= length - count;
+    return count;
+  } };
+  const directory = bindDirectory(historyRoot(), { io });
+  const root = bindDirectory(dataRoot(), { io });
+  const optional = name => {
+    const target = path.join(root.path, name);
+    let binding = null;
+    try { binding = bindDirectory(target, { io }); }
+    catch (error) { if (error?.code !== 'ENOENT') throw error; }
+    return { path: target, binding };
+  };
+  // Bind once, even the optional owner/journal parents. A later attempt may
+  // never adopt a replacement namespace or an initially absent directory.
+  const exports = optional('result-export-state'), owners = optional('result-export-owners'), journals = optional('batches');
+  const assertParents = () => {
+    assertDirectory(root); assertDirectory(directory);
+    for (const item of [exports, owners, journals]) {
+      if (item.binding) { assertDirectory(item.binding); continue; }
+      try { io.lstatSync(item.path); }
+      catch (error) { if (error?.code === 'ENOENT') continue; throw error; }
+      throw unavailable();
+    }
+  };
+  const names = () => io.readdirSync(directory.path).filter(name => /^[a-f0-9]{64}\.json$/u.test(name)).sort();
+  const exportNames = () => exports.binding
+    ? io.readdirSync(exports.path).filter(name => /^re_[a-f0-9]{32}\.json$/u.test(name)).sort() : [];
+  for (let attempt = 0; attempt < 3; attempt++) {
+    // Parent checks deliberately live outside the retry catch: their CHANGED
+    // code is not evidence of a harmless leaf publication.
+    assertParents();
+    const initial = names(), initialExports = exportNames(), rows = [], observed = new Map(), skipped = new Map();
+    entries += initial.length + initialExports.length;
+    if (entries > 10000) throw unavailable();
+    const read = (parent, name, maximum, listed = false) => {
+      if (!parent) return null;
+      const target = path.join(parent.path, name);
+      let stat;
+      try { stat = io.lstatSync(target, { bigint: true }); }
+      catch (error) {
+        if (error?.code !== 'ENOENT') throw error;
+        observed.set(target, null);
+        if (listed) throw retrySnapshot;
+        return null;
       }
-      // Search metadata, not a validated export receipt. Only the selected
-      // five are later resolved with the full existing owner/anchor reader.
-      const stamp = /^Lauf-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})-[a-f0-9]{8}$/u.exec(record?.run_directory);
-      if (record?.product_channel !== 'standalone' || !stamp || !Array.isArray(record.items) ||
-          !/^datasecure-result-export\/[1-6]$/u.test(record.schema)) continue;
-      let created_at = `${stamp[1]}-${stamp[2]}-${stamp[3]}T${stamp[4]}:${stamp[5]}:${stamp[6]}.000Z`;
-      if (!Number.isFinite(Date.parse(created_at)) || new Date(created_at).toISOString() !== created_at) continue;
-      const id = name.slice(0, -5);
-      let actualBatch = ID_RE.test(record.batch_id || '') && exportId(record.batch_id) === id ? record.batch_id : null;
-      if (!actualBatch) {
-        try {
-          const ownerBytes = readBoundFile(path.join(dataRoot(), 'result-export-owners', name), { maximum: 4096, minimum: 1 });
-          bytes += ownerBytes.length;
-          const owner = JSON.parse(ownerBytes);
-          if (owner.schema === 'datasecure-content-export-owner/1' && owner.product_channel === 'standalone' &&
+      // Retain compatibility: damaged old projections are not candidates.
+      if (!stat.isFile() || stat.isSymbolicLink() || stat.size < 1n || stat.size > BigInt(maximum)) {
+        // Skipping old damage is not permission to miss a legitimate same-name
+        // replacement during this snapshot. Observe metadata without opening
+        // unsafe/oversized bytes and compare it again before publication.
+        skipped.set(target, { identity: fileIdentity(stat), file: stat.isFile(), link: stat.isSymbolicLink() });
+        return null;
+      }
+      if (stat.size > BigInt(64 * 1024 * 1024 - bytes)) throw unavailable();
+      let record;
+      try { record = readBoundFileRecord(target, { directory: parent, io, maximum, minimum: 1 }); }
+      catch (error) {
+        assertParents();
+        if (budgetExceeded) throw unavailable();
+        if (error?.code === 'BOUND_FILE_CHANGED' || error?.code === 'ENOENT') throw retrySnapshot;
+        throw error; // in particular UNSAFE and unconfirmed close are final
+      }
+      observed.set(target, record.identity);
+      try { return JSON.parse(record.bytes); } catch { return null; }
+    };
+    let selected;
+    try {
+      for (const name of initial) {
+        const value = read(directory, name, 32768, true);
+        if (validSummary(value) && value.batch_id === name.slice(0, -5) && exportId(value.batch_id) === value.export_id)
+          rows.push({ batch_id: value.batch_id, created_at: new Date(value.created_at).toISOString() });
+      }
+      const knownExports = new Set(rows.map(row => exportId(row.batch_id)));
+      for (const name of initialExports) {
+        if (knownExports.has(name.slice(0, -5))) continue;
+        const record = read(exports.binding, name, 1024 * 1024, true);
+        // Search metadata, not a validated export receipt. Only the selected
+        // five are later resolved with the full existing owner/anchor reader.
+        const stamp = /^Lauf-(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})-[a-f0-9]{8}$/u.exec(record?.run_directory);
+        if (record?.product_channel !== 'standalone' || !stamp || !Array.isArray(record.items) ||
+            !/^datasecure-result-export\/[1-6]$/u.test(record.schema)) continue;
+        let created_at = `${stamp[1]}-${stamp[2]}-${stamp[3]}T${stamp[4]}:${stamp[5]}:${stamp[6]}.000Z`;
+        if (!Number.isFinite(Date.parse(created_at)) || new Date(created_at).toISOString() !== created_at) continue;
+        const id = name.slice(0, -5);
+        let actualBatch = ID_RE.test(record.batch_id || '') && exportId(record.batch_id) === id ? record.batch_id : null;
+        if (!actualBatch) {
+          const owner = read(owners.binding, name, 4096);
+          if (owner?.schema === 'datasecure-content-export-owner/1' && owner.product_channel === 'standalone' &&
               owner.record_name === name && ID_RE.test(owner.batch_id || '') && exportId(owner.batch_id) === id)
             actualBatch = owner.batch_id;
-        } catch { /* no lookup authority is invented from an unreadable owner */ }
-      }
-      if (bytes > 64 * 1024 * 1024) throw failure('STANDALONE_HISTORY_UNAVAILABLE');
-      if (actualBatch) {
-        try {
-          const rawJournal = readBoundFile(path.join(dataRoot(), 'batches', `${actualBatch}.json`), { maximum: 2 * 1024 * 1024, minimum: 1 });
-          bytes += rawJournal.length;
-          const journal = JSON.parse(rawJournal);
-          if (journal.token === actualBatch && journal.product_channel === 'standalone' && typeof journal.created_at === 'string' && Number.isFinite(Date.parse(journal.created_at)))
+        }
+        if (actualBatch) {
+          const journal = read(journals.binding, `${actualBatch}.json`, 2 * 1024 * 1024);
+          if (journal?.token === actualBatch && journal.product_channel === 'standalone' && typeof journal.created_at === 'string' && Number.isFinite(Date.parse(journal.created_at)))
             created_at = new Date(journal.created_at).toISOString();
-        } catch { /* an export-only search date is not a journal completion proof */ }
-        if (bytes > 64 * 1024 * 1024) throw failure('STANDALONE_HISTORY_UNAVAILABLE');
-        rows.push({ batch_id: actualBatch, created_at }); continue;
+          rows.push({ batch_id: actualBatch, created_at }); continue;
+        }
+        const batch_id = crypto.createHash('sha256').update(`standalone-history:${id}`).digest('hex');
+        rows.push({ batch_id, created_at, legacy_export_id: id });
       }
-      const batch_id = crypto.createHash('sha256').update(`standalone-history:${id}`).digest('hex');
-      rows.push({ batch_id, created_at, legacy_export_id: id });
+      assertParents();
+      if (JSON.stringify(names()) !== JSON.stringify(initial) || JSON.stringify(exportNames()) !== JSON.stringify(initialExports))
+        throw retrySnapshot;
+      for (const [target, identity] of observed) {
+        let current;
+        try { current = io.lstatSync(target, { bigint: true }); }
+        catch (error) { if (error?.code !== 'ENOENT') throw error; if (identity) throw retrySnapshot; continue; }
+        if (!identity || !sameFile(current, identity)) throw retrySnapshot;
+      }
+      for (const [target, before] of skipped) {
+        let current;
+        try { current = io.lstatSync(target, { bigint: true }); }
+        catch (error) { if (error?.code === 'ENOENT') throw retrySnapshot; throw error; }
+        if (current.isFile() !== before.file || current.isSymbolicLink() !== before.link ||
+            JSON.stringify(fileIdentity(current)) !== JSON.stringify(before.identity)) throw retrySnapshot;
+      }
+      assertParents();
+      selected = historyWindow.selectHistoryEntries(rows);
+    } catch (error) {
+      assertParents();
+      if (error !== retrySnapshot) throw error;
+      if (attempt === 2) throw unavailable();
+      continue;
     }
-    assertDirectory(exportsDirectory);
-    if (JSON.stringify(exportNames()) !== JSON.stringify(initialExports)) throw failure('STANDALONE_HISTORY_UNAVAILABLE');
-    assertDirectory(exportsDirectory);
+    // Persist only selected legacy locators, not thousands of old lookup files.
+    // These selected locators outlive later eviction, without becoming approval,
+    // directory-binding, ownership or replay authority.
+    for (const row of selected) if (row.legacy_export_id) {
+      assertParents();
+      const target = path.join(directory.path, `legacy-${row.batch_id}.json`);
+      const temporary = `${target}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.tmp`;
+      const payload = Buffer.from(JSON.stringify({ schema: 'datasecure-standalone-history-locator/1',
+        batch_id: row.batch_id, legacy_export_id: row.legacy_export_id }));
+      const fd = fs.openSync(temporary, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL |
+        (fs.constants.O_NOFOLLOW || 0), 0o600);
+      let identity;
+      try {
+        assertParents(); writeFully(fd, payload, fs); fs.fsyncSync(fd);
+        identity = fileIdentity(fs.fstatSync(fd, { bigint: true }));
+      } finally { fs.closeSync(fd); }
+      assertParents();
+      if (!sameFile(fs.lstatSync(temporary, { bigint: true }), identity)) throw unavailable();
+      renameWithTransientRetry(temporary, target);
+      syncParentDirectory(target, fs, process.platform);
+      assertParents();
+    }
+    return selected;
   }
-  assertDirectory(directory);
-  if (JSON.stringify(names()) !== JSON.stringify(initial)) throw failure('STANDALONE_HISTORY_UNAVAILABLE');
-  assertDirectory(directory);
-  const selected = historyWindow.selectHistoryEntries(rows);
-  // Persist only selected legacy locators, not thousands of old lookup files.
-  // These selected locators outlive later eviction, without becoming approval,
-  // directory-binding, ownership or replay authority.
-  for (const row of selected) if (row.legacy_export_id)
-    writeJson(`legacy-${row.batch_id}`, { schema: 'datasecure-standalone-history-locator/1',
-      batch_id: row.batch_id, legacy_export_id: row.legacy_export_id });
-  assertDirectory(directory); return selected;
 }
 function readRecentHistory() { return historyWindow.readRecentHistory(historyWindowMigration); }
 function readHistoryLocator(batchId) {

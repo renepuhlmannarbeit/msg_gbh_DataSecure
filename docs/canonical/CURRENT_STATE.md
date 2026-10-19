@@ -4,6 +4,35 @@ Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Test-Pre-Release in 
 
 ### Aktueller Nachtauftrag – neuere Autorität vor historischen Abschnitten
 
+Neu19.10.nach04:15UTC: Store-/native Harnessquellengegenreviews abgeschlossen,
+keine weiteren bestätigten Produktblocker. Index21PASS/22(1Windows-NOT_RUN),
+Migration21/21/echteIPC erneut grün. Native Reader39/39/Workflow/Pfade grün;
+kein nativer Mac-/GUI-PASS daraus. Produktfingerprint jetzt a55afd65f30f23e30409a41c4a032fdad7d14fa6635ebb1e0b59b1f8026e41ec.
+Übergabehelfer gegen vertauschte/unvollständige Belegrollen, abweichende ZIP-
+EXE und inzwischen geänderte Tests verschärft; deren unabhängiger Gegenreview abgeschlossen.
+Noch kein final4-Freeze/aktueller GUI-FINAL/Release. Frische275+10/Native/Paket/
+Mac-/zehn echte Windows-GUI-/lokale/Remoteübergabegates folgen gemeinsam.
+
+Neu19.10.nach03:45UTC: final3 aufaf55717 vollständig272/272+10/10, Native228 und
+fünf Paketgates unverändert grün beendet. Danach begrenzte echte Historyraces
+implementiert: Index21PASS/22 (ein Windows-NOT_RUN), Migration21/21, echte
+IPC-/diagnostische Gegenproben grün. Unabhängiger Index-/Probequellenreview
+abgeschlossen, zusätzlicher Storegegenreview noch offen. Intel-App-Smoke ROT
+wegen deterministisch veraltetem Basislognamen; kein Beweis für Produktcrash,
+zusätzliche Startstörung aber noch nicht ausgeschlossen. Native Reader für
+Windows/Mac/analog Linux werden mit Session-/Owner-/Budgetgegenfällen geprüft.
+Neuer final4-Gitfreeze und vollständige275+10/Native/Paket/Mac/GUI/Releasegates
+noch offen.14 synthetische Originalkopien nach letzter GUI-Vorprobe bytegleich.
+
+Neu19.10.nach03:30UTC: af55717 Windows-Native/Paket unverändert grün, Headless
+noch aktiv. ARMconsumer39193987747 ROT im echten get_run_history vor Testfault;
+konkrete native I/O-Ursache offen. Ein unabhängiger tatsächlicher Zweiprozess-
+Gegenfall beweist zusätzlich legitimes Indexpublish/read-Rennen im Produkt.
+Enger max3-Readfix mit gleicher Directorybindung/Gegenfällen erst nach Freeze;
+keine Lockerung von UNSAFE/CLOSE/Schema, keine Scans/Reparatur. Eigene Windows-
+GUI-Vorprobe nur01 auf af55717 bestanden, App/Core normal geschlossen; übrige9
+NOT_RUN. Keine aktuelle vollständige GUI-/Mac-/Releasefreigabe.
+
 Neu19.10.nach03:13UTC: b772 Windows272/272+10/10, Native228/Clippy/Release und
 fünf Paketgates vollständig unverändert bestanden. Beide Macconsumer ROT wegen
 Darwin-Testdouble; zusätzlich obsolete positive Addon-Testfixture bestätigt.

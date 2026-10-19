@@ -76,6 +76,25 @@ function Test-NativeMainReadiness($Events) {
         (Test-NativeActionReadiness $Events 'get_ui_context'))
 }
 
+function Read-NativeSidecarReadiness([string] $Directory, [string] $DesktopLog,
+    [switch] $RequireReview, [switch] $RequireWorkspace) {
+    try {
+        $reader = Join-Path $PSScriptRoot '..\helpers\native-review-readiness.js'
+        $readerArguments = @($reader, $Directory, '--sidecar', $DesktopLog, '--report')
+        if ($RequireReview) { $readerArguments += '--review' }
+        if ($RequireWorkspace) { $readerArguments += '--workspace' }
+        $json = & node @readerArguments 2>$null
+        $report = ($json -join "`n") | ConvertFrom-Json
+        if ($report.schema -cne 'datasecure-native-smoke-readiness/1') { throw 'INVALID_REPORT' }
+        return $report
+    } catch {
+        return [pscustomobject]@{ schema = 'datasecure-native-smoke-readiness/1'; ready = $false;
+            session_id = $null; product_version = $null; application_started_ms = $null;
+            conditions = [pscustomobject]@{}; bootstrap_error = $null;
+            error_codes = @('NATIVE_SMOKE_LOG_UNAVAILABLE') }
+    }
+}
+
 function Get-NativeWebViewProfile([string] $CommandLine) {
     $arguments = [regex]::Matches($CommandLine,
         '(?i)(?:^|\s)--user-data-dir(?:=|\s+)(?:"([^"]+)"|([^\s"]+))')
@@ -263,7 +282,6 @@ $executable = Join-Path $extractedRoot "$productDirectory\DataSecure Standalone.
 $isolatedTemp = Join-Path $testRoot 'temp'
 $diagnosticRoot = Join-Path $isolatedTemp 'SecureDataMsg-Standalone'
 $desktopLog = Join-Path $diagnosticRoot 'desktop-interactions.jsonl'
-$sidecarLog = Join-Path $diagnosticRoot 'sidecar-interactions.jsonl'
 $startedAt = [DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()
 $process = $null
 $passed = $false
@@ -306,13 +324,6 @@ function New-IsolatedStartInfo([string] $FilePath) {
         $startInfo.EnvironmentVariables['DATASECURE_STANDALONE_NATIVE_SMOKE_REVIEW'] = '1'
     }
     return $startInfo
-}
-
-function Read-InteractionEvents([string] $Path) {
-    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return @() }
-    return @(Get-Content -LiteralPath $Path | ForEach-Object {
-        try { $_ | ConvertFrom-Json -ErrorAction Stop } catch { }
-    } | Where-Object { $_.time_ms -ge $startedAt })
 }
 
 function Assert-NativeProcessRunning($CandidateProcess) {
@@ -542,31 +553,24 @@ try {
             $networkEvidence = Merge-NativeNetworkEvidence $networkEvidence $observation
         }
         Start-Sleep -Milliseconds 100
-        $desktop = Read-InteractionEvents $desktopLog
-        $application = @($desktop | Where-Object {
-            $_.product_version -eq $expectedVersion -and $_.event -eq 'application_started' -and
-            $_.session_id -match '^[a-f0-9]{16,64}$'
-        } | Select-Object -Last 1)
-        if ($application.Count -eq 0) { continue }
-        $session = $application[0].session_id
-        $desktopSession = @($desktop | Where-Object { $_.session_id -eq $session })
-        $sidecarSession = @(Read-InteractionEvents $sidecarLog | Where-Object { $_.session_id -eq $session })
-        $publicState = Test-NativeActionReadiness $desktopSession 'get_public_state'
-        $uiContext = Test-NativeActionReadiness $desktopSession 'get_ui_context'
-        $pageLoaded = @($desktopSession | Where-Object { $_.event -eq 'page_loaded' }).Count -gt 0
-        $workspaceLoaded = @($desktopSession | Where-Object { $_.event -eq 'workspace_page_loaded' }).Count -gt 0
-        $reviewPageLoaded = @($desktopSession | Where-Object { $_.event -eq 'review_page_loaded' }).Count -gt 0
-        $reviewScriptStarted = @($desktopSession | Where-Object {
-            $_.event -eq 'ipc_request_started' -and $_.action -eq 'get_review_session'
-        }).Count -gt 0
-        $reviewReady = Test-NativeReviewReadiness $desktopSession
-        $frontendReady = @($desktopSession | Where-Object { $_.event -eq 'frontend_ready' }).Count -gt 0
-        $setupStarted = @($desktopSession | Where-Object { $_.event -eq 'setup_started' }).Count -gt 0
-        $setupCompleted = @($desktopSession | Where-Object { $_.event -eq 'setup_completed' }).Count -gt 0
-        $sidecarStarted = @($sidecarSession | Where-Object { $_.event -eq 'sidecar_started' }).Count -gt 0
-        $serviceInitialized = @($sidecarSession | Where-Object { $_.event -eq 'service_initialized' }).Count -gt 0
-        if ($pageLoaded -and $frontendReady -and $publicState -and $uiContext -and $sidecarStarted -and $serviceInitialized -and
-            (-not $AssertReviewWindow -or $reviewReady) -and (-not $AssertWorkspace -or $workspaceLoaded)) {
+        $sidecarStatus = Read-NativeSidecarReadiness $diagnosticRoot $desktopLog `
+            -RequireReview:$AssertReviewWindow -RequireWorkspace:$AssertWorkspace
+        $application = [bool] ($sidecarStatus.conditions.application_session -and
+            $null -ne $sidecarStatus.application_started_ms -and $sidecarStatus.application_started_ms -ge $startedAt -and
+            $sidecarStatus.product_version -ceq $expectedVersion)
+        $publicState = [bool] $sidecarStatus.conditions.public_state_ipc
+        $uiContext = [bool] $sidecarStatus.conditions.ui_context_ipc
+        $pageLoaded = [bool] $sidecarStatus.conditions.page_loaded
+        $workspaceLoaded = [bool] $sidecarStatus.conditions.workspace_page_loaded
+        $reviewPageLoaded = [bool] $sidecarStatus.conditions.review_page_loaded
+        $reviewScriptStarted = [bool] $sidecarStatus.conditions.review_script_started
+        $reviewReady = [bool] ($sidecarStatus.conditions.review_ipc -and $sidecarStatus.conditions.current_owner_review_ipc)
+        $frontendReady = [bool] $sidecarStatus.conditions.frontend_ready
+        $setupStarted = [bool] $sidecarStatus.conditions.setup_started
+        $setupCompleted = [bool] $sidecarStatus.conditions.setup_completed
+        $sidecarStarted = [bool] $sidecarStatus.conditions.sidecar_started
+        $serviceInitialized = [bool] $sidecarStatus.conditions.service_initialized
+        if ($application -and $sidecarStatus.ready) {
             $startupStopwatch.Stop()
             $startupMilliseconds = [Math]::Round($startupStopwatch.Elapsed.TotalMilliseconds, 3)
             $passed = $true
@@ -576,22 +580,17 @@ try {
     if (-not $passed) {
         # Preserve bounded content-free evidence before the owned test profile is
         # cleaned. A timeout alone cannot distinguish page loading from IPC failure.
-        $checkpoint = [ordered]@{ application = ($application.Count -gt 0); setup_started = $setupStarted;
+        $checkpoint = [ordered]@{ application = $application; setup_started = $setupStarted;
             setup_completed = $setupCompleted; page_loaded = $pageLoaded;
             review_page_loaded = $reviewPageLoaded; review_script_started = $reviewScriptStarted;
             review_session_response_ok = $reviewReady;
             frontend_ready = $frontendReady; public_state = $publicState; ui_context = $uiContext;
             sidecar_started = $sidecarStarted; service_initialized = $serviceInitialized }
         Write-Output ('STANDALONE NATIVE CHECKPOINT ' + ($checkpoint | ConvertTo-Json -Compress))
-        Write-Output ('STANDALONE NATIVE HOST ' + ((Get-StandaloneWebViewHostFacts) | ConvertTo-Json -Compress))
-        foreach ($record in @($desktopSession + $sidecarSession | Select-Object -Last 16)) {
-            $safe = [ordered]@{}
-            foreach ($field in @('event', 'action', 'outcome', 'error_code')) {
-                $value = [string]$record.$field
-                if ($value -cmatch '^[A-Za-z0-9_]{1,96}$') { $safe[$field] = $value }
-            }
-            Write-Output ('STANDALONE NATIVE EVENT ' + ($safe | ConvertTo-Json -Compress))
+        if ($null -ne $sidecarStatus) {
+            Write-Output ('STANDALONE NATIVE SIDECAR CHECKPOINT ' + ($sidecarStatus | ConvertTo-Json -Depth 4 -Compress))
         }
+        Write-Output ('STANDALONE NATIVE HOST ' + ((Get-StandaloneWebViewHostFacts) | ConvertTo-Json -Compress))
         if (-not $setupStarted) { throw 'STANDALONE_NATIVE_WEBVIEW_INITIALIZATION_TIMEOUT' }
         if (-not $setupCompleted) { throw 'STANDALONE_NATIVE_SETUP_TIMEOUT' }
         if (-not $pageLoaded) { throw 'STANDALONE_NATIVE_PAGE_LOAD_TIMEOUT' }

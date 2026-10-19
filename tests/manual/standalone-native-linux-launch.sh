@@ -3,7 +3,7 @@ set -euo pipefail
 
 if [[ "$(uname -s)" != "Linux" ]]; then
   echo "STANDALONE NATIVE LINUX LAUNCH SKIP (non-Linux host)"
-  exit 0
+  exit 77
 fi
 
 appdir=""
@@ -66,7 +66,6 @@ candidate="$product/AppDir"
 executable="$candidate/usr/bin/datasecure-standalone"
 launcher="$candidate/AppRun"
 desktop_log="$test_root/temp/SecureDataMsg-Standalone/desktop-interactions.jsonl"
-sidecar_log="$test_root/temp/SecureDataMsg-Standalone/sidecar-interactions.jsonl"
 [[ -x "$executable" && ! -L "$executable" ]] || { echo "STANDALONE_NATIVE_EXECUTABLE_MISSING" >&2; exit 66; }
 [[ -x "$launcher" ]] || { echo "STANDALONE_NATIVE_APPRUN_MISSING" >&2; exit 66; }
 launcher_target="$(realpath -e "$launcher")"
@@ -113,20 +112,18 @@ deadline=$((SECONDS + 60))
 ready=false
 while ((SECONDS < deadline)); do
   kill -0 "$app_pid" 2>/dev/null || { wait "$app_pid" || status=$?; echo "STANDALONE_NATIVE_APP_EXITED_${status:-0}" >&2; exit 1; }
-  if [[ -f "$desktop_log" && -f "$sidecar_log" ]] \
-    && grep -q '"event":"page_loaded"' "$desktop_log" \
-    && grep -q '"event":"frontend_ready"' "$desktop_log" \
-    && grep -q '"event":"review_page_loaded"' "$desktop_log" \
-    && node "$script_directory/../helpers/native-review-readiness.js" "$desktop_log" \
-    && node "$script_directory/../helpers/native-review-readiness.js" "$desktop_log" --main --workspace \
-    && grep -q '"event":"sidecar_started"' "$sidecar_log" \
-    && grep -q '"event":"service_initialized"' "$sidecar_log"; then
+  if node "$script_directory/../helpers/native-review-readiness.js" \
+      "$test_root/temp/SecureDataMsg-Standalone" --sidecar "$desktop_log" --review --workspace; then
     ready=true
     break
   fi
   sleep 0.2
 done
-[[ "$ready" == true ]] || { echo "STANDALONE_NATIVE_LINUX_IPC_TIMEOUT" >&2; exit 1; }
+[[ "$ready" == true ]] || {
+  node "$script_directory/../helpers/native-review-readiness.js" \
+    "$test_root/temp/SecureDataMsg-Standalone" --sidecar "$desktop_log" --review --workspace --report || true
+  echo "STANDALONE_NATIVE_LINUX_IPC_TIMEOUT" >&2; exit 1;
+}
 [[ -d "$test_root/profile/Xdg/SecureDataMsg-Standalone/workspace" ]] || {
   echo "STANDALONE_NATIVE_ISOLATED_WORKSPACE_MISSING" >&2
   exit 1

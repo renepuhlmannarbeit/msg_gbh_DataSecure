@@ -1,5 +1,126 @@
 # RC164 – fortgesetzter Abschlussauftrag
 
+## Final4-Vorbereitung nach04:15 UTC, 19.10.
+
+Zusätzlicher unabhängiger tatsächlicher Store-Quellengegenreview abgeschlossen,
+kein weiterer bestätigter Produktionsblocker. Hauptagent wiederholt Index-
+Gegenfälle21PASS/22 mit genau einem Windows-NOT_RUN, Migration21/21,
+Probe- und reale Sidecar/Worker/Broker-IPC erfolgreich. Beide Produktionsfixes
+ändern den Fingerprint auf a55afd65f30f23e30409a41c4a032fdad7d14fa6635ebb1e0b59b1f8026e41ec
+(332Dateien); statische Mac-Corebytes/Approval unverändert.
+
+Native Harnesskette nach unabhängigen tatsächlichen Quellengegenreviews
+korrigiert: ein kohärenter gebundener Report statt unbegrenzter Prereads,
+Session/Generation/aktuelle Ownerantworten, Workspace-/Review-/Runtimeorakel.
+64Leaves/2MiB je Leaf/8MiB gesamt, geschlossene Timeoutdiagnose statt Rawwerte.
+Windows bindet Version/Startzeit, Linux-Wronghost77.39/39 Gegenfälle vom Autor
+und Hauptagent bestanden; Node/Bash/PowerShell-Syntax grün. Zwei alte statische
+Workflowbehauptungen wurden auf tatsächlichen Readeraufruf/Implementierung
+umgestellt, nicht durch Kommentare grün gemacht. Workflow und16/16 Pfadschutz
+nach Aufnahme der neuen Quellen in Git erneut grün. Keine native Mac-/GUI-
+Abnahme aus diesen Modellen.
+
+Separater Handoffquellenreview fand drei Nachweislücken: Rollen/Complete-Gates,
+ZIP-EXE gegenüber Stage-/GUI-Hash, aktuelle Tests gegenüber alten Manifesten.
+Ignored create-only final4-Helfer entsprechend verschärft,31 synthetische
+Validator-Gegenfälle grün (keine Produkt-FINALs). Ein weiterer unabhängiger
+Deltafund – gleiche Dateinamen für zwei verschiedene Zusatz-CLI-Zweige –
+führte zum gemeinsamen Commandplan, automatischer tatsächlicher Spawn-
+Argument-/Programm-/CWDbindung sowie Vorher/Nachher-Hashes der ignorierten
+Driver/Contractquellen. Deren unabhängiger tatsächlicher Abschlussgegenreview
+ebenfalls ohne bestätigten Restbefund abgeschlossen. Danach neuer gemeinsamer Gitcommit,
+275Headless+10Zusatzgates, Native/Paket/Macconsumer und gebundene zehn echte
+Windows-GUI-Fälle. Alte final3-Belege bleiben unverändert/historisch, kein
+aktueller GUI-FINAL oder Release.14Originalkopien erneut bytegleich.
+
+## Begrenzte Verlaufsfixes und korrigierte native Belegleser, 19.10., nach03:45 UTC
+
+Alle final3-Lokaljobs auf af55717d58a5c46fc5f85e1357ace9cc766b16bf regulär
+beendet:272/272+10/10 Headless03:43:29.723UTC, Native228/Clippy/Release und fünf
+Paketgates vorher grün, jeweils inputs_unchanged=true. Erst danach Produkt-/
+Test-/Scriptedits. Altes GUI-Fall01 bleibt nur Vorabnachweis auf af55717; alle
+14 synthetischen Originalkopien danach erneut bytegleich. Kein GUI-FINAL.
+
+Indexread jetzt höchstens drei volle Boundversuche, gleiche ursprüngliche
+Directorybindung; nur CHANGED wiederholen. Initiales ENOENT mit veränderter
+Namespace sowie CHANGED→ENOENT verweigert ohne Scan/Schreiben/Rebinding.
+UNSAFE/CLOSE/Schema bleiben final, Writer-CAS unverändert. Unabhängiger echter
+Quellengegenreview ohne bestätigten Produktionsfehler.22 echte Childwriter-
+Gegenfälle:21PASS,0Fehler,1Windows-NOT_RUN (echter EPERM bei offenem Reader,
+POSIX/Mac muss diesen Fall ausführen). Kein natives Mac-PASS daraus.
+
+Einmalige Migration jetzt ebenfalls max3 vollständige Snapshots mit denselben
+ursprünglichen Summary-/Export-/Owner-/Journalparentbindungen. Gemeinsame
+10000-Eintrags-/64MiB-Arbeitsbudgets über alle Versuche einschließlich
+fehlgeschlagener Reads, volle gebundene Records und abschließende Record- und
+Membershipprüfung. Kein Locatorwrite vor stabiler Runde; Writes verwenden
+ursprüngliche Bindung statt historyRoot-Neuauflösung. Main-Quellengegenlesen
+ergänzte einen übersehenen OversizedSkipped→sameNameValid-Fall samt eigener
+Childgegenprobe/Metadatenvergleich ohne Öffnen unsicherer Bytes.21/21 gezielt
+grün; History/Window/Targeted/Visibility/StartupCapture/StartupIO und BoundIO
+erneut grün. Zusätzlicher unabhängiger Store-Abschlussgegenreview noch offen.
+
+Test-only-Fehlergrenzprobe erfasst tatsächliche Window- und Store-Boundfehler,
+Migrationsphase und gehashte Memberships. Exakte geschlossene Felder/Codes,
+keine privaten Pfade/Quellbytes;64 Metadaten-/128 Gesamtereignisse. Beobachter-
+Fehler ändern weder echte Bytes noch Fehleridentität. Zwei tatsächliche
+Quellengegenreviews fanden und klärten fehlende Storebeobachtung und das
+Restoreorakel: frische Installation mit unverbrauchtem Budget plus behaltenen
+Wrapperreferenzen beweist Inaktivität. Direkte Delegation nach Restore.
+Probe- und reale Sidecar→Worker→Broker→IPC-Gegenfälle erneut PASS.
+
+Intelconsumer39193987747 scheiterte03:45:36UTC am Sammelstarttimeout nach
+grünen Static-Core-/Guard-/Worker-/ACL-/Bundle-/Sealvorstufen. Main und
+unabhängiger Reviewer bestätigen einen deterministischen Harnessfehler:
+Rust setzt Diagnosticsegment, Node schreibt sidecar-interactions.<32hex>.jsonl,
+Smoke fordert Basisdatei sidecar-interactions.jsonl; seine AND-Kette ist damit
+im frischen Profil unmöglich. Kein belegter Corecrash, aber auch noch kein
+Nachweis, dass daneben kein echter Startfehler besteht.0 GH-Artefakte, alter
+EXIT-Trap löschte Logs. Native Leser für Mac/Windows und analog Linux werden
+begrenzt und session-/generationgebunden korrigiert, Erfolgsantwort-Orakel
+bleiben. Vor Timeoutcleanup geschlossene Bedingungsdiagnose statt Rawstderr.
+Gegenfälle gegen Lesebudgetüberzug und alte Owner-IPC-Signale erforderlich.
+
+Noch kein neuer Commit/Freeze: native Readerimplementierung/Quellengegenreview
+abschließen, danach gemeinsamer final4-Schnitt mit275 Headless-Dateien plus
+zehn Zusatzgates, frischen Native-/Paket-/Mac-/GUI-Nachweisen. Neue Helfer nur
+create-only in dist/rc164-shared-final4-20261019 vorbereitet, keine alten FINALs
+übertragen. Beide approved Coreartefakte unverändert; kein neuer Producer nötig.
+
+## Tatsächliches Verlaufsrennen reproduziert, 19.10., nach03:30 UTC
+
+Gemeinsamer af55717d58a5c46fc5f85e1357ace9cc766b16bf /4a880940… hat
+Windows-Native228/Clippy/Release und fünf Paketgates unverändert bestanden.
+Headlessfinal3 läuft noch; keine Produkt-/Test-/Scriptänderung währenddessen.
+Macconsumer39193987747 ARM117872663716 ROT03:20:28UTC: echter get_run_history
+liefert STANDALONE_HISTORY_UNAVAILABLE vor der Fehlerinjektion. Tempverzeichnis
+bereits kanonisch. Der öffentliche Log beweist die ursprüngliche I/O-Ursache
+nicht; Intelconsumer noch aktiv. Kein behaupteter Corecrash/Testdoublefehler.
+
+Unabhängig davon ist jetzt ein echter plattformübergreifender Produktionsrace
+mit unverändertem Reader und echtem registerHistory-Publisher in zwei Prozessen
+kausal nachgewiesen: Publisher ersetzt recent.json nach lstat/vor open, Leser
+verweigert trotz gültigem neuem Index; vollständiger Folgeread enthält beide
+exakten Einträge. dist/rc164-history-race-repro-20261019/REPRO.json bewahrt den
+Beleg einschließlich Quellenhash. Gerade dieses Rennen als konkrete Ursache
+des ARM-Abbruchs bleibt unbewiesen. Gegenfälle und enges Quellengegenreview
+laufen; Korrektur erst nach Ende der Freezejobs. Geplant maximal drei volle
+Readversuche nur bei BOUND_FILE_CHANGED mit derselben ursprünglichen
+Directorybindung; UNSAFE/CLOSE/Schemafehler nicht wiederholen, keine Scans,
+keine stillschweigende Reparatur oder globale Schutzlockerung.
+
+Neues tatsächliches Windows-GUI-Vorabresultat nur Fall01 auf af55717-Paket:
+sichtbarer Build, genau zwei vollständige nicht anonymisierte MD, eine
+erwartete OCR-Auslassung, Abschluss mit Hinweisen. ZIP9bce5d83…/EXE80e2dac2…;
+volle Bindungen und tatsächliche Dateien in final3/GUI-PREAPPROVAL.json.
+Eigene App/Core normal geschlossen und Prozessende bestätigt. Übrige neun
+GUI-Fälle dieses Pakets NOT_RUN. Kein GUI-FINAL/Release, alte Ergebnisse bleiben.
+
+Primärabgleich: [Node22.23.2 Dateisystem](https://nodejs.org/download/release/v22.23.2/docs/api/fs.html#fsrenamesyncoldpath-newpath).
+Eine atomare Veröffentlichung ersetzt nicht die Bindung zwischen separat
+ausgeführten Metadaten-/Open-/Read-Schritten; die kausale Gegenprobe ist der
+konkrete Nachweis hier, nicht ein aus Dokumentation abgeleitetes natives PASS.
+
 ## Zwei Darwin-Testverträge korrigiert und gegengelesen, 19.10., nach03:13 UTC
 
 Alle b772-Freezejobs beendet:272/272 Headless+10/10 Zusatzgates03:13:50.392UTC,

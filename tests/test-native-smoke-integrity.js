@@ -4,9 +4,12 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const crypto = require('node:crypto');
+const vm = require('node:vm');
+const { createRequire } = require('node:module');
 const { spawnSync } = require('node:child_process');
 const { createSuite } = require('./helpers');
-const { reviewReady, mainReady, actionReady } = require('./helpers/native-review-readiness');
+const { reviewReady, mainReady, actionReady, sidecarReadiness } = require('./helpers/native-review-readiness');
+const { MAX_LEAVES, MAX_LEAF_BYTES, MAX_TOTAL_BYTES } = require('./helpers/native-sidecar-readiness');
 const { createPlatformCases } = require('./helpers/platform-case');
 const { test, testAsync, done, assert } = createSuite('Native smoke evidence integrity');
 const page = { event: 'review_page_loaded' };
@@ -16,6 +19,500 @@ const rpc = (event, action, request_id = requestA) => ({ event, action, request_
 const request = rpc('ipc_request_started', 'get_review_session');
 const failed = rpc('ipc_response_error', 'get_review_session');
 const success = rpc('ipc_response_ok', 'get_review_session');
+
+function diagnosticFixture(action) {
+  const parent = fs.realpathSync.native(os.tmpdir());
+  const root = fs.mkdtempSync(path.join(parent, 'datasecure-native-log-reader-'));
+  const directory = path.join(root, 'diagnostics'); fs.mkdirSync(directory);
+  const session = '1'.repeat(32), generation = 'a'.repeat(32);
+  const event = (component, event, time_ms, fields = {}) => ({ schema: 'datasecure-standalone-interaction/1',
+    component, session_id: session, event, time_ms, outcome: 'ready', ...fields });
+  const desktop = path.join(directory, 'desktop-interactions.jsonl');
+  const desktopEvents = [event('desktop', 'application_started', 10, { product_version: '3.2.0-rc164' }),
+    ...['setup_started', 'setup_completed', 'page_loaded', 'workspace_page_loaded', 'frontend_ready',
+      'review_page_loaded'].map((name, index) => event('desktop', name, 11 + index)),
+    event('desktop', 'sidecar_starting', 20), event('desktop', 'sidecar_spawned', 21),
+    event('desktop', 'sidecar_bootstrap_ready', 40)];
+  for (const [index, action] of ['get_public_state', 'get_ui_context', 'get_review_session'].entries())
+    desktopEvents.push(event('desktop', 'ipc_request_started', 41 + index * 2, { action, request_id: requestA }),
+      event('desktop', 'ipc_response_ok', 42 + index * 2, { action, request_id: requestA }));
+  const sidecarEvents = ['sidecar_entry', 'sidecar_imports_ready', 'sidecar_started',
+    'runtime_integrity_checked', 'service_initialized'].map((name, index) => event('sidecar', name, 22 + index));
+  const write = (name, values) => {
+    const target = path.join(directory, name);
+    fs.writeFileSync(target, values.map(value => JSON.stringify(value)).join('\n') + '\n');
+    return target;
+  };
+  write(path.basename(desktop), desktopEvents);
+  const leaf = write(`sidecar-interactions.${generation}.jsonl`, sidecarEvents);
+  try { action({ root, directory, desktop, leaf, event, session, generation, desktopEvents, sidecarEvents, write }); }
+  finally {
+    assert.equal(path.dirname(root), parent); assert.equal(fs.realpathSync.native(root), root);
+    assert.match(path.basename(root), /^datasecure-native-log-reader-[A-Za-z0-9]+$/u);
+    const entries = [];
+    function inspect(target) {
+      const relative = path.relative(root, target);
+      assert.ok(target === root || relative && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+      const stat = fs.lstatSync(target);
+      if (stat.isDirectory() && !stat.isSymbolicLink()) for (const name of fs.readdirSync(target)) inspect(path.join(target, name));
+      else assert.ok(stat.isFile() || stat.isSymbolicLink());
+      entries.push({ target, directory: stat.isDirectory() && !stat.isSymbolicLink() });
+    }
+    inspect(root);
+    for (const entry of entries) {
+      if (entry.directory) fs.rmdirSync(entry.target);
+      else fs.unlinkSync(entry.target); // Never traverse a fixture link.
+    }
+  }
+}
+
+function runReadinessCli(args) {
+  const helper = path.join(__dirname, 'helpers/native-review-readiness.js');
+  const source = fs.readFileSync(helper, 'utf8'), module = { exports: {} }, actualRequire = createRequire(helper);
+  const localRequire = name => actualRequire(name); localRequire.main = module;
+  let stdout = '';
+  const processView = { argv: [process.execPath, helper, ...args], stdout: { write(value) { stdout += value; } }, exitCode: 0 };
+  vm.runInNewContext(source, { module, require: localRequire, process: processView }, { filename: helper, timeout: 5000 });
+  return { status: processView.exitCode, stdout };
+}
+
+function runWindowsNativeReport(f, { expectedVersion = '3.2.0-rc164', startedAt = 10, timeoutSurface = false } = {}) {
+  const source = fs.readFileSync(path.join(__dirname, 'manual/standalone-native-windows-launch.ps1'), 'utf8');
+  const quote = value => `'${String(value).replace(/'/gu, "''")}'`;
+  let reader = source.slice(source.indexOf('function Read-NativeSidecarReadiness('), source.indexOf('function Get-NativeWebViewProfile('));
+  // Relocate only the script and pinned Node executable for this source-fragment
+  // test. The actual reader, switches, bounded bytes and native gate stay intact.
+  const readerPath = "Join-Path $PSScriptRoot '..\\helpers\\native-review-readiness.js'";
+  assert.ok(reader.includes(readerPath)); assert.ok(reader.includes('& node @readerArguments'));
+  reader = reader.replace(readerPath, quote(path.join(__dirname, 'helpers/native-review-readiness.js')))
+    .replace('& node @readerArguments', `& ${quote(process.execPath)} @readerArguments`);
+  const start = source.indexOf('        $sidecarStatus = Read-NativeSidecarReadiness $diagnosticRoot');
+  const end = source.indexOf('        if ($application -and $sidecarStatus.ready) {', start);
+  assert.ok(start > 0 && end > start);
+  const native = source.slice(start, end);
+  const failureStart = source.indexOf('    if (-not $passed) {', end);
+  const failureEnd = source.indexOf("    if (-not (Test-Path -LiteralPath (Join-Path $testRoot 'profile\\Local", failureStart);
+  assert.ok(failureStart > end && failureEnd > failureStart);
+  const failure = source.slice(failureStart, failureEnd);
+  const script = `$ErrorActionPreference = 'Stop'
+${reader}
+function Get-Content { throw 'UNBOUNDED_DIAGNOSTIC_READ' }
+function Read-InteractionEvents { throw 'UNBOUNDED_DIAGNOSTIC_READ' }
+function Test-NativeActionReadiness { throw 'NATIVE_MODEL_PREDICATE_USED' }
+function Test-NativeReviewReadiness { throw 'NATIVE_MODEL_PREDICATE_USED' }
+$diagnosticRoot = ${quote(f.directory)}
+$desktopLog = ${quote(f.desktop)}
+$expectedVersion = ${quote(expectedVersion)}
+$startedAt = ${startedAt}
+$AssertReviewWindow = $true
+$AssertWorkspace = $true
+${native}
+$passed = [bool] ($application -and $sidecarStatus.ready)
+${timeoutSurface ? `
+$passed = $false
+$desktopSession = @([pscustomobject]@{ event = 'PRIVATE_PATH_SECRET_SENTINEL'; action = 'PRIVATE_PATH_SECRET_SENTINEL'; outcome = 'PRIVATE_PATH_SECRET_SENTINEL'; error_code = 'PRIVATE_PATH_SECRET_SENTINEL' })
+$sidecarSession = $desktopSession
+function Get-StandaloneWebViewHostFacts { [pscustomobject]@{ os_build = 'synthetic'; process_architecture = 'x64'; webview2_version = $null; webview2_scope = $null } }
+try { ${failure} } catch { Write-Output ('CLOSED_TIMEOUT ' + $_.Exception.Message) }
+` : `Write-Output ('NATIVE_REPORT_RESULT ' + ([ordered]@{ accepted = $passed; ready = [bool] $sidecarStatus.ready } | ConvertTo-Json -Compress))`}
+exit 0
+`;
+  return spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-EncodedCommand', Buffer.from(script, 'utf16le').toString('base64')],
+    { encoding: 'utf8', windowsHide: true, timeout: 10000 });
+}
+
+test('native sidecar readiness accepts real generation leaves without a base log on every platform', () => diagnosticFixture(f => {
+  assert.equal(fs.existsSync(path.join(f.directory, 'sidecar-interactions.jsonl')), false);
+  const status = sidecarReadiness(f.directory, f.desktop, { requireRuntime: true });
+  assert.equal(status.ready, true); assert.equal(status.session_id, f.session);
+  assert.equal(status.product_version, '3.2.0-rc164'); assert.equal(status.application_started_ms, 10);
+  assert.equal(status.conditions.main_workspace_ipc, true); assert.equal(status.conditions.review_ipc, true);
+  assert.equal(status.conditions.current_owner_main_ipc, true); assert.equal(status.conditions.current_owner_review_ipc, true);
+  assert.equal(status.conditions.runtime_integrity_checked, true);
+  const bound = require('../plugins/data-secure/server/core/bound-file-io'), real = bound.readBoundFileRecord;
+  const capabilities = [];
+  bound.readBoundFileRecord = function(target, options) {
+    capabilities.push(options); return real(target, options);
+  };
+  try { assert.equal(sidecarReadiness(f.directory, f.desktop).ready, true); }
+  finally { bound.readBoundFileRecord = real; }
+  assert.equal(capabilities.length, 2);
+  assert.ok(capabilities.every(value => value.directory === capabilities[0].directory && value.maxLinks === 1 &&
+    value.maximum === MAX_LEAF_BYTES && value.minimum === 1 && value.checkCtime === true));
+}));
+
+test('rotation may complete one generation but gaps, duplicate starts and cross-generation markers never pass', () => diagnosticFixture(f => {
+  f.write(path.basename(f.leaf), f.sidecarEvents.slice(0, 3));
+  const rotated = `sidecar-interactions.${f.generation}.2.jsonl`;
+  f.write(rotated, f.sidecarEvents.slice(3));
+  assert.equal(sidecarReadiness(f.directory, f.desktop, { requireRuntime: true }).ready, true);
+  fs.renameSync(path.join(f.directory, rotated), path.join(f.directory, rotated.replace('.2.', '.3.')));
+  assert.equal(sidecarReadiness(f.directory, f.desktop, { requireRuntime: true }).ready, false);
+  fs.unlinkSync(path.join(f.directory, rotated.replace('.2.', '.3.')));
+  f.write(`sidecar-interactions.${'b'.repeat(32)}.jsonl`, f.sidecarEvents.slice(3));
+  assert.equal(sidecarReadiness(f.directory, f.desktop, { requireRuntime: true }).ready, false);
+  f.write(path.basename(f.leaf), [...f.sidecarEvents, f.sidecarEvents[0]]);
+  assert.equal(sidecarReadiness(f.directory, f.desktop, { requireRuntime: true }).ready, false);
+}));
+
+test('a previous app session or an earlier successful owner cannot bless pending, failed or ambiguous current owners', () => diagnosticFixture(f => {
+  const read = () => sidecarReadiness(f.directory, f.desktop, { requireRuntime: true });
+  f.write(path.basename(f.leaf), f.sidecarEvents.map(row => ({ ...row, session_id: '2'.repeat(32) })));
+  assert.equal(read().ready, false);
+  f.write(path.basename(f.leaf), f.sidecarEvents);
+  f.write(path.basename(f.desktop), [...f.desktopEvents, f.event('desktop', 'sidecar_starting', 50)]);
+  assert.equal(read().ready, false);
+  f.write(path.basename(f.desktop), [...f.desktopEvents, f.event('desktop', 'sidecar_starting', 50),
+    f.event('desktop', 'sidecar_bootstrap_failed', 60, { outcome: 'failed', error_code: 'STANDALONE_IPC_FAILED' })]);
+  assert.equal(read().ready, false); assert.equal(read().bootstrap_error, 'STANDALONE_IPC_FAILED');
+  f.write(path.basename(f.desktop), f.desktopEvents);
+  const another = `sidecar-interactions.${'b'.repeat(32)}.jsonl`;
+  f.write(another, f.sidecarEvents);
+  assert.equal(read().ready, false);
+  f.write(another, [f.event('sidecar', 'sidecar_entry', 45)]);
+  assert.equal(read().ready, false, 'an as-yet unreflected newer generation is not ignored');
+}));
+
+test('all success markers stay in one session, generation and real bootstrap interval', () => diagnosticFixture(f => {
+  for (const mutate of [
+    rows => rows.map(row => row.event === 'service_initialized' ? { ...row, session_id: '2'.repeat(32) } : row),
+    rows => rows.map(row => row.event === 'service_initialized' ? { ...row, outcome: 'failed' } : row),
+    rows => rows.map(row => row.event === 'service_initialized' ? { ...row, time_ms: 1000 } : row),
+    rows => rows.map(row => row.event === 'sidecar_entry' ? { ...row, time_ms: 19 } : row)
+  ]) {
+    f.write(path.basename(f.leaf), mutate(f.sidecarEvents));
+    assert.equal(sidecarReadiness(f.directory, f.desktop, { requireRuntime: true }).ready, false);
+  }
+  f.write(path.basename(f.leaf), f.sidecarEvents.filter(row => row.event !== 'runtime_integrity_checked'));
+  assert.equal(sidecarReadiness(f.directory, f.desktop).ready, true, 'Windows/Linux keep their existing positive contract');
+  assert.equal(sidecarReadiness(f.directory, f.desktop, { requireRuntime: true }).ready, false);
+  f.write(path.basename(f.leaf), []);
+  assert.equal(sidecarReadiness(f.directory, f.desktop).ready, false);
+  for (const session_id of [1234567890123456, [f.session], null, 'x'.repeat(32)]) {
+    f.write(path.basename(f.leaf), f.sidecarEvents.map(row => ({ ...row, session_id })));
+    assert.equal(sidecarReadiness(f.directory, f.desktop).ready, false, 'session IDs must be literal opaque strings');
+  }
+}));
+
+test('an approved untagged batch failure is ancillary only and can neither corrupt nor prove startup evidence', () => diagnosticFixture(f => {
+  const failure = f.event('sidecar', 'batch_worker_failed', 90,
+    { outcome: 'failed', phase: 'processing', error_code: 'EIO' });
+  delete failure.session_id;
+  f.write(path.basename(f.leaf), [f.sidecarEvents[0], failure, ...f.sidecarEvents.slice(1), failure]);
+  assert.equal(sidecarReadiness(f.directory, f.desktop, { requireRuntime: true, requireReview: true }).ready, true);
+  f.write(path.basename(f.leaf), [failure]);
+  const absent = sidecarReadiness(f.directory, f.desktop);
+  assert.equal(absent.ready, false); assert.equal(absent.conditions.sidecar_session, false);
+  assert.equal(absent.conditions.sidecar_generation, false);
+  for (const invalid of [
+    { ...failure, session_id: f.session }, { ...failure, phase: 'PRIVATE_PHASE_SENTINEL' },
+    { ...failure, error_code: 'PRIVATE_ERROR_SENTINEL' }, { ...failure, outcome: 'ready' },
+    { ...failure, action: 'service_initialized' }, { ...failure, event: 'service_initialized' }
+  ]) {
+    f.write(path.basename(f.leaf), [...f.sidecarEvents, invalid]);
+    const report = sidecarReadiness(f.directory, f.desktop);
+    assert.equal(report.ready, false); assert.ok(report.error_codes.includes('NATIVE_SMOKE_LOG_INVALID'));
+    assert.ok(!JSON.stringify(report).includes('PRIVATE_'));
+  }
+}));
+
+test('current-owner IPC cannot borrow an older owner response and preserves requests issued before bootstrap', () => diagnosticFixture(f => {
+  const another = `sidecar-interactions.${'b'.repeat(32)}.jsonl`;
+  const latestOwner = [f.event('desktop', 'sidecar_starting', 50), f.event('desktop', 'sidecar_bootstrap_ready', 70)];
+  f.write(another, f.sidecarEvents.map(row => ({ ...row, time_ms: row.time_ms + 30 })));
+  f.write(path.basename(f.desktop), [...f.desktopEvents, ...latestOwner]);
+  let report = sidecarReadiness(f.directory, f.desktop);
+  assert.equal(report.conditions.main_ipc, true, 'the original session-only predicate is intentionally unchanged');
+  assert.equal(report.conditions.sidecar_generation, true); assert.equal(report.conditions.service_initialized, true);
+  assert.equal(report.conditions.current_owner_main_ipc, false); assert.equal(report.ready, false);
+  assert.ok(report.error_codes.includes('NATIVE_SMOKE_CURRENT_OWNER_IPC_NOT_READY'));
+
+  const actions = ['get_public_state', 'get_ui_context', 'get_review_session'];
+  const requests = actions.map((action, index) => f.event('desktop', 'ipc_request_started', 47 + index,
+    { action, request_id: requestB }));
+  const responses = actions.map((action, index) => f.event('desktop', 'ipc_response_ok', 71 + index,
+    { action, request_id: requestB }));
+  const pending = [...f.desktopEvents, ...requests, ...latestOwner];
+  f.write(path.basename(f.desktop), [...pending, ...responses.slice(0, 2)]);
+  assert.equal(sidecarReadiness(f.directory, f.desktop).ready, true, 'regular startup does not require a review window');
+  report = sidecarReadiness(f.directory, f.desktop, { requireReview: true });
+  assert.equal(report.ready, false); assert.equal(report.conditions.current_owner_main_ipc, true);
+  assert.equal(report.conditions.current_owner_review_ipc, false);
+  f.write(path.basename(f.desktop), [...pending, ...responses,
+    f.event('desktop', 'ipc_response_error', 74, { action: 'get_public_state', request_id: requestA })]);
+  assert.equal(sidecarReadiness(f.directory, f.desktop, { requireReview: true }).ready, true,
+    'a late response to old request A cannot invalidate the current correlated B response');
+  f.write(path.basename(f.desktop), [...pending, ...responses,
+    f.event('desktop', 'ipc_response_error', 74, { action: 'get_public_state', request_id: requestB })]);
+  assert.equal(sidecarReadiness(f.directory, f.desktop).ready, false);
+  f.write(path.basename(f.desktop), [...f.desktopEvents.map(row => row.event === 'ipc_response_ok'
+    ? { ...row, time_ms: 70 } : row), ...latestOwner]);
+  assert.equal(sidecarReadiness(f.directory, f.desktop).ready, false, 'equal-ms responses before the new bootstrap are still old');
+
+  fs.unlinkSync(path.join(f.directory, another));
+  const base = f.desktopEvents.filter(row => !row.event.startsWith('ipc_'));
+  const beforeBootstrap = base.findIndex(row => row.event === 'sidecar_starting');
+  f.write(path.basename(f.desktop), [...base.slice(0, beforeBootstrap),
+    ...requests.map(row => ({ ...row, time_ms: 19 })), ...base.slice(beforeBootstrap),
+    ...responses.map((row, index) => ({ ...row, time_ms: 42 + index }))]);
+  assert.equal(sidecarReadiness(f.directory, f.desktop, { requireReview: true }).ready, true,
+    'initial UI requests may precede sidecar_starting while their real responses follow bootstrap_ready');
+}));
+
+test('a legacy base log, malformed JSONL and arbitrary raw failure fields cannot grant native readiness or escape diagnostics', () => diagnosticFixture(f => {
+  fs.renameSync(f.leaf, path.join(f.directory, 'sidecar-interactions.jsonl'));
+  assert.equal(sidecarReadiness(f.directory, f.desktop).ready, false);
+  fs.renameSync(path.join(f.directory, 'sidecar-interactions.jsonl'), f.leaf);
+  for (const bytes of ['{damaged\n', JSON.stringify(f.sidecarEvents[0]), '\xff\n']) {
+    fs.writeFileSync(f.leaf, bytes);
+    assert.equal(sidecarReadiness(f.directory, f.desktop).ready, false);
+  }
+  f.write(path.basename(f.leaf), f.sidecarEvents);
+  f.write(path.basename(f.desktop), [...f.desktopEvents, f.event('desktop', 'sidecar_starting', 50),
+    f.event('desktop', 'sidecar_bootstrap_failed', 60, { outcome: 'failed',
+      error_code: 'PRIVATE_PATH_SECRET_SENTINEL', raw_stderr: 'PRIVATE_PATH_SECRET_SENTINEL' })]);
+  const report = sidecarReadiness(f.directory, f.desktop);
+  assert.equal(report.ready, false); assert.equal(report.bootstrap_error, null);
+  assert.ok(!JSON.stringify(report).includes('PRIVATE_PATH_SECRET_SENTINEL'));
+  assert.ok(!JSON.stringify(report).includes(f.root));
+}));
+
+test('native diagnostic inventory and bytes have finite leaf and total budgets', () => {
+  diagnosticFixture(f => {
+    for (let index = 1; index < MAX_LEAVES; index++) f.write(
+      `sidecar-interactions.${index.toString(16).padStart(32, '0')}.jsonl`,
+      f.sidecarEvents.map(row => ({ ...row, session_id: '2'.repeat(32) })));
+    assert.equal(sidecarReadiness(f.directory, f.desktop).ready, true, 'exactly 64 bounded leaves remain admissible');
+    f.write(`sidecar-interactions.${MAX_LEAVES.toString(16).padStart(32, '0')}.jsonl`, f.sidecarEvents);
+    const report = sidecarReadiness(f.directory, f.desktop);
+    assert.equal(report.ready, false); assert.ok(report.error_codes.includes('NATIVE_SMOKE_LOG_LIMIT'));
+  });
+  diagnosticFixture(f => {
+    fs.writeFileSync(f.leaf, Buffer.alloc(MAX_LEAF_BYTES + 1, 32));
+    assert.equal(sidecarReadiness(f.directory, f.desktop).ready, false);
+  });
+  diagnosticFixture(f => {
+    const padding = 'x'.repeat(MAX_LEAF_BYTES - 1024);
+    for (let segment = 1; segment <= Math.ceil(MAX_TOTAL_BYTES / padding.length); segment++) f.write(
+      `sidecar-interactions.${f.generation}${segment === 1 ? '' : `.${segment}`}.jsonl`,
+      [f.event('sidecar', 'diagnostic_progress', 22, { padding })]);
+    const read = fs.readSync, bound = require('../plugins/data-secure/server/core/bound-file-io');
+    const boundRead = bound.readBoundFileRecord, limits = [];
+    let readBytes = 0, report;
+    fs.readSync = function(...args) { const count = read.call(this, ...args); readBytes += count; return count; };
+    bound.readBoundFileRecord = function(target, options) { limits.push(options.maximum); return boundRead(target, options); };
+    try { report = sidecarReadiness(f.directory, f.desktop); }
+    finally { fs.readSync = read; bound.readBoundFileRecord = boundRead; }
+    assert.equal(report.ready, false); assert.ok(report.error_codes.includes('NATIVE_SMOKE_LOG_UNSAFE'));
+    assert.ok(readBytes <= MAX_TOTAL_BYTES, `actual held reads consumed ${readBytes} bytes`);
+    assert.ok(limits.at(-1) > 0 && limits.at(-1) < MAX_LEAF_BYTES,
+      'the remaining total budget must constrain the next bound read before consuming it');
+  });
+  diagnosticFixture(f => {
+    const exactRow = size => {
+      const row = f.event('sidecar', 'diagnostic_progress', 22, { padding: '' });
+      row.padding = 'x'.repeat(size - Buffer.byteLength(JSON.stringify(row) + '\n'));
+      return row;
+    };
+    const desktopBytes = fs.statSync(f.desktop).size;
+    for (let segment = 1; segment <= 4; segment++) f.write(
+      `sidecar-interactions.${f.generation}${segment === 1 ? '' : `.${segment}`}.jsonl`,
+      [exactRow(segment < 4 ? MAX_LEAF_BYTES : MAX_TOTAL_BYTES - desktopBytes - 3 * MAX_LEAF_BYTES)]);
+    f.write(`sidecar-interactions.${f.generation}.5.jsonl`, [f.sidecarEvents[0]]);
+    const read = fs.readSync, bound = require('../plugins/data-secure/server/core/bound-file-io');
+    const boundRead = bound.readBoundFileRecord;
+    let readBytes = 0, boundCalls = 0, report;
+    fs.readSync = function(...args) { const count = read.call(this, ...args); readBytes += count; return count; };
+    bound.readBoundFileRecord = function(target, options) {
+      boundCalls++; assert.ok(options.maximum > 0); return boundRead(target, options);
+    };
+    try { report = sidecarReadiness(f.directory, f.desktop); }
+    finally { fs.readSync = read; bound.readBoundFileRecord = boundRead; }
+    assert.equal(readBytes, MAX_TOTAL_BYTES); assert.equal(boundCalls, 5, 'zero remaining budget fails before another bound read');
+    assert.equal(report.ready, false); assert.ok(report.error_codes.includes('NATIVE_SMOKE_LOG_LIMIT'));
+  });
+});
+
+test('linked leaves, redirected diagnostic directories and actual identity races fail closed', () => {
+  diagnosticFixture(f => {
+    fs.linkSync(f.leaf, path.join(f.root, 'second-link.jsonl'));
+    const report = sidecarReadiness(f.directory, f.desktop);
+    assert.equal(report.ready, false); assert.ok(report.error_codes.includes('NATIVE_SMOKE_LOG_UNSAFE'));
+  });
+  diagnosticFixture(f => {
+    const alias = path.join(f.root, 'alias');
+    fs.symlinkSync(f.directory, alias, process.platform === 'win32' ? 'junction' : 'dir');
+    assert.equal(sidecarReadiness(alias, path.join(alias, path.basename(f.desktop))).ready, false);
+  });
+  diagnosticFixture(f => {
+    fs.renameSync(f.leaf, path.join(f.root, 'preserved-leaf.jsonl'));
+    const destination = path.join(f.root, 'linked-directory'); fs.mkdirSync(destination);
+    fs.symlinkSync(destination, f.leaf, process.platform === 'win32' ? 'junction' : 'dir');
+    const report = sidecarReadiness(f.directory, f.desktop);
+    assert.equal(report.ready, false); assert.ok(report.error_codes.includes('NATIVE_SMOKE_LOG_UNSAFE'));
+  });
+  diagnosticFixture(f => {
+    const original = fs.openSync;
+    let changed = false;
+    fs.openSync = function(target, ...args) {
+      if (!changed && target === f.leaf) {
+        changed = true;
+        fs.renameSync(f.leaf, path.join(f.root, 'preserved-before-open.jsonl'));
+        f.write(path.basename(f.leaf), f.sidecarEvents);
+      }
+      return original.call(this, target, ...args);
+    };
+    let report;
+    try { report = sidecarReadiness(f.directory, f.desktop); }
+    finally { fs.openSync = original; }
+    assert.equal(changed, true); assert.equal(report.ready, false);
+    assert.ok(report.error_codes.includes('NATIVE_SMOKE_LOG_CHANGED'));
+  });
+});
+
+test('actual close failures and a replaced directory cannot be hidden by otherwise valid diagnostic bytes', () => {
+  diagnosticFixture(f => {
+    const open = fs.openSync, close = fs.closeSync;
+    let leafFd, injected = false;
+    fs.openSync = function(target, ...args) {
+      const fd = open.call(this, target, ...args); if (target === f.leaf) leafFd = fd; return fd;
+    };
+    fs.closeSync = function(fd, ...args) {
+      const value = close.call(this, fd, ...args);
+      if (fd === leafFd && !injected) { injected = true; throw Object.assign(Error('synthetic close refusal'), { code: 'EIO' }); }
+      return value;
+    };
+    let report;
+    try { report = sidecarReadiness(f.directory, f.desktop); }
+    finally { fs.openSync = open; fs.closeSync = close; }
+    assert.equal(injected, true); assert.equal(report.ready, false);
+    assert.ok(report.error_codes.includes('NATIVE_SMOKE_LOG_CLOSE_FAILED'));
+  });
+  diagnosticFixture(f => {
+    const open = fs.opendirSync;
+    let replaced = false;
+    fs.opendirSync = function(target, ...args) {
+      const handle = open.call(this, target, ...args), close = handle.closeSync.bind(handle);
+      handle.closeSync = () => {
+        close();
+        if (target === f.directory && !replaced) {
+          replaced = true;
+          fs.renameSync(f.directory, path.join(f.root, 'preserved-directory'));
+          fs.mkdirSync(f.directory);
+          f.write(path.basename(f.desktop), f.desktopEvents);
+          f.write(path.basename(f.leaf), f.sidecarEvents);
+        }
+      };
+      return handle;
+    };
+    let report;
+    try { report = sidecarReadiness(f.directory, f.desktop); }
+    finally { fs.opendirSync = open; }
+    assert.equal(replaced, true); assert.equal(report.ready, false);
+    assert.ok(report.error_codes.includes('NATIVE_SMOKE_LOG_CHANGED'));
+  });
+});
+
+test('the sidecar CLI keeps native positives, emits only a closed report and returns nonzero for missing evidence', () => diagnosticFixture(f => {
+  const helper = path.join(__dirname, 'helpers/native-review-readiness.js');
+  const run = flags => spawnSync(process.execPath, [helper, f.directory, '--sidecar', f.desktop, ...flags],
+    { encoding: 'utf8', windowsHide: true, timeout: 5000 });
+  const positive = run(['--runtime', '--review', '--workspace', '--report']);
+  assert.equal(positive.status, 0, positive.stderr);
+  assert.equal(JSON.parse(positive.stdout).conditions.review_ipc, true);
+  assert.equal(JSON.parse(positive.stdout).conditions.current_owner_main_ipc, true);
+  fs.unlinkSync(f.leaf);
+  const negative = run(['--runtime', '--report']);
+  assert.equal(negative.status, 1); assert.equal(JSON.parse(negative.stdout).ready, false);
+  assert.ok(!negative.stdout.includes(f.root)); assert.equal(negative.stderr, '');
+}));
+
+test('one bounded report retains every native readiness oracle and projects only closed launch metadata', () => diagnosticFixture(f => {
+  const options = { requireRuntime: true, requireReview: true, requireWorkspace: true };
+  const check = () => sidecarReadiness(f.directory, f.desktop, options);
+  for (const name of ['page_loaded', 'frontend_ready', 'review_page_loaded', 'workspace_page_loaded']) {
+    f.write(path.basename(f.desktop), f.desktopEvents.filter(row => row.event !== name));
+    assert.equal(check().ready, false, `one coherent native gate still requires ${name}`);
+  }
+  for (const action of ['get_public_state', 'get_ui_context', 'get_review_session']) {
+    f.write(path.basename(f.desktop), f.desktopEvents.map(row => row.event === 'ipc_response_ok' && row.action === action
+      ? { ...row, event: 'ipc_response_error' } : row));
+    assert.equal(check().ready, false, `one coherent native gate still requires successful ${action}`);
+  }
+  f.write(path.basename(f.desktop), f.desktopEvents.filter(row => row.event !== 'workspace_page_loaded'));
+  assert.equal(sidecarReadiness(f.directory, f.desktop).ready, true, 'legacy Windows mode remains explicit');
+  assert.equal(check().error_codes.includes('NATIVE_SMOKE_WORKSPACE_NOT_READY'), true);
+  const missingWorkspace = runReadinessCli([f.directory, '--sidecar', f.desktop, '--workspace', '--report']);
+  assert.equal(missingWorkspace.status, 1); assert.equal(JSON.parse(missingWorkspace.stdout).ready, false);
+  for (const product_version of ['PRIVATE_PATH_SECRET_SENTINEL', ['3.2.0-rc164'], 123456, null,
+    '03.2.0-rc164', '3.2.0-rc164+PRIVATE_PATH_SECRET_SENTINEL', '3.2.0']) {
+    f.write(path.basename(f.desktop), f.desktopEvents.map(row => row.event === 'application_started' ? { ...row, product_version } : row));
+    const report = check(); assert.equal(report.product_version, null); assert.equal(report.application_started_ms, 10);
+    assert.ok(!JSON.stringify(report).includes('PRIVATE_PATH_SECRET_SENTINEL'));
+  }
+  f.write(path.basename(f.desktop), [...f.desktopEvents, f.event('desktop', 'application_started', 100,
+    { session_id: '2'.repeat(32), product_version: 'PRIVATE_PATH_SECRET_SENTINEL' })]);
+  const latest = check(); assert.equal(latest.ready, false); assert.equal(latest.product_version, null);
+  assert.equal(latest.application_started_ms, 100, 'metadata is from the same latest session, never borrowed from an older start');
+  f.write(path.basename(f.desktop), f.desktopEvents.map(row => row.event === 'application_started'
+    ? { ...row, time_ms: 'PRIVATE_PATH_SECRET_SENTINEL' } : row));
+  assert.equal(check().application_started_ms, null);
+}));
+
+test('actual CLI sidecar and file modes never pre-read diagnostic paths with readFileSync', () => diagnosticFixture(f => {
+  const readFile = fs.readFileSync, read = fs.readSync;
+  const bound = require('../plugins/data-secure/server/core/bound-file-io');
+  const boundRecord = bound.readBoundFileRecord, boundFile = bound.readBoundFile;
+  const capabilities = []; let unchecked = 0, readBytes = 0;
+  fs.readFileSync = function(target, ...args) {
+    if (typeof target === 'string' && target.endsWith('.jsonl')) { unchecked++; throw Error('UNBOUNDED_DIAGNOSTIC_READ'); }
+    return readFile.call(this, target, ...args);
+  };
+  fs.readSync = function(...args) { const count = read.call(this, ...args); readBytes += count; return count; };
+  bound.readBoundFileRecord = function(target, options) { capabilities.push(options); return boundRecord(target, options); };
+  bound.readBoundFile = function(target, options) { capabilities.push(options); return boundFile(target, options); };
+  try {
+    const report = runReadinessCli([f.directory, '--sidecar', f.desktop, '--runtime', '--review', '--workspace', '--report']);
+    assert.equal(report.status, 0); assert.equal(JSON.parse(report.stdout).ready, true);
+    assert.equal(runReadinessCli([f.desktop, '--main', '--workspace']).status, 0);
+    assert.equal(unchecked, 0); assert.equal(capabilities.length, 3);
+    assert.ok(capabilities.every(value => value.maximum === MAX_LEAF_BYTES && value.maxLinks === 1 && value.checkCtime === true));
+    fs.writeFileSync(f.desktop, Buffer.alloc(MAX_LEAF_BYTES + 1, 32));
+    readBytes = 0;
+    assert.equal(runReadinessCli([f.desktop, '--main', '--workspace']).status, 1); assert.equal(readBytes, 0);
+    f.write(path.basename(f.desktop), f.desktopEvents);
+    fs.linkSync(f.desktop, path.join(f.root, 'desktop-second-link.jsonl'));
+    readBytes = 0;
+    assert.equal(runReadinessCli([f.desktop, '--main', '--workspace']).status, 1); assert.equal(readBytes, 0);
+    assert.equal(unchecked, 0);
+  } finally {
+    fs.readFileSync = readFile; fs.readSync = read; bound.readBoundFileRecord = boundRecord; bound.readBoundFile = boundFile;
+  }
+}));
+
+test('all native launchers use bounded sidecar evidence and Mac failures report individual fixed predicates before cleanup', () => {
+  for (const name of ['standalone-native-macos-launch.sh', 'standalone-native-linux-launch.sh', 'standalone-macos-regular-start.sh']) {
+    const source = fs.readFileSync(path.join(__dirname, 'manual', name), 'utf8');
+    assert.match(source, /--sidecar "\$desktop_log"/u);
+    assert.match(source, /--sidecar "\$desktop_log"[^\n]*--report/u);
+    assert.doesNotMatch(source, /sidecar-interactions\.jsonl/u);
+    assert.doesNotMatch(source, /node -e .*fs\.readFileSync/u);
+    assert.doesNotMatch(source, /grep[^\n]*"\$desktop_log"|native-review-readiness\.js" "\$desktop_log"/u);
+    const gate = source.match(/  if node [\s\S]*?; then\n    ready=true/u)?.[0];
+    assert.ok(gate); assert.equal(gate.match(/native-review-readiness\.js/gu)?.length, 1, 'one report supplies all diagnostic predicates');
+    assert.match(gate, /--workspace/u);
+    if (name !== 'standalone-macos-regular-start.sh') assert.match(source, /--sidecar "\$desktop_log"[^\n]*--review/u);
+  }
+  const windows = fs.readFileSync(path.join(__dirname, 'manual/standalone-native-windows-launch.ps1'), 'utf8');
+  assert.match(windows, /Read-NativeSidecarReadiness \$diagnosticRoot \$desktopLog/u);
+  assert.match(windows, /-RequireReview:\$AssertReviewWindow -RequireWorkspace:\$AssertWorkspace/u);
+  assert.match(windows, /if \(\$application -and \$sidecarStatus\.ready\)/u);
+  assert.match(windows, /\$sidecarStatus\.application_started_ms -ge \$startedAt/u);
+  assert.match(windows, /\$sidecarStatus\.product_version -ceq \$expectedVersion/u);
+  assert.doesNotMatch(windows, /Read-InteractionEvents|Get-Content[^\n]*(?:\$desktopLog|\$Path)|\$desktopSession|\$sidecarSession/u);
+  const nativeTail = windows.slice(windows.indexOf('$deadline = [DateTimeOffset]::UtcNow.AddSeconds(30)'));
+  assert.doesNotMatch(nativeTail, /STANDALONE NATIVE EVENT|foreach \(\$record|\$record\.\$field/u);
+});
 
 test('page load, request start, unrelated success and refused review IPC cannot pass macOS readiness', () => {
   for (const records of [[page], [page, request], [page, request, failed],
@@ -30,10 +527,10 @@ test('page load, request start, unrelated success and refused review IPC cannot 
 
 test('the macOS native launcher uses the tested successful-response predicate', () => {
   const source = fs.readFileSync(path.join(__dirname, 'manual/standalone-native-macos-launch.sh'), 'utf8');
-  assert.match(source, /&& node "\$script_directory\/\.\.\/helpers\/native-review-readiness\.js" "\$desktop_log"/u);
+  assert.match(source, /if node "\$script_directory\/\.\.\/helpers\/native-review-readiness\.js"/u);
   assert.doesNotMatch(source, /&& grep -q '"action":"get_review_session"' "\$sidecar_log"/u);
   assert.match(source, /no review decisions/u);
-  assert.match(source, /&& node "\$script_directory\/\.\.\/helpers\/native-review-readiness\.js" "\$desktop_log" --main/u);
+  assert.match(source, /--sidecar "\$desktop_log" --runtime --review --workspace/u);
   assert.doesNotMatch(source, /grep -q '"action":"get_(?:public_state|ui_context)"'/u);
 });
 
@@ -72,7 +569,7 @@ test('new native candidates require the actual workspace page as well as success
   }
   for (const platform of ['macos', 'linux']) {
     const launcher = fs.readFileSync(path.join(__dirname, `manual/standalone-native-${platform}-launch.sh`), 'utf8');
-    assert.match(launcher, /native-review-readiness\.js" "\$desktop_log" --main --workspace/u);
+    assert.match(launcher, /--sidecar "\$desktop_log"[^\n]*--workspace/u);
   }
   const rust = fs.readFileSync(path.join(__dirname, '../apps/datasecure-standalone/tauri-contract/src/main.rs'), 'utf8');
   assert.match(rust, /webview\.label\(\) == "main" && workspace_catalogue_path\(payload\.url\(\)\.path\(\)\)/u);
@@ -452,8 +949,8 @@ testAsync('native campaign resolves supported package roots and rejects changed 
 test('the Windows launcher is bound to the successful-response predicate and has a bounded contract mode', () => {
   const script = path.join(__dirname, 'manual/standalone-native-windows-launch.ps1');
   const source = fs.readFileSync(script, 'utf8');
-  assert.match(source, /\$reviewReady = Test-NativeReviewReadiness \$desktopSession/u);
-  assert.match(source, /-not \$AssertReviewWindow -or \$reviewReady/u);
+  assert.match(source, /\$reviewReady = \[bool\] \(\$sidecarStatus\.conditions\.review_ipc -and \$sidecarStatus\.conditions\.current_owner_review_ipc\)/u);
+  assert.match(source, /-RequireReview:\$AssertReviewWindow -RequireWorkspace:\$AssertWorkspace/u);
   assert.match(source, /review_session_response_ok = \$reviewReady/u);
   assert.match(source, /if \(\$ValidateReadinessOnly\)/u);
 });
@@ -466,6 +963,42 @@ if (process.platform === 'win32') test('actual PowerShell readiness rejects fail
   assert.match(result.stdout, /READINESS CONTRACT PASS \([0-9]+ groups; no native app launch\)/u);
 });
 else process.stdout.write('SKIP actual PowerShell readiness contract (Windows host required; not counted passed)\n');
+
+if (process.platform === 'win32') {
+  test('the actual Windows native report gate binds version/start and never invokes unbounded or model pre-reads', () => diagnosticFixture(f => {
+    const check = (options, accepted, ready) => {
+      const result = runWindowsNativeReport(f, options);
+      assert.ifError(result.error); assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+      const json = result.stdout.match(/NATIVE_REPORT_RESULT (\{[^\r\n]*\})/u)?.[1]; assert.ok(json, result.stdout);
+      assert.deepEqual(JSON.parse(json), { accepted, ready });
+      assert.doesNotMatch(result.stdout + result.stderr, /UNBOUNDED_DIAGNOSTIC_READ|NATIVE_MODEL_PREDICATE_USED/u);
+    };
+    check({}, true, true);
+    check({ expectedVersion: '3.2.0-rc165' }, false, true);
+    check({ startedAt: 11 }, false, true);
+    f.write(path.basename(f.desktop), f.desktopEvents.filter(row => row.event !== 'workspace_page_loaded'));
+    check({}, false, false);
+    f.write(path.basename(f.desktop), f.desktopEvents.map(row => row.event === 'ipc_response_ok' && row.action === 'get_review_session'
+      ? { ...row, event: 'ipc_response_error' } : row));
+    check({}, false, false);
+  }));
+  test('the actual Windows timeout surface emits only the closed report and fixed predicates, never raw record sentinels', () => diagnosticFixture(f => {
+    f.write(path.basename(f.desktop), [...f.desktopEvents.map(row => row.event === 'application_started'
+      ? { ...row, product_version: 'PRIVATE_PATH_SECRET_SENTINEL' } : row),
+    f.event('desktop', 'PRIVATE_PATH_SECRET_SENTINEL', 90, { action: 'PRIVATE_PATH_SECRET_SENTINEL',
+      error_code: 'PRIVATE_PATH_SECRET_SENTINEL', raw_stderr: 'PRIVATE_PATH_SECRET_SENTINEL' })]);
+    f.write(path.basename(f.leaf), [...f.sidecarEvents, f.event('sidecar', 'PRIVATE_PATH_SECRET_SENTINEL', 90,
+      { action: 'PRIVATE_PATH_SECRET_SENTINEL', error_code: 'PRIVATE_PATH_SECRET_SENTINEL' })]);
+    const result = runWindowsNativeReport(f, { timeoutSurface: true });
+    assert.ifError(result.error); assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+    assert.match(result.stdout, /STANDALONE NATIVE CHECKPOINT /u);
+    assert.match(result.stdout, /STANDALONE NATIVE SIDECAR CHECKPOINT /u);
+    assert.match(result.stdout, /STANDALONE NATIVE HOST /u);
+    assert.match(result.stdout, /CLOSED_TIMEOUT STANDALONE_NATIVE_IPC_TIMEOUT/u);
+    assert.doesNotMatch(result.stdout + result.stderr, /PRIVATE_PATH_SECRET_SENTINEL|STANDALONE NATIVE EVENT/u);
+    assert.ok(!(result.stdout + result.stderr).includes(f.root));
+  }));
+} else process.stdout.write('SKIP actual Windows native report/timeout fragments (Windows host required; not counted passed)\n');
 
 testAsync('a nonmatching target is explicitly skipped and cannot increase passed count', async () => {
   let assertionsReached = false;
@@ -494,13 +1027,21 @@ test('real converter suite declares platform applicability before callback execu
 test('a native launcher on the wrong host cannot return a successful exit status', () => {
   for (const [file, marker] of [
     ['standalone-native-windows-launch.ps1', 'if ($env:OS'],
-    ['standalone-native-macos-launch.sh', 'if [[ "$(uname -s)"']
+    ['standalone-native-macos-launch.sh', 'if [[ "$(uname -s)"'],
+    ['standalone-native-linux-launch.sh', 'if [[ "$(uname -s)"']
   ]) {
     const source = fs.readFileSync(path.join(__dirname, 'manual', file), 'utf8');
     const guard = source.slice(source.indexOf(marker), source.indexOf(marker) + 300);
     assert.match(guard, /exit 77/u);
     assert.doesNotMatch(guard, /exit 0/u);
   }
+  const linux = fs.readFileSync(path.join(__dirname, 'manual/standalone-native-linux-launch.sh'), 'utf8');
+  const bash = process.platform === 'win32' ? path.join(process.env.ProgramFiles || 'C:/Program Files', 'Git/bin/bash.exe') : '/bin/bash';
+  const guard = linux.slice(0, linux.indexOf('\nappdir='));
+  const rejected = spawnSync(bash, ['--noprofile', '--norc', '-c', `uname() { printf '%s\\n' Darwin; }\n${guard}`],
+    { encoding: 'utf8', windowsHide: true, timeout: 5000, env: { ...process.env, BASH_ENV: '' } });
+  assert.ifError(rejected.error); assert.equal(rejected.status, 77, rejected.stderr);
+  assert.match(rejected.stdout, /LINUX LAUNCH SKIP/u); assert.doesNotMatch(rejected.stdout, /PASS/u);
 });
 
 test('UI-only browser fixtures follow the current version without claiming native evidence', () => {

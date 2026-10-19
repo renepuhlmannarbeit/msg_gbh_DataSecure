@@ -7,6 +7,12 @@ const path = require('node:path');
 const childProcess = require('node:child_process');
 const { encodeFrame } = require('../plugins/data-secure/server/standalone/desktop-ipc');
 const { desktopErrorCode } = require('../plugins/data-secure/server/core/desktop-error-contract');
+const { safeProbeLines } = require('./lib/standalone-history-probe.cjs');
+// Never turn arbitrary child stderr into an unredacted native CI diagnostic.
+assert.deepEqual(safeProbeLines('STANDALONE_HISTORY_PROBE:{"kind":"error","phase":"migration","code":"OTHER","path":"PRIVATE_CANARY"}\n' +
+  'STANDALONE_HISTORY_PROBE:{"kind":"error","phase":"migration","code":"PRIVATE_CANARY"}\n'), []);
+assert.deepEqual(safeProbeLines('STANDALONE_HISTORY_PROBE:{"kind":"error","phase":"readBoundFileRecord","code":"BOUND_FILE_CHANGED"}\n'),
+  ['STANDALONE_HISTORY_PROBE:{"kind":"error","phase":"readBoundFileRecord","code":"BOUND_FILE_CHANGED"}']);
 
 const root = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'datasecure-review-ipc-'));
 const initial = fs.lstatSync(root);
@@ -40,10 +46,10 @@ let sequence = 0;
 const waiters = new Map();
 const failedResponses = [];
 function note(value) { try { process.stderr.write(value); } catch { /* never replace the exact primary failure */ } }
-child.stderr.on('data', (chunk) => { stderr += chunk.toString('utf8'); });
+child.stderr.on('data', (chunk) => { stderr = (stderr + chunk.toString('utf8')).slice(-65536); });
 child.stdin.on('error', () => {});
 child.once('exit', (code) => {
-  for (const waiter of waiters.values()) { clearTimeout(waiter.timer); waiter.reject(new Error(`sidecar exited ${code}: ${stderr}`)); }
+  for (const waiter of waiters.values()) { clearTimeout(waiter.timer); waiter.reject(new Error(`sidecar exited ${code}`)); }
   waiters.clear();
 });
 child.stdout.on('data', (chunk) => {
@@ -62,7 +68,7 @@ child.stdout.on('data', (chunk) => {
 async function send(action, fields = {}, expectedError) {
   const id = (++sequence).toString(16).padStart(16, '0');
   const answer = await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => { waiters.delete(id); reject(new Error(`IPC timeout: ${action}: ${stderr}`)); }, 10000);
+    const timer = setTimeout(() => { waiters.delete(id); reject(new Error(`IPC timeout: ${action}`)); }, 10000);
     waiters.set(id, { resolve, reject, timer });
     child.stdin.write(encodeFrame({ schema: 'datasecure-standalone-private-ipc/1', request_id: id, action, ...fields }));
   });
@@ -264,6 +270,7 @@ function cleanOwnedRoot() {
   }
   process.stdout.write('✓ real Standalone sidecar → worker → broker → serialized corporate answer → typed publication; first-draft fault/retry; invalid answer; defer/resume\n');
 })().catch((error) => {
+  for (const line of safeProbeLines(stderr)) note(line + '\n');
   note(`STANDALONE_REVIEW_IPC_FAILED_RESPONSES:${JSON.stringify(failedResponses)}\n`);
   console.error(error); process.exitCode = 1;
 });

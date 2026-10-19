@@ -83,7 +83,6 @@ ditto "$app_bundle" "$product/DataSecure Standalone.app"
 candidate="$product/DataSecure Standalone.app"
 executable="$candidate/Contents/MacOS/datasecure-standalone"
 desktop_log="$test_root/temp/SecureDataMsg-Standalone/desktop-interactions.jsonl"
-sidecar_log="$test_root/temp/SecureDataMsg-Standalone/sidecar-interactions.jsonl"
 [[ -x "$executable" && ! -L "$executable" ]] || {
   echo "STANDALONE_NATIVE_EXECUTABLE_MISSING" >&2
   exit 66
@@ -112,27 +111,26 @@ fi
 
 deadline=$((SECONDS + 45))
 ready=false
+# The bounded reader requires sidecar_started, runtime_integrity_checked and
+# service_initialized from one current-session owner, not a legacy base leaf.
 while ((SECONDS < deadline)); do
   kill -0 "$app_pid" 2>/dev/null || {
     if [[ "$launch_services" == false ]]; then wait "$app_pid" || status=$?; fi
+    node "$script_directory/../helpers/native-review-readiness.js" \
+      "$test_root/temp/SecureDataMsg-Standalone" --sidecar "$desktop_log" --runtime --review --workspace --report || true
     echo "STANDALONE_NATIVE_APP_EXITED_${status:-0}" >&2
     exit 1
   }
-  if [[ -f "$desktop_log" && -f "$sidecar_log" ]] \
-    && grep -q '"event":"page_loaded"' "$desktop_log" \
-    && grep -q '"event":"frontend_ready"' "$desktop_log" \
-    && grep -q '"event":"review_page_loaded"' "$desktop_log" \
-    && node "$script_directory/../helpers/native-review-readiness.js" "$desktop_log" \
-    && node "$script_directory/../helpers/native-review-readiness.js" "$desktop_log" --main --workspace \
-    && grep -q '"event":"sidecar_started"' "$sidecar_log" \
-    && grep -q '"event":"runtime_integrity_checked"' "$sidecar_log" \
-    && grep -q '"event":"service_initialized"' "$sidecar_log"; then
+  if node "$script_directory/../helpers/native-review-readiness.js" \
+      "$test_root/temp/SecureDataMsg-Standalone" --sidecar "$desktop_log" --runtime --review --workspace; then
     ready=true
     break
   fi
   sleep 0.2
 done
 [[ "$ready" == true ]] || {
+  node "$script_directory/../helpers/native-review-readiness.js" \
+    "$test_root/temp/SecureDataMsg-Standalone" --sidecar "$desktop_log" --runtime --review --workspace --report || true
   echo "STANDALONE_NATIVE_MACOS_IPC_TIMEOUT" >&2
   exit 1
 }

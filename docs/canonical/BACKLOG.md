@@ -4,6 +4,38 @@ Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Pre-Release in Vorbe
 
 ## Aktuelle Nacht-Fortsetzung (ersetzt ältere Freigabeangaben)
 
+Neu19.10.nach04:15UTC: zusätzlicher Store- und nativer Harnessgegenreview
+abgeschlossen, keine bestätigten Restbefunde dort. Gezielte Revalidierung
+Index21PASS/22(1Windows-NOT_RUN), Migration21/21/Probe/echteIPC/Native39/39/
+Workflow/Pfade grün. Handoffbelege jetzt strenge Rollen+vollständige Schritte,
+aktuelle Testbytes und tatsächliche ZIP-EXE;31 synthetische Gegenfälle grün,
+deren unabhängiger Abschlussreview ohne Restbefund abgeschlossen. Dann gemeinsamer final4-
+Gitfreeze/275+10/Native/Paket/Mac/GUIfälle01..10/Release. Ältere Belege bleiben
+historisch, keine Freigabe aus Modellen oder älteren Paketbytes.
+
+Neu19.10.nach03:45UTC: zwei bestätigte Historyraces implementiert und gezielt
+gegengelesen/geprüft: Index21PASS/22 mit Windows-POSIX-NOT_RUN, Migration21/21,
+gebundene Parent-/Snapshot-/Arbeitsbudgets/Locatorwrites. Test-only-Fehlerprobe
+nach Quellengegenreview korrigiert, echte IPC grün. Noch offen zusätzlicher
+unabhängiger Storegegenreview und Abschluss der korrigierten nativen Reader.
+Intelconsumer hatte deterministischen Harness-Basislognamenfehler; vorhandene
+echte Startfehler sind dadurch nicht ausgeschlossen. Reader-Gegenfälle müssen
+neueste Session/Owner, tatsächliche erfolgreiche IPC und harte IO-Budgets
+belegen, Diagnose vor Cleanup erhalten. Erst danach neuer gemeinsamer final4-
+Commit/Freeze und frische275+10/Native-/Paket-/Mac-/GUI-/lokale/Remoteübergabe.
+final3 davor vollständig272+10/Native/Paket grün/unverändert, nicht umetikettieren.
+
+Neu19.10.nach03:30UTC: bestätigten Produktionsrace recent.json nach laufendem
+af55717-Freeze beheben: höchstens3 vollständige Reads nur BOUND_FILE_CHANGED,
+identische ursprüngliche Directorybindung, keine UNSAFE/CLOSE/Schema-Retries,
+keine Scans/Reparatur. Tatsächlicher Zweiprozessbeweis liegt in dist vor;
+unabhängige kausale Gegenfälle/Quellenreview laufen. ARMconsumer39193987747
+echter Verlauf-IPC ROT, konkrete Ursache nicht aus öffentlichem Code ableitbar;
+zusätzliche inhaltsfreie Fehlergrenzdiagnose für nächsten Lauf erforderlich.
+Windows-Native/Paket dieses Schnitts grün, Headless aktiv. Neue GUI nurFall01
+PASS,9NOT_RUN, App/Core normal beendet. Neuer gemeinsamer Produktfreeze und
+frische vollständige Windows-/Mac-/Paket-/GUI-/Releasegates danach offen.
+
 Neu19.10.nach03:13UTC: zwei bestätigte Darwin-Testvertragsfehler korrigiert,
 kein Produkt-/Schutzumbau. Runtime-vor-Lese/Schreib-IO wird hostunabhängig
 geprüft; nur obsolete positive Addonfixture getrennt, vollständige Quell-

@@ -76,7 +76,8 @@ assert.match(workflow, /find "\$bundle\/Contents\/Resources\/server" -type f ! -
 const regularLaunch = fs.readFileSync(path.join(root, 'tests', 'manual', 'standalone-macos-regular-start.sh'), 'utf8');
 const launchServices = fs.readFileSync(path.join(root, 'tests', 'helpers', 'macos-launch-services.swift'), 'utf8');
 assert.match(regularLaunch, /macos-launch-services\.swift" --regular/u);
-assert.match(regularLaunch, /sidecar_bootstrap_ready/u);
+assert.match(regularLaunch, /--sidecar "\$desktop_log" --runtime --workspace/u,
+  'regular startup must use the bounded reader and actual main-workspace IPC');
 assert.match(launchServices, /CommandLine\.arguments\[1\] == "--regular"/u);
 assert.doesNotMatch(launchServices.split('if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--regular"')[1]
   .split('guard CommandLine.arguments.count == 3')[0], /config\.environment\s*=/u);
@@ -172,12 +173,9 @@ assert.strictEqual(packageLock.packages['node_modules/@tauri-apps/cli'].version,
 for (const expected of [
   'DATASECURE_STANDALONE_NATIVE_SMOKE_ROOT',
   'DATASECURE_STANDALONE_NATIVE_SMOKE_REVIEW=1',
-  'review_page_loaded',
   'native-review-readiness.js',
   'DATASECURE_STANDALONE_DOCUMENTS_DIR',
   'profile/Library/Application Support/SecureDataMsg-Standalone/workspace',
-  'sidecar_started',
-  'service_initialized',
   'pgrep -P "$app_pid" -x datasecure-core',
   'sidecar_command="$(ps -p "$sidecar_pid" -o command=',
   'macos-launch-services.swift" --terminate "$candidate" "$app_pid"',
@@ -188,6 +186,16 @@ assert.doesNotMatch(macosLaunch, /child_pids="\$\(pgrep -P/u,
   'the sidecar check must not classify every WebView child as a sidecar');
 assert.doesNotMatch(macosLaunch, /curl|wget|https?:\/\//u);
 const readiness = fs.readFileSync(path.join(root, 'tests', 'helpers', 'native-review-readiness.js'), 'utf8');
+const sidecarReadiness = fs.readFileSync(path.join(root, 'tests', 'helpers', 'native-sidecar-readiness.js'), 'utf8');
+assert.match(macosLaunch, /--sidecar "\$desktop_log" --runtime --review/u,
+  'the native launch must call the bounded, session/owner-correlated reader, not a comment or legacy base-file grep');
+assert.match(macosLaunch, /STANDALONE_NATIVE_APP_EXITED_/u);
+for (const event of ['sidecar_started', 'runtime_integrity_checked', 'service_initialized'])
+  assert.ok(sidecarReadiness.includes(`'${event}'`), `sidecar reader lacks ${event}`);
+assert.match(sidecarReadiness, /sidecar_bootstrap_ready/u);
+assert.match(readiness, /review_page_loaded/u);
+assert.match(sidecarReadiness, /readBoundFileRecord/u);
+assert.match(sidecarReadiness, /current_owner_main_ipc/u);
 assert.match(readiness, /get_review_session/u);
 assert.match(readiness, /ipc_response_ok/u);
 const { actionReady } = require('./helpers/native-review-readiness');

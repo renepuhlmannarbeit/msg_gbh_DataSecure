@@ -30,6 +30,10 @@ if (path.resolve(process.argv[1]) === reviewFile) {
     return original(...args);
   };
 } else {
+  // Test-lifetime, narrow observation only. Keep the original I/O failure
+  // visible if a native runner fails before this fixture injects any fault.
+  const restoreHistoryProbe = require('./standalone-history-probe.cjs').install(root);
+  process.once('exit', restoreHistoryProbe);
   const fork = childProcess.fork;
   childProcess.fork = function reviewFork(file, args, options) {
     if (path.resolve(file) !== reviewFile) return fork.call(this, file, args, options);

@@ -51,16 +51,33 @@ function mainReady(events, { workspace = false } = {}) {
     actionReady(scoped, 'get_public_state') && actionReady(scoped, 'get_ui_context');
 }
 
-module.exports = { reviewReady, mainReady, actionReady };
+function sidecarReadiness(...args) {
+  return require('./native-sidecar-readiness').readNativeSidecarReadiness(...args);
+}
+module.exports = { reviewReady, mainReady, actionReady, sidecarReadiness };
 if (require.main === module) {
   try {
-    const input = process.argv[2] === '-' ? 0 : process.argv[2];
-    const records = fs.readFileSync(input, 'utf8').split(/\r?\n/u).flatMap(line => {
-      try { const value = JSON.parse(line); return value && typeof value === 'object' ? [value] : []; }
-      catch { return []; }
-    });
-    const check = process.argv[3] === '--main'
-      ? events => mainReady(events, { workspace: process.argv[4] === '--workspace' }) : reviewReady;
-    process.exitCode = check(records) ? 0 : 1;
+    if (process.argv[3] === '--sidecar') {
+      const flags = process.argv.slice(5);
+      if (!process.argv[4] || flags.some(flag => !['--runtime', '--review', '--workspace', '--report'].includes(flag))) throw Error('ARGUMENT_INVALID');
+      const report = sidecarReadiness(process.argv[2], process.argv[4], {
+        requireRuntime: flags.includes('--runtime'), requireReview: flags.includes('--review'),
+        requireWorkspace: flags.includes('--workspace') });
+      if (flags.includes('--report')) process.stdout.write(`${JSON.stringify(report)}\n`);
+      process.exitCode = report.ready ? 0 : 1;
+    } else {
+      // Preserve stdin fragments for the pure predicate contract. File-mode
+      // evidence, even outside native launchers, uses the same leaf boundary.
+      const bytes = process.argv[2] === '-' ? fs.readFileSync(0) :
+        require('../../plugins/data-secure/server/core/bound-file-io').readBoundFile(process.argv[2],
+          { maximum: 2 * 1024 * 1024, minimum: 1, maxLinks: 1, checkCtime: true });
+      const records = bytes.toString('utf8').split(/\r?\n/u).flatMap(line => {
+        try { const value = JSON.parse(line); return value && typeof value === 'object' ? [value] : []; }
+        catch { return []; }
+      });
+      const check = process.argv[3] === '--main'
+        ? events => mainReady(events, { workspace: process.argv[4] === '--workspace' }) : reviewReady;
+      process.exitCode = check(records) ? 0 : 1;
+    }
   } catch { process.exitCode = 1; }
 }

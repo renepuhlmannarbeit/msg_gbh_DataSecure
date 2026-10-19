@@ -49,33 +49,23 @@ trap normal_quit EXIT
 app_pid="$(/usr/bin/swift "$(dirname "${BASH_SOURCE[0]}")/../helpers/macos-launch-services.swift" --regular "$candidate")"
 [[ "$app_pid" =~ ^[0-9]+$ ]] || exit 66
 desktop_log="$diagnostic_dir/desktop-interactions.jsonl"
-sidecar_log="$diagnostic_dir/sidecar-interactions.jsonl"
 ready=false
 deadline=$((SECONDS + 60))
 while ((SECONDS < deadline)); do
   kill -0 "$app_pid" 2>/dev/null || break
-  if [[ -f "$desktop_log" && -f "$sidecar_log" ]] \
-    && grep -q '"event":"sidecar_bootstrap_ready"' "$desktop_log" \
-    && grep -q '"event":"sidecar_imports_ready"' "$sidecar_log" \
-    && grep -q '"event":"runtime_integrity_checked"' "$sidecar_log" \
-    && grep -q '"event":"service_initialized"' "$sidecar_log" \
-    && node "$(dirname "${BASH_SOURCE[0]}")/../helpers/native-review-readiness.js" \
-      "$desktop_log" --main --workspace; then
+  if node "$(dirname "${BASH_SOURCE[0]}")/../helpers/native-review-readiness.js" \
+      "$diagnostic_dir" --sidecar "$desktop_log" --runtime --workspace; then
     ready=true
     break
   fi
   sleep 0.2
 done
 if [[ "$ready" != true ]]; then
-  # The diagnostic schema deliberately excludes paths and document content.
-  # Print only a closed set of fields if this new OS gate fails.
-  for log in "$desktop_log" "$sidecar_log"; do
-    if [[ -f "$log" ]]; then
-      node -e 'const fs=require("node:fs"); for(const line of fs.readFileSync(process.argv[1],"utf8").trim().split(/\r?\n/u).slice(-30)){try{const e=JSON.parse(line); console.log(JSON.stringify({component:e.component,event:e.event,outcome:e.outcome,error_code:e.error_code}));}catch{}}' "$log"
-    fi
-  done
+  # Fixed predicates and closed codes only: no raw stderr, environment, paths
+  # or arbitrary log fields escape the owned native startup fixture.
+  node "$(dirname "${BASH_SOURCE[0]}")/../helpers/native-review-readiness.js" \
+    "$diagnostic_dir" --sidecar "$desktop_log" --runtime --workspace --report || true
   [[ -f "$desktop_log" ]] || echo "STANDALONE_REGULAR_MACOS_DESKTOP_LOG_MISSING" >&2
-  [[ -f "$sidecar_log" ]] || echo "STANDALONE_REGULAR_MACOS_SIDECAR_LOG_MISSING" >&2
   echo "STANDALONE_REGULAR_MACOS_START_FAILED" >&2
   exit 1
 fi
