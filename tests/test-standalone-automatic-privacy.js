@@ -141,7 +141,7 @@ function historicalUnsafeTextFixture() {
   // artifact constructor and transform trace (Node 22.23.2). Restore that saved
   // state instead of rerunning a now-fixed anonymizer to construct the test.
   // No verifier is mocked and no fresh WeakMap publication proof is invented.
-  const saved = structuredClone(require('./fixtures/standalone-unsafe-canonical-pre-fix.json'));
+  const saved = structuredClone(require('./lib/standalone-unsafe-canonical-pre-fix.json'));
   const policy = require('../plugins/data-secure/server/privacy/policy');
   assert.equal(crypto.createHash('sha256').update(JSON.stringify(saved.manifest)).digest('hex'), saved.expectation.manifest_sha256,
     'the frozen pre-fix package really has the recorded byte binding');

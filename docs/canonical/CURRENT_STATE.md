@@ -4,6 +4,15 @@ Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Test-Pre-Release in 
 
 ### Aktueller Nachtauftrag – neuere Autorität vor historischen Abschnitten
 
+Neu19.10.nach02:42UTC: d094/4a880940… lokal272/272+10/10 und Native228
+unverändert grün; echte Macconsumer39189276321 beide ROT wegen fehlender
+ignored JSON-Testquelle, kein Corecrash. Bytegleiche historische2731Bytes
+jetzt in tracked tests/lib, require korrigiert, JSON-Pfadtracking erweitert.
+16/16+50/50 gezielt grün; unabhängiger Quellengegenreview ohne weiteren belegten
+Fehler abgeschlossen. Neuer gemeinsamer
+Gitfreeze und erneute Mac-/Windows-/Paket-/GUI-Gates erforderlich. Produktcode,
+Corebytes und Schutzpolicy unverändert; kein Release aus dem roten Versuch.
+
 Neu19.10.nach02:06UTC: Beide Coreproducer39167676290 erfolgreich. Intel-Core
 9e950210…/kanonische Metadaten17450b40… anhand tatsächlicher Compile-/Link-/
 Binär-/ACL-/Originalquellenbelege von Main und zwei unabhängigen Reviewern

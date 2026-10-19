@@ -12,6 +12,17 @@ Keine Developer-ID, Apple-Einreichung oder Storeverteilung.
 
 ## Neuester geprüfter Windows-Quellstand, 19.10.2026
 
+Neu nach02:42UTC: erster gemeinsamer Consumer39189276321 scheiterte auf beiden
+Macs an einer ignorierten, nicht eingecheckten historischen JSON-Testquelle.
+Kein Corecrash daraus; lokale272/272+10/10 und Native228 grün gelten nur für
+den damaligen vorhandenen Entwicklercheckout. Frozen2731Bytes jetzt bytegleich
+in tests/lib versioniert, require korrigiert und JSON-Ressourcenpfadschutz
+erweitert;16/16+50/50 gezielte Fälle grün. Produktfingerprint4a880940… bleibt
+unverändert. Unabhängiger tatsächlicher Quellengegenreview ohne weiteren
+belegten Fehler abgeschlossen. Vor neuer gemeinsamer Git-/Paketfreigabe
+erneuter kompletter Consumer-/Windows-/GUI-Lauf erforderlich. Keine alten
+FINALs auf den nächsten Commit übertragen.
+
 Neuer gemeinsamer Schnitt nach02:06UTC: Beide Coreproducer erfolgreich,
 Intel zusätzlich von Main und zwei unabhängigen KI-Reviewern anhand echter
 Compile-/finaler Link-/Binär-/ACL-/Sourcebelege geprüft. Ausschließlich die

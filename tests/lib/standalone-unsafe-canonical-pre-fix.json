@@ -1,0 +1,58 @@
+{
+  "markdown": "4111\ufffd1111\ufffd1111\ufffd1111",
+  "transform_trace": {
+    "schema": "datasecure-private-transform-trace/1",
+    "complete": true,
+    "canonical_input": "4111\ufffd1111\ufffd1111\ufffd1111",
+    "input_hash": "94448373dce08157ecc5aaca8554e0f59f79bc3c26f092f3d370e3c803c11ee2",
+    "output_hash": "94448373dce08157ecc5aaca8554e0f59f79bc3c26f092f3d370e3c803c11ee2",
+    "steps": [{
+      "phase": "entities",
+      "input_hash": "94448373dce08157ecc5aaca8554e0f59f79bc3c26f092f3d370e3c803c11ee2",
+      "output_hash": "94448373dce08157ecc5aaca8554e0f59f79bc3c26f092f3d370e3c803c11ee2",
+      "edits": []
+    }]
+  },
+  "verification_context": {
+    "profile": "general",
+    "dictionary": [],
+    "strong_person_anchor": false,
+    "ruleset": "de-business/4",
+    "credential_policy": "credential-context/2",
+    "person_field_policy": "content-person-fields/1",
+    "publication_frame": { "prefix": "", "suffix": "" },
+    "reviewed_ranges": []
+  },
+  "manifest": {
+    "schema": "eu-privacy-package/4",
+    "package_id": "ds_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "product_channel": "standalone",
+    "processing_mode": "markdown-and-anonymize",
+    "anonymized": true,
+    "content_options": { "schema": "datasecure-content-options/1", "markdownOutput": "content-v1", "scanOcr": true, "imageOcr": false },
+    "source_type": "txt",
+    "privacy_scope": "extracted-markdown-only",
+    "source_extraction_coverage": { "status": "complete", "reason_codes": [] },
+    "profile": "general",
+    "operation_id": "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",
+    "created_at": "2026-10-18T00:00:00.000Z",
+    "gateway_version": "3.2.0-rc163",
+    "privacy_ruleset": "de-business/4",
+    "credential_context_policy": "credential-context/2",
+    "person_field_policy": "content-person-fields/1",
+    "document": "ds_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee.md",
+    "document_sha256": "94448373dce08157ecc5aaca8554e0f59f79bc3c26f092f3d370e3c803c11ee2",
+    "document_bytes": 25,
+    "verification": { "text_residual_pii": "passed", "residual_gate_checked_dictionary_literals": true },
+    "document_result": { "schema": "datasecure-document-result/1", "grade": "complete", "omissions": [], "reason_code": null }
+  },
+  "expectation": {
+    "schema": "datasecure-anonymized-artifact-expectation/1",
+    "package_id": "ds_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "content_options": { "schema": "datasecure-content-options/1", "markdownOutput": "content-v1", "scanOcr": true, "imageOcr": false },
+    "source_type": "txt",
+    "profile": "general",
+    "document_sha256": "94448373dce08157ecc5aaca8554e0f59f79bc3c26f092f3d370e3c803c11ee2",
+    "manifest_sha256": "7daef1907e75fecffda9970205ed970b39ec0b2b1e989005b464728ca77ca82d"
+  }
+}

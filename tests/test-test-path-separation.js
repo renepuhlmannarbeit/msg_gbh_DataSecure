@@ -10,6 +10,29 @@ const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
 const runner = fs.readFileSync(path.join(__dirname, 'run-product-suite.js'), 'utf8');
 const workflow = (name) => fs.readFileSync(path.join(root, '.github', 'workflows', name), 'utf8');
 
+function relativeJsonModules(source) {
+  // Literal module dependencies are required inputs, unlike JSON output paths
+  // a test deliberately creates or asserts absent. This supplements the
+  // existing path.join script check; it is not a general JavaScript parser.
+  const pattern = /\b(?:require|import)\s*\(\s*(['"])(\.\.?\/[^'"\r\n]+\.json)\1(?=\s*[,\)])|\bfrom\s*(['"])(\.\.?\/[^'"\r\n]+\.json)\3/gu;
+  return [...source.matchAll(pattern)].map(match => match[2] || match[4]);
+}
+
+test('literal JSON module scanning includes ignored regression data, not package names or runtime output paths', () => {
+  const ignored = './fixtures/ignored-regression.json';
+  const source = [
+    'require' + '(' + JSON.stringify(ignored) + ')',
+    'import' + '(' + JSON.stringify('../lib/second.json') + ')',
+    'import data from ' + JSON.stringify('./lib/third.json'),
+    'export { default } from ' + JSON.stringify('./lib/fourth.json'),
+    'import' + ' (' + JSON.stringify('./lib/options.json') + ', { with: { type: "json" } })',
+    'require' + '(' + JSON.stringify('third-party/package.json') + ')',
+    'path.join' + '(__dirname, ' + JSON.stringify('runtime-output.json') + ')'
+  ].join('\n');
+  assert.deepStrictEqual(relativeJsonModules(source),
+    [ignored, '../lib/second.json', './lib/third.json', './lib/fourth.json', './lib/options.json']);
+});
+
 test('resource-bound sidecar and Office cases use their explicitly separated source and native gates', () => {
   const suite = require('./run-product-suite');
   const sidecar = 'tests/test-standalone-sidecar.js';
@@ -186,7 +209,7 @@ test('Windows processing admission is an explicit artifact-bound probe, never so
   assert.match(source, /darwin_evidence: false/u);
 });
 
-test('every project script a test addresses by path exists and is tracked by Git', () => {
+test('every addressed project script and literal JSON module exists and is tracked by Git', () => {
   // tests/fixtures/ is ignored wholesale, so a helper forked from there never
   // reaches a clone and its test dies with a generic exit code instead of
   // proving anything. Test sources belong in tests/lib/ or tests/helpers/.
@@ -201,6 +224,13 @@ test('every project script a test addresses by path exists and is tracked by Git
       if (!/\.(?:js|mjs|cjs)$/u.test(entry.name)) continue;
       const source = fs.readFileSync(full, 'utf8');
       const rootIsRepository = repoRootDeclaration.test(source);
+      for (const modulePath of relativeJsonModules(source)) {
+        const target = path.resolve(path.dirname(full), modulePath);
+        const relative = path.relative(root, target).split(path.sep).join('/');
+        if (relative.startsWith('..') || path.isAbsolute(relative)) continue;
+        if (!scripts.has(relative)) scripts.set(relative, new Set());
+        scripts.get(relative).add(path.relative(root, full).split(path.sep).join('/'));
+      }
       joinPattern.lastIndex = 0;
       let match;
       while ((match = joinPattern.exec(source)) !== null) {
@@ -218,17 +248,25 @@ test('every project script a test addresses by path exists and is tracked by Git
   collect(__dirname);
   assert.ok(scripts.size >= 20, `path-referenced script scan collected only ${scripts.size} entries`);
   assert.ok(scripts.has('tests/lib/crash-batch-worker.js'), 'the detached crash worker must stay a path-referenced, tracked test helper');
+  assert.ok(scripts.has('tests/lib/standalone-unsafe-canonical-pre-fix.json'),
+    'the frozen pre-fix regression must participate in source tracking, not only exist locally');
   let gitAvailable = true;
   try { childProcess.execFileSync('git', ['rev-parse', '--git-dir'], { cwd: root, stdio: 'ignore' }); }
   catch { gitAvailable = false; }
-  for (const [relative, referees] of scripts) {
-    const by = [...referees].sort().join(', ');
+  function verifyResource(relative, by) {
     assert.ok(fs.existsSync(path.join(root, relative)), `${relative} is addressed by ${by} but missing`);
-    if (!gitAvailable) continue;
+    if (!gitAvailable) return;
     let tracked = true;
     try { childProcess.execFileSync('git', ['ls-files', '--error-unmatch', '--', relative], { cwd: root, stdio: 'ignore' }); }
     catch { tracked = false; }
     assert.ok(tracked, `${relative} is addressed by ${by} but not tracked by Git`);
+  }
+  for (const [relative, referees] of scripts) verifyResource(relative, [...referees].sort().join(', '));
+  if (gitAvailable) {
+    // The old ignored copy may exist in a developer checkout, but never in a
+    // clean clone. Both states must refuse it as a required source dependency.
+    assert.throws(() => verifyResource('tests/fixtures/standalone-unsafe-canonical-pre-fix.json', 'synthetic ignored JSON countercase'),
+      /but missing|but not tracked by Git/u);
   }
 });
 

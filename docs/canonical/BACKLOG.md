@@ -4,6 +4,15 @@ Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Pre-Release in Vorbe
 
 ## Aktuelle Nacht-Fortsetzung (ersetzt ältere Freigabeangaben)
 
+Neu19.10.nach02:42UTC: bestätigten Clone-Testressourcenfehler korrigiert:
+historische ignored JSON2731Bytes bytegleich nach tracked tests/lib,
+require geändert und Pfadschutz auch für JSONmodule/Tracking samt Gegenfall.
+16/16+50/50 gezielt grün, Quellengegenreview ohne weiteren belegten Fehler
+abgeschlossen. d094 blieb lokal272/272+10/10
+und Native228 grün, echte Macconsumer waren dennoch ROT; nicht umdeuten.
+Nächster gemeinsamer Git-/Testfreeze, neue Consumer-/Windows-/Paket-/GUI-Gates
+und tatsächliche lokale/Remoteübergabe weiter offen. Coreapproval bleibt gültig.
+
 Neu19.10.nach02:06UTC: Intelproducer ebenfalls erfolgreich; Main und zwei
 unabhängige tatsächliche Artefakt-/Sourcegegenreviews ohne Aufnahmeblocker.
 Beide konkreten kanonischen FINAL-Metadatenhashes freigegeben. Offen jetzt

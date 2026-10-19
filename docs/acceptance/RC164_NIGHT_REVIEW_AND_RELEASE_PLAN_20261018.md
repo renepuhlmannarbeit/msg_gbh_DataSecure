@@ -1,5 +1,39 @@
 # RC164 – fortgesetzter Abschlussauftrag
 
+## Echter Clone-Testressourcenfehler korrigiert, 19.10.2026, nach02:42 UTC
+
+Gemeinsamer Versuch d094df4f4edbd3a549494901288a9adff08bf84a/Fingerprint
+4a880940772b386790f2c8522c2e16340971c81d134df6625217ee0d7e4d5c80:
+lokal272/272 Headless+10/10 unverändert bestanden02:42:26.802UTC;
+Prepare/Clippy/228Rusttests(3ignoriert)/Release bereits02:19:47.529UTC grün.
+Native Macconsumer39189276321 dagegen beide ROT: ARM02:19:07UTC,
+Intel02:21:16UTC, MODULE_NOT_FOUND in test-standalone-automatic-privacy.js144.
+Ein lokales grünes Testresultat mit vorhandenen ignorierten Dateien widerlegt
+den fehlgeschlagenen sauberen Runnercheckout ausdrücklich nicht.
+
+Ursache: tests/fixtures/standalone-unsafe-canonical-pre-fix.json war eine
+lokale eingefrorene historische Testquelle, nicht von make-fixtures generiert,
+aber durch /tests/fixtures/ ignoriert und nicht im Git. Native Import-/Policy-/
+Seal-/Preparegates waren vorher grün; kein Corecrash aus diesem Befund ableiten.
+Unabhängiger begrenzter Scan503 Quellen: kein zweites entsprechendes fehlendes
+nicht generiertes Produkt-/Consumerresource bestätigt; alte Legacyreferenzen
+gehören nicht als neue kumulative Standaloneaufgaben hierher.
+
+Nach Ende beider lokalen Jobs: eingefrorene2731Bytes bytegleich unter tracked
+tests/lib/standalone-unsafe-canonical-pre-fix.json aufgenommen,
+SHA2560700817484efa4dabe7fa74da0f56e6ff29055c007eded24d563f05e91314d87.
+Alte lokale Fixture erhalten, keine historische Markdown-/Trace-/Manifest-
+Neuerzeugung. Ausschließlich require-Pfad korrigiert und bestehenden Pfadschutz
+um statische relative JSONrequire/import/from-Ressourcen, Tracking und echten
+ignored-JSON-Gegenfall ergänzt. Generierte Office-/Bildfixtures bleiben ignoriert.
+Gezielt16/16 Pfad- und50/50 automatische Datenschutzfälle grün, einschließlich
+echter historischer Freigabe-/Exportabweisung. Unabhängiger tatsächlicher
+Quellengegenreview abgeschlossen: kein weiterer belegter Fehler, Byteidentität
+auch im Git-Index bestätigt; begrenzter Literalscanner nicht als Parser ausgeben.
+Produktionsfingerprint unverändert; neue
+Git-/Testinputbindung und erneute komplette gemeinsame Consumer-/Windowsgates
+bleiben nötig. Kein d094-Paket erstellt oder veröffentlicht; rote Evidenz erhalten.
+
 ## Beide nativen Corekandidaten geprüft; gemeinsamer Appfreeze, 19.10.2026
 
 Inteljob117793987554 erfolgreich02:06:09UTC; Producer39167676290 insgesamt
