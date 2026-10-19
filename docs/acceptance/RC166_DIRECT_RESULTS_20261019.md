@@ -5,6 +5,43 @@ bleiben Nutzer-/Kollegenaufgabe. Keine neue Automation.
 
 ## Neuer enger Gegenlauf nach Source07
 
+Source09/568ebd31c03a9085826a5f3ee7732a75a40ba431: Windows253Rusttests
+(3ignoriert), Clippy/Release und5Paketgates/100Dateienkorpus bestanden bei
+unveränderten Inputs. Intel118272203714 in39314446190 verweigerte beim
+OCR-an-Initialordnerlesen mit RESULT_PUBLICATION_CONFLICT. Der genaue native
+Unterpfad ist nicht instrumentiert; vorherige Historyobserver-Returns ersetzen
+keinen Nachweis des neuen Initialreaders. Sekundärer HOST_NOT_CLOSED bleibt
+neben dem Primärfehler erhalten. Main reproduzierte separat einen echten
+Produktionschild-Race zwischen lstat(A), atomarem Writerrecord B und open(B):
+BOUND_FILE_CHANGED→RESULT_EXPORT_STATE_UNSAFE→RESULT_PUBLICATION_CONFLICT,
+obwohl Eltern, Owner und Contentanker unverändert und finale MD exakt waren.
+Das beweist diesen Quellfehler, nicht rückwirkend das konkrete Intel-Scheduling.
+Zwei unabhängige tatsächliche Quellengegenreviews bestätigen den erreichbaren
+Pfad. Die Korrektur ist ausschließlich ein getrennt lesender Initial-/Ledger-
+Snapshot mit ursprünglicher Elternbindung und bestehender max3WeakMap-
+Replacementklassifikation. Danach Schema/Batch/Owner/Purpose/Anchor weiter voll
+prüfen; Mutationsreader bleibt unverändert. Kein allgemeines Retry oder Fehler-
+Umklassifizieren. Neue Gegenfälle und Source10-Endgates folgen. Headless nach70
+Dateien gezielt beendet, ARM cancelled; alle eigenen Source09-Jobs waren vor
+Liveänderung beendet. Alte Primärbelege/Fixture/ZIPs bleiben unverändert erhalten.
+
+Gezielte neue Nachweise: identisches erhaltenes Childgegenorakel vorher ROT
+(Ydw3Mv,1Open/1Close), danach PASS(6TXLTL,2Opens/2Closes); beide mit echten
+Writerrecords, unveränderten Eltern/Anchors und exakten MD. Main34Snapshot-
+Gegenfälle grün, einschließlich tatsächlicher Initialreader und weiter strikt
+verweigerndem Legacyopener. Neue Kampagne prüft beide Leser in vier realen
+Phasen:Windows2PASS/6POSIX_NOT_RUN; Darwin muss alle8frisch nachweisen.
+15Initialwriter-/53Generationen-/51Asyncprüfungen bestanden. Unabhängiger
+finaler Produkt-/Negativquellenreview ohne bestätigten Deltablocker.
+Mutierendes readRecord LF-bytegleich zu568ebd31, SHA256
+62e5ce7ea0ac349386a80f118bc7a1dda2085a44fcc1cb0c6e2f54a17f36f4c1.
+Test-only Observer ergänzt den tatsächlichen synchronen Initialreader und feste
+Phasen/Codes.27Observer- und8RAM-Gegenfälle grün; unveränderte128Gesamt-/64Routine-
+Ereignisse,512Bytezeilen und8Ringpunkte. Erfolgreiche Parentfakten verdrängen
+Leaf-/Fehlerfakten nicht mehr vorzeitig. Kein zusätzliches Produkt-I/O, Await,
+Retry oder Timeout. Main las tatsächliche Loader-/Descriptor-/Sanitizerdeltas;
+das ist kein nativer Ursachennachweis. Neue gemeinsame Source10-Gates nötig.
+
 Source08/439b446f bestand Windows252Rusttests (3ignoriert), Clippy/Release
 und fünfPaketgates mit unveränderten Inputs. ARM118264213145 scheiterte
 vor Manifestfinalisierung an einer Test-Zeitannahme: Antwort42 war richtig,

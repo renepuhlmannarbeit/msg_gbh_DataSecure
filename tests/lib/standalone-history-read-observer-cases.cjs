@@ -62,6 +62,7 @@ if (process.argv[2] === '--publish') {
   const historyParent = parentAt(server, 'standalone/run-history.js');
   const storeParent = parentAt(server, 'gateway/standalone-history-store.js');
   const exportParent = parentAt(server, 'gateway/result-export.js');
+  const reviewParent = parentAt(server, 'gateway/standalone-document-review-store.js');
   const privateRoot = path.join(caseRoot, 'private'); fs.mkdirSync(privateRoot);
   process.env.EU_PRIVACY_DATA_ROOT = privateRoot;
   process.env.DATASECURE_PRODUCT_CHANNEL = 'standalone';
@@ -146,14 +147,110 @@ if (process.argv[2] === '--publish') {
   } finally { restore(); }
   assert.notEqual(Module._load, originalLoad);
 
+  await test('actual synchronous initial-result caller observes a real null and bare record failure', () => {
+    for (const key of Object.keys(require.cache)) if (key.startsWith(server + path.sep)) delete require.cache[key];
+    let text = ''; restore = observer.install({ caseRoot, server, write: line => { text += line; } });
+    try {
+      const reader = reviewParent.require('./result-export');
+      assert.equal(reader.initialResultPublication('1'.repeat(64), false), null);
+      assert.throws(() => reader.initialResultPublication(token, false), error => error.message === 'RESULT_EXPORT_STATE_UNSAFE');
+      const events = lines(text);
+      assert.ok(events.some(row => row.phase === 'initial_results' && row.operation === 'initialResultPublication' && row.outcome === 'null'));
+      assert.ok(events.some(row => row.phase === 'initial_results' && row.operation === 'initialResultPublication' && row.code === 'RESULT_EXPORT_STATE_UNSAFE'));
+      assert.ok(events.some(row => row.phase === 'initial_results' && row.operation === 'readBoundFileSnapshot'));
+      assert.ok(!text.includes(PRIVATE) && !text.includes(caseRoot));
+    } finally { restore(); }
+  });
+  await test('initial caller seam preserves synchronous return identity, receiver, arguments and finite read phases', () => {
+    for (const key of Object.keys(require.cache)) if (key.startsWith(server + path.sep)) delete require.cache[key];
+    let text = ''; restore = observer.install({ caseRoot, server, write: line => { text += line; } });
+    const raw = require(path.join(server, 'gateway/result-export.js')), method = raw.initialResultPublication;
+    const id = '2'.repeat(64), binding = path.join(privateRoot, 'result-publication-bindings', id + '.json');
+    const folder = path.join(caseRoot, 'initial-results-model'), leaf = path.join(folder, 'synthetic.md');
+    fs.mkdirSync(path.dirname(binding), { recursive: true }); fs.writeFileSync(binding, '{}', { flag: 'wx' });
+    fs.mkdirSync(folder); fs.writeFileSync(leaf, '# synthetic', { flag: 'wx' });
+    const own = {}, receiver = {}, args = [id, true]; let actualArgs, actualReceiver, invocations = 0;
+    try {
+      // Model only the enclosing initial-result function. The observer's actual
+      // caller boundary and all delegated reads/inventory operations stay real.
+      raw.initialResultPublication = function (...values) {
+        invocations++;
+        actualArgs = values; actualReceiver = this;
+        const io = exportParent.require('fs'), api = exportParent.require('../core/bound-file-io');
+        assert.equal(api.readBoundFile(binding).toString(), '{}');
+        assert.equal(api.readBoundFileRecord(leaf).bytes.toString(), '# synthetic');
+        assert.deepEqual(io.readdirSync(folder), ['synthetic.md']);
+        return own;
+      };
+      const reader = reviewParent.require('./result-export');
+      assert.equal(Reflect.apply(reader.initialResultPublication, receiver, args), own);
+      assert.equal(actualReceiver, receiver); assert.deepEqual(actualArgs, args); assert.equal(invocations, 1);
+      for (const phase of ['initial_results', 'initial_binding', 'initial_leaf', 'inventory'])
+        assert.ok(lines(text).some(row => row.phase === phase), phase);
+      assert.ok(!text.includes(leaf) && !text.includes(binding) && !text.includes('# synthetic'));
+    } finally { raw.initialResultPublication = method; restore(); }
+  });
+  await test('initial caller seam retains exact failures while only own closed code/message data is classified', () => {
+    for (const key of Object.keys(require.cache)) if (key.startsWith(server + path.sep)) delete require.cache[key];
+    let text = ''; restore = observer.install({ caseRoot, server, write: line => { text += line; } });
+    const raw = require(path.join(server, 'gateway/result-export.js')), method = raw.initialResultPublication;
+    let getters = 0;
+    const accessor = Object.defineProperty({}, 'message', { get() { getters++; throw Error(PRIVATE); } });
+    const codeAccessor = Object.defineProperty({ message: 'RESULT_EXPORT_STATE_UNSAFE' }, 'code', { get() { getters++; throw Error(PRIVATE); } });
+    const proxy = new Proxy({}, { getOwnPropertyDescriptor() { getters++; throw Error(PRIVATE); } });
+    const cases = [
+      [Object.assign(Error(PRIVATE), { code: 'RESULT_PUBLICATION_CONFLICT' }), 'RESULT_PUBLICATION_CONFLICT'],
+      [Error('RESULT_EXPORT_STATE_UNSAFE'), 'RESULT_EXPORT_STATE_UNSAFE'],
+      [Error(PRIVATE), 'OTHER'], [accessor, 'OTHER'], [codeAccessor, 'OTHER'], [proxy, 'OTHER'],
+      [Object.create({ message: 'RESULT_EXPORT_STATE_UNSAFE' }), 'OTHER']
+    ];
+    try {
+      for (const [error, code] of cases) {
+        raw.initialResultPublication = () => { throw error; };
+        const before = lines(text).length;
+        assert.throws(() => reviewParent.require('./result-export').initialResultPublication(token), caught => caught === error);
+        assert.ok(lines(text).slice(before).some(row => row.operation === 'initialResultPublication' && row.kind === 'error' && row.code === code));
+      }
+      assert.equal(getters, 0); assert.ok(!text.includes(PRIVATE));
+      for (const code of ['RESULT_PUBLICATION_PENDING', 'RESULT_PUBLICATION_CONFLICT', 'RESULT_PUBLICATION_LEGACY',
+        'RESULT_PUBLICATION_INVALID', 'RESULT_EXPORT_PENDING', 'RESULT_EXPORT_CONFLICT', 'RESULT_EXPORT_STATE_UNSAFE'])
+        assert.equal(observer.safeCode({ code }), code);
+      assert.equal(observer.safeCode({ code: 'RESULT_PUBLICATION_' + PRIVATE }), 'OTHER');
+      const event = { seq: 1, call: 1, phase: 'initial_results', operation: 'initialResultPublication', kind: 'error', code: 'RESULT_PUBLICATION_CONFLICT' };
+      assert.ok(observer.safeEvent(event)); assert.equal(observer.safeEvent({ ...event, payload: PRIVATE }), null);
+      const hostileEvent = { ...event }; Object.defineProperty(hostileEvent, 'code', { enumerable: true, get() { getters++; throw Error(PRIVATE); } });
+      assert.equal(observer.safeEvent(hostileEvent), null);
+      const hashAccessor = { toString() { getters++; throw Error(PRIVATE); } };
+      assert.equal(observer.safeEvent({ seq: 1, call: 1, phase: 'initial_leaf', operation: 'fstatSync', kind: 'identity', sha256: hashAccessor }), null);
+      assert.equal(getters, 0);
+    } finally { raw.initialResultPublication = method; restore(); }
+  });
+  await test('initial caller sink/hash failure cannot replace its exact returned value or thrown error', () => {
+    for (const key of Object.keys(require.cache)) if (key.startsWith(server + path.sep)) delete require.cache[key];
+    let hashCalls = 0;
+    restore = observer.install({ caseRoot, server, write() { throw Error(PRIVATE); }, identityHash() { hashCalls++; throw Error(PRIVATE); } });
+    const raw = require(path.join(server, 'gateway/result-export.js')), method = raw.initialResultPublication;
+    const own = {}, error = Object.assign(Error(PRIVATE), { code: 'RESULT_EXPORT_CONFLICT' });
+    try {
+      const io = exportParent.require('fs'), file = path.join(privateRoot, 'result-export-state', exportId + '.json');
+      raw.initialResultPublication = () => { io.lstatSync(file); return own; };
+      assert.equal(reviewParent.require('./result-export').initialResultPublication(token), own);
+      raw.initialResultPublication = () => { io.lstatSync(file); throw error; };
+      assert.throws(() => reviewParent.require('./result-export').initialResultPublication(token), caught => caught === error);
+      assert.ok(hashCalls > 0, 'actual delegated stat reached only the optional failing identity hash');
+    } finally { raw.initialResultPublication = method; restore(); }
+  });
+
   await test('fresh unused-budget retained wrappers are inert after restore', () => {
     // A fresh empty output budget prevents exhaustion from hiding live hooks.
     // Cached product modules are intentionally removed only in this test host.
     for (const key of Object.keys(require.cache)) if (key.startsWith(server + path.sep)) delete require.cache[key];
     let count = 0, hashes = 0;
     restore = observer.install({ caseRoot, server, write() { count++; }, identityHash(bytes) { hashes++; return hash(bytes); } });
-    const retained = appParent.require('../gateway/batch'); restore(); count = 0; hashes = 0;
+    const retained = appParent.require('../gateway/batch'), initial = reviewParent.require('./result-export'); restore(); count = 0; hashes = 0;
     assert.throws(() => retained.readStandaloneHistoryState(token), { code: 'STANDALONE_HISTORY_UNAVAILABLE' });
+    assert.equal(initial.initialResultPublication('1'.repeat(64), false), null);
+    assert.throws(() => initial.initialResultPublication(token, false), error => error.message === 'RESULT_EXPORT_STATE_UNSAFE');
     assert.equal(count, 0);
     assert.equal(hashes, 0, 'retained/destructured observation performs no hashing after restore');
   });
@@ -240,6 +337,19 @@ if (process.argv[2] === '--publish') {
     for (let n = 1; n <= 200; n++) collector.append(Buffer.from(event(n)));
     await collector.promote(); assert.equal(lines(text).length, 128); assert.ok(!text.includes(PRIVATE));
   });
+  await test('collector preserves closed initial-result phases/codes and refuses their extra payload', async () => {
+    let text = ''; const collector = observer.createCollector({ write(line) { text += line; } });
+    let seq = 0;
+    for (const code of ['RESULT_EXPORT_STATE_UNSAFE', 'RESULT_EXPORT_PENDING', 'RESULT_EXPORT_CONFLICT',
+      'RESULT_PUBLICATION_PENDING', 'RESULT_PUBLICATION_CONFLICT', 'RESULT_PUBLICATION_LEGACY']) {
+      const event = { seq: ++seq, call: 1, phase: 'initial_results', operation: 'initialResultPublication', kind: 'error', code };
+      collector.append(Buffer.from(observer.PREFIX + JSON.stringify({ ...event, payload: PRIVATE }) + '\n'));
+      collector.append(Buffer.from(observer.PREFIX + JSON.stringify(event) + '\n'));
+    }
+    await collector.promote(0);
+    assert.equal(lines(text).length, seq); assert.ok(lines(text).every(row => row.phase === 'initial_results'));
+    assert.ok(!text.includes(PRIVATE));
+  });
   await test('zero remaining IPC budget does not add a diagnostic wait', async () => {
     const collector = observer.createCollector(); let complete = false;
     await collector.promote(0); complete = true; assert.equal(complete, true);
@@ -302,6 +412,37 @@ if (process.argv[2] === '--publish') {
       assert.equal(reader.readStandaloneExportHistoryEntry(id).complete, false, 'published replacement remains genuinely valid');
       assert.ok(lines(text).some(row => row.phase === 'export' && row.operation === 'readBoundFileSnapshot' && row.code === 'BOUND_FILE_CHANGED'));
       assert.ok(lines(text).some(row => row.phase === 'export' && row.operation === 'readStandaloneExportHistoryEntry' && row.code === 'STANDALONE_HISTORY_UNAVAILABLE'));
+    } finally { restore(); }
+  });
+  await test('initial-result real snapshot failure keeps the causal ring and exact closed bare-record error', () => {
+    for (const key of Object.keys(require.cache)) if (key.startsWith(server + path.sep)) delete require.cache[key];
+    let text = ''; restore = observer.install({ caseRoot, server, write: line => { text += line; } });
+    const id = '3'.repeat(64), file = path.join(privateRoot, 'result-export-state', 're_' + hash(id).slice(0, 32) + '.json');
+    fs.writeFileSync(file, JSON.stringify({ schema: 'datasecure-result-export/2', product_channel: 'standalone',
+      run_directory: 'Lauf-20261019-000000-aaaaaaaa', items: [], complete: false, destination_id: '' }), { flag: 'wx' });
+    try {
+      const reader = reviewParent.require('./result-export');
+      assert.equal(reader.initialResultPublication(id, false), null, 'valid historical layout stays historical');
+      const open = fs.openSync; let publishers = 0;
+      fs.openSync = function (...args) {
+        if (args[0] === file && typeof args[1] === 'number' && (args[1] & 3) === 0 && publishers < 3) {
+          const child = cp.spawnSync(process.execPath, [__filename, '--publish', file], { encoding: 'utf8', windowsHide: true,
+            timeout: 5000, maxBuffer: 4096, env: { ...process.env, [observer.ENV]: undefined } });
+          assert.ifError(child.error); assert.equal(child.status, 0, child.stderr); assert.equal(child.stdout, 'PUBLISHED\n'); publishers++;
+        }
+        return Reflect.apply(open, this, args);
+      };
+      try { assert.throws(() => reader.initialResultPublication(id, false), error => error.message === 'RESULT_EXPORT_STATE_UNSAFE'); }
+      finally { fs.openSync = open; }
+      assert.equal(publishers, 3, 'only the actual snapshot boundary has its existing three attempts');
+      const events = lines(text);
+      assert.ok(events.some(row => row.phase === 'initial_results' && row.operation === 'readBoundFileSnapshot' && row.code === 'BOUND_FILE_CHANGED'));
+      assert.ok(events.some(row => row.phase === 'initial_results' && row.operation === 'initialResultPublication' && row.code === 'RESULT_EXPORT_STATE_UNSAFE'));
+      const points = events.filter(row => row.phase === 'initial_results' && row.kind === 'io');
+      assert.equal(points.length, 8); assert.ok(points.some(row => row.operation === 'closeSync'));
+      assert.ok(points.some(row => row.operation === 'fstatSync' && row.role === 'leaf' && row.object_sha256), JSON.stringify(points));
+      assert.ok(!text.includes(file) && !text.includes(caseRoot) && !text.includes(PRIVATE));
+      assert.equal(reader.initialResultPublication(id, false), null, 'no successful old value was substituted for the refused call');
     } finally { restore(); }
   });
   await test('all test/product source input bytes unchanged during cases', () => {

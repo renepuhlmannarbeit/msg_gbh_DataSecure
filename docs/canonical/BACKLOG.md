@@ -4,6 +4,25 @@ Arbeitsversion: **3.2.0-rc166**, Umsetzung und neue gemeinsame Windows-/macOS-Te
 
 ## Aktueller Auftrag – Nutzerbefunde als RC166 umsetzen und neu prüfen
 
+**READ-INITIAL-SNAPSHOT-01:** Source09-Intel verweigerte im echten OCR-an-
+Readinesslauf mit RESULT_PUBLICATION_CONFLICT. Unabhängiger tatsächlicher
+Quellenreview und eigener realer Produktionschild-Gegenfall bestätigen:
+initialResultPublication nutzt einen strikten Reader, obwohl der autonome
+Worker denselben Record legitim atomar ersetzt. Enger getrennt lesender
+Snapshotzugriff unter originaler Elternbindung, max3Gesamtversuche allein
+über vorhandene interne Replacementklassifikation; anschließend volle Schema/
+Batch/Owner/Purpose/Anchorprüfung. Keine Mutation/ACK/Reparatur oder generische
+Retryautorität. PrivateLedger-Zweitread ebenso berücksichtigen; allgemeines
+readRecord bleibt bytegleich. Neue Positiv-/Negativorakel und Source10-Gates
+vor Übergabe nötig. Historische native Schedulingfolge weiter unbewiesen;
+Windows253Rust/Paket5 und abgebrochene Source09-Jobs nicht umetikettieren.
+Eng implementiert und unabhängig am tatsächlichen Delta gegengelesen; das
+identische vorher rote reale Childorakel ist jetzt grün. Main34Snapshotfälle,
+2Win-Races (6POSIX NOT_RUN),15Initialwriter/53Generationen/51Asyncprüfungen
+bestanden. Reine Testdiagnostik ergänzt Initial-/Binding-/Leaf-/Inventarphasen,
+27Observer+8RAM-Gegenfälle mit unveränderten Caps und identischen Produktwerten.
+Keine behobene historische native Ursache behauptet. Source10-Endgates offen.
+
 **VERIFY-HEARTBEAT-ORDER-01:** Source08-ARM erhielt Antwort42, verlangte aber
 nach einem vorher gestarteten1150ms-Producer fälschlich mindestens einen
 Heartbeat. Vor Receiverstart oder am Timeout-Rand verfügbare Antworten dürfen

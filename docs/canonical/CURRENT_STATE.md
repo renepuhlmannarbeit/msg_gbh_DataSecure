@@ -4,6 +4,32 @@ Arbeitsversion: **3.2.0-rc166**, Entwicklung und erneute Paketprüfung; veröffe
 
 ### Aktuelle Umsetzung nach weiterem Nutzertest – RC166
 
+Source09/568ebd31c03a9085826a5f3ee7732a75a40ba431 bleibt ungeeignet:
+Windows253Rusttests (3ignoriert)/Clippy/Release und Paket5/100Dateienkorpus
+bestanden, Inputs unverändert. Intel118272203714 in39314446190 meldete im
+OCR-an-Readinessschritt RESULT_PUBLICATION_CONFLICT. Konkrete native Ursache
+nicht aufgezeichnet; der nachfolgende Teardownfehler bleibt ebenfalls erhalten.
+Ein separater echter Produktionschild-Gegenfall beweist einen neuen Quellrace:
+der strikte Initialreader liest zwischen lstat(A) und atomarer Writerpublikation/
+open(B). Daraus wird ein falscher Bereitstellungskonflikt trotz gültigem Owner,
+Purpose, Elternordner und exakter Ergebnisbytes. Nur der lesende Initialzugriff
+und der private Ledger-Zweitread erhalten den bestehenden gebundenen Snapshot-
+Vertrag; Mutationsreader und Schutzprüfungen bleiben strikt. Keine pauschale
+Konflikt/Pending-Umdeutung oder äußere Wiederholung. Quelle gegengeprüft; neue
+gezielte Gegenfälle und ein gemeinsamer Source10-Endlauf werden benötigt.
+Headless nach70Dateien bewusst beendet, ARM gezielt cancelled; alle Source09-
+Freezejobs waren vor Liveänderungen geschlossen. Kein Source09-Snapshot/Release.
+Der unveränderte echte Quellgegenfall besteht nach dem engen Fix:2Opens/2Closes,
+gültige neue Bindung statt Konflikt. Mutierendes readRecord bleibt bytegleich
+(LF-Hash62e5ce7e…f36f4c1). Windows34Snapshot-Negativen,2echte Racefälle
+(6POSIX-Fälle ausdrücklich nicht ausgeführt),15Initialwriter-,53Generationen-
+und51Asyncprüfungen bestanden. Test-only Beobachtung ergänzt den tatsächlichen
+synchronen Initialreader, feste neue Phasen/Codes und Fehlerfakten;27Observer-
+plus8RAM-Gegenfälle grün, unveränderte128/64Ereignis- und8Ringpunktgrenzen.
+Keine neuen Produkt-I/O-Aufrufe oder Friständerungen. Unabhängiger finaler
+Produkt-/Negativquellenreview ohne bestätigten Deltablocker; Source10 muss
+Windows und beide Macs neu aus demselben Appcommit binden.
+
 Source08/`439b446f3a0dae1270ee6d3a518fae6f8507c4db` ist ebenfalls kein
 Freigabestand: Windows252Rusttests (3ignoriert), Clippy/Release und fünf
 Paketgates bestanden mit unveränderten Inputs. ARM118264213145 in39312131308

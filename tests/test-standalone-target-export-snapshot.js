@@ -75,7 +75,8 @@ function refused(result, attempts, code = 'BOUND_FILE_CHANGED') {
 async function run(name, action) {
   await action(); passed++; results.push(name); console.log(`  ok ${name}`);
 }
-async function productionFixture() {
+async function productionFixture(readerRole = 'history') {
+  assert.ok(['history', 'initial-results'].includes(readerRole));
   const directory = fs.mkdtempSync(path.join(root, 'product-'));
   process.env.EU_PRIVACY_DATA_ROOT = path.join(directory, 'private');
   process.env.EU_PRIVACY_ROOT = path.join(directory, 'workspace');
@@ -99,7 +100,8 @@ async function productionFixture() {
   assert.deepEqual(exporter.exportCompletedState(state), { exported: 1, pending: 0, available: true });
   const filename = exporter.recordPath(state.token);
   assert.equal(exporter.readStandaloneExportHistoryEntry(state.token).complete, true);
-  return { filename, exporter, state, directory, read: () => exporter.readStandaloneExportHistoryEntry(state.token),
+  return { filename, exporter, state, directory, read: () => readerRole === 'history'
+    ? exporter.readStandaloneExportHistoryEntry(state.token) : exporter.initialResultPublication(state.token),
     owner: path.join(process.env.EU_PRIVACY_DATA_ROOT, 'result-export-owners', path.basename(filename)) };
 }
 async function main() {
@@ -179,10 +181,12 @@ async function main() {
     assert.equal(fs.readFileSync(f.filename, 'utf8'), 'BBBB');
     assert.equal(fs.existsSync(`${f.directory}.original`), true);
   });
-  for (const kind of ['schema', 'owner', 'purpose', 'hardlink', 'parent', 'replacement-to-invalid-json'])
-    await run(`exact production reader refuses ${kind} without a generic retry`, async () => {
-      const f = await productionFixture();
+  for (const readerRole of ['history', 'initial-results'])
+    for (const kind of ['schema', 'owner', 'purpose', 'hardlink', 'parent', 'replacement-to-invalid-json', 'wrong-batch'])
+    await run(`exact ${readerRole} production reader refuses ${kind} without a generic retry`, async () => {
+      const f = await productionFixture(readerRole);
       if (kind === 'schema') { const value = JSON.parse(fs.readFileSync(f.filename)); value.schema = 'invalid'; replace(f.filename, JSON.stringify(value)); }
+      if (kind === 'wrong-batch') { const value = JSON.parse(fs.readFileSync(f.filename)); value.batch_id = 'f'.repeat(64); replace(f.filename, JSON.stringify(value)); }
       if (kind === 'owner' || kind === 'purpose') {
         const value = JSON.parse(fs.readFileSync(f.owner));
         if (kind === 'owner') value.batch_id = 'f'.repeat(64); else value.processing_mode = 'markdown-and-anonymize';
@@ -196,8 +200,40 @@ async function main() {
         }
         if (kind === 'replacement-to-invalid-json' && metrics.attempts === 1) replace(f.filename, '{invalid');
       } });
-      refused(result, kind === 'replacement-to-invalid-json' ? 2 : 1, 'STANDALONE_HISTORY_UNAVAILABLE');
+      const attempts = kind === 'replacement-to-invalid-json' ? 2 : 1;
+      if (readerRole === 'history') refused(result, attempts, 'STANDALONE_HISTORY_UNAVAILABLE');
+      else {
+        assert.ok(result.error instanceof Error, 'the actual initial reader must throw, not return success or pending');
+        assert.ok(['RESULT_EXPORT_STATE_UNSAFE', 'BOUND_FILE_CHANGED', 'BOUND_FILE_UNSAFE'].includes(result.error.code || result.error.message),
+          `unexpected initial-reader error: ${result.error.code || result.error.message}`);
+        assert.equal(result.attempts, attempts); assert.equal(result.value, undefined);
+      }
     });
+  for (const scenario of ['stable', 'two-replacements', 'continuous-replacement'])
+    await run(`actual initial-results reader: ${scenario} has a fixed snapshot bound`, async () => {
+      const f = await productionFixture('initial-results'), bytes = fs.readFileSync(f.filename);
+      const result = probe(f.filename, f.read, { beforeOpen(metrics) {
+        if (scenario === 'continuous-replacement' || scenario === 'two-replacements' && metrics.attempts <= 2)
+          replace(f.filename, bytes);
+      } });
+      assert.equal(result.attempts, scenario === 'stable' ? 1 : 3);
+      assert.equal(result.opens, result.closes, 'every delegated real descriptor closes');
+      if (scenario === 'continuous-replacement') {
+        assert.equal(result.value, undefined); assert.equal(result.error?.message, 'RESULT_EXPORT_STATE_UNSAFE');
+      } else {
+        assert.equal(result.error, undefined); assert.equal(result.value.batch_id, f.state.token);
+        assert.equal(result.value.files.length, 1);
+        assert.equal(fs.readFileSync(f.filename).toString(), bytes.toString());
+      }
+    });
+  await run('actual strict legacy opener does not gain snapshot retry authority', async () => {
+    const f = await productionFixture(), bytes = fs.readFileSync(f.filename);
+    const result = probe(f.filename, () => f.exporter.visibleExportDirectory(f.state.token), {
+      beforeOpen() { replace(f.filename, bytes); }
+    });
+    assert.equal(result.attempts, 1); assert.equal(result.value, '');
+    assert.equal(result.opens, result.closes);
+  });
   if (process.platform === 'win32') await run('held no-delete-sharing handle defeats old owner rename but not the real purpose-negative oracle', async () => {
     const f = await productionFixture(), original = fs.readFileSync(f.owner, 'utf8');
     const value = JSON.parse(original); value.processing_mode = 'markdown-and-anonymize';

@@ -414,6 +414,24 @@ function readRecord(target, options) {
   assertRecordContentAnchor(target, value, options);
   return value;
 }
+// Initial-readiness and private-ledger inspection are read-only. The actual
+// publisher atomically replaces this progress leaf while the original parent,
+// owner and content anchor stay fixed. Only the existing snapshot primitive may
+// retry its own positively classified leaf replacement (at most three reads).
+// Mutation/recovery callers keep the strict readRecord boundary above.
+function readPublicationRecordSnapshot(target, expectedBatchId) {
+  if (!/^[a-f0-9]{64}$/u.test(expectedBatchId || '') || path.basename(target) !==
+      `re_${crypto.createHash('sha256').update(expectedBatchId).digest('hex').slice(0, 32)}.json`)
+    throw new Error('RESULT_EXPORT_STATE_UNSAFE');
+  const directory = bindDirectory(path.dirname(target));
+  let value;
+  try { value = JSON.parse(readBoundFileSnapshot(target, { directory, maximum: 1024 * 1024, minimum: 1 })); }
+  catch { throw new Error('RESULT_EXPORT_STATE_UNSAFE'); }
+  if (!validRecord(value)) throw new Error('RESULT_EXPORT_STATE_UNSAFE');
+  assertRecordContentAnchor(target, value, { expectedBatchId });
+  assertDirectory(directory);
+  return value;
+}
 // This content-free receipt is an irreversible instruction not to resume an
 // incomplete visible export. Keep it separate from the mutable export record:
 // its pending count must never be mistaken for a completed export receipt.
@@ -1351,7 +1369,7 @@ function initialResultPublication(batchId, verifyFiles = true) {
   if (!/^[a-f0-9]{64}$/u.test(batchId || '')) throw resultExportFailure('RESULT_EXPORT_STATE_UNSAFE');
   const target = path.join(dataRoot(), 'result-export-state', `re_${crypto.createHash('sha256').update(batchId).digest('hex').slice(0, 32)}.json`);
   try { fs.lstatSync(target); } catch (error) { if (error?.code === 'ENOENT') return null; throw error; }
-  const record = readRecord(target, { expectedBatchId: batchId });
+  const record = readPublicationRecordSnapshot(target, batchId);
   if (record.result_layout !== RESULT_LAYOUT) return null; // never reinterpret old user folders
   if (record.batch_id !== batchId || !record.items.length) throw resultExportFailure('RESULT_EXPORT_STATE_UNSAFE');
   // A validated, still-writing initial plan is not a completed generation and
@@ -1396,7 +1414,7 @@ function privateResultLedger(batchId) {
   const initial = initialResultPublication(batchId, false);
   if (!initial || initial.processing_mode === 'markdown-only') return null;
   const target = path.join(path.dirname(resultBindingPath(batchId)), `${batchId}-Zuordnung.csv`);
-  const record = readRecord(path.join(dataRoot(), 'result-export-state', `re_${crypto.createHash('sha256').update(batchId).digest('hex').slice(0, 32)}.json`), { expectedBatchId: batchId });
+  const record = readPublicationRecordSnapshot(path.join(dataRoot(), 'result-export-state', `re_${crypto.createHash('sha256').update(batchId).digest('hex').slice(0, 32)}.json`), batchId);
   if (!readBoundFile(target, { maximum: PRIVATE_MAPPING_BYTES }).equals(visibleMappingBytes(record))) throw resultExportFailure('RESULT_EXPORT_MAPPING_CONFLICT');
   return target;
 }

@@ -6,8 +6,8 @@
 // a real production publisher at four real reader boundaries. Each case owns
 // a fresh process/fixture; POSIX held-descriptor replacement is not simulated
 // on Windows, whose rename-sharing rules make those schedules inapplicable.
-// Expected on the unfixed source: STANDALONE_HISTORY_UNAVAILABLE and exit 1.
-// A future fix must return a coherent owner-bound row, not suppress validation.
+// Both read-only roles must return a coherent owner-bound result, not suppress
+// validation. A passing source counteroracle never diagnoses an earlier CI job.
 // All create-only synthetic fixtures/evidence are preserved; no cleanup delete.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
@@ -116,8 +116,10 @@ function publish(root) {
 }
 const phases = ['real-bound-lstat-before-open', 'real-open-before-first-fstat', 'real-read-before-postcheck',
   'real-postread-fstat-before-named-lstat'];
-async function counteroracle(phase) {
+const readerRoles = ['history', 'initial-results'];
+async function counteroracle(phase, readerRole = 'history') {
   assert.ok(phases.includes(phase));
+  assert.ok(readerRoles.includes(readerRole));
   assert.ok(phase === phases[0] || process.platform !== 'win32', 'held-descriptor schedules require POSIX rename semantics');
   const root = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'datasecure-target-export-race-'));
   Object.assign(process.env, environment(root, crypto.randomBytes(32).toString('hex')));
@@ -128,7 +130,7 @@ async function counteroracle(phase) {
   const sourceFiles = ['gateway/result-export.js', 'core/bound-file-io.js', 'gateway/batch-journal-io.js'];
   const sourcePins = Object.fromEntries(sourceFiles.map(name => [name, sha(fs.readFileSync(path.join(product, name)))]));
   const bound = require(path.join(product, 'core/bound-file-io'));
-  const read = bound.readBoundFile;
+  const read = bound.readBoundFile, snapshot = bound.readBoundFileSnapshot;
   let watching = false;
   const observations = { scheduled_publishers: 0, reader_opens: 0, reader_closes: 0,
     reader_reads: 0, reader_postread_fstats: 0, reader_bound_errors: [], reader_error: null };
@@ -142,8 +144,15 @@ async function counteroracle(phase) {
       throw error;
     }
   };
+  bound.readBoundFileSnapshot = function(filename, ...args) {
+    try { return Reflect.apply(snapshot, bound, [filename, ...args]); }
+    catch (error) {
+      if (watching && filename === target) observations.reader_bound_errors.push(error.code || 'NO_CODE');
+      throw error;
+    }
+  };
   const exporter = loadProduct();
-  bound.readBoundFile = read;
+  bound.readBoundFile = read; bound.readBoundFileSnapshot = snapshot;
   const { createDocumentReviewStore } = require(path.join(product, 'gateway/standalone-document-review-store'));
   const { publishMarkdownArtifact } = require(path.join(product, 'standalone/markdown-store'));
   const { createMarkdownExtraction } = require(path.join(product, 'standalone/markdown-contract'));
@@ -248,7 +257,8 @@ async function counteroracle(phase) {
   };
   try {
     watching = true;
-    try { row = exporter.readStandaloneExportHistoryEntry(state.token); }
+    try { row = readerRole === 'history' ? exporter.readStandaloneExportHistoryEntry(state.token)
+      : exporter.initialResultPublication(state.token, true); }
     catch (error) { observations.reader_error = error.code || 'NO_CODE'; }
   } finally {
     watching = false; fs.lstatSync = lstat; fs.openSync = open; fs.readSync = readSync; fs.fstatSync = fstat; fs.closeSync = close;
@@ -275,41 +285,54 @@ async function counteroracle(phase) {
   for (const [name, pin] of Object.entries(sourcePins)) assert.equal(sha(fs.readFileSync(path.join(product, name))), pin);
   const report = { schema: 'datasecure-target-export-atomic-counteroracle/1', classification: 'SOURCE_COUNTERORACLE_NOT_NATIVE_OR_CI_DIAGNOSIS',
     source_sha256: sourcePins, platform: process.platform, node: process.version, fixture_preserved: root,
-    phase, controls: { stable_before: true, stable_after: true,
+    phase, reader_role: readerRole, controls: { stable_before: true, stable_after: true,
       product_owner_and_purpose: true, anchors_unchanged: true, original_parent_unchanged: true, visible_bytes_exact: true },
     observations, publisher, before: { sha256: stableBefore.sha256, identity: stableBefore.identity },
     after: { sha256: stableAfter.sha256, identity: stableAfter.identity } };
   fs.writeFileSync(path.join(root, 'COUNTERORACLE.json'), JSON.stringify(report, null, 2), { flag: 'wx', mode: 0o600 });
   process.stdout.write(JSON.stringify(report) + '\n');
   assert.equal(observations.reader_error, null,
-    'legitimate atomic progress publication must not make the exact history reader unavailable; evidence is preserved');
-  assert.equal(row.complete, true);
-  assert.equal(row.exported_count, 1);
-  assert.equal(row.pending_count, 0);
-  process.stdout.write(`TARGET EXPORT ATOMIC SOURCE COUNTERORACLE PASS ${phase} (not native/CI acceptance)\n`);
+    `legitimate atomic progress publication must not make the exact ${readerRole} reader unavailable; evidence is preserved`);
+  if (readerRole === 'history') {
+    assert.equal(row.complete, true);
+    assert.equal(row.exported_count, 1);
+    assert.equal(row.pending_count, 0);
+  } else {
+    assert.equal(row.schema, 'datasecure-initial-results/1');
+    assert.equal(row.batch_id, state.token);
+    assert.equal(row.result_layout, exporter.RESULT_LAYOUT);
+    assert.equal(row.processing_mode, 'markdown-only');
+    assert.equal(row.directory.path, stableAfter.row.directory);
+    assert.equal(row.files.length, 1);
+    assert.equal(row.files[0].document_id, documentId);
+    assert.equal(row.files[0].name, 'Synthetic.md');
+    assert.equal(row.files[0].sha256, sha(bytes));
+    assert.deepEqual(row, exporter.initialResultPublication(state.token, true), 'same complete immutable binding and exact visible leaves after the reader finishes');
+  }
+  process.stdout.write(`TARGET EXPORT ATOMIC SOURCE COUNTERORACLE PASS ${readerRole}/${phase} (not native/CI acceptance)\n`);
 }
 
 function campaign() {
   let passed = 0, notRun = 0;
-  for (const phase of phases) {
+  for (const readerRole of readerRoles) for (const phase of phases) {
     if (process.platform === 'win32' && phase !== phases[0]) {
       notRun++;
-      process.stdout.write(JSON.stringify({ phase, status: 'PLATFORM_NOT_RUN', platform: process.platform,
+      process.stdout.write(JSON.stringify({ phase, reader_role: readerRole, status: 'PLATFORM_NOT_RUN', platform: process.platform,
         reason: 'Windows held-descriptor rename-sharing semantics; no POSIX replacement simulation or PASS' }) + '\n');
       continue;
     }
-    const child = cp.spawnSync(process.execPath, [__filename, '--counteroracle', phase], {
+    const child = cp.spawnSync(process.execPath, [__filename, '--counteroracle', phase, readerRole], {
       cwd: repository, env: { ...process.env }, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8',
       timeout: 60000, maxBuffer: 1024 * 1024, windowsHide: true });
     if (child.stdout) process.stdout.write(child.stdout);
     if (child.stderr) process.stderr.write(child.stderr);
     assert.ifError(child.error);
     assert.equal(child.signal, null);
-    assert.equal(child.status, 0, `${phase}: preserve the failed fixture; a real publisher/reader failure is not PASS`);
+    assert.equal(child.status, 0, `${readerRole}/${phase}: preserve the failed fixture; a real publisher/reader failure is not PASS`);
     passed++;
   }
-  assert.equal(passed, process.platform === 'win32' ? 1 : 4);
-  assert.equal(notRun, process.platform === 'win32' ? 3 : 0);
+  assert.equal(passed, process.platform === 'win32' ? 2 : 8);
+  assert.equal(notRun, process.platform === 'win32' ? 6 : 0);
   process.stdout.write(`TARGET EXPORT ATOMIC SOURCE CAMPAIGN: ${passed} PASS; ${notRun} PLATFORM_NOT_RUN (not native/CI acceptance)\n`);
 }
 
@@ -317,7 +340,7 @@ if (process.argv[2] === '--publisher') {
   try { publish(process.argv[3]); }
   catch (error) { process.stderr.write(`TARGET_EXPORT_PUBLISHER_FAILED:${error.code || error.name}\n`); process.exitCode = 1; }
 } else if (process.argv[2] === '--counteroracle') {
-  counteroracle(process.argv[3]).catch(error => { console.error(error); process.exitCode = 1; });
+  counteroracle(process.argv[3], process.argv[4]).catch(error => { console.error(error); process.exitCode = 1; });
 } else {
   try { campaign(); }
   catch (error) { console.error(error); process.exitCode = 1; }
