@@ -71,7 +71,8 @@ export async function runPackagedMarkdownScenario({ request: initialRequest, res
       const response = await request({ schema: 'datasecure-standalone-private-ipc/1',
         request_id: (++sequence).toString(16).padStart(16, '0'), action: 'resolve_history_results', batch_id: batchId });
       if (response.ok) { target = response.result; break; }
-      assert.equal(response.error_code, 'STANDALONE_RESULTS_MISSING');
+      assert.ok(['STANDALONE_RESULTS_MISSING', 'RESULT_PUBLICATION_PENDING'].includes(response.error_code),
+        `initial readiness never retries a conflict: ${JSON.stringify(response)}`);
       if (Date.now() >= exportDeadline) {
         const status = await send('get_public_state'), context = await send('get_ui_context');
         throw Error(`MD_EXPORT_NOT_READY:${JSON.stringify({ row, status, context })}`);

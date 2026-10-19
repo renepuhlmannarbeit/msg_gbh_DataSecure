@@ -1347,7 +1347,12 @@ function initialResultPublication(batchId, verifyFiles = true) {
   try { fs.lstatSync(target); } catch (error) { if (error?.code === 'ENOENT') return null; throw error; }
   const record = readRecord(target, { expectedBatchId: batchId });
   if (record.result_layout !== RESULT_LAYOUT) return null; // never reinterpret old user folders
-  if (record.batch_id !== batchId || !record.complete || !record.items.length || record.items.some(item => item.exported !== true))
+  if (record.batch_id !== batchId || !record.items.length) throw resultExportFailure('RESULT_EXPORT_STATE_UNSAFE');
+  // A validated, still-writing initial plan is not a completed generation and
+  // must grant neither a folder nor correction authority. Do not describe this
+  // ordinary worker interval as tampering. Missing completed proofs remain hard.
+  if (record.complete === false) throw resultExportFailure('RESULT_EXPORT_PENDING');
+  if (record.items.some(item => item.exported !== true))
     throw resultExportFailure('RESULT_EXPORT_STATE_UNSAFE');
   const bytes = readBoundFile(resultBindingPath(batchId), { maximum: INITIAL_BINDING_BYTES, minimum: 1 });
   const value = JSON.parse(bytes);

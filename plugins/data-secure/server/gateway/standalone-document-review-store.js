@@ -1573,6 +1573,7 @@ function createDocumentReviewStore(options = {}) {
     try { return action(); }
     catch (error) {
       if (String(error?.code || '').startsWith('OWNERSHIP_GUARD_')) throw error;
+      if (error?.code === 'RESULT_EXPORT_PENDING') throw fail('RESULT_PUBLICATION_PENDING');
       throw fail('RESULT_PUBLICATION_CONFLICT');
     }
   }
@@ -1638,7 +1639,8 @@ function createDocumentReviewStore(options = {}) {
       const state = latest ? latest.complete && JSON.stringify(latest.op.selection) === JSON.stringify(vector) ? 'current' : 'pending'
         : current_revision === 0 ? 'initial' : 'pending';
       return { result_publication: { state, generation_id: latest?.op.operation_id || null, count: vector.length, current_revision } };
-    } catch { return { result_publication: { state: 'conflict', generation_id: null, count: vector.length, current_revision } }; }
+    } catch (error) { return { result_publication: { state: error?.code === 'RESULT_PUBLICATION_PENDING' ? 'pending' : 'conflict',
+      generation_id: null, count: vector.length, current_revision } }; }
   }
   function resultOperation(op) { return { ...exportBinding(op), publication_role: 'results', binding: op.binding, files: op.files }; }
   async function callResultNative(op, command, body) {

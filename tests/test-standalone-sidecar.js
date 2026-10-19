@@ -284,7 +284,10 @@ function removeOwnedRoot(root, initial) {
     const configFile = path.join(nativeData, 'settings', 'result-root.json');
     const persisted = fs.readFileSync(configFile, 'utf8');
     assert.deepEqual(JSON.parse(persisted).native_export, nativeBinding);
-    assert.equal(JSON.parse(persisted).schema, 'datasecure-result-root/4');
+    assert.equal(JSON.parse(persisted).schema, 'datasecure-result-root/6');
+    const nativeRootStat = fs.statSync(path.join(nativeRoot, 'output'), { bigint: true });
+    const exactRootIdentity = { dev: String(nativeRootStat.dev), ino: String(nativeRootStat.ino), birthtime_ns: String(nativeRootStat.birthtimeNs) };
+    assert.deepEqual(JSON.parse(persisted).exact_identity, exactRootIdentity);
     deny = true;
     const refused = await nativeClient.send('configure_results', '02'.repeat(8), {
       source_paths: [path.join(nativeRoot, 'output')], native_export_binding: true
@@ -294,7 +297,10 @@ function removeOwnedRoot(root, initial) {
     const legacyConfiguration = await nativeClient.send('configure_results', '03'.repeat(8), { source_paths: [path.join(nativeRoot, 'output')] });
     assert.equal(legacyConfiguration.ok, true, JSON.stringify(legacyConfiguration));
     assert.equal(callbacks, 2, 'legacy request cannot silently acquire a native binding');
-    assert.equal(JSON.parse(fs.readFileSync(configFile, 'utf8')).schema, 'datasecure-result-root/2');
+    const nodeConfiguration = JSON.parse(fs.readFileSync(configFile, 'utf8'));
+    assert.equal(nodeConfiguration.schema, 'datasecure-result-root/5');
+    assert.deepEqual(nodeConfiguration.exact_identity, exactRootIdentity);
+    assert.equal(Object.hasOwn(nodeConfiguration, 'native_export'), false);
     nativeHost.stdin.end(); assert.equal((await bounded(nativeHost.closed, 'native callback host did not close')).code, 0);
     const nativeDiagnosticNames = fs.readdirSync(nativeEnv.DATASECURE_STANDALONE_DIAGNOSTIC_DIR);
     assert.deepEqual(nativeDiagnosticNames, [`sidecar-interactions.${'c'.repeat(32)}.jsonl`]);

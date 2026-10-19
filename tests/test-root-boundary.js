@@ -808,9 +808,12 @@ try {
     const file = result.configPath();
     const replacement = `${file}.test-replacement`;
     const record = JSON.parse(configBytes(result));
+    assert.strictEqual(record.schema, result.EXACT_SCHEMA, 'fresh settings use the exact Node identity contract');
     record.root = competing;
     const stat = fs.lstatSync(competing);
     record.identity = { dev: String(stat.dev), ino: String(stat.ino), birthtime_ms: String(Math.trunc(stat.birthtimeMs)) };
+    const exact = fs.lstatSync(competing, { bigint: true });
+    record.exact_identity = { dev: String(exact.dev), ino: String(exact.ino), birthtime_ns: String(exact.birthtimeNs) };
     fs.writeFileSync(replacement, JSON.stringify(record), { flag: 'wx' });
     const competingBytes = fs.readFileSync(replacement);
     const originalOpen = fs.openSync;

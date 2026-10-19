@@ -185,6 +185,46 @@ async function run() {
     assert.equal((await f.resolve()).local_path, f.bound.directory.path);
     assert.equal(f.calls.length, 0, 'initial/list never invoke correction publication');
   });
+  for (const mode of ['markdown-only', 'markdown-and-anonymize']) for (const partial of [true, false])
+  await testAsync(`${mode}: validated incomplete initial publication (partial=${partial}) stays pending without readable authority`, async () => {
+    const f = await fixture({ mode }), outbox = path.join(data, 'result-export-state', `re_${sha(f.batchId).slice(0, 32)}.json`);
+    const original = fs.readFileSync(outbox), record = JSON.parse(original);
+    const binding = path.join(data, 'result-publication-bindings', `${f.batchId}.json`);
+    fs.renameSync(binding, binding + '.held');
+    record.complete = false;
+    if (partial) delete record.items[0].exported;
+    fs.writeFileSync(outbox, JSON.stringify(record));
+    const before = fs.readFileSync(outbox), files = fs.readdirSync(f.bound.directory.path).sort();
+    assert.throws(() => exporter.initialResultPublication(f.batchId), { code: 'RESULT_EXPORT_PENDING' });
+    assert.deepEqual(f.store.list(f.batchId).result_publication,
+      { state: 'pending', generation_id: null, count: 2, current_revision: 0 });
+    await rejects(() => f.resolve(), 'RESULT_PUBLICATION_PENDING');
+    await rejects(() => f.publish(), 'RESULT_PUBLICATION_PENDING');
+    assert.equal(f.calls.length, 0); assert.deepEqual(fs.readFileSync(outbox), before);
+    assert.deepEqual(fs.readdirSync(f.bound.directory.path).sort(), files);
+    assert.equal(fs.existsSync(binding), false, 'pending read/publish cannot fabricate the not-yet-committed binding');
+    fs.renameSync(binding + '.held', binding);
+    fs.writeFileSync(outbox, original);
+    assert.equal((await f.resolve()).local_path, f.bound.directory.path, 'only the completed worker proof grants readiness');
+  });
+  for (const mutation of ['schema', 'batch', 'completed-missing-flag'])
+  await testAsync(`an unsafe initial plan (${mutation}) cannot borrow a pending classification`, async () => {
+    const f = await fixture(), outbox = path.join(data, 'result-export-state', `re_${sha(f.batchId).slice(0, 32)}.json`);
+    const record = JSON.parse(fs.readFileSync(outbox));
+    if (mutation === 'completed-missing-flag') delete record.items[0].exported;
+    else { record.complete = false; record[mutation === 'batch' ? 'batch_id' : 'schema'] = mutation === 'batch' ? 'f'.repeat(64) : 'unknown'; }
+    fs.writeFileSync(outbox, JSON.stringify(record));
+    assert.equal(f.store.list(f.batchId).result_publication.state, 'conflict');
+    await rejects(() => f.resolve(), 'RESULT_PUBLICATION_CONFLICT'); assert.equal(f.calls.length, 0);
+  });
+  await testAsync('a completed initial plan with a lost private binding is conflict, not retryable pending', async () => {
+    const f = await fixture(), binding = path.join(data, 'result-publication-bindings', `${f.batchId}.json`);
+    fs.renameSync(binding, binding + '.held');
+    assert.equal(f.store.list(f.batchId).result_publication.state, 'conflict');
+    await rejects(() => f.resolve(), 'RESULT_PUBLICATION_CONFLICT');
+    await rejects(() => f.publish(), 'RESULT_PUBLICATION_CONFLICT');
+    assert.equal(fs.existsSync(binding), false); assert.equal(f.calls.length, 0);
+  });
   for (const mutation of ['extra-file', 'missing-file', 'same-hash-leaf-replacement']) await testAsync(`initial opener revalidates ${mutation} without publication or fallback`, async () => {
     const f = await fixture(), leaf = path.join(f.bound.directory.path, f.bound.files[0].name);
     if (mutation === 'extra-file') fs.writeFileSync(path.join(f.bound.directory.path, 'private.csv'), 'private');

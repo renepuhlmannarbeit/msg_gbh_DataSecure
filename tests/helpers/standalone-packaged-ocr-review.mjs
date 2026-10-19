@@ -123,7 +123,8 @@ export async function runPackagedOcrSkipScenario({ request, sourceDirectory }) {
     assert.ok(Date.now() < deadline, 'PACKAGED_SKIP_VISIBLE_EXPORT_TIMEOUT');
     if (response.ok === true) { output = response.result; break; }
     assert.equal(response.ok, false);
-    assert.equal(response.error_code, 'STANDALONE_RESULTS_MISSING');
+    assert.ok(['STANDALONE_RESULTS_MISSING', 'RESULT_PUBLICATION_PENDING'].includes(response.error_code),
+      `initial readiness never retries a conflict: ${JSON.stringify(response)}`);
     await new Promise(resolve => setTimeout(resolve, 100));
   }
   const texts = fs.readdirSync(output.local_path).filter(name => name.endsWith('.md'))

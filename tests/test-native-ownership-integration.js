@@ -179,11 +179,12 @@ function clean(directory) {
       const a = path.join(base, `public-a-${rootSequence}`), b = path.join(base, `public-b-${rootSequence}`);
       fs.mkdirSync(a); fs.mkdirSync(b);
       check((await q.request('config-save', { path: a })).ok, true);
-      // /3 makes this settings-only test independent of whether the fixture's
-      // legacy NTFS inode Number is lossless; native /2 has its own real gate.
+      // An explicitly closed legacy /3 fixture retains coverage of its CAS
+      // migration. New /5 -> /6 has a separate real Node/Rust admission gate.
       const configFile = path.join(root, 'settings/result-root.json');
       const record = JSON.parse(fs.readFileSync(configFile));
-      fs.writeFileSync(configFile, JSON.stringify({ ...record, schema: 'datasecure-result-root/3',
+      fs.writeFileSync(configFile, JSON.stringify({ schema: 'datasecure-result-root/3',
+        root: record.root, identity: record.identity, notices: record.notices,
         native_identity: { volume: '1', object: '2', created_ns: '3' } }));
       const snapshotEvent = p.event(), upgrading = p.request('config-upgrade');
       check(await snapshotEvent, 'config-native-await');

@@ -101,7 +101,8 @@ export async function runPackagedAnonymizedOcrScenario({ request, sourceDirector
       request_id: (++sequence).toString(16).padStart(16, '0'), action: 'resolve_history_results',
       batch_id: started.batch_id });
     if (response.ok) { output = response.result; break; }
-    assert.equal(response.error_code, 'STANDALONE_RESULTS_MISSING');
+    assert.ok(['STANDALONE_RESULTS_MISSING', 'RESULT_PUBLICATION_PENDING'].includes(response.error_code),
+      `initial readiness never retries a conflict: ${JSON.stringify(response)}`);
     assert.ok(Date.now() < deadline, `PACKAGED_ANON_OCR_VISIBLE_EXPORT_TIMEOUT:${JSON.stringify(row)}`);
     await new Promise(resolve => setTimeout(resolve, 100));
   }

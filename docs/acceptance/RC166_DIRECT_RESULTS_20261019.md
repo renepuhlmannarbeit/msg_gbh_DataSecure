@@ -82,6 +82,35 @@ Paket-Core, nicht die vollständige autonome Processing-Worker-Komposition und
 keine Desktop-/Finder-Bedienung. Die erneute echte Windows-Node/Rust-Pipe
 (`datasecure-native-store-N3pw9n`) bestand anschließend ebenfalls.
 
+Erster eingefrorener Source03-Gesamtlauf: Headless ROT bei der konkurrierenden
+Root-CAS-Fixture. Sie beließ die neue exakte /5-Kennung am alten Root; die
+Produktverweigerung war richtig. Zwei weitere statisch gefundene Altschema-
+Fixtures wurden mit korrigiert: Sidecar verlangt nun /6-/5 und exakte Identität,
+die explizite alte /3-Guardfixture besitzt keine versteckten /5-Felder. Die
+ursprünglichen CAS-, Verweigerungs- und Legacyorakel bleiben erhalten, unabhängig
+am tatsächlichen Produktionsreader/-writer gegengelesen. Windows-Native Source03
+bestand244 Rusttests (3 ignoriert); Mac wurde gezielt abgebrochen. Source03 bleibt
+rote Historie, kein neuer Produktfix und kein Ersatz für den frischen Gesamtlauf.
+
+Anschließender echter Source-Sidecar-Gegenfall: terminale Fachzähler wurden vor
+dem atomaren Abschluss der Erstbereitstellung sichtbar. Ein gültiger noch
+unvollständiger neuer Plan wurde fälschlich als Konflikt beschrieben. Nur nach
+vollständiger Schema-/Batch-/Owner-/Contentankerprüfung und nur bei nichtleerem
+Plan mit `complete === false` lautet der lesende Status jetzt Pending. Keine
+Ordner-/Korrekturautorität, kein Produktionsretry, keine neue Deadline. Fertiger
+Plan ohne Flags/Bindung oder mit manipulierten Dateien bleibt Conflict; Legacy
+bleibt unverändert. Acht Gegenfälle und echte Source-Sidecar-Komposition prüfen
+die Grenze getrennt. Unabhängiger tatsächlicher Quellengegenreview bestätigt
+den engen Vertrag. Source-Harness ohne nativen Publisher bleibt kein Nachweis
+der neuen nativen Nachkorrekturbereitstellung; Legacyexport wird dort separat
+als Kompatibilitätsweg geprüft, nicht als normaler neuer Anwenderablauf.
+Danach gezielt bestanden: 32 Generationen-/Pending-Gegenfälle, 86 echte
+Root-Dateisystemfälle, 261 native Ownership-CAS-Assertions sowie komplette
+Source-Sidecar-/Processing-Worker-Komposition einschließlich OCR an/aus,
+Legacy-Kopie und sechs bestätigten Host-/Worker-Abschlüssen. Zudem erneut
+51 Async-,15 Initialwriter-,156 Renderer- und49 Präsentationsfälle grün.
+Die vollständigen eingefrorenen Source04-Belege müssen diese Vorabtests ersetzen.
+
 ## Anwendervertrag
 
 - Quellen auswählen und verarbeiten. OCR bleibt separat; geführte Fundstellen-
