@@ -152,6 +152,23 @@ testAsync('contact corrections and confirmations use distinct actions, preserve 
   assert.equal(h.element('matrix-body').children.length, 0);
 });
 
+for (const total of [1, 2]) testAsync(`OCR matrix document counts use the ${total === 1 ? 'singular' : 'plural'} before and after staging`, async () => {
+  const h = harness(null, false, false, { modifyDraft(draft) {
+    for (const key of Object.keys(draft)) delete draft[key];
+    Object.assign(draft, contactBatchDraft(Array.from({ length: total }, (_, index) => `+49 30 555100${index + 1}`)));
+  } });
+  await new Promise(resolve => setImmediate(resolve));
+  const affected = `${total} ${total === 1 ? 'betroffenes Dokument' : 'betroffene Dokumente'}`;
+  const location = `in ${total} ${total === 1 ? 'Dokument' : 'Dokumenten'}:`;
+  assert.ok(h.element('matrix-guide').textContent.includes(location));
+  assert.ok(h.element('matrix-progress').textContent.endsWith(affected));
+  assert.equal(h.element('release').disabled, true);
+  selectAll(h); applySelected(h, 'confirm_contact');
+  assert.ok(h.element('matrix-progress').textContent.endsWith(affected));
+  assert.equal(h.element('release').disabled, false);
+  assert.equal(h.calls.some(call => call.command === 'submit_review'), false, 'copy changes never submit staged choices');
+});
+
 testAsync('confirmed OCR handoff copy follows the loaded purpose before clearing its draft', async () => {
   const { buildContactDraft } = require('../plugins/data-secure/server/core/ocr-contact-review');
   for (const markdown of [true, false]) {

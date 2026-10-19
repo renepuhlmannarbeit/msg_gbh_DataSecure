@@ -4,6 +4,22 @@ Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Test-Pre-Release in 
 
 ### Aktueller Nachtauftrag – neuere Autorität vor historischen Abschnitten
 
+Neu19.10.nachCheckpoint05: Sechs beobachtete Singular-Copyfälle eng korrigiert,
+359 Workspace-/54 Review-Frontendgegenfälle vom Autor und Hauptagenten grün,
+unabhängiges tatsächliches Quellengegenlesen ohne Befund. Kein Fach-/ACK-/
+Autorisierungs-/Layoutumbau. Neuer unveränderter Checkpoint06 folgt; ältere
+05-Gesamt-/GUI-Belege bleiben auf ihren exakten25702dd5-Stand begrenzt.
+
+Neu19.10.00:28UTC: Checkpoint05/25702dd5/393899c4… vollständig272/272+10/10,
+Native228/3ignoriert,Clippy/Release und5 Paketgates grün, Inputs unverändert.
+Unabhängiges Live-Region-Gegenreview inzwischen ohne bestätigten Fehler.
+Neues Windows-ZIP3ce481dd…/EXE8ed7dc27… tatsächlich isoliert gestartet;
+OCR-Copy, Schnellweg3/3, einmaliger3-MD-Export samt Goldenhashes/Beleg,
+neuer leerer Entwurf und Zusatzpickerabbruch ohne alte Ansage geprüft.
+14/14 Originalkopien bytegleich, eigene App/Core normal geschlossen.
+Gezielte Vorabdeltaorakel, kein finaler gemeinsamer Release-/M2-Nachweis.
+Beobachtete reine Singular-Copy wird eng nachgebessert; Macproducer weiter aktiv.
+
 Neu18.10.23:57UTC: Live-Region-Folgekorrektur implementiert: erste echte
 Hintergrund-Terminalphase erhalten, alte versteckte Wiederankündigung stumm,
 Rückkehr genau einmal, unbekannte Freigabe neutral.357 Workspacegegenfälle

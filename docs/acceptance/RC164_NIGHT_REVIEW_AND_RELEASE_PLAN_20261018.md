@@ -1,5 +1,70 @@
 # RC164 – fortgesetzter Abschlussauftrag
 
+## Enger Sprachabschluss nach Checkpoint05, 19.10.2026
+
+Die im echten Windows-GUI gefundenen sechs Singular-Copypfade sind korrigiert:
+„1 Datei wartet“, „1 Datei“ in Quellen-/Lauf-/Prüfkopf, „1 betroffenes Dokument“
+und „in1 Dokument“. Ausschließlich bestehende Zähler in textContent verwendet;
+keine Layout-, Zustands-, ACK-, Fach- oder Autorisierungsänderung. Vier neue
+Gegenfälle für1/2 Elemente samt unveränderter Übergabe. Autor und Hauptagent
+führten unabhängig die Zieltests mit verifiziertem Node22.23.2 aus:
+359 Workspacefälle und54 Review-Frontendfälle bestanden. Zusätzlicher
+unabhängiger Quellen-/Architekturreview: kein bestätigter Befund. Dieser
+Reviewer hat keine Tests ausgeführt, also kein erfundenes zweites Lauf-PASS.
+
+Der vorherige vollständige Checkpoint05 und seine tatsächlichen Windows-
+Deltaorakel gelten exakt für25702dd5, nicht rückwirkend für diese neuen Bytes.
+Neuer unveränderter Checkpoint06 folgt; finaler gemeinsamer Mac-Core-/Appfreeze
+weiter erforderlich. Kein Release/Tag/Mainpush oder Austausch alter ZIPs.
+
+## Checkpoint05 und echte Windows-Deltaorakel, 19.10., 00:28 UTC
+
+Appcommit25702dd5e6bc8bef1cd95c706070d8332032dadb, Produktfingerprint
+393899c481a234278e9df56f4f2c9228c5f3f5e270a7c6b426af56ca68b743df (332 Dateien):
+272/272 Headlessdateien plus10/10 Zusatzgates, Windows-Prepare/Clippy/228
+Rusttests (3 ignoriert)/Release sowie fünf Paketgates bestanden. Alle
+jeweiligen Inputs unverändert. Test-/Scriptmanifest546 Dateien,
+5a0dd048c890f615a1ccceedb531f44793f3718801ed7873b9b8a1d434c3828c.
+Headlessabschluss00:23:39.803UTC. Diese Jobs sind beendet, keine Duplikate nötig.
+
+Der zusätzliche unabhängige Mac-/Architekturagent konnte nach vorübergehender
+Kapazitätsstörung den tatsächlichen Live-Region-Diff8da562e..9b4f71f lesen:
+kein bestätigter Fehler; erste Hintergrund-Terminalphase, versteckte Wiederholung,
+Rückkehr, fremder Lauf/Exportreceipt und unveränderte Warn-/ACK-/Aktionsbedingungen
+bestätigt. Damit ist die im Abschnitt23:57 noch offene Quellengegenprüfung
+erledigt. Das ist keine native Screenreader-Audioabnahme.
+
+Neues eigenes Windows-ZIP (nicht umetikettiert):
+dist/engineering-rc164-ui-checkpoint05-20261018/DataSecure-Standalone-3.2.0-rc164-windows-x64.zip,
+SHA256 3ce481dd1bf1d24430fe44fad8d1fbb8d451e8f577d4746ccd7ec22f0adabccd,
+EXE8ed7dc276270130722570609f1a06bff6545cd7a5ba8533f0713588a56f0d892.
+Eigener unveränderter DataSecure-Shortroot, frisches isoliertes Profil,
+sichtbarer Build25702dd5 und tatsächlicher EXE-/PID-Abgleich vor Bedienung.
+
+- Fall02: ein echtes PNG, beide Kontaktzeilen gegen tatsächlich gerenderte
+  Originalpixel verglichen, unverändert vorgemerkt und einmal gespeichert.
+  Korrigierte zweckrichtige Zwischenmeldung tatsächlich beobachtet; danach
+  keine weitere Pflichtfreigabe, klar nicht anonymisiert, eine170-Byte-MD mit
+  erwarteter SHA256 dee5b2488b105ad5807c0441224bdf9eb9bd1ad3e93b1f695eca4dbfcabd1abb.
+- Fall04: Schnellweg/OCR, drei echte Eingaben,3/3 ausdrücklich automatische,
+  nicht manuelle Erstfreigabe, kein automatischer Export. Ein expliziter Export
+  erzeugt Export-7ca17193ed3663be68f96a6a75db6076 mit exakt3 regulären neutralen MD,
+  keinen privaten Beigaben und den erwarteten165-/576-/989-Byte-Goldenhashes.
+  Abschluss, Schließen und derselbe gebundene Beleg ohne erneute Exportpflicht
+  tatsächlich beobachtet.
+- Danach neue leere konsumierte Auswahl; ein neuer TXT-Entwurf und Abbruch
+  des zusätzlichen nativen Dateipickers erhalten exakt Quelle/Ziel. Alte
+  globale Terminal-Liveregion bleibt in wiederholten nativen Aufnahmen leer.
+  Erste kurze Hintergrundansage wurde zeitlich nicht eingefangen: keine
+  erfundene native Audioaussage; dafür gibt es kausale Quellen-/VM-Gegenfälle.
+-14/14 synthetische Originalkopien am Ende bytegleich. Eigene App/Core normal
+  geschlossen und Prozessende bestätigt. Profile, Archive und Belege erhalten.
+
+Detailnachweise: checkpoint05/GUI-PREAPPROVAL.json und drei FINAL.json.
+Reine im GUI beobachtete Singular-Copyfehler werden separat eng korrigiert;
+keine neue Fachlogik daraus. Kein gemeinsamer finaler Freeze/Release: beide
+Mac-Coreproducer39167676290 weiterhin aktiv, kein Artefakt/Approval vorhanden.
+
 ## Live-Region-Folgekorrektur, 18.10., 23:57 UTC
 
 Die tatsächliche Workspacequelle unterscheidet nun die erste Terminalphase

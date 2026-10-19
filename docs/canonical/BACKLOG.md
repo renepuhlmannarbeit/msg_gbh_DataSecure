@@ -4,6 +4,18 @@ Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Pre-Release in Vorbe
 
 ## Aktuelle Nacht-Fortsetzung (ersetzt ältere Freigabeangaben)
 
+Neu19.10.nachCheckpoint05: Beobachtete Singular-Copy erledigt, enges echtes
+Quellengegenreview ohne Befund und359/54 gezielte Frontendtests grün. Neuer
+unveränderter Checkpoint06 nötig; finaler gemeinsamer Core-/App-/Paket-/
+Windows-GUI-/Uploadabschluss bleibt offen, native Macproducer laufen weiter.
+
+Neu19.10.00:28UTC: Gesamtcheckpoint05/25702dd5/393899c4… und Native/Paketgates
+unverändert grün. Zusätzlich echte Windows-Deltaorakel02/04/Export/Abbruch
+am neuen gebundenen ZIP bestanden; Live-Region unabhängig gegengelesen.
+14/14 Originals bytegleich, eigene GUI/Core normal beendet. Nur beobachtete
+Singular-Copy noch eng nachbessern; gemeinsame Coreapproval/finaler Appfreeze,
+Macconsumer, finale gemeinsame Pakete/GUI und Upload/Readback weiterhin offen.
+
 Neu18.10.23:57UTC: Live-Region-Folgekorrektur samt357 gezielten Gegenfällen
 grün, Produktionsdiff direkt gegengelesen. Vor finaler Freigabe weiteres
 unabhängiges Gegenlesen (bisherige zusätzliche Agenten wegen Kapazität nicht

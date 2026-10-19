@@ -441,7 +441,7 @@ function render(table = true) {
   const affectedDocuments = draft.contact_batch?.documents.length || draft.batch_review?.document_count || 1;
   el('matrix-title').textContent = contact ? 'OCR-Kontaktwerte vor Abschluss prüfen' : 'Fundstellen gemeinsam bearbeiten';
   el('matrix-guide').textContent = contact
-    ? `Hauptweg: Kontaktwert mit dem Original vergleichen → Werte auswählen → unverändert oder korrigiert vormerken → am Ende speichern. ${items.length} erkannte E-Mail-/Telefonwerte in ${affectedDocuments} Dokumenten: Prüfkandidaten, keine ${items.length} Konvertierungsfehler.`
+    ? `Hauptweg: Kontaktwert mit dem Original vergleichen → Werte auswählen → unverändert oder korrigiert vormerken → am Ende speichern. ${items.length} erkannte E-Mail-/Telefonwerte in ${affectedDocuments} Dokument${affectedDocuments === 1 ? '' : 'en'}: Prüfkandidaten, keine ${items.length} Konvertierungsfehler.`
     : 'Diese Fundstellen brauchen eine Entscheidung. Wähle Zeilen aus, wende eine Behandlung an und speichere dann die vollständige Gruppe.';
   el('matrix-explanation').textContent = contact
     ? 'Du hast diese zusätzliche Prüfung beim Start gewählt. Auch plausibel aussehende OCR-Werte zählen. Bestätige oder korrigiere sie nach dem Bildvergleich; andere OCR-Zeilen oder Markdown-Inhalte sind dadurch nicht geprüft. Eine eingegebene Korrektur kannst du für exakt gleiche OCR-Lesarten als Vorschlag in weitere offene Zeilen einsetzen. Dort musst du das Original dennoch einzeln vergleichen und die Entscheidung ausdrücklich vormerken. Anwenden merkt Entscheidungen nur vor. Erst der Abschlussknopf übergibt sie und setzt den Lauf fort.'
@@ -450,7 +450,7 @@ function render(table = true) {
     ? `${state.choices.size} von ${items.length} OCR-Kontaktwerten vorgemerkt · ${items.length - state.choices.size} offen · ${affectedDocuments} Dokument${affectedDocuments === 1 ? '' : 'e'} betroffen. Beim Start freiwillig gewählt; zum Abschluss dieses Laufs jetzt erforderlich.`
     : `${state.choices.size} von ${items.length} Stellen vorgemerkt · ${items.length - state.choices.size} offen · ${state.rows.length} Prüfzeilen in dieser Gruppe. Noch nicht übergeben.`;
   el('matrix-progress').textContent = contact
-    ? `${state.choices.size} von ${items.length} OCR-Kontaktwerten vorgemerkt · ${items.length - state.choices.size} offen · ${affectedDocuments} betroffene Dokumente`
+    ? `${state.choices.size} von ${items.length} OCR-Kontaktwerten vorgemerkt · ${items.length - state.choices.size} offen · ${affectedDocuments} ${affectedDocuments === 1 ? 'betroffenes Dokument' : 'betroffene Dokumente'}`
     : `${state.choices.size} von ${items.length} Fundstellen vorgemerkt · ${items.length - state.choices.size} offen`;
   el('document-position').textContent = `${documentName(candidate.ambiguity_id)} · Dokument ${state.documentPositions.get(candidate.ambiguity_id)} von ${draft.contact_batch?.documents.length || draft.batch_review?.document_count || 1}`;
   el('finding-position').textContent = `Fundstelle ${state.cursor + 1} von ${items.length}`;

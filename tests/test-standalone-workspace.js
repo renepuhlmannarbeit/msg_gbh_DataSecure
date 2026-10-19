@@ -899,6 +899,30 @@ testAsync('all ancestors of an initially blocked deep file are visible in a larg
   assert.equal(h.el('group-toggle-1').attrs['aria-expanded'], 'true');
   assert.match(h.el('source-tree').textContent, /Bad.zip.*Dieses Dateiformat wird nicht unterstützt/u);
 });
+for (const total of [1, 2]) testAsync(`source/run/review headings and Markdown review status use the ${total === 1 ? 'singular' : 'plural'} without changing the handoff`, async () => {
+  const files = Array.from({ length: total }, (_, index) => ({ name: `Source-${index + 1}.txt`,
+    source_id: id(index + 1), bytes: 10, selectable: true }));
+  const h = harness({ catalogue: files }); await tick(); await h.act('select-files');
+  const countLabel = `${total} ${total === 1 ? 'Datei' : 'Dateien'}`;
+  assert.equal(h.el('catalogue-count').textContent, countLabel);
+  h.el('mode-markdown').checked = true; await h.act('mode-markdown', 'change'); await h.act('start');
+  assert.equal(h.el('job-count').textContent, countLabel);
+  const start = h.calls.filter(call => call.command === 'start_admitted_batch');
+  assert.equal(start.length, 1);
+  assert.deepEqual(Array.from(start[0].args.sourceIds), files.map(file => file.source_id));
+  assert.equal(start[0].args.processingMode, 'markdown-only');
+  h.model.state = { ...h.model.state, state: 'review_required', review_count: total };
+  h.model.entries = [{ batch_id: A, processing_mode: 'markdown-only', selected_count: total,
+    status: 'review_required', resumable: true }];
+  await h.poll();
+  assert.ok(h.el('job-description').textContent.startsWith(`${countLabel} ${total === 1 ? 'wartet' : 'warten'} auf deine Entscheidung.`));
+  await h.act('job-action-review');
+  assert.equal(h.el('review-scope').textContent, `${countLabel} · Entscheidungen gelten für diesen Lauf`);
+  assert.equal(h.el('review-frame').src, 'review.html?embedded=1');
+  assert.equal(h.calls.filter(call => call.command === 'open_embedded_review').length, 1);
+  assert.equal(h.calls.some(call => ['submit_review', 'decide_document_review', 'export_approved_documents'].includes(call.command)), false);
+});
+
 testAsync('historical continuation adopts the exact run instead of rendering the old job', async () => {
   const h = harness(); await selectAndStart(h);
   h.model.entries = [{ batch_id: B, created_at: '2026-10-07T09:00:00Z', processing_mode: 'markdown-and-anonymize', selected_count: 7, resumable: true, status: 'stopped' }];

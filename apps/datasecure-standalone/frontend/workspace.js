@@ -665,7 +665,7 @@
     $('source-tree').replaceChildren(); $('catalogue').hidden = !catalogue.length;
     $('drop-zone').hidden = catalogue.length > 0 || admitting;
     $('admission-status').hidden = !admitting;
-    $('catalogue-count').textContent = `${catalogue.length} Dateien`;
+    $('catalogue-count').textContent = `${catalogue.length} ${catalogue.length === 1 ? 'Datei' : 'Dateien'}`;
     const chosen = catalogue.filter(item => item.selectable && selected.has(item.source_id));
     $('selection-count').textContent = `${chosen.length} von ${catalogue.filter(item => item.selectable).length} ausgewählt`;
     checkState($('select-all'), catalogue);
@@ -802,7 +802,7 @@
     $('setup').hidden = true; $('job').hidden = false;
     $('job-task').textContent = run.task === 'markdown-only' ? 'Nur umwandeln'
       : run.task === 'markdown-and-anonymize' ? 'Umwandeln und anonymisieren' : 'Verarbeitungszweck nicht bestätigt';
-    $('job-name').textContent = run.name; $('job-count').textContent = `${run.selectedCount} Dateien`;
+    $('job-name').textContent = run.name; $('job-count').textContent = `${run.selectedCount} ${run.selectedCount === 1 ? 'Datei' : 'Dateien'}`;
     $('job-files').replaceChildren(...run.files.map(name => element('li', name)));
     $('job-files').hidden = true; $('job-files-toggle').hidden = !run.files.length;
     $('job-files-toggle').setAttribute('aria-expanded', 'false'); $('job-files-toggle').textContent = 'Dateien anzeigen ⌄';
@@ -874,7 +874,7 @@
       nativeGeneration: opened.review_generation, phaseGeneration: 0, complete: false, closing: false, stage: 'waiting' };
     $('review-heading').textContent = `Prüfen: ${job?.batchId === batchId ? job.name : `Lauf ${batchId.slice(0, 8)}`}`;
     $('review-scope').textContent = job?.batchId === batchId
-      ? `${job.selectedCount} Dateien · Entscheidungen gelten für diesen Lauf`
+      ? `${job.selectedCount} ${job.selectedCount === 1 ? 'Datei' : 'Dateien'} · Entscheidungen gelten für diesen Lauf`
       : 'Entscheidungen gelten für diesen Lauf';
     $('review-frame').src = 'review.html?embedded=1'; showView('review', batchId);
     feedback(''); $('review-heading').focus();
@@ -1077,7 +1077,7 @@
     const total = count(state.selected_count) || job.selectedCount, done = count(state.completed_count), failed = count(state.failed_count), reviews = count(state.review_count);
     $('job-description').className = reviewProjection?.not_processed_count ? 'run-notice' : 'muted';
     $('job-description').textContent = summary?.description || (state.state === 'review_required' ? state.processing_mode === 'markdown-only'
-      ? `${reviews} Datei${reviews === 1 ? '' : 'en'} warten auf deine Entscheidung. Du kannst erkannte E-Mail-Adressen und Telefonnummern mit dem Originalbild vergleichen oder ohne diese zusätzliche Prüfung fortfahren. Die Werte sind beim Fortfahren nicht als richtig bestätigt; OCR-Lesefehler bleiben möglich. Danach läuft die Markdown-Umwandlung weiter.`
+      ? `${reviews} Datei${reviews === 1 ? ' wartet' : 'en warten'} auf deine Entscheidung. Du kannst erkannte E-Mail-Adressen und Telefonnummern mit dem Originalbild vergleichen oder ohne diese zusätzliche Prüfung fortfahren. Die Werte sind beim Fortfahren nicht als richtig bestätigt; OCR-Lesefehler bleiben möglich. Danach läuft die Markdown-Umwandlung weiter.`
       : `${reviews} Datei${reviews === 1 ? ' benötigt' : 'en benötigen'} eine lokale Entscheidung. Jetzt prüfen oder später fortsetzen.`
       : working ? state.pause_requested ? 'Pause angefordert. Die aktuelle Datei einschließlich Bereitstellung und Zuordnung wird fertiggestellt; danach beginnt keine weitere Datei.' : `${done} von ${total} Dateien abgeschlossen. Bitte warten; die Verarbeitung bleibt lokal.`
       : state.state === 'results_available' ? `${count(state.result_count)} ${rawResults ? 'Markdown-Ergebnisse (nicht anonymisiert)' : anonymousResults ? 'technisch geprüfte anonymisierte Ergebnisse' : 'Ergebnisse mit unbestätigtem Verarbeitungszweck'} verfügbar.${failed && reviewProjection?.not_processed_count !== failed ? ` ${failed} Datei${failed === 1 ? '' : 'en'} mit Problemen.` : ''}`
