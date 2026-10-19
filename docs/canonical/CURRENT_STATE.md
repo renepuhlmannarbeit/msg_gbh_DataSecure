@@ -30,6 +30,16 @@ falschen Inhaltszählorakels im Unix-Test. Testfixes implementiert/gegengelesen,
 Frischer gemeinsamer Commit und vollständige Windows-/Mac-Endbelege folgen.
 Alte rote Nachweise und der fremde Edgeprozess bleiben unangetastet.
 
+Nachfolgend Source03/66f20543: Native und fünf Windows-Paketgates grün,
+Headless durch Nutzerneustart ohne FINAL unterbrochen. Neuer ARM-Snapshot-
+Lesefehler im echten Mac-Consumer; historisches IO-Timing nicht bewiesen.
+Enger read-only Reload für zwei weitere atomare Publikationsfenster implementiert,
+26 Bound-/22 Snapshotgegenfälle grün. Standardordnerhypothese am RC164-Code
+bestätigt: /2 wurde ohne native Exportbindung gespeichert; RC165 richtet sie
+beim expliziten Erstexport sicher ein. Zusätzlicher echter Windows-Node/Rust-
+Defaultordnertest ohne Picker bestanden, neue Service-/Storeinstanz geprüft.
+Keine RC165-Veröffentlichung vor neuen gemeinsamen Endgates. Nutzer bedient UI.
+
 ### Neuester verbindlicher Stand – Veröffentlichung 19.10.2026
 
 [RC164-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc164)

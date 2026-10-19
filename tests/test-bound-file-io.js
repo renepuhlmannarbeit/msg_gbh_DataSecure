@@ -5,7 +5,7 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawnSync } = require('node:child_process');
 const { createSuite } = require('./helpers');
-const { readBoundFile, readBoundFileRecord, hashBoundFile } = require('../plugins/data-secure/server/core/bound-file-io');
+const { readBoundFile, readBoundFileRecord, readBoundFileSnapshot, hashBoundFile } = require('../plugins/data-secure/server/core/bound-file-io');
 const { createBestEffortDiagnosticLog } = require('../plugins/data-secure/server/core/safe-diagnostic-log');
 const { test, done, assert } = createSuite('Held file and best-effort diagnostic boundaries');
 // Product private storage deliberately rejects symlink ancestors. macOS's
@@ -412,6 +412,95 @@ test('directory junctions/symlinks, including higher ancestors with missing desc
   assert.equal(createBestEffortDiagnosticLog({ directory: path.join(alias, 'missing', 'nested'), name: 'sidecar-interactions.jsonl' }).append('event\n'), false);
   assert.equal(fs.existsSync(path.join(directory, 'missing')), false);
 });
+// Delegated real FD/byte reads with a MODELLED POSIX name replacement. Windows
+// refuses a real rename over these open FDs; this seam is not a native Unix
+// acceptance claim. The production Child-publisher probe runs on POSIX too.
+function retiredSnapshotProbe({ phase = 'read', fault, turns = 1, links = 0, strict } = {}) {
+  const f = fixture(), files = [f.file, f.foreign, path.join(f.directory, 'third'), path.join(f.directory, 'fourth')];
+  for (const file of files.slice(2)) fs.writeFileSync(file, path.basename(file), { flag: 'wx' });
+  const held = new Map(), versions = [], counts = new Map();
+  let version = 0, opens = 0, closes = 0, value, error;
+  function retire(index) {
+    if (opens > turns || index !== version) return;
+    if (fault === 'inplace') { fs.appendFileSync(files[index], 'changed'); return; }
+    version++;
+    if (fault === 'changed-content') fs.appendFileSync(files[index], 'changed');
+    if (fault === 'hardlink') fs.linkSync(files[version], path.join(f.directory, `link-${version}`));
+  }
+  const io = { ...fs,
+    lstatSync(file, ...args) {
+      if (file === f.file && version && fault === 'missing') throw Object.assign(Error('model missing'), { code: 'ENOENT' });
+      const stat = fs.lstatSync(file === f.file ? files[version] : file, ...args);
+      if (file === f.directory && version && fault === 'parent') stat.ino++;
+      return stat;
+    },
+    openSync(file, ...args) {
+      if (file !== f.file) return fs.openSync(file, ...args);
+      opens++;
+      if (opens > 1 && fault === 'access') throw Object.assign(Error('model access'), { code: 'EACCES' });
+      const index = version, fd = fs.openSync(files[index], ...args); held.set(fd, index); versions.push(index);
+      if (phase === 'open') retire(index);
+      return fd;
+    },
+    fstatSync(fd, ...args) {
+      const stat = fs.fstatSync(fd, ...args), index = held.get(fd);
+      if (index < version) {
+        const count = (counts.get(fd) || 0) + 1; counts.set(fd, count);
+        stat.nlink = BigInt(links); stat.ctimeNs += BigInt(fault === 'unstable-held' ? count : 1);
+      }
+      return stat;
+    },
+    readSync(fd, ...args) {
+      const count = fs.readSync(fd, ...args);
+      if (held.has(fd) && phase === 'read') retire(held.get(fd));
+      if (fault === 'read') throw Object.assign(Error('model read'), { code: 'EIO' });
+      return count;
+    },
+    closeSync(fd) {
+      fs.closeSync(fd); held.delete(fd); closes++;
+      if (fault === 'close') throw Object.assign(Error('model close'), { code: 'EIO' });
+    }
+  };
+  try {
+    value = strict === 'record' ? readBoundFileRecord(f.file, { io }).bytes : strict === 'hash'
+      ? hashBoundFile(f.file, { io }) : readBoundFileSnapshot(f.file, { io, maximum: 65536, minimum: 1 });
+  } catch (caught) { error = caught; }
+  assert.equal(held.size, 0, 'all real model descriptors closed');
+  return { value, error, opens, closes, versions, expected: fs.readFileSync(files[version]) };
+}
+test('read-only snapshot discards retired descriptors before first fstat and after read (delegated IO model)', () => {
+  for (const phase of ['open', 'read']) for (const links of [0, 1]) {
+    const result = retiredSnapshotProbe({ phase, links });
+    assert.equal(result.error, undefined); assert.deepEqual(result.value, result.expected);
+    assert.equal(result.opens, 2); assert.equal(result.closes, 2); assert.deepEqual(result.versions, [0, 1]);
+  }
+});
+test('retired read-only snapshots share the same three total attempt limit (delegated IO model)', () => {
+  const success = retiredSnapshotProbe({ turns: 2 });
+  assert.equal(success.error, undefined); assert.deepEqual(success.value, success.expected); assert.equal(success.opens, 3);
+  const exhausted = retiredSnapshotProbe({ turns: 3 });
+  assert.equal(exhausted.error?.code, 'BOUND_FILE_CHANGED'); assert.equal(exhausted.value, undefined);
+  assert.equal(exhausted.opens, 3); assert.equal(exhausted.closes, 3);
+});
+test('retired snapshot classification cannot authorize changed content, parent, links or missing target (IO model)', () => {
+  for (const fault of ['inplace', 'changed-content', 'parent', 'hardlink', 'unstable-held', 'missing', 'read']) {
+    const result = retiredSnapshotProbe({ fault });
+    assert.ok(result.error, fault); assert.equal(result.value, undefined, fault); assert.equal(result.opens, 1, fault);
+  }
+});
+test('access and close faults dominate a retired snapshot reload (delegated IO model)', () => {
+  const access = retiredSnapshotProbe({ fault: 'access' });
+  assert.equal(access.error?.code, 'BOUND_FILE_CHANGED'); assert.equal(access.opens, 2); assert.equal(access.closes, 1);
+  const close = retiredSnapshotProbe({ fault: 'close' });
+  assert.equal(close.error?.code, 'BOUND_FILE_CLOSE_FAILED'); assert.equal(close.opens, 1); assert.equal(close.closes, 1);
+});
+test('strict record and hash reads never adopt retired snapshot retry authority (delegated IO model)', () => {
+  for (const strict of ['record', 'hash']) {
+    const result = retiredSnapshotProbe({ strict });
+    assert.equal(result.error?.code, 'BOUND_FILE_CHANGED'); assert.equal(result.value, undefined); assert.equal(result.opens, 1);
+  }
+});
+
 done().finally(() => {
   for (const link of links) { assert.ok(fs.lstatSync(link).isSymbolicLink()); fs.unlinkSync(link); }
   assert.equal(path.dirname(root), temporaryRoot);

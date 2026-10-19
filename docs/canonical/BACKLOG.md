@@ -30,6 +30,17 @@ Mac-Consumer. Danach RC165 Windows lokal und neuer GitHub-Pre-Release für alle
 drei Architekturen ausdrücklich beauftragt. Nutzer-Desktoptests bleiben offen;
 keine Agenten-Appstarts. Details/rote Forensik im Exportvereinfachungsnachweis.
 
+Neuere Fortsetzung: Source03-Gesamtlauf durch Nutzerneustart ohne FINAL beendet;
+Mac-ARM neuer Export-Snapshotfehler. Read-only Reload auf nachgewiesen retired
+Leaf erweitert, strikte Schreib-/Record-/Hashpfade unverändert; gezielt grün,
+frische native POSIX- und Gesamtgates offen. Nutzerhinweis Defaultordner gezielt
+nachgestellt: echte Erstellung/Servicevorbereitung/Node-Rust-Erstexport ohne
+Picker, /2->/4 und neue Service-/Storeinstanz unter Windows bestanden.
+Unabhängige finale Quellengegenreviews für Reload und Defaultsequenz abgeschlossen.
+Aktuell offen: neuer gemeinsamer Commit,
+frische 280+10/Windows-Native/Paketgates, beide Macs, lokale Übergabe und RC165-
+Pre-Release. Windows-/Mac-Desktopabnahme bleibt Nutzeraufgabe, kein Zeitauftrag.
+
 Auslöser: reale RC164-Mac26.2-ARM64-Protokolle belegen fehlende Exporteinrichtung
 vor erfolgreicher Ordnerwahl und anschließendem Drei-Dateien-Export samt ACK.
 Drei Read-Busy-Antworten sind Konkurrenzzustände, kein belegter Coreabsturz.

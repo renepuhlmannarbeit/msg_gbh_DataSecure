@@ -17,10 +17,11 @@ delete process.env.EU_PRIVACY_RESULT_ROOT;
 const resultConfig = require('../plugins/data-secure/server/gateway/result-folder-config');
 const child = spawn('cargo', ['test', '--locked', 'native_export_broker::tests::pipe_helper', '--', '--ignored', '--exact', '--nocapture', '--test-threads=1'],
   { cwd: path.resolve(__dirname, '../apps/datasecure-standalone/tauri-contract'), stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
-let stderr = '', outer, binding, seq = 0, nativeSession, loseNextPublish = false, poisonedBody = false, configuredAdmissions = 0;
-const nativeCommands = [];
+let stderr = '', outer, binding, seq = 0, nativeSession, loseNextPublish = false, poisonedBody = false, configuredAdmissions = 0, preparationService;
+const nativeCommands = [], nativeActions = [];
 child.stderr.on('data', bytes => { stderr = `${stderr}${bytes}`.slice(-8192); });
 const channel = new NativeExportChannel({ write: frame => {
+  if (frame.action) nativeActions.push(frame.action);
   if (frame.command) nativeCommands.push(frame.command);
   if (poisonedBody && frame.command === 'write_body') {
     frame.body.hex = frame.body.hex.replace(/^../u, '00'); poisonedBody = false;
@@ -46,14 +47,16 @@ function fixture(mode, index, extraText = '', raw = null, native = true) {
   const item = { id: documentId, name: 'nested/Quelle.pdf', sha256: sha(raw ?? 'synthetic source'), status: 'released' };
   const text = actual?.text ?? (mode === 'markdown-only' ? '# Quelle\nAnna Beispiel: 42 Projekte.\n' : '# Quelle\n[PERSON_001]: 42 Projekte.\n') + extraText;
   const nodeRoot = path.join(root, 'node-results'); if (!native && !fs.existsSync(nodeRoot)) fs.mkdirSync(nodeRoot);
-  const store = createDocumentReviewStore({ dataRoot: data, outputRoot: () => packages,
+  const storeOptions = { dataRoot: data, outputRoot: () => packages,
     readMarkdownArtifact(id) {
       const manifest = JSON.parse(fs.readFileSync(path.join(packages, id, 'manifest.json')));
       const markdown = fs.readFileSync(path.join(packages, id, `${id}.md`), 'utf8');
       require('../plugins/data-secure/server/standalone/markdown-artifact').validateMarkdownArtifact(manifest, markdown); return { manifest, markdown };
     },
     controlOwnerPid: process.pid, ...(native ? { nativeBinding: () => binding,
-      prepareNativeBinding: (batchId, operationId) => resultConfig.prepareConfiguredNativeExportBinding(async snapshot => {
+      prepareNativeBinding: (batchId, operationId) => (preparationService
+        ? preparationService.prepareConfiguredExportRoot.bind(preparationService)
+        : resultConfig.prepareConfiguredNativeExportBinding)(async snapshot => {
         configuredAdmissions++;
         const prepared = await nativeSession.send('prepare_configured_export_root', { ...snapshot, batch_id: batchId, operation_id: operationId });
         binding = prepared;
@@ -62,7 +65,8 @@ function fixture(mode, index, extraText = '', raw = null, native = true) {
       const status = await nativeSession.send('export_documents', { operation, command, ...(body ? { body } : {}) });
       if (loseNextPublish && command === 'publish') { loseNextPublish = false; throw Object.assign(Error('lost receipt'), { code: 'STANDALONE_IPC_TIMEOUT' }); }
       return status;
-    } } : { resultRoot: () => nodeRoot }) });
+    } } : { resultRoot: () => nodeRoot }) };
+  const store = createDocumentReviewStore(storeOptions);
   const packageId = `${mode === 'markdown-only' ? 'dm' : 'ds'}_${documentId}`, packageDir = path.join(packages, packageId); fs.mkdirSync(packageDir);
   store.capture({ token: batchId, product_channel: 'standalone', standalone_document_review: true, processing_mode: mode, items: [item] }, item,
     { package_id: packageId, original_text: raw ?? 'synthetic source', markdown: text,
@@ -81,7 +85,7 @@ function fixture(mode, index, extraText = '', raw = null, native = true) {
   const decide = action => { const r = row(); return store.decide(batchId, documentId, { action, operation_id: crypto.randomBytes(16).toString('hex'),
     revision: r.revision, output_sha256: r.output_sha256, ranges: [] }); };
   decide('approve'); const r = row(), selection = [{ document_id: documentId, revision: r.revision, output_sha256: r.output_sha256 }];
-  return { store, batchId, documentId, text, selection, decide };
+  return { store, reload: () => createDocumentReviewStore(storeOptions), batchId, documentId, text, selection, decide };
 }
 async function exportCall(f, operationId, acknowledge = false) {
   // Mirror serde_json's lexicographic map order, not JS fixture insertion order.
@@ -90,11 +94,57 @@ async function exportCall(f, operationId, acknowledge = false) {
   return f.store.exportApproved(f.batchId, operationId, selection, acknowledge);
 }
 async function run() {
+  let i = 0;
+  // First installation: no picker and no pre-existing destination. Execute the
+  // actual application method with real FS/config dependencies, then the real
+  // native /2 admission and export pipe before any native folder selection.
+  const { StandaloneApplicationService, defaultResultRoot } = require('../plugins/data-secure/server/standalone/application-service');
+  const previousDocuments = process.env.DATASECURE_STANDALONE_DOCUMENTS_DIR;
+  process.env.DATASECURE_STANDALONE_DOCUMENTS_DIR = path.join(root, 'documents');
+  try {
+    const serviceOptions = { home: path.join(root, 'synthetic-home'), dependencies: {
+      fs, readConfiguredResultRootStatus: resultConfig.readConfiguredResultRootStatus,
+      resultOutputDirectory: resultConfig.resultOutputDirectory,
+      saveConfiguredResultRoot: resultConfig.saveConfiguredResultRoot,
+      lightweightStatus: () => ({ local_intake_pending: false, batch_processing_active: false }),
+      prepareConfiguredNativeExportBinding: resultConfig.prepareConfiguredNativeExportBinding
+    } };
+    const automatic = new StandaloneApplicationService(serviceOptions);
+    preparationService = automatic;
+    const defaultRoot = defaultResultRoot({ home: serviceOptions.home });
+    assert.equal(fs.existsSync(defaultRoot), false);
+    assert.equal(automatic.resultRootStatus().status, 'unconfigured');
+    assert.equal(automatic.ensureResultRoot(), defaultRoot);
+    const savedDefault = fs.readFileSync(resultConfig.configPath());
+    const initial = JSON.parse(savedDefault);
+    assert.equal(initial.schema, 'datasecure-result-root/2'); assert.equal(initial.root, defaultRoot);
+    assert.equal(Object.hasOwn(initial, 'native_export'), false);
+    const f = fixture('markdown-and-anonymize', ++i), op = crypto.randomBytes(16).toString('hex');
+    assert.equal((await exportCall(f, op)).exported_count, 1);
+    const configured = JSON.parse(fs.readFileSync(resultConfig.configPath()));
+    assert.equal(configured.schema, 'datasecure-result-root/4');
+    assert.equal(configured.root, defaultRoot); assert.deepEqual(configured.identity, initial.identity);
+    assert.deepEqual(configured.native_export, binding); assert.equal(configuredAdmissions, 1);
+    assert.equal(nativeActions.includes('configure_export_root'), false, 'no native folder picker was used');
+    assert.equal(fs.readFileSync(path.join(defaultRoot, 'DataSecure-KI-Export', `Export-${op}`, 'Dokument_01.md'), 'utf8'), f.text);
+    // A new application object reads the saved root, without making a picker or
+    // provisioning another binding. The same export receives only its ACK.
+    const restarted = new StandaloneApplicationService(serviceOptions);
+    preparationService = restarted; binding = null; f.store = f.reload();
+    assert.equal(restarted.ensureResultRoot(), defaultRoot);
+    const persisted = fs.readFileSync(resultConfig.configPath());
+    assert.equal((await exportCall(f, op, true)).exported_count, 1);
+    assert.equal(configuredAdmissions, 1); assert.deepEqual(fs.readFileSync(resultConfig.configPath()), persisted);
+    console.log('ok first installation: actual ensureResultRoot creates default, saves /2, first native export upgrades once to /4 without picker; saved root and ACK survive new service');
+  } finally {
+    preparationService = null;
+    if (previousDocuments === undefined) delete process.env.DATASECURE_STANDALONE_DOCUMENTS_DIR;
+    else process.env.DATASECURE_STANDALONE_DOCUMENTS_DIR = previousDocuments;
+  }
   context('configure_results', { source_paths: [results], native_export_binding: true });
   binding = await channel.configureExportRoot(outer);
   assert.equal(binding.root, results); assert.match(binding.private_name, /^native-export-[a-f0-9]{32}$/u);
   console.log('ok native picker bootstrap creates and returns held parent bindings');
-  let i = 0;
   const pickerBinding = binding;
   for (const mode of ['markdown-only', 'markdown-and-anonymize']) {
     const admissionsBefore = configuredAdmissions;

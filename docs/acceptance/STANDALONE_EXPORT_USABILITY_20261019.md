@@ -325,3 +325,52 @@ unveränderten Settingsdateien und fehlende Nonce in Original-/Ersatznamespace.
 Unabhängig kausal gegengelesen; keine Produktions-, ACL- oder Sealingänderung.
 Intel wurde nach dem bestätigten ARM-Testfehler gezielt abgebrochen, nicht als
 grün gewertet. Beide Consumer benötigen neue Läufe am neuen gemeinsamen Commit.
+
+### Fortsetzung nach Nutzerneustart: Standardordner und weiterer Snapshotbereich
+
+Source03/`66f205436361e4800537249be84b7e19340647b2`, Fingerprint
+`5f15ade319953ac8a4baaa00a3bc1f92d9496170c2b513bcb01a0bce1f5207f6`/332:
+Windows Native/232Rust/Clippy/Release und fünf Paketgates bestanden mit
+unveränderten Inputs. Headless wurde beim Nutzerneustart unterbrochen, zuletzt
+Datei156/280 gestartet; keine HEADLESS-FINAL und kein Gesamt-PASS. Nicht als
+Produktfehler oder grüne Endabnahme umdeuten. Belege und Zwischen-ZIP erhalten.
+
+ARM-Consumer39246795170/118040612738 scheiterte vor Rust beim tatsächlichen
+`get_run_failures` im Export-Snapshotleser: `BOUND_FILE_CHANGED` wurde zu
+`STANDALONE_HISTORY_UNAVAILABLE`. Exakte historische IO-Phase bleibt unbewiesen;
+der Observer zeigte nicht die internen Core-FS-Prüfpunkte. Intel gezielt
+abgebrochen, keine Freigabe. Primärlog/Quellengegenreviews erhalten unter
+`dist/rc165-source03-failure-review-20261019`.
+
+Unabhängiges Quellengegenlesen identifizierte zwei unvollständig behandelte
+legitime Zeitfenster: atomare Publikation nach `open` vor erstem `fstat`, sowie
+nach gehaltenem Read vor Postcheck. Der enge Reload verwirft alte Bytes; kein
+Erfolg mit einem unlinked FD. Nur dasselbe ursprüngliche gehaltene Objekt mit
+unveränderter Größe/mtime, nlink0/1 und anschließend stabilen vollständigen
+Statfakten sowie ein anderes stabiles reguläres nlink1-Namensobjekt erzeugt
+interne per-call Wiederholungsbefugnis. Ursprüngliche Parentbindung und maximal
+drei Gesamtversuche bleiben; neue Bytes brauchen vollständigen Read und
+unveränderte Schema-/Owner-/Purpose-/Ankerprüfung. Access-/Read-/Close-/Parent-
+und normale Inplacefehler bleiben hart. Strikte Record-/Hashpfade unverändert.
+26 Bound-I/O-Fälle einschließlich fünf ausdrücklich modellierter FD-Gegenfälle
+und 22 unveränderte/erweiterte Snapshotnegative bestanden unter Windows.
+Der echte Produktionspublisher läuft mit drei Phasen auf POSIX; Windows weist
+die beiden held-FD-Phasen ehrlich als PLATFORM_NOT_RUN aus (Sharingregeln).
+Das ist kein Ersatz für den neuen nativen Mac-Lauf und kein nachträglicher
+Beweis des alten CI-Timings.
+
+Die neue Nutzerhypothese zum Defaultordner ist am RC164-Quellcode bestätigt:
+`ensureResultRoot()` legt Documents/SecureDataMsg an und speichert /2 mit
+Node-Identität, aber ohne `native_export`. Der native RC164-Erstexport benötigt
+/4; manuelle Ordnerwahl provisioniert sie. Der Pfad war also nicht einfach
+vergessen, sondern die Exporteinrichtung fehlte. Die konkrete alte Einstellung
+des Kollegen bleibt als individueller Beweis nicht vorhanden. Kein spezifisches
+Apple-Zertifikatsproblem; der Anwendungszustand betrifft Windows und Mac.
+
+Zusätzlicher echter Node/Rust-Test bestanden: Produktionsmethode erzeugt zuvor
+fehlenden Default, speichert /2, geht beim expliziten Erstexport über die reale
+Servicevorbereitung und den privaten nativen Kanal zu /4 über, ohne Picker.
+Identität/Ort und exakte Exportbytes geprüft; neue Service-/Storeinstanz bei
+zurückgesetzter flüchtiger Bindung liest denselben Ort, ACK erzeugt keine zweite
+Bindung/Kopie. Dies ist ein nativer Windows-Pipe-Nachweis, kein Tauri-GUI- oder
+echter Prozessneustart-/Mac-TCC-Nachweis. Neuer gemeinsamer Endlauf erforderlich.

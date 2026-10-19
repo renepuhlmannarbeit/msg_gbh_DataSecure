@@ -52,6 +52,23 @@ function replacementAfterOpen(absolute, directory, fd, before, opened, io, optio
   assertDirectory(directory); options.validateParents?.();
   return true;
 }
+// A reload never returns bytes from a retired descriptor, whether publication
+// happened before its first fstat or after its read. The next attempt must
+// perform a complete fresh read under the original directory binding.
+function retiredSnapshotReplacement(absolute, directory, fd, opened, after, io, options) {
+  const original = fileIdentity(opened, true), current = fileIdentity(after, true);
+  if (!after.isFile() || after.isSymbolicLink() || ![0, 1].includes(Number(after.nlink)) ||
+      !sameObject(after, objectIdentity(opened)) || current.size !== original.size || current.mtime !== original.mtime) return false;
+  assertDirectory(directory); options.validateParents?.();
+  const named = io.lstatSync(absolute, { bigint: true });
+  if (sameObject(named, objectIdentity(opened)) ||
+      !plainSnapshotLeaf(named, options.minimum ?? 0, options.maximum ?? 256 * 1024 * 1024)) return false;
+  const replacement = fileIdentity(named, true);
+  if (!sameFile(io.fstatSync(fd, { bigint: true }), current) ||
+      !sameFile(io.lstatSync(absolute, { bigint: true }), replacement)) return false;
+  assertDirectory(directory); options.validateParents?.();
+  return true;
+}
 function realpath(io, target) { return io.realpathSync(target); }
 function systemAlias(probe, io, platform) {
   // macOS's OS-owned aliases are not user-created directory redirects.
@@ -142,15 +159,20 @@ function consumeBoundFileRecord(target, options, consume, snapshotOwner = null) 
       (io.constants.O_NONBLOCK || 0));
     const opened = io.fstatSync(fd, { bigint: true });
     if (!sameFile(opened, identity)) {
-      if (snapshotOwner && replacementAfterOpen(absolute, directory, fd, before, opened, io, options))
+      if (snapshotOwner && (replacementAfterOpen(absolute, directory, fd, before, opened, io, options) ||
+          retiredSnapshotReplacement(absolute, directory, fd, before, opened, io, options)))
         throw snapshotReplacement(snapshotOwner);
       throw failure('BOUND_FILE_CHANGED');
     }
     assertDirectory(directory);
     options.validateParents?.();
     const value = consume(fd, size, io, maximum);
-    if (!sameFile(io.fstatSync(fd, { bigint: true }), identity) ||
-        !sameFile(io.lstatSync(absolute, { bigint: true }), identity)) throw failure('BOUND_FILE_CHANGED');
+    const after = io.fstatSync(fd, { bigint: true });
+    if (!sameFile(after, identity) || !sameFile(io.lstatSync(absolute, { bigint: true }), identity)) {
+      if (snapshotOwner && retiredSnapshotReplacement(absolute, directory, fd, opened, after, io, options))
+        throw snapshotReplacement(snapshotOwner);
+      throw failure('BOUND_FILE_CHANGED');
+    }
     assertDirectory(directory);
     options.validateParents?.();
     // A capability, not serializable user metadata. Callers may use it to
