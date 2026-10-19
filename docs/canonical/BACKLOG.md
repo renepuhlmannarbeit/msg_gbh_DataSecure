@@ -1,11 +1,11 @@
 # Aktives Entwicklungsbacklog
 
-Arbeitsversion: **3.2.0-rc167**, gemeinsame Windows-/macOS-Builds und neuer
-Test-Pre-Release beauftragt; noch nicht veröffentlicht. RC166 bleibt unverändert.
+Arbeitsversion: **3.2.0-rc167**, gemeinsamer Windows-/macOS-Test-Pre-Release
+veröffentlicht; menschliche Abnahme offen. RC166 bleibt unverändert.
 
 ## Aktiver Nutzerbefund – vertrauliche Zuordnungen im Ergebnisordner
 
-**RESULT-COMPANIONS-01 – Quellfix umgesetzt, noch kein neues Paket:** Der reale
+**RESULT-COMPANIONS-01 – umgesetzt, technisch geprüft, RC167 veröffentlicht:** Der reale
 Windowslauf `d7047e01…` besitzt beide internen Zuordnungen, aber keinen sichtbaren
 Unterordner. Nutzeranforderung: Im geöffneten anonymisierten Ergebnisstand müssen
 `Vertraulich/Dateizuordnung.csv` und
@@ -20,12 +20,20 @@ Quell-/Native-Gegenprüfungen bestanden:16Companion-/65Generationenfälle,
 beide Betriebsarten. Unabhängige Erstwriter-/Store-/Rustreviews, engste neue
 Native-ACL-/Nullgrößen-/Async-Befunde ebenfalls behoben und revalidiert.
 [Nachweise und Grenzen](../acceptance/RC166_RESULT_COMPANIONS_FIX_20261019.md).
-Vollständige neue Regression/Plattformbuilds/Paketnachweise offen; alte
-RC166-Pakete und Belege bleiben unverändert. Desktoptests übernimmt der Nutzer.
-RC167 wurde am20.10.2026 ausdrücklich samt beiden Mac-Runnern und
-GitHub-Test-Pre-Release freigegeben; keine Main-Integration oder Automation.
+Vollständige neue Source04-Gates bestanden:284/284+10/10, Windows265Rust/
+3ignoriert/Clippy/Release/Paket5/Korpus100; beide Macjobs39335666200 je256Rust/
+3ignoriert/68Generationen-/16Companionfälle samt nativen App-/ZIP-/DMG-Gates.
+App-/Tagcommit `84df81c3c935cca6447ad05686c3f43416aabdb6`, FP
+`71aa639ee12adc28980d27f3ff311e59ea23549148293a2488d215fde9fe5418`/334.
+[RC167-Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc167)
+mit20frisch nachgehashten Assets veröffentlicht; Windows lokal unter
+`Software DataSecure/RC167`. Alte Pakete/Belege unverändert, keine rückwirkende
+Reparatur alter Ergebnisordner. Desktoptests/zehn Fälle übernimmt der Nutzer;
+physische Mac-Zielhostgates offen. Keine bestätigten weiteren Implementierungs-
+blocker aus den begrenzten Endreviews. Keine Main-Integration oder Automation.
+[Abschluss-/Gegenbelege](../acceptance/RC167_SHARED_RELEASE_20261020.md).
 
-## Neuester Abschluss – RC166-Testübergabe
+## Historischer Abschluss – RC166-Testübergabe
 
 UX-DIRECT-RESULTS-01, UX-OCR-FOLDER-01, UX-HISTORY-DETAILS-01,
 UX-HISTORY-COPY-STATUS-01 (im Direktablauf Ergebnisstatus), UX-ANON-CHOICE-01,

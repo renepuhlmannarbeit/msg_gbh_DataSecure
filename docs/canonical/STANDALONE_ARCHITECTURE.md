@@ -2,7 +2,19 @@
 
 Stand: 07.10.2026 · einschließlich DS-104 bis DS-109 · Steuerung über BL-010.9
 
-**RC166-Nachtrag 19.10.2026:** Der ausdrücklich vereinfachte normale Standalone-
+**RC167-Nachtrag 20.10.2026:** Neue Anonymisierungsstände erweitern den
+geschlossenen Direkt-Ergebnisvertrag versioniert auf `/2`: MD-Dateien plus
+`Vertraulich/Dateizuordnung.csv` und `Vertraulich/Personen-Pseudonym-Zuordnung.txt`.
+Erst- und vollständige Korrekturstände binden beide Pflichtdateien an ihre
+eigenen tatsächlichen Dateinamen, Revisionen und semantischen Identitätsspuren.
+Kein weiterer UI-Klick; Bereitstellung erst nach vollständigem technischen
+Commit. Read-only-Öffner reparieren nichts. Alte `/1`-Ordner bleiben unverändert;
+ein ausdrücklicher späterer Korrekturstand kann separat `/2` erzeugen.
+Vertraulich enthält Originalangaben und ist nicht zur Weitergabe bestimmt.
+[Geschlossener Vertrag und native Gegenbelege](../acceptance/RC166_RESULT_COMPANIONS_FIX_20261019.md),
+[RC167-Pakete/Abnahmegrenzen](../acceptance/RC167_SHARED_RELEASE_20261020.md).
+
+**Historischer RC166-Nachtrag 19.10.2026:** Der ausdrücklich vereinfachte normale Standalone-
 Abschluss benötigt nach notwendigen OCR-/Fundstellenprüfungen keine zweite
 Dokumentauswahl/Freigabe/Exportbestätigung mehr. Direkte Erstbereitstellung und
 optionale vollständige immutable Korrekturgenerationen bleiben getrennte

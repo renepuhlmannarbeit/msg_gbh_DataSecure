@@ -1,8 +1,67 @@
 # Release- und Distributionsvertrag
 
-Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc167 · Veröffentlichungsnachtrag: 19.10.2026
+Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc167 · Veröffentlichungsnachtrag: 20.10.2026
 
-Der aktuelle Quellstand ist RC167-Entwicklungsstand und noch kein neu gebundener Paketkandidat. Menschliche N3/N4-Produktionsfreigaben bleiben offen.
+Der aktuelle Quellstand ist RC167; der gemeinsame Windows-/Mac-Test-Pre-Release ist veröffentlicht. Nachfolgende reine Dokumentation ändert die Paket-/Tagbindung nicht. Menschliche N3/N4-Produktionsfreigaben bleiben offen.
+
+### RC167 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
+
+Quellcommit `84df81c3c935cca6447ad05686c3f43416aabdb6` bindet den
+[RC167-Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc167).
+Build `84df81c3`, Produktfingerprint
+`71aa639ee12adc28980d27f3ff311e59ea23549148293a2488d215fde9fe5418`/334.
+Windows x64 und macOS ARM64/Intel stammen aus demselben Appstand. RC166 und
+alle älteren Pakete, Archive, Primärbelege und Nutzerläufe bleiben unverändert.
+
+Neue Anonymisierungsstände enthalten jetzt beide Pflichtdateien physisch im
+Ergebnisordner: `Vertraulich/Dateizuordnung.csv` und
+`Vertraulich/Personen-Pseudonym-Zuordnung.txt`. Das gilt für Erstbereitstellung
+und jeden ausdrücklich gespeicherten vollständigen Korrekturstand, gebunden an
+dessen tatsächliche Namen, Revisionen und Inhalte. Keine zusätzliche Auswahl,
+Dokumentfreigabe oder Exportbestätigung. **Vertraulich enthält Originalangaben:
+nicht weitergeben oder hochladen.** Nur gewünschte anonymisierte MD weitergeben.
+Alte `/1`-Ordner werden weder migriert noch beim Lesen repariert; technische
+Objekt-/Eltern-/Hash-/Inventar-/Budget-/NativeGuard-Prüfungen bleiben erhalten.
+Reine Markdown-Konvertierung erzeugt keine Anonymisierungszuordnungen.
+
+Source04 bestand284/284 Headless-Dateien plus10/10 Zusatzgates, Windows Prepare/
+Clippy/265Rusttests(3ignoriert)/Release und5Paketgates mit100/100Dateien,0Fehlern
+und unveränderten Originalen. Alle334Produkt-/570Test-/Scriptinputs unverändert.
+Beide nativen [Mac-Consumer39335666200](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/39335666200)
+bestanden: je68Generationen-/16Companion-/256Rustfälle(3ignoriert), echte
+Node→Rust-Erst-/Korrekturbereitstellung, LostReceipt, Nichtreparatur, Core/Worker/
+Guard/ACL/App/Office/PDF/OCR/ZIP/DMG. Beide tatsächlichen Mac-ZIPs je1153Einträge,
+1151Manifestrecords/1152Checksummen,231gemeinsame Runtimequellen bytegebunden.
+Unabhängige Windows-/ARM-/Intel-Artefakt- und Übergabegegenreviews ohne bestätigten
+Übergabeblocker. Quellenmodell, native CI und menschliche Abnahme bleiben getrennt.
+
+Release417844567 veröffentlicht19.10.2026 23:17:37UTC, Pre-Release=true,
+Draft=false. Alle20Assets vor und nach Veröffentlichung frisch heruntergeladen
+und gehasht; dieselben AssetIDs und exakter Tagcommit erneut bestätigt. Windows
+zusätzlich create-only unter `Software DataSecure/RC167` mit aktuellem Testplan,
+Prüfsummen und drei unveränderten synthetischen Testdatenarchiven geliefert.
+Nachweise: `dist/rc167-result-companions-source04-20261020` sowie
+`dist/rc167-source04-arm-review-20261020`/Intel. Genaues
+[Fix-/Gegenreviewprotokoll](acceptance/RC167_SHARED_RELEASE_20261020.md) erhält
+auch die roten/abgebrochenen Source01–03-Belege; keine alten PASS umetikettiert.
+
+| Archiv | Bytes | SHA-256 |
+|---|---:|---|
+| Windows x64 ZIP | 112382263 | `23ec57cc1428824b7d1fcdde53b55f4e0e04a02a8f1ab81799b7c906f7dbcbf6` |
+| macOS Apple Silicon ZIP | 117734094 | `a36b42fb83f6255ac7bbe00832f2b18826fe6e10f0cc02353eb462d460a9d975` |
+| macOS Apple Silicon DMG | 131488906 | `8406c3585cc64bcd5780ec8d73294c85c24e75fa803c5e200ab8f0fede00736a` |
+| macOS Intel ZIP | 120988709 | `a841a3b2195b634e6b4ca52432fc30ffe63548b099fbcfdc751517493bc56ab6` |
+| macOS Intel DMG | 137161467 | `1b966f8110a370bb8655e664d09da54d14cb90d4811eeecb280f40008b4dabbc` |
+
+Alle10menschlichen Desktopfälle bleiben USER_PENDING und beim Nutzer/Kollegen.
+Physischer M2/Finder/TCC/Gatekeeper/Enterprise/VoiceOver sowie macOS13.5/26 offen;
+reguläres26Profil übersprungen, adversariale ACL-Matrix partiell. Bei fehlender
+Writerquieszenz bewahrt der Paket-IPC-Test seine Extraktion; keine erfundene
+Prozessbaum-/GUI-Abnahme. Eigene App/Core ad-hoc versiegelt, keine Developer-ID,
+Notarisierung/Apple-Einreichung oder Abschaltung von OS-Schutzfunktionen.
+Offizieller Converter bleibt separate hashgebundene Rolle mit seinen offen
+ausgewiesenen Upstream-Entitlements. Branch/Tag gepusht; keine Main-Integration
+oder Automation beauftragt. Keine Produktionsfreigabe/Anonymitätsgarantie.
 
 ### RC166 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
 

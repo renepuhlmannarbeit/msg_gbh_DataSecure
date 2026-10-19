@@ -2,7 +2,20 @@
 
 Stand: 06.10.2026 · einschließlich DS-104 bis DS-109
 
-**Entwicklungsnachtrag 19.10.2026:** Die normale Exportbestätigung darf die
+**RC167-Nachtrag 20.10.2026:** Neue anonymisierte Ergebnisstände enthalten
+verbindlich zwei vertrauliche Dateien unter `Vertraulich`. Der versionierte `/2`-
+Vertrag bindet feste Rollen/Dateipfade, nicht frei übergebene Sidecar-Schreibpfade.
+CSV≤4MiB, Identitätstext≤16MiB und gemeinsames MD-/Begleitdateibudget≤500MiB;
+die200Dokumentgrenze und Frame-/Journalgrenzen bleiben unverändert. Native
+Staging-/Eltern-/Objekt-/Hash-/Inventar-/Guardprüfungen gelten auch für diese
+Dateien. Neu erstelltes privates Windows-Staging erhält seine geschützte DACL
+bei exklusiver Erstellung; vorhandene ACLs und Nutzerordner werden nicht repariert.
+Kein Lesen erzeugt oder ergänzt fehlende Dateien; alte `/1`-Ordner bleiben
+unverändert. Beide Originalzuordnungen ausdrücklich nicht weitergeben/hochladen.
+Keine neue Cowork-Schreibbefugnis durch das inerte gemeinsame Rollenmodul.
+[Fix-/Sicherheitsgegenbelege](../acceptance/RC166_RESULT_COMPANIONS_FIX_20261019.md).
+
+**Historischer RC165-Entwicklungsnachtrag 19.10.2026:** Die normale Exportbestätigung darf die
 interne Dokumentfreigabe einschließen, ohne technische Prüfungen zu entfernen.
 Eine Vorschau erteilt keine Freigabe. Verlorene, partielle oder veränderte
 Freigabeantworten starten keine Kopie. Der neue interne Callback zur Übernahme

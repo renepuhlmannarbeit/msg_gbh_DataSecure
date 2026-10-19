@@ -1,10 +1,9 @@
 # Aktueller Iststand
 
-Arbeitsversion: **3.2.0-rc167**, gemeinsamer Windows-/Mac-Entwicklungsstand;
-Builds und neuer Test-Pre-Release ausdrücklich beauftragt, noch nicht veröffentlicht.
+Arbeitsversion: **3.2.0-rc167**, gemeinsamer Windows-/Mac-Test-Pre-Release veröffentlicht.
 RC166 und frühere Pakete bleiben unverändert erhalten.
 
-### Aktive Änderung nach Nutzerabnahme – RESULT-COMPANIONS-01
+### Neuester verbindlicher Abschluss – RC167 / RESULT-COMPANIONS-01
 
 Beide Zuordnungen des gemeldeten Windowslaufs sind intern vorhanden, fehlen
 aber im geöffneten Ergebnisordner. Der Nutzer verlangt jetzt ausdrücklich
@@ -12,17 +11,30 @@ zwei Dateien unter `Vertraulich` im jeweiligen Ergebnisstand. Gemeinsamer
 Windows-/Mac-Quellfix umgesetzt und unabhängig gegengelesen; gezielte16Companion-,
 65Generationen-/65Async-Prüfungen,265Rust/3ignoriert/Clippy und echter
 Node→Rust-Pfad beider Betriebsarten bestanden. Neue native ACL-/Nullgrößen-
-und Async-Admission-Deltas kausal revalidiert. Keine neue Paket-/Release-/
-Mac-Zielhost- oder Desktopabnahme behauptet; vollständige neue Endgates offen.
-RC167-Versionen sind angeglichen; vollständige neue Regression und native
-Windows-/beideMac-Build-/Paketgates folgen aus demselben eingefrorenen Appcommit.
+und Async-Admission-Deltas kausal revalidiert. Neue Pakete veröffentlicht aus
+App-/Tagcommit `84df81c3c935cca6447ad05686c3f43416aabdb6`, Build `84df81c3`,
+Fingerprint `71aa639ee12adc28980d27f3ff311e59ea23549148293a2488d215fde9fe5418`/334.
+Source04:284/284+10/10, Windows265Rust/3ignoriert/Clippy/Release/Paket5,
+100/100Dateien/0Fehler, alle570Test-/Scriptinputs unverändert. Beide nativen
+Macjobs39335666200 erfolgreich: je256Rust/3ignoriert,68Generationen-/16Companion-
+Fälle, Node→Rust/Core/Guard/Worker/App/Konverter/ZIP/DMG. Tatsächliche Archive
+und finale Übergabe unabhängig gegengelesen. Release417844567 als
+[RC167](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc167)
+veröffentlicht;20Assets vor/nach Veröffentlichung frisch gehasht, gleicheIDs
+und Tagquelle bestätigt. Windows lokal `Software DataSecure/RC167` mit Testplan,
+offenen zehn Nutzerfällen und drei unveränderten Testdatenbeilagen.
 Desktopabnahme bleibt ausdrücklich beim Nutzer. Keine neue Automation.
 Die frühere Markdown-only-Inventarentscheidung wird für neue Anonymisierungsläufe
 versioniert erweitert, nicht durch ungeprüfte nachträgliche Kopien umgangen.
 Alte `/1`-Ordner bleiben unverändert lesbar. Neue Korrekturgenerationen müssen
 die Zuordnungen an ihre eigenen aktuellen Inhalte und Dateinamen binden.
+Vertraulich enthält Originalangaben: nicht weitergeben oder hochladen. Physische
+Mac-/Finder-/TCC-/M2-/Enterprise-/VoiceOver-/macOS13.5/26-Abnahme offen. Kein
+Developer-ID-/Notarisierungs- oder pauschaler Lauffähigkeitsnachweis. Branch/Tag
+gepusht, keine Main-Integration. [Exakter Abschluss](../acceptance/RC167_SHARED_RELEASE_20261020.md).
+Nachfolgende reine Dokumentation ändert keine App-/Test-/Paket-/Tagbindung.
 
-### Neuester verbindlicher Abschluss – RC166 direkt bereitgestellte Ergebnisse
+### Historischer Abschluss – RC166 direkt bereitgestellte Ergebnisse
 
 [RC166](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc166)
 bindet Windows x64 und macOS ARM64/Intel an App-/Tagcommit

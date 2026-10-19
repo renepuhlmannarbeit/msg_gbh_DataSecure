@@ -1,8 +1,8 @@
 # Vertrauliche Zuordnungen im Ergebnisstand
 
-Status: Quellfix umgesetzt und gezielt gegengeprüft. Der Nutzer hat am 20.10.2026
-RC167 für Windows und beide Macs samt GitHub-Test-Pre-Release freigegeben;
-noch keine neue Testversion gebaut. Desktoptests übernimmt der Nutzer.
+Status: als RC167 für Windows und beide Macs technisch geprüft, gebaut und
+veröffentlicht. [Gemeinsamer Abschluss und exakte Nachweisgrenzen](RC167_SHARED_RELEASE_20261020.md).
+Alte RC166-Pakete und Nutzerordner unverändert; Desktoptests übernimmt der Nutzer.
 
 ## Bestätigter Nutzerbefund
 
@@ -69,8 +69,9 @@ bisherigen Vertrag. Eigene statische Mac-Cores und OS-Schutzfunktionen unveränd
    danach Gesamt-/Paketgates vor einer neuen Übergabe. Native Mac-Ausführung
    und menschliche Desktoptests nicht aus Windows-Quellmodellen ableiten.
 
-RC166-Pakete/Tag/Releasebelege bleiben unverändert; keine neue Version oder
-Veröffentlichung als abgeschlossen ausgeben. Desktoptests übernimmt der Nutzer.
+Zum damaligen Zwischenstand blieb eine neue Veröffentlichung offen; RC166-
+Pakete/Tag/Releasebelege bleiben weiterhin unverändert. Der tatsächliche spätere
+RC167-Abschluss ist oben verlinkt. Desktoptests übernimmt der Nutzer.
 
 ## Ausgeführte gezielte Endprüfungen
 
@@ -139,7 +140,9 @@ nach erster und zweiter Maskierung, nicht bloß korrekte Zuordnungsdateien.
 Danach erneut65/65Generationenfälle und vollständiger echter Node→Rust-Test
 bestanden. Kein Tauri-Desktop- oder nativer Mac-Nachweis daraus.
 
-Offen vor einer neuen Paketübergabe: gemeinsamer neuer Versions-/Commitfreeze,
+Damals offen vor einer neuen Paketübergabe waren gemeinsamer Versions-/Commitfreeze,
 vollständige unveränderte Regression und Windows-/beideMac-Build-/Paketgates.
+Diese späteren Nachweise wurden für RC167 Source04 neu ausgeführt und oben verlinkt;
+die damaligen gezielten Belege werden dadurch nicht rückwirkend umetikettiert.
 Die installierte RC166 enthält den Fix noch nicht. Der bestehende Nutzerlauf
 und sämtliche alten veröffentlichten Pakete bleiben unverändert.

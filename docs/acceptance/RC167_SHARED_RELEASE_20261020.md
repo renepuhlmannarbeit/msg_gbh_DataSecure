@@ -1,7 +1,7 @@
 # RC167 – vertrauliche Zuordnungen im Ergebnisordner
 
-Status: beauftragter gemeinsamer Windows-x64-/macOS-ARM64-/Intel-Teststand;
-noch kein Paket-/Releaseabschluss. RC166 bleibt unverändert. Nutzer bedient
+Status: gemeinsamer Windows-x64-/macOS-ARM64-/Intel-Test-Pre-Release veröffentlicht.
+Technische Endgates bestanden, menschliche Abnahme offen. RC166 bleibt unverändert. Nutzer bedient
 den Desktop selbst; keine Desktopautomation und keine geplante Aufgabe.
 
 ## Umfang und Sollvertrag
@@ -149,3 +149,58 @@ Mac `084a568727263fd4e237bcd839847a8921e2032f4fcaf4c61af0381bd694f04f`;
 Dokumentvertrag `0fc6dac7e1f53cbb7565d49a64af8f393539fccc27c5d6552052b91ae9daeb6a`.
 Aktueller Dokumentvertrag30/30 bestanden. Source04 muss neue unveränderte
 Endgates nachweisen; keine Übernahme der historischen Teil-PASS aus Source03.
+
+## Source04 – tatsächlicher gemeinsamer Abschluss
+
+App-/Tagcommit `84df81c3c935cca6447ad05686c3f43416aabdb6`, FP
+`71aa639ee12adc28980d27f3ff311e59ea23549148293a2488d215fde9fe5418`/334.
+570Test-/Scriptinputs mit Manifest
+`6b2b3e98cc5147093e7c5b0639bbb9a5cbf0952ae61c0a53447477a23ee876ba`.
+Alle303geschlossenen Aufrufe und tatsächliche Logenden unabhängig gegengelesen:
+284/284+10/10 Headless, Prepare/Clippy/265Rust(3ignoriert)/Release,5Paketgates
+und100/100Dateienkorpus ohne Fehler; sämtliche Inputs/Originale unverändert.
+Frischer Quellsnapshot erst danach:928Dateien,8351080Bytes,
+SHA256 `0f80b94772984feb026b8ab0aad2228681da00c18cbc4776277ad2cecdcfb69a`.
+
+Macrun39335666200 erfolgreich, ARM118344466358/Intel118344466413. Je68Generationen-,
+16Companion-,15Initial-Anker- und256Rustfälle(3ignoriert) bestanden; echte
+Node→Rust-Erst-/Korrekturbereitstellung/LostReceipt und Nichtreparatur, Default/5→/6
+ohne Picker, Guard/Worker/ACL/App/Office/PDF/OCR/ZIP/DMG. Beide tatsächlichen
+Transport-/Nutzarchive separat heruntergeladen,1153ZIPeinträge/1151Manifestrecords/
+1152Checksummen/231gemeinsame Runtimequellen vollständig bytegebunden geprüft.
+Unabhängige tatsächliche Windows-/ARM-/Intel-Artefaktgegenreviews und finaler
+18lokale-/20Release-Dateien-Übergabegegenreview ohne bestätigten Blocker.
+
+WindowsZIP `23ec57cc1428824b7d1fcdde53b55f4e0e04a02a8f1ab81799b7c906f7dbcbf6`,
+EXE `edde9c3031607b77fdff8c820718103ba93b4ccccef4c94a937a18822504f73d`.
+ARMZIP `a36b42fb83f6255ac7bbe00832f2b18826fe6e10f0cc02353eb462d460a9d975`,
+DMG `8406c3585cc64bcd5780ec8d73294c85c24e75fa803c5e200ab8f0fede00736a`.
+IntelZIP `a841a3b2195b634e6b4ca52432fc30ffe63548b099fbcfdc751517493bc56ab6`,
+DMG `1b966f8110a370bb8655e664d09da54d14cb90d4811eeecb280f40008b4dabbc`.
+Eigenständiger Core unverändert vom freigegebenen Producer; offizieller Converter
+separate Rolle, seine abweichenden Upstream-Entitlements nicht verschwiegen.
+
+Windows create-only unter `Software DataSecure/RC167` geliefert; aktueller
+Testplan, alle zehn Fälle USER_PENDING und unveränderte drei Testdatenbeilagen.
+[Release417844567](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc167)
+veröffentlicht19.10.2026 23:17:37UTC, Pre-Release=true/Draft=false. Alle20Assets
+im Entwurf und veröffentlicht frisch heruntergeladen/gehasht, gleicheAssetIDs,
+Tagquelle und Bytes bestätigt. Belege unter `dist/rc167-result-companions-source04-20261020`
+und `dist/rc167-source04-arm-review-20261020`/Intel. Kein alter FINAL umgeschrieben.
+
+Offen ausschließlich menschliche Abnahme und tatsächliche Zielhostgates:
+M2/Finder/TCC/Gatekeeper/Enterprise/VoiceOver/macOS13.5/26. CI-native App-IPC ist
+keine UI-/Finder-Abnahme, partielles ACL-Orakel keine Vollmatrix. Paket-Smokefixture
+bei unbestätigter Writerquieszenz bewahrt; keine künstliche Prozessbaumquieszenz.
+Historische Fehlursachen nicht rückwirkend durch neue Grüns erklärt. Keine
+Desktopautomation, neue geplante Aufgabe, Developer-ID/Notarisierung oder
+OS-Schutzabschaltung. Branch/Tag gepusht, keine Main-Integration beauftragt.
+Nachfolgende reine Dokumentation ändert die eingefrorenen Bindungen nicht.
+
+Abschließende neun Markdown-only-Deltas unabhängig ohne bestätigten Restbefund
+gegengelesen. Erster nachgelagerter Dokumententest ROT wegen noch RC166 im
+FORMAL_UAT-Einstieg; ausschließlich diesen Kandidatenverweis ergänzt, keine
+Testassertion oder NOT_RUN-Vorlage geändert. Gesamter Dokumententest danach
+bestanden:30Dokument-/3Link-/6UAT-/5Formal-/3Fixturefälle, Versiontruth und
+Canonicalprüfung grün. Produktfingerprint nach diesen Deltas unverändert;
+Releasebody zusätzlich gegen den vorbereiteten tatsächlichen Notiztext geprüft.

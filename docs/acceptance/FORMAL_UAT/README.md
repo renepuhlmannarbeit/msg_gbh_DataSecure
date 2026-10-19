@@ -1,8 +1,23 @@
 # Formale N3/N4-Abnahme mit Windows und macOS
 
-Stand: 19.10.2026 · veröffentlichte Standalone Windows/macOS RC166 · Linux RC159 · Cowork RC151
+Stand: 20.10.2026 · veröffentlichte Standalone Windows/macOS RC167 · Linux RC159 · Cowork RC151
 
 **Aktueller Windows-/Mac-Standalone-Kandidat:** Das
+[RC167-Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc167)
+bindet Windows x64 und beide Mac-Architekturen an den exakten Quellcommit
+`84df81c3c935cca6447ad05686c3f43416aabdb6`. Beide Mac-ZIPs und beide DMGs
+bestanden native Paket-/Startgates, Windows seine Quell-/Native-/Paketgates.
+Neue Anonymisierungsstände enthalten beide Zuordnungen physisch unter
+Vertraulich; diese Originalangaben nicht weitergeben oder hochladen. Keine
+zweite Pflichtfreigabe/Exportauswahl nach den erforderlichen Prüfgruppen.
+Alle zehn Desktopfälle und echte Mac-/M2-/Finder-/TCC-/VoiceOver-Abnahme bleiben
+USER_PENDING. Linux-Standalone und Cowork behalten RC159 beziehungsweise RC151.
+Neue Kampagnen binden ausschließlich die exakten RC167-Pakethashes an diesen
+Produktcommit. Leere Vorlagen, historische Kandidaten und frühere Nutzerläufe
+sind keine abgeschlossene RC167-Evidenz. Reine Dokumentation nach Veröffentlichung
+ändert weder App-/Tagcommit noch vorhandene Nachweise.
+
+**Historischer Windows-/Mac-Standalone-Kandidat:** Das
 [RC166-Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc166)
 bindet Windows x64 und beide Mac-Architekturen an den exakten Quellcommit
 `e04d32cff603597ce3d8c982e94154bb00f534fb`. Beide Mac-ZIPs und beide DMGs
