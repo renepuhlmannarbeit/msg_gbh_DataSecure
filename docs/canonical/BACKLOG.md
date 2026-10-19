@@ -1,6 +1,28 @@
 # Aktives Entwicklungsbacklog
 
-Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Pre-Release in Vorbereitung.
+Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Test-Pre-Release veröffentlicht; Nutzerabnahme offen.
+
+## RC164-Übergabe abgeschlossen, Zielhosttests verbleiben
+
+19.10.2026: [RC164 veröffentlicht](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc164),
+gemeinsamer Appcommit `95f30181fdaf2494b0ff53c4cd2e7b97bf834990`, Produktfingerprint
+`cbd2175dc131e4edf63247a52dea8b9b4b2aae7355daf9388745312fa5f28b2d`/332.
+Final11-Gesamtlauf 279/279+10/10, Windows Native/Clippy/229 Rusttests
+(3 ignoriert)/Release, fünf Paketgates und beide nativen Mac-Consumer grün.
+Unabhängige reale ARM-/Intel-Paket-/Logreviews abgeschlossen. 18 Releaseassets
+remote heruntergeladen/gehasht, Tag/Appcommit und Pre-Release/Nicht-Draft geprüft.
+Windows-ZIP mit Testplan und synthetischen Daten lokal bereitgestellt.
+Kein bestätigter neuer Implementierungsblocker aus diesen begrenzten Endreviews.
+
+Offen: zehn manuelle Windows-Abschlusstests durch den Nutzer und tatsächliche
+Mac-/M2-/Finder-/TCC-/Enterprise-/VoiceOver-/macOS26-Zielhostnachweise. Kein
+erfundener GUI-PASS, keine Behauptung vollständiger Fehlerfreiheit oder
+Produktionsfreigabe. Keine weitere Agenten-Desktopbedienung/Appstarts. Geplanter
+Nachtauftrag auf Nutzerwunsch zum Löschen aufgerufen; App meldet bereits nicht
+vorhanden. Kein neuer Zeitauftrag. Diese Übergabe schließt nicht das gesamte
+historische Produktbacklog. Nachfolgende Nachtstände sind historische Belege,
+keine neue kumulative Fixliste. Nachweise/Prüfsummen: [Releasevertrag](../RELEASE.md).
+Reine Dokumentation nach dem unveränderten veröffentlichten Appcommit.
 
 ## Aktuelle Nacht-Fortsetzung (ersetzt ältere Freigabeangaben)
 

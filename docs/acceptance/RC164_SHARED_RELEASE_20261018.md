@@ -1,5 +1,31 @@
 # RC164 – gemeinsamer Windows-/macOS-Teststand
 
+## Veröffentlicht und zur Nutzerabnahme bereit, 19.10.2026
+
+[RC164-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc164):
+Appcommit `95f30181fdaf2494b0ff53c4cd2e7b97bf834990` für Windows x64,
+macOS ARM64 und Intel; Build `95f30181`, Produktfingerprint
+`cbd2175dc131e4edf63247a52dea8b9b4b2aae7355daf9388745312fa5f28b2d`/332.
+Final11 bestand 279/279 Haupttests, 10/10 Zusatzprüfungen, Windows Native/
+Clippy/229 Rusttests (3 ignoriert)/Release und fünf Paketgates unverändert.
+Beide Mac-Consumer Run39223015403 sind erfolgreich; ihre tatsächlichen Logs,
+ZIP-/DMG- und Quellbindungen wurden unabhängig geprüft. Alle 18 veröffentlichten
+Assets wurden anhand ihrer IDs erneut heruntergeladen und gehasht. Pre-Release-
+Flag, Nicht-Draft-Status und Tag/Appcommit sind bestätigt, keine alte ZIP umbenannt.
+Prüfsummen und Nachweisgrenzen: [Releasevertrag](../RELEASE.md).
+
+Windows liegt zusätzlich mit Testplan und beiden synthetischen Testpaketen
+unter `Software DataSecure/RC164`; USER-TEST-HANDOFF.json bindet echte Bytes.
+Alle zehn manuellen Windows-Fälle bleiben PENDING_USER_CONTROL. Der Nutzer
+bedient selbst, der Kollege testet Mac/M2; keine agentischen Desktopaktionen
+oder neuen Appstarts. M2/Finder/TCC/Enterprise/VoiceOver/macOS26 sind nicht
+durch CI abgenommen. Eigene Mac-Signierung nur ad-hoc, keine Developer ID oder
+Notarisierung, keine globale Schutzabschaltung. Löschung des geplanten
+Nachtauftrags auf Nutzerwunsch aufgerufen; die App meldete ihn bereits als
+nicht vorhanden.
+Nachfolgende Auftragstexte/Freezestände sind historische Belege. Dieser neue
+Dokumentationsnachtrag ändert weder den Release-Tag noch die Paketidentität.
+
 Nutzerauftrag vom 18.10.2026: neuesten implementierten Featurestand als dieselbe
 Version für Windows x64, macOS Apple Silicon und Intel bereitstellen. Die
 frühere ungefähre Nummer139/140 wird nicht rückwärts übernommen: Quellversion

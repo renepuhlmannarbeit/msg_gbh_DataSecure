@@ -1,9 +1,9 @@
-# GBH DataSecure – Standalone Windows/macOS RC162 · Linux RC159 · Cowork RC151
+# GBH DataSecure – Standalone Windows/macOS RC164 · Linux RC159 · Cowork RC151
 
 Quellstand: 3.2.0-rc164
 
-Der [Standalone-Test-Pre-Release RC162 für Windows und macOS](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc162)
-bindet Quellcommit `310925f59d76fddc955288eef3c3b0ef4297c232`.
+Der [Standalone-Test-Pre-Release RC164 für Windows und macOS](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc164)
+bindet Quellcommit `95f30181fdaf2494b0ff53c4cd2e7b97bf834990` (Build `95f30181`).
 Linux bleibt beim [RC159-Paket](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc159)
 aus Quellcommit `7af2a9d0268864a01b954e0175cae9f5a3616fe8`.
 Die neue Oberfläche ist der reguläre Einstieg: **Neue Verarbeitung**, schnelle
@@ -14,12 +14,14 @@ Fundstellenprüfung öffnet sich die Dokumentprüfung desselben Laufs.
 ausdrückliche Schritte; nur aktuelle freigegebene Markdown-Stände werden in
 einen normalen separaten Ordner kopiert. Vertrauliche Zuordnungen bleiben lokal
 und gehören nicht in KI-Uploads. Reine Markdown-Konvertierung anonymisiert nicht.
-Für RC162 bestanden CI, Sicherheits-, Windows-, macOS-26-ARM- und Intel-Mac-Gates
-auf demselben Quellcommit. Die nativen Paketstarts bestätigen Laden, IPC und
-Konverter, aber keine bedienten Prüfentscheidungen. Der frühere RC161-Fehler
-auf dem verwalteten M2 ist durch die Korrektur der Core-Signierung plausibel
-adressiert, jedoch dort noch nicht erneut getestet. RC162 bleibt ein interner
-Teststand mit synthetischen Daten, keine Produktionsfreigabe.
+Für RC164 bestanden 279 Haupttests, zehn Zusatzprüfungen, Windows-Native-/Rust-
+und Paketgates sowie beide nativen Mac-Consumer aus demselben Appcommit.
+Die Mac-Pakete enthalten einen eigenen statischen Core und eine getrennte
+offizielle Konverterruntime. Alle 18 veröffentlichten Dateien wurden erneut
+heruntergeladen und gegen ihre Prüfsummen kontrolliert. Die manuelle Windows-
+Abnahme übernimmt der Nutzer, die praktische Mac-/M2-Abnahme sein Kollege.
+Finder-/Gatekeeper-/TCC-/VoiceOver- und macOS-26-Zielhostabnahmen bleiben offen.
+RC164 ist ein Teststand mit synthetischen Daten, keine Produktionsfreigabe.
 [Exakte Nachweise und Prüfsummen](docs/RELEASE.md).
 
 Das getrennte [Cowork-Plugin bleibt auf RC151](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc151),
@@ -46,40 +48,43 @@ Für die Standalone-App werden **weder Claude noch Cowork, Node.js, Python oder
 Rust** benötigt. Das zur eigenen CPU passende ZIP vollständig entpacken und
 nicht direkt aus dem ZIP starten; auf dem Mac gibt es alternativ ein DMG:
 
-**[RC162: Windows-/Mac-ZIPs, Mac-DMGs, Prüfsummen und synthetische Testdaten](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc162)** ·
+**[RC164: Windows-/Mac-ZIPs, Mac-DMGs, Testpläne und Prüfsummen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc164)** ·
 [Linux RC159](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc159)
 
-Für Testläufe steht das unveränderte
-[100-Dateien-Testpaket aus RC160](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc162/DataSecure-Standalone-3.2.0-rc160-Testdatenpaket.zip)
-auf der RC162-Seite. In der App nur den enthaltenen Eingabeordner
+Für die zehn Abschlusstests gibt es [synthetische RC164-Testdaten](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc164/DataSecure-3.2.0-rc164-Abnahmetests.zip),
+einen [Windows-Testplan](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc164/WINDOWS-TESTPLAN.txt)
+und [Mac-Testhinweise](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc164/MAC-TEST-HINWEISE.txt).
+Pro Fall nur dessen EINGABEN wählen. Zusätzlich steht das unveränderte
+[100-Dateien-Testpaket aus RC160](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc164/DataSecure-Standalone-3.2.0-rc160-Testdatenpaket.zip)
+bereit. In der App dafür nur den enthaltenen Eingabeordner
 `DataSecure-RC160-Testdaten-100` wählen; Anleitung und Manifest sind keine
 Eingabedateien.
 
 **Mac-Kompatibilitätshinweis:** Der erneute Paketreview hat in den veröffentlichten
 Standalone-RC140-ZIPs einen Helfer mit höherer Mindestversion gefunden: Intel
 verlangt macOS 15, Apple Silicon macOS 14. Die bisherige Angabe 13.5 war für
-diese ZIPs falsch. Für Mac die unten verlinkten RC162-ZIPs oder DMGs verwenden:
+diese ZIPs falsch. Für Mac die unten verlinkten RC164-ZIPs oder DMGs verwenden:
 ihr Binärvertrag ist für macOS 13.5 geprüft; ein realer Lauf auf 13.5 bleibt offen.
 Die RC140-Downloads werden nicht verändert. Die Mac-Pakete bleiben interne,
 ad-hoc-signierte Piloten ohne bestätigte Finder-/Gatekeeper-Abnahme auf dem
 betroffenen verwalteten M2.
 
 - **Windows 10/11 x64:**
-  [DataSecure-Standalone-3.2.0-rc162-windows-x64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc162/DataSecure-Standalone-3.2.0-rc162-windows-x64.zip)
+  [DataSecure-Standalone-3.2.0-rc164-windows-x64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc164/DataSecure-Standalone-3.2.0-rc164-windows-x64.zip)
   herunterladen, vollständig entpacken und
   `DataSecure Standalone.exe` doppelklicken. Microsoft Edge WebView2 muss als
   Windows-Systemkomponente vorhanden sein. [Ausführliche Windows-Anleitung](apps/datasecure-standalone/START-WINDOWS.md)
 - **Mac mit Intel-Prozessor:**
-  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc162/DataSecure-Standalone-3.2.0-rc162-macos-x64.zip)
-  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc162/DataSecure-Standalone-3.2.0-rc162-macos-x64.dmg)
+  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc164/DataSecure-Standalone-3.2.0-rc164-macos-x64.zip)
+  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc164/DataSecure-Standalone-3.2.0-rc164-macos-x64.dmg)
   herunterladen, die jeweils passende `.sha256` derselben Release-Seite prüfen
   und die enthaltene `DataSecure Standalone.app` nach **Programme** ziehen.
 - **Mac mit Apple Silicon (M1 oder neuer):**
-  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc162/DataSecure-Standalone-3.2.0-rc162-macos-arm64.zip)
-  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc162/DataSecure-Standalone-3.2.0-rc162-macos-arm64.dmg)
+  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc164/DataSecure-Standalone-3.2.0-rc164-macos-arm64.zip)
+  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc164/DataSecure-Standalone-3.2.0-rc164-macos-arm64.dmg)
   herunterladen und genauso installieren.
-  Die Architektur zeigt **Apple-Menü → Über diesen Mac**. RC162 wurde auf
-  macOS 15 (Intel) und macOS 26 (ARM) ausgeführt; macOS 13.5 ist die deklarierte,
+  Die Architektur zeigt **Apple-Menü → Über diesen Mac**. RC164 wurde auf
+  macOS 15 (Intel) und macOS 14 (ARM) ausgeführt; macOS 13.5 ist die deklarierte,
   in allen nativen Komponenten geprüfte Mindestversion (siehe Hinweis oben).
   [Ausführliche macOS-Anleitung](apps/datasecure-standalone/MACOS-START.md)
 - **Linux x64 mit glibc:**
@@ -96,8 +101,9 @@ bei DataSecure **Dennoch öffnen** wählen und die Rückfrage mit
 **Öffnen** bestätigen. Bei „beschädigt“ oder Schadsoftwarewarnung nicht
 umgehen; genaue Meldung und Prüfsumme kontrollieren. Gatekeeper nicht global
 deaktivieren.
-Für eine reibungsarme breite macOS-Verteilung sind Developer-ID-Signierung,
-Notarisierung und ein Fresh-Install-Test des heruntergeladenen Pakets nötig.
+Diese Testverteilung verwendet bewusst keine Developer ID oder Notarisierung.
+Der praktische Erstinstallationstest des heruntergeladenen Pakets bleibt nötig;
+lokale oder organisatorische Startsperren sind durch CI nicht ausgeschlossen.
 Vor einem formalen Test immer Paketname und veröffentlichte SHA-256-Prüfsumme
 mit dem Kandidatenmanifest vergleichen.
 

@@ -1,10 +1,55 @@
 # Release- und Distributionsvertrag
 
-Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc164 · Veröffentlichungsnachtrag: 16.10.2026
+Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc164 · Veröffentlichungsnachtrag: 19.10.2026
 
-Der aktuelle Quellstand ist RC164-Entwicklungsstand und noch kein neu gebundener Paketkandidat. Der Standalone-Test-Pre-Release ist aus
-einem exakt geprüften Commit veröffentlicht; Linux bleibt RC159 und Cowork
+Der aktuelle Quellstand ist RC164; der Standalone-Test-Pre-Release ist aus
+dem unten exakt gebundenen Appcommit veröffentlicht; Linux bleibt RC159 und Cowork
 RC151. Menschliche N3/N4-Produktionsfreigaben bleiben offen.
+
+### RC164 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
+
+Quellcommit `95f30181fdaf2494b0ff53c4cd2e7b97bf834990` bindet den
+[RC164-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc164)
+für Windows x64, Apple Silicon und Intel. Sichtbare Buildkennung `95f30181`,
+gemeinsamer Produktfingerprint `cbd2175dc131e4edf63247a52dea8b9b4b2aae7355daf9388745312fa5f28b2d`
+(332 Produktinputs). Nachfolgende reine Dokumentationscommits ändern diesen
+eingefrorenen Paket- und Tagcommit nicht.
+
+279/279 Haupttests plus 10/10 Zusatzprüfungen, Windows Prepare/Clippy/229
+Rusttests (drei ignoriert)/Release und fünf Paketgates bestanden mit unveränderten
+Inputs. Beide tatsächlichen [Mac-Consumer](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/39223015403)
+bestanden native Core-/CLI-/Worker-/Guard-/ACL-/App-/Konverter-/ZIP-/DMG-Gates.
+Originale Logs und tatsächliche Artefakte wurden je Architektur unabhängig
+gegengelesen; die begrenzten ACL-/Prozessgruppen-Orakel sind keine vollständige
+Hostabnahme. Eigener statischer Mac-Core und unveränderte offizielle
+Konverterruntime bleiben getrennte Rollen. Der Coreproducer-Quellcommit
+`7d0ee31dc65ce31ce54f1b4a1a0cefa348ef7071` ist bewusst nicht der Appcommit.
+
+Alle 18 Assets wurden nach Upload anhand ihrer IDs erneut heruntergeladen,
+bytegenau gehasht und nach Veröffentlichung mit denselben IDs bestätigt.
+Release417102811 ist Pre-Release, kein Draft; der Tag löst auf den Appcommit auf.
+Die Prüfsummen, zwei synthetischen Testdatenpakete, Windows-Testplan,
+Mac-Testhinweise und `RELEASE-EVIDENCE.json` liegen auf der Release-Seite.
+Windows wurde zusätzlich mit Testplan lokal unter `Software DataSecure/RC164`
+bereitgestellt. Die zehn manuellen Windows-Fälle führt der Nutzer selbst aus;
+es gibt keinen neuen agentischen GUI-FINAL oder behaupteten menschlichen PASS.
+
+| Archiv | Bytes | SHA-256 |
+|---|---:|---|
+| Windows x64 ZIP | 112322766 | `e5a36897a195137e1c607e891d9df586fea39990f2e175ab6a6a981907eb70eb` |
+| macOS Apple Silicon ZIP | 117671807 | `16aafc26ccc56246687f522fb7d010034c19e1b63b27017698d78756cb1f04bf` |
+| macOS Apple Silicon DMG | 132374043 | `f0fcf2d1f19b8a10e46a6f342af599df653b0d24e65fc68576e2235ea00190fb` |
+| macOS Intel ZIP | 120924619 | `38da34d52fddd9b779d2f0c382cdf5ca76e52c82ee1a1ce7a1739deeeaca155a` |
+| macOS Intel DMG | 137224352 | `dada8e167dad1e6823912858daa72a86ff8a7aba3cd568520dc8d804a0814b7e` |
+
+Mac-Runnerumgebungen: macOS14/ARM64 und macOS15/Intel. Kein tatsächlicher
+macOS26-/M2-/Finder-/TCC-/Gatekeeper-/Enterprise-/VoiceOver-Abnahmebeleg.
+Die praktische Mac-Abnahme übernimmt der Kollege. Eigene Mac-Signierung ist
+lokales Ad-hoc-Sealing, keine Developer ID oder Notarisierung; keine Apple-
+Einreichung und keine globale Schutzabschaltung. Dieser Teststand ist keine
+Produktionsfreigabe und keine Garantie vollständiger OCR-/Anonymitätsqualität.
+
+Die nachfolgenden RC162-/RC161-Abschnitte sind unveränderte historische Belege.
 
 ### RC162 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
 

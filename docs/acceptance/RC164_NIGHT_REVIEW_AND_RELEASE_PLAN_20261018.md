@@ -1,5 +1,33 @@
 # RC164 – fortgesetzter Abschlussauftrag
 
+## Abschlussstand 19.10.2026, 09:20 UTC
+
+RC164 ist als [Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc164)
+veröffentlicht: Windows x64 und macOS ARM64/Intel aus Appcommit
+`95f30181fdaf2494b0ff53c4cd2e7b97bf834990`, Build `95f30181`,
+Produktfingerprint `cbd2175dc131e4edf63247a52dea8b9b4b2aae7355daf9388745312fa5f28b2d`.
+279/279+10/10, Windows Native/Clippy/229 Rusttests (3 ignoriert) und fünf
+Paketgates bestanden mit unveränderten Inputs. Beide nativen Mac-Consumer
+in Run39223015403 sind SUCCESS; tatsächliche ARM-/Intel-Logs und Paketbytes
+wurden unabhängig geprüft. Alle 18 Release-Assets erneut heruntergeladen und
+gehasht; Release417102811 ist Pre-Release/nicht Draft, Tagcommit bestätigt.
+
+Windows-ZIP SHA `e5a36897a195137e1c607e891d9df586fea39990f2e175ab6a6a981907eb70eb`
+liegt mit Testplan/Testdaten lokal unter `Software DataSecure/RC164`.
+Reale Belege: `dist/rc164-shared-final11-20261019/{HEADLESS-FINAL,NATIVE-FINAL,PACKAGE-FINAL,USER-TEST-HANDOFF,REMOTE-PUBLISHED-VERIFIED}.json`.
+App-/Core-Artefaktrollen, Mac-Prüfsummen und Grenzen stehen in docs/RELEASE.md.
+
+Neuere ausdrückliche Nutzerentscheidung: keine weitere Desktopbedienung oder
+Appstarts durch Agenten. Alle zehn Windows-Abschlusstests sind Nutzeraufgabe,
+keine neue GUI-Vollabnahme. Der Kollege übernimmt echte Mac-/M2-/Finder-/TCC-
+Praxistests; VoiceOver/Enterprise/macOS26 bleiben offene Zielhostnachweise.
+Keine Developer ID/Notarisierung, keine globale Schutzabschaltung. Der Nutzer
+hat den geplanten Nachtauftrag beendet und seine Löschung angefordert; die
+App meldet ihn beim Löschaufruf bereits als nicht vorhanden. Nur aktuelle
+Chat-Arbeit fortsetzen, keine neue Automation erstellen.
+Nachfolgende Laufstände sind historische Nachweise, keine offenen Neubauloops.
+Dieser Nachtrag ist reine Dokumentation nach dem eingefrorenen Releasecommit.
+
 19.10.2026, nach 08:29 UTC: **Final10 ist nicht freigabefähig; Final11 folgt.**
 Alle lokalen Jobs endeten mit unveränderten Inputs. Native/Clippy/229 Rusttests
 (3 ignoriert) und fünf Paketgates bestanden. Die Gesamtprüfung stoppte nach

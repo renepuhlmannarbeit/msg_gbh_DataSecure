@@ -1,6 +1,29 @@
 # Aktueller Iststand
 
-Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Test-Pre-Release in Vorbereitung; noch keine neue Veröffentlichung oder Zielhostabnahme.
+Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Test-Pre-Release veröffentlicht; manuelle Zielhostabnahme offen.
+
+### Neuester verbindlicher Stand – Veröffentlichung 19.10.2026
+
+[RC164-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc164)
+aus Appcommit `95f30181fdaf2494b0ff53c4cd2e7b97bf834990`, Build `95f30181`;
+Produktfingerprint `cbd2175dc131e4edf63247a52dea8b9b4b2aae7355daf9388745312fa5f28b2d`/332.
+Windows x64 und beide Mac-Architekturen verwenden diesen gemeinsamen Appstand.
+Final11: 279/279+10/10, Windows Native/Clippy/229 Rusttests (3 ignoriert)/Release
+und fünf Paketgates grün, Inputs unverändert. Beide nativen Mac-Consumer in
+Run39223015403 erfolgreich, reale Artefakt-/Loggegenreviews abgeschlossen.
+18 veröffentlichte Assets erneut heruntergeladen/gehasht; Tagcommit und
+Pre-Release/nicht Draft bestätigt. Windows zusätzlich lokal mit Testplan und
+synthetischen Daten unter `Software DataSecure/RC164` ausgeliefert.
+
+Alle zehn Windows-Desktop-Abschlusstests sind ausdrücklich Nutzeraufgabe;
+keine weitere Agenten-Desktopbedienung oder Appstarts. Praktischer Mac-/M2-
+Test durch den Kollegen; Finder/TCC/Enterprise/VoiceOver/macOS26 nicht
+abgenommen. Keine Developer ID/Notarisierung oder globale Schutzabschaltung.
+Aktueller Auftrag bleibt im Chat, geplanter Nachtauftrag wurde auf ausdrücklichen
+Nutzerwunsch zum Löschen aufgerufen (App: bereits nicht vorhanden).
+Prüfsummen und Grenzen in [RELEASE.md](../RELEASE.md), tatsächliche Endbelege
+unter `dist/rc164-shared-final11-20261019`. Nachfolgende Nachtstände sind
+historisch; dieser Dokumentationsnachtrag verändert den Releasecommit nicht.
 
 ### Aktueller Nachtauftrag – neuere Autorität vor historischen Abschnitten
 
