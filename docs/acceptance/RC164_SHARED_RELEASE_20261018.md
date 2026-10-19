@@ -12,6 +12,17 @@ Keine Developer-ID, Apple-Einreichung oder Storeverteilung.
 
 ## Neuester geprüfter Windows-Quellstand, 19.10.2026
 
+Nach05:02UTC: final5/c29878e vollständig275/275+10/10, Native228/Clippy/
+Release und Paket5 unverändert PASS. Beide Macconsumer39200265925 ROT:
+Testroot-Kollision Intel und echter alter Parserroutingpfad ARM. Dagegen
+echte ARM-App-/entpackteZIP-/LaunchServices-Startgates sowie gepackte
+Office/PDF/OCR-Konvertierung bestanden; kein M2/Finder/TCC-Nachweis daraus.
+Legacy ist noch gültiger Start-/Resumevertrag, daher sicherer Produkt-
+Delegationsfix statt Testumschreibung. #[cfg(test)]-Sequenzfix gezielt17/17
+parallel vom Autor und Main bestanden; native Macwiederholung noch offen.
+Beide Coreapprovals bleiben gültig. Neue gemeinsame App-/Paket-/GUI-/Release-
+Bindung nach Quellengegenreviews nötig, keine Übergabe des roten Schnitts.
+
 Nach04:33UTC: final4 Headless ROT an obsoleter Desktopassertion69,68vorher
 grün/unverändert; Native/fünfPaketgates grün. Beide Macjobs ROTgleicheAssertion.
 Echter gebundener Windowsstart+Workspace/ReviewIPC PASS1539.567ms/Exit0,

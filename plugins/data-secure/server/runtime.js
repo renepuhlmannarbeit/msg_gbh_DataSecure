@@ -295,13 +295,66 @@ function validateParserResult(value, expectedExt) {
   return value;
 }
 
+function fixedMacParserOptions(options) {
+  const { types } = require('node:util');
+  if (!options || typeof options !== 'object' || types.isProxy(options) || Array.isArray(options))
+    throw safeError('Die gebundene lokale Parserrolle ist nicht einsatzbereit.', 'PARSER_ISOLATION_FAILED');
+  for (let owner = options; owner !== null; owner = Object.getPrototypeOf(owner)) {
+    if (types.isProxy(owner)) throw safeError('Die gebundene lokale Parserrolle ist nicht einsatzbereit.', 'PARSER_ISOLATION_FAILED');
+  }
+  const descriptors = Object.getOwnPropertyDescriptors(options);
+  if (SEA_EXECUTION_OVERRIDES.some(key => key in options) || Reflect.ownKeys(descriptors).some(key =>
+    typeof key !== 'string' || !Object.hasOwn(descriptors[key], 'value')))
+    throw safeError('Die gebundene lokale Parserrolle ist nicht einsatzbereit.', 'PARSER_ISOLATION_FAILED');
+  return Object.fromEntries(Object.entries(descriptors).filter(([, value]) => value.enumerable)
+    .map(([key, value]) => [key, value.value]));
+}
+
+function fixedMacParserRole(bundle) {
+  const { roleFile } = require('./standalone/macos-bundle-layout');
+  const { bindDirectory, assertDirectory, fileIdentity, sameFile } = require('./core/bound-file-io');
+  const node = roleFile(bundle, 'conversion_node'), executable = roleFile(bundle, 'sandbox');
+  const paths = [node, path.join(__dirname, 'standalone', 'conversion-runtime', 'RUNTIME.json'), executable,
+    path.join(bundle.server, ...bundle.roles.sandbox.checksum.split('/'))];
+  // Retain the original parent/leaf identities across BOTH integrity checks;
+  // a replacement bundle must not be adopted by a fresh resolver call.
+  const bindings = paths.map(target => {
+    const directory = bindDirectory(path.dirname(target));
+    const stat = fs.lstatSync(target, { bigint: true });
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1n) throw new Error('unsafe_parser_role');
+    return { target, directory, identity: fileIdentity(stat, true), mode: String(stat.mode) };
+  });
+  const unchanged = () => {
+    for (const binding of bindings) {
+      assertDirectory(binding.directory);
+      const stat = fs.lstatSync(binding.target, { bigint: true });
+      if (!sameFile(stat, binding.identity) || String(stat.mode) !== binding.mode) throw new Error('parser_role_changed');
+    }
+  };
+  const verify = () => {
+    unchanged();
+    const runtime = require('./standalone/conversion-runtime-resolver').resolveConversionRuntime();
+    const supervisor = verifyPosixSupervisor();
+    if (runtime.node !== node || !supervisor.available || supervisor.executable !== executable)
+      throw new Error('parser_role_invalid');
+    unchanged();
+  };
+  verify();
+  return { node, executable, verify };
+}
+
 async function convertDocument(source, options = {}) {
+  const macBundle = process.platform === 'darwin'
+    ? require('./standalone/macos-bundle-layout').bundleContext(__dirname) : null;
+  if (macBundle) options = fixedMacParserOptions(options);
   if (process.platform === 'darwin') {
-    // Old journals without content_options must stop, not parse documents in a
-    // capability-bearing Core. No automatic journal rewrite or policy upgrade.
-    if (process.env.DATASECURE_NATIVE_EXPORT_CHANNEL === '1')
-      throw safeError('Alte lokale Läufe benötigen den getrennten Konverter.', 'PARSER_ISOLATION_FAILED');
-    require('./core/macos-static-ownership-guard').assertParserCore('PARSER_ISOLATION_FAILED');
+    // The bundle delegates the unchanged legacy protocol to its verified
+    // official converter. An unbundled native/Core process still cannot parse.
+    if (!macBundle) {
+      if (process.env.DATASECURE_NATIVE_EXPORT_CHANNEL === '1')
+        throw safeError('Alte lokale Läufe benötigen den getrennten Konverter.', 'PARSER_ISOLATION_FAILED');
+      require('./core/macos-static-ownership-guard').assertParserCore('PARSER_ISOLATION_FAILED');
+    }
   }
   if (options.signal?.aborted) {
     throw safeError('Der isolierte Dokumentparser wurde auf Anforderung beendet.', 'REQUEST_CANCELLED');
@@ -322,9 +375,13 @@ async function convertDocument(source, options = {}) {
     'Dieses Format ist im beaufsichtigten Pilotbetrieb nicht freigegeben.',
     'FORMAT_COVERAGE_UNVERIFIED'
   );
-  let seaRole;
+  let seaRole, macRole;
   try {
     seaRole = resolveSeaParserRole();
+    if (macBundle) {
+      if (seaRole) throw new Error('unexpected_sea_parser_role');
+      macRole = fixedMacParserRole(macBundle);
+    }
     if (seaRole && SEA_EXECUTION_OVERRIDES.some(key => options[key] !== undefined)) {
       throw new Error('SEA_EXECUTION_OVERRIDE_DENIED');
     }
@@ -338,11 +395,11 @@ async function convertDocument(source, options = {}) {
   // docs/canonical/BACKLOG.md and docs/FORMAT_COVERAGE_MATRIX.md have passed all release gates.
   const worker = path.join(__dirname, 'parser-worker.js');
   const networkDeny = path.join(__dirname, 'network-deny.cjs');
-  const launchOptions = seaRole ? {} : options;
+  const launchOptions = seaRole || macRole ? {} : options;
   const spawn = launchOptions.spawn || childProcess.spawn;
   const platform = launchOptions.platform || process.platform;
   const arch = launchOptions.arch || process.arch;
-  const nodeExecutable = seaRole?.executable || launchOptions.execPath || process.execPath;
+  const nodeExecutable = macRole?.node || seaRole?.executable || launchOptions.execPath || process.execPath;
   const nodeFlags = [
     '--permission', `--allow-fs-read=${__dirname}`, `--require=${networkDeny}`, '--disable-proto=throw',
     '--max-old-space-size=384', worker, ext
@@ -364,6 +421,11 @@ async function convertDocument(source, options = {}) {
       '--wall-ms', String(PARSER_JOB_WALL_MS), '--', nodeExecutable,
       ...workerArgs
     ];
+  } else if (macRole) {
+    // Never take nativeParserStatus's development Node-only fallback here.
+    command = macRole.executable;
+    args = ['--memory-mib', String(PARSER_JOB_MEMORY_MIB), '--cpu-ms', String(PARSER_JOB_CPU_MS),
+      '--wall-ms', String(PARSER_JOB_WALL_MS), '--', nodeExecutable, ...workerArgs];
   } else if (platform === 'darwin' || platform === 'linux') {
     const portable = nativeParserStatus(seaRole ? {} : { platform, arch, nodeVersion: options.nodeVersion,
       posixSupervisorPath: options.posixSupervisorPath, posixSupervisorBase: options.posixSupervisorBase,
@@ -460,6 +522,7 @@ async function convertDocument(source, options = {}) {
   try {
     // Recheck after source inspection, immediately before the path-based spawn.
     // This narrows but cannot eliminate OS-level verify/exec races.
+    if (macRole) macRole.verify();
     if (seaRole && resolveSeaParserRole()?.executable !== nodeExecutable) throw new Error('role_changed');
     child = spawn(command, args, {
       stdio,

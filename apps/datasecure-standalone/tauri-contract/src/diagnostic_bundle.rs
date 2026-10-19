@@ -325,9 +325,14 @@ pub(crate) fn save(source: &Path, destination: &Path) -> io::Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::AtomicU64;
+    static ROOT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
     fn root() -> std::path::PathBuf {
-        let path = std::env::temp_dir().join(format!("datasecure-bundle-test-{}-{}", std::process::id(),
-            std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos()));
+        root_at(std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos())
+    }
+    fn root_at(timestamp: u128) -> std::path::PathBuf {
+        let path = std::env::temp_dir().join(format!("datasecure-bundle-test-{}-{}-{}", std::process::id(),
+            timestamp, ROOT_SEQUENCE.fetch_add(1, Ordering::Relaxed)));
         std::fs::create_dir(&path).unwrap(); path
     }
     fn cleanup(path: std::path::PathBuf) {
@@ -335,6 +340,36 @@ mod tests {
         assert!(path.file_name().unwrap().to_string_lossy().starts_with("datasecure-bundle-test-"));
         assert!(!std::fs::symlink_metadata(&path).unwrap().file_type().is_symlink());
         std::fs::remove_dir_all(path).unwrap();
+    }
+    #[test]
+    fn parallel_roots_with_identical_timestamps_remain_distinct_until_joined() {
+        struct CreatedRoots(Vec<std::path::PathBuf>);
+        impl Drop for CreatedRoots {
+            fn drop(&mut self) { for path in self.0.drain(..) { cleanup(path); } }
+        }
+        let timestamp = 1_700_000_000_123_456_000;
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(2));
+        let handles = [0, 1].map(|_| {
+            let barrier = barrier.clone();
+            std::thread::spawn(move || { barrier.wait(); root_at(timestamp) })
+        });
+        // Keep both exclusively created directories until both workers have joined.
+        let results = handles.map(|handle| handle.join());
+        let mut roots = CreatedRoots(Vec::new());
+        for result in results {
+            if let Ok(path) = result { roots.0.push(path); }
+        }
+        assert_eq!(roots.0.len(), 2, "both concurrent allocations must succeed");
+        assert_ne!(roots.0[0], roots.0[1]);
+        let prefix = format!("datasecure-bundle-test-{}-{timestamp}-", std::process::id());
+        for path in &roots.0 {
+            assert_eq!(path.parent().unwrap(), std::env::temp_dir());
+            assert!(path.file_name().unwrap().to_string_lossy().strip_prefix(&prefix)
+                .and_then(|sequence| sequence.parse::<u64>().ok()).is_some());
+            let metadata = std::fs::symlink_metadata(path).unwrap();
+            assert!(metadata.is_dir());
+            assert!(!metadata.file_type().is_symlink());
+        }
     }
     fn record() -> Value { json!({ "schema": "datasecure-standalone-interaction/1", "time_ms": 10,
         "component": "desktop", "event": "sidecar_bootstrap_failed", "outcome": "failed",

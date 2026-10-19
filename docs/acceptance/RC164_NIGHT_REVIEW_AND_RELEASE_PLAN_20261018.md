@@ -1,5 +1,68 @@
 # RC164 – fortgesetzter Abschlussauftrag
 
+## Final5 beendet; zwei native Mac-Gegenbefunde, 19.10., nach05:02 UTC
+
+Nach05:14UTC: beide enge Fixes implementiert. Autor/Main17/17Rust-Diagnose-
+tests parallel mit8Threads grün; Produktionsbytes vor cfg(test) unverändert.
+Runtime-Delegation vom Autor/Main und unabhängigem Quellenreview vollständig
+gegengelesen, kein bestätigter Restblocker/Windowsfolgefehler.11neue echte
+Produktionsquellen-VM-Gegenfälle,19Parser-/9Workergrenzenfälle vom Main grün;
+Autor weitere Layout/Coremodell/Migration/Supervisor/Contentgates, gesamt156
+gezielt grün. Kein nativer Mac-PASS dieser Deltas. Neue Suite ausdrücklich im
+kanonischen276er-Plan und nativen Macstep vor npm gebunden, Workflow/Pfade
+gezielt grün. Nodepermission bleibt nur Zusatzgrenze, nicht Sandboxgarantie:
+https://nodejs.org/download/release/v22.23.2/docs/api/permissions.html .
+PID/Zeit bleibt nichtunique; Sequenz braucht keine Veröffentlichungsordnung.
+
+Final5GUI05 nun Pflichtorakel bestanden: zwei reale normale Neustarts gleicher
+Lauf/gleicher isolierter Root; ungespeichert nach erstem Neustart0/2, danach
+beide OCR-Kontaktpixel verglichen und explizit gespeichert. Zweiter Neustart
+führt direkt zur unveränderten Anna-Berger-Mehrdeutigkeit, nicht erneut zur
+OCR-Gruppe. Keine Dokumentfreigabe/kein Export. GUI-PROGRESS.json bewahrt
+exakte c298-Bindung/Orakel. Noch kein zehn-Fall-GUI-FINAL, spätere Paketbytes
+brauchen neue tatsächliche Abnahme. Alte Belege bleiben unverändert.
+
+Appcommit c29878e9da8d91d655917ff2f18c6c6060d56382, Fingerprint
+e6401825469fe8ed4dc22901c683bf6718608e218a966b48711e81f3d3a973f6.
+Headless275/275+10/10 beendet05:02:21.383UTC, Native228(3ignoriert)/Clippy/
+Release und fünf Paketgates vorher PASS; alle Inputs unverändert. Evidence
+dist/rc164-shared-final5-20261019, keine FINALs umschreiben. Windows-ZIP
+fb829ad0c8a5089aa1aa3f88ec50f8d2537ad029d7b8c4f321ec6eb9b0077612,
+EXE d50f8c351abadf4671215d9dfb95dbdb99355640c3e536f00f948ad82af6254d.
+100/100Markdown,0Fehler,Originale unverändert. Kein Release dieses Schnitts.
+
+Macconsumer39200265925 beide ROT. Intel scheitert bei exklusivem create_dir
+des Testrootallocators vor dem eigentlichen Bundleorakel an AlreadyExists17.
+PID+SystemTime.as_nanos garantiert keine parallele Eindeutigkeit. Tatsächlicher
+quellenbasierter Windows-Gegenfall mit ausschließlich fixierter Clock bestätigt
+exakt einen Erfolg/eine Kollision zweier Threads; kein nativer Mac-Clocknachweis.
+#[cfg(test)]-Sequenzfix mit deterministischem Gegenfall folgt, keine
+Serialisierung oder Lockerung der Datei-/Diagnoseprüfung.
+
+ARM erreicht echte versiegelte App, entpackte ZIP-App und LaunchServices-Start
+sowie gepackte Office/PDF/OCR-Konvertierung. Danach Vierformat-Legacy-Smoke
+ROT:1statt4. Tatsächlicher Quellengegenreview bestätigt alte TXT/MD/CSV-Aufrufe
+ohne content_options geraten in verweigerten statischen Coreparser; DOCX hat
+bereits getrennten Konverter. Einzelne native Stoppcodes wurden im Job nicht
+ausgegeben; keine Behauptung beobachteter Codes. Legacy ist noch gültiger
+Start-/Resumevertrag. Daher Produkt-Routingfix über den bestehenden festen,
+hashgeprüften offiziellen Konverter plus zwingenden POSIX-Supervisor, nicht
+Testumstellung auf neue Inhaltsoptionen. Parserworker muss Core weiterhin
+vor Import/Eingabelesen verweigern; Protokoll, Journal, Limits, Abort/Close,
+Antwort-/Contentgraphprüfung bleiben. Keine Core-/Policy-/Apple-Lockerung.
+
+Windows-GUI auf exakt c298-Bytes:01Markdown PASS;05 echte ungespeicherte
+Vormerkung04:53:05UTC, nach05:00 weiterhin1/2 und kein Timeout. Vertagen-ACK,
+normaler Schluss/gleicher isolierter Neustart, identische Batch80053607…:
+0/2vorgemerkt/2offen korrekt. Gespeicherte Folgeentscheidung/zweiter Neustart
+und weitere Fälle noch nicht abgeschlossen. Nur Vorabnachweise dieser Bytes,
+kein GUI-FINAL für spätere Pakete.14Goldeninputs zuvor erneut bytegleich.
+
+Nach Ende aller Freezejobs getrennte begrenzte KI-Aufträge für Runtime-Routing
+und Rust-Testallocator. Main prüft tatsächliche Diffs/Gegenfälle, danach neuer
+gemeinsamer Commit und alle frischen lokalen/nativeMac-/Paket-/GUI-Gates.
+Beide statischen Mac-Cores bleiben bereits approved; kein Producerneubau.
+
 ## Final4-Gegenbeleg und eng korrigierte Testverträge, 19.10., nach04:33 UTC
 
 Alle final4-Lokaljobs auf9ffaf47 beendet. Headless ROT bei Datei69/275 an

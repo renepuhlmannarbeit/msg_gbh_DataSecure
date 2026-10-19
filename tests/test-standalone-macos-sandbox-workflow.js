@@ -74,7 +74,8 @@ assert.match(workflow, /standalone-macos-regular-start\.sh/u);
 const historyContractStep = workflow.match(/      - name: Run product, conversion, Rust and workflow contracts\n([\s\S]*?)(?=\n      - name:)/u)?.[1];
 assert.ok(historyContractStep, 'the actual native product-contract step must be present');
 assert.match(historyContractStep, /^          set -euo pipefail$/mu);
-const historyCommands = ['test-standalone-history-read-race.js', 'test-standalone-history-migration-race.js', 'test-standalone-history-probe.js'];
+const historyCommands = ['test-standalone-history-read-race.js', 'test-standalone-history-migration-race.js',
+  'test-standalone-history-probe.js', 'test-legacy-macos-parser-routing.js'];
 const standaloneCommand = historyContractStep.indexOf('\n          npm run test:standalone');
 for (const file of historyCommands) {
   const command = `\n          node tests/${file}\n`;

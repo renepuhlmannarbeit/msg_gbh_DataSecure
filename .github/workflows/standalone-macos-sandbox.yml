@@ -211,6 +211,7 @@ jobs:
           node tests/test-standalone-history-read-race.js
           node tests/test-standalone-history-migration-race.js
           node tests/test-standalone-history-probe.js
+          node tests/test-legacy-macos-parser-routing.js
           npm run test:standalone
       - name: Run the real isolated converter-worker boundary
         run: npm run test:standalone:conversion

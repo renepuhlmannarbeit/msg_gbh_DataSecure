@@ -4,6 +4,29 @@ Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Test-Pre-Release in 
 
 ### Aktueller Nachtauftrag – neuere Autorität vor historischen Abschnitten
 
+Neu19.10.nach05:14UTC: Runtime-Legacy-Mac-Delegation implementiert, Main+
+unabhängiger tatsächlicher Quellenreview ohne bestätigten Restbefund.17/17
+paralleleRust-Diagnosefälle und11Routing-/19Parser-/9Workergegenfälle vom
+Main grün; Autor insgesamt156gezielteGates. Neue Routing-Suite ausdrücklich
+im276er-Plan und Macworkflow, Workflow/Pfadprüfung grün. Beide statischen
+Coreapprovals/Bytes unverändert. Neuer Produktfingerprint
+b7dd9654bcfc72898a19e304489a6dc1a826a8fdd30b8c7148c66f7644d4c934/332.
+Final6-Helper neu create-only,31synthetische Proofgegenfälle grün, keine
+FINALs kopiert. Danach neuer gemeinsamer Commit und frische Gates Pflicht.
+Windows-GUI05 aufc298 mit5minPause/zweiNeustarts/unsavedweg/savedOCRbleibt
+bestanden;01ebenfalls,8NOT_RUN. Kein neuer GUI-FINAL/Release/M2-PASS.
+
+Neu19.10.nach05:02UTC: final5/c29878e vollständig275/275+10/10, Native228/
+Clippy/Release und Paket5 PASS, Inputs unverändert. Mac39200265925 beide ROT:
+Intel Testroot-Namenskollision vor Bundleorakel (deterministisch mit fixierter
+Clock quellenbasiert reproduziert); ARM echte App/ZIP/LaunchServices sowie
+Office/PDF/OCR grün, dann Legacy-Vierformat1statt4. Quellengegenreview bestätigt
+Mac-Legacy-Parserroutingproblem; nicht durch neue Testoptionen verdecken.
+Zwei enge Fixes in Arbeit, danach neuer gemeinsamer Commit und sämtliche
+frischen Gates. Beide Coreartefakte approved, kein Producerneubau. Windows-GUI
+01PASS und05Denkpause/Vertagen/Neustart/unsaved korrekt nur auf c298-Bytes;
+weitere05Orakel und übrige Fälle offen. Keine neue Releasefreigabe.
+
 Neu19.10.nach04:33UTC: final4 Headless69ROT/unverändert(68vorherPASS),
 Native/Paket5PASS, beideMacjobsROTgleicheobsoleteAssertion. Tatsächlicher
 Windowsstartup+Workspace/ReviewIPC1539.567ms/Exit0; keinevollständigeGUIabnahme.

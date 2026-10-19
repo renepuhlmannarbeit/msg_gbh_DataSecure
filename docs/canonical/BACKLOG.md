@@ -4,6 +4,26 @@ Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Pre-Release in Vorbe
 
 ## Aktuelle Nacht-Fortsetzung (ersetzt ältere Freigabeangaben)
 
+Neu19.10.nach05:14UTC: beide gezielten Deltas implementiert/gegengelesen;
+unabhängiger Runtimequellenreview ohne bestätigten Restbefund. Main17Rust/
+11Routing/19Parser/9Worker/Workflow/16Pfadfälle grün. NeueSuite explizit im
+276er-Plan und Macstep. Jetzt gemeinsamer final6Commit/Fingerprintb7dd9654…,
+neue unveränderte Headless/Native/Paket-/beideMac-Gates und10echteGUI-Fälle.
+Beide Mac-Cores bereitsapproved, nicht neu produzieren. Windows-Vorab05auf
+c298 nun5min/zweiRestart/ungespeichertweg/gespeichertbleibtPASS, keinealte
+GUI-Gleichsetzung mit neuenBytes. Release/Remote-/lokaleÜbergabe weiter offen.
+
+Neu19.10.nach05:02UTC: final5/c29878e Headless275+10, Native228 und Paket5
+vollständig unverändert PASS; beide Macconsumer39200265925 dennoch ROT.
+Zuerst echte Legacy-Mac-Aufrufe im Bundle über verifizierten offiziellen
+Konverter+zwingenden Supervisor delegieren; Coreparser weiter verweigern,
+keine Journal-/Protokoll-/Bestätigungsänderung. Unveränderte Vierformat- und
+Altjournal-Resumeorakel nativ verlangen. Zweitens Test-only Rustrootallocator
+gegen gleiche parallele Clockwerte mit Atomic-Sequenz/Gegenprobe korrigieren.
+Danach Quellengegenreviews/neuer geteilter Commit und alle frischen finalen
+Gates/Pakete/GUI/Remoteübergabe. Windows05Pause+Vertagen+ersterRestart aktuell
+korrekt, kein Gesamt-GUI-PASS. Coreproducer bereits beide approved.
+
 Neu19.10.nach04:33UTC: final4ROT69(68vorherPASS/unverändert), beideMacjobs
 ROTgleicheobsoleteAssertion. Native/Paket5PASS und tatsächlicherWindowsstart/
 Workspace/ReviewIPC1539.567ms/Exit0. Zwei Testverträge nach Jobende korrigiert,

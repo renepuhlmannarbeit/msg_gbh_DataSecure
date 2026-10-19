@@ -20,6 +20,7 @@ const baseFiles = [
   'tests/test-macos-static-core-workflow.mjs',
   'tests/test-import-macos-core-candidate.mjs',
   'tests/test-macos-system-make.mjs',
+  'tests/test-legacy-macos-parser-routing.js',
   'tests/test-native-ui-boundary.js',
   'tests/test-bound-file-io.js',
   'tests/test-hocr-choice-groups.mjs',
