@@ -11,7 +11,7 @@ pub const REQUEST_SCHEMA: &str = "datasecure-native-export-request/1";
 pub const RESPONSE_SCHEMA: &str = "datasecure-native-export-response/1";
 pub const PUBLICATION_REQUEST: &str = "datasecure-native-export-request/2";
 pub const PUBLICATION_RESPONSE: &str = "datasecure-native-export-response/2";
-const MAX_PUBLICATION_FRAMES: u64 = 9000; // 500 MiB / 64 KiB + <=200 file boundaries + control frames
+const MAX_PUBLICATION_FRAMES: u64 = 9000; // 500 MiB / 64 KiB + <=202 fixed body boundaries + control frames
 #[derive(Default)]
 pub(crate) struct PublicationState {
     sequence: u32, native_id: Option<String>, operation: Option<Value>, body: Option<(usize, Vec<u8>)>,
@@ -54,7 +54,7 @@ fn current_results_outer(outer: &Value) -> bool {
 fn receive_body(state: &mut PublicationState, op: &crate::native_export_broker::Operation, chunk: BodyChunk,
     data: &Path, guard: Option<&ipc_transport::NativeGuard>, reporter: Option<&ExportReporter>) -> std::io::Result<&'static str> {
     let invalid = || std::io::Error::other("AI_EXPORT_CONFLICT");
-    let file = op.files.get(chunk.index).ok_or_else(invalid)?;
+    let file = op.payload_file(chunk.index).map_err(|_| invalid())?;
     if file.bytes > 32_000_000 || chunk.hex.len() > 2 * 65536 || !chunk.hex.len().is_multiple_of(2) ||
         !chunk.hex.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)) ||
         chunk.hex.is_empty() && file.bytes != 0 { return Err(invalid()); }
@@ -341,6 +341,7 @@ mod tests {
             let guard = lifecycle.begin_native().unwrap();
             let binding = crate::native_export_broker::configure(&self.root.join("public"), &self.data(), &"d".repeat(32), &guard).unwrap();
             Operation { batch_id: "a".repeat(64), operation_id: "b".repeat(32), request_sha256: "c".repeat(64), publication_role: None,
+                confidential: None,
                 processing_mode: "markdown-and-anonymize".into(), binding,
                 files: [b"hello", b"world"].into_iter().enumerate().map(|(index, bytes)| ExpectedFile {
                     name: format!("Dokument_{:02}.md", index + 1), bytes: 5, sha256: Sha256::digest(bytes).into() }).collect() }
@@ -432,6 +433,67 @@ mod tests {
         assert_eq!(response["ok"], false);
         assert!(validate_completion(&json!({"ok": true}), &outer(), response["ok"] == true).is_err(),
             "a performed but refused callback is not a native binding");
+    }
+    #[test]
+    fn confidential_result_frames_use_exact_two_additional_body_indices_and_preserve_readonly_authority() {
+        use crate::export_directory::{ConfidentialFiles, ConfidentialFile, CONFIDENTIAL_DIRECTORY, FILENAME_MAPPING, IDENTITIES_FILE};
+        let fixture = ExportFixture::new(); let lifecycle = Lifecycle::default();
+        let mut op = fixture.operation(&lifecycle); op.publication_role = Some(PublicationRole::Results);
+        op.confidential = Some(ConfidentialFiles { filename_mapping: ConfidentialFile { bytes: 7, sha256: Sha256::digest(b"mapping").into() },
+            identities: ConfidentialFile { bytes: 10, sha256: Sha256::digest(b"identities").into() } });
+        let outer = results_request_outer(&op, "publish_result_documents"); let mut state = PublicationState::default();
+        for (sequence, index, offset, hex, final_chunk, expected) in [
+            (1, 0, 0, "68656c6c6f", true, "staged"), (2, 1, 0, "776f726c64", true, "staged"),
+            (3, 2, 0, "6d6170", false, "receiving"), (4, 2, 3, "70696e67", true, "staged"),
+            (5, 3, 0, "6964656e746974696573", true, "staged")] {
+            let frame = export_frame(&op, &outer, sequence, "write_body", Some(json!({"index":index,"offset":offset,"hex":hex,"final_chunk":final_chunk})));
+            let response = handle_publication(&frame, &outer, &mut state, &lifecycle, &fixture.data(), deadline()).unwrap().unwrap();
+            assert_eq!(response["ok"], true); assert_eq!(response["status"], expected);
+        }
+        for (sequence, command, expected) in [(6, "publish", "completed"), (7, "acknowledge", "acknowledged")] {
+            let response = handle_publication(&export_frame(&op, &outer, sequence, command, None), &outer,
+                &mut state, &lifecycle, &fixture.data(), deadline()).unwrap().unwrap();
+            assert_eq!(response["ok"], true); assert_eq!(response["status"], expected);
+        }
+        let target = fixture.root.join("public/DataSecure-KI-Export").join(format!("Ergebnisse-{}", op.operation_id));
+        assert_eq!(std::fs::read_dir(&target).unwrap().count(), 3, "two Markdown files plus the fixed directory");
+        assert_eq!(std::fs::read_dir(target.join(CONFIDENTIAL_DIRECTORY)).unwrap().count(), 2);
+        assert_eq!(std::fs::read(target.join(CONFIDENTIAL_DIRECTORY).join(FILENAME_MAPPING)).unwrap(), b"mapping");
+        assert_eq!(std::fs::read(target.join(CONFIDENTIAL_DIRECTORY).join(IDENTITIES_FILE)).unwrap(), b"identities");
+        let read = results_request_outer(&op, "resolve_history_results");
+        let response = handle_publication(&export_frame(&op, &read, 1, "reconcile", None), &read,
+            &mut PublicationState::default(), &lifecycle, &fixture.data(), deadline()).unwrap().unwrap();
+        assert_eq!(response["status"], "acknowledged");
+        let write = export_frame(&op, &read, 1, "write_body", Some(json!({"index":2,"offset":0,"hex":"6d617070696e67","final_chunk":true})));
+        assert!(handle_publication(&write, &read, &mut PublicationState::default(), &lifecycle, &fixture.data(), deadline()).is_err());
+    }
+    #[test]
+    fn confidential_frame_null_unknown_partial_or_out_of_range_never_provisions_output() {
+        use crate::export_directory::{ConfidentialFiles, ConfidentialFile};
+        let fixture = ExportFixture::new(); let lifecycle = Lifecycle::default();
+        let mut op = fixture.operation(&lifecycle); op.publication_role = Some(PublicationRole::Results);
+        op.confidential = Some(ConfidentialFiles { filename_mapping: ConfidentialFile { bytes: 7, sha256: Sha256::digest(b"mapping").into() },
+            identities: ConfidentialFile { bytes: 10, sha256: Sha256::digest(b"identities").into() } });
+        let outer = results_request_outer(&op, "publish_result_documents"); let guard = lifecycle.begin_native().unwrap();
+        let frame = export_frame(&op, &outer, 1, "write_body", Some(json!({"index":2,"offset":0,"hex":"6d617070696e67","final_chunk":true})));
+        for value in [Value::Null, json!({}), json!({"path":"Vertraulich/foreign.txt"})] {
+            let mut invalid = frame.clone(); invalid["operation"]["confidential"] = value;
+            assert!(handle_publication_owned(&invalid, &outer, &mut PublicationState::default(), Some(&guard), &fixture.data(), None).is_err());
+        }
+        let mut partial = frame.clone(); partial["operation"]["confidential"].as_object_mut().unwrap().remove("identities");
+        assert!(handle_publication_owned(&partial, &outer, &mut PublicationState::default(), Some(&guard), &fixture.data(), None).is_err());
+        let mut unknown = frame.clone(); unknown["operation"]["confidential"]["filename_mapping"]["name"] = json!("foreign.csv");
+        assert!(handle_publication_owned(&unknown, &outer, &mut PublicationState::default(), Some(&guard), &fixture.data(), None).is_err());
+        for index in [4, 200, usize::MAX] {
+            let mut invalid = frame.clone(); invalid["body"]["index"] = json!(index);
+            let response = handle_publication_owned(&invalid, &outer, &mut PublicationState::default(), Some(&guard), &fixture.data(), None).unwrap().unwrap();
+            assert_eq!(response["ok"], false);
+        }
+        let mut no_companions = op.clone(); no_companions.confidential = None;
+        let invalid = export_frame(&no_companions, &outer, 1, "write_body", Some(json!({"index":2,"offset":0,"hex":"6d617070696e67","final_chunk":true})));
+        assert_eq!(handle_publication_owned(&invalid, &outer, &mut PublicationState::default(), Some(&guard), &fixture.data(), None).unwrap().unwrap()["ok"], false);
+        assert_eq!(std::fs::read_dir(fixture.root.join("public/DataSecure-KI-Export")).unwrap().count(), 0);
+        assert_eq!(std::fs::read_dir(fixture.data().join(&op.binding.private_name)).unwrap().count(), 0);
     }
     #[test]
     fn result_role_frames_publish_and_reconcile_only_through_the_closed_batch_contract() {

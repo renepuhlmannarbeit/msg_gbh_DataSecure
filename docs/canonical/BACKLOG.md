@@ -1,6 +1,29 @@
 # Aktives Entwicklungsbacklog
 
-Arbeitsversion: **3.2.0-rc166**, gemeinsame Windows-/macOS-Testpakete veröffentlicht; Nutzerabnahme offen.
+Arbeitsversion: **3.2.0-rc167**, gemeinsame Windows-/macOS-Builds und neuer
+Test-Pre-Release beauftragt; noch nicht veröffentlicht. RC166 bleibt unverändert.
+
+## Aktiver Nutzerbefund – vertrauliche Zuordnungen im Ergebnisordner
+
+**RESULT-COMPANIONS-01 – Quellfix umgesetzt, noch kein neues Paket:** Der reale
+Windowslauf `d7047e01…` besitzt beide internen Zuordnungen, aber keinen sichtbaren
+Unterordner. Nutzeranforderung: Im geöffneten anonymisierten Ergebnisstand müssen
+`Vertraulich/Dateizuordnung.csv` und
+`Vertraulich/Personen-Pseudonym-Zuordnung.txt` physisch vorhanden sein, ohne
+weitere Buttons oder Exportpflicht. Auch nach Nachbearbeitung muss der vollständige
+neue Stand seine eigenen tatsächlichen Dateinamen und Identitäten abbilden.
+Versionierter geschlossener Inventar-/Transaktionsvertrag; Hash-, Eltern-,
+Objekt-, Budget- und Native-Guardprüfungen bleiben erhalten. Kein nachträgliches
+ungeprüftes Kopieren in alte `/1`-Ergebnisordner und keine Reparatur beim Lesen.
+Quell-/Native-Gegenprüfungen bestanden:16Companion-/65Generationenfälle,
+65Async-Assertions,265Rust/3ignoriert/Clippy und echter Node→Rust-Pfad für
+beide Betriebsarten. Unabhängige Erstwriter-/Store-/Rustreviews, engste neue
+Native-ACL-/Nullgrößen-/Async-Befunde ebenfalls behoben und revalidiert.
+[Nachweise und Grenzen](../acceptance/RC166_RESULT_COMPANIONS_FIX_20261019.md).
+Vollständige neue Regression/Plattformbuilds/Paketnachweise offen; alte
+RC166-Pakete und Belege bleiben unverändert. Desktoptests übernimmt der Nutzer.
+RC167 wurde am20.10.2026 ausdrücklich samt beiden Mac-Runnern und
+GitHub-Test-Pre-Release freigegeben; keine Main-Integration oder Automation.
 
 ## Neuester Abschluss – RC166-Testübergabe
 
@@ -1090,7 +1113,7 @@ in dieselbe Korrekturrunde.
 
 ## Historische Nachweise bis R4 (kein aktueller R5-Abschluss)
 
-Stand: 17.10.2026 · Produktstand 3.2.0-rc166 · veröffentlicht Standalone RC162 (Windows und beide Mac-Architekturen; M2-Abnahme offen), Linux RC159 / Cowork RC151 · lokaler Arbeitsstand nach RC162 noch nicht veröffentlicht
+Stand: 17.10.2026 · Produktstand 3.2.0-rc167 · veröffentlicht Standalone RC162 (Windows und beide Mac-Architekturen; M2-Abnahme offen), Linux RC159 / Cowork RC151 · lokaler Arbeitsstand nach RC162 noch nicht veröffentlicht
 
 ## Gezielter R3-Abschlussreview
 

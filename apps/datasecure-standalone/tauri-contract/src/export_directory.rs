@@ -209,11 +209,75 @@ impl RecoveredDirectory<'_> {
         self.parent.inspect_child(&self.name, self.directory.identity)?;
         Ok(())
     }
+    pub fn verify_confidential_results_inventory(&self, expected: &[ExpectedFile], confidential: &ConfidentialFiles,
+        identity: Identity) -> io::Result<()> {
+        self.parent.inspect_child(&self.name, self.directory.identity)?;
+        self.directory.verify_confidential_inventory(expected, confidential, identity, true)?;
+        self.parent.inspect_child(&self.name, self.directory.identity)?;
+        Ok(())
+    }
+    pub fn verify_confidential_stage_inventory(&self, expected: &[ExpectedFile], confidential: &ConfidentialFiles,
+        identity: Identity) -> io::Result<()> {
+        self.parent.inspect_child(&self.name, self.directory.identity)?;
+        self.directory.open_controlled_child(CONFIDENTIAL_DIRECTORY, identity)?.verify_controlled()?;
+        self.directory.verify_confidential_inventory(expected, confidential, identity, false)?;
+        self.parent.inspect_child(&self.name, self.directory.identity)?;
+        Ok(())
+    }
 }
 /// Flat, neutral export inventory. Sizes are exact, not an allocation hint.
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ExpectedFile { pub name: String, pub bytes: u64, pub sha256: [u8; 32] }
+pub(crate) const CONFIDENTIAL_DIRECTORY: &str = "Vertraulich";
+pub(crate) const FILENAME_MAPPING: &str = "Dateizuordnung.csv";
+pub(crate) const IDENTITIES_FILE: &str = "Personen-Pseudonym-Zuordnung.txt";
+/// Fixed companion roles, never caller-selected paths or another document.
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ConfidentialFile { pub bytes: u64, pub sha256: [u8; 32] }
+#[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct ConfidentialFiles { pub filename_mapping: ConfidentialFile, pub identities: ConfidentialFile }
+pub(crate) fn deserialize_confidential<'de, D: serde::Deserializer<'de>>(deserializer: D)
+    -> Result<Option<ConfidentialFiles>, D::Error> {
+    // Missing uses the field default. Explicit null is NOT the legacy role.
+    <ConfidentialFiles as serde::Deserialize<'de>>::deserialize(deserializer).map(Some)
+}
+impl ConfidentialFiles {
+    pub fn files(&self) -> [ExpectedFile; 2] {
+        [ExpectedFile { name: FILENAME_MAPPING.into(), bytes: self.filename_mapping.bytes, sha256: self.filename_mapping.sha256 },
+            ExpectedFile { name: IDENTITIES_FILE.into(), bytes: self.identities.bytes, sha256: self.identities.sha256 }]
+    }
+    fn total_bytes(&self) -> io::Result<u64> {
+        if self.filename_mapping.bytes == 0 || self.identities.bytes == 0 ||
+            self.filename_mapping.bytes > 4 * 1024 * 1024 || self.identities.bytes > 16 * 1024 * 1024 {
+            return Err(unsafe_io());
+        }
+        self.filename_mapping.bytes.checked_add(self.identities.bytes).ok_or_else(unsafe_io)
+    }
+}
+/// Preserve the 200-document / 500-MiB contract. Exactly two typed companions
+/// can additionally belong to an anonymized Results transaction, never Legacy.
+pub(crate) fn validate_publication_inventory(mode: &str, results: bool, files: &[ExpectedFile],
+    confidential: Option<&ConfidentialFiles>) -> io::Result<()> {
+    if files.is_empty() || files.len() > 200 { return Err(unsafe_io()); }
+    validate_export_names(mode, files)?;
+    let mut total = if let Some(value) = confidential {
+        if !results || mode != "markdown-and-anonymize" { return Err(unsafe_io()); }
+        value.total_bytes()?
+    } else { 0 };
+    for file in files {
+        if file.bytes > 32_000_000 { return Err(unsafe_io()); }
+        total = total.checked_add(file.bytes).ok_or_else(unsafe_io)?;
+        if total > 500 * 1024 * 1024 { return Err(unsafe_io()); }
+    }
+    Ok(())
+}
+pub(crate) fn publication_body(files: &[ExpectedFile], confidential: Option<&ConfidentialFiles>, index: usize) -> Option<ExpectedFile> {
+    if let Some(file) = files.get(index) { return Some(file.clone()); }
+    confidential?.files().get(index.checked_sub(files.len())?).cloned()
+}
 pub(crate) fn validate_export_names(mode: &str, files: &[ExpectedFile]) -> io::Result<()> {
     let mut used = std::collections::HashSet::new();
     for (index, file) in files.iter().enumerate() {
@@ -253,6 +317,54 @@ mod filename_tests {
         assert!(validate_export_names("markdown-only", &files(&[&format!("{}.md", "🧪".repeat(64))])).is_err());
         assert!(validate_export_names("markdown-and-anonymize", &files(&["Quelle.md"])).is_err());
         assert!(validate_export_names("markdown-and-anonymize", &files(&["Dokument_01.md"])).is_ok());
+    }
+    fn confidential() -> ConfidentialFiles {
+        ConfidentialFiles { filename_mapping: ConfidentialFile { bytes: 4 * 1024 * 1024, sha256: [1; 32] },
+            identities: ConfidentialFile { bytes: 16 * 1024 * 1024, sha256: [2; 32] } }
+    }
+    #[test]
+    fn confidential_inventory_has_exact_roles_sizes_and_no_generic_filename_authority() {
+        let value = confidential(); let documents = files(&["Dokument_01.md"]);
+        assert!(validate_publication_inventory("markdown-and-anonymize", true, &documents, Some(&value)).is_ok());
+        assert!(validate_publication_inventory("markdown-and-anonymize", false, &documents, Some(&value)).is_err());
+        assert!(validate_publication_inventory("markdown-only", true, &files(&["x.md"]), Some(&value)).is_err());
+        let mut oversize = value.clone(); oversize.filename_mapping.bytes += 1;
+        assert!(validate_publication_inventory("markdown-and-anonymize", true, &documents, Some(&oversize)).is_err());
+        oversize = value.clone(); oversize.identities.bytes += 1;
+        assert!(validate_publication_inventory("markdown-and-anonymize", true, &documents, Some(&oversize)).is_err());
+        for role in [true, false] {
+            let mut empty = value.clone();
+            if role { empty.filename_mapping.bytes = 0; } else { empty.identities.bytes = 0; }
+            assert!(validate_publication_inventory("markdown-and-anonymize", true, &documents, Some(&empty)).is_err());
+        }
+        assert_eq!(publication_body(&documents, Some(&value), 0).unwrap().name, "Dokument_01.md");
+        assert_eq!(publication_body(&documents, Some(&value), 1).unwrap().name, FILENAME_MAPPING);
+        assert_eq!(publication_body(&documents, Some(&value), 2).unwrap().name, IDENTITIES_FILE);
+        assert!(publication_body(&documents, Some(&value), 3).is_none());
+        assert!(publication_body(&documents, None, 1).is_none());
+        for invalid in [serde_json::Value::Null, serde_json::json!({})] {
+            assert!(serde_json::from_value::<ConfidentialFiles>(invalid).is_err());
+        }
+        let mut partial = serde_json::to_value(&value).unwrap(); partial.as_object_mut().unwrap().remove("identities");
+        assert!(serde_json::from_value::<ConfidentialFiles>(partial).is_err());
+        let mut unknown = serde_json::to_value(&value).unwrap(); unknown["path"] = serde_json::json!("elsewhere");
+        assert!(serde_json::from_value::<ConfidentialFiles>(unknown).is_err());
+        let mut unknown = serde_json::to_value(&value).unwrap(); unknown["identities"]["name"] = serde_json::json!("other.txt");
+        assert!(serde_json::from_value::<ConfidentialFiles>(unknown).is_err());
+    }
+    #[test]
+    fn confidential_companions_do_not_spend_document_slots_or_expand_the_total_byte_budget() {
+        let value = confidential();
+        let mut documents: Vec<_> = (1..=200).map(|index| ExpectedFile { name: format!("Dokument_{index:02}.md"), bytes: 0, sha256: [0; 32] }).collect();
+        assert!(validate_publication_inventory("markdown-and-anonymize", true, &documents, Some(&value)).is_ok());
+        assert_eq!(publication_body(&documents, Some(&value), 201).unwrap().name, IDENTITIES_FILE);
+        assert!(publication_body(&documents, Some(&value), 202).is_none());
+        documents.push(ExpectedFile { name: "Dokument_201.md".into(), bytes: 0, sha256: [0; 32] });
+        assert!(validate_publication_inventory("markdown-and-anonymize", true, &documents, Some(&value)).is_err());
+        documents.pop();
+        for item in documents.iter_mut().take(16) { item.bytes = 32_000_000; }
+        assert!(validate_publication_inventory("markdown-and-anonymize", true, &documents, None).is_ok());
+        assert!(validate_publication_inventory("markdown-and-anonymize", true, &documents, Some(&value)).is_err());
     }
 }
 impl Directory {
@@ -501,6 +613,12 @@ impl Directory {
         if expected.iter().any(|file| file.name == ".DS_Store") { return Err(unsafe_io()); }
         self.verify_inventory_policy(expected, cfg!(target_os = "macos"))
     }
+    /// Closed two-file child. Its original native identity is durable plan
+    /// evidence; neither a name nor equal bytes grants replacement ownership.
+    pub fn verify_confidential_inventory(&self, expected: &[ExpectedFile], confidential: &ConfidentialFiles,
+        identity: Identity, public_results: bool) -> io::Result<()> {
+        self.verify_inventory_policy_confidential(expected, public_results && cfg!(target_os = "macos"), Some((confidential, identity)))
+    }
     fn verify_public_results_names(&self, expected: &[String], public_results: bool) -> io::Result<()> {
         let limit = expected.len().checked_add(if public_results { 1 } else { 0 }).ok_or_else(unsafe_io)?;
         let mut actual = platform::list_names(&self.inner, limit)?;
@@ -523,9 +641,13 @@ impl Directory {
         self.check()
     }
     fn verify_inventory_policy(&self, expected: &[ExpectedFile], public_results: bool) -> io::Result<()> {
+        self.verify_inventory_policy_confidential(expected, public_results, None)
+    }
+    fn verify_inventory_policy_confidential(&self, expected: &[ExpectedFile], public_results: bool,
+        confidential: Option<(&ConfidentialFiles, Identity)>) -> io::Result<()> {
         if expected.is_empty() || expected.len() > 200 { return Err(unsafe_io()); }
         let mut names = Vec::with_capacity(expected.len());
-        let mut total = 0u64;
+        let mut total = confidential.map(|(value, _)| value.total_bytes()).transpose()?.unwrap_or(0);
         for item in expected {
             leaf(&item.name)?;
             // Metadata can be tolerated, never promoted into promised output.
@@ -535,10 +657,21 @@ impl Directory {
             if total > 500 * 1024 * 1024 { return Err(unsafe_io()); }
             names.push(item.name.clone());
         }
+        if confidential.is_some() { names.push(CONFIDENTIAL_DIRECTORY.into()); }
         names.sort();
         if names.windows(2).any(|pair| pair[0] == pair[1]) { return Err(unsafe_io()); }
         self.check()?;
         self.verify_public_results_names(&names, public_results)?;
+        let verify_confidential = || -> io::Result<()> {
+            if let Some((value, identity)) = confidential {
+                let child = self.open_known_child(CONFIDENTIAL_DIRECTORY, identity)?;
+                child.parent.inspect_child(&child.name, identity)?;
+                child.directory.verify_inventory_policy(&value.files(), public_results)?;
+                child.parent.inspect_child(&child.name, identity)?;
+            }
+            Ok(())
+        };
+        verify_confidential()?;
         for item in expected {
             let mut file = platform::read_file(&self.inner, &item.name)?;
             let identity = platform::regular_identity(&file)?;
@@ -564,6 +697,7 @@ impl Directory {
             let named = platform::read_file(&self.inner, &item.name)?;
             if platform::regular_identity(&named)? != identity { return Err(unsafe_io()); }
         }
+        verify_confidential()?;
         self.verify_public_results_names(&names, public_results)?;
         self.check()
     }

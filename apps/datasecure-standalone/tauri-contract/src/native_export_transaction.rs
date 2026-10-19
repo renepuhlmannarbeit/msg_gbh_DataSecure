@@ -4,7 +4,7 @@
 //! Records are exclusive, bounded, handle-relative and immutable. No cleanup,
 //! copy fallback, adoption of unknown stages, or automatic new attempts.
 #![allow(dead_code)]
-use crate::{export_directory::{self, Directory, ExpectedFile, Identity, RecoveredDirectory}, ipc_transport::NativeGuard};
+use crate::{export_directory::{self, Directory, ExpectedFile, ConfidentialFiles, deserialize_confidential, Identity, RecoveredDirectory, CONFIDENTIAL_DIRECTORY}, ipc_transport::NativeGuard};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::io;
@@ -52,6 +52,8 @@ pub(crate) struct Plan {
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_publication_role")]
     publication_role: Option<PublicationRole>,
     files: Vec<ExpectedFile>,
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_confidential")]
+    confidential: Option<ConfidentialFiles>,
 }
 pub(crate) struct Parents<'a> { pub journal: &'a Directory, pub staging: &'a Directory, pub target: &'a Directory }
 impl Plan {
@@ -59,24 +61,22 @@ impl Plan {
         files: Vec<ExpectedFile>, parents: &Parents<'_>) -> io::Result<Self> {
         let plan = Self { schema: "datasecure-native-export-plan/1".into(), batch_id, operation_id, request_sha256,
             processing_mode, journal: parents.journal.identity().into(), staging_parent: parents.staging.identity().into(),
-            target_parent: parents.target.identity().into(), publication_role: None, files };
+            target_parent: parents.target.identity().into(), publication_role: None, files, confidential: None };
         plan.validate()?; Ok(plan)
     }
     pub fn with_publication_role(mut self, role: Option<PublicationRole>) -> Self {
         self.publication_role = role; self
+    }
+    pub fn with_confidential(mut self, confidential: Option<ConfidentialFiles>) -> io::Result<Self> {
+        self.confidential = confidential; self.validate()?; Ok(self)
     }
     fn validate(&self) -> io::Result<()> {
         if self.schema != "datasecure-native-export-plan/1" || !hex(&self.batch_id, 64) || !hex(&self.operation_id, 32) ||
             !hex(&self.request_sha256, 64) || !["markdown-only", "markdown-and-anonymize"].contains(&self.processing_mode.as_str()) ||
             self.files.is_empty() || self.files.len() > 200 { return Err(conflict()); }
         self.journal.identity()?; self.staging_parent.identity()?; self.target_parent.identity()?;
-        let mut total = 0u64;
-        crate::export_directory::validate_export_names(&self.processing_mode, &self.files).map_err(|_| conflict())?;
-        for file in &self.files {
-            if file.bytes > 32_000_000 { return Err(conflict()); }
-            total = total.checked_add(file.bytes).ok_or_else(conflict)?;
-            if total > 500 * 1024 * 1024 { return Err(conflict()); }
-        }
+        crate::export_directory::validate_publication_inventory(&self.processing_mode,
+            self.publication_role == Some(PublicationRole::Results), &self.files, self.confidential.as_ref()).map_err(|_| conflict())?;
         Ok(())
     }
     fn digest(&self) -> io::Result<[u8; 32]> {
@@ -91,6 +91,9 @@ pub(crate) enum Status { Unprepared, Prepared, Completed, Acknowledged, Abandone
 #[derive(Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct Record { schema: String, plan_sha256: [u8; 32], stage: Option<ObjectId> }
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ConfidentialRecord { schema: String, plan_sha256: [u8; 32], stage: ObjectId, directory: ObjectId }
 pub(crate) struct Transaction<'a> {
     journal: &'a Directory, staging: &'a Directory, target: &'a Directory, plan: Plan, guard: &'a NativeGuard,
     plan_sha256: [u8; 32],
@@ -157,6 +160,57 @@ impl<'a> Transaction<'a> {
         if record.schema != format!("datasecure-native-export-{kind}/1") || record.plan_sha256 != self.plan_sha256 { return Err(conflict()); }
         Ok(Some(record.stage.map(|id| id.identity()).transpose()?))
     }
+    fn confidential_identity(&self, stage: Option<Identity>, required: bool) -> io::Result<Option<Identity>> {
+        let attempted = self.existing("confidential-started")?;
+        let saved = self.read::<ConfidentialRecord>("confidential")?;
+        if self.plan.confidential.is_none() {
+            if attempted.is_some() || saved.is_some() { return Err(conflict()); }
+            return Ok(None);
+        }
+        if attempted.is_some() && (stage.is_none() || attempted != Some(stage)) { return Err(conflict()); }
+        if let Some(saved) = saved {
+            if saved.schema != "datasecure-native-confidential-directory/1" || saved.plan_sha256 != self.plan_sha256 ||
+                Some(saved.stage.identity()?) != stage || attempted != Some(stage) { return Err(conflict()); }
+            return Ok(Some(saved.directory.identity()?));
+        }
+        // A crash between native creation and this receipt is never permission
+        // to adopt a same-name child, even after somebody removes that child.
+        if attempted.is_some() { return Err(failure("AI_EXPORT_UNCERTAIN")); }
+        if required { return Err(failure("AI_EXPORT_INCOMPLETE")); }
+        Ok(None)
+    }
+    fn confidential_stage(&self, stage: &Directory) -> io::Result<Directory> {
+        if self.plan.confidential.is_none() { return Err(conflict()); }
+        stage.verify_controlled()?;
+        if let Some(identity) = self.confidential_identity(Some(stage.identity()), false)? {
+            return stage.open_controlled_child(CONFIDENTIAL_DIRECTORY, identity);
+        }
+        if !stage.child_absent(CONFIDENTIAL_DIRECTORY)? { return Err(conflict()); }
+        self.guard.checkpoint().map_err(|_| failure("STANDALONE_CLOSING"))?;
+        self.record("confidential-started", Some(stage.identity()))?;
+        self.guard.checkpoint().map_err(|_| failure("STANDALONE_CLOSING"))?;
+        let directory = stage.create_controlled_child(CONFIDENTIAL_DIRECTORY)
+            .map_err(|_| failure("AI_EXPORT_UNCERTAIN"))?;
+        directory.sync()?; stage.sync()?;
+        self.put("confidential", &ConfidentialRecord { schema: "datasecure-native-confidential-directory/1".into(),
+            plan_sha256: self.plan_sha256, stage: stage.identity().into(), directory: directory.identity().into() })?;
+        stage.inspect_child(CONFIDENTIAL_DIRECTORY, directory.identity())?;
+        directory.verify_controlled()?;
+        Ok(directory)
+    }
+    fn verify_stage_inventory(&self, stage: &Directory) -> io::Result<()> {
+        if let Some(confidential) = &self.plan.confidential {
+            let identity = self.confidential_identity(Some(stage.identity()), true)?.ok_or_else(conflict)?;
+            stage.open_controlled_child(CONFIDENTIAL_DIRECTORY, identity)?.verify_controlled()?;
+            stage.verify_confidential_inventory(&self.plan.files, confidential, identity, false)
+        } else { stage.verify_inventory(&self.plan.files) }
+    }
+    fn verify_recovered_stage_inventory(&self, stage: &RecoveredDirectory<'_>, stage_identity: Identity) -> io::Result<()> {
+        if let Some(confidential) = &self.plan.confidential {
+            let identity = self.confidential_identity(Some(stage_identity), true)?.ok_or_else(conflict)?;
+            stage.verify_confidential_stage_inventory(&self.plan.files, confidential, identity)
+        } else { stage.verify_inventory(&self.plan.files) }
+    }
     fn evidence(&self) -> io::Result<(Option<Identity>, bool, bool, bool, bool, bool)> {
         let saved: Plan = self.read("intent")?.ok_or_else(conflict)?;
         if saved != self.plan { return Err(conflict()); }
@@ -173,6 +227,7 @@ impl<'a> Transaction<'a> {
         }
         if started.is_some() && prepared.is_none() || complete.is_some() && started.is_none() ||
             ack.is_some() && complete.is_none() || abandoned.is_some() && (abandoned != Some(identity) || complete.is_some() || ack.is_some()) { return Err(conflict()); }
+        self.confidential_identity(identity, prepared.is_some() || started.is_some() || complete.is_some() || ack.is_some())?;
         Ok((identity, prepared.is_some(), started.is_some(), complete.is_some(), ack.is_some(), abandoned.is_some()))
     }
     /// Every body must match the already-bound neutral inventory. A partial
@@ -180,22 +235,32 @@ impl<'a> Transaction<'a> {
     pub fn write_body(&self, index: usize, bytes: &[u8]) -> io::Result<()> {
         let (identity, prepared, started, _, _, abandoned) = self.evidence()?;
         if prepared || started || abandoned { return Err(conflict()); }
-        let file = self.plan.files.get(index).ok_or_else(conflict)?;
+        let file = export_directory::publication_body(&self.plan.files, self.plan.confidential.as_ref(), index).ok_or_else(conflict)?;
         if bytes.len() as u64 != file.bytes || <[u8; 32]>::from(Sha256::digest(bytes)) != file.sha256 { return Err(conflict()); }
         self.guard.checkpoint().map_err(|_| failure("STANDALONE_CLOSING"))?;
         let stage = if let Some(identity) = identity {
             self.staging.reopen_private_stage(&self.plan.stage_name(), identity)?
         } else {
-            let stage = self.staging.create_private_child(&self.plan.stage_name())?;
+            // New confidential stages are themselves admitted as controlled
+            // parents before creating the protected child. Inherited Windows
+            // ACEs alone do not carry SE_DACL_PROTECTED. Supply the descriptor
+            // at exclusive creation; do not weaken verification or repair ACLs.
+            let stage = if self.plan.confidential.is_some() {
+                self.staging.create_controlled_child(&self.plan.stage_name())?
+            } else { self.staging.create_private_child(&self.plan.stage_name())? };
             self.record("stage", Some(stage.identity()))?;
             stage
         };
-        match stage.write_new(&file.name, bytes) {
+        let confidential = if index >= self.plan.files.len() { Some(self.confidential_stage(&stage)?) } else { None };
+        let destination = confidential.as_ref().unwrap_or(&stage);
+        match destination.write_new(&file.name, bytes) {
             Ok(()) => {},
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {},
             Err(error) => return Err(error),
         }
-        if stage.read_bounded(&file.name, 32_000_000)? != bytes { return Err(conflict()); }
+        if destination.read_bounded(&file.name, 32_000_000)? != bytes { return Err(conflict()); }
+        destination.sync()?;
+        if let Some(child) = &confidential { stage.inspect_child(CONFIDENTIAL_DIRECTORY, child.identity())?; }
         stage.sync()?;
         self.staging.inspect_child(&self.plan.stage_name(), stage.identity())?;
         Ok(())
@@ -206,7 +271,7 @@ impl<'a> Transaction<'a> {
         let identity = identity.ok_or_else(|| failure("AI_EXPORT_INCOMPLETE"))?;
         self.guard.checkpoint().map_err(|_| failure("STANDALONE_CLOSING"))?;
         let stage = self.staging.open_known_child(&self.plan.stage_name(), identity)?;
-        stage.verify_inventory(&self.plan.files)?;
+        self.verify_recovered_stage_inventory(&stage, identity)?;
         self.record("prepared", Some(identity))
     }
     /// Reconcile before retry, ACK and abandonment. A receipt alone is never
@@ -215,7 +280,11 @@ impl<'a> Transaction<'a> {
         // Only this already-published public target gains the exact metadata
         // exception. Its Results role is part of the durable hashed plan.
         if self.plan.publication_role == Some(PublicationRole::Results) {
-            output.verify_public_results_inventory(&self.plan.files)
+            if let Some(confidential) = &self.plan.confidential {
+                let stage = self.existing("stage")?.flatten();
+                let identity = self.confidential_identity(stage, true)?.ok_or_else(conflict)?;
+                output.verify_confidential_results_inventory(&self.plan.files, confidential, identity)
+            } else { output.verify_public_results_inventory(&self.plan.files) }
         } else {
             output.verify_inventory(&self.plan.files)
         }
@@ -244,7 +313,7 @@ impl<'a> Transaction<'a> {
                 // exact known complete stage permits another publication try.
                 let stage = self.staging.open_known_child(&self.plan.stage_name(), identity)
                     .map_err(|_| failure("AI_EXPORT_UNCERTAIN"))?;
-                stage.verify_inventory(&self.plan.files)?;
+                self.verify_recovered_stage_inventory(&stage, identity)?;
                 Ok(Status::Prepared)
             },
             Err(error) => Err(error),
@@ -271,7 +340,7 @@ impl<'a> Transaction<'a> {
         let identity = self.evidence()?.0.ok_or_else(conflict)?;
         self.guard.checkpoint().map_err(|_| failure("STANDALONE_CLOSING"))?;
         let stage = self.staging.reopen_private_stage(&self.plan.stage_name(), identity)?;
-        stage.verify_inventory(&self.plan.files)?;
+        self.verify_stage_inventory(&stage)?;
         self.record("started", Some(identity))?; // before the OS rename
         let result = export_directory::publish(self.staging, &self.plan.stage_name(), &stage,
             self.target, &self.plan.target_name(), self.guard);
@@ -309,6 +378,7 @@ impl<'a> Transaction<'a> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::export_directory::{ConfidentialFile, FILENAME_MAPPING, IDENTITIES_FILE};
     use crate::ipc_transport::Lifecycle;
     use std::{fs, path::PathBuf};
     struct Fixture { path: PathBuf }
@@ -354,6 +424,143 @@ mod tests {
         let stage = tx.staging.reopen_private_stage(&tx.plan.stage_name(), identity).unwrap();
         tx.record("started", Some(identity)).unwrap();
         export_directory::publish(tx.staging, &tx.plan.stage_name(), &stage, tx.target, &tx.plan.target_name(), tx.guard).unwrap();
+    }
+    fn companions() -> ConfidentialFiles {
+        ConfidentialFiles { filename_mapping: ConfidentialFile { bytes: 7, sha256: Sha256::digest(b"mapping").into() },
+            identities: ConfidentialFile { bytes: 10, sha256: Sha256::digest(b"identities").into() } }
+    }
+    fn results_with_companions(f: &Fixture, j: &Directory, s: &Directory, t: &Directory) -> Plan {
+        f.plan(j, s, t).with_publication_role(Some(PublicationRole::Results)).with_confidential(Some(companions())).unwrap()
+    }
+    fn stage_all(tx: &Transaction<'_>) {
+        tx.write_body(0, b"hello").unwrap(); tx.write_body(1, b"mapping").unwrap(); tx.write_body(2, b"identities").unwrap();
+    }
+    #[test]
+    fn confidential_plan_is_closed_optional_digest_bound_and_never_a_legacy_or_markdown_capability() {
+        let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+        let legacy = f.plan(&j, &s, &t);
+        assert!(!String::from_utf8_lossy(&serde_json::to_vec(&legacy).unwrap()).contains("confidential"));
+        assert!(legacy.clone().with_confidential(Some(companions())).is_err());
+        let results = legacy.clone().with_publication_role(Some(PublicationRole::Results));
+        let current = results.clone().with_confidential(Some(companions())).unwrap();
+        assert_ne!(current.digest().unwrap(), results.digest().unwrap());
+        let mut changed = companions(); changed.identities.sha256[0] ^= 1;
+        assert_ne!(current.digest().unwrap(), results.clone().with_confidential(Some(changed)).unwrap().digest().unwrap());
+        let mut markdown = results; markdown.processing_mode = "markdown-only".into(); markdown.files[0].name = "source.md".into();
+        assert!(markdown.with_confidential(Some(companions())).is_err());
+        for invalid in [serde_json::Value::Null, serde_json::json!({}), serde_json::json!({"path":"anywhere"})] {
+            let mut value = serde_json::to_value(&current).unwrap(); value["confidential"] = invalid;
+            assert!(serde_json::from_value::<Plan>(value).is_err());
+        }
+        let mut partial = serde_json::to_value(&current).unwrap(); partial["confidential"].as_object_mut().unwrap().remove("identities");
+        assert!(serde_json::from_value::<Plan>(partial).is_err());
+    }
+    #[test]
+    fn confidential_generation_publishes_both_companions_with_lost_receipt_recovery_but_never_repairs_a_deleted_file() {
+        let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+        let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
+        let plan = results_with_companions(&f, &j, &s, &t);
+        {
+            let tx = Transaction::open(&j, &s, &t, plan.clone(), &guard).unwrap();
+            tx.write_body(0, b"hello").unwrap(); assert!(tx.prepare().is_err(), "both companions are required");
+            tx.write_body(1, b"mapping").unwrap(); assert!(tx.prepare().is_err(), "one companion is not a completed generation");
+            tx.write_body(2, b"identities").unwrap(); tx.prepare().unwrap(); publish_without_receipt(&tx);
+            assert_eq!(tx.inspect_completed().unwrap_err().to_string(), "AI_EXPORT_INCOMPLETE");
+        }
+        drop(j); drop(s); drop(t);
+        let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+        let tx = Transaction::open(&j, &s, &t, plan, &guard).unwrap();
+        assert_eq!(tx.commit().unwrap(), Status::Completed);
+        assert_eq!(tx.acknowledge().unwrap(), Status::Acknowledged);
+        let target = f.path.join("target").join(tx.plan.target_name()); let confidential = target.join(CONFIDENTIAL_DIRECTORY);
+        assert_eq!(fs::read_dir(&target).unwrap().count(), 2);
+        assert_eq!(fs::read_dir(&confidential).unwrap().count(), 2);
+        assert_eq!(fs::read(confidential.join(FILENAME_MAPPING)).unwrap(), b"mapping");
+        assert_eq!(fs::read(confidential.join(IDENTITIES_FILE)).unwrap(), b"identities");
+        assert_eq!(tx.inspect_completed().unwrap(), Status::Acknowledged);
+        fs::remove_file(confidential.join(FILENAME_MAPPING)).unwrap();
+        assert!(tx.inspect_completed().is_err()); assert!(tx.commit().is_err());
+        assert!(!confidential.join(FILENAME_MAPPING).exists(), "a missing published companion is never recreated");
+        assert_eq!(fs::read(target.join("Dokument_01.md")).unwrap(), b"hello");
+        assert_eq!(fs::read_dir(f.path.join("target")).unwrap().count(), 1, "no replacement generation");
+    }
+    #[test]
+    fn confidential_inventory_rejects_changed_bodies_extras_hardlinks_and_equal_byte_directory_replacement() {
+        for damage in ["body", "extra", "hardlink", "subdirectory", "root-extra", "directory-replacement"] {
+            let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+            let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
+            let tx = Transaction::open(&j, &s, &t, results_with_companions(&f, &j, &s, &t), &guard).unwrap();
+            stage_all(&tx); tx.prepare().unwrap(); tx.commit().unwrap();
+            let target = f.path.join("target").join(tx.plan.target_name()); let child = target.join(CONFIDENTIAL_DIRECTORY);
+            match damage {
+                "body" => fs::write(child.join(FILENAME_MAPPING), b"changed").unwrap(),
+                "extra" => fs::write(child.join("extra.csv"), b"extra").unwrap(),
+                "hardlink" => fs::hard_link(child.join(IDENTITIES_FILE), f.path.join("foreign-link")).unwrap(),
+                "subdirectory" => fs::create_dir(child.join("other")).unwrap(),
+                "root-extra" => fs::write(target.join("other.txt"), b"extra").unwrap(),
+                "directory-replacement" => {
+                    fs::rename(&child, f.path.join("original-confidential")).unwrap(); fs::create_dir(&child).unwrap();
+                    fs::write(child.join(FILENAME_MAPPING), b"mapping").unwrap(); fs::write(child.join(IDENTITIES_FILE), b"identities").unwrap();
+                },
+                _ => unreachable!(),
+            }
+            assert!(tx.inspect_completed().is_err(), "{damage}");
+            assert!(tx.acknowledge().is_err(), "{damage}");
+            assert_eq!(fs::read_dir(f.path.join("target")).unwrap().count(), 1);
+        }
+    }
+    #[cfg(unix)]
+    #[test]
+    fn confidential_results_never_follow_symlinked_sidecar_directories_or_leaves() {
+        for directory in [false, true] {
+            let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+            let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
+            let tx = Transaction::open(&j, &s, &t, results_with_companions(&f, &j, &s, &t), &guard).unwrap();
+            stage_all(&tx); tx.prepare().unwrap(); tx.commit().unwrap();
+            let child = f.path.join("target").join(tx.plan.target_name()).join(CONFIDENTIAL_DIRECTORY);
+            let path = if directory { child } else { child.join(IDENTITIES_FILE) };
+            let original = f.path.join("original-object");
+            fs::rename(&path, &original).unwrap(); std::os::unix::fs::symlink(&original, &path).unwrap();
+            let refused = tx.inspect_completed().is_err();
+            fs::remove_file(&path).unwrap(); fs::rename(&original, &path).unwrap();
+            assert!(refused, "directory={directory}");
+            assert_eq!(tx.inspect_completed().unwrap(), Status::Completed);
+        }
+    }
+    #[test]
+    fn confidential_directory_without_a_durable_creation_receipt_is_never_adopted_or_recreated() {
+        for attempted in [false, true] {
+            let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+            let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
+            let plan = results_with_companions(&f, &j, &s, &t);
+            let tx = Transaction::open(&j, &s, &t, plan.clone(), &guard).unwrap(); tx.write_body(0, b"hello").unwrap();
+            let stage_id = tx.evidence().unwrap().0.unwrap(); let child = f.path.join("staging").join(tx.plan.stage_name()).join(CONFIDENTIAL_DIRECTORY);
+            if attempted { tx.record("confidential-started", Some(stage_id)).unwrap(); }
+            fs::create_dir(&child).unwrap();
+            assert!(tx.write_body(1, b"mapping").is_err()); assert_eq!(fs::read_dir(&child).unwrap().count(), 0);
+            assert!(tx.read::<ConfidentialRecord>("confidential").unwrap().is_none());
+            if attempted {
+                fs::remove_dir(&child).unwrap();
+                assert_eq!(tx.write_body(1, b"mapping").unwrap_err().to_string(), "AI_EXPORT_UNCERTAIN");
+                assert!(!child.exists(), "deleting an unconfirmed attempt grants no new creation");
+                drop(tx);
+                assert!(Transaction::open(&j, &s, &t, plan, &guard).is_err());
+            }
+        }
+    }
+    #[test]
+    fn confidential_private_staging_has_no_finder_metadata_exception() {
+        let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+        let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
+        let tx = Transaction::open(&j, &s, &t, results_with_companions(&f, &j, &s, &t), &guard).unwrap(); stage_all(&tx);
+        let metadata = f.path.join("staging").join(tx.plan.stage_name()).join(CONFIDENTIAL_DIRECTORY).join(".DS_Store");
+        fs::write(&metadata, b"opaque").unwrap(); assert!(tx.prepare().is_err()); fs::remove_file(&metadata).unwrap();
+        tx.prepare().unwrap(); tx.commit().unwrap();
+        let metadata = f.path.join("target").join(tx.plan.target_name()).join(CONFIDENTIAL_DIRECTORY).join(".DS_Store");
+        fs::write(&metadata, b"opaque").unwrap();
+        #[cfg(target_os = "macos")] assert_eq!(tx.inspect_completed().unwrap(), Status::Completed);
+        #[cfg(not(target_os = "macos"))] assert!(tx.inspect_completed().is_err());
+        fs::write(&metadata, vec![0u8; 1024 * 1024 + 1]).unwrap(); assert!(tx.inspect_completed().is_err());
     }
     #[test]
     fn result_role_is_closed_digest_bound_and_absent_for_legacy_serialization() {

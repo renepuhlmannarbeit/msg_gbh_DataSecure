@@ -1,7 +1,7 @@
 //! Standalone-only composition of picker authorization, controlled workspace
 //! and durable publication. All writes finish inside the desktop's NativeGuard.
 //! The sidecar streams hashed bodies over the owned pipe, never target paths.
-use crate::{export_directory::{Directory, ExpectedFile, Identity, Node22Identity, Node22BigIntIdentity}, ipc_transport::NativeGuard,
+use crate::{export_directory::{Directory, ExpectedFile, ConfidentialFiles, deserialize_confidential, Identity, Node22Identity, Node22BigIntIdentity}, ipc_transport::NativeGuard,
     native_export_transaction::{Status, PublicationRole, deserialize_publication_role}, native_export_workspace::{Request, Workspace}};
 use serde::{Deserialize, Serialize};
 use std::{io, path::{Path, PathBuf}};
@@ -56,6 +56,17 @@ pub(crate) struct Operation {
     pub processing_mode: String, pub binding: Binding, pub files: Vec<ExpectedFile>,
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_publication_role")]
     pub publication_role: Option<PublicationRole>,
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_confidential")]
+    pub confidential: Option<ConfidentialFiles>,
+}
+impl Operation {
+    pub(crate) fn payload_file(&self, index: usize) -> io::Result<ExpectedFile> {
+        crate::export_directory::validate_publication_inventory(&self.processing_mode,
+            self.publication_role == Some(PublicationRole::Results), &self.files, self.confidential.as_ref())
+            .map_err(|_| error("AI_EXPORT_INVALID"))?;
+        crate::export_directory::publication_body(&self.files, self.confidential.as_ref(), index)
+            .ok_or_else(|| error("AI_EXPORT_INVALID"))
+    }
 }
 // Match Standalone's fixed product namespace, not a renderer-controlled path.
 pub(crate) fn private_data_root() -> io::Result<PathBuf> {
@@ -246,7 +257,7 @@ fn execute_inner(data: &Path, op: &Operation, command: &str, body: Option<(usize
     let target = public.open_bound_child(name, id.identity()?)?;
     let request = Request::new(op.batch_id.clone(), op.operation_id.clone(), op.request_sha256.clone(),
         op.processing_mode.clone(), op.files.clone(), &private, &target)?
-        .with_publication_role(op.publication_role);
+        .with_publication_role(op.publication_role).with_confidential(op.confidential.clone())?;
     if command == "abandon" && Workspace::abandon_unbound(&private, &target, &request, guard)? {
         parent.inspect_child(&op.binding.private_name, private.identity())?;
         public.inspect_child(name, target.identity())?;
@@ -308,6 +319,7 @@ mod tests {
         fn op(&self, guard: &NativeGuard) -> Operation {
             let binding = configure(&self.path.join("public"), &self.path.join("private"), &"d".repeat(32), guard).unwrap();
             Operation { batch_id: "a".repeat(64), operation_id: "b".repeat(32), request_sha256: "c".repeat(64), publication_role: None,
+                confidential: None,
                 processing_mode: "markdown-and-anonymize".into(), binding,
                 files: vec![ExpectedFile { name: "Dokument_01.md".into(), bytes: 5, sha256: Sha256::digest(b"hello").into() }] }
         }
@@ -324,6 +336,56 @@ mod tests {
             }
             fs::remove_dir_all(&self.path).unwrap();
         }
+    }
+    #[test]
+    fn confidential_operation_is_optional_closed_and_payload_indices_are_not_arbitrary_paths() {
+        use crate::export_directory::{ConfidentialFile, FILENAME_MAPPING, IDENTITIES_FILE};
+        let f = Fixture::new(); let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
+        let legacy = f.op(&guard);
+        assert!(!String::from_utf8_lossy(&serde_json::to_vec(&legacy).unwrap()).contains("confidential"));
+        assert!(legacy.payload_file(1).is_err());
+        let mut op = legacy.clone(); op.publication_role = Some(PublicationRole::Results);
+        op.confidential = Some(ConfidentialFiles { filename_mapping: ConfidentialFile { bytes: 7, sha256: Sha256::digest(b"mapping").into() },
+            identities: ConfidentialFile { bytes: 10, sha256: Sha256::digest(b"identities").into() } });
+        assert_eq!(op.payload_file(1).unwrap().name, FILENAME_MAPPING);
+        assert_eq!(op.payload_file(2).unwrap().name, IDENTITIES_FILE);
+        assert!(op.payload_file(3).is_err());
+        let mut invalid = op.clone(); invalid.publication_role = None; assert!(invalid.payload_file(1).is_err());
+        invalid = op.clone(); invalid.processing_mode = "markdown-only".into(); assert!(invalid.payload_file(1).is_err());
+        for value in [serde_json::Value::Null, serde_json::json!({}), serde_json::json!({"root":"anywhere"})] {
+            let mut invalid = serde_json::to_value(&op).unwrap(); invalid["confidential"] = value;
+            assert!(serde_json::from_value::<Operation>(invalid).is_err());
+        }
+        let mut invalid = serde_json::to_value(&op).unwrap(); invalid["confidential"].as_object_mut().unwrap().remove("filename_mapping");
+        assert!(serde_json::from_value::<Operation>(invalid).is_err());
+        assert_eq!(fs::read_dir(f.path.join("private").join(&op.binding.private_name)).unwrap().count(), 0);
+    }
+    #[test]
+    fn confidential_results_broker_reopens_exact_companions_and_never_recreates_deleted_output() {
+        use crate::export_directory::{ConfidentialFile, CONFIDENTIAL_DIRECTORY, FILENAME_MAPPING, IDENTITIES_FILE};
+        let f = Fixture::new(); let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
+        let mut op = f.op(&guard); op.publication_role = Some(PublicationRole::Results);
+        op.confidential = Some(ConfidentialFiles { filename_mapping: ConfidentialFile { bytes: 7, sha256: Sha256::digest(b"mapping").into() },
+            identities: ConfidentialFile { bytes: 10, sha256: Sha256::digest(b"identities").into() } });
+        let data = f.path.join("private");
+        for (index, bytes) in [b"hello".as_slice(), b"mapping".as_slice(), b"identities".as_slice()].into_iter().enumerate() {
+            assert_eq!(write_body(&data, &op, index, bytes, &guard).unwrap(), "staged");
+        }
+        assert_eq!(execute(&data, &op, "publish", &guard).unwrap(), "completed");
+        assert_eq!(execute(&data, &op, "acknowledge", &guard).unwrap(), "acknowledged");
+        assert_eq!(inspect_results(&data, &op, &guard).unwrap(), "acknowledged");
+        let generation = f.path.join("public/DataSecure-KI-Export").join(format!("Ergebnisse-{}", op.operation_id));
+        let confidential = generation.join(CONFIDENTIAL_DIRECTORY);
+        assert_eq!(fs::read_dir(&confidential).unwrap().count(), 2);
+        assert_eq!(fs::read(confidential.join(FILENAME_MAPPING)).unwrap(), b"mapping");
+        assert_eq!(fs::read(confidential.join(IDENTITIES_FILE)).unwrap(), b"identities");
+        let mut legacy = op.clone(); legacy.confidential = None;
+        assert!(inspect_results(&data, &legacy, &guard).is_err(), "a new result cannot be reinterpreted as the old flat plan");
+        fs::remove_file(confidential.join(IDENTITIES_FILE)).unwrap();
+        assert!(inspect_results(&data, &op, &guard).is_err());
+        assert!(execute(&data, &op, "publish", &guard).is_err());
+        assert!(!confidential.join(IDENTITIES_FILE).exists());
+        assert_eq!(fs::read(generation.join("Dokument_01.md")).unwrap(), b"hello");
     }
     #[test]
     fn result_role_history_inspection_never_creates_setup_or_repairs_missing_receipts() {

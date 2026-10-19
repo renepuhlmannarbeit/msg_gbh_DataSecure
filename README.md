@@ -1,6 +1,6 @@
 # GBH DataSecure – Standalone Windows/macOS RC166 · Linux RC159 · Cowork RC151
 
-Quellstand: 3.2.0-rc166
+Quellstand: 3.2.0-rc167
 
 Der [Standalone-Test-Pre-Release RC166 für Windows und macOS](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc166)
 bindet Quellcommit `e04d32cff603597ce3d8c982e94154bb00f534fb` (Build `e04d32cf`).
@@ -17,6 +17,13 @@ und Integritätsprüfungen bleiben aktiv. Neue fertige Ordner enthalten die
 Markdown-Dateien; vertrauliche Zuordnungen bleiben getrennt privat. Nur gewünschte
 MD weitergeben, nicht zusätzliche OS-Metadaten. Es erfolgt kein Upload, und
 die Ergebnisse sind nicht auf KI-Nutzung beschränkt. Reine Konvertierung anonymisiert nicht.
+
+**Quellfix nach RC166, noch nicht als neues Paket veröffentlicht:** Neue
+Anonymisierungsstände erhalten im Ergebnisordner unter **Vertraulich** eine
+Dateizuordnung und eine Personen-/Pseudonymzuordnung, jeweils passend zum
+aktuellen Stand. Nur gewünschte Markdown-Dateien weitergeben; die vertraulichen
+Dateien enthalten Originalnamen. Alte RC166-Downloads und `/1`-Ordner bleiben
+unverändert. [Umsetzung und Prüfstand](docs/acceptance/RC166_RESULT_COMPANIONS_FIX_20261019.md).
 Für RC166 bestanden 283 Haupttests, zehn Zusatzprüfungen, Windows-Native-/Rust-
 und Paketgates sowie beide nativen Mac-Consumer aus demselben Appcommit.
 Die Mac-Pakete enthalten einen eigenen statischen Core und eine getrennte

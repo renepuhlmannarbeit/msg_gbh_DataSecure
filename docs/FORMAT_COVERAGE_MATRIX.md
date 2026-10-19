@@ -1,6 +1,6 @@
 # Aktuelle Format-Coverage
 
-Stand: 15.10.2026 · 3.2.0-rc166 · veröffentlicht Standalone RC160 (Windows x64, macOS Intel/Apple Silicon) / Cowork RC151; Linux Standalone RC159
+Stand: 15.10.2026 · 3.2.0-rc167 · veröffentlicht Standalone RC160 (Windows x64, macOS Intel/Apple Silicon) / Cowork RC151; Linux Standalone RC159
 
 Der [RC160-Quellcommit](RELEASE.md#rc160--standalone-test-pre-release-windows-und-macos)
 `b5d52c550ead3fb4cea5acc9e9774de9863db32c` ist auf Windows x64 und

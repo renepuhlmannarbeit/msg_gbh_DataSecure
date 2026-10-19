@@ -105,8 +105,14 @@ aktiv; die App öffnet dabei nicht automatisch die vollständige Verlaufsliste.
    oder Exportbestätigung.
 7. **Ergebnisordner öffnen** führt zu den fertigen Dateien. Diese kannst du im
    Dateimanager selbst auswählen und auch ohne KI verwenden. Die neuen fertigen
-   MD-Ordner enthalten keine Originale, vertraulichen Zuordnungen, privaten
-   Prüfstände oder von DataSecure erzeugten technischen Begleitdateien.
+   Anonymisierungsstände des neuen `/2`-Layouts enthalten neben den Markdown-
+   Dateien den Unterordner **Vertraulich** mit **Dateizuordnung.csv**
+   (Originaldateiname → tatsächlicher Ergebnisname) und
+   **Personen-Pseudonym-Zuordnung.txt** (nachgewiesene Identitäten des jeweiligen
+   Standes). Keine weitere Aktion ist nötig. Nachbearbeitungen erhalten eigene,
+   passende Zuordnungen. Ältere `/1`-Läufe behalten ihre internen Zuordnungen;
+   ihre Ordner werden nicht nachträglich verändert. Reine Konvertierung erzeugt
+   keine Zuordnungen. Originaldateien und private Prüfstände werden nicht kopiert.
    Betriebssysteme können zusätzliche Anzeige-Metadaten wie `.DS_Store`
    hinzufügen. Diese sind nicht geprüft oder anonymisiert: nur die gewünschten
    Markdown-Dateien weitergeben, nicht ungeprüft den gesamten Ordner verpacken.

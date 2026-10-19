@@ -1414,6 +1414,8 @@
               ? `${count(entry.selected_count)} Dateien · ${count(entry.result_count)} Ergebnisse · ${unknownStops} nicht verarbeitet (Gründe im Verlauf nicht mehr klassifiziert)`
             : `${count(entry.selected_count)} Dateien · ${count(entry.result_count)} Ergebnisse · ${count(entry.failed_count)} ${anonymous ? count(entry.failed_count) === 1 ? 'Datei nicht verarbeitet' : 'Dateien nicht verarbeitet' : count(entry.failed_count) === 1 ? 'Problem' : 'Probleme'}`), 'history-meta'),
           stateLabel);
+        if (anonymous && entry.status === 'results_available') detail.append(element('p',
+          'Nur die gewünschten Markdown-Dateien weitergeben. Vertrauliche Zuordnungen enthalten Originalnamen und gehören nicht zur Weitergabe.', 'history-meta'));
         const titleId = `history-${entry.batch_id}-title`, identityId = `history-${entry.batch_id}-identity`;
         detail.children[0].id = titleId;
         row.setAttribute('aria-labelledby', `${titleId} ${identityId}`);

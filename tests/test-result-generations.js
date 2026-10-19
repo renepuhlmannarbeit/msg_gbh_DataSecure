@@ -42,7 +42,7 @@ let serial = 0;
 // This builder deliberately invokes the real initial exporter, not a fabricated
 // initialResultPublication dependency. It is also the fixture contract used by
 // the separate real Node->Rust pipe test (which has its own native callback).
-async function fixture({ mode = 'markdown-only', count = 2, legacy = false, separateFolders = false } = {}) {
+async function fixture({ mode = 'markdown-only', count = 2, legacy = false, separateFolders = false, sourceFolders = null, legacyLayout = false } = {}) {
   const batchId = (++serial).toString(16).padStart(64, '0'), results = path.join(root, `results-${serial}`);
   fs.mkdirSync(results); process.env.EU_PRIVACY_RESULT_ROOT = results;
   const state = { schema: 'datasecure-batch/7', token: batchId, product_channel: 'standalone', processing_mode: mode,
@@ -63,15 +63,15 @@ async function fixture({ mode = 'markdown-only', count = 2, legacy = false, sepa
     if (record) assert.equal(JSON.stringify(op), record.operation, 'stable native intent');
     else {
       if (command === 'reconcile') return 'unprepared';
-      record = { operation: JSON.stringify(op), bodies: op.files.map(() => Buffer.alloc(0)), status: 'unprepared' };
+      record = { operation: JSON.stringify(op), bodies: payloadFiles(op).map(() => Buffer.alloc(0)), status: 'unprepared' };
       operations.set(op.operation_id, record);
     }
     if (command === 'write_body') {
       assert.equal(body.offset, record.bodies[body.index].length);
       record.bodies[body.index] = Buffer.concat([record.bodies[body.index], Buffer.from(body.hex, 'hex')]);
       if (body.final_chunk) {
-        assert.equal(sha(record.bodies[body.index]), Buffer.from(op.files[body.index].sha256).toString('hex'));
-        assert.equal(record.bodies[body.index].length, op.files[body.index].bytes);
+        assert.equal(sha(record.bodies[body.index]), Buffer.from(payloadFiles(op)[body.index].sha256).toString('hex'));
+        assert.equal(record.bodies[body.index].length, payloadFiles(op)[body.index].bytes);
         record.status = 'prepared'; return 'staged';
       }
       return 'receiving';
@@ -80,7 +80,8 @@ async function fixture({ mode = 'markdown-only', count = 2, legacy = false, sepa
       if (controls.beforePublish) { const hook = controls.beforePublish; delete controls.beforePublish; hook(); }
       if (!record.directory) {
         fs.mkdirSync(target(op), { recursive: true });
-        for (const [index, file] of op.files.entries()) fs.writeFileSync(path.join(target(op), file.name), record.bodies[index], { flag: 'wx' });
+        if (op.confidential) fs.mkdirSync(path.join(target(op), 'Vertraulich'));
+        for (const [index, file] of payloadFiles(op).entries()) fs.writeFileSync(path.join(target(op), file.name), record.bodies[index], { flag: 'wx' });
         record.directory = bindDirectory(target(op)); record.status = 'completed';
       }
       if (controls.losePublish) { controls.losePublish = false; throw Object.assign(Error('lost native publish reply'), { code: 'STANDALONE_IPC_TIMEOUT' }); }
@@ -92,7 +93,7 @@ async function fixture({ mode = 'markdown-only', count = 2, legacy = false, sepa
     if (command === 'reconcile' && record.directory) {
       if (controls.beforeReconcile) { const hook = controls.beforeReconcile; delete controls.beforeReconcile; hook(target(op)); }
       assertDirectory(record.directory); // model native committed stage identity, never readopt
-      for (const [index, file] of op.files.entries()) assert.equal(sha(fs.readFileSync(path.join(target(op), file.name))), sha(record.bodies[index]));
+      for (const [index, file] of payloadFiles(op).entries()) assert.equal(sha(fs.readFileSync(path.join(target(op), file.name))), sha(record.bodies[index]));
     }
     return record.status;
   }
@@ -100,7 +101,7 @@ async function fixture({ mode = 'markdown-only', count = 2, legacy = false, sepa
   const store = createDocumentReviewStore(options);
   for (let index = 0; index < count; index++) {
     const id = (serial * 100 + index + 1).toString(16).padStart(32, '0');
-    const sourceLabel = `${separateFolders ? `folder-${index + 1}` : 'nested'}/Quelle-${index + 1}.txt`;
+    const sourceLabel = `${sourceFolders?.[index] || (separateFolders ? `folder-${index + 1}` : 'nested')}/Quelle-${index + 1}.txt`;
     const item = { id, name: sourceLabel, source_label: sourceLabel,
       sha256: sha(original), status: 'released' };
     state.items.push(item);
@@ -139,8 +140,29 @@ async function fixture({ mode = 'markdown-only', count = 2, legacy = false, sepa
   const initial = exporter.exportCompletedState(state);
   assert.equal(initial.available, true, JSON.stringify(initial));
   assert.equal(initial.exported, count);
+  if (legacyLayout && mode === 'markdown-and-anonymize') {
+    // Explicit historical fixture conversion, not a product migration: retain
+    // the actual MD objects/root identities, remove only our two freshly made
+    // fixed synthetic leaves, and serialize the former exact /1 proof shape.
+    const outbox = path.join(data, 'result-export-state', `re_${sha(batchId).slice(0, 32)}.json`);
+    const record = JSON.parse(fs.readFileSync(outbox));
+    const bindingFile = path.join(data, 'result-publication-bindings', `${batchId}.json`);
+    const proof = JSON.parse(fs.readFileSync(bindingFile));
+    assert.equal(proof.result_layout, exporter.CONFIDENTIAL_RESULT_LAYOUT);
+    const folder = path.join(proof.directory.path, 'Vertraulich');
+    assert.equal(fs.lstatSync(folder).isSymbolicLink(), false);
+    for (const leaf of ['Dateizuordnung.csv', 'Personen-Pseudonym-Zuordnung.txt']) {
+      const file = path.join(folder, leaf); assert.ok(fs.lstatSync(file).isFile()); fs.unlinkSync(file);
+    }
+    assert.deepEqual(fs.readdirSync(folder), []); fs.rmdirSync(folder);
+    record.result_layout = exporter.RESULT_LAYOUT;
+    delete record.confidential_binding_sha256; delete record.confidential;
+    proof.schema = 'datasecure-initial-results/1'; proof.result_layout = exporter.RESULT_LAYOUT;
+    for (const key of ['confidential_binding_sha256', 'confidential', 'confidential_directory', 'confidential_files']) delete proof[key];
+    fs.writeFileSync(outbox, JSON.stringify(record)); fs.writeFileSync(bindingFile, JSON.stringify(proof));
+  }
   const bound = exporter.initialResultPublication(batchId);
-  assert.equal(bound.result_layout, exporter.RESULT_LAYOUT);
+  assert.equal(bound.result_layout, mode === 'markdown-and-anonymize' && !legacyLayout ? exporter.CONFIDENTIAL_RESULT_LAYOUT : exporter.RESULT_LAYOUT);
   if (legacy) {
     // Simulate a historical frozen plan. No new reader may silently add the
     // new layout to it or adopt its old Number identities as new authority.
@@ -161,9 +183,15 @@ async function fixture({ mode = 'markdown-only', count = 2, legacy = false, sepa
   return { batchId, results, state, store, row, edit, publish, resolve, bound, controls, calls, operations, options,
     reload: () => createDocumentReviewStore(options), target: result => target({ operation_id: result.result_publication.generation_id }) };
 }
+function payloadFiles(op) {
+  return [...op.files, ...(op.confidential ? Object.entries(require('../plugins/data-secure/server/standalone/result-companions').PATHS)
+    .map(([role, name]) => ({ name, ...op.confidential[role] })) : [])];
+}
 const rejects = (action, code) => assert.rejects(action, error => !code || error.code === code);
 function sameByteSwap(folder) {
-  const old = folder + '-replaced'; fs.renameSync(folder, old); fs.mkdirSync(folder);
+  const old = path.join(root, `retired-${serial}-${crypto.randomBytes(6).toString('hex')}`);
+  assert.ok(path.relative(folder, old).startsWith('..' + path.sep), 'retire outside the complete checked result tree');
+  fs.renameSync(folder, old); fs.mkdirSync(folder);
   const copy = (source, destination) => {
     for (const entry of fs.readdirSync(source, { withFileTypes: true })) {
       if (entry.isDirectory()) { fs.mkdirSync(path.join(destination, entry.name)); copy(path.join(source, entry.name), path.join(destination, entry.name)); }
@@ -433,17 +461,68 @@ async function run() {
     }
     await rejects(() => f.resolve(), 'RESULT_PUBLICATION_CONFLICT'); assert.equal(f.calls.length, 0);
   });
-  await testAsync('real anonymization initial layout keeps confidential mapping private and opener resolves it', async () => {
+  await testAsync('real anonymization commits both confidential files before ready, corrections bind their actual new names', async () => {
     const f = await fixture({ mode: 'markdown-and-anonymize' });
     const visible = fs.readdirSync(f.bound.directory.path, { recursive: true }).filter(name => fs.statSync(path.join(f.bound.directory.path, name)).isFile())
       .map(name => name.split(path.sep).join('/')).sort();
-    assert.deepEqual(visible, f.bound.files.map(file => file.name).sort());
+    assert.deepEqual(visible, [...f.bound.files.map(file => file.name),
+      'Vertraulich/Dateizuordnung.csv', 'Vertraulich/Personen-Pseudonym-Zuordnung.txt'].sort());
+    const csv = fs.readFileSync(path.join(f.bound.directory.path, 'Vertraulich/Dateizuordnung.csv'), 'utf8');
+    const identities = fs.readFileSync(path.join(f.bound.directory.path, 'Vertraulich/Personen-Pseudonym-Zuordnung.txt'), 'utf8');
+    for (const file of f.bound.files) assert.ok(csv.includes(file.name));
+    assert.match(identities, /Anna Beispiel/u); assert.match(identities, /PERSON/u);
     const mapping = exporter.privateResultLedger(f.batchId);
     assert.ok(mapping.startsWith(path.join(data, 'result-publication-bindings') + path.sep));
     assert.match(fs.readFileSync(mapping, 'utf8'), /Quelle-1/u); assert.equal(f.row(0).approved, false);
     f.edit(); const result = await f.publish();
     assert.equal(result.result_publication.count, 2); assert.equal(f.row(0).approved, false);
-    assert.deepEqual(fs.readdirSync(f.target(result)), ['Dokument_01.md', 'Dokument_02.md']);
+    assert.deepEqual(fs.readdirSync(f.target(result)).sort(), ['Dokument_01.md', 'Dokument_02.md', 'Vertraulich']);
+    const nextCsv = fs.readFileSync(path.join(f.target(result), 'Vertraulich/Dateizuordnung.csv'), 'utf8');
+    assert.match(nextCsv, /Dokument_01\.md/u); assert.doesNotMatch(nextCsv, /Dokument-001-anonymisiert/u);
+    assert.equal(fs.readFileSync(path.join(f.bound.directory.path, 'Vertraulich/Dateizuordnung.csv'), 'utf8'), csv);
+  });
+  await testAsync('source Vertraulich roots cannot collide with confidential output namespace, including case variants', async () => {
+    const f = await fixture({ mode: 'markdown-and-anonymize', count: 3,
+      sourceFolders: ['Vertraulich', 'vertraulich', 'Vertraulich (Quelle)'] });
+    assert.ok(f.bound.files.every(file => file.name.split('/')[0].toLowerCase() !== 'vertraulich'));
+    assert.equal(f.bound.files[0].name.split('/')[0], 'Vertraulich (Quelle 2)');
+    assert.equal(f.bound.files[1].name.split('/')[0], 'Vertraulich (Quelle 2)');
+    assert.equal(fs.readdirSync(path.join(f.bound.directory.path, 'Vertraulich')).length, 2);
+    assert.equal((await f.resolve()).local_path, f.bound.directory.path);
+  });
+  await testAsync('old /1 anonymization stays immutable; an explicit later correction gains version-bound companions', async () => {
+    const f = await fixture({ mode: 'markdown-and-anonymize', legacyLayout: true });
+    assert.equal(fs.existsSync(path.join(f.bound.directory.path, 'Vertraulich')), false);
+    const before = fs.readdirSync(f.bound.directory.path, { recursive: true }).sort();
+    assert.equal((await f.resolve()).local_path, f.bound.directory.path);
+    assert.deepEqual(fs.readdirSync(f.bound.directory.path, { recursive: true }).sort(), before);
+    f.edit(); const result = await f.publish();
+    assert.equal(fs.readdirSync(path.join(f.target(result), 'Vertraulich')).length, 2);
+    assert.equal(fs.existsSync(path.join(f.bound.directory.path, 'Vertraulich')), false);
+  });
+  for (const phase of ['initial', 'generation']) for (const mutation of ['missing', 'changed', 'same-bytes-swap', 'directory-swap', 'extra'])
+  await testAsync(`confidential ${phase} ${mutation}: refuse without recreating or adopting files`, async () => {
+    const f = await fixture({ mode: 'markdown-and-anonymize' });
+    let folder = f.bound.directory.path;
+    if (phase === 'generation') { f.edit(); folder = f.target(await f.publish()); }
+    const confidential = path.join(folder, 'Vertraulich'), leaf = path.join(confidential, 'Dateizuordnung.csv');
+    const originalInventory = fs.readdirSync(folder, { recursive: true }).sort();
+    const originalBytes = originalInventory.filter(name => fs.statSync(path.join(folder, name)).isFile())
+      .map(name => ({ name, bytes: fs.readFileSync(path.join(folder, name)) }));
+    const retired = path.join(root, `retired-mapping-${serial}.csv`);
+    if (mutation === 'missing') fs.renameSync(leaf, retired);
+    if (mutation === 'changed') fs.appendFileSync(leaf, 'changed');
+    if (mutation === 'same-bytes-swap') { fs.renameSync(leaf, retired); fs.copyFileSync(retired, leaf); }
+    if (mutation === 'directory-swap') sameByteSwap(confidential);
+    if (mutation === 'extra') fs.writeFileSync(path.join(confidential, 'extra.txt'), 'private');
+    const before = fs.readdirSync(folder, { recursive: true }).sort(), calls = f.calls.length;
+    if (['same-bytes-swap', 'directory-swap'].includes(mutation)) {
+      assert.deepEqual(before, originalInventory, 'same-byte oracle has no foreign-name confounder');
+      for (const file of originalBytes) assert.deepEqual(fs.readFileSync(path.join(folder, file.name)), file.bytes);
+    }
+    await rejects(() => f.resolve(), 'RESULT_PUBLICATION_CONFLICT');
+    f.edit(1); await rejects(() => f.publish(), 'RESULT_PUBLICATION_CONFLICT');
+    assert.equal(f.calls.length, calls); assert.deepEqual(fs.readdirSync(folder, { recursive: true }).sort(), before);
   });
   await testAsync('real new-layout identity opener returns explicit private scope without publication or a false warning', async () => {
     const f = await fixture({ mode: 'markdown-and-anonymize' });

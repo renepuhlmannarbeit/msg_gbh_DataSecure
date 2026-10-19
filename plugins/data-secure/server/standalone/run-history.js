@@ -226,7 +226,7 @@ function createRunHistory(deps) {
         // exists. Old all-stopped runs may still contain a historical report
         // file, but it must not be exposed as a result or mapping action.
         const run = summary.result_count > 0 ? bound : '';
-        const privateResults = savedExport?.result_layout === 'datasecure-visible-markdown/1';
+        const privateResults = ['datasecure-visible-markdown/1', 'datasecure-visible-markdown/2'].includes(savedExport?.result_layout);
         const ledger = summary.processing_mode !== 'markdown-only' && Boolean(privateResults
           ? (() => { try { return require('../gateway/result-export').privateResultLedger(summary.batch_id); } catch { return false; } })()
           : run && regularFile(path.join(run, MAPPING)));

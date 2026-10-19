@@ -1,6 +1,26 @@
 # Aktueller Iststand
 
-Arbeitsversion: **3.2.0-rc166**, als neuer Windows-/Mac-Test-Pre-Release veröffentlicht; frühere Pakete bleiben unverändert erhalten.
+Arbeitsversion: **3.2.0-rc167**, gemeinsamer Windows-/Mac-Entwicklungsstand;
+Builds und neuer Test-Pre-Release ausdrücklich beauftragt, noch nicht veröffentlicht.
+RC166 und frühere Pakete bleiben unverändert erhalten.
+
+### Aktive Änderung nach Nutzerabnahme – RESULT-COMPANIONS-01
+
+Beide Zuordnungen des gemeldeten Windowslaufs sind intern vorhanden, fehlen
+aber im geöffneten Ergebnisordner. Der Nutzer verlangt jetzt ausdrücklich
+zwei Dateien unter `Vertraulich` im jeweiligen Ergebnisstand. Gemeinsamer
+Windows-/Mac-Quellfix umgesetzt und unabhängig gegengelesen; gezielte16Companion-,
+65Generationen-/65Async-Prüfungen,265Rust/3ignoriert/Clippy und echter
+Node→Rust-Pfad beider Betriebsarten bestanden. Neue native ACL-/Nullgrößen-
+und Async-Admission-Deltas kausal revalidiert. Keine neue Paket-/Release-/
+Mac-Zielhost- oder Desktopabnahme behauptet; vollständige neue Endgates offen.
+RC167-Versionen sind angeglichen; vollständige neue Regression und native
+Windows-/beideMac-Build-/Paketgates folgen aus demselben eingefrorenen Appcommit.
+Desktopabnahme bleibt ausdrücklich beim Nutzer. Keine neue Automation.
+Die frühere Markdown-only-Inventarentscheidung wird für neue Anonymisierungsläufe
+versioniert erweitert, nicht durch ungeprüfte nachträgliche Kopien umgangen.
+Alte `/1`-Ordner bleiben unverändert lesbar. Neue Korrekturgenerationen müssen
+die Zuordnungen an ihre eigenen aktuellen Inhalte und Dateinamen binden.
 
 ### Neuester verbindlicher Abschluss – RC166 direkt bereitgestellte Ergebnisse
 
@@ -1443,7 +1463,7 @@ neuen gemeinsamen Quellfreeze und erneute Windows-Regression.
 
 ## Historische Nachweise bis R4 (kein aktueller R5-Abschluss)
 
-Stand: 17.10.2026 · 3.2.0-rc166 lokaler Windows-R4-Final-Testkandidat gebaut und ohne GUI geprüft; veröffentlicht bleibt Standalone RC162 für Windows und beide Mac-Architekturen; native Windows-/M2-Zielhostabnahme offen; Linux RC159 / Cowork RC151
+Stand: 17.10.2026 · 3.2.0-rc167 lokaler Windows-R4-Final-Testkandidat gebaut und ohne GUI geprüft; veröffentlicht bleibt Standalone RC162 für Windows und beide Mac-Architekturen; native Windows-/M2-Zielhostabnahme offen; Linux RC159 / Cowork RC151
 
 ### Gezielter R3-Abschlussreview: zusätzliche Fixes F13/F14
 

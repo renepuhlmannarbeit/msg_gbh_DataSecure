@@ -228,14 +228,27 @@ async function run() {
     const operation = { batch_id: batchId, operation_id: operationId, request_sha256: sha(`results:${batchId}:${digest}`),
       processing_mode: mode, publication_role: 'results', binding: pickerBinding,
       files: [{ name, bytes: body.length, sha256: [...Buffer.from(digest, 'hex')] }] };
+    const companions = mode === 'markdown-and-anonymize' ? [
+      { name: 'Vertraulich/Dateizuordnung.csv', bytes: Buffer.from('\uFEFFOriginaldatei;Anonymisiertes Ergebnis\r\nQuelle.txt;Dokument_01.md\r\n') },
+      { name: 'Vertraulich/Personen-Pseudonym-Zuordnung.txt', bytes: Buffer.from('VERTRAULICH\n[PERSON_001] = Anna Beispiel\n') }
+    ] : [];
+    if (companions.length) operation.confidential = Object.fromEntries(['filename_mapping', 'identities'].map((role, n) =>
+      [role, { bytes: companions[n].bytes.length, sha256: [...Buffer.from(sha(companions[n].bytes), 'hex')] }]));
     const send = (command, body) => nativeSession.send('export_documents', { operation, command, ...(body ? { body } : {}) });
     const namespace = mode === 'markdown-only' ? 'DataSecure-Markdown-Korrektur' : 'DataSecure-KI-Export';
     const target = path.join(results, namespace, `Ergebnisse-${operationId}`);
     context('publish_result_documents', { batch_id: batchId });
     assert.equal(await send('write_body', { index: 0, offset: 0, hex: body.toString('hex'), final_chunk: true }), 'staged');
     assert.equal(fs.existsSync(target), false, 'a staged result is never reported as a visible complete generation');
+    if (companions.length) {
+      await assert.rejects(send('publish'), { code: 'AI_EXPORT_INCOMPLETE' }, 'missing confidential bodies cannot become ready');
+      for (const [extra, file] of companions.entries())
+        assert.equal(await send('write_body', { index: operation.files.length + extra, offset: 0,
+          hex: file.bytes.toString('hex'), final_chunk: true }), 'staged');
+    }
     assert.equal(await send('publish'), 'completed');
-    assert.deepEqual(fs.readdirSync(target), [name]);
+    assert.deepEqual(fs.readdirSync(target).sort(), [name, ...(companions.length ? ['Vertraulich'] : [])].sort());
+    for (const file of companions) assert.deepEqual(fs.readFileSync(path.join(target, file.name)), file.bytes);
     assert.deepEqual(fs.readFileSync(path.join(target, name)), body);
     assert.equal(await send('acknowledge'), 'acknowledged', 'this is a software receipt, not a fabricated human approval');
     const metadata = path.join(target, '.DS_Store');
@@ -272,23 +285,37 @@ async function run() {
     await assert.rejects(send('reconcile'), { code: 'STANDALONE_IPC_FAILED' }, 'legacy copy opener cannot adopt results role');
     // Reusing the private operation ID under the old role is a real durable
     // intent conflict even though the body and all other fields are identical.
-    const { publication_role: _role, ...legacyOperation } = operation;
+    const { publication_role: _role, confidential: _confidential, ...legacyOperation } = operation;
     context('export_approved_documents', { batch_id: batchId, operation_id: operationId,
       selection: [{ document_id: '1'.repeat(32), revision: 0, output_sha256: digest }], acknowledge: false });
     await assert.rejects(nativeSession.send('export_documents', { operation: legacyOperation, command: 'reconcile' }), { code: 'AI_EXPORT_CONFLICT' });
     assert.equal(fs.existsSync(path.join(results, namespace, `Export-${operationId}`)), false);
     assert.deepEqual(fs.readFileSync(path.join(target, name)), body);
+    if (companions.length) {
+      const before = fs.readdirSync(target, { recursive: true }).sort();
+      const confidentialDirectory = path.join(target, 'Vertraulich'), old = path.join(root, `retired-confidential-${operationId}`);
+      fs.renameSync(confidentialDirectory, old); fs.mkdirSync(confidentialDirectory);
+      for (const file of companions) fs.copyFileSync(path.join(old, path.basename(file.name)), path.join(confidentialDirectory, path.basename(file.name)));
+      assert.deepEqual(fs.readdirSync(target, { recursive: true }).sort(), before, 'same-byte native oracle has no extra-name confounder');
+      assert.deepEqual(fs.readFileSync(path.join(target, name)), body);
+      for (const file of companions) assert.deepEqual(fs.readFileSync(path.join(target, file.name)), file.bytes);
+      context('resolve_history_results', { batch_id: batchId });
+      await assert.rejects(send('reconcile'), { code: 'AI_EXPORT_CONFLICT' }, 'same-byte confidential directory replacement is never adopted');
+      assert.equal(fs.existsSync(old), true, 'no automatic cleanup or repair');
+    }
     console.log(`ok ${mode}: actual results role, complete generation, software ACK, repeat/readonly reconciliation and closed legacy/role/batch boundaries`);
   }
-  {
+  for (const [modeIndex, mode] of ['markdown-only', 'markdown-and-anonymize'].entries()) {
     // Full production composition: real content-bound initial publication,
     // private correction journal, current-vector planner AND native Rust pipe.
-    const batchId = '800'.padStart(64, '0');
+    const anonymous = mode === 'markdown-and-anonymize', serial = 800 + modeIndex * 10;
+    const batchId = String(serial).padStart(64, '0');
     const contentOptions = { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: false, imageOcr: false };
     const state = { schema: 'datasecure-batch/7', token: batchId, product_channel: 'standalone',
-      processing_mode: 'markdown-only', standalone_document_review: true, content_options: contentOptions,
+      processing_mode: mode, standalone_document_review: true, content_options: contentOptions,
+      ...(anonymous ? { profile: 'general', output_naming_mode: 'neutral' } : {}),
       created_at: '2026-10-19T19:00:00.000Z', items: [1, 2].map(index => ({
-        id: (800 + index).toString(16).padStart(32, '0'), name: `nested/Quelle-${index}.txt`,
+        id: (serial + index).toString(16).padStart(32, '0'), name: `nested/Quelle-${index}.txt`,
         source_label: `nested/Quelle-${index}.txt`, sha256: sha(`source ${index}`), status: 'released' })) };
     const options = { dataRoot: data, controlOwnerPid: process.pid, nativeBinding: () => pickerBinding,
       nativeExport: async (operation, command, body) => {
@@ -299,7 +326,31 @@ async function run() {
       } };
     let store = createDocumentReviewStore(options);
     for (const [index, item] of state.items.entries()) {
-      const text = `# Aktuelles Dokument ${index + 1}\n42 Projekte.\n`, id = `dm_${item.id}`;
+      const text = `# Aktuelles Dokument ${index + 1}\n${anonymous ? 'Name: Anna Beispiel\nAnna Beispiel hat ' : ''}42 Projekte und 42 Aufträge.\n`,
+        id = `${anonymous ? 'ds' : 'dm'}_${item.id}`;
+      if (anonymous) {
+        const captured = require('../plugins/data-secure/server/pii-engine').anonymize(text, 'general',
+          { captureTransformPlan: true, productChannel: 'standalone', contentOptions });
+        const pub = require('../plugins/data-secure/server/standalone/anonymized-artifact'), coverage = { status: 'complete', reason_codes: [] };
+        const proof = pub.verifyAnonymizedPublication({ markdown: captured.text, profile: 'general', content_options: contentOptions,
+          source_extraction: require('../plugins/data-secure/server/core/source-extraction-contract').createSourceExtraction(
+            { source_type: 'txt', content_options: contentOptions, coverage, markdown: text }, 8_000_000),
+          dictionary: captured.dictionary, strong_person_anchor: captured.strongPersonAnchor === true, reviewed_person_candidates: null });
+        const artifact = pub.createAnonymizedArtifact({ package_id: id, content_options: contentOptions, source_type: 'txt', profile: 'general',
+          operation_id: crypto.randomUUID(), created_at: new Date().toISOString(), coverage, markdown: captured.text, verification_proof: proof });
+        const folder = path.join(require('../plugins/data-secure/server/standalone/anonymized-store').anonymizedArtifactRoots().output, id);
+        fs.mkdirSync(folder); fs.writeFileSync(path.join(folder, `${id}.md`), artifact.markdown);
+        fs.writeFileSync(path.join(folder, 'manifest.json'), JSON.stringify(artifact.manifest));
+        item.package_id = id; item.document_result = artifact.manifest.document_result;
+        store.capture(state, item, { package_id: id, original_text: text, markdown: captured.text, content_options: contentOptions, source_type: 'txt',
+          publication_binding: artifact.expectation, transform_trace: captured.transform_trace, verification_context: {
+            profile: 'general', dictionary: captured.dictionary, strong_person_anchor: captured.strongPersonAnchor === true,
+            ruleset: require('../plugins/data-secure/server/privacy/policy').PRIVACY_RULESET_VERSION,
+            credential_policy: require('../plugins/data-secure/server/privacy/policy').CREDENTIAL_CONTEXT_POLICY_VERSION,
+            person_field_policy: require('../plugins/data-secure/server/core/person-field-policy').CONTENT_PERSON_FIELD_POLICY,
+            publication_frame: { prefix: '', suffix: '' }, reviewed_ranges: [] } });
+        continue;
+      }
       const extraction = require('../plugins/data-secure/server/standalone/markdown-contract').createMarkdownExtraction({
         source_type: 'txt', markdown: text, coverage: { status: 'complete', reason_codes: [] }, content_options: contentOptions });
       Object.assign(item, await require('../plugins/data-secure/server/standalone/markdown-store').publishMarkdownArtifact(extraction, id, { contentOptions }));
@@ -312,7 +363,8 @@ async function run() {
       assert.equal(exporter.exportCompletedState(state).available, true);
       initial = exporter.initialResultPublication(batchId, true);
     } finally { delete process.env.EU_PRIVACY_RESULT_ROOT; }
-    assert.deepEqual(initial.files.map(file => file.name).sort(), ['nested/Quelle-1.md', 'nested/Quelle-2.md']);
+    assert.deepEqual(initial.files.map(file => file.name).sort(), anonymous
+      ? ['nested/Dokument-001-anonymisiert.md', 'nested/Dokument-002-anonymisiert.md'] : ['nested/Quelle-1.md', 'nested/Quelle-2.md']);
     const initialBytes = initial.files.map(file => fs.readFileSync(path.join(initial.directory.path, file.name)));
     if (process.platform === 'darwin') for (const folder of [initial.directory.path, path.join(initial.directory.path, 'nested')])
       fs.writeFileSync(path.join(folder, '.DS_Store'), 'opaque initial OS metadata', { flag: 'wx' });
@@ -321,17 +373,28 @@ async function run() {
       const row = store.list(batchId).documents.find(row => row.document_id === state.items[0].id);
       const text = store.chunk(batchId, row.document_id, row.revision, 0).markdown, start = text.indexOf('42');
       assert.notEqual(start, -1);
-      store.decide(batchId, row.document_id, { action: 'correct', revision: row.revision, output_sha256: row.output_sha256,
-        operation_id: crypto.randomBytes(16).toString('hex'), ranges: [{ start, end: start + 2, replacement }] });
+      store.decide(batchId, row.document_id, { action: anonymous ? 'redact' : 'correct', revision: row.revision, output_sha256: row.output_sha256,
+        operation_id: crypto.randomBytes(16).toString('hex'), ranges: [{ start, end: start + 2, ...(anonymous ? {} : { replacement }) }] });
     };
     const publish = async () => { context('publish_result_documents', { batch_id: batchId }); return store.publishResults(batchId); };
     edit('42 korrigierte');
     const first = await publish(), generation = first.result_publication.generation_id;
     assert.equal(first.result_publication.state, 'current'); assert.equal(first.result_publication.count, 2);
-    const directory = path.join(results, 'DataSecure-Markdown-Korrektur', `Ergebnisse-${generation}`);
-    assert.deepEqual(fs.readdirSync(directory).sort(), ['Quelle-1.md', 'Quelle-2.md']);
-    assert.match(fs.readFileSync(path.join(directory, 'Quelle-1.md'), 'utf8'), /42 korrigierte Projekte/u);
-    assert.deepEqual(fs.readFileSync(path.join(directory, 'Quelle-2.md')), initialBytes[1]);
+    const namespace = anonymous ? 'DataSecure-KI-Export' : 'DataSecure-Markdown-Korrektur';
+    const names = anonymous ? ['Dokument_01.md', 'Dokument_02.md', 'Vertraulich'] : ['Quelle-1.md', 'Quelle-2.md'];
+    const directory = path.join(results, namespace, `Ergebnisse-${generation}`);
+    assert.deepEqual(fs.readdirSync(directory).sort(), names);
+    if (!anonymous) assert.match(fs.readFileSync(path.join(directory, names[0]), 'utf8'), /42 korrigierte Projekte/u);
+    if (anonymous) {
+      const expected = initialBytes[0].toString('utf8').replace('42 Projekte', '[MANUAL_REDACTION] Projekte');
+      assert.notEqual(expected, initialBytes[0].toString('utf8'), 'independent known-range oracle changed a real source span');
+      assert.equal(fs.readFileSync(path.join(directory, names[0]), 'utf8'), expected);
+      assert.doesNotMatch(expected, /Anna Beispiel/u);
+      assert.deepEqual(fs.readdirSync(path.join(directory, 'Vertraulich')).sort(), ['Dateizuordnung.csv', 'Personen-Pseudonym-Zuordnung.txt']);
+      assert.match(fs.readFileSync(path.join(directory, 'Vertraulich/Dateizuordnung.csv'), 'utf8'), /Dokument_01\.md/u);
+      assert.match(fs.readFileSync(path.join(directory, 'Vertraulich/Personen-Pseudonym-Zuordnung.txt'), 'utf8'), /Anna Beispiel/u);
+    }
+    assert.deepEqual(fs.readFileSync(path.join(directory, names[1])), initialBytes[1]);
     assert.ok(store.list(batchId).documents.every(row => row.approved === false), 'publication is not human approval');
     if (process.platform === 'darwin') fs.writeFileSync(path.join(directory, '.DS_Store'), 'opaque current OS metadata', { flag: 'wx' });
     assert.equal((await publish()).result_publication.generation_id, generation);
@@ -342,18 +405,21 @@ async function run() {
     assert.equal((await publish()).result_publication.generation_id, resumed.result_publication.generation_id);
     context('resolve_history_results', { batch_id: batchId });
     const resolved = await store.resolveResultsGeneration(batchId);
-    assert.equal(resolved.local_path, path.join(results, 'DataSecure-Markdown-Korrektur', `Ergebnisse-${resumed.result_publication.generation_id}`));
-    assert.deepEqual(fs.readdirSync(resolved.local_path).sort(), ['Quelle-1.md', 'Quelle-2.md'], 'OS metadata is never propagated to a new generation');
-    assert.match(fs.readFileSync(path.join(resolved.local_path, 'Quelle-1.md'), 'utf8'), /42 nochmals korrigierte Projekte/u);
+    assert.equal(resolved.local_path, path.join(results, namespace, `Ergebnisse-${resumed.result_publication.generation_id}`));
+    assert.deepEqual(fs.readdirSync(resolved.local_path).sort(), names, 'OS metadata is never propagated to a new generation');
+    if (!anonymous) assert.match(fs.readFileSync(path.join(resolved.local_path, names[0]), 'utf8'), /42 nochmals korrigierte Projekte/u);
+    else assert.equal(fs.readFileSync(path.join(resolved.local_path, names[0]), 'utf8'), initialBytes[0].toString('utf8')
+      .replace('42 Projekte', '[MANUAL_REDACTION] Projekte').replace('42 Aufträge', '[MANUAL_REDACTION] Aufträge'),
+      'both independent explicit masking decisions must occur in the actual native current file');
     for (const [index, file] of initial.files.entries())
       assert.deepEqual(fs.readFileSync(path.join(initial.directory.path, file.name)), initialBytes[index], 'initial files are preserved');
-    const corrupt = path.join(resolved.local_path, 'Quelle-2.md');
+    const corrupt = path.join(resolved.local_path, names[1]);
     fs.writeFileSync(corrupt, '# Manuell geaendert\n');
     const count = fs.readdirSync(path.dirname(resolved.local_path)).filter(name => name.startsWith('Ergebnisse-')).length;
     await assert.rejects(publish(), error => ['RESULT_PUBLICATION_CONFLICT', 'AI_EXPORT_CONFLICT'].includes(error.code));
     assert.equal(fs.readFileSync(corrupt, 'utf8'), '# Manuell geaendert\n');
     assert.equal(fs.readdirSync(path.dirname(resolved.local_path)).filter(name => name.startsWith('Ergebnisse-')).length, count);
-    console.log('ok production initial -> correction -> native full-vector generation -> LostReceipt -> fresh store -> readonly opener; no human approval, originals unchanged, manual tamper refused');
+    console.log(`ok ${mode}: production initial -> correction -> native full-vector generation -> LostReceipt -> fresh store -> readonly opener; no human approval, originals unchanged, manual tamper refused`);
   }
   for (const mode of ['markdown-only', 'markdown-and-anonymize']) {
     const admissionsBefore = configuredAdmissions;
@@ -423,11 +489,14 @@ async function run() {
   console.log('ok altered private body cannot publish; explicit native abandonment settles the same operation');
   const large = fixture('markdown-only', ++i, '🙂 gültiger Text.\n'.repeat(12000));
   const largeOp = crypto.randomBytes(16).toString('hex');
+  const beforeLarge = new Set(fs.readdirSync(path.join(data, binding.private_name)));
   assert.equal((await exportCall(large, largeOp)).exported_count, 1);
   assert.equal(fs.readFileSync(path.join(results, 'DataSecure-Markdown-Korrektur', `Export-${largeOp}`, 'Quelle.md'), 'utf8'), large.text);
   const privateEntries = fs.readdirSync(path.join(data, binding.private_name));
   assert.ok(privateEntries.every(name => !/^export-.*-body-/u.test(name)), 'body files never collect in the common native journal');
-  assert.ok(privateEntries.length < 40, 'multi-chunk bodies are stored only inside their own operation stage');
+  assert.deepEqual(privateEntries.filter(name => !beforeLarge.has(name)).sort(),
+    [`${largeOp}-parents-binding.json`, `${largeOp}-parents-intent.json`, `journal-${largeOp}`, `staging-${largeOp}`].sort(),
+    'exact new operation parents only; frame count cannot grow a shared spool, regardless of earlier cases');
   console.log('ok bounded multi-frame Unicode body preserves exact bytes without a shared spool inventory');
   const raw = 'Name: Anna Beispiel\nArbeitgeber: Muster GmbH\n' +
     Array.from({ length: 10001 }, (_, index) => `E-Mail: qa${index}@quality.example.invalid`).join('\n');

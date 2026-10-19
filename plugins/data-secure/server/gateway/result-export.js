@@ -24,12 +24,22 @@ const { contentOptionsForBatch, validateContentOptions, serializeContentOptions 
 const { ensurePrivateDirectory } = require('./common');
 const { createPrivateWorkStore } = require('./private-work-store');
 const { createPublicResultMetadataInspector } = require('../core/public-result-metadata');
+const { DIRECTORY: CONFIDENTIAL_DIRECTORY, PATHS: CONFIDENTIAL_PATHS, MAX_MAPPING_BYTES, MAX_IDENTITY_BYTES,
+  validConfidentialDescriptor } = require('../standalone/result-companions');
 
 const SCHEMA = 'datasecure-result-export/2';
 const MARKDOWN_SCHEMA = 'datasecure-result-export/4';
 const CONTENT_MARKDOWN_SCHEMA = 'datasecure-result-export/5';
 const CONTENT_ANONYMIZED_SCHEMA = 'datasecure-result-export/6';
 const RESULT_LAYOUT = 'datasecure-visible-markdown/1';
+// /1 remains the immutable Markdown-only tree promised by RC166. New
+// anonymization runs explicitly promise two confidential companion files.
+const CONFIDENTIAL_RESULT_LAYOUT = 'datasecure-visible-markdown/2';
+const hasBoundResultLayout = record => [RESULT_LAYOUT, CONFIDENTIAL_RESULT_LAYOUT].includes(record?.result_layout);
+const CONFIDENTIAL_FILES = Object.freeze([
+  Object.freeze({ key: 'filename_mapping', name: CONFIDENTIAL_PATHS.filename_mapping, maximum: MAX_MAPPING_BYTES }),
+  Object.freeze({ key: 'identities', name: CONFIDENTIAL_PATHS.identities, maximum: MAX_IDENTITY_BYTES })
+]);
 const INITIAL_BINDING_BYTES = 1024 * 1024;
 // Up to 200 quoted pairs of 1024-code-unit Unicode source/result paths.
 // Mapping contents are private and do not share the smaller binding budget.
@@ -305,6 +315,26 @@ function neutralAnonymizedOutputNames(items) {
     return parent === '.' ? leaf : `${parent}/${leaf}`;
   });
 }
+function reserveConfidentialDirectory(names) {
+  // Source folders must never merge with the confidential namespace, including
+  // on a case-insensitive/NFC filesystem. Pick one deterministic unused root.
+  const rootNames = new Set(names.map(name => name.split('/')[0].normalize('NFC').toLowerCase()));
+  let replacement = 'Vertraulich (Quelle)', index = 1;
+  while (rootNames.has(replacement.normalize('NFC').toLowerCase())) replacement = `Vertraulich (Quelle ${++index})`;
+  return names.map(name => {
+    const segments = name.split('/');
+    if (segments.length > 1 && segments[0].normalize('NFC').toLowerCase() === 'vertraulich') segments[0] = replacement;
+    return segments.join('/');
+  });
+}
+function confidentialSelection(record) {
+  return record.items.map(item => ({ document_id: item.package_id.slice(3), revision: 0, output_sha256: item.sha256 }));
+}
+function confidentialNames(record) { return record.items.map(item => ({ name: item.file, sha256: item.sha256 })); }
+function confidentialItems(record) {
+  return CONFIDENTIAL_FILES.map(file => ({ file: file.name,
+    sha256: Buffer.from(record.confidential[file.key].sha256).toString('hex') }));
+}
 function validRecord(value) {
   const legacy = value?.schema === LEGACY_SCHEMA;
   const converting = isMarkdownRecord(value), contentBound = [CONTENT_MARKDOWN_SCHEMA, CONTENT_ANONYMIZED_SCHEMA].includes(value?.schema);
@@ -326,10 +356,14 @@ function validRecord(value) {
     ? markdownOutputNames(value.items) : null;
   const legacyFlatMarkdownNames = converting && value?.schema === MARKDOWN_SCHEMA && Array.isArray(value.items)
     ? flatMarkdownOutputNames(value.items) : null;
-  const expectedSourceAnonymizedNames = !converting && !legacy && value?.product_channel === 'standalone' && Array.isArray(value.items)
+  let expectedSourceAnonymizedNames = !converting && !legacy && value?.product_channel === 'standalone' && Array.isArray(value.items)
     ? collisionFreeOutputNames(value.items, '-anonymisiert') : null;
-  const expectedNeutralAnonymizedNames = !converting && !legacy && value?.product_channel === 'standalone' && Array.isArray(value.items)
+  let expectedNeutralAnonymizedNames = !converting && !legacy && value?.product_channel === 'standalone' && Array.isArray(value.items)
     ? neutralAnonymizedOutputNames(value.items) : null;
+  if (value?.result_layout === CONFIDENTIAL_RESULT_LAYOUT) {
+    if (expectedSourceAnonymizedNames) expectedSourceAnonymizedNames = reserveConfidentialDirectory(expectedSourceAnonymizedNames);
+    if (expectedNeutralAnonymizedNames) expectedNeutralAnonymizedNames = reserveConfidentialDirectory(expectedNeutralAnonymizedNames);
+  }
   const topLevelKeys = legacy
     ? ['schema', 'run_directory', 'items', 'complete', 'destination_id']
     : ['schema', 'run_directory', 'items', 'complete', 'destination_id', 'product_channel'];
@@ -337,8 +371,11 @@ function validRecord(value) {
   if (converting || value?.schema === CONTENT_ANONYMIZED_SCHEMA) topLevelKeys.push('processing_mode');
   if (contentBound) topLevelKeys.push('content_options', 'batch_id');
   if (Object.hasOwn(value || {}, 'result_layout')) topLevelKeys.push('result_layout');
+  if (value?.result_layout === CONFIDENTIAL_RESULT_LAYOUT) topLevelKeys.push('confidential_binding_sha256', 'confidential');
   return exactKeys(value, topLevelKeys) &&
-    (!Object.hasOwn(value, 'result_layout') || contentBound && value.product_channel === 'standalone' && value.result_layout === RESULT_LAYOUT) &&
+    (!Object.hasOwn(value, 'result_layout') || contentBound && value.product_channel === 'standalone' && hasBoundResultLayout(value)) &&
+    (value.result_layout !== CONFIDENTIAL_RESULT_LAYOUT || value.schema === CONTENT_ANONYMIZED_SCHEMA &&
+      /^[a-f0-9]{64}$/u.test(value.confidential_binding_sha256 || '') && validConfidentialDescriptor(value.confidential)) &&
     [SCHEMA, LEGACY_SCHEMA, MARKDOWN_SCHEMA, LEGACY_MARKDOWN_SCHEMA, CONTENT_MARKDOWN_SCHEMA, CONTENT_ANONYMIZED_SCHEMA].includes(value.schema) &&
     (value.schema !== CONTENT_ANONYMIZED_SCHEMA || value.product_channel === 'standalone' &&
       value.processing_mode === 'markdown-and-anonymize') &&
@@ -360,7 +397,7 @@ function validRecord(value) {
         (exactKeys(item, ['package_id', 'file', 'sha256', 'source_label', 'exported']) && item.exported === true)) &&
         validSourceLabel(item.source_label))) &&
       PACKAGE_RE.test(item.package_id) && /^[a-f0-9]{64}$/u.test(item.sha256) &&
-      (item.file === `Dokument-${String(index + 1).padStart(3, '0')}-anonymisiert.md` ||
+      (value.result_layout !== CONFIDENTIAL_RESULT_LAYOUT && item.file === `Dokument-${String(index + 1).padStart(3, '0')}-anonymisiert.md` ||
         (value.product_channel === 'standalone' && validResultFile(item.file) &&
           (item.file === expectedSourceAnonymizedNames?.[index] ||
             item.file === expectedNeutralAnonymizedNames?.[index])))) &&
@@ -624,7 +661,7 @@ function activeDestination(record, options = {}) {
   const root = readConfiguredResultRoot();
   if (!root) return null;
   const checked = inspectRoot(root);
-  const exact = record?.result_layout === RESULT_LAYOUT;
+  const exact = hasBoundResultLayout(record);
   const rootBinding = bindPlainDirectory(checked.root, null, exact);
   assertDirectoryBinding(rootBinding);
   let outputPath;
@@ -665,11 +702,14 @@ function* ensureRecordSteps(state) {
     source_label: String(item.source_label || item.name || '')
   }));
   const outputNamingMode = converting ? null : resultNamingModeForBatch(state);
-  const anonymizedNames = !converting && state.product_channel === 'standalone'
+  const newConfidentialLayout = !existingPlan && Boolean(contentOptions) && !converting &&
+    state.product_channel === 'standalone' && state.standalone_document_review === true;
+  let anonymizedNames = !converting && state.product_channel === 'standalone'
     ? outputNamingMode === RESULT_NAMING_MODES.NEUTRAL
       ? neutralAnonymizedOutputNames(anonymizedItems)
       : collisionFreeOutputNames(anonymizedItems, '-anonymisiert')
     : [];
+  if (newConfidentialLayout) anonymizedNames = reserveConfidentialDirectory(anonymizedNames);
   const markdownNames = converting
     ? existingPlan?.items?.length === released.length
       ? existingPlan.items.map((item) => item.file)
@@ -723,12 +763,18 @@ function* ensureRecordSteps(state) {
     return { target, value: existing };
   }
   if (!['plugin', 'standalone'].includes(state.product_channel)) throw new Error('RESULT_EXPORT_PRODUCT_CHANNEL_INVALID');
+  const companions = newConfidentialLayout && items.length ? yield { kind: 'companion-prepare', batchId: state.token,
+    selection: items.map(item => ({ document_id: item.package_id.slice(3), revision: 0, output_sha256: item.sha256 })),
+    files: items.map(item => ({ name: item.file, sha256: item.sha256 })) } : null;
+  if (companions && (!/^[a-f0-9]{64}$/u.test(companions.binding_sha256 || '') || !validConfidentialDescriptor(companions.confidential)))
+    throw resultExportFailure('RESULT_EXPORT_STATE_UNSAFE');
   const value = { schema: contentOptions ? converting ? CONTENT_MARKDOWN_SCHEMA : CONTENT_ANONYMIZED_SCHEMA : converting ? MARKDOWN_SCHEMA : SCHEMA,
     run_directory: runDirectoryName(state.created_at), items,
     complete: items.length === 0 && stoppedItems.length === 0, destination_id: '', product_channel: state.product_channel,
     ...(converting || contentOptions ? { processing_mode: state.processing_mode } : {}),
     ...(contentOptions ? { content_options: contentOptions, batch_id: state.token } : {}),
-    ...(contentOptions && state.product_channel === 'standalone' ? { result_layout: RESULT_LAYOUT } : {}),
+    ...(contentOptions && state.product_channel === 'standalone' ? { result_layout: companions ? CONFIDENTIAL_RESULT_LAYOUT : RESULT_LAYOUT } : {}),
+    ...(companions ? { confidential_binding_sha256: companions.binding_sha256, confidential: companions.confidential } : {}),
     ...(stoppedItems.length ? { stopped_items: stoppedItems } : {}) };
   writeRecord(target, value);
   return { target, value };
@@ -755,10 +801,14 @@ async function runAsyncSteps(iterator, resolve) {
   return step.value;
 }
 function ensureRecord(state) {
-  return runSynchronousSteps(ensureRecordSteps(state), operation => confirmPublication(operation.state, operation.item));
+  return runSynchronousSteps(ensureRecordSteps(state), operation => operation.kind === 'companion-prepare'
+    ? require('./standalone-document-review-store').createDocumentReviewStore().prepareResultCompanions(operation.batchId, operation.selection, operation.files)
+    : confirmPublication(operation.state, operation.item));
 }
 function ensureRecordAsync(state) {
-  return runAsyncSteps(ensureRecordSteps(state), operation => confirmPublicationAsync(operation.state, operation.item));
+  return runAsyncSteps(ensureRecordSteps(state), operation => operation.kind === 'companion-prepare'
+    ? require('./standalone-document-review-store').createDocumentReviewStore().prepareResultCompanionsAsync(operation.batchId, operation.selection, operation.files)
+    : confirmPublicationAsync(operation.state, operation.item));
 }
 // Once a complete, identity-bound visible conversion was committed,
 // the private dm copy may expire. This proves the historical export transaction,
@@ -832,7 +882,7 @@ function presentEntry(target) {
 // result claim is held. A mkdir/link without its durable anchor is uncertain:
 // recovery never upgrades a same-name or same-byte foreign object into ours.
 function initialProgress(record, destination) {
-  if (record.result_layout !== RESULT_LAYOUT) return null;
+  if (!hasBoundResultLayout(record)) return null;
   if (!destination.root.exact || !destination.output.exact || record.destination_id !== destination.id ||
       !/^[a-f0-9]{64}$/u.test(record.batch_id || ''))
     throw resultExportFailure('RESULT_EXPORT_STATE_UNSAFE');
@@ -1030,6 +1080,13 @@ function* exportOneSteps(destination, run, item, contentOptions, contentRecord, 
   }
   const expected = crypto.createHash('sha256').update(bytes).digest('hex');
   if (expected !== m.document_sha256 || expected !== item.sha256) throw new Error('RESULT_EXPORT_SOURCE_INVALID');
+  return publishInitialBytes(destination, run, item, bytes, resolvedTarget, validateParents, progress);
+}
+// Both Markdown and the two fixed confidential leaves use the same exclusive
+// writer, durable attempt/identity receipt and no-adoption recovery rules.
+function publishInitialBytes(destination, run, item, bytes, resolvedTarget, validateParents, progress) {
+  const target = resolvedTarget.target, expected = crypto.createHash('sha256').update(bytes).digest('hex');
+  if (expected !== item.sha256) throw resultExportFailure('RESULT_EXPORT_SOURCE_INVALID');
   if (progress) {
     validateParents();
     progress.begin(initialLeafAttemptKey(item.file), { schema: 'datasecure-initial-file-attempt/1',
@@ -1096,6 +1153,28 @@ function* exportOneSteps(destination, run, item, contentOptions, contentRecord, 
         if (originalIdentity && sameObject(fs.lstatSync(temporary, { bigint: true }), originalIdentity)) fs.unlinkSync(temporary);
       } else if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
     } catch {}
+  }
+}
+function publishInitialCompanions(record, destination, run, progress, prepared) {
+  if (record.result_layout !== CONFIDENTIAL_RESULT_LAYOUT) return;
+  if (!progress || !validConfidentialDescriptor(record.confidential)) throw resultExportFailure('RESULT_EXPORT_STATE_UNSAFE');
+  if (prepared.binding_sha256 !== record.confidential_binding_sha256 ||
+      JSON.stringify(prepared.confidential) !== JSON.stringify(record.confidential))
+    throw resultExportFailure('RESULT_EXPORT_STATE_CONFLICT');
+  const parent = initialDirectory(progress, run, path.join(run.path, CONFIDENTIAL_DIRECTORY), true);
+  for (const [index, file] of CONFIDENTIAL_FILES.entries()) {
+    const item = confidentialItems(record)[index], bytes = prepared[file.key];
+    if (!Buffer.isBuffer(bytes) || bytes.length !== record.confidential[file.key].bytes ||
+        crypto.createHash('sha256').update(bytes).digest('hex') !== item.sha256)
+      throw resultExportFailure('RESULT_EXPORT_SOURCE_INVALID');
+    const saved = progress.read(initialLeafKey(item.file));
+    if (saved) { inspectInitialLeaf(progress, run, item, saved); continue; }
+    const leaf = file.name.split('/').at(-1), target = path.join(parent.path, leaf);
+    if (progress.read(initialLeafAttemptKey(item.file)) || presentEntry(target)) throw resultExportFailure('RESULT_EXPORT_STATE_UNSAFE');
+    const validateParents = () => { progress.assert(); assertDirectoryBinding(run, destination.output); assertDirectoryBinding(parent, run); };
+    validateParents();
+    publishInitialBytes(destination, run, item, bytes, { parent, leaf, target }, validateParents, progress);
+    validateParents();
   }
 }
 function exportOne(destination, run, item, contentOptions, contentRecord, progress) {
@@ -1265,11 +1344,15 @@ function* exportOpenItemsSteps(target, record, destination) {
     // Pure conversion keeps the original basename and therefore needs no
     // source-to-result ledger. Older v3 plans retain their already promised
     // mapping; anonymization plans continue to publish it unchanged.
-    if (current.result_layout !== RESULT_LAYOUT && current.product_channel === 'standalone' && ![MARKDOWN_SCHEMA, CONTENT_MARKDOWN_SCHEMA].includes(current.schema) &&
+    if (!hasBoundResultLayout(current) && current.product_channel === 'standalone' && ![MARKDOWN_SCHEMA, CONTENT_MARKDOWN_SCHEMA].includes(current.schema) &&
         (current.schema === LEGACY_MARKDOWN_SCHEMA || current.items.length > 0)) {
       exportVisibleMapping(destination, run, current);
     }
-    if (current.result_layout === RESULT_LAYOUT) captureInitialResultBinding(current, run, progress);
+    if (current.result_layout === CONFIDENTIAL_RESULT_LAYOUT) {
+      const prepared = yield { kind: 'companion-read', record: current };
+      publishInitialCompanions(current, destination, run, progress, prepared);
+    }
+    if (hasBoundResultLayout(current)) captureInitialResultBinding(current, run, progress);
     current = { ...current, complete: true };
     writeRecord(target, current);
     try {
@@ -1281,12 +1364,16 @@ function* exportOpenItemsSteps(target, record, destination) {
 }
 
 function exportOpenItems(target, record, destination) {
-  return runSynchronousSteps(exportOpenItemsSteps(target, record, destination), operation =>
-    exportOne(operation.destination, operation.run, operation.item, operation.contentOptions, operation.record, operation.progress));
+  return runSynchronousSteps(exportOpenItemsSteps(target, record, destination), operation => operation.kind === 'companion-read'
+    ? require('./standalone-document-review-store').createDocumentReviewStore().readResultCompanions(operation.record.batch_id,
+      operation.record.confidential_binding_sha256, confidentialSelection(operation.record), confidentialNames(operation.record))
+    : exportOne(operation.destination, operation.run, operation.item, operation.contentOptions, operation.record, operation.progress));
 }
 function exportOpenItemsAsync(target, record, destination) {
-  return runAsyncSteps(exportOpenItemsSteps(target, record, destination), operation =>
-    exportOneAsync(operation.destination, operation.run, operation.item, operation.contentOptions, operation.record, operation.progress));
+  return runAsyncSteps(exportOpenItemsSteps(target, record, destination), operation => operation.kind === 'companion-read'
+    ? require('./standalone-document-review-store').createDocumentReviewStore().readResultCompanionsAsync(operation.record.batch_id,
+      operation.record.confidential_binding_sha256, confidentialSelection(operation.record), confidentialNames(operation.record))
+    : exportOneAsync(operation.destination, operation.run, operation.item, operation.contentOptions, operation.record, operation.progress));
 }
 function resultBindingPath(batchId) {
   if (!/^[a-f0-9]{64}$/u.test(batchId || '')) throw resultExportFailure('RESULT_EXPORT_STATE_UNSAFE');
@@ -1342,12 +1429,22 @@ function captureInitialResultBinding(record, run, progress) {
     return { document_id: (item.artifact_id || item.package_id).slice(3), name: item.file,
       sha256: item.sha256, identity: file.identity };
   });
-  assertInitialInventory(directory, files);
+  const confidential = record.result_layout === CONFIDENTIAL_RESULT_LAYOUT ? {
+    confidential_binding_sha256: record.confidential_binding_sha256,
+    confidential: record.confidential,
+    confidential_directory: serialDirectory(initialDirectory(progress, run, path.join(run.path, CONFIDENTIAL_DIRECTORY), false).directory),
+    confidential_files: confidentialItems(record).map(item => {
+      const actual = inspectInitialLeaf(progress, run, item);
+      return { name: item.file, sha256: item.sha256, identity: actual.identity };
+    })
+  } : {};
+  assertInitialInventory(directory, [...files, ...(confidential.confidential_files || [])]);
   const target = resultBindingPath(record.batch_id);
   ensurePrivateDirectory(dataRoot(), 'result-publication-bindings');
-  const bytes = Buffer.from(JSON.stringify({ schema: 'datasecure-initial-results/1', batch_id: record.batch_id,
-    processing_mode: record.processing_mode, result_layout: RESULT_LAYOUT,
-    root: path.dirname(path.dirname(runPath)), directory: serialDirectory(directory), files }));
+  const bytes = Buffer.from(JSON.stringify({ schema: record.result_layout === CONFIDENTIAL_RESULT_LAYOUT
+    ? 'datasecure-initial-results/2' : 'datasecure-initial-results/1', batch_id: record.batch_id,
+    processing_mode: record.processing_mode, result_layout: record.result_layout,
+    root: path.dirname(path.dirname(runPath)), directory: serialDirectory(directory), files, ...confidential }));
   const work = createPrivateWorkStore({ privateRoot: path.dirname(target), maxBytes: INITIAL_BINDING_BYTES });
   let existing;
   let present = true;
@@ -1370,7 +1467,7 @@ function initialResultPublication(batchId, verifyFiles = true) {
   const target = path.join(dataRoot(), 'result-export-state', `re_${crypto.createHash('sha256').update(batchId).digest('hex').slice(0, 32)}.json`);
   try { fs.lstatSync(target); } catch (error) { if (error?.code === 'ENOENT') return null; throw error; }
   const record = readPublicationRecordSnapshot(target, batchId);
-  if (record.result_layout !== RESULT_LAYOUT) return null; // never reinterpret old user folders
+  if (!hasBoundResultLayout(record)) return null; // never reinterpret old user folders
   if (record.batch_id !== batchId || !record.items.length) throw resultExportFailure('RESULT_EXPORT_STATE_UNSAFE');
   // A validated, still-writing initial plan is not a completed generation and
   // must grant neither a folder nor correction authority. Do not describe this
@@ -1380,9 +1477,13 @@ function initialResultPublication(batchId, verifyFiles = true) {
     throw resultExportFailure('RESULT_EXPORT_STATE_UNSAFE');
   const bytes = readBoundFile(resultBindingPath(batchId), { maximum: INITIAL_BINDING_BYTES, minimum: 1 });
   const value = JSON.parse(bytes);
-  if (!exactKeys(value, ['schema', 'batch_id', 'processing_mode', 'result_layout', 'root', 'directory', 'files']) ||
-      value.schema !== 'datasecure-initial-results/1' || value.batch_id !== batchId || value.processing_mode !== record.processing_mode ||
-      value.result_layout !== RESULT_LAYOUT || typeof value.root !== 'string' || !path.isAbsolute(value.root) ||
+  const withConfidential = record.result_layout === CONFIDENTIAL_RESULT_LAYOUT;
+  const proofKeys = ['schema', 'batch_id', 'processing_mode', 'result_layout', 'root', 'directory', 'files'];
+  if (withConfidential) proofKeys.push('confidential_binding_sha256', 'confidential', 'confidential_directory', 'confidential_files');
+  if (!exactKeys(value, proofKeys) ||
+      value.schema !== (withConfidential ? 'datasecure-initial-results/2' : 'datasecure-initial-results/1') ||
+      value.batch_id !== batchId || value.processing_mode !== record.processing_mode ||
+      value.result_layout !== record.result_layout || typeof value.root !== 'string' || !path.isAbsolute(value.root) ||
       !exactKeys(value.directory, ['path', 'real', 'chain', 'platform']) || value.directory.platform !== process.platform ||
       typeof value.directory.real !== 'string' || !Array.isArray(value.directory.chain) || value.directory.chain.length === 0 ||
       !Array.isArray(value.files) || value.directory.path !== path.join(value.root,
@@ -1391,13 +1492,29 @@ function initialResultPublication(batchId, verifyFiles = true) {
         !exactKeys(file, ['document_id', 'name', 'sha256', 'identity']) || file.name !== record.items[index].file ||
         file.sha256 !== record.items[index].sha256 || file.document_id !== (record.items[index].artifact_id || record.items[index].package_id).slice(3)))
     throw resultExportFailure('RESULT_EXPORT_STATE_UNSAFE');
+  if (withConfidential && (value.confidential_binding_sha256 !== record.confidential_binding_sha256 ||
+      JSON.stringify(value.confidential) !== JSON.stringify(record.confidential) ||
+      !exactKeys(value.confidential_directory, ['path', 'real', 'chain', 'platform']) ||
+      value.confidential_directory.platform !== process.platform ||
+      value.confidential_directory.path !== path.join(value.directory.path, CONFIDENTIAL_DIRECTORY) ||
+      typeof value.confidential_directory.real !== 'string' || !Array.isArray(value.confidential_directory.chain) ||
+      value.confidential_directory.chain.length === 0 || !Array.isArray(value.confidential_files) || value.confidential_files.length !== 2 ||
+      value.confidential_files.some((file, index) => !exactKeys(file, ['name', 'sha256', 'identity']) ||
+        file.name !== CONFIDENTIAL_FILES[index].name || file.sha256 !== confidentialItems(record)[index].sha256)))
+    throw resultExportFailure('RESULT_EXPORT_STATE_UNSAFE');
   if (verifyFiles) {
     const directory = { ...value.directory, io: fs };
     if (JSON.stringify(serialDirectory(bindDirectory(directory.path))) !== JSON.stringify(value.directory)) throw resultExportFailure('RESULT_EXPORT_CONFLICT');
     assertDirectory(directory);
-    for (const file of value.files) {
-      const actual = readBoundFileRecord(path.join(directory.path, file.name), { maximum: 32 * 1024 * 1024,
-        checkCtime: true, validateParents: () => assertDirectory(directory) });
+    const confidentialDirectory = withConfidential ? { ...value.confidential_directory, io: fs } : null;
+    if (confidentialDirectory && JSON.stringify(serialDirectory(bindDirectory(confidentialDirectory.path))) !== JSON.stringify(value.confidential_directory))
+      throw resultExportFailure('RESULT_EXPORT_CONFLICT');
+    const allFiles = [...value.files, ...(value.confidential_files || [])];
+    for (const file of allFiles) {
+      const privateFile = withConfidential && value.confidential_files.includes(file);
+      const parent = privateFile ? confidentialDirectory : null;
+      const actual = readBoundFileRecord(path.join(directory.path, file.name), { ...(parent ? { directory: parent } : {}), maximum: 32 * 1024 * 1024,
+        checkCtime: true, validateParents: () => { assertDirectory(directory); if (parent) assertDirectory(parent); } });
       if (JSON.stringify(actual.identity) !== JSON.stringify(file.identity) ||
           crypto.createHash('sha256').update(actual.bytes).digest('hex') !== file.sha256)
         throw resultExportFailure('RESULT_EXPORT_CONFLICT');
@@ -1406,7 +1523,8 @@ function initialResultPublication(batchId, verifyFiles = true) {
     // opener must not silently include user-added private files or follow a
     // replaced/symlinked subtree. Walk only the finite promised folder set;
     // opaque, bounded Finder metadata is not part of the Markdown inventory.
-    assertInitialInventory(directory, value.files);
+    assertInitialInventory(directory, allFiles);
+    if (confidentialDirectory) assertDirectory(confidentialDirectory);
   }
   return { ...value, binding_sha256: crypto.createHash('sha256').update(bytes).digest('hex') };
 }
@@ -1465,9 +1583,9 @@ function visibleExportDirectory(token) {
 }
 function publishStandaloneIdentityIfPossible(state) {
   if (state?.product_channel !== 'standalone' || state.processing_mode === 'markdown-only') return;
-  // New result folders contain reusable Markdown only. Private re-identification
-  // aids remain available through the local mapping action, never beside MD.
-  try { if (readRecord(recordPath(state.token)).result_layout === RESULT_LAYOUT) {
+  // Legacy /1 keeps its private aids internal. New /2 has already committed
+  // its mandatory version-bound companions before the completion record.
+  try { if (hasBoundResultLayout(readRecord(recordPath(state.token)))) {
     identityLedger.materialize(state); return;
   } } catch { return; }
   try {
@@ -1876,7 +1994,7 @@ async function terminalVisibleExportAsync(completed, exporter) {
 }
 
 module.exports = {
-  RESULT_LAYOUT, initialResultPublication, privateResultLedger,
+  RESULT_LAYOUT, CONFIDENTIAL_RESULT_LAYOUT, initialResultPublication, privateResultLedger,
   SCHEMA, MARKDOWN_SCHEMA, CONTENT_MARKDOWN_SCHEMA, CONTENT_ANONYMIZED_SCHEMA, LEGACY_MARKDOWN_SCHEMA, LEGACY_SCHEMA, VISIBLE_MAPPING_FILE, recordPath, validRecord, exportCompletedState, exportCompletedStateAsync, replayPendingResultExports, visibleExportStatus,
   visibleExportDirectory, terminalVisibleExport, terminalVisibleExportAsync, readStandaloneExportHistory, readStandaloneExportHistoryEntry, abandonPendingResultExport,
   completedMarkdownExportMatches,

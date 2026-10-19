@@ -26,6 +26,7 @@ function fixture(options = {}) {
   const context = vm.createContext({ module, Buffer, process: { platform: 'win32', pid: 12345, env: {} },
     require(id) {
       if (['path', 'crypto', 'node:util'].includes(id)) return require(id);
+      if (id === '../standalone/result-companions') return require('../plugins/data-secure/server/standalone/result-companions');
       if (id === './batch-execution-diagnostic') return {
         ...diagnostic,
         recordBatchExecutionFailure(phase, error) {

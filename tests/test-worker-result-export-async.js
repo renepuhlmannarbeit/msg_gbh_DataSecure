@@ -184,11 +184,14 @@ async function main() {
   inject('acquireExportClaimAsync', rawBusy(), true, 2);
   inject('releaseExportClaimAsync', rawBusy(), true, 2);
   inject('exportOneAsync', rawBusy(), true, 2);
+  inject('prepareResultCompanions', rawBusy(), true, 2);
+  inject('readResultCompanions', rawBusy(), true, 2);
   const beforeWaits = waits;
   const result = await exporter.terminalVisibleExportAsync({ complete: true, released: 1 }, () => batch.exportCompletedBatchResultsAsync(f.token));
   assert.deepEqual(plain(result), { exported: 1, pending: 0, available: true }); checks++;
   assert.deepEqual({ waits: waits - beforeWaits, faults: faults.map(({ where, count, done }) => ({ where, count, done })) },
-    { waits: 10, faults: ['publicationExpectationAsync', 'recordPublicationAsync', 'acquireExportClaimAsync', 'releaseExportClaimAsync', 'exportOneAsync']
+    { waits: 14, faults: ['publicationExpectationAsync', 'recordPublicationAsync', 'acquireExportClaimAsync', 'releaseExportClaimAsync', 'exportOneAsync',
+      'prepareResultCompanions', 'readResultCompanions']
       .map(where => ({ where, count: 2, done: true })) }); checks++;
   count(fs.existsSync(f.publication) && fs.existsSync(f.membership));
   const record = JSON.parse(fs.readFileSync(exporter.recordPath(f.token), 'utf8'));
@@ -196,7 +199,9 @@ async function main() {
   const run = exporter.visibleExportDirectory(f.token), markdown = fs.readFileSync(path.join(run, record.items[0].file));
   assert.deepEqual(markdown, Buffer.from(req('standalone/anonymized-store').readAnonymizedArtifact(f.item.package_id,
     f.review.publicationExpectation(f.token, f.id)).markdown)); checks++;
-  count(record.result_layout === exporter.RESULT_LAYOUT && !fs.existsSync(path.join(run, 'DataSecure-Zuordnung.csv')));
+  count(record.result_layout === exporter.CONFIDENTIAL_RESULT_LAYOUT && !fs.existsSync(path.join(run, 'DataSecure-Zuordnung.csv')));
+  count(fs.readFileSync(path.join(run, 'Vertraulich/Dateizuordnung.csv'), 'utf8').includes(record.items[0].file));
+  count(fs.readFileSync(path.join(run, 'Vertraulich/Personen-Pseudonym-Zuordnung.txt'), 'utf8').includes('VERTRAULICH'));
   count(fs.readFileSync(exporter.privateResultLedger(f.token), 'utf8').includes('synthetic.txt'));
   assert.deepEqual(fs.readFileSync(f.source), f.bytes); checks++;
   count(!fs.existsSync(exporter._test.claimPath(exporter.recordPath(f.token))));
@@ -214,6 +219,20 @@ async function main() {
   const syncWaits = waits, syncPending = batch.exportCompletedBatchResults(syncFixture.token);
   assert.deepEqual(plain(syncPending), { exported: 0, pending: 1, available: false }); checks++;
   count(waits === syncWaits && !syncPending.then);
+
+  // New companion admission retries only raw pre-entry kernel contention.
+  // Logical Busy or post-action/close uncertainty cannot replay the action or
+  // fabricate completion, even if all MD leaves were already committed.
+  for (const where of ['prepareResultCompanions', 'readResultCompanions']) for (const fault of [
+    { error: Object.assign(Error('logical'), { code: 'BATCH_ACTIVE_LOCK_BUSY' }), before: true },
+    { error: rawBusy(), before: false },
+    { error: Object.assign(Error('close'), { code: 'OWNERSHIP_GUARD_CLOSE_UNCONFIRMED' }), before: false }
+  ]) {
+    const bad = await fixture(); inject(where, fault.error, fault.before);
+    const oldWaits = waits, result = await batch.exportCompletedBatchResultsAsync(bad.token);
+    count(result.available === false && result.exported + result.pending === 1);
+    count(waits === oldWaits && faults[0].count === 1 && faults[0].done === true);
+  }
 
   // A logical collision / malformed binding / post-action or close failure is
   // fail-closed pending, never an admitted root wait or plan/copy replay.

@@ -15,7 +15,13 @@ Vorbereitung, **Verlauf** zeigt kompakte frühere Läufe. Nach dem Start oder
 Reiterwechsel erteilt weder Freigabe noch Exportauftrag. Abschluss und
 Hinweise bleiben sichtbar, ausführliche Erklärungen sind aufklappbar.
 Ergebnisordner und Hinweise sind direkt erreichbar; vertrauliche Zuordnungen
-sind als optionale, nicht zur Weitergabe bestimmte Angaben gruppiert. Diese gemeinsame
+sind nicht zur Weitergabe bestimmt. Neue Anonymisierungsstände im `/2`-Layout
+enthalten **Vertraulich/Dateizuordnung.csv** und
+**Vertraulich/Personen-Pseudonym-Zuordnung.txt**, ohne zusätzliche Aktion.
+Beide Dateien gehören genau zum jeweiligen Ergebnisstand; Nachbearbeitungen
+erhalten eigene passende Zuordnungen. Ältere `/1`-Läufe bleiben unverändert.
+Nur die gewünschten Markdown-Dateien weitergeben, niemals ungeprüft den gesamten
+Ergebnisordner einschließlich Vertraulich. Diese gemeinsame
 UI-Beschreibung ersetzt nicht den noch offenen nativen Mac-Nachweis.
 Nach einem gestarteten Lauf ist dessen Dateiauswahl verbraucht. Eine noch nicht
 gestartete neue Auswahl bleibt beim bloßen Reiterwechsel erhalten. Abgeschlossene

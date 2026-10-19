@@ -4,7 +4,7 @@
 //! A lost parent-creation receipt is uncertain, not permission to adopt or retry
 //! into another directory. No cleanup, permission repair or copy fallback.
 #![allow(dead_code)]
-use crate::{export_directory::{Directory, ExpectedFile, Identity}, ipc_transport::NativeGuard,
+use crate::{export_directory::{Directory, ExpectedFile, ConfidentialFiles, deserialize_confidential, Identity}, ipc_transport::NativeGuard,
     native_export_transaction::{Parents, Plan, PublicationRole, Transaction, deserialize_publication_role, publication_directory_name}};
 use serde::{Deserialize, Serialize};
 use std::io;
@@ -36,16 +36,21 @@ pub(crate) struct Request {
     private_root: ObjectId, target: ObjectId, files: Vec<ExpectedFile>,
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_publication_role")]
     publication_role: Option<PublicationRole>,
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_confidential")]
+    confidential: Option<ConfidentialFiles>,
 }
 impl Request {
     pub fn new(batch_id: String, operation_id: String, request_sha256: String, processing_mode: String,
         files: Vec<ExpectedFile>, private_root: &Directory, target: &Directory) -> io::Result<Self> {
-        let request = Self { batch_id, operation_id, request_sha256, processing_mode, files, publication_role: None,
+        let request = Self { batch_id, operation_id, request_sha256, processing_mode, files, publication_role: None, confidential: None,
             private_root: private_root.identity().into(), target: target.identity().into() };
         request.validate()?; Ok(request)
     }
     pub fn with_publication_role(mut self, role: Option<PublicationRole>) -> Self {
         self.publication_role = role; self
+    }
+    pub fn with_confidential(mut self, confidential: Option<ConfidentialFiles>) -> io::Result<Self> {
+        self.confidential = confidential; self.validate()?; Ok(self)
     }
     fn validate(&self) -> io::Result<()> {
         if !hex(&self.batch_id, 64) || !hex(&self.operation_id, 32) || !hex(&self.request_sha256, 64) ||
@@ -54,13 +59,8 @@ impl Request {
         let root = self.private_root.identity()?; let target = self.target.identity()?;
         if root == target { return Err(conflict()); }
         if root.volume != target.volume { return Err(error("AI_EXPORT_VOLUME_MISMATCH")); }
-        let mut total = 0u64;
-        crate::export_directory::validate_export_names(&self.processing_mode, &self.files).map_err(|_| conflict())?;
-        for file in &self.files {
-            if file.bytes > 32_000_000 { return Err(conflict()); }
-            total = total.checked_add(file.bytes).ok_or_else(conflict)?;
-            if total > 500 * 1024 * 1024 { return Err(conflict()); }
-        }
+        crate::export_directory::validate_publication_inventory(&self.processing_mode,
+            self.publication_role == Some(PublicationRole::Results), &self.files, self.confidential.as_ref()).map_err(|_| conflict())?;
         Ok(())
     }
     fn journal_name(&self) -> String { format!("journal-{}", self.operation_id) }
@@ -215,7 +215,7 @@ impl<'a> Workspace<'a> {
         let plan = Plan::new(self.request.batch_id.clone(), self.request.operation_id.clone(), self.request.request_sha256.clone(),
             self.request.processing_mode.clone(), self.request.files.clone(),
             &Parents { journal: &self.journal, staging: &self.staging, target: self.target })?
-            .with_publication_role(self.request.publication_role);
+            .with_publication_role(self.request.publication_role).with_confidential(self.request.confidential.clone())?;
         if existing_only { Transaction::open_existing(&self.journal, &self.staging, self.target, plan, guard) }
         else { Transaction::open(&self.journal, &self.staging, self.target, plan, guard) }
     }
@@ -258,6 +258,28 @@ mod tests {
             }
             fs::remove_dir_all(&self.path).unwrap();
         }
+    }
+    #[test]
+    fn confidential_request_is_durable_and_cannot_cross_adopt_the_old_results_request() {
+        use crate::export_directory::{ConfidentialFile, CONFIDENTIAL_DIRECTORY, IDENTITIES_FILE};
+        let f = Fixture::new(); let (r, t) = (f.open("private"), f.open("public"));
+        let old = f.request(&r, &t).with_publication_role(Some(PublicationRole::Results));
+        assert!(!String::from_utf8_lossy(&serde_json::to_vec(&old).unwrap()).contains("confidential"));
+        let request = old.clone().with_confidential(Some(ConfidentialFiles {
+            filename_mapping: ConfidentialFile { bytes: 7, sha256: Sha256::digest(b"mapping").into() },
+            identities: ConfidentialFile { bytes: 10, sha256: Sha256::digest(b"identities").into() } })).unwrap();
+        let mut invalid = serde_json::to_value(&request).unwrap(); invalid["confidential"] = serde_json::Value::Null;
+        assert!(serde_json::from_value::<Request>(invalid).is_err());
+        let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
+        {
+            let workspace = Workspace::open(&r, &t, request.clone(), &guard).unwrap(); let tx = workspace.transaction(&guard).unwrap();
+            tx.write_body(0, b"hello").unwrap(); tx.write_body(1, b"mapping").unwrap(); tx.write_body(2, b"identities").unwrap();
+            tx.prepare().unwrap(); assert_eq!(tx.commit().unwrap(), Status::Completed);
+        }
+        assert!(Workspace::open_existing(&r, &t, old, &guard).is_err());
+        let workspace = Workspace::open_existing(&r, &t, request.clone(), &guard).unwrap(); let tx = workspace.existing_transaction(&guard).unwrap();
+        assert_eq!(tx.inspect_completed().unwrap(), Status::Completed);
+        assert_eq!(fs::read(f.path.join("public").join(request.published_name()).join(CONFIDENTIAL_DIRECTORY).join(IDENTITIES_FILE)).unwrap(), b"identities");
     }
     #[test]
     fn result_role_parent_intents_never_cross_adopt_legacy_and_results() {

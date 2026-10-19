@@ -1,6 +1,6 @@
 # Produktvertrag: GBH DataSecure
 
-Stand: 19.10.2026 · 3.2.0-rc166 · Ist-Zustand RC166 (Entwicklung) · veröffentlichte Windows/macOS RC165 unverändert · Linux RC159 · Cowork RC151
+Stand: 19.10.2026 · 3.2.0-rc167 · Ist-Zustand RC167 (Entwicklung) · veröffentlichte Windows/macOS RC165 unverändert · Linux RC159 · Cowork RC151
 
 **Aktuelle RC166-Entwicklung:** Notwendige OCR-/Fundstellenentscheidungen bleiben,
 danach führt der normale Weg direkt zu den fertigen Ergebnisdateien. Keine zweite
