@@ -14,21 +14,79 @@ const contacts = buildContactBatch(['one.png', 'two.png'].map((source_label, ind
       png_base64: encodePng({ width: 4, height: 3, rgba: Buffer.alloc(48, index ? 180 : 255) }).toString('base64') } }] } }))).draft;
 const evidence = fs.mkdtempSync(path.resolve('dist/engineering-review-bulk-browser-'));
 const browser = await chromium.launch({ channel: process.platform === 'win32' ? 'msedge' : 'chrome', headless: true });
-async function scenario(draft, work, { embedded = false } = {}) {
+async function scenario(draft, work, { embedded = false, waiting = false } = {}) {
   const preview = await startReviewPreview({ draft });
   const context = await browser.newContext({ viewport: { width: 1500, height: 1000 }, colorScheme: 'light' });
   try {
     await context.route('**/*', route => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());
+    if (waiting) await context.route('**/preview-ocr.js', route => route.fulfill({ contentType: 'text/javascript', body: `(() => {
+      const data = ${JSON.stringify(Buffer.from(JSON.stringify(draft)).toString('base64'))};
+      window.previewStatusReads = 0; window.previewReady = false; window.previewHoldStatus = false;
+      window.previewSubmissions = [];
+      const snapshot = () => window.previewReady ? { ready: true, review_id: 'a'.repeat(32), chunk_count: 1 }
+        : { ready: false, phase: 'preparing', continuation_available: false };
+      window.__TAURI__ = { event: { listen: async () => () => {} }, core: { invoke: async (command, args) => {
+        if (command === 'get_review_session') {
+          window.previewStatusReads++;
+          if (window.previewHoldStatus) return new Promise(resolve => { window.previewReleaseStatus = () => resolve(snapshot()); });
+          return snapshot();
+        }
+        if (command === 'get_review_chunk') return { review_id: 'a'.repeat(32), index: 0, data };
+        if (command === 'submit_review') { window.previewSubmissions.push(args.answer); window.previewReady = false; return { accepted: true }; }
+        if (command === 'close_review_window') return { ok: true };
+        throw Error('Unsupported waiting-only synthetic command');
+      } } };
+    })();` }));
     // Test instrumentation must not relax the app's production-style CSP.
     await context.addInitScript({ path: require.resolve('axe-core/axe.min.js') });
     const page = await context.newPage(), errors = [];
     page.on('pageerror', error => errors.push(String(error)));
-    await page.goto(`${preview.url}/review.html${embedded ? '?embedded=1' : ''}`); await page.locator('#review').waitFor({ state: 'visible' });
+    await page.goto(`${preview.url}/review.html${embedded ? '?embedded=1' : ''}`);
+    if (waiting) await page.waitForFunction(() => window.previewStatusReads >= 1);
+    else await page.locator('#review').waitFor({ state: 'visible' });
     await work(page); assert.deepEqual(errors, []);
   } finally { await context.close(); await preview.close(); }
 }
 const apply = async (page, value) => { await page.locator('#bulk-treatment').selectOption(value); await page.locator('#bulk-apply').click(); };
 try {
+  for (const embedded of [false, true]) await scenario(syntheticDraft('entities'), async page => {
+    const retry = page.locator('#retry');
+    await retry.focus();
+    const initialReads = await page.evaluate(() => {
+      window.previewMutations = [];
+      window.previewObserver = new MutationObserver(records => window.previewMutations.push(...records.map(record => ({
+        id: record.target.id || record.target.parentElement?.id || '', type: record.type, attribute: record.attributeName
+      }))));
+      window.previewObserver.observe(document.body, { subtree: true, childList: true, attributes: true, characterData: true });
+      return window.previewStatusReads;
+    });
+    await page.waitForFunction(reads => window.previewStatusReads >= reads + 3, initialReads, { timeout: 7000 });
+    assert.deepEqual(await page.evaluate(() => window.previewMutations), [], 'three real 1200ms background polls leave actual DOM/live regions unchanged');
+    assert.equal(await retry.isEnabled(), true);
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'retry');
+    await page.evaluate(() => { window.previewHoldStatus = true; window.previewMutations = []; });
+    await retry.click();
+    assert.equal(await retry.isDisabled(), true, 'an explicit status read remains visibly locked');
+    await page.waitForFunction(() => typeof window.previewReleaseStatus === 'function');
+    await page.evaluate(() => { window.previewHoldStatus = false; window.previewReleaseStatus(); });
+    await page.waitForFunction(() => !document.getElementById('retry').disabled);
+    assert.deepEqual(await page.evaluate(() => window.previewMutations), [
+      { id: 'retry', type: 'attributes', attribute: 'disabled' },
+      { id: 'retry', type: 'attributes', attribute: 'disabled' }
+    ]);
+    await page.evaluate(() => { window.previewReady = true; window.previewMutations = []; });
+    await page.locator('#review').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#matrix-body tr').count(), 1);
+    assert.equal(await page.evaluate(() => document.activeElement.id), 'matrix-title');
+    assert.ok(await page.evaluate(() => window.previewMutations.some(record => record.id === 'matrix-body' && record.type === 'childList')));
+    await page.locator('#select-visible').check(); await apply(page, 'keep'); await page.locator('#release').click();
+    await page.locator('#waiting').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#matrix-body tr').count(), 0);
+    assert.equal(await page.locator('#source-context').textContent(), '');
+    assert.equal(await page.locator('#contact-image').getAttribute('src'), '');
+    assert.equal(await page.evaluate(() => window.previewSubmissions.length), 1, 'one explicit handoff, no synthetic repeat submission');
+    await page.evaluate(() => window.previewObserver.disconnect());
+  }, { embedded, waiting: true });
   await scenario(syntheticDraft('entities'), async page => {
     assert.equal(await page.locator('#matrix-body tr').count(), 1);
     assert.equal(await page.locator('#matrix-body input:checked').count(), 0);
@@ -166,5 +224,5 @@ try {
     await page.setViewportSize({ width: 683, height: 580 });
     assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Embedded review reflows at 200%-equivalent width');
   }, { embedded: true });
-  console.log('REVIEW BULK BROWSER PASS: actual HTML/JS/CSS, single explicit Apply, no duplicate editors/actions, bounded OCR correction proposals without implicit decisions, different per-row corrections, atomic validation, Undo, grouped contexts, privacy clearing, axe, pagination and 390–1920px reflow; synthetic IPC, no native claim; evidence=' + evidence);
+  console.log('REVIEW BULK BROWSER PASS: actual HTML/JS/CSS, stable waiting DOM/live regions/focus across real 1200ms polls, explicit read locks and private group transitions, single explicit Apply, no duplicate editors/actions, bounded OCR correction proposals without implicit decisions, different per-row corrections, atomic validation, Undo, grouped contexts, privacy clearing, axe, pagination and 390–1920px reflow; synthetic IPC, no native claim; evidence=' + evidence);
 } finally { await browser.close(); }

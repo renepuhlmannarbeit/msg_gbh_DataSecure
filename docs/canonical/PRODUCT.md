@@ -1,6 +1,6 @@
 # Produktvertrag: GBH DataSecure
 
-Stand: 19.10.2026 · 3.2.0-rc165 · Ist-Zustand RC165 · Windows/macOS-Test-Pre-Release; RC164 unverändert · Linux RC159 · Cowork RC151
+Stand: 19.10.2026 · 3.2.0-rc166 · Ist-Zustand RC166 (Entwicklung) · veröffentlichte Windows/macOS RC165 unverändert · Linux RC159 · Cowork RC151
 
 **Aktuelle Standalone-Präzisierung nach RC164:** Der normale Dokumentweg benötigt
 keine gesonderte Pflichtfreigabe mehr. Nach der Fundstellenprüfung können die

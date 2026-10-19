@@ -56,7 +56,7 @@ aktiv; die App öffnet dabei nicht automatisch die vollständige Verlaufsliste.
    eine erforderliche Fundstellenprüfung nicht auf diese Weise umgangen werden.
    Bei geführter Anonymisierung folgen die erforderliche Fundstellenprüfung,
    Dokumentfreigabe und ein gesonderter Export. Alternativ kannst du vor
-   dem Start den unten erläuterten **Schnellweg** ausdrücklich einschalten.
+   dem Start die unten erläuterte Auswahl **Automatisch maskieren** wählen.
    Die Kontaktprüfung bestätigt ohnehin keine übrigen OCR-Zeilen. Mit oder
    ohne das zweite Häkchen ist später eine freiwillige Markdown-Nachkorrektur
    möglich; sie ist keine zweite OCR-Pflichtprüfung.
@@ -246,17 +246,27 @@ Gerät. Für formale Nachweise den
 Der frühere bestätigte RC157-Anwenderlauf bleibt historische Evidenz seines
 damaligen Pakets und ist keine Abnahme dieses Pakets.
 
-## Schnellweg und klarer Abschluss
+## Umgang mit unklaren Fundstellen und klarer Abschluss
 
-**Schnellweg: automatisch anonymisieren und freigeben** ist vor jedem neuen
-Anonymisierungslauf ausdrücklich zu wählen. Bekannte unklare Stellen und
+**Selbst entscheiden** ist vor einem neuen Anonymisierungslauf vorausgewählt:
+Die App anonymisiert automatisch und fragt bei unklaren Fundstellen nach.
+Alternativ **Automatisch maskieren** (bisher Schnellweg: automatisch anonymisieren und freigeben)
+ausdrücklich wählen. Bekannte unklare Stellen und
 erkannte OCR-Kontaktbereiche werden automatisch maskiert, nicht als richtig
 erkannt bestätigt. Die unveränderten erstellten Basisstände erhalten eine
 gekennzeichnete automatische Erstfreigabe, keine menschliche Prüfung.
 Nicht lesbare oder technisch nicht sicher prüfbare Dateien werden mit Grund
 ausgelassen. Eine spätere Änderung oder ein Widerruf hebt die betroffene
 Freigabe auf; sie wird nicht beim nächsten Laden automatisch wieder erteilt.
-Der Export bleibt auch im Schnellweg ein ausdrücklicher Auftrag.
+Der Export bleibt auch bei automatischer Maskierung ein ausdrücklicher Auftrag.
+Die separate Option **Text aus Bildern und Scans lesen (OCR)** gilt für beide
+Abläufe und wird dadurch nicht eingeschaltet. Alle vier Kombinationen sind
+möglich; die technischen Schutzprüfungen bleiben erhalten.
+Die Datei- und Ordnerlabels nennen bekannten OCR-Bedarf einschließlich
+Unterordnern, auch wenn diese zugeklappt oder Dateien abgewählt sind.
+Bei Markdown-Konvertierung stehen optionale Kopierbelege ausschließlich in
+**Ausführliche Laufdetails**; **Kopierstatus aktualisieren** liest diese erneut,
+**Nachkorrektur öffnen (optional)** öffnet dagegen die Textbearbeitung.
 
 **Lauf abgeschlossen – mit Hinweisen** ist ein abgeschlossener technischer
 Lauf, kein weiter laufender Prüfschritt. Hinweise und ausgelassene Dateien

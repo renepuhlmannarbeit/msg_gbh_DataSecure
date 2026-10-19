@@ -104,9 +104,11 @@ und deren Ablehnung zur Abnahme; ein Headless-Runner ersetzt diese nicht.
 
 ## Verarbeitung und Prüfung
 
-Die folgenden manuellen Prüfschritte gelten für den **geführten Weg**.
+Die folgenden manuellen Prüfschritte gelten für **Selbst entscheiden**, die
+vorausgewählte Option unter **Umgang mit unklaren Fundstellen**. Die App
+anonymisiert auch dabei automatisch und fragt bei unklaren Fundstellen nach.
 Vor einem neuen Anonymisierungslauf kannst du stattdessen ausdrücklich
-**Schnellweg: automatisch anonymisieren und freigeben** wählen. Bekannte
+**Automatisch maskieren** (bisher Schnellweg: automatisch anonymisieren und freigeben) wählen. Bekannte
 mehrdeutige Fundstellen und erkannte OCR-Kontaktbereiche werden dann maskiert,
 nicht als richtig erkannt bestätigt. Erstellte unveränderte Basisstände
 erhalten eine gekennzeichnete automatische Erstfreigabe, keine menschliche
@@ -114,6 +116,14 @@ Prüfung. Nicht lesbare oder technisch nicht sicher prüfbare Dateien werden
 mit Grund ausgelassen. Spätere Änderungen und Widerrufe werden nicht beim
 Laden automatisch wieder freigegeben. Der Export bleibt ein eigener,
 ausdrücklicher Auftrag. Automatik ist keine Anonymitätsgarantie.
+
+**Text aus Bildern und Scans lesen (OCR)** ist eine davon unabhängige Option
+für beide Abläufe. Alle vier Kombinationen bleiben möglich; die technischen
+Schutzprüfungen sind unverändert. Datei- und Ordnerlabels nennen bekannten
+OCR-Bedarf einschließlich Unterordnern auch bei zugeklapptem Inhalt.
+Bei Markdown-Konvertierung stehen optionale Kopierbelege in
+**Ausführliche Laufdetails**; **Kopierstatus aktualisieren** liest den Status,
+während **Nachkorrektur öffnen (optional)** die Textbearbeitung öffnet.
 
 Für neue anonymisierte Ergebnisdateien sind neutrale Namen empfohlen.
 Alternativ **Originalname mit „-anonymisiert“** wählen, wenn die Namen keine

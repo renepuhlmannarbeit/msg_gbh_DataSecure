@@ -57,22 +57,33 @@ function harness(sessions = null, allowOrganizationReview = false, singleFinding
   const callbacks = new Map();
   const elements = new Map();
   const timers = [];
-  const createElement = (tag, id = '') => ({
-    tagName: tag, id, dataset: {}, children: [], value: '', hidden: false, disabled: false, textContent: '',
-    focus() { this.focused = true; },
-    append(...values) { this.children.push(...values); },
-    replaceChildren(...values) { this.children = values; },
-    setAttribute(name, value) { this[name] = value; },
-    querySelectorAll(selector) {
-      const descendants = this.children.flatMap(child => [child, ...child.querySelectorAll('*')]);
-      if (selector === '*') return descendants;
-      if (selector === 'select') return descendants.filter(child => child.tagName === 'select');
-      if (selector === '[data-row]') return descendants.filter(child => child.dataset.row !== undefined);
-      if (selector === 'input[data-action="correction"]') return descendants.filter(child => child.tagName === 'input' && child.dataset.action === 'correction');
-      throw Error(`Unsupported test selector: ${selector}`);
-    },
-    addEventListener(type, callback) { callbacks.set(type === 'click' ? id : `${id}:${type}`, callback); }
-  });
+  const timerDelays = [], mutations = [];
+  let activeElement = null;
+  const createElement = (tag, id = '') => {
+    const result = {
+      tagName: tag, id, dataset: {}, children: [], value: '', hidden: false, disabled: false, textContent: '',
+      focus() { mutations.push({ id, property: 'focus' }); activeElement = this; this.focused = true; },
+      append(...values) { mutations.push({ id, property: 'append' }); this.children.push(...values); },
+      replaceChildren(...values) { mutations.push({ id, property: 'replaceChildren' }); this.children = values; },
+      setAttribute(name, value) { mutations.push({ id, property: `attribute:${name}`, value }); this[name] = value; },
+      querySelectorAll(selector) {
+        const descendants = this.children.flatMap(child => [child, ...child.querySelectorAll('*')]);
+        if (selector === '*') return descendants;
+        if (selector === 'select') return descendants.filter(child => child.tagName === 'select');
+        if (selector === '[data-row]') return descendants.filter(child => child.dataset.row !== undefined);
+        if (selector === 'input[data-action="correction"]') return descendants.filter(child => child.tagName === 'input' && child.dataset.action === 'correction');
+        throw Error(`Unsupported test selector: ${selector}`);
+      },
+      addEventListener(type, callback) { callbacks.set(type === 'click' ? id : `${id}:${type}`, callback); }
+    };
+    for (const property of ['value', 'hidden', 'disabled', 'textContent', 'src', 'checked', 'indeterminate']) {
+      let value = result[property];
+      Object.defineProperty(result, property, { enumerable: true, get() { return value; }, set(next) {
+        mutations.push({ id, property, value: next }); value = next;
+      } });
+    }
+    return result;
+  };
   const element = (id) => {
     assert.ok(elementIds.has(id), `Unknown product element: ${id}`);
     if (!elements.has(id)) elements.set(id, createElement('div', id));
@@ -115,14 +126,15 @@ function harness(sessions = null, allowOrganizationReview = false, singleFinding
       return options.listen ? options.listen(name, callback, register) : register();
     } } },
     addEventListener(type, callback) { windowCallbacks.set(type, callback); },
-    setTimeout(callback) { timers.push(callback); return callback; },
+    setTimeout(callback, delay) { timers.push(callback); timerDelays.push(delay); return callback; },
     clearTimeout(callback) { const index = timers.indexOf(callback); if (index >= 0) timers.splice(index, 1); } };
   if (options.eventUnavailable) delete window.__TAURI__.event;
   if (options.embedded) { window.location = { search: '?embedded=1' }; window.parent = { __DATASECURE_REVIEW__: { invoke } }; }
   const presentation = fs.readFileSync(path.join(__dirname, '../apps/datasecure-standalone/frontend/workflow-presentation.js'), 'utf8');
   vm.runInNewContext(presentation + '\n' + source, { window, document: { getElementById: element, createElement, body: { classList: { add() {} } } }, TextDecoder, atob },
     { filename: 'review.js' });
-  return { element, callbacks, calls, draft, timers, listeners, windowCallbacks, unlistens: () => unlistens };
+  return { element, callbacks, calls, draft, timers, timerDelays, mutations, listeners, windowCallbacks,
+    activeElement: () => activeElement, unlistens: () => unlistens };
 }
 
 testAsync('contact corrections and confirmations use distinct actions, preserve literal spelling and clear private input after submission', async () => {
@@ -408,6 +420,243 @@ testAsync('the working indicator is decorative and respects reduced motion', asy
   assert.match(html, /class="work-gear" aria-hidden="true"/u);
   assert.match(css, /\.work-indicator\[hidden\]\{display:none\}/u);
   assert.match(css, /prefers-reduced-motion:reduce/u);
+});
+
+for (const embedded of [false, true]) testAsync(`identical background waiting polls preserve DOM, live text and focus (${embedded ? 'embedded' : 'native window'})`, async () => {
+  const snapshots = [
+    { ready: false, phase: 'preparing', run_complete: false, continuation_available: false },
+    { ready: false, phase: 'export_pending', run_complete: false, continuation_available: false },
+    { ready: false, phase: 'failed', error_code: 'LOCAL_REVIEW_FAILED', run_complete: false,
+      continuation_available: true, retry_available: true, affected_files: ['Dokument.txt'] }
+  ];
+  for (const snapshot of snapshots) {
+    const h = harness(Array(5).fill(snapshot), false, false, { embedded });
+    await new Promise(resolve => setImmediate(resolve));
+    const button = h.element('retry'); button.focus();
+    const waitingText = h.element('waiting-text').textContent, summary = h.element('summary').textContent;
+    const body = h.element('matrix-body').children, occurrences = h.element('occurrence').children;
+    h.mutations.length = 0;
+    for (let index = 0; index < 4; index++) {
+      assert.equal(h.timers.length, 1, 'exactly one unchanged status timer is retained');
+      await h.timers.shift()();
+      assert.equal(button.disabled, false, 'background reads do not flash the manual status control');
+      assert.strictEqual(h.element('matrix-body').children, body, 'the private table is not rebuilt while waiting');
+      assert.strictEqual(h.element('occurrence').children, occurrences);
+      assert.strictEqual(h.activeElement(), button, 'a waiting poll does not move keyboard focus');
+      assert.equal(h.element('waiting-text').textContent, waitingText);
+      assert.equal(h.element('summary').textContent, summary);
+      assert.deepEqual(h.mutations, [], 'even same-value DOM/disabled/live-region writes are observable and forbidden here');
+    }
+    assert.deepEqual(h.timerDelays, [1200, 1200, 1200, 1200, 1200], 'poll cadence is unchanged');
+    assert.equal(h.calls.filter(call => call.command === 'get_review_session').length, 5);
+    assert.equal(h.calls.some(call => ['get_review_chunk', 'submit_review', 'continue_review_session'].includes(call.command)), false);
+  }
+});
+
+testAsync('an in-flight background waiting read stays visually idle but coalesces manual requests', async () => {
+  let allowStatus, reads = 0;
+  const pending = new Promise(resolve => { allowStatus = resolve; });
+  const waiting = { ready: false, phase: 'preparing', continuation_available: false };
+  const h = harness([waiting, waiting], false, false, { async invoke(command, args, normal) {
+    if (command === 'get_review_session' && ++reads === 2) await pending;
+    return normal(command, args);
+  } });
+  await new Promise(resolve => setImmediate(resolve));
+  h.element('retry').focus(); h.mutations.length = 0;
+  const polling = h.timers.shift()();
+  assert.equal(h.element('retry').disabled, false);
+  await Promise.all([h.callbacks.get('retry')(), h.callbacks.get('retry')()]);
+  assert.equal(h.calls.filter(call => call.command === 'get_review_session').length, 2);
+  assert.equal(h.timers.length, 0);
+  assert.deepEqual(h.mutations, []);
+  allowStatus(); await polling;
+  assert.deepEqual(h.mutations, []);
+  assert.strictEqual(h.activeElement(), h.element('retry'));
+  assert.equal(h.timers.length, 1);
+});
+
+testAsync('an explicit waiting status read locks its button once and unlocks once without changing other waiting controls', async () => {
+  let allowStatus, reads = 0;
+  const pending = new Promise(resolve => { allowStatus = resolve; });
+  const waiting = { ready: false, phase: 'preparing', continuation_available: false };
+  const h = harness([waiting, waiting], false, false, { async invoke(command, args, normal) {
+    if (command === 'get_review_session' && ++reads === 2) await pending;
+    return normal(command, args);
+  } });
+  await new Promise(resolve => setImmediate(resolve)); h.mutations.length = 0;
+  const reading = h.callbacks.get('retry')();
+  assert.equal(h.element('retry').disabled, true, 'a genuine manual read retains its visible command lock');
+  await h.callbacks.get('retry')();
+  assert.equal(h.calls.filter(call => call.command === 'get_review_session').length, 2);
+  assert.equal(h.timers.length, 0);
+  allowStatus(); await reading;
+  assert.equal(h.element('retry').disabled, false);
+  assert.deepEqual(h.mutations, [
+    { id: 'retry', property: 'disabled', value: true },
+    { id: 'retry', property: 'disabled', value: false }
+  ]);
+  assert.equal(h.timers.length, 1);
+  assert.equal(h.timerDelays.at(-1), 1200);
+});
+
+testAsync('a genuine session transition updates its message and continuation control without rebuilding waiting content', async () => {
+  const preparing = { ready: false, phase: 'preparing', continuation_available: false };
+  const available = { ready: false, phase: 'retry_available', continuation_available: true };
+  let allowContinuation;
+  const pending = new Promise(resolve => { allowContinuation = resolve; });
+  const h = harness([preparing, available, available], false, false, { invoke(command, args, normal) {
+    return command === 'continue_review_session' ? pending : normal(command, args);
+  } });
+  await new Promise(resolve => setImmediate(resolve));
+  const body = h.element('matrix-body').children;
+  h.element('retry').focus(); h.mutations.length = 0;
+  await h.timers.shift()();
+  assert.equal(h.element('continue-review').hidden, false);
+  assert.equal(h.element('work-indicator').hidden, true);
+  assert.match(h.element('waiting-text').textContent, /Weitere Fundstellen/u);
+  assert.strictEqual(h.element('matrix-body').children, body);
+  assert.ok(h.mutations.some(change => change.id === 'waiting-text' && change.property === 'textContent'));
+  assert.equal(h.mutations.some(change => ['replaceChildren', 'focus'].includes(change.property)), false);
+  assert.equal(h.mutations.some(change => change.id === 'retry' && change.property === 'disabled'), false);
+  assert.strictEqual(h.activeElement(), h.element('retry'));
+  h.mutations.length = 0; await h.timers.shift()();
+  assert.deepEqual(h.mutations, [], 'the newly displayed state becomes stable on its next identical snapshot');
+  const continuing = h.callbacks.get('continue-review')();
+  assert.equal(h.element('continue-review').hidden, true);
+  assert.equal(h.element('continue-review').disabled, true);
+  assert.equal(h.element('work-indicator').hidden, false);
+  assert.equal(h.timers.length, 0);
+  await Promise.all([h.callbacks.get('continue-review')(), h.callbacks.get('retry')()]);
+  assert.equal(h.calls.filter(call => call.command === 'continue_review_session').length, 1);
+  assert.equal(h.calls.filter(call => call.command === 'get_review_session').length, 3);
+  allowContinuation({ ok: true }); await continuing;
+  assert.equal(h.element('continue-review').disabled, false);
+  assert.equal(h.timers.length, 1);
+});
+
+testAsync('background discovery of a private draft locks every chunk and renders and focuses only the complete bound group', async () => {
+  const allowChunks = [];
+  const pending = [0, 1].map(index => new Promise(resolve => { allowChunks[index] = resolve; }));
+  let data;
+  const h = harness([
+    { ready: false, phase: 'preparing', continuation_available: false },
+    { ready: true, review_id: 'b'.repeat(32), chunk_count: 2 }
+  ], false, false, { async invoke(command, args, normal) {
+    if (command === 'get_review_chunk') {
+      await pending[args.chunkIndex];
+      const midpoint = Math.floor(data.length / 2);
+      return { review_id: args.reviewId, index: args.chunkIndex,
+        data: (args.chunkIndex === 0 ? data.subarray(0, midpoint) : data.subarray(midpoint)).toString('base64') };
+    }
+    return normal(command, args);
+  } });
+  data = Buffer.from(JSON.stringify(h.draft));
+  await new Promise(resolve => setImmediate(resolve)); h.mutations.length = 0;
+  const loading = h.timers.shift()();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.element('retry').disabled, true);
+  assert.equal(h.element('review').hidden, true);
+  assert.equal(h.element('matrix-body').children.length, 0);
+  await h.callbacks.get('retry')();
+  assert.equal(h.calls.filter(call => call.command === 'get_review_session').length, 2);
+  allowChunks[0](); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.element('retry').disabled, true, 'the private read stays locked between chunks');
+  assert.equal(h.element('review').hidden, true, 'a partial draft never appears');
+  allowChunks[1](); await loading;
+  assert.deepEqual(h.calls.filter(call => call.command === 'get_review_chunk').map(call => [call.args.reviewId, call.args.chunkIndex]),
+    [['b'.repeat(32), 0], ['b'.repeat(32), 1]]);
+  assert.equal(h.element('retry').disabled, false);
+  assert.equal(h.element('review').hidden, false);
+  assert.equal(h.element('waiting').hidden, true);
+  assert.strictEqual(h.activeElement(), h.element('matrix-title'));
+  assert.equal(h.mutations.filter(change => change.property === 'focus').length, 1);
+  assert.equal(h.mutations.filter(change => change.id === 'matrix-body' && change.property === 'replaceChildren').length, 1);
+  assert.equal(h.timers.length, 0, 'human review is not replaced by background polling');
+});
+
+testAsync('each new private render resets the waiting boundary and clears staged text and contact raster on handoff or close', async () => {
+  const { encodePng } = require('../plugins/data-secure/server/images/png');
+  const { buildContactDraft } = require('../plugins/data-secure/server/core/ocr-contact-review');
+  const png = encodePng({ width: 4, height: 3, rgba: Buffer.alloc(48, 255) });
+  const image = { schema: 'datasecure-ocr-contact-image/1', source_width: 10, source_height: 10,
+    x: 2, y: 3, width: 4, height: 3, png_base64: png.toString('base64') };
+  const waiting = { ready: false, phase: 'publishing', run_complete: false };
+  const h = harness([
+    { ready: true, review_id: 'a'.repeat(32), chunk_count: 1 }, waiting, waiting,
+    { ready: true, review_id: 'b'.repeat(32), chunk_count: 1 }
+  ], false, true, { modifyDraft(draft) {
+    for (const key of Object.keys(draft)) delete draft[key];
+    Object.assign(draft, buildContactDraft({ original_text: 'a@b.invalid', source_type: 'png',
+      contacts: [{ start: 0, end: 11, line: 1, page: 1, kind: 'email', image }] }));
+  } });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.element('contact-image').src, `data:image/png;base64,${png.toString('base64')}`);
+  editContact(h, 'saved@new.invalid'); selectAll(h); applySelected(h, 'correct_contact');
+  h.callbacks.get('release')(); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.calls.filter(call => call.command === 'submit_review').length, 1);
+  assert.equal(h.element('matrix-body').children.length, 0);
+  assert.equal(h.element('contact-image').src, '');
+  assert.equal(h.element('source-context').textContent, '');
+  await h.timers.shift()(); h.mutations.length = 0; await h.timers.shift()();
+  assert.deepEqual(h.mutations, [], 'acknowledged decision waits are also mutation-silent');
+  await h.timers.shift()();
+  assert.equal(h.element('review').hidden, false);
+  assert.equal(h.element('contact-image').src, `data:image/png;base64,${png.toString('base64')}`);
+  assert.equal(correctionValue(h), '', 'a new group never inherits a previous input');
+  editContact(h, 'unsaved@new.invalid'); selectAll(h); applySelected(h, 'correct_contact');
+  await h.callbacks.get('close-review')();
+  assert.equal(h.element('review').hidden, true);
+  assert.equal(h.element('matrix-body').children.length, 0);
+  assert.equal(h.element('contact-image').src, '');
+  for (const id of ['exact-text', 'source-context', 'output-context']) assert.equal(h.element(id).textContent, '');
+  h.callbacks.get('release')(); await h.callbacks.get('retry')();
+  assert.equal(h.calls.filter(call => call.command === 'submit_review').length, 1, 'dirty close never submits the second group');
+  assert.equal(h.timers.length, 0);
+});
+
+testAsync('a stale background status reply cannot replace a new group after failed close recovery', async () => {
+  let allowOldStatus, reads = 0;
+  const pending = new Promise(resolve => { allowOldStatus = resolve; });
+  const h = harness(null, false, false, { invoke(command, args, normal) {
+    if (command === 'get_review_session' && ++reads === 1) return pending;
+    if (command === 'close_review_window') throw Error('close failed');
+    return normal(command, args);
+  } });
+  await new Promise(resolve => setImmediate(resolve));
+  await h.callbacks.get('close-review')();
+  assert.match(h.element('waiting-text').textContent, /nicht automatisch geschlossen/u);
+  assert.equal(h.timers.length, 1);
+  await h.timers.shift()();
+  assert.equal(h.element('review').hidden, false);
+  const rows = h.element('matrix-body').children;
+  const privateText = h.element('exact-text').textContent;
+  h.mutations.length = 0;
+  allowOldStatus({ ready: true, review_id: 'c'.repeat(32), chunk_count: 1 });
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(h.mutations, [], 'generation invalidation also prevents a stale finally from toggling controls');
+  assert.strictEqual(h.element('matrix-body').children, rows);
+  assert.equal(h.element('exact-text').textContent, privateText);
+  assert.equal(h.calls.filter(call => call.command === 'get_review_chunk').length, 1);
+  assert.equal(h.calls.some(call => call.command === 'submit_review'), false);
+  assert.equal(h.timers.length, 0);
+});
+
+testAsync('identical busy replies do not mutate waiting DOM or relax the existing read backoff', async () => {
+  for (const code of ['STANDALONE_IPC_BUSY', 'STANDALONE_OWNERSHIP_CONTROL_BUSY', 'STANDALONE_PAUSE_CONTROL_BUSY']) {
+    const h = harness(null, false, false, { invoke(command, args, normal) {
+      if (command === 'get_review_session') throw JSON.stringify({ code });
+      return normal(command, args);
+    } });
+    await new Promise(resolve => setImmediate(resolve));
+    assert.match(h.element('waiting-text').textContent, /speichert gerade.*automatisch erneut geladen/u);
+    h.element('retry').focus(); h.mutations.length = 0;
+    for (let index = 0; index < 4; index++) await h.timers.shift()();
+    assert.deepEqual(h.mutations, []);
+    assert.deepEqual(h.timerDelays, [2400, 4800, 9600, 10000, 10000]);
+    assert.strictEqual(h.activeElement(), h.element('retry'));
+    assert.equal(h.calls.filter(call => call.command === 'get_review_session').length, 5);
+    assert.equal(h.calls.some(call => ['submit_review', 'continue_review_session'].includes(call.command)), false);
+  }
 });
 
 testAsync('accepted explicit defer stops waiting without polling, restarting or approving another step', async () => {

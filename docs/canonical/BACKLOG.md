@@ -1,6 +1,59 @@
 # Aktives Entwicklungsbacklog
 
-Arbeitsversion: **3.2.0-rc165**, gemeinsamer Windows-/macOS-Test-Pre-Release veröffentlicht; RC164 bleibt unverändert erhalten.
+Arbeitsversion: **3.2.0-rc166**, Umsetzung und neue gemeinsame Windows-/macOS-Testpakete beauftragt; RC165 bleibt der zuletzt veröffentlichte Stand.
+
+## Aktueller Auftrag – Nutzerbefunde als RC166 umsetzen und neu prüfen
+
+19.10.2026: Der Nutzer hat anschließend die Umsetzung aller nachfolgend
+gesammelten Punkte und neue Windows-/Mac-Testversionen ausdrücklich beauftragt.
+Ziel ist RC166 mit gleichem Appcommit/Featurestand für Windows x64 und beide
+Mac-Architekturen; Windows zusätzlich lokal, Testdatenbeilagen getrennt.
+Technische Schutzprüfungen bleiben erhalten. Kein Agent bedient den Desktop;
+menschliche Windows-/Mac-Abnahme bleibt beim Nutzer und seinem Kollegen.
+Neue native Mac-Consumer verwenden die vorhandenen genehmigten statischen
+Coreartefakte; keine Developer-ID/Notarisierung/Apple-Einreichung und keine
+Abschaltung von Gatekeeper, Hardened Runtime oder eigener Library Validation.
+Der veröffentlichte RC165-Stand und sämtliche alten Nachweise bleiben erhalten.
+
+Aktueller Umsetzungsstand vor dem neuen Buildfreeze: UX-OCR-FOLDER-01,
+UX-HISTORY-DETAILS-01, UX-HISTORY-COPY-STATUS-01, UX-ANON-CHOICE-01 und
+UX-PROCESSING-FLICKER-01 sind im gemeinsamen Frontend implementiert. Gezielte
+Quell-/VM-Prüfungen: Workspace406/406, Reviewfrontend67/67; echte HTML-/CSS-/JS-
+Gegenproben im Headless-Browser mit synthetischem IPC grün. Das ist keine
+native Desktop-/Mac-Abnahme. TESTDATA-LARGE-01 ist als separat verifizierte
+36-Dateien-Beilage fertig. CI-DOC-RC165-01 ist quellseitig korrigiert;
+die vollständige Dokumentationskette ist grün, die nächste main-CI bleibt
+nach Integration zu prüfen. Der eingefrorene Gesamt-/Native-/Paketnachweis
+und die neuen Mac-Consumer folgen erst auf dem abschließenden gemeinsamen
+Commit. Details: [RC166-Umsetzung und Nachweisgrenzen](../acceptance/RC166_BACKLOG_IMPLEMENTATION_20261019.md).
+
+### Gesammelte Nutzerbefunde (frühere Sammelphase, jetzt zur Umsetzung freigegeben)
+
+19.10.2026: Der Nutzer testet die veröffentlichten Apps selbst weiter. Änderungen
+wurden zunächst ausschließlich im Quellcode gesammelt; keine Versionsanhebung,
+kein neuer Windows-/Mac-Build, kein Release und keine Agenten-Desktopbedienung.
+
+| ID | Auftrag / Grenze | Stand |
+|---|---|---|
+| UX-OCR-FOLDER-01 | Gemeinsame Windows-/Mac-Dateiauswahl: neben der Ordneranzahl „1 Datei benötigt OCR“ bzw. „N Dateien benötigen OCR“. Alle Unterordner einbeziehen, auch bei zugeklapptem Inhalt sichtbar; ebenso Gesamtlabel neben der Kataloganzahl. Dieselben verfügbaren `ocr_required === true`-Dateien wie die bestehenden Dateilabels, unabhängig von Auswahl und OCR-Schalter. Kein neuer Scan, keine OCR-Aktivierung, unbekannte PDF-/Office-Inhalte nicht raten. | Im Quellcode implementiert und unabhängig gegengelesen, gezielte Regression grün; noch nicht gebaut oder veröffentlicht. Desktopabnahme erst mit einem späteren Paket durch den Nutzer. |
+| UX-HISTORY-DETAILS-01 | Gemeinsamer Windows-/Mac-Verlauf bei Markdown-Konvertierung: redundanten Button „Nachkorrekturen und Kopien“ entfernen. Dessen gespeicherten Kopier-/Bestätigungsstatus vollständig unter „Ausführliche Laufdetails“ integrieren und mit diesen ein-/ausklappen. „Nachkorrektur öffnen (optional)“ als eigenständigen Editorzugang und die Statusaktualisierung innerhalb der Details behalten; neue Beschriftung gemäß UX-HISTORY-COPY-STATUS-01. Nur den ausdrücklich geöffneten Lauf abgleichen; keine zusätzlichen Hintergrundscans, Kopien, Freigaben oder Änderungen an Schutzprüfungen. | Auf Nutzerwunsch vorgemerkt, noch nicht umgesetzt. Vor Umsetzung Regression für Auf-/Zuklappen, gezielten Statusread, offene Bestätigungen, erneutes Laden und Fokus sowie unabhängiges Quellengegenreview; kein neuer Build während der laufenden Nutzertests. |
+| UX-HISTORY-COPY-STATUS-01 | In den ausführlichen Laufdetails der Markdown-Konvertierung auf Windows und Mac „Prüfstatus erneut laden“ in „Kopierstatus aktualisieren“ umbenennen. Mit UX-HISTORY-DETAILS-01 abstimmen: Aktualisierung bleibt innerhalb der Details, liest ausschließlich den gespeicherten Status und öffnet weder den Nachkorrektur-Editor noch erstellt sie eine Kopie. Kein zusätzlicher Pflichtschritt oder automatischer Hintergrundabgleich; Anonymisierung erhält nicht ungeprüft dieselbe Kopierstatus-Beschriftung. | Auf ausdrücklichen Nutzerwunsch ins Backlog aufgenommen, noch nicht umgesetzt. Bei Umsetzung sichtbaren Text, etwaige ARIA-Bezüge und Rücksetzung der Beschriftung nach erfolgreichem/fehlgeschlagenem Laden gemeinsam prüfen und testen. Kein neuer Build oder Versionswechsel während der Nutzertests. |
+| UX-ANON-CHOICE-01 | Bei „Neue Verarbeitung > Umwandeln und anonymisieren“ auf Windows und Mac die Schnellweg-Checkbox durch eine gemeinsame exklusive Auswahl „Umgang mit unklaren Fundstellen“ ersetzen: „Selbst entscheiden“ (entspricht dem bisherigen Standard, vorausgewählt; automatische Anonymisierung, Rückfragen bei unklaren Fundstellen) oder „Automatisch maskieren“ (bekannte unklare Fundstellen automatisch maskieren, erfolgreiche Basisstände automatisch freigeben, nicht manuell geprüft; stärkere Maskierung möglich). OCR als unabhängige Checkbox „Text aus Bildern und Scans lesen (OCR)“ für beide Abläufe beibehalten; keine automatische Aktivierung. Alle vier Kombinationen bleiben gültig, technische Schutzprüfungen unverändert und Export weiterhin nur auf ausdrücklichen Auftrag. Keine neue Pflichtauswahl, kein zusätzliches Bestätigungsfenster, „Schnellweg“/„Prüfmodus“ nicht als irreführende Hauptbezeichnung verwenden. | Auf Nutzerwunsch vorgemerkt, noch nicht umgesetzt. KI-UX-Gegenreview und offizielle Gestaltungsempfehlungen geprüft; echte Nutzerabnahme steht aus. Bei Umsetzung bestehende Policy-/OCR-Verträge unverändert abbilden und alle vier Kombinationen, Voreinstellung/Neuauftrag, Tastatur-/Screenreader-Beschriftung sowie Windows-/Mac-Reflow regressionsprüfen. Kein neuer Build oder Versionswechsel während der laufenden Nutzertests. |
+| TESTDATA-LARGE-01 | Zusätzlich zum vorhandenen vollständigen Testpaket ein separates kompaktes Paket ausschließlich mit den vorhandenen synthetischen „large“-Testdateien bereitstellen, gemeinsam für Windows und Mac. Bestehendes Paket/Originaldateien unverändert lassen; dieselben Dateibytes und relativen Unterordner beibehalten, keine small-/medium-/short-Varianten, alten Ergebnisse, Diagnosen oder Nutzerdateien aufnehmen. Bei Erstellung die tatsächliche Auswahl aus dem bestehenden Testbestand inventarisieren, mit Originalhashes prüfen und eine kurze Testanleitung sowie SHA-256-Prüfsumme mitgeben. | Auf Nutzerwunsch ins Backlog aufgenommen, noch nicht zusammengestellt. Eigenständige Testdatenbeilage, kein neuer App-Build oder Versionswechsel. |
+| UX-PROCESSING-FLICKER-01 | Gemeinsame Windows-/Mac-Anzeige während automatischer Verarbeitung stabilisieren: unveränderte Bedienelemente erhalten, bei Datei-/Fortschrittswechseln nur geänderte Werte aktualisieren, Hintergrundabfragen ohne wiederholtes sichtbares Deaktivieren/Aktivieren von Statusbuttons und ohne unnötigen Neuaufbau leerer Warteansichten ausführen. Echte Zustandswechsel, Fehlermeldungen, Sperren bei tatsächlichen Befehlen, Fokus-/Screenreader-Verhalten und sämtliche technischen Schutz-/Statusprüfungen erhalten; keine erneuten Starts, Entscheidungen oder Exporte. | Auf Nutzerwunsch vorgemerkt, noch nicht umgesetzt. Nutzer beobachtet den Effekt auch ohne Klick während der Arbeit. Quellen-/VM-Gegenprüfung bestätigt Button-Neuaufbau bei Fortschritt/Dateiwechsel sowie Disabled/Enabled-Wechsel im Wartepoll; kein nachgewiesener kompletter Seitenreload oder Endlosklick, genaue Ursache des konkreten Desktopvorfalls noch offen. Vor Umsetzung/Abnahme unabhängiges Quellenreview und Browser-Gegenorakel mit unveränderten Wartestatusantworten, echten Fortschrittswechseln, DOM-/Fokus-/Navigationstrace und ausschließlich erwarteten Read-Aufrufen; Fehler-/Busy-/Befehlsperren regressionsprüfen. Desktopabnahme durch Nutzer; kein neuer Build während der laufenden Tests. |
+| CI-DOC-RC165-01 | Bestätigter main-CI-Fehler39265247122: `FORMAL_UAT/README.md` bindet noch RC162 statt des veröffentlichten RC165-Commits. Dokumentbindung korrigieren und komplette CI wiederholen; keine vorhandenen Paketnachweise umschreiben. | Offen, separat vom OCR-Anzeigeauftrag; keine CI-Wiederholung gestartet. |
+
+OCR-Delta-Nachweis: sieben neue Rendererfälle vor der Umsetzung erwartungsgemäß
+rot (382 bestanden/7 fehlgeschlagen), danach kompletter Workspace389/389 grün.
+Zusätzlich Frontend46/46, Reviewfrontend58/58, Workflowpräsentation47/47 und
+Desktopvertrag37/37 grün mit gepinntem Node22.23.2; Canonical-Dokumentprüfung
+bestanden. Unabhängiger KI-Frontend-/UX-/Windows-/Mac-Quellengegenreview ohne
+bestätigten Deltablocker. Vollständige vorhandene Headless-Designmatrix plus neue
+OCR-Prüfung mit echtem HTML/CSS/JS: Unterordner, Einklappen per Tastatur,
+Abwahl/OCR-Schalter, Leeren/Neuauswahl, Axe und320/390/720/1280px-Reflow grün.
+Screenshots für320 und1280px tatsächlich visuell geprüft; synthetische IPC,
+keine native WebKit-/VoiceOver-/Desktopabnahme. Browserbelege unter
+`dist/workflow-usability-design-vmXCVH`; kein Paket-/Release-/Versionswechsel.
 
 ## Neuester verbindlicher Abschluss – RC165,19.10.2026
 
@@ -934,7 +987,7 @@ in dieselbe Korrekturrunde.
 
 ## Historische Nachweise bis R4 (kein aktueller R5-Abschluss)
 
-Stand: 17.10.2026 · Produktstand 3.2.0-rc165 · veröffentlicht Standalone RC162 (Windows und beide Mac-Architekturen; M2-Abnahme offen), Linux RC159 / Cowork RC151 · lokaler Arbeitsstand nach RC162 noch nicht veröffentlicht
+Stand: 17.10.2026 · Produktstand 3.2.0-rc166 · veröffentlicht Standalone RC162 (Windows und beide Mac-Architekturen; M2-Abnahme offen), Linux RC159 / Cowork RC151 · lokaler Arbeitsstand nach RC162 noch nicht veröffentlicht
 
 ## Gezielter R3-Abschlussreview
 

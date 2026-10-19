@@ -1,8 +1,21 @@
 # Formale N3/N4-Abnahme mit Windows und macOS
 
-Stand: 16.10.2026 · Standalone Windows/macOS RC162 · Linux RC159 · Cowork RC151
+Stand: 19.10.2026 · veröffentlichte Standalone Windows/macOS RC165 · Linux RC159 · Cowork RC151
 
 **Aktueller Windows-/Mac-Standalone-Kandidat:** Das
+[RC165-Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc165)
+bindet Windows x64 und beide Mac-Architekturen an den exakten Quellcommit
+`973274f17cda46bb66621d956af2cbc96e2272e3`. Beide Mac-ZIPs und beide DMGs
+bestanden die nativen Paket-/Startgates; Windows besitzt gesonderte Quell-,
+Native- und Paketnachweise. Menschliche RC165-Desktopabnahme und tatsächliche
+Mac-/M2-/Finder-/TCC-/VoiceOver-Abnahme bleiben offen. Linux-Standalone und
+Cowork behalten RC159 beziehungsweise RC151. Eine neue Standalone-Kampagne
+bindet ausschließlich die exakten RC165-Pakethashes an diesen Produktcommit;
+leere Vorlagen sind keine abgeschlossene Evidenz. RC166 ist zunächst ein
+Entwicklungsstand und wird erst mit eigenen Paketen/Nachweisen als neuer
+Kandidat gebunden; historische Kandidaten werden nicht umetikettiert.
+
+**Historischer Windows-/Mac-Standalone-Kandidat:** Das
 [RC162-Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc162)
 bindet Windows x64 und beide Mac-Architekturen an den exakten Quellcommit
 `310925f59d76fddc955288eef3c3b0ef4297c232`. Windows-PKG-04/INT-13 bestand zwei bytegleiche

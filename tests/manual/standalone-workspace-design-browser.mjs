@@ -16,6 +16,116 @@ const context = await browser.newContext({ viewport: { width: 1280, height: 900 
 try {
   await context.route('**/*', route => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());
   await context.addInitScript({ path: require.resolve('axe-core/axe.min.js') });
+  // Exercise real HTML/CSS/JS in a separate page so the existing workflow
+  // scenarios retain their initial state. IPC and source files are synthetic.
+  const ocrPage = await context.newPage(), ocrErrors = [];
+  ocrPage.on('pageerror', error => ocrErrors.push(String(error)));
+  try {
+    await ocrPage.goto(preview.url + '/workspace.html');
+    await ocrPage.locator('#select-folder').click();
+    const folder = name => ocrPage.locator('.source-group').filter({ has: ocrPage.getByText(name, { exact: true }) });
+    const parent = folder('Bewerbungen'), nested = folder('Entwicklung');
+    assert.equal(await ocrPage.locator('#catalogue-ocr-count').innerText(), '1 Datei benötigt OCR');
+    assert.equal(await parent.locator('.group-heading .folder-ocr').innerText(), '1 Datei benötigt OCR');
+    assert.equal(await nested.locator('.group-heading .folder-ocr').innerText(), '1 Datei benötigt OCR');
+    assert.equal(await folder('Projektleitung').locator('.folder-ocr').count(), 0, 'unknown PDF need is not inferred');
+    assert.equal(await ocrPage.locator('.file-row .pill').filter({ hasText: /^OCR$/u }).count(), 1);
+    await nested.locator('.collapse').press('Enter');
+    assert.equal(await nested.locator('.group-files').isVisible(), false);
+    assert.equal(await nested.locator('.group-heading .folder-ocr').isVisible(), true);
+    await parent.locator('.collapse').click();
+    assert.equal(await nested.isVisible(), false);
+    assert.equal(await parent.locator('.group-heading .folder-ocr').isVisible(), true);
+    await ocrPage.locator('#choose-none').click();
+    assert.equal(await ocrPage.locator('#catalogue-ocr-count').innerText(), '1 Datei benötigt OCR');
+    await ocrPage.locator('#mode-markdown').check();
+    for (const enabled of [true, false]) {
+      await ocrPage.locator('#text-ocr').setChecked(enabled);
+      assert.equal(await parent.locator('.group-heading .folder-ocr').innerText(), '1 Datei benötigt OCR');
+    }
+    for (const [width, height] of [[1280, 900], [720, 560], [390, 700], [320, 700]]) {
+      await ocrPage.setViewportSize({ width, height });
+      assert.ok(await ocrPage.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'folder OCR page reflow ' + width);
+      assert.ok(await ocrPage.locator('#source-tree').evaluate(node => node.scrollWidth <= node.clientWidth + 1), 'folder OCR tree reflow ' + width);
+      const badge = await parent.locator('.group-heading .folder-ocr').boundingBox();
+      const tree = await ocrPage.locator('#source-tree').boundingBox();
+      assert.ok(badge && tree && badge.x >= tree.x && badge.x + badge.width <= tree.x + tree.width + 1,
+        'collapsed folder OCR label is not clipped ' + width);
+      const audit = await ocrPage.evaluate(() => axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a', 'wcag2aa', 'wcag21aa'] } }));
+      assert.deepEqual(audit.violations.map(row => ({ id: row.id, targets: row.nodes.map(node => node.target) })), [], 'folder OCR axe ' + width);
+      if (width === 1280 || width === 320) await ocrPage.screenshot({ path: path.join(evidence, `folder-ocr-collapsed-${width}.png`), fullPage: true });
+    }
+    await ocrPage.locator('#clear-files').click();
+    assert.equal(await ocrPage.locator('#catalogue-ocr-count').isVisible(), false);
+    assert.equal(await ocrPage.locator('#catalogue-ocr-count').textContent(), '');
+    await ocrPage.locator('#select-folder').click();
+    assert.equal(await ocrPage.locator('#catalogue-ocr-count').innerText(), '1 Datei benötigt OCR');
+    assert.equal(await ocrPage.locator('#text-ocr').isChecked(), false);
+    assert.deepEqual(ocrErrors, []);
+    console.log('FOLDER OCR HEADLESS PASS: real heading/file badges, descendants, collapsed keyboard toggle, selection/consent independence, clear/readmission, axe and 320–1280px reflow; synthetic IPC, not desktop acceptance');
+  } finally { await ocrPage.close(); }
+  for (const automatic of [false, true]) for (const ocr of [false, true]) {
+    const choicePage = await context.newPage();
+    try {
+      await choicePage.goto(preview.url + '/workspace.html');
+      await choicePage.locator('#select-folder').click(); await choicePage.locator('#mode-anonymize').check();
+      assert.equal(await choicePage.getByRole('radio', { name: 'Selbst entscheiden', exact: true }).isChecked(), true);
+      await choicePage.locator('#fast-anonymize').check();
+      assert.equal(await choicePage.locator('#manual-anonymize').isChecked(), false, 'real radio group is exclusive');
+      await choicePage.locator('#mode-markdown').check(); await choicePage.locator('#mode-anonymize').check();
+      assert.equal(await choicePage.locator('#manual-anonymize').isChecked(), true, 'changing purpose restores the existing guided default');
+      assert.equal(await choicePage.locator('#fast-anonymize').isChecked(), false);
+      await choicePage.locator(automatic ? '#fast-anonymize' : '#manual-anonymize').check();
+      assert.equal(await choicePage.locator('#text-ocr').isChecked(), false, 'workflow never implies OCR');
+      await choicePage.locator('#text-ocr').setChecked(ocr);
+      await choicePage.locator('#start').click();
+      await choicePage.waitForFunction(() => Boolean(window.previewLastStart));
+      const request = await choicePage.evaluate(() => window.previewLastStart);
+      assert.equal(request.reviewPolicy, automatic ? 'automatic-conservative' : undefined);
+      assert.deepEqual(request.contentOptions, { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: ocr, imageOcr: ocr });
+    } finally { await choicePage.close(); }
+  }
+  const progressPage = await context.newPage();
+  try {
+    let navigations = 0; progressPage.on('framenavigated', () => navigations++);
+    await progressPage.goto(preview.url + '/workspace.html');
+    await progressPage.evaluate(() => {
+      const original = window.__TAURI__.core.invoke;
+      window.progressProbe = { counter: 0, paused: false, reads: 0, commands: [], mutations: 0 };
+      window.__TAURI__.core.invoke = async (command, args) => {
+        if (command === 'pause_batch') { window.progressProbe.commands.push(command); window.progressProbe.paused = true; return { ok: true }; }
+        if (command === 'get_public_state' && window.previewLastStart) {
+          window.progressProbe.reads++;
+          return { state: 'processing', batch_id: 'b'.repeat(64), processing_mode: 'markdown-and-anonymize',
+            selected_count: 6, completed_count: window.progressProbe.counter, current_file: `Synthetic/File-${window.progressProbe.counter}.txt`,
+            pause_requested: window.progressProbe.paused, external_disclosure: false };
+        }
+        return original(command, args);
+      };
+    });
+    await progressPage.locator('#select-folder').click(); await progressPage.locator('#mode-anonymize').check(); await progressPage.locator('#start').click();
+    await progressPage.locator('#job-action-pause').waitFor();
+    const navigationBaseline = navigations;
+    await progressPage.evaluate(() => {
+      window.progressProbe.pauseButton = document.getElementById('job-action-pause');
+      window.progressProbe.pauseButton.focus();
+      window.progressProbe.observer = new MutationObserver(records => { window.progressProbe.mutations += records.length; });
+      window.progressProbe.observer.observe(document.getElementById('job-actions'), { childList: true, subtree: true, attributes: true });
+    });
+    for (const counter of [1, 2, 3]) {
+      await progressPage.evaluate(value => { window.progressProbe.counter = value; }, counter);
+      await progressPage.waitForFunction(value => document.getElementById('job-current').textContent === `Synthetic/File-${value}.txt`, counter);
+      assert.equal(await progressPage.evaluate(() => document.getElementById('job-action-pause') === window.progressProbe.pauseButton && document.activeElement === window.progressProbe.pauseButton), true);
+    }
+    assert.equal(await progressPage.evaluate(() => window.progressProbe.mutations), 0, 'background file changes retain actual buttons and attributes');
+    assert.equal(navigations, navigationBaseline, 'progress performs no document or iframe navigation');
+    assert.deepEqual(await progressPage.evaluate(() => window.progressProbe.commands), []);
+    await progressPage.locator('#job-action-pause').click();
+    await progressPage.locator('#job-action-pause').waitFor({ state: 'detached' });
+    assert.deepEqual(await progressPage.evaluate(() => window.progressProbe.commands), ['pause_batch']);
+    await progressPage.evaluate(() => window.progressProbe.observer.disconnect());
+    console.log('MODE/PROGRESS HEADLESS PASS: four native radio/OCR combinations, exact start DTOs, stable background action nodes/focus, no navigation or command replay; synthetic IPC');
+  } finally { await progressPage.close(); }
   const page = await context.newPage(), errors = [];
   page.on('pageerror', error => errors.push(String(error)));
   await page.goto(preview.url + '/workspace.html');

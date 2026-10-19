@@ -1,8 +1,8 @@
 # Release- und Distributionsvertrag
 
-Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc165 · Veröffentlichungsnachtrag: 19.10.2026
+Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc166 · Veröffentlichungsnachtrag: 19.10.2026
 
-Der aktuelle Quellstand ist RC165, als Standalone-Test-Pre-Release für Windows und macOS veröffentlicht. Menschliche N3/N4-Produktionsfreigaben bleiben offen.
+Der aktuelle Quellstand ist RC166-Entwicklungsstand und noch kein neu gebundener Paketkandidat. Menschliche N3/N4-Produktionsfreigaben bleiben offen.
 
 ### RC165 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
 

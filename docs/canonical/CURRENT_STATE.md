@@ -1,6 +1,39 @@
 # Aktueller Iststand
 
-Arbeitsversion: **3.2.0-rc165**, gemeinsamer Windows-/macOS-Test-Pre-Release veröffentlicht; RC164 bleibt unverändert erhalten.
+Arbeitsversion: **3.2.0-rc166**, Entwicklung und erneute Paketprüfung; veröffentlichte RC165-/RC164-Pakete bleiben unverändert erhalten.
+
+### Aktuelle Umsetzung nach weiterem Nutzertest – RC166
+
+Der Nutzer hat alle gesammelten Nachbesserungen und neue Testversionen für
+Windows x64 sowie macOS ARM64/Intel aus gleichem Appstand beauftragt. Keine
+Desktopbedienung durch Agenten; Nutzer und Kollege übernehmen die praktische
+Abnahme. OCR-Ordnerlabels, gemeinsame Markdown-Laufdetails, verständliche
+Entscheidungswahl, stabilere Hintergrundanzeige, separates Large-Testdatenpaket
+und Korrektur der formalen Dokumentbindung werden vor frischen Quellen-/
+Native-/Paketnachweisen zusammengeführt. Gezielte Workspace406/406 und
+Reviewfrontend67/67 sowie die Headless-Designmatrizen sind grün; noch keine
+eingefrorenen RC166-Paket-/Release-PASS. Der aktuelle Gesamtauftrag und die
+Nachweisgrenzen stehen in [RC166-Umsetzung](../acceptance/RC166_BACKLOG_IMPLEMENTATION_20261019.md).
+Die Personenentscheidung ist im Produktionscode weiterhin vorhanden: geführte
+erkannte Mehrdeutigkeiten werden lokal vorgelegt, automatisch maskiert wird
+nur mit ausdrücklicher gespeicherter Policy. Der anderswo beobachtete Lauf
+ist ohne dessen konkrete Daten nicht rückwirkend erklärt.
+
+### Historischer Zwischenstand: OCR-Quelländerung vor RC166-Auftrag,19.10.2026
+
+UX-OCR-FOLDER-01: Gemeinsame Windows-/Mac-Dateiauswahl zeigt bekannte verfügbare
+OCR-Dateien zusätzlich neben der Katalog- und jeweiligen Ordneranzahl an,
+einschließlich aller Unterordner und bei zugeklapptem Inhalt. Zählung unabhängig
+von Auswahl/OCR-Einwilligung, ohne Zusatzscan oder neue Erkennungsbehauptung für
+PDF-/Office-Inhalte. Vorhandene Dateilabels und technische Prüfungen unverändert.
+Workspace389/389 und vier angrenzende Suiten grün; vollständige Headless-
+Designmatrix samt OCR-/Tastatur-/Axe-/320–1280px-Reflowprüfung bestanden,
+unabhängiges tatsächliches Quellengegenlesen ohne bestätigten Deltablocker.
+Damals kein neuer Build/Release, keine Versionsanhebung oder Desktopbedienung.
+Nutzer testet veröffentlichte RC165 weiter; sichtbare Abnahme dieses neuen
+Labels benötigt ein neues Paket. Der damals separat bestätigte main-CI-
+Dokumentbindungsfehler ist inzwischen quellseitig korrigiert; der nächste
+Remote-CI-Nachweis bleibt getrennt zu prüfen. Status und Belege in `BACKLOG.md`.
 
 ### Neuester verbindlicher Stand – RC165 veröffentlicht,19.10.2026
 
@@ -1297,7 +1330,7 @@ neuen gemeinsamen Quellfreeze und erneute Windows-Regression.
 
 ## Historische Nachweise bis R4 (kein aktueller R5-Abschluss)
 
-Stand: 17.10.2026 · 3.2.0-rc165 lokaler Windows-R4-Final-Testkandidat gebaut und ohne GUI geprüft; veröffentlicht bleibt Standalone RC162 für Windows und beide Mac-Architekturen; native Windows-/M2-Zielhostabnahme offen; Linux RC159 / Cowork RC151
+Stand: 17.10.2026 · 3.2.0-rc166 lokaler Windows-R4-Final-Testkandidat gebaut und ohne GUI geprüft; veröffentlicht bleibt Standalone RC162 für Windows und beide Mac-Architekturen; native Windows-/M2-Zielhostabnahme offen; Linux RC159 / Cowork RC151
 
 ### Gezielter R3-Abschlussreview: zusätzliche Fixes F13/F14
 

@@ -112,6 +112,13 @@ function descendants(node, predicate) {
 function withClass(node, name) { return descendants(node, child => child.className.split(/\s+/u).includes(name)); }
 async function toggleHistorySummary(h, batchId) {
   const toggle = h.el(`history-${batchId}-summary-toggle`);
+  if (!toggle) {
+    const disclosure = h.el(`history-${batchId}-disclosure`);
+    assert.ok(disclosure, 'Markdown status belongs to the native run-details disclosure');
+    disclosure.open = !disclosure.open;
+    await h.act(disclosure, 'toggle');
+    return;
+  }
   assert.ok(toggle, 'the selected run has an explicit status disclosure');
   if (toggle.closest('[hidden]')) await h.act(`history-${batchId}-more`);
   assert.equal(toggle.closest('[hidden]'), null, 'status lookup is initiated by an actually visible control');
@@ -779,6 +786,32 @@ testAsync('Fastweg is explicit for a new anonymization and cannot leak into raw 
   assert.equal(h.calls.filter(call => call.command === 'start_admitted_batch').at(-1).args.reviewPolicy, undefined);
 });
 
+for (const automatic of [false, true]) for (const ocr of [false, true])
+testAsync(`named anonymization choice keeps the existing exact start contract: automatic=${automatic}, OCR=${ocr}`, async () => {
+  const h = harness(); await tick(); await h.act('select-folder');
+  h.el('mode-anonymize').checked = true; await h.act('mode-anonymize', 'change');
+  assert.equal(h.el('manual-anonymize').checked, true, 'the existing guided default needs no extra click');
+  assert.equal(h.el('fast-anonymize').checked, false);
+  // The VM is not a native radio-group implementation. Supply the checked
+  // state emitted by that group; browser coverage verifies real exclusivity.
+  h.el('manual-anonymize').checked = !automatic; h.el('fast-anonymize').checked = automatic;
+  await h.act(automatic ? 'fast-anonymize' : 'manual-anonymize', 'change');
+  assert.equal(h.el('text-ocr').checked, false, 'workflow choice never enables OCR');
+  h.el('text-ocr').checked = ocr; await h.act('text-ocr', 'change'); await h.act('start');
+  const starts = h.calls.filter(call => call.command === 'start_admitted_batch');
+  assert.equal(starts.length, 1); assert.equal(starts[0].args.processingMode, 'markdown-and-anonymize');
+  assert.equal(starts[0].args.reviewPolicy, automatic ? 'automatic-conservative' : undefined);
+  assert.deepEqual(JSON.parse(JSON.stringify(starts[0].args.contentOptions)), {
+    schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: ocr, imageOcr: ocr
+  });
+  assert.equal(starts[0].args.ocrContactReview, undefined);
+  h.model.state = { state: 'results_available', batch_id: A, processing_mode: 'markdown-and-anonymize',
+    selected_count: 3, completed_count: 3, result_count: 3, results_available: true };
+  await h.poll(); await h.act(h.el('job-actions').children.find(node => node.textContent === 'Neue Verarbeitung'));
+  assert.equal(h.el('manual-anonymize').checked, true); assert.equal(h.el('fast-anonymize').checked, false);
+  assert.equal(h.el('text-ocr').checked, false);
+});
+
 testAsync('Markdown-only does not send anonymization naming even after changing the setup choice', async () => {
   const h = harness(); await tick(); await h.act('select-folder');
   h.el('mode-anonymize').checked = true; await h.act('mode-anonymize', 'change');
@@ -850,6 +883,40 @@ testAsync('confirmed Start highlights only its real working history row, display
   assert.equal(active.dataset.current, 'false'); assert.equal(active.attrs['aria-busy'], 'false');
   assert.doesNotMatch(active.textContent, /Wird verarbeitet/u);
 });
+testAsync('background progress and file changes retain working controls and focus, but a pause transition removes its action', async () => {
+  const h = harness({ invoke(command, args, fallback, model) {
+    if (command === 'pause_batch') { model.state = { ...model.state, pause_requested: true }; return { ok: true }; }
+    return fallback();
+  } }); await selectAndStart(h);
+  const pause = h.el('job-action-pause'), history = h.el('job-action-history');
+  pause.focus();
+  for (const [completed_count, current_file] of [[1, 'Synthetic/Two.txt'], [1, 'Synthetic/Three.txt'], [2, 'Synthetic/Three.txt']]) {
+    h.model.state = { ...h.model.state, completed_count, current_file }; await h.poll();
+    assert.equal(h.el('job-action-pause'), pause); assert.equal(h.el('job-action-history'), history);
+    assert.equal(pause.isConnected, true); assert.equal(h.doc.activeElement, pause);
+    assert.equal(h.el('job-current').textContent, current_file);
+    assert.equal(h.el('job-progress').value, completed_count);
+  }
+  assert.equal(h.calls.filter(call => call.command === 'start_admitted_batch').length, 1);
+  assert.equal(h.calls.filter(call => call.command === 'pause_batch').length, 0, 'reads never click a command');
+  await h.act(pause);
+  assert.equal(h.calls.filter(call => call.command === 'pause_batch').length, 1);
+  assert.equal(h.el('job-action-pause'), undefined, 'real pause ownership changes remove the command');
+  assert.equal(pause.isConnected, false);
+  assert.match(h.el('job-description').textContent, /Pause angefordert/u);
+  assert.equal(h.doc.activeElement, h.el('job-title'), 'focus is restored only when the action actually retires');
+});
+testAsync('a real processing phase change and completion still replace working controls', async () => {
+  const h = harness(); await selectAndStart(h);
+  const pause = h.el('job-action-pause');
+  h.model.state = { ...h.model.state, state: 'preparing' }; await h.poll();
+  assert.equal(pause.isConnected, false); assert.equal(h.el('job-action-pause'), undefined);
+  h.model.state = { ...h.model.state, state: 'processing' }; await h.poll();
+  assert.ok(h.el('job-action-pause')?.isConnected);
+  h.model.state = { ...h.model.state, state: 'results_available', completed_count: 3, result_count: 3, results_available: true };
+  await h.poll();
+  assert.equal(h.el('job-action-pause'), undefined); assert.ok(h.el('job-action-results'));
+});
 testAsync('a large catalogue stays selectable while the actual processing subset is bounded', async () => {
   const h = harness({ catalogue: Array.from({ length: 201 }, (_, n) => ({ name: `Synthetic/${n}.txt`, source_id: id(n + 1), bytes: 4, selectable: true })) });
   await tick(); await h.act('select-folder'); h.el('mode-markdown').checked = true; await h.act('mode-markdown', 'change');
@@ -889,6 +956,102 @@ testAsync('parent checkboxes include descendants and mixed state survives adding
   assert.deepEqual(JSON.parse(JSON.stringify(start.args.contentOptions)), {
     schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: false, imageOcr: false
   });
+});
+function ocrFolder(h, name) {
+  const group = h.el('source-tree').children.find(node => descendants(node.children[0],
+    child => child.tagName === 'LABEL' && child.children.some(part => part.textContent === name)).length);
+  assert.ok(group, `actual folder ${name} is rendered`);
+  return group;
+}
+function ocrFolderBadges(h, name) { return withClass(ocrFolder(h, name).children[0], 'folder-ocr'); }
+function ocrCatalogue() {
+  return [
+    { name: 'Inbox/Top.png', source_id: id(1), selectable: true, bytes: 10, ocr_required: true },
+    { name: 'Inbox/Deep/Nested/Scan.bmp', source_id: id(2), selectable: true, bytes: 20, ocr_required: true },
+    { name: 'Inbox/Deep/Note.txt', source_id: id(3), selectable: true, bytes: 30, ocr_required: null },
+    { name: 'Other/Report.pdf', source_id: id(4), selectable: true, bytes: 40, ocr_required: null },
+    { name: 'Other/Unknown.png', source_id: id(5), selectable: true, bytes: 50, ocr_required: 'true' },
+    { name: 'Unavailable/Scan.png', selectable: false, ocr_required: true, reason_code: 'SOURCE_FILE_EMPTY' }
+  ];
+}
+testAsync('folder OCR badges count known available descendants once, not unknown PDFs or unavailable images', async () => {
+  const h = harness({ catalogue: ocrCatalogue() }); await tick(); await h.act('select-folder');
+  assert.equal(h.el('catalogue-ocr-count')?.textContent, '2 Dateien benötigen OCR');
+  assert.equal(h.el('catalogue-ocr-count').hidden, false);
+  assert.deepEqual(ocrFolderBadges(h, 'Inbox').map(node => node.textContent), ['2 Dateien benötigen OCR']);
+  for (const name of ['Deep', 'Nested'])
+    assert.deepEqual(ocrFolderBadges(h, name).map(node => node.textContent), ['1 Datei benötigt OCR']);
+  for (const name of ['Other', 'Unavailable']) assert.equal(ocrFolderBadges(h, name).length, 0);
+  assert.equal(withClass(h.el('source-tree'), 'file-row').filter(row =>
+    row.children.some(child => child.textContent === 'OCR')).length, 2, 'existing per-file badges stay unchanged');
+  assert.equal(h.calls.some(call => ['start_admitted_batch', 'configure_results'].includes(call.command)), false);
+});
+testAsync('collapsed folders keep their OCR badge outside hidden content, including a fully collapsed tree', async () => {
+  const h = harness({ catalogue: ocrCatalogue() }); await tick(); await h.act('select-folder');
+  const deep = ocrFolder(h, 'Deep');
+  await h.act(deep.children[0].children.find(node => node.tagName === 'BUTTON'));
+  assert.equal(ocrFolder(h, 'Deep').children[1].hidden, true);
+  assert.equal(ocrFolderBadges(h, 'Deep')[0].closest('[hidden]'), null);
+  assert.equal(ocrFolder(h, 'Nested').hidden, true);
+  assert.equal(ocrFolderBadges(h, 'Inbox')[0].textContent, '2 Dateien benötigen OCR');
+  await h.act('expand-all'); await h.act('expand-all');
+  assert.equal(ocrFolder(h, 'Inbox').children[1].hidden, true);
+  assert.equal(ocrFolderBadges(h, 'Inbox')[0].closest('[hidden]'), null);
+  assert.equal(h.el('catalogue-ocr-count').hidden, false);
+});
+for (const purpose of ['mode-markdown', 'mode-anonymize'])
+testAsync(`folder OCR badges describe contents independently of selection and OCR consent in ${purpose}`, async () => {
+  const h = harness({ catalogue: ocrCatalogue() }); await tick(); await h.act('select-folder');
+  h.el(purpose).checked = true; await h.act(purpose, 'change');
+  await h.act('choose-none');
+  assert.equal(h.el('selection-count').textContent, '0 von 5 ausgewählt');
+  assert.doesNotMatch(h.el('selection-summary').textContent, /OCR/u);
+  for (const enabled of [false, true, false]) {
+    h.el('text-ocr').checked = enabled; await h.act('text-ocr', 'change');
+    assert.equal(ocrFolderBadges(h, 'Inbox')[0].textContent, '2 Dateien benötigen OCR');
+    assert.equal(h.el('catalogue-ocr-count').textContent, '2 Dateien benötigen OCR');
+    assert.equal(h.el('text-ocr').checked, enabled);
+  }
+  assert.equal(h.calls.some(call => call.command === 'start_admitted_batch'), false);
+});
+testAsync('top-level file grouping does not count OCR files from sibling folders twice', async () => {
+  const h = harness({ catalogue: [
+    { name: 'Top.jpg', source_id: id(10), selectable: true, bytes: 5, ocr_required: true }, ...ocrCatalogue()
+  ] }); await tick(); await h.act('select-files');
+  assert.equal(h.el('catalogue-ocr-count').textContent, '3 Dateien benötigen OCR');
+  assert.deepEqual(ocrFolderBadges(h, 'Dateien').map(node => node.textContent), ['1 Datei benötigt OCR']);
+  assert.equal(ocrFolderBadges(h, 'Inbox')[0].textContent, '2 Dateien benötigen OCR');
+});
+testAsync('clearing and replacing admission removes stale folder OCR badges and updates newly added descendants', async () => {
+  const options = { catalogue: ocrCatalogue() }, h = harness(options);
+  await tick(); await h.act('select-folder');
+  options.catalogue = [...options.catalogue,
+    { name: 'Inbox/Deep/Extra.jpeg', source_id: id(11), selectable: true, bytes: 5, ocr_required: true }];
+  await h.act('add-more'); await h.act('add-folder');
+  assert.equal(h.el('catalogue-ocr-count').textContent, '3 Dateien benötigen OCR');
+  assert.equal(ocrFolderBadges(h, 'Deep')[0].textContent, '2 Dateien benötigen OCR');
+  await h.act('clear-files');
+  assert.equal(h.el('catalogue-ocr-count').hidden, true);
+  assert.equal(h.el('catalogue-ocr-count').textContent, '');
+  assert.equal(h.el('source-tree').children.length, 0);
+  options.catalogue = [{ name: 'Plain/Report.pdf', source_id: id(12), selectable: true, bytes: 5, ocr_required: null }];
+  await h.act('select-folder');
+  assert.equal(h.el('catalogue-ocr-count').hidden, true);
+  assert.equal(ocrFolderBadges(h, 'Plain').length, 0);
+  options.catalogue = ocrCatalogue(); await h.act('select-folder');
+  assert.equal(h.el('catalogue-ocr-count').textContent, '2 Dateien benötigen OCR');
+});
+testAsync('new processing after completion clears folder OCR counts and computes the next admission afresh', async () => {
+  const h = harness({ catalogue: ocrCatalogue() }); await selectAndStart(h);
+  assert.equal(h.el('catalogue-ocr-count').hidden, true, 'accepted Start consumes the previous admission');
+  h.model.state = { state: 'results_available', batch_id: A, processing_mode: 'markdown-only',
+    selected_count: 5, completed_count: 5, result_count: 5, results_available: true };
+  await h.poll(); await h.act(h.el('job-actions').children.find(node => node.textContent === 'Neue Verarbeitung'));
+  assert.equal(h.el('catalogue-ocr-count').textContent, '');
+  await h.act('select-folder');
+  assert.equal(h.el('catalogue-ocr-count').textContent, '2 Dateien benötigen OCR');
+  assert.equal(ocrFolderBadges(h, 'Inbox')[0].textContent, '2 Dateien benötigen OCR');
+  assert.equal(h.el('text-ocr').checked, false, 'a badge does not enable OCR');
 });
 testAsync('all ancestors of an initially blocked deep file are visible in a large catalogue', async () => {
   const files = Array.from({length: 13}, (_, n) => ({ name: `One/${n}.txt`, source_id: id(n + 1), bytes: 1, selectable: true }));
@@ -1138,8 +1301,230 @@ testAsync('plain Markdown history never advertises text approval or saved raw co
   assert.match(text, /Optionale Kopien: 1 von 2 verfügbaren Dokumentständen zum Kopieren bestätigt/u);
   assert.match(text, /1 zusätzliche Markdown-Kopien gespeichert · nicht anonymisiert/u);
   assert.match(text, /ursprünglichen Markdown-Ergebnisse.*keine Freigabe erforderlich/u);
-  assert.equal(h.el(`history-${B}-summary-toggle`).textContent, 'Nachkorrekturen und Kopien');
+  assert.equal(h.el(`history-${B}-summary-toggle`), undefined, 'no duplicate Markdown-copy status action');
+  assert.equal(h.el(`history-${B}-summary`).parent, h.el(`history-${B}-disclosure`));
+  assert.equal(h.el(`history-${B}-summary-reload`).textContent, 'Kopierstatus aktualisieren');
   assert.doesNotMatch(text, /abgeschlossene Exporte|menschlich freigegeben|Neuester datierter/u);
+});
+
+function markdownHistoryEntry(batch_id = B, overrides = {}) {
+  return { batch_id, processing_mode: 'markdown-only', selected_count: 2, result_count: 2,
+    status: 'results_available', results_available: true, result_location: 'available', ...overrides };
+}
+function markdownCopySummary(overrides = {}) {
+  return reviewSummary({ processing_mode: 'markdown-only', approved_count: 0,
+    recorded_export_count: 0, current_exported_count: 0, ...overrides });
+}
+testAsync('Markdown details are the only copy-status disclosure and never read unopened sibling runs', async () => {
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_document_review_history_summary') return markdownCopySummary({ recorded_export_count: 4,
+      pending_export_count: 1, pending_confirmation_count: 1 });
+    return fallback();
+  } }); await tick();
+  h.model.entries = [markdownHistoryEntry(), markdownHistoryEntry(A)];
+  await h.act('nav-history');
+  const disclosure = h.el(`history-${B}-disclosure`), summary = h.el(`history-${B}-summary`);
+  const opener = h.el(`history-${B}-results`), editor = h.el(`history-${B}-documents`);
+  assert.equal(disclosure.open, false); assert.equal(summary.hidden, true);
+  assert.equal(summary.parent, disclosure);
+  assert.equal(h.calls.some(call => call.command === 'get_document_review_history_summary'), false);
+  assert.equal(h.el(`history-${B}-summary-toggle`), undefined);
+  disclosure.open = true; await h.act(disclosure, 'toggle'); await h.act(disclosure, 'toggle');
+  assert.deepEqual(h.calls.filter(call => call.command === 'get_document_review_history_summary').map(call => call.args), [{ batchId: B }]);
+  assert.match(summary.textContent, /4 zusätzliche Markdown-Kopien gespeichert/u);
+  assert.match(summary.textContent, /1 fertige Kopien mit offener Empfangsbestätigung/u);
+  assert.match(summary.textContent, /nicht erneut kopieren/u);
+  assert.equal(h.el(`history-${A}-summary`).hidden, true);
+  assert.equal(h.el(`history-${B}-results`), opener); assert.equal(opener.className, 'primary');
+  assert.equal(h.el(`history-${B}-documents`), editor); assert.equal(editor.textContent, 'Nachkorrektur öffnen (optional)');
+  assert.equal(h.doc.activeElement, disclosure);
+  noAutomaticDecision(h);
+});
+
+for (const failure of [false, true])
+testAsync(`closed Markdown details discard a late ${failure ? 'failed' : 'successful'} copy-status read and stay closed through changed polling`, async () => {
+  let settle, reads = 0;
+  const waiting = new Promise((resolve, reject) => { settle = () => failure ? reject(Error('STANDALONE_IPC_TIMEOUT'))
+    : resolve(markdownCopySummary({ recorded_export_count: 77 })); });
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_document_review_history_summary') return ++reads === 1 ? waiting : markdownCopySummary({ recorded_export_count: 5 });
+    return fallback();
+  } }); await tick(); h.model.entries = [markdownHistoryEntry()];
+  await h.act('nav-history'); await toggleHistorySummary(h, B); await toggleHistorySummary(h, B);
+  const summary = h.el(`history-${B}-summary`);
+  assert.equal(summary.hidden, true); assert.equal(summary.attrs['aria-busy'], undefined);
+  settle(); await tick();
+  assert.doesNotMatch(summary.textContent, /77 zusätzliche|nicht verfügbar/u);
+  h.model.entries[0] = markdownHistoryEntry(B, { content_notice_count: 1 });
+  await h.poll(); await tick();
+  assert.equal(h.el(`history-${B}-disclosure`).open, false);
+  assert.equal(h.el(`history-${B}-summary`).hidden, true); assert.equal(reads, 1);
+  await toggleHistorySummary(h, B);
+  assert.equal(reads, 2); assert.match(h.el(`history-${B}-summary`).textContent, /5 zusätzliche Markdown-Kopien/u);
+  assert.equal(h.el(`history-${B}-summary-reload`).textContent, 'Kopierstatus aktualisieren');
+  noAutomaticDecision(h);
+});
+
+for (const failure of [false, true])
+testAsync(`rapid Markdown details close/reopen serializes one fresh read after the retired ${failure ? 'failed' : 'successful'} read`, async () => {
+  let settleOld, settleNew, reads = 0;
+  const old = new Promise((resolve, reject) => { settleOld = () => failure ? reject(Error('STANDALONE_IPC_FAILED'))
+    : resolve(markdownCopySummary({ recorded_export_count: 77 })); });
+  const fresh = new Promise(resolve => { settleNew = () => resolve(markdownCopySummary({ recorded_export_count: 6 })); });
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_document_review_history_summary') return ++reads === 1 ? old : fresh;
+    return fallback();
+  } }); await tick(); h.model.entries = [markdownHistoryEntry()];
+  await h.act('nav-history'); await toggleHistorySummary(h, B); await toggleHistorySummary(h, B); await toggleHistorySummary(h, B);
+  const summary = h.el(`history-${B}-summary`), reload = h.el(`history-${B}-summary-reload`);
+  assert.equal(reads, 1); assert.equal(summary.hidden, false);
+  assert.match(summary.textContent, /vorherige Kopierstatusabgleich.*Danach/u);
+  assert.equal(summary.attrs['aria-busy'], 'true'); assert.equal(reload.disabled, true);
+  const statusReads = h.calls.filter(call => call.command === 'get_public_state').length;
+  await h.poll(); await h.act(h.el(`history-${B}-disclosure`), 'toggle');
+  assert.equal(reads, 1); assert.equal(h.calls.filter(call => call.command === 'get_public_state').length, statusReads);
+  settleOld(); await tick();
+  assert.equal(reads, 2); assert.equal(reload.disabled, true); assert.equal(summary.attrs['aria-busy'], 'true');
+  assert.doesNotMatch(summary.textContent, /77 zusätzliche|nicht verfügbar/u);
+  settleNew(); await tick();
+  assert.match(summary.textContent, /6 zusätzliche Markdown-Kopien/u);
+  assert.equal(reload.disabled, false); assert.equal(summary.attrs['aria-busy'], undefined);
+  assert.equal(h.calls.filter(call => call.command === 'get_document_review_history_summary').every(call =>
+    Object.keys(call.args).length === 1 && call.args.batchId === B), true);
+  noAutomaticDecision(h);
+});
+
+testAsync('Markdown detail polling retains disclosure and reload focus while refreshed copy receipts stay exact and read-only', async () => {
+  let copies = 1;
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_document_review_history_summary') return markdownCopySummary({ recorded_export_count: copies });
+    return fallback();
+  } }); await tick(); h.model.entries = [markdownHistoryEntry(), markdownHistoryEntry(A)];
+  await h.act('nav-history'); await toggleHistorySummary(h, B);
+  const reloadId = `history-${B}-summary-reload`, originalReload = h.el(reloadId);
+  originalReload.focus(); await h.poll();
+  assert.equal(h.el(reloadId), originalReload); assert.equal(h.doc.activeElement, originalReload);
+  copies = 3; h.model.entries[0] = markdownHistoryEntry(B, { exported_count: 3 });
+  await h.poll(); await tick();
+  assert.equal(h.el(`history-${B}-disclosure`).open, true); assert.equal(h.el(`history-${B}-summary`).hidden, false);
+  assert.equal(h.doc.activeElement, h.el(reloadId));
+  assert.match(h.el(`history-${B}-summary`).textContent, /3 zusätzliche Markdown-Kopien/u);
+  assert.deepEqual(h.calls.filter(call => call.command === 'get_document_review_history_summary').map(call => call.args.batchId), [B, B]);
+  await h.act(`history-${B}-details`); await tick();
+  h.el(reloadId).focus(); copies = 4;
+  h.model.entries[0] = markdownHistoryEntry(B, { exported_count: 4 });
+  await h.poll(); await tick();
+  assert.equal(h.doc.activeElement, h.el(reloadId), 'a changed selected-run snapshot retains keyboard focus as well');
+  assert.match(h.el(`history-${B}-summary`).textContent, /4 zusätzliche Markdown-Kopien/u);
+  const disclosure = h.el(`history-${B}-disclosure`);
+  assert.equal(disclosure.open, true);
+  disclosure.open = false; await h.act(disclosure, 'toggle');
+  const disclosureToggleId = `history-${B}-disclosure-toggle`;
+  h.el(disclosureToggleId).focus();
+  const before = h.calls.filter(call => call.command === 'get_document_review_history_summary').length;
+  h.model.entries[0] = markdownHistoryEntry(B, { exported_count: 5 });
+  await h.poll(); await tick();
+  assert.equal(h.el(`history-${B}-disclosure`).open, false);
+  assert.equal(h.el(`history-${B}-summary`).hidden, true);
+  assert.equal(h.doc.activeElement, h.el(disclosureToggleId), 'the collapsed native summary keeps its own keyboard target');
+  assert.equal(h.calls.filter(call => call.command === 'get_document_review_history_summary').length, before);
+  noAutomaticDecision(h);
+});
+
+testAsync('closing reopened Markdown details again cancels the deferred fresh read without losing the later reload', async () => {
+  let finish, reads = 0;
+  const pending = new Promise(resolve => { finish = () => resolve(markdownCopySummary({ recorded_export_count: 77 })); });
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_document_review_history_summary') return ++reads === 1 ? pending : markdownCopySummary({ recorded_export_count: 8 });
+    return fallback();
+  } }); await tick(); h.model.entries = [markdownHistoryEntry()]; await h.act('nav-history');
+  for (let n = 0; n < 4; n++) await toggleHistorySummary(h, B);
+  finish(); await tick();
+  assert.equal(reads, 1); assert.equal(h.el(`history-${B}-summary`).hidden, true);
+  assert.equal(h.el(`history-${B}-summary`).attrs['aria-busy'], undefined);
+  assert.doesNotMatch(h.el(`history-${B}-summary`).textContent, /77 zusätzliche/u);
+  await toggleHistorySummary(h, B);
+  assert.equal(reads, 2); assert.match(h.el(`history-${B}-summary`).textContent, /8 zusätzliche Markdown-Kopien/u);
+  noAutomaticDecision(h);
+});
+
+testAsync('a native folder command cannot leave a deferred Markdown copy-status reload permanently locked', async () => {
+  let finishSummary, finishFolder, reads = 0;
+  const pending = new Promise(resolve => { finishSummary = () => resolve(markdownCopySummary({ recorded_export_count: 77 })); });
+  const folder = new Promise(resolve => { finishFolder = () => resolve({ ok: true }); });
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_document_review_history_summary') return ++reads === 1 ? pending : markdownCopySummary({ recorded_export_count: 9 });
+    if (command === 'open_history_results') return folder;
+    return fallback();
+  } }); await tick(); h.model.entries = [markdownHistoryEntry()]; await h.act('nav-history');
+  await toggleHistorySummary(h, B); await toggleHistorySummary(h, B); await toggleHistorySummary(h, B);
+  await h.act(`history-${B}-results`); finishSummary(); await tick();
+  assert.equal(reads, 1, 'a new summary cannot bypass the current native-command lock');
+  assert.match(h.el(`history-${B}-summary`).textContent, /nach einem anderen lokalen Vorgang nicht bestätigt/u);
+  assert.equal(h.el(`history-${B}-summary`).attrs['aria-busy'], undefined);
+  assert.equal(h.el(`history-${B}-summary-reload`).disabled, true, 'the native command still owns the global lock');
+  finishFolder(); await tick();
+  assert.equal(h.el(`history-${B}-summary-reload`).disabled, false);
+  await h.act(`history-${B}-summary-reload`);
+  assert.equal(reads, 2); assert.match(h.el(`history-${B}-summary`).textContent, /9 zusätzliche Markdown-Kopien/u);
+  noAutomaticDecision(h);
+});
+
+testAsync('a new Core epoch retires the deferred Markdown read without releasing its successor reload lock', async () => {
+  let finishOld, finishNew, reads = 0;
+  const old = new Promise(resolve => { finishOld = () => resolve(markdownCopySummary({ recorded_export_count: 77 })); });
+  const fresh = new Promise(resolve => { finishNew = () => resolve(markdownCopySummary({ recorded_export_count: 10 })); });
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_document_review_history_summary') return ++reads === 1 ? old : fresh;
+    return fallback();
+  } }); await tick(); h.model.entries = [markdownHistoryEntry()]; await h.act('nav-history');
+  await toggleHistorySummary(h, B); await toggleHistorySummary(h, B); await toggleHistorySummary(h, B);
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 2, state: 'ready' } }); await tick();
+  assert.match(h.el(`history-${B}-summary`).textContent, /Kopierstatus nach Verbindungswechsel nicht bestätigt/u);
+  await h.act(`history-${B}-summary-reload`); assert.equal(reads, 2);
+  const reload = h.el(`history-${B}-summary-reload`), summary = h.el(`history-${B}-summary`);
+  finishOld(); await tick();
+  assert.equal(reads, 2); assert.equal(reload.disabled, true); assert.equal(summary.attrs['aria-busy'], 'true');
+  assert.doesNotMatch(summary.textContent, /77 zusätzliche/u);
+  finishNew(); await tick();
+  assert.equal(reload.disabled, false); assert.equal(summary.attrs['aria-busy'], undefined);
+  assert.match(summary.textContent, /10 zusätzliche Markdown-Kopien/u);
+  noAutomaticDecision(h);
+});
+
+testAsync('Markdown copy-status error discards old receipts and only an explicit reload obtains the current count', async () => {
+  let fail = false, copies = 2;
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_document_review_history_summary') {
+      if (fail) throw Error('DOCUMENT_REVIEW_POLICY_CHANGED');
+      return markdownCopySummary({ recorded_export_count: copies });
+    }
+    return fallback();
+  } }); await tick(); h.model.entries = [markdownHistoryEntry()];
+  await h.act('nav-history'); await toggleHistorySummary(h, B);
+  assert.match(h.el(`history-${B}-summary`).textContent, /2 zusätzliche Markdown-Kopien/u);
+  fail = true; await h.act(`history-${B}-summary-reload`);
+  assert.match(h.el(`history-${B}-summary`).textContent, /Kopierstatus nicht verfügbar.*älteren, nicht übernehmbaren Prüfvertrag/u);
+  assert.doesNotMatch(h.el(`history-${B}-summary`).textContent, /2 zusätzliche|0 zusätzliche/u);
+  const before = h.calls.filter(call => call.command === 'get_document_review_history_summary').length;
+  await h.poll(); assert.equal(h.calls.filter(call => call.command === 'get_document_review_history_summary').length, before);
+  fail = false; copies = 7; await h.act(`history-${B}-summary-reload`);
+  assert.match(h.el(`history-${B}-summary`).textContent, /7 zusätzliche Markdown-Kopien/u);
+  assert.equal(h.el(`history-${B}-summary-reload`).textContent, 'Kopierstatus aktualisieren');
+  assert.equal(h.doc.activeElement, h.el(`history-${B}-summary-reload`));
+  noAutomaticDecision(h);
+});
+
+testAsync('an explicit Markdown completion target opens only its own details, not another expanded copy-status read', async () => {
+  const h = harness({ invoke(command, args, fallback) {
+    return command === 'get_document_review_history_summary' ? markdownCopySummary() : fallback();
+  } }); await tick(); h.model.entries = [markdownHistoryEntry(), markdownHistoryEntry(A)];
+  await h.act('nav-history'); await toggleHistorySummary(h, B);
+  h.el('nav-history').dataset.openSummaryBatchId = A; await h.act('nav-history'); await tick();
+  assert.equal(h.el(`history-${A}-disclosure`).open, true); assert.equal(h.el(`history-${A}-summary`).hidden, false);
+  assert.deepEqual(h.calls.filter(call => call.command === 'get_document_review_history_summary').map(call => call.args.batchId), [B, A]);
+  assert.equal(h.doc.activeElement, h.el(`history-${A}-disclosure`).parent.parent);
+  noAutomaticDecision(h);
 });
 
 testAsync('changed history rows reload an expanded review summary instead of leaving an empty panel', async () => {
@@ -1936,7 +2321,7 @@ for (const failure of [false, true]) testAsync(`late ${failure ? 'failed' : 'suc
   if (failure) reject(Error('STANDALONE_IPC_FAILED'));
   else resolve({ ok: true, available: false, local_ui_only: true, external_disclosure: false });
   await tick();
-  assert.match(h.el(`history-${B}-summary`).textContent, /Prüfstatus nach Ansichtswechsel nicht bestätigt/u);
+  assert.match(h.el(`history-${B}-summary`).textContent, /Kopierstatus nach Ansichtswechsel nicht bestätigt/u);
   assert.doesNotMatch(h.el(`history-${B}-summary`).textContent, /älteren Lauf|nicht verfügbar|abgeschlossene Kopie/u);
 });
 

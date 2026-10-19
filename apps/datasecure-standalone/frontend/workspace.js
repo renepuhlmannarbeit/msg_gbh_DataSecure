@@ -136,6 +136,7 @@
     historySummaryReadGeneration = 0, historySummaryOwnershipEpoch = 0,
     lastJobSignature = '', problemSignature = '', acknowledged;
   let lastJobAnnouncement = '', lastJobAnnouncementTerminal = false;
+  let workingActionSignature = null;
   const terminalAnnouncementStates = new Set(['results_available', 'completed_without_results', 'export_abandoned', 'failed']);
   const announcedTerminalPhases = new Set();
   let guideSignature = '', documentGuide = null, runReviewSnapshot = null;
@@ -288,6 +289,7 @@
   const problemRequests = new WeakMap();
   const expandedHistoryProblems = new Set();
   const expandedHistorySummaries = new Set();
+  const collapsedMarkdownDetails = new Set();
   const expandedHistoryExtras = new Set();
   const historySummaryRequests = new WeakMap();
   const historySummaryRetirements = new Set();
@@ -639,6 +641,7 @@
     $('text-ocr-options').hidden = !['markdown-only', 'markdown-and-anonymize'].includes(mode);
     $('output-naming').hidden = mode !== 'markdown-and-anonymize';
     $('fast-anonymize-option').hidden = mode !== 'markdown-and-anonymize';
+    $('manual-anonymize').disabled = busy || mode !== 'markdown-and-anonymize';
     $('fast-anonymize').disabled = busy || mode !== 'markdown-and-anonymize';
     $('naming-neutral').disabled = busy || mode !== 'markdown-and-anonymize';
     $('naming-source').disabled = busy || mode !== 'markdown-and-anonymize';
@@ -652,6 +655,12 @@
     input.checked = eligible.length > 0 && n === eligible.length; input.indeterminate = n > 0 && n < eligible.length;
     input.disabled = busy || !eligible.length; input.setAttribute('aria-checked', input.indeterminate ? 'mixed' : String(input.checked)); }
   function chooseItems(items, checked) { for (const item of items) if (item.selectable) checked ? selected.add(item.source_id) : selected.delete(item.source_id); renderTree(); }
+  function folderOcrLabel(items) {
+    // Match the existing file badge, not the selected subset or the OCR switch.
+    // PDF/embedded-image OCR need is unknown until processing; do not infer it.
+    const total = items.filter(item => item.selectable && item.ocr_required === true).length;
+    return total ? `${total} ${total === 1 ? 'Datei benötigt' : 'Dateien benötigen'} OCR` : '';
+  }
   function treeGroups() {
     const root = { key: '', name: 'Dateien', files: [], children: new Map(), items: catalogue };
     for (const item of catalogue) {
@@ -675,6 +684,9 @@
     $('drop-zone').hidden = catalogue.length > 0 || admitting;
     $('admission-status').hidden = !admitting;
     $('catalogue-count').textContent = `${catalogue.length} ${catalogue.length === 1 ? 'Datei' : 'Dateien'}`;
+    const catalogueOcr = folderOcrLabel(catalogue);
+    $('catalogue-ocr-count').textContent = catalogueOcr;
+    $('catalogue-ocr-count').hidden = !catalogueOcr;
     const chosen = catalogue.filter(item => item.selectable && selected.has(item.source_id));
     $('selection-count').textContent = `${chosen.length} von ${catalogue.filter(item => item.selectable).length} ausgewählt`;
     checkState($('select-all'), catalogue);
@@ -695,9 +707,15 @@
       collapse.setAttribute('aria-controls', `group-files-${index}`); collapse.setAttribute('aria-label', `${folder} ${expanded.get(folder) ? 'zuklappen' : 'aufklappen'}`);
       const label = element('label'), input = document.createElement('input'); input.type = 'checkbox'; input.id = `group-select-${index}`; checkState(input, items);
       input.addEventListener('change', () => chooseItems(items, input.checked)); label.append(input, element('span', name)); label.title = folder || 'Dateien';
-      heading.append(collapse, label, element('span', `${items.filter(item => item.selectable && selected.has(item.source_id)).length}/${items.filter(item => item.selectable).length}`, 'meta'));
+      const metadata = element('div', undefined, 'group-metadata');
+      metadata.append(element('span', `${items.filter(item => item.selectable && selected.has(item.source_id)).length}/${items.filter(item => item.selectable).length}`, 'meta'));
+      // treeGroups already includes all descendants once in each parent's items.
+      // Keep this in the heading so collapsing the content cannot hide the badge.
+      const ocrLabel = folderOcrLabel(items);
+      if (ocrLabel) metadata.append(element('span', ocrLabel, 'pill neutral folder-ocr'));
       const unavailable = items.filter(item => !item.selectable).length;
-      if (unavailable) heading.append(element('span', `${unavailable} nicht verfügbar`, 'pill warning'));
+      if (unavailable) metadata.append(element('span', `${unavailable} nicht verfügbar`, 'pill warning'));
+      heading.append(collapse, label, metadata);
       const content = element('div', undefined, 'group-files'); content.id = `group-files-${index}`; content.hidden = !expanded.get(folder);
       for (const item of files) {
         const row = element('div', undefined, `file-row${!item.selectable ? ' blocked' : selected.has(item.source_id) ? ' selected' : ''}`);
@@ -858,6 +876,7 @@
     lastJobAnnouncement = ''; lastJobAnnouncementTerminal = false; $('job-announcement').textContent = '';
     $('mode-markdown').checked = false; $('mode-anonymize').checked = false;
     $('text-ocr').checked = false; $('ocr-review').checked = false;
+    $('manual-anonymize').checked = true;
     $('fast-anonymize').checked = false;
     $('naming-neutral').checked = true; $('naming-source').checked = false;
     $('setup').hidden = false; $('job').hidden = true;
@@ -988,6 +1007,7 @@
 
   function renderJob(state, announcementView = view) {
     if (!job) return;
+    if (state.batch_id !== job.batchId || !['preparing', 'processing'].includes(state.state)) workingActionSignature = null;
     reconcileFeedback(state);
     refreshRunGuide();
     // Only replace focus that this render actually removes. Background updates
@@ -1113,6 +1133,13 @@
         ? `Die Verarbeitung bleibt lokal.${failed ? ' Dateien mit Hinweisen sind im Lauf aufgeführt.' : ''}`
         : $('job-description').textContent}`;
     }
+    // Progress/count/filename updates do not change the available commands.
+    // Preserve those actual buttons (and focus) while this owned working phase
+    // remains the same; real phase/pause/connection changes still rebuild them.
+    const nextWorkingActions = working ? JSON.stringify([job.batchId, connectionEpoch, state.state,
+      state.processing_mode, Boolean(state.pause_requested)]) : null;
+    if (!working || workingActionSignature !== nextWorkingActions) {
+    workingActionSignature = nextWorkingActions;
     const actions = $('job-actions'); actions.replaceChildren();
     const secondary = $('job-secondary-actions'); secondary.replaceChildren();
     if (state.state === 'processing' && !state.pause_requested) actions.append(action('pause', 'Pausieren', async () => {
@@ -1136,6 +1163,7 @@
     if (state.state !== 'export_pending') secondary.append(action('history', 'Im Verlauf ansehen', () => showView('history')));
     $('job-more').hidden = !secondary.children.length;
     restoreActionFocus();
+    }
     $('file-problems').hidden = !failed && !summary?.content_notice_count && !(completedAnonymous && contentNotices?.attention) && state.state !== 'stopped';
     $('file-problems-summary').textContent = summary
       ? `Hinweise zu diesem Lauf · ${summary.ocr_omitted_count} ohne OCR nicht umgewandelt · ${summary.content_notice_count} Inhaltshinweise${summary.error_count ? ` · ${summary.error_count} technische Fehler` : ''}`
@@ -1147,22 +1175,34 @@
     acknowledgeRenderedNotice(state);
   }
   function historySummary(container, entry, updateAction, hasMainLoader = false) {
-    const status = element('p', entry.processing_mode === 'markdown-only'
+    const raw = entry.processing_mode === 'markdown-only';
+    const reloadLabel = raw ? 'Kopierstatus aktualisieren' : 'Prüfstatus erneut laden';
+    const statusName = raw ? 'Kopierstatus' : 'Prüfstatus';
+    const status = element('p', raw
       ? 'Optionale Nachkorrekturen und Kopien werden bei Bedarf abgeglichen.' : 'Freigaben und Exportbelege werden bei Bedarf neu abgeglichen.', 'history-meta');
     status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
     const contents = element('div');
-    let pendingRead = null, loadedRead = null;
+    let pendingRead = null, loadedRead = null, reloadAfterPending = null;
     const currentRead = owner => owner && owner.epoch === historySummaryEpoch && owner.connection === connectionEpoch &&
       owner.generation === generation && historySummaryRequests.get(container) === owner.token;
     const load = async () => {
       if (busy || closed || !(view === 'history' || view === 'details' && runDetails?.batchId === entry.batch_id)) return;
       if (currentRead(pendingRead)) return;
+      // Closing retires the visible owner, not the physical serialized read.
+      // A quick Markdown-details reopen waits for that read to settle before
+      // acquiring fresh proof instead of queueing a duplicate IPC operation.
+      if (raw && pendingRead) {
+        reloadAfterPending = pendingRead;
+        setControlDisabled(reload, true); container.setAttribute('aria-busy', 'true');
+        status.textContent = 'Der vorherige Kopierstatusabgleich wird noch beendet. Danach wird der aktuelle Kopierstatus geladen …';
+        return;
+      }
       const epoch = historySummaryEpoch, connection = connectionEpoch, requestGeneration = generation, token = {};
       const owner = { epoch, connection, generation: requestGeneration, token };
       pendingRead = owner; loadedRead = null;
       historySummaryRequests.set(container, token); setControlDisabled(reload, true); contents.replaceChildren();
       reload.hidden = updateAction({ loading: true }) === true;
-      status.textContent = entry.processing_mode === 'markdown-only' ? 'Optionale Nachkorrekturen und gespeicherte Kopien werden abgeglichen …'
+      status.textContent = raw ? 'Gespeicherter Kopierstatus wird aktualisiert …'
         : 'Gespeicherte Freigaben und Exportbelege werden abgeglichen …';
       container.setAttribute('aria-busy', 'true');
       // Summary reads share the serialized Core channel with status polls on
@@ -1238,7 +1278,7 @@
           const code = errorCode(error), reason = { DOCUMENT_REVIEW_POLICY_CHANGED: 'Dieser Prüfstand gehört zu einem älteren, nicht übernehmbaren Prüfvertrag.',
             DOCUMENT_REVIEW_INVALID: 'Die gespeicherten Prüfbelege sind nicht konsistent lesbar.',
             STANDALONE_BUSY: 'Ein anderer lokaler Vorgang ist aktiv.' }[code] || reasons[code] || 'Der lokale Abgleich ist fehlgeschlagen.';
-          contents.replaceChildren(); status.textContent = `Prüfstatus nicht verfügbar. ${reason} (${code}) Erneut laden; die Verarbeitung und frühere Kopien bleiben unverändert.`;
+          contents.replaceChildren(); status.textContent = `${statusName} nicht verfügbar. ${reason} (${code}) ${raw ? 'Erneut aktualisieren' : 'Erneut laden'}; die Verarbeitung und frühere Kopien bleiben unverändert.`;
           reload.hidden = updateAction(null) === true;
         }
       } finally {
@@ -1248,28 +1288,39 @@
           if (!historySummaryReads && !closed) schedule(300);
         }
         if (container.isConnected && historySummaryRequests.get(container) === token) {
-          setControlDisabled(reload, false); reload.textContent = 'Prüfstatus erneut laden'; container.removeAttribute('aria-busy');
+          setControlDisabled(reload, false); reload.textContent = reloadLabel; container.removeAttribute('aria-busy');
           if (epoch !== historySummaryEpoch || !(view === 'history' || view === 'details' && runDetails?.batchId === entry.batch_id)) {
             contents.replaceChildren();
-            status.textContent = 'Prüfstatus nach Ansichtswechsel nicht bestätigt. Bitte erneut laden.';
+            status.textContent = `${statusName} nach Ansichtswechsel nicht bestätigt. Bitte ${raw ? 'erneut aktualisieren' : 'erneut laden'}.`;
             reload.hidden = false;
+          }
+        }
+        if (reloadAfterPending === owner) {
+          reloadAfterPending = null;
+          setControlDisabled(reload, false); container.removeAttribute('aria-busy');
+          if (container.isConnected && !container.hidden && !reconnecting && !contextRequired) {
+            if (busy) reset('Kopierstatus nach einem anderen lokalen Vorgang nicht bestätigt. Bitte erneut aktualisieren.');
+            else loadIfNeeded();
           }
         }
       }
     };
-    const reload = button('Prüfstatus laden', load);
+    const reload = button(raw ? reloadLabel : 'Prüfstatus laden', load);
     reload.id = `history-${entry.batch_id}-summary-reload`;
     reload.hidden = hasMainLoader;
     container.append(status, contents, reload);
-    const reset = message => {
-      pendingRead = null; loadedRead = null;
+    const reset = (message, waitForPending = false) => {
+      if (!waitForPending) pendingRead = null;
+      loadedRead = null; reloadAfterPending = null;
       historySummaryRequests.delete(container); setControlDisabled(reload, false); container.removeAttribute('aria-busy');
+      if (raw) reload.textContent = reloadLabel;
       contents.replaceChildren(); status.textContent = message;
       reload.hidden = updateAction(null) === true;
     };
-    const cancel = () => reset('Abgleich geschlossen. Bei Bedarf den Prüfstatus neu laden.');
+    const cancel = () => reset(raw ? 'Kopierstatus geschlossen. Bei Bedarf erneut aktualisieren.'
+      : 'Abgleich geschlossen. Bei Bedarf den Prüfstatus neu laden.', raw);
     historySummaryRetirements.add(() => {
-      if (container.isConnected) reset('Prüfstatus nach Verbindungswechsel nicht bestätigt. Bitte erneut laden.');
+      if (container.isConnected) reset(`${statusName} nach Verbindungswechsel nicht bestätigt. Bitte ${raw ? 'erneut aktualisieren' : 'erneut laden'}.`);
     });
     const loadIfNeeded = () => currentRead(loadedRead) ? undefined : load();
     return { load, loadIfNeeded, cancel };
@@ -1385,7 +1436,9 @@
         const disclosure = element('details', undefined, 'history-disclosure');
         disclosure.id = `history-${entry.batch_id}-disclosure`;
         disclosure.open = Boolean(detailsBatchId);
-        disclosure.append(element('summary', 'Ausführliche Laufdetails'));
+        const disclosureToggle = element('summary', 'Ausführliche Laufdetails');
+        disclosureToggle.id = `history-${entry.batch_id}-disclosure-toggle`;
+        disclosure.append(disclosureToggle);
         if (conversion) stateLabel.className = 'history-outcome';
         if (anonymous && entry.status === 'failed' && !entry.resumable) {
           row.dataset.outcome = 'error';
@@ -1664,28 +1717,50 @@
           const requestedSummary = targetedSummary === entry.batch_id;
           focusRequestedSummary = requestedSummary;
           if (requestedSummary) expandedHistorySummaries.add(entry.batch_id);
-          summary.hidden = !expandedHistorySummaries.has(entry.batch_id);
+          if (raw) {
+            if (requestedSummary) collapsedMarkdownDetails.delete(entry.batch_id);
+            disclosure.open = expandedHistorySummaries.has(entry.batch_id) ||
+              Boolean(detailsBatchId) && !collapsedMarkdownDetails.has(entry.batch_id);
+            if (disclosure.open) expandedHistorySummaries.add(entry.batch_id);
+          }
+          summary.hidden = raw ? !disclosure.open : !expandedHistorySummaries.has(entry.batch_id);
           summary.id = `history-${entry.batch_id}-summary`;
           const { load, loadIfNeeded, cancel } = historySummary(summary, entry, updateAction);
           if (!summary.hidden && (!targetedSummary || requestedSummary)) reopenedSummaries.push({ summary, load: loadIfNeeded });
-          const toggle = action('summary-toggle', raw ? 'Nachkorrekturen und Kopien' : 'Freigaben und Exporte', () => {
-            summary.hidden = !summary.hidden; toggle.setAttribute('aria-expanded', String(!summary.hidden));
-            if (summary.hidden) { expandedHistorySummaries.delete(entry.batch_id); cancel(); }
-            else { expandedHistorySummaries.add(entry.batch_id); load(); }
-          });
-          toggle.setAttribute('aria-expanded', String(!summary.hidden)); toggle.setAttribute('aria-controls', summary.id);
-          disclosure.addEventListener('toggle', () => {
-            if (!disclosure.open || !disclosure.isConnected ||
-                !(view === 'history' || view === 'details' && runDetails?.batchId === entry.batch_id)) return;
-            summary.hidden = false; expandedHistorySummaries.add(entry.batch_id);
-            toggle.setAttribute('aria-expanded', 'true');
-            loadIfNeeded();
-          });
-          // After a restart the run-history record only proves technical
-          // completion. Surface the authoritative approval/export lookup
-          // directly, without implying that approval is still outstanding.
-          extra.append(toggle);
-          row.append(summary);
+          if (raw) {
+            // Markdown conversion is complete without another confirmation.
+            // Its optional, read-only copy status belongs to this one native
+            // details disclosure, not a second independently visible panel.
+            disclosure.append(summary);
+            disclosure.addEventListener('toggle', () => {
+              if (!disclosure.isConnected ||
+                  !(view === 'history' || view === 'details' && runDetails?.batchId === entry.batch_id)) return;
+              summary.hidden = !disclosure.open;
+              if (disclosure.open) {
+                collapsedMarkdownDetails.delete(entry.batch_id); expandedHistorySummaries.add(entry.batch_id);
+                loadIfNeeded();
+              } else {
+                collapsedMarkdownDetails.add(entry.batch_id); expandedHistorySummaries.delete(entry.batch_id); cancel();
+              }
+            });
+          } else {
+            const toggle = action('summary-toggle', 'Freigaben und Exporte', () => {
+              summary.hidden = !summary.hidden; toggle.setAttribute('aria-expanded', String(!summary.hidden));
+              if (summary.hidden) { expandedHistorySummaries.delete(entry.batch_id); cancel(); }
+              else { expandedHistorySummaries.add(entry.batch_id); load(); }
+            });
+            toggle.setAttribute('aria-expanded', String(!summary.hidden)); toggle.setAttribute('aria-controls', summary.id);
+            disclosure.addEventListener('toggle', () => {
+              if (!disclosure.open || !disclosure.isConnected ||
+                  !(view === 'history' || view === 'details' && runDetails?.batchId === entry.batch_id)) return;
+              summary.hidden = false; expandedHistorySummaries.add(entry.batch_id);
+              toggle.setAttribute('aria-expanded', 'true');
+              loadIfNeeded();
+            });
+            // Approval/export status remains an explicit anonymous-run action.
+            extra.append(toggle);
+            row.append(summary);
+          }
           if (requestedSummary) requestedHistorySummaryBatchId = null;
         }
         if (count(entry.failed_count) || count(entry.problem_count) || conversion?.content_notice_count ||
@@ -1731,6 +1806,9 @@
         $('history-status').textContent = 'Keine sichtbaren abgeschlossenen Läufe. Über „Ausgeblendete Läufe anzeigen“ kannst du sie wieder aufrufen.';
       historySignature = signature;
       if (view === 'history' && focused?.startsWith('history-')) ($(focused) || $('nav-history')).focus();
+      else if (view === 'details' && focused?.startsWith('history-') && data.entries.some(entry =>
+        entry.batch_id === detailsBatchId && entry.processing_mode === 'markdown-only'))
+        ($(focused) || $('details-heading')).focus();
     } catch { if (request === historyGeneration && connection === connectionEpoch &&
         (!detailsBatchId || view === 'details' && runDetails === route)) {
       if (recovering) feedback('Die Bereitstellung konnte nicht bestätigt werden. Den aktuellen Laufstatus und die Diagnose prüfen; keinen zweiten Lauf oder Export blind starten.', true,
@@ -1877,12 +1955,13 @@
   });
   for (const id of ['mode-markdown', 'mode-anonymize']) $(id).addEventListener('change', () => {
     mode = $(id).value;
-    if (mode !== 'markdown-and-anonymize') { $('naming-neutral').checked = true; $('naming-source').checked = false; $('fast-anonymize').checked = false; }
+    if (mode !== 'markdown-and-anonymize') { $('naming-neutral').checked = true; $('naming-source').checked = false;
+      $('manual-anonymize').checked = true; $('fast-anonymize').checked = false; }
     updateStart();
   });
   for (const id of ['naming-neutral', 'naming-source']) $(id).addEventListener('change', updateStart);
   $('text-ocr').addEventListener('change', renderTree);
-  $('fast-anonymize').addEventListener('change', updateStart);
+  for (const id of ['manual-anonymize', 'fast-anonymize']) $(id).addEventListener('change', updateStart);
   $('select-files').addEventListener('click', () => pick('select_files')); $('select-folder').addEventListener('click', () => pick('select_folder'));
   $('add-files').addEventListener('click', () => pick('select_files')); $('add-folder').addEventListener('click', () => pick('select_folder'));
   $('add-more').addEventListener('click', () => { const show = $('add-options').hidden; $('add-options').hidden = !show;

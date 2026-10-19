@@ -11,7 +11,7 @@ function elAfterLoad() {
 const el = (id) => document.getElementById(id);
 const state = { draft: null, reviewId: null, cursor: 0, choices: new Map(), history: [],
   rows: [], rowById: new Map(), candidateIndex: new Map(), groups: new Map(), selected: new Set(), inputs: new Map(), page: 0,
-  waiting: false, submitted: false, closed: false, disconnected: false, continuing: false, continuationAvailable: false,
+  waiting: false, waitingViewActive: false, submitted: false, closed: false, disconnected: false, continuing: false, continuationAvailable: false,
   generation: 0, loadGeneration: null, pollTimer: null, pollFailures: 0, connectionReady: embedded,
   uncertainAnswer: null, continuationFailure: null, continuationSnapshot: null, lastSession: null };
 const START_FAILURE_TEXT = Object.freeze({
@@ -52,38 +52,48 @@ function reviewFailureMessage(session) {
   return message;
 }
 
+function setIfChanged(id, property, value) {
+  const target = el(id);
+  if (target[property] !== value) target[property] = value;
+}
+
 function setWaiting(message, working = false) {
-  el('review').hidden = true;
-  for (const id of ['exact-text', 'source-context', 'output-context', 'group-note', 'document-position', 'finding-position']) {
-    el(id).textContent = '';
+  if (!state.waitingViewActive) {
+    // Clear private display state on entry, not on every identical background
+    // status read. Loading/rendering any new draft invalidates this boundary.
+    el('review').hidden = true;
+    for (const id of ['exact-text', 'source-context', 'output-context', 'group-note', 'document-position', 'finding-position']) {
+      el(id).textContent = '';
+    }
+    el('bulk-treatment').value = '';
+    el('bulk-treatment').disabled = true;
+    el('bulk-apply').disabled = true;
+    el('select-filtered').disabled = true;
+    el('matrix-empty').hidden = true;
+    el('select-visible').checked = false;
+    el('select-visible').indeterminate = false;
+    el('contact-image').src = '';
+    el('contact-original').hidden = true;
+    el('contact-image-note').textContent = '';
+    el('matrix-body').replaceChildren();
+    el('occurrence').replaceChildren();
+    el('matrix-search').value = '';
+    el('matrix-document').value = 'all';
+    el('matrix-count').textContent = '';
+    el('matrix-progress').textContent = '';
+    el('bulk-hint').textContent = 'Zuerst Werte auswählen. Häkchen allein bestätigen nichts.';
+    el('release-hint').textContent = '3. Entscheidungen speichern: erst nach Behandlung aller Fundstellen.';
+    el('matrix-page').textContent = '';
+    el('matrix-message').textContent = '';
+    state.waitingViewActive = true;
   }
-  el('bulk-treatment').value = '';
-  el('bulk-treatment').disabled = true;
-  el('bulk-apply').disabled = true;
-  el('select-filtered').disabled = true;
-  el('matrix-empty').hidden = true;
-  el('select-visible').checked = false;
-  el('select-visible').indeterminate = false;
-  el('contact-image').src = '';
-  el('contact-original').hidden = true;
-  el('contact-image-note').textContent = '';
-  el('matrix-body').replaceChildren();
-  el('occurrence').replaceChildren();
-  el('matrix-search').value = '';
-  el('matrix-document').value = 'all';
-  el('matrix-count').textContent = '';
-  el('matrix-progress').textContent = '';
-  el('bulk-hint').textContent = 'Zuerst Werte auswählen. Häkchen allein bestätigen nichts.';
-  el('release-hint').textContent = '3. Entscheidungen speichern: erst nach Behandlung aller Fundstellen.';
-  el('matrix-page').textContent = '';
-  el('matrix-message').textContent = '';
-  el('waiting').hidden = false;
-  el('work-indicator').hidden = !working;
-  if (el('waiting-text').textContent !== message) el('waiting-text').textContent = message;
+  setIfChanged('waiting', 'hidden', false);
+  setIfChanged('work-indicator', 'hidden', !working);
+  setIfChanged('waiting-text', 'textContent', message);
   const summary = working ? 'DataSecure arbeitet im Hintergrund …' : message;
-  if (el('summary').textContent !== summary) el('summary').textContent = summary;
-  el('continue-review').hidden = !state.continuationAvailable;
-  el('continue-review').disabled = state.continuing;
+  setIfChanged('summary', 'textContent', summary);
+  setIfChanged('continue-review', 'hidden', !state.continuationAvailable);
+  setIfChanged('continue-review', 'disabled', state.continuing);
 }
 
 function cancelPoll() {
@@ -432,6 +442,7 @@ function handoffLabel() {
 function render(table = true) {
   const draft = state.draft;
   if (!draft) return;
+  state.waitingViewActive = false;
   const items = draft.ambiguities;
   const filtered = filteredRows();
   state.page = Math.max(0, Math.min(state.page, Math.ceil(filtered.length / PAGE_SIZE) - 1));
@@ -586,12 +597,14 @@ function decodeChunks(parts) {
   return new TextDecoder('utf-8', { fatal: true }).decode(joined);
 }
 
-async function poll() {
+async function poll(manual = false) {
   if (!invoke || !state.connectionReady || state.draft || (state.closed || state.disconnected) || state.continuing || state.waiting || state.loadGeneration !== null) return;
   cancelPoll();
   const generation = state.generation;
   state.loadGeneration = generation;
-  el('retry').disabled = true;
+  // Background reads are coalesced by loadGeneration, without flashing the
+  // status button. Explicit reads and private chunk loads still show a lock.
+  if (manual) setIfChanged('retry', 'disabled', true);
   const current = () => !(state.closed || state.disconnected) && generation === state.generation;
   try {
     const session = await invoke('get_review_session');
@@ -608,7 +621,7 @@ async function poll() {
         return;
       }
       state.continuationAvailable = session.continuation_available === true;
-      el('continue-review').textContent = session.retry_available === true ? 'Prüfung erneut starten' : 'Prüfung fortsetzen';
+      setIfChanged('continue-review', 'textContent', session.retry_available === true ? 'Prüfung erneut starten' : 'Prüfung fortsetzen');
       if (session.phase === 'failed') {
         state.continuationFailure = null;
         setWaiting(reviewFailureMessage(session), false);
@@ -634,6 +647,7 @@ async function poll() {
     }
     if (!/^[a-f0-9]{32}$/u.test(session.review_id) ||
         !Number.isInteger(session.chunk_count) || session.chunk_count < 1 || session.chunk_count > 320) throw Error('invalid session');
+    setIfChanged('retry', 'disabled', true);
     const parts = [];
     for (let index = 0; index < session.chunk_count; index++) {
       const chunk = await invoke('get_review_chunk', { reviewId: session.review_id, chunkIndex: index });
@@ -646,6 +660,7 @@ async function poll() {
     state.documentPositions = documentPositions(draft);
     state.reviewId = session.review_id;
     state.draft = draft;
+    state.waitingViewActive = false;
     state.selected.clear(); state.inputs.clear(); state.page = 0;
     el('matrix-filter').value = 'open';
     el('matrix-type').value = 'all';
@@ -689,7 +704,7 @@ async function poll() {
   } finally {
     if (state.loadGeneration === generation) {
       state.loadGeneration = null;
-      el('retry').disabled = false;
+      setIfChanged('retry', 'disabled', false);
     }
   }
 }
@@ -838,7 +853,7 @@ el('release').addEventListener('click', () => {
       ...(state.draft.ocr_contact_review === true ? state.choices.get(item.ambiguity_id)
         : { decision: state.choices.get(item.ambiguity_id) }) })) });
 });
-el('retry').addEventListener('click', poll);
+el('retry').addEventListener('click', () => poll(true));
 el('continue-review').addEventListener('click', continueReview);
 el('close-review').addEventListener('click', closeReviewWindow);
 let unlistenConnection = null, pageDisposed = false;
