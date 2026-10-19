@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
+import vm from 'node:vm';
 import { createRequire, Module } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
@@ -12,6 +13,7 @@ import { verifyMacNativeContract } from '../scripts/lib/macos-native-contract.mj
 import { verifyConversionInventory } from '../scripts/lib/standalone-package-integrity.mjs';
 import { collectStandaloneRuntime } from '../scripts/lib/standalone-runtime-projection.mjs';
 import { removePackageSmokeScope } from './helpers/standalone-package-scope.mjs';
+import boundFileIo from '../plugins/data-secure/server/core/bound-file-io.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url), hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
@@ -63,6 +65,151 @@ function entries(value) {
   };
   walk(value.app); return new Map([...result].map(([name, bytes]) => [`DataSecure Standalone.app/${name}`, bytes]));
 }
+
+// Actual private production function, evaluated as a host-independent source
+// model with controlled syscall boundaries. NOT an APFS/O_RDWR diagnosis or a
+// native relocation/signing proof; no test-only production export is added.
+function replacementModel(value, role, { point = null, field = null, ioFailure = null, closeFailure = false } = {}) {
+  const filename = value.manifestFile;
+  const original = boundFileIo.readBoundFileRecord(filename, { maximum: 2 * 1024 * 1024, checkCtime: true });
+  const replacement = Buffer.from('{"source_model_replacement":true}\n');
+  const counts = { opens: 0, closes: 0, truncates: 0, writes: 0, syncs: 0 }, lines = [];
+  const io = Object.create(fs); let namedCalls = 0;
+  const changed = (stat, at) => {
+    if (point !== at) return stat;
+    const copy = Object.create(stat);
+    if (field === 'type') Object.defineProperty(copy, 'isFile', { value: () => false });
+    else if (field === 'oversize') Object.defineProperty(copy, 'size', { value: BigInt(2 * 1024 * 1024 + 1) });
+    else Object.defineProperty(copy, field, { value: stat[field] + 1n });
+    return copy;
+  };
+  io.openSync = (...args) => {
+    counts.opens++; assert.equal(args[0], filename);
+    assert.equal(args[1] & fs.constants.O_TRUNC, 0, 'opening must not truncate');
+    if (ioFailure === 'open') throw false;
+    return fs.openSync(...args);
+  };
+  io.lstatSync = (...args) => {
+    assert.equal(args[0], filename); namedCalls++;
+    if (ioFailure === 'named-postopen' && namedCalls === 2) throw false;
+    return changed(fs.lstatSync(...args), namedCalls === 1 ? 'named-preopen' : 'named-postopen');
+  };
+  io.fstatSync = (...args) => {
+    if (ioFailure === 'held-postopen') throw false;
+    return changed(fs.fstatSync(...args), 'held-postopen');
+  };
+  io.ftruncateSync = (...args) => { counts.truncates++; return fs.ftruncateSync(...args); };
+  io.writeFileSync = (...args) => { counts.writes++; return fs.writeFileSync(...args); };
+  io.fsyncSync = (...args) => { counts.syncs++; return fs.fsyncSync(...args); };
+  io.closeSync = fd => { counts.closes++; fs.closeSync(fd); if (closeFailure) throw false; };
+  const source = fs.readFileSync(path.join(root, 'scripts/lib/macos-bundle-native.mjs'), 'utf8');
+  const start = source.indexOf('const hash ='), end = source.indexOf('export function macNativeContext');
+  assert.ok(start >= 0 && end > start);
+  let threw = false, error;
+  try {
+    vm.runInNewContext(source.slice(start, end) + '\nreplaceChecked(filename, original.stat, replacement, role, parent);', {
+      fs: io, path, crypto, Buffer, boundFileIo, filename, original, replacement, role,
+      parent: boundFileIo.bindDirectory(path.dirname(filename)),
+      console: { error(line) { lines.push(line); } }
+    }, { timeout: 5000, filename: 'macos-manifest-replacement-source-model' });
+  } catch (value) { threw = true; error = value; }
+  const prefix = 'STANDALONE_MACOS_MANIFEST_REPLACE:';
+  const diagnostics = lines.map(line => {
+    assert.ok(typeof line === 'string' && line.startsWith(prefix));
+    assert.equal(line.includes(filename), false); assert.equal(line.includes(value.scope), false);
+    assert.equal(line.includes(original.bytes.toString('utf8')), false);
+    const record = JSON.parse(line.slice(prefix.length));
+    assert.deepEqual(Object.keys(record).sort(), ['close', 'comparisons', 'outcome', 'phase', 'role', 'schema']);
+    assert.equal(record.schema, 'datasecure-macos-manifest-replacement-diagnostic/1');
+    assert.ok(['relocation-manifest', 'finalization-manifest'].includes(record.role));
+    assert.ok(['parent-before-open', 'named-preopen', 'open', 'held-postopen', 'named-postopen', 'comparison',
+      'parent-before-truncate', 'truncate', 'write', 'sync', 'written', 'close', 'closed'].includes(record.phase));
+    assert.ok(['not-opened', 'pending', 'closed', 'failed'].includes(record.close));
+    assert.deepEqual(Object.keys(record.comparisons).sort(), ['heldPostOpen', 'namedPostOpen', 'namedPreOpen', 'originalReadStat']);
+    for (const facts of Object.values(record.comparisons)) if (facts !== null) {
+      assert.deepEqual(Object.keys(facts).sort(), ['birthtimeNs', 'ctimeNs', 'dev', 'ino', 'link_count_equal',
+        'mtimeNs', 'object_equal', 'single_link', 'size', 'type', 'within_maximum']);
+      assert.ok(Object.values(facts).every(flag => typeof flag === 'boolean'), 'no raw IDs/times/paths/content');
+    }
+    return record;
+  });
+  return { counts, diagnostics, threw, error, original: original.bytes, replacement };
+}
+for (const role of ['relocation-manifest', 'finalization-manifest']) {
+  test(`SOURCE MODEL ${role}: closed pass diagnosis and one held-descriptor replacement`, () => {
+    const value = fixture();
+    try {
+      const result = replacementModel(value, role);
+      assert.equal(result.threw, false); assert.deepEqual(result.counts, { opens: 1, closes: 1, truncates: 1, writes: 1, syncs: 1 });
+      assert.equal(result.diagnostics.length, 1); assert.equal(result.diagnostics[0].outcome, 'pass');
+      assert.equal(result.diagnostics[0].phase, 'closed'); assert.equal(result.diagnostics[0].close, 'closed');
+      assert.ok(Object.values(result.diagnostics[0].comparisons).every(facts => Object.values(facts).every(Boolean)));
+      assert.deepEqual(fs.readFileSync(value.manifestFile), result.replacement);
+    } finally { value.cleanup(); }
+  });
+  for (const point of ['named-preopen', 'held-postopen', 'named-postopen']) {
+    const fields = point === 'named-preopen' ? ['ctimeNs'] : ['dev', 'ino', 'size', 'mtimeNs', 'ctimeNs', 'birthtimeNs', 'nlink', 'type', 'oversize'];
+    for (const field of fields) test(`SOURCE MODEL ${role}: ${point}/${field} refuses before truncate without adoption`, () => {
+      const value = fixture();
+      try {
+        const result = replacementModel(value, role, { point, field });
+        assert.equal(result.threw, true); assert.equal(result.error.message, 'STANDALONE_MACOS_NATIVE_LAYOUT_INVALID');
+        assert.deepEqual(result.counts, { opens: 1, closes: 1, truncates: 0, writes: 0, syncs: 0 });
+        assert.deepEqual(fs.readFileSync(value.manifestFile), result.original);
+        assert.equal(result.diagnostics.length, 1); const diagnosis = result.diagnostics[0];
+        assert.equal(diagnosis.outcome, 'fail'); assert.equal(diagnosis.phase, 'comparison');
+        assert.equal(diagnosis.close, 'closed');
+        const snapshot = diagnosis.comparisons[({ 'named-preopen': 'namedPreOpen', 'held-postopen': 'heldPostOpen', 'named-postopen': 'namedPostOpen' })[point]];
+        assert.equal(snapshot[field === 'nlink' ? 'link_count_equal' : field === 'oversize' ? 'within_maximum' : field], false);
+      } finally { value.cleanup(); }
+    });
+  }
+  for (const ioFailure of ['open', 'held-postopen', 'named-postopen']) test(`SOURCE MODEL ${role}: falsy ${ioFailure} is retained and descriptor consumed once`, () => {
+    const value = fixture();
+    try {
+      const result = replacementModel(value, role, { ioFailure });
+      assert.equal(result.threw, true); assert.equal(result.error, false);
+      assert.deepEqual(result.counts, { opens: 1, closes: ioFailure === 'open' ? 0 : 1, truncates: 0, writes: 0, syncs: 0 });
+      assert.deepEqual(fs.readFileSync(value.manifestFile), result.original);
+      assert.equal(result.diagnostics.length, 1); assert.equal(result.diagnostics[0].outcome, 'fail');
+      assert.equal(result.diagnostics[0].phase, ioFailure);
+    } finally { value.cleanup(); }
+  });
+  test(`SOURCE MODEL ${role}: falsy close failure cannot become a successful replacement`, () => {
+    const value = fixture();
+    try {
+      const result = replacementModel(value, role, { closeFailure: true });
+      assert.equal(result.threw, true); assert.equal(result.error, false);
+      assert.deepEqual(result.counts, { opens: 1, closes: 1, truncates: 1, writes: 1, syncs: 1 });
+      assert.deepEqual(fs.readFileSync(value.manifestFile), result.replacement, 'failure after writing is not a claim that nothing changed');
+      assert.equal(result.diagnostics[0].outcome, 'fail'); assert.equal(result.diagnostics[0].phase, 'close');
+      assert.equal(result.diagnostics[0].close, 'failed');
+    } finally { value.cleanup(); }
+  });
+  test(`SOURCE MODEL ${role}: primary falsy failure and close failure both survive`, () => {
+    const value = fixture();
+    try {
+      const result = replacementModel(value, role, { ioFailure: 'held-postopen', closeFailure: true });
+      assert.equal(result.threw, true); assert.equal(result.error.name, 'AggregateError');
+      assert.deepEqual(Array.from(result.error.errors), [false, false]);
+      assert.deepEqual(result.counts, { opens: 1, closes: 1, truncates: 0, writes: 0, syncs: 0 });
+      assert.deepEqual(fs.readFileSync(value.manifestFile), result.original);
+      assert.equal(result.diagnostics[0].outcome, 'fail'); assert.equal(result.diagnostics[0].close, 'failed');
+    } finally { value.cleanup(); }
+  });
+}
+test('SOURCE MODEL replacement diagnostic role is closed, never a supplied path or label', () => {
+  const value = fixture();
+  try {
+    const result = replacementModel(value, value.manifestFile);
+    assert.equal(result.threw, true); assert.equal(result.error.message, 'STANDALONE_MACOS_NATIVE_LAYOUT_INVALID');
+    assert.equal(result.counts.opens, 0); assert.equal(result.counts.closes, 0); assert.deepEqual(result.diagnostics, []);
+    assert.deepEqual(fs.readFileSync(value.manifestFile), result.original);
+    const source = fs.readFileSync(path.join(root, 'scripts/lib/macos-bundle-native.mjs'), 'utf8');
+    assert.match(source, /replaceChecked\(manifestFile, manifestRead\.stat,[^\n]+ 'relocation-manifest', manifestParent\)/u);
+    assert.match(source, /replaceChecked\(manifestFile, manifestRead\.stat,[^\n]+ 'finalization-manifest', manifestParent\)/u);
+  } finally { value.cleanup(); }
+});
 function resolver(value) {
   const source = path.join(root, 'plugins/data-secure/server/standalone/conversion-runtime-resolver.js');
   const loaded = new Module(source); loaded.filename = source;

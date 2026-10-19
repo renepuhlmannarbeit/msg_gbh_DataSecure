@@ -4,6 +4,26 @@ Arbeitsversion: **3.2.0-rc166**, Entwicklung und erneute Paketprüfung; veröffe
 
 ### Aktuelle Umsetzung nach weiterem Nutzertest – RC166
 
+Neuer Source07-Gegenlauf auf `85c0b1c478d751966e8ca1ca5127f7f5ae3038b4`
+ist nicht freigabefähig:220/282Headlessdateien bestanden, danach native
+Erstordneradmission mit `AI_EXPORT_CONFIGURATION_REQUIRED` verweigert;
+Inputs unverändert. Die Ursache bleibt am realen Node/Rustpfad ungeklärt,
+nicht als veraltete Fixture erklärt. Zwölf frische Erstinstallationen und
+der komplette fokussierte Nativeexportlauf bestanden danach mit unveränderten
+Inputs. Neue feste native Fehlerphasen beobachten die ursprünglichen Fehler,
+ohne Admission-/ACL-/Identitätslockerung oder Retry. Der Testabschluss ist
+jetzt integriert an dieselbe monotone180s-Frist gebunden; fehlendes Exit/Close
+bleibt unbestätigt/FAIL, kein erfundener Join. Neue Gegenfälle sind kanonisch
+und im Mac-Consumer registriert. Windows250Rust/Clippy/Release,
+fünfPaketgates und100Dateienkorpus bestanden. Intel39303497549/118234561581
+bestand alle nativen App-/ZIP-/DMG-Gates; ARM118234561544 scheiterte zuvor
+beim Manifestvergleich vor dem Schreibzugriff. Das abweichende Statfeld und
+die Ursache sind noch unbewiesen. Ein enges geschlossenes Diagnosedelta
+erhält beide ursprünglichen Vergleiche ohne Retry/Statadoption;63Layoutfälle
+inklusive51Quellenmodelle bestanden. Das ist kein nativer ARM-Fixnachweis.
+Vor neuer Übergabe sind ein gemeinsamer neuer Freeze und frische Endgates
+erforderlich; keine Übernahme alter ZIPs oder behauptete Desktopabnahme.
+
 Die direkte Ergebnisbereitstellung ist implementiert; neue gemeinsame
 Endgates folgen als Source06. Source05 bleibt ungeeignet: Diagnosekatalogtest
 überschritt die unveränderte300er-Retention und ARM-ZIP-Smoke erwartete den

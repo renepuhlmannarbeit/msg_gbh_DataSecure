@@ -5,6 +5,11 @@ const fs = require('node:fs'), os = require('node:os'), path = require('node:pat
 const { spawn } = require('node:child_process');
 const readline = require('node:readline');
 const assert = require('node:assert/strict');
+const { performance } = require('node:perf_hooks');
+const { observeChild, waitForChildCompletion } = require('./lib/native-export-test-lifecycle.cjs');
+const testArgs = process.argv.slice(2);
+assert.ok(testArgs.length === 0 || testArgs.length === 1 && testArgs[0] === '--first-install-only', 'closed native export test mode');
+const firstInstallOnly = testArgs.length === 1;
 const { NativeExportChannel } = require('../plugins/data-secure/server/standalone/native-export-channel');
 const { createDocumentReviewStore } = require('../plugins/data-secure/server/gateway/standalone-document-review-store');
 const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
@@ -19,7 +24,41 @@ const child = spawn('cargo', ['test', '--locked', 'native_export_broker::tests::
   { cwd: path.resolve(__dirname, '../apps/datasecure-standalone/tauri-contract'), stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
 let stderr = '', outer, binding, seq = 0, nativeSession, loseNextPublish = false, poisonedBody = false, configuredAdmissions = 0, preparationService;
 const nativeCommands = [], nativeActions = [];
+const admissionSnapshots = [], nativeConfigureFailures = [];
+let invalidNativeConfigureFailures = 0;
+const configureStages = new Set(('nonce guard public_open data_open roots anonymize_bind anonymize_volume markdown_bind markdown_volume private_create private_sync data_sync public_sync root_encoding ' +
+  'admission_digest_encoding admission_guard admission_data_open admission_settings_open admission_settings_read admission_settings_digest admission_settings_parse admission_root admission_record admission_native_identity admission_public_open admission_node_identity admission_identity_match admission_settings_binding admission_data_reopen admission_repeat_data_open admission_repeat_settings_binding admission_repeat_settings_read admission_repeat_settings_match').split(' '));
+const configureKinds = new Set('NotFound PermissionDenied ConnectionRefused ConnectionReset HostUnreachable NetworkUnreachable ConnectionAborted NotConnected AddrInUse AddrNotAvailable NetworkDown BrokenPipe AlreadyExists WouldBlock NotADirectory IsADirectory DirectoryNotEmpty ReadOnlyFilesystem FilesystemLoop StaleNetworkFileHandle InvalidInput InvalidData TimedOut WriteZero StorageFull NotSeekable QuotaExceeded FileTooLarge ResourceBusy ExecutableFileBusy Deadlock CrossesDevices TooManyLinks InvalidFilename ArgumentListTooLong Interrupted Unsupported UnexpectedEof OutOfMemory InProgress Other Uncategorized'.split(' '));
 child.stderr.on('data', bytes => { stderr = `${stderr}${bytes}`.slice(-8192); });
+readline.createInterface({ input: child.stderr }).on('line', line => {
+  const prefix = 'NATIVE_CONFIGURE_FAILURE:';
+  if (!line.startsWith(prefix)) return;
+  try {
+    const value = JSON.parse(line.slice(prefix.length));
+    if (!value || Object.keys(value).sort().join(',') !== 'io_error_kind,raw_os_error,stage' ||
+        !configureStages.has(value.stage) || !configureKinds.has(value.io_error_kind) ||
+        value.raw_os_error !== null && (!Number.isInteger(value.raw_os_error) || value.raw_os_error < -(2 ** 31) || value.raw_os_error >= 2 ** 31) ||
+        nativeConfigureFailures.length >= 64) throw Error('closed diagnostic required');
+    nativeConfigureFailures.push(value);
+  } catch { invalidNativeConfigureFailures++; }
+});
+function observeAdmissionSnapshot(snapshot, batchId, operationId) {
+  // Test evidence only, beneath this process's create-only synthetic root.
+  // These fresh reads never authorize or repair the real native request.
+  if (admissionSnapshots.length >= 64) return;
+  try {
+    const bytes = fs.readFileSync(resultConfig.configPath()), record = JSON.parse(bytes);
+    const stat = fs.statSync(snapshot.root, { bigint: true });
+    const exact = { dev: String(stat.dev), ino: String(stat.ino), birthtime_ns: String(stat.birthtimeNs) };
+    admissionSnapshots.push({ configuration_schema: /^datasecure-result-root\/[1-6]$/u.test(record.schema) ? record.schema : 'unknown',
+      admission_kind: ['native', 'node22', 'node22_bigint'].includes(snapshot.admission?.kind) ? snapshot.admission.kind : 'unknown',
+      setting_digest_matches: sha(bytes) === snapshot.setting_sha256, root_matches: record.root === snapshot.root,
+      exact_identity_matches: ['dev', 'ino', 'birthtime_ns'].every(key => record.exact_identity?.[key] === exact[key]),
+      admission_matches_saved: JSON.stringify(snapshot.admission?.identity) === JSON.stringify(snapshot.admission?.kind === 'native' ? record.native_identity :
+        snapshot.admission?.kind === 'node22_bigint' ? record.exact_identity : record.identity),
+      outer_batch_matches: outer?.batch_id === batchId, outer_operation_matches: outer?.operation_id === operationId });
+  } catch { admissionSnapshots.push({ diagnostic_unavailable: true }); }
+}
 const channel = new NativeExportChannel({ write: frame => {
   if (frame.action) nativeActions.push(frame.action);
   if (frame.command) nativeCommands.push(frame.command);
@@ -35,7 +74,10 @@ readline.createInterface({ input: child.stdout }).on('line', line => {
   if (reply.harness_error) console.error(reply.harness_error);
   try { channel.accept(reply); } catch (e) { channel.abort(e.code); }
 });
-const exited = new Promise(resolve => child.once('exit', (code, signal) => { channel.abort('STANDALONE_IPC_FAILED'); resolve({ code, signal }); }));
+const observedChild = observeChild(child);
+child.once('exit', () => { channel.abort('STANDALONE_IPC_FAILED'); });
+child.once('error', () => { channel.abort('STANDALONE_IPC_FAILED'); });
+const deadlineAt = performance.now() + 180000;
 const deadline = setTimeout(() => { channel.abort('STANDALONE_IPC_FAILED'); child.kill(); }, 180000);
 function context(action, extra = {}) {
   outer = { schema: 'datasecure-standalone-private-ipc/1', request_id: (++seq).toString(16).padStart(16, '0'), action, ...extra };
@@ -58,6 +100,7 @@ function fixture(mode, index, extraText = '', raw = null, native = true) {
         ? preparationService.prepareConfiguredExportRoot.bind(preparationService)
         : resultConfig.prepareConfiguredNativeExportBinding)(async snapshot => {
         configuredAdmissions++;
+        observeAdmissionSnapshot(snapshot, batchId, operationId);
         const prepared = await nativeSession.send('prepare_configured_export_root', { ...snapshot, batch_id: batchId, operation_id: operationId });
         binding = prepared;
         return prepared;
@@ -146,6 +189,7 @@ async function run() {
     if (previousDocuments === undefined) delete process.env.DATASECURE_STANDALONE_DOCUMENTS_DIR;
     else process.env.DATASECURE_STANDALONE_DOCUMENTS_DIR = previousDocuments;
   }
+  if (firstInstallOnly) { console.log('ok first-install-only: complete unchanged first-installation/export/restart/ACK block; remaining full-suite cases intentionally not run'); return; }
   {
     // Force the NEW lossless representation even on APFS with small inode IDs.
     // This is a test settings fixture, not an upgrade/adoption of a legacy /2.
@@ -413,8 +457,24 @@ async function run() {
   try { await run(); }
   catch (e) { console.error(e); console.error(stderr); process.exitCode = 1; }
   finally {
-    child.stdin.end(); const result = await exited; clearTimeout(deadline);
-    if (result.code !== 0) { console.error('Native pipe helper did not exit cleanly', result, stderr); process.exitCode = 1; }
+    child.stdin.end();
+    const completion = await waitForChildCompletion(observedChild, deadlineAt);
+    clearTimeout(deadline);
+    if (!completion.close_confirmed || !completion.exit_confirmed) {
+      console.error('Native pipe helper exit/close unconfirmed within original deadline; fixture retained'); process.exitCode = 1;
+      // Detach only this harness's own pipes after failure. This is not a
+      // successful join, writer-quiescence proof or authority to delete data.
+      child.stdin.destroy(); child.stdout.destroy(); child.stderr.destroy(); child.unref();
+    }
+    if (completion.exit_code !== 0 || completion.error_observed) { console.error('Native pipe helper did not exit cleanly', completion, stderr); process.exitCode = 1; }
+    if (invalidNativeConfigureFailures !== 0) { console.error('Closed native configure diagnostic rejected'); process.exitCode = 1; }
+    fs.writeFileSync(path.join(root, 'NATIVE-ADMISSION-DIAGNOSTIC.json'), JSON.stringify({
+      schema: 'datasecure-native-export-test-diagnostics/1', test_mode: firstInstallOnly ? 'first-install-only' : 'full',
+      configured_admissions: configuredAdmissions, admission_snapshots: admissionSnapshots,
+      native_configure_failures: nativeConfigureFailures, invalid_native_configure_failures: invalidNativeConfigureFailures,
+      child_exit_code: completion.exit_code, child_exit_confirmed: completion.exit_confirmed,
+      child_close_confirmed: completion.close_confirmed, test_exit_code: process.exitCode || 0
+    }, null, 2), { flag: 'wx', mode: 0o600 });
     // Retain these strictly synthetic fault fixtures for inspection; never
     // recursively delete a directory that has been deliberately tampered with.
     console.log(`Synthetic native-export evidence: ${root}`);

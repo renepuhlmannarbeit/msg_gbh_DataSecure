@@ -76,6 +76,12 @@ pub(crate) fn private_data_root() -> io::Result<PathBuf> {
 pub(crate) enum ConfigureStage {
     Nonce, Guard, PublicOpen, DataOpen, Roots, AnonymizeBind, AnonymizeVolume,
     MarkdownBind, MarkdownVolume, PrivateCreate, PrivateSync, DataSync, PublicSync, RootEncoding,
+    AdmissionDigestEncoding, AdmissionGuard, AdmissionDataOpen, AdmissionSettingsOpen,
+    AdmissionSettingsRead, AdmissionSettingsDigest, AdmissionSettingsParse, AdmissionRoot,
+    AdmissionRecord, AdmissionNativeIdentity, AdmissionPublicOpen, AdmissionNodeIdentity,
+    AdmissionIdentityMatch, AdmissionSettingsBinding, AdmissionDataReopen,
+    AdmissionRepeatDataOpen, AdmissionRepeatSettingsBinding, AdmissionRepeatSettingsRead,
+    AdmissionRepeatSettingsMatch,
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize)]
 pub(crate) struct ConfigureFailure {
@@ -111,49 +117,70 @@ pub(crate) fn configure_observed(root: &Path, data: &Path, nonce: &str, guard: &
 }
 pub(crate) fn prepare_configured(root: &Path, data: &Path, nonce: &str, admission: &ConfiguredAdmission,
     setting_sha256: &str, guard: &NativeGuard) -> io::Result<Binding> {
+    prepare_configured_observed(root, data, nonce, admission, setting_sha256, guard, |failure| {
+        // The test-only pipe may preserve this closed record beside its own
+        // synthetic fixture. Release builds never emit this stderr protocol.
+        #[cfg(test)]
+        if let Ok(closed) = serde_json::to_string(&failure) {
+            let _ = std::io::Write::write_all(&mut std::io::stderr().lock(),
+                format!("NATIVE_CONFIGURE_FAILURE:{closed}\n").as_bytes());
+        }
+        crate::diagnostic_native_configure_failure(failure);
+    })
+}
+fn prepare_configured_observed(root: &Path, data: &Path, nonce: &str, admission: &ConfiguredAdmission,
+    setting_sha256: &str, guard: &NativeGuard, mut observe: impl FnMut(ConfigureFailure)) -> io::Result<Binding> {
     use sha2::{Digest, Sha256};
+    use ConfigureStage::*;
     let refused = || error("AI_EXPORT_CONFLICT");
-    if !hex(setting_sha256, 64) { return Err(refused()); }
-    guard.checkpoint().map_err(|_| error("STANDALONE_CLOSING"))?;
-    let private_parent = Directory::open_existing(data, None)?;
-    let settings = private_parent.open_settings()?;
-    let bytes = settings.read_bounded("result-root.json", 128 * 1024)?;
+    configure_step(AdmissionDigestEncoding, if hex(setting_sha256, 64) { Ok(()) } else { Err(refused()) }, &mut observe)?;
+    configure_step(AdmissionGuard, guard.checkpoint().map_err(|_| error("STANDALONE_CLOSING")), &mut observe)?;
+    let private_parent = configure_step(AdmissionDataOpen, Directory::open_existing(data, None), &mut observe)?;
+    let settings = configure_step(AdmissionSettingsOpen, private_parent.open_settings(), &mut observe)?;
+    let bytes = configure_step(AdmissionSettingsRead, settings.read_bounded("result-root.json", 128 * 1024), &mut observe)?;
     let digest = |bytes: &[u8]| format!("{:x}", Sha256::digest(bytes));
-    if digest(&bytes) != setting_sha256 { return Err(refused()); }
-    let record: serde_json::Value = serde_json::from_slice(&bytes).map_err(|_| refused())?;
-    if record["root"].as_str() != root.to_str() { return Err(refused()); }
+    configure_step(AdmissionSettingsDigest, if digest(&bytes) == setting_sha256 { Ok(()) } else { Err(refused()) }, &mut observe)?;
+    let record: serde_json::Value = configure_step(AdmissionSettingsParse,
+        serde_json::from_slice(&bytes).map_err(|_| refused()), &mut observe)?;
+    configure_step(AdmissionRoot, if record["root"].as_str() == root.to_str() { Ok(()) } else { Err(refused()) }, &mut observe)?;
     let public = match admission {
         ConfiguredAdmission::Native(expected) => {
-            if record["schema"] != "datasecure-result-root/3" || record["native_identity"] != serde_json::json!(expected) { return Err(refused()); }
-            Directory::open_existing(root, Some(expected.identity()?))?
+            configure_step(AdmissionRecord, if record["schema"] == "datasecure-result-root/3" &&
+                record["native_identity"] == serde_json::json!(expected) { Ok(()) } else { Err(refused()) }, &mut observe)?;
+            let identity = configure_step(AdmissionNativeIdentity, expected.identity(), &mut observe)?;
+            configure_step(AdmissionPublicOpen, Directory::open_existing(root, Some(identity)), &mut observe)?
         },
         ConfiguredAdmission::Node22(expected) => {
-            if !["datasecure-result-root/1", "datasecure-result-root/2"].iter().any(|schema| record["schema"] == *schema) ||
-                record["identity"] != serde_json::json!(expected) { return Err(refused()); }
-            let public = Directory::open_existing(root, None)?;
-            if public.node22_identity()? != *expected { return Err(refused()); }
+            configure_step(AdmissionRecord, if ["datasecure-result-root/1", "datasecure-result-root/2"].iter().any(|schema| record["schema"] == *schema) &&
+                record["identity"] == serde_json::json!(expected) { Ok(()) } else { Err(refused()) }, &mut observe)?;
+            let public = configure_step(AdmissionPublicOpen, Directory::open_existing(root, None), &mut observe)?;
+            let actual = configure_step(AdmissionNodeIdentity, public.node22_identity(), &mut observe)?;
+            configure_step(AdmissionIdentityMatch, if actual == *expected { Ok(()) } else { Err(refused()) }, &mut observe)?;
             public // Same held capability continues into provisioning, no re-adoption.
         },
         ConfiguredAdmission::Node22BigInt(expected) => {
             // Only a freshly persisted exact setting grants this admission.
             // A rounded /1 or /2 record may not be upgraded from today's stat.
-            if record["schema"] != "datasecure-result-root/5" ||
-                record["exact_identity"] != serde_json::json!(expected) { return Err(refused()); }
-            let public = Directory::open_existing(root, None)?;
-            if public.node22_bigint_identity()? != *expected { return Err(refused()); }
+            configure_step(AdmissionRecord, if record["schema"] == "datasecure-result-root/5" &&
+                record["exact_identity"] == serde_json::json!(expected) { Ok(()) } else { Err(refused()) }, &mut observe)?;
+            let public = configure_step(AdmissionPublicOpen, Directory::open_existing(root, None), &mut observe)?;
+            let actual = configure_step(AdmissionNodeIdentity, public.node22_bigint_identity(), &mut observe)?;
+            configure_step(AdmissionIdentityMatch, if actual == *expected { Ok(()) } else { Err(refused()) }, &mut observe)?;
             public
         },
     };
     #[cfg(test)] guard.test_event("configured_before_provision");
-    private_parent.inspect_child("settings", settings.identity())?;
+    configure_step(AdmissionSettingsBinding, private_parent.inspect_child("settings", settings.identity()), &mut observe)?;
     let private_identity = private_parent.identity();
     // Reject a changed pathname, but retain the original capability for all
     // provisioning. The check must not become a fresh adoption of a new root.
-    Directory::open_existing(data, Some(private_identity))?;
-    let binding = configure_admitted(root, data, nonce, guard, Some((public, private_parent)), &mut crate::diagnostic_native_configure_failure)?;
-    let parent = Directory::open_existing(data, Some(private_identity))?;
-    parent.inspect_child("settings", settings.identity())?;
-    if settings.read_bounded("result-root.json", 128 * 1024)? != bytes { return Err(refused()); }
+    configure_step(AdmissionDataReopen, Directory::open_existing(data, Some(private_identity)), &mut observe)?;
+    let binding = configure_admitted(root, data, nonce, guard, Some((public, private_parent)), &mut observe)?;
+    #[cfg(test)] guard.test_event("configured_after_provision");
+    let parent = configure_step(AdmissionRepeatDataOpen, Directory::open_existing(data, Some(private_identity)), &mut observe)?;
+    configure_step(AdmissionRepeatSettingsBinding, parent.inspect_child("settings", settings.identity()), &mut observe)?;
+    let repeated = configure_step(AdmissionRepeatSettingsRead, settings.read_bounded("result-root.json", 128 * 1024), &mut observe)?;
+    configure_step(AdmissionRepeatSettingsMatch, if repeated == bytes { Ok(()) } else { Err(refused()) }, &mut observe)?;
     Ok(binding)
 }
 fn configure_admitted(root: &Path, data: &Path, nonce: &str, guard: &NativeGuard,
@@ -486,6 +513,76 @@ mod tests {
                 assert_eq!(fs::read_dir(&root).unwrap().count(), 0);
                 assert_eq!(fs::read_dir(&data).unwrap().count(), 1, "settings only; no private nonce child");
             }
+        }
+    }
+    #[test]
+    fn configured_admission_diagnostics_distinguish_preflight_failures_without_provisioning() {
+        use ConfigureStage::*;
+        for (fault, stage) in [("digest_encoding", AdmissionDigestEncoding), ("data", AdmissionDataOpen),
+            ("settings", AdmissionSettingsOpen), ("read", AdmissionSettingsRead), ("digest", AdmissionSettingsDigest),
+            ("parse", AdmissionSettingsParse), ("root", AdmissionRoot), ("record", AdmissionRecord),
+            ("native_identity", AdmissionNativeIdentity), ("public", AdmissionPublicOpen)] {
+            let f = Fixture::new(); let (mut admission, mut digest, mut bytes) = configured_fixture(&f);
+            let root = f.path.join("public"); let original_data = f.path.join("private"); let mut data = original_data.clone();
+            let setting = original_data.join("settings/result-root.json");
+            match fault {
+                "digest_encoding" => digest = "invalid".into(),
+                "data" => data = f.path.join("missing-private"),
+                "settings" => fs::rename(original_data.join("settings"), original_data.join("original-settings")).unwrap(),
+                "read" => fs::rename(&setting, setting.with_extension("original")).unwrap(),
+                "digest" => digest = "0".repeat(64),
+                "parse" => { bytes = b"not-json PRIVATE payload".to_vec(); fs::write(&setting, &bytes).unwrap(); digest = format!("{:x}", Sha256::digest(&bytes)); },
+                "root" | "record" | "native_identity" => {
+                    let mut record: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+                    if fault == "root" { record["root"] = serde_json::json!(f.path.join("other-public")); }
+                    if fault == "record" { record["schema"] = serde_json::json!("datasecure-result-root/2"); }
+                    if fault == "native_identity" {
+                        if let ConfiguredAdmission::Native(ref mut id) = admission { id.object = "not-decimal".into(); }
+                        if let ConfiguredAdmission::Native(ref id) = admission { record["native_identity"] = serde_json::json!(id); }
+                    }
+                    bytes = serde_json::to_vec(&record).unwrap(); fs::write(&setting, &bytes).unwrap(); digest = format!("{:x}", Sha256::digest(&bytes));
+                },
+                "public" => fs::rename(&root, f.path.join("original-public")).unwrap(),
+                _ => unreachable!(),
+            }
+            let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap(); let mut observed = Vec::new();
+            let failure = prepare_configured_observed(&root, &data, &"c".repeat(32), &admission, &digest, &guard,
+                |failure| observed.push(failure)).unwrap_err();
+            assert_eq!(observed.len(), 1, "{fault}"); assert_eq!(observed[0].stage, stage, "{fault}");
+            assert_eq!(observed[0].io_error_kind, format!("{:?}", failure.kind()), "{fault}");
+            assert_eq!(observed[0].raw_os_error, failure.raw_os_error(), "{fault}");
+            let closed = serde_json::to_value(&observed[0]).unwrap();
+            assert_eq!(closed.as_object().unwrap().len(), 3);
+            assert!(!closed.to_string().contains("PRIVATE")); assert!(!closed.to_string().contains(&f.path.to_string_lossy().to_string()));
+            assert_eq!(fs::read_dir(&original_data).unwrap().count(), 1, "{fault}: settings only, no provisioning");
+            let preserved_public = if fault == "public" { f.path.join("original-public") } else { root };
+            assert_eq!(fs::read_dir(preserved_public).unwrap().count(), 0, "{fault}: no public provisioning");
+        }
+    }
+    #[test]
+    fn configured_admission_diagnostics_keep_exact_identity_mismatch_and_repeat_failure_distinct() {
+        use ConfigureStage::*;
+        for repeat in [false, true] {
+            let f = Fixture::new(); let root = f.path.join("public"); let data_path = f.path.join("private");
+            let data = Directory::open_existing(&data_path, None).unwrap(); let settings = data.create_controlled_child("settings").unwrap();
+            let mut exact = Directory::open_existing(&root, None).unwrap().node22_bigint_identity().unwrap();
+            if !repeat { exact.birthtime_ns.push('0'); }
+            let bytes = serde_json::to_vec(&serde_json::json!({ "schema":"datasecure-result-root/5", "root":root,
+                "exact_identity":exact, "identity":{"dev":"1","ino":"2","birthtime_ms":"3"}, "notices":{"sync":false,"network":false}})).unwrap();
+            settings.write_record_atomic("result-root.json", &bytes).unwrap(); drop(settings); drop(data);
+            let digest = format!("{:x}", Sha256::digest(&bytes)); let setting = data_path.join("settings/result-root.json");
+            let changed = setting.clone(); let lifecycle = Lifecycle::default();
+            let guard = lifecycle.begin_native().unwrap().with_test_event(move |phase| {
+                if repeat && phase == "configured_after_provision" { fs::write(&changed, b"changed PRIVATE setting").unwrap(); }
+            });
+            let mut observed = Vec::new();
+            let failure = prepare_configured_observed(&root, &data_path, &"c".repeat(32), &ConfiguredAdmission::Node22BigInt(exact), &digest, &guard,
+                |failure| observed.push(failure)).unwrap_err();
+            assert_eq!(failure.to_string(), "AI_EXPORT_CONFLICT"); assert_eq!(failure.raw_os_error(), None);
+            assert_eq!(observed.len(), 1); assert_eq!(observed[0].stage, if repeat { AdmissionRepeatSettingsMatch } else { AdmissionIdentityMatch });
+            assert_eq!(observed[0].io_error_kind, "Other");
+            if !repeat { assert_eq!(fs::read_dir(&root).unwrap().count(), 0); assert_eq!(fs::read(&setting).unwrap(), bytes); }
+            else { assert_eq!(fs::read(&setting).unwrap(), b"changed PRIVATE setting", "diagnostics never repair the changed setting"); }
         }
     }
     #[cfg(unix)]

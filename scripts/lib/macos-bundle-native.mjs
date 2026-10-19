@@ -18,17 +18,83 @@ function sameFile(left, right) {
   return ['dev', 'ino', 'size', 'mtimeNs', 'ctimeNs'].every(key => left[key] === right[key]);
 }
 
-function replaceChecked(file, expected, bytes, parent = boundFileIo.bindDirectory(path.dirname(file))) {
-  boundFileIo.assertDirectory(parent);
-  const descriptor = fs.openSync(file, fs.constants.O_RDWR | (fs.constants.O_NOFOLLOW || 0));
+const MAX_REPLACED_MANIFEST_BYTES = 2 * 1024 * 1024;
+function replacementComparison(original, actual) {
+  if (!actual) return null;
+  const regular = actual.isFile() && !actual.isSymbolicLink();
+  return {
+    type: regular,
+    link_count_equal: actual.nlink === original.nlink,
+    single_link: actual.nlink === 1n,
+    within_maximum: typeof actual.size === 'bigint' && actual.size >= 0n && actual.size <= BigInt(MAX_REPLACED_MANIFEST_BYTES),
+    object_equal: ['dev', 'ino', 'birthtimeNs'].every(key => typeof actual[key] === 'bigint' && actual[key] === original[key]),
+    dev: actual.dev === original.dev, ino: actual.ino === original.ino,
+    size: actual.size === original.size, mtimeNs: actual.mtimeNs === original.mtimeNs,
+    ctimeNs: actual.ctimeNs === original.ctimeNs, birthtimeNs: actual.birthtimeNs === original.birthtimeNs
+  };
+}
+function replacementShapeSafe(original, actual) {
+  const facts = replacementComparison(original, actual);
+  return facts && facts.type && facts.link_count_equal && facts.single_link && facts.within_maximum && facts.object_equal;
+}
+function replaceChecked(file, expected, bytes, role, parent = boundFileIo.bindDirectory(path.dirname(file))) {
+  // Only the two literal build-call roles below may reach closed diagnostics.
+  // Never print a path, stat value, exception text, file content or supplied tag.
+  if (!['relocation-manifest', 'finalization-manifest'].includes(role)) fail();
+  const originalReadStat = expected;
+  let descriptor, namedPreOpen = null, heldPostOpen = null, namedPostOpen = null;
+  let phase = 'parent-before-open', primaryFailed = false, primaryError;
+  let closeFailed = false, closeError, closeState = 'not-opened';
   try {
-    if (!sameFile(fs.fstatSync(descriptor, { bigint: true }), expected) ||
-        !sameFile(fs.lstatSync(file, { bigint: true }), expected)) fail();
     boundFileIo.assertDirectory(parent);
+    if (!replacementShapeSafe(originalReadStat, originalReadStat) || !Buffer.isBuffer(bytes) ||
+        bytes.length > MAX_REPLACED_MANIFEST_BYTES) fail();
+    phase = 'named-preopen'; namedPreOpen = fs.lstatSync(file, { bigint: true });
+    phase = 'open'; descriptor = fs.openSync(file, fs.constants.O_RDWR | (fs.constants.O_NOFOLLOW || 0));
+    closeState = 'pending';
+    phase = 'held-postopen'; heldPostOpen = fs.fstatSync(descriptor, { bigint: true });
+    phase = 'named-postopen'; namedPostOpen = fs.lstatSync(file, { bigint: true });
+    phase = 'comparison';
+    // Preserve BOTH original held/named checks against the original read.
+    // A fresh stat is diagnostic evidence, never permission to adopt changes.
+    if (!sameFile(heldPostOpen, expected) || !sameFile(namedPostOpen, expected) ||
+        !sameFile(namedPreOpen, expected) || !replacementShapeSafe(originalReadStat, namedPreOpen) ||
+        !replacementShapeSafe(originalReadStat, heldPostOpen) || !replacementShapeSafe(originalReadStat, namedPostOpen)) fail();
+    phase = 'parent-before-truncate';
+    boundFileIo.assertDirectory(parent);
+    phase = 'truncate';
     fs.ftruncateSync(descriptor, 0);
+    phase = 'write';
     fs.writeFileSync(descriptor, bytes);
+    phase = 'sync';
     fs.fsyncSync(descriptor);
-  } finally { fs.closeSync(descriptor); }
+    phase = 'written';
+  } catch (error) { primaryFailed = true; primaryError = error; }
+  finally {
+    if (descriptor !== undefined) {
+      const closing = descriptor; descriptor = undefined;
+      try { fs.closeSync(closing); closeState = 'closed'; }
+      catch (error) { closeFailed = true; closeError = error; closeState = 'failed'; }
+    }
+  }
+  const errors = [];
+  if (primaryFailed) errors.push(primaryError);
+  if (closeFailed) errors.push(closeError);
+  try {
+    console.error('STANDALONE_MACOS_MANIFEST_REPLACE:' + JSON.stringify({
+      schema: 'datasecure-macos-manifest-replacement-diagnostic/1', role,
+      phase: primaryFailed ? phase : closeFailed ? 'close' : 'closed',
+      outcome: primaryFailed || closeFailed ? 'fail' : 'pass', close: closeState,
+      comparisons: {
+        originalReadStat: replacementComparison(originalReadStat, originalReadStat),
+        namedPreOpen: replacementComparison(originalReadStat, namedPreOpen),
+        heldPostOpen: replacementComparison(originalReadStat, heldPostOpen),
+        namedPostOpen: replacementComparison(originalReadStat, namedPostOpen)
+      }
+    }));
+  } catch (error) { errors.push(error); }
+  if (errors.length > 1) throw new AggregateError(errors, 'STANDALONE_MACOS_MANIFEST_REPLACEMENT_FAILED');
+  if (errors.length === 1) throw errors[0]; // Includes falsy thrown values.
 }
 
 export function macNativeContext(app, target) {
@@ -98,7 +164,7 @@ export function relocateMacNative(app, target) {
   }
   const manifest = JSON.parse(manifestRead.bytes);
   manifest.native_layout = layout.LAYOUT;
-  replaceChecked(manifestFile, manifestRead.stat, Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`), manifestParent);
+  replaceChecked(manifestFile, manifestRead.stat, Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`), 'relocation-manifest', manifestParent);
   return { target, roles: prepared.map(({ role }) => role) };
 }
 
@@ -132,5 +198,5 @@ export function finalizeMacNativeInventory(app, target) {
     }
   }
   manifest.native_inventory_finalized = true;
-  replaceChecked(manifestFile, manifestRead.stat, Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`), manifestParent);
+  replaceChecked(manifestFile, manifestRead.stat, Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`), 'finalization-manifest', manifestParent);
 }

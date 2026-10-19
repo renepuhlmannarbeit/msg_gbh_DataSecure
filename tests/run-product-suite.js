@@ -161,7 +161,7 @@ const ciFiles = [
   // reservation, executor lease, recovery and the visible result export.
   'test-batch-intake-reservation.js', 'test-process-identity.js', 'test-batch-executor-lease.js',
   'test-batch-active-lock.js', 'test-batch-recovery.js', 'test-result-folder-export.js',
-  'test-result-export-startup-replay.js'
+  'test-result-export-startup-replay.js', 'test-native-export-test-lifecycle.js'
 ];
 
 const fullOnly = [

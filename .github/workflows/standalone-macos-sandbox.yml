@@ -218,6 +218,7 @@ jobs:
           node tests/test-result-generations.js
           node tests/test-result-initial-exact-binding.js
           npm run test:standalone
+          node tests/test-native-export-test-lifecycle.js
       - name: Run the real isolated converter-worker boundary
         run: npm run test:standalone:conversion
       - name: Require warning-free native Rust code

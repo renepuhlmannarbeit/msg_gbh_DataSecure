@@ -3,6 +3,54 @@
 Status: Umsetzung, noch kein neuer Paket-/Release-PASS. Windows-/Mac-Desktoptests
 bleiben Nutzer-/Kollegenaufgabe. Keine neue Automation.
 
+## Neuer enger Gegenlauf nach Source07
+
+Source07/85c0b1c ist ungeeignet:220/282Headlessdateien bestanden, danach
+native Erstordneradmission verweigert, Inputs unverändert. Ursache nicht
+vorwegnehmen; echte Node/Rust-Fixture und Primärlog bleiben erhalten.
+Windows250Rust/Clippy/Release und5Paketgates inklusive100Dateienkorpus grün.
+Intel118234561581 in39303497549 bestand native App/ZIP/DMG; ARM118234561544
+scheiterte vorher in Finalize/replaceChecked vor Truncate. Das alte Log
+identifiziert weder Feld noch Held-/Named-Seite; Ursache bleibt unbekannt.
+
+Enges Diagnosedelta hält beide ursprünglichen fünfFeld-Vergleiche gegen den
+ursprünglichen Read sowie Parentbindung fest, ergänzt Preopen-/Birth-/Typ-/
+Einfachlink-/Größenprüfung und einmaliges Schließen unter Erhalt aller Fehler.
+Nur zwei literale Rollen, finite Phasen und Boolesche Fakten werden geloggt;
+keine Pfade, Rohidentitäten, Zeiten oder Inhalte. Keine Wiederholung, neue
+Statadoption oder ctime-Ausnahme. Unabhängiges tatsächliches Quellengegenlesen
+und Mainreview ohne bestätigten Blocker;63Layoutfälle inkl51Quellenmodelle
+bestanden. Kein APFS-/ARM-Ursachennachweis aus Windowsmodellen.
+
+Ein weiterer Übergabereview korrigierte den Vertagentestaufbau ausdrücklich
+auf geführten neuen Lauf/OCR an und tatsächliche Gruppenbuttons. Neue gemeinsame
+Freeze-/Native-/Paketgates und beide Macjobs bleiben vor Veröffentlichung nötig.
+
+Die erhaltene native Erstordnerfixture besitzt heute dieselbe NodeBigInt-/
+Rust-/Windows-Identität; das beweist nicht ihre Identität zur Fehlerzeit.
+Ein unveränderter fokussierter Wiederholungslauf bestand vollständig. Der
+engste neue Produktionsschritt ist deshalb Diagnose, keine behauptete
+Ursachenbehebung: feste native Admissionphasen plus ErrorKind/i32-OS-Code
+erhalten Originalfehler, Reihenfolge, Guard und gehaltene Directoryhandles.
+Keine zusätzliche Zulassung, Wiederholung, ACL- oder Identitätslockerung.
+Unabhängiger tatsächlicher finaler Rustgegenreview ohne bestätigten Blocker.
+
+Der Testharness speichert eigene geschlossene Snapshots und beobachtete native
+Phasen. Ein ausdrücklich begrenzter Erstinstallationsmodus endet erst nach
+Defaultroot-/5→nativer/6-Bindung, tatsächlicher Datei, Service-Neustart und ACK;
+der Standardaufruf führt weiterhin alle bisherigen Fälle aus. Beim Gegenreview
+gefundene unbeschränkte Exit-/Close-Nachwartepfade sind integriert auf das
+ursprüngliche monotone180s-Budget begrenzt. Nicht beobachtetes Exit bleibt null,
+Close wird nicht erfunden; bei Fristablauf FAIL und Fixtureerhalt, ausschließlich
+eigene Pipes abkoppeln. FünfClose- und sechsCompletion-Gegenfälle plus ungültige
+Deadline prüfen den tatsächlich verwendeten Helper. Diese Datei ist im
+kanonischen283erPlan und beiden Mac-Consumerstufen registriert.
+
+Auf finalen fokussierten Bytes bestanden12frische Erstinstallationen und der
+komplette Nativeexportumfang mit unveränderten Inputs. Frühere Zwischenserien
+und Source07ROT bleiben unverändert erhalten. Windows-/Mac-Endgates müssen
+auf einem neuen gemeinsamen Commit folgen; keine tatsächliche Desktopbedienung.
+
 ## Tatsächliche Zwischenbefunde und enge Korrekturen
 
 - Echter Windows-Negativlauf `datasecure-native-store-z9Pp2p`: neue Defaultwurzel

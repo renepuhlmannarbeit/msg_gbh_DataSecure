@@ -64,11 +64,17 @@ alten Ergebnisse überschreiben. Windows und Mac erhalten denselben Plan.
 
 ## 6. Vertagen und Neustart
 
-- In einer tatsächlichen Prüfgruppe eine Entscheidung nur vormerken, nicht
-  vollständig speichern. Vertagen, normal schließen, neu öffnen.
+- „Neue Verarbeitung“ → „Umwandeln und anonymisieren“ → „Selbst entscheiden“.
+- OCR einschalten, `05-Vertagen-Neustart/EINGABEN` aus dem Kompaktarchiv wählen,
+  ein neues leeres Ergebnisziel wählen und die Verarbeitung starten.
+- In einer tatsächlich angebotenen Prüfgruppe eine Entscheidung nur vormerken,
+  nicht vollständig speichern. „Später entscheiden“ anklicken, die App normal
+  schließen, neu öffnen und denselben Lauf fortsetzen.
 - Erwartung: derselbe Lauf ist fortsetzbar; ungespeicherte Vormerkung ist nicht
   versehentlich als fertige Ergebnisänderung veröffentlicht.
-- Danach vollständig speichern und abschließen: direkt Ergebnisordner erreichbar.
+- Danach die vollständige Gruppe bearbeiten und „Entscheidungen speichern und
+  fortfahren“ anklicken; weitere erforderliche Gruppen ebenso abschließen.
+  Erwartung: direkt Ergebnisordner erreichbar, keine weitere Exportauswahl.
 
 ## 7. Vorhandene Ergebnisse außerhalb der App verändern
 

@@ -4,6 +4,32 @@ Arbeitsversion: **3.2.0-rc166**, Umsetzung und neue gemeinsame Windows-/macOS-Te
 
 ## Aktueller Auftrag – Nutzerbefunde als RC166 umsetzen und neu prüfen
 
+**BUILD-MAC-MANIFEST-01:** Source07 ARM118234561544 verweigert vor Truncate
+einen Statvergleich. Konkretes Feld/Ursache noch unbekannt; derselbe Stand
+bestand Intel118234561581 vollständig. Enges Diagnoseinstrument mit
+ursprünglichen Held-/Named-Vergleichen, zusätzlichem Preopenvergleich und
+geschlossenen Booleschen Fakten implementiert/gegengelesen;63Layoutfälle
+bestanden. Kein Retry, keine ctime-Ausnahme oder Adoption. Nächster echter
+nativer Lauf muss die tatsächlichen Fakten liefern; kein behaupteter Fix.
+
+**VERIFY-NATIVE-DEFAULT-01:** Source07Headless nach220Dateien bei echtem
+Windows-Node/Rust-Erstordnerexport mit AI_EXPORT_CONFIGURATION_REQUIRED rot.
+Primärbelege und synthetische Fixture erhalten; kausale Produkt-/Testdiagnose
+bleibt ohne bewiesene Ursache. Fokussierter unveränderter Wiederholungslauf,
+danach finale12frische Erstinstallationen und kompletter Nativeexportumfang
+mit unveränderten Inputs bestanden. Feste native Vor-/Nachadmissionphasen
+erhalten Originalfehler und die exakte Ordner-/Schemaadmission, kein Retry.
+Zwei neue Testharness-Lifecyclelücken (Closewait, vorgeschalteter Exitwait)
+sind durch einen integrierten monotone180s-Restbudgethelper korrigiert;
+fünfClose- und sechsCompletion-Gegenfälle inklusive NoExit/NoClose/SpawnError
+plus Invaliddeadline bestanden. Kein rückwirkend grüner Source07-Endlauf,
+frische gemeinsame283+10/Native/Paket/beideMac-Gates bleiben erforderlich.
+
+**UAT-DEFER-SETUP-01:** Übergabegegenreview fand im Vertagentest fehlenden
+Start/Modus/OCR-Aufbau. Anleitung ergänzt: neuer geführter Anonymisierungslauf,
+OCR an, tatsächliche Prüfgruppe, nur vormerken, „Später entscheiden“, Neustart,
+vollständige Gruppe speichern. Keine neue Pflichtfunktion oder Desktop-PASS.
+
 **COMPAT-PUBLIC-METADATA-01:** Neuer P2 aus tatsächlichem JS-/Rustreview:
 öffentliche neue macOS-Results müssen reguläre begrenzte Finder-`.DS_Store` zulassen,
 ohne Metadaten in MD-Inventar/Receipt/Generation zu übernehmen. Eng implementiert;
