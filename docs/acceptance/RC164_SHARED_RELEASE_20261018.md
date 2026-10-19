@@ -12,6 +12,27 @@ Keine Developer-ID, Apple-Einreichung oder Storeverteilung.
 
 ## Neuester geprüfter Windows-Quellstand, 19.10.2026
 
+Neu nach03:13UTC: b772 vollständig272/272+10/10, Native228/Clippy/Release und
+fünf Paketgates unverändert grün; beide Macconsumer desselben Schnitts ROT.
+Danach zwei Darwin-Testverträge eng korrigiert, Produktionsfingerprint bleibt
+4a880940…/332Dateien. Runtime-IO-Modell vollständig/stellt Hook wieder her;
+obsolete positive dynamische Mac-Testfixture separat ausgeschlossen, vollständige
+Quellworkflows erhalten. Zwei unabhängige tatsächliche Quellengegenreviews ohne
+weiteren Blocker;78/78 und sechs Selektormodelle plus Source-Sidecar-Lifecycle,
+16/16 Pfade/Canonicaldocs gezielt grün. Noch kein neuer Mac-/Finalpaket-/GUI-PASS.
+Native positive Mac-Configure/Persistenz/Conflictfixture bleibt ausdrücklich
+NOT_RUN, keine Gleichsetzung mit anderen Sealed-App-Gates. Neuer gemeinsamer
+Commit und frische finale Gates sind vor Übergabe weiterhin erforderlich.
+
+Neu02:50UTC: b772-Consumer39191630620 ARM ROT in vier IO-order-Testfällen;
+ownership-control-Testdouble lässt Darwins assertNativeOwnershipRuntime aus.
+Tatsächlicher Produktionspfad und unabhängiger Quellenreview bestätigen einen
+TypeError vor IO, keinen bewiesenen Corefehler. Testdouble/Gegenfall nach Ende
+laufender Freezejobs korrigieren, Produktionsschutz unverändert lassen.
+Windows-Native228/Clippy/Release und fünf Paketgates dieses b772-Schnitts grün,
+Headless noch aktiv. ZIP0aceca88…/EXE73d710c2… bleibt unveröffentlicht und ohne
+neue GUI-Abnahme; Details/volle Hashes im aktuellen Nachtplan. Kein Release.
+
 Neu nach02:42UTC: erster gemeinsamer Consumer39189276321 scheiterte auf beiden
 Macs an einer ignorierten, nicht eingecheckten historischen JSON-Testquelle.
 Kein Corecrash daraus; lokale272/272+10/10 und Native228 grün gelten nur für

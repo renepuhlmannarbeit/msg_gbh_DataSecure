@@ -10,6 +10,11 @@ const { encodeFrame } = require('../plugins/data-secure/server/standalone/deskto
 const args = process.argv.slice(2);
 if (args.length && (args.length !== 1 || args[0] !== '--source-only')) throw new Error('STANDALONE_SIDECAR_TEST_ARGUMENT_INVALID');
 const sourceOnly = args.length === 1;
+// The checkout interpreter cannot prove the statically linked, sealed Mac-Core
+// role. Keep only this old positive addon fixture out of Darwin; full projected
+// document/OCR/fast/lifecycle coverage below still depends on sourceOnly alone.
+// Native static readiness/IPC/Worker/Guard gates run on the actual sealed app.
+const nativeSourceOnly = sourceOnly || process.platform === 'darwin';
 
 function protocolClient(child, onNative, onReady) {
   let buffer = Buffer.alloc(0);
@@ -197,7 +202,7 @@ function removeOwnedRoot(root, initial) {
     assert.equal(unsupportedNative.ok, false);
     assert.equal(unsupportedNative.error_code, 'STANDALONE_IPC_FAILED', 'requested native capability never silently falls back');
     const nativeGuardTarget = ['win32', 'darwin'].includes(process.platform);
-    if (sourceOnly && nativeGuardTarget) {
+    if (nativeSourceOnly && nativeGuardTarget) {
       const missingRoot = path.join(root, 'native-unverified'); fs.mkdirSync(missingRoot);
       const missingEnv = isolatedEnvironment(missingRoot);
       Object.assign(missingEnv, { DATASECURE_NATIVE_EXPORT_CHANNEL: '1',
@@ -216,7 +221,7 @@ function removeOwnedRoot(root, initial) {
       await refusedClient.send('shutdown', '02'.repeat(8));
       assert.equal((await bounded(host.closed, 'unverified native host did not stop')).code, 0);
     }
-    if (!sourceOnly || !nativeGuardTarget) {
+    if (!nativeSourceOnly || !nativeGuardTarget) {
     // Real process/pipe/configuration integration. This emulates the desktop
     // response only, not the native filesystem identity implementation (Rust
     // tests exercise that separately with actual directory handles).
@@ -290,6 +295,9 @@ function removeOwnedRoot(root, initial) {
     assert.ok(nativeRecords.some(record => record.event === 'private_ipc_closed' && record.outcome === 'stopped'));
     assert.ok(nativeRecords.every(record => record.component === 'sidecar' && record.schema === 'datasecure-standalone-interaction/1'));
     if (nativeGuardTarget) assert.ok(nativeRecords.some(record => record.event === 'ownership_control_check_finished'));
+    }
+    if (process.platform === 'darwin') {
+      process.stdout.write('Darwin checkout native-success addon fixture: NOT_RUN; sealed-app static startup/IPC/Worker/Guard gates required separately. Emulated native configure/persistence/conflict is not a Mac-native proof.\n');
     }
     const status = await client.send('get_public_state', 'a'.repeat(16));
     assert.strictEqual(status.schema, 'datasecure-standalone-private-response/1');

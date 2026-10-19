@@ -171,18 +171,27 @@ test('Standalone still rejects a redirected POSIX data root', () => {
 
 // IO-order model around the actual namespace activator. The native primitive
 // itself is covered by real target-specific gates, not by this injected guard.
-function nativeNamespaceOrderProbe(nativeError, diagnosticsThrow = false) {
+function nativeNamespaceOrderProbe(nativeError, diagnosticsThrow = false, model = {}) {
   const Module = require('node:module'), originalLoad = Module._load;
   const originalChannel = process.env.DATASECURE_NATIVE_EXPORT_CHANNEL;
   const caller = require.resolve('../plugins/data-secure/server/standalone/application-service');
-  const root = path.join(os.tmpdir(), 'datasecure-namespace-order-model');
-  const events = [], environment = {};
+  const root = model.platform === 'darwin' ? '/synthetic/datasecure-namespace-order-model'
+    : path.join(os.tmpdir(), 'datasecure-namespace-order-model');
+  const events = [], ioCalls = [], environment = {};
   const directory = { dev: 7, ino: 42, isDirectory: () => true, isSymbolicLink: () => false };
-  const io = { mkdirSync(candidate) { events.push(candidate === root ? 'mkdir-root' : 'mkdir-workspace'); },
-    lstatSync: () => directory, statSync: () => directory,
-    realpathSync: Object.assign(value => value, { native: value => value }) };
+  const realpath = value => { ioCalls.push(['realpath', value]); return value; };
+  const io = { mkdirSync(candidate) {
+      ioCalls.push(['mkdir', candidate]); events.push(candidate === root ? 'mkdir-root' : 'mkdir-workspace');
+    },
+    lstatSync(candidate) { ioCalls.push(['lstat', candidate]); return directory; },
+    statSync(candidate) { ioCalls.push(['stat', candidate]); return directory; },
+    realpathSync: Object.assign(realpath, { native: realpath }) };
   Module._load = function(request, parent, ...rest) {
     if (parent?.filename === caller && request === '../core/ownership-control') return {
+      assertNativeOwnershipRuntime() {
+        events.push('runtime-check');
+        if (model.runtimeError) throw Object.assign(Error('private vendor detail must not escape'), { code: model.runtimeError });
+      },
       withOwnershipControl(candidate, action) {
         assert.equal(candidate, root); events.push('native-check');
         if (nativeError) throw Object.assign(Error('private vendor detail must not escape'), { code: nativeError });
@@ -194,7 +203,19 @@ function nativeNamespaceOrderProbe(nativeError, diagnosticsThrow = false) {
   process.env.DATASECURE_NATIVE_EXPORT_CHANNEL = '1';
   let result, error;
   try {
-    result = activateStandaloneNamespace({ dataRoot: root, fs: io, environment,
+    let activate = activateStandaloneNamespace;
+    if (model.platform) {
+      // Execute the unchanged real module with an explicit platform model. This
+      // catches Darwin-only IO ordering on Windows too; it is NOT native proof.
+      const modeledModule = { exports: {} };
+      require('node:vm').runInNewContext(fs.readFileSync(caller, 'utf8'), {
+        module: modeledModule, require: Module.createRequire(caller),
+        process: { platform: model.platform, env: process.env }
+      }, { filename: caller, timeout: 1000 });
+      activate = modeledModule.exports.activateStandaloneNamespace;
+    }
+    result = activate({ dataRoot: root, fs: io, environment,
+      ...(model.platform ? { platform: model.platform } : {}),
       startupDiagnostic(event) { events.push(event); if (diagnosticsThrow) throw Error('unavailable diagnostic'); } });
   } catch (caught) { error = caught; }
   finally {
@@ -202,10 +223,36 @@ function nativeNamespaceOrderProbe(nativeError, diagnosticsThrow = false) {
     if (originalChannel === undefined) delete process.env.DATASECURE_NATIVE_EXPORT_CHANNEL;
     else process.env.DATASECURE_NATIVE_EXPORT_CHANNEL = originalChannel;
   }
-  return { events, environment, result, error, root };
+  return { events, ioCalls, environment, result, error, root };
 }
 
-const nativeRootOrder = process.platform === 'win32' ? [] : ['mkdir-root'];
+const nativeRootOrder = process.platform === 'darwin' ? ['runtime-check', 'mkdir-root'] : [];
+
+test('Darwin actual-source IO model checks the runtime before namespace IO on every host', () => {
+  for (const [nativeError, expected] of [[null, undefined],
+    ['OWNERSHIP_GUARD_UNSAFE', 'STANDALONE_OWNERSHIP_STORAGE_UNSAFE'],
+    ['OWNERSHIP_GUARD_BUSY', 'STANDALONE_OWNERSHIP_CONTROL_BUSY']]) {
+    const outcome = nativeNamespaceOrderProbe(nativeError, false, { platform: 'darwin' });
+    assert.equal(outcome.error?.code, expected);
+    assert.deepEqual(outcome.events, ['runtime-check', 'mkdir-root', 'ownership_control_check_started', 'native-check',
+      ...(nativeError ? ['ownership_control_check_failed'] : ['held', 'ownership_control_check_finished', 'mkdir-workspace'])]);
+    if (nativeError) assert.deepEqual(outcome.environment, {});
+    else assert.equal(outcome.result, outcome.root);
+  }
+});
+
+test('Darwin actual-source IO model refuses unavailable or invalid runtime without filesystem calls', () => {
+  for (const runtimeError of ['OWNERSHIP_GUARD_UNAVAILABLE', 'OWNERSHIP_GUARD_INTEGRITY_FAILED']) {
+    for (const diagnosticsThrow of [false, true]) {
+      const outcome = nativeNamespaceOrderProbe(null, diagnosticsThrow, { platform: 'darwin', runtimeError });
+      assert.equal(outcome.error?.code, 'STANDALONE_OWNERSHIP_RUNTIME_INVALID');
+      assert.equal(outcome.error.message.includes('private vendor detail'), false);
+      assert.deepEqual(outcome.events, ['runtime-check']);
+      assert.deepEqual(outcome.ioCalls, [], 'runtime refusal precedes both read and write IO');
+      assert.deepEqual(outcome.environment, {});
+    }
+  }
+});
 
 test('native Windows never falls back to JavaScript mkdir when its host root is absent (IO-order model)', () => {
   if (process.platform !== 'win32') return;

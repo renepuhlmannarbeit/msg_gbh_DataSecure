@@ -1,5 +1,89 @@
 # RC164 – fortgesetzter Abschlussauftrag
 
+## Zwei Darwin-Testverträge korrigiert und gegengelesen, 19.10., nach03:13 UTC
+
+Alle b772-Freezejobs beendet:272/272 Headless+10/10 Zusatzgates03:13:50.392UTC,
+Native228/Clippy/Release und fünf Paketgates vorher grün, jeweils unveränderte
+Inputs. Diese alten FINALs bleiben exakt aufb772 gebunden und werden nicht auf
+den nachfolgenden Testfix übertragen. Macconsumer39191630620 beide ROT bleibt
+als echte gegenteilige Plattform-Evidenz erhalten, kein pauschales Produkt-PASS.
+
+Erst danach drei Testquellen korrigiert, keine Produktions-/C-/Runtime-/Policy-
+Änderung. IO-order-Testdouble besitzt ausdrücklich assertNativeOwnershipRuntime;
+Darwin erwartet runtime-check vor mkdir-root. Zwei neue hostunabhängige Tests
+führen echten unveränderten Produktionsmodultext im VM-Plattformmodell aus:
+sieben READY-/UNSAFE-/BUSY-/Runtimeverweigerungs-Konfigurationen. Kein globaler
+process.platform-Wechsel. Eigenständige IO-Liste erfasst mkdir/lstat/stat/beide
+Realpathzugänge; Runtimeverweigerung verlangt keinerlei Lese- oder Schreib-IO.
+Hook und Exportchannel werden im finally wiederhergestellt. Tatsächlicher
+unabhängiger Quellenreview einschließlich nachgebesserter Lese-IO-Orakel ohne
+weiteren Befund; Modelle sind keine native Primitive-/Mac-Ausführungsabnahme.
+
+Im Sidecartest nativeSourceOnly ausschließlich für native Ownershipzweige:
+Darwin prüft die unkonfigurierte Runtimeverweigerung, lädt keinen obsoleten
+dynamischen Testguard. Windows/Linux-Zweige unverändert. Vollständige Quell-
+Dokument-/OCR-/Schnellweg-/History-/Lifecycleproben weiter aktiv; nicht pauschal
+Darwin-source-only. Sechs ausgeführte echte Selektormodelle plus Quellenvertrag
+sichern die Trennung. Zweiter unabhängiger tatsächlicher Gegenreview ohne
+Blocker. Native positive Configure-/Persistenz-/Conflictfixture auf Mac explizit
+NOT_RUN; Sealed-App-Gates ersetzen sie nicht exakt. Tatsächlicher statischer
+Core-/IPC-/Worker-/Guard-/ACL-/Appstart-/Paketnachweis weiter Pflicht, nicht erlassen.
+
+Gezielt78/78 Produktfälle (nach erweitertem IO-Orakel erneut), Macworkflow samt
+sechs Modellen, vollständiger source-only-Sidecar mit sieben echten Worker-
+Lifecyclefällen,16/16 Pfadfälle und Canonicaldocs bestanden. Alle eigenen
+gezielten Prozesse beendet. Produktfingerprint weiterhin unverändert
+4a880940772b386790f2c8522c2e16340971c81d134df6625217ee0d7e4d5c80/332Dateien.
+Nächster gemeinsamer Gitfreeze mit frischen final3-Gesamt-/Native-/Paket-/GUI-
+Belegen und beiden Macconsumern; kein altes ZIP umetikettieren oder veröffentlichen.
+
+## Zweiter echter Macconsumer: Testdouble vor IO unvollständig, 19.10., 02:50 UTC
+
+b77234dd13247fd811fc971b181d19b99f6d4000 / Produktfingerprint
+4a880940772b386790f2c8522c2e16340971c81d134df6625217ee0d7e4d5c80:
+Consumer39191630620 ARM117865527769 ROT in test-standalone.js (72/76).
+Der IO-order-Mock ersetzt ownership-control nur durch withOwnershipControl,
+setzt aber den nativen Kanal. Darwin ruft vorher assertNativeOwnershipRuntime
+auf; fehlende Mockmethode erzeugt TypeError ohne code und korrekt die feste
+Abbildung STANDALONE_OPERATION_FAILED. Die vier beabsichtigten UNSAFE-/BUSY-/
+Ready-/Diagnosefälle erreichen daher weder mkdir noch den injizierten Guard.
+Hauptagent und unabhängiger tatsächlicher Quellenreview bestätigen den Pfad.
+Kein belegter Corecrash, kein Grund für eine gelockerte Produktionsvorprüfung.
+Nach Ende laufender Freezejobs wird das Testdouble ausdrücklich vervollständigt,
+Runtime-vor-IO geordnet erwartet und ein verweigerter Runtimecheck gegengeprüft.
+Die rote native Evidenz bleibt erhalten; neuer gemeinsamer Gitfreeze erforderlich.
+
+Intel117865527837 reproduziert02:54:58UTC dieselben vier Fehler (72/76).
+Zusätzlicher unabhängiger Quellenbefund vor erneutem Dispatch:
+test-standalone-sidecar.js219ff lädt bei Darwin noch ein dynamisches Guard-
+Buildmanifest und der Testpreload konfiguriert dessen sechs Felder. Die echte
+Darwin-API akzeptiert inzwischen nur den fünfteiligen statischen Corevertrag.
+Kein kompatibles Addon oder erfundener Pin als Ersatz. Zweiter unabhängiger
+Architekturgegenreview empfiehlt nativeSourceOnly nur für Ownershipzweige:
+unkonfigurierte native Runtime bleibt verweigert geprüft, obsolete positive
+Addonfixture entfällt auf Darwin. Nicht pauschal source-only setzen: vollständige
+Dokument-/OCR-/Fast-/History-/Lifecyclequellproben müssen aktiv bleiben.
+Die echten nativen Static-Core-/Fork-/IPC-/Worker-/Guard-/ACL-/Startgates am
+versiegelten App-Paket bleiben verpflichtend. Der emulierte native Configure-/
+Persistenz-/Conflictfall wird damit nicht exakt auf Mac nativ nachgewiesen;
+diese Coveragegrenze ausdrücklich ausweisen, keinen Ersatz-PASS erfinden.
+
+Hauptagent prüfte zusätzlich unveränderten tatsächlichen Produktionsactivator
+unter acht Win/Darwin-VM-Ordermodellen (READY, UNSAFE, BUSY, Runtimeverweigerung),
+alle erwarteten festen Codes und keinerlei IO bei verweigerter Mac-Runtime.
+Quellenmodell, kein natives Executions-/Dateisystem-/Mac-PASS. Rusts zweiter
+filesec-Aufrufer direkt gegengelesen: akzeptiert bereits positive Bitmasken und
+prüft anschließend den ACL-Inhalt; kein entsprechender weiterer Bug bestätigt.
+Primärabgleich für Plattform-/Testmodellgrenzen: [Node22.23.2 process.platform](https://nodejs.org/download/release/v22.23.2/docs/api/process.html#processplatform)
+und [Node22.23.2 Mocking](https://nodejs.org/download/release/v22.23.2/docs/api/test.html#mocking).
+
+Windows dieses b772-Schnitts: Native-FINAL 02:49:44.943UTC PASS/unverändert,
+Prepare/Clippy/228Rusttests (3 ignoriert)/Release. Fünf Paketgates einschließlich
+100/100 Markdownkorpus 02:53:55.858UTC PASS/unverändert; ZIP0aceca88942a44f3c4bb26ada823aa413ffccdd81144398100e6c6d5806a6046,
+EXE73d710c26958645361d96e09d5c7dda27ebdd0fcb83244fc5d43a0c6940ac27b.
+Evidenz dist/rc164-shared-final2-20261019; Headless noch aktiv, keine neue GUI
+dieser Bytes, kein Release. Alle älteren Nachweise unverändert erhalten.
+
 ## Echter Clone-Testressourcenfehler korrigiert, 19.10.2026, nach02:42 UTC
 
 Gemeinsamer Versuch d094df4f4edbd3a549494901288a9adff08bf84a/Fingerprint

@@ -4,6 +4,23 @@ Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Test-Pre-Release in 
 
 ### Aktueller Nachtauftrag – neuere Autorität vor historischen Abschnitten
 
+Neu19.10.nach03:13UTC: b772 Windows272/272+10/10, Native228/Clippy/Release und
+fünf Paketgates vollständig unverändert bestanden. Beide Macconsumer ROT wegen
+Darwin-Testdouble; zusätzlich obsolete positive Addon-Testfixture bestätigt.
+Beide Testverträge danach eng korrigiert, Schutz/Produktcode/Fingerprint4a880940…
+unverändert. Zwei tatsächliche unabhängige Quellengegenreviews ohne Blocker,
+78/78+sechsModellfälle/Source-Sidecar-Lifecycle/16Pfadfälle/Canonicaldocs grün.
+Neuer gemeinsamer Gitfreeze und frische finale Windows-/Mac-/GUI-Gates folgen.
+Sealed-App-Gates bleiben Pflicht; native positive Configure-/Conflictfixture
+auf Mac wird nicht als geprüft behauptet. Kein Release aus alten grünen FINALs.
+
+Neu19.10.02:50UTC: zweiter Consumer39191630620/b772 ARM ROT bei vier Tests:
+IO-order-Mock kennt Darwins assertNativeOwnershipRuntime nicht (TypeError vor IO).
+Produktionspfad und unabhängiger Quellenreview bestätigen Testdoublefehler,
+keinen belegten Corecrash. Nach laufendem Freeze eng korrigieren/gegentesten;
+Schutzprüfung bleibt unverändert. Native228/Clippy/Release und fünf Windows-
+Paketgates dieses Schnitts unverändert grün; Headless aktiv, GUI/Release offen.
+
 Neu19.10.nach02:42UTC: d094/4a880940… lokal272/272+10/10 und Native228
 unverändert grün; echte Macconsumer39189276321 beide ROT wegen fehlender
 ignored JSON-Testquelle, kein Corecrash. Bytegleiche historische2731Bytes

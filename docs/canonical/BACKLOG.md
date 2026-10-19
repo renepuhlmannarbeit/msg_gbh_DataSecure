@@ -4,6 +4,23 @@ Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Pre-Release in Vorbe
 
 ## Aktuelle Nacht-Fortsetzung (ersetzt ältere Freigabeangaben)
 
+Neu19.10.nach03:13UTC: zwei bestätigte Darwin-Testvertragsfehler korrigiert,
+kein Produkt-/Schutzumbau. Runtime-vor-Lese/Schreib-IO wird hostunabhängig
+geprüft; nur obsolete positive Addonfixture getrennt, vollständige Quell-
+Workflows bleiben. Zwei tatsächliche Quellengegenreviews ohne Blocker,
+78/78+sechsModelle/Source-Sidecar/16Pfade/Canonicaldocs grün. b772 davor lokal
+272/272+10/10/Native/Paket unverändert grün, Macconsumer dennoch ROT bewahren.
+Offen: neuer gemeinsamer Gitfreeze, frische Macconsumer-/Windows-/Paket-/GUI-
+Gates, konkrete Übergabe/Release. Native Configure-/ConflictfixtureMacNOT_RUN
+nicht als durch andere Sealed-App-Gates vollständig ersetzt ausgeben.
+
+Neu19.10.02:50UTC: b772-Consumer39191630620 ARM ROT, vier IO-order-Mockfälle
+ohne Darwins assertNativeOwnershipRuntime. Testdouble nach laufendem Freeze
+vollständig modellieren, Runtime-vor-IO und echte Refusal-Gegenfälle ergänzen;
+Hauptagent/Quellengegenreview bestätigen Ursache. Kein Produktionsbypass.
+Native228/Clippy/Release und fünf Windowspaketgates grün, Headless läuft noch.
+Neuer gemeinsamer Freeze/Consumer/finale GUI und Übergabe bleiben erforderlich.
+
 Neu19.10.nach02:42UTC: bestätigten Clone-Testressourcenfehler korrigiert:
 historische ignored JSON2731Bytes bytegleich nach tracked tests/lib,
 require geändert und Pfadschutz auch für JSONmodule/Tracking samt Gegenfall.

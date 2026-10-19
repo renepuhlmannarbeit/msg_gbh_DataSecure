@@ -13,6 +13,28 @@ const macosLaunch = fs.readFileSync(path.join(root, 'tests', 'manual', 'standalo
 const coreJitEntitlements = fs.readFileSync(path.join(root, 'apps', 'datasecure-standalone',
   'tauri-contract', 'macos-core-jit.entitlements.plist'), 'utf8');
 
+// Evaluate the actual source-test mode selectors without running a child or
+// claiming a native Mac pass. A broad Darwin sourceOnly would also remove the
+// independent real projected document/OCR/fast/workflow scenarios unnecessarily.
+const sidecarFile = path.join(root, 'tests', 'test-standalone-sidecar.js');
+const sidecarSource = fs.readFileSync(sidecarFile, 'utf8');
+const selectorEnd = sidecarSource.indexOf('\nfunction protocolClient(');
+assert.ok(selectorEnd > 0);
+for (const platform of ['win32', 'darwin', 'linux']) {
+  for (const args of [[], ['--source-only']]) {
+    const selection = require('node:vm').runInNewContext(sidecarSource.slice(0, selectorEnd) +
+      '\n({ sourceOnly, nativeSourceOnly });', {
+      require: require('node:module').createRequire(sidecarFile),
+      process: { platform, argv: ['node', sidecarFile, ...args] }
+    }, { filename: sidecarFile, timeout: 1000 });
+    assert.equal(selection.sourceOnly, args.length === 1, 'full source scenarios stay enabled on Darwin');
+    assert.equal(selection.nativeSourceOnly, args.length === 1 || platform === 'darwin');
+  }
+}
+assert.match(sidecarSource, /if \(nativeSourceOnly && nativeGuardTarget\)/u);
+assert.match(sidecarSource, /if \(!nativeSourceOnly \|\| !nativeGuardTarget\)/u);
+assert.match(sidecarSource, /if \(!sourceOnly\) \{\s*const \{ writeStandaloneRuntime \}/u);
+
 for (const regression of ['test-bound-file-io.js', 'test-retention.js', 'test-status-app-server.js',
   'test-status-app-artifacts.mjs', 'test-sea-source-evidence.mjs']) {
   assert.ok(packageJson.scripts['test:standalone'].includes(`node tests/${regression}`),
