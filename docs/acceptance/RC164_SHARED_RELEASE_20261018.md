@@ -12,6 +12,19 @@ Keine Developer-ID, Apple-Einreichung oder Storeverteilung.
 
 ## Neuester geprüfter Windows-Quellstand, 19.10.2026
 
+Nach05:46UTC: final7/c32092b vollständig276/276+10/10, Native229/3ignoriert/
+Clippy/Release und Paket5 unverändert PASS. Beide nativeMacjobs39203972091
+bestanden App-/ZIP-/LaunchServices-/Office-/PDF-/OCR-Gates und Vierformatzählung,
+dann ROT an veraltetem UI-Anzeigepfad im Paket-Smoke. Kein M2-/Finder-/TCC-PASS.
+Nach Jobende vier positive Testziele auf tatsächliche explizite Start-Batch-
+Resolver umgestellt; alle Inhalts-/Mapping-/Original-/Restartorakel erhalten,
+negative CSV-Substitution und Rootwechsel explizit geprüft. OCR-Skip-Helfer
+wartet nur bei RESULTS_MISSING innerhalb unveränderter Deadline. Quellenreview,
+15Paket-/42Integritäts-/16Pfadfälle grün; keine Produkt-/Schutzänderung.
+Windows-GUI05 aufc320: echte5minPause/zwei normale Neustarts, ungespeichertweg/
+gespeichertbleibt PASS; neun Fälle NOT_RUN, kein GUI-FINAL. Final8 erhält
+neuen gemeinsamen Git-/Paket-/Nachweisstand, keine alten Belege umetikettieren.
+
 Nach05:19UTC: final6/b92 wegen manual_flatten im neuen Rust-Testgegenfall
 ungeeignet. NativeROT und kontrolliert gecancelte Headless/Macjobs bleiben
 unverändert erhalten; kein Paket/kein PASS daraus. Nach tatsächlichem Ende

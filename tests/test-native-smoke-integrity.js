@@ -76,6 +76,69 @@ function runReadinessCli(args) {
   return { status: processView.exitCode, stdout };
 }
 
+function packagedOcrSkipProbe(resolutions, sleepAdvance = 100) {
+  const file = path.join(__dirname, 'helpers/standalone-packaged-ocr-review.mjs');
+  const source = fs.readFileSync(file, 'utf8');
+  const start = source.indexOf('export async function runPackagedOcrSkipScenario(');
+  const end = source.indexOf('\nexport function assertPackagedOcrOutputs(', start);
+  assert.ok(start >= 0 && end > start);
+  const batchId = 'a'.repeat(64), sourceDirectory = path.join(__dirname, 'synthetic-ocr-sources');
+  const outputDirectory = path.join(__dirname, 'synthetic-ocr-output');
+  const fixtures = new Map([['one.png', Buffer.from('original one')], ['two.png', Buffer.from('original two')]]);
+  const files = new Map(['one.md', 'two.md'].map(name => [path.join(outputDirectory, name), 'Ungepruefter Originalinhalt\n']));
+  const calls = [], sleeps = [], outputReads = [], events = [];
+  let now = 0, historyReads = 0, resolverCalls = 0, stdout = '';
+  const io = {
+    mkdirSync() {},
+    writeFileSync(target, bytes) { assert.equal(files.has(target), false); files.set(target, Buffer.from(bytes)); },
+    readdirSync(target) {
+      assert.equal(target, outputDirectory); outputReads.push(target); events.push('open');
+      return ['one.md', 'two.md'];
+    },
+    readFileSync(target, encoding) {
+      assert.ok(files.has(target), 'the scenario must not read an inferred or substitute path');
+      const bytes = files.get(target); return encoding ? String(bytes) : bytes;
+    }
+  };
+  const scenario = vm.runInNewContext(`${source.slice(start, end).replace(/^export /u, '')}\nrunPackagedOcrSkipScenario`, {
+    assert, fs: io, path, packagedOcrFixtures: () => fixtures, Date: { now: () => now },
+    setTimeout(callback, delay) {
+      assert.equal(delay, 100); sleeps.push(delay); events.push('wait'); now += sleepAdvance;
+      queueMicrotask(callback); return 1;
+    },
+    process: { stdout: { write(value) { stdout += value; } } }
+  }, { filename: file, timeout: 5000 });
+  const request = async message => {
+    calls.push(message);
+    const result = value => ({ ok: true, result: value });
+    switch (message.action) {
+      case 'admit_selected_sources': return result({ selected_count: 2 });
+      case 'start_admitted_batch': return result({ batch_id: batchId });
+      case 'get_run_history': return result({ entries: [
+        { batch_id: 'b'.repeat(64), status: 'review_required', result_count: 0, resumable: true },
+        { batch_id: batchId, processing_mode: 'markdown-only',
+        ...(historyReads++ === 0 ? { status: 'review_required', result_count: 0, resumable: true }
+          : { status: 'processing', result_count: 2, resumable: false }) }] });
+      case 'continue_history_batch':
+      case 'skip_ocr_contact_review': assert.equal(message.batch_id, batchId); return result({ skip_requested: true });
+      case 'get_review_session': return result({ ready: true });
+      case 'resolve_history_results': {
+        assert.equal(message.batch_id, batchId);
+        const resolution = resolutions[Math.min(resolverCalls++, resolutions.length - 1)];
+        if (resolution === 'late-ready') now += 120000;
+        const ready = resolution === 'ready' || resolution === 'late-ready';
+        events.push(ready ? 'ready' : 'missing-or-error');
+        return ready ? result({ ok: true, target_kind: 'directory',
+          local_path: outputDirectory, external_disclosure: false })
+          : typeof resolution === 'string' ? { ok: false, error_code: resolution } : resolution;
+      }
+      default: throw new Error(`unexpected synthetic scenario action: ${message.action}`);
+    }
+  };
+  return { run: () => scenario({ request, sourceDirectory }), batchId, calls, sleeps, outputReads, events,
+    clock: () => now, output: () => stdout };
+}
+
 function runWindowsNativeReport(f, { expectedVersion = '3.2.0-rc164', startedAt = 10, timeoutSurface = false } = {}) {
   const source = fs.readFileSync(path.join(__dirname, 'manual/standalone-native-windows-launch.ps1'), 'utf8');
   const quote = value => `'${String(value).replace(/'/gu, "''")}'`;
@@ -1083,6 +1146,48 @@ test('Windows native cleanup proves profile quiescence before strict inventory a
   assert.match(launcher, /STANDALONE_NATIVE_WEBVIEW_EXIT_TIMEOUT/u);
   assert.match(cleanup, /Get-Item -LiteralPath \$stamp\.Path -Force -ErrorAction Stop/u);
   assert.match(cleanup, /Remove-Item -LiteralPath \$stamp\.Path -Force -ErrorAction Stop/u);
+});
+
+testAsync('actual OCR-skip scenario waits for its exact batch publication after terminal counts', async () => {
+  const probe = packagedOcrSkipProbe(['STANDALONE_RESULTS_MISSING', 'ready']);
+  await probe.run();
+  const resolutions = probe.calls.filter(value => value.action === 'resolve_history_results');
+  assert.deepEqual(resolutions.map(value => value.batch_id), [probe.batchId, probe.batchId]);
+  assert.notEqual(resolutions[0].request_id, resolutions[1].request_id);
+  assert.deepEqual(probe.sleeps, [100]);
+  assert.deepEqual(probe.events, ['missing-or-error', 'wait', 'ready', 'open']);
+  assert.equal(probe.outputReads.length, 1);
+  assert.match(probe.output(), /RAW OCR SKIP IPC PASS/u);
+});
+
+testAsync('actual OCR-skip scenario never retries terminal or malformed resolver failures', async () => {
+  for (const failure of ['STANDALONE_HISTORY_UNAVAILABLE', 'STANDALONE_HISTORY_MISSING',
+    { ok: false }, { ok: 'true' }, { error_code: 'STANDALONE_RESULTS_MISSING' }]) {
+    const probe = packagedOcrSkipProbe([failure, 'ready']);
+    await assert.rejects(probe.run(), error => error.code === 'ERR_ASSERTION');
+    assert.equal(probe.calls.filter(value => value.action === 'resolve_history_results').length, 1);
+    assert.deepEqual(probe.sleeps, []); assert.deepEqual(probe.outputReads, []);
+    assert.doesNotMatch(probe.output(), /PASS/u);
+  }
+});
+
+testAsync('actual OCR-skip scenario refuses unpublished paths at the original deadline without a real wait', async () => {
+  const probe = packagedOcrSkipProbe(['STANDALONE_RESULTS_MISSING'], 120000);
+  await assert.rejects(probe.run(), /PACKAGED_SKIP_VISIBLE_EXPORT_TIMEOUT/u);
+  assert.equal(probe.clock(), 120000);
+  assert.equal(probe.calls.filter(value => value.action === 'resolve_history_results').length, 1);
+  assert.deepEqual(probe.sleeps, [100]); assert.deepEqual(probe.outputReads, []);
+  assert.doesNotMatch(probe.output(), /PASS/u);
+});
+
+testAsync('actual OCR-skip scenario rejects even a successful resolver response arriving after its deadline', async () => {
+  const probe = packagedOcrSkipProbe(['late-ready']);
+  await assert.rejects(probe.run(), /PACKAGED_SKIP_VISIBLE_EXPORT_TIMEOUT/u);
+  assert.equal(probe.clock(), 120000);
+  assert.equal(probe.calls.filter(value => value.action === 'resolve_history_results').length, 1);
+  assert.deepEqual(probe.events, ['ready']);
+  assert.deepEqual(probe.sleeps, []); assert.deepEqual(probe.outputReads, []);
+  assert.doesNotMatch(probe.output(), /PASS/u);
 });
 
 done();

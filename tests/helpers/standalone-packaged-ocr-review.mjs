@@ -86,11 +86,12 @@ export async function runPackagedOcrSkipScenario({ request, sourceDirectory }) {
   });
   const admitted = await send('admit_selected_sources', { source_kind: 'files', source_paths: sources });
   assert.equal(admitted.selected_count, 2);
-  await send('start_admitted_batch', { processing_mode: 'markdown-only', ocr_contact_review: true });
+  const started = await send('start_admitted_batch', { processing_mode: 'markdown-only', ocr_contact_review: true });
+  assert.match(started.batch_id, /^[a-f0-9]{64}$/u);
   const deadline = Date.now() + 120000;
   let row;
   for (;;) {
-    row = (await send('get_run_history')).entries[0];
+    row = (await send('get_run_history')).entries.find(item => item.batch_id === started.batch_id);
     if (row?.status === 'review_required') break;
     assert.ok(Date.now() < deadline, 'PACKAGED_SKIP_CONTACT_REVIEW_NOT_REACHED');
     await new Promise(resolve => setTimeout(resolve, 100));
@@ -111,7 +112,20 @@ export async function runPackagedOcrSkipScenario({ request, sourceDirectory }) {
     assert.ok(Date.now() < deadline, 'PACKAGED_SKIP_MARKDOWN_NOT_COMPLETED');
     await new Promise(resolve => setTimeout(resolve, 100));
   }
-  const output = await send('resolve_history_results', { batch_id: row.batch_id });
+  // Terminal item counts can precede the owning worker's visible publication.
+  // Keep the original scenario deadline and resolve only this exact batch.
+  let output;
+  for (;;) {
+    assert.ok(Date.now() < deadline, 'PACKAGED_SKIP_VISIBLE_EXPORT_TIMEOUT');
+    const response = await request({ schema: 'datasecure-standalone-private-ipc/1',
+      request_id: (++sequence).toString(16).padStart(16, '0'), action: 'resolve_history_results',
+      batch_id: row.batch_id });
+    assert.ok(Date.now() < deadline, 'PACKAGED_SKIP_VISIBLE_EXPORT_TIMEOUT');
+    if (response.ok === true) { output = response.result; break; }
+    assert.equal(response.ok, false);
+    assert.equal(response.error_code, 'STANDALONE_RESULTS_MISSING');
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
   const texts = fs.readdirSync(output.local_path).filter(name => name.endsWith('.md'))
     .map(name => fs.readFileSync(path.join(output.local_path, name), 'utf8'));
   assert.equal(texts.length, 2);

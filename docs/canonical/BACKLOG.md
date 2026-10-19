@@ -4,6 +4,18 @@ Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Pre-Release in Vorbe
 
 ## Aktuelle Nacht-Fortsetzung (ersetzt ältere Freigabeangaben)
 
+Neu19.10.nach05:46UTC: final7 lokal276+10/Native229/Paket5 unverändertgrün;
+beideMacconsumerROT nach nativen Start-/Konvertierungsgates an altem UIhint.
+Tests jetzt auf tatsächliche exakte Ergebnisaktionen umgestellt, Negativfall
+ohne A→B-Substitution und Rootwechsel erhalten/verschärft; separater OCR-Skip-
+Helfer wartet auf tatsächliche Publikation nur in alterDeadline. Main15/42/16
+gezielte Fälle grün, Quellenreview ohne Smoke-Restblocker. OCR-Helfer-Gegenreview
+ohne Implementierungsblocker, dessen Testlücke mit verspäteter Erfolgsantwort
+geschlossen; Main nun43Integritätsfälle grün. Windows05echtePause/
+zweiNeustarts aufc320PASS;kein GesamtGUI. Offen: neuer gemeinsamer Final8Commit,
+frische Gesamt-/Native-/Paket-/
+beideMac-/10GUI-Gates und lokale/Remoteübergabe. Keine neue Coreproduktion.
+
 Neu19.10.nach05:18UTC: ClippyallTargets/-Dwarnings+17Bundleparallel nachFix
 PASS; unabhängiger Rust-/Suite-/Workflow-Deltareview ohneRestblocker. final7
 vorbereitet FP eaa4a829…/332,31Helpergegenfälle grün; frischer gemeinsamer

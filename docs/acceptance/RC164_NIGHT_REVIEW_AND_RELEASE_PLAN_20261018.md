@@ -1,5 +1,67 @@
 # RC164 – fortgesetzter Abschlussauftrag
 
+## Final7 abgeschlossen; enger Paket-Smoke-Vertragsfix für Final8
+
+19.10., nach05:46UTC: c32092b117c0fb4a9c3c189ada58a0bab572407c bestand
+276/276 Headless +10/10 Zusatzgates, Native/Clippy/229Rusttests (3ignoriert)
+und fünf Paketgates. Alle Inputs blieben unverändert. Produktfingerprint
+eaa4a82929831b2488868e66305c2b7177f61998a8dd5d9322dd5a04f72a0cfc,
+332Dateien; Test-/Scriptmanifest553/a9b0e610c55c77b440ed795bf01385034f3a8aeed7f8edd0966a72ea1b0fffa8.
+Alte FINALs bleiben unverändert, neuer Gitstand braucht neue Belege.
+
+Macconsumer39203972091: beide Ziele tatsächlich beendet/ROT. ARM117902715097
+05:31:17UTC, Intel11790271502905:41:21UTC. Beide bestanden versiegelte App,
+entpackte ZIP-App, LaunchServices-Start sowie Office/PDF/OCR und die vorher
+fehlerhafte Vierformatzählung. Danach Smoke247ROT: path.dirname('') statt
+Ergebnisordner. Tatsächlicher Produktionsvertrag projectUiContext liefert
+absichtlich keinen historischen Ergebnispfad beim bloßen UI-Lesen. Explizite
+batchgebundene Ergebnisaktionen sind der richtige Zugriff. Kein Beleg eines
+Core-/Publikationsfehlers aus dieser Assertion, kein M2-/Finder-/TCC-PASS.
+
+Nach tatsächlichem Ende aller Freezejobs wurden nur Tests korrigiert: vier
+positive Ziele über resolve_history_results mit jeweiliger Start-ID, leere
+UI-Hints zusätzlich prüfen; Modus-/Batch-/Historyorderbindung und alle bisherigen
+Inhalts-, Alias-, Dateinamen-, Mapping-/BOM-, Originalbyte-, Restart- und
+Rootwechselorakel erhalten. Negativer CSV-Lauf B muss Results/Ledger verweigern,
+während erfolgreicher A weiterhin exakt A auflöst. Passiver Folgelauf verlangt
+nextRoot statt des alten Ergebnisroots. Unabhängiger tatsächlicher Quellenreview
+bestätigt keinen Deltablocker. Main15/15 Paket-Quellvertragsfälle grün.
+
+Zusätzlich bestätigte OCR-Skip-Helferrace eng korrigiert: terminale Zählung ist
+noch kein Nachweis der Ordnerpublikation. Innerhalb derselben bisherigen120s-
+Deadline exakt die Start-Batch-ID auflösen, nur RESULTS_MISSING erneut prüfen;
+andere/malformed Fehler sofort ablehnen, keine Pfadfallbacks/Deadlineverlängerung.
+Drei kausale Fälle führen die tatsächliche Helferfunktion mit kontrollierter
+Clock aus; Main42/42 Integritätsfälle und16/16 Pfadfälle grün. Fremder
+review_required-Historyeintrag vor dem eigenen darf nicht übernommen werden.
+Unabhängiger tatsächlicher Helfer-Gegenreview ohne Implementierungsblocker.
+Dessen enge Testlücke zusätzlich geschlossen: eine erst nach Deadline erfolgreiche
+Resolverantwort wird kausal verworfen, kein Outputzugriff/PASS. Main nun43/43.
+Quellen-/Modellprüfung ist kein nativer OCR-/Mac-/GUI-Abnahmenachweis.
+
+Separater ignorierter Engineeringprobe des vollständigen Smokes mit genau vier
+Resolverkorrekturen bestand unter Windows05:44:19UTC, Quellen/ZIP/Node unverändert,
+eigene Prozesse beendet. Originaltest vollständig erhalten und rücktransformiert
+hashgleich. dist/rc164-smoke-contract-probe-20261019/attempt-02/END-CHECKS.json.
+Ausdrücklich NOT_PRODUCT_ACCEPTANCE, kein Ersatz für kanonische neue Paketläufe.
+
+Tatsächlicher Windows-GUI-Fall05 auf Final7 bestand ebenfalls: Batch9dfda0d9…,
+05:32:24–05:37:26UTC echte Denkpause mit1/2 ungespeichert; Vertagen-ACK und
+normaler erster Neustart verwirft Vormerkung (0/2). Beide Originalkontaktpixel
+verglichen, zwei OCR-Entscheidungen ausdrücklich gespeichert, Folgegruppe Anna
+Berger vertagt. Zweiter normaler Neustart derselben Isolation führt direkt zur
+Anna-Gruppe; gespeicherte OCR-Werte bleiben erhalten. Abschließend normal
+vertagt/geschlossen, keine eigenen Profilprozesse, keine Dokumentfreigabe/Export.
+GUI-PROGRESS.json bindet exakt ZIP070b6ef6…/EXE361e838e…/c320. Neun Fälle
+NOT_RUN, kein GUI-FINAL und keine Übertragung auf einen späteren Commit.
+
+Final8 vorbereitet: sieben neue create-only Driver-/Contractvorlagen, keine
+FINALs oder GUI-Belege kopiert;31synthetische Validatorgegenfälle grün.
+Nächster Schnitt Final8: ausschließlich Testkorrekturen und Dokumentation,
+Produktfingerprint/Coreapprovals unverändert. Danach gemeinsamer neuer Appcommit,
+neue unveränderte lokale Gesamt-/Native-/Paketgates, beide Macconsumer, echte
+zehn-Fall-Windows-GUI und lokale/Remoteübergabe. Kein Release des roten Schnitts.
+
 ## Final7 vorbereitet nach tatsächlichem Abbruchende, 19.10., nach05:18 UTC
 
 ClippyallTargets/offline/locked/-Dwarnings und17Bundlefälle mit8Threads

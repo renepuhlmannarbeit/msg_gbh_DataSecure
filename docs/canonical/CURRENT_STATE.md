@@ -4,6 +4,17 @@ Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Test-Pre-Release in 
 
 ### Aktueller Nachtauftrag – neuere Autorität vor historischen Abschnitten
 
+Neu19.10.nach05:46UTC: final7/c32092b alle276+10/Native229(3ignoriert)/Paket5
+unverändert PASS. Beide nativeMacjobs39203972091 ROT erst an obsoletem UI-
+Ergebnispfadhint, nach bestandenen App-/ZIP-/LaunchServices-/Office-/PDF-/OCR-
+und Vierformatgates. Nach tatsächlichem Ende aller Jobs enge Testkorrektur
+auf exakte Start-Batch-Resolver, negative CSV-/History-/Rootwechselorakel
+verschärft. OCR-Skip-Publikationsrace nur innerhalb alter Deadline abwarten;
+keine Produkt-/Schutz-/Coreänderung. Main15/42/16 gezielte Fälle grün,
+unabhängiger tatsächlicher Smoke-Quellenreview ohne Blocker. Windows05 aufc320
+mit5minPause/zwei Neustarts PASS,9NOT_RUN; kein GUI-FINAL/M2-PASS. Neuer
+gemeinsamer Final8-Freeze und sämtliche frischen Gates/Übergaben bleiben offen.
+
 Neu19.10.nach05:18UTC: Testsyntaxfix ClippyallTargets/-Dwarnings und17Bundle
 parallel PASS; unabhängiger tatsächlicher cfg(test)/Suite/Workflowgegenreview
 ohne Restblocker. Main11Routing/Workflow erneut grün. final7Helper31synthetische

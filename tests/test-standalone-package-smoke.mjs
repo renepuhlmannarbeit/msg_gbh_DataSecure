@@ -239,11 +239,23 @@ try {
   assert.ok(terminal, 'the real packaged worker handoff must reach a durable terminal state');
   assert.equal(terminal.state, 'results_available');
   assert.equal(terminal.result_count, 4);
+  assert.equal(terminal.batch_id, started.result.batch_id);
+  assert.equal(terminal.processing_mode, 'markdown-and-anonymize');
   const completedContext = await request({ schema: 'datasecure-standalone-private-ipc/1',
     request_id: '1'.repeat(16), action: 'get_ui_context' });
   assert.equal(completedContext.ok, true);
-  const exactRun = completedContext.result.latest_result_folder;
+  // UI root/selection display deliberately performs no historical result IO.
+  // Ask the production action for this exact batch, never a "latest" fallback.
+  assert.equal(completedContext.result.latest_result_folder, '');
+  const exactResolution = await request({ schema: 'datasecure-standalone-private-ipc/1',
+    request_id: 'dca1000000000001', action: 'resolve_history_results', batch_id: started.result.batch_id });
+  assert.equal(exactResolution.ok, true);
+  assert.equal(exactResolution.result.ok, true);
+  assert.equal(exactResolution.result.target_kind, 'directory');
+  assert.equal(exactResolution.result.external_disclosure, false);
+  const exactRun = exactResolution.result.local_path;
   assert.equal(typeof exactRun, 'string');
+  assert.equal(path.isAbsolute(exactRun), true);
   assert.equal(path.dirname(exactRun), path.join(resultDirectory, 'DataSecure-Output'));
   assert.match(path.basename(exactRun), /^Lauf-\d{8}-\d{6}-[a-f0-9]{8}$/u);
   assert.equal(fs.statSync(exactRun).isDirectory(), true);
@@ -326,11 +338,26 @@ try {
   assert.equal(failedTerminal.result_count, 0);
   assert.equal(failedTerminal.failed_count, 1);
   assert.equal(failedTerminal.ledger_available, false);
+  assert.equal(failedTerminal.batch_id, failedStart.result.batch_id);
+  assert.equal(failedTerminal.processing_mode, 'markdown-and-anonymize');
   const failedContext = await request({ schema: 'datasecure-standalone-private-ipc/1',
     request_id: '7'.repeat(16), action: 'get_ui_context' });
   assert.equal(failedContext.ok, true);
   const failedRun = failedContext.result.latest_result_folder;
   assert.equal(failedRun, '', 'an all-stopped run does not expose an empty result folder');
+  const failedHistoryResults = await request({ schema: 'datasecure-standalone-private-ipc/1',
+    request_id: 'dca1000000000002', action: 'resolve_history_results', batch_id: failedStart.result.batch_id });
+  assert.equal(failedHistoryResults.ok, false);
+  assert.equal(failedHistoryResults.error_code, 'STANDALONE_RESULTS_MISSING');
+  const failedHistoryLedger = await request({ schema: 'datasecure-standalone-private-ipc/1',
+    request_id: 'dca1000000000003', action: 'resolve_history_ledger', batch_id: failedStart.result.batch_id });
+  assert.equal(failedHistoryLedger.ok, false);
+  assert.equal(failedHistoryLedger.error_code, 'STANDALONE_LEDGER_MISSING');
+  const previousHistoryResults = await request({ schema: 'datasecure-standalone-private-ipc/1',
+    request_id: 'dca1000000000004', action: 'resolve_history_results', batch_id: started.result.batch_id });
+  assert.deepEqual(previousHistoryResults.result, exactResolution.result,
+    'run A stays explicitly resolvable; failed run B must never substitute A');
+  assert.equal(previousHistoryResults.ok, true);
   const resolvedFailureMapping = await request({ schema: 'datasecure-standalone-private-ipc/1',
     request_id: '8'.repeat(16), action: 'resolve_local_ledger' });
   assert.equal(resolvedFailureMapping.ok, false);
@@ -396,9 +423,22 @@ try {
   assert.equal(wideTerminal.state, 'results_available', JSON.stringify(wideTerminal));
   assert.equal(wideTerminal.result_count, 2);
   assert.equal(wideTerminal.failed_count, 0);
+  assert.equal(wideTerminal.batch_id, wideStart.result.batch_id);
+  assert.equal(wideTerminal.processing_mode, 'markdown-and-anonymize');
   const wideContext = await request({ schema: 'datasecure-standalone-private-ipc/1',
     request_id: 'b3'.repeat(8), action: 'get_ui_context' });
-  const wideRun = wideContext.result.latest_result_folder;
+  assert.equal(wideContext.ok, true);
+  assert.equal(wideContext.result.latest_result_folder, '');
+  const wideResolution = await request({ schema: 'datasecure-standalone-private-ipc/1',
+    request_id: 'dca1000000000005', action: 'resolve_history_results', batch_id: wideStart.result.batch_id });
+  assert.equal(wideResolution.ok, true);
+  assert.equal(wideResolution.result.ok, true);
+  assert.equal(wideResolution.result.target_kind, 'directory');
+  assert.equal(wideResolution.result.external_disclosure, false);
+  const wideRun = wideResolution.result.local_path;
+  assert.equal(typeof wideRun, 'string');
+  assert.equal(path.isAbsolute(wideRun), true);
+  assert.equal(path.dirname(wideRun), path.join(resultDirectory, 'DataSecure-Output'));
   const wideOutputs = fs.readdirSync(wideRun).filter(name => name.endsWith('.md'));
   assert.deepEqual(wideOutputs.sort(), ['Privacy-Profil-anonymisiert.md', 'Privacy-Tabelle-anonymisiert.md']);
   const wideMarkdown = wideOutputs.map(name => fs.readFileSync(path.join(wideRun, name), 'utf8')).join('\n');
@@ -462,10 +502,22 @@ try {
   assert.equal(converted.state, 'results_available', JSON.stringify(converted));
   assert.equal(converted.result_count, 11);
   assert.equal(converted.failed_count, 1);
+  assert.equal(converted.batch_id, conversionStart.result.batch_id);
+  assert.equal(converted.processing_mode, 'markdown-only');
   assert.ok(converted.warning_count >= 6, 'Office/scan/image omissions are explicit and never block pure conversion');
   const convertedContext = await request({ schema: 'datasecure-standalone-private-ipc/1',
     request_id: 'c3'.repeat(8), action: 'get_ui_context' });
-  const convertedRun = convertedContext.result.latest_result_folder;
+  assert.equal(convertedContext.ok, true);
+  assert.equal(convertedContext.result.latest_result_folder, '');
+  const convertedResolution = await request({ schema: 'datasecure-standalone-private-ipc/1',
+    request_id: 'dca1000000000006', action: 'resolve_history_results', batch_id: conversionStart.result.batch_id });
+  assert.equal(convertedResolution.ok, true);
+  assert.equal(convertedResolution.result.ok, true);
+  assert.equal(convertedResolution.result.target_kind, 'directory');
+  assert.equal(convertedResolution.result.external_disclosure, false);
+  const convertedRun = convertedResolution.result.local_path;
+  assert.equal(typeof convertedRun, 'string');
+  assert.equal(path.isAbsolute(convertedRun), true);
   assert.equal(path.dirname(convertedRun), path.join(resultDirectory, 'DataSecure-Markdown'));
   const convertedMapping = path.join(convertedRun, 'DataSecure-Zuordnung.csv');
   assert.equal(fs.existsSync(convertedMapping), false, 'pure conversion does not create a redundant source mapping');
@@ -511,6 +563,8 @@ try {
   assert.equal(historyBefore.result.local_ui_only, true);
   assert.equal(historyBefore.result.entries.length, 4, 'each real run appears once, including wide privacy and the all-failed run');
   const historyRows = historyBefore.result.entries;
+  assert.deepEqual(historyRows.map(row => row.batch_id), [conversionStart.result.batch_id,
+    wideStart.result.batch_id, failedStart.result.batch_id, started.result.batch_id]);
   assert.deepEqual(historyRows.map(row => row.processing_mode), ['markdown-only', 'markdown-and-anonymize',
     'markdown-and-anonymize', 'markdown-and-anonymize']);
   assert.ok(historyRows.every(row => !row.resumable));
@@ -601,9 +655,22 @@ try {
   assert.equal(passiveTerminal.state, 'results_available', JSON.stringify(passiveTerminal));
   assert.equal(passiveTerminal.result_count, 3);
   assert.equal(passiveTerminal.failed_count, 0);
+  assert.equal(passiveTerminal.batch_id, passiveStart.result.batch_id);
+  assert.equal(passiveTerminal.processing_mode, 'markdown-and-anonymize');
   const passiveContext = await request({ schema: 'datasecure-standalone-private-ipc/1',
     request_id: 'e9'.repeat(8), action: 'get_ui_context' });
-  const passiveRun = passiveContext.result.latest_result_folder;
+  assert.equal(passiveContext.ok, true);
+  assert.equal(passiveContext.result.latest_result_folder, '');
+  const passiveResolution = await request({ schema: 'datasecure-standalone-private-ipc/1',
+    request_id: 'dca1000000000007', action: 'resolve_history_results', batch_id: passiveStart.result.batch_id });
+  assert.equal(passiveResolution.ok, true);
+  assert.equal(passiveResolution.result.ok, true);
+  assert.equal(passiveResolution.result.target_kind, 'directory');
+  assert.equal(passiveResolution.result.external_disclosure, false);
+  const passiveRun = passiveResolution.result.local_path;
+  assert.equal(typeof passiveRun, 'string');
+  assert.equal(path.isAbsolute(passiveRun), true);
+  assert.equal(path.dirname(passiveRun), path.join(nextRoot, 'DataSecure-Output'));
   const passiveOutputs = relativeFiles(passiveRun).filter(name => name.endsWith('.md'));
   assert.equal(passiveOutputs.length, 3);
   for (const name of passiveOutputs) {

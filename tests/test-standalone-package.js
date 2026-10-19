@@ -391,9 +391,41 @@ test('package smoke exercises a real failed CSV without exposing a false result 
   assert.match(smoke, /failedRun, '', 'an all-stopped run does not expose an empty result folder'/u);
   assert.match(smoke, /failedTerminal\.ledger_available, false/u);
   assert.match(smoke, /resolvedFailureMapping\.error_code, 'STANDALONE_RESULTS_MISSING'/u);
+  for (const [name, action, code] of [
+    ['failedHistoryResults', 'resolve_history_results', 'STANDALONE_RESULTS_MISSING'],
+    ['failedHistoryLedger', 'resolve_history_ledger', 'STANDALONE_LEDGER_MISSING']
+  ]) {
+    const call = smoke.slice(smoke.indexOf(`const ${name} =`), smoke.indexOf(`assert.equal(${name}.error_code`));
+    assert.ok(call.includes(`action: '${action}', batch_id: failedStart.result.batch_id`));
+    assert.ok(call.includes(`assert.equal(${name}.ok, false)`));
+    assert.ok(smoke.includes(`assert.equal(${name}.error_code, '${code}')`));
+  }
+  assert.match(smoke, /assert\.deepEqual\(previousHistoryResults\.result, exactResolution\.result/u);
   assert.match(smoke, /fs\.readFileSync\(failedSource\), failedOriginal/u);
   const { parseDocumentBuffer } = require('../plugins/data-secure/server/document-parser');
   assert.throws(() => parseDocumentBuffer(Buffer.from('Name,Wert\nBeispiel,"nicht abgeschlossen\n'), '.csv'), /CSV_QUOTE_INVALID/u);
+});
+
+test('package smoke resolves every positive target by its admitted batch, not a UI display hint', () => {
+  const smoke = fs.readFileSync(path.join(root, 'tests/test-standalone-package-smoke.mjs'), 'utf8');
+  for (const [prefix, started, context, terminal] of [
+    ['exact', 'started', 'completedContext', 'terminal'],
+    ['wide', 'wideStart', 'wideContext', 'wideTerminal'],
+    ['converted', 'conversionStart', 'convertedContext', 'converted'],
+    ['passive', 'passiveStart', 'passiveContext', 'passiveTerminal']
+  ]) {
+    assert.ok(smoke.includes(`assert.equal(${context}.result.latest_result_folder, '')`));
+    assert.ok(smoke.includes(`assert.equal(${terminal}.batch_id, ${started}.result.batch_id)`));
+    const call = smoke.slice(smoke.indexOf(`const ${prefix}Resolution =`), smoke.indexOf(`const ${prefix}Run =`));
+    assert.ok(call.includes(`action: 'resolve_history_results', batch_id: ${started}.result.batch_id`));
+    for (const assertion of [`${prefix}Resolution.ok, true`, `${prefix}Resolution.result.ok, true`,
+      `${prefix}Resolution.result.target_kind, 'directory'`, `${prefix}Resolution.result.external_disclosure, false`])
+      assert.ok(call.includes(`assert.equal(${assertion})`));
+    assert.ok(smoke.includes(`const ${prefix}Run = ${prefix}Resolution.result.local_path`));
+    assert.ok(smoke.includes(`assert.equal(path.isAbsolute(${prefix}Run), true)`));
+  }
+  assert.doesNotMatch(smoke, /const (?:exact|wide|converted|passive)Run = \w+\.result\.latest_result_folder/u);
+  assert.match(smoke, /path\.dirname\(passiveRun\), path\.join\(nextRoot, 'DataSecure-Output'\)/u);
 });
 
 test('package smoke binds actual review decisions and real restart to the extracted bundled runtime', async () => {
