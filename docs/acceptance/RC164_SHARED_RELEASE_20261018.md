@@ -10,6 +10,25 @@ synthetischen Daten; M2-Anwendertest später. Bestehender Thread-Heartbeat wiede
 ACTIVE alle30min. Aktueller Plan: RC164_NIGHT_REVIEW_AND_RELEASE_PLAN_20261018.md.
 Keine Developer-ID, Apple-Einreichung oder Storeverteilung.
 
+## Neuester geprüfter Windows-Quellstand, 19.10.2026
+
+187e1602138d086596ac379f22504fa096b86233 / Fingerprint1730ad82… ist mit
+272/272+10/10, Native228/3ignoriert/Clippy/Release und fünf Paketgates vollständig
+unverändert geprüft (checkpoint06). Neues Windows-ZIPa55ebade… bleibt ein
+unveröffentlichter Zwischenkandidat ohne neue GUI-Abnahme, kein gemeinsamer
+Finalrelease. Die beiden Mac-Coreproducer39167676290 laufen weiterhin;
+tatsächliche Artefaktapproval und nativer Consumer stehen aus. Vorherige
+GUI-PREAPPROVALs dürfen nicht auf neue Bytes umetikettiert werden.
+
+Zusätzliches portables Zehn-Fall-Testpaket vorbereitet:
+DataSecure-3.2.0-rc164-Abnahmetests.zip, SHA256
+4a8e352f8d1bd85b546eeaf044c9cd669afd55bfd9527e0d196586349032db40.
+14 synthetische Eingaben bytegleich, nur Plan/Manifest/Anleitung und leere
+Ergebnis-/Belegordner, keine alten Ergebnisse oder Diagnoseprotokolle.
+Node-ZIP-Gegenprüfung und zusätzliche echte Windows-Entpackprobe bestanden.
+Der ältere umfangreichere unveränderte Testbestand bleibt zusätzlich erhalten.
+Ausführliche Bindungen im aktuellen Nachtplan und dist/rc164-desktop-testdata-20261019.
+
 ## Gemeinsamer Funktionsstand
 
 Ausgangspunkt ist exakt der R8-Produktinputhash

@@ -1,5 +1,52 @@
 # RC164 – fortgesetzter Abschlussauftrag
 
+## Unveränderter Gesamtcheckpoint06, 19.10.2026, 00:57 UTC
+
+Produktquellen187e1602138d086596ac379f22504fa096b86233, Fingerprint
+1730ad8220b6ba932d823f7729c5dc1558b8fb4badca0bf095b3c79c2c2b564b (332 Dateien):
+272/272 Headlessdateien plus10/10 Zusatzgates bestanden, abgeschlossen
+00:57:50.044UTC. Prepare/Clippy/228 Rusttests (3 ignoriert)/Release und fünf
+Paketgates ebenfalls bestanden, jeweils inputs_unchanged=true.
+Test-/Scriptmanifest546 Dateien,
+48c7239465d41c84e75a852fcfdf68cc463cb509e89e89305e48367fc5e22777.
+Alle drei lokalen Jobs beendet, keine Duplikate erforderlich.
+
+Neues unveröffentlichtes Windows-ZIP:
+dist/engineering-rc164-ui-checkpoint06-20261019/DataSecure-Standalone-3.2.0-rc164-windows-x64.zip,
+SHA256a55ebaded60ae2d789ac0483476c78fc2b0c9bfc9454cc2421f5a84f1d016bf8,
+EXE503ef35d40da82b812221c1f5cddf993561d20ba78d4f1bf112574cc38829bbd.
+Paketkorpus100/100 Ergebnisse,0 Fehler, relative Struktur und Originalbytes
+erhalten. Keine neue native GUI-Abnahme dieser Bytes, keine Mac-Abnahme daraus.
+
+Zwei begrenzte unabhängige Quellengegenreviews: keine neue belegte Fehlannahme
+in der laufenden Producerkette; vier Handoffvorlagen korrigiert und danach
+erneut ohne weiteren bestätigten Befund gegengelesen. Übergabe verlangt nun
+separate exakt passende finale GUI-Evidenz, reicht ZIP-/EXE-/Paket-/GUI-Bindung
+und Testplan weiter und behauptet keine menschliche Abnahme. Diese Helfer sind
+ignorierte Vorlagen, noch keine ausführbare finale Übergabefreigabe.
+
+Zusätzlich kompakter gemeinsamer Testdatenbestand mit zehn Fällen,14 unveränderten
+synthetischen Eingaben, Testplan und leeren Ausgabe-/Belegordnern:
+dist/rc164-desktop-testdata-20261019/DataSecure-3.2.0-rc164-Abnahmetests.zip,
+340387 Bytes, SHA2564a8e352f8d1bd85b546eeaf044c9cd669afd55bfd9527e0d196586349032db40.
+ZIP-Readerprüfung plus tatsächliches PowerShell-Entpacken in eigenen frischen
+Ordner bestanden;14/14 Größen/Hashes passen,20 Ausgabe-/Belegordner leer.
+Keine alten Ergebnisse, Profile oder Diagnosen exportiert. Das Entpacken ist
+keine bestandene Produktabnahme. Alter133-Datei-Testbestand bleibt zusätzlich.
+
+Hauptagent verglich statischen API-Overload/Lebensdauer/Workerhook nochmals mit
+originaler Node22.23.2-Quelle: kein bestätigter Fehler. Zwei zusätzliche dafür
+angefragte KI-Gegenlesungen waren diesmal wegen Kapazität nicht ausführbar;
+kein zusätzliches Agenten-/Native-PASS daraus. Zuvor abgeschlossene erfolgreiche
+Gegenreviews bleiben gültige getrennte Nachweise. Details in checkpoint06.
+
+Macproducer39167676290 weiterhin aktiv, noch keine Artefakte/Approval. Ein
+zusätzlicher read-only Browserversuch bietet laufende Logs nur nach Anmeldung;
+keine Anmeldung oder Schutzumgehung vorgenommen, temporären Tab geschlossen.
+Warten auf tatsächliche abgeschlossene Compiler-/Seal-/ACL-/Rollenbelege;
+feste Makefrist ist Budgetgrenze, kein Hängernachweis. Finaler gemeinsamer
+Appfreeze, Consumer, neue finale Pakete/GUI und Upload/Remoteprüfung weiter offen.
+
 ## Enger Sprachabschluss nach Checkpoint05, 19.10.2026
 
 Die im echten Windows-GUI gefundenen sechs Singular-Copypfade sind korrigiert:

@@ -4,6 +4,15 @@ Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Pre-Release in Vorbe
 
 ## Aktuelle Nacht-Fortsetzung (ersetzt ältere Freigabeangaben)
 
+Neu19.10.00:57UTC: Checkpoint06/187e160/1730ad82… vollständig272/272+10/10,
+Native228/3ignoriert/Clippy/Release und fünf Paketgates unverändert bestanden.
+Neues Windows-ZIPa55ebade… bleibt ungeprüfter GUI-Zwischenkandidat, kein Release.
+Kompaktes10-Fall-Testdatenpaket4a8e352f… samt14 Goldeninputs, Plan und leeren
+Output-/Belegordnern erstellt/Windows-entpackt/Hash-geprüft; keine Nutzerdaten.
+Offen weiterhin tatsächliche Mac-Coreartefakte/Approval, gemeinsamer finaler
+Quellstand, native Consumer, neu gebundene finale Windows-/Mac-Pakete/GUI,
+lokale Windowsübergabe und Pre-Release/Prüfsummen/Remoteprüfung.
+
 Neu19.10.nachCheckpoint05: Beobachtete Singular-Copy erledigt, enges echtes
 Quellengegenreview ohne Befund und359/54 gezielte Frontendtests grün. Neuer
 unveränderter Checkpoint06 nötig; finaler gemeinsamer Core-/App-/Paket-/
