@@ -12,6 +12,15 @@ Keine Developer-ID, Apple-Einreichung oder Storeverteilung.
 
 ## Neuester geprüfter Windows-Quellstand, 19.10.2026
 
+Nach04:33UTC: final4 Headless ROT an obsoleter Desktopassertion69,68vorher
+grün/unverändert; Native/fünfPaketgates grün. Beide Macjobs ROTgleicheAssertion.
+Echter gebundener Windowsstart+Workspace/ReviewIPC PASS1539.567ms/Exit0,
+kein10-GUI-PASS. Nach Jobende zwei Testverträge eng korrigiert, drei neue
+Historytests explizit im Macworkflow gebunden. Gezielte37/39/Workflows/16Pfade
+grün; unabhängiger actual-Deltareview ohne Restbefund abgeschlossen. Keine Fach-/
+Runtime-/Core-/Schutzänderung, jedoch neuer Fingerprint e6401825… wegen
+des explizit mitgebundenen Workflows. Noch kein Release.
+
 Nach04:15UTC: unabhängiger Store- und nativer Harnessabschlussgegenreview
 ohne weiteren bestätigten Produktionsbefund. Index21PASS/22(1Windows-NOT_RUN),
 Migration21/21/echteIPC erneut grün; native Readiness39/39 sowie Workflow/Pfade

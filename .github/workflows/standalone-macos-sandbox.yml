@@ -201,12 +201,16 @@ jobs:
         run: node scripts/prepare-standalone-runtime.mjs
       - name: Run product, conversion, Rust and workflow contracts
         run: |
+          set -euo pipefail
           node tests/test-import-macos-core-candidate.mjs
           node tests/test-uat-fixture-generation.js
           node tests/test-legacy-input-migration.js
           node tests/test-process-identity.js
           node tests/test-batch-executor-boundaries.js
           node tests/test-standalone-intake-failure.js
+          node tests/test-standalone-history-read-race.js
+          node tests/test-standalone-history-migration-race.js
+          node tests/test-standalone-history-probe.js
           npm run test:standalone
       - name: Run the real isolated converter-worker boundary
         run: npm run test:standalone:conversion

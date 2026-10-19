@@ -677,8 +677,10 @@ test('native smoke isolates data, Documents, diagnostics and WebView before prod
   assert.ok(polling.indexOf('Assert-NativeProcessRunning $process') >= 0);
   assert.match(polling, /Get-NativeNetworkObservation/u,
     'listener evidence is sampled during startup instead of only after readiness');
-  assert.ok(polling.indexOf('Assert-NativeProcessRunning $process') < polling.indexOf('Read-InteractionEvents'),
-    'exit before the first application event must be reported before the no-events continue branch');
+  const processGuard = polling.indexOf('\n        Assert-NativeProcessRunning $process');
+  const boundedReader = polling.indexOf('\n        $sidecarStatus = Read-NativeSidecarReadiness ');
+  assert.ok(processGuard >= 0 && boundedReader >= 0 && processGuard < boundedReader,
+    'an early process exit must be reported before the actual bounded readiness read');
   assert.match(isolation, /executable\.ancestors\(\)\.any\(is_reserved_root\)/u);
   assert.match(nativeSmoke, /Get-CheckedTree/u);
   assert.match(nativeSmoke, /network_observed = \[bool\] \$AssertNoListeners/u);

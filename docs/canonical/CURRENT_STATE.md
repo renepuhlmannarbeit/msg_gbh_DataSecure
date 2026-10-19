@@ -4,6 +4,14 @@ Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Test-Pre-Release in 
 
 ### Aktueller Nachtauftrag – neuere Autorität vor historischen Abschnitten
 
+Neu19.10.nach04:33UTC: final4 Headless69ROT/unverändert(68vorherPASS),
+Native/Paket5PASS, beideMacjobsROTgleicheobsoleteAssertion. Tatsächlicher
+Windowsstartup+Workspace/ReviewIPC1539.567ms/Exit0; keinevollständigeGUIabnahme.
+Danach zwei Testverträge und Mac-Coverage für drei neue Historytests korrigiert;
+37/39/Workflow/Pfade gezielt grün. Unabhängiger Quellen-Deltareview abgeschlossen.
+Neuer Fingerprint e6401825…/332 wegen mitgebundenem Workflow, beide Coreapproved.
+Neuer gemeinsamer final5Commit+275/10/Native/Paket/Mac/GUIfälle01..10 offen.
+
 Neu19.10.nach04:15UTC: Store-/native Harnessquellengegenreviews abgeschlossen,
 keine weiteren bestätigten Produktblocker. Index21PASS/22(1Windows-NOT_RUN),
 Migration21/21/echteIPC erneut grün. Native Reader39/39/Workflow/Pfade grün;

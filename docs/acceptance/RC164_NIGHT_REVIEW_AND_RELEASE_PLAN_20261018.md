@@ -1,5 +1,40 @@
 # RC164 – fortgesetzter Abschlussauftrag
 
+## Final4-Gegenbeleg und eng korrigierte Testverträge, 19.10., nach04:33 UTC
+
+Alle final4-Lokaljobs auf9ffaf47 beendet. Headless ROT bei Datei69/275 an
+Desktop-Quellassertion,68vorher grün/0Zusatzgates, inputs_unchanged=true,
+Abschluss04:33:03.056UTC. Native PASS04:24:46.860 und fünf Paketgates
+PASS04:27:35.305UTC, jeweils unverändert. ZIPa7bacaa0796c16322b6b8e498656d7ae969826cbad14bb83cd9cbfddba040693,
+EXEfeadfb0d11082359dd2df8b1f5d7ac6d42b2042d9e7bb134fdab0ba548da5182.
+100/100Markdown/0Fehler/Originale unverändert. Kein Release aus diesem Stand.
+
+Zusätzlicher tatsächlicher Windows-Nativstart desselben hashgebundenen ZIPs
+mit Workspace- und Reviewfenster erreichte erfolgreiche aktuelle IPC:
+1539.567ms, WebView155.0.4283.62. Launcher Exit0,1573 eigene Testeinträge
+regulär bereinigt, keine Kandidatenprozesse verblieben. Nur Start/IPC-Nachweis,
+keine Prüfentscheidungen/zehn GUI-Fälle; NATIVE-LAUNCH-PREAPPROVAL.json bewahrt
+Bindung. Beide Macconsumer39199173324 danach ROT an derselben Quellassertion.
+
+Main+unabhängige Quellenprüfung bestätigt: indexOf des entfernten
+Read-InteractionEvents ergibt -1, nicht einen Corefehler. Nach tatsächlichem
+Jobende zwei obsolete Testverträge auf existierende reale Aufrufe/Order und
+verschobene Helpermarker korrigiert. Produktlogik/Schutz/Corebytes unverändert,
+Fach-/Runtimequellen unverändert.37/37Desktop,39/39NativeIntegrity,
+Mac-/Linuxworkflow und16/16Pfadfälle gezielt grün.
+
+Zusätzliche reale Coverage-Lücke geschlossen: Macworkflow test:standalone
+ruft nicht den275er-Plan auf. Daher drei neue Historytests explizit vor npm
+im abbrechenden Produktstep; Sourceassertion bindet denselben Step, tatsächliche
+Nodeaufrufe und Order. Erst nächster echter Maclauf kann22/22POSIX-Indexfälle
+belegen. Weil der Workflow selbst zu den332 Produktinputs gehört, ist der
+neue gemeinsame Fingerprint e6401825469fe8ed4dc22901c683bf6718608e218a966b48711e81f3d3a973f6,
+nicht der alte a55afd65…. Unabhängiger tatsächlicher final5-Quellenabschluss-
+review ohne bestätigten Restbefund abgeschlossen,
+danach vollständig neue275+10/Native/Paket/Mac/GUI/Releasegates. Ignorierte
+final5-Helfer nur kopierte Driver/Contractvorlagen mit neuem Paketprefix,
+31 synthetische Gegenfälle grün; keine alten FINALs übernommen.
+
 ## Final4-Vorbereitung nach04:15 UTC, 19.10.
 
 Zusätzlicher unabhängiger tatsächlicher Store-Quellengegenreview abgeschlossen,

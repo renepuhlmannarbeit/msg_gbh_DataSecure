@@ -71,6 +71,16 @@ assert.match(workflow, /macos-14/u);
 assert.match(workflow, /macos-arm64-26/u);
 assert.match(workflow, /macos-26/u);
 assert.match(workflow, /standalone-macos-regular-start\.sh/u);
+const historyContractStep = workflow.match(/      - name: Run product, conversion, Rust and workflow contracts\n([\s\S]*?)(?=\n      - name:)/u)?.[1];
+assert.ok(historyContractStep, 'the actual native product-contract step must be present');
+assert.match(historyContractStep, /^          set -euo pipefail$/mu);
+const historyCommands = ['test-standalone-history-read-race.js', 'test-standalone-history-migration-race.js', 'test-standalone-history-probe.js'];
+const standaloneCommand = historyContractStep.indexOf('\n          npm run test:standalone');
+for (const file of historyCommands) {
+  const command = `\n          node tests/${file}\n`;
+  const index = historyContractStep.indexOf(command);
+  assert.ok(index >= 0 && standaloneCommand > index, `native POSIX history gate must actually execute before npm: ${file}`);
+}
 assert.match(workflow, /find "\$bundle\/Contents\/Resources\/server" -type d ! -perm -005/u);
 assert.match(workflow, /find "\$bundle\/Contents\/Resources\/server" -type f ! -perm -004/u);
 const regularLaunch = fs.readFileSync(path.join(root, 'tests', 'manual', 'standalone-macos-regular-start.sh'), 'utf8');

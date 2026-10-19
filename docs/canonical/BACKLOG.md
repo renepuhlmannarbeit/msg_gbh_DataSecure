@@ -4,6 +4,15 @@ Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Pre-Release in Vorbe
 
 ## Aktuelle Nacht-Fortsetzung (ersetzt ältere Freigabeangaben)
 
+Neu19.10.nach04:33UTC: final4ROT69(68vorherPASS/unverändert), beideMacjobs
+ROTgleicheobsoleteAssertion. Native/Paket5PASS und tatsächlicherWindowsstart/
+Workspace/ReviewIPC1539.567ms/Exit0. Zwei Testverträge nach Jobende korrigiert,
+neue Historytests nun ausdrücklich in Macconsumer; gezielte37/39/Workflows/
+16Pfade grün. Quellen-Deltareview abgeschlossen, dann frischer geteilter
+Commit/275+10/Native/Paket/Mac/10GUI/Release. Kein Produkt-/Schutz-/Coreumbau,
+keine Neuinterpretation alter grüner oder roter Belege. Neuer Fingerprint
+e6401825… wegen des bewusst mitgebundenen Workflows.
+
 Neu19.10.nach04:15UTC: zusätzlicher Store- und nativer Harnessgegenreview
 abgeschlossen, keine bestätigten Restbefunde dort. Gezielte Revalidierung
 Index21PASS/22(1Windows-NOT_RUN), Migration21/21/Probe/echteIPC/Native39/39/
