@@ -2,14 +2,6 @@
 
 Stand: 23.09.2026 · 3.2.0-rc165
 
-Aktuelle gemeinsame Standalone-Präzisierung nach RC164 (19.10.2026):
-[je ein Aktivitäts- und Sequenzdiagramm für Exportbestätigung,
-gespeicherten Ergebnisordner, Verlauf und kurzzeitig belegte Statuslesung](../acceptance/STANDALONE_EXPORT_USABILITY_20261019.md).
-Diese quellgebundene Prüfsicht ersetzt für den neuen Bedienweg die frühere
-Pflichtfolge „gesondert freigeben, danach exportieren“, nicht die internen
-Revisions-/Freigabe-/Native-Transaktionsgrenzen. Alte Paketnachweise bleiben
-historisch; Diagramme sind keine Zielhostabnahme.
-
 Die Abschnitte 1 bis 10 bilden den tatsächlich implementierten Pluginpfad ab.
 Abschnitt 11 trennt den implementierten Standalone-Vertikalschnitt von weiterhin
 offener Implementierung und Zielhostevidenz; eine als offen bezeichnete Kante ist kein Implementierungsbeleg.
@@ -20,6 +12,14 @@ eine Navigations- und Prüfsicht auf `mcp-server.js`, die getrennten Worker, die
 Batch-Module, den lokalen Review, die Ergebnisprojektion und die Diagnose. Der
 normative Produktvertrag bleibt in `PRODUCT.md`, `DECISIONS.md` und den
 Einzelverträgen unter `contracts/`.
+
+Aktuelle gemeinsame Standalone-Präzisierung nach RC164 (19.10.2026):
+[je ein Aktivitäts- und Sequenzdiagramm für Exportbestätigung,
+gespeicherten Ergebnisordner, Verlauf und kurzzeitig belegte Statuslesung](../acceptance/STANDALONE_EXPORT_USABILITY_20261019.md).
+Diese quellgebundene Prüfsicht ersetzt für den neuen Bedienweg die frühere
+Pflichtfolge „gesondert freigeben, danach exportieren“, nicht die internen
+Revisions-/Freigabe-/Native-Transaktionsgrenzen. Alte Paketnachweise bleiben
+historisch; Diagramme sind keine Zielhostabnahme.
 
 Diese Quellsicht enthält die noch unveröffentlichten DS-101-Änderungen.
 

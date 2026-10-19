@@ -42,13 +42,35 @@ function plainSnapshotLeaf(stat, minimum, maximum) {
   return stat.isFile() && !stat.isSymbolicLink() && Number(stat.nlink) === 1 &&
     Number.isSafeInteger(size) && size >= minimum && size <= maximum;
 }
+function retiredSnapshotLeaf(stat, minimum, maximum) {
+  const size = Number(stat.size);
+  return stat.isFile() && !stat.isSymbolicLink() && [0, 1].includes(Number(stat.nlink)) &&
+    Number.isSafeInteger(size) && size >= minimum && size <= maximum;
+}
 function replacementAfterOpen(absolute, directory, fd, before, opened, io, options) {
-  if (sameObject(opened, objectIdentity(before)) ||
-      !plainSnapshotLeaf(opened, options.minimum ?? 0, options.maximum ?? 256 * 1024 * 1024)) return false;
+  if (sameObject(opened, objectIdentity(before))) return false;
+  const minimum = options.minimum ?? 0, maximum = options.maximum ?? 256 * 1024 * 1024;
+  if (!plainSnapshotLeaf(opened, minimum, maximum)) {
+    // An already retired but otherwise sound B may be classified separately.
+    // Any actually observed unsafe B is sticky, not a boolean fallback hint.
+    if (retiredSnapshotLeaf(opened, minimum, maximum)) return false;
+    throw failure('BOUND_FILE_CHANGED');
+  }
   assertDirectory(directory); options.validateParents?.();
   const held = fileIdentity(opened, true);
   const named = io.lstatSync(absolute, { bigint: true });
-  if (!sameFile(named, held) || !sameFile(io.fstatSync(fd, { bigint: true }), held)) return false;
+  if (!plainSnapshotLeaf(named, minimum, maximum)) throw failure('BOUND_FILE_CHANGED');
+  // A genuinely different regular C is only a retirement candidate. A bad
+  // fact on the same named B may not disappear through that second classifier.
+  if (!sameObject(named, objectIdentity(opened))) return false;
+  if (!sameFile(named, held)) throw failure('BOUND_FILE_CHANGED');
+  const after = io.fstatSync(fd, { bigint: true });
+  if (!sameFile(after, held)) {
+    const current = fileIdentity(after, true);
+    if (retiredSnapshotLeaf(after, minimum, maximum) && sameObject(after, objectIdentity(opened)) &&
+        current.size === held.size && current.mtime === held.mtime) return false;
+    throw failure('BOUND_FILE_CHANGED');
+  }
   assertDirectory(directory); options.validateParents?.();
   return true;
 }
@@ -56,15 +78,25 @@ function replacementAfterOpen(absolute, directory, fd, before, opened, io, optio
 // happened before its first fstat or after its read. The next attempt must
 // perform a complete fresh read under the original directory binding.
 function retiredSnapshotReplacement(absolute, directory, fd, opened, after, io, options) {
-  const original = fileIdentity(opened, true), current = fileIdentity(after, true);
-  if (!after.isFile() || after.isSymbolicLink() || ![0, 1].includes(Number(after.nlink)) ||
-      !sameObject(after, objectIdentity(opened)) || current.size !== original.size || current.mtime !== original.mtime) return false;
+  const minimum = options.minimum ?? 0, maximum = options.maximum ?? 256 * 1024 * 1024;
+  const original = fileIdentity(opened, true);
+  const retiredLeaf = stat => retiredSnapshotLeaf(stat, minimum, maximum);
+  const unchangedContent = stat => {
+    const current = fileIdentity(stat, true);
+    return retiredLeaf(stat) && sameObject(stat, objectIdentity(opened)) &&
+      current.size === original.size && current.mtime === original.mtime;
+  };
+  // Never wash away an already observed unsafe/content-changing state with a
+  // later good sample. Only ctime/nlink may establish a fresh stability point.
+  if (!retiredLeaf(opened) || !unchangedContent(after)) return false;
   assertDirectory(directory); options.validateParents?.();
+  const fresh = io.fstatSync(fd, { bigint: true });
+  if (!unchangedContent(fresh)) return false;
+  const held = fileIdentity(fresh, true);
   const named = io.lstatSync(absolute, { bigint: true });
-  if (sameObject(named, objectIdentity(opened)) ||
-      !plainSnapshotLeaf(named, options.minimum ?? 0, options.maximum ?? 256 * 1024 * 1024)) return false;
+  if (sameObject(named, objectIdentity(opened)) || !plainSnapshotLeaf(named, minimum, maximum)) return false;
   const replacement = fileIdentity(named, true);
-  if (!sameFile(io.fstatSync(fd, { bigint: true }), current) ||
+  if (!sameFile(io.fstatSync(fd, { bigint: true }), held) ||
       !sameFile(io.lstatSync(absolute, { bigint: true }), replacement)) return false;
   assertDirectory(directory); options.validateParents?.();
   return true;
@@ -160,7 +192,8 @@ function consumeBoundFileRecord(target, options, consume, snapshotOwner = null) 
     const opened = io.fstatSync(fd, { bigint: true });
     if (!sameFile(opened, identity)) {
       if (snapshotOwner && (replacementAfterOpen(absolute, directory, fd, before, opened, io, options) ||
-          retiredSnapshotReplacement(absolute, directory, fd, before, opened, io, options)))
+          retiredSnapshotReplacement(absolute, directory, fd,
+            sameObject(opened, objectIdentity(before)) ? before : opened, opened, io, options)))
         throw snapshotReplacement(snapshotOwner);
       throw failure('BOUND_FILE_CHANGED');
     }

@@ -7,7 +7,7 @@ const observer = require('./standalone-history-read-observer.cjs');
 const repository = path.resolve(__dirname, '../..');
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const PRIVATE = 'PRIVATE_OBSERVER_CANARY';
-const checkFiles = ['tests/lib/standalone-history-read-observer.cjs', 'tests/test-standalone-sidecar.js',
+const checkFiles = ['tests/lib/standalone-history-read-observer.cjs', 'tests/lib/standalone-history-io-observer-cases.cjs', 'tests/test-standalone-sidecar.js',
   'tests/lib/standalone-history-read-observer-cases.cjs', 'plugins/data-secure/server/gateway/result-export.js',
   'plugins/data-secure/server/gateway/batch-journal-store.js', 'plugins/data-secure/server/core/bound-file-io.js',
   'plugins/data-secure/server/standalone/run-history.js', 'plugins/data-secure/server/gateway/standalone-history-store.js',
@@ -310,4 +310,5 @@ if (process.argv[2] === '--publish') {
   fs.writeFileSync(path.join(evidence, 'RESULT.json'), JSON.stringify({ classification: 'ENGINEERING_PROBE/NOT_PRODUCT_ACCEPTANCE',
     passed, node: process.version, source_pins: pins, fixture, mac_native: 'NOT_RUN', current_intel_cause: 'NOT_PROVEN' }, null, 2), { flag: 'wx' });
   console.log(`${passed} history-read observer countercases PASS; evidence preserved: ${evidence}`);
+  require('./standalone-history-io-observer-cases.cjs');
 })().catch(error => { console.error(error); process.exitCode = 1; });

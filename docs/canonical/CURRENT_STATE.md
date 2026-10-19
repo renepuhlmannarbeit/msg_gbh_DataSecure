@@ -40,6 +40,19 @@ beim expliziten Erstexport sicher ein. Zusätzlicher echter Windows-Node/Rust-
 Defaultordnertest ohne Picker bestanden, neue Service-/Storeinstanz geprüft.
 Keine RC165-Veröffentlichung vor neuen gemeinsamen Endgates. Nutzer bedient UI.
 
+Source04/02ba2a1: Windows-Native232Rust/3ignored und fünf Paketgates PASS,
+Inputs unverändert; Headless158/280 ROT an UML-Absatzreihenfolge, rein
+dokumentarisch korrigiert und24Manifestfälle wieder grün. ARM bestand alle drei
+echten atomaren Publisherphasen, danach weiterhin Export-Snapshotfehler im
+Source-Sidecar; genaue historische IO-Phase unbewiesen. Isolierter testseitiger
+ARM-Diagnoselauf39252050991 reproduzierte ihn nicht und wurde nach grünen
+Sourceverträgen gezielt beendet. Separater kontrollierter vierter Publisherfall
+reproduziert den Postread-fstat/Named-lstat-Fehler auf ARM in39253339590.
+Fresh-Held-/Sticky-Failure-Korrektur jetzt produktiv übernommen; Schema-/Owner-/
+Purpose-, Parent-, Close- und Drei-Versuchsgrenzen bleiben erhalten. Frische
+gemeinsame Gesamt-/Native-/Paketgates folgen; keine neue Freigabe, kein RC165-
+Release. Genauer Stand im Exportvereinfachungsnachweis.
+
 ### Neuester verbindlicher Stand – Veröffentlichung 19.10.2026
 
 [RC164-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc164)

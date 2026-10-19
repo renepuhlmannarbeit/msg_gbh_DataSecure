@@ -374,3 +374,92 @@ Identität/Ort und exakte Exportbytes geprüft; neue Service-/Storeinstanz bei
 zurückgesetzter flüchtiger Bindung liest denselben Ort, ACK erzeugt keine zweite
 Bindung/Kopie. Dies ist ein nativer Windows-Pipe-Nachweis, kein Tauri-GUI- oder
 echter Prozessneustart-/Mac-TCC-Nachweis. Neuer gemeinsamer Endlauf erforderlich.
+
+### Source04 und präzisere Dateizugriffsdiagnose
+
+`02ba2a1f59c5c9d4a3f21327156fa0aff1097537`, Fingerprint
+`12b8fe484405d7af3e7c1121d716159668ecd5c9dc921ff26b37cb3027c84b9a`/332:
+Windows-Native232Rust/3ignored/Clippy/Release und fünf Paketgates PASS,
+sämtliche Inputs unverändert. Headless endete am19.10.12:27:05UTC nach158/280
+mit0/10 ergänzenden Gates ROT beim unveränderten Manifesttest159. Neuer
+UML-Präzisierungshinweis stand vor dem dort erwarteten Einleitungsabsatz;
+nach regulärem Jobende ausschließlich Absatzreihenfolge korrigiert,24/24
+Manifestfälle wieder grün. Rote FINAL und Zwischen-ZIP bleiben unverändert.
+
+Mac-Consumer39250025593: ARM118051315879 bestand erstmals alle drei echten
+POSIX-Publisherphasen, scheiterte danach erneut im echten Source-Sidecar-
+Snapshot (`resolve_history_results`: HISTORY_UNAVAILABLE statt RESULTS_MISSING).
+Die historische innere IO-Phase ist weiterhin nicht nachgewiesen. Intel wurde
+gezielt abgebrochen; kein RC165-Paket-/Release-PASS.
+
+Ein testseitiger Observerkandidat erfasst nun nur delegierte Core-FS-Ergebnisse
+in einem privaten Achtpunkt-Ring pro Snapshot. Getrennte Objekt-/Inhalt-/
+Statfaktenhashes, geschlossene Typ-/Link-/Fehlercodes, keine Rohpfade/Inhalte/
+Statwerte/Stacks; maximal128 Records/64 Routine/512Bytes je Zeile, kein Zusatz-IO
+oder Produktretry. Ein zunächst tatsächlich gefundener Diagnose-Budgetfehler
+wurde vor Runnernutzung korrigiert; Main acht RAM- und21 bestehende Observer-
+Gegenfälle PASS, unabhängiges tatsächliches Quellengegenlesen abgeschlossen.
+Isolierter Diagnosecommit2880abbd19a4076a622001062593b691e5ef6624 verändert
+nur diesen Testobserver, nicht den Produktbaum. Ein ARM-Diagnoselauf39252050991
+ist gestartet, kein Releasebeleg. Quellen/Belege:
+`dist/rc165-history-io-diagnostic-spike-20261019`.
+
+Separates Quellengegenlesen belegt im POSIX-Modell ein weiteres Zeitfenster
+zwischen Postread-fstat(A) und Named-lstat(B), sowie B->C während der ersten
+Klassifikation. Daraus folgt noch keine Diagnose der historischen Runnerfehler.
+Ein zusätzlicher echter Produktionspublisher-Gegenfall wird vorbereitet;
+Windows weist gehaltene-FD-Phasen ausdrücklich als PLATFORM_NOT_RUN aus.
+Keine Lockerung auf generischen Fehlercode, keine Parentneubindung, keine
+Rückgabe alter unlinked Bytes oder Abschaltung von Schutzprüfungen.
+
+Der erste isolierte ARM-Diagnoselauf39252050991 reproduzierte den sporadischen
+Fehler nicht: Source-Sidecar und221 native Rusttests/3ignored bestanden.
+Nach erfülltem Diagnosezweck vor weiterer Paketierung gezielt beendet, nicht
+als gemeinsamer Release-PASS gewertet. Rohbelege unter
+`dist/rc165-diagnostic-arm-review-20261019`.
+
+Die zusätzliche unveränderte vierte Gegenprobe reproduziert den separaten
+Postread-fstat/Named-lstat-Fehler tatsächlich auf dem ARM-Mac-Runner:
+39253339590/118062383035, Diagnosecommit62b016b031670d9eb4eca252f5d0257537834f41,
+unveränderter Produktbaum02ba2a1. Erste drei Phasen PASS, vierte Phase ROT am
+19.10.12:37:08UTC: echter erfolgreicher Publisher, ein Reader-Open/Read/Close,
+unveränderte Parent-/Owner-/Purposeanker, exakte Endbytes, trotzdem
+HISTORY_UNAVAILABLE. Das beweist diesen kontrollierten Fehler, nicht rückwirkend
+das Timing der früheren sporadischen Source-Sidecar-Fehler. RohlogSHA
+`2ef8689f604ef64c53d966a7fd23e2f34ed261cf408fa159112d4cf92a51aff6`,
+Belege unter `dist/rc165-post-fstat-native-counterproof-20261019`.
+
+Ein Fresh-Held-Kandidat verwendet unter Erhalt aller früher beobachteten
+Objekt-/Größen-/mtime-Grenzen eine frische ctime/nlink-Stabilitätsprobe, wirft
+alte Bytes weiterhin vollständig weg und liest höchstens dreimal komplett.
+Der erste35er-Modelllauf war grün; unabhängiges tatsächliches Gegenlesen fand
+dennoch eine Sticky-Failure-Lücke zwischen beiden Klassifikatoren. Ein einmal
+beobachteter unsicherer Named-/FD-Stat darf nicht durch einen später wieder
+passenden Fallback verschwinden. Diese Grenze wird vor Produktübernahme mit
+einmaligen statt persistenten Negativproben abgesichert. Keine Freigabe aus
+dem ersten grünen Modelllauf; frische gemeinsame Native-/Gesamtgates folgen.
+
+Der korrigierte Sticky-Kandidat5fc2185e… bestand danach47 Modell-/Callerfälle,
+durch Main tatsächlich erneut ausgeführt. Zehn einmalige unsichere Named-/FD-
+Beobachtungen waren am erhaltenen frühen Kandidaten unerlaubt wiederholbar;
+der korrigierte Leser beendet jeweils nach einem Versuch ohne Retryauthority.
+Zwei explizite legitime FD-Retirement-Positivkontrollen bleiben erfolgreich.
+Produktübernahme enthält nur die besprochene Klassifikation; reguläre Record-/
+Hash-/Mutationspfade bleiben ohne Snapshotauthority. Neuer Produktboundarypin
+`22734abe2511a644fcb806a01d2f161b5072301446099b448c96106e375cf130`.
+Main danach26 bestehende Bound-I/O- und22 Snapshotgegenfälle PASS; vierte echte
+Publisherphase nun in dauerhafter Regression, auf Windows1PASS/3 ausdrücklich
+PLATFORM_NOT_RUN. Acht neue Diagnose-RAM- und21 bestehende Observerfälle PASS.
+Unabhängige Testintegration bindet zusätzliche Retirement-/Stickygegenfälle
+an den tatsächlichen Produktionsleser, nicht den ignorierten Kandidaten.
+Gemeinsamer neuer Commit und komplette unveränderte Endgates erforderlich.
+
+Abschließendes unabhängiges tatsächliches Produktgegenlesen bestätigt die
+geschlossene Sticky-Grenze ohne weiteren bestätigten Deltablocker. Die dauerhafte
+Childregression enthält46 Fälle gegen den wirklichen Produktimport, ohne
+Kandidaten-/Loaderersatz. Erste Integrationsprobe scheiterte nur am noch44
+erwartenden Schlusszähler nach Ergänzung der zwei Positivkontrollen; rote
+synthetische Evidence bleibt erhalten. Nach Korrektur46/46, Main kompletter
+Haupttest27/27 und gezielter Historytest PASS. Der vorläufige Pfadtrackingtest
+meldete vor Gitaufnahme erwartungsgemäß den neuen Helper als untracked; keine
+Orakellockerung, Datei wird als dauerhafte Testressource aufgenommen.

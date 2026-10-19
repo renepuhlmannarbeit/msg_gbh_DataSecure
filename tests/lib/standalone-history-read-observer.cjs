@@ -1,4 +1,5 @@
 'use strict';
+// Test-only bounded observation; no production retry or additional filesystem I/O.
 // Test-only observation of the unchanged projected modules, before import.
 // No product result, response, error, decision, retry or filesystem value is
 // substituted. The only additional output is this closed bounded trace.
@@ -13,7 +14,7 @@ const OPERATIONS = new Set(['install', 'resolveResults', 'readHistoryLocator', '
   'readStandaloneSummary', 'readStandaloneExportHistoryEntry', 'assertContentBinding',
   'bindDirectory', 'assertDirectory', 'readBoundFile', 'readBoundFileRecord', 'readBoundFileSnapshot',
   'readBoundFileSnapshotRecord', 'readHeldBytes',
-  'lstatSync', 'openSync', 'fstatSync', 'readSync', 'closeSync']);
+  'lstatSync', 'openSync', 'fstatSync', 'readSync', 'closeSync', 'realpathSync']);
 const CODES = new Set(['OTHER', 'ENOENT', 'EACCES', 'EPERM', 'EIO', 'EBUSY', 'EMFILE', 'ENFILE',
   'BOUND_FILE_CHANGED', 'BOUND_FILE_UNSAFE', 'BOUND_FILE_CLOSE_FAILED', 'RESULT_EXPORT_STATE_UNSAFE',
   'STANDALONE_HISTORY_UNAVAILABLE', 'STANDALONE_HISTORY_MISSING', 'STANDALONE_RESULTS_MISSING',
@@ -40,6 +41,19 @@ function safeEvent(value) {
       ['begin', 'return', 'null'].includes(value.outcome)) return { ...base, outcome: value.outcome };
   if (keys === 'call,kind,operation,phase,seq,sha256' && value.kind === 'identity' && /^[a-f0-9]{64}$/u.test(value.sha256))
     return { ...base, sha256: value.sha256 };
+  if (value.kind === 'io' && ['leaf', 'parent'].includes(value.role) &&
+      Number.isInteger(value.step) && value.step >= 1 && value.step <= 1000000) {
+    const ioBase = { ...base, role: value.role, step: value.step, outcome: value.outcome };
+    if (keys === 'call,code,kind,operation,outcome,phase,role,seq,step' &&
+        value.outcome === 'error' && CODES.has(value.code)) return { ...ioBase, code: value.code };
+    if (keys === 'call,kind,operation,outcome,phase,role,seq,step' && value.outcome === 'return') return ioBase;
+    if (keys === 'call,content_sha256,fact_sha256,kind,links,object_sha256,operation,outcome,phase,role,seq,step,type' &&
+        value.outcome === 'return' && ['zero', 'one', 'other'].includes(value.links) &&
+        ['regular', 'symlink', 'other'].includes(value.type) &&
+        ['object_sha256', 'content_sha256', 'fact_sha256'].every(key => /^[a-f0-9]{64}$/u.test(value[key])))
+      return { ...ioBase, object_sha256: value.object_sha256, content_sha256: value.content_sha256,
+        fact_sha256: value.fact_sha256, links: value.links, type: value.type };
+  }
   return null;
 }
 function install({ caseRoot, server, write = line => process.stderr.write(line), identityHash = sha }) {
@@ -60,31 +74,37 @@ function install({ caseRoot, server, write = line => process.stderr.write(line),
       throw Error('HISTORY_READ_OBSERVER_SOURCE');
   }
   bound.assertDirectory(scopeBinding); bound.assertDirectory(serverBinding);
-  const load = Module._load, stack = [], fds = new Map();
+  const load = Module._load, stack = [], fds = new Map(), snapshotRings = [];
   let active = true, emitted = 0, routine = 0, calls = 0;
-  function emit(event) {
+  function emit(event, causal = false) {
     // An absent optional locator/summary is routine, not permission to consume
     // the reserved causal-failure capacity during normal history polling.
-    const important = event.kind === 'error' && !['ENOENT', 'STANDALONE_RESULTS_MISSING'].includes(event.code);
+    const important = causal || event.kind === 'error' && !['ENOENT', 'STANDALONE_RESULTS_MISSING'].includes(event.code);
     if (!active || emitted >= 128 || !important && routine >= 64) return;
     try {
       const value = safeEvent({ seq: emitted + 1, ...event });
       if (!value) return;
+      const line = PREFIX + JSON.stringify(value) + '\n';
+      if (Buffer.byteLength(line, 'utf8') > 512) return;
       emitted++; if (!important) routine++;
-      write(PREFIX + JSON.stringify(value) + '\n');
+      write(line);
     } catch { /* observer failure cannot replace an error or successful I/O */ }
   }
   const context = () => stack.at(-1);
-  function observed(phase, operation, action) {
+  function observed(phase, operation, action, snapshotTarget = null) {
     if (!active) return action();
     const entry = { phase, operation, call: Math.min(++calls, 1000000) };
+    const ring = snapshotTarget === null ? null : { ...entry, target: snapshotTarget, step: 0, points: [] };
+    if (ring) snapshotRings.push(ring);
     stack.push(entry); emit({ ...entry, kind: 'call', outcome: 'begin' });
     try {
       const result = action();
       emit({ ...entry, kind: 'call', outcome: result === null ? 'null' : 'return' });
       return result;
-    } catch (error) { emit({ ...entry, kind: 'error', code: safeCode(error) }); throw error; }
-    finally { stack.pop(); }
+    } catch (error) {
+      if (ring) for (const point of ring.points) emit(point, true);
+      emit({ ...entry, kind: 'error', code: safeCode(error) }); throw error;
+    } finally { stack.pop(); if (ring) snapshotRings.pop(); }
   }
   function wrap(original, phase, operation) {
     return function (...args) {
@@ -107,26 +127,65 @@ function install({ caseRoot, server, write = line => process.stderr.write(line),
     if (parts.at(-3) === 'document-reviews' && /^[a-f0-9]{64}$/u.test(parent) && leaf === 'manifest.json') return anchorPhase();
     return null;
   }
-  function ioView(original) {
+  // No raw paths, PIDs, stat values or bytes enter this per-call ring. Facts
+  // are captured only from the delegated result, without extra filesystem I/O.
+  function snapshotFacts(stat) {
+    if (!stat || typeof stat !== 'object' || types.isProxy(stat)) return {};
+    const number = key => {
+      const value = Object.getOwnPropertyDescriptor(stat, key)?.value;
+      if (typeof value !== 'bigint' && !(typeof value === 'number' && Number.isFinite(value))) throw Error('FACT_UNAVAILABLE');
+      return value;
+    };
+    const clock = (ns, ms) => Object.hasOwn(stat, ns) ? number(ns) : number(ms);
+    const mode = BigInt(number('mode')) & 0o170000n, links = number('nlink');
+    return { object_sha256: identityHash(JSON.stringify([number('dev'), number('ino'),
+      clock('birthtimeNs', 'birthtimeMs')].map(String))),
+      content_sha256: identityHash(JSON.stringify([number('size'), clock('mtimeNs', 'mtimeMs')].map(String))),
+      fact_sha256: identityHash(JSON.stringify([clock('ctimeNs', 'ctimeMs'), links].map(String))),
+      links: links === 0n || links === 0 ? 'zero' : links === 1n || links === 1 ? 'one' : 'other',
+      type: mode === 0o100000n ? 'regular' : mode === 0o120000n ? 'symlink' : 'other' };
+  }
+  function rememberIo(ring, operation, role, result, error, failed) {
+    if (!ring) return;
+    try {
+      const point = { call: ring.call, phase: ring.phase, operation, kind: 'io',
+        role, step: Math.min(++ring.step, 1000000), outcome: failed ? 'error' : 'return' };
+      if (failed) point.code = safeCode(error);
+      else if (['lstatSync', 'fstatSync'].includes(operation)) {
+        try { Object.assign(point, snapshotFacts(result)); } catch { /* facts are optional, never product authority */ }
+      }
+      ring.points.push(point); if (ring.points.length > 8) ring.points.shift();
+    } catch { /* diagnostics cannot change actual I/O */ }
+  }
+  function ioView(original, core = false) {
     const copy = { ...original };
-    for (const operation of ['lstatSync', 'openSync', 'fstatSync', 'readSync', 'closeSync']) {
+    for (const operation of ['lstatSync', 'openSync', 'fstatSync', 'readSync', 'closeSync', 'realpathSync']) {
       copy[operation] = function (...args) {
         const current = active && context();
         if (!current) return Reflect.apply(original[operation], this, args);
-        const phase = ['lstatSync', 'openSync'].includes(operation) ? leafPhase(args[0]) : fds.get(args[0]);
+        const ring = core ? snapshotRings.at(-1) : null;
+        const named = ['lstatSync', 'openSync', 'realpathSync'].includes(operation);
+        const held = named ? null : fds.get(args[0]);
+        const phase = named ? leafPhase(args[0]) || ring?.phase : held?.phase;
         if (!phase) return Reflect.apply(original[operation], this, args);
+        const role = named ? args[0] === ring?.target ? 'leaf' : 'parent' : held?.role || 'leaf';
         const entry = { call: current.call, phase, operation };
         try {
           const result = Reflect.apply(original[operation], this, args);
-          if (operation === 'openSync') fds.set(result, phase);
-          if (['lstatSync', 'fstatSync'].includes(operation) && emitted < 128 && routine < 64) {
+          if (operation === 'openSync') fds.set(result, { phase, role });
+          rememberIo(ring, operation, role, result, null, false);
+          if (!core && ['lstatSync', 'fstatSync'].includes(operation) && emitted < 128 && routine < 64) {
             try { emit({ ...entry, kind: 'identity', sha256: identityHash(JSON.stringify(['dev', 'ino', 'birthtimeNs', 'size', 'nlink', 'mtimeNs']
               .map(key => String(result[key])))) }); } catch { /* optional identity witness only */ }
           }
           return result;
-        } catch (error) { emit({ ...entry, kind: 'error', code: safeCode(error) }); throw error; }
-        finally { if (operation === 'closeSync') fds.delete(args[0]); }
+        } catch (error) {
+          rememberIo(ring, operation, role, null, error, true);
+          if (!core) emit({ ...entry, kind: 'error', code: safeCode(error) }); throw error;
+        } finally { if (operation === 'closeSync') fds.delete(args[0]); }
       };
+      if (operation === 'realpathSync' && typeof original.realpathSync.native === 'function')
+        copy.realpathSync.native = original.realpathSync.native;
     }
     return copy;
   }
@@ -160,6 +219,7 @@ function install({ caseRoot, server, write = line => process.stderr.write(line),
             return observed(anchorPhase(), 'assertContentBinding', () => Reflect.apply(result.assertContentBinding, this, values));
           } }; } catch { return result; }
         } };
+      if (relative === 'core/bound-file-io.js' && ['fs', 'node:fs'].includes(request)) return ioView(original, true);
       if (['gateway/batch-journal-store.js', 'gateway/standalone-history-store.js'].includes(relative) && ['fs', 'node:fs'].includes(request))
         return ioView(original);
       if (request === '../core/bound-file-io') {
@@ -170,7 +230,8 @@ function install({ caseRoot, server, write = line => process.stderr.write(line),
           copy[operation] = function (...args) {
             if (!active || !context()) return Reflect.apply(original[operation], this, args);
             const phase = leafPhase(args[0]) || context().phase;
-            return observed(phase, operation, () => Reflect.apply(original[operation], this, args));
+            return observed(phase, operation, () => Reflect.apply(original[operation], this, args),
+              ['readBoundFileSnapshot', 'readBoundFileSnapshotRecord'].includes(operation) ? args[0] : null);
           };
         }
         return copy;
@@ -180,7 +241,7 @@ function install({ caseRoot, server, write = line => process.stderr.write(line),
   };
   Module._load = historyReadLoad;
   emit({ call: 0, phase: 'observer', operation: 'install', kind: 'call', outcome: 'return' });
-  return () => { active = false; if (Module._load === historyReadLoad) Module._load = load; fds.clear(); };
+  return () => { active = false; if (Module._load === historyReadLoad) Module._load = load; fds.clear(); snapshotRings.length = 0; };
 }
 
 // Consume at most 128 sanitized records; unrelated/partial/oversized stderr is

@@ -501,6 +501,32 @@ test('strict record and hash reads never adopt retired snapshot retry authority 
   }
 });
 
+test('fresh-held and sticky retirement observations remain production regressions in an isolated IO model', () => {
+  const environment = { ...process.env };
+  delete environment.NODE_OPTIONS;
+  delete environment.NODE_PATH;
+  const result = spawnSync(process.execPath, [path.join(__dirname, 'lib/standalone-snapshot-retirement-cases.cjs')], {
+    cwd: path.resolve(__dirname, '..'), env: environment, timeout: 45000, maxBuffer: 256 * 1024,
+    encoding: 'utf8', windowsHide: true, stdio: ['ignore', 'pipe', 'pipe']
+  });
+  if (result.error || result.signal || result.status !== 0) {
+    // Emit only the helper's closed diagnostic contract on failure, never
+    // inherited environment, raw vendor messages, source text or native paths.
+    for (const [stream, output] of [['stdout', result.stdout], ['stderr', result.stderr]]) {
+      const safe = String(output || '').split(/\r?\n/u).filter(line =>
+        /^SNAPSHOT_RETIREMENT_IO_MODEL_(?:PASS:\d+|EVIDENCE_FAILED|FAILED:[A-Za-z0-9 /.,:;_()=-]+)$/u.test(line));
+      if (safe.length) console.error(`  snapshot-retirement ${stream}: ${safe.join('\n').slice(0, 2048)}`);
+      else if (output) console.error(`  snapshot-retirement ${stream}: non-contract output withheld`);
+    }
+  }
+  assert.equal(Boolean(result.error), false, 'bounded snapshot-retirement child must launch and settle');
+  assert.equal(result.signal, null, 'snapshot-retirement child must close without a signal');
+  assert.equal(result.status, 0, 'production snapshot-retirement countercases must all pass');
+  assert.match(result.stdout, /^SNAPSHOT_RETIREMENT_IO_MODEL_PASS:46\r?\n$/u);
+  assert.equal(result.stderr, '', 'successful model child must not hide stderr');
+  process.stdout.write('  note snapshot retirement: 46 production IO-model cases; not native acceptance\n');
+});
+
 done().finally(() => {
   for (const link of links) { assert.ok(fs.lstatSync(link).isSymbolicLink()); fs.unlinkSync(link); }
   assert.equal(path.dirname(root), temporaryRoot);

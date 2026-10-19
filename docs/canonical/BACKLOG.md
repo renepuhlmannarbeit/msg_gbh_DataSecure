@@ -41,6 +41,17 @@ Aktuell offen: neuer gemeinsamer Commit,
 frische 280+10/Windows-Native/Paketgates, beide Macs, lokale Übergabe und RC165-
 Pre-Release. Windows-/Mac-Desktopabnahme bleibt Nutzeraufgabe, kein Zeitauftrag.
 
+Neuestes Source04-Endgate: Windows-Native232Rust/3ignored und fünf Paketgates
+PASS, Headless158/280 an UML-Absatzreihenfolge ROT; Dokumentreihenfolge danach
+korrigiert,24/24 Manifestfälle PASS. MacARM echte drei Publisherphasen PASS,
+danach weiterer echter Snapshotlesefehler. Innere historische IO-Phase offen;
+begrenzter testseitiger ARM-Diagnoselauf39252050991 reproduzierte den Fehler
+nicht und wurde nach Sourceverträgen beendet, kein Releasebeleg. Kontrollierte
+vierte Publisherphase in39253339590 am unveränderten alten Produkt auf ARM ROT.
+Fresh-Held-/Sticky-Failure-Korrektur produktiv übernommen, gezielte Gegenfälle
+und frische gemeinsame Endgates folgen. Alle roten Belege bleiben; kein generisch
+aufgeweichtes Fehler-/Retryorakel und keine native Desktopabnahme.
+
 Auslöser: reale RC164-Mac26.2-ARM64-Protokolle belegen fehlende Exporteinrichtung
 vor erfolgreicher Ordnerwahl und anschließendem Drei-Dateien-Export samt ACK.
 Drei Read-Busy-Antworten sind Konkurrenzzustände, kein belegter Coreabsturz.
