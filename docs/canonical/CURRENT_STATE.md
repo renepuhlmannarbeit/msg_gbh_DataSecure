@@ -4,6 +4,20 @@ Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Test-Pre-Release in 
 
 ### Aktueller Nachtauftrag – neuere Autorität vor historischen Abschnitten
 
+Neu19.10.nach05:18UTC: Testsyntaxfix ClippyallTargets/-Dwarnings und17Bundle
+parallel PASS; unabhängiger tatsächlicher cfg(test)/Suite/Workflowgegenreview
+ohne Restblocker. Main11Routing/Workflow erneut grün. final7Helper31synthetische
+Gegenfälle grün, keineFINALskopiert; FP
+eaa4a82929831b2488868e66305c2b7177f61998a8dd5d9322dd5a04f72a0cfc/332.
+Danach gemeinsamerCommit/volle276+10/Native/Paket/Mac/GUI/Releasegates offen.
+
+Neu19.10.nach05:15UTC: final6/b92 NativeClippyROTmanual_flatten im neuen
+Testgegenfall. Bekannten ungeeigneten Schnitt gezielt beendet: beideMacjobs
+39203576757 tatsächlichcancelled, eigenergebundenerHeadlessdriver99722Exit1,
+keinHeadlessPASS/keinPaket. Inputs bisAbbruch unverändert. Erst danach kleiner
+extend/flatten-Testsyntaxfix ohneOrakeländerung. ClippyvorFreeze ausdrücklich
+wiederholen, danach neuerfinal7Commit/alleGates. Keine Produktfreigabe.
+
 Neu19.10.nach05:14UTC: Runtime-Legacy-Mac-Delegation implementiert, Main+
 unabhängiger tatsächlicher Quellenreview ohne bestätigten Restbefund.17/17
 paralleleRust-Diagnosefälle und11Routing-/19Parser-/9Workergegenfälle vom

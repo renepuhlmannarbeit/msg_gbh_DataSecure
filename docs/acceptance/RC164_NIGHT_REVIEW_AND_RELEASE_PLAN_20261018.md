@@ -1,5 +1,37 @@
 # RC164 – fortgesetzter Abschlussauftrag
 
+## Final7 vorbereitet nach tatsächlichem Abbruchende, 19.10., nach05:18 UTC
+
+ClippyallTargets/offline/locked/-Dwarnings und17Bundlefälle mit8Threads
+nach minimalem Testsyntaxfix tatsächlich PASS; unabhängiger tatsächlicher
+Rust-/Suite-/Workflow-Deltagegenreview ohne bestätigten Restblocker. Main
+wiederholt11Routing-VM-Gegenfälle und Macworkflow grün. Sieben final7Helper
+neu create-only aus final6Vorlagen,31synthetischeProofgegenfälle grün,
+keine FINALs/GUI-Proofs kopiert. Neuer gemeinsamer Produktfingerprint
+eaa4a82929831b2488868e66305c2b7177f61998a8dd5d9322dd5a04f72a0cfc,
+332Dateien; statischeCoreapprovals unverändert. Danach gemeinsamerGitfreeze,
+276Headless+10/NativeRust229(3ignoriert erwartet, tatsächliches Ergebnis lesen)/
+Paket5/beideMac/10GUI/Releasegates. Keine neue Abnahme aus Vorabtests.
+
+## Final6 gezielt abgebrochen nach Compilergegenbefund, 19.10., nach05:15 UTC
+
+b92fee475094ead34ae780d49697b66cdc8fe085/FPb7dd9654…: NativepreparePASS,
+ClippyROT101 an manual_flatten im neuen cfg(test)-Gegenfall, noch keine
+Rust-/Release-/Paket-/GUI-Freigabe. NATIVE-FINAL.json bewahrt unveränderteInputs.
+Bekannter deterministischer Lint macht diesen Schnitt ungeeignet; gezielt
+Macconsumer39203576757 normal gecancelt, beide Jobs tatsächlich completed/
+cancelled. Lokalen Headlessdriver99722 samt ausschließlich gebundenem eigenem
+Child nach PID/Exe/CLI/Nodehashprüfung beendet, Exit1; kein HEADLESS-FINAL/PASS.
+Current553-Testinputhash gegenüber Nativestart unverändert. Keine alten
+FINALs korrigiert und keine Produktedits vor tatsächlichem Ende aller Jobs.
+
+Danach ausschließlich Schleife durch extend(results.into_iter().flatten())
+ersetzt. Beide Threads werden weiterhin vorher gejoint, beide frischen
+Verzeichnisse bleiben erhalten, len==2 verweigert weiterhin Threadpanic.
+Kein allow-Lintattribut, Retry oder veränderter fachlicher Produktionspfad.
+Clippy aller Targets und parallele17Bundlefälle vor nächstem Freeze erneut
+ausführen. Danach neuer gemeinsamer Appcommit/final7 und alle frischen Gates.
+
 ## Final5 beendet; zwei native Mac-Gegenbefunde, 19.10., nach05:02 UTC
 
 Nach05:14UTC: beide enge Fixes implementiert. Autor/Main17/17Rust-Diagnose-

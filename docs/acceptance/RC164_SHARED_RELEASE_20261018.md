@@ -12,6 +12,13 @@ Keine Developer-ID, Apple-Einreichung oder Storeverteilung.
 
 ## Neuester geprüfter Windows-Quellstand, 19.10.2026
 
+Nach05:19UTC: final6/b92 wegen manual_flatten im neuen Rust-Testgegenfall
+ungeeignet. NativeROT und kontrolliert gecancelte Headless/Macjobs bleiben
+unverändert erhalten; kein Paket/kein PASS daraus. Nach tatsächlichem Ende
+aller Jobs minimale Testschleifenform korrigiert, MainClippyallTargets mit
+-Dwarnings und17paralleleBundlefälle erneut PASS. Neues final7Freeze mit
+identischem gemeinsamen Appstand je Plattform folgt erst nach Deltagegenreview.
+
 Nach05:02UTC: final5/c29878e vollständig275/275+10/10, Native228/Clippy/
 Release und Paket5 unverändert PASS. Beide Macconsumer39200265925 ROT:
 Testroot-Kollision Intel und echter alter Parserroutingpfad ARM. Dagegen

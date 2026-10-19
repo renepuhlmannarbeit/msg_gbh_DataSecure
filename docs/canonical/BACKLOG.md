@@ -4,6 +4,20 @@ Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Pre-Release in Vorbe
 
 ## Aktuelle Nacht-Fortsetzung (ersetzt ältere Freigabeangaben)
 
+Neu19.10.nach05:18UTC: ClippyallTargets/-Dwarnings+17Bundleparallel nachFix
+PASS; unabhängiger Rust-/Suite-/Workflow-Deltareview ohneRestblocker. final7
+vorbereitet FP eaa4a829…/332,31Helpergegenfälle grün; frischer gemeinsamer
+Commit und276+10/Native/Paket/beideMac/10GUI/Releasegates noch auszuführen.
+Keine Schutzabsenkung oder neue Coreproduktion, keine Gleichsetzung alter
+GUI-/Headless-/nativeMac-Nachweise mit künftigen Bytes.
+
+Neu19.10.nach05:15UTC: final6/b92 wegenClippymanual_flatten TestsyntaxROT.
+EigeneFreezejobs kontrolliert/gezieltbeendet, beideMacjobs39203576757cancelled,
+lokalerHeadless99722Exit1ohneFINAL/PASS, keinPaket. Inputs bisEndeunverändert.
+NachEnde Testschleifeextend/flatten, Orakelunverändert. ErstClippyallTargets+
+17Bundlegegenfälle wiederholen, dann neuerfinal7Commit/volleGates. Native-
+Legacy-Kompatibilität bleibt noch mit echten ARM/Intel-Smokes zu bestätigen.
+
 Neu19.10.nach05:14UTC: beide gezielten Deltas implementiert/gegengelesen;
 unabhängiger Runtimequellenreview ohne bestätigten Restbefund. Main17Rust/
 11Routing/19Parser/9Worker/Workflow/16Pfadfälle grün. NeueSuite explizit im

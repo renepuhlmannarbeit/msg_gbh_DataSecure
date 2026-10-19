@@ -356,9 +356,7 @@ mod tests {
         // Keep both exclusively created directories until both workers have joined.
         let results = handles.map(|handle| handle.join());
         let mut roots = CreatedRoots(Vec::new());
-        for result in results {
-            if let Ok(path) = result { roots.0.push(path); }
-        }
+        roots.0.extend(results.into_iter().flatten());
         assert_eq!(roots.0.len(), 2, "both concurrent allocations must succeed");
         assert_ne!(roots.0[0], roots.0[1]);
         let prefix = format!("datasecure-bundle-test-{}-{timestamp}-", std::process::id());
