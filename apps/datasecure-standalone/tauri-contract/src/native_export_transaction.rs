@@ -17,6 +17,19 @@ fn conflict() -> io::Error { failure("AI_EXPORT_CONFLICT") }
 fn hex(value: &str, size: usize) -> bool {
     value.len() == size && value.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))
 }
+// Missing is the immutable legacy export role. Explicit null/unknown roles
+// are refused, and an omitted role serializes byte-for-byte as before.
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize)]
+pub(crate) enum PublicationRole { #[serde(rename = "results")] Results }
+pub(crate) fn deserialize_publication_role<'de, D: serde::Deserializer<'de>>(deserializer: D)
+    -> Result<Option<PublicationRole>, D::Error> {
+    let role = String::deserialize(deserializer)?;
+    if role == "results" { Ok(Some(PublicationRole::Results)) }
+    else { Err(<D::Error as serde::de::Error>::custom("PUBLICATION_ROLE_INVALID")) }
+}
+pub(crate) fn publication_directory_name(role: Option<PublicationRole>, operation_id: &str) -> String {
+    format!("{}-{operation_id}", if role == Some(PublicationRole::Results) { "Ergebnisse" } else { "Export" })
+}
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ObjectId { volume: String, object: String, created_ns: String }
@@ -36,6 +49,8 @@ impl ObjectId {
 pub(crate) struct Plan {
     schema: String, batch_id: String, operation_id: String, request_sha256: String,
     processing_mode: String, journal: ObjectId, staging_parent: ObjectId, target_parent: ObjectId,
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_publication_role")]
+    publication_role: Option<PublicationRole>,
     files: Vec<ExpectedFile>,
 }
 pub(crate) struct Parents<'a> { pub journal: &'a Directory, pub staging: &'a Directory, pub target: &'a Directory }
@@ -44,8 +59,11 @@ impl Plan {
         files: Vec<ExpectedFile>, parents: &Parents<'_>) -> io::Result<Self> {
         let plan = Self { schema: "datasecure-native-export-plan/1".into(), batch_id, operation_id, request_sha256,
             processing_mode, journal: parents.journal.identity().into(), staging_parent: parents.staging.identity().into(),
-            target_parent: parents.target.identity().into(), files };
+            target_parent: parents.target.identity().into(), publication_role: None, files };
         plan.validate()?; Ok(plan)
+    }
+    pub fn with_publication_role(mut self, role: Option<PublicationRole>) -> Self {
+        self.publication_role = role; self
     }
     fn validate(&self) -> io::Result<()> {
         if self.schema != "datasecure-native-export-plan/1" || !hex(&self.batch_id, 64) || !hex(&self.operation_id, 32) ||
@@ -66,7 +84,7 @@ impl Plan {
         Ok(Sha256::digest(serde_json::to_vec(self).map_err(|_| conflict())?).into())
     }
     fn stage_name(&self) -> String { format!("stage-{}", self.operation_id) }
-    pub fn target_name(&self) -> String { format!("Export-{}", self.operation_id) }
+    pub fn target_name(&self) -> String { publication_directory_name(self.publication_role, &self.operation_id) }
 }
 #[derive(Debug, Eq, PartialEq)]
 pub(crate) enum Status { Unprepared, Prepared, Completed, Acknowledged, Abandoned }
@@ -80,6 +98,13 @@ pub(crate) struct Transaction<'a> {
 }
 impl<'a> Transaction<'a> {
     pub fn open(journal: &'a Directory, staging: &'a Directory, target: &'a Directory, plan: Plan, guard: &'a NativeGuard) -> io::Result<Self> {
+        Self::open_mode(journal, staging, target, plan, guard, false)
+    }
+    pub fn open_existing(journal: &'a Directory, staging: &'a Directory, target: &'a Directory, plan: Plan, guard: &'a NativeGuard) -> io::Result<Self> {
+        Self::open_mode(journal, staging, target, plan, guard, true)
+    }
+    fn open_mode(journal: &'a Directory, staging: &'a Directory, target: &'a Directory, plan: Plan, guard: &'a NativeGuard,
+        existing_only: bool) -> io::Result<Self> {
         plan.validate()?;
         if plan.journal != journal.identity().into() || plan.staging_parent != staging.identity().into() ||
             plan.target_parent != target.identity().into() { return Err(conflict()); }
@@ -88,12 +113,14 @@ impl<'a> Transaction<'a> {
         journal.verify_controlled()?;
         staging.verify_controlled()?;
         guard.checkpoint().map_err(|_| failure("STANDALONE_CLOSING"))?;
-        let control = journal.lock_control()?;
+        let control = if existing_only { journal.lock_existing_control()? } else { journal.lock_control()? };
         // The owned plan is immutable for this instance. Reusing its digest
         // never reuses journal evidence, directory authority or inventory facts.
         let plan_sha256 = plan.digest()?;
         let tx = Self { journal, staging, target, plan, guard, plan_sha256, _control: control };
-        tx.put("intent", &tx.plan)?;
+        if existing_only {
+            if tx.read::<Plan>("intent")?.as_ref() != Some(&tx.plan) { return Err(conflict()); }
+        } else { tx.put("intent", &tx.plan)?; }
         // Closed record dependencies matter even when a later receipt exists.
         tx.evidence()?;
         Ok(tx)
@@ -214,6 +241,17 @@ impl<'a> Transaction<'a> {
             Err(error) => Err(error),
         }
     }
+    /// A history opener is observation only: require an already durable
+    /// completion, verify the same owned destination, and never repair a lost
+    /// receipt or authorize preparation/publication through this path.
+    pub fn inspect_completed(&self) -> io::Result<Status> {
+        let (identity, _, _, complete, ack, abandoned) = self.evidence()?;
+        if abandoned { return Ok(Status::Abandoned); }
+        if !complete { return Err(failure("AI_EXPORT_INCOMPLETE")); }
+        let output = self.target.open_known_child(&self.plan.target_name(), identity.ok_or_else(conflict)?)?;
+        output.verify_inventory(&self.plan.files)?;
+        Ok(if ack { Status::Acknowledged } else { Status::Completed })
+    }
     pub fn commit(&self) -> io::Result<Status> {
         match self.reconcile()? {
             status @ (Status::Completed | Status::Acknowledged) => return Ok(status),
@@ -307,6 +345,61 @@ mod tests {
         let stage = tx.staging.reopen_private_stage(&tx.plan.stage_name(), identity).unwrap();
         tx.record("started", Some(identity)).unwrap();
         export_directory::publish(tx.staging, &tx.plan.stage_name(), &stage, tx.target, &tx.plan.target_name(), tx.guard).unwrap();
+    }
+    #[test]
+    fn result_role_is_closed_digest_bound_and_absent_for_legacy_serialization() {
+        let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+        let legacy = f.plan(&j, &s, &t);
+        let bytes = serde_json::to_vec(&legacy).unwrap();
+        assert!(!String::from_utf8_lossy(&bytes).contains("publication_role"));
+        assert_eq!(serde_json::from_slice::<Plan>(&bytes).unwrap(), legacy);
+        let results = legacy.clone().with_publication_role(Some(PublicationRole::Results));
+        assert_ne!(legacy.digest().unwrap(), results.digest().unwrap());
+        assert_eq!(legacy.target_name(), format!("Export-{}", legacy.operation_id));
+        assert_eq!(results.target_name(), format!("Ergebnisse-{}", legacy.operation_id));
+        let mut value = serde_json::to_value(&results).unwrap();
+        assert_eq!(value["publication_role"], "results");
+        for invalid in [serde_json::Value::Null, serde_json::json!("export"), serde_json::json!("Results"),
+            serde_json::json!(true), serde_json::json!({ "results": null })] {
+            value["publication_role"] = invalid;
+            assert!(serde_json::from_value::<Plan>(value.clone()).is_err());
+        }
+    }
+    #[test]
+    fn result_role_lost_receipt_recovers_without_legacy_adoption_or_second_generation() {
+        let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+        let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
+        let legacy = f.plan(&j, &s, &t);
+        let results = legacy.clone().with_publication_role(Some(PublicationRole::Results));
+        {
+            let tx = Transaction::open(&j, &s, &t, results.clone(), &guard).unwrap();
+            tx.write_body(0, b"hello").unwrap(); tx.prepare().unwrap(); publish_without_receipt(&tx);
+        }
+        assert!(Transaction::open(&j, &s, &t, legacy, &guard).is_err(), "same operation cannot erase its role");
+        drop(j); drop(s); drop(t);
+        let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+        let tx = Transaction::open(&j, &s, &t, results, &guard).unwrap();
+        assert_eq!(tx.commit().unwrap(), Status::Completed);
+        assert_eq!(tx.acknowledge().unwrap(), Status::Acknowledged);
+        assert_eq!(tx.commit().unwrap(), Status::Acknowledged);
+        assert_eq!(fs::read_dir(f.path.join("target")).unwrap().count(), 1);
+        assert_eq!(fs::read(f.path.join("target").join(tx.plan.target_name()).join("Dokument_01.md")).unwrap(), b"hello");
+    }
+    #[test]
+    fn result_role_inspection_does_not_turn_a_real_rename_without_receipt_into_completion() {
+        let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+        let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
+        let plan = f.plan(&j, &s, &t).with_publication_role(Some(PublicationRole::Results));
+        let tx = Transaction::open(&j, &s, &t, plan, &guard).unwrap();
+        tx.write_body(0, b"hello").unwrap(); tx.prepare().unwrap(); publish_without_receipt(&tx);
+        let receipt = f.path.join("journal").join(tx.name("complete"));
+        assert!(!receipt.exists());
+        assert_eq!(tx.inspect_completed().unwrap_err().to_string(), "AI_EXPORT_INCOMPLETE");
+        assert!(!receipt.exists(), "opening history never persists completion");
+        assert_eq!(tx.reconcile().unwrap(), Status::Completed);
+        let bytes = fs::read(&receipt).unwrap();
+        assert_eq!(tx.inspect_completed().unwrap(), Status::Completed);
+        assert_eq!(fs::read(&receipt).unwrap(), bytes);
     }
     #[test]
     fn lost_ack_and_fresh_native_handles_recover_the_same_copy_without_republishing() {

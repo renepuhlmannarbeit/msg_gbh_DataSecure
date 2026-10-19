@@ -1,8 +1,8 @@
 //! Standalone-only composition of picker authorization, controlled workspace
 //! and durable publication. All writes finish inside the desktop's NativeGuard.
 //! The sidecar streams hashed bodies over the owned pipe, never target paths.
-use crate::{export_directory::{Directory, ExpectedFile, Identity, Node22Identity}, ipc_transport::NativeGuard,
-    native_export_transaction::Status, native_export_workspace::{Request, Workspace}};
+use crate::{export_directory::{Directory, ExpectedFile, Identity, Node22Identity, Node22BigIntIdentity}, ipc_transport::NativeGuard,
+    native_export_transaction::{Status, PublicationRole, deserialize_publication_role}, native_export_workspace::{Request, Workspace}};
 use serde::{Deserialize, Serialize};
 use std::{io, path::{Path, PathBuf}};
 
@@ -39,6 +39,7 @@ impl ObjectId {
 #[serde(tag = "kind", content = "identity", deny_unknown_fields)]
 pub(crate) enum ConfiguredAdmission {
     #[serde(rename = "node22")] Node22(Node22Identity),
+    #[serde(rename = "node22_bigint")] Node22BigInt(Node22BigIntIdentity),
     #[serde(rename = "native")] Native(ObjectId),
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -53,6 +54,8 @@ pub(crate) struct Binding {
 pub(crate) struct Operation {
     pub batch_id: String, pub operation_id: String, pub request_sha256: String,
     pub processing_mode: String, pub binding: Binding, pub files: Vec<ExpectedFile>,
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_publication_role")]
+    pub publication_role: Option<PublicationRole>,
 }
 // Match Standalone's fixed product namespace, not a renderer-controlled path.
 pub(crate) fn private_data_root() -> io::Result<PathBuf> {
@@ -131,6 +134,15 @@ pub(crate) fn prepare_configured(root: &Path, data: &Path, nonce: &str, admissio
             if public.node22_identity()? != *expected { return Err(refused()); }
             public // Same held capability continues into provisioning, no re-adoption.
         },
+        ConfiguredAdmission::Node22BigInt(expected) => {
+            // Only a freshly persisted exact setting grants this admission.
+            // A rounded /1 or /2 record may not be upgraded from today's stat.
+            if record["schema"] != "datasecure-result-root/5" ||
+                record["exact_identity"] != serde_json::json!(expected) { return Err(refused()); }
+            let public = Directory::open_existing(root, None)?;
+            if public.node22_bigint_identity()? != *expected { return Err(refused()); }
+            public
+        },
     };
     #[cfg(test)] guard.test_event("configured_before_provision");
     private_parent.inspect_child("settings", settings.identity())?;
@@ -176,12 +188,20 @@ fn configure_admitted(root: &Path, data: &Path, nonce: &str, guard: &NativeGuard
         anonymize_identity: anonymize.identity().into(), markdown_identity: markdown.identity().into() })
 }
 pub(crate) fn execute(data: &Path, op: &Operation, command: &str, guard: &NativeGuard) -> io::Result<&'static str> {
-    execute_inner(data, op, command, None, guard)
+    execute_inner(data, op, command, None, guard, false)
+}
+pub(crate) fn inspect_results(data: &Path, op: &Operation, guard: &NativeGuard) -> io::Result<&'static str> {
+    if op.publication_role != Some(PublicationRole::Results) { return Err(error("AI_EXPORT_INVALID")); }
+    execute_inner(data, op, "reconcile", None, guard, true)
 }
 pub(crate) fn write_body(data: &Path, op: &Operation, index: usize, bytes: &[u8], guard: &NativeGuard) -> io::Result<&'static str> {
-    execute_inner(data, op, "write_body", Some((index, bytes)), guard)
+    execute_inner(data, op, "write_body", Some((index, bytes)), guard, false)
 }
-fn execute_inner(data: &Path, op: &Operation, command: &str, body: Option<(usize, &[u8])>, guard: &NativeGuard) -> io::Result<&'static str> {
+fn execute_inner(data: &Path, op: &Operation, command: &str, body: Option<(usize, &[u8])>, guard: &NativeGuard,
+    inspect_only: bool) -> io::Result<&'static str> {
+    if inspect_only && (op.publication_role != Some(PublicationRole::Results) || command != "reconcile" || body.is_some()) {
+        return Err(error("AI_EXPORT_INVALID"));
+    }
     if !hex(&op.batch_id, 64) || !hex(&op.operation_id, 32) || !hex(&op.request_sha256, 64) ||
         !["publish", "reconcile", "acknowledge", "abandon", "write_body"].contains(&command) ||
         op.binding.schema != "datasecure-native-export-binding/1" ||
@@ -198,14 +218,16 @@ fn execute_inner(data: &Path, op: &Operation, command: &str, body: Option<(usize
     };
     let target = public.open_bound_child(name, id.identity()?)?;
     let request = Request::new(op.batch_id.clone(), op.operation_id.clone(), op.request_sha256.clone(),
-        op.processing_mode.clone(), op.files.clone(), &private, &target)?;
+        op.processing_mode.clone(), op.files.clone(), &private, &target)?
+        .with_publication_role(op.publication_role);
     if command == "abandon" && Workspace::abandon_unbound(&private, &target, &request, guard)? {
         parent.inspect_child(&op.binding.private_name, private.identity())?;
         public.inspect_child(name, target.identity())?;
         return Ok("abandoned");
     }
-    let workspace = Workspace::open(&private, &target, request, guard)?;
-    let tx = workspace.transaction(guard)?;
+    let workspace = if inspect_only { Workspace::open_existing(&private, &target, request, guard)? }
+        else { Workspace::open(&private, &target, request, guard)? };
+    let tx = if inspect_only { workspace.existing_transaction(guard)? } else { workspace.transaction(guard)? };
     if let Some((index, bytes)) = body {
         // No Node pathname write precedes this native identity/ACL check.
         // Each body lives only in this operation's bound transaction stage.
@@ -214,7 +236,7 @@ fn execute_inner(data: &Path, op: &Operation, command: &str, body: Option<(usize
         public.inspect_child(name, target.identity())?;
         return Ok("staged");
     }
-    let status = match command {
+    let status = if inspect_only { tx.inspect_completed()? } else { match command {
         "reconcile" => tx.reconcile()?, "acknowledge" => tx.acknowledge()?, "abandon" => tx.abandon()?,
         "publish" => match tx.reconcile()? {
             s @ (Status::Completed | Status::Acknowledged) => s,
@@ -225,7 +247,7 @@ fn execute_inner(data: &Path, op: &Operation, command: &str, body: Option<(usize
             },
         },
         _ => unreachable!(),
-    };
+    } };
     // Retain parent capabilities through reconciliation and this final check.
     parent.inspect_child(&op.binding.private_name, private.identity())?;
     public.inspect_child(name, target.identity())?;
@@ -258,7 +280,7 @@ mod tests {
         }
         fn op(&self, guard: &NativeGuard) -> Operation {
             let binding = configure(&self.path.join("public"), &self.path.join("private"), &"d".repeat(32), guard).unwrap();
-            Operation { batch_id: "a".repeat(64), operation_id: "b".repeat(32), request_sha256: "c".repeat(64),
+            Operation { batch_id: "a".repeat(64), operation_id: "b".repeat(32), request_sha256: "c".repeat(64), publication_role: None,
                 processing_mode: "markdown-and-anonymize".into(), binding,
                 files: vec![ExpectedFile { name: "Dokument_01.md".into(), bytes: 5, sha256: Sha256::digest(b"hello").into() }] }
         }
@@ -277,6 +299,84 @@ mod tests {
         }
     }
     #[test]
+    fn result_role_history_inspection_never_creates_setup_or_repairs_missing_receipts() {
+        fn tree(root: &Path) -> Vec<(PathBuf, Option<Vec<u8>>)> {
+            fn visit(base: &Path, directory: &Path, rows: &mut Vec<(PathBuf, Option<Vec<u8>>)>) {
+                let mut children: Vec<_> = fs::read_dir(directory).unwrap().map(|entry| entry.unwrap().path()).collect();
+                children.sort();
+                for child in children {
+                    let metadata = fs::symlink_metadata(&child).unwrap(); assert!(!metadata.file_type().is_symlink());
+                    rows.push((child.strip_prefix(base).unwrap().to_path_buf(), if metadata.is_file() { Some(fs::read(&child).unwrap()) } else { None }));
+                    if metadata.is_dir() { visit(base, &child, rows); }
+                }
+            }
+            let mut rows = Vec::new(); visit(root, root, &mut rows); rows
+        }
+        for missing in ["setup", "complete", "parent-binding", "transaction-intent", "lock", "changed-body", "extra-file", "none"] {
+            let f = Fixture::new(); let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
+            let mut op = f.op(&guard); op.publication_role = Some(PublicationRole::Results);
+            let data = f.path.join("private");
+            let private = data.join(&op.binding.private_name);
+            let journal = private.join(format!("journal-{}", op.operation_id));
+            if missing != "setup" {
+                write_body(&data, &op, 0, b"hello", &guard).unwrap();
+                assert_eq!(execute(&data, &op, "publish", &guard).unwrap(), "completed");
+                let remove = match missing {
+                    "complete" => Some(journal.join(format!("{}-complete.json", op.operation_id))),
+                    "parent-binding" => Some(private.join(format!("{}-parents-binding.json", op.operation_id))),
+                    "transaction-intent" => Some(journal.join(format!("{}-intent.json", op.operation_id))),
+                    "lock" => Some(journal.join("export-control.lock")), _ => None,
+                };
+                if let Some(path) = remove { fs::remove_file(path).unwrap(); }
+                let generation = f.path.join("public/DataSecure-KI-Export").join(format!("Ergebnisse-{}", op.operation_id));
+                if missing == "changed-body" { fs::write(generation.join("Dokument_01.md"), b"other").unwrap(); }
+                if missing == "extra-file" { fs::write(generation.join("foreign.txt"), b"not ours").unwrap(); }
+            }
+            let before = tree(&f.path);
+            let result = inspect_results(&data, &op, &guard);
+            assert_eq!(result.is_ok(), missing == "none", "{missing}");
+            if missing == "none" { assert_eq!(result.unwrap(), "completed"); }
+            assert_eq!(tree(&f.path), before, "history inspection changed names or bytes: {missing}");
+            if missing == "complete" {
+                assert_eq!(execute(&data, &op, "reconcile", &guard).unwrap(), "completed", "only publication context can recover lost completion");
+                assert_eq!(inspect_results(&data, &op, &guard).unwrap(), "completed");
+            }
+        }
+    }
+    #[test]
+    fn result_role_operations_publish_immutable_generations_without_changing_legacy_authority() {
+        for mode in ["markdown-only", "markdown-and-anonymize"] {
+            let f = Fixture::new(); let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
+            let mut op = f.op(&guard); op.processing_mode = mode.into();
+            let legacy_json = serde_json::to_value(&op).unwrap();
+            assert!(legacy_json.get("publication_role").is_none());
+            assert!(serde_json::from_value::<Operation>(legacy_json.clone()).unwrap().publication_role.is_none());
+            for bad in [serde_json::Value::Null, serde_json::json!("export"), serde_json::json!(false), serde_json::json!({ "results": null })] {
+                let mut value = legacy_json.clone(); value["publication_role"] = bad;
+                assert!(serde_json::from_value::<Operation>(value).is_err());
+            }
+            op.publication_role = Some(PublicationRole::Results);
+            let data = f.path.join("private");
+            write_body(&data, &op, 0, b"hello", &guard).unwrap();
+            assert_eq!(execute(&data, &op, "publish", &guard).unwrap(), "completed");
+            assert_eq!(execute(&data, &op, "acknowledge", &guard).unwrap(), "acknowledged");
+            let namespace = if mode == "markdown-only" { "DataSecure-Markdown-Korrektur" } else { "DataSecure-KI-Export" };
+            let target = f.path.join("public").join(namespace);
+            let first = target.join(format!("Ergebnisse-{}", op.operation_id));
+            assert_eq!(fs::read(first.join("Dokument_01.md")).unwrap(), b"hello");
+            let mut legacy = op.clone(); legacy.publication_role = None;
+            assert!(execute(&data, &legacy, "reconcile", &guard).is_err());
+            assert!(!target.join(format!("Export-{}", op.operation_id)).exists());
+            let mut next = op.clone(); next.operation_id = "e".repeat(32); next.request_sha256 = "f".repeat(64);
+            next.files[0].sha256 = Sha256::digest(b"world").into();
+            write_body(&data, &next, 0, b"world", &guard).unwrap();
+            assert_eq!(execute(&data, &next, "publish", &guard).unwrap(), "completed");
+            assert_eq!(fs::read(first.join("Dokument_01.md")).unwrap(), b"hello", "no in-place revision update");
+            assert_eq!(fs::read(target.join(format!("Ergebnisse-{}", next.operation_id)).join("Dokument_01.md")).unwrap(), b"world");
+            assert_eq!(fs::read_dir(target).unwrap().count(), 2);
+        }
+    }
+    #[test]
     fn configured_node22_admission_uses_actual_node_identity_on_the_target_os() {
         let f = Fixture::new();
         let root = f.path.join("public");
@@ -291,6 +391,55 @@ mod tests {
             .all(|value| value.parse::<u64>().is_ok_and(|value| value < (1u64 << 53)));
         if safe { assert_eq!(directory.node22_identity().unwrap(), expected); }
         else { assert!(directory.node22_identity().is_err(), "ambiguous legacy Numbers require a new native selection"); }
+    }
+    #[test]
+    fn configured_bigint_admission_matches_actual_node_without_number_rounding() {
+        let f = Fixture::new(); let root = f.path.join("public");
+        let node = std::env::var_os("DATASECURE_TEST_NODE").unwrap_or_else(|| "node".into());
+        let output = std::process::Command::new(node).args(["-e",
+            "const s=require('node:fs').statSync(process.argv[1],{bigint:true});process.stdout.write(JSON.stringify({dev:String(s.dev),ino:String(s.ino),birthtime_ns:String(s.birthtimeNs)}));"])
+            .arg(&root).output().unwrap();
+        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+        let expected: Node22BigIntIdentity = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(Directory::open_existing(&root, None).unwrap().node22_bigint_identity().unwrap(), expected);
+        let value = serde_json::json!({"kind":"node22_bigint", "identity": expected});
+        assert!(matches!(serde_json::from_value::<ConfiguredAdmission>(value.clone()).unwrap(), ConfiguredAdmission::Node22BigInt(_)));
+        for bad in [serde_json::json!(0), serde_json::json!({"dev":"1","ino":"2","birthtime_ms":"3"}),
+            serde_json::json!({"dev":"1","ino":"2","birthtime_ns":"3","extra":true})] {
+            let mut invalid = value.clone(); invalid["identity"] = bad;
+            assert!(serde_json::from_value::<ConfiguredAdmission>(invalid).is_err());
+        }
+    }
+    #[test]
+    fn configured_bigint_requires_fresh_exact_setting_and_never_upgrades_legacy_numbers() {
+        for fault in ["root", "digest", "ino", "dev", "birthtime_ns", "noncanonical", "legacy1", "legacy2", "bound6", "none"] {
+            let f = Fixture::new(); let root = f.path.join("public"); let data_path = f.path.join("private");
+            let expected = Directory::open_existing(&root, None).unwrap().node22_bigint_identity().unwrap();
+            let mut admission_id = expected.clone();
+            match fault {
+                "ino" => admission_id.ino = "0".into(), "dev" => admission_id.dev = "0".into(),
+                "birthtime_ns" => admission_id.birthtime_ns = "0".into(),
+                "noncanonical" => admission_id.ino.insert(0, '0'), _ => (),
+            }
+            let schema = match fault { "legacy1" => "datasecure-result-root/1", "legacy2" => "datasecure-result-root/2",
+                "bound6" => "datasecure-result-root/6", _ => "datasecure-result-root/5" };
+            let bytes = serde_json::to_vec(&serde_json::json!({"schema":schema, "root":root,
+                "identity":{"dev":"1","ino":"70931694135686580","birthtime_ms":"3"},
+                "exact_identity": admission_id, "notices":{"sync":false,"network":false}})).unwrap();
+            let data = Directory::open_existing(&data_path, None).unwrap();
+            let settings = data.create_controlled_child("settings").unwrap();
+            settings.write_record_atomic("result-root.json", &bytes).unwrap(); drop(settings); drop(data);
+            let digest = if fault == "digest" { "0".repeat(64) } else { format!("{:x}", Sha256::digest(&bytes)) };
+            if fault == "root" { fs::rename(&root, f.path.join("original-public")).unwrap(); fs::create_dir(&root).unwrap(); }
+            let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
+            let result = prepare_configured(&root, &data_path, &"c".repeat(32), &ConfiguredAdmission::Node22BigInt(admission_id), &digest, &guard);
+            assert_eq!(result.is_ok(), fault == "none", "{fault}");
+            assert_eq!(fs::read(data_path.join("settings/result-root.json")).unwrap(), bytes, "never repair or upgrade settings");
+            if fault != "none" {
+                assert_eq!(fs::read_dir(&root).unwrap().count(), 0, "{fault}: no public provisioning");
+                assert_eq!(fs::read_dir(&data_path).unwrap().count(), 1, "{fault}: settings only");
+            }
+        }
     }
     #[test]
     fn result_root_volume_mismatch_is_rejected_before_provisioning() {

@@ -54,8 +54,8 @@ aktiv; die App öffnet dabei nicht automatisch die vollständige Verlaufsliste.
    Andernfalls sind Entscheidungen zu allen gefundenen Kontaktwerten nötig,
    damit dieser Prüfschritt abgeschlossen wird. Beim Anonymisierungsweg darf
    eine erforderliche Fundstellenprüfung nicht auf diese Weise umgangen werden.
-   Bei geführter Anonymisierung folgen die erforderliche Fundstellenprüfung,
-   Dokumentfreigabe und ein gesonderter Export. Alternativ kannst du vor
+   Bei geführter Anonymisierung folgt die erforderliche Fundstellenprüfung,
+   danach die technische Ergebnisbereitstellung ohne weitere Exportbestätigung. Alternativ kannst du vor
    dem Start die unten erläuterte Auswahl **Automatisch maskieren** wählen.
    Die Kontaktprüfung bestätigt ohnehin keine übrigen OCR-Zeilen. Mit oder
    ohne das zweite Häkchen ist später eine freiwillige Markdown-Nachkorrektur
@@ -98,30 +98,24 @@ aktiv; die App öffnet dabei nicht automatisch die vollständige Verlaufsliste.
    Es wird keine zweite Prüfseite automatisch
    geöffnet. **Ergebnisordner öffnen** bleibt der normale nächste Schritt;
    der Text ist weiterhin nicht anonymisiert.
-6. Nach Abschluss aller Fundstellengruppen öffnet sich bei Anonymisierung die
-   Dokumentprüfung **desselben Laufs**. Das ist noch kein Export:
-   Originaltext und geplantes Markdown vergleichen, gewünschte Dokumente
-   auswählen. Die zuvor gewählten Maskierungen sind bereits angewendet.
-   Änderungen heben betroffene Freigaben auf. Eine gesonderte Pflichtfreigabe
-   ist nicht nötig. Über **Prüfung öffnen** im Verlauf lässt sich die
-   Dokumentprüfung später wieder öffnen.
-7. **Auswahl exportieren** wählen und den angezeigten Auftrag
-   mit **Freigeben und exportieren** ausdrücklich bestätigen. Die Bestätigung
-   schließt die Freigabe genau dieser Textstände ein; technische Schutzprüfungen
-   bleiben aktiv. Vorschau und Abbrechen geben nichts neu frei und kopieren nichts.
-   Nur freigegebene aktuelle Markdown-Stände werden
-   in einen **normalen separaten Ordner** kopiert. Originale, Identitäts- und
-   Dateizuordnung, private Prüfstände und technische Begleitdateien sind nicht
-   enthalten. Der technische Laufordner kann Prüf- und Zuordnungsdateien enthalten;
-   der separate Exportordner enthält nur die ausgewählten freigegebenen
-   Markdown-Dateien. Die exportierten Markdown-Dateien kannst du auch ohne KI
-   verwenden. DataSecure lädt nichts hoch.
+6. Nach bestätigtem Abschluss aller erforderlichen Gruppen kehrst du zu den
+   **Laufdetails desselben Laufs** zurück. Die gewählten Maskierungen sind
+   bereits angewendet. Erst wenn die technische Bereitstellung bestätigt ist,
+   sind die Dateien fertig. Es gibt keine zweite Dokumentauswahl, Pflichtfreigabe
+   oder Exportbestätigung.
+7. **Ergebnisordner öffnen** führt zu den fertigen Dateien. Diese kannst du im
+   Dateimanager selbst auswählen und auch ohne KI verwenden. Die neuen fertigen
+   MD-Ordner enthalten keine Originale, vertraulichen Zuordnungen, privaten
+   Prüfstände oder technischen Begleitdateien. Bei alten Läufen können solche
+   Beilagen weiterhin vorhanden sein; alte Ordner werden nicht bereinigt.
+   DataSecure lädt nichts hoch. Eine technische Prüfung garantiert weder
+   vollständige Anonymität noch fachliche Fehlerfreiheit.
 
 Der bereits gespeicherte Ergebnisordner wird angezeigt und ohne neuen Picker
 verwendet, sofern ursprüngliche Identität und tatsächlicher Zugriff passen.
 Ein ersetzter, fehlender oder verweigerter Ordner benötigt eine neue bewusste
-Wahl; alte Exporte werden dabei nicht verschoben. **Auswahl nur freigeben**
-und Widerrufen bleiben unter **Freigaben verwalten (optional)** verfügbar.
+Wahl für neue Läufe; alte Ergebnisstände werden dabei nicht verschoben oder
+stillschweigend unter einem anderen Ziel wiederhergestellt.
 
 **Später entscheiden** verschiebt die Prüfung des konkreten Laufs. Noch nicht
 übergebene Eingaben sind nicht gespeichert. Der **Verlauf** enthält höchstens
@@ -134,8 +128,7 @@ Bei reiner Umwandlung bleiben Originalinhalte erhalten: **Markdown nachkorrigier
 bietet die nachträgliche Korrektur. Ein Markdown-Export ist ausdrücklich
 **nicht anonymisiert**. Die bereits erzeugten Markdown-Dateien musst du nicht
 nochmals freigeben. Die Nachkorrektur ist freiwillig. Zum Vergleichen und
-Korrigieren den **Dateinamen anklicken**; die **Häkchen wählen nur Dateien
-für eine zusätzliche Kopie** und öffnen keinen Vergleich. Die Dateiliste zeigt
+Korrigieren den **Dateinamen anklicken**. Die Dateiliste zeigt
 zuerst nur erstellte Markdown-Dateien mit Inhaltshinweisen; über **Dateien
 anzeigen** kannst du **Nachbearbeitet**, **Alle Dateien** oder **Ohne Hinweise**
 wählen. Eine Datei ohne Hinweis ist nicht automatisch inhaltlich oder per OCR
@@ -144,25 +137,17 @@ eine Kontaktprüfung nur erkannte E-Mail-/Telefonwerte kontrolliert, nicht die
 übrigen Wörter, Zahlen oder Lesereihenfolge. Dieser Hinweis verschwindet durch
 Kontaktbestätigung oder eine gespeicherte Textkorrektur nicht automatisch.
 Nicht umgewandelte Dateien haben keinen Textstand zum Korrigieren
-und werden separat mit Grund angezeigt. **Korrektur speichern** hält den
-geänderten Text zunächst nur als privaten, wieder aufrufbaren Stand fest; die
-ursprünglich erzeugte Markdown-Datei bleibt unverändert. **Korrektur
-gespeichert** bezeichnet den aktuell vom erzeugten Text abweichenden Stand,
-auch nach einem Neustart. Der Inhaltshinweis bleibt bestehen, weil eine
-manuelle Textänderung dessen Ursache nicht automatisch widerlegt. Für eine
-verwendbare zusätzliche Kopie die gewünschten Dateien anhaken,
-**Zusätzliche Markdown-Kopie speichern** wählen und
-**Kopie speichern** bestätigen. Eine Vorschau oder **Abbrechen** erstellt keine
-Kopie und bestätigt keinen Textstand. Ungespeicherte Korrekturen zuerst speichern
-oder verwerfen. Bei verlorener Speicherbestätigung wird keine Teilkopie gestartet;
-bereits bestätigte Stände können erhalten bleiben. Den angezeigten Stand neu laden.
-Fundstellenbestätigung und technische Dokumentfreigabe bleiben intern getrennt;
-der normale finale Exportklick enthält die Freigabe. Eine technische Erfolgsmeldung
-ersetzt keine fachliche Inhaltsprüfung.
-**Nachkorrekturen und Kopien** zeigt nur optionale Prüfungen und zusätzliche
-gespeicherte Kopien. Die dortigen Zähler zählen nicht die ursprünglichen Dateien
-im Ergebnisordner. Eine noch offene Kopierbestätigung bleibt ausdrücklich sichtbar
-und muss vor einem erneuten Kopierauftrag abgeglichen werden.
+und werden separat mit Grund angezeigt. **Korrektur speichern** sichert die
+Revision und stellt den vollständigen aktuellen Ergebnisstand automatisch bereit.
+Erst nach Bestätigung gilt die sichtbare Ergebnisdatei als aktualisiert.
+Der Ordneröffner führt auf den bestätigten neuen Stand; ältere Stände bleiben
+erhalten. Bei einem Fehler kann die Revision privat gespeichert sein, während
+die Bereitstellung noch unbestätigt ist. Den konkreten Vorgang abgleichen,
+nicht blind neu speichern oder verarbeiten. Außerhalb der App veränderte oder
+gelöschte Ergebnisse werden nicht ungefragt überschrieben oder wiederangelegt.
+Inhaltshinweise verschwinden durch eine manuelle Korrektur nicht automatisch.
+Historische zusätzliche Kopien bleiben unter den ausführlichen Laufdetails
+erreichbar und werden nicht als heutige Ergebnisstände umgedeutet.
 
 Nach bestätigtem Start bleibst du auf der Laufseite. Der erfolgreiche Abschluss
 ist grün und nennt erstellte Dateien, OCR-aus-Auslassungen und technische Fehler
@@ -189,11 +174,12 @@ Technische Ergebnisse liegen unter `DataSecure-Markdown/Lauf-…` beziehungsweis
 Vor einem neuen Lauf kannst du stattdessen **Originalname mit „-anonymisiert“**
 wählen. Dateinamen können personenbezogene Angaben enthalten; diese Wahl ist
 daher keine Anonymisierung der Namen. Sie gilt nur für die Ergebnisdateien
-dieses Laufs. Spätere Exporte erhalten immer neutrale Namen.
-Die lokale `DataSecure-Zuordnung.csv` und
-`VERTRAULICH-NICHT-HOCHLADEN` enthalten Originalangaben. **Nie den gesamten
-Laufordner weitergeben.** Stattdessen den getrennten freigegebenen
-Export verwenden. Die Identitätszuordnung wird nicht automatisch gelöscht.
+dieses Laufs. Neue nachbearbeitete Anonymisierungsstände erhalten neutrale Namen.
+Vertrauliche Datei-/Identitätszuordnungen sind getrennt über optionale Aktionen
+erreichbar und nicht Teil der neuen fertigen MD-Ordner. In älteren Laufordnern
+können `DataSecure-Zuordnung.csv` und `VERTRAULICH-NICHT-HOCHLADEN` weiterhin
+Originalangaben enthalten; diese alten Ordner nicht pauschal weitergeben.
+Die Identitätszuordnung wird nicht automatisch gelöscht.
 Reine Markdown-Konvertierung erzeugt keine Dateizuordnung.
 Auch nach „Markdown nachkorrigieren“ behalten neue Kopien den ursprünglichen
 Basisnamen mit `.md`; bei Kollisionen gibt es eindeutige Zusätze. Dieser Weg
@@ -258,7 +244,7 @@ gekennzeichnete automatische Erstfreigabe, keine menschliche Prüfung.
 Nicht lesbare oder technisch nicht sicher prüfbare Dateien werden mit Grund
 ausgelassen. Eine spätere Änderung oder ein Widerruf hebt die betroffene
 Freigabe auf; sie wird nicht beim nächsten Laden automatisch wieder erteilt.
-Der Export bleibt auch bei automatischer Maskierung ein ausdrücklicher Auftrag.
+Fertige Ergebnisdateien benötigen im neuen Ablauf keinen zusätzlichen Exportauftrag.
 Die separate Option **Text aus Bildern und Scans lesen (OCR)** gilt für beide
 Abläufe und wird dadurch nicht eingeschaltet. Alle vier Kombinationen sind
 möglich; die technischen Schutzprüfungen bleiben erhalten.
@@ -270,14 +256,12 @@ Bei Markdown-Konvertierung stehen optionale Kopierbelege ausschließlich in
 
 **Lauf abgeschlossen – mit Hinweisen** ist ein abgeschlossener technischer
 Lauf, kein weiter laufender Prüfschritt. Hinweise und ausgelassene Dateien
-bleiben gelb sichtbar. **Export abgeschlossen** bedeutet zusätzlich, dass
-die ausgewählten freigegebenen Textstände lokal kopiert und bestätigt wurden.
-Du musst diesen Export nicht wiederholen. Das anschließende Nachladen der
-Dokumentanzeige ist davon getrennt; weitere Änderungen benötigen einen
-frischen Stand. **Zur Laufübersicht** im Erfolgsdialog führt zur Übersicht
-desselben Laufs, nicht erneut zur Dokumentprüfung. Du musst weder die Freigabe
-noch den Export wiederholen. Kein Schritt lädt automatisch Daten ins Internet
-hoch.
+bleiben gelb sichtbar. Sobald die technische Bereitstellung bestätigt ist,
+führt **Ergebnisordner öffnen** zum fertigen Stand. Eine optionale gespeicherte
+Korrektur erzeugt einen neuen vollständigen Stand, nicht eine neue Pflichtfreigabe.
+Ein alter **Export abgeschlossen**-Beleg beschreibt nur die damalige zusätzliche
+Kopie; er ist kein Nachweis für heute nachbearbeitete Dateien. Kein Schritt lädt
+automatisch Daten ins Internet hoch.
 
 Bei Problemen unter **Einstellungen** oder in der Fehlerhilfe
 **Diagnosepaket speichern** wählen; diese Funktion ist ohne Core-Verbindung

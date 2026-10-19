@@ -189,6 +189,29 @@ test('MODEL: native ACL fixture refuses a non-Darwin host before any fixture IO'
   const f = aclFixtureModel('normal', 'win32'); assert.throws(f.run); assert.equal(f.calls, 0); assert.equal(f.entries.size, 0);
 });
 
+test('MODEL: shared initial-result native fixture rejects nonnative/fallback contexts before any IO or product import', () => {
+  const source = fs.readFileSync(path.join(directory, 'helpers/native-initial-results-fixture.cjs'), 'utf8');
+  for (const change of [{ platform: 'linux' }, { version: 'v22.23.1' }, { arch: 'ia32' },
+    { env: { DATASECURE_NATIVE_EXPORT_CHANNEL: '0' } }, { network: false }, { invalidScope: true }]) {
+    let touches = 0;
+    const env = change.env || { DATASECURE_NATIVE_EXPORT_CHANNEL: '1' };
+    const context = vm.createContext({ module: { exports: {} }, Buffer, console,
+      process: { platform: change.platform || 'win32', arch: change.arch || 'x64', version: change.version || 'v22.23.2', env },
+      __DATASECURE_NETWORK_DENY_ACTIVE__: change.network !== false,
+      require(name) {
+        if (name === 'node:assert/strict') return assert;
+        if (name === 'node:path') return path.win32;
+        if (name === 'node:crypto') return crypto;
+        if (name === 'node:fs') return new Proxy({}, { get() { touches++; throw Error('unexpected filesystem access'); } });
+        touches++; throw Error('unexpected product import');
+      } });
+    vm.runInContext(source, context, { timeout: 1000 });
+    const options = { server: 'C:\\package\\server', scope: change.invalidScope ? 'C:\\real-user-data' : 'C:\\own\\datasecure-windows-ownership-load-model' };
+    assert.throws(() => context.module.exports.runNativeInitialResults(options), { code: 'NATIVE_INITIAL_RESULTS_FAILED' });
+    assert.equal(touches, 0);
+  }
+});
+
 test('MODEL: real runner dispatch is explicit Darwin-only, old Windows artifact plans unchanged', () => {
   const runner = fs.readFileSync(path.join(directory, 'run-product-suite.js'), 'utf8'), spawns = [];
   const context = vm.createContext({ module: { exports: {} }, console: { log() {}, error() {} },
@@ -267,6 +290,10 @@ function lifecycleModel(mode = 'normal') {
         case 'worker_free': value = { builtin: true, busy: false, callbacks: 1, reentrant: true, exited: true, normal: true }; break;
         case 'acl_matrix': value = { cases: 6, empty_private_acl: true, benign_home_ancestor: true,
           additional_mutation_grants_refused: true, private_aces_refused: true, fixture_cleanup_confirmed: true }; break;
+        case 'initial_results': value = { schema: 'datasecure-native-initial-results/1', target: 'macos-arm64', native_output_guard: true,
+          refused_guard_mkdirs: 0, refused_guard_attempt_absent: true, created_directories: 2, written_documents: 2,
+          read_only_reopen_under_output_lock: true, reopen_mkdirs: 0, exact_visible_markdown_inventory: true,
+          lock_only_in_output_container: true, original_inputs_unchanged: true, fixture_cleanup_confirmed: true }; break;
         case 'release':
           if (this.index === 0 && ++this.releases === 2) { ok = false; value = 'MAC_NATIVE_NO_HELD_CAPABILITY'; }
           else value = { released: true, root_closed: true };
@@ -274,13 +301,17 @@ function lifecycleModel(mode = 'normal') {
         case 'shutdown': value = { stopped: true }; break;
         default: throw Error('unexpected model operation');
       }
+      if (frame.operation === 'initial_results' && mode === 'initial-probe-fallback') value.native_output_guard = false;
+      if (frame.operation === 'initial_results' && mode === 'initial-probe-mutated-before-refusal') value.refused_guard_mkdirs = 1;
+      if (frame.operation === 'initial_results' && mode === 'initial-probe-unconfirmed-close') value.fixture_cleanup_confirmed = false;
       const message = vm.runInContext('JSON.parse(' + JSON.stringify(JSON.stringify({ seq: frame.seq, ok, value })) + ')', context);
       this.emit('message', message); callback?.(null);
       if (frame.operation === 'shutdown') {
         if (mode === 'late-error-during-b-stop' && this.index === 1)
           children[0].stderr.emit('error', fixedIO('EIO'));
         if (['normal', 'late-output', 'late-ipc', 'late-error-during-b-stop', 'exit-without-close',
-          'cleanup-partial', 'cleanup-validation-fails'].includes(mode)) queueMicrotask(() => this.finish());
+          'cleanup-partial', 'cleanup-validation-fails', 'initial-probe-fallback', 'initial-probe-mutated-before-refusal',
+          'initial-probe-unconfirmed-close'].includes(mode)) queueMicrotask(() => this.finish());
       }
     }
   }
@@ -323,6 +354,15 @@ for (const mode of ['late-output', 'late-ipc', 'late-error-during-b-stop'])
     assert.equal(report.error_code, mode === 'late-error-during-b-stop' ? 'MAC_NATIVE_STREAM_FAILED' : 'MAC_NATIVE_PROTOCOL_INVALID');
     assert.equal(f.children[0].operations.filter(value => value === 'hold').length, 1, 'no semantic operation replay');
     assert.equal(f.children[0].kills.length, 0, 'no signal after observed Exit');
+  });
+for (const mode of ['initial-probe-fallback', 'initial-probe-mutated-before-refusal', 'initial-probe-unconfirmed-close'])
+  test('MODEL: actual Mac gate refuses ' + mode + ' and preserves its bounded fixture', async () => {
+    const f = lifecycleModel(mode); let report;
+    await assert.rejects(f.gate(), error => { report = error.report; return report.native_status === 'FAILED'; });
+    assert.equal(report.phase, 'initial_result_output_guard'); assert.equal(report.coverage.initial_result_output_guard, false);
+    assert.equal(report.fixture_cleanup_confirmed, false); assert.equal(f.cleanups, 0);
+    assert.equal(report.process_receipts.every(receipt => receipt.confirmed && receipt.normal && receipt.shutdown_ack), true);
+    assert.equal(f.children[0].operations.filter(value => value === 'initial_results').length, 1);
   });
 for (const mode of ['never-close', 'kill-throws', 'exit-without-close', 'detach-throws'])
   test('MODEL NG-02: ' + mode + ' is bounded, detached and never called reaped', async () => {

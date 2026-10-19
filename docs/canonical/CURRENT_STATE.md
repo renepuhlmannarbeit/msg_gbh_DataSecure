@@ -4,13 +4,22 @@ Arbeitsversion: **3.2.0-rc166**, Entwicklung und erneute Paketprüfung; veröffe
 
 ### Aktuelle Umsetzung nach weiterem Nutzertest – RC166
 
+Neuer verbindlicher Zusatzauftrag: normale Dokumentauswahl/Freigabe/Export nach
+dem Lauf entfällt. Notwendige OCR-/Fundstellenprüfungen bleiben; fertige Dateien
+und optionale Korrekturen werden technisch gebunden bereitgestellt. Neue
+immutable Ergebnisgenerationen statt generischem Überschreiben; vertrauliche
+Zuordnungen getrennt. Source02/76078347 ist vollständig geprüft, aber wegen
+dieses neuen Auftrags kein vereinfachter Releasekandidat. Der alte lokale
+`RC166`-Ordner und alle Belege bleiben erhalten. Neue vollständige Quellen-/
+Paketnachweise folgen. [Vertrag](../acceptance/RC166_DIRECT_RESULTS_20261019.md).
+
 Der Nutzer hat alle gesammelten Nachbesserungen und neue Testversionen für
 Windows x64 sowie macOS ARM64/Intel aus gleichem Appstand beauftragt. Keine
 Desktopbedienung durch Agenten; Nutzer und Kollege übernehmen die praktische
 Abnahme. OCR-Ordnerlabels, gemeinsame Markdown-Laufdetails, verständliche
 Entscheidungswahl, stabilere Hintergrundanzeige, separates Large-Testdatenpaket
 und Korrektur der formalen Dokumentbindung werden vor frischen Quellen-/
-Native-/Paketnachweisen zusammengeführt. Gezielte Workspace406/406 und
+Native-/Paketnachweisen zusammengeführt. Gezielte Workspace419/419 und
 Reviewfrontend67/67 sowie die Headless-Designmatrizen sind grün; noch keine
 eingefrorenen RC166-Paket-/Release-PASS. Der aktuelle Gesamtauftrag und die
 Nachweisgrenzen stehen in [RC166-Umsetzung](../acceptance/RC166_BACKLOG_IMPLEMENTATION_20261019.md).

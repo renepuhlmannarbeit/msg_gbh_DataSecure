@@ -32,6 +32,9 @@
     "revision_binding": "document-id-revision-output-sha256-operation-id",
     "run_entity_scope": "immutable-membership-exact-semantic-identity-single-journal-commit",
     "raw_correction": "markdown-only-bounded-explicit-range-replacement",
+    "normal_completion": "direct-initial-results-no-post-run-selection-or-export-confirmation",
+    "optional_correction_publication": "complete-current-revision-vector-create-only-generation-with-technical-validation",
+    "result_opener": "existing-current-revision-and-target-bound-inspection-only-no-repair",
     "ai_export": "selected-approved-current-anonymization-revisions-only",
     "raw_export": "separate-non-anonymized-markdown-copy-namespace",
     "automatic_initial_approval": {
@@ -113,6 +116,7 @@
     "decide_document_review",
     "decide_document_review_batch",
     "export_approved_documents",
+    "publish_result_documents",
     "abandon_document_export",
     "open_document_export",
     "open_recorded_document_export",

@@ -72,6 +72,8 @@ const baseFiles = [
   'tests/test-worker-result-export-async.js',
   'tests/test-standalone-pause-control.js',
   'tests/test-native-export-channel.js',
+  'tests/test-result-generations.js',
+  'tests/test-result-initial-exact-binding.js',
   'tests/test-result-folder-config-migration.js',
   'tests/test-standalone-terminal-failures.js',
   'tests/test-standalone-document-control.js',

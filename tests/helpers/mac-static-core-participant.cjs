@@ -154,6 +154,11 @@ if (!isMainThread) {
           result = require('./native-macos-ownership-acl-fixture.cjs')
             .runNativeMacOwnershipAclCases(staticGuard.loadStaticOwnershipGuard(descriptor));
           break;
+        case 'initial_results':
+          if (worker || held) throw fail('MAC_NATIVE_PARTICIPANT_FAILED');
+          result = require('./native-initial-results-fixture.cjs')
+            .runNativeInitialResults({ server: options.server, scope: options.scope });
+          break;
         case 'shutdown':
           if (worker || held) throw fail('MAC_NATIVE_PARTICIPANT_FAILED');
           result = { stopped: true }; stopping = true; clearTimeout(watchdog); break;

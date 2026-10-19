@@ -39,6 +39,7 @@
     "allow-decide-document-review",
     "allow-decide-document-review-batch",
     "allow-export-approved-documents",
+    "allow-publish-result-documents",
     "allow-preview-document-export",
     "allow-abandon-document-export",
     "allow-open-document-export",

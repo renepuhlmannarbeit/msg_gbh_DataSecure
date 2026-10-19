@@ -226,8 +226,10 @@ function createRunHistory(deps) {
         // exists. Old all-stopped runs may still contain a historical report
         // file, but it must not be exposed as a result or mapping action.
         const run = summary.result_count > 0 ? bound : '';
-        const ledger = summary.processing_mode !== 'markdown-only' &&
-          Boolean(run && regularFile(path.join(run, MAPPING)));
+        const privateResults = savedExport?.result_layout === 'datasecure-visible-markdown/1';
+        const ledger = summary.processing_mode !== 'markdown-only' && Boolean(privateResults
+          ? (() => { try { return require('../gateway/result-export').privateResultLedger(summary.batch_id); } catch { return false; } })()
+          : run && regularFile(path.join(run, MAPPING)));
         const processing = Boolean(state && deps.liveExecutor(state));
         const canResume = !processing && !summary.complete && resumable.has(summary.batch_id);
         // History is a read-only projection of this exact journal snapshot.
@@ -257,7 +259,7 @@ function createRunHistory(deps) {
         const capturedIdentity = identityEligible && state ? identityLedger.identityStatus(state) : null;
         const identityWarning = identityEligible && !readableIdentity ? 'STANDALONE_IDENTITY_MAPPING_MISSING' :
           capturedIdentity?.available && !capturedIdentity.complete ? 'STANDALONE_IDENTITY_MAPPING_INVALID' :
-            readableIdentity && run && !identityLedger.publicationAvailable(summary.batch_id, run) ? 'STANDALONE_IDENTITY_PUBLICATION_FAILED' : null;
+            !privateResults && readableIdentity && run && !identityLedger.publicationAvailable(summary.batch_id, run) ? 'STANDALONE_IDENTITY_PUBLICATION_FAILED' : null;
         const feedback = state && conversionFeedback(state);
         const expectedOcrOmissions = summary.complete && Array.isArray(state?.items)
           ? state.items.filter(item => isAnonymizationOcrOmission(state, item)).length : 0;
@@ -350,6 +352,8 @@ function createRunHistory(deps) {
   function resolveLedger(batchId) {
     const entry = find(batchId);
     if (!entry.ledger_available) throw failure('STANDALONE_LEDGER_MISSING');
+    const privateFile = require('../gateway/result-export').privateResultLedger(batchId);
+    if (privateFile) return { ok: true, target_kind: 'file', local_path: privateFile, external_disclosure: false };
     return { ok: true, target_kind: 'file', local_path: path.join(entry._run, MAPPING), external_disclosure: false };
   }
   function resolveIdentityMapping(batchId) {
@@ -364,6 +368,9 @@ function createRunHistory(deps) {
       catch { throw failure('STANDALONE_IDENTITY_MAPPING_INVALID'); }
     }
     const privateFile = identityLedger.resolveDocument(batchId);
+    if (require('../gateway/result-export').initialResultPublication(batchId, false))
+      return { ok: true, target_kind: 'file', local_path: privateFile, external_disclosure: false,
+        publication_available: false, identity_mapping_scope: 'private' };
     let localPath = privateFile;
     let publicationAvailable = false;
     if (entry._run) {

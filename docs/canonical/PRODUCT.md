@@ -2,7 +2,17 @@
 
 Stand: 19.10.2026 · 3.2.0-rc166 · Ist-Zustand RC166 (Entwicklung) · veröffentlichte Windows/macOS RC165 unverändert · Linux RC159 · Cowork RC151
 
-**Aktuelle Standalone-Präzisierung nach RC164:** Der normale Dokumentweg benötigt
+**Aktuelle RC166-Entwicklung:** Notwendige OCR-/Fundstellenentscheidungen bleiben,
+danach führt der normale Weg direkt zu den fertigen Ergebnisdateien. Keine zweite
+Dokumentauswahl, Pflichtfreigabe oder Exportbestätigung. Optionale Nachbearbeitung
+stellt nach dem Speichern den vollständigen aktuellen Ergebnisstand bereit;
+ältere Stände bleiben erhalten. Technische Revision-/Hash-/Ziel-/Eigentumsprüfungen
+bleiben erhalten, ohne künstliche menschliche Freigabe. Neue fertige MD-Ordner
+halten vertrauliche Zuordnungen getrennt. Legacydaten werden nicht bereinigt
+oder rückwirkend umgedeutet. [Vertrag und neue Nachweisgrenzen](../acceptance/RC166_DIRECT_RESULTS_20261019.md).
+Noch kein Paket-/Zielhost-PASS dieser Vereinfachung.
+
+**Historischer RC165-Vertrag nach RC164:** Der normale Dokumentweg benötigt
 keine gesonderte Pflichtfreigabe mehr. Nach der Fundstellenprüfung können die
 bereits angewendeten Maskierungen angesehen und gewünschte Dokumente gewählt
 werden. Eine lesende Exportvorschau und anschließend **Freigeben und exportieren**
@@ -54,7 +64,7 @@ einzuführen. Claude erhält knappe aufgabenbezogene Anweisungen; technische
 Schutzprüfungen bleiben im Code. Nur tatsächlich mehrdeutige Inhalte benötigen
 eine lokale Fachentscheidung, nicht jeder erfolgreiche Verarbeitungsschritt.
 
-## Normalreise: Standalone RC165, nach RC164 vereinfachter Weg
+## Historische Normalreise: veröffentlichte Standalone RC165
 
 Die bewusste Zweckwahl aus DS-086 bleibt erhalten; Benennung und Darstellung
 wurden mit v2 erneuert. Historische Abgrenzung: Der integrierte Standalone-

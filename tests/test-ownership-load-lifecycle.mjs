@@ -385,10 +385,18 @@ async function executeGateModel(platform, flow) {
   function spawnModel(executable, parameters, configuration) {
     const child = new Child(); children.push(child);
     const name = path.basename(executable), setup = ['whoami.exe', 'icacls.exe'].includes(name);
+    const initialProbe = platform === 'windows' && parameters[0] === '--require';
     assert.equal(configuration.shell, false);
     if (setup) {
       assert.equal(platform, 'windows'); assert.deepEqual(configuration.stdio, ['ignore', 'pipe', 'pipe']);
       child.stdin = null;
+    } else if (initialProbe) {
+      assert.deepEqual(parameters, ['--require', path.join(fixture.root, 'server/network-deny.cjs'),
+        path.join(repository, 'tests/helpers/native-initial-results-fixture.cjs'), '--server', path.join(fixture.root, 'server'), '--scope', gateFixture]);
+      assert.equal(configuration.cwd, gateFixture); assert.deepEqual(configuration.stdio, ['ignore', 'pipe', 'pipe']);
+      assert.equal(configuration.env.DATASECURE_NATIVE_EXPORT_CHANNEL, '1');
+      assert.equal(configuration.env.DATASECURE_OWNERSHIP_GUARD_SHA256, fixture.build.artifact.sha256);
+      child.stdin = null; child.killAction = () => false;
     } else {
       assert.deepEqual(parameters, ['--require=../network-deny.cjs', 'desktop-sidecar.js']);
       assert.equal(configuration.cwd, path.join(fixture.installation, platform === 'macos' ? 'Contents/Resources/server/standalone' : 'server/standalone'));
@@ -411,6 +419,16 @@ async function executeGateModel(platform, flow) {
         if (name === 'whoami.exe') child.stdout.emit('data', Buffer.from('"synthetic account","S-1-5-21-123"\n'));
         child.emit('close', 0, null); return;
       }
+      if (initialProbe) {
+        // Explicit command receipt MODEL, not execution of the shared helper,
+        // its real product writer or a native capability.
+        child.stdout.emit('data', Buffer.from(JSON.stringify({ schema: 'datasecure-native-initial-results/1',
+          target: 'windows-x64', native_output_guard: flow !== 'initial-output-fallback', refused_guard_mkdirs: 0,
+          refused_guard_attempt_absent: true, created_directories: 2, written_documents: 2,
+          read_only_reopen_under_output_lock: true, reopen_mkdirs: 0, exact_visible_markdown_inventory: true,
+          lock_only_in_output_container: true, original_inputs_unchanged: true, fixture_cleanup_confirmed: true })));
+        child.exitCode = 0; child.emit('exit', 0, null); child.emit('close', 0, null); return;
+      }
       if (flow === 'unconfirmed') { clock.advance(22000); return; }
       const diagnostic = path.join(configuration.env.DATASECURE_STANDALONE_DIAGNOSTIC_DIR, 'sidecar-interactions.jsonl');
       fs.writeFileSync(diagnostic, JSON.stringify({ event: 'ownership_control_check_finished', outcome: 'ready' }) + '\n');
@@ -430,7 +448,7 @@ async function executeGateModel(platform, flow) {
   const names = ['assert', 'fs', 'os', 'path', 'spawn', 'fileURLToPath', 'createRequire', 'loadOwnershipGuardBuild',
     'assertOwnershipGuardMarker', 'loadMacStaticCore', 'assertMacCoreBundle', 'standaloneBuildFingerprint', 'assertStandaloneBuildFingerprint',
     'assertStandaloneSourceUnchanged', 'assertStandaloneRuntimeSource', 'probeOwnershipLoad', 'runOwnershipLoadCommand',
-    'windowsPackageRoots', 'bound', 'process', 'console'];
+    'windowsPackageRoots', 'bound', 'crypto', 'process', 'console'];
   const values = [assert, modelFs, os, modelPath, spawnModel,
     () => path.join(repository, `tests/manual/standalone-${platform}-ownership-load.mjs`),
     () => specifier => specifier.endsWith('desktop-ipc.js') ? { encodeFrame } : { DESKTOP_ERROR_CODES: ['STANDALONE_OPERATION_FAILED'] },
@@ -439,7 +457,7 @@ async function executeGateModel(platform, flow) {
     (root, fingerprint) => { ++fingerprintChecks; assert.equal(root, repository); assert.equal(fingerprint, fixture.source.fingerprint); },
     assertStandaloneRuntimeSource,
     (child, configuration) => probeOwnershipLoad(child, { ...configuration, timers: clock }),
-    child => runOwnershipLoadCommand(child, { timers: clock }), windowsPackageRoots, bound,
+    child => runOwnershipLoadCommand(child, { timers: clock }), windowsPackageRoots, bound, crypto,
     { platform: platform === 'macos' ? 'darwin' : 'win32', arch: 'x64', pid: 12345, env: {},
       argv: platform === 'macos' ? ['node', 'model', '--app', fixture.installation, '--target', 'macos-x64'] : ['node', 'model', '--package', fixture.root] },
     { error: report => reports.push(JSON.parse(report)), log: report => successes.push(JSON.parse(report)) }];
@@ -462,7 +480,10 @@ async function executeGateModel(platform, flow) {
       assert.equal(reports[0].kill_status, 'refused'); assert.equal(children.at(-1).unrefs, 1);
     } else if (['stale-projection', 'stale-core', 'stale-core-marker', 'stale-artifact-marker'].includes(flow)) {
       assert.match(error?.message || '', flow === 'stale-projection' ? /STANDALONE_RUNTIME_SOURCE_MISMATCH/u : /STANDALONE_MACOS_STATIC_CORE_INVALID/u);
-      assert.equal(successes.length, 0); assert.equal(removalRequested, true); assert.equal(fingerprintChecks, 2);
+      assert.equal(successes.length, 0); assert.equal(removalRequested, platform !== 'windows'); assert.equal(fingerprintChecks, 2);
+    } else if (flow === 'initial-output-fallback') {
+      assert.ok(error); assert.equal(successes.length, 0); assert.equal(removalRequested, false);
+      assert.equal(children.length, 4); assert.equal(fingerprintChecks, 2);
     } else {
       assert.equal(error, undefined); assert.equal(successes.length, 1); assert.equal(reports.length, 0);
       assert.equal(successes[0].source_fingerprint, fixture.source.fingerprint);
@@ -471,7 +492,11 @@ async function executeGateModel(platform, flow) {
         assert.equal(successes[0].artifact_sha256, fixture.build.artifactSha256);
         assert.equal(successes[0].gui, 'NOT_RUN'); assert.equal(successes[0].m2, 'NOT_RUN');
       }
-      assert.equal(removalRequested, true); assert.equal(fingerprintChecks, 2);
+      if (platform === 'windows') {
+        assert.equal(successes[0].initial_result_output_guard.native_output_guard, true);
+        assert.match(successes[0].initial_results_helper_sha256, /^[a-f0-9]{64}$/u); assert.equal(children.length, 4);
+      }
+      assert.equal(removalRequested, true); assert.equal(fingerprintChecks, platform === 'windows' ? 3 : 2);
     }
     assert.equal(clock.pending.size, 0);
   } finally {
@@ -497,6 +522,8 @@ for (const platform of ['windows', 'macos']) for (const flow of ['unconfirmed', 
   test(`${platform}: complete gate model ${flow}`, options, () => executeGateModel(platform, flow));
 for (const flow of ['unapproved-core', 'stale-core', 'stale-core-marker', 'stale-artifact-marker'])
   test(`macos: complete static-Core model rejects ${flow} before success`, options, () => executeGateModel('macos', flow));
+test('windows: complete gate rejects a fallback initial-results receipt and preserves its fixture', options,
+  () => executeGateModel('windows', 'initial-output-fallback'));
 
 test('new source/model regression is registered exactly once in the product runner', options, () => {
   const suite = require('./run-product-suite.js');

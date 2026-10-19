@@ -15,6 +15,7 @@ process.env.DATASECURE_PRODUCT_CHANNEL = 'standalone';
 delete process.env.DATASECURE_NATIVE_EXPORT_CHANNEL;
 const rawBusy = () => Object.assign(Error('raw busy'), { code: 'OWNERSHIP_GUARD_BUSY' });
 let faults = [], entries = 0, holds = 0, waits = 0, virtualNow = 0, checks = 0;
+const heldRoots = new Map();
 const count = value => { assert.ok(value); checks++; };
 const realLoad = Module._load;
 let actualAdmission;
@@ -22,17 +23,23 @@ let admittedFault;
 Module._load = function(id, parent, isMain) {
   const filename = !Module.isBuiltin(id) ? Module._resolveFilename(id, parent) : id;
   if (filename === path.join(product, 'core/ownership-control.js')) return { withOwnershipControl(root, action) {
-    assert.equal(root, process.env.EU_PRIVACY_DATA_ROOT); assert.equal(holds, 0);
+    assert.ok([process.env.EU_PRIVACY_DATA_ROOT, path.join(process.env.EU_PRIVACY_RESULT_ROOT, 'DataSecure-Output')].includes(root),
+      'only private control and the exact output container are ownership roles, never a result run');
+    const prior = heldRoots.get(root);
+    if (prior) { prior.assertHeld(); const value = action(prior);
+      assert.ok(!value || typeof value.then !== 'function', 'no Promise may escape a reentrant kernel callback');
+      prior.assertHeld(); return value; }
     const stack = Error().stack;
     const fault = admittedFault && !admittedFault.done ? admittedFault : faults.find(value => !value.done && stack.includes(value.where));
     if (fault?.before) { fault.count++; if (fault.count >= fault.times) fault.done = true; throw fault.error; }
-    holds++; entries++;
+    const guard = { assertHeld() { assert.equal(heldRoots.get(root), guard); } };
+    holds++; entries++; heldRoots.set(root, guard);
     try {
-      const value = action({ assertHeld() { assert.equal(holds, 1); } });
+      const value = action(guard);
       assert.ok(!value || typeof value.then !== 'function', 'no Promise may escape a held kernel callback');
       if (fault) { fault.count++; fault.done = true; throw fault.error; }
       return value;
-    } finally { holds--; }
+    } finally { heldRoots.delete(root); holds--; }
   } };
   if (filename === path.join(product, 'gateway/synchronous-ownership-admission.js')) {
     actualAdmission ||= realLoad.apply(this, arguments).admitSynchronousOwnership;
@@ -189,7 +196,8 @@ async function main() {
   const run = exporter.visibleExportDirectory(f.token), markdown = fs.readFileSync(path.join(run, record.items[0].file));
   assert.deepEqual(markdown, Buffer.from(req('standalone/anonymized-store').readAnonymizedArtifact(f.item.package_id,
     f.review.publicationExpectation(f.token, f.id)).markdown)); checks++;
-  count(fs.readFileSync(path.join(run, 'DataSecure-Zuordnung.csv'), 'utf8').includes('synthetic.txt'));
+  count(record.result_layout === exporter.RESULT_LAYOUT && !fs.existsSync(path.join(run, 'DataSecure-Zuordnung.csv')));
+  count(fs.readFileSync(exporter.privateResultLedger(f.token), 'utf8').includes('synthetic.txt'));
   assert.deepEqual(fs.readFileSync(f.source), f.bytes); checks++;
   count(!fs.existsSync(exporter._test.claimPath(exporter.recordPath(f.token))));
   const sync = batch.exportCompletedBatchResults(f.token);

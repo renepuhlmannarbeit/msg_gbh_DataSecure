@@ -1117,8 +1117,8 @@
       : 'Der aktuelle Status bleibt diesem Lauf zugeordnet.');
     if (completedAnonymous && reviewProjection) $('job-description').textContent += ' ' + reviewProjection.next;
     else if (completedAnonymous) $('job-description').textContent += fastRun
-      ? ' Schnellweg: Die Erstfreigabe erfolgt automatisch, nicht manuell. Den aktuellen Freigabestand bei den Ergebnissen öffnen; Änderungen oder ein Widerruf können Freigaben aufgehoben haben. Ein Export wird nur auf deinen Auftrag erstellt.'
-      : ' Der Lauf verarbeitet keine weiteren Dateien. Den aktuellen Freigabe- und Exportstand bei den Ergebnissen prüfen.';
+      ? ' Bekannte unklare Fundstellen wurden automatisch maskiert, nicht manuell geprüft. Ergebnisordner öffnen; keine zusätzliche Freigabe oder Exportbestätigung nötig.'
+      : ' Der Lauf verarbeitet keine weiteren Dateien. Ergebnisordner öffnen und die fertigen Dateien dort auswählen oder weiterverwenden. Nachbearbeitung ist freiwillig.';
     if (completedAnonymous && !reviewProjection && contentNotices?.description) $('job-description').textContent += ` ${contentNotices.description}`;
     $('job-progress').max = Math.max(1, total); if (state.state === 'preparing') $('job-progress').removeAttribute('value');
     else $('job-progress').value = Math.min(total, done);
@@ -1153,8 +1153,8 @@
       actions.append(action('skip-ocr', 'Ohne diesen Vergleich fortfahren', () => offerSkipOcrContactReview(job.batchId)));
     if (['stopped', 'paused'].includes(state.state)) actions.append(action('resume', 'Verarbeitung fortsetzen', async () => { if (await perform('continue_current_batch')) { lastJobSignature = ''; await refresh(); } }, true));
     if (state.state === 'export_pending') actions.append(action('history', 'Bereitstellung im Verlauf prüfen', () => showView('history'), true));
-    if (state.state === 'results_available' && state.results_available && !working) actions.append(action('results', 'Ergebnisordner öffnen', () => perform('open_history_results', { batchId: job.batchId }), rawResults && !(summary ? summary.error_count : failed)));
-    if (state.state === 'results_available' && state.results_available && !working) (anonymousResults ? actions : secondary).append(action('documents', rawResults ? 'Markdown nachkorrigieren (optional)' : anonymousResults ? reviewProjection?.phase === 'exported' ? 'Prüfung öffnen (optional)' : reviewProjection?.phase === 'approved' ? 'Freigaben / Exportvorschau' : reviewProjection?.phase === 'export_pending' ? 'Export abgleichen' : 'Dokumente prüfen / Export' : 'Prüfstände ansehen', () => openDocuments(job.batchId), anonymousResults && reviewProjection?.phase !== 'exported'));
+    if (state.state === 'results_available' && state.results_available && !working) actions.append(action('results', 'Ergebnisordner öffnen', () => perform('open_history_results', { batchId: job.batchId }), true));
+    if (state.state === 'results_available' && state.results_available && !working) secondary.append(action('documents', rawResults ? 'Markdown nachkorrigieren (optional)' : 'Nachbearbeitung öffnen (optional)', () => openDocuments(job.batchId)));
     if (state.state === 'export_pending' && anonymousResults) secondary.append(action('abandon-export', 'Bereitstellung aufgeben …', () =>
       offerAbandonResultExport({ batch_id: job.batchId, status: state.state, processing_mode: state.processing_mode,
         result_count: state.result_count, failed_count: state.failed_count,
@@ -1176,8 +1176,8 @@
   }
   function historySummary(container, entry, updateAction, hasMainLoader = false) {
     const raw = entry.processing_mode === 'markdown-only';
-    const reloadLabel = raw ? 'Kopierstatus aktualisieren' : 'Prüfstatus erneut laden';
-    const statusName = raw ? 'Kopierstatus' : 'Prüfstatus';
+    const reloadLabel = 'Ergebnisstatus aktualisieren';
+    const statusName = 'Ergebnisstatus';
     const status = element('p', raw
       ? 'Optionale Nachkorrekturen und Kopien werden bei Bedarf abgeglichen.' : 'Freigaben und Exportbelege werden bei Bedarf neu abgeglichen.', 'history-meta');
     status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
@@ -1191,10 +1191,10 @@
       // Closing retires the visible owner, not the physical serialized read.
       // A quick Markdown-details reopen waits for that read to settle before
       // acquiring fresh proof instead of queueing a duplicate IPC operation.
-      if (raw && pendingRead) {
+      if (pendingRead) {
         reloadAfterPending = pendingRead;
         setControlDisabled(reload, true); container.setAttribute('aria-busy', 'true');
-        status.textContent = 'Der vorherige Kopierstatusabgleich wird noch beendet. Danach wird der aktuelle Kopierstatus geladen …';
+        status.textContent = 'Der vorherige Ergebnisstatusabgleich wird noch beendet. Danach wird der aktuelle Ergebnisstatus geladen …';
         return;
       }
       const epoch = historySummaryEpoch, connection = connectionEpoch, requestGeneration = generation, token = {};
@@ -1202,8 +1202,7 @@
       pendingRead = owner; loadedRead = null;
       historySummaryRequests.set(container, token); setControlDisabled(reload, true); contents.replaceChildren();
       reload.hidden = updateAction({ loading: true }) === true;
-      status.textContent = raw ? 'Gespeicherter Kopierstatus wird aktualisiert …'
-        : 'Gespeicherte Freigaben und Exportbelege werden abgeglichen …';
+      status.textContent = 'Gespeicherter Ergebnisstatus und frühere Kopierbelege werden abgeglichen …';
       container.setAttribute('aria-busy', 'true');
       // Summary reads share the serialized Core channel with status polls on
       // both Windows and macOS. A healthy long read must not produce a false
@@ -1241,20 +1240,19 @@
             data.automatically_approved_count < 0 || data.automatically_approved_count > data.approved_count))
           throw Error('DOCUMENT_REVIEW_INVALID');
         const raw = data.processing_mode === 'markdown-only';
-        contents.append(element('p', raw
-          ? `Optionale Kopien: ${data.approved_count} von ${data.reviewable_count} verfügbaren Dokumentständen zum Kopieren bestätigt. Die ursprünglichen Markdown-Ergebnisse sind bereits erstellt; dafür ist keine Freigabe erforderlich.`
-          : `Dokumentprüfung: ${data.approved_count} von ${data.reviewable_count} verfügbaren Dokumentständen freigegeben. Du kannst sie später erneut prüfen; eine Änderung hebt die betroffene Freigabe auf.`, 'history-meta'));
+        if (data.result_publication !== undefined && (!window.__DATASECURE_PRESENTATION__?.resultPublication(data.result_publication) ||
+            data.result_publication.count !== undefined && data.result_publication.count !== data.reviewable_count))
+          throw Error('DOCUMENT_REVIEW_INVALID');
+        contents.append(element('p', `${data.reviewable_count} gespeicherte Ergebnisstände. Nachbearbeitung ist freiwillig; keine zusätzliche Dateiauswahl, Dokumentfreigabe oder Exportbestätigung nötig.`, 'history-meta'));
         if (data.review_policy) contents.append(element('p',
-          `Schnellweg: ${data.automatically_approved_count} aktuelle Dokumentstände automatisch freigegeben, nicht manuell geprüft. Nachträgliche Änderungen benötigen eine neue Freigabe; der Export erfolgt nur auf deinen Auftrag.`, 'history-meta'));
-        if (data.unavailable_count) contents.append(element('p', `${data.unavailable_count} Dokumentprüfstände nicht verfügbar. Betroffene Dateien in „${raw ? 'Markdown nachkorrigieren' : 'Dokumente prüfen / Export'}“ ansehen.`, 'history-meta'));
-        if (data.unclassified_source_count) contents.append(element('p', `${data.unclassified_source_count} Quelldateien mit unklarem früheren Ergebnisstatus. Die vollständige Freigabe dieses Laufs ist nicht belegbar. Dateinamen in der Dokumentansicht ansehen.`, 'history-meta'));
+          'Bekannte unklare Fundstellen wurden automatisch maskiert, nicht manuell geprüft.', 'history-meta'));
+        if (data.unavailable_count) contents.append(element('p', `${data.unavailable_count} Dokumentprüfstände nicht verfügbar. Betroffene Dateien in der optionalen Nachbearbeitung ansehen.`, 'history-meta'));
+        if (data.unclassified_source_count) contents.append(element('p', `${data.unclassified_source_count} Quelldateien mit unklarem früheren Ergebnisstatus. Die vollständige Verarbeitung dieses Laufs ist nicht belegbar. Dateinamen in der Dokumentansicht ansehen.`, 'history-meta'));
         if (rejectedCount) contents.append(element('p', raw
           ? `${rejectedCount} Quelldateien nicht umgewandelt. Gründe und Namen unter den Hinweisen dieses Laufs ansehen.`
-          : `${rejectedCount} Quelldateien wurden nicht verarbeitet. Dateinamen und Gründe in der Dokumentansicht ansehen; sie sind nicht freigegeben oder exportiert.`, 'history-meta'));
-        contents.append(element('p', raw
-          ? `${data.recorded_export_count} zusätzliche Markdown-Kopien gespeichert · nicht anonymisiert. Das zählt nicht die bereits erstellten Dateien im Ergebnisordner.`
-          : `Export: ${data.recorded_export_count ? data.recorded_export_count === 1 ? '1 abgeschlossener Export mit Beleg' : `${data.recorded_export_count} abgeschlossene Exporte mit Beleg` : 'noch kein abgeschlossener Export belegt'}. Frühere Exporte sind keine Freigabe des heutigen Stands.`, 'history-meta'));
-        if (!raw) contents.append(element('p', `${data.current_exported_count} von ${data.reviewable_count} aktuellen Dokumentständen in gespeicherten Abschlussbelegen erfasst. Die exportierten Dateien werden erst beim Öffnen erneut geprüft.`, 'history-meta'));
+          : `${rejectedCount} Quelldateien wurden nicht verarbeitet. Dateinamen und Gründe in der Dokumentansicht ansehen; sie sind nicht in den Ergebnisdateien enthalten.`, 'history-meta'));
+        if (data.recorded_export_count) contents.append(element('p',
+          `${data.recorded_export_count} frühere zusätzliche Kopien mit Beleg. Sie gehören zu ihren damaligen Textständen und werden beim Öffnen erneut geprüft; keine neue Kopie nötig.`, 'history-meta'));
         const last = data.last_recorded_export;
         if (last) {
           if (!['markdown-only', 'markdown-and-anonymize'].includes(last.processing_mode) ||
@@ -1267,10 +1265,9 @@
         }
         if (data.pending_incomplete_count || data.pending_confirmation_count) contents.append(element('p',
           `${data.pending_incomplete_count} unvollständige Exportaufträge · ${data.pending_confirmation_count} fertige Kopien mit offener Empfangsbestätigung. In der Dokumentansicht abgleichen, nicht neu exportieren.`, 'history-meta'));
-        status.textContent = raw ? data.pending_export_count
-          ? 'Eine zusätzliche Markdown-Kopie hat noch eine offene Bestätigung. In der Nachkorrektur abgleichen, nicht erneut kopieren. Die ursprünglichen Ergebnisdateien bleiben erhalten.'
-          : 'Optionale Nachkorrekturen und zusätzliche Kopien. Für den normalen Markdown-Abschluss ist hier kein weiterer Schritt erforderlich.'
-          : 'Verarbeitung beendet. Freigabe und Export werden im normalen Weg gemeinsam bestätigt. Abgeglichene Momentaufnahme: Nach Änderungen erneut laden.';
+        status.textContent = data.result_publication && ['pending', 'conflict'].includes(data.result_publication.state)
+          ? 'Die Bereitstellung des aktuellen Nachbearbeitungsstands ist noch nicht bestätigt. Nachbearbeitung öffnen und denselben Ergebnisstand abgleichen.'
+          : 'Ergebnisdateien erstellt. Ergebnisordner öffnen; Nachbearbeitung und die Einsicht in frühere Kopierbelege sind optional.';
         reload.hidden = updateAction(data) === true;
         loadedRead = owner;
       } catch (error) {
@@ -1313,12 +1310,12 @@
       if (!waitForPending) pendingRead = null;
       loadedRead = null; reloadAfterPending = null;
       historySummaryRequests.delete(container); setControlDisabled(reload, false); container.removeAttribute('aria-busy');
-      if (raw) reload.textContent = reloadLabel;
+      reload.textContent = reloadLabel;
       contents.replaceChildren(); status.textContent = message;
       reload.hidden = updateAction(null) === true;
     };
     const cancel = () => reset(raw ? 'Kopierstatus geschlossen. Bei Bedarf erneut aktualisieren.'
-      : 'Abgleich geschlossen. Bei Bedarf den Prüfstatus neu laden.', raw);
+      : 'Abgleich geschlossen. Bei Bedarf den Ergebnisstatus aktualisieren.', true);
     historySummaryRetirements.add(() => {
       if (container.isConnected) reset(`${statusName} nach Verbindungswechsel nicht bestätigt. Bitte ${raw ? 'erneut aktualisieren' : 'erneut laden'}.`);
     });
@@ -1407,7 +1404,7 @@
         const technicalProblems = anonymous && reasonBreakdownValid ? failedFiles - expectedOcr - privacyStops : 0;
         const unknownStops = anonymous && !reasonBreakdownValid ? failedFiles : 0;
         const stateLabel = element('p', conversion?.heading || (entry.status === 'results_available' ? entry.processing_mode === 'markdown-only'
-          ? 'Textübernahme abgeschlossen · nicht anonymisiert' : anonymous ? 'Verarbeitung beendet · Freigabe- und Exportstand nicht abgeglichen' : 'Technisch verarbeitet · Verarbeitungszweck nicht bestätigt'
+          ? 'Textübernahme abgeschlossen · nicht anonymisiert' : anonymous ? 'Verarbeitung abgeschlossen · Ergebnisdateien bereit' : 'Technisch verarbeitet · Verarbeitungszweck nicht bestätigt'
           : states[entry.status] || 'Nicht verfügbar'), 'history-meta');
         stateLabel.id = `history-${entry.batch_id}-state`;
         detail.append(element('p', `${raw ? 'Markdown-Konvertierung' : anonymous ? 'Anonymisierung' : 'Verarbeitungszweck nicht bestätigt'} · ${dateLabel}`, 'history-title'),
@@ -1480,7 +1477,7 @@
           entry.results_available === true && entry.result_location === 'available' && verifiedTotals;
         let finishDetail = null, finishNext = null, historyGuide = null;
         let finishedProcessingText = '';
-        const unconfirmedReviewText = 'Die technische Verarbeitung ist fertig. Freigabe- und Exportstand sind noch nicht abgeglichen. „Ausführliche Laufdetails“ öffnen, um die gespeicherten Belege dieses Laufs zu prüfen.';
+        const unconfirmedReviewText = 'Die Ergebnisdateien sind erstellt. Ergebnisordner öffnen und Dateien dort auswählen oder weiterverwenden. Nachbearbeitung ist freiwillig; keine zusätzliche Freigabe oder Exportbestätigung nötig.';
         if (finished && anonymous) {
           const completion = element('section', undefined, 'history-completion');
           const marks = element('span', undefined, 'history-completion-marks');
@@ -1515,18 +1512,17 @@
               // Technical completion proves neither a missing approval nor a
               // missing export. Only the fresh revision-bound summary may
               // choose the current/done state of these two later stages.
-              baseline.heading = 'Freigabe- und Exportstand nicht abgeglichen';
-              baseline.stages[2].status = 'pending'; baseline.stages[3].status = 'pending';
+              baseline.heading = 'Ergebnisdateien bereit';
             }
             const selected = projection || baseline;
-            if (!selected) { guideTitle.textContent = 'Freigabe- und Kopiestand noch unbestätigt'; guideCounts.textContent = ''; guideStages.replaceChildren(); return; }
+            if (!selected) { guideTitle.textContent = 'Ergebnisstand wird abgeglichen'; guideCounts.textContent = ''; guideStages.replaceChildren(); return; }
             guideTitle.textContent = selected.heading; guideCounts.textContent = selected.counts || '';
             renderStageList(guideStages, selected.stages);
           };
           historyGuide(null);
           completion.append(guideTitle, guideCounts, guideStages);
           if (entry.review_policy === 'automatic-conservative') completion.append(element('p',
-            'Schnellweg: Die unveränderten erstellten Basisstände werden automatisch freigegeben, nicht manuell geprüft. Den aktuellen Freigabe- und Exportstatus unten bei Bedarf abgleichen. Kein automatischer Export.', 'history-completion-detail'));
+            'Bekannte unklare Fundstellen wurden automatisch maskiert, nicht manuell geprüft. Die Ergebnisdateien sind im Ergebnisordner verfügbar; keine zusätzliche Freigabe oder Exportbestätigung nötig.', 'history-completion-detail'));
           detail.append(completion);
           row.dataset.outcome = count(entry.failed_count) || contentNotices?.attention ? 'partial' : 'complete';
         }
@@ -1575,7 +1571,7 @@
           : !working && entry.results_available && !['missing', 'unsafe', 'unknown'].includes(entry.result_location)
             ? { key: 'results', label: 'Ergebnisordner öffnen', primary: true,
               run: () => perform('open_history_results', { batchId: entry.batch_id }) }
-          : !working && entry.result_count > 0 && anonymous ? { key: 'documents', label: 'Dokumente und Freigaben öffnen', primary: true, run: () => openDocuments(entry.batch_id) }
+          : !working && entry.result_count > 0 && anonymous ? { key: 'documents', label: 'Nachbearbeitung öffnen (optional)', primary: false, run: () => openDocuments(entry.batch_id) }
           : null;
         let mainAction = baseAction;
         const main = baseAction ? action(baseAction.key, baseAction.label, () => mainAction.run(), baseAction.primary) : null;
@@ -1583,7 +1579,7 @@
         // File opening and private document review are different stable actions.
         // A late summary may improve status, never move or relabel this opener.
         if (baseAction?.key === 'results' && entry.result_count > 0)
-          actions.append(action('documents', raw ? 'Nachkorrektur öffnen (optional)' : anonymous ? 'Prüfung öffnen' : 'Prüfstände ansehen', () => openDocuments(entry.batch_id)));
+          actions.append(action('documents', raw ? 'Nachkorrektur öffnen (optional)' : 'Nachbearbeitung öffnen (optional)', () => openDocuments(entry.batch_id)));
         if (!detailsBatchId) actions.append(action('details', 'Laufdetails', () => {
           showView('details', entry.batch_id); $('details-heading').focus();
         }));
@@ -1616,7 +1612,7 @@
           : 'Offene oder noch nicht bestätigte Vorgänge können nicht ausgeblendet werden.';
         extra.append(visibility);
         if (entry.results_available && baseAction?.key !== 'results') actions.append(action('results', 'Ergebnisordner', () => perform('open_history_results', { batchId: entry.batch_id })));
-        if (entry.status !== 'export_abandoned' && entry.result_count > 0 && !['documents', 'results'].includes(baseAction?.key)) addExtra('documents', raw ? 'Markdown nachkorrigieren (optional)' : anonymous ? 'Prüfung öffnen' : 'Prüfstände ansehen', () => openDocuments(entry.batch_id));
+        if (entry.status !== 'export_abandoned' && entry.result_count > 0 && !['documents', 'results'].includes(baseAction?.key)) addExtra('documents', raw ? 'Markdown nachkorrigieren (optional)' : 'Nachbearbeitung öffnen (optional)', () => openDocuments(entry.batch_id));
         if (entry.ledger_available || entry.identity_mapping_available) {
           const privateGroup = element('details', undefined, 'history-private');
           privateGroup.append(element('summary', 'Vertrauliche Zuordnungen (optional)'),
@@ -1642,72 +1638,16 @@
             finishNext.textContent = displayProof ? displayProof.next :
               unconfirmedReviewText;
           }
-          // A privacy stop does not erase independently confirmed approvals,
-          // and a missing export receipt is not a processing failure.
-          if (finishDetail && (data?.available !== true || data.loading))
-            finishDetail.textContent = `${finishedProcessingText} ${data?.loading
-              ? 'Freigaben und Exporte werden anhand der gespeicherten Belege neu geprüft.'
-              : 'Freigaben und Exporte sind derzeit nicht bestätigt. Bitte den Prüfstatus erneut laden.'}`;
-          if (data?.available !== true || data.loading) stateLabel.textContent = baseStateLabel;
-          if (anonymous && entry.status === 'results_available' && !missingLocation &&
-              data?.available === true && !data.loading) {
-            const copy = data.pending_export_count ? 'Export im Abgleich' :
-              data.current_exported_count === data.reviewable_count && data.reviewable_count > 0 ? 'Export mit Abschlussbeleg' :
-                'aktueller Stand noch nicht als Export belegt';
-            stateLabel.textContent = `Verarbeitung beendet · ${data.approved_count}/${data.reviewable_count} freigegeben · ${copy}`;
-            if (finishDetail) {
-              const coverage = data.pending_export_count
-                ? 'Ein Export wird noch abgeglichen. Bitte keinen zweiten Export starten.'
-                : data.reviewable_count > 0 && data.approved_count === data.reviewable_count &&
-                    data.current_exported_count === data.reviewable_count && data.recorded_export_count > 0
-                  ? `Die ${data.reviewable_count} verfügbaren Dokumentstände sind freigegeben und in abgeschlossenen Exporten belegt. Für diesen Stand ist kein weiterer Export nötig.`
-                  : data.approved_count === data.reviewable_count && data.reviewable_count > 0
-                    ? 'Alle verfügbaren Dokumentstände sind freigegeben. Ein Export dieses aktuellen Stands ist noch nicht vollständig belegt.'
-                    : `${data.approved_count} von ${data.reviewable_count} verfügbaren Dokumentständen sind freigegeben. Noch nicht freigegebene Dokumente ausdrücklich prüfen.`;
-              finishDetail.textContent = `${finishedProcessingText} ${coverage}`;
-            }
-          }
-          const decorateState = () => {
-            if (anonymous && data?.available === true && !data.loading && data.pending_export_count)
-              stateLabel.textContent = `Verarbeitung beendet · ${data.approved_count}/${data.reviewable_count} freigegeben · Export im Abgleich`;
-            if (anonymous && data?.available === true && !data.loading && expectedOcr)
-              stateLabel.textContent += ` · ${expectedOcr} ohne OCR nicht umgewandelt`;
-            if (missingLocation && !stateLabel.textContent.includes('Ergebnisordner fehlt'))
-              stateLabel.textContent += ' · Ergebnisordner fehlt';
-          };
-          if (!main || baseAction.key !== 'documents') { decorateState(); return false; }
-          mainAction = baseAction; main.hidden = false;
-          // Metadata loading is secondary; the direct document action reloads
-          // authoritative revisions itself and must not depend on two clicks.
-          setControlDisabled(main, false);
-          if (data?.available === false) {
-            mainAction = { ...baseAction, label: 'Ergebnisse öffnen', primary: false,
-              run: () => perform('open_history_results', { batchId: entry.batch_id }) };
-            main.hidden = !entry.results_available;
-          } else if (data && !data.loading) {
-            mainAction = { ...baseAction, run: () => openDocuments(entry.batch_id) };
-            if (data.pending_export_count) mainAction.label = 'Export abgleichen';
-            else if (['unsafe', 'unknown'].includes(entry.result_location)) mainAction.label = 'Prüfstände ansehen';
-            else if (data.unavailable_count || data.unclassified_source_count || count(data.not_processed_count) > expectedOcr + privacyStops) {
-              mainAction.label = 'Prüfstände ansehen';
-              stateLabel.textContent = `Verarbeitung beendet · ${data.approved_count}/${data.reviewable_count} freigegeben · Prüfstände unvollständig`;
-            } else if (data.reviewable_count > 0 && data.approved_count === data.reviewable_count) {
-              if (data.current_exported_count === data.reviewable_count) {
-                mainAction = { ...mainAction, label: 'Prüfung öffnen', primary: false };
-                stateLabel.textContent = `Verarbeitung beendet · ${data.approved_count}/${data.reviewable_count} freigegeben · Export mit Abschlussbeleg`;
-              } else {
-                mainAction = { ...mainAction, label: 'Exportvorschau', run: () => openDocuments(entry.batch_id, true) };
-                stateLabel.textContent = `Verarbeitung beendet · ${data.approved_count}/${data.reviewable_count} freigegeben · ${data.pending_export_count ? 'Export im Abgleich' : 'aktueller Stand noch nicht als Export belegt'}`;
-              }
-            } else {
-              stateLabel.textContent = `Verarbeitung beendet · ${data.approved_count}/${data.reviewable_count} freigegeben · Export gesondert prüfen`;
-            }
-          }
-          // A pending durable copy takes precedence over an OCR omission or
-          // the generic next-action label. Otherwise an in-flight/recoverable
-          // export can appear completed simply because the row has results.
-          decorateState();
-          main.textContent = mainAction.label; main.className = mainAction.primary ? 'primary' : '';
+          // Additional historical copies are not a prerequisite for the
+          // normal result files. Never turn their approval/ACK counts into
+          // another mandatory export or file selection.
+          const publication = data?.available === true && !data.loading ? data.result_publication : null;
+          const unsettled = publication && ['pending', 'conflict'].includes(publication.state);
+          stateLabel.textContent = unsettled ? 'Verarbeitung beendet · aktueller Ergebnisstand noch nicht bestätigt' : baseStateLabel;
+          if (missingLocation && !stateLabel.textContent.includes('Ergebnisordner fehlt')) stateLabel.textContent += ' · Ergebnisordner fehlt';
+          if (finishDetail) finishDetail.textContent = finishedProcessingText;
+          if (finishNext && unsettled) finishNext.textContent = 'Nachbearbeitung gespeichert, Bereitstellung noch nicht bestätigt. Nachbearbeitung öffnen und denselben Ergebnisstand erneut prüfen; keine weitere Änderung blind wiederholen.';
+          if (main?.id.endsWith('-results')) setControlDisabled(main, Boolean(unsettled));
           return false;
         };
         row.append(detail, actions);
@@ -1717,17 +1657,17 @@
           const requestedSummary = targetedSummary === entry.batch_id;
           focusRequestedSummary = requestedSummary;
           if (requestedSummary) expandedHistorySummaries.add(entry.batch_id);
-          if (raw) {
+          if (raw || anonymous) {
             if (requestedSummary) collapsedMarkdownDetails.delete(entry.batch_id);
             disclosure.open = expandedHistorySummaries.has(entry.batch_id) ||
               Boolean(detailsBatchId) && !collapsedMarkdownDetails.has(entry.batch_id);
             if (disclosure.open) expandedHistorySummaries.add(entry.batch_id);
           }
-          summary.hidden = raw ? !disclosure.open : !expandedHistorySummaries.has(entry.batch_id);
+          summary.hidden = raw || anonymous ? !disclosure.open : !expandedHistorySummaries.has(entry.batch_id);
           summary.id = `history-${entry.batch_id}-summary`;
           const { load, loadIfNeeded, cancel } = historySummary(summary, entry, updateAction);
           if (!summary.hidden && (!targetedSummary || requestedSummary)) reopenedSummaries.push({ summary, load: loadIfNeeded });
-          if (raw) {
+          if (raw || anonymous) {
             // Markdown conversion is complete without another confirmation.
             // Its optional, read-only copy status belongs to this one native
             // details disclosure, not a second independently visible panel.
@@ -2174,11 +2114,9 @@
         $('review-frame').src = 'about:blank'; reviewOrigin = null;
         view = ''; lastJobSignature = '';
         if (origin.complete && origin.processingMode === 'markdown-and-anonymize') {
-          feedback('Fundstellenprüfung abgeschlossen. Prüfe jetzt die Ergebnisse dieses Laufs und gib die gewünschten Dokumente ausdrücklich frei. Deine bisherigen Entscheidungen sind übernommen; noch kein Export.');
-          await openDocuments(origin.batchId, false, origin.view);
-          refresh(); return;
+          feedback('Fundstellenprüfung abgeschlossen. Die Ergebnisdateien werden für diesen Lauf bereitgestellt. Keine zusätzliche Dateiauswahl, Freigabe oder Exportbestätigung nötig.');
         }
-        if (origin.complete && origin.processingMode === 'markdown-only')
+        else if (origin.complete && origin.processingMode === 'markdown-only')
           feedback('OCR-Kontaktprüfung abgeschlossen. Keine weitere Pflichtprüfung für diesen Markdown-Lauf. Nachbearbeitung ist freiwillig; die Dateien sind nicht anonymisiert.');
         else if (origin.complete)
           feedback('Prüfung abgeschlossen. Der Verarbeitungszweck ist nicht bestätigt; den Status dieses Laufs abgleichen. Keine Freigabe oder Kopie wurde ausgelöst.');

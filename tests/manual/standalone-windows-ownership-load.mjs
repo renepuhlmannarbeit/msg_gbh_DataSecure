@@ -6,6 +6,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import crypto from 'node:crypto';
 import { loadOwnershipGuardBuild, assertOwnershipGuardMarker } from '../../scripts/lib/ownership-guard-artifact.mjs';
 import { standaloneBuildFingerprint, assertStandaloneBuildFingerprint, assertStandaloneSourceUnchanged,
   assertStandaloneRuntimeSource } from '../../scripts/lib/standalone-build-fingerprint.mjs';
@@ -44,7 +45,7 @@ assertPackageSource();
 const parent = fs.realpathSync.native(os.tmpdir()), fixture = fs.mkdtempSync(path.join(parent, 'datasecure-windows-ownership-load-'));
 const initial = fs.lstatSync(fixture, { bigint: true });
 const system = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32');
-let child, ended = false;
+let child, ended = false, complete = false;
 function assertProcessResult(result) {
   ended = result.closed;
   if (!result.ok) {
@@ -91,12 +92,29 @@ try {
     .toString('utf8').trim().split('\n').map(line => JSON.parse(line)));
   assert.ok(records.some(record => record.event === 'ownership_control_check_finished' && record.outcome === 'ready'));
   assertPackageSource();
+  const helper = path.join(repository, 'tests/helpers/native-initial-results-fixture.cjs');
+  const helperDigest = () => crypto.createHash('sha256').update(bound.readBoundFile(helper,
+    { minimum: 1, maximum: 128 * 1024, checkCtime: true })).digest('hex');
+  const helperPin = helperDigest();
+  child = spawn(path.join(installation, 'datasecure-core-x86_64-pc-windows-msvc.exe'),
+    ['--require', path.join(server, 'network-deny.cjs'), helper, '--server', server, '--scope', fixture],
+    { cwd: fixture, env: environment, windowsHide: true, shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
+  ended = false;
+  const initialResult = await runOwnershipLoadCommand(child); assertProcessResult(initialResult);
+  const initialProof = JSON.parse(initialResult.stdout.toString('utf8'));
+  assert.deepEqual(initialProof, { schema: 'datasecure-native-initial-results/1', target: 'windows-x64', native_output_guard: true,
+    refused_guard_mkdirs: 0, refused_guard_attempt_absent: true, created_directories: 2, written_documents: 2,
+    read_only_reopen_under_output_lock: true, reopen_mkdirs: 0, exact_visible_markdown_inventory: true,
+    lock_only_in_output_container: true, original_inputs_unchanged: true, fixture_cleanup_confirmed: true });
+  assert.equal(helperDigest(), helperPin); assertPackageSource(); complete = true;
   console.log(JSON.stringify({ schema: 'datasecure-windows-ownership-load/1', ready: true, shutdown: true,
-    guard_sha256: build.artifact.sha256, source_fingerprint: source.fingerprint, gui: 'NOT_RUN', fresh_profile_without_result_directory: true }));
+    guard_sha256: build.artifact.sha256, source_fingerprint: source.fingerprint, gui: 'NOT_RUN', fresh_profile_without_result_directory: true,
+    initial_result_output_guard: initialProof, initial_results_helper_sha256: helperPin }));
 } finally {
   // The helper has bounded its reap attempt and detached unresolved handles.
   // Never remove a fixture that may still be used by an unconfirmed process.
   if (child && !ended) throw Error('WINDOWS_OWNERSHIP_PROCESS_NOT_REAPED');
+  if (complete) {
   const current = fs.lstatSync(fixture, { bigint: true });
   assert.ok(current.isDirectory() && !current.isSymbolicLink() && current.dev === initial.dev && current.ino === initial.ino);
   assert.equal(path.dirname(fixture), parent); assert.match(path.basename(fixture), /^datasecure-windows-ownership-load-/u);
@@ -107,4 +125,5 @@ try {
     if (entry.isDirectory()) for (const childName of fs.readdirSync(name)) inspect(path.join(name, childName));
   };
   inspect(fixture); fs.rmSync(fixture, { recursive: true });
+  }
 }

@@ -146,6 +146,11 @@ pub(crate) struct Identity { pub volume: u64, pub object: u128, pub created_ns: 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct Node22Identity { pub dev: String, pub ino: String, pub birthtime_ms: String }
+/// Fresh Node BigInt settings preserve the exact libuv object and nanosecond
+/// birth time. This must never be reconstructed from legacy Number settings.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Node22BigIntIdentity { pub dev: String, pub ino: String, pub birthtime_ns: String }
 fn node22_identity(dev: u64, ino: u64, created_ns: u128) -> io::Result<Node22Identity> {
     const MAX_SAFE: u64 = (1u64 << 53) - 1;
     if dev > MAX_SAFE || ino > MAX_SAFE { return Err(unsafe_io()); }
@@ -257,6 +262,12 @@ impl Directory {
         let (dev, ino) = platform::node22_object(&self.inner)?;
         node22_identity(dev, ino, self.identity.created_ns)
     }
+    pub(crate) fn node22_bigint_identity(&self) -> io::Result<Node22BigIntIdentity> {
+        self.check()?;
+        let (dev, ino) = platform::node22_object(&self.inner)?;
+        Ok(Node22BigIntIdentity { dev: dev.to_string(), ino: ino.to_string(),
+            birthtime_ns: self.identity.created_ns.to_string() })
+    }
     /// Initial authorization only (the native result picker). Recovery must
     /// instead use the previously persisted identity with open_bound_child.
     pub fn bind_output_child(&self, name: &str) -> io::Result<Self> {
@@ -367,6 +378,13 @@ impl Directory {
     pub fn lock_control(&self) -> io::Result<ControlLock> {
         self.check()?;
         let lock = platform::lock_control(&self.inner)?;
+        platform::regular_identity(&lock.file)?; self.check()?; Ok(lock)
+    }
+    /// Inspect-only callers may acquire an existing cooperative owner, never
+    /// create even a missing lock file while opening a recorded result.
+    pub fn lock_existing_control(&self) -> io::Result<ControlLock> {
+        self.check()?;
+        let lock = platform::lock_existing_control(&self.inner)?;
         platform::regular_identity(&lock.file)?; self.check()?; Ok(lock)
     }
     /// Fully prepare a bounded private journal record before exposing its
@@ -653,9 +671,15 @@ mod platform {
     }
     pub fn read_diagnostic_file(parent: &Directory, name: &str) -> io::Result<File> { read_file(parent, name) }
     pub fn lock_control(parent: &Directory) -> io::Result<ControlLock> {
+        lock_control_mode(parent, true)
+    }
+    pub fn lock_existing_control(parent: &Directory) -> io::Result<ControlLock> {
+        lock_control_mode(parent, false)
+    }
+    fn lock_control_mode(parent: &Directory, create: bool) -> io::Result<ControlLock> {
         let name = c"export-control.lock";
         let file = opened(unsafe { libc::openat(parent.file.as_raw_fd(), name.as_ptr(),
-            libc::O_RDWR | libc::O_CREAT | libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK, 0o600u32) })?;
+            libc::O_RDWR | (if create { libc::O_CREAT } else { 0 }) | libc::O_NOFOLLOW | libc::O_CLOEXEC | libc::O_NONBLOCK, 0o600u32) })?;
         let identity = regular_identity(&file)?;
         if unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX | libc::LOCK_NB) } != 0 { return Err(io::Error::last_os_error()); }
         let lock = ControlLock { file }; // Own unlock before any further fallible check.
@@ -762,10 +786,10 @@ mod platform {
         relative_policy(parent, name, directory, create, inspect_held, stage_owner, false)
     }
     fn relative_policy(parent: &File, name: &std::ffi::OsStr, directory: bool, create: bool, inspect_held: bool, stage_owner: bool, control: bool) -> io::Result<File> {
-        relative_security(parent, name, directory, create, inspect_held, stage_owner, control, std::ptr::null_mut())
+        relative_security(parent, name, directory, create, inspect_held, stage_owner, control.then_some(true), std::ptr::null_mut())
     }
     #[allow(clippy::too_many_arguments)]
-    fn relative_security(parent: &File, name: &std::ffi::OsStr, directory: bool, create: bool, inspect_held: bool, stage_owner: bool, control: bool, security: Handle) -> io::Result<File> {
+    fn relative_security(parent: &File, name: &std::ffi::OsStr, directory: bool, create: bool, inspect_held: bool, stage_owner: bool, control: Option<bool>, security: Handle) -> io::Result<File> {
         let mut wide: Vec<u16> = name.encode_wide().collect();
         if wide.is_empty() || wide.len() > 255 || wide.iter().any(|c| [0, 47, 58, 92].contains(c)) { return Err(unsafe_io()); }
         let mut text = UnicodeString { length: (wide.len() * 2) as u16, maximum_length: (wide.len() * 2) as u16, buffer: wide.as_mut_ptr() };
@@ -779,9 +803,10 @@ mod platform {
         // A read-only inspection handle shares deletion so it can inspect our
         // already-held DELETE-capable stage without invalidating that owner.
         let access = 0x0010_0080 | if directory { 0x20000 | 1 | if create || stage_owner { 0x10000 } else { 0 } }
-            else if stage_owner { 3 | 0x10000 } else if control { 3 } else if create { 2 } else { 1 };
+            else if stage_owner { 3 | 0x10000 } else if control.is_some() { 3 } else if create { 2 } else { 1 };
         let result = unsafe { NtCreateFile(&mut handle, access, &mut attributes, &mut status,
-            std::ptr::null(), 0x80, if control { 0 } else if inspect_held { 7 } else if directory { 3 } else { 1 }, if control { 3 } else if create { 2 } else { 1 },
+            std::ptr::null(), 0x80, if control.is_some() { 0 } else if inspect_held { 7 } else if directory { 3 } else { 1 },
+            match control { Some(true) => 3, Some(false) => 1, None => if create { 2 } else { 1 } },
             0x20 | 0x0020_0000 | if directory { 1 } else { 0x40 }, std::ptr::null_mut(), 0) };
         if result < 0 {
             let mapped_os_error = unsafe { RtlNtStatusToDosError(result) };
@@ -861,7 +886,7 @@ mod platform {
         // The descriptor is supplied to the exclusive NtCreateFile itself.
         // There is no mkdir/stat/set-ACL window and no inherited broad ACE.
         let descriptor = crate::export_private_security::private_descriptor()?;
-        let file = relative_security(&parent.file, std::ffi::OsStr::new(name), true, true, false, false, false, descriptor.as_ptr())?;
+        let file = relative_security(&parent.file, std::ffi::OsStr::new(name), true, true, false, false, None, descriptor.as_ptr())?;
         let directory = Directory { file, _parents: Vec::new() };
         verify_private(&directory)?;
         Ok(directory)
@@ -888,6 +913,10 @@ mod platform {
     }
     pub fn lock_control(parent: &Directory) -> io::Result<ControlLock> {
         Ok(ControlLock { file: relative_policy(&parent.file, std::ffi::OsStr::new("export-control.lock"), false, false, false, false, true)? })
+    }
+    pub fn lock_existing_control(parent: &Directory) -> io::Result<ControlLock> {
+        Ok(ControlLock { file: relative_security(&parent.file, std::ffi::OsStr::new("export-control.lock"),
+            false, false, false, false, Some(false), std::ptr::null_mut())? })
     }
     fn parse_names(buffer: &[u8], names: &mut Vec<String>, limit: usize) -> io::Result<()> {
         let mut offset = 0;
@@ -1020,6 +1049,22 @@ mod tests {
     }
     fn expected(name: &str, bytes: &[u8]) -> ExpectedFile {
         ExpectedFile { name: name.to_string(), bytes: bytes.len() as u64, sha256: Sha256::digest(bytes).into() }
+    }
+    #[test]
+    fn existing_control_inspection_never_creates_a_missing_lock() {
+        let f = Fixture::new(); let directory = f.directory();
+        let lock_path = f.path.join("export-control.lock");
+        assert!(directory.lock_existing_control().is_err());
+        assert!(!lock_path.exists());
+        drop(directory.lock_control().unwrap());
+        let before = fs::read(&lock_path).unwrap();
+        let held = directory.lock_existing_control().unwrap();
+        assert!(directory.lock_control().is_err());
+        drop(held);
+        assert_eq!(fs::read(&lock_path).unwrap(), before);
+        fs::remove_file(&lock_path).unwrap();
+        assert!(directory.lock_existing_control().is_err());
+        assert!(!lock_path.exists());
     }
     #[cfg(unix)]
     #[test]

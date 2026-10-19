@@ -258,6 +258,7 @@ async function dispatch(message) {
     case 'decide_document_review': return service.decideDocumentReview(message.batch_id, message.document_id, message.decision);
     case 'decide_document_review_batch': return service.decideDocumentReviewBatch(message.batch_id, message.decision);
     case 'export_approved_documents': return service.exportApprovedDocuments(message.batch_id, message.operation_id, message.selection, message.acknowledge === true);
+    case 'publish_result_documents': return service.publishResultDocuments(message.batch_id);
     case 'preview_document_export': return service.previewDocumentExport(message.batch_id, message.operation_id, message.selection);
     case 'abandon_document_export': return service.abandonDocumentExport(message.batch_id, message.operation_id, message.digest);
     case 'resolve_document_export': return service.resolveDocumentExport(message.batch_id, message.operation_id);
@@ -286,7 +287,7 @@ async function dispatch(message) {
       diagnosticEvent('local_target_requested', { action: message.action });
       try {
         const result = message.action === 'resolve_history_results'
-          ? service.resolveHistoryResults(message.batch_id)
+          ? await service.resolveHistoryResults(message.batch_id)
           : message.action === 'resolve_history_ledger'
             ? service.resolveHistoryLedger(message.batch_id)
             : message.action === 'resolve_history_identity_mapping'
@@ -294,7 +295,7 @@ async function dispatch(message) {
             : message.action === 'resolve_identity_mappings_directory'
               ? service.resolveIdentityMappingsDirectory()
             : message.action === 'resolve_current_results'
-              ? service.resolveResults() : service.resolveLedger();
+              ? await service.resolveCurrentResults() : service.resolveLedger();
         diagnosticEvent('local_target_resolved', { action: message.action, outcome: 'ready' });
         return result;
       } catch (error) {

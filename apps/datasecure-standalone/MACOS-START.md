@@ -114,8 +114,8 @@ nicht als richtig erkannt bestätigt. Erstellte unveränderte Basisstände
 erhalten eine gekennzeichnete automatische Erstfreigabe, keine menschliche
 Prüfung. Nicht lesbare oder technisch nicht sicher prüfbare Dateien werden
 mit Grund ausgelassen. Spätere Änderungen und Widerrufe werden nicht beim
-Laden automatisch wieder freigegeben. Der Export bleibt ein eigener,
-ausdrücklicher Auftrag. Automatik ist keine Anonymitätsgarantie.
+Laden automatisch wieder freigegeben. Im neuen normalen Ablauf werden fertige
+Dateien ohne zusätzliche Exportbestätigung bereitgestellt. Automatik ist keine Anonymitätsgarantie.
 
 **Text aus Bildern und Scans lesen (OCR)** ist eine davon unabhängige Option
 für beide Abläufe. Alle vier Kombinationen bleiben möglich; die technischen
@@ -142,38 +142,28 @@ vertrauliche Zuordnung können Originalnamen enthalten.
    Offen-Filter, weitere Seiten und Folgegruppen beachten. Original-/Markdown-
    Vergleich und OCR-Originalbildausschnitt gehören zum angezeigten Punkt.
    Personen- und Unternehmensentscheidungen bleiben unterscheidbar.
-3. Nach Fundstellenabschluss öffnet sich bei Anonymisierung direkt die
-   Dokumentprüfung desselben Laufs. Quelle und geplantes Markdown vergleichen,
-   gewünschte Dokumente auswählen. Die Maskierungen sind bereits angewendet;
-   eine gesonderte Pflichtfreigabe ist nicht nötig. Im Schnellweg ist die automatische
-   Erstfreigabe ausdrücklich gekennzeichnet, ein weiterer Vergleich freiwillig.
-4. **Auswahl exportieren** öffnet zuerst eine lesende Vorschau. Erst
-   **Freigeben und exportieren** bestätigt die ausgewählten Textstände und kopiert
-   ausschließlich freigegebene aktuelle Markdown-Stände in einen normalen
-   separaten Ordner. Originale, Identitäts-/Dateizuordnung, private Prüfstände
-   und Begleitdateien werden nicht mitkopiert. Den technischen Laufordner
-   niemals pauschal weitergeben: Er kann Prüf- und Zuordnungsdateien enthalten.
-   Der separate Exportordner enthält nur die ausgewählten freigegebenen
-   Markdown-Dateien. Die exportierten Markdown-Dateien kannst du auch ohne KI
-   verwenden. DataSecure lädt nichts hoch.
-   Vorschau und Abbrechen geben nichts neu frei und kopieren nichts.
-   Die technischen Schutzprüfungen bleiben aktiv. **Auswahl nur freigeben**
-   und Widerrufen stehen optional unter **Freigaben verwalten (optional)**.
+3. Nach bestätigtem Fundstellenabschluss kehrst du zu den **Laufdetails desselben
+   Laufs** zurück. Die Maskierungen sind bereits angewendet; eine zusätzliche
+   Dokumentauswahl, Pflichtfreigabe oder Exportbestätigung entfällt.
+4. Nach bestätigter technischer Bereitstellung **Ergebnisordner öffnen** wählen.
+   Neue fertige MD-Ordner enthalten keine Originale, Identitäts-/Dateizuordnung,
+   privaten Prüfstände oder technischen Begleitdateien. Dateien im Finder selbst
+   auswählen; sie sind auch ohne KI verwendbar. DataSecure lädt nichts hoch.
+   Bei alten Laufordnern können vertrauliche Beilagen erhalten sein; diese nicht
+   rückwirkend als neue bereinigte Ausgabe ansehen. Technische Prüfungen bleiben.
 5. **Lauf abgeschlossen – mit Hinweisen** ist ebenfalls abgeschlossen.
-   Gelbe Hinweise öffnen keinen fertigen Lauf wieder. Dokumentfreigabe und
-   **Export abgeschlossen** sind getrennte, revisionsgebundene Tatsachen.
-   Eine bestätigte Kopie nicht wiederholen, nur weil die Dokumentanzeige
-   danach noch lädt. Weitere Änderungen benötigen einen frischen Stand.
-   Im Erfolgsdialog **Zur Laufübersicht** wählen: Die Übersicht desselben Laufs
-   wird geöffnet, kein erneuter Prüfschritt oder Export. Diagnose ist kein
-   Pflichtabschluss.
+   Gelbe Hinweise öffnen keinen fertigen Lauf wieder. Eine optionale
+   Nachbearbeitung speichert die Revision und stellt automatisch den vollständigen
+   aktuellen Ergebnisstand bereit. Erst nach Bestätigung führt der Ordneröffner
+   auf den neuen Stand; ältere Stände bleiben erhalten. Bei verlorener Bestätigung
+   denselben Vorgang abgleichen, nicht neu verarbeiten. Diagnose ist kein Pflichtabschluss.
 6. **Später entscheiden**, Pause und Fortsetzung gehören zum konkreten Lauf.
    Der Verlauf berücksichtigt nur die letzten 5 Verarbeitungen. Über **Laufdetails** die spätere
    Dokumentprüfung öffnen.
    Neue Dateien gehören nach dem Start in eine neue Verarbeitung.
    Verbindungsverlust wiederholt Entscheidungen und Exportbestätigungen nicht blind.
 
-Der gespeicherte Ergebnisordner wird beim Export angezeigt und wiederverwendet,
+Der gespeicherte Ergebnisordner wird für die Bereitstellung wiederverwendet,
 wenn ursprüngliche Identität und macOS-Zugriff passen. Dafür ist keine
 Developer-ID-Signierung oder Notarisierung vorgesehen. Lokales Ad-hoc-Sealing
 ist davon getrennt. macOS kann trotzdem Zugriff auf Documents/Downloads/Desktop

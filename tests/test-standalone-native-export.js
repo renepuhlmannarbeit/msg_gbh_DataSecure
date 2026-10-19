@@ -117,12 +117,17 @@ async function run() {
     assert.equal(automatic.ensureResultRoot(), defaultRoot);
     const savedDefault = fs.readFileSync(resultConfig.configPath());
     const initial = JSON.parse(savedDefault);
-    assert.equal(initial.schema, 'datasecure-result-root/2'); assert.equal(initial.root, defaultRoot);
+    assert.equal(initial.schema, 'datasecure-result-root/5'); assert.equal(initial.root, defaultRoot);
+    if (initial.exact_identity) {
+      const exact = fs.statSync(defaultRoot, { bigint: true });
+      assert.deepEqual(initial.exact_identity, { dev: String(exact.dev), ino: String(exact.ino), birthtime_ns: String(exact.birthtimeNs) });
+    }
     assert.equal(Object.hasOwn(initial, 'native_export'), false);
     const f = fixture('markdown-and-anonymize', ++i), op = crypto.randomBytes(16).toString('hex');
     assert.equal((await exportCall(f, op)).exported_count, 1);
     const configured = JSON.parse(fs.readFileSync(resultConfig.configPath()));
-    assert.equal(configured.schema, 'datasecure-result-root/4');
+    assert.equal(configured.schema, initial.exact_identity ? 'datasecure-result-root/6' : 'datasecure-result-root/4');
+    if (initial.exact_identity) assert.deepEqual(configured.exact_identity, initial.exact_identity);
     assert.equal(configured.root, defaultRoot); assert.deepEqual(configured.identity, initial.identity);
     assert.deepEqual(configured.native_export, binding); assert.equal(configuredAdmissions, 1);
     assert.equal(nativeActions.includes('configure_export_root'), false, 'no native folder picker was used');
@@ -135,17 +140,157 @@ async function run() {
     const persisted = fs.readFileSync(resultConfig.configPath());
     assert.equal((await exportCall(f, op, true)).exported_count, 1);
     assert.equal(configuredAdmissions, 1); assert.deepEqual(fs.readFileSync(resultConfig.configPath()), persisted);
-    console.log('ok first installation: actual ensureResultRoot creates default, saves /2, first native export upgrades once to /4 without picker; saved root and ACK survive new service');
+    console.log(`ok first installation: actual ensureResultRoot saves ${initial.schema}, native admission upgrades to ${configured.schema} without picker; saved root and ACK survive new service`);
   } finally {
     preparationService = null;
     if (previousDocuments === undefined) delete process.env.DATASECURE_STANDALONE_DOCUMENTS_DIR;
     else process.env.DATASECURE_STANDALONE_DOCUMENTS_DIR = previousDocuments;
+  }
+  {
+    // Force the NEW lossless representation even on APFS with small inode IDs.
+    // This is a test settings fixture, not an upgrade/adoption of a legacy /2.
+    const exactRoot = path.join(root, 'new-exact-admission'); fs.mkdirSync(exactRoot);
+    resultConfig.saveConfiguredResultRoot(exactRoot);
+    const saved = JSON.parse(fs.readFileSync(resultConfig.configPath())), stat = fs.statSync(exactRoot, { bigint: true });
+    saved.schema = 'datasecure-result-root/5';
+    saved.exact_identity = { dev: String(stat.dev), ino: String(stat.ino), birthtime_ns: String(stat.birthtimeNs) };
+    fs.writeFileSync(resultConfig.configPath(), JSON.stringify(saved));
+    const f = fixture('markdown-only', ++i), operation = crypto.randomBytes(16).toString('hex'); binding = null;
+    const before = configuredAdmissions;
+    assert.equal((await exportCall(f, operation)).exported_count, 1);
+    const completed = JSON.parse(fs.readFileSync(resultConfig.configPath()));
+    assert.equal(completed.schema, 'datasecure-result-root/6');
+    assert.deepEqual(completed.exact_identity, saved.exact_identity);
+    assert.equal(configuredAdmissions, before + 1);
+    const bytes = fs.readFileSync(resultConfig.configPath());
+    f.store = f.reload(); binding = null;
+    assert.equal((await exportCall(f, operation, true)).exported_count, 1);
+    assert.deepEqual(fs.readFileSync(resultConfig.configPath()), bytes);
+    assert.equal(configuredAdmissions, before + 1);
+    console.log('ok real Node BigInt -> native held directory admission /5 -> /6, exact birth/dev/inode retained, fresh store ACK creates no new binding');
   }
   context('configure_results', { source_paths: [results], native_export_binding: true });
   binding = await channel.configureExportRoot(outer);
   assert.equal(binding.root, results); assert.match(binding.private_name, /^native-export-[a-f0-9]{32}$/u);
   console.log('ok native picker bootstrap creates and returns held parent bindings');
   const pickerBinding = binding;
+  // Direct-results uses the same real owned pipe/OS publisher but a distinct
+  // durable role. No approval or selection is supplied by this new outer DTO.
+  // This proves the native boundary, not the separate review-store orchestration.
+  for (const [index, mode] of ['markdown-only', 'markdown-and-anonymize'].entries()) {
+    const body = Buffer.from(`# Fertiges Ergebnis ${index}\n[PERSON_001]\n`), digest = sha(body);
+    const batchId = (900 + index).toString(16).padStart(64, '0'), operationId = crypto.randomBytes(16).toString('hex');
+    const name = mode === 'markdown-only' ? 'Quelle.md' : 'Dokument_01.md';
+    const operation = { batch_id: batchId, operation_id: operationId, request_sha256: sha(`results:${batchId}:${digest}`),
+      processing_mode: mode, publication_role: 'results', binding: pickerBinding,
+      files: [{ name, bytes: body.length, sha256: [...Buffer.from(digest, 'hex')] }] };
+    const send = (command, body) => nativeSession.send('export_documents', { operation, command, ...(body ? { body } : {}) });
+    const namespace = mode === 'markdown-only' ? 'DataSecure-Markdown-Korrektur' : 'DataSecure-KI-Export';
+    const target = path.join(results, namespace, `Ergebnisse-${operationId}`);
+    context('publish_result_documents', { batch_id: batchId });
+    assert.equal(await send('write_body', { index: 0, offset: 0, hex: body.toString('hex'), final_chunk: true }), 'staged');
+    assert.equal(fs.existsSync(target), false, 'a staged result is never reported as a visible complete generation');
+    assert.equal(await send('publish'), 'completed');
+    assert.deepEqual(fs.readdirSync(target), [name]);
+    assert.deepEqual(fs.readFileSync(path.join(target, name)), body);
+    assert.equal(await send('acknowledge'), 'acknowledged', 'this is a software receipt, not a fabricated human approval');
+    context('publish_result_documents', { batch_id: batchId });
+    assert.equal(await send('reconcile'), 'acknowledged');
+    assert.equal(await send('publish'), 'acknowledged');
+    assert.equal(fs.readdirSync(path.dirname(target)).filter(value => value === path.basename(target)).length, 1);
+    context('resolve_history_results', { batch_id: batchId });
+    assert.equal(await send('reconcile'), 'acknowledged');
+    for (const command of ['publish', 'acknowledge', 'abandon']) {
+      context('resolve_history_results', { batch_id: batchId });
+      await assert.rejects(send(command), { code: 'STANDALONE_IPC_FAILED' }, `history cannot ${command}`);
+    }
+    context('publish_result_documents', { batch_id: 'f'.repeat(64) });
+    await assert.rejects(send('reconcile'), { code: 'STANDALONE_IPC_FAILED' }, 'a different outer batch grants no capability');
+    context('publish_result_documents', { batch_id: batchId, selection: [] });
+    await assert.rejects(send('reconcile'), { code: 'STANDALONE_IPC_FAILED' }, 'new outer is closed; even a selection field is refused');
+    context('resolve_document_export', { batch_id: batchId, operation_id: operationId });
+    await assert.rejects(send('reconcile'), { code: 'STANDALONE_IPC_FAILED' }, 'legacy copy opener cannot adopt results role');
+    // Reusing the private operation ID under the old role is a real durable
+    // intent conflict even though the body and all other fields are identical.
+    const { publication_role: _role, ...legacyOperation } = operation;
+    context('export_approved_documents', { batch_id: batchId, operation_id: operationId,
+      selection: [{ document_id: '1'.repeat(32), revision: 0, output_sha256: digest }], acknowledge: false });
+    await assert.rejects(nativeSession.send('export_documents', { operation: legacyOperation, command: 'reconcile' }), { code: 'AI_EXPORT_CONFLICT' });
+    assert.equal(fs.existsSync(path.join(results, namespace, `Export-${operationId}`)), false);
+    assert.deepEqual(fs.readFileSync(path.join(target, name)), body);
+    console.log(`ok ${mode}: actual results role, complete generation, software ACK, repeat/readonly reconciliation and closed legacy/role/batch boundaries`);
+  }
+  {
+    // Full production composition: real content-bound initial publication,
+    // private correction journal, current-vector planner AND native Rust pipe.
+    const batchId = '800'.padStart(64, '0');
+    const contentOptions = { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: false, imageOcr: false };
+    const state = { schema: 'datasecure-batch/7', token: batchId, product_channel: 'standalone',
+      processing_mode: 'markdown-only', standalone_document_review: true, content_options: contentOptions,
+      created_at: '2026-10-19T19:00:00.000Z', items: [1, 2].map(index => ({
+        id: (800 + index).toString(16).padStart(32, '0'), name: `nested/Quelle-${index}.txt`,
+        source_label: `nested/Quelle-${index}.txt`, sha256: sha(`source ${index}`), status: 'released' })) };
+    const options = { dataRoot: data, controlOwnerPid: process.pid, nativeBinding: () => pickerBinding,
+      nativeExport: async (operation, command, body) => {
+        const status = await nativeSession.send('export_documents', { operation, command, ...(body ? { body } : {}) });
+        if (loseNextPublish && command === 'publish') { loseNextPublish = false;
+          throw Object.assign(Error('lost real result receipt'), { code: 'STANDALONE_IPC_TIMEOUT' }); }
+        return status;
+      } };
+    let store = createDocumentReviewStore(options);
+    for (const [index, item] of state.items.entries()) {
+      const text = `# Aktuelles Dokument ${index + 1}\n42 Projekte.\n`, id = `dm_${item.id}`;
+      const extraction = require('../plugins/data-secure/server/standalone/markdown-contract').createMarkdownExtraction({
+        source_type: 'txt', markdown: text, coverage: { status: 'complete', reason_codes: [] }, content_options: contentOptions });
+      Object.assign(item, await require('../plugins/data-secure/server/standalone/markdown-store').publishMarkdownArtifact(extraction, id, { contentOptions }));
+      store.capture(state, item, { package_id: id, original_text: text, markdown: text, content_options: contentOptions, source_type: 'txt' });
+    }
+    process.env.EU_PRIVACY_RESULT_ROOT = results;
+    let initial;
+    try {
+      const exporter = require('../plugins/data-secure/server/gateway/result-export');
+      assert.equal(exporter.exportCompletedState(state).available, true);
+      initial = exporter.initialResultPublication(batchId, true);
+    } finally { delete process.env.EU_PRIVACY_RESULT_ROOT; }
+    assert.deepEqual(initial.files.map(file => file.name).sort(), ['nested/Quelle-1.md', 'nested/Quelle-2.md']);
+    const initialBytes = initial.files.map(file => fs.readFileSync(path.join(initial.directory.path, file.name)));
+    assert.ok(store.list(batchId).documents.every(row => row.approved === false), 'no fabricated initial human approval');
+    const edit = replacement => {
+      const row = store.list(batchId).documents.find(row => row.document_id === state.items[0].id);
+      const text = store.chunk(batchId, row.document_id, row.revision, 0).markdown, start = text.indexOf('42');
+      assert.notEqual(start, -1);
+      store.decide(batchId, row.document_id, { action: 'correct', revision: row.revision, output_sha256: row.output_sha256,
+        operation_id: crypto.randomBytes(16).toString('hex'), ranges: [{ start, end: start + 2, replacement }] });
+    };
+    const publish = async () => { context('publish_result_documents', { batch_id: batchId }); return store.publishResults(batchId); };
+    edit('42 korrigierte');
+    const first = await publish(), generation = first.result_publication.generation_id;
+    assert.equal(first.result_publication.state, 'current'); assert.equal(first.result_publication.count, 2);
+    const directory = path.join(results, 'DataSecure-Markdown-Korrektur', `Ergebnisse-${generation}`);
+    assert.deepEqual(fs.readdirSync(directory).sort(), ['Quelle-1.md', 'Quelle-2.md']);
+    assert.match(fs.readFileSync(path.join(directory, 'Quelle-1.md'), 'utf8'), /42 korrigierte Projekte/u);
+    assert.deepEqual(fs.readFileSync(path.join(directory, 'Quelle-2.md')), initialBytes[1]);
+    assert.ok(store.list(batchId).documents.every(row => row.approved === false), 'publication is not human approval');
+    assert.equal((await publish()).result_publication.generation_id, generation);
+    edit('42 nochmals'); loseNextPublish = true;
+    await assert.rejects(publish(), { code: 'STANDALONE_IPC_TIMEOUT' });
+    store = createDocumentReviewStore(options);
+    const resumed = await publish(); assert.notEqual(resumed.result_publication.generation_id, generation);
+    assert.equal((await publish()).result_publication.generation_id, resumed.result_publication.generation_id);
+    context('resolve_history_results', { batch_id: batchId });
+    const resolved = await store.resolveResultsGeneration(batchId);
+    assert.equal(resolved.local_path, path.join(results, 'DataSecure-Markdown-Korrektur', `Ergebnisse-${resumed.result_publication.generation_id}`));
+    assert.match(fs.readFileSync(path.join(resolved.local_path, 'Quelle-1.md'), 'utf8'), /42 nochmals korrigierte Projekte/u);
+    for (const [index, file] of initial.files.entries())
+      assert.deepEqual(fs.readFileSync(path.join(initial.directory.path, file.name)), initialBytes[index], 'initial files are preserved');
+    const corrupt = path.join(resolved.local_path, 'Quelle-2.md');
+    fs.writeFileSync(corrupt, '# Manuell geaendert\n');
+    const count = fs.readdirSync(path.dirname(resolved.local_path)).filter(name => name.startsWith('Ergebnisse-')).length;
+    await assert.rejects(publish(), error => ['RESULT_PUBLICATION_CONFLICT', 'AI_EXPORT_CONFLICT'].includes(error.code));
+    assert.equal(fs.readFileSync(corrupt, 'utf8'), '# Manuell geaendert\n');
+    assert.equal(fs.readdirSync(path.dirname(resolved.local_path)).filter(name => name.startsWith('Ergebnisse-')).length, count);
+    console.log('ok production initial -> correction -> native full-vector generation -> LostReceipt -> fresh store -> readonly opener; no human approval, originals unchanged, manual tamper refused');
+  }
   for (const mode of ['markdown-only', 'markdown-and-anonymize']) {
     const admissionsBefore = configuredAdmissions;
     const targetRoot = path.join(root, `configured-${++i}`); fs.mkdirSync(targetRoot);
@@ -154,7 +299,8 @@ async function run() {
     const f = fixture(mode, ++i), op = crypto.randomBytes(16).toString('hex'); binding = null;
     assert.equal((await exportCall(f, op)).exported_count, 1);
     const saved = JSON.parse(fs.readFileSync(resultConfig.configPath()));
-    assert.equal(saved.schema, 'datasecure-result-root/4'); assert.deepEqual(saved.identity, original.identity);
+    assert.equal(saved.schema, original.exact_identity ? 'datasecure-result-root/6' : 'datasecure-result-root/4'); assert.deepEqual(saved.identity, original.identity);
+    if (original.exact_identity) assert.deepEqual(saved.exact_identity, original.exact_identity);
     assert.equal(saved.root, targetRoot); assert.deepEqual(saved.native_export, binding);
     assert.equal(configuredAdmissions, admissionsBefore + 1, 'actual Node22 setting admitted by the native held handle once');
     const name = mode === 'markdown-only' ? 'Quelle.md' : 'Dokument_01.md';
@@ -165,7 +311,7 @@ async function run() {
     resultConfig.saveConfiguredResultRoot(results); binding = null;
     assert.equal((await exportCall(f, op, true)).exported_count, 1);
     assert.equal(configuredAdmissions, admissionsBefore + 1);
-    console.log(`ok ${mode}: real Node22 /2 admission, native configure, /4 save, exact copy and old-operation ACK without picker`);
+    console.log(`ok ${mode}: real Node22 ${original.schema} admission, native configure, ${saved.schema} save, exact copy and old-operation ACK without picker`);
   }
   binding = pickerBinding;
   for (const mode of ['markdown-only', 'markdown-and-anonymize']) {

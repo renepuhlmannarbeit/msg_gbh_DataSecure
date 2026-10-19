@@ -90,7 +90,8 @@ function readRootRecord(directory, name) {
   try {
     const value = JSON.parse(readBoundFile(file, { maximum: name === 'result-root.json' ? 128 * 1024 : 4096, minimum: 1 }));
     const supported = name === 'privacy-root.json' ? value?.version === 1 :
-      ['datasecure-result-root/1', 'datasecure-result-root/2', 'datasecure-result-root/3', 'datasecure-result-root/4'].includes(value?.schema);
+      ['datasecure-result-root/1', 'datasecure-result-root/2', 'datasecure-result-root/3', 'datasecure-result-root/4',
+        'datasecure-result-root/5', 'datasecure-result-root/6'].includes(value?.schema);
     if (!supported || typeof value.root !== 'string' || !path.isAbsolute(value.root)) throw unsafe();
     return path.resolve(value.root);
   } catch (error) {

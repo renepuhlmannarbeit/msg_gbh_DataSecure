@@ -4,6 +4,15 @@ Arbeitsversion: **3.2.0-rc166**, Umsetzung und neue gemeinsame Windows-/macOS-Te
 
 ## Aktueller Auftrag – Nutzerbefunde als RC166 umsetzen und neu prüfen
 
+**UX-DIRECT-RESULTS-01 (neu ausdrücklich beauftragt, in Umsetzung):** Nach den
+notwendigen OCR-/Fundstellenprüfungen direkt Ergebnisordner öffnen; zweite
+Dokumentauswahl/Freigabe/Export entfernen. Optionale Korrekturen automatisch
+als vollständigen neuen Ergebnisstand bereitstellen, Ordneröffner zeigt den
+bestätigten aktuellen Stand. Keine fake Freigabe oder generischen Overwrites;
+private Zuordnungen trennen, Legacy erhalten, manuelle Löschung nicht rückgängig
+machen. Source02-PASS belegt alten Ablauf und wird nicht umetikettiert.
+Details und neue Orakel: [Vertrag](../acceptance/RC166_DIRECT_RESULTS_20261019.md).
+
 19.10.2026: Der Nutzer hat anschließend die Umsetzung aller nachfolgend
 gesammelten Punkte und neue Windows-/Mac-Testversionen ausdrücklich beauftragt.
 Ziel ist RC166 mit gleichem Appcommit/Featurestand für Windows x64 und beide

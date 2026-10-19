@@ -62,6 +62,7 @@ fn safe_action(action: &str) -> &'static str {
         "decide_document_review" => "decide_document_review",
         "decide_document_review_batch" => "decide_document_review_batch",
         "export_approved_documents" => "export_approved_documents",
+        "publish_result_documents" => "publish_result_documents",
         "preview_document_export" => "preview_document_export",
         "abandon_document_export" => "abandon_document_export",
         "resolve_document_export" => "resolve_document_export",

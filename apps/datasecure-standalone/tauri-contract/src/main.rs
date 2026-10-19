@@ -1438,6 +1438,7 @@ fn history_request(request_id: &str, action: &str, batch_id: &str) -> Result<Val
         "resolve_history_results" | "resolve_history_ledger" | "resolve_history_identity_mapping"
             | "continue_history_batch" | "get_run_failures" | "pause_batch"
             | "skip_ocr_contact_review" | "abandon_result_export"
+            | "publish_result_documents"
     ) || batch_id.len() != 64
         || !batch_id
             .bytes()
@@ -1504,7 +1505,7 @@ fn history_rpc(state: &DesktopState, action: &str, batch_id: &str) -> Result<Val
 }
 
 fn rpc_duration(action: &str) -> Duration {
-    Duration::from_secs(if matches!(action, "admit_selected_sources" | "preview_document_export" | "export_approved_documents" |
+    Duration::from_secs(if matches!(action, "admit_selected_sources" | "preview_document_export" | "export_approved_documents" | "publish_result_documents" |
         "abandon_document_export" | "decide_document_review_batch" |
         "resolve_document_export" | "resolve_document_identity_overview" | "get_document_reviews" | "get_document_review_history_summary" |
         "get_run_history" | "set_run_history_visibility" | "get_run_failures" | "resolve_history_results" | "resolve_history_ledger" |
@@ -1843,12 +1844,19 @@ fn history_local_target(mut result: Value, kind: &str, identity: bool) -> Result
         let published = object.get("publication_available").and_then(Value::as_bool)
             .ok_or_else(|| "STANDALONE_IPC_FAILED".to_string())?;
         let warning = object.get("identity_mapping_warning").and_then(Value::as_str);
-        if kind != "file" || (published && (object.len() != 5 || object.contains_key("identity_mapping_warning")))
-            || (!published && (object.len() != 6 || warning != Some("STANDALONE_IDENTITY_PUBLICATION_FAILED"))) {
+        let private = object.get("identity_mapping_scope").and_then(Value::as_str) == Some("private");
+        let valid = if private {
+            !published && object.len() == 6 && !object.contains_key("identity_mapping_warning")
+        } else if published {
+            object.len() == 5 && !object.contains_key("identity_mapping_warning")
+        } else {
+            object.len() == 6 && warning == Some("STANDALONE_IDENTITY_PUBLICATION_FAILED")
+        };
+        if kind != "file" || !valid {
             return Err("STANDALONE_IPC_FAILED".to_string());
         }
         let warning = warning.map(str::to_string);
-        object.remove("publication_available"); object.remove("identity_mapping_warning");
+        object.remove("publication_available"); object.remove("identity_mapping_warning"); object.remove("identity_mapping_scope");
         warning
     } else { None };
     Ok((validate_local_target(result, kind)?, warning))
@@ -2386,6 +2394,21 @@ fn document_review_surface(window: &tauri::WebviewWindow, state: &DesktopState, 
         if binding.as_deref() != Some(batch) { return Err("DOCUMENT_REVIEW_STALE".to_string()); }
     }
     Ok(())
+}
+
+#[tauri::command(rename_all = "camelCase")]
+async fn publish_result_documents(window: tauri::WebviewWindow, state: State<'_, DesktopState>,
+    batch_id: String) -> Result<Value, String> {
+    // No renderer paths, revision vector, operation ID or approval flag. The
+    // private store owns every generation decision for this exact batch.
+    document_review_surface(&window, &state, Some(&batch_id))?;
+    let owned = state.inner().capture_connection();
+    let expected_batch = batch_id.clone();
+    let result = tauri::async_runtime::spawn_blocking(move ||
+        history_rpc(&owned, "publish_result_documents", &expected_batch))
+        .await.map_err(|_| "STANDALONE_OPERATION_FAILED".to_string())??;
+    document_review_surface(&window, &state, Some(&batch_id))?;
+    Ok(result)
 }
 
 async fn document_review_rpc(window: tauri::WebviewWindow, state: DesktopState, batch_id: String,
@@ -3015,6 +3038,7 @@ fn main() {
             decide_document_review,
             decide_document_review_batch,
             export_approved_documents,
+            publish_result_documents,
             preview_document_export,
             abandon_document_export,
             open_document_export,
@@ -3306,6 +3330,7 @@ mod tests {
             "resolve_history_results",
             "resolve_history_ledger",
             "continue_history_batch",
+            "publish_result_documents",
         ] {
             let value = history_request(&id, action, &batch).expect("valid history action");
             assert_eq!(value.as_object().unwrap().len(), 4);
@@ -3313,6 +3338,9 @@ mod tests {
             assert_eq!(value["action"], action);
             assert!(value.get("source_paths").is_none());
             assert!(value.get("processing_mode").is_none());
+            assert!(value.get("selection").is_none());
+            assert!(value.get("operation_id").is_none());
+            assert!(value.get("acknowledge").is_none());
             for invalid in [
                 "".to_string(),
                 "b".repeat(63),
@@ -3933,6 +3961,16 @@ mod tests {
         let mut fallback = base.clone(); fallback["publication_available"] = json!(false);
         fallback["identity_mapping_warning"] = json!("STANDALONE_IDENTITY_PUBLICATION_FAILED");
         assert_eq!(history_local_target(fallback.clone(), "file", true).unwrap().1.as_deref(), Some("STANDALONE_IDENTITY_PUBLICATION_FAILED"));
+        let mut private = base.clone(); private["publication_available"] = json!(false);
+        private["identity_mapping_scope"] = json!("private");
+        let (private_target, private_warning) = history_local_target(private.clone(), "file", true).unwrap();
+        assert_eq!(private_target, path); assert_eq!(private_warning, None);
+        for (key, value) in [("publication_available", json!(true)), ("identity_mapping_scope", json!("public")),
+            ("identity_mapping_warning", json!("STANDALONE_IDENTITY_PUBLICATION_FAILED")), ("unexpected", json!(true))] {
+            let mut invalid = private.clone(); invalid[key] = value;
+            assert_eq!(history_local_target(invalid, "file", true).unwrap_err(), "STANDALONE_IPC_FAILED");
+        }
+        assert_eq!(history_local_target(private, "directory", true).unwrap_err(), "STANDALONE_IPC_FAILED");
         for mut invalid in [published.clone(), fallback.clone()] {
             invalid["unexpected"] = json!("private detail");
             assert_eq!(history_local_target(invalid, "file", true).unwrap_err(), "STANDALONE_IPC_FAILED");
@@ -3971,6 +4009,7 @@ mod tests {
             assert_eq!(rpc_lock_duration(action), Duration::from_secs(300), "{action}");
         }
         assert_eq!(rpc_duration("export_approved_documents"), Duration::from_secs(300), "progress never extends the mutation deadline");
+        assert_eq!(rpc_duration("publish_result_documents"), Duration::from_secs(300), "new result generations retain the same bounded publication deadline");
         assert_eq!(rpc_duration("get_review_session"), Duration::from_secs(300));
         assert_eq!(rpc_duration("get_public_state"), Duration::from_secs(120));
         assert_eq!(rpc_duration("get_ui_context"), Duration::from_secs(120));

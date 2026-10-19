@@ -21,7 +21,7 @@ const PRIVATE_ACTIONS = new Set([
   'resolve_identity_mappings_directory',
   'continue_history_batch', 'pause_batch', 'skip_ocr_contact_review', 'abandon_result_export',
   'get_document_reviews', 'get_document_review_history_summary', 'get_document_review_chunk', 'get_document_entities', 'decide_document_review', 'decide_document_review_batch', 'preview_document_export', 'export_approved_documents', 'abandon_document_export', 'resolve_document_export', 'resolve_document_identity_overview',
-  'get_review_session', 'get_review_chunk', 'submit_review', 'continue_review_session', 'shutdown'
+  'publish_result_documents', 'get_review_session', 'get_review_chunk', 'submit_review', 'continue_review_session', 'shutdown'
 ]);
 
 function validDecisionShape(item) {
@@ -77,7 +77,7 @@ function validatePrivateMessage(message) {
   } else assertLegacyContentOperation(message, 'content_options', 'standalone', 'resume');
   if (['resolve_history_results', 'resolve_history_ledger', 'resolve_history_identity_mapping',
     'continue_history_batch', 'set_run_history_visibility', 'pause_batch', 'skip_ocr_contact_review', 'abandon_result_export', 'get_document_reviews', 'get_document_review_history_summary', 'get_document_review_chunk', 'get_document_entities',
-    'decide_document_review', 'decide_document_review_batch', 'preview_document_export', 'export_approved_documents', 'abandon_document_export', 'resolve_document_export', 'resolve_document_identity_overview'].includes(message.action)) {
+    'decide_document_review', 'decide_document_review_batch', 'publish_result_documents', 'preview_document_export', 'export_approved_documents', 'abandon_document_export', 'resolve_document_export', 'resolve_document_identity_overview'].includes(message.action)) {
     allowedFields.add('batch_id');
     if (typeof message.batch_id !== 'string' || !/^[a-f0-9]{64}$/u.test(message.batch_id))
       fail('STANDALONE_HISTORY_INVALID', 'Ungültige lokale Laufkennung.');

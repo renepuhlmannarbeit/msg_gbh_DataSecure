@@ -1047,7 +1047,8 @@ function createDocumentReviewStore(options = {}) {
         pending_incomplete_export_count: exports.pending.filter(row => row.status === 'incomplete').length,
         pending_export_confirmation_count: exports.pending.filter(row => row.status === 'completed').length,
         export_receipts: exports.receipts, recorded_export_count: exports.recordedCount,
-        recorded_current_export_count: exports.currentExportedCount };
+        recorded_current_export_count: exports.currentExportedCount,
+        ...resultPublicationProjection(batchId, documents) };
   }
   function list(batchId) { return locked(batchId, () => listLocked(batchId)); }
   function historySummary(batchId) {
@@ -1074,7 +1075,8 @@ function createDocumentReviewStore(options = {}) {
         pending_incomplete_count: value.pending_incomplete_export_count,
         pending_confirmation_count: value.pending_export_confirmation_count,
         last_recorded_export: latest ? { processing_mode: latest.processing_mode, document_count: latest.exported_count,
-          recorded_at: latest.recorded_at } : null };
+          recorded_at: latest.recorded_at } : null,
+        ...(value.result_publication ? { result_publication: value.result_publication } : {}) };
     });
   }
   function chunk(batchId, documentId, revision, index) {
@@ -1567,6 +1569,237 @@ function createDocumentReviewStore(options = {}) {
   }
   function nativeResponse(op) { return { ok: true, operation_id: op.operation_id, folder_name: `Export-${op.operation_id}`, exported_count: op.files.length,
     ...(op.processing_mode === MARKDOWN ? { processing_mode: MARKDOWN, anonymized: false } : {}), local_ui_only: true, external_disclosure: false }; }
+  function resultFileCheck(action) {
+    try { return action(); }
+    catch (error) {
+      if (String(error?.code || '').startsWith('OWNERSHIP_GUARD_')) throw error;
+      throw fail('RESULT_PUBLICATION_CONFLICT');
+    }
+  }
+  const initialResults = (batchId, verify = true) => resultFileCheck(() => options.initialResultPublication
+    ? options.initialResultPublication(batchId, verify) : require('./result-export').initialResultPublication(batchId, verify));
+  const resultVector = documents => documents.map(({ document_id, revision, output_sha256 }) =>
+    ({ document_id, revision, output_sha256 })).sort((a, b) => a.document_id.localeCompare(b.document_id));
+  function resultGenerationDigest(op) {
+    const { request_sha256, ...bound } = op; return hash(JSON.stringify(bound));
+  }
+  function resultOperationId(batchId, mode, initialHash, selection) {
+    return hash(JSON.stringify({ schema: 'datasecure-results-vector/1', batch_id: batchId,
+      processing_mode: mode, initial_binding_sha256: initialHash, selection: resultVector(selection) })).slice(0, 32);
+  }
+  function resultGenerations(batchId, initial) {
+    const run = path.join(base(), batchId), records = [];
+    const names = fs.readdirSync(run).filter(name => /^results-generation-[a-f0-9]{32}\.json$/u.test(name));
+    if (names.length > 1000) throw fail('DOCUMENT_REVIEW_LIMIT');
+    for (const name of names) {
+      const op = read(path.join(run, name));
+      if (!closed(op, 'schema,batch_id,operation_id,publication_role,processing_mode,request_sha256,selection,initial_binding_sha256,root,binding,files,sequence,parent_generation_id') ||
+          op.schema !== 'datasecure-results-generation/1' || op.batch_id !== batchId || op.publication_role !== 'results' ||
+          !valid(op.operation_id, 32) || name !== `results-generation-${op.operation_id}.json` ||
+          !initial || op.initial_binding_sha256 !== initial.binding_sha256 || op.root !== initial.root || op.processing_mode !== initial.processing_mode ||
+          !valid(op.request_sha256, 64) || op.request_sha256 !== resultGenerationDigest(op) ||
+          !validSelection(op.selection) || !valid(op.initial_binding_sha256, 64) || ![MARKDOWN, ANONYMIZE].includes(op.processing_mode) ||
+          op.operation_id !== resultOperationId(batchId, op.processing_mode, op.initial_binding_sha256, op.selection) ||
+          !Number.isSafeInteger(op.sequence) || op.sequence < 1 || op.sequence > 1000 ||
+          op.parent_generation_id !== null && !valid(op.parent_generation_id, 32) ||
+          !validNativeExportBinding(op.binding) || op.binding.root !== op.root ||
+          !Array.isArray(op.files) || op.files.length !== op.selection.length || !validMarkdownInventory(op.files.map(file => file?.name)) ||
+          op.files.some((file, index) => !closed(file, 'name,bytes,sha256') || !Number.isSafeInteger(file.bytes) || file.bytes < 0 || file.bytes > MAX_TEXT ||
+            !Array.isArray(file.sha256) || file.sha256.length !== 32 || file.sha256.some(byte => !Number.isInteger(byte) || byte < 0 || byte > 255) ||
+            Buffer.from(file.sha256).toString('hex') !== op.selection[index].output_sha256) ||
+          op.files.reduce((total, file) => total + file.bytes, 0) > 500 * 1024 * 1024)
+        throw fail('RESULT_PUBLICATION_CONFLICT');
+      const receiptPath = path.join(run, `results-generation-${op.operation_id}-complete.json`);
+      let complete = false;
+      if (fs.existsSync(receiptPath)) {
+        const receipt = read(receiptPath);
+        if (!closed(receipt, 'schema,batch_id,generation_id,request_sha256,acknowledged,directory,files') || receipt.schema !== 'datasecure-results-generation-complete/1' ||
+            receipt.batch_id !== batchId || receipt.generation_id !== op.operation_id || receipt.request_sha256 !== op.request_sha256 || receipt.acknowledged !== true)
+          throw fail('RESULT_PUBLICATION_CONFLICT');
+        complete = true;
+        records.push({ op, complete, receipt }); continue;
+      }
+      records.push({ op, complete });
+    }
+    records.sort((a, b) => a.op.sequence - b.op.sequence);
+    for (let index = 0; index < records.length; index++) if (records[index].op.sequence !== index + 1 ||
+        records[index].op.parent_generation_id !== (index ? records[index - 1].op.operation_id : null) ||
+        index < records.length - 1 && !records[index].complete) throw fail('RESULT_PUBLICATION_CONFLICT');
+    return records;
+  }
+  function resultPublicationProjection(batchId, documents) {
+    const vector = resultVector(documents), current_revision = Math.max(0, ...vector.map(row => row.revision));
+    let initial;
+    try {
+      initial = initialResults(batchId, false);
+      if (!initial) return {};
+      const records = resultGenerations(batchId, initial), latest = records.at(-1);
+      if (latest?.complete) inspectResultGeneration(latest.op, latest.receipt);
+      const state = latest ? latest.complete && JSON.stringify(latest.op.selection) === JSON.stringify(vector) ? 'current' : 'pending'
+        : current_revision === 0 ? 'initial' : 'pending';
+      return { result_publication: { state, generation_id: latest?.op.operation_id || null, count: vector.length, current_revision } };
+    } catch { return { result_publication: { state: 'conflict', generation_id: null, count: vector.length, current_revision } }; }
+  }
+  function resultOperation(op) { return { ...exportBinding(op), publication_role: 'results', binding: op.binding, files: op.files }; }
+  async function callResultNative(op, command, body) {
+    if (!options.nativeExport) throw fail('AI_EXPORT_CONFIGURATION_REQUIRED');
+    const status = await options.nativeExport(resultOperation(op), command, body);
+    if (!(command === 'write_body' ? ['receiving', 'staged'] : ['unprepared', 'prepared', 'completed', 'acknowledged', 'abandoned']).includes(status))
+      throw fail('AI_EXPORT_INVALID');
+    return status;
+  }
+  function generationTarget(op) { return path.join(op.root, exportNamespace(op.processing_mode), `Ergebnisse-${op.operation_id}`); }
+  function inspectResultGeneration(op, receipt = null) {
+    return resultFileCheck(() => inspectResultGenerationFiles(op, receipt));
+  }
+  function inspectResultGenerationFiles(op, receipt) {
+    const target = generationTarget(op), named = bindDirectory(target);
+    const savedDirectory = { path: named.path, real: named.real, chain: named.chain, platform: named.platform };
+    if (receipt && JSON.stringify(savedDirectory) !== JSON.stringify(receipt.directory)) throw fail('RESULT_PUBLICATION_CONFLICT');
+    const directory = receipt ? { ...receipt.directory, io: fs } : named;
+    if (directory.path !== target) throw fail('RESULT_PUBLICATION_CONFLICT');
+    assertDirectory(directory);
+    const files = op.files.map((file, index) => {
+      const record = readBoundFileRecord(path.join(target, file.name), { maximum: MAX_TEXT, checkCtime: true,
+        validateParents: () => assertDirectory(directory) });
+      const sha256 = hash(record.bytes);
+      if (sha256 !== Buffer.from(file.sha256).toString('hex') || record.bytes.length !== file.bytes || receipt &&
+          (!receipt.files[index] || receipt.files[index].name !== file.name || receipt.files[index].sha256 !== sha256 ||
+          JSON.stringify(receipt.files[index].identity) !== JSON.stringify(record.identity))) throw fail('RESULT_PUBLICATION_CONFLICT');
+      return { name: file.name, sha256, identity: record.identity };
+    });
+    const actual = [];
+    function inventory(folder, prefix = '') {
+      const binding = bindDirectory(folder); assertDirectory(directory);
+      for (const entry of fs.readdirSync(folder, { withFileTypes: true })) {
+        if (entry.isSymbolicLink() || !entry.isDirectory() && !entry.isFile() || actual.length > 1000) throw fail('RESULT_PUBLICATION_CONFLICT');
+        const name = prefix + entry.name;
+        if (entry.isDirectory()) {
+          if (!op.files.some(file => file.name.startsWith(name + '/'))) throw fail('RESULT_PUBLICATION_CONFLICT');
+          inventory(path.join(folder, entry.name), name + '/');
+        } else actual.push(name);
+      }
+      assertDirectory(binding); assertDirectory(directory);
+    }
+    inventory(target);
+    if (JSON.stringify(actual.sort()) !== JSON.stringify(op.files.map(file => file.name).sort()) || receipt && receipt.files.length !== files.length)
+      throw fail('RESULT_PUBLICATION_CONFLICT');
+    return { directory: { path: directory.path, real: directory.real, chain: directory.chain, platform: directory.platform }, files };
+  }
+  async function recordResultCompletion(batchId, op) {
+    const target = path.join(base(), batchId, `results-generation-${op.operation_id}-complete.json`);
+    if (fs.existsSync(target)) { const receipt = read(target); inspectResultGeneration(op, receipt); return; }
+    // Never adopt an equal-byte replacement between the native commit and this
+    // private receipt. Capture strong directory/leaf identities, have the native
+    // transaction inspect its original committed identity, then recheck exactly
+    // the captured objects before recording them. Reconcile is the SAME op.
+    const candidate = inspectResultGeneration(op);
+    if (!['completed', 'acknowledged'].includes(await callResultNative(op, 'reconcile'))) throw fail('RESULT_PUBLICATION_CONFLICT');
+    inspectResultGeneration(op, candidate);
+    put(target, {
+      schema: 'datasecure-results-generation-complete/1', batch_id: batchId,
+      generation_id: op.operation_id, request_sha256: op.request_sha256, acknowledged: true, ...candidate });
+  }
+  function publishResults(batchId) {
+    return lockedAsync(batchId, async () => {
+      const listing = listLocked(batchId);
+      if (listing.unavailable.length || listing.unclassified_documents.length || !listing.documents.length) throw fail('RESULT_PUBLICATION_CONFLICT');
+      const initial = initialResults(batchId, false);
+      if (!initial) throw fail('RESULT_PUBLICATION_LEGACY');
+      const selection = resultVector(listing.documents), mode = listing.processing_mode;
+      if (mode !== initial.processing_mode || selection.length !== initial.files.length ||
+          selection.some(row => !initial.files.some(file => file.document_id === row.document_id))) throw fail('RESULT_PUBLICATION_CONFLICT');
+      const events = journal(batchId), sources = [], sizes = [];
+      for (const row of selection) {
+        const value = current(batchId, row.document_id, events);
+        if (value.revision !== row.revision || value.output_sha256 !== row.output_sha256) throw fail('DOCUMENT_REVIEW_STALE');
+        verifyCandidate(value); sources.push({ source_label: value.snapshot.name }); sizes.push(Buffer.byteLength(value.markdown));
+      }
+      if (sizes.some(size => size > MAX_TEXT) || sizes.reduce((a, b) => a + b, 0) > 500 * 1024 * 1024) throw fail('DOCUMENT_REVIEW_LIMIT');
+      const records = resultGenerations(batchId, initial), previous = records.at(-1);
+      const operationId = resultOperationId(batchId, mode, initial.binding_sha256, selection);
+      let op = previous?.op.operation_id === operationId ? previous.op : null, status;
+      // An unfinished intent still has a confirmed predecessor. Retrying it
+      // must not recreate a result after that predecessor was manually deleted.
+      const predecessor = previous?.complete ? previous : records.at(-2);
+      const assertPredecessor = () => {
+        if (predecessor) inspectResultGeneration(predecessor.op, predecessor.receipt);
+        else if (initialResults(batchId, true).binding_sha256 !== initial.binding_sha256) throw fail('RESULT_PUBLICATION_CONFLICT');
+      };
+      assertPredecessor();
+      if (previous) {
+        if (previous.complete) inspectResultGeneration(previous.op, previous.receipt);
+        if (!previous.complete && !op) throw fail('RESULT_PUBLICATION_CONFLICT');
+        if (op) status = await callResultNative(op, 'reconcile');
+        if (['completed', 'acknowledged'].includes(status)) {
+          if (await callResultNative(previous.op, 'acknowledge') !== 'acknowledged') throw fail('AI_EXPORT_INCOMPLETE');
+          await recordResultCompletion(batchId, previous.op);
+          if (op) return { ok: true, batch_id: batchId, local_ui_only: true, external_disclosure: false,
+            result_publication: { state: 'current', generation_id: op.operation_id, count: selection.length,
+              current_revision: Math.max(...selection.map(row => row.revision)) } };
+        }
+      }
+      if (!op) {
+        let binding = options.nativeBinding ? options.nativeBinding() : readConfiguredNativeExportBinding();
+        if (!binding && options.prepareNativeBinding) {
+          // Preparing a new root must never redirect a historical run to the
+          // currently configured location. The initial publication fixed it.
+          const configured = options.resultRoot ? options.resultRoot() : readConfiguredResultRoot();
+          if (configured !== initial.root) throw fail('RESULT_PUBLICATION_CONFLICT');
+          binding = await options.prepareNativeBinding(batchId, operationId);
+        }
+        if (!validNativeExportBinding(binding) || binding.root !== initial.root) throw fail('RESULT_PUBLICATION_CONFLICT');
+        const names = mode === MARKDOWN ? safeMarkdownOutputNames(sources) : selection.map((_row, index) => `Dokument_${String(index + 1).padStart(2, '0')}.md`);
+        op = { schema: 'datasecure-results-generation/1', batch_id: batchId, operation_id: operationId,
+          publication_role: 'results', processing_mode: mode, selection, initial_binding_sha256: initial.binding_sha256,
+          root: binding.root, binding, files: names.map((name, index) => ({ name, bytes: sizes[index],
+            sha256: [...Buffer.from(selection[index].output_sha256, 'hex')] })), sequence: records.length + 1,
+          parent_generation_id: previous?.op.operation_id || null };
+        op.request_sha256 = resultGenerationDigest(op);
+        put(path.join(base(), batchId, `results-generation-${op.operation_id}.json`), op);
+      }
+      if (status !== 'prepared') for (const [index, row] of selection.entries()) {
+        const value = current(batchId, row.document_id, events), bytes = Buffer.from(value.markdown);
+        if (value.revision !== row.revision || hash(bytes) !== row.output_sha256) throw fail('DOCUMENT_REVIEW_STALE');
+        verifyCandidate(value);
+        for (let offset = 0; offset < bytes.length || offset === 0; offset += 65536) {
+          const end = Math.min(offset + 65536, bytes.length), final = end === bytes.length;
+          const response = await callResultNative(op, 'write_body', { index, offset, hex: bytes.subarray(offset, end).toString('hex'), final_chunk: final });
+          if (response !== (final ? 'staged' : 'receiving')) throw fail('AI_EXPORT_INVALID');
+        }
+      }
+      assertPredecessor();
+      if (!['completed', 'acknowledged'].includes(await callResultNative(op, 'publish'))) throw fail('AI_EXPORT_INCOMPLETE');
+      if (await callResultNative(op, 'acknowledge') !== 'acknowledged') throw fail('AI_EXPORT_INCOMPLETE');
+      await recordResultCompletion(batchId, op);
+      return { ok: true, batch_id: batchId, local_ui_only: true, external_disclosure: false,
+        result_publication: { state: 'current', generation_id: op.operation_id, count: selection.length,
+          current_revision: Math.max(...selection.map(row => row.revision)) } };
+    });
+  }
+  function resolveResultsGeneration(batchId) {
+    return lockedAsync(batchId, async () => {
+      const initial = initialResults(batchId, false);
+      if (!initial) return null; // historical runs keep their original opener
+      const records = resultGenerations(batchId, initial), complete = records.at(-1);
+      const listing = listLocked(batchId), vector = resultVector(listing.documents);
+      if (listing.unavailable.length || listing.unclassified_documents.length) throw fail('RESULT_PUBLICATION_CONFLICT');
+      if (!complete) {
+        if (vector.some(row => row.revision > 0)) throw fail('RESULT_PUBLICATION_PENDING');
+        const checked = initialResults(batchId, true);
+        if (checked.binding_sha256 !== initial.binding_sha256) throw fail('RESULT_PUBLICATION_CONFLICT');
+        return { ok: true, local_path: checked.directory.path, target_kind: 'directory', external_disclosure: false };
+      }
+      if (!complete.complete || JSON.stringify(complete.op.selection) !== JSON.stringify(vector))
+        throw fail('RESULT_PUBLICATION_PENDING');
+      inspectResultGeneration(complete.op, complete.receipt);
+      const status = await callResultNative(complete.op, 'reconcile');
+      if (!['completed', 'acknowledged'].includes(status)) throw fail('RESULT_PUBLICATION_CONFLICT');
+      inspectResultGeneration(complete.op, complete.receipt);
+      return { ok: true, local_path: path.join(complete.op.root, exportNamespace(complete.op.processing_mode),
+        `Ergebnisse-${complete.op.operation_id}`), target_kind: 'directory', external_disclosure: false };
+    });
+  }
   function exportNativeApproved(batchId, operationId, selection, acknowledge) {
     return lockedAsync(batchId, async () => {
       if (!valid(operationId, 32) || !validSelection(selection)) throw fail('AI_EXPORT_INVALID');
@@ -1805,6 +2038,6 @@ function createDocumentReviewStore(options = {}) {
       return { ok: true, local_path: target, target_kind: 'directory', external_disclosure: false };
     });
   }
-  return Object.freeze({ captureRun, capture, capturePrepared, preparedReplay, assertContentBinding, assertDocumentBinding, hasPublicationEvidence, notProcessed, recordPublication, publicationExpectation, recordPublicationAsync, publicationExpectationAsync, list, historySummary, chunk, entities, decide, decideBatch, previewExport, exportApproved, abandonExport, resolveExport, resolveIdentityOverview });
+  return Object.freeze({ captureRun, capture, capturePrepared, preparedReplay, assertContentBinding, assertDocumentBinding, hasPublicationEvidence, notProcessed, recordPublication, publicationExpectation, recordPublicationAsync, publicationExpectationAsync, list, historySummary, chunk, entities, decide, decideBatch, publishResults, resolveResultsGeneration, previewExport, exportApproved, abandonExport, resolveExport, resolveIdentityOverview });
 }
 module.exports = { createDocumentReviewStore, MAX_TEXT, CHUNK };

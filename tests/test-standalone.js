@@ -836,7 +836,7 @@ test('Standalone UI contract limits source details to the local display', () => 
     'select_files', 'select_folder', 'remove_admitted_source', 'cancel_admission', 'start_admitted_batch',
     'get_public_state', 'get_ui_context', 'get_run_history', 'set_run_history_visibility', 'get_run_failures', 'open_history_results', 'open_history_ledger',
     'open_history_identity_mapping', 'open_identity_mappings_directory', 'continue_history_batch', 'pause_batch', 'abandon_result_export', 'skip_ocr_contact_review',
-    'get_document_reviews', 'get_document_review_history_summary', 'close_document_reviews', 'get_document_review_chunk', 'get_document_entities', 'decide_document_review', 'decide_document_review_batch', 'export_approved_documents', 'abandon_document_export', 'open_document_export', 'open_recorded_document_export', 'open_document_identity_overview',
+    'get_document_reviews', 'get_document_review_history_summary', 'close_document_reviews', 'get_document_review_chunk', 'get_document_entities', 'decide_document_review', 'decide_document_review_batch', 'export_approved_documents', 'publish_result_documents', 'abandon_document_export', 'open_document_export', 'open_recorded_document_export', 'open_document_identity_overview',
     'open_review_window', 'open_embedded_review', 'close_review_window', 'get_review_session', 'get_review_chunk', 'submit_review',
     'continue_review_session',
     'ack_terminal_presented', 'continue_current_batch', 'configure_results',
@@ -850,6 +850,7 @@ test('Standalone UI contract limits source details to the local display', () => 
     'resolve_identity_mappings_directory',
     'continue_history_batch', 'pause_batch', 'skip_ocr_contact_review', 'abandon_result_export',
     'get_document_reviews', 'get_document_review_history_summary', 'get_document_review_chunk', 'get_document_entities', 'decide_document_review', 'decide_document_review_batch', 'preview_document_export', 'export_approved_documents', 'abandon_document_export', 'resolve_document_export', 'resolve_document_identity_overview',
+    'publish_result_documents',
     'get_review_session', 'get_review_chunk', 'submit_review', 'continue_review_session', 'shutdown'
   ]);
 });

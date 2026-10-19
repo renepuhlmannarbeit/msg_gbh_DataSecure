@@ -1,7 +1,8 @@
 //! Internal sidecar callbacks, not WebView commands or a generic filesystem API.
 //! Picker binding, bounded body transfer and durable native publication.
 //! There is no helper process, renderer filesystem API or recursive RPC.
-use crate::{export_directory::Directory, ipc_transport::{self, Lifecycle}, ipc_activity::{ExportPhase, ExportReporter}};
+use crate::{export_directory::Directory, ipc_transport::{self, Lifecycle}, ipc_activity::{ExportPhase, ExportReporter},
+    native_export_transaction::PublicationRole};
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::{path::Path, sync::mpsc, time::Instant};
@@ -31,6 +32,25 @@ struct ExportRequest { schema: String, request_id: String, native_id: String, se
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct BodyChunk { index: usize, offset: usize, hex: String, final_chunk: bool }
+// Results publication is a separate closed caller role, not a caller-selected
+// export inventory. Only the private store chooses its operation and bodies.
+// The history opener may freshly reconcile an existing result, never mutate it.
+fn results_outer(outer: &Value, batch_id: &str, action: &str) -> bool {
+    let Some(object) = outer.as_object() else { return false; };
+    object.len() == 4 && ["schema", "request_id", "action", "batch_id"].iter().all(|key| object.contains_key(*key)) &&
+        outer["schema"] == "datasecure-standalone-private-ipc/1" && outer["action"] == action &&
+        outer["batch_id"] == batch_id && batch_id.len() == 64 &&
+        batch_id.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) &&
+        outer["request_id"].as_str().is_some_and(|id| (16..=64).contains(&id.len()) &&
+            id.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
+}
+fn current_results_outer(outer: &Value) -> bool {
+    let Some(object) = outer.as_object() else { return false; };
+    object.len() == 3 && ["schema", "request_id", "action"].iter().all(|key| object.contains_key(*key)) &&
+        outer["schema"] == "datasecure-standalone-private-ipc/1" && outer["action"] == "resolve_current_results" &&
+        outer["request_id"].as_str().is_some_and(|id| (16..=64).contains(&id.len()) &&
+            id.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
+}
 fn receive_body(state: &mut PublicationState, op: &crate::native_export_broker::Operation, chunk: BodyChunk,
     data: &Path, guard: Option<&ipc_transport::NativeGuard>, reporter: Option<&ExportReporter>) -> std::io::Result<&'static str> {
     let invalid = || std::io::Error::other("AI_EXPORT_CONFLICT");
@@ -149,8 +169,10 @@ fn handle_publication_owned(frame: &Value, outer: &Value, state: &mut Publicatio
         let request: ConfiguredRequest = serde_json::from_value(frame.clone()).map_err(|_| invalid())?;
         if request.schema != PUBLICATION_REQUEST || request.action != "prepare_configured_export_root" ||
             request.request_id != outer["request_id"] || request.native_id != native_id || u64::from(request.sequence) != sequence ||
-            sequence != 1 || state.operation.is_some() || outer["action"] != "export_approved_documents" ||
-            outer["acknowledge"] == true || outer["batch_id"] != request.batch_id || outer["operation_id"] != request.operation_id ||
+            sequence != 1 || state.operation.is_some() ||
+            !(results_outer(outer, &request.batch_id, "publish_result_documents") ||
+                outer["action"] == "export_approved_documents" && outer["acknowledge"] != true &&
+                outer["batch_id"] == request.batch_id && outer["operation_id"] == request.operation_id) ||
             request.batch_id.len() != 64 || request.operation_id.len() != 32 ||
             !request.batch_id.bytes().chain(request.operation_id.bytes()).all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
             return Err(invalid());
@@ -162,10 +184,12 @@ fn handle_publication_owned(frame: &Value, outer: &Value, state: &mut Publicatio
         let request: ExportRequest = serde_json::from_value(frame.clone()).map_err(|_| invalid())?;
         let op = &request.operation;
         let action = outer["action"].as_str().unwrap_or("");
-        if request.schema != PUBLICATION_REQUEST || request.action != "export_documents" ||
-            request.request_id != outer["request_id"] || request.native_id != native_id || u64::from(request.sequence) != sequence ||
-            outer["batch_id"] != op.batch_id || outer["operation_id"] != op.operation_id ||
-            !match action {
+        let authorized = if op.publication_role == Some(PublicationRole::Results) {
+            results_outer(outer, &op.batch_id, "publish_result_documents") &&
+                ["publish", "write_body", "acknowledge", "reconcile"].contains(&request.command.as_str()) ||
+            (results_outer(outer, &op.batch_id, "resolve_history_results") || current_results_outer(outer)) && request.command == "reconcile"
+        } else {
+            outer["batch_id"] == op.batch_id && outer["operation_id"] == op.operation_id && match action {
                 "export_approved_documents" => match request.command.as_str() {
                     "publish" | "write_body" => outer["acknowledge"] != true,
                     "acknowledge" => outer["acknowledge"] == true,
@@ -173,7 +197,11 @@ fn handle_publication_owned(frame: &Value, outer: &Value, state: &mut Publicatio
                 "resolve_document_export" => request.command == "reconcile",
                 "abandon_document_export" => request.command == "abandon" && outer["digest"] == op.request_sha256,
                 _ => false,
-            } { return Err(invalid()); }
+            }
+        };
+        if request.schema != PUBLICATION_REQUEST || request.action != "export_documents" ||
+            request.request_id != outer["request_id"] || request.native_id != native_id || u64::from(request.sequence) != sequence ||
+            !authorized { return Err(invalid()); }
         if action == "export_approved_documents" {
             let rows = outer["selection"].as_array().ok_or_else(invalid)?;
             if rows.len() != op.files.len() || rows.iter().zip(&op.files).any(|(row, file)| {
@@ -198,7 +226,9 @@ fn handle_publication_owned(frame: &Value, outer: &Value, state: &mut Publicatio
                     _ => ExportPhase::Preparing,
                 }, op.files.len());
             }
-            crate::native_export_broker::execute(data, op, &request.command, guard.ok_or_else(invalid)?)
+            if ["resolve_history_results", "resolve_current_results"].contains(&action) {
+                crate::native_export_broker::inspect_results(data, op, guard.ok_or_else(invalid)?)
+            } else { crate::native_export_broker::execute(data, op, &request.command, guard.ok_or_else(invalid)?) }
         };
         if result.is_err() { state.body = None; }
         if let (Some(reporter), Ok(status)) = (reporter, &result) {
@@ -310,7 +340,7 @@ mod tests {
         fn operation(&self, lifecycle: &Lifecycle) -> Operation {
             let guard = lifecycle.begin_native().unwrap();
             let binding = crate::native_export_broker::configure(&self.root.join("public"), &self.data(), &"d".repeat(32), &guard).unwrap();
-            Operation { batch_id: "a".repeat(64), operation_id: "b".repeat(32), request_sha256: "c".repeat(64),
+            Operation { batch_id: "a".repeat(64), operation_id: "b".repeat(32), request_sha256: "c".repeat(64), publication_role: None,
                 processing_mode: "markdown-and-anonymize".into(), binding,
                 files: [b"hello", b"world"].into_iter().enumerate().map(|(index, bytes)| ExpectedFile {
                     name: format!("Dokument_{:02}.md", index + 1), bytes: 5, sha256: Sha256::digest(bytes).into() }).collect() }
@@ -336,6 +366,10 @@ mod tests {
             "selection": op.files.iter().enumerate().map(|(index, file)| json!({
                 "document_id": format!("{index:032x}"), "revision": 1,
                 "output_sha256": file.sha256.iter().map(|byte| format!("{byte:02x}")).collect::<String>() })).collect::<Vec<_>>() })
+    }
+    fn results_request_outer(op: &Operation, action: &str) -> Value {
+        json!({ "schema": "datasecure-standalone-private-ipc/1", "request_id": "0000000000000001",
+            "action": action, "batch_id": op.batch_id })
     }
     fn export_frame(op: &Operation, outer: &Value, sequence: u32, command: &str, body: Option<Value>) -> Value {
         let mut value = json!({ "schema": PUBLICATION_REQUEST, "request_id": outer["request_id"], "native_id": "e".repeat(32),
@@ -398,6 +432,103 @@ mod tests {
         assert_eq!(response["ok"], false);
         assert!(validate_completion(&json!({"ok": true}), &outer(), response["ok"] == true).is_err(),
             "a performed but refused callback is not a native binding");
+    }
+    #[test]
+    fn result_role_frames_publish_and_reconcile_only_through_the_closed_batch_contract() {
+        let fixture = ExportFixture::new(); let lifecycle = Lifecycle::default();
+        let mut op = fixture.operation(&lifecycle); op.publication_role = Some(PublicationRole::Results);
+        let outer = results_request_outer(&op, "publish_result_documents");
+        let mut state = PublicationState::default();
+        for (index, body) in ["68656c6c6f", "776f726c64"].into_iter().enumerate() {
+            let frame = export_frame(&op, &outer, (index + 1) as u32, "write_body",
+                Some(json!({ "index": index, "offset": 0, "hex": body, "final_chunk": true })));
+            let result = handle_publication(&frame, &outer, &mut state, &lifecycle, &fixture.data(), deadline()).unwrap().unwrap();
+            assert_eq!(result["ok"], true); assert_eq!(result["status"], "staged");
+        }
+        for (sequence, command, expected) in [(3, "publish", "completed"), (4, "acknowledge", "acknowledged")] {
+            let result = handle_publication(&export_frame(&op, &outer, sequence, command, None), &outer,
+                &mut state, &lifecycle, &fixture.data(), deadline()).unwrap().unwrap();
+            assert_eq!(result["ok"], true); assert_eq!(result["status"], expected);
+        }
+        let mut second = op.clone(); second.operation_id = "f".repeat(32);
+        assert!(handle_publication(&export_frame(&second, &outer, 5, "reconcile", None), &outer,
+            &mut state, &lifecycle, &fixture.data(), deadline()).is_err(), "one outer request cannot switch operation even after ACK");
+        let read_outer = results_request_outer(&op, "resolve_history_results");
+        let result = handle_publication(&export_frame(&op, &read_outer, 1, "reconcile", None), &read_outer,
+            &mut PublicationState::default(), &lifecycle, &fixture.data(), deadline()).unwrap().unwrap();
+        assert_eq!(result["ok"], true); assert_eq!(result["status"], "acknowledged");
+        let current_outer = json!({"schema":"datasecure-standalone-private-ipc/1", "request_id":"1".repeat(16), "action":"resolve_current_results"});
+        let current = handle_publication(&export_frame(&op, &current_outer, 1, "reconcile", None), &current_outer,
+            &mut PublicationState::default(), &lifecycle, &fixture.data(), deadline()).unwrap().unwrap();
+        assert_eq!(current["ok"], true); assert_eq!(current["status"], "acknowledged");
+        let target = fixture.root.join("public/DataSecure-KI-Export");
+        assert_eq!(std::fs::read_dir(&target).unwrap().count(), 1);
+        let generation = target.join(format!("Ergebnisse-{}", op.operation_id));
+        assert_eq!(std::fs::read(generation.join("Dokument_01.md")).unwrap(), b"hello");
+        assert_eq!(std::fs::read(generation.join("Dokument_02.md")).unwrap(), b"world");
+    }
+    #[test]
+    fn result_role_rejects_foreign_outer_fields_legacy_actions_and_history_mutation_before_io() {
+        let fixture = ExportFixture::new(); let lifecycle = Lifecycle::default();
+        let mut op = fixture.operation(&lifecycle); op.publication_role = Some(PublicationRole::Results);
+        let outer = results_request_outer(&op, "publish_result_documents");
+        let guard = lifecycle.begin_native().unwrap();
+        let frame = export_frame(&op, &outer, 1, "reconcile", None);
+        for (field, value) in [("selection", json!([])), ("operation_id", json!(op.operation_id)),
+            ("acknowledge", json!(true)), ("source_paths", json!([])), ("extra", json!(false)),
+            ("batch_id", json!("f".repeat(64))), ("schema", json!("foreign"))] {
+            let mut invalid = outer.clone(); invalid[field] = value;
+            assert!(handle_publication_owned(&frame, &invalid, &mut PublicationState::default(), Some(&guard), &fixture.data(), None).is_err(), "{field}");
+        }
+        for action in ["export_approved_documents", "resolve_document_export", "abandon_document_export", "get_public_state"] {
+            let mut invalid = export_outer(&op, false); invalid["action"] = json!(action);
+            assert!(handle_publication_owned(&frame, &invalid, &mut PublicationState::default(), Some(&guard), &fixture.data(), None).is_err(), "{action}");
+        }
+        let mut legacy = op.clone(); legacy.publication_role = None;
+        assert!(handle_publication_owned(&export_frame(&legacy, &outer, 1, "reconcile", None), &outer,
+            &mut PublicationState::default(), Some(&guard), &fixture.data(), None).is_err());
+        let read_outer = results_request_outer(&op, "resolve_history_results");
+        let current_outer = json!({"schema":"datasecure-standalone-private-ipc/1", "request_id":"1".repeat(16), "action":"resolve_current_results"});
+        for read in [&read_outer, &current_outer] {
+            for command in ["publish", "write_body", "acknowledge", "abandon"] {
+                assert!(handle_publication_owned(&export_frame(&op, read, 1, command, None), read,
+                    &mut PublicationState::default(), Some(&guard), &fixture.data(), None).is_err(), "{command}");
+            }
+        }
+        for (field, value) in [("batch_id", json!(op.batch_id)), ("source_paths", json!([])),
+            ("operation_id", json!(op.operation_id)), ("acknowledge", json!(true)), ("selection", json!([])), ("extra", json!(true))] {
+            let mut invalid = current_outer.clone(); invalid[field] = value;
+            assert!(handle_publication_owned(&export_frame(&op, &invalid, 1, "reconcile", None), &invalid,
+                &mut PublicationState::default(), Some(&guard), &fixture.data(), None).is_err(), "current {field}");
+        }
+        for invalid_role in [Value::Null, json!("legacy"), json!(true), json!({ "results": null })] {
+            let mut invalid = frame.clone(); invalid["operation"]["publication_role"] = invalid_role;
+            assert!(handle_publication_owned(&invalid, &outer, &mut PublicationState::default(), Some(&guard), &fixture.data(), None).is_err());
+        }
+        // Native configuration created the empty fixed namespaces, not any
+        // generation, journal or staged body for these refused callbacks.
+        assert_eq!(std::fs::read_dir(fixture.root.join("public/DataSecure-KI-Export")).unwrap().count(), 0);
+        assert_eq!(std::fs::read_dir(fixture.data().join(&op.binding.private_name)).unwrap().count(), 0);
+    }
+    #[test]
+    fn result_role_configured_prepare_accepts_only_the_closed_publishing_batch_not_history() {
+        let fixture = ExportFixture::new(); let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
+        let outer = json!({ "schema": "datasecure-standalone-private-ipc/1", "request_id": "1".repeat(16),
+            "action": "publish_result_documents", "batch_id": "a".repeat(64) });
+        let frame = json!({ "schema": PUBLICATION_REQUEST, "request_id": outer["request_id"],
+            "native_id": "c".repeat(32), "sequence": 1, "action": "prepare_configured_export_root",
+            "batch_id": outer["batch_id"], "operation_id": "b".repeat(32),
+            "root": fixture.root.join("public"), "setting_sha256": "d".repeat(64),
+            "admission": { "kind": "native", "identity": { "volume": "1", "object": "2", "created_ns": "3" } } });
+        let result = handle_publication_owned(&frame, &outer, &mut PublicationState::default(), Some(&guard), &fixture.data(), None).unwrap().unwrap();
+        assert_eq!(result["ok"], false, "closed valid authorization reaches refusal for absent saved settings");
+        for (field, value) in [("action", json!("resolve_history_results")), ("batch_id", json!("e".repeat(64))),
+            ("operation_id", json!("b".repeat(32))), ("selection", json!([])), ("acknowledge", json!(true))] {
+            let mut invalid = outer.clone(); invalid[field] = value;
+            assert!(handle_publication_owned(&frame, &invalid, &mut PublicationState::default(), Some(&guard), &fixture.data(), None).is_err(), "{field}");
+        }
+        assert_eq!(std::fs::read_dir(fixture.data()).unwrap().count(), 0);
+        assert_eq!(std::fs::read_dir(fixture.root.join("public")).unwrap().count(), 0);
     }
     #[test]
     fn configured_root_callback_is_closed_and_bound_to_one_new_export_request() {

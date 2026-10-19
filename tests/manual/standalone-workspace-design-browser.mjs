@@ -216,11 +216,9 @@ try {
     await page.locator('#documents-list .document-row').first().waitFor();
     if (raw) {
       assert.ok((await page.locator('#documents-heading').innerText()).includes('freiwillig'));
-      assert.ok((await page.locator('#documents-purpose').innerText()).includes('Häkchen wählen nur Dateien für eine zusätzliche Kopie'));
+      assert.match(await page.locator('#documents-purpose').innerText(), /ohne weitere Dateiauswahl oder Exportbestätigung/u);
       assert.equal(await page.locator('#document-markdown').inputValue(), '');
-      await page.locator('#documents-list .document-row input').first().check();
-      assert.equal(await page.locator('#document-markdown').inputValue(), '', 'copy selection never opens a comparison');
-      await page.locator('#documents-list .document-row input').first().uncheck();
+      assert.equal(await page.locator('#documents-list .document-row input:visible').count(), 0, 'no second file selection');
     }
     assert.equal(await page.locator('#nav-history').getAttribute('aria-controls'), 'history-view');
     assert.equal(await page.locator('#nav-history').getAttribute('aria-selected'), 'false');
@@ -234,8 +232,8 @@ try {
     await page.waitForFunction(() => document.querySelector('#document-markdown').value.length > 0);
     assert.ok(await page.locator('#document-markdown').evaluate(node => getComputedStyle(node).fontFamily.includes('monospace')));
     assert.ok(await page.locator('body').evaluate(node => getComputedStyle(node).fontFamily.includes('Inter')));
-    assert.equal(await page.locator('#documents-main-guide').isVisible(), !raw);
-    assert.equal(await page.locator('#documents-approval-extras').isVisible(), !raw);
+    assert.equal(await page.locator('#documents-main-guide').isVisible(), false);
+    assert.equal(await page.locator('#documents-approval-extras').isVisible(), false);
     assert.equal(await page.locator('#documents-revoke').isVisible(), false, 'revocation starts collapsed');
     assert.equal(await page.locator('#document-extra-actions').isVisible(), !raw);
     assert.equal(await page.locator('#document-redact').isVisible(), false, 'optional text mutations start collapsed');
@@ -268,38 +266,25 @@ try {
       assert.deepEqual(audit.violations.map(row => ({ id: row.id, targets: row.nodes.map(node => node.target) })), [], mode + ' axe ' + width);
     }
     await page.setViewportSize({ width: 1280, height: 900 });
-    await page.locator('#documents-all').check();
-    await page.locator('#documents-export').click(); await page.locator('#document-export-dialog').waitFor({ state: 'visible' });
-    assert.equal(await page.locator('#document-export-confirm').innerText(), raw ? 'Kopie speichern' : 'Freigeben und exportieren');
-    assert.match(await page.locator('#document-export-target').innerText(), /\/Synthetic\/Results/u);
+    assert.equal(await page.locator('#documents-all').isVisible(), false);
+    assert.equal(await page.locator('#documents-export').isVisible(), false);
+    assert.equal(await page.locator('#document-export-dialog').isVisible(), false);
+    assert.equal(await page.locator('#documents-open-results').isEnabled(), true);
     assert.equal(await page.evaluate(() => window.previewCombinedCalls.some(row =>
-      ['decide_document_review', 'decide_document_review_batch', 'export_approved_documents'].includes(row.command))), false,
-      'selection, comparisons and preview do not approve or copy');
-    const names = await page.locator('#document-export-files li').allTextContents();
-    assert.deepEqual(names, raw ? ['Lebenslauf-Erika-Linden.md','Kontaktliste.md','Ergänzungen.md'] : ['Dokument_01.md','Dokument_02.md','Dokument_03.md']);
-    for (const [width, height] of [[1280,900], [720,560], [390,700]]) {
-      await page.setViewportSize({ width, height });
-      assert.ok(await page.locator('#document-export-dialog').evaluate(node => node.scrollWidth <= node.clientWidth + 1));
-      await page.locator('#document-export-close').focus();
-      await page.keyboard.press('Tab'); await page.keyboard.press('Shift+Tab');
-      assert.equal(await page.locator('#document-export-close').evaluate(node => getComputedStyle(node).outlineStyle !== 'none'), true);
-    }
+      ['decide_document_review', 'decide_document_review_batch', 'export_approved_documents', 'publish_result_documents'].includes(row.command))), false,
+      'comparison/cancel never mutates or publishes');
+    await page.locator('#documents-open-results').focus();
+    await page.keyboard.press('Tab'); await page.keyboard.press('Shift+Tab');
+    assert.equal(await page.locator('#documents-open-results').evaluate(node => getComputedStyle(node).outlineStyle !== 'none'), true);
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.screenshot({ path: path.join(evidence, mode + '.png'), fullPage: true });
-    await page.locator('#document-export-close').click();
+    await page.locator('#documents-open-results').click();
     assert.equal(await page.locator('#document-export-dialog').isVisible(), false);
+    const opens = await page.evaluate(() => window.previewCombinedCalls.filter(row => row.command === 'open_history_results'));
+    assert.deepEqual(opens.map(row => row.args), [{ batchId: 'b'.repeat(64) }]);
     assert.equal(await page.evaluate(() => window.previewCombinedCalls.some(row =>
-      ['decide_document_review_batch', 'export_approved_documents'].includes(row.command))), false, 'cancel remains read-only');
-    await page.locator('#documents-export').click(); await page.locator('#document-export-confirm').click();
-    await page.waitForFunction(title => document.querySelector('#document-export-title').textContent === title,
-      raw ? 'Markdown-Kopie gespeichert' : 'Export abgeschlossen');
-    const mutations = await page.evaluate(() => window.previewCombinedCalls.filter(row =>
-      ['decide_document_review_batch', 'export_approved_documents'].includes(row.command)));
-    assert.equal(mutations.filter(row => row.command === 'decide_document_review_batch').length, 1);
-    assert.equal(mutations.filter(row => row.command === 'export_approved_documents' && !row.args.acknowledge).length, 1);
-    assert.equal(mutations.filter(row => row.command === 'export_approved_documents' && row.args.acknowledge).length, 1);
-    assert.deepEqual(mutations.find(row => row.command === 'export_approved_documents').args.selection.map(row => row.revision), [1, 1, 1]);
-    if (raw) assert.ok((await page.locator('#documents-selected').innerText()).includes('Markdown-Dateien verfügbar'));
+      ['decide_document_review_batch', 'export_approved_documents', 'publish_result_documents'].includes(row.command))), false,
+      'opening an initial result is a pure handoff, not publication/approval');
   }
   await page.goto(preview.url + '/workspace.html?demo=documents-raw-filter');
   await page.locator('#nav-history').click();
@@ -309,15 +294,11 @@ try {
   assert.equal(await page.locator('#documents-filter').inputValue(), 'notices');
   assert.equal(await page.locator('#documents-list .document-row').count(), 2);
   assert.ok((await page.locator('#documents-filter option').first().innerText()).includes('Mit Hinweisen (2)'));
-  await page.locator('#documents-all').check();
-  await page.locator('#documents-export').click();
-  assert.deepEqual(await page.locator('#document-export-files li').allTextContents(),
-    ['Lebenslauf-Erika-Linden.md', 'Kontaktliste.md']);
-  assert.ok((await page.locator('#document-export-dialog').innerText()).includes('Bereits erzeugte Dateien bleiben unverändert'));
-  await page.locator('#document-export-close').click();
+  assert.equal(await page.locator('#documents-all').isVisible(), false);
+  assert.equal(await page.locator('#documents-export').isVisible(), false);
   await page.locator('#documents-filter').selectOption('all');
   assert.equal(await page.locator('#documents-list .document-row').count(), 3);
-  assert.ok((await page.locator('#documents-selected').innerText()).includes('0 ausgewählt'));
+  assert.match(await page.locator('#documents-selected').innerText(), /3 Ergebnisdateien verfügbar/u);
   await page.locator('#documents-filter').selectOption('edited');
   assert.equal(await page.locator('#documents-list .document-row').count(), 0);
   await page.locator('#documents-filter').selectOption('notices');
@@ -326,8 +307,8 @@ try {
   await page.locator('#document-markdown').fill('# Projektleitung\nErika Linden\nE-Mail: korrigiert@example.invalid\n\nLeitung von 42 Projekten.\nSachinhalt und Qualifikationen bleiben erhalten.');
   await page.locator('#document-save-correction').click();
   await page.waitForFunction(() => document.querySelector('#documents-list').textContent.includes('Korrektur gespeichert'));
-  await page.waitForFunction(() => document.querySelector('#documents-status').textContent.includes('privater Textstand gespeichert'));
-  assert.ok((await page.locator('#documents-status').innerText()).includes('zusätzliche Kopie speichern'));
+  await page.waitForFunction(() => document.querySelector('#documents-status').textContent.includes('Ergebnisstand bereitgestellt'));
+  assert.equal(await page.locator('#documents-open-results').isEnabled(), true);
   await page.locator('#documents-filter').selectOption('edited');
   assert.equal(await page.locator('#documents-list .document-row').count(), 1);
   assert.ok((await page.locator('#documents-list').innerText()).includes('Korrektur gespeichert'));
@@ -388,139 +369,95 @@ try {
   }
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.screenshot({ path: path.join(evidence, 'fastweg-completed-with-ocr-hints.png'), fullPage: true });
-  assert.equal(await page.locator('#history-' + 'b'.repeat(64) + '-documents').innerText(), 'Prüfung öffnen',
-    'a stable secondary action opens the review without silently starting an export preview');
-  await page.locator('#history-' + 'b'.repeat(64) + '-documents').click();
+  assert.equal(await page.locator(fastPrefix + '-documents').innerText(), 'Nachbearbeitung öffnen (optional)');
+  await page.locator(fastPrefix + '-documents').click();
   await page.locator('#documents-list .document-row').first().waitFor();
   assert.equal(await page.locator('#document-export-dialog').isVisible(), false);
-  await page.waitForFunction(() => document.querySelector('#documents-purpose').textContent.includes('3 automatisch freigegeben'));
+  assert.match(await page.locator('#documents-purpose').innerText(), /automatisch maskiert, nicht manuell geprüft/u);
   assert.equal(await page.locator('#documents-main-guide').isVisible(), false);
-  assert.equal(await page.locator('#run-guide-title').innerText(), 'Schnellweg abgeschlossen · automatisch freigegeben');
-  await page.locator('#documents-all').check();
-  assert.equal(await page.locator('#documents-approve').isEnabled(), false);
-  assert.equal(await page.locator('#documents-export').isEnabled(), true);
-  for (const [width, height] of [[1280,900], [720,560], [390,700]]) {
-    await page.setViewportSize({ width, height });
-    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'Fastweg reflow ' + width);
-    const audit = await page.evaluate(() => axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a','wcag2aa','wcag21aa'] } }));
-    assert.deepEqual(audit.violations.map(row => ({ id: row.id, targets: row.nodes.map(node => node.target) })), [], 'Fastweg axe ' + width);
-  }
-  await page.setViewportSize({ width: 1280, height: 900 });
-  await page.screenshot({ path: path.join(evidence, 'fastweg-automatic-approval.png'), fullPage: true });
-  await page.locator('#documents-export').click();
-  await page.locator('#document-export-dialog').waitFor({ state: 'visible' });
-  assert.match(await page.locator('#document-export-purpose').innerText(), /automatische Erstfreigabe ist keine menschliche Prüfung/u);
+  assert.equal(await page.locator('#run-guide-title').innerText(), 'Anonymisierte Ergebnisse bereit');
+  assert.equal(await page.locator('#documents-all').isVisible(), false);
+  assert.equal(await page.locator('#documents-approve').isVisible(), false);
+  assert.equal(await page.locator('#documents-export').isVisible(), false);
+  assert.equal(await page.locator('#documents-open-results').isEnabled(), true);
+  // A delayed publication of an optional mask owns the view and cannot be
+  // mistaken for another approval/export. Replies here are synthetic only.
+  await page.locator('#documents-list .document-row button').first().click();
+  await page.waitForFunction(() => document.querySelector('#document-markdown').value.length > 0);
   await page.evaluate(() => {
     const original = window.__TAURI__.core.invoke;
-    const observed = window.previewExportObservation = { phase: 'copying', staged: 1, request: null, requests: [], finish: null, saves: 0 };
+    window.publicationProbe = { calls: [], finish: null };
     window.__TAURI__.core.invoke = async (command, args) => {
-      if (command === 'export_approved_documents') observed.requests.push(structuredClone(args));
-      if (command === 'save_diagnostic_bundle') {
-        observed.saves++;
-        return { ok: true, saved: true, cancelled: false, partial: true, external_disclosure: false };
-      }
-      if (command === 'export_approved_documents' && !args.acknowledge) {
-        observed.request = args;
-        return new Promise(resolve => { observed.finish = async () => resolve(await original(command, args)); });
-      }
-      if (command === 'get_native_recovery_status') return { phase: 'owned', local_ui_only: true, external_disclosure: false,
-        activity: { state: 'active', active: true, action: 'export_approved_documents', phase: 'native', elapsed_ms: 100,
-          export_progress: { operation_id: observed.request.operationId, phase: observed.phase,
-            staged_count: observed.staged, total_count: observed.request.selection.length } } };
+      window.publicationProbe.calls.push({ command, args: structuredClone(args) });
+      if (command === 'publish_result_documents') return new Promise(resolve => {
+        window.publicationProbe.finish = async () => resolve(await original(command, args));
+      });
       return original(command, args);
     };
   });
-  await page.locator('#document-export-confirm').click();
-  await page.waitForFunction(() => document.querySelector('#document-export-result').textContent.includes('1 von 3 Dateien'));
-  assert.equal(await page.evaluate(() => document.activeElement.id), 'document-export-result');
-  assert.equal(await page.locator('#document-export-close').isEnabled(), false);
-  assert.notEqual(await page.locator('#document-export-title').innerText(), 'Export abgeschlossen');
-  assert.equal(await page.locator('#document-export-diagnostic-save').isVisible(), false, 'support starts in its optional disclosure');
-  await page.locator('#document-export-support > summary').click();
-  await page.locator('#document-export-diagnostic-save').click();
-  assert.match(await page.locator('#document-export-diagnostic-status').innerText(), /lokal gespeichert.*gekennzeichnet/u);
-  assert.equal(await page.evaluate(() => window.previewExportObservation.saves), 1);
-  assert.equal(await page.locator('#document-export-dialog').isVisible(), true);
-  assert.equal(await page.locator('#document-export-close').isEnabled(), false, 'support cannot release the export owner');
+  await page.locator('#document-extra-actions > summary').click();
+  await page.locator('#document-markdown').evaluate(node => node.setSelectionRange(0, 4));
+  await page.locator('#document-redact').click();
+  await page.locator('#document-change-save').click();
+  try { await page.waitForFunction(() => Boolean(window.publicationProbe.finish)); }
+  catch (error) {
+    console.error('DIRECT_PUBLICATION_BROWSER_STATE', await page.evaluate(() => ({ calls: window.publicationProbe.calls,
+      status: document.querySelector('#documents-status').textContent })));
+    await page.screenshot({ path: path.join(evidence, 'direct-publication-failure.png'), fullPage: true }); throw error;
+  }
+  assert.equal(await page.locator('#documents-open-results').isEnabled(), false);
+  assert.equal(await page.locator('#documents-back').isEnabled(), false);
+  assert.equal(await page.locator('#document-change-save').isEnabled(), false);
+  assert.match(await page.locator('#documents-status').innerText(), /Ergebnisstand wird sicher bereitgestellt/u);
   for (const [width, height] of [[1280,900], [720,560], [390,700]]) {
     await page.setViewportSize({ width, height });
-    assert.ok(await page.locator('#document-export-dialog').evaluate(node => node.scrollWidth <= node.clientWidth + 1), 'observed export reflow ' + width);
+    assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'publication reflow ' + width);
     const audit = await page.evaluate(() => axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a','wcag2aa','wcag21aa'] } }));
-    assert.deepEqual(audit.violations.map(row => ({ id: row.id, targets: row.nodes.map(node => node.target) })), [], 'observed export axe ' + width);
+    assert.deepEqual(audit.violations.map(row => ({ id: row.id, targets: row.nodes.map(node => node.target) })), [], 'publication axe ' + width);
   }
-  await page.screenshot({ path: path.join(evidence, 'native-progress-synthetic-ui.png'), fullPage: true });
-  await page.evaluate(() => { window.previewExportObservation.phase = 'verifying'; });
-  await page.waitForFunction(() => document.querySelector('#document-export-result').textContent.includes('prüft die kopierten Dateien'));
-  await page.evaluate(() => window.previewExportObservation.finish());
-  await page.waitForFunction(() => document.querySelector('#document-export-title').textContent === 'Export abgeschlossen');
-  assert.equal(await page.locator('#document-export-close').isEnabled(), true);
-  assert.equal(await page.locator('#document-export-support').isVisible(), false, 'diagnostics are not a successful-copy completion step');
-  assert.equal(await page.evaluate(() => document.activeElement.id), 'document-export-close');
-  await page.locator('#document-export-close').click();
-  await page.locator('#documents-completion').waitFor({ state: 'visible' });
-  assert.equal(await page.locator('#documents-view').isVisible(), true, 'export completion stays on the document page');
-  await page.waitForFunction(() => document.activeElement.id === 'documents-completion-history');
-  assert.equal(await page.evaluate(() => document.activeElement.id), 'documents-completion-history');
-  await page.locator('#documents-completion-details').click();
-  await page.locator('#details-receipt').waitFor({ state: 'visible' });
-  assert.equal(await page.locator('#documents-view').isVisible(), false);
-  assert.equal(await page.locator('#nav-details').getAttribute('aria-selected'), 'true');
-  assert.equal(await page.locator('#nav-history').getAttribute('aria-controls'), 'history-view');
-  assert.equal(await page.locator('#details-run-id').innerText(), 'Lauf-ID: ' + 'b'.repeat(64));
-  assert.match(await page.locator('#details-receipt-text').innerText(), /Empfang bestätigt.*kein weiterer Export nötig/u);
-  const exportRequests = await page.evaluate(() => window.previewExportObservation.requests);
-  assert.equal(exportRequests.length, 2, 'one copy and one durable acknowledgement');
-  assert.equal(exportRequests[0].batchId, 'b'.repeat(64));
-  assert.equal(exportRequests[1].acknowledge, true);
-  assert.equal(exportRequests[1].operationId, exportRequests[0].operationId);
-  assert.deepEqual(exportRequests[1].selection, exportRequests[0].selection);
-  await page.screenshot({ path: path.join(evidence, 'r6-confirmed-copy-same-run-overview.png'), fullPage: true });
+  await page.screenshot({ path: path.join(evidence, 'direct-results-publication-pending.png'), fullPage: true });
+  await page.evaluate(() => window.publicationProbe.finish());
+  await page.waitForFunction(() => document.querySelector('#documents-status').textContent.includes('Ergebnisstand bereitgestellt'));
+  assert.equal(await page.locator('#documents-open-results').isEnabled(), true);
+  assert.equal(await page.locator('#documents-publish').isVisible(), false);
+  const publications = await page.evaluate(() => window.publicationProbe.calls.filter(row => row.command === 'publish_result_documents'));
+  assert.deepEqual(publications.map(row => row.args), [{ batchId: 'b'.repeat(64) }]);
+  assert.equal(await page.evaluate(() => window.publicationProbe.calls.some(row =>
+    ['decide_document_review_batch', 'export_approved_documents'].includes(row.command))), false);
+  await page.locator('#documents-open-results').click();
+  assert.equal(await page.evaluate(() => window.publicationProbe.calls.filter(row => row.command === 'open_history_results').length), 1);
+  assert.equal(await page.locator('#document-export-dialog').isVisible(), false);
+  await page.screenshot({ path: path.join(evidence, 'direct-results-current-generation.png'), fullPage: true });
 
-  // Native GUI06 found that the renderer completion -> History bridge used
-  // technical counts without requesting its revision-bound durable summary.
-  // Exercise that exact bridge in a real DOM, including queued details toggle
-  // events. Synthetic IPC still is not native package/OS acceptance.
-  await page.locator('#details-open-documents').click();
-  await page.locator('#documents-completion-history').waitFor({ state: 'visible' });
+  // The completion->History bridge must read exactly this run once. Actual
+  // queued disclosure events reuse that read without publishing/approving.
   await page.evaluate(() => {
     const original = window.__TAURI__.core.invoke;
     window.previewCompletionSummaryReads = [];
     window.__TAURI__.core.invoke = async (command, args) => {
-      if (command === 'get_document_review_history_summary')
-        window.previewCompletionSummaryReads.push(structuredClone(args));
+      if (command === 'get_document_review_history_summary') window.previewCompletionSummaryReads.push(structuredClone(args));
       return original(command, args);
     };
   });
   await page.locator('#documents-completion-history').click();
-  try {
-    await page.waitForFunction(() => document.querySelector('#history-' + 'b'.repeat(64) + '-guide-title')?.textContent === 'Export mit Abschlussbeleg');
-  } catch (error) {
-    console.error('COMPLETION_HISTORY_BROWSER_STATE', await page.evaluate(() => ({
-      historyVisible: !document.querySelector('#history-view').hidden,
-      reads: window.previewCompletionSummaryReads,
-      history: document.querySelector('#history-list').textContent,
-      feedback: document.querySelector('#feedback').textContent
-    })));
-    await page.screenshot({ path: path.join(evidence, 'completion-history-failure.png'), fullPage: true });
-    throw error;
-  }
+  await page.waitForFunction(() => document.querySelector('#history-' + 'b'.repeat(64) + '-guide-title')?.textContent === 'Anonymisierte Ergebnisse bereit');
   assert.equal(await page.locator('#nav-history').getAttribute('aria-selected'), 'true');
-  assert.deepEqual(await page.evaluate(() => window.previewCompletionSummaryReads.map(row => row.batchId)), ['b'.repeat(64)],
-    'completion link reads only its selected durable summary, once');
-  assert.match(await page.locator(fastPrefix + '-summary').innerText(), /3 von 3.*Abschlussbelegen/u);
-  assert.equal(await page.locator(fastPrefix + '-disclosure').getAttribute('open'), null);
+  assert.deepEqual(await page.evaluate(() => window.previewCompletionSummaryReads.map(row => row.batchId)), ['b'.repeat(64)]);
+  assert.equal(await page.locator(fastPrefix + '-disclosure').evaluate(node => node.open), true,
+    'the explicitly expanded run remains expanded when returning from its editor');
+  await page.locator(fastPrefix + '-disclosure').evaluate(node => {
+    for (let index = 0; index < 3; index++) node.dispatchEvent(new Event('toggle'));
+  });
+  assert.equal(await page.locator(fastPrefix + '-guide-title').innerText(), 'Anonymisierte Ergebnisse bereit');
+  assert.equal(await page.evaluate(() => window.previewCompletionSummaryReads.length), 1);
   await page.locator(fastPrefix + '-disclosure > summary').click();
+  await page.waitForFunction(() => !document.querySelector('#history-' + 'b'.repeat(64) + '-disclosure').open);
   await page.locator(fastPrefix + '-disclosure > summary').click();
-  await page.locator(fastPrefix + '-disclosure > summary').click();
-  assert.equal(await page.locator(fastPrefix + '-guide-title').innerText(), 'Export mit Abschlussbeleg');
-  assert.deepEqual(await page.locator(fastPrefix + '-guide-stages li').evaluateAll(nodes =>
-    nodes.slice(2).map(node => ({ status: node.dataset.status, current: node.hasAttribute('aria-current') }))),
-    [{ status: 'done', current: false }, { status: 'done', current: false }],
-    'both automatic document approval and exported revisions are complete, not the current step');
-  assert.equal(await page.evaluate(() => window.previewCompletionSummaryReads.length), 1,
-    'real queued disclosure events reuse the current bound read');
-  assert.equal(await page.evaluate(() => window.previewExportObservation.requests.length), 2,
-    'returning to History or opening details never repeats the copy or ACK');
+  await page.waitForFunction(() => document.querySelector('#history-' + 'b'.repeat(64) + '-guide-title')?.textContent === 'Anonymisierte Ergebnisse bereit');
+  assert.equal(await page.evaluate(() => window.previewCompletionSummaryReads.length), 2,
+    'an explicit close retires the proof; reopen may acquire one fresh read');
+  assert.equal(await page.evaluate(() => window.publicationProbe.calls.filter(row => row.command === 'publish_result_documents').length), 1);
+  assert.equal(await page.evaluate(() => window.publicationProbe.calls.some(row => row.command === 'export_approved_documents')), false);
   await page.screenshot({ path: path.join(evidence, 'completion-history-bound-summary.png'), fullPage: true });
 
   // Real DOM navigation through the actual renderer close transaction. Its
@@ -621,5 +558,5 @@ try {
   await page.screenshot({ path: path.join(evidence, 'uat-review-wide-workspace.png'), fullPage: true });
   assert.deepEqual(await embedded.locator('body').evaluate(() => window.previewSubmissions), [], 'layout/focus never makes a decision');
   assert.deepEqual(errors, []);
-  console.log('WORKSPACE DESIGN PASS: actual v2 pages, both purposes, comparisons, raw masking exclusion, approval, authoritative filenames, R6 run/details navigation, exact copy/ACK binding, delayed-close single-flight, computed fonts, dialog/focus, axe and 390–1280px reflow; synthetic IPC, headless, not native acceptance');
+  console.log('WORKSPACE DESIGN PASS: actual v2 pages, both purposes, comparisons, raw masking exclusion, direct result opening without approval/export selection, optional correction/full-vector publication, pending ownership, selected History summary, delayed-close single-flight, computed fonts, focus, axe and 390–1280px reflow; synthetic IPC, headless, not native acceptance');
 } finally { await context.close(); await preview.close(); await browser.close(); }

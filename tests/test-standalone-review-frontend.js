@@ -200,7 +200,7 @@ testAsync('confirmed OCR handoff copy follows the loaded purpose before clearing
       assert.match(message, /OCR-Kontaktentscheidungen gespeichert.*Markdown-Umwandlung fort/u);
       assert.match(message, /Dokumentfreigabe zur Anonymisierung ist nicht erforderlich/u);
       assert.doesNotMatch(message, /Dokumentfreigabe und Export folgen|Export abgeschlossen/u);
-    } else assert.match(message, /Ergebnisse ansehen.*gemeinsamen Freigabe-\/Exportbestätigung/u);
+    } else assert.match(message, /fertigen Ergebnisdateien bereitgestellt.*Keine zweite Dateiauswahl, Freigabe oder Exportbestätigung/u);
   }
 });
 

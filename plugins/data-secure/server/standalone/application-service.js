@@ -866,6 +866,10 @@ class StandaloneApplicationService {
   documentEntities(batchId, documentId, revision, page) { return this.deps.documentReviews.entities(batchId, documentId, revision, page); }
   decideDocumentReview(batchId, documentId, request) { return this.deps.documentReviews.decide(batchId, documentId, request); }
   decideDocumentReviewBatch(batchId, request) { return this.deps.documentReviews.decideBatch(batchId, request); }
+  publishResultDocuments(batchId) {
+    validateBatchId(batchId);
+    return this.deps.documentReviews.publishResults(batchId);
+  }
   exportApprovedDocuments(batchId, operationId, selection, acknowledge = false) { return this.deps.documentReviews.exportApproved(batchId, operationId, selection, acknowledge); }
   previewDocumentExport(batchId, operationId, selection) { return this.deps.documentReviews.previewExport(batchId, operationId, selection); }
   abandonDocumentExport(batchId, operationId, digest) { return this.deps.documentReviews.abandonExport(batchId, operationId, digest); }
@@ -886,8 +890,12 @@ class StandaloneApplicationService {
     return this.deps.runHistory.failures(target);
   }
 
-  resolveHistoryResults(batchId) {
+  async resolveHistoryResults(batchId) {
     validateBatchId(batchId);
+    if (typeof this.deps.documentReviews?.resolveResultsGeneration === 'function') {
+      const generation = await this.deps.documentReviews.resolveResultsGeneration(batchId);
+      if (generation) return generation;
+    }
     return this.deps.runHistory.resolveResults(batchId);
   }
 
@@ -1468,7 +1476,7 @@ class StandaloneApplicationService {
   }
 
   async openResults() {
-    const resolved = this.resolveResults();
+    const resolved = await this.resolveCurrentResults();
     const target = resolved.local_path;
     const opened = await this.deps.openFolder(target);
     if (!opened?.ok) {
@@ -1487,6 +1495,12 @@ class StandaloneApplicationService {
       throw fixedFailure('STANDALONE_LEDGER_OPEN_FAILED', 'Die lokale Zuordnungsdatei konnte nicht angezeigt werden.');
     }
     return { ok: true, handoff_confirmed: true, external_disclosure: false };
+  }
+
+  async resolveCurrentResults() {
+    this.observeCurrentRun();
+    if (this.observedBatchId) return this.resolveHistoryResults(this.observedBatchId);
+    return this.resolveResults(); // legacy injected adapters without an observed run
   }
 
   resolveResults() {
@@ -1508,6 +1522,8 @@ class StandaloneApplicationService {
   }
 
   resolveLedger() {
+    this.observeCurrentRun();
+    if (this.observedBatchId) return this.deps.runHistory.resolveLedger(this.observedBatchId);
     const run = this.resolveResults().local_path;
     if (path.basename(path.dirname(run)) === 'DataSecure-Markdown') {
       throw fixedFailure('STANDALONE_LEDGER_MISSING', 'Für eine reine Markdown-Konvertierung wird keine Zuordnungsdatei erstellt.');

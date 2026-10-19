@@ -18,6 +18,7 @@ function fixture(schema = 'datasecure-result-root/2') {
   const root = path.join(base, `results-${++serial}`); fs.mkdirSync(root);
   config.saveConfiguredResultRoot(root);
   const record = JSON.parse(fs.readFileSync(config.configPath())); record.schema = schema;
+  delete record.exact_identity; // This helper deliberately constructs the named legacy shape.
   if (schema.endsWith('/1')) delete record.notices;
   if (schema.endsWith('/3')) record.native_identity = { ...id };
   if (schema.endsWith('/4')) record.native_export = binding(root);
@@ -83,6 +84,77 @@ test('a native volume refusal is not relabelled or retried and leaves settings u
     calls++; throw Object.assign(Error('AI_EXPORT_VOLUME_MISMATCH'), { code: 'AI_EXPORT_VOLUME_MISMATCH' });
   }), { code: 'AI_EXPORT_VOLUME_MISMATCH' });
   assert.equal(calls, 1); assert.deepEqual(fs.readFileSync(config.configPath()), f.bytes);
+});
+
+function exactFixture() {
+  const root = path.join(base, `exact-results-${++serial}`); fs.mkdirSync(root);
+  config.saveConfiguredResultRoot(root);
+  const record = JSON.parse(fs.readFileSync(config.configPath())), stat = fs.statSync(root, { bigint: true });
+  Object.assign(record, { schema: config.EXACT_SCHEMA,
+    exact_identity: { dev: String(stat.dev), ino: String(stat.ino), birthtime_ns: String(stat.birthtimeNs) } });
+  fs.writeFileSync(config.configPath(), JSON.stringify(record));
+  return { root, record, bytes: fs.readFileSync(config.configPath()) };
+}
+
+test('a newly selected native export root persists exact stat identity without upgrading any old /4 record', async () => {
+  const f = fixture('datasecure-result-root/4');
+  assert.equal(JSON.parse(fs.readFileSync(config.configPath())).schema, config.EXPORT_SCHEMA);
+  assert.deepEqual(await config.prepareConfiguredNativeExportBinding(() => assert.fail('old native binding needs no reprovision')), binding(f.root));
+  assert.deepEqual(fs.readFileSync(config.configPath()), f.bytes, 'reading a legacy /4 does not adopt fresh stat authority');
+  config.saveConfiguredResultRoot(f.root, { nativeExport: binding(f.root) });
+  const selected = JSON.parse(fs.readFileSync(config.configPath())), stat = fs.statSync(f.root, { bigint: true });
+  assert.equal(selected.schema, config.EXACT_EXPORT_SCHEMA);
+  assert.deepEqual(selected.exact_identity, { dev: String(stat.dev), ino: String(stat.ino), birthtime_ns: String(stat.birthtimeNs) });
+  assert.deepEqual(config.readConfiguredNativeExportBinding(), binding(f.root));
+  selected.exact_identity.ino = String(BigInt(selected.exact_identity.ino) + 1n);
+  fs.writeFileSync(config.configPath(), JSON.stringify(selected));
+  assert.equal(config.readConfiguredResultRootStatus().status, 'unavailable');
+  assert.equal(config.readConfiguredNativeExportBinding(), null);
+  assert.equal(config.recordedResultRootPath(), f.root);
+});
+test('new exact identity is admitted losslessly once and survives notices and service reread', async () => {
+  const f = exactFixture(); let calls = 0;
+  const result = await config.prepareConfiguredNativeExportBinding(async snapshot => {
+    calls++; assert.deepEqual(snapshot.admission, { kind: 'node22_bigint', identity: f.record.exact_identity });
+    assert.deepEqual(fs.readFileSync(config.configPath()), f.bytes);
+    return binding(f.root);
+  });
+  assert.deepEqual(result, binding(f.root)); assert.equal(calls, 1);
+  const saved = JSON.parse(fs.readFileSync(config.configPath()));
+  assert.equal(saved.schema, config.EXACT_EXPORT_SCHEMA);
+  assert.deepEqual(saved.exact_identity, f.record.exact_identity);
+  assert.deepEqual(saved.identity, f.record.identity);
+  config.consumeConfiguredResultNotices();
+  assert.equal(JSON.parse(fs.readFileSync(config.configPath())).schema, config.EXACT_EXPORT_SCHEMA);
+  assert.deepEqual(config.readConfiguredNativeExportBinding(), binding(f.root));
+  await config.prepareConfiguredNativeExportBinding(() => assert.fail('no second native provisioning'));
+});
+for (const field of ['dev', 'ino', 'birthtime_ns']) test(`new exact binding refuses changed ${field} before native admission`, async () => {
+  const f = exactFixture(); f.record.exact_identity[field] = String(BigInt(f.record.exact_identity[field]) + 1n);
+  fs.writeFileSync(config.configPath(), JSON.stringify(f.record));
+  assert.equal(config.readConfiguredResultRootStatus().status, 'unavailable');
+  assert.equal(config.recordedResultRootPath(), f.root, 'an unavailable exact root remains shielded from input');
+  assert.equal(config.visibleResultTreeOverlaps(path.join(f.root, 'DataSecure-Output', 'test.md')), true);
+  await assert.rejects(config.prepareConfiguredNativeExportBinding(() => assert.fail('changed exact identity')), { code: 'AI_EXPORT_CONFIGURATION_REQUIRED' });
+  assert.deepEqual(JSON.parse(fs.readFileSync(config.configPath())), f.record);
+});
+test('unavailable exact-export root stays recorded for source exclusion without authorizing access', () => {
+  const f = exactFixture();
+  Object.assign(f.record, { schema: config.EXACT_EXPORT_SCHEMA, native_export: binding(f.root) });
+  f.record.exact_identity.ino = String(BigInt(f.record.exact_identity.ino) + 1n);
+  fs.writeFileSync(config.configPath(), JSON.stringify(f.record));
+  assert.equal(config.readConfiguredResultRootStatus().status, 'unavailable');
+  assert.equal(config.readConfiguredNativeExportBinding(), null);
+  assert.equal(config.recordedResultRootPath(), f.root);
+  assert.equal(config.visibleResultTreeOverlaps(path.join(f.root, 'DataSecure-Markdown', 'test.md')), true);
+});
+test('new exact binding refuses stale settings across native await without erasing newer settings', async () => {
+  const f = exactFixture();
+  await assert.rejects(config.prepareConfiguredNativeExportBinding(async () => {
+    config.saveConfiguredResultRoot(f.root, { nativeIdentity: id });
+    return binding(f.root);
+  }), { code: 'AI_EXPORT_CONFIGURATION_REQUIRED' });
+  assert.equal(JSON.parse(fs.readFileSync(config.configPath())).schema, config.NATIVE_SCHEMA);
 });
 // Deliberately retain these small synthetic fault fixtures, including displaced
 // folders. No recursive cleanup or permissions repair of a tampered tree.

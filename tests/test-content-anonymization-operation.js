@@ -755,7 +755,8 @@ async function main() {
       const run = exporter.visibleExportDirectory(stored.token);
       assert.ok(run && fs.existsSync(path.join(run, 'Dokument-001-anonymisiert.md')));
       assert.equal(fs.readFileSync(path.join(run, 'Dokument-001-anonymisiert.md'), 'utf8'), p.basis.markdown);
-      assert.ok(fs.readFileSync(path.join(run, 'DataSecure-Zuordnung.csv'), 'utf8').includes(p.basis.package_id) === false);
+      assert.equal(fs.existsSync(path.join(run, 'DataSecure-Zuordnung.csv')), false, 'new result layout contains reusable Markdown only');
+      assert.ok(fs.readFileSync(exporter.privateResultLedger(stored.token), 'utf8').includes(p.basis.package_id) === false);
       assert.equal(JSON.parse(fs.readFileSync(exporter.recordPath(stored.token), 'utf8')).schema,
         exporter.CONTENT_ANONYMIZED_SCHEMA);
       assert.deepEqual(exporter.exportCompletedState(stored), { exported: 1, pending: 0, available: true }, 'final export is not copied again');

@@ -282,7 +282,8 @@ export async function runNativeMacGate(options) {
   parseNativeMacArgs(['--app', options.app, '--target', options.target]);
   const checked = preflightNativeMacGate(options), helper = path.join(here, 'helpers/mac-static-core-participant.cjs');
   const aclHelper = path.join(here, 'helpers/native-macos-ownership-acl-fixture.cjs');
-  const helperDigest = () => digest(Buffer.from(JSON.stringify([helper, aclHelper].map(file =>
+  const initialResultsHelper = path.join(here, 'helpers/native-initial-results-fixture.cjs');
+  const helperDigest = () => digest(Buffer.from(JSON.stringify([helper, aclHelper, initialResultsHelper].map(file =>
     digest(bound.readBoundFile(file, { minimum: 1, maximum: 128 * 1024, checkCtime: true }))))));
   const helperPin = helperDigest();
   const fixture = createFixture(), peers = [], receipts = [];
@@ -321,6 +322,12 @@ export async function runNativeMacGate(options) {
     phase = 'acl_presence_and_roles';
     assert.deepEqual(await a.request('acl_matrix'), { cases: 6, empty_private_acl: true, benign_home_ancestor: true,
       additional_mutation_grants_refused: true, private_aces_refused: true, fixture_cleanup_confirmed: true });
+    phase = 'initial_result_output_guard';
+    assert.deepEqual(await a.request('initial_results'), {
+      schema: 'datasecure-native-initial-results/1', target: options.target, native_output_guard: true,
+      refused_guard_mkdirs: 0, refused_guard_attempt_absent: true, created_directories: 2, written_documents: 2,
+      read_only_reopen_under_output_lock: true, reopen_mkdirs: 0, exact_visible_markdown_inventory: true,
+      lock_only_in_output_container: true, original_inputs_unchanged: true, fixture_cleanup_confirmed: true });
     fixture.unchangedAnchor(); checked.unchanged();
     assert.equal(helperDigest(), helperPin);
     complete = true;
@@ -352,6 +359,7 @@ export async function runNativeMacGate(options) {
     coverage: { two_core_processes: complete, normal_fork_ipc: complete, worker_builtin_environment: complete,
       process_and_worker_contention: complete, synchronous_root_admission_release: complete,
       acl_presence_and_role_matrix: complete,
+      initial_result_output_guard: complete,
       epoch: 'NOT_RUN', pause: 'NOT_RUN', lease: 'NOT_RUN', adversarial_acl_matrix: complete ? 'PARTIAL' : 'NOT_RUN', gui: 'NOT_RUN' } };
   if (failed) { const error = failure(fixedCode(primary)); error.report = result; throw error; }
   return result;

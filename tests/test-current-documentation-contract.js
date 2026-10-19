@@ -435,23 +435,27 @@ test('main README gives direct Windows and macOS Standalone installation paths',
   assert.match(readme, /Systemeinstellungen →\s+Datenschutz & Sicherheit/u);
 });
 
-test('all current Standalone start guides describe staged review and one final combined export confirmation', () => {
-  for (const file of ['START-WINDOWS.md', 'MACOS-START.md', 'LINUX-START.md']) {
+test('Windows and Mac describe required reviews followed by direct results; published Linux retains its old contract', () => {
+  for (const file of ['START-WINDOWS.md', 'MACOS-START.md']) {
     const text = read(`apps/datasecure-standalone/${file}`).replace(/\*\*/gu, '').replace(/\s+/gu, ' ');
     const reviewAction = file === 'START-WINDOWS.md'
       ? 'Entscheidungen speichern' : 'Gruppe übergeben und weiter';
     for (const label of ['Neue Verarbeitung', 'Verarbeitung starten', reviewAction,
-      'Freigeben und exportieren', 'Auswahl exportieren']) {
+      'Ergebnisordner öffnen']) {
       assert.ok(text.includes(label), `${file} omits current action ${label}`);
     }
-    assert.match(text, /normalen separaten Ordner/u, file);
+    assert.match(text, /(?:keine zweite|zusätzliche).*Dokumentauswahl/iu, file);
+    assert.match(text, /(?:zusätzliche|weitere).*Exportbestätigung/iu, file);
+    assert.match(text, /(?:neuen|aktuellen).*Ergebnisstand/u, file);
     assert.match(text, /nicht anonymisiert/u, file);
-    assert.match(text, /Identitäts.*(?:nicht|bleiben)/u, file);
-    assert.match(text, /gesonderte Pflichtfreigabe ist nicht nötig/u, file);
-    assert.match(text, /Vorschau und Abbrechen geben nichts neu frei und kopieren nichts/u, file);
+    assert.match(text, /(?:Identitäts|Zuordnung).*getrennt/u, file);
+    assert.match(text, /ältere Stände bleiben erhalten/iu, file);
     assert.doesNotMatch(text, /Auswahl freigeben wählen/u, file);
     assert.doesNotMatch(text, /Die Ansicht Verarbeiten zeigt zunächst den Abschluss/u, file);
   }
+  const linux = read('apps/datasecure-standalone/LINUX-START.md');
+  assert.match(linux, /Freigeben und exportieren/u);
+  assert.match(linux, /Auswahl exportieren/u);
 });
 
 test('current Standalone export wording explains general-purpose files without migrating receipt paths', () => {
@@ -461,12 +465,14 @@ test('current Standalone export wording explains general-purpose files without m
     assert.doesNotMatch(text, /KI-Kopie|KI-Kopien|Auswahl für KI exportieren|Für KI exportieren/u, file);
   }
   const html = read(frontend + 'workspace.html'), renderer = read(frontend + 'document-review.js');
-  assert.match(html, /freigegebenen Textstände wurden in einen lokalen Exportordner kopiert/u);
+  assert.match(html, /Ergebnisordner öffnen/u);
+  assert.match(html, /Frühere zusätzliche Kopien \(optional\)/u);
+  assert.match(html, /Bereitstellung erneut prüfen/u);
   assert.match(html, /Der Ergebnisordner kann Prüf- und Zuordnungsdateien enthalten/u);
   assert.match(html, /Markdown-Dateien kannst du auch ohne KI verwenden/u);
   assert.match(renderer, /'DataSecure-KI-Export'/u, 'existing physical receipt namespace stays unchanged');
   for (const file of ['START-WINDOWS.md', 'MACOS-START.md'])
-    assert.match(read('apps/datasecure-standalone/' + file).replace(/\s+/gu, ' '), /auch ohne KI verwenden/u, file);
+    assert.match(read('apps/datasecure-standalone/' + file).replace(/\s+/gu, ' '), /auch ohne KI (?:verwenden|verwendbar)/u, file);
 });
 
 test('Windows and macOS shipped guides follow package identity and both review paths', () => {
@@ -477,7 +483,7 @@ test('Windows and macOS shipped guides follow package identity and both review p
     assert.match(guide, /Schnellweg.*automatisch anonymisieren und freigeben/u);
     assert.match(guide, /keine menschliche Prüfung/u);
     assert.match(guide, /Originalname mit „-anonymisiert“/u);
-    assert.match(guide, /spätere Exporte erhalten immer neutrale Namen/iu);
+    assert.match(guide, /(?:Anonymisierungsstände erhalten neutrale Namen|spätere Exporte erhalten immer neutrale Namen)/iu);
     assert.match(guide, /Einstellungen.*Diagnosepaket speichern/u);
     assert.match(guide, /ohne Core-Verbindung/u);
     assert.match(guide, /kein notwendiger Export- oder Abschlussschritt/u);
@@ -485,7 +491,7 @@ test('Windows and macOS shipped guides follow package identity and both review p
     assert.match(guide, /Neue Verarbeitung/u);
     assert.match(guide, /Verlauf/u);
     assert.match(guide, /Laufdetails/u);
-    assert.match(guide, /Zur Laufübersicht.*desselben Laufs/u);
+    assert.match(guide, /Laufdetails desselben Laufs/u);
     assert.doesNotMatch(guide, /Anleitung für den .*Pre-Release .*rc\d+/u);
   }
 });

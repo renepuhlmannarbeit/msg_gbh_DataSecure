@@ -223,6 +223,11 @@ description = "Exportiert nur explizit ausgewählte freigegebene Dokumentrevisio
 commands.allow = ["export_approved_documents"]
 
 [[permission]]
+identifier = "allow-publish-result-documents"
+description = "Stellt ausschließlich den technisch geprüften aktuellen Dokumentstand eines lokalen Laufs ohne private Begleitdaten bereit; keine freie Auswahl oder Zielpfade."
+commands.allow = ["publish_result_documents"]
+
+[[permission]]
 identifier = "allow-abandon-document-export"
 description = "Unvollständigen gebundenen Exportauftrag ausdrücklich nicht weiter verfolgen; keine Dateien löschen."
 commands.allow = ["abandon_document_export"]

@@ -4,14 +4,40 @@ Stand: 19.10.2026. RC165 bleibt unverändert veröffentlicht. RC166 wird neu
 aus einem gemeinsamen Appcommit für Windows x64 und macOS ARM64/Intel gebaut.
 Die Desktoptests übernimmt der Nutzer; keine neue agentische GUI-Abnahme.
 
+## Neuer verbindlicher Zusatzauftrag: Ergebnisdateien statt zweitem Export
+
+Der Nutzer hat die Vereinfachung ausdrücklich noch für RC166 beauftragt.
+Der zusätzliche Dokumentauswahl-/Freigabe-/Exportdialog entfällt als normaler
+Abschlussschritt. Notwendige OCR- und Fundstellenentscheidungen bleiben.
+Nach dem technischen Abschluss öffnet die primäre Aktion den Ergebnisordner.
+Optionale Nachbearbeitung speichert den Fachstand und stellt ihn ohne weitere
+Auswahl oder Bestätigung vollständig bereit. Kein künstliches `approved=true`.
+
+Die Quellenanalyse bestätigt: Die Erstbereitstellung existiert bereits; spätere
+Korrekturen lagen bisher privat. Nur Buttons auszublenden wäre deshalb falsch.
+Neue Laufpläne halten vertrauliche Zuordnungen getrennt von den fertigen MD.
+Eine Korrektur erzeugt eine vollständige, neue unveränderliche Ergebnisgeneration;
+der Ergebnisöffner folgt ausschließlich dem bestätigten aktuellen Stand. Alte
+Ergebnisstände und Legacybelege bleiben erhalten. Kein Überschreiben fremder
+Dateien, keine Wiederanlage manuell gelöschter Ergebnisse, kein Publish beim
+Start-/Verlaufslesen. Fehlende oder veränderte Vorstände bleiben Konflikte.
+
+Vertrag und Gegenorakel: [Direkte Ergebnisbereitstellung](RC166_DIRECT_RESULTS_20261019.md).
+Die fertig geprüften Source02-Pakete aus `760783478214b3fa96e366bcbee0905d4c39f30f`
+mit Fingerprint `97e779c4eaf0b211b54bf07467fceb97d9b5b7b0a2f416346fb0feef1011ac2c`
+belegen ausschließlich den alten Ablauf. 280/280+10/10, Windows Native und fünf
+Paketgates waren grün, Inputs unverändert. Lokaler Übergabeordner `RC166` bleibt
+erhalten, wird aber nicht als vereinfachter Kandidat freigegeben. Neue Pakete,
+Belege und lokaler Ordner werden neu benannt. Noch kein RC166-Pre-Release.
+
 ## Begrenzter Änderungsumfang
 
 | Auftrag | Umsetzung | Erhaltene Grenze |
 |---|---|---|
 | UX-OCR-FOLDER-01 | OCR-Anzahl an Katalog und Ordnerzeile, inklusive Unterordnern und bei zugeklapptem Inhalt | Nur bekannte verfügbare `ocr_required`-Dateien; keine neue Analyse oder automatische OCR-Zustimmung |
 | UX-HISTORY-DETAILS-01 | Markdown-Kopierstatus unter genau einer nativen Detailklappe; redundanter Statusbutton entfällt | Editor bleibt getrennt, kein Export oder Freigabebefehl beim Öffnen; nur ausgewählter Lauf |
-| UX-HISTORY-COPY-STATUS-01 | Markdown: Kopierstatus aktualisieren, auch nach Fehler und Wiederverbindung | Anonymisierungsstatus nicht in Kopierstatus umgedeutet |
-| UX-ANON-CHOICE-01 | Exklusive native Radios Selbst entscheiden / Automatisch maskieren, OCR unabhängig | Bisherige Policy-DTOs und expliziter Exportauftrag unverändert; Standard bleibt Selbst entscheiden |
+| UX-HISTORY-COPY-STATUS-01 | Mit neuem Direktauftrag: Ergebnisstatus aktualisieren, auch nach Fehler und Wiederverbindung | Lesend; keine Nachbearbeitung oder Veröffentlichung durch Statuslesen |
+| UX-ANON-CHOICE-01 | Exklusive native Radios Selbst entscheiden / Automatisch maskieren, OCR unabhängig | Bisherige Policy-DTOs; Standard bleibt Selbst entscheiden. Neuer Abschluss ohne zweiten Exportauftrag |
 | UX-PROCESSING-FLICKER-01 | Unveränderte Verarbeitungsbuttons erhalten; Wartepoll ohne wiederholten DOM-Neuaufbau/disabled-Wechsel | Reale Zustands-/Fehlerwechsel, manuelle Abfrage, private Chunkladung und Befehle bleiben gesperrt; Poll-/Retryzeiten unverändert |
 | TESTDATA-LARGE-01 | Separate 36-Dateien-Beilage mit exakt vorhandenen large-Verzeichnissen | Byte-/Hashgleichheit mit synthetischem 100-Dateien-Basispaket; keine Nutzerdateien oder alten Ergebnisse |
 | CI-DOC-RC165-01 | Veraltete RC162-Bindung im aktiven formalen UAT-README korrigiert | Historische Belege nicht umgeschrieben; nächste main-CI getrennt nachlesen |

@@ -1155,17 +1155,17 @@ testAsync('history loads approval metadata only on demand and distinguishes old 
   assert.equal(h.calls.some(row => row.command === 'get_document_review_history_summary'), false, 'ordinary polling never replays all documents');
   await toggleHistorySummary(h, B);
   const summary = h.el(`history-${B}-summary`);
-  assert.match(summary.textContent, /Dokumentprüfung: 0 von 2 verfügbaren Dokumentständen freigegeben/u);
+  assert.match(summary.textContent, /2 gespeicherte Ergebnisstände.*keine zusätzliche Dateiauswahl, Dokumentfreigabe oder Exportbestätigung nötig/u);
   assert.match(summary.textContent, /1 Dokumentprüfstände nicht verfügbar/u);
   assert.match(summary.textContent, /1 Quelldateien mit unklarem früheren Ergebnisstatus/u);
-  assert.match(summary.textContent, /vollständige Freigabe dieses Laufs ist nicht belegbar/u);
-  assert.match(summary.textContent, /Export: 3 abgeschlossene Exporte mit Beleg/u);
+  assert.match(summary.textContent, /vollständige Verarbeitung dieses Laufs ist nicht belegbar/u);
+  assert.match(summary.textContent, /3 frühere zusätzliche Kopien mit Beleg/u);
   assert.match(summary.textContent, /1 unvollständige Exportaufträge · 1 fertige Kopien mit offener Empfangsbestätigung/u);
   const reload = h.el(`history-${B}-summary-reload`); reload.focus(); await h.poll();
   assert.equal(h.el(`history-${B}-summary-reload`), reload); assert.equal(h.doc.activeElement, reload);
   assert.equal(h.calls.filter(row => row.command === 'get_document_review_history_summary').length, 1);
   await h.act('nav-new'); await h.act('nav-history'); await tick();
-  assert.match(h.el(`history-${B}-summary`).textContent, /0 von 2/u, 'the expanded summary is reloaded instead of appearing blank');
+  assert.match(h.el(`history-${B}-summary`).textContent, /2 gespeicherte Ergebnisstände/u, 'the expanded summary is reloaded instead of appearing blank');
   assert.equal(h.calls.filter(row => row.command === 'get_document_review_history_summary').length, 2);
 });
 
@@ -1182,7 +1182,7 @@ testAsync('the completed-copy link loads only its own durable history summary af
   assert.equal(h.el('nav-history').dataset.openSummaryBatchId, undefined);
   assert.equal(h.el(`history-${B}-summary`).hidden, false);
   assert.equal(h.calls.filter(call => call.command === 'get_document_review_history_summary').length, 1);
-  assert.match(h.el('history-list').textContent, /Export mit Abschlussbeleg/u);
+  assert.match(h.el('history-list').textContent, /1 frühere zusätzliche Kopien mit Beleg/u);
   assert.equal(h.doc.activeElement, h.el('history-list').children[0]);
   noAutomaticDecision(h);
 });
@@ -1196,7 +1196,7 @@ testAsync('a failed post-copy history read never re-labels a completed copy as a
     result_count: 2, failed_count: 0, status: 'results_available', results_available: true, result_location: 'available' }];
   h.el('nav-history').dataset.openSummaryBatchId = B;
   await h.act('nav-history'); await tick();
-  assert.match(h.el(`history-${B}-summary`).textContent, /Prüfstatus nicht verfügbar/u);
+  assert.match(h.el(`history-${B}-summary`).textContent, /Ergebnisstatus nicht verfügbar/u);
   assert.match(h.el('history-list').textContent, /Anonymisierungslauf abgeschlossen/u);
   assert.doesNotMatch(h.el('history-list').textContent, /0\/2 freigegeben|noch keine abgeschlossene Kopie belegt/u);
   noAutomaticDecision(h);
@@ -1215,11 +1215,11 @@ testAsync('a failed reload removes stale approval and KI-copy claims from the co
   h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', selected_count: 2,
     result_count: 2, failed_count: 0, status: 'results_available', results_available: true, result_location: 'available' }];
   await h.act('nav-history'); await toggleHistorySummary(h, B);
-  assert.match(h.el('history-list').textContent, /Für diesen Stand ist kein weiterer Export nötig/u);
+  assert.match(h.el('history-list').textContent, /1 frühere zusätzliche Kopien mit Beleg/u);
   await h.act(`history-${B}-summary-reload`);
-  assert.match(h.el(`history-${B}-summary`).textContent, /Prüfstatus nicht verfügbar/u);
-  assert.match(h.el('history-list').textContent, /Freigaben und Exporte sind derzeit nicht bestätigt/u);
-  assert.doesNotMatch(h.el('history-list').textContent, /Für diesen Stand ist kein weiterer Export nötig/u);
+  assert.match(h.el(`history-${B}-summary`).textContent, /Ergebnisstatus nicht verfügbar/u);
+  assert.doesNotMatch(h.el(`history-${B}-summary`).textContent, /1 frühere zusätzliche Kopien mit Beleg/u);
+  assert.match(h.el('history-list').textContent, /Ergebnisdateien bereit/u, 'an optional metadata failure does not undo the original processing completion');
   noAutomaticDecision(h);
 });
 
@@ -1265,7 +1265,7 @@ testAsync('a status poll queued before a history-summary read cannot leave a fal
   rejectStatus(Error('STANDALONE_IPC_TIMEOUT')); await queuedPoll;
   assert.doesNotMatch(h.el('feedback').textContent, /STANDALONE_IPC_TIMEOUT/u);
   await h.poll();
-  assert.match(h.el(`history-${B}-summary`).textContent, /Dokumentprüfung/u);
+  assert.match(h.el(`history-${B}-summary`).textContent, /gespeicherte Ergebnisstände/u);
   noAutomaticDecision(h);
 });
 
@@ -1298,12 +1298,12 @@ testAsync('plain Markdown history never advertises text approval or saved raw co
   h.model.entries = [{ batch_id: B, processing_mode: 'markdown-only', selected_count: 2, result_count: 2, status: 'results_available' }];
   await h.act('nav-history'); await toggleHistorySummary(h, B);
   const text = h.el(`history-${B}-summary`).textContent;
-  assert.match(text, /Optionale Kopien: 1 von 2 verfügbaren Dokumentständen zum Kopieren bestätigt/u);
-  assert.match(text, /1 zusätzliche Markdown-Kopien gespeichert · nicht anonymisiert/u);
-  assert.match(text, /ursprünglichen Markdown-Ergebnisse.*keine Freigabe erforderlich/u);
+  assert.match(text, /2 gespeicherte Ergebnisstände/u);
+  assert.match(text, /1 frühere zusätzliche Kopien mit Beleg/u);
+  assert.match(text, /keine zusätzliche Dateiauswahl, Dokumentfreigabe oder Exportbestätigung nötig/u);
   assert.equal(h.el(`history-${B}-summary-toggle`), undefined, 'no duplicate Markdown-copy status action');
   assert.equal(h.el(`history-${B}-summary`).parent, h.el(`history-${B}-disclosure`));
-  assert.equal(h.el(`history-${B}-summary-reload`).textContent, 'Kopierstatus aktualisieren');
+  assert.equal(h.el(`history-${B}-summary-reload`).textContent, 'Ergebnisstatus aktualisieren');
   assert.doesNotMatch(text, /abgeschlossene Exporte|menschlich freigegeben|Neuester datierter/u);
 });
 
@@ -1331,9 +1331,9 @@ testAsync('Markdown details are the only copy-status disclosure and never read u
   assert.equal(h.el(`history-${B}-summary-toggle`), undefined);
   disclosure.open = true; await h.act(disclosure, 'toggle'); await h.act(disclosure, 'toggle');
   assert.deepEqual(h.calls.filter(call => call.command === 'get_document_review_history_summary').map(call => call.args), [{ batchId: B }]);
-  assert.match(summary.textContent, /4 zusätzliche Markdown-Kopien gespeichert/u);
+  assert.match(summary.textContent, /4 frühere zusätzliche Kopien/u);
   assert.match(summary.textContent, /1 fertige Kopien mit offener Empfangsbestätigung/u);
-  assert.match(summary.textContent, /nicht erneut kopieren/u);
+  assert.match(summary.textContent, /nicht neu exportieren/u);
   assert.equal(h.el(`history-${A}-summary`).hidden, true);
   assert.equal(h.el(`history-${B}-results`), opener); assert.equal(opener.className, 'primary');
   assert.equal(h.el(`history-${B}-documents`), editor); assert.equal(editor.textContent, 'Nachkorrektur öffnen (optional)');
@@ -1360,8 +1360,8 @@ testAsync(`closed Markdown details discard a late ${failure ? 'failed' : 'succes
   assert.equal(h.el(`history-${B}-disclosure`).open, false);
   assert.equal(h.el(`history-${B}-summary`).hidden, true); assert.equal(reads, 1);
   await toggleHistorySummary(h, B);
-  assert.equal(reads, 2); assert.match(h.el(`history-${B}-summary`).textContent, /5 zusätzliche Markdown-Kopien/u);
-  assert.equal(h.el(`history-${B}-summary-reload`).textContent, 'Kopierstatus aktualisieren');
+  assert.equal(reads, 2); assert.match(h.el(`history-${B}-summary`).textContent, /5 frühere zusätzliche Kopien/u);
+  assert.equal(h.el(`history-${B}-summary-reload`).textContent, 'Ergebnisstatus aktualisieren');
   noAutomaticDecision(h);
 });
 
@@ -1378,7 +1378,7 @@ testAsync(`rapid Markdown details close/reopen serializes one fresh read after t
   await h.act('nav-history'); await toggleHistorySummary(h, B); await toggleHistorySummary(h, B); await toggleHistorySummary(h, B);
   const summary = h.el(`history-${B}-summary`), reload = h.el(`history-${B}-summary-reload`);
   assert.equal(reads, 1); assert.equal(summary.hidden, false);
-  assert.match(summary.textContent, /vorherige Kopierstatusabgleich.*Danach/u);
+  assert.match(summary.textContent, /vorherige Ergebnisstatusabgleich.*Danach/u);
   assert.equal(summary.attrs['aria-busy'], 'true'); assert.equal(reload.disabled, true);
   const statusReads = h.calls.filter(call => call.command === 'get_public_state').length;
   await h.poll(); await h.act(h.el(`history-${B}-disclosure`), 'toggle');
@@ -1387,7 +1387,7 @@ testAsync(`rapid Markdown details close/reopen serializes one fresh read after t
   assert.equal(reads, 2); assert.equal(reload.disabled, true); assert.equal(summary.attrs['aria-busy'], 'true');
   assert.doesNotMatch(summary.textContent, /77 zusätzliche|nicht verfügbar/u);
   settleNew(); await tick();
-  assert.match(summary.textContent, /6 zusätzliche Markdown-Kopien/u);
+  assert.match(summary.textContent, /6 frühere zusätzliche Kopien/u);
   assert.equal(reload.disabled, false); assert.equal(summary.attrs['aria-busy'], undefined);
   assert.equal(h.calls.filter(call => call.command === 'get_document_review_history_summary').every(call =>
     Object.keys(call.args).length === 1 && call.args.batchId === B), true);
@@ -1408,14 +1408,14 @@ testAsync('Markdown detail polling retains disclosure and reload focus while ref
   await h.poll(); await tick();
   assert.equal(h.el(`history-${B}-disclosure`).open, true); assert.equal(h.el(`history-${B}-summary`).hidden, false);
   assert.equal(h.doc.activeElement, h.el(reloadId));
-  assert.match(h.el(`history-${B}-summary`).textContent, /3 zusätzliche Markdown-Kopien/u);
+  assert.match(h.el(`history-${B}-summary`).textContent, /3 frühere zusätzliche Kopien/u);
   assert.deepEqual(h.calls.filter(call => call.command === 'get_document_review_history_summary').map(call => call.args.batchId), [B, B]);
   await h.act(`history-${B}-details`); await tick();
   h.el(reloadId).focus(); copies = 4;
   h.model.entries[0] = markdownHistoryEntry(B, { exported_count: 4 });
   await h.poll(); await tick();
   assert.equal(h.doc.activeElement, h.el(reloadId), 'a changed selected-run snapshot retains keyboard focus as well');
-  assert.match(h.el(`history-${B}-summary`).textContent, /4 zusätzliche Markdown-Kopien/u);
+  assert.match(h.el(`history-${B}-summary`).textContent, /4 frühere zusätzliche Kopien/u);
   const disclosure = h.el(`history-${B}-disclosure`);
   assert.equal(disclosure.open, true);
   disclosure.open = false; await h.act(disclosure, 'toggle');
@@ -1444,7 +1444,7 @@ testAsync('closing reopened Markdown details again cancels the deferred fresh re
   assert.equal(h.el(`history-${B}-summary`).attrs['aria-busy'], undefined);
   assert.doesNotMatch(h.el(`history-${B}-summary`).textContent, /77 zusätzliche/u);
   await toggleHistorySummary(h, B);
-  assert.equal(reads, 2); assert.match(h.el(`history-${B}-summary`).textContent, /8 zusätzliche Markdown-Kopien/u);
+  assert.equal(reads, 2); assert.match(h.el(`history-${B}-summary`).textContent, /8 frühere zusätzliche Kopien/u);
   noAutomaticDecision(h);
 });
 
@@ -1466,7 +1466,7 @@ testAsync('a native folder command cannot leave a deferred Markdown copy-status 
   finishFolder(); await tick();
   assert.equal(h.el(`history-${B}-summary-reload`).disabled, false);
   await h.act(`history-${B}-summary-reload`);
-  assert.equal(reads, 2); assert.match(h.el(`history-${B}-summary`).textContent, /9 zusätzliche Markdown-Kopien/u);
+  assert.equal(reads, 2); assert.match(h.el(`history-${B}-summary`).textContent, /9 frühere zusätzliche Kopien/u);
   noAutomaticDecision(h);
 });
 
@@ -1480,7 +1480,7 @@ testAsync('a new Core epoch retires the deferred Markdown read without releasing
   } }); await tick(); h.model.entries = [markdownHistoryEntry()]; await h.act('nav-history');
   await toggleHistorySummary(h, B); await toggleHistorySummary(h, B); await toggleHistorySummary(h, B);
   h.listeners.get('datasecure-connection')({ payload: { epoch: 2, state: 'ready' } }); await tick();
-  assert.match(h.el(`history-${B}-summary`).textContent, /Kopierstatus nach Verbindungswechsel nicht bestätigt/u);
+  assert.match(h.el(`history-${B}-summary`).textContent, /Ergebnisstatus nach Verbindungswechsel nicht bestätigt/u);
   await h.act(`history-${B}-summary-reload`); assert.equal(reads, 2);
   const reload = h.el(`history-${B}-summary-reload`), summary = h.el(`history-${B}-summary`);
   finishOld(); await tick();
@@ -1488,7 +1488,7 @@ testAsync('a new Core epoch retires the deferred Markdown read without releasing
   assert.doesNotMatch(summary.textContent, /77 zusätzliche/u);
   finishNew(); await tick();
   assert.equal(reload.disabled, false); assert.equal(summary.attrs['aria-busy'], undefined);
-  assert.match(summary.textContent, /10 zusätzliche Markdown-Kopien/u);
+  assert.match(summary.textContent, /10 frühere zusätzliche Kopien/u);
   noAutomaticDecision(h);
 });
 
@@ -1502,15 +1502,15 @@ testAsync('Markdown copy-status error discards old receipts and only an explicit
     return fallback();
   } }); await tick(); h.model.entries = [markdownHistoryEntry()];
   await h.act('nav-history'); await toggleHistorySummary(h, B);
-  assert.match(h.el(`history-${B}-summary`).textContent, /2 zusätzliche Markdown-Kopien/u);
+  assert.match(h.el(`history-${B}-summary`).textContent, /2 frühere zusätzliche Kopien/u);
   fail = true; await h.act(`history-${B}-summary-reload`);
-  assert.match(h.el(`history-${B}-summary`).textContent, /Kopierstatus nicht verfügbar.*älteren, nicht übernehmbaren Prüfvertrag/u);
+  assert.match(h.el(`history-${B}-summary`).textContent, /Ergebnisstatus nicht verfügbar.*älteren, nicht übernehmbaren Prüfvertrag/u);
   assert.doesNotMatch(h.el(`history-${B}-summary`).textContent, /2 zusätzliche|0 zusätzliche/u);
   const before = h.calls.filter(call => call.command === 'get_document_review_history_summary').length;
   await h.poll(); assert.equal(h.calls.filter(call => call.command === 'get_document_review_history_summary').length, before);
   fail = false; copies = 7; await h.act(`history-${B}-summary-reload`);
-  assert.match(h.el(`history-${B}-summary`).textContent, /7 zusätzliche Markdown-Kopien/u);
-  assert.equal(h.el(`history-${B}-summary-reload`).textContent, 'Kopierstatus aktualisieren');
+  assert.match(h.el(`history-${B}-summary`).textContent, /7 frühere zusätzliche Kopien/u);
+  assert.equal(h.el(`history-${B}-summary-reload`).textContent, 'Ergebnisstatus aktualisieren');
   assert.equal(h.doc.activeElement, h.el(`history-${B}-summary-reload`));
   noAutomaticDecision(h);
 });
@@ -1539,10 +1539,11 @@ testAsync('changed history rows reload an expanded review summary instead of lea
   h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', result_count: 2,
     selected_count: 2, status: 'results_available' }];
   await h.act('nav-history'); await toggleHistorySummary(h, B);
-  assert.match(h.el(`history-${B}-summary`).textContent, /0 von 2/u);
+  assert.match(h.el(`history-${B}-summary`).textContent, /2 gespeicherte Ergebnisstände/u);
   approved = 1; h.model.entries[0] = { ...h.model.entries[0], approved_count: 1 };
   await h.poll(); await tick();
-  assert.match(h.el(`history-${B}-summary`).textContent, /1 von 2/u);
+  assert.match(h.el(`history-${B}-summary`).textContent, /2 gespeicherte Ergebnisstände/u);
+  assert.doesNotMatch(h.el(`history-${B}-summary`).textContent, /1 von 2.*freigegeben/u, 'legacy approval does not become a new mandatory action');
   assert.equal(h.calls.filter(row => row.command === 'get_document_review_history_summary').length, 2);
 });
 
@@ -1555,8 +1556,8 @@ testAsync('history has one next action and keyboard disclosure retains its state
   const main = h.nodes.filter(node => node.isConnected && node.attrs['data-history-main'] === 'true');
   assert.equal(main.length, 1); assert.equal(main[0].textContent, 'Fortsetzen');
   assert.equal(h.el(`history-${B}-summary`).hidden, true, 'metadata is secondary, not an extra primary click');
-  assert.equal(extra.children.includes(h.el(`history-${B}-summary-toggle`)), true,
-    'approval and export status is an explicit optional action');
+  assert.equal(h.el(`history-${B}-summary-toggle`), undefined, 'one details disclosure, no duplicate copy/approval action');
+  assert.equal(h.el(`history-${B}-summary`).parent, h.el(`history-${B}-disclosure`));
   assert.equal(extra.hidden, true); assert.equal(more.attrs['aria-expanded'], 'false');
   assert.equal(more.attrs['aria-controls'], extra.id);
   assert.ok(extra.children.every(node => node.className !== 'primary'));
@@ -1577,7 +1578,7 @@ testAsync('secondary status loading never locks the direct document action', asy
   await toggleHistorySummary(h, B);
   assert.equal(main.disabled, false); assert.equal(h.el(`history-${B}-summary-reload`).disabled, true);
   resolve(reviewSummary()); await tick();
-  assert.equal(main.disabled, false); assert.equal(main.textContent, 'Exportvorschau');
+  assert.equal(main.disabled, false); assert.equal(main.textContent, 'Nachbearbeitung öffnen (optional)');
   assert.equal(h.el(`history-${B}-summary-reload`).hidden, false);
 });
 
@@ -1591,7 +1592,7 @@ testAsync('collapsing an in-flight approval summary keeps the direct action and 
   await toggleHistorySummary(h, B); await toggleHistorySummary(h, B);
   assert.equal(main.disabled, false); assert.equal(h.el(`history-${B}-summary`).hidden, true);
   resolve(reviewSummary()); await tick(); await h.poll();
-  assert.equal(main.disabled, false); assert.equal(main.textContent, 'Dokumente und Freigaben öffnen');
+  assert.equal(main.disabled, false); assert.equal(main.textContent, 'Nachbearbeitung öffnen (optional)');
 });
 
 testAsync('finishing a native folder action cannot restore a superseded summary loading lock', async () => {
@@ -1608,7 +1609,7 @@ testAsync('finishing a native folder action cannot restore a superseded summary 
   await toggleHistorySummary(h, B); await h.act(`history-${B}-results`);
   resolveSummary(reviewSummary()); await tick(); assert.equal(main.disabled, true, 'native command remains in flight');
   resolveFolder({ ok: true }); await tick();
-  assert.equal(main.disabled, false); assert.equal(main.textContent, 'Prüfung öffnen');
+  assert.equal(main.disabled, false); assert.equal(main.textContent, 'Nachbearbeitung öffnen (optional)');
   assert.equal(h.el(`history-${B}-summary-reload`).hidden, false);
   assert.match(h.el(`history-${B}-summary`).textContent, /anderer lokaler Vorgang/u);
 });
@@ -1804,7 +1805,7 @@ testAsync('one history click opens the actual document renderer with 72 unapprov
   assert.equal(h.el('documents-view').hidden, false); assert.equal(h.el('history-view').hidden, true);
   selectedRun(h, B);
   assert.equal(h.el('documents-list').children.length, 72);
-  assert.equal(h.el('documents-selected').textContent, '0 ausgewählt · 0 von 72 freigegeben');
+  assert.equal(h.el('documents-selected').textContent, '72 angezeigt · 72 Ergebnisdateien verfügbar');
   assert.equal(h.calls.some(call => call.command === 'get_document_review_history_summary'), false);
   assert.equal(h.el('documents-approve').disabled, true); assert.equal(h.el('documents-export').disabled, true);
   noAutomaticDecision(h);
@@ -1871,7 +1872,7 @@ testAsync('a status read queued before a document copy cannot leave a false time
   assert.equal(h.calls.filter(call => call.command === 'get_public_state').length >= 3, true);
 });
 
-for (const mode of ['markdown-and-anonymize']) testAsync(`owned final review opens actual ${mode} results of the same run without approval or export`, async () => {
+for (const mode of ['markdown-and-anonymize']) testAsync(`owned final review returns to same-run details and ready results without opening a second document selection`, async () => {
   const h = harness({ documentRenderer: true, invoke(command, args, fallback) {
     if (command === 'get_review_session') return { ready: false, run_complete: true };
     if (command === 'get_document_reviews') { assert.equal(args.batchId, B); return documentResponse(mode); }
@@ -1880,17 +1881,20 @@ for (const mode of ['markdown-and-anonymize']) testAsync(`owned final review ope
   h.model.entries = [{ batch_id: B, processing_mode: mode, selected_count: 72, resumable: true, status: 'review_required' }];
   await h.act('nav-history'); await h.act(`history-${B}-continue`);
   await h.window.__DATASECURE_REVIEW__.invoke('get_review_session');
+  h.model.state = { state: 'results_available', batch_id: B, processing_mode: mode, selected_count: 72,
+    completed_count: 72, result_count: 72, failed_count: 0, results_available: true, batch_complete: true };
+  h.model.entries = [{ ...h.model.state, status: 'results_available', result_location: 'available' }];
   // Native event can arrive before the close command's response.
   const closing = h.window.__DATASECURE_REVIEW__.invoke('close_review_window');
   await h.listeners.get('datasecure-review-closed')({payload: {closed: true, review_generation: 1}}); await closing;
   assert.equal(h.el('review-frame').src, 'about:blank'); assert.equal(h.el('review-view').hidden, true);
-  assert.equal(h.el('documents-view').hidden, false); assert.equal(h.el('history-view').hidden, true);
-  assert.equal(h.el('documents-run').textContent, `Lauf-ID: ${B}`);
-  assert.equal(h.el('documents-list').children.length, 72); assert.equal(h.doc.activeElement.id, 'documents-heading');
-  assert.match(h.el('feedback').textContent, /Fundstellenprüfung abgeschlossen.*ausdrücklich frei/u);
-  assert.equal(h.el('documents-all').checked, false); noAutomaticDecision(h);
+  assert.equal(h.el('documents-view').hidden, true); assert.equal(h.el('details-view').hidden, false);
+  assert.equal(h.doc.activeElement.id, 'details-heading'); selectedRun(h, B);
+  assert.equal(h.calls.some(call => call.command === 'get_document_reviews'), false);
+  assert.match(h.el('feedback').textContent, /Fundstellenprüfung abgeschlossen.*Ergebnisdateien/u);
+  assert.equal(h.el('job-action-results').className, 'primary'); noAutomaticDecision(h);
   await h.listeners.get('datasecure-review-closed')({payload: {closed: true, review_generation: 1}});
-  assert.equal(h.el('documents-view').hidden, false, 'duplicate close cannot leave the new view');
+  assert.equal(h.el('details-view').hidden, false, 'duplicate close cannot leave the completed run overview');
 });
 
 for (const purpose of ['markdown-only', 'markdown-and-anonymize']) testAsync(`${purpose}: unrequested closure and a completion flag on a ready session cannot navigate or imply final completion`, async () => {
@@ -1988,7 +1992,7 @@ testAsync('fresh approval summary improves the next action without changing an a
     [{ status: 'review_required', resumable: true }, 'Jetzt prüfen'],
     [{ status: 'stopped', resumable: true, failed_count: 1 }, 'Fortsetzen'],
     [{ status: 'export_pending' }, 'Bereitstellung erneut prüfen'],
-    [{ status: 'results_available', failed_count: 1 }, 'Exportvorschau']
+    [{ status: 'results_available', failed_count: 1 }, 'Nachbearbeitung öffnen (optional)']
   ]) {
     const h = harness({ invoke(command, args, fallback) {
       return command === 'get_document_review_history_summary' ? reviewSummary() : fallback();
@@ -2000,7 +2004,7 @@ testAsync('fresh approval summary improves the next action without changing an a
     if (label === 'Bereitstellung erneut prüfen') {
       await h.act(main); assert.equal(h.calls.some(call => call.command === 'continue_history_batch'), false);
     }
-    if (label === 'Exportvorschau') {
+    if (label === 'Nachbearbeitung öffnen (optional)') {
       assert.equal(h.el(`history-${B}-problems`).hidden, false, 'file failures remain a visible parallel action');
       assert.equal(h.calls.some(call => call.command === 'continue_history_batch'), false);
     }
@@ -2058,11 +2062,12 @@ testAsync('completed anonymization with bound OCR-off omissions leads to documen
   await h.act('nav-history');
   const row = h.el('history-list').children[0];
   assert.match(row.textContent, /18 ohne OCR nicht umgewandelt · 0 technische Fehler/u);
-  assert.equal(h.el(`history-${B}-documents`).textContent, 'Prüfung öffnen');
+  assert.equal(h.el(`history-${B}-documents`).textContent, 'Nachbearbeitung öffnen (optional)');
   assert.equal(h.nodes.some(node => node.isConnected && node.id === `history-${B}-problems-main`), false);
   await toggleHistorySummary(h, B);
-  assert.match(row.textContent, /Verarbeitung beendet · 0\/115 freigegeben · aktueller Stand noch nicht als Export belegt · 18 ohne OCR nicht umgewandelt/u);
-  assert.equal(h.el(`history-${B}-documents`).textContent, 'Prüfung öffnen');
+  assert.match(row.textContent, /Verarbeitung abgeschlossen · Ergebnisdateien bereit/u);
+  assert.match(row.textContent, /18 ohne OCR nicht umgewandelt/u);
+  assert.equal(h.el(`history-${B}-documents`).textContent, 'Nachbearbeitung öffnen (optional)');
   assert.equal(h.calls.some(call => ['decide_document_review', 'export_approved_documents'].includes(call.command)), false);
 });
 testAsync('anonymization history separates a privacy stop from OCR omissions and technical failures', async () => {
@@ -2079,7 +2084,7 @@ testAsync('anonymization history separates a privacy stop from OCR omissions and
   assert.match(h.el('history-list').textContent,
     /17 ohne OCR nicht umgewandelt · 1 aus Datenschutzgründen angehalten · 0 technische Fehler/u);
   assert.equal(h.el(`history-${B}-problems-main`), undefined);
-  assert.equal(h.el(`history-${B}-documents`).textContent, 'Prüfung öffnen');
+  assert.equal(h.el(`history-${B}-documents`).textContent, 'Nachbearbeitung öffnen (optional)');
   assert.equal(h.el(`history-${B}-problems`).textContent, '18 Ausnahmen ansehen');
   assert.match(h.el('history-list').textContent, /Anonymisierungslauf abgeschlossen – mit Hinweisen/u);
   const marks = withClass(h.el('history-list'), 'history-completion-marks')[0];
@@ -2102,13 +2107,14 @@ testAsync('privacy stop stays visible without hiding completed processing and 13
     result_count: 132, failed_count: 1, privacy_stop_count: 1, status: 'results_available',
     results_available: true, result_location: 'available' }];
   await h.act('nav-history');
-  assert.match(h.el('history-list').textContent, /Verarbeitung beendet/u);
+  assert.match(h.el('history-list').textContent, /Verarbeitung abgeschlossen/u);
   await toggleHistorySummary(h, B);
   assert.match(h.el('history-list').textContent,
-    /Verarbeitung beendet · 132\/132 freigegeben · aktueller Stand noch nicht als Export belegt/u);
+    /Verarbeitung abgeschlossen · Ergebnisdateien bereit/u);
   assert.equal(h.el(`history-${B}-problems-main`), undefined);
   assert.equal(h.el(`history-${B}-problems`).textContent, '1 Ausnahme ansehen');
-  assert.match(h.el(`history-${B}-summary`).textContent, /Export: noch kein abgeschlossener Export belegt/u);
+  assert.match(h.el(`history-${B}-summary`).textContent, /132 gespeicherte Ergebnisstände/u);
+  assert.doesNotMatch(h.el(`history-${B}-summary`).textContent, /Export: noch kein abgeschlossener Export/u);
 });
 
 testAsync('successful OCR anonymization exposes content hints directly without reopening or failing the run', async () => {
@@ -2186,7 +2192,7 @@ testAsync('a single technical file failure does not turn a usable anonymization 
   assert.equal(row.dataset.outcome, 'partial');
   assert.match(row.textContent, /Anonymisierungslauf abgeschlossen – mit Dateifehlern/u);
   assert.match(row.textContent, /1 Datei hat einen technischen Fehler/u);
-  assert.equal(h.el(`history-${B}-documents`).textContent, 'Prüfung öffnen');
+  assert.equal(h.el(`history-${B}-documents`).textContent, 'Nachbearbeitung öffnen (optional)');
   assert.equal(h.el(`history-${B}-problems`).textContent, 'Betroffene Dateien');
 });
 
@@ -2211,7 +2217,7 @@ testAsync('retained history without source-journal reasons never invents technic
   assert.match(row.textContent, /Anonymisierungslauf abgeschlossen – mit ungeklärten Ausnahmen/u);
   assert.match(row.textContent, /18 Dateien wurden nicht verarbeitet; die Gründe sind im kompakten Verlauf nicht mehr klassifiziert/u);
   assert.doesNotMatch(row.textContent, /18 technische Fehler|mit Dateifehlern/u);
-  assert.equal(h.el(`history-${B}-documents`).textContent, 'Prüfung öffnen');
+  assert.equal(h.el(`history-${B}-documents`).textContent, 'Nachbearbeitung öffnen (optional)');
   assert.equal(h.el(`history-${B}-problems`).textContent, 'Betroffene Dateien');
   h.model.entries[0] = { ...h.model.entries[0], expected_ocr_omission_count: 0 };
   await h.act('refresh-history');
@@ -2250,18 +2256,18 @@ testAsync('a total processing failure is red, while an OCR-off all-omitted run i
     'inconsistent retained counts cannot assert a finished empty run');
 });
 
-testAsync('exact current export coverage and pending debt determine the explicit history action', async () => {
+testAsync('legacy approval and additional-copy debt never replace the normal result-folder action', async () => {
   for (const [summary, location, label, primary] of [
-    [reviewSummary(), 'available', 'Exportvorschau', true],
-    [reviewSummary({ current_exported_count: 2 }), 'available', 'Prüfung öffnen', false],
-    [reviewSummary({ approved_count: 1 }), 'available', 'Dokumente und Freigaben öffnen', true],
-    [reviewSummary({ pending_export_count: 1, pending_confirmation_count: 1 }), 'available', 'Export abgleichen', true],
-    [reviewSummary({ unavailable_count: 1 }), 'available', 'Prüfstände ansehen', true],
-    [reviewSummary({ unclassified_source_count: 1 }), 'available', 'Prüfstände ansehen', true],
-    [reviewSummary({ not_processed_count: 1 }), 'available', 'Prüfstände ansehen', true],
-    [reviewSummary(), 'unsafe', 'Prüfstände ansehen', true],
-    [reviewSummary(), 'unknown', 'Prüfstände ansehen', true],
-    [reviewSummary({ reviewable_count: 0, approved_count: 0, current_exported_count: 0 }), 'available', 'Dokumente und Freigaben öffnen', true]
+    [reviewSummary(), 'available', 'Nachbearbeitung öffnen (optional)', false],
+    [reviewSummary({ current_exported_count: 2 }), 'available', 'Nachbearbeitung öffnen (optional)', false],
+    [reviewSummary({ approved_count: 1 }), 'available', 'Nachbearbeitung öffnen (optional)', false],
+    [reviewSummary({ pending_export_count: 1, pending_confirmation_count: 1 }), 'available', 'Nachbearbeitung öffnen (optional)', false],
+    [reviewSummary({ unavailable_count: 1 }), 'available', 'Nachbearbeitung öffnen (optional)', false],
+    [reviewSummary({ unclassified_source_count: 1 }), 'available', 'Nachbearbeitung öffnen (optional)', false],
+    [reviewSummary({ not_processed_count: 1 }), 'available', 'Nachbearbeitung öffnen (optional)', false],
+    [reviewSummary(), 'unsafe', 'Nachbearbeitung öffnen (optional)', false],
+    [reviewSummary(), 'unknown', 'Nachbearbeitung öffnen (optional)', false],
+    [reviewSummary({ reviewable_count: 0, approved_count: 0, current_exported_count: 0 }), 'available', 'Nachbearbeitung öffnen (optional)', false]
   ]) {
     const opened = [];
     const h = harness({ invoke(command, args, fallback) {
@@ -2274,8 +2280,8 @@ testAsync('exact current export coverage and pending debt determine the explicit
     const main = h.el(`history-${B}-documents`); await toggleHistorySummary(h, B);
     assert.equal(main.textContent, label); assert.equal(main.className === 'primary', primary);
     if (summary.pending_export_count)
-      assert.match(h.el(`history-${B}-state`).textContent, /Export im Abgleich/u);
-    await h.act(main); assert.deepEqual(opened, [[B, { exportPreview: label === 'Exportvorschau' }]]);
+      assert.match(h.el(`history-${B}-summary`).textContent, /offener Empfangsbestätigung/u);
+    await h.act(main); assert.deepEqual(opened, [[B, { exportPreview: false }]]);
     assert.equal(h.calls.some(call => ['decide_document_review', 'export_approved_documents', 'continue_history_batch'].includes(call.command)), false);
   }
 });
@@ -2303,8 +2309,9 @@ testAsync('expected OCR omissions cannot hide a confirmed copy or make optional 
     privacy_stop_count: 0, results_available: true, result_location: 'available', status: 'results_available' }];
   await h.act('nav-history'); await toggleHistorySummary(h, B);
   const label = h.el(`history-${B}-state`).textContent;
-  assert.match(label, /Export mit Abschlussbeleg.*1 ohne OCR nicht umgewandelt/u);
-  assert.equal(h.el(`history-${B}-documents`).textContent, 'Prüfung öffnen');
+  assert.match(label, /Verarbeitung abgeschlossen · Ergebnisdateien bereit/u);
+  assert.match(h.el('history-list').textContent, /1 ohne OCR nicht umgewandelt/u);
+  assert.equal(h.el(`history-${B}-documents`).textContent, 'Nachbearbeitung öffnen (optional)');
   assert.notEqual(h.el(`history-${B}-documents`).className, 'primary');
 });
 
@@ -2321,7 +2328,7 @@ for (const failure of [false, true]) testAsync(`late ${failure ? 'failed' : 'suc
   if (failure) reject(Error('STANDALONE_IPC_FAILED'));
   else resolve({ ok: true, available: false, local_ui_only: true, external_disclosure: false });
   await tick();
-  assert.match(h.el(`history-${B}-summary`).textContent, /Kopierstatus nach Ansichtswechsel nicht bestätigt/u);
+  assert.match(h.el(`history-${B}-summary`).textContent, /Ergebnisstatus nach Ansichtswechsel nicht bestätigt/u);
   assert.doesNotMatch(h.el(`history-${B}-summary`).textContent, /älteren Lauf|nicht verfügbar|abgeschlossene Kopie/u);
 });
 
@@ -2771,7 +2778,7 @@ for (const purpose of ['markdown-only', 'markdown-and-anonymize']) testAsync(`on
   await h.poll();
   const primary = h.el('job-actions').children.filter(node => node.className === 'primary');
   assert.equal(primary.length, 1);
-  assert.equal(primary[0].id, purpose === 'markdown-only' ? 'job-action-results' : 'job-action-documents');
+  assert.equal(primary[0].id, 'job-action-results');
   assert.match(h.el('job-title').textContent, purpose === 'markdown-only' ? /Textübernahme abgeschlossen/u : /Anonymisierungslauf abgeschlossen/u);
 });
 
@@ -3177,9 +3184,9 @@ testAsync('unknown review purpose cannot fall through to anonymized document nav
   assert.equal(h.el('job-title').textContent, 'Verarbeitungszweck nicht bestätigt');
   assert.match(h.el('job-description').textContent, /unbestätigtem Verarbeitungszweck/u);
   assert.doesNotMatch(h.el('job-description').textContent, /anonymisiert/u);
-  assert.equal(h.el('job-action-documents').textContent, 'Prüfstände ansehen');
+  assert.equal(h.el('job-action-documents').textContent, 'Nachbearbeitung öffnen (optional)');
   await h.act('nav-history');
-  assert.equal(h.el(`history-${B}-documents`).textContent, 'Prüfstände ansehen');
+  assert.equal(h.el(`history-${B}-documents`).textContent, 'Nachbearbeitung öffnen (optional)');
   assert.doesNotMatch(h.el('history-list').textContent, /Anonymisierung|freigeben/u);
   noAutomaticDecision(h);
 });
@@ -3597,6 +3604,8 @@ async function acknowledgedDocumentWorkspace(options = {}) {
     selection: null, operation: null, acknowledged: false };
   const summary = () => fullCopySummary({ approved_count: backend.rows.filter(row => row.approved).length,
     recorded_export_count: backend.selection ? 1 : 0,
+    ...(backend.rows.some(row => row.text_modified === true) ? { result_publication: { state: 'pending', generation_id: null,
+      count: backend.rows.length, current_revision: Math.max(...backend.rows.map(row => row.revision)) } } : {}),
     current_exported_count: backend.rows.filter(row => backend.selection?.some(saved => saved.document_id === row.document_id &&
       saved.revision === row.revision && saved.output_sha256 === row.output_sha256)).length });
   const h = await finishedAnonymousWorkspace({ documentRenderer: true, invoke(command, args, fallback) {
@@ -3642,7 +3651,7 @@ async function acknowledgedDocumentWorkspace(options = {}) {
   await h.act('job-action-documents');
   h.el('documents-all').checked = true; await h.act('documents-all', 'change');
   await h.act('documents-approve'); await h.act('documents-approve-proceed'); await tick();
-  assert.match(h.el('documents-selected').textContent, /2 von 2 freigegeben/u);
+  assert.match(h.el('documents-selected').textContent, /2 angezeigt · 2 Ergebnisdateien verfügbar/u);
   h.el('documents-all').checked = true; await h.act('documents-all', 'change');
   await h.act('documents-export'); await h.act('document-export-confirm'); await tick();
   assert.equal(backend.acknowledged, true);
@@ -3660,10 +3669,11 @@ testAsync('actual RunGuide completion link reconciles only its 2/2 explicitly ap
   await h.act('documents-completion-history'); await tick(); await tick();
   assert.equal(h.el('history-view').hidden, false);
   assert.deepEqual(h.calls.filter(call => call.command === 'get_document_review_history_summary').map(call => call.args.batchId), [A]);
-  assert.match(h.el(`history-${A}-state`).textContent, /2\/2 freigegeben.*Export mit Abschlussbeleg/u);
-  assert.match(h.el(`history-${A}-guide-next`).textContent, /kein weiterer Export nötig/u);
-  for (const stage of h.el(`history-${A}-guide-stages`).children) assert.equal(stage.dataset.status, 'done');
-  assert.match(h.el(`history-${B}-guide-title`).textContent, /nicht abgeglichen/u);
+  assert.match(h.el(`history-${A}-state`).textContent, /Ergebnisdateien bereit/u);
+  assert.match(h.el(`history-${A}-summary`).textContent, /1 frühere zusätzliche Kopien mit Beleg/u);
+  assert.match(h.el(`history-${A}-guide-next`).textContent, /keine zusätzliche Freigabe oder Exportbestätigung/u);
+  assert.deepEqual(h.el(`history-${A}-guide-stages`).children.map(stage => stage.dataset.status), ['done', 'done', 'done', 'optional']);
+  assert.equal(h.el(`history-${B}-summary`).textContent.includes('1 frühere zusätzliche Kopien'), false);
   assert.equal(h.el(`history-${B}-summary`).hidden, true);
   await openHistoryDisclosure(h, A); await h.poll();
   assert.equal(h.calls.filter(call => call.command === 'get_document_review_history_summary').length, 1,
@@ -3688,11 +3698,11 @@ testAsync('actual RunGuide target does not re-read another previously expanded r
   assert.deepEqual(h.calls.filter(call => call.command === 'get_document_review_history_summary').map(call => call.args.batchId), [B]);
   await h.act(`history-${A}-documents`); await h.act('documents-completion-history'); await tick(); await tick();
   assert.deepEqual(h.calls.filter(call => call.command === 'get_document_review_history_summary').map(call => call.args.batchId), [B, A]);
-  assert.match(h.el(`history-${A}-state`).textContent, /Export mit Abschlussbeleg/u);
-  assert.match(h.el(`history-${B}-guide-title`).textContent, /nicht abgeglichen/u);
+  assert.match(h.el(`history-${A}-summary`).textContent, /1 frühere zusätzliche Kopien mit Beleg/u);
+  assert.equal(h.el(`history-${B}-summary`).textContent.includes('1 frühere zusätzliche Kopien'), false);
   noAutomaticDecision(h);
 });
-testAsync('explicit run-details disclosure is neutral until its one exact fresh summary and retains focus', async () => {
+testAsync('one exact fresh summary owns only its optional metadata; the initial result readiness remains usable', async () => {
   let resolve;
   const pending = new Promise(yes => { resolve = yes; });
   const h = await finishedAnonymousWorkspace({ invoke: (command, args, fallback) =>
@@ -3700,17 +3710,18 @@ testAsync('explicit run-details disclosure is neutral until its one exact fresh 
   h.model.entries.push({ ...h.model.entries[0], batch_id: B });
   await h.act('nav-history'); await h.poll();
   assert.equal(h.calls.some(call => call.command === 'get_document_review_history_summary'), false);
-  assert.match(h.el(`history-${A}-state`).textContent, /nicht abgeglichen/u);
-  for (const index of [2, 3]) {
-    assert.equal(h.el(`history-${A}-guide-stages`).children[index].dataset.status, 'pending');
+  assert.match(h.el(`history-${A}-state`).textContent, /Ergebnisdateien bereit/u);
+  for (const [index, status] of [[2, 'done'], [3, 'optional']]) {
+    assert.equal(h.el(`history-${A}-guide-stages`).children[index].dataset.status, status);
     assert.equal(h.el(`history-${A}-guide-stages`).children[index].attrs['aria-current'], undefined);
   }
   const disclosure = await openHistoryDisclosure(h, A);
   await h.act(disclosure, 'toggle');
   assert.deepEqual(h.calls.filter(call => call.command === 'get_document_review_history_summary').map(call => call.args.batchId), [A]);
-  assert.match(h.el(`history-${A}-guide-title`).textContent, /nicht abgeglichen/u);
+  assert.doesNotMatch(h.el(`history-${A}-summary`).textContent, /1 frühere zusätzliche Kopien/u);
   resolve(fullCopySummary()); await tick(); await tick();
-  assert.match(h.el(`history-${A}-guide-title`).textContent, /Export mit Abschlussbeleg/u);
+  assert.match(h.el(`history-${A}-guide-title`).textContent, /Anonymisierte Ergebnisse bereit/u);
+  assert.match(h.el(`history-${A}-summary`).textContent, /1 frühere zusätzliche Kopien/u);
   assert.equal(h.doc.activeElement, disclosure);
   await h.act(disclosure, 'toggle'); await h.poll();
   assert.equal(h.calls.filter(call => call.command === 'get_document_review_history_summary').length, 1);
@@ -3719,13 +3730,14 @@ testAsync('explicit run-details disclosure is neutral until its one exact fresh 
 });
 testAsync('actual completion link reads newer revisions instead of upgrading the old ACK into current approval', async () => {
   const { h, backend } = await acknowledgedDocumentWorkspace();
-  backend.rows[0].revision++; backend.rows[0].output_sha256 = 'd'.repeat(64); backend.rows[0].approved = false;
+  backend.rows[0].revision++; backend.rows[0].output_sha256 = 'd'.repeat(64); backend.rows[0].approved = false; backend.rows[0].text_modified = true;
   const mutations = navigationMutations(h).length;
   await h.act('documents-completion-history'); await tick(); await tick();
-  assert.match(h.el(`history-${A}-state`).textContent, /1\/2 freigegeben/u);
+  assert.match(h.el(`history-${A}-state`).textContent, /nicht bestätigt/u);
   assert.doesNotMatch(h.el(`history-${A}-guide-next`).textContent, /kein weiterer Export nötig/u);
   assert.equal(h.el(`history-${A}-guide-stages`).children[2].dataset.status, 'current');
-  assert.equal(h.el(`history-${A}-guide-stages`).children[3].dataset.status, 'pending');
+  assert.equal(h.el(`history-${A}-guide-stages`).children[3].dataset.status, 'optional');
+  assert.equal(h.el(`history-${A}-results`).disabled, true);
   assert.equal(navigationMutations(h).length, mutations);
 });
 testAsync('superseding an actual completion-link native close cannot leave a later automatic history request', async () => {
@@ -3745,12 +3757,12 @@ testAsync('actual completion-link failed summary stays neutral and explicit relo
     if (fail) throw Error('STANDALONE_IPC_TIMEOUT'); return data;
   } });
   await h.act('documents-completion-history'); await tick(); await tick();
-  assert.match(h.el(`history-${A}-summary`).textContent, /Prüfstatus nicht verfügbar/u);
-  assert.match(h.el(`history-${A}-guide-title`).textContent, /nicht abgeglichen/u);
-  for (const index of [2, 3]) assert.equal(h.el(`history-${A}-guide-stages`).children[index].dataset.status, 'pending');
+  assert.match(h.el(`history-${A}-summary`).textContent, /Ergebnisstatus nicht verfügbar/u);
+  assert.doesNotMatch(h.el(`history-${A}-summary`).textContent, /1 frühere zusätzliche Kopien/u);
+  for (const [index, status] of [[2, 'done'], [3, 'optional']]) assert.equal(h.el(`history-${A}-guide-stages`).children[index].dataset.status, status);
   const mutations = navigationMutations(h).length;
   fail = false; await h.act(`history-${A}-summary-reload`);
-  assert.match(h.el(`history-${A}-state`).textContent, /2\/2 freigegeben.*Export mit Abschlussbeleg/u);
+  assert.match(h.el(`history-${A}-summary`).textContent, /1 frühere zusätzliche Kopien/u);
   assert.equal(navigationMutations(h).length, mutations);
 });
 for (const transition of ['navigation', 'connection', 'generation', 'stale'])
@@ -3802,31 +3814,30 @@ function assertNoExportOrRestart(h) {
   assert.equal(h.calls.some(call => ['preview_document_export', 'export_approved_documents',
     'continue_history_batch', 'continue_current_batch', 'continue_review_session', 'start_admitted_batch'].includes(call.command)), false);
 }
-testAsync('document approval snapshot: actual explicit 1/1 approval survives nav-details without claiming an export', async () => {
+testAsync('actual optional editor and nav-details preserve ready files without a second approval/export action', async () => {
   const { h } = await documentApprovalWorkspace();
-  assert.match(h.el('run-guide-title').textContent, /Ergebnisse ansehen und auswählen/u);
-  h.el('documents-all').checked = true; await h.act('documents-all', 'change');
-  await h.act('documents-approve'); assert.equal(h.el('documents-approve-confirm').hidden, false);
-  await h.act('documents-approve-proceed'); await tick();
-  assert.match(h.el('documents-selected').textContent, /1 von 1 freigegeben/u);
-  assert.match(h.el('run-guide-title').textContent, /Verfügbare Dokumente freigegeben/u);
-  assert.equal(h.el('run-guide-stages').children[3].dataset.status, 'current');
+  assert.match(h.el('run-guide-title').textContent, /Anonymisierte Ergebnisse bereit/u);
+  assert.equal(h.el('documents-approval-extras').hidden, true);
+  assert.equal(h.el('documents-export').hidden, true);
+  assert.match(h.el('documents-selected').textContent, /1 angezeigt · 1 Ergebnisdateien verfügbar/u);
+  assert.equal(h.el('run-guide-stages').children[2].dataset.status, 'done');
+  assert.equal(h.el('run-guide-stages').children[3].dataset.status, 'optional');
   await h.act('nav-details'); await tick();
   selectedRun(h, A); assert.equal(h.el('documents-view').hidden, true);
-  assert.match(h.el('job-description').textContent, /Freigegebene Dokumente auswählen/u);
+  assert.match(h.el('job-description').textContent, /Ergebnisordner öffnen/u);
   assert.doesNotMatch(h.el('job-description').textContent, /noch vergleichen und freigeben|kein weiterer Export nötig|Export abgeschlossen/u);
-  assert.equal(h.el('job-action-documents').textContent, 'Freigaben / Exportvorschau');
-  assert.match(h.el('job-announcement').textContent, /Freigegebene Dokumente auswählen/u);
+  assert.equal(h.el('job-action-documents').textContent, 'Nachbearbeitung öffnen (optional)');
+  assert.match(h.el('job-announcement').textContent, /Ergebnisordner öffnen/u);
   await h.poll();
-  assert.equal(h.el('job-action-documents').textContent, 'Freigaben / Exportvorschau');
-  assert.equal(h.calls.filter(call => call.command === 'decide_document_review').length, 1);
+  assert.equal(h.el('job-action-documents').textContent, 'Nachbearbeitung öffnen (optional)');
+  assert.equal(h.calls.filter(call => call.command === 'decide_document_review').length, 0);
   assert.equal(h.calls.some(call => call.command === 'get_document_review_history_summary'), false);
   assertNoExportOrRestart(h);
 });
 testAsync('document approval snapshot: freshly loaded approvals can improve the retained job, not copied status', async () => {
   const { h } = await documentApprovalWorkspace({ approved: true, resultCount: 2 });
   await h.act('nav-details'); await tick();
-  assert.equal(h.el('job-action-documents').textContent, 'Freigaben / Exportvorschau');
+  assert.equal(h.el('job-action-documents').textContent, 'Nachbearbeitung öffnen (optional)');
   assert.doesNotMatch(h.el('job-description').textContent, /kein weiterer Export nötig|noch vergleichen und freigeben/u);
   assert.equal(h.calls.some(call => call.command === 'decide_document_review'), false); assertNoExportOrRestart(h);
 });
@@ -3844,7 +3855,7 @@ for (const patch of [
   // Boundary-only metadata probe. Actual renderer lifecycle/ACK behavior is
   // covered above and below; its internal busy/draft state is not overwritten.
   await h.act('nav-details'); await tick();
-  assert.equal(h.el('job-action-documents').textContent, 'Dokumente prüfen / Export');
+  assert.equal(h.el('job-action-documents').textContent, 'Nachbearbeitung öffnen (optional)');
   assert.doesNotMatch(h.el('job-description').textContent, /Freigegebene Dokumente auswählen|kein weiterer Export nötig/u);
   assertNoExportOrRestart(h);
 });
@@ -3859,12 +3870,12 @@ testAsync('document approval snapshot: actual reload with revocation retires the
   const { h, backend } = await documentApprovalWorkspace({ approved: true });
   backend.rows[0].approved = false; backend.rows[0].revision++;
   await h.act('documents-reload'); await h.act('nav-details'); await tick();
-  assert.equal(h.el('job-action-documents').textContent, 'Dokumente prüfen / Export'); assertNoExportOrRestart(h);
+  assert.equal(h.el('job-action-documents').textContent, 'Nachbearbeitung öffnen (optional)'); assertNoExportOrRestart(h);
 });
 testAsync('document approval snapshot: failed actual reload retires the former approval', async () => {
   const { h, backend } = await documentApprovalWorkspace({ approved: true });
   backend.failReload = true; await h.act('documents-reload'); await h.act('nav-details'); await tick();
-  assert.equal(h.el('job-action-documents').textContent, 'Dokumente prüfen / Export'); assertNoExportOrRestart(h);
+  assert.equal(h.el('job-action-documents').textContent, 'Nachbearbeitung öffnen (optional)'); assertNoExportOrRestart(h);
 });
 testAsync('document approval snapshot: connection retirement and late actual reload cannot restore old approval', async () => {
   const { h, backend } = await documentApprovalWorkspace({ approved: true });
@@ -3874,25 +3885,25 @@ testAsync('document approval snapshot: connection retirement and late actual rel
   finish(); await tick(); await tick();
   h.listeners.get('datasecure-connection')({ payload: { epoch: 1, state: 'ready' } }); await h.poll();
   await h.act('nav-details'); await tick();
-  assert.equal(h.el('job-action-documents').textContent, 'Dokumente prüfen / Export'); assertNoExportOrRestart(h);
+  assert.equal(h.el('job-action-documents').textContent, 'Nachbearbeitung öffnen (optional)'); assertNoExportOrRestart(h);
 });
 testAsync('document approval snapshot: another run cannot relabel the retained job', async () => {
   const { h } = await documentApprovalWorkspace({ approved: true });
   await h.act('nav-history'); await tick();
   h.model.entries.push({ ...h.model.entries[0], batch_id: B }); await h.act('refresh-history');
   await h.act('history-' + B + '-documents'); await h.act('nav-details'); await tick();
-  assert.equal(h.el('job-action-documents').textContent, 'Dokumente prüfen / Export'); assertNoExportOrRestart(h);
+  assert.equal(h.el('job-action-documents').textContent, 'Nachbearbeitung öffnen (optional)'); assertNoExportOrRestart(h);
 });
 testAsync('document approval snapshot: ordinary command generation retires the display-only approval', async () => {
   const { h } = await documentApprovalWorkspace({ approved: true });
   await h.act('nav-details'); await tick(); await h.act('job-action-results');
-  assert.equal(h.el('job-action-documents').textContent, 'Dokumente prüfen / Export'); assertNoExportOrRestart(h);
+  assert.equal(h.el('job-action-documents').textContent, 'Nachbearbeitung öffnen (optional)'); assertNoExportOrRestart(h);
 });
 for (const exceptions of [{ omitted: 1 }, { privacyStops: 1 }])
 testAsync('document approval snapshot: partial-source runs still require the existing classified history contract ' + JSON.stringify(exceptions), async () => {
   const { h } = await documentApprovalWorkspace({ approved: true, ...exceptions });
   await h.act('nav-details'); await tick();
-  assert.equal(h.el('job-action-documents').textContent, 'Dokumente prüfen / Export');
+  assert.equal(h.el('job-action-documents').textContent, 'Nachbearbeitung öffnen (optional)');
   assert.match(h.el('job-description').textContent, /1 Datei mit Problemen/u);
   assertNoExportOrRestart(h);
 });
@@ -3901,22 +3912,22 @@ testAsync('bound history snapshot: the actual guide, completion warning and nav-
   const h = await finishedAnonymousWorkspace({ invoke:(command,args,fallback) =>
     command === 'get_document_review_history_summary' ? fullCopySummary() : fallback() });
   await openFinishedSnapshot(h);
-  assert.match(h.el('history-' + A + '-guide-title').textContent,/Export mit Abschlussbeleg/u);
-  assert.match(h.el('history-' + A + '-guide-next').textContent,/kein weiterer Export nötig/u);
+  assert.match(h.el('history-' + A + '-guide-title').textContent,/Anonymisierte Ergebnisse bereit/u);
+  assert.match(h.el('history-' + A + '-guide-next').textContent,/keine zusätzliche Freigabe oder Exportbestätigung/u);
   assert.equal(h.el('history-' + A + '-guide-stages').children[2].dataset.status,'done');
-  assert.equal(h.el('history-' + A + '-guide-stages').children[3].dataset.status,'done');
+  assert.equal(h.el('history-' + A + '-guide-stages').children[3].dataset.status,'optional');
   const row = h.el('history-list').children[0];
   assert.doesNotMatch(row.textContent,/Freigabe- und Exportstand sind noch nicht abgeglichen/u);
   await h.act(`history-${A}-details`);
-  assert.match(h.el('job-description').textContent,/kein weiterer Export nötig/u);
+  assert.match(h.el('job-description').textContent,/keine zusätzliche Freigabe oder Exportbestätigung/u);
   assert.doesNotMatch(h.el('job-description').textContent,/noch vergleichen und freigeben/u);
-  assert.equal(h.el('job-action-documents').textContent,'Prüfung öffnen (optional)');
+  assert.equal(h.el('job-action-documents').textContent,'Nachbearbeitung öffnen (optional)');
   assert.notEqual(h.el('job-action-documents').className,'primary');
-  assert.match(h.el('job-announcement').textContent,/kein weiterer Export nötig/u);
+  assert.match(h.el('job-announcement').textContent,/keine zusätzliche Freigabe oder Exportbestätigung/u);
   const statusReads = h.calls.filter(call=>call.command==='get_public_state').length;
   await h.poll();
   assert.ok(h.calls.filter(call=>call.command==='get_public_state').length>statusReads);
-  assert.match(h.el('job-description').textContent,/kein weiterer Export nötig/u);
+  assert.match(h.el('job-description').textContent,/keine zusätzliche Freigabe oder Exportbestätigung/u);
   noAutomaticDecision(h);
 });
 
@@ -3930,7 +3941,7 @@ testAsync('terminal announcements: exported predecessor stays silent through a n
   } });
   await openFinishedSnapshot(h); await h.act(`history-${A}-details`);
   const region = h.el('job-announcement');
-  assert.match(region.textContent, /kein weiterer Export nötig/u);
+  assert.match(region.textContent, /keine zusätzliche Freigabe oder Exportbestätigung/u);
   const departing = region.textHistory.length;
   await h.act('nav-new');
   assert.deepEqual(region.textHistory.slice(departing), [''], 'leaving clears the old terminal announcement without a transient replacement');
@@ -3953,7 +3964,7 @@ testAsync('terminal announcements: exported predecessor stays silent through a n
   await h.act('nav-details'); selectedRun(h, A);
   assert.equal(h.el('job').hidden, false, 'the predecessor job itself is retained');
   assert.equal(region.textUpdates, returning + 1);
-  assert.match(region.textContent, /aktuellen Freigabe- und Exportstand.*prüfen/u);
+  assert.match(region.textContent, /Ergebnisordner öffnen/u);
   assert.doesNotMatch(region.textContent, /noch vergleichen und freigeben|kein weiterer Export nötig/u,
     'the invalidated export snapshot is neither preserved nor turned into a missing-approval claim');
   await h.poll(); await h.act('nav-details');
@@ -3973,7 +3984,7 @@ for (const destination of ['history', 'settings']) testAsync(`terminal announcem
     command === 'get_document_review_history_summary' ? fullCopySummary() : fallback() });
   await openFinishedSnapshot(h); await h.act(`history-${A}-details`);
   const region = h.el('job-announcement');
-  assert.match(region.textContent, /kein weiterer Export nötig/u);
+  assert.match(region.textContent, /keine zusätzliche Freigabe oder Exportbestätigung/u);
   const before = region.textHistory.length;
   await h.act('nav-' + destination); await h.poll();
   assert.equal(region.textContent, '');
@@ -4111,10 +4122,10 @@ testAsync('bound history snapshot: fresh approvals without a current copy improv
     command==='get_document_review_history_summary'?fullCopySummary({current_exported_count:0}):fallback()});
   await openFinishedSnapshot(h);
   assert.equal(h.el('history-' + A + '-guide-stages').children[2].dataset.status,'done');
-  assert.equal(h.el('history-' + A + '-guide-stages').children[3].dataset.status,'current');
+  assert.equal(h.el('history-' + A + '-guide-stages').children[3].dataset.status,'optional');
   assert.doesNotMatch(h.el('history-' + A + '-guide-next').textContent,/kein weiterer Export nötig/u);
   await h.act('nav-details');
-  assert.equal(h.el('job-action-documents').textContent,'Freigaben / Exportvorschau');
+  assert.equal(h.el('job-action-documents').textContent,'Nachbearbeitung öffnen (optional)');
   assert.doesNotMatch(h.el('job-description').textContent,/noch vergleichen und freigeben|kein weiterer Export nötig/u);
   noAutomaticDecision(h);
 });
@@ -4122,9 +4133,10 @@ testAsync('bound history snapshot: a pending copy never becomes export success d
   const h = await finishedAnonymousWorkspace({invoke:(command,args,fallback)=>command==='get_document_review_history_summary'
     ?fullCopySummary({pending_export_count:1,pending_confirmation_count:1}):fallback()});
   await openFinishedSnapshot(h);
-  assert.match(h.el('history-' + A + '-guide-next').textContent,/Denselben Export abgleichen/u);
+  assert.match(h.el('history-' + A + '-summary').textContent,/offener Empfangsbestätigung/u);
+  assert.match(h.el('history-' + A + '-guide-next').textContent,/keine zusätzliche Freigabe oder Exportbestätigung/u);
   assert.doesNotMatch(h.el('history-' + A + '-guide-next').textContent,/kein weiterer Export nötig/u);
-  await h.act('nav-details'); assert.equal(h.el('job-action-documents').textContent,'Export abgleichen');
+  await h.act('nav-details'); assert.equal(h.el('job-action-documents').textContent,'Nachbearbeitung öffnen (optional)');
   noAutomaticDecision(h);
 });
 testAsync('bound history snapshot: failed reload removes guide, job and completion-footer success together', async () => {
@@ -4133,24 +4145,26 @@ testAsync('bound history snapshot: failed reload removes guide, job and completi
     if(command==='get_document_review_history_summary'){if(fail)throw Error('STANDALONE_IPC_TIMEOUT');return fullCopySummary()}
     return fallback();
   }});await openFinishedSnapshot(h);
-  assert.match(h.el('history-list').textContent,/2\/2 freigegeben · Export mit Abschlussbeleg/u);
+  assert.match(h.el('history-' + A + '-summary').textContent,/1 frühere zusätzliche Kopien mit Beleg/u);
   fail=true;await h.act('history-'+A+'-summary-reload');
   assert.doesNotMatch(h.el('history-list').textContent,/2\/2 freigegeben · Export mit Abschlussbeleg/u,
     'the stable primary folder action must not retain a previous positive summary after failed reload');
   assert.equal(h.el('history-'+A+'-results').textContent,'Ergebnisordner öffnen');
   assert.equal(h.el('history-'+A+'-results').className,'primary');
   assert.doesNotMatch(h.el('history-' + A + '-guide-next').textContent,/kein weiterer Export nötig/u);
-  assert.equal(h.el('history-' + A + '-guide-stages').children[3].dataset.status,'pending');
-  assert.match(h.el('history-list').textContent,/Freigabe- und Exportstand sind noch nicht abgeglichen/u);
+  assert.equal(h.el('history-' + A + '-guide-stages').children[3].dataset.status,'optional');
+  assert.match(h.el('history-' + A + '-summary').textContent,/Ergebnisstatus nicht verfügbar/u);
   await h.act('nav-details');assert.doesNotMatch(h.el('job-description').textContent,/kein weiterer Export nötig/u);
-  assert.equal(h.el('job-action-documents').textContent,'Dokumente prüfen / Export');noAutomaticDecision(h);
+  assert.equal(h.el('job-action-documents').textContent,'Nachbearbeitung öffnen (optional)');noAutomaticDecision(h);
 });
 testAsync('bound history snapshot: another run summary cannot improve the current run or its job', async () => {
   const h=await finishedAnonymousWorkspace({invoke:(command,args,fallback)=>command==='get_document_review_history_summary'?fullCopySummary():fallback()});
   h.model.entries.push({...h.model.entries[0],batch_id:B});await h.act('nav-history');await toggleHistorySummary(h, B);
   assert.equal(h.el('run-guide').hidden, true);
-  assert.match(h.el('history-' + B + '-guide-title').textContent,/Export mit Abschlussbeleg/u);
-  assert.equal(h.el('history-' + A + '-guide-stages').children[3].dataset.status,'pending');
+  assert.match(h.el('history-' + B + '-guide-title').textContent,/Anonymisierte Ergebnisse bereit/u);
+  assert.match(h.el('history-' + B + '-summary').textContent,/1 frühere zusätzliche Kopien mit Beleg/u);
+  assert.equal(h.el('history-' + A + '-summary').textContent.includes('1 frühere zusätzliche Kopien'),false);
+  assert.equal(h.el('history-' + A + '-guide-stages').children[3].dataset.status,'optional');
   await h.act('nav-details');assert.doesNotMatch(h.el('job-description').textContent,/kein weiterer Export nötig/u);noAutomaticDecision(h);
 });
 for(const state of ['processing','paused','failed','export_pending']) testAsync('bound history snapshot: '+state+' current status overrides an older finished history snapshot',async()=>{
@@ -4207,7 +4221,7 @@ testAsync('bound history snapshot: retired read cannot publish or release a succ
   assert.equal(h.el('history-'+A+'-summary-reload').disabled,true);
   resolveFresh(fullCopySummary({approved_count:0,current_exported_count:0,recorded_export_count:0}));await tick();
   assert.equal(h.el('history-'+A+'-summary-reload').disabled,false);
-  assert.equal(h.el('history-'+A+'-guide-stages').children[3].dataset.status,'pending');
+  assert.equal(h.el('history-'+A+'-guide-stages').children[3].dataset.status,'optional');
   const statusReads=h.calls.filter(call=>call.command==='get_public_state').length;
   await h.poll();assert.ok(h.calls.filter(call=>call.command==='get_public_state').length>statusReads,'retired ownership cannot block later polling');
   noAutomaticDecision(h);
@@ -4219,7 +4233,7 @@ testAsync('bound history snapshot: loading and unavailable metadata cannot retai
   assert.doesNotMatch(h.el('history-' + A + '-guide-next').textContent,/kein weiterer Export nötig/u);
   assert.doesNotMatch(h.el('job-description').textContent,/kein weiterer Export nötig/u);
   resolve({ok:true,local_ui_only:true,external_disclosure:false,available:false});await tick();
-  assert.equal(h.el('history-' + A + '-guide-stages').children[3].dataset.status,'pending');noAutomaticDecision(h);
+  assert.equal(h.el('history-' + A + '-guide-stages').children[3].dataset.status,'optional');noAutomaticDecision(h);
 });
 
 testAsync('bound history snapshot: the actual 3-source 2-result OCR-off completion stays yellow and closes only its two result revisions',async()=>{
@@ -4230,19 +4244,20 @@ testAsync('bound history snapshot: the actual 3-source 2-result OCR-off completi
   assert.equal(Object.hasOwn(h.model.state,'expected_ocr_omission_count'),false,'public status has no invented omission classifier');
   await openFinishedSnapshot(h);
   assert.equal(h.calls.filter(call=>call.command==='get_document_review_history_summary').at(-1).args.batchId,A);
-  assert.match(h.el('history-' + A + '-guide-title').textContent,/Export mit Abschlussbeleg.*Hinweisen/u);
-  assert.match(h.el('history-' + A + '-guide-counts').textContent,/2 von 2 verfügbaren Dokumenten freigegeben.*2 von 3 Quellen.*1 ohne OCR nicht umgewandelt/u);
+  assert.match(h.el('history-' + A + '-guide-title').textContent,/Anonymisierte Ergebnisse bereit/u);
+  assert.match(h.el('history-' + A + '-guide-counts').textContent,/2 Ergebnisdateien.*2 von 3 Quellen.*1 ohne OCR nicht umgewandelt/u);
   assert.equal(h.el('history-' + A + '-guide-stages').children[0].dataset.status,'warning','existing CSS renders warning yellow');
-  for(const index of [1,2,3])assert.equal(h.el('history-' + A + '-guide-stages').children[index].dataset.status,'done');
-  assert.match(h.el('history-' + A + '-guide-next').textContent,/kein weiterer Export nötig.*1 Bild- oder Scan-Datei.*nicht umgewandelt/u);
-  assert.match(h.el('history-' + A + '-guide-next').textContent,/nicht verarbeitete Quelle ist weder freigegeben noch im Export enthalten/u);
+  for(const index of [1,2])assert.equal(h.el('history-' + A + '-guide-stages').children[index].dataset.status,'done');
+  assert.equal(h.el('history-' + A + '-guide-stages').children[3].dataset.status,'optional');
+  assert.match(h.el('history-' + A + '-guide-next').textContent,/keine zusätzliche Freigabe oder Exportbestätigung.*1 Bild- oder Scan-Datei.*nicht umgewandelt/u);
+  assert.match(h.el('history-' + A + '-guide-next').textContent,/nicht verarbeitete Quelle ist nicht in den Ergebnisdateien enthalten/u);
   assert.equal(h.el('history-list').children[0].dataset.outcome,'partial');
   assert.match(h.el('history-list').textContent,/1 ohne OCR nicht umgewandelt/u);
   await h.act('nav-details');
   assert.match(h.el('job-title').textContent,/abgeschlossen mit Hinweisen/u);assert.match(h.el('job-icon').textContent,/!/u);
-  assert.match(h.el('job-description').textContent,/2 verfügbaren Ergebnisstände.*kein weiterer Export nötig.*1 Bild- oder Scan-Datei.*nicht umgewandelt/u);
+  assert.match(h.el('job-description').textContent,/keine zusätzliche Freigabe oder Exportbestätigung.*1 Bild- oder Scan-Datei.*nicht umgewandelt/u);
   assert.doesNotMatch(h.el('job-description').textContent,/noch vergleichen und freigeben|1 Datei mit Problemen|3 verfügbaren Ergebnisstände/u);
-  assert.equal(h.el('job-action-documents').textContent,'Prüfung öffnen (optional)');
+  assert.equal(h.el('job-action-documents').textContent,'Nachbearbeitung öffnen (optional)');
   assert.equal(h.el('job-description').className,'run-notice','existing warning styling keeps the omitted source visibly yellow on nav-details');
   await h.poll();assert.equal(h.el('job-description').className,'run-notice');
   assert.equal(h.el('file-problems').hidden,false,'the omitted source notice remains reachable');
@@ -4286,24 +4301,25 @@ for(const [results,ocr,privacy]of [[2,0,1],[115,17,1]])testAsync('bound history 
   assert.equal(Object.hasOwn(h.model.state,'privacy_stop_count'),false);
   await openFinishedSnapshot(h);
   assert.equal(h.calls.filter(call=>call.command==='get_document_review_history_summary').at(-1).args.batchId,A);
-  assert.match(h.el('history-' + A + '-guide-title').textContent,/Export mit Abschlussbeleg.*Hinweisen/u);
-  assert.match(h.el('history-' + A + '-guide-counts').textContent,new RegExp(results+' von '+results+' verfügbaren Dokumenten freigegeben','u'));
+  assert.match(h.el('history-' + A + '-guide-title').textContent,/Anonymisierte Ergebnisse bereit/u);
+  assert.match(h.el('history-' + A + '-guide-counts').textContent,new RegExp(results+' Ergebnisdateien','u'));
   assert.match(h.el('history-' + A + '-guide-counts').textContent,new RegExp(results+' von '+total+' Quellen als Ergebnis verfügbar','u'));
   assert.match(h.el('history-' + A + '-guide-counts').textContent,new RegExp(privacy+' aus Datenschutzgründen angehalten','u'));
   for(const index of [0,1])assert.equal(h.el('history-' + A + '-guide-stages').children[index].dataset.status,'warning');
-  for(const index of [2,3])assert.equal(h.el('history-' + A + '-guide-stages').children[index].dataset.status,'done');
-  assert.match(h.el('history-' + A + '-guide-next').textContent,/kein weiterer Export nötig.*aus Datenschutzgründen angehalten/u);
-  assert.match(h.el('history-' + A + '-guide-next').textContent,stopped===1?/nicht verarbeitete Quelle ist weder freigegeben noch im Export enthalten/u:
-    new RegExp(stopped+' nicht verarbeiteten Quellen sind weder freigegeben noch im Export enthalten','u'));
+  assert.equal(h.el('history-' + A + '-guide-stages').children[2].dataset.status,'done');
+  assert.equal(h.el('history-' + A + '-guide-stages').children[3].dataset.status,'optional');
+  assert.match(h.el('history-' + A + '-guide-next').textContent,/keine zusätzliche Freigabe oder Exportbestätigung.*aus Datenschutzgründen angehalten/u);
+  assert.match(h.el('history-' + A + '-guide-next').textContent,stopped===1?/nicht verarbeitete Quelle ist nicht in den Ergebnisdateien enthalten/u:
+    new RegExp(stopped+' nicht verarbeiteten Quellen sind nicht in den Ergebnisdateien enthalten','u'));
   assert.equal(h.el('history-list').children[0].dataset.outcome,'partial');
   assert.match(h.el('history-list').textContent,new RegExp(privacy+' aus Datenschutzgründen angehalten','u'));
   await h.act('nav-details');
   assert.equal(h.el('job-description').className,'run-notice');assert.match(h.el('job-title').textContent,/abgeschlossen mit Hinweisen/u);
-  assert.match(h.el('job-description').textContent,new RegExp(results+' verfügbaren Ergebnisstände.*kein weiterer Export nötig','u'));
+  assert.match(h.el('job-description').textContent,new RegExp(results+' technisch geprüfte anonymisierte Ergebnisse verfügbar.*keine zusätzliche Freigabe oder Exportbestätigung','u'));
   assert.match(h.el('job-description').textContent,/aus Datenschutzgründen angehalten.*keinen freigabefähigen Prüfstand/u);
   assert.doesNotMatch(h.el('job-description').textContent,new RegExp(total+' verfügbaren Ergebnisstände|'+stopped+' Dateien mit Problemen|noch vergleichen und freigeben','u'));
   if(ocr)assert.match(h.el('job-description').textContent,new RegExp(ocr+' Bild- oder Scan-Dateien.*nicht umgewandelt','u'));
-  assert.equal(h.el('job-action-documents').textContent,'Prüfung öffnen (optional)');assert.equal(h.el('file-problems').hidden,false);
+  assert.equal(h.el('job-action-documents').textContent,'Nachbearbeitung öffnen (optional)');assert.equal(h.el('file-problems').hidden,false);
   noAutomaticDecision(h);
 });
 for(const kind of ['technical-remainder','unknown-reason','legacy-classification','incoherent-ledger','unavailable-result','old-copy','pending-copy'])
@@ -4446,7 +4462,8 @@ testAsync('history status is first and later summary updates preserve title and 
   await toggleHistorySummary(h, B);
   assert.equal(detail.children.find(row => row.className === 'history-title').textContent, title);
   assert.equal(detail.children.find(row => row.className === 'history-meta' && row !== h.el(`history-${B}-state`)).textContent, counters);
-  assert.match(h.el(`history-${B}-state`).textContent, /Export im Abgleich/u);
+  assert.match(h.el(`history-${B}-state`).textContent, /Ergebnisdateien bereit/u);
+  assert.match(h.el(`history-${B}-summary`).textContent, /offener Empfangsbestätigung/u);
 });
 
 testAsync('history accessibility names and stable openers stay bound to their own visible run after summary', async () => {
@@ -4470,7 +4487,7 @@ testAsync('history accessibility names and stable openers stay bound to their ow
   }
   const main = h.el(`history-${B}-documents`), binding = main.attrs['aria-labelledby'];
   await toggleHistorySummary(h, B);
-  assert.equal(main.textContent, 'Prüfung öffnen');
+  assert.equal(main.textContent, 'Nachbearbeitung öffnen (optional)');
   assert.equal(main.attrs['aria-labelledby'], binding, 'self-reference follows the live label without replacing run context');
   assert.equal(h.calls.some(call => ['start_admitted_batch', 'continue_history_batch', 'export_approved_documents'].includes(call.command)), false);
 });
@@ -4661,7 +4678,7 @@ testAsync(`finished history keeps result opener first/green and stable separate 
   const opener = h.el(`history-${B}-results`), review = h.el(`history-${B}-documents`), actions = opener.parent;
   assert.equal(opener.textContent, 'Ergebnisordner öffnen'); assert.equal(opener.className, 'primary');
   assert.equal(opener.attrs['data-history-main'], 'true');
-  assert.equal(review.textContent, processing_mode === 'markdown-only' ? 'Nachkorrektur öffnen (optional)' : 'Prüfung öffnen');
+  assert.equal(review.textContent, processing_mode === 'markdown-only' ? 'Nachkorrektur öffnen (optional)' : 'Nachbearbeitung öffnen (optional)');
   assert.deepEqual(actions.children.filter(node => node.tagName === 'BUTTON').map(node => node.id),
     ['results', 'documents', 'details', 'problems', 'more'].map(key => `history-${B}-${key}`));
   const label = review.textContent;
@@ -4671,35 +4688,36 @@ testAsync(`finished history keeps result opener first/green and stable separate 
   assert.equal(h.calls.some(call => ['decide_document_review', 'decide_document_review_batch', 'export_approved_documents'].includes(call.command)), false);
 });
 
-testAsync('anonymization mode copy assigns approval to the export confirmation, not a separate mandatory action', async () => {
+testAsync('anonymization mode copy promises direct results after necessary processing, not another selection or approval', async () => {
   const input = html.indexOf('id="mode-anonymize"');
   assert.ok(input >= 0);
   const start = html.lastIndexOf('<label', input), end = html.indexOf('</label>', input);
   assert.ok(start >= 0 && end > input);
   const copy = html.slice(start, end + '</label>'.length).replace(/<[^>]*>/gu, ' ').replace(/\s+/gu, ' ');
-  assert.match(copy, /Exportbestätigung enthält die Freigabe der ausgewählten Textstände/u);
-  assert.match(copy, /ein zusätzlicher Freigabeschritt ist nicht nötig/u);
+  assert.match(copy, /Danach liegen die fertigen Dateien im Ergebnisordner/u);
+  assert.match(copy, /keine zusätzliche Dateiauswahl, Freigabe oder Exportbestätigung/u);
   assert.doesNotMatch(copy, /Erst eine gesonderte Dokumentfreigabe erlaubt den Export/u);
   const extras = /<details\b[^>]*id="documents-approval-extras"[\s\S]*?<\/details>/u.exec(html)?.[0];
   assert.ok(extras);
   assert.match(extras, /Freigaben verwalten \(optional\)/u);
-  assert.match(extras, /Auswahl nur freigeben/u, 'optional approval-only management remains available');
+  assert.match(extras, /\bhidden\b/u, 'legacy approval management is not a normal visible action');
 });
 
-testAsync('entity-change guidance names the combined export click and attributes no export to editing alone', async () => {
+testAsync('entity-change guidance describes consequential saving and automatic complete-result delivery', async () => {
   const marker = html.indexOf('class="entity-guide meta"');
   assert.ok(marker >= 0);
   const start = html.lastIndexOf('<ol', marker), end = html.indexOf('</ol>', marker);
   assert.ok(start >= 0 && end > marker);
   const copy = html.slice(start, end + '</ol>'.length).replace(/<[^>]*>/gu, ' ').replace(/\s+/gu, ' ');
   assert.match(copy, /Originalwert beibehalten/u);
-  assert.match(copy, /Jede Änderung hebt betroffene Freigaben auf/u);
-  assert.match(copy, /„Freigeben und exportieren“ bestätigen/u);
-  assert.match(copy, /Die Änderung allein startet keinen Export/u);
+  assert.match(copy, /personenbezogene Angaben in der Ausgabe sichtbar lassen/u);
+  assert.match(copy, /Vor dem Speichern die gewählte Behandlung prüfen/u);
+  assert.match(copy, /gesamte aktuelle Ergebnisstand ohne zweite Dateiauswahl bereitgestellt/u);
+  assert.match(copy, /Frühere Ergebnisstände bleiben unverändert/u);
   assert.doesNotMatch(copy, /ausdrücklich freigeben; ein Export startet dadurch nicht/u);
 });
 
-testAsync('rendered history summary explains combined confirmation after an explicit read-only disclosure', async () => {
+testAsync('rendered history summary needs no second approval/export and remains strictly read-only', async () => {
   const h = harness({ invoke(command, _args, fallback) {
     return command === 'get_document_review_history_summary' ? reviewSummary() : fallback();
   } }); await tick();
@@ -4710,7 +4728,7 @@ testAsync('rendered history summary explains combined confirmation after an expl
   await toggleHistorySummary(h, B);
   const summary = h.el(`history-${B}-summary`);
   assert.equal(summary.hidden, false);
-  assert.match(summary.textContent, /Freigabe und Export werden im normalen Weg gemeinsam bestätigt/u);
+  assert.match(summary.textContent, /keine zusätzliche Dateiauswahl, Dokumentfreigabe oder Exportbestätigung nötig/u);
   assert.doesNotMatch(summary.textContent, /Dokumentfreigaben und Exporte sind getrennte Schritte/u);
   const reads = h.calls.filter(call => call.command === 'get_document_review_history_summary');
   assert.equal(reads.length, 1); assert.deepEqual(reads[0].args, { batchId: B });
@@ -4718,6 +4736,78 @@ testAsync('rendered history summary explains combined confirmation after an expl
     'configure_results', 'start_admitted_batch', 'continue_history_batch', 'continue_current_batch',
     'continue_review_session', 'abandon_document_export', 'abandon_result_export'].includes(call.command)), false,
     'copy disclosure itself cannot approve, export, configure, start or continue work');
+});
+
+for (const processing_mode of ['markdown-only', 'markdown-and-anonymize'])
+  for (const state of ['initial', 'current', 'pending', 'conflict'])
+    testAsync(`${processing_mode}: history uses exact ${state} result-publication truth, independent of old approval and copy receipts`, async () => {
+      const publication = { state, generation_id: state === 'current' ? 'e'.repeat(32) : null, count: 2, current_revision: 0 };
+      const h = harness({ invoke(command, _args, fallback) {
+        return command === 'get_document_review_history_summary' ? reviewSummary({ processing_mode, approved_count: 0,
+          current_exported_count: 0, recorded_export_count: 3, pending_export_count: 1, pending_confirmation_count: 1,
+          result_publication: publication }) : fallback();
+      } }); await tick();
+      h.model.entries = [{ ...markdownHistoryEntry(B), processing_mode, selected_count: 2, completed_count: 2, failed_count: 0 }];
+      await h.act('nav-history');
+      const opener = h.el(`history-${B}-results`), editor = h.el(`history-${B}-documents`);
+      assert.equal(opener.textContent, 'Ergebnisordner öffnen'); assert.equal(opener.className, 'primary');
+      assert.equal(opener.parent.children.filter(node => node.tagName === 'BUTTON')[0], opener);
+      assert.notEqual(editor.className, 'primary');
+      assert.equal(h.calls.some(call => call.command === 'get_document_review_history_summary'), false);
+      await toggleHistorySummary(h, B);
+      const unsettled = state === 'pending' || state === 'conflict';
+      assert.equal(opener.disabled, unsettled);
+      assert.match(h.el(`history-${B}-summary`).textContent, /3 frühere zusätzliche Kopien mit Beleg/u);
+      if (unsettled) {
+        assert.match(h.el(`history-${B}-state`).textContent, /aktueller Ergebnisstand noch nicht bestätigt/u);
+        assert.match(h.el(`history-${B}-summary`).textContent, /Nachbearbeitung.*Ergebnisstand abgleichen/u);
+        if (processing_mode === 'markdown-and-anonymize') assert.doesNotMatch(h.el(`history-${B}-guide-title`).textContent, /Ergebnisse bereit/u);
+      } else {
+        assert.match(h.el(`history-${B}-summary`).textContent, /Ergebnisdateien erstellt/u);
+        assert.doesNotMatch(h.el(`history-${B}-state`).textContent, /Freigabe.*offen|Export im Abgleich/u);
+      }
+      assert.equal(h.calls.filter(call => call.command === 'get_document_review_history_summary').length, 1);
+      assert.equal(h.calls.some(call => ['publish_result_documents', 'decide_document_review', 'decide_document_review_batch',
+        'preview_document_export', 'export_approved_documents', 'abandon_document_export'].includes(call.command)), false);
+    });
+
+for (const result_publication of [{ state: 'current', generation_id: null, count: 2 },
+  { state: 'current', generation_id: 'e'.repeat(64), count: 2 }, { state: 'initial', generation_id: null, count: 1 },
+  { state: 'current', generation_id: 'e'.repeat(32), count: 2, approved: true }])
+  testAsync(`history rejects malformed result generation without inventing current delivery: ${JSON.stringify(result_publication)}`, async () => {
+    const h = harness({ invoke(command, _args, fallback) {
+      return command === 'get_document_review_history_summary' ? reviewSummary({ result_publication }) : fallback();
+    } }); await tick();
+    h.model.entries = [{ ...markdownHistoryEntry(B), processing_mode: 'markdown-and-anonymize' }];
+    await h.act('nav-history'); await toggleHistorySummary(h, B);
+    assert.match(h.el(`history-${B}-summary`).textContent, /DOCUMENT_REVIEW_INVALID/u);
+    assert.doesNotMatch(h.el(`history-${B}-summary`).textContent, /gespeicherte Ergebnisstände|frühere zusätzliche Kopien mit Beleg/u);
+    assert.equal(h.el(`history-${B}-summary-reload`).disabled, false);
+    noAutomaticDecision(h);
+    assert.equal(h.calls.some(call => ['publish_result_documents', 'preview_document_export'].includes(call.command)), false);
+  });
+
+testAsync('a superseded pending-publication reply cannot replace a newer exact current-generation summary or release its read lock', async () => {
+  let reads = 0, finishOld, finishNew;
+  const oldRead = new Promise(resolve => { finishOld = resolve; }), newRead = new Promise(resolve => { finishNew = resolve; });
+  const h = await finishedAnonymousWorkspace({ invoke(command, _args, fallback) {
+    return command === 'get_document_review_history_summary' ? ++reads === 1 ? oldRead : newRead : fallback();
+  } });
+  await h.act('nav-history'); await openHistoryDisclosure(h, A);
+  h.listeners.get('datasecure-connection')({ payload: { epoch: 1, state: 'ready' } }); await tick();
+  await h.act(`history-${A}-summary-reload`);
+  finishOld(fullCopySummary({ result_publication: { state: 'pending', generation_id: null, count: 2, current_revision: 1 } }));
+  await tick();
+  assert.equal(h.el(`history-${A}-summary`).attrs['aria-busy'], 'true');
+  assert.equal(h.el(`history-${A}-summary-reload`).disabled, true);
+  assert.doesNotMatch(h.el(`history-${A}-state`).textContent, /aktueller Ergebnisstand noch nicht bestätigt/u);
+  finishNew(fullCopySummary({ result_publication: { state: 'current', generation_id: 'e'.repeat(32), count: 2, current_revision: 1 } }));
+  await tick(); await tick();
+  assert.equal(h.el(`history-${A}-summary-reload`).disabled, false);
+  assert.equal(h.el(`history-${A}-results`).disabled, false);
+  assert.match(h.el(`history-${A}-guide-title`).textContent, /Anonymisierte Ergebnisse bereit/u);
+  assert.equal(reads, 2); noAutomaticDecision(h);
+  assert.equal(h.calls.some(call => ['publish_result_documents', 'preview_document_export'].includes(call.command)), false);
 });
 
 done();

@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { readBoundFile, readBoundFileRecord, readBoundFileSnapshot, bindDirectory, assertDirectory } = require('../core/bound-file-io');
+const { readBoundFile, readBoundFileRecord, readBoundFileSnapshot, bindDirectory, assertDirectory, objectIdentity, sameObject } = require('../core/bound-file-io');
 const { ownerRecordIo } = require('./batch-active-lock');
 const { dataRoot } = require('../runtime');
 const { safeResolvePackage, readVerifiedFile } = require('./package-store');
@@ -28,6 +28,11 @@ const SCHEMA = 'datasecure-result-export/2';
 const MARKDOWN_SCHEMA = 'datasecure-result-export/4';
 const CONTENT_MARKDOWN_SCHEMA = 'datasecure-result-export/5';
 const CONTENT_ANONYMIZED_SCHEMA = 'datasecure-result-export/6';
+const RESULT_LAYOUT = 'datasecure-visible-markdown/1';
+const INITIAL_BINDING_BYTES = 1024 * 1024;
+// Up to 200 quoted pairs of 1024-code-unit Unicode source/result paths.
+// Mapping contents are private and do not share the smaller binding budget.
+const PRIVATE_MAPPING_BYTES = 4 * 1024 * 1024;
 const LEGACY_MARKDOWN_SCHEMA = 'datasecure-result-export/3';
 const isMarkdownRecord = value => [CONTENT_MARKDOWN_SCHEMA, MARKDOWN_SCHEMA, LEGACY_MARKDOWN_SCHEMA].includes(value?.schema);
 const LEGACY_SCHEMA = 'datasecure-result-export/1';
@@ -59,7 +64,16 @@ function comparablePath(value) {
   const resolved = path.resolve(value);
   return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
 }
-function bindPlainDirectory(directory, parent = null) {
+function bindPlainDirectory(directory, parent = null, exact = false) {
+  if (exact || parent?.exact === true) {
+    if (parent) assertDirectoryBinding(parent);
+    const bound = bindDirectory(directory);
+    if (bound.chain[0].alias || parent && comparablePath(path.dirname(bound.real)) !== comparablePath(parent.real))
+      throw new Error('RESULT_EXPORT_PATH_UNSAFE');
+    assertDirectory(bound);
+    if (parent) assertDirectoryBinding(parent);
+    return exactDirectory(bound);
+  }
   const named = fs.lstatSync(directory);
   const opened = fs.statSync(directory);
   const real = fs.realpathSync.native(directory);
@@ -71,7 +85,20 @@ function bindPlainDirectory(directory, parent = null) {
   }
   return { path: directory, real: path.resolve(real), dev: String(opened.dev), ino: String(opened.ino), birthtime: String(Math.trunc(opened.birthtimeMs)) };
 }
+function exactDirectory(bound) {
+  const identity = bound.chain[0].identity;
+  return { path: bound.path, real: bound.real, dev: identity.dev, ino: identity.ino,
+    birthtime: identity.birth, exact: true, directory: bound };
+}
 function assertDirectoryBinding(binding, parent = null) {
+  if (binding.exact === true) {
+    assertDirectory(binding.directory);
+    if (parent) {
+      assertDirectoryBinding(parent);
+      if (comparablePath(path.dirname(binding.real)) !== comparablePath(parent.real)) throw new Error('RESULT_EXPORT_PATH_UNSAFE');
+    }
+    return binding;
+  }
   const current = bindPlainDirectory(binding.path, parent);
   if (current.dev !== binding.dev || current.ino !== binding.ino || current.birthtime !== binding.birthtime ||
       comparablePath(current.real) !== comparablePath(binding.real)) throw new Error('RESULT_EXPORT_PATH_UNSAFE');
@@ -308,7 +335,9 @@ function validRecord(value) {
   if (!legacy && Object.hasOwn(value || {}, 'stopped_items')) topLevelKeys.push('stopped_items');
   if (converting || value?.schema === CONTENT_ANONYMIZED_SCHEMA) topLevelKeys.push('processing_mode');
   if (contentBound) topLevelKeys.push('content_options', 'batch_id');
+  if (Object.hasOwn(value || {}, 'result_layout')) topLevelKeys.push('result_layout');
   return exactKeys(value, topLevelKeys) &&
+    (!Object.hasOwn(value, 'result_layout') || contentBound && value.product_channel === 'standalone' && value.result_layout === RESULT_LAYOUT) &&
     [SCHEMA, LEGACY_SCHEMA, MARKDOWN_SCHEMA, LEGACY_MARKDOWN_SCHEMA, CONTENT_MARKDOWN_SCHEMA, CONTENT_ANONYMIZED_SCHEMA].includes(value.schema) &&
     (value.schema !== CONTENT_ANONYMIZED_SCHEMA || value.product_channel === 'standalone' &&
       value.processing_mode === 'markdown-and-anonymize') &&
@@ -576,7 +605,9 @@ function activeDestination(record, options = {}) {
   const root = readConfiguredResultRoot();
   if (!root) return null;
   const checked = inspectRoot(root);
-  const rootBinding = bindPlainDirectory(checked.root);
+  const exact = record?.result_layout === RESULT_LAYOUT;
+  const rootBinding = bindPlainDirectory(checked.root, null, exact);
+  assertDirectoryBinding(rootBinding);
   let outputPath;
   if (options.create === false) {
     outputPath = path.join(checked.root, isMarkdownRecord(record) ? 'DataSecure-Markdown' : 'DataSecure-Output');
@@ -584,12 +615,15 @@ function activeDestination(record, options = {}) {
     outputPath = path.join(checked.root, 'DataSecure-Markdown');
     if (!fs.existsSync(outputPath)) fs.mkdirSync(outputPath, { mode: 0o700 });
   } else outputPath = resultOutputDirectory({ root: checked.root });
+  assertDirectoryBinding(rootBinding);
   const outputBinding = bindPlainDirectory(outputPath, rootBinding);
   const legacyMaterial = `${checked.root}\0${checked.identity.dev}\0${checked.identity.ino}\0${checked.identity.birthtime_ms}`;
-  const material = `${legacyMaterial}\0${outputBinding.real}\0${outputBinding.dev}\0${outputBinding.ino}\0${outputBinding.birthtime}`;
+  const material = exact ? JSON.stringify({ schema: 'datasecure-result-destination/exact-1',
+    root: serialDirectory(rootBinding.directory), output: serialDirectory(outputBinding.directory) }) :
+    `${legacyMaterial}\0${outputBinding.real}\0${outputBinding.dev}\0${outputBinding.ino}\0${outputBinding.birthtime}`;
   return {
     id: crypto.createHash('sha256').update(material).digest('hex'),
-    legacyId: crypto.createHash('sha256').update(legacyMaterial).digest('hex'),
+    legacyId: exact ? null : crypto.createHash('sha256').update(legacyMaterial).digest('hex'),
     root: rootBinding,
     output: outputBinding
   };
@@ -675,6 +709,7 @@ function* ensureRecordSteps(state) {
     complete: items.length === 0 && stoppedItems.length === 0, destination_id: '', product_channel: state.product_channel,
     ...(converting || contentOptions ? { processing_mode: state.processing_mode } : {}),
     ...(contentOptions ? { content_options: contentOptions, batch_id: state.token } : {}),
+    ...(contentOptions && state.product_channel === 'standalone' ? { result_layout: RESULT_LAYOUT } : {}),
     ...(stoppedItems.length ? { stopped_items: stoppedItems } : {}) };
   writeRecord(target, value);
   return { target, value };
@@ -770,18 +805,147 @@ function completedContentAnonymizedExportMatches(state, record) {
     return JSON.stringify(stopped) === JSON.stringify(record.stopped_items || []);
   } catch { return false; }
 }
-function ensurePlainDirectory(destination, name) {
+function presentEntry(target) {
+  try { fs.lstatSync(target); return true; }
+  catch (error) { if (error?.code === 'ENOENT') return false; throw error; }
+}
+// New-layout progress is immutable, private and published while the existing
+// result claim is held. A mkdir/link without its durable anchor is uncertain:
+// recovery never upgrades a same-name or same-byte foreign object into ours.
+function initialProgress(record, destination) {
+  if (record.result_layout !== RESULT_LAYOUT) return null;
+  if (!destination.root.exact || !destination.output.exact || record.destination_id !== destination.id ||
+      !/^[a-f0-9]{64}$/u.test(record.batch_id || ''))
+    throw resultExportFailure('RESULT_EXPORT_STATE_UNSAFE');
+  const parent = ensurePrivateDirectory(dataRoot(), 'result-publication-progress');
+  const directory = ensurePrivateDirectory(parent, record.batch_id), privateBinding = bindDirectory(directory);
+  const work = createPrivateWorkStore({ privateRoot: directory, maxBytes: INITIAL_BINDING_BYTES,
+    expectedRootIdentity: privateBinding.chain[0].identity });
+  const expected = { schema: 'datasecure-initial-progress/1', batch_id: record.batch_id,
+    plan_sha256: exportPlanDigest(record), destination_id: record.destination_id,
+    root: serialDirectory(destination.root.directory), output: serialDirectory(destination.output.directory) };
+  const assert = () => { assertDirectory(privateBinding); assertDirectoryBinding(destination.root);
+    assertDirectoryBinding(destination.output, destination.root); };
+  const read = name => {
+    assert(); const target = path.join(directory, name);
+    if (!presentEntry(target)) return null;
+    const bytes = work.readFile(target); assert();
+    try { return JSON.parse(bytes); } catch { throw resultExportFailure('RESULT_EXPORT_STATE_UNSAFE'); }
+  };
+  const put = (name, value) => {
+    const bytes = Buffer.from(JSON.stringify(value)); assert();
+    const target = path.join(directory, name);
+    if (!presentEntry(target)) work.writeFile(target, bytes);
+    if (!work.readFile(target).equals(bytes)) throw resultExportFailure('RESULT_EXPORT_STATE_CONFLICT');
+    assert();
+  };
+  const begin = (name, value) => {
+    const target = path.join(directory, name), bytes = Buffer.from(JSON.stringify(value));
+    assert();
+    // Unlike an idempotent success record, an attempt may only be minted by
+    // this call. A previous attempt without success is permanently uncertain,
+    // including after somebody removes its public object outside the app.
+    if (presentEntry(target)) throw resultExportFailure('RESULT_EXPORT_STATE_UNSAFE');
+    work.writeFile(target, bytes);
+    if (!work.readFile(target).equals(bytes)) throw resultExportFailure('RESULT_EXPORT_STATE_CONFLICT');
+    assert();
+  };
+  const saved = read('intent.json');
+  if (saved) {
+    if (JSON.stringify(saved) !== JSON.stringify(expected)) throw resultExportFailure('RESULT_EXPORT_DESTINATION_CHANGED');
+  } else {
+    if (exportedCount(record) > 0 || presentEntry(path.join(destination.output.path, record.run_directory)))
+      throw resultExportFailure('RESULT_EXPORT_STATE_UNSAFE');
+    put('intent.json', expected);
+  }
+  return { record, destination, assert, read, put, begin, plan: expected.plan_sha256 };
+}
+function initialDirectory(progress, parent, target, create) {
+  const relative = path.relative(progress.destination.output.path, target);
+  if (!relative || path.isAbsolute(relative) || relative === '..' || relative.startsWith(`..${path.sep}`) ||
+      relative.split(path.sep)[0] !== progress.record.run_directory) throw resultExportFailure('RESULT_EXPORT_PATH_UNSAFE');
+  const key = `directory-${crypto.createHash('sha256').update(relative).digest('hex')}.json`;
+  const saved = progress.read(key);
+  if (saved) {
+    if (!exactKeys(saved, ['schema', 'batch_id', 'plan_sha256', 'relative', 'directory']) ||
+        saved.schema !== 'datasecure-initial-directory/1' || saved.batch_id !== progress.record.batch_id ||
+        saved.plan_sha256 !== progress.plan || saved.relative !== relative || saved.directory?.path !== target ||
+        JSON.stringify(serialDirectory(bindDirectory(target))) !== JSON.stringify(saved.directory))
+      throw resultExportFailure('RESULT_EXPORT_STATE_CONFLICT');
+    const bound = exactDirectory({ ...saved.directory, io: fs }); assertDirectoryBinding(bound, parent); return bound;
+  }
+  const attemptKey = key.replace('directory-', 'directory-attempt-');
+  if (!create || progress.read(attemptKey) || presentEntry(target)) throw resultExportFailure('RESULT_EXPORT_STATE_UNSAFE');
+  // ABI1 guards this synchronous section at the already selected OUTPUT
+  // container, never the shareable run. Native owner/ACL/ancestry admission
+  // excludes ordinary other accounts while mkdir->first-bind is in progress.
+  // No fallback or rights repair: acquire/assert/release/close errors propagate.
+  // Node still has no portable mkdirat/openat capability. Hostile same-UID/RAM
+  // mutation is outside the documented boundary, not an atomic-handle claim.
+  return require('../core/ownership-control').withOwnershipControl(progress.destination.output.path, guard => {
+    guard.assertHeld(); progress.assert(); assertDirectoryBinding(parent);
+    if (progress.read(attemptKey) || presentEntry(target)) throw resultExportFailure('RESULT_EXPORT_STATE_UNSAFE');
+    progress.begin(attemptKey, { schema: 'datasecure-initial-directory-attempt/1', batch_id: progress.record.batch_id,
+      plan_sha256: progress.plan, relative, parent: serialDirectory(parent.directory) });
+    guard.assertHeld(); progress.assert(); assertDirectoryBinding(parent);
+    fs.mkdirSync(target, { mode: 0o700 });
+    guard.assertHeld(); progress.assert(); assertDirectoryBinding(parent);
+    const bound = bindPlainDirectory(target, parent);
+    syncParentDirectory(target, fs, process.platform);
+    guard.assertHeld(); progress.assert(); assertDirectoryBinding(bound, parent);
+    progress.put(key, { schema: 'datasecure-initial-directory/1', batch_id: progress.record.batch_id,
+      plan_sha256: progress.plan, relative, directory: serialDirectory(bound.directory) });
+    guard.assertHeld(); progress.assert(); assertDirectoryBinding(bound, parent);
+    return bound;
+  });
+}
+function initialLeafParent(progress, run, name) {
+  let parent = run;
+  for (const segment of name.split('/').slice(0, -1))
+    parent = initialDirectory(progress, parent, path.join(parent.path, segment), false);
+  return parent;
+}
+function initialLeafKey(name) { return `file-${crypto.createHash('sha256').update(name).digest('hex')}.json`; }
+function initialLeafAttemptKey(name) { return initialLeafKey(name).replace('file-', 'file-attempt-'); }
+function inspectInitialLeaf(progress, run, item, expected = progress.read(initialLeafKey(item.file))) {
+  if (!expected || !exactKeys(expected, ['schema', 'batch_id', 'plan_sha256', 'name', 'sha256', 'identity']) ||
+      expected.schema !== 'datasecure-initial-file/1' || expected.batch_id !== progress.record.batch_id ||
+      expected.plan_sha256 !== progress.plan || expected.name !== item.file || expected.sha256 !== item.sha256)
+    throw resultExportFailure('RESULT_EXPORT_STATE_UNSAFE');
+  const parent = initialLeafParent(progress, run, item.file);
+  const actual = readBoundFileRecord(path.join(run.path, item.file), { directory: parent.directory,
+    maximum: 32 * 1024 * 1024, checkCtime: true,
+    validateParents: () => { progress.assert(); assertDirectoryBinding(run); assertDirectoryBinding(parent); } });
+  if (JSON.stringify(actual.identity) !== JSON.stringify(expected.identity) ||
+      crypto.createHash('sha256').update(actual.bytes).digest('hex') !== item.sha256)
+    throw resultExportFailure('RESULT_EXPORT_CONFLICT');
+  return actual;
+}
+function recordInitialLeaf(progress, run, item, originalIdentity) {
+  const parent = initialLeafParent(progress, run, item.file);
+  const actual = readBoundFileRecord(path.join(run.path, item.file), { directory: parent.directory,
+    maximum: 32 * 1024 * 1024, checkCtime: true,
+    validateParents: () => { progress.assert(); assertDirectoryBinding(run); assertDirectoryBinding(parent); } });
+  if (['dev', 'ino', 'birth'].some(key => actual.identity[key] !== originalIdentity[key]) ||
+      crypto.createHash('sha256').update(actual.bytes).digest('hex') !== item.sha256)
+    throw resultExportFailure('RESULT_EXPORT_VERIFY_FAILED');
+  progress.put(initialLeafKey(item.file), { schema: 'datasecure-initial-file/1', batch_id: progress.record.batch_id,
+    plan_sha256: progress.plan, name: item.file, sha256: item.sha256, identity: actual.identity });
+  inspectInitialLeaf(progress, run, item);
+}
+function ensurePlainDirectory(destination, name, progress = null) {
   assertDirectoryBinding(destination.root);
   assertDirectoryBinding(destination.output, destination.root);
   const parent = destination.output.path;
   const target = path.join(parent, name);
   if (path.dirname(target) !== parent || name === '.' || name === '..' || /[\\/\0]/u.test(name)) throw new Error('RESULT_EXPORT_PATH_UNSAFE');
+  if (progress) return initialDirectory(progress, destination.output, target, true);
   if (!fs.existsSync(target)) fs.mkdirSync(target, { mode: 0o700 });
   assertDirectoryBinding(destination.root);
   assertDirectoryBinding(destination.output, destination.root);
   return bindPlainDirectory(target, destination.output);
 }
-function ensureResultParent(destination, run, relativeFile) {
+function ensureResultParent(destination, run, relativeFile, progress = null) {
   if (!validResultFile(relativeFile)) throw new Error('RESULT_EXPORT_PATH_UNSAFE');
   assertDirectoryBinding(destination.root);
   assertDirectoryBinding(destination.output, destination.root);
@@ -792,17 +956,20 @@ function ensureResultParent(destination, run, relativeFile) {
     assertDirectoryBinding(parent, parent.path === run.path ? destination.output : null);
     const target = path.join(parent.path, segment);
     if (path.dirname(target) !== parent.path) throw new Error('RESULT_EXPORT_PATH_UNSAFE');
-    if (!fs.existsSync(target)) fs.mkdirSync(target, { mode: 0o700 });
-    parent = bindPlainDirectory(target, parent);
+    if (progress) parent = initialDirectory(progress, parent, target, true);
+    else {
+      if (!fs.existsSync(target)) fs.mkdirSync(target, { mode: 0o700 });
+      parent = bindPlainDirectory(target, parent);
+    }
   }
   assertDirectoryBinding(parent, parent.path === run.path ? destination.output : null);
   return { parent, leaf, target: path.join(parent.path, leaf) };
 }
-function* exportOneSteps(destination, run, item, contentOptions, contentRecord) {
+function* exportOneSteps(destination, run, item, contentOptions, contentRecord, progress = null) {
   assertDirectoryBinding(destination.root);
   assertDirectoryBinding(destination.output, destination.root);
   assertDirectoryBinding(run, destination.output);
-  const resolvedTarget = ensureResultParent(destination, run, item.file);
+  const resolvedTarget = ensureResultParent(destination, run, item.file, progress);
   const target = resolvedTarget.target;
   assertDirectoryBinding(resolvedTarget.parent);
   const validateParents = () => {
@@ -811,7 +978,11 @@ function* exportOneSteps(destination, run, item, contentOptions, contentRecord) 
     assertDirectoryBinding(run, destination.output);
     assertDirectoryBinding(resolvedTarget.parent);
   };
-  if (fs.existsSync(target)) {
+  if (progress) {
+    const saved = progress.read(initialLeafKey(item.file));
+    if (saved) { inspectInitialLeaf(progress, run, item, saved); return false; }
+    if (progress.read(initialLeafAttemptKey(item.file)) || presentEntry(target)) throw resultExportFailure('RESULT_EXPORT_STATE_UNSAFE');
+  } else if (fs.existsSync(target)) {
     try {
       const existing = readBoundFile(target, { maximum: 32 * 1024 * 1024, maxLinks: 2, validateParents });
       if (crypto.createHash('sha256').update(existing).digest('hex') !== item.sha256) throw new Error('conflict');
@@ -840,8 +1011,15 @@ function* exportOneSteps(destination, run, item, contentOptions, contentRecord) 
   }
   const expected = crypto.createHash('sha256').update(bytes).digest('hex');
   if (expected !== m.document_sha256 || expected !== item.sha256) throw new Error('RESULT_EXPORT_SOURCE_INVALID');
+  if (progress) {
+    validateParents();
+    progress.begin(initialLeafAttemptKey(item.file), { schema: 'datasecure-initial-file-attempt/1',
+      batch_id: progress.record.batch_id, plan_sha256: progress.plan, name: item.file, sha256: item.sha256,
+      bytes: bytes.length, parent: serialDirectory(resolvedTarget.parent.directory) });
+    validateParents();
+  }
   const temporary = path.join(resolvedTarget.parent.path, `.${resolvedTarget.leaf}.${crypto.randomBytes(6).toString('hex')}.tmp`);
-  let descriptor;
+  let descriptor, originalIdentity;
   try {
     assertDirectoryBinding(destination.root);
     assertDirectoryBinding(destination.output, destination.root);
@@ -850,10 +1028,14 @@ function* exportOneSteps(destination, run, item, contentOptions, contentRecord) 
     descriptor = fs.openSync(temporary, fs.constants.O_WRONLY | fs.constants.O_CREAT | fs.constants.O_EXCL | (fs.constants.O_NOFOLLOW || 0), 0o600);
     writeFully(descriptor, bytes, fs);
     fs.fsyncSync(descriptor);
-    const opened = fs.fstatSync(descriptor);
-    const named = fs.lstatSync(temporary);
-    if (!opened.isFile() || !named.isFile() || named.isSymbolicLink() || opened.nlink !== 1 || named.nlink !== 1 ||
-        opened.dev !== named.dev || opened.ino !== named.ino) throw new Error('RESULT_EXPORT_PATH_UNSAFE');
+    const opened = fs.fstatSync(descriptor, progress ? { bigint: true } : undefined);
+    const named = fs.lstatSync(temporary, progress ? { bigint: true } : undefined);
+    const one = progress ? 1n : 1;
+    if (!opened.isFile() || !named.isFile() || named.isSymbolicLink() || opened.nlink !== one || named.nlink !== one ||
+        opened.dev !== named.dev || opened.ino !== named.ino || progress &&
+        (opened.birthtimeNs !== named.birthtimeNs || opened.mtimeNs !== named.mtimeNs || opened.ctimeNs !== named.ctimeNs || opened.size !== named.size))
+      throw new Error('RESULT_EXPORT_PATH_UNSAFE');
+    if (progress) originalIdentity = objectIdentity(opened);
     fs.closeSync(descriptor);
     descriptor = undefined;
     assertDirectoryBinding(destination.root);
@@ -864,11 +1046,15 @@ function* exportOneSteps(destination, run, item, contentOptions, contentRecord) 
     // a file created after the earlier existence check on POSIX. A same-volume
     // hard link is an atomic create-if-absent operation on all release targets.
     linkWithTransientRetry(temporary, target);
-    const linkedTemporary = fs.lstatSync(temporary);
-    const linkedTarget = fs.lstatSync(target);
+    const linkedTemporary = fs.lstatSync(temporary, progress ? { bigint: true } : undefined);
+    const linkedTarget = fs.lstatSync(target, progress ? { bigint: true } : undefined);
+    const two = progress ? 2n : 2;
     if (!linkedTemporary.isFile() || !linkedTarget.isFile() || linkedTemporary.isSymbolicLink() ||
-        linkedTarget.isSymbolicLink() || linkedTemporary.nlink !== 2 || linkedTarget.nlink !== 2 ||
-        linkedTemporary.dev !== linkedTarget.dev || linkedTemporary.ino !== linkedTarget.ino) {
+        linkedTarget.isSymbolicLink() || linkedTemporary.nlink !== two || linkedTarget.nlink !== two ||
+        linkedTemporary.dev !== linkedTarget.dev || linkedTemporary.ino !== linkedTarget.ino || progress &&
+        (!sameObject(linkedTemporary, originalIdentity) || !sameObject(linkedTarget, originalIdentity) ||
+          linkedTemporary.mtimeNs !== opened.mtimeNs || linkedTarget.mtimeNs !== opened.mtimeNs ||
+          linkedTemporary.size !== opened.size || linkedTarget.size !== opened.size)) {
       throw new Error('RESULT_EXPORT_VERIFY_FAILED');
     }
     fs.unlinkSync(temporary);
@@ -881,18 +1067,24 @@ function* exportOneSteps(destination, run, item, contentOptions, contentRecord) 
       const written = readBoundFile(target, { maximum: bytes.length, minimum: bytes.length, maxLinks: 2, validateParents });
       if (crypto.createHash('sha256').update(written).digest('hex') !== expected) throw new Error('verify');
     } catch { throw new Error('RESULT_EXPORT_VERIFY_FAILED'); }
+    if (progress) recordInitialLeaf(progress, run, item, originalIdentity);
     return true;
   } finally {
     try { if (descriptor !== undefined) fs.closeSync(descriptor); } catch {}
-    try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch {}
+    try {
+      if (progress) {
+        validateParents();
+        if (originalIdentity && sameObject(fs.lstatSync(temporary, { bigint: true }), originalIdentity)) fs.unlinkSync(temporary);
+      } else if (fs.existsSync(temporary)) fs.unlinkSync(temporary);
+    } catch {}
   }
 }
-function exportOne(destination, run, item, contentOptions, contentRecord) {
-  return runSynchronousSteps(exportOneSteps(destination, run, item, contentOptions, contentRecord), operation =>
+function exportOne(destination, run, item, contentOptions, contentRecord, progress) {
+  return runSynchronousSteps(exportOneSteps(destination, run, item, contentOptions, contentRecord, progress), operation =>
     require('./standalone-document-review-store').createDocumentReviewStore().publicationExpectation(operation.batchId, operation.documentId));
 }
-function exportOneAsync(destination, run, item, contentOptions, contentRecord) {
-  return runAsyncSteps(exportOneSteps(destination, run, item, contentOptions, contentRecord), operation =>
+function exportOneAsync(destination, run, item, contentOptions, contentRecord, progress) {
+  return runAsyncSteps(exportOneSteps(destination, run, item, contentOptions, contentRecord, progress), operation =>
     require('./standalone-document-review-store').createDocumentReviewStore().publicationExpectationAsync(operation.batchId, operation.documentId));
 }
 function visibleMappingBytes(record) {
@@ -1040,11 +1232,12 @@ function* exportOpenItemsSteps(target, record, destination) {
       writeRecord(target, current);
     } else throw new Error('RESULT_EXPORT_DESTINATION_CHANGED');
   }
-  const run = ensurePlainDirectory(destination, current.run_directory);
+  const progress = initialProgress(current, destination);
+  const run = ensurePlainDirectory(destination, current.run_directory, progress);
   for (let index = 0; index < current.items.length; index++) {
     const item = current.items[index];
     if (item.exported === true) continue;
-    yield { destination, run, item, contentOptions: current.schema === CONTENT_MARKDOWN_SCHEMA ? current.content_options : undefined, record: current };
+    yield { destination, run, item, contentOptions: current.schema === CONTENT_MARKDOWN_SCHEMA ? current.content_options : undefined, record: current, progress };
     const items = current.items.map((entry, position) => position === index ? { ...planItem(entry), exported: true } : entry);
     current = { ...current, items };
     writeRecord(target, current);
@@ -1053,10 +1246,11 @@ function* exportOpenItemsSteps(target, record, destination) {
     // Pure conversion keeps the original basename and therefore needs no
     // source-to-result ledger. Older v3 plans retain their already promised
     // mapping; anonymization plans continue to publish it unchanged.
-    if (current.product_channel === 'standalone' && ![MARKDOWN_SCHEMA, CONTENT_MARKDOWN_SCHEMA].includes(current.schema) &&
+    if (current.result_layout !== RESULT_LAYOUT && current.product_channel === 'standalone' && ![MARKDOWN_SCHEMA, CONTENT_MARKDOWN_SCHEMA].includes(current.schema) &&
         (current.schema === LEGACY_MARKDOWN_SCHEMA || current.items.length > 0)) {
       exportVisibleMapping(destination, run, current);
     }
+    if (current.result_layout === RESULT_LAYOUT) captureInitialResultBinding(current, run, progress);
     current = { ...current, complete: true };
     writeRecord(target, current);
     try {
@@ -1069,11 +1263,130 @@ function* exportOpenItemsSteps(target, record, destination) {
 
 function exportOpenItems(target, record, destination) {
   return runSynchronousSteps(exportOpenItemsSteps(target, record, destination), operation =>
-    exportOne(operation.destination, operation.run, operation.item, operation.contentOptions, operation.record));
+    exportOne(operation.destination, operation.run, operation.item, operation.contentOptions, operation.record, operation.progress));
 }
 function exportOpenItemsAsync(target, record, destination) {
   return runAsyncSteps(exportOpenItemsSteps(target, record, destination), operation =>
-    exportOneAsync(operation.destination, operation.run, operation.item, operation.contentOptions, operation.record));
+    exportOneAsync(operation.destination, operation.run, operation.item, operation.contentOptions, operation.record, operation.progress));
+}
+function resultBindingPath(batchId) {
+  if (!/^[a-f0-9]{64}$/u.test(batchId || '')) throw resultExportFailure('RESULT_EXPORT_STATE_UNSAFE');
+  return path.join(dataRoot(), 'result-publication-bindings', `${batchId}.json`);
+}
+function serialDirectory(binding) {
+  return { path: binding.path, real: binding.real, chain: binding.chain, platform: binding.platform };
+}
+function assertInitialInventory(directory, files) {
+  const expectedFiles = new Set(files.map(file => file.name)), expectedDirectories = new Set();
+  for (const name of expectedFiles) {
+    const segments = name.split('/');
+    for (let index = 1; index < segments.length; index++) expectedDirectories.add(segments.slice(0, index).join('/'));
+  }
+  const pending = [{ folder: directory.path, prefix: '' }], actualFiles = [];
+  while (pending.length) {
+    const { folder, prefix } = pending.pop(), bound = bindDirectory(folder);
+    assertDirectory(directory);
+    for (const entry of fs.readdirSync(folder, { withFileTypes: true })) {
+      const name = prefix + entry.name;
+      if (entry.isSymbolicLink()) throw resultExportFailure('RESULT_EXPORT_CONFLICT');
+      if (entry.isDirectory() && expectedDirectories.has(name)) pending.push({ folder: path.join(folder, entry.name), prefix: name + '/' });
+      else if (entry.isFile() && expectedFiles.has(name)) actualFiles.push(name);
+      else throw resultExportFailure('RESULT_EXPORT_CONFLICT');
+    }
+    assertDirectory(bound); assertDirectory(directory);
+  }
+  if (JSON.stringify(actualFiles.sort()) !== JSON.stringify([...expectedFiles].sort())) throw resultExportFailure('RESULT_EXPORT_CONFLICT');
+  assertDirectory(directory);
+}
+function writePrivateResultMapping(directory, batchId, mapping) {
+  const mappingFile = path.join(directory, `${batchId}-Zuordnung.csv`);
+  const mappingWork = createPrivateWorkStore({ privateRoot: directory, maxBytes: PRIVATE_MAPPING_BYTES });
+  if (presentEntry(mappingFile)) {
+    if (!mappingWork.readFile(mappingFile).equals(mapping)) throw resultExportFailure('RESULT_EXPORT_MAPPING_CONFLICT');
+  } else mappingWork.writeFile(mappingFile, mapping);
+  if (!mappingWork.readFile(mappingFile).equals(mapping)) throw resultExportFailure('RESULT_EXPORT_MAPPING_CONFLICT');
+}
+function captureInitialResultBinding(record, run, progress) {
+  if (!progress || !run.exact) throw resultExportFailure('RESULT_EXPORT_STATE_UNSAFE');
+  const runPath = run.path, directory = run.directory;
+  progress.assert(); assertDirectoryBinding(run);
+  const files = record.items.map(item => {
+    const target = path.resolve(runPath, item.file), relative = path.relative(runPath, target);
+    if (path.isAbsolute(relative) || relative === '..' || relative.startsWith(`..${path.sep}`)) throw resultExportFailure('RESULT_EXPORT_PATH_UNSAFE');
+    const file = inspectInitialLeaf(progress, run, item);
+    if (crypto.createHash('sha256').update(file.bytes).digest('hex') !== item.sha256) throw resultExportFailure('RESULT_EXPORT_VERIFY_FAILED');
+    return { document_id: (item.artifact_id || item.package_id).slice(3), name: item.file,
+      sha256: item.sha256, identity: file.identity };
+  });
+  assertInitialInventory(directory, files);
+  const target = resultBindingPath(record.batch_id);
+  ensurePrivateDirectory(dataRoot(), 'result-publication-bindings');
+  const bytes = Buffer.from(JSON.stringify({ schema: 'datasecure-initial-results/1', batch_id: record.batch_id,
+    processing_mode: record.processing_mode, result_layout: RESULT_LAYOUT,
+    root: path.dirname(path.dirname(runPath)), directory: serialDirectory(directory), files }));
+  const work = createPrivateWorkStore({ privateRoot: path.dirname(target), maxBytes: INITIAL_BINDING_BYTES });
+  let existing;
+  let present = true;
+  try { fs.lstatSync(target); } catch (error) { if (error?.code !== 'ENOENT') throw error; present = false; }
+  progress.assert(); assertDirectoryBinding(run);
+  if (present) existing = work.readFile(target);
+  if (existing) { if (!existing.equals(bytes)) throw resultExportFailure('RESULT_EXPORT_STATE_CONFLICT'); }
+  else work.writeFile(target, bytes);
+  if (!work.readFile(target).equals(bytes)) throw resultExportFailure('RESULT_EXPORT_VERIFY_FAILED');
+  progress.assert(); assertDirectoryBinding(run);
+  if (record.processing_mode !== 'markdown-only') {
+    writePrivateResultMapping(path.dirname(target), record.batch_id, visibleMappingBytes(record));
+  }
+  progress.assert(); assertDirectoryBinding(run);
+}
+// No publication, provisioning or adoption on this reader. Full BigInt object
+// and leaf identities were captured by the original publishing transaction.
+function initialResultPublication(batchId, verifyFiles = true) {
+  if (!/^[a-f0-9]{64}$/u.test(batchId || '')) throw resultExportFailure('RESULT_EXPORT_STATE_UNSAFE');
+  const target = path.join(dataRoot(), 'result-export-state', `re_${crypto.createHash('sha256').update(batchId).digest('hex').slice(0, 32)}.json`);
+  try { fs.lstatSync(target); } catch (error) { if (error?.code === 'ENOENT') return null; throw error; }
+  const record = readRecord(target, { expectedBatchId: batchId });
+  if (record.result_layout !== RESULT_LAYOUT) return null; // never reinterpret old user folders
+  if (record.batch_id !== batchId || !record.complete || !record.items.length || record.items.some(item => item.exported !== true))
+    throw resultExportFailure('RESULT_EXPORT_STATE_UNSAFE');
+  const bytes = readBoundFile(resultBindingPath(batchId), { maximum: INITIAL_BINDING_BYTES, minimum: 1 });
+  const value = JSON.parse(bytes);
+  if (!exactKeys(value, ['schema', 'batch_id', 'processing_mode', 'result_layout', 'root', 'directory', 'files']) ||
+      value.schema !== 'datasecure-initial-results/1' || value.batch_id !== batchId || value.processing_mode !== record.processing_mode ||
+      value.result_layout !== RESULT_LAYOUT || typeof value.root !== 'string' || !path.isAbsolute(value.root) ||
+      !exactKeys(value.directory, ['path', 'real', 'chain', 'platform']) || value.directory.platform !== process.platform ||
+      typeof value.directory.real !== 'string' || !Array.isArray(value.directory.chain) || value.directory.chain.length === 0 ||
+      !Array.isArray(value.files) || value.directory.path !== path.join(value.root,
+        isMarkdownRecord(record) ? 'DataSecure-Markdown' : 'DataSecure-Output', record.run_directory) ||
+      value.files.length !== record.items.length || value.files.some((file, index) =>
+        !exactKeys(file, ['document_id', 'name', 'sha256', 'identity']) || file.name !== record.items[index].file ||
+        file.sha256 !== record.items[index].sha256 || file.document_id !== (record.items[index].artifact_id || record.items[index].package_id).slice(3)))
+    throw resultExportFailure('RESULT_EXPORT_STATE_UNSAFE');
+  if (verifyFiles) {
+    const directory = { ...value.directory, io: fs };
+    if (JSON.stringify(serialDirectory(bindDirectory(directory.path))) !== JSON.stringify(value.directory)) throw resultExportFailure('RESULT_EXPORT_CONFLICT');
+    assertDirectory(directory);
+    for (const file of value.files) {
+      const actual = readBoundFileRecord(path.join(directory.path, file.name), { maximum: 32 * 1024 * 1024,
+        checkCtime: true, validateParents: () => assertDirectory(directory) });
+      if (JSON.stringify(actual.identity) !== JSON.stringify(file.identity) ||
+          crypto.createHash('sha256').update(actual.bytes).digest('hex') !== file.sha256)
+        throw resultExportFailure('RESULT_EXPORT_CONFLICT');
+    }
+    // Initial results are reusable Markdown just like later generations. The
+    // opener must not silently include user-added private files or follow a
+    // replaced/symlinked subtree. Walk only the finite promised folder set.
+    assertInitialInventory(directory, value.files);
+  }
+  return { ...value, binding_sha256: crypto.createHash('sha256').update(bytes).digest('hex') };
+}
+function privateResultLedger(batchId) {
+  const initial = initialResultPublication(batchId, false);
+  if (!initial || initial.processing_mode === 'markdown-only') return null;
+  const target = path.join(path.dirname(resultBindingPath(batchId)), `${batchId}-Zuordnung.csv`);
+  const record = readRecord(path.join(dataRoot(), 'result-export-state', `re_${crypto.createHash('sha256').update(batchId).digest('hex').slice(0, 32)}.json`), { expectedBatchId: batchId });
+  if (!readBoundFile(target, { maximum: PRIVATE_MAPPING_BYTES }).equals(visibleMappingBytes(record))) throw resultExportFailure('RESULT_EXPORT_MAPPING_CONFLICT');
+  return target;
 }
 function visibleExportStatus(token, expectedReleased = 0) {
   const expected = Number.isSafeInteger(expectedReleased) && expectedReleased >= 0 ? expectedReleased : 0;
@@ -1122,6 +1435,11 @@ function visibleExportDirectory(token) {
 }
 function publishStandaloneIdentityIfPossible(state) {
   if (state?.product_channel !== 'standalone' || state.processing_mode === 'markdown-only') return;
+  // New result folders contain reusable Markdown only. Private re-identification
+  // aids remain available through the local mapping action, never beside MD.
+  try { if (readRecord(recordPath(state.token)).result_layout === RESULT_LAYOUT) {
+    identityLedger.materialize(state); return;
+  } } catch { return; }
   try {
     const runPath = visibleExportDirectory(state.token);
     if (!runPath) return;
@@ -1333,6 +1651,7 @@ function standaloneExportHistoryRow(target, record) {
   }
   const failed = record.stopped_items?.length || 0;
   return { export_id: path.basename(target, '.json'), target, directory, run_directory: record.run_directory, complete: record.complete,
+    ...(record.result_layout ? { result_layout: record.result_layout } : {}),
     exported_count: exportedCount(record), pending_count: record.items.length - exportedCount(record),
     ...(waiver ? { abandoned: true } : {}),
     summary: { created_at: created, processing_mode: record.processing_mode === 'markdown-only' ? 'markdown-only' : 'markdown-and-anonymize',
@@ -1527,9 +1846,12 @@ async function terminalVisibleExportAsync(completed, exporter) {
 }
 
 module.exports = {
+  RESULT_LAYOUT, initialResultPublication, privateResultLedger,
   SCHEMA, MARKDOWN_SCHEMA, CONTENT_MARKDOWN_SCHEMA, CONTENT_ANONYMIZED_SCHEMA, LEGACY_MARKDOWN_SCHEMA, LEGACY_SCHEMA, VISIBLE_MAPPING_FILE, recordPath, validRecord, exportCompletedState, exportCompletedStateAsync, replayPendingResultExports, visibleExportStatus,
   visibleExportDirectory, terminalVisibleExport, terminalVisibleExportAsync, readStandaloneExportHistory, readStandaloneExportHistoryEntry, abandonPendingResultExport,
   completedMarkdownExportMatches,
   _test: { activeDestination, ensurePlainDirectory, bindPlainDirectory, assertDirectoryBinding,
+    initialProgress, initialDirectory, ensureResultParent, inspectInitialLeaf, recordInitialLeaf, exportOne,
+    writePrivateResultMapping, visibleMappingBytes,
     acquireExportClaim, releaseExportClaim, acquireExportClaimAsync, releaseExportClaimAsync, claimPath, markdownOutputNames }
 };

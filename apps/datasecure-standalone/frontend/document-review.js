@@ -94,11 +94,22 @@
   let viewedBindings = new Map(), pendingApproval = null;
   let sourceCount = 0, unavailableSourceCount = 0, omissionSourceCount = 0, privacyStopCount = 0;
   let unavailableReviewCount = 0;
+  let resultPublication = null;
+  let directResultsSupported = false;
+  function publication(value) {
+    if (!value || !['initial', 'current', 'pending', 'conflict'].includes(value.state) ||
+        Object.keys(value).some(key => !['state', 'generation_id', 'count', 'current_revision'].includes(key)) ||
+        value.generation_id !== undefined && value.generation_id !== null && !/^[a-f0-9]{32}$/u.test(value.generation_id) ||
+        value.state === 'current' && !/^[a-f0-9]{32}$/u.test(value.generation_id || '') ||
+        value.count !== undefined && (!Number.isSafeInteger(value.count) || value.count < 0 || value.count > 200) ||
+        value.current_revision !== undefined && (!Number.isSafeInteger(value.current_revision) || value.current_revision < 0 || value.current_revision > 1000))
+      throw Error('DOCUMENT_REVIEW_INVALID');
+    return { ...value };
+  }
   const mode = () => (pendingMetadata || detail || documents[0])?.processing_mode || runMode;
   const raw = () => mode() === 'markdown-only';
   const automatic = () => runPolicy === 'automatic-conservative';
-  const approvalLabel = row => !row.approved ? 'Noch nicht freigegeben' : row.approval_basis === 'automatic'
-    ? 'Automatisch freigegeben · nicht manuell geprüft' : 'Freigegeben';
+  const approvalLabel = row => row.text_modified === true ? 'Nachbearbeitung gespeichert' : 'Ergebnis verfügbar';
   const visibleDocuments = () => {
     if (!raw() || !contentNotices || exportRequest || filterMode === 'all') return documents;
     if (filterMode === 'edited') return documents.filter(row => row.text_modified === true);
@@ -119,9 +130,26 @@
       'Inhaltsübernahme möglicherweise unvollständig';
   };
   const dirty = () => Boolean(recoveryDraft || detail && raw() && $('document-markdown').value !== loadedMarkdown);
+  const publicationUnsettled = () => ['pending', 'conflict'].includes(resultPublication?.state);
+  async function publishCurrent(expected, ownership, connection) {
+    if (expected !== batchId || ownership !== busyGeneration || connection !== connectionGeneration ||
+        !busy || !stateFresh || !processingComplete || !directResultsSupported || dirty() || exportRequest) throw Error('DOCUMENT_REVIEW_STALE');
+    resultPublication = { state: 'pending' }; controls();
+    status('Änderung gespeichert. Der vollständige aktuelle Ergebnisstand wird sicher bereitgestellt …');
+    const result = await invoke('publish_result_documents', { batchId: expected });
+    if (expected !== batchId || ownership !== busyGeneration || connection !== connectionGeneration) throw Error('STANDALONE_CONNECTION_CHANGED');
+    if (result?.ok !== true || result.batch_id !== expected || result.local_ui_only !== true || result.external_disclosure !== false)
+      throw Error('RESULT_PUBLICATION_INVALID');
+    const current = publication(result.result_publication);
+    if (current.state !== 'current' || !current.generation_id || current.count !== documents.length) throw Error('RESULT_PUBLICATION_INVALID');
+    resultPublication = current;
+    return current;
+  }
   const detailCurrent = () => stateFresh && detail && documents.some(row => sameDocumentBinding(detail, row));
   const namespace = mode => mode === 'markdown-only' ? 'DataSecure-Markdown-Korrektur' : 'DataSecure-KI-Export';
   const reasons = { DOCUMENT_REVIEW_STALE: 'Der Textstand hat sich geändert. Bitte neu laden und erneut prüfen.',
+    RESULT_PUBLICATION_INVALID: 'Die Änderung kann bereits gespeichert sein, aber der neue Ergebnisstand ist noch nicht bestätigt. Bereitstellung erneut prüfen; nichts blind nochmals ändern.',
+    RESULT_PUBLICATION_CONFLICT: 'Der neue Ergebnisstand konnte wegen eines Dateikonflikts nicht sicher bereitgestellt werden. Frühere Ordner bleiben unverändert; den gespeicherten Stand prüfen.',
     STANDALONE_IPC_BUSY: 'DataSecure bearbeitet noch einen anderen lokalen Vorgang. Diese Anfrage wurde noch nicht gesendet. Bitte den Abschluss abwarten und den gespeicherten Stand anschließend neu laden.',
     CONTENT_OPTIONS_BINDING_INVALID: 'Die Inhalts- oder OCR-Einstellungen passen nicht zum gespeicherten Prüfstand. Keine Freigabe oder neue Kopie wird daraus erzeugt. Bitte die Originaldateien für einen neuen Lauf auswählen.',
     CONTENT_OPTIONS_BINDING_MISSING: 'Der unveränderliche Nachweis der Inhalts- und OCR-Auswahl fehlt. Dieser Prüfstand wird nicht freigegeben. Bitte die Originaldateien für einen neuen Lauf auswählen.',
@@ -154,7 +182,20 @@
   function status(text, error = false) { $('documents-status').textContent = text; $('documents-status').className = `notice${error ? ' error' : ''}`; }
   function actionStatus(text, error = false) { const node = $('document-action-status'); node.hidden = !text;
     node.textContent = text; node.className = `document-action-status${error ? ' error' : ''}`; }
-  function showError(error, name = '') {
+  const publicationRecovery = 'Die Änderung kann bereits gespeichert sein; der neue Ergebnisstand ist noch nicht bestätigt. ' +
+    'Den gespeicherten Stand neu laden, ohne die fachliche Änderung erneut zu speichern. Unter Einstellungen das ursprüngliche Ergebnisziel, seine Identität und Zugriffsrechte prüfen. ' +
+    'Danach „Bereitstellung erneut prüfen“ verwenden; dieser Lauf wird nicht auf einen anderen Ordner umgebunden. Keine neue Quellverarbeitung blind starten. Frühere Ergebnisdateien bleiben unverändert.';
+  const publicationReasons = {
+    AI_EXPORT_CONFIGURATION_REQUIRED: 'Die sichere native Bindung an das ursprüngliche Ergebnisziel fehlt. ' + publicationRecovery,
+    AI_EXPORT_VOLUME_MISMATCH: 'Das gebundene Ergebnisziel und der private Arbeitsbereich liegen nicht auf einem kompatiblen Laufwerk. Es wird keine unsichere Kopieralternative verwendet. ' + publicationRecovery,
+    AI_EXPORT_UNCERTAIN: 'Der Zustand der Ergebnisbereitstellung ist nicht eindeutig belegt. ' + publicationRecovery,
+    AI_EXPORT_INCOMPLETE: 'Die Ergebnisbereitstellung ist noch nicht vollständig bestätigt. ' + publicationRecovery,
+    AI_EXPORT_CONFLICT: 'Ein gebundener Ordner oder eine Datei steht im Konflikt. Nichts wird überschrieben oder als Ersatz übernommen. ' + publicationRecovery,
+    AI_EXPORT_INVALID: 'Der gespeicherte Bereitstellungsauftrag oder sein Beleg ist nicht gültig. ' + publicationRecovery,
+    RESULT_PUBLICATION_LEGACY: 'Dieser ältere Lauf unterstützt keine automatische Bereitstellung neuer Ergebnisstände. Eine Nachbearbeitung kann privat gespeichert sein; vorhandene Ergebnisdateien werden dadurch nicht aktualisiert oder erneut veröffentlicht. ' +
+      'Den gespeicherten Stand und die vorhandenen Ergebnisdateien prüfen. Nicht blind erneut ändern, einen neuen Lauf starten oder einen anderen Zielordner zuweisen. Frühere Dateien bleiben unverändert.'
+  };
+  function showError(error, name = '', resultPublicationFailure = false) {
     let code = error?.code || error?.message || String(error);
     try {
       const value = JSON.parse(code); code = value.code || code;
@@ -167,7 +208,8 @@
             row.name.split('/').every(part => part && part !== '.' && part !== '..'))) name = details.selection_files.map(row => row.name).join(', ');
     } catch {}
     if (!/^[A-Z][A-Z0-9_]{2,80}$/u.test(code)) code = 'DOCUMENT_REVIEW_INVALID';
-    status(`${name ? `${name}: ` : ''}${reasons[code] || 'Der lokale Prüfstand konnte nicht sicher bestätigt werden. Erneut laden; nicht blind freigeben.'} (${code})`, true);
+    const publicationReason = resultPublicationFailure && !exportRequest && !pendingMetadata && !knownExport ? publicationReasons[code] : null;
+    status(`${name ? `${name}: ` : ''}${publicationReason || reasons[code] || 'Der lokale Prüfstand konnte nicht sicher bestätigt werden. Erneut laden; nicht blind freigeben.'} (${code})`, true);
   }
   function exportFolderError(error) {
     let code = error?.code || error?.message || String(error);
@@ -177,7 +219,7 @@
   const canLeaveCompletion = () => Boolean(batchId && !busy && !dirty() &&
     (!loading || confirmedCopy?.batchId === batchId && !exportRequest));
   function controls() {
-    const blocked = busy || !stateFresh;
+    const blocked = busy || !stateFresh, mutationBlocked = blocked || !processingComplete || !directResultsSupported || publicationUnsettled();
     const shown = visibleDocuments(), rows = documents.filter(row => selected.has(row.document_id));
     const anotherCopy = completedCopyCount > 0 || confirmedCopy?.batchId === batchId;
     const selectedShown = shown.filter(row => selected.has(row.document_id));
@@ -187,8 +229,7 @@
         row.revision === copy.revision && row.output_sha256 === copy.output_sha256));
     const completedHere = confirmedCopy?.batchId === batchId && !exportRequest && !busy;
     const currentCompletion = Boolean(batchId && stateFresh && !busy && !loading && processingComplete &&
-      documents.length > 0 && !dirty() && !exportRequest && !pendingDocumentChange && !pendingApproval);
-    const allApproved = !raw() && documents.length > 0 && documents.every(row => row.approved);
+      documents.length > 0 && !dirty() && !pendingDocumentChange && !pendingApproval);
     const hasHints = documentProblemCount > 0 || documentOmissionCount > 0 ||
       sourceNoticeFacts?.content_notice_count > 0 || sourceNoticeFacts?.content_notice_breakdown_complete === false;
     let completionTitle = '', completionText = '';
@@ -197,18 +238,15 @@
       completionTitle = raw() ? 'Markdown-Kopie abgeschlossen' : 'Export abgeschlossen';
       completionText = `${copied} ausgewählte ${copied === 1 ? 'Datei wurde' : 'Dateien wurden'} lokal kopiert. Dieser Kopiervorgang ist bestätigt und wird nicht automatisch wiederholt. ${!stateFresh ? 'Der heutige Dokumentstatus wird getrennt neu geprüft; Änderungen bleiben bis dahin gesperrt. Das stellt diese bereits bestätigte Kopie nicht infrage.' : exportComplete ? 'Alle derzeit verfügbaren Dokumentstände dieses Laufs sind in dieser Kopie enthalten.' : 'Weitere Dateien oder spätere Textänderungen sind darin nicht automatisch enthalten und brauchen bei Bedarf eine neue Freigabe und Kopie.'} Im Verlauf kannst du Abschluss und Ausnahmen getrennt ansehen. Es erfolgte kein Upload.`;
     } else if (currentCompletion) {
-      completionTitle = raw() ? 'Umwandlung abgeschlossen' : allApproved
-        ? 'Dokumentprüfung abgeschlossen' : 'Verarbeitung abgeschlossen – Dokumentprüfung offen';
+      const unsettled = ['pending', 'conflict'].includes(resultPublication?.state);
+      completionTitle = unsettled ? resultPublication.state === 'conflict' ? 'Ergebnisbereitstellung nicht bestätigt' : 'Ergebnisstand wird abgeglichen'
+        : raw() ? 'Umwandlung abgeschlossen' : 'Anonymisierungslauf abgeschlossen';
       if (hasHints) completionTitle += ' · mit Hinweisen';
-      const automaticCount = documents.filter(row => row.approved && row.approval_basis === 'automatic').length;
-      const exportAdvice = completedCopyCount > 0
-        ? 'Gespeicherte Exportbelege sind bereits vorhanden. Eine neue Kopie ist nur nötig, wenn du sie ausdrücklich möchtest. Alte Belege bestätigen nicht automatisch den heutigen Textstand. '
-        : 'Ein Export wurde dadurch nicht erstellt. Du kannst gewünschte freigegebene Dateien optional exportieren oder jetzt zum Verlauf gehen. ';
       completionText = `Der Lauf verarbeitet keine weiteren Dateien. ${documents.length} ${documents.length === 1 ? 'Ergebnis ist' : 'Ergebnisse sind'} verfügbar. ` +
-        (raw() ? 'Die Dateien sind nicht anonymisiert. Nachbearbeitung und eine zusätzliche Markdown-Kopie sind freiwillig. '
-          : allApproved ? `Alle ${documents.length} verfügbaren Dokumentstände sind freigegeben. ${automaticCount ? `${automaticCount} davon automatisch im Schnellweg, nicht manuell geprüft. ` : ''}${exportAdvice}`
-            : `${documents.filter(row => row.approved).length} von ${documents.length} verfügbaren Dokumentständen sind freigegeben. Für einen Export die gewünschten Ergebnisse vergleichen und ausdrücklich freigeben; du kannst diese Prüfung auch später fortsetzen. `) +
-        (hasHints ? 'Hinweise und nicht verfügbare Quellen bleiben gesondert aufgeführt. Nicht verfügbare Quellen sind weder freigegeben noch exportiert. ' : '') +
+        (unsettled ? 'Der aktuelle Nachbearbeitungsstand ist noch nicht als Ergebnisdateien bestätigt. Bereitstellung erneut prüfen; frühere Ergebnisordner bleiben unverändert. '
+          : 'Den Ergebnisordner öffnen und Dateien dort auswählen oder weiterverwenden. Keine zusätzliche Freigabe oder Exportbestätigung nötig. ') +
+        (raw() ? 'Die Dateien sind nicht anonymisiert. ' : automatic() ? 'Bekannte unklare Fundstellen wurden automatisch maskiert, nicht manuell geprüft. ' : '') +
+        (hasHints ? 'Hinweise und nicht verfügbare Quellen bleiben gesondert aufgeführt. Nicht verfügbare Quellen sind nicht in den Ergebnisdateien enthalten. ' : '') +
         'Es erfolgte kein Upload.';
     }
     $('documents-completion').hidden = !completionTitle;
@@ -221,7 +259,9 @@
       ...(runPolicy ? { review_policy: runPolicy } : {}),
       ...(sourceNoticeFacts || {}),
       fresh: stateFresh, busy: busy || loading, ...(completedHere ? { confirmed_copy_count: confirmedCopy.selection.length } : {}),
+      ...(resultPublication ? { result_publication: { ...resultPublication } } : {}),
       document_count: documents.length, approved_count: documents.filter(row => row.approved).length,
+      has_modified_results: documents.some(row => row.text_modified === true || row.revision > 0 && row.text_modified !== false),
       problem_count: documentProblemCount, expected_omission_count: documentOmissionCount, processing_complete: processingComplete,
       automatically_approved_count: documents.filter(row => row.approval_basis === 'automatic' && row.approved).length,
       dirty: dirty(), export_pending: Boolean(exportRequest), export_complete: exportComplete });
@@ -260,27 +300,18 @@
     $('document-export-close').disabled = busy && !dialogCompleted;
     $('documents-identity-reference').hidden = mode() !== 'markdown-and-anonymize';
     $('documents-identities').disabled = blocked || dirty() || Boolean(recoveryDraft) || !documents.length;
-    $('documents-all').disabled = blocked || Boolean(exportRequest) || !shown.length;
-    $('documents-selected').textContent = raw() ? `${rows.length} ausgewählt · ${shown.length} angezeigt · ${documents.length} Markdown-Dateien verfügbar`
-      : `${rows.length} ausgewählt · ${documents.filter(row => row.approved).length} von ${documents.length} freigegeben`;
+    $('documents-all').disabled = true;
+    $('documents-selected').textContent = `${shown.length} angezeigt · ${documents.length} Ergebnisdateien verfügbar`;
     $('documents-approve').hidden = raw(); $('documents-revoke').hidden = raw();
     $('documents-approve').disabled = blocked || dirty() || Boolean(exportRequest) || !rows.length; $('documents-revoke').disabled = blocked || dirty() || Boolean(exportRequest) || !rows.length;
     if (!raw() && rows.length && rows.every(row => row.approved)) $('documents-approve').disabled = true;
     $('documents-approve').textContent = !raw() && rows.length && rows.every(row => row.approved) ? 'Auswahl bereits freigegeben' : 'Auswahl nur freigeben';
+    $('documents-export').hidden = !exportRequest;
+    // Hidden compatibility controls keep the old explicitly selected copy
+    // transaction contract. The normal UI exposes no new copy selection.
     $('documents-export').disabled = blocked || dirty() || !exportRequest && !rows.length;
     $('documents-export').textContent = exportRequest ? knownExport || pendingMetadata?.status === 'completed' ? 'Empfang erneut abgleichen' : pendingMetadata ? 'Export erneut abgleichen' : 'Export erneut versuchen' : raw() ? anotherCopy ? 'Weitere Markdown-Kopie speichern' : 'Zusätzliche Markdown-Kopie speichern' : anotherCopy ? 'Weitere Dateien exportieren' : 'Auswahl exportieren';
-    $('documents-heading').textContent = raw() ? 'Markdown freiwillig nachbearbeiten · nicht anonymisiert' : 'Prüfen und Dateien exportieren';
-    $('documents-purpose').textContent = raw() ? 'Die erstellten Markdown-Dateien sind bereits im Ergebnisordner nutzbar. Zum Vergleichen und Korrigieren den Dateinamen anklicken. Häkchen wählen nur Dateien für eine zusätzliche Kopie. „Korrektur speichern“ hält einen privaten Textstand fest; erst „Zusätzliche Kopie“ schreibt daraus eine verwendbare korrigierte Datei. Das ist keine weitere OCR-Pflichtprüfung; Originalinhalte bleiben erhalten.' : 'Die Anonymisierung ist technisch fertig; deine gewählten Maskierungen sind bereits angewendet. Hier kannst du die fertigen Textstände mit dem Original vergleichen. Wähle die gewünschten Dateien und öffne die Exportvorschau. Die letzte Exportbestätigung gibt genau diese Textstände frei und erstellt die fertigen Dateien – ohne zusätzlichen Freigabeschritt. Technische Schutzprüfungen bleiben aktiv; sie garantieren keine vollständige Anonymität. Die Dateien sind auch ohne KI nutzbar. DataSecure lädt nichts hoch. Du kannst später im Verlauf fortsetzen.';
-    if (automatic()) {
-      const autoCount = documents.filter(row => row.approved && row.approval_basis === 'automatic').length;
-      const manualCount = documents.filter(row => row.approved && row.approval_basis === 'manual').length;
-      const unapprovedCount = documents.filter(row => !row.approved).length;
-      $('documents-purpose').textContent = `Schnellweg: ${autoCount} automatisch freigegeben, nicht manuell geprüft · ${manualCount} später manuell freigegeben · ${unapprovedCount} aktuell ohne Freigabe. Bekannte unklare Stellen und OCR-Kontaktbereiche wurden automatisch maskiert. ` +
-        (unapprovedCount ? 'Geänderte oder widerrufene Textstände vor dem Export ansehen; die Exportbestätigung enthält ihre neue Freigabe. ' : 'Keine erneute Dokumentfreigabe nötig. ') +
-        'Wähle die gewünschten Dateien für einen lokalen Export aus. Die exportierten Markdown-Dateien kannst du auch ohne KI verwenden. DataSecure lädt nichts hoch.';
-    }
-    if (!raw() && anotherCopy && !exportRequest && !rows.length)
-      $('documents-purpose').textContent = 'Ein Export dieses Laufs wurde bereits abgeschlossen. Für denselben unveränderten Stand ist kein erneuter Export nötig. Du kannst einzelne Dokumente weiter prüfen; nach Änderungen müssen betroffene Textstände neu freigegeben werden. Nur falls du bewusst einen weiteren Export brauchst, wähle die gewünschten Dateien erneut aus.';
+    $('documents-heading').textContent = raw() ? 'Markdown freiwillig nachbearbeiten · nicht anonymisiert' : 'Ergebnisse nachbearbeiten (optional)';
     if (!mode()) {
       $('documents-heading').textContent = loading ? 'Dokumentprüfstände werden geladen' : 'Dokumentprüfstände dieses Laufs';
       $('documents-purpose').textContent = loading
@@ -291,20 +322,32 @@
     }
     $('document-markdown-caption').textContent = raw() ? 'Markdown-Text (für Korrekturen bearbeitbar)' :
       mode() === 'markdown-and-anonymize' ? 'Geplanter anonymisierter Markdown-Text (nur markieren)' : 'Markdown-Text (Modus wird geladen)';
-    $('documents-main-guide').hidden = mode() !== 'markdown-and-anonymize' || automatic();
-    $('documents-approval-extras').hidden = mode() !== 'markdown-and-anonymize';
+    $('documents-main-guide').hidden = true;
+    $('documents-approval-extras').hidden = true;
+    $('documents-purpose').textContent = !mode() ? loading ? 'Gespeicherte Dokumentstände werden geladen. Bitte warten.' : 'Der Verarbeitungszweck ist nicht bestätigt. Den gespeicherten Stand abgleichen.'
+      : stateFresh && !directResultsSupported ? 'Älterer Lauf: Dokumente und damalige Kopierbelege bleiben lesbar. Automatische Bereitstellung neuer Nachbearbeitungsstände ist für diesen Lauf nicht verfügbar. Deshalb hier keine weiteren Textänderungen speichern; vorhandene Ergebnisdateien bleiben unverändert. ' +
+        (raw() ? 'Markdown enthält Originalinhalte und ist nicht anonymisiert.' : automatic() ? 'Bekannte unklare Fundstellen wurden automatisch maskiert, nicht manuell geprüft.' : '')
+      : 'Die erzeugten Dateien liegen im Ergebnisordner. Zum freiwilligen Vergleichen den Dateinamen anklicken. Gespeicherte Änderungen werden ohne weitere Dateiauswahl oder Exportbestätigung als neuer Ergebnisstand bereitgestellt. ' +
+        (raw() ? 'Markdown enthält Originalinhalte und ist nicht anonymisiert. ' : automatic() ? 'Bekannte unklare Fundstellen wurden automatisch maskiert, nicht manuell geprüft. ' : '') +
+        'Originaldateien und frühere Ergebnisstände bleiben unverändert. DataSecure lädt nichts hoch.';
+    const publicationBlocked = ['pending', 'conflict'].includes(resultPublication?.state);
+    $('documents-open-results').disabled = blocked || dirty() || !processingComplete || !documents.length || publicationBlocked;
+    $('documents-publish').hidden = !publicationBlocked || !directResultsSupported;
+    $('documents-publish').disabled = blocked || dirty() || !processingComplete || !directResultsSupported || Boolean(exportRequest);
     $('document-markdown').setAttribute('aria-label', $('document-markdown-caption').textContent);
-    $('document-edit-hint').textContent = raw() ? 'Du kannst den rechten Markdown-Text direkt bearbeiten. Korrekturen ausdrücklich speichern; die ursprünglich erzeugten Dateien bleiben unverändert. Für eine verwendbare korrigierte Datei die gewünschte Datei auswählen und zusätzlich eine Kopie speichern. Sie enthält Originalinhalte und ist nicht anonymisiert.' : !detail ? 'Wähle links ein Dokument, um Original und anonymisierten Text zu vergleichen. Das rechte Feld ist schreibgeschützt. Wähle gewünschte Dateien für den Export aus; dessen Bestätigung enthält bereits die Freigabe.' : 'Hauptweg: Original und anonymisierten Text ansehen, Datei links anhaken und oben „Auswahl exportieren“ wählen. Der rechte Text ist schreibgeschützt. Nur wenn du weitere Änderungen brauchst, öffne „Weitere Textänderungen (optional)“; sie werden erst nach gesonderter Bestätigung gespeichert und heben die betroffene Freigabe auf.';
-    if (automatic() && (!detail || detail.approved)) $('document-edit-hint').textContent = 'Schnellweg: Bereits freigegebene Textstände können direkt für einen lokalen Export ausgewählt werden. Ein Textvergleich ist zusätzlich möglich. Änderungen unter „Weitere Textänderungen“ erzeugen einen neuen Stand ohne Freigabe; dafür ist eine neue Entscheidung nötig.';
+    $('document-edit-hint').textContent = stateFresh && !directResultsSupported ? 'Dieser ältere Lauf ist hier nur lesbar. Eine neue automatische Ergebnisbereitstellung ist nicht belegt; vorhandene Dateien und alte Kopierbelege bleiben unverändert.'
+      : raw() ? 'Du kannst den rechten Markdown-Text direkt bearbeiten. Die Datei ist nicht anonymisiert. „Markdown-Korrektur speichern“ speichert die Änderung und stellt danach den gesamten aktuellen Ergebnisstand bereit. Erst die Bestätigung beendet diesen Vorgang. Originaldateien und frühere Ergebnisstände bleiben unverändert.'
+      : !detail ? 'Wähle links ein Dokument, um Original und anonymisierten Text freiwillig zu vergleichen. Die Ergebnisdateien benötigen keine weitere Freigabe oder Exportbestätigung.'
+        : 'Der rechte Text ist schreibgeschützt. Zusätzliche Maskierungen oder andere Änderungen unter „Weitere Textänderungen (optional)“ bewusst speichern. Danach wird der gesamte aktuelle Ergebnisstand bereitgestellt; keine zweite Dateiauswahl nötig.';
     $('document-save-correction').hidden = !raw(); $('document-discard-correction').hidden = !raw();
-    $('document-save-correction').disabled = blocked || !detailCurrent() || Boolean(recoveryDraft) || Boolean(exportRequest) || !dirty();
+    $('document-save-correction').disabled = mutationBlocked || !detailCurrent() || Boolean(recoveryDraft) || Boolean(exportRequest) || !dirty();
     $('document-discard-correction').disabled = busy || !dirty();
-    $('document-markdown').readOnly = !raw() || blocked || Boolean(recoveryDraft) || Boolean(exportRequest);
+    $('document-markdown').readOnly = !raw() || mutationBlocked || Boolean(recoveryDraft) || Boolean(exportRequest);
     $('document-extra-actions').hidden = raw() || !detailCurrent();
     $('document-redact').hidden = raw();
-    $('document-redact').disabled = raw() || blocked || dirty() || Boolean(exportRequest) || !detailCurrent(); $('document-restore').disabled = blocked || dirty() || Boolean(exportRequest) || !detailCurrent();
+    $('document-redact').disabled = raw() || mutationBlocked || dirty() || Boolean(exportRequest) || !detailCurrent(); $('document-restore').disabled = mutationBlocked || dirty() || Boolean(exportRequest) || !detailCurrent();
     $('document-change-confirm').hidden = !pendingDocumentChange;
-    $('document-change-save').disabled = blocked || !pendingDocumentChange || !detailCurrent() || !sameDocumentBinding(detail, pendingDocumentChange?.row);
+    $('document-change-save').disabled = mutationBlocked || !pendingDocumentChange || !detailCurrent() || !sameDocumentBinding(detail, pendingDocumentChange?.row);
     $('document-change-cancel').disabled = busy;
     $('documents-back').disabled = busy;
     $('document-export-confirm').disabled = blocked;
@@ -319,7 +362,7 @@
     $('document-next').disabled = blocked || dirty() || position < 0 || position >= shown.length - 1;
     const scopeBlocked = $('entities-scope').value === 'run' && (!detail?.run_entity_review_available ||
       entityRows.some(row => entitySelected.has(row.entity_id) && row.run_eligible !== true));
-    $('entities-apply').disabled = blocked || !detailCurrent() || Boolean(exportRequest) || !entitySelected.size || scopeBlocked;
+    $('entities-apply').disabled = mutationBlocked || !detailCurrent() || Boolean(exportRequest) || !entitySelected.size || scopeBlocked;
     const selectable = entityRows.filter(row => !row.disabled), chosen = selectable.filter(row => entitySelected.has(row.entity_id));
     $('entities-all').disabled = blocked || Boolean(exportRequest) || !selectable.length;
     $('entities-all').checked = selectable.length > 0 && chosen.length === selectable.length;
@@ -392,13 +435,16 @@
       const info = make('div'), show = make('button', row.name); show.disabled = busy || !stateFresh;
       show.setAttribute('aria-label', `${row.name}: ${raw() ? 'vergleichen und korrigieren' : 'vergleichen'}`);
       show.addEventListener('click', () => loadDetail(row));
-      info.append(show, make('p', `${raw() ? currentTextState(row) : approvalLabel(row)} · Stand ${row.revision}`, 'meta'));
+      info.append(show, make('p', `${currentTextState(row)} · Stand ${row.revision}`, 'meta'));
       if (raw() && (contentNotices?.has(row.document_id) || row.text_modified === true)) {
         const flags = make('div', undefined, 'document-flags');
         if (contentNotices?.has(row.document_id)) flags.append(make('span', noticeExplanation(contentNotices.get(row.document_id)), 'warning'));
         if (row.text_modified === true) flags.append(make('span', 'Korrektur gespeichert'));
         info.append(flags);
       }
+      // File selection for an extra copy is no longer part of the app's
+      // normal workflow. Entity-treatment selections remain independent.
+      check.hidden = true;
       item.append(check, info); list.append(item);
     }
     if (!visibleDocuments().length) list.append(make('p', documents.length && raw() && contentNotices ?
@@ -508,6 +554,12 @@
         data.documents.some(row => (row.review_policy || null) !== (data.review_policy || null)) ||
         runPolicy && data.review_policy !== runPolicy) throw Error('DOCUMENT_REVIEW_INVALID');
     runPolicy = data.review_policy || null;
+    directResultsSupported = data.result_publication !== undefined;
+    resultPublication = data.result_publication === undefined
+      ? data.documents.some(row => row.text_modified === true || row.revision > 0 && row.text_modified !== false) ? { state: 'pending' } : null
+      : publication(data.result_publication);
+    if (resultPublication?.count !== undefined && resultPublication.count !== data.documents.length)
+      throw Error('DOCUMENT_REVIEW_INVALID');
     processingComplete = data.processing_complete === true;
     if (runMode && data.pending_exports?.some(row => row.processing_mode !== runMode)) throw Error('AI_EXPORT_INVALID');
     renderUnavailable(data);
@@ -561,7 +613,7 @@
       ? 'Ein früherer Export wurde noch nicht bestätigt. „Export erneut abgleichen“ prüft genau diese gespeicherte Auswahl. Es wird kein neuer Export automatisch gestartet.'
       : 'Für diesen Export liegt noch kein bestätigter Beleg vor. Prüfe den Ergebnisordner und versuche denselben Auftrag nur ausdrücklich erneut; es wird nichts automatisch kopiert.');
     else if (data.unavailable?.length) status(`Prüfstände nicht verfügbar: ${data.unavailable.map(row => row.name || `Dokument ${row.document_id.slice(0, 8)}`).join(', ')}. Diese Dateien können nicht freigegeben oder exportiert werden.`, true);
-    else status(`${comparisonInvalidated ? `${previousName}: Der zuvor angezeigte Dokumentstand hat sich geändert oder ist nicht mehr verfügbar. Vergleich und betroffene Auswahl wurden zurückgesetzt; bitte den aktuellen Stand erneut öffnen. ` : ''}${documents.length} Markdown-Datei${documents.length === 1 ? '' : 'en'} verfügbar. ${raw() ? contentNotices ? `${visibleDocuments().length} in der aktuellen Ansicht. Inhaltshinweise stammen aus dem Verarbeitungslauf; eine gespeicherte Korrektur löst sie nicht automatisch auf.` : 'Dateibezogene Hinweise nicht sicher zuordenbar; alle Dateien werden angezeigt.' : `${documents.filter(row => row.approved).length} von ${documents.length} aktuellen Dokumentständen freigegeben. ${data.export_receipts?.length ? `${data.export_receipts.length} abgeschlossene${data.export_receipts.length === 1 ? 'r Export' : ' Exporte'} mit Beleg vorhanden; die heutigen Textstände vor einem weiteren Export erneut prüfen.` : 'Noch kein abgeschlossener Export mit Beleg vorhanden.'} Zum Vergleichen den Dateinamen anklicken; Häkchen wählen für Sammelaktionen aus.`}`);
+    else status(`${comparisonInvalidated ? `${previousName}: Der zuvor angezeigte Dokumentstand hat sich geändert oder ist nicht mehr verfügbar. Vergleich und betroffene Auswahl wurden zurückgesetzt; bitte den aktuellen Stand erneut öffnen. ` : ''}${documents.length} Markdown-Datei${documents.length === 1 ? '' : 'en'} verfügbar. ${publicationUnsettled() ? 'Die Bereitstellung des aktuellen Nachbearbeitungsstands ist noch nicht bestätigt. Frühere Ergebnisdateien bleiben unverändert. Bereitstellung erneut prüfen.' : raw() ? contentNotices ? `${visibleDocuments().length} in der aktuellen Ansicht. Inhaltshinweise stammen aus dem Verarbeitungslauf; eine gespeicherte Korrektur löst sie nicht automatisch auf.` : 'Dateibezogene Hinweise nicht sicher zuordenbar; alle Dateien werden angezeigt.' : 'Zum freiwilligen Vergleichen den Dateinamen anklicken. Die Ergebnisdateien benötigen keine weitere Auswahl, Freigabe oder Exportbestätigung.'}`);
     return true;
     } catch (error) { if (expected === batchId && request === ticket) { stateFresh = false; render(); } throw error; }
     finally { if (expected === batchId && request === ticket) { loading = false; controls(); } }
@@ -631,19 +683,20 @@
     finally { if (ownership !== busyGeneration) return; busy = false; controls(); }
   }
   async function applyEntities() {
-    if (busy || !detailCurrent() || exportRequest || !entitySelected.size) return;
+    if (busy || !processingComplete || !directResultsSupported || publicationUnsettled() || !detailCurrent() || exportRequest || !entitySelected.size) return;
     const connection = connectionGeneration;
     const row = detail, expected = batchId, treatment = $('entities-decision').value;
     const scope = $('entities-scope').value;
     if (!['document', 'run'].includes(scope) || scope === 'run' && (!row.run_entity_review_available ||
         entityRows.some(value => entitySelected.has(value.entity_id) && value.run_eligible !== true))) return;
     if (!['default', 'keep', 'person', 'organization'].includes(treatment)) return;
-    const ownership = ++busyGeneration; busy = true; controls(); let updated, failure;
+    const ownership = ++busyGeneration; busy = true; controls(); let updated, failure, publicationAttempted = false;
     try {
       updated = await invoke('decide_document_review', { batchId: expected, documentId: row.document_id,
         decision: { action: 'entities', revision: row.revision, output_sha256: row.output_sha256, ranges: [], operation_id: operationId(),
           entity_decisions: [...entitySelected].map(entity_id => ({ entity_id, decision: treatment })),
           ...(scope === 'run' ? { scope } : {}) } });
+      if (expected !== batchId || connection !== connectionGeneration || ownership !== busyGeneration) return;
       if (updated?.ok === false && updated.reason_code === 'DOCUMENT_ENTITY_RUN_CONFLICT' && updated.local_ui_only === true &&
           updated.external_disclosure === false && Array.isArray(updated.blocked_files) && updated.blocked_files.length <= 200 &&
           updated.blocked_files.every(file => typeof file.name === 'string' && file.name.length <= 1024)) {
@@ -653,7 +706,7 @@
       if (!decisionAcknowledged(updated, row, 'entities')) throw Error('DOCUMENT_REVIEW_STALE');
       if (scope === 'run' && (updated.scope !== 'run' || !Number.isSafeInteger(updated.affected_count) ||
           updated.affected_count < 1 || updated.affected_count > 200)) throw Error('DOCUMENT_REVIEW_STALE');
-      if (expected === batchId) { clearText(); await reload(); }
+      if (expected === batchId) { clearText(); await reload(); publicationAttempted = true; await publishCurrent(expected, ownership, connection); }
     } catch (error) {
       if (connection !== connectionGeneration) return;
       failure = error; updated = null;
@@ -664,36 +717,40 @@
     finally { if (ownership !== busyGeneration) return; busy = false; controls(); }
     if (connection !== connectionGeneration) return;
     if (updated && expected === batchId) { await loadDetail(documents.find(value => value.document_id === row.document_id));
-      status(scope === 'run' ? `Behandlung für ${updated.affected_count} Dateien dieses Laufs gemeinsam gespeichert; spätere passende Prüfstände übernehmen sie ebenfalls. Betroffene Texte müssen erneut freigegeben werden. Ein Export wurde nicht gestartet.` :
-        'Behandlung gespeichert. Die Datei muss mit dem geänderten Text erneut freigegeben werden. Ein Export wurde nicht gestartet.'); }
+      if (expected !== batchId || connection !== connectionGeneration) return;
+      status(scope === 'run' ? `Behandlung für ${updated.affected_count} Dateien gespeichert und aktueller Ergebnisstand bereitgestellt. Frühere Ergebnisstände bleiben unverändert.` :
+        'Behandlung gespeichert und aktueller Ergebnisstand bereitgestellt. Ergebnisordner öffnen; keine weitere Freigabe oder Exportbestätigung nötig.'); }
     else if (failure && expected === batchId) {
       if (stateFresh) await loadDetail(documents.find(value => value.document_id === row.document_id));
-      showError(failure, row.name);
+      if (expected !== batchId || connection !== connectionGeneration) return;
+      showError(failure, row.name, publicationAttempted);
       $('documents-status').textContent += stateFresh ? ' Die Bestätigung ist unklar; der gespeicherte Stand wurde erneut abgefragt. Bitte vor weiteren Änderungen vergleichen.' :
         ' Die Bestätigung ist unklar. Auch der aktuelle gespeicherte Stand konnte nicht abgefragt werden. Änderungen bleiben gesperrt; bitte „Gespeicherten Stand neu laden“ wählen.';
     }
   }
   async function decideRows(action, rows, ranges = []) {
-    if (busy || !stateFresh || recoveryDraft || exportRequest || !batchId || !rows.length || dirty() && action !== 'correct') return;
+    if (busy || publicationUnsettled() || !stateFresh || recoveryDraft || exportRequest || !batchId || !rows.length || dirty() && action !== 'correct') return;
+    if ((!processingComplete || !directResultsSupported) && !['approve', 'revoke'].includes(action)) return;
     if (action === 'redact' && raw()) return;
     if (rows.some(row => !documents.some(current => sameDocumentBinding(row, current))) ||
         ['correct', 'redact', 'restore_base'].includes(action) && !detailCurrent()) return;
     const draft = action === 'correct' ? { ...detail, text: $('document-markdown').value } : null;
     const connection = connectionGeneration;
-    const expected = batchId; let failed, confirmed = 0; const updates = []; const ownership = ++busyGeneration;
+    const expected = batchId; let failed, confirmed = 0, publicationAttempted = false; const updates = []; const ownership = ++busyGeneration;
     bulkReviewProgress = !raw() && ['approve', 'revoke'].includes(action) && rows.length > 1
       ? { action, total: rows.length, done: 0 } : null;
     busy = true; render(); status('Entscheidungen werden lokal gespeichert …');
     try {
       if (['approve', 'revoke'].includes(action) && rows.length > 1) {
         const results = await decideSelection(expected, action, rows);
-        if (batchId !== expected || connection !== connectionGeneration) return;
+        if (batchId !== expected || connection !== connectionGeneration || ownership !== busyGeneration) return;
         documents = documents.map(value => results.find(row => row.document_id === value.document_id) || value);
         confirmed = results.length; updates.push(...results);
         if (bulkReviewProgress) { bulkReviewProgress.done = confirmed; controls(); }
       } else for (const row of rows) {
         try { const result = await invoke('decide_document_review', { batchId: expected, documentId: row.document_id,
           decision: { action, revision: row.revision, output_sha256: row.output_sha256, ranges, operation_id: operationId() } });
+          if (batchId !== expected || connection !== connectionGeneration || ownership !== busyGeneration) return;
           if (!decisionAcknowledged(result, row, action)) throw Error('DOCUMENT_REVIEW_STALE');
           // Only an exactly bound acknowledgement may advance a selection
           // across our own mutation. An unrelated reload never gets this grant.
@@ -704,7 +761,9 @@
       }
       if (batchId !== expected) return;
       exportRequest = null; clearText(); await reload();
-      status(raw() && action === 'correct' ? `${rows[0].name}: Korrektur als privater Textstand gespeichert. Die bereits erstellte Markdown-Datei bleibt unverändert. Für eine verwendbare korrigierte Datei diesen Stand auswählen und ausdrücklich eine zusätzliche Kopie speichern.` :
+      if (batchId !== expected || connection !== connectionGeneration || ownership !== busyGeneration) return;
+      if (!['approve', 'revoke'].includes(action)) { publicationAttempted = true; await publishCurrent(expected, ownership, connection); }
+      status(!['approve', 'revoke'].includes(action) ? `${rows[0].name}: Änderung gespeichert und aktueller Ergebnisstand bereitgestellt. Ergebnisordner öffnen; frühere Ergebnisstände bleiben unverändert.` :
         raw() && action === 'restore_base' ? `${rows[0].name}: Der technisch erzeugte Textstand wurde wiederhergestellt. Die ursprünglich erstellte Markdown-Datei bleibt unverändert.` :
           !raw() && action === 'approve' ? `${rows.length} Freigabeentscheidung${rows.length === 1 ? '' : 'en'} gespeichert. Die Dokumente können später weiter geprüft werden; durch diese Freigabe wurde kein neuer Export erstellt. Dafür die freigegebenen Stände auswählen und die Exportvorschau ausdrücklich öffnen.` :
           `${rows.length} Entscheidung${rows.length === 1 ? '' : 'en'} gespeichert. Ein Export erfolgt nur über den eigenen Exportbutton.`);
@@ -712,7 +771,7 @@
     } catch (error) { if (connection === connectionGeneration && batchId === expected) {
       for (const row of rows.slice(0, confirmed)) selected.delete(row.document_id);
       if (draft) recoveryDraft = draft;
-      clearText(); await reload().catch(() => {}); showError(failed?.error || error, failed?.name || rows.map(row => row.name).join(', '));
+      clearText(); await reload().catch(() => {}); showError(failed?.error || error, failed?.name || rows.map(row => row.name).join(', '), publicationAttempted);
       status(['approve', 'revoke'].includes(action) && rows.length > 1
         ? `Die gemeinsame Speicherbestätigung ist unklar. ${$('documents-status').textContent} Der gespeicherte Stand wurde erneut angefordert. Bitte vor einer weiteren Entscheidung den aktuellen Freigabestatus prüfen.`
         : `${confirmed} Entscheidung${confirmed === 1 ? '' : 'en'} bestätigt. ${$('documents-status').textContent} ${Math.max(0, rows.length - confirmed - 1)} weitere Dateien wurden noch nicht bearbeitet.`, true);
@@ -1006,30 +1065,47 @@
         revision: detail.revision, output_sha256: detail.output_sha256, text: $('document-markdown').value };
       // An export intent remains durable on the server. Forget its local
       // acknowledgement, not its operation; reload discovers that same receipt.
-      knownExport = null; confirmedCopy = null; completedCopyCount = 0; documents = []; contentNotices = null; clearText(); renderReceipts(); render();
+      knownExport = null; confirmedCopy = null; completedCopyCount = 0; resultPublication = null; documents = []; contentNotices = null; clearText(); renderReceipts(); render();
       status('Verbindung unterbrochen. Aktuelle Stände nach der Wiederverbindung neu laden; keine Entscheidung oder Exportbestätigung wird automatisch gesendet.', true);
     },
     async open(id, options = {}) { if (!this.canOpen(id)) return false;
       // Re-entering even the same run creates a new view owner. A detached
       // post-ACK callback from the previous view cannot invalidate fresh state.
       const ownership = ++busyGeneration;
-      completedExportReceipt = null;
-      batchId = id; bulkReviewProgress = null; pendingApproval = null; viewedBindings.clear(); confirmedCopy = null; completedCopyCount = 0; documents = []; contentNotices = null; sourceNoticeFacts = null; filterMode = 'notices'; runMode = null; runPolicy = null; processingComplete = false; stateFresh = false; selected.clear(); exportRequest = null; knownExport = null; pendingMetadata = null; exportFolderNeeded = false; clearText(); renderUnavailable({}); renderReceipts(); render();
+      completedExportReceipt = null; directResultsSupported = false;
+      batchId = id; bulkReviewProgress = null; pendingApproval = null; viewedBindings.clear(); confirmedCopy = null; completedCopyCount = 0; resultPublication = null; documents = []; contentNotices = null; sourceNoticeFacts = null; filterMode = 'notices'; runMode = null; runPolicy = null; processingComplete = false; stateFresh = false; selected.clear(); exportRequest = null; knownExport = null; pendingMetadata = null; exportFolderNeeded = false; clearText(); renderUnavailable({}); renderReceipts(); render();
       $('documents-run').textContent = `Lauf-ID: ${id}`; status('Private Dokumentprüfstände werden geladen …');
       try {
         if (!await reload() || batchId !== id || options.exportPreview !== true) return;
-        // An explicit history action may propose the complete selection, never
-        // approval or target I/O. A stale history snapshot must not turn into
-        // a partial export or an automatic replay of an older pending intent.
-        if (stateFresh && runMode === 'markdown-and-anonymize' && !exportRequest && documents.length &&
-            documents.every(row => row.approved) && unavailableReviewCount === 0) {
-          selected = new Set(documents.map(row => row.document_id)); render(); await openExportDialog();
-        } else status('Der gespeicherte Stand wurde neu geladen. Die vollständige Exportvorschau ist noch nicht verfügbar; offene Prüfstände oder Exportaufträge zuerst abgleichen.', true);
+        // Old navigation may open an existing bound transaction for inspection,
+        // never manufacture a new selection or replay its write/acknowledgement.
+        if (stateFresh && exportRequest) await openExportDialog();
       } catch (error) { if (batchId === id && ownership === busyGeneration) showError(error); }
     },
-    async close() { if (busy || dirty()) { if (dirty()) status('Ungespeicherte Markdown-Korrektur zuerst speichern oder ausdrücklich verwerfen.'); return false; } connectionGeneration++; ticket++; loading = false; bulkReviewProgress = null; pendingApproval = null; viewedBindings.clear(); batchId = null; confirmedCopy = null; completedExportReceipt = null; completedCopyCount = 0; documents = []; contentNotices = null; sourceNoticeFacts = null; filterMode = 'notices'; runMode = null; runPolicy = null; selected.clear(); exportRequest = null; knownExport = null; pendingMetadata = null; exportFolderNeeded = false;
+    async close() { if (busy || dirty()) { if (dirty()) status('Ungespeicherte Markdown-Korrektur zuerst speichern oder ausdrücklich verwerfen.'); return false; } connectionGeneration++; ticket++; loading = false; bulkReviewProgress = null; pendingApproval = null; viewedBindings.clear(); batchId = null; confirmedCopy = null; completedExportReceipt = null; completedCopyCount = 0; resultPublication = null; documents = []; contentNotices = null; sourceNoticeFacts = null; filterMode = 'notices'; runMode = null; runPolicy = null; selected.clear(); exportRequest = null; knownExport = null; pendingMetadata = null; exportFolderNeeded = false;
+      directResultsSupported = false;
       if ($('document-export-dialog').open) $('document-export-dialog').close();
       clearText(); renderReceipts(); render(); await invoke('close_document_reviews').catch(() => {}); return true; }
+  });
+  $('documents-open-results').addEventListener('click', async () => {
+    if (busy || !stateFresh || dirty() || !processingComplete || !documents.length || !batchId || ['pending', 'conflict'].includes(resultPublication?.state)) return;
+    const expected = batchId, connection = connectionGeneration, ownership = ++busyGeneration;
+    busy = true; controls();
+    try {
+      await invoke('open_history_results', { batchId: expected });
+      if (expected === batchId && connection === connectionGeneration) status('Der geprüfte Ergebnisordner wurde zum Öffnen übergeben. Dateien dort auswählen oder weiterverwenden.');
+    } catch (error) { if (expected === batchId && connection === connectionGeneration) showError(error); }
+    finally { if (expected === batchId && ownership === busyGeneration) { busy = false; controls(); } }
+  });
+  $('documents-publish').addEventListener('click', async () => {
+    if (busy || !stateFresh || dirty() || !batchId || !processingComplete || !directResultsSupported || !publicationUnsettled() || exportRequest) return;
+    const expected = batchId, connection = connectionGeneration, ownership = ++busyGeneration;
+    busy = true; controls();
+    try {
+      await publishCurrent(expected, ownership, connection);
+      if (expected === batchId && connection === connectionGeneration) status('Aktueller Ergebnisstand bestätigt. Ergebnisordner öffnen; frühere Ergebnisstände bleiben unverändert.');
+    } catch (error) { if (expected === batchId && connection === connectionGeneration) showError(error, '', true); }
+    finally { if (expected === batchId && ownership === busyGeneration) { busy = false; controls(); } }
   });
   $('documents-reload').addEventListener('click', async () => {
     if (busy || !batchId || dirty() && !recoveryDraft) return;
@@ -1043,7 +1119,7 @@
       // Preserve the draft separately while loading the actual committed text.
       recoveryDraft = null; await loadDetail(row); recoveryDraft = draft;
       if (detail && row) {
-        if (loadedMarkdown === draft.text) { recoveryDraft = null; status(`${draft.name}: Der gespeicherte Text stimmt mit deinem Korrekturentwurf überein. Du kannst bei Bedarf eine zusätzliche Markdown-Kopie speichern.`); }
+        if (loadedMarkdown === draft.text) { recoveryDraft = null; status(`${draft.name}: Der gespeicherte Text stimmt mit deinem Korrekturentwurf überein. ${publicationUnsettled() ? 'Die Bereitstellung des aktuellen Ergebnisstands erneut prüfen.' : 'Den bestätigten Ergebnisordner öffnen; keine weitere Dateiauswahl nötig.'}`); }
         else if (row.revision === draft.revision && row.output_sha256 === draft.output_sha256) {
           $('document-markdown').value = draft.text; recoveryDraft = null; status(`${draft.name}: Korrekturentwurf wiederhergestellt, noch nicht gespeichert.`);
         } else status(`${draft.name}: Der gespeicherte Stand weicht ab. Dein Entwurf bleibt zum Vergleichen und Kopieren erhalten; er wird nicht automatisch darübergeschrieben.`, true);
@@ -1059,7 +1135,7 @@
     if (!['notices', 'edited', 'all', 'without'].includes(next) || next === filterMode) return;
     filterMode = next; selected.clear();
     if (detail && !visibleDocuments().some(row => row.document_id === detail.document_id)) clearText();
-    render(); status(`${visibleDocuments().length} von ${documents.length} Markdown-Dateien angezeigt. Die vorherige Auswahl wurde aufgehoben. Häkchen und „Vorherige/Nächste Datei“ gelten nur für diese Ansicht.`);
+    render(); status(`${visibleDocuments().length} von ${documents.length} Markdown-Dateien angezeigt. „Vorherige/Nächste Datei“ gilt nur für diese Ansicht. Die Ergebnisdateien werden dadurch nicht geändert.`);
   });
   $('documents-all').addEventListener('change', () => { if (busy || !stateFresh || exportRequest) return;
     const shown = visibleDocuments(); selected = new Set($('documents-all').checked ? shown.map(row => row.document_id) : []); render(); });
@@ -1130,7 +1206,7 @@
   $('document-markdown').addEventListener('input', controls);
   $('document-discard-correction').addEventListener('click', () => { $('document-markdown').value = loadedMarkdown; controls(); });
   $('document-save-correction').addEventListener('click', () => {
-    if (!detailCurrent() || !raw() || !dirty()) return;
+    if (busy || !processingComplete || !directResultsSupported || publicationUnsettled() || !detailCurrent() || !raw() || !dirty()) return;
     const text = $('document-markdown').value; let start = 0, oldEnd = loadedMarkdown.length, end = text.length;
     while (start < oldEnd && start < end && loadedMarkdown[start] === text[start]) start++;
     if (/[\uDC00-\uDFFF]/u.test(text[start] || '') || /[\uDC00-\uDFFF]/u.test(loadedMarkdown[start] || '')) start--;
@@ -1140,6 +1216,7 @@
     decideRows('correct', [detail], [{ start, end: oldEnd, replacement: text.slice(start, end) }]);
   });
   $('document-redact').addEventListener('click', () => { const node = $('document-markdown');
+    if (busy || !processingComplete || !directResultsSupported || publicationUnsettled()) return;
     if (!detailCurrent()) { actionStatus('Bitte zuerst links ein aktuelles Dokument öffnen.', true); return; }
     const start = node.selectionStart, end = node.selectionEnd;
     if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start >= end) {
@@ -1147,15 +1224,15 @@
       actionStatus(message, true); status(message, true); return;
     }
     pendingDocumentChange = { action: 'redact', row: { ...detail }, ranges: [{ start, end }] };
-    $('document-change-confirm-text').textContent = `${end - start} Zeichen in ${detail.name} markiert. Noch nichts geändert. „Maskierung jetzt speichern“ ersetzt nur diese Stelle, erzeugt einen neuen Prüfstand und hebt die Freigabe dieser Datei auf. Bereits erstellte Exporte bleiben unverändert.`;
+    $('document-change-confirm-text').textContent = `${end - start} Zeichen in ${detail.name} markiert. Noch nichts geändert. „Maskierung jetzt speichern“ ersetzt nur diese Stelle und stellt danach den vollständigen aktuellen Ergebnisstand in einem neuen Ordner bereit. Originaldateien und frühere Ergebnisstände bleiben unverändert.`;
     $('document-change-save').textContent = 'Maskierung jetzt speichern';
     controls(); $('document-change-save').focus();
     actionStatus('Maskierung vorbereitet, noch nicht gespeichert. Bitte die Auswirkung prüfen und ausdrücklich bestätigen oder abbrechen.');
   });
   $('document-restore').addEventListener('click', () => {
-    if (!detailCurrent() || raw()) return;
+    if (busy || !processingComplete || !directResultsSupported || publicationUnsettled() || !detailCurrent() || raw()) return;
     pendingDocumentChange = { action: 'restore_base', row: { ...detail }, ranges: [] };
-    $('document-change-confirm-text').textContent = `${detail.name}: Noch nichts geändert. Das Speichern stellt den automatisch erzeugten Basisstand dieser Datei wieder her und verwirft ihre späteren Text- und Entitätenänderungen. Die Freigabe wird aufgehoben; frühere Exporte bleiben unverändert.`;
+    $('document-change-confirm-text').textContent = `${detail.name}: Noch nichts geändert. Das Speichern stellt den automatisch erzeugten Basisstand dieser Datei wieder her und verwirft ihre späteren Text- und Entitätenänderungen. Danach wird der vollständige aktuelle Ergebnisstand in einem neuen Ordner bereitgestellt; frühere Ergebnisstände bleiben unverändert.`;
     $('document-change-save').textContent = 'Basisstand jetzt wiederherstellen';
     controls(); $('document-change-save').focus();
     actionStatus('Wiederherstellung vorbereitet, noch nicht gespeichert. Bitte ausdrücklich bestätigen oder abbrechen.');
@@ -1166,8 +1243,9 @@
     actionStatus('Änderung abgebrochen. Der gespeicherte Textstand bleibt unverändert.');
   });
   $('document-change-save').addEventListener('click', async () => {
+    const expected = batchId, connection = connectionGeneration;
     const pending = pendingDocumentChange;
-    if (!pending || !detailCurrent() || !sameDocumentBinding(detail, pending.row) || busy) {
+    if (!pending || !processingComplete || !directResultsSupported || publicationUnsettled() || !detailCurrent() || !sameDocumentBinding(detail, pending.row) || busy) {
       pendingDocumentChange = null; controls();
       actionStatus('Der vorbereitete Textstand ist nicht mehr aktuell. Bitte die Datei neu öffnen und die Änderung erneut prüfen.', true);
       return;
@@ -1175,6 +1253,7 @@
     pendingDocumentChange = null; controls();
     actionStatus('Änderung wird lokal gespeichert …');
     const result = await decideRows(pending.action, [detail], pending.ranges);
+    if (expected !== batchId || connection !== connectionGeneration) return;
     if (!result || batchId !== result.batchId) {
       actionStatus('Änderung nicht sicher bestätigt. Bitte den Status oben und den gespeicherten Stand prüfen; nicht blind erneut klicken.', true);
       return;
@@ -1185,13 +1264,14 @@
       return;
     }
     await loadDetail(updated);
+    if (expected !== batchId || connection !== connectionGeneration) return;
     if (!detail || !sameDocumentBinding(detail, updated)) {
       actionStatus('Änderung gespeichert, der neue Text konnte aber nicht geöffnet werden. Bitte den gespeicherten Stand neu laden.', true);
       return;
     }
     const message = pending.action === 'redact'
-      ? `${updated.name}: Zusätzliche Maskierung in Stand ${updated.revision} gespeichert. Prüfe rechts den Platzhalter [MANUAL_REDACTION]. Diese Datei ist noch nicht freigegeben; ein Export wurde nicht gestartet.`
-      : `${updated.name}: Technisch geprüfter Basisstand als Stand ${updated.revision} gespeichert. Prüfe den Text erneut und gib diese Datei bei Bedarf ausdrücklich frei. Frühere Exporte bleiben unverändert.`;
+      ? `${updated.name}: Zusätzliche Maskierung in Stand ${updated.revision} gespeichert und aktueller Ergebnisstand bereitgestellt. Prüfe rechts den Platzhalter [MANUAL_REDACTION].`
+      : `${updated.name}: Technisch geprüfter Basisstand als Stand ${updated.revision} gespeichert und aktueller Ergebnisstand bereitgestellt. Frühere Ergebnisstände bleiben unverändert.`;
     actionStatus(message); status(message);
   });
   controls();

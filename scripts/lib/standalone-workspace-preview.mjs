@@ -46,6 +46,7 @@ export function workspacePreviewBridge() {
     const privateResult = row => ({ ok: true, ...row, local_ui_only: true, external_disclosure: false });
     const entityChoices = new Map();
     const exportReceipts = [], pendingExports = [], completedSelections = new Map();
+    let resultPublication = { state: 'initial', generation_id: null, count: documentRows.length, current_revision: 0 };
     const context = () => ({ ok: true, local_ui_only: true, external_disclosure: false,
       result_folder: 'Dokumente/DataSecure', source_catalogue: files, catalogue_revision: revision,
       source_folders: files.length ? [largeCatalogueDemo ? 'Dokumente/Synthetischer-Katalog' : 'Dokumente/Bewerbungen-Q3'] : [], selected_files: files.filter(f => f.selectable).map(f => f.name) });
@@ -74,7 +75,8 @@ export function workspacePreviewBridge() {
         if (command === 'get_run_history') return entries();
         if (command === 'get_document_review_history_summary') return privateResult({ available: args.batchId === batch,
           ...(fastDemo ? { review_policy: 'automatic-conservative', automatically_approved_count: documentRows.filter(row => row.approval_basis === 'automatic' && row.approved).length } : {}),
-          processing_mode: mode, reviewable_count: documentRows.length, approved_count: documentRows.filter(row => row.approved).length,
+          processing_mode: mode, result_publication: structuredClone(resultPublication),
+          reviewable_count: documentRows.length, approved_count: documentRows.filter(row => row.approved).length,
           unavailable_count: 0, unclassified_source_count: 0, recorded_export_count: exportReceipts.length,
           current_exported_count: documentRows.filter(row => [...completedSelections.values()].some(selection => selection.some(item =>
             item.document_id === row.document_id && item.revision === row.revision && item.output_sha256 === row.output_sha256))).length,
@@ -87,6 +89,7 @@ export function workspacePreviewBridge() {
           for (const row of documentRows) row.output_sha256 = await digest(bodies.get(row.document_id));
           if (documentNotices) await new Promise(resolve => setTimeout(resolve, 450));
           return { local_ui_only: true, external_disclosure: false, documents: structuredClone(documentRows), processing_mode: mode,
+            processing_complete: phase === 'results_available', result_publication: structuredClone(resultPublication),
             ...(fastDemo ? { review_policy: 'automatic-conservative', processing_complete: true,
               content_notice_count: 2, content_notice_breakdown_complete: true } : {}),
             ...(documentFilter ? { conversion_feedback: { ...feedback, selected_count: 3, result_count: 3,
@@ -143,7 +146,8 @@ export function workspacePreviewBridge() {
               throw Error('DOCUMENT_REVIEW_STALE');
             return row;
           });
-          for (const row of chosen) { row.revision++; row.approved = args.decision.action === 'approve'; }
+          for (const row of chosen) { row.revision++; row.approved = args.decision.action === 'approve';
+            if (fastDemo) row.approval_basis = row.approved ? 'manual' : null; }
           return { ok: true, operation_id: args.decision.operation_id, affected_count: chosen.length,
             documents: chosen.map(privateResult), local_ui_only: true, external_disclosure: false };
         }
@@ -165,8 +169,19 @@ export function workspacePreviewBridge() {
           else if (args.decision.action === 'restore_base') { text = mode === 'markdown-only' ? original : initial; entityChoices.delete(row.document_id); }
           bodies.set(row.document_id, text); row.output_sha256 = await digest(text);
           if (mode === 'markdown-only') row.text_modified = text !== original;
-          row.revision++; row.approved = args.decision.action === 'approve'; }
+          row.revision++; row.approved = args.decision.action === 'approve';
+          if (fastDemo) row.approval_basis = row.approved ? 'manual' : null; }
+          if (!['approve', 'revoke'].includes(args.decision.action)) resultPublication = { state: 'pending', generation_id: null,
+            count: documentRows.length, current_revision: Math.max(...documentRows.map(row => row.revision)) };
           return { ...privateResult(origin), scope: args.decision.scope || 'document', affected_count: affected.length }; }
+        if (command === 'publish_result_documents') {
+          if (args.batchId !== batch || Object.keys(args).join(',') !== 'batchId' || phase !== 'results_available')
+            throw Error('DOCUMENT_REVIEW_STALE');
+          resultPublication = { state: 'current', generation_id: (await digest(JSON.stringify(documentRows.map(row =>
+            [row.document_id, row.revision, row.output_sha256])))).slice(0, 32), count: documentRows.length,
+            current_revision: Math.max(...documentRows.map(row => row.revision)) };
+          return privateResult({ batch_id: batch, result_publication: structuredClone(resultPublication) });
+        }
         if (command === 'export_approved_documents') {
           const result = { ok: true, operation_id: args.operationId, exported_count: args.selection.length,
             folder_name: 'Export-' + args.operationId, processing_mode: mode, anonymized: mode !== 'markdown-only', local_ui_only: true, external_disclosure: false };

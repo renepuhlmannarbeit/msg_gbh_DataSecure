@@ -215,6 +215,8 @@ jobs:
           node tests/test-standalone-target-export-race.js
           node tests/test-standalone-target-export-snapshot.js
           node tests/lib/standalone-history-read-observer-cases.cjs
+          node tests/test-result-generations.js
+          node tests/test-result-initial-exact-binding.js
           npm run test:standalone
       - name: Run the real isolated converter-worker boundary
         run: npm run test:standalone:conversion

@@ -572,7 +572,7 @@ async function sendAnswer(answer) {
       ? 'Prüfung vertagt. Der Lauf bleibt im Verlauf unter „Prüfung offen“ und kann dort fortgesetzt werden.'
       : markdownContact
         ? 'OCR-Kontaktentscheidungen gespeichert. DataSecure setzt die Markdown-Umwandlung fort. Weitere Kontaktgruppen erscheinen hier bei Bedarf. Eine Dokumentfreigabe zur Anonymisierung ist nicht erforderlich. Den Abschlussstatus siehst du beim Lauf im Hauptfenster.'
-        : 'Entscheidungen gespeichert. Weitere Fundstellen werden geprüft. Bitte warten; die nächste Gruppe erscheint hier. Danach kannst du die Ergebnisse ansehen und mit einer gemeinsamen Freigabe-/Exportbestätigung verwenden.',
+        : 'Entscheidungen gespeichert. Weitere Fundstellen werden geprüft. Bitte warten; die nächste Gruppe erscheint hier. Nach der letzten Gruppe werden die fertigen Ergebnisdateien bereitgestellt. Keine zweite Dateiauswahl, Freigabe oder Exportbestätigung nötig.',
     answer.action === 'reviewed');
     if (answer.action === 'reviewed') schedulePoll();
   } catch {

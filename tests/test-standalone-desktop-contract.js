@@ -297,7 +297,7 @@ test('native review close is bound before visibility and never discovers a later
 
 test('recursive admission uses a separate bounded deadline and an honest content-free heartbeat', () => {
   const deadline = rust.slice(rust.indexOf('fn rpc_duration('), rust.indexOf('fn admission_transport_code('));
-  for (const action of ['admit_selected_sources', 'export_approved_documents', 'resolve_document_export', 'abandon_document_export',
+  for (const action of ['admit_selected_sources', 'export_approved_documents', 'publish_result_documents', 'resolve_document_export', 'abandon_document_export',
     'resolve_document_identity_overview', 'get_document_reviews', 'get_document_review_history_summary', 'get_run_history',
     'get_review_session', 'resolve_current_results', 'resolve_local_ledger']) {
     assert.ok(deadline.includes(`"${action}"`), `${action} needs a bounded export/recovery deadline`);
@@ -321,6 +321,30 @@ test('recursive admission uses a separate bounded deadline and an honest content
   const payload = progress.match(/json!\(\{([\s\S]*?)\}\)/u)?.[1];
   assert.ok(payload);
   assert.deepStrictEqual([...payload.matchAll(/"([^"]+)":/gu)].map(match => match[1]), ['phase', 'elapsed_ms']);
+});
+
+test('result publication is a main-workspace batch-only native command, separate from legacy exports', () => {
+  const permissions = fs.readFileSync(path.join(root, 'tauri-contract/permissions/commands.toml'), 'utf8');
+  const reviewCapability = JSON.parse(fs.readFileSync(path.join(root, 'tauri-contract/capabilities/review.json'), 'utf8'));
+  assert.ok(capability.permissions.includes('allow-publish-result-documents'));
+  assert.ok(!reviewCapability.permissions.includes('allow-publish-result-documents'));
+  assert.match(permissions, /identifier = "allow-publish-result-documents"[\s\S]*?commands\.allow = \["publish_result_documents"\]/u);
+  const command = rust.slice(rust.indexOf('async fn publish_result_documents('), rust.indexOf('async fn document_review_rpc('));
+  assert.match(command, /batch_id: String/u);
+  assert.equal((command.match(/document_review_surface\(&window, &state, Some\(&batch_id\)\)\?/gu) || []).length, 2,
+    'the exact active document batch must own admission and the post-RPC response');
+  assert.doesNotMatch(command, /document_review_surface\(&window, &state, None\)/u);
+  assert.match(command, /let expected_batch = batch_id\.clone\(\)/u);
+  assert.match(command, /history_rpc\(&owned, "publish_result_documents", &expected_batch\)/u);
+  assert.doesNotMatch(command, /selection:|operation_id:|source_paths|acknowledge:|approved:/u);
+  const invoke = rust.slice(rust.indexOf('.invoke_handler(tauri::generate_handler!['));
+  assert.match(invoke, /\bpublish_result_documents,/u);
+  const channel = fs.readFileSync(path.join(root, 'tauri-contract/src/native_export_channel.rs'), 'utf8');
+  assert.match(channel, /object\.len\(\) == 4/u);
+  assert.match(channel, /\(results_outer\(outer, &op\.batch_id, "resolve_history_results"\) \|\| current_results_outer\(outer\)\) && request\.command == "reconcile"/u);
+  assert.match(channel, /object\.len\(\) == 3 && \["schema", "request_id", "action"\]/u);
+  assert.match(channel, /outer\["action"\] == "resolve_current_results"/u);
+  assert.match(channel, /native_export_broker::inspect_results/u);
 });
 
 test('every repeated external quit stays prevented until the shutdown completion gate', () => {

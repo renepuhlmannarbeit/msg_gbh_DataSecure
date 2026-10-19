@@ -5,7 +5,7 @@
 //! into another directory. No cleanup, permission repair or copy fallback.
 #![allow(dead_code)]
 use crate::{export_directory::{Directory, ExpectedFile, Identity}, ipc_transport::NativeGuard,
-    native_export_transaction::{Parents, Plan, Transaction}};
+    native_export_transaction::{Parents, Plan, PublicationRole, Transaction, deserialize_publication_role, publication_directory_name}};
 use serde::{Deserialize, Serialize};
 use std::io;
 
@@ -34,13 +34,18 @@ impl ObjectId {
 pub(crate) struct Request {
     batch_id: String, operation_id: String, request_sha256: String, processing_mode: String,
     private_root: ObjectId, target: ObjectId, files: Vec<ExpectedFile>,
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_publication_role")]
+    publication_role: Option<PublicationRole>,
 }
 impl Request {
     pub fn new(batch_id: String, operation_id: String, request_sha256: String, processing_mode: String,
         files: Vec<ExpectedFile>, private_root: &Directory, target: &Directory) -> io::Result<Self> {
-        let request = Self { batch_id, operation_id, request_sha256, processing_mode, files,
+        let request = Self { batch_id, operation_id, request_sha256, processing_mode, files, publication_role: None,
             private_root: private_root.identity().into(), target: target.identity().into() };
         request.validate()?; Ok(request)
+    }
+    pub fn with_publication_role(mut self, role: Option<PublicationRole>) -> Self {
+        self.publication_role = role; self
     }
     fn validate(&self) -> io::Result<()> {
         if !hex(&self.batch_id, 64) || !hex(&self.operation_id, 32) || !hex(&self.request_sha256, 64) ||
@@ -60,7 +65,7 @@ impl Request {
     }
     fn journal_name(&self) -> String { format!("journal-{}", self.operation_id) }
     fn staging_name(&self) -> String { format!("staging-{}", self.operation_id) }
-    fn published_name(&self) -> String { format!("Export-{}", self.operation_id) }
+    fn published_name(&self) -> String { publication_directory_name(self.publication_role, &self.operation_id) }
     fn record_name(&self, kind: &str) -> String { format!("{}-parents-{kind}.json", self.operation_id) }
 }
 #[derive(Eq, PartialEq, Serialize, Deserialize)]
@@ -102,6 +107,23 @@ pub(crate) struct Workspace<'a> {
 impl<'a> Workspace<'a> {
     pub fn open(root: &'a Directory, target: &'a Directory, request: Request, guard: &NativeGuard) -> io::Result<Self> {
         Self::open_checkpoints(root, target, request, guard, |_| Ok(()))
+    }
+    pub fn open_existing(root: &'a Directory, target: &'a Directory, request: Request, guard: &NativeGuard) -> io::Result<Self> {
+        request.validate()?;
+        if request.private_root != root.identity().into() || request.target != target.identity().into() { return Err(conflict()); }
+        root.verify_controlled()?;
+        guard.checkpoint().map_err(|_| error("STANDALONE_CLOSING"))?;
+        let _ownership = root.lock_existing_control()?;
+        let intent = Intent { schema: "datasecure-native-export-parent-intent/1".into(), request: request.clone() };
+        if read::<Intent>(root, &request.record_name("intent"))?.as_ref() != Some(&intent) ||
+            read::<Abandoned>(root, &request.record_name("abandoned"))?.is_some() { return Err(conflict()); }
+        let binding = read::<Binding>(root, &request.record_name("binding"))?.ok_or_else(|| error("AI_EXPORT_UNCERTAIN"))?;
+        if binding.schema != "datasecure-native-export-parent-binding/1" || binding.request != request { return Err(conflict()); }
+        let journal = root.open_controlled_child(&request.journal_name(), binding.journal.identity()?)?;
+        let staging = root.open_controlled_child(&request.staging_name(), binding.staging.identity()?)?;
+        root.inspect_child(&request.journal_name(), journal.identity())?;
+        root.inspect_child(&request.staging_name(), staging.identity())?;
+        Ok(Self { root, target, request, journal, staging })
     }
     fn open_checkpoints(root: &'a Directory, target: &'a Directory, request: Request, guard: &NativeGuard,
         mut checkpoint: impl FnMut(&str) -> io::Result<()>) -> io::Result<Self> {
@@ -181,13 +203,21 @@ impl<'a> Workspace<'a> {
         Ok(true)
     }
     pub fn transaction<'b>(&'b self, guard: &'b NativeGuard) -> io::Result<Transaction<'b>> {
+        self.transaction_mode(guard, false)
+    }
+    pub fn existing_transaction<'b>(&'b self, guard: &'b NativeGuard) -> io::Result<Transaction<'b>> {
+        self.transaction_mode(guard, true)
+    }
+    fn transaction_mode<'b>(&'b self, guard: &'b NativeGuard, existing_only: bool) -> io::Result<Transaction<'b>> {
         self.root.verify_controlled()?;
         self.root.inspect_child(&self.request.journal_name(), self.journal.identity())?;
         self.root.inspect_child(&self.request.staging_name(), self.staging.identity())?;
         let plan = Plan::new(self.request.batch_id.clone(), self.request.operation_id.clone(), self.request.request_sha256.clone(),
             self.request.processing_mode.clone(), self.request.files.clone(),
-            &Parents { journal: &self.journal, staging: &self.staging, target: self.target })?;
-        Transaction::open(&self.journal, &self.staging, self.target, plan, guard)
+            &Parents { journal: &self.journal, staging: &self.staging, target: self.target })?
+            .with_publication_role(self.request.publication_role);
+        if existing_only { Transaction::open_existing(&self.journal, &self.staging, self.target, plan, guard) }
+        else { Transaction::open(&self.journal, &self.staging, self.target, plan, guard) }
     }
 }
 
@@ -227,6 +257,28 @@ mod tests {
                 else { assert!(metadata.is_file()); }
             }
             fs::remove_dir_all(&self.path).unwrap();
+        }
+    }
+    #[test]
+    fn result_role_parent_intents_never_cross_adopt_legacy_and_results() {
+        for results_first in [false, true] {
+            let f = Fixture::new(); let (r, t) = (f.open("private"), f.open("public"));
+            let legacy = f.request(&r, &t);
+            let results = legacy.clone().with_publication_role(Some(PublicationRole::Results));
+            assert!(!String::from_utf8_lossy(&serde_json::to_vec(&legacy).unwrap()).contains("publication_role"));
+            let (first, changed) = if results_first { (results, legacy) } else { (legacy, results) };
+            let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
+            {
+                let workspace = Workspace::open(&r, &t, first.clone(), &guard).unwrap();
+                let tx = workspace.transaction(&guard).unwrap();
+                tx.write_body(0, b"hello").unwrap(); tx.prepare().unwrap();
+                assert_eq!(tx.commit().unwrap(), Status::Completed);
+            }
+            assert!(Workspace::open(&r, &t, changed, &guard).is_err());
+            let workspace = Workspace::open(&r, &t, first.clone(), &guard).unwrap();
+            assert_eq!(workspace.transaction(&guard).unwrap().acknowledge().unwrap(), Status::Acknowledged);
+            assert_eq!(fs::read_dir(f.path.join("public")).unwrap().count(), 1);
+            assert_eq!(fs::read(f.path.join("public").join(first.published_name()).join("Dokument_01.md")).unwrap(), b"hello");
         }
     }
     #[test]

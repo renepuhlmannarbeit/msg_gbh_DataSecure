@@ -1,12 +1,13 @@
 # DataSecure Standalone Desktop
 
-Aktuelle unveröffentlichte Entwicklung **RC165**: Die normale Exportbestätigung
-**Freigeben und exportieren** schließt die technische Dokumentfreigabe ein;
-keine zweite Pflichtbestätigung. Vorschau ist lesend, Schutzprüfungen bleiben.
+Aktuelle unveröffentlichte Entwicklung **RC166**: Nach notwendigen OCR-/
+Fundstellenentscheidungen direkt zu den fertigen Ergebnisdateien, ohne zweite
+Dokumentauswahl, Freigabe oder Exportbestätigung. Optionale Nachkorrekturen werden
+als vollständiger neuer Ergebnisstand bereitgestellt. Schutzprüfungen bleiben.
 Gespeicherte Ziele werden nur mit unveränderter Identität und erlaubtem Zugriff
 übernommen. Kein neues veröffentlichtes Paket-/Mac-/Desktop-PASS aus diesem
 Quellstand. Die folgenden RC159-Abschnitte sind historische Releasebelege.
-Aktueller Vertrag: [Exportvereinfachung](../../docs/acceptance/STANDALONE_EXPORT_USABILITY_20261019.md).
+Aktueller Vertrag: [Direkte Ergebnisbereitstellung](../../docs/acceptance/RC166_DIRECT_RESULTS_20261019.md).
 
 ### Veröffentlichtes Test-Prerelease RC159 (11.10.2026)
 
