@@ -81,3 +81,26 @@ Die beiden Betriebsarten rufen das exakte Receiptorakel jetzt auch außerhalb
 des Darwinzweigs auf. Der erste Windows-65erLauf mit bereits korrektem
 Anonymisierungsorakel war grün; die nächste Gesamtregression muss zusätzlich
 die neue Markdown-Aufrufstelle und beide neuen echten Mac-Läufe nachweisen.
+
+## Source02 – fehlende gemeinsame Projektionsabhängigkeit
+
+Appcommit `b5c30eb9a69eca910f717b06658bd85649a467e2`, gleicher Produktfingerprint.
+Headless mit unveränderten570Test-/Scriptinputs beendet:8/284+0/10, ROT in
+`test-core-contracts.mjs`. ARM118335366069 in39332942087 bestätigt denselben
+Fehler: `PRODUCT_MODULE_DEPENDENCY_MISSING` für den neuen statischen Import
+`gateway/result-export.js -> standalone/result-companions.js`.
+Die Standalone-Projektion selbst schließt relative Imports bereits automatisch;
+die explizite gemeinsame Cowork-Leafliste enthielt das neue inerte Modul nicht.
+Intel118335366180 nach bestätigtem gemeinsamen Blocker gezielt abgebrochen.
+Windows Prepare/Clippy/265Rusttests(3ignoriert)/Release regulär beendet,
+unveränderte Inputs, kein Paket gebaut. Alle Jobs beendet vor Quelländerung.
+
+Minimaler Fix: exakt ein inertes festes Rollen-/Hash-/CSV-Modul zur geschlossenen
+gemeinsamen Liste aufnehmen; keine Wildcard, Closureausnahme oder neue Cowork-
+Aktion/Schreibbefugnis. Tatsächliche Quellenanalyse bestätigt keine I/O- oder
+Registrierungsaktion beim Import; bestehende Mappingabhängigkeit war bereits
+Teil des gemeinsamen Exporters. Explizite Laufzeitliste ergänzt; beide echten
+Projektionen müssen exakte Modulbytes enthalten und bei Entfernen genau dieses
+Leafs scheitern. Vorschlag unabhängig gegengelesen; Source03 benötigt nach dem
+engen Fix neue gemeinsame Commit-/Regressions-/Plattformbelege. Source02 bleibt
+als fehlgeschlagen dokumentiert; seine Nativebelege ersetzen Source03 nicht.

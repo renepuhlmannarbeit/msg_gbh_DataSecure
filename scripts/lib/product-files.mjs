@@ -41,7 +41,10 @@ const sharedStandaloneModules = new Set([
   'server/standalone/identity-ledger.js',
   // Pure rendering dependency of the shared, channel-guarded document store.
   // This grants no Cowork UI/IPC action or confidential export path.
-  'server/standalone/confidential-overview.js'
+  'server/standalone/confidential-overview.js',
+  // Inert fixed-role/hash/CSV contract imported by shared publication code.
+  // This adds no Cowork action, UI, path authority or native write capability.
+  'server/standalone/result-companions.js'
 ]);
 
 function excludedEngineeringFile(normalized) {

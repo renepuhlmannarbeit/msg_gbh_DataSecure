@@ -299,6 +299,14 @@ test('both actual product projections contain the same core implementations and 
   const standalone = new Map(collectStandaloneRuntime(server, 'windows-x64').map(file => [`server/${file.relative}`, file.bytes]));
   assert.deepStrictEqual(verifyProductRelativeRequires(plugin), { ok: true });
   assert.deepStrictEqual(verifyProductRelativeRequires(standalone), { ok: true });
+  const companion = 'server/standalone/result-companions.js';
+  const companionSource = fs.readFileSync(path.join(server, 'standalone/result-companions.js'));
+  for (const [channel, entries] of [['plugin', plugin], ['standalone', standalone]]) {
+    assert.ok(entries.get(companion)?.equals(companionSource), `${channel}: exact shared companion contract bytes shipped`);
+    const missing = new Map(entries); missing.delete(companion);
+    assert.throws(() => verifyProductRelativeRequires(missing), /PRODUCT_MODULE_DEPENDENCY_MISSING/u,
+      `${channel}: missing companion contract must not fall back to the checkout`);
+  }
   assert.ok(!plugin.has('server/standalone/application-service.js'));
   assert.ok(!standalone.has('server/mcp-server.js') && !standalone.has('server/index.js'));
   for (const name of coreRoots) {
