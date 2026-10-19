@@ -53,6 +53,14 @@ Purpose-, Parent-, Close- und Drei-Versuchsgrenzen bleiben erhalten. Frische
 gemeinsame Gesamt-/Native-/Paketgates folgen; keine neue Freigabe, kein RC165-
 Release. Genauer Stand im Exportvereinfachungsnachweis.
 
+Source05/d480b8f: neue vierte echte Publisherphase auf ARM64 UNDIntelPASS,
+WindowsNative232Rust/3ignored und fünfPaketgatesPASS, Inputs unverändert.
+Wegen drei zuletzt am UI-Quelltext bestätigter alter Pflichtfreigabehinweise
+HeadlessbeiDatei60 und beideMacjobs gezielt angehalten; kein Gesamt-PASS.
+Nur diese drei Copytexte korrigiert und mit lokalisierten HTML-/tatsächlich
+gerenderten VM-Verlaufsregressionen abgesichert. Ziel bleibt gemeinsame neue
+Endprüfung und RC165-Übergabe, Nutzer bedient Desktop; kein Zeitauftrag.
+
 ### Neuester verbindlicher Stand – Veröffentlichung 19.10.2026
 
 [RC164-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc164)

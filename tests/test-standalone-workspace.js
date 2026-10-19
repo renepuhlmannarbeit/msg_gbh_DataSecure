@@ -4286,4 +4286,53 @@ testAsync(`finished history keeps result opener first/green and stable separate 
   assert.equal(h.calls.some(call => ['decide_document_review', 'decide_document_review_batch', 'export_approved_documents'].includes(call.command)), false);
 });
 
+testAsync('anonymization mode copy assigns approval to the export confirmation, not a separate mandatory action', async () => {
+  const input = html.indexOf('id="mode-anonymize"');
+  assert.ok(input >= 0);
+  const start = html.lastIndexOf('<label', input), end = html.indexOf('</label>', input);
+  assert.ok(start >= 0 && end > input);
+  const copy = html.slice(start, end + '</label>'.length).replace(/<[^>]*>/gu, ' ').replace(/\s+/gu, ' ');
+  assert.match(copy, /Exportbestätigung enthält die Freigabe der ausgewählten Textstände/u);
+  assert.match(copy, /ein zusätzlicher Freigabeschritt ist nicht nötig/u);
+  assert.doesNotMatch(copy, /Erst eine gesonderte Dokumentfreigabe erlaubt den Export/u);
+  const extras = /<details\b[^>]*id="documents-approval-extras"[\s\S]*?<\/details>/u.exec(html)?.[0];
+  assert.ok(extras);
+  assert.match(extras, /Freigaben verwalten \(optional\)/u);
+  assert.match(extras, /Auswahl nur freigeben/u, 'optional approval-only management remains available');
+});
+
+testAsync('entity-change guidance names the combined export click and attributes no export to editing alone', async () => {
+  const marker = html.indexOf('class="entity-guide meta"');
+  assert.ok(marker >= 0);
+  const start = html.lastIndexOf('<ol', marker), end = html.indexOf('</ol>', marker);
+  assert.ok(start >= 0 && end > marker);
+  const copy = html.slice(start, end + '</ol>'.length).replace(/<[^>]*>/gu, ' ').replace(/\s+/gu, ' ');
+  assert.match(copy, /Originalwert beibehalten/u);
+  assert.match(copy, /Jede Änderung hebt betroffene Freigaben auf/u);
+  assert.match(copy, /„Freigeben und exportieren“ bestätigen/u);
+  assert.match(copy, /Die Änderung allein startet keinen Export/u);
+  assert.doesNotMatch(copy, /ausdrücklich freigeben; ein Export startet dadurch nicht/u);
+});
+
+testAsync('rendered history summary explains combined confirmation after an explicit read-only disclosure', async () => {
+  const h = harness({ invoke(command, _args, fallback) {
+    return command === 'get_document_review_history_summary' ? reviewSummary() : fallback();
+  } }); await tick();
+  h.model.entries = [{ batch_id: B, processing_mode: 'markdown-and-anonymize', selected_count: 2,
+    result_count: 2, failed_count: 0, status: 'results_available', result_location: 'available', results_available: true }];
+  await h.act('nav-history');
+  assert.equal(h.calls.filter(call => call.command === 'get_document_review_history_summary').length, 0);
+  await toggleHistorySummary(h, B);
+  const summary = h.el(`history-${B}-summary`);
+  assert.equal(summary.hidden, false);
+  assert.match(summary.textContent, /Freigabe und Export werden im normalen Weg gemeinsam bestätigt/u);
+  assert.doesNotMatch(summary.textContent, /Dokumentfreigaben und Exporte sind getrennte Schritte/u);
+  const reads = h.calls.filter(call => call.command === 'get_document_review_history_summary');
+  assert.equal(reads.length, 1); assert.deepEqual(reads[0].args, { batchId: B });
+  assert.equal(h.calls.some(call => ['decide_document_review', 'decide_document_review_batch', 'export_approved_documents',
+    'configure_results', 'start_admitted_batch', 'continue_history_batch', 'continue_current_batch',
+    'continue_review_session', 'abandon_document_export', 'abandon_result_export'].includes(call.command)), false,
+    'copy disclosure itself cannot approve, export, configure, start or continue work');
+});
+
 done();

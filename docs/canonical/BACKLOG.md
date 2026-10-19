@@ -52,6 +52,13 @@ Fresh-Held-/Sticky-Failure-Korrektur produktiv übernommen, gezielte Gegenfälle
 und frische gemeinsame Endgates folgen. Alle roten Belege bleiben; kein generisch
 aufgeweichtes Fehler-/Retryorakel und keine native Desktopabnahme.
 
+Source05/d480b8f: native vierte Publisherphase auf beidenMacarchitekturenPASS;
+WindowsNative232Rust/3ignored und fünfPaketgatesPASS, Inputs unverändert.
+Zwischenlauf wegen drei bestätigter alter UI-Pflichthinweise gezielt angehalten,
+keine HEADLESS-FINAL, beideMacjobsCANCELLED. Drei Copytexte und lokalisierte
+Quellen-/echte DOM-VM-Regressionsfälle korrigiert, keine technische Lockerung.
+Neuer gemeinsamer Commit/freie Endgates/Windows-Übergabe/Macdownloads noch offen.
+
 Auslöser: reale RC164-Mac26.2-ARM64-Protokolle belegen fehlende Exporteinrichtung
 vor erfolgreicher Ordnerwahl und anschließendem Drei-Dateien-Export samt ACK.
 Drei Read-Busy-Antworten sind Konkurrenzzustände, kein belegter Coreabsturz.

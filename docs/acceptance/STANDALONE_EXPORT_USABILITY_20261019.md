@@ -463,3 +463,36 @@ synthetische Evidence bleibt erhalten. Nach Korrektur46/46, Main kompletter
 Haupttest27/27 und gezielter Historytest PASS. Der vorläufige Pfadtrackingtest
 meldete vor Gitaufnahme erwartungsgemäß den neuen Helper als untracked; keine
 Orakellockerung, Datei wird als dauerhafte Testressource aufgenommen.
+
+### Source05-Deltaabgleich und abschließende Copykonsistenz
+
+Gemeinsamer Zwischencommitd480b8f664c1b708d249ed70994d368a1d56e9b9,
+Fingerprintbaceb35f3ccb6ef72a5c1cfebaee2641591f01fe030100c4a79c56c439283dee/332:
+WindowsNative232Rust/3ignored/Clippy/Release sowie fünfPaketgatesPASS, Inputs
+unverändert. Macconsumer39254579846 bestand die vier echten atomaren Publisher-
+Gegenphasen auf ARM64 undIntel; ARMauchSourceverträge/221Rust3ignoredPASS.
+Keine Behauptung eines vollständigen Mac-Paketpasses daraus.
+
+Abgleich der tatsächlich sichtbaren UI mit dem Testplan fand noch drei
+widersprüchliche RC164-Copyreste: Startmodus behauptete gesonderte Pflichtfreigabe,
+Verlaufsstatus getrennte Pflichtschritte, Entitätenhilfe erneutes ausdrücklich
+Freigeben ohne Export. Quellreviews bestätigten das als Copyfehler, nicht
+als gewollte optionale Freigabeverwaltung. Source05 daher gezielt angehalten:
+Headlessnach59vollständigabgeschlossenenDateienbeim60.Sidecarfall, keine
+HEADLESS-FINAL; beide Macjobs absichtlichCANCELLED. Quellen bis Ende unverändert,
+rote/unterbrochene Belege und Zwischenpakete erhalten. Kein Release/Übergabe.
+
+Nur diese drei Texte korrigiert, keine Fachlogik/IPC/Layout-/Autoritätsänderung.
+Neue Regression prüft lokalisierte HTML-Abschnitte und die tatsächlich gerenderte
+Historysummary nach einem expliziten gebundenen Read; keine Start-/Freigabe-/
+Exportmutation. Derselbe gezielte Quellen-/DOM-VM-Test vor dem Fix0PASS/3FAIL,
+nach dem Fix3PASS/0FAIL, durch Main unverändert reproduziert. Optionale
+„Freigaben verwalten“ bleibt positiv geprüft. Der echte Workspace-/Renderer-
+Gesamttest wird am neuen Commit erneut gebunden; VM ist kein Desktopnachweis.
+Quellen/Belege unter `dist/rc165-copy-consistency-spike-20261019`.
+
+Main nach Produktübernahme vollständiger Workspace382/382 und Reviewfrontend103/103
+PASS; unabhängiges tatsächliches finales Copy-/Renderergegenlesen ohne bestätigten
+Deltablocker. Optionale Freigabeverwaltung und technische Schutzprüfungen unverändert.
+Der anschließende gemeinsame Source06-Lauf muss alle Endgates frisch nachweisen;
+Source05-Belege werden nicht als neuer Paket- oder Release-PASS übernommen.

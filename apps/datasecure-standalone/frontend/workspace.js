@@ -1230,7 +1230,7 @@
         status.textContent = raw ? data.pending_export_count
           ? 'Eine zusätzliche Markdown-Kopie hat noch eine offene Bestätigung. In der Nachkorrektur abgleichen, nicht erneut kopieren. Die ursprünglichen Ergebnisdateien bleiben erhalten.'
           : 'Optionale Nachkorrekturen und zusätzliche Kopien. Für den normalen Markdown-Abschluss ist hier kein weiterer Schritt erforderlich.'
-          : 'Verarbeitung beendet; Dokumentfreigaben und Exporte sind getrennte Schritte. Abgeglichene Momentaufnahme: Nach Änderungen erneut laden.';
+          : 'Verarbeitung beendet. Freigabe und Export werden im normalen Weg gemeinsam bestätigt. Abgeglichene Momentaufnahme: Nach Änderungen erneut laden.';
         reload.hidden = updateAction(data) === true;
         loadedRead = owner;
       } catch (error) {
