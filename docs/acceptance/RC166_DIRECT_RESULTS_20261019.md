@@ -111,6 +111,17 @@ Legacy-Kopie und sechs bestätigten Host-/Worker-Abschlüssen. Zudem erneut
 51 Async-,15 Initialwriter-,156 Renderer- und49 Präsentationsfälle grün.
 Die vollständigen eingefrorenen Source04-Belege müssen diese Vorabtests ersetzen.
 
+Source04: Beide Macjobs fanden einen weiteren veralteten Testaufbau, der selbst
+einen neuen Laufordner vor dem Writerintent anlegte und dessen Übernahme erwartete.
+Die neue Schutzprüfung verweigerte diese Adoption korrekt. Die Fixture lässt
+jetzt den echten Writer Ordner und erste Datei anlegen; erst am exklusiven Link
+des zweiten Blatts erzeugt sie eine fremde Datei mit `wx`. Der echte Link
+scheitert dann an der Kollision. Teilkopie1/1, Abandon, Original-/Fremdbytes und
+Replay bleiben geprüft. 37/37 danach grün; unabhängig am tatsächlichen Writer
+gegengelesen, kein Produktdelta. Source04-Native und5Windows-Paketgates inklusive
+neuer echter ABI1-Outputprobe und100/100Korpus waren regulär grün, Gesamtprüfung
+wurde nach35Dateien gezielt beendet. Keine Source04-Freigabe; neuer Source05-Freeze.
+
 ## Anwendervertrag
 
 - Quellen auswählen und verarbeiten. OCR bleibt separat; geführte Fundstellen-

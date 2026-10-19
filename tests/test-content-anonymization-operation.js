@@ -880,11 +880,20 @@ async function main() {
       const record = JSON.parse(fs.readFileSync(exporter.recordPath(stored.token), 'utf8'));
       assert.equal(record.items.length, 2);
       const run = path.join(configuredRoot, 'DataSecure-Output', record.run_directory);
-      fs.mkdirSync(run, { recursive: true });
+      assert.equal(fs.existsSync(run), false, 'the production writer must create and anchor its own run');
       const copied = path.join(run, ...record.items[0].file.split('/'));
       const conflicting = path.join(run, ...record.items[1].file.split('/'));
-      fs.writeFileSync(conflicting, 'synthetic user-owned conflict');
-      assert.deepEqual(exporter.exportCompletedState(stored), { exported: 1, pending: 1, available: false });
+      const originalLink = fs.linkSync; let conflicts = 0;
+      fs.linkSync = (source, target, ...args) => {
+        if (target === conflicting && conflicts++ === 0) {
+          assert.equal(fs.existsSync(copied), true, 'first verified leaf precedes the independent second-leaf conflict');
+          fs.writeFileSync(conflicting, 'synthetic user-owned conflict', { flag: 'wx' });
+        }
+        return originalLink(source, target, ...args);
+      };
+      try { assert.deepEqual(exporter.exportCompletedState(stored), { exported: 1, pending: 1, available: false }); }
+      finally { fs.linkSync = originalLink; }
+      assert.equal(conflicts, 1, 'one actual second-leaf collision, not adoption of a precreated run');
       const copiedBytes = fs.readFileSync(copied), conflictBytes = fs.readFileSync(conflicting);
       assert.equal(crypto.createHash('sha256').update(copiedBytes).digest('hex'), record.items[0].sha256);
       assert.deepEqual(exporter.abandonPendingResultExport(stored),
