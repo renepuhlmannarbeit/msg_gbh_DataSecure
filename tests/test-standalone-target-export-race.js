@@ -3,7 +3,7 @@
 // Deterministic source counteroracles, NOT a diagnosis of an observed CI
 // job, a native Core/GUI test, or a concurrent-process-tree acceptance gate.
 // The parent delegates every stat/open/read. Its scheduling seams start
-// a real production publisher at three real reader boundaries. Each case owns
+// a real production publisher at four real reader boundaries. Each case owns
 // a fresh process/fixture; POSIX held-descriptor replacement is not simulated
 // on Windows, whose rename-sharing rules make those schedules inapplicable.
 // Expected on the unfixed source: STANDALONE_HISTORY_UNAVAILABLE and exit 1.
@@ -16,7 +16,10 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const cp = require('node:child_process');
 
-const repository = fs.realpathSync.native(path.resolve(__dirname, '..'));
+// The ignored candidate runs two levels below the repo. The same file can be
+// adopted under tests/ without changing its publisher/counteroracle __filename.
+const repository = fs.realpathSync.native(path.resolve(__dirname,
+  path.basename(__dirname) === 'tests' ? '..' : '../..'));
 const product = path.join(repository, 'plugins/data-secure/server');
 const OWNER = 'DATASECURE_TARGET_EXPORT_RACE_OWNER';
 const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
@@ -114,7 +117,8 @@ function publish(root) {
   assert.notDeepEqual(before.identity, after.identity, 'compare the full file fact, not an assumed non-reused inode');
   process.stdout.write(JSON.stringify({ pid: process.pid, outcome, publications, final_sha256: after.sha256 }) + '\n');
 }
-const phases = ['real-bound-lstat-before-open', 'real-open-before-first-fstat', 'real-read-before-postcheck'];
+const phases = ['real-bound-lstat-before-open', 'real-open-before-first-fstat', 'real-read-before-postcheck',
+  'real-postread-fstat-before-named-lstat'];
 async function counteroracle(phase) {
   assert.ok(phases.includes(phase));
   assert.ok(phase === phases[0] || process.platform !== 'win32', 'held-descriptor schedules require POSIX rename semantics');
@@ -130,7 +134,7 @@ async function counteroracle(phase) {
   const read = bound.readBoundFile;
   let watching = false;
   const observations = { scheduled_publishers: 0, reader_opens: 0, reader_closes: 0,
-    reader_reads: 0, reader_bound_errors: [], reader_error: null };
+    reader_reads: 0, reader_postread_fstats: 0, reader_bound_errors: [], reader_error: null };
   let target;
   // Observe the real boundary's errors unchanged; never manufacture success,
   // state DTOs, stat identities or HISTORY_UNAVAILABLE.
@@ -168,8 +172,8 @@ async function counteroracle(phase) {
   const anchors = protectedFiles.map(filename => ({ filename, sha256: sha(fs.readFileSync(filename)),
     identity: identity(fs.lstatSync(filename, { bigint: true })) }));
   const parentBefore = identity(fs.lstatSync(path.dirname(target), { bigint: true }));
-  const lstat = fs.lstatSync, open = fs.openSync, readSync = fs.readSync, close = fs.closeSync;
-  const readerDescriptors = new Set();
+  const lstat = fs.lstatSync, open = fs.openSync, readSync = fs.readSync, fstat = fs.fstatSync, close = fs.closeSync;
+  const readerDescriptors = new Set(), completeReads = new Set();
   let publisher, row;
   let schedulingFailure;
   function schedulePublisher() {
@@ -220,13 +224,28 @@ async function counteroracle(phase) {
       // Real bounded positional reads: schedule after the last delegated read
       // of the original bytes, before any subsequent post-read identity check.
       const position = args[3];
+      if (Number.isSafeInteger(position) && position + count === Number(stableBefore.identity.size)) completeReads.add(fd);
       if (phase === phases[2] && observations.scheduled_publishers === 0 &&
           Number.isSafeInteger(position) && position + count === Number(stableBefore.identity.size)) schedulePublisher();
     }
     return count;
   };
+  fs.fstatSync = function(fd, ...args) {
+    const realStat = Reflect.apply(fstat, fs, [fd, ...args]);
+    if (watching && readerDescriptors.has(fd) && completeReads.has(fd)) {
+      observations.reader_postread_fstats++;
+      if (phase === phases[3] && observations.scheduled_publishers === 0) {
+        // The real postread fstat has already returned the old, still-linked A
+        // fact. Publish now; do not alter that returned fact or the next lstat.
+        assert.deepEqual(identity(realStat), stableBefore.identity);
+        schedulePublisher();
+      }
+    }
+    return realStat;
+  };
   fs.closeSync = function(fd, ...args) {
     const result = Reflect.apply(close, fs, [fd, ...args]);
+    completeReads.delete(fd);
     if (readerDescriptors.delete(fd)) observations.reader_closes++;
     return result;
   };
@@ -235,14 +254,15 @@ async function counteroracle(phase) {
     try { row = exporter.readStandaloneExportHistoryEntry(state.token); }
     catch (error) { observations.reader_error = error.code || 'NO_CODE'; }
   } finally {
-    watching = false; fs.lstatSync = lstat; fs.openSync = open; fs.readSync = readSync; fs.closeSync = close;
+    watching = false; fs.lstatSync = lstat; fs.openSync = open; fs.readSync = readSync; fs.fstatSync = fstat; fs.closeSync = close;
   }
   if (schedulingFailure) throw schedulingFailure;
   assert.equal(observations.scheduled_publishers, 1);
   assert.ok(observations.reader_opens >= 1);
   assert.equal(observations.reader_closes, observations.reader_opens, 'every real reader descriptor must close successfully');
   assert.equal(readerDescriptors.size, 0);
-  if (phase === phases[2]) assert.ok(observations.reader_reads >= 1, 'the publisher follows a real delegated read');
+  if ([phases[2], phases[3]].includes(phase)) assert.ok(observations.reader_reads >= 1, 'the publisher follows a real delegated read');
+  if (phase === phases[3]) assert.ok(observations.reader_postread_fstats >= 1, 'the publisher follows the actual delegated postread fstat');
   assert.ok(publisher?.publications.length === 3);
   const stableAfter = assertBoundRecord(exporter, target, state);
   assert.equal(stableAfter.row.complete, true);
@@ -291,8 +311,8 @@ function campaign() {
     assert.equal(child.status, 0, `${phase}: preserve the failed fixture; a real publisher/reader failure is not PASS`);
     passed++;
   }
-  assert.equal(passed, process.platform === 'win32' ? 1 : 3);
-  assert.equal(notRun, process.platform === 'win32' ? 2 : 0);
+  assert.equal(passed, process.platform === 'win32' ? 1 : 4);
+  assert.equal(notRun, process.platform === 'win32' ? 3 : 0);
   process.stdout.write(`TARGET EXPORT ATOMIC SOURCE CAMPAIGN: ${passed} PASS; ${notRun} PLATFORM_NOT_RUN (not native/CI acceptance)\n`);
 }
 
