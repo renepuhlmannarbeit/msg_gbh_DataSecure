@@ -1,9 +1,14 @@
 # RC166: Nutzer-Abschlusstests des vereinfachten Ablaufs
 
-Dieser Plan gilt nur für das künftig neu gebundene Paket mit direkter
-Ergebnisbereitstellung. Der ältere lokale Ordner `RC166` mit Build `76078347`
+Dieser Plan gilt für das neu gebundene RC166-Paket mit direkter
+Ergebnisbereitstellung, Build `e04d32cf`, App-/Tagcommit
+`e04d32cff603597ce3d8c982e94154bb00f534fb`. Der ältere lokale Ordner `RC166` mit Build `76078347`
 enthält den vorherigen Ablauf und ist kein Nachweis dieser Änderung.
-Paketname, Appcommit und Prüfsummen werden bei tatsächlicher Übergabe ergänzt.
+Windows-ZIP `DataSecure-Standalone-3.2.0-rc166-windows-x64.zip` liegt mit dem
+vollständigen Archiv-/Ordner-Mapping unter `Software DataSecure/RC166-R2`.
+SHA256: `37f303407dfe781c06ab06371a6c0ae4186e9a0cd2abe06a2390ff8d13647faa`.
+Beide Mac-Pakete und aktuelle TXT-Testpläne liegen im
+[RC166-Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc166).
 Alle Desktoptests sind **offen** und werden vom Nutzer/Kollegen durchgeführt.
 
 Die vorhandenen synthetischen Eingaben verwenden. Je Fall ausschließlich

@@ -1,9 +1,27 @@
 # RC166: direkte Ergebnisbereitstellung
 
-Status: Umsetzung, noch kein neuer Paket-/Release-PASS. Windows-/Mac-Desktoptests
-bleiben Nutzer-/Kollegenaufgabe. Keine neue Automation.
+Status: implementiert und als RC166-Test-Pre-Release veröffentlicht.
+Windows-/Mac-Desktoptests bleiben Nutzer-/Kollegenaufgabe. Keine neue Automation.
 
-## Neuer enger Gegenlauf nach Source07
+## Aktueller gebundener Abschluss
+
+App-/Tagcommit `e04d32cff603597ce3d8c982e94154bb00f534fb`, Build `e04d32cf`,
+Fingerprint `741e69e3f76981431f96408a7b19338820b722f11533fc234151aff2f786a9a7`/333.
+Source10:283/283+10/10, Windows253Rust/3ignoriert/Clippy/Release/Paket5,
+beide Macjobs39317346697 mit243Rust/3ignoriert je Architektur bestanden;
+sämtliche Inputs unverändert. Tatsächliche Pakete/Logs unabhängig gegengelesen,
+acht reale History-/Initialreader-Racegegenfälle auf beiden Macs grün.
+20Assets vor und nach Veröffentlichung frisch gehasht, gleicher Bestand und Tag.
+Windows lokal `Software DataSecure/RC166-R2`; alter RC166-Ordner bleibt historisch.
+[Release und Prüfsummen](../RELEASE.md), [aktueller Nutzerplan](RC166_DIRECT_RESULTS_USER_TESTPLAN_20261019.md).
+
+Alle zehn menschlichen Fälle offen; keine native Desktop-/M2-/Finder-/TCC-/
+Enterprise-/VoiceOver-/macOS26-Abnahme. Historische untenstehende Fehlerbelege
+bleiben erhalten; Source07-Ursachen und Source09-natives Scheduling nicht
+rückwirkend erklärt. Separater realer Quellrace wurde eng kausal behoben.
+Nachfolgende Dokumentation verändert keine eingefrorenen Nachweisbindungen.
+
+## Historische enge Gegenläufe nach Source07
 
 Source09/568ebd31c03a9085826a5f3ee7732a75a40ba431: Windows253Rusttests
 (3ignoriert), Clippy/Release und5Paketgates/100Dateienkorpus bestanden bei

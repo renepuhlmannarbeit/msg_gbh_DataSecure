@@ -1,8 +1,21 @@
 # Formale N3/N4-Abnahme mit Windows und macOS
 
-Stand: 19.10.2026 · veröffentlichte Standalone Windows/macOS RC165 · Linux RC159 · Cowork RC151
+Stand: 19.10.2026 · veröffentlichte Standalone Windows/macOS RC166 · Linux RC159 · Cowork RC151
 
 **Aktueller Windows-/Mac-Standalone-Kandidat:** Das
+[RC166-Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc166)
+bindet Windows x64 und beide Mac-Architekturen an den exakten Quellcommit
+`e04d32cff603597ce3d8c982e94154bb00f534fb`. Beide Mac-ZIPs und beide DMGs
+bestanden native Paket-/Startgates; Windows besitzt gesonderte Quell-/Native-/
+Paketnachweise. Die vereinfachte direkte Ergebnisbereitstellung hat keine zweite
+Pflichtfreigabe oder Exportauswahl. Alle zehn RC166-Desktopfälle und tatsächliche
+Mac-/M2-/Finder-/TCC-/VoiceOver-Abnahme bleiben offen. Linux-Standalone und Cowork
+behalten RC159 beziehungsweise RC151. Neue Kampagnen binden ausschließlich die
+exakten RC166-Pakethashes an diesen Produktcommit. Leere Vorlagen und frühere
+Nutzerergebnisse sind keine abgeschlossene RC166-Evidenz. Historische Kandidaten
+bleiben unverändert; reine Dokumentation nach Veröffentlichung ändert den Tag nicht.
+
+**Historischer Windows-/Mac-Standalone-Kandidat:** Das
 [RC165-Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc165)
 bindet Windows x64 und beide Mac-Architekturen an den exakten Quellcommit
 `973274f17cda46bb66621d956af2cbc96e2272e3`. Beide Mac-ZIPs und beide DMGs
@@ -11,9 +24,8 @@ Native- und Paketnachweise. Menschliche RC165-Desktopabnahme und tatsächliche
 Mac-/M2-/Finder-/TCC-/VoiceOver-Abnahme bleiben offen. Linux-Standalone und
 Cowork behalten RC159 beziehungsweise RC151. Eine neue Standalone-Kampagne
 bindet ausschließlich die exakten RC165-Pakethashes an diesen Produktcommit;
-leere Vorlagen sind keine abgeschlossene Evidenz. RC166 ist zunächst ein
-Entwicklungsstand und wird erst mit eigenen Paketen/Nachweisen als neuer
-Kandidat gebunden; historische Kandidaten werden nicht umetikettiert.
+leere Vorlagen sind keine abgeschlossene Evidenz. Dieser RC165-Nachweis wird
+nicht in RC166 umetikettiert.
 
 **Historischer Windows-/Mac-Standalone-Kandidat:** Das
 [RC162-Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc162)

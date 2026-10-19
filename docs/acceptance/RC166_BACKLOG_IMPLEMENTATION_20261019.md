@@ -1,8 +1,19 @@
 # RC166: Nutzerbefunde, Umsetzung und Paketnachweise
 
-Stand: 19.10.2026. RC165 bleibt unverändert veröffentlicht. RC166 wird neu
-aus einem gemeinsamen Appcommit für Windows x64 und macOS ARM64/Intel gebaut.
+Stand: 19.10.2026. RC165 bleibt unverändert veröffentlicht. RC166 ist neu
+aus einem gemeinsamen Appcommit für Windows x64 und macOS ARM64/Intel veröffentlicht.
 Die Desktoptests übernimmt der Nutzer; keine neue agentische GUI-Abnahme.
+
+Abschluss: App-/Tagcommit `e04d32cff603597ce3d8c982e94154bb00f534fb`,
+Fingerprint `741e69e3f76981431f96408a7b19338820b722f11533fc234151aff2f786a9a7`/333.
+283/283+10/10 Headless, Windows253Rust/3ignoriert/Clippy/Release/Paket5,
+beide Mac-Consumer39317346697 erfolgreich; Inputs unverändert. Quellen sowie
+tatsächliche drei Plattformpakete unabhängig gegengeprüft. Alle20Releaseassets
+im Draft und veröffentlicht frisch gehasht; Tag, Bestand und AssetIDs bestätigt.
+Windows mit Testplan/Testdaten lokal `Software DataSecure/RC166-R2`.
+[Gebundener Releasevertrag](../RELEASE.md), [offene Nutzerfälle](RC166_DIRECT_RESULTS_USER_TESTPLAN_20261019.md).
+Die nachfolgenden Umsetzungs-/Zwischenstände sind historische Entwicklung;
+keine Umschreibung alter Primärbelege oder erfundene Nutzer-/Mac-Zielhostabnahme.
 
 ## Neuer verbindlicher Zusatzauftrag: Ergebnisdateien statt zweitem Export
 

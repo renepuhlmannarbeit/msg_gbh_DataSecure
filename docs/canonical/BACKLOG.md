@@ -1,8 +1,36 @@
 # Aktives Entwicklungsbacklog
 
-Arbeitsversion: **3.2.0-rc166**, Umsetzung und neue gemeinsame Windows-/macOS-Testpakete beauftragt; RC165 bleibt der zuletzt veröffentlichte Stand.
+Arbeitsversion: **3.2.0-rc166**, gemeinsame Windows-/macOS-Testpakete veröffentlicht; Nutzerabnahme offen.
 
-## Aktueller Auftrag – Nutzerbefunde als RC166 umsetzen und neu prüfen
+## Neuester Abschluss – RC166-Testübergabe
+
+UX-DIRECT-RESULTS-01, UX-OCR-FOLDER-01, UX-HISTORY-DETAILS-01,
+UX-HISTORY-COPY-STATUS-01 (im Direktablauf Ergebnisstatus), UX-ANON-CHOICE-01,
+UX-PROCESSING-FLICKER-01 und TESTDATA-LARGE-01 implementiert, gegengeprüft und
+neu gebaut. Keine zweite Pflichtauswahl/Freigabe/Export nach den erforderlichen
+Prüfgruppen; vollständige neue Korrekturgenerationen, technische Grenzen erhalten.
+READ-INITIAL-SNAPSHOT-01 eng behoben, strikter Mutationsreader unverändert.
+Keine weiteren bestätigten Implementierungsblocker aus den begrenzten Endreviews.
+
+App-/Tagcommit `e04d32cff603597ce3d8c982e94154bb00f534fb`, Fingerprint
+`741e69e3f76981431f96408a7b19338820b722f11533fc234151aff2f786a9a7`/333;
+283/283+10/10, Windows253Rust/3ignoriert/Clippy/Release/Paket5 und beide
+nativen Macjobs39317346697 (je243Rust/3ignoriert) erfolgreich, Inputs unverändert.
+Tatsächliche Windows-/Mac-Artefakte unabhängig gegengelesen;20Releaseassets vor
+und nach Veröffentlichung frisch gehasht, gleicher Bestand und Tagcommit.
+[RC166](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc166),
+Windows lokal `Software DataSecure/RC166-R2` mit aktuellem Testplan und drei
+unveränderten Testdatenarchiven. Frühere Pakete/Primärbelege/Profile erhalten.
+
+Verbleibend: zehn menschliche Windowsfälle und reale Mac-Zielhostabnahme;
+keine GUI-FINAL, M2/Finder/TCC/Enterprise/VoiceOver/macOS26-PASS behauptet.
+Historische Source07-Default-/Manifestursachen und Source09-native Scheduling-
+folge weiter unbewiesen; neue erfolgreiche Gates erklären sie nicht rückwirkend.
+Der separat reproduzierte Quellrace ist dagegen kausal korrigiert. Main-CI nach
+zukünftiger Integration bleibt getrennt; keine RC166-Main-Integration beauftragt.
+Keine Automation oder globale Sicherheits-/Berechtigungsänderung.
+
+## Historischer Entwicklungsauftrag – Nutzerbefunde als RC166 umsetzen und neu prüfen
 
 **READ-INITIAL-SNAPSHOT-01:** Source09-Intel verweigerte im echten OCR-an-
 Readinesslauf mit RESULT_PUBLICATION_CONFLICT. Unabhängiger tatsächlicher

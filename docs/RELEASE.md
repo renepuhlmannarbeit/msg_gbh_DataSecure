@@ -2,7 +2,68 @@
 
 Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc166 · Veröffentlichungsnachtrag: 19.10.2026
 
-Der aktuelle Quellstand ist RC166-Entwicklungsstand und noch kein neu gebundener Paketkandidat. Menschliche N3/N4-Produktionsfreigaben bleiben offen.
+Der aktuelle Quellstand ist RC166 mit veröffentlichten Testpaketen für Windows und beide Macs. Menschliche N3/N4-Produktionsfreigaben bleiben offen.
+
+### RC166 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
+
+Quellcommit `e04d32cff603597ce3d8c982e94154bb00f534fb` bindet den
+[RC166-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc166)
+für Windows x64, Apple Silicon und Intel. Build `e04d32cf`, gemeinsamer
+Produktfingerprint `741e69e3f76981431f96408a7b19338820b722f11533fc234151aff2f786a9a7`
+(333 Produktdateien). Nachfolgende reine Dokumentation ändert diesen App-/Tagcommit
+nicht. RC165/164 und alle früheren Pakete/Primärbelege bleiben unverändert.
+
+Nach notwendigen OCR-/Fundstellenprüfungen direkt Ergebnisordner öffnen; keine
+zweite Dateiauswahl/Freigabe/Exportbestätigung im normalen Ablauf. Optionale
+Korrekturen erzeugen vollständige neue immutable Ergebnisstände, vertrauliche
+Zuordnungen bleiben getrennt privat. Technische Revisions-/Hash-/Ordner-/Guard-
+Prüfungen bleiben aktiv. Keine stille Überschreibung, Reparatur oder Wiederanlage
+manuell geänderter/gelöschter Ergebnisse. Ordner-OCR-Labels, vereinheitlichte
+Verlaufsaktionen, exklusive Entscheidungswahl/OCR separat, stabilere Verarbeitung
+und separate36-Dateien-Large-Beilage sind enthalten.
+
+Source10:283/283 Hauptdateien plus10/10 Zusatzgates, Windows Prepare/Clippy/
+253Rusttests (3ignoriert)/Release und5Paketgates/100Dateienkorpus bestanden;
+sämtliche Inputs unverändert. Beide nativen
+[Mac-Consumer](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/39317346697)
+erfolgreich: je243Rusttests (3ignoriert), acht echte atomare Publisher-/Reader-
+Gegenfälle, Default/5→/6 ohne Picker, direkte Korrekturgeneration/LostReceipt/
+Read-only-Öffner, Guard/Worker/IPC/App/Office/PDF/OCR/ZIP/DMG. Tatsächliche Downloads
+je1152ZIPeinträge/1150Manifestrecords und230gemeinsame Serverdateien geprüft;
+zwei unabhängige tatsächliche Artefaktgegenreviews ohne bestätigten Übergabeblocker.
+
+Release417749437 ist Pre-Release, kein Draft, veröffentlicht19.10.2026 21:03:51UTC.
+Alle20Assets im Entwurf und nach Veröffentlichung frisch heruntergeladen/gehasht,
+dieselben AssetIDs/Bytes und genauer Tagcommit bestätigt. Windows zusätzlich
+create-only unter `Software DataSecure/RC166-R2` mit aktuellem Testplan, offenen
+zehn Nutzerfällen, Prüfsummen und drei synthetischen Testdatenarchiven geliefert.
+Der ältere lokale `RC166`-Ordner ist ein anderer Build und bleibt erhalten.
+Nachweise: `dist/rc166-direct-results-source10-20261019` und je
+`dist/rc166-source10-arm-review-20261019`/Intel. Ein reiner Übergabehelfer-
+Budgetfehler wurde auf die bestehende512MiB-Lesegrenze korrigiert und unabhängig
+gegengelesen; keine App-/Paket-/Schutzänderung, kein falscher Übergabe-PASS.
+
+| Archiv | Bytes | SHA-256 |
+|---|---:|---|
+| Windows x64 ZIP | 112361838 | `37f303407dfe781c06ab06371a6c0ae4186e9a0cd2abe06a2390ff8d13647faa` |
+| macOS Apple Silicon ZIP | 117712448 | `c52eaeeae0d1b6565def5e223b62a73007dfcf728aae7d334b1bddd76db1d956` |
+| macOS Apple Silicon DMG | 130633566 | `deed337048f29a1b3ae9e1a3994e1ce10e97271c22546d2e5087b94ab0f8eff1` |
+| macOS Intel ZIP | 120966602 | `33d5667cef0776d3b2150081b8ebbe5ebf58d0e9d6f95734c3ff52376d3bf1e3` |
+| macOS Intel DMG | 137331816 | `09037ab7a3c63b5e70ab0e11623ca94f9a962dab7be64d84cd9f57da5b321204` |
+
+Windows-/Mac-Desktopabnahme ausschließlich durch Nutzer/Kollegen offen. Kein
+physischer M2-/Finder-/TCC-/Gatekeeper-/Enterprise-/VoiceOver-/macOS26-PASS.
+Reguläres macOS26-Profil übersprungen, adversariale ACL-Matrix partiell;
+Packaged-Sidecar-Extraktion bei unbestätigter Writerquieszenz erhalten. Nur
+load+IPC statt vollständiger UI-Abnahme bei LaunchServices. Historische Source07-
+Default-/Manifestursachen sowie das genaue Source09-Intel-Scheduling bleiben
+unbewiesen; separat reproduzierter Quellrace eng korrigiert und gegengeprüft.
+Keine pauschale Fehlerunterdrückung. Eigener statischer Core bleibt separat vom
+unveränderten offiziellen Converter mit dessen offen ausgewiesenen Upstream-
+Entitlements. Keine DeveloperID/Notarisierung/Apple-Einreichung, nur Ad-hoc-Sealing;
+keine globale Schutzabschaltung, Produktionsfreigabe oder Anonymitätsgarantie.
+
+Die nachfolgenden RC165-/RC164-Abschnitte sind historische Belege.
 
 ### RC165 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
 

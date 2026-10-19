@@ -1,8 +1,39 @@
 # Aktueller Iststand
 
-Arbeitsversion: **3.2.0-rc166**, Entwicklung und erneute Paketprüfung; veröffentlichte RC165-/RC164-Pakete bleiben unverändert erhalten.
+Arbeitsversion: **3.2.0-rc166**, als neuer Windows-/Mac-Test-Pre-Release veröffentlicht; frühere Pakete bleiben unverändert erhalten.
 
-### Aktuelle Umsetzung nach weiterem Nutzertest – RC166
+### Neuester verbindlicher Abschluss – RC166 direkt bereitgestellte Ergebnisse
+
+[RC166](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc166)
+bindet Windows x64 und macOS ARM64/Intel an App-/Tagcommit
+`e04d32cff603597ce3d8c982e94154bb00f534fb`, Build `e04d32cf`, Fingerprint
+`741e69e3f76981431f96408a7b19338820b722f11533fc234151aff2f786a9a7`/333.
+Nach notwendigen OCR-/Fundstellenprüfungen direkt Ergebnisordner öffnen, keine
+zweite Dokumentauswahl/Freigabe/Exportbestätigung. Optionale Korrekturen werden
+als vollständiger neuer Stand bereitgestellt; Zuordnungen getrennt privat,
+technische Schutzprüfungen erhalten. Alle gesammelten RC166-UX-Punkte und die
+separate Large-Beilage umgesetzt; keine bestätigten weiteren Implementierungs-
+blocker aus den begrenzten Quellen-/Artefaktgegenreviews.
+
+283/283+10/10 Headless, Windows Prepare/Clippy/253Rusttests (3ignoriert)/Release,
+5Paketgates/100Dateienkorpus bestanden, sämtliche Inputs unverändert. Beide
+Macjobs39317346697 erfolgreich, je243Rusttests (3ignoriert),8echte Racefälle,
+Default/5→/6 ohne Picker, direkte Ergebnisse/Generationen/Guard/Worker/IPC/
+App/Konverter/ZIP/DMG. Tatsächliche Pakete unabhängig bytegebunden gegengelesen.
+20Assets im Draft und veröffentlicht frisch heruntergeladen/gehasht, gleiche
+AssetIDs und Tagquelle bestätigt. Windows lokal mit aktuellem Testplan/Testdaten
+unter `Software DataSecure/RC166-R2`; alter `RC166`-Ordner nicht umetikettiert.
+Nachweise/Primärfehler bleiben unter `dist/rc166-direct-results-source10-20261019`.
+
+Offen: alle10menschlichen Desktopfälle, tatsächliche Mac-/Finder-/TCC-/M2-/
+Enterprise-/VoiceOver-/macOS26-Abnahme. Historische Source07-Default-/Manifest-
+Ursachen und genaue Source09-native Schedulingfolge nicht rückwirkend bewiesen.
+Keine Desktopbedienung, Automation, DeveloperID/Notarisierung oder Abschaltung
+von OS-Schutzfunktionen. Diese nachfolgende reine Dokumentation ändert keine
+eingefrorenen Paket-/Test-/Tagbindungen. Main-Integration nicht Teil dieser
+RC166-Übergabe; Branch/Tag sind gepusht.
+
+### Historische Entwicklung nach weiterem Nutzertest – RC166
 
 Source09/568ebd31c03a9085826a5f3ee7732a75a40ba431 bleibt ungeeignet:
 Windows253Rusttests (3ignoriert)/Clippy/Release und Paket5/100Dateienkorpus

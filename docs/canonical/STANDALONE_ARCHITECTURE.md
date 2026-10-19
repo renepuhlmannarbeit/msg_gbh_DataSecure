@@ -2,7 +2,17 @@
 
 Stand: 07.10.2026 · einschließlich DS-104 bis DS-109 · Steuerung über BL-010.9
 
-**Entwicklungsnachtrag 19.10.2026 (DS-110/BL-010.53):** Die finale bewusste
+**RC166-Nachtrag 19.10.2026:** Der ausdrücklich vereinfachte normale Standalone-
+Abschluss benötigt nach notwendigen OCR-/Fundstellenprüfungen keine zweite
+Dokumentauswahl/Freigabe/Exportbestätigung mehr. Direkte Erstbereitstellung und
+optionale vollständige immutable Korrekturgenerationen bleiben getrennte
+Transaktionen, mit exakten Revisions-/Hash-/Ordner-/Guardprüfungen. Status und
+Ergebnisöffner lesen ausschließlich bestätigte Stände; keine Reparatur oder
+Wiederanlage gelöschter/geänderter Vorstände. Vertrauliche Zuordnungen getrennt
+privat. [Aktuelle Aktivitäts-/Sequenzverträge](../acceptance/RC166_DIRECT_RESULTS_20261019.md).
+RC166-Windows/ARM64/Intel an e04d32cf veröffentlicht; praktische Abnahme offen.
+
+**Historischer RC165-Entwicklungsnachtrag 19.10.2026 (DS-110/BL-010.53):** Die finale bewusste
 Exportbestätigung schließt die notwendige interne Freigabe ein; der normale
 Bedienweg benötigt keinen zweiten Freigabeklick. Lesende Vorschau, atomarer
 Freigabe-ACK, erneuter Dateiplan und native Kopiertransaktion bleiben getrennte
