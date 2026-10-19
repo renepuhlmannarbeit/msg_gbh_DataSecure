@@ -267,6 +267,19 @@ veralteter Copy-Regex; kein Produktfix und kein rückwirkend grüner Lauf.
 Gesamtregression, Clippy/Rust-Gesamtlauf und neue Paket-/Mac-Nativegates werden
 separat dokumentiert. Keine alten FINALs auf neue Quellen umetikettieren.
 
+Erster eingefrorener RC165-Versuch `e00376cf48dc89738844f7af661991761e325a65`
+unter `dist/rc165-usability-source-20261019` ist **rot**, Inputs unverändert:
+Headless stoppte bei Datei20/280 (`test-root-boundary.js:228`), Native bei Clippy.
+Das neue gemeinsame Configwriter-Wrapping richtete Settings zu früh ein, noch
+bevor ein ungültiger/überlappender Zielort verweigert wurde. Der Fix prüft vor
+Einrichtung und nochmals unter Writerguard mit derselben ursprünglichen
+Identität. Lesen nicht vorhandener Notices bleibt ohne Einrichtung; Reset
+prüft ebenfalls vor Einrichtung. Kein gelockerter Root-Test. 86 unveränderte/
+erweiterte echte Root-Dateisystemfälle und 10 Migrationsfälle danach grün.
+Clippy beanstandete separat nur eine äquivalente Ganzzahlvergleichsschreibweise
+im neuen Rust-Test; nach Korrektur wieder grün. Frischer gemeinsamer Endlauf
+erforderlich, keine rote Evidence umgeschrieben.
+
 Offizielle Referenzen, am 19.10.2026 geprüft:
 
 - [Apple: Zugriff auf Dateien und Ordner](https://support.apple.com/en-euro/guide/mac-help/mchld5a35146/mac): Berechtigung bleibt Benutzer-/OS-Entscheidung, kein Pfad als Zugriffsbeweis.

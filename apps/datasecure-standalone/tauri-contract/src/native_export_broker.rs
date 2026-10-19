@@ -288,7 +288,7 @@ mod tests {
         let expected: Node22Identity = serde_json::from_slice(&output.stdout).unwrap();
         let directory = Directory::open_existing(&root, None).unwrap();
         let safe = [&expected.dev, &expected.ino, &expected.birthtime_ms].into_iter()
-            .all(|value| value.parse::<u64>().is_ok_and(|value| value <= (1u64 << 53) - 1));
+            .all(|value| value.parse::<u64>().is_ok_and(|value| value < (1u64 << 53)));
         if safe { assert_eq!(directory.node22_identity().unwrap(), expected); }
         else { assert!(directory.node22_identity().is_err(), "ambiguous legacy Numbers require a new native selection"); }
     }

@@ -230,13 +230,19 @@ async function prepareConfiguredNativeExportBinding(prepare) {
   return structuredClone(binding);
 }
 function saveConfiguredResultRoot(root, options = {}) {
-  return withConfigWriter(() => {
   const native = options.nativeIdentity !== undefined;
   const exporting = options.nativeExport !== undefined;
   if (native && exporting) throw new Error('RESULT_ROOT_UNSAFE');
   if (exporting && (!validNativeExportBinding(options.nativeExport) || options.nativeExport.root !== root)) throw new Error('RESULT_ROOT_UNSAFE');
   if (native && !validNativeDirectoryIdentity(options.nativeIdentity)) throw new Error('RESULT_ROOT_UNSAFE');
   const selected = inspectRoot(root);
+  assertRootSeparation({ resultRoot: selected.root });
+  // Rejected arguments or overlapping roots must not create settings first.
+  // Repeat admission under the common writer guard without adopting a target
+  // replaced while that guard was being acquired.
+  return withConfigWriter(() => {
+  const current = inspectRoot(root);
+  if (current.root !== selected.root || !sameIdentity(current.identity, selected.identity)) throw new Error('RESULT_ROOT_UNSAFE');
   assertRootSeparation({ resultRoot: selected.root });
   reserveRootSeparation({ resultRoot: selected.root });
   const directory = ensureConfigDirectory();
@@ -254,12 +260,15 @@ function saveConfiguredResultRoot(root, options = {}) {
   });
 }
 function consumeConfiguredResultNotices() {
-  return withConfigWriter(() => {
   assertRootSeparation();
   if (String(process.env.EU_PRIVACY_RESULT_ROOT || '').trim()) {
     const root = readConfiguredResultRoot();
     return { sync: isCommonSyncFolder(root), network: isNetworkResultFolder(root) };
   }
+  const initial = readRecord();
+  if (!initial || !initial.notices.sync && !initial.notices.network) return { sync: false, network: false };
+  return withConfigWriter(() => {
+  assertRootSeparation();
   const record = readRecord();
   if (!record) return { sync: false, network: false };
   const notices = { sync: record.notices.sync === true, network: record.notices.network === true };
@@ -275,6 +284,7 @@ function consumeConfiguredResultNotices() {
   });
 }
 function clearConfiguredResultRoot() {
+  assertRootSeparation({ resetResult: true });
   return withConfigWriter(() => {
   assertRootSeparation({ resetResult: true });
   reserveRootSeparation({ resetResult: true });

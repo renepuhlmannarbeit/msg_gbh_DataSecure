@@ -279,6 +279,10 @@ try {
     }
     assert.strictEqual(fs.existsSync(f.data), false);
   });
+  test('consuming absent result notices is read-only and never initializes first-install settings', f => {
+    assert.deepStrictEqual(result.consumeConfiguredResultNotices(), { sync: false, network: false });
+    assert.strictEqual(fs.existsSync(f.data), false);
+  });
   test('real junction/symlink aliases cannot hide an overlap in either direction', f => {
     const alias = path.join(f.scope, 'alias');
     fs.symlinkSync(f.visible, alias, process.platform === 'win32' ? 'junction' : 'dir');
