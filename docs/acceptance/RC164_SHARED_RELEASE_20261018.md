@@ -12,6 +12,69 @@ Keine Developer-ID, Apple-Einreichung oder Storeverteilung.
 
 ## Neuester geprüfter Windows-Quellstand, 19.10.2026
 
+19.10.2026, nach 08:05 UTC: **Final10 wird vorbereitet, noch kein Release.**
+Die beiden engen Korrekturen sind implementiert: P2-GUI-HISTORY-SUMMARY lädt
+nach dem tatsächlichen Dokumentabschluss nur den gewählten Lauf und zeigt
+ungeprüfte Freigaben/Exporte neutral. 369 Workspace-/98 Rendererfälle sowie
+die erweiterte echte Headless-Browserprobe mit synthetischem IPC bestanden;
+unabhängige tatsächliche Quellengegenreviews ohne neuen Deltablocker.
+Die Browserprobe prüft einen Summaryread, 3/3 Belege, beide letzten Stufen
+done und unverändert eine Kopie plus ACK. Kein nativer GUI-PASS daraus.
+
+P2-TARGET-EXPORT-SNAPSHOT ist unabhängig mit echtem produktivem Child-Publisher
+reproduziert: gültiger lstat(A)-rename(B)-open(B)-Fortschritt verursachte
+HISTORY_UNAVAILABLE. Der unveränderte rote Gegenfall ist mit dem engen Fix grün.
+Separater Snapshotleser: höchstens drei Gesamtversuche, nur intern bestätigter
+Objektwechsel vor open, gleiche ursprüngliche Directorybindung; keine Retries
+für Access/Close/Parent/Inplace/Postread-/Schema-/Owner-/Purposefehler.
+Mutierendes readRecord ist durch Main bytegleich zu HEAD geprüft.
+21 Negativ-/21 Bound-I/O-/21 Diagnosegegenfälle und gezielte History-/Workflow-
+Pfade bestanden. Zwei unabhängige tatsächliche Produktionsgegenreviews sind
+bei identischen Vor-/Nachpins ohne bestätigten Deltablocker abgeschlossen.
+Vorläufiger gemeinsamer Produktfingerprint
+cbd2175dc131e4edf63247a52dea8b9b4b2aae7355daf9388745312fa5f28b2d/332;
+Test-/Scriptmanifest560/6dd2160ab46f50cb7a4545aedeb94c32f0a81fdfef735a820f18f8ce8e8b5e48.
+
+Der ursprüngliche Intel-CI-Ursprung bleibt unbewiesen. Rein testseitige
+geschlossene Diagnostik unterscheidet Locator/Journal/Anchor/Summary/Export,
+max128 Records ohne Rohpfade/Inhalte/Frames und ohne zusätzliche Produktretry-
+oder Timeoutfreigabe. Der ältere komplette Sidecarlauf mit
+inputs_unchanged:false bleibt ungültig. Die drei neuen Gegenfallsuites sind im
+kanonischen Runner und im tatsächlichen Mac-Consumer-Step registriert;17/17
+Pfad-/Trackingfälle grün. Gemeinsamer neuer Commit/Freeze,279+10 Endgates,
+Windows Native/Paket/alle10 GUI-Fälle sowie beide nativen Mac-Consumer sind
+noch auszuführen. Final9/ältere Pakete und GUI-Belege bleiben historisch.
+14/14 Kampagnenoriginale sind am19.10.07:50:53UTC erneut bytegleich geprüft.
+Alle Quell-/Test-/Scriptarbeiten vor frischem Freeze abschließen.
+
+19.10.2026, nach 07:39 UTC: **Final9 ist nicht freigabefähig.** Gemeinsamer
+Commit 3b8a2fa402179d0c91c9300d9aa057835c9ac762 bestand unverändert
+276/276 +10/10, Windows Native/Clippy/229 Rusttests (3 ignoriert) und fünf
+Paketgates. ARM-Consumer117923939541 bestand native Start-/Core-/Worker-/ACL-/
+Konverter-/ZIP-/DMG-Gates; dessen tatsächliche Artefakte wurden unabhängig
+gegengelesen. Das ist weiterhin kein M2-/Finder-/TCC-/VoiceOver-Nachweis.
+
+Die echte Windows-GUI zeigte nach korrekten 2/2 Freigaben und einem bestätigten
+Zwei-Dateien-Export einen neuen P2: der direkte Rückweg zum Verlauf fordert die
+batchgebundene Summary nicht an. Freigabe/Export werden daher irreführend als
+noch offen dargestellt. Quellengegenreview bestätigt den Navigationsfehler;
+enger Frontend-/Unbekanntstatusfix mit kausalen Gegenfällen in Arbeit. Keine
+zusätzlichen alten Läufe oder Startabgleiche dafür einführen. GUI01/02/03/05
+PASS,06 FAILED,04/07/08/09/10 NOT_RUN; kein GUI-FINAL. App normal geschlossen,
+synthetische Daten und sämtliche Belege bleiben erhalten.
+
+Intel-Versuch1 bestand alle nativen Gates und scheiterte ausschließlich beim
+Artefakt-Upload an ENOTFOUND. Separater Versuch2, Job117938500233, scheiterte
+dagegen bereits im Source-Sidecar-Test: HISTORY_UNAVAILABLE statt
+RESULTS_MISSING während gezieltem Publikationslesen. Der erhaltene innere
+Fehler ist noch nicht diagnostisch auf eine konkrete Leaf-/Schema-/ACL-Ursache
+zurückführbar. Atomarer Exportplan-/Journalwechsel ist ein Quellenkandidat,
+kein bewiesener Ursprung dieses Jobs. Geschlossene testseitige Diagnostik
+zuerst ergänzen; keine pauschale Errorcode-/Retry-/Schutzlockerung. Zusätzlich
+HOST_NOT_CLOSED ist ein sekundärer, ehrlich erhaltener Teardownbefund. Alle
+Jobs sind beendet. Neue gemeinsame Pakete und frische Gates erst nach diesen
+Korrekturen und Gegenreviews; ältere grüne Belege nicht umschreiben.
+
 Neu19.10.nach06:29UTC: final8/b8a8f75 vollständig276/276+10/10 Headless,
 Native/Clippy/229Rusttests (3ignoriert)/Release und fünf Paketgates PASS;
 alle Inputs unverändert. Vollständiger kanonischer Windows-Paket-IPC-Smoke

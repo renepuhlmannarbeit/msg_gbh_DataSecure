@@ -28,6 +28,30 @@ function sameFile(stat, identity) {
   return stat.isFile() && !stat.isSymbolicLink() &&
     Object.keys(actual).every(key => actual[key] === identity[key]);
 }
+// A code is not retry authority: BOUND_FILE_CHANGED also represents access,
+// parent, in-place mutation and other IO failures. Only these internally
+// classified leaf replacements, for this one snapshot call, may be retried.
+const snapshotReplacementOwners = new WeakMap();
+function snapshotReplacement(owner) {
+  const error = failure('BOUND_FILE_CHANGED');
+  snapshotReplacementOwners.set(error, owner);
+  return error;
+}
+function plainSnapshotLeaf(stat, minimum, maximum) {
+  const size = Number(stat.size);
+  return stat.isFile() && !stat.isSymbolicLink() && Number(stat.nlink) === 1 &&
+    Number.isSafeInteger(size) && size >= minimum && size <= maximum;
+}
+function replacementAfterOpen(absolute, directory, fd, before, opened, io, options) {
+  if (sameObject(opened, objectIdentity(before)) ||
+      !plainSnapshotLeaf(opened, options.minimum ?? 0, options.maximum ?? 256 * 1024 * 1024)) return false;
+  assertDirectory(directory); options.validateParents?.();
+  const held = fileIdentity(opened, true);
+  const named = io.lstatSync(absolute, { bigint: true });
+  if (!sameFile(named, held) || !sameFile(io.fstatSync(fd, { bigint: true }), held)) return false;
+  assertDirectory(directory); options.validateParents?.();
+  return true;
+}
 function realpath(io, target) { return io.realpathSync(target); }
 function systemAlias(probe, io, platform) {
   // macOS's OS-owned aliases are not user-created directory redirects.
@@ -93,7 +117,7 @@ function hashHeldBytes(fd, length, io, maximum) {
   }
   return hash.digest('hex');
 }
-function consumeBoundFileRecord(target, options, consume) {
+function consumeBoundFileRecord(target, options, consume, snapshotOwner = null) {
   const io = options.io || fs;
   const maximum = options.maximum ?? 256 * 1024 * 1024;
   const minimum = options.minimum ?? 0;
@@ -117,7 +141,11 @@ function consumeBoundFileRecord(target, options, consume) {
     fd = io.openSync(absolute, io.constants.O_RDONLY | (io.constants.O_NOFOLLOW || 0) |
       (io.constants.O_NONBLOCK || 0));
     const opened = io.fstatSync(fd, { bigint: true });
-    if (!sameFile(opened, identity)) throw failure('BOUND_FILE_CHANGED');
+    if (!sameFile(opened, identity)) {
+      if (snapshotOwner && replacementAfterOpen(absolute, directory, fd, before, opened, io, options))
+        throw snapshotReplacement(snapshotOwner);
+      throw failure('BOUND_FILE_CHANGED');
+    }
     assertDirectory(directory);
     options.validateParents?.();
     const value = consume(fd, size, io, maximum);
@@ -145,9 +173,26 @@ function readBoundFileRecord(target, options = {}) {
   return { bytes, ...binding };
 }
 function readBoundFile(target, options = {}) { return readBoundFileRecord(target, options).bytes; }
+function readBoundFileSnapshotRecord(target, options = {}) {
+  if (options.maxLinks !== undefined && options.maxLinks !== 1) throw failure();
+  const io = options.io || fs, absolute = path.resolve(target);
+  const directory = options.directory || bindDirectory(path.dirname(absolute), { ...options, io });
+  const owner = Symbol('bound file snapshot');
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const { value: bytes, ...binding } = consumeBoundFileRecord(absolute,
+        { ...options, io, directory, maxLinks: 1, checkCtime: true }, readHeldBytes, owner);
+      return { bytes, ...binding };
+    } catch (error) {
+      if (snapshotReplacementOwners.get(error) !== owner || attempt === 2) throw error;
+    }
+  }
+}
+function readBoundFileSnapshot(target, options = {}) { return readBoundFileSnapshotRecord(target, options).bytes; }
 function hashBoundFile(target, options = {}) {
   return consumeBoundFileRecord(target, options, hashHeldBytes).value;
 }
 
-module.exports = { readBoundFile, readBoundFileRecord, readHeldBytes, hashBoundFile, bindDirectory, assertDirectory,
+module.exports = { readBoundFile, readBoundFileRecord, readBoundFileSnapshot, readBoundFileSnapshotRecord,
+  readHeldBytes, hashBoundFile, bindDirectory, assertDirectory,
   fileIdentity, sameFile, objectIdentity, sameObject, failure };

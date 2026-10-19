@@ -3201,6 +3201,191 @@ async function openFinishedSnapshot(h) {
 }
 const fullCopySummary = extra => reviewSummary({recorded_export_count:1,current_exported_count:2,...extra});
 
+async function openHistoryDisclosure(h, batchId) {
+  const disclosure = h.el(`history-${batchId}-disclosure`);
+  assert.ok(disclosure?.isConnected);
+  disclosure.open = true; await h.act(disclosure, 'toggle');
+  return disclosure;
+}
+async function acknowledgedDocumentWorkspace(options = {}) {
+  const backend = { rows: documentResponse('markdown-and-anonymize', 2).documents,
+    selection: null, operation: null, acknowledged: false };
+  const summary = () => fullCopySummary({ approved_count: backend.rows.filter(row => row.approved).length,
+    recorded_export_count: backend.selection ? 1 : 0,
+    current_exported_count: backend.rows.filter(row => backend.selection?.some(saved => saved.document_id === row.document_id &&
+      saved.revision === row.revision && saved.output_sha256 === row.output_sha256)).length });
+  const h = await finishedAnonymousWorkspace({ documentRenderer: true, invoke(command, args, fallback) {
+    if (command === 'get_document_reviews') return { ...documentResponse('markdown-and-anonymize', 2),
+      documents: structuredClone(backend.rows), processing_complete: true, unavailable: [], unclassified_documents: [],
+      not_processed_documents: [], content_notice_count: 0, content_notice_breakdown_complete: true, content_notices: [],
+      export_receipts: backend.selection ? [{ operation_id: backend.operation, exported_count: 2,
+        folder_name: `Export-${backend.operation}`, processing_mode: 'markdown-and-anonymize' }] : [] };
+    if (command === 'decide_document_review_batch') {
+      assert.equal(args.batchId, A); assert.equal(args.decision.action, 'approve');
+      assert.equal(args.decision.selection.length, 2);
+      for (const selected of args.decision.selection) {
+        const row = backend.rows.find(row => row.document_id === selected.document_id);
+        assert.equal(selected.revision, row.revision); assert.equal(selected.output_sha256, row.output_sha256);
+        row.revision++; row.approved = true;
+      }
+      return { ok: true, operation_id: args.decision.operation_id, affected_count: 2,
+        documents: structuredClone(backend.rows), local_ui_only: true, external_disclosure: false };
+    }
+    if (command === 'preview_document_export') return { ok: true, processing_mode: 'markdown-and-anonymize',
+      files: args.selection.map((row, index) => ({ name: `Dokument_${index + 1}.md`, sha256: row.output_sha256 })),
+      local_ui_only: true, external_disclosure: false };
+    if (command === 'export_approved_documents') {
+      assert.equal(args.batchId, A);
+      if (!args.acknowledge) {
+        assert.equal(backend.selection, null, 'exactly one explicit copy');
+        backend.selection = structuredClone(args.selection); backend.operation = args.operationId;
+      } else {
+        assert.equal(args.operationId, backend.operation);
+        assert.deepEqual(args.selection, backend.selection); backend.acknowledged = true;
+      }
+      return { ok: true, operation_id: backend.operation, exported_count: 2,
+        folder_name: `Export-${backend.operation}`, local_ui_only: true, external_disclosure: false };
+    }
+    if (command === 'close_document_reviews') return options.close ? options.close() : { ok: true };
+    if (command === 'get_document_review_history_summary') {
+      assert.equal(args.batchId, A);
+      return options.summary ? options.summary(summary()) : summary();
+    }
+    return fallback();
+  } });
+  h.model.entries.push({ ...h.model.entries[0], batch_id: B });
+  await h.act('job-action-documents');
+  h.el('documents-all').checked = true; await h.act('documents-all', 'change');
+  await h.act('documents-approve'); await h.act('documents-approve-proceed'); await tick();
+  assert.match(h.el('documents-selected').textContent, /2 von 2 freigegeben/u);
+  h.el('documents-all').checked = true; await h.act('documents-all', 'change');
+  await h.act('documents-export'); await h.act('document-export-confirm'); await tick();
+  assert.equal(backend.acknowledged, true);
+  assert.equal(h.el('document-export-title').textContent, 'Export abgeschlossen');
+  await h.act('document-export-close');
+  return { h, backend };
+}
+function navigationMutations(h) {
+  return h.calls.filter(call => ['decide_document_review', 'decide_document_review_batch', 'preview_document_export',
+    'export_approved_documents', 'start_admitted_batch', 'continue_history_batch', 'continue_current_batch'].includes(call.command));
+}
+testAsync('actual RunGuide completion link reconciles only its 2/2 explicitly approved and acknowledged export', async () => {
+  const { h, backend } = await acknowledgedDocumentWorkspace();
+  const mutations = navigationMutations(h).length;
+  await h.act('documents-completion-history'); await tick(); await tick();
+  assert.equal(h.el('history-view').hidden, false);
+  assert.deepEqual(h.calls.filter(call => call.command === 'get_document_review_history_summary').map(call => call.args.batchId), [A]);
+  assert.match(h.el(`history-${A}-state`).textContent, /2\/2 freigegeben.*Export mit Abschlussbeleg/u);
+  assert.match(h.el(`history-${A}-guide-next`).textContent, /kein weiterer Export nötig/u);
+  for (const stage of h.el(`history-${A}-guide-stages`).children) assert.equal(stage.dataset.status, 'done');
+  assert.match(h.el(`history-${B}-guide-title`).textContent, /nicht abgeglichen/u);
+  assert.equal(h.el(`history-${B}-summary`).hidden, true);
+  await openHistoryDisclosure(h, A); await h.poll();
+  assert.equal(h.calls.filter(call => call.command === 'get_document_review_history_summary').length, 1,
+    'completion navigation, native toggle and unchanged polls share the same fresh read');
+  assert.equal(navigationMutations(h).length, mutations);
+  const copies = h.calls.filter(call => call.command === 'export_approved_documents');
+  assert.equal(copies.length, 2); assert.equal(copies[1].args.acknowledge, true);
+  assert.equal(copies[0].args.operationId, backend.operation);
+  assert.equal(copies[1].args.operationId, backend.operation);
+});
+testAsync('actual RunGuide target does not re-read another previously expanded run', async () => {
+  const response = { ...documentResponse('markdown-and-anonymize', 2), processing_complete: true,
+    content_notice_count: 0, content_notice_breakdown_complete: true, content_notices: [] };
+  response.documents.forEach(row => { row.approved = true; });
+  const h = await finishedAnonymousWorkspace({ documentRenderer: true, invoke(command, args, fallback) {
+    if (command === 'get_document_reviews') return response;
+    if (command === 'close_document_reviews') return { ok: true };
+    return command === 'get_document_review_history_summary' ? fullCopySummary() : fallback();
+  } });
+  h.model.entries.push({ ...h.model.entries[0], batch_id: B });
+  await h.act('nav-history'); await openHistoryDisclosure(h, B);
+  assert.deepEqual(h.calls.filter(call => call.command === 'get_document_review_history_summary').map(call => call.args.batchId), [B]);
+  await h.act(`history-${A}-documents`); await h.act('documents-completion-history'); await tick(); await tick();
+  assert.deepEqual(h.calls.filter(call => call.command === 'get_document_review_history_summary').map(call => call.args.batchId), [B, A]);
+  assert.match(h.el(`history-${A}-state`).textContent, /Export mit Abschlussbeleg/u);
+  assert.match(h.el(`history-${B}-guide-title`).textContent, /nicht abgeglichen/u);
+  noAutomaticDecision(h);
+});
+testAsync('explicit run-details disclosure is neutral until its one exact fresh summary and retains focus', async () => {
+  let resolve;
+  const pending = new Promise(yes => { resolve = yes; });
+  const h = await finishedAnonymousWorkspace({ invoke: (command, args, fallback) =>
+    command === 'get_document_review_history_summary' ? pending : fallback() });
+  h.model.entries.push({ ...h.model.entries[0], batch_id: B });
+  await h.act('nav-history'); await h.poll();
+  assert.equal(h.calls.some(call => call.command === 'get_document_review_history_summary'), false);
+  assert.match(h.el(`history-${A}-state`).textContent, /nicht abgeglichen/u);
+  for (const index of [2, 3]) {
+    assert.equal(h.el(`history-${A}-guide-stages`).children[index].dataset.status, 'pending');
+    assert.equal(h.el(`history-${A}-guide-stages`).children[index].attrs['aria-current'], undefined);
+  }
+  const disclosure = await openHistoryDisclosure(h, A);
+  await h.act(disclosure, 'toggle');
+  assert.deepEqual(h.calls.filter(call => call.command === 'get_document_review_history_summary').map(call => call.args.batchId), [A]);
+  assert.match(h.el(`history-${A}-guide-title`).textContent, /nicht abgeglichen/u);
+  resolve(fullCopySummary()); await tick(); await tick();
+  assert.match(h.el(`history-${A}-guide-title`).textContent, /Export mit Abschlussbeleg/u);
+  assert.equal(h.doc.activeElement, disclosure);
+  await h.act(disclosure, 'toggle'); await h.poll();
+  assert.equal(h.calls.filter(call => call.command === 'get_document_review_history_summary').length, 1);
+  assert.equal(h.doc.activeElement, disclosure);
+  noAutomaticDecision(h);
+});
+testAsync('actual completion link reads newer revisions instead of upgrading the old ACK into current approval', async () => {
+  const { h, backend } = await acknowledgedDocumentWorkspace();
+  backend.rows[0].revision++; backend.rows[0].output_sha256 = 'd'.repeat(64); backend.rows[0].approved = false;
+  const mutations = navigationMutations(h).length;
+  await h.act('documents-completion-history'); await tick(); await tick();
+  assert.match(h.el(`history-${A}-state`).textContent, /1\/2 freigegeben/u);
+  assert.doesNotMatch(h.el(`history-${A}-guide-next`).textContent, /kein weiterer Export nötig/u);
+  assert.equal(h.el(`history-${A}-guide-stages`).children[2].dataset.status, 'current');
+  assert.equal(h.el(`history-${A}-guide-stages`).children[3].dataset.status, 'pending');
+  assert.equal(navigationMutations(h).length, mutations);
+});
+testAsync('superseding an actual completion-link native close cannot leave a later automatic history request', async () => {
+  let finishClose;
+  const { h } = await acknowledgedDocumentWorkspace({ close: () => new Promise(resolve => { finishClose = resolve; }) });
+  const mutations = navigationMutations(h).length;
+  await h.act('documents-completion-history'); await h.act('nav-settings');
+  finishClose({ ok: true }); await tick(); await tick();
+  assert.equal(h.el('settings-view').hidden, false);
+  await h.act('nav-history');
+  assert.equal(h.calls.some(call => call.command === 'get_document_review_history_summary'), false);
+  assert.equal(navigationMutations(h).length, mutations);
+});
+testAsync('actual completion-link failed summary stays neutral and explicit reload alone can establish the current receipt', async () => {
+  let fail = true;
+  const { h } = await acknowledgedDocumentWorkspace({ summary: data => {
+    if (fail) throw Error('STANDALONE_IPC_TIMEOUT'); return data;
+  } });
+  await h.act('documents-completion-history'); await tick(); await tick();
+  assert.match(h.el(`history-${A}-summary`).textContent, /Prüfstatus nicht verfügbar/u);
+  assert.match(h.el(`history-${A}-guide-title`).textContent, /nicht abgeglichen/u);
+  for (const index of [2, 3]) assert.equal(h.el(`history-${A}-guide-stages`).children[index].dataset.status, 'pending');
+  const mutations = navigationMutations(h).length;
+  fail = false; await h.act(`history-${A}-summary-reload`);
+  assert.match(h.el(`history-${A}-state`).textContent, /2\/2 freigegeben.*Export mit Abschlussbeleg/u);
+  assert.equal(navigationMutations(h).length, mutations);
+});
+for (const transition of ['navigation', 'connection', 'generation', 'stale'])
+testAsync(`explicit disclosure cannot adopt a ${transition} retired or incompatible summary`, async () => {
+  let resolve;
+  const pending = new Promise(yes => { resolve = yes; });
+  const h = await finishedAnonymousWorkspace({ invoke: (command, args, fallback) =>
+    command === 'get_document_review_history_summary' ? pending : fallback() });
+  await h.act('nav-history'); await openHistoryDisclosure(h, A);
+  if (transition === 'navigation') await h.act('nav-settings');
+  if (transition === 'connection') h.listeners.get('datasecure-connection')({ payload: { epoch: 1, state: 'ready' } });
+  if (transition === 'generation') await h.act(`history-${A}-results`);
+  resolve(fullCopySummary(transition === 'stale' ? { processing_mode: 'markdown-only' } : {}));
+  await tick(); await tick();
+  assert.doesNotMatch(h.el('history-list').textContent, /Export mit Abschlussbeleg|kein weiterer Export nötig/u);
+  assert.notEqual(h.el(`history-${A}-guide-stages`)?.children[3].dataset.status, 'done');
+  assert.equal(h.calls.filter(call => call.command === 'get_document_review_history_summary').length, 1);
+  noAutomaticDecision(h);
+});
+
 // Actual workspace + document renderer, with explicit native DTO models.
 // Approval remains an explicit user action. No native process or GUI claim.
 async function documentApprovalWorkspace({ approved = false, omitted = 0, privacyStops = 0, resultCount = 1 } = {}) {
@@ -3336,7 +3521,7 @@ testAsync('bound history snapshot: the actual guide, completion warning and nav-
   assert.equal(h.el('history-' + A + '-guide-stages').children[2].dataset.status,'done');
   assert.equal(h.el('history-' + A + '-guide-stages').children[3].dataset.status,'done');
   const row = h.el('history-list').children[0];
-  assert.doesNotMatch(row.textContent,/Ob Dokumentfreigabe und Export abgeschlossen sind, wird getrennt geprüft/u);
+  assert.doesNotMatch(row.textContent,/Freigabe- und Exportstand sind noch nicht abgeglichen/u);
   await h.act(`history-${A}-details`);
   assert.match(h.el('job-description').textContent,/kein weiterer Export nötig/u);
   assert.doesNotMatch(h.el('job-description').textContent,/noch vergleichen und freigeben/u);
@@ -3565,7 +3750,7 @@ testAsync('bound history snapshot: failed reload removes guide, job and completi
   }});await openFinishedSnapshot(h);fail=true;await h.act('history-'+A+'-summary-reload');
   assert.doesNotMatch(h.el('history-' + A + '-guide-next').textContent,/kein weiterer Export nötig/u);
   assert.equal(h.el('history-' + A + '-guide-stages').children[3].dataset.status,'pending');
-  assert.match(h.el('history-list').textContent,/Ob Dokumentfreigabe und Export abgeschlossen sind, wird getrennt geprüft/u);
+  assert.match(h.el('history-list').textContent,/Freigabe- und Exportstand sind noch nicht abgeglichen/u);
   await h.act('nav-details');assert.doesNotMatch(h.el('job-description').textContent,/kein weiterer Export nötig/u);
   assert.equal(h.el('job-action-documents').textContent,'Dokumente prüfen / Export');noAutomaticDecision(h);
 });

@@ -267,7 +267,11 @@ try {
   }
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.screenshot({ path: path.join(evidence, 'fastweg-completed-with-ocr-hints.png'), fullPage: true });
+  assert.match(await page.locator('#history-' + 'b'.repeat(64) + '-documents').innerText(), /Exportvorschau/u,
+    'the freshly read automatic approvals advertise a preview, not an unapproved review');
   await page.locator('#history-' + 'b'.repeat(64) + '-documents').click();
+  await page.locator('#document-export-dialog').waitFor({ state: 'visible' });
+  await page.locator('#document-export-close').click();
   await page.waitForFunction(() => document.querySelector('#documents-purpose').textContent.includes('3 automatisch freigegeben'));
   assert.equal(await page.locator('#documents-main-guide').isVisible(), false);
   assert.equal(await page.locator('#run-guide-title').innerText(), 'Schnellweg abgeschlossen · automatisch freigegeben');
@@ -350,6 +354,53 @@ try {
   assert.equal(exportRequests[1].operationId, exportRequests[0].operationId);
   assert.deepEqual(exportRequests[1].selection, exportRequests[0].selection);
   await page.screenshot({ path: path.join(evidence, 'r6-confirmed-copy-same-run-overview.png'), fullPage: true });
+
+  // Native GUI06 found that the renderer completion -> History bridge used
+  // technical counts without requesting its revision-bound durable summary.
+  // Exercise that exact bridge in a real DOM, including queued details toggle
+  // events. Synthetic IPC still is not native package/OS acceptance.
+  await page.locator('#details-open-documents').click();
+  await page.locator('#documents-completion-history').waitFor({ state: 'visible' });
+  await page.evaluate(() => {
+    const original = window.__TAURI__.core.invoke;
+    window.previewCompletionSummaryReads = [];
+    window.__TAURI__.core.invoke = async (command, args) => {
+      if (command === 'get_document_review_history_summary')
+        window.previewCompletionSummaryReads.push(structuredClone(args));
+      return original(command, args);
+    };
+  });
+  await page.locator('#documents-completion-history').click();
+  try {
+    await page.waitForFunction(() => document.querySelector('#history-' + 'b'.repeat(64) + '-guide-title')?.textContent === 'Export mit Abschlussbeleg');
+  } catch (error) {
+    console.error('COMPLETION_HISTORY_BROWSER_STATE', await page.evaluate(() => ({
+      historyVisible: !document.querySelector('#history-view').hidden,
+      reads: window.previewCompletionSummaryReads,
+      history: document.querySelector('#history-list').textContent,
+      feedback: document.querySelector('#feedback').textContent
+    })));
+    await page.screenshot({ path: path.join(evidence, 'completion-history-failure.png'), fullPage: true });
+    throw error;
+  }
+  assert.equal(await page.locator('#nav-history').getAttribute('aria-selected'), 'true');
+  assert.deepEqual(await page.evaluate(() => window.previewCompletionSummaryReads.map(row => row.batchId)), ['b'.repeat(64)],
+    'completion link reads only its selected durable summary, once');
+  assert.match(await page.locator(fastPrefix + '-summary').innerText(), /3 von 3.*Abschlussbelegen/u);
+  assert.equal(await page.locator(fastPrefix + '-disclosure').getAttribute('open'), null);
+  await page.locator(fastPrefix + '-disclosure > summary').click();
+  await page.locator(fastPrefix + '-disclosure > summary').click();
+  await page.locator(fastPrefix + '-disclosure > summary').click();
+  assert.equal(await page.locator(fastPrefix + '-guide-title').innerText(), 'Export mit Abschlussbeleg');
+  assert.deepEqual(await page.locator(fastPrefix + '-guide-stages li').evaluateAll(nodes =>
+    nodes.slice(2).map(node => ({ status: node.dataset.status, current: node.hasAttribute('aria-current') }))),
+    [{ status: 'done', current: false }, { status: 'done', current: false }],
+    'both automatic document approval and exported revisions are complete, not the current step');
+  assert.equal(await page.evaluate(() => window.previewCompletionSummaryReads.length), 1,
+    'real queued disclosure events reuse the current bound read');
+  assert.equal(await page.evaluate(() => window.previewExportObservation.requests.length), 2,
+    'returning to History or opening details never repeats the copy or ACK');
+  await page.screenshot({ path: path.join(evidence, 'completion-history-bound-summary.png'), fullPage: true });
 
   // Real DOM navigation through the actual renderer close transaction. Its
   // native response is delayed so a second tab click shares the same owner.

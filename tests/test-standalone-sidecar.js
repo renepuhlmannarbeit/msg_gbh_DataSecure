@@ -16,7 +16,7 @@ const sourceOnly = args.length === 1;
 // Native static readiness/IPC/Worker/Guard gates run on the actual sealed app.
 const nativeSourceOnly = sourceOnly || process.platform === 'darwin';
 
-function protocolClient(child, onNative, onReady) {
+function protocolClient(child, onNative, onReady, historyTrace = null) {
   let buffer = Buffer.alloc(0);
   let stderr = '';
   const pending = new Map();
@@ -24,7 +24,10 @@ function protocolClient(child, onNative, onReady) {
     for (const waiter of pending.values()) { clearTimeout(waiter.timer); waiter.reject(error); }
     pending.clear();
   };
-  child.stderr.on('data', (chunk) => { stderr += chunk.toString('utf8'); });
+  child.stderr.on('data', (chunk) => {
+    if (historyTrace) { try { historyTrace.append(chunk); } catch { /* observation only */ } }
+    else stderr += chunk.toString('utf8');
+  });
   child.once('exit', (code) => failAll(new Error(`sidecar exited ${code}: ${stderr}`)));
   child.stdout.on('data', (chunk) => {
     buffer = Buffer.concat([buffer, chunk]);
@@ -48,17 +51,27 @@ function protocolClient(child, onNative, onReady) {
       if (!waiter) return failAll(new Error('unexpected sidecar response'));
       pending.delete(value.request_id);
       clearTimeout(waiter.timer);
-      waiter.resolve(value);
+      if (value.ok === false && historyTrace && value.error_code !== 'STANDALONE_RESULTS_MISSING') {
+        // Promote closed diagnostics even for a normal error frame: no child
+        // exit/IPC timeout is required. Keep the original response unchanged.
+        let promotion;
+        try { promotion = historyTrace.promote(Math.max(0, waiter.deadline - Date.now()),
+          waiter.traceCheckpoint, value.error_code); } catch {}
+        Promise.resolve(promotion).catch(() => {}).then(() => waiter.resolve(value));
+      } else waiter.resolve(value);
     }
   });
   return {
     send(action, id, fields = {}, trailingFrame = Buffer.alloc(0)) {
       return new Promise((resolve, reject) => {
+        const deadline = Date.now() + 60000;
+        let traceCheckpoint = 0;
+        try { traceCheckpoint = historyTrace?.checkpoint?.() ?? 0; } catch { /* observation only */ }
         const timer = setTimeout(() => {
           pending.delete(id);
           reject(new Error(`sidecar response timeout: ${stderr}`));
         }, 60000);
-        pending.set(id, { resolve, reject, timer });
+        pending.set(id, { resolve, reject, timer, deadline, traceCheckpoint });
         child.stdin.write(Buffer.concat([encodeFrame({
           schema: 'datasecure-standalone-private-ipc/1', request_id: id, action, ...fields
         }), trailingFrame]));
@@ -71,6 +84,8 @@ const sidecarFile = path.join(__dirname, '../plugins/data-secure/server/standalo
 const lifecycleFixture = path.join(__dirname, 'lib/standalone-sidecar-lifecycle.cjs');
 const writerObserverFile = path.join(__dirname, 'lib/standalone-sidecar-writer-observer.cjs');
 const writerObserver = require('./lib/standalone-sidecar-writer-observer.cjs');
+const historyReadObserver = require('./lib/standalone-history-read-observer.cjs');
+const historyReadObserverFile = path.join(__dirname, 'lib/standalone-history-read-observer.cjs');
 
 function isolatedEnvironment(root) {
   const env = {};
@@ -665,11 +680,12 @@ function removeOwnedRoot(root, initial) {
       let host, client;
       const launch = () => {
         const generation = writerObserver.planHost(writers);
-        host = trackChild(childProcess.spawn(process.execPath, [`--require=${writerObserverFile}`, path.join(packagedServer, 'standalone/desktop-sidecar.js')], {
-          stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, env: { ...env, ...generation.environment }
+        host = trackChild(childProcess.spawn(process.execPath, [`--require=${historyReadObserverFile}`, `--require=${writerObserverFile}`, path.join(packagedServer, 'standalone/desktop-sidecar.js')], {
+          stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, env: { ...env, ...generation.environment,
+            [historyReadObserver.ENV]: caseRoot }
         }), children);
         writerObserver.attachHost(generation, host);
-        client = protocolClient(host);
+        client = protocolClient(host, undefined, undefined, historyReadObserver.createCollector());
         return value => { const { action, request_id, schema: _schema, ...fields } = value; return client.send(action, request_id, fields); };
       };
       const restart = async () => {

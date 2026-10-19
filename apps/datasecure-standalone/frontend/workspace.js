@@ -265,7 +265,7 @@
     },
     history(batchId) {
       if (!closed && view === 'documents' && batchId === documentGuide?.batch_id && batchId === runDetails?.batchId)
-        showView('history');
+        showView('history', batchId, null, batchId);
     },
     exportCompleted(receipt) {
       if (closed || view !== 'documents' || reconnecting || contextRequired ||
@@ -549,7 +549,7 @@
     catch (error) { if (connection !== connectionEpoch) return null; lastError = errorCode(error); showError(error, command); return null; }
     finally { endBusy(ownership); }
   }
-  function showView(next, batchId = runDetails?.batchId, receipt = null) {
+  function showView(next, batchId = runDetails?.batchId, receipt = null, summaryBatchId = null) {
     if (closed || !['new', 'history', 'settings', 'details', 'documents', 'review'].includes(next)) return;
     const navigation = ++navigationGeneration, connection = connectionEpoch;
     if (view === 'documents' && next !== 'documents') {
@@ -568,7 +568,7 @@
       closing.promise.then(ok => {
         if (!currentClose()) return;
         documentClose = null;
-        if (ok) { view = ''; showView(next, batchId, receipt); }
+        if (ok) { view = ''; showView(next, batchId, receipt, summaryBatchId); }
       }).catch(() => {
         if (!currentClose()) return;
         documentClose = null;
@@ -586,6 +586,12 @@
       else if (!['new', 'history', 'details'].includes(next)) clearRunReview(next);
     }
     view = next;
+    // Commit the exact completion-link request only after its native document
+    // close and navigation ownership checks. A superseding tab must not leave
+    // an unrelated summary request behind for a later visit to history.
+    if (next === 'history' && validBatchId(summaryBatchId)) {
+      requestedHistorySummaryBatchId = summaryBatchId; historySignature = '';
+    }
     if (receipt && runDetails?.batchId === receipt.batch_id) runDetails.receipt = receipt;
     clearHiddenTerminalAnnouncement();
     const ownJob = runDetails?.batchId === job?.batchId;
@@ -1142,9 +1148,15 @@
       ? 'Optionale Nachkorrekturen und Kopien werden bei Bedarf abgeglichen.' : 'Freigaben und Exportbelege werden bei Bedarf neu abgeglichen.', 'history-meta');
     status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite');
     const contents = element('div');
+    let pendingRead = null, loadedRead = null;
+    const currentRead = owner => owner && owner.epoch === historySummaryEpoch && owner.connection === connectionEpoch &&
+      owner.generation === generation && historySummaryRequests.get(container) === owner.token;
     const load = async () => {
       if (busy || closed || !(view === 'history' || view === 'details' && runDetails?.batchId === entry.batch_id)) return;
+      if (currentRead(pendingRead)) return;
       const epoch = historySummaryEpoch, connection = connectionEpoch, requestGeneration = generation, token = {};
+      const owner = { epoch, connection, generation: requestGeneration, token };
+      pendingRead = owner; loadedRead = null;
       historySummaryRequests.set(container, token); setControlDisabled(reload, true); contents.replaceChildren();
       reload.hidden = updateAction({ loading: true }) === true;
       status.textContent = entry.processing_mode === 'markdown-only' ? 'Optionale Nachkorrekturen und gespeicherte Kopien werden abgeglichen …'
@@ -1169,6 +1181,7 @@
             ? 'Für diesen älteren Lauf ist keine nachträgliche Textkorrektur verfügbar. Vorhandene Ergebnisdateien bleiben davon unberührt.'
             : 'Für diesen älteren Lauf wurde kein nachträglicher Dokumentprüfstand erfasst. Keine menschliche Freigabe ableitbar.';
           reload.hidden = updateAction(data) === true;
+          loadedRead = owner;
           return;
         }
         const keys = ['reviewable_count', 'approved_count', 'unavailable_count', 'unclassified_source_count', 'recorded_export_count', 'current_exported_count',
@@ -1216,6 +1229,7 @@
           : 'Optionale Nachkorrekturen und zusätzliche Kopien. Für den normalen Markdown-Abschluss ist hier kein weiterer Schritt erforderlich.'
           : 'Verarbeitung beendet; Dokumentfreigaben und Exporte sind getrennte Schritte. Abgeglichene Momentaufnahme: Nach Änderungen erneut laden.';
         reload.hidden = updateAction(data) === true;
+        loadedRead = owner;
       } catch (error) {
         if (active()) {
           const code = errorCode(error), reason = { DOCUMENT_REVIEW_POLICY_CHANGED: 'Dieser Prüfstand gehört zu einem älteren, nicht übernehmbaren Prüfvertrag.',
@@ -1225,6 +1239,7 @@
           reload.hidden = updateAction(null) === true;
         }
       } finally {
+        if (pendingRead === owner) pendingRead = null;
         if (ownershipEpoch === historySummaryOwnershipEpoch) {
           historySummaryReads--;
           if (!historySummaryReads && !closed) schedule(300);
@@ -1244,6 +1259,7 @@
     reload.hidden = hasMainLoader;
     container.append(status, contents, reload);
     const reset = message => {
+      pendingRead = null; loadedRead = null;
       historySummaryRequests.delete(container); setControlDisabled(reload, false); container.removeAttribute('aria-busy');
       contents.replaceChildren(); status.textContent = message;
       reload.hidden = updateAction(null) === true;
@@ -1252,7 +1268,8 @@
     historySummaryRetirements.add(() => {
       if (container.isConnected) reset('Prüfstatus nach Verbindungswechsel nicht bestätigt. Bitte erneut laden.');
     });
-    return { load, cancel };
+    const loadIfNeeded = () => currentRead(loadedRead) ? undefined : load();
+    return { load, loadIfNeeded, cancel };
   }
   function historyUnavailable(message) {
     // Old rows still contain clickable actions bound to an unconfirmed
@@ -1310,6 +1327,7 @@
       $('history-visibility-status').textContent = (Number.isSafeInteger(data.hidden_count) && data.hidden_count > 0
         ? `${data.hidden_count} abgeschlossene Läufe ausgeblendet. ` : '') +
         'Der Verlauf berücksichtigt nur die letzten 5 Läufe. Ältere Läufe rücken beim Ausblenden nicht nach. Dateien und gespeicherte Entscheidungen bleiben erhalten.';
+      const targetedSummary = requestedHistorySummaryBatchId;
       for (const entry of data.entries.slice(0, 5)) {
         if (!/^[a-f0-9]{64}$/u.test(entry.batch_id)) continue;
         if (detailsBatchId && entry.batch_id !== detailsBatchId) continue;
@@ -1335,7 +1353,7 @@
         const technicalProblems = anonymous && reasonBreakdownValid ? failedFiles - expectedOcr - privacyStops : 0;
         const unknownStops = anonymous && !reasonBreakdownValid ? failedFiles : 0;
         const stateLabel = element('p', conversion?.heading || (entry.status === 'results_available' ? entry.processing_mode === 'markdown-only'
-          ? 'Textübernahme abgeschlossen · nicht anonymisiert' : anonymous ? 'Verarbeitung beendet · Freigaben und Export getrennt prüfen' : 'Technisch verarbeitet · Verarbeitungszweck nicht bestätigt'
+          ? 'Textübernahme abgeschlossen · nicht anonymisiert' : anonymous ? 'Verarbeitung beendet · Freigabe- und Exportstand nicht abgeglichen' : 'Technisch verarbeitet · Verarbeitungszweck nicht bestätigt'
           : states[entry.status] || 'Nicht verfügbar'), 'history-meta');
         stateLabel.id = `history-${entry.batch_id}-state`;
         detail.append(element('p', `${raw ? 'Markdown-Konvertierung' : anonymous ? 'Anonymisierung' : 'Verarbeitungszweck nicht bestätigt'} · ${dateLabel}`, 'history-title'),
@@ -1406,6 +1424,7 @@
           entry.results_available === true && entry.result_location === 'available' && verifiedTotals;
         let finishDetail = null, finishNext = null, historyGuide = null;
         let finishedProcessingText = '';
+        const unconfirmedReviewText = 'Die technische Verarbeitung ist fertig. Freigabe- und Exportstand sind noch nicht abgeglichen. „Ausführliche Laufdetails“ öffnen, um die gespeicherten Belege dieses Laufs zu prüfen.';
         if (finished && anonymous) {
           const completion = element('section', undefined, 'history-completion');
           const marks = element('span', undefined, 'history-completion-marks');
@@ -1422,7 +1441,7 @@
           finishedProcessingText = `${count(entry.result_count)} von ${count(entry.selected_count)} Dateien wurden als anonymisierte Markdown-Entwürfe erstellt. ${expectedOcr ? `${expectedOcr} wurden ohne OCR nicht umgewandelt. ` : ''}${privacyStops ? `${privacyStops} wurden aus Datenschutzgründen angehalten. ` : ''}${technicalProblems ? `${technicalProblems} ${technicalProblems === 1 ? 'Datei hat einen technischen Fehler' : 'Dateien haben technische Fehler'}. ` : ''}${unknownStops ? `${unknownStops} ${unknownStops === 1 ? 'Datei wurde' : 'Dateien wurden'} nicht verarbeitet; die Gründe sind im kompakten Verlauf nicht mehr klassifiziert. ` : ''}Der Lauf verarbeitet keine weiteren Dateien.`;
           if (contentNotices?.description) finishedProcessingText += ` ${contentNotices.description}`;
           finishDetail = element('p', finishedProcessingText, 'history-completion-detail');
-          const next = finishNext = element('p', 'Die technische Verarbeitung ist fertig. Ob Dokumentfreigabe und Export abgeschlossen sind, wird getrennt geprüft; bitte nichts allein aus diesem Status weitergeben.', 'history-completion-next');
+          const next = finishNext = element('p', unconfirmedReviewText, 'history-completion-next');
           const title = element('div', undefined, 'history-completion-title'); title.append(marks, headline);
           // The processing outcome is always visible. Only the long
           // explanation and revision-bound approval/copy stages are folded.
@@ -1436,6 +1455,13 @@
           historyGuide = projection => {
             const baseline = window.__DATASECURE_PRESENTATION__?.projectRun({ ...entry, source: 'processor',
               state: entry.status, completed_count: entry.selected_count });
+            if (baseline && !projection) {
+              // Technical completion proves neither a missing approval nor a
+              // missing export. Only the fresh revision-bound summary may
+              // choose the current/done state of these two later stages.
+              baseline.heading = 'Freigabe- und Exportstand nicht abgeglichen';
+              baseline.stages[2].status = 'pending'; baseline.stages[3].status = 'pending';
+            }
             const selected = projection || baseline;
             if (!selected) { guideTitle.textContent = 'Freigabe- und Kopiestand noch unbestätigt'; guideCounts.textContent = ''; guideStages.replaceChildren(); return; }
             guideTitle.textContent = selected.heading; guideCounts.textContent = selected.counts || '';
@@ -1552,7 +1578,7 @@
           if (historyGuide) historyGuide(displayProof);
           if (finishNext) {
             finishNext.textContent = displayProof ? displayProof.next :
-              'Die technische Verarbeitung ist fertig. Ob Dokumentfreigabe und Export abgeschlossen sind, wird getrennt geprüft; bitte nichts allein aus diesem Status weitergeben.';
+              unconfirmedReviewText;
           }
           // A privacy stop does not erase independently confirmed approvals,
           // and a missing export receipt is not a processing failure.
@@ -1625,19 +1651,26 @@
         let focusRequestedSummary = false;
         if (entry.result_count > 0) {
           const summary = element('div', undefined, 'history-review-summary');
-          const requestedSummary = requestedHistorySummaryBatchId === entry.batch_id;
+          const requestedSummary = targetedSummary === entry.batch_id;
           focusRequestedSummary = requestedSummary;
           if (requestedSummary) expandedHistorySummaries.add(entry.batch_id);
           summary.hidden = !expandedHistorySummaries.has(entry.batch_id);
           summary.id = `history-${entry.batch_id}-summary`;
-          const { load, cancel } = historySummary(summary, entry, updateAction);
-          if (!summary.hidden) reopenedSummaries.push({ summary, load });
+          const { load, loadIfNeeded, cancel } = historySummary(summary, entry, updateAction);
+          if (!summary.hidden && (!targetedSummary || requestedSummary)) reopenedSummaries.push({ summary, load: loadIfNeeded });
           const toggle = action('summary-toggle', raw ? 'Nachkorrekturen und Kopien' : 'Freigaben und Exporte', () => {
             summary.hidden = !summary.hidden; toggle.setAttribute('aria-expanded', String(!summary.hidden));
             if (summary.hidden) { expandedHistorySummaries.delete(entry.batch_id); cancel(); }
             else { expandedHistorySummaries.add(entry.batch_id); load(); }
           });
           toggle.setAttribute('aria-expanded', String(!summary.hidden)); toggle.setAttribute('aria-controls', summary.id);
+          disclosure.addEventListener('toggle', () => {
+            if (!disclosure.open || !disclosure.isConnected ||
+                !(view === 'history' || view === 'details' && runDetails?.batchId === entry.batch_id)) return;
+            summary.hidden = false; expandedHistorySummaries.add(entry.batch_id);
+            toggle.setAttribute('aria-expanded', 'true');
+            loadIfNeeded();
+          });
           // After a restart the run-history record only proves technical
           // completion. Surface the authoritative approval/export lookup
           // directly, without implying that approval is still outstanding.

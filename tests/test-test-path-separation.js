@@ -98,6 +98,17 @@ test('standalone package source contracts run in every product gate as well as t
   assert.match(pkg.scripts['test:standalone'], /node tests\/test-standalone-package\.js(?: &&|$)/u);
 });
 
+test('targeted export snapshot and diagnostic countercases run in source and both native Mac consumer gates', () => {
+  const suite = require('./run-product-suite');
+  const files = ['tests/test-standalone-target-export-race.js', 'tests/test-standalone-target-export-snapshot.js',
+    'tests/lib/standalone-history-read-observer-cases.cjs'];
+  const mac = workflow('standalone-macos-sandbox.yml');
+  for (const file of files) {
+    assert.ok(suite.baseFiles.includes(file), `${file} must not become dead evidence`);
+    assert.ok(mac.includes(`node ${file}\n`), `${file} must execute on each actual Mac consumer`);
+  }
+});
+
 test('fast documentation validation cannot trigger SEA, apps or Claude CLI', () => {
   assert.strictEqual(pkg.scripts['test:docs'], 'npm run test:docs:fast');
   assert.doesNotMatch(pkg.scripts['test:docs:fast'], /sea|status-app|claude-local/iu);

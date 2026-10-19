@@ -3,7 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { readBoundFile, readBoundFileRecord, bindDirectory, assertDirectory } = require('../core/bound-file-io');
+const { readBoundFile, readBoundFileRecord, readBoundFileSnapshot, bindDirectory, assertDirectory } = require('../core/bound-file-io');
 const { ownerRecordIo } = require('./batch-active-lock');
 const { dataRoot } = require('../runtime');
 const { safeResolvePackage, readVerifiedFile } = require('./package-store');
@@ -1363,9 +1363,16 @@ function readStandaloneExportHistoryEntry(batchId, { legacyExportId = null } = {
   }
   try {
     // No mkdir, replay, publication or binding backfill on this read path.
-    const binding = bindPlainDirectory(directory);
-    const row = standaloneExportHistoryRow(target, readRecord(target, { expectedBatchId }));
-    assertDirectoryBinding(binding);
+    const binding = bindDirectory(directory);
+    if (comparablePath(binding.real) !== comparablePath(directory)) throw new Error('RESULT_EXPORT_STATE_UNSAFE');
+    // Only this read-only projection may tolerate a proven atomic leaf
+    // replacement. Keep the original parent binding and validate the entire
+    // newly adopted record/owner/purpose, not an old successful DTO.
+    const record = JSON.parse(readBoundFileSnapshot(target, { directory: binding, maximum: 1024 * 1024, minimum: 1 }));
+    if (!validRecord(record)) throw new Error('RESULT_EXPORT_STATE_UNSAFE');
+    assertRecordContentAnchor(target, record, { expectedBatchId });
+    const row = standaloneExportHistoryRow(target, record);
+    assertDirectory(binding);
     return row;
   } catch { throw failed('STANDALONE_HISTORY_UNAVAILABLE'); }
 }
