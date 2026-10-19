@@ -1,6 +1,6 @@
 # Produktvertrag: GBH DataSecure
 
-Stand: 19.10.2026 · 3.2.0-rc165 · Ist-Zustand RC165 · neuer Standalone-Entwicklungsnachtrag; veröffentlichter RC164 unverändert · Cowork bleibt RC151
+Stand: 19.10.2026 · 3.2.0-rc165 · Ist-Zustand RC165 · Windows/macOS-Test-Pre-Release; RC164 unverändert · Linux RC159 · Cowork RC151
 
 **Aktuelle Standalone-Präzisierung nach RC164:** Der normale Dokumentweg benötigt
 keine gesonderte Pflichtfreigabe mehr. Nach der Fundstellenprüfung können die
@@ -10,12 +10,13 @@ bestätigen genau diese Textstände. Intern bleiben revisions-/hashgebundene
 Freigabe, erneute Kandidatenprüfung, native Zielbindung, eindeutiger Exportauftrag
 und Empfangsbestätigung getrennte technische Schritte. Der Klick behauptet keine
 menschliche Lektüre aller Dokumente oder vollständige Anonymität. Nur freigeben
-und Widerrufen bleiben optionale Verwaltungsaktionen. Dieser Quellnachtrag ist
-noch kein neues veröffentlichtes Paket oder Zielhost-PASS.
+und Widerrufen bleiben optionale Verwaltungsaktionen. Dieser Ablauf ist als
+RC165-Testpaket veröffentlicht, kein menschlicher Zielhost-PASS.
 
-Die aktuellen RC159-Standalone-Pakete für Windows, beide Mac-Architekturen und Linux binden
-Quellcommit `7af2a9d0268864a01b954e0175cae9f5a3616fe8`.
-[Release und begrenzte technische Nachweise](../RELEASE.md#rc159--standalone-auf-allen-zielplattformen).
+Windows und beide Mac-Architekturen binden in RC165 den Appcommit
+`973274f17cda46bb66621d956af2cbc96e2272e3`/Build `973274f1`.
+Linux bleibt beim RC159-Paket aus Quellcommit `7af2a9d0268864a01b954e0175cae9f5a3616fe8`.
+[Release und begrenzte technische Nachweise](../RELEASE.md).
 Die integrierte lokale Prüfung und Identitätszuordnung gehören ausschließlich
 zum Standalone-Adapter; der veröffentlichte Cowork-Weg wird dadurch nicht verändert.
 
@@ -53,7 +54,7 @@ einzuführen. Claude erhält knappe aufgabenbezogene Anweisungen; technische
 Schutzprüfungen bleiben im Code. Nur tatsächlich mehrdeutige Inhalte benötigen
 eine lokale Fachentscheidung, nicht jeder erfolgreiche Verarbeitungsschritt.
 
-## Normalreise: Standalone, aktueller Entwicklungsweg nach RC164
+## Normalreise: Standalone RC165, nach RC164 vereinfachter Weg
 
 Die bewusste Zweckwahl aus DS-086 bleibt erhalten; Benennung und Darstellung
 wurden mit v2 erneuert. Historische Abgrenzung: Der integrierte Standalone-

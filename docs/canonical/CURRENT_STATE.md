@@ -1,8 +1,34 @@
 # Aktueller Iststand
 
-Arbeitsversion: **3.2.0-rc165**, unveröffentlichte gemeinsame Windows-/macOS-Weiterentwicklung; RC164 bleibt unverändert veröffentlicht.
+Arbeitsversion: **3.2.0-rc165**, gemeinsamer Windows-/macOS-Test-Pre-Release veröffentlicht; RC164 bleibt unverändert erhalten.
 
-### Aktuelle Entwicklung – gemeinsame Bedienvereinfachung nach RC164
+### Neuester verbindlicher Stand – RC165 veröffentlicht,19.10.2026
+
+[RC165](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc165),
+App-/Tagcommit `973274f17cda46bb66621d956af2cbc96e2272e3`, Build `973274f1`,
+Produktfingerprint `080ce0b2edeadc89e336a361a3e41a9649badf0ca163ec9cf3219e19c9690dfe`/332.
+280/280+10/10, Windows Native/Clippy/232Rusttests (3 ignoriert)/Release und fünf
+Paketgates grün, sämtliche Inputs unverändert. Beide Mac-Consumer39256845033
+und tatsächliche ARM-/Intel-Paket-/Loggegenreviews erfolgreich. 18Releaseassets
+remote erneut heruntergeladen/gehasht, gleiche AssetIDs nach Veröffentlichung,
+Pre-Release/nichtDraft und genauer Tagcommit bestätigt. Windows lokal mit Testplan
+und synthetischen Daten unter `Software DataSecure/RC165`, kein Desktopstart.
+
+Freigabe und Export im normalen Weg gemeinsam bestätigt; Vorschau bleibt lesend,
+technische Schutzprüfungen und optionale Freigabeverwaltung bleiben erhalten.
+Defaultordner-Erstellung und nativer Erstexport ohne Picker auf Windows und
+beiden Mac-Runnern bestanden; gespeicherter Root/ACK in neuer Serviceinstanz,
+keine Behauptung tatsächlicher TCC-/Finder-/OS-Neustartabnahme. Ergebnisaktion
+und Copy konsistent; Snapshotreload eng klassifiziert, keine generische Retrylockerung.
+
+Offen bleiben die zehn Nutzer-Desktopfälle sowie die tatsächliche Mac-/M2-/
+Finder-/TCC-/Enterprise-/VoiceOver-/macOS26-Abnahme. Keine Developer ID oder
+Notarisierung, keine globale Schutzabschaltung, keine Automation. Nachweise:
+[Releasevertrag](../RELEASE.md), `dist/rc165-usability-source06-20261019`.
+Die anschließenden Entwicklungs-/RC164-Nachtstände sind historische Belege;
+dieser Dokumentationsnachtrag verändert den eingefrorenen Releasecommit nicht.
+
+### Historische Entwicklung – gemeinsame Bedienvereinfachung nach RC164
 
 19.10.2026, `codex/standalone-export-usability`: gemeinsamer Freigabe-/Exportklick,
 lesende Vorschau, sichere Übernahme vorhandener Ergebnisordner und konsistente
@@ -61,7 +87,7 @@ Nur diese drei Copytexte korrigiert und mit lokalisierten HTML-/tatsächlich
 gerenderten VM-Verlaufsregressionen abgesichert. Ziel bleibt gemeinsame neue
 Endprüfung und RC165-Übergabe, Nutzer bedient Desktop; kein Zeitauftrag.
 
-### Neuester verbindlicher Stand – Veröffentlichung 19.10.2026
+### Historischer Abschluss – RC164-Veröffentlichung 19.10.2026
 
 [RC164-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc164)
 aus Appcommit `95f30181fdaf2494b0ff53c4cd2e7b97bf834990`, Build `95f30181`;

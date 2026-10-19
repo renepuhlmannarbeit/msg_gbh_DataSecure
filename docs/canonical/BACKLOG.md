@@ -1,8 +1,34 @@
 # Aktives Entwicklungsbacklog
 
-Arbeitsversion: **3.2.0-rc165**, unveröffentlichte gemeinsame Windows-/macOS-Weiterentwicklung; RC164 bleibt unverändert veröffentlicht.
+Arbeitsversion: **3.2.0-rc165**, gemeinsamer Windows-/macOS-Test-Pre-Release veröffentlicht; RC164 bleibt unverändert erhalten.
 
-## Aktueller Nutzerauftrag – gemeinsame Standalone-Vereinfachung nach RC164
+## Neuester verbindlicher Abschluss – RC165,19.10.2026
+
+Aktueller Standalone-Vereinfachungsauftrag implementiert und als
+[RC165](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc165)
+bereitgestellt: Appcommit `973274f17cda46bb66621d956af2cbc96e2272e3`,
+Fingerprint `080ce0b2edeadc89e336a361a3e41a9649badf0ca163ec9cf3219e19c9690dfe`/332.
+Gemeinsame Freigabe/Export, Defaultordnerbindung ohne unnötigen Picker,
+konsistente Ordneraktion und Status-/Read-only-Snapshotkorrekturen abgeschlossen.
+Keine bestätigten offenen Implementierungsblocker aus den begrenzten Endreviews.
+
+Source06:280/280+10/10, Windows-Native/232Rust3ignored/Clippy/Release und fünf
+Paketgates grün, Inputs unverändert; beide nativen Macjobs39256845033 erfolgreich.
+Tatsächliche ARM-/Intel-Artefakte/Logs unabhängig gegengelesen und durch Main
+bytegebunden geprüft. Defaultsequenz /2->/4 samt Erstexport ohnePicker auf beiden
+Macs real bestanden. Alle18Releaseassets remote nachgelesen/gehasht, gleicher
+Uploadbestand nach Publish, Tagcommit/PreRelease/nichtDraft bestätigt.
+Windows-ZIP/Testplan/Testdaten lokal unter `Software DataSecure/RC165` übergeben.
+
+Verbleibend: zehn manuelle Windowsfälle durch Nutzer, praktische Mac-/M2-/Finder-/
+TCC-/Gatekeeper-/Enterprise-/VoiceOver-/macOS26-Zielhostnachweise. Keine agentische
+Desktopabnahme oder vollständiger Writerjoin behauptet; keine neue Automation,
+Developer ID/Notarisierung/Apple-Einreichung/Schutzabschaltung. Das gesamte
+historische Produktbacklog wird dadurch nicht pauschal für erledigt erklärt.
+Folgende Source02..05-/RC164-Arbeitsstände sind historische Entwicklungsbelege,
+keine erneut offenen Endgates dieses erledigten Übergabeauftrags.
+
+## Historischer Nutzerauftrag – gemeinsame Standalone-Vereinfachung nach RC164
 
 19.10.2026, BL-010.53 / DS-082, DS-086, DS-110: neue Implementierung auf
 `codex/standalone-export-usability`; veröffentlichter RC164-Tag und Pakete bleiben

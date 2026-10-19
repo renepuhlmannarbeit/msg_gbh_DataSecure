@@ -1,9 +1,36 @@
 # Standalone nach RC164 – Export, Ordnerbindung und Verlauf
 
-Stand: 19.10.2026. Quellreview/Entwicklungsnachweis, keine Paket- oder Zielhostabnahme.
+Stand: 19.10.2026. Quellreview mit gebundener technischer Paketprüfung; keine menschliche Zielhostabnahme.
 Auftrag und offene Arbeit ausschließlich in `../canonical/BACKLOG.md`.
 Windows und macOS verwenden dieselben Fachmodule, mit nativen OS-Adaptern.
 Veröffentlichte RC164-Pakete und ihre eingefrorenen Nachweise bleiben unverändert.
+
+## Abschluss RC165 – tatsächliche Nachweise,19.10.2026
+
+Veröffentlicht als [RC165-Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc165),
+Appcommit973274f17cda46bb66621d956af2cbc96e2272e3/Build973274f1,
+Fingerprint080ce0b2edeadc89e336a361a3e41a9649badf0ca163ec9cf3219e19c9690dfe/332.
+280/280+10/10, Windows-Native232Rust3ignored/Clippy/Release und fünfPaketgates
+PASS mit unveränderten Inputs. Beide tatsächlichen Macjobs39256845033SUCCESS,
+vier Publisherphasen, Default-/2->/4-Erstexport ohnePicker, Guard/ACL-/Prozess-/
+App-/ZIP-/DMG-Nachweise. Mainverifier prüfte je1151ZIPeinträge,229gemeinsame
+Runtimequellen und tatsächliche Core-/Architektur-/Gitmarker-/FP-/Signaturbindungen;
+unabhängige ARM-/Intel-Loggegenreviews ohne neuen bestätigten Blocker.
+
+Windows lokal create-only samt Testplan/Testdaten übergeben.18Releaseassets
+remote erneut heruntergeladen/gehasht und nach Veröffentlichung mit gleichen
+UploadIDs bestätigt; Tag löst exakt auf Appcommit auf, PreRelease/nichtDraft.
+Originale Belege unter `dist/rc165-usability-source06-20261019`, tatsächliche
+Artefakte unter den getrennten Source06-ARM-/Intel-Reviewverzeichnissen.
+Vorherige rote/unterbrochene Zwischenläufe bleiben unverändert erhalten und
+werden nicht rückwirkend als PASS ausgegeben. Nachfolgende Source02..05-Notizen
+sind historische Entwicklungsbelege, keine offenen neuen Implementierungspunkte.
+
+Zehn Windows-Desktoptests sind weiterhin Nutzeraufgabe. Neue Serviceinstanz ist
+kein echter OS-Neustart oder TCC-Dialog; physische M2-/Finder-/TCC-/Enterprise-/
+VoiceOver-/macOS26-Abnahme offen. Keine DeveloperID/Notarisierung/Apple-
+Einreichung oder globale Schutzabschaltung. Dieser Textnachtrag ändert die
+eingefrorenen Produktbytes und den App-/Tagcommit nicht.
 
 ## Ausgangslage und Soll
 

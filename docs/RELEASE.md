@@ -2,7 +2,62 @@
 
 Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc165 · Veröffentlichungsnachtrag: 19.10.2026
 
-Der aktuelle Quellstand ist RC165-Entwicklungsstand und noch kein neu gebundener Paketkandidat. Menschliche N3/N4-Produktionsfreigaben bleiben offen.
+Der aktuelle Quellstand ist RC165, als Standalone-Test-Pre-Release für Windows und macOS veröffentlicht. Menschliche N3/N4-Produktionsfreigaben bleiben offen.
+
+### RC165 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
+
+Quellcommit `973274f17cda46bb66621d956af2cbc96e2272e3` bindet den
+[RC165-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc165)
+für Windows x64, macOS ARM64 und Intel. Sichtbare Buildkennung `973274f1`,
+gemeinsamer Produktfingerprint `080ce0b2edeadc89e336a361a3e41a9649badf0ca163ec9cf3219e19c9690dfe`
+(332 Produktinputs). Nachfolgende reine Dokumentation ändert diesen eingefrorenen
+App-/Tagcommit nicht; RC164 und alle älteren Pakete/Evidenzen bleiben unverändert.
+
+Normaler Freigabe-/Exportweg auf einen bestätigten Endklick reduziert. Die Vorschau
+bleibt lesend; fehlende technische Freigaben werden exakt revisions-/hashgebunden
+atomar gespeichert und vor dem nativen Kopieren erneut abgeglichen. Gespeicherte
+Standardordner werden beim Erstexport ohne unnötige neue Auswahl nativ gebunden,
+wenn ursprüngliche Identität und Zugriff passen. Keine neuen OS-Rechte behauptet.
+Konsistente primäre Ergebnisordneraktion, neutrale Busy-/Fehlstatusdarstellung und
+eng begrenzter read-only Reload nach nachgewiesenem atomaren Snapshotwechsel.
+
+280/280 Haupttests plus10/10 Zusatzprüfungen, Windows Prepare/Clippy/232Rusttests
+(3 ignoriert)/Release und fünf Paketgates bestanden; sämtliche Inputs unverändert.
+Paketkorpus100/100 Ergebnisse, Originale bytegleich. Beide nativen
+[Mac-Consumer](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/39256845033)
+erfolgreich: je221Rusttests (3 ignoriert), vier tatsächliche atomare Publisher-
+Gegenphasen, Defaultordner-/2->/4-Erstexport ohne Picker, Guard/ACL/Prozessreceipts,
+App-/LaunchServices-/Konverter-/ZIP-/DMG-Nachweise. Neue Serviceinstanzen sind kein
+Nachweis eines echten OS-Neustarts oder tatsächlicher TCC-Dialoge. Pro Architektur
+1151 ZIPeinträge,229 gemeinsame Runtimequellen, Core-/Provenienz-/Signatur-/
+Architektur-/Gitmarker-/Fingerprintbindungen am tatsächlichen Download geprüft.
+Unabhängige tatsächliche ARM-/Intel-Jobgegenreviews ohne bestätigten neuen Blocker.
+
+Release417349053 ist Pre-Release, kein Draft. Alle18Assets im Draft erneut
+heruntergeladen und gehasht, nach Veröffentlichung dieselben AssetIDs/Bytes
+sowie Tagcommit bestätigt. Windows zusätzlich create-only mit Testplan, offenen
+Abnahmefällen und unveränderten synthetischen Daten unter `Software DataSecure/RC165`
+geliefert. Nachweise unter `dist/rc165-usability-source06-20261019` und den getrennten
+`dist/rc165-source06-arm-review-20261019`-/Intel-Verzeichnissen.
+
+| Archiv | Bytes | SHA-256 |
+|---|---:|---|
+| Windows x64 ZIP | 112339508 | `16f5eabd6f65a8c52c9633aa6400b7ad5496fc9f20ace45aa588c6f6ee0baf21` |
+| macOS Apple Silicon ZIP | 117690573 | `4c16df3a2f11f2e71aca72d3e4879110ac4ee8f54b81c3f1bd40a6652abd8be5` |
+| macOS Apple Silicon DMG | 130819073 | `b045675ef8ddf1e11c24bacf7c81f143bc9435f307df815c203de27a6d989ffd` |
+| macOS Intel ZIP | 120942901 | `22c18e317f67add14f6d6321dfc326879b8e4533f357f1963248db587527a4e4` |
+| macOS Intel DMG | 136178967 | `55517bcbe74814b8dc00d33309537f73be85e4b778a7a8024efec05ce34f3f8c` |
+
+Zehn menschliche Windows-Abschlusstests durch den Nutzer und praktische Mac-/M2-/
+Finder-/TCC-/Gatekeeper-/Enterprise-/VoiceOver-/macOS26-Abnahme bleiben offen.
+Mac-Runner:14.8.9/ARM64 und15.7.9/Intel; macOS26-Regular-Profile-Gate übersprungen.
+Paket-Sidecarfixture bleibt bei unbestätigter Writerquieszenz erhalten, kein
+vollständiger autonomer Writerjoin behauptet. Eigener statischer Mac-Core und
+unveränderter offizieller Converter bleiben getrennte offen hashgebundene Rollen.
+Keine Developer ID/Notarisierung/Apple-Einreichung, nur lokales Ad-hoc-Sealing;
+keine globale Schutzabschaltung. Kein Produktions- oder vollständiger Anonymitätsnachweis.
+
+Die nachfolgenden RC164- und älteren Abschnitte sind historische Belege.
 
 ### RC164 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
 
