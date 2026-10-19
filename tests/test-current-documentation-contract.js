@@ -435,18 +435,21 @@ test('main README gives direct Windows and macOS Standalone installation paths',
   assert.match(readme, /Systemeinstellungen →\s+Datenschutz & Sicherheit/u);
 });
 
-test('all shipped Standalone start guides describe v2 staged review, explicit approval and separate export', () => {
+test('all current Standalone start guides describe staged review and one final combined export confirmation', () => {
   for (const file of ['START-WINDOWS.md', 'MACOS-START.md', 'LINUX-START.md']) {
     const text = read(`apps/datasecure-standalone/${file}`).replace(/\*\*/gu, '').replace(/\s+/gu, ' ');
     const reviewAction = file === 'START-WINDOWS.md'
       ? 'Entscheidungen speichern' : 'Gruppe übergeben und weiter';
     for (const label of ['Neue Verarbeitung', 'Verarbeitung starten', reviewAction,
-      'Auswahl freigeben', 'Auswahl exportieren']) {
+      'Freigeben und exportieren', 'Auswahl exportieren']) {
       assert.ok(text.includes(label), `${file} omits current action ${label}`);
     }
     assert.match(text, /normalen separaten Ordner/u, file);
     assert.match(text, /nicht anonymisiert/u, file);
     assert.match(text, /Identitäts.*(?:nicht|bleiben)/u, file);
+    assert.match(text, /gesonderte Pflichtfreigabe ist nicht nötig/u, file);
+    assert.match(text, /Vorschau und Abbrechen geben nichts neu frei und kopieren nichts/u, file);
+    assert.doesNotMatch(text, /Auswahl freigeben wählen/u, file);
     assert.doesNotMatch(text, /Die Ansicht Verarbeiten zeigt zunächst den Abschluss/u, file);
   }
 });

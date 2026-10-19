@@ -141,6 +141,21 @@ mod controlled_create_diagnostic_tests {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct Identity { pub volume: u64, pub object: u128, pub created_ns: u128 }
+/// Legacy Node22 setting admission only. Never use this representation for
+/// recovery/publication; those always retain the full native Identity.
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct Node22Identity { pub dev: String, pub ino: String, pub birthtime_ms: String }
+fn node22_identity(dev: u64, ino: u64, created_ns: u128) -> io::Result<Node22Identity> {
+    const MAX_SAFE: u64 = (1u64 << 53) - 1;
+    if dev > MAX_SAFE || ino > MAX_SAFE { return Err(unsafe_io()); }
+    let seconds = created_ns / 1_000_000_000;
+    if seconds > u128::from(MAX_SAFE / 1000) { return Err(unsafe_io()); }
+    // Exactly Node22 internal/fs/utils.js msFromTimeSpec, then Math.trunc.
+    // Its Date getter rounds separately and must NOT be used for this setting.
+    let millis = (seconds as f64 * 1000.0 + (created_ns % 1_000_000_000) as f64 / 1_000_000.0).trunc();
+    Ok(Node22Identity { dev: dev.to_string(), ino: ino.to_string(), birthtime_ms: format!("{millis:.0}") })
+}
 
 fn identity(metadata: &std::fs::Metadata, volume: u64, object: u128) -> io::Result<Identity> {
     // Persisting only a device/inode pair would mistake a recycled inode for
@@ -237,6 +252,11 @@ impl Directory {
         Ok(Self { inner, identity })
     }
     pub fn identity(&self) -> Identity { self.identity }
+    pub(crate) fn node22_identity(&self) -> io::Result<Node22Identity> {
+        self.check()?;
+        let (dev, ino) = platform::node22_object(&self.inner)?;
+        node22_identity(dev, ino, self.identity.created_ns)
+    }
     /// Initial authorization only (the native result picker). Recovery must
     /// instead use the previously persisted identity with open_bound_child.
     pub fn bind_output_child(&self, name: &str) -> io::Result<Self> {
@@ -280,6 +300,17 @@ impl Directory {
         platform::verify_private(&inner)?;
         self.inspect_child(name, expected)?;
         Ok(Self { inner, identity: expected })
+    }
+    /// Read admission for the fixed settings directory, relative to a held
+    /// private root. Core's synchronous namespace guard admits the digest-bound
+    /// snapshot. This is NOT a private export stage or an ACL certification;
+    /// neither creates it nor grants export recovery authority.
+    pub(crate) fn open_settings(&self) -> io::Result<Self> {
+        self.check()?;
+        let inner = platform::open_recovery_child(&self.inner, "settings")?;
+        let identity = platform::directory_identity(&inner)?;
+        self.inspect_child("settings", identity)?;
+        Ok(Self { inner, identity })
     }
     /// Bounded journal/body read through the held directory. Missing is distinct
     /// from inaccessible, replaced, linked, oversized or malformed evidence.
@@ -577,6 +608,11 @@ mod platform {
         if !metadata.is_dir() { return Err(unsafe_io()); }
         identity(&metadata, metadata.dev(), metadata.ino() as u128)
     }
+    pub fn node22_object(directory: &Directory) -> io::Result<(u64, u64)> {
+        let metadata = directory.file.metadata()?;
+        if !metadata.is_dir() { return Err(unsafe_io()); }
+        Ok((metadata.dev(), metadata.ino()))
+    }
     pub fn open_child(parent: &Directory, name: &str) -> io::Result<Directory> {
         let name = cstr(std::ffi::OsStr::new(name))?;
         from_file(opened(unsafe { openat(parent.file.as_raw_fd(), name.as_ptr(), DIR_FLAGS) })?)
@@ -781,6 +817,18 @@ mod platform {
         super::identity(&file.metadata()?, id.volume, u128::from_le_bytes(id.id))
     }
     pub fn directory_identity(directory: &Directory) -> io::Result<Identity> { plain_directory(&directory.file)?; identity(&directory.file) }
+    pub fn node22_object(directory: &Directory) -> io::Result<(u64, u64)> {
+        plain_directory(&directory.file)?;
+        let mut info: FileInfo = unsafe { std::mem::zeroed() };
+        if unsafe { GetFileInformationByHandle(directory.file.as_raw_handle(), &mut info) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let ino = (u64::from(info.index[0]) << 32) | u64::from(info.index[1]);
+        // Node's legacy 64-bit index is not a unique ReFS 128-bit identity.
+        // Only admit when it exactly covers the full native object on this FS.
+        if identity(&directory.file)?.object != u128::from(ino) { return Err(unsafe_io()); }
+        Ok((u64::from(info.volume), ino))
+    }
     pub fn open_child(parent: &Directory, name: &str) -> io::Result<Directory> {
         let file = relative(&parent.file, std::ffi::OsStr::new(name), true, false, true)?;
         plain_directory(&file)?;

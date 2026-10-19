@@ -100,3 +100,24 @@ test('body transfers permit bounded multi-frame sessions but never publish-statu
     sequence: frame.sequence, ok: true, status: 'completed' }), { code: 'STANDALONE_IPC_FAILED' });
   await rejected;
 });
+
+test('configured-root preparation is a private bound metadata response and keeps the publication sequence', async () => {
+  const frames = [], channel = new NativeExportChannel({ write: value => frames.push(value) });
+  const root = '/synthetic/existing-results';
+  const binding = { schema: 'datasecure-native-export-binding/1', root, root_identity: identity,
+    data_root_identity: identity, private_name: `native-export-${'c'.repeat(32)}`, private_identity: identity,
+    anonymize_identity: identity, markdown_identity: identity };
+  const session = channel.publication({ request_id: 'a'.repeat(16), action: 'export_approved_documents' });
+  const preparation = session.send('prepare_configured_export_root', { root, setting_sha256: 'b'.repeat(64),
+    admission: { kind: 'node22', identity: { dev: '1', ino: '2', birthtime_ms: '3' } },
+    batch_id: 'd'.repeat(64), operation_id: 'e'.repeat(32) });
+  const first = frames[0]; assert.throws(() => validatePrivateMessage(first));
+  channel.accept({ schema: PUBLICATION_RESPONSE, request_id: first.request_id, native_id: first.native_id,
+    sequence: 1, ok: true, binding });
+  assert.deepEqual(await preparation, binding);
+  const publication = session.send('export_documents', { command: 'publish', operation: {} });
+  assert.equal(frames[1].sequence, 2); assert.equal(frames[1].native_id, first.native_id);
+  channel.accept({ schema: PUBLICATION_RESPONSE, request_id: first.request_id, native_id: first.native_id,
+    sequence: 2, ok: true, status: 'completed' });
+  assert.equal(await publication, 'completed');
+});

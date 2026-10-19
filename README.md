@@ -1,6 +1,6 @@
 # GBH DataSecure – Standalone Windows/macOS RC164 · Linux RC159 · Cowork RC151
 
-Quellstand: 3.2.0-rc164
+Quellstand: 3.2.0-rc165
 
 Der [Standalone-Test-Pre-Release RC164 für Windows und macOS](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc164)
 bindet Quellcommit `95f30181fdaf2494b0ff53c4cd2e7b97bf834990` (Build `95f30181`).

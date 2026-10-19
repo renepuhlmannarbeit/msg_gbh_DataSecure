@@ -188,7 +188,7 @@ testAsync('confirmed OCR handoff copy follows the loaded purpose before clearing
       assert.match(message, /OCR-Kontaktentscheidungen gespeichert.*Markdown-Umwandlung fort/u);
       assert.match(message, /Dokumentfreigabe zur Anonymisierung ist nicht erforderlich/u);
       assert.doesNotMatch(message, /Dokumentfreigabe und Export folgen|Export abgeschlossen/u);
-    } else assert.match(message, /Dokumentfreigabe und Export folgen gesondert/u);
+    } else assert.match(message, /Ergebnisse ansehen.*gemeinsamen Freigabe-\/Exportbestätigung/u);
   }
 });
 
@@ -1082,6 +1082,45 @@ testAsync('the explicit handoff button counts actual occurrence decisions, not g
   selectAll(h); applySelected(h, 'keep');
   assert.equal(h.element('release').disabled, false);
   assert.equal(h.calls.some(call => call.command === 'submit_review'), false);
+});
+
+for (const code of ['STANDALONE_IPC_BUSY', 'STANDALONE_OWNERSHIP_CONTROL_BUSY', 'STANDALONE_PAUSE_CONTROL_BUSY'])
+testAsync('acknowledged review then busy status read waits neutrally without resubmission: ' + code, async () => {
+  let reads = 0;
+  const h = harness(null, false, false, { invoke: async (command, args, normal) => {
+    if (command === 'get_review_session') {
+      reads++;
+      if (reads === 2) throw JSON.stringify({ code });
+      if (reads > 2) return { ready: false, phase: 'complete', run_complete: true };
+    }
+    return normal(command, args);
+  } });
+  await new Promise(resolve => setImmediate(resolve));
+  selectAll(h); applySelected(h, 'keep'); h.callbacks.get('release')();
+  await new Promise(resolve => setImmediate(resolve));
+  await h.timers.shift()();
+  assert.match(h.element('waiting-text').textContent, /Entscheidungen sind gespeichert.*automatisch erneut geladen/u);
+  assert.doesNotMatch(h.element('waiting-text').textContent, /unklar|nicht sicher geladen/u);
+  assert.equal(h.calls.filter(call => call.command === 'submit_review').length, 1);
+  assert.equal(h.calls.filter(call => call.command === 'close_review_window').length, 0);
+  await h.timers.shift()();
+  assert.equal(h.calls.filter(call => call.command === 'submit_review').length, 1);
+  assert.equal(h.calls.filter(call => call.command === 'close_review_window').length, 1);
+});
+
+testAsync('busy status never upgrades an unacknowledged review mutation to saved', async () => {
+  let reads = 0;
+  const h = harness(null, false, false, { invoke: async (command, args, normal) => {
+    if (command === 'submit_review') throw Error('STANDALONE_IPC_BUSY');
+    if (command === 'get_review_session' && ++reads > 1) throw Error('STANDALONE_OWNERSHIP_CONTROL_BUSY');
+    return normal(command, args);
+  } });
+  await new Promise(resolve => setImmediate(resolve));
+  selectAll(h); applySelected(h, 'keep'); h.callbacks.get('release')();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.match(h.element('waiting-text').textContent, /Bestätigung.*noch nicht sicher/u);
+  assert.doesNotMatch(h.element('waiting-text').textContent, /Entscheidungen sind gespeichert/u);
+  assert.equal(h.calls.filter(call => call.command === 'submit_review').length, 1);
 });
 
 done();

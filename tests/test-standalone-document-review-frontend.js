@@ -11,7 +11,7 @@ const isDecision = call => ['decide_document_review', 'decide_document_review_ba
 function harness(options = {}) {
   const nodes = new Map(), calls = [], guides = [], rows = [1, 2].map(n => ({ name: `Quelle-${n}.pdf`, document_id: String(n).repeat(32), revision: 0,
     output_sha256: String(n).repeat(64), chunks: 1, approved: false, processing_mode: 'markdown-and-anonymize' }));
-  const intervals = new Set(); let now = 0, wallClockOffset = 0;
+  const intervals = new Set(); let now = 0, wallClockOffset = 0, resultFolder = options.resultFolder;
   const document = { activeElement: null };
   const create = tag => ({ tag, children: [], events: new Map(), dataset: {}, textContent: '', value: '', disabled: false, checked: false, isConnected: true,
     append(...values) { this.children.push(...values); }, replaceChildren(...values) { this.children = values; },
@@ -22,9 +22,12 @@ function harness(options = {}) {
   const el = id => { if (!nodes.has(id)) nodes.set(id, create('div')); return nodes.get(id); };
   const invoke = async (command, args) => {
     calls.push({ command, args: structuredClone(args) });
-    if (options.invoke) { const response = await options.invoke(command, args); if (response !== undefined) return response; }
+    if (options.invoke) { const response = await options.invoke(command, args); if (response !== undefined) {
+      if (command === 'configure_results' && response?.ok === true && response.configuration_changed === true) resultFolder = response.result_folder;
+      return response;
+    } }
     if (command === 'get_document_reviews') return { documents: structuredClone(rows), unavailable: [], local_ui_only: true, external_disclosure: false };
-    if (command === 'preview_document_export') return { ok: true, processing_mode: rows[0].processing_mode, local_ui_only: true, external_disclosure: false,
+    if (command === 'preview_document_export') return { ok: true, processing_mode: rows[0].processing_mode, result_folder: resultFolder, local_ui_only: true, external_disclosure: false,
       files: args.selection.map((row, index) => ({ name: rows[0].processing_mode === 'markdown-only' ? `Quelle-${index + 1}.md` : `Dokument_${String(index + 1).padStart(2, '0')}.md`, sha256: row.output_sha256 })) };
     if (command === 'get_document_review_chunk') return { ...rows.find(row => row.document_id === args.documentId), chunk_index: args.chunkIndex,
       original_text: 'Anna Beispiel: 42 Projekte.', markdown: options.maskAfterRevision && rows.find(row => row.document_id === args.documentId).revision > 0 ?
@@ -175,7 +178,7 @@ testAsync('bound privacy stop has its own non-reviewable category and accurate n
 testAsync('checkboxes only select; explicit bulk approval covers exactly the selected documents', async () => {
   const h = harness(); await h.api.open('a'.repeat(64)); await h.all();
   assert.equal(h.calls.some(isDecision), false);
-  assert.equal(h.el('documents-export').disabled, true);
+  assert.equal(h.el('documents-export').disabled, false, 'preview can precede the combined export confirmation');
   await h.act('documents-approve'); assert.equal(h.calls.filter(isDecision).length, 1);
   assert.equal(h.calls.find(isDecision).command, 'decide_document_review_batch');
   assert.deepEqual(h.calls.find(isDecision).args.decision.selection.map(row => row.document_id), h.rows.map(row => row.document_id));
@@ -530,7 +533,7 @@ testAsync('export dialog previews neutral names and cancel starts no operation a
   assert.equal(h.el('document-export-dialog').open, true);
   assert.equal(h.calls.some(call => call.command === 'export_approved_documents'), false);
   assert.equal(h.el('document-export-files').children[0].textContent, 'Dokument_01.md');
-  assert.match(h.el('documents-status').textContent, /Exportvorschau geprüft.*keine neue Kopie.*„Exportieren“/u);
+  assert.match(h.el('documents-status').textContent, /Exportvorschau geprüft.*keine neue Kopie.*„Freigeben und exportieren“/u);
   assert.doesNotMatch(h.el('documents-status').textContent, /wird lokal geprüft/u);
   await h.act('document-export-close'); assert.equal(h.el('document-export-dialog').open, false);
   assert.match(h.el('documents-status').textContent, /keine neue Kopie/u);
@@ -643,7 +646,8 @@ testAsync('lost decision acknowledgement reconciles state without losing the aff
   await h.api.open('a'.repeat(64)); await h.all(); await h.act('documents-approve');
   assert.match(h.el('documents-status').textContent, /Quelle-1\.pdf.*DOCUMENT_REVIEW_STALE/u);
   assert.equal(h.calls.filter(call => call.command === 'get_document_reviews').length, 2);
-  assert.equal(h.el('documents-export').disabled, true);
+  assert.equal(h.rows.some(row => row.approved), false);
+  assert.equal(h.calls.some(call => call.command === 'export_approved_documents'), false);
 });
 
 testAsync('an unbound success acknowledgement is not counted as a confirmed document decision', async () => {
@@ -651,7 +655,8 @@ testAsync('an unbound success acknowledgement is not counted as a confirmed docu
   await h.api.open('a'.repeat(64)); await h.all(); await h.act('documents-approve');
   assert.equal(h.calls.filter(isDecision).length, 1);
   assert.match(h.el('documents-status').textContent, /gemeinsame Speicherbestätigung ist unklar.*Quelle-1\.pdf/u);
-  assert.equal(h.el('documents-export').disabled, true);
+  assert.equal(h.rows.some(row => row.approved), false);
+  assert.equal(h.calls.some(call => call.command === 'export_approved_documents'), false);
 });
 
 testAsync('approval cannot adopt an acknowledgement for different Markdown bytes', async () => {
@@ -662,7 +667,8 @@ testAsync('approval cannot adopt an acknowledgement for different Markdown bytes
   } });
   await h.api.open('a'.repeat(64)); await h.all(); await h.act('documents-approve');
   assert.match(h.el('documents-status').textContent, /gemeinsame Speicherbestätigung ist unklar.*DOCUMENT_REVIEW_STALE/u);
-  assert.equal(h.el('documents-export').disabled, true);
+  assert.equal(h.rows.some(row => row.approved), false);
+  assert.equal(h.calls.some(call => call.command === 'export_approved_documents'), false);
 });
 
 testAsync('entity checkboxes only select and the single central action validates the returned text revision', async () => {
@@ -750,7 +756,7 @@ testAsync('a first anonymized export can bind its result folder before any copy 
   assert.equal(h.calls.filter(call => call.command === 'configure_results').length, 1);
   assert.equal(h.calls.filter(call => call.command === 'export_approved_documents').length, 0);
   assert.equal(h.el('document-export-result').hidden, false);
-  assert.match(h.el('document-export-result').textContent, /„Exportieren“.*kein automatischer Export/u);
+  assert.match(h.el('document-export-result').textContent, /„Freigeben und exportieren“.*kein automatischer Export/u);
   await h.act('document-export-confirm');
   assert.equal(h.calls.filter(call => call.command === 'export_approved_documents').length, 2,
     'only the explicit confirmation may start a copy and its acknowledgement');
@@ -1174,7 +1180,8 @@ testAsync('masking requires a separate confirmation, then submits only marked of
   await h.act('document-change-save'); await tick(); await tick();
   const call = h.calls.filter(call => call.command === 'decide_document_review').at(-1);
   assert.equal(call.args.decision.action, 'redact'); assert.deepEqual(call.args.decision.ranges, [{ start: 14, end: 16 }]);
-  assert.equal(h.rows[0].approved, false); assert.equal(h.rows[1].approved, true); assert.equal(h.el('documents-export').disabled, true);
+  assert.equal(h.rows[0].approved, false); assert.equal(h.rows[1].approved, true);
+  assert.equal(h.calls.some(call => call.command === 'export_approved_documents'), false, 'editing never exports or inherits the old approval');
 });
 testAsync('mask action explains a missing right-side selection next to the button without writing', async () => {
   const h = harness(); await h.api.open('a'.repeat(64));
@@ -1462,58 +1469,95 @@ testAsync('connection invalidation releases a pending detail load and an old com
   assert.equal(await h.api.close(), true);
 });
 
-testAsync('raw preview and cancel never approve, while explicit save seals only selected ACK revisions', async () => {
+for (const mode of ['markdown-only', 'markdown-and-anonymize']) testAsync(`${mode} preview and cancel never approve, while explicit confirmation seals only selected ACK revisions`, async () => {
   const h = harness({ strictBindings: true, invoke(command, args) {
     if (command === 'export_approved_documents') return { ok: true, operation_id: args.operationId,
-      exported_count: args.selection.length, folder_name: `Export-${args.operationId}`, processing_mode: 'markdown-only',
-      anonymized: false, local_ui_only: true, external_disclosure: false };
+      exported_count: args.selection.length, folder_name: `Export-${args.operationId}`, processing_mode: mode,
+      anonymized: mode === 'markdown-and-anonymize', local_ui_only: true, external_disclosure: false };
   } });
-  h.rows.forEach(row => { row.processing_mode = 'markdown-only'; });
+  h.rows.forEach(row => { row.processing_mode = mode; });
   await h.api.open('a'.repeat(64));
-  assert.equal(h.el('documents-approve').hidden, true); assert.equal(h.el('documents-revoke').hidden, true);
-  assert.doesNotMatch(h.el('documents-selected').textContent, /freigegeben|textgeprüft/u);
+  assert.equal(h.el('documents-approve').hidden, mode === 'markdown-only');
+  if (mode === 'markdown-only') assert.doesNotMatch(h.el('documents-selected').textContent, /freigegeben|textgeprüft/u);
   const checkbox = h.el('documents-list').children[0].children[0]; checkbox.checked = true; await h.act(checkbox, 'change');
   await h.act('documents-export'); assert.equal(h.el('document-export-dialog').open, true);
   await h.act('document-export-close');
-  assert.equal(h.calls.some(call => ['decide_document_review', 'export_approved_documents'].includes(call.command)), false);
+  assert.equal(h.calls.some(call => isDecision(call) || call.command === 'export_approved_documents'), false);
   await h.export(); await tick(); await tick();
   assert.equal(h.rows[0].approved, true); assert.equal(h.rows[1].approved, false);
-  const decision = h.calls.filter(call => call.command === 'decide_document_review'); assert.equal(decision.length, 1);
-  assert.equal(decision[0].args.decision.revision, 0);
+  const decision = h.calls.filter(isDecision); assert.equal(decision.length, 1);
+  assert.equal(decision[0].command, 'decide_document_review_batch');
+  assert.equal(decision[0].args.decision.selection.length, 1);
+  assert.equal(decision[0].args.decision.selection[0].revision, 0);
   const preview = h.calls.filter(call => call.command === 'preview_document_export').at(-1);
   assert.equal(preview.args.selection[0].revision, 1);
   const copies = h.calls.filter(call => call.command === 'export_approved_documents'); assert.equal(copies.length, 2);
   assert.equal(copies[0].args.selection[0].revision, 1); assert.equal(copies[0].args.operationId, copies[1].args.operationId);
-  assert.equal(h.el('document-export-title').textContent, 'Markdown-Kopie gespeichert');
+  assert.equal(h.el('document-export-title').textContent, mode === 'markdown-only' ? 'Markdown-Kopie gespeichert' : 'Export abgeschlossen');
 });
 
-testAsync('raw copy preparation stops on lost, mismatched or partial ACK and changed filename plan, without replay', async () => {
-  for (const failure of ['lost', 'hash', 'revision', 'mode', 'partial', 'plan']) {
+for (const mode of ['markdown-only', 'markdown-and-anonymize']) testAsync(`${mode} combined confirmation stops before copying on lost, mismatched or partial ACK and changed plan`, async () => {
+  for (const failure of ['lost', 'hash', 'revision', 'mode', 'partial', 'operation', 'plan', 'folder']) {
     let decisions = 0, previews = 0;
     const h = harness({ invoke(command, args) {
       if (command === 'decide_document_review_batch') {
         decisions++;
-        if (failure === 'plan') return;
+        if (failure === 'plan' || failure === 'folder') return;
         const updated = h.rows.map(row => ({ ...row, approved: true, revision: failure === 'revision' ? 7 : row.revision + 1,
           output_sha256: failure === 'hash' ? 'f'.repeat(64) : row.output_sha256,
-          processing_mode: failure === 'mode' ? 'markdown-and-anonymize' : 'markdown-only' }));
+          processing_mode: failure === 'mode' ? mode === 'markdown-only' ? 'markdown-and-anonymize' : 'markdown-only' : mode }));
         if (failure === 'lost') { h.rows.forEach(row => { row.approved = true; row.revision++; }); throw Error('STANDALONE_CONNECTION_LOST'); }
-        return { ok: true, operation_id: args.decision.operation_id, affected_count: h.rows.length,
+        return { ok: true, operation_id: failure === 'operation' ? 'f'.repeat(32) : args.decision.operation_id, affected_count: h.rows.length,
           documents: failure === 'partial' ? updated.slice(0, 1) : updated, local_ui_only: true, external_disclosure: false };
       }
-      if (command === 'preview_document_export' && failure === 'plan' && ++previews === 2)
-        return { ok: true, processing_mode: 'markdown-only', local_ui_only: true, external_disclosure: false,
-          files: args.selection.map(row => ({ name: 'changed.md', sha256: row.output_sha256 })) };
+      if (command === 'preview_document_export' && ['plan', 'folder'].includes(failure) && ++previews === 2)
+        return { ok: true, processing_mode: mode, local_ui_only: true, external_disclosure: false,
+          result_folder: failure === 'folder' ? '/different-result-folder' : null,
+          files: args.selection.map((row, index) => ({ name: failure === 'plan' ? 'changed.md' : `Dokument_0${index + 1}.md`, sha256: row.output_sha256 })) };
     } });
-    h.rows.forEach(row => { row.processing_mode = 'markdown-only'; });
+    h.rows.forEach(row => { row.processing_mode = mode; });
     await h.api.open('a'.repeat(64)); await h.all(); await h.export(); await tick(); await tick();
     assert.equal(h.calls.some(call => call.command === 'export_approved_documents'), false, failure);
-    assert.match(h.el('documents-status').textContent, /Keine zusätzliche Kopie gestartet/u, failure);
+    assert.match(h.el('documents-status').textContent, /kein Export gestartet.*Freigabe kann bereits gespeichert sein/u, failure);
     assert.equal(h.el('document-export-dialog').open, false, failure);
-    assert.match(h.el('documents-status').textContent, /erneut auswählen.*neue Kopiervorschau/u, failure);
+    assert.match(h.el('documents-status').textContent, /erneut auswählen.*neue Exportvorschau/u, failure);
     assert.equal(decisions, 1);
     const before = h.calls.length; await tick(); assert.equal(h.calls.length, before, 'no automatic retry');
   }
+});
+
+for (const phase of ['approval', 'second-preview']) testAsync(`connection change during combined ${phase} cannot resume a copy or overwrite another view`, async () => {
+  let finish, heldArgs, previews = 0;
+  const pending = new Promise(resolve => { finish = resolve; });
+  const h = harness({ invoke(command, args) {
+    if (command === 'decide_document_review_batch' && phase === 'approval' ||
+        command === 'preview_document_export' && ++previews === 2 && phase === 'second-preview') { heldArgs = args; return pending; }
+  } });
+  await h.api.open('a'.repeat(64)); await h.all(); await h.export();
+  assert.ok(heldArgs); h.api.invalidateConnection();
+  await h.api.open('b'.repeat(64)); const currentStatus = h.el('documents-status').textContent;
+  finish(phase === 'approval' ? { ok: true, operation_id: heldArgs.decision.operation_id, affected_count: 2,
+    documents: h.rows.map(row => ({ ...row, approved: true, revision: row.revision + 1 })), local_ui_only: true, external_disclosure: false } :
+    { ok: true, processing_mode: 'markdown-and-anonymize', local_ui_only: true, external_disclosure: false,
+      files: heldArgs.selection.map((row, index) => ({ name: `Dokument_0${index + 1}.md`, sha256: row.output_sha256 })) });
+  await tick(); await tick();
+  assert.equal(h.calls.some(call => call.command === 'export_approved_documents'), false);
+  assert.equal(h.el('documents-status').textContent, currentStatus);
+  assert.equal(h.api.activeBatchId(), 'b'.repeat(64));
+});
+
+testAsync('combined export approves only unapproved current stands and never repeats existing approvals', async () => {
+  const h = harness({ strictBindings: true, resultFolder: '/Users/Synthetic/Downloads/SecureDataMsg' });
+  h.rows[1].approved = true; h.rows[1].revision = 3;
+  await h.api.open('a'.repeat(64)); await h.all(); await h.act('documents-export');
+  assert.match(h.el('document-export-target').textContent, /\/Users\/Synthetic\/Downloads\/SecureDataMsg/u);
+  assert.equal(h.calls.some(call => isDecision(call) || call.command === 'configure_results'), false);
+  await h.act('document-export-confirm'); await tick();
+  const decisions = h.calls.filter(isDecision); assert.equal(decisions.length, 1);
+  assert.deepEqual(decisions[0].args.decision.selection.map(row => row.document_id), [h.rows[0].document_id]);
+  const copy = h.calls.find(call => call.command === 'export_approved_documents');
+  assert.deepEqual(copy.args.selection.map(row => row.revision), [1, 3]);
+  assert.equal(h.calls.filter(call => call.command === 'configure_results').length, 0);
 });
 
 testAsync('document loading is visible and a late closed load cannot restore its state', async () => {

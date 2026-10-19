@@ -2,6 +2,16 @@
 
 Stand: 07.10.2026 · einschließlich DS-104 bis DS-109 · Steuerung über BL-010.9
 
+**Entwicklungsnachtrag 19.10.2026 (DS-110/BL-010.53):** Die finale bewusste
+Exportbestätigung schließt die notwendige interne Freigabe ein; der normale
+Bedienweg benötigt keinen zweiten Freigabeklick. Lesende Vorschau, atomarer
+Freigabe-ACK, erneuter Dateiplan und native Kopiertransaktion bleiben getrennte
+Verantwortlichkeiten. Vorhandene Konfigurationen werden nur beim ausdrücklich
+angeforderten neuen Export nativ zugelassen und bei fehlender Bindung unter
+gemeinsamer Configwriter-Sperre übernommen. Bestehende Exportaufträge behalten
+ihren Zielort. Ein angezeigter Pfad ist keine native Capability.
+[Aktivitäts-/Sequenzprüfsichten und Nachweisgrenzen](../acceptance/STANDALONE_EXPORT_USABILITY_20261019.md).
+
 ## Produktabgrenzung
 
 DS-109 bestätigt die vorhandenen Schichten statt eines MVC-Neubaus:

@@ -124,6 +124,14 @@ function safeFailureCode(error) {
     code === 'LOCAL_REVIEW_TOO_LARGE' ? code : 'LOCAL_REVIEW_FAILED';
 }
 
+function isBusyRead(error) {
+  let code = typeof error === 'string' ? error : error?.code || error?.message;
+  if (typeof code === 'string' && code.startsWith('{')) {
+    try { const value = JSON.parse(code); code = value.code || value.error_code; } catch { return false; }
+  }
+  return ['STANDALONE_IPC_BUSY', 'STANDALONE_OWNERSHIP_CONTROL_BUSY', 'STANDALONE_PAUSE_CONTROL_BUSY'].includes(code);
+}
+
 function groupIds(candidate) {
   return state.groups.get(candidate.ambiguity_id) || [candidate.ambiguity_id];
 }
@@ -553,7 +561,7 @@ async function sendAnswer(answer) {
       ? 'Prüfung vertagt. Der Lauf bleibt im Verlauf unter „Prüfung offen“ und kann dort fortgesetzt werden.'
       : markdownContact
         ? 'OCR-Kontaktentscheidungen gespeichert. DataSecure setzt die Markdown-Umwandlung fort. Weitere Kontaktgruppen erscheinen hier bei Bedarf. Eine Dokumentfreigabe zur Anonymisierung ist nicht erforderlich. Den Abschlussstatus siehst du beim Lauf im Hauptfenster.'
-        : 'Entscheidungen gespeichert. Weitere Fundstellen werden geprüft. Bitte warten; die nächste Gruppe erscheint hier. Dokumentfreigabe und Export folgen gesondert.',
+        : 'Entscheidungen gespeichert. Weitere Fundstellen werden geprüft. Bitte warten; die nächste Gruppe erscheint hier. Danach kannst du die Ergebnisse ansehen und mit einer gemeinsamen Freigabe-/Exportbestätigung verwenden.',
     answer.action === 'reviewed');
     if (answer.action === 'reviewed') schedulePoll();
   } catch {
@@ -664,7 +672,7 @@ async function poll() {
     // New groups start at their shared controls, not the lower detail pane.
     // This also keeps the bulk actions visible in the stacked narrow layout.
     el('matrix-title').focus();
-  } catch {
+  } catch (error) {
     if (!current()) return;
     clearDraft();
     state.waiting = false;
@@ -674,7 +682,9 @@ async function poll() {
       ? 'Die Bestätigung deiner Entscheidung und der Laufstatus konnten noch nicht sicher ermittelt werden. Bereits geprüfte Ergebnisse können verfügbar sein. DataSecure fragt den Status erneut ab; die Entscheidung wird nicht automatisch wiederholt.'
       : state.continuationFailure
         ? `${reviewFailureMessage({ ...state.continuationSnapshot, error_code: state.continuationFailure, retry_available: false })}\nDer aktuelle Laufstatus wird erneut abgefragt.`
-        : 'Die lokale Prüfung konnte nicht sicher geladen werden. DataSecure fragt den Status erneut ab. Du kannst den Status im Hauptfenster prüfen oder hier erneut versuchen.');
+        : isBusyRead(error)
+          ? `${state.submitted ? 'Deine Entscheidungen sind gespeichert. ' : ''}DataSecure speichert gerade einen lokalen Vorgang. Der nächste Prüfstatus wird automatisch erneut geladen. Bitte kurz warten; nichts erneut bestätigen.`
+          : 'Die lokale Prüfung konnte nicht sicher geladen werden. DataSecure fragt den Status erneut ab. Du kannst den Status im Hauptfenster prüfen oder hier erneut versuchen.');
     schedulePoll(Math.min(10000, 1200 * (2 ** Math.min(state.pollFailures, 4))));
   } finally {
     if (state.loadGeneration === generation) {

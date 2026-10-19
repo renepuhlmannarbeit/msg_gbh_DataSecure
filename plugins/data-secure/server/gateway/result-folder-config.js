@@ -3,8 +3,10 @@
 // The user-visible result destination is deliberately separate from the
 // private DataSecure workspace. Only released Markdown is copied there.
 const fs = require('fs');
+const crypto = require('node:crypto');
 const { readBoundFile } = require('../core/bound-file-io');
 const { renameWithTransientRetry } = require('./batch-journal-io');
+const { withOwnershipControl } = require('../core/ownership-control');
 const path = require('path');
 const { dataRoot } = require('../runtime');
 const { assertRootSeparation, reserveRootSeparation } = require('./root-boundary');
@@ -50,6 +52,12 @@ function ensureConfigDirectory() {
   }
   return directory;
 }
+function withConfigWriter(action) {
+  ensureConfigDirectory();
+  // Same cooperative cross-process guard for EVERY settings writer. Held only
+  // for the short synchronous compare/write/rename, never across native await.
+  return withOwnershipControl(dataRoot(), action);
+}
 function displayRoot(root) {
   return typeof root === 'string' && root.length <= 32768 && path.isAbsolute(root) && !/\p{Cc}/u.test(root)
     ? path.resolve(root) : '';
@@ -75,7 +83,8 @@ function readRecordStatus() {
     const inspected = inspectRoot(value.root);
     return sameIdentity(inspected.identity, value.identity) ? {
       status: 'available', recorded_root: inspected.root,
-      record: { ...value, notices: isCurrent ? value.notices : { sync: false, network: false } }
+      record: { ...value, notices: isCurrent ? value.notices : { sync: false, network: false } },
+      digest: crypto.createHash('sha256').update(bytes).digest('hex')
     } : { status: 'unavailable', recorded_root: recordedRoot };
   } catch (error) {
     // A missing selected destination is not a new installation. Once the
@@ -165,7 +174,63 @@ function readConfiguredNativeExportBinding() {
   const record = readRecord();
   return record?.schema === EXPORT_SCHEMA ? structuredClone(record.native_export) : null;
 }
+// Explicit-export migration only. A stored Node identity is an admission
+// expectation, NEVER a native identity. Rust compares it on the held directory
+// handle before provisioning and derives its stronger identity from that handle.
+async function prepareConfiguredNativeExportBinding(prepare) {
+  assertRootSeparation();
+  const refused = () => Object.assign(new Error('AI_EXPORT_CONFIGURATION_REQUIRED'), { code: 'AI_EXPORT_CONFIGURATION_REQUIRED' });
+  if (String(process.env.EU_PRIVACY_RESULT_ROOT || '').trim() || typeof prepare !== 'function') throw refused();
+  // The normal private-namespace policy admits settings; export-stage ACLs
+  // intentionally do not apply to an inherited preferences directory. Read
+  // the FULL snapshot while both synchronous guards are actually held.
+  const snapshot = withConfigWriter(() => withOwnershipControl(configDirectory(), () => readRecordStatus()));
+  const record = snapshot.record;
+  if (snapshot.status !== 'available' || !record) throw refused();
+  if (record.schema === EXPORT_SCHEMA) return structuredClone(record.native_export);
+  const legacy = record.identity;
+  const safeDecimal = value => typeof value === 'string' && /^(?:0|[1-9][0-9]*)$/u.test(value) &&
+    Number.isSafeInteger(Number(value)) && String(Number(value)) === value;
+  if (record.schema !== NATIVE_SCHEMA && (!legacy || Object.keys(legacy).sort().join(',') !== 'birthtime_ms,dev,ino' ||
+      !Object.values(legacy).every(safeDecimal))) throw refused();
+  const admission = record.schema === NATIVE_SCHEMA
+    ? { kind: 'native', identity: structuredClone(record.native_identity) }
+    : { kind: 'node22', identity: structuredClone(legacy) };
+  const unchanged = () => {
+    const current = readRecordStatus();
+    if (current.status !== 'available' || current.digest !== snapshot.digest ||
+        String(process.env.EU_PRIVACY_RESULT_ROOT || '').trim()) throw refused();
+  };
+  unchanged();
+  let binding;
+  try { binding = await prepare({ root: record.root, admission, setting_sha256: snapshot.digest }); }
+  catch (error) {
+    // Failed legacy admission needs a real native folder selection. Do not
+    // translate a conflict from an already configured /4 or existing export.
+    if (error?.code === 'AI_EXPORT_CONFLICT') throw refused();
+    throw error;
+  }
+  unchanged();
+  if (!validNativeExportBinding(binding) || binding.root !== record.root ||
+      record.schema === NATIVE_SCHEMA && !['volume', 'object', 'created_ns'].every(key =>
+        binding.root_identity[key] === record.native_identity[key])) throw refused();
+  // Retain the ORIGINAL identity and notice state. Fresh stat never re-adopts
+  // a replacement folder. No new defaults, source paths or renderer input.
+  const payload = JSON.stringify({ schema: EXPORT_SCHEMA, root: record.root, identity: record.identity,
+    native_export: structuredClone(binding), notices: record.notices });
+  if (Buffer.byteLength(payload) > MAX_CONFIG_BYTES) throw refused();
+  withConfigWriter(() => {
+    unchanged();
+    reserveRootSeparation({ resultRoot: record.root });
+    const target = configPath(), temporary = path.join(configDirectory(), `${CONFIG_NAME}.${crypto.randomBytes(16).toString('hex')}.tmp`);
+    fs.writeFileSync(temporary, payload, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+    try { unchanged(); renameWithTransientRetry(temporary, target); }
+    finally { try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch {} }
+  });
+  return structuredClone(binding);
+}
 function saveConfiguredResultRoot(root, options = {}) {
+  return withConfigWriter(() => {
   const native = options.nativeIdentity !== undefined;
   const exporting = options.nativeExport !== undefined;
   if (native && exporting) throw new Error('RESULT_ROOT_UNSAFE');
@@ -186,8 +251,10 @@ function saveConfiguredResultRoot(root, options = {}) {
   fs.writeFileSync(temporary, payload, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
   try { renameWithTransientRetry(temporary, target); }
   finally { try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch {} }
+  });
 }
 function consumeConfiguredResultNotices() {
+  return withConfigWriter(() => {
   assertRootSeparation();
   if (String(process.env.EU_PRIVACY_RESULT_ROOT || '').trim()) {
     const root = readConfiguredResultRoot();
@@ -205,12 +272,15 @@ function consumeConfiguredResultNotices() {
   try { renameWithTransientRetry(temporary, target); }
   finally { try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch {} }
   return notices;
+  });
 }
 function clearConfiguredResultRoot() {
+  return withConfigWriter(() => {
   assertRootSeparation({ resetResult: true });
   reserveRootSeparation({ resetResult: true });
   try { fs.unlinkSync(configPath()); }
   catch (error) { if (error?.code !== 'ENOENT') throw error; }
+  });
 }
 function resultOutputDirectory(options = {}) {
   const root = options.root || readConfiguredResultRoot();
@@ -238,6 +308,6 @@ function isNetworkResultFolder(root, platform = process.platform) {
 
 module.exports = {
   CONFIG_NAME, SCHEMA, LEGACY_SCHEMA, NATIVE_SCHEMA, EXPORT_SCHEMA, configPath, inspectRoot, readConfiguredResultRoot, readConfiguredResultRootStatus, recordedResultRootPath, readConfiguredNativeRootBinding, readConfiguredNativeExportBinding,
-  saveConfiguredResultRoot, clearConfiguredResultRoot, resultOutputDirectory,
+  saveConfiguredResultRoot, prepareConfiguredNativeExportBinding, clearConfiguredResultRoot, resultOutputDirectory,
   consumeConfiguredResultNotices, isCommonSyncFolder, isNetworkResultFolder, visibleResultTreeOverlaps
 };

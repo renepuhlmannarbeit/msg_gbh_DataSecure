@@ -4,6 +4,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 let api, kind, cap, target, fault, armed = true, metadataTarget, metadataPending = false;
+let configResume, configSnapshot;
 const publicationStats = { links: 0, renames: 0, faults: 0 };
 const files = new Map();
 const io = { ...fs, constants: fs.constants,
@@ -59,7 +60,35 @@ process.on('message', message => {
       if (kind === 'export') {
         const module = require('../../plugins/data-secure/server/gateway/result-export'); api = module._test; target = module.recordPath(token);
       }
+      if (kind === 'config') {
+        api = require('../../plugins/data-secure/server/gateway/result-folder-config');
+        const rename = fs.renameSync;
+        fs.renameSync = function(from, to) {
+          if (fault === 'pause-config-rename' && to === api.configPath()) {
+            process.send({ event: 'guarded-config-rename' });
+            Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1500);
+            fault = undefined;
+          }
+          return rename.call(fs, from, to);
+        };
+      }
       value = { node: process.version, pid: process.pid };
+    } else if (message.command === 'config-save') { api.saveConfiguredResultRoot(message.path); value = true;
+    } else if (message.command === 'config-upgrade') {
+      api.prepareConfiguredNativeExportBinding(snapshot => {
+        configSnapshot = snapshot;
+        process.send({ event: 'config-native-await' });
+        return new Promise(resolve => { configResume = resolve; });
+      }).then(value => process.send({ id: message.id, ok: true, value }),
+        error => process.send({ id: message.id, ok: false, code: error.code || null, message: error.message }));
+      return;
+    } else if (message.command === 'config-resume') {
+      fault = message.pauseRename ? 'pause-config-rename' : undefined;
+      const id = { volume: '1', object: '2', created_ns: '3' };
+      configResume({ schema: 'datasecure-native-export-binding/1', root: configSnapshot.root,
+        root_identity: id, data_root_identity: id, private_name: `native-export-${'a'.repeat(32)}`,
+        private_identity: id, anonymize_identity: id, markdown_identity: id });
+      configResume = null; value = true;
     } else if (message.command === 'acquire') {
       if (kind === 'active') { value = api.acquireActiveLock(token); cap = token; }
       if (kind === 'intake') { cap = api.reserveIntake(); value = cap; }

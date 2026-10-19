@@ -11,6 +11,7 @@ const preview = await startReviewPreview({ workspace: true });
 const evidence = process.env.DATASECURE_UI_EVIDENCE_DIR
   ? path.resolve(process.env.DATASECURE_UI_EVIDENCE_DIR) : fs.mkdtempSync(path.resolve('dist/workflow-usability-design-'));
 fs.mkdirSync(evidence, { recursive: true });
+console.log('HEADLESS_UI_EVIDENCE ' + evidence);
 const context = await browser.newContext({ viewport: { width: 1280, height: 900 }, colorScheme: 'light' });
 try {
   await context.route('**/*', route => new URL(route.request().url()).hostname === '127.0.0.1' ? route.continue() : route.abort());
@@ -86,6 +87,14 @@ try {
   for (const mode of ['documents-raw', 'documents', 'documents-raw-notices']) {
     const raw = mode.startsWith('documents-raw');
     await page.goto(preview.url + '/workspace.html?demo=' + mode);
+    await page.evaluate(() => {
+      const original = window.__TAURI__.core.invoke;
+      window.previewCombinedCalls = [];
+      window.__TAURI__.core.invoke = async (command, args) => {
+        window.previewCombinedCalls.push({ command, args: structuredClone(args) });
+        return original(command, args);
+      };
+    });
     await page.locator('#nav-history').click();
     const rowPrefix = '#history-' + 'b'.repeat(64);
     if (raw) await page.locator(rowPrefix + '-more').click();
@@ -132,7 +141,7 @@ try {
       await page.locator('#document-extra-actions > summary').click();
     }
     assert.equal(await page.locator('#document-markdown').getAttribute('readonly') !== null, !raw);
-    assert.equal(await page.locator('#documents-approve').isVisible(), !raw);
+    assert.equal(await page.locator('#documents-approve').isVisible(), false, 'separate approval is optional and starts collapsed');
     if (mode === 'documents-raw-notices') {
       const notices = page.locator('#documents-unavailable');
       assert.equal(await notices.locator('.file-notice-group.error').count(), 0);
@@ -150,17 +159,12 @@ try {
     }
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.locator('#documents-all').check();
-    if (!raw) { await page.locator('#documents-approve').click();
-      await page.locator('#documents-approve-confirm').waitFor({ state: 'visible' });
-      assert.match(await page.locator('#documents-approve-confirm-text').innerText(), /2 von 3.*nicht.*geöffnet/u);
-      await page.setViewportSize({ width: 390, height: 700 });
-      assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1), 'approval confirmation reflow');
-      const confirmationAudit = await page.evaluate(() => axe.run(document, { runOnly: { type: 'tag', values: ['wcag2a','wcag2aa','wcag21aa'] } }));
-      assert.deepEqual(confirmationAudit.violations.map(row => row.id), [], 'approval confirmation axe');
-      await page.setViewportSize({ width: 1280, height: 900 });
-      await page.locator('#documents-approve-proceed').click();
-      await page.waitForFunction(() => document.querySelector('#documents-selected').textContent.includes('3 von 3 freigegeben')); }
     await page.locator('#documents-export').click(); await page.locator('#document-export-dialog').waitFor({ state: 'visible' });
+    assert.equal(await page.locator('#document-export-confirm').innerText(), raw ? 'Kopie speichern' : 'Freigeben und exportieren');
+    assert.match(await page.locator('#document-export-target').innerText(), /\/Synthetic\/Results/u);
+    assert.equal(await page.evaluate(() => window.previewCombinedCalls.some(row =>
+      ['decide_document_review', 'decide_document_review_batch', 'export_approved_documents'].includes(row.command))), false,
+      'selection, comparisons and preview do not approve or copy');
     const names = await page.locator('#document-export-files li').allTextContents();
     assert.deepEqual(names, raw ? ['Lebenslauf-Erika-Linden.md','Kontaktliste.md','Ergänzungen.md'] : ['Dokument_01.md','Dokument_02.md','Dokument_03.md']);
     for (const [width, height] of [[1280,900], [720,560], [390,700]]) {
@@ -174,11 +178,18 @@ try {
     await page.screenshot({ path: path.join(evidence, mode + '.png'), fullPage: true });
     await page.locator('#document-export-close').click();
     assert.equal(await page.locator('#document-export-dialog').isVisible(), false);
-    if (raw) {
-      await page.locator('#documents-export').click(); await page.locator('#document-export-confirm').click();
-      await page.waitForFunction(() => document.querySelector('#document-export-title').textContent === 'Markdown-Kopie gespeichert');
-      assert.ok((await page.locator('#documents-selected').innerText()).includes('Markdown-Dateien verfügbar'));
-    }
+    assert.equal(await page.evaluate(() => window.previewCombinedCalls.some(row =>
+      ['decide_document_review_batch', 'export_approved_documents'].includes(row.command))), false, 'cancel remains read-only');
+    await page.locator('#documents-export').click(); await page.locator('#document-export-confirm').click();
+    await page.waitForFunction(title => document.querySelector('#document-export-title').textContent === title,
+      raw ? 'Markdown-Kopie gespeichert' : 'Export abgeschlossen');
+    const mutations = await page.evaluate(() => window.previewCombinedCalls.filter(row =>
+      ['decide_document_review_batch', 'export_approved_documents'].includes(row.command)));
+    assert.equal(mutations.filter(row => row.command === 'decide_document_review_batch').length, 1);
+    assert.equal(mutations.filter(row => row.command === 'export_approved_documents' && !row.args.acknowledge).length, 1);
+    assert.equal(mutations.filter(row => row.command === 'export_approved_documents' && row.args.acknowledge).length, 1);
+    assert.deepEqual(mutations.find(row => row.command === 'export_approved_documents').args.selection.map(row => row.revision), [1, 1, 1]);
+    if (raw) assert.ok((await page.locator('#documents-selected').innerText()).includes('Markdown-Dateien verfügbar'));
   }
   await page.goto(preview.url + '/workspace.html?demo=documents-raw-filter');
   await page.locator('#nav-history').click();
@@ -267,11 +278,11 @@ try {
   }
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.screenshot({ path: path.join(evidence, 'fastweg-completed-with-ocr-hints.png'), fullPage: true });
-  assert.match(await page.locator('#history-' + 'b'.repeat(64) + '-documents').innerText(), /Exportvorschau/u,
-    'the freshly read automatic approvals advertise a preview, not an unapproved review');
+  assert.equal(await page.locator('#history-' + 'b'.repeat(64) + '-documents').innerText(), 'Prüfung öffnen',
+    'a stable secondary action opens the review without silently starting an export preview');
   await page.locator('#history-' + 'b'.repeat(64) + '-documents').click();
-  await page.locator('#document-export-dialog').waitFor({ state: 'visible' });
-  await page.locator('#document-export-close').click();
+  await page.locator('#documents-list .document-row').first().waitFor();
+  assert.equal(await page.locator('#document-export-dialog').isVisible(), false);
   await page.waitForFunction(() => document.querySelector('#documents-purpose').textContent.includes('3 automatisch freigegeben'));
   assert.equal(await page.locator('#documents-main-guide').isVisible(), false);
   assert.equal(await page.locator('#run-guide-title').innerText(), 'Schnellweg abgeschlossen · automatisch freigegeben');
@@ -288,7 +299,7 @@ try {
   await page.screenshot({ path: path.join(evidence, 'fastweg-automatic-approval.png'), fullPage: true });
   await page.locator('#documents-export').click();
   await page.locator('#document-export-dialog').waitFor({ state: 'visible' });
-  assert.match(await page.locator('#document-export-purpose').innerText(), /automatische Erstfreigabe, keine menschliche Prüfung/u);
+  assert.match(await page.locator('#document-export-purpose').innerText(), /automatische Erstfreigabe ist keine menschliche Prüfung/u);
   await page.evaluate(() => {
     const original = window.__TAURI__.core.invoke;
     const observed = window.previewExportObservation = { phase: 'copying', staged: 1, request: null, requests: [], finish: null, saves: 0 };

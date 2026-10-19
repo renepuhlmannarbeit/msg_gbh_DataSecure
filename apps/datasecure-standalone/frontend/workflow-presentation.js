@@ -115,7 +115,7 @@
       value.state === 'processing' && value.review_count > 0);
     const labels = raw ? ['Text übernehmen', contactReviewActive ? 'Gewählte OCR-Kontaktprüfung' : 'Markdown nachkorrigieren (optional)', 'Markdown-Dateien']
       : ['Text übernehmen', fast ? 'Fundstellen automatisch behandeln' : 'Fundstellen prüfen',
-        fast ? 'Automatische Erstfreigabe' : 'Dokumente freigeben', 'Dateien exportieren'];
+        fast ? 'Automatische Erstfreigabe' : 'Ergebnisse ansehen', 'Dateien exportieren'];
     const output = { batchId: value.batch_id, raw, phase: 'unknown', heading: 'Laufstatus abgleichen',
       next: 'Gespeicherten Stand neu laden. Keine Freigabe oder Export daraus ableiten.',
       busy: false, stages: labels.map(label => ({ label, status: 'pending' })) };
@@ -157,8 +157,8 @@
         output.stages[review].status = wholeRun ? 'done' : 'pending';
         set('approved', copy, raw ? 'Textprüfung gespeichert' : 'Verfügbare Dokumente freigegeben',
           raw ? 'Korrigierte Markdown-Kopie ausdrücklich speichern. Sie enthält Originalinhalte.' : 'Freigegebene Dokumente auswählen und den Export ausdrücklich bestätigen.');
-      } else set('documents', review, raw ? 'Markdown prüfen und korrigieren' : 'Dokumentprüfung offen',
-        raw ? 'Nachkorrektur ist optional. Bereits konvertierte Dateien sind nicht anonymisiert.' : 'Vollständige Dokumente vergleichen und gewünschte aktuelle Stände freigeben.');
+      } else set('documents', review, raw ? 'Markdown prüfen und korrigieren' : 'Ergebnisse ansehen und auswählen',
+        raw ? 'Nachkorrektur ist optional. Bereits konvertierte Dateien sind nicht anonymisiert.' : 'Ergebnisse mit dem Original vergleichen und gewünschte Dateien auswählen. Die Exportbestätigung enthält die Freigabe; ein zusätzlicher Freigabeschritt ist nicht nötig.');
       if (raw) output.stages[review].status = value.dirty === true ? 'current' : 'optional';
       output.counts = raw ? `${value.document_count} Markdown-Dateien verfügbar · Nachkorrektur freiwillig`
         : `${value.approved_count} von ${value.document_count} verfügbaren Dokumenten freigegeben`;
@@ -206,7 +206,7 @@
         : 'Entscheidungen vormerken und die vollständige Gruppe ausdrücklich speichern.');
       else if (phase === 'complete') set('review_complete', -1, raw ? 'OCR-Kontaktprüfung abgeschlossen' : 'Fundstellenprüfung abgeschlossen', raw
         ? 'Zum Abschluss dieses Markdown-Laufs zurückkehren. Nachbearbeitung ist optional; keine weitere Pflichtfreigabe. Inhalte sind nicht anonymisiert.'
-        : 'Die Dokumentprüfung desselben Laufs wird geöffnet. Freigabe und Export folgen gesondert.');
+        : 'Die Dokumentprüfung desselben Laufs wird geöffnet. Deine Maskierungen sind angewendet. Gewünschte Ergebnisse auswählen; Freigabe und Export werden gemeinsam bestätigt.');
       else if (phase === 'deferred') set('review_deferred', 1, raw ? 'OCR-Kontaktprüfung vertagt' : 'Fundstellenprüfung vertagt', raw
         ? 'Zum Markdown-Lauf zurückkehren und die gewählte Kontaktprüfung später im Verlauf ausdrücklich fortsetzen. Kontaktwerte bleiben ungeprüft; Inhalte sind nicht anonymisiert.'
         : 'Zum Lauf zurückkehren und die Prüfung später im Verlauf ausdrücklich fortsetzen. Offene Fundstellen bleiben ungeprüft. Weder Dokumentfreigabe noch Export sind damit bestätigt.');

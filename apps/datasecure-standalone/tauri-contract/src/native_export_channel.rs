@@ -21,6 +21,11 @@ pub(crate) struct PublicationState {
 struct ConfigureRequest { schema: String, request_id: String, native_id: String, sequence: u32, action: String, root: String }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
+struct ConfiguredRequest { schema: String, request_id: String, native_id: String, sequence: u32, action: String,
+    batch_id: String, operation_id: String, root: String, setting_sha256: String,
+    admission: crate::native_export_broker::ConfiguredAdmission }
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
 struct ExportRequest { schema: String, request_id: String, native_id: String, sequence: u32, action: String,
     command: String, operation: crate::native_export_broker::Operation, #[serde(default)] body: Option<BodyChunk> }
 #[derive(Deserialize)]
@@ -139,6 +144,19 @@ fn handle_publication_owned(frame: &Value, outer: &Value, state: &mut Publicatio
             return Err(invalid());
         }
         crate::native_export_broker::configure(Path::new(&request.root), data, native_id, guard.ok_or_else(invalid)?)
+            .map(|binding| { response["binding"] = json!(binding); })
+    } else if frame["action"] == "prepare_configured_export_root" {
+        let request: ConfiguredRequest = serde_json::from_value(frame.clone()).map_err(|_| invalid())?;
+        if request.schema != PUBLICATION_REQUEST || request.action != "prepare_configured_export_root" ||
+            request.request_id != outer["request_id"] || request.native_id != native_id || u64::from(request.sequence) != sequence ||
+            sequence != 1 || state.operation.is_some() || outer["action"] != "export_approved_documents" ||
+            outer["acknowledge"] == true || outer["batch_id"] != request.batch_id || outer["operation_id"] != request.operation_id ||
+            request.batch_id.len() != 64 || request.operation_id.len() != 32 ||
+            !request.batch_id.bytes().chain(request.operation_id.bytes()).all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) {
+            return Err(invalid());
+        }
+        crate::native_export_broker::prepare_configured(Path::new(&request.root), data, native_id,
+            &request.admission, &request.setting_sha256, guard.ok_or_else(invalid)?)
             .map(|binding| { response["binding"] = json!(binding); })
     } else {
         let request: ExportRequest = serde_json::from_value(frame.clone()).map_err(|_| invalid())?;
@@ -380,6 +398,47 @@ mod tests {
         assert_eq!(response["ok"], false);
         assert!(validate_completion(&json!({"ok": true}), &outer(), response["ok"] == true).is_err(),
             "a performed but refused callback is not a native binding");
+    }
+    #[test]
+    fn configured_root_callback_is_closed_and_bound_to_one_new_export_request() {
+        let fixture = ExportFixture::new();
+        let lifecycle = Lifecycle::default();
+        let guard = lifecycle.begin_native().unwrap();
+        let outer = json!({ "request_id": "1".repeat(16), "action": "export_approved_documents",
+            "batch_id": "a".repeat(64), "operation_id": "b".repeat(32), "acknowledge": false });
+        let frame = json!({ "schema": PUBLICATION_REQUEST, "request_id": outer["request_id"],
+            "native_id": "c".repeat(32), "sequence": 1, "action": "prepare_configured_export_root",
+            "batch_id": outer["batch_id"], "operation_id": outer["operation_id"],
+            "root": fixture.root.join("public"), "setting_sha256": "d".repeat(64),
+            "admission": { "kind": "native", "identity": { "volume": "1", "object": "2", "created_ns": "3" } } });
+        // A well-shaped frame reaches the broker, which refuses the missing
+        // saved setting without provisioning any destination. Malformed or
+        // foreign frames must instead fail the closed authorization boundary.
+        let mut state = PublicationState::default();
+        let response = handle_publication_owned(&frame, &outer, &mut state, Some(&guard), &fixture.data(), None).unwrap().unwrap();
+        assert_eq!(response["ok"], false);
+        assert_eq!(state.sequence, 1);
+        assert!(handle_publication_owned(&frame, &outer, &mut state, Some(&guard), &fixture.data(), None).is_err());
+        for (field, value) in [("extra", json!(true)), ("request_id", json!("0".repeat(16))),
+            ("sequence", json!(2)), ("native_id", json!("C".repeat(32))),
+            ("batch_id", json!("e".repeat(64))), ("operation_id", json!("e".repeat(32)))] {
+            let mut invalid = frame.clone(); invalid[field] = value;
+            let mut state = PublicationState::default();
+            assert!(handle_publication_owned(&invalid, &outer, &mut state, Some(&guard), &fixture.data(), None).is_err(), "{field}");
+            assert_eq!(state.sequence, 0);
+        }
+        for (field, value) in [("action", json!("preview_document_export")),
+            ("action", json!("configure_results")), ("acknowledge", json!(true)),
+            ("batch_id", json!("e".repeat(64))), ("operation_id", json!("e".repeat(32)))] {
+            let mut invalid = outer.clone(); invalid[field] = value;
+            assert!(handle_publication_owned(&frame, &invalid, &mut PublicationState::default(), Some(&guard), &fixture.data(), None).is_err(), "outer {field}");
+        }
+        let mut state = PublicationState { operation: Some(json!({ "already_bound": true })), ..Default::default() };
+        assert!(handle_publication_owned(&frame, &outer, &mut state, Some(&guard), &fixture.data(), None).is_err());
+        let mut invalid = frame.clone(); invalid["admission"]["extra"] = json!(true);
+        assert!(handle_publication_owned(&invalid, &outer, &mut PublicationState::default(), Some(&guard), &fixture.data(), None).is_err());
+        assert_eq!(std::fs::read_dir(fixture.data()).unwrap().count(), 0);
+        assert_eq!(std::fs::read_dir(fixture.root.join("public")).unwrap().count(), 0);
     }
     #[test]
     fn blocked_read_times_out_without_blocking_shutdown_or_adopting_a_late_result() {

@@ -11,9 +11,13 @@ const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const root = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'datasecure-native-store-'));
 const data = path.join(root, 'private'), results = path.join(root, 'public'), packages = path.join(root, 'packages');
 for (const p of [data, results, packages]) fs.mkdirSync(p, { mode: 0o700 });
+process.env.EU_PRIVACY_DATA_ROOT = data;
+process.env.EU_PRIVACY_ROOT = path.join(root, 'workspace');
+delete process.env.EU_PRIVACY_RESULT_ROOT;
+const resultConfig = require('../plugins/data-secure/server/gateway/result-folder-config');
 const child = spawn('cargo', ['test', '--locked', 'native_export_broker::tests::pipe_helper', '--', '--ignored', '--exact', '--nocapture', '--test-threads=1'],
   { cwd: path.resolve(__dirname, '../apps/datasecure-standalone/tauri-contract'), stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true });
-let stderr = '', outer, binding, seq = 0, nativeSession, loseNextPublish = false, poisonedBody = false;
+let stderr = '', outer, binding, seq = 0, nativeSession, loseNextPublish = false, poisonedBody = false, configuredAdmissions = 0;
 const nativeCommands = [];
 child.stderr.on('data', bytes => { stderr = `${stderr}${bytes}`.slice(-8192); });
 const channel = new NativeExportChannel({ write: frame => {
@@ -48,7 +52,13 @@ function fixture(mode, index, extraText = '', raw = null, native = true) {
       const markdown = fs.readFileSync(path.join(packages, id, `${id}.md`), 'utf8');
       require('../plugins/data-secure/server/standalone/markdown-artifact').validateMarkdownArtifact(manifest, markdown); return { manifest, markdown };
     },
-    controlOwnerPid: process.pid, ...(native ? { nativeBinding: () => binding, nativeExport: async (operation, command, body) => {
+    controlOwnerPid: process.pid, ...(native ? { nativeBinding: () => binding,
+      prepareNativeBinding: (batchId, operationId) => resultConfig.prepareConfiguredNativeExportBinding(async snapshot => {
+        configuredAdmissions++;
+        const prepared = await nativeSession.send('prepare_configured_export_root', { ...snapshot, batch_id: batchId, operation_id: operationId });
+        binding = prepared;
+        return prepared;
+      }), nativeExport: async (operation, command, body) => {
       const status = await nativeSession.send('export_documents', { operation, command, ...(body ? { body } : {}) });
       if (loseNextPublish && command === 'publish') { loseNextPublish = false; throw Object.assign(Error('lost receipt'), { code: 'STANDALONE_IPC_TIMEOUT' }); }
       return status;
@@ -85,6 +95,29 @@ async function run() {
   assert.equal(binding.root, results); assert.match(binding.private_name, /^native-export-[a-f0-9]{32}$/u);
   console.log('ok native picker bootstrap creates and returns held parent bindings');
   let i = 0;
+  const pickerBinding = binding;
+  for (const mode of ['markdown-only', 'markdown-and-anonymize']) {
+    const admissionsBefore = configuredAdmissions;
+    const targetRoot = path.join(root, `configured-${++i}`); fs.mkdirSync(targetRoot);
+    resultConfig.saveConfiguredResultRoot(targetRoot);
+    const original = JSON.parse(fs.readFileSync(resultConfig.configPath()));
+    const f = fixture(mode, ++i), op = crypto.randomBytes(16).toString('hex'); binding = null;
+    assert.equal((await exportCall(f, op)).exported_count, 1);
+    const saved = JSON.parse(fs.readFileSync(resultConfig.configPath()));
+    assert.equal(saved.schema, 'datasecure-result-root/4'); assert.deepEqual(saved.identity, original.identity);
+    assert.equal(saved.root, targetRoot); assert.deepEqual(saved.native_export, binding);
+    assert.equal(configuredAdmissions, admissionsBefore + 1, 'actual Node22 setting admitted by the native held handle once');
+    const name = mode === 'markdown-only' ? 'Quelle.md' : 'Dokument_01.md';
+    const namespace = mode === 'markdown-only' ? 'DataSecure-Markdown-Korrektur' : 'DataSecure-KI-Export';
+    assert.equal(fs.readFileSync(path.join(targetRoot, namespace, `Export-${op}`, name), 'utf8'), f.text);
+    // A changed current preference does not authorize repairing or relocating
+    // a previously frozen operation. Only its original binding is reconciled.
+    resultConfig.saveConfiguredResultRoot(results); binding = null;
+    assert.equal((await exportCall(f, op, true)).exported_count, 1);
+    assert.equal(configuredAdmissions, admissionsBefore + 1);
+    console.log(`ok ${mode}: real Node22 /2 admission, native configure, /4 save, exact copy and old-operation ACK without picker`);
+  }
+  binding = pickerBinding;
   for (const mode of ['markdown-only', 'markdown-and-anonymize']) {
     const f = fixture(mode, ++i), op = crypto.randomBytes(16).toString('hex');
     loseNextPublish = true;

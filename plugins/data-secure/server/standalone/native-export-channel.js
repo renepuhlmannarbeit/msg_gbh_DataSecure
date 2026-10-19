@@ -47,7 +47,7 @@ class NativeExportChannel {
   accept(message) {
     const pending = this.pending;
     if (pending?.request.schema === PUBLICATION_REQUEST) {
-      const configure = pending.request.action === 'configure_export_root';
+      const configure = ['configure_export_root', 'prepare_configured_export_root'].includes(pending.request.action);
       const fields = (message?.ok === true ? `${configure ? 'binding' : 'status'},native_id,ok,request_id,schema,sequence` : 'error_code,native_id,ok,request_id,schema,sequence').split(',').sort().join(',');
       if (!message || Object.keys(message).sort().join(',') !== fields || message.schema !== PUBLICATION_RESPONSE ||
           message.request_id !== pending.request.request_id || message.native_id !== pending.request.native_id || message.sequence !== pending.request.sequence ||

@@ -101,17 +101,27 @@ aktiv; die App öffnet dabei nicht automatisch die vollständige Verlaufsliste.
 6. Nach Abschluss aller Fundstellengruppen öffnet sich bei Anonymisierung die
    Dokumentprüfung **desselben Laufs**. Das ist noch kein Export:
    Originaltext und geplantes Markdown vergleichen, gewünschte Dokumente
-   auswählen und **Auswahl freigeben** wählen. Änderungen heben betroffene
-   Freigaben auf. Über **Laufdetails** im Verlauf lässt sich die Dokumentprüfung
-   später wieder öffnen.
+   auswählen. Die zuvor gewählten Maskierungen sind bereits angewendet.
+   Änderungen heben betroffene Freigaben auf. Eine gesonderte Pflichtfreigabe
+   ist nicht nötig. Über **Prüfung öffnen** im Verlauf lässt sich die
+   Dokumentprüfung später wieder öffnen.
 7. **Auswahl exportieren** wählen und den angezeigten Auftrag
-   ausdrücklich bestätigen. Nur freigegebene aktuelle Markdown-Stände werden
+   mit **Freigeben und exportieren** ausdrücklich bestätigen. Die Bestätigung
+   schließt die Freigabe genau dieser Textstände ein; technische Schutzprüfungen
+   bleiben aktiv. Vorschau und Abbrechen geben nichts neu frei und kopieren nichts.
+   Nur freigegebene aktuelle Markdown-Stände werden
    in einen **normalen separaten Ordner** kopiert. Originale, Identitäts- und
    Dateizuordnung, private Prüfstände und technische Begleitdateien sind nicht
    enthalten. Der technische Laufordner kann Prüf- und Zuordnungsdateien enthalten;
    der separate Exportordner enthält nur die ausgewählten freigegebenen
    Markdown-Dateien. Die exportierten Markdown-Dateien kannst du auch ohne KI
    verwenden. DataSecure lädt nichts hoch.
+
+Der bereits gespeicherte Ergebnisordner wird angezeigt und ohne neuen Picker
+verwendet, sofern ursprüngliche Identität und tatsächlicher Zugriff passen.
+Ein ersetzter, fehlender oder verweigerter Ordner benötigt eine neue bewusste
+Wahl; alte Exporte werden dabei nicht verschoben. **Auswahl nur freigeben**
+und Widerrufen bleiben unter **Freigaben verwalten (optional)** verfügbar.
 
 **Später entscheiden** verschiebt die Prüfung des konkreten Laufs. Noch nicht
 übergebene Eingaben sind nicht gespeichert. Der **Verlauf** enthält höchstens
@@ -146,8 +156,9 @@ verwendbare zusätzliche Kopie die gewünschten Dateien anhaken,
 Kopie und bestätigt keinen Textstand. Ungespeicherte Korrekturen zuerst speichern
 oder verwerfen. Bei verlorener Speicherbestätigung wird keine Teilkopie gestartet;
 bereits bestätigte Stände können erhalten bleiben. Den angezeigten Stand neu laden.
-Fundstellenbestätigung und Pflichtfreigabe bleiben im Anonymisierungsweg getrennt;
-eine technische Erfolgsmeldung ersetzt keine Inhaltsprüfung.
+Fundstellenbestätigung und technische Dokumentfreigabe bleiben intern getrennt;
+der normale finale Exportklick enthält die Freigabe. Eine technische Erfolgsmeldung
+ersetzt keine fachliche Inhaltsprüfung.
 **Nachkorrekturen und Kopien** zeigt nur optionale Prüfungen und zusätzliche
 gespeicherte Kopien. Die dortigen Zähler zählen nicht die ursprünglichen Dateien
 im Ergebnisordner. Eine noch offene Kopierbestätigung bleibt ausdrücklich sichtbar

@@ -1,6 +1,26 @@
 # Aktueller Iststand
 
-Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Test-Pre-Release veröffentlicht; manuelle Zielhostabnahme offen.
+Arbeitsversion: **3.2.0-rc165**, unveröffentlichte gemeinsame Windows-/macOS-Weiterentwicklung; RC164 bleibt unverändert veröffentlicht.
+
+### Aktuelle Entwicklung – gemeinsame Bedienvereinfachung nach RC164
+
+19.10.2026, `codex/standalone-export-usability`: gemeinsamer Freigabe-/Exportklick,
+lesende Vorschau, sichere Übernahme vorhandener Ergebnisordner und konsistente
+primäre Ordneraktion implementiert. Bestätigter Review-ACK bleibt bei kurzzeitig
+belegter nachfolgender Statuslesung bestätigt. Gescheiterter Neuabgleich
+neutralisiert auch die Verlaufszeile, ohne Ordneraktionen zu verändern.
+Mehrere unabhängige KI-Quellenreviews durchgeführt; zwei dabei gefundene
+Configwriter-/Parentbindungslücken und ein P3-Anzeigefehler eng korrigiert und
+erneut gegengelesen. Kein neuer Mac-/Windows-Paket-PASS aus alten RC164-Belegen.
+
+Keine Developer-ID, Notarisierung oder Apple-Einreichung. Statischer eigener
+Mac-Core und lokales Ad-hoc-Sealing bleiben unverändert; keine Gatekeeper-,
+Hardened-Runtime- oder Library-Validation-Abschaltung. Ein gespeicherter Pfad
+erteilt keine OS-Zugriffsrechte. Neue Mac-Pakete/CI und Nutzer-Desktoptests des
+neuen Standes bleiben separat nachzuweisen. Kein Agenten-Desktopzugriff.
+Detailvertrag, Diagramme und gezielter Testplan:
+[Standalone-Exportvereinfachung](../acceptance/STANDALONE_EXPORT_USABILITY_20261019.md).
+Die einzige aktive Arbeitsliste bleibt `BACKLOG.md`.
 
 ### Neuester verbindlicher Stand – Veröffentlichung 19.10.2026
 
@@ -1212,7 +1232,7 @@ neuen gemeinsamen Quellfreeze und erneute Windows-Regression.
 
 ## Historische Nachweise bis R4 (kein aktueller R5-Abschluss)
 
-Stand: 17.10.2026 · 3.2.0-rc164 lokaler Windows-R4-Final-Testkandidat gebaut und ohne GUI geprüft; veröffentlicht bleibt Standalone RC162 für Windows und beide Mac-Architekturen; native Windows-/M2-Zielhostabnahme offen; Linux RC159 / Cowork RC151
+Stand: 17.10.2026 · 3.2.0-rc165 lokaler Windows-R4-Final-Testkandidat gebaut und ohne GUI geprüft; veröffentlicht bleibt Standalone RC162 für Windows und beide Mac-Architekturen; native Windows-/M2-Zielhostabnahme offen; Linux RC159 / Cowork RC151
 
 ### Gezielter R3-Abschlussreview: zusätzliche Fixes F13/F14
 

@@ -345,7 +345,10 @@
       } catch (error) {
         if (owner === reviewOrigin && command === 'close_review_window') owner.closing = false;
         if (owner === reviewOrigin && phaseGeneration === owner.phaseGeneration &&
-            ['submit_review', 'continue_review_session', 'get_review_session'].includes(command)) {
+            (['submit_review', 'continue_review_session'].includes(command) ||
+              command === 'get_review_session' && !transientReadBusyCodes.has(errorCode(error)))) {
+          // A rejected read grants no new state, but cannot undo a prior ACK.
+          // Mutations remain uncertain even when their error is a busy code.
           owner.stage = 'uncertain'; refreshRunGuide();
         }
         throw error;
@@ -1516,12 +1519,18 @@
           : entry.status === 'export_abandoned' ? null
           : !working && hasProblems && !entry.result_count ?
             { key: 'problems-main', label: 'Probleme ansehen', primary: true, run: () => showProblems() }
+          : !working && entry.results_available && !['missing', 'unsafe', 'unknown'].includes(entry.result_location)
+            ? { key: 'results', label: 'Ergebnisordner öffnen', primary: true,
+              run: () => perform('open_history_results', { batchId: entry.batch_id }) }
           : !working && entry.result_count > 0 && anonymous ? { key: 'documents', label: 'Dokumente und Freigaben öffnen', primary: true, run: () => openDocuments(entry.batch_id) }
-          : !working && entry.results_available ? { key: 'results', label: 'Ergebnisordner öffnen', primary: raw,
-            run: () => perform('open_history_results', { batchId: entry.batch_id }) } : null;
+          : null;
         let mainAction = baseAction;
         const main = baseAction ? action(baseAction.key, baseAction.label, () => mainAction.run(), baseAction.primary) : null;
         if (main) { main.setAttribute('data-history-main', 'true'); actions.append(main); }
+        // File opening and private document review are different stable actions.
+        // A late summary may improve status, never move or relabel this opener.
+        if (baseAction?.key === 'results' && entry.result_count > 0)
+          actions.append(action('documents', raw ? 'Nachkorrektur öffnen (optional)' : anonymous ? 'Prüfung öffnen' : 'Prüfstände ansehen', () => openDocuments(entry.batch_id)));
         if (!detailsBatchId) actions.append(action('details', 'Laufdetails', () => {
           showView('details', entry.batch_id); $('details-heading').focus();
         }));
@@ -1554,7 +1563,7 @@
           : 'Offene oder noch nicht bestätigte Vorgänge können nicht ausgeblendet werden.';
         extra.append(visibility);
         if (entry.results_available && baseAction?.key !== 'results') actions.append(action('results', 'Ergebnisordner', () => perform('open_history_results', { batchId: entry.batch_id })));
-        if (entry.status !== 'export_abandoned' && entry.result_count > 0 && baseAction?.key !== 'documents') addExtra('documents', raw ? 'Markdown nachkorrigieren (optional)' : anonymous ? 'Prüfung öffnen' : 'Prüfstände ansehen', () => openDocuments(entry.batch_id));
+        if (entry.status !== 'export_abandoned' && entry.result_count > 0 && !['documents', 'results'].includes(baseAction?.key)) addExtra('documents', raw ? 'Markdown nachkorrigieren (optional)' : anonymous ? 'Prüfung öffnen' : 'Prüfstände ansehen', () => openDocuments(entry.batch_id));
         if (entry.ledger_available || entry.identity_mapping_available) {
           const privateGroup = element('details', undefined, 'history-private');
           privateGroup.append(element('summary', 'Vertrauliche Zuordnungen (optional)'),
@@ -1586,6 +1595,7 @@
             finishDetail.textContent = `${finishedProcessingText} ${data?.loading
               ? 'Freigaben und Exporte werden anhand der gespeicherten Belege neu geprüft.'
               : 'Freigaben und Exporte sind derzeit nicht bestätigt. Bitte den Prüfstatus erneut laden.'}`;
+          if (data?.available !== true || data.loading) stateLabel.textContent = baseStateLabel;
           if (anonymous && entry.status === 'results_available' && !missingLocation &&
               data?.available === true && !data.loading) {
             const copy = data.pending_export_count ? 'Export im Abgleich' :
@@ -1604,9 +1614,16 @@
               finishDetail.textContent = `${finishedProcessingText} ${coverage}`;
             }
           }
-          if (!main || baseAction.key !== 'documents') return false;
+          const decorateState = () => {
+            if (anonymous && data?.available === true && !data.loading && data.pending_export_count)
+              stateLabel.textContent = `Verarbeitung beendet · ${data.approved_count}/${data.reviewable_count} freigegeben · Export im Abgleich`;
+            if (anonymous && data?.available === true && !data.loading && expectedOcr)
+              stateLabel.textContent += ` · ${expectedOcr} ohne OCR nicht umgewandelt`;
+            if (missingLocation && !stateLabel.textContent.includes('Ergebnisordner fehlt'))
+              stateLabel.textContent += ' · Ergebnisordner fehlt';
+          };
+          if (!main || baseAction.key !== 'documents') { decorateState(); return false; }
           mainAction = baseAction; main.hidden = false;
-          if (!data || data.loading || data.available === false) stateLabel.textContent = baseStateLabel;
           // Metadata loading is secondary; the direct document action reloads
           // authoritative revisions itself and must not depend on two clicks.
           setControlDisabled(main, false);
@@ -1636,14 +1653,7 @@
           // A pending durable copy takes precedence over an OCR omission or
           // the generic next-action label. Otherwise an in-flight/recoverable
           // export can appear completed simply because the row has results.
-          if (anonymous && data?.available === true && !data.loading && data.pending_export_count)
-            stateLabel.textContent = `Verarbeitung beendet · ${data.approved_count}/${data.reviewable_count} freigegeben · Export im Abgleich`;
-          // Expected OCR omissions are an additional notice, not a replacement
-          // for the independently confirmed copy status or the next action.
-          if (anonymous && data?.available === true && !data.loading && expectedOcr)
-            stateLabel.textContent += ` · ${expectedOcr} ohne OCR nicht umgewandelt`;
-          if (missingLocation && !stateLabel.textContent.includes('Ergebnisordner fehlt'))
-            stateLabel.textContent += ' · Ergebnisordner fehlt';
+          decorateState();
           main.textContent = mainAction.label; main.className = mainAction.primary ? 'primary' : '';
           return false;
         };

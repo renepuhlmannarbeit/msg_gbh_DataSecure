@@ -1,7 +1,7 @@
 //! Standalone-only composition of picker authorization, controlled workspace
 //! and durable publication. All writes finish inside the desktop's NativeGuard.
 //! The sidecar streams hashed bodies over the owned pipe, never target paths.
-use crate::{export_directory::{Directory, ExpectedFile, Identity}, ipc_transport::NativeGuard,
+use crate::{export_directory::{Directory, ExpectedFile, Identity, Node22Identity}, ipc_transport::NativeGuard,
     native_export_transaction::Status, native_export_workspace::{Request, Workspace}};
 use serde::{Deserialize, Serialize};
 use std::{io, path::{Path, PathBuf}};
@@ -34,6 +34,12 @@ impl ObjectId {
             created_ns: self.created_ns.parse().map_err(|_| error("AI_EXPORT_INVALID"))? };
         if Self::from(v) != *self { return Err(error("AI_EXPORT_INVALID")); } Ok(v)
     }
+}
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "identity", deny_unknown_fields)]
+pub(crate) enum ConfiguredAdmission {
+    #[serde(rename = "node22")] Node22(Node22Identity),
+    #[serde(rename = "native")] Native(ObjectId),
 }
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -98,28 +104,73 @@ pub(crate) fn configure(root: &Path, data: &Path, nonce: &str, guard: &NativeGua
 }
 pub(crate) fn configure_observed(root: &Path, data: &Path, nonce: &str, guard: &NativeGuard,
     mut observe: impl FnMut(ConfigureFailure)) -> io::Result<Binding> {
+    configure_admitted(root, data, nonce, guard, None, &mut observe)
+}
+pub(crate) fn prepare_configured(root: &Path, data: &Path, nonce: &str, admission: &ConfiguredAdmission,
+    setting_sha256: &str, guard: &NativeGuard) -> io::Result<Binding> {
+    use sha2::{Digest, Sha256};
+    let refused = || error("AI_EXPORT_CONFLICT");
+    if !hex(setting_sha256, 64) { return Err(refused()); }
+    guard.checkpoint().map_err(|_| error("STANDALONE_CLOSING"))?;
+    let private_parent = Directory::open_existing(data, None)?;
+    let settings = private_parent.open_settings()?;
+    let bytes = settings.read_bounded("result-root.json", 128 * 1024)?;
+    let digest = |bytes: &[u8]| format!("{:x}", Sha256::digest(bytes));
+    if digest(&bytes) != setting_sha256 { return Err(refused()); }
+    let record: serde_json::Value = serde_json::from_slice(&bytes).map_err(|_| refused())?;
+    if record["root"].as_str() != root.to_str() { return Err(refused()); }
+    let public = match admission {
+        ConfiguredAdmission::Native(expected) => {
+            if record["schema"] != "datasecure-result-root/3" || record["native_identity"] != serde_json::json!(expected) { return Err(refused()); }
+            Directory::open_existing(root, Some(expected.identity()?))?
+        },
+        ConfiguredAdmission::Node22(expected) => {
+            if !["datasecure-result-root/1", "datasecure-result-root/2"].iter().any(|schema| record["schema"] == *schema) ||
+                record["identity"] != serde_json::json!(expected) { return Err(refused()); }
+            let public = Directory::open_existing(root, None)?;
+            if public.node22_identity()? != *expected { return Err(refused()); }
+            public // Same held capability continues into provisioning, no re-adoption.
+        },
+    };
+    #[cfg(test)] guard.test_event("configured_before_provision");
+    private_parent.inspect_child("settings", settings.identity())?;
+    let private_identity = private_parent.identity();
+    // Reject a changed pathname, but retain the original capability for all
+    // provisioning. The check must not become a fresh adoption of a new root.
+    Directory::open_existing(data, Some(private_identity))?;
+    let binding = configure_admitted(root, data, nonce, guard, Some((public, private_parent)), &mut crate::diagnostic_native_configure_failure)?;
+    let parent = Directory::open_existing(data, Some(private_identity))?;
+    parent.inspect_child("settings", settings.identity())?;
+    if settings.read_bounded("result-root.json", 128 * 1024)? != bytes { return Err(refused()); }
+    Ok(binding)
+}
+fn configure_admitted(root: &Path, data: &Path, nonce: &str, guard: &NativeGuard,
+    admitted: Option<(Directory, Directory)>, observe: &mut impl FnMut(ConfigureFailure)) -> io::Result<Binding> {
     use ConfigureStage::*;
-    configure_step(Nonce, if hex(nonce, 32) { Ok(()) } else { Err(error("AI_EXPORT_INVALID")) }, &mut observe)?;
-    configure_step(Guard, guard.checkpoint().map_err(|_| error("STANDALONE_CLOSING")), &mut observe)?;
-    let public = configure_step(PublicOpen, Directory::open_existing(root, None), &mut observe)?;
-    let private_parent = configure_step(DataOpen, Directory::open_existing(data, None), &mut observe)?;
-    configure_step(Roots, validate_configuration_roots(public.identity(), private_parent.identity()), &mut observe)?;
-    let anonymize = configure_step(AnonymizeBind, public.bind_output_child("DataSecure-KI-Export"), &mut observe)?;
-    configure_step(AnonymizeVolume, require_same_volume(private_parent.identity(), &[anonymize.identity()]), &mut observe)?;
-    let markdown = configure_step(MarkdownBind, public.bind_output_child("DataSecure-Markdown-Korrektur"), &mut observe)?;
+    configure_step(Nonce, if hex(nonce, 32) { Ok(()) } else { Err(error("AI_EXPORT_INVALID")) }, observe)?;
+    configure_step(Guard, guard.checkpoint().map_err(|_| error("STANDALONE_CLOSING")), observe)?;
+    let (public, private_parent) = match admitted {
+        Some(held) => held,
+        None => (configure_step(PublicOpen, Directory::open_existing(root, None), observe)?,
+            configure_step(DataOpen, Directory::open_existing(data, None), observe)?),
+    };
+    configure_step(Roots, validate_configuration_roots(public.identity(), private_parent.identity()), observe)?;
+    let anonymize = configure_step(AnonymizeBind, public.bind_output_child("DataSecure-KI-Export"), observe)?;
+    configure_step(AnonymizeVolume, require_same_volume(private_parent.identity(), &[anonymize.identity()]), observe)?;
+    let markdown = configure_step(MarkdownBind, public.bind_output_child("DataSecure-Markdown-Korrektur"), observe)?;
     // Existing output children can themselves be mount points even when the
     // selected parent is on the private volume. Reject those before a private
     // operation child is provisioned; Request::validate rechecks at export.
-    configure_step(MarkdownVolume, require_same_volume(private_parent.identity(), &[markdown.identity()]), &mut observe)?;
+    configure_step(MarkdownVolume, require_same_volume(private_parent.identity(), &[markdown.identity()]), observe)?;
     // Random exclusive child; a lost configuration reply leaves an orphan,
     // not a name that any subsequent configuration may adopt or repair.
     let private_name = format!("native-export-{nonce}");
-    let private = configure_step(PrivateCreate, private_parent.create_controlled_child(&private_name), &mut observe)?;
-    configure_step(PrivateSync, private.sync(), &mut observe)?;
-    configure_step(DataSync, private_parent.sync(), &mut observe)?;
-    configure_step(PublicSync, public.sync(), &mut observe)?;
+    let private = configure_step(PrivateCreate, private_parent.create_controlled_child(&private_name), observe)?;
+    configure_step(PrivateSync, private.sync(), observe)?;
+    configure_step(DataSync, private_parent.sync(), observe)?;
+    configure_step(PublicSync, public.sync(), observe)?;
     let root = configure_step(RootEncoding, root.to_str()
-        .ok_or_else(|| error("STANDALONE_RESULT_ROOT_UNSAFE")), &mut observe)?;
+        .ok_or_else(|| error("STANDALONE_RESULT_ROOT_UNSAFE")), observe)?;
     Ok(Binding { schema: "datasecure-native-export-binding/1".into(), root: root.into(), root_identity: public.identity().into(),
         data_root_identity: private_parent.identity().into(), private_name, private_identity: private.identity().into(),
         anonymize_identity: anonymize.identity().into(), markdown_identity: markdown.identity().into() })
@@ -226,6 +277,22 @@ mod tests {
         }
     }
     #[test]
+    fn configured_node22_admission_uses_actual_node_identity_on_the_target_os() {
+        let f = Fixture::new();
+        let root = f.path.join("public");
+        let node = std::env::var_os("DATASECURE_TEST_NODE").unwrap_or_else(|| "node".into());
+        let output = std::process::Command::new(node).args(["-e",
+            "const s=require('node:fs').statSync(process.argv[1]);process.stdout.write(JSON.stringify({dev:String(s.dev),ino:String(s.ino),birthtime_ms:String(Math.trunc(s.birthtimeMs))}));"])
+            .arg(&root).output().unwrap();
+        assert!(output.status.success(), "{}", String::from_utf8_lossy(&output.stderr));
+        let expected: Node22Identity = serde_json::from_slice(&output.stdout).unwrap();
+        let directory = Directory::open_existing(&root, None).unwrap();
+        let safe = [&expected.dev, &expected.ino, &expected.birthtime_ms].into_iter()
+            .all(|value| value.parse::<u64>().is_ok_and(|value| value <= (1u64 << 53) - 1));
+        if safe { assert_eq!(directory.node22_identity().unwrap(), expected); }
+        else { assert!(directory.node22_identity().is_err(), "ambiguous legacy Numbers require a new native selection"); }
+    }
+    #[test]
     fn result_root_volume_mismatch_is_rejected_before_provisioning() {
         let f = Fixture::new();
         let public = Directory::open_existing(&f.path.join("public"), None).unwrap();
@@ -243,6 +310,55 @@ mod tests {
             .unwrap_err().to_string(), "AI_EXPORT_VOLUME_MISMATCH");
         assert_eq!(fs::read_dir(f.path.join("private")).unwrap().count(), 0);
         assert_eq!(fs::read_dir(f.path.join("public")).unwrap().count(), 0);
+    }
+    fn configured_fixture(f: &Fixture) -> (ConfiguredAdmission, String, Vec<u8>) {
+        let data = Directory::open_existing(&f.path.join("private"), None).unwrap();
+        let settings = data.create_controlled_child("settings").unwrap();
+        let expected: ObjectId = Directory::open_existing(&f.path.join("public"), None).unwrap().identity().into();
+        let bytes = serde_json::to_vec(&serde_json::json!({ "schema": "datasecure-result-root/3",
+            "root": f.path.join("public"), "native_identity": expected,
+            "identity": {"dev":"1", "ino":"2", "birthtime_ms":"3"}, "notices": {"sync":false,"network":false} })).unwrap();
+        settings.write_record_atomic("result-root.json", &bytes).unwrap();
+        (ConfiguredAdmission::Native(expected), format!("{:x}", Sha256::digest(&bytes)), bytes)
+    }
+    #[test]
+    fn configured_admission_requires_saved_root_digest_and_identity_before_any_provisioning() {
+        for fault in ["root", "digest", "identity", "none"] {
+            let f = Fixture::new(); let (mut admission, mut digest, original) = configured_fixture(&f);
+            let root = f.path.join("public"); let data = f.path.join("private");
+            if fault == "root" { fs::rename(&root, f.path.join("original-public")).unwrap(); fs::create_dir(&root).unwrap(); }
+            if fault == "digest" { digest = "0".repeat(64); }
+            if fault == "identity" { if let ConfiguredAdmission::Native(ref mut id) = admission { id.object = "0".into(); } }
+            let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
+            let result = prepare_configured(&root, &data, &"c".repeat(32), &admission, &digest, &guard);
+            assert_eq!(result.is_ok(), fault == "none", "{fault}");
+            assert_eq!(fs::read(data.join("settings/result-root.json")).unwrap(), original, "Rust never changes preferences");
+            if fault != "none" {
+                assert_eq!(fs::read_dir(&root).unwrap().count(), 0);
+                assert_eq!(fs::read_dir(&data).unwrap().count(), 1, "settings only; no private nonce child");
+            }
+        }
+    }
+    #[cfg(unix)]
+    #[test]
+    fn configured_parent_and_settings_replacements_with_identical_bytes_are_not_adopted() {
+        for replace_data in [true, false] {
+            let f = Fixture::new(); let (admission, digest, bytes) = configured_fixture(&f);
+            let data = f.path.join("private"); let root = f.path.join("public");
+            let swapped = if replace_data { data.clone() } else { data.join("settings") };
+            let changed = swapped.clone();
+            let lifecycle = Lifecycle::default();
+            let guard = lifecycle.begin_native().unwrap().with_test_event(move |point| {
+                if point != "configured_before_provision" { return; }
+                fs::rename(&changed, changed.with_extension("original")).unwrap();
+                fs::create_dir(&changed).unwrap();
+                let settings = if replace_data { let path = changed.join("settings"); fs::create_dir(&path).unwrap(); path } else { changed.clone() };
+                fs::write(settings.join("result-root.json"), &bytes).unwrap();
+            });
+            assert!(prepare_configured(&root, &data, &"c".repeat(32), &admission, &digest, &guard).is_err());
+            assert_eq!(fs::read_dir(root).unwrap().count(), 0);
+            assert_eq!(fs::read_dir(data).unwrap().count(), 1, "no nonce provisioned in replacement namespace");
+        }
     }
     #[test]
     fn publication_worker_timeout_retains_ownership_and_reconciles_both_sides_of_real_rename() {

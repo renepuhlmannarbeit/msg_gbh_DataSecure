@@ -103,7 +103,7 @@ export function workspacePreviewBridge() {
         if (command === 'close_document_reviews') return { ok: true };
         if (command === 'preview_document_export') {
           const used = new Set();
-          return { ok: true, processing_mode: mode, local_ui_only: true, external_disclosure: false,
+          return { ok: true, processing_mode: mode, result_folder: '/Synthetic/Results', local_ui_only: true, external_disclosure: false,
             files: args.selection.map((row, index) => {
               const source = documentRows.find(value => value.document_id === row.document_id).name.split('/').at(-1);
               const stem = source.replace(/\\.[^.]+$/, ''); let name = stem + '.md', suffix = 1;

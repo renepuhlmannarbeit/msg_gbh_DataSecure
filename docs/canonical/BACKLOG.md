@@ -1,6 +1,33 @@
 # Aktives Entwicklungsbacklog
 
-Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Test-Pre-Release veröffentlicht; Nutzerabnahme offen.
+Arbeitsversion: **3.2.0-rc165**, unveröffentlichte gemeinsame Windows-/macOS-Weiterentwicklung; RC164 bleibt unverändert veröffentlicht.
+
+## Aktueller Nutzerauftrag – gemeinsame Standalone-Vereinfachung nach RC164
+
+19.10.2026, BL-010.53 / DS-082, DS-086, DS-110: neue Implementierung auf
+`codex/standalone-export-usability`; veröffentlichter RC164-Tag und Pakete bleiben
+unverändert. Keine neue Automation, keine Desktopbedienung/Appstarts durch
+Agenten. Nutzer übernimmt Windows-Desktoptests, Kollege die Mac-Praxistests.
+
+| Arbeitspaket | Ziel und unveränderte Grenze | Status |
+|---|---|---|
+| Gemeinsamer Freigabe-/Exportauftrag | Eine bewusste Exportbestätigung; interne technische Kandidatenprüfung, genaue Revision/Hash, eindeutiger Auftrag und ACK/Resume bleiben erhalten. Keine behauptete menschliche Lektüre. | implementiert, gezielt grün; Endgates offen |
+| Vorhandenen Ergebnisordner nutzen | Gespeicherten Ort anzeigen und bei Bedarf nativ prüfen/einrichten; kein neuer Picker ohne nötige Entscheidung, keine erfundenen Identitäten oder Dateirechte, bestehende Aufträge nicht umleiten. | implementiert, native Windows-Vorabprobe/CAS grün; neue Endgates offen |
+| Konsistenter Verlauf und verständliche Schritte | Ergebnisordner öffnen bei verfügbaren fertigen Ergebnissen zuerst/grün; weitere Aktionen konsistent und responsiv. Ergebnisvergleich bleibt zugänglich; keine doppelte Pflichtfreigabe. | implementiert, VM/Headless-Browser grün; Nutzer-Desktoptest offen |
+| Kurzzeitig belegte Lesungen | Neutral warten/erneut lesen; ein bestätigter Submit wird nicht wegen einer nachfolgenden abgewiesenen Statuslesung als unbestätigte Mutation umgedeutet. | implementiert, gezielt grün und gegengelesen |
+| Revalidierung und Regression | Unabhängige KI-Fachreviews tatsächlicher Quellen, kausale Negativfälle, JS-/Rust-/Paketprüfungen. Zielhostnachweise nicht simulieren. | Quellengegenreviews abgeschlossen; neue Gesamt-/Paket-/Macgates offen |
+
+Detailvertrag und gezielter manueller Testplan samt je Aktivitäts-/Sequenzdiagramm:
+[Exportvereinfachung](../acceptance/STANDALONE_EXPORT_USABILITY_20261019.md).
+Keine neue Apple-Signierung, Notarisierung, Rechteerhöhung oder Schutzabschaltung.
+
+Auslöser: reale RC164-Mac26.2-ARM64-Protokolle belegen fehlende Exporteinrichtung
+vor erfolgreicher Ordnerwahl und anschließendem Drei-Dateien-Export samt ACK.
+Drei Read-Busy-Antworten sind Konkurrenzzustände, kein belegter Coreabsturz.
+Die konkrete alte Konfigurationsversion und der Sperrhalter sind nicht belegt.
+Die unveränderte Ergebnis-Unterordnerstruktur ist vom Nutzer ausdrücklich
+akzeptiert und wird nicht umgebaut. Die technische Prüfung ist keine Garantie
+vollständiger Anonymität. Rückwärtskompatible RC164-Belege bleiben lesbar.
 
 ## RC164-Übergabe abgeschlossen, Zielhosttests verbleiben
 
@@ -843,7 +870,7 @@ in dieselbe Korrekturrunde.
 
 ## Historische Nachweise bis R4 (kein aktueller R5-Abschluss)
 
-Stand: 17.10.2026 · Produktstand 3.2.0-rc164 · veröffentlicht Standalone RC162 (Windows und beide Mac-Architekturen; M2-Abnahme offen), Linux RC159 / Cowork RC151 · lokaler Arbeitsstand nach RC162 noch nicht veröffentlicht
+Stand: 17.10.2026 · Produktstand 3.2.0-rc165 · veröffentlicht Standalone RC162 (Windows und beide Mac-Architekturen; M2-Abnahme offen), Linux RC159 / Cowork RC151 · lokaler Arbeitsstand nach RC162 noch nicht veröffentlicht
 
 ## Gezielter R3-Abschlussreview
 

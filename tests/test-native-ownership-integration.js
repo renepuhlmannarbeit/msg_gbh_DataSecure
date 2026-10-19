@@ -170,6 +170,37 @@ function clean(directory) {
     check((await renameParent.request('release')).value, false);
     check((await renameWorker.request('release', { idValue: renameCap.value.reservation_id })).value, true);
     await renameParent.stop(); await renameWorker.stop();
+    // Real separate processes + actual pinned kernel guard. The native
+    // provisioner's ACK is stubbed here only to isolate the settings CAS;
+    // real handle admission/publication is a different integration gate.
+    for (const changeDuringAwait of [true, false]) {
+      const root = fixture(), p = child(), q = child();
+      await initialize(p, root, 'config'); await initialize(q, root, 'config');
+      const a = path.join(base, `public-a-${rootSequence}`), b = path.join(base, `public-b-${rootSequence}`);
+      fs.mkdirSync(a); fs.mkdirSync(b);
+      check((await q.request('config-save', { path: a })).ok, true);
+      // /3 makes this settings-only test independent of whether the fixture's
+      // legacy NTFS inode Number is lossless; native /2 has its own real gate.
+      const configFile = path.join(root, 'settings/result-root.json');
+      const record = JSON.parse(fs.readFileSync(configFile));
+      fs.writeFileSync(configFile, JSON.stringify({ ...record, schema: 'datasecure-result-root/3',
+        native_identity: { volume: '1', object: '2', created_ns: '3' } }));
+      const snapshotEvent = p.event(), upgrading = p.request('config-upgrade');
+      check(await snapshotEvent, 'config-native-await');
+      if (changeDuringAwait) {
+        check((await q.request('config-save', { path: b })).ok, true);
+        check((await p.request('config-resume')).ok, true);
+        check((await upgrading).code, 'AI_EXPORT_CONFIGURATION_REQUIRED');
+      } else {
+        const held = p.event(), resuming = p.request('config-resume', { pauseRename: true });
+        check(await held, 'guarded-config-rename');
+        check((await q.request('config-save', { path: b })).code, 'OWNERSHIP_GUARD_BUSY');
+        check((await resuming).ok, true); check((await upgrading).ok, true);
+        check((await q.request('config-save', { path: b })).ok, true);
+      }
+      check(JSON.parse(fs.readFileSync(configFile)).root, b);
+      await p.stop(); await q.stop();
+    }
     console.log(`NATIVE OWNERSHIP INTEGRATION PASS ${checks} assertions; ${rootSequence} private fixtures; ${process.version}; ${process.platform}`);
   } finally {
     await Promise.all(children.map(participant => participant.stop()));

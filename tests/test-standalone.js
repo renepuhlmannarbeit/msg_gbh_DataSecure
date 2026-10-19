@@ -1739,6 +1739,59 @@ async function missingLedgerCase() {
     assert.equal((await service.configureResults({ path: FIXTURE_RESULT_ROOT })).configuration_changed, true);
     assert.equal(saved, 1);
   });
+  await testAsync('configured-root preparation holds the interaction through native acknowledgement without another picker', async () => {
+    let release;
+    const snapshot = { root: FIXTURE_RESULT_ROOT, setting_sha256: 'a'.repeat(64) };
+    const binding = { sentinel: 'native saved-root binding' }, calls = [];
+    const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+      prepareConfiguredNativeExportBinding: async prepare => {
+        calls.push('snapshot'); const result = await prepare(snapshot); calls.push('commit'); return result;
+      },
+      pickFolderAsync: () => { throw Error('UNREQUESTED_PICKER'); }
+    }) });
+    const pending = service.prepareConfiguredExportRoot(value => {
+      assert.equal(value, snapshot); calls.push('native'); return new Promise(resolve => { release = resolve; });
+    });
+    assert.equal(service.interactionActive, true);
+    await assert.rejects(service.configureResults(), { code: 'STANDALONE_BUSY' });
+    await assert.rejects(service.prepareConfiguredExportRoot(() => binding), { code: 'STANDALONE_BUSY' });
+    assert.deepEqual(calls, ['snapshot', 'native']);
+    release(binding); assert.equal(await pending, binding);
+    assert.deepEqual(calls, ['snapshot', 'native', 'commit']);
+    assert.equal(service.interactionActive, false);
+  });
+  for (const phase of ['before', 'after']) for (const busyKind of ['worker', 'intake', 'batch'])
+    await testAsync(`configured-root preparation refuses ${busyKind} work ${phase} native acknowledgement`, async () => {
+      let busy = phase === 'before', release, committed = false, prepared = 0;
+      const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+        lightweightStatus: () => ({ local_intake_pending: busy && busyKind === 'intake',
+          batch_processing_active: busy && busyKind === 'batch' }),
+        localWorkerActive: () => busy && busyKind === 'worker',
+        prepareConfiguredNativeExportBinding: async prepare => {
+          const result = await prepare({ root: FIXTURE_RESULT_ROOT }); committed = true; return result;
+        }
+      }) });
+      const pending = service.prepareConfiguredExportRoot(() => {
+        prepared++; return new Promise(resolve => { release = resolve; });
+      });
+      if (phase === 'after') { busy = true; release({ sentinel: 'native binding' }); }
+      await assert.rejects(pending, { code: 'STANDALONE_BUSY' });
+      assert.equal(prepared, phase === 'after' ? 1 : 0); assert.equal(committed, false);
+      assert.equal(service.interactionActive, false);
+    });
+  await testAsync('configured-root native refusal releases interaction without committing or masking its error', async () => {
+    let committed = false;
+    const service = new StandaloneApplicationService({ dependencies: fakeDependencies({
+      prepareConfiguredNativeExportBinding: async prepare => {
+        const result = await prepare({ root: FIXTURE_RESULT_ROOT }); committed = true; return result;
+      }
+    }) });
+    await assert.rejects(service.prepareConfiguredExportRoot(async () => {
+      throw Object.assign(Error('native refusal'), { code: 'AI_EXPORT_VOLUME_UNSUPPORTED' });
+    }), { code: 'AI_EXPORT_VOLUME_UNSUPPORTED' });
+    assert.equal(committed, false); assert.equal(service.interactionActive, false);
+    assert.deepEqual(await service.prepareConfiguredExportRoot(async () => ({ retry: true })), { retry: true });
+  });
   await testAsync('a network result folder remains allowed and produces a visible notice', networkResultFolderNoticeCase);
   await testAsync('a running batch stops a second start with a fixed domain code', busyCase);
   await testAsync('a rejected batch or review lease never becomes a false continuation success', rejectedContinuationCase);

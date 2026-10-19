@@ -340,4 +340,11 @@ test('bound history snapshot: 133-source classification cannot absorb an unknown
   const empty=classifiedStopSummary(0,17,1);assert.equal(historyReviewProjection(empty.entry,empty.data),null);
 });
 
+test('guided results no longer advertise a mandatory separate document approval step', () => {
+  const value = documents({});
+  assert.equal(value.stages[2].label, 'Ergebnisse ansehen');
+  assert.match(value.next, /Exportbestätigung enthält die Freigabe.*zusätzlicher Freigabeschritt ist nicht nötig/u);
+  assert.doesNotMatch(value.heading, /Prüfung offen/u);
+});
+
 done();

@@ -2,6 +2,21 @@
 
 Stand: 05.10.2026
 
+## Aktuelle Präzisierung DS-082/DS-086/DS-110 – Standalone nach RC164
+
+19.10.2026, Nutzerentscheidung: Freigabe und Export im normalen Bedienweg
+zusammenführen, technische Schutzprüfungen erhalten. Eine lesende Vorschau
+und eine bewusste finale Bestätigung ersetzen die getrennte Pflichtfreigabe.
+Interne Freigaben bleiben revisioniert und werden bei Textänderung ungültig.
+Schnellwegfreigaben werden nicht als manuelle Prüfung umgedeutet. Gespeicherte
+Ergebnisordner dürfen nur nach ursprünglicher Identitätszulassung und unter
+tatsächlich erlaubtem OS-Zugriff wiederverwendet werden. Bestehende Aufträge
+behalten ihren Ort; keine Rechte-/Bindungsreparatur. Gemeinsame Windows-/Mac-
+Featurelogik, keine Developer-ID, Notarisierung oder Apple-Einreichung;
+lokales Ad-hoc-Sealing bleibt zulässig. Desktoptests macht der Nutzer selbst.
+[Quellvertrag und Diagramme](../acceptance/STANDALONE_EXPORT_USABILITY_20261019.md).
+Nachfolgende datierte Entscheidungen bleiben historische Entwicklungsbelege.
+
 Alle Entscheidungen bleiben als unveränderliche Historie erhalten. „Angenommen“
 bedeutet deshalb nicht automatisch „heute vollständig aktiv“:
 

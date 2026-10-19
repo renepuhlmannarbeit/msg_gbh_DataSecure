@@ -134,11 +134,11 @@ vertrauliche Zuordnung können Originalnamen enthalten.
    Personen- und Unternehmensentscheidungen bleiben unterscheidbar.
 3. Nach Fundstellenabschluss öffnet sich bei Anonymisierung direkt die
    Dokumentprüfung desselben Laufs. Quelle und geplantes Markdown vergleichen,
-   gewünschte Dokumente auswählen und **Auswahl freigeben** wählen.
-   Das ist im geführten Weg ein eigener Schritt; technische Verarbeitung ist
-   noch keine menschliche Freigabe. Im Schnellweg ist die automatische
+   gewünschte Dokumente auswählen. Die Maskierungen sind bereits angewendet;
+   eine gesonderte Pflichtfreigabe ist nicht nötig. Im Schnellweg ist die automatische
    Erstfreigabe ausdrücklich gekennzeichnet, ein weiterer Vergleich freiwillig.
-4. **Auswahl exportieren** kopiert nach ausdrücklicher Bestätigung
+4. **Auswahl exportieren** öffnet zuerst eine lesende Vorschau. Erst
+   **Freigeben und exportieren** bestätigt die ausgewählten Textstände und kopiert
    ausschließlich freigegebene aktuelle Markdown-Stände in einen normalen
    separaten Ordner. Originale, Identitäts-/Dateizuordnung, private Prüfstände
    und Begleitdateien werden nicht mitkopiert. Den technischen Laufordner
@@ -146,6 +146,9 @@ vertrauliche Zuordnung können Originalnamen enthalten.
    Der separate Exportordner enthält nur die ausgewählten freigegebenen
    Markdown-Dateien. Die exportierten Markdown-Dateien kannst du auch ohne KI
    verwenden. DataSecure lädt nichts hoch.
+   Vorschau und Abbrechen geben nichts neu frei und kopieren nichts.
+   Die technischen Schutzprüfungen bleiben aktiv. **Auswahl nur freigeben**
+   und Widerrufen stehen optional unter **Freigaben verwalten (optional)**.
 5. **Lauf abgeschlossen – mit Hinweisen** ist ebenfalls abgeschlossen.
    Gelbe Hinweise öffnen keinen fertigen Lauf wieder. Dokumentfreigabe und
    **Export abgeschlossen** sind getrennte, revisionsgebundene Tatsachen.
@@ -159,6 +162,15 @@ vertrauliche Zuordnung können Originalnamen enthalten.
    Dokumentprüfung öffnen.
    Neue Dateien gehören nach dem Start in eine neue Verarbeitung.
    Verbindungsverlust wiederholt Entscheidungen und Exportbestätigungen nicht blind.
+
+Der gespeicherte Ergebnisordner wird beim Export angezeigt und wiederverwendet,
+wenn ursprüngliche Identität und macOS-Zugriff passen. Dafür ist keine
+Developer-ID-Signierung oder Notarisierung vorgesehen. Lokales Ad-hoc-Sealing
+ist davon getrennt. macOS kann trotzdem Zugriff auf Documents/Downloads/Desktop
+verweigern oder eine Zustimmung verlangen; die App umgeht diese Rechte nicht.
+Bei fehlendem, ersetztem oder verweigertem Ziel ist eine erneute bewusste
+Ordnerwahl nötig, ohne alte Exporte zu verschieben. Keine globale Schutzfunktion
+abschalten. Ein gespeicherter Pfad allein ist keine Zugriffsberechtigung.
 
 Bei reiner Umwandlung bleiben Originalinhalte erhalten.
 **Markdown nachkorrigieren** bietet die spätere Korrektur; ein solcher

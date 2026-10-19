@@ -2,6 +2,20 @@
 
 Stand: 06.10.2026 · einschließlich DS-104 bis DS-109
 
+**Entwicklungsnachtrag 19.10.2026:** Die normale Exportbestätigung darf die
+interne Dokumentfreigabe einschließen, ohne technische Prüfungen zu entfernen.
+Eine Vorschau erteilt keine Freigabe. Verlorene, partielle oder veränderte
+Freigabeantworten starten keine Kopie. Der neue interne Callback zur Übernahme
+eines gespeicherten Ordners ist an äußeren Exportrequest, Lauf, Operation,
+Sequenz und laufende NativeGuard-Lebensdauer gebunden; kein Renderer-Pfad-API.
+Originale Zielidentität, gespeicherter Configdigest und unveränderte
+Volume-/Staging-/ACL-/Receiptprüfungen bleiben erforderlich. `/4`-Bindungen und
+vorhandene Exporte werden nicht mit neu ermittelten Identitäten repariert.
+Alte ungenaue Node-Zahlenidentitäten benötigen eine erneute echte Ordnerwahl.
+Keine Rechteerhöhung, ACL-Reparatur, Developer-ID/Notarisierung oder globale
+macOS-Schutzabschaltung. Details und offene Zielhostgates im
+[Workflowreview](../acceptance/STANDALONE_EXPORT_USABILITY_20261019.md).
+
 ## Geltungsbereich
 
 Dieses Dokument beschreibt ausschließlich das zweite Produkt **DataSecure

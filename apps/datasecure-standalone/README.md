@@ -1,5 +1,13 @@
 # DataSecure Standalone Desktop
 
+Aktuelle unveröffentlichte Entwicklung **RC165**: Die normale Exportbestätigung
+**Freigeben und exportieren** schließt die technische Dokumentfreigabe ein;
+keine zweite Pflichtbestätigung. Vorschau ist lesend, Schutzprüfungen bleiben.
+Gespeicherte Ziele werden nur mit unveränderter Identität und erlaubtem Zugriff
+übernommen. Kein neues veröffentlichtes Paket-/Mac-/Desktop-PASS aus diesem
+Quellstand. Die folgenden RC159-Abschnitte sind historische Releasebelege.
+Aktueller Vertrag: [Exportvereinfachung](../../docs/acceptance/STANDALONE_EXPORT_USABILITY_20261019.md).
+
 ### Veröffentlichtes Test-Prerelease RC159 (11.10.2026)
 
 [RC159 für Windows x64, beide Macs und Linux x64 glibc](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc159)

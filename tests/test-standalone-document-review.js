@@ -539,6 +539,10 @@ test('selected approval preserves purpose-bound residual and policy checks witho
   const contentOptions = { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: true, imageOcr: false };
   const policyMarker = require('../plugins/data-secure/server/core/person-field-policy').CONTENT_PERSON_FIELD_POLICY;
   const safe = fixture(true, true, null, { original: 'Vollständiger Name: Qvx', contentOptions, policyMarker });
+  const beforePreview = safe.store.list(safe.batchId).documents;
+  assert.equal(safe.store.previewExport(safe.batchId, 'a'.repeat(32), beforePreview.map(({ document_id, revision, output_sha256 }) =>
+    ({ document_id, revision, output_sha256 }))).files.length, 2);
+  assert.deepEqual(safe.store.list(safe.batchId).documents, beforePreview, 'preview grants no approval/revision');
   assert.ok(safe.store.decideBatch(safe.batchId, batchRequest(safe)).documents.every(row => row.approved && row.revision === 1));
   const f = fixture(true, true, null, { original: 'Vollständiger Name: Qvx', contentOptions, policyMarker });
   const row = f.row(1), entity = f.store.entities(f.batchId, row.document_id, row.revision, 0).entities.find(value => value.kind === 'PERSON');
@@ -547,6 +551,7 @@ test('selected approval preserves purpose-bound residual and policy checks witho
     output_sha256: row.output_sha256, operation_id: crypto.randomBytes(16).toString('hex'),
     entity_decisions: [{ entity_id: entity.entity_id, decision: 'keep' }] });
   throwsCode(() => f.store.decideBatch(f.batchId, batchRequest(f)), 'DOCUMENT_REVIEW_RESIDUAL_PII');
+  throwsCode(() => f.store.previewExport(f.batchId, 'b'.repeat(32), batchRequest(f).selection), 'DOCUMENT_REVIEW_RESIDUAL_PII');
   const after = f.create().list(f.batchId).documents;
   assert.equal(after[0].revision, 0); assert.ok(after.every(value => !value.approved));
   // A revocation is still possible for an unsafe candidate; no new export grant.
@@ -802,7 +807,10 @@ test('plain Markdown corrections persist, revoke approval and never use the KI n
   assert.equal(create().list(f.batchId).documents[0].approved, false, 'preview does not approve');
   throwsCode(() => create().exportApproved(f.batchId, '9'.repeat(32), unapprovedSelection), 'DOCUMENT_REVIEW_UNAPPROVED');
   const anonSelection = f.selection(0);
-  throwsCode(() => f.store.previewExport(f.batchId, '9'.repeat(32), anonSelection), 'DOCUMENT_REVIEW_UNAPPROVED');
+  assert.deepEqual(f.store.previewExport(f.batchId, '9'.repeat(32), anonSelection).files,
+    [{ name: 'Dokument_01.md', sha256: anonSelection[0].output_sha256 }], 'anonymized preview validates candidate without approval');
+  assert.equal(f.store.list(f.batchId).documents.find(value => value.document_id === anonSelection[0].document_id).approved, false);
+  throwsCode(() => f.store.exportApproved(f.batchId, '9'.repeat(32), anonSelection), 'DOCUMENT_REVIEW_UNAPPROVED');
   assert.equal(fs.existsSync(path.join(f.results, 'DataSecure-Markdown-Korrektur')), false, 'neither preview nor refused copy creates output');
   const decide = (action, ranges = []) => { const result = create().decide(f.batchId, item.id, { action, ranges, revision: row.revision,
     output_sha256: row.output_sha256, operation_id: crypto.randomBytes(16).toString('hex') }); row = result; };

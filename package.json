@@ -1,6 +1,6 @@
 {
   "name": "data-secure-privacy-preflight",
-  "version": "3.2.0-rc164",
+  "version": "3.2.0-rc165",
   "private": true,
   "description": "Lokale DataSecure-Produktfamilie zur De-Identifizierung von Dokumenten: Claude-Plugin und Standalone-App",
   "main": "plugins/data-secure/server/index.js",
@@ -14,7 +14,7 @@
     "test:standalone:preview": "node tests/test-standalone-review-preview.mjs",
     "test:standalone:review-browser": "node tests/manual/standalone-review-matrix-browser.mjs",
     "test:standalone:workspace-browser": "node tests/manual/standalone-workspace-design-browser.mjs",
-    "pretest:standalone": "npm run test:standalone:content && npm run test:quality && node tests/test-native-export-channel.js && node tests/test-standalone-terminal-failures.js && node tests/test-standalone-document-control.js && node tests/test-standalone-font-license.mjs && node tests/test-standalone-pause.js && npm run test:standalone:documents",
+    "pretest:standalone": "npm run test:standalone:content && npm run test:quality && node tests/test-native-export-channel.js && node tests/test-result-folder-config-migration.js && node tests/test-standalone-terminal-failures.js && node tests/test-standalone-document-control.js && node tests/test-standalone-font-license.mjs && node tests/test-standalone-pause.js && npm run test:standalone:documents",
     "test:standalone:content": "node tests/test-markdown-start-transport.js && node tests/test-office-image-ocr.mjs --source-only && node tests/test-office-image-relevance.js && node tests/test-content-options-persistence.js && node tests/test-content-start-readiness.js && node tests/test-content-anonymization-operation.js && node tests/test-conversion-content-contract.js && node tests/test-content-consumer-binding.js && node tests/test-content-privacy-extraction.js && node tests/test-standalone-anonymized-artifact.js && node tests/test-privacy-text-operation.js && node tests/test-core-contracts.mjs && node tests/test-source-extraction-contract.js",
     "test:standalone:documents": "node tests/test-workflow-presentation.js && node tests/test-markdown-image-content.mjs && node tests/test-private-transform-trace.js && node tests/test-standalone-entities.js && node tests/test-standalone-run-entities.js && node tests/test-standalone-confidential-overview.js && node tests/test-standalone-document-review.js && node tests/test-standalone-document-review-frontend.js",
     "posttest:standalone:content": "node tests/test-standalone-review-policy.js && node tests/test-standalone-automatic-privacy.js",

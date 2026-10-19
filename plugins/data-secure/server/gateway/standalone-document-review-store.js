@@ -1408,7 +1408,7 @@ function createDocumentReviewStore(options = {}) {
   }
   const isNativeOperation = op => op.schema === 'datasecure-document-export/5' ||
     ['datasecure-document-export/6', 'datasecure-document-export/7'].includes(op.schema) && Object.hasOwn(op, 'native_export');
-  function selectedFilePlan(batchId, selection, { rawPreview = false, events = journal(batchId), prepare = false, existingFiles } = {}) {
+  function selectedFilePlan(batchId, selection, { readOnlyPreview = false, events = journal(batchId), prepare = false, existingFiles } = {}) {
     const sources = [], sizes = []; let mode, total = 0, identity;
     // Validate the committed decision chain once for the whole selection.
     // Re-reading it in current() for every document makes a large approved
@@ -1420,9 +1420,14 @@ function createDocumentReviewStore(options = {}) {
       if (mode && purpose(value.snapshot) !== mode) throw fail('AI_EXPORT_INVALID');
       mode = purpose(value.snapshot);
       if (value.revision !== row.revision || value.output_sha256 !== row.output_sha256) throw fail('DOCUMENT_REVIEW_STALE');
-      // Only read-only Raw previews may precede copy confirmation. Actual
-      // export/publication callers retain their approval requirement.
-      if (!value.approved && !(rawPreview && mode === MARKDOWN)) throw fail('DOCUMENT_REVIEW_UNAPPROVED');
+      // A preview may precede the user's combined confirmation, but grants
+      // no approval or copy authority. Anonymized candidates must pass the
+      // same residual check before showing their plan. Every mutating caller
+      // still requires an exact approved revision below and at publication.
+      if (!value.approved) {
+        if (!readOnlyPreview) throw fail('DOCUMENT_REVIEW_UNAPPROVED');
+        if (mode === ANONYMIZE) verifyCandidate(value);
+      }
       // current() has just run this exact residual gate before granting an
       // automatic revision-0 approval. Guided/edited approvals still require
       // their explicit current-candidate check here. No proof crosses actions.
@@ -1449,13 +1454,20 @@ function createDocumentReviewStore(options = {}) {
     return locked(batchId, () => {
       if (!valid(operationId, 32) || !validSelection(selection)) throw fail('AI_EXPORT_INVALID');
       const run = ensurePrivateDirectory(base(), batchId), filename = path.join(run, `export-${operationId}.json`);
-      let plan;
+      let plan, resultFolder = null;
       if (fs.existsSync(filename)) {
         const op = readOperation(run, operationId);
         if (JSON.stringify(op.selection) !== JSON.stringify(selection) || abandoned(run, operationId, op)) throw fail('AI_EXPORT_CONFLICT');
         plan = { mode: op.processing_mode || ANONYMIZE, files: op.files };
-      } else plan = selectedFilePlan(batchId, selection, { rawPreview: true });
-      return { ok: true, processing_mode: plan.mode, files: plan.files, local_ui_only: true, external_disclosure: false };
+        resultFolder = op.root;
+      } else {
+        plan = selectedFilePlan(batchId, selection, { readOnlyPreview: true });
+        // Display only, not a native capability or a substitute for admission.
+        // Missing preferences must not prohibit a read-only document preview.
+        try { resultFolder = options.resultRoot ? options.resultRoot() : readConfiguredResultRoot(); } catch {}
+      }
+      if (typeof resultFolder !== 'string' || !path.isAbsolute(resultFolder) || resultFolder.length > 32768 || /\p{Cc}/u.test(resultFolder)) resultFolder = null;
+      return { ok: true, processing_mode: plan.mode, files: plan.files, result_folder: resultFolder, local_ui_only: true, external_disclosure: false };
     });
   }
   const exportBinding = op => ({ batch_id: op.batch_id, operation_id: op.operation_id,
@@ -1583,7 +1595,9 @@ function createDocumentReviewStore(options = {}) {
         sha256: [...Buffer.from(selection[index].output_sha256, 'hex')] }));
       if (!op) {
         if (exportRecords(run).pending.length >= 16) throw fail('DOCUMENT_REVIEW_LIMIT');
-        const binding = options.nativeBinding ? options.nativeBinding() : readConfiguredNativeExportBinding();
+        let binding = options.nativeBinding ? options.nativeBinding() : readConfiguredNativeExportBinding();
+        if (!binding && typeof options.prepareNativeBinding === 'function')
+          binding = await options.prepareNativeBinding(batchId, operationId);
         if (!validNativeExportBinding(binding)) throw fail('AI_EXPORT_CONFIGURATION_REQUIRED');
         const inspected = inspectRoot(binding.root);
         const identityBinding = mode === ANONYMIZE ? writeIdentityOverview(batchId, plan.identityOverview) : null;

@@ -7,7 +7,7 @@ details.file-problems{display:block}details.file-problems #problem-list>*{margin
 button.primary{transition:none}
 .history-outcome{font-weight:700;color:var(--c-primary);margin-top:8px}.history-row[data-outcome=error] .history-outcome{color:var(--c-danger-ink)}
 .run-notice,.notice-card{padding:14px 16px;background:var(--c-warn-bg);color:var(--c-warn-ink);border:1px solid var(--c-border);border-radius:var(--r-box);overflow-wrap:anywhere}.notice-card+.notice-card{margin-top:8px}.notice-card p{margin-top:6px}.content-notices{margin-top:16px;padding:14px 16px;border:1px solid var(--c-border);border-radius:var(--r-box)}.content-notices summary{font-weight:600;cursor:pointer}.content-notices .notice-card{margin-top:8px}
-.history-actions{max-width:440px}.history-extra{flex-basis:100%;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;padding-top:8px;border-top:1px solid var(--c-border-soft)}
+.history-actions{max-width:520px}.history-extra{flex-basis:100%;display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-start;padding-top:8px;border-top:1px solid var(--c-border-soft)}
 @media(max-width:720px){.history-actions{max-width:100%}.history-extra{justify-content:flex-start}}
 body{margin:0;background:var(--c-bg);font:var(--fs-body)/var(--lh-body) var(--font-sans);color:var(--c-ink);-webkit-font-smoothing:antialiased}
 button,input,select{font:inherit}button{border:1px solid var(--c-border-input);border-radius:var(--r-btn);padding:10px 16px;color:var(--c-ink);background:var(--c-surface);font-weight:600;cursor:pointer;transition:background var(--t-fast)}button:hover:not(:disabled):not([aria-disabled=true]){background:var(--c-surface-muted);border-color:var(--c-control)}button:disabled,button[aria-disabled=true]{cursor:default;color:var(--c-muted);background:var(--c-surface-muted)}button.primary{background:var(--c-primary);border-color:var(--c-primary);color:#fff}button.primary:hover:not(:disabled):not([aria-disabled=true]){background:var(--c-primary-hover)}button.primary:disabled,button.primary[aria-disabled=true]{background:var(--c-border);border-color:var(--c-border);color:var(--c-muted)}
@@ -111,5 +111,5 @@ button{white-space:nowrap}:focus-visible{outline-offset:2px}
 .history-status-heading{margin:0 0 10px;font-size:18px;font-weight:700;line-height:1.35;overflow-wrap:anywhere}
 .history-status-heading.history-completion-title{margin-top:0}
 .history-title{font-size:14px;color:var(--c-muted)}
-.history-row>div{min-width:0}.history-actions{align-content:start}
+.history-row>div{min-width:0}.history-actions{align-content:start;justify-content:flex-start}
 .history-visibility{display:flex;flex-direction:column;gap:8px}.history-visibility label{display:flex;align-items:center;gap:8px;flex-wrap:wrap}

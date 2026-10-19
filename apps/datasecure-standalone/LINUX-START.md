@@ -36,15 +36,18 @@ auf den unterstützten Linux-Distributionen.
    Vergleich und bei OCR der Originalbildausschnitt gehören zum jeweiligen Punkt.
 3. Nach Abschluss der Fundstellen öffnet sich bei Anonymisierung direkt die
    Dokumentprüfung desselben Laufs. Quelle und geplantes Markdown vergleichen,
-   gewünschte Dokumente auswählen und **Auswahl freigeben** wählen.
-   Fundstellenabschluss allein ist keine Dokumentfreigabe.
-4. **Auswahl exportieren** kopiert nach ausdrücklicher Bestätigung nur
+   gewünschte Dokumente auswählen. Die Maskierungen sind bereits angewendet;
+   eine gesonderte Pflichtfreigabe ist nicht nötig.
+4. **Auswahl exportieren** zeigt eine lesende Vorschau. Erst **Freigeben und exportieren**
+   bestätigt genau diese Textstände und kopiert nur
    freigegebene aktuelle Markdown-Stände in einen normalen separaten Ordner.
    Originale, Identitäts-/Dateizuordnung und private Prüfstände bleiben draußen.
    Den technischen Laufordner nicht pauschal an eine KI weitergeben.
+   Vorschau und Abbrechen geben nichts neu frei und kopieren nichts.
+   Technische Schutzprüfungen bleiben aktiv; reine Freigabe/Widerruf sind optional.
 5. **Später entscheiden**, Pause und Fortsetzen sind an den konkreten Lauf
    gebunden; weitere Eingaben gehören in eine neue Verarbeitung. Der Verlauf
-   zeigt höchstens 5 Verarbeitungen. **Ergebnisse prüfen und freigeben** öffnet
+   zeigt höchstens 5 Verarbeitungen. **Prüfung öffnen** öffnet
    bei Anonymisierung die spätere Dokumentprüfung. Verbindungsverlust führt
    nicht zu blinder Wiederholung von Entscheidungen oder Exportbestätigungen.
 

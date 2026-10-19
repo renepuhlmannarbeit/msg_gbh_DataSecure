@@ -214,7 +214,7 @@ function defaultDependencies(options = {}) {
   const reviewBroker = require('./review-broker').createReviewBroker();
   const intakeReservation = require('../gateway/batch-intake-reservation');
   const documentReviews = require('../gateway/standalone-document-review-store').createDocumentReviewStore({
-    nativeExport: options.nativeExport, controlOwnerPid: options.controlOwnerPid,
+    nativeExport: options.nativeExport, prepareNativeBinding: options.prepareNativeBinding, controlOwnerPid: options.controlOwnerPid,
     controlOwnerGeneration: options.controlOwnerGeneration, retiredControlGenerations: options.retiredControlGenerations });
   const runHistory = createRunHistory({
     readStates: readStandaloneHistoryStates,
@@ -359,6 +359,7 @@ function defaultDependencies(options = {}) {
     readConfiguredResultRoot: resultFolder.readConfiguredResultRoot,
     readConfiguredResultRootStatus: resultFolder.readConfiguredResultRootStatus,
     saveConfiguredResultRoot: resultFolder.saveConfiguredResultRoot,
+    prepareConfiguredNativeExportBinding: resultFolder.prepareConfiguredNativeExportBinding,
     resultOutputDirectory: resultFolder.resultOutputDirectory,
     isNetworkResultFolder: resultFolder.isNetworkResultFolder,
     recordSupportTrace: supportTrace.recordSupportTrace,
@@ -1444,6 +1445,25 @@ class StandaloneApplicationService {
         export_replay_pending: replay?.pending === true || Number(replay?.pending || 0) > 0 ||
           Number(replay?.failures || 0) > 0,
         local_ui_only: true, external_disclosure: false };
+    } finally { this.interactionActive = false; }
+  }
+
+  async prepareConfiguredExportRoot(prepare) {
+    if (this.interactionActive) throw fixedFailure('STANDALONE_BUSY', 'Ein lokaler Vorgang ist bereits aktiv.');
+    this.interactionActive = true;
+    const assertIdle = () => {
+      const status = this.deps.lightweightStatus();
+      if (status.local_intake_pending || status.batch_processing_active || this.deps.localWorkerActive?.())
+        throw fixedFailure('STANDALONE_BUSY', 'Bitte die laufende Verarbeitung abwarten.');
+    };
+    try {
+      assertIdle();
+      return await this.deps.prepareConfiguredNativeExportBinding(async snapshot => {
+        assertIdle();
+        const binding = await prepare(snapshot);
+        assertIdle();
+        return binding;
+      });
     } finally { this.interactionActive = false; }
   }
 

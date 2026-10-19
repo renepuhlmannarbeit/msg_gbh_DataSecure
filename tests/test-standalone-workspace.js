@@ -1223,7 +1223,7 @@ testAsync('finishing a native folder action cannot restore a superseded summary 
   await toggleHistorySummary(h, B); await h.act(`history-${B}-results`);
   resolveSummary(reviewSummary()); await tick(); assert.equal(main.disabled, true, 'native command remains in flight');
   resolveFolder({ ok: true }); await tick();
-  assert.equal(main.disabled, false); assert.equal(main.textContent, 'Dokumente und Freigaben öffnen');
+  assert.equal(main.disabled, false); assert.equal(main.textContent, 'Prüfung öffnen');
   assert.equal(h.el(`history-${B}-summary-reload`).hidden, false);
   assert.match(h.el(`history-${B}-summary`).textContent, /anderer lokaler Vorgang/u);
 });
@@ -1673,11 +1673,11 @@ testAsync('completed anonymization with bound OCR-off omissions leads to documen
   await h.act('nav-history');
   const row = h.el('history-list').children[0];
   assert.match(row.textContent, /18 ohne OCR nicht umgewandelt · 0 technische Fehler/u);
-  assert.equal(h.el(`history-${B}-documents`).textContent, 'Dokumente und Freigaben öffnen');
+  assert.equal(h.el(`history-${B}-documents`).textContent, 'Prüfung öffnen');
   assert.equal(h.nodes.some(node => node.isConnected && node.id === `history-${B}-problems-main`), false);
   await toggleHistorySummary(h, B);
-  assert.match(row.textContent, /Verarbeitung beendet · 0\/115 freigegeben · Export gesondert prüfen · 18 ohne OCR nicht umgewandelt/u);
-  assert.equal(h.el(`history-${B}-documents`).textContent, 'Dokumente und Freigaben öffnen');
+  assert.match(row.textContent, /Verarbeitung beendet · 0\/115 freigegeben · aktueller Stand noch nicht als Export belegt · 18 ohne OCR nicht umgewandelt/u);
+  assert.equal(h.el(`history-${B}-documents`).textContent, 'Prüfung öffnen');
   assert.equal(h.calls.some(call => ['decide_document_review', 'export_approved_documents'].includes(call.command)), false);
 });
 testAsync('anonymization history separates a privacy stop from OCR omissions and technical failures', async () => {
@@ -1694,7 +1694,7 @@ testAsync('anonymization history separates a privacy stop from OCR omissions and
   assert.match(h.el('history-list').textContent,
     /17 ohne OCR nicht umgewandelt · 1 aus Datenschutzgründen angehalten · 0 technische Fehler/u);
   assert.equal(h.el(`history-${B}-problems-main`), undefined);
-  assert.equal(h.el(`history-${B}-documents`).textContent, 'Dokumente und Freigaben öffnen');
+  assert.equal(h.el(`history-${B}-documents`).textContent, 'Prüfung öffnen');
   assert.equal(h.el(`history-${B}-problems`).textContent, '18 Ausnahmen ansehen');
   assert.match(h.el('history-list').textContent, /Anonymisierungslauf abgeschlossen – mit Hinweisen/u);
   const marks = withClass(h.el('history-list'), 'history-completion-marks')[0];
@@ -1801,7 +1801,7 @@ testAsync('a single technical file failure does not turn a usable anonymization 
   assert.equal(row.dataset.outcome, 'partial');
   assert.match(row.textContent, /Anonymisierungslauf abgeschlossen – mit Dateifehlern/u);
   assert.match(row.textContent, /1 Datei hat einen technischen Fehler/u);
-  assert.equal(h.el(`history-${B}-documents`).textContent, 'Dokumente und Freigaben öffnen');
+  assert.equal(h.el(`history-${B}-documents`).textContent, 'Prüfung öffnen');
   assert.equal(h.el(`history-${B}-problems`).textContent, 'Betroffene Dateien');
 });
 
@@ -1826,7 +1826,7 @@ testAsync('retained history without source-journal reasons never invents technic
   assert.match(row.textContent, /Anonymisierungslauf abgeschlossen – mit ungeklärten Ausnahmen/u);
   assert.match(row.textContent, /18 Dateien wurden nicht verarbeitet; die Gründe sind im kompakten Verlauf nicht mehr klassifiziert/u);
   assert.doesNotMatch(row.textContent, /18 technische Fehler|mit Dateifehlern/u);
-  assert.equal(h.el(`history-${B}-documents`).textContent, 'Dokumente und Freigaben öffnen');
+  assert.equal(h.el(`history-${B}-documents`).textContent, 'Prüfung öffnen');
   assert.equal(h.el(`history-${B}-problems`).textContent, 'Betroffene Dateien');
   h.model.entries[0] = { ...h.model.entries[0], expected_ocr_omission_count: 0 };
   await h.act('refresh-history');
@@ -3419,7 +3419,7 @@ function assertNoExportOrRestart(h) {
 }
 testAsync('document approval snapshot: actual explicit 1/1 approval survives nav-details without claiming an export', async () => {
   const { h } = await documentApprovalWorkspace();
-  assert.match(h.el('run-guide-title').textContent, /Dokumentprüfung offen/u);
+  assert.match(h.el('run-guide-title').textContent, /Ergebnisse ansehen und auswählen/u);
   h.el('documents-all').checked = true; await h.act('documents-all', 'change');
   await h.act('documents-approve'); assert.equal(h.el('documents-approve-confirm').hidden, false);
   await h.act('documents-approve-proceed'); await tick();
@@ -3747,7 +3747,13 @@ testAsync('bound history snapshot: failed reload removes guide, job and completi
   const h=await finishedAnonymousWorkspace({invoke:(command,args,fallback)=>{
     if(command==='get_document_review_history_summary'){if(fail)throw Error('STANDALONE_IPC_TIMEOUT');return fullCopySummary()}
     return fallback();
-  }});await openFinishedSnapshot(h);fail=true;await h.act('history-'+A+'-summary-reload');
+  }});await openFinishedSnapshot(h);
+  assert.match(h.el('history-list').textContent,/2\/2 freigegeben · Export mit Abschlussbeleg/u);
+  fail=true;await h.act('history-'+A+'-summary-reload');
+  assert.doesNotMatch(h.el('history-list').textContent,/2\/2 freigegeben · Export mit Abschlussbeleg/u,
+    'the stable primary folder action must not retain a previous positive summary after failed reload');
+  assert.equal(h.el('history-'+A+'-results').textContent,'Ergebnisordner öffnen');
+  assert.equal(h.el('history-'+A+'-results').className,'primary');
   assert.doesNotMatch(h.el('history-' + A + '-guide-next').textContent,/kein weiterer Export nötig/u);
   assert.equal(h.el('history-' + A + '-guide-stages').children[3].dataset.status,'pending');
   assert.match(h.el('history-list').textContent,/Freigabe- und Exportstand sind noch nicht abgeglichen/u);
@@ -4058,7 +4064,7 @@ testAsync('history status is first and later summary updates preserve title and 
   assert.match(h.el(`history-${B}-state`).textContent, /Export im Abgleich/u);
 });
 
-testAsync('history accessibility names bind repeated controls to their own visible run and follow action changes', async () => {
+testAsync('history accessibility names and stable openers stay bound to their own visible run after summary', async () => {
   const h = harness({ invoke(command, _args, fallback) {
     return command === 'get_document_review_history_summary' ? reviewSummary({ approved_count: 2,
       reviewable_count: 2, current_exported_count: 0 }) : fallback();
@@ -4079,7 +4085,7 @@ testAsync('history accessibility names bind repeated controls to their own visib
   }
   const main = h.el(`history-${B}-documents`), binding = main.attrs['aria-labelledby'];
   await toggleHistorySummary(h, B);
-  assert.equal(main.textContent, 'Exportvorschau');
+  assert.equal(main.textContent, 'Prüfung öffnen');
   assert.equal(main.attrs['aria-labelledby'], binding, 'self-reference follows the live label without replacing run context');
   assert.equal(h.calls.some(call => ['start_admitted_batch', 'continue_history_batch', 'export_approved_documents'].includes(call.command)), false);
 });
@@ -4218,6 +4224,66 @@ testAsync('ordinary journal notice rendered while hidden is ACKed only after rev
   await h.act('nav-details'); flush(); await tick();
   assert.equal(h.calls.filter(call => call.command === 'ack_terminal_presented').length, 1);
   assert.equal(h.calls.find(call => call.command === 'ack_terminal_presented').args.presentationGeneration, 91);
+});
+
+for (const code of ['STANDALONE_IPC_BUSY', 'STANDALONE_OWNERSHIP_CONTROL_BUSY', 'STANDALONE_PAUSE_CONTROL_BUSY'])
+testAsync('review read contention preserves an already acknowledged decision: ' + code, async () => {
+  let rejectRead = false;
+  const h = await openDeferredGuideFixture('markdown-and-anonymize', (command, args, fallback) => {
+    if (command === 'get_review_session') {
+      if (rejectRead) throw Error(code);
+      return { ready: true, review_id: 'a'.repeat(32), chunk_count: 1 };
+    }
+    if (command === 'submit_review') return { accepted: true, action: 'reviewed' };
+    return fallback();
+  });
+  const bridge = h.window.__DATASECURE_REVIEW__;
+  await bridge.invoke('get_review_session');
+  await bridge.invoke('submit_review', { reviewId: 'a'.repeat(32), answer: { action: 'reviewed' } });
+  const title = h.el('run-guide-title').textContent;
+  rejectRead = true;
+  await assert.rejects(bridge.invoke('get_review_session'), new RegExp(code, 'u'));
+  assert.equal(h.el('run-guide-title').textContent, title);
+  assert.doesNotMatch(h.el('run-guide-title').textContent, /unklar/u);
+  assert.equal(h.calls.filter(call => call.command === 'submit_review').length, 1);
+});
+
+testAsync('busy mutation acknowledgement still remains uncertain, unlike a rejected status read', async () => {
+  const h = await openDeferredGuideFixture('markdown-and-anonymize', (command, args, fallback) => {
+    if (command === 'submit_review') throw Error('STANDALONE_OWNERSHIP_CONTROL_BUSY');
+    return fallback();
+  });
+  await assert.rejects(h.window.__DATASECURE_REVIEW__.invoke('submit_review', {
+    reviewId: 'a'.repeat(32), answer: { action: 'reviewed' }
+  }), /OWNERSHIP_CONTROL_BUSY/u);
+  assert.match(h.el('run-guide-title').textContent, /unklar/u);
+  assert.equal(h.calls.filter(call => call.command === 'submit_review').length, 1);
+});
+
+for (const processing_mode of ['markdown-only', 'markdown-and-anonymize']) for (const coverage of ['unapproved', 'approved', 'exported'])
+testAsync(`finished history keeps result opener first/green and stable separate review action: ${processing_mode}/${coverage}`, async () => {
+  const h = harness({ invoke(command, _args, fallback) {
+    return command === 'get_document_review_history_summary' ? reviewSummary({ processing_mode,
+      reviewable_count: 2, approved_count: coverage === 'unapproved' ? 0 : 2,
+      current_exported_count: coverage === 'exported' ? 2 : 0 }) : fallback();
+  } }); await tick();
+  h.model.entries = [{ batch_id: B, processing_mode, selected_count: 2, result_count: 2, failed_count: 0,
+    status: 'results_available', result_location: 'available', results_available: true,
+    ...(processing_mode === 'markdown-only' ? { conversion_feedback: conversionFeedback({ selected_count: 2, result_count: 2,
+      not_converted_count: 0, ocr_omitted_count: 0, content_notice_count: 1 }) } : {}),
+    content_notice_count: 1, content_notice_breakdown_complete: true }];
+  await h.act('nav-history');
+  const opener = h.el(`history-${B}-results`), review = h.el(`history-${B}-documents`), actions = opener.parent;
+  assert.equal(opener.textContent, 'Ergebnisordner öffnen'); assert.equal(opener.className, 'primary');
+  assert.equal(opener.attrs['data-history-main'], 'true');
+  assert.equal(review.textContent, processing_mode === 'markdown-only' ? 'Nachkorrektur öffnen (optional)' : 'Prüfung öffnen');
+  assert.deepEqual(actions.children.filter(node => node.tagName === 'BUTTON').map(node => node.id),
+    ['results', 'documents', 'details', 'problems', 'more'].map(key => `history-${B}-${key}`));
+  const label = review.textContent;
+  await toggleHistorySummary(h, B);
+  assert.equal(opener.textContent, 'Ergebnisordner öffnen'); assert.equal(opener.className, 'primary');
+  assert.equal(review.textContent, label);
+  assert.equal(h.calls.some(call => ['decide_document_review', 'decide_document_review_batch', 'export_approved_documents'].includes(call.command)), false);
 });
 
 done();

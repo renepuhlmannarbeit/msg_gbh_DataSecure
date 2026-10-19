@@ -95,6 +95,10 @@ try {
   service = new StandaloneApplicationService({ ...(nativeEnabled ? {
     controlOwnerPid: owner, controlOwnerGeneration: ownerGeneration, retiredControlGenerations,
     startupDiagnostic: diagnosticEvent,
+    prepareNativeBinding: (batchId, operationId) => service.prepareConfiguredExportRoot(snapshot => {
+      if (!nativeSession) throw Object.assign(Error('STANDALONE_IPC_FAILED'), { code: 'STANDALONE_IPC_FAILED' });
+      return nativeSession.send('prepare_configured_export_root', { ...snapshot, batch_id: batchId, operation_id: operationId });
+    }),
     nativeExport: (operation, command, body) => {
       if (!nativeSession) return Promise.reject(Object.assign(Error('STANDALONE_IPC_FAILED'), { code: 'STANDALONE_IPC_FAILED' }));
       // Sparse, content-free checkpoints distinguish slow staging from a

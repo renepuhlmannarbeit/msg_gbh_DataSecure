@@ -1,6 +1,17 @@
 # Produktvertrag: GBH DataSecure
 
-Stand: 11.10.2026 · 3.2.0-rc164 · Ist-Zustand RC164 · Standalone RC159 auf allen vier Zielplattformen veröffentlicht · Cowork bleibt RC151
+Stand: 19.10.2026 · 3.2.0-rc165 · Ist-Zustand RC165 · neuer Standalone-Entwicklungsnachtrag; veröffentlichter RC164 unverändert · Cowork bleibt RC151
+
+**Aktuelle Standalone-Präzisierung nach RC164:** Der normale Dokumentweg benötigt
+keine gesonderte Pflichtfreigabe mehr. Nach der Fundstellenprüfung können die
+bereits angewendeten Maskierungen angesehen und gewünschte Dokumente gewählt
+werden. Eine lesende Exportvorschau und anschließend **Freigeben und exportieren**
+bestätigen genau diese Textstände. Intern bleiben revisions-/hashgebundene
+Freigabe, erneute Kandidatenprüfung, native Zielbindung, eindeutiger Exportauftrag
+und Empfangsbestätigung getrennte technische Schritte. Der Klick behauptet keine
+menschliche Lektüre aller Dokumente oder vollständige Anonymität. Nur freigeben
+und Widerrufen bleiben optionale Verwaltungsaktionen. Dieser Quellnachtrag ist
+noch kein neues veröffentlichtes Paket oder Zielhost-PASS.
 
 Die aktuellen RC159-Standalone-Pakete für Windows, beide Mac-Architekturen und Linux binden
 Quellcommit `7af2a9d0268864a01b954e0175cae9f5a3616fe8`.
@@ -23,8 +34,10 @@ Scan-Texterkennung und zusätzliche Bild-/Grafik-Texterkennung werden getrennt
 gewählt und unveränderlich im Lauf gespeichert; zusätzliche Bild-OCR ist
 standardmäßig aus. Dieser vollständige Optionsanschluss ist noch in Arbeit.
 Echte Codebeispiele und Literalinhalt bleiben erhalten. Anonymisierung,
-Fundstellenprüfung, nachträgliche Dokumentfreigabe und neutraler KI-Export
-bleiben separat; keine automatische Freigabe oder garantierte OCR-Wahrheit.
+Fundstellenprüfung und technische Dokumentfreigabe bleiben getrennte Verträge;
+die finale Exportbestätigung kann die Freigabe einschließen. Der Schnellweg
+kennzeichnet seine automatische Erstfreigabe, nicht eine menschliche Prüfung.
+Keine garantierte OCR-Wahrheit; Exporte sind auch ohne KI verwendbar.
 
 DataSecure umfasst zwei lokale Produkte mit gemeinsamem Verarbeitungskern:
 Das Cowork-Plugin de-identifiziert Geschäftsdokumente vor einer ausdrücklich
@@ -40,7 +53,7 @@ einzuführen. Claude erhält knappe aufgabenbezogene Anweisungen; technische
 Schutzprüfungen bleiben im Code. Nur tatsächlich mehrdeutige Inhalte benötigen
 eine lokale Fachentscheidung, nicht jeder erfolgreiche Verarbeitungsschritt.
 
-## Normalreise: Standalone RC159
+## Normalreise: Standalone, aktueller Entwicklungsweg nach RC164
 
 Die bewusste Zweckwahl aus DS-086 bleibt erhalten; Benennung und Darstellung
 wurden mit v2 erneuert. Historische Abgrenzung: Der integrierte Standalone-
@@ -65,17 +78,26 @@ Coworks Reviewadapter bleibt unabhängig.
 
 Nach bestätigtem Fundstellenabschluss öffnet sich bei Anonymisierung die
 Dokumentprüfung **desselben Laufs**, nicht nur dessen Status-Momentaufnahme.
-Original und geplanten Text prüfen, Dokumente auswählen und **Auswahl freigeben**
-wählen. Freigaben binden Revision/Hash; Änderungen heben betroffene Freigaben auf.
-**Auswahl für KI exportieren** ist ein eigener bestätigter Auftrag: Nur aktuelle
-freigegebene Markdown-Stände gelangen in einen normalen separaten Ordner.
+Original und geplanten Text vergleichen, gewünschte Dokumente auswählen und
+**Auswahl exportieren** wählen. Die Vorschau zeigt Namen und gespeicherten
+Ergebnisordner; sie speichert keine neue Freigabe und kopiert nichts.
+**Freigeben und exportieren** bestätigt die genaue Auswahl einmal. Noch fehlende
+Freigaben werden atomar gespeichert; nach eindeutigem vollständigem ACK werden
+die neuen Revisionen und der unveränderte Dateiplan erneut geprüft. Erst danach
+gelangen aktuelle freigegebene Markdown-Stände in einen separaten Exportordner.
+Eine verlorene Freigabeantwort oder veränderte Vorschau startet keinen Export.
+Eine bereits gespeicherte Freigabe kann dabei bestehen bleiben; neu laden und
+bewusst erneut auswählen statt blind wiederholen. Freigaben binden Revision/Hash;
+Änderungen heben betroffene Freigaben auf. **Auswahl nur freigeben** ist optional.
 Originale, private Prüfstände und Zuordnungen werden nicht mitkopiert.
 Fundstellenabschluss ist weder Dokumentfreigabe noch Exportabschluss.
 
 **Später entscheiden** lässt einen gespeicherten Lauf offen; unübergebene
 Eingaben sind nicht gespeichert. **Verlauf** berücksichtigt nur die letzten 5 Verarbeitungen mit
-eigenen Aktionen; **Ergebnisse prüfen und freigeben** öffnet dort direkt die
-Dokumentliste. Neustart/Verbindungsverlust wiederholen Starts, Entscheidungen
+eigenen Aktionen; bei verfügbaren fertigen Ergebnissen steht **Ergebnisordner
+öffnen** zuerst und grün. **Prüfung öffnen** beziehungsweise **Nachkorrektur öffnen
+(optional)** bleibt separat direkt erreichbar, danach Laufdetails, Hinweise und
+Weitere Aktionen. Neustart/Verbindungsverlust wiederholen Starts, Entscheidungen
 oder Exportbestätigungen nicht blind. Der gespeicherte Stand muss bewusst
 neu geladen werden; neue Eingaben starten keine alte Verarbeitung heimlich.
 **Markdown nachkorrigieren** gehört zum reinen Konvertierungszweck, dessen
@@ -92,7 +114,7 @@ TXT-Datei liegt pro Lauf in `VERTRAULICH-NICHT-HOCHLADEN` unter dem
 Ergebnisordner; private Einzelsnapshots bleiben im App-Datenbereich. Sie enthält
 Originalwerte und darf nicht in KI-Systeme hochgeladen werden. **Der gesamte
 Laufordner ist damit kein KI-Uploadpaket.** Die Datei wird nicht automatisch
-gelöscht; die App bietet keinen Löschbutton. Die 20 jüngsten Läufe sind direkt
+gelöscht; die App bietet keinen Dateilöschbutton. Nur die 5 jüngsten Läufe sind direkt
 im Verlauf erreichbar. Ältere Zuordnungen lassen sich über „Einstellungen und
 Hilfe → Vertrauliche Zuordnungen öffnen“ im privaten lokalen Ordner auffinden.
 Erfasste und nicht eindeutig zuordenbare Stellen werden getrennt ausgewiesen.
