@@ -1,5 +1,35 @@
 # RC164 – fortgesetzter Abschlussauftrag
 
+19.10.2026, nach 08:29 UTC: **Final10 ist nicht freigabefähig; Final11 folgt.**
+Alle lokalen Jobs endeten mit unveränderten Inputs. Native/Clippy/229 Rusttests
+(3 ignoriert) und fünf Paketgates bestanden. Die Gesamtprüfung stoppte nach
+49/279 Dateien im Aufbau eines Owner-/Purpose-Negativfixtures (Rename EPERM),
+nicht im Produktleser. Der konkrete historische Sperrhandle bleibt unbelegt.
+Der reine Testfix beschädigt den unveränderlichen Owner vor Lesebeginn
+kontrolliert ohne Namespacewechsel; echte Windows-NoDeleteSharing-Gegenprobe
+reproduziert altes EPERM und bestätigt die unveränderte Purpose-Verweigerung.
+22/22 Snapshotfälle durch Main erneut bestanden, keine Produktlockerung.
+
+Beide Mac-Jobs39220556406 scheiterten separat an einer veralteten Env-Regex
+in test-native-smoke-integrity.js:1212. Die reale Launcher-Closure wird jetzt
+mit exakt geprüftem Spawn-DTO, beiden Preloads, aktuellem PIN/HOST/Historyscope,
+zwei Generationen und acht RAM-Negativen ausgeführt. Drain/Close-Orakel bleiben.
+53/53 durch Main und unabhängigen Gegenreview bestanden; kein nativer Mac-PASS.
+
+Der tatsächliche Windows-Deltatest am gebundenen b142efba-ZIP bestand:
+geführter Lauf98d41c19 mit zwei manuell verglichenen/freigegebenen Ergebnissen,
+genau ein Export624847dfe3a7580074fc95a0b293358d mit exakt zwei neutralen MD
+(576/989 Bytes), danach direkt Zum Verlauf: 2/2 freigegeben, Export mit
+Abschlussbeleg, keine zweite Exportpflicht. 14/14 Originale bytegleich.
+GUI-PREAPPROVAL liegt bei Final10; keine vollständige Zehnfall-Abnahme.
+App normal geschlossen, isoliertes Profil und sämtliche Belege erhalten.
+
+Final11 erfordert neuen gemeinsamen Appcommit, frische 279+10 Gesamt-/Native-/
+Paketgates, beide Mac-Consumer und vollständige Windows-GUI an neuen Bytes.
+Produktfingerprint bleibt cbd2175dc131e4edf63247a52dea8b9b4b2aae7355daf9388745312fa5f28b2d/332;
+nur zwei Testdateien geändert. Keine alten FINALs/Pakete umetikettieren.
+Kein Release, lokaler finaler Übergabeordner oder M2-/Finder-/TCC-PASS bisher.
+
 19.10.2026, nach 08:05 UTC: **Final10 wird vorbereitet, noch kein Release.**
 Die beiden engen Korrekturen sind implementiert: P2-GUI-HISTORY-SUMMARY lädt
 nach dem tatsächlichen Dokumentabschluss nur den gewählten Lauf und zeigt

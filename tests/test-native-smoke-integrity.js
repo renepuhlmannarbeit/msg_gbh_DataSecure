@@ -1200,16 +1200,92 @@ test('actual multi-generation observer rejects incomplete writers and preserves 
   assert.match(result.stdout, /ENGINEERING_MODEL PASS 31; real_workers=0; scopes retained/u);
 });
 
-test('source content workflow drains actual observed workers before each restart and final shutdown', () => {
+function contentWorkflowLaunchSource() {
   const source = fs.readFileSync(path.join(__dirname, 'test-standalone-sidecar.js'), 'utf8');
   const start = source.indexOf("const caseRoot = path.join(root, 'content-format-workflow')");
   const end = source.indexOf("Projected document/converter workflow:", start);
   assert.ok(start > 0 && end > start);
   const flow = source.slice(start, end);
-  assert.match(flow, /writerObserver\.planHost\(writers\)/u);
-  assert.match(flow, /writerObserver\.attachHost\(generation, host\)/u);
-  assert.match(flow, /--require=\$\{writerObserverFile\}/u);
-  assert.match(flow, /env: \{ \.\.\.env, \.\.\.generation\.environment \}/u);
+  const launchStart = flow.indexOf('const launch = () => {');
+  const launchEnd = flow.indexOf('const restart = async () => {', launchStart);
+  assert.ok(launchStart >= 0 && launchEnd > launchStart);
+  return { source, flow, launch: flow.slice(launchStart, launchEnd) };
+}
+
+// Execute the real closure, not a shape regex. Only process creation and its
+// observer/protocol dependencies are models; no native process or scope exists.
+function assertContentWorkflowLaunchContract(launchSource) {
+  const caseRoot = path.join(__dirname, 'synthetic-launch', 'content-format-workflow');
+  const packagedServer = path.join(path.dirname(caseRoot), 'packaged-server');
+  const writerObserverFile = path.join(__dirname, 'lib/standalone-sidecar-writer-observer.cjs');
+  const historyReadObserverFile = path.join(__dirname, 'lib/standalone-history-read-observer.cjs');
+  const historyEnv = 'DATASECURE_TEST_HISTORY_READ_SCOPE';
+  const pinKey = 'DATASECURE_TEST_WRITER_PIN', hostKey = 'DATASECURE_TEST_WRITER_HOST';
+  const env = Object.freeze({ DATASECURE_PRODUCT_CHANNEL: 'standalone',
+    EU_PRIVACY_DATA_ROOT: path.join(caseRoot, 'private'), HOME: path.join(caseRoot, 'home') });
+  const pin = Buffer.from('synthetic original directory binding').toString('base64');
+  const writers = Object.freeze({ modelScope: true }), children = [];
+  const plans = [], spawns = [], attachments = [], collectors = [], protocols = [], sent = [], order = [];
+  const launch = vm.runInNewContext(`let host, client;\n${launchSource}\nlaunch`, {
+    path, env, caseRoot, packagedServer, writerObserverFile, historyReadObserverFile, writers, children,
+    process: { execPath: process.execPath, env: { AMBIENT_MUST_NOT_FORWARD: 'private ambient canary', NODE_OPTIONS: '--require=unapproved.cjs' } },
+    writerObserver: {
+      planHost(scope) {
+        assert.equal(scope, writers); order.push('plan');
+        const id = String(plans.length + 1).repeat(32);
+        const generation = Object.freeze({ id, environment: Object.freeze({ [pinKey]: pin, [hostKey]: id }) });
+        plans.push(generation); return generation;
+      },
+      attachHost(generation, host) {
+        assert.equal(generation, plans[attachments.length]); assert.equal(host, spawns[attachments.length].child);
+        order.push('attach'); attachments.push({ generation, host });
+      }
+    },
+    childProcess: { spawn(executable, args, options) {
+      order.push('spawn'); const child = Object.freeze({ modelChild: spawns.length + 1 });
+      spawns.push({ executable, args, options, child }); return child;
+    } },
+    trackChild(child, list) { assert.equal(list, children); order.push('track'); list.push(child); return child; },
+    historyReadObserver: { ENV: historyEnv, createCollector() {
+      order.push('collector'); const collector = Object.freeze({ modelCollector: collectors.length + 1 });
+      collectors.push(collector); return collector;
+    } },
+    protocolClient(...args) {
+      order.push('protocol'); const index = protocols.length; protocols.push(args);
+      return { send(...values) { order.push('send'); const reply = Object.freeze({ modelReply: index + 1 });
+        sent.push({ index, values, reply }); return reply; } };
+    }
+  }, { filename: 'actual-content-workflow-launch.vm.js', timeout: 1000 });
+  for (let index = 0; index < 2; index++) {
+    const request = launch(); assert.equal(plans.length, index + 1, 'each launch plans a fresh generation');
+    const spawn = spawns[index], expectedEnvironment = { ...env, [pinKey]: pin, [hostKey]: plans[index].id, [historyEnv]: caseRoot };
+    assert.equal(spawn.executable, process.execPath);
+    assert.deepStrictEqual(Array.from(spawn.args), [`--require=${historyReadObserverFile}`, `--require=${writerObserverFile}`,
+      path.join(packagedServer, 'standalone/desktop-sidecar.js')]);
+    assert.deepStrictEqual(Object.keys(spawn.options).sort(), ['env', 'stdio', 'windowsHide']);
+    assert.deepStrictEqual(Array.from(spawn.options.stdio), ['pipe', 'pipe', 'pipe']); assert.equal(spawn.options.windowsHide, true);
+    assert.deepStrictEqual(Object.keys(spawn.options.env).sort(), Object.keys(expectedEnvironment).sort());
+    for (const [key, value] of Object.entries(expectedEnvironment)) {
+      const descriptor = Object.getOwnPropertyDescriptor(spawn.options.env, key);
+      assert.ok(descriptor && Object.hasOwn(descriptor, 'value')); assert.strictEqual(descriptor.value, value, key);
+    }
+    assert.deepStrictEqual(Array.from(protocols[index]), [spawn.child, undefined, undefined, collectors[index]]);
+    const fields = { action: 'get_run_history', request_id: String(index + 1).repeat(16),
+      schema: 'datasecure-standalone-private-ipc/1', include_hidden: false };
+    const reply = request(fields); assert.equal(reply, sent[index].reply);
+    assert.equal(sent[index].index, index);
+    assert.deepStrictEqual(Array.from(sent[index].values).slice(0, 2), [fields.action, fields.request_id]);
+    assert.deepStrictEqual(Object.keys(sent[index].values[2]), ['include_hidden']);
+    assert.strictEqual(sent[index].values[2].include_hidden, false);
+  }
+  assert.notEqual(plans[0], plans[1]); assert.notEqual(plans[0].id, plans[1].id);
+  assert.notEqual(spawns[0].child, spawns[1].child); assert.notEqual(collectors[0], collectors[1]);
+  assert.deepStrictEqual(order, Array(2).fill(['plan', 'spawn', 'track', 'attach', 'collector', 'protocol', 'send']).flat());
+}
+
+test('source content workflow drains actual observed workers before each restart and final shutdown', () => {
+  const { source, flow, launch } = contentWorkflowLaunchSource();
+  assertContentWorkflowLaunchContract(launch);
   assert.equal((flow.match(/await writerObserver\.drain\(writers, host, \{ timeout: 22000 \}\)/gu) || []).length, 2);
   for (const [shutdown, marker] of [["'ee'.repeat(8)", 'return launch();'], ["'ef'.repeat(8)", '} else {']]) {
     const stop = flow.indexOf(shutdown);
@@ -1224,6 +1300,21 @@ test('source content workflow drains actual observed workers before each restart
   assert.match(teardown, /const proof = writerObserver\.assertAllClosed\(scope\)/u);
   assert.match(source, /hasPrimaryFailure \? \{ primary: primaryFailure \} : \{\}/u);
   assert.match(source, /remove: \(\) => removeOwnedRoot\(root, initial\)/u);
+});
+
+for (const [name, change] of [
+  ['missing generation PIN', text => text.replace('...generation.environment', '...{ DATASECURE_TEST_WRITER_HOST: generation.environment.DATASECURE_TEST_WRITER_HOST }')],
+  ['missing generation HOST', text => text.replace('...generation.environment', '...{ DATASECURE_TEST_WRITER_PIN: generation.environment.DATASECURE_TEST_WRITER_PIN }')],
+  ['wrong history scope', text => text.replace('[historyReadObserver.ENV]: caseRoot', '[historyReadObserver.ENV]: caseRoot + "-wrong"')],
+  ['ambient environment forwarding', text => text.replace('env: { ...env,', 'env: { ...process.env, ...env,')],
+  ['missing history preload', text => text.replace('`--require=${historyReadObserverFile}`, ', '')],
+  ['missing writer preload', text => text.replace('`--require=${writerObserverFile}`, ', '')],
+  ['extra preload', text => text.replace('[`--require=${historyReadObserverFile}`', '["--require=unapproved.cjs", `--require=${historyReadObserverFile}`')],
+  ['reused generation', text => text.replace('writerObserver.planHost(writers)', '(globalThis.oldGeneration ||= writerObserver.planHost(writers))')]
+]) test(`actual content launcher contract rejects ${name} (RAM countercase)`, () => {
+  const { launch } = contentWorkflowLaunchSource(), changed = change(launch);
+  assert.notEqual(changed, launch, 'countercase changes the actual closure');
+  assert.throws(() => assertContentWorkflowLaunchContract(changed), error => error.code === 'ERR_ASSERTION');
 });
 
 done();

@@ -5,6 +5,7 @@
 // and retained; faults delegate real stat/read/close before adding an error.
 const assert = require('node:assert/strict');
 const fs = require('node:fs'), path = require('node:path'), os = require('node:os'), crypto = require('node:crypto');
+const { spawnSync } = require('node:child_process');
 const bound = require('../plugins/data-secure/server/core/bound-file-io');
 const root = fs.mkdtempSync(path.join(fs.realpathSync.native(os.tmpdir()), 'datasecure-export-snapshot-'));
 assert.equal(path.dirname(root), fs.realpathSync.native(os.tmpdir()));
@@ -23,6 +24,18 @@ function replace(filename, bytes = 'BBBB') {
   const temporary = `${filename}.replacement-${++serial}`;
   fs.writeFileSync(temporary, bytes, { flag: 'wx', mode: 0o600 });
   fs.renameSync(temporary, filename);
+}
+function corruptOwnerFixture(filename, bytes) {
+  // Deliberate corruption BEFORE the reader starts, not a publication race.
+  // The immutable owner is never replaced by a product writer. Requiring a
+  // delete/rename here would add unrelated Windows sharing prerequisites.
+  const before = fs.lstatSync(filename, { bigint: true });
+  assert.ok(before.isFile() && !before.isSymbolicLink() && before.nlink === 1n);
+  fs.writeFileSync(filename, bytes);
+  const after = fs.lstatSync(filename, { bigint: true });
+  for (const key of ['dev', 'ino', 'birthtimeNs']) assert.equal(after[key], before[key]);
+  assert.equal(after.nlink, 1n);
+  assert.equal(fs.readFileSync(filename, 'utf8'), bytes);
 }
 function probe(filename, read, hooks = {}) {
   const real = Object.fromEntries(['lstatSync', 'openSync', 'readSync', 'closeSync'].map(name => [name, fs[name]]));
@@ -173,7 +186,7 @@ async function main() {
       if (kind === 'owner' || kind === 'purpose') {
         const value = JSON.parse(fs.readFileSync(f.owner));
         if (kind === 'owner') value.batch_id = 'f'.repeat(64); else value.processing_mode = 'markdown-and-anonymize';
-        replace(f.owner, JSON.stringify(value));
+        corruptOwnerFixture(f.owner, JSON.stringify(value));
       }
       if (kind === 'hardlink') fs.linkSync(f.filename, `${f.filename}.hardlink`);
       const result = probe(f.filename, f.read, { beforeOpen(metrics) {
@@ -185,6 +198,38 @@ async function main() {
       } });
       refused(result, kind === 'replacement-to-invalid-json' ? 2 : 1, 'STANDALONE_HISTORY_UNAVAILABLE');
     });
+  if (process.platform === 'win32') await run('held no-delete-sharing handle defeats old owner rename but not the real purpose-negative oracle', async () => {
+    const f = await productionFixture(), original = fs.readFileSync(f.owner, 'utf8');
+    const value = JSON.parse(original); value.processing_mode = 'markdown-and-anonymize';
+    const child = `const fs = require('node:fs'), assert = require('node:assert/strict');
+const corruptOwnerFixture = ${corruptOwnerFixture.toString()};
+const filename = process.env.DS_SNAPSHOT_OWNER_FILE, original = process.env.DS_SNAPSHOT_OWNER_ORIGINAL;
+const changed = process.env.DS_SNAPSHOT_OWNER_CHANGED, temporary = filename + '.denied-replacement';
+fs.writeFileSync(temporary, changed, { flag: 'wx', mode: 0o600 });
+let renameError;
+try { fs.renameSync(temporary, filename); } catch (error) { renameError = error.code; }
+assert.equal(renameError, 'EPERM', 'the real held Windows handle must cause the original failure');
+assert.equal(fs.readFileSync(filename, 'utf8'), original);
+corruptOwnerFixture(filename, changed);
+const exporter = require(process.env.DS_SNAPSHOT_EXPORT_MODULE);
+assert.throws(() => exporter.readStandaloneExportHistoryEntry(process.env.DS_SNAPSHOT_BATCH),
+  error => error.code === 'STANDALONE_HISTORY_UNAVAILABLE');
+console.log(JSON.stringify({ rename_error: renameError, in_place_corruption: true, actual_reader_refused: true }));`;
+    const script = `$ErrorActionPreference = 'Stop';
+$held = [IO.File]::Open($env:DS_SNAPSHOT_OWNER_FILE, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite);
+try { & $env:DS_SNAPSHOT_NODE -e $env:DS_SNAPSHOT_CHILD; if ($LASTEXITCODE -ne 0) { throw 'Snapshot held-handle child failed' } }
+finally { $held.Dispose() }`;
+    const result = spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], {
+      windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'], encoding: 'utf8', timeout: 15000, maxBuffer: 256 * 1024,
+      env: { ...process.env, DS_SNAPSHOT_NODE: process.execPath, DS_SNAPSHOT_CHILD: child,
+        DS_SNAPSHOT_OWNER_FILE: f.owner, DS_SNAPSHOT_OWNER_ORIGINAL: original, DS_SNAPSHOT_OWNER_CHANGED: JSON.stringify(value),
+        DS_SNAPSHOT_EXPORT_MODULE: require.resolve('../plugins/data-secure/server/gateway/result-export'), DS_SNAPSHOT_BATCH: f.state.token }
+    });
+    assert.ifError(result.error); assert.equal(result.signal, null); assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(JSON.parse(result.stdout.trim()), { rename_error: 'EPERM', in_place_corruption: true, actual_reader_refused: true });
+    const observed = probe(f.filename, f.read);
+    refused(observed, 1, 'STANDALONE_HISTORY_UNAVAILABLE');
+  });
   fs.writeFileSync(path.join(root, 'RESULT.json'), JSON.stringify({ classification: 'SOURCE_NEGATIVE_CASES_NOT_NATIVE_ACCEPTANCE',
     node: process.version, platform: process.platform, passed, cases: results, fixtures_preserved: root }, null, 2), { flag: 'wx', mode: 0o600 });
   console.log(`Target export snapshot countercases: ${passed} passed, 0 failed (source IO only)`);
