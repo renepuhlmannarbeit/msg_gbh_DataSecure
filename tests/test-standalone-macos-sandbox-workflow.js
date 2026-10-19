@@ -225,4 +225,6 @@ assert.match(workflow, /actions\/setup-node@[a-f0-9]{40}/u);
 assert.doesNotMatch(workflow, /uses: [^\n]+@(?![a-f0-9]{40}(?:\s|$))/u,
   'every third-party action must be pinned to an immutable commit');
 
+require('./lib/macos-cleanup-source-cases.cjs')(root);
+
 process.stdout.write('Standalone macOS manual sandbox workflow: PASS\n');

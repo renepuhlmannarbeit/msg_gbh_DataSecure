@@ -69,6 +69,8 @@ function protocolClient(child, onNative, onReady) {
 
 const sidecarFile = path.join(__dirname, '../plugins/data-secure/server/standalone/desktop-sidecar.js');
 const lifecycleFixture = path.join(__dirname, 'lib/standalone-sidecar-lifecycle.cjs');
+const writerObserverFile = path.join(__dirname, 'lib/standalone-sidecar-writer-observer.cjs');
+const writerObserver = require('./lib/standalone-sidecar-writer-observer.cjs');
 
 function isolatedEnvironment(root) {
   const env = {};
@@ -183,6 +185,8 @@ function removeOwnedRoot(root, initial) {
   }
   const children = [];
   const fixtureRoots = [];
+  const writerScopes = [];
+  let hasPrimaryFailure = false, primaryFailure;
   const environment = isolatedEnvironment(root);
   const diagnostics = environment.DATASECURE_STANDALONE_DIAGNOSTIC_DIR;
   const sourceDirectory = path.join(root, 'sources');
@@ -655,19 +659,24 @@ function removeOwnedRoot(root, initial) {
     }
     {
       const { runPackagedMarkdownScenario } = await import('./helpers/standalone-packaged-markdown.mjs');
-      const caseRoot = path.join(root, 'content-format-workflow'); fs.mkdirSync(caseRoot); fixtureRoots.push(caseRoot);
+      const caseRoot = path.join(root, 'content-format-workflow'); fs.mkdirSync(caseRoot);
+      const writers = writerObserver.createScope(caseRoot); writerScopes.push(writers);
       const env = isolatedEnvironment(caseRoot), sources = path.join(caseRoot, 'sources'); fs.mkdirSync(sources);
       let host, client;
       const launch = () => {
-        host = trackChild(childProcess.spawn(process.execPath, [path.join(packagedServer, 'standalone/desktop-sidecar.js')], {
-          stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, env
+        const generation = writerObserver.planHost(writers);
+        host = trackChild(childProcess.spawn(process.execPath, [`--require=${writerObserverFile}`, path.join(packagedServer, 'standalone/desktop-sidecar.js')], {
+          stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, env: { ...env, ...generation.environment }
         }), children);
+        writerObserver.attachHost(generation, host);
         client = protocolClient(host);
         return value => { const { action, request_id, schema: _schema, ...fields } = value; return client.send(action, request_id, fields); };
       };
       const restart = async () => {
+        await writerObserver.drain(writers, host, { timeout: 22000 });
         assert.equal((await client.send('shutdown', 'ee'.repeat(8))).ok, true);
         assert.equal((await bounded(host.closed, 'content format host did not stop', 10000)).code, 0);
+        writerObserver.assertClosedGeneration(writers, host);
         return launch();
       };
       const currentRequest = await runPackagedMarkdownScenario({ request: launch(), restart, sourceDirectory: sources });
@@ -675,8 +684,10 @@ function removeOwnedRoot(root, initial) {
       await runPackagedOcrScenario({ request: currentRequest, restart, sourceDirectory: sources, markdownOnly: true, contentOnly: true });
       const { runPackagedFastReviewScenario } = await import('./helpers/standalone-packaged-fast-review.mjs');
       await runPackagedFastReviewScenario({ request: currentRequest, restart, sourceDirectory: sources });
+      await writerObserver.drain(writers, host, { timeout: 22000 });
       assert.equal((await client.send('shutdown', 'ef'.repeat(8))).ok, true);
       assert.equal((await bounded(host.closed, 'content format final host did not stop', 10000)).code, 0);
+      writerObserver.assertClosedGeneration(writers, host);
     }
     } else {
       process.stdout.write('Projected document/converter workflow: NOT_RUN in source-only CI; required by headless/full and native package gates.\n');
@@ -765,14 +776,27 @@ function removeOwnedRoot(root, initial) {
       assert.ok(!log.includes(caseRoot) && !log.includes(ready.token));
       process.stdout.write(`✓ standalone real sidecar/worker lifecycle: ${scenario}\n`);
     }
+  } catch (error) {
+    hasPrimaryFailure = true; primaryFailure = error;
+    throw error;
   } finally {
-    for (const own of children) {
-      if (own.exitCode === null && own.signalCode === null) own.kill();
-      await bounded(own.closed, 'own sidecar process did not close; preserve its test directory');
-    }
-    // Never kill by a recorded PID: wait for the fixture's own bounded lifetime
-    // and recorded exit, then validate all exact deletion targets before cleanup.
-    for (const caseRoot of fixtureRoots) await workerEnded(caseRoot);
-    removeOwnedRoot(root, initial);
+    // Preserve the exact scenario failure (even throw undefined), and attempt
+    // every bounded end check. No deletion on any failure/incomplete census.
+    await writerObserver.collectTeardown({
+      ...(hasPrimaryFailure ? { primary: primaryFailure } : {}),
+      checks: [
+        ...children.map(own => async () => {
+          if (own.exitCode === null && own.signalCode === null) own.kill();
+          await bounded(own.closed, 'own sidecar process did not close; preserve its test directory');
+        }),
+        ...fixtureRoots.map(caseRoot => () => workerEnded(caseRoot)),
+        ...writerScopes.map(scope => () => {
+          const proof = writerObserver.assertAllClosed(scope);
+          process.stdout.write(`STANDALONE SOURCE WRITER CLOSE PASS: hosts=${proof.hosts}; workers=${proof.workers}; exact generations; no process-tree claim\n`);
+        })
+      ],
+      remove: () => removeOwnedRoot(root, initial),
+      preserve: () => process.stderr.write(`STANDALONE_SIDECAR_FIXTURE_PRESERVED:${root}\n`)
+    });
   }
 })().catch((error) => { console.error(error); process.exitCode = 1; });

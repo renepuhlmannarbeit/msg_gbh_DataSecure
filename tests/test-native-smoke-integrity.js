@@ -1190,4 +1190,40 @@ testAsync('actual OCR-skip scenario rejects even a successful resolver response 
   assert.doesNotMatch(probe.output(), /PASS/u);
 });
 
+test('actual multi-generation observer rejects incomplete writers and preserves primary failures', () => {
+  const model = path.join(__dirname, 'lib/standalone-sidecar-writer-model.cjs');
+  const result = spawnSync(process.execPath, [model], { cwd: path.join(__dirname, '..'),
+    encoding: 'utf8', windowsHide: true, timeout: 120000, maxBuffer: 4 * 1024 * 1024 });
+  assert.equal(result.error, undefined);
+  assert.equal(result.signal, null);
+  assert.equal(result.status, 0, result.stderr || result.stdout);
+  assert.match(result.stdout, /ENGINEERING_MODEL PASS 31; real_workers=0; scopes retained/u);
+});
+
+test('source content workflow drains actual observed workers before each restart and final shutdown', () => {
+  const source = fs.readFileSync(path.join(__dirname, 'test-standalone-sidecar.js'), 'utf8');
+  const start = source.indexOf("const caseRoot = path.join(root, 'content-format-workflow')");
+  const end = source.indexOf("Projected document/converter workflow:", start);
+  assert.ok(start > 0 && end > start);
+  const flow = source.slice(start, end);
+  assert.match(flow, /writerObserver\.planHost\(writers\)/u);
+  assert.match(flow, /writerObserver\.attachHost\(generation, host\)/u);
+  assert.match(flow, /--require=\$\{writerObserverFile\}/u);
+  assert.match(flow, /env: \{ \.\.\.env, \.\.\.generation\.environment \}/u);
+  assert.equal((flow.match(/await writerObserver\.drain\(writers, host, \{ timeout: 22000 \}\)/gu) || []).length, 2);
+  for (const [shutdown, marker] of [["'ee'.repeat(8)", 'return launch();'], ["'ef'.repeat(8)", '} else {']]) {
+    const stop = flow.indexOf(shutdown);
+    const drain = flow.lastIndexOf('await writerObserver.drain(', stop);
+    const closed = flow.indexOf('await bounded(host.closed,', stop);
+    const verified = flow.indexOf('writerObserver.assertClosedGeneration(writers, host);', closed);
+    const next = flow.indexOf(marker, verified);
+    assert.ok(drain >= 0 && drain < stop && closed > stop && verified > closed && next > verified);
+  }
+  const teardown = source.slice(source.indexOf('await writerObserver.collectTeardown('));
+  assert.match(teardown, /\.\.\.writerScopes\.map\(scope => \(\) => \{/u);
+  assert.match(teardown, /const proof = writerObserver\.assertAllClosed\(scope\)/u);
+  assert.match(source, /hasPrimaryFailure \? \{ primary: primaryFailure \} : \{\}/u);
+  assert.match(source, /remove: \(\) => removeOwnedRoot\(root, initial\)/u);
+});
+
 done();

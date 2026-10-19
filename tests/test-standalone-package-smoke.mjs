@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { readCentralModes } from '../scripts/lib/zip.mjs';
 import { windowsPackagePrefix } from '../scripts/lib/standalone-windows-layout.mjs';
 import { loadMacStaticCore, assertMacCoreBundle } from '../scripts/lib/macos-core-artifact.mjs';
-import { isolatedSidecarEnvironment, removePackageSmokeScope } from './helpers/standalone-package-scope.mjs';
+import { isolatedSidecarEnvironment } from './helpers/standalone-package-scope.mjs';
 import { runPackagedReviewScenario } from './helpers/standalone-packaged-review.mjs';
 import { runPackagedOcrScenario, runPackagedOcrSkipScenario } from './helpers/standalone-packaged-ocr-review.mjs';
 import { runPackagedMarkdownScenario } from './helpers/standalone-packaged-markdown.mjs';
@@ -30,10 +30,6 @@ const extraction = fs.mkdtempSync(path.join(root, '.tmp-standalone-package-'));
 const install = path.join(extraction, 'Leerzeichen ünicode');
 const sourceDirectory = path.join(extraction, 'Quellen');
 const resultDirectory = path.join(extraction, 'Ergebnisse');
-
-function safeRemove() {
-  removePackageSmokeScope(root, extraction);
-}
 
 function frame(value) {
   const payload = Buffer.from(JSON.stringify(value));
@@ -108,6 +104,7 @@ let childClosed = false;
 let closePromise;
 let activeRequest;
 let primaryFailure;
+let hasPrimaryFailure = false;
 try {
   const environment = isolatedSidecarEnvironment(root, extraction);
   // Exercise the optional trace through the actual packaged child chain, not
@@ -729,6 +726,7 @@ try {
   process.stdout.write('STANDALONE REAL HISTORY PASS (both purposes, failed run, exact targets, restart, changed result root)\n');
   process.stdout.write('STANDALONE PACKAGE ISOLATED SIDECAR SMOKE PASS\n');
 } catch (error) {
+  hasPrimaryFailure = true;
   primaryFailure = error;
   throw error;
 } finally {
@@ -755,12 +753,15 @@ try {
       })]);
     }
   }
-  if (process.env.DATASECURE_SMOKE_KEEP === '1') process.stderr.write(`STANDALONE_SMOKE_KEPT:${extraction}\n`);
-  else safeRemove();
   } catch (cleanupError) {
     // Preserve the actual assertion as well as a refused/failed cleanup. Never
     // retry deletion with looser path guards or turn cleanup into a PASS.
-    if (primaryFailure) throw new AggregateError([primaryFailure, cleanupError], 'STANDALONE_SMOKE_AND_CLEANUP_FAILED');
+    if (hasPrimaryFailure) throw new AggregateError([primaryFailure, cleanupError], 'STANDALONE_SMOKE_AND_CLEANUP_FAILED', { cause: primaryFailure });
     throw cleanupError;
+  } finally {
+    // Host close is not a join of autonomous descendants from all generations.
+    // Immutable packages expose no complete pure-IPC writer join. Keep this
+    // synthetic extraction even on success; DATASECURE_SMOKE_KEEP stays compatible.
+    process.stderr.write(`STANDALONE_SMOKE_KEPT:${extraction}; writer_quiescence=UNCONFIRMED; deletion=NOT_ATTEMPTED\n`);
   }
 }

@@ -408,13 +408,30 @@ jobs:
             "${RUNNER_TEMP}/datasecure-macos-package."*) ;;
             *) echo "Unsafe extraction directory" >&2; exit 74 ;;
           esac
+          converter_close_confirmed=false
+          extraction_step_completed=false
           cleanup() {
-            case "$extraction" in
-              "${RUNNER_TEMP}/datasecure-macos-package."*) rm -rf -- "$extraction" ;;
-              *) exit 74 ;;
-            esac
+            local exit_status="$1"
+            trap - EXIT
+            if [[ "$exit_status" != 0 || "$converter_close_confirmed" != true || "$extraction_step_completed" != true ]]; then
+              echo "STANDALONE_MACOS_EXTRACTION_PRESERVED:$extraction" >&2
+              if [[ "$exit_status" == 0 ]]; then exit_status=1; fi
+              exit "$exit_status"
+            fi
+            if [[ ! -d "$extraction" || -L "$extraction" ]] ||
+                [[ "$(dirname "$extraction")" != "$RUNNER_TEMP" ]] ||
+                [[ ! "$(basename "$extraction")" =~ ^datasecure-macos-package\.[A-Za-z0-9]+$ ]] ||
+                [[ "$(cd "$extraction" && pwd -P)" != "$extraction" ]]; then
+              echo "STANDALONE_MACOS_EXTRACTION_TARGET_INVALID" >&2
+              exit 74
+            fi
+            if ! rm -rf -- "$extraction"; then
+              echo "STANDALONE_MACOS_EXTRACTION_CLEANUP_FAILED:$extraction" >&2
+              exit 1
+            fi
+            exit 0
           }
-          trap cleanup EXIT
+          trap 'cleanup "$?"' EXIT
           ditto -x -k "$archive" "$extraction"
           packaged_app="$extraction/DataSecure-Standalone-${version}-${{ matrix.target }}/DataSecure Standalone.app"
           node scripts/lib/macos-core-artifact.mjs --app "$PWD" "${{ matrix.target }}" "$packaged_app"
@@ -433,7 +450,11 @@ jobs:
           bash tests/manual/standalone-native-macos-launch.sh \
             --app "$packaged_app" --target "${{ matrix.target }}" --version "$version" --launch-services
           node tests/manual/standalone-macos-packaged-conversion.mjs "$packaged_app"
+          # Every successful convertBuffer above resolves only from real
+          # Supervisor close. A refused/unconfirmed converter never sets this.
+          converter_close_confirmed=true
           node tests/test-standalone-package-smoke.mjs "$archive"
+          extraction_step_completed=true
       - name: Verify drag-to-Applications DMG contains the identical signed app
         shell: bash
         run: |

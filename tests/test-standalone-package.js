@@ -386,7 +386,8 @@ test('package smoke exercises a real failed CSV without exposing a false result 
   const smoke = fs.readFileSync(path.join(root, 'tests', 'test-standalone-package-smoke.mjs'), 'utf8');
   assert.match(smoke, /env: environment/u);
   assert.match(smoke, /isolatedSidecarEnvironment\(root, extraction\)/u);
-  assert.match(smoke, /removePackageSmokeScope\(root, extraction\)/u);
+  assert.doesNotMatch(smoke, /removePackageSmokeScope|safeRemove\(/u);
+  assert.match(smoke, /writer_quiescence=UNCONFIRMED; deletion=NOT_ATTEMPTED/u);
   assert.match(smoke, /failedSourceName = 'synthetisch-offenes-zitat\.csv'/u);
   assert.match(smoke, /failedRun, '', 'an all-stopped run does not expose an empty result folder'/u);
   assert.match(smoke, /failedTerminal\.ledger_available, false/u);

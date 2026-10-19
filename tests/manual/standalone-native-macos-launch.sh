@@ -52,26 +52,40 @@ test_root="$(cd "$test_root" && pwd -P)"
 case "$test_root" in "$tmp_parent"/.tmp-standalone-native-[a-f0-9][a-f0-9]*) ;; *) exit 73 ;; esac
 
 app_pid=""
-child_pids=""
+sidecar_pid=""
+app_end_confirmed=false
+sidecar_end_confirmed=false
 cleanup() {
-  if [[ -n "$app_pid" ]] && kill -0 "$app_pid" 2>/dev/null; then
-    kill -TERM "$app_pid" 2>/dev/null || true
-    if [[ "$launch_services" == false ]]; then
-      wait "$app_pid" 2>/dev/null || true
-    else
-      for _ in {1..50}; do
-        kill -0 "$app_pid" 2>/dev/null || break
-        sleep 0.1
-      done
-      if kill -0 "$app_pid" 2>/dev/null; then return 1; fi
-    fi
+  local exit_status="$1"
+  trap - EXIT
+  # A failed startup/quit/orphan gate retains its exact evidence. EXIT is not
+  # authority to terminate a recorded PID or to wait for autonomous processes.
+  if [[ "$exit_status" != 0 || "$app_end_confirmed" != true || "$sidecar_end_confirmed" != true ]]; then
+    echo "STANDALONE_NATIVE_ROOT_PRESERVED:$test_root" >&2
+    if [[ "$exit_status" == 0 ]]; then exit_status=1; fi
+    exit "$exit_status"
   fi
-  [[ -d "$test_root" && ! -L "$test_root" ]] || return 1
-  [[ "$(dirname "$test_root")" == "$tmp_parent" ]] || return 1
-  [[ "$(basename "$test_root")" =~ ^\.tmp-standalone-native-[a-f0-9]{32}$ ]] || return 1
-  rm -rf -- "$test_root"
+  # These are liveness probes only. Even a reused/uncertain live PID makes
+  # cleanup conservative; neither PID receives a termination signal here.
+  if kill -0 "$app_pid" 2>/dev/null || kill -0 "$sidecar_pid" 2>/dev/null; then
+    echo "STANDALONE_NATIVE_ROOT_PRESERVED:$test_root" >&2
+    exit 1
+  fi
+  if [[ ! -d "$test_root" || -L "$test_root" ]] ||
+      [[ "$(dirname "$test_root")" != "$tmp_parent" ]] ||
+      [[ ! "$(basename "$test_root")" =~ ^\.tmp-standalone-native-[a-f0-9]{32}$ ]] ||
+      [[ "$(cd "$test_root" && pwd -P)" != "$test_root" ]]; then
+    echo "STANDALONE_NATIVE_CLEANUP_TARGET_INVALID" >&2
+    exit 1
+  fi
+  if ! rm -rf -- "$test_root"; then
+    echo "STANDALONE_NATIVE_ROOT_CLEANUP_FAILED:$test_root" >&2
+    exit 1
+  fi
+  echo "STANDALONE NATIVE MACOS APP BUNDLE LAUNCH PASS ($target, launch_services=$launch_services; load + successful IPC only, no review decisions)"
+  exit 0
 }
-trap cleanup EXIT
+trap 'cleanup "$?"' EXIT
 
 product="$test_root/candidate/DataSecure-Standalone-$version-$target"
 mkdir -p "$product" \
@@ -172,14 +186,14 @@ else
   # instance accepted a normal quit request, but cannot observe its exit code.
   echo "STANDALONE_LAUNCH_SERVICES_EXIT_CODE_UNAVAILABLE"
 fi
+app_end_confirmed=true
 for _ in {1..50}; do
   kill -0 "$sidecar_pid" 2>/dev/null || break
   sleep 0.1
 done
 remaining_command="$(ps -p "$sidecar_pid" -o command= 2>/dev/null || true)"
-if [[ -n "$remaining_command" && "$remaining_command" == "$sidecar_command" ]]; then
+if kill -0 "$sidecar_pid" 2>/dev/null || [[ -n "$remaining_command" ]]; then
   echo "STANDALONE_NATIVE_MACOS_ORPHANED_SIDECAR" >&2
   exit 1
 fi
-app_pid=""
-echo "STANDALONE NATIVE MACOS APP BUNDLE LAUNCH PASS ($target, launch_services=$launch_services; load + successful IPC only, no review decisions)"
+sidecar_end_confirmed=true

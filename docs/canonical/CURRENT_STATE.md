@@ -4,6 +4,46 @@ Arbeitsversion: **3.2.0-rc164**, gemeinsamer Windows-/macOS-Test-Pre-Release in 
 
 ### Aktueller Nachtauftrag – neuere Autorität vor historischen Abschnitten
 
+Neu19.10.nach06:29UTC: final8/b8a8f75 vollständig276/276+10/10 Headless,
+Native/Clippy/229Rusttests (3ignoriert)/Release und fünf Paketgates PASS;
+alle Inputs unverändert. Vollständiger kanonischer Windows-Paket-IPC-Smoke
+zusätzlich PASS06:03:49.975UTC. Kein Final8-GUI-FINAL.
+Intel-Macjob117911191174 in39206755546 tatsächlich SUCCESS06:19:05UTC:
+echte App-/ZIP-/LaunchServices-Starts, Core/Worker/Guard/ACL, Office/PDF/OCR,
+kanonische Fach-/Restart-/Exportabläufe und DMG-Gates. Heruntergeladene
+ZIPf260197f…/DMG3e9fa445… samt Prüfsummen,1149 Manifestdateien, eingebettetem
+b8a8-Commit und unveränderten approved Corebytes lokal gegengeprüft.
+Das ist kein M2-/Finder-/TCC-/VoiceOver- oder gemeinsamer Release-PASS.
+
+ARMjob117911191196 blieb ROT05:56:37UTC im Source-Content-Workflow.
+ENOTEMPTY im finally kann eine frühere Szenarioexception verdeckt haben;
+konkrete ursprüngliche ARM-Ursache bleibt unbekannt. Nach tatsächlichem Ende
+aller Freezejobs enger Testharnessfix: Primärfehler einschließlich falsy-Werten
+erhalten, alle Teardownfehler sammeln, keine Löschung bei Fehler. Tatsächliche
+batch/review-Child-close-Beobachtung über alle Content-Hostgenerationen,
+Drain vor Shutdown, Host-close und finaler exakter Census.31 kausale Modelle,
+separate echte Windows-Node-3-Close-Integration und vollständiger tatsächlicher
+Windows-Source-Sidecar-Lauf bestanden.45 Integritäts-/15 Paket-/16 Pfadfälle
+gezielt grün; zwei unabhängige tatsächliche Observer-/Anschlussgegenreviews
+ohne bestätigten Blocker. Keine fachlichen Orakel entfernt.
+
+Im unveränderten kanonischen Paket-Smoke ist kein vollständiger reiner IPC-
+Join autonomer Nachkommen verfügbar: synthetische Extraktion daher immer
+behalten, Writerquieszenz ausdrücklich UNCONFIRMED, Löschung NOT_ATTEMPTED.
+Keine Preload-Injektion in Produktpakete, keine Fake-Join-/Prozessbaumfreigabe.
+Mac-Launcher-/Workflow-Cleanup nun ebenfalls an tatsächlichen Erfolg und
+Endnachweise gebunden; Fehlerstatus/Belege erhalten, kein TERM/unboundedwait
+im EXIT-Trap. Main wiederholt18 tatsächliche Bash-Quellmodelle, Workflow/Pfade
+und Canonicaldocs grün. Zusätzlicher unabhängiger tatsächlicher Cleanup-
+Quellengegenreview ohne bestätigten Blocker abgeschlossen. Kein nativer
+Mac-PASS daraus. Produkt-/Apple-Schutz und
+approved statische Cores bleiben unverändert. Neuer gemeinsamer Fingerprint
+05adbca56284e248ac060b9988e29cdeba04e792cf370851847655f28e43fd3a/332
+(Workflowdelta); Test-/Scriptinputs556/7d855d7e9acd3461a9b2af5f9e283bf6fe990f84d8a5e55795f10393acdb9d49.
+Neuer gemeinsamer Final9-Commit
+mit frischen Gesamt-/Native-/Paket-/beidenMac-/10GUI-/Übergabegates folgt erst
+nach Abschlussgegenreview; rote ARM-Evidenz bleibt unverändert/offen.
+
 Neu19.10.nach05:46UTC: final7/c32092b alle276+10/Native229(3ignoriert)/Paket5
 unverändert PASS. Beide nativeMacjobs39203972091 ROT erst an obsoletem UI-
 Ergebnispfadhint, nach bestandenen App-/ZIP-/LaunchServices-/Office-/PDF-/OCR-
