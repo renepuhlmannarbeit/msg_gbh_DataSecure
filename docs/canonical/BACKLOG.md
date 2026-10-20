@@ -1,11 +1,11 @@
 # Aktives Entwicklungsbacklog
 
-Arbeitsversion: **3.2.0-rc168**, Umsetzung und gezielte Gegenreviews abgeschlossen;
-neue Gesamtregression und Windows-/Mac-Paketgates noch offen.
-RC167 ist weiterhin der letzte veröffentlichte Teststand; menschliche Abnahme
+Arbeitsversion: **3.2.0-rc168**, Umsetzung, unabhängige Gegenreviews und neue
+Gesamt-/Windows-/Mac-Paketgates abgeschlossen; Test-Pre-Release veröffentlicht.
+RC168 ist der aktuelle Windows-/Mac-Teststand; menschliche Abnahme
 offen. Frühere Pakete und Ergebnisstände bleiben unverändert.
 
-## Aktiver Auftrag – RC168 Nachbearbeitung und strukturierte Zuordnung
+## Abgeschlossener Implementierungsauftrag – RC168 Nachbearbeitung und strukturierte Zuordnung
 
 - **TEXT-POSITIONS-01/P1:** CRLF/LF/CR-Anzeigeoffsets sicher mit Backendpositionen
   verbinden. Maskierung, beide Hervorhebungsfelder und Markdown-Nachkorrektur
@@ -30,8 +30,22 @@ offen. Frühere Pakete und Ergebnisstände bleiben unverändert.
   Harness widerspricht genehmigtem Ein-Klick-Flow. Strikter Ersatz ohne Verlust
   der Nichtmutations-/Sperr-/Axe-/Fokusorakel vollständig durch Autor/Main grün,
   unabhängig final gegengelesen; neue Source03-Gates erforderlich.
+- Source03 tatsächlich neu bestanden:285/285+11/11, Windows275Rust/3ignoriert/
+  Clippy/Release/Paket5/Korpus100 ohne Fehler und unveränderte Inputs.
+  Mac39401647855 beide grün, je266Rust/3ignoriert/70Generationen/20Companion/
+  34Workbookfälle und native App-/ZIP-/DMG-Gates. App-/Tagcommit0049513a9ba661bee4190a6677bb3ddffef461a9,
+  FP48ba2fa729f2ac59cc4d47bc57bf6633c580b8316fe330fadeccf9a6064224e3/336.
+  [RC168](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc168)
+  veröffentlicht;20Assets vor/nach Veröffentlichung frisch gehasht, IDs/Tag
+  unverändert. Windows lokal mit Testplan und drei Testdatenbeilagen.
+  Kein bestätigter weiterer Implementierungs-/Übergabeblocker in den begrenzten
+  Quellen-/Artefaktreviews. Offen: zehn Nutzerdesktopfälle, echte Excel-/Numbers-
+  Anzeige, M2/Finder/TCC/Gatekeeper/Enterprise/VoiceOver/macOS13.5/26.
+  Historische Ursachen nicht rückwirkend erklärt. Keine Main-Integration,
+  Desktopautomation oder neue geplante Aufgabe.
+  [Exakter Abschluss](../acceptance/RC168_SHARED_RELEASE_20261020.md).
 
-## Aktiver Nutzerbefund – vertrauliche Zuordnungen im Ergebnisordner
+## Historischer Nutzerbefund – vertrauliche Zuordnungen im Ergebnisordner
 
 **RESULT-COMPANIONS-01 – umgesetzt, technisch geprüft, RC167 veröffentlicht:** Der reale
 Windowslauf `d7047e01…` besitzt beide internen Zuordnungen, aber keinen sichtbaren

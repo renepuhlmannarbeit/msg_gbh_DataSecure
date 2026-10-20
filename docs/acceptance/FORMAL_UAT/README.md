@@ -1,8 +1,21 @@
 # Formale N3/N4-Abnahme mit Windows und macOS
 
-Stand: 20.10.2026 · veröffentlichte Standalone Windows/macOS RC167 · Linux RC159 · Cowork RC151
+Stand: 20.10.2026 · veröffentlichte Standalone Windows/macOS RC168 · Linux RC159 · Cowork RC151
 
 **Aktueller Windows-/Mac-Standalone-Kandidat:** Das
+[RC168-Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc168)
+bindet Windows x64 und beide Mac-Architekturen an Quellcommit
+`0049513a9ba661bee4190a6677bb3ddffef461a9`. Neue Positions-/Maskierungs- und
+Drei-Dateien-Zuordnungsverträge samt nativen Paketgates sind technisch geprüft.
+Neue Anonymisierung: Dateizuordnung.csv, Pseudonym-Zuordnung.txt und
+Pseudonym-Zuordnung.xlsx unter Vertraulich; Originalangaben nicht weitergeben.
+Keine zweite Pflichtfreigabe/Exportauswahl. Alle zehn Nutzerdesktopfälle,
+Excel-/Numbers- und echte Mac-/M2-/Finder-/TCC-/VoiceOver-Abnahme USER_PENDING.
+Eine Kampagne bindet die exakten RC168-Pakethashes an diesen Produktcommit;
+leere Vorlagen und ältere Evidenzen sind kein RC168-PASS. Reine Dokumentation
+ändert die Paket-/Tagbindung nicht. Linux RC159 und Cowork RC151 bleiben.
+
+**Historischer Windows-/Mac-Standalone-Kandidat:** Das
 [RC167-Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc167)
 bindet Windows x64 und beide Mac-Architekturen an den exakten Quellcommit
 `84df81c3c935cca6447ad05686c3f43416aabdb6`. Beide Mac-ZIPs und beide DMGs

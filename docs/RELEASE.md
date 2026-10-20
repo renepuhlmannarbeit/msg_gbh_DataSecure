@@ -2,7 +2,64 @@
 
 Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc168 · Veröffentlichungsnachtrag: 20.10.2026
 
-Der aktuelle Quellstand ist RC168-Entwicklungsstand und noch kein neu gebundener Paketkandidat. Nachfolgende reine Dokumentation ändert die Paket-/Tagbindung nicht. Menschliche N3/N4-Produktionsfreigaben bleiben offen.
+Der aktuelle Quellstand ist der veröffentlichte RC168-Standalone-Teststand für Windows und macOS. Nachfolgende reine Dokumentation ändert die Paket-/Tagbindung nicht. Menschliche N3/N4-Produktionsfreigaben bleiben offen.
+
+### RC168 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
+
+Quellcommit `0049513a9ba661bee4190a6677bb3ddffef461a9` bindet den
+[RC168-Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc168).
+Build `0049513a`, Produktfingerprint
+`48ba2fa729f2ac59cc4d47bc57bf6633c580b8316fe330fadeccf9a6064224e3`/336.
+Windows x64 und beide Macs stammen aus demselben Appstand; Linux RC159 und
+Cowork RC151 werden nicht umetikettiert. Ältere Pakete und Nutzerläufe bleiben.
+
+CRLF/LF/CR- und UTF-16-Positionen der Anzeige werden auf gespeicherte Texte
+abgebildet, ohne alte Bytes/Hashes umzuschreiben. Rechts markieren, Vorschau
+prüfen, einmal **Maskierung speichern**. Entitätenbehandlung/Geltung separat
+bewusst speichern; Blättern und Markieren allein mutieren nichts. Sichtbare
+Sperrgründe statt stiller inaktiver Aktionen; keine zweite Freigabe/Exportpflicht.
+Neue Anonymisierungs-Erst-/Korrekturstände enthalten drei Pflichtdateien:
+`Vertraulich/Dateizuordnung.csv`, `Pseudonym-Zuordnung.txt` und
+`Pseudonym-Zuordnung.xlsx`. XLSX je Dokument Typ/Basiswert/Endwert, dazu Kontext
+und verlustfreie Langwerte. Alte /1-/2-Leser, No-op und Resume erhalten die
+alten Rollen/Namen; keine stille Reparatur oder Umbenennung beim Öffnen.
+**Vertraulich enthält Originalnamen/Identitäten: nicht weitergeben/hochladen.**
+
+Source03 neu285/285Headless+11/11Zusatzgates, Windows Prepare/Clippy/
+275Rusttests(3ignoriert)/Release/Paket5 und100Dateienkorpus ohne Fehler;
+336Produkt-/572Test-/Scriptinputs unverändert. Beide nativen
+[Macjobs39401647855](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/actions/runs/39401647855)
+bestanden, je266Rust/3ignoriert/70Generationen/20Companion/34Workbookfälle,
+echte Node→Rust-Drei-Dateien-/Legacy-/LostReceipt-/Nichtreparatur-/Default-/
+Core-/Worker-/Guard-/App-/Konverter-/ZIP-/DMG-Gates. Unabhängige tatsächliche
+Windows-/ARM-/Intel-Artefakt- und Übergabegegenreviews ohne bestätigten Blocker.
+
+Release418271744 veröffentlicht20.10.2026 10:29:20UTC, Pre-Release=true,
+Draft=false. Alle20Assets im Entwurf und nach Veröffentlichung frisch
+heruntergeladen/gehasht; dieselben IDs und exakter Tagcommit bestätigt.
+Windows zusätzlich create-only unter `Software DataSecure/RC168` mit aktuellem
+Testplan, zehn offenen Nutzerfällen und drei unveränderten Testdatenbeilagen.
+[Abschluss mit historischen Gegenbelegen und Grenzen](acceptance/RC168_SHARED_RELEASE_20261020.md).
+
+| Archiv | Bytes | SHA-256 |
+|---|---:|---|
+| Windows x64 ZIP | 112395420 | `9bf52cd4146e78e34afd0f08674f72fdfbb19d685aa0f3ca9d12d92e231efbad` |
+| macOS Apple Silicon ZIP | 117745716 | `103f67e2cabef57f799670009da52080e6a09678ef7539bb650caabb3f7ca84c` |
+| macOS Apple Silicon DMG | 131595119 | `906bd8324e73f93b9b20291a6c2e0f89e2cb714d8a2fc27cb258e71839659529` |
+| macOS Intel ZIP | 121001934 | `d2c326a3d190a2d0b4cf4084e3eeb2645323219c20adce959c2fd16cd6ef33c5` |
+| macOS Intel DMG | 136569616 | `2e07cd25910f4fcaec64af13182b630f279ae8c79581f08936df9ede724d1269` |
+
+Alle menschlichen Desktop-/Excel-/Numbers-/M2-/Finder-/TCC-/Gatekeeper-/Enterprise-/
+VoiceOver-/macOS13.5/26-Prüfungen bleiben offen. Isolierte Workbookreader zeigen
+Xstring-/Langziffern-Darstellungsgrenzen; kein nativer Office-Gleichheits-PASS.
+Zuordnungen zunächst nur ansehen, nicht über gebundene Originale speichern;
+Office vor erneutem Appabgleich schließen, Bearbeitungskopien außerhalb des
+gesamten Ergebnisbaums weiterhin vertraulich behandeln. Keine vermeintlichen
+Lockdateien blind löschen oder bereits gespeicherte Korrektur blind wiederholen.
+Eigene App/Core nur ad-hoc versiegelt, keine Developer-ID/Notarisierung/Apple-
+Einreichung oder globale Schutzabschaltung. Offizieller Converter bleibt
+separate hashgebundene Rolle mit ausgewiesenen Upstream-Entitlements.
+Keine Main-Integration, Desktopautomation, neue Automation oder Produktionsfreigabe.
 
 ### RC167 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
 

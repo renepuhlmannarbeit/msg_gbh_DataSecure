@@ -1,11 +1,11 @@
 # Aktueller Iststand
 
-Arbeitsversion: **3.2.0-rc168**, implementiert und gezielt unabhängig revalidiert;
-neue vollständige technische Endgates und Pakete noch offen.
-Letzter veröffentlichter gemeinsamer Windows-/Mac-Teststand ist RC167.
+Arbeitsversion: **3.2.0-rc168**, implementiert, unabhängig revalidiert und als
+gemeinsamer Windows-/Mac-Test-Pre-Release veröffentlicht. Technische Endgates grün;
+menschliche Desktop-/Excel-/Numbers-/Mac-Zielhostabnahme bleibt offen.
 RC167, RC166 und frühere Pakete bleiben unverändert erhalten.
 
-### Aktiver Auftrag – RC168 exakte Nachbearbeitung und echte XLSX-Zuordnung
+### Neuester Abschluss – RC168 exakte Nachbearbeitung und echte XLSX-Zuordnung
 
 Der Nutzer hat den vollständigen Plan zur Umsetzung und neuen Windows-/Mac-
 Testübergabe freigegeben. Zuerst TEXT-POSITIONS-01 (CRLF/UTF16), danach klare
@@ -26,10 +26,25 @@ für den alten Zwei-Klick-Maskierflow. Zwei unabhängige Reviews bestätigen den
 Testwiderspruch; kein neues Produktdelta nötig. Native/Paket und ARM grün,
 Intel gezielt abgebrochen. Strikter Browsertestersatz durch Autor und Main
 vollständig grün, final unabhängig gegengelesen; Produktionsfingerprint unverändert.
-Neuer Source03-Gesamtlauf steht aus; keine Source02-Veröffentlichung.
+Source03 neu vollständig bestanden:285/285+11/11, Windows275Rust/3ignoriert/
+Clippy/Release/Paket5/Korpus100 ohne Fehler; sämtliche336Produkt-/572Testinputs
+unverändert. App-/Tagcommit `0049513a9ba661bee4190a6677bb3ddffef461a9`, FP
+`48ba2fa729f2ac59cc4d47bc57bf6633c580b8316fe330fadeccf9a6064224e3`.
+Macrun39401647855 beide erfolgreich, je266Rust/3ignoriert/70Generationen/
+20Companion/34Workbookfälle und native Core-/App-/ZIP-/DMG-Gates. Tatsächliche
+Windows-/ARM-/Intel-Artefakte und Übergabe unabhängig gegengelesen. Release
+418271744 mit20Assets vor und nach Veröffentlichung frisch heruntergeladen/
+gehasht; gleicheIDs und Tagquelle bestätigt. Windows create-only lokal unter
+`Software DataSecure/RC168`, Testplan und drei unveränderte Testdatenbeilagen.
+Keine Desktopautomation, neue Automation, Main-Integration oder Apple-
+Zertifizierung. Workbook-Anzeige in Excel/Numbers bleibt Nutzerabnahme;
+isolierte Readergrenzen sind dokumentiert, keine native Gleichheit behauptet.
+Zuordnungen nur ansehen, Office vor erneutem Abgleich schließen; bearbeitete
+Kopien außerhalb des ganzen Ergebnisordners weiterhin vertraulich behandeln.
+[Abschluss und genaue Grenzen](../acceptance/RC168_SHARED_RELEASE_20261020.md).
 [Plan, revalidierte Quellen und Ablaufverträge](../acceptance/RC168_REVIEW_CORRECTION_AND_WORKBOOK_20261020.md).
 
-### Neuester verbindlicher Abschluss – RC167 / RESULT-COMPANIONS-01
+### Historischer Abschluss – RC167 / RESULT-COMPANIONS-01
 
 Beide Zuordnungen des gemeldeten Windowslaufs sind intern vorhanden, fehlen
 aber im geöffneten Ergebnisordner. Der Nutzer verlangt jetzt ausdrücklich

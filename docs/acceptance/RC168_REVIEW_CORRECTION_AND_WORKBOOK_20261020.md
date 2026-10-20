@@ -1,9 +1,14 @@
 # RC168 – exakte Nachbearbeitung und strukturierte Pseudonym-Zuordnung
 
-Status: Umsetzung und gezielte technische Revalidierung erfolgt;
-unabhängige Endreviews/Gesamtregression und neue Paketgates noch offen.
+Status: Umsetzung, unabhängige Endreviews und neue technische Gesamt-/Native-/
+Paketgates abgeschlossen; gemeinsamer RC168-Test-Pre-Release veröffentlicht.
 Desktoptests bleiben ausdrücklich bei den Nutzern. RC167 und sämtliche früheren
 Pakete, Quellbelege, Nutzerläufe und Ergebnisordner bleiben unverändert.
+
+[Finaler Source03-Abschluss mit Pakethashes und offenen Nutzerfällen](RC168_SHARED_RELEASE_20261020.md).
+Nachfolgende frühere Pending-/Source01-/Source02-Angaben sind chronologische
+Zwischenstände, keine weiterhin offenen technischen Endgates. Kein alter
+fehlgeschlagener Lauf wurde in einen PASS umetikettiert.
 
 ## Auftrag und Reihenfolge
 
