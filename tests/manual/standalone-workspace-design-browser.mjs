@@ -236,17 +236,37 @@ try {
     assert.equal(await page.locator('#documents-approval-extras').isVisible(), false);
     assert.equal(await page.locator('#documents-revoke').isVisible(), false, 'revocation starts collapsed');
     assert.equal(await page.locator('#document-extra-actions').isVisible(), !raw);
-    assert.equal(await page.locator('#document-redact').isVisible(), false, 'optional text mutations start collapsed');
+    assert.equal(await page.locator('#document-redact').isVisible(), !raw, 'anonymization masking is directly beside the current text');
     if (!raw) {
+      assert.equal(await page.locator('#document-redact').isEnabled(), false, 'no mutation without an actively used right selection');
+      assert.match(await page.locator('#document-mask-reason').innerText(), /rechten aktuellen Ergebnistext.*markieren/u);
+      assert.equal(await page.locator('#document-mask-preview').isVisible(), false);
+      const selected = await page.locator('#document-markdown').evaluate(node => {
+        node.focus(); const start = node.value.indexOf('42'); if (start < 0) throw Error('SYNTHETIC_SELECTION_MISSING');
+        node.setSelectionRange(start, start + 2); return node.value.slice(start, start + 2);
+      });
+      await page.waitForFunction(value => document.querySelector('#document-mask-preview').value === value, selected);
+      assert.equal(await page.locator('#document-redact').isEnabled(), true);
+      assert.equal(await page.evaluate(() => window.previewCombinedCalls.some(row =>
+        ['decide_document_review', 'decide_document_review_batch', 'export_approved_documents', 'publish_result_documents'].includes(row.command))), false,
+        'a precise local mask preview is not a save');
+      await page.locator('#document-original').evaluate(node => { node.focus(); node.setSelectionRange(0, 4); });
+      await page.waitForFunction(() => document.querySelector('#document-redact').disabled && document.querySelector('#document-mask-preview').hidden);
+      assert.match(await page.locator('#document-mask-reason').innerText(), /Markierung links.*genügt nicht/u);
       await page.locator('#document-extra-actions > summary').click();
-      assert.equal(await page.locator('#document-redact').isVisible(), true);
-      await page.locator('#document-markdown').evaluate(node => node.setSelectionRange(0, 4));
-      await page.locator('#document-redact').click();
+      assert.equal(await page.locator('#entities-pagination').isVisible(), false, 'the actual preview has exactly one entity page');
+      assert.equal(await page.locator('#entities-next').isEnabled(), false);
+      assert.equal(await page.locator('#entities-previous').isEnabled(), false);
+      assert.match(await page.locator('#entities-pagination-reason').innerText(), /Alle erkannten Stellen stehen auf dieser Seite/u);
+      await page.locator('#document-extra-actions > summary').click();
+      await page.locator('#document-restore-actions > summary').click();
+      await page.locator('#document-restore').click();
       assert.equal(await page.locator('#document-change-confirm').isVisible(), true);
-      assert.ok((await page.locator('#document-change-confirm-text').innerText()).includes('Noch nichts geändert'));
+      assert.match(await page.locator('#document-change-confirm-text').innerText(), /Noch nichts geändert.*verwirft ihre späteren Text- und Entitätenänderungen/u);
+      assert.equal(await page.locator('#documents-reload').isEnabled(), false, 'a prepared restoration cannot be silently lost');
       await page.locator('#document-change-cancel').click();
       assert.equal(await page.locator('#document-change-confirm').isVisible(), false);
-      await page.locator('#document-extra-actions > summary').click();
+      await page.locator('#document-restore-actions > summary').click();
     }
     assert.equal(await page.locator('#document-markdown').getAttribute('readonly') !== null, !raw);
     assert.equal(await page.locator('#documents-approve').isVisible(), false, 'separate approval is optional and starts collapsed');
@@ -382,23 +402,35 @@ try {
   assert.equal(await page.locator('#documents-open-results').isEnabled(), true);
   // A delayed publication of an optional mask owns the view and cannot be
   // mistaken for another approval/export. Replies here are synthetic only.
-  await page.locator('#documents-list .document-row button').first().click();
-  await page.waitForFunction(() => document.querySelector('#document-markdown').value.length > 0);
   await page.evaluate(() => {
     const original = window.__TAURI__.core.invoke;
-    window.publicationProbe = { calls: [], finish: null };
+    window.publicationProbe = { calls: [], finish: null, basis: null, displayed: null };
     window.__TAURI__.core.invoke = async (command, args) => {
       window.publicationProbe.calls.push({ command, args: structuredClone(args) });
       if (command === 'publish_result_documents') return new Promise(resolve => {
         window.publicationProbe.finish = async () => resolve(await original(command, args));
       });
-      return original(command, args);
+      const response = await original(command, args);
+      if (command === 'get_document_review_chunk') {
+        const snapshot = { document_id: args.documentId, revision: response.revision, output_sha256: response.output_sha256, markdown: response.markdown };
+        if (!window.publicationProbe.basis) window.publicationProbe.basis = snapshot;
+        window.publicationProbe.displayed = snapshot;
+      }
+      return response;
     };
   });
-  await page.locator('#document-extra-actions > summary').click();
-  await page.locator('#document-markdown').evaluate(node => node.setSelectionRange(0, 4));
+  await page.locator('#documents-list .document-row button').first().click();
+  await page.waitForFunction(() => document.querySelector('#document-markdown').value.length > 0 && window.publicationProbe.basis);
+  assert.equal(await page.locator('#document-redact').isVisible(), true);
+  assert.equal(await page.locator('#document-redact').isEnabled(), false);
+  const maskSelection = await page.locator('#document-markdown').evaluate(node => {
+    node.focus(); const start = node.value.indexOf('42'); if (start < 0) throw Error('SYNTHETIC_SELECTION_MISSING');
+    const end = start + 2; node.setSelectionRange(start, end); return { start, end, text: node.value.slice(start, end) };
+  });
+  await page.waitForFunction(value => document.querySelector('#document-mask-preview').value === value, maskSelection.text);
+  assert.equal(await page.evaluate(() => window.publicationProbe.calls.some(row =>
+    ['decide_document_review', 'decide_document_review_batch', 'publish_result_documents', 'export_approved_documents'].includes(row.command))), false);
   await page.locator('#document-redact').click();
-  await page.locator('#document-change-save').click();
   try { await page.waitForFunction(() => Boolean(window.publicationProbe.finish)); }
   catch (error) {
     console.error('DIRECT_PUBLICATION_BROWSER_STATE', await page.evaluate(() => ({ calls: window.publicationProbe.calls,
@@ -407,7 +439,26 @@ try {
   }
   assert.equal(await page.locator('#documents-open-results').isEnabled(), false);
   assert.equal(await page.locator('#documents-back').isEnabled(), false);
-  assert.equal(await page.locator('#document-change-save').isEnabled(), false);
+  assert.equal(await page.locator('#document-redact').isEnabled(), false);
+  assert.equal(await page.locator('#documents-reload').isEnabled(), false);
+  assert.equal(await page.locator('#document-next').isEnabled(), false);
+  assert.equal(await page.locator('#entities-apply').isEnabled(), false);
+  assert.equal(await page.locator('#document-change-confirm').isVisible(), false, 'mask save has no second confirmation');
+  const held = await page.evaluate(() => ({ basis: window.publicationProbe.basis,
+    decisions: window.publicationProbe.calls.filter(row => row.command === 'decide_document_review'),
+    publications: window.publicationProbe.calls.filter(row => row.command === 'publish_result_documents') }));
+  assert.equal(held.decisions.length, 1); assert.equal(held.publications.length, 1);
+  assert.deepEqual(Object.keys(held.decisions[0].args).sort(), ['batchId', 'decision', 'documentId']);
+  assert.equal(held.decisions[0].args.batchId, 'b'.repeat(64)); assert.equal(held.decisions[0].args.documentId, held.basis.document_id);
+  assert.equal(held.decisions[0].args.decision.action, 'redact');
+  assert.equal(held.decisions[0].args.decision.revision, held.basis.revision);
+  assert.equal(held.decisions[0].args.decision.output_sha256, held.basis.output_sha256);
+  assert.deepEqual(held.decisions[0].args.decision.ranges, [{ start: maskSelection.start, end: maskSelection.end }]);
+  assert.match(held.decisions[0].args.decision.operation_id, /^[a-f0-9]{32}$/u);
+  assert.equal(held.basis.markdown.slice(maskSelection.start, maskSelection.end), maskSelection.text);
+  await page.keyboard.press('Enter');
+  assert.equal(await page.evaluate(() => window.publicationProbe.calls.filter(row => row.command === 'decide_document_review').length), 1);
+  assert.equal(await page.evaluate(() => window.publicationProbe.calls.filter(row => row.command === 'publish_result_documents').length), 1);
   assert.match(await page.locator('#documents-status').innerText(), /Ergebnisstand wird sicher bereitgestellt/u);
   for (const [width, height] of [[1280,900], [720,560], [390,700]]) {
     await page.setViewportSize({ width, height });
@@ -418,6 +469,13 @@ try {
   await page.screenshot({ path: path.join(evidence, 'direct-results-publication-pending.png'), fullPage: true });
   await page.evaluate(() => window.publicationProbe.finish());
   await page.waitForFunction(() => document.querySelector('#documents-status').textContent.includes('Ergebnisstand bereitgestellt'));
+  const expectedMarkdown = held.basis.markdown.slice(0, maskSelection.start) + '[MANUAL_REDACTION]' + held.basis.markdown.slice(maskSelection.end);
+  await page.waitForFunction(value => document.querySelector('#document-markdown').value === value, expectedMarkdown);
+  assert.match(await page.locator('#document-revision').innerText(), new RegExp('Stand ' + (held.basis.revision + 1) + '\\b', 'u'));
+  const displayed = await page.evaluate(() => window.publicationProbe.displayed);
+  assert.equal(displayed.document_id, held.basis.document_id); assert.equal(displayed.revision, held.basis.revision + 1);
+  assert.equal(displayed.markdown, expectedMarkdown);
+  assert.equal(await page.evaluate(() => window.publicationProbe.calls.filter(row => row.command === 'decide_document_review').length), 1);
   assert.equal(await page.locator('#documents-open-results').isEnabled(), true);
   assert.equal(await page.locator('#documents-publish').isVisible(), false);
   const publications = await page.evaluate(() => window.publicationProbe.calls.filter(row => row.command === 'publish_result_documents'));

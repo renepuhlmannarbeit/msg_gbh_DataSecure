@@ -25,6 +25,11 @@ offen. Frühere Pakete und Ergebnisstände bleiben unverändert.
   geschlossener Modulliste. Genau Workbookeintrag ergänzt, unabhängig geprüft
   und gezielter Test PASS; kein Produktionsdelta. Neue Source02-Endgates und
   Macconsumer beider Architekturen nötig; Source01 bleibt historische Evidenz.
+- Source02:285/285+8/11, Gesamturteil rot am alten Browservertrag (verborgener
+  Maskierknopf plus zweiter Bestätigungsklick). Zwei unabhängige Gegenreviews:
+  Harness widerspricht genehmigtem Ein-Klick-Flow. Strikter Ersatz ohne Verlust
+  der Nichtmutations-/Sperr-/Axe-/Fokusorakel vollständig durch Autor/Main grün,
+  unabhängig final gegengelesen; neue Source03-Gates erforderlich.
 
 ## Aktiver Nutzerbefund – vertrauliche Zuordnungen im Ergebnisordner
 

@@ -21,6 +21,12 @@ Headless nach148/285 rot wegen fehlendem Workbookeintrag in exakter Testliste.
 Enger unabhängig geprüfter Testfix gezielt grün, kein Produktdelta. ARMconsumer
 grün, Intel gezielt abgebrochen; keine Freigabe. Neue gemeinsame Source02-
 Endgates und neue Pakete erforderlich, keine alten Belege umetikettieren.
+Source02:285/285 regulär+8/11Extras, insgesamt rot am veralteten Browserorakel
+für den alten Zwei-Klick-Maskierflow. Zwei unabhängige Reviews bestätigen den
+Testwiderspruch; kein neues Produktdelta nötig. Native/Paket und ARM grün,
+Intel gezielt abgebrochen. Strikter Browsertestersatz durch Autor und Main
+vollständig grün, final unabhängig gegengelesen; Produktionsfingerprint unverändert.
+Neuer Source03-Gesamtlauf steht aus; keine Source02-Veröffentlichung.
 [Plan, revalidierte Quellen und Ablaufverträge](../acceptance/RC168_REVIEW_CORRECTION_AND_WORKBOOK_20261020.md).
 
 ### Neuester verbindlicher Abschluss – RC167 / RESULT-COMPANIONS-01

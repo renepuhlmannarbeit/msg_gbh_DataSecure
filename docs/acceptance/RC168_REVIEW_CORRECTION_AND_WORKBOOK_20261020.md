@@ -174,6 +174,52 @@ Source01-Archive/FINALs bleiben unverändert, keine Veröffentlichung und keine
 und beide Macconsumer sowie neue Bytes sind erforderlich. Desktoptests bleiben
 bei den Nutzern. Belege: `dist/rc168-review-workbook-source01-20261020`.
 
+### Source02 – reguläre Suite grün, altes Browserorakel rot
+
+Gemeinsamer Commit `713126f2a74ae376026224a541c13d9cd4fa642c`, gleicher
+Produktfingerprint. Tatsächlich285/285 reguläre Dateien und8/11Zusatzgates
+bestanden; Gesamturteil FAILED bei EXTRA9, Inputs unverändert. Der alte
+Workspace-Browsertest erwartet bei Zeile239 einen verborgenen Maskierknopf
+und später eine zweite Bestätigung. Der freigegebene neue Ablauf zeigt den
+Knopf direkt am rechten Text und speichert einmal bewusst. Hauptagent und zwei
+unabhängige tatsächliche Gegenreviews bestätigen diesen Harnesswiderspruch;
+kein aus dieser Assertion belegter Produktfehler. Die Behauptung betrifft nicht
+den Öffnungszustand der optionalen Entitäten-Disclosure.
+
+Enger Ersatz erhält strikte Orakel: sichtbarer zunächst gesperrter Knopf und
+Grund; tatsächliche rechte Auswahl/Vorschau ohne Schreiben; linke Auswahl
+entwertet; ein Speicherklick mit exakter Revision/Hash/Range; während gehaltener
+Publikation keine weitere Mutation/Navigation/Ergebnisöffnung; erst bestätigter
+neuer Textstand ist Erfolg. Restore-Abbruch bleibt eigene erweiterte Aktion.
+Keine zweite Freigabe/Export und keine Lockerung von Axe/Reflow/Fokus/History.
+Separate Main-Gegenläufe des Matrixbrowsers und13Positionsbrowserfälle grün.
+
+Windows Native275/3ignoriert und Paket5/Korpus100 grün, unveränderte Inputs;
+tatsächliches ZIP unabhängig gegengelesen. ARM118538358275 in39395863303 grün,
+native266Rust/3ignoriert/70Generationen/20Companion/34Workbook sowie App-/ZIP-/
+DMG-IPC-Belege unabhängig gelesen. Intel nach lokalem Fehler gezielt abgebrochen;
+Gesamtrun jetzt completed/cancelled. Keine Paketfreigabe aus diesen Teilgrüns.
+Source02 bleibt unverändert erhalten, neue Source03-Endgates/Bytes erforderlich.
+
+Enger Browsertestersatz umgesetzt:72Ergänzungen/14Entfernungen in genau einer
+Testdatei, keine Produktions-/Preview-/Schutz-/Timeoutänderung. Erst isolierter
+Kandidat durch Autor vollständig bestanden, dann bytegleich in kanonische Datei
+übernommen und Hauptagentlauf vollständig PASS. Exakte Entscheidung mit
+Revision/Hash/Range/Operation, eine Publikation, keine zweite Bestätigung,
+Sperren und tatsächlich neuer Platzhaltertext nach Bestätigung geprüft.
+Bestehende Axe-/Reflow-/Fokus-/Historyorakel erhalten. Main sah die tatsächlichen
+Pending-/Ergebnisbilder; nur Headless mit synthetischem IPC, keine Desktopabnahme.
+Testdatei SHA256 `9345d4eba4fdccd1f1f46c31970b0d886d7b54b09a4a36aaee6978a7c926300e`.
+Main zusätzlich30Dokumentations-/17Pfadtrennungs-/7Fingerprintfälle grün.
+Die reguläre Matrix- und13Positionsbrowserprobe sind ebenfalls vollständig grün.
+Damit wurden vor dem nächsten Freeze alle drei tatsächlichen Browser-Extras
+gezielt ausgeführt; neue gesamte Source03-Endgates bleiben erforderlich.
+Unabhängiger finaler tatsächlicher Testgegenreview bestätigt bytegleichen
+Kandidaten/kanonische Datei und erhaltene stärkere Orakel, kein Deltablocker.
+Fehlerhafte Publikationsantworten bleiben in den vorhandenen acht Renderer-
+Negativen plus expliziter publikationsreiner Wiederaufnahme geprüft; der
+Workspacebrowser injiziert sie nicht zusätzlich. Keine neue Coveragebehauptung.
+
 ### Gezielter Zwischenstand, noch keine Paketfreigabe
 
 **Neuer bestätigter P2 vor dem Freeze:** Der unabhängige UI-Gegenreview
