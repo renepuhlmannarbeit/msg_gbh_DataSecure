@@ -25,6 +25,10 @@ offen. Frühere Pakete und Ergebnisstände bleiben unverändert.
   beispiel und neue gemeinsame Windows-/Mac-Testpakete. Desktop-/Office-UAT beim
   Nutzer/Kollegen, keine Automation oder Apple-Zertifizierung.
   [Auftrag](../acceptance/RC169_WORKBOOK_MAPPING_20261020.md).
+- Source01 lokal vollständig grün, ARM grün; Intel durch belegtes45Minuten-
+  CI-Joblimit abgebrochen, kein geeigneter gemeinsamer Release. Enger75Minuten-
+  Consumer-CI-Rahmen ohne interne Test-/Produktdeadlineänderung; unabhängiger
+  Gegenreview und neue gemeinsame Source02-Endgates/Pakete erforderlich.
 
 ## Historischer Implementierungsauftrag – RC168 Nachbearbeitung und strukturierte Zuordnung
 

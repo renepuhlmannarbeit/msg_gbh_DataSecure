@@ -93,7 +93,14 @@ assert.match(launchServices, /CommandLine\.arguments\[1\] == "--regular"/u);
 assert.doesNotMatch(launchServices.split('if CommandLine.arguments.count == 3 && CommandLine.arguments[1] == "--regular"')[1]
   .split('guard CommandLine.arguments.count == 3')[0], /config\.environment\s*=/u);
 assert.match(workflow, /^permissions:\n  contents: read$/mu);
-assert.match(workflow, /timeout-minutes: 45/u);
+const nativeJob = workflow.slice(workflow.indexOf('\n  native-evidence:\n'));
+assert.ok(nativeJob.startsWith('\n  native-evidence:\n'), 'the bounded native consumer job must exist');
+assert.match(nativeJob, /^    timeout-minutes: 75$/mu,
+  'the complete Intel native/ZIP/DMG gates need a bounded 75-minute CI budget');
+assert.deepEqual([...workflow.matchAll(/^    timeout-minutes: (\d+)$/gmu)].map(match => Number(match[1])),
+  [2, 2, 75], 'only the native consumer CI budget changes, not target-selection jobs');
+assert.doesNotMatch(workflow, /^        timeout-minutes:/mu,
+  'no per-step timeout overrides may silently replace the existing test deadlines');
 assert.match(workflow, /cancel-in-progress: \$\{\{ inputs\.produce_static_core != true \}\}/u,
   'a producer dispatch must not cancel an earlier long-running native Core build');
 assert.match(workflow, /^  actions: read$/mu);

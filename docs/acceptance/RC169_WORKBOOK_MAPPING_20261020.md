@@ -1,6 +1,7 @@
 # RC169 – TXT-gleiche Pseudonym-Zuordnung als erstes Excelblatt
 
-Status: in Umsetzung. Keine neuen Pakete oder bestandene Desktopabnahme behauptet.
+Status: implementiert; technische Source02-Endläufe erforderlich. Keine neue
+gemeinsame Paketfreigabe oder bestandene Desktopabnahme behauptet.
 RC168 bleibt unverändert veröffentlicht; alle alten Ergebnisstände bleiben erhalten.
 
 ## Ergänzter Nutzervertrag – fertige öffentliche Arbeitskopien
@@ -121,3 +122,36 @@ Transportkatalog und den echten Node/Rust-Gegenfall abgeschlossen. Kein Paket-PA
 bestanden, Helfer nicht mit Produkt-/UAT-Abnahme verwechseln. Der neue
 Windows-Native-Endlauf verlangt die tatsächliche Node/Rust-Integration zusätzlich
 zu Prepare/Clippy/Rust/Release. Alte RC168-Belege werden nicht umgedeutet.
+
+## Source01-Endgates und eng begrenzte CI-Budgetkorrektur
+
+Appcommit e2b9e6653cad4819eb993fadc024862ff6f104a6, Produktfingerprint
+cf4d42446bf0694c65f2090a1ce9eb31ac267978eb114675bd867f9f51b744fe/336:
+285/285+11/11 Headless, Windows Prepare/Clippy/280Rust(3ignoriert)/echte
+Node-Rust-Ergebnisintegration/Release und alle fünf Paketgates bestanden.
+Alle Inputs unverändert; Korpus100/100. Nach den drei lokalen FINALs ein neuer
+Source-Snapshot erstellt. Diese Belege bleiben an Source01 gebunden.
+
+Macconsumer39453343747: ARM118733731084 erfolgreich mit89Generationen/
+20Companion/47Workbook/15TXT/271Rust(3ignoriert), echter Node/Rust-Pipe und
+Core/App/ZIP/DMG-Gates. Intel118733731198 nach45Minuten durch den GitHub-
+Jobwächter abgebrochen. Primärannotation lautet exakt: „The job has exceeded
+the maximum execution time of 45m0s“. Der Log zeigt bis dahin erfolgreich
+fortschreitende ZIP-/App-/Konverter-/Paketprüfungen, nicht einen belegten
+Produkt-/Coreabsturz. DMG/Upload/Abschluss übersprungen; kein geeigneter
+gemeinsamer Release. Primärbelege unter
+dist/rc169-source01-intel-cancellation-20261020 bleiben unverändert erhalten.
+
+Engster Folgeschritt: ausschließlich den umschließenden nativen Consumer-
+CI-Zeitrahmen45→75Minuten erhöhen, passenden geschlossenen Workflowvertrag
+mitprüfen. Keine Produktions-/IPC-/Testdeadline, Assertion, Schutzprüfung oder
+Producer330Minuten ändern. Neuer gemeinsamer Source02-Commit/Fingerprint,
+neue Windows-/beideMac-Endläufe und neue Pakete; keine alten ZIPs umetikettieren.
+
+Zwei unabhängige tatsächliche Gegenreviews bestätigen Timeoutursache und enges
+CI-only-Delta;75Minuten sind begründete Reserve, keine Laufzeitgarantie.
+Main: Workflowvertrag, unveränderter Coreproducervertrag und30aktuelle
+Dokumentationsfälle bestanden. Neue Source02-Helfer:31Proof-Negative,
+381statische Bindungschecks/76aktuelle Pflichtbelegzeilen und15Syntaxchecks
+bestanden; keine alten FINALs/Checkpoints/Artefakte kopiert. Gegenreview der
+neuen Helfer ohne bestätigten Blocker. Desktop weiterhin USER_PENDING.

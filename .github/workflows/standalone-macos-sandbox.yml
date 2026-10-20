@@ -110,7 +110,9 @@ jobs:
       fail-fast: false
       matrix: ${{ fromJSON(needs.select-target.outputs.matrix) }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    # Intel's complete native/ZIP/DMG gate exceeded the former 45-minute job
+    # budget. Only the enclosing CI budget changes; test/IPC deadlines stay fixed.
+    timeout-minutes: 75
     env:
       MACOSX_DEPLOYMENT_TARGET: '13.5'
       DATASECURE_BUILD_ID: ${{ github.sha }}
