@@ -28,8 +28,8 @@ function fixture(count = 2) {
     private_identity: identity, anonymize_identity: identity, markdown_identity: identity };
   const controls = {}, calls = [], operations = new Map(); let initial;
   const target = op => path.join(output, 'DataSecure-KI-Export', `Ergebnisse-${op.operation_id}`);
-  const payload = op => [...op.files, ...(op.confidential ? Object.entries(companions.PATHS)
-    .map(([role, name]) => ({ name, ...op.confidential[role] })) : [])];
+  const payload = op => [...op.files, ...(op.confidential ? companions.confidentialFiles(op.confidential)
+    .map(({ key, name }) => ({ name, ...op.confidential[key] })) : [])];
   async function nativeExport(op, command, body) {
     assert.equal(op.publication_role, 'results'); assert.equal(op.batch_id, batchId);
     if (controls.activeOperation && controls.activeOperation !== op.operation_id) throw Error('MULTIPLE_NATIVE_OPS');
@@ -112,30 +112,58 @@ function fixture(count = 2) {
   const publish = async (candidate = store) => { controls.activeOperation = null; return candidate.publishResults(batchId); };
   const resolve = async (candidate = store) => { controls.activeOperation = null; return candidate.resolveResultsGeneration(batchId); };
   const planFile = bindingHash => path.join(data, 'document-reviews', batchId, `companions-${bindingHash}.json`);
-  function seedLegacy(complete = false) {
-    const chosen = selection(), opId = hash(JSON.stringify({ schema: 'datasecure-results-vector/1', batch_id: batchId,
-      processing_mode: state.processing_mode, initial_binding_sha256: initial.binding_sha256, selection: chosen })).slice(0, 32);
+  function seedLegacy(complete = false, version = 1) {
+    assert.ok([1, 2].includes(version));
+    const chosen = selection(), legacyFiles = chosen.map((row, index) => ({ name: `Dokument_${String(index + 1).padStart(2, '0')}.md`, sha256: row.output_sha256 }));
+    let companion = null;
+    if (version === 2) {
+      // Construct the frozen RC167 shape explicitly; the production reader
+      // must accept it without deriving an XLSX or renaming its TXT.
+      const modern = store.prepareResultCompanions(batchId, chosen, legacyFiles);
+      const currentPlan = JSON.parse(fs.readFileSync(planFile(modern.binding_sha256)));
+      const bodies = store.readResultCompanions(batchId, modern.binding_sha256, chosen, legacyFiles);
+      const oldPlan = { ...currentPlan, schema: 'datasecure-result-companions/1',
+        confidential: companions.confidentialDescriptor(bodies.filename_mapping, bodies.identities) };
+      const bindingHash = hash(JSON.stringify(oldPlan));
+      fs.writeFileSync(planFile(bindingHash), JSON.stringify(oldPlan), { flag: 'wx', mode: 0o600 });
+      for (const [role, extension] of [['filename_mapping', 'csv'], ['identities', 'txt']])
+        fs.writeFileSync(planFile(bindingHash).replace('.json', `-${role}.${extension}`), bodies[role], { flag: 'wx', mode: 0o600 });
+      companion = { binding_sha256: bindingHash, confidential: oldPlan.confidential };
+    }
+    const opId = hash(JSON.stringify({ schema: `datasecure-results-vector/${version}`, batch_id: batchId,
+      processing_mode: state.processing_mode, initial_binding_sha256: initial.binding_sha256, selection: chosen,
+      ...(companion ? { companion_binding_sha256: companion.binding_sha256, confidential: companion.confidential } : {}) })).slice(0, 32);
     const bodies = chosen.map(row => Buffer.from(store.chunk(batchId, row.document_id, row.revision, 0).markdown));
-    const op = { schema: 'datasecure-results-generation/1', batch_id: batchId, operation_id: opId,
+    const op = { schema: `datasecure-results-generation/${version}`, batch_id: batchId, operation_id: opId,
       publication_role: 'results', processing_mode: state.processing_mode, selection: chosen, initial_binding_sha256: initial.binding_sha256,
       root: output, binding, files: chosen.map((row, index) => ({ name: `Dokument_${String(index + 1).padStart(2, '0')}.md`,
-        bytes: bodies[index].length, sha256: [...Buffer.from(row.output_sha256, 'hex')] })), sequence: 1, parent_generation_id: null };
+        bytes: bodies[index].length, sha256: [...Buffer.from(row.output_sha256, 'hex')] })), sequence: 1, parent_generation_id: null,
+      ...(companion ? { companion_binding_sha256: companion.binding_sha256, confidential: companion.confidential } : {}) };
     op.request_sha256 = hash(JSON.stringify(op));
     const run = path.join(data, 'document-reviews', batchId);
     fs.writeFileSync(path.join(run, `results-generation-${opId}.json`), JSON.stringify(op), { flag: 'wx', mode: 0o600 });
     if (complete) {
       fs.mkdirSync(target(op), { recursive: true });
-      op.files.forEach((file, index) => fs.writeFileSync(path.join(target(op), file.name), bodies[index], { flag: 'wx' }));
+      if (companion) {
+        fs.mkdirSync(path.join(target(op), 'Vertraulich'));
+        const extra = store.readResultCompanions(batchId, companion.binding_sha256, chosen, legacyFiles);
+        bodies.push(extra.filename_mapping, extra.identities);
+      }
+      const allFiles = payload(op);
+      allFiles.forEach((file, index) => fs.writeFileSync(path.join(target(op), file.name), bodies[index], { flag: 'wx' }));
       const dir = bindDirectory(target(op));
       const directory = { path: dir.path, real: dir.real, chain: dir.chain, platform: dir.platform };
-      const proofFiles = op.files.map(file => { const read = readBoundFileRecord(path.join(target(op), file.name), { maximum: 100000, checkCtime: true });
+      const proofFiles = allFiles.map(file => { const read = readBoundFileRecord(path.join(target(op), file.name), { maximum: 100000, checkCtime: true });
         return { name: file.name, sha256: hash(read.bytes), identity: read.identity }; });
+      const confidential = companion ? bindDirectory(path.join(target(op), 'Vertraulich')) : null;
       fs.writeFileSync(path.join(run, `results-generation-${opId}-complete.json`), JSON.stringify({
-        schema: 'datasecure-results-generation-complete/1', batch_id: batchId, generation_id: opId,
-        request_sha256: op.request_sha256, acknowledged: true, directory, files: proofFiles }), { flag: 'wx', mode: 0o600 });
+        schema: `datasecure-results-generation-complete/${version}`, batch_id: batchId, generation_id: opId,
+        request_sha256: op.request_sha256, acknowledged: true, directory, files: proofFiles,
+        ...(confidential ? { confidential_directory: { path: confidential.path, real: confidential.real, chain: confidential.chain, platform: confidential.platform } } : {}) }), { flag: 'wx', mode: 0o600 });
       const nativeOperation = { batch_id: batchId, operation_id: opId, processing_mode: state.processing_mode,
-        request_sha256: op.request_sha256, publication_role: 'results', binding, files: op.files };
-      operations.set(opId, { operation: JSON.stringify(nativeOperation), files: op.files, bodies, directory: dir, status: 'acknowledged' });
+        request_sha256: op.request_sha256, publication_role: 'results', binding, files: op.files,
+        ...(companion ? { confidential: companion.confidential } : {}) };
+      operations.set(opId, { operation: JSON.stringify(nativeOperation), files: allFiles, bodies, directory: dir, status: 'acknowledged' });
     }
     return op;
   }
@@ -152,7 +180,23 @@ test('fixed descriptor has exactly two roles, byte caps and no caller-selected p
     const candidate = clone(value); change(candidate); assert.equal(companions.validConfidentialDescriptor(candidate), false);
   }
   assert.equal(companions.FILENAME_MAPPING_PATH, 'Vertraulich/Dateizuordnung.csv');
-  assert.equal(companions.IDENTITIES_PATH, 'Vertraulich/Personen-Pseudonym-Zuordnung.txt');
+  assert.equal(companions.LEGACY_IDENTITIES_PATH, 'Vertraulich/Personen-Pseudonym-Zuordnung.txt');
+  assert.equal(companions.IDENTITIES_PATH, 'Vertraulich/Pseudonym-Zuordnung.txt');
+  assert.equal(companions.confidentialFiles(value)[1].name, companions.LEGACY_IDENTITIES_PATH);
+});
+
+test('new descriptor has exactly three closed roles, fixed names and no null or downgrade', () => {
+  const value = companions.confidentialDescriptor(Buffer.from('csv'), Buffer.from('txt'), Buffer.from('xlsx'));
+  assert.equal(companions.confidentialVersion(value), 3);
+  assert.equal(companions.validConfidentialDescriptor(value, 2), false);
+  assert.equal(companions.validConfidentialDescriptor(value, 3), true);
+  assert.deepEqual(companions.confidentialFiles(value).map(file => file.name),
+    ['Vertraulich/Dateizuordnung.csv', 'Vertraulich/Pseudonym-Zuordnung.txt', 'Vertraulich/Pseudonym-Zuordnung.xlsx']);
+  assert.equal(companions.confidentialBytes(value), 10);
+  for (const change of [v => { v.workbook = null; }, v => { v.workbook.path = '../foreign'; },
+    v => { v.workbook.bytes = 0; }, v => { v.workbook.bytes = companions.MAX_WORKBOOK_BYTES + 1; }]) {
+    const candidate = clone(value); change(candidate); assert.equal(companions.validConfidentialDescriptor(candidate), false);
+  }
 });
 test('CSV preserves exact NFC/NFD paths, quotes/formula-protects and maps actual output names', () => {
   const bytes = companions.buildFilenameMapping(['=SUM(1)', "'-Original", 'cafe\u0301/Quelle.txt'],
@@ -177,6 +221,9 @@ test('prepare persists exact revision/body/name/semantic binding and read only r
   assert.deepEqual(Object.keys(plan), ['binding_sha256', 'confidential']);
   const loaded = f.store.readResultCompanions(f.batchId, plan.binding_sha256, selection, files);
   assert.equal(Buffer.isBuffer(loaded.filename_mapping), true); assert.equal(Buffer.isBuffer(loaded.identities), true);
+  assert.equal(Buffer.isBuffer(loaded.workbook), true); assert.equal(loaded.workbook.subarray(0, 2).toString(), 'PK');
+  assert.equal(loaded.confidential.workbook.bytes, loaded.workbook.length);
+  assert.equal(Buffer.from(loaded.confidential.workbook.sha256).toString('hex'), hash(loaded.workbook));
   assert.match(loaded.filename_mapping.toString(), /nested\/Initial-1.md/u);
   assert.match(loaded.identities.toString(), /Anna Beispiel|keine Identitäten erfunden/u);
   assert.match(loaded.identities.toString(), /Datei: "nested\/Initial-1.md"/u);
@@ -201,12 +248,25 @@ test('missing private companion is refused by read without materializing or repa
   code(() => f.store.readResultCompanions(f.batchId, plan.binding_sha256, selection, files));
   assert.equal(fs.existsSync(file), false); assert.deepEqual(fs.readdirSync(parent).sort(), before);
 });
-test('private plan, CSV, TXT and semantic-record tampering all fail closed', () => {
-  for (const role of ['plan', 'filename_mapping', 'identities', 'semantic']) {
+
+test('bound XLSX reads require neither serializer nor compression and never repair a missing workbook', () => {
+  const f = fixture(), selection = f.selection(), files = f.files(), plan = f.store.prepareResultCompanions(f.batchId, selection, files);
+  const filename = f.planFile(plan.binding_sha256).replace('.json', '-workbook.xlsx');
+  const expected = fs.readFileSync(filename), compression = require('node:zlib'), original = compression.deflateRawSync;
+  compression.deflateRawSync = () => { throw Error('READER_MUST_NOT_COMPRESS'); };
+  try {
+    assert.ok(f.store.readResultCompanions(f.batchId, plan.binding_sha256, selection, files).workbook.equals(expected));
+    fs.unlinkSync(filename);
+    code(() => f.store.readResultCompanions(f.batchId, plan.binding_sha256, selection, files));
+    assert.equal(fs.existsSync(filename), false);
+  } finally { compression.deflateRawSync = original; }
+});
+test('private plan, CSV, TXT, XLSX and semantic-record tampering all fail closed', () => {
+  for (const role of ['plan', 'filename_mapping', 'identities', 'workbook', 'semantic']) {
     const f = fixture(), selection = f.selection(), files = f.files(), plan = f.store.prepareResultCompanions(f.batchId, selection, files);
     const file = role === 'plan' ? f.planFile(plan.binding_sha256) : role === 'semantic'
       ? path.join(path.dirname(f.planFile(plan.binding_sha256)), `identity-${JSON.parse(fs.readFileSync(f.planFile(plan.binding_sha256))).identity_binding_sha256}.json`)
-      : f.planFile(plan.binding_sha256).replace('.json', `-${role}.${role === 'filename_mapping' ? 'csv' : 'txt'}`);
+      : f.planFile(plan.binding_sha256).replace('.json', `-${role}.${role === 'filename_mapping' ? 'csv' : role === 'workbook' ? 'xlsx' : 'txt'}`);
     fs.appendFileSync(file, role === 'plan' || role === 'semantic' ? '\n{}' : 'changed');
     code(() => f.store.readResultCompanions(f.batchId, plan.binding_sha256, selection, files));
   }
@@ -233,22 +293,22 @@ test('hardlinked private companion is not accepted as immutable private evidence
   code(() => f.store.readResultCompanions(f.batchId, plan.binding_sha256, selection, files));
 });
 async function run() {
-  await testAsync('v2 generation publishes two complete companions after MD bodies without fake approval', async () => {
+  await testAsync('v3 generation publishes three complete companions after MD bodies without fake approval', async () => {
     const f = fixture(); f.edit(); const result = await f.publish(), id = result.result_publication.generation_id;
     const privateOp = JSON.parse(fs.readFileSync(path.join(data, 'document-reviews', f.batchId, `results-generation-${id}.json`)));
-    assert.equal(privateOp.schema, 'datasecure-results-generation/2'); assert.equal(privateOp.files.length, 2);
+    assert.equal(privateOp.schema, 'datasecure-results-generation/3'); assert.equal(privateOp.files.length, 2);
     assert.equal(companions.validConfidentialDescriptor(privateOp.confidential), true);
     const target = f.target(privateOp); assert.equal(fs.readdirSync(target).length, 3);
-    assert.deepEqual(fs.readdirSync(path.join(target, 'Vertraulich')).sort(), ['Dateizuordnung.csv', 'Personen-Pseudonym-Zuordnung.txt']);
+    assert.deepEqual(fs.readdirSync(path.join(target, 'Vertraulich')).sort(), ['Dateizuordnung.csv', 'Pseudonym-Zuordnung.txt', 'Pseudonym-Zuordnung.xlsx']);
     assert.match(fs.readFileSync(path.join(target, companions.FILENAME_MAPPING_PATH), 'utf8'), /Dokument_01.md/u);
-    assert.deepEqual(f.calls.filter(call => call.command === 'write_body' && call.body.final_chunk).map(call => call.body.index), [0, 1, 2, 3]);
+    assert.deepEqual(f.calls.filter(call => call.command === 'write_body' && call.body.final_chunk).map(call => call.body.index), [0, 1, 2, 3, 4]);
     assert.equal(f.store.list(f.batchId).documents[0].approved, false, 'publication never creates an approval');
     const receipt = JSON.parse(fs.readFileSync(path.join(data, 'document-reviews', f.batchId, `results-generation-${id}-complete.json`)));
-    assert.equal(receipt.schema, 'datasecure-results-generation-complete/2'); assert.equal(receipt.files.length, 4);
+    assert.equal(receipt.schema, 'datasecure-results-generation-complete/3'); assert.equal(receipt.files.length, 5);
     assert.equal(receipt.confidential_directory.path, path.join(target, 'Vertraulich'));
     assert.equal((await f.resolve()).local_path, target);
   });
-  await testAsync('lost publication reply resumes identical v2 operation, not a second generation', async () => {
+  await testAsync('lost publication reply resumes identical v3 operation, not a second generation', async () => {
     const f = fixture(); f.edit(); f.controls.losePublish = true;
     await assert.rejects(() => f.publish(), error => error.code === 'STANDALONE_IPC_TIMEOUT');
     const result = await f.publish(createDocumentReviewStore(f.options));
@@ -263,13 +323,41 @@ async function run() {
     assert.ok(fs.readFileSync(path.join(data, 'document-reviews', f.batchId, `results-generation-${legacy.operation_id}.json`)).equals(before));
     assert.equal(fs.readdirSync(path.join(data, 'document-reviews', f.batchId)).some(name => name.startsWith('companions-')), false);
   });
-  await testAsync('confirmed legacy v1 is read-only, explicit new save creates separate v2 generation', async () => {
+  await testAsync('confirmed legacy v1 remains unchanged on no-op, actual new save creates separate v3 generation', async () => {
     const f = fixture(); f.edit(); const legacy = f.seedLegacy(true), before = fs.readdirSync(f.target(legacy));
     assert.equal((await f.resolve()).local_path, f.target(legacy));
     assert.equal(fs.existsSync(path.join(f.target(legacy), 'Vertraulich')), false);
+    assert.equal((await f.publish()).result_publication.generation_id, legacy.operation_id);
+    const row = f.selection()[0];
+    f.store.decide(f.batchId, row.document_id, { action: 'restore_base', revision: row.revision,
+      output_sha256: row.output_sha256, operation_id: crypto.randomBytes(16).toString('hex'), ranges: [] });
     const result = await f.publish(); assert.notEqual(result.result_publication.generation_id, legacy.operation_id);
     assert.deepEqual(fs.readdirSync(f.target(legacy)), before);
     assert.equal(fs.existsSync(path.join(f.target({ operation_id: result.result_publication.generation_id }), companions.FILENAME_MAPPING_PATH)), true);
+  });
+  await testAsync('unfinished RC167 v2 resumes exact old operation and old TXT path without XLSX', async () => {
+    const f = fixture(); f.edit(); const legacy = f.seedLegacy(false, 2);
+    const operationPath = path.join(data, 'document-reviews', f.batchId, `results-generation-${legacy.operation_id}.json`);
+    const before = fs.readFileSync(operationPath);
+    const result = await f.publish(createDocumentReviewStore(f.options));
+    assert.equal(result.result_publication.generation_id, legacy.operation_id);
+    assert.equal(f.operations.size, 1); assert.ok(fs.readFileSync(operationPath).equals(before));
+    assert.deepEqual(fs.readdirSync(path.join(f.target(legacy), 'Vertraulich')).sort(),
+      ['Dateizuordnung.csv', 'Personen-Pseudonym-Zuordnung.txt']);
+    assert.equal((await f.resolve()).local_path, f.target(legacy));
+  });
+  await testAsync('confirmed RC167 v2 stays byte-bound on read/no-op; only a new save creates XLSX generation', async () => {
+    const f = fixture(); f.edit(); const legacy = f.seedLegacy(true, 2);
+    const oldFolder = path.join(f.target(legacy), 'Vertraulich');
+    const old = fs.readdirSync(oldFolder).map(name => [name, hash(fs.readFileSync(path.join(oldFolder, name)))]);
+    assert.equal((await f.resolve(createDocumentReviewStore(f.options))).local_path, f.target(legacy));
+    assert.equal((await f.publish()).result_publication.generation_id, legacy.operation_id);
+    const row = f.selection()[0];
+    f.store.decide(f.batchId, row.document_id, { action: 'restore_base', revision: row.revision,
+      output_sha256: row.output_sha256, operation_id: crypto.randomBytes(16).toString('hex'), ranges: [] });
+    const next = await f.publish(); assert.notEqual(next.result_publication.generation_id, legacy.operation_id);
+    assert.deepEqual(fs.readdirSync(oldFolder).map(name => [name, hash(fs.readFileSync(path.join(oldFolder, name)))]), old);
+    assert.equal(fs.existsSync(path.join(f.target({ operation_id: next.result_publication.generation_id }), companions.WORKBOOK_PATH)), true);
   });
   await testAsync('deleted/changed confidential file or foreign sibling prevents opening without repair', async () => {
     for (const mode of ['deleted', 'changed', 'foreign']) {

@@ -346,7 +346,7 @@ mod tests {
         assert!(legacy.payload_file(1).is_err());
         let mut op = legacy.clone(); op.publication_role = Some(PublicationRole::Results);
         op.confidential = Some(ConfidentialFiles { filename_mapping: ConfidentialFile { bytes: 7, sha256: Sha256::digest(b"mapping").into() },
-            identities: ConfidentialFile { bytes: 10, sha256: Sha256::digest(b"identities").into() } });
+            identities: ConfidentialFile { bytes: 10, sha256: Sha256::digest(b"identities").into() }, workbook: None });
         assert_eq!(op.payload_file(1).unwrap().name, FILENAME_MAPPING);
         assert_eq!(op.payload_file(2).unwrap().name, IDENTITIES_FILE);
         assert!(op.payload_file(3).is_err());
@@ -366,7 +366,7 @@ mod tests {
         let f = Fixture::new(); let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
         let mut op = f.op(&guard); op.publication_role = Some(PublicationRole::Results);
         op.confidential = Some(ConfidentialFiles { filename_mapping: ConfidentialFile { bytes: 7, sha256: Sha256::digest(b"mapping").into() },
-            identities: ConfidentialFile { bytes: 10, sha256: Sha256::digest(b"identities").into() } });
+            identities: ConfidentialFile { bytes: 10, sha256: Sha256::digest(b"identities").into() }, workbook: None });
         let data = f.path.join("private");
         for (index, bytes) in [b"hello".as_slice(), b"mapping".as_slice(), b"identities".as_slice()].into_iter().enumerate() {
             assert_eq!(write_body(&data, &op, index, bytes, &guard).unwrap(), "staged");
@@ -386,6 +386,38 @@ mod tests {
         assert!(execute(&data, &op, "publish", &guard).is_err());
         assert!(!confidential.join(IDENTITIES_FILE).exists());
         assert_eq!(fs::read(generation.join("Dokument_01.md")).unwrap(), b"hello");
+    }
+    #[test]
+    fn confidential_workbook_operation_keeps_fixed_indices_roles_and_readonly_original_plan_binding() {
+        use crate::export_directory::{ConfidentialFile, CONFIDENTIAL_DIRECTORY, IDENTITIES_FILE};
+        let f = Fixture::new(); let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
+        let mut op = f.op(&guard); op.publication_role = Some(PublicationRole::Results);
+        op.confidential = Some(ConfidentialFiles { filename_mapping: ConfidentialFile { bytes: 7, sha256: Sha256::digest(b"mapping").into() },
+            identities: ConfidentialFile { bytes: 10, sha256: Sha256::digest(b"identities").into() },
+            workbook: Some(ConfidentialFile { bytes: 8, sha256: Sha256::digest(b"workbook").into() }) });
+        assert_eq!(op.payload_file(1).unwrap().name, "Dateizuordnung.csv");
+        assert_eq!(op.payload_file(2).unwrap().name, "Pseudonym-Zuordnung.txt");
+        assert_eq!(op.payload_file(3).unwrap().name, "Pseudonym-Zuordnung.xlsx"); assert!(op.payload_file(4).is_err());
+        let mut invalid = op.clone(); invalid.publication_role = None; assert!(invalid.payload_file(1).is_err());
+        invalid = op.clone(); invalid.processing_mode = "markdown-only".into(); assert!(invalid.payload_file(1).is_err());
+        let mut invalid = serde_json::to_value(&op).unwrap(); invalid["confidential"]["workbook"] = serde_json::Value::Null;
+        assert!(serde_json::from_value::<Operation>(invalid).is_err());
+        let data = f.path.join("private");
+        for (index, bytes) in [b"hello".as_slice(), b"mapping".as_slice(), b"identities".as_slice(), b"workbook".as_slice()].into_iter().enumerate() {
+            assert_eq!(write_body(&data, &op, index, bytes, &guard).unwrap(), "staged");
+        }
+        assert_eq!(execute(&data, &op, "publish", &guard).unwrap(), "completed");
+        assert_eq!(execute(&data, &op, "acknowledge", &guard).unwrap(), "acknowledged");
+        assert_eq!(inspect_results(&data, &op, &guard).unwrap(), "acknowledged");
+        let generation = f.path.join("public/DataSecure-KI-Export").join(format!("Ergebnisse-{}", op.operation_id));
+        let folder = generation.join(CONFIDENTIAL_DIRECTORY); assert_eq!(fs::read_dir(&folder).unwrap().count(), 3);
+        assert_eq!(fs::read(folder.join("Pseudonym-Zuordnung.xlsx")).unwrap(), b"workbook");
+        assert!(!folder.join(IDENTITIES_FILE).exists());
+        let mut old = op.clone(); old.confidential.as_mut().unwrap().workbook = None;
+        assert!(inspect_results(&data, &old, &guard).is_err());
+        fs::remove_file(folder.join("Pseudonym-Zuordnung.xlsx")).unwrap();
+        assert!(inspect_results(&data, &op, &guard).is_err()); assert!(execute(&data, &op, "publish", &guard).is_err());
+        assert!(!folder.join("Pseudonym-Zuordnung.xlsx").exists());
     }
     #[test]
     fn result_role_history_inspection_never_creates_setup_or_repairs_missing_receipts() {

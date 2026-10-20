@@ -15,11 +15,11 @@ Vorbereitung, **Verlauf** zeigt kompakte frühere Läufe. Nach dem Start oder
 Reiterwechsel erteilt weder Freigabe noch Exportauftrag. Abschluss und
 Hinweise bleiben sichtbar, ausführliche Erklärungen sind aufklappbar.
 Ergebnisordner und Hinweise sind direkt erreichbar; vertrauliche Zuordnungen
-sind nicht zur Weitergabe bestimmt. Neue Anonymisierungsstände im `/2`-Layout
-enthalten **Vertraulich/Dateizuordnung.csv** und
-**Vertraulich/Personen-Pseudonym-Zuordnung.txt**, ohne zusätzliche Aktion.
-Beide Dateien gehören genau zum jeweiligen Ergebnisstand; Nachbearbeitungen
-erhalten eigene passende Zuordnungen. Ältere `/1`-Läufe bleiben unverändert.
+sind nicht zur Weitergabe bestimmt. Neue Anonymisierungsstände im `/3`-Layout
+enthalten **Vertraulich/Dateizuordnung.csv**, **Vertraulich/Pseudonym-Zuordnung.txt**
+und **Vertraulich/Pseudonym-Zuordnung.xlsx**, ohne zusätzliche Aktion.
+Alle drei Dateien gehören genau zum jeweiligen Ergebnisstand; Nachbearbeitungen
+erhalten eigene passende Zuordnungen. Ältere `/1`- und `/2`-Läufe bleiben unverändert.
 Nur die gewünschten Markdown-Dateien weitergeben, niemals ungeprüft den gesamten
 Ergebnisordner einschließlich Vertraulich. Diese gemeinsame
 UI-Beschreibung ersetzt nicht den noch offenen nativen Mac-Nachweis.
@@ -31,6 +31,20 @@ normalen Liste entfernen; Dateien, Ergebnisse und Zuordnungen bleiben bestehen.
 und einige Alteinträge ohne ausreichende Laufmetadaten sind geschützt.
 Start-Recovery und Aufbewahrungsprüfung bleiben aktiv; die vollständige
 Verlaufsliste wird nicht automatisch beim Start geöffnet.
+
+**Freiwillige Nachbearbeitung:** Im fertigen Anonymisierungslauf
+**Nachbearbeitung öffnen (optional)** wählen und links eine Datei öffnen.
+Rechts die zusätzliche sensible Stelle vollständig markieren, Vorschau prüfen
+und einmal **Maskierung speichern** wählen. Nur links markieren genügt nicht.
+Unter **Behandlung erkannter Stellen ändern (optional)** erkannte Werte auswählen, eine
+Behandlung bewusst wählen und **Gewählte Behandlung speichern** klicken.
+Anfangs gilt **Nur diese Datei**; laufweit nur für belegte gleiche Identitäten.
+Fundstellenseiten wechseln speichert nichts und erhält die Auswahl. Vor
+Dateiwechsel oder Neuladen speichern oder ausdrücklich verwerfen. Fehlende
+Bestätigungen zuerst abgleichen, nicht blind wiederholen. Danach wird der
+vollständige neue Ergebnisstand mit passenden drei Zuordnungsdateien
+bereitgestellt; Originale und frühere Stände bleiben unverändert. Keine
+zusätzliche Auswahl, Freigabe oder Exportbestätigung.
 
 **Historischer RC161-Mac-26.2/M2-Prüfstopp, kein Befund dieses Pakets:** Der damalige Core endete auf diesem
 Zielhost bei ZIP und DMG 16-mal vor seiner Bereitschaft mit Signal 5
@@ -161,9 +175,12 @@ vertrauliche Zuordnung können Originalnamen enthalten.
    Dokumentauswahl, Pflichtfreigabe oder Exportbestätigung entfällt.
 4. Nach bestätigter technischer Bereitstellung **Ergebnisordner öffnen** wählen.
    Neue Anonymisierungsstände enthalten die fertigen Markdown-Dateien und den
-   getrennten Unterordner **Vertraulich** mit **Dateizuordnung.csv** und
-   **Personen-Pseudonym-Zuordnung.txt**. Beide Dateien sind ohne weitere Aktion
-   vorhanden; auch jeder neue Korrekturstand erhält seine passenden Zuordnungen.
+   getrennten Unterordner **Vertraulich** mit **Dateizuordnung.csv**,
+   **Pseudonym-Zuordnung.txt** und **Pseudonym-Zuordnung.xlsx**. Alle drei Dateien
+   sind ohne weitere Aktion vorhanden; auch jeder neue Korrekturstand erhält
+   seine passenden Zuordnungen. Die Excel-Datei enthält je Dokument die Spalten
+   **Typ**, **Basiswert** und **Endwert** für belegte Personen, Unternehmen/
+   Organisationen und Projekte. Excel muss für die Erzeugung nicht installiert sein.
    **Vertraulich enthält Originalangaben: nicht weitergeben oder hochladen.**
    Originaldateien und private Prüfstände werden nicht in den Ergebnisstand kopiert.
    Reine Markdown-Konvertierung erzeugt keine Zuordnungen.

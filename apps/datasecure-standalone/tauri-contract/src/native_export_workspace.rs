@@ -267,7 +267,7 @@ mod tests {
         assert!(!String::from_utf8_lossy(&serde_json::to_vec(&old).unwrap()).contains("confidential"));
         let request = old.clone().with_confidential(Some(ConfidentialFiles {
             filename_mapping: ConfidentialFile { bytes: 7, sha256: Sha256::digest(b"mapping").into() },
-            identities: ConfidentialFile { bytes: 10, sha256: Sha256::digest(b"identities").into() } })).unwrap();
+            identities: ConfidentialFile { bytes: 10, sha256: Sha256::digest(b"identities").into() }, workbook: None })).unwrap();
         let mut invalid = serde_json::to_value(&request).unwrap(); invalid["confidential"] = serde_json::Value::Null;
         assert!(serde_json::from_value::<Request>(invalid).is_err());
         let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
@@ -280,6 +280,33 @@ mod tests {
         let workspace = Workspace::open_existing(&r, &t, request.clone(), &guard).unwrap(); let tx = workspace.existing_transaction(&guard).unwrap();
         assert_eq!(tx.inspect_completed().unwrap(), Status::Completed);
         assert_eq!(fs::read(f.path.join("public").join(request.published_name()).join(CONFIDENTIAL_DIRECTORY).join(IDENTITIES_FILE)).unwrap(), b"identities");
+    }
+    #[test]
+    fn confidential_workbook_request_reopens_exact_three_files_without_downgrading_to_old_two_file_intent() {
+        use crate::export_directory::{ConfidentialFile, CONFIDENTIAL_DIRECTORY, IDENTITIES_FILE};
+        let f = Fixture::new(); let (r, t) = (f.open("private"), f.open("public"));
+        let old = f.request(&r, &t).with_publication_role(Some(PublicationRole::Results)).with_confidential(Some(ConfidentialFiles {
+            filename_mapping: ConfidentialFile { bytes: 7, sha256: Sha256::digest(b"mapping").into() },
+            identities: ConfidentialFile { bytes: 10, sha256: Sha256::digest(b"identities").into() }, workbook: None })).unwrap();
+        let mut current = old.clone(); current.confidential.as_mut().unwrap().workbook =
+            Some(ConfidentialFile { bytes: 8, sha256: Sha256::digest(b"workbook").into() });
+        let mut invalid = serde_json::to_value(&current).unwrap(); invalid["confidential"]["workbook"] = serde_json::Value::Null;
+        assert!(serde_json::from_value::<Request>(invalid).is_err());
+        let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
+        {
+            let workspace = Workspace::open(&r, &t, current.clone(), &guard).unwrap(); let tx = workspace.transaction(&guard).unwrap();
+            for (index, bytes) in [b"hello".as_slice(), b"mapping".as_slice(), b"identities".as_slice(), b"workbook".as_slice()].into_iter().enumerate() {
+                tx.write_body(index, bytes).unwrap();
+            }
+            tx.prepare().unwrap(); tx.commit().unwrap();
+        }
+        assert!(Workspace::open_existing(&r, &t, old, &guard).is_err());
+        let workspace = Workspace::open_existing(&r, &t, current.clone(), &guard).unwrap();
+        assert_eq!(workspace.existing_transaction(&guard).unwrap().inspect_completed().unwrap(), Status::Completed);
+        let folder = f.path.join("public").join(current.published_name()).join(CONFIDENTIAL_DIRECTORY);
+        assert_eq!(fs::read_dir(&folder).unwrap().count(), 3);
+        assert_eq!(fs::read(folder.join("Pseudonym-Zuordnung.xlsx")).unwrap(), b"workbook");
+        assert!(!folder.join(IDENTITIES_FILE).exists());
     }
     #[test]
     fn result_role_parent_intents_never_cross_adopt_legacy_and_results() {

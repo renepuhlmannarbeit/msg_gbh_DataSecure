@@ -93,6 +93,8 @@ function harness(options = {}) {
     setInterval: fn => { intervals.add(fn); return fn; }, clearInterval: fn => intervals.delete(fn) });
   vm.runInContext(fs.readFileSync(path.join(base, 'workflow-presentation.js'), 'utf8'), context, { filename: 'workflow-presentation.js' });
   vm.runInContext(source, context, { filename: 'workspace.js' });
+  if (options.documentRenderer) vm.runInContext(fs.readFileSync(path.join(base, 'text-positions.js'), 'utf8'), context,
+    { filename: 'text-positions.js' });
   if (options.documentRenderer) vm.runInContext(fs.readFileSync(path.join(base, 'document-review.js'), 'utf8'), context,
     { filename: 'document-review.js' });
   return { el, doc, window, calls, model, listeners, nodes,
@@ -4710,9 +4712,11 @@ testAsync('entity-change guidance describes consequential saving and automatic c
   assert.ok(start >= 0 && end > marker);
   const copy = html.slice(start, end + '</ol>'.length).replace(/<[^>]*>/gu, ' ').replace(/\s+/gu, ' ');
   assert.match(copy, /Originalwert beibehalten/u);
-  assert.match(copy, /personenbezogene Angaben in der Ausgabe sichtbar lassen/u);
+  assert.match(copy, /personenbezogene Angaben sichtbar machen/u);
   assert.match(copy, /Vor dem Speichern die gewählte Behandlung prüfen/u);
-  assert.match(copy, /gesamte aktuelle Ergebnisstand ohne zweite Dateiauswahl bereitgestellt/u);
+  assert.match(copy, /gesamte aktuelle Ergebnisstand ohne zweite Freigabe oder Exportbestätigung bereitgestellt/u);
+  assert.match(copy, /Standard ist „Nur diese Datei“/u);
+  assert.match(copy, /höchstens 500 unterschiedliche Werte/u);
   assert.match(copy, /Frühere Ergebnisstände bleiben unverändert/u);
   assert.doesNotMatch(copy, /ausdrücklich freigeben; ein Export startet dadurch nicht/u);
 });

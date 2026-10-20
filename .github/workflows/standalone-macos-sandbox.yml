@@ -217,6 +217,7 @@ jobs:
           node tests/lib/standalone-history-read-observer-cases.cjs
           node tests/test-result-generations.js
           node tests/test-result-companions.js
+          node tests/test-confidential-workbook.js
           node tests/test-result-initial-exact-binding.js
           npm run test:standalone
           node tests/test-native-export-test-lifecycle.js

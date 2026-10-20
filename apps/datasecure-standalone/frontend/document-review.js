@@ -84,11 +84,14 @@
   let documentProblemCount = 0, documentOmissionCount = 0, processingComplete = false, confirmedCopy = null, completedCopyCount = 0, loading = false;
   let contentNotices = null, filterMode = 'notices';
   let sourceNoticeFacts = null;
-  let loadedMarkdown = '', stateFresh = false, recoveryDraft = null, runMode = null, runPolicy = null;
+  let loadedMarkdown = '', markdownPositions = null, originalPositions = null;
+  let stateFresh = false, recoveryDraft = null, runMode = null, runPolicy = null;
   let pendingMetadata = null, dialogSelection = null, dialogMode = null, dialogFocus = null, dialogFiles = null, dialogResultFolder = null;
   let dialogCompleted = false, completedExportReceipt = null;
-  let entityRows = [], entitySelected = new Set(), entityPage = 0, entityPages = 1, entityControls = [];
+  let entityRows = [], entitySelected = new Set(), entitySelectionFacts = new Map(), entityPage = 0, entityPages = 1, entityControls = [];
+  let textSelection = null, selectionOwner = null;
   let receiptControls = [];
+  let documentControls = [];
   let bulkReviewProgress = null;
   let pendingDocumentChange = null;
   let viewedBindings = new Map(), pendingApproval = null;
@@ -129,7 +132,72 @@
     return codes.length ? codes.map(code => messages[code] || `Inhaltshinweis: ${code}`).join(' · ') :
       'Inhaltsübernahme möglicherweise unvollständig';
   };
-  const dirty = () => Boolean(recoveryDraft || detail && raw() && $('document-markdown').value !== loadedMarkdown);
+  const dirty = () => Boolean(recoveryDraft || detail && raw() && $('document-markdown').value !== markdownPositions?.display);
+  // A plain text highlight is not a prepared write. Explicit entity choices
+  // and a prepared basis restoration are; keep them on navigation attempts.
+  const prepared = () => Boolean(pendingDocumentChange || entitySelected.size);
+  const navigationDraft = () => dirty() || prepared();
+  function guardReason(action) {
+    if (busy || loading) return 'Ein lokaler Vorgang läuft. Bitte seinen Abschluss abwarten.';
+    if (!batchId || !detail) return 'Bitte zuerst links eine Datei öffnen.';
+    if (!detailCurrent()) return 'Der angezeigte Stand ist nicht mehr bestätigt. Den gespeicherten Stand neu laden.';
+    if (exportRequest) return 'Ein früherer Kopiervorgang ist noch offen. Zuerst seinen gespeicherten Stand abgleichen.';
+    if (['inspect', 'page'].includes(action)) {
+      if (action === 'page' && (dirty() || pendingDocumentChange)) return 'Den vorbereiteten Entwurf zuerst speichern oder bewusst verwerfen.';
+      return '';
+    }
+    if (!processingComplete) return 'Der Lauf ist noch nicht abgeschlossen. Lesen ist möglich; Änderungen erst nach seinem Abschluss speichern.';
+    if (!directResultsSupported) return 'Dieser ältere Lauf ist hier nur lesbar; eine neue Ergebnisbereitstellung ist nicht belegt.';
+    if (publicationUnsettled()) return 'Der aktuelle Ergebnisstand ist noch nicht bestätigt. Zuerst „Bereitstellung erneut prüfen“ verwenden.';
+    if (recoveryDraft) return 'Der erhaltene Korrekturentwurf muss zuerst mit dem gespeicherten Stand abgeglichen oder verworfen werden.';
+    if (action === 'correct') return raw() && dirty() ? '' : 'Bitte den rechten Markdown-Text zuerst bearbeiten.';
+    if (raw()) return 'Zusätzliche Maskierung und Behandlung gehören nur zum Anonymisierungsweg.';
+    if (dirty()) return 'Den Korrekturentwurf zuerst speichern oder bewusst verwerfen.';
+    if (action !== 'restore-save' && pendingDocumentChange) return 'Die vorbereitete Basis-Wiederherstellung zuerst bestätigen oder abbrechen.';
+    if (action === 'mask') {
+      if (entitySelected.size) return 'Die gewählte Behandlung zuerst speichern oder die Auswahl bewusst verwerfen.';
+      if (!currentTextSelection()) return 'Im rechten aktuellen Ergebnistext vollständige Zeichen markieren. Eine Markierung links im Original genügt nicht.';
+    }
+    if (action === 'entities') {
+      if (!entitySelected.size) return 'Mindestens eine erkannte Stelle auswählen; Häkchen allein speichern nichts.';
+      if (entitySelected.size > 500) return 'Höchstens 500 unterschiedliche Werte gemeinsam behandeln.';
+      if (!['default', 'keep', 'person', 'organization'].includes($('entities-decision').value)) return 'Die gewünschte Behandlung bewusst auswählen.';
+      const scope = $('entities-scope').value;
+      if (!['document', 'run'].includes(scope)) return 'Die Geltung der Behandlung auswählen.';
+      if (scope === 'run' && (!detail.run_entity_review_available || [...entitySelected].some(id => entitySelectionFacts.get(id)?.run_eligible !== true)))
+        return 'Für diese Auswahl ist keine gemeinsame laufweite Identität belegt. „Nur diese Datei“ wählen.';
+    }
+    if (action === 'restore' && entitySelected.size) return 'Die gewählte Behandlung zuerst speichern oder die Auswahl bewusst verwerfen.';
+    if (action === 'restore-save' && (!pendingDocumentChange || !sameDocumentBinding(detail, pendingDocumentChange.row)))
+      return 'Die vorbereitete Wiederherstellung passt nicht mehr zum angezeigten Stand.';
+    return '';
+  }
+  function allowAction(action) {
+    const reason = guardReason(action);
+    if (!reason) return true;
+    actionStatus(reason, true); status(reason, true); controls(); return false;
+  }
+  function currentTextSelection() {
+    if (!textSelection || selectionOwner !== 'markdown' || !detailCurrent() || !sameDocumentBinding(detail, textSelection.row)) return null;
+    const node = $('document-markdown');
+    if (node.value !== markdownPositions?.display || node.selectionStart !== textSelection.start || node.selectionEnd !== textSelection.end) return null;
+    try {
+      const range = markdownPositions.backendRange(node.value, textSelection.start, textSelection.end);
+      return range.start < range.end ? { ...textSelection, range } : null;
+    } catch { return null; }
+  }
+  function captureTextSelection() {
+    const node = $('document-markdown'); textSelection = null;
+    if (selectionOwner === 'markdown' && detailCurrent() && node.selectionStart < node.selectionEnd) {
+      try {
+        markdownPositions.backendRange(node.value, node.selectionStart, node.selectionEnd);
+        textSelection = { row: { ...detail }, start: node.selectionStart, end: node.selectionEnd,
+          text: node.value.slice(node.selectionStart, node.selectionEnd) };
+      } catch {}
+    }
+    controls();
+  }
+  function forgetTextSelection() { textSelection = null; selectionOwner = null; }
   const publicationUnsettled = () => ['pending', 'conflict'].includes(resultPublication?.state);
   async function publishCurrent(expected, ownership, connection) {
     if (expected !== batchId || ownership !== busyGeneration || connection !== connectionGeneration ||
@@ -148,6 +216,7 @@
   const detailCurrent = () => stateFresh && detail && documents.some(row => sameDocumentBinding(detail, row));
   const namespace = mode => mode === 'markdown-only' ? 'DataSecure-Markdown-Korrektur' : 'DataSecure-KI-Export';
   const reasons = { DOCUMENT_REVIEW_STALE: 'Der Textstand hat sich geändert. Bitte neu laden und erneut prüfen.',
+    DOCUMENT_TEXT_POSITION_INVALID: 'Die Textmarkierung oder Korrektur passt nicht eindeutig zum gespeicherten Textstand. Bitte die Datei neu öffnen und die vollständigen Zeichen erneut markieren; es wird keine andere Textstelle verwendet.',
     RESULT_PUBLICATION_INVALID: 'Die Änderung kann bereits gespeichert sein, aber der neue Ergebnisstand ist noch nicht bestätigt. Bereitstellung erneut prüfen; nichts blind nochmals ändern.',
     RESULT_PUBLICATION_CONFLICT: 'Der neue Ergebnisstand konnte wegen eines Dateikonflikts nicht sicher bereitgestellt werden. Zusätzliche oder veränderte Dateien prüfen; unter Windows zählt auch eine hineinkopierte .DS_Store dazu. Die App entfernt oder überschreibt nichts. Frühere Ordner bleiben unverändert; den gespeicherten Stand prüfen.',
     STANDALONE_IPC_BUSY: 'DataSecure bearbeitet noch einen anderen lokalen Vorgang. Diese Anfrage wurde noch nicht gesendet. Bitte den Abschluss abwarten und den gespeicherten Stand anschließend neu laden.',
@@ -182,6 +251,7 @@
   function status(text, error = false) { $('documents-status').textContent = text; $('documents-status').className = `notice${error ? ' error' : ''}`; }
   function actionStatus(text, error = false) { const node = $('document-action-status'); node.hidden = !text;
     node.textContent = text; node.className = `document-action-status${error ? ' error' : ''}`; }
+  const quietText = (id, text) => { const node = $(id); if (node.textContent !== text) node.textContent = text; };
   const publicationRecovery = 'Die Änderung kann bereits gespeichert sein; der neue Ergebnisstand ist noch nicht bestätigt. ' +
     'Den gespeicherten Stand neu laden, ohne die fachliche Änderung erneut zu speichern. Unter Einstellungen das ursprüngliche Ergebnisziel, seine Identität und Zugriffsrechte prüfen. ' +
     'Danach „Bereitstellung erneut prüfen“ verwenden; dieser Lauf wird nicht auf einen anderen Ordner umgebunden. Keine neue Quellverarbeitung blind starten. Frühere Ergebnisdateien bleiben unverändert.';
@@ -216,7 +286,7 @@
     try { code = JSON.parse(code).code || code; } catch {}
     return !pendingMetadata && !knownExport && ['AI_EXPORT_CONFIGURATION_REQUIRED', 'AI_EXPORT_VOLUME_MISMATCH'].includes(code);
   }
-  const canLeaveCompletion = () => Boolean(batchId && !busy && !dirty() &&
+  const canLeaveCompletion = () => Boolean(batchId && !busy && !navigationDraft() &&
     (!loading || confirmedCopy?.batchId === batchId && !exportRequest));
   function controls() {
     const blocked = busy || !stateFresh, mutationBlocked = blocked || !processingComplete || !directResultsSupported || publicationUnsettled();
@@ -229,7 +299,7 @@
         row.revision === copy.revision && row.output_sha256 === copy.output_sha256));
     const completedHere = confirmedCopy?.batchId === batchId && !exportRequest && !busy;
     const currentCompletion = Boolean(batchId && stateFresh && !busy && !loading && processingComplete &&
-      documents.length > 0 && !dirty() && !pendingDocumentChange && !pendingApproval);
+      documents.length > 0 && !navigationDraft() && !pendingApproval);
     const hasHints = documentProblemCount > 0 || documentOmissionCount > 0 ||
       sourceNoticeFacts?.content_notice_count > 0 || sourceNoticeFacts?.content_notice_breakdown_complete === false;
     let completionTitle = '', completionText = '';
@@ -264,7 +334,7 @@
       has_modified_results: documents.some(row => row.text_modified === true || row.revision > 0 && row.text_modified !== false),
       problem_count: documentProblemCount, expected_omission_count: documentOmissionCount, processing_complete: processingComplete,
       automatically_approved_count: documents.filter(row => row.approval_basis === 'automatic' && row.approved).length,
-      dirty: dirty(), export_pending: Boolean(exportRequest), export_complete: exportComplete });
+      dirty: navigationDraft(), export_pending: Boolean(exportRequest), export_complete: exportComplete });
     $('documents-loading').hidden = Boolean(bulkReviewProgress) || !busy && !loading;
     $('documents-loading-text').textContent = loading ? 'Dokumente und Hinweise werden geladen …' : 'DataSecure verarbeitet den lokalen Vorgang …';
     $('documents-review-controls').hidden = Boolean(bulkReviewProgress);
@@ -282,7 +352,7 @@
     $('documents-all').checked = all; $('documents-all').indeterminate = rows.length > 0 && !all;
     $('documents-filter-bar').hidden = !raw();
     $('documents-filter').value = raw() && contentNotices ? filterMode : 'all';
-    $('documents-filter').disabled = blocked || dirty() || Boolean(exportRequest) || !contentNotices;
+    $('documents-filter').disabled = blocked || navigationDraft() || Boolean(exportRequest) || !contentNotices;
     $('documents-all-label').textContent = raw() ? 'Alle angezeigten auswählen' : 'Alle auswählen';
     if (raw()) {
       const warned = contentNotices ? documents.filter(row => contentNotices.has(row.document_id)).length : 0;
@@ -294,7 +364,7 @@
         `${shown.length} von ${documents.length} verfügbar · ${edited} mit gespeicherter Korrektur. Ein fehlender Hinweis ist keine Garantie für fehlerfreien OCR-Text.` :
         'Dateibezogene Hinweise sind für diesen Lauf nicht sicher zuordenbar. Alle verfügbaren Dateien werden angezeigt.';
     }
-    $('documents-reload').disabled = busy || loading;
+    $('documents-reload').disabled = busy || loading || prepared() || dirty() && !recoveryDraft;
     // Closing a modal cannot cancel a native copy. Keep its progress and
     // eventual receipt visible until the operation has actually settled.
     $('document-export-close').disabled = busy && !dialogCompleted;
@@ -320,8 +390,8 @@
       $('documents-export').textContent = 'Keine belegbare Exportauswahl';
       $('documents-export').disabled = true;
     }
-    $('document-markdown-caption').textContent = raw() ? 'Markdown-Text (für Korrekturen bearbeitbar)' :
-      mode() === 'markdown-and-anonymize' ? 'Geplanter anonymisierter Markdown-Text (nur markieren)' : 'Markdown-Text (Modus wird geladen)';
+    $('document-markdown-caption').textContent = raw() ? 'Aktueller Markdown-Text (für Korrekturen bearbeitbar)' :
+      mode() === 'markdown-and-anonymize' ? 'Aktueller Ergebnistext (nur markieren)' : 'Markdown-Text (Modus wird geladen)';
     $('documents-main-guide').hidden = true;
     $('documents-approval-extras').hidden = true;
     $('documents-purpose').textContent = !mode() ? loading ? 'Gespeicherte Dokumentstände werden geladen. Bitte warten.' : 'Der Verarbeitungszweck ist nicht bestätigt. Den gespeicherten Stand abgleichen.'
@@ -331,25 +401,39 @@
         (raw() ? 'Markdown enthält Originalinhalte und ist nicht anonymisiert. ' : automatic() ? 'Bekannte unklare Fundstellen wurden automatisch maskiert, nicht manuell geprüft. ' : '') +
         'Originaldateien und frühere Ergebnisstände bleiben unverändert. DataSecure lädt nichts hoch.';
     const publicationBlocked = ['pending', 'conflict'].includes(resultPublication?.state);
-    $('documents-open-results').disabled = blocked || dirty() || !processingComplete || !documents.length || publicationBlocked;
+    $('documents-open-results').disabled = blocked || navigationDraft() || !processingComplete || !documents.length || publicationBlocked;
     $('documents-publish').hidden = !publicationBlocked || !directResultsSupported;
-    $('documents-publish').disabled = blocked || dirty() || !processingComplete || !directResultsSupported || Boolean(exportRequest);
+    $('documents-publish').disabled = blocked || navigationDraft() || !processingComplete || !directResultsSupported || Boolean(exportRequest);
     $('document-markdown').setAttribute('aria-label', $('document-markdown-caption').textContent);
     $('document-edit-hint').textContent = stateFresh && !directResultsSupported ? 'Dieser ältere Lauf ist hier nur lesbar. Eine neue automatische Ergebnisbereitstellung ist nicht belegt; vorhandene Dateien und alte Kopierbelege bleiben unverändert.'
       : raw() ? 'Du kannst den rechten Markdown-Text direkt bearbeiten. Die Datei ist nicht anonymisiert. „Markdown-Korrektur speichern“ speichert die Änderung und stellt danach den gesamten aktuellen Ergebnisstand bereit. Erst die Bestätigung beendet diesen Vorgang. Originaldateien und frühere Ergebnisstände bleiben unverändert.'
       : !detail ? 'Wähle links ein Dokument, um Original und anonymisierten Text freiwillig zu vergleichen. Die Ergebnisdateien benötigen keine weitere Freigabe oder Exportbestätigung.'
-        : 'Der rechte Text ist schreibgeschützt. Zusätzliche Maskierungen oder andere Änderungen unter „Weitere Textänderungen (optional)“ bewusst speichern. Danach wird der gesamte aktuelle Ergebnisstand bereitgestellt; keine zweite Dateiauswahl nötig.';
+        : 'Der rechte Text ist schreibgeschützt. Eine sensible Stelle dort markieren und direkt darunter „Maskierung speichern“ wählen. Die Behandlung erkannter Stellen ist eine separate optionale Änderung. Danach wird der gesamte aktuelle Ergebnisstand bereitgestellt; keine zweite Dateiauswahl nötig.';
     $('document-save-correction').hidden = !raw(); $('document-discard-correction').hidden = !raw();
-    $('document-save-correction').disabled = mutationBlocked || !detailCurrent() || Boolean(recoveryDraft) || Boolean(exportRequest) || !dirty();
+    $('document-save-correction').disabled = Boolean(guardReason('correct'));
     $('document-discard-correction').disabled = busy || !dirty();
     $('document-markdown').readOnly = !raw() || mutationBlocked || Boolean(recoveryDraft) || Boolean(exportRequest);
     $('document-extra-actions').hidden = raw() || !detailCurrent();
+    $('document-restore-actions').hidden = raw() || !detail;
+    $('document-mask-actions').hidden = raw() || !detail;
     $('document-redact').hidden = raw();
-    $('document-redact').disabled = raw() || mutationBlocked || dirty() || Boolean(exportRequest) || !detailCurrent(); $('document-restore').disabled = mutationBlocked || dirty() || Boolean(exportRequest) || !detailCurrent();
+    const maskSelection = currentTextSelection(), maskReason = guardReason('mask');
+    $('document-redact').disabled = Boolean(maskReason);
+    quietText('document-mask-reason', maskReason || `${maskSelection.text.length} Zeichen in dieser Datei ausgewählt. Nur diese Stelle wird beim Speichern durch [MANUAL_REDACTION] ersetzt.`);
+    $('document-mask-preview').hidden = !maskSelection;
+    if ($('document-mask-preview').value !== (maskSelection?.text || '')) $('document-mask-preview').value = maskSelection?.text || '';
+    $('document-restore').disabled = Boolean(guardReason('restore'));
     $('document-change-confirm').hidden = !pendingDocumentChange;
-    $('document-change-save').disabled = mutationBlocked || !pendingDocumentChange || !detailCurrent() || !sameDocumentBinding(detail, pendingDocumentChange?.row);
+    $('document-change-save').disabled = Boolean(guardReason('restore-save'));
     $('document-change-cancel').disabled = busy;
-    $('documents-back').disabled = busy;
+    $('documents-back').disabled = busy || navigationDraft();
+    const hasDraft = navigationDraft();
+    $('document-draft-controls').hidden = !prepared();
+    $('document-discard-draft').disabled = busy;
+    quietText('document-draft-reason', pendingDocumentChange ? 'Basis-Wiederherstellung vorbereitet, noch nicht gespeichert. Bestätigen oder abbrechen; Dateiwechsel und Neuladen halten diesen Entwurf fest.'
+      : `${entitySelected.size} erkannte Werte ausgewählt, noch nicht gespeichert. Behandlung wählen und speichern oder die Auswahl bewusst verwerfen. Die Auswahl bleibt beim Fundstellenseitenwechsel erhalten.`);
+    $('document-navigation-reason').hidden = !hasDraft;
+    quietText('document-navigation-reason', hasDraft ? 'Ungespeicherter Entwurf: zuerst speichern oder ausdrücklich verwerfen, bevor du die Datei wechselst, neu lädst oder die Ansicht verlässt.' : '');
     $('document-export-confirm').disabled = blocked;
     $('document-export-abandon').disabled = blocked || !$('document-export-abandon-check').checked;
     $('document-recovery-draft').hidden = !recoveryDraft;
@@ -358,25 +442,34 @@
     $('document-recovery-discard').disabled = busy;
     const position = shown.findIndex(row => row.document_id === detail?.document_id);
     $('document-position').textContent = position < 0 ? '' : `${position + 1} von ${shown.length} angezeigten Dateien`;
-    $('document-previous').disabled = blocked || dirty() || position <= 0;
-    $('document-next').disabled = blocked || dirty() || position < 0 || position >= shown.length - 1;
-    const scopeBlocked = $('entities-scope').value === 'run' && (!detail?.run_entity_review_available ||
-      entityRows.some(row => entitySelected.has(row.entity_id) && row.run_eligible !== true));
-    $('entities-apply').disabled = mutationBlocked || !detailCurrent() || Boolean(exportRequest) || !entitySelected.size || scopeBlocked;
+    $('document-previous').disabled = blocked || hasDraft || position <= 0;
+    $('document-next').disabled = blocked || hasDraft || position < 0 || position >= shown.length - 1;
+    for (const node of documentControls) node.disabled = blocked || hasDraft;
+    const treatmentReason = guardReason('entities'), readingReason = guardReason('inspect'), selectionReason = guardReason('select'), pageReason = guardReason('page');
+    $('entities-apply').disabled = Boolean(treatmentReason);
     const selectable = entityRows.filter(row => !row.disabled), chosen = selectable.filter(row => entitySelected.has(row.entity_id));
-    $('entities-all').disabled = blocked || Boolean(exportRequest) || !selectable.length;
+    $('entities-all').disabled = Boolean(selectionReason) || !selectable.length;
     $('entities-all').checked = selectable.length > 0 && chosen.length === selectable.length;
     $('entities-all').indeterminate = chosen.length > 0 && chosen.length < selectable.length;
-    $('entities-decision').disabled = blocked || Boolean(exportRequest);
-    $('entities-scope').disabled = blocked || Boolean(exportRequest) || !detail?.run_entity_review_available;
-    $('entities-count').textContent = `${entitySelected.size} ausgewählt · ${detail?.entity_count || 0} unterschiedliche Werte in dieser Datei${scopeBlocked ? ' · Für diese Auswahl „Nur diese Datei“ wählen.' : ''}`;
-    $('entities-previous').disabled = busy || entityPage <= 0; $('entities-next').disabled = busy || entityPage >= entityPages - 1;
-    for (const { node, row, checkbox } of entityControls) { node.disabled = blocked || Boolean(exportRequest) || row.disabled; if (checkbox) node.checked = entitySelected.has(row.entity_id); }
+    $('entities-decision').disabled = mutationBlocked || Boolean(exportRequest) || Boolean(pendingDocumentChange);
+    $('entities-scope').disabled = mutationBlocked || Boolean(exportRequest) || Boolean(pendingDocumentChange);
+    const runOption = $('entities-scope').children[1];
+    if (runOption) runOption.disabled = !detail?.run_entity_review_available || [...entitySelected].some(id => entitySelectionFacts.get(id)?.run_eligible !== true);
+    $('entities-count').textContent = `${entitySelected.size} ausgewählt (über alle Fundstellenseiten, höchstens 500) · ${detail?.entity_count || 0} unterschiedliche Werte in dieser Datei`;
+    quietText('entities-reason', treatmentReason || ($('entities-scope').value === 'run'
+      ? 'Die gewählte Behandlung gilt für belegte gleiche Identitäten auch in anderen Dateien dieses Laufs. „Originalwert beibehalten“ kann echte personenbezogene Angaben sichtbar machen.'
+      : 'Die gewählte Behandlung gilt nur für diese Datei. „Originalwert beibehalten“ kann echte personenbezogene Angaben sichtbar machen.'));
+    $('entities-pagination').hidden = entityPages <= 1;
+    $('entities-previous').disabled = Boolean(pageReason) || entityPage <= 0; $('entities-next').disabled = Boolean(pageReason) || entityPage >= entityPages - 1;
+    quietText('entities-pagination-reason', pageReason || (entityPages > 1 ? 'Nur Fundstellenseiten wechseln; noch nichts speichern. Deine Auswahl bleibt erhalten.' : 'Alle erkannten Stellen stehen auf dieser Seite.'));
+    for (const { node, row, checkbox } of entityControls) { node.disabled = Boolean(checkbox ? selectionReason : readingReason) || row.disabled; if (checkbox) node.checked = entitySelected.has(row.entity_id); }
     for (const node of receiptControls) node.disabled = blocked;
   }
-  function clearText() { pendingDocumentChange = null; $('document-change-confirm').hidden = true; $('document-extra-actions').open = false;
-    detail = null; loadedMarkdown = ''; $('document-original').value = ''; $('document-markdown').value = ''; actionStatus('');
-    entityRows = []; entitySelected.clear(); entityPage = 0; entityPages = 1; entityControls = [];
+  function clearText() { pendingDocumentChange = null; $('document-change-confirm').hidden = true; $('document-extra-actions').open = false; $('document-restore-actions').open = false;
+    detail = null; loadedMarkdown = ''; markdownPositions = null; originalPositions = null; forgetTextSelection();
+    $('document-original').value = ''; $('document-markdown').value = ''; actionStatus('');
+    entityRows = []; entitySelected.clear(); entitySelectionFacts.clear(); entityPage = 0; entityPages = 1; entityControls = [];
+    $('entities-decision').value = ''; $('entities-scope').value = 'document';
     $('entities-list').replaceChildren(); $('document-entities').hidden = true;
     $('document-name').textContent = 'Dokument auswählen'; $('document-revision').textContent = ''; controls(); }
   async function openIdentities(operation) {
@@ -426,7 +519,7 @@
   }
   const exportSuccess = result => `${result.exported_count} Datei${result.exported_count === 1 ? '' : 'en'} ${result.processing_mode === 'markdown-only' ? 'als zusätzliche Markdown-Kopie gespeichert' : 'exportiert'}: Ergebnisordner → ${namespace(result.processing_mode)} → ${result.folder_name}. ${result.processing_mode === 'markdown-only' ? 'Die ursprünglichen Markdown-Dateien sind unverändert; die Kopie enthält Originalinhalte und ist nicht anonymisiert.' : 'Nur neutrale Markdown-Dateien; keine privaten Begleitdaten.'} Dieser Export ist abgeschlossen; bitte nicht erneut ausführen, sofern du nicht ausdrücklich eine weitere Kopie benötigst.`;
   function render() {
-    const list = $('documents-list'); list.replaceChildren();
+    const list = $('documents-list'); list.replaceChildren(); documentControls = [];
     for (const row of visibleDocuments()) {
       const item = make('div', undefined, `document-row${detail?.document_id === row.document_id ? ' active' : ''}`);
       const check = make('input'); check.type = 'checkbox'; check.checked = selected.has(row.document_id); check.disabled = busy || !stateFresh || Boolean(exportRequest);
@@ -435,6 +528,7 @@
       const info = make('div'), show = make('button', row.name); show.disabled = busy || !stateFresh;
       show.setAttribute('aria-label', `${row.name}: ${raw() ? 'vergleichen und korrigieren' : 'vergleichen'}`);
       show.addEventListener('click', () => loadDetail(row));
+      documentControls.push(show);
       info.append(show, make('p', `${currentTextState(row)} · Stand ${row.revision}`, 'meta'));
       if (raw() && (contentNotices?.has(row.document_id) || row.text_modified === true)) {
         const flags = make('div', undefined, 'document-flags');
@@ -527,6 +621,7 @@
   }
   async function reload() {
     const expected = batchId, request = ++ticket;
+    forgetTextSelection();
     pendingDocumentChange = null; $('document-change-confirm').hidden = true;
     loading = true; stateFresh = false; controls();
     try {
@@ -620,7 +715,7 @@
   }
   async function loadDetail(row) {
     if (!row) return;
-    if (dirty()) { status('Ungespeicherte Markdown-Korrektur zuerst speichern oder ausdrücklich verwerfen.'); return; }
+    if (navigationDraft()) { status('Ungespeicherten Entwurf zuerst speichern oder ausdrücklich verwerfen. Die aktuelle Datei und Auswahl bleiben erhalten.', true); controls(); return; }
     if (busy || !stateFresh || !batchId) return; const expected = batchId, request = ++ticket;
     const ownership = ++busyGeneration; busy = true; clearText(); render(); status(`${row.name} wird lokal geladen …`);
     try {
@@ -634,8 +729,14 @@
           throw Error('DOCUMENT_REVIEW_STALE');
         original += data.original_text; markdown += data.markdown;
       }
-      detail = { ...row }; loadedMarkdown = markdown; $('document-original').value = original; $('document-markdown').value = markdown;
-      $('entities-scope').value = row.run_entity_review_available ? 'run' : 'document';
+      const nextMarkdownPositions = window.__DATASECURE_TEXT_POSITIONS__.create(markdown);
+      const nextOriginalPositions = window.__DATASECURE_TEXT_POSITIONS__.create(original);
+      detail = { ...row }; loadedMarkdown = markdown;
+      markdownPositions = nextMarkdownPositions; originalPositions = nextOriginalPositions;
+      // Only the API/display value is LF-normalized. The stored text/hash and
+      // every IPC range continue to address the exact original backend bytes.
+      $('document-original').value = originalPositions.display; $('document-markdown').value = markdownPositions.display;
+      $('entities-scope').value = 'document'; $('entities-decision').value = '';
       if (row.entity_review_available) await loadEntities(0, expected, request);
       viewedBindings.set(row.document_id, { ...row });
       $('document-name').textContent = row.name; $('document-revision').textContent = `Stand ${row.revision} · ${raw() ? currentTextState(row) : approvalLabel(row)}`;
@@ -654,42 +755,71 @@
           typeof value.disabled !== 'boolean' || !Number.isSafeInteger(value.count) || value.count < 1 ||
           !Number.isSafeInteger(value.output_start) || !Number.isSafeInteger(value.output_end) || value.output_start < 0 ||
           value.output_end < value.output_start || value.output_end > loadedMarkdown.length)) throw Error('DOCUMENT_ENTITY_INVALID');
-    entityRows = data.entities; entitySelected.clear(); entityPage = page; entityPages = data.pages; entityControls = [];
+    entityRows = data.entities; entityPage = page; entityPages = data.pages; entityControls = [];
+    for (const value of entityRows) if (entitySelected.has(value.entity_id)) entitySelectionFacts.set(value.entity_id, { run_eligible: value.run_eligible === true });
     $('document-entities').hidden = false; $('entities-page').textContent = `Seite ${page + 1} von ${entityPages}`;
     $('entities-list').replaceChildren(...entityRows.map(value => {
       const tr = make('tr'), td = make('td'), check = make('input'); check.type = 'checkbox';
       check.setAttribute('aria-label', `${value.original} auswählen`); check.disabled = value.disabled;
-      check.addEventListener('change', () => { if (busy || exportRequest || value.disabled) return;
-        check.checked ? entitySelected.add(value.entity_id) : entitySelected.delete(value.entity_id); controls(); });
+      check.addEventListener('change', () => {
+        if (value.disabled || !sameDocumentBinding(detail, row) || !allowAction('select')) { controls(); return; }
+        selectEntities([value], check.checked);
+      });
       entityControls.push({ node: check, row: value, checkbox: true }); td.append(check);
       const original = make('td'), inspect = make('button', value.original + (value.original_truncated ? ' …' : ''));
       inspect.addEventListener('click', () => {
+        if (!allowAction('inspect') || !sameDocumentBinding(detail, row)) return;
         const markdown = $('document-markdown'), source = $('document-original');
-        markdown.focus(); markdown.setSelectionRange(value.output_start, value.output_end);
-        if (Number.isSafeInteger(value.source_start) && Number.isSafeInteger(value.source_end)) source.setSelectionRange(value.source_start, value.source_end);
+        let outputRange, sourceRange;
+        try {
+          if (markdown.value !== markdownPositions?.display || source.value !== originalPositions?.display)
+            throw Error('DOCUMENT_TEXT_POSITION_INVALID');
+          outputRange = markdownPositions.displayRange(value.output_start, value.output_end);
+          if (value.source_start !== undefined || value.source_end !== undefined)
+            sourceRange = originalPositions.displayRange(value.source_start, value.source_end);
+        } catch (error) { showError(error, row.name); return; }
+        // Validate both complete ranges before changing either field's focus
+        // or selection; a half-CRLF/surrogate coordinate never widens silently.
+        markdown.focus(); markdown.setSelectionRange(outputRange.start, outputRange.end);
+        if (sourceRange) source.setSelectionRange(sourceRange.start, sourceRange.end);
+        selectionOwner = 'markdown'; captureTextSelection();
         status(`Ausgewählt: ${value.original}. ${value.count} Vorkommen in dieser Datei. Der Vergleich zeigt die erste Fundstelle.`);
       });
       entityControls.push({ node: inspect, row: value }); original.append(inspect, make('p', `${value.count} Vorkommen · ${value.kind}`, 'meta'));
       const planned = make('td', value.disabled ? 'Zusätzlich maskiert' : value.replacement);
-      planned.setAttribute('data-label', 'Geplante Ausgabe');
+      planned.setAttribute('data-label', 'Aktueller Ergebnistext');
       const state = make('td', value.disabled ? 'Gesperrt durch Textmaskierung' : value.decision === 'keep' ? 'Beibehalten · Prüfung nötig' : 'Ersetzt');
       state.setAttribute('data-label', 'Status'); tr.append(td, original, planned, state);
       return tr;
     })); controls();
   }
   async function changeEntityPage(delta) {
-    if (busy || !detailCurrent()) return; const ownership = ++busyGeneration; busy = true; controls();
-    try { await loadEntities(entityPage + delta); } catch (error) { showError(error, detail?.name); }
-    finally { if (ownership !== busyGeneration) return; busy = false; controls(); }
+    if (!allowAction('page')) return;
+    const next = entityPage + delta;
+    if (![-1, 1].includes(delta) || next < 0 || next >= entityPages) { status('Alle erkannten Stellen dieser Fundstellenseite sind bereits sichtbar. Die Seitenbuttons speichern keine Behandlung.'); return; }
+    const expected = batchId, connection = connectionGeneration, ownership = ++busyGeneration; busy = true; controls();
+    try { await loadEntities(next, expected); } catch (error) {
+      if (expected !== batchId || connection !== connectionGeneration || ownership !== busyGeneration) return;
+      stateFresh = false; showError(error, detail?.name);
+      $('documents-status').textContent += ' Die vorhandene Auswahl bleibt erhalten. Vor neuen Änderungen bewusst verwerfen und den gespeicherten Stand neu laden.'; }
+    finally { if (expected !== batchId || connection !== connectionGeneration || ownership !== busyGeneration) return; busy = false; controls(); }
+  }
+  function selectEntities(values, checked) {
+    const added = values.filter(row => !row.disabled && !entitySelected.has(row.entity_id));
+    if (checked && entitySelected.size + added.length > 500) {
+      status('Höchstens 500 unterschiedliche Werte gemeinsam behandeln. Die bisherige Auswahl bleibt erhalten.', true); controls(); return;
+    }
+    for (const row of values.filter(value => !value.disabled)) {
+      if (checked) { entitySelected.add(row.entity_id); entitySelectionFacts.set(row.entity_id, { run_eligible: row.run_eligible === true }); }
+      else { entitySelected.delete(row.entity_id); entitySelectionFacts.delete(row.entity_id); }
+    }
+    controls();
   }
   async function applyEntities() {
-    if (busy || !processingComplete || !directResultsSupported || publicationUnsettled() || !detailCurrent() || exportRequest || !entitySelected.size) return;
+    if (!allowAction('entities')) return;
     const connection = connectionGeneration;
     const row = detail, expected = batchId, treatment = $('entities-decision').value;
     const scope = $('entities-scope').value;
-    if (!['document', 'run'].includes(scope) || scope === 'run' && (!row.run_entity_review_available ||
-        entityRows.some(value => entitySelected.has(value.entity_id) && value.run_eligible !== true))) return;
-    if (!['default', 'keep', 'person', 'organization'].includes(treatment)) return;
     const ownership = ++busyGeneration; busy = true; controls(); let updated, failure, publicationAttempted = false;
     try {
       updated = await invoke('decide_document_review', { batchId: expected, documentId: row.document_id,
@@ -1049,10 +1179,10 @@
         status('Der lokale Prüfvorgang läuft noch. Warte auf den gespeicherten Stand, bevor du einen anderen Lauf öffnest.');
         return false;
       }
-      if (dirty()) {
+      if (navigationDraft()) {
         status(id === batchId
-          ? 'Dein nicht gespeicherter Korrekturentwurf gehört zu diesem Lauf. Gleiche den gespeicherten Stand ab oder speichere beziehungsweise verwirf den Entwurf ausdrücklich.'
-          : 'Ein nicht gespeicherter Korrekturentwurf gehört noch zum angezeigten Lauf. Er wurde nicht in den gewählten Lauf übernommen. Bitte zuerst diesen Entwurf abgleichen, speichern oder ausdrücklich verwerfen.', true);
+          ? 'Dein nicht gespeicherter Entwurf gehört zu diesem Lauf. Gleiche den gespeicherten Stand ab oder speichere beziehungsweise verwirf den Entwurf ausdrücklich.'
+          : 'Ein nicht gespeicherter Entwurf gehört noch zum angezeigten Lauf. Er wurde nicht in den gewählten Lauf übernommen. Bitte zuerst diesen Entwurf abgleichen, speichern oder ausdrücklich verwerfen.', true);
         return false;
       }
       return true;
@@ -1082,13 +1212,13 @@
         if (stateFresh && exportRequest) await openExportDialog();
       } catch (error) { if (batchId === id && ownership === busyGeneration) showError(error); }
     },
-    async close() { if (busy || dirty()) { if (dirty()) status('Ungespeicherte Markdown-Korrektur zuerst speichern oder ausdrücklich verwerfen.'); return false; } connectionGeneration++; ticket++; loading = false; bulkReviewProgress = null; pendingApproval = null; viewedBindings.clear(); batchId = null; confirmedCopy = null; completedExportReceipt = null; completedCopyCount = 0; resultPublication = null; documents = []; contentNotices = null; sourceNoticeFacts = null; filterMode = 'notices'; runMode = null; runPolicy = null; selected.clear(); exportRequest = null; knownExport = null; pendingMetadata = null; exportFolderNeeded = false;
+    async close() { if (busy || navigationDraft()) { if (navigationDraft()) status('Ungespeicherten Entwurf zuerst speichern oder ausdrücklich verwerfen.'); return false; } connectionGeneration++; ticket++; loading = false; bulkReviewProgress = null; pendingApproval = null; viewedBindings.clear(); batchId = null; confirmedCopy = null; completedExportReceipt = null; completedCopyCount = 0; resultPublication = null; documents = []; contentNotices = null; sourceNoticeFacts = null; filterMode = 'notices'; runMode = null; runPolicy = null; selected.clear(); exportRequest = null; knownExport = null; pendingMetadata = null; exportFolderNeeded = false;
       directResultsSupported = false;
       if ($('document-export-dialog').open) $('document-export-dialog').close();
       clearText(); renderReceipts(); render(); await invoke('close_document_reviews').catch(() => {}); return true; }
   });
   $('documents-open-results').addEventListener('click', async () => {
-    if (busy || !stateFresh || dirty() || !processingComplete || !documents.length || !batchId || ['pending', 'conflict'].includes(resultPublication?.state)) return;
+    if (busy || !stateFresh || navigationDraft() || !processingComplete || !documents.length || !batchId || ['pending', 'conflict'].includes(resultPublication?.state)) return;
     const expected = batchId, connection = connectionGeneration, ownership = ++busyGeneration;
     busy = true; controls();
     try {
@@ -1098,7 +1228,7 @@
     finally { if (expected === batchId && ownership === busyGeneration) { busy = false; controls(); } }
   });
   $('documents-publish').addEventListener('click', async () => {
-    if (busy || !stateFresh || dirty() || !batchId || !processingComplete || !directResultsSupported || !publicationUnsettled() || exportRequest) return;
+    if (busy || !stateFresh || navigationDraft() || !batchId || !processingComplete || !directResultsSupported || !publicationUnsettled() || exportRequest) return;
     const expected = batchId, connection = connectionGeneration, ownership = ++busyGeneration;
     busy = true; controls();
     try {
@@ -1108,7 +1238,8 @@
     finally { if (expected === batchId && ownership === busyGeneration) { busy = false; controls(); } }
   });
   $('documents-reload').addEventListener('click', async () => {
-    if (busy || !batchId || dirty() && !recoveryDraft) return;
+    if (busy || !batchId) return;
+    if (prepared() || dirty() && !recoveryDraft) { status('Ungespeicherten Entwurf zuerst speichern oder ausdrücklich verwerfen. Der angezeigte Text und die Auswahl bleiben erhalten.', true); controls(); return; }
     const draft = recoveryDraft; const ownership = ++busyGeneration; busy = true; controls();
     try { await reload(); }
     catch (error) { showError(error, draft?.name); $('documents-status').textContent += ' Der aktuelle Stand konnte nicht abgefragt werden. Änderungen bleiben gesperrt.'; }
@@ -1119,7 +1250,7 @@
       // Preserve the draft separately while loading the actual committed text.
       recoveryDraft = null; await loadDetail(row); recoveryDraft = draft;
       if (detail && row) {
-        if (loadedMarkdown === draft.text) { recoveryDraft = null; status(`${draft.name}: Der gespeicherte Text stimmt mit deinem Korrekturentwurf überein. ${publicationUnsettled() ? 'Die Bereitstellung des aktuellen Ergebnisstands erneut prüfen.' : 'Den bestätigten Ergebnisordner öffnen; keine weitere Dateiauswahl nötig.'}`); }
+        if (markdownPositions?.display === draft.text) { recoveryDraft = null; status(`${draft.name}: Der gespeicherte Text stimmt mit deinem Korrekturentwurf überein. ${publicationUnsettled() ? 'Die Bereitstellung des aktuellen Ergebnisstands erneut prüfen.' : 'Den bestätigten Ergebnisordner öffnen; keine weitere Dateiauswahl nötig.'}`); }
         else if (row.revision === draft.revision && row.output_sha256 === draft.output_sha256) {
           $('document-markdown').value = draft.text; recoveryDraft = null; status(`${draft.name}: Korrekturentwurf wiederhergestellt, noch nicht gespeichert.`);
         } else status(`${draft.name}: Der gespeicherte Stand weicht ab. Dein Entwurf bleibt zum Vergleichen und Kopieren erhalten; er wird nicht automatisch darübergeschrieben.`, true);
@@ -1130,7 +1261,7 @@
   });
   $('document-recovery-discard').addEventListener('click', () => { if (busy) return; recoveryDraft = null; controls(); });
   $('documents-filter').addEventListener('change', () => {
-    if (busy || !stateFresh || !raw() || !contentNotices || exportRequest || dirty()) { controls(); return; }
+    if (busy || !stateFresh || !raw() || !contentNotices || exportRequest || navigationDraft()) { controls(); return; }
     const next = $('documents-filter').value;
     if (!['notices', 'edited', 'all', 'without'].includes(next) || next === filterMode) return;
     filterMode = next; selected.clear();
@@ -1139,10 +1270,11 @@
   });
   $('documents-all').addEventListener('change', () => { if (busy || !stateFresh || exportRequest) return;
     const shown = visibleDocuments(); selected = new Set($('documents-all').checked ? shown.map(row => row.document_id) : []); render(); });
-  $('entities-all').addEventListener('change', () => { if (busy || exportRequest) return;
-    entitySelected = new Set($('entities-all').checked ? entityRows.filter(row => !row.disabled).map(row => row.entity_id) : []); controls(); });
+  $('entities-all').addEventListener('change', () => { if (!allowAction('select')) return;
+    selectEntities(entityRows, $('entities-all').checked); });
   $('entities-apply').addEventListener('click', applyEntities);
   $('entities-scope').addEventListener('change', controls);
+  $('entities-decision').addEventListener('change', controls);
   $('entities-previous').addEventListener('click', () => changeEntityPage(-1)); $('entities-next').addEventListener('click', () => changeEntityPage(1));
   for (const [id, delta] of [['document-previous', -1], ['document-next', 1]]) $(id).addEventListener('click', () => {
     const shown = visibleDocuments(), position = shown.findIndex(row => row.document_id === detail?.document_id), next = shown[position + delta];
@@ -1203,34 +1335,41 @@
     } catch (error) { showError(error); $('document-export-result').hidden = false; $('document-export-result').textContent = $('documents-status').textContent; }
     finally { if (ownership !== busyGeneration) return; busy = false; render(); }
   });
-  $('document-markdown').addEventListener('input', controls);
-  $('document-discard-correction').addEventListener('click', () => { $('document-markdown').value = loadedMarkdown; controls(); });
-  $('document-save-correction').addEventListener('click', () => {
-    if (busy || !processingComplete || !directResultsSupported || publicationUnsettled() || !detailCurrent() || !raw() || !dirty()) return;
-    const text = $('document-markdown').value; let start = 0, oldEnd = loadedMarkdown.length, end = text.length;
-    while (start < oldEnd && start < end && loadedMarkdown[start] === text[start]) start++;
-    if (/[\uDC00-\uDFFF]/u.test(text[start] || '') || /[\uDC00-\uDFFF]/u.test(loadedMarkdown[start] || '')) start--;
-    while (oldEnd > start && end > start && loadedMarkdown[oldEnd - 1] === text[end - 1]) { oldEnd--; end--; }
-    if (/[\uDC00-\uDFFF]/u.test(text[end] || '') || /[\uDC00-\uDFFF]/u.test(loadedMarkdown[oldEnd] || '')) { oldEnd++; end++; }
-    if (end - start > 32768) { status('Bitte eine kleinere Korrektur speichern (höchstens 32.768 Zeichen pro Änderung).', true); return; }
-    decideRows('correct', [detail], [{ start, end: oldEnd, replacement: text.slice(start, end) }]);
+  $('document-markdown').addEventListener('input', () => { forgetTextSelection(); controls(); });
+  $('document-markdown').addEventListener('focus', () => { forgetTextSelection(); selectionOwner = 'markdown'; controls(); });
+  $('document-markdown').addEventListener('mousedown', () => { forgetTextSelection(); selectionOwner = 'markdown'; controls(); });
+  for (const event of ['select', 'mouseup', 'keyup']) $('document-markdown').addEventListener(event, () => {
+    if (document.activeElement !== $('document-markdown')) return;
+    selectionOwner = 'markdown'; captureTextSelection();
   });
-  $('document-redact').addEventListener('click', () => { const node = $('document-markdown');
-    if (busy || !processingComplete || !directResultsSupported || publicationUnsettled()) return;
-    if (!detailCurrent()) { actionStatus('Bitte zuerst links ein aktuelles Dokument öffnen.', true); return; }
-    const start = node.selectionStart, end = node.selectionEnd;
-    if (!Number.isSafeInteger(start) || !Number.isSafeInteger(end) || start >= end) {
-      const message = 'Bitte den zusätzlich zu maskierenden Text im rechten Markdown-Feld markieren. Eine Markierung links im Originaltext genügt nicht.';
-      actionStatus(message, true); status(message, true); return;
-    }
-    pendingDocumentChange = { action: 'redact', row: { ...detail }, ranges: [{ start, end }] };
-    $('document-change-confirm-text').textContent = `${end - start} Zeichen in ${detail.name} markiert. Noch nichts geändert. „Maskierung jetzt speichern“ ersetzt nur diese Stelle und stellt danach den vollständigen aktuellen Ergebnisstand in einem neuen Ordner bereit. Originaldateien und frühere Ergebnisstände bleiben unverändert.`;
-    $('document-change-save').textContent = 'Maskierung jetzt speichern';
-    controls(); $('document-change-save').focus();
-    actionStatus('Maskierung vorbereitet, noch nicht gespeichert. Bitte die Auswirkung prüfen und ausdrücklich bestätigen oder abbrechen.');
+  for (const event of ['focus', 'mousedown', 'select']) $('document-original').addEventListener(event, () => {
+    if (event === 'select' && document.activeElement !== $('document-original')) return;
+    forgetTextSelection(); selectionOwner = 'original'; controls();
+  });
+  $('document-discard-correction').addEventListener('click', () => { $('document-markdown').value = markdownPositions?.display || ''; controls(); });
+  $('document-discard-draft').addEventListener('click', () => {
+    if (busy) return;
+    pendingDocumentChange = null; entitySelected.clear(); entitySelectionFacts.clear(); $('entities-decision').value = ''; $('entities-scope').value = 'document';
+    controls(); actionStatus('Vorbereitete Auswahl verworfen. Der gespeicherte Text und alle Ergebnisdateien bleiben unverändert.');
+  });
+  $('document-save-correction').addEventListener('click', () => {
+    if (!allowAction('correct')) return;
+    let correction;
+    try { correction = markdownPositions.correction($('document-markdown').value); }
+    catch (error) { showError(error, detail.name); return; }
+    if (!correction) { controls(); return; }
+    if (correction.replacement.length > 32768) { status('Bitte eine kleinere Korrektur speichern (höchstens 32.768 Zeichen pro Änderung).', true); return; }
+    decideRows('correct', [detail], [correction]);
+  });
+  $('document-redact').addEventListener('click', async () => {
+    if (!allowAction('mask')) return;
+    const selectedText = currentTextSelection();
+    if (!selectedText) return;
+    await saveTextChange({ action: 'redact', row: { ...detail }, ranges: [selectedText.range] });
   });
   $('document-restore').addEventListener('click', () => {
-    if (busy || !processingComplete || !directResultsSupported || publicationUnsettled() || !detailCurrent() || raw()) return;
+    if (!allowAction('restore')) return;
+    forgetTextSelection();
     pendingDocumentChange = { action: 'restore_base', row: { ...detail }, ranges: [] };
     $('document-change-confirm-text').textContent = `${detail.name}: Noch nichts geändert. Das Speichern stellt den automatisch erzeugten Basisstand dieser Datei wieder her und verwirft ihre späteren Text- und Entitätenänderungen. Danach wird der vollständige aktuelle Ergebnisstand in einem neuen Ordner bereitgestellt; frühere Ergebnisstände bleiben unverändert.`;
     $('document-change-save').textContent = 'Basisstand jetzt wiederherstellen';
@@ -1242,15 +1381,14 @@
     pendingDocumentChange = null; controls(); $('document-redact').focus();
     actionStatus('Änderung abgebrochen. Der gespeicherte Textstand bleibt unverändert.');
   });
-  $('document-change-save').addEventListener('click', async () => {
+  async function saveTextChange(pending) {
     const expected = batchId, connection = connectionGeneration;
-    const pending = pendingDocumentChange;
     if (!pending || !processingComplete || !directResultsSupported || publicationUnsettled() || !detailCurrent() || !sameDocumentBinding(detail, pending.row) || busy) {
       pendingDocumentChange = null; controls();
       actionStatus('Der vorbereitete Textstand ist nicht mehr aktuell. Bitte die Datei neu öffnen und die Änderung erneut prüfen.', true);
       return;
     }
-    pendingDocumentChange = null; controls();
+    pendingDocumentChange = null; forgetTextSelection(); controls();
     actionStatus('Änderung wird lokal gespeichert …');
     const result = await decideRows(pending.action, [detail], pending.ranges);
     if (expected !== batchId || connection !== connectionGeneration) return;
@@ -1273,6 +1411,10 @@
       ? `${updated.name}: Zusätzliche Maskierung in Stand ${updated.revision} gespeichert und aktueller Ergebnisstand bereitgestellt. Prüfe rechts den Platzhalter [MANUAL_REDACTION].`
       : `${updated.name}: Technisch geprüfter Basisstand als Stand ${updated.revision} gespeichert und aktueller Ergebnisstand bereitgestellt. Frühere Ergebnisstände bleiben unverändert.`;
     actionStatus(message); status(message);
+  }
+  $('document-change-save').addEventListener('click', async () => {
+    if (!allowAction('restore-save')) return;
+    await saveTextChange(pendingDocumentChange);
   });
   controls();
 })();

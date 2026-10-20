@@ -107,12 +107,14 @@ aktiv; die App öffnet dabei nicht automatisch die vollständige Verlaufsliste.
    oder Exportbestätigung.
 7. **Ergebnisordner öffnen** führt zu den fertigen Dateien. Diese kannst du im
    Dateimanager selbst auswählen und auch ohne KI verwenden. Die neuen fertigen
-   Anonymisierungsstände des neuen `/2`-Layouts enthalten neben den Markdown-
+   Anonymisierungsstände des neuen `/3`-Layouts enthalten neben den Markdown-
    Dateien den Unterordner **Vertraulich** mit **Dateizuordnung.csv**
-   (Originaldateiname → tatsächlicher Ergebnisname) und
-   **Personen-Pseudonym-Zuordnung.txt** (nachgewiesene Identitäten des jeweiligen
-   Standes). Keine weitere Aktion ist nötig. Nachbearbeitungen erhalten eigene,
-   passende Zuordnungen. Ältere `/1`-Läufe behalten ihre internen Zuordnungen;
+   (Originaldateiname → tatsächlicher Ergebnisname),
+   **Pseudonym-Zuordnung.txt** und **Pseudonym-Zuordnung.xlsx** (belegte Personen,
+   Unternehmen/Organisationen und Projekte des jeweiligen Standes). Die Excel-
+   Datei enthält je Dokument die Spalten **Typ**, **Basiswert** und **Endwert**.
+   Keine weitere Aktion ist nötig. Nachbearbeitungen erhalten eigene,
+   passende Zuordnungen. Ältere `/1`- und `/2`-Läufe behalten ihre bisherigen Zuordnungen;
    ihre Ordner werden nicht nachträglich verändert. Reine Konvertierung erzeugt
    keine Zuordnungen. Originaldateien und private Prüfstände werden nicht kopiert.
    Betriebssysteme können zusätzliche Anzeige-Metadaten wie `.DS_Store`
@@ -192,10 +194,10 @@ wählen. Dateinamen können personenbezogene Angaben enthalten; diese Wahl ist
 daher keine Anonymisierung der Namen. Sie gilt nur für die Ergebnisdateien
 dieses Laufs. Neue nachbearbeitete Anonymisierungsstände erhalten neutrale Namen.
 Vertrauliche Datei-/Identitätszuordnungen liegen getrennt von den Markdown-
-Dateien unter `Vertraulich/Dateizuordnung.csv` und
-`Vertraulich/Personen-Pseudonym-Zuordnung.txt` im neuen anonymisierten Ergebnisstand.
+Dateien unter `Vertraulich/Dateizuordnung.csv`, `Vertraulich/Pseudonym-Zuordnung.txt`
+und `Vertraulich/Pseudonym-Zuordnung.xlsx` im neuen anonymisierten Ergebnisstand.
 **Vertraulich enthält Originalangaben: nicht weitergeben oder hochladen.**
-Beide Dateien sind ohne zusätzliche Aktion vorhanden, auch im neuen vollständigen
+Alle drei Dateien sind ohne zusätzliche Aktion vorhanden, auch im neuen vollständigen
 Stand nach einer gespeicherten Nachbearbeitung. In älteren Laufordnern
 können `DataSecure-Zuordnung.csv` und `VERTRAULICH-NICHT-HOCHLADEN` weiterhin
 Originalangaben enthalten; diese alten Ordner nicht pauschal weitergeben.
@@ -282,6 +284,25 @@ Korrektur erzeugt einen neuen vollständigen Stand, nicht eine neue Pflichtfreig
 Ein alter **Export abgeschlossen**-Beleg beschreibt nur die damalige zusätzliche
 Kopie; er ist kein Nachweis für heute nachbearbeitete Dateien. Kein Schritt lädt
 automatisch Daten ins Internet hoch.
+
+## Freiwillige Nachbearbeitung
+
+Im fertigen Anonymisierungslauf **Nachbearbeitung öffnen (optional)** wählen
+und links eine Datei öffnen. Rechts steht der aktuelle Ergebnistext. Dort die
+zusätzlich sensible Stelle vollständig markieren; Vorschau und Sperrgrund
+stehen direkt darunter. **Maskierung speichern** ersetzt genau diese Stelle
+und stellt anschließend den vollständigen neuen Ergebnisstand bereit.
+Eine Markierung nur im linken Original ist kein Maskierungsauftrag.
+
+Unter **Behandlung erkannter Stellen ändern (optional)** erkannte Werte anhaken,
+die gewünschte Behandlung bewusst wählen und **Gewählte Behandlung speichern**
+klicken. Anfangs gilt **Nur diese Datei**. Laufweite Behandlung ist nur für
+belegte gleiche Identitäten möglich. Fundstellenseiten wechseln speichert
+nichts; die Auswahl bleibt erhalten. Vor Dateiwechsel oder Neuladen den
+Entwurf speichern oder ausdrücklich verwerfen. Eine fehlende Speicher- oder
+Bereitstellungsbestätigung zuerst abgleichen, nicht blind erneut klicken.
+Originaldateien und frühere Ergebnisstände bleiben unverändert. Keine zweite
+Dateiauswahl, Dokumentfreigabe oder Exportbestätigung ist nötig.
 
 Bei Problemen unter **Einstellungen** oder in der Fehlerhilfe
 **Diagnosepaket speichern** wählen; diese Funktion ist ohne Core-Verbindung

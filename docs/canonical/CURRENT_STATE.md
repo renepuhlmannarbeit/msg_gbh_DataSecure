@@ -1,7 +1,23 @@
 # Aktueller Iststand
 
-Arbeitsversion: **3.2.0-rc167**, gemeinsamer Windows-/Mac-Test-Pre-Release veröffentlicht.
-RC166 und frühere Pakete bleiben unverändert erhalten.
+Arbeitsversion: **3.2.0-rc168**, implementiert und gezielt unabhängig revalidiert;
+neue vollständige technische Endgates und Pakete noch offen.
+Letzter veröffentlichter gemeinsamer Windows-/Mac-Teststand ist RC167.
+RC167, RC166 und frühere Pakete bleiben unverändert erhalten.
+
+### Aktiver Auftrag – RC168 exakte Nachbearbeitung und echte XLSX-Zuordnung
+
+Der Nutzer hat den vollständigen Plan zur Umsetzung und neuen Windows-/Mac-
+Testübergabe freigegeben. Zuerst TEXT-POSITIONS-01 (CRLF/UTF16), danach klare
+Nachbearbeitungszustände und drei feste vertrauliche Begleitdateien einschließlich
+neutral benannter TXT und echter XLSX. Alte /1-/2-Ergebnisse und unterbrochene
+Aufträge unverändert erhalten. Desktoptests führen ausschließlich die Nutzer
+aus; keine neue Automation. Vorhandene statische Mac-Cores bleiben gepinnt,
+keine Developer-ID/Notarisierung und keine Abschaltung von OS-Schutzfunktionen.
+Positions-/UI-/Workbook-/Kompatibilitätsgegenfälle grün, einschließlich eines
+neu bestätigten und vor dem Freeze behobenen alten Fundstellenseiten-Callbacks.
+Noch keine neue Gesamtregression, native Endgates oder Paket-/Releaseabnahme.
+[Plan, revalidierte Quellen und Ablaufverträge](../acceptance/RC168_REVIEW_CORRECTION_AND_WORKBOOK_20261020.md).
 
 ### Neuester verbindlicher Abschluss – RC167 / RESULT-COMPANIONS-01
 
@@ -1475,7 +1491,7 @@ neuen gemeinsamen Quellfreeze und erneute Windows-Regression.
 
 ## Historische Nachweise bis R4 (kein aktueller R5-Abschluss)
 
-Stand: 17.10.2026 · 3.2.0-rc167 lokaler Windows-R4-Final-Testkandidat gebaut und ohne GUI geprüft; veröffentlicht bleibt Standalone RC162 für Windows und beide Mac-Architekturen; native Windows-/M2-Zielhostabnahme offen; Linux RC159 / Cowork RC151
+Stand: 17.10.2026 · 3.2.0-rc168 lokaler Windows-R4-Final-Testkandidat gebaut und ohne GUI geprüft; veröffentlicht bleibt Standalone RC162 für Windows und beide Mac-Architekturen; native Windows-/M2-Zielhostabnahme offen; Linux RC159 / Cowork RC151
 
 ### Gezielter R3-Abschlussreview: zusätzliche Fixes F13/F14
 

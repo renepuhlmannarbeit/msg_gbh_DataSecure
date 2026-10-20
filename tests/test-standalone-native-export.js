@@ -390,9 +390,10 @@ async function run() {
       assert.notEqual(expected, initialBytes[0].toString('utf8'), 'independent known-range oracle changed a real source span');
       assert.equal(fs.readFileSync(path.join(directory, names[0]), 'utf8'), expected);
       assert.doesNotMatch(expected, /Anna Beispiel/u);
-      assert.deepEqual(fs.readdirSync(path.join(directory, 'Vertraulich')).sort(), ['Dateizuordnung.csv', 'Personen-Pseudonym-Zuordnung.txt']);
+      assert.deepEqual(fs.readdirSync(path.join(directory, 'Vertraulich')).sort(), ['Dateizuordnung.csv', 'Pseudonym-Zuordnung.txt', 'Pseudonym-Zuordnung.xlsx']);
       assert.match(fs.readFileSync(path.join(directory, 'Vertraulich/Dateizuordnung.csv'), 'utf8'), /Dokument_01\.md/u);
-      assert.match(fs.readFileSync(path.join(directory, 'Vertraulich/Personen-Pseudonym-Zuordnung.txt'), 'utf8'), /Anna Beispiel/u);
+      assert.match(fs.readFileSync(path.join(directory, 'Vertraulich/Pseudonym-Zuordnung.txt'), 'utf8'), /Anna Beispiel/u);
+      assert.equal(fs.readFileSync(path.join(directory, 'Vertraulich/Pseudonym-Zuordnung.xlsx')).subarray(0, 2).toString(), 'PK');
     }
     assert.deepEqual(fs.readFileSync(path.join(directory, names[1])), initialBytes[1]);
     assert.ok(store.list(batchId).documents.every(row => row.approved === false), 'publication is not human approval');

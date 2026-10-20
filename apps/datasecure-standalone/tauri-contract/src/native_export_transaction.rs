@@ -427,13 +427,17 @@ mod tests {
     }
     fn companions() -> ConfidentialFiles {
         ConfidentialFiles { filename_mapping: ConfidentialFile { bytes: 7, sha256: Sha256::digest(b"mapping").into() },
-            identities: ConfidentialFile { bytes: 10, sha256: Sha256::digest(b"identities").into() } }
+            identities: ConfidentialFile { bytes: 10, sha256: Sha256::digest(b"identities").into() }, workbook: None }
     }
     fn results_with_companions(f: &Fixture, j: &Directory, s: &Directory, t: &Directory) -> Plan {
         f.plan(j, s, t).with_publication_role(Some(PublicationRole::Results)).with_confidential(Some(companions())).unwrap()
     }
     fn stage_all(tx: &Transaction<'_>) {
         tx.write_body(0, b"hello").unwrap(); tx.write_body(1, b"mapping").unwrap(); tx.write_body(2, b"identities").unwrap();
+    }
+    fn workbook_companions() -> ConfidentialFiles {
+        let mut value = companions();
+        value.workbook = Some(ConfidentialFile { bytes: 8, sha256: Sha256::digest(b"workbook").into() }); value
     }
     #[test]
     fn confidential_plan_is_closed_optional_digest_bound_and_never_a_legacy_or_markdown_capability() {
@@ -483,6 +487,77 @@ mod tests {
         assert!(!confidential.join(FILENAME_MAPPING).exists(), "a missing published companion is never recreated");
         assert_eq!(fs::read(target.join("Dokument_01.md")).unwrap(), b"hello");
         assert_eq!(fs::read_dir(f.path.join("target")).unwrap().count(), 1, "no replacement generation");
+    }
+    #[test]
+    fn confidential_workbook_plan_is_digest_bound_and_never_reinterprets_a_legacy_two_file_intent() {
+        let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+        let legacy = results_with_companions(&f, &j, &s, &t);
+        let current = legacy.clone().with_confidential(Some(workbook_companions())).unwrap();
+        assert_ne!(current.digest().unwrap(), legacy.digest().unwrap());
+        let mut changed = workbook_companions(); changed.workbook.as_mut().unwrap().sha256[0] ^= 1;
+        assert_ne!(current.digest().unwrap(), legacy.clone().with_confidential(Some(changed)).unwrap().digest().unwrap());
+        let mut invalid = serde_json::to_value(&current).unwrap(); invalid["confidential"]["workbook"] = serde_json::Value::Null;
+        assert!(serde_json::from_value::<Plan>(invalid).is_err());
+        let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
+        { let tx = Transaction::open(&j, &s, &t, legacy.clone(), &guard).unwrap(); stage_all(&tx); }
+        assert!(Transaction::open(&j, &s, &t, current, &guard).is_err());
+        let tx = Transaction::open(&j, &s, &t, legacy, &guard).unwrap(); tx.prepare().unwrap(); tx.commit().unwrap();
+        let confidential = f.path.join("target").join(tx.plan.target_name()).join(CONFIDENTIAL_DIRECTORY);
+        assert_eq!(fs::read_dir(&confidential).unwrap().count(), 2);
+        assert_eq!(fs::read(confidential.join(IDENTITIES_FILE)).unwrap(), b"identities");
+        assert!(!confidential.join("Pseudonym-Zuordnung.xlsx").exists());
+    }
+    #[test]
+    fn confidential_workbook_generation_requires_all_three_bodies_and_recovers_without_renaming_or_repair() {
+        let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+        let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
+        let plan = results_with_companions(&f, &j, &s, &t).with_confidential(Some(workbook_companions())).unwrap();
+        {
+            let tx = Transaction::open(&j, &s, &t, plan.clone(), &guard).unwrap(); stage_all(&tx);
+            assert!(tx.prepare().is_err(), "the workbook is a required third promised body");
+            tx.write_body(3, b"workbook").unwrap(); tx.prepare().unwrap(); publish_without_receipt(&tx);
+            assert_eq!(tx.inspect_completed().unwrap_err().to_string(), "AI_EXPORT_INCOMPLETE");
+        }
+        drop(j); drop(s); drop(t);
+        let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+        let tx = Transaction::open(&j, &s, &t, plan, &guard).unwrap();
+        assert_eq!(tx.commit().unwrap(), Status::Completed); assert_eq!(tx.acknowledge().unwrap(), Status::Acknowledged);
+        let target = f.path.join("target").join(tx.plan.target_name()); let confidential = target.join(CONFIDENTIAL_DIRECTORY);
+        let mut names: Vec<_> = fs::read_dir(&confidential).unwrap().map(|entry| entry.unwrap().file_name()).collect(); names.sort();
+        assert_eq!(names, ["Dateizuordnung.csv", "Pseudonym-Zuordnung.txt", "Pseudonym-Zuordnung.xlsx"].map(std::ffi::OsString::from));
+        assert_eq!(fs::read(confidential.join("Pseudonym-Zuordnung.txt")).unwrap(), b"identities");
+        assert_eq!(fs::read(confidential.join("Pseudonym-Zuordnung.xlsx")).unwrap(), b"workbook");
+        assert!(!confidential.join(IDENTITIES_FILE).exists(), "no duplicate old-name identity file");
+        fs::remove_file(confidential.join("Pseudonym-Zuordnung.xlsx")).unwrap();
+        assert!(tx.inspect_completed().is_err()); assert!(tx.commit().is_err());
+        assert!(!confidential.join("Pseudonym-Zuordnung.xlsx").exists());
+        assert_eq!(fs::read(target.join("Dokument_01.md")).unwrap(), b"hello");
+        assert_eq!(fs::read_dir(f.path.join("target")).unwrap().count(), 1);
+    }
+    #[test]
+    fn confidential_workbook_inventory_rejects_tampering_old_alias_links_and_directory_replacement() {
+        for damage in ["body", "old-alias", "hardlink", "directory-replacement"] {
+            let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+            let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
+            let plan = results_with_companions(&f, &j, &s, &t).with_confidential(Some(workbook_companions())).unwrap();
+            let tx = Transaction::open(&j, &s, &t, plan, &guard).unwrap(); stage_all(&tx); tx.write_body(3, b"workbook").unwrap();
+            tx.prepare().unwrap(); tx.commit().unwrap();
+            let target = f.path.join("target").join(tx.plan.target_name()); let child = target.join(CONFIDENTIAL_DIRECTORY);
+            match damage {
+                "body" => fs::write(child.join("Pseudonym-Zuordnung.xlsx"), b"modified").unwrap(),
+                "old-alias" => fs::write(child.join(IDENTITIES_FILE), b"identities").unwrap(),
+                "hardlink" => fs::hard_link(child.join("Pseudonym-Zuordnung.xlsx"), f.path.join("foreign-link")).unwrap(),
+                "directory-replacement" => {
+                    let retired = f.path.join("retired-confidential"); fs::rename(&child, &retired).unwrap(); fs::create_dir(&child).unwrap();
+                    for name in [FILENAME_MAPPING, "Pseudonym-Zuordnung.txt", "Pseudonym-Zuordnung.xlsx"] {
+                        fs::copy(retired.join(name), child.join(name)).unwrap();
+                    }
+                },
+                _ => unreachable!(),
+            }
+            assert!(tx.inspect_completed().is_err(), "{damage}"); assert!(tx.acknowledge().is_err(), "{damage}");
+            assert_eq!(fs::read_dir(f.path.join("target")).unwrap().count(), 1);
+        }
     }
     #[test]
     fn confidential_inventory_rejects_changed_bodies_extras_hardlinks_and_equal_byte_directory_replacement() {

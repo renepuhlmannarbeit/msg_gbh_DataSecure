@@ -5,6 +5,8 @@ const fs = require('node:fs'), path = require('node:path'), vm = require('node:v
 const { createSuite } = require('./helpers');
 const { testAsync, assert, done } = createSuite('Standalone document review renderer');
 const source = fs.readFileSync(path.join(__dirname, '../apps/datasecure-standalone/frontend/document-review.js'), 'utf8');
+const positionsSource = fs.readFileSync(path.join(__dirname, '../apps/datasecure-standalone/frontend/text-positions.js'), 'utf8');
+const positions = require('../apps/datasecure-standalone/frontend/text-positions');
 const tick = () => new Promise(resolve => setImmediate(resolve));
 const textTree = node => [node.textContent, ...(node.children || []).map(textTree)].join(' ');
 const isDecision = call => ['decide_document_review', 'decide_document_review_batch'].includes(call.command);
@@ -20,7 +22,18 @@ function harness(options = {}) {
     click() { this.events.get('click')?.(); },
     setSelectionRange(start, end) { this.selectionStart = start; this.selectionEnd = end; },
     showModal() { this.open = true; }, close() { this.open = false; this.events.get('close')?.(); } });
-  const el = id => { if (!nodes.has(id)) nodes.set(id, create('div')); return nodes.get(id); };
+  const el = id => { if (!nodes.has(id)) {
+    const node = create('div');
+    if (['document-original', 'document-markdown'].includes(id)) {
+      let value = '';
+      // WHATWG textarea API-value behavior, independently of the production
+      // coordinate adapter. Native WebView coverage remains a separate gate.
+      Object.defineProperty(node, 'value', { get() { return value; }, set(next) {
+        value = String(next).replace(/\r\n?/gu, '\n'); node.selectionStart = node.selectionEnd = value.length;
+      } });
+    }
+    nodes.set(id, node);
+  } return nodes.get(id); };
   const invoke = async (command, args) => {
     calls.push({ command, args: structuredClone(args) });
     if (options.invoke) { const response = await options.invoke(command, args); if (response !== undefined) {
@@ -67,6 +80,7 @@ function harness(options = {}) {
   const context = vm.createContext({ document, window, crypto: crypto.webcrypto, Date: clock, performance: { now: () => now },
     setInterval(fn) { intervals.add(fn); return fn; }, clearInterval(fn) { intervals.delete(fn); } });
   vm.runInContext(fs.readFileSync(path.join(__dirname, '../apps/datasecure-standalone/frontend/workflow-presentation.js'), 'utf8'), context);
+  vm.runInContext(positionsSource, context);
   window.__DATASECURE_RUN_GUIDE__ = { documents(value) { guides.push(window.__DATASECURE_PRESENTATION__.projectRun(value)); } };
   vm.runInContext(source, context);
   return { el, document, calls, rows, guides, api: window.__DATASECURE_DOCUMENTS__,
@@ -78,6 +92,7 @@ function harness(options = {}) {
         el('documents-approve-proceed').events.get('click')?.(); await tick();
       } },
     async all() { el('documents-all').checked = true; await this.act('documents-all', 'change'); },
+    async mark(start, end) { const node = el('document-markdown'); node.focus(); node.setSelectionRange(start, end); await this.act(node, 'select'); },
     async export() { await this.act('documents-export'); await this.act('document-export-confirm'); } };
 }
 testAsync('completed anonymization run no longer claims its processing completion is unconfirmed', async () => {
@@ -710,10 +725,12 @@ testAsync('run scope is explicit, refuses ambiguous identities and reports the e
   h.rows[0].entity_review_available = true; h.rows[0].entity_count = 1; h.rows[0].run_entity_review_available = true;
   await h.api.open('a'.repeat(64)); await h.act(h.el('documents-list').children[0].children[1].children[0]);
   let check = h.el('entities-list').children[0].children[0].children[0]; check.checked = true; await h.act(check, 'change');
-  h.el('entities-decision').value = 'organization'; assert.equal(h.el('entities-apply').disabled, true);
+  assert.equal(h.el('entities-scope').value, 'document');
+  h.el('entities-scope').value = 'run'; h.el('entities-decision').value = 'organization'; await h.act('entities-scope', 'change'); assert.equal(h.el('entities-apply').disabled, true);
   await h.act('entities-apply'); assert.equal(h.calls.some(call => call.command === 'decide_document_review'), false);
-  eligible = true; await h.act(h.el('documents-list').children[0].children[1].children[0]);
+  await h.act('document-discard-draft'); eligible = true; await h.act(h.el('documents-list').children[0].children[1].children[0]);
   check = h.el('entities-list').children[0].children[0].children[0]; check.checked = true; await h.act(check, 'change');
+  h.el('entities-scope').value = 'run'; h.el('entities-decision').value = 'organization'; await h.act('entities-scope', 'change');
   assert.equal(h.el('entities-apply').disabled, false); await h.act('entities-apply');
   assert.equal(h.calls.find(call => call.command === 'decide_document_review').args.decision.scope, 'run');
   assert.match(h.el('documents-status').textContent, /nicht übernommen.*Unterordner\/Vertrag\.docx/u);
@@ -1172,22 +1189,21 @@ testAsync('an ACK saved before its response is lost stays visible as a completed
   assert.equal(second.calls.some(call => call.command === 'export_approved_documents'), false);
 });
 
-testAsync('masking requires a separate confirmation, then submits only marked offsets and revokes approval', async () => {
+testAsync('masking previews only marked text then saves with one click and revokes approval', async () => {
   const h = harness(); await h.api.open('a'.repeat(64)); await h.all(); await h.act('documents-approve');
   assert.equal(h.el('documents-main-guide').hidden, true);
   assert.equal(h.el('documents-approval-extras').hidden, true);
   await h.act(h.el('documents-list').children[0].children[1].children[0]);
   assert.equal(h.el('document-markdown').readOnly, true);
-  assert.match(h.el('document-markdown-caption').textContent, /nur markieren/u);
-  assert.match(h.el('document-edit-hint').textContent, /schreibgeschützt.*bewusst speichern/u);
+  assert.match(h.el('document-markdown-caption').textContent, /Aktueller Ergebnistext.*nur markieren/u);
+  assert.match(h.el('document-edit-hint').textContent, /schreibgeschützt.*Maskierung speichern/u);
   assert.equal(h.el('document-save-correction').hidden, true);
-  h.el('document-markdown').selectionStart = 14; h.el('document-markdown').selectionEnd = 16;
+  await h.mark(14, 16);
   const writesBefore = h.calls.filter(call => call.command === 'decide_document_review').length;
-  await h.act('document-redact');
   assert.equal(h.calls.filter(call => call.command === 'decide_document_review').length, writesBefore);
-  assert.equal(h.el('document-change-confirm').hidden, false);
-  assert.match(h.el('document-change-confirm-text').textContent, /Noch nichts geändert/u);
-  await h.act('document-change-save'); await tick(); await tick();
+  assert.equal(h.el('document-mask-preview').value, '42');
+  assert.equal(h.el('document-change-confirm').hidden, true);
+  await h.act('document-redact'); await tick(); await tick();
   const call = h.calls.filter(call => call.command === 'decide_document_review').at(-1);
   assert.equal(call.args.decision.action, 'redact'); assert.deepEqual(call.args.decision.ranges, [{ start: 14, end: 16 }]);
   assert.equal(h.rows[0].approved, false); assert.equal(h.rows[1].approved, true);
@@ -1200,14 +1216,14 @@ testAsync('mask action explains a missing right-side selection next to the butto
   await h.act('document-redact');
   assert.equal(h.calls.some(call => call.command === 'decide_document_review'), false);
   assert.equal(h.el('document-action-status').hidden, false);
-  assert.match(h.el('document-action-status').textContent, /rechten Markdown-Feld markieren/u);
-  assert.match(h.el('documents-status').textContent, /rechten Markdown-Feld markieren/u);
+  assert.match(h.el('document-action-status').textContent, /rechten aktuellen Ergebnistext.*markieren/u);
+  assert.match(h.el('documents-status').textContent, /rechten aktuellen Ergebnistext.*markieren/u);
 });
 testAsync('confirmed mask immediately reopens its new revision and shows a local success receipt', async () => {
   const h = harness({ maskAfterRevision: true }); await h.api.open('a'.repeat(64));
   await h.act(h.el('documents-list').children[0].children[1].children[0]);
-  h.el('document-markdown').selectionStart = 14; h.el('document-markdown').selectionEnd = 16;
-  await h.act('document-redact'); await h.act('document-change-save'); await tick(); await tick();
+  await h.mark(14, 16);
+  await h.act('document-redact'); await tick(); await tick();
   assert.equal(h.calls.filter(call => call.command === 'decide_document_review').length, 1);
   assert.equal(h.el('document-name').textContent, 'Quelle-1.pdf');
   assert.match(h.el('document-markdown').value, /\[MANUAL_REDACTION\]/u);
@@ -1216,11 +1232,10 @@ testAsync('confirmed mask immediately reopens its new revision and shows a local
   assert.equal(h.rows[0].approved, false);
   assert.equal(h.calls.some(call => call.command === 'export_approved_documents'), false);
 });
-testAsync('cancelling an optional mask or basis reset writes nothing', async () => {
+testAsync('a plain mask highlight and cancelling the separate basis reset write nothing', async () => {
   const h = harness(); await h.api.open('a'.repeat(64));
   await h.act(h.el('documents-list').children[0].children[1].children[0]);
-  h.el('document-markdown').selectionStart = 14; h.el('document-markdown').selectionEnd = 16;
-  await h.act('document-redact'); await h.act('document-change-cancel');
+  await h.mark(14, 16);
   assert.equal(h.el('document-change-confirm').hidden, true);
   await h.act('document-restore');
   assert.match(h.el('document-change-confirm-text').textContent, /späteren Text- und Entitätenänderungen/u);
@@ -1238,12 +1253,11 @@ testAsync('basis reset also requires explicit saving and invalidates the affecte
   assert.equal(h.rows[0].approved, false); assert.equal(h.rows[1].approved, true);
   assert.match(h.el('document-action-status').textContent, /Basisstand als Stand 2 gespeichert/u);
 });
-testAsync('a prepared mask cannot be saved after the document revision changes', async () => {
+testAsync('a highlighted mask cannot be saved after the document revision changes', async () => {
   const h = harness(); await h.api.open('a'.repeat(64));
   await h.act(h.el('documents-list').children[0].children[1].children[0]);
-  h.el('document-markdown').selectionStart = 14; h.el('document-markdown').selectionEnd = 16;
-  await h.act('document-redact'); h.rows[0].revision++;
-  await h.act('documents-reload'); await h.act('document-change-save');
+  await h.mark(14, 16); h.rows[0].revision++;
+  await h.act('documents-reload'); await h.act('document-redact');
   assert.equal(h.calls.some(call => call.command === 'decide_document_review'), false);
 });
 testAsync('failed state recovery does not request stale detail or claim a successful reconciliation', async () => {
@@ -1737,11 +1751,10 @@ async function prepareCorrection(h, mode = 'markdown-and-anonymize') {
   if (mode === 'markdown-only') {
     h.el('document-markdown').value = '[PERSON_001]: 43 Projekte.'; await h.act('document-markdown', 'input');
   } else {
-    h.el('document-markdown').selectionStart = 14; h.el('document-markdown').selectionEnd = 16;
-    await h.act('document-redact');
+    await h.mark(14, 16);
   }
 }
-const saveCorrection = (h, mode) => h.act(mode === 'markdown-only' ? 'document-save-correction' : 'document-change-save');
+const saveCorrection = (h, mode) => h.act(mode === 'markdown-only' ? 'document-save-correction' : 'document-redact');
 
 for (const state of ['initial', 'current', 'pending', 'conflict']) testAsync(`actual ${state} publication DTO preserves readiness and null-generation semantics`, async () => {
   const h = harness({ resultPublication: { state, generation_id: state === 'current' ? 'e'.repeat(32) : null, count: 2, current_revision: 0 } });
@@ -1904,7 +1917,7 @@ for (const mode of ['markdown-only', 'markdown-and-anonymize']) for (const compl
     assert.equal(h.calls.some(call => isDecision(call) || ['publish_result_documents', 'open_history_results', 'export_approved_documents'].includes(call.command)), false);
   });
 
-testAsync('an already prepared optional mask cannot commit if a fresh read withdraws terminal completion', async () => {
+testAsync('a highlighted optional mask cannot commit if a fresh read withdraws terminal completion', async () => {
   let complete = true;
   const h = harness({ invoke(command) {
     if (command === 'get_document_reviews') return { documents: structuredClone(h.rows), processing_mode: 'markdown-and-anonymize',
@@ -1912,9 +1925,9 @@ testAsync('an already prepared optional mask cannot commit if a fresh read withd
       unavailable: [], local_ui_only: true, external_disclosure: false };
   } });
   await prepareCorrection(h);
-  assert.equal(h.el('document-change-confirm').hidden, false);
+  assert.equal(h.el('document-redact').disabled, false);
   complete = false; await h.act('documents-reload');
-  assert.equal(h.el('document-change-save').disabled, true); await h.act('document-change-save');
+  assert.equal(h.el('document-redact').disabled, true); await h.act('document-redact');
   assert.equal(h.calls.some(call => isDecision(call) || call.command === 'publish_result_documents'), false);
   assert.equal(h.el('documents-completion').hidden, true);
   assert.equal(h.el('document-original').value, 'Anna Beispiel: 42 Projekte.');
@@ -2037,6 +2050,337 @@ for (const processing_mode of ['markdown-only', 'markdown-and-anonymize']) testA
     await h.act('document-restore'); await h.act('document-change-save'); await h.act('documents-publish');
     assert.equal(h.el('documents-publish').hidden, true);
     assert.equal(h.calls.some(call => isDecision(call) || call.command === 'publish_result_documents'), false);
+  });
+
+testAsync('HTML text positions round-trip exact CRLF/CR/LF and UTF-16 boundaries without changing backend bytes', async () => {
+  const samples = ['', 'plain', '\r\n', '\r', '\n', 'aa\r\nxyz', 'a\rb\nc\r\nd', '\r\n\r\r\n\n',
+    '😀\r\nA\re\u0301\n𐐀z', 'a\r\n😀\r\n𐐀\rb'];
+  const validBoundary = (text, index) => !(index > 0 && index < text.length &&
+    /[\uD800-\uDBFF]/u.test(text[index - 1]) && /[\uDC00-\uDFFF]/u.test(text[index]));
+  for (const raw of samples) {
+    const before = crypto.createHash('sha256').update(raw).digest('hex'), mapping = positions.create(raw);
+    const expected = raw.replace(/\r\n?/gu, '\n'); assert.equal(mapping.display, expected);
+    for (let start = 0; start <= expected.length; start++) for (let end = start; end <= expected.length; end++) {
+      if (!validBoundary(expected, start) || !validBoundary(expected, end)) continue;
+      const bound = mapping.backendRange(expected, start, end);
+      assert.equal(raw.slice(bound.start, bound.end).replace(/\r\n?/gu, '\n'), expected.slice(start, end));
+      assert.deepEqual(mapping.displayRange(bound.start, bound.end), { start, end });
+    }
+    assert.equal(mapping.correction(expected), null);
+    assert.equal(crypto.createHash('sha256').update(raw).digest('hex'), before);
+    assert.equal(Object.isFrozen(mapping), true);
+  }
+});
+
+testAsync('HTML text positions reject stale values, invalid ranges, half CRLF and split surrogate selections', async () => {
+  const invalid = error => error.code === 'DOCUMENT_TEXT_POSITION_INVALID';
+  for (const raw of [null, {}, '\ud800', '\udc00', 'x'.repeat(8 * 1024 * 1024 + 1)])
+    assert.throws(() => positions.create(raw), invalid);
+  const raw = 'A\r\n😀B', mapping = positions.create(raw);
+  for (const [start, end] of [[-1, 2], [2, 1], [0, 20], [0.5, 2], [NaN, 2], [null, 2], [2, 3], [3, 4]])
+    assert.throws(() => mapping.backendRange(mapping.display, start, end), invalid);
+  assert.throws(() => mapping.backendRange(mapping.display + 'x', 0, 1), invalid);
+  assert.throws(() => mapping.displayRange(2, 3), invalid, 'middle of the CRLF has no exact API coordinate');
+  assert.throws(() => mapping.displayRange(4, 5), invalid, 'middle of the astral character is not a safe boundary');
+  for (const text of ['A\rB', 'A\r\nB', '\ud800', null]) assert.throws(() => mapping.correction(text), invalid);
+});
+
+testAsync('HTML text positions work without the newer String.isWellFormed WebView API', async () => {
+  const window = {}, context = vm.createContext({ window });
+  vm.runInContext('String.prototype.isWellFormed = undefined;', context);
+  vm.runInContext(positionsSource, context);
+  const api = window.__DATASECURE_TEXT_POSITIONS__, mapping = api.create('😀\r\nxyz');
+  assert.equal(mapping.display, '😀\nxyz');
+  assert.equal(mapping.backendRange(mapping.display, 3, 6).start, 4);
+  assert.throws(() => api.create('\ud800'), error => error.code === 'DOCUMENT_TEXT_POSITION_INVALID');
+});
+
+testAsync('API correction maps one deliberate edit back to original offsets and retains untouched line endings', async () => {
+  const cases = [
+    ['before\r\nTARGET\r\nafter', 'before\nCHANGED\nafter', 'before\r\nCHANGED\r\nafter'],
+    ['before\rTARGET\nafter', 'before\nCHANGED\nafter', 'before\rCHANGED\nafter'],
+    ['😀\r\nold\rafter', '😀\nnew\nafter', '😀\r\nnew\rafter'],
+    ['a\r\nb', 'ax\nb', 'ax\r\nb'],
+    ['a\r\nb', 'a\nxb', 'a\r\nxb'],
+    ['a\r\nb', 'ab', 'ab'],
+    ['a\r\nb', 'a\n\nb', 'a\r\n\nb'],
+    ['a\r\n😀b', 'a\n😃b', 'a\r\n😃b'],
+    ['😀\r\nend', '\nend', '\r\nend'],
+    ['\r\nend', '😀\nend', '😀\r\nend']
+  ];
+  for (const [raw, edited, expected] of cases) {
+    const correction = positions.create(raw).correction(edited);
+    assert.ok(correction); assert.equal(correction.replacement.isWellFormed(), true);
+    const actual = raw.slice(0, correction.start) + correction.replacement + raw.slice(correction.end);
+    assert.equal(actual, expected); assert.equal(actual.replace(/\r\n?/gu, '\n'), edited);
+  }
+});
+
+function positionedFixture(markdown, { original = markdown, mode = 'markdown-and-anonymize', entities = null } = {}) {
+  let backend = markdown; const control = { loseReply: false };
+  const hash = text => crypto.createHash('sha256').update(text).digest('hex');
+  const h = harness({ invoke(command, args) {
+    if (command === 'get_document_review_chunk') return { ...h.rows[0], chunk_index: args.chunkIndex,
+      original_text: original, markdown: backend, local_ui_only: true, external_disclosure: false };
+    if (command === 'get_document_entities') return { ok: true, ...h.rows[0], page: args.page, pages: 1,
+      entities, local_ui_only: true, external_disclosure: false };
+    if (command === 'decide_document_review') {
+      assert.equal(args.decision.output_sha256, hash(backend)); assert.equal(args.decision.revision, h.rows[0].revision);
+      assert.equal(args.decision.ranges.length, 1);
+      const range = args.decision.ranges[0];
+      backend = backend.slice(0, range.start) + (args.decision.action === 'correct' ? range.replacement : '[MANUAL_REDACTION]') + backend.slice(range.end);
+      Object.assign(h.rows[0], { revision: h.rows[0].revision + 1, output_sha256: hash(backend), text_modified: true, approved: false });
+      if (control.loseReply) { control.loseReply = false; throw Error('STANDALONE_BUSY'); }
+      return { ok: true, ...h.rows[0], local_ui_only: true, external_disclosure: false };
+    }
+  } });
+  h.rows.forEach(row => { row.processing_mode = mode; });
+  Object.assign(h.rows[0], { output_sha256: hash(markdown), entity_review_available: Boolean(entities), entity_count: entities?.length || 0 });
+  return { h, control, backend: () => backend, async open() {
+    await h.api.open('a'.repeat(64)); await h.act(h.el('documents-list').children[0].children[1].children[0]);
+  } };
+}
+
+for (const raw of ['aa\r\nxyz', 'aa\rxyz', 'aa\nxyz', '😀\r\na\rb\nxyz\r\nend'])
+  testAsync(`manual masking targets exact backend characters after textarea normalization: ${JSON.stringify(raw)}`, async () => {
+    const f = positionedFixture(raw); await f.open(); const { h } = f;
+    const visible = h.el('document-markdown').value, start = visible.indexOf('xyz');
+    await h.mark(start, start + 3); assert.equal(h.calls.some(isDecision), false);
+    await h.act('document-redact'); await tick(); await tick();
+    const call = h.calls.find(isDecision);
+    assert.deepEqual(call.args.decision.ranges, [{ start: raw.indexOf('xyz'), end: raw.indexOf('xyz') + 3 }]);
+    assert.equal(f.backend(), raw.replace('xyz', '[MANUAL_REDACTION]'));
+    assert.equal(h.calls.filter(isDecision).length, 1); assert.equal(h.calls.filter(call => call.command === 'publish_result_documents').length, 1);
+    assert.equal(h.calls.some(call => call.command === 'export_approved_documents'), false);
+  });
+
+testAsync('manual masking refuses half an astral character or a changed readonly display without a decision', async () => {
+  for (const changed of [false, true]) {
+    const f = positionedFixture('aa\r\n😀end'); await f.open(); const { h } = f, node = h.el('document-markdown');
+    if (changed) node.value += 'x';
+    const start = node.value.indexOf('😀'); await h.mark(start + (changed ? 0 : 1), start + 2);
+    await h.act('document-redact');
+    assert.equal(h.calls.some(isDecision), false); assert.equal(h.calls.some(call => call.command === 'publish_result_documents'), false);
+    assert.match(h.el('documents-status').textContent, /vollständige Zeichen markieren/u);
+    assert.equal(f.backend(), 'aa\r\n😀end');
+  }
+});
+
+testAsync('complete astral-character mask remains exact after CRLF without splitting UTF-16', async () => {
+  const f = positionedFixture('aa\r\n😀end'); await f.open(); const { h } = f, node = h.el('document-markdown');
+  const start = node.value.indexOf('😀'); await h.mark(start, start + 2);
+  await h.act('document-redact'); await tick(); await tick();
+  assert.equal(f.backend(), 'aa\r\n[MANUAL_REDACTION]end');
+  assert.deepEqual(h.calls.find(isDecision).args.decision.ranges, [{ start: 4, end: 6 }]);
+});
+
+testAsync('entity inspection maps source and Markdown highlights independently across mixed line endings', async () => {
+  const original = '😀\r\nsource\rNAME\nend', markdown = '😀\r\noutput\r\n[PERSON_001]\rend';
+  const entity = { entity_id: 'entity_000001', original: 'NAME', replacement: '[PERSON_001]', disabled: false,
+    kind: 'PERSON', run_eligible: true, count: 1, decision: 'default', output_start: markdown.indexOf('[PERSON_001]'),
+    output_end: markdown.indexOf('[PERSON_001]') + 12, source_start: original.indexOf('NAME'), source_end: original.indexOf('NAME') + 4 };
+  const f = positionedFixture(markdown, { original, entities: [entity] }); await f.open(); const { h } = f;
+  const inspect = h.el('entities-list').children[0].children[1].children[0]; await h.act(inspect);
+  const right = h.el('document-markdown'), left = h.el('document-original');
+  assert.equal(right.value.slice(right.selectionStart, right.selectionEnd), '[PERSON_001]');
+  assert.equal(left.value.slice(left.selectionStart, left.selectionEnd), 'NAME');
+  assert.equal(h.document.activeElement, right); assert.equal(h.calls.some(isDecision), false);
+});
+
+testAsync('an unrepresentable source highlight never partially changes either comparison selection', async () => {
+  const original = 'a\r\nNAME', markdown = 'a\r\n[PERSON_001]';
+  const f = positionedFixture(markdown, { original, entities: [{ entity_id: 'entity_000001', original: 'NAME', replacement: '[PERSON_001]',
+    disabled: false, kind: 'PERSON', run_eligible: true, count: 1, decision: 'default', output_start: 3, output_end: 15,
+    source_start: 2, source_end: 7 }] });
+  await f.open(); const { h } = f, right = h.el('document-markdown'), left = h.el('document-original');
+  right.setSelectionRange(0, 1); left.setSelectionRange(0, 1); const active = h.document.activeElement;
+  await h.act(h.el('entities-list').children[0].children[1].children[0]);
+  assert.equal(right.selectionStart, 0); assert.equal(right.selectionEnd, 1);
+  assert.equal(left.selectionStart, 0); assert.equal(left.selectionEnd, 1); assert.equal(h.document.activeElement, active);
+  assert.match(h.el('documents-status').textContent, /DOCUMENT_TEXT_POSITION_INVALID/u); assert.equal(h.calls.some(isDecision), false);
+});
+
+for (const raw of ['before\r\nTARGET\r\nafter', 'before\rTARGET\nafter', '😀\r\nTARGET\rafter'])
+  testAsync(`raw correction has no phantom dirty state and preserves original untouched bytes: ${JSON.stringify(raw)}`, async () => {
+    const f = positionedFixture(raw, { mode: 'markdown-only' }); await f.open(); const { h } = f;
+    assert.equal(h.el('document-save-correction').disabled, true); assert.equal(h.el('document-discard-correction').disabled, true);
+    h.el('document-markdown').value = h.el('document-markdown').value.replace('TARGET', 'CHANGED'); await h.act('document-markdown', 'input');
+    await h.act('document-save-correction'); await tick(); await tick();
+    const correction = h.calls.find(isDecision).args.decision;
+    assert.deepEqual(correction.ranges, [{ start: raw.indexOf('TARGET'), end: raw.indexOf('TARGET') + 6, replacement: 'CHANGED' }]);
+    assert.equal(f.backend(), raw.replace('TARGET', 'CHANGED')); assert.equal(h.calls.filter(isDecision).length, 1);
+  });
+
+testAsync('discard and lost-reply recovery compare API text without normalizing saved CRLF/CR bytes', async () => {
+  const raw = 'before\r\nTARGET\rafter', f = positionedFixture(raw, { mode: 'markdown-only' }); await f.open(); const { h } = f;
+  h.el('document-markdown').value += ' draft'; await h.act('document-markdown', 'input'); await h.act('document-discard-correction');
+  assert.equal(h.el('document-markdown').value, raw.replace(/\r\n?/gu, '\n')); assert.equal(h.el('document-save-correction').disabled, true);
+  h.el('document-markdown').value = h.el('document-markdown').value.replace('TARGET', 'CHANGED'); await h.act('document-markdown', 'input');
+  f.control.loseReply = true; await h.act('document-save-correction'); await tick(); await tick();
+  assert.equal(h.el('document-recovery-draft').hidden, false); assert.equal(f.backend(), raw.replace('TARGET', 'CHANGED'));
+  await h.act('documents-reload'); await tick(); await tick();
+  assert.equal(h.el('document-recovery-draft').hidden, true); assert.equal(h.el('document-save-correction').disabled, true);
+  assert.match(h.el('documents-status').textContent, /gespeicherte Text stimmt mit deinem Korrekturentwurf überein/u);
+  assert.equal(h.calls.filter(isDecision).length, 1, 'recovery never issues a second decision');
+});
+
+testAsync('a fresh left focus, invalid selection, reload or file change cannot reuse an old right-hand mask range', async () => {
+  const f = positionedFixture('aa\r\nxyz\r\n😀end'); await f.open(); const { h } = f;
+  await h.mark(3, 6); assert.equal(h.el('document-mask-preview').value, 'xyz'); assert.equal(h.el('document-redact').disabled, false);
+  h.el('document-original').focus(); await h.act('document-original', 'focus');
+  assert.equal(h.el('document-redact').disabled, true); assert.equal(h.el('document-mask-preview').hidden, true);
+  await h.act('document-redact'); assert.equal(h.calls.some(isDecision), false);
+  h.el('document-markdown').focus(); await h.act('document-markdown', 'focus');
+  assert.equal(h.el('document-redact').disabled, true, 'returning focus alone does not authorize a retained old selection');
+  const emoji = h.el('document-markdown').value.indexOf('😀'); await h.mark(emoji + 1, emoji + 2);
+  assert.equal(h.el('document-redact').disabled, true); await h.act('document-redact'); assert.equal(h.calls.some(isDecision), false);
+  await h.mark(3, 6); await h.act('documents-reload');
+  assert.equal(h.el('document-redact').disabled, true, 'even a same-revision explicit reload invalidates the preview');
+  await h.mark(3, 6); await h.act('document-next'); await h.act('document-redact');
+  assert.equal(h.calls.some(isDecision), false); assert.equal(f.backend(), 'aa\r\nxyz\r\n😀end');
+});
+
+function pagedEntitiesHarness(options = {}) {
+  const control = { failPage: null, failReload: false };
+  const total = options.total || 41, size = options.pageSize || 20;
+  const entities = Array.from({ length: total }, (_, index) => ({ entity_id: `entity_${String(index + 1).padStart(6, '0')}`,
+    original: `Value ${index + 1}`, replacement: '[PERSON_001]', disabled: false, kind: 'PERSON', count: 1, decision: 'default',
+    run_eligible: options.ineligible !== index + 1, output_start: 0, output_end: 12 }));
+  const h = harness({ invoke(command, args) {
+    if (command === 'get_document_reviews' && control.failReload) throw Error('STANDALONE_BUSY');
+    if (command === 'get_document_entities') {
+      if (control.failPage === args.page) throw Error('STANDALONE_BUSY');
+      return { ok: true, ...h.rows[0], page: args.page, pages: Math.ceil(total / size), entities: entities.slice(args.page * size, (args.page + 1) * size),
+        local_ui_only: true, external_disclosure: false };
+    }
+    if (options.invoke) return options.invoke(command, args, h);
+  } });
+  Object.assign(h.rows[0], { entity_review_available: true, entity_count: total, run_entity_review_available: true });
+  return { h, control, async open() { await h.api.open('a'.repeat(64)); await h.act(h.el('documents-list').children[0].children[1].children[0]); },
+    async choose(index = 0) { const node = h.el('entities-list').children[index].children[0].children[0]; node.checked = true; await h.act(node, 'change'); return node; } };
+}
+
+testAsync('entity pages retain the exact cross-page selection, require a conscious treatment and default to file-only', async () => {
+  const f = pagedEntitiesHarness(); await f.open(); const { h } = f;
+  assert.equal(h.el('entities-scope').value, 'document'); assert.equal(h.el('entities-decision').value, '');
+  await f.choose(); assert.equal(h.el('entities-apply').disabled, true); assert.match(h.el('entities-reason').textContent, /Behandlung bewusst auswählen/u);
+  const old = h.el('entities-list').children[0].children[0].children[0];
+  await h.act('entities-next'); assert.equal(h.el('entities-page').textContent, 'Seite 2 von 3'); await f.choose(1);
+  await h.act('entities-previous'); assert.equal(h.el('entities-list').children[0].children[0].children[0].checked, true);
+  assert.match(h.el('entities-count').textContent, /^2 ausgewählt/u); assert.equal(h.calls.some(isDecision), false);
+  h.el('entities-decision').value = 'organization'; await h.act('entities-decision', 'change'); assert.equal(h.el('entities-apply').disabled, false);
+  await h.act('entities-apply'); await tick(); await tick();
+  const decision = h.calls.find(isDecision).args.decision;
+  assert.deepEqual(decision.entity_decisions, [{ entity_id: 'entity_000001', decision: 'organization' }, { entity_id: 'entity_000022', decision: 'organization' }]);
+  assert.equal(decision.scope, undefined); assert.equal(h.calls.filter(isDecision).length, 1); assert.equal(h.calls.filter(call => call.command === 'publish_result_documents').length, 1);
+  old.checked = true; await h.act(old, 'change');
+  assert.equal(h.el('document-draft-controls').hidden, true, 'a removed old-revision checkbox cannot prepare a new decision');
+});
+
+testAsync('off-page ambiguous identities still block run scope while file-only treatment remains available', async () => {
+  const f = pagedEntitiesHarness({ ineligible: 1 }); await f.open(); const { h } = f;
+  await f.choose(); await h.act('entities-next'); await f.choose();
+  h.el('entities-decision').value = 'person'; h.el('entities-scope').value = 'run'; await h.act('entities-scope', 'change');
+  assert.equal(h.el('entities-apply').disabled, true); assert.match(h.el('entities-reason').textContent, /keine gemeinsame laufweite Identität/u);
+  await h.act('entities-apply'); assert.equal(h.calls.some(isDecision), false);
+  h.el('entities-scope').value = 'document'; await h.act('entities-scope', 'change');
+  assert.equal(h.el('entities-apply').disabled, false);
+});
+
+testAsync('500-ID selection cap is enforced before writing and the 501st checkbox cannot discard prior pages', async () => {
+  const f = pagedEntitiesHarness({ total: 501 }); await f.open(); const { h } = f;
+  for (let page = 0; page < 25; page++) {
+    h.el('entities-all').checked = true; await h.act('entities-all', 'change'); await h.act('entities-next');
+  }
+  assert.match(h.el('entities-count').textContent, /^500 ausgewählt/u);
+  await f.choose(); assert.match(h.el('documents-status').textContent, /Höchstens 500/u);
+  assert.equal(h.el('entities-list').children[0].children[0].children[0].checked, false);
+  assert.match(h.el('entities-count').textContent, /^500 ausgewählt/u); assert.equal(h.calls.some(isDecision), false);
+  h.el('entities-decision').value = 'default'; await h.act('entities-decision', 'change'); await h.act('entities-apply'); await tick(); await tick();
+  assert.equal(h.calls.find(isDecision).args.decision.entity_decisions.length, 500);
+});
+
+testAsync('prepared treatment holds file/reload/close navigation until an explicit discard, without blocking its own save', async () => {
+  const f = pagedEntitiesHarness(); await f.open(); const { h } = f;
+  await f.choose(); h.el('entities-decision').value = 'keep'; await h.act('entities-decision', 'change');
+  assert.equal(h.el('entities-apply').disabled, false); assert.equal(h.el('document-next').disabled, true);
+  assert.equal(h.el('documents-reload').disabled, true); assert.equal(h.el('documents-back').disabled, true);
+  assert.equal(h.el('documents-list').children[1].children[1].children[0].disabled, true);
+  const reads = h.calls.filter(call => call.command === 'get_document_reviews').length, chunks = h.calls.filter(call => call.command === 'get_document_review_chunk').length;
+  await h.act('documents-reload'); await h.act('document-next'); await h.act(h.el('documents-list').children[1].children[1].children[0]);
+  assert.equal(await h.api.close(), false); assert.equal(await h.api.open('b'.repeat(64)), false);
+  assert.equal(h.calls.filter(call => call.command === 'get_document_reviews').length, reads); assert.equal(h.calls.filter(call => call.command === 'get_document_review_chunk').length, chunks);
+  assert.match(h.el('entities-count').textContent, /^1 ausgewählt/u); assert.equal(h.calls.some(isDecision), false);
+  await h.act('document-discard-draft'); assert.equal(h.el('documents-reload').disabled, false); assert.equal(h.el('document-next').disabled, false);
+  assert.equal(await h.api.close(), true);
+});
+
+testAsync('failed page and reload reads preserve visible context but never enable an uncertain write', async () => {
+  const f = pagedEntitiesHarness(); await f.open(); const { h, control } = f;
+  await f.choose(); h.el('entities-decision').value = 'person'; await h.act('entities-decision', 'change');
+  control.failPage = 1; await h.act('entities-next');
+  assert.equal(h.el('entities-page').textContent, 'Seite 1 von 3'); assert.match(h.el('entities-count').textContent, /^1 ausgewählt/u);
+  assert.equal(h.el('entities-list').children[0].children[0].children[0].checked, true);
+  assert.equal(h.el('entities-apply').disabled, true); assert.match(h.el('entities-reason').textContent, /nicht mehr bestätigt/u);
+  await h.act('entities-apply'); assert.equal(h.calls.some(isDecision), false);
+  await h.act('document-discard-draft'); control.failReload = true; await h.act('documents-reload');
+  assert.match(h.el('documents-status').textContent, /konnte nicht abgefragt werden/u); assert.equal(h.el('document-original').value, 'Anna Beispiel: 42 Projekte.');
+  assert.equal(h.el('document-redact').disabled, true); assert.equal(h.el('entities-next').disabled, true);
+});
+
+testAsync('one entity page hides read-only pagination and a boundary call has a concrete explanation, not a write', async () => {
+  const f = pagedEntitiesHarness({ total: 1 }); await f.open(); const { h } = f;
+  assert.equal(h.el('entities-pagination').hidden, true); assert.equal(h.el('entities-next').disabled, true);
+  const reads = h.calls.filter(call => call.command === 'get_document_entities').length;
+  await h.act('entities-next'); assert.match(h.el('documents-status').textContent, /Seitenbuttons speichern keine Behandlung/u);
+  assert.equal(h.calls.filter(call => call.command === 'get_document_entities').length, reads); assert.equal(h.calls.some(isDecision), false);
+});
+
+testAsync('restoration is a separate explicit draft with navigation hold and no automatic save', async () => {
+  const h = harness(); await h.api.open('a'.repeat(64)); await h.act(h.el('documents-list').children[0].children[1].children[0]);
+  await h.act('document-restore'); assert.equal(h.el('document-change-confirm').hidden, false);
+  assert.match(h.el('document-change-confirm-text').textContent, /verwirft ihre späteren Text- und Entitätenänderungen/u);
+  assert.equal(h.el('document-next').disabled, true); assert.equal(h.el('documents-reload').disabled, true);
+  await h.act('document-next'); await h.act('documents-reload'); assert.equal(await h.api.close(), false); assert.equal(h.calls.some(isDecision), false);
+  await h.act('document-change-cancel'); assert.equal(h.el('document-draft-controls').hidden, true); assert.equal(h.el('document-next').disabled, false);
+});
+
+for (const successor of ['same', 'different']) for (const outcome of ['success', 'rejection'])
+  testAsync(`retired entity-page ${outcome} cannot invalidate a fresh ${successor}-batch successor`, async () => {
+    let resolveOld, rejectOld, holding = true;
+    const pending = new Promise((resolve, reject) => { resolveOld = resolve; rejectOld = reject; });
+    const firstBatch = 'a'.repeat(64), nextBatch = (successor === 'same' ? 'a' : 'b').repeat(64);
+    const entity = { entity_id: 'entity_000001', original: 'Anna Beispiel', replacement: '[PERSON_001]', disabled: false,
+      kind: 'PERSON', run_eligible: true, count: 1, decision: 'default', output_start: 0, output_end: 12 };
+    const h = harness({ invoke(command, args) {
+      if (command === 'get_document_entities') {
+        if (args.page === 1 && holding) { holding = false; return pending; }
+        return { ok: true, ...h.rows[0], page: args.page, pages: 2, entities: [entity], local_ui_only: true, external_disclosure: false };
+      }
+    } });
+    Object.assign(h.rows[0], { entity_review_available: true, entity_count: 2, run_entity_review_available: true });
+    try {
+      await h.api.open(firstBatch); await h.act(h.el('documents-list').children[0].children[1].children[0]);
+      await h.act('entities-next'); assert.equal(h.el('entities-previous').disabled, true);
+      const originalResponse = { ok: true, ...h.rows[0], page: 1, pages: 2, entities: [entity], local_ui_only: true, external_disclosure: false };
+      h.api.invalidateConnection(); await h.api.open(nextBatch); await h.act(h.el('documents-list').children[0].children[1].children[0]);
+      const check = h.el('entities-list').children[0].children[0].children[0]; check.checked = true; await h.act(check, 'change');
+      h.el('entities-decision').value = 'person'; await h.act('entities-decision', 'change');
+      assert.equal(h.el('entities-apply').disabled, false); assert.equal(h.el('entities-next').disabled, false);
+      const before = { status: h.el('documents-status').textContent, name: h.el('document-name').textContent,
+        revision: h.el('document-revision').textContent, text: h.el('document-markdown').value,
+        page: h.el('entities-page').textContent, reason: h.el('entities-reason').textContent };
+      if (outcome === 'success') resolveOld(originalResponse); else rejectOld(Error('DOCUMENT_ENTITY_INVALID'));
+      await tick(); await tick(); await tick();
+      assert.equal(h.api.activeBatchId(), nextBatch);
+      assert.deepEqual({ status: h.el('documents-status').textContent, name: h.el('document-name').textContent,
+        revision: h.el('document-revision').textContent, text: h.el('document-markdown').value,
+        page: h.el('entities-page').textContent, reason: h.el('entities-reason').textContent }, before);
+      assert.equal(h.el('entities-apply').disabled, false, 'the old catch cannot mark the successor stale');
+      assert.equal(h.el('entities-next').disabled, false, 'the successor retains read navigation');
+      assert.equal(h.el('entities-list').children[0].children[0].children[0].checked, true);
+      assert.equal(h.calls.some(isDecision), false);
+    } finally { resolveOld({}); await tick(); }
   });
 
 done();

@@ -42,6 +42,9 @@ const sharedStandaloneModules = new Set([
   // Pure rendering dependency of the shared, channel-guarded document store.
   // This grants no Cowork UI/IPC action or confidential export path.
   'server/standalone/confidential-overview.js',
+  // Pure bounded OpenXML rendering for the same private, channel-guarded
+  // result snapshot. No Excel process or new file/path authority is imported.
+  'server/standalone/confidential-workbook.js',
   // Inert fixed-role/hash/CSV contract imported by shared publication code.
   // This adds no Cowork action, UI, path authority or native write capability.
   'server/standalone/result-companions.js'

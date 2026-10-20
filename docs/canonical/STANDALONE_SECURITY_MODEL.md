@@ -2,7 +2,17 @@
 
 Stand: 06.10.2026 · einschließlich DS-104 bis DS-109
 
-**RC167-Nachtrag 20.10.2026:** Neue anonymisierte Ergebnisstände enthalten
+**RC168-Entwicklungsnachtrag 20.10.2026:** Das versionierte `/3`-Inventar ergänzt
+die XLSX-Pseudonymzuordnung (höchstens16MiB, entpacktes XML höchstens64MiB)
+und benennt den neuen Identitätstext neutral. Feste Rollen und Pfade, reine
+Textzellen ohne Formeln/Makros/externe Beziehungen, gemeinsames500MiB-Budget,
+200Dokumente und9000Frames bleiben begrenzt. Gebundene Leser dekomprimieren
+oder erzeugen die XLSX nicht erneut, sondern prüfen den gespeicherten Hash.
+Alte `/1`-/`/2`-Absichten werden nicht beim Lesen oder Resume umgedeutet.
+Kein neuer Apple-Signierdienst, kein Abschalten von OS-Schutz oder NativeGuard.
+[Nachweise und offene Zielhostgates](../acceptance/RC168_REVIEW_CORRECTION_AND_WORKBOOK_20261020.md).
+
+**Historischer RC167-Nachtrag 20.10.2026:** Neue anonymisierte Ergebnisstände enthalten
 verbindlich zwei vertrauliche Dateien unter `Vertraulich`. Der versionierte `/2`-
 Vertrag bindet feste Rollen/Dateipfade, nicht frei übergebene Sidecar-Schreibpfade.
 CSV≤4MiB, Identitätstext≤16MiB und gemeinsames MD-/Begleitdateibudget≤500MiB;

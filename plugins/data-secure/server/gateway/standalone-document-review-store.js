@@ -30,9 +30,10 @@ const { validateMarkdownArtifactForOptions } = require('../standalone/markdown-a
 const { validateExpectation } = require('../standalone/anonymized-artifact');
 const { processingModeForBatch } = require('../core/processing-mode');
 const { createConfidentialOverview, renderConfidentialOverview, MAX_BYTES: MAX_OVERVIEW_BYTES } = require('../standalone/confidential-overview');
-const { DIRECTORY: COMPANION_DIRECTORY, PATHS: COMPANION_PATHS, MAX_MAPPING_BYTES, MAX_IDENTITY_BYTES,
+const { renderConfidentialWorkbook } = require('../standalone/confidential-workbook');
+const { DIRECTORY: COMPANION_DIRECTORY, MAX_IDENTITY_BYTES,
   MAX_TOTAL_BYTES: MAX_RESULT_BYTES, validConfidentialDescriptor, validResultCompanionFiles,
-  buildFilenameMapping, confidentialDescriptor } = require('../standalone/result-companions');
+  buildFilenameMapping, confidentialDescriptor, confidentialVersion, confidentialFiles, confidentialBytes } = require('../standalone/result-companions');
 // Preserve the existing character budget even for four-byte UTF-8 text;
 // a byte-only 8 MiB cap would reject otherwise valid multilingual documents.
 const MAX_TEXT = RESOURCE_LIMITS.MAX_TEXT_CHARS * 4;
@@ -1366,17 +1367,19 @@ function createDocumentReviewStore(options = {}) {
         output_sha256: row.output_sha256, markdown: value.markdown, entities: value.entities || null });
     }
     const semantic = overview.finish(), filename_mapping = buildFilenameMapping(sources, input.files), identities = Buffer.from(semantic.text);
-    const confidential = confidentialDescriptor(filename_mapping, identities);
-    if (markdownBytes + filename_mapping.length + identities.length > MAX_RESULT_BYTES) throw fail('DOCUMENT_REVIEW_LIMIT');
-    const plan = { schema: 'datasecure-result-companions/1', batch_id: batchId, processing_mode: ANONYMIZE,
+    const workbook = renderConfidentialWorkbook(semantic.value);
+    const confidential = confidentialDescriptor(filename_mapping, identities, workbook);
+    if (markdownBytes + confidentialBytes(confidential) > MAX_RESULT_BYTES) throw fail('DOCUMENT_REVIEW_LIMIT');
+    const plan = { schema: 'datasecure-result-companions/2', batch_id: batchId, processing_mode: ANONYMIZE,
       selection: input.selection, files: input.files, identity_binding_sha256: semantic.binding_sha256, confidential };
     const binding_sha256 = hash(JSON.stringify(plan));
     // All private bodies are immutable, independently verified before their
     // closed plan is published. A partial prepare cannot authorize publication.
     writeIdentityOverview(batchId, semantic);
     const privateStore = companionPrivateStore(batchId);
-    for (const [role, bytes] of Object.entries({ filename_mapping, identities })) {
-      const file = path.join(privateStore.run, `companions-${binding_sha256}-${role}.${role === 'filename_mapping' ? 'csv' : 'txt'}`);
+    for (const [role, bytes] of Object.entries({ filename_mapping, identities, workbook })) {
+      const extension = role === 'filename_mapping' ? 'csv' : role === 'workbook' ? 'xlsx' : 'txt';
+      const file = path.join(privateStore.run, `companions-${binding_sha256}-${role}.${extension}`);
       try { privateStore.bounded.writeFile(file, bytes); }
       catch (error) { if (error.code !== 'PRIVATE_ARTIFACT_ALREADY_EXISTS') throw error;
         if (!privateStore.bounded.readFile(file).equals(bytes)) throw fail('RESULT_COMPANIONS_INVALID'); }
@@ -1391,13 +1394,13 @@ function createDocumentReviewStore(options = {}) {
     const input = companionInputs(selection, files);
     if (!valid(binding, 64)) throw fail('RESULT_COMPANIONS_INVALID');
     const privateStore = companionPrivateStore(batchId), get = name => privateStore.bounded.readFile(path.join(privateStore.run, name));
-    let plan, semantic, filename_mapping, identities;
+    let plan, semantic, filename_mapping, identities, workbook;
     try {
       plan = JSON.parse(get(`companions-${binding}.json`).toString('utf8'));
       if (!closed(plan, 'schema,batch_id,processing_mode,selection,files,identity_binding_sha256,confidential') ||
-          plan.schema !== 'datasecure-result-companions/1' || plan.batch_id !== batchId || plan.processing_mode !== ANONYMIZE ||
+          !['datasecure-result-companions/1', 'datasecure-result-companions/2'].includes(plan.schema) || plan.batch_id !== batchId || plan.processing_mode !== ANONYMIZE ||
           hash(JSON.stringify(plan)) !== binding || !valid(plan.identity_binding_sha256, 64) ||
-          !validConfidentialDescriptor(plan.confidential) ||
+          !validConfidentialDescriptor(plan.confidential, plan.schema === 'datasecure-result-companions/2' ? 3 : 2) ||
           JSON.stringify(plan.selection) !== JSON.stringify(input.selection) || JSON.stringify(plan.files) !== JSON.stringify(input.files)) throw fail();
       const manifest = runManifest(batchId, false, privateStore.context), sources = input.selection.map(row => {
         const member = manifest.documents.find(document => document.document_id === row.document_id);
@@ -1418,10 +1421,16 @@ function createDocumentReviewStore(options = {}) {
           !get(`DataSecure-Identitaeten-${plan.identity_binding_sha256}.txt`).equals(rendered)) throw fail();
       filename_mapping = get(`companions-${binding}-filename_mapping.csv`);
       identities = get(`companions-${binding}-identities.txt`);
+      if (plan.schema === 'datasecure-result-companions/2') {
+        // Prepare rendered the workbook once from this exact semantic snapshot.
+        // Its independently bound immutable plan fixes length and SHA-256.
+        // Reading/reconciling never recompresses, creates or repairs the XLSX.
+        workbook = get(`companions-${binding}-workbook.xlsx`);
+      }
       if (!filename_mapping.equals(buildFilenameMapping(sources, input.files)) || !identities.equals(rendered) ||
-          JSON.stringify(confidentialDescriptor(filename_mapping, identities)) !== JSON.stringify(plan.confidential)) throw fail();
+          JSON.stringify(confidentialDescriptor(filename_mapping, identities, workbook)) !== JSON.stringify(plan.confidential)) throw fail();
       privateStore.check();
-      return { binding_sha256: binding, confidential: plan.confidential, filename_mapping, identities };
+      return { binding_sha256: binding, confidential: plan.confidential, filename_mapping, identities, ...(workbook ? { workbook } : {}) };
     } catch { throw fail('RESULT_COMPANIONS_INVALID'); }
   }
   function prepareResultCompanions(batchId, selection, files) {
@@ -1687,11 +1696,13 @@ function createDocumentReviewStore(options = {}) {
     ? options.initialResultPublication(batchId, verify) : require('./result-export').initialResultPublication(batchId, verify));
   const resultVector = documents => documents.map(({ document_id, revision, output_sha256 }) =>
     ({ document_id, revision, output_sha256 })).sort((a, b) => a.document_id.localeCompare(b.document_id));
+  const resultGenerationVersion = op => op.schema === 'datasecure-results-generation/3' ? 3 :
+    op.schema === 'datasecure-results-generation/2' ? 2 : 1;
   function resultGenerationDigest(op) {
     const { request_sha256, ...bound } = op; return hash(JSON.stringify(bound));
   }
   function resultOperationId(batchId, mode, initialHash, selection, companions = null) {
-    return hash(JSON.stringify({ schema: `datasecure-results-vector/${companions ? 2 : 1}`, batch_id: batchId,
+    return hash(JSON.stringify({ schema: `datasecure-results-vector/${companions ? confidentialVersion(companions.confidential) : 1}`, batch_id: batchId,
       processing_mode: mode, initial_binding_sha256: initialHash, selection: resultVector(selection),
       ...(companions ? { companion_binding_sha256: companions.binding_sha256, confidential: companions.confidential } : {}) })).slice(0, 32);
   }
@@ -1701,14 +1712,14 @@ function createDocumentReviewStore(options = {}) {
     if (names.length > 1000) throw fail('DOCUMENT_REVIEW_LIMIT');
     for (const name of names) {
       const op = read(path.join(run, name));
-      const companions = op.schema === 'datasecure-results-generation/2';
+      const version = resultGenerationVersion(op), companions = version > 1;
       if (!closed(op, `schema,batch_id,operation_id,publication_role,processing_mode,request_sha256,selection,initial_binding_sha256,root,binding,files,sequence,parent_generation_id${companions ? ',companion_binding_sha256,confidential' : ''}`) ||
-          !['datasecure-results-generation/1', 'datasecure-results-generation/2'].includes(op.schema) || op.batch_id !== batchId || op.publication_role !== 'results' ||
+          !['datasecure-results-generation/1', 'datasecure-results-generation/2', 'datasecure-results-generation/3'].includes(op.schema) || op.batch_id !== batchId || op.publication_role !== 'results' ||
           !valid(op.operation_id, 32) || name !== `results-generation-${op.operation_id}.json` ||
           !initial || op.initial_binding_sha256 !== initial.binding_sha256 || op.root !== initial.root || op.processing_mode !== initial.processing_mode ||
           !valid(op.request_sha256, 64) || op.request_sha256 !== resultGenerationDigest(op) ||
           !validSelection(op.selection) || !valid(op.initial_binding_sha256, 64) || ![MARKDOWN, ANONYMIZE].includes(op.processing_mode) ||
-          companions && (op.processing_mode !== ANONYMIZE || !valid(op.companion_binding_sha256, 64) || !validConfidentialDescriptor(op.confidential)) ||
+          companions && (op.processing_mode !== ANONYMIZE || !valid(op.companion_binding_sha256, 64) || !validConfidentialDescriptor(op.confidential, version)) ||
           op.operation_id !== resultOperationId(batchId, op.processing_mode, op.initial_binding_sha256, op.selection,
             companions ? { binding_sha256: op.companion_binding_sha256, confidential: op.confidential } : null) ||
           !Number.isSafeInteger(op.sequence) || op.sequence < 1 || op.sequence > 1000 ||
@@ -1719,7 +1730,7 @@ function createDocumentReviewStore(options = {}) {
             !Array.isArray(file.sha256) || file.sha256.length !== 32 || file.sha256.some(byte => !Number.isInteger(byte) || byte < 0 || byte > 255) ||
             Buffer.from(file.sha256).toString('hex') !== op.selection[index].output_sha256) ||
           op.files.reduce((total, file) => total + file.bytes, 0) +
-            (companions ? op.confidential.filename_mapping.bytes + op.confidential.identities.bytes : 0) > MAX_RESULT_BYTES)
+            (companions ? confidentialBytes(op.confidential) : 0) > MAX_RESULT_BYTES)
         throw fail('RESULT_PUBLICATION_CONFLICT');
       if (companions) readResultCompanionsLocked(batchId, op.companion_binding_sha256, op.selection,
         op.files.map(file => ({ name: file.name, sha256: Buffer.from(file.sha256).toString('hex') })));
@@ -1728,7 +1739,7 @@ function createDocumentReviewStore(options = {}) {
       if (fs.existsSync(receiptPath)) {
         const receipt = read(receiptPath);
         if (!closed(receipt, `schema,batch_id,generation_id,request_sha256,acknowledged,directory,files${companions ? ',confidential_directory' : ''}`) ||
-            receipt.schema !== `datasecure-results-generation-complete/${companions ? 2 : 1}` ||
+            receipt.schema !== `datasecure-results-generation-complete/${version}` ||
             receipt.batch_id !== batchId || receipt.generation_id !== op.operation_id || receipt.request_sha256 !== op.request_sha256 || receipt.acknowledged !== true)
           throw fail('RESULT_PUBLICATION_CONFLICT');
         complete = true;
@@ -1757,7 +1768,7 @@ function createDocumentReviewStore(options = {}) {
       generation_id: null, count: vector.length, current_revision } }; }
   }
   function resultOperation(op) { return { ...exportBinding(op), publication_role: 'results', binding: op.binding, files: op.files,
-    ...(op.schema === 'datasecure-results-generation/2' ? { confidential: op.confidential } : {}) }; }
+    ...(resultGenerationVersion(op) > 1 ? { confidential: op.confidential } : {}) }; }
   async function callResultNative(op, command, body) {
     if (!options.nativeExport) throw fail('AI_EXPORT_CONFIGURATION_REQUIRED');
     const status = await options.nativeExport(resultOperation(op), command, body);
@@ -1776,7 +1787,7 @@ function createDocumentReviewStore(options = {}) {
     const directory = receipt ? { ...receipt.directory, io: fs } : named;
     if (directory.path !== target) throw fail('RESULT_PUBLICATION_CONFLICT');
     assertDirectory(directory);
-    const companions = op.schema === 'datasecure-results-generation/2';
+    const companions = resultGenerationVersion(op) > 1;
     let confidentialDirectory, savedConfidentialDirectory;
     if (companions) {
       confidentialDirectory = bindDirectory(path.join(target, COMPANION_DIRECTORY));
@@ -1787,8 +1798,7 @@ function createDocumentReviewStore(options = {}) {
       if (receipt) confidentialDirectory = { ...receipt.confidential_directory, io: fs };
     }
     const expected = [...op.files.map(file => ({ ...file, maximum: MAX_TEXT })), ...(companions ?
-      Object.entries(COMPANION_PATHS).map(([role, name]) => ({ name, ...op.confidential[role],
-        maximum: role === 'filename_mapping' ? MAX_MAPPING_BYTES : MAX_IDENTITY_BYTES })) : [])];
+      confidentialFiles(op.confidential).map(({ key, name, maximum }) => ({ name, ...op.confidential[key], maximum })) : [])];
     const checkParents = () => { assertDirectory(directory); if (confidentialDirectory) assertDirectory(confidentialDirectory); };
     const files = expected.map((file, index) => {
       const record = readBoundFileRecord(path.join(target, file.name), { maximum: file.maximum, checkCtime: true,
@@ -1831,7 +1841,7 @@ function createDocumentReviewStore(options = {}) {
     if (!['completed', 'acknowledged'].includes(await callResultNative(op, 'reconcile'))) throw fail('RESULT_PUBLICATION_CONFLICT');
     inspectResultGeneration(op, candidate);
     put(target, {
-      schema: `datasecure-results-generation-complete/${op.schema === 'datasecure-results-generation/2' ? 2 : 1}`, batch_id: batchId,
+      schema: `datasecure-results-generation-complete/${resultGenerationVersion(op)}`, batch_id: batchId,
       generation_id: op.operation_id, request_sha256: op.request_sha256, acknowledged: true, ...candidate });
   }
   function publishResults(batchId) {
@@ -1853,15 +1863,23 @@ function createDocumentReviewStore(options = {}) {
       const records = resultGenerations(batchId, initial), previous = records.at(-1);
       const names = mode === MARKDOWN ? safeMarkdownOutputNames(sources) : selection.map((_row, index) => `Dokument_${String(index + 1).padStart(2, '0')}.md`);
       const companionFiles = names.map((name, index) => ({ name, sha256: selection[index].output_sha256 }));
-      // An interrupted v1 transaction retains its original operation identity
-      // and MD-only contract. A new explicit save creates v2, including when
-      // its initial publication or confirmed predecessor was historical v1.
-      const resumeLegacy = previous && !previous.complete && previous.op.schema === 'datasecure-results-generation/1' &&
-        JSON.stringify(previous.op.selection) === JSON.stringify(selection);
-      const companions = mode === ANONYMIZE && !resumeLegacy
-        ? prepareResultCompanionsLocked(batchId, selection, companionFiles) : null;
-      if (sizes.reduce((a, b) => a + b, 0) + (companions ? companions.confidential.filename_mapping.bytes +
-          companions.confidential.identities.bytes : 0) > MAX_RESULT_BYTES) throw fail('DOCUMENT_REVIEW_LIMIT');
+      const samePrevious = previous && JSON.stringify(previous.op.selection) === JSON.stringify(selection);
+      // A no-op on an already confirmed historical generation is not an
+      // upgrade request. Never manufacture a new format merely by reading or
+      // reconciling it, and never change an interrupted /1 or /2 operation ID.
+      if (samePrevious && previous.complete) {
+        inspectResultGeneration(previous.op, previous.receipt);
+        return { ok: true, batch_id: batchId, local_ui_only: true, external_disclosure: false,
+          result_publication: { state: 'current', generation_id: previous.op.operation_id, count: selection.length,
+            current_revision: Math.max(...selection.map(row => row.revision)) } };
+      }
+      const resume = samePrevious && !previous.complete;
+      const companions = mode === ANONYMIZE ? resume
+        ? resultGenerationVersion(previous.op) > 1
+          ? readResultCompanionsLocked(batchId, previous.op.companion_binding_sha256, selection, companionFiles) : null
+        : prepareResultCompanionsLocked(batchId, selection, companionFiles) : null;
+      if (sizes.reduce((a, b) => a + b, 0) + (companions ? confidentialBytes(companions.confidential) : 0) > MAX_RESULT_BYTES)
+        throw fail('DOCUMENT_REVIEW_LIMIT');
       const operationId = resultOperationId(batchId, mode, initial.binding_sha256, selection, companions);
       let op = previous?.op.operation_id === operationId ? previous.op : null, status;
       // An unfinished intent still has a confirmed predecessor. Retrying it
@@ -1894,7 +1912,7 @@ function createDocumentReviewStore(options = {}) {
           binding = await options.prepareNativeBinding(batchId, operationId);
         }
         if (!validNativeExportBinding(binding) || binding.root !== initial.root) throw fail('RESULT_PUBLICATION_CONFLICT');
-        op = { schema: `datasecure-results-generation/${companions ? 2 : 1}`, batch_id: batchId, operation_id: operationId,
+        op = { schema: `datasecure-results-generation/${companions ? confidentialVersion(companions.confidential) : 1}`, batch_id: batchId, operation_id: operationId,
           publication_role: 'results', processing_mode: mode, selection, initial_binding_sha256: initial.binding_sha256,
           root: binding.root, binding, files: names.map((name, index) => ({ name, bytes: sizes[index],
             sha256: [...Buffer.from(selection[index].output_sha256, 'hex')] })), sequence: records.length + 1,
@@ -1913,10 +1931,10 @@ function createDocumentReviewStore(options = {}) {
           if (response !== (final ? 'staged' : 'receiving')) throw fail('AI_EXPORT_INVALID');
         }
       }
-      if (status !== 'prepared' && op.schema === 'datasecure-results-generation/2') {
+      if (status !== 'prepared' && resultGenerationVersion(op) > 1) {
         const bodies = readResultCompanionsLocked(batchId, op.companion_binding_sha256, selection,
           op.files.map(file => ({ name: file.name, sha256: Buffer.from(file.sha256).toString('hex') })));
-        for (const [extraIndex, role] of ['filename_mapping', 'identities'].entries()) {
+        for (const [extraIndex, { key: role }] of confidentialFiles(op.confidential).entries()) {
           const bytes = bodies[role], index = op.files.length + extraIndex;
           for (let offset = 0; offset < bytes.length; offset += 65536) {
             const end = Math.min(offset + 65536, bytes.length), final = end === bytes.length;

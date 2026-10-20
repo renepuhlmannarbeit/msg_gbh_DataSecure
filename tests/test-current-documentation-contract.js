@@ -495,7 +495,8 @@ test('complete Windows and Mac guides do not contradict mandatory result compani
   assert.ok(actionLabels.every(label => typeof label === 'string' && label.length));
   const validate = source => {
     const text = source.replace(/\*\*/gu, '').replace(/\s+/gu, ' ');
-    for (const name of ['Vertraulich', 'Dateizuordnung.csv', 'Personen-Pseudonym-Zuordnung.txt']) assert.ok(text.includes(name));
+    for (const name of ['Vertraulich', 'Dateizuordnung.csv', 'Pseudonym-Zuordnung.txt', 'Pseudonym-Zuordnung.xlsx',
+      'Typ', 'Basiswert', 'Endwert']) assert.ok(text.includes(name));
     assert.match(text, /Originalangaben: nicht weitergeben oder hochladen/u);
     assert.match(text, /ohne (?:weitere|zusätzliche) Aktion/u);
     for (const label of actionLabels) assert.ok(text.includes(label), `guide must use actual UI label ${label}`);

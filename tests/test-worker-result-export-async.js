@@ -201,7 +201,8 @@ async function main() {
     f.review.publicationExpectation(f.token, f.id)).markdown)); checks++;
   count(record.result_layout === exporter.CONFIDENTIAL_RESULT_LAYOUT && !fs.existsSync(path.join(run, 'DataSecure-Zuordnung.csv')));
   count(fs.readFileSync(path.join(run, 'Vertraulich/Dateizuordnung.csv'), 'utf8').includes(record.items[0].file));
-  count(fs.readFileSync(path.join(run, 'Vertraulich/Personen-Pseudonym-Zuordnung.txt'), 'utf8').includes('VERTRAULICH'));
+  count(fs.readFileSync(path.join(run, 'Vertraulich/Pseudonym-Zuordnung.txt'), 'utf8').includes('VERTRAULICH'));
+  count(fs.readFileSync(path.join(run, 'Vertraulich/Pseudonym-Zuordnung.xlsx')).subarray(0, 2).toString() === 'PK');
   count(fs.readFileSync(exporter.privateResultLedger(f.token), 'utf8').includes('synthetic.txt'));
   assert.deepEqual(fs.readFileSync(f.source), f.bytes); checks++;
   count(!fs.existsSync(exporter._test.claimPath(exporter.recordPath(f.token))));

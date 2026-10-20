@@ -11,7 +11,7 @@ pub const REQUEST_SCHEMA: &str = "datasecure-native-export-request/1";
 pub const RESPONSE_SCHEMA: &str = "datasecure-native-export-response/1";
 pub const PUBLICATION_REQUEST: &str = "datasecure-native-export-request/2";
 pub const PUBLICATION_RESPONSE: &str = "datasecure-native-export-response/2";
-const MAX_PUBLICATION_FRAMES: u64 = 9000; // 500 MiB / 64 KiB + <=202 fixed body boundaries + control frames
+const MAX_PUBLICATION_FRAMES: u64 = 9000; // 500 MiB / 64 KiB + <=203 fixed body boundaries + control frames
 #[derive(Default)]
 pub(crate) struct PublicationState {
     sequence: u32, native_id: Option<String>, operation: Option<Value>, body: Option<(usize, Vec<u8>)>,
@@ -440,7 +440,7 @@ mod tests {
         let fixture = ExportFixture::new(); let lifecycle = Lifecycle::default();
         let mut op = fixture.operation(&lifecycle); op.publication_role = Some(PublicationRole::Results);
         op.confidential = Some(ConfidentialFiles { filename_mapping: ConfidentialFile { bytes: 7, sha256: Sha256::digest(b"mapping").into() },
-            identities: ConfidentialFile { bytes: 10, sha256: Sha256::digest(b"identities").into() } });
+            identities: ConfidentialFile { bytes: 10, sha256: Sha256::digest(b"identities").into() }, workbook: None });
         let outer = results_request_outer(&op, "publish_result_documents"); let mut state = PublicationState::default();
         for (sequence, index, offset, hex, final_chunk, expected) in [
             (1, 0, 0, "68656c6c6f", true, "staged"), (2, 1, 0, "776f726c64", true, "staged"),
@@ -473,7 +473,7 @@ mod tests {
         let fixture = ExportFixture::new(); let lifecycle = Lifecycle::default();
         let mut op = fixture.operation(&lifecycle); op.publication_role = Some(PublicationRole::Results);
         op.confidential = Some(ConfidentialFiles { filename_mapping: ConfidentialFile { bytes: 7, sha256: Sha256::digest(b"mapping").into() },
-            identities: ConfidentialFile { bytes: 10, sha256: Sha256::digest(b"identities").into() } });
+            identities: ConfidentialFile { bytes: 10, sha256: Sha256::digest(b"identities").into() }, workbook: None });
         let outer = results_request_outer(&op, "publish_result_documents"); let guard = lifecycle.begin_native().unwrap();
         let frame = export_frame(&op, &outer, 1, "write_body", Some(json!({"index":2,"offset":0,"hex":"6d617070696e67","final_chunk":true})));
         for value in [Value::Null, json!({}), json!({"path":"Vertraulich/foreign.txt"})] {
@@ -494,6 +494,76 @@ mod tests {
         assert_eq!(handle_publication_owned(&invalid, &outer, &mut PublicationState::default(), Some(&guard), &fixture.data(), None).unwrap().unwrap()["ok"], false);
         assert_eq!(std::fs::read_dir(fixture.root.join("public/DataSecure-KI-Export")).unwrap().count(), 0);
         assert_eq!(std::fs::read_dir(fixture.data().join(&op.binding.private_name)).unwrap().count(), 0);
+    }
+    #[test]
+    fn confidential_workbook_frames_use_exact_third_body_and_never_grant_readonly_write_authority() {
+        use crate::export_directory::{ConfidentialFiles, ConfidentialFile, CONFIDENTIAL_DIRECTORY, IDENTITIES_FILE};
+        let fixture = ExportFixture::new(); let lifecycle = Lifecycle::default();
+        let mut op = fixture.operation(&lifecycle); op.publication_role = Some(PublicationRole::Results);
+        op.confidential = Some(ConfidentialFiles { filename_mapping: ConfidentialFile { bytes: 7, sha256: Sha256::digest(b"mapping").into() },
+            identities: ConfidentialFile { bytes: 10, sha256: Sha256::digest(b"identities").into() },
+            workbook: Some(ConfidentialFile { bytes: 8, sha256: Sha256::digest(b"workbook").into() }) });
+        let outer = results_request_outer(&op, "publish_result_documents"); let mut state = PublicationState::default();
+        for (sequence, index, offset, hex, final_chunk, expected) in [
+            (1, 0, 0, "68656c6c6f", true, "staged"), (2, 1, 0, "776f726c64", true, "staged"),
+            (3, 2, 0, "6d617070696e67", true, "staged"), (4, 3, 0, "6964656e746974696573", true, "staged"),
+            (5, 4, 0, "776f726b", false, "receiving"), (6, 4, 4, "626f6f6b", true, "staged")] {
+            let frame = export_frame(&op, &outer, sequence, "write_body", Some(json!({"index":index,"offset":offset,"hex":hex,"final_chunk":final_chunk})));
+            let response = handle_publication(&frame, &outer, &mut state, &lifecycle, &fixture.data(), deadline()).unwrap().unwrap();
+            assert_eq!(response["ok"], true); assert_eq!(response["status"], expected);
+        }
+        for (sequence, command, expected) in [(7, "publish", "completed"), (8, "acknowledge", "acknowledged")] {
+            let response = handle_publication(&export_frame(&op, &outer, sequence, command, None), &outer,
+                &mut state, &lifecycle, &fixture.data(), deadline()).unwrap().unwrap();
+            assert_eq!(response["ok"], true); assert_eq!(response["status"], expected);
+        }
+        let folder = fixture.root.join("public/DataSecure-KI-Export").join(format!("Ergebnisse-{}", op.operation_id)).join(CONFIDENTIAL_DIRECTORY);
+        assert_eq!(std::fs::read_dir(&folder).unwrap().count(), 3);
+        assert_eq!(std::fs::read(folder.join("Pseudonym-Zuordnung.txt")).unwrap(), b"identities");
+        assert_eq!(std::fs::read(folder.join("Pseudonym-Zuordnung.xlsx")).unwrap(), b"workbook");
+        assert!(!folder.join(IDENTITIES_FILE).exists());
+        let read = results_request_outer(&op, "resolve_history_results");
+        let response = handle_publication(&export_frame(&op, &read, 1, "reconcile", None), &read,
+            &mut PublicationState::default(), &lifecycle, &fixture.data(), deadline()).unwrap().unwrap();
+        assert_eq!(response["status"], "acknowledged");
+        let write = export_frame(&op, &read, 1, "write_body", Some(json!({"index":4,"offset":0,"hex":"776f726b626f6f6b","final_chunk":true})));
+        assert!(handle_publication(&write, &read, &mut PublicationState::default(), &lifecycle, &fixture.data(), deadline()).is_err());
+        assert_eq!(std::fs::read(folder.join("Pseudonym-Zuordnung.xlsx")).unwrap(), b"workbook");
+    }
+    #[test]
+    fn confidential_workbook_frames_reject_null_unknown_oversize_and_out_of_range_before_staging() {
+        use crate::export_directory::{ConfidentialFiles, ConfidentialFile, MAX_WORKBOOK_BYTES};
+        let fixture = ExportFixture::new(); let lifecycle = Lifecycle::default();
+        let mut op = fixture.operation(&lifecycle); op.publication_role = Some(PublicationRole::Results);
+        op.confidential = Some(ConfidentialFiles { filename_mapping: ConfidentialFile { bytes: 7, sha256: Sha256::digest(b"mapping").into() },
+            identities: ConfidentialFile { bytes: 10, sha256: Sha256::digest(b"identities").into() },
+            workbook: Some(ConfidentialFile { bytes: 8, sha256: Sha256::digest(b"workbook").into() }) });
+        let outer = results_request_outer(&op, "publish_result_documents"); let guard = lifecycle.begin_native().unwrap();
+        let frame = export_frame(&op, &outer, 1, "write_body", Some(json!({"index":4,"offset":0,"hex":"776f726b626f6f6b","final_chunk":true})));
+        for workbook in [Value::Null, json!({}), json!({"bytes":8}),
+            json!({"bytes":8,"sha256":vec![0;32],"name":"foreign.xlsx"})] {
+            let mut invalid = frame.clone(); invalid["operation"]["confidential"]["workbook"] = workbook;
+            assert!(handle_publication_owned(&invalid, &outer, &mut PublicationState::default(), Some(&guard), &fixture.data(), None).is_err());
+        }
+        for bytes in [0, MAX_WORKBOOK_BYTES + 1, u64::MAX] {
+            let mut invalid = frame.clone(); invalid["operation"]["confidential"]["workbook"]["bytes"] = json!(bytes);
+            assert_eq!(handle_publication_owned(&invalid, &outer, &mut PublicationState::default(), Some(&guard), &fixture.data(), None).unwrap().unwrap()["ok"], false);
+        }
+        for index in [5, 200, usize::MAX] {
+            let mut invalid = frame.clone(); invalid["body"]["index"] = json!(index);
+            assert_eq!(handle_publication_owned(&invalid, &outer, &mut PublicationState::default(), Some(&guard), &fixture.data(), None).unwrap().unwrap()["ok"], false);
+        }
+        assert_eq!(std::fs::read_dir(fixture.root.join("public/DataSecure-KI-Export")).unwrap().count(), 0);
+        assert_eq!(std::fs::read_dir(fixture.data().join(&op.binding.private_name)).unwrap().count(), 0);
+    }
+    #[test]
+    fn confidential_workbook_frame_budget_fits_without_raising_existing_limits() {
+        let bodies = 200u64 + 3;
+        let worst_data_frames = (500u64 * 1024 * 1024).div_ceil(65536) + bodies - 1;
+        assert_eq!(worst_data_frames, 8202);
+        assert_eq!(MAX_PUBLICATION_FRAMES, 9000);
+        assert!(worst_data_frames + 8 < MAX_PUBLICATION_FRAMES);
+        const { assert!(crate::export_directory::MAX_WORKBOOK_BYTES <= 32_000_000); }
     }
     #[test]
     fn result_role_frames_publish_and_reconcile_only_through_the_closed_batch_contract() {

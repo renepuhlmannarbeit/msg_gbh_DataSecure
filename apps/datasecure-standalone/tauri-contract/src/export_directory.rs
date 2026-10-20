@@ -232,33 +232,56 @@ pub(crate) struct ExpectedFile { pub name: String, pub bytes: u64, pub sha256: [
 pub(crate) const CONFIDENTIAL_DIRECTORY: &str = "Vertraulich";
 pub(crate) const FILENAME_MAPPING: &str = "Dateizuordnung.csv";
 pub(crate) const IDENTITIES_FILE: &str = "Personen-Pseudonym-Zuordnung.txt";
+pub(crate) const PSEUDONYM_IDENTITIES_FILE: &str = "Pseudonym-Zuordnung.txt";
+pub(crate) const PSEUDONYM_WORKBOOK_FILE: &str = "Pseudonym-Zuordnung.xlsx";
+pub(crate) const MAX_WORKBOOK_BYTES: u64 = 16 * 1024 * 1024;
 /// Fixed companion roles, never caller-selected paths or another document.
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ConfidentialFile { pub bytes: u64, pub sha256: [u8; 32] }
 #[derive(Clone, Debug, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct ConfidentialFiles { pub filename_mapping: ConfidentialFile, pub identities: ConfidentialFile }
+pub(crate) struct ConfidentialFiles {
+    pub filename_mapping: ConfidentialFile, pub identities: ConfidentialFile,
+    // Presence is the closed new inventory discriminator. Missing preserves
+    // RC167's exact two-file serialization and its old identity-text filename.
+    // An explicit null is not an absent/legacy workbook role.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_workbook")]
+    pub workbook: Option<ConfidentialFile>,
+}
+fn deserialize_workbook<'de, D: serde::Deserializer<'de>>(deserializer: D)
+    -> Result<Option<ConfidentialFile>, D::Error> {
+    <ConfidentialFile as serde::Deserialize<'de>>::deserialize(deserializer).map(Some)
+}
 pub(crate) fn deserialize_confidential<'de, D: serde::Deserializer<'de>>(deserializer: D)
     -> Result<Option<ConfidentialFiles>, D::Error> {
     // Missing uses the field default. Explicit null is NOT the legacy role.
     <ConfidentialFiles as serde::Deserialize<'de>>::deserialize(deserializer).map(Some)
 }
 impl ConfidentialFiles {
-    pub fn files(&self) -> [ExpectedFile; 2] {
-        [ExpectedFile { name: FILENAME_MAPPING.into(), bytes: self.filename_mapping.bytes, sha256: self.filename_mapping.sha256 },
-            ExpectedFile { name: IDENTITIES_FILE.into(), bytes: self.identities.bytes, sha256: self.identities.sha256 }]
+    pub fn files(&self) -> Vec<ExpectedFile> {
+        let mut files = vec![ExpectedFile { name: FILENAME_MAPPING.into(), bytes: self.filename_mapping.bytes, sha256: self.filename_mapping.sha256 },
+            ExpectedFile { name: if self.workbook.is_some() { PSEUDONYM_IDENTITIES_FILE } else { IDENTITIES_FILE }.into(),
+                bytes: self.identities.bytes, sha256: self.identities.sha256 }];
+        if let Some(workbook) = &self.workbook {
+            files.push(ExpectedFile { name: PSEUDONYM_WORKBOOK_FILE.into(), bytes: workbook.bytes, sha256: workbook.sha256 });
+        }
+        files
     }
     fn total_bytes(&self) -> io::Result<u64> {
         if self.filename_mapping.bytes == 0 || self.identities.bytes == 0 ||
             self.filename_mapping.bytes > 4 * 1024 * 1024 || self.identities.bytes > 16 * 1024 * 1024 {
             return Err(unsafe_io());
         }
-        self.filename_mapping.bytes.checked_add(self.identities.bytes).ok_or_else(unsafe_io)
+        let total = self.filename_mapping.bytes.checked_add(self.identities.bytes).ok_or_else(unsafe_io)?;
+        if let Some(workbook) = &self.workbook {
+            if workbook.bytes == 0 || workbook.bytes > MAX_WORKBOOK_BYTES { return Err(unsafe_io()); }
+            total.checked_add(workbook.bytes).ok_or_else(unsafe_io)
+        } else { Ok(total) }
     }
 }
-/// Preserve the 200-document / 500-MiB contract. Exactly two typed companions
-/// can additionally belong to an anonymized Results transaction, never Legacy.
+/// Preserve the 200-document / 500-MiB contract. Two legacy or three new typed
+/// companions can belong to an anonymized Results transaction, never Legacy.
 pub(crate) fn validate_publication_inventory(mode: &str, results: bool, files: &[ExpectedFile],
     confidential: Option<&ConfidentialFiles>) -> io::Result<()> {
     if files.is_empty() || files.len() > 200 { return Err(unsafe_io()); }
@@ -320,7 +343,7 @@ mod filename_tests {
     }
     fn confidential() -> ConfidentialFiles {
         ConfidentialFiles { filename_mapping: ConfidentialFile { bytes: 4 * 1024 * 1024, sha256: [1; 32] },
-            identities: ConfidentialFile { bytes: 16 * 1024 * 1024, sha256: [2; 32] } }
+            identities: ConfidentialFile { bytes: 16 * 1024 * 1024, sha256: [2; 32] }, workbook: None }
     }
     #[test]
     fn confidential_inventory_has_exact_roles_sizes_and_no_generic_filename_authority() {
@@ -364,6 +387,56 @@ mod filename_tests {
         documents.pop();
         for item in documents.iter_mut().take(16) { item.bytes = 32_000_000; }
         assert!(validate_publication_inventory("markdown-and-anonymize", true, &documents, None).is_ok());
+        assert!(validate_publication_inventory("markdown-and-anonymize", true, &documents, Some(&value)).is_err());
+    }
+    #[test]
+    fn confidential_workbook_discriminator_preserves_exact_legacy_json_and_both_fixed_inventories() {
+        let legacy = confidential();
+        let expected_legacy = serde_json::json!({
+            "filename_mapping": {"bytes": 4 * 1024 * 1024, "sha256": vec![1; 32]},
+            "identities": {"bytes": 16 * 1024 * 1024, "sha256": vec![2; 32]},
+        });
+        let bytes = serde_json::to_vec(&legacy).unwrap();
+        assert_eq!(bytes, serde_json::to_vec(&expected_legacy).unwrap(), "no workbook key or changed old fields");
+        assert_eq!(serde_json::from_slice::<ConfidentialFiles>(&bytes).unwrap(), legacy);
+        assert_eq!(legacy.files().iter().map(|file| file.name.as_str()).collect::<Vec<_>>(),
+            ["Dateizuordnung.csv", "Personen-Pseudonym-Zuordnung.txt"]);
+        let mut current = legacy.clone();
+        current.workbook = Some(ConfidentialFile { bytes: 8, sha256: [3; 32] });
+        assert_eq!(current.files().iter().map(|file| file.name.as_str()).collect::<Vec<_>>(),
+            ["Dateizuordnung.csv", "Pseudonym-Zuordnung.txt", "Pseudonym-Zuordnung.xlsx"]);
+        assert_eq!(serde_json::from_slice::<ConfidentialFiles>(&serde_json::to_vec(&current).unwrap()).unwrap(), current);
+        for invalid in [serde_json::Value::Null, serde_json::json!({}), serde_json::json!({"bytes": 8}),
+            serde_json::json!({"bytes": 8, "sha256": vec![3; 32], "path": "foreign.xlsx"})] {
+            let mut value = serde_json::to_value(&legacy).unwrap(); value["workbook"] = invalid;
+            assert!(serde_json::from_value::<ConfidentialFiles>(value).is_err());
+        }
+    }
+    #[test]
+    fn confidential_workbook_has_positive_16mib_limit_and_keeps_200_documents_and_500mib_total() {
+        let mut value = confidential();
+        value.workbook = Some(ConfidentialFile { bytes: MAX_WORKBOOK_BYTES, sha256: [3; 32] });
+        let mut documents: Vec<_> = (1..=200).map(|index| ExpectedFile {
+            name: format!("Dokument_{index:02}.md"), bytes: 0, sha256: [0; 32] }).collect();
+        assert!(validate_publication_inventory("markdown-and-anonymize", true, &documents, Some(&value)).is_ok());
+        assert_eq!(publication_body(&documents, Some(&value), 200).unwrap().name, FILENAME_MAPPING);
+        assert_eq!(publication_body(&documents, Some(&value), 201).unwrap().name, PSEUDONYM_IDENTITIES_FILE);
+        assert_eq!(publication_body(&documents, Some(&value), 202).unwrap().name, PSEUDONYM_WORKBOOK_FILE);
+        assert!(publication_body(&documents, Some(&value), 203).is_none());
+        for bytes in [0, MAX_WORKBOOK_BYTES + 1, u64::MAX] {
+            let mut invalid = value.clone(); invalid.workbook.as_mut().unwrap().bytes = bytes;
+            assert!(validate_publication_inventory("markdown-and-anonymize", true, &documents, Some(&invalid)).is_err());
+        }
+        assert!(validate_publication_inventory("markdown-and-anonymize", false, &documents, Some(&value)).is_err());
+        assert!(validate_publication_inventory("markdown-only", true, &files(&["x.md"]), Some(&value)).is_err());
+        let mut remaining = 500 * 1024 * 1024 - value.total_bytes().unwrap();
+        for item in &mut documents { item.bytes = remaining.min(32_000_000); remaining -= item.bytes; }
+        assert_eq!(remaining, 0);
+        assert!(validate_publication_inventory("markdown-and-anonymize", true, &documents, Some(&value)).is_ok());
+        documents[15].bytes += 1;
+        assert!(validate_publication_inventory("markdown-and-anonymize", true, &documents, Some(&value)).is_err());
+        documents[15].bytes -= 1;
+        documents.push(ExpectedFile { name: "Dokument_201.md".into(), bytes: 0, sha256: [0; 32] });
         assert!(validate_publication_inventory("markdown-and-anonymize", true, &documents, Some(&value)).is_err());
     }
 }

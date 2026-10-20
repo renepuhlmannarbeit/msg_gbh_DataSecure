@@ -1,7 +1,26 @@
 # Aktives Entwicklungsbacklog
 
-Arbeitsversion: **3.2.0-rc167**, gemeinsamer Windows-/macOS-Test-Pre-Release
-veröffentlicht; menschliche Abnahme offen. RC166 bleibt unverändert.
+Arbeitsversion: **3.2.0-rc168**, Umsetzung und gezielte Gegenreviews abgeschlossen;
+neue Gesamtregression und Windows-/Mac-Paketgates noch offen.
+RC167 ist weiterhin der letzte veröffentlichte Teststand; menschliche Abnahme
+offen. Frühere Pakete und Ergebnisstände bleiben unverändert.
+
+## Aktiver Auftrag – RC168 Nachbearbeitung und strukturierte Zuordnung
+
+- **TEXT-POSITIONS-01/P1:** CRLF/LF/CR-Anzeigeoffsets sicher mit Backendpositionen
+  verbinden. Maskierung, beide Hervorhebungsfelder und Markdown-Nachkorrektur
+  gemeinsam revalidieren; unveränderliche gespeicherte Texte/Hashes erhalten.
+- **REVIEW-ACTIONS-01:** Einheitliche UI-/Handlerbedingungen mit sichtbaren
+  Sperrgründen, sichere Markierung/Vormerkung, klare Fundstellenseitennavigation
+  und Behandlungs-/Geltungswahl. Kein neuer Freigabe- oder Exportschritt.
+- **RESULT-COMPANIONS-02:** Neues /3-Inventar mit Dateizuordnung.csv,
+  Pseudonym-Zuordnung.txt und Pseudonym-Zuordnung.xlsx unter Vertraulich.
+  Drei Datenspalten je Dokument, belegte Identitäten und verlustfreie Langwerte;
+  alte /1-/2-Leser/Resume und exakt gebundene Nativeverträge erhalten.
+- Gemeinsame neue Windows-/ARM64-/Intel-Testpakete erst nach unabhängigen
+  tatsächlichen Quellenreviews und neuen vollständigen technischen Endgates.
+  Desktopabnahme bleibt bei den Nutzern, keine neue Automation oder Apple-
+  Zertifizierung. [Umfang und Quellen](../acceptance/RC168_REVIEW_CORRECTION_AND_WORKBOOK_20261020.md).
 
 ## Aktiver Nutzerbefund – vertrauliche Zuordnungen im Ergebnisordner
 
@@ -1121,7 +1140,7 @@ in dieselbe Korrekturrunde.
 
 ## Historische Nachweise bis R4 (kein aktueller R5-Abschluss)
 
-Stand: 17.10.2026 · Produktstand 3.2.0-rc167 · veröffentlicht Standalone RC162 (Windows und beide Mac-Architekturen; M2-Abnahme offen), Linux RC159 / Cowork RC151 · lokaler Arbeitsstand nach RC162 noch nicht veröffentlicht
+Stand: 17.10.2026 · Produktstand 3.2.0-rc168 · veröffentlicht Standalone RC162 (Windows und beide Mac-Architekturen; M2-Abnahme offen), Linux RC159 / Cowork RC151 · lokaler Arbeitsstand nach RC162 noch nicht veröffentlicht
 
 ## Gezielter R3-Abschlussreview
 

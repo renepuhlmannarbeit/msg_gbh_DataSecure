@@ -87,6 +87,7 @@ button{white-space:nowrap}:focus-visible{outline-offset:2px}
 .entity-table th:first-child { width:88px; white-space:nowrap; overflow-wrap:normal; }.entity-table th:last-child { width:116px; }
 .entity-table button { max-width:100%; text-align:left; font-size:13px; padding:4px 8px; white-space:normal; overflow-wrap:anywhere; }
 .document-pagination { justify-content:space-between; margin-bottom:12px; }
+.document-comparison>div{min-width:0}.document-mask-actions{margin-top:12px;padding:12px;border:1px solid var(--c-primary-soft-border);border-radius:var(--r-box);background:var(--c-primary-tint-2)}.document-mask-actions h4{margin:0 0 8px}.document-mask-actions textarea{height:100px;min-height:70px;margin:8px 0;font-weight:400}.document-mask-actions .meta{font-weight:400;line-height:1.5}#document-draft-controls button{margin-top:10px}#entities-pagination-reason,#entities-reason{line-height:1.5}
 @media(max-width:720px){.entity-table th:first-child { width:76px; }.entity-table th:last-child { width:90px; }.entity-table th,.entity-table td { padding:8px 5px; }}
 @media(max-width:620px){
   .entity-table thead { position:absolute; clip:rect(0,0,0,0); width:1px; height:1px; overflow:hidden; }

@@ -2,7 +2,17 @@
 
 Stand: 07.10.2026 · einschließlich DS-104 bis DS-109 · Steuerung über BL-010.9
 
-**RC167-Nachtrag 20.10.2026:** Neue Anonymisierungsstände erweitern den
+**RC168-Entwicklungsnachtrag 20.10.2026:** Neue Anonymisierungsstände verwenden
+das geschlossene `/3`-Inventar mit `Vertraulich/Dateizuordnung.csv`,
+`Pseudonym-Zuordnung.txt` und `Pseudonym-Zuordnung.xlsx`. Die Excel-Datei enthält
+je Dokument die drei Spalten Typ/Basiswert/Endwert; Übersicht und Langwerte
+erhalten Dateikontext und vollständige Werte. Alte `/1`-/`/2`-Ergebnisse und
+angefangene alte Aufträge behalten ihre ursprünglichen Rollen und Namen.
+Der Positionsadapter verbindet normalisierte Textarea-Auswahl mit unveränderten
+gespeicherten UTF-16-Positionen; keine nachträgliche Hashnormalisierung.
+[Aktivitäts-/Sequenzverträge und offene Endgates](../acceptance/RC168_REVIEW_CORRECTION_AND_WORKBOOK_20261020.md).
+
+**Historischer RC167-Nachtrag 20.10.2026:** Neue Anonymisierungsstände erweitern den
 geschlossenen Direkt-Ergebnisvertrag versioniert auf `/2`: MD-Dateien plus
 `Vertraulich/Dateizuordnung.csv` und `Vertraulich/Personen-Pseudonym-Zuordnung.txt`.
 Erst- und vollständige Korrekturstände binden beide Pflichtdateien an ihre

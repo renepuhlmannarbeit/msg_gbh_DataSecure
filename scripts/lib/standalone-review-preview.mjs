@@ -57,7 +57,7 @@ export async function startReviewPreview({ port = 0, host = '127.0.0.1', draft, 
   if (host !== '127.0.0.1' || !Number.isInteger(port) || port < 0 || port > 65535) throw Error('LOOPBACK_ONLY');
   const routes = new Map();
   for (const name of ['review.html', 'review.css', 'review.js', 'workflow-presentation.js', 'review-workspace.css', 'design-tokens.css',
-    ...(workspace ? ['workspace.html', 'workspace.css', 'workspace.js', 'document-review.js'] : [])]) {
+    ...(workspace ? ['workspace.html', 'workspace.css', 'workspace.js', 'text-positions.js', 'document-review.js'] : [])]) {
     routes.set(`/${name}`, { body: readBoundFile(path.join(frontend, name), { maximum: 20 * 1024 * 1024, checkCtime: true }), type: name.endsWith('.js') ? 'text/javascript' : name.endsWith('.css') ? 'text/css' : 'text/html' });
   }
   routes.set('/fonts/InterVariable.woff2', { body: readBoundFile(path.join(frontend, 'fonts/InterVariable.woff2'), { maximum: 20 * 1024 * 1024, checkCtime: true }), type: 'font/woff2' });
