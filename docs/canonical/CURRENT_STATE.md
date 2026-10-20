@@ -1,11 +1,36 @@
 # Aktueller Iststand
 
-Arbeitsversion: **3.2.0-rc168**, implementiert, unabhängig revalidiert und als
-gemeinsamer Windows-/Mac-Test-Pre-Release veröffentlicht. Technische Endgates grün;
+Arbeitsversion: **3.2.0-rc169**, in Umsetzung: erstes Excelblatt mit denselben
+Pseudonym-/Typ-/Originalwert-/Vorkommenszuordnungen wie TXT, Dateikontext erhalten.
+Letzter veröffentlichter gemeinsamer Windows-/Mac-Teststand ist RC168.
 menschliche Desktop-/Excel-/Numbers-/Mac-Zielhostabnahme bleibt offen.
 RC167, RC166 und frühere Pakete bleiben unverändert erhalten.
 
-### Neuester Abschluss – RC168 exakte Nachbearbeitung und echte XLSX-Zuordnung
+### Aktiver Auftrag – RC169 TXT-gleiche Excel-Zuordnung zuerst
+
+Nutzer bestätigt am20.10.: erstes Blatt Zuordnungen mit Pseudonym/Typ/
+Originalwert(e)/Vorkommen/Datei. Genau eine Zeile pro belegtem TXT-Eintrag,
+Häufigkeit nicht je Schreibvariante vervielfachen oder über Dokumente hinweg
+aus gleichlautenden Markern herleiten. Beide Formate verwenden dieselbe
+validierte strukturierte Overview, kein TXT-Neuparsen. Bestehende technische
+Übersicht/Detailblätter dahinter, alte gebundene Workbooks unverändert. Neue
+bewusste Stände erhalten die neue Darstellung; keine Reparatur beim Lesen.
+Unabhängige Quellen-/Workbook-/Kompatibilitätsgegenreviews und neue technische
+Windows-/ARM64-/Intel-Endgates vor neuer Testübergabe. Desktoptests ausschließlich
+bei Nutzer/Kollegen. Keine Automation, neue Coreproducer oder Apple-Zertifizierung.
+[Auftrag und Nachweisplan](../acceptance/RC169_WORKBOOK_MAPPING_20261020.md).
+Zusatzauftrag: fertig bereitgestellte Ergebnisdateien sind bearbeitbare öffentliche
+Arbeitskopien. Konkreter RC168-Lauf14c09da8: alle7Hashesgleich, Zielordnergleich,
+keineExtras, nurTXT/XLSXctimeabweichend. Ordneröffner künftig Abschluss-/Ordner-
+bindung ohne öffentliche Blatt-I/O; private Belege/Pending/ACK weiter streng.
+Neue App-Korrektur aus privater Basis in neuen Ordner, keine externe Adoption/
+Überschreibung. Fehlender/ersetzter Ordner neutral statt Produktabbruch.
+Gezielte Workbook-/TXT-/JS-/UI-/Rust- und reale Node/Rust-Pipe-Gegenfälle grün;
+unabhängige Gegenreviews fanden vor Freeze drei Anschlusslücken, eng behoben und
+erneut gegengelesen. Neuer gemeinsamer Quellenfreeze und technische Endläufe
+folgen; noch kein RC169-Paket oder menschlicher Desktop-PASS.
+
+### Historischer Abschluss – RC168 exakte Nachbearbeitung und echte XLSX-Zuordnung
 
 Der Nutzer hat den vollständigen Plan zur Umsetzung und neuen Windows-/Mac-
 Testübergabe freigegeben. Zuerst TEXT-POSITIONS-01 (CRLF/UTF16), danach klare
@@ -1516,7 +1541,7 @@ neuen gemeinsamen Quellfreeze und erneute Windows-Regression.
 
 ## Historische Nachweise bis R4 (kein aktueller R5-Abschluss)
 
-Stand: 17.10.2026 · 3.2.0-rc168 lokaler Windows-R4-Final-Testkandidat gebaut und ohne GUI geprüft; veröffentlicht bleibt Standalone RC162 für Windows und beide Mac-Architekturen; native Windows-/M2-Zielhostabnahme offen; Linux RC159 / Cowork RC151
+Stand: 17.10.2026 · 3.2.0-rc169 lokaler Windows-R4-Final-Testkandidat gebaut und ohne GUI geprüft; veröffentlicht bleibt Standalone RC162 für Windows und beide Mac-Architekturen; native Windows-/M2-Zielhostabnahme offen; Linux RC159 / Cowork RC151
 
 ### Gezielter R3-Abschlussreview: zusätzliche Fixes F13/F14
 

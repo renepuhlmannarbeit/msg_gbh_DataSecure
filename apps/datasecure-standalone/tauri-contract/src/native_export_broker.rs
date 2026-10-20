@@ -274,7 +274,7 @@ fn execute_inner(data: &Path, op: &Operation, command: &str, body: Option<(usize
         public.inspect_child(name, target.identity())?;
         return Ok("staged");
     }
-    let status = if inspect_only { tx.inspect_completed()? } else { match command {
+    let status = if inspect_only { tx.inspect_completed_directory()? } else { match command {
         "reconcile" => tx.reconcile()?, "acknowledge" => tx.acknowledge()?, "abandon" => tx.abandon()?,
         "publish" => match tx.reconcile()? {
             s @ (Status::Completed | Status::Acknowledged) => s,
@@ -374,6 +374,9 @@ mod tests {
         assert_eq!(execute(&data, &op, "publish", &guard).unwrap(), "completed");
         assert_eq!(execute(&data, &op, "acknowledge", &guard).unwrap(), "acknowledged");
         assert_eq!(inspect_results(&data, &op, &guard).unwrap(), "acknowledged");
+        assert!(execute(&data, &op, "inspect_completed_directory", &guard).is_err(), "directory inspection adds no mutating command ingress");
+        let mut legacy_role = op.clone(); legacy_role.publication_role = None;
+        assert!(inspect_results(&data, &legacy_role, &guard).is_err(), "legacy export callers cannot acquire the working-directory exception");
         let generation = f.path.join("public/DataSecure-KI-Export").join(format!("Ergebnisse-{}", op.operation_id));
         let confidential = generation.join(CONFIDENTIAL_DIRECTORY);
         assert_eq!(fs::read_dir(&confidential).unwrap().count(), 2);
@@ -382,7 +385,7 @@ mod tests {
         let mut legacy = op.clone(); legacy.confidential = None;
         assert!(inspect_results(&data, &legacy, &guard).is_err(), "a new result cannot be reinterpreted as the old flat plan");
         fs::remove_file(confidential.join(IDENTITIES_FILE)).unwrap();
-        assert!(inspect_results(&data, &op, &guard).is_err());
+        assert_eq!(inspect_results(&data, &op, &guard).unwrap(), "acknowledged", "confirmed public copies may lose a companion without repair");
         assert!(execute(&data, &op, "publish", &guard).is_err());
         assert!(!confidential.join(IDENTITIES_FILE).exists());
         assert_eq!(fs::read(generation.join("Dokument_01.md")).unwrap(), b"hello");
@@ -416,7 +419,7 @@ mod tests {
         let mut old = op.clone(); old.confidential.as_mut().unwrap().workbook = None;
         assert!(inspect_results(&data, &old, &guard).is_err());
         fs::remove_file(folder.join("Pseudonym-Zuordnung.xlsx")).unwrap();
-        assert!(inspect_results(&data, &op, &guard).is_err()); assert!(execute(&data, &op, "publish", &guard).is_err());
+        assert_eq!(inspect_results(&data, &op, &guard).unwrap(), "acknowledged"); assert!(execute(&data, &op, "publish", &guard).is_err());
         assert!(!folder.join("Pseudonym-Zuordnung.xlsx").exists());
     }
     #[test]
@@ -433,7 +436,8 @@ mod tests {
             }
             let mut rows = Vec::new(); visit(root, root, &mut rows); rows
         }
-        for missing in ["setup", "complete", "parent-binding", "transaction-intent", "lock", "changed-body", "extra-file", "none"] {
+        for missing in ["setup", "complete", "parent-binding", "transaction-intent", "lock", "fake-complete", "missing-started",
+            "pending", "folder-missing", "folder-replaced", "root-replaced", "changed-body", "deleted-body", "extra-file", "none"] {
             let f = Fixture::new(); let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
             let mut op = f.op(&guard); op.publication_role = Some(PublicationRole::Results);
             let data = f.path.join("private");
@@ -441,23 +445,41 @@ mod tests {
             let journal = private.join(format!("journal-{}", op.operation_id));
             if missing != "setup" {
                 write_body(&data, &op, 0, b"hello", &guard).unwrap();
-                assert_eq!(execute(&data, &op, "publish", &guard).unwrap(), "completed");
+                if missing != "pending" { assert_eq!(execute(&data, &op, "publish", &guard).unwrap(), "completed"); }
                 let remove = match missing {
                     "complete" => Some(journal.join(format!("{}-complete.json", op.operation_id))),
                     "parent-binding" => Some(private.join(format!("{}-parents-binding.json", op.operation_id))),
                     "transaction-intent" => Some(journal.join(format!("{}-intent.json", op.operation_id))),
+                    "missing-started" => Some(journal.join(format!("{}-started.json", op.operation_id))),
                     "lock" => Some(journal.join("export-control.lock")), _ => None,
                 };
                 if let Some(path) = remove { fs::remove_file(path).unwrap(); }
+                if missing == "fake-complete" { fs::write(journal.join(format!("{}-complete.json", op.operation_id)), b"{}").unwrap(); }
                 let generation = f.path.join("public/DataSecure-KI-Export").join(format!("Ergebnisse-{}", op.operation_id));
                 if missing == "changed-body" { fs::write(generation.join("Dokument_01.md"), b"other").unwrap(); }
+                if missing == "deleted-body" { fs::remove_file(generation.join("Dokument_01.md")).unwrap(); }
                 if missing == "extra-file" { fs::write(generation.join("foreign.txt"), b"not ours").unwrap(); }
+                if ["folder-missing", "folder-replaced"].contains(&missing) {
+                    fs::rename(&generation, generation.with_file_name("retired-working-copy")).unwrap();
+                    if missing == "folder-replaced" { fs::create_dir(&generation).unwrap(); fs::write(generation.join("Dokument_01.md"), b"hello").unwrap(); }
+                }
+                if missing == "root-replaced" {
+                    fs::rename(f.path.join("public"), f.path.join("retired-public")).unwrap();
+                    fs::create_dir(f.path.join("public")).unwrap();
+                }
             }
             let before = tree(&f.path);
             let result = inspect_results(&data, &op, &guard);
-            assert_eq!(result.is_ok(), missing == "none", "{missing}");
-            if missing == "none" { assert_eq!(result.unwrap(), "completed"); }
+            let working_copy = ["none", "changed-body", "deleted-body", "extra-file"].contains(&missing);
+            assert_eq!(result.is_ok(), working_copy, "{missing}");
+            if working_copy { assert_eq!(result.unwrap(), "completed"); }
             assert_eq!(tree(&f.path), before, "history inspection changed names or bytes: {missing}");
+            if ["changed-body", "deleted-body", "extra-file"].contains(&missing) {
+                for command in ["publish", "reconcile", "acknowledge"] {
+                    assert!(execute(&data, &op, command, &guard).is_err(), "{missing} must remain strict for {command}");
+                }
+                assert_eq!(tree(&f.path), before, "a failed mutation must not repair the public working copy");
+            }
             if missing == "complete" {
                 assert_eq!(execute(&data, &op, "reconcile", &guard).unwrap(), "completed", "only publication context can recover lost completion");
                 assert_eq!(inspect_results(&data, &op, &guard).unwrap(), "completed");

@@ -371,4 +371,18 @@ test('malformed publication metadata never upgrades the displayed result generat
     assert.notEqual(processor({ state: 'results_available', completed_count: 3, result_count: 3, result_publication }).phase, 'results_ready');
   }
 });
+test('an unavailable completed result directory is not pending processing or a failed run', () => {
+  for (const processing_mode of ['markdown-only', 'markdown-and-anonymize']) {
+    const result_publication = { state: 'unavailable', generation_id: null, count: 3, current_revision: 0 };
+    for (const result of [documents({ processing_mode, result_publication }), processor({ processing_mode,
+      state: 'results_available', completed_count: 3, result_count: 3, result_publication })]) {
+      assert.equal(result.phase, 'results_unavailable');
+      assert.equal(result.stages[2].status, 'done'); assert.equal(result.busy, false);
+      assert.match(result.heading, /Verarbeitung abgeschlossen.*Ergebnisordner nicht verfügbar/u);
+      assert.match(result.next, /Private Prüfstände bleiben erhalten/u);
+      assert.doesNotMatch(result.next, /erneut abgleichen|blind starten|noch nicht bestätigt/u);
+    }
+  }
+});
+
 done();

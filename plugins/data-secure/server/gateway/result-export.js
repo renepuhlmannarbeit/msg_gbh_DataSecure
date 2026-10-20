@@ -1519,9 +1519,9 @@ function initialResultPublication(batchId, verifyFiles = true) {
           crypto.createHash('sha256').update(actual.bytes).digest('hex') !== file.sha256)
         throw resultExportFailure('RESULT_EXPORT_CONFLICT');
     }
-    // Initial results are reusable Markdown just like later generations. The
-    // opener must not silently include user-added private files or follow a
-    // replaced/symlinked subtree. Walk only the finite promised folder set;
+    // This strict publication/recovery inspection is not the opener for a
+    // confirmed public working copy. It must not silently accept extra files
+    // or a replaced/symlinked subtree. Walk only the promised folder set;
     // opaque, bounded Finder metadata is not part of the Markdown inventory.
     assertInitialInventory(directory, allFiles);
     if (confidentialDirectory) assertDirectory(confidentialDirectory);

@@ -63,7 +63,7 @@ function fixture(count = 2) {
       if (controls.beforeReconcile && command === 'reconcile') {
         const callback = controls.beforeReconcile; delete controls.beforeReconcile; callback(target(op));
       }
-      for (const [index, file] of record.files.entries()) assert.equal(hash(fs.readFileSync(path.join(target(op), file.name))), hash(record.bodies[index]));
+      if (!controls.readOnlyResults) for (const [index, file] of record.files.entries()) assert.equal(hash(fs.readFileSync(path.join(target(op), file.name))), hash(record.bodies[index]));
     }
     if (command === 'acknowledge') record.status = 'acknowledged';
     return record.status;
@@ -102,15 +102,28 @@ function fixture(count = 2) {
     .sort((a, b) => a.document_id.localeCompare(b.document_id));
   const files = () => selection().map((row, index) => ({ name: `nested/Initial-${index + 1}.md`, sha256: row.output_sha256 }));
   const vector = selection();
-  initial = { schema: 'datasecure-initial-results/1', binding_sha256: hash(batchId), root: output,
-    processing_mode: state.processing_mode, files: vector.map((row, index) => ({ document_id: row.document_id, file: `Initial-${index + 1}.md` })) };
+  // Explicit closed legacy initial /1 proof, with real originally bound
+  // directory and file objects, not an incomplete fabricated authority DTO.
+  const initialPath = path.join(output, 'DataSecure-Output', `Lauf-${batchId.slice(-8)}`);
+  fs.mkdirSync(initialPath, { recursive: true });
+  const initialDirectory = bindDirectory(initialPath);
+  initial = { schema: 'datasecure-initial-results/1', batch_id: batchId, binding_sha256: hash(batchId), root: output,
+    result_layout: 'datasecure-visible-markdown/1', processing_mode: state.processing_mode,
+    directory: { path: initialDirectory.path, real: initialDirectory.real, chain: initialDirectory.chain, platform: initialDirectory.platform },
+    files: vector.map((row, index) => {
+      const name = `Initial-${index + 1}.md`, bytes = Buffer.from(store.chunk(batchId, row.document_id, row.revision, 0).markdown);
+      fs.writeFileSync(path.join(initialPath, name), bytes, { flag: 'wx' });
+      return { document_id: row.document_id, name, sha256: row.output_sha256,
+        identity: readBoundFileRecord(path.join(initialPath, name), { checkCtime: true }).identity };
+    }) };
   const edit = () => {
     const row = selection()[0], text = store.chunk(batchId, row.document_id, row.revision, 0).markdown, start = text.indexOf('42');
     return store.decide(batchId, row.document_id, { action: 'redact', revision: row.revision, output_sha256: row.output_sha256,
       operation_id: crypto.randomBytes(16).toString('hex'), ranges: [{ start, end: start + 2 }] });
   };
   const publish = async (candidate = store) => { controls.activeOperation = null; return candidate.publishResults(batchId); };
-  const resolve = async (candidate = store) => { controls.activeOperation = null; return candidate.resolveResultsGeneration(batchId); };
+  const resolve = async (candidate = store) => { controls.activeOperation = null; controls.readOnlyResults = true;
+    try { return await candidate.resolveResultsGeneration(batchId); } finally { controls.readOnlyResults = false; } };
   const planFile = bindingHash => path.join(data, 'document-reviews', batchId, `companions-${bindingHash}.json`);
   function seedLegacy(complete = false, version = 1) {
     assert.ok([1, 2].includes(version));
@@ -359,7 +372,7 @@ async function run() {
     assert.deepEqual(fs.readdirSync(oldFolder).map(name => [name, hash(fs.readFileSync(path.join(oldFolder, name)))]), old);
     assert.equal(fs.existsSync(path.join(f.target({ operation_id: next.result_publication.generation_id }), companions.WORKBOOK_PATH)), true);
   });
-  await testAsync('deleted/changed confidential file or foreign sibling prevents opening without repair', async () => {
+  await testAsync('completed public confidential files are editable/deletable and foreign siblings do not trigger repair', async () => {
     for (const mode of ['deleted', 'changed', 'foreign']) {
       const f = fixture(); f.edit(); const result = await f.publish();
       const folder = f.target({ operation_id: result.result_publication.generation_id });
@@ -368,17 +381,17 @@ async function run() {
       else if (mode === 'changed') fs.appendFileSync(file, 'changed');
       else fs.writeFileSync(path.join(folder, 'Vertraulich', 'foreign.csv'), 'not ours');
       const before = fs.readdirSync(path.dirname(file)).sort();
-      await assert.rejects(() => f.resolve(), error => error.code === 'RESULT_PUBLICATION_CONFLICT');
+      assert.equal((await f.resolve()).local_path, folder);
       assert.deepEqual(fs.readdirSync(path.dirname(file)).sort(), before);
       if (mode === 'deleted') assert.equal(fs.existsSync(file), false);
     }
   });
-  await testAsync('equal bytes in a replaced confidential directory do not gain receipt authority', async () => {
+  await testAsync('after durable completion an edited confidential subtree is not reopened or adopted by the folder opener', async () => {
     const f = fixture(); f.edit(); const result = await f.publish();
     const folder = path.join(f.target({ operation_id: result.result_publication.generation_id }), 'Vertraulich');
     const previous = path.join(f.output, 'old-confidential'); fs.renameSync(folder, previous); fs.mkdirSync(folder);
     for (const name of fs.readdirSync(previous)) fs.renameSync(path.join(previous, name), path.join(folder, name));
-    await assert.rejects(() => f.resolve(), error => error.code === 'RESULT_PUBLICATION_CONFLICT');
+    assert.equal((await f.resolve()).local_path, f.target({ operation_id: result.result_publication.generation_id }));
   });
   await done();
 }

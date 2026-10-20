@@ -94,7 +94,7 @@ async function fixture({ mode = 'markdown-only', count = 2, legacy = false, sepa
     if (command === 'reconcile' && record.directory) {
       if (controls.beforeReconcile) { const hook = controls.beforeReconcile; delete controls.beforeReconcile; hook(target(op)); }
       assertDirectory(record.directory); // model native committed stage identity, never readopt
-      for (const [index, file] of payloadFiles(op).entries()) assert.equal(sha(fs.readFileSync(path.join(target(op), file.name))), sha(record.bodies[index]));
+      if (!controls.readOnlyResults) for (const [index, file] of payloadFiles(op).entries()) assert.equal(sha(fs.readFileSync(path.join(target(op), file.name))), sha(record.bodies[index]));
     }
     return record.status;
   }
@@ -139,32 +139,24 @@ async function fixture({ mode = 'markdown-only', count = 2, legacy = false, sepa
     }
   }
   assert.ok(!deferInitial || legacyCompanions, 'only the explicit historical initial fixture may defer publication');
+  if (legacyLayout && mode === 'markdown-and-anonymize') {
+    // Original companion-free /1 intent BEFORE the first real writer call.
+    // Such historical files may legitimately use the Vertraulich source folder.
+    const stamp = new Date(state.created_at).toISOString().replace(/[-:]/gu, '').replace('T', '-').slice(0, 15);
+    const record = { schema: exporter.CONTENT_ANONYMIZED_SCHEMA, run_directory: `Lauf-${stamp}-${state.token.slice(-8)}`,
+      items: state.items.map((item, index) => ({ package_id: item.package_id,
+        file: `${path.posix.dirname(item.source_label)}/Dokument-${String(index + 1).padStart(3, '0')}-anonymisiert.md`,
+        sha256: store.publicationExpectation(state.token, item.id).document_sha256, source_label: item.source_label })),
+      complete: false, destination_id: '', product_channel: state.product_channel, processing_mode: state.processing_mode,
+      content_options: state.content_options, batch_id: state.token, result_layout: exporter.RESULT_LAYOUT };
+    assert.equal(exporter.validRecord(record), true);
+    fs.writeFileSync(exporter.recordPath(state.token), JSON.stringify(record), { flag: 'wx', mode: 0o600 });
+  }
   const historical = legacyCompanions ? prepareLegacyInitialPlan(state, store) : null;
   const initial = deferInitial ? null : exporter.exportCompletedState(state);
   if (initial) {
     assert.equal(initial.available, true, JSON.stringify(initial));
     assert.equal(initial.exported, count);
-  }
-  if (legacyLayout && mode === 'markdown-and-anonymize') {
-    // Explicit historical fixture conversion, not a product migration: retain
-    // the actual MD objects/root identities, remove only our three freshly made
-    // fixed synthetic leaves, and serialize the former exact /1 proof shape.
-    const outbox = path.join(data, 'result-export-state', `re_${sha(batchId).slice(0, 32)}.json`);
-    const record = JSON.parse(fs.readFileSync(outbox));
-    const bindingFile = path.join(data, 'result-publication-bindings', `${batchId}.json`);
-    const proof = JSON.parse(fs.readFileSync(bindingFile));
-    assert.equal(proof.result_layout, exporter.CONFIDENTIAL_RESULT_LAYOUT);
-    const folder = path.join(proof.directory.path, 'Vertraulich');
-    assert.equal(fs.lstatSync(folder).isSymbolicLink(), false);
-    for (const leaf of ['Dateizuordnung.csv', 'Pseudonym-Zuordnung.txt', 'Pseudonym-Zuordnung.xlsx']) {
-      const file = path.join(folder, leaf); assert.ok(fs.lstatSync(file).isFile()); fs.unlinkSync(file);
-    }
-    assert.deepEqual(fs.readdirSync(folder), []); fs.rmdirSync(folder);
-    record.result_layout = exporter.RESULT_LAYOUT;
-    delete record.confidential_binding_sha256; delete record.confidential;
-    proof.schema = 'datasecure-initial-results/1'; proof.result_layout = exporter.RESULT_LAYOUT;
-    for (const key of ['confidential_binding_sha256', 'confidential', 'confidential_directory', 'confidential_files']) delete proof[key];
-    fs.writeFileSync(outbox, JSON.stringify(record)); fs.writeFileSync(bindingFile, JSON.stringify(proof));
   }
   const bound = deferInitial ? null : exporter.initialResultPublication(batchId);
   if (bound) assert.equal(bound.result_layout, legacyCompanions ? 'datasecure-visible-markdown/2' :
@@ -185,7 +177,8 @@ async function fixture({ mode = 'markdown-only', count = 2, legacy = false, sepa
       revision: value.revision, output_sha256: value.output_sha256, operation_id: crypto.randomBytes(16).toString('hex') });
   };
   const publish = async (candidate = store) => { controls.activeOperation = null; return candidate.publishResults(batchId); };
-  const resolve = async () => { controls.activeOperation = null; return store.resolveResultsGeneration(batchId); };
+  const resolve = async () => { controls.activeOperation = null; controls.readOnlyResults = true;
+    try { return await store.resolveResultsGeneration(batchId); } finally { controls.readOnlyResults = false; } };
   return { batchId, results, state, store, row, edit, publish, resolve, bound, historical, controls, calls, operations, options,
     reload: () => createDocumentReviewStore(options), target: result => target({ operation_id: result.result_publication.generation_id }) };
 }
@@ -363,13 +356,13 @@ async function run() {
     for (const folder of folders.slice(0, 8)) putMetadata(folder, Buffer.alloc(MAX_METADATA_BYTES));
     assert.equal((await f.resolve()).local_path, f.bound.directory.path, 'exactly 8 MiB remains valid');
     putMetadata(folders[8], Buffer.from('x'));
-    await rejects(() => f.resolve(), 'RESULT_PUBLICATION_CONFLICT'); f.edit();
-    await rejects(() => f.publish(), 'RESULT_PUBLICATION_CONFLICT'); assert.equal(f.calls.length, 0);
+    assert.throws(() => exporter.initialResultPublication(f.batchId), { code: 'RESULT_EXPORT_CONFLICT' }, 'strict publication inspector retains its budget');
+    assert.equal((await f.resolve()).local_path, f.bound.directory.path, 'completed folder opening does not inventory user files');
   });
   } else {
     console.log(`  NOT_RUN real Darwin metadata initial/generation/budget cases: actual host ${process.platform}; no Mac API or O_NOFOLLOW PASS`);
     for (const phase of ['initial', 'generation'])
-    await testAsync(`${process.platform} actual process: regular .DS_Store blocks ${phase} opening/publication without repair`, async () => {
+    await testAsync(`${process.platform} actual process: completed ${phase} ignores user-added metadata without repair or import`, async () => {
       const f = await fixture(); let folder, files;
       if (phase === 'generation') {
         f.edit(); const result = await f.publish(); folder = f.target(result);
@@ -379,9 +372,8 @@ async function run() {
       const metadata = putMetadata(folder), metadataBytes = fs.readFileSync(metadata);
       const metadataIdentity = fs.lstatSync(metadata, { bigint: true });
       const names = fs.readdirSync(folder).sort(), operations = f.operations.size, calls = f.calls.length;
-      await rejects(() => f.resolve(), 'RESULT_PUBLICATION_CONFLICT');
-      f.edit(1); await rejects(() => f.publish(), 'RESULT_PUBLICATION_CONFLICT');
-      assert.equal(f.calls.length, calls); assert.equal(f.operations.size, operations, 'no new native publication or repair');
+      assert.equal((await f.resolve()).local_path, folder);
+      assert.equal(f.operations.size, operations, 'folder opening cannot publish or repair');
       assert.deepEqual(fs.readdirSync(folder).sort(), names); assert.deepEqual(fs.readFileSync(metadata), metadataBytes);
       const after = fs.lstatSync(metadata, { bigint: true });
       for (const key of ['dev', 'ino', 'birthtimeNs', 'size', 'mtimeNs', 'ctimeNs', 'nlink']) assert.equal(after[key], metadataIdentity[key]);
@@ -414,17 +406,21 @@ async function run() {
   const metadataTampers = ['oversize', 'directory', 'hardlink', 'unknown-dot', 'csv', 'md-tamper'];
   if (symlinksAuthorized()) metadataTampers.push('symlink');
   for (const phase of ['initial', 'generation']) for (const kind of metadataTampers)
-  await testAsync(`${phase}: metadata exception still refuses ${kind} before another publication`, async () => {
+  await testAsync(`${phase}: strict pre-completion inventory still refuses ${kind}`, async () => {
     const f = await fixture(); let folder, files;
     if (phase === 'generation') {
-      f.edit(); const result = await f.publish(); folder = f.target(result);
-      files = JSON.parse(f.operations.get(result.result_publication.generation_id).operation).files.map(file => file.name);
-    } else { folder = f.bound.directory.path; files = f.bound.files.map(file => file.name); }
-    addResultTamper(folder, files, kind);
-    const before = fs.readdirSync(folder).sort(), calls = f.calls.length;
-    await rejects(() => f.resolve(), 'RESULT_PUBLICATION_CONFLICT');
-    f.edit(1); await rejects(() => f.publish(), 'RESULT_PUBLICATION_CONFLICT');
-    assert.equal(f.calls.length, calls); assert.deepEqual(fs.readdirSync(folder).sort(), before);
+      f.edit(); f.controls.afterAck = target => {
+        folder = target; const op = JSON.parse([...f.operations.values()].at(-1).operation);
+        addResultTamper(folder, op.files.map(file => file.name), kind);
+      };
+      await rejects(() => f.publish());
+      assert.equal(fs.readdirSync(path.join(data, 'document-reviews', f.batchId)).some(name => /^results-generation-.*-complete\.json$/u.test(name)), false);
+    } else {
+      folder = f.bound.directory.path; files = f.bound.files.map(file => file.name);
+      addResultTamper(folder, files, kind);
+      assert.throws(() => exporter.initialResultPublication(f.batchId), 'the unchanged strict initial inspector still refuses this payload');
+      assert.equal((await f.resolve()).local_path, folder);
+    }
   });
   test('SOURCE-MODEL Darwin-branch algorithm never reads/parses/hashes opaque metadata', () => {
     const f = metadataScope('opaque'), io = Object.create(fs);
@@ -469,7 +465,7 @@ async function run() {
     for (const extra of [{ selection: [] }, { approved: true }, { acknowledge: true }, { operation_id: 'b'.repeat(32) }, { root: root }, { publication_role: 'results' }])
       assert.throws(() => validatePrivateMessage({ ...message, ...extra }));
     const { desktopErrorCode } = require('../plugins/data-secure/server/core/desktop-error-contract');
-    for (const code of ['RESULT_PUBLICATION_CONFLICT', 'RESULT_PUBLICATION_PENDING', 'RESULT_PUBLICATION_LEGACY']) assert.equal(desktopErrorCode(code), code);
+    for (const code of ['RESULT_PUBLICATION_CONFLICT', 'RESULT_PUBLICATION_PENDING', 'RESULT_PUBLICATION_LEGACY', 'RESULT_DIRECTORY_UNAVAILABLE']) assert.equal(desktopErrorCode(code), code);
   });
   await testAsync('current and historical service openers await the selected generation and keep legacy adapters compatible', async () => {
     const { StandaloneApplicationService } = require('../plugins/data-secure/server/standalone/application-service');
@@ -498,6 +494,23 @@ async function run() {
     f.edit(); const result = await f.publish();
     assertGenerationReceiptInventory(fs.readFileSync(path.join(data, 'document-reviews', f.batchId,
       `results-generation-${result.result_publication.generation_id}-complete.json`)), 'markdown-only', 2, f.target(result));
+  });
+  for (const sourceFolder of ['Vertraulich', 'vertraulich', 'VERTRAULICH']) for (const mode of ['markdown-only', 'markdown-and-anonymize'])
+  await testAsync(`companion-free initial ${mode} keeps legitimate ${sourceFolder} source folders readable`, async () => {
+    const f = await fixture({ mode, legacyLayout: mode === 'markdown-and-anonymize', sourceFolders: [sourceFolder, sourceFolder] });
+    assert.equal(f.bound.schema, 'datasecure-initial-results/1');
+    assert.ok(f.bound.files.every(file => file.name.startsWith(sourceFolder + '/')));
+    assert.equal((await f.resolve()).local_path, f.bound.directory.path);
+    assert.equal(f.store.list(f.batchId).result_publication.state, 'initial');
+  });
+  for (const legacyCompanions of [true, false]) await testAsync(`companion-bearing initial /${legacyCompanions ? 2 : 3} never admits a reserved MD namespace collision`, async () => {
+    const f = await fixture({ mode: 'markdown-and-anonymize', legacyCompanions });
+    const file = path.join(data, 'result-publication-bindings', `${f.batchId}.json`), proof = JSON.parse(fs.readFileSync(file));
+    const outbox = exporter.recordPath(f.batchId), record = JSON.parse(fs.readFileSync(outbox));
+    const oldName = proof.files[0].name; proof.files[0].name = 'vErTrAuLiCh/Quelle.md';
+    record.items.find(item => item.file === oldName).file = proof.files[0].name;
+    fs.writeFileSync(file, JSON.stringify(proof)); fs.writeFileSync(outbox, JSON.stringify(record));
+    await rejects(() => f.resolve(), 'RESULT_PUBLICATION_CONFLICT'); assert.equal(f.calls.length, 0);
   });
   for (const mode of ['markdown-only', 'markdown-and-anonymize']) for (const partial of [true, false])
   await testAsync(`${mode}: validated incomplete initial publication (partial=${partial}) stays pending without readable authority`, async () => {
@@ -539,14 +552,15 @@ async function run() {
     await rejects(() => f.publish(), 'RESULT_PUBLICATION_CONFLICT');
     assert.equal(fs.existsSync(binding), false); assert.equal(f.calls.length, 0);
   });
-  for (const mutation of ['extra-file', 'missing-file', 'same-hash-leaf-replacement']) await testAsync(`initial opener revalidates ${mutation} without publication or fallback`, async () => {
+  for (const mutation of ['extra-file', 'missing-file', 'same-hash-leaf-replacement']) await testAsync(`confirmed initial opener permits ${mutation} without publication or repair`, async () => {
     const f = await fixture(), leaf = path.join(f.bound.directory.path, f.bound.files[0].name);
     if (mutation === 'extra-file') fs.writeFileSync(path.join(f.bound.directory.path, 'private.csv'), 'private');
     else {
       const retired = path.join(root, `retired-leaf-${serial}.md`); fs.renameSync(leaf, retired);
       if (mutation === 'same-hash-leaf-replacement') fs.copyFileSync(retired, leaf);
     }
-    await rejects(() => f.resolve(), 'RESULT_PUBLICATION_CONFLICT'); assert.equal(f.calls.length, 0);
+    assert.throws(() => exporter.initialResultPublication(f.batchId), 'strict initial verification is unchanged');
+    assert.equal((await f.resolve()).local_path, f.bound.directory.path); assert.equal(f.calls.length, 0);
   });
   await testAsync('real anonymization commits all three confidential files before ready, corrections bind their actual new names', async () => {
     const f = await fixture({ mode: 'markdown-and-anonymize' });
@@ -658,7 +672,7 @@ async function run() {
     assert.equal((await f.resolve()).local_path, folder); assert.equal(f.row(0).approved, false);
   });
   for (const phase of ['initial', 'generation']) for (const mutation of ['missing', 'changed', 'same-bytes-swap', 'directory-swap', 'extra'])
-  await testAsync(`confidential ${phase} ${mutation}: refuse without recreating or adopting files`, async () => {
+  await testAsync(`completed confidential ${phase} ${mutation}: open without recreating, importing or adopting files`, async () => {
     const f = await fixture({ mode: 'markdown-and-anonymize' });
     let folder = f.bound.directory.path;
     if (phase === 'generation') { f.edit(); folder = f.target(await f.publish()); }
@@ -677,9 +691,12 @@ async function run() {
       assert.deepEqual(before, originalInventory, 'same-byte oracle has no foreign-name confounder');
       for (const file of originalBytes) assert.deepEqual(fs.readFileSync(path.join(folder, file.name)), file.bytes);
     }
-    await rejects(() => f.resolve(), 'RESULT_PUBLICATION_CONFLICT');
-    f.edit(1); await rejects(() => f.publish(), 'RESULT_PUBLICATION_CONFLICT');
-    assert.equal(f.calls.length, calls); assert.deepEqual(fs.readdirSync(folder, { recursive: true }).sort(), before);
+    assert.equal((await f.resolve()).local_path, folder);
+    f.edit(1); const next = await f.publish();
+    assert.notEqual(f.target(next), folder);
+    assert.deepEqual(fs.readdirSync(folder, { recursive: true }).sort(), before);
+    assertGenerationReceiptInventory(fs.readFileSync(path.join(data, 'document-reviews', f.batchId,
+      `results-generation-${next.result_publication.generation_id}-complete.json`)), 'markdown-and-anonymize', 2, f.target(next));
   });
   await testAsync('real new-layout identity opener returns explicit private scope without publication or a false warning', async () => {
     const f = await fixture({ mode: 'markdown-and-anonymize' });
@@ -729,12 +746,78 @@ async function run() {
     assert.ok(fs.readFileSync(path.join(firstTarget, 'Quelle-1.md')).equals(firstBytes));
     assert.equal((await f.resolve()).local_path, f.target(second)); assert.equal(f.operations.size, 2);
   });
-  for (const mutation of ['missing', 'bytes', 'same-bytes-replacement']) await testAsync(`initial ${mutation} cannot be reconstructed by a correction`, async () => {
+  for (const phase of ['initial', 'generation']) await testAsync(`completed ${phase}: timestamps, edits, deleted leaves and Office extras require no public-leaf IO`, async () => {
+    const f = await fixture({ mode: 'markdown-and-anonymize' });
+    let folder = f.bound.directory.path;
+    if (phase === 'generation') { f.edit(); folder = f.target(await f.publish()); }
+    const files = fs.readdirSync(folder, { recursive: true }).filter(name => fs.statSync(path.join(folder, name)).isFile());
+    const hashes = files.map(name => sha(fs.readFileSync(path.join(folder, name))));
+    for (const name of files) fs.utimesSync(path.join(folder, name), new Date(0), new Date(0));
+    assert.deepEqual(files.map(name => sha(fs.readFileSync(path.join(folder, name)))), hashes, 'timestamp-only change leaves all bytes equal');
+    fs.writeFileSync(path.join(folder, 'Vertraulich', '~$Pseudonym-Zuordnung.xlsx'), 'user Office lock');
+    fs.appendFileSync(path.join(folder, files[0]), 'MANUAL USER EDIT');
+    fs.unlinkSync(path.join(folder, files.at(-1)));
+    const inventory = fs.readdirSync(folder, { recursive: true }).sort(), calls = f.calls.length;
+    const originals = new Map(), observed = [];
+    for (const name of ['openSync', 'readFileSync', 'readdirSync', 'lstatSync', 'statSync']) {
+      originals.set(name, fs[name]); fs[name] = function (file, ...args) {
+        const target = typeof file === 'string' ? path.resolve(file) : '';
+        if (target.startsWith(folder + path.sep) || name === 'readdirSync' && target === folder) {
+          observed.push([name, target]); throw Error('PUBLIC_LEAF_IO_AFTER_COMPLETION');
+        }
+        return originals.get(name).call(this, file, ...args);
+      };
+    }
+    try {
+      assert.equal((await f.resolve()).local_path, folder);
+      assert.equal(f.store.list(f.batchId).result_publication.state, phase === 'initial' ? 'initial' : 'current');
+      if (phase === 'generation') assert.equal((await f.publish()).result_publication.state, 'current');
+    } finally { for (const [name, original] of originals) fs[name] = original; }
+    assert.deepEqual(observed, []);
+    assert.equal(f.calls.length - calls, phase === 'initial' ? 0 : 1, 'only latest-generation read-only native inspection, no ACK or no-op publication');
+    assert.deepEqual(fs.readdirSync(folder, { recursive: true }).sort(), inventory);
+    f.edit(1); const next = await f.publish();
+    assert.notEqual(f.target(next), folder);
+    assert.equal(fs.existsSync(path.join(f.target(next), 'Vertraulich', '~$Pseudonym-Zuordnung.xlsx')), false);
+    assert.ok(fs.readdirSync(f.target(next), { recursive: true }).filter(name => name.endsWith('.md')).every(name =>
+      !fs.readFileSync(path.join(f.target(next), name), 'utf8').includes('MANUAL USER EDIT')));
+  });
+  for (const field of ['files-missing', 'files-extra', 'name', 'digest', 'identity-number', 'identity-extra', 'identity-missing', 'directory-chain'])
+  await testAsync(`completed private receipt ${field} remains a conflict before any public authority`, async () => {
+    const f = await fixture(); f.edit(); const result = await f.publish(), id = result.result_publication.generation_id;
+    const file = path.join(data, 'document-reviews', f.batchId, `results-generation-${id}-complete.json`), receipt = JSON.parse(fs.readFileSync(file));
+    if (field === 'files-missing') receipt.files.pop();
+    if (field === 'files-extra') receipt.files.push(receipt.files[0]);
+    if (field === 'name') receipt.files[0].name = 'foreign.md';
+    if (field === 'digest') receipt.files[0].sha256 = '0'.repeat(64);
+    if (field === 'identity-number') receipt.files[0].identity.ino = 1;
+    if (field === 'identity-extra') receipt.files[0].identity.extra = true;
+    if (field === 'identity-missing') delete receipt.files[0].identity.ctime;
+    if (field === 'directory-chain') receipt.directory.chain.push(receipt.directory.chain.at(-1));
+    fs.writeFileSync(file, JSON.stringify(receipt)); const calls = f.calls.length;
+    assert.equal(f.store.list(f.batchId).result_publication.state, 'conflict');
+    await rejects(() => f.resolve(), 'RESULT_PUBLICATION_CONFLICT');
+    await rejects(() => f.publish(), 'RESULT_PUBLICATION_CONFLICT'); assert.equal(f.calls.length, calls);
+  });
+  for (const phase of ['initial', 'generation']) await testAsync(`completed ${phase}: unreadable original directory is unavailable, not a content conflict`, async () => {
+    const f = await fixture(); let folder = f.bound.directory.path;
+    if (phase === 'generation') { f.edit(); folder = f.target(await f.publish()); }
+    const access = fs.accessSync; fs.accessSync = function (file, ...args) {
+      if (file === folder) throw Object.assign(Error('synthetic directory access refusal'), { code: 'EACCES' });
+      return access.call(this, file, ...args);
+    };
+    try { await rejects(() => f.resolve(), 'RESULT_DIRECTORY_UNAVAILABLE');
+      assert.equal(f.store.list(f.batchId).result_publication.state, 'unavailable'); }
+    finally { fs.accessSync = access; }
+    assert.equal((await f.resolve()).local_path, folder);
+  });
+  for (const mutation of ['missing', 'same-bytes-replacement']) await testAsync(`initial directory ${mutation} cannot be reconstructed by a correction`, async () => {
     const f = await fixture(); f.edit(); const folder = f.bound.directory.path;
     if (mutation === 'missing') fs.renameSync(folder, folder + '-missing');
-    else if (mutation === 'bytes') fs.appendFileSync(path.join(folder, f.bound.files[0].name), 'changed');
     else sameByteSwap(folder);
-    await rejects(() => f.publish()); assert.equal(f.calls.length, 0); assert.equal(fs.existsSync(path.join(f.results, 'DataSecure-Markdown-Korrektur')), false);
+    await rejects(() => f.publish(), 'RESULT_DIRECTORY_UNAVAILABLE'); assert.equal(f.calls.length, 0); assert.equal(fs.existsSync(path.join(f.results, 'DataSecure-Markdown-Korrektur')), false);
+    await rejects(() => f.resolve(), 'RESULT_DIRECTORY_UNAVAILABLE');
+    assert.equal(f.store.list(f.batchId).result_publication.state, 'unavailable');
   });
   await testAsync('lost publish response stays pending/read-only then same-op retry repairs receipt without new generation', async () => {
     const f = await fixture(); f.edit(); f.controls.losePublish = true;
@@ -761,11 +844,13 @@ async function run() {
     const files = fs.readdirSync(path.join(data, 'document-reviews', f.batchId));
     assert.equal(files.some(name => /^results-generation-.*-complete\.json$/u.test(name)), false);
   });
-  await testAsync('changed prior generation refuses new publication and history honestly reports conflict', async () => {
+  await testAsync('changed prior generation remains user-owned while a new correction comes only from private revisions', async () => {
     const f = await fixture(); f.edit(); const first = await f.publish(); f.edit(1);
     fs.appendFileSync(path.join(f.target(first), 'Quelle-1.md'), 'changed');
-    assert.equal(f.store.list(f.batchId).result_publication.state, 'conflict'); const count = f.calls.length;
-    await rejects(() => f.publish()); assert.equal(f.calls.length, count); assert.equal(f.operations.size, 1);
+    assert.equal(f.store.list(f.batchId).result_publication.state, 'pending');
+    const next = await f.publish(); assert.equal(f.operations.size, 2);
+    assert.match(fs.readFileSync(path.join(f.target(first), 'Quelle-1.md'), 'utf8'), /changed$/u);
+    assert.doesNotMatch(fs.readFileSync(path.join(f.target(next), 'Quelle-1.md'), 'utf8'), /changed/u);
   });
   for (const tamper of ['root', 'initial_binding_sha256', 'operation_id']) await testAsync(`rehashing a private ${tamper} change cannot redirect or rebind a saved generation`, async () => {
     const f = await fixture(); f.edit(); const result = await f.publish();

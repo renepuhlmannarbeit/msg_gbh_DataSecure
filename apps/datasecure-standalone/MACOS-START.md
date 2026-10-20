@@ -178,12 +178,29 @@ vertrauliche Zuordnung können Originalnamen enthalten.
    getrennten Unterordner **Vertraulich** mit **Dateizuordnung.csv**,
    **Pseudonym-Zuordnung.txt** und **Pseudonym-Zuordnung.xlsx**. Alle drei Dateien
    sind ohne weitere Aktion vorhanden; auch jeder neue Korrekturstand erhält
-   seine passenden Zuordnungen. Die Excel-Datei enthält je Dokument die Spalten
-   **Typ**, **Basiswert** und **Endwert** für belegte Personen, Unternehmen/
-   Organisationen und Projekte. Excel muss für die Erzeugung nicht installiert sein.
+   seine passenden Zuordnungen. Die Excel-Datei zeigt im ersten Blatt
+   **Zuordnungen** dieselben Zuordnungen wie die TXT: **Pseudonym**, **Typ**,
+   **Originalwert(e)**, **Vorkommen** und **Datei**. Eine Zeile entspricht einer
+   TXT-Zuordnung; Vorkommen ist deren gesamte Anzahl, nicht eine zusätzliche
+   Zählung je Schreibvariante. Gleichlautende Pseudonyme aus verschiedenen
+   Dateien werden nicht zusammengezogen. Technischer Kontext steht dahinter
+   in **Übersicht**; die ergänzenden Dokumentblätter behalten **Typ**,
+   **Basiswert** und **Endwert**. Vorhandene alte Excel-Dateien bleiben unverändert;
+   erst neue Läufe oder bewusst gespeicherte neue Korrekturstände erhalten das
+   neue erste Blatt. Excel muss für die Erzeugung nicht installiert sein.
    **Vertraulich enthält Originalangaben: nicht weitergeben oder hochladen.**
    Originaldateien und private Prüfstände werden nicht in den Ergebnisstand kopiert.
    Reine Markdown-Konvertierung erzeugt keine Zuordnungen.
+   Nach bestätigter Bereitstellung sind die Ergebnisdateien deine Arbeitskopien:
+   Du darfst sie außerhalb der App manuell bearbeiten. Der normale Ordneröffner
+   prüft dann nur die sichere Erreichbarkeit des gebundenen Ordners, nicht erneut
+   die Hashes oder das Inventar seiner Dateien. Manuelle Änderungen werden nicht
+   in private Prüfstände übernommen. Eine neue App-Nachbearbeitung erstellt aus
+   ihrem privaten Basisstand einen neuen Ordner und überschreibt deine Arbeitskopie
+   nicht. Die Zuordnungen beschreiben den von DataSecure bereitgestellten Stand,
+   nicht spätere externe Änderungen. Fehlende oder ausgetauschte Ordner werden
+   nicht repariert oder neu angelegt. Private Belege und offene Schreib-/
+   Bestätigungstransaktionen werden weiterhin streng geprüft.
    Finder kann zusätzliche `.DS_Store`-Anzeige-Metadaten anlegen. Diese sind
    nicht geprüft oder anonymisiert und gehören nicht zur Weitergabe: im Finder
    nur die gewünschten Markdown-Dateien auswählen, nicht ungeprüft den gesamten

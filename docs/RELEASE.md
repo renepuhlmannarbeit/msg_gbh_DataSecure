@@ -1,8 +1,8 @@
 # Release- und Distributionsvertrag
 
-Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc168 · Veröffentlichungsnachtrag: 20.10.2026
+Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc169 · Veröffentlichungsnachtrag: 20.10.2026
 
-Der aktuelle Quellstand ist der veröffentlichte RC168-Standalone-Teststand für Windows und macOS. Nachfolgende reine Dokumentation ändert die Paket-/Tagbindung nicht. Menschliche N3/N4-Produktionsfreigaben bleiben offen.
+Der aktuelle Quellstand ist RC169-Entwicklungsstand und noch kein neu gebundener Paketkandidat. Nachfolgende reine Dokumentation ändert die Paket-/Tagbindung nicht. Menschliche N3/N4-Produktionsfreigaben bleiben offen.
 
 ### RC168 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
 

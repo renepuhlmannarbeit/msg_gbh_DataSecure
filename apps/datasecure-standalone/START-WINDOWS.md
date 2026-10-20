@@ -112,7 +112,15 @@ aktiv; die App öffnet dabei nicht automatisch die vollständige Verlaufsliste.
    (Originaldateiname → tatsächlicher Ergebnisname),
    **Pseudonym-Zuordnung.txt** und **Pseudonym-Zuordnung.xlsx** (belegte Personen,
    Unternehmen/Organisationen und Projekte des jeweiligen Standes). Die Excel-
-   Datei enthält je Dokument die Spalten **Typ**, **Basiswert** und **Endwert**.
+   Datei zeigt im ersten Blatt **Zuordnungen** dieselben Zuordnungen wie die TXT:
+   **Pseudonym**, **Typ**, **Originalwert(e)**, **Vorkommen** und **Datei**.
+   Eine Zeile entspricht einer TXT-Zuordnung; Vorkommen ist deren gesamte Anzahl,
+   nicht eine zusätzliche Zählung je Schreibvariante. Gleichlautende Pseudonyme
+   aus verschiedenen Dateien werden nicht zusammengezogen. Technischer Kontext
+   steht dahinter in **Übersicht**; die ergänzenden Dokumentblätter behalten
+   **Typ**, **Basiswert** und **Endwert**. Vorhandene alte Excel-Dateien bleiben
+   unverändert; erst neue Läufe oder bewusst gespeicherte neue Korrekturstände
+   erhalten das neue erste Blatt.
    Keine weitere Aktion ist nötig. Nachbearbeitungen erhalten eigene,
    passende Zuordnungen. Ältere `/1`- und `/2`-Läufe behalten ihre bisherigen Zuordnungen;
    ihre Ordner werden nicht nachträglich verändert. Reine Konvertierung erzeugt
@@ -120,8 +128,16 @@ aktiv; die App öffnet dabei nicht automatisch die vollständige Verlaufsliste.
    Betriebssysteme können zusätzliche Anzeige-Metadaten wie `.DS_Store`
    hinzufügen. Diese sind nicht geprüft oder anonymisiert: nur die gewünschten
    Markdown-Dateien weitergeben, nicht ungeprüft den gesamten Ordner verpacken.
-   Unter Windows bleibt eine hinzugelegte `.DS_Store` ein Dateikonflikt; die App
-   entfernt oder repariert solche Dateien nicht automatisch.
+   Nach bestätigter Bereitstellung sind die Ergebnisdateien deine Arbeitskopien:
+   Du darfst sie außerhalb der App manuell bearbeiten. Der normale Ordneröffner
+   prüft dann nur die sichere Erreichbarkeit des gebundenen Ordners, nicht erneut
+   die Hashes oder das Inventar seiner Dateien. Manuelle Änderungen werden nicht
+   in private Prüfstände übernommen. Eine neue App-Nachbearbeitung erstellt aus
+   ihrem privaten Basisstand einen neuen Ordner und überschreibt deine Arbeitskopie
+   nicht. Die Zuordnungen beschreiben den von DataSecure bereitgestellten Stand,
+   nicht spätere externe Änderungen. Fehlende oder ausgetauschte Ordner werden
+   nicht repariert oder neu angelegt. Private Belege und offene Schreib-/
+   Bestätigungstransaktionen werden weiterhin streng geprüft.
    Bei alten Läufen können solche
    Beilagen weiterhin vorhanden sein; alte Ordner werden nicht bereinigt.
    DataSecure lädt nichts hoch. Eine technische Prüfung garantiert weder

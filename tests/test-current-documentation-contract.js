@@ -496,7 +496,14 @@ test('complete Windows and Mac guides do not contradict mandatory result compani
   const validate = source => {
     const text = source.replace(/\*\*/gu, '').replace(/\s+/gu, ' ');
     for (const name of ['Vertraulich', 'Dateizuordnung.csv', 'Pseudonym-Zuordnung.txt', 'Pseudonym-Zuordnung.xlsx',
-      'Typ', 'Basiswert', 'Endwert']) assert.ok(text.includes(name));
+      'Typ', 'Basiswert', 'Endwert', 'Zuordnungen', 'Pseudonym', 'Originalwert(e)', 'Vorkommen', 'Datei']) assert.ok(text.includes(name));
+    assert.match(text, /ersten Blatt Zuordnungen dieselben Zuordnungen wie die TXT/u);
+    assert.match(text, /Eine Zeile entspricht einer TXT-Zuordnung/u);
+    assert.match(text, /Vorhandene alte Excel-Dateien bleiben unverändert/u);
+    assert.match(text, /Nach bestätigter Bereitstellung sind die Ergebnisdateien deine Arbeitskopien/u);
+    assert.match(text, /Manuelle Änderungen werden nicht in private Prüfstände übernommen/u);
+    assert.match(text, /offene Schreib-\/ Bestätigungstransaktionen werden weiterhin streng geprüft/u);
+    assert.doesNotMatch(text, /Unter Windows bleibt eine hinzugelegte `.DS_Store` ein Dateikonflikt/u);
     assert.match(text, /Originalangaben: nicht weitergeben oder hochladen/u);
     assert.match(text, /ohne (?:weitere|zusätzliche) Aktion/u);
     for (const label of actionLabels) assert.ok(text.includes(label), `guide must use actual UI label ${label}`);

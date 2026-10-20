@@ -21,6 +21,14 @@ const fail = (code = 'CONFIDENTIAL_WORKBOOK_INVALID') => Object.assign(Error(cod
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 const lfs = value => (value.match(/\n/gu) || []).length;
 
+// Match TXT's unambiguous JSON-quoted variant list, but leave a sole original
+// raw. The count belongs to the whole validated entry, never to each variant.
+function mappingOriginals(entry) {
+  if (entry.originals.length === 1) return entry.originals[0];
+  return entry.originals.map(value => JSON.stringify(value).replace(/[\p{Cf}\u2028\u2029]/gu,
+    character => character.split('').map(unit => `\\u${unit.charCodeAt(0).toString(16).padStart(4, '0')}`).join(''))).join(' / ');
+}
+
 // Snapshot plain data, not accessors, toJSON methods, Buffers, prototypes or
 // renderer callbacks. This also prevents a changing object from supplying a
 // different vector after validation. Proxy side effects are not an authority
@@ -149,15 +157,23 @@ function packageBuilder() {
 }
 
 function worksheet(write, rows, widths) {
+  const columns = widths.length;
+  if (![3, 5].includes(columns)) throw fail();
   write(`${XML}<worksheet xmlns="${SS}"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><cols>`);
-  for (let i = 0; i < 3; i++) write(`<col min="${i + 1}" max="${i + 1}" width="${widths[i]}" customWidth="1"/>`);
+  for (let i = 0; i < columns; i++) write(`<col min="${i + 1}" max="${i + 1}" width="${widths[i]}" customWidth="1"/>`);
   write('</cols><sheetData>');
   let rowIndex = 0;
   for (const row of rows) {
-    if (++rowIndex > MAX_SHEET_ROWS || row.length !== 3) throw fail('CONFIDENTIAL_WORKBOOK_LIMIT');
+    if (++rowIndex > MAX_SHEET_ROWS || row.length !== columns) throw fail('CONFIDENTIAL_WORKBOOK_LIMIT');
     write(`<row r="${rowIndex}">`);
-    for (let column = 0; column < 3; column++) {
+    for (let column = 0; column < columns; column++) {
       const value = row[column];
+      if (columns === 5 && column === 3 && rowIndex > 1) {
+        if (!Number.isSafeInteger(value) || value < 1) throw fail();
+        // Explicit numeric cell + General style, not a formula or text format.
+        write(`<c r="D${rowIndex}" s="2" t="n"><v>${value}</v></c>`);
+        continue;
+      }
       if (typeof value !== 'string' || !value.isWellFormed() || value.length > MAX_CELL_UNITS || lfs(value) > MAX_CELL_LFS) throw fail('CONFIDENTIAL_WORKBOOK_LIMIT');
       write(`<c r="${String.fromCharCode(65 + column)}${rowIndex}" s="${rowIndex === 1 ? 1 : 0}" t="inlineStr"><is><t xml:space="preserve">${xmlText(value)}</t></is></c>`);
     }
@@ -170,30 +186,46 @@ function renderConfidentialWorkbook(input) {
   const overview = dataSnapshot(input);
   renderConfidentialOverview(overview); // Same closed, proven-identity schema as TXT; no marker inference.
   const binding = hash(JSON.stringify(overview)), long = [], references = new Map();
+  function registerLongValue(sheet, cell, value) {
+    if (value.length <= MAX_CELL_UNITS && lfs(value) <= MAX_CELL_LFS) return;
+    const id = `LW${String(long.length + 1).padStart(6, '0')}`;
+    const parts = splitLongValue(value), sha256 = hash(value);
+    const record = { id, source_sheet: sheet, source_cell: cell, parts: parts.length,
+      total_utf16: value.length, sha256 };
+    long.push({ binding: record, chunks: parts });
+    references.set(`${sheet}:${cell}`, `[LANGWERT ${id}: Langwerte; Teile=${parts.length}; SHA-256=${sha256}]`);
+  }
+  let mappingRow = 1;
   const documents = overview.documents.map((document, index) => {
     const sheet = `Dokument_${String(index + 1).padStart(3, '0')}`;
+    for (const entry of document.entries) {
+      if (++mappingRow > MAX_SHEET_ROWS) throw fail('CONFIDENTIAL_WORKBOOK_LIMIT');
+      registerLongValue('Zuordnungen', `C${mappingRow}`, mappingOriginals(entry));
+    }
     let rows = 0;
     for (const entry of document.entries) for (const original of entry.originals) {
       if (++rows >= MAX_SHEET_ROWS) throw fail('CONFIDENTIAL_WORKBOOK_LIMIT');
-      if (original.length > MAX_CELL_UNITS || lfs(original) > MAX_CELL_LFS) {
-        const id = `LW${String(long.length + 1).padStart(6, '0')}`, cell = `B${rows + 1}`;
-        const parts = splitLongValue(original), sha256 = hash(original);
-        const record = { id, source_sheet: sheet, source_cell: cell, parts: parts.length,
-          total_utf16: original.length, sha256 };
-        long.push({ binding: record, chunks: parts });
-        references.set(`${sheet}:${cell}`, `[LANGWERT ${id}: Langwerte; Teile=${parts.length}; SHA-256=${sha256}]`);
-      }
+      registerLongValue(sheet, `B${rows + 1}`, original);
     }
     return { document, sheet, rows };
   });
-  const sheets = ['Übersicht', ...documents.map(item => item.sheet), ...(long.length ? ['Langwerte'] : [])];
+  const sheets = ['Zuordnungen', 'Übersicht', ...documents.map(item => item.sheet), ...(long.length ? ['Langwerte'] : [])];
   const zip = packageBuilder();
   zip.part('[Content_Types].xml', `${XML}<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${sheets.map((_, index) => `<Override PartName="/xl/worksheets/sheet${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}</Types>`);
   zip.part('_rels/.rels', `${XML}<Relationships xmlns="${PKG}"><Relationship Id="rId1" Type="${REL}/officeDocument" Target="xl/workbook.xml"/></Relationships>`);
   zip.part('xl/workbook.xml', `${XML}<workbook xmlns="${SS}" xmlns:r="${REL}"><bookViews><workbookView/></bookViews><sheets>${sheets.map((name, index) => `<sheet name="${name}" sheetId="${index + 1}" r:id="rId${index + 1}"/>`).join('')}</sheets></workbook>`);
   zip.part('xl/_rels/workbook.xml.rels', `${XML}<Relationships xmlns="${PKG}">${sheets.map((_, index) => `<Relationship Id="rId${index + 1}" Type="${REL}/worksheet" Target="worksheets/sheet${index + 1}.xml"/>`).join('')}<Relationship Id="rId${sheets.length + 1}" Type="${REL}/styles" Target="styles.xml"/></Relationships>`);
-  zip.part('xl/styles.xml', `${XML}<styleSheet xmlns="${SS}"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf><xf numFmtId="49" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`);
+  zip.part('xl/styles.xml', `${XML}<styleSheet xmlns="${SS}"><fonts count="2"><font><sz val="11"/><name val="Calibri"/></font><font><b/><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="3"><xf numFmtId="49" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf><xf numFmtId="49" fontId="1" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyFont="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyNumberFormat="1" applyAlignment="1"><alignment vertical="top" wrapText="1"/></xf></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`);
 
+  function* mappingRows() {
+    yield ['Pseudonym', 'Typ', 'Originalwert(e)', 'Vorkommen', 'Datei'];
+    let row = 1;
+    for (const { document } of documents) for (const entry of document.entries) {
+      row++;
+      yield [entry.replacement, entry.kind, references.get(`Zuordnungen:C${row}`) || mappingOriginals(entry),
+        entry.occurrences, document.name];
+    }
+  }
   function* overviewRows() {
     yield ['Kontext', 'Wert', 'Hinweis'];
     yield ['VERTRAULICH', 'NICHT AN KI WEITERGEBEN', 'Enthält ursprüngliche Werte. Nur lokal und vertraulich verwenden.'];
@@ -201,7 +233,10 @@ function renderConfidentialWorkbook(input) {
     yield ['Datenquelle', overview.schema, 'Nur belegte eindeutige Zuordnungen; keine aus Markertext erfundenen Identitäten.'];
     yield ['Lauf', overview.batch_id, ''];
     yield ['Standbindung SHA-256', binding, 'SHA-256 des unveränderten Overview-JSON in seiner gebundenen Reihenfolge.'];
-    yield ['Varianten', 'Jede tatsächlich belegte Originalvariante hat eine eigene Zeile.', 'Keine Normalisierung, Zahlenkonvertierung, Formeln, Makros oder externen Verknüpfungen.'];
+    yield ['Zuordnungen', 'Erstes Blatt: eine Zeile je belegter Zuordnung in ihrer Datei, in derselben Reihenfolge wie TXT.', 'Pseudonym und roher Typ PERSON/ORGANIZATION/PROJECT stammen unverändert aus derselben geprüften Entitätenspur. Keine Zusammenführung über Dokumentgrenzen.'];
+    yield ['Originalwert(e)', 'Ein Originalwert steht unverändert da; mehrere Varianten sind wie in TXT JSON-gequotet und durch / getrennt.', 'Anführungszeichen und Escapezeichen machen die Varianten verlustfrei unterscheidbar. Keine Normalisierung oder Zahlenkonvertierung der Identitätswerte.'];
+    yield ['Vorkommen', 'Echte Excel-Zahl für die ganze Zuordnung, genau wie TXT.', 'Nicht je Originalvariante wiederholen oder vervielfachen. Nur diese Häufigkeit ist numerisch; keine Formeln, Makros oder externen Verknüpfungen.'];
+    yield ['Varianten', 'Detailblätter: jede tatsächlich belegte Originalvariante hat eine eigene Zeile.', 'Typ/Basiswert/Endwert bleiben unverändert; diese Detailzeilen sind keine Vorkommenszählung.'];
     yield ['Auslassungen', 'Beibehaltene, maskierte, sonstige und mehrdeutige Werte sind keine eindeutige Zuordnung.', 'Die Anzahlen stehen je Dokument unten. Ausgeschlossene Werte werden nicht erfunden.'];
     yield ['Langwerte', long.length ? `${long.length} Wert(e); vollständige Teile auf Blatt Langwerte` : 'Keine ausgelagerten Werte', 'Referenz bindet Blatt/Zelle, Reihenfolge, UTF-16-Länge und SHA-256 (UTF-8); Teile in angegebener Reihenfolge unverändert zusammenfügen.'];
     for (const { document, sheet, rows } of documents) {
@@ -210,13 +245,15 @@ function renderConfidentialWorkbook(input) {
       yield [`${sheet} · Revision`, String(document.revision), ''];
       yield [`${sheet} · Markdown SHA-256`, document.output_sha256, 'Gilt ausschließlich für diesen Dokumentstand.'];
       yield [`${sheet} · Entitätenspur`, document.trace_available ? 'vorhanden' : 'nicht verfügbar', document.trace_available ? '' : 'Keine neue Identität aus dem Text herleiten.'];
-      yield [`${sheet} · Zuordnungen`, String(rows), 'Anzahl der Originalvarianten-Zeilen, nicht Anzahl der Vorkommen.'];
+      yield [`${sheet} · Zuordnungen`, String(document.entries.length), 'Anzahl der Zuordnungszeilen im ersten Blatt für genau diese Datei.'];
+      yield [`${sheet} · Originalvarianten`, String(rows), 'Anzahl der Detailzeilen, nicht Anzahl der Vorkommen.'];
       for (const [key, title] of [['kept', 'beibehalten'], ['masked', 'zusätzlich maskiert'], ['not_identity', 'keine Identität'], ['ambiguous', 'mehrdeutig']]) {
         yield [`${sheet} · ausgeschlossen`, String(document.excluded[key]), title];
       }
     }
   }
-  zip.appendPart('xl/worksheets/sheet1.xml', write => worksheet(write, overviewRows(), [37, 85, 105]));
+  zip.appendPart('xl/worksheets/sheet1.xml', write => worksheet(write, mappingRows(), [50, 25, 90, 14, 72]));
+  zip.appendPart('xl/worksheets/sheet2.xml', write => worksheet(write, overviewRows(), [37, 85, 105]));
   for (let index = 0; index < documents.length; index++) {
     const { document, sheet } = documents[index];
     function* documentRows() {
@@ -227,7 +264,7 @@ function renderConfidentialWorkbook(input) {
         yield [TYPES[entry.kind], references.get(`${sheet}:B${row}`) || original, entry.replacement];
       }
     }
-    zip.appendPart(`xl/worksheets/sheet${index + 2}.xml`, write => worksheet(write, documentRows(), [28, 80, 46]));
+    zip.appendPart(`xl/worksheets/sheet${index + 3}.xml`, write => worksheet(write, documentRows(), [28, 80, 46]));
   }
   if (long.length) {
     function* longRows() {

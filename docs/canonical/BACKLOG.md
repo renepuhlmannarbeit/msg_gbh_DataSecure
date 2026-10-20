@@ -1,11 +1,32 @@
 # Aktives Entwicklungsbacklog
 
-Arbeitsversion: **3.2.0-rc168**, Umsetzung, unabhängige Gegenreviews und neue
-Gesamt-/Windows-/Mac-Paketgates abgeschlossen; Test-Pre-Release veröffentlicht.
+Arbeitsversion: **3.2.0-rc169**, TXT-gleiche Zuordnung als erstes Excelblatt in Umsetzung.
+Neue technische Gesamt-/Windows-/Mac-Endgates und Testübergabe danach erforderlich.
 RC168 ist der aktuelle Windows-/Mac-Teststand; menschliche Abnahme
 offen. Frühere Pakete und Ergebnisstände bleiben unverändert.
 
-## Abgeschlossener Implementierungsauftrag – RC168 Nachbearbeitung und strukturierte Zuordnung
+## Aktiver Auftrag – RC169 TXT-gleiche Excel-Zuordnung zuerst
+
+- **RESULT-WORKING-COPY-01:** Nach bestätigtem Abschluss öffentliche Ergebnisse
+  manuell bearbeitbar. Normale Ordneröffnung ohne öffentliche Blatt-Hash-/Identitäts-
+  oder Inventarprüfung; private Abschlussbelege und Zielordnerbindung bleiben.
+  Neue App-Korrekturen ausschließlich aus privater Basis in neuen Ordner.
+  Pending-Publish/ACK/Spools/Guard weiter streng, keine externe Adoption/Überschreibung.
+  Fehlender/ersetzter Ordner neutral nicht verfügbar, kein Produktabbruch.
+- **RESULT-COMPANIONS-03:** erstes Blatt Zuordnungen, Spalten Pseudonym/Typ/
+  Originalwert(e)/Vorkommen/Datei. Eine Zeile je belegtem TXT-Eintrag und exakt
+  dessen gesamte Häufigkeit, auch bei mehreren Originalvarianten. Gleiche Marker
+  aus verschiedenen Dateien nicht zusammenziehen; ausgeschlossene Werte bleiben
+  getrennt als Hinweise. Keine Identitäten aus Text erfinden oder TXT neu parsen.
+- Bestehende technische Übersicht/Detailblätter bleiben dahinter; Literaltext,
+  Langwerte und feste OOXML-/Publikationsbudgets erhalten. Numerische Häufigkeiten.
+  Alte Ergebnisdateien/no-op/resume unverändert; erst neue bewusste Stände neu.
+- Unabhängige Fachreviews, gezielter TXT-/XLSX-Gleichheitsgegenfall samt Nutzer-
+  beispiel und neue gemeinsame Windows-/Mac-Testpakete. Desktop-/Office-UAT beim
+  Nutzer/Kollegen, keine Automation oder Apple-Zertifizierung.
+  [Auftrag](../acceptance/RC169_WORKBOOK_MAPPING_20261020.md).
+
+## Historischer Implementierungsauftrag – RC168 Nachbearbeitung und strukturierte Zuordnung
 
 - **TEXT-POSITIONS-01/P1:** CRLF/LF/CR-Anzeigeoffsets sicher mit Backendpositionen
   verbinden. Maskierung, beide Hervorhebungsfelder und Markdown-Nachkorrektur
@@ -1163,7 +1184,7 @@ in dieselbe Korrekturrunde.
 
 ## Historische Nachweise bis R4 (kein aktueller R5-Abschluss)
 
-Stand: 17.10.2026 · Produktstand 3.2.0-rc168 · veröffentlicht Standalone RC162 (Windows und beide Mac-Architekturen; M2-Abnahme offen), Linux RC159 / Cowork RC151 · lokaler Arbeitsstand nach RC162 noch nicht veröffentlicht
+Stand: 17.10.2026 · Produktstand 3.2.0-rc169 · veröffentlicht Standalone RC162 (Windows und beide Mac-Architekturen; M2-Abnahme offen), Linux RC159 / Cowork RC151 · lokaler Arbeitsstand nach RC162 noch nicht veröffentlicht
 
 ## Gezielter R3-Abschlussreview
 

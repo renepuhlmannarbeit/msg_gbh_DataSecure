@@ -5,7 +5,7 @@
       "app"
     ],
     "macOS": {
-      "bundleVersion": "168",
+      "bundleVersion": "169",
       "minimumSystemVersion": "13.5",
       "signingIdentity": "-",
       "hardenedRuntime": true

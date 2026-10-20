@@ -330,6 +330,30 @@ impl<'a> Transaction<'a> {
         self.verify_published_inventory(&output)?;
         Ok(if ack { Status::Acknowledged } else { Status::Completed })
     }
+    /// A confirmed Results directory is a public working copy. Its files may
+    /// subsequently be edited, removed or extended outside DataSecure. This
+    /// read-only opener proves the original completion and exact directory,
+    /// not the continued equality of public bytes. It must never be used by
+    /// prepare/publish/reconcile/ACK or by a legacy export role.
+    pub fn inspect_completed_directory(&self) -> io::Result<Status> {
+        if self.plan.publication_role != Some(PublicationRole::Results) { return Err(conflict()); }
+        self.guard.checkpoint().map_err(|_| failure("STANDALONE_CLOSING"))?;
+        let evidence = self.evidence()?;
+        let (identity, _, _, complete, ack, abandoned) = evidence;
+        if abandoned { return Err(failure("AI_EXPORT_ABANDONED")); }
+        if !complete { return Err(failure("AI_EXPORT_INCOMPLETE")); }
+        let identity = identity.ok_or_else(conflict)?;
+        // Retain the actual recovery handle across the final name/parent and
+        // private-evidence rechecks. No public leaf or inventory is opened.
+        let _output = self.target.open_known_child(&self.plan.target_name(), identity)?;
+        #[cfg(test)] self.guard.test_event("inspect_completed_directory_bound");
+        self.target.inspect_child(&self.plan.target_name(), identity)?;
+        if self.evidence()? != evidence { return Err(conflict()); }
+        self.guard.checkpoint().map_err(|_| failure("STANDALONE_CLOSING"))?;
+        self.target.inspect_child(&self.plan.target_name(), identity)?;
+        self.guard.checkpoint().map_err(|_| failure("STANDALONE_CLOSING"))?;
+        Ok(if ack { Status::Acknowledged } else { Status::Completed })
+    }
     pub fn commit(&self) -> io::Result<Status> {
         match self.reconcile()? {
             status @ (Status::Completed | Status::Acknowledged) => return Ok(status),
@@ -829,6 +853,139 @@ mod tests {
         fs::write(&output, b"hello").unwrap();
         fs::write(f.path.join("journal").join(tx.name("started")), b"{}").unwrap();
         assert!(tx.reconcile().is_err(), "existing complete/ACK never hides damaged dependencies");
+    }
+    #[test]
+    fn completed_results_directory_is_a_working_copy_but_every_mutating_route_stays_strict() {
+        let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+        let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
+        let mut files = companions(); files.workbook = Some(ConfidentialFile { bytes: 8, sha256: Sha256::digest(b"workbook").into() });
+        let plan = f.plan(&j, &s, &t).with_publication_role(Some(PublicationRole::Results)).with_confidential(Some(files)).unwrap();
+        let tx = Transaction::open(&j, &s, &t, plan, &guard).unwrap();
+        stage_all(&tx); tx.write_body(3, b"workbook").unwrap(); tx.prepare().unwrap();
+        assert_eq!(tx.commit().unwrap(), Status::Completed); assert_eq!(tx.acknowledge().unwrap(), Status::Acknowledged);
+        let complete = j.read_bounded(&tx.name("complete"), MAX_RECORD).unwrap();
+        let ack = j.read_bounded(&tx.name("ack"), MAX_RECORD).unwrap();
+        let target = f.path.join("target").join(tx.plan.target_name());
+        fs::write(target.join("Dokument_01.md"), b"a deliberate external edit").unwrap();
+        fs::remove_file(target.join(CONFIDENTIAL_DIRECTORY).join("Pseudonym-Zuordnung.xlsx")).unwrap();
+        fs::write(target.join("~$Pseudonym-Zuordnung.xlsx"), b"public Office lock").unwrap();
+        fs::create_dir(target.join("manual-notes")).unwrap();
+        assert_eq!(tx.inspect_completed_directory().unwrap(), Status::Acknowledged);
+        assert!(tx.inspect_completed().is_err()); assert!(tx.reconcile().is_err());
+        assert!(tx.acknowledge().is_err()); assert!(tx.commit().is_err());
+        assert_eq!(fs::read(target.join("Dokument_01.md")).unwrap(), b"a deliberate external edit");
+        assert!(!target.join(CONFIDENTIAL_DIRECTORY).join("Pseudonym-Zuordnung.xlsx").exists());
+        assert_eq!(j.read_bounded(&tx.name("complete"), MAX_RECORD).unwrap(), complete);
+        assert_eq!(j.read_bounded(&tx.name("ack"), MAX_RECORD).unwrap(), ack);
+        // No promised public child, including the confidential directory, is
+        // needed to open the original confirmed top-level working directory.
+        fs::remove_file(target.join("Dokument_01.md")).unwrap();
+        fs::rename(target.join(CONFIDENTIAL_DIRECTORY), target.join("manually-renamed-private-aids")).unwrap();
+        assert_eq!(tx.inspect_completed_directory().unwrap(), Status::Acknowledged);
+    }
+    #[test]
+    fn working_directory_inspection_requires_results_role_and_actual_durable_completion() {
+        for phase in ["empty", "body", "prepared", "renamed-without-complete", "abandoned", "legacy-complete"] {
+            let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+            let guard = Lifecycle::default().begin_native().unwrap();
+            let plan = f.plan(&j, &s, &t).with_publication_role(if phase == "legacy-complete" { None } else { Some(PublicationRole::Results) });
+            let tx = Transaction::open(&j, &s, &t, plan, &guard).unwrap();
+            if phase != "empty" { tx.write_body(0, b"hello").unwrap(); }
+            if ["prepared", "renamed-without-complete", "legacy-complete"].contains(&phase) { tx.prepare().unwrap(); }
+            if phase == "renamed-without-complete" { publish_without_receipt(&tx); }
+            if phase == "abandoned" { assert_eq!(tx.abandon().unwrap(), Status::Abandoned); }
+            if phase == "legacy-complete" { assert_eq!(tx.commit().unwrap(), Status::Completed); }
+            let names: Vec<_> = fs::read_dir(f.path.join("journal")).unwrap().map(|item| item.unwrap().file_name()).collect();
+            assert!(tx.inspect_completed_directory().is_err(), "{phase} cannot mint a working-copy authority");
+            assert_eq!(fs::read_dir(f.path.join("journal")).unwrap().count(), names.len(), "inspection never repairs completion");
+            if phase == "renamed-without-complete" { assert!(j.read_bounded(&tx.name("complete"), MAX_RECORD).is_err()); }
+        }
+    }
+    #[test]
+    fn working_directory_inspection_refuses_private_proof_damage_even_after_real_completion() {
+        for damage in ["complete", "started", "prepared", "intent", "ack"] {
+            let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+            let guard = Lifecycle::default().begin_native().unwrap();
+            let tx = Transaction::open(&j, &s, &t, f.plan(&j, &s, &t).with_publication_role(Some(PublicationRole::Results)), &guard).unwrap();
+            tx.write_body(0, b"hello").unwrap(); tx.prepare().unwrap(); tx.commit().unwrap(); tx.acknowledge().unwrap();
+            fs::write(f.path.join("journal").join(tx.name(damage)), b"{}").unwrap();
+            assert!(tx.inspect_completed_directory().is_err(), "damaged {damage} is not public editing");
+            assert_eq!(fs::read(f.path.join("journal").join(tx.name(damage))).unwrap(), b"{}");
+            assert_eq!(fs::read(f.path.join("target").join(tx.plan.target_name()).join("Dokument_01.md")).unwrap(), b"hello");
+        }
+    }
+    #[test]
+    fn working_directory_inspection_rechecks_guard_name_and_private_evidence_after_binding() {
+        use std::sync::{Arc, atomic::{AtomicBool, Ordering}};
+        for change in ["closing", "folder-replaced", "proof-changed"] {
+            let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+            let lifecycle = Lifecycle::default(); let stopping = lifecycle.stopping.clone();
+            let fired = Arc::new(AtomicBool::new(false)); let observed = fired.clone();
+            let rename_blocked = Arc::new(AtomicBool::new(false)); let observed_block = rename_blocked.clone();
+            let target = f.path.join("target").join(format!("Ergebnisse-{}", "b".repeat(32)));
+            let completion = f.path.join("journal").join(format!("{}-complete.json", "b".repeat(32)));
+            let guard = lifecycle.begin_native().unwrap().with_test_event(move |phase| {
+                if phase == "inspect_completed_directory_bound" && !observed.swap(true, Ordering::Relaxed) {
+                    match change {
+                        "closing" => stopping.store(true, Ordering::Release),
+                        "folder-replaced" => match fs::rename(&target, target.with_file_name("retired")) {
+                            Ok(()) => fs::create_dir(&target).unwrap(),
+                            Err(error) => {
+                                // Windows may keep this recovery handle's
+                                // no-delete-sharing pin through the boundary.
+                                // A blocked swap is not a changed directory.
+                                #[cfg(windows)] {
+                                    assert_eq!(error.raw_os_error(), Some(32));
+                                    observed_block.store(true, Ordering::Release);
+                                }
+                                #[cfg(not(windows))] { let _ = &observed_block; panic!("unexpected directory rename failure: {error}"); }
+                            },
+                        },
+                        "proof-changed" => fs::write(&completion, b"{}").unwrap(), _ => unreachable!(),
+                    }
+                }
+            });
+            let tx = Transaction::open(&j, &s, &t, f.plan(&j, &s, &t).with_publication_role(Some(PublicationRole::Results)), &guard).unwrap();
+            tx.write_body(0, b"hello").unwrap(); tx.prepare().unwrap(); tx.commit().unwrap(); tx.acknowledge().unwrap();
+            let result = tx.inspect_completed_directory();
+            if rename_blocked.load(Ordering::Acquire) {
+                assert_eq!(result.unwrap(), Status::Acknowledged, "kernel refused the swap while the original directory stayed bound");
+                assert_eq!(fs::read(f.path.join("target").join(tx.plan.target_name()).join("Dokument_01.md")).unwrap(), b"hello");
+            } else { assert!(result.is_err(), "{change} cannot outlive the bound read"); }
+            assert!(fired.load(Ordering::Relaxed));
+        }
+    }
+    #[cfg(windows)]
+    #[test]
+    fn working_directory_inspection_never_opens_a_public_leaf_with_exclusive_windows_sharing() {
+        use std::os::windows::fs::OpenOptionsExt;
+        let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+        let guard = Lifecycle::default().begin_native().unwrap();
+        let tx = Transaction::open(&j, &s, &t, f.plan(&j, &s, &t).with_publication_role(Some(PublicationRole::Results)), &guard).unwrap();
+        tx.write_body(0, b"hello").unwrap(); tx.prepare().unwrap(); tx.commit().unwrap(); tx.acknowledge().unwrap();
+        let target = f.path.join("target").join(tx.plan.target_name()).join("Dokument_01.md");
+        let held = fs::OpenOptions::new().read(true).share_mode(0).open(&target).unwrap();
+        assert_eq!(tx.inspect_completed_directory().unwrap(), Status::Acknowledged);
+        assert!(tx.inspect_completed().is_err(), "the original strict inspector still attempts its content read");
+        drop(held);
+        assert_eq!(fs::read(&target).unwrap(), b"hello");
+    }
+    #[cfg(unix)]
+    #[test]
+    fn working_directory_inspection_allows_changed_leaf_ctime_without_changed_bytes() {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+        let guard = Lifecycle::default().begin_native().unwrap();
+        let tx = Transaction::open(&j, &s, &t, f.plan(&j, &s, &t).with_publication_role(Some(PublicationRole::Results)), &guard).unwrap();
+        tx.write_body(0, b"hello").unwrap(); tx.prepare().unwrap(); tx.commit().unwrap(); tx.acknowledge().unwrap();
+        let target = f.path.join("target").join(tx.plan.target_name()).join("Dokument_01.md");
+        let before = fs::metadata(&target).unwrap(); let mode = before.permissions().mode();
+        fs::set_permissions(&target, fs::Permissions::from_mode(mode ^ 0o200)).unwrap();
+        fs::set_permissions(&target, fs::Permissions::from_mode(mode)).unwrap();
+        let after = fs::metadata(&target).unwrap();
+        assert_ne!((before.ctime(), before.ctime_nsec()), (after.ctime(), after.ctime_nsec()));
+        assert_eq!(fs::read(&target).unwrap(), b"hello");
+        assert_eq!(tx.inspect_completed_directory().unwrap(), Status::Acknowledged);
     }
     #[test]
     fn direct_acknowledgement_preserves_abandoned_and_incomplete_semantics_without_creating_a_copy() {

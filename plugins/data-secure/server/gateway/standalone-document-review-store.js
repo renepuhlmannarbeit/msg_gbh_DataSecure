@@ -1692,8 +1692,78 @@ function createDocumentReviewStore(options = {}) {
       throw fail('RESULT_PUBLICATION_CONFLICT');
     }
   }
-  const initialResults = (batchId, verify = true) => resultFileCheck(() => options.initialResultPublication
-    ? options.initialResultPublication(batchId, verify) : require('./result-export').initialResultPublication(batchId, verify));
+  const integerIdentity = value => typeof value === 'string' && value !== '-0' && /^-?(?:0|[1-9][0-9]*)$/u.test(value);
+  function validObjectIdentity(value) {
+    return closed(value, 'dev,ino,birth') && ['dev', 'ino', 'birth'].every(key => integerIdentity(value[key])) &&
+      !value.dev.startsWith('-') && !value.ino.startsWith('-');
+  }
+  function validFileIdentity(value, bytes = null) {
+    return closed(value, 'dev,ino,birth,size,nlink,mtime,ctime') &&
+      validObjectIdentity({ dev: value.dev, ino: value.ino, birth: value.birth }) &&
+      ['size', 'nlink', 'mtime', 'ctime'].every(key => integerIdentity(value[key])) &&
+      !value.size.startsWith('-') && value.nlink === '1' && (bytes === null || value.size === String(bytes));
+  }
+  function validDirectoryProof(value, expected) {
+    if (!closed(value, 'path,real,chain,platform') || value.path !== expected || !path.isAbsolute(expected) ||
+        typeof value.real !== 'string' || !path.isAbsolute(value.real) || value.platform !== process.platform ||
+        !Array.isArray(value.chain) || !value.chain.length || value.chain.length > 1024) return false;
+    let probe = expected; const seen = new Set();
+    for (const row of value.chain) {
+      if (!closed(row, 'path,identity,alias') || row.path !== probe || seen.has(probe) || !validObjectIdentity(row.identity) ||
+          typeof row.alias !== 'boolean' || row.alias && (process.platform !== 'darwin' || !['/var', '/tmp', '/etc'].includes(probe))) return false;
+      seen.add(probe);
+      probe = path.dirname(probe);
+    }
+    return value.chain.at(-1).path === probe && path.dirname(probe) === probe;
+  }
+  function validateInitialProof(value, batchId) {
+    const version = /^datasecure-initial-results\/([123])$/u.exec(value.schema || '')?.[1];
+    const companions = version && version !== '1';
+    if (!version || !closed(value, `schema,batch_id,processing_mode,result_layout,root,directory,files,binding_sha256${companions ? ',confidential_binding_sha256,confidential,confidential_directory,confidential_files' : ''}`) ||
+        value.batch_id !== batchId || !valid(value.binding_sha256, 64) || ![MARKDOWN, ANONYMIZE].includes(value.processing_mode) ||
+        value.result_layout !== `datasecure-visible-markdown/${version}` || typeof value.root !== 'string' || !path.isAbsolute(value.root) ||
+        !validDirectoryProof(value.directory, value.directory?.path || '') ||
+        path.dirname(path.dirname(value.directory.path)) !== value.root ||
+        path.basename(path.dirname(value.directory.path)) !== (value.processing_mode === MARKDOWN ? 'DataSecure-Markdown' : 'DataSecure-Output') ||
+        !Array.isArray(value.files) || !value.files.length || value.files.length > 200 ||
+        !(companions ? validResultCompanionFiles(value.files.map(file => ({ name: file?.name, sha256: file?.sha256 })))
+          : value.files.every(file => typeof file?.name === 'string' && file.name.isWellFormed() && file.name.length <= 1024 &&
+              file.name.endsWith('.md') && !/[\u0000-\u001f\u007f\\]/u.test(file.name) && !/^[A-Za-z]:/u.test(file.name) &&
+              file.name.split('/').every(part => part && part !== '.' && part !== '..') && valid(file.sha256, 64)) &&
+            new Set(value.files.map(file => file.name.normalize('NFC').toLowerCase())).size === value.files.length) ||
+        value.files.some(file => !closed(file, 'document_id,name,sha256,identity') || !valid(file.document_id, 32) || !validFileIdentity(file.identity)) ||
+        new Set(value.files.map(file => file.document_id)).size !== value.files.length) throw fail('RESULT_PUBLICATION_CONFLICT');
+    if (companions && (value.processing_mode !== ANONYMIZE || !valid(value.confidential_binding_sha256, 64) ||
+        !validConfidentialDescriptor(value.confidential, Number(version)) ||
+        !validDirectoryProof(value.confidential_directory, path.join(value.directory.path, COMPANION_DIRECTORY)) ||
+        !Array.isArray(value.confidential_files) || value.confidential_files.length !== confidentialFiles(value.confidential).length ||
+        value.confidential_files.some((file, index) => {
+          const role = confidentialFiles(value.confidential)[index];
+          return !closed(file, 'name,sha256,identity') || file.name !== role.name ||
+            file.sha256 !== Buffer.from(value.confidential[role.key].sha256).toString('hex') ||
+            !validFileIdentity(file.identity, value.confidential[role.key].bytes);
+        }))) throw fail('RESULT_PUBLICATION_CONFLICT');
+    return value;
+  }
+  const initialResults = (batchId, verify = true) => resultFileCheck(() => {
+    const value = options.initialResultPublication ? options.initialResultPublication(batchId, verify)
+      : require('./result-export').initialResultPublication(batchId, verify);
+    return value && !verify ? validateInitialProof(value, batchId) : value;
+  });
+  // After durable completion the public contents belong to the user. Only the
+  // originally receipted directory/ancestor objects remain opener authority;
+  // no leaf lookup, inventory, hash, restoration or adoption occurs here.
+  function inspectCompletedDirectory(directory, expected) {
+    if (!validDirectoryProof(directory, expected)) throw fail('RESULT_PUBLICATION_CONFLICT');
+    try {
+      const actual = bindDirectory(expected);
+      const proof = { path: actual.path, real: actual.real, chain: actual.chain, platform: actual.platform };
+      if (JSON.stringify(proof) !== JSON.stringify(directory)) throw Error('changed directory');
+      fs.accessSync(expected, fs.constants.R_OK);
+      assertDirectory({ ...directory, io: fs });
+      return directory;
+    } catch { throw fail('RESULT_DIRECTORY_UNAVAILABLE'); }
+  }
   const resultVector = documents => documents.map(({ document_id, revision, output_sha256 }) =>
     ({ document_id, revision, output_sha256 })).sort((a, b) => a.document_id.localeCompare(b.document_id));
   const resultGenerationVersion = op => op.schema === 'datasecure-results-generation/3' ? 3 :
@@ -1740,7 +1810,18 @@ function createDocumentReviewStore(options = {}) {
         const receipt = read(receiptPath);
         if (!closed(receipt, `schema,batch_id,generation_id,request_sha256,acknowledged,directory,files${companions ? ',confidential_directory' : ''}`) ||
             receipt.schema !== `datasecure-results-generation-complete/${version}` ||
-            receipt.batch_id !== batchId || receipt.generation_id !== op.operation_id || receipt.request_sha256 !== op.request_sha256 || receipt.acknowledged !== true)
+            receipt.batch_id !== batchId || receipt.generation_id !== op.operation_id || receipt.request_sha256 !== op.request_sha256 || receipt.acknowledged !== true ||
+            !validDirectoryProof(receipt.directory, generationTarget(op)) ||
+            companions && !validDirectoryProof(receipt.confidential_directory, path.join(generationTarget(op), COMPANION_DIRECTORY)) ||
+            !Array.isArray(receipt.files) || receipt.files.length !== op.files.length + (companions ? confidentialFiles(op.confidential).length : 0) ||
+            receipt.files.some((file, index) => {
+              const expected = index < op.files.length ? op.files[index] : (() => {
+                const role = confidentialFiles(op.confidential)[index - op.files.length];
+                return { name: role.name, ...op.confidential[role.key] };
+              })();
+              return !closed(file, 'name,sha256,identity') || file.name !== expected.name ||
+                file.sha256 !== Buffer.from(expected.sha256).toString('hex') || !validFileIdentity(file.identity, expected.bytes);
+            }))
           throw fail('RESULT_PUBLICATION_CONFLICT');
         complete = true;
         records.push({ op, complete, receipt }); continue;
@@ -1760,11 +1841,13 @@ function createDocumentReviewStore(options = {}) {
       initial = initialResults(batchId, false);
       if (!initial) return {};
       const records = resultGenerations(batchId, initial), latest = records.at(-1);
-      if (latest?.complete) inspectResultGeneration(latest.op, latest.receipt);
+      if (latest?.complete) inspectCompletedDirectory(latest.receipt.directory, generationTarget(latest.op));
+      else if (!latest) inspectCompletedDirectory(initial.directory, initial.directory.path);
       const state = latest ? latest.complete && JSON.stringify(latest.op.selection) === JSON.stringify(vector) ? 'current' : 'pending'
         : current_revision === 0 ? 'initial' : 'pending';
       return { result_publication: { state, generation_id: latest?.op.operation_id || null, count: vector.length, current_revision } };
-    } catch (error) { return { result_publication: { state: error?.code === 'RESULT_PUBLICATION_PENDING' ? 'pending' : 'conflict',
+    } catch (error) { return { result_publication: { state: error?.code === 'RESULT_PUBLICATION_PENDING' ? 'pending'
+      : error?.code === 'RESULT_DIRECTORY_UNAVAILABLE' ? 'unavailable' : 'conflict',
       generation_id: null, count: vector.length, current_revision } }; }
   }
   function resultOperation(op) { return { ...exportBinding(op), publication_role: 'results', binding: op.binding, files: op.files,
@@ -1868,7 +1951,7 @@ function createDocumentReviewStore(options = {}) {
       // upgrade request. Never manufacture a new format merely by reading or
       // reconciling it, and never change an interrupted /1 or /2 operation ID.
       if (samePrevious && previous.complete) {
-        inspectResultGeneration(previous.op, previous.receipt);
+        inspectCompletedDirectory(previous.receipt.directory, generationTarget(previous.op));
         return { ok: true, batch_id: batchId, local_ui_only: true, external_disclosure: false,
           result_publication: { state: 'current', generation_id: previous.op.operation_id, count: selection.length,
             current_revision: Math.max(...selection.map(row => row.revision)) } };
@@ -1886,12 +1969,12 @@ function createDocumentReviewStore(options = {}) {
       // must not recreate a result after that predecessor was manually deleted.
       const predecessor = previous?.complete ? previous : records.at(-2);
       const assertPredecessor = () => {
-        if (predecessor) inspectResultGeneration(predecessor.op, predecessor.receipt);
-        else if (initialResults(batchId, true).binding_sha256 !== initial.binding_sha256) throw fail('RESULT_PUBLICATION_CONFLICT');
+        if (predecessor) inspectCompletedDirectory(predecessor.receipt.directory, generationTarget(predecessor.op));
+        else inspectCompletedDirectory(initial.directory, initial.directory.path);
       };
       assertPredecessor();
       if (previous) {
-        if (previous.complete) inspectResultGeneration(previous.op, previous.receipt);
+        if (previous.complete) inspectCompletedDirectory(previous.receipt.directory, generationTarget(previous.op));
         if (!previous.complete && !op) throw fail('RESULT_PUBLICATION_CONFLICT');
         if (op) status = await callResultNative(op, 'reconcile');
         if (['completed', 'acknowledged'].includes(status)) {
@@ -1960,17 +2043,16 @@ function createDocumentReviewStore(options = {}) {
       const listing = listLocked(batchId), vector = resultVector(listing.documents);
       if (listing.unavailable.length || listing.unclassified_documents.length) throw fail('RESULT_PUBLICATION_CONFLICT');
       if (!complete) {
+        inspectCompletedDirectory(initial.directory, initial.directory.path);
         if (vector.some(row => row.revision > 0)) throw fail('RESULT_PUBLICATION_PENDING');
-        const checked = initialResults(batchId, true);
-        if (checked.binding_sha256 !== initial.binding_sha256) throw fail('RESULT_PUBLICATION_CONFLICT');
-        return { ok: true, local_path: checked.directory.path, target_kind: 'directory', external_disclosure: false };
+        return { ok: true, local_path: initial.directory.path, target_kind: 'directory', external_disclosure: false };
       }
-      if (!complete.complete || JSON.stringify(complete.op.selection) !== JSON.stringify(vector))
-        throw fail('RESULT_PUBLICATION_PENDING');
-      inspectResultGeneration(complete.op, complete.receipt);
+      if (!complete.complete) throw fail('RESULT_PUBLICATION_PENDING');
+      inspectCompletedDirectory(complete.receipt.directory, generationTarget(complete.op));
+      if (JSON.stringify(complete.op.selection) !== JSON.stringify(vector)) throw fail('RESULT_PUBLICATION_PENDING');
       const status = await callResultNative(complete.op, 'reconcile');
       if (!['completed', 'acknowledged'].includes(status)) throw fail('RESULT_PUBLICATION_CONFLICT');
-      inspectResultGeneration(complete.op, complete.receipt);
+      inspectCompletedDirectory(complete.receipt.directory, generationTarget(complete.op));
       return { ok: true, local_path: path.join(complete.op.root, exportNamespace(complete.op.processing_mode),
         `Ergebnisse-${complete.op.operation_id}`), target_kind: 'directory', external_disclosure: false };
     });

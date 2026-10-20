@@ -255,7 +255,9 @@ async function run() {
     fs.writeFileSync(metadata, 'opaque OS display metadata', { flag: 'wx' });
     if (process.platform !== 'darwin') {
       context('resolve_history_results', { batch_id: batchId });
-      await assert.rejects(send('reconcile'), { code: 'AI_EXPORT_CONFLICT' }, 'non-Mac metadata never gains an exception');
+      assert.equal(await send('reconcile'), 'acknowledged', 'confirmed working-folder opening never reads public extras on any host');
+      context('publish_result_documents', { batch_id: batchId });
+      await assert.rejects(send('reconcile'), { code: 'AI_EXPORT_CONFLICT' }, 'non-Mac extras still refuse a mutating reconciliation');
       assert.equal(fs.readFileSync(metadata, 'utf8'), 'opaque OS display metadata', 'no automatic metadata repair/removal');
       const leaf = fs.lstatSync(metadata); assert.ok(leaf.isFile() && !leaf.isSymbolicLink() && leaf.nlink === 1);
       fs.unlinkSync(metadata); // Only this newly created, exact synthetic leaf.
@@ -300,7 +302,9 @@ async function run() {
       assert.deepEqual(fs.readFileSync(path.join(target, name)), body);
       for (const file of companions) assert.deepEqual(fs.readFileSync(path.join(target, file.name)), file.bytes);
       context('resolve_history_results', { batch_id: batchId });
-      await assert.rejects(send('reconcile'), { code: 'AI_EXPORT_CONFLICT' }, 'same-byte confidential directory replacement is never adopted');
+      assert.equal(await send('reconcile'), 'acknowledged', 'public confidential subtree is not opener authority or read as input');
+      context('publish_result_documents', { batch_id: batchId });
+      await assert.rejects(send('reconcile'), { code: 'AI_EXPORT_CONFLICT' }, 'strict mutating route never adopts a replacement confidential directory');
       assert.equal(fs.existsSync(old), true, 'no automatic cleanup or repair');
     }
     console.log(`ok ${mode}: actual results role, complete generation, software ACK, repeat/readonly reconciliation and closed legacy/role/batch boundaries`);
@@ -416,11 +420,33 @@ async function run() {
       assert.deepEqual(fs.readFileSync(path.join(initial.directory.path, file.name)), initialBytes[index], 'initial files are preserved');
     const corrupt = path.join(resolved.local_path, names[1]);
     fs.writeFileSync(corrupt, '# Manuell geaendert\n');
+    fs.writeFileSync(path.join(resolved.local_path, '~$Office.xlsx'), 'public lock marker');
     const count = fs.readdirSync(path.dirname(resolved.local_path)).filter(name => name.startsWith('Ergebnisse-')).length;
-    await assert.rejects(publish(), error => ['RESULT_PUBLICATION_CONFLICT', 'AI_EXPORT_CONFLICT'].includes(error.code));
+    store = createDocumentReviewStore(options);
+    context('resolve_history_results', { batch_id: batchId });
+    assert.equal((await store.resolveResultsGeneration(batchId)).local_path, resolved.local_path,
+      'fresh store and actual native read-only opener permit public working-copy edits');
+    assert.equal((await publish()).result_publication.generation_id, resumed.result_publication.generation_id,
+      'no-op never reconciles or overwrites completed public bytes');
     assert.equal(fs.readFileSync(corrupt, 'utf8'), '# Manuell geaendert\n');
     assert.equal(fs.readdirSync(path.dirname(resolved.local_path)).filter(name => name.startsWith('Ergebnisse-')).length, count);
-    console.log(`ok ${mode}: production initial -> correction -> native full-vector generation -> LostReceipt -> fresh store -> readonly opener; no human approval, originals unchanged, manual tamper refused`);
+    const row = store.list(batchId).documents.find(value => value.document_id === state.items[1].id);
+    const privateText = store.chunk(batchId, row.document_id, row.revision, 0).markdown, start = privateText.indexOf('42');
+    assert.notEqual(start, -1);
+    store.decide(batchId, row.document_id, { action: anonymous ? 'redact' : 'correct', revision: row.revision,
+      output_sha256: row.output_sha256, operation_id: crypto.randomBytes(16).toString('hex'),
+      ranges: [{ start, end: start + 2, ...(anonymous ? {} : { replacement: '42 privat korrigierte' }) }] });
+    const next = await publish();
+    assert.notEqual(next.result_publication.generation_id, resumed.result_publication.generation_id);
+    const nextFolder = path.join(results, namespace, `Ergebnisse-${next.result_publication.generation_id}`);
+    assert.equal(fs.readFileSync(corrupt, 'utf8'), '# Manuell geaendert\n', 'new private correction never overwrites external edits');
+    assert.equal(fs.existsSync(path.join(nextFolder, '~$Office.xlsx')), false, 'no foreign public siblings are imported');
+    assert.equal(fs.readFileSync(path.join(nextFolder, names[1]), 'utf8'), anonymous
+      ? initialBytes[1].toString('utf8').replace('42 Projekte', '[MANUAL_REDACTION] Projekte')
+      : privateText.replace('42 Projekte', '42 privat korrigierte Projekte'), 'new bytes come only from the private revision');
+    context('resolve_history_results', { batch_id: batchId });
+    assert.equal((await store.resolveResultsGeneration(batchId)).local_path, nextFolder);
+    console.log(`ok ${mode}: production initial -> correction -> native full-vector generation -> LostReceipt -> fresh store -> readonly working-copy opener; public edits preserved, new private generation never imports them`);
   }
   for (const mode of ['markdown-only', 'markdown-and-anonymize']) {
     const admissionsBefore = configuredAdmissions;

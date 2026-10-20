@@ -68,11 +68,11 @@ test('closed desktop errors preserve identity and capacity facts and their rende
   assert.match(sidecar, /desktopErrorCode\(error\?\.code\)/u);
 });
 
-test('every fixed document/entity/export failure survives the closed desktop vocabulary with an actionable explanation', () => {
+test('every fixed document/entity/export/result failure survives the closed desktop vocabulary with an actionable explanation', () => {
   const { desktopErrorCode } = require('../plugins/data-secure/server/core/desktop-error-contract');
   const implementation = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/gateway/standalone-document-review-store.js'), 'utf8');
   const documentRenderer = fs.readFileSync(path.join(root, 'frontend/document-review.js'), 'utf8');
-  const codes = [...new Set([...implementation.matchAll(/fail\('(DOCUMENT_[A-Z_]+|AI_EXPORT_[A-Z_]+)'/gu)].map(match => match[1]))];
+  const codes = [...new Set([...implementation.matchAll(/fail\('(DOCUMENT_[A-Z_]+|AI_EXPORT_[A-Z_]+|RESULT_DIRECTORY_UNAVAILABLE)'/gu)].map(match => match[1]))];
   assert.ok(codes.length >= 17);
   for (const code of codes) {
     assert.equal(desktopErrorCode(code), code, `${code} cannot become a generic transport error`);

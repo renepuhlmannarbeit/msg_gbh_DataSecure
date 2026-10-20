@@ -4,7 +4,7 @@
 (() => {
   const integer = value => Number.isSafeInteger(value) && value >= 0 && value <= 200;
   function resultPublication(value) {
-    if (!value || !['initial', 'current', 'pending', 'conflict'].includes(value.state) ||
+    if (!value || !['initial', 'current', 'pending', 'conflict', 'unavailable'].includes(value.state) ||
         Object.keys(value).some(key => !['state', 'generation_id', 'count', 'current_revision'].includes(key)) ||
         value.generation_id !== undefined && value.generation_id !== null && !/^[a-f0-9]{32}$/u.test(value.generation_id) ||
         value.state === 'current' && !/^[a-f0-9]{32}$/u.test(value.generation_id || '') ||
@@ -153,7 +153,11 @@
         const publication = value.result_publication === undefined ? null : resultPublication(value.result_publication);
         if (value.result_publication !== undefined && (!publication ||
             publication.count !== undefined && publication.count !== value.document_count)) return output;
-        if (publication && ['pending', 'conflict'].includes(publication.state)) set('result_pending', copy,
+        if (publication?.state === 'unavailable' && wholeRun) {
+          output.stages[copy].status = 'done';
+          Object.assign(output, { phase: 'results_unavailable', heading: 'Verarbeitung abgeschlossen – Ergebnisordner nicht verfügbar',
+            next: 'Der bereitgestellte Ordner ist nicht mehr sicher erreichbar. Private Prüfstände bleiben erhalten; es wird nichts neu angelegt oder überschrieben.' });
+        } else if (publication && ['pending', 'conflict'].includes(publication.state)) set('result_pending', copy,
           'Aktueller Ergebnisstand noch nicht bestätigt', 'Die Nachbearbeitung kann bereits gespeichert sein. Denselben Ergebnisstand erneut abgleichen; keine Änderung blind wiederholen.');
         else if (wholeRun && (publication || value.has_modified_results !== true)) {
           output.stages[copy].status = 'done';
@@ -229,6 +233,15 @@
         : 'Fundstellen prüfen oder bewusst später fortsetzen.');
     } else if (value.state === 'results_available') {
       const publication = value.result_publication === undefined ? null : resultPublication(value.result_publication);
+      if (publication?.state === 'unavailable' && complete && value.result_count > 0 &&
+          (publication.count === undefined || publication.count === value.result_count)) {
+        output.stages[0].status = failed ? 'warning' : 'done';
+        output.stages[1].status = raw ? 'optional' : 'done'; output.stages[2].status = 'done';
+        if (!raw) output.stages[3].status = 'optional';
+        Object.assign(output, { phase: 'results_unavailable', heading: 'Verarbeitung abgeschlossen – Ergebnisordner nicht verfügbar',
+          next: 'Der bereitgestellte Ordner ist nicht mehr sicher erreichbar. Private Prüfstände bleiben erhalten; es wird nichts neu angelegt oder überschrieben.' });
+        return output;
+      }
       if (value.result_publication !== undefined && !publication || publication && (['pending', 'conflict'].includes(publication.state) ||
           publication.count !== undefined && publication.count !== value.result_count) ||
           value.results_available === false || !complete || value.result_count === 0) {

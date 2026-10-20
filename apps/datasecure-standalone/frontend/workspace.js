@@ -437,6 +437,11 @@
     catch { return /^[A-Z][A-Z0-9_]{1,80}$/u.test(raw) ? raw : 'STANDALONE_OPERATION_FAILED'; } }
   function showError(error, command = null) { const code = errorCode(error);
     if (bootstrapFailure) { renderBootstrapFailure(); return; }
+    if (code === 'RESULT_DIRECTORY_UNAVAILABLE' && ['open_history_results', 'open_current_results'].includes(command)) {
+      feedback('Der Ergebnisordner ist nicht mehr sicher erreichbar. Die Verarbeitung ist abgeschlossen; private Prüfstände bleiben erhalten. Es wird nichts neu angelegt oder überschrieben.', false,
+        { kind: 'result-directory-unavailable' });
+      return;
+    }
     const connectionError = ['STANDALONE_IPC_FAILED', 'STANDALONE_IPC_TIMEOUT', 'STANDALONE_CONNECTION_CHANGED',
       'STANDALONE_CONNECTION_RECOVERY_BLOCKED', 'STANDALONE_RECOVERY_ATTEMPTS_EXHAUSTED',
       'STANDALONE_RUNTIME_START_FAILED', 'STANDALONE_RUNTIME_MISSING',
@@ -1265,7 +1270,9 @@
         }
         if (data.pending_incomplete_count || data.pending_confirmation_count) contents.append(element('p',
           `${data.pending_incomplete_count} unvollständige Exportaufträge · ${data.pending_confirmation_count} fertige Kopien mit offener Empfangsbestätigung. In der Dokumentansicht abgleichen, nicht neu exportieren.`, 'history-meta'));
-        status.textContent = data.result_publication && ['pending', 'conflict'].includes(data.result_publication.state)
+        status.textContent = data.result_publication?.state === 'unavailable'
+          ? 'Die Verarbeitung ist abgeschlossen. Der bereitgestellte Ergebnisordner ist nicht mehr sicher erreichbar; private Prüfstände bleiben erhalten. Es wird nichts neu angelegt.'
+          : data.result_publication && ['pending', 'conflict'].includes(data.result_publication.state)
           ? 'Die Bereitstellung des aktuellen Nachbearbeitungsstands ist noch nicht bestätigt. Nachbearbeitung öffnen und denselben Ergebnisstand abgleichen.'
           : 'Ergebnisdateien erstellt. Ergebnisordner öffnen; Nachbearbeitung und die Einsicht in frühere Kopierbelege sind optional.';
         reload.hidden = updateAction(data) === true;
@@ -1645,11 +1652,14 @@
           // another mandatory export or file selection.
           const publication = data?.available === true && !data.loading ? data.result_publication : null;
           const unsettled = publication && ['pending', 'conflict'].includes(publication.state);
-          stateLabel.textContent = unsettled ? 'Verarbeitung beendet · aktueller Ergebnisstand noch nicht bestätigt' : baseStateLabel;
+          const directoryUnavailable = publication?.state === 'unavailable';
+          stateLabel.textContent = directoryUnavailable ? 'Verarbeitung abgeschlossen · Ergebnisordner nicht verfügbar'
+            : unsettled ? 'Verarbeitung beendet · aktueller Ergebnisstand noch nicht bestätigt' : baseStateLabel;
           if (missingLocation && !stateLabel.textContent.includes('Ergebnisordner fehlt')) stateLabel.textContent += ' · Ergebnisordner fehlt';
           if (finishDetail) finishDetail.textContent = finishedProcessingText;
           if (finishNext && unsettled) finishNext.textContent = 'Nachbearbeitung gespeichert, Bereitstellung noch nicht bestätigt. Nachbearbeitung öffnen und denselben Ergebnisstand erneut prüfen; keine weitere Änderung blind wiederholen.';
-          if (main?.id.endsWith('-results')) setControlDisabled(main, Boolean(unsettled));
+          if (finishNext && directoryUnavailable) finishNext.textContent = 'Der bereitgestellte Ordner ist nicht mehr sicher erreichbar. Private Prüfstände bleiben erhalten; keine automatische Neuerstellung oder Übernahme eines Ersatzordners.';
+          if (main?.id.endsWith('-results')) setControlDisabled(main, Boolean(unsettled || directoryUnavailable));
           return false;
         };
         row.append(detail, actions);

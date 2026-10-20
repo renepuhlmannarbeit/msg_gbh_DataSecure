@@ -3272,6 +3272,18 @@ testAsync('result folder conflict: the same code from another perform command ke
   assert.equal(h.calls.some(call => call.command === 'configure_results'), false);
 });
 
+testAsync('completed working directory: an unavailable code from another action is not downgraded', async () => {
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'open_identity_mappings_directory') throw Error('RESULT_DIRECTORY_UNAVAILABLE');
+    return fallback();
+  } });
+  await tick(); await h.act('identities');
+  assert.equal(h.el('feedback').className, 'notice error');
+  assert.match(h.el('feedback').textContent, /lokale Vorgang konnte nicht abgeschlossen werden/u);
+  assert.doesNotMatch(h.el('feedback').textContent, /Verarbeitung ist abgeschlossen|Arbeitskopien/u);
+  assert.equal(h.calls.some(call => ['publish_current_results', 'publish_history_results'].includes(call.command)), false);
+});
+
 testAsync('result folder conflict: an unscoped native-drop error keeps generic guidance', async () => {
   const h = harness(); await tick();
   h.listeners.get('datasecure-native-drop')({ payload: { phase: 'failed', error_code: 'AI_EXPORT_CONFLICT' } });
@@ -4743,7 +4755,7 @@ testAsync('rendered history summary needs no second approval/export and remains 
 });
 
 for (const processing_mode of ['markdown-only', 'markdown-and-anonymize'])
-  for (const state of ['initial', 'current', 'pending', 'conflict'])
+  for (const state of ['initial', 'current', 'pending', 'conflict', 'unavailable'])
     testAsync(`${processing_mode}: history uses exact ${state} result-publication truth, independent of old approval and copy receipts`, async () => {
       const publication = { state, generation_id: state === 'current' ? 'e'.repeat(32) : null, count: 2, current_revision: 0 };
       const h = harness({ invoke(command, _args, fallback) {
@@ -4760,9 +4772,13 @@ for (const processing_mode of ['markdown-only', 'markdown-and-anonymize'])
       assert.equal(h.calls.some(call => call.command === 'get_document_review_history_summary'), false);
       await toggleHistorySummary(h, B);
       const unsettled = state === 'pending' || state === 'conflict';
-      assert.equal(opener.disabled, unsettled);
+      assert.equal(opener.disabled, unsettled || state === 'unavailable');
       assert.match(h.el(`history-${B}-summary`).textContent, /3 frühere zusätzliche Kopien mit Beleg/u);
-      if (unsettled) {
+      if (state === 'unavailable') {
+        assert.match(h.el(`history-${B}-state`).textContent, /Verarbeitung abgeschlossen.*Ergebnisordner nicht verfügbar/u);
+        assert.match(h.el(`history-${B}-summary`).textContent, /Verarbeitung ist abgeschlossen.*nicht mehr sicher erreichbar/u);
+        assert.doesNotMatch(h.el(`history-${B}-summary`).textContent, /aktuellen Nachbearbeitungsstands.*noch nicht bestätigt/u);
+      } else if (unsettled) {
         assert.match(h.el(`history-${B}-state`).textContent, /aktueller Ergebnisstand noch nicht bestätigt/u);
         assert.match(h.el(`history-${B}-summary`).textContent, /Nachbearbeitung.*Ergebnisstand abgleichen/u);
         if (processing_mode === 'markdown-and-anonymize') assert.doesNotMatch(h.el(`history-${B}-guide-title`).textContent, /Ergebnisse bereit/u);
@@ -4774,6 +4790,19 @@ for (const processing_mode of ['markdown-only', 'markdown-and-anonymize'])
       assert.equal(h.calls.some(call => ['publish_result_documents', 'decide_document_review', 'decide_document_review_batch',
         'preview_document_export', 'export_approved_documents', 'abandon_document_export'].includes(call.command)), false);
     });
+
+testAsync('a no-longer-available completed result directory reports a neutral local notice without repeating work', async () => {
+  const h = harness({ invoke(command, _args, fallback) {
+    if (command === 'open_history_results') throw Object.assign(Error('RESULT_DIRECTORY_UNAVAILABLE'), { code: 'RESULT_DIRECTORY_UNAVAILABLE' });
+    return fallback();
+  } }); await tick(); h.model.entries = [markdownHistoryEntry()]; await h.act('nav-history');
+  await h.act(`history-${B}-results`);
+  assert.equal(h.el('feedback').className, 'notice');
+  assert.match(h.el('feedback').textContent, /Verarbeitung ist abgeschlossen.*private Prüfstände bleiben erhalten/u);
+  assert.equal(h.el('connection-help').hidden, true);
+  assert.equal(h.calls.filter(call => call.command === 'open_history_results').length, 1);
+  noAutomaticDecision(h);
+});
 
 for (const result_publication of [{ state: 'current', generation_id: null, count: 2 },
   { state: 'current', generation_id: 'e'.repeat(64), count: 2 }, { state: 'initial', generation_id: null, count: 1 },

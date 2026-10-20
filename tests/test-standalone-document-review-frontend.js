@@ -1775,10 +1775,126 @@ for (const state of ['initial', 'current', 'pending', 'conflict']) testAsync(`ac
   assert.equal(h.calls.some(call => isDecision(call) || ['publish_result_documents', 'export_approved_documents'].includes(call.command)), false);
 });
 
+for (const mode of ['markdown-only', 'markdown-and-anonymize']) testAsync(`${mode}: unavailable public folder retains private reading and navigation without any mutation or replacement`, async () => {
+  const h = harness({ resultPublication: { state: 'unavailable', generation_id: mode === 'markdown-only' ? null : 'e'.repeat(32),
+    count: 2, current_revision: 0 }, invoke(command, args) {
+    if (command === 'get_document_entities') return { ok: true, ...h.rows.find(row => row.document_id === args.documentId),
+      page: args.page, pages: 2, entities: [{ entity_id: `entity_${String(args.page + 1).padStart(6, '0')}`,
+        original: 'Anna Beispiel', replacement: '[PERSON_001]', disabled: false, kind: 'PERSON', run_eligible: true,
+        count: 1, decision: 'default', output_start: 0, output_end: 12 }], local_ui_only: true, external_disclosure: false };
+  } });
+  h.rows.forEach(row => { row.processing_mode = mode; });
+  if (mode !== 'markdown-only') Object.assign(h.rows[0], { entity_review_available: true, entity_count: 2, run_entity_review_available: true });
+  await h.api.open('a'.repeat(64));
+  assert.equal(h.el('documents-status').className, 'notice');
+  assert.match(h.el('documents-status').textContent, /Verarbeitung ist abgeschlossen.*Private Dokumentstände bleiben lesbar/u);
+  assert.match(h.el('documents-completion-title').textContent, /Verarbeitung abgeschlossen.*Ergebnisordner nicht verfügbar/u);
+  assert.match(h.el('documents-completion-text').textContent, /private Dokumentstände bleiben lesbar.*öffentliche Ergebnisdateien.*nicht als erreichbar bestätigt/u);
+  assert.doesNotMatch(h.el('documents-completion-text').textContent, /Ergebnisse sind verfügbar|Den Ergebnisordner öffnen/u);
+  assert.match(h.el('documents-purpose').textContent, /Verarbeitung ist abgeschlossen.*Private Dokumentstände können gelesen und verglichen werden.*Änderungen und neue Bereitstellungen bleiben gesperrt/u);
+  assert.equal(h.guides.at(-1).phase, 'results_unavailable');
+  await h.act(h.el('documents-list').children[0].children[1].children[0]);
+  assert.equal(h.el('document-original').value, 'Anna Beispiel: 42 Projekte.');
+  assert.equal(h.el('document-markdown').value, '[PERSON_001]: 42 Projekte.');
+  assert.equal(h.el('document-markdown').readOnly, true);
+  assert.match(h.el('document-markdown-caption').textContent, /Privater gespeicherter Text/u);
+  if (mode !== 'markdown-only') {
+    assert.equal(h.el('entities-next').disabled, false);
+    await h.act('entities-next'); assert.equal(h.el('entities-page').textContent, 'Seite 2 von 2');
+    const inspect = h.el('entities-list').children[0].children[1].children[0];
+    assert.equal(inspect.disabled, false); await h.act(inspect);
+    assert.equal(h.document.activeElement, h.el('document-markdown'));
+    assert.equal(h.el('document-markdown').selectionStart, 0); assert.equal(h.el('document-markdown').selectionEnd, 12);
+    const check = h.el('entities-list').children[0].children[0].children[0];
+    assert.equal(check.disabled, true); check.checked = true; await h.act(check, 'change');
+    assert.match(h.el('entities-count').textContent, /^0 ausgewählt/u);
+    await h.act('entities-apply'); await h.act('document-redact'); await h.act('document-restore'); await h.act('document-change-save');
+  }
+  assert.equal(h.el('document-next').disabled, false); await h.act('document-next');
+  assert.equal(h.el('document-name').textContent, 'Quelle-2.pdf');
+  await h.act('document-previous'); assert.equal(h.el('document-name').textContent, 'Quelle-1.pdf');
+  assert.equal(h.el('documents-reload').disabled, false);
+  const reads = h.calls.filter(call => call.command === 'get_document_reviews').length;
+  await h.act('documents-reload');
+  assert.equal(h.calls.filter(call => call.command === 'get_document_reviews').length, reads + 1);
+  assert.equal(h.el('document-original').value, 'Anna Beispiel: 42 Projekte.');
+  assert.equal(h.el('documents-open-results').disabled, true); assert.equal(h.el('documents-publish').hidden, true);
+  assert.equal(h.el('documents-publish').disabled, true);
+  await h.act('documents-open-results'); await h.act('documents-publish');
+  await h.all(); await h.act('documents-approve'); await h.act('documents-approve-proceed'); await h.act('documents-revoke');
+  await h.act('documents-export'); await h.act('document-export-confirm');
+  // Programmatic activation cannot bypass a hidden/disabled legacy picker.
+  h.el('document-export-dialog').open = true; h.el('document-export-preview').hidden = false;
+  await h.act('document-export-configure'); h.el('document-export-abandon-check').checked = true; await h.act('document-export-abandon');
+  if (mode === 'markdown-only') {
+    h.el('document-markdown').value = 'Not a saved private revision'; await h.act('document-markdown', 'input');
+    await h.act('document-save-correction'); await h.act('document-discard-correction');
+  }
+  assert.equal(h.calls.some(call => isDecision(call) || ['publish_result_documents', 'open_history_results',
+    'preview_document_export', 'export_approved_documents', 'configure_results', 'abandon_document_export'].includes(call.command)), false);
+  assert.ok(h.rows.every(row => row.revision === 0 && row.text_modified === false));
+  h.el('document-export-dialog').open = false; assert.equal(await h.api.close(), true);
+});
+
+for (const mode of ['markdown-only', 'markdown-and-anonymize']) testAsync(`${mode}: only the result-folder click treats a disappearing original directory as neutral unavailability`, async () => {
+  const h = harness({ invoke(command) { if (command === 'open_history_results') throw Error('RESULT_DIRECTORY_UNAVAILABLE'); } });
+  h.rows.forEach(row => { row.processing_mode = mode; });
+  await h.api.open('a'.repeat(64)); await h.act(h.el('documents-list').children[0].children[1].children[0]);
+  assert.equal(h.el('documents-open-results').disabled, false); await h.act('documents-open-results');
+  assert.equal(h.calls.filter(call => call.command === 'open_history_results').length, 1);
+  assert.equal(h.el('documents-status').className, 'notice');
+  assert.match(h.el('documents-status').textContent, /Verarbeitung ist abgeschlossen.*Ergebnisordner.*nicht mehr sicher erreichbar.*kein Ersatzordner/u);
+  assert.doesNotMatch(h.el('documents-status').textContent, /\(RESULT_DIRECTORY_UNAVAILABLE\)|zum Öffnen übergeben/u);
+  assert.equal(h.guides.at(-1).phase, 'results_unavailable');
+  assert.equal(h.el('documents-open-results').disabled, true); assert.equal(h.el('document-markdown').readOnly, true);
+  assert.equal(h.el('documents-publish').hidden, true); await h.act('documents-publish'); await h.act('documents-open-results');
+  await h.act('document-next'); assert.equal(h.el('document-name').textContent, 'Quelle-2.pdf');
+  assert.equal(h.el('documents-reload').disabled, false);
+  assert.equal(h.calls.filter(call => call.command === 'open_history_results').length, 1);
+  assert.equal(h.calls.some(call => isDecision(call) || call.command === 'publish_result_documents'), false);
+});
+
+for (const mode of ['markdown-only', 'markdown-and-anonymize']) for (const phase of ['detail', 'decision', 'publication'])
+  testAsync(`${mode}: RESULT_DIRECTORY_UNAVAILABLE during ${phase} remains a red operation error, not a neutral folder click`, async () => {
+    const target = { detail: 'get_document_review_chunk', decision: 'decide_document_review', publication: 'publish_result_documents' }[phase];
+    const h = harness({ invoke(command) { if (command === target) throw Error('RESULT_DIRECTORY_UNAVAILABLE'); } });
+    if (phase === 'detail') {
+      h.rows.forEach(row => { row.processing_mode = mode; }); await h.api.open('a'.repeat(64));
+      await h.act(h.el('documents-list').children[0].children[1].children[0]);
+    } else { await prepareCorrection(h, mode); await saveCorrection(h, mode); await tick(); await tick(); }
+    assert.equal(h.el('documents-status').className, 'notice error');
+    assert.match(h.el('documents-status').textContent, /\(RESULT_DIRECTORY_UNAVAILABLE\)/u);
+    assert.doesNotMatch(h.el('documents-status').textContent, /Verarbeitung ist abgeschlossen|Ergebnisstand bereitgestellt/u);
+    assert.equal(h.calls.filter(call => call.command === target).length, 1);
+    assert.equal(h.calls.some(call => call.command === 'open_history_results'), false);
+    assert.notEqual(h.guides.at(-1).phase, 'results_unavailable', 'non-opening errors do not rewrite publication authority');
+    if (phase === 'publication') {
+      assert.equal(h.calls.filter(isDecision).length, 1); assert.equal(h.el('documents-open-results').disabled, true);
+    } else assert.equal(h.calls.some(call => call.command === 'publish_result_documents'), false);
+  });
+
+for (const nextBatch of ['a'.repeat(64), 'b'.repeat(64)]) testAsync(`late missing-folder reply cannot mark a reopened ${nextBatch[0]} run unavailable`, async () => {
+  let reject; const pending = new Promise((_, failure) => { reject = failure; });
+  const h = harness({ invoke(command) { if (command === 'open_history_results') return pending; } });
+  try {
+    await h.api.open('a'.repeat(64)); await h.act('documents-open-results');
+    h.api.invalidateConnection(); await h.api.open(nextBatch);
+    const status = h.el('documents-status').textContent, completion = h.el('documents-completion-text').textContent;
+    reject(Error('RESULT_DIRECTORY_UNAVAILABLE')); await tick(); await tick();
+    assert.equal(h.el('documents-status').textContent, status); assert.equal(h.el('documents-completion-text').textContent, completion);
+    assert.equal(h.el('documents-open-results').disabled, false); assert.equal(h.guides.at(-1).phase, 'results_ready');
+    assert.equal(h.calls.some(call => isDecision(call) || call.command === 'publish_result_documents'), false);
+  } finally { reject(Error('RESULT_DIRECTORY_UNAVAILABLE')); await tick(); }
+});
+
 for (const value of [{ state: 'current', generation_id: null, count: 2, current_revision: 0 },
   { state: 'current', generation_id: 'e'.repeat(64), count: 2 },
   { state: 'current', generation_id: 'e'.repeat(32), count: 1 },
-  { state: 'initial', generation_id: null, count: 2, current_revision: -1 }])
+  { state: 'initial', generation_id: null, count: 2, current_revision: -1 },
+  { state: 'unknown', generation_id: null, count: 2, current_revision: 0 },
+  { state: 'unavailable', generation_id: null, count: 1, current_revision: 0 },
+  { state: 'unavailable', generation_id: 'e'.repeat(64), count: 2, current_revision: 0 },
+  { state: 'unavailable', generation_id: null, count: 2, current_revision: 0, writable: true }])
   testAsync(`malformed publication DTO fails closed: ${JSON.stringify(value)}`, async () => {
     const h = harness({ resultPublication: value }); await h.api.open('a'.repeat(64));
     assert.match(h.el('documents-status').textContent, /DOCUMENT_REVIEW_INVALID/u);
