@@ -153,6 +153,27 @@ sequenceDiagram
 
 ## Noch auszuführen
 
+### Source01 – echter Endlauf, nicht freigabefähig
+
+Gemeinsamer Quellstand `c286b6179b3f3844915f1de0c31c6dde123cf7f2`,
+Produktfingerprint `48ba2fa729f2ac59cc4d47bc57bf6633c580b8316fe330fadeccf9a6064224e3`/336.
+Windows Native (275 Rust/3 ignoriert, Prepare/Clippy/Release) und fünf
+Paketgates einschließlich 100/100 Markdown-Dateien bestanden, Inputs unverändert.
+Der Headlesslauf endete nach 148/285 Dateien bei `test-runtime-release-path.mjs`
+rot: Die geschlossene Testliste enthielt den neuen ausdrücklich aufgenommenen
+Workbookbaustein noch nicht. Kein beobachteter App-Absturz; vorherige Grüns
+widerlegen den roten echten Endlauf nicht. Enger unabhängig gegengelesener Fix:
+genau `confidential-workbook.js` ergänzen, exakten Inventarvergleich und
+Entfernungsgegenprobe beibehalten. Gezielter tatsächlicher Test danach PASS.
+Keine Produktionsänderung für diesen Testfix.
+
+Macconsumer `39392541460`: ARM erfolgreich; Intel nach diesem Headlessfehler
+gezielt abgebrochen, Gesamtlauf cancelled. Sämtliche Freezejobs beendet.
+Source01-Archive/FINALs bleiben unverändert, keine Veröffentlichung und keine
+Übernahme als neuer Quellstandnachweis. Frische Source02-Gesamt-/Native-/Paket-
+und beide Macconsumer sowie neue Bytes sind erforderlich. Desktoptests bleiben
+bei den Nutzern. Belege: `dist/rc168-review-workbook-source01-20261020`.
+
 ### Gezielter Zwischenstand, noch keine Paketfreigabe
 
 **Neuer bestätigter P2 vor dem Freeze:** Der unabhängige UI-Gegenreview

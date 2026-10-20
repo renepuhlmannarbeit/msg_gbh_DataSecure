@@ -21,6 +21,10 @@ offen. Frühere Pakete und Ergebnisstände bleiben unverändert.
   tatsächlichen Quellenreviews und neuen vollständigen technischen Endgates.
   Desktopabnahme bleibt bei den Nutzern, keine neue Automation oder Apple-
   Zertifizierung. [Umfang und Quellen](../acceptance/RC168_REVIEW_CORRECTION_AND_WORKBOOK_20261020.md).
+- Source01-Endlauf: Native/Paket grün, Headless148/285 rot bei veralteter
+  geschlossener Modulliste. Genau Workbookeintrag ergänzt, unabhängig geprüft
+  und gezielter Test PASS; kein Produktionsdelta. Neue Source02-Endgates und
+  Macconsumer beider Architekturen nötig; Source01 bleibt historische Evidenz.
 
 ## Aktiver Nutzerbefund – vertrauliche Zuordnungen im Ergebnisordner
 

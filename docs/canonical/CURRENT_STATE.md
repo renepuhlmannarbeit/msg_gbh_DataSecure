@@ -16,7 +16,11 @@ aus; keine neue Automation. Vorhandene statische Mac-Cores bleiben gepinnt,
 keine Developer-ID/Notarisierung und keine Abschaltung von OS-Schutzfunktionen.
 Positions-/UI-/Workbook-/Kompatibilitätsgegenfälle grün, einschließlich eines
 neu bestätigten und vor dem Freeze behobenen alten Fundstellenseiten-Callbacks.
-Noch keine neue Gesamtregression, native Endgates oder Paket-/Releaseabnahme.
+Source01: Native275Rust/3ignoriert/Clippy/Release und Paket5/Korpus100 grün,
+Headless nach148/285 rot wegen fehlendem Workbookeintrag in exakter Testliste.
+Enger unabhängig geprüfter Testfix gezielt grün, kein Produktdelta. ARMconsumer
+grün, Intel gezielt abgebrochen; keine Freigabe. Neue gemeinsame Source02-
+Endgates und neue Pakete erforderlich, keine alten Belege umetikettieren.
 [Plan, revalidierte Quellen und Ablaufverträge](../acceptance/RC168_REVIEW_CORRECTION_AND_WORKBOOK_20261020.md).
 
 ### Neuester verbindlicher Abschluss – RC167 / RESULT-COMPANIONS-01
