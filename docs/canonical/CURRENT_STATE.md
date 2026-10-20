@@ -1,12 +1,12 @@
 # Aktueller Iststand
 
-Arbeitsversion: **3.2.0-rc169**, in Umsetzung: erstes Excelblatt mit denselben
-Pseudonym-/Typ-/Originalwert-/Vorkommenszuordnungen wie TXT, Dateikontext erhalten.
-Letzter veröffentlichter gemeinsamer Windows-/Mac-Teststand ist RC168.
+Veröffentlicht: **3.2.0-rc169**, gemeinsamer Windows-/Mac-Test-Pre-Release.
+Erstes Excelblatt TXT-gleich, fertige Ergebnisse manuell bearbeitbare Arbeitskopien.
+Technische Endgates und unabhängige tatsächliche Artefaktgegenreviews bestanden;
 menschliche Desktop-/Excel-/Numbers-/Mac-Zielhostabnahme bleibt offen.
-RC167, RC166 und frühere Pakete bleiben unverändert erhalten.
+RC168, RC167, RC166 und frühere Pakete bleiben unverändert erhalten.
 
-### Aktiver Auftrag – RC169 TXT-gleiche Excel-Zuordnung zuerst
+### Abschluss – RC169 TXT-gleiche Excel-Zuordnung und bearbeitbare Ergebnisse
 
 Nutzer bestätigt am20.10.: erstes Blatt Zuordnungen mit Pseudonym/Typ/
 Originalwert(e)/Vorkommen/Datei. Genau eine Zeile pro belegtem TXT-Eintrag,
@@ -27,14 +27,25 @@ Neue App-Korrektur aus privater Basis in neuen Ordner, keine externe Adoption/
 Überschreibung. Fehlender/ersetzter Ordner neutral statt Produktabbruch.
 Gezielte Workbook-/TXT-/JS-/UI-/Rust- und reale Node/Rust-Pipe-Gegenfälle grün;
 unabhängige Gegenreviews fanden vor Freeze drei Anschlusslücken, eng behoben und
-erneut gegengelesen. Neuer gemeinsamer Quellenfreeze und technische Endläufe
-folgen; noch kein freigegebenes RC169-Paket oder menschlicher Desktop-PASS.
+erneut gegengelesen. Die nachstehenden Vorabstände bleiben historische Belege;
+kein menschlicher Desktop-PASS daraus.
 Source01/e2b9e665 lokal285/285+11/11, Windows280Rust(3ignoriert)/Node-Rust/
 Clippy/Release/Paket5/Korpus100 grün mit unveränderten Inputs. ARMconsumer
 grün. Intelverbrauchte nachweislich das45Minuten-CI-Jobbudget während weiter
 erfolgreicher Paketgates; kein belegter Produktabsturz. Nur äußeres CI-Budget
 auf75Minuten, Produktions-/Testdeadlines unverändert. Neuer gemeinsamer
-Source02-Quellenfreeze und neue vollständige Endgates/Pakete erforderlich.
+Source02-Quellenfreeze und neue vollständige Endgates/Pakete deshalb erforderlich.
+Source02 jetzt tatsächlich abgeschlossen: App-/Tagcommit8f21b55a41fb63ab62f92d198ec8f108ab8164ad,
+FP77937b239fd35cbc80b7c2037d5d597be007625997815b44e35876fc1d4bd11c/336.
+285/285+11/11, Windows280Rust(3ignoriert)/Clippy/Node-Rust/Release/Paket5/
+Korpus100 und beide Macjobs39461104366 grün, Inputs unverändert. Je271MacRust/
+3ignoriert/89Generationen/20Companion/47Workbook/15TXT und Core/App/ZIP/DMG.
+Release418691555 veröffentlicht mit20vor/nach Publikation frisch gehashten
+Assets, gleicher Tagquelle/IDs; Windows lokalRC169 mit18Dateien/Testplan und
+drei unveränderten Testdaten-ZIPs. Keine Desktopautomation, neue Automation,
+Main-Integration oder Apple-Zertifizierung. Erstes XLSX-Blatt und manuelle
+Arbeitskopien samt Neustart ausdrücklich in der offenen Nutzerabnahme.
+[Abschluss und genaue Grenzen](../acceptance/RC169_SHARED_RELEASE_20261020.md).
 
 ### Historischer Abschluss – RC168 exakte Nachbearbeitung und echte XLSX-Zuordnung
 

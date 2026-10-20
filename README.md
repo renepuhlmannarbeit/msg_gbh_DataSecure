@@ -1,9 +1,9 @@
-# GBH DataSecure – Standalone Windows/macOS RC168 · Linux RC159 · Cowork RC151
+# GBH DataSecure – Standalone Windows/macOS RC169 · Linux RC159 · Cowork RC151
 
 Quellstand: 3.2.0-rc169
 
-Der [Standalone-Test-Pre-Release RC168 für Windows und macOS](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc168)
-bindet Quellcommit `0049513a9ba661bee4190a6677bb3ddffef461a9` (Build `0049513a`).
+Der [Standalone-Test-Pre-Release RC169 für Windows und macOS](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc169)
+bindet Quellcommit `8f21b55a41fb63ab62f92d198ec8f108ab8164ad` (Build `8f21b55a`).
 Linux bleibt beim [RC159-Paket](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc159)
 aus Quellcommit `7af2a9d0268864a01b954e0175cae9f5a3616fe8`.
 Die neue Oberfläche ist der reguläre Einstieg: **Neue Verarbeitung**, schnelle
@@ -12,36 +12,49 @@ laufgebundene Fortsetzung und konkrete Dateiprobleme. Nach den notwendigen
 OCR-/Fundstellenprüfungen direkt **Ergebnisordner öffnen**: keine zweite
 Dokumentauswahl, Freigabe oder Exportbestätigung im normalen Ablauf.
 Optionale Nachbearbeitung stellt einen vollständigen neuen aktuellen Stand
-bereit; frühere Stände bleiben erhalten. Technische Revisions-/Hash-/Ordner-
-und Integritätsprüfungen bleiben aktiv. Neue Anonymisierungsstände enthalten die
+bereit; frühere Stände bleiben erhalten. Private Prüfstände und neue Schreibvorgänge
+bleiben revisions-/hash-/ordnergebunden geschützt. Neue Anonymisierungsstände enthalten die
 Markdown-Dateien und den getrennten Unterordner **Vertraulich** mit
 **Dateizuordnung.csv**, **Pseudonym-Zuordnung.txt** und **Pseudonym-Zuordnung.xlsx**. Nur gewünschte
 MD weitergeben, nicht Vertraulich oder zusätzliche OS-Metadaten. Es erfolgt kein Upload, und
 die Ergebnisse sind nicht auf KI-Nutzung beschränkt. Reine Konvertierung anonymisiert nicht.
 
-**Neu in RC168:** Zusätzliche Maskierung rechts exakt markieren, Vorschau prüfen
-und einmal **Maskierung speichern**. CRLF/LF/CR- und UTF-16-Positionen bleiben an
-die gespeicherten Bytes gebunden. Entitätenbehandlung und Geltung sind getrennte
-bewusste Entscheidungen; Blättern speichert nichts. Die neutral benannte
-Pseudonym-Zuordnung enthält Personen, Unternehmen und andere belegte Typen;
-zusätzlich gibt es eine echte XLSX mit Typ/Basiswert/Endwert je Dokument.
-Alle drei Pflichtdateien sind physisch im Erststand und jedem ausdrücklich
-gespeicherten neuen Korrekturstand vorhanden. **Vertraulich enthält Originalangaben:
-nicht weitergeben oder hochladen.** Alte RC167-/2- und frühere Ordner bleiben
-unverändert; Lesen ergänzt oder benennt nichts um.
-[Umsetzung und Prüfstand](docs/acceptance/RC168_SHARED_RELEASE_20261020.md).
-Für RC168 bestanden 285 Haupttestdateien, elf Zusatzprüfungen, Windows-Native-/Rust-
-und Paketgates sowie beide nativen Mac-Consumer aus demselben Appcommit.
-Die Mac-Pakete enthalten einen eigenen statischen Core und eine getrennte
-offizielle Konverterruntime. Alle 20 veröffentlichten Dateien wurden erneut
-heruntergeladen und gegen ihre Prüfsummen kontrolliert. Die manuelle Windows-
-Abnahme übernimmt der Nutzer, die praktische Mac-/M2-Abnahme sein Kollege.
-Finder-/Gatekeeper-/TCC-/VoiceOver- und macOS-26-Zielhostabnahmen bleiben offen.
-Die native Excel-/Numbers-Abnahme bleibt ebenfalls offen. Zuordnungen zunächst
-nur ansehen, nicht über die gebundenen Originale speichern; vor erneuter App-
-Prüfung Office normal schließen. Bearbeitungskopien außerhalb des gesamten
-Ergebnisordners aufbewahren und weiterhin vertraulich behandeln.
-RC168 ist ein Teststand mit synthetischen Daten, keine Produktionsfreigabe.
+**Neu in RC169:** Das erste Excelblatt **Zuordnungen** enthält dieselben
+Pseudonym-/Typ-/Originalwert-/Vorkommenszuordnungen wie die TXT, zusätzlich den
+Dateikontext. Genau eine Zeile pro TXT-Eintrag; numerische Vorkommen werden nicht
+je Schreibvariante vervielfacht oder über gleichlautende Marker verschiedener
+Dokumente erfunden. Übersicht/Hinweise, bisherige Detailblätter und ggf.
+verlustfreie Langwerte stehen dahinter.
+
+Fertige Ergebnisdateien sind bearbeitbare Arbeitskopien: MD/CSV/TXT/XLSX dürfen
+manuell gespeichert, ersetzt, ergänzt oder gelöscht werden. Office-Locks und
+Datei-ctime allein blockieren das normale Ordneröffnen nicht mehr. Private
+Abschlussbelege und ursprüngliche Zielordnerbindung bleiben geschützt; fehlende
+oder ersetzte Ordner sind neutral nicht verfügbar, keine Wiederanlage.
+Externe Edits werden nicht importiert: eine neue Appkorrektur erzeugt aus der
+privaten Basis einen neuen Ordner und überschreibt keine bearbeitete Arbeitskopie.
+
+Weiter enthalten: rechts exakt markieren, Vorschau prüfen, einmal **Maskierung
+speichern**, mit gebundenen CRLF/LF/CR-/UTF-16-Positionen. Nur anonymisierte
+Erst-/neue Korrekturstände erhalten die drei vertraulichen Begleitdateien.
+**Vertraulich enthält Originalangaben: nicht weitergeben oder hochladen.**
+Alte Workbookbytes werden beim Lesen/No-op nicht neu erzeugt oder umbenannt.
+[Umsetzung und Prüfstand](docs/acceptance/RC169_SHARED_RELEASE_20261020.md).
+
+Für RC169 bestanden 285 Haupttestdateien, elf Zusatzprüfungen, Windows-Native-/
+Rust-/Node-Rust-/Paketgates sowie beide nativen Mac-Consumer desselben Appcommits.
+Alle 20 veröffentlichten Dateien wurden vor und nach Publikation frisch
+heruntergeladen und gegen ihre Prüfsummen kontrolliert. Die eigene statische
+Mac-Core-Rolle und die offizielle Konverterruntime bleiben getrennt hashgebunden;
+keine Developer-ID/Notarisierung oder Abschaltung von OS-Schutzfunktionen.
+
+Die Desktoptests macht der Nutzer/Kollege selbst. Echte Excel-/Numbers-,
+Finder-/Gatekeeper-/TCC-/M2-/VoiceOver-/macOS-26-Zielhostabnahmen bleiben offen.
+Workbookreader-Proben sind kein universeller nativer Office-Gleichheitsnachweis.
+Manuelle Bearbeitung ist erlaubt; vertrauliche Zuordnungen bleiben auch nach
+Bearbeitung vertraulich. Belege beschreiben den ursprünglich von der App
+bereitgestellten Stand, nicht externe Änderungen.
+RC169 ist ein Teststand mit synthetischen Daten, keine Produktionsfreigabe.
 [Exakte Nachweise und Prüfsummen](docs/RELEASE.md).
 
 Das getrennte [Cowork-Plugin bleibt auf RC151](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc151),
@@ -68,15 +81,15 @@ Für die Standalone-App werden **weder Claude noch Cowork, Node.js, Python oder
 Rust** benötigt. Das zur eigenen CPU passende ZIP vollständig entpacken und
 nicht direkt aus dem ZIP starten; auf dem Mac gibt es alternativ ein DMG:
 
-**[RC168: Windows-/Mac-ZIPs, Mac-DMGs, Testpläne und Prüfsummen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc168)** ·
+**[RC169: Windows-/Mac-ZIPs, Mac-DMGs, Testpläne und Prüfsummen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc169)** ·
 [Linux RC159](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc159)
 
-Für die zehn Abschlusstests gibt es [synthetische RC164-Testdaten](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc168/DataSecure-3.2.0-rc164-Abnahmetests.zip),
-einen [Windows-Testplan](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc168/WINDOWS-TESTPLAN.txt)
-und [Mac-Testhinweise](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc168/MAC-TEST-HINWEISE.txt).
+Für die zehn Abschlusstests gibt es [synthetische RC164-Testdaten](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc169/DataSecure-3.2.0-rc164-Abnahmetests.zip),
+einen [Windows-Testplan](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc169/WINDOWS-TESTPLAN.txt)
+und [Mac-Testhinweise](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc169/MAC-TEST-HINWEISE.txt).
 Pro Fall nur dessen EINGABEN wählen. Zusätzlich steht das unveränderte
-[100-Dateien-Testpaket aus RC160](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc168/DataSecure-Standalone-3.2.0-rc160-Testdatenpaket.zip)
-und die separate [36-Dateien-Large-Beilage](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc168/DataSecure-3.2.0-rc166-Large-Testdaten.zip)
+[100-Dateien-Testpaket aus RC160](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc169/DataSecure-Standalone-3.2.0-rc160-Testdatenpaket.zip)
+und die separate [36-Dateien-Large-Beilage](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc169/DataSecure-3.2.0-rc166-Large-Testdaten.zip)
 bereit. Die historischen Anleitungen in diesen unveränderten Archiven gelten
 nicht für den neuen Direktablauf; die zwei aktuellen Testpläne sind maßgeblich.
 In der App für den 100-Dateien-Bestand nur den enthaltenen Eingabeordner
@@ -86,27 +99,27 @@ Eingabedateien.
 **Mac-Kompatibilitätshinweis:** Der erneute Paketreview hat in den veröffentlichten
 Standalone-RC140-ZIPs einen Helfer mit höherer Mindestversion gefunden: Intel
 verlangt macOS 15, Apple Silicon macOS 14. Die bisherige Angabe 13.5 war für
-diese ZIPs falsch. Für Mac die unten verlinkten RC168-ZIPs oder DMGs verwenden:
+diese ZIPs falsch. Für Mac die unten verlinkten RC169-ZIPs oder DMGs verwenden:
 ihr Binärvertrag ist für macOS 13.5 geprüft; ein realer Lauf auf 13.5 bleibt offen.
 Die RC140-Downloads werden nicht verändert. Die Mac-Pakete bleiben interne,
 ad-hoc-signierte Piloten ohne bestätigte Finder-/Gatekeeper-Abnahme auf dem
 betroffenen verwalteten M2.
 
 - **Windows 10/11 x64:**
-  [DataSecure-Standalone-3.2.0-rc168-windows-x64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc168/DataSecure-Standalone-3.2.0-rc168-windows-x64.zip)
+  [DataSecure-Standalone-3.2.0-rc169-windows-x64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc169/DataSecure-Standalone-3.2.0-rc169-windows-x64.zip)
   herunterladen, vollständig entpacken und
   `DataSecure Standalone.exe` doppelklicken. Microsoft Edge WebView2 muss als
   Windows-Systemkomponente vorhanden sein. [Ausführliche Windows-Anleitung](apps/datasecure-standalone/START-WINDOWS.md)
 - **Mac mit Intel-Prozessor:**
-  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc168/DataSecure-Standalone-3.2.0-rc168-macos-x64.zip)
-  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc168/DataSecure-Standalone-3.2.0-rc168-macos-x64.dmg)
+  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc169/DataSecure-Standalone-3.2.0-rc169-macos-x64.zip)
+  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc169/DataSecure-Standalone-3.2.0-rc169-macos-x64.dmg)
   herunterladen, die jeweils passende `.sha256` derselben Release-Seite prüfen
   und die enthaltene `DataSecure Standalone.app` nach **Programme** ziehen.
 - **Mac mit Apple Silicon (M1 oder neuer):**
-  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc168/DataSecure-Standalone-3.2.0-rc168-macos-arm64.zip)
-  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc168/DataSecure-Standalone-3.2.0-rc168-macos-arm64.dmg)
+  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc169/DataSecure-Standalone-3.2.0-rc169-macos-arm64.zip)
+  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc169/DataSecure-Standalone-3.2.0-rc169-macos-arm64.dmg)
   herunterladen und genauso installieren.
-  Die Architektur zeigt **Apple-Menü → Über diesen Mac**. RC168 wurde auf
+  Die Architektur zeigt **Apple-Menü → Über diesen Mac**. RC169 wurde auf
   macOS 15 (Intel) und macOS 14 (ARM) ausgeführt; macOS 13.5 ist die deklarierte,
   in allen nativen Komponenten geprüfte Mindestversion (siehe Hinweis oben).
   [Ausführliche macOS-Anleitung](apps/datasecure-standalone/MACOS-START.md)

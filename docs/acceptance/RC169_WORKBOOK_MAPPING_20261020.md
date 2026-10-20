@@ -1,7 +1,8 @@
 # RC169 – TXT-gleiche Pseudonym-Zuordnung als erstes Excelblatt
 
-Status: implementiert; technische Source02-Endläufe erforderlich. Keine neue
-gemeinsame Paketfreigabe oder bestandene Desktopabnahme behauptet.
+Status: implementiert und als gemeinsamer Windows-/Mac-Test-Pre-Release RC169
+veröffentlicht. Neue Source02-Endgates bestanden; menschliche Desktop-/Office-
+Abnahme offen. [Exakter Abschluss](RC169_SHARED_RELEASE_20261020.md).
 RC168 bleibt unverändert veröffentlicht; alle alten Ergebnisstände bleiben erhalten.
 
 ## Ergänzter Nutzervertrag – fertige öffentliche Arbeitskopien
@@ -155,3 +156,17 @@ Dokumentationsfälle bestanden. Neue Source02-Helfer:31Proof-Negative,
 381statische Bindungschecks/76aktuelle Pflichtbelegzeilen und15Syntaxchecks
 bestanden; keine alten FINALs/Checkpoints/Artefakte kopiert. Gegenreview der
 neuen Helfer ohne bestätigten Blocker. Desktop weiterhin USER_PENDING.
+
+## Abschluss Source02
+
+App-/Tagcommit8f21b55a41fb63ab62f92d198ec8f108ab8164ad, FP77937b239fd35cbc80b7c2037d5d597be007625997815b44e35876fc1d4bd11c/336.
+285/285+11/11, Windows280Rust(3ignoriert)/Node-Rust/Clippy/Release/Paket5/
+Korpus100 bestanden mit unveränderten Inputs. Beide Macjobs39461104366 grün,
+je271Rust/3ignoriert/89Generationen/20Companion/47Workbook/15TXT sowie native
+Core/App/ZIP/DMG-Gates. Tatsächliche Windows-/ARM-/Intel-Artefakt- und20Asset-
+Übergabegegenreviews ohne verbleibenden bestätigten Blocker. Redaktionelle
+Modusqualifikation nur im erzeugten Beschreibungstext vor Veröffentlichung.
+Release418691555 veröffentlicht; alle20Assets vor/nach Publikation frisch
+heruntergeladen/gehasht, gleicheIDs/Tagquelle. Windows lokalRC169 mit Testplan,
+18Dateien und drei unveränderten synthetischen Testdaten-ZIPs. Keine Desktop-
+automation, neue Automation, Main-Integration oder Apple-Zertifizierung.

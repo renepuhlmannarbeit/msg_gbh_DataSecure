@@ -1,11 +1,11 @@
 # Aktives Entwicklungsbacklog
 
-Arbeitsversion: **3.2.0-rc169**, TXT-gleiche Zuordnung als erstes Excelblatt in Umsetzung.
-Neue technische Gesamt-/Windows-/Mac-Endgates und Testübergabe danach erforderlich.
-RC168 ist der aktuelle Windows-/Mac-Teststand; menschliche Abnahme
+Veröffentlicht: **3.2.0-rc169**, TXT-gleiche Zuordnung als erstes Excelblatt und
+bearbeitbare fertige Ergebnisse umgesetzt, technisch geprüft und übergeben.
+RC169 ist der aktuelle Windows-/Mac-Teststand; menschliche Abnahme
 offen. Frühere Pakete und Ergebnisstände bleiben unverändert.
 
-## Aktiver Auftrag – RC169 TXT-gleiche Excel-Zuordnung zuerst
+## Abgeschlossener Implementierungsauftrag – RC169
 
 - **RESULT-WORKING-COPY-01:** Nach bestätigtem Abschluss öffentliche Ergebnisse
   manuell bearbeitbar. Normale Ordneröffnung ohne öffentliche Blatt-Hash-/Identitäts-
@@ -29,6 +29,18 @@ offen. Frühere Pakete und Ergebnisstände bleiben unverändert.
   CI-Joblimit abgebrochen, kein geeigneter gemeinsamer Release. Enger75Minuten-
   Consumer-CI-Rahmen ohne interne Test-/Produktdeadlineänderung; unabhängiger
   Gegenreview und neue gemeinsame Source02-Endgates/Pakete erforderlich.
+- Source02 tatsächlich neu285/285+11/11, Windows280Rust(3ignoriert)/Clippy/
+  echte Node-Rust-Pipe/Release/Paket5/Korpus100 und beide Macjobs39461104366
+  grün, Quellen unverändert. App-/Tagcommit8f21b55a41fb63ab62f92d198ec8f108ab8164ad,
+  FP77937b239fd35cbc80b7c2037d5d597be007625997815b44e35876fc1d4bd11c/336.
+  Unabhängige tatsächliche Windows-/ARM-/Intel-Artefakt-/Übergabegegenreviews;
+  nur Modusqualifikation im erzeugten Releasebeschreibungstext korrigiert.
+  [RC169](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc169)
+  veröffentlicht:20Assets vor/nach Publikation frisch gehasht, gleicheIDs/Tagquelle.
+  Windows lokalRC169 mit Testplan/18Dateien/drei synthetischen Beilagen.
+  Offen bleiben Nutzerdesktop-/Office-/Mac-Zielhosttests, keine erfundenen PASS.
+  Keine Main-Integration, Automation oder Apple-Zertifizierung.
+  [Exakter Abschluss](../acceptance/RC169_SHARED_RELEASE_20261020.md).
 
 ## Historischer Implementierungsauftrag – RC168 Nachbearbeitung und strukturierte Zuordnung
 

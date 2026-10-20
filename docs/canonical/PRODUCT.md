@@ -1,16 +1,23 @@
 # Produktvertrag: GBH DataSecure
 
-Stand: 19.10.2026 · 3.2.0-rc169 · Ist-Zustand RC169 (Entwicklung) · veröffentlichte Windows/macOS RC165 unverändert · Linux RC159 · Cowork RC151
+Stand: 20.10.2026 · 3.2.0-rc169 · Windows/macOS RC169 als Test-Pre-Release · Linux RC159 · Cowork RC151
 
-**Aktuelle RC166-Entwicklung:** Notwendige OCR-/Fundstellenentscheidungen bleiben,
+**Aktueller RC169-Vertrag:** Notwendige OCR-/Fundstellenentscheidungen bleiben,
 danach führt der normale Weg direkt zu den fertigen Ergebnisdateien. Keine zweite
 Dokumentauswahl, Pflichtfreigabe oder Exportbestätigung. Optionale Nachbearbeitung
 stellt nach dem Speichern den vollständigen aktuellen Ergebnisstand bereit;
-ältere Stände bleiben erhalten. Technische Revision-/Hash-/Ziel-/Eigentumsprüfungen
-bleiben erhalten, ohne künstliche menschliche Freigabe. Neue fertige MD-Ordner
-halten vertrauliche Zuordnungen getrennt. Legacydaten werden nicht bereinigt
-oder rückwirkend umgedeutet. [Vertrag und neue Nachweisgrenzen](../acceptance/RC166_DIRECT_RESULTS_20261019.md).
-Noch kein Paket-/Zielhost-PASS dieser Vereinfachung.
+ältere Stände bleiben erhalten. Private Prüfstände, noch offene Bereitstellung
+und neue Schreibvorgänge bleiben revisions-/hash-/ziel-/eigentumsgebunden.
+Fertige öffentliche MD/CSV/TXT/XLSX sind manuell bearbeitbare Arbeitskopien:
+normales Ordneröffnen ohne Blatt-Hash-/ctime-/Inventarprüfung, ursprüngliche
+Ordnerbindung erhalten. Neue Appkorrekturen aus privater Basis in neuen Ordner,
+keine externe Adoption oder Überschreibung; fehlender/ersetzter Ordner neutral.
+Bei Anonymisierung liegen drei vertrauliche Zuordnungen getrennt; erstes XLSX-
+Blatt mit denselben Pseudonym-/Typ-/Originalwert-/Vorkommenszuordnungen wie TXT
+und Dateikontext, keine Variantenverdoppelung oder erfundene Markerfusion.
+Legacydaten werden nicht bereinigt oder rückwirkend umgedeutet.
+[Gemeinsamer Release und Nachweisgrenzen](../acceptance/RC169_SHARED_RELEASE_20261020.md).
+Technische Windows-/beideMac-Paketgates bestanden; menschliche Zielhostabnahme offen.
 
 **Historischer RC165-Vertrag nach RC164:** Der normale Dokumentweg benötigt
 keine gesonderte Pflichtfreigabe mehr. Nach der Fundstellenprüfung können die
@@ -23,7 +30,7 @@ menschliche Lektüre aller Dokumente oder vollständige Anonymität. Nur freigeb
 und Widerrufen bleiben optionale Verwaltungsaktionen. Dieser Ablauf ist als
 RC165-Testpaket veröffentlicht, kein menschlicher Zielhost-PASS.
 
-Windows und beide Mac-Architekturen binden in RC165 den Appcommit
+Historische Windows-/Mac-RC165-Pakete binden den Appcommit
 `973274f17cda46bb66621d956af2cbc96e2272e3`/Build `973274f1`.
 Linux bleibt beim RC159-Paket aus Quellcommit `7af2a9d0268864a01b954e0175cae9f5a3616fe8`.
 [Release und begrenzte technische Nachweise](../RELEASE.md).

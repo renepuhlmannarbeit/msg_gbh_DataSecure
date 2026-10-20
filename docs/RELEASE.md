@@ -2,9 +2,41 @@
 
 Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc169 · Veröffentlichungsnachtrag: 20.10.2026
 
-Der aktuelle Quellstand ist RC169-Entwicklungsstand und noch kein neu gebundener Paketkandidat. Nachfolgende reine Dokumentation ändert die Paket-/Tagbindung nicht. Menschliche N3/N4-Produktionsfreigaben bleiben offen.
+Der aktuelle Quellstand ist RC169 und als Windows-/Mac-Teststand veröffentlicht. Nachfolgende reine
+Dokumentation ändert dessen App-/Paket-/Tagbindung nicht. Menschliche Desktop-/
+Office-/Zielhost- und N3/N4-Produktionsfreigaben bleiben offen.
 
-### RC168 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
+### RC169 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
+
+Quellcommit `8f21b55a41fb63ab62f92d198ec8f108ab8164ad` bindet den
+[RC169-Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc169).
+TXT-gleiche Excel-Zuordnung und bearbeitbare Ergebnisse. Build `8f21b55a`,
+Produktfingerprint `77937b239fd35cbc80b7c2037d5d597be007625997815b44e35876fc1d4bd11c`/336.
+Windows x64 und macOS ARM64/Intel aus demselben Appstand; Linux159/Cowork151
+und sämtliche alten Pakete/Nutzerläufe unverändert.
+
+Erstes XLSX-Blatt Zuordnungen: Pseudonym/Typ/Originalwert(e)/Vorkommen/Datei,
+genau dieselben validierten Einträge und numerischen Zählungen wie TXT, keine
+Variantenverdoppelung oder erfundene Markerfusion. Übersicht/Details dahinter.
+Fertige Ergebnisdateien sind manuell bearbeitbare Arbeitskopien; normales Öffnen
+prüft private Belege und ursprüngliche Ordnerbindung, keine öffentlichen Blatt-
+Hashes/ctime/Extras/Office-Locks. Fehlender/ersetzter Ordner neutral unavailable,
+keine Wiederanlage. Neue Appkorrektur aus privater Basis in neuen Ordner, kein
+Import/Überschreiben externer Edits. Private/Pending/Erstabschluss/ACK weiter strikt.
+Keine zusätzliche Auswahl/Freigabe/Exportpflicht. Vertraulich nicht weitergeben.
+
+Neu285/285+11/11, Windows280Rust(3ignoriert)/Clippy/echte Node-Rust-Pipe/Release/
+Paket5/Korpus100 ohne Fehler; alle Inputs unverändert. Beide Macjobs39461104366
+grün: je271Rust/3ignoriert/89Generationen/20Companion/47Workbook/15TXT und native
+Core/App/ZIP/DMG-Gates. Tatsächliche Artefakt- und finale Übergabegegenreviews.
+Release418691555 veröffentlicht20.10.2026 19:50:11MESZ(17:50:11UTC), PreRelease=true,
+Draft=false; alle20Assets vor/nach Publikation frisch gehasht, gleicheIDs/Tagquelle.
+Windows lokal `Software DataSecure/RC169`, Testplan und drei synthetische Test-ZIPs.
+Desktop-/Excel-/Numbers-/physischeMac-Abnahme beim Nutzer/Kollegen; keine
+Developer-ID/Notarisierung oder OS-Schutzabschaltung. Keine Main-Integration.
+[Exakte Hashes, historische Gegenbelege und Grenzen](acceptance/RC169_SHARED_RELEASE_20261020.md).
+
+### Historisch – RC168: Standalone Windows sowie macOS ZIP und zusätzlich DMG
 
 Quellcommit `0049513a9ba661bee4190a6677bb3ddffef461a9` bindet den
 [RC168-Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc168).
