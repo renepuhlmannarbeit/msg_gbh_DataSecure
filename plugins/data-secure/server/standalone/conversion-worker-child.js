@@ -8,7 +8,8 @@ const crypto = require('node:crypto');
 const { createRequire } = require('node:module');
 const { pathToFileURL } = require('node:url');
 const { extractMarkdownBuffer, extractOfficeMarkdownAndMedia } = require('./markdown-extractor');
-const { prepareOfficeImagePlan, appendOfficeOcr } = require('./office-image-ocr');
+const { prepareOfficeImagePlan, preparePartialOfficeImagePlan, appendOfficeOcr } = require('./office-image-ocr');
+const { createCheckpointEmitter, MAX_UNITS } = require('./conversion-checkpoints');
 const { markdownImageContent, extractMarkdownImageMedia } = require('./markdown-image-content');
 const { createMarkdownExtraction, MAX_MARKDOWN_CHARS } = require('./markdown-contract');
 const { unreadableSymbolRun, cleanExtractedSymbolText } = require('./markdown-visuals');
@@ -35,8 +36,10 @@ let requestedContentOptions;
 for (const method of ['log', 'info', 'warn', 'error', 'debug']) console[method] = () => {};
 
 function canvasApi() {
-  if (localRequire('@napi-rs/canvas/package.json').version !== '1.0.7') fail('CONVERSION_POLICY_FAILED');
-  return localRequire('@napi-rs/canvas');
+  try {
+    if (localRequire('@napi-rs/canvas/package.json').version !== '1.0.7') fail('CONVERSION_POLICY_FAILED');
+    return localRequire('@napi-rs/canvas');
+  } catch { fail('CONVERSION_POLICY_FAILED'); }
 }
 function dimensions(width, height) {
   if (!Number.isSafeInteger(width) || !Number.isSafeInteger(height) || width < 1 || height < 1 || width * height > MAX_PIXELS) {
@@ -44,6 +47,7 @@ function dimensions(width, height) {
   }
 }
 function checkedModels() {
+  try {
   const lock = JSON.parse(fs.readFileSync(path.join(root, 'models.lock.json'), 'utf8'));
   for (const language of ['deu', 'eng']) {
     const expected = lock.models?.[language];
@@ -51,10 +55,12 @@ function checkedModels() {
     const model = fs.readFileSync(path.join(root, 'models', expected.file));
     if (model.length !== expected.bytes || crypto.createHash('sha256').update(model).digest('hex') !== expected.sha256) fail('CONVERSION_MODEL_INVALID');
   }
+  } catch { fail('CONVERSION_MODEL_INVALID'); }
 }
 
 async function createOcr() {
   checkedModels();
+  try {
   if (localRequire('tesseract.js/package.json').version !== '7.0.0') fail('CONVERSION_POLICY_FAILED');
   const { createWorker, OEM } = localRequire('tesseract.js');
   process.stderr.write('CONVERSION_OCR_STARTING\n');
@@ -64,12 +70,15 @@ async function createOcr() {
   });
   process.stderr.write('CONVERSION_OCR_READY\n');
   return worker;
+  } catch { fail('CONVERSION_POLICY_FAILED'); }
 }
 
 async function recognize(canvas, ocr, nativeRegions = [], singleTokenOnly = false) {
   // Keep word confidence local to this isolated worker. A high whole-page
   // confidence does not establish that a contact value was read correctly.
-  const result = await ocr.recognize(canvas.toBuffer('image/png'), {}, { text: true, blocks: true });
+  let result;
+  try { result = await ocr.recognize(canvas.toBuffer('image/png'), {}, { text: true, blocks: true }); }
+  catch (cause) { if (errors.has(cause?.code)) throw cause; fail('CONVERSION_OCR_FAILED'); }
   if (typeof result?.data?.text !== 'string') fail('CONVERSION_OCR_FAILED');
   if (result.data.text.length > MAX_MARKDOWN_CHARS) fail('TEXT_TOO_LARGE');
   // Re-segmentation stays in original pixel coordinates. Never change OCR
@@ -155,13 +164,28 @@ async function imageMarkdown(bytes, type, markdownOutput, contentOptions, ownedO
   }
 }
 
-async function officeImageMarkdown(bytes, type, extractionOptions, contentOptions) {
+function imageOmission(cause) {
+  if (['CONVERSION_IMAGE_INVALID'].includes(cause?.code)) return 'IMAGE_CONTENT_DAMAGED';
+  if (['CONVERSION_PIXEL_LIMIT', 'INPUT_FORMAT_LIMIT', 'OCR_REVIEW_PAYLOAD_LIMIT'].includes(cause?.code)) return 'IMAGE_PROCESSING_LIMIT';
+  if (cause?.code === 'CONVERSION_OCR_FAILED') return 'IMAGE_OCR_FAILED';
+  if (cause?.code === 'TEXT_TOO_LARGE') return 'TEXT_LIMIT_PARTIAL';
+  // Never reinterpret model, source, policy or isolation failures as pictures.
+  return null;
+}
+
+async function officeImageMarkdown(bytes, type, extractionOptions, contentOptions, checkpoint) {
   // One parser supplies both text and its authorized attachment list. Do not
   // re-open ZIP media separately or read Relationship targets from disk/URLs.
   const { extraction, attachments } = extractOfficeMarkdownAndMedia(bytes, `.${type}`, extractionOptions);
-  const plan = prepareOfficeImagePlan(attachments);
-  if (!plan.length) return createMarkdownExtraction({ source_type: type, markdown: extraction.markdown,
+  const native = createMarkdownExtraction({ source_type: type, markdown: extraction.markdown,
     coverage: extraction.coverage, content_options: contentOptions });
+  await checkpoint(native, 0);
+  const plan = preparePartialOfficeImagePlan(attachments);
+  if (!plan.length) {
+    if (!extraction.markdown.trim()) fail(extraction.coverage.reason_codes.includes('TEXT_LIMIT_PARTIAL')
+      ? 'TEXT_TOO_LARGE' : 'CONVERSION_OCR_TEXT_EMPTY');
+    return native;
+  }
   const session = { ocr: null, cropBudget: { bytes: 0, pixels: 0 } };
   try {
     // imageMarkdown starts the shared session only after its image decoder has
@@ -169,20 +193,33 @@ async function officeImageMarkdown(bytes, type, extractionOptions, contentOption
     const recognized = [];
     let outputChars = extraction.markdown.length, contactCount = 0;
     for (const item of plan) {
-      const result = await imageMarkdown(item.bytes, item.type, 'content-v1', contentOptions, session);
-      outputChars += result.markdown.length + (result.markdown && outputChars ? 2 : 0);
-      contactCount += result.ocr_contacts?.length || 0;
+      let result, omission = item.reason;
+      if (!omission) {
+        try { result = await imageMarkdown(item.bytes, item.type, 'content-v1', contentOptions, session); }
+        catch (cause) { omission = imageOmission(cause); if (!omission) throw cause; }
+      }
+      const nextChars = outputChars + (result?.markdown ? result.markdown.length + (outputChars ? 2 : 0) : 0);
+      const nextContacts = contactCount + (result?.ocr_contacts?.length || 0);
       // Bound the whole document while building it, not only after 150
       // individually valid image transcripts have accumulated in memory.
-      if (outputChars > MAX_MARKDOWN_CHARS || contactCount > 5000) fail('TEXT_TOO_LARGE');
+      if (nextChars > MAX_MARKDOWN_CHARS || nextContacts > 5000) omission = 'TEXT_LIMIT_PARTIAL';
+      if (omission) result = createMarkdownExtraction({ source_type: type, markdown: '', content_options: contentOptions,
+        coverage: { status: 'incomplete', reason_codes: [omission] } });
+      else {
+        outputChars = nextChars; contactCount = nextContacts;
+        result = createMarkdownExtraction({ source_type: type, markdown: result.markdown, content_options: contentOptions,
+          coverage: { status: 'incomplete', reason_codes: result.coverage.reason_codes.filter(code => code !== 'OCR_TEXT_EMPTY') },
+          ...(result.ocr_contacts?.length ? { ocr_contacts: result.ocr_contacts.map(contact => ({ ...contact, page: item.ordinal })) } : {}) });
+      }
       recognized.push(result);
+      await checkpoint(result, recognized.length);
     }
     // Text is appended once per relationship-checked media part. Its original
     // paragraph/slide placement is not invented; source coverage remains incomplete.
     return appendOfficeOcr(extraction, recognized, contentOptions);
   } finally {
     try { if (session.ocr) await session.ocr.terminate(); }
-    finally { for (const item of plan) item.bytes.fill(0); }
+    finally { for (const item of plan) item.bytes?.fill(0); }
   }
 }
 
@@ -236,7 +273,7 @@ function additionalOcrText(nativeText, ocrText) {
   }).join('');
 }
 
-async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, contentOptions) {
+async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, contentOptions, checkpoint) {
   if (bytes.length > 25 * 1024 * 1024) fail('INPUT_FORMAT_LIMIT');
   const pdfRoot = path.join(root, 'node_modules', 'pdfjs-dist');
   const { getDocument, OPS, AnnotationMode, setDataSecureTextPaintObserver } = await import(pathToFileURL(path.join(pdfRoot, 'legacy', 'build', 'pdf.datasecure.mjs')).href);
@@ -262,11 +299,20 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
     // Standalone Markdown-first privacy may omit them with incomplete source
     // coverage; the privacy gate still inspects all extracted Markdown.
     if (document.isPureXfa) fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
-    const hasDocumentObjects = await document.hasJSActions() || populated(await document.getFieldObjects()) ||
-      populated(await document.getAttachments());
+    const optionalReasons = new Set();
+    async function passiveRead(operation, fallback) {
+      try { return await operation(); }
+      catch (cause) {
+        if (!contentOptions || !passiveObjects || errors.has(cause?.code)) throw cause;
+        optionalReasons.add('DOCUMENT_PARTS_DAMAGED'); return fallback;
+      }
+    }
+    const hasDocumentObjects = await passiveRead(() => document.hasJSActions(), false) ||
+      populated(await passiveRead(() => document.getFieldObjects(), null)) ||
+      populated(await passiveRead(() => document.getAttachments(), null));
     if (hasDocumentObjects && !passiveObjects) fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
-    const outline = await document.getOutline();
-    const metadata = await document.getMetadata();
+    const outline = await passiveRead(() => document.getOutline(), null);
+    const metadata = await passiveRead(() => document.getMetadata(), null);
     const metadataKeys = PDF_KEYS;
     if (((Array.isArray(outline) && outline.length > 0) || metadata?.metadata !== null) && !passiveObjects) {
       fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
@@ -289,7 +335,7 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
       catch { fail('CONVERSION_METADATA_LIMIT'); }
     }
     const sections = [];
-    const reasons = new Set(['SOURCE_COVERAGE_UNVERIFIED', 'VISUAL_CONTENT_NOT_EXTRACTED']);
+    const reasons = new Set(['SOURCE_COVERAGE_UNVERIFIED', 'VISUAL_CONTENT_NOT_EXTRACTED', ...optionalReasons]);
     const contacts = [];
     const cropBudget = { bytes: 0 };
     const documentNotice = { image: false, symbols: false, ocr: false, contacts: false,
@@ -300,10 +346,24 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
     // never guesses at missing letters or extends the existing worker deadline.
     const visibilityBudget = { remainingPixels: 32_000_000, remainingProbes: 128 };
     if (total > MAX_MARKDOWN_CHARS) fail('TEXT_TOO_LARGE');
+    function pageUnit(number, markdown, pageContacts = []) {
+      const codes = new Set(reasons);
+      codes.delete('OCR_CONTACT_VALUES_UNVERIFIED'); codes.delete('OCR_TEXT_EMPTY');
+      if (pageContacts.length) codes.add('OCR_CONTACT_VALUES_UNVERIFIED');
+      return createMarkdownExtraction({ source_type: 'pdf', markdown, content_options: contentOptions,
+        ...(pageContacts.length ? { ocr_contacts: pageContacts } : {}),
+        ...(number === 1 && privateMetadata ? { private_document_metadata: privateMetadata } : {}),
+        coverage: { status: 'incomplete', reason_codes: [...codes].sort() } });
+    }
     for (let number = 1; number <= document.numPages; number++) {
-      const page = await document.getPage(number);
-      let canvas;
+      if (contentOptions && number > MAX_UNITS) {
+        // Producer budget, not a forged-unit/policy failure. Keep the already
+        // completed pages and label the terminal result explicitly partial.
+        reasons.add('CONVERSION_RESOURCE_LIMIT_PARTIAL'); break;
+      }
+      let page, canvas, nativeUnit, finalUnit;
       try {
+        page = await document.getPage(number);
         if (page.isPureXfa) fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
         if (!passiveObjects && (populated(await page.getJSActions()) ||
             (await page.getAnnotations({ intent: 'display' })).length > 0)) fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
@@ -340,6 +400,14 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
         }
         const nativeText = text;
         const hasNativeText = Boolean(nativeText.trim());
+        if (contentOptions) {
+          // Commit a fully read native page before rasterization. Existing search
+          // text remains useful even if a later image decoder or OCR fails.
+          const candidate = pageUnit(number, hasNativeText ? `## Seite ${number}\n\n${readableText(nativeText).markdown}` : '');
+          if (total + candidate.markdown.length + (sections.length && candidate.markdown ? 2 : 0) > MAX_MARKDOWN_CHARS) fail('TEXT_TOO_LARGE');
+          nativeUnit = candidate;
+          await checkpoint(nativeUnit, number - 1);
+        }
         const operators = await page.getOperatorList();
         const hasPaintedImage = operators?.fnArray.some(operation => imageOperations.has(operation));
         const hasNonTextGraphicPaint = operators?.fnArray.some(operation => graphicOperations.has(operation));
@@ -394,7 +462,7 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
           }
           if (!recognized.text.trim() && !hasNativeText) reasons.add('OCR_TEXT_EMPTY');
         }
-        meaningfulText ||= Boolean(text.trim() || additional.trim());
+        if (!contentOptions) meaningfulText ||= Boolean(text.trim() || additional.trim());
         const main = readableText(text, hasNativeText ? [] : retainedContacts);
         let section = `## Seite ${number}\n\n${main.markdown}`;
         let renderedContacts = main.contacts;
@@ -405,18 +473,36 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
           section += `\n\n${supplement.markdown}`;
           renderedContacts = supplement.contacts;
         }
-        const offset = total + (sections.length ? 2 : 0) + contactOffset;
-        contacts.push(...renderedContacts.map(item => ({ ...item, start: offset + item.start, end: offset + item.end })));
+        const localContacts = renderedContacts.map(item => ({ ...item, start: contactOffset + item.start, end: contactOffset + item.end }));
+        if (contacts.length + localContacts.length > 5000) fail('TEXT_TOO_LARGE');
         documentNotice.image ||= Boolean(hasPaintedImage);
         documentNotice.symbols ||= omittedSymbols;
         documentNotice.ocr ||= retainedOcr;
         documentNotice.contacts ||= retainedContacts.length > 0;
-        total += section.length + (sections.length ? 2 : 0);
-        if (total > MAX_MARKDOWN_CHARS) fail('TEXT_TOO_LARGE');
-        sections.push(section);
+        if (total + section.length + (sections.length ? 2 : 0) > MAX_MARKDOWN_CHARS) fail('TEXT_TOO_LARGE');
+        if (contentOptions) {
+          finalUnit = pageUnit(number, text.trim() || additional.trim() ? section : '', localContacts);
+          await checkpoint(finalUnit, number - 1);
+        } else finalUnit = { markdown: section, ocr_contacts: localContacts };
+      } catch (cause) {
+        // Only a component/extraction failure is local. Requests requiring a
+        // different OCR scope and policy/model/source failures remain hard.
+        const omission = imageOmission(cause);
+        if (!contentOptions || (errors.has(cause?.code) && !omission && cause.code !== 'PDF_EXTRACTION_FAILED')) throw cause;
+        reasons.add(nativeUnit ? 'PDF_IMAGE_NOT_READ' : 'PDF_PAGE_NOT_READ');
+        if (omission) reasons.add(omission);
+        finalUnit = pageUnit(number, nativeUnit?.markdown || '');
+        await checkpoint(finalUnit, number - 1);
       } finally {
         if (canvas) { canvas.width = 1; canvas.height = 1; }
-        page.cleanup();
+        page?.cleanup();
+      }
+      if (finalUnit?.markdown) {
+        const offset = total + (sections.length ? 2 : 0);
+        contacts.push(...(finalUnit.ocr_contacts || []).map(item => ({ ...item, start: offset + item.start, end: offset + item.end })));
+        total = offset + finalUnit.markdown.length;
+        sections.push(finalUnit.markdown);
+        meaningfulText = true;
       }
     }
     // Metadata and a single concise notice do not interrupt the page prose.
@@ -426,6 +512,10 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
     if (metadataLines.length && (!contentOptions || markdownOutput === 'notes-v1')) sections.push(`## Dokumentinformationen\n\n${readableText(metadataLines.join('\n')).markdown}`);
     const notice = markdownOutput === 'content-v1' ? '' : readableNotice(documentNotice);
     if (notice) sections.push(notice);
+    if (contentOptions) {
+      reasons.delete('OCR_TEXT_EMPTY'); reasons.delete('OCR_CONTACT_VALUES_UNVERIFIED');
+      if (contacts.length) reasons.add('OCR_CONTACT_VALUES_UNVERIFIED');
+    }
     return createMarkdownExtraction({ source_type: 'pdf', markdown: sections.join('\n\n'),
       ...(contentOptions ? { content_options: contentOptions } : {}),
       ...(privateMetadata ? { private_document_metadata: privateMetadata } : {}),
@@ -480,16 +570,22 @@ async function main() {
   }
   if (size !== expectedBytes) fail('CONVERSION_INPUT_INCOMPLETE');
   const bytes = Buffer.concat(chunks);
-  if (type === 'pdf') return pdfMarkdown(bytes, policies.includes('passive-document-objects'), markdownOutput, contentOptions);
+  const checkpoint = contentOptions && ['docx', 'xlsx', 'pptx', 'pdf'].includes(type)
+    ? createCheckpointEmitter({ type, contentOptions }) : async () => {};
+  if (type === 'pdf') return pdfMarkdown(bytes, policies.includes('passive-document-objects'), markdownOutput, contentOptions, checkpoint);
   if (['png', 'bmp', 'jpeg'].includes(type)) return imageMarkdown(bytes, type, markdownOutput, contentOptions);
   const extractionOptions = {
+    ...(contentOptions && ['docx', 'xlsx', 'pptx'].includes(type) ? { partialExtraction: true } : {}),
     ...(policies.includes('omit-docx-header-footer') ? { omitDocxHeaderFooter: true } : {}),
     ...(markdownOutput && type !== 'md' ? { markdownOutput } : {})
   };
   if (contentOptions?.imageOcr && ['docx', 'xlsx', 'pptx'].includes(type)) {
-    return officeImageMarkdown(bytes, type, extractionOptions, contentOptions);
+    return officeImageMarkdown(bytes, type, extractionOptions, contentOptions, checkpoint);
   }
   const result = extractMarkdownBuffer(bytes, `.${type}`, extractionOptions);
+  if (contentOptions && ['docx', 'xlsx', 'pptx'].includes(type) && !result.markdown.trim()) {
+    fail('CONVERSION_EXTRACTION_FAILED');
+  }
   if (type !== 'md' || (markdownOutput !== 'content-v1' && !contentOptions?.imageOcr)) return contentOptions
     ? createMarkdownExtraction({ source_type: result.source_type, markdown: result.markdown, coverage: result.coverage, content_options: contentOptions }) : result;
   for (const [name, version] of [['mdast-util-from-markdown', '2.0.2'], ['parse5', '7.3.0']]) {

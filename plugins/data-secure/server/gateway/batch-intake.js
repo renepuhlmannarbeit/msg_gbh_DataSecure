@@ -176,6 +176,7 @@ function createBatchIntake(options = {}) {
         fs: io,
         processingMode,
         productChannel,
+        ...(contentOptions !== undefined ? { contentOptions } : {}),
         hasReparseComponent: beginOptions.hasReparseComponent || defaultHasReparseComponent
       });
     } catch (error) {

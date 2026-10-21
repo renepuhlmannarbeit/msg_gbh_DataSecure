@@ -1,6 +1,6 @@
 # Produktvertrag: GBH DataSecure
 
-Stand: 21.10.2026 · 3.2.0-rc170 · Ist-Zustand RC170 (veröffentlichter gemeinsamer Test-Pre-Release) · ältere Windows/macOS RC169 unverändert · Linux RC159 · Cowork RC151
+Stand: 22.10.2026 · 3.2.0-rc171 · Ist-Zustand RC171 (Teilkonvertierung, neuer Test-Pre-Release in Vorbereitung) · Windows/macOS RC170 unverändert veröffentlicht · Linux RC159 · Cowork RC151
 
 RC170 ergänzt die eng passive Zulassung moderner PPTX-Folienkommentare,
 konservative PDF-/OCR-Zeichenhygiene und exakt belegte OCR-Dopplungsentfernung.

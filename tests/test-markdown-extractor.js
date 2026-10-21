@@ -6,10 +6,13 @@ const { createSuite } = require('./helpers');
 const { zipStore } = require('./lib/zip');
 const { opcControlEntries } = require('./lib/opc');
 const { xlsxCounterexample } = require('./lib/conversion-counterexamples');
-const { extractMarkdownBuffer, MarkdownExtractionError } = require('../plugins/data-secure/server/standalone/markdown-extractor');
-const { validateMarkdownExtraction } = require('../plugins/data-secure/server/standalone/markdown-contract');
+const { extractMarkdownBuffer, extractOfficeMarkdownAndMedia, MarkdownExtractionError } = require('../plugins/data-secure/server/standalone/markdown-extractor');
+const { createMarkdownExtraction, validateMarkdownExtraction } = require('../plugins/data-secure/server/standalone/markdown-contract');
+const { appendOfficeOcr, preparePartialOfficeImagePlan } = require('../plugins/data-secure/server/standalone/office-image-ocr');
+const { encodePng } = require('../plugins/data-secure/server/images/png');
 const { parseDocumentBuffer, parseCsvRows } = require('../plugins/data-secure/server/document-parser');
 const { parseOoxml } = require('../plugins/data-secure/server/ooxml');
+const { officeContent } = require('../plugins/data-secure/server/standalone/markdown-output-profile');
 const { RESOURCE_LIMITS } = require('../plugins/data-secure/server/resource-limits');
 const { unreadableSymbolRun, cleanOcrSymbolLines, visualNotices } = require('../plugins/data-secure/server/standalone/markdown-visuals');
 const { test, done, assert } = createSuite('Content-preserving engineering Markdown extraction');
@@ -306,6 +309,438 @@ test('PPTX XML depth is bounded independently of ZIP integrity', () => {
 });
 test('malformed ZIP never returns a partial success or raw parser exception', () => {
   rejects('SYNTHETIC_SECRET', '.docx', 'MARKDOWN_EXTRACTION_FAILED');
+});
+
+const partialOptions = Object.freeze({ preserveText: true, literalMarkup: true, partialExtraction: true,
+  referencedImagesOnly: true });
+function damagedPayload(archive, name) {
+  const copy = Buffer.from(archive);
+  let offset = 0;
+  while (copy.readUInt32LE(offset) === 0x04034b50) {
+    const length = copy.readUInt16LE(offset + 26), extra = copy.readUInt16LE(offset + 28);
+    const start = offset + 30 + length + extra, size = copy.readUInt32LE(offset + 18);
+    if (copy.subarray(offset + 30, offset + 30 + length).toString('utf8') === name) {
+      copy[start] ^= 1;
+      return copy;
+    }
+    offset = start + size;
+  }
+  throw new Error('synthetic part missing');
+}
+
+test('explicit partial Office extraction keeps valid source text, never damaged image bytes or private reason details', () => {
+  const archive = damagedPayload(docx(paragraph('Valid ä ö ü ß text'), [
+    ['word/media/image1.png', 'SYNTHETIC_BROKEN_IMAGE']
+  ]), 'word/media/image1.png');
+  const before = Buffer.from(archive);
+  const parsed = parseOoxml(archive, '.docx', undefined, partialOptions);
+  assert.strictEqual(parsed.markdown, 'Valid ä ö ü ß text');
+  assert.deepStrictEqual(parsed.attachments, []);
+  assert.deepStrictEqual(parsed.partial_findings, [{ reason: 'DOCUMENT_PARTS_DAMAGED', count: 1 }]);
+  assert.ok(parsed.warnings.includes('DOCUMENT_PARTS_DAMAGED'));
+  assert.ok(!JSON.stringify(parsed.partial_findings).includes('SYNTHETIC'));
+  const extracted = extractMarkdownBuffer(archive, '.docx', { partialExtraction: true, markdownOutput: 'content-v1' });
+  assert.strictEqual(extracted.coverage.status, 'incomplete');
+  assert.ok(extracted.coverage.reason_codes.includes('DOCUMENT_PARTS_DAMAGED'));
+  assert.deepStrictEqual(archive, before);
+  assert.throws(() => parseOoxml(archive, '.docx', undefined, { preserveText: true }));
+});
+
+test('partial DOCX retains an independent referenced header and main story after a malformed footer', () => {
+  const archive = docx(paragraph('Body survives') + '<w:sectPr><w:headerReference r:id="h1"/><w:footerReference r:id="f1"/></w:sectPr>', [
+    ['word/_rels/document.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="h1" Type="${R}/header" Target="header1.xml"/><Relationship Id="f1" Type="${R}/footer" Target="footer1.xml"/></Relationships>`],
+    ['word/header1.xml', `<w:hdr xmlns:w="${W}">${paragraph('Header survives')}</w:hdr>`],
+    ['word/footer1.xml', `<w:ftr xmlns:w="${W}">${paragraph('SYNTHETIC_BAD_PREFIX')}<w:p>`]
+  ]);
+  const parsed = parseOoxml(archive, '.docx', undefined, partialOptions);
+  assert.ok(parsed.markdown.includes('Body survives'));
+  assert.ok(parsed.markdown.includes('Header survives'));
+  assert.ok(!parsed.markdown.includes('SYNTHETIC_BAD_PREFIX'));
+  assert.ok(parsed.warnings.includes('DOCUMENT_PARTS_DAMAGED'));
+});
+
+test('partial DOCX missing referenced header bytes never cause a TypeError or discard main and footer text', () => {
+  const original = docx(paragraph('Main survives') + '<w:sectPr><w:headerReference r:id="h1"/><w:footerReference r:id="f1"/></w:sectPr>', [
+    ['word/_rels/document.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="h1" Type="${R}/header" Target="header1.xml"/><Relationship Id="f1" Type="${R}/footer" Target="footer1.xml"/></Relationships>`],
+    ['word/header1.xml', `<w:hdr xmlns:w="${W}">${paragraph('SYNTHETIC_BAD_HEADER')}</w:hdr>`],
+    ['word/footer1.xml', `<w:ftr xmlns:w="${W}">${paragraph('Footer survives')}</w:ftr>`]
+  ]);
+  const damaged = damagedPayload(original, 'word/header1.xml');
+  const malformed = docx(paragraph('Main survives') + '<w:sectPr><w:headerReference r:id="h1"/><w:footerReference r:id="f1"/></w:sectPr>', [
+    ['word/_rels/document.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="h1" Type="${R}/header" Target="header1.xml"/><Relationship Id="f1" Type="${R}/footer" Target="footer1.xml"/></Relationships>`],
+    ['word/header1.xml', `<w:hdr xmlns:w="${W}">${paragraph('SYNTHETIC_BAD_HEADER')}<w:p>`],
+    ['word/footer1.xml', `<w:ftr xmlns:w="${W}">${paragraph('Footer survives')}</w:ftr>`]
+  ]);
+  for (const archive of [damaged, malformed]) {
+    const parsed = parseOoxml(archive, '.docx', undefined, partialOptions);
+    assert.ok(parsed.markdown.includes('Main survives'));
+    assert.ok(parsed.markdown.includes('Footer survives'));
+    assert.ok(!parsed.markdown.includes('SYNTHETIC_BAD_HEADER'));
+    assert.deepStrictEqual(parsed.partial_findings, [{ reason: 'DOCUMENT_PARTS_DAMAGED', count: 1 }]);
+  }
+});
+
+test('partial PPTX keeps only completely validated reachable slides and notes after malformed XML', () => {
+  const archive = pptx([
+    ['ppt/presentation.xml', `<p:presentation xmlns:p="${P}" xmlns:r="${R}"><p:sldIdLst><p:sldId id="256" r:id="s1"/><p:sldId id="257" r:id="s2"/></p:sldIdLst></p:presentation>`],
+    ['ppt/_rels/presentation.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="s1" Type="${R}/slide" Target="slides/slide7.xml"/><Relationship Id="s2" Type="${R}/slide" Target="slides/slide8.xml"/></Relationships>`],
+    ['ppt/slides/slide8.xml', `<p:sld xmlns:p="${P}" xmlns:a="${A}"><a:p><a:t>SYNTHETIC_BAD_PREFIX</a:t>`]
+  ]);
+  const parsed = parseOoxml(archive, '.pptx', undefined, partialOptions);
+  assert.ok(parsed.markdown.includes('BeforeAfter'));
+  assert.ok(parsed.markdown.includes('123456'));
+  assert.ok(!parsed.markdown.includes('SYNTHETIC_BAD_PREFIX'));
+  assert.ok(parsed.warnings.includes('DOCUMENT_PARTS_DAMAGED'));
+});
+
+test('partial Office recovery keeps XML invalidity scoped to an independent part and never accepts DTD or bad encoding text', () => {
+  for (const source of [Buffer.from('<root><prefix>SYNTHETIC_BAD_PREFIX</prefix><unclosed>'),
+    Buffer.from('<!DOCTYPE root [<!ENTITY x "SYNTHETIC_BAD_PREFIX">]><root>&x;</root>'),
+    Buffer.from([0x3c, 0x78, 0x3e, 0xc3, 0x28, 0x3c, 0x2f, 0x78, 0x3e])]) {
+    const parsed = parseOoxml(docx(paragraph('Valid body'), [['docProps/custom.xml', source]]),
+      '.docx', undefined, partialOptions);
+    assert.strictEqual(parsed.markdown, 'Valid body');
+    assert.ok(!parsed.markdown.includes('SYNTHETIC_BAD_PREFIX'));
+    assert.ok(parsed.warnings.includes('DOCUMENT_PARTS_DAMAGED'));
+  }
+  const parsed = parseOoxml(pptx([['ppt/notesSlides/notesSlide2.xml',
+    `<p:wrong xmlns:p="${P}" xmlns:a="${A}"><a:p><a:r><a:t>SYNTHETIC_WRONG_ROOT</a:t></a:r></a:p></p:wrong>`]]),
+    '.pptx', undefined, partialOptions);
+  assert.ok(parsed.markdown.includes('BeforeAfter'));
+  assert.ok(!parsed.markdown.includes('SYNTHETIC_WRONG_ROOT'));
+  assert.ok(parsed.warnings.includes('DOCUMENT_PARTS_DAMAGED'));
+});
+
+test('partial XLSX does not guess shared strings but preserves independently valid inline-string worksheets', () => {
+  const archive = xlsx('<row><c r="A1" t="inlineStr"><is><t>Inline survives</t></is></c></row>', [
+    ['xl/workbook.xml', `<workbook xmlns="${S}" xmlns:r="${R}"><sheets><sheet name="Inline" sheetId="1" r:id="s1"/><sheet name="Dependent" sheetId="2" r:id="s2"/></sheets></workbook>`],
+    ['xl/_rels/workbook.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="s1" Type="${R}/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="s2" Type="${R}/worksheet" Target="worksheets/sheet2.xml"/><Relationship Id="str" Type="${R}/sharedStrings" Target="sharedStrings.xml"/></Relationships>`],
+    ['xl/worksheets/sheet2.xml', `<worksheet xmlns="${S}"><sheetData><row><c r="A1" t="s"><v>0</v></c></row></sheetData></worksheet>`],
+    ['xl/sharedStrings.xml', `<sst xmlns="${S}"><si><t>SYNTHETIC_INVALID_STRING</t>`]
+  ]);
+  const parsed = parseOoxml(archive, '.xlsx', undefined, partialOptions);
+  assert.ok(parsed.markdown.includes('Inline survives'));
+  assert.ok(!parsed.markdown.includes('Dependent'));
+  assert.ok(!parsed.markdown.includes('SYNTHETIC_INVALID_STRING'));
+  assert.ok(parsed.warnings.includes('DOCUMENT_PARTS_DAMAGED'));
+});
+
+test('partial XLSX rejects one malformed coordinate atomically instead of leaking that worksheet prefix', () => {
+  const archive = xlsx('<row><c r="A1" t="inlineStr"><is><t>Valid sheet</t></is></c></row>', [
+    ['xl/workbook.xml', `<workbook xmlns="${S}" xmlns:r="${R}"><sheets><sheet name="Good" sheetId="1" r:id="s1"/><sheet name="Bad" sheetId="2" r:id="s2"/></sheets></workbook>`],
+    ['xl/_rels/workbook.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="s1" Type="${R}/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="s2" Type="${R}/worksheet" Target="worksheets/sheet2.xml"/></Relationships>`],
+    ['xl/worksheets/sheet2.xml', `<worksheet xmlns="${S}"><sheetData><row><c r="A1" t="inlineStr"><is><t>SYNTHETIC_PREFIX</t></is></c><c r="A1"><v>7</v></c></row></sheetData></worksheet>`]
+  ]);
+  const parsed = parseOoxml(archive, '.xlsx', undefined, partialOptions);
+  assert.ok(parsed.markdown.includes('Valid sheet'));
+  assert.ok(!parsed.markdown.includes('SYNTHETIC_PREFIX'));
+  assert.ok(!parsed.markdown.includes('# Arbeitsblatt: Bad'));
+  assert.ok(parsed.warnings.includes('DOCUMENT_PARTS_DAMAGED'));
+});
+
+test('partial parser quarantines external image references without following file or network targets', () => {
+  for (const target of ['https://SYNTHETIC_SECRET.invalid/image.png', 'file:///SYNTHETIC_SECRET/image.png']) {
+    const archive = docx(paragraph('Local body'), [['word/_rels/document.xml.rels',
+      `<Relationships xmlns="${PR}"><Relationship Id="i1" Type="${R}/image" Target="${target}" TargetMode="External"/></Relationships>`]]);
+    const parsed = parseOoxml(archive, '.docx', undefined, partialOptions);
+    assert.ok(parsed.markdown.includes('Local body'));
+    assert.deepStrictEqual(parsed.attachments, []);
+    assert.deepStrictEqual(parsed.partial_findings, [{ reason: 'EXTERNAL_CONTENT_NOT_READ', count: 1 }]);
+    assert.ok(!JSON.stringify(parsed.partial_findings).includes('SYNTHETIC_SECRET'));
+  }
+});
+
+test('partial parser still refuses broken controls, broken main-part binding and global malformed containers', () => {
+  const archive = docx(paragraph('Safe body'));
+  for (const name of ['[Content_Types].xml', '_rels/.rels', 'word/document.xml']) {
+    assert.throws(() => parseOoxml(damagedPayload(archive, name), '.docx', undefined, partialOptions));
+  }
+  assert.throws(() => parseOoxml(Buffer.concat([archive, Buffer.from('trailing')]), '.docx', undefined, partialOptions));
+  assert.throws(() => parseOoxml(docx(paragraph('Body'), [['_rels/.rels', '<Relationships><broken>']]),
+    '.docx', undefined, partialOptions));
+});
+
+function budgetDocx(mainText, stories = []) {
+  const reference = stories.map((story, index) => `<w:${story.kind}Reference r:id="s${index}"/>`).join('');
+  const type = kind => `application/vnd.openxmlformats-officedocument.wordprocessingml.${kind}+xml`;
+  return zipStore([
+    ...opcControlEntries('docx', { additionalOverrides: stories.map(story => ({
+      part: `word/${story.part}`, contentType: type(story.kind)
+    })) }),
+    ['word/document.xml', `<w:document xmlns:w="${W}" xmlns:r="${R}"><w:body>${paragraph(mainText)}<w:sectPr>${reference}</w:sectPr></w:body></w:document>`],
+    ...(stories.length ? [['word/_rels/document.xml.rels', `<Relationships xmlns="${PR}">${stories.map((story, index) =>
+      `<Relationship Id="s${index}" Type="${R}/${story.kind}" Target="${story.part}"/>`).join('')}</Relationships>`]] : []),
+    ...stories.map(story => [`word/${story.part}`, `<w:${story.kind === 'header' ? 'hdr' : 'ftr'} xmlns:w="${W}">${paragraph(story.text)}</w:${story.kind === 'header' ? 'hdr' : 'ftr'}>`])
+  ]);
+}
+
+function budgetXlsx(values) {
+  return zipStore([
+    ...opcControlEntries('xlsx'),
+    ['xl/workbook.xml', `<workbook xmlns="${S}" xmlns:r="${R}"><sheets>${values.map((_value, index) =>
+      `<sheet name="Sheet${index + 1}" sheetId="${index + 1}" r:id="s${index}"/>`).join('')}</sheets></workbook>`],
+    ['xl/_rels/workbook.xml.rels', `<Relationships xmlns="${PR}">${values.map((_value, index) =>
+      `<Relationship Id="s${index}" Type="${R}/worksheet" Target="worksheets/sheet${index + 1}.xml"/>`).join('')}</Relationships>`],
+    ...values.map((value, index) => [`xl/worksheets/sheet${index + 1}.xml`, `<worksheet xmlns="${S}"><sheetData><row><c r="A1" t="inlineStr"><is><t>${xml(value)}</t></is></c></row></sheetData></worksheet>`])
+  ]);
+}
+
+test('partial DOCX caps whole sections during assembly instead of losing a valid 7.9M main story to its footer', () => {
+  const source = budgetDocx('a'.repeat(7_900_000), [{ kind: 'footer', part: 'footer1.xml', text: 'b'.repeat(200_000) }]);
+  const parsed = parseOoxml(source, '.docx', undefined, partialOptions);
+  assert.strictEqual(parsed.markdown, 'a'.repeat(7_900_000));
+  assert.deepStrictEqual(parsed.sections.map(section => section.source_part), ['word/document.xml']);
+  assert.deepStrictEqual(parsed.partial_findings, [{ reason: 'TEXT_LIMIT_PARTIAL', count: 1 }]);
+  for (const markdownOutput of ['content-v1', 'notes-v1']) {
+    const extracted = extractMarkdownBuffer(source, '.docx', { partialExtraction: true, markdownOutput });
+    assert.strictEqual(extracted.markdown, parsed.markdown);
+    assert.ok(extracted.coverage.reason_codes.includes('TEXT_LIMIT_PARTIAL'));
+  }
+  assert.ok(parseOoxml(source, '.docx', undefined, { preserveText: true, literalMarkup: true }).markdown.length > 8_000_000);
+  rejects(source, '.docx', 'TEXT_TOO_LARGE');
+});
+
+test('partial XLSX retains one whole 4M sheet when two independently valid sheets exceed the document budget', () => {
+  const source = budgetXlsx(['a'.repeat(4_000_000), 'b'.repeat(4_000_000)]);
+  const parsed = parseOoxml(source, '.xlsx', undefined, partialOptions);
+  assert.strictEqual(parsed.sections.length, 1);
+  assert.strictEqual(parsed.sections[0].source_part, 'xl/worksheets/sheet1.xml');
+  assert.ok(parsed.markdown.length < 8_000_000);
+  assert.ok(!parsed.markdown.includes('b'.repeat(32)));
+  assert.ok(parsed.warnings.includes('TEXT_LIMIT_PARTIAL'));
+  const extracted = extractMarkdownBuffer(source, '.xlsx', { partialExtraction: true, markdownOutput: 'content-v1' });
+  assert.strictEqual(extracted.markdown, parsed.markdown);
+  assert.ok(extracted.coverage.reason_codes.includes('TEXT_LIMIT_PARTIAL'));
+});
+
+test('an over-budget middle story is omitted whole while a later small story still fits in source order', () => {
+  const parsed = parseOoxml(budgetDocx('a'.repeat(7_900_000), [
+    { kind: 'header', part: 'header1.xml', text: 'H'.repeat(200_000) },
+    { kind: 'footer', part: 'footer1.xml', text: 'Z' }
+  ]), '.docx', undefined, partialOptions);
+  assert.deepStrictEqual(parsed.sections.map(section => section.source_part), ['word/document.xml', 'word/footer1.xml']);
+  assert.ok(parsed.markdown.endsWith('\n\n## Fußzeile\n\nZ'));
+  assert.ok(!parsed.markdown.includes('H'));
+  assert.deepStrictEqual(parsed.partial_findings, [{ reason: 'TEXT_LIMIT_PARTIAL', count: 1 }]);
+});
+
+test('whole-section budget includes every two-character separator and preserves the exact 8M boundary', () => {
+  for (const overflow of [0, 1]) {
+    const main = 'a'.repeat(8_000_000 - 16 + overflow);
+    const parsed = parseOoxml(budgetDocx(main, [{ kind: 'footer', part: 'footer1.xml', text: 'Z' }]),
+      '.docx', undefined, partialOptions);
+    assert.strictEqual(parsed.markdown, overflow ? main : `${main}\n\n## Fußzeile\n\nZ`);
+    assert.strictEqual(parsed.markdown.length, overflow ? main.length : 8_000_000);
+    assert.strictEqual(parsed.warnings.includes('TEXT_LIMIT_PARTIAL'), Boolean(overflow));
+  }
+  const source = budgetDocx('Original äöüß', [{ kind: 'footer', part: 'footer1.xml', text: 'Kleine Fußzeile' }]);
+  assert.strictEqual(parseOoxml(source, '.docx', undefined, partialOptions).markdown,
+    parseOoxml(source, '.docx', undefined, { preserveText: true, literalMarkup: true }).markdown);
+});
+
+test('actual content projection precedes budgeting and is idempotent at the chart-label boundary', () => {
+  const make = value => pptx([
+    ['ppt/slides/_rels/slide7.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="n1" Type="${R}/notesSlide" Target="../notesSlides/notesSlide2.xml"/><Relationship Id="c1" Type="${R}/chart" Target="../charts/chart1.xml"/></Relationships>`],
+    ['ppt/charts/chart1.xml', `<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:v>${value}</c:v></c:chartSpace>`]
+  ]);
+  const overhead = officeContent(parseOoxml(make('x'), '.pptx', undefined,
+    { preserveText: true, literalMarkup: true }).sections).length - 1;
+  const source = make('x'.repeat(8_000_000 - overhead));
+  const content = parseOoxml(source, '.pptx', undefined, { ...partialOptions,
+    sectionRenderer: section => officeContent([section]) });
+  assert.strictEqual(content.markdown.length, 8_000_000);
+  assert.strictEqual(officeContent(content.sections), content.markdown);
+  assert.ok(content.sections.some(section => section.source_part === 'ppt/charts/chart1.xml'));
+  assert.ok(!content.warnings.includes('TEXT_LIMIT_PARTIAL'));
+  const notes = parseOoxml(source, '.pptx', undefined, partialOptions);
+  assert.ok(!notes.sections.some(section => section.source_part === 'ppt/charts/chart1.xml'));
+  assert.ok(notes.warnings.includes('TEXT_LIMIT_PARTIAL'));
+});
+
+test('parent embedding pushes share the document budget and never leave an isolated generated embedding header', () => {
+  const nested = budgetXlsx(['N'.repeat(200_000)]);
+  const make = value => pptx([
+    ['ppt/slides/slide7.xml', `<p:sld xmlns:p="${P}" xmlns:a="${A}"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>${value}</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>`],
+    ['ppt/slides/_rels/slide7.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="n1" Type="${R}/notesSlide" Target="../notesSlides/notesSlide2.xml"/><Relationship Id="e1" Type="${R}/package" Target="../embeddings/table.xlsx"/></Relationships>`],
+    ['ppt/embeddings/table.xlsx', nested]
+  ]);
+  const parsed = parseOoxml(make('a'.repeat(7_900_000)), '.pptx', undefined, partialOptions);
+  assert.ok(parsed.markdown.includes('123456'));
+  assert.ok(!parsed.markdown.includes('Eingebettetes Dokument'));
+  assert.ok(!parsed.markdown.includes('N'.repeat(32)));
+  assert.ok(parsed.warnings.includes('TEXT_LIMIT_PARTIAL'));
+  assert.ok(parsed.markdown.length < 8_000_000);
+  const small = make('Kleine Folie');
+  assert.strictEqual(parseOoxml(small, '.pptx', undefined, partialOptions).markdown,
+    parseOoxml(small, '.pptx', undefined, { preserveText: true, literalMarkup: true }).markdown);
+});
+
+test('partial notes keep a full boundary-sized body even when the optional visual notice no longer fits', () => {
+  const body = 'a'.repeat(8_000_000);
+  const source = docx(paragraph(body), [
+    ['word/media/image1.png', Buffer.from([137, 80, 78, 71])],
+    ['word/_rels/document.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="image1" Type="${R}/image" Target="media/image1.png"/></Relationships>`]
+  ]);
+  const extracted = extractMarkdownBuffer(source, '.docx', { partialExtraction: true, markdownOutput: 'notes-v1' });
+  assert.strictEqual(extracted.markdown, body);
+  assert.ok(extracted.coverage.reason_codes.includes('TEXT_LIMIT_PARTIAL'));
+  assert.ok(extracted.coverage.reason_codes.includes('VISUAL_CONTENT_NOT_EXTRACTED'));
+});
+
+test('an omitted 8M slide cannot become a notice-only result while its separate OCR entrance stays recoverable', () => {
+  const image = Buffer.from([137, 80, 78, 71]);
+  const source = pptx([
+    ['ppt/slides/slide7.xml', `<p:sld xmlns:p="${P}" xmlns:a="${A}" xmlns:r="${R}"><p:cSld><p:spTree>` +
+      `<p:sp><p:txBody><a:p><a:r><a:t>${'a'.repeat(8_000_000)}</a:t></a:r></a:p></p:txBody></p:sp>` +
+      '<p:pic><a:blip r:embed="i1"/></p:pic></p:spTree></p:cSld></p:sld>'],
+    ['ppt/slides/_rels/slide7.xml.rels', `<Relationships xmlns="${PR}">` +
+      `<Relationship Id="i1" Type="${R}/image" Target="../media/image1.png"/></Relationships>`],
+    ['ppt/media/image1.png', image]
+  ]);
+  const before = Buffer.from(source);
+  const parsed = parseOoxml(source, '.pptx', undefined, partialOptions);
+  assert.strictEqual(parsed.sections.length, 0, 'the generated slide heading puts this whole section above 8M');
+  assert.strictEqual(parsed.markdown, '');
+  assert.strictEqual(parsed.attachments.length, 1);
+  assert.ok(parsed.warnings.includes('TEXT_LIMIT_PARTIAL'));
+  for (const markdownOutput of ['content-v1', 'notes-v1']) {
+    assert.throws(() => extractMarkdownBuffer(source, '.pptx', { partialExtraction: true, markdownOutput }),
+      error => error instanceof MarkdownExtractionError && error.code === 'TEXT_TOO_LARGE');
+    const { extraction, attachments } = extractOfficeMarkdownAndMedia(source, '.pptx', {
+      partialExtraction: true, markdownOutput
+    });
+    assert.strictEqual(extraction.markdown, '', 'neither the media entrance nor its native checkpoint may contain a generated notice');
+    assert.strictEqual(extraction.coverage.status, 'incomplete');
+    assert.ok(extraction.coverage.reason_codes.includes('TEXT_LIMIT_PARTIAL'));
+    assert.ok(extraction.coverage.reason_codes.includes('VISUAL_CONTENT_NOT_EXTRACTED'));
+    assert.strictEqual(attachments.length, 1);
+    assert.deepStrictEqual(Buffer.from(attachments[0].data, 'base64'), image);
+    const content_options = { schema: 'datasecure-content-options/1', markdownOutput, scanOcr: true, imageOcr: true };
+    assert.throws(() => appendOfficeOcr(extraction, [], content_options), error => error.code === 'CONVERSION_OCR_TEXT_EMPTY');
+    // This is an already validated synthetic transcript, not a claim that OCR
+    // ran here. The actual append path must still permit later real image text.
+    const transcript = createMarkdownExtraction({ source_type: 'png', content_options,
+      markdown: 'Synthetischer Rastertext', coverage: { status: 'incomplete',
+        reason_codes: ['OCR_NOT_VERIFIED', 'VISUAL_CONTENT_NOT_EXTRACTED'] } });
+    const recovered = appendOfficeOcr(extraction, [transcript], content_options);
+    assert.strictEqual(recovered.markdown, transcript.markdown);
+    assert.ok(recovered.coverage.reason_codes.includes('TEXT_LIMIT_PARTIAL'));
+    assert.strictEqual(recovered.coverage.status, 'incomplete');
+  }
+  assert.deepStrictEqual(source, before);
+});
+
+function pictureOnlyPptx(extension, bytes, extra = []) {
+  return pptx([
+    ['ppt/slides/slide7.xml', `<p:sld xmlns:p="${P}" xmlns:a="${A}" xmlns:r="${R}"><p:cSld><p:spTree>` +
+      '<p:pic><a:blip r:embed="i1"/></p:pic></p:spTree></p:cSld></p:sld>'],
+    ['ppt/slides/_rels/slide7.xml.rels', `<Relationships xmlns="${PR}">` +
+      `<Relationship Id="i1" Type="${R}/image" Target="../media/image1.${extension}"/></Relationships>`],
+    [`ppt/media/image1.${extension}`, bytes],
+    ...extra
+  ]);
+}
+
+test('partial picture-only PPTX has no generated native text while its authorized raster plan remains available', () => {
+  const white = encodePng({ width: 1, height: 1, rgba: Buffer.from([255,255,255,255]) });
+  const contrast = encodePng({ width: 2, height: 1, rgba: Buffer.from([0,0,0,255,255,255,255,255]) });
+  for (const [extension, bytes] of [['emf', Buffer.from('unsupported EMF')], ['png', white], ['png', contrast]]) {
+    const source = pictureOnlyPptx(extension, bytes), before = Buffer.from(source);
+    const parsed = parseOoxml(source, '.pptx', undefined, partialOptions);
+    assert.strictEqual(parsed.markdown, '');
+    assert.deepStrictEqual(parsed.sections, []);
+    assert.strictEqual(parsed.attachments.length, 1, 'textless reached slide still owns its picture');
+    for (const markdownOutput of ['content-v1', 'notes-v1']) {
+      const { extraction, attachments } = extractOfficeMarkdownAndMedia(source, '.pptx', {
+        partialExtraction: true, markdownOutput
+      });
+      assert.strictEqual(extraction.markdown, '', 'no Folie/Notizen/generated visual notice is source text');
+      assert.strictEqual(attachments.length, 1);
+      const plan = preparePartialOfficeImagePlan(attachments);
+      assert.strictEqual(plan.length, 1);
+      assert.strictEqual(plan[0].ordinal, 1);
+      const content_options = { schema: 'datasecure-content-options/1', markdownOutput, scanOcr: false, imageOcr: true };
+      const reason = extension === 'emf' ? 'OFFICE_IMAGE_FORMAT_EMF_UNSUPPORTED' : 'OCR_TEXT_EMPTY';
+      if (extension === 'emf') assert.strictEqual(plan[0].reason, reason);
+      else assert.deepStrictEqual(plan[0].bytes, bytes);
+      const omitted = createMarkdownExtraction({ source_type: 'pptx', content_options, markdown: '',
+        coverage: { status: 'incomplete', reason_codes: [reason] } });
+      assert.throws(() => appendOfficeOcr(extraction, [omitted], content_options), error => error.code === 'CONVERSION_OCR_TEXT_EMPTY');
+      // A validated synthetic image transcript proves the separate append
+      // entrance still works. Actual recognition belongs to the native gate.
+      if (extension === 'png') {
+        const transcript = createMarkdownExtraction({ source_type: 'png', content_options,
+          markdown: 'Synthetischer Bildtext äöüß', coverage: { status: 'incomplete', reason_codes: ['OCR_NOT_VERIFIED'] } });
+        assert.strictEqual(appendOfficeOcr(extraction, [transcript], content_options).markdown, transcript.markdown);
+      }
+      for (const item of plan) item.bytes?.fill(0);
+    }
+    assert.deepStrictEqual(source, before);
+    assert.strictEqual(parseOoxml(source, '.pptx', undefined, { preserveText: true, literalMarkup: true }).markdown,
+      '# Folie 1\n\n', 'historical strict renderer retains its exact generated label');
+  }
+});
+
+test('partial PPTX skips empty slide and note labels without deleting authored lookalike headings or changing source numbering', () => {
+  const authored = '# Folie 1\n## Notizen';
+  const source = pictureOnlyPptx('emf', Buffer.from('unsupported EMF'), [
+    ['ppt/presentation.xml', `<p:presentation xmlns:p="${P}" xmlns:r="${R}"><p:sldIdLst><p:sldId id="256" r:id="s1"/><p:sldId id="257" r:id="s2"/></p:sldIdLst></p:presentation>`],
+    ['ppt/_rels/presentation.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="s1" Type="${R}/slide" Target="slides/slide7.xml"/><Relationship Id="s2" Type="${R}/slide" Target="slides/slide8.xml"/></Relationships>`],
+    ['ppt/slides/slide8.xml', `<p:sld xmlns:p="${P}" xmlns:a="${A}"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>${authored}</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>`],
+    ['ppt/slides/_rels/slide7.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="i1" Type="${R}/image" Target="../media/image1.emf"/><Relationship Id="n1" Type="${R}/notesSlide" Target="../notesSlides/notesSlide2.xml"/></Relationships>`],
+    ['ppt/notesSlides/notesSlide2.xml', `<p:notes xmlns:p="${P}" xmlns:a="${A}"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t></a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:notes>`]
+  ]);
+  const parsed = parseOoxml(source, '.pptx', undefined, partialOptions);
+  assert.deepStrictEqual(parsed.sections.map(section => section.source_part), ['ppt/slides/slide8.xml']);
+  assert.strictEqual(parsed.markdown, '# Folie 2\n\n\\# Folie 1  \n\\#\\# Notizen');
+  assert.strictEqual(parsed.attachments.length, 1);
+  const legacy = parseOoxml(source, '.pptx', undefined, { preserveText: true, literalMarkup: true });
+  assert.strictEqual(legacy.markdown, '# Folie 1\n\n\n\n## Notizen\n\n\n\n# Folie 2\n\n\\# Folie 1  \n\\#\\# Notizen');
+});
+
+test('partial textless PPTX owns only its reached embedding and never an orphan slide or chart package', () => {
+  const reached = budgetXlsx(['REACHED_EMBEDDED_VALUE']), orphan = budgetXlsx(['ORPHAN_EMBEDDED_VALUE']);
+  const source = pictureOnlyPptx('emf', Buffer.from('unsupported EMF'), [
+    ['ppt/slides/_rels/slide7.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="i1" Type="${R}/image" Target="../media/image1.emf"/><Relationship Id="e1" Type="${R}/package" Target="../embeddings/reached.xlsx"/></Relationships>`],
+    ['ppt/embeddings/reached.xlsx', reached],
+    ['ppt/slides/slide99.xml', `<p:sld xmlns:p="${P}" xmlns:a="${A}"><p:cSld><p:spTree/></p:cSld></p:sld>`],
+    ['ppt/slides/_rels/slide99.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="e1" Type="${R}/package" Target="../embeddings/orphan.xlsx"/></Relationships>`],
+    ['ppt/charts/chart99.xml', '<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:v></c:v></c:chartSpace>'],
+    ['ppt/charts/_rels/chart99.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="e1" Type="${R}/package" Target="../embeddings/orphan.xlsx"/></Relationships>`],
+    ['ppt/embeddings/orphan.xlsx', orphan]
+  ]);
+  const parsed = parseOoxml(source, '.pptx', undefined, partialOptions);
+  assert.ok(parsed.markdown.includes('REACHED\\_EMBEDDED\\_VALUE'));
+  assert.ok(!parsed.markdown.includes('ORPHAN'));
+  assert.ok(!parsed.sections.some(section => section.source_part === 'ppt/slides/slide7.xml'));
+  assert.strictEqual(parsed.attachments.length, 1);
+});
+
+test('partial empty chart, layout, master and table labels cannot invent source text or revoke a reached chart embedding', () => {
+  const source = pictureOnlyPptx('emf', Buffer.from('unsupported EMF'), [
+    ['ppt/_rels/presentation.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="s1" Type="${R}/slide" Target="slides/slide7.xml"/><Relationship Id="m1" Type="${R}/slideMaster" Target="slideMasters/slideMaster1.xml"/></Relationships>`],
+    ['ppt/slides/slide7.xml', `<p:sld xmlns:p="${P}" xmlns:a="${A}" xmlns:r="${R}"><p:cSld><p:spTree><p:pic><a:blip r:embed="i1"/></p:pic><p:graphicFrame><a:graphic><a:graphicData><a:tbl><a:tr><a:tc><a:txBody><a:p><a:r><a:t></a:t></a:r></a:p></a:txBody></a:tc></a:tr></a:tbl></a:graphicData></a:graphic></p:graphicFrame></p:spTree></p:cSld></p:sld>`],
+    ['ppt/slides/_rels/slide7.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="i1" Type="${R}/image" Target="../media/image1.emf"/><Relationship Id="c1" Type="${R}/chart" Target="../charts/chart1.xml"/><Relationship Id="l1" Type="${R}/slideLayout" Target="../slideLayouts/slideLayout1.xml"/></Relationships>`],
+    ['ppt/charts/chart1.xml', '<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:v></c:v></c:chartSpace>'],
+    ['ppt/slideLayouts/slideLayout1.xml', `<p:sldLayout xmlns:p="${P}" xmlns:a="${A}"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t></a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sldLayout>`],
+    ['ppt/slideLayouts/_rels/slideLayout1.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="m1" Type="${R}/slideMaster" Target="../slideMasters/slideMaster1.xml"/></Relationships>`],
+    ['ppt/slideMasters/slideMaster1.xml', `<p:sldMaster xmlns:p="${P}" xmlns:a="${A}"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t></a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sldMaster>`]
+  ]);
+  const parsed = parseOoxml(source, '.pptx', undefined, partialOptions);
+  assert.strictEqual(parsed.markdown, '');
+  assert.deepStrictEqual(parsed.sections, []);
+  assert.strictEqual(parsed.attachments.length, 1);
+  const legacy = parseOoxml(source, '.pptx', undefined, { preserveText: true, literalMarkup: true });
+  for (const heading of ['# Folie 1', '## Tabelle', '## Diagrammdaten chart1.xml', '## Folienlayout slideLayout1.xml', '## Folienmaster slideMaster1.xml']) assert.ok(legacy.markdown.includes(heading));
+  const nested = budgetXlsx(['REACHED_CHART_VALUE']);
+  const withEmbedding = pictureOnlyPptx('emf', Buffer.from('unsupported EMF'), [
+    ...require('../plugins/data-secure/server/zip-reader').readZip(source),
+    ['ppt/charts/_rels/chart1.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="e1" Type="${R}/package" Target="../embeddings/chart.xlsx"/></Relationships>`],
+    ['ppt/embeddings/chart.xlsx', nested]
+  ]);
+  const embedded = parseOoxml(withEmbedding, '.pptx', undefined, partialOptions);
+  assert.ok(embedded.markdown.includes('REACHED\\_CHART\\_VALUE'));
+  assert.ok(!embedded.markdown.includes('## Diagrammdaten'));
 });
 
 done();

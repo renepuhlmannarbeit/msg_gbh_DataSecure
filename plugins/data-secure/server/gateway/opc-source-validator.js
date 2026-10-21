@@ -276,7 +276,8 @@ function hasSupportedRelationshipNamespace(value) {
     .some((namespace) => type.startsWith(namespace) && type.length > namespace.length);
 }
 
-function validateOpcControls({ declaredType, entries, controlParts, passivePresentation = false }) {
+function validateOpcControls({ declaredType, entries, controlParts, passivePresentation = false,
+  partialExtraction = false, payloadCrcVerified = true }) {
   const expected = MAIN[declaredType];
   if (!expected || !(entries instanceof Set) || !controlParts || typeof controlParts !== 'object') {
     throw new OpcValidationError();
@@ -294,6 +295,7 @@ function validateOpcControls({ declaredType, entries, controlParts, passivePrese
   if (!expected.contentTypes.has(overrides.get(`/${expected.part}`))) throw new OpcValidationError('SOURCE_TYPE_MISMATCH');
 
   const office = [];
+  let externalReferences = 0;
   for (const [name, xml] of Object.entries(controlParts)) {
     if (!name.endsWith('.rels')) continue;
     const relationships = parseXml(xml, RELATIONSHIPS_NS, 'Relationships');
@@ -302,10 +304,22 @@ function validateOpcControls({ declaredType, entries, controlParts, passivePrese
       const id = String(attribute(node, 'Id'));
       const type = String(attribute(node, 'Type'));
       const target = String(attribute(node, 'Target'));
-      const targetMode = String(attribute(node, 'TargetMode')).toLowerCase();
+      const rawTargetMode = String(attribute(node, 'TargetMode'));
+      const targetMode = rawTargetMode.toLowerCase();
       if (!id || !type || !target || ids.has(id)) throw new OpcValidationError();
       ids.add(id);
+      // OPC enumeration values are case-sensitive. Do not quarantine an edge
+      // as external here while a format reader could interpret its spelling
+      // differently and resolve the same target against local package bytes.
+      if (partialExtraction && !['', 'Internal', 'External'].includes(rawTargetMode)) throw new OpcValidationError();
       if (targetMode === 'external') {
+        // Partial Standalone extraction has no external resolver. Preserve
+        // independent local text, but never treat an external package root as
+        // a source binding and never expose the target in public findings.
+        if (partialExtraction && !(name === '_rels/.rels' && OFFICE_REL_TYPES.has(type))) {
+          externalReferences++;
+          continue;
+        }
         // A passive Markdown conversion never follows a link. Only ordinary
         // presentation hyperlinks may be ignored; all other external edges
         // remain blocked, including remote templates and package references.
@@ -356,7 +370,11 @@ function validateOpcControls({ declaredType, entries, controlParts, passivePrese
   if (office.length !== 1 || office[0] !== expected.part || !entries.has(expected.part)) {
     throw new OpcValidationError('SOURCE_TYPE_MISMATCH');
   }
-  return Object.freeze({ ooxml_type: declaredType, controls_verified: true, relationships_verified: true, crc_verified: true });
+  const verified = { ooxml_type: declaredType, controls_verified: true,
+    relationships_verified: externalReferences === 0, crc_verified: payloadCrcVerified === true };
+  if (partialExtraction) verified.partial_findings = Object.freeze(externalReferences
+    ? [Object.freeze({ reason: 'EXTERNAL_CONTENT_NOT_READ', count: externalReferences })] : []);
+  return Object.freeze(verified);
 }
 
 module.exports = Object.freeze({ validateOpcControls, OpcValidationError });

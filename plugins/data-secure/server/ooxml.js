@@ -1,7 +1,7 @@
 'use strict';
 
 const path = require('path');
-const { readZip, ZipError } = require('./zip-reader');
+const { readZip, readZipPartial, ZipError } = require('./zip-reader');
 const { createXlsxReader } = require('./xlsx-structure');
 const { readXml, assertXmlCharacters } = require('./xml-reader');
 const { validateOpcControls } = require('./gateway/opc-source-validator');
@@ -11,6 +11,97 @@ const MAX_EMBEDDED_DOCUMENTS = 20;
 const MAX_EMBEDDED_BYTES = 50 * 1024 * 1024;
 const MAX_EMBEDDED_EXPANDED_BYTES = 100 * 1024 * 1024;
 const SUPPORTED_EMBEDDED = /^(?:word|xl|ppt)\/embeddings\/[^/]+\.(docx|xlsx|pptx)$/i;
+const PARTIAL_ENTRY_STATE = new WeakMap();
+const PARTIAL_PART_ERRORS = new Set(['OOXML_XML_CHARACTER_INVALID', 'OOXML_ENCODING_INVALID',
+  'DOCX_STRUCTURE_UNSAFE', 'DOCX_STRUCTURE_LIMIT', 'XLSX_STRUCTURE_UNSAFE', 'XLSX_STRUCTURE_LIMIT',
+  'XLSX_SHARED_STRING_INVALID', 'PPTX_STRUCTURE_UNSAFE', 'PPTX_STRUCTURE_LIMIT']);
+
+function notePartialPart(entries, reason, key) {
+  const state = PARTIAL_ENTRY_STATE.get(entries);
+  if (!state) return;
+  const identity = `${reason}:${key}`;
+  if (state.noted.has(identity)) return;
+  state.noted.add(identity);
+  state.findings.set(reason, (state.findings.get(reason) || 0) + 1);
+}
+
+function sectionList(entries, options) {
+  if (options.partialExtraction !== true || !PARTIAL_ENTRY_STATE.has(entries)) return [];
+  const sections = [];
+  let chars = 0, ordinal = 0;
+  // The function is an owned in-process output projection, never an IPC or
+  // source-provided callback. Measure its actual output before retaining it.
+  const render = typeof options.sectionRenderer === 'function' ? options.sectionRenderer : section => section.markdown;
+  Object.defineProperty(sections, 'push', { value(...candidates) {
+    for (const section of candidates) {
+      const markdown = render(section);
+      if (typeof markdown !== 'string') throw Object.assign(new Error('OOXML-Abschnittsausgabe ist ungültig.'), {
+        code: 'CONVERSION_POLICY_FAILED'
+      });
+      const key = `section:${ordinal++}`;
+      const added = markdown.length + (sections.length ? 2 : 0);
+      if (added > MAX_WORD_RENDERED_CHARS - chars) {
+        notePartialPart(entries, 'TEXT_LIMIT_PARTIAL', key);
+        continue;
+      }
+      Array.prototype.push.call(sections, { ...section, markdown });
+      chars += added;
+    }
+    return sections.length;
+  } });
+  return sections;
+}
+
+function omitEmptyPptxSection(entries, options, sourcePart, values) {
+  const state = PARTIAL_ENTRY_STATE.get(entries);
+  if (options.partialExtraction !== true || !state || values.some(value => String(value).trim())) return false;
+  // Only called for parts already reached by the format's relationship proof.
+  // A parser-owned label is not source text, but omitting that label must not
+  // revoke the reached part's separate image/embedded-package ownership.
+  state.textlessPptxOwners ||= new Set();
+  state.textlessPptxOwners.add(sourcePart);
+  return true;
+}
+
+function partialPartFailure(entries, name, error) {
+  if (!PARTIAL_ENTRY_STATE.has(entries) || !PARTIAL_PART_ERRORS.has(error?.code)) return false;
+  notePartialPart(entries, 'DOCUMENT_PARTS_DAMAGED', name);
+  // No later coverage/media pass may rediscover a part whose atomic render
+  // failed. Dependent lookups must see a missing part, not its invalid bytes.
+  const data = entries.get(name);
+  entries.delete(name);
+  data?.fill(0);
+  return true;
+}
+
+function validatePartialXmlEntries(entries, ext) {
+  const main = { '.docx': 'word/document.xml', '.xlsx': 'xl/workbook.xml', '.pptx': 'ppt/presentation.xml' }[ext];
+  if (!main || !entries.has(main)) throw xmlTextError();
+  for (const [name, data] of entries) if (/\.(?:xml|rels)$/iu.test(name)) {
+    try {
+      let source;
+      try { source = new TextDecoder('utf-8', { fatal: true }).decode(data); }
+      catch { throw Object.assign(new Error('OOXML-Zeichencodierung ist ungültig.'), { code: 'OOXML_ENCODING_INVALID' }); }
+      // Whole XML parts only: no malformed prefix, regex repair, entity/DTD
+      // resolution or raw-XML fallback can become an accepted text section.
+      const root = readXml(source, { decode: xmlDecode, error: xmlTextError });
+      if (ext === '.pptx') {
+        const expected = name === main ? 'presentation'
+          : /^ppt\/slides\/[^/]+\.xml$/iu.test(name) ? 'sld'
+            : /^ppt\/notesSlides\/[^/]+\.xml$/iu.test(name) ? 'notes'
+              : /^ppt\/slideLayouts\/[^/]+\.xml$/iu.test(name) ? 'sldLayout'
+                : /^ppt\/slideMasters\/[^/]+\.xml$/iu.test(name) ? 'sldMaster' : null;
+        if (expected && (root.localName !== expected || ![
+          'http://schemas.openxmlformats.org/presentationml/2006/main',
+          'http://purl.oclc.org/ooxml/presentationml/main'
+        ].includes(root.namespaceURI))) throw xmlTextError();
+      }
+    } catch (error) {
+      if (name === main || name === '[Content_Types].xml' || name.endsWith('.rels') ||
+          !partialPartFailure(entries, name, error)) throw error;
+    }
+  }
+}
 
 function xmlDecode(s='') {
   const decodeCodePoint = (digits, radix) => {
@@ -396,7 +487,9 @@ function pptSlideTableSections(xml, sourcePart, options = {}) {
     const markdown = renderPptTable(match[0], options);
     // An empty but structurally valid table has no text to emit. It is not a
     // coverage failure; a non-empty/unbalanced table is handled by the caller.
-    if (markdown) tables.push({ kind: 'table', source_part: sourcePart, markdown: `## Tabelle\n\n${markdown}` });
+    if (markdown && (options.partialExtraction !== true || drawingText(match[0]).trim())) {
+      tables.push({ kind: 'table', source_part: sourcePart, markdown: `## Tabelle\n\n${markdown}` });
+    }
   }
   const balanced = opened === closed;
   return {
@@ -1287,7 +1380,7 @@ function docxCoverageWarnings(entries) {
 }
 function parseDocx(entries, options = {}) {
   const main=entries.get('word/document.xml'); if(!main) throw new Error('DOCX enthält kein word/document.xml.');
-  const sections=[]; const body=renderWordBody(main.toString('utf8'), options);
+  const sections=sectionList(entries, options); const body=renderWordBody(main.toString('utf8'), options);
   if(body)sections.push({kind:'text',source_part:'word/document.xml',markdown:body});
   const headerFooter = docxReferencedHeaderFooter(entries);
   const orderedStories = headerFooter.present ? headerFooter.orderedParts : [
@@ -1299,16 +1392,27 @@ function parseDocx(entries, options = {}) {
   // released Markdown.  The option changes output scope, never validation.
   if (options.omitDocxHeaderFooter !== true) for(const name of orderedStories) {
     const data = entries.get(name);
-    const root=name.includes('header')?'hdr':'ftr'; const t=renderWordPart(data.toString('utf8'),root,options);
-    if(t) sections.push({kind:'text',source_part:name,markdown:`## ${root==='hdr'?'Kopfzeile':'Fußzeile'}\n\n${t}`});
+    // The relationship selector normally already excludes omitted parts.
+    // Keep the atomic renderer explicit as well; a missing header must never
+    // turn a valid main story into a TypeError/whole-document failure.
+    if (!data && PARTIAL_ENTRY_STATE.has(entries)) {
+      notePartialPart(entries, 'DOCUMENT_PARTS_DAMAGED', name);
+      continue;
+    }
+    try {
+      const root=name.includes('header')?'hdr':'ftr'; const t=renderWordPart(data.toString('utf8'),root,options);
+      if(t) sections.push({kind:'text',source_part:name,markdown:`## ${root==='hdr'?'Kopfzeile':'Fußzeile'}\n\n${t}`});
+    } catch (error) { if (!partialPartFailure(entries, name, error)) throw error; }
   }
   for(const [extra,root,label] of [
     ['word/comments.xml','comments','Kommentare'],
     ['word/footnotes.xml','footnotes','Fußnoten'],
     ['word/endnotes.xml','endnotes','Endnoten']
   ]) if(entries.has(extra)) {
-    const t=renderWordPart(entries.get(extra).toString('utf8'),root,options);
-    if(t)sections.push({kind:'text',source_part:extra,markdown:`## ${label}\n\n${t}`});
+    try {
+      const t=renderWordPart(entries.get(extra).toString('utf8'),root,options);
+      if(t)sections.push({kind:'text',source_part:extra,markdown:`## ${label}\n\n${t}`});
+    } catch (error) { if (!partialPartFailure(entries, extra, error)) throw error; }
   }
   sections.push(...metadataSections(entries,options));
   const imageCoverage = docxImageRelationshipCoverage(entries, options);
@@ -1460,7 +1564,9 @@ function parseXlsx(entries, options = {}) {
   // Broken XML anywhere in this workbook is a source failure, never a prefix.
   for (const [name, data] of entries) if (/\.(?:xml|rels)$/i.test(name)) reader.validate(data.toString('utf8'));
   const sharedPart = entries.get('xl/sharedStrings.xml');
-  const shared = sharedPart ? reader.sharedStrings(sharedPart.toString('utf8')) : [];
+  let shared = [];
+  if (sharedPart) try { shared = reader.sharedStrings(sharedPart.toString('utf8')); }
+  catch (error) { if (!partialPartFailure(entries, 'xl/sharedStrings.xml', error)) throw error; }
   const workbook=entries.get('xl/workbook.xml')?.toString('utf8')||''; const relationState=xlsxSheetRelationshipMap(entries, reader); const rootIssues=packageMainRelationshipIssueCount(entries, 'xl/workbook.xml');
   const sheetMeta=[]; let issues=relationState.issues;
   for (const { name, rid } of workbook ? reader.workbook(workbook) : []) {
@@ -1469,8 +1575,9 @@ function parseXlsx(entries, options = {}) {
     sheetMeta.push({ name, target });
   }
   if(!workbook || !sheetMeta.length) issues++;
-  const sections=[]; let formulaCells=0;
+  const sections=sectionList(entries, options), renderedSheets=[]; let formulaCells=0;
   for(const s of sheetMeta){const buf=entries.get(s.target);if(!buf)continue;
+    try {
     const parsed = reader.worksheet(buf.toString('utf8'), shared);
     const rows = parsed.rows; formulaCells += parsed.formulaCells;
     const parts=[];let rendered=0;
@@ -1489,9 +1596,11 @@ function parseXlsx(entries, options = {}) {
       }
     }
     sections.push({kind:'table',source_part:s.target,markdown:options.preserveText?parts[0]+'\n\n'+parts.slice(1).join('\n'):parts.join('\n\n')});
+    renderedSheets.push(s);
+    } catch (error) { if (!partialPartFailure(entries, s.target, error)) throw error; }
   }
-  const supplementCoverage = xlsxSupplementRelationshipCoverage(entries, sheetMeta);
-  const commentCoverage = xlsxCommentRelationshipCoverage(entries, sheetMeta);
+  const supplementCoverage = xlsxSupplementRelationshipCoverage(entries, renderedSheets);
+  const commentCoverage = xlsxCommentRelationshipCoverage(entries, renderedSheets);
   for(const [name,data] of entries) if(supplementCoverage.safeCharts.has(name)){const vals=textTags(data.toString('utf8'),'c:v').concat(textTags(data.toString('utf8'),'a:t')).map(value=>options.literalMarkup?extractionText(value,false,true):value); if(vals.length)sections.push({kind:'table',source_part:name,markdown:`## Diagrammdaten ${path.basename(name)}\n\n${vals.join(' | ')}`});}
   for(const [name,data]of entries)if(supplementCoverage.safeDrawings.has(name)){const vals=textTags(data.toString('utf8'),'a:t').map(value=>options.literalMarkup?extractionText(value,false,true):value);if(vals.length)sections.push({kind:'text',source_part:name,markdown:`## Grafiktext ${path.basename(name)}\n\n${vals.join(' ')}`});}
   for(const [name,data]of entries)if(commentCoverage.safeComments.has(name)){const vals=textTags(data.toString('utf8'),'t').map(value=>options.literalMarkup?extractionText(value,false,true):value);if(vals.length)sections.push({kind:'text',source_part:name,markdown:`## Tabellenkommentare\n\n${vals.join('\n\n')}`});}
@@ -1680,20 +1789,20 @@ function parsePptx(entries, options = {}) {
   if(!presentation||!slides.length)issues++;
   const notesCoverage = pptNotesRelationshipCoverage(entries, slides);
   const masterCoverage = pptMasterLayoutCoverage(entries, slides);
-  const sections=[];
+  const sections=sectionList(entries, options);
   for(const [slideIndex,s] of slides.entries()){
-    const n=options.preserveText?slideIndex+1:slideNumber(s),xml=entries.get(s).toString('utf8'),tableCoverage=pptSlideTableSections(xml,s,options),texts=options.preserveText?[extractionText(drawingText(tableCoverage.prose),false,options.literalMarkup)]:textTags(tableCoverage.prose,'a:t'),slide=[`# Folie ${n}`];
+    const n=options.preserveText?slideIndex+1:slideNumber(s),xml=entries.get(s).toString('utf8'),tableCoverage=pptSlideTableSections(xml,s,options),rawTexts=options.preserveText?[drawingText(tableCoverage.prose)]:textTags(tableCoverage.prose,'a:t'),texts=options.preserveText?rawTexts.map(value=>extractionText(value,false,options.literalMarkup)):rawTexts,slide=[`# Folie ${n}`];
     tableIssues+=tableCoverage.issues;
     if(texts.length)slide.push(texts.join('\n\n'));
-    sections.push({kind:'text',source_part:s,markdown:slide.join('\n\n')});
+    if(!omitEmptyPptxSection(entries,options,s,rawTexts))sections.push({kind:'text',source_part:s,markdown:slide.join('\n\n')});
     sections.push(...tableCoverage.tables);
     const notes=pptRelationshipTarget(entries,`ppt/slides/_rels/${path.basename(s)}.rels`,null,'notesSlide','ppt/slides');
-    if(notes&&notesCoverage.safeNotes.has(notes)){const nt=options.preserveText?[extractionText(drawingText(entries.get(notes).toString('utf8')),false,options.literalMarkup)]:textTags(entries.get(notes).toString('utf8'),'a:t').filter(x=>!/^\d+$/.test(x.trim()));if(nt.length)sections.push({kind:'text',source_part:notes,markdown:`## Notizen\n\n${nt.join('\n\n')}`});}
+    if(notes&&notesCoverage.safeNotes.has(notes)){const rawNotes=options.preserveText?[drawingText(entries.get(notes).toString('utf8'))]:textTags(entries.get(notes).toString('utf8'),'a:t').filter(x=>!/^\d+$/.test(x.trim())),nt=options.preserveText?rawNotes.map(value=>extractionText(value,false,options.literalMarkup)):rawNotes;if(nt.length&&!omitEmptyPptxSection(entries,options,notes,rawNotes))sections.push({kind:'text',source_part:notes,markdown:`## Notizen\n\n${nt.join('\n\n')}`});}
   }
   const chartCoverage = pptChartRelationshipCoverage(entries, slides);
-  for(const [name,data] of entries) if(chartCoverage.safeCharts.has(name)){const vals=textTags(data.toString('utf8'),'c:v').concat(textTags(data.toString('utf8'),'a:t')).map(value=>options.literalMarkup?extractionText(value,false,true):value);if(vals.length)sections.push({kind:'table',source_part:name,markdown:`## Diagrammdaten ${path.basename(name)}\n\n${vals.join(' | ')}`});}
-  for(const [name,data] of entries) if(masterCoverage.safeLayouts.has(name)){const vals=textTags(data.toString('utf8'),'a:t').map(value=>options.literalMarkup?extractionText(value,false,true):value);if(vals.length)sections.push({kind:'text',source_part:name,markdown:`## Folienlayout ${path.basename(name)}\n\n${vals.join('\n\n')}`});}
-  for(const [name,data] of entries) if(masterCoverage.safeMasters.has(name)){const vals=textTags(data.toString('utf8'),'a:t').map(value=>options.literalMarkup?extractionText(value,false,true):value);if(vals.length)sections.push({kind:'text',source_part:name,markdown:`## Folienmaster ${path.basename(name)}\n\n${vals.join('\n\n')}`});}
+  for(const [name,data] of entries) if(chartCoverage.safeCharts.has(name)){const rawValues=textTags(data.toString('utf8'),'c:v').concat(textTags(data.toString('utf8'),'a:t')),vals=rawValues.map(value=>options.literalMarkup?extractionText(value,false,true):value);if(vals.length&&!omitEmptyPptxSection(entries,options,name,rawValues))sections.push({kind:'table',source_part:name,markdown:`## Diagrammdaten ${path.basename(name)}\n\n${vals.join(' | ')}`});}
+  for(const [name,data] of entries) if(masterCoverage.safeLayouts.has(name)){const rawValues=textTags(data.toString('utf8'),'a:t'),vals=rawValues.map(value=>options.literalMarkup?extractionText(value,false,true):value);if(vals.length&&!omitEmptyPptxSection(entries,options,name,rawValues))sections.push({kind:'text',source_part:name,markdown:`## Folienlayout ${path.basename(name)}\n\n${vals.join('\n\n')}`});}
+  for(const [name,data] of entries) if(masterCoverage.safeMasters.has(name)){const rawValues=textTags(data.toString('utf8'),'a:t'),vals=rawValues.map(value=>options.literalMarkup?extractionText(value,false,true):value);if(vals.length&&!omitEmptyPptxSection(entries,options,name,rawValues))sections.push({kind:'text',source_part:name,markdown:`## Folienmaster ${path.basename(name)}\n\n${vals.join('\n\n')}`});}
   sections.push(...metadataSections(entries,options));
   const imageCoverage = packageImageRelationshipCoverage(entries, 'ppt', 'PPTX', new Set(slides));
   const warnings=[...customMetadataWarnings(entries), ...pptxCoverageWarnings(entries, slides, notesCoverage.safeNotes, masterCoverage), ...imageCoverage.warnings, ...chartCoverage.warnings, ...notesCoverage.warnings, ...masterCoverage.warnings];if(issues)warnings.push(`PPTX enthält ${issues} nicht eindeutig über eine interne Folienbeziehung abgesicherte Struktur(en); Freigabe wird blockiert.`);
@@ -1786,6 +1895,7 @@ function embeddedState(context) {
 function augmentEmbedded(result, entries, context, options = {}) {
   const state=embeddedState(context);
   const reachableParts=new Set(result.sections.map((section)=>section.source_part));
+  for(const part of PARTIAL_ENTRY_STATE.get(entries)?.textlessPptxOwners||[])reachableParts.add(part);
   const coverage=embeddedRelationshipCoverage(entries,reachableParts),matches=[];
   result.warnings.push(...coverage.warnings);
   for(const [name,data]of entries){const match=SUPPORTED_EMBEDDED.exec(name);if(match&&coverage.safeTargets.has(name))matches.push({name,data,ext:`.${match[1].toLowerCase()}`});}
@@ -1800,8 +1910,22 @@ function augmentEmbedded(result, entries, context, options = {}) {
     let nested;
     try{nested=parseOoxml(embedded.data,embedded.ext,{depth:state.depth+1,budget:state.budget},options);}
     catch{result.warnings.push('Eingebettetes OOXML-Dokument konnte nicht vollständig geprüft werden; Freigabe wird blockiert.');continue;}
-    result.sections.push({kind:'text',source_part:embedded.name,markdown:`## Eingebettetes Dokument ${ordinal}`});
-    for(const section of nested.sections)result.sections.push({...section,source_part:`${embedded.name}!/${section.source_part}`});
+    const heading = `## Eingebettetes Dokument ${ordinal}`;
+    if (options.partialExtraction === true && PARTIAL_ENTRY_STATE.has(entries)) {
+      // A generated embedding label is not useful source text by itself. Add
+      // it atomically with the first retained whole child section; a rejected
+      // large child must not leave a heading-only apparent result behind.
+      let headingPending = true;
+      for (const section of nested.sections) {
+        const before = result.sections.length;
+        result.sections.push({ ...section, source_part: `${embedded.name}!/${section.source_part}`,
+          markdown: headingPending ? `${heading}\n\n${section.markdown}` : section.markdown });
+        if (result.sections.length > before) headingPending = false;
+      }
+    } else {
+      result.sections.push({kind:'text',source_part:embedded.name,markdown:heading});
+      for(const section of nested.sections)result.sections.push({...section,source_part:`${embedded.name}!/${section.source_part}`});
+    }
     for(const attachment of nested.attachments)result.attachments.push({...attachment,source_part:`${embedded.name}!/${attachment.source_part}`});
     result.warnings.push(...nested.warnings);
   }
@@ -1816,8 +1940,26 @@ function parseOoxml(buffer, ext, context, options = {}) {
     if(remainingExpanded<=0)throw new Error('EMBEDDED_EXPANDED_BUDGET_EXCEEDED');
     zipLimits={maxUncompressed:remainingExpanded};
   }
-  let entries; try{entries=readZip(buffer,zipLimits);}catch(e){if(e instanceof ZipError)throw e;throw new Error('Office-Datei konnte nicht als OOXML gelesen werden.');}
-  if(state.depth>0&&ext==='.xlsx'){
+  let entries, partial;
+  try {
+    if (options.partialExtraction === true) {
+      partial = readZipPartial(buffer, zipLimits);
+      entries = partial.payloads;
+    } else entries = readZip(buffer, zipLimits);
+  } catch(e){if(e instanceof ZipError)throw e;throw new Error('Office-Datei konnte nicht als OOXML gelesen werden.');}
+  if (partial) {
+    const verified = validateOpcControls({ declaredType: ext.slice(1),
+      entries: new Set(partial.entry_names), controlParts: partial.control_parts,
+      passivePresentation: ext === '.pptx', partialExtraction: true,
+      payloadCrcVerified: partial.crc_verified });
+    const findings = new Map();
+    for (const finding of [...partial.partial_findings, ...verified.partial_findings]) {
+      findings.set(finding.reason, (findings.get(finding.reason) || 0) + finding.count);
+    }
+    PARTIAL_ENTRY_STATE.set(entries, { findings, noted: new Set() });
+    validatePartialXmlEntries(entries, ext);
+  }
+  if(state.depth>0&&ext==='.xlsx'&&!partial){
     // An XLSX nested inside a presentation is not independently admitted
     // through the source FD. Verify its declared type and relationships before
     // its cells enter the Markdown representation. Legacy DOCX recursion has
@@ -1825,7 +1967,9 @@ function parseOoxml(buffer, ext, context, options = {}) {
     const controlParts=Object.fromEntries([...entries]
       .filter(([name])=>name==='[Content_Types].xml'||name.endsWith('.rels'))
       .map(([name,data])=>[name,data.toString('utf8')]));
-    validateOpcControls({declaredType:ext.slice(1),entries:new Set(entries.keys()),controlParts});
+    validateOpcControls({declaredType:ext.slice(1),entries:new Set(entries.keys()),controlParts,
+      partialExtraction: options.partialExtraction === true,
+      payloadCrcVerified: partial?.crc_verified !== false});
   }
   // One source-character gate precedes every body, metadata, image-scope and
   // legacy selector path. Never rely on a selected text decoder to see raw
@@ -1861,7 +2005,13 @@ function parseOoxml(buffer, ext, context, options = {}) {
     const prefix = { '.docx': 'word/media/', '.xlsx': 'xl/media/', '.pptx': 'ppt/media/' }[ext];
     result.attachments = mediaAttachments(entries, prefix, referencedOfficeMedia(entries, ext, options));
   }
-  return augmentEmbedded(result,entries,state,options);
+  result = augmentEmbedded(result,entries,state,options);
+  const partialState = PARTIAL_ENTRY_STATE.get(entries);
+  if (partialState) {
+    result.partial_findings = Object.freeze([...partialState.findings].map(([reason, count]) => Object.freeze({ reason, count })));
+    result.warnings.push(...result.partial_findings.map(finding => finding.reason));
+  }
+  return result;
 }
 
 function docxExtractionHasUnverifiedContent(entries) {

@@ -7,15 +7,13 @@ const { types } = require('node:util');
 const { resolveConversionRuntime } = require('./conversion-runtime-resolver');
 const { verifyNativeLauncherArtifact } = require('../native-launcher');
 const { verifyPosixSupervisor } = require('../posix-supervisor');
-const { createMarkdownExtraction, validateMarkdownExtractionForOptions, exactKeys, MAX_MARKDOWN_CHARS } = require('./markdown-contract');
+const { createMarkdownExtraction, validateMarkdownExtractionForOptions, exactKeys } = require('./markdown-contract');
 const { validateContentOptions, serializeContentOptions } = require('../core/content-options');
 const { SOURCE_TYPES, ERROR_CODES, MAX_INPUT_BYTES } = require('../core/conversion-worker-contract');
+const { CheckpointStream, MAX_RESPONSE_BYTES } = require('./conversion-checkpoints');
 const ERROR_SET = new Set(ERROR_CODES);
 const DEFAULT_TIMEOUT_MS = 300_000;
 const TERMINATION_GRACE_MS = 1500;
-// Transient private cropped PNGs have their own explicit 2 MiB compressed
-// budget (base64 overhead included), independent of Markdown size.
-const MAX_RESPONSE_BYTES = MAX_MARKDOWN_CHARS * 6 + Math.ceil(2 * 1024 * 1024 / 3) * 4 + 256 * 1024;
 const error = code => Object.assign(new Error('Die lokale Markdown-Konvertierung konnte nicht abgeschlossen werden.'), { code });
 const intrinsicAborted = Object.getOwnPropertyDescriptor(AbortSignal.prototype, 'aborted').get;
 const intrinsicAddListener = EventTarget.prototype.addEventListener;
@@ -133,6 +131,10 @@ async function convertBuffer(bytes, extension, options = {}) {
       env: environment, stdio: ['pipe', 'pipe', 'pipe'], shell: false, windowsHide: true }); }
     catch (failure) { reject(error(conversionStartFailureCode(failure, invocation.command))); return; }
     const chunks = [];
+    // Only the new Standalone Office/PDF path can produce partial units.
+    // Legacy/plugin and standalone raster/Markdown responses stay unchanged.
+    const checkpointStream = contentOptions && ['docx', 'xlsx', 'pptx', 'pdf'].includes(type)
+      ? new CheckpointStream(type, contentOptions) : null;
     let size = 0, stderrSize = 0, stopped = null, closed = false, settled = false, inputFlushed = false, grace;
     const finish = (failure, result) => {
       if (settled) return;
@@ -142,14 +144,27 @@ async function convertBuffer(bytes, extension, options = {}) {
       if (failure) reject(error(failure)); else resolve(result);
     };
     const stop = code => {
-      if (closed || stopped) return;
+      if (closed) return;
+      if (stopped) {
+        // A recoverable timeout is not permission to ignore a later hard
+        // transport/input/runtime fault while the worker is being reaped.
+        // Preserve the first hard cause (and cancellation), without another
+        // kill or a fresh grace period that could extend the original bound.
+        if (stopped === 'CONVERSION_TIMEOUT' && code !== 'CONVERSION_TIMEOUT') stopped = code;
+        return;
+      }
       stopped = code;
       grace = setTimeout(() => finish('CONVERSION_TERMINATION_UNCONFIRMED'), TERMINATION_GRACE_MS);
       // SIGTERM lets the POSIX supervisor reap its process group. Windows closes
       // the Job Object on launcher termination, including all worker threads.
       try { child.kill('SIGTERM'); } catch { /* bounded, explicitly unconfirmed below */ }
     };
-    const abort = () => stop('REQUEST_CANCELLED');
+    const abort = () => {
+      // Cancellation while a timed-out worker is being reaped must still
+      // suppress partial recovery; a previous timeout is not user consent.
+      if (!closed && stopped) { stopped = 'REQUEST_CANCELLED'; return; }
+      stop('REQUEST_CANCELLED');
+    };
     const timer = setTimeout(() => stop('CONVERSION_TIMEOUT'), timeoutMs);
     try {
       abortSignal?.subscribe(abort);
@@ -157,6 +172,11 @@ async function convertBuffer(bytes, extension, options = {}) {
     } catch { stop('CONVERSION_INPUT_INVALID'); }
     child.once('error', failure => stop(conversionStartFailureCode(failure, invocation.command)));
     child.stdout.on('data', chunk => {
+      if (checkpointStream) {
+        try { checkpointStream.push(chunk); }
+        catch (failure) { stop(failure?.code === 'CONVERSION_OUTPUT_LIMIT' ? 'CONVERSION_OUTPUT_LIMIT' : 'CONVERSION_RESPONSE_INVALID'); }
+        return;
+      }
       size += chunk.length;
       if (size > MAX_RESPONSE_BYTES) { stop('CONVERSION_OUTPUT_LIMIT'); return; }
       chunks.push(chunk);
@@ -170,17 +190,33 @@ async function convertBuffer(bytes, extension, options = {}) {
       // Keep the confirmed inner OS fact instead of hiding it behind that
       // secondary incomplete-input symptom; deliberate cancellation still wins.
       const nativeFailure = nativeConversionExitCode(code);
+      const partial = failure => inputFlushed && checkpointStream ? checkpointStream.recover(failure) : null;
       if (nativeFailure && stopped === 'CONVERSION_INPUT_INCOMPLETE') {
         finish(nativeFailure); return;
       }
-      if (stopped) { finish(stopped); return; }
-      if (nativeFailure) { finish(nativeFailure); return; }
+      if (stopped) {
+        // An explicit cancellation, invalid protocol or unconfirmed termination
+        // never becomes success. This branch runs only on actual child close.
+        const failure = stopped === 'CONVERSION_TIMEOUT' && nativeFailure && nativeFailure !== 'CONVERSION_RESOURCE_LIMIT'
+          ? nativeFailure : stopped;
+        const result = partial(failure);
+        if (result) finish(null, result); else finish(failure);
+        return;
+      }
+      if (nativeFailure) {
+        const result = partial(nativeFailure);
+        if (result) finish(null, result); else finish(nativeFailure);
+        return;
+      }
       try {
-        const response = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks)));
+        const response = checkpointStream ? checkpointStream.response()
+          : JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(Buffer.concat(chunks)));
         const responseSchema = contentOptions ? 'datasecure-conversion-response/2' : 'datasecure-conversion-response/1';
         if (code === 2 && exactKeys(response, ['schema', 'ok', 'error_code']) && response.ok === false &&
             response.schema === responseSchema && ERROR_SET.has(response.error_code)) {
-          finish(response.error_code); return;
+          const result = partial(response.error_code);
+          if (result) finish(null, result); else finish(response.error_code);
+          return;
         }
         if (code !== 0 || !exactKeys(response, ['schema', 'ok', 'result']) || response.ok !== true ||
             response.schema !== responseSchema) throw error('CONVERSION_RESPONSE_INVALID');

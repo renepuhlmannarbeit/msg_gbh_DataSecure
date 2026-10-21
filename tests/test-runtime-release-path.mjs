@@ -75,7 +75,7 @@ const projected = collectProductFiles(path.join(root, 'plugins', 'data-secure'))
 const entries = new Map(projected.map(file => [file.archivePath, fs.readFileSync(file.fullPath)]));
 // Inert private publication contracts are transitive dependencies of the shared
 // document store, not a Cowork capability or a shipped extraction runtime.
-const commonModules = ['anonymization-notices.js', 'anonymized-artifact.js', 'anonymized-store.js', 'confidential-overview.js', 'confidential-workbook.js', 'conversion-runtime-resolver.js', 'conversion-worker-contract.js', 'conversion-worker.js',
+const commonModules = ['anonymization-notices.js', 'anonymized-artifact.js', 'anonymized-store.js', 'confidential-overview.js', 'confidential-workbook.js', 'conversion-checkpoints.js', 'conversion-runtime-resolver.js', 'conversion-worker-contract.js', 'conversion-worker.js',
   'convert-next.js', 'identity-ledger.js', 'macos-bundle-layout.js', 'markdown-artifact.js', 'markdown-contract.js', 'markdown-retention.js', 'markdown-store.js', 'result-companions.js'];
 assert.deepEqual([...entries.keys()].filter(name => name.startsWith('server/standalone/')).sort(),
   commonModules.map(name => `server/standalone/${name}`).sort());

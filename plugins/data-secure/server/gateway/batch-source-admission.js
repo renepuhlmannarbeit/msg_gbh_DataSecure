@@ -2,6 +2,7 @@
 
 const fs = require('fs');
 const crypto = require('crypto');
+const { validateContentOptions } = require('../core/content-options');
 const {
   LIMITS,
   hasReparseComponent
@@ -49,6 +50,12 @@ function boundDescriptor(entry, deps = {}) {
 function planBatchAdmission(queue, deps = {}) {
   const io = deps.fs || fs;
   const inspect = deps.inspectSourceFormatFromFd || inspectSourceFormatFromFd;
+  // The product channel alone also describes historical /1 runs. Only a
+  // complete, validated /2 request may select the partial payload policy.
+  const contentOptions = Object.hasOwn(deps, 'contentOptions')
+    ? validateContentOptions(deps.contentOptions) : undefined;
+  const partialExtraction = contentOptions !== undefined && deps.productChannel === 'standalone' &&
+    ['markdown-only', 'markdown-and-anonymize'].includes(deps.processingMode);
   const plan = [];
   // Planning is deliberately mutation-free. A descriptor/read/identity error
   // means the intake boundary itself is untrustworthy and aborts the complete
@@ -61,6 +68,8 @@ function planBatchAdmission(queue, deps = {}) {
       result = inspect(opened.descriptor, opened.stat, extensionForName(entry.name), {
         processingMode: deps.processingMode,
         productChannel: deps.productChannel,
+        // No plugin or historical Standalone admission inherits /2 recovery.
+        partialExtraction,
         maxEntries: 20000,
         maxUncompressed: LIMITS.MAX_OOXML_EXPANDED_BYTES,
         fstatSync: io.fstatSync.bind(io),
@@ -102,7 +111,10 @@ function planBatchAdmission(queue, deps = {}) {
       entry,
       admission: candidate ? 'candidate' : 'stopped',
       error_code: candidate ? null : result.code,
-      source_sha256: candidate ? result.source_sha256 : null
+      source_sha256: candidate ? result.source_sha256 : null,
+      ...(candidate && result.structure?.partial_findings?.length ? {
+        partial_findings: result.structure.partial_findings
+      } : {})
     }));
   }
   return Object.freeze(plan);

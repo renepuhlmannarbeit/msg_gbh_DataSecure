@@ -1,6 +1,6 @@
 # Aktueller Iststand
 
-Stand: 21.10.2026 · 3.2.0-rc170 · gemeinsamer Windows-/Mac-Test-Pre-Release veröffentlicht; menschliche Abnahme offen.
+Stand: 22.10.2026 · 3.2.0-rc171 · neuer gemeinsamer Windows-/Mac-Test-Pre-Release in Vorbereitung; RC170 unverändert veröffentlicht.
 
 Veröffentlicht: **3.2.0-rc170**, gemeinsamer Windows-/Mac-Test-Pre-Release.
 PPTX-Kommentare eng passiv zugelassen, sichere PDF-/OCR-Zeichenhygiene;
@@ -9,6 +9,28 @@ Arbeitskopien ausRC169 beibehalten.
 Technische Endgates und unabhängige tatsächliche Artefaktgegenreviews bestanden;
 menschliche Desktop-/Excel-/Numbers-/Mac-Zielhostabnahme bleibt offen.
 RC169, RC168, RC167, RC166 und frühere Pakete bleiben unverändert erhalten.
+
+### Unveröffentlichter Quellnachtrag – PARTIAL-EXTRACTION-01
+
+Best-effort-Teilkonvertierung für DOCX/XLSX/PPTX/PDF im gemeinsamen Windows-/Mac-
+Code implementiert und mehrfach unabhängig gegengelesen. Nutzbare geprüfte
+Abschnitte trotz einzelner Bild-/Part-/Seitenfehler behalten, feste Auslassungs-
+hinweise; keine unsicheren Rohtextpräfixe, externen Abrufe oder leeren Erfolge.
+Workerende/Eingabeübergabe müssen vor Teilübernahme bestätigt sein; Abbruch,
+Isolations-/Protokoll-/Modell-/Policyfehler bleiben hart. Anonymisierung und
+technische Veröffentlichungskontrollen weiter unverändert. Ganze Office-
+Abschnitte unter unverändert8M einschließlich Ausgabeprojektion/Separatoren.
+Source04-FreezeFPdf5dd5a67e74650b7608c42350bc9a60c4224b49cb43898e4081fad37f844bdf/339;
+Gesamt-/Windows-Native-Endgates durch Nutzerunterbrechung unvollständig beendet;
+kein vollständiger Source04-Endnachweis. Keine alten FINALs umdeuten.
+Original-PPTX Source04 bereits PASS:61310 native Zeichen exakt erhalten,
+61723 insgesamt, Einschränkungen ausdrücklich ausgewiesen, Original bytegleich.
+Am22.10. neuer expliziter Releaseauftrag RC171: Prüfungen abschließen, Windows
+und beide Macs aus gleichem abschließendem Appcommit bauen, GitHub-Pre-Release
+und Windows-ZIP lokal mit Testplan. Desktoptests ausschließlich beim Nutzer;
+native Mac-Endgates neuer Bytes noch offen. RC170 unverändert erhalten.
+[Releaseauftrag](../acceptance/RC171_SHARED_RELEASE_20261022.md),
+[Plan und Grenzen](../acceptance/DOCUMENT_EXTRACTION_ARTIFACTS_20261021.md).
 
 ### Veröffentlicht – RC170 gemeinsamer Test-Pre-Release (21.10.2026)
 

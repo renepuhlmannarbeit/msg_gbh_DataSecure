@@ -99,6 +99,8 @@ function inspectSourceFormatFromFd(fd, stat, extension, options = {}) {
   const widePrivacy = options.processingMode === 'markdown-and-anonymize' &&
     (options.productChannel === 'standalone' ||
       (options.productChannel === 'plugin' && ['.xlsx', '.pptx'].includes(String(extension || '').toLowerCase())));
+  const partialExtraction = options.partialExtraction === true && options.productChannel === 'standalone' &&
+    ['markdown-only', 'markdown-and-anonymize'].includes(options.processingMode);
   const readSync = options.readSync || fs.readSync;
   const fstatSync = options.fstatSync || fs.fstatSync;
   const ext = String(extension || '').toLowerCase();
@@ -144,6 +146,7 @@ function inspectSourceFormatFromFd(fd, stat, extension, options = {}) {
         includeStructure: true,
         verifyPayloads: true,
         includeControls: true,
+        partialExtraction,
         maxEntryUncompressed: options.maxEntryUncompressed || 64 * 1024 * 1024,
         maxCompressionRatio: options.maxCompressionRatio || 1000,
         maxControlPartBytes: options.maxControlPartBytes || 2 * 1024 * 1024,
@@ -186,12 +189,18 @@ function inspectSourceFormatFromFd(fd, stat, extension, options = {}) {
         declaredType,
         entries: new Set(inspected.entry_names || []),
         controlParts: inspected.control_parts,
-        passivePresentation
+        passivePresentation,
+        partialExtraction,
+        payloadCrcVerified: inspected.crc_verified !== false
       });
     } catch (error) {
       if (!(error instanceof OpcValidationError)) throw error;
       return finish(verdict(declaredType, declaredType, 'rejected', error.code));
     }
+    if (partialExtraction) verifiedStructure = Object.freeze({
+      ...verifiedStructure,
+      partial_findings: Object.freeze([...(inspected.partial_findings || []), ...(verifiedStructure.partial_findings || [])])
+    });
     const enabled = PILOT_TYPES.has(declaredType) || conversion || widePrivacy;
     const result = verdict(declaredType, declaredType, enabled ? 'candidate' : 'not_released',
       enabled ? 'SOURCE_FORMAT_CANDIDATE' : 'SOURCE_FORMAT_NOT_RELEASED', verifiedStructure);

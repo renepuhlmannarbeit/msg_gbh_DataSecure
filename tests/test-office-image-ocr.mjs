@@ -32,20 +32,20 @@ const nativeText = 'NATIVE ORIGINAL § € ± →';
 const relations = rows => `<Relationships xmlns="${PR}">${rows.map(([id, kind, target, mode]) =>
   `<Relationship Id="${id}" Type="${R}/${kind}" Target="${target}"${mode ? ` TargetMode="${mode}"` : ''}/>`).join('')}</Relationships>`;
 
-function office(type, media, relationship = 'internal', sensitiveTable = false) {
+function office(type, media, relationship = 'internal', sensitiveTable = false, sourceText = nativeText) {
   const root = { docx: 'word', xlsx: 'xl', pptx: 'ppt' }[type];
   const imageRows = media.map((item, index) => [`img${index}`, relationship === 'wrong-type' ? 'hyperlink' : 'image',
     relationship === 'external' ? 'https://never-read.invalid/private.png' : `${type === 'docx' ? '' : '../'}media/image${index}.${item.ext}`,
     relationship === 'external' ? 'External' : undefined]);
   const wordTable = sensitiveTable ? '<w:tbl>' + ['Name', 'Qvx'].map(text =>
     `<w:tr><w:tc><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:tc></w:tr>`).join('') + '</w:tbl>' : '';
-  const sheetRows = (sensitiveTable ? ['Name', 'Qvx', nativeText] : [nativeText]).map((text, index) =>
+  const sheetRows = (sensitiveTable ? ['Name', 'Qvx', sourceText] : [sourceText]).map((text, index) =>
     `<row r="${index + 1}"><c r="A${index + 1}" t="inlineStr"><is><t>${text}</t></is></c></row>`).join('');
   const slideTable = sensitiveTable ? '<p:graphicFrame><a:graphic><a:graphicData><a:tbl>' + ['Name', 'Qvx'].map(text =>
     `<a:tr><a:tc><a:txBody><a:p><a:r><a:t>${text}</a:t></a:r></a:p></a:txBody></a:tc></a:tr>`).join('') +
     '</a:tbl></a:graphicData></a:graphic></p:graphicFrame>' : '';
   const entries = type === 'docx' ? [
-    ['word/document.xml', `<w:document xmlns:w="${W}" xmlns:a="${A}" xmlns:r="${R}"><w:body><w:p><w:r><w:t>${nativeText}</w:t></w:r></w:p>${wordTable}${media.map((_, index) => `<w:p><w:r><w:drawing><a:blip r:embed="img${index}"/></w:drawing></w:r></w:p>`).join('')}</w:body></w:document>`],
+    ['word/document.xml', `<w:document xmlns:w="${W}" xmlns:a="${A}" xmlns:r="${R}"><w:body><w:p><w:r><w:t>${sourceText}</w:t></w:r></w:p>${wordTable}${media.map((_, index) => `<w:p><w:r><w:drawing><a:blip r:embed="img${index}"/></w:drawing></w:r></w:p>`).join('')}</w:body></w:document>`],
     ...(relationship === 'orphan' ? [] : [['word/_rels/document.xml.rels', relations(imageRows)]])
   ] : type === 'xlsx' ? [
     ['xl/workbook.xml', `<workbook xmlns="${S}" xmlns:r="${R}"><sheets><sheet name="Tabelle" sheetId="1" r:id="s1"/></sheets></workbook>`],
@@ -57,7 +57,7 @@ function office(type, media, relationship = 'internal', sensitiveTable = false) 
   ] : [
     ['ppt/presentation.xml', `<p:presentation xmlns:p="${P}" xmlns:r="${R}"><p:sldIdLst><p:sldId id="256" r:id="s1"/></p:sldIdLst></p:presentation>`],
     ['ppt/_rels/presentation.xml.rels', relations([['s1', 'slide', 'slides/slide1.xml']])],
-    ['ppt/slides/slide1.xml', `<p:sld xmlns:p="${P}" xmlns:a="${A}" xmlns:r="${R}"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>${nativeText}</a:t></a:r></a:p></p:txBody></p:sp>${slideTable}${media.map((_, index) => `<p:pic><a:blip r:embed="img${index}"/></p:pic>`).join('')}</p:spTree></p:cSld></p:sld>`],
+    ['ppt/slides/slide1.xml', `<p:sld xmlns:p="${P}" xmlns:a="${A}" xmlns:r="${R}"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>${sourceText}</a:t></a:r></a:p></p:txBody></p:sp>${slideTable}${media.map((_, index) => `<p:pic><a:blip r:embed="img${index}"/></p:pic>`).join('')}</p:spTree></p:cSld></p:sld>`],
     ...(relationship === 'orphan' ? [] : [['ppt/slides/_rels/slide1.xml.rels', relations(imageRows)]])
   ];
   return zipStore([...opcControlEntries(type), ...entries, ...media.map((item, index) => [`${root}/media/image${index}.${item.ext}`, item.bytes])]);
@@ -283,6 +283,74 @@ if (process.argv.includes('--source-only')) {
       assert.equal((result.markdown.match(/RASTER ORIGINAL/gu) || []).length, 2);
       for (const contact of result.ocr_contacts) assert.ok(result.markdown.slice(contact.start, contact.end).includes(contact.kind === 'email' ? '@' : '555'));
     });
+    for (const type of ['docx','xlsx','pptx']) await check(`${target}: ${type} mixed unsupported and damaged pictures preserve native text and later OCR provenance`, async () => {
+      const source = office(type, [{ext:'emf',bytes:Buffer.from('unsupported EMF')},
+        {ext:'png',bytes:Buffer.from('damaged PNG')},{ext:'png',bytes:png},
+        {ext:'svg',bytes:Buffer.from('<svg/>')},{ext:'png',bytes:png}]);
+      const before = hash(source);
+      const result = await convertBuffer(source,`.${type}`,{contentOptions:options(true)});
+      assert.equal(hash(source),before); assert.match(result.markdown,/NATIVE ORIGINAL/u);
+      assert.equal((result.markdown.match(/RASTER ORIGINAL/gu)||[]).length,2);
+      for (const code of ['OFFICE_IMAGE_FORMAT_EMF_UNSUPPORTED','OFFICE_IMAGE_FORMAT_SVG_UNSUPPORTED','IMAGE_CONTENT_DAMAGED'])
+        assert.ok(result.coverage.reason_codes.includes(code),code);
+      assert.deepEqual([...new Set(result.ocr_contacts.map(item=>item.page))],[3,5]);
+      for (const contact of result.ocr_contacts) assert.ok(result.markdown.slice(contact.start,contact.end).includes(contact.kind==='email'?'@':'555'));
+      const { extractSourceForPrivacy } = require(path.join(server,'core/markdown-first-privacy'));
+      const privateText = await extractSourceForPrivacy(source,`.${type}`,{contentOptions:options(true),convertBuffer:async()=>result});
+      assert.equal(privateText.sourceExtractionCoverage.status,'incomplete');
+      assert.ok(privateText.sourceExtractionCoverage.reason_codes.includes('OFFICE_IMAGE_FORMAT_EMF_UNSUPPORTED'));
+      assert.equal(privateText.ocrContacts.length,result.ocr_contacts.length);
+    });
+    await check(`${target}: completed native Office sections survive the unchanged 8M document budget and reach the checkpoint pipe`, async () => {
+      const body = 'N'.repeat(7_900_000), footer = 'F'.repeat(200_000);
+      const source = zipStore([...opcControlEntries('docx',{additionalOverrides:[
+        {part:'word/footer1.xml',contentType:'application/vnd.openxmlformats-officedocument.wordprocessingml.footer+xml'}]}),
+        ['word/document.xml',`<w:document xmlns:w="${W}" xmlns:r="${R}"><w:body><w:p><w:r><w:t>${body}</w:t></w:r></w:p><w:sectPr><w:footerReference w:type="default" r:id="f1"/></w:sectPr></w:body></w:document>`],
+        ['word/_rels/document.xml.rels',relations([['f1','footer','footer1.xml']])],
+        ['word/footer1.xml',`<w:ftr xmlns:w="${W}"><w:p><w:r><w:t>${footer}</w:t></w:r></w:p></w:ftr>`]
+      ]), before = hash(source);
+      const result = await convertBuffer(source,'.docx',{contentOptions:options(true)});
+      assert.equal(result.markdown.length,body.length); assert.ok(/^N+$/u.test(result.markdown));
+      assert.ok(result.coverage.reason_codes.includes('TEXT_LIMIT_PARTIAL'));
+      assert.equal(result.coverage.status,'incomplete'); assert.equal(result.ocr_contacts,undefined);
+      await assert.rejects(convertBuffer(source,'.docx'),{code:'TEXT_TOO_LARGE'});
+      assert.equal(hash(source),before);
+    });
+    await check(`${target}: generated notes never rescue omitted native sections but actual later image text still can`, async () => {
+      const make = image => zipStore([...opcControlEntries('pptx'),
+        ['ppt/presentation.xml',`<p:presentation xmlns:p="${P}" xmlns:r="${R}"><p:sldIdLst><p:sldId id="256" r:id="s1"/></p:sldIdLst></p:presentation>`],
+        ['ppt/_rels/presentation.xml.rels',relations([['s1','slide','slides/slide1.xml']])],
+        ['ppt/slides/slide1.xml',`<p:sld xmlns:p="${P}" xmlns:a="${A}" xmlns:r="${R}"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>${'N'.repeat(8_000_000)}</a:t></a:r></a:p></p:txBody></p:sp>${image ? '<p:pic><a:blip r:embed="i1"/></p:pic>' : ''}</p:spTree></p:cSld></p:sld>`],
+        ...(image ? [['ppt/slides/_rels/slide1.xml.rels',relations([['i1','image','../media/image1.png']])],
+          ['ppt/media/image1.png',image]] : [])
+      ]);
+      const source = make(png), before = hash(source), opts = { ...options(true),markdownOutput:'notes-v1' };
+      await assert.rejects(convertBuffer(source,'.pptx',{contentOptions:{...opts,imageOcr:false}}),{code:'TEXT_TOO_LARGE'});
+      const result = await convertBuffer(source,'.pptx',{contentOptions:opts});
+      assert.match(result.markdown,/RASTER ORIGINAL/u);
+      assert.doesNotMatch(result.markdown,/N{32}|Lokal erkannter Bildtext/u);
+      assert.ok(result.coverage.reason_codes.includes('TEXT_LIMIT_PARTIAL'));
+      assert.equal(result.coverage.status,'incomplete');
+      await assert.rejects(convertBuffer(make(tiny),'.pptx',{contentOptions:opts}),{code:'CONVERSION_OCR_TEXT_EMPTY'});
+      await assert.rejects(convertBuffer(make(null),'.pptx',{contentOptions:opts}),{code:'TEXT_TOO_LARGE'});
+      assert.equal(hash(source),before);
+    });
+    await check(`${target}: image-only slides need real OCR text; parser-owned slide labels cannot become successful content`, async () => {
+      for (const markdownOutput of ['content-v1','notes-v1']) {
+        const opts = {...options(true),markdownOutput};
+        const emf = office('pptx',[{ext:'emf',bytes:Buffer.from('unsupported EMF')}],'internal',false,'');
+        const before = hash(emf);
+        await assert.rejects(convertBuffer(emf,'.pptx',{contentOptions:opts}),{code:'CONVERSION_OCR_TEXT_EMPTY'});
+        await assert.rejects(convertBuffer(emf,'.pptx',{contentOptions:{...opts,imageOcr:false}}),{code:'CONVERSION_EXTRACTION_FAILED'});
+        await assert.rejects(convertBuffer(office('pptx',[{ext:'png',bytes:tiny}],'internal',false,''),'.pptx',
+          {contentOptions:opts}),{code:'CONVERSION_OCR_TEXT_EMPTY'});
+        const result = await convertBuffer(office('pptx',[{ext:'png',bytes:png}],'internal',false,''),'.pptx',{contentOptions:opts});
+        assert.match(result.markdown,/RASTER ORIGINAL/u);
+        assert.doesNotMatch(result.markdown,/# Folie/u);
+        assert.ok(result.ocr_contacts?.length);
+        assert.equal(hash(emf),before);
+      }
+    });
     await check(`${target}: disabled Office OCR and unsafe relationships never start Tesseract`, async () => {
       diagnostics = '';
       for (const type of ['docx', 'xlsx', 'pptx']) {
@@ -291,7 +359,9 @@ if (process.argv.includes('--source-only')) {
         const orphan = await convertBuffer(office(type, [{ ext: 'png', bytes: png }], 'orphan'), `.${type}`, { contentOptions: options(true) });
         assert.doesNotMatch(orphan.markdown, /RASTER ORIGINAL/u);
       }
-      await assert.rejects(convertBuffer(office('docx', [{ ext: 'svg', bytes: Buffer.from('<svg/>') }]), '.docx', { contentOptions: options(true) }), { code: 'OFFICE_IMAGE_OCR_UNAVAILABLE' });
+      const partial = await convertBuffer(office('docx', [{ ext: 'svg', bytes: Buffer.from('<svg/>') }]), '.docx', { contentOptions: options(true) });
+      assert.match(partial.markdown, /NATIVE ORIGINAL/u);
+      assert.ok(partial.coverage.reason_codes.includes('OFFICE_IMAGE_FORMAT_SVG_UNSUPPORTED'));
       assert.doesNotMatch(diagnostics, /CONVERSION_OCR_(?:STARTING|READY)/u);
     });
     await check(`${target}: empty decorative raster does not erase native Office prose or invent image text`, async () => {

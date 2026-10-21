@@ -34,6 +34,7 @@ for (const [name, value] of entries) {
 for (const required of ['DataSecure Standalone.exe', 'datasecure-core-x86_64-pc-windows-msvc.exe',
   'server/standalone/desktop-sidecar.js', 'server/network-deny.cjs', 'RUNTIME-EVIDENCE.json',
   'server/standalone/conversion-worker.js', 'server/standalone/conversion-worker-child.js',
+  'server/standalone/conversion-checkpoints.js',
   'server/standalone/conversion-runtime/RUNTIME.json', 'server/standalone/conversion-runtime/node.exe',
   'server/standalone/conversion-runtime/THIRD_PARTY_NOTICES.txt',
   'server/native/windows-x64/datasecure-sandbox.exe',

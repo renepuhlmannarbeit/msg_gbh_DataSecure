@@ -60,7 +60,8 @@ function extractCsv(source, literalGfm) {
 
 function extractMarkdownAndMedia(buffer, extension, options = {}, referencedImagesOnly = false) {
   if (!options || typeof options !== 'object' || Array.isArray(options) ||
-      Object.keys(options).some((key) => !['omitDocxHeaderFooter', 'markdownOutput'].includes(key)) ||
+      Object.keys(options).some((key) => !['omitDocxHeaderFooter', 'markdownOutput', 'partialExtraction'].includes(key)) ||
+      (options.partialExtraction !== undefined && typeof options.partialExtraction !== 'boolean') ||
       (options.omitDocxHeaderFooter !== undefined && typeof options.omitDocxHeaderFooter !== 'boolean')) {
     throw new MarkdownExtractionError('CONVERSION_INPUT_INVALID');
   }
@@ -92,6 +93,11 @@ function extractMarkdownAndMedia(buffer, extension, options = {}, referencedImag
     } else {
       const parsed = parseOoxml(buffer, `.${source_type}`, undefined, {
         preserveText: true,
+        ...(options.partialExtraction === true ? { partialExtraction: true,
+          // Internal, fixed renderer only. No caller callback crosses this
+          // module's closed options or the worker's serialized request.
+          sectionRenderer: section => options.markdownOutput === 'content-v1'
+            ? officeContent([section]) : section.markdown } : {}),
         ...(referencedImagesOnly ? { referencedImagesOnly: true } : {}),
         ...(options.markdownOutput === 'content-v1' ? { literalMarkup: true } : {}),
         ...(options.omitDocxHeaderFooter === true ? { omitDocxHeaderFooter: true } : {})
@@ -101,15 +107,29 @@ function extractMarkdownAndMedia(buffer, extension, options = {}, referencedImag
       // receives these bytes; the public extraction record never contains them.
       attachments = parsed.attachments;
       markdown = options.markdownOutput === 'content-v1' ? officeContent(parsed.sections) : parsed.markdown;
+      const retainedSourceText = Boolean(markdown.trim());
       if (options.omitDocxHeaderFooter === true) reasons.add('DOCX_HEADER_FOOTER_EXCLUDED_BY_POLICY');
       if (parsed.warnings.length || source_type === 'xlsx' || source_type === 'pptx') reasons.add('SOURCE_COVERAGE_UNVERIFIED');
+      for (const warning of parsed.warnings) {
+        if (['DOCUMENT_PARTS_DAMAGED', 'EXTERNAL_CONTENT_NOT_READ', 'IMAGE_PROCESSING_LIMIT', 'TEXT_LIMIT_PARTIAL'].includes(warning)) reasons.add(warning);
+      }
+      // An automatically generated omission notice is not a source section.
+      // Only the worker's media entrance may still recover actual image text
+      // after all native sections were omitted at the unchanged text budget.
+      if (options.partialExtraction === true && !referencedImagesOnly && !retainedSourceText && reasons.has('TEXT_LIMIT_PARTIAL')) {
+        throw new MarkdownExtractionError('TEXT_TOO_LARGE');
+      }
       if (parsed.attachments.length) {
         reasons.add('VISUAL_CONTENT_NOT_EXTRACTED');
         // The .md file is useful on its own when passed to an AI: explain the
         // omission without embedding image bytes, XML or source filenames, and
         // never invent an image title/description. Retain all extracted prose,
         // table cells, chart data and text-box text above this fixed notice.
-        if (options.markdownOutput !== 'content-v1') markdown += `${markdown ? '\n\n' : ''}${visualNotices({ image: true })}`;
+        if (options.markdownOutput !== 'content-v1' && (options.partialExtraction !== true || retainedSourceText)) {
+          const notice = `${markdown ? '\n\n' : ''}${visualNotices({ image: true })}`;
+          if (options.partialExtraction === true && markdown.length + notice.length > MAX_MARKDOWN_CHARS) reasons.add('TEXT_LIMIT_PARTIAL');
+          else markdown += notice;
+        }
       }
     }
     const reason_codes = [...reasons].sort();

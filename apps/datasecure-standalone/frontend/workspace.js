@@ -977,7 +977,24 @@
           IMAGE_OCR_DISABLED_BY_POLICY: 'Text in Bildern wurde wegen ausgeschalteter OCR nicht gelesen',
           SCAN_OCR_DISABLED_BY_POLICY: 'Scantext wurde wegen ausgeschalteter OCR nicht gelesen',
           OCR_NOT_VERIFIED: 'Automatisch erkannter Text kann Lesefehler enthalten; nicht jedes Zeichen wurde mit dem Original verglichen',
-          OCR_CONTACT_VALUES_UNVERIFIED: 'Erkannte E-Mail-Adressen und Telefonnummern wurden nicht mit dem Original verglichen' };
+          OCR_CONTACT_VALUES_UNVERIFIED: 'Erkannte E-Mail-Adressen und Telefonnummern wurden nicht mit dem Original verglichen',
+          OFFICE_IMAGE_FORMAT_EMF_UNSUPPORTED: 'EMF-Grafiken konnten nicht gelesen werden; der Dokumentinhalt wurde nur teilweise übernommen',
+          OFFICE_IMAGE_FORMAT_WMF_UNSUPPORTED: 'WMF-Grafiken konnten nicht gelesen werden; der Dokumentinhalt wurde nur teilweise übernommen',
+          OFFICE_IMAGE_FORMAT_SVG_UNSUPPORTED: 'SVG-Grafiken konnten nicht gelesen werden; der Dokumentinhalt wurde nur teilweise übernommen',
+          OFFICE_IMAGE_FORMAT_GIF_UNSUPPORTED: 'GIF-Bilder konnten nicht gelesen werden; der Dokumentinhalt wurde nur teilweise übernommen',
+          OFFICE_IMAGE_FORMAT_TIFF_UNSUPPORTED: 'TIFF-Bilder konnten nicht gelesen werden; der Dokumentinhalt wurde nur teilweise übernommen',
+          OFFICE_IMAGE_FORMAT_WEBP_UNSUPPORTED: 'WebP-Bilder konnten nicht gelesen werden; der Dokumentinhalt wurde nur teilweise übernommen',
+          OFFICE_IMAGE_FORMAT_OTHER_UNSUPPORTED: 'Ein nicht unterstütztes Bildformat wurde nicht gelesen; der Dokumentinhalt wurde nur teilweise übernommen',
+          IMAGE_CONTENT_DAMAGED: 'Mindestens ein Bild ist beschädigt und wurde nicht gelesen; der Dokumentinhalt wurde nur teilweise übernommen',
+          IMAGE_PROCESSING_LIMIT: 'Die Bildverarbeitung erreichte eine technische Grenze; der Dokumentinhalt wurde nur teilweise übernommen',
+          IMAGE_OCR_FAILED: 'Die Texterkennung eines Bildes ist fehlgeschlagen; der Dokumentinhalt wurde nur teilweise übernommen',
+          DOCUMENT_PARTS_DAMAGED: 'Beschädigte Dokumentteile konnten nicht gelesen werden; der Dokumentinhalt wurde nur teilweise übernommen',
+          EXTERNAL_CONTENT_NOT_READ: 'Extern verknüpfte Inhalte wurden nicht nachgeladen; der Dokumentinhalt wurde nur teilweise übernommen',
+          CONVERSION_RESOURCE_LIMIT_PARTIAL: 'Eine technische Ressourcenbegrenzung beendete die weitere Verarbeitung; nur ein Teil des Dokuments wurde übernommen',
+          CONVERSION_TIMEOUT_PARTIAL: 'Die verfügbare Verarbeitungszeit war ausgeschöpft; nur ein Teil des Dokuments wurde übernommen',
+          TEXT_LIMIT_PARTIAL: 'Die Textmengengrenze wurde erreicht; nur ein Teil des Dokuments wurde übernommen',
+          PDF_PAGE_NOT_READ: 'Mindestens eine PDF-Seite konnte nicht gelesen werden; der PDF-Inhalt wurde nur teilweise übernommen',
+          PDF_IMAGE_NOT_READ: 'Mindestens ein Bildbereich der PDF konnte nicht gelesen werden; der PDF-Inhalt wurde nur teilweise übernommen' };
         for (const file of (result.content_notices || []).slice(0, 200)) if (safeLabel(file.name)) {
           const card = element('div', undefined, 'notice-card');
           card.append(element('strong', file.name), element('p', (file.reason_codes || []).map(code => descriptions[code] || 'Inhaltsvollständigkeit eingeschränkt; Original vergleichen').join('; ') || 'Inhaltsvollständigkeit eingeschränkt; Original vergleichen', 'meta'));

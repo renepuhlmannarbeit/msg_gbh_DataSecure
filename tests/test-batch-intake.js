@@ -44,10 +44,10 @@ function fixture(options = {}) {
     validateBatchLimits: () => {},
     storageStatus: () => ({ safe: true }),
     hasReparseComponent: () => false,
-    planBatchAdmission(queue) {
+    planBatchAdmission(queue, settings) {
       events.push('plan');
       return typeof options.planBatchAdmission === 'function'
-        ? options.planBatchAdmission(queue)
+        ? options.planBatchAdmission(queue, settings)
         : queue.map((entry) => ({ entry, admission: 'candidate', error_code: null }));
     },
     assertStagingCapacity(queue) { events.push(`capacity:${queue.length}`); },
@@ -621,6 +621,31 @@ test('a planning trust failure occurs before work, capacity and journal mutation
     assert.strictEqual(fs.existsSync(item.work), false);
     assert.strictEqual(fs.existsSync(item.journal), false);
   } finally { item.cleanup(); }
+});
+
+test('intake forwards only its validated current content contract to source admission', () => {
+  const contentOptions = { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: true, imageOcr: true };
+  for (const current of [false, true]) {
+    let observed;
+    const item = fixture({ productChannel: 'standalone',
+      expectedIntakeSchema: current ? 'datasecure-intake/3' : 'datasecure-intake/1',
+      captureDocumentRun() {},
+      planBatchAdmission(queue, settings) {
+        observed = settings;
+        return queue.map(entry => ({ entry, admission: 'candidate', error_code: null }));
+      } });
+    try {
+      const result = item.begin([item.queueEntry()], { processingMode: 'markdown-and-anonymize',
+        ...(current ? { documentReview: true, contentOptions } : {}) });
+      assert.strictEqual(result.ok, true);
+      assert.strictEqual(Object.hasOwn(observed, 'contentOptions'), current);
+      if (current) {
+        assert.deepStrictEqual(observed.contentOptions, contentOptions);
+        assert.notStrictEqual(observed.contentOptions, contentOptions, 'admission receives the validated copy, not the caller object');
+        assert.strictEqual(Object.isFrozen(observed.contentOptions), true);
+      }
+    } finally { item.cleanup(); }
+  }
 });
 
 test('conservative automatic intake seals the policy only for the new Standalone anonymization contract', () => {

@@ -205,6 +205,8 @@ jobs:
         run: |
           set -euo pipefail
           node tests/test-import-macos-core-candidate.mjs
+          node tests/test-partial-conversion.js
+          node tests/test-conversion-checkpoints.js
           node tests/test-uat-fixture-generation.js
           node tests/test-legacy-input-migration.js
           node tests/test-process-identity.js

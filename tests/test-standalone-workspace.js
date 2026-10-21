@@ -2916,6 +2916,82 @@ function conversionFeedback(overrides = {}) {
   return { schema: 'datasecure-conversion-feedback/1', ocr_enabled: false, selected_count: 133, result_count: 116,
     not_converted_count: 17, ocr_omitted_count: 17, error_count: 0, content_notice_count: 35, pending_count: 0, complete: true, ...overrides };
 }
+const partialContentNotices = [
+  ['OFFICE_IMAGE_FORMAT_EMF_UNSUPPORTED', /EMF-Grafiken/u],
+  ['OFFICE_IMAGE_FORMAT_WMF_UNSUPPORTED', /WMF-Grafiken/u],
+  ['OFFICE_IMAGE_FORMAT_SVG_UNSUPPORTED', /SVG-Grafiken/u],
+  ['OFFICE_IMAGE_FORMAT_GIF_UNSUPPORTED', /GIF-Bilder/u],
+  ['OFFICE_IMAGE_FORMAT_TIFF_UNSUPPORTED', /TIFF-Bilder/u],
+  ['OFFICE_IMAGE_FORMAT_WEBP_UNSUPPORTED', /WebP-Bilder/u],
+  ['OFFICE_IMAGE_FORMAT_OTHER_UNSUPPORTED', /nicht unterstütztes Bildformat/u],
+  ['IMAGE_CONTENT_DAMAGED', /Bild ist beschädigt/u],
+  ['IMAGE_PROCESSING_LIMIT', /Bildverarbeitung.*technische Grenze/u],
+  ['IMAGE_OCR_FAILED', /Texterkennung.*fehlgeschlagen/u],
+  ['DOCUMENT_PARTS_DAMAGED', /Beschädigte Dokumentteile/u],
+  ['EXTERNAL_CONTENT_NOT_READ', /Extern verknüpfte Inhalte.*nicht nachgeladen/u],
+  ['CONVERSION_RESOURCE_LIMIT_PARTIAL', /Ressourcenbegrenzung/u],
+  ['CONVERSION_TIMEOUT_PARTIAL', /Verarbeitungszeit.*ausgeschöpft/u],
+  ['TEXT_LIMIT_PARTIAL', /Textmengengrenze/u],
+  ['PDF_PAGE_NOT_READ', /PDF-Seite.*nicht gelesen/u],
+  ['PDF_IMAGE_NOT_READ', /Bildbereich der PDF.*nicht gelesen/u]
+];
+for (const mode of ['markdown-only', 'markdown-and-anonymize']) for (const [code, expected] of partialContentNotices)
+testAsync(`partial content notice has a concrete German reason and never restarts: ${mode}/${code}`, async () => {
+  const fb = conversionFeedback({ ocr_enabled: true, selected_count: 1, result_count: 1,
+    not_converted_count: 0, ocr_omitted_count: 0, error_count: 0, content_notice_count: 1 });
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_run_failures') return { local_ui_only: true, external_disclosure: false, available: true,
+      total: 0, files: [], content_notice_count: 1, content_notice_breakdown_complete: true,
+      ...(mode === 'markdown-only' ? { conversion_feedback: fb } : {}),
+      content_notices: [{ name: 'Inhalt.pptx', reason_codes: [code] }] };
+    return fallback();
+  } }); await tick();
+  h.model.entries = [{ batch_id: B, processing_mode: mode, status: 'results_available', selected_count: 1,
+    result_count: 1, failed_count: 0, results_available: true, result_location: 'available',
+    content_notice_count: 1, content_notice_breakdown_complete: true,
+    ...(mode === 'markdown-only' ? { conversion_feedback: fb } : {}) }];
+  await h.act('nav-history'); await h.act(`history-${B}-problems`);
+  const notices = withClass(h.el(`history-${B}-files`), 'notice-card');
+  assert.equal(notices.length, 1); assert.match(notices[0].textContent, expected);
+  assert.match(notices[0].textContent, /nur teilweise übernommen|nur ein Teil des Dokuments/u);
+  assert.doesNotMatch(notices[0].textContent, new RegExp(code, 'u'));
+  assert.doesNotMatch(notices[0].textContent, /ausgeschaltet|ohne OCR|vollständig übernommen|vollständig anonymisiert/u);
+  assert.match(h.el('history-list').children[0].textContent, /abgeschlossen.*mit Hinweisen/u);
+  assert.equal(h.el(`history-${B}-results`).textContent, 'Ergebnisordner öffnen');
+  noAutomaticDecision(h);
+  assert.equal(h.calls.some(call => call.command === 'continue_history_batch'), false);
+});
+
+testAsync('actual pure CSV notice presenter spells out all partial reasons without changing legacy anonymization columns', async () => {
+  // Execute the real pure presenter and CSV/source-label helpers in isolation.
+  // This checks presentation bytes only, not filesystem publication or native authority.
+  const exporter = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/gateway/result-export.js'), 'utf8');
+  const mapping = fs.readFileSync(path.join(__dirname, '../plugins/data-secure/server/gateway/mapping.js'), 'utf8');
+  const between = (text, first, next) => {
+    const start = text.indexOf(first), end = text.indexOf(next, start);
+    assert.ok(start >= 0 && end > start); return text.slice(start, end);
+  };
+  const constants = ['SCHEMA', 'CONTENT_ANONYMIZED_SCHEMA', 'LEGACY_MARKDOWN_SCHEMA', 'VISIBLE_MAPPING_HEADER'].map(name => {
+    const match = exporter.match(new RegExp(`^const ${name} = '[^']*';`, 'mu')); assert.ok(match); return match[0];
+  }).join('\n');
+  const present = vm.runInNewContext(constants + '\n' +
+    between(mapping, 'function quoteCsvField(', 'function sourceIdentityNote(') + '\n' +
+    between(exporter, 'function validSourceLabel(', 'function validResultFile(') + '\n' +
+    between(exporter, 'function visibleMappingBytes(', 'function exportVisibleMapping(') + '\nvisibleMappingBytes;', { Buffer });
+  const legacySchema = /const LEGACY_MARKDOWN_SCHEMA = '([^']+)';/u.exec(exporter)[1];
+  for (const [code, expected] of partialContentNotices) {
+    const csv = present({ schema: legacySchema, items: [{ source_label: 'Quelle.pptx', file: 'Quelle.md',
+      extraction_grade: 'incomplete', reason_codes: [code] }] }).toString('utf8');
+    assert.match(csv, expected); assert.match(csv, /nur teilweise übernommen|nur ein Teil des Dokuments/u);
+    assert.doesNotMatch(csv, new RegExp(code, 'u'));
+    assert.doesNotMatch(csv, /ausgeschaltet|ohne OCR|Text vollständig extrahiert/u);
+  }
+  const anonymousSchema = /const CONTENT_ANONYMIZED_SCHEMA = '([^']+)';/u.exec(exporter)[1];
+  const anonymous = present({ schema: anonymousSchema, items: [{ source_label: 'Quelle.pptx', file: 'Dokument_01.md',
+    extraction_grade: 'incomplete', reason_codes: ['IMAGE_OCR_FAILED'] }] }).toString('utf8');
+  assert.equal(anonymous, '\uFEFFOriginaldatei;Anonymisiertes Ergebnis\r\n"Quelle.pptx";"Dokument_01.md"\r\n');
+});
+
 testAsync('bound raw completion makes results primary, explains omissions and separates content notices', async () => {
   const h = harness({ invoke(command, args, fallback) {
     if (command === 'get_run_failures') return { local_ui_only: true, external_disclosure: false, available: true, total: 17,

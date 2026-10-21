@@ -24,6 +24,9 @@ const sharedStandaloneModules = new Set([
   'server/standalone/macos-bundle-layout.js',
   'server/standalone/conversion-worker-contract.js',
   'server/standalone/conversion-worker.js',
+  // Bounded pure framing imported by the shared worker controller. It does
+  // not grant Cowork a converter, partial extraction or publication action.
+  'server/standalone/conversion-checkpoints.js',
   'server/standalone/convert-next.js',
   'server/standalone/markdown-artifact.js',
   'server/standalone/markdown-contract.js',

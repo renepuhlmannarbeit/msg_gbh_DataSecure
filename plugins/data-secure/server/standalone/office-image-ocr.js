@@ -75,6 +75,51 @@ function prepareOfficeImagePlan(attachments) {
   } catch (error) { for (const item of plan) item.bytes.fill(0); throw error; }
 }
 
+// Standalone /2 only. The strict planner above remains the Markdown/legacy
+// boundary. These bytes have already been authorized by the Office reader;
+// an unsupported picture does not revoke the other document text.
+function preparePartialOfficeImagePlan(attachments) {
+  if (!Array.isArray(attachments)) fail('CONVERSION_INPUT_INVALID');
+  const plan = [], sources = new Set();
+  const formats = { emf: 'EMF', wmf: 'WMF', svg: 'SVG', gif: 'GIF', tif: 'TIFF', tiff: 'TIFF', webp: 'WEBP' };
+  let totalBytes = 0, totalPixels = 0;
+  try {
+    for (const [index, attachment] of attachments.entries()) {
+      const ordinal = index + 1;
+      if (index >= RESOURCE_LIMITS.MAX_VISUAL_ASSETS) {
+        plan.push({ ordinal, reason: 'IMAGE_PROCESSING_LIMIT' }); break;
+      }
+      if (typeof attachment?.source_part !== 'string' || !attachment.source_part ||
+          sources.has(attachment.source_part)) fail('CONVERSION_INPUT_INVALID');
+      sources.add(attachment.source_part);
+      const pair = Object.hasOwn(TYPES, attachment.extension || '') ? TYPES[attachment.extension] : null;
+      if (!pair || attachment.type !== 'image' || attachment.mimeType !== pair[1]) {
+        const format = Object.hasOwn(formats, attachment.extension || '') ? formats[attachment.extension] : 'OTHER';
+        plan.push({ ordinal, reason: `OFFICE_IMAGE_FORMAT_${format}_UNSUPPORTED` }); continue;
+      }
+      let bytes;
+      try {
+        if (typeof attachment.data !== 'string' || !attachment.data ||
+            attachment.data.length > Math.ceil(MAX_IMAGE_BYTES / 3) * 4 ||
+            !/^[A-Za-z0-9+/]+={0,2}$/u.test(attachment.data)) fail('CONVERSION_IMAGE_INVALID');
+        bytes = Buffer.from(attachment.data, 'base64');
+        if (bytes.toString('base64') !== attachment.data || !bytes.length) fail('CONVERSION_IMAGE_INVALID');
+        if (bytes.length > MAX_IMAGE_BYTES || totalBytes + bytes.length > RESOURCE_LIMITS.MAX_ASSET_BYTES) fail('INPUT_FORMAT_LIMIT');
+        totalBytes += bytes.length;
+        const size = imageSize(bytes, pair[0]);
+        if (totalPixels + size.width * size.height > MAX_PIXELS) fail('CONVERSION_PIXEL_LIMIT');
+        totalPixels += size.width * size.height;
+        plan.push({ type: pair[0], bytes, ...size, ordinal });
+        bytes = undefined;
+      } catch (cause) {
+        if (!['CONVERSION_IMAGE_INVALID', 'CONVERSION_PIXEL_LIMIT', 'INPUT_FORMAT_LIMIT'].includes(cause?.code)) throw cause;
+        plan.push({ ordinal, reason: cause.code === 'CONVERSION_IMAGE_INVALID' ? 'IMAGE_CONTENT_DAMAGED' : 'IMAGE_PROCESSING_LIMIT' });
+      } finally { bytes?.fill(0); }
+    }
+    return plan;
+  } catch (cause) { for (const item of plan) item.bytes?.fill(0); throw cause; }
+}
+
 function appendOfficeOcr(extraction, recognized, contentOptions) {
   let markdown = extraction.markdown;
   const contacts = [], reasons = new Set(extraction.coverage.reason_codes);
@@ -96,4 +141,4 @@ function appendOfficeOcr(extraction, recognized, contentOptions) {
     coverage: { status: reasons.size ? 'incomplete' : 'complete', reason_codes: [...reasons].sort() } });
 }
 
-module.exports = Object.freeze({ imageSize, prepareOfficeImagePlan, appendOfficeOcr });
+module.exports = Object.freeze({ imageSize, prepareOfficeImagePlan, preparePartialOfficeImagePlan, appendOfficeOcr });

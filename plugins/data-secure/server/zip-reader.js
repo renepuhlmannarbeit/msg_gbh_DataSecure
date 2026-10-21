@@ -197,6 +197,9 @@ function inspectZipDirectoryFromFd(fd, archiveSize, limits = {}, readSync = fs.r
   const descriptors = [];
   const occupiedRanges = [];
   const controlParts = Object.create(null);
+  const payloads = limits.collectPayloads === true ? new Map() : null;
+  const omittedEntries = [];
+  const partialFindings = new Map();
   let controlBytes = 0;
   const maxUncompressed = limits.maxUncompressed || 300 * 1024 * 1024;
   for (let n = 0; n < totalEntries; n++) {
@@ -295,17 +298,38 @@ function inspectZipDirectoryFromFd(fd, archiveSize, limits = {}, readSync = fs.r
     const maxControlPartBytes = limits.maxControlPartBytes || 2 * 1024 * 1024;
     const maxControlBytes = limits.maxControlBytes || 8 * 1024 * 1024;
     for (const entry of descriptors) {
-      const data = verifiedEntryDataFromFd(fd, entry, limits, readSync);
       const isControl = entry.name === '[Content_Types].xml' || entry.name.endsWith('.rels');
+      let data;
+      try { data = verifiedEntryDataFromFd(fd, entry, limits, readSync); }
+      catch (error) {
+        // All directory, local-header, range, descriptor and aggregate limits
+        // above have already passed. Only an independent payload may be
+        // omitted, never a control part or an IO/source-identity failure.
+        const mainPart = ['word/document.xml', 'xl/workbook.xml', 'ppt/presentation.xml'].includes(entry.name);
+        if (limits.partialExtraction !== true || isControl || mainPart || !(error instanceof ZipError) ||
+            !['ZIP_UNSUPPORTED_METHOD', 'ZIP_LIMIT', 'ZIP_CORRUPT', 'ZIP_CRC_MISMATCH'].includes(error.code)) throw error;
+        const image = /\.(?:png|jpe?g|bmp|gif|tiff?|webp|svg|emf|wmf)$/iu.test(entry.name);
+        const reason = error.code === 'ZIP_LIMIT' && image ? 'IMAGE_PROCESSING_LIMIT' : 'DOCUMENT_PARTS_DAMAGED';
+        omittedEntries.push(entry.name);
+        partialFindings.set(reason, (partialFindings.get(reason) || 0) + 1);
+        continue;
+      }
       if (isControl) {
         if (data.length > maxControlPartBytes || data.length > maxControlBytes - controlBytes) {
           data.fill(0);
           throw new ZipError('OPC-Steuerteile überschreiten das sichere Prüfbudget.', 'ZIP_LIMIT');
         }
         controlBytes += data.length;
-        controlParts[entry.name] = data.toString('utf8');
+        try {
+          controlParts[entry.name] = limits.partialExtraction === true
+            ? new TextDecoder('utf-8', { fatal: true }).decode(data) : data.toString('utf8');
+        } catch {
+          data.fill(0);
+          throw new ZipError('OPC-Steuerteil besitzt keine gültige UTF-8-Codierung.', 'ZIP_CORRUPT');
+        }
       }
-      data.fill(0);
+      if (payloads) payloads.set(entry.name, data);
+      else data.fill(0);
     }
   }
   const result = { entries: totalEntries, files, uncompressed_bytes: total };
@@ -321,7 +345,38 @@ function inspectZipDirectoryFromFd(fd, archiveSize, limits = {}, readSync = fs.r
     result.control_parts = Object.freeze(controlParts);
     result.entry_names = Object.freeze([...names]);
   }
+  if (limits.partialExtraction === true) {
+    // Names are private parser input, not a diagnostic DTO. Public findings
+    // contain fixed reasons and counts only, never source paths or targets.
+    result.omitted_entries = Object.freeze(omittedEntries);
+    result.partial_findings = Object.freeze([...partialFindings].map(([reason, count]) => Object.freeze({ reason, count })));
+    result.crc_verified = limits.verifyPayloads === true && omittedEntries.length === 0;
+  }
+  if (payloads) result.payloads = payloads;
   return result;
+}
+
+function readZipPartial(buf, limits = {}) {
+  if (!Buffer.isBuffer(buf)) buf = Buffer.from(buf);
+  // Reuse the descriptor inspector's complete structural proof on the exact
+  // original bytes. This does not manufacture a repaired archive or silently
+  // weaken readZip's legacy/plugin contract.
+  const inspected = inspectZipDirectoryFromFd(0, buf.length, {
+    maxEntries: 20000, maxUncompressed: 128 * 1024 * 1024,
+    maxEntryUncompressed: 64 * 1024 * 1024, maxCompressionRatio: 1000,
+    maxControlPartBytes: 2 * 1024 * 1024, maxControlBytes: 8 * 1024 * 1024,
+    ...limits, requireExactEnd: true, includeStructure: true,
+    includeControls: true, verifyPayloads: true, collectPayloads: true,
+    partialExtraction: true
+  }, (_fd, target, offset, length, position) => {
+    if (!Number.isSafeInteger(position) || position < 0 || position + length > buf.length) {
+      throw new ZipError('ZIP-Daten sind abgeschnitten.');
+    }
+    buf.copy(target, offset, position, position + length);
+    return length;
+  });
+  if (!inspected) throw new ZipError('Office-Datei besitzt keinen ZIP-Container.');
+  return inspected;
 }
 
 function readZip(buf, limits={}) {
@@ -400,4 +455,4 @@ function readZip(buf, limits={}) {
   return out;
 }
 
-module.exports = { ZipError, inspectZipDirectory, inspectZipDirectoryFromFd, readZip };
+module.exports = { ZipError, inspectZipDirectory, inspectZipDirectoryFromFd, readZip, readZipPartial };

@@ -508,4 +508,132 @@ test('standard package metadata cannot unlock XLSX or PPTX', () => {
   }
 });
 
+const partialStandalone = Object.freeze({ processingMode: 'markdown-only', productChannel: 'standalone', partialExtraction: true });
+
+test('explicit Standalone partial intake preserves independent bytes after leaf CRC damage without claiming full CRC', () => {
+  const archive = Buffer.from(docx({}, [['word/media/image1.png', Buffer.from('SYNTHETIC_IMAGE')]]));
+  archive[payloadOffset(archive, 'word/media/image1.png')] ^= 1;
+  const before = Buffer.from(archive);
+  const result = inspect('partial-leaf.docx', archive, partialStandalone);
+  assert.strictEqual(result.verdict, 'candidate');
+  assert.strictEqual(result.structure.controls_verified, true);
+  assert.strictEqual(result.structure.crc_verified, false);
+  assert.deepStrictEqual(result.structure.partial_findings, [{ reason: 'DOCUMENT_PARTS_DAMAGED', count: 1 }]);
+  assert.deepStrictEqual(archive, before);
+  for (const options of [{}, { ...partialStandalone, partialExtraction: false },
+    { ...partialStandalone, productChannel: 'plugin', processingMode: 'markdown-and-anonymize' }]) {
+    assert.strictEqual(inspect('strict-leaf.docx', archive, options).code, 'SOURCE_CONTAINER_CORRUPT');
+  }
+});
+
+test('partial extraction never softens damaged controls, aggregate limits, source reads or archive boundaries', () => {
+  for (const part of ['[Content_Types].xml', '_rels/.rels', 'word/_rels/document.xml.rels', 'word/document.xml']) {
+    const archive = Buffer.from(docx({}, [['word/_rels/document.xml.rels',
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"/>']]));
+    archive[payloadOffset(archive, part)] ^= 1;
+    assert.strictEqual(inspect(`partial-control-${part.replace(/\W/gu, '_')}.docx`, archive, partialStandalone).code,
+      'SOURCE_CONTAINER_CORRUPT');
+  }
+  const archive = docx({}, [['word/media/image1.png', Buffer.alloc(1024, 1)]]);
+  const limited = inspect('partial-image-limit.docx', archive, { ...partialStandalone, maxEntryUncompressed: 512 });
+  assert.strictEqual(limited.verdict, 'candidate');
+  assert.deepStrictEqual(limited.structure.partial_findings, [{ reason: 'IMAGE_PROCESSING_LIMIT', count: 1 }]);
+  assert.strictEqual(inspect('partial-global-limit.docx', archive, { ...partialStandalone, maxUncompressed: 512 }).code,
+    'SOURCE_CONTAINER_LIMIT');
+  assert.strictEqual(inspect('partial-trailing.docx', Buffer.concat([archive, Buffer.from('not ZIP')]), partialStandalone).code,
+    'SOURCE_POLYGLOT_UNSUPPORTED');
+  const mismatch = Buffer.from(archive);
+  mismatch.writeUInt16LE(8, 8);
+  assert.strictEqual(inspect('partial-header-mismatch.docx', mismatch, partialStandalone).code, 'SOURCE_CONTAINER_CORRUPT');
+  const offset = payloadOffset(archive, 'word/media/image1.png');
+  assert.throws(() => inspect('partial-read-failure.docx', archive, { ...partialStandalone,
+    readSync(fd, target, start, length, position) {
+      if (position === offset) throw new Error('SYNTHETIC_PRIVATE_READ_FAILURE');
+      return fs.readSync(fd, target, start, length, position);
+    }
+  }), error => error.code === 'SOURCE_READ_FAILED');
+});
+
+test('partial intake quarantines external references with fixed findings but never an external office root', () => {
+  for (const target of ['https://SYNTHETIC_SECRET.invalid/image.png', 'file:///SYNTHETIC_SECRET/image.png',
+    '\\\\SYNTHETIC_SECRET\\image.png']) {
+    const relationships = `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="i1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="${target}" TargetMode="External"/></Relationships>`;
+    const result = inspect('partial-external.docx', docx({}, [['word/_rels/document.xml.rels', relationships]]), partialStandalone);
+    assert.strictEqual(result.verdict, 'candidate');
+    assert.strictEqual(result.structure.relationships_verified, false);
+    assert.deepStrictEqual(result.structure.partial_findings, [{ reason: 'EXTERNAL_CONTENT_NOT_READ', count: 1 }]);
+    assert.ok(!JSON.stringify(result).includes('SYNTHETIC_SECRET'));
+  }
+  const controls = Object.fromEntries(opcControlEntries('docx'));
+  const externalRoot = controls['_rels/.rels'].replace('Target="word/document.xml"',
+    'Target="https://SYNTHETIC_SECRET.invalid/main.xml" TargetMode="External"');
+  assert.strictEqual(inspect('partial-external-root.docx', docx({ relationships: externalRoot }), partialStandalone).verdict,
+    'rejected');
+  const traversal = '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="i1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../../outside.png"/></Relationships>';
+  assert.strictEqual(inspect('partial-traversal.docx', docx({}, [
+    ['word/_rels/document.xml.rels', traversal], ['outside.png', 'image']
+  ]), partialStandalone).code, 'SOURCE_CONTAINER_CORRUPT');
+});
+
+test('partial OPC and XLSX extraction never reinterpret a noncanonical external mode as a local worksheet', () => {
+  const main = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+  const office = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const packageNamespace = 'http://schemas.openxmlformats.org/package/2006/relationships';
+  const worksheet = value => `<worksheet xmlns="${main}"><sheetData><row><c r="A1" t="inlineStr">` +
+    `<is><t>${value}</t></is></c></row></sheetData></worksheet>`;
+  for (const mode of ['External', 'EXTERNAL', 'external', 'eXtErNaL']) {
+    const archive = zipStore([
+      ...opcControlEntries('xlsx'),
+      ['xl/workbook.xml', `<workbook xmlns="${main}" xmlns:r="${office}"><sheets>` +
+        '<sheet name="Good" sheetId="1" r:id="s1"/><sheet name="External" sheetId="2" r:id="s2"/>' +
+        '</sheets></workbook>'],
+      ['xl/_rels/workbook.xml.rels', `<Relationships xmlns="${packageNamespace}">` +
+        `<Relationship Id="s1" Type="${office}/worksheet" Target="worksheets/sheet1.xml"/>` +
+        `<Relationship Id="s2" Type="${office}/worksheet" Target="worksheets/sheet2.xml" TargetMode="${mode}"/>` +
+        '</Relationships>'],
+      ['xl/worksheets/sheet1.xml', worksheet('GoodWorksheetText')],
+      ['xl/worksheets/sheet2.xml', worksheet('ExternalSentinelMustNotBecomeLocalText')]
+    ]);
+    const before = Buffer.from(archive);
+    const result = inspect(`partial-external-mode-${mode}.xlsx`, archive, partialStandalone);
+    if (mode === 'External') {
+      assert.strictEqual(result.verdict, 'candidate');
+      assert.deepStrictEqual(result.structure.partial_findings, [{ reason: 'EXTERNAL_CONTENT_NOT_READ', count: 1 }]);
+      const extracted = extractMarkdownBuffer(archive, '.xlsx', { partialExtraction: true, markdownOutput: 'content-v1' });
+      assert.ok(extracted.markdown.includes('GoodWorksheetText'));
+      assert.ok(!extracted.markdown.includes('ExternalSentinelMustNotBecomeLocalText'));
+      assert.ok(extracted.coverage.reason_codes.includes('EXTERNAL_CONTENT_NOT_READ'));
+    } else {
+      assert.strictEqual(result.verdict, 'rejected');
+      assert.strictEqual(result.code, 'SOURCE_CONTAINER_CORRUPT');
+      assert.throws(() => extractMarkdownBuffer(archive, '.xlsx', { partialExtraction: true, markdownOutput: 'content-v1' }),
+        error => error.code === 'MARKDOWN_EXTRACTION_FAILED');
+    }
+    assert.deepStrictEqual(archive, before);
+  }
+});
+
+test('partial payload policy does not change unsupported compression into a CRC pass or soften encryption', () => {
+  const archive = Buffer.from(docx({}, [['word/media/image1.png', 'SYNTHETIC_IMAGE']]));
+  const payload = payloadOffset(archive, 'word/media/image1.png');
+  const local = payload - 30 - Buffer.byteLength('word/media/image1.png');
+  let central = archive.readUInt32LE(archive.length - 22 + 16);
+  while (archive.readUInt32LE(central) === 0x02014b50) {
+    const length = archive.readUInt16LE(central + 28), extra = archive.readUInt16LE(central + 30),
+      comment = archive.readUInt16LE(central + 32);
+    const name = archive.subarray(central + 46, central + 46 + length).toString('utf8');
+    if (name === 'word/media/image1.png') break;
+    central += 46 + length + extra + comment;
+  }
+  archive.writeUInt16LE(12, local + 8);
+  archive.writeUInt16LE(12, central + 10);
+  const result = inspect('partial-unsupported-method.docx', archive, partialStandalone);
+  assert.strictEqual(result.verdict, 'candidate');
+  assert.strictEqual(result.structure.crc_verified, false);
+  assert.deepStrictEqual(result.structure.partial_findings, [{ reason: 'DOCUMENT_PARTS_DAMAGED', count: 1 }]);
+  assert.strictEqual(inspect('strict-unsupported-method.docx', archive).code, 'SOURCE_CONTAINER_CORRUPT');
+  archive.writeUInt16LE(archive.readUInt16LE(local + 6) | 1, local + 6);
+  assert.strictEqual(inspect('partial-encrypted.docx', archive, partialStandalone).code, 'SOURCE_ENCRYPTED_UNSUPPORTED');
+});
+
 done(() => fs.rmSync(root, { recursive: true, force: true }));

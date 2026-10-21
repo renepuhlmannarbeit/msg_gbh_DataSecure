@@ -1355,6 +1355,71 @@ testAsync('raw Markdown editing is explicit, protects unsaved changes and submit
   assert.equal(h.calls.filter(call => call.command === 'publish_result_documents').length, 1);
 });
 
+const partialContentNotices = [
+  ['OFFICE_IMAGE_FORMAT_EMF_UNSUPPORTED', /EMF-Grafiken/u],
+  ['OFFICE_IMAGE_FORMAT_WMF_UNSUPPORTED', /WMF-Grafiken/u],
+  ['OFFICE_IMAGE_FORMAT_SVG_UNSUPPORTED', /SVG-Grafiken/u],
+  ['OFFICE_IMAGE_FORMAT_GIF_UNSUPPORTED', /GIF-Bilder/u],
+  ['OFFICE_IMAGE_FORMAT_TIFF_UNSUPPORTED', /TIFF-Bilder/u],
+  ['OFFICE_IMAGE_FORMAT_WEBP_UNSUPPORTED', /WebP-Bilder/u],
+  ['OFFICE_IMAGE_FORMAT_OTHER_UNSUPPORTED', /nicht unterstütztes Bildformat/u],
+  ['IMAGE_CONTENT_DAMAGED', /Bild ist beschädigt/u],
+  ['IMAGE_PROCESSING_LIMIT', /Bildverarbeitung.*technische Grenze/u],
+  ['IMAGE_OCR_FAILED', /Texterkennung.*fehlgeschlagen/u],
+  ['DOCUMENT_PARTS_DAMAGED', /Beschädigte Dokumentteile/u],
+  ['EXTERNAL_CONTENT_NOT_READ', /Extern verknüpfte Inhalte.*nicht nachgeladen/u],
+  ['CONVERSION_RESOURCE_LIMIT_PARTIAL', /Ressourcenbegrenzung/u],
+  ['CONVERSION_TIMEOUT_PARTIAL', /Verarbeitungszeit.*ausgeschöpft/u],
+  ['TEXT_LIMIT_PARTIAL', /Textmengengrenze/u],
+  ['PDF_PAGE_NOT_READ', /PDF-Seite.*nicht gelesen/u],
+  ['PDF_IMAGE_NOT_READ', /Bildbereich der PDF.*nicht gelesen/u]
+];
+function partialNoticeRenderer(codes) {
+  const h = harness({ invoke(command) {
+    if (command === 'get_document_reviews') return { local_ui_only: true, external_disclosure: false,
+      processing_mode: 'markdown-only', documents: structuredClone(h.rows), unavailable: [], not_processed_documents: [],
+      conversion_feedback: { schema: 'datasecure-conversion-feedback/1', ocr_enabled: true,
+        selected_count: 2, result_count: 2, not_converted_count: 0, ocr_omitted_count: 0, error_count: 0,
+        content_notice_count: 1, pending_count: 0, complete: true },
+      content_notices: [{ document_id: '1'.repeat(32), name: 'Quelle-1.pdf', reason_codes: codes }] };
+  } });
+  h.rows.forEach(row => { row.processing_mode = 'markdown-only'; });
+  return h;
+}
+for (const [code, expected] of partialContentNotices)
+testAsync(`optional text review explains a partial result without raw codes or automatic work: ${code}`, async () => {
+  const h = partialNoticeRenderer([code]); await h.api.open('a'.repeat(64));
+  const text = textTree(h.el('documents-list'));
+  assert.match(text, expected); assert.match(text, /nur teilweise übernommen|nur ein Teil des Dokuments/u);
+  assert.doesNotMatch(text, new RegExp(code, 'u'));
+  assert.doesNotMatch(text, /ausgeschaltet|ohne OCR|vollständig übernommen|vollständig anonymisiert/u);
+  assert.equal(h.el('documents-filter').value, 'notices');
+  assert.equal(h.el('documents-list').children.length, 1);
+  assert.equal(h.calls.some(call => isDecision(call) || ['start_admitted_batch', 'continue_history_batch',
+    'publish_result_documents', 'export_approved_documents'].includes(call.command)), false);
+});
+testAsync('the full bounded coverage vocabulary remains visible, while oversized or future notices stay neutral', async () => {
+  const all = [...partialContentNotices.map(([code]) => code), 'DOCX_HEADER_FOOTER_EXCLUDED_BY_POLICY',
+    'IMAGE_OCR_DISABLED_BY_POLICY', 'OCR_CONTACT_VALUES_UNVERIFIED', 'OCR_NOT_VERIFIED', 'OCR_TEXT_EMPTY',
+    'PDF_OCR_SCOPE_UNVERIFIED', 'SCAN_OCR_DISABLED_BY_POLICY', 'SOURCE_COVERAGE_UNVERIFIED', 'VISUAL_CONTENT_NOT_EXTRACTED'].sort();
+  assert.equal(all.length, 26);
+  const h = partialNoticeRenderer(all); await h.api.open('a'.repeat(64));
+  assert.equal(h.el('documents-filter').value, 'notices');
+  assert.equal(h.el('documents-list').children.length, 1);
+  for (const [, expected] of partialContentNotices) assert.match(textTree(h.el('documents-list')), expected);
+  for (const code of all) assert.doesNotMatch(textTree(h.el('documents-list')), new RegExp(code, 'u'));
+  const oversized = partialNoticeRenderer(Array.from({ length: 33 }, () => 'SOURCE_COVERAGE_UNVERIFIED'));
+  await oversized.api.open('a'.repeat(64));
+  assert.equal(oversized.el('documents-filter').value, 'all');
+  assert.equal(oversized.el('documents-filter').disabled, true);
+  assert.match(oversized.el('documents-filter-summary').textContent, /nicht sicher zuordenbar/u);
+  const future = partialNoticeRenderer(['FUTURE_CONTENT_NOTICE']); await future.api.open('a'.repeat(64));
+  assert.match(textTree(future.el('documents-list')), /möglicherweise unvollständig.*Original vergleichen/u);
+  assert.doesNotMatch(textTree(future.el('documents-list')), /FUTURE_CONTENT_NOTICE/u);
+  for (const item of [h, oversized, future]) assert.equal(item.calls.some(call => isDecision(call) ||
+    ['start_admitted_batch', 'continue_history_batch', 'publish_result_documents', 'export_approved_documents'].includes(call.command)), false);
+});
+
 testAsync('bound raw notices filter the optional editor; selection and navigation stay within the visible files', async () => {
   const h = harness({ invoke(command) {
     if (command !== 'get_document_reviews') return;

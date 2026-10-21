@@ -1,11 +1,42 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 21.10.2026 · Produktstand 3.2.0-rc170 · gemeinsamer Windows-/Mac-Test-Pre-Release veröffentlicht; menschliche Abnahme offen.
+Stand: 22.10.2026 · Produktstand 3.2.0-rc171 · gemeinsamer Windows-/Mac-Test-Pre-Release in Vorbereitung; RC170 bleibt unverändert.
 
 Veröffentlicht: **3.2.0-rc170**, PPTX-/PDF-/OCR-Korrekturen technisch geprüft und
 übergeben; vorhandene PDF-Suchtexte bewusst erhalten. TXT-gleiche Zuordnung und
 bearbeitbare Ergebnisse ausRC169 bleiben. Menschliche Windows-/Mac-/Officeabnahme
 offen. Frühere Pakete und Ergebnisstände bleiben unverändert.
+
+## In Umsetzung – PARTIAL-EXTRACTION-01 (21.10.2026)
+
+Nutzerauftrag: Word/Excel/PowerPoint/PDF unter Windows und macOS bestmöglich
+verarbeiten. Einzelne nicht lesbare Bilder, unabhängige beschädigte Teile und
+lokale Ressourcenfehler dürfen sicher gewonnenen Text nicht pauschal verwerfen.
+RC170 und vorhandene Nutzerdateien bleiben unverändert; Desktoptests beim Nutzer.
+
+1. Geschlossene, formatbezogene Auslassungshinweise und eindeutiger Teilstatus.
+   Keine Bild-/Binärartefakte oder Exception-/URL-Texte in Markdown übernehmen.
+2. Office-Bilder einzeln behandeln; unterstützte Raster lokal erkennen,
+   unbekannte/defekte Bilder auslassen. PDF-Seiten und native Suchtexte unabhängig
+   von anschließend fehlschlagendem Bild-OCR behalten; Suchtexte nicht löschen.
+3. Vollständig validierte Konvertierungsabschnitte über einen begrenzten privaten
+   Workerkanal sichern. Teilübernahme erst nach bestätigtem Workerende; keine
+   Übernahme nach Protokoll-, Isolations-, Bindungs- oder Abbruchfehlern.
+4. Expliziter Standalone-Partialmodus für unabhängige Office-Parts: globale
+   ZIP-/Pfad-/Kontrollteilprüfung unverändert; nur eindeutig gebundene, CRC- und
+   formatgeprüfte Teile verwenden. Externe Referenzen niemals auflösen/ausführen.
+5. Anonymisierung unverändert auf alle übernommenen Teiltexte anwenden. Keine
+   Rohtext-Veröffentlichung als anonymisiert, keine erfundene Vollständigkeit.
+6. Gezielte positive/adversarielle Tests, unabhängige tatsächliche Quellenreviews
+   sowie Windows-Nativeprüfung. Mac-Quellverträge gemeinsam; echte Mac-Paket-/
+   Zielhostabnahme erst an neu gebundenen Paketen, kein Ersatz durch Windowsmodelle.
+
+Kein universelles Reparaturversprechen: Bei unklarer Containerstruktur, fehlender
+vertrauenswürdiger Textbasis oder verletzten Sicherheitsbindungen bleibt eine
+konkrete Fehlermeldung statt leerem/falschem Erfolg. Keine zusätzlichen nativen
+Renderer, Apple-Zertifizierung oder OS-Schutzänderung. Umsetzung und unabhängige
+Quellgegenreviews vorhanden, unterbrochene Endprüfungen neu binden. Expliziter
+RC171-Releaseauftrag vom22.10.; [Plan](../acceptance/RC171_SHARED_RELEASE_20261022.md).
 
 ## Abgeschlossen – RC170 gemeinsamer Test-Pre-Release (21.10.2026)
 

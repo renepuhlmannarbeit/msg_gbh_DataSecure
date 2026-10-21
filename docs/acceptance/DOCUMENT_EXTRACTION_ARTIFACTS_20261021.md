@@ -1,5 +1,10 @@
 # Dokumentextraktion – Quellkorrektur vom 21.10.2026
 
+Einordnung: Die folgenden ursprünglichen DOC-TEXT-01-Nachweise sind historisch;
+deren gemeinsame Release-Endgates wurden später für RC170 abgeschlossen. Der
+neue Nutzerauftrag PARTIAL-EXTRACTION-01 nach RC170 steht im Nachtrag am Ende.
+Alte Bindungen und Belege werden dadurch nicht rückwirkend umgeschrieben.
+
 Status: implementiert und gezielt technisch revalidiert; kein Release-PASS.
 Basis-HEAD ddc3998ef12b9201427a0fa155164ba662a483d1, Branch
 codex/standalone-export-usability. Lokale Quelländerungen, kein neuer Commit,
@@ -129,3 +134,94 @@ RC169-Pakete enthalten diese lokalen Quellkorrekturen noch nicht.
 - [Unicode: Unsupported Characters](https://www.unicode.org/faq/unsup_char.html)
 - [PDF.js6.2.108 API](https://github.com/mozilla/pdf.js/blob/v6.2.108/src/display/api.js)
 - [PDF.js6.2.108 Canvas](https://github.com/mozilla/pdf.js/blob/v6.2.108/src/display/canvas.js)
+
+## Neuer Auftrag nach RC170 – PARTIAL-EXTRACTION-01
+
+Nutzerauftrag: Word/DOCX, Excel/XLSX, PowerPoint/PPTX und PDF unter Windows und
+macOS bestmöglich lesen; einzelne nicht unterstützte Bilder, beschädigte
+unabhängige Teile und Ressourcenfehler dürfen vollständig sicher gewonnene
+Textabschnitte nicht pauschal verwerfen. Keine Universalreparaturgarantie für
+beliebige Altformate, kaputte Hauptteile oder unklare Container. Desktoptests
+bleiben beim Nutzer. RC170, Originaldateien und bisherige Ergebnisse unverändert.
+Basis-HEAD1e40c2b8684d9b20b7f0ade4d446c42f0d6c1139; lokale, noch nicht
+veröffentlichte Quelländerungen, kein Versionswechsel oder neuer Paketbuild.
+
+### Implementierte Reihenfolge und Sicherheitsgrenzen
+
+1. Gemeinsame geschlossene Auslassungsgründe in Extraktionsvertrag, Oberfläche
+   und vertraulicher Statusausgabe. EMF/WMF/SVG/GIF/TIFF/WebP/sonstige unbekannte
+   Office-Bilder werden formatbezogen gemeldet, nicht ausgeführt oder in ein
+   erfundenes OCR-Ergebnis umgedeutet. Kein neuer nativer Fremdrenderer.
+2. Office-Raster einzeln unter vorhandenen Byte-/Pixel-/Anzahlgrenzen prüfen.
+   Defekte und zu große Bilder auslassen, später passende Bilder weiter lesen;
+   ursprüngliche Bildordinale sowie exakte Kontaktpositionen beibehalten.
+3. PDF: vollständige native Suchtexte vor nachfolgender Bild-/OCR-Verarbeitung
+   sichern. Unabhängige Seitenfehler lokal kennzeichnen, nächste Seiten weiter
+   lesen. Keine neue Heuristik zum Entfernen möglicherweise gültiger Suchtexte.
+4. Expliziter Standalone-/2-Partialmodus für unabhängige Office-Parts. ZIP-
+   Verzeichnis, Pfade, Offsets, Kontrollteile, Hauptteilbindung, Quellidentität
+   und Ressourcenbudgets bleiben hart. Nur ganze CRC-/XML-/formatgeprüfte Teile;
+   keine Ausgabe von ungeprüften XML-Präfixen. Externe Beziehungen werden
+   abgesondert, nie geladen, ausgeführt oder als Roh-URL in Hinweise übernommen.
+5. Private begrenzte Worker-Checkpoints für vollständige Einheiten. Verwertung
+   ausschließlich nach tatsächlichem Workerende und bestätigter Eingabeübergabe.
+   Abbruch, ungültiges Protokoll, Eingabe-/Isolations-/Modell-/Policyfehler und
+   unbestätigte Beendigung erlauben keine Teilübernahme. Timeout plus späterer
+   harter Transportfehler bleibt Fehler. Bestehende Zeit-/OS-/Textgrenzen bleiben.
+6. Office-Gesamtbudget bereits beim Aufbau ganzer Abschnitte, einschließlich
+   tatsächlicher Ausgabeprojektion und Separatoren, auf unverändert8M begrenzt.
+   Überlange Abschnitte ganz auslassen; spätere kleine können noch passen.
+   Generierte Überschriften/Bildhinweise dürfen keinen leeren Erfolg erzeugen.
+   Ohne brauchbaren Text bleibt eine konkrete Fehlermeldung. Teiltexte durchlaufen
+   danach unverändert Anonymisierung, Kontaktprüfung und Veröffentlichungsbindung.
+
+Keine Developer-ID, Notarisierung, Zertifikatssuche, Apple-Einreichung oder
+Änderung an Gatekeeper/Library-Validation. Gemeinsamer JavaScript-Code und
+bestehende gepinnte Konverter; kein nativer Mac-Paket-/Zielhostnachweis dieser
+neuen Änderungen aus Windows- oder Quellenmodellen abgeleitet.
+
+### Gezielte Gegenreviews und erhaltene Zwischenstände
+
+Mehrere unabhängige tatsächliche Produktionsquellenreviews: Transport/
+Workerlebensdauer, Office-/ZIP-/OPC-Zulassung, Bild-/PDF-Verhalten und UI-
+Hinweisverträge. Gefundene Gegenfälle eng korrigiert: später harter Stderrfehler
+nach Timeout, nicht kanonische TargetMode-Schreibweisen, fehlende /2-Zulassung,
+PDF-Seitenüberschrift an der Textgrenze, Office-Gesamtbudget und generierter
+Notes-Hinweis ohne Quelltext sowie leerer No-Media-Workerzweig. Abschließende
+gezielte Gegenreviews ohne bestätigten verbleibenden Deltablocker.
+
+Source01/Source02-Headless/Source03 wurden vor neuen Quellkorrekturen bewusst
+beendet; keine vollständigen grünen Endnachweise. Alte Logs/rote Gegenversuche
+bleiben erhalten. Source02-Windows-Native30+67+34 und Original-PPTX waren auf
+FP3c5096df… technisch grün; nicht dem späteren Stand zugeschrieben.
+Source02-Nativprobe bestätigt Rasterbudget-Teilübernahme und echten Worker-
+Kill/Close nach kontrolliert ausgelöstem Deadlinecallback. Keine gemessene
+Produktions-Wartezeit behauptet. Ungültiger Flate-Teststream löste im echten
+PDF.js keinen Seitenfehler aus: FIXTURE_NOT_CAUSAL, kein nativer Seitenfehler-PASS.
+
+### Aktueller eingefrorener Quellenendlauf
+
+Source04 unter dist/partial-extraction-source04-20261021:
+FPdf5dd5a67e74650b7608c42350bc9a60c4224b49cb43898e4081fad37f844bdf,
+339 Produktdateien;543 JS/MJS/CJS/JSON/PS1/YAML-Test-/Scriptinputs,
+Manifestff5f2e38a3fdbef12730d887fab183bb01e3e5f154a5f4c85d312a841f31f1fe.
+Gebundene Headless-/Windows-Native-Endläufe gestartet; vollständige FINALs und
+inputs_unchanged noch zu lesen. Original-PPTX-Endprobe anschließend offen.
+Gezielt zuletzt63 Extractor- und13 Partial- sowie38 Transportfälle bestanden.
+Keine neue Versionsnummer, kein Apppaket, kein Push-/Main-/Release-Schritt.
+
+### Menschlicher Testplan für später neu gebundene Pakete
+
+- Originale BITMARCK-PPTX mit/ohne OCR: nutzbares Markdown; EMF-Auslassung und
+  weitere tatsächliche Einschränkungen sichtbar, kein Bild-/Base64artefakt.
+- DOCX/XLSX/PPTX mit gemischten Raster-/Vektorbildern: übriger Text und lesbare
+  Bildtexte bleiben; Hinweise nicht mit technischer Gesamtfehlermeldung verwechseln.
+- PDF mit Suchtext und unlesbarem Bild: Suchtext und unabhängige Folgeseiten
+  erhalten, kein stiller Vollständigkeitsanspruch.
+- Geführte und automatische Anonymisierung derselben Teilquellen: kein
+  ungeprüfter Rohtext als anonymisiert; Kontakt-/Nachbearbeitung weiter verfügbar.
+- Leere/unbrauchbare oder global unsichere Quelle: konkrete Erklärung statt
+  leerer erfolgreicher Ergebnisdatei; weitere Dateien des Laufs unabhängig.
+
+Windows-/Mac-Desktop-, Finder-/TCC-/Organisationsprofil-/Officeabnahme bleibt
+Nutzeraufgabe an späteren neuen Paketen; RC170 enthält diesen Nachtrag noch nicht.

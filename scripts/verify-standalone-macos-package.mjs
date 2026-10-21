@@ -57,6 +57,7 @@ for (const required of [
   `${app}/Contents/Resources/server/network-deny.cjs`,
   `${app}/Contents/Resources/server/standalone/conversion-worker.js`,
   `${app}/Contents/Resources/server/standalone/conversion-worker-child.js`,
+  `${app}/Contents/Resources/server/standalone/conversion-checkpoints.js`,
   `${app}/Contents/Resources/server/standalone/conversion-runtime/RUNTIME.json`,
   `${app}/Contents/Resources/server/standalone/conversion-runtime/THIRD_PARTY_NOTICES.txt`,
   `${app}/Contents/Resources/server/native/${productTarget}/datasecure-sandbox.sha256`,

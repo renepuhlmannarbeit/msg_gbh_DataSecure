@@ -109,4 +109,82 @@ test('planning performs no writes, copies, mappings or directory creation', () =
   } finally { fs.rmSync(root, { recursive: true, force: true }); }
 });
 
+const partialContentOptions = Object.freeze({ schema: 'datasecure-content-options/1',
+  markdownOutput: 'content-v1', scanOcr: true, imageOcr: true });
+
+test('only validated current Standalone admission requests partial extraction and retains the original source hash', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-admission-partial-'));
+  try {
+    const entry = queueEntry(root, 'source.docx', office('docx'));
+    for (const [productChannel, processingMode, current, expected] of [
+      ['standalone', 'markdown-only', true, true], ['standalone', 'markdown-and-anonymize', true, true],
+      ['standalone', 'markdown-only', false, false], ['standalone', 'markdown-and-anonymize', false, false],
+      ['plugin', 'markdown-and-anonymize', false, false], ['plugin', 'markdown-and-anonymize', true, false],
+      ['standalone', undefined, true, false], [undefined, undefined, true, false]
+    ]) {
+      let observed;
+      const findings = Object.freeze([Object.freeze({ reason: 'DOCUMENT_PARTS_DAMAGED', count: 1 })]);
+      const plan = planBatchAdmission([entry], { productChannel, processingMode,
+        ...(current ? { contentOptions: partialContentOptions } : {}),
+        inspectSourceFormatFromFd(_fd, _stat, _ext, options) {
+          observed = options.partialExtraction;
+          return { verdict: 'candidate', code: 'SOURCE_FORMAT_CANDIDATE',
+            structure: { partial_findings: findings } };
+        }
+      });
+      assert.strictEqual(observed, expected);
+      assert.strictEqual(plan[0].source_sha256, crypto.createHash('sha256').update(fs.readFileSync(entry.full)).digest('hex'));
+      assert.deepStrictEqual(plan[0].partial_findings, findings);
+    }
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('actual partial CRC admission stays disabled for legacy Standalone and plugin sources', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-admission-partial-crc-'));
+  try {
+    const archive = zipStore([...opcControlEntries('docx'), ['word/document.xml', '<root/>'],
+      ['word/media/image1.png', 'SYNTHETIC_IMAGE']]);
+    let offset = 0, damaged = false;
+    while (archive.readUInt32LE(offset) === 0x04034b50) {
+      const nameLength = archive.readUInt16LE(offset + 26), extraLength = archive.readUInt16LE(offset + 28);
+      const start = offset + 30 + nameLength + extraLength, size = archive.readUInt32LE(offset + 18);
+      if (archive.subarray(offset + 30, offset + 30 + nameLength).toString('utf8') === 'word/media/image1.png') {
+        archive[start] ^= 1; damaged = true; break;
+      }
+      offset = start + size;
+    }
+    assert.strictEqual(damaged, true);
+    const entry = queueEntry(root, 'source.docx', archive);
+    for (const processingMode of ['markdown-only', 'markdown-and-anonymize']) {
+      for (const [productChannel, current, expected] of [
+        ['standalone', false, 'stopped'], ['plugin', false, 'stopped'],
+        ['plugin', true, 'stopped'], ['standalone', true, 'candidate']
+      ]) {
+        const [plan] = planBatchAdmission([entry], { productChannel, processingMode,
+          ...(current ? { contentOptions: partialContentOptions } : {}) });
+        assert.strictEqual(plan.admission, expected, `${productChannel}/${processingMode}/current=${current}`);
+        assert.strictEqual(plan.error_code, expected === 'candidate' ? null : 'SOURCE_CONTAINER_CORRUPT');
+        if (expected === 'candidate') {
+          assert.deepStrictEqual(plan.partial_findings, [{ reason: 'DOCUMENT_PARTS_DAMAGED', count: 1 }]);
+          assert.strictEqual(plan.source_sha256, crypto.createHash('sha256').update(archive).digest('hex'));
+        } else assert.strictEqual(Object.hasOwn(plan, 'partial_findings'), false);
+      }
+    }
+    assert.deepStrictEqual(fs.readFileSync(entry.full), archive);
+  } finally { fs.rmSync(root, { recursive: true, force: true }); }
+});
+
+test('truthy or malformed content options cannot enable partial admission or open source descriptors', () => {
+  for (const contentOptions of [undefined, null, true, {}, Object.create(partialContentOptions),
+    { ...partialContentOptions, imageOcr: 'true' }]) {
+    let opened = false;
+    assert.throws(() => planBatchAdmission([{ name: 'source.docx' }], {
+      productChannel: 'standalone', processingMode: 'markdown-and-anonymize', contentOptions,
+      fs: { openSync() { opened = true; throw new Error('SOURCE_OPEN_UNEXPECTED'); } },
+      hasReparseComponent: () => false
+    }), error => error.code === 'CONTENT_OPTIONS_INVALID');
+    assert.strictEqual(opened, false);
+  }
+});
+
 done();
