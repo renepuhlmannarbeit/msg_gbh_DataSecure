@@ -95,6 +95,10 @@ try {
   service = new StandaloneApplicationService({ ...(nativeEnabled ? {
     controlOwnerPid: owner, controlOwnerGeneration: ownerGeneration, retiredControlGenerations,
     startupDiagnostic: diagnosticEvent,
+    ...(process.platform === 'win32' ? { prepareInitialOutputRoot: snapshot => {
+      if (!nativeSession) throw Object.assign(Error('STANDALONE_IPC_FAILED'), { code: 'STANDALONE_IPC_FAILED' });
+      return nativeSession.send('prepare_initial_output_root', snapshot);
+    } } : {}),
     prepareNativeBinding: (batchId, operationId) => service.prepareConfiguredExportRoot(snapshot => {
       if (!nativeSession) throw Object.assign(Error('STANDALONE_IPC_FAILED'), { code: 'STANDALONE_IPC_FAILED' });
       return nativeSession.send('prepare_configured_export_root', { ...snapshot, batch_id: batchId, operation_id: operationId });
@@ -273,7 +277,8 @@ async function dispatch(message) {
           // The service first excludes live work and holds interactionActive.
           // Reject private/public overlap before native provisioning as well.
           require('../gateway/root-boundary').assertRootSeparation({ resultRoot: message.source_paths[0] });
-          return nativeChannel.configureExportRoot(message);
+          if (!nativeSession) throw Object.assign(Error('STANDALONE_IPC_FAILED'), { code: 'STANDALONE_IPC_FAILED' });
+          return nativeSession.send('configure_export_root', { root: message.source_paths[0] });
         } });
       }
       return service.configureResults({ path: message.source_paths[0] });

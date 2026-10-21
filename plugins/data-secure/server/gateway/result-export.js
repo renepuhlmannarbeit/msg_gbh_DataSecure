@@ -8,6 +8,7 @@ const { ownerRecordIo } = require('./batch-active-lock');
 const { dataRoot } = require('../runtime');
 const { safeResolvePackage, readVerifiedFile } = require('./package-store');
 const { inspectRoot, readConfiguredResultRoot, resultOutputDirectory } = require('./result-folder-config');
+const initialOutput = require('./initial-output-binding');
 const { writeFully, syncParentDirectory, renameWithTransientRetry, linkWithTransientRetry } = require('./batch-journal-io');
 const { processAlive } = require('./process-liveness');
 const { csvField } = require('./mapping');
@@ -664,8 +665,11 @@ function activeDestination(record, options = {}) {
   const exact = hasBoundResultLayout(record);
   const rootBinding = bindPlainDirectory(checked.root, null, exact);
   assertDirectoryBinding(rootBinding);
+  // A completed working copy is resolved against its existing destination
+  // binding, never re-admitted for writes. Old completed runs predate receipts.
+  const initialBinding = record.complete === true ? null : initialOutput.readInitialOutputBinding(checked.root);
   let outputPath;
-  if (options.create === false) {
+  if (initialBinding || record.complete === true || options.create === false) {
     outputPath = path.join(checked.root, isMarkdownRecord(record) ? 'DataSecure-Markdown' : 'DataSecure-Output');
   } else if (isMarkdownRecord(record)) {
     outputPath = path.join(checked.root, 'DataSecure-Markdown');
@@ -673,6 +677,7 @@ function activeDestination(record, options = {}) {
   } else outputPath = resultOutputDirectory({ root: checked.root });
   assertDirectoryBinding(rootBinding);
   const outputBinding = bindPlainDirectory(outputPath, rootBinding);
+  if (initialBinding) initialOutput.assertBinding(initialBinding);
   const legacyMaterial = `${checked.root}\0${checked.identity.dev}\0${checked.identity.ino}\0${checked.identity.birthtime_ms}`;
   const material = exact ? JSON.stringify({ schema: 'datasecure-result-destination/exact-1',
     root: serialDirectory(rootBinding.directory), output: serialDirectory(outputBinding.directory) }) :

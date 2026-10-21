@@ -88,7 +88,8 @@ function createRunHistory(deps) {
     const exports = captureExistingExportBindings();
     return { journal_count: states.length, ...exports };
   }
-  function collect({ recoverExports = false, recoverBatchId = null, targetBatchId = null, includeHidden = false, allowDegradedList = false } = {}) {
+  function collect({ recoverExports = false, recoverBatchId = null, targetBatchId = null, includeHidden = false, allowDegradedList = false,
+    beforeRecovery = null } = {}) {
     // This fixed result describes only this explicit request. The visible
     // export helper deliberately collapses most filesystem failures into a
     // pending result; neither paths nor raw exception messages leave the core.
@@ -159,6 +160,9 @@ function createRunHistory(deps) {
             now < (nextExportRecovery.get(batchId) || 0)) continue;
         try { if (!contentOptionsForBatch(state)) continue; }
         catch { continue; }
+        // Private service hook, after the ONE actual eligibility calculation
+        // and before cooldown/publication mutation. Never a renderer option.
+        beforeRecovery?.();
         nextExportRecovery.set(batchId, now + 2000);
         recoveryAttempted = true;
         try { deps.exportCompletedBatchResults(batchId); }
@@ -300,20 +304,32 @@ function createRunHistory(deps) {
   }
   // Display queries must not perform a potentially long result publication.
   // Recovery is an explicit, separately identified user action.
-  function history({ recoverExports = false, recoverBatchId = null, includeHidden = false, batchId = null } = {}) {
+  function history({ recoverExports = false, recoverBatchId = null, includeHidden = false, batchId = null } = {}, beforeRecovery = null) {
     if (typeof includeHidden !== 'boolean') throw failure('STANDALONE_HISTORY_INVALID');
     if (batchId !== null) validateBatchId(batchId);
     if (recoverExports) validateBatchId(recoverBatchId);
     if (batchId && (includeHidden || recoverExports)) throw failure('STANDALONE_HISTORY_INVALID');
-    const recovery = recoverExports && exactReaders ? collect({ recoverExports, recoverBatchId, targetBatchId: recoverBatchId }) : null;
+    const recovery = recoverExports && exactReaders ? collect({ recoverExports, recoverBatchId, targetBatchId: recoverBatchId, beforeRecovery }) : null;
     const projected = collect({ recoverExports: recoverExports && !recovery, recoverBatchId,
-      targetBatchId: batchId, includeHidden, allowDegradedList: !batchId && !recoverExports });
+      targetBatchId: batchId, includeHidden, allowDegradedList: !batchId && !recoverExports, beforeRecovery });
     if (recovery) projected.export_recovery = recovery.export_recovery;
     return { ok: true, local_ui_only: true, external_disclosure: false,
       entries: projected.entries.map(({ _run, ...entry }) => entry),
       open_count: projected.open_count, hidden_count: projected.hidden_count,
       ...(projected.history_degraded === true ? { history_degraded: true } : {}),
       ...(projected.export_recovery ? { export_recovery: projected.export_recovery } : {}) };
+  }
+  async function historyWithRecoveryPreparation(options, prepare) {
+    if (options?.recoverExports !== true || typeof prepare !== 'function') throw failure('STANDALONE_HISTORY_INVALID');
+    validateBatchId(options.recoverBatchId);
+    const needed = {};
+    try { return history(options, () => { throw needed; }); }
+    catch (error) { if (error !== needed) throw error; }
+    const recheck = await prepare();
+    if (typeof recheck !== 'function') throw failure('STANDALONE_HISTORY_UNAVAILABLE');
+    // State, receipts, liveness and cooldown are read afresh after await. A
+    // completed/abandoned/cooldown result does not gain mutation authority.
+    return history(options, recheck);
   }
   function setVisibility(batchId, hidden) {
     validateBatchId(batchId);
@@ -473,7 +489,7 @@ function createRunHistory(deps) {
     validateBatchId(batchId);
     return readStandaloneContentNoticeSummary(batchId, expectedCount);
   }
-  return { captureDurableHistory, captureExistingExportBindings, history, setVisibility, find, resolveResults, resolveLedger, resolveIdentityMapping,
+  return { captureDurableHistory, captureExistingExportBindings, history, historyWithRecoveryPreparation, setVisibility, find, resolveResults, resolveLedger, resolveIdentityMapping,
     failures, reviewTargets, feedback, documentFeedback, contentNoticeSummary };
 }
 

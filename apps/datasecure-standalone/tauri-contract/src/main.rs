@@ -1669,7 +1669,7 @@ fn rpc_request(
                     &publication_data_root(process)?, deadline, export_reporter.clone())?
             } else { None };
             if let Some(reply) = publication_reply.or(native_export_channel::handle(&frame, &request, &mut native_handled, &state.lifecycle, deadline)?) {
-                native_bound = reply.get("ok").and_then(Value::as_bool) == Some(true);
+                native_bound = native_export_channel::callback_confirms_binding(&reply, &request);
                 let payload = serde_json::to_vec(&reply).map_err(|_| ipc_transport::FAILED.to_string())?;
                 let (sent, completed) = mpsc::channel();
                 process.writes.send((payload, sent)).map_err(|_| ipc_transport::FAILED.to_string())?;

@@ -7,6 +7,144 @@ Nachtauftrag: Hauptagent prüft auch die gebundene eigene Windows-App nativ mit
 synthetischen Daten. Menschliche Abnahme bleibt davon getrennt USER_PENDING.
 RC170 und sämtliche früheren Pakete, Nutzerdateien, Profile und Evidenzen erhalten.
 
+## Neuester Arbeitsstand: initiale Windows-Bereitstellung korrigiert (22.10.01:37)
+
+Der begrenzte Produktionsfix ist implementiert, noch nicht als neuer gemeinsamer
+Release-Freeze abgenommen. Native Windows-Startvorbereitung erstellt ausschließlich
+die festen fehlenden Ausgabecontainer mit geschützter DACL bereits beim exklusiven
+Erstellen. Geschlossener Startauftrag, Settingsdigest, gehaltene Root-/Childobjekte,
+private Identitätsquittung und erneute Kontrolle unmittelbar vor Intake bleiben
+gebunden. Busy-/Abbruch-/verlorene-Antwort-Fälle starten keinen Worker. Mac-0700-
+Pfad, alte Exportadmission und C-Guard/ABI bleiben unverändert; keine Bestands-
+oder Eltern-ACL-Reparatur. Fertige öffentliche Arbeitskopien bleiben bearbeitbar.
+
+Autor: 13 echte Windows-initial_output-Tests und Clippy PASS, darunter neuer
+frischer synthetischer Elternordner mit fremdem Modify(0x1301bf): Rootidentität,
+Owner-/DACL-Descriptorbytes und Settingsbytes vor/nach identisch, beide neu
+erstellten Kinder Owner-only/geschützt und DTO-Identitäten passend. Das ist eine
+native Rust-ACL-Probe, kein behaupteter C-Guard-/GUI-PASS. Acht bestehende
+configured-Tests zuvor ebenfalls PASS. Unabhängiger tatsächlicher Rust-
+Produktionsquellengegenreview ohne bestätigten Deltablocker. Main las auch den
+zusätzlichen reinen Testgegenfall. Zwei unnötige Erweiterungen wurden vermieden:
+kein Same-Volume-Zwang für den kopierenden Initialpfad und keine Erweiterung der
+alten Exportadmission durch neue initial-only Settingsschemata.
+
+Main-Gegenlauf dist/rc171-initial-output-targeted-main-20261022/RESULT.json:
+15/15 gezielte JS-Gruppen PASS, inputs_unchanged:true, 23:24:07.938–23:27:36.580UTC,
+darunter 46 Provisionierungsfälle, echter Source-Sidecar/OCR/Native-Integritäts-
+und Mac-Workflowvertrag. Quellen vor Zusatz-Rusttest: FP26a0b69a…/340. Keine native
+ACL-/GUI-/Releaseabnahme daraus. Beide 26erVokabulare identisch sortiert,
+17MarkdownArtifact/6Neutral/13Partial PASS, Wirevalidator unverändert.
+
+Neue create-only Source04-Helfer vorbereitet, noch ohne CHECKPOINT/FINAL/Paket.
+Kanonischer Plan jetzt288+11, neuer Provisionierungstest auch im echten Macconsumer.
+Main prüfte Helper31Negative/78Pins/9Konverter-/33GUI-Bindungen/2GUI-Release-
+Refusals und612statische Checks/101Macreceipts PASS; keine Appabnahme daraus.
+Nach abschließendem JS-Gegenreview: gemeinsamer neuer Commit/FP, neuer Macdispatch,
+frische unveränderte Endgates und neue gebundene Windows-GUI; kein altes Grün kopieren.
+
+### Weiterer bestätigter P2 vor Freeze: Wiederaufnahme und Zielwechsel
+
+Der tatsächliche unabhängige JS-Gegenreview fand eine noch nicht geschlossene
+Recovery-Lücke: Die erste neue Vorbereitung lief nur bei startAdmittedBatch.
+Alte vertagte oder noch nicht veröffentlichte Läufe haben keine neue private
+Initialquittung; continueHistoryBatch würde ihren Worker trotzdem starten und
+die spätere Erstveröffentlichung mangels Quittung verweigern. configureResults
+erzeugte bei Zielwechsel ebenfalls noch keine Initialquittung vor Replay.
+Main hat beide produktiven Kausalpfade gegengelesen; kein Freeze/Build daraus.
+
+Begrenzter Folgefix in Umsetzung: dieselbe native Vorprüfung vor ausdrücklich
+autorisierter Wiederaufnahme, vor dauerhaftem pausiertem OCR-Skip, vor gezieltem
+historischem Recovery-Versuch und nach gespeichertem Zielwechsel vor Replay.
+Geschlossene Native-Outerrollen; configure muss erst bestätigte konfigurierte
+Bindung(seq1), dann Initialquittung(seq2) derselben Session/Root vorweisen.
+Keine allgemeine History-/Startup-Provisionierung, keine zusätzliche Renderer-
+Dateiberechtigung. Bereits fertige Arbeitskopien und aktiver OCR-Skip ohne neuen
+Worker benötigen keine neue Schreibquittung. Weitere gezielte Gegenfälle und
+erneuter unabhängiger Produktionsquellengegenreview vor gemeinsamem Freeze.
+
+### Recovery-Folgefix implementiert (22.10.01:44)
+
+JavaScript-Autor: 83 Provisionierungs-/Recoveryfälle plus bestehende Kanal-,
+Migration-, Service-, History-, Continuation- und Startupregressionen grün.
+Native-Autor: 18initial_output/8configured und Clippy grün. Erfolgreiche echte
+Configure→Initial-Sequenz und verweigerte Replay-/Root-/Fehlerfälle enthalten.
+Windows-Completion zählt nur echte Initialbindung; dauerhafter Skip bleibt
+Mutation, aktiver Skip dagegen kein neuer Worker. Native Produktionsdelta von
+zweitem Experten unabhängig gelesen: kein bestätigter Deltablocker, Channelpin
+16503611d64bd5538d5d46d746eb6eb1b078c366b9c2a5b17a19aa6ea9a9249f,
+Mainpin48f86ed98046753438d9ed46df5c51c2d68ce1548e1a8ff4d86c253d6363d155.
+Main las ebenfalls Rollen, native Sequenz/Completion und JS-Lifecycle/Collector.
+
+Collector verwendet privaten Sentinel direkt hinter der tatsächlichen bestehenden
+Recovery-Eligibility, vor Cooldown und Mutation: nur nötigenfalls nativ vorbereiten,
+dann Eligibility frisch berechnen und Quittung unmittelbar vor Mutation prüfen.
+Keine duplizierte Eligibility oder allgemeine History-Provisionierung. Private
+One-use-Vorbereitung für pausierten OCR-Skip bleibt unter derselben Interaktion.
+Unbeobachteter Produktionsresolver verweigert vor ensure/replay.
+
+Separater Rootgegenreview bestätigt: Initialpublisher verwendet aktuelles Ziel,
+aber ein bereits gebundener offener Plan darf dabei nicht heimlich neu gebunden
+werden. Bei Zielwechsel bleibt er pending, bis ursprünglicher identischer Root
+zurückgewählt ist. Fertige historische Ergebnisse behalten eigene Originalbindung;
+keine Reparatur, kein Rebase und kein automatisches Schreiben ins alte Ziel.
+
+Main-Gegenlauf zwölf Gruppen unter dist/rc171-recovery-review-20261022/RESULT.json
+frisch PASS/inputs_unchanged:true, 23:43:14.889–23:44:21.526UTC. Exakter geprüfter
+Produktfingerprint3c71039392b0b80c845114cd94d6e672fcc04a84810958077c83acdd5ff300c4,
+340Produktdateien;577Test-/Scriptinputs,
+Manifest57a0455ae62fee9162acdd3f4c42883bcfebf1709e99c7e67aed7575cc17444f.
+Unabhängiger tatsächlicher JS-Produktionsgegenreview anschließend ohne bestätigten
+Deltablocker, identische Pins zweimal gelesen. Main las das Delta ebenfalls selbst.
+Main Source04-Helpertests nochmals31/78/9/33/2/612+101PASS; keine Appabnahme daraus.
+Quellenabschluss jetzt geeignet für neuen gemeinsamen Commit und erst anschließend
+neuen echten Macdispatch/Source04-Freeze. Vollständige Endgates und neue GUI offen.
+
+## Historischer bestätigter Source03-Blocker
+
+Source03/8871b4d8468a17b2cbbfe9f75c2f4ad8cd47d4be ist NICHT freigabefähig.
+WindowsNative280Rust(3ignoriert)/Node-Rust/Clippy/Release, echte30PDF/67Konverter/
+37Office und5Paketgates samt100MD-Korpus waren frisch PASS/inputsunverändert.
+ZIPa33d57cd0f96f8496b07c54e506d051ff33a253b089aca66ebc8255afe24ade8,
+EXEbc1c0a5205894d1b263adc5fda009cb98471b0843495d7595a3d68ab5a80cf26.
+Die erste tatsächliche native Bedienprobe mit frisch unkonfiguriertem Profil
+und3synthetischen Quellen erzeugt2interneMD und1korrektenOCR-Auslassungshinweis,
+scheitert aber beim ersten sichtbaren Bereitstellen. Lauf1ab8363c… im erhaltenen
+isolierten Root985959906d5e4934acb103e9c1448841: Bereitstellung offen,
+STANDALONE_OWNERSHIP_STORAGE_UNSAFE/result_export_copy. Kein Retry oder öffentlicherMD.
+Main allein bediente nach ComputerUseSkill; App normal geschlossen, keine eigenen
+App-/Coreprozesse dieses Roots mehr; alle89Kampagneneingaben danach bytegleich.
+Echte FAIL-Evidenz und19Fallstatus stehen in Source03/AGENT-GUI-EVIDENCE.json,
+Details/Launchharnessabweichung in GUI-OBSERVATIONS.md/GUI-LAUNCH.json.
+
+Zwei unabhängige tatsächliche Quellengegenanalysen bestätigen: Node-mkdir0700
+erzeugt unter Windows keinen geschützten DACL. Der neue Ausgabecontainer erbt
+zwei gewöhnliche fremde Modify-Prinzipale. Der Guard verweigert korrekt den noch
+mutierenden Bereich; nicht die später bearbeitbare öffentliche Arbeitskopie.
+Kein Longpath-/Konvertercrashbeleg. Enger Fix in Umsetzung: feste initiale
+DataSecure-Markdown/DataSecure-Output-Container über vorhandenes handle-relatives
+Rust-create_controlled_child mit geschütztem Descriptor bereits beim Erstellen
+provisionieren. Gespeicherte Rootidentität/Settingsdigest vor/nach prüfen, echte
+Root-/Childidentitäten bestätigen; Worker erst danach. Bestehende Ordner-/Eltern-
+ACLs niemals reparieren, keine Guardlockerung, kein neuer Renderer-Dateiservice.
+Keine Änderung des C-Guards/ABI oder neuen Mac-Coreproducer erforderlich.
+
+Unabhängig beendete Source03-Gesamtsuite ROT um21.10.23:06:37.883UTC,
+105/287+0/11, inputs_unchanged:true: test-markdown-artifact:96/97 verwendet die
+gesamte26erVokabularliste, die nach Ergänzung unsortiert ist. Wirevalidator lehnt
+korrekt ab; echte Erzeuger sortieren bereits. Beide Konstanten werden identisch
+lexikografisch geordnet und gegen Unsortiertheit/Duplikate abgesichert; keine
+Validatorlockerung. Alte rote Enddatei unverändert erhalten.
+
+Alle lokalen Source03-Jobs beendet. Mac39688672064 nach bestätigtem Windows-
+Produktblocker gezielt beendet: completed/cancelled, ARM119529136515success,
+Intel119529136787cancelled. Kein gemeinsamer Mac-/Release-PASS daraus.
+Erst danach wurde der Quellenfreeze für diese beiden begrenzten Korrekturen
+freigegeben. Rust-/JS-Autoren arbeiten getrennt, keine parallele Desktopsteuerung.
+Nach Gegenreview: neuer gemeinsamer Commit/FP, neue create-only Source04-Belege,
+frische Gesamt-/Native-/Konverter-/Paket-/Macläufe und neue gebundene Windows-
+GUI-Probe. Ältere Windows-/ARM-Artefakte niemals umetikettieren oder veröffentlichen.
+
 ## Gemeinsamer Vertrag
 
 DOCX/XLSX/PPTX/PDF bestmöglich lesen. Einzelne nicht unterstützte/defekte Bilder,
@@ -25,7 +163,7 @@ aus39167676290/7d0ee31dc65ce31ce54f1b4a1a0cefa348ef7071 wiederverwenden.
 
 1. Gezielte Tests und unabhängige tatsächliche Produktionsquellengegenprüfung.
    Gemeinsame Version3.2.0-rc171, abschließenden Appcommit/Fingerprint einfrieren.
-2. Frische Headless287-Dateien-Suite plus bisherige elf Zusatzgates; Windows
+2. Frische Headless288-Dateien-Suite plus bisherige elf Zusatzgates; Windows
    Prepare/Clippy/Rust/Node-Rust/Release; tatsächliche isolierte Konverter/OCR;
    frisches ZIP und fünf Paketgates. Alle Inputs während Läufen unverändert.
 3. Genau ein normaler Macconsumer target=both, keine neuen Coreproducer; beide

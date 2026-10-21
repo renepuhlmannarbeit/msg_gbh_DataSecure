@@ -2,14 +2,26 @@
 // Owned private pipe only; not a renderer action or a Cowork tool. Native v2
 // writes approved bodies and publication records through pinned capabilities.
 const crypto = require('node:crypto');
-const { validNativeDirectoryIdentity, validNativeExportBinding } = require('../core/native-directory-identity');
+const { validNativeDirectoryIdentity, validNativeExportBinding, validInitialOutputBinding,
+  validNode22BigIntIdentity, plainDataFields } = require('../core/native-directory-identity');
 const REQUEST_SCHEMA = 'datasecure-native-export-request/1';
 const RESPONSE_SCHEMA = 'datasecure-native-export-response/1';
 const PUBLICATION_REQUEST = 'datasecure-native-export-request/2';
 const PUBLICATION_RESPONSE = 'datasecure-native-export-response/2';
 const nativeErrors = new Set(['AI_EXPORT_CONFLICT', 'AI_EXPORT_VOLUME_MISMATCH', 'AI_EXPORT_UNCERTAIN',
-  'AI_EXPORT_ALREADY_COMPLETE', 'AI_EXPORT_INCOMPLETE', 'AI_EXPORT_ABANDONED', 'STANDALONE_CLOSING']);
+  'AI_EXPORT_ALREADY_COMPLETE', 'AI_EXPORT_INCOMPLETE', 'AI_EXPORT_ABANDONED', 'STANDALONE_CLOSING',
+  'STANDALONE_RESULT_ROOT_UNSAFE']);
 const fail = code => Object.assign(new Error(code), { code });
+function validPrivateOuter(outer) {
+  try { require('./desktop-ipc').validatePrivateMessage(outer); } catch { return false; }
+  return true;
+}
+function initialOutputOuter(outer) {
+  if (!validPrivateOuter(outer)) return false;
+  return ['start_admitted_batch', 'continue_history_batch', 'continue_current_batch', 'continue_review_session',
+    'skip_ocr_contact_review'].includes(outer.action) || outer.action === 'get_run_history' &&
+      outer.recover_exports === true && /^[a-f0-9]{64}$/u.test(outer.recover_batch_id || '');
+}
 class NativeExportChannel {
   constructor({ write, timeoutMs = 25000 }) { this.write = write; this.timeoutMs = timeoutMs; this.pending = null; }
   configureExportRoot(outer) {
@@ -18,15 +30,30 @@ class NativeExportChannel {
     return this.publication(outer).send('configure_export_root', { root: outer.source_paths[0] });
   }
   publication(outer) {
-    const nativeId = crypto.randomBytes(16).toString('hex'); let sequence = 0;
+    const nativeId = crypto.randomBytes(16).toString('hex'); let sequence = 0, configuredRoot = null;
     return { send: (action, fields) => {
+      if (action === 'configure_export_root' && (outer?.action !== 'configure_results' || outer.native_export_binding !== true || sequence !== 0 ||
+          !validPrivateOuter(outer) ||
+          !Array.isArray(outer.source_paths) || outer.source_paths.length !== 1 || !plainDataFields(fields, ['root']) ||
+          typeof fields.root !== 'string' || fields.root !== outer.source_paths[0])) return Promise.reject(fail('STANDALONE_IPC_FAILED'));
+      const configuredInitial = outer?.action === 'configure_results' && outer.native_export_binding === true &&
+        validPrivateOuter(outer) && sequence === 1 && configuredRoot !== null && plainDataFields(fields, ['root', 'admission', 'setting_sha256']) &&
+        fields.root === configuredRoot && outer.source_paths?.length === 1 && outer.source_paths[0] === configuredRoot;
+      if (action === 'prepare_initial_output_root' && (!(sequence === 0 && initialOutputOuter(outer) || configuredInitial) ||
+          !plainDataFields(fields, ['root', 'admission', 'setting_sha256']) || typeof fields.root !== 'string' ||
+          !/^[a-f0-9]{64}$/u.test(fields.setting_sha256) || !plainDataFields(fields.admission, ['kind', 'identity']) ||
+          !(fields.admission.kind === 'native' ? plainDataFields(fields.admission.identity, ['volume', 'object', 'created_ns']) &&
+            validNativeDirectoryIdentity(fields.admission.identity) :
+            fields.admission.kind === 'node22_bigint' && validNode22BigIntIdentity(fields.admission.identity))))
+        return Promise.reject(fail('STANDALONE_IPC_FAILED'));
       if (this.pending || !/^[a-f0-9]{16,64}$/u.test(outer?.request_id) || ++sequence > 9000) return Promise.reject(fail('STANDALONE_IPC_FAILED'));
       const request = { schema: PUBLICATION_REQUEST, request_id: outer.request_id, native_id: nativeId, sequence, action, ...fields };
       // No timer is allowed to release the document lock while the native
       // publisher still owns write capability. Only its settled reply or the
       // owning desktop's EOF may settle this Promise. Rust bounds admission.
       return new Promise((resolve, reject) => {
-        this.pending = { request, resolve, reject, timer: null };
+        this.pending = { request, resolve, reject, timer: null,
+          accepted: action === 'configure_export_root' ? () => { configuredRoot = request.root; } : null };
         try { this.write(request); } catch { this.abort('STANDALONE_IPC_FAILED'); }
       });
     } };
@@ -48,16 +75,26 @@ class NativeExportChannel {
     const pending = this.pending;
     if (pending?.request.schema === PUBLICATION_REQUEST) {
       const configure = ['configure_export_root', 'prepare_configured_export_root'].includes(pending.request.action);
-      const fields = (message?.ok === true ? `${configure ? 'binding' : 'status'},native_id,ok,request_id,schema,sequence` : 'error_code,native_id,ok,request_id,schema,sequence').split(',').sort().join(',');
+      const initial = pending.request.action === 'prepare_initial_output_root';
+      if (initial && !plainDataFields(message, ['initial_binding', 'native_id', 'ok', 'request_id', 'schema', 'sequence']) &&
+          !plainDataFields(message, ['error_code', 'native_id', 'ok', 'request_id', 'schema', 'sequence'])) {
+        this.abort('STANDALONE_IPC_FAILED'); throw fail('STANDALONE_IPC_FAILED');
+      }
+      const fields = (message?.ok === true ? `${initial ? 'initial_binding' : configure ? 'binding' : 'status'},native_id,ok,request_id,schema,sequence` : 'error_code,native_id,ok,request_id,schema,sequence').split(',').sort().join(',');
+      if (initial && (!plainDataFields(message, fields.split(',')) || message.ok === true &&
+          (!validInitialOutputBinding(message.initial_binding) || message.initial_binding.root !== pending.request.root))) {
+        this.abort('STANDALONE_IPC_FAILED'); throw fail('STANDALONE_IPC_FAILED');
+      }
       if (!message || Object.keys(message).sort().join(',') !== fields || message.schema !== PUBLICATION_RESPONSE ||
           message.request_id !== pending.request.request_id || message.native_id !== pending.request.native_id || message.sequence !== pending.request.sequence ||
-          ![true, false].includes(message.ok) || message.ok && (configure ? !validNativeExportBinding(message.binding) || message.binding.root !== pending.request.root :
+          ![true, false].includes(message.ok) || message.ok && (initial ? false : configure ? !validNativeExportBinding(message.binding) || message.binding.root !== pending.request.root :
             !(pending.request.command === 'write_body' ? ['receiving', 'staged'] : ['unprepared', 'prepared', 'completed', 'acknowledged', 'abandoned']).includes(message.status)) ||
           !message.ok && !nativeErrors.has(message.error_code)) {
         this.abort('STANDALONE_IPC_FAILED'); throw fail('STANDALONE_IPC_FAILED');
       }
       this.pending = null;
-      if (message.ok) pending.resolve(configure ? message.binding : message.status); else pending.reject(fail(message.error_code));
+      if (message.ok) { pending.accepted?.(); pending.resolve(initial ? message.initial_binding : configure ? message.binding : message.status); }
+      else pending.reject(fail(message.error_code));
       return message;
     }
     const fields = message?.ok === true ? 'identity,native_id,ok,request_id,schema,sequence' : 'error_code,native_id,ok,request_id,schema,sequence';

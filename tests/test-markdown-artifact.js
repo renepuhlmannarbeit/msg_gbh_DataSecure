@@ -79,6 +79,10 @@ test('empty text has an honest zero-byte digest rather than an invented placehol
 });
 
 test('incomplete conversion is retained with its explicit non-anonymized grade and reasons', () => {
+  assert.strictEqual(COVERAGE_REASON_CODES.length, 26);
+  assert.strictEqual(new Set(COVERAGE_REASON_CODES).size, 26);
+  assert.ok(COVERAGE_REASON_CODES.every((code, index, codes) => index === 0 || codes[index - 1] < code),
+    'the closed coverage vocabulary must be strictly ascending, like valid wire reasons');
   const contactText = 'E-Mail: audit@example.invalid';
   const contactMap = [{ start: 8, end: contactText.length, page: 1, line: 1, kind: 'email' }];
   for (const code of COVERAGE_REASON_CODES) {

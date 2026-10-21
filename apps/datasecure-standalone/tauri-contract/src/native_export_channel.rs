@@ -15,6 +15,7 @@ const MAX_PUBLICATION_FRAMES: u64 = 9000; // 500 MiB / 64 KiB + <=203 fixed body
 #[derive(Default)]
 pub(crate) struct PublicationState {
     sequence: u32, native_id: Option<String>, operation: Option<Value>, body: Option<(usize, Vec<u8>)>,
+    configured_initial_root: Option<String>,
     #[cfg(test)] native_worker_dispatches: usize,
 }
 #[derive(Deserialize)]
@@ -25,6 +26,10 @@ struct ConfigureRequest { schema: String, request_id: String, native_id: String,
 struct ConfiguredRequest { schema: String, request_id: String, native_id: String, sequence: u32, action: String,
     batch_id: String, operation_id: String, root: String, setting_sha256: String,
     admission: crate::native_export_broker::ConfiguredAdmission }
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct InitialOutputRequest { schema: String, request_id: String, native_id: String, sequence: u32, action: String,
+    root: String, setting_sha256: String, admission: crate::native_export_broker::ConfiguredAdmission }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ExportRequest { schema: String, request_id: String, native_id: String, sequence: u32, action: String,
@@ -51,6 +56,65 @@ fn current_results_outer(outer: &Value) -> bool {
         outer["request_id"].as_str().is_some_and(|id| (16..=64).contains(&id.len()) &&
             id.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)))
 }
+fn initial_start_outer_valid(outer: &Value) -> bool {
+    let Some(object) = outer.as_object() else { return false; };
+    const ALLOWED: &[&str] = &["schema", "request_id", "action", "processing_mode", "output_naming_mode",
+        "content_options", "document_review", "ocr_contact_review", "review_policy", "source_ids", "catalogue_revision"];
+    if object.keys().any(|name| !ALLOWED.contains(&name.as_str())) ||
+        outer["schema"] != "datasecure-standalone-private-ipc/1" || outer["action"] != "start_admitted_batch" ||
+        !outer["request_id"].as_str().is_some_and(|id| (16..=64).contains(&id.len()) &&
+            id.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))) { return false; }
+    let Some(mode @ ("markdown-only" | "markdown-and-anonymize")) = outer["processing_mode"].as_str() else { return false; };
+    let naming = match outer.get("output_naming_mode") { Some(value) => match value.as_str() { Some(text) => Some(text), None => return false }, None => None };
+    if crate::validate_output_naming_mode(naming, mode).is_err() { return false; }
+    if outer.get("document_review").is_some_and(|value| value != &Value::Bool(true)) { return false; }
+    if outer.get("ocr_contact_review").is_some_and(|value| value != &Value::Bool(true) || mode != "markdown-only") { return false; }
+    let mut body = json!({ "processingMode": mode });
+    if let Some(content) = outer.get("content_options") { body["contentOptions"] = content.clone(); }
+    if let Some(policy) = outer.get("review_policy") { body["reviewPolicy"] = policy.clone(); }
+    if crate::content_start::decode_start(&body, outer["document_review"] == true).is_err() { return false; }
+    match (outer.get("source_ids"), outer.get("catalogue_revision")) {
+        (None, None) => {},
+        (Some(ids), Some(revision)) => {
+            let Some(ids) = ids.as_array() else { return false; };
+            if revision.as_u64().is_none() || ids.is_empty() || ids.len() > 200 { return false; }
+            let mut seen = std::collections::HashSet::new();
+            for id in ids {
+                let Some(id) = id.as_str() else { return false; };
+                if id.len() != 32 || !id.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)) || !seen.insert(id) { return false; }
+            }
+        },
+        _ => return false,
+    }
+    true
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum InitialOutputRole { Start, Resume, Recovery, Configure }
+fn initial_output_role(outer: &Value) -> Option<InitialOutputRole> {
+    let object = outer.as_object()?;
+    if outer["schema"] != "datasecure-standalone-private-ipc/1" ||
+        !outer["request_id"].as_str().is_some_and(|id| (16..=64).contains(&id.len()) &&
+            id.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c))) { return None; }
+    let exact = |fields: &[&str]| object.len() == fields.len() && fields.iter().all(|field| object.contains_key(*field));
+    let batch = |name: &str| outer[name].as_str().is_some_and(|id| id.len() == 64 &&
+        id.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)));
+    match outer["action"].as_str()? {
+        "start_admitted_batch" if initial_start_outer_valid(outer) => Some(InitialOutputRole::Start),
+        "continue_history_batch" | "skip_ocr_contact_review" if exact(&["schema", "request_id", "action", "batch_id"]) && batch("batch_id") =>
+            Some(InitialOutputRole::Resume),
+        "continue_current_batch" | "continue_review_session" if exact(&["schema", "request_id", "action"]) => Some(InitialOutputRole::Resume),
+        "get_run_history" if outer["recover_exports"] == true && batch("recover_batch_id") &&
+            (exact(&["schema", "request_id", "action", "recover_exports", "recover_batch_id"]) ||
+                exact(&["schema", "request_id", "action", "recover_exports", "recover_batch_id", "include_hidden"]) && outer["include_hidden"] == true) =>
+            Some(InitialOutputRole::Recovery),
+        "configure_results" if exact(&["schema", "request_id", "action", "source_paths", "native_export_binding"]) &&
+            outer["native_export_binding"] == true && outer["source_paths"].as_array().is_some_and(|paths|
+                paths.len() == 1 && paths[0].as_str().is_some_and(|root| !root.is_empty())) => Some(InitialOutputRole::Configure),
+        _ => None,
+    }
+}
+#[cfg(test)]
+fn initial_output_outer(outer: &Value) -> bool { initial_output_role(outer).is_some() }
 fn receive_body(state: &mut PublicationState, op: &crate::native_export_broker::Operation, chunk: BodyChunk,
     data: &Path, guard: Option<&ipc_transport::NativeGuard>, reporter: Option<&ExportReporter>) -> std::io::Result<&'static str> {
     let invalid = || std::io::Error::other("AI_EXPORT_CONFLICT");
@@ -164,7 +228,28 @@ fn handle_publication_owned(frame: &Value, outer: &Value, state: &mut Publicatio
             return Err(invalid());
         }
         crate::native_export_broker::configure(Path::new(&request.root), data, native_id, guard.ok_or_else(invalid)?)
-            .map(|binding| { response["binding"] = json!(binding); })
+            .map(|binding| {
+                state.configured_initial_root = Some(binding.root.clone());
+                response["binding"] = json!(binding);
+            })
+    } else if frame["action"] == "prepare_initial_output_root" {
+        let request: InitialOutputRequest = serde_json::from_value(frame.clone()).map_err(|_| invalid())?;
+        let role = initial_output_role(outer).ok_or_else(invalid)?;
+        let expected_sequence = if role == InitialOutputRole::Configure { 2 } else { 1 };
+        if !cfg!(windows) || request.schema != PUBLICATION_REQUEST || request.action != "prepare_initial_output_root" ||
+            request.request_id != outer["request_id"] || request.native_id != native_id || u64::from(request.sequence) != sequence ||
+            sequence != expected_sequence || state.operation.is_some() || state.body.is_some() ||
+            role == InitialOutputRole::Configure && (state.configured_initial_root.as_deref() != Some(request.root.as_str()) ||
+                outer["source_paths"][0].as_str() != Some(request.root.as_str())) {
+            return Err(invalid());
+        }
+        // Only a successful sequence-1 configure mints this one-use sequence-2
+        // authority. Failed preparation, root changes and repeated callbacks
+        // never acquire it, even if the sidecar later forges a success result.
+        state.configured_initial_root = None;
+        crate::native_export_broker::prepare_initial_output_root(Path::new(&request.root), data,
+            &request.admission, &request.setting_sha256, guard.ok_or_else(invalid)?)
+            .map(|binding| { response["initial_binding"] = json!(binding); })
     } else if frame["action"] == "prepare_configured_export_root" {
         let request: ConfiguredRequest = serde_json::from_value(frame.clone()).map_err(|_| invalid())?;
         if request.schema != PUBLICATION_REQUEST || request.action != "prepare_configured_export_root" ||
@@ -312,11 +397,36 @@ fn read_metadata<T: Send + 'static>(lifecycle: &Lifecycle, deadline: Instant,
 }
 
 pub fn validate_completion(response: &Value, outer: &Value, bound: bool) -> Result<(), String> {
-    if outer.get("native_export_binding").and_then(Value::as_bool) == Some(true) &&
+    validate_completion_for_platform(response, outer, bound, cfg!(windows))
+}
+fn validate_completion_for_platform(response: &Value, outer: &Value, bound: bool, windows: bool) -> Result<(), String> {
+    let initial_required = windows && match initial_output_role(outer) {
+        Some(InitialOutputRole::Start | InitialOutputRole::Configure) => true,
+        Some(InitialOutputRole::Resume) => response["result"]["event"] == "batch_continued" ||
+            outer["action"] == "skip_ocr_contact_review" && response["result"]["skip_recorded"] == true,
+        Some(InitialOutputRole::Recovery) => matches!(response["result"]["export_recovery"]["outcome"].as_str(), Some("failed" | "pending")),
+        None => false,
+    };
+    if (outer.get("native_export_binding").and_then(Value::as_bool) == Some(true) ||
+        initial_required) &&
         response.get("ok").and_then(Value::as_bool) == Some(true) && !bound {
         return Err(ipc_transport::FAILED.to_string());
     }
     Ok(())
+}
+pub(crate) fn callback_confirms_binding(reply: &Value, outer: &Value) -> bool {
+    callback_confirms_binding_for_platform(reply, outer, cfg!(windows))
+}
+fn callback_confirms_binding_for_platform(reply: &Value, outer: &Value, windows: bool) -> bool {
+    if reply["ok"] != true { return false; }
+    if windows && initial_output_role(outer).is_some() {
+        // configure_export_root's regular binding alone is NOT an initial
+        // output binding. Only the actual successful second callback counts.
+        return reply.get("initial_binding").is_some_and(|value|
+            serde_json::from_value::<crate::native_export_broker::InitialOutputBinding>(value.clone()).is_ok_and(|binding|
+                binding.schema == "datasecure-initial-output-binding/1"));
+    }
+    true
 }
 
 #[cfg(test)]
@@ -433,6 +543,227 @@ mod tests {
         assert_eq!(response["ok"], false);
         assert!(validate_completion(&json!({"ok": true}), &outer(), response["ok"] == true).is_err(),
             "a performed but refused callback is not a native binding");
+    }
+    fn initial_start_outer() -> Value {
+        json!({"schema":"datasecure-standalone-private-ipc/1", "request_id":"1".repeat(16),
+            "action":"start_admitted_batch", "processing_mode":"markdown-only"})
+    }
+    #[cfg(windows)]
+    fn initial_frame(fixture: &ExportFixture, outer: &Value) -> Value {
+        let public = Directory::open_existing(&fixture.root.join("public"), None).unwrap();
+        let exact = public.node22_bigint_identity().unwrap();
+        let data = Directory::open_existing(&fixture.data(), None).unwrap();
+        let settings = data.create_controlled_child("settings").unwrap();
+        let bytes = serde_json::to_vec(&json!({"schema":"datasecure-result-root/5", "root":fixture.root.join("public"),
+            "identity":{"dev":"1","ino":"2","birthtime_ms":"3"}, "exact_identity":exact,
+            "notices":{"sync":false,"network":false}})).unwrap();
+        settings.write_record_atomic("result-root.json", &bytes).unwrap();
+        json!({"schema":PUBLICATION_REQUEST,"request_id":outer["request_id"],"native_id":"2".repeat(32),
+            "sequence":1,"action":"prepare_initial_output_root","root":fixture.root.join("public"),
+            "admission":{"kind":"node22_bigint","identity":exact},"setting_sha256":format!("{:x}",Sha256::digest(bytes))})
+    }
+    #[test]
+    fn initial_output_outer_is_closed_to_the_actual_prestart_request_without_renderer_paths_or_acl_fields() {
+        let base = initial_start_outer(); assert!(initial_output_outer(&base));
+        for (field, value) in [("root", json!("arbitrary")), ("source_paths", json!(["arbitrary"])), ("acl", json!("WD")),
+            ("action", json!("get_run_history")), ("schema", json!("wrong")), ("request_id", json!("short")),
+            ("processing_mode", json!("other")), ("document_review", Value::Null), ("ocr_contact_review", json!(false)),
+            ("content_options", Value::Null), ("source_ids", json!(["a".repeat(32)])), ("catalogue_revision", json!(1))] {
+            let mut changed = base.clone(); changed[field] = value;
+            assert!(!initial_output_outer(&changed), "{field}");
+        }
+        let mut both = base.clone(); both["source_ids"] = json!(["a".repeat(32)]); both["catalogue_revision"] = json!(1);
+        assert!(initial_output_outer(&both));
+        both["source_ids"] = json!(["a".repeat(32),"a".repeat(32)]); assert!(!initial_output_outer(&both));
+        let mut anonymize = base; anonymize["processing_mode"] = json!("markdown-and-anonymize");
+        assert!(!initial_output_outer(&anonymize)); anonymize["output_naming_mode"] = json!("neutral");
+        assert!(initial_output_outer(&anonymize));
+    }
+    #[test]
+    fn initial_output_completion_requires_windows_native_callback_but_preserves_mac_start_contract() {
+        let outer = initial_start_outer(); let success = json!({"ok":true});
+        assert!(validate_completion_for_platform(&success, &outer, false, true).is_err(), "Windows cannot skip native provisioning");
+        assert!(validate_completion_for_platform(&success, &outer, true, true).is_ok());
+        assert!(validate_completion_for_platform(&success, &outer, false, false).is_ok(), "Mac still uses its existing 0700 path");
+        assert!(validate_completion_for_platform(&json!({"ok":false}), &outer, false, true).is_ok());
+        assert_eq!(validate_completion(&success, &outer, false).is_err(), cfg!(windows));
+    }
+    fn initial_resume_outer(action: &str) -> Value {
+        let mut outer = json!({"schema":"datasecure-standalone-private-ipc/1","request_id":"1".repeat(16),"action":action});
+        if ["continue_history_batch", "skip_ocr_contact_review"].contains(&action) { outer["batch_id"] = json!("a".repeat(64)); }
+        if action == "get_run_history" { outer["recover_exports"] = json!(true); outer["recover_batch_id"] = json!("a".repeat(64)); }
+        outer
+    }
+    #[test]
+    fn initial_output_resume_and_targeted_recovery_roles_are_closed_and_never_general_history_or_export_authority() {
+        for action in ["continue_history_batch","continue_current_batch","continue_review_session","skip_ocr_contact_review","get_run_history"] {
+            let outer = initial_resume_outer(action); assert!(initial_output_outer(&outer), "{action}");
+            for (field, value) in [("root",json!("arbitrary")),("source_paths",json!(["arbitrary"])),("acl",json!("WD"))] {
+                let mut changed = outer.clone(); changed[field] = value; assert!(!initial_output_outer(&changed));
+            }
+            if outer.get("batch_id").is_some() {
+                let mut changed = outer.clone(); changed["batch_id"] = json!("a".repeat(63)); assert!(!initial_output_outer(&changed));
+            }
+        }
+        for action in ["get_public_state","get_run_history","get_document_reviews","resolve_history_results","publish_result_documents",
+            "export_approved_documents","resolve_current_results","abandon_result_export"] {
+            let outer = json!({"schema":"datasecure-standalone-private-ipc/1","request_id":"1".repeat(16),"action":action,"batch_id":"a".repeat(64)});
+            assert!(!initial_output_outer(&outer), "{action}");
+        }
+        let recovery = initial_resume_outer("get_run_history");
+        for (field, value) in [("recover_exports",json!(false)),("recover_batch_id",json!("A".repeat(64))),
+            ("include_hidden",json!(false)),("batch_id",json!("a".repeat(64)))] {
+            let mut changed = recovery.clone(); changed[field] = value; assert!(!initial_output_outer(&changed));
+        }
+        let mut hidden = recovery; hidden["include_hidden"] = json!(true); assert!(initial_output_outer(&hidden));
+    }
+    #[test]
+    fn initial_output_resume_completion_observes_real_worker_or_durable_skip_not_readonly_or_already_complete_results() {
+        for action in ["continue_history_batch","continue_current_batch","continue_review_session","skip_ocr_contact_review"] {
+            let outer = initial_resume_outer(action);
+            let continued = json!({"ok":true,"result":{"event":"batch_continued"}});
+            assert!(validate_completion_for_platform(&continued,&outer,false,true).is_err());
+            assert!(validate_completion_for_platform(&continued,&outer,true,true).is_ok());
+            assert!(validate_completion_for_platform(&continued,&outer,false,false).is_ok(), "Mac unchanged");
+            let completed = json!({"ok":true,"result":{"event":"batch_already_completed"}});
+            assert!(validate_completion_for_platform(&completed,&outer,false,true).is_ok());
+        }
+        let skip = initial_resume_outer("skip_ocr_contact_review");
+        assert!(validate_completion_for_platform(&json!({"ok":true,"result":{"skip_requested":true,"continuation_pending":false}}),&skip,false,true).is_ok());
+        let durable = json!({"ok":true,"result":{"skip_recorded":true,"continuation_pending":true}});
+        assert!(validate_completion_for_platform(&durable,&skip,false,true).is_err());
+        assert!(validate_completion_for_platform(&durable,&skip,true,true).is_ok());
+        let recovery = initial_resume_outer("get_run_history");
+        for outcome in ["available","not_attempted","failed","pending"] {
+            let response = json!({"ok":true,"result":{"export_recovery":{"outcome":outcome}}});
+            assert_eq!(validate_completion_for_platform(&response,&recovery,false,true).is_err(), ["failed","pending"].contains(&outcome));
+            assert!(validate_completion_for_platform(&response,&recovery,true,true).is_ok());
+            assert!(validate_completion_for_platform(&response,&recovery,false,false).is_ok());
+        }
+    }
+    #[cfg(windows)]
+    fn initial_configure_outer(fixture: &ExportFixture) -> Value {
+        json!({"schema":"datasecure-standalone-private-ipc/1","request_id":"1".repeat(16),"action":"configure_results",
+            "source_paths":[fixture.root.join("public")],"native_export_binding":true})
+    }
+    #[cfg(windows)]
+    fn initial_configure_frame(outer: &Value) -> Value {
+        json!({"schema":PUBLICATION_REQUEST,"request_id":outer["request_id"],"native_id":"2".repeat(32),
+            "sequence":1,"action":"configure_export_root","root":outer["source_paths"][0]})
+    }
+    #[cfg(windows)]
+    fn initial_after_configure(fixture: &ExportFixture, outer: &Value, configured: &Value) -> Value {
+        let initial = initial_frame(fixture, outer); // exact old-root setting, no output mkdir
+        let binding: crate::native_export_broker::Binding = serde_json::from_value(configured["binding"].clone()).unwrap();
+        let settings = fixture.data().join("settings/result-root.json");
+        let mut record: Value = serde_json::from_slice(&std::fs::read(&settings).unwrap()).unwrap();
+        record["schema"] = json!("datasecure-result-root/6"); record["native_export"] = configured["binding"].clone();
+        let bytes = serde_json::to_vec(&record).unwrap(); std::fs::write(settings, &bytes).unwrap();
+        let mut frame = initial; frame["sequence"] = json!(2);
+        frame["admission"] = json!({"kind":"native","identity":binding.root_identity});
+        frame["setting_sha256"] = json!(format!("{:x}",Sha256::digest(bytes))); frame
+    }
+    #[cfg(windows)]
+    #[test]
+    fn initial_output_configure_requires_real_successful_sequence_one_then_same_session_root_sequence_two() {
+        let fixture = ExportFixture::new(); let outer = initial_configure_outer(&fixture); let lifecycle = Lifecycle::default();
+        let mut state = PublicationState::default();
+        let configured = handle_publication(&initial_configure_frame(&outer),&outer,&mut state,&lifecycle,&fixture.data(),deadline()).unwrap().unwrap();
+        assert_eq!(configured["ok"],true);
+        assert!(!callback_confirms_binding(&configured,&outer), "regular export binding cannot stand in for initial binding");
+        assert!(callback_confirms_binding_for_platform(&configured,&outer,false), "Mac still accepts its existing single configuration callback");
+        assert!(validate_completion(&json!({"ok":true}),&outer,callback_confirms_binding(&configured,&outer)).is_err());
+        let initial = initial_after_configure(&fixture,&outer,&configured);
+        for (field,value) in [("root",json!(fixture.data())),("native_id",json!("3".repeat(32))),("sequence",json!(3))] {
+            let mut forged = initial.clone(); forged[field] = value;
+            assert!(handle_publication(&forged,&outer,&mut state,&lifecycle,&fixture.data(),deadline()).is_err(),"{field}");
+        }
+        let response = handle_publication(&initial,&outer,&mut state,&lifecycle,&fixture.data(),deadline()).unwrap().unwrap();
+        assert_eq!(response["ok"],true); assert!(callback_confirms_binding(&response,&outer));
+        validate_completion(&json!({"ok":true}),&outer,callback_confirms_binding(&response,&outer)).unwrap();
+        assert!(state.configured_initial_root.is_none());
+        assert!(handle_publication(&initial,&outer,&mut state,&lifecycle,&fixture.data(),deadline()).is_err());
+        let mut repeat = initial; repeat["sequence"] = json!(3);
+        assert!(handle_publication(&repeat,&outer,&mut state,&lifecycle,&fixture.data(),deadline()).is_err());
+    }
+    #[cfg(windows)]
+    #[test]
+    fn initial_output_failed_configuration_or_initial_callback_never_mints_retry_or_completion_authority() {
+        for failure in ["configure","initial"] {
+            let fixture = ExportFixture::new(); let outer = initial_configure_outer(&fixture); let lifecycle = Lifecycle::default();
+            if failure == "configure" {
+                let data = Directory::open_existing(&fixture.data(),None).unwrap();
+                data.create_controlled_child(&format!("native-export-{}","2".repeat(32))).unwrap();
+            }
+            let mut state = PublicationState::default();
+            let configured = handle_publication(&initial_configure_frame(&outer),&outer,&mut state,&lifecycle,&fixture.data(),deadline()).unwrap().unwrap();
+            if failure == "configure" {
+                assert_eq!(configured["ok"],false); assert!(state.configured_initial_root.is_none());
+                let mut forged = initial_frame(&fixture,&outer); forged["sequence"] = json!(2);
+                assert!(handle_publication(&forged,&outer,&mut state,&lifecycle,&fixture.data(),deadline()).is_err());
+            } else {
+                assert_eq!(configured["ok"],true);
+                let mut initial = initial_after_configure(&fixture,&outer,&configured); initial["setting_sha256"] = json!("0".repeat(64));
+                let response = handle_publication(&initial,&outer,&mut state,&lifecycle,&fixture.data(),deadline()).unwrap().unwrap();
+                assert_eq!(response["ok"],false); assert!(!callback_confirms_binding(&response,&outer));
+                assert!(state.configured_initial_root.is_none()); initial["sequence"] = json!(3);
+                assert!(handle_publication(&initial,&outer,&mut state,&lifecycle,&fixture.data(),deadline()).is_err());
+            }
+            assert!(validate_completion(&json!({"ok":true}),&outer,false).is_err());
+            assert!(!fixture.root.join("public/DataSecure-Markdown").exists());
+            assert!(!fixture.root.join("public/DataSecure-Output").exists());
+        }
+    }
+    #[cfg(windows)]
+    #[test]
+    fn initial_output_resume_and_targeted_recovery_each_use_real_sequence_one_binding() {
+        for action in ["continue_history_batch","continue_current_batch","continue_review_session","skip_ocr_contact_review","get_run_history"] {
+            let fixture = ExportFixture::new(); let outer = initial_resume_outer(action); let frame = initial_frame(&fixture,&outer);
+            let lifecycle = Lifecycle::default(); let mut state = PublicationState::default();
+            let response = handle_publication(&frame,&outer,&mut state,&lifecycle,&fixture.data(),deadline()).unwrap().unwrap();
+            assert_eq!(response["ok"],true,"{action}"); assert!(callback_confirms_binding(&response,&outer));
+            assert_eq!(std::fs::read_dir(fixture.root.join("public")).unwrap().count(),2);
+            assert!(handle_publication(&frame,&outer,&mut state,&lifecycle,&fixture.data(),deadline()).is_err());
+        }
+    }
+    #[cfg(windows)]
+    #[test]
+    fn initial_output_native_frame_provisions_only_fixed_children_and_cannot_repeat_or_skip_its_reply() {
+        let fixture = ExportFixture::new(); let outer = initial_start_outer(); let frame = initial_frame(&fixture, &outer);
+        let lifecycle = Lifecycle::default(); let mut state = PublicationState::default();
+        let response = handle_publication(&frame, &outer, &mut state, &lifecycle, &fixture.data(), deadline()).unwrap().unwrap();
+        assert_eq!(response["ok"], true); assert!(response.get("binding").is_none());
+        let binding: crate::native_export_broker::InitialOutputBinding = serde_json::from_value(response["initial_binding"].clone()).unwrap();
+        let public = Directory::open_existing(&fixture.root.join("public"), None).unwrap();
+        assert_eq!(binding.root_identity, public.node22_bigint_identity().unwrap());
+        for (name, expected) in [("DataSecure-Markdown", binding.markdown_identity), ("DataSecure-Output", binding.output_identity)] {
+            let directory = Directory::open_existing(&fixture.root.join("public").join(name), None).unwrap();
+            directory.verify_controlled().unwrap(); assert_eq!(directory.node22_bigint_identity().unwrap(), expected);
+        }
+        assert_eq!(std::fs::read_dir(fixture.root.join("public")).unwrap().count(), 2);
+        assert!(handle_publication(&frame, &outer, &mut state, &lifecycle, &fixture.data(), deadline()).is_err());
+        let mut next = frame.clone(); next["sequence"] = json!(2);
+        assert!(handle_publication(&next, &outer, &mut state, &lifecycle, &fixture.data(), deadline()).is_err());
+        // A lost response cannot be replaced with an unbound successful start.
+        assert!(validate_completion(&json!({"ok":true}), &outer, false).is_err());
+        validate_completion(&json!({"ok":true}), &outer, response["ok"] == true).unwrap();
+    }
+    #[cfg(windows)]
+    #[test]
+    fn initial_output_native_frame_refuses_wrong_role_digest_extra_fields_closing_and_expired_owner() {
+        for fault in ["outer", "digest", "root", "extra", "closing", "expired"] {
+            let fixture = ExportFixture::new(); let mut outer = initial_start_outer(); let mut frame = initial_frame(&fixture, &outer);
+            if fault == "outer" { outer["action"] = json!("configure_results"); }
+            if fault == "digest" { frame["setting_sha256"] = json!("0".repeat(64)); }
+            if fault == "root" { frame["root"] = json!(fixture.data()); }
+            if fault == "extra" { frame["child_name"] = json!("arbitrary"); }
+            let lifecycle = Lifecycle::default(); if fault == "closing" { assert!(lifecycle.stop()); }
+            let until = if fault == "expired" { Instant::now() } else { deadline() };
+            let result = handle_publication(&frame, &outer, &mut PublicationState::default(), &lifecycle, &fixture.data(), until);
+            assert!(!matches!(result, Ok(Some(ref value)) if value["ok"] == true), "{fault}");
+            assert_eq!(std::fs::read_dir(fixture.root.join("public")).unwrap().count(), 0, "{fault}");
+            assert!(validate_completion(&json!({"ok":true}), &initial_start_outer(), false).is_err());
+        }
     }
     #[test]
     fn confidential_result_frames_use_exact_two_additional_body_indices_and_preserve_readonly_authority() {

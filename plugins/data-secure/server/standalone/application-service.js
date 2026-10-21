@@ -360,6 +360,7 @@ function defaultDependencies(options = {}) {
     readConfiguredResultRootStatus: resultFolder.readConfiguredResultRootStatus,
     saveConfiguredResultRoot: resultFolder.saveConfiguredResultRoot,
     prepareConfiguredNativeExportBinding: resultFolder.prepareConfiguredNativeExportBinding,
+    prepareConfiguredInitialOutputRoot: resultFolder.prepareConfiguredInitialOutputRoot,
     resultOutputDirectory: resultFolder.resultOutputDirectory,
     isNetworkResultFolder: resultFolder.isNetworkResultFolder,
     recordSupportTrace: supportTrace.recordSupportTrace,
@@ -410,10 +411,18 @@ function selectedPathIdentity(candidate) {
   const resolved = path.resolve(candidate);
   return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
 }
+// One private opt-out continuation may reuse its own already-confirmed native
+// preflight. This capability is never accepted from an IPC/renderer DTO.
+const recoveryPreparations = new WeakMap();
 
 class StandaloneApplicationService {
   constructor(options = {}) {
     this.deps = options.dependencies || defaultDependencies(options);
+    // Injected legacy adapters opt into this separately; the real native
+    // Windows product cannot bypass preparation by omitting its private hook.
+    this.nativeInitialOutputRequired = options.dependencies ? options.nativeInitialOutputRequired === true
+      : require('../gateway/initial-output-binding').required();
+    this.prepareInitialOutputRoot = options.prepareInitialOutputRoot;
     this.home = options.home || os.homedir();
     this.interactionActive = false;
     this.admittedQueue = null;
@@ -490,6 +499,23 @@ class StandaloneApplicationService {
       throw fixedFailure('OCR_CONTACT_SKIP_UNAVAILABLE', 'Nur eine offene OCR-Kontaktprüfung der reinen Markdown-Umwandlung kann übersprungen werden.');
     if (session.worker_active === true || this.deps.lightweightStatus().batch_processing_active === true)
       throw fixedFailure('OCR_CONTACT_SKIP_NOT_READY', 'DataSecure bereitet die Prüfgruppe noch vor. Bitte kurz warten und den Status erneut prüfen.');
+    if (this.nativeInitialOutputRequired) {
+      this.interactionActive = true;
+      try {
+        const recheck = await this.prepareInitialOutputForMutation();
+        recheck();
+        this.deps.skipStandaloneOcrContactReview(batchId);
+        const prepared = {};
+        recoveryPreparations.set(prepared, { service: this, recheck });
+        try {
+          const continued = await this.continueHistoryBatch(batchId, undefined, prepared);
+          return { ...continued, skip_recorded: true, external_disclosure: false };
+        } catch {
+          // Only failures AFTER durable skip may report that saved decision.
+          return { ok: true, skip_recorded: true, continuation_pending: true, external_disclosure: false };
+        } finally { recoveryPreparations.delete(prepared); }
+      } finally { this.interactionActive = false; }
+    }
     this.deps.skipStandaloneOcrContactReview(batchId);
     try {
       const continued = await this.continueHistoryBatch(batchId);
@@ -528,7 +554,7 @@ class StandaloneApplicationService {
     const selected = defaultResultRoot({ home: this.home });
     try {
       this.deps.fs.mkdirSync(selected, { recursive: true, mode: 0o700 });
-      this.deps.resultOutputDirectory({ root: selected });
+      if (!this.nativeInitialOutputRequired) this.deps.resultOutputDirectory({ root: selected });
       this.deps.saveConfiguredResultRoot(selected);
     } catch {
       // A fresh installation has no result folder. Failure to create it
@@ -768,7 +794,24 @@ class StandaloneApplicationService {
   }
 
   history({ recoverExports = false, recoverBatchId = null, includeHidden = false, batchId = null } = {}) {
+    if (this.nativeInitialOutputRequired && recoverExports === true)
+      return this.recoverHistoryExports({ recoverExports, recoverBatchId, includeHidden, batchId });
     return this.deps.runHistory.history({ recoverExports, recoverBatchId, includeHidden, batchId });
+  }
+
+  async recoverHistoryExports(options) {
+    validateBatchId(options.recoverBatchId);
+    if (options.recoverExports !== true || options.batchId)
+      throw fixedFailure('STANDALONE_HISTORY_INVALID', 'Die lokale Laufauswahl ist ungültig.');
+    if (this.interactionActive || this.admittedQueue?.length > 0)
+      throw fixedFailure('STANDALONE_BUSY', 'Ein lokaler Vorgang ist bereits aktiv.');
+    this.interactionActive = true;
+    try {
+      if (typeof this.deps.runHistory.historyWithRecoveryPreparation !== 'function')
+        throw fixedFailure('STANDALONE_IPC_FAILED', 'Die gezielte Ergebniswiederherstellung ist nicht gebunden.');
+      return await this.deps.runHistory.historyWithRecoveryPreparation(options,
+        () => this.prepareInitialOutputForMutation());
+    } finally { this.interactionActive = false; }
   }
 
   setRunHistoryVisibility(batchId, hidden) {
@@ -914,9 +957,13 @@ class StandaloneApplicationService {
     return { ok: true, target_kind: 'directory', local_path: localPath, external_disclosure: false };
   }
 
-  async continueHistoryBatch(batchId, signal) {
+  async continueHistoryBatch(batchId, signal, prepared) {
     validateBatchId(batchId);
-    if (this.interactionActive || this.admittedQueue?.length > 0) throw fixedFailure('STANDALONE_BUSY', 'Ein lokaler Vorgang ist bereits aktiv.');
+    const preparation = prepared && recoveryPreparations.get(prepared);
+    if (prepared && (preparation?.service !== this || !this.interactionActive))
+      throw fixedFailure('STANDALONE_IPC_FAILED', 'Die native Fortsetzung ist nicht gebunden.');
+    if (prepared) recoveryPreparations.delete(prepared);
+    if (this.interactionActive && !preparation || this.admittedQueue?.length > 0) throw fixedFailure('STANDALONE_BUSY', 'Ein lokaler Vorgang ist bereits aktiv.');
     const current = this.deps.lightweightStatus();
     if (!current.engine_ready) throw fixedFailure('STANDALONE_ENGINE_NOT_READY', 'Die lokale Verarbeitung ist nicht bereit.');
     if (current.local_intake_pending || current.batch_processing_active) {
@@ -927,8 +974,11 @@ class StandaloneApplicationService {
     this.interactionActive = true;
     let reservation;
     try {
+      const recheck = preparation?.recheck || (this.nativeInitialOutputRequired ? await this.prepareInitialOutputForMutation(signal) : null);
+      recheck?.();
       try { reservation = this.deps.reserveIntake(); }
       catch { throw fixedFailure('STANDALONE_BUSY', 'Ein lokaler Vorgang ist bereits aktiv.'); }
+      recheck?.();
       const continued = this.deps.continueStandaloneBatch(batchId);
       if (continued?.ok !== true || continued.batch_token !== batchId) {
         throw fixedFailure('STANDALONE_NOTHING_TO_CONTINUE', 'Dieser lokale Lauf kann nicht fortgesetzt werden.');
@@ -944,6 +994,7 @@ class StandaloneApplicationService {
         selected_count: continued.batch_total, completed_count: continued.completed,
         failed_count: continued.stopped, external_disclosure: false };
       const review = action === 'review';
+      recheck?.();
       const started = review
         ? this.deps.startLocalReviewExecutor(batchId, { requireIpcAcknowledgement: true, signal })
         : this.deps.startLocalBatchExecutor(batchId, { requireIpcAcknowledgement: true, signal });
@@ -962,8 +1013,8 @@ class StandaloneApplicationService {
       }
       return { ok: true, event: 'batch_continued', external_disclosure: false };
     } finally {
-      if (reservation) this.deps.releaseIntake(reservation.reservation_id);
-      this.interactionActive = false;
+      try { if (reservation) this.deps.releaseIntake(reservation.reservation_id); }
+      finally { if (!preparation) this.interactionActive = false; }
     }
   }
 
@@ -1258,11 +1309,35 @@ class StandaloneApplicationService {
         selectedBytes > RESOURCE_LIMITS.MAX_BATCH_TOTAL_BYTES) {
       throw fixedFailure('STANDALONE_SELECTION_INVALID', 'Höchstens 200 Dateien und 500 MB pro Verarbeitung. Bitte die Auswahl verkleinern.');
     }
-    this.ensureResultRoot();
     let reservation;
     let transferred = false;
+    const nativePreparation = this.nativeInitialOutputRequired;
+    const originalQueue = this.admittedQueue, originalRevision = this.admissionRevision;
+    const assertIdle = () => {
+      const status = this.deps.lightweightStatus();
+      if (status.local_intake_pending || status.batch_processing_active || this.deps.localWorkerActive?.())
+        throw fixedFailure('STANDALONE_BUSY', 'Bitte die laufende Verarbeitung abwarten.');
+    };
+    if (nativePreparation) this.interactionActive = true;
     try {
+      let assertInitialOutput;
+      if (nativePreparation) {
+        assertIdle();
+      }
+      if (!nativePreparation) this.ensureResultRoot();
+      if (nativePreparation) {
+        assertInitialOutput = await this.prepareInitialOutputForMutation(signal);
+        assertIdle();
+        if (typeof assertInitialOutput !== 'function' || this.admittedQueue !== originalQueue || this.admissionRevision !== originalRevision)
+          throw fixedFailure('STANDALONE_IPC_FAILED', 'Die native Ergebnisvorbereitung wurde nicht bestätigt.');
+        if (signal?.aborted) throw fixedFailure('STANDALONE_CLOSING', 'Der lokale Start wurde abgebrochen.');
+        assertInitialOutput();
+      }
       reservation = this.deps.reserveIntake();
+      // This reservation now belongs to this start and is itself reported as
+      // intake-pending. Do not mistake our own acquired reservation for a new
+      // competing worker. No asynchronous boundary occurs before transfer.
+      if (nativePreparation) assertInitialOutput();
       this.observedBatchId = null;
       this.terminalPresentation = null;
       const { attempt, ...intakeCallbacks } = this.beginIntakeAttempt();
@@ -1305,7 +1380,8 @@ class StandaloneApplicationService {
       return { ok: true, event: 'batch_accepted', batch_id: batchToken,
         selected_count: queue.length, external_disclosure: false };
     } finally {
-      if (reservation && !transferred) this.deps.releaseIntake(reservation.reservation_id);
+      try { if (reservation && !transferred) this.deps.releaseIntake(reservation.reservation_id); }
+      finally { if (nativePreparation) this.interactionActive = false; }
     }
   }
 
@@ -1313,7 +1389,7 @@ class StandaloneApplicationService {
     assertLegacyContentOperation(options, 'contentOptions', PRODUCT_CHANNEL, 'resume');
     if (this.interactionActive || this.admittedQueue?.length > 0) throw fixedFailure('STANDALONE_BUSY', 'Ein lokaler Vorgang ist bereits aktiv.');
     if (this.observedBatchId) return this.continueHistoryBatch(this.observedBatchId, signal);
-    if (options.requireObserved === true) {
+    if (options.requireObserved === true || this.nativeInitialOutputRequired) {
       throw fixedFailure('STANDALONE_NOTHING_TO_CONTINUE', 'Der aktuelle Lauf ist nicht mehr verbunden. Bitte ihn im Verlauf auswählen.');
     }
     const status = this.deps.lightweightStatus();
@@ -1443,8 +1519,10 @@ class StandaloneApplicationService {
         if (typeof this.deps.runHistory?.captureExistingExportBindings === 'function') this.deps.runHistory.captureExistingExportBindings();
         else this.deps.runHistory?.history(); // Legacy adapter, not production.
       } catch { /* retain every safely readable prior export binding */ }
-      this.deps.resultOutputDirectory({ root: selected });
+      if (!this.nativeInitialOutputRequired) this.deps.resultOutputDirectory({ root: selected });
       this.deps.saveConfiguredResultRoot(selected, { nativeIdentity: options.nativeIdentity, nativeExport });
+      const recheck = this.nativeInitialOutputRequired ? await this.prepareInitialOutputForMutation(options.signal) : null;
+      recheck?.();
       let replay = null;
       try { replay = this.deps.replayPendingResultExports?.() || null; }
       catch { replay = { pending: true }; }
@@ -1454,6 +1532,32 @@ class StandaloneApplicationService {
           Number(replay?.failures || 0) > 0,
         local_ui_only: true, external_disclosure: false };
     } finally { this.interactionActive = false; }
+  }
+
+  // Call only inside this service's held interaction, before mutation/reservation.
+  // The returned recheck deliberately does not treat our later own reservation
+  // as competing intake; it retains settings/receipt/identity and abort checks.
+  async prepareInitialOutputForMutation(signal) {
+    if (!this.nativeInitialOutputRequired) return null;
+    if (!this.interactionActive || typeof this.prepareInitialOutputRoot !== 'function' ||
+        typeof this.deps.prepareConfiguredInitialOutputRoot !== 'function')
+      throw fixedFailure('STANDALONE_IPC_FAILED', 'Die native Ergebnisvorbereitung ist nicht verfügbar.');
+    const assertIdle = () => {
+      const status = this.deps.lightweightStatus();
+      if (status.local_intake_pending || status.batch_processing_active || this.deps.localWorkerActive?.())
+        throw fixedFailure('STANDALONE_BUSY', 'Bitte die laufende Verarbeitung abwarten.');
+      if (signal?.aborted) throw fixedFailure('STANDALONE_CLOSING', 'Der lokale Vorgang wurde abgebrochen.');
+    };
+    assertIdle(); this.ensureResultRoot();
+    const bindingRecheck = await this.deps.prepareConfiguredInitialOutputRoot(this.prepareInitialOutputRoot);
+    assertIdle();
+    if (typeof bindingRecheck !== 'function')
+      throw fixedFailure('STANDALONE_IPC_FAILED', 'Die native Ergebnisvorbereitung wurde nicht bestätigt.');
+    const recheck = () => {
+      if (signal?.aborted) throw fixedFailure('STANDALONE_CLOSING', 'Der lokale Vorgang wurde abgebrochen.');
+      bindingRecheck();
+    };
+    recheck(); return recheck;
   }
 
   async prepareConfiguredExportRoot(prepare) {
@@ -1505,13 +1609,13 @@ class StandaloneApplicationService {
 
   resolveResults() {
     this.observeCurrentRun();
-    this.ensureResultRoot();
-    try { this.deps.replayPendingResultExports?.(); } catch { /* resolved below without a false success */ }
-    if (this.observedBatchId) return this.deps.runHistory.resolveResults(this.observedBatchId);
-    if (this.deps.publicStatusSnapshot) {
+    if (!this.observedBatchId && (this.nativeInitialOutputRequired || this.deps.publicStatusSnapshot)) {
       throw fixedFailure('STANDALONE_RESULTS_MISSING',
         'In dieser Sitzung ist noch kein Ergebnislauf verfügbar. Ältere Ergebnisse stehen im Verlauf.');
     }
+    this.ensureResultRoot();
+    try { this.deps.replayPendingResultExports?.(); } catch { /* resolved below without a false success */ }
+    if (this.observedBatchId) return this.deps.runHistory.resolveResults(this.observedBatchId);
     const target = this.deps.latestProductResultDirectory?.(PRODUCT_CHANNEL, { ensureExport: true, latestBatchOnly: true });
     if (!target || !path.isAbsolute(target)) {
       throw fixedFailure('STANDALONE_RESULTS_MISSING', 'Es ist noch kein vollständiger sichtbarer Ergebnislauf vorhanden.');

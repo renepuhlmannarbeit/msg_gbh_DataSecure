@@ -2,6 +2,43 @@
 
 Stand: 22.10.2026 · 3.2.0-rc171 · neuer gemeinsamer Windows-/Mac-Test-Pre-Release in Vorbereitung; RC170 unverändert veröffentlicht.
 
+Neuestes Quellen-Gegenreview01:46: Recovery-Folgefix fertig,18nativeInitial/8configured/
+Clippy und83JS-Provisionierungsfälle+Altregressionen grün. Unabhängige tatsächliche
+Native- und JS-Produktionsgegenreviews ohne bestätigten Deltablocker. Main12/12
+Recoverygruppen frisch PASS/Inputs unverändert23:44:21.526UTC, FP3c71039392b0b80c845114cd94d6e672fcc04a84810958077c83acdd5ff300c4/340,
+577Tests-/Scripts Manifest57a0455ae62fee9162acdd3f4c42883bcfebf1709e99c7e67aed7575cc17444f.
+Keine globale History-/Startup-Provisionierung oder Rebase alter Zielbindungen.
+Neuer gemeinsamer Commit/Source04-Freeze und sämtliche Endgates/GUI folgen jetzt;
+noch kein Release-PASS, kein geeigneter alter Source03-Kandidat.
+
+Neuester Nachtstand01:37: enger nativer Windows-Initialausgabe-Fix implementiert,
+13 echte Windows-Proben einschließlich breitem synthetischem Eltern-DACL und
+Clippy PASS; Eltern-Owner/DACL/Settings unverändert, neue Kinder geschützt.
+Unabhängiger Rust-Produktionsquellengegenreview ohne bestätigten Deltablocker.
+Main15/15gezielte JS-Gruppen PASS/Inputs unverändert, 46Provisionierungsfälle;
+kein GUI-/C-Guard-/Release-PASS daraus. Beide26erVokabulare kanonisch sortiert.
+Frische Source04-Helfer/288+11Plan/101Macreceipts vorbereitet, MainHelpertests grün.
+Gemeinsamer neuer Commit/FP/Endgates/GUI folgen erst nach JS-Gegenreview.
+Keine Eltern-/Bestandsrechte reparieren, kein C-/ABI-/MacCorewechsel.
+Nachfolgender unabhängiger JS-Gegenreview bestätigte P2 bei Wiederaufnahme alter
+offener Läufe/Zielwechsel ohne neue Initialquittung. Main gegengelesen; enger
+Recovery-Lifecycle-/Native-Outer-/Completion-Folgefix in Umsetzung, KEIN Freeze.
+Readonly-History/Startup und fertige Arbeitskopien bleiben ohne neue Schreibpflicht.
+
+Historischer Source03/8871b4d ist NICHT freigabefähig. WindowsNative,
+30PDF/67Konverter/37Office und5Paketgates/Korpus100 grün, aber echte erste Windows-
+GUI mit Defaultroot scheitert an OWNERSHIP_STORAGE_UNSAFE beim Bereitstellen.
+Zwei unabhängige Reviews bestätigen neue Node-mkdir0700-Container mit unterWindows
+breit geerbtem DACL; Guardkorrekt. Enger nativer Erstellungsfix für feste initiale
+Ausgabecontainer in Umsetzung, keine Bestands-/Eltern-ACLreparatur und keine
+Schutzlockerung. Separat Headless105/287+0/11 ROT/Inputs unverändert wegen
+unsortiertem26erVokabular beim vollständigen Vertragsfixture. Beide Konstanten
+kanonisch sortieren und Invariante ergänzen, keine Wirevalidatorlockerung.
+Mac39688672064 gezielt completed/cancelled (ARMsuccess/Intelcancelled); alle lokalen
+Source03-Jobs und eigeneGUI geschlossen. Erst danach Freeze beendet. Neue Quellen-
+bindung und alle Endgates/GUI nötig. Profile/rote Belege/89Originale erhalten.
+Details im aktuellen RC171-Releaseauftrag; kein RC171-Release/Tag/lokaleÜbergabe.
+
 Veröffentlicht: **3.2.0-rc170**, gemeinsamer Windows-/Mac-Test-Pre-Release.
 PPTX-Kommentare eng passiv zugelassen, sichere PDF-/OCR-Zeichenhygiene;
 vorhandene PDF-Suchtexte erhalten. TXT-gleiches Excel und bearbeitbare fertige

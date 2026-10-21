@@ -306,6 +306,8 @@ mod windows {
         fn GetSecurityInfo(handle: Handle, kind: u32, flags: u32, owner: *mut Handle, group: *mut Handle,
             dacl: *mut Handle, sacl: *mut Handle, descriptor: *mut Handle) -> u32;
         fn GetSecurityDescriptorControl(descriptor: Handle, control: *mut u16, revision: *mut u32) -> i32;
+        #[cfg(test)]
+        fn GetSecurityDescriptorLength(descriptor: Handle) -> u32;
         fn GetAclInformation(acl: Handle, buffer: Handle, bytes: u32, class: u32) -> i32;
         fn GetAce(acl: Handle, index: u32, ace: *mut Handle) -> i32;
         fn EqualSid(first: Handle, second: Handle) -> i32;
@@ -394,6 +396,55 @@ mod windows {
             unsafe { EqualSid(sid, user.sid) } == 0 { return Err(unsafe_permissions()); }
         Ok(())
     }
+    /// Admission of an EXISTING user-visible output container, not a private
+    /// export stage. Match the unchanged C guard's ordinary-account boundary;
+    /// do not rewrite inherited ACLs or demand the new-child exact descriptor.
+    pub fn verify_initial_output(file: &File) -> io::Result<()> {
+        let user = current_user()?;
+        let (mut owner, mut dacl, mut raw_descriptor) = (std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut());
+        let result = unsafe { GetSecurityInfo(file.as_raw_handle(), 1, 1 | 4, &mut owner, std::ptr::null_mut(),
+            &mut dacl, std::ptr::null_mut(), &mut raw_descriptor) };
+        if result != 0 { return Err(io::Error::from_raw_os_error(result as i32)); }
+        let descriptor = Descriptor(raw_descriptor);
+        if descriptor.0.is_null() || owner.is_null() || dacl.is_null() || unsafe { EqualSid(owner, user.sid) } == 0 {
+            return Err(unsafe_permissions());
+        }
+        let mut size = AclSize { count: 0, used: 0, free: 0 };
+        if unsafe { GetAclInformation(dacl, (&mut size as *mut AclSize).cast(), std::mem::size_of::<AclSize>() as u32, 2) } == 0 ||
+            size.used < 8 || size.used > 65535 || size.count > (size.used - 8) / 4 { return Err(unsafe_permissions()); }
+        const MUTATIONS: u32 = 2 | 4 | 0x10 | 0x100 | 0x10000 | 0x40 | 0x40000 | 0x80000 | 0x40000000 | 0x10000000;
+        for index in 0..size.count {
+            let mut ace = std::ptr::null_mut();
+            if unsafe { GetAce(dacl, index, &mut ace) } == 0 || ace.is_null() { return Err(unsafe_permissions()); }
+            let offset = (ace as usize).checked_sub(dacl as usize).ok_or_else(unsafe_permissions)?;
+            if offset < 8 || !offset.is_multiple_of(4) || offset > size.used as usize - 4 { return Err(unsafe_permissions()); }
+            let header = unsafe { std::slice::from_raw_parts(ace.cast::<u8>(), 4) };
+            let length = u16::from_le_bytes([header[2], header[3]]) as usize;
+            if length < 4 || !length.is_multiple_of(4) || length > size.used as usize - offset { return Err(unsafe_permissions()); }
+            if header[0] == 1 { continue; } // ACCESS_DENIED_ACE, as in the C guard.
+            if header[0] != 0 || length < 16 { return Err(unsafe_permissions()); }
+            let bytes = unsafe { std::slice::from_raw_parts(ace.cast::<u8>(), length) };
+            let count = bytes[9] as usize;
+            if count > 15 || 16 + count * 4 != length { return Err(unsafe_permissions()); }
+            let sid: Handle = unsafe { ace.cast::<u8>().add(8) }.cast();
+            if unsafe { IsValidSid(sid) } == 0 || unsafe { GetLengthSid(sid) } as usize != length - 8 { return Err(unsafe_permissions()); }
+            let mask = u32::from_le_bytes(bytes[4..8].try_into().map_err(|_| unsafe_permissions())?);
+            if mask & MUTATIONS == 0 || unsafe { EqualSid(sid, user.sid) } != 0 { continue; }
+            let mut text = std::ptr::null_mut();
+            if unsafe { ConvertSidToStringSidW(sid, &mut text) } == 0 { return Err(io::Error::last_os_error()); }
+            if text.is_null() { return Err(unsafe_permissions()); }
+            let allocation = Descriptor(text.cast());
+            let mut chars = 0;
+            while chars < 184 && unsafe { *text.add(chars) } != 0 { chars += 1; }
+            if chars == 184 { return Err(unsafe_permissions()); }
+            let name = String::from_utf16(unsafe { std::slice::from_raw_parts(text, chars) }).map_err(|_| unsafe_permissions())?;
+            drop(allocation);
+            if name != "S-1-5-18" && name != "S-1-5-32-544" && !name.starts_with("S-1-15-3-") {
+                return Err(unsafe_permissions());
+            }
+        }
+        Ok(())
+    }
     #[cfg(test)]
     pub fn broaden_test_directory(file: &File) -> io::Result<()> {
         let text: Vec<u16> = "D:P(A;OICI;FA;;;WD)".encode_utf16().chain([0]).collect();
@@ -410,8 +461,58 @@ mod windows {
         if result != 0 { return Err(io::Error::from_raw_os_error(result as i32)); }
         Ok(())
     }
+    /// Test-only ACL changes on exclusively created synthetic fixture objects.
+    /// Production has no ACL-writing route for an existing output container.
+    #[cfg(test)]
+    pub fn initial_output_test_policy(file: &File, policy: &str) -> io::Result<()> {
+        let user = current_user()?; let mut text = std::ptr::null_mut();
+        if unsafe { ConvertSidToStringSidW(user.sid, &mut text) } == 0 { return Err(io::Error::last_os_error()); }
+        let allocation = Descriptor(text.cast());
+        let mut length = 0;
+        while length < 184 && unsafe { *text.add(length) } != 0 { length += 1; }
+        if length == 184 { return Err(unsafe_permissions()); }
+        let sid = String::from_utf16(unsafe { std::slice::from_raw_parts(text, length) }).map_err(|_| unsafe_permissions())?;
+        drop(allocation);
+        let acl = match policy {
+            "owner-system-admin" => format!("D:P(A;OICI;FA;;;{sid})(A;OICI;FA;;;SY)(A;OICI;FA;;;BA)"),
+            "foreign-write" => format!("D:P(A;OICI;FA;;;{sid})(A;OICI;0x00000002;;;WD)"),
+            "foreign-modify" => format!("D:P(A;OICI;FA;;;{sid})(A;OICI;0x001301bf;;;WD)"),
+            "deny-create" => format!("D:P(D;;0x00000004;;;{sid})(A;OICI;FA;;;{sid})"),
+            _ => return Err(unsafe_permissions()),
+        };
+        let wide: Vec<u16> = acl.encode_utf16().chain([0]).collect();
+        let mut raw = std::ptr::null_mut();
+        if unsafe { ConvertStringSecurityDescriptorToSecurityDescriptorW(wide.as_ptr(), 1, &mut raw, std::ptr::null_mut()) } == 0 {
+            return Err(io::Error::last_os_error());
+        }
+        let descriptor = Descriptor(raw);
+        let (mut present, mut defaulted, mut dacl) = (0, 0, std::ptr::null_mut());
+        if unsafe { GetSecurityDescriptorDacl(descriptor.0, &mut present, &mut dacl, &mut defaulted) } == 0 || present == 0 || dacl.is_null() {
+            return Err(unsafe_permissions());
+        }
+        let result = unsafe { SetSecurityInfo(file.as_raw_handle(), 1, 4 | 0x8000_0000,
+            std::ptr::null_mut(), std::ptr::null_mut(), dacl, std::ptr::null_mut()) };
+        if result != 0 { return Err(io::Error::from_raw_os_error(result as i32)); }
+        Ok(())
+    }
+    /// Read-only test oracle for the complete kernel-returned Owner/DACL
+    /// descriptor. Callers supply only their freshly created fixture handle.
+    #[cfg(test)]
+    pub fn initial_output_test_security_bytes(file: &File) -> io::Result<Vec<u8>> {
+        let (mut owner, mut dacl, mut raw) = (std::ptr::null_mut(), std::ptr::null_mut(), std::ptr::null_mut());
+        let result = unsafe { GetSecurityInfo(file.as_raw_handle(), 1, 1 | 4, &mut owner, std::ptr::null_mut(),
+            &mut dacl, std::ptr::null_mut(), &mut raw) };
+        if result != 0 { return Err(io::Error::from_raw_os_error(result as i32)); }
+        let descriptor = Descriptor(raw);
+        if descriptor.0.is_null() || owner.is_null() || dacl.is_null() { return Err(unsafe_permissions()); }
+        let length = unsafe { GetSecurityDescriptorLength(descriptor.0) } as usize;
+        if !(20..=128 * 1024).contains(&length) { return Err(unsafe_permissions()); }
+        Ok(unsafe { std::slice::from_raw_parts(descriptor.0.cast::<u8>(), length) }.to_vec())
+    }
 }
 #[cfg(windows)]
-pub(crate) use windows::{private_descriptor, verify_private};
+pub(crate) use windows::{private_descriptor, verify_private, verify_initial_output};
 #[cfg(all(windows, test))]
 pub(crate) use windows::broaden_test_directory;
+#[cfg(all(windows, test))]
+pub(crate) use windows::{initial_output_test_policy, initial_output_test_security_bytes};

@@ -2,6 +2,36 @@
 
 Stand: 22.10.2026 · Produktstand 3.2.0-rc171 · gemeinsamer Windows-/Mac-Test-Pre-Release in Vorbereitung; RC170 bleibt unverändert.
 
+Quellenabschluss01:46: native Initial- und Recoverypfade implementiert;18native/
+8configured/Clippy,83JS-Provisionierungsfälle und Main12/12Recoverygruppen mit
+unveränderten Inputs grün. Zwei unabhängige tatsächliche Produktionsgegenreviews
+ohne bestätigten Deltablocker. Gemeinsamer FP3c710393…/340,577Test-/Scriptinputs.
+Jetzt neuer gemeinsamer Commit/Source04-Freeze, frische Gesamt-/Native-/Konverter-/
+Paket-/beideMacgates und gebundene Windows-GUI erforderlich; kein altes Grün kopieren.
+
+Aktuelle begrenzte Korrektur implementiert, Freigabe noch offen: native feste
+Initialcontainer beim Erstellen geschützt, 13WindowsACL/Clippy und Main15/15JS-
+Gruppen PASS, Quellen unverändert während Mainlauf. Eltern-/Bestands-ACLs und
+Settings bleiben unverändert, fertige öffentliche Arbeitskopien bearbeitbar.
+Rustgegenreview ohne bestätigten Deltablocker, JSgegenreview folgt. Kanonischer
+Plan288+11; Source04-Helfer vorbereitet/geprüft, noch kein neuer Freeze/Paket.
+Danach neuer gemeinsamer Commit/FP, sämtliche Endgates und echte Windows-GUI.
+Neuer bestätigter P2 vor Freeze: Wiederaufnahme alter offener Läufe und Zielwechsel
+brauchen dieselbe native Initialvorbereitung vor Worker/Replay; derzeit enger
+Lifecycle-/Outer-/Completion-Folgefix plus Gegenfälle. Kein readonly-/Startup-
+Provisionierungsrecht und keine neue Schreibquittung für fertige Arbeitskopien.
+
+Historischer bestätigter RC171-Blocker aus echter Windows-GUI01: neue feste initiale
+Outputcontainer erben mit Node-mkdir0700 fremde Modify-ACLs. Guard verweigert korrekt.
+In Umsetzung: vorhandene native handle-relative sichere Erstellung wiederverwenden,
+Root-/Settings-/Childidentitäten binden, Default/explizit und beide Modi, vor jedem
+Intakestart bestätigen. Bestands-/Elternrechte nicht ändern, Guard/C-ABI/MacCore
+nicht lockern/neu bauen. Zusätzlich beide26erHinweisvokabulare identisch sortieren
+und Invariante testen; Gesamtlauf105/287 war dadurch rot, keine Produktcrashdiagnose.
+Source03/8871b4d nicht veröffentlichen. Alle Jobs beendet/gezielt cancelled und
+eigeneGUI normal geschlossen. Nach unabhängigen Gegenreviews neuer gemeinsamer
+Commit/FP und frische Endgates/GUI; ältere Belege bleiben unverändert erhalten.
+
 Veröffentlicht: **3.2.0-rc170**, PPTX-/PDF-/OCR-Korrekturen technisch geprüft und
 übergeben; vorhandene PDF-Suchtexte bewusst erhalten. TXT-gleiche Zuordnung und
 bearbeitbare Ergebnisse ausRC169 bleiben. Menschliche Windows-/Mac-/Officeabnahme

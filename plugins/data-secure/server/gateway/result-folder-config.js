@@ -10,7 +10,8 @@ const { withOwnershipControl } = require('../core/ownership-control');
 const path = require('path');
 const { dataRoot } = require('../runtime');
 const { assertRootSeparation, reserveRootSeparation } = require('./root-boundary');
-const { validNativeDirectoryIdentity, validNativeExportBinding } = require('../core/native-directory-identity');
+const { validNativeDirectoryIdentity, validNativeExportBinding, validInitialOutputBinding } = require('../core/native-directory-identity');
+const initialOutput = require('./initial-output-binding');
 
 const CONFIG_NAME = 'result-root.json';
 const SCHEMA = 'datasecure-result-root/2';
@@ -257,6 +258,53 @@ async function prepareConfiguredNativeExportBinding(prepare) {
   });
   return structuredClone(binding);
 }
+// Initial publication is admitted afresh for each real Windows start. Settings
+// remain in their closed schema; this separate private receipt carries only
+// native-confirmed directory identities, not readiness or public file hashes.
+async function prepareConfiguredInitialOutputRoot(prepare) {
+  assertRootSeparation();
+  const refused = () => Object.assign(Error('STANDALONE_RESULT_ROOT_UNSAFE'), { code: 'STANDALONE_RESULT_ROOT_UNSAFE' });
+  if (String(process.env.EU_PRIVACY_RESULT_ROOT || '').trim() || typeof prepare !== 'function') throw refused();
+  const snapshot = withConfigWriter(() => withOwnershipControl(configDirectory(), () => readRecordStatus()));
+  const record = snapshot.record;
+  if (snapshot.status !== 'available' || !record) throw refused();
+  const admission = [EXPORT_SCHEMA, EXACT_EXPORT_SCHEMA].includes(record.schema)
+    ? { kind: 'native', identity: structuredClone(record.native_export.root_identity) }
+    : record.schema === NATIVE_SCHEMA ? { kind: 'native', identity: structuredClone(record.native_identity) }
+    : record.schema === EXACT_SCHEMA ? { kind: 'node22_bigint', identity: structuredClone(record.exact_identity) } : null;
+  if (!admission) throw refused(); // Rounded legacy Node identities confer no new Windows provisioning authority.
+  const unchanged = () => {
+    assertRootSeparation({ resultRoot: record.root });
+    const current = readRecordStatus();
+    if (current.status !== 'available' || current.digest !== snapshot.digest || current.record?.root !== record.root ||
+        String(process.env.EU_PRIVACY_RESULT_ROOT || '').trim()) throw refused();
+  };
+  unchanged();
+  const binding = await prepare({ root: record.root, admission, setting_sha256: snapshot.digest });
+  unchanged();
+  if (!validInitialOutputBinding(binding) || binding.root !== record.root) throw refused();
+  initialOutput.assertBinding(binding);
+  const payload = JSON.stringify({ schema: initialOutput.SCHEMA, setting_sha256: snapshot.digest,
+    binding: structuredClone(binding) });
+  withConfigWriter(() => {
+    unchanged(); initialOutput.assertBinding(binding);
+    const target = initialOutput.receiptPath(record.root);
+    const temporary = `${target}.${crypto.randomBytes(16).toString('hex')}.tmp`;
+    fs.writeFileSync(temporary, payload, { encoding: 'utf8', mode: 0o600, flag: 'wx' });
+    try { unchanged(); initialOutput.assertBinding(binding); renameWithTransientRetry(temporary, target); }
+    finally { try { if (fs.existsSync(temporary)) fs.unlinkSync(temporary); } catch {} }
+  });
+  const receipt = initialOutput.readReceipt(record.root, { required: true });
+  if (!receipt.bytes.equals(Buffer.from(payload))) throw refused();
+  const assertCurrent = () => {
+    unchanged();
+    require('../core/bound-file-io').assertDirectory(receipt.directory);
+    const current = initialOutput.readReceipt(record.root, { required: true });
+    if (!current.bytes.equals(receipt.bytes) || JSON.stringify(current.identity) !== JSON.stringify(receipt.identity)) throw refused();
+  };
+  assertCurrent();
+  return assertCurrent;
+}
 function saveConfiguredResultRoot(root, options = {}) {
   const native = options.nativeIdentity !== undefined;
   const exporting = options.nativeExport !== undefined;
@@ -330,6 +378,8 @@ function resultOutputDirectory(options = {}) {
   const checked = inspectRoot(root);
   assertRootSeparation({ resultRoot: checked.root });
   const output = path.join(checked.root, 'DataSecure-Output');
+  const initialBinding = initialOutput.readInitialOutputBinding(checked.root);
+  if (initialBinding) return output; // Receipt validated both fixed children; never mkdir a missing/replaced one.
   if (!fs.existsSync(output)) fs.mkdirSync(output, { mode: 0o700 });
   const stat = fs.lstatSync(output);
   const real = fs.realpathSync.native(output);
@@ -350,6 +400,6 @@ function isNetworkResultFolder(root, platform = process.platform) {
 
 module.exports = {
   CONFIG_NAME, SCHEMA, LEGACY_SCHEMA, NATIVE_SCHEMA, EXPORT_SCHEMA, EXACT_SCHEMA, EXACT_EXPORT_SCHEMA, configPath, inspectRoot, readConfiguredResultRoot, readConfiguredResultRootStatus, recordedResultRootPath, readConfiguredNativeRootBinding, readConfiguredNativeExportBinding,
-  saveConfiguredResultRoot, prepareConfiguredNativeExportBinding, clearConfiguredResultRoot, resultOutputDirectory,
+  saveConfiguredResultRoot, prepareConfiguredNativeExportBinding, prepareConfiguredInitialOutputRoot, clearConfiguredResultRoot, resultOutputDirectory,
   consumeConfiguredResultNotices, isCommonSyncFolder, isNetworkResultFolder, visibleResultTreeOverlaps
 };

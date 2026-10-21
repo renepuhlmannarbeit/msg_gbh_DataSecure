@@ -479,6 +479,28 @@ impl Directory {
         self.inspect_child(name, expected)?;
         Ok(Self { inner, identity: expected })
     }
+    /// Inspect the fixed initial-output candidate through this held parent.
+    /// Existing containers retain their ACL and contents. Missing is the ONLY
+    /// outcome that authorizes a subsequent exclusive controlled creation.
+    pub(crate) fn inspect_initial_output_child(&self, name: &str) -> io::Result<Option<Self>> {
+        leaf(name)?; self.check()?;
+        let inner = match platform::open_recovery_child(&self.inner, name) {
+            Ok(inner) => inner,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => { self.check()?; return Ok(None); },
+            Err(error) => return Err(error),
+        };
+        let identity = platform::directory_identity(&inner)?;
+        #[cfg(windows)] platform::verify_initial_output(&inner)?;
+        #[cfg(not(windows))] platform::verify_private(&inner)?;
+        self.inspect_child(name, identity)?;
+        Ok(Some(Self { inner, identity }))
+    }
+    pub(crate) fn verify_initial_output(&self) -> io::Result<()> {
+        self.check()?;
+        #[cfg(windows)] platform::verify_initial_output(&self.inner)?;
+        #[cfg(not(windows))] platform::verify_private(&self.inner)?;
+        self.check()
+    }
     pub fn verify_controlled(&self) -> io::Result<()> {
         self.check()?;
         platform::verify_private(&self.inner)?;
@@ -1129,6 +1151,10 @@ mod platform {
     pub fn verify_private(directory: &Directory) -> io::Result<()> {
         plain_directory(&directory.file)?;
         crate::export_private_security::verify_private(&directory.file)
+    }
+    pub fn verify_initial_output(directory: &Directory) -> io::Result<()> {
+        plain_directory(&directory.file)?;
+        crate::export_private_security::verify_initial_output(&directory.file)
     }
     pub fn create_controlled_directory(parent: &Directory, name: &str) -> io::Result<Directory> {
         // The descriptor is supplied to the exclusive NtCreateFile itself.
