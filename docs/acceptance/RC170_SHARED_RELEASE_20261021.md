@@ -4,7 +4,63 @@ Nutzer erweitert am21.10.2026 den lokalen Windowsauftrag ausdrücklich auf
 GitHub-Pre-Releases einschließlich macOS. Ziel: Windows x64, macOS ARM64 und
 Intel aus demselben abschließenden Appcommit/Produktfingerprint, Windows-ZIP
 zusätzlich lokal mit Testplan. Desktoptests ausschließlich Nutzer/Kollegen.
-Status: gemeinsamer finaler Freeze wird vorbereitet; noch kein Release-PASS.
+Status: am21.10.2026 um17:33:15UTC als gemeinsamer Test-Pre-Release veröffentlicht.
+Technische Endgates und unabhängige KI-Artefaktgegenreviews bestanden;
+menschliche Desktop-/Mac-/Officeabnahme bleibt USER_PENDING.
+
+## Tatsächlicher gemeinsamer Abschluss
+
+[GitHub-Pre-Release RC170](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc170),
+Release419851964,Tagv3.2.0-rc170,Appcommit
+`ab05612443ccf2914f4170b56d88f636c39c742f`/Build`ab056124`.
+Produktfingerprint`94c392156dc1d21094d1bd0c6e1b7653756eefcd7cb94b745fc0e9cb603358db`,338Produktdateien.
+574Test-/Scriptinputs,Manifest`79668b34383be6f49718768796714e079bc17061adf3dbcab67237003ad89829`.
+Dokumentationsabschluss danach ist kein neuer Paketcommit und verschiebt den Tag nicht.
+
+- Source03:285/285Headlessdateien plus11/11Zusatzgates bestanden17:19:00.161UTC;
+  alle Inputs unverändert. Windows Prepare/Clippy/280Rusttests(3ignoriert)/echte
+  Node-Rust-Ergebnisintegration/Release sowie5Paketgates bestanden.
+- Tatsächlicher Windows-Konverterlauf:30Rendergegenfälle,67Konvertergruppen,
+  31Office/OCR-Gruppen.100/100Markdownkorpus,0Fehler,Originaleunverändert.
+- Nativer Macconsumer39636489410 auf exakt demselben Appcommit SUCCESS;
+  ARMjob119348367682/Artefakt12365255885,Inteljob119348367609/Artefakt12366590037.
+  Je65anwendbareKonvertergruppen bestanden,2Windows-spezifische Gruppen explizit
+  übersprungen;31Office/OCR-Gruppen. Echte Core/Guard/Worker/forkIPC/ACL-/App-/
+  ZIP-/DMG-Belege und tatsächliche Archivbytes unabhängig gegengelesen.
+- Beide Macarchive enthalten233gemeinsameServer-Quelldateien bytegleich zur
+  eingefrorenen Quelle, exakte PDF.js-Ableitung und unveränderte freigegebene
+  Corebytes. Offizieller Converter bleibt getrennte offen hashgebundene Rolle.
+- Alle20Releaseassets vor UND nach Veröffentlichung frisch heruntergeladen und
+  gehasht; Inventar, Asset-IDs, PreReleaseflag und Tagquelle erneut bestätigt.
+  Releasebody stimmt mit geprüften Notizen überein. Keine alten ZIPs umetikettiert.
+- Lokale Windowsübergabe create-only unter
+  `C:\Users\arkud\Documents\Software DataSecure\RC170`:19Dateien,ZIP,14Fall-Testplan,
+  drei unveränderte synthetische Testarchive und Prüfsummen. Entpackpfadmaximum226
+  Zeichen am angegebenen Ziel; kein Appstart/Desktoptest durch den Agenten.
+
+| Archiv | SHA256 |
+| --- | --- |
+| Windows x64 ZIP | `ec81597dcf4bbcf729ab8139dab117893f46659fc4090bf8d1e5bad7911cebee` |
+| macOS ARM64 ZIP | `e546114417f6710acdd426fa09b531b474ed0c939edaa2c6460bff6bae96d4f8` |
+| macOS ARM64 DMG | `98346eaf4e7d5be4c39add9dde7cac2c4afcb057a87976a67bc6f24ee748711f` |
+| macOS Intel ZIP | `4dbddf35f10d0925836d42fa9cbc50d34b4d342b5b82627c3f7922afea2dbb8a` |
+| macOS Intel DMG | `6dfcb5033f22472aca00d0c338ed19cb1c6ce8bd096c75bfc20c7fbe94cd0395` |
+
+Belege unter`dist/rc170-document-extraction-source03-20261021`,Windowsgegenreview
+`dist/rc170-source03-windows-review-20261021`,beideMacgegenreviews
+`dist/rc170-source03-{arm,intel}-review-20261021`.
+Sourceoverlay938Dateien/8442133Bytes,
+SHA`cb69abb03be63d753f6b52ca19db9b5447f3388253e119528e3202160da85868`;
+kein eigenständiger Checkout oder menschlicher Abnahmenachweis.
+
+Offen ausschließlich die vereinbarte menschliche14Fall-Abnahme einschließlich
+echter Finder-/TCC-/M2-/Enterprise-/VoiceOver-/Office-/macOS26-Prüfung.
+macOS26-Gate explizit skipped; adversariale ACL-Matrix PARTIAL,
+Coreepoch/pause/lease/gui NOT_RUN im gesonderten Coregate. Gepackte Sidecarprobe
+bewahrt ihre Fixture bei unbestätigter Writerquieszenz,kein erfundener Cleanup-PASS.
+Suchtexte ausdrücklich erhalten,keine vollständige semantische Artefaktfreiheit,
+keine Developer-ID/Notarisierung oder OS-Schutzabschaltung. Nutzerdateien,
+Profile,Läufe,Ergebnisse,RC169 und ältere Evidenzen bleiben unverändert.
 
 ## Unveränderte Funktionsgrenzen
 

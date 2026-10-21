@@ -1,14 +1,17 @@
 # Produktvertrag: GBH DataSecure
 
-Stand: 21.10.2026 · 3.2.0-rc170 · Ist-Zustand RC170 (gemeinsamer Testkandidat) · veröffentlichtes Windows/macOS RC169 unverändert · Linux RC159 · Cowork RC151
+Stand: 21.10.2026 · 3.2.0-rc170 · Ist-Zustand RC170 (veröffentlichter gemeinsamer Test-Pre-Release) · ältere Windows/macOS RC169 unverändert · Linux RC159 · Cowork RC151
 
 RC170 ergänzt die eng passive Zulassung moderner PPTX-Folienkommentare,
 konservative PDF-/OCR-Zeichenhygiene und exakt belegte OCR-Dopplungsentfernung.
-Vorhandene PDF-Suchtexte bleiben ausdrücklich erhalten. Nutzer beauftragt nun
-einen gemeinsamen Windows-/Mac-Test-Pre-Release; noch kein neuer Paket-/Release-PASS.
+Vorhandene PDF-Suchtexte bleiben ausdrücklich erhalten. Windows/macOS ARM64/Intel
+ausdemselben Appcommitab05612443ccf2914f4170b56d88f636c39c742f veröffentlicht,
+technische Endgates/Artefaktgegenreviews und Remotehashprüfung bestanden.
+Menschliche Desktop-/Office-/Mac-Zielhostabnahme bleibt USER_PENDING;
+keine vollständige semantische Artefaktfreiheit oder Apple-Zertifizierung behauptet.
 [Gemeinsamer Prüf- und Übergabeauftrag](../acceptance/RC170_SHARED_RELEASE_20261021.md).
 
-**Aktueller RC169-Vertrag:** Notwendige OCR-/Fundstellenentscheidungen bleiben,
+**Aus RC169 beibehaltener Vertrag:** Notwendige OCR-/Fundstellenentscheidungen bleiben,
 danach führt der normale Weg direkt zu den fertigen Ergebnisdateien. Keine zweite
 Dokumentauswahl, Pflichtfreigabe oder Exportbestätigung. Optionale Nachbearbeitung
 stellt nach dem Speichern den vollständigen aktuellen Ergebnisstand bereit;

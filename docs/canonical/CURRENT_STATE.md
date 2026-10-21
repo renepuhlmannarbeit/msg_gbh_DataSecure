@@ -1,23 +1,27 @@
 # Aktueller Iststand
 
-Stand: 21.10.2026 · 3.2.0-rc170 · gemeinsamer Windows-/Mac-Testkandidat in Prüfung; veröffentlicht bleibt RC169.
+Stand: 21.10.2026 · 3.2.0-rc170 · gemeinsamer Windows-/Mac-Test-Pre-Release veröffentlicht; menschliche Abnahme offen.
 
-Veröffentlicht: **3.2.0-rc169**, gemeinsamer Windows-/Mac-Test-Pre-Release.
-Erstes Excelblatt TXT-gleich, fertige Ergebnisse manuell bearbeitbare Arbeitskopien.
+Veröffentlicht: **3.2.0-rc170**, gemeinsamer Windows-/Mac-Test-Pre-Release.
+PPTX-Kommentare eng passiv zugelassen, sichere PDF-/OCR-Zeichenhygiene;
+vorhandene PDF-Suchtexte erhalten. TXT-gleiches Excel und bearbeitbare fertige
+Arbeitskopien ausRC169 beibehalten.
 Technische Endgates und unabhängige tatsächliche Artefaktgegenreviews bestanden;
 menschliche Desktop-/Excel-/Numbers-/Mac-Zielhostabnahme bleibt offen.
-RC168, RC167, RC166 und frühere Pakete bleiben unverändert erhalten.
+RC169, RC168, RC167, RC166 und frühere Pakete bleiben unverändert erhalten.
 
-### In Vorbereitung – RC170 gemeinsamer Test-Pre-Release (21.10.2026)
+### Veröffentlicht – RC170 gemeinsamer Test-Pre-Release (21.10.2026)
 
-Nutzer hat den anfänglichen lokalen Windowsauftrag erweitert: Windows-x64,
-macOS ARM64/Intel aus demselben abschließenden Commit/Fingerprint bauen und als
-GitHub-Pre-Release anbieten, Windows zusätzlich lokal mit Testplan. RC169 bleibt
-unverändert. Keine Main-Integration, Desktopsteuerung oder Apple-Zertifizierung.
-Neue gebundene Endgates vor Übergabe; menschliche Desktopabnahme USER_PENDING.
+Windows-x64 und macOS ARM64/Intel ausAppcommitab05612443ccf2914f4170b56d88f636c39c742f,
+FP94c392156dc1d21094d1bd0c6e1b7653756eefcd7cb94b745fc0e9cb603358db/338.
+285/285+11/11,Windows280Rust(3ignoriert)/Node-Rust/5Paketgates und beide nativen
+Macjobs39636489410 sowie unabhängige tatsächliche Archivgegenreviews bestanden.
+20Remoteassets vor/nach Publikation frisch gehasht,Tagquelle/PreReleaseflag geprüft.
+Windows lokalRC170 mit14Fall-Testplan und Testdaten. Keine Main-Integration,
+Desktopsteuerung oder Apple-Zertifizierung; menschliche Abnahme USER_PENDING.
 [Aktueller gemeinsamer Auftrag](../acceptance/RC170_SHARED_RELEASE_20261021.md).
 
-### Quellkorrektur technisch geprüft – Dokumentextraktion nach RC169 (21.10.2026)
+### Historischer Quellvorabstand – Dokumentextraktion nach RC169 (21.10.2026)
 
 Moderne interne PPTX-Folienkommentare eng passiv zugelassen; nicht-textuelle
 PDF-/OCR-Extraktionszeichen vor Kontaktpositionen/Hashes bereinigt. Nutzerwahl
@@ -31,7 +35,8 @@ mehrdeutige Artefakte bewusst behalten, keine vollständige Artefaktfreiheit.
 FP1a09bf04d7cc198e004437847df90cf157ecddd7f7890331f6e5ccfe4a6e7be6/338.
 Unabhängiger abschließender Quellengegenreview ohne bestätigten Deltablocker.
 Keine Gesamtregression, native Mac- oder GUI-Abnahme dieser Änderungen behauptet.
-RC169 bleibt unverändert; noch keine neue Version gebaut oder veröffentlicht.
+RC169 blieb unverändert; zu diesem historischen Vorabstand noch keine neue
+Version gebaut oder veröffentlicht. Aktueller RC170-Abschluss steht darüber.
 [Arbeitsauftrag/Nachweise](../acceptance/DOCUMENT_EXTRACTION_ARTIFACTS_20261021.md).
 
 ### Abschluss – RC169 TXT-gleiche Excel-Zuordnung und bearbeitbare Ergebnisse

@@ -1,18 +1,20 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 21.10.2026 · Produktstand 3.2.0-rc170 · gemeinsamer Windows-/Mac-Testkandidat in Prüfung; veröffentlicht bleibt RC169.
+Stand: 21.10.2026 · Produktstand 3.2.0-rc170 · gemeinsamer Windows-/Mac-Test-Pre-Release veröffentlicht; menschliche Abnahme offen.
 
-Veröffentlicht: **3.2.0-rc169**, TXT-gleiche Zuordnung als erstes Excelblatt und
-bearbeitbare fertige Ergebnisse umgesetzt, technisch geprüft und übergeben.
-RC169 ist der aktuelle Windows-/Mac-Teststand; menschliche Abnahme
+Veröffentlicht: **3.2.0-rc170**, PPTX-/PDF-/OCR-Korrekturen technisch geprüft und
+übergeben; vorhandene PDF-Suchtexte bewusst erhalten. TXT-gleiche Zuordnung und
+bearbeitbare Ergebnisse ausRC169 bleiben. Menschliche Windows-/Mac-/Officeabnahme
 offen. Frühere Pakete und Ergebnisstände bleiben unverändert.
 
-## In Vorbereitung – RC170 gemeinsamer Test-Pre-Release (21.10.2026)
+## Abgeschlossen – RC170 gemeinsamer Test-Pre-Release (21.10.2026)
 
-Nutzer erweitert auf GitHub-Pre-Release für Windows und beide Macarchitekturen,
-gleicher finaler Commit/Fingerprint, Windows zusätzlich lokal mit Testplan.
-Quellversion3.2.0-rc170; neue gebundene Gesamt-/Native-/Paketgates. Macrunner und
-Push/Veröffentlichung nun beauftragt, kein Main-/Desktop-/Apple-Zertifizierungsauftrag.
+Gemeinsamer Appcommitab05612443ccf2914f4170b56d88f636c39c742f,
+FP94c392156dc1d21094d1bd0c6e1b7653756eefcd7cb94b745fc0e9cb603358db/338.
+285/285+11/11,WindowsNative/5Paketgates,beideMacjobs39636489410 und unabhängige
+tatsächliche Archivgegenreviews bestanden.20Remoteassets vor/nach Veröffentlichung
+frisch gehasht,Tagquelle/PreReleaseflag bestätigt. Windows lokalRC170 mit14Fall-
+Testplan. Kein Main-/Desktop-/Apple-Zertifizierungsauftrag; Desktoptests beim Nutzer.
 [Bindungen/Abschluss](../acceptance/RC170_SHARED_RELEASE_20261021.md).
 
 ## Quellimplementierung technisch geprüft – DOC-TEXT-01 (21.10.2026)
@@ -30,8 +32,8 @@ Push/Veröffentlichung nun beauftragt, kein Main-/Desktop-/Apple-Zertifizierungs
   Office/OCR31/31 und Original-PPTX/PDF mit/ohne OCR bestanden, Inputs unverändert.
   FP1a09bf04d7cc198e004437847df90cf157ecddd7f7890331f6e5ccfe4a6e7be6/338.
   Mac-Bundle-Quellmodell geprüft, kein nativer Mac-/Paket-/Desktop-PASS.
-  Vor einem neuen Release verbleiben gemeinsame Endgates und neue Pakete.
-  Noch kein neuer RC-/Build-/Veröffentlichungsauftrag in diesem Nachtrag.
+  Dies war der historische Vorabstand ohne neuen Build-/Veröffentlichungsauftrag;
+  gemeinsame RC170-Endgates und neue Pakete inzwischen wie oben abgeschlossen.
   [Nachweisplan](../acceptance/DOCUMENT_EXTRACTION_ARTIFACTS_20261021.md).
 
 ## Abgeschlossener Implementierungsauftrag – RC169
