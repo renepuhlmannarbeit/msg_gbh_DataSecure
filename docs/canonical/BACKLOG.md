@@ -47,6 +47,13 @@ an frischer Projektion gegengeprüft,42Checkpointfälle grün. Neue Source02-End
 erforderlich. Zusätzliche Fachprüfung fokussiert echte Funktionsblocker statt
 neuer Features; vorhandene Schutzprüfungen und alle Nutzerdateien bleiben erhalten.
 
+Source02-Windows5Native/30PDF/67Converter/37Office/5Paket/100Korpus tatsächlich
+PASS mit unveränderten Inputs. MacARM ROT an historischem Cleanup-Testregex,
+nicht belegtem Produktcrash; nach vollständigem Stopp übriger eigenerJobs enger
+behavior-bound Testfix und neueSource03-Gesamt-/Mac-/Paketbelege. Übergabeleser
+zusätzlich exakt7Helperpins verlangen, tatsächlicherCheckpoint bereits korrekt.
+Windows-Agentenkampagne19Bereiche/89synthetischeInputs vorbereitet, NOT_RUN.
+
 ## Abgeschlossen – RC170 gemeinsamer Test-Pre-Release (21.10.2026)
 
 Gemeinsamer Appcommitab05612443ccf2914f4170b56d88f636c39c742f,

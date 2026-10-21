@@ -43,6 +43,13 @@ belegt die Fehlerklasse. Enger EOF/EPIPE/Streamclosed-nach-Timeout-Fix unabhäng
 nativ gegengeprüft,42Checkpointfälle grün; harte Eingabe-/Protokoll-/Cancel- und
 Terminierungsbindungen unverändert. Neuer Source02-Freeze mit frischen Endgates.
 
+Source02/a418483/FP21efd742…: WindowsNative5/Konverter30+67+37/Paket5+100Korpus
+grün, Inputs unverändert. ARM-Mac scheitert an alter Cleanup-Quellregex statt
+neuem bestätigtem Teiltextpfad; kein Produktcrash belegt, spätere Macgates fehlen.
+Übrige Freezejobs vor Testfix gezielt gestoppt/cancelled und Endstatus bestätigt.
+Neue Source03-Tests/Pakete nötig, keine ältere ZIP umetikettieren.19GUIbereiche
+mit89synthetischen Eingaben vorbereitet, noch kein App-/Desktop-PASS.
+
 ### Veröffentlicht – RC170 gemeinsamer Test-Pre-Release (21.10.2026)
 
 Windows-x64 und macOS ARM64/Intel ausAppcommitab05612443ccf2914f4170b56d88f636c39c742f,

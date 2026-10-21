@@ -100,3 +100,57 @@ Partial-Deltablocker in Start/Fünferverlauf/Defaultziel/beiden Modi/OCR/Vertage
 Neustart/Nachbearbeitung/Zuordnungsbeilagen. Frisch218Reviewfrontend/10Broker/
 10persistenteEntscheidungen/20Companionfälle sowie echter Produktions-Fünfer-
 und Startup-I/O-Test grün; kein Desktop-/Mac-/Paket-PASS daraus.
+
+## Source02: Windows-Endgates grün, veralteter Mac-Testvertrag offen
+
+Appa418483db7346fb16cd9928ad476addcf7aafec2,
+FP21efd742db9b5b7621856b74fa5d1e506b375b1c28ab556898613428af5bd407/339.
+WindowsNative alle5Rollen PASS, Konverter PDF30/67Worker/37Office PASS, Paket
+alle5Gates einschließlich100Dateien-Korpus PASS, sämtliche Inputs unverändert.
+ZIPc8b132f7f7ec4c722aacf09c806574a82e62b5b207172025c607142c3605c282;
+EXEd726c86d5b1741ec433157b8dd77f6525f4b1973da85d51152e89c356ad42d5f.
+Keine vollständige Headless-/Mac-/GUI-Abnahme oder geeigneter gemeinsamer Release.
+
+ARM119522456612 imMacconsumer39686679125 ROT: tatsächlicher Stack
+tests/lib/macos-cleanup-source-cases.cjs:54:10, aufgerufen durch
+tests/test-standalone-macos-sandbox-workflow.js:235. Historische Regex verlangt
+bedingungslosen stopped-Abbruch statt berechtigter bestätigter Teiltextübernahme.
+Kein Produktcrash aus dieser Quelltextassertion belegt; spätere native App-/ZIP-/
+DMG-Gates nicht gelaufen. Originaljoblog412431Bytes/SHA47c5920eeea19b41afa7971fbac6231f2b44864ce6cb3e6404ab3cae5b88e63b
+lokal unverändert erhalten. Vor Teständerung Headless gezielt gestoppt, letztes
+Testfile41/287, kein FINAL. Macrun tatsächlich completed/cancelled mit ARMfailure
+und Intelcancelled bestätigt. Nur enger behavior-bound Testgegenfix vorgesehen,
+keine Produkt-/Signier-/Deadline-/Schutzänderung. Neue Source03-Belege erforderlich.
+
+Unabhängiger Handoffgegenreview: tatsächlicher Source02-Checkpoint hat alle7
+korrektenPins, aber fehlendeSchlüssel wurden vom Übergabeleser nicht ausdrücklich
+verweigert. Source03 schließt exakt diesen Schemagap mit Negativfällen; alte
+Helper/FINALs bleiben erhalten. Kein aktueller falscher Artefaktbeleg nachgewiesen.
+
+Neue synthetische GUIkampagne RC171-Desktop-Test-20261022-56a3e8d4 create-only
+vorbereitet:19Fälle/89Eingaben, unabhängig gehasht und ohne Reparsepoints;
+Originalgolden und Large-Archiv bytegleich. Alle Produktfälle NOT_RUN, Paketbindung
+noch PENDING, keine alten RC164-Exportpflichten relabelt. Erzeugung kein PASS.
+
+Enger Testgegenfix jetzt implementiert, ausschließlich
+tests/lib/macos-cleanup-source-cases.cjs. Alte18BashCleanup-Gegenfälle und
+awaitedOffice/PDF/OCR-Bindungen unverändert. Neue15Verhaltensfälle laden den
+vollständigen hashgebundenen Produktions-Parent samt echten Checkpointvalidatoren;
+nur OS-Start und Uhr sind doppelt. Autor und Main: MacWorkflow18+15 PASS;
+42Checkpointfälle separat grün. Autoren-Gegenmutationen (historischerStopzweig,
+erfundenerInputFlush, CancellationRecovery, ErfolgohneClose) tatsächlich verweigert.
+Keine Produkt-/Mac-Signier-/Deadlineänderung, ProduktFP21efd742… bleibt gleich.
+Dies sind Quellenmodelle, kein nativer Mac-Paket- oder Desktopnachweis.
+
+Source03-Übergabehelfer ausschließlich create-only ausSource02 vorbereitet;
+unabhängiger tatsächlicher Gegenreview bestätigt nun exakt7bekannteHelperpins
+vor jederSchleife,78fehlende/zusätzliche/Typ/Syntax-Gegenfälle sowie7gültigeaber
+falscheHashes verweigert. Konverter-/GUI-/Remote- und20Assets-Bindungen beibehalten.
+Main frisch31Proofnegative/1positive+78PinRefusals/9KonverterRefusals/
+4positive+33GUINegative/549statischeChecks/94Pflichtreceipts grün.
+Unabhängiger tatsächlicher Testquellengegenreview ebenfalls abgeschlossen:
+frisch15Parent/18Cleanupmodelle PASS und8reineInMemory-Gegenmutationen kausal
+abgewiesen (früherErfolg, normaler/partiellerFlush, Cancel, Isolation, EIO,
+Graceverlängerung, Protokoll). Alle eigenen Testprozesse beendet; weder dieser
+Review noch die Modelle ersetzen native Macgates. Neue gemeinsame Appcommit-
+Bindung und frische Endgates folgen; keine alten FINALs/Bytes neu etikettieren.
