@@ -67,7 +67,7 @@ function builderFixture() {
   for (const relative of [
     'scripts/build-standalone-package.mjs', 'scripts/build-standalone-macos-package.mjs',
     'scripts/lib/standalone-build-fingerprint.mjs', 'scripts/lib/standalone-runtime-projection.mjs',
-    'scripts/lib/standalone-conversion-runtime.mjs', 'scripts/lib/bundled-runtime.mjs',
+    'scripts/lib/standalone-conversion-runtime.mjs', 'scripts/lib/pdfjs-text-paint-hook.mjs', 'scripts/lib/bundled-runtime.mjs',
     'scripts/lib/standalone-windows-layout.mjs',
     'scripts/lib/windows-native-contract.mjs', 'native/runtime/standalone-windows-runtime.json',
     'plugins/data-secure/server/standalone/macos-bundle-layout.js',

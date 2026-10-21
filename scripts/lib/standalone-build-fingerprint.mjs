@@ -50,7 +50,7 @@ export const SOURCE_INPUT_FILES = Object.freeze([
   'scripts/lib/macos-bundle-native.mjs', 'scripts/lib/macos-native-contract.mjs',
   'plugins/data-secure/server/standalone/macos-bundle-layout.js',
   'scripts/lib/standalone-build-fingerprint.mjs', 'scripts/lib/standalone-runtime-projection.mjs',
-  'scripts/lib/standalone-conversion-runtime.mjs', 'scripts/lib/bundled-runtime.mjs',
+  'scripts/lib/standalone-conversion-runtime.mjs', 'scripts/lib/pdfjs-text-paint-hook.mjs', 'scripts/lib/bundled-runtime.mjs',
   'scripts/lib/standalone-package-integrity.mjs', 'scripts/lib/standalone-windows-layout.mjs',
   'plugins/data-secure/server/core/bound-file-io.js'
 ]);

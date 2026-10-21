@@ -64,6 +64,12 @@ test('default and CI aliases enter only the canonical product runner', () => {
   assert.match(runner, /test-batch-maintenance\.js/u);
 });
 
+test('PDF visibility uses the real native conversion gate on both Mac targets, not a source-only mock', () => {
+  assert.ok(pkg.scripts['test:standalone:conversion'].includes('node tests/test-pdf-text-visibility.mjs &&'));
+  assert.ok(!require('./run-product-suite').baseFiles.includes('tests/test-pdf-text-visibility.mjs'));
+  assert.ok(workflow('standalone-macos-sandbox.yml').includes('npm run test:standalone:conversion'));
+});
+
 test('engineering and historical evidence have explicit opt-in scripts', () => {
   assert.match(pkg.scripts['test:engineering'], /test:sea-gates/u);
   assert.match(pkg.scripts['test:engineering'], /test-pdfium-spike/u);
@@ -86,7 +92,7 @@ test('native conversion resources are required by PKG-04, not silently added to 
   const suite = require('./run-product-suite');
   const nativeTest = 'test-standalone-conversion-worker.mjs';
   assert.ok(![...suite.baseFiles.map(file => path.basename(file)), ...suite.ciFiles, ...suite.fullOnly].includes(nativeTest));
-  assert.strictEqual(pkg.scripts['test:standalone:conversion'], `node tests/${nativeTest} && node tests/test-office-image-ocr.mjs`);
+  assert.strictEqual(pkg.scripts['test:standalone:conversion'], `node tests/test-pdf-text-visibility.mjs && node tests/${nativeTest} && node tests/test-office-image-ocr.mjs`);
   const pkg04 = fs.readFileSync(path.join(root, 'scripts/run-pkg-04.ps1'), 'utf8');
   assert.ok(pkg04.indexOf("@('run', 'test:standalone:conversion')") < pkg04.indexOf("foreach ($label"));
   assert.match(pkg04, /Invoke-Checked 'npm.cmd' @\('run', 'test:standalone:conversion'\)/u);

@@ -5,6 +5,32 @@ bearbeitbare fertige Ergebnisse umgesetzt, technisch geprüft und übergeben.
 RC169 ist der aktuelle Windows-/Mac-Teststand; menschliche Abnahme
 offen. Frühere Pakete und Ergebnisstände bleiben unverändert.
 
+## In Vorbereitung – RC170 Windows-Testpaket (21.10.2026)
+
+Nutzer beauftragt lokale neue Windowsversion mit Dokumentextraktionskorrekturen.
+Quellversion3.2.0-rc170; neue gebundene Gesamt-/Native-/Paketgates und Testplan.
+Kein Auftrag für Macrunner, GitHubrelease, Main-Integration oder Desktopbedienung.
+[Bindungen/Abschluss](../acceptance/RC170_WINDOWS_TEST_20261021.md).
+
+## Quellimplementierung technisch geprüft – DOC-TEXT-01 (21.10.2026)
+
+- PPTX: exakte interne moderne Kommentar-Beziehung passiv ignorieren; keine
+  Ausführung aktiver Teile oder Aufweichung der ZIP-/CRC-/Pfadkontrollen.
+- PDF: Nutzerwahl „Suchtexte erhalten“ umgesetzt. Alle vorhandenen TextItems
+  einschließlich unsichtbarer Such-/Barrierefreiheitstexte behalten. Renderbelege
+  ausschließlich für exakte positionsgebundene OCR-Dopplungen; ohne OCR keine
+  zusätzlichen Rasterproben. Mehrdeutige Artefakte bleiben, keine semantische
+  Vollbereinigung behaupten.
+- Zeichenhygiene ausschließlich vor privater Markdown-/Kontakt-/Hashbindung:
+  Umlaute/ß und andere Sprachen/Symbole bleiben; kein Deutsch-Whitelistfilter.
+- Unabhängige tatsächliche Gegenreviews abgeschlossen; Windows-Konverter67/67,
+  Office/OCR31/31 und Original-PPTX/PDF mit/ohne OCR bestanden, Inputs unverändert.
+  FP1a09bf04d7cc198e004437847df90cf157ecddd7f7890331f6e5ccfe4a6e7be6/338.
+  Mac-Bundle-Quellmodell geprüft, kein nativer Mac-/Paket-/Desktop-PASS.
+  Vor einem neuen Release verbleiben gemeinsame Endgates und neue Pakete.
+  Noch kein neuer RC-/Build-/Veröffentlichungsauftrag in diesem Nachtrag.
+  [Nachweisplan](../acceptance/DOCUMENT_EXTRACTION_ARTIFACTS_20261021.md).
+
 ## Abgeschlossener Implementierungsauftrag – RC169
 
 - **RESULT-WORKING-COPY-01:** Nach bestätigtem Abschluss öffentliche Ergebnisse
@@ -1200,7 +1226,7 @@ in dieselbe Korrekturrunde.
 
 ## Historische Nachweise bis R4 (kein aktueller R5-Abschluss)
 
-Stand: 17.10.2026 · Produktstand 3.2.0-rc169 · veröffentlicht Standalone RC162 (Windows und beide Mac-Architekturen; M2-Abnahme offen), Linux RC159 / Cowork RC151 · lokaler Arbeitsstand nach RC162 noch nicht veröffentlicht
+Stand: 17.10.2026 · Produktstand 3.2.0-rc170 · veröffentlicht Standalone RC162 (Windows und beide Mac-Architekturen; M2-Abnahme offen), Linux RC159 / Cowork RC151 · lokaler Arbeitsstand nach RC162 noch nicht veröffentlicht
 
 ## Gezielter R3-Abschlussreview
 

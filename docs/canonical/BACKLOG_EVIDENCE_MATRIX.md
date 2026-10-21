@@ -1,6 +1,6 @@
 # Evidence-Matrix für aktive Arbeit
 
-Stand: 14.10.2026 · 3.2.0-rc169 · lokale Erweiterung in Prüfung · veröffentlicht Standalone RC159 / Cowork RC151
+Stand: 14.10.2026 · 3.2.0-rc170 · lokale Erweiterung in Prüfung · veröffentlicht Standalone RC159 / Cowork RC151
 
 **BL-010.53.6/.7/.8, neuer Anonymisierungsweg r19:** Eigener
 `content-v1`-Zweckstart, private Zuordnung, Review-/Freigabe- und

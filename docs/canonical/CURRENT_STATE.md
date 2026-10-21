@@ -6,6 +6,32 @@ Technische Endgates und unabhängige tatsächliche Artefaktgegenreviews bestande
 menschliche Desktop-/Excel-/Numbers-/Mac-Zielhostabnahme bleibt offen.
 RC168, RC167, RC166 und frühere Pakete bleiben unverändert erhalten.
 
+### In Vorbereitung – RC170 Windows-Testpaket (21.10.2026)
+
+Neuer Nutzerauftrag: lokale Windows-x64-Testversion mit den folgenden
+Dokumentextraktionskorrekturen und Testplan bereitstellen. Quellversion3.2.0-rc170;
+RC169 bleibt veröffentlicht und unverändert. Keine Macjobs, GitHubveröffentlichung,
+Main-Integration oder Desktopsteuerung in diesem Auftrag. Neue gebundene Windows-
+Gesamt-/Native-/Paketprüfungen vor lokaler Übergabe; Desktopabnahme USER_PENDING.
+[Aktueller Auftrag](../acceptance/RC170_WINDOWS_TEST_20261021.md).
+
+### Quellkorrektur technisch geprüft – Dokumentextraktion nach RC169 (21.10.2026)
+
+Moderne interne PPTX-Folienkommentare eng passiv zugelassen; nicht-textuelle
+PDF-/OCR-Extraktionszeichen vor Kontaktpositionen/Hashes bereinigt. Nutzerwahl
+„Suchtexte erhalten“: sämtliche vorhandenen PDF-TextItems bleiben Grundlage,
+auch unsichtbare Such-/Barrierefreiheitstexte. Renderbelege berechtigen nur zur
+exakten positionsbezogenen OCR-Dopplungsentfernung, nicht zum Löschen nativer
+Texte. Ohne OCR kein zusätzlicher Rasterprüflauf. Kein Sprachzeichenfilter,
+keine Änderung bestehender Ergebnisse. Windows-Konverter67/67 und Office/OCR31/31
+mit unveränderten Inputs sowie originale PPTX/PDF mit/ohne OCR bestanden;
+mehrdeutige Artefakte bewusst behalten, keine vollständige Artefaktfreiheit.
+FP1a09bf04d7cc198e004437847df90cf157ecddd7f7890331f6e5ccfe4a6e7be6/338.
+Unabhängiger abschließender Quellengegenreview ohne bestätigten Deltablocker.
+Keine Gesamtregression, native Mac- oder GUI-Abnahme dieser Änderungen behauptet.
+RC169 bleibt unverändert; noch keine neue Version gebaut oder veröffentlicht.
+[Arbeitsauftrag/Nachweise](../acceptance/DOCUMENT_EXTRACTION_ARTIFACTS_20261021.md).
+
 ### Abschluss – RC169 TXT-gleiche Excel-Zuordnung und bearbeitbare Ergebnisse
 
 Nutzer bestätigt am20.10.: erstes Blatt Zuordnungen mit Pseudonym/Typ/
@@ -1558,7 +1584,7 @@ neuen gemeinsamen Quellfreeze und erneute Windows-Regression.
 
 ## Historische Nachweise bis R4 (kein aktueller R5-Abschluss)
 
-Stand: 17.10.2026 · 3.2.0-rc169 lokaler Windows-R4-Final-Testkandidat gebaut und ohne GUI geprüft; veröffentlicht bleibt Standalone RC162 für Windows und beide Mac-Architekturen; native Windows-/M2-Zielhostabnahme offen; Linux RC159 / Cowork RC151
+Stand: 17.10.2026 · 3.2.0-rc170 lokaler Windows-R4-Final-Testkandidat gebaut und ohne GUI geprüft; veröffentlicht bleibt Standalone RC162 für Windows und beide Mac-Architekturen; native Windows-/M2-Zielhostabnahme offen; Linux RC159 / Cowork RC151
 
 ### Gezielter R3-Abschlussreview: zusätzliche Fixes F13/F14
 

@@ -35,7 +35,8 @@ function resolveConversionRuntime() {
     if (manifest.schema !== 'datasecure-conversion-runtime/1' || manifest.target !== target ||
         manifest.node_file !== (process.platform === 'win32' ? 'node.exe' : 'node') ||
         !Array.isArray(manifest.files) || !manifest.files.length || manifest.files.length > 4096 ||
-        manifest.syntax_reader_contract !== 'datasecure-markdown-syntax/1' || !Array.isArray(manifest.packages)) fail();
+        manifest.syntax_reader_contract !== 'datasecure-markdown-syntax/1' ||
+        manifest.pdf_text_paint_contract !== 'datasecure-pdf-text-paint/1' || !Array.isArray(manifest.packages)) fail();
     for (const [name, version] of [['mdast-util-from-markdown', '2.0.2'], ['parse5', '7.3.0']]) {
       const records = manifest.packages.filter(item => item?.name === name);
       if (records.length !== 1 || records[0].version !== version || records[0].license !== 'MIT') fail();
@@ -72,6 +73,7 @@ function resolveConversionRuntime() {
     }
     for (const required of [manifest.node_file, 'LICENSE.node.txt', 'models/deu.traineddata', 'models/eng.traineddata',
       'node_modules/pdfjs-dist/legacy/build/pdf.mjs', 'node_modules/tesseract.js/src/index.js', 'node_modules/@napi-rs/canvas/index.js',
+      'node_modules/pdfjs-dist/legacy/build/pdf.datasecure.mjs',
       'node_modules/mdast-util-from-markdown/index.js', 'node_modules/mdast-util-from-markdown/package.json',
       'node_modules/parse5/dist/index.js', 'node_modules/parse5/package.json', ...nativeFiles.keys()]) {
       if (!seen.has(required)) fail();

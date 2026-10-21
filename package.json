@@ -1,6 +1,6 @@
 {
   "name": "data-secure-privacy-preflight",
-  "version": "3.2.0-rc169",
+  "version": "3.2.0-rc170",
   "private": true,
   "description": "Lokale DataSecure-Produktfamilie zur De-Identifizierung von Dokumenten: Claude-Plugin und Standalone-App",
   "main": "plugins/data-secure/server/index.js",
@@ -30,7 +30,7 @@
     "build:standalone:windows": "node scripts/prepare-standalone-runtime.mjs && cd apps/datasecure-standalone/tauri-contract && cargo build --release --locked",
     "build:standalone:windows:portable": "npm run build:standalone:windows && node scripts/build-standalone-package.mjs && npm run test:standalone:package",
     "test:standalone:package": "node scripts/verify-standalone-package.mjs && node tests/test-standalone-package-smoke.mjs",
-    "test:standalone:conversion": "node tests/test-standalone-conversion-worker.mjs && node tests/test-office-image-ocr.mjs",
+    "test:standalone:conversion": "node tests/test-pdf-text-visibility.mjs && node tests/test-standalone-conversion-worker.mjs && node tests/test-office-image-ocr.mjs",
     "test:standalone:native-windows": "powershell -NoProfile -ExecutionPolicy Bypass -File tests/manual/standalone-native-windows-launch.ps1",
     "test:standalone:package-corpus": "node tests/manual/standalone-package-corpus.mjs",
     "test:standalone:pkg-04": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/run-pkg-04.ps1",

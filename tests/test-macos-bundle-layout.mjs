@@ -38,12 +38,12 @@ function fixture(target = 'macos-arm64') {
   const roles = layout.nativeRoles(target);
   add('node', macho(target)); add(roles.canvas.inventory, macho(target, 6));
   for (const name of ['LICENSE.node.txt', 'models/deu.traineddata', 'models/eng.traineddata',
-    'node_modules/pdfjs-dist/legacy/build/pdf.mjs', 'node_modules/tesseract.js/src/index.js',
+    'node_modules/pdfjs-dist/legacy/build/pdf.mjs', 'node_modules/pdfjs-dist/legacy/build/pdf.datasecure.mjs', 'node_modules/tesseract.js/src/index.js',
     'node_modules/@napi-rs/canvas/index.js', 'node_modules/mdast-util-from-markdown/index.js', 'node_modules/parse5/dist/index.js']) add(name, Buffer.from('synthetic data'));
   const packages = [{ name: 'mdast-util-from-markdown', version: '2.0.2', license: 'MIT' }, { name: 'parse5', version: '7.3.0', license: 'MIT' }];
   for (const item of packages) add(`node_modules/${item.name}/package.json`, Buffer.from(JSON.stringify(item)));
   const manifest = { schema: 'datasecure-conversion-runtime/1', target, node_file: 'node', packages,
-    syntax_reader_contract: 'datasecure-markdown-syntax/1', files: [...files].map(([name, bytes]) =>
+    syntax_reader_contract: 'datasecure-markdown-syntax/1', pdf_text_paint_contract: 'datasecure-pdf-text-paint/1', files: [...files].map(([name, bytes]) =>
       ({ path: name, bytes: bytes.length, sha256: hash(bytes), executable: name === 'node' })) };
   const manifestFile = path.join(conversion, 'RUNTIME.json');
   write(manifestFile, JSON.stringify(manifest)); write(path.join(conversion, 'THIRD_PARTY_NOTICES.txt'), 'synthetic licenses');

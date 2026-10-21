@@ -45,12 +45,17 @@ const PASSIVE_PRESENTATION_REL_TYPES = new Set([
   'http://schemas.microsoft.com/office/2007/relationships/diagramdrawing',
   'http://schemas.microsoft.com/office/2007/relationships/hdphoto'
 ]);
+const MODERN_PRESENTATION_COMMENTS_CONTENT_TYPE = 'application/vnd.ms-powerpoint.comments+xml';
 // These exact PowerPoint projections are inert for Markdown extraction. Their
 // text is not asserted to be covered: PPTX Markdown always stays incomplete.
 // Keep owner and target checks below; this is not a general Microsoft-URI pass.
 const PASSIVE_PRESENTATION_METADATA = new Map([
   ['http://schemas.microsoft.com/office/2018/10/relationships/authors',
     [/^ppt\/_rels\/presentation\.xml\.rels$/iu, /^ppt\/authors\.xml$/iu]],
+  ['http://schemas.microsoft.com/office/2018/10/relationships/comments',
+    [/^ppt\/slides\/_rels\/slide[0-9]+\.xml\.rels$/iu,
+      /^ppt\/comments\/modernComment_[0-9a-f]+_[0-9a-f]+\.xml$/iu,
+      MODERN_PRESENTATION_COMMENTS_CONTENT_TYPE]],
   ['http://schemas.microsoft.com/office/2015/10/relationships/revisioninfo',
     [/^ppt\/_rels\/presentation\.xml\.rels$/iu, /^ppt\/revisionInfo\.xml$/iu]],
   ['http://schemas.microsoft.com/office/2016/11/relationships/changesinfo',
@@ -297,9 +302,10 @@ function validateOpcControls({ declaredType, entries, controlParts, passivePrese
       const id = String(attribute(node, 'Id'));
       const type = String(attribute(node, 'Type'));
       const target = String(attribute(node, 'Target'));
+      const targetMode = String(attribute(node, 'TargetMode')).toLowerCase();
       if (!id || !type || !target || ids.has(id)) throw new OpcValidationError();
       ids.add(id);
-      if (String(attribute(node, 'TargetMode')).toLowerCase() === 'external') {
+      if (targetMode === 'external') {
         // A passive Markdown conversion never follows a link. Only ordinary
         // presentation hyperlinks may be ignored; all other external edges
         // remain blocked, including remote templates and package references.
@@ -332,6 +338,16 @@ function validateOpcControls({ declaredType, entries, controlParts, passivePrese
         throw new OpcValidationError('SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
       }
       if (passiveMetadata && (!passiveMetadata[0].test(name) || !passiveMetadata[1].test(resolvedTarget))) {
+        throw new OpcValidationError('SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
+      }
+      // Modern comments are ignored, not extracted. Bind their exception to
+      // the declared content type and an existing slide owner as well as the
+      // exact path above. Comment XML is not retained by the bounded control
+      // reader; do not introduce a separate, unbounded payload read here.
+      if (passiveMetadata?.[2] &&
+          (overrides.get(`/${resolvedTarget}`) !== passiveMetadata[2] ||
+            !['', 'internal'].includes(targetMode) ||
+            !entries.has(name.replace('/_rels/', '/').slice(0, -'.rels'.length)))) {
         throw new OpcValidationError('SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
       }
       if (name === '_rels/.rels' && OFFICE_REL_TYPES.has(type)) office.push(resolvedTarget);

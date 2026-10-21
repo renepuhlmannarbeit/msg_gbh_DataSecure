@@ -25,6 +25,35 @@ function docx(controlOverrides = {}, extras = [], fixtureOptions = {}) {
   ]);
 }
 
+function modernCommentsPresentation() {
+  const officeNamespace = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const packageNamespace = 'http://schemas.openxmlformats.org/package/2006/relationships';
+  const comments = ['modernComment_a1b2_c3d4.xml', 'modernComment_AABB_0011.xml'];
+  const slide = (text) => '<p:sld xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" ' +
+    'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p:cSld><p:spTree><p:sp><p:txBody>' +
+    `<a:p><a:r><a:t>${text}</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>`;
+  return [
+    ...opcControlEntries('pptx', { additionalOverrides: comments.map(name => ({
+      part: `ppt/comments/${name}`, contentType: 'application/vnd.ms-powerpoint.comments+xml'
+    })) }),
+    ['ppt/presentation.xml', '<p:presentation xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" ' +
+      `xmlns:r="${officeNamespace}"><p:sldIdLst><p:sldId id="256" r:id="s1"/>` +
+      '<p:sldId id="257" r:id="s2"/></p:sldIdLst></p:presentation>'],
+    ['ppt/_rels/presentation.xml.rels', `<Relationships xmlns="${packageNamespace}">` +
+      `<Relationship Id="s1" Type="${officeNamespace}/slide" Target="slides/slide1.xml"/>` +
+      `<Relationship Id="s2" Type="${officeNamespace}/slide" Target="slides/slide2.xml"/></Relationships>`],
+    ...comments.flatMap((name, index) => [
+      [`ppt/slides/slide${index + 1}.xml`, slide(`Folientext ${index + 1}`)],
+      [`ppt/slides/_rels/slide${index + 1}.xml.rels`, `<Relationships xmlns="${packageNamespace}">` +
+        '<Relationship Id="c1" Type="http://schemas.microsoft.com/office/2018/10/relationships/comments" ' +
+        `Target="../comments/${name}"${index ? ' TargetMode="Internal"' : ''}/></Relationships>`],
+      [`ppt/comments/${name}`, '<p188:cmLst xmlns:p188="http://schemas.microsoft.com/office/powerpoint/2018/8/main" ' +
+        'xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><p188:cm><p188:txBody>' +
+        '<a:p><a:r><a:t>Kommentartext ausgeschlossen</a:t></a:r></a:p></p188:txBody></p188:cm></p188:cmLst>']
+    ])
+  ];
+}
+
 function inspect(name, bytes, options = {}) {
   const target = path.join(root, name);
   fs.writeFileSync(target, bytes);
@@ -200,6 +229,106 @@ test('Standalone Markdown-first privacy admits passive presentation objects but 
   assert.strictEqual(inspect('external-template.pptx', zipStore(parts.map(([name, value]) =>
     name === 'ppt/slides/_rels/slide1.xml.rels' ? [name, rels.replace('relationships/hyperlink', 'relationships/attachedTemplate')] : [name, value])),
   conversion).code, 'SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
+});
+
+test('Standalone admits two internal modern slide comments as ignored metadata with incomplete coverage', () => {
+  const bytes = zipStore(modernCommentsPresentation());
+  for (const processingMode of ['markdown-only', 'markdown-and-anonymize']) {
+    const result = inspect(`modern-comments-${processingMode}.pptx`, bytes,
+      { productChannel: 'standalone', processingMode });
+    assert.strictEqual(result.verdict, 'candidate');
+    assert.strictEqual(result.structure.crc_verified, true);
+  }
+  const extraction = extractMarkdownBuffer(bytes, '.pptx');
+  assert.match(extraction.markdown, /Folientext 1/u);
+  assert.match(extraction.markdown, /Folientext 2/u);
+  assert.doesNotMatch(extraction.markdown, /Kommentartext ausgeschlossen/u);
+  assert.strictEqual(extraction.coverage.status, 'incomplete');
+  assert.deepStrictEqual(extraction.coverage.reason_codes, ['SOURCE_COVERAGE_UNVERIFIED']);
+  for (const options of [{},
+    { productChannel: 'plugin', processingMode: 'markdown-only' },
+    { productChannel: 'plugin', processingMode: 'markdown-and-anonymize' }
+  ]) {
+    assert.strictEqual(inspect('modern-comments-strict.pptx', bytes, options).code,
+      'SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
+  }
+});
+
+test('modern comments keep exact relationship, owner, target and content-type constraints', () => {
+  const parts = modernCommentsPresentation();
+  const slideRels = 'ppt/slides/_rels/slide1.xml.rels';
+  const commentPart = 'ppt/comments/modernComment_a1b2_c3d4.xml';
+  const commentType = 'application/vnd.ms-powerpoint.comments+xml';
+  const standalone = { productChannel: 'standalone', processingMode: 'markdown-and-anonymize' };
+  const change = (part, transform) => parts.map(([name, value]) =>
+    [name, name === part ? transform(value) : value]);
+  const moveRelationship = (ownerRels, targetPrefix) => {
+    const commentRels = parts.find(([name]) => name === slideRels)[1];
+    const relationship = commentRels.match(/<Relationship\b[^>]+\/>/u)[0]
+      .replace('Target="../comments/', `Target="${targetPrefix}`);
+    return parts.filter(([name]) => name !== slideRels).map(([name, value]) =>
+      [name, name === ownerRels ? value.replace('</Relationships>', `${relationship}</Relationships>`) : value]);
+  };
+  const cases = [
+    ['external', change(slideRels, xml => xml.replace('Target="../comments/',
+      'TargetMode="External" Target="https://example.invalid/')), 'SOURCE_ACTIVE_CONTENT_UNSUPPORTED'],
+    ['external-local-target', change(slideRels, xml => xml.replace('Target="',
+      'TargetMode="External" Target="')), 'SOURCE_ACTIVE_CONTENT_UNSUPPORTED'],
+    ['unknown-target-mode', change(slideRels, xml => xml.replace('Target="',
+      'TargetMode="Other" Target="')), 'SOURCE_ACTIVE_CONTENT_UNSUPPORTED'],
+    ['presentation-owner', moveRelationship('ppt/_rels/presentation.xml.rels', 'comments/'),
+      'SOURCE_ACTIVE_CONTENT_UNSUPPORTED'],
+    ['root-owner', moveRelationship('_rels/.rels', 'ppt/comments/'), 'SOURCE_ACTIVE_CONTENT_UNSUPPORTED'],
+    ['missing-owner', parts.filter(([name]) => name !== 'ppt/slides/slide1.xml').map(([name, value]) =>
+      [name, name === 'ppt/_rels/presentation.xml.rels'
+        ? value.replace(/<Relationship Id="s1"[^>]+\/>/u, '') : value]), 'SOURCE_ACTIVE_CONTENT_UNSUPPORTED'],
+    ['wrong-target-name', [
+      ...change(slideRels, xml => xml.replace('modernComment_a1b2_c3d4.xml', 'comment1.xml')),
+      ['ppt/comments/comment1.xml', '<cmLst/>']
+    ], 'SOURCE_ACTIVE_CONTENT_UNSUPPORTED'],
+    ['nonhex-target-name', [
+      ...change(slideRels, xml => xml.replace('modernComment_a1b2_c3d4.xml', 'modernComment_gg_11.xml')),
+      ['ppt/comments/modernComment_gg_11.xml', '<cmLst/>']
+    ], 'SOURCE_ACTIVE_CONTENT_UNSUPPORTED'],
+    ['missing-target', parts.filter(([name]) => name !== commentPart), 'SOURCE_CONTAINER_CORRUPT'],
+    ['wrong-content-type', change('[Content_Types].xml', xml => xml.replace(commentType, 'application/xml')),
+      'SOURCE_ACTIVE_CONTENT_UNSUPPORTED'],
+    ['missing-content-type', change('[Content_Types].xml', xml => xml.replace(
+      `<Override PartName="/${commentPart}" ContentType="${commentType}"/>`, '')),
+      'SOURCE_ACTIVE_CONTENT_UNSUPPORTED'],
+    ['lookalike-uri', change(slideRels, xml => xml.replace('/relationships/comments', '/relationships/comment')),
+      'SOURCE_ACTIVE_CONTENT_UNSUPPORTED'],
+    ['foreign-uri', change(slideRels, xml => xml.replace('http://schemas.microsoft.com/office/2018/10/',
+      'https://example.invalid/office/2018/10/')), 'SOURCE_ACTIVE_CONTENT_UNSUPPORTED'],
+    ['macro', [...parts, ['ppt/vbaProject.bin', Buffer.from([1])]], 'SOURCE_ACTIVE_CONTENT_UNSUPPORTED']
+  ];
+  for (const [name, entries, code] of cases) {
+    const result = inspect(`modern-comments-${name}.pptx`, zipStore(entries), standalone);
+    assert.strictEqual(result.verdict, 'rejected', name);
+    assert.strictEqual(result.code, code, name);
+  }
+});
+
+test('modern comment admission preserves payload CRC and bounded ZIP/control gates', () => {
+  const parts = modernCommentsPresentation();
+  const bytes = zipStore(parts);
+  const standalone = { productChannel: 'standalone', processingMode: 'markdown-only' };
+  const damaged = Buffer.from(bytes);
+  damaged[payloadOffset(damaged, 'ppt/comments/modernComment_a1b2_c3d4.xml')] ^= 0x01;
+  assert.strictEqual(inspect('modern-comments-crc.pptx', damaged, standalone).code, 'SOURCE_CONTAINER_CORRUPT');
+  const total = parts.reduce((size, [, value]) => size + Buffer.byteLength(value), 0);
+  for (const options of [
+    { maxEntries: parts.length - 1 }, { maxUncompressed: total - 1 },
+    { maxControlPartBytes: 8 }, { maxControlBytes: 8 }
+  ]) {
+    assert.strictEqual(inspect('modern-comments-limited.pptx', bytes, { ...standalone, ...options }).code,
+      'SOURCE_CONTAINER_LIMIT');
+  }
+  const oversizedComment = zipStore(parts.map(([name, value]) =>
+    [name, name === 'ppt/comments/modernComment_a1b2_c3d4.xml'
+      ? value.replace('Kommentartext ausgeschlossen', 'x'.repeat(4096)) : value]));
+  assert.strictEqual(inspect('modern-comments-entry-limit.pptx', oversizedComment,
+    { ...standalone, maxEntryUncompressed: 2048 }).code, 'SOURCE_CONTAINER_LIMIT');
 });
 
 test('Standalone reads a linked embedded workbook while keeping passive PowerPoint metadata incomplete', () => {

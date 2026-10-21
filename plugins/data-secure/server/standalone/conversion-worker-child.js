@@ -11,13 +11,14 @@ const { extractMarkdownBuffer, extractOfficeMarkdownAndMedia } = require('./mark
 const { prepareOfficeImagePlan, appendOfficeOcr } = require('./office-image-ocr');
 const { markdownImageContent, extractMarkdownImageMedia } = require('./markdown-image-content');
 const { createMarkdownExtraction, MAX_MARKDOWN_CHARS } = require('./markdown-contract');
-const { unreadableSymbolRun, cleanOcrSymbolLines } = require('./markdown-visuals');
+const { unreadableSymbolRun, cleanExtractedSymbolText } = require('./markdown-visuals');
 const { contactQuality } = require('./ocr-quality');
 const { readableText, readableNotice } = require('./readable-markdown');
 const { refineOcr } = require('./ocr-refinement');
 const { contactSpans } = require('../core/ocr-contact-review');
 const { attachContactCrops } = require('./ocr-contact-crops');
 const { nativeTextSeparator, paintedTextGeometryAvailable, nativeTextRegions, nativeSingleTokenRegions, uncoveredOcrText } = require('./pdf-text-layout');
+const { classifyPdfTextVisibility } = require('./pdf-text-visibility');
 const { SOURCE_TYPES, ERROR_CODES, MAX_INPUT_BYTES } = require('../core/conversion-worker-contract');
 const { decodePng } = require('../images/png');
 const { decodeBmp } = require('../images/bmp');
@@ -75,7 +76,7 @@ async function recognize(canvas, ocr, nativeRegions = [], singleTokenOnly = fals
   // geometry when a native PDF mask is in use, or duplicate its exact text.
   const data = nativeRegions.length ? result.data : await refineOcr(result.data, canvas, ocr, canvasApi().createCanvas);
   if (data.text.length > MAX_MARKDOWN_CHARS) fail('TEXT_TOO_LARGE');
-  const recognized = cleanOcrSymbolLines(nativeRegions.length ? uncoveredOcrText(data, nativeRegions, { singleTokenOnly }) : data.text);
+  const recognized = cleanExtractedSymbolText(nativeRegions.length ? uncoveredOcrText(data, nativeRegions, { singleTokenOnly }) : data.text);
   return { ...recognized, quality: contactQuality(data, recognized.text), wordData: data.blocks,
     cropText: nativeRegions.length ? null : data.text };
 }
@@ -238,7 +239,7 @@ function additionalOcrText(nativeText, ocrText) {
 async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, contentOptions) {
   if (bytes.length > 25 * 1024 * 1024) fail('INPUT_FORMAT_LIMIT');
   const pdfRoot = path.join(root, 'node_modules', 'pdfjs-dist');
-  const { getDocument, OPS, AnnotationMode } = await import(pathToFileURL(path.join(pdfRoot, 'legacy', 'build', 'pdf.mjs')).href);
+  const { getDocument, OPS, AnnotationMode, setDataSecureTextPaintObserver } = await import(pathToFileURL(path.join(pdfRoot, 'legacy', 'build', 'pdf.datasecure.mjs')).href);
   // Actual painted operators, not merely image resources declared in the PDF.
   // These are the image operations of the bundled PDF.js display API.
   const imageOperations = new Set([OPS.paintImageXObject, OPS.paintInlineImageXObject,
@@ -295,6 +296,9 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
       disagreement: false, lowConfidence: false, unscored: false };
     let total = sections.reduce((sum, section, index) => sum + section.length + (index ? 2 : 0), 0);
     let meaningfulText = false;
+    // Explicit document-wide work cap. Exhaustion retains uncertain text; it
+    // never guesses at missing letters or extends the existing worker deadline.
+    const visibilityBudget = { remainingPixels: 32_000_000, remainingProbes: 128 };
     if (total > MAX_MARKDOWN_CHARS) fail('TEXT_TOO_LARGE');
     for (let number = 1; number <= document.numPages; number++) {
       const page = await document.getPage(number);
@@ -307,6 +311,10 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
         let text = '';
         let omittedSymbols = false;
         let previousTextItem;
+        // Preserve existing search/accessibility text regardless of whether
+        // its glyphs paint. Rendering cannot establish that such text has no
+        // semantic counterpart in a raster OR vector graphic. User policy:
+        // keep search text; paint evidence grants only OCR-deduplication rights.
         for (const item of content.items) {
           // PDF.js may emit marked-content boundaries; these contain no text.
           if (!Object.hasOwn(item, 'str')) continue;
@@ -321,7 +329,11 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
             // cryptic glyphs or silently concatenate their neighbouring words.
             omittedSymbols = true;
             text += item.hasEOL ? '\n' : ' ';
-          } else text += item.str + (item.hasEOL ? '\n' : '');
+          } else {
+            const cleaned = cleanExtractedSymbolText(item.str);
+            omittedSymbols ||= cleaned.omitted;
+            text += cleaned.text + (item.hasEOL ? '\n' : '');
+          }
           if (item.hasEOL) previousTextItem = undefined;
           else if (item.str.trim()) previousTextItem = item;
           if (text.length + total > MAX_MARKDOWN_CHARS) fail('TEXT_TOO_LARGE');
@@ -342,12 +354,24 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
           const viewport = page.getViewport({ scale: 2 });
           const width = Math.ceil(viewport.width), height = Math.ceil(viewport.height);
           dimensions(width, height);
+          // Only an already selected OCR operation may spend raster-probe
+          // work. No extra visibility rendering for ordinary PDF text reads.
+          const paintAnalysis = hasNativeText ? await classifyPdfTextVisibility({ page, textItems: content.items,
+            viewport: page.getViewport({ scale: 1 }), createCanvas: canvasApi().createCanvas,
+            setTextPaintObserver: setDataSecureTextPaintObserver, annotationMode: AnnotationMode.DISABLE,
+            budget: visibilityBudget }) : { wordRegions: [] };
           canvas = canvasApi().createCanvas(width, height);
           await page.render({ canvasContext: canvas.getContext('2d'), viewport, background: 'white',
             annotationMode: AnnotationMode.DISABLE }).promise;
           ocr ??= await createOcr(); // One session per document, never across customers.
-          const regions = hasNativeText && paintedTextGeometryAvailable(operators, OPS, { strictMarkedContent: Boolean(contentOptions) })
+          const legacyRegions = hasNativeText && paintedTextGeometryAvailable(operators, OPS, { strictMarkedContent: Boolean(contentOptions) })
             ? (contentOptions ? nativeSingleTokenRegions : nativeTextRegions)(content.items, content.styles, viewport) : [];
+          // These extra per-word regions come from actual glyph positions and
+          // final pixel differences, never a proportional split of a line box.
+          // Visibility uses scale1; OCR uses scale2 of the same page viewport.
+          const provenRegions = hasNativeText ? paintAnalysis.wordRegions.map(region => ({ text: region.text,
+            x0: region.x0 * 2, y0: region.y0 * 2, x1: region.x1 * 2, y1: region.y1 * 2 })) : [];
+          const regions = [...provenRegions, ...legacyRegions];
           const recognized = await recognize(canvas, ocr, regions, Boolean(contentOptions));
           omittedSymbols ||= recognized.omitted;
           // New contracts require visible geometric/exact duplication evidence.

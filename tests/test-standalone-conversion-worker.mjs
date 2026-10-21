@@ -7,6 +7,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { writeStandaloneRuntime } from '../scripts/lib/standalone-runtime-projection.mjs';
 import { collectConversionRuntime, writeConversionRuntime } from '../scripts/lib/standalone-conversion-runtime.mjs';
+import { derivePdfjsTextPaintModule, PDFJS_TEXT_PAINT_HOOK } from '../scripts/lib/pdfjs-text-paint-hook.mjs';
 import { removePackageSmokeScope } from './helpers/standalone-package-scope.mjs';
 import { createCases as createAdversarialCases } from '../scripts/generate-adversarial-golden-corpus.mjs';
 import { qualityCases } from '../scripts/generate-quality-corpus.mjs';
@@ -118,6 +119,13 @@ try {
     assert.deepEqual(a.map(item => [item.relative, hash(item.bytes)]), b.map(item => [item.relative, hash(item.bytes)]));
     assert.ok(a.some(item => item.relative.endsWith('.node')));
     assert.ok(!a.some(item => item.relative.includes('/.bin/') || item.relative.includes('/pilot/')));
+    const originalPdf = a.find(item => item.relative === 'node_modules/pdfjs-dist/legacy/build/pdf.mjs');
+    const derivedPdf = a.find(item => item.relative === 'node_modules/pdfjs-dist/legacy/build/pdf.datasecure.mjs');
+    const manifest = JSON.parse(a.find(item => item.relative === 'RUNTIME.json').bytes);
+    assert.equal(hash(originalPdf.bytes), PDFJS_TEXT_PAINT_HOOK.upstreamSha256);
+    assert.deepEqual(derivedPdf.bytes, derivePdfjsTextPaintModule(originalPdf.bytes));
+    assert.equal(manifest.pdf_text_paint_contract, 'datasecure-pdf-text-paint/1');
+    assert.deepEqual(manifest.pdf_text_paint_upstream, PDFJS_TEXT_PAINT_HOOK);
     assert.throws(() => collectConversionRuntime(repo, 'unsupported-target'), /CONVERSION_PACKAGE_TARGET_UNSUPPORTED/u);
     writeStandaloneRuntime(path.join(repo, 'plugins', 'data-secure', 'server'), server, target);
     writeConversionRuntime(repo, runtime, target);
@@ -1104,6 +1112,18 @@ try {
     assert.equal((hybrid.markdown.match(/Projektmanager Software Tester/gu) || []).length, 1);
     assert.ok(hybrid.coverage.reason_codes.includes('OCR_NOT_VERIFIED'));
     assert.doesNotMatch(hybrid.markdown, /Zusätzlicher Bildtext/u);
+  });
+  await test('search-text preservation keeps non-painted native text without raster evidence or OCR consent', async () => {
+    let diagnostics = '';
+    observeSpawn = child => child.stderr.on('data', chunk => { diagnostics += chunk.toString('utf8'); });
+    try {
+      const bytes = pdf([{ textLines: ['Vorhandener Suchtext', 'Gruesse und Sachwerte'], invisibleText: true }]);
+      const output = await convertBuffer(bytes, '.pdf', { contentOptions: contentChoices(false, false) });
+      assert.match(output.markdown, /Vorhandener Suchtext/u);
+      assert.match(output.markdown, /Gruesse und Sachwerte/u);
+      assert.doesNotMatch(diagnostics, /CONVERSION_OCR_(?:STARTING|READY)/u);
+      assert.ok(children.every(entry => entry.closed));
+    } finally { observeSpawn = undefined; }
   });
   await test('native PDF text, including unused image resources, never starts OCR', async () => {
     let starts = 0;

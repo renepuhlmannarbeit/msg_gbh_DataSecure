@@ -12,6 +12,22 @@ const word = (text, x0, y0, x1, y1) => ({ text, bbox: { x0, y0, x1, y1 } });
 const data = (...lines) => ({ text: lines.map(line => line.text).join(''), blocks: [{ paragraphs: [{ lines }] }] });
 const line = (text, ...words) => ({ text, words });
 
+const { cleanExtractedSymbolText } = require('../plugins/data-secure/server/standalone/markdown-visuals');
+test('extraction hygiene preserves German and international wording without a language whitelist', () => {
+  for (const source of ['ÄÖÜäöüß ẞ Straße Grüße René Püllmann', '€ £ $ ± × ÷ § → ✓ 🙂 👩‍💻',
+    '李明 Ελληνικά العربية עברית', 'e\u0301 a\u200Cb\u200Dc\uFE0F',
+    '\u00A0\u202F\u200E\u2060\uFEFF\u00AD\u0085\t\r\n', 'A*B = 42; C:\\Daten\\Datei',
+    'Name: A\uFFFDna Müller', 'Name: Anna\uE001 Müller']) {
+    assert.deepEqual(cleanExtractedSymbolText(source), { text: source, omitted: false });
+  }
+});
+test('only non-text extraction controls are replaced with boundaries, not neighbouring words', () => {
+  assert.deepEqual(cleanExtractedSymbolText('Anna\u0000Müller\u007FEnde\uFDD0\u{10FFFF}'),
+    { text: 'Anna Müller Ende  ', omitted: true });
+  assert.deepEqual(cleanExtractedSymbolText('Anfang\r\n\uE000\uFFFD\r\nEnde'),
+    { text: 'Anfang\r\n\r\nEnde', omitted: true });
+});
+
 test('position separates footer page number without altering source strings', () => {
   assert.equal(nativeTextSeparator(item('15.09.2026', 64, 29, 49), item('2', 42, 29, 6)), '\n');
   assert.equal(nativeTextSeparator(item('Footer', 119, 29, 303), item('2', 42, 29, 6)), '\n');
@@ -98,6 +114,22 @@ test('bounded comparison fallback cannot silently drop already filtered words', 
 });
 const { readableText, readableNotice } = require('../plugins/data-secure/server/standalone/readable-markdown');
 const { contactSpans, applyContactAnswer, buildContactDraft } = require('../plugins/data-secure/server/core/ocr-contact-review');
+test('symbol hygiene runs before UTF16 contact positions and never guesses a changed OCR crop', () => {
+  const { contactQuality } = require('../plugins/data-secure/server/standalone/ocr-quality');
+  const { attachContactCrops } = require('../plugins/data-secure/server/standalone/ocr-contact-crops');
+  const original = '🙂 Grüße\u0000\u{10FFFF}\r\n\uE000\r\nE-Mail: qa_a@example.invalid\r\nTelefon: +49 30 555 1011';
+  const cleaned = cleanExtractedSymbolText(original);
+  const contacts = contactSpans(cleaned.text, contactQuality({}, cleaned.text));
+  assert.equal(contacts.length, 2);
+  assert.deepEqual(contacts.map(value => cleaned.text.slice(value.start, value.end)),
+    ['qa_a@example.invalid', '+49 30 555 1011']);
+  const rendered = readableText(cleaned.text, contacts);
+  assert.deepEqual(rendered.contacts.map(value => rendered.markdown.slice(value.start, value.end)),
+    ['qa_a@example.invalid', '+49 30 555 1011']);
+  assert.strictEqual(attachContactCrops(contacts, cleaned.text, [], null, { bytes: 0 }, original), contacts,
+    'changed transcript must not borrow a plausible crop from a different source line');
+  assert.equal(original.includes('\u0000'), true, 'original transcript is not mutated');
+});
 const { contactQuality } = require('../plugins/data-secure/server/standalone/ocr-quality');
 const { extractMarkdownBuffer } = require('../plugins/data-secure/server/standalone/markdown-extractor');
 test('PDF prose has no generated code fence or OCR supplement heading', () => {

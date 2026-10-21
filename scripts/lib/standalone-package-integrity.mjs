@@ -83,6 +83,14 @@ export function verifyConversionInventory(entries, prefix, manifest) {
   // and SHA256SUMS; all other conversion payload files must occur exactly once.
   assert.ok(files.has('RUNTIME.json') && files.has('THIRD_PARTY_NOTICES.txt'), 'CONVERSION_INVENTORIES_MISSING');
   verifyInventory(files, manifest.files, new Set(['RUNTIME.json', 'THIRD_PARTY_NOTICES.txt']), 'CONVERSION_MANIFEST');
+  // Earlier packages retain their historical runtime contract. New packages
+  // explicitly inventory the unchanged upstream and the named derivative.
+  if (manifest.pdf_text_paint_contract !== undefined || files.has('node_modules/pdfjs-dist/legacy/build/pdf.datasecure.mjs')) {
+    assert.equal(manifest.pdf_text_paint_contract, 'datasecure-pdf-text-paint/1', 'CONVERSION_PDF_PAINT_CONTRACT_INVALID');
+    for (const name of ['pdf.mjs', 'pdf.datasecure.mjs']) {
+      assert.ok(files.has(`node_modules/pdfjs-dist/legacy/build/${name}`), 'CONVERSION_PDF_PAINT_MODULE_MISSING');
+    }
+  }
   // Earlier exact packages retain their historical inventory contract.
   const hasSyntax = [...files.keys()].some(name => /^node_modules\/(?:mdast-util-from-markdown|parse5)\//u.test(name)) ||
     manifest.packages?.some(item => ['mdast-util-from-markdown', 'parse5'].includes(item.name));

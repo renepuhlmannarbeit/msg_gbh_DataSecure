@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import boundFileIo from '../../plugins/data-secure/server/core/bound-file-io.js';
 import { readRegular, sha256, readStandaloneRuntimeContract, verifyTargetEvidence } from './bundled-runtime.mjs';
+import { derivePdfjsTextPaintModule, PDFJS_TEXT_PAINT_HOOK } from './pdfjs-text-paint-hook.mjs';
 
 const BINDINGS = Object.freeze({ 'windows-x64': 'canvas-win32-x64-msvc',
   'macos-x64': 'canvas-darwin-x64', 'macos-arm64': 'canvas-darwin-arm64',
@@ -73,7 +74,13 @@ export function collectConversionRuntime(repoRoot, productTarget) {
   packages.push({ name: 'pdfjs-dist', version: pdfPackage.version, license: pdfPackage.license,
     integrity: pdfLock.packages['node_modules/pdfjs-dist'].integrity });
   for (const relative of ['package.json', 'LICENSE', 'legacy/build/pdf.mjs', 'legacy/build/pdf.worker.mjs']) {
-    add(`node_modules/pdfjs-dist/${relative}`, regularBytes(path.join(pdfSource, ...relative.split('/'))));
+    const bytes = regularBytes(path.join(pdfSource, ...relative.split('/')));
+    add(`node_modules/pdfjs-dist/${relative}`, bytes);
+    if (relative === 'legacy/build/pdf.mjs') {
+      // Keep upstream bytes/licence separately. This explicitly named and
+      // inventoried derivative adds only our first-party text-paint probe.
+      add('node_modules/pdfjs-dist/legacy/build/pdf.datasecure.mjs', derivePdfjsTextPaintModule(bytes));
+    }
   }
   for (const directory of ['cmaps', 'standard_fonts', 'iccs', 'wasm']) tree(path.join(pdfSource, directory), `node_modules/pdfjs-dist/${directory}`);
   // Syntax readers belong exclusively to this isolated runtime. The sidecar
@@ -131,8 +138,10 @@ export function collectConversionRuntime(repoRoot, productTarget) {
   }));
   add('RUNTIME.json', Buffer.from(`${JSON.stringify({ schema: 'datasecure-conversion-runtime/1', target: productTarget,
     node_file: nodeFile, node_version: contract.node_version,
-    syntax_reader_contract: 'datasecure-markdown-syntax/1', packages, files: inventory }, null, 2)}\n`));
-  add('THIRD_PARTY_NOTICES.txt', Buffer.from(`Offline Markdown conversion runtime\n\n${packages.map(item => `${item.name} ${item.version}: ${item.license}`).join('\n')}\n\nTessdata fast 4.1.0: Apache-2.0 (models/LICENSE)\nNode.js: LICENSE.node.txt\nDependency license files remain beside each package.\n`));
+    syntax_reader_contract: 'datasecure-markdown-syntax/1',
+    pdf_text_paint_contract: 'datasecure-pdf-text-paint/1', pdf_text_paint_upstream: PDFJS_TEXT_PAINT_HOOK,
+    packages, files: inventory }, null, 2)}\n`));
+  add('THIRD_PARTY_NOTICES.txt', Buffer.from(`Offline Markdown conversion runtime\n\n${packages.map(item => `${item.name} ${item.version}: ${item.license}`).join('\n')}\n\nPDF.js: upstream pdf.mjs remains unchanged; pdf.datasecure.mjs is a DataSecure text-paint-observer derivative of precisely pinned ${PDFJS_TEXT_PAINT_HOOK.upstreamVersion} (${PDFJS_TEXT_PAINT_HOOK.upstreamSha256}), under the same upstream licence. NPM integrity identifies the upstream package, not this derivative. Both module hashes are listed in RUNTIME.json.\nTessdata fast 4.1.0: Apache-2.0 (models/LICENSE)\nNode.js: LICENSE.node.txt\nDependency license files remain beside each package.\n`));
   return [...files.values()].sort((a, b) => a.relative.localeCompare(b.relative));
 }
 
