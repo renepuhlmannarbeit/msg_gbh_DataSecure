@@ -1,16 +1,19 @@
 # Aktives Entwicklungsbacklog
 
+Stand: 21.10.2026 · Produktstand 3.2.0-rc170 · gemeinsamer Windows-/Mac-Testkandidat in Prüfung; veröffentlicht bleibt RC169.
+
 Veröffentlicht: **3.2.0-rc169**, TXT-gleiche Zuordnung als erstes Excelblatt und
 bearbeitbare fertige Ergebnisse umgesetzt, technisch geprüft und übergeben.
 RC169 ist der aktuelle Windows-/Mac-Teststand; menschliche Abnahme
 offen. Frühere Pakete und Ergebnisstände bleiben unverändert.
 
-## In Vorbereitung – RC170 Windows-Testpaket (21.10.2026)
+## In Vorbereitung – RC170 gemeinsamer Test-Pre-Release (21.10.2026)
 
-Nutzer beauftragt lokale neue Windowsversion mit Dokumentextraktionskorrekturen.
-Quellversion3.2.0-rc170; neue gebundene Gesamt-/Native-/Paketgates und Testplan.
-Kein Auftrag für Macrunner, GitHubrelease, Main-Integration oder Desktopbedienung.
-[Bindungen/Abschluss](../acceptance/RC170_WINDOWS_TEST_20261021.md).
+Nutzer erweitert auf GitHub-Pre-Release für Windows und beide Macarchitekturen,
+gleicher finaler Commit/Fingerprint, Windows zusätzlich lokal mit Testplan.
+Quellversion3.2.0-rc170; neue gebundene Gesamt-/Native-/Paketgates. Macrunner und
+Push/Veröffentlichung nun beauftragt, kein Main-/Desktop-/Apple-Zertifizierungsauftrag.
+[Bindungen/Abschluss](../acceptance/RC170_SHARED_RELEASE_20261021.md).
 
 ## Quellimplementierung technisch geprüft – DOC-TEXT-01 (21.10.2026)
 
@@ -1226,7 +1229,7 @@ in dieselbe Korrekturrunde.
 
 ## Historische Nachweise bis R4 (kein aktueller R5-Abschluss)
 
-Stand: 17.10.2026 · Produktstand 3.2.0-rc170 · veröffentlicht Standalone RC162 (Windows und beide Mac-Architekturen; M2-Abnahme offen), Linux RC159 / Cowork RC151 · lokaler Arbeitsstand nach RC162 noch nicht veröffentlicht
+Stand: 17.10.2026 · Produktstand 3.2.0-rc169 · veröffentlicht Standalone RC162 (Windows und beide Mac-Architekturen; M2-Abnahme offen), Linux RC159 / Cowork RC151 · lokaler Arbeitsstand nach RC162 noch nicht veröffentlicht
 
 ## Gezielter R3-Abschlussreview
 

@@ -1,19 +1,21 @@
 # Aktueller Iststand
 
+Stand: 21.10.2026 · 3.2.0-rc170 · gemeinsamer Windows-/Mac-Testkandidat in Prüfung; veröffentlicht bleibt RC169.
+
 Veröffentlicht: **3.2.0-rc169**, gemeinsamer Windows-/Mac-Test-Pre-Release.
 Erstes Excelblatt TXT-gleich, fertige Ergebnisse manuell bearbeitbare Arbeitskopien.
 Technische Endgates und unabhängige tatsächliche Artefaktgegenreviews bestanden;
 menschliche Desktop-/Excel-/Numbers-/Mac-Zielhostabnahme bleibt offen.
 RC168, RC167, RC166 und frühere Pakete bleiben unverändert erhalten.
 
-### In Vorbereitung – RC170 Windows-Testpaket (21.10.2026)
+### In Vorbereitung – RC170 gemeinsamer Test-Pre-Release (21.10.2026)
 
-Neuer Nutzerauftrag: lokale Windows-x64-Testversion mit den folgenden
-Dokumentextraktionskorrekturen und Testplan bereitstellen. Quellversion3.2.0-rc170;
-RC169 bleibt veröffentlicht und unverändert. Keine Macjobs, GitHubveröffentlichung,
-Main-Integration oder Desktopsteuerung in diesem Auftrag. Neue gebundene Windows-
-Gesamt-/Native-/Paketprüfungen vor lokaler Übergabe; Desktopabnahme USER_PENDING.
-[Aktueller Auftrag](../acceptance/RC170_WINDOWS_TEST_20261021.md).
+Nutzer hat den anfänglichen lokalen Windowsauftrag erweitert: Windows-x64,
+macOS ARM64/Intel aus demselben abschließenden Commit/Fingerprint bauen und als
+GitHub-Pre-Release anbieten, Windows zusätzlich lokal mit Testplan. RC169 bleibt
+unverändert. Keine Main-Integration, Desktopsteuerung oder Apple-Zertifizierung.
+Neue gebundene Endgates vor Übergabe; menschliche Desktopabnahme USER_PENDING.
+[Aktueller gemeinsamer Auftrag](../acceptance/RC170_SHARED_RELEASE_20261021.md).
 
 ### Quellkorrektur technisch geprüft – Dokumentextraktion nach RC169 (21.10.2026)
 
@@ -1584,7 +1586,7 @@ neuen gemeinsamen Quellfreeze und erneute Windows-Regression.
 
 ## Historische Nachweise bis R4 (kein aktueller R5-Abschluss)
 
-Stand: 17.10.2026 · 3.2.0-rc170 lokaler Windows-R4-Final-Testkandidat gebaut und ohne GUI geprüft; veröffentlicht bleibt Standalone RC162 für Windows und beide Mac-Architekturen; native Windows-/M2-Zielhostabnahme offen; Linux RC159 / Cowork RC151
+Stand: 17.10.2026 · 3.2.0-rc169 lokaler Windows-R4-Final-Testkandidat gebaut und ohne GUI geprüft; veröffentlicht bleibt Standalone RC162 für Windows und beide Mac-Architekturen; native Windows-/M2-Zielhostabnahme offen; Linux RC159 / Cowork RC151
 
 ### Gezielter R3-Abschlussreview: zusätzliche Fixes F13/F14
 

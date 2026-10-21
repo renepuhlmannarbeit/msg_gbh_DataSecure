@@ -1,5 +1,9 @@
 # RC170 – lokale Windows-Testversion
 
+Historischer Initialauftrag; inzwischen auf gemeinsamen GitHub-Pre-Release für
+Windows und beide Macs erweitert. Maßgeblich ist
+[RC170_SHARED_RELEASE_20261021.md](RC170_SHARED_RELEASE_20261021.md).
+
 Auftrag vom21.10.2026: neue Windowsversion zum eigenen Desktoptest bereitstellen.
 Status: Vorbereitung; noch kein Paket-/Übergabe-PASS.
 
