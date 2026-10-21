@@ -2,7 +2,9 @@
 
 Expliziter Nutzerauftrag vom22.10.2026: unterbrochene Prüfungen abschließen und
 neue Testversion Windows x64/macOS ARM64/Intel als GitHub-Pre-Release bereitstellen.
-Windows-ZIP zusätzlich lokal mit Testplan; Desktoptests ausschließlich Nutzer.
+Windows-ZIP zusätzlich lokal mit Testplan. Anschließender ausdrücklicher
+Nachtauftrag: Hauptagent prüft auch die gebundene eigene Windows-App nativ mit
+synthetischen Daten. Menschliche Abnahme bleibt davon getrennt USER_PENDING.
 RC170 und sämtliche früheren Pakete, Nutzerdateien, Profile und Evidenzen erhalten.
 
 ## Gemeinsamer Vertrag
@@ -33,6 +35,11 @@ aus39167676290/7d0ee31dc65ce31ce54f1b4a1a0cefa348ef7071 wiederverwenden.
 4. Lokale create-only Übergabe unter Software DataSecure/RC171, neues Windows-ZIP,
    menschlicher Testplan, synthetische Testdaten, Prüfsummen und Paketbelege.
    Keine private Nutzer-PPTX/Diagnose/Ergebnisinhalte in Git oder Releaseassets.
+   Zuvor neue Windows-Desktopkampagne ausschließlich mit exakt gebundenem eigenen
+   Paket und isoliertem Profil. Kein paralleler Desktopzugriff, keine Anmeldung,
+   Sicherheitsdialoge oder OS-Schutzänderungen. Gesperrten Desktop nicht umgehen;
+   echte Beobachtungen und offene Fälle getrennt dokumentieren. Risikobasierter
+   zusätzlicher Funktionsreview, keine ungefragten neuen Funktionen.
 5. Neuer Tag und GitHub-Pre-Release; Assetinventar/Remotehashes/Tagsource/
    Prereleaseflag vor UND nach Veröffentlichung prüfen. Keine Mainintegration
    ohne gesonderten Auftrag und keine alten ZIPs umetikettieren.
@@ -61,3 +68,35 @@ Legacydarstellung unverändert. Nicht-OCR-Officeworker verweigert leeres Resulta
 Autor:67Extractor/91Parser/32Bildrelevanz; Main tatsächliches Quellengegenlesen,
 13Partial-/39Checkpointfälle grün. Neue echte37.Officegruppe trennt EMF-only,
 leeres Raster und lesbaren Bildtext in beiden Profilen; nativer Endlauf offen.
+
+## Source01-Endbefund und eng begrenzter Timeout-Gegenfix
+
+App36eb64ef78581c1018ee390595bcd64201032968/FPf514cd54… war noch kein
+geeigneter Releasefreeze. Windows-Native-FINAL PASS mit unveränderten Inputs:
+Prepare/Clippy/280Rust(3ignoriert)/Node-Rust/Release. Native Konverterkampagne
+dagegen ROT nach PDF30 und61Konverterfällen: frühe Timeoutprobe erhielt
+CONVERSION_INPUT_INCOMPLETE statt CONVERSION_TIMEOUT. Office37 daher NOT_RUN.
+Headless bewusst vor Quellenänderung gestoppt, kein vollständiges FINAL;
+Macconsumer39684655804 gezielt abgebrochen, tatsächlich completed/cancelled.
+Keine Source01-Pakete erzeugt, keine alten Belege rückwirkend umgeschrieben.
+
+Neue echte Windows-Gegenprobe mit1MB synthetischer Eingabe und1ms Testtimeout
+belegt timer.fire → kill → stdin.callback(EOF) → stdin.error(EOF) → close(SIGTERM).
+Die konkrete Ursache der ursprünglichen kleinen fehlgeschlagenen Probe bleibt
+unbewiesen; diese gleiche Fehlerklasse ist separat nativ reproduziert. Enger Fix:
+nur EOF/EPIPE/ERR_STREAM_DESTROYED nach bereits angefordertem Timeout behalten
+die Timeoutklassifikation. Keine erfundene Eingabeübergabe, kein vorgetäuschtes
+Workerende, keine verlängerte Grace; unabhängige späte I/O-/Protokollfehler,
+ausdrücklicher Abbruch und unbestätigte Terminierung bleiben hart.
+Unabhängiger tatsächlicher Quellengegenreview und frische native Projektion
+bestätigen jetzt die gleiche Sequenz mit CONVERSION_TIMEOUT; alle Kinder beendet.
+42Checkpointfälle einschließlich neuer Reihenfolge-/Flush-/Harderror-Gegenfälle
+bestanden. Separate Belege EARLY-TIMEOUT-LARGE-DIAGNOSIS.json und
+EARLY-TIMEOUT-FIXED-PROOF.json unter ignoriertem Source01 erhalten.
+Neuer gemeinsamer Source02-Commit und vollständig frische Endgates erforderlich.
+
+Zusätzlicher unabhängiger tatsächlicher Funktionsreview: kein weiterer bestätigter
+Partial-Deltablocker in Start/Fünferverlauf/Defaultziel/beiden Modi/OCR/Vertagen/
+Neustart/Nachbearbeitung/Zuordnungsbeilagen. Frisch218Reviewfrontend/10Broker/
+10persistenteEntscheidungen/20Companionfälle sowie echter Produktions-Fünfer-
+und Startup-I/O-Test grün; kein Desktop-/Mac-/Paket-PASS daraus.

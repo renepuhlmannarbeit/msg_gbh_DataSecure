@@ -27,10 +27,21 @@ Original-PPTX Source04 bereits PASS:61310 native Zeichen exakt erhalten,
 61723 insgesamt, Einschränkungen ausdrücklich ausgewiesen, Original bytegleich.
 Am22.10. neuer expliziter Releaseauftrag RC171: Prüfungen abschließen, Windows
 und beide Macs aus gleichem abschließendem Appcommit bauen, GitHub-Pre-Release
-und Windows-ZIP lokal mit Testplan. Desktoptests ausschließlich beim Nutzer;
+und Windows-ZIP lokal mit Testplan. Neuer ausdrücklicher Nachtauftrag ergänzt
+native Windows-Desktoptests durch den Hauptagenten an eigenem gebundenem Paket,
+isoliertem Profil und synthetischen Daten; menschliche Abnahme bleibt USER_PENDING.
+Zusätzlicher risikobasierter Funktionsreview ohne ungefragte Featureausweitung;
 native Mac-Endgates neuer Bytes noch offen. RC170 unverändert erhalten.
 [Releaseauftrag](../acceptance/RC171_SHARED_RELEASE_20261022.md),
 [Plan und Grenzen](../acceptance/DOCUMENT_EXTRACTION_ARTIFACTS_20261021.md).
+
+Source01/36eb64e: WindowsNative280Rust/Node-Rust/Clippy/Release grün, tatsächliche
+Konverterkampagne rot an frühem Timeout/Input-EOF, Officegruppe nicht gelaufen;
+Headless gezielt gestoppt und Macconsumer39684655804 tatsächlich cancelled.
+Kein geeignetes Paket oder Gesamt-PASS. Separater echter Windows1MB/1ms-Gegenfall
+belegt die Fehlerklasse. Enger EOF/EPIPE/Streamclosed-nach-Timeout-Fix unabhängig
+nativ gegengeprüft,42Checkpointfälle grün; harte Eingabe-/Protokoll-/Cancel- und
+Terminierungsbindungen unverändert. Neuer Source02-Freeze mit frischen Endgates.
 
 ### Veröffentlicht – RC170 gemeinsamer Test-Pre-Release (21.10.2026)
 

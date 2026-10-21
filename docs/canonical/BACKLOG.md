@@ -12,7 +12,9 @@ offen. Frühere Pakete und Ergebnisstände bleiben unverändert.
 Nutzerauftrag: Word/Excel/PowerPoint/PDF unter Windows und macOS bestmöglich
 verarbeiten. Einzelne nicht lesbare Bilder, unabhängige beschädigte Teile und
 lokale Ressourcenfehler dürfen sicher gewonnenen Text nicht pauschal verwerfen.
-RC170 und vorhandene Nutzerdateien bleiben unverändert; Desktoptests beim Nutzer.
+RC170 und vorhandene Nutzerdateien bleiben unverändert. Neuer Nachtauftrag:
+Hauptagent prüft Windows nativ mit gebundenem eigenem Paket, isoliertem Profil
+und synthetischen Daten; menschliche Windows-/Mac-Abnahme weiter USER_PENDING.
 
 1. Geschlossene, formatbezogene Auslassungshinweise und eindeutiger Teilstatus.
    Keine Bild-/Binärartefakte oder Exception-/URL-Texte in Markdown übernehmen.
@@ -37,6 +39,13 @@ konkrete Fehlermeldung statt leerem/falschem Erfolg. Keine zusätzlichen nativen
 Renderer, Apple-Zertifizierung oder OS-Schutzänderung. Umsetzung und unabhängige
 Quellgegenreviews vorhanden, unterbrochene Endprüfungen neu binden. Expliziter
 RC171-Releaseauftrag vom22.10.; [Plan](../acceptance/RC171_SHARED_RELEASE_20261022.md).
+
+Source01-Endlauf vor Freigabe ROT in echter früher Windows-Konvertertimeoutprobe;
+kein Paket/Gesamt-PASS. Gezieltes Stoppen übriger eigener Freezejobs dokumentiert.
+Separat nativ belegte Input-EOF-nach-Kill-Fehlerklasse eng korrigiert und unabhängig
+an frischer Projektion gegengeprüft,42Checkpointfälle grün. Neue Source02-Endgates
+erforderlich. Zusätzliche Fachprüfung fokussiert echte Funktionsblocker statt
+neuer Features; vorhandene Schutzprüfungen und alle Nutzerdateien bleiben erhalten.
 
 ## Abgeschlossen – RC170 gemeinsamer Test-Pre-Release (21.10.2026)
 

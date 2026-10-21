@@ -159,6 +159,14 @@ async function convertBuffer(bytes, extension, options = {}) {
       // the Job Object on launcher termination, including all worker threads.
       try { child.kill('SIGTERM'); } catch { /* bounded, explicitly unconfirmed below */ }
     };
+    const inputFailure = failure => {
+      // Closing our timed-out worker can itself close its input pipe. Keep
+      // that original timeout only for these concrete shutdown symptoms;
+      // independent I/O faults and faults before termination remain hard.
+      // This never proves that input was flushed or that the worker ended.
+      if (stopped === 'CONVERSION_TIMEOUT' && ['EOF', 'EPIPE', 'ERR_STREAM_DESTROYED'].includes(failure?.code)) return;
+      stop('CONVERSION_INPUT_INCOMPLETE');
+    };
     const abort = () => {
       // Cancellation while a timed-out worker is being reaped must still
       // suppress partial recovery; a previous timeout is not user consent.
@@ -183,7 +191,7 @@ async function convertBuffer(bytes, extension, options = {}) {
     });
     // Drain vendor diagnostics, never return/persist raw document text or paths.
     child.stderr.on('data', chunk => { stderrSize += chunk.length; if (stderrSize > 64 * 1024) stop('CONVERSION_OUTPUT_LIMIT'); });
-    child.stdin.on('error', () => stop('CONVERSION_INPUT_INCOMPLETE'));
+    child.stdin.on('error', inputFailure);
     child.once('close', code => {
       closed = true;
       // A launcher that cannot start its parser can close stdin first (EPIPE).
@@ -230,7 +238,7 @@ async function convertBuffer(bytes, extension, options = {}) {
       } catch { finish('CONVERSION_RESPONSE_INVALID'); }
     });
     if (!stopped) child.stdin.end(input, failure => {
-      if (failure) stop('CONVERSION_INPUT_INCOMPLETE'); else inputFlushed = true;
+      if (failure) inputFailure(failure); else inputFlushed = true;
     });
     else child.stdin.destroy();
   });

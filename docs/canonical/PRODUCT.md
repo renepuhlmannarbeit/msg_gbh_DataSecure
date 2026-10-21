@@ -11,6 +11,12 @@ Menschliche Desktop-/Office-/Mac-Zielhostabnahme bleibt USER_PENDING;
 keine vollständige semantische Artefaktfreiheit oder Apple-Zertifizierung behauptet.
 [Gemeinsamer Prüf- und Übergabeauftrag](../acceptance/RC170_SHARED_RELEASE_20261021.md).
 
+RC171-Nachtauftrag ergänzt einen risikobasierten Funktionsreview und echte native
+Windows-Agententests am neu gebundenen eigenen Paket mit synthetischen Daten.
+Agentenbeobachtung ist keine menschliche Abnahme; Mac-Finder/TCC/M2/Enterprise/
+VoiceOver bleiben Zielhostgates. Keine Apple-Developer-ID/Notarisierung oder
+OS-Schutzänderung; bestehendes lokales Ad-hoc-Sealing unverändert.
+
 **Aus RC169 beibehaltener Vertrag:** Notwendige OCR-/Fundstellenentscheidungen bleiben,
 danach führt der normale Weg direkt zu den fertigen Ergebnisdateien. Keine zweite
 Dokumentauswahl, Pflichtfreigabe oder Exportbestätigung. Optionale Nachbearbeitung

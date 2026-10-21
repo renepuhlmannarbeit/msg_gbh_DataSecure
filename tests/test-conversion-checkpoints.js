@@ -173,9 +173,9 @@ testAsync('emitter output failure prevents all subsequent writes', async () => {
 function parentModel({ legacy = false, flush = true } = {}) {
   const filename = path.resolve(__dirname, '../plugins/data-secure/server/standalone/conversion-worker.js');
   const originalRequire = createRequire(filename), child = new EventEmitter(), timers = new Map();
-  let nextTimer = 0, killed = 0;
+  let nextTimer = 0, killed = 0, inputCallback;
   child.stdout = new EventEmitter(); child.stderr = new EventEmitter(); child.stdin = new EventEmitter();
-  child.stdin.end = (_bytes, callback) => { if (flush) callback(); };
+  child.stdin.end = (_bytes, callback) => { inputCallback=callback; if (flush) callback(); };
   child.stdin.destroy = () => {};
   child.kill = () => { killed++; return true; };
   const module = { exports: {} };
@@ -194,6 +194,8 @@ function parentModel({ legacy = false, flush = true } = {}) {
     { timeoutMs: 1000, signal: controller.signal, ...(legacy ? {} : { contentOptions: options }) });
   const tick = ms => { const entry = [...timers].find(([, timer]) => timer.ms === ms); assert.ok(entry); timers.delete(entry[0]); entry[1].callback(); };
   return { promise, child, controller, tick, killed: () => killed, timers,
+    inputError: (code, via) => { const failure=code === undefined ? new Error('synthetic I/O failure') : Object.assign(new Error(code),{code});
+      if(via === 'callback') inputCallback(failure); else child.stdin.emit('error',failure); },
     send: value => child.stdout.emit('data', Buffer.isBuffer(value) ? value : line(value)), close: code => child.emit('close', code) };
 }
 testAsync('actual parent releases a checkpoint only after confirmed resource close', async () => {
@@ -209,6 +211,29 @@ testAsync('actual parent timeout needs child close; missing close rejects at unc
 testAsync('actual parent confirmed timeout yields an incomplete result', async () => {
   const m = parentModel(); m.send(frame()); m.tick(1000); m.close(null);
   assert.ok((await m.promise).coverage.reason_codes.includes('CONVERSION_TIMEOUT_PARTIAL'));
+});
+testAsync('own timeout pipe closure preserves timeout without inventing input flush or extending termination', async () => {
+  for(const code of ['EOF','EPIPE','ERR_STREAM_DESTROYED']) for(const via of ['callback','event']) for(const flush of [false,true]) {
+    const m=parentModel({flush});m.send(frame());m.tick(1000);m.inputError(code,via);
+    assert.equal(m.killed(),1);assert.deepEqual([...m.timers.values()].map(timer=>timer.ms),[1500]);
+    m.close(null);
+    if(flush)assert.ok((await m.promise).coverage.reason_codes.includes('CONVERSION_TIMEOUT_PARTIAL'));
+    else await assert.rejects(m.promise,{code:'CONVERSION_TIMEOUT'});
+  }
+  const m=parentModel({flush:false});m.tick(1000);m.inputError('EOF','event');m.tick(1500);
+  await assert.rejects(m.promise,{code:'CONVERSION_TERMINATION_UNCONFIRMED'});
+});
+testAsync('the same input pipe closure before timeout is a hard incomplete-input failure', async () => {
+  for(const code of ['EOF','EPIPE','ERR_STREAM_DESTROYED']) for(const via of ['callback','event']) {
+    const m=parentModel({flush:false});m.send(frame());m.inputError(code,via);m.close(0);
+    await assert.rejects(m.promise,{code:'CONVERSION_INPUT_INCOMPLETE'});assert.equal(m.killed(),1);
+  }
+});
+testAsync('late independent or unknown input faults still veto partial timeout recovery', async () => {
+  for(const code of ['EIO','ENOSPC',undefined]) for(const via of ['callback','event']) {
+    const m=parentModel();m.send(frame());m.tick(1000);m.inputError(code,via);m.close(0);
+    await assert.rejects(m.promise,{code:'CONVERSION_INPUT_INCOMPLETE'});assert.equal(m.killed(),1);
+  }
 });
 testAsync('actual parent explicit cancellation while reaping a timeout still refuses partial recovery', async () => {
   const m = parentModel(); m.send(frame()); m.tick(1000); m.controller.abort(); m.close(125);
