@@ -17,7 +17,7 @@ const {
 } = require('./document-result-grade');
 const { packageIdentityMatches } = require('./package-identity');
 const { artifactRoot, readMarkdownArtifact, metadata, verifyMarkdownItem } = require('../standalone/markdown-store');
-const { applyRetryBudget, clearRetryBudget, isDocumentControlBusy, isOwnershipControlFailure } = require('./prepublication-error');
+const { applyRetryBudget, clearRetryBudget, isDocumentControlBusy, isOwnershipControlFailure, retryDocumentControl } = require('./prepublication-error');
 const { isMarkdownBatch } = require('../core/processing-mode');
 const { contentOptionsForBatch, serializeContentOptions } = require('../core/content-options');
 const { privatePublicationRecord, confirmPublication } = require('./standalone-anonymized-batch');
@@ -134,8 +134,7 @@ function createBatchReconciliation(options = {}) {
     return publishedPackageState(packageId, state, item) === 'verified';
   }
 
-  function markMappingPending(item, packageId, documentResult, state) {
-    const published = publishedPackageRecord(packageId, state, item);
+  function applyMappingPending(item, packageId, documentResult, published) {
     if (published.state !== 'verified') {
       throw new ErrorType('Das lokal veröffentlichte Paket konnte nicht sicher verifiziert werden.');
     }
@@ -158,6 +157,17 @@ function createBatchReconciliation(options = {}) {
     item.work_copy_cleanup_pending = true;
   }
 
+  function markMappingPending(item, packageId, documentResult, state) {
+    return applyMappingPending(item, packageId, documentResult, publishedPackageRecord(packageId, state, item));
+  }
+
+  async function markMappingPendingAsync(item, packageId, documentResult, state) {
+    // The private reader performs only idempotent metadata verification. Keep
+    // the item mutation outside its retry boundary and execute it once.
+    const published = await retryDocumentControl(() => publishedPackageRecord(packageId, state, item));
+    return applyMappingPending(item, packageId, documentResult, published);
+  }
+
   function commitPendingMapping(item, packageId, state) {
     if (state && contentOptionsForBatch(state)) {
       if (packageId !== `ds_${item.id}`) throw new ErrorType('Die veröffentlichte Paketidentität ist ungültig.');
@@ -172,6 +182,17 @@ function createBatchReconciliation(options = {}) {
     writeMapping(item.source_label || item.name, packageId, undefined, { documentResult: item.document_result });
     clearMappingIntent(outbox);
     delete item.mapping_outbox_persisted;
+  }
+
+  async function commitPendingMappingAsync(item, packageId, state) {
+    if (state && contentOptionsForBatch(state)) {
+      if (packageId !== `ds_${item.id}`) throw new ErrorType('Die veröffentlichte Paketidentität ist ungültig.');
+      await require('./standalone-anonymized-mapping').commitPrivateMappingAsync(state, item);
+      delete item.mapping_outbox_persisted;
+      return;
+    }
+    // Existing legacy intent/CSV/finish semantics, once and without retries.
+    return commitPendingMapping(item, packageId, state);
   }
 
   function reconcilePendingMappings(state) {
@@ -334,7 +355,9 @@ function createBatchReconciliation(options = {}) {
     publishedPackageState,
     regularPublishedPackage,
     markMappingPending,
+    markMappingPendingAsync,
     commitPendingMapping,
+    commitPendingMappingAsync,
     reconcilePendingMappings,
     reconcilePreflightStoppedMappings,
     reconcilePublishedItems,

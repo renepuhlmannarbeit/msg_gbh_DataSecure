@@ -9,6 +9,71 @@ RC170 und sämtliche früheren Pakete, Nutzerdateien, Profile und Evidenzen erha
 
 ## Neuester Abschluss der Testgegenfixes vor Source05 (22.10.02:06)
 
+### Neuer tatsächlicher Diagnose-/Konkurrenzcheckpoint (22.10.01:12UTC)
+
+Quellenabschluss danach22.10.01:23UTC: beide begrenzten Gegenfixes fertig.
+Unabhängige tatsächliche Produktionsgegenreviews ohne bestätigten Deltablocker,
+Main las alle sechs geänderten Produktionsdateien. Backend fünf Pins stabil:
+Mapping1855148bc109b40b62567dab3b6a490183ea22defc678e07ca9b14298c8b6d9a,
+Reconciliation684d46884dea5a4c1f1c81fb9794f2d5c638cad09e1c8976ef936d869ed634c5,
+Batch269b96b7ff83fdd171604ade8e05171a4df831389161ac7d008d28d6fa4ac9b7,
+Item5ed1330cd276835a903317fd3eb6ec7a8165f1ff2425db437286470c61dcb097,
+Reviewf58dc6780220fba8ad5d5b50607591e1dee88cb132ff1480b7a970d4328a2405.
+Workspace6b1f657e1126d2b0e337530972e9a8c57056fd26a71a622bc23d585950f07532.
+Autor62Mappingdiagnostik/26Item/17Review/15Reconciliation/37Contentfälle und
+66Worker-Exportchecks grün; letzteres ausdrücklich source_adapter:true/native:false.
+Main469Workspace grün; gezielter Mainquellenlauf zehn Gruppen PASS/Inputs unverändert
+01:22:15.973–01:24:30.627UTC, Beleg dist/rc171-mapping-counterfix-main-20261022/RESULT.json.
+578Inputs mit Manifestc845ece7300cc5b047542fa456509e0fb61416d3cd2d7490deee637282e2155f.
+Neuer ProduktFP
+1320d938f4976b0647b5db970252edf48d792793860bad956acf59dee5a6c29b/340.
+Nur vorhandene idempotente synchrone Metadatenbestätigungen über bestehenden
+Retryhelper awaiten, danach Intent/CSV/Finish jeweils einmal. Nach zweitem Await
+Bindung/Ergebnisgrad frisch vergleichen. Beide Workerkompositionen verwenden
+Async-Fassaden und awaiten Markierung/Intent/Commit vor Freigabe. Bestehende
+synchrone Reconciliation/History-/Legacysemantik unverändert; rohe Action-/Close-/
+Epochfehler nicht retryfähig gemacht. Mappingdiagnostics evaluiert Composition
+und Exporte im VM statt normalem Batchimport/Profilinitialisierung. Keine neue
+Deadline, Guard-/ACK-/Retrykatalog-/Schreibänderung, kein alter GUI-Ursachenclaim.
+Nach Mainlauf neuer gemeinsamer Commit/Push und sämtliche frischen Source06-
+Endgates einschließlich19echter Windows-GUI-Fälle; noch keine Releasefreigabe.
+
+Lokaler Diagnosecommit525e9df0920d231ef0d60dd75a8f22f60c7bab07,
+FP76b48d01ec33b22ef894e16089cba14ac551a99cf526e6247aac5195adcf9948/340,
+gezielt gebaut/stabil. ZIPa3c4e16843e33ad6e50f5cca57f76393f28b8b4f722702a48ede0ad4b671f171,
+EXE5bc2e7d563d3b5cfe8e19807899f403f1b5ec7458c60cfc5995cea2cf263c9dd.
+Keine vollständige Regression/Releasefreigabe dieses Diagnosekandidaten.
+Echte Main-GUI: Run3a21a04b212fd1fcd96488ee301c6be2c4790a79e4331ae486c7b9f105a3dace,
+zwei normale Neustarts mit gleichem EXE/Profil, ungespeicherte OCR verworfen,
+zwei OCR-Entscheidungen gespeichert, pausiert neues Ergebnisziel gewählt,
+AnnaBerger als Person gespeichert. Tatsächlich165ByteMarkdown und Vertraulich/
+Dateizuordnung.csv91B, Pseudonym-Zuordnung.txt976B, Pseudonym-Zuordnung.xlsx5296B
+bereitgestellt und im echten Explorer geöffnet. Keine neue Fünfminutenpause;
+deshalb kein voller GUI06-PASS. Profilf8b628f4040145a9bd72cbd08a6bb6cd erhalten,
+App66716/Core71228 normal geschlossen01:08:31.829UTC, Rootprozess0,
+89Originale bytegleich. RESULT-RECHECK/GUI-OBSERVATIONS unter
+dist/rc171-mapping-diagnostic01-20261022. Historische Source05-Ursache UNPROVEN.
+
+Unabhängige tatsächliche Windows-Native-Probe am unveränderten Diagnosepaket:
+dist/rc171-native-mapping-contention-20261022-01/attempt02/FINAL.json PASS.
+Eigener fremder logischer Controller mit echtem NativeOwner/2, PID-/Instanzprüfung
+und CGuard; mutierender Prozess erwirbt eigenen Kernelguard, kein Lockkeeper.
+commitPrivateMapping verweigert STANDALONE_BUSY in mapping_publication vor
+Metadatenaction, kein CSV, Intent/Owner bytegleich. Nach echter Controllerfreigabe
+und bestätigtem Childclose genau ein normaler Commit/CSVzeile, Intent danach weg,
+Original unverändert; alle eigenen Kinder beendet. Das beweist einen separaten
+Konkurrenzfehler, nicht den genauen verlorenen Source05-Primärfehler.
+Enger Async-Gegenfix an ausschließlich idempotenten Metadatenreads läuft.
+CSV/Intent/Finish werden nicht als Callback wiederholt, Sync-History/Recovery
+bleiben unverändert. Keine Guard-/ACK-/Deadline-/Retrykataloglockerung.
+
+Zusätzlicher echter GUI-Befund: Navigation behält nach einzigem fertigem Lauf
+"1 offen". Autorfix trennt globale Countfrische von Tabellenrendercache, nutzt
+nur bestätigte globale Readonlyantworten und invalidiert Busy/Connection/alte
+Generationen neutral. Keine Zählerableitung aus einer gezielten Detailantwort,
+kein Startupscan/Recoverywrite.469/469Workspacefälle inkl.11neue Gegenfälle PASS;
+Main und unabhängiger tatsächlicher Gegenreview vor gemeinsamer Neubindung.
+
 Neuer Diagnosequellenabschluss22.10.00:51UTC: ausschließlich beobachtende feste
 Mappingphasen vor bestehender Fehlernormalisierung ergänzt, keine Retry-/Guard-/
 ACK-/Schreib-/Recoveryentscheidung geändert. Identischer RAW-Weiterwurf auch vor

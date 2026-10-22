@@ -2,6 +2,31 @@
 
 Stand: 22.10.2026 · Produktstand 3.2.0-rc171 · gemeinsamer Windows-/Mac-Test-Pre-Release in Vorbereitung; RC170 bleibt unverändert.
 
+Quellenabschluss22.10.01:23UTC: Mapping-Konkurrenzgegenfix und Badgefix fertig,
+jeweils unabhängig am tatsächlichen Produktionsdelta gegengelesen, kein
+bestätigter Deltablocker. Autor62/26/17/15/37gezielte Fälle+66Sourceadapterchecks
+PASS, Main469Workspace und zehn gezielte Gruppen PASS/Inputs unverändert,
+01:22:15.973–01:24:30.627UTC.578Inputs/Manifestc845ece7300cc5b047542fa456509e0fb61416d3cd2d7490deee637282e2155f.
+ProduktFP
+1320d938f4976b0647b5db970252edf48d792793860bad956acf59dee5a6c29b/340.
+Nächster offener Schritt: neuer gemeinsamer Commit/Push/Macconsumer und Source06-
+Freeze; gesamte frische Regression/Native/Konverter/Paket und19echte GUI-Fälle.
+Separater echter nativer Postfix-Konkurrenznachweis wird vorbereitet, erst an
+neuen Paketbytes ausführen. Keine alten Belege oder historische Ursache umdeuten.
+
+Aktueller Abschlussbedarf22.10.01:12UTC: separat kausal bestätigte logische
+Documentcontroller-Konkurrenz beim Mappingabschluss eng an idempotenten
+Metadatenreads abfangen, beide Workerpfade wirklich awaiten. Bestehende synchrone
+History-/Recovery-APIs und Guard-/ACK-/Schreibentscheidungen unverändert lassen.
+Diagnosepaket525e lieferte nativ nach zwei Neustarts/Zielwechsel165ByteMD und
+drei vertrauliche Dateien,89Originale unverändert; erklärt historischen GUI06-
+Primärfehler nicht rückwirkend. Native Konkurrenzprobe bestätigt Busy vor Action,
+unveränderten Intent und genau einen Commit nach tatsächlicher Freigabe.
+Zusätzlich Navigationsbadge nach Abschluss aktualisieren: Autor469/469 inkl.
+11Gegenfälle grün, unabhängiger Quellengegenreview läuft. Danach Mainprüfung,
+neuer gemeinsamer Commit und alle frischen Endgates/19echten Windows-GUI-Fälle.
+Kein alter GUI-/Mac-/Paket-PASS auf neue Bytes; noch kein RC171-Pre-Release.
+
 Diagnosequellen inzwischen ergänzt/gegengelesen und gezielt grün: neun feste
 Mappingphasen/Originalcode vor Normalisierung, RAW-Weiterwurf identisch, keine
 Retry-/Guard-/ACKänderung. Neues synthetisches Windows-Diagnosepaket als nächster

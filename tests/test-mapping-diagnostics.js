@@ -8,6 +8,8 @@ const { test } = require('node:test');
 const diagnostic = require('../plugins/data-secure/server/gateway/batch-execution-diagnostic');
 const { sanitizeWorkflowEvent } = require('../plugins/data-secure/server/gateway/workflow-diagnostics');
 const grades = require('../plugins/data-secure/server/gateway/document-result-grade');
+const policy = require('../plugins/data-secure/server/gateway/prepublication-error');
+const { withSynchronousDocumentControl } = require('../plugins/data-secure/server/gateway/standalone-document-control');
 const { normalizePostPreflightWriteError } = require('../plugins/data-secure/server/gateway/storage-capacity');
 const root = path.resolve(__dirname, '..');
 const plain = value => JSON.parse(JSON.stringify(value));
@@ -18,6 +20,7 @@ function evaluate(relative, dependencies, suffix = '') {
   const context = vm.createContext({ module, Buffer, JSON, process,
     require(id) {
       if (Object.hasOwn(dependencies, id)) return dependencies[id];
+      if (id === './prepublication-error') return policy;
       if (id.startsWith('node:') || ['fs', 'path', 'crypto'].includes(id)) return require(id);
       throw Error('UNEXPECTED_RAM_DEPENDENCY:' + id);
     }
@@ -192,4 +195,190 @@ test('all new closed mapping phases survive the actual sender/reader and workflo
   for (const phase of phases) f.api.recordBatchExecutionFailure(phase, fixed('EPERM'));
   assert.deepEqual(f.check(), phases.map(phase => [phase, 'EPERM']));
   assert.equal(diagnostic.recordBatchExecutionFailure('mapping_PRIVATE', fixed('EIO')), false);
+});
+
+// Actual async mapping bodies + actual synchronous document admission and retry
+// classifier. Locks/publication/intent/CSV IO below are explicit RAM boundaries,
+// not native/GUI evidence. Only the test wait uses three zero-delay attempts.
+function admittedMappingFixture(options = {}) {
+  const observations = observer(), calls = [], attempts = { publication: 0, recheck: 0 }, actions = { publication: 0, recheck: 0 };
+  const sourceBytes = Buffer.from('Änne Beispiel ß — immutable original');
+  const state = { token: 'a'.repeat(64) }, item = { id: 'b'.repeat(32), name: 'PRIVATE-source.txt',
+    package_id: 'ds_' + 'b'.repeat(32), status: 'mapping_pending' };
+  const input = JSON.stringify({ state, item }), original = Buffer.from(sourceBytes);
+  const published = { state: 'verified', publication_binding: { package_id: item.package_id, pin: 'one' },
+    document_result: { schema: 'datasecure-document-result/1', grade: 'complete', omissions: [], reason_code: null } };
+  let stage = 'publication';
+  const injected = options.error || fixed(options.mode === 'logical' ? 'BATCH_ACTIVE_LOCK_BUSY' : 'OWNERSHIP_GUARD_BUSY');
+  function confirmPublication() {
+    const current = stage; attempts[current]++; calls.push(current);
+    const fault = options.stage === current && (options.persistent || attempts[current] <= (options.failures ?? 2));
+    const gate = { withSynchronousActiveLock(_token, action) {
+      if (fault && options.mode !== 'post-action') throw injected;
+      const result = action();
+      if (fault && options.mode === 'post-action') throw injected;
+      return result;
+    } };
+    return withSynchronousDocumentControl(gate, state.token, () => {
+      actions[current]++;
+      const result = plain(published);
+      if (current === 'recheck' && options.change === 'binding') result.publication_binding.pin = 'changed';
+      if (current === 'recheck' && options.change === 'grade') result.document_result.grade = 'usable-with-omissions';
+      return result;
+    });
+  }
+  const boundary = name => { calls.push(name); if (options.stage === name) throw injected; };
+  const api = evaluate('plugins/data-secure/server/gateway/standalone-anonymized-mapping.js', {
+    '../runtime': { dataRoot: () => '/ram/private', SafeError }, './common': {}, '../core/bound-file-io': {},
+    './bound-private-file': {}, './batch-journal-io': {}, './storage-capacity': {},
+    './prepublication-error': { ...policy, retryDocumentControl: action => policy.retryDocumentControl(action, { attempts: 3, delayMs: 0 }) },
+    './mapping': { appendMapping() { boundary('csv'); return true; } },
+    './standalone-anonymized-batch': { confirmPublication }, './batch-execution-diagnostic': observations.api
+  }, '\nmodule.exports = { ...module.exports, __install: hooks => { ensurePrivateMappingIntent = hooks.intent; removePrivateMappingIntent = hooks.finish; } };');
+  api.__install({ intent(_state, _item, publication) {
+    assert.deepEqual(plain(publication), published); boundary('intent'); stage = 'recheck'; return {};
+  }, finish() { boundary('finish'); } });
+  return { ...observations, api, state, item, attempts, actions, calls, published, injected,
+    run: () => api.commitPrivateMappingAsync(state, item),
+    ensure: publication => api.ensurePrivateMappingIntentAsync(state, item, publication),
+    unchanged() { assert.equal(JSON.stringify({ state, item }), input); assert.deepEqual(sourceBytes, original); } };
+}
+for (const stage of ['publication', 'recheck']) for (const mode of ['native', 'logical'])
+  test(`async mapping waits only for ${stage} ${mode} admission, never repeats writes`, async () => {
+    const f = admittedMappingFixture({ stage, mode });
+    assert.equal(await f.run(), true); assert.equal(f.attempts[stage], 3);
+    assert.equal(f.actions[stage], 1); assert.equal(f.actions[stage === 'publication' ? 'recheck' : 'publication'], 1);
+    for (const write of ['intent', 'csv', 'finish']) assert.equal(f.calls.filter(name => name === write).length, 1);
+    assert.deepEqual(f.check(), []); f.unchanged();
+  });
+for (const stage of ['publication', 'recheck']) for (const mode of ['native', 'logical'])
+  test(`async mapping exhausts ${stage} ${mode} contention without a CSV or finish`, async () => {
+    const f = admittedMappingFixture({ stage, mode, persistent: true });
+    await assert.rejects(f.run(), { code: 'STANDALONE_BUSY' });
+    assert.equal(f.attempts[stage], 3); assert.equal(f.actions[stage], 0);
+    assert.equal(f.calls.includes('csv'), false); assert.equal(f.calls.includes('finish'), false);
+    assert.equal(f.calls.filter(name => name === 'intent').length, stage === 'publication' ? 0 : 1);
+    assert.deepEqual(f.check(), [[stage === 'publication' ? 'mapping_publication' : 'mapping_recheck', 'STANDALONE_BUSY']]); f.unchanged();
+  });
+for (const stage of ['publication', 'recheck']) for (const code of ['OWNERSHIP_GUARD_BUSY', 'OWNERSHIP_GUARD_CLOSE_UNCONFIRMED', 'BATCH_OWNERSHIP_CHANGED', 'EIO'])
+  test(`async mapping never replays post-action ${stage} ${code}`, async () => {
+    const error = fixed(code), f = admittedMappingFixture({ stage, mode: 'post-action', error });
+    await assert.rejects(f.run(), actual => actual === error);
+    assert.equal(f.attempts[stage], 1); assert.equal(f.actions[stage], 1);
+    assert.equal(f.calls.includes('csv'), false); assert.equal(f.calls.includes('finish'), false);
+    assert.equal(f.originals.at(-1)[1], error); f.check(); f.unchanged();
+  });
+for (const stage of ['intent', 'csv', 'finish']) for (const code of ['STANDALONE_BUSY', 'EIO'])
+  test(`async mapping executes ${stage} once even when it throws ${code}`, async () => {
+    const error = fixed(code), f = admittedMappingFixture({ stage, error });
+    await assert.rejects(f.run(), actual => actual === error);
+    assert.equal(f.calls.filter(name => name === stage).length, 1);
+    assert.equal(f.calls.filter(name => name === 'csv').length, stage === 'intent' ? 0 : 1);
+    assert.equal(f.originals.at(-1)[1], error); f.check(); f.unchanged();
+  });
+for (const change of ['binding', 'grade']) test(`async mapping refuses changed ${change} after admission`, async () => {
+  const f = admittedMappingFixture({ change }); await assert.rejects(f.run(), { code: 'LOCAL_MAPPING_EXPORT_PENDING' });
+  assert.equal(f.calls.filter(name => name === 'intent').length, 1); assert.equal(f.calls.includes('csv'), false);
+  assert.equal(f.calls.includes('finish'), false); f.unchanged();
+});
+test('async initial intent waits only for its default metadata; a supplied publication never waits', async () => {
+  const f = admittedMappingFixture({ stage: 'publication', mode: 'logical' }); await f.ensure();
+  assert.equal(f.attempts.publication, 3); assert.equal(f.calls.filter(name => name === 'intent').length, 1); f.unchanged();
+  const supplied = admittedMappingFixture({ stage: 'publication', persistent: true }); await supplied.ensure(supplied.published);
+  assert.equal(supplied.attempts.publication, 0); assert.deepEqual(supplied.calls, ['intent']); supplied.unchanged();
+});
+test('async initial intent preserves hard admission and write failures without retrying intent', async () => {
+  for (const stage of ['publication', 'intent']) {
+    const error = fixed(stage === 'intent' ? 'STANDALONE_BUSY' : 'OWNERSHIP_GUARD_CLOSE_UNCONFIRMED');
+    const f = admittedMappingFixture({ stage, mode: 'post-action', error });
+    await assert.rejects(f.ensure(), actual => actual === error);
+    assert.equal(f.calls.filter(name => name === 'intent').length, stage === 'intent' ? 1 : 0); f.unchanged();
+  }
+});
+test('sync mapping still returns a non-Promise and never starts admission retries', () => {
+  const f = commitFixture(); const result = f.run(); assert.equal(result, true); assert.equal(result?.then, undefined);
+  assert.deepEqual(f.calls, ['publication', 'intent', 'recheck', 'csv', 'finish']);
+});
+
+test('actual worker compositions select only async mapping dependencies; sync recovery remains available', () => {
+  const source = fs.readFileSync(path.join(root, 'plugins/data-secure/server/gateway/batch.js'), 'utf8');
+  for (const factory of ['createBatchItemProcessor', 'createBatchReviewPublication']) {
+    const start = source.indexOf('= ' + factory + '({') + 2, end = source.indexOf('\n});', start) + 4;
+    assert.ok(start > 1 && end > start); const expression = source.slice(start, end), context = {};
+    for (const name of new Set(expression.match(/[a-zA-Z_$][\w$]*/gu))) context[name] = () => {};
+    const mark = () => {}, commit = () => {}; let wired;
+    Object.assign(context, { markMappingPendingAsync: mark, commitPendingMappingAsync: commit,
+      standalonePause: { claim() {} }, identityLedger: { capture() {} }, [factory](options) { wired = options; return {}; } });
+    new vm.Script(expression).runInNewContext(context);
+    assert.equal(wired.markMappingPending, mark); assert.equal(wired.commitPendingMapping, commit);
+  }
+  // Evaluate only the actual export expression. Importing batch itself here would
+  // initialize normal profile/diagnostic dependencies outside this RAM harness.
+  const exportExpression = source.slice(source.lastIndexOf('module.exports = ')), context = {};
+  for (const name of new Set(exportExpression.match(/[a-zA-Z_$][\w$]*/gu))) context[name] = () => {};
+  const syncCommit = () => {}, syncReconcile = () => {};
+  Object.assign(context, { module: { exports: {} }, Object, RETRYABLE_CODES: [],
+    commitPendingMapping: syncCommit, reconcilePendingMappings: syncReconcile });
+  new vm.Script(exportExpression).runInNewContext(context);
+  const facade = context.module.exports._test;
+  assert.equal(facade.commitPendingMapping, syncCommit); assert.equal(facade.reconcilePendingMappings, syncReconcile);
+});
+
+function reconciliationAdmissionFixture(options = {}) {
+  let attempts = 0, commits = 0, release;
+  const calls = [], originalError = fixed(options.code || 'BATCH_ACTIVE_LOCK_BUSY');
+  const complete = { schema: 'datasecure-document-result/1', grade: 'complete', omissions: [], reason_code: null };
+  const state = { schema: 'datasecure-batch/7', product_channel: 'standalone', token: 'a'.repeat(64),
+    content_options: { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: false, imageOcr: false } };
+  const item = { id: 'b'.repeat(32), name: 'PRIVATE-source.txt', status: 'processing' }, packageId = 'ds_' + item.id;
+  const api = evaluate('plugins/data-secure/server/gateway/batch-reconciliation.js', {
+    '../core/bound-file-io': {}, '../runtime': { SafeError }, './common': {},
+    './mapping': { appendMapping() { calls.push('csv'); }, ensureMappingOutbox() { calls.push('intent'); return {}; },
+      removeMappingOutbox() { calls.push('finish'); } }, './document-result-grade': grades,
+    './package-identity': {}, '../standalone/markdown-store': {},
+    './prepublication-error': { ...policy, retryDocumentControl: action => policy.retryDocumentControl(action, { attempts: 3, delayMs: 0 }) },
+    '../core/processing-mode': require('../plugins/data-secure/server/core/processing-mode'),
+    '../core/content-options': require('../plugins/data-secure/server/core/content-options'),
+    './standalone-anonymized-batch': { privatePublicationRecord() {
+      attempts++;
+      return withSynchronousDocumentControl({ withSynchronousActiveLock(_token, action) {
+        if (options.fail && (options.persistent || attempts < 3)) throw originalError;
+        const value = action(); if (options.postAction) throw originalError; return value;
+      } }, state.token, () => ({ state: 'verified', document_result: options.badGrade ? { ...complete, grade: 'not-processed' } : complete }));
+    } },
+    './standalone-anonymized-mapping': { commitPrivateMappingAsync() {
+      commits++; return new Promise(resolve => { release = resolve; });
+    } }
+  }).createBatchReconciliation();
+  return { api, state, item, packageId, complete, calls, originalError,
+    attempts: () => attempts, commits: () => commits, release: () => release() };
+}
+test('async mark waits for logical metadata admission before mutating the item exactly once', async () => {
+  const f = reconciliationAdmissionFixture({ fail: true }), before = plain(f.item), input = plain(f.state);
+  const pending = f.api.markMappingPendingAsync(f.item, f.packageId, f.complete, f.state);
+  assert.deepEqual(f.item, before); await pending; assert.equal(f.attempts(), 3);
+  assert.equal(f.item.status, 'mapping_pending'); assert.equal(f.item.package_id, f.packageId);
+  assert.deepEqual(f.state, input); assert.deepEqual(f.calls, []);
+});
+for (const options of [{ fail: true, persistent: true }, { postAction: true, code: 'OWNERSHIP_GUARD_BUSY' },
+  { postAction: true, code: 'OWNERSHIP_GUARD_CLOSE_UNCONFIRMED' }, { postAction: true, code: 'BATCH_OWNERSHIP_CHANGED' },
+  { fail: true, code: 'EIO' }, { badGrade: true }])
+  test('async mark retains item after rejected metadata ' + JSON.stringify(options), async () => {
+    const f = reconciliationAdmissionFixture(options), before = plain(f.item);
+    await assert.rejects(f.api.markMappingPendingAsync(f.item, f.packageId, f.complete, f.state));
+    assert.deepEqual(f.item, before); assert.deepEqual(f.calls, []);
+    assert.equal(f.attempts(), options.persistent ? 3 : 1);
+  });
+test('async mapping facade clears its debt only after awaited commit; sync and legacy facades stay non-Promise', async () => {
+  const f = reconciliationAdmissionFixture(); f.item.mapping_outbox_persisted = true;
+  const pending = f.api.commitPendingMappingAsync(f.item, f.packageId, f.state);
+  assert.equal(typeof pending.then, 'function'); assert.equal(f.commits(), 1);
+  assert.equal(f.item.mapping_outbox_persisted, true); f.release(); await pending;
+  assert.equal(Object.hasOwn(f.item, 'mapping_outbox_persisted'), false);
+  const legacy = { schema: 'datasecure-batch/4' }, original = { name: 'legacy.txt' };
+  const result = f.api.commitPendingMapping(original, f.packageId, legacy);
+  assert.equal(result, undefined); assert.deepEqual(f.calls, ['intent', 'csv', 'finish']);
+  f.calls.length = 0; await f.api.commitPendingMappingAsync(original, f.packageId, legacy);
+  assert.deepEqual(f.calls, ['intent', 'csv', 'finish']); assert.equal(f.commits(), 1);
+  assert.equal(f.api.markMappingPending(f.item, f.packageId, f.complete, f.state), undefined);
 });

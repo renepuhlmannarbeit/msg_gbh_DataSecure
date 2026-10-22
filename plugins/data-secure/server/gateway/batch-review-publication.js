@@ -215,11 +215,11 @@ function createBatchReviewPublication(options = {}) {
         }
         if (contentOptionsForBatch(state) && JSON.stringify(result.publication_binding) !==
             JSON.stringify((await retryDocumentControl(() => confirmPublication(state, item))).publication_binding)) throw unconfirmedPublication();
-        markMappingPending(item, result.package_id, result.document_result, state);
+        await markMappingPending(item, result.package_id, result.document_result, state);
         clearRetryBudget(item);
         writeState(state);
         try {
-          if (contentOptionsForBatch(state)) require('./standalone-anonymized-mapping').ensurePrivateMappingIntent(state, item);
+          if (contentOptionsForBatch(state)) await require('./standalone-anonymized-mapping').ensurePrivateMappingIntentAsync(state, item);
           else ensureMappingOutbox(item.source_label || item.name, result.package_id, item.document_result);
           item.mapping_outbox_persisted = true;
         } catch {
@@ -230,7 +230,7 @@ function createBatchReviewPublication(options = {}) {
         try { cleanupTerminalWorkCopy(state, item, deps); }
         catch { item.work_copy_cleanup_pending = true; }
         writeState(state);
-        try { commitPendingMapping(item, result.package_id, state); }
+        try { await commitPendingMapping(item, result.package_id, state); }
         catch {
           if (state.product_channel === 'standalone') { recoveryBlocked = true; break; }
           continue;

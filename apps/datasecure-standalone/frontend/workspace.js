@@ -295,6 +295,8 @@
   const historySummaryRetirements = new Set();
   let historySummaryEpoch = 0;
   let historySignature = '';
+  let historyCountObserved = false, historyCountDirty = false, historyCountEpoch = 0,
+    historyCountState = '', globalHistoryRead = null;
   let includeHiddenHistory = false;
   let requestedHistorySummaryBatchId = null;
   let lastError = null;
@@ -324,6 +326,7 @@
       // child-frame claim or the number of rendered/staged decisions.
       if (command === 'close_review_window') owner.closing = true;
       if (command === 'submit_review' || command === 'continue_review_session') {
+        invalidateHistoryCount();
         owner.phaseGeneration++; owner.complete = false; owner.stage = 'waiting'; refreshRunGuide();
       }
       const phaseGeneration = owner.phaseGeneration;
@@ -383,6 +386,7 @@
       renderBootstrapFailure(); return;
     }
     bootstrapFailure = { epoch, code, nativeBound };
+    invalidateHistoryCount();
     automaticRetryPaused = true; clearTimeout(timer);
     reconnecting = true; contextRequired = true; updateStart(); renderBootstrapFailure();
   }
@@ -537,7 +541,7 @@
     else { for (const [node, disabled] of disabledBeforeBusy) node.disabled = disabled; disabledBeforeBusy.clear(); }
     $('start').disabled = false; updateStart();
   }
-  function beginBusy() { const ownership = ++busyGeneration; setBusy(true); return ownership; }
+  function beginBusy() { const ownership = ++busyGeneration; invalidateHistoryCount(); setBusy(true); return ownership; }
   function endBusy(ownership) { if (ownership === busyGeneration && !closed) setBusy(false); }
   async function explainBlockedPicker(command, reason) {
     if (!['select_files', 'select_folder', 'configure_results'].includes(command)) return;
@@ -828,6 +832,7 @@
     showView('details', job.batchId); $('job-title').focus(); await refresh();
   }
   function adoptRun(run) {
+    invalidateHistoryCount();
     job = run; mode = run.task;
     announcedTerminalPhases.clear();
     lastJobAnnouncement = ''; lastJobAnnouncementTerminal = false; $('job-announcement').textContent = '';
@@ -1346,6 +1351,66 @@
     const loadIfNeeded = () => currentRead(loadedRead) ? undefined : load();
     return { load, loadIfNeeded, cancel };
   }
+  function invalidateHistoryCount() {
+    historyCountEpoch++;
+    historyCountDirty = historyCountObserved;
+    // An old count is not a statement about today's runs. Unknown is hidden,
+    // never converted to zero or inferred from this one current job.
+    $('open-count').hidden = true;
+  }
+  function observeHistoryCountState(state) {
+    const signature = JSON.stringify([state.batch_id || null, state.state, state.processing,
+      state.resumable, state.completion_pending, state.export_pending_count]);
+    if (signature !== historyCountState) {
+      historyCountState = signature; invalidateHistoryCount();
+    }
+  }
+  function currentGlobalHistoryRead(owner) {
+    return !closed && owner.connection === connectionEpoch && owner.generation === generation &&
+      owner.epoch === historyCountEpoch && owner.includeHidden === includeHiddenHistory &&
+      !reconnecting && !contextRequired;
+  }
+  async function readGlobalHistory() {
+    // Badge refresh and the visible five-run list share the same read. Keep an
+    // invalidated old request until it settles; never overlap it with a new poll.
+    let owner = globalHistoryRead;
+    if (owner) {
+      const data = await owner.promise;
+      return currentGlobalHistoryRead(owner) ? { data, owner } : null;
+    }
+    owner = { connection: connectionEpoch, generation, epoch: historyCountEpoch,
+      includeHidden: includeHiddenHistory, promise: null };
+    owner.promise = invoke('get_run_history', includeHiddenHistory ? { includeHidden: true } : undefined);
+    globalHistoryRead = owner;
+    try {
+      const data = await owner.promise;
+      return currentGlobalHistoryRead(owner) ? { data, owner } : null;
+    } finally { if (globalHistoryRead === owner) globalHistoryRead = null; }
+  }
+  function confirmHistoryCount(data, owner) {
+    if (!currentGlobalHistoryRead(owner) || busy || historyRecoveryBusy || historySummaryReads) return;
+    if (data?.local_ui_only !== true || data.external_disclosure !== false || !Array.isArray(data.entries) ||
+        data.history_degraded === true || !Number.isSafeInteger(data.open_count) || data.open_count < 0 || data.open_count > 5) {
+      $('open-count').hidden = true; historyCountDirty = historyCountObserved; return;
+    }
+    historyCountObserved = true; historyCountDirty = false;
+    $('open-count').textContent = `${data.open_count} offen`; $('open-count').hidden = data.open_count === 0;
+  }
+  async function refreshHistoryCount() {
+    // First paint still does not scan history. Once a global count has been
+    // shown, keep it fresh even while the own job card hides history details.
+    if (!historyCountDirty || busy || bootstrapping || bootstrapFailure || historyRecoveryBusy || historySummaryReads ||
+        reconnecting || contextRequired || closed) return;
+    const epoch = historyCountEpoch, connection = connectionEpoch;
+    try {
+      const snapshot = await readGlobalHistory();
+      if (snapshot) confirmHistoryCount(snapshot.data, snapshot.owner);
+    } catch {
+      if (epoch === historyCountEpoch && connection === connectionEpoch) {
+        $('open-count').hidden = true; historyCountDirty = historyCountObserved;
+      }
+    }
+  }
   function historyUnavailable(message) {
     // Old rows still contain clickable actions bound to an unconfirmed
     // connection. Never leave them looking usable while the sidecar is gone.
@@ -1353,7 +1418,7 @@
     historySummaryRetirements.clear();
     $('history-list').replaceChildren();
     $('run-history-detail').replaceChildren(element('p', message, 'notice'));
-    $('open-count').hidden = true;
+    invalidateHistoryCount();
     $('history-status').textContent = message;
   }
   async function refreshHistory(quiet = false, recoverBatchId = null, detailsBatchId = null) {
@@ -1378,10 +1443,15 @@
       const historyArgs = { ...(recoverBatchId ? { recoverExports: true, recoverBatchId } : {}),
         ...(detailsBatchId && !recoverBatchId ? { batchId: detailsBatchId } : {}),
         ...(includeHiddenHistory && !detailsBatchId ? { includeHidden: true } : {}) };
-      const data = await invoke('get_run_history', Object.keys(historyArgs).length ? historyArgs : undefined);
+      const globalRead = !recovering && !detailsBatchId ? await readGlobalHistory() : null;
+      if (!recovering && !detailsBatchId && !globalRead) return;
+      const data = globalRead ? globalRead.data : await invoke('get_run_history', historyArgs);
       if (closed || request !== historyGeneration || connection !== connectionEpoch ||
           detailsBatchId && (view !== 'details' || runDetails !== route)) return;
       if (data.local_ui_only !== true || data.external_disclosure !== false || !Array.isArray(data.entries)) throw Error('STANDALONE_HISTORY_INVALID');
+      // A targeted detail response counts only its selected run, not every
+      // open run in navigation. Count updates also precede the row-render cache.
+      if (globalRead) confirmHistoryCount(data, globalRead.owner);
       if (recovering) recoveryFeedback(data.export_recovery, recoverBatchId);
       $('history-status').textContent = data.entries.length ? 'Die letzten 5 Verarbeitungen · neueste zuerst' : 'Keine Verarbeitungen in den letzten 5 Verlaufseinträgen sichtbar.';
       if (data.history_degraded === true) $('history-status').textContent += ' Einige alte Dateistände sind momentan nicht bestätigbar. Die übrigen Laufdaten bleiben sichtbar; es werden keine fehlenden Dateien automatisch neu angelegt.';
@@ -1396,9 +1466,6 @@
       // summary buttons that can act on another selected run.
       historySummaryRetirements.clear();
       $('history-list').replaceChildren(); $('run-history-detail').replaceChildren();
-      const open = Number.isSafeInteger(data.open_count) && data.open_count >= 0 ? data.open_count
-        : data.entries.filter(entry => entry.resumable || ['processing', 'export_pending'].includes(entry.status)).length;
-      $('open-count').textContent = `${open} offen`; $('open-count').hidden = !open;
       $('history-visibility-status').textContent = (Number.isSafeInteger(data.hidden_count) && data.hidden_count > 0
         ? `${data.hidden_count} abgeschlossene Läufe ausgeblendet. ` : '') +
         'Der Verlauf berücksichtigt nur die letzten 5 Läufe. Ältere Läufe rücken beim Ausblenden nicht nach. Dateien und gespeicherte Entscheidungen bleiben erhalten.';
@@ -1833,7 +1900,7 @@
         bootstrapFailure = null; bootstrapRecoveryPending = false; updateStart();
         if (recoveredConnection) feedback('Lokale Verbindung wiederhergestellt. Gespeicherte Läufe bleiben erhalten; kein Start und keine Entscheidung wurden automatisch wiederholt. Eine frühere Dateiauswahl bitte neu aufnehmen.');
       }
-      current = state; updateStart();
+      current = state; observeHistoryCountState(state); updateStart();
       if (!job && !catalogue.length && /^[a-f0-9]{64}$/u.test(state.batch_id || '') && ['preparing', 'processing'].includes(state.state)) {
         adoptRun({ batchId: state.batch_id, task: state.processing_mode, name: `Lauf ${state.batch_id.slice(0, 8)}`,
           files: [], selectedCount: count(state.selected_count) });
@@ -1843,6 +1910,7 @@
         if (view === 'history') await refreshHistory(true);
         else if (view === 'details' && runDetails?.connection === connectionEpoch && !$('run-history-detail').hidden)
           await refreshHistory(true, null, runDetails.batchId);
+        if (view !== 'history') await refreshHistoryCount();
       }
       if (state.state === 'blocked') feedback('Die lokale Verarbeitung ist nicht bereit. Bitte das vollständige Paket und die Diagnose prüfen.', true);
       else if (feedbackOwner?.kind === 'connection-unconfirmed') feedback(
@@ -1864,6 +1932,7 @@
       }
       if (!closed && request === generation && !historyRecoveryBusy && !historySummaryReads &&
       summaryReadAtStart === historySummaryReadGeneration && !(view === 'documents' && documentGuide?.busy)) {
+      invalidateHistoryCount();
       if (transientBusyRead) {
         if (explicitRetry) {
           let description = '';
@@ -2061,6 +2130,7 @@
         const changedConnection = connectionEpoch !== data.epoch;
         connectionEpoch = data.epoch;
         if (changedConnection) {
+          invalidateHistoryCount();
           // A newer Ready may arrive without an intermediate Recovering
           // event. Retire both the global proof and every rendered row's
           // approval/copy projection; an old read/finally cannot own the new

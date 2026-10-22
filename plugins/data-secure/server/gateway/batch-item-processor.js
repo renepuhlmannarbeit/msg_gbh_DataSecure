@@ -278,11 +278,11 @@ function createBatchItemProcessor(options = {}) {
       }
       if (contentOptions && JSON.stringify(result?.publication_binding) !==
           JSON.stringify((await retryDocumentControl(() => confirmPublication(state, item))).publication_binding)) throw publicationUnconfirmed();
-      markMappingPending(item, expectedPackageId, result.document_result, state);
+      await markMappingPending(item, expectedPackageId, result.document_result, state);
       clearRetryBudget(item);
       writeState(state);
       try {
-        if (contentOptions) require('./standalone-anonymized-mapping').ensurePrivateMappingIntent(state, item);
+        if (contentOptions) await require('./standalone-anonymized-mapping').ensurePrivateMappingIntentAsync(state, item);
         else ensureMappingOutbox(item.source_label || item.name, expectedPackageId, item.document_result);
         item.mapping_outbox_persisted = true;
       } catch {
@@ -298,7 +298,7 @@ function createBatchItemProcessor(options = {}) {
       try { cleanupTerminalWorkCopy(state, item, deps); }
       catch { item.work_copy_cleanup_pending = true; }
       try {
-        commitPendingMapping(item, expectedPackageId, state);
+        await commitPendingMapping(item, expectedPackageId, state);
       } catch {
         // Preserve cleanup debt on this early return; the ordinary path
         // includes it in the final durable delivery checkpoint below.

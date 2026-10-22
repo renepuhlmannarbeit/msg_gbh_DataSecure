@@ -4919,4 +4919,125 @@ testAsync('a superseded pending-publication reply cannot replace a newer exact c
   assert.equal(h.calls.some(call => ['publish_result_documents', 'preview_document_export'].includes(call.command)), false);
 });
 
+const historyCountProjection = (entries, open_count, extra = {}) => ({ local_ui_only: true,
+  external_disclosure: false, entries, open_count, ...extra });
+const countEntry = (batch_id, extra = {}) => ({ batch_id, processing_mode: 'markdown-and-anonymize',
+  selected_count: 1, result_count: 0, failed_count: 0, resumable: true, status: 'stopped', ...extra });
+
+for (const otherOpen of [0, 1]) testAsync(`own resumed job completion refreshes the global badge with ${otherOpen} other open runs, without opening history details`, async () => {
+  let open = 1 + otherOpen;
+  const h = harness({ invoke(command, args, fallback, model) {
+    if (command === 'get_run_history') {
+      assert.equal(args?.recoverExports, undefined, 'badge reads never request publication/recovery');
+      return historyCountProjection(args?.batchId ? model.entries.filter(row => row.batch_id === args.batchId) : model.entries,
+        args?.batchId ? 0 : open);
+    }
+    return fallback();
+  } });
+  await tick(); h.model.entries = [countEntry(A), ...(otherOpen ? [countEntry(B)] : [])];
+  await h.act('nav-history'); assert.equal(h.el('open-count').textContent, `${1 + otherOpen} offen`);
+  await h.act(`history-${A}-continue`); await tick();
+  assert.equal(h.el('run-history-detail').hidden, true, 'the own resumed job uses its retained job card');
+  h.model.state = { state: 'results_available', batch_id: A, processing_mode: 'markdown-and-anonymize',
+    selected_count: 1, completed_count: 1, result_count: 1, failed_count: 0, batch_complete: true, results_available: true };
+  h.model.entries[0] = countEntry(A, { status: 'results_available', resumable: false, result_count: 1, results_available: true });
+  open = otherOpen;
+  const before = h.calls.filter(row => row.command === 'get_run_history').length;
+  await h.poll();
+  assert.equal(h.el('open-count').textContent, `${otherOpen} offen`);
+  assert.equal(h.el('open-count').hidden, otherOpen === 0);
+  assert.equal(h.calls.filter(row => row.command === 'get_run_history').length, before + 1);
+  assert.equal(h.calls.filter(row => row.command === 'continue_history_batch').length, 1);
+  assert.equal(h.calls.some(row => ['publish_result_documents', 'export_approved_documents'].includes(row.command)), false);
+});
+
+testAsync('an authoritative changed global count updates before the unchanged-row render cache', async () => {
+  let open = 2;
+  const h = harness({ invoke(command, _args, fallback, model) {
+    return command === 'get_run_history' ? historyCountProjection(model.entries, open) : fallback();
+  } }); await tick(); h.model.entries = [countEntry(A), countEntry(B)];
+  await h.act('nav-history'); const firstRow = h.el('history-list').children[0];
+  open = 1; await h.poll();
+  assert.equal(h.el('open-count').textContent, '1 offen'); assert.equal(h.el('open-count').hidden, false);
+  assert.equal(h.el('history-list').children[0], firstRow, 'count-only changes do not rebuild focused history rows');
+});
+
+testAsync('a targeted detail count cannot erase another run from the global navigation badge', async () => {
+  const h = harness({ invoke(command, args, fallback, model) {
+    return command === 'get_run_history' ? historyCountProjection(args?.batchId
+      ? model.entries.filter(row => row.batch_id === args.batchId) : model.entries, args?.batchId ? 0 : 1) : fallback();
+  } }); await tick(); h.model.entries = [countEntry(A), countEntry(B,
+    { status: 'results_available', resumable: false, result_count: 1, results_available: true })];
+  await h.act('nav-history'); assert.equal(h.el('open-count').textContent, '1 offen');
+  await h.act(`history-${B}-details`);
+  assert.ok(h.calls.some(row => row.command === 'get_run_history' && row.args?.batchId === B));
+  assert.equal(h.el('open-count').textContent, '1 offen'); assert.equal(h.el('open-count').hidden, false);
+});
+
+for (const rejected of ['busy', 'missing-count', 'degraded']) testAsync(`${rejected} global badge refresh stays unknown, not zero, and a later read can confirm it`, async () => {
+  let rejectCount = false;
+  const h = harness({ invoke(command, _args, fallback, model) {
+    if (command === 'get_run_history') {
+      if (rejectCount && rejected === 'busy') throw Error('STANDALONE_IPC_BUSY');
+      if (rejectCount && rejected === 'missing-count') return { local_ui_only: true, external_disclosure: false, entries: model.entries };
+      return historyCountProjection(model.entries, rejectCount ? 0 : 1, rejectCount ? { history_degraded: true } : {});
+    }
+    return fallback();
+  } }); await tick(); h.model.entries = [countEntry(A)]; await h.act('nav-history');
+  await h.act('nav-new'); rejectCount = true;
+  await h.act('select-files'); assert.equal(h.el('open-count').hidden, true, 'a new interaction retires the old count');
+  await h.poll(); assert.equal(h.el('open-count').hidden, true); assert.equal(h.el('open-count').textContent, '1 offen');
+  assert.equal(h.el('open-count').textHistory.includes('0 offen'), false);
+  rejectCount = false; await h.poll(); assert.equal(h.el('open-count').hidden, false);
+  assert.equal(h.el('open-count').textContent, '1 offen');
+  assert.equal(h.calls.some(row => row.command === 'get_run_history' && row.args?.recoverExports), false);
+});
+
+testAsync('a badge-only global read and a visible history load share one in-flight projection', async () => {
+  let delay = false, finish, reads = 0;
+  const pending = new Promise(resolve => { finish = resolve; });
+  const h = harness({ invoke(command, _args, fallback, model) {
+    if (command === 'get_run_history') { reads++; return delay ? pending : historyCountProjection(model.entries, 1); }
+    return fallback();
+  } }); await tick(); h.model.entries = [countEntry(A), countEntry(B)]; await h.act('nav-history');
+  await h.act('nav-new'); await h.act('select-files'); delay = true;
+  const poll = h.poll(); await tick(); assert.equal(reads, 2);
+  await h.act('nav-history'); assert.equal(reads, 2, 'navigation joins the badge read instead of issuing a duplicate poll');
+  finish(historyCountProjection(h.model.entries, 2)); await poll; await tick();
+  assert.equal(h.el('open-count').textContent, '2 offen'); assert.equal(h.el('open-count').hidden, false);
+  assert.equal(h.el('history-list').children.length, 2);
+});
+
+testAsync('an unconfirmed public-state Busy read retires the known badge until a fresh global count', async () => {
+  let refuse = false;
+  const h = harness({ invoke(command, _args, fallback, model) {
+    if (command === 'get_public_state' && refuse) throw Error('STANDALONE_OWNERSHIP_CONTROL_BUSY');
+    return command === 'get_run_history' ? historyCountProjection(model.entries, 1) : fallback();
+  } }); await tick(); h.model.entries = [countEntry(A)]; await h.act('nav-history'); await h.act('nav-new');
+  refuse = true; await h.poll(); assert.equal(h.el('open-count').hidden, true);
+  assert.equal(h.el('open-count').textHistory.includes('0 offen'), false);
+  refuse = false; await h.poll(); assert.equal(h.el('open-count').textContent, '1 offen');
+  assert.equal(h.el('open-count').hidden, false);
+});
+
+for (const retirement of ['interaction', 'connection']) testAsync(`a delayed global count is shared and retired by ${retirement}, without overwriting its successor`, async () => {
+  let delay = false, finishOld, reads = 0;
+  const pending = new Promise(resolve => { finishOld = resolve; });
+  const h = harness({ invoke(command, _args, fallback, model) {
+    if (command === 'get_run_history') {
+      reads++; return delay ? pending : historyCountProjection(model.entries, reads === 1 ? 1 : 2);
+    }
+    return fallback();
+  } }); await tick(); h.model.entries = [countEntry(A), countEntry(B)]; await h.act('nav-history');
+  delay = true; await h.act('refresh-history'); await h.act('refresh-history');
+  assert.equal(reads, 2, 'repeated list requests share the same actual read');
+  if (retirement === 'interaction') { await h.act('nav-new'); await h.act('select-files'); }
+  else h.listeners.get('datasecure-connection')({ payload: { epoch: 1, state: 'ready' } });
+  assert.equal(h.el('open-count').hidden, true);
+  finishOld(historyCountProjection(h.model.entries, 0)); await tick(); await tick();
+  assert.equal(h.el('open-count').textHistory.includes('0 offen'), false, 'the retired snapshot cannot invent a completed global state');
+  delay = false; await h.poll(); await tick();
+  assert.equal(reads, 3); assert.equal(h.el('open-count').textContent, '2 offen'); assert.equal(h.el('open-count').hidden, false);
+});
+
 done();

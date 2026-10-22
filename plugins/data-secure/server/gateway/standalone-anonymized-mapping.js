@@ -15,6 +15,7 @@ const { writeFully, syncParentDirectory, linkWithTransientRetry } = require('./b
 const { assertWritableCapacity, normalizePostPreflightWriteError } = require('./storage-capacity');
 const { appendMapping } = require('./mapping');
 const { confirmPublication } = require('./standalone-anonymized-batch');
+const { retryDocumentControl } = require('./prepublication-error');
 const { recordBatchExecutionFailure } = require('./batch-execution-diagnostic');
 
 function observeFailure(phase, error) {
@@ -102,6 +103,14 @@ function removePrivateMappingIntent(intent) {
     syncParentDirectory(target, fs);
   } catch (error) { observeFailure('mapping_intent_finish', error); throw fail(); }
 }
+async function ensurePrivateMappingIntentAsync(state, item, publication) {
+  if (publication === undefined) {
+    try { publication = await retryDocumentControl(() => confirmPublication(state, item)); }
+    catch (error) { observeFailure('mapping_publication', error); throw error; }
+  }
+  // Only metadata admission above may wait. Never replay an intent write.
+  return ensurePrivateMappingIntent(state, item, publication);
+}
 function commitPrivateMapping(state, item) {
   let phase = 'mapping_publication';
   try {
@@ -120,4 +129,22 @@ function commitPrivateMapping(state, item) {
     return true;
   } catch (error) { observeFailure(phase, error); throw error; }
 }
-module.exports = Object.freeze({ commitPrivateMapping, ensurePrivateMappingIntent, intentPath });
+async function commitPrivateMappingAsync(state, item) {
+  let phase = 'mapping_publication';
+  try {
+    const published = await retryDocumentControl(() => confirmPublication(state, item));
+    phase = 'mapping_intent';
+    const intent = ensurePrivateMappingIntent(state, item, published);
+    phase = 'mapping_recheck';
+    const current = await retryDocumentControl(() => confirmPublication(state, item));
+    if (JSON.stringify(current.publication_binding) !== JSON.stringify(published.publication_binding) ||
+        JSON.stringify(current.document_result) !== JSON.stringify(published.document_result)) throw fail();
+    phase = 'mapping_csv';
+    appendMapping(item.source_label || item.name, item.package_id, undefined, { documentResult: published.document_result });
+    phase = 'mapping_intent_finish';
+    removePrivateMappingIntent(intent);
+    return true;
+  } catch (error) { observeFailure(phase, error); throw error; }
+}
+module.exports = Object.freeze({ commitPrivateMapping, commitPrivateMappingAsync,
+  ensurePrivateMappingIntent, ensurePrivateMappingIntentAsync, intentPath });

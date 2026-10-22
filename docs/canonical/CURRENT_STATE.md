@@ -2,6 +2,36 @@
 
 Stand: 22.10.2026 · 3.2.0-rc171 · neuer gemeinsamer Windows-/Mac-Test-Pre-Release in Vorbereitung; RC170 unverändert veröffentlicht.
 
+Neuester Quellenabschluss22.10.01:23UTC: enger Mapping-Metadatengegenfix und
+Navigationsbadgefix fertig. Unabhängige tatsächliche Gegenreviews beider Deltas
+ohne bestätigten Deltablocker; Main las alle sechs Produktionsdateien. Autor
+62Mapping-/26Item-/17Review-/15Reconciliation-/37Contentfälle und66Worker-
+Exportchecks PASS, ausdrücklich Sourceadapter/nichtNative. Main469Workspace
+frisch PASS; gezielter Mainlauf zehn Gruppen PASS/Inputs unverändert bis01:24:30.627UTC.
+578Test-/Scriptinputs mit Manifestc845ece7300cc5b047542fa456509e0fb61416d3cd2d7490deee637282e2155f.
+Neue Produktbindung
+1320d938f4976b0647b5db970252edf48d792793860bad956acf59dee5a6c29b/340.
+Nur bestehende Metadatenadmission wird begrenzt abgewartet; Intent/CSV/Finish
+einmal, beide Worker awaiten vor Release. Sync-History/Recovery und sämtliche
+Guard-/ACK-/Schreib-/Retrykatalogpflichten bleiben. Noch kein neuer Commit/
+Freeze/Paket/Release; frische gemeinsame Endgates und19Windows-GUI nötig.
+
+Neuester Nachtcheckpoint22.10.01:12UTC: Diagnosepaket525e9df tatsächlich gebaut
+und nativ geprüft. Der gleiche Wiederaufnahmeablauf mit zwei Normalneustarts,
+gespeicherter OCR, Zielwechsel und Personenentscheidung stellte165ByteMD und
+drei vertrauliche Zuordnungsdateien bereit. Keine neue Fünfminutenpause in dieser
+Diagnose, kein voller GUI06-/Release-PASS. App normal geschlossen,89Originale
+bytegleich. Historische Source05-Ursache bleibt ausdrücklich unbewiesen.
+Separater kausaler echter Windows-Native-Nachweis: fremder logischer Controller
+verhindert den synchronen Mapping-Metadatenread mit STANDALONE_BUSY; CSV fehlt,
+Intent unverändert. Nach echter Freigabe/Childclose genau ein Commit erfolgreich.
+Enger Async-Metadatengegenfix in Umsetzung, keine Wiederholung von CSV/Intent/
+Finish und keine Guard-/ACK-/Retrykatalogänderung. Veralteter Navigationszähler
+ebenfalls korrigiert (469Workspacefälle/11neue Gegenfälle); unabhängiger tatsächlicher
+Gegenreview läuft. Kein Freeze/Release, dirty Quellen zunächst fertig prüfen.
+Belege: dist/rc171-mapping-diagnostic01-20261022 und
+dist/rc171-native-mapping-contention-20261022-01/attempt02/FINAL.json.
+
 Neuere Diagnosequellen: neun rein beobachtende Mappingphasen bis Rust-Bundle,
 keine Verarbeitungs-/Guard-/Retryänderung.26NeueCases/37Content und Altmapping
 PASS, Main26/11Bridge/1Rustphase/Pfadtrennung/Macworkflowmodelle/ResultExport PASS;

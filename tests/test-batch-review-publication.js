@@ -67,21 +67,28 @@ function fixture(options = {}) {
       return `outbox:${name}`;
     },
     markMappingPending(item, packageId) {
+      const apply = () => {
       events.push(`mapping-pending:${item.name}`);
       item.status = 'mapping_pending';
       item.package_id = packageId;
       item.document_result = COMPLETE_DOCUMENT_RESULT;
       item.error_code = 'LOCAL_MAPPING_EXPORT_PENDING';
       item.mapping_outbox_persisted = false;
+      };
+      return options.awaitMappingBoundary ? options.awaitMappingBoundary('mark', item, apply) : apply();
     },
     cleanupTerminalWorkCopy(_state, item) {
       events.push(`cleanup:${item.name}`);
       if (options.cleanupFailure === item.name) throw new Error('cleanup failed');
     },
     commitPendingMapping(item) {
+      const apply = () => {
+      options.onMappingCommit?.();
       events.push(`mapping-commit:${item.name}`);
       if (options.mappingFailure === item.name) throw new Error('mapping failed');
       delete item.error_code;
+      };
+      return options.awaitMappingBoundary ? options.awaitMappingBoundary('commit', item, apply) : apply();
     },
     deliveryResult(_state, item) {
       if (options.deliveryFailure === item.name) throw new Error('delivery failed');
@@ -119,12 +126,32 @@ function fixture(options = {}) {
 }
 
 async function main() {
+  await testAsync('review worker awaits mark and mapping commit before releasing or starting the next item', async () => {
+    const releases = new Map();
+    const value = fixture({ awaitMappingBoundary(stage, item, apply) {
+      if (item.name !== 'first') return apply();
+      return new Promise(resolve => releases.set(stage, () => { apply(); resolve(); }));
+    } });
+    const originalDrafts = structuredClone(value.drafts);
+    const pending = value.publication.publishReviewedBatch(value.state, value.items, value.drafts, [
+      { document_index: 1, decisions: [decision('a-1')] }, { document_index: 2, decisions: [decision('a-2')] }
+    ]);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(releases.has('mark'), true); assert.equal(releases.has('commit'), false);
+    assert.equal(value.items[0].status, 'processing'); assert.equal(value.events.includes('anonymize:second'), false);
+    releases.get('mark')(); await new Promise(resolve => setImmediate(resolve));
+    assert.equal(releases.has('commit'), true); assert.equal(value.items[0].status, 'mapping_pending');
+    assert.equal(value.events.includes('anonymize:second'), false);
+    releases.get('commit')(); const result = await pending;
+    assert.equal(result.packages.length, 2); assert.equal(value.items[0].status, 'delivery_pending');
+    assert.deepEqual(value.drafts, originalDrafts); assert.equal(value.events.filter(event => event === 'anonymize:first').length, 1);
+  });
   await testAsync('guided content callbacks retry only metadata and persist an exhausted post-publish checkpoint', async () => {
     const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm'), { createRequire } = require('node:module');
     const source = require.resolve('../plugins/data-secure/server/gateway/batch-review-publication'), local = createRequire(source);
     const policy = local('./prepublication-error');
     for (const failure of ['short', 'before-busy', 'after-busy', 'hard']) {
-      let expectedReads = 0, confirmations = 0, operations = 0, publications = 0;
+      let expectedReads = 0, confirmations = 0, operations = 0, publications = 0, intentConfirmed = false;
       const binding = { fixed: 'review-publication' }, loaded = { exports: {} }, hard = reviewError('BATCH_OWNERSHIP_CHANGED');
       const overrides = {
         './prepublication-error': { ...policy, retryDocumentControl: action => policy.retryDocumentControl(action, { attempts: 3, delayMs: 0 }) },
@@ -142,11 +169,14 @@ async function main() {
           }
         },
         './standalone-document-review-store': { createDocumentReviewStore: () => ({ recordPublication() {} }) },
-        './standalone-anonymized-mapping': { ensurePrivateMappingIntent() {} }
+        './standalone-anonymized-mapping': { async ensurePrivateMappingIntentAsync() {
+          intentConfirmed = false; await Promise.resolve(); intentConfirmed = true;
+        } }
       };
       vm.runInThisContext(`(function(require,module,exports,__filename,__dirname){${fs.readFileSync(source, 'utf8')}\n})`, { filename: source })(
         request => Object.hasOwn(overrides, request) ? overrides[request] : local(request), loaded, loaded.exports, source, path.dirname(source));
       const value = fixture({ createPublication: loaded.exports.createBatchReviewPublication,
+        onMappingCommit() { assert.equal(intentConfirmed, true, 'review worker must await async intent before committing'); },
         publishStandaloneReviewedItem: async (_token, id, hooks) => {
           operations++; const result = { package_id: `ds_${id}`, document_result: COMPLETE_DOCUMENT_RESULT, publication_binding: binding };
           await hooks.beforePublish(result); publications++; await hooks.afterPublish(result); return result;

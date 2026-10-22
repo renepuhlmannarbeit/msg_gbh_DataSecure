@@ -80,6 +80,7 @@ function fixture(options = {}) {
       if (options.outboxFailure) throw new Error('outbox failed');
     },
     markMappingPending(value, packageId) {
+      const apply = () => {
       events.push('mapping-pending');
       if (options.markMappingFailure) throw new Error('mark mapping failed');
       value.status = 'mapping_pending';
@@ -87,6 +88,8 @@ function fixture(options = {}) {
       value.package_id = packageId;
       value.document_result = COMPLETE_DOCUMENT_RESULT;
       value.error_code = 'LOCAL_MAPPING_EXPORT_PENDING';
+      };
+      return options.awaitMappingBoundary ? options.awaitMappingBoundary('mark', value, apply) : apply();
     },
     cleanupTerminalWorkCopy(_state, value) {
       events.push('cleanup');
@@ -94,11 +97,15 @@ function fixture(options = {}) {
       if (options.cleanupFailure) throw new Error('cleanup failed');
     },
     commitPendingMapping(value, packageId) {
+      const apply = () => {
+      options.onMappingCommit?.();
       events.push('mapping-commit');
       assert.strictEqual(value, item);
       assert.strictEqual(packageId, expectedPackageId);
       if (options.mappingFailure) throw new Error('mapping failed');
       delete value.error_code;
+      };
+      return options.awaitMappingBoundary ? options.awaitMappingBoundary('commit', value, apply) : apply();
     },
     appendMapping(name, packageId, status) {
       events.push('mapping-stopped');
@@ -165,12 +172,29 @@ function fixture(options = {}) {
 }
 
 async function main() {
+  await testAsync('worker awaits mark and mapping commit before changing durable delivery status', async () => {
+    const releases = new Map();
+    const value = fixture({ awaitMappingBoundary(stage, _item, apply) {
+      return new Promise(resolve => releases.set(stage, () => { apply(); resolve(); }));
+    } });
+    const originalEntry = structuredClone(value.entry);
+    const pending = value.processor.processSingleBatchItem(value.state, value.item, value.entry, value.deps);
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal(releases.has('mark'), true); assert.equal(releases.has('commit'), false);
+    assert.equal(value.item.status, 'processing'); assert.equal(value.events.includes('mapping-commit'), false);
+    releases.get('mark')(); await new Promise(resolve => setImmediate(resolve));
+    assert.equal(releases.has('commit'), true); assert.equal(value.item.status, 'mapping_pending');
+    assert.equal(value.state.io_summary.output_packages_committed, 0);
+    releases.get('commit')(); await pending;
+    assert.equal(value.item.status, 'delivery_pending'); assert.equal(value.state.io_summary.output_packages_committed, 1);
+    assert.deepEqual(value.entry, originalEntry); assert.equal(value.events.filter(event => event === 'pipeline-publish').length, 1);
+  });
   await testAsync('content callbacks retry only complete metadata checks, never the item operation or publication', async () => {
     const fs = require('node:fs'), path = require('node:path'), vm = require('node:vm'), { createRequire } = require('node:module');
     const source = require.resolve('../plugins/data-secure/server/gateway/batch-item-processor'), local = createRequire(source);
     const policy = local('./prepublication-error');
     for (const failure of ['short', 'before-busy', 'after-busy', 'hard']) {
-      let expectedReads = 0, confirmations = 0, operations = 0, publications = 0;
+      let expectedReads = 0, confirmations = 0, operations = 0, publications = 0, intentConfirmed = false;
       const binding = { fixed: 'expected-publication' }, loaded = { exports: {} };
       const hard = codedError('BATCH_OWNERSHIP_CHANGED');
       const overrides = {
@@ -189,12 +213,15 @@ async function main() {
           }
         },
         './standalone-document-review-store': { createDocumentReviewStore: () => ({ recordPublication() {} }) },
-        './standalone-anonymized-mapping': { ensurePrivateMappingIntent() {} }
+        './standalone-anonymized-mapping': { async ensurePrivateMappingIntentAsync() {
+          intentConfirmed = false; await Promise.resolve(); intentConfirmed = true;
+        } }
       };
       vm.runInThisContext(`(function(require,module,exports,__filename,__dirname){${fs.readFileSync(source, 'utf8')}\n})`, { filename: source })(
         request => Object.hasOwn(overrides, request) ? overrides[request] : local(request), loaded, loaded.exports, source, path.dirname(source));
       let value;
       value = fixture({ productChannel: 'standalone', createProcessor: loaded.exports.createBatchItemProcessor,
+        onMappingCommit() { assert.equal(intentConfirmed, true, 'worker must await async intent before committing'); },
         runStandaloneItem: async (_token, id, hooks) => {
           operations++; assert.equal(id, value.item.id);
           const result = { package_id: value.expectedPackageId, document_result: COMPLETE_DOCUMENT_RESULT, publication_binding: binding };
