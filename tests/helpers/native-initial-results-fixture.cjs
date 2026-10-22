@@ -6,6 +6,40 @@ const fs = require('node:fs'), path = require('node:path'), crypto = require('no
 const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const identity = stat => [String(stat.dev), String(stat.ino), String(stat.birthtimeNs)];
 const failure = () => Object.assign(Error('NATIVE_INITIAL_RESULTS_FAILED'), { code: 'NATIVE_INITIAL_RESULTS_FAILED' });
+// TEST-OWNED PRECONDITION, not a native/Tauri provisioning acknowledgement.
+// The Windows caller has already restricted this entirely new synthetic parent.
+// Use the unchanged package's ordinary setting writer and receipt reader; never
+// substitute an ownership API, relax required(), or repair an existing ACL.
+function prepareWindowsFixtureResultRoot(server, root) {
+  const bound = require(path.join(server, 'core/bound-file-io.js'));
+  const config = require(path.join(server, 'gateway/result-folder-config.js'));
+  const receipts = require(path.join(server, 'gateway/initial-output-binding.js'));
+  const rootBinding = bound.bindDirectory(root); bound.assertDirectory(rootBinding);
+  const exact = named => {
+    const stat = fs.lstatSync(named, { bigint: true });
+    assert.ok(stat.isDirectory() && !stat.isSymbolicLink());
+    return { dev: String(stat.dev), ino: String(stat.ino), birthtime_ns: String(stat.birthtimeNs) };
+  };
+  for (const child of ['DataSecure-Markdown', 'DataSecure-Output']) {
+    const named = path.join(root, child);
+    assert.equal(fs.existsSync(named), false); fs.mkdirSync(named, { mode: 0o700 });
+  }
+  config.saveConfiguredResultRoot(root);
+  const settings = bound.readBoundFile(config.configPath(), { minimum: 1, maximum: 128 * 1024 });
+  const settingSha256 = digest(settings);
+  const binding = { schema: 'datasecure-initial-output-binding/1', root, root_identity: exact(root),
+    markdown_identity: exact(path.join(root, 'DataSecure-Markdown')), output_identity: exact(path.join(root, 'DataSecure-Output')) };
+  receipts.assertBinding(binding); bound.assertDirectory(rootBinding);
+  const target = receipts.receiptPath(root);
+  assert.equal(fs.existsSync(target), false);
+  fs.writeFileSync(target, JSON.stringify({ schema: receipts.SCHEMA, setting_sha256: settingSha256, binding }),
+    { encoding: 'utf8', flag: 'wx', mode: 0o600 });
+  const receipt = receipts.readReceipt(root, { required: true });
+  assert.equal(receipt.setting_sha256, settingSha256); assert.deepEqual(receipt.binding, binding);
+  assert.deepEqual(bound.readBoundFile(config.configPath(), { minimum: 1, maximum: 128 * 1024 }), settings);
+  receipts.assertBinding(binding); bound.assertDirectory(rootBinding);
+  return { initial_output_admission: 'TEST_OWNED_PRECONDITION', tauri_native_provisioning: 'NOT_RUN' };
+}
 function runNativeInitialResults(options) {
   if (!options || Object.keys(options).sort().join(',') !== 'scope,server' ||
       !['win32', 'darwin'].includes(process.platform) || process.version !== 'v22.23.2' ||
@@ -36,8 +70,9 @@ function runNativeInitialResults(options) {
   const own = path.join(options.scope, 'initial-results');
   assert.equal(fs.existsSync(own), false); fs.mkdirSync(own, { mode: 0o700 });
   const ownBinding = bound.bindDirectory(own);
+  const resultRoot = path.join(own, 'results');
   const overrides = { EU_PRIVACY_DATA_ROOT: path.join(own, 'private'), EU_PRIVACY_ROOT: path.join(own, 'workspace'),
-    EU_PRIVACY_RESULT_ROOT: path.join(own, 'results') };
+    EU_PRIVACY_RESULT_ROOT: process.platform === 'win32' ? '' : resultRoot };
   const saved = new Map(Object.keys(overrides).map(key => [key, process.env[key]]));
   let liveCapability = false, completed = false;
   // No child, Worker, timer or async operation is started by this fixture.
@@ -66,14 +101,15 @@ function runNativeInitialResults(options) {
     };
     try { callback(); return calls; } finally { fs.mkdirSync = original; }
   }
-  let destination, visible;
+  let destination, visible, admissionProof;
   try {
     Object.assign(process.env, overrides);
-    fs.mkdirSync(overrides.EU_PRIVACY_RESULT_ROOT, { mode: 0o700 });
+    fs.mkdirSync(resultRoot, { mode: 0o700 });
     const { roots } = require(path.join(options.server, 'gateway/common.js'));
     const exporter = require(path.join(options.server, 'gateway/result-export.js')), io = exporter._test;
     assert.equal(exporter.RESULT_LAYOUT, 'datasecure-visible-markdown/1');
     const packageRoot = roots().output, originals = [], items = [];
+    if (process.platform === 'win32') admissionProof = prepareWindowsFixtureResultRoot(options.server, resultRoot);
     const id = crypto.randomBytes(32).toString('hex');
     for (let index = 1; index <= 2; index++) {
       const packageId = `ds_${crypto.randomBytes(16).toString('hex')}`;
@@ -161,6 +197,7 @@ function runNativeInitialResults(options) {
   }
   assert.equal(fs.existsSync(own), false); bound.assertDirectory(outer);
   return { schema: 'datasecure-native-initial-results/1', target, native_output_guard: true,
+    ...(admissionProof || {}),
     refused_guard_mkdirs: 0, refused_guard_attempt_absent: true, created_directories: 2, written_documents: 2,
     read_only_reopen_under_output_lock: true, reopen_mkdirs: 0, exact_visible_markdown_inventory: true,
     lock_only_in_output_container: true, original_inputs_unchanged: true, fixture_cleanup_confirmed: true };
@@ -171,5 +208,21 @@ if (require.main === module) {
     const args = process.argv.slice(2);
     if (args.length !== 4 || args[0] !== '--server' || args[2] !== '--scope') throw failure();
     console.log(JSON.stringify(runNativeInitialResults({ server: args[1], scope: args[3] })));
-  } catch { console.error(JSON.stringify({ schema: 'datasecure-native-initial-results/1', native_status: 'FAILED' })); process.exitCode = 1; }
+  } catch (error) {
+    const codes = new Set(['NATIVE_INITIAL_RESULTS_FAILED', 'RESULT_ROOT_UNSAFE', 'STANDALONE_RESULT_ROOT_UNSAFE',
+      'STANDALONE_OWNERSHIP_STORAGE_UNSAFE', 'OWNERSHIP_GUARD_BUSY']);
+    let fixturePreserved = false;
+    try {
+      const args = process.argv.slice(2), scope = args[3];
+      if (args.length === 4 && args[0] === '--server' && args[2] === '--scope' && path.isAbsolute(scope) &&
+          /^datasecure-(?:windows-ownership-load-|macos-static-native-)/u.test(path.basename(scope))) {
+        const stat = fs.lstatSync(path.join(scope, 'initial-results'));
+        fixturePreserved = stat.isDirectory() && !stat.isSymbolicLink();
+      }
+    } catch { /* no existing synthetic fixture was confirmed */ }
+    console.error(JSON.stringify({ schema: 'datasecure-native-initial-results/1', native_status: 'FAILED',
+      ...(process.platform === 'win32' ? { phase: 'initial_result_output_guard',
+        error_code: codes.has(error?.code) ? error.code : 'NATIVE_INITIAL_RESULTS_FAILED', fixture_preserved: fixturePreserved } : {}) }));
+    process.exitCode = 1;
+  }
 }

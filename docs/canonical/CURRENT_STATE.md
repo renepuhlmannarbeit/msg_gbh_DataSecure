@@ -2,6 +2,24 @@
 
 Stand: 22.10.2026 · 3.2.0-rc171 · neuer gemeinsamer Windows-/Mac-Test-Pre-Release in Vorbereitung; RC170 unverändert veröffentlicht.
 
+Neuester Quellenabschluss02:06: zwei reine Testharnessgegenfixes unabhängig am
+tatsächlichen Vier-Dateien-Delta gegengelesen, kein Produktionsdelta. Voller
+Sidecarlauf einschließlich acht Pipe-Negativen und separater tatsächlicher
+Windows-CGuard-/Output-/Reopenloader PASS. Main51Lifecycle und Source05-Helfer-
+Gegenfälle PASS. TEST_OWNED_PRECONDITION/TauriNOT_RUN ausdrücklich getrennt;
+Nativeflag1/Guard/Schutzpflichten unverändert. ProduktFP weiterhin3c710393…/340;
+577Inputs neuerManifest6d6123064f0742fab6abc1037acf15c9e4748352a08ebd1e15d4c8159fe2f4a9.
+Neue gemeinsame Source05-Bindung, alle Endgates und echte Windows-GUI folgen;
+alte Source04-FINALs bleiben rot, kein Release-PASS/keine Übergabe.
+
+Neuester tatsächlicher Endbefund01:57: Source04/a5d4cec NICHT freigabefähig.
+Native298Rust(3ignored)/NodeRust/Clippy/Release und reale30PDF67Worker37Office
+PASS/stabil, aber Paketgate zweiteCGuardFixture ohne Initialreceipt ROT;
+CoreREADY+Shutdown waren echt grün. Headless61/288+0/11ROT/stabil bei altem
+Sidecar-Testcallback, der neueSEQ2 nicht kennt. Beides eng testseitig korrigieren,
+keine Produktionspflicht lockern. Alle Jobs beendet; Mac39695475801 und beide
+Jobs tatsächlich completed/cancelled. Source05-Neubindung/alle Endgates/GUI offen.
+
 Neuestes Quellen-Gegenreview01:46: Recovery-Folgefix fertig,18nativeInitial/8configured/
 Clippy und83JS-Provisionierungsfälle+Altregressionen grün. Unabhängige tatsächliche
 Native- und JS-Produktionsgegenreviews ohne bestätigten Deltablocker. Main12/12

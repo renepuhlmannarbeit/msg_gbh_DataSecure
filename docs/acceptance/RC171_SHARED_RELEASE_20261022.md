@@ -7,6 +7,62 @@ Nachtauftrag: Hauptagent prüft auch die gebundene eigene Windows-App nativ mit
 synthetischen Daten. Menschliche Abnahme bleibt davon getrennt USER_PENDING.
 RC170 und sämtliche früheren Pakete, Nutzerdateien, Profile und Evidenzen erhalten.
 
+## Neuester Abschluss der Testgegenfixes vor Source05 (22.10.02:06)
+
+Nach tatsächlichem Ende aller Source04-Jobs ausschließlich vier Testdateien
+korrigiert, kein Produktdelta. Windows-CGuard-Fixture verwendet nun normalen
+paketgebundenen Settingswriter, tatsächliche Settingsbytes/-digest, echte BigInt-
+Objektidentitäten und unveränderten Receiptreader. Beide festen Kinder werden
+ausschließlich neu unter dem bereits ownergeschützten synthetischen Parent
+erstellt. Explizite Kennzeichnung TEST_OWNED_PRECONDITION und Tauri NOT_RUN;
+Nativeflag1 und tatsächliche CGuard-/Lock-/Reopenprüfungen bleiben unverändert.
+Separater voller Loaderlauf auf unveränderten Source04-Bytes Exit0: zwei echte
+Markdown-Ausgaben, Guardverweigerung ohne mkdir, Readonly-Reopen ohne mkdir,
+Originale unverändert und Cleanup bestätigt. Historisches PACKAGE-FINAL bleibt
+ROT. Primärfehler der zweiten Phase jetzt separat und inhaltfrei; erfolglose
+Fixtures bleiben erhalten. Beleg rc171-source04-native-loader-testfix-20261022.
+
+Sidecarprüfung bildet nun Configure-SEQ1 → Initial-SEQ2 derselben Native-ID/Root
+mit tatsächlichen Settings-/Verzeichnisidentitäten über echte Pipes ab, weiterhin
+ausdrücklich emulierte native Antwort. Acht Protokollgegenfälle verweigert, kein
+Receipt/Output danach. Vollständiger Sidecarlauf Exit0 einschließlich OCR,
+Nachkorrektur/Neustart/automatischer Prüfung und exakten sechs Host-/Workergenerationen.
+Windows-Direktcaller ohne Callbackcapability wird korrekt verweigert; Mac unverändert.
+
+Unabhängiger tatsächlicher Vier-Dateien-Quellengegenreview ohne bestätigten
+Deltablocker/Maskierungsfehler, Main las die tatsächlichen Änderungen. Main frisch
+51/51 Lifecyclefälle,31Proofnegative/78Pins/9Konverter-/33GUI-Gegenfälle/
+2GUI-Releaserefusals/629statischeChecks/101Macreceipts grün. Kein Tauri-/GUI-/Mac-
+Paket-PASS daraus. ProduktFP unverändert3c71039392b0b80c845114cd94d6e672fcc04a84810958077c83acdd5ff300c4/340;
+577Test-/Scriptinputs jetzt6d6123064f0742fab6abc1037acf15c9e4748352a08ebd1e15d4c8159fe2f4a9.
+Source05-Helfer create-only vorbereitet und geprüft. Nächster Schritt: neuer
+gemeinsamer Commit, beide Macconsumer und frische lokale Endgates, neues ZIP,
+gebundene Windows-GUI. Keine alten FINALs oder Paketbytes umetikettieren.
+
+## Historischer Source04-Endbefund (22.10.01:57)
+
+Source04/a5d4cecafcd788bd08f921acf8d422b41e4bb74a,
+FP3c71039392b0b80c845114cd94d6e672fcc04a84810958077c83acdd5ff300c4/340,
+577Inputs/Manifest57a0455ae62fee9162acdd3f4c42883bcfebf1709e99c7e67aed7575cc17444f
+ist noch NICHT freigabefähig. Native298Rust(3ignoriert)/NodeRust/Clippy/Release
+und echte30PDF/67Worker/37Office PASS/stabil. Paket ROT/stabil an zweiter
+Windows-CGuard-Testfixture ohne neue Initialquittung; erste Core-READY-/Ownership-/
+Bootstrap-/Integritäts-/Shutdownprobe nachweislich erfolgreich. Kein Corecrash.
+ZIP2e2f4a28064cabcb4bf6189904da9e72f95be65a326edf0abdc23b4d9adf145e,
+EXE87c189915e547c97acfdbb286690e57993ff588a90090139d5f8e6bb704befbf.
+Native FixtureDTZC2q und alle roten Belege erhalten. Echter Quellengegenreview
+bestätigt fehlenden Testprefix, Produktionsverweigerung korrekt.
+
+Headless natürlich ROT61/288+0/11/Inputs unverändert23:54:50.648UTC:
+tests/test-standalone-sidecar.js:262 kennt die zweite Initialcallbackphase noch
+nicht (actual prepare_initial_output_root, expected configure_export_root).
+FixtureZn43oE erhalten. Kein älteres Grün als Gegenbeweis.
+Mac39695475801 gezielt cancelled,01:57 tatsächlich completed/cancelled, beide
+119551700081/119551700114 ebenfalls completed/cancelled. Alle lokalen Jobs beendet.
+Erst danach Freeze für zwei eng begrenzte reine Testharnesskorrekturen freigegeben,
+keine Produktions-/Signier-/Schutzänderung vorgesehen. Keine Source04-App gestartet.
+Neue create-only Source05-Helfer und gemeinsamer neuer Appcommit/Endgates folgen.
+
 ## Neuester Arbeitsstand: initiale Windows-Bereitstellung korrigiert (22.10.01:37)
 
 Der begrenzte Produktionsfix ist implementiert, noch nicht als neuer gemeinsamer

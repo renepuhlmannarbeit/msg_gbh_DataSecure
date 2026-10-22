@@ -46,14 +46,17 @@ const parent = fs.realpathSync.native(os.tmpdir()), fixture = fs.mkdtempSync(pat
 const initial = fs.lstatSync(fixture, { bigint: true });
 const system = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32');
 let child, ended = false, complete = false;
-function assertProcessResult(result) {
+function assertProcessResult(result, phase = 'core_load', primaryCode) {
   ended = result.closed;
   if (!result.ok) {
-    console.error(JSON.stringify({ schema: 'datasecure-windows-ownership-load/1', ready: result.ready, shutdown: result.shutdown,
-      error_code: result.ready_error_code || result.error_code, exit_code: result.exit_code, signal: result.signal,
+    console.error(JSON.stringify({ schema: 'datasecure-windows-ownership-load/1', phase,
+      ready: phase === 'initial_result_output_guard' ? true : result.ready,
+      shutdown: phase === 'initial_result_output_guard' ? true : result.shutdown,
+      error_code: primaryCode || result.ready_error_code || result.error_code, exit_code: result.exit_code, signal: result.signal,
       deadline_exceeded: result.deadline_exceeded, timer_failed: result.timer_failed, kill_status: result.kill_status,
-      process_end: result.closed ? 'confirmed' : 'unconfirmed', fixture_preserved: !result.fixture_cleanup_allowed }));
-    throw Error(result.closed ? 'WINDOWS_OWNERSHIP_CORE_LOAD_FAILED' : 'WINDOWS_OWNERSHIP_PROCESS_NOT_REAPED');
+      process_end: result.closed ? 'confirmed' : 'unconfirmed', fixture_preserved: true }));
+    throw Error(!result.closed ? 'WINDOWS_OWNERSHIP_PROCESS_NOT_REAPED' : phase === 'initial_result_output_guard'
+      ? 'WINDOWS_INITIAL_RESULT_OUTPUT_GUARD_FAILED' : 'WINDOWS_OWNERSHIP_CORE_LOAD_FAILED');
   }
 }
 async function setupCommand(file, parameters) {
@@ -100,9 +103,26 @@ try {
     ['--require', path.join(server, 'network-deny.cjs'), helper, '--server', server, '--scope', fixture],
     { cwd: fixture, env: environment, windowsHide: true, shell: false, stdio: ['ignore', 'pipe', 'pipe'] });
   ended = false;
-  const initialResult = await runOwnershipLoadCommand(child); assertProcessResult(initialResult);
+  let initialFailure = Buffer.alloc(0);
+  child.stderr.on('data', chunk => {
+    if (initialFailure.length < 4097) initialFailure = Buffer.concat([initialFailure, chunk.subarray(0, 4097 - initialFailure.length)]);
+  });
+  const initialResult = await runOwnershipLoadCommand(child);
+  let initialFailureCode;
+  if (!initialResult.ok && initialFailure.length <= 4096) {
+    try {
+      const value = JSON.parse(initialFailure.toString('utf8'));
+      if (value && Object.keys(value).sort().join(',') === 'error_code,fixture_preserved,native_status,phase,schema' &&
+          value.schema === 'datasecure-native-initial-results/1' && value.native_status === 'FAILED' &&
+          value.phase === 'initial_result_output_guard' && typeof value.fixture_preserved === 'boolean' &&
+          ['NATIVE_INITIAL_RESULTS_FAILED', 'RESULT_ROOT_UNSAFE', 'STANDALONE_RESULT_ROOT_UNSAFE',
+            'STANDALONE_OWNERSHIP_STORAGE_UNSAFE', 'OWNERSHIP_GUARD_BUSY'].includes(value.error_code)) initialFailureCode = value.error_code;
+    } catch { /* never disclose arbitrary native stderr */ }
+  }
+  assertProcessResult(initialResult, 'initial_result_output_guard', initialFailureCode);
   const initialProof = JSON.parse(initialResult.stdout.toString('utf8'));
   assert.deepEqual(initialProof, { schema: 'datasecure-native-initial-results/1', target: 'windows-x64', native_output_guard: true,
+    initial_output_admission: 'TEST_OWNED_PRECONDITION', tauri_native_provisioning: 'NOT_RUN',
     refused_guard_mkdirs: 0, refused_guard_attempt_absent: true, created_directories: 2, written_documents: 2,
     read_only_reopen_under_output_lock: true, reopen_mkdirs: 0, exact_visible_markdown_inventory: true,
     lock_only_in_output_container: true, original_inputs_unchanged: true, fixture_cleanup_confirmed: true });

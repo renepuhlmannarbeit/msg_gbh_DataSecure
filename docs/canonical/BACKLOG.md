@@ -2,6 +2,21 @@
 
 Stand: 22.10.2026 · Produktstand 3.2.0-rc171 · gemeinsamer Windows-/Mac-Test-Pre-Release in Vorbereitung; RC170 bleibt unverändert.
 
+02:06: vier Testdateien eng korrigiert, unabhängiger tatsächlicher Gegenreview
+ohne Deltablocker. Voller Sidecar einschließlich acht echter Pipe-Negativen,
+tatsächlicher WindowsLoader/Guard/2MD/Readonly-Reopen und Main51Lifecycle grün;
+keine Produkt-/Guard-/Macänderung. Test-eigene Ordnerprecondition ausdrücklich
+kein TauriACK. Source05-Helfer Maingeprüft, ProduktFP3c710393…/340 unverändert,
+577Inputs neuerManifest6d612306… . Jetzt neuer gemeinsamer Commit/Source05-Freeze,
+frische Gesamt-/Native-/Konverter-/Paket-/beideMacgates und Windows-GUI nötig.
+Historische rote Enddateien/Fixtures erhalten, keine Veröffentlichung alter Bytes.
+
+Aktuell01:57: Source04/a5d4cec Native298/NodeRust/Clippy/Release und Konverter
+30/67/37PASS/stabil, Paket/HeadlessROT an zwei alten Testvorbedingungen: fehlende
+Windows-Initialreceipt in reiner CGuard-Fixture und Sidecarcallback nurSEQ1 statt
+korrekterSEQ1/2. Produktverweigerungen nicht lockern, nur eng Testharnesskorrektur
+nach tatsächlichem Ende allerJobs/Maccancel. Neue Source05-Bindung/Endgates/GUI.
+
 Quellenabschluss01:46: native Initial- und Recoverypfade implementiert;18native/
 8configured/Clippy,83JS-Provisionierungsfälle und Main12/12Recoverygruppen mit
 unveränderten Inputs grün. Zwei unabhängige tatsächliche Produktionsgegenreviews

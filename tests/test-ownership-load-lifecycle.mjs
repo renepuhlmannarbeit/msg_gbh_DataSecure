@@ -337,7 +337,7 @@ for (const platform of ['windows', 'macos']) {
     const body = fs.readFileSync(path.join(repository, `tests/manual/standalone-${platform}-ownership-load.mjs`), 'utf8');
     const cleanup = body.slice(body.indexOf('} finally {'));
     assert.ok(cleanup.indexOf('if (child && !ended) throw Error(') < cleanup.indexOf('fs.rmSync('));
-    assert.match(body, /fixture_preserved: !result\.fixture_cleanup_allowed/u);
+    assert.match(body, platform === 'windows' ? /fixture_preserved: true/u : /fixture_preserved: !result\.fixture_cleanup_allowed/u);
     assert.match(body, /process_end: result\.closed \? 'confirmed' : 'unconfirmed'/u);
     assert.ok(body.indexOf('if (!result.ok)') < body.indexOf('  console.log('));
     assert.doesNotMatch(body, /execFileSync|\.stdin\.end\(|\.kill\(/u);
@@ -422,8 +422,16 @@ async function executeGateModel(platform, flow) {
       if (initialProbe) {
         // Explicit command receipt MODEL, not execution of the shared helper,
         // its real product writer or a native capability.
+        if (flow === 'initial-output-command-failure') {
+          child.stderr.emit('data', Buffer.from(JSON.stringify({ schema: 'datasecure-native-initial-results/1', native_status: 'FAILED',
+            phase: 'initial_result_output_guard', error_code: 'RESULT_ROOT_UNSAFE', fixture_preserved: true })));
+          child.exitCode = 1; child.emit('exit', 1, null); child.emit('close', 1, null); return;
+        }
         child.stdout.emit('data', Buffer.from(JSON.stringify({ schema: 'datasecure-native-initial-results/1',
           target: 'windows-x64', native_output_guard: flow !== 'initial-output-fallback', refused_guard_mkdirs: 0,
+          ...(flow === 'initial-output-missing-precondition' ? {} : {
+            initial_output_admission: flow === 'initial-output-wrong-precondition' ? 'NATIVE_ACK' : 'TEST_OWNED_PRECONDITION',
+            tauri_native_provisioning: 'NOT_RUN' }),
           refused_guard_attempt_absent: true, created_directories: 2, written_documents: 2,
           read_only_reopen_under_output_lock: true, reopen_mkdirs: 0, exact_visible_markdown_inventory: true,
           lock_only_in_output_container: true, original_inputs_unchanged: true, fixture_cleanup_confirmed: true })));
@@ -481,9 +489,15 @@ async function executeGateModel(platform, flow) {
     } else if (['stale-projection', 'stale-core', 'stale-core-marker', 'stale-artifact-marker'].includes(flow)) {
       assert.match(error?.message || '', flow === 'stale-projection' ? /STANDALONE_RUNTIME_SOURCE_MISMATCH/u : /STANDALONE_MACOS_STATIC_CORE_INVALID/u);
       assert.equal(successes.length, 0); assert.equal(removalRequested, platform !== 'windows'); assert.equal(fingerprintChecks, 2);
-    } else if (flow === 'initial-output-fallback') {
+    } else if (flow.startsWith('initial-output-')) {
       assert.ok(error); assert.equal(successes.length, 0); assert.equal(removalRequested, false);
       assert.equal(children.length, 4); assert.equal(fingerprintChecks, 2);
+      if (flow === 'initial-output-command-failure') {
+        assert.equal(error.message, 'WINDOWS_INITIAL_RESULT_OUTPUT_GUARD_FAILED'); assert.equal(reports.length, 1);
+        assert.equal(reports[0].phase, 'initial_result_output_guard'); assert.equal(reports[0].error_code, 'RESULT_ROOT_UNSAFE');
+        assert.equal(reports[0].ready, true); assert.equal(reports[0].shutdown, true); assert.equal(reports[0].fixture_preserved, true);
+        assert.equal(fs.existsSync(gateFixture), true);
+      }
     } else {
       assert.equal(error, undefined); assert.equal(successes.length, 1); assert.equal(reports.length, 0);
       assert.equal(successes[0].source_fingerprint, fixture.source.fingerprint);
@@ -494,6 +508,8 @@ async function executeGateModel(platform, flow) {
       }
       if (platform === 'windows') {
         assert.equal(successes[0].initial_result_output_guard.native_output_guard, true);
+        assert.equal(successes[0].initial_result_output_guard.initial_output_admission, 'TEST_OWNED_PRECONDITION');
+        assert.equal(successes[0].initial_result_output_guard.tauri_native_provisioning, 'NOT_RUN');
         assert.match(successes[0].initial_results_helper_sha256, /^[a-f0-9]{64}$/u); assert.equal(children.length, 4);
       }
       assert.equal(removalRequested, true); assert.equal(fingerprintChecks, platform === 'windows' ? 3 : 2);
@@ -522,8 +538,80 @@ for (const platform of ['windows', 'macos']) for (const flow of ['unconfirmed', 
   test(`${platform}: complete gate model ${flow}`, options, () => executeGateModel(platform, flow));
 for (const flow of ['unapproved-core', 'stale-core', 'stale-core-marker', 'stale-artifact-marker'])
   test(`macos: complete static-Core model rejects ${flow} before success`, options, () => executeGateModel('macos', flow));
-test('windows: complete gate rejects a fallback initial-results receipt and preserves its fixture', options,
-  () => executeGateModel('windows', 'initial-output-fallback'));
+for (const flow of ['initial-output-fallback', 'initial-output-missing-precondition', 'initial-output-wrong-precondition', 'initial-output-command-failure'])
+  test(`windows: complete gate rejects ${flow} and preserves its fixture`, options, () => executeGateModel('windows', flow));
+
+for (const fault of ['none', 'missing-receipt', 'wrong-digest', 'wrong-identity', 'settings-changed'])
+  test(`Windows test-owned precondition actual receipt reader: ${fault}`, options, () => {
+    // Execute the actual test-helper setup, real BigInt/stat and unchanged
+    // production receipt reader. ONLY the setting-writer boundary is modelled;
+    // this is not Tauri provisioning, native admission or a C-guard proof.
+    const parent = fs.realpathSync.native(os.tmpdir()), root = fs.mkdtempSync(path.join(parent, 'datasecure-ownership-load-model-'));
+    const original = fs.lstatSync(root, { bigint: true }), result = path.join(root, 'results');
+    const privateRoot = path.join(root, 'private'), settingsDirectory = path.join(privateRoot, 'settings');
+    for (const named of [result, privateRoot, settingsDirectory]) fs.mkdirSync(named);
+    const setting = path.join(settingsDirectory, 'result-root.json'), server = path.join(root, 'unchanged-package-server');
+    const receiptModule = { exports: {} };
+    const receiptSource = fs.readFileSync(path.join(repository, 'plugins/data-secure/server/gateway/initial-output-binding.js'), 'utf8');
+    new Function('require', 'module', 'exports', receiptSource)(specifier => {
+      if (specifier === '../runtime') return { dataRoot: () => privateRoot };
+      if (specifier === '../core/bound-file-io') return bound;
+      if (specifier === '../core/native-directory-identity') return require('../plugins/data-secure/server/core/native-directory-identity.js');
+      return require(specifier);
+    }, receiptModule, receiptModule.exports);
+    const receipts = receiptModule.exports, receiptPath = receipts.receiptPath(result), writes = [];
+    let settingsBytes;
+    const config = { configPath: () => setting, saveConfiguredResultRoot(selected) {
+      assert.equal(selected, result); settingsBytes = Buffer.from(JSON.stringify({ schema: 'explicit-setting-writer-model/1', root: selected }));
+      fs.writeFileSync(setting, settingsBytes, { flag: 'wx' });
+    } };
+    const modelFs = { ...fs, writeFileSync(named, bytes, configuration) {
+      writes.push(named); assert.equal(named, receiptPath); assert.equal(configuration.flag, 'wx');
+      if (fault === 'missing-receipt') return;
+      const value = JSON.parse(bytes);
+      if (fault === 'wrong-digest') value.setting_sha256 = 'f'.repeat(64);
+      if (fault === 'wrong-identity') value.binding.output_identity.ino = String(BigInt(value.binding.output_identity.ino) + 1n);
+      fs.writeFileSync(named, JSON.stringify(value), configuration);
+      if (fault === 'settings-changed') fs.writeFileSync(setting, Buffer.from('changed model settings'));
+    } };
+    const helper = fs.readFileSync(path.join(repository, 'tests/helpers/native-initial-results-fixture.cjs'), 'utf8');
+    const start = helper.indexOf('function prepareWindowsFixtureResultRoot('), end = helper.indexOf('\nfunction runNativeInitialResults(');
+    assert.ok(start >= 0 && end > start);
+    const prepare = new Function('assert', 'fs', 'path', 'digest', 'require', `${helper.slice(start, end)}\nreturn prepareWindowsFixtureResultRoot;`)(
+      assert, modelFs, path, bytes => crypto.createHash('sha256').update(bytes).digest('hex'), specifier => {
+        if (specifier === path.join(server, 'core/bound-file-io.js')) return bound;
+        if (specifier === path.join(server, 'gateway/result-folder-config.js')) return config;
+        if (specifier === path.join(server, 'gateway/initial-output-binding.js')) return receipts;
+        assert.fail('unexpected test-helper import');
+      });
+    try {
+      if (fault === 'none') {
+        assert.deepEqual(prepare(server, result), { initial_output_admission: 'TEST_OWNED_PRECONDITION', tauri_native_provisioning: 'NOT_RUN' });
+        const receipt = receipts.readReceipt(result, { required: true });
+        assert.equal(receipt.setting_sha256, crypto.createHash('sha256').update(settingsBytes).digest('hex'));
+        assert.deepEqual(fs.readFileSync(setting), settingsBytes); assert.equal(writes.length, 1);
+      } else assert.throws(() => prepare(server, result));
+    } finally {
+      // Synchronous owned model only; enumerate and revalidate every entry.
+      assert.equal(path.dirname(root), parent); assert.match(path.basename(root), /^datasecure-ownership-load-model-/u);
+      const current = fs.lstatSync(root, { bigint: true });
+      assert.ok(current.isDirectory() && !current.isSymbolicLink() && current.dev === original.dev && current.ino === original.ino);
+      const entries = [];
+      const inspect = named => {
+        assert.ok(entries.length < 32); const stat = fs.lstatSync(named, { bigint: true });
+        assert.ok(!stat.isSymbolicLink() && (stat.isFile() || stat.isDirectory()));
+        assert.ok(stat.isDirectory() || stat.nlink === 1n); entries.push({ named, stat });
+        if (stat.isDirectory()) for (const child of fs.readdirSync(named)) inspect(path.join(named, child));
+      };
+      inspect(root);
+      for (const { named, stat } of entries.reverse()) {
+        const now = fs.lstatSync(named, { bigint: true });
+        assert.ok(!now.isSymbolicLink() && now.dev === stat.dev && now.ino === stat.ino && now.isDirectory() === stat.isDirectory());
+        if (stat.isDirectory()) { assert.deepEqual(fs.readdirSync(named), []); fs.rmdirSync(named); }
+        else fs.unlinkSync(named);
+      }
+    }
+  });
 
 test('new source/model regression is registered exactly once in the product runner', options, () => {
   const suite = require('./run-product-suite.js');

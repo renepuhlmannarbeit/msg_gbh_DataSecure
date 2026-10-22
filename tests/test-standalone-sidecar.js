@@ -142,6 +142,33 @@ async function waitForFile(file, timeout = 10000) {
   return JSON.parse(fs.readFileSync(file, 'utf8'));
 }
 
+function nativeReplyFrame(value) {
+  const payload = Buffer.from(JSON.stringify(value)), header = Buffer.alloc(4);
+  header.writeUInt32BE(payload.length);
+  return Buffer.concat([header, payload]);
+}
+function exactDirectoryIdentity(target) {
+  const stat = fs.statSync(target, { bigint: true });
+  assert.ok(stat.isDirectory());
+  return { dev: String(stat.dev), ino: String(stat.ino), birthtime_ns: String(stat.birthtimeNs) };
+}
+function emulatedInitialBinding(root) {
+  // Test-only objects beneath the exclusively owned synthetic fixture. This
+  // deliberately does NOT claim Rust handle admission or production ACL creation.
+  for (const name of ['DataSecure-Markdown', 'DataSecure-Output']) {
+    const target = path.join(root, name);
+    if (!fs.existsSync(target)) fs.mkdirSync(target, { mode: 0o700 });
+    assert.ok(!fs.lstatSync(target).isSymbolicLink());
+  }
+  return { schema: 'datasecure-initial-output-binding/1', root, root_identity: exactDirectoryIdentity(root),
+    markdown_identity: exactDirectoryIdentity(path.join(root, 'DataSecure-Markdown')),
+    output_identity: exactDirectoryIdentity(path.join(root, 'DataSecure-Output')) };
+}
+function initialReceiptNames(data) {
+  const settings = path.join(data, 'settings');
+  return fs.existsSync(settings) ? fs.readdirSync(settings).filter(name => /^initial-output-[a-f0-9]{64}\.json$/u.test(name)) : [];
+}
+
 async function workerEnded(root) {
   const spawnedFile = path.join(root, 'worker-spawned.json');
   if (!fs.existsSync(spawnedFile)) return;
@@ -258,16 +285,37 @@ function removeOwnedRoot(root, initial) {
     const nativeBinding = { schema: 'datasecure-native-export-binding/1', root: path.join(nativeRoot, 'output'),
       root_identity: nativeIdentity, data_root_identity: nativeIdentity, private_name: `native-export-${'a'.repeat(32)}`,
       private_identity: nativeIdentity, anonymize_identity: nativeIdentity, markdown_identity: nativeIdentity };
+    const nativeData = require('../plugins/data-secure/server/standalone/application-service').standaloneDataRoot({ environment: nativeEnv, home: nativeEnv.HOME });
+    const configFile = path.join(nativeData, 'settings', 'result-root.json');
+    const phases = new Map();
+    let confirmedInitialBinding;
     const nativeClient = protocolClient(nativeHost, (request, host) => {
-      callbacks++; assert.equal(request.action, 'configure_export_root');
+      callbacks++;
       assert.equal(request.schema, 'datasecure-native-export-request/2');
-      assert.equal(request.sequence, 1);
       assert.equal(request.root, path.join(nativeRoot, 'output'));
-      const payload = Buffer.from(JSON.stringify({ schema: 'datasecure-native-export-response/2',
+      const response = { schema: 'datasecure-native-export-response/2',
         request_id: request.request_id, native_id: request.native_id, sequence: request.sequence,
-        ok: !deny, ...(deny ? { error_code: 'AI_EXPORT_CONFLICT' } : { binding: nativeBinding }) }));
-      const header = Buffer.alloc(4); header.writeUInt32BE(payload.length);
-      host.stdin.write(Buffer.concat([header, payload]));
+        ok: !deny };
+      if (request.action === 'configure_export_root') {
+        assert.equal(request.sequence, 1); assert.equal(phases.has(request.request_id), false);
+        phases.set(request.request_id, { native_id: request.native_id, root: request.root, configured: !deny });
+        Object.assign(response, deny ? { error_code: 'AI_EXPORT_CONFLICT' } : { binding: nativeBinding });
+      } else {
+        assert.equal(process.platform, 'win32', 'initial provisioning belongs only to the native Windows path');
+        assert.equal(request.action, 'prepare_initial_output_root'); assert.equal(request.sequence, 2);
+        const phase = phases.get(request.request_id);
+        assert.ok(phase?.configured, 'no phase2 without this request successfully completing phase1');
+        assert.equal(request.native_id, phase.native_id); assert.equal(request.root, phase.root);
+        assert.equal(phase.initial, undefined, 'only one phase2 per configured request'); phase.initial = true;
+        const bytes = fs.readFileSync(configFile), saved = JSON.parse(bytes);
+        assert.equal(request.setting_sha256, crypto.createHash('sha256').update(bytes).digest('hex'));
+        assert.equal(saved.schema, 'datasecure-result-root/6'); assert.equal(saved.root, request.root);
+        assert.deepEqual(request.admission, { kind: 'native', identity: saved.native_export.root_identity });
+        assert.deepEqual(saved.native_export, nativeBinding);
+        confirmedInitialBinding = emulatedInitialBinding(request.root);
+        Object.assign(response, { initial_binding: confirmedInitialBinding });
+      }
+      host.stdin.write(nativeReplyFrame(response));
     }, ready => {
       assert.deepStrictEqual(ready, { schema: 'datasecure-standalone-ready/1', owner_generation: 'c'.repeat(32),
         ok: true, diagnostic_log: 'ready' });
@@ -276,18 +324,24 @@ function removeOwnedRoot(root, initial) {
     const configured = await nativeClient.send('configure_results', '01'.repeat(8), {
       source_paths: [path.join(nativeRoot, 'output')], native_export_binding: true
     });
-    assert.equal(configured.ok, true); assert.equal(callbacks, 1);
+    assert.equal(configured.ok, true); assert.equal(callbacks, process.platform === 'win32' ? 2 : 1);
     assert.equal(readyCount, 1);
     // os.homedir() belongs to this parent process, not to the isolated child.
     // In particular macOS uses HOME directly rather than LOCALAPPDATA/XDG.
-    const nativeData = require('../plugins/data-secure/server/standalone/application-service').standaloneDataRoot({ environment: nativeEnv, home: nativeEnv.HOME });
-    const configFile = path.join(nativeData, 'settings', 'result-root.json');
     const persisted = fs.readFileSync(configFile, 'utf8');
     assert.deepEqual(JSON.parse(persisted).native_export, nativeBinding);
     assert.equal(JSON.parse(persisted).schema, 'datasecure-result-root/6');
     const nativeRootStat = fs.statSync(path.join(nativeRoot, 'output'), { bigint: true });
     const exactRootIdentity = { dev: String(nativeRootStat.dev), ino: String(nativeRootStat.ino), birthtime_ns: String(nativeRootStat.birthtimeNs) };
     assert.deepEqual(JSON.parse(persisted).exact_identity, exactRootIdentity);
+    if (process.platform === 'win32') {
+      const receipts = initialReceiptNames(nativeData); assert.equal(receipts.length, 1);
+      const receipt = JSON.parse(fs.readFileSync(path.join(nativeData, 'settings', receipts[0])));
+      assert.equal(receipt.schema, 'datasecure-initial-output-receipt/1');
+      assert.equal(receipt.setting_sha256, crypto.createHash('sha256').update(persisted).digest('hex'));
+      assert.deepEqual(receipt.binding, confirmedInitialBinding);
+      assert.deepEqual(receipt.binding.root_identity, exactRootIdentity);
+    }
     deny = true;
     const refused = await nativeClient.send('configure_results', '02'.repeat(8), {
       source_paths: [path.join(nativeRoot, 'output')], native_export_binding: true
@@ -295,8 +349,10 @@ function removeOwnedRoot(root, initial) {
     assert.equal(refused.error_code, 'AI_EXPORT_CONFLICT');
     assert.equal(fs.readFileSync(configFile, 'utf8'), persisted, 'native refusal cannot mutate existing settings');
     const legacyConfiguration = await nativeClient.send('configure_results', '03'.repeat(8), { source_paths: [path.join(nativeRoot, 'output')] });
-    assert.equal(legacyConfiguration.ok, true, JSON.stringify(legacyConfiguration));
-    assert.equal(callbacks, 2, 'legacy request cannot silently acquire a native binding');
+    assert.equal(legacyConfiguration.ok, process.platform !== 'win32', JSON.stringify(legacyConfiguration));
+    if (process.platform === 'win32') assert.equal(legacyConfiguration.error_code, 'STANDALONE_IPC_FAILED',
+      'a native Windows direct caller without the configured capability cannot invent phase2 authorization');
+    assert.equal(callbacks, process.platform === 'win32' ? 3 : 2, 'legacy request cannot silently acquire a native binding');
     const nodeConfiguration = JSON.parse(fs.readFileSync(configFile, 'utf8'));
     assert.equal(nodeConfiguration.schema, 'datasecure-result-root/5');
     assert.deepEqual(nodeConfiguration.exact_identity, exactRootIdentity);
@@ -310,6 +366,70 @@ function removeOwnedRoot(root, initial) {
     assert.ok(nativeRecords.some(record => record.event === 'private_ipc_closed' && record.outcome === 'stopped'));
     assert.ok(nativeRecords.every(record => record.component === 'sidecar' && record.schema === 'datasecure-standalone-interaction/1'));
     if (nativeGuardTarget) assert.ok(nativeRecords.some(record => record.event === 'ownership_control_check_finished'));
+    if (process.platform === 'win32') {
+      // Source-side protocol adversaries only. Rust ACL/handle/lifecycle tests
+      // remain independent; these cases must never be labelled native UI PASS.
+      const { NativeExportChannel } = require('../plugins/data-secure/server/standalone/native-export-channel');
+      const noReplyChannel = new NativeExportChannel({ write() { assert.fail('phase2 without phase1 must not write'); } });
+      const unauthorized = noReplyChannel.publication({ schema: 'datasecure-standalone-private-ipc/1',
+        action: 'configure_results', request_id: '7'.repeat(16), native_export_binding: true, source_paths: [nativeBinding.root] });
+      await assert.rejects(unauthorized.send('prepare_initial_output_root', { root: nativeBinding.root,
+        admission: { kind: 'node22_bigint', identity: exactRootIdentity }, setting_sha256: 'a'.repeat(64) }),
+      error => error?.code === 'STANDALONE_IPC_FAILED');
+      for (const fault of ['missing-binding', 'wrong-root', 'wrong-bigint', 'wrong-sequence', 'wrong-native-id', 'repeat', 'lost-reply', 'phase2-before-phase1']) {
+        const caseRoot = path.join(root, `native-initial-${fault}`); fs.mkdirSync(caseRoot);
+        const env = isolatedEnvironment(caseRoot); delete env.EU_PRIVACY_RESULT_ROOT;
+        Object.assign(env, { DATASECURE_NATIVE_EXPORT_CHANNEL: '1', DATASECURE_DOCUMENT_CONTROL_OWNER_PID: String(process.pid),
+          DATASECURE_DOCUMENT_CONTROL_GENERATION: 'c'.repeat(32), DATASECURE_STANDALONE_DIAGNOSTIC_SEGMENT: 'c'.repeat(32),
+          DATASECURE_TEST_OWNERSHIP_MANIFEST: nativeEnv.DATASECURE_TEST_OWNERSHIP_MANIFEST,
+          DATASECURE_TEST_OWNERSHIP_SERVER: nativeEnv.DATASECURE_TEST_OWNERSHIP_SERVER });
+        fs.mkdirSync(env.DATASECURE_STANDALONE_NAMESPACE_ROOT);
+        const host = trackChild(childProcess.spawn(process.execPath, nativeArgs, {
+          stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true, env }), children);
+        const output = path.join(caseRoot, 'output'), data = require('../plugins/data-secure/server/standalone/application-service')
+          .standaloneDataRoot({ environment: env, home: env.HOME });
+        let first = null, nativeCount = 0, ready = 0;
+        const faultClient = protocolClient(host, (request, own) => {
+          nativeCount++;
+          assert.equal(request.schema, 'datasecure-native-export-request/2'); assert.equal(request.root, output);
+          const response = { schema: 'datasecure-native-export-response/2', request_id: request.request_id,
+            native_id: request.native_id, sequence: request.sequence, ok: true };
+          if (request.action === 'configure_export_root') {
+            assert.equal(request.sequence, 1); assert.equal(first, null); first = request;
+            if (fault === 'phase2-before-phase1') {
+              response.sequence = 2; response.initial_binding = emulatedInitialBinding(output);
+            } else response.binding = { ...nativeBinding, root: output };
+          } else {
+            assert.equal(request.action, 'prepare_initial_output_root'); assert.equal(request.sequence, 2);
+            assert.ok(first); assert.equal(request.native_id, first.native_id); assert.equal(request.request_id, first.request_id);
+            const saved = fs.readFileSync(path.join(data, 'settings', 'result-root.json'));
+            assert.equal(request.setting_sha256, crypto.createHash('sha256').update(saved).digest('hex'));
+            assert.deepEqual(request.admission, { kind: 'native', identity: nativeIdentity });
+            response.initial_binding = emulatedInitialBinding(output);
+            if (fault === 'missing-binding') delete response.initial_binding;
+            if (fault === 'wrong-root') response.initial_binding.root = `${output}-different`;
+            if (fault === 'wrong-bigint') response.initial_binding.output_identity.ino = Number(response.initial_binding.output_identity.ino);
+            if (fault === 'wrong-sequence') response.sequence = 3;
+            if (fault === 'wrong-native-id') response.native_id = 'f'.repeat(32);
+            if (fault === 'lost-reply') { own.stdin.end(); return; }
+          }
+          const frame = nativeReplyFrame(response);
+          own.stdin.write(fault === 'repeat' && request.sequence === 2 ? Buffer.concat([frame, frame]) : frame);
+        }, value => { assert.equal(value.ok, true); ready++; });
+        await assert.rejects(bounded(faultClient.send('configure_results', '6'.repeat(16), {
+          source_paths: [output], native_export_binding: true }), `${fault}: native failure did not settle`, 10000));
+        const ended = await bounded(host.closed, `${fault}: source sidecar did not close`);
+        assert.equal(ended.code, fault === 'lost-reply' ? 0 : 65, fault);
+        assert.equal(ready, 1); assert.equal(nativeCount, fault === 'phase2-before-phase1' ? 1 : 2);
+        assert.deepEqual(initialReceiptNames(data), [], `${fault}: no acknowledged initial receipt`);
+        for (const name of ['DataSecure-Markdown', 'DataSecure-Output']) {
+          const directory = path.join(output, name);
+          assert.deepEqual(fs.readdirSync(directory), [], `${fault}: no result/run/worker product data`);
+        }
+        process.stdout.write(`✓ standalone source native-callback refusal: ${fault}; no Rust/GUI claim\n`);
+      }
+      process.stdout.write('STANDALONE WINDOWS TWO-PHASE SOURCE CALLBACK PASS: actual BigInt directory IDs; emulated native replies, no Rust-native/GUI acceptance claim\n');
+    }
     }
     if (process.platform === 'darwin') {
       process.stdout.write('Darwin checkout native-success addon fixture: NOT_RUN; sealed-app static startup/IPC/Worker/Guard gates required separately. Emulated native configure/persistence/conflict is not a Mac-native proof.\n');
