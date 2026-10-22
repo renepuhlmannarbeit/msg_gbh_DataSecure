@@ -2,6 +2,39 @@
 
 Stand: 22.10.2026 · 3.2.0-rc171 · neuer gemeinsamer Windows-/Mac-Test-Pre-Release in Vorbereitung; RC170 unverändert veröffentlicht.
 
+## Neuester Quellenabschluss22.10.2026 09:17UTC vor Source11
+
+Bestätigter nativer Pause-Aufnahmefehler eng behoben: main.rs allein,7Produktions-
+zeilen+2Tests; paused nur bei explizit processing:false/preparing:false.
+Main tatsächlichen Produktionspfad gegengelesen, unabhängiger Deltagegenreview
+ohne bestätigten Blocker. Main300RustPASS/3ignored und sechs volle Pause-/
+Continuation-/Intake-/Smoke-/Nativepausegruppen PASS/Exit0/Inputs unverändert
+09:15:33.476UTC. NeuerFP1f0fa47f2b97bb3ed2fa0dbecd2b7e9a516e2d90cfa524234acde62138f0b8a7/340,
+578Test-/Scriptmanifest310ab9c…2e99 unverändert. Alle echten Schutzprüfungen
+erhalten. Source11 normale23Helfer create-only/pure31negative+645BindingPASS;
+Plan ehrlich zur fehlenden finalen UI-Abbruchfunktion und neuen Pausekonkurrenz-
+probe. Neuer gemeinsamer Commit/Freeze/frische4Endgates/beideMacs/Paket/GUIfolgen;
+noch keine Freigabe oder Mainintegration. Menschliche UAT USER_PENDING.
+
+## Historischer nativer Aufnahmebefund22.10.2026 09:10UTC
+
+Source10bb73441 nicht freigabefähig trotz grüner vier lokaler Endgates und beider
+Mac39727354777/Artefaktgegenreviews. Tatsächliche Windowsprobe: nach23/36 Pause
+bietet UI Neue Verarbeitung an, native Aufnahme verweigert `paused` mit BUSY.
+Main+unabhängiger tatsächlicher Rust/Frontend/DS-043-Gegenreview bestätigen P2:
+paused fehlt in nativer Allowlist. Kein Datenverlust oder Corecrash; explizites
+Fortsetzen desselben111022e7 endete36/36. App normal geschlossen/Census0,
+19Entwurf ungestartet erhalten, alte Ergebnisse/Profile/FINALs unverändert.
+Minimalfix nur mit explizit processing:false/preparing:false bei paused;
+aktive/fehlende/ungültige Flags weiterhin ablehnen, frische Backend-/Worker-/
+Ownershipprüfungen unverändert. Nach Tests/Gegenreview Source11 gemeinsamer
+Commit/FP und neue Windows-/Mac-Endbelege, keine Source10-Umetikettierung.
+Zusätzliche Source10-GUI Large36/36, PDFohneOCR, GanzeAbschnittsgrenze,
+Öffnen editierter Arbeitskopien, sichere Altprofilreparatur und Pause/Neustarts
+tatsächlich dokumentiert; nicht auf neue Bytes übertragen. Finale UI-Abbruch-
+funktion nicht vorhanden, kein solcher GUI-PASS. Menschliche UAT USER_PENDING.
+Details RC171_SHARED_RELEASE und Source10 GUI-OBSERVATIONS/CHECKPOINT.
+
 ## Neuester Quellenabschluss22.10.2026 05:17UTC vor Source10
 
 Pending-Metadatenkompatibilität eng im Store korrigiert, kein Frontend-/Policy-/

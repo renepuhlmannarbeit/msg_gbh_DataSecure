@@ -2,6 +2,35 @@
 
 Stand: 22.10.2026 · Produktstand 3.2.0-rc171 · gemeinsamer Windows-/Mac-Test-Pre-Release in Vorbereitung; RC170 bleibt unverändert.
 
+## Aktive Übergabegates nach Pause-Aufnahmefix22.10.2026 09:17UTC
+
+Enger main.rs-Fix mit2Tests fertig/gegengelesen: paused nur mit explizit beiden
+Inaktivitätsflags false, alle aktiven/fehlenden/ungültigen Flags verweigert und
+frische Backend-/Ownership-/Workerprüfungen erhalten. Autor11+1+1Rust PASS;
+Mainvolle300Rust/3ignored+sechsNachbar-/Nativegruppen PASS/stabil/Exit0 bis09:15:33.
+Unabhängiger tatsächlicher Delta-Gegenreview ohne bestätigten Blocker.
+FP1f0fa47f…0b8a7/340, 578Testinputs310ab9c…2e99 unverändert. Source11Helfer
+create-only vorbereitet/purePASS, neue Quellenfreeze/Endgates/Windows+beideMacs
+und echte Pause→Neulauf→alten Lauf fortsetzen-Paketprobe noch offen.
+Vorherige Source10Grüns/GUIFAIL bleiben mit ihren Bytes erhalten; keine
+Freigabe, bis neue geeignete Belege vorliegen. Menschliche UAT USER_PENDING.
+
+## Historischer nativer Aufnahmeblocker22.10.2026 09:10UTC
+
+P2: DS-043 Pause→NeueVerarbeitung kann nativ keine neue Auswahl aufnehmen,
+obwohl das Frontend sie anbietet. Source10bb73441 echte GUI-Reproduktion,
+Main+unabhängiger Quellenreview bestätigen fehlendes paused in Rust-Allowlist.
+Minimal korrigieren: paused nur mit explizit processing:false UND preparing:false,
+aktive/fehlende/ungültige Statusflags ablehnen; frische Backend-/Ownership-/
+Interaktions-/Workerprüfungen behalten. Native positive/negative Gegenfälle,
+unabhängiges Delta-Gegenlesen, Main-Prüfung, neuer gemeinsamer Source11Commit/
+FP/Freeze/frische vier lokale Endgates und beide Macconsumer. Anschließend
+tatsächliche neue Paketprobe Pause→Neulauf→alten Lauf fortsetzen. Source10s
+grüne Endgates/Artefakte und neue GUI-Teilbelege bleiben historische Evidenz,
+keine Releasefreigabe/Umbenennung. 19geführt/auto und Historyhide4 noch offen;
+kein vorhandener endgültiger UI-Abbruchbutton, keine falsche Abbruchabnahme.
+Menschliche Zielhost-/Office-UAT bleibt USER_PENDING. Details RC171_SHARED_RELEASE.
+
 ## Aktive Übergabegates nach geprüftem Fix,22.10.2026 05:17UTC
 
 Backend-Pendingfix abgeschlossen und unabhängig am tatsächlichen Produkt-/Testdelta

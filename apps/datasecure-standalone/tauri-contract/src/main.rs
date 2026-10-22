@@ -417,6 +417,13 @@ fn state_allows_new_admission(current: &Value) -> bool {
             == Some("STANDALONE_START_FAILED")
             && current.pointer("/intake_failure/worker_active").and_then(Value::as_bool) == Some(false);
     }
+    if state == Some("paused") {
+        // A selected historical pause can be projected before another active
+        // worker. Admit a new selection only with both explicit quiescent
+        // flags; the service still rechecks live intake/processing afterwards.
+        return current.get("processing").and_then(Value::as_bool) == Some(false)
+            && current.get("preparing").and_then(Value::as_bool) == Some(false);
+    }
     matches!(
         state,
         Some(
@@ -3301,6 +3308,37 @@ mod tests {
             assert!(!state_allows_new_admission(&json!({ "state": state })), "{state}");
         }
         assert!(!state_allows_new_admission(&json!({})));
+    }
+
+    #[test]
+    fn paused_admission_requires_both_explicit_quiescent_flags() {
+        let paused = json!({ "state": "paused", "processing": false, "preparing": false });
+        assert!(state_allows_new_admission(&paused));
+        for field in ["processing", "preparing"] {
+            let mut missing = paused.clone();
+            missing.as_object_mut().unwrap().remove(field);
+            assert!(!state_allows_new_admission(&missing), "missing {field}: {missing}");
+            for value in [json!(true), Value::Null, json!("false"), json!(0), json!([]), json!({})] {
+                let mut status = paused.clone();
+                status[field] = value;
+                assert!(!state_allows_new_admission(&status), "unknown or active {field}: {status}");
+            }
+        }
+        assert!(!state_allows_new_admission(&json!({ "state": "paused" })));
+    }
+
+    #[test]
+    fn paused_selected_run_cannot_hide_another_active_worker() {
+        // application-service.status() prioritizes latest.paused over the
+        // global processing branch, but retains its actual boolean flags.
+        let projected = json!({ "state": "paused", "batch_id": "a".repeat(64),
+            "processing": true, "preparing": false, "pause_requested": true,
+            "batch_complete": false, "resumable": true });
+        assert!(!state_allows_new_admission(&projected));
+        for state in ["preparing", "processing", "blocked", "unknown"] {
+            assert!(!state_allows_new_admission(&json!({ "state": state,
+                "processing": false, "preparing": false })), "{state}");
+        }
     }
 
     #[test]

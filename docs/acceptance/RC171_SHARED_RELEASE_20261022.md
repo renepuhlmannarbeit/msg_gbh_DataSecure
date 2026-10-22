@@ -9,6 +9,78 @@ RC170 und sämtliche früheren Pakete, Nutzerdateien, Profile und Evidenzen erha
 
 ## Neuer geprüfter Quellenabschluss22.10.2026 05:17UTC vor Source10
 
+### Neuer Quellenabschluss22.10.2026 09:17UTC vor Source11
+
+Pause-Aufnahmefix abgeschlossen: ausschließlich main.rs, sieben Produktionszeilen
+plus zwei native Tests. `paused` benötigt echte boolesche processing:false und
+preparing:false. Bestehende Zustände und frische Backend-/Worker-/Ownership-/
+Verbindungsprüfungen unverändert. Main hat den tatsächlichen DTO-/Rust-/Backend-
+Pfad selbst gelesen; unabhängiger tatsächlicher Deltagegenreview ohne bestätigten
+Blocker, keine aus Tests hergeleitete Sicherheitsfreigabe.
+main.rs SHA161bf846f5eb403ab91b7168d45cbbc50239d17a1bdc6f471ad21862d10ec0fe.
+Neuer ProduktFP1f0fa47f2b97bb3ed2fa0dbecd2b7e9a516e2d90cfa524234acde62138f0b8a7/340;
+Test-/Scriptinputs578/310ab9c44015353155fa53ccd4b7b711321e2ca78527f76d78cd6e4840442e99.
+Autor gezielte11+1+1Rustfälle PASS/stabil. Main unveränderte volle native Rustsuite
+300PASS/3ignoriert, Pause8, Pausecontrol30, Continuation30, Intakefailure11,
+Smokeintegrity59 und reale native Pausecontrol25Proben (19verweigert/6erlaubt):
+alle sieben Gruppen Exit0/inputs_unchangedtrue bis09:15:33.476UTC. Belege
+dist/rc171-pause-{admission-fix,main-countercheck,delta-counterreview}-20261022.
+Noch kein neuer nativer GUI-/Mac-/Paket-PASS für diesen Fix.
+
+Source11 normale23Helferrollen create-only portiert, Main Generator vollständig
+gelesen und erzeugt, reine31Proofnegative/645Bindingchecks PASS. Sieben Driver
+frisch gepinnt. Drei ignorierte Dokumente danach eng berichtigt: Plan enthält
+Pause→neuen Lauf→alten Lauf fortsetzen und behauptet keinen verfügbaren finalen
+UI-Abbruch; README/Contract behaupten keinen hier nicht erzeugten Legacyhelfer.
+Kein Source10FINAL/VERIFY/Snapshot/GUI kopiert, keine alten Pakete umetikettiert.
+Neuer gemeinsamer Commit/Push/Dispatch/Freeze und alle frischen Endbelege folgen.
+
+### Historischer tatsächlicher GUI-Befund22.10.2026 09:10UTC – Source10 gesperrt
+
+Source10 bb7344128b1404760754e4e0d261081539ab708d hat sämtliche vier lokalen
+Endgates und beide Macconsumer39727354777 mit unveränderten Inputs bestanden.
+Beide Macartefakte sind byte-/loggebunden unabhängig gegengelesen; Snapshot und
+Windows-ZIP bleiben erhalten. Das ist trotzdem KEINE Releasefreigabe: zusätzliche
+native Windowsbedienung fand einen bestätigten P2 in der Aufnahme nach Pause.
+
+Eigener synthetischer Lauf111022e7 wurde nach23/36 vollständig fertigen Dateien
+pausiert. „Neue Verarbeitung“ ließ einen neuen Entwurf zu, der native Datei- und
+Ordnerpicker verweigerte aber dessen Aufnahme mit STANDALONE_BUSY. Main und
+unabhängiger tatsächlicher Quellengegenreview bestätigen: Rusts
+state_allows_new_admission lässt `paused` nicht zu. DS-043 und Zielarchitektur
+verlangen ausdrücklich mehrere pausierte/neue Stapel neben höchstens einem
+aktiven Prozessor. Kein aktiver Worker/kein Datenverlust als Ursache behauptet.
+Explizites Fortsetzen über Verlauf gelang, derselbe111022-Lauf endete regulär
+36/36 mit neun Inhaltshinweisen. Danach konnte19 als ungestarteter Entwurf
+aufgenommen werden. App normal geschlossen, eigener Rootprozesscensus0;
+Profil/alte Dateien/roter Aufnahmebeleg bleiben erhalten.
+
+Enger Fix in Arbeit: nur ausdrücklich bestätigtes `paused` mit
+`processing:false` UND `preparing:false` zur nativen Vorprüfung zulassen.
+Die Statusprojektion kann einen beobachteten pausierten Lauf vor globalem
+Processing anzeigen; deshalb fehlende/ungültige/aktive Flags hart verweigern.
+Frische Backend-/Ownership-/Interaktions-/Workerprüfungen bleiben unverändert.
+Rust-Gegenfälle und unabhängiges Quellengegenlesen, dann neuer gemeinsamer
+Appcommit/FP/Source11-Freeze mit frischen vier lokalen Endgates und beiden
+Macpaketen sowie neuer nativer Pause→Neulauf→alten Lauf fortsetzen-Probe.
+Source10-FINALs/ZIPs/VERIFYs niemals auf Source11 umschreiben.
+
+Weitere tatsächliche Source10-GUI-Proben: Large36/36 automatisch/OCRan,
+27 vollständige/9 eingeschränkte Extraktionsbelege; 36 gezielte synthetische
+Privacywerte fehlen, 3Pflichtbeilagen, 89Golden unverändert. PDFohneOCR erhält
+nativen/unsichtbaren Suchtext und Unicode, kein Bildcode/Base64/XML. Ganze
+Abschnittsgrenze: vollständiger7.9M-Hauptteil und späte Fußzeile erhalten,
+überlanger Teil ganz ausgelassen und gemeldet. Wiederaufnahmen/320s-Denkpause,
+OCR-Speichern, Positionsmaskierung, sichere Altprofilreparatur, extern editierte
+öffentliche Kopien und reversible Fehlordnerprobe tatsächlich geprüft. Genaue
+Grenzen/Hashes im Source10-GUI-Journal, kein universeller Format-/Privacy-PASS.
+Die UI bietet dauerhaftes Pausieren/Fortsetzen, keinen endgültigen Laufabbruch;
+ein solcher GUI-Abbruch bleibt NOT_RUN, nicht aus Pause als PASS abgeleitet.
+19geführt/auto und Historyhide4 auf Source10 noch NOT_RUN. Menschliche Windows/
+Mac/Finder/TCC/M2/Enterprise/VoiceOver/Excel/Numbers-UAT bleibt USER_PENDING.
+
+### Historischer Quellenabschluss vor Source10
+
 Enger Backendfix abgeschlossen: nur Store plus Ergebnisgenerationentest geändert.
 SafeMetadataOnly erlaubt approve/revoke Single/Batch für den vollständig sicheren
 Privatvektor ausschließlich bei kompletter Initial-/Generations-/ACK-/Directorykette
