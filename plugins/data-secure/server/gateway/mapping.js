@@ -9,6 +9,7 @@ const { SafeError } = require('../runtime');
 const { roots } = require('./common');
 const { assertWritableCapacity, normalizePostPreflightWriteError } = require('./storage-capacity');
 const { writeFully, syncParentDirectory, renameWithTransientRetry } = require('./batch-journal-io');
+const { recordBatchExecutionFailure } = require('./batch-execution-diagnostic');
 const {
   GRADES,
   OMISSION_CODES,
@@ -34,6 +35,10 @@ const LEGACY_GRADE_LABEL = 'Ergebnisgrad für älteres Paket nicht verfügbar';
 const SOURCE_ID_PREFIX = ' Dateinamenbezug v2: ';
 const OUTBOX_V1_KEYS = ['entry_id', 'original_basename', 'package_id', 'schema', 'state'].sort();
 const OUTBOX_V2_KEYS = [...OUTBOX_V1_KEYS, 'document_result'].sort();
+
+function observeFailure(phase, error) {
+  try { recordBatchExecutionFailure(phase, error); } catch { /* observation never changes the primary failure */ }
+}
 
 function quoteCsvField(value) {
   return `"${String(value ?? '').replace(/"/g, '""')}"`;
@@ -352,7 +357,8 @@ function acquireMappingLock(options = {}) {
     descriptor = io.openSync(target, 'wx', 0o600);
     io.writeFileSync(descriptor, `datasecure-mapping-lock/1 ${process.pid}\n`, 'utf8');
     return { target, descriptor, marker: `datasecure-mapping-lock/1 ${process.pid}\n` };
-  } catch {
+  } catch (error) {
+    observeFailure('mapping_csv_lock', error);
     if (descriptor !== undefined) {
       try { io.closeSync(descriptor); } catch { /* the fail-closed error wins */ }
     }
@@ -398,17 +404,23 @@ function appendMapping(originalName, packageId, status = RELEASED, options = {})
     throw new SafeError('Der lokale Zuordnungsexport konnte nicht sicher aktualisiert werden.');
   }
   const io = options.fs || fs;
-  const target = mappingPath(options);
+  let target;
+  try { target = mappingPath(options); }
+  catch (error) { observeFailure('mapping_csv_root', error); throw error; }
   let lock;
   let previous = '';
+  let phase = 'mapping_csv_root';
   try {
     const parent = io.lstatSync(path.dirname(target));
     if (!parent.isDirectory() || parent.isSymbolicLink()) throw new Error('unsafe mapping directory');
+    phase = 'mapping_csv_lock';
     lock = acquireMappingLock(options);
+    phase = 'mapping_csv_read';
     if (io.existsSync(target)) {
       previous = readBoundFile(target, { io, maximum: 64 * 1024 * 1024 }).toString('utf8');
     }
   } catch (error) {
+    observeFailure(phase, error);
     if (lock) releaseMappingLock(lock, options);
     if (error instanceof SafeError) throw error;
     throw new SafeError('Der lokale Zuordnungsexport konnte nicht sicher gelesen werden.');
@@ -443,6 +455,7 @@ function appendMapping(originalName, packageId, status = RELEASED, options = {})
     }
     const next = previous + row;
     const temporary = `${target}.tmp_${crypto.randomBytes(6).toString('hex')}`;
+    phase = 'mapping_csv_write';
     try {
       (options.assertWritableCapacity || assertWritableCapacity)({
         directory: path.dirname(target),
@@ -451,6 +464,7 @@ function appendMapping(originalName, packageId, status = RELEASED, options = {})
       durableAtomicWrite(target, temporary, next, options);
       return true;
     } catch (error) {
+      observeFailure(phase, error);
       try { if (io.existsSync(temporary)) io.unlinkSync(temporary); } catch { /* no broader cleanup */ }
       const normalized = normalizePostPreflightWriteError(error);
       if (['LOCAL_CAPACITY_UNAVAILABLE', 'LOCAL_CAPACITY_INSUFFICIENT', 'LOCAL_CAPACITY_RACE'].includes(normalized?.code)) {
@@ -458,6 +472,9 @@ function appendMapping(originalName, packageId, status = RELEASED, options = {})
       }
       throw new SafeError('Der lokale Zuordnungsexport konnte nicht sicher aktualisiert werden.');
     }
+  } catch (error) {
+    if (phase !== 'mapping_csv_write') observeFailure(phase, error);
+    throw error;
   } finally {
     if (lock) releaseMappingLock(lock, options);
   }

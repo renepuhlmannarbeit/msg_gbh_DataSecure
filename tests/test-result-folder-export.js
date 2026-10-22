@@ -557,7 +557,7 @@ try {
   fs.mkdirSync(boundRoot);
   fs.mkdirSync(outside);
   process.env.EU_PRIVACY_RESULT_ROOT = boundRoot;
-  const destination = _test.activeDestination();
+  const destination = _test.activeDestination({ schema: LEGACY_SCHEMA, complete: false });
   fs.rmSync(destination.output.path, { recursive: true });
   fs.symlinkSync(outside, destination.output.path, process.platform === 'win32' ? 'junction' : 'dir');
   assert.throws(() => _test.ensurePlainDirectory(destination, 'Lauf-20260903-120000-abcdef12'), /RESULT_EXPORT_PATH_UNSAFE/u);

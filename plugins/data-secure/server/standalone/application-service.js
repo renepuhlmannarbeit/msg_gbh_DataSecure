@@ -191,7 +191,8 @@ function defaultDependencies(options = {}) {
   const { REASON_CODES } = require('../core/document-result-grade');
   const workerCodes = new Set([...DESKTOP_ERROR_CODES, ...WORKFLOW_ERROR_CODES, ...REASON_CODES]);
   const { types } = require('node:util');
-  const workerPhases = new Set(['item_epoch_release', 'registry_finalize', 'local_delivery_verify', 'executor_lease_release', 'processing', 'result_export_prepare', 'result_export_claim', 'result_export_plan', 'result_export_copy', 'result_export_claim_release']);
+  const workerPhases = new Set(['item_epoch_release', 'registry_finalize', 'local_delivery_verify', 'executor_lease_release', 'processing', 'result_export_prepare', 'result_export_claim', 'result_export_plan', 'result_export_copy', 'result_export_claim_release',
+    'mapping_publication', 'mapping_intent', 'mapping_recheck', 'mapping_csv', 'mapping_csv_root', 'mapping_csv_lock', 'mapping_csv_read', 'mapping_csv_write', 'mapping_intent_finish']);
   const workerDiagnostics = (executorOptions = {}) => {
     const recorder = typeof executorOptions.recordWorkflowEvent === 'function'
       ? executorOptions.recordWorkflowEvent : recordWorkflowEvent;

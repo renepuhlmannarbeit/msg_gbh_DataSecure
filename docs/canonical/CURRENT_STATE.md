@@ -2,6 +2,25 @@
 
 Stand: 22.10.2026 · 3.2.0-rc171 · neuer gemeinsamer Windows-/Mac-Test-Pre-Release in Vorbereitung; RC170 unverändert veröffentlicht.
 
+Neuere Diagnosequellen: neun rein beobachtende Mappingphasen bis Rust-Bundle,
+keine Verarbeitungs-/Guard-/Retryänderung.26NeueCases/37Content und Altmapping
+PASS, Main26/11Bridge/1Rustphase/Pfadtrennung/Macworkflowmodelle/ResultExport PASS;
+unabhängiges tatsächliches Quellengegenlesen samt RAW-Vorgrenze abgeschlossen.
+Nächster Schritt frischer gebundener Windows-Diagnosebuild und echte Reproduktion;
+noch KEIN Gegenfix des ungeklärten GUI06-Primärfehlers, keine Releasefreigabe.
+
+Source05/17d6bc1a995026ea6c9251441228f679ed1a3a24 NICHT freigabefähig.
+Native298Rust/3ignored, Konverter30/67/37 und fünf Paketgates
+PASS/stabil; beide Macjobs39697486477 SUCCESS. Headless221/288+0/11 ROT/stabil
+an einem veralteten argumentlosen Testcaller; enger testseitiger Gegenfix grün.
+Echte GUI01Defaultbereitstellung PASS, GUI06 nach gespeicherter OCR/Vertagen/zwei
+Neustarts/Zielwechsel/Personenentscheidung FAIL: LOCAL_REVIEW_FAILED, privater
+Mappingintent erhalten, keine öffentliche Ausgabe. Zwei unabhängige tatsächliche
+Quellen-/Fixturegegenreviews bestätigen verlorenen Primärfehler im Mapping-Catch,
+keine bewiesene ACL-/Root-/Hashursache. Alle Freezejobs beendet, eigene App normal
+geschlossen,89Originale bytegleich; Quellen-Phasendiagnose und kausaler Fix laufen.
+Keine alte GUI-/Mac-/Paketbelege auf neue Bytes übertragen, keine Releasefreigabe.
+
 Neuester Quellenabschluss02:06: zwei reine Testharnessgegenfixes unabhängig am
 tatsächlichen Vier-Dateien-Delta gegengelesen, kein Produktionsdelta. Voller
 Sidecarlauf einschließlich acht Pipe-Negativen und separater tatsächlicher

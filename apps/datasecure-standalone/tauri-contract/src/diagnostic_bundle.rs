@@ -40,7 +40,7 @@ fn member(value: &str, vocabulary: &str) -> bool { vocabulary.split_whitespace()
 const CONFIGURE_EVENTS: &str = "native_configure_failed";
 const CONTROLLED_CREATE_EVENTS: &str = "native_controlled_create_failed";
 const BATCH_WORKER_EVENTS: &str = "batch_worker_failed";
-const BATCH_WORKER_PHASES: &str = "item_epoch_release registry_finalize local_delivery_verify executor_lease_release processing result_export_prepare result_export_claim result_export_plan result_export_copy result_export_claim_release";
+const BATCH_WORKER_PHASES: &str = "item_epoch_release registry_finalize local_delivery_verify executor_lease_release processing result_export_prepare result_export_claim result_export_plan result_export_copy result_export_claim_release mapping_publication mapping_intent mapping_recheck mapping_csv mapping_csv_root mapping_csv_lock mapping_csv_read mapping_csv_write mapping_intent_finish";
 const CAPTURE_EVENTS: &str = "history_capture_full history_capture_reused";
 const PROBE_EVENTS: &str = "core_probe_observer core_probe_cleanup";
 const RECOVERY_EVENTS: &str = "sidecar_exited_before_response";

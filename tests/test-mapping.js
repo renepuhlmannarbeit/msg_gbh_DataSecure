@@ -4,6 +4,13 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { createSuite } = require('./helpers');
+// Expected mapping failures now emit content-free workflow observations. Keep
+// those real diagnostic writes in this new test-owned root, never a user profile.
+const diagnosticParent = fs.realpathSync.native(os.tmpdir());
+const diagnosticRoot = fs.mkdtempSync(path.join(diagnosticParent, 'data-secure-mapping-diagnostics-'));
+const diagnosticIdentity = fs.lstatSync(diagnosticRoot, { bigint: true });
+const previousDataRoot = process.env.EU_PRIVACY_DATA_ROOT;
+process.env.EU_PRIVACY_DATA_ROOT = path.join(diagnosticRoot, 'private');
 const { csvField, appendMapping, mappingPath, mappingLockPath, normalizeExistingMapping, HEADER, LEGACY_HEADER } = require('../plugins/data-secure/server/gateway/mapping');
 const { releasedDocumentResult, notProcessedDocumentResult } = require('../plugins/data-secure/server/gateway/document-result-grade');
 
@@ -336,4 +343,25 @@ test('CSV durable replacement handles short writes and fails closed at every unc
   }
 });
 
-done();
+done(() => {
+  assert.equal(path.dirname(diagnosticRoot), diagnosticParent);
+  assert.match(path.basename(diagnosticRoot), /^data-secure-mapping-diagnostics-/u);
+  const current = fs.lstatSync(diagnosticRoot, { bigint: true });
+  assert.ok(current.isDirectory() && !current.isSymbolicLink() && current.dev === diagnosticIdentity.dev && current.ino === diagnosticIdentity.ino);
+  const entries = [];
+  const inspect = named => {
+    assert.ok(entries.length < 4096); const stat = fs.lstatSync(named, { bigint: true });
+    assert.ok(!stat.isSymbolicLink() && (stat.isFile() || stat.isDirectory()));
+    assert.ok(stat.isDirectory() || stat.nlink === 1n); entries.push({ named, stat });
+    if (stat.isDirectory()) for (const child of fs.readdirSync(named)) inspect(path.join(named, child));
+  };
+  inspect(diagnosticRoot);
+  for (const { named, stat } of entries.reverse()) {
+    const now = fs.lstatSync(named, { bigint: true });
+    assert.ok(!now.isSymbolicLink() && now.dev === stat.dev && now.ino === stat.ino && now.isDirectory() === stat.isDirectory());
+    if (stat.isDirectory()) { assert.deepEqual(fs.readdirSync(named), []); fs.rmdirSync(named); }
+    else fs.unlinkSync(named);
+  }
+  if (previousDataRoot === undefined) delete process.env.EU_PRIVACY_DATA_ROOT;
+  else process.env.EU_PRIVACY_DATA_ROOT = previousDataRoot;
+});

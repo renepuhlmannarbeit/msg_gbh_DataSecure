@@ -70,6 +70,7 @@ const baseFiles = [
   'tests/test-batch-processing-admission.js',
   'tests/test-batch-processing-composition.js',
   'tests/test-result-export-diagnostics.js',
+  'tests/test-mapping-diagnostics.js',
   'tests/test-worker-result-export-async.js',
   'tests/test-standalone-pause-control.js',
   'tests/test-native-export-channel.js',

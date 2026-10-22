@@ -48,7 +48,9 @@ const PHASES = new Set([
   'awaiting_local_mapping_repair', 'awaiting_delivery_acknowledgement',
   'ready_for_next_document', 'invalid_local_state',
   'content_prepare', 'content_extract', 'content_privacy', 'content_verify', 'content_publish', 'content_ack',
-  'item_epoch_release', 'registry_finalize', 'local_delivery_verify', 'executor_lease_release', 'processing', 'result_export_prepare', 'result_export_claim', 'result_export_plan', 'result_export_copy', 'result_export_claim_release'
+  'item_epoch_release', 'registry_finalize', 'local_delivery_verify', 'executor_lease_release', 'processing', 'result_export_prepare', 'result_export_claim', 'result_export_plan', 'result_export_copy', 'result_export_claim_release',
+  'mapping_publication', 'mapping_intent', 'mapping_recheck', 'mapping_csv',
+  'mapping_csv_root', 'mapping_csv_lock', 'mapping_csv_read', 'mapping_csv_write', 'mapping_intent_finish'
 ]);
 const ERROR_CODES = new Set(require('./diagnostic-causes').WORKFLOW_ERROR_CODES);
 

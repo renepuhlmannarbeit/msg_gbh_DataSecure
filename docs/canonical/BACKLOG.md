@@ -2,6 +2,20 @@
 
 Stand: 22.10.2026 · Produktstand 3.2.0-rc171 · gemeinsamer Windows-/Mac-Test-Pre-Release in Vorbereitung; RC170 bleibt unverändert.
 
+Diagnosequellen inzwischen ergänzt/gegengelesen und gezielt grün: neun feste
+Mappingphasen/Originalcode vor Normalisierung, RAW-Weiterwurf identisch, keine
+Retry-/Guard-/ACKänderung. Neues synthetisches Windows-Diagnosepaket als nächster
+Schritt; tatsächlicher GUI06-Primärfehler bleibt offen, nicht als behoben melden.
+
+Source05/17d6bc1: kein Release. Beide MacconsumerSUCCESS; Windows
+Native/Konverter/PaketPASS, HeadlessROT221/288 an einzelnem altem Testcaller,
+eng testseitig grün korrigiert. Echte GUI06 scheitert nach Vertagen/Neustart/
+Zielwechsel und gespeichertem Personenentscheid im privaten Mappingabschluss.
+Intent/Artefakt vorhanden, keine CSV/öffentliche Ausgabe; Primärfehler im Catch
+verloren. Inhaltsfreie Phasendiagnose, kausale Gegenprobe/Fix und neue gemeinsame
+Quellbindung/alle Endgates erforderlich. GUI01Defaultausgabe tatsächlich PASS;
+89synthetischeOriginale bytegleich, altes Profil/rote Belege unverändert erhalten.
+
 02:06: vier Testdateien eng korrigiert, unabhängiger tatsächlicher Gegenreview
 ohne Deltablocker. Voller Sidecar einschließlich acht echter Pipe-Negativen,
 tatsächlicher WindowsLoader/Guard/2MD/Readonly-Reopen und Main51Lifecycle grün;

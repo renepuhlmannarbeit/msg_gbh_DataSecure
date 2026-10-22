@@ -224,6 +224,8 @@ jobs:
           node tests/test-confidential-workbook.js
           node tests/test-result-initial-exact-binding.js
           node tests/test-initial-output-provisioning.js
+            node tests/test-mapping-diagnostics.js
+            node tests/test-standalone-batch-diagnostics.js
           npm run test:standalone
           node tests/test-native-export-test-lifecycle.js
       - name: Run the real isolated converter-worker boundary

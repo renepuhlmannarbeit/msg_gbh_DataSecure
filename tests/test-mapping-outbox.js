@@ -9,6 +9,9 @@ const { createSuite } = require('./helpers');
 const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-mapping-outbox-'));
 process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
 process.env.LOCALAPPDATA = path.join(base, 'localapp');
+// Expected mapping failures may emit real content-free diagnostic files.
+// Bind those writes explicitly too, before importing any product module.
+process.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'data');
 
 const { roots, sha256File } = require('../plugins/data-secure/server/gateway/common');
 const { mappingPath, mappingOutboxDir, readOutboxEntries, ensureMappingOutbox, removeMappingOutbox } = require('../plugins/data-secure/server/gateway/mapping');

@@ -15,6 +15,11 @@ const { writeFully, syncParentDirectory, linkWithTransientRetry } = require('./b
 const { assertWritableCapacity, normalizePostPreflightWriteError } = require('./storage-capacity');
 const { appendMapping } = require('./mapping');
 const { confirmPublication } = require('./standalone-anonymized-batch');
+const { recordBatchExecutionFailure } = require('./batch-execution-diagnostic');
+
+function observeFailure(phase, error) {
+  try { recordBatchExecutionFailure(phase, error); } catch { /* observation never changes the primary failure */ }
+}
 
 const SCHEMA = 'datasecure-anonymized-mapping-intent/1';
 const fail = () => Object.assign(new SafeError('Die private Ergebniszuordnung konnte nicht sicher bestätigt werden.'),
@@ -41,9 +46,16 @@ function readExact(target, payload, directory) {
   if (!sameFile(fs.lstatSync(target, { bigint: true }), record.identity)) throw fail();
   return record;
 }
-function ensurePrivateMappingIntent(state, item, publication = confirmPublication(state, item)) {
-  const target = intentPath(state, item), directory = bindDirectory(path.dirname(target));
-  const payload = Buffer.from(JSON.stringify(expectedIntent(state, item, publication)), 'utf8');
+function ensurePrivateMappingIntent(state, item, publication) {
+  let target, directory, payload, phase = 'mapping_publication';
+  // These operations previously preceded the normalizing try. Observation must
+  // retain their exact raw throw, including default-argument acquisition faults.
+  try {
+    if (publication === undefined) publication = confirmPublication(state, item);
+    phase = 'mapping_intent';
+    target = intentPath(state, item); directory = bindDirectory(path.dirname(target));
+    payload = Buffer.from(JSON.stringify(expectedIntent(state, item, publication)), 'utf8');
+  } catch (error) { observeFailure(phase, error); throw error; }
   try {
     try { return { target, record: readExact(target, payload, directory) }; }
     catch (error) { if (error?.code !== 'ENOENT') throw error; }
@@ -68,6 +80,7 @@ function ensurePrivateMappingIntent(state, item, publication = confirmPublicatio
       throw error;
     }
   } catch (error) {
+    observeFailure('mapping_intent', error);
     const normalized = normalizePostPreflightWriteError(error);
     if (['LOCAL_CAPACITY_UNAVAILABLE', 'LOCAL_CAPACITY_INSUFFICIENT', 'LOCAL_CAPACITY_RACE'].includes(normalized?.code)) throw normalized;
     throw fail();
@@ -87,17 +100,24 @@ function removePrivateMappingIntent(intent) {
       if (!sameFile(fs.lstatSync(target, { bigint: true }), record.identity)) throw fail();
     } });
     syncParentDirectory(target, fs);
-  } catch { throw fail(); }
+  } catch (error) { observeFailure('mapping_intent_finish', error); throw fail(); }
 }
 function commitPrivateMapping(state, item) {
-  const published = confirmPublication(state, item);
-  const intent = ensurePrivateMappingIntent(state, item, published);
-  // Revalidate private bytes immediately before exposing the local mapping.
-  const current = confirmPublication(state, item);
-  if (JSON.stringify(current.publication_binding) !== JSON.stringify(published.publication_binding) ||
-      JSON.stringify(current.document_result) !== JSON.stringify(published.document_result)) throw fail();
-  appendMapping(item.source_label || item.name, item.package_id, undefined, { documentResult: published.document_result });
-  removePrivateMappingIntent(intent);
-  return true;
+  let phase = 'mapping_publication';
+  try {
+    const published = confirmPublication(state, item);
+    phase = 'mapping_intent';
+    const intent = ensurePrivateMappingIntent(state, item, published);
+    // Revalidate private bytes immediately before exposing the local mapping.
+    phase = 'mapping_recheck';
+    const current = confirmPublication(state, item);
+    if (JSON.stringify(current.publication_binding) !== JSON.stringify(published.publication_binding) ||
+        JSON.stringify(current.document_result) !== JSON.stringify(published.document_result)) throw fail();
+    phase = 'mapping_csv';
+    appendMapping(item.source_label || item.name, item.package_id, undefined, { documentResult: published.document_result });
+    phase = 'mapping_intent_finish';
+    removePrivateMappingIntent(intent);
+    return true;
+  } catch (error) { observeFailure(phase, error); throw error; }
 }
 module.exports = Object.freeze({ commitPrivateMapping, ensurePrivateMappingIntent, intentPath });

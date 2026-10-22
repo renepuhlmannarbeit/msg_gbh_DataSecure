@@ -14,7 +14,8 @@ const diagnosticLog = createBestEffortDiagnosticLog({ directory: diagnosticDirec
 const diagnosticSession = /^[a-f0-9]{16,64}$/u.test(String(process.env.DATASECURE_STANDALONE_DIAGNOSTIC_SESSION || ''))
   ? process.env.DATASECURE_STANDALONE_DIAGNOSTIC_SESSION : null;
 let diagnosticLogAvailable = true;
-const BATCH_WORKER_PHASES = ['item_epoch_release', 'registry_finalize', 'local_delivery_verify', 'executor_lease_release', 'processing', 'result_export_prepare', 'result_export_claim', 'result_export_plan', 'result_export_copy', 'result_export_claim_release'];
+const BATCH_WORKER_PHASES = ['item_epoch_release', 'registry_finalize', 'local_delivery_verify', 'executor_lease_release', 'processing', 'result_export_prepare', 'result_export_claim', 'result_export_plan', 'result_export_copy', 'result_export_claim_release',
+  'mapping_publication', 'mapping_intent', 'mapping_recheck', 'mapping_csv', 'mapping_csv_root', 'mapping_csv_lock', 'mapping_csv_read', 'mapping_csv_write', 'mapping_intent_finish'];
 
 function diagnosticEvent(event, fields = {}) {
   try {
