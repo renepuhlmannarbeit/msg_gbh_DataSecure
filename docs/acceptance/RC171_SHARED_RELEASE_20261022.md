@@ -7,7 +7,73 @@ Nachtauftrag: Hauptagent prüft auch die gebundene eigene Windows-App nativ mit
 synthetischen Daten. Menschliche Abnahme bleibt davon getrennt USER_PENDING.
 RC170 und sämtliche früheren Pakete, Nutzerdateien, Profile und Evidenzen erhalten.
 
-## Neuer Quellenabschluss22.10.2026 04:34UTC vor Source09
+## Neuer geprüfter Quellenabschluss22.10.2026 05:17UTC vor Source10
+
+Enger Backendfix abgeschlossen: nur Store plus Ergebnisgenerationentest geändert.
+SafeMetadataOnly erlaubt approve/revoke Single/Batch für den vollständig sicheren
+Privatvektor ausschließlich bei kompletter Initial-/Generations-/ACK-/Directorykette
+ohne Native-/Legacyintents; identische private Belegobjekte direkt vor Commit
+erneut prüfen. Öffentlich weiterhin pending, keine Inhalts-/Open-/Publishrechte.
+Gebundene Residualreparatur unverändert, andere Schutzfehler bleiben hart.
+Finale StoreSHA35d1e55cc6774bb0197e45bc6f24942b2bd8b196bd30cfe891abcf10f924d198,
+TestSHA1a83a8ebf6650060ddd0175b9fcaa3258cbbf574a3e889933fe3189512768176.
+Autor9 neue tatsächliche Gruppen plus1ClosedGenerationgruppe PASS/stabil/Exit0;
+abschließende unabhängige tatsächliche Produkt-/Testgegenreviews ohne bestätigten
+Deltablocker. Swap-Originale außerhalb beobachteter Inventare, exakte Fehlercodes.
+
+Main las beide finalen Deltas und bestand anschließend den unveränderten VOLLEN
+Sidecartest sowie volle Ergebnisgenerationen111, Dokumentreview68, Context28,
+Entities9, RunEntities12 und Companions20. Alle7Gruppen Exit0, Inputs unverändert
+04:59:11–05:17:56.481UTC, Belegdist/rc171-pending-metadata-main-20261022/RESULT.json.
+Originalhelperscenario ohne ergänzten Publish/Timeoutänderung: OCRaus/an,
+Korrektur/Freigabe/exakteKopie/Neustart PASS, FastReview und Lifecycle PASS;
+Beobachtungsumfang WriterClose6Hosts/6Worker/exakteGenerationen, kein pauschaler
+Prozessbaum-/Mac-/GUI-Nachweis. Historische Source09-Rotbelege bleiben unverändert.
+
+Neuer ProduktFPbcf6ef2084b4256987dc7c81586b8d14bc219cd603fcd32887f23a3a61e4ab87/340,
+578Test-/Scriptinputs/310ab9c44015353155fa53ccd4b7b711321e2ca78527f76d78cd6e4840442e99.
+Source10normale/Legacyhelper create-only vorbereitet; Main las beide Generatoren,
+Launcher/Legacycode und prüfte exakte Ports sowie alle reinen Positiv-/Negativ-
+Helperfälle selbst PASS. Keine Profile/alten Ergebnisse kopiert/gestartet.
+Neue21GUI-Zielordner nur vorbereitet, noch nicht erzeugt. Kein nativer Recovery-
+oder Gesamt-/Paket-/Mac-/GUI-PASS aus diesem Vorabgegenlauf; neuer gemeinsamer
+Commit/Push/Dispatch/Freeze und alle vier lokalen Endgates/beideMacs/WindowsGUI19
+folgen frisch. Menschliche Windows/Mac/Office/Finder/TCC/M2-UAT bleibt USER_PENDING.
+
+### Historischer tatsächlicher Integrationsbefund22.10.2026 04:47UTC
+
+Source09/61d8347b59226feb1c65b65169e47c6669d06dcb ist NICHT freigabefähig.
+Windows Native298Rust/3ignoriert/Clippy/Release, Konverter30PDF/67Worker/37Office
+und Paket5/100MD0Fehler bestanden mit unveränderten Inputs. Headless endet regulär
+ROT61/289+0/11 am04:47:53.378UTC; beide Macconsumer39723196230 scheitern an
+derselben unveränderten Integration, kein Job wurde gecancelt oder gekillt.
+
+Bestätigte Ursache: Nach erfolgreicher Initialauflösung und gespeicherter sicherer
+privater Markdown-Korrektur labelt die Projektion den neuen Privatvektor pending.
+Obwohl noch kein neuer nativer Generationsintent besteht, blockiert die neue
+Entscheidungssperre auch die weiterhin unterstützte Legacy-Freigabe/Kopie
+(standalone-packaged-markdown.mjs:133). Main und zwei unabhängige tatsächliche
+Code-/Primärloggegenreviews bestätigen den Backend-Kompatibilitätsfehler, keinen
+Macrechte-/Corecrash oder initialen Readiness-Timeout. Zusätzlicher Teardown
+WRITER_PROBE_HOST_NOT_CLOSED bleibt erhalten, keine rückwirkende Quieszenzbehauptung
+oder Löschung der Testprofile. Originale rote Logs/FINALs bleiben unverändert.
+
+Nach Ende aller Freezejobs enger Store-/ResultGenerations-Fix in Arbeit:
+approve/revoke Single/Batch nur für vollständigen sicheren Privatvektor bei
+kompletter Initial-/Generations-/ACK-/Verzeichnisbindung ohne offene Native-
+oder Legacyintents; dieselben privaten Objektbeobachtungen bis unmittelbar vor
+Commit halten. Öffentlich weiterhin pending, keine Content-/Open-/Publishrechte.
+Residualunsicherheit bleibt ausschließlich frisch gebundene Reparatur, andere
+Schutzfehler bleiben hart. Unveränderte tatsächliche vollständige Sidecar-
+Integration und volle Ergebnisgenerationen durch Main vor neuem Freeze nötig.
+
+Source10normale/Legacyhelper ausschließlich create-only vorbereitet, keine alten
+Belege übernommen. Noch kein neuer gemeinsamer Commit/Freeze/Paket/GUI/Release.
+Source09-ZIP12c329eb…/EXEb9a6ef2d… bleibt historisch, nicht neu umetikettieren.
+Danach alle vier lokalen Gates, beide Macconsumer und echte neue Windows-GUI19
+einschließlich Source07-Altprofilreparatur frisch nötig. Menschliche UAT USER_PENDING.
+
+### Historischer Quellenabschluss22.10.2026 04:34UTC vor Source09
 
 Genau zwei Tests korrigiert, kein Produkt-/Policy-/Scanner-/Runtimeunterschied
 gegenüber06bbeb5. Neue direkte Keep-Ablehnung beweist Nichtmutation; historische

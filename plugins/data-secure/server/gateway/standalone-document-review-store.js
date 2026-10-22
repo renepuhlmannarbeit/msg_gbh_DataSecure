@@ -1151,7 +1151,7 @@ function createDocumentReviewStore(options = {}) {
         return result;
       }
       if (previous) throw fail('DOCUMENT_REVIEW_STALE');
-      const repair = assertDecisionPublication(batchId, request, context);
+      const publicationAdmission = assertDecisionPublication(batchId, request, context);
       // Preserve replay/idempotent ACK of old immutable raw revisions, but do
       // not create new anonymization actions in the conversion-only purpose.
       if (request.action === 'redact' && purpose(value.snapshot) === MARKDOWN) throw fail('DOCUMENT_REVIEW_INVALID');
@@ -1227,7 +1227,7 @@ function createDocumentReviewStore(options = {}) {
       }
       if (events.length >= 10000) throw fail('DOCUMENT_REVIEW_LIMIT');
       assertReadOperation(context);
-      if (repair) repair.assertFresh();
+      if (publicationAdmission) publicationAdmission.assertFresh();
       const record = { schema: 'datasecure-run-decision/1', batch_id: batchId, sequence: events.length + 1,
         parent_sha256: events.at(-1)?.event_sha256 || hash(`datasecure-run-decisions/1:${batchId}`),
         origin_document_id: documentId, operation_id: request.operation_id, request_sha256: requestHash, scope,
@@ -1258,7 +1258,7 @@ function createDocumentReviewStore(options = {}) {
       const previous = events.find(row => row.operation_id === request.operation_id);
       if (previous && (previous.scope !== 'selection' || previous.request_sha256 !== requestHash))
         throw fail('DOCUMENT_REVIEW_CONFLICT');
-      if (!previous) assertDecisionPublication(batchId, request, context);
+      const publicationAdmission = previous ? null : assertDecisionPublication(batchId, request, context);
       if (!previous && events.length >= 10000) throw fail('DOCUMENT_REVIEW_LIMIT');
       const targets = [], documents = []; let mode;
       // Read, reconcile and purpose-check every candidate under the same lock.
@@ -1293,6 +1293,7 @@ function createDocumentReviewStore(options = {}) {
       // held beginning of this pass before a selection can gain authority.
       assertReadOperation(context);
       if (!previous) {
+        if (publicationAdmission) publicationAdmission.assertFresh();
         const record = { schema: 'datasecure-run-decision/2', batch_id: batchId, sequence: events.length + 1,
           parent_sha256: events.at(-1)?.event_sha256 || hash(`datasecure-run-decisions/1:${batchId}`),
           origin_document_id: request.selection[0].document_id, operation_id: request.operation_id,
@@ -1893,8 +1894,8 @@ function createDocumentReviewStore(options = {}) {
     if (!previous) context.records.set(file, { identity: record.identity, directory: record.directory,
       size: record.bytes.length, sha256: digest });
   }
-  function repairAssessment(batchId, documents, initial, records, inspection) {
-    if (!inspection?.completeInventory || initial.processing_mode !== ANONYMIZE ||
+  function privatePublicationAssessment(batchId, documents, initial, records, inspection, metadataOnly = false) {
+    if (!inspection?.completeInventory || initial.processing_mode !== ANONYMIZE && !metadataOnly ||
         records.some(record => !record.complete)) return null;
     const selection = resultVector(documents);
     if (!validSelection(selection) || selection.length !== initial.files.length ||
@@ -1933,14 +1934,15 @@ function createDocumentReviewStore(options = {}) {
           exportRecords(context.runDirectory.path, documents).pending.length) return null;
       for (const row of selection) {
         const value = current(batchId, row.document_id, events, context);
-        if (value.revision !== row.revision || value.output_sha256 !== row.output_sha256) throw fail('DOCUMENT_REVIEW_STALE');
+        if (purpose(value.snapshot) !== initial.processing_mode || value.revision !== row.revision ||
+            value.output_sha256 !== row.output_sha256) throw fail('DOCUMENT_REVIEW_STALE');
         try { verifyCandidate(value); }
         catch (error) {
           if (error?.code !== 'DOCUMENT_REVIEW_RESIDUAL_PII') throw error;
           residual = true;
         }
       }
-      if (residual) {
+      if (residual || metadataOnly) {
         // These fixed private originals are held across the decision, not just
         // structurally re-read/adopted by two independent exporter calls.
         const privateRoot = options.dataRoot || dataRoot();
@@ -1949,7 +1951,7 @@ function createDocumentReviewStore(options = {}) {
       }
       assertFresh();
     } finally { recoveryReadContext = previousContext; }
-    if (!residual) return null;
+    if (!residual) return metadataOnly ? { safeMetadataOnly: true, assertFresh } : null;
     const binding = hash(JSON.stringify({ schema: 'datasecure-private-result-repair/1', batch_id: batchId,
       selection, journal_sequence: events.length, journal_tail: events.at(-1)?.event_sha256 || hash(`datasecure-run-decisions/1:${batchId}`),
       initial_binding_sha256: initial.binding_sha256, last_ack_generation: records.at(-1)?.op.operation_id || null }));
@@ -1962,7 +1964,15 @@ function createDocumentReviewStore(options = {}) {
       if (Object.hasOwn(request, 'repair_binding')) throw fail('DOCUMENT_REVIEW_STALE');
       return null;
     }
-    const listing = listLocked(batchId, context), publication = listing.result_publication;
+    // Legacy approval/copy APIs may change consent metadata for a fully safe
+    // saved vector which has not yet been published. This is not permission
+    // to change content, supersede any open native intent or open the result.
+    const metadataOnly = ['approve', 'revoke'].includes(request.action);
+    let listing;
+    context.metadataDecision = metadataOnly;
+    try { listing = listLocked(batchId, context); }
+    finally { delete context.metadataDecision; }
+    const publication = listing.result_publication;
     // Once an initial contract was observed, disappearance is a conflict, not
     // a newly discovered historical/no-initial authorization path.
     if (!publication) throw fail('RESULT_PUBLICATION_CONFLICT');
@@ -1973,7 +1983,10 @@ function createDocumentReviewStore(options = {}) {
       return context.repairAssessment;
     }
     if (Object.hasOwn(request, 'repair_binding')) throw fail('DOCUMENT_REVIEW_STALE');
-    if (publication?.state === 'pending') throw fail('RESULT_PUBLICATION_PENDING');
+    if (publication?.state === 'pending') {
+      if (metadataOnly && context.pendingMetadataAssessment) return context.pendingMetadataAssessment;
+      throw fail('RESULT_PUBLICATION_PENDING');
+    }
     if (publication?.state === 'conflict') throw fail('RESULT_PUBLICATION_CONFLICT');
     if (publication?.state === 'unavailable') throw fail('RESULT_DIRECTORY_UNAVAILABLE');
     return null;
@@ -1991,13 +2004,17 @@ function createDocumentReviewStore(options = {}) {
         : current_revision === 0 ? 'initial' : 'pending';
       if (inspection) {
         inspection.context.repairAssessment = null;
+        inspection.context.pendingMetadataAssessment = null;
         if (state === 'pending') {
-          const repair = repairAssessment(batchId, documents, initial, records, inspection);
+          const assessment = privatePublicationAssessment(batchId, documents, initial, records, inspection,
+            inspection.context.metadataDecision === true);
+          const repair = assessment?.binding ? assessment : null;
           if (repair) {
             inspection.context.repairAssessment = repair;
             return { result_publication: { state: 'repair_required', generation_id: latest?.op.operation_id || null,
               count: vector.length, current_revision, repair_binding: repair.binding } };
           }
+          if (assessment?.safeMetadataOnly === true) inspection.context.pendingMetadataAssessment = assessment;
         }
       }
       return { result_publication: { state, generation_id: latest?.op.operation_id || null, count: vector.length, current_revision } };

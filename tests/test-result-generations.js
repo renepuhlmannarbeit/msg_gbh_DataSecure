@@ -389,7 +389,137 @@ function historicalNewerCorrection(f, index) {
     batch_id: f.batchId, sequence: record.sequence, event_sha256: record.event_sha256, record }), { flag: 'wx', mode: 0o600 });
   fs.writeFileSync(path.join(run, `decision-${sequence}.json`), JSON.stringify(record), { flag: 'wx', mode: 0o600 });
 }
+function metadataInput(f, action, scope) {
+  const rows = f.store.list(f.batchId).documents;
+  const request = scope === 'batch' ? { action, operation_id: crypto.randomBytes(16).toString('hex'),
+    selection: rows.map(({ document_id, revision, output_sha256 }) => ({ document_id, revision, output_sha256 })) }
+    : { action, operation_id: crypto.randomBytes(16).toString('hex'), ranges: [], revision: rows[0].revision, output_sha256: rows[0].output_sha256 };
+  return { rows, request, apply: () => scope === 'batch' ? f.store.decideBatch(f.batchId, request)
+    : f.store.decide(f.batchId, rows[0].document_id, request) };
+}
+function privateRunPins(f) {
+  const directory = path.join(data, 'document-reviews', f.batchId);
+  return fs.readdirSync(directory, { recursive: true }).sort().map(name => {
+    const file = path.join(directory, name), stat = fs.lstatSync(file, { bigint: true });
+    assert.equal(stat.isSymbolicLink(), false);
+    return [name, stat.isDirectory() ? 'directory' : 'file', String(stat.dev), String(stat.ino),
+      ...(stat.isFile() ? [sha(fs.readFileSync(file))] : [])];
+  });
+}
 async function run() {
+  for (const mode of ['markdown-only', 'markdown-and-anonymize']) for (const scope of ['document', 'batch'])
+  await testAsync(`pending metadata ${mode}/${scope}: safe saved vector permits legacy approval/copy/revocation but no current result grant`, async () => {
+    const f = await fixture({ mode }); f.edit();
+    const initialFiles = fileSnapshot(f.bound.files.map(file => path.join(f.bound.directory.path, file.name)));
+    assert.equal(f.store.list(f.batchId).result_publication.state, 'pending');
+    assert.throws(() => f.edit(1), { code: 'RESULT_PUBLICATION_PENDING' }, 'only consent metadata, never another content mutation');
+    const legacy = createDocumentReviewStore({ ...f.options, nativeExport: undefined });
+    let row = f.row(0), selection = [{ document_id: row.document_id, revision: row.revision, output_sha256: row.output_sha256 }];
+    const expectedText = f.store.chunk(f.batchId, row.document_id, row.revision, 0).markdown;
+    assert.equal(legacy.previewExport(f.batchId, crypto.randomBytes(16).toString('hex'), selection).files.length, 1);
+    assert.throws(() => legacy.exportApproved(f.batchId, crypto.randomBytes(16).toString('hex'), selection), { code: 'DOCUMENT_REVIEW_UNAPPROVED' });
+    const approval = metadataInput(f, 'approve', scope), ack = approval.apply();
+    assert.equal(ack.ok, true); assert.equal(ack.affected_count, scope === 'batch' ? f.state.items.length : 1);
+    assert.deepEqual(approval.apply(), ack, 'exact metadata ACK stays idempotent');
+    row = f.row(0); assert.equal(row.approved, true);
+    selection = [{ document_id: row.document_id, revision: row.revision, output_sha256: row.output_sha256 }];
+    const operation = crypto.randomBytes(16).toString('hex'), preview = legacy.previewExport(f.batchId, operation, selection);
+    const exported = legacy.exportApproved(f.batchId, operation, selection); assert.equal(exported.exported_count, 1);
+    const target = legacy.resolveExport(f.batchId, operation);
+    assert.equal(fs.readFileSync(path.join(target.local_path, preview.files[0].name), 'utf8'), expectedText);
+    legacy.exportApproved(f.batchId, operation, selection, true);
+    const revocation = metadataInput(f, 'revoke', scope), revoked = revocation.apply();
+    assert.equal(revoked.ok, true); assert.equal(f.row(0).approved, false); assert.deepEqual(revocation.apply(), revoked);
+    assert.equal(f.store.list(f.batchId).result_publication.state, 'pending', 'metadata never claims current publication');
+    await rejects(() => f.resolve(), 'RESULT_PUBLICATION_PENDING'); assert.equal(f.calls.length, 0);
+    assert.equal(f.operations.size, 0, 'no native generation is created by approval or a separate legacy copy');
+    assertFileSnapshot(initialFiles);
+  });
+  await testAsync('pending metadata after a closed native generation: single and batch consent changes preserve its exact ACK and files', async () => {
+    for (const scope of ['document', 'batch']) {
+      const f = await fixture({ mode: 'markdown-and-anonymize' }); f.edit(); const published = await f.publish();
+      const folder = f.target(published), files = fileSnapshot(fs.readdirSync(folder, { recursive: true })
+        .map(name => path.join(folder, name)).filter(file => fs.statSync(file).isFile()));
+      f.edit(1); const calls = f.calls.length;
+      for (const action of ['approve', 'revoke']) {
+        const input = metadataInput(f, action, scope), ack = input.apply();
+        assert.equal(ack.ok, true); assert.deepEqual(input.apply(), ack);
+        assert.equal(f.row(0).approved, action === 'approve');
+        const publication = f.store.list(f.batchId).result_publication;
+        assert.equal(publication.state, 'pending'); assert.equal(publication.generation_id, published.result_publication.generation_id);
+        assert.equal(Object.hasOwn(publication, 'repair_binding'), false);
+      }
+      await rejects(() => f.resolve(), 'RESULT_PUBLICATION_PENDING');
+      assert.equal(f.operations.size, 1); assert.equal(f.calls.length, calls, 'consent never replays the prior native transaction or publishes another');
+      assertFileSnapshot(files);
+    }
+  });
+  await testAsync('pending metadata never changes a vector with an unacknowledged native generation', async () => {
+    for (const mode of ['markdown-only', 'markdown-and-anonymize']) for (const scope of ['document', 'batch']) {
+      const f = await fixture({ mode }); f.edit(); f.controls.losePublish = true;
+      await rejects(() => f.publish(), 'STANDALONE_IPC_TIMEOUT'); const before = privateRunPins(f), calls = f.calls.length;
+      for (const action of ['approve', 'revoke']) assert.throws(() => metadataInput(f, action, scope).apply(), { code: 'RESULT_PUBLICATION_PENDING' });
+      assert.deepEqual(privateRunPins(f), before); assert.equal(f.calls.length, calls); assert.equal(f.operations.size, 1);
+    }
+  });
+  await testAsync('pending metadata never borrows authority across an open legacy export intent', async () => {
+    for (const scope of ['document', 'batch']) {
+      const f = await fixture(); f.edit(); metadataInput(f, 'approve', scope).apply();
+      const row = f.row(0), selection = [{ document_id: row.document_id, revision: row.revision, output_sha256: row.output_sha256 }];
+      let attempts = 0;
+      const interrupted = createDocumentReviewStore({ ...f.options, nativeExport() {
+        attempts++; throw Object.assign(Error('test-owned native legacy refusal'), { code: 'SYNTHETIC_NATIVE_STOP' });
+      } });
+      await rejects(() => interrupted.exportApproved(f.batchId, crypto.randomBytes(16).toString('hex'), selection), 'SYNTHETIC_NATIVE_STOP');
+      assert.equal(attempts, 1); assert.equal(f.store.list(f.batchId).pending_export_count, 1);
+      const before = privateRunPins(f);
+      for (const action of ['approve', 'revoke']) assert.throws(() => metadataInput(f, action, scope).apply(), { code: 'RESULT_PUBLICATION_PENDING' });
+      assert.deepEqual(privateRunPins(f), before); assert.equal(f.calls.length, 0);
+    }
+  });
+  await testAsync('pending metadata requires the whole private vector to be safe, not just its selected document', async () => {
+    for (const scope of ['document', 'batch']) {
+      const f = await fixture({ mode: 'markdown-and-anonymize' }); f.edit(); historicalUnsafeKeep(f, 1);
+      assert.equal(f.store.list(f.batchId).result_publication.state, 'repair_required'); const before = privateRunPins(f);
+      for (const action of ['approve', 'revoke']) assert.throws(() => metadataInput(f, action, scope).apply(), { code: 'DOCUMENT_REVIEW_STALE' });
+      assert.deepEqual(privateRunPins(f), before); assert.equal(f.calls.length, 0);
+    }
+  });
+  await testAsync('pending metadata keeps original initial-binding, outbox and journal objects through single and batch commit', async () => {
+    for (const scope of ['document', 'batch']) for (const role of ['initial-binding', 'initial-outbox', 'journal']) for (const mutation of ['missing', 'same-bytes-swap']) {
+      const f = await fixture({ mode: 'markdown-and-anonymize', count: 1 }); f.edit();
+      const input = metadataInput(f, 'approve', scope), run = path.join(data, 'document-reviews', f.batchId);
+      const target = role === 'initial-binding' ? path.join(data, 'result-publication-bindings', `${f.batchId}.json`)
+        : role === 'initial-outbox' ? exporter.recordPath(f.batchId) : path.join(run, 'decision-000001.json');
+      const retired = path.join(root, `retired-pending-metadata-${serial}-${scope}-${role}-${mutation}.json`);
+      assert.equal(fs.existsSync(retired), false);
+      const bytes = fs.readFileSync(target), engine = require('../plugins/data-secure/server/pii-engine'), scan = engine.scanResidual;
+      let calls = 0, changed = false;
+      engine.scanResidual = function(...args) {
+        if (++calls === 2) {
+          fs.renameSync(target, retired); // outside every observed private/run inventory
+          if (mutation === 'same-bytes-swap') fs.writeFileSync(target, bytes, { flag: 'wx', mode: 0o600 });
+          changed = true;
+        }
+        return scan.apply(this, args);
+      };
+      const expectedCode = mutation === 'missing' && role !== 'journal' ? 'RESULT_PUBLICATION_CONFLICT' : 'DOCUMENT_REVIEW_CONFLICT';
+      try { assert.throws(input.apply, { code: expectedCode }); }
+      finally { engine.scanResidual = scan; }
+      assert.equal(changed, true, `${scope}/${role}/${mutation}: real candidate check reached the precommit fault`);
+      assert.equal(fs.existsSync(path.join(run, 'commit-000002.json')), false); assert.equal(f.calls.length, 0);
+    }
+  });
+  await testAsync('pending metadata never downgrades private scanner policy, IO or guard failure into consent authority', async () => {
+    for (const scope of ['document', 'batch']) for (const code of ['DOCUMENT_REVIEW_POLICY_CHANGED', 'EIO', 'OWNERSHIP_GUARD_BUSY']) {
+      const f = await fixture({ mode: 'markdown-and-anonymize' }); f.edit(); const input = metadataInput(f, 'approve', scope), before = privateRunPins(f);
+      const engine = require('../plugins/data-secure/server/pii-engine'), scan = engine.scanResidual;
+      engine.scanResidual = () => { throw Object.assign(Error('test-owned classified scanner failure'), { code }); };
+      try { assert.throws(input.apply, { code: 'RESULT_PUBLICATION_CONFLICT' }); }
+      finally { engine.scanResidual = scan; }
+      assert.deepEqual(privateRunPins(f), before); assert.equal(f.calls.length, 0);
+    }
+  });
   for (const action of ['entities', 'redact', 'restore_base']) await testAsync(`historical unsafe private result: explicit ${action} repairs without publishing unsafe bytes`, async () => {
     const f = await fixture({ mode: 'markdown-and-anonymize', count: 1 });
     f.edit(); const previous = await f.publish(), priorFiles = fileSnapshot(fs.readdirSync(f.target(previous), { recursive: true })

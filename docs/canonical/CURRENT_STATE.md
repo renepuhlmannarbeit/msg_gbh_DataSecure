@@ -2,7 +2,41 @@
 
 Stand: 22.10.2026 · 3.2.0-rc171 · neuer gemeinsamer Windows-/Mac-Test-Pre-Release in Vorbereitung; RC170 unverändert veröffentlicht.
 
-## Neuester Quellenabschluss22.10.2026 04:34UTC
+## Neuester Quellenabschluss22.10.2026 05:17UTC vor Source10
+
+Pending-Metadatenkompatibilität eng im Store korrigiert, kein Frontend-/Policy-/
+Deadline-/Core-/Rechtedelta. approve/revoke Single/Batch nur für sicheren vollständigen
+Privatvektor mit vollständigen ACKs/ohne Native-/Legacyintents und erneuter identischer
+Privatobjektbindung direkt vor Commit; öffentlich pending/Content/Open/Publishsperre
+und gebundene Residualreparatur unverändert. Autor10neueGruppen PASS/stabil;
+unabhängige tatsächliche Produkt-/Testgegenreviews ohne bestätigten Deltablocker.
+Main las finale Deltas und bestand unveränderte volle Sidecarintegration plus
+Ergebnisgenerationen111/Dokumentreview68/Context28/Entities9/Run12/Companions20:
+alle7Gruppen Exit0/inputs_unchangedtrue,05:17:56.481UTC. Keine Reparatur des Tests
+durch zusätzlichen Publish oder gelockerte Frist. BelegRC171Shared/Maincountercheck.
+NeuerFPbcf6ef2084b4256987dc7c81586b8d14bc219cd603fcd32887f23a3a61e4ab87/340,
+578Tests/310ab9c44015353155fa53ccd4b7b711321e2ca78527f76d78cd6e4840442e99.
+Source10helperMainexaktePort-/PuregegenprüfungenPASS, kein Profil/Appstart.
+Neuer gemeinsamer Commit/Freeze/frische vier lokale Gates/beideMacs/WindowsGUI19
+folgen; keine alten Pakete/Belege umetikettieren. Menschliche UAT USER_PENDING.
+
+### Historischer tatsächlicher Prüfstand22.10.2026 04:47UTC
+
+Source09/61d8347 ist NICHT freigabefähig. WindowsNative298Rust/3ignored,
+Konverter30/67/37 und Paket5/100MD bestanden/stabileInputs. Headless endet ROT
+61/289+0/11, beide Mac39723196230 ebenfalls ROT in derselben unveränderten
+Sidecarintegration: sichere gespeicherte Privatkorrektur ohne neuen Nativeintent
+wird durch zu breite pending-Sperre auch von Legacy-approve/revoke ausgeschlossen.
+Main+zwei unabhängige tatsächliche Gegenreviews bestätigen Backendkompatibilitäts-
+fehler, keinen Macrechte-/Corecrash. Alle09Jobs regulär beendet, kein Cancel/Kill;
+roter Primärfehler samt Writerteardown erhalten, keine Cleanup-/Quieszenzbehauptung.
+Enger Store-/ResultGenerations-Fix jetzt in Arbeit, öffentlich pending und alle
+Content-/Open-/Publish-/echten Intent-/Residualschutzgrenzen bleiben. Frische volle
+Sidecar-/Ergebnisgenerationengegenprüfung vor neuem Commit/Freeze zwingend.
+Source10helper nur vorbereitet. Kein09GUI/Snapshot/Release; neue vier lokale
+Gates/beideMacs/WindowsGUI19 folgen, menschliche UAT USER_PENDING. DetailsRC171Shared.
+
+### Historischer Quellenabschluss22.10.2026 04:34UTC
 
 Reiner Zwei-Testfix fertig:9/9Einzel-/12/12RunfällePASS,unabhängig am echten Code
 gegengelesen. Main las Delta und bestand sechs vollständige Nachbarsuiten mit

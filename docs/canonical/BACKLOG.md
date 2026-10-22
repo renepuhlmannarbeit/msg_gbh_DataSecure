@@ -2,7 +2,38 @@
 
 Stand: 22.10.2026 · Produktstand 3.2.0-rc171 · gemeinsamer Windows-/Mac-Test-Pre-Release in Vorbereitung; RC170 bleibt unverändert.
 
-## Aktive Übergabegates nach Testfix,22.10.2026 04:34UTC
+## Aktive Übergabegates nach geprüftem Fix,22.10.2026 05:17UTC
+
+Backend-Pendingfix abgeschlossen und unabhängig am tatsächlichen Produkt-/Testdelta
+gegengelesen. Autor10neueGruppenPASS/stabil; Main unveränderte volle Sidecarintegration
+sowie111Ergebnisgenerationen/68Review/28Context/9Entity/12Run/20Companionfälle grün,
+alle7Gruppen Exit0/stabil bis05:17:56.481UTC. Historische09Rotbelege behalten;
+keine zusätzlichen Publish-/Timeoutabkürzungen im Originaltest. Öffentliche pending-
+und Content/Open/Publishgrenzen sowie alle echten Intent-/Residualschutzfälle bleiben.
+Noch offen: neuer gemeinsamer Source10Commit/FP/Freeze, vier frische lokale Gates,
+beide Macpakete/Review, neue paketgebundene WindowsGUI19 einschließlich tatsächlicher
+Source07-Altprofilreparatur sowie lokale/GitHubÜbergabe. Source10helperMainpurePASS,
+noch kein Stage/Start/Recovery-PASS. Menschliche UAT USER_PENDING. DetailsRC171Shared.
+
+### Historische Übergabegates nach Kompatibilitätsbefund,22.10.2026 04:47UTC
+
+1. Engen Backendfix für Legacy-approve/revoke nach sicher gespeicherter privater
+   Korrektur ohne neuen Nativeintent abschließen und unabhängig am echten Delta
+   gegenlesen. Nur vollständiger sicherer Wholevector/komplette Initial-/ACK-Kette,
+   keine Native-/Legacyintents; dieselben privaten Belege direkt vor Single-/
+   Batchcommit frisch prüfen. Öffentliches pending/Content-/Open-/Publishsperren
+   sowie gebundene Residualreparatur und alle anderen Schutzfehler beibehalten.
+2. Unveränderte vollständige Source-Sidecarintegration und volle Ergebnisgenerationen
+   durch Main grün/stabil nachweisen. Source09Headless61/289+0/11 und beideMacs
+   39723196230 sind ROT, kein fehlender Testpublish als Abkürzung einfügen.
+   Native298Rust/3ignored/Konverter30/67/37/Paket5 dagegen PASS/stabil; alle Jobs
+   regulär beendet. Zusätzlichen Writerteardown/erhaltene Fixtures nicht löschen.
+3. Danach neuer gemeinsamer Source10Commit/FP und vier frische lokale Endgates,
+   beideMacpakete/Review, echte neueWindowsGUI19inkl tatsächlicher Source07-
+   Altprofilreparatur, lokale+GitHubÜbergabe. Source10helper nur vorbereitet,
+   keine alten Belege übernehmen. Menschliche UAT bleibt USER_PENDING.
+
+### Historische Übergabegates nach Testfix,22.10.2026 04:34UTC
 
 Zwei reine Entitytests korrigiert/9+12FällePASS; historischer Schutz und neue
 Precommit-Nichtmutation getrennt erhalten. Unabhängiges tatsächliches Gegenlesen
