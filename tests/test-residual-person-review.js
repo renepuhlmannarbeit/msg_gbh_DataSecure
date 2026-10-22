@@ -639,7 +639,147 @@ test('Linux local dialog logic asks once for identical residual occurrences', ()
 // The actual Windows form probe lives in test-native-windows-forms.js and
 // requires explicit desktop permission. Engine/policy integration stays here.
 
+test('nested residual hypotheses retain only individually bound child Keep capabilities', () => {
+  const source = 'NATIVE TEXT ON DAMAGED';
+  const findings = [
+    { type: 'PERSON_CANDIDATE', text: source, start: 0, end: source.length },
+    { type: 'PERSON_CANDIDATE', text: 'ON DAMAGED', start: 12, end: source.length }
+  ];
+  assert.throws(() => residualPersonAmbiguities(source, source, findings),
+    error => error.code === 'AMBIGUITY_REVIEW_REQUIRED', 'default/Cowork retains its existing nested refusal');
+  const candidates = residualPersonAmbiguities(source, source, findings, { productChannel: 'standalone' });
+  assert.equal(candidates.length, 1);
+  const binding = createPersonReviewBinding(source, candidates, { productChannel: 'standalone' });
+  binding.confirm(decisions({ ambiguities: candidates }), [], source);
+  const token = binding.forPublication('', source, '');
+  const { reviewedPersonRanges } = require('../plugins/data-secure/server/privacy/residual-person-review');
+  assert.deepEqual(reviewedPersonRanges(token, source), [{ start: 0, end: source.length },
+    { start: 12, end: source.length }]);
+  assert.deepEqual(reviewedPersonRanges(token, source + '!'), []);
+  const clone = createPersonReviewBinding(source, candidates.map(row => ({ ...row })), { productChannel: 'standalone' });
+  clone.confirm(decisions({ ambiguities: candidates }), [], source);
+  assert.deepEqual(reviewedPersonRanges(clone.forPublication('', source, ''), source),
+    [{ start: 0, end: source.length }], 'public-shaped clones cannot mint child capabilities');
+  assert.ok(pii.scanResidual(source, 'general', [{ type: 'PERSON_ALIAS', value: 'DAMAGED' }],
+    { reviewedPersonCandidates: token }).some(row => row.type === 'RESIDUAL_ENTITY'),
+  'nested weak Keep never waives a dictionary hard finding');
+});
+
+test('nested residual grouping never repairs crossing, stale, missing-copy or surrogate provenance', () => {
+  const source = 'ALPHA BETA GAMMA';
+  assert.throws(() => residualPersonAmbiguities(source, source, [
+    { type: 'PERSON_CANDIDATE', text: 'ALPHA BETA', start: 0, end: 10 },
+    { type: 'PERSON_CANDIDATE', text: 'BETA GAMMA', start: 6, end: 16 }
+  ], { productChannel: 'standalone' }), error => error.code === 'AMBIGUITY_REVIEW_REQUIRED');
+  assert.throws(() => residualPersonAmbiguities('Max Mustermann – KEINE REALDATEN\n'.repeat(2),
+    '[PERSON_001] – KEINE REALDATEN\n', [
+      { type: 'PERSON_CANDIDATE', text: 'KEINE REALDATEN', start: 15, end: 29 },
+      { type: 'PERSON_CANDIDATE', text: 'REALDATEN', start: 21, end: 29 }
+    ]), error => error.code === 'AMBIGUITY_REVIEW_REQUIRED');
+  const input = 'A😀B', bad = { type: 'PERSON_CANDIDATE', text: input.slice(2, 4), start: 2, end: 4 };
+  assert.throws(() => residualPersonAmbiguities(input, input, [bad]), error => error.code === 'AMBIGUITY_REVIEW_REQUIRED');
+  const rows = residualPersonAmbiguities(source, source, [
+    { type: 'PERSON_CANDIDATE', text: source, start: 0, end: source.length },
+    { type: 'PERSON_CANDIDATE', text: 'BETA', start: 6, end: 10 }
+  ], { productChannel: 'standalone' });
+  rows[0].anonymized_end--;
+  assert.throws(() => createPersonReviewBinding(source, rows, { productChannel: 'standalone' }),
+    error => error.code === 'AMBIGUITY_REVIEW_REQUIRED');
+});
+
+test('raw nested/duplicate finding limits apply before grouping', () => {
+  const source = 'ALPHA BETA';
+  const finding = { type: 'PERSON_CANDIDATE', text: source, start: 0, end: source.length };
+  assert.equal(residualPersonAmbiguities(source, source, Array(5000).fill(finding),
+    { productChannel: 'standalone' }).length, 1);
+  assert.throws(() => residualPersonAmbiguities(source, source, Array(5001).fill(finding),
+    { productChannel: 'standalone' }), error => error.code === 'LOCAL_REVIEW_TOO_LARGE');
+});
+
+test('nested child capabilities share the total binding budget with independent prose choices', () => {
+  const { personProseAmbiguities } = require('../plugins/data-secure/server/privacy/person-ambiguities');
+  for (const count of [4998, 4999]) {
+    const source = 'ALPHA BETA GAMMA\n' + 'Anna Linden sagt etwas.\n'.repeat(count);
+    const residual = residualPersonAmbiguities(source, source, [
+      { type: 'PERSON_CANDIDATE', text: 'ALPHA BETA GAMMA', start: 0, end: 16 },
+      { type: 'PERSON_CANDIDATE', text: 'BETA GAMMA', start: 6, end: 16 }
+    ], { productChannel: 'standalone' });
+    const prose = personProseAmbiguities(source, source, { productChannel: 'standalone', profile: 'general' })
+      .filter(candidate => candidate.original_start >= 'ALPHA BETA GAMMA\n'.length);
+    assert.equal(prose.length, count);
+    const bind = () => createPersonReviewBinding(source, [...prose, ...residual], { productChannel: 'standalone' });
+    if (count === 4999) assert.throws(bind, error => error.code === 'LOCAL_REVIEW_TOO_LARGE',
+      '5000 visible decisions plus one private child are not a 5000-range proof');
+    else {
+      const binding = bind(), candidates = [...prose, ...residual];
+      binding.confirm(decisions({ ambiguities: candidates }), [], source);
+      const { reviewedPersonRanges, bindStandaloneDocumentKeeps } =
+        require('../plugins/data-secure/server/privacy/residual-person-review');
+      const ranges = reviewedPersonRanges(binding.forPublication('', source, ''), source);
+      assert.equal(ranges.length, 5000);
+      assert.ok(bindStandaloneDocumentKeeps(source, ranges, []));
+    }
+  }
+});
+
+test('private dictionary coordinates use the unchanged scanner and retain type collisions', () => {
+  const source = 'PAGE / Page / backpage / [PERSON_001]';
+  const dictionary = [{ type: 'PERSON_ALIAS', value: 'page' }];
+  assert.deepEqual(pii.scanResidual(source, 'general', dictionary).filter(row => row.type === 'RESIDUAL_ENTITY'),
+    [{ type: 'RESIDUAL_ENTITY', text: 'page' }], 'default hard verdict has no new public fields');
+  const evidence = pii.scanResidual(source, 'general', [...dictionary, { type: 'PERSON', value: 'PAGE' }],
+    { includeKnownValueSpans: true }).filter(row => row.type === 'RESIDUAL_ENTITY');
+  assert.deepEqual(evidence.map(row => [row.text, row.start, row.end, row.dictionary_type]),
+    [['PAGE', 0, 4, 'PERSON_ALIAS'], ['Page', 7, 11, 'PERSON_ALIAS'],
+      ['PAGE', 0, 4, 'PERSON'], ['Page', 7, 11, 'PERSON']]);
+  const separated = 'Özdemir\t\n BERGER';
+  const actual = pii.scanResidual(separated, 'general', [{ type: 'PERSON_ALIAS', value: 'özdemir berger' }],
+    { includeKnownValueSpans: true }).find(row => row.type === 'RESIDUAL_ENTITY');
+  assert.deepEqual([actual.text, actual.start, actual.end], [separated, 0, separated.length]);
+  const capped = pii.scanResidual('Page '.repeat(5001), 'general', dictionary,
+    { includeKnownValueSpans: true }).filter(row => row.type === 'RESIDUAL_ENTITY');
+  assert.deepEqual(capped, [{ type: 'RESIDUAL_ENTITY', text: 'page' }], 'excess evidence remains an unlocated hard refusal');
+  const duplicated = pii.scanResidual('Page '.repeat(3000), 'general', [...dictionary, ...dictionary],
+    { includeKnownValueSpans: true }).filter(row => row.type === 'RESIDUAL_ENTITY');
+  assert.equal(duplicated.filter(row => Number.isSafeInteger(row.start)).length, 3000);
+  assert.deepEqual(duplicated.at(-1), { type: 'RESIDUAL_ENTITY', text: 'page' },
+    'the detail budget spans all dictionary rows, including duplicated aliases');
+});
+
 async function main() {
+  await testAsync('partial-PDF text prepares nested hypotheses and masks every restored alias before final publication', async () => {
+    const { prepareTextPrivacyReview, resolveTextPrivacyReview, finalizeTextPrivacyReview } =
+      require('../plugins/data-secure/server/gateway/privacy-text-operation');
+    const { createBatchPseudonymRegistry, READABLE_CONTRACT_VERSION } =
+      require('../plugins/data-secure/server/batch-pseudonym-registry');
+    const text = '## Seite 1\n\nFIRST VALID PAGE - Anna Berger - Elbwiese Beratung GmbH\n\n' +
+      'Synthetisches Dokument  \nAnna Berger  \n\nElbwiese Beratung GmbH  \n' +
+      '`[EMAIL_REDACTED]`  \n`[PHONE_REDACTED]`  \nDE10370400440532013001  \nBeispielweg 3, 10115 Berlin  \n\n\n' +
+      '## Seite 2\n\nNATIVE TEXT ON DAMAGED IMAGE PAGE - Kontakt anna@example.invalid\n\n' +
+      '## Seite 3\n\nLAST VALID PAGE RETAINED';
+    for (const keep of [false, true]) {
+      const registry = createBatchPseudonymRegistry(Buffer.alloc(32, 47), { contractVersion: READABLE_CONTRACT_VERSION });
+      try {
+        registry.assign('PERSON', 'Anna Berger'); registry.assign('ORG', 'Elbwiese Beratung GmbH');
+        const state = prepareTextPrivacyReview({ text, profile: 'general', productChannel: 'standalone',
+          consumerOptions: { productChannel: 'standalone' }, registry, captureTrace: true, ocrLineReview: true });
+        assert.equal(state.ambiguities.length, 3);
+        const body = await resolveTextPrivacyReview(state, keep ? input => reviewedBatchText(input,
+          input.ambiguities.map(candidate => ({ ambiguity_id: candidate.ambiguity_id,
+            decision: input.original_text.slice(candidate.original_start, candidate.original_end) === 'FIRST VALID PAGE'
+              ? 'keep' : 'redact' }))) : null,
+        { reviewPolicy: keep ? 'manual' : 'automatic-conservative' });
+        if (keep) assert.throws(() => finalizeTextPrivacyReview(state, body, { prefix: '', suffix: '' }),
+          error => error.code === 'RESIDUAL_PII', 'a restored known surname alias cannot be kept through a weak review');
+        else {
+          const result = finalizeTextPrivacyReview(state, body, { prefix: '', suffix: '' });
+          assert.equal(result.transform_trace.complete, true);
+          assert.doesNotMatch(result.markdown, /Anna|Berger|Elbwiese|GmbH|PAGE|anna@example|DE10370400440532013001|10115 Berlin/iu);
+          assert.deepEqual(pii.scanResidual(result.markdown, 'general', result.dictionary), []);
+        }
+      } finally { registry.dispose(); }
+    }
+  });
   await testAsync('ordinary Standalone conversational names require a bound choice and preserve technical language', async () => {
     const cases = [
       ['In der Besprechung sagte Anna Linden, dass die Lieferung morgen erfolgt.', 'Anna Linden'],

@@ -1,5 +1,6 @@
 'use strict';
 const { LEGACY_PERSON_FIELD_POLICY, CONTENT_PERSON_FIELD_POLICY, personFieldContextForConsumer, personFieldPattern, isPersonFieldLabel } = require('../core/person-field-policy');
+const { RESOURCE_LIMITS } = require('../resource-limits');
 
 const {
   URL_RE,
@@ -981,17 +982,26 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
     }
   }
 
+  let knownValueDetails = 0;
   for (const value of knownValues || []) {
     const typed = value && typeof value === 'object';
     const v = normalizeSpaces(typed ? value.value : value);
     if (v.length < 3) continue;
     const occurrences=findLiteralSpans(clean,v,'','RESIDUAL_ENTITY',0);
     const credentialOrg=typed ? ['ORGANIZATION','PROJECT'].includes(value.type) : residualOrgKeys.has(key(v));
-    if (occurrences.some((s)=>!reviewedLiterals.some(range => s.start >= range.start && s.end <= range.end) &&
+    const remaining = occurrences.filter((s)=>!reviewedLiterals.some(range => s.start >= range.start && s.end <= range.end) &&
         !insideCredentialValue(s.start, s.end) && !(credentialOrg &&
         (credentialOrganizationRole(clean,s.start,s.end,credentialRanges)!=='private' ||
-         isTechnologyOrganizationSpan(clean,s.start,s.end))))) {
-      out.push({ type: 'RESIDUAL_ENTITY', text: v });
+         isTechnologyOrganizationSpan(clean,s.start,s.end))));
+    if (remaining.length) {
+      // Internal review preparation may need every actual dictionary-hit
+      // coordinate. Default/final gates keep their unchanged hard verdict.
+      if (options.includeKnownValueSpans === true &&
+          remaining.length <= RESOURCE_LIMITS.MAX_STANDALONE_REVIEW_FINDINGS - knownValueDetails) {
+        knownValueDetails += remaining.length;
+        for (const span of remaining) out.push({ type: 'RESIDUAL_ENTITY', text: span.text,
+          start: span.start, end: span.end, dictionary_type: typed ? value.type : null });
+      } else out.push({ type: 'RESIDUAL_ENTITY', text: v });
     }
   }
 

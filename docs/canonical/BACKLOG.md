@@ -2,6 +2,42 @@
 
 Stand: 22.10.2026 · Produktstand 3.2.0-rc171 · gemeinsamer Windows-/Mac-Test-Pre-Release in Vorbereitung; RC170 bleibt unverändert.
 
+## Aktive Übergabegates22.10.2026 10:49UTC nach geprüftem Nestedfix
+
+Enger Drei-Produktmodulfix samt sechs neuen Testgruppen abgeschlossen und
+unabhängig tatsächlich gegengelesen. Finale Restprüfung unverändert hart,
+keine pauschalen Alias-/Contains-/Policyausnahmen. Globale Detailgrenze und
+gemeinsames privates Kindintervallgewicht max5000 eng korrigiert/gegengelesen.
+Main finale7Gruppen120FällePASS/stabil/Exit0 bis10:48:17.596UTC, aktuelle gebundene
+PDFgegenprobePASS/Keepfinalverweigert/Originalrecordsbytegleich. FPb494f315…f66c8b/340,
+578Testinputs08827fe6…acf1f. Frühere230Fälle aufbabFP bleiben Vorabgrün.
+
+Offen: gemeinsamer neuer Source12Commit/Push/Freeze, vier frische lokale Gesamt-/
+Native-/Konverter-/Paket-Endgates, beideMacconsumer+echte Artefakt/Loggegenreviews,
+neue gebundeneWindowsGUI19 besondersPDFgeführt/Auto, lokale+GitHubÜbergabe.
+23Source12Helfer vorbereitet/purePASS; keine altenFINALs oderGUI umetikettieren.
+KeineMainintegration; allealtenProfile/Pakete/roten+grünenBelege erhalten.
+Menschliche Windows/Mac/Zielhost-/Office-UAT USER_PENDING. DetailsRC171Shared.
+
+## Historische Übergabegates22.10.2026 10:26UTC – nested Reviewaufbereitung
+
+1. Bestätigte Source11-PDF-Reviewengstellen eng abschließen: vollständig einzeln
+   quellgebundene echte Schachtelungen gemeinsam entscheiden, ausschließlich
+   private Kindintervall-Capabilities, kein Crossing-/Kopien-/Literalbypass.
+   Nur scanneridentisch belegte PERSON_ALIAS-Hardtreffer vollständig in offenen
+   gebundenen Reviewintervallen privat pending; andere Hardreste sofort rot,
+   finale Restprüfung unverändert/Keep muss weiterhin verweigern. Drei echte
+   Produktionsmodule geändert, Main gezielte Tests und unabhängiger tatsächlicher
+   Delta-Gegenreview laufen. Kein fertiger Fix-/Release-PASS behauptet.
+2. Danach neuer gemeinsamer Source12Commit/FP, frische vier lokale Endgates,
+   WindowsZIP+beideMacconsumer/Artefakt+Loggegenreviews, echte neue Windows19-
+   Orakel einschließlich Auto/geführt-PDF sowie lokale+GitHubÜbergabe.
+3. Source11 alle4Endgates/Mac39754454908/VERIFYs/Snapshot PASS, Pause→Neulauf→
+   alterRun36/36 nativ bestanden. Diese bleiben historische Evidenz zum exakten
+   e4d61ea, kein Ersatz für neue Fixbytes. App normalgeschlossen/Census0;
+   alle alten Profile/Ergebnisse/roten+grünen Nachweise erhalten. Keine Main-
+   integration/Tag/Release bis geeignet; menschliche Zielhost-UAT USER_PENDING.
+
 ## Aktive Übergabegates nach Pause-Aufnahmefix22.10.2026 09:17UTC
 
 Enger main.rs-Fix mit2Tests fertig/gegengelesen: paused nur mit explizit beiden

@@ -8,6 +8,9 @@ const { sourceVariableTokens, VARIABLE_PLACEHOLDER_RE } = require('./spans');
 // These capabilities live only in the processing call. They are neither a
 // persisted allowlist nor a user/MCP parameter, and contain no public fields.
 const approvals = new WeakMap();
+// A nested hypothesis is not renderer-supplied approval for arbitrary text
+// inside a larger range. Retain only individually source-bound child spans.
+const nestedHypotheses = new WeakMap();
 const TYPE = 'person_residual_ambiguous';
 
 function invalidReview() {
@@ -66,15 +69,14 @@ function residualPersonAmbiguities(originalText, anonymizedText, findings, optio
     fragmentProvenance.set(fragment, complete);
     return complete;
   };
-  const candidates = [];
+  const candidates = [], children = new Map();
   for (const finding of [...findings].sort((a, b) => a.start - b.start || b.end - a.end)) {
     if (finding?.type !== 'PERSON_CANDIDATE' || !Number.isSafeInteger(finding.start) ||
         !Number.isSafeInteger(finding.end) || finding.start < 0 || finding.end <= finding.start ||
-        finding.end > anonymized.length || anonymized.slice(finding.start, finding.end) !== finding.text) throw invalidReview();
+        finding.end > anonymized.length || anonymized.slice(finding.start, finding.end) !== finding.text ||
+        /[\uDC00-\uDFFF]/u.test(anonymized[finding.start] || '') ||
+        /[\uDC00-\uDFFF]/u.test(anonymized[finding.end] || '')) throw invalidReview();
     if (candidates.some((item) => item.anonymized_start === finding.start && item.anonymized_end === finding.end)) continue;
-    // Do not guess how overlapping name hypotheses should be grouped. The
-    // terminal residual gate remains in force when exact alignment is absent.
-    if (candidates.some((item) => item.anonymized_start < finding.end && finding.start < item.anonymized_end)) throw invalidReview();
     const retained = preserved.find((range) => finding.start >= range.anonymized_start &&
       finding.end <= range.anonymized_start + range.original_end - range.original_start);
     if (!retained) throw invalidReview();
@@ -86,6 +88,18 @@ function residualPersonAmbiguities(originalText, anonymizedText, findings, optio
     const start = retained.original_start + finding.start - retained.anonymized_start;
     const end = start + finding.end - finding.start;
     if (original.slice(start, end) !== finding.text) throw invalidReview();
+    const outer = candidates.find(item => item.anonymized_start < finding.end && finding.start < item.anonymized_end);
+    if (outer) {
+      // Only an existing, fully bound outer hypothesis may own an inner one.
+      // Crossing hypotheses, different source offsets and generated text still
+      // fail closed; neither first-match guessing nor a new union identity.
+      if (options.productChannel !== 'standalone' ||
+          finding.start < outer.anonymized_start || finding.end > outer.anonymized_end ||
+          start < outer.original_start || end > outer.original_end ||
+          start - finding.start !== outer.original_start - outer.anonymized_start) throw invalidReview();
+      children.get(outer).push(Object.freeze({ start: finding.start, end: finding.end }));
+      continue;
+    }
     candidates.push({
       ambiguity_id: `person-residual:v1:${String(candidates.length + 1).padStart(6, '0')}`,
       type: TYPE,
@@ -95,7 +109,11 @@ function residualPersonAmbiguities(originalText, anonymizedText, findings, optio
       anonymized_start: finding.start,
       anonymized_end: finding.end
     });
+    children.set(candidates.at(-1), []);
   }
+  for (const item of candidates) if (children.get(item).length) nestedHypotheses.set(item, {
+    text: anonymized, fields: Object.freeze({ ...item }), ranges: Object.freeze(children.get(item))
+  });
   return candidates;
 }
 
@@ -103,7 +121,20 @@ function createPersonReviewBinding(text, ambiguities, options = {}) {
   const source = String(text);
   if (!Array.isArray(ambiguities)) throw invalidReview();
   assertReviewCount(ambiguities.length, options);
-  const snapshot = ambiguities.map((item) => Object.freeze({ ...item }));
+  const nested = new Map();
+  let reviewCount = ambiguities.length;
+  const snapshot = ambiguities.map((item) => {
+    const copy = Object.freeze({ ...item }), group = nestedHypotheses.get(item);
+    if (group) {
+      if (options.productChannel !== 'standalone' || group.text !== source ||
+          Object.keys(copy).length !== Object.keys(group.fields).length ||
+          Object.keys(group.fields).some(key => copy[key] !== group.fields[key])) throw invalidReview();
+      nested.set(copy, group.ranges);
+      reviewCount += group.ranges.length;
+    }
+    return copy;
+  });
+  assertReviewCount(reviewCount, options);
   const byId = new Map(snapshot.map((item) => [item.ambiguity_id, item]));
   if (byId.size !== snapshot.length) throw invalidReview();
   const required = snapshot.filter((item) => item.type === TYPE ||
@@ -159,6 +190,9 @@ function createPersonReviewBinding(text, ambiguities, options = {}) {
         sum + (edit.replacement || '[MANUAL_REDACTION]').length - (edit.end - edit.start), 0);
       if (resultText.slice(start + offset, end + offset) !== source.slice(start, end)) throw invalidReview();
       ranges.push(Object.freeze({ start: start + offset, end: end + offset }));
+      for (const child of nested.get(item) || []) ranges.push(Object.freeze({
+        start: child.start + offset, end: child.end + offset
+      }));
     }
     confirmed = { text: resultText, ranges };
   }

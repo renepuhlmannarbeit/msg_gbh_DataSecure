@@ -2,6 +2,43 @@
 
 Stand: 22.10.2026 · 3.2.0-rc171 · neuer gemeinsamer Windows-/Mac-Test-Pre-Release in Vorbereitung; RC170 unverändert veröffentlicht.
 
+## Neuester Quellenabschluss22.10.2026 10:49UTC vor Source12
+
+Nested-/Alias-pending-Fix in drei Privacyproduktmodulen fertig, unabhängig am
+tatsächlichen finalen Delta gegengelesen. Vollständige einzelne Quellbindungen,
+Standalone-only private Kind-Capabilities und finale harte Restprüfung erhalten.
+Zwei tatsächliche Budgetgegenbefunde eng korrigiert: globale max5000Details und
+Bindinggewicht einschließlich privater Kinder; Contextgrenze unverändert.
+FPb494f315aea0ab6945e7ce9a7b8b346d742735b6a111443e8b1fd40898f66c8b/340;
+578Tests/Scriptmanifest08827fe6208fad78a3892c6fa67bba3114dc6c6b1a552c840e02f730728acf1f.
+Main finale7Gruppen120Fälle PASS/Exit0/stabil10:48:17.596; davor8Gruppen230
+inklusive111Generationen aufvorherigembabFP grün, nicht umgeschrieben. Neue volle
+Endgates folgen. Tatsächlich gebundene aktuelle PDF-Gegenprobe10:47PASS, separate
+Keep-Lane final RESIDUAL_PII/Originalrecords unverändert. Keine Altbatchmigration/
+Policylockerung aus diagnostischen Archivlesern. Source12Helfer23purePASS,
+noch kein gemeinsamer neuer Freeze/Build-/GUI-/Mac-PASS. Neuer gemeinsamer Commit/
+Push/frische4Endgates/beideMacpakete/WindowsGUI dann geeignete Übergabe. Alte
+Source11GUIrot und allePakete/Profiles/Evidenzen erhalten. KeineMainintegration;
+menschliche Zielhost-/Office-UAT USER_PENDING. DetailsRC171Shared.
+
+## Historischer Prüfstand22.10.2026 10:26UTC – zusätzlicher Privacy-GUI-Befund
+
+Source11e4d61ea/FP1f0fa47f…0b8a7 alle vier lokalen Endgates PASS/stabil:
+289+11Headless,300Rust/3ignored/Clippy/Release,30PDF67Worker37Office,
+5Paketgates100MD. Snapshot vorhanden. BeideMac39754454908SUCCESS samt echten
+ArtefaktVERIFYs und unabhängigen ganzen Log-/Quellenreviews. Native neue
+Pause→Neulauf→alterRun36/36 bestanden/13alte privateMD bytegleich.
+Trotzdem keine Freigabe: neue19AutoPDF stoppt in der Privacy-Aufbereitung.
+Gebundene aktuelle Gegenprobe/Main+zwei unabhängige Quellenreviews bestätigen
+behebbare nested-Hypothesen-/PERSON_ALIAS-pending-Engstellen. Kein OS-/Macrechte-
+oder Konverterfehler daraus. Früheres Mainetikett „fehlendes retained“ korrigiert:
+Frame77 ist Overlap, retained wäre80; kein zweiter bewiesener Produktionspfad.
+Enger dreimoduliger Fix/gezielte Tests/actualDeltareview in Arbeit; finale harte
+Restprüfung bleibt, Keep eines Aliasrests verweigert. Neuer gemeinsamer Source12
+Commit/FP/frische volle Windows-/Mac-Belege erforderlich. Source11App normal
+geschlossen/Census0, alle Ergebnisse/Profile erhalten. Kein Tag/Release/Mainmerge;
+menschliche UAT USER_PENDING. Details RC171_SHARED_RELEASE+Source11GUIjournal.
+
 ## Neuester Quellenabschluss22.10.2026 09:17UTC vor Source11
 
 Bestätigter nativer Pause-Aufnahmefehler eng behoben: main.rs allein,7Produktions-

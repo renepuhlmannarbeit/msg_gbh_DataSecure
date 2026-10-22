@@ -76,11 +76,23 @@ function prepareTextPrivacyReview({ text, profile, productChannel, consumerOptio
   const organizationAmbiguities = ['personnel_profile', 'applicant'].includes(profile)
     ? credentialIssuerAmbiguities(personReview.original, anon.text) : [];
   const proseAmbiguities = personProseAmbiguities(personReview.original, anon.text, { ...fieldOptions, productChannel, profile, ocrLineReview });
+  const residual = pii.scanResidual(anon.text, profile, anon.dictionary, { ...fieldOptions,
+    strongPersonAnchor: anon.strongPersonAnchor, includePersonCandidateSpans: true,
+    includeKnownValueSpans: productChannel === 'standalone', originalSourceText: personReview.original });
   const personAmbiguities = [...proseAmbiguities, ...residualPersonAmbiguities(personReview.original, anon.text,
-    pii.scanResidual(anon.text, profile, anon.dictionary, { ...fieldOptions, strongPersonAnchor: anon.strongPersonAnchor,
-      includePersonCandidateSpans: true, originalSourceText: personReview.original })
-      .filter(finding => finding.type !== 'PERSON_CANDIDATE' || !proseAmbiguities.some(candidate =>
-        finding.start >= candidate.anonymized_start && finding.end <= candidate.anonymized_end)), { productChannel })];
+    residual.filter(finding => finding.type === 'PERSON_CANDIDATE' && !proseAmbiguities.some(candidate =>
+      finding.start >= candidate.anonymized_start && finding.end <= candidate.anonymized_end)), { productChannel })];
+  // A known surname alias may survive only inside an already source-bound
+  // open choice. This is a private pending draft, NOT an allowlist: Keep still
+  // fails the unchanged final dictionary gate unless the alias is really gone.
+  const hardResidual = residual.filter(finding => finding.type !== 'PERSON_CANDIDATE');
+  if (hardResidual.some(finding => productChannel !== 'standalone' || finding.type !== 'RESIDUAL_ENTITY' ||
+      finding.dictionary_type !== 'PERSON_ALIAS' || !Number.isSafeInteger(finding.start) ||
+      !Number.isSafeInteger(finding.end) || finding.start < 0 || finding.end <= finding.start ||
+      finding.end > anon.text.length || anon.text.slice(finding.start, finding.end) !== finding.text ||
+      !personAmbiguities.some(candidate => finding.start >= candidate.anonymized_start &&
+        finding.end <= candidate.anonymized_end)))
+    throw Object.assign(new SafeError('Die private Textfassung enthält nicht sicher prüfbare direkte Identifikatoren.'), { code: 'RESIDUAL_PII' });
   const ambiguities = [...organizationAmbiguities, ...personAmbiguities];
   const binding = createPersonReviewBinding(anon.text, ambiguities, { productChannel, allowOrganizationReview: productChannel === 'standalone' });
   function confirmReview(decisions, redactions, resultText, phase) {
