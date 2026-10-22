@@ -77,44 +77,48 @@ function fixture(v2 = false, traced = false, rejected = null, fields = null) {
   const output = path.join(dir, 'packages'), results = path.join(dir, 'results'), data = path.join(dir, 'private');
   for (const folder of [output, results, data]) fs.mkdirSync(folder, { recursive: true });
   const original = fields?.original || 'Name: Anna Beispiel\nAnna Beispiel hat 42 Projekte.\nE-Mail: anna@example.invalid';
+  const originalFor = index => fields?.originals?.[index] ?? original;
   const items = Array.from({ length: fields?.documentCount || 2 }, (_unused, offset) => offset + 1).map(index => ({ id: (fields?.contentOptions ? n * 100 + index : index).toString(16).padStart(32, '0'), name: `nested/Quelle-${index}.pdf`,
-    sha256: sha(traced ? original : 'original'), status: 'released' }));
+    sha256: sha(traced ? originalFor(index - 1) : 'original'), status: 'released' }));
   if (rejected) items.push(rejected);
   const state = { product_channel: 'standalone', processing_mode: 'markdown-and-anonymize', token: batchId, items,
     ...(fields?.reviewPolicy ? { standalone_review_policy: fields.reviewPolicy } : {}),
     ...(v2 ? { standalone_document_review: true } : {}),
     ...(fields?.contentOptions ? { schema: 'datasecure-batch/7', content_options: fields.contentOptions } : {}) };
   const create = () => createDocumentReviewStore({ dataRoot: data, outputRoot: () => output, resultRoot: () => results, expectedDocuments: () => items });
-  const captured = traced ? require('../plugins/data-secure/server/pii-engine').anonymize(original, 'general', { captureTransformPlan: true,
+  const capture = source => traced ? require('../plugins/data-secure/server/pii-engine').anonymize(source, 'general', { captureTransformPlan: true,
     ...(fields?.contentOptions && !fields.legacyRedactor ? { productChannel: 'standalone', contentOptions: fields.contentOptions } : {}) }) : null;
+  const captured = capture(originalFor(0));
   const store = create(), text = captured?.text || '# Inhalt\n[PERSON_001] hat 42 Projekte.\n';
-  for (const item of items.filter(row => row !== rejected)) {
+  for (const [index, item] of items.filter(row => row !== rejected).entries()) {
+    const documentOriginal = originalFor(index), documentCapture = documentOriginal === originalFor(0) ? captured : capture(documentOriginal);
+    const documentText = documentCapture?.text || text;
     const packageId = `ds_${item.id}`, packageDir = path.join(output, packageId); fs.mkdirSync(packageDir);
     let boundArtifact;
     if (fields?.contentOptions) {
       const { createSourceExtraction } = require('../plugins/data-secure/server/core/source-extraction-contract');
       const pub = require('../plugins/data-secure/server/standalone/anonymized-artifact');
       const coverage = { status: 'complete', reason_codes: [] };
-      const proof = pub.verifyAnonymizedPublication({ markdown: text, profile: 'general', content_options: fields.contentOptions,
-        source_extraction: createSourceExtraction({ source_type: 'pdf', content_options: fields.contentOptions, coverage, markdown: original }, 8_000_000),
-        dictionary: captured.dictionary, strong_person_anchor: captured.strongPersonAnchor === true, reviewed_person_candidates: null });
+      const proof = pub.verifyAnonymizedPublication({ markdown: documentText, profile: 'general', content_options: fields.contentOptions,
+        source_extraction: createSourceExtraction({ source_type: 'pdf', content_options: fields.contentOptions, coverage, markdown: documentOriginal }, 8_000_000),
+        dictionary: documentCapture.dictionary, strong_person_anchor: documentCapture.strongPersonAnchor === true, reviewed_person_candidates: null });
       boundArtifact = pub.createAnonymizedArtifact({ package_id: packageId, content_options: fields.contentOptions, source_type: 'pdf', profile: 'general',
-        operation_id: crypto.randomUUID(), created_at: new Date().toISOString(), coverage, markdown: text, verification_proof: proof });
+        operation_id: crypto.randomUUID(), created_at: new Date().toISOString(), coverage, markdown: documentText, verification_proof: proof });
       const target = path.join(require('../plugins/data-secure/server/standalone/anonymized-store').anonymizedArtifactRoots().output, packageId);
-      fs.mkdirSync(target); fs.writeFileSync(path.join(target, `${packageId}.md`), text);
+      fs.mkdirSync(target); fs.writeFileSync(path.join(target, `${packageId}.md`), documentText);
       fs.writeFileSync(path.join(target, 'manifest.json'), JSON.stringify(boundArtifact.manifest));
     }
-    store.capture(state, item, { package_id: packageId, original_text: captured ? original : 'Anna Beispiel hat 42 Projekte.', markdown: text,
+    store.capture(state, item, { package_id: packageId, original_text: documentCapture ? documentOriginal : 'Anna Beispiel hat 42 Projekte.', markdown: documentText,
       ...(fields?.contentOptions ? { content_options: fields.contentOptions, source_type: 'pdf', publication_binding: boundArtifact.expectation } : {}),
-      ...(captured ? { transform_trace: captured.transform_trace, verification_context: {
-        profile: 'general', dictionary: captured.dictionary, strong_person_anchor: captured.strongPersonAnchor === true,
+      ...(documentCapture ? { transform_trace: documentCapture.transform_trace, verification_context: {
+        profile: 'general', dictionary: documentCapture.dictionary, strong_person_anchor: documentCapture.strongPersonAnchor === true,
         ruleset: require('../plugins/data-secure/server/privacy/policy').PRIVACY_RULESET_VERSION,
         credential_policy: require('../plugins/data-secure/server/privacy/policy').CREDENTIAL_CONTEXT_POLICY_VERSION,
         ...(fields && Object.hasOwn(fields, 'policyMarker') ? { person_field_policy: fields.policyMarker } : {}),
         publication_frame: { prefix: '', suffix: '' }, reviewed_ranges: [] } } : {}) });
-    fs.writeFileSync(path.join(packageDir, `${packageId}.md`), text);
+    fs.writeFileSync(path.join(packageDir, `${packageId}.md`), documentText);
     fs.writeFileSync(path.join(packageDir, 'manifest.json'), JSON.stringify({ schema: 'eu-privacy-package/3', package_id: packageId,
-      document: `${packageId}.md`, verification: { text_residual_pii: 'passed' }, document_sha256: sha(text) }));
+      document: `${packageId}.md`, verification: { text_residual_pii: 'passed' }, document_sha256: sha(documentText) }));
   }
   const row = index => store.list(batchId).documents.find(value => value.document_id === items[index].id);
   const decision = (index, action, ranges = [], op = crypto.randomBytes(16).toString('hex')) => {
@@ -131,6 +135,112 @@ function faultOnce(predicate, action) {
     return original.apply(this, arguments); };
   try { action(); assert.equal(failed, true); } finally { fs.linkSync = original; }
 }
+const entityFields = extra => ({ contentOptions: { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: false, imageOcr: false },
+  policyMarker: require('../plugins/data-secure/server/core/person-field-policy').CONTENT_PERSON_FIELD_POLICY, ...extra });
+function entityRequest(f, index, decision, scope = 'document', operationId = crypto.randomBytes(16).toString('hex')) {
+  const row = f.row(index), group = f.store.entities(f.batchId, row.document_id, row.revision, 0).entities.find(value => value.kind === 'PERSON');
+  assert.ok(group);
+  return { documentId: row.document_id, request: { action: 'entities', ranges: [], revision: row.revision,
+    output_sha256: row.output_sha256, operation_id: operationId,
+    entity_decisions: [{ entity_id: group.entity_id, decision }], ...(scope === 'run' ? { scope } : {}) } };
+}
+function persistentDecisionPins(f) {
+  const rows = [];
+  for (const [role, folder] of [['review', path.join(f.data, 'document-reviews', f.batchId)], ['packages', f.output], ['results', f.results]]) {
+    const walk = target => {
+      for (const name of fs.readdirSync(target).sort()) {
+        const file = path.join(target, name), stat = fs.lstatSync(file);
+        assert.equal(stat.isSymbolicLink(), false);
+        if (stat.isDirectory()) walk(file);
+        else rows.push([role, path.relative(folder, file), sha(fs.readFileSync(file))]);
+      }
+    };
+    walk(folder);
+  }
+  return rows;
+}
+function assertCandidateBlocked(f, input, blocked) {
+  const before = persistentDecisionPins(f), result = f.store.decide(f.batchId, input.documentId, input.request);
+  assert.deepEqual(result, { ok: false, reason_code: 'DOCUMENT_ENTITY_RUN_CONFLICT', blocked_files: blocked,
+    local_ui_only: true, external_disclosure: false });
+  assert.deepEqual(persistentDecisionPins(f), before, 'no decision, revision, rule, package or result mutation');
+  assert.ok(f.create().list(f.batchId).documents.every(row => row.revision === 0 && !row.approved));
+  return result;
+}
+function seedHistoricalEntityKeep(f, index) {
+  // Test-owned pre-fix legacy revision, not a new decision authorized by the
+  // current service. Existing unsafe revisions and their exact ACK stay intact.
+  const input = entityRequest(f, index, 'keep'), run = path.join(f.data, 'document-reviews', f.batchId);
+  const snapshot = JSON.parse(fs.readFileSync(path.join(run, input.documentId, 'base.json')));
+  const key = Buffer.from(JSON.parse(fs.readFileSync(path.join(run, 'entity-key.json'))).key, 'hex');
+  const entity = require('../plugins/data-secure/server/gateway/standalone-entity-review');
+  const next = entity.applyEntityDecisions(snapshot.markdown, entity.initialEntities(snapshot), input.request.entity_decisions, key);
+  const event = { schema: 'datasecure-document-revision/1', revision: 1, parent_sha256: input.request.output_sha256,
+    output_sha256: sha(next.markdown), approved: false, action: 'entities', ranges: [],
+    operation_id: input.request.operation_id, request_sha256: sha(JSON.stringify(input.request)), entity_decisions: input.request.entity_decisions };
+  fs.writeFileSync(path.join(run, input.documentId, 'revision-000001.json'), JSON.stringify(event), { flag: 'wx' });
+  return input;
+}
+
+test('single-document entity Keep refuses the actual residual gate before any durable decision', () => {
+  const f = fixture(true, true, null, entityFields()), input = entityRequest(f, 0, 'keep');
+  assertCandidateBlocked(f, input, [{ name: f.items[0].name, reason_code: 'DOCUMENT_REVIEW_RESIDUAL_PII' }]);
+});
+test('run-wide entity Keep checks a later unsafe candidate before committing the safe origin', () => {
+  const f = fixture(true, true, null, entityFields({ originals: ['Anna Beispiel\nProjekt erledigt.', 'Name: Anna Beispiel\nBericht 42.'] }));
+  const input = entityRequest(f, 0, 'keep', 'run');
+  assertCandidateBlocked(f, input, [{ name: f.items[1].name, reason_code: 'DOCUMENT_REVIEW_RESIDUAL_PII' }]);
+});
+test('all refused entity candidates are named and a policy mismatch grants no decision', () => {
+  const f = fixture(true, true, null, entityFields()), input = entityRequest(f, 0, 'keep', 'run');
+  assertCandidateBlocked(f, input, f.items.map(row => ({ name: row.name, reason_code: 'DOCUMENT_REVIEW_RESIDUAL_PII' })));
+  const changed = fixture(true, true, null, entityFields({ original: 'Anna Beispiel\nProjekt erledigt.', policyMarker: 'legacy-person-fields/1' }));
+  assertCandidateBlocked(changed, entityRequest(changed, 0, 'default'),
+    [{ name: changed.items[0].name, reason_code: 'DOCUMENT_REVIEW_POLICY_CHANGED' }]);
+});
+test('valid entity Keep, person, organization and default remain available for single and run scope', () => {
+  for (const scope of ['document', 'run']) for (const treatment of ['keep', 'person', 'organization', 'default']) {
+    const f = fixture(true, true, null, entityFields({ original: 'Anna Beispiel\nProjekt erledigt.' })), input = entityRequest(f, 0, treatment, scope);
+    const result = f.store.decide(f.batchId, input.documentId, input.request);
+    assert.equal(result.ok, true); assert.equal(result.affected_count, scope === 'run' ? 2 : 1);
+    const rows = f.create().list(f.batchId).documents;
+    for (const [index, row] of rows.entries()) {
+      assert.equal(row.revision, scope === 'run' || index === 0 ? 1 : 0);
+      if (!row.revision) continue;
+      const text = f.store.chunk(f.batchId, row.document_id, row.revision, 0).markdown;
+      if (treatment === 'keep') assert.match(text, /Anna Beispiel/u);
+      else if (treatment === 'default') assert.equal(text, f.text);
+      else assert.match(text, treatment === 'person' ? /\[PERSON_[A-Z2-7]{52}\]/u : /\[UNTERNEHMEN_[A-Z2-7]{52}\]/u);
+      assert.equal(f.decision(index, 'approve').approved, true);
+    }
+  }
+});
+test('snapshot, ACL and I/O failures are hard errors, not safely inspected entity conflicts', () => {
+  for (const code of ['EACCES', 'EPERM', 'EIO', 'BROKEN_SNAPSHOT']) {
+    const f = fixture(true, true, null, entityFields({ originals: ['Anna Beispiel\nProjekt erledigt.', 'Name: Anna Beispiel\nBericht 42.'] }));
+    const input = entityRequest(f, 0, 'keep', 'run'), target = path.join(f.data, 'document-reviews', f.batchId, f.items[1].id, 'base.json');
+    if (code === 'BROKEN_SNAPSHOT') fs.writeFileSync(target, '{broken');
+    const before = persistentDecisionPins(f), open = fs.openSync; let faulted = false;
+    fs.openSync = function(file, ...args) {
+      if (code !== 'BROKEN_SNAPSHOT' && typeof file === 'string' && path.resolve(file) === target) {
+        faulted = true; throw Object.assign(Error('test-owned read failure'), { code });
+      }
+      return open.call(this, file, ...args);
+    };
+    try { assert.throws(() => f.store.decide(f.batchId, input.documentId, input.request), error =>
+      error.code !== 'DOCUMENT_ENTITY_RUN_CONFLICT' && error.code !== 'DOCUMENT_REVIEW_RESIDUAL_PII', code); }
+    finally { fs.openSync = open; }
+    assert.equal(faulted, code !== 'BROKEN_SNAPSHOT');
+    assert.deepEqual(persistentDecisionPins(f), before, 'hard boundary failure cannot commit earlier safe targets');
+  }
+});
+test('historical unsafe entity revision stays immutable and its exact acknowledgement remains idempotent', () => {
+  const f = fixture(true, true, null, entityFields()), input = seedHistoricalEntityKeep(f, 0), before = persistentDecisionPins(f);
+  const ack = f.store.decide(f.batchId, input.documentId, input.request);
+  assert.equal(ack.ok, true); assert.equal(ack.revision, 1);
+  assert.deepEqual(persistentDecisionPins(f), before, 'no rollback, new decision or publication on historical ACK');
+  throwsCode(() => f.decision(0, 'approve'), 'DOCUMENT_REVIEW_RESIDUAL_PII');
+});
 
 test('Fastweg auto-approves only its verified published basis and never reapproves an edited or revoked revision', () => {
   const fields = { contentOptions: { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: false, imageOcr: false },
@@ -170,11 +280,7 @@ test('private document approval reconstructs bound field policy and never accept
     assert.equal(f.create().list(f.batchId).documents[0].approved, false);
   }
   const explicit = fixture(true, true, null, { original: '| First Name |\n| --- |\n| Qvx |', contentOptions, policyMarker });
-  const row = explicit.row(0), entity = explicit.store.entities(explicit.batchId, row.document_id, row.revision, 0).entities.find(value => value.kind === 'PERSON');
-  assert.ok(entity);
-  explicit.store.decide(explicit.batchId, row.document_id, { action: 'entities', ranges: [], revision: row.revision,
-    output_sha256: row.output_sha256, operation_id: crypto.randomBytes(16).toString('hex'),
-    entity_decisions: [{ entity_id: entity.entity_id, decision: 'keep' }] });
+  seedHistoricalEntityKeep(explicit, 0);
   throwsCode(() => explicit.decision(0, 'approve'), 'DOCUMENT_REVIEW_RESIDUAL_PII');
   const valid = fixture(true, true, null, { original: 'Vollständiger Name: Qvx', contentOptions, policyMarker });
   valid.decision(0, 'approve'); assert.equal(valid.create().list(valid.batchId).documents[0].approved, true);
@@ -545,11 +651,7 @@ test('selected approval preserves purpose-bound residual and policy checks witho
   assert.deepEqual(safe.store.list(safe.batchId).documents, beforePreview, 'preview grants no approval/revision');
   assert.ok(safe.store.decideBatch(safe.batchId, batchRequest(safe)).documents.every(row => row.approved && row.revision === 1));
   const f = fixture(true, true, null, { original: 'Vollständiger Name: Qvx', contentOptions, policyMarker });
-  const row = f.row(1), entity = f.store.entities(f.batchId, row.document_id, row.revision, 0).entities.find(value => value.kind === 'PERSON');
-  assert.ok(entity);
-  f.store.decide(f.batchId, row.document_id, { action: 'entities', ranges: [], revision: row.revision,
-    output_sha256: row.output_sha256, operation_id: crypto.randomBytes(16).toString('hex'),
-    entity_decisions: [{ entity_id: entity.entity_id, decision: 'keep' }] });
+  seedHistoricalEntityKeep(f, 1);
   throwsCode(() => f.store.decideBatch(f.batchId, batchRequest(f)), 'DOCUMENT_REVIEW_RESIDUAL_PII');
   throwsCode(() => f.store.previewExport(f.batchId, 'b'.repeat(32), batchRequest(f).selection), 'DOCUMENT_REVIEW_RESIDUAL_PII');
   const after = f.create().list(f.batchId).documents;

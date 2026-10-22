@@ -1,7 +1,7 @@
 'use strict';
 const { createSuite } = require('./helpers');
 const { test, assert, done } = createSuite('Standalone display-only workflow projection');
-const { projectRun, failureAdvice, conversionSummary, validateConversionFeedback, contentNoticeSummary } = require('../apps/datasecure-standalone/frontend/workflow-presentation');
+const { projectRun, failureAdvice, conversionSummary, validateConversionFeedback, contentNoticeSummary, resultPublication } = require('../apps/datasecure-standalone/frontend/workflow-presentation');
 const id = 'a'.repeat(64);
 const processor = extra => projectRun({ batch_id: id, processing_mode: 'markdown-and-anonymize',
   source: 'processor', selected_count: 3, completed_count: 0, failed_count: 0, ...extra });
@@ -383,6 +383,46 @@ test('an unavailable completed result directory is not pending processing or a f
       assert.doesNotMatch(result.next, /erneut abgleichen|blind starten|noch nicht bestätigt/u);
     }
   }
+});
+
+const repairPublication = () => ({ state: 'repair_required', generation_id: null, count: 3, current_revision: 2, repair_binding: '9'.repeat(64) });
+test('a complete repair projection displays an active private step, not current public files or a publication retry', () => {
+  const publication = repairPublication(), before = JSON.stringify(publication);
+  for (const result of [documents({ result_publication: publication }), processor({ state: 'results_available', completed_count: 3,
+    result_count: 3, results_available: true, result_publication: publication })]) {
+    assert.equal(result.phase, 'result_repair_required'); assert.equal(result.stages[3].status, 'current');
+    assert.notEqual(result.stages[2].status, 'done'); assert.equal(result.busy, false);
+    assert.match(result.heading, /Gespeicherte Anonymisierung.*nachbearbeiten/u);
+    assert.match(result.next, /bewusst.*maskieren.*ersetzen.*Basisstand/u);
+    assert.doesNotMatch(result.next, /Ergebnisordner öffnen|Bereitstellung erneut prüfen|Ergebnisstand erneut abgleichen/u);
+    assert.equal(JSON.stringify(result).includes(publication.repair_binding), false, 'opaque authority token is not UI copy');
+  }
+  assert.equal(JSON.stringify(publication), before); assert.equal(resultPublication(publication), publication);
+});
+test('repair metadata is closed and its token exists exclusively in the repair-required state', () => {
+  for (const mutate of [value => { delete value.repair_binding; },value => { value.repair_binding = null; },value => { value.repair_binding = undefined; },
+    value => { value.repair_binding = false; },value => { value.repair_binding = 'A'.repeat(64); },value => { value.repair_binding = 'a'.repeat(63); },
+    value => { value.repair_binding = 'a'.repeat(65); },value => { delete value.generation_id; },value => { delete value.count; },
+    value => { delete value.current_revision; },value => { value.generation_id = '../other'; },value => { value.count = 201; },
+    value => { value.generation_id = undefined; },value => { value.count = undefined; },value => { value.current_revision = undefined; },
+    value => { value.current_revision = -1; },value => { value.current_revision = '1'; },value => { value.extra = true; }]) {
+    const value = repairPublication(); mutate(value); assert.equal(resultPublication(value), null);
+    for (const result of [documents({ result_publication: value }), processor({ state: 'results_available', completed_count: 3, result_count: 3, result_publication: value })])
+      assert.ok(!['results_ready','result_repair_required'].includes(result.phase));
+  }
+  for (const state of ['initial','current','pending','conflict','unavailable']) {
+    const value = { ...repairPublication(), state, generation_id: state === 'current' ? 'e'.repeat(32) : null };
+    assert.equal(resultPublication(value), null); delete value.repair_binding; assert.notEqual(resultPublication(value), null);
+  }
+});
+test('repair state cannot authorize a raw, unfinished, mismatched-count or stale display', () => {
+  for (const result of [documents({ processing_mode: 'markdown-only', result_publication: repairPublication() }),
+    documents({ processing_complete: false, result_publication: repairPublication() }),
+    documents({ fresh: false, result_publication: repairPublication() }),
+    documents({ result_publication: { ...repairPublication(), count: 2 } }),
+    processor({ processing_mode: 'markdown-only', state: 'results_available', completed_count: 3, result_count: 3, result_publication: repairPublication() }),
+    processor({ state: 'results_available', completed_count: 2, result_count: 3, result_publication: repairPublication() })])
+    assert.ok(!['results_ready','result_repair_required'].includes(result.phase));
 });
 
 done();

@@ -2,7 +2,42 @@
 
 Stand: 22.10.2026 · 3.2.0-rc171 · neuer gemeinsamer Windows-/Mac-Test-Pre-Release in Vorbereitung; RC170 unverändert veröffentlicht.
 
-## Quellenabschluss22.10.2026 02:18UTC vor Source07
+## Neuester Quellenprüfstand 22.10.2026 nach 04:05 UTC
+
+Precommit-Entityprüfung und frisch gebundene private Reparatur sind implementiert
+und unabhängig am tatsächlichen Produktionsdelta gegengelesen. Autorenprüfungen:
+68 Dokumentreview +101 Ergebnisgenerationen +819 Frontend/Presentation/Workspace
+PASS. Hauptagent las Produkt-/Testdeltas selbst; eigener unveränderter
+10-Gruppen-Gegenlauf vollständig PASS/Exit0/inputs_unchangedtrue am04:14:56UTC.
+Neuer Produktfingerprint d73e5ee1e73b79b6d21432b4d3d1c4d4c68e8bb7a1b1f97cb2d56ee7f69e6a76,
+340 Produktdateien,578 Testinputs/Manifest9dbef57f81f3404cccb43ebb8310f9aaab4c5703df605c6fc7a6958af4b5fd58.
+Kein neuer Gesamt-/Paket-/GUI-Recovery-PASS daraus; frische gemeinsame Endläufe folgen.
+Nur residualverweigerte private Stände mit gültiger abgeschlossener Belegkette
+sind bewusst reparierbar; keine Policy-/Guardlockerung, kein Rollback, keine
+öffentlichen Arbeitsdateihashes. Source08-Helfer vorbereitet, noch keine neuen
+Endbelege. Source07 bleibt wegen des tatsächlichen GUI05-Fehlers historisch rot.
+
+### Historischer Prüfstand 03:23 UTC vor Source08
+
+Source07 ist NICHT freigabefähig: alle lokalen Endgates (289+11 Headless,
+298 Rust/3 ignoriert, Konverter/Paket) und beide Macconsumer39710736315 grün,
+aber echte Windows-GUI05 reproduziert einen Nachbearbeitungsfehler. Entity-Keep
+für ein explizites Namensfeld wird vor Residualprüfung gespeichert; danach
+scheitert die Bereitstellung. Spannen/Hashes sind korrekt. Zusätzlich sperrt
+pending die bewusste Reparatur dieses bereits gespeicherten privaten Stands.
+Enger Precommit-Kandidatencheck und autoritativ gebundene Legacy-Reparatur werden
+vor dem neuen gemeinsamen Freeze unabhängig korrigiert/geprüft; keine Policy-
+oder Guardlockerung, kein Rollback, keine Überschreibung öffentlicher Dateien.
+
+GUI01/06 wirklich PASS (317,829 s Pause, zwei Neustarts, gespeicherte OCR erhalten),
+04 Korrektur/Unicode/Zeilenenden/Neugeneration positiv, Restartunterfall offen;
+05 FAIL, übrige Source07-Fälle NOT_RUN. App normal geschlossen, Rootprozesse null,
+89 Originalinputs bytegleich. Source07-Commit3a2693a6e5fa94df5aea219b0c5946f9c512d6bf
+und seine FINALs/ZIPs/GUI-Belege bleiben historische, nicht umetikettierbare Evidenz.
+Keine finale lokale RC171-Übergabe/Tag/Pre-Release. Zielhost-UAT USER_PENDING.
+Details: RC171_SHARED_RELEASE_20261022.md und Source07-CHECKPOINT/GUI-OBSERVATIONS.
+
+### Historischer Quellenabschluss 02:18 UTC vor Source07
 
 Zwei reine Zusatztestkorrekturen fertig und unabhängig am tatsächlichen Delta
 gegen Produktionsparser/Worker/CheckpointStream gegengelesen, kein bestätigter

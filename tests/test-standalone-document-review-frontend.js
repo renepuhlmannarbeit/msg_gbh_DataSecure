@@ -2564,4 +2564,355 @@ for (const successor of ['same', 'different']) for (const outcome of ['success',
     } finally { resolveOld({}); await tick(); }
   });
 
+const entityRefusal = files => ({ ok: false, reason_code: 'DOCUMENT_ENTITY_RUN_CONFLICT', blocked_files: files,
+  local_ui_only: true, external_disclosure: false });
+for (const scope of ['document', 'run']) for (const reason of ['DOCUMENT_REVIEW_RESIDUAL_PII', 'DOCUMENT_REVIEW_POLICY_CHANGED', 'mixed'])
+  testAsync(`${scope}: explicit pre-commit ${reason} refusal preserves the entity draft and never publishes or retries`, async () => {
+    let refused = true;
+    const files = [{ name: 'Unterordner/Vertrag.docx', reason_code: reason === 'mixed' ? 'DOCUMENT_REVIEW_RESIDUAL_PII' : reason }];
+    if (reason === 'mixed') files.push({ name: 'Zweite-Datei.pdf', reason_code: 'DOCUMENT_REVIEW_POLICY_CHANGED' });
+    const f = pagedEntitiesHarness({ invoke(command) {
+      if (command === 'decide_document_review' && refused) return entityRefusal(files);
+    } });
+    await f.open(); const { h } = f; await f.choose(); await h.act('entities-next'); await f.choose(1);
+    h.el('entities-scope').value = scope; h.el('entities-decision').value = 'keep'; await h.act('entities-decision', 'change');
+    assert.equal(h.el('entities-apply').disabled, false, 'frontend must not invent pre-admission policy knowledge');
+    assert.match(h.el('entities-reason').textContent, /Auch dabei gelten die Schutzprüfungen.*Namensfelder/u);
+    const previous = structuredClone(h.rows), reads = h.calls.filter(call => call.command === 'get_document_reviews').length;
+    const markdown = h.el('document-markdown').value, revision = h.el('document-revision').textContent;
+    await h.act('entities-apply'); await tick(); await tick();
+    const message = h.el('documents-status').textContent;
+    assert.match(message, /Behandlung nicht gespeichert.*nicht übernommen.*bisherige Stand bleibt erhalten/u);
+    assert.match(message, /Unterordner\/Vertrag\.docx/u);
+    assert.doesNotMatch(message, /Bestätigung ist unklar|Änderung kann bereits gespeichert|bereitgestellt/u);
+    if (reason !== 'DOCUMENT_REVIEW_POLICY_CHANGED') assert.match(message, /Originalwert beibehalten.*Namensfelder.*Schutzprüfung.*sichere Ersetzung/u);
+    if (reason !== 'DOCUMENT_REVIEW_RESIDUAL_PII') assert.match(message, /Datenschutzregel.*aktuelle.*neu verarbeiten/u);
+    assert.equal(h.el('document-action-status').textContent, message);
+    assert.equal(h.el('document-action-status').hidden, false);
+    assert.deepEqual(h.rows, previous); assert.equal(h.el('document-markdown').value, markdown); assert.equal(h.el('document-revision').textContent, revision);
+    assert.equal(h.calls.filter(call => call.command === 'get_document_reviews').length, reads);
+    assert.equal(h.calls.filter(isDecision).length, 1); assert.equal(h.calls.some(call => call.command === 'publish_result_documents'), false);
+    assert.match(h.el('entities-count').textContent, /^2 ausgewählt/u); assert.equal(h.el('entities-decision').value, 'keep');
+    assert.equal(h.el('entities-scope').value, scope); assert.equal(h.el('entities-apply').disabled, false);
+    assert.equal(h.el('entities-list').children[1].children[0].children[0].checked, true);
+    await h.act('entities-previous'); assert.equal(h.el('entities-list').children[0].children[0].children[0].checked, true);
+    if (reason === 'DOCUMENT_REVIEW_RESIDUAL_PII' && scope === 'document') {
+      refused = false; h.el('entities-decision').value = 'person'; await h.act('entities-decision', 'change');
+      // A new, conscious safer choice can be submitted exactly once. This is a
+      // renderer transition model, not a claim that the backend has approved it.
+      await h.act('entities-apply'); await tick(); await tick();
+      const changes = h.calls.filter(isDecision); assert.equal(changes.length, 2);
+      assert.deepEqual(changes[1].args.decision.entity_decisions, changes[0].args.decision.entity_decisions.map(choice => ({ ...choice, decision: 'person' })));
+      assert.equal(h.calls.filter(call => call.command === 'publish_result_documents').length, 1);
+      assert.match(h.el('documents-status').textContent, /Behandlung gespeichert.*bereitgestellt/u);
+    }
+  });
+
+for (const reason of ['DOCUMENT_ENTITY_RUN_UNAVAILABLE', 'DOCUMENT_ENTITY_RUN_CONFLICT', 'DOCUMENT_REVIEW_INVALID'])
+  testAsync(`the established non-residual ${reason} refusal remains explicit without inventing a residual explanation`, async () => {
+    const f = pagedEntitiesHarness({ invoke(command) {
+      if (command === 'decide_document_review') return entityRefusal([{ name: 'Unterordner/Vertrag.docx', reason_code: reason }]);
+    } });
+    await f.open(); const { h } = f; await f.choose(); h.el('entities-decision').value = 'organization'; h.el('entities-scope').value = 'run';
+    await h.act('entities-apply');
+    assert.match(h.el('documents-status').textContent, /nicht gespeichert.*nicht übernommen.*nicht bearbeitbar.*Unterordner\/Vertrag\.docx/u);
+    assert.doesNotMatch(h.el('documents-status').textContent, /personenbezogene Angaben bleiben|Datenschutzregel hat sich geändert|Bestätigung ist unklar/u);
+    assert.equal(h.rows[0].revision, 0); assert.equal(h.calls.filter(isDecision).length, 1);
+    assert.equal(h.calls.some(call => call.command === 'publish_result_documents'), false);
+    assert.equal(h.el('entities-list').children[0].children[0].children[0].checked, true);
+  });
+
+const malformedEntityRefusals = {
+  'missing reply': () => null,
+  'non-object reply': () => 'DOCUMENT_ENTITY_RUN_CONFLICT',
+  'unknown outer reason': reply => { reply.reason_code = 'UNKNOWN_CONFLICT'; },
+  'non-false verdict': reply => { reply.ok = true; },
+  'missing local scope': reply => { delete reply.local_ui_only; },
+  'non-local scope': reply => { reply.local_ui_only = false; },
+  'external disclosure': reply => { reply.external_disclosure = true; },
+  'extra outer field': reply => { reply.saved = false; },
+  'no blocked list': reply => { delete reply.blocked_files; },
+  'empty blocked list': reply => { reply.blocked_files = []; },
+  'non-array blocked list': reply => { reply.blocked_files = {}; },
+  'oversized blocked list': reply => { reply.blocked_files = Array(201).fill(reply.blocked_files[0]); },
+  'null blocked file': reply => { reply.blocked_files = [null]; },
+  'empty blocked filename': reply => { reply.blocked_files[0].name = ''; },
+  'non-string blocked filename': reply => { reply.blocked_files[0].name = 7; },
+  'oversized blocked filename': reply => { reply.blocked_files[0].name = 'a'.repeat(1025); },
+  'absolute blocked filename': reply => { reply.blocked_files[0].name = '/private/file.docx'; },
+  'parent traversal blocked filename': reply => { reply.blocked_files[0].name = '../file.docx'; },
+  'control character blocked filename': reply => { reply.blocked_files[0].name = 'file\n.docx'; },
+  'missing blocked reason': reply => { delete reply.blocked_files[0].reason_code; },
+  'unknown blocked reason': reply => { reply.blocked_files[0].reason_code = 'UNKNOWN'; },
+  'non-string blocked reason': reply => { reply.blocked_files[0].reason_code = null; },
+  'extra blocked field': reply => { reply.blocked_files[0].saved = false; },
+  'mixed known and unknown blocked reasons': reply => { reply.blocked_files.push({ name: 'other.pdf', reason_code: 'UNKNOWN' }); }
+};
+for (const [variant, mutate] of Object.entries(malformedEntityRefusals))
+  testAsync(`malformed entity refusal ${variant} cannot prove no commit and retains conservative recovery`, async () => {
+    const f = pagedEntitiesHarness({ invoke(command, args, h) {
+      if (command === 'decide_document_review') {
+        h.rows[0].revision++; // A malformed reply may have followed a commit.
+        const reply = entityRefusal([{ name: 'Vertrag.docx', reason_code: 'DOCUMENT_REVIEW_RESIDUAL_PII' }]);
+        const replacement = mutate(reply); return replacement === undefined ? reply : replacement;
+      }
+    } });
+    await f.open(); const { h } = f; await f.choose(); h.el('entities-decision').value = 'keep';
+    const reads = h.calls.filter(call => call.command === 'get_document_reviews').length;
+    await h.act('entities-apply'); await tick(); await tick();
+    assert.match(h.el('documents-status').textContent, /Bestätigung ist unklar.*gespeicherte Stand wurde erneut abgefragt/u);
+    assert.doesNotMatch(h.el('documents-status').textContent, /Behandlung nicht gespeichert|nicht übernommen|bisherige Stand bleibt erhalten/u);
+    assert.match(h.el('document-revision').textContent, /Stand 1/u);
+    assert.equal(h.calls.filter(call => call.command === 'get_document_reviews').length, reads + 1);
+    assert.equal(h.calls.filter(isDecision).length, 1); assert.equal(h.calls.some(call => call.command === 'publish_result_documents'), false);
+  });
+
+for (const code of ['DOCUMENT_ENTITY_RUN_CONFLICT', 'DOCUMENT_REVIEW_RESIDUAL_PII', 'DOCUMENT_REVIEW_POLICY_CHANGED'])
+  testAsync(`a thrown ${code} is not a complete pre-commit refusal and never claims nothing was saved`, async () => {
+    const f = pagedEntitiesHarness({ invoke(command, args, h) {
+      if (command === 'decide_document_review') { h.rows[0].revision++; throw Error(code); }
+    } });
+    await f.open(); const { h } = f; await f.choose(); h.el('entities-decision').value = 'keep'; await h.act('entities-apply');
+    assert.match(h.el('documents-status').textContent, /Bestätigung ist unklar/u);
+    assert.doesNotMatch(h.el('documents-status').textContent, /Behandlung nicht gespeichert|nicht übernommen|bisherige Stand bleibt erhalten/u);
+    assert.match(h.el('document-revision').textContent, /Stand 1/u);
+    assert.equal(h.calls.filter(isDecision).length, 1); assert.equal(h.calls.some(call => call.command === 'publish_result_documents'), false);
+  });
+
+for (const successor of ['same', 'different'])
+  testAsync(`a retired explicit entity refusal cannot alter a ${successor}-batch successor or its draft`, async () => {
+    let finish;
+    const pending = new Promise(resolve => { finish = resolve; });
+    const f = pagedEntitiesHarness({ invoke(command) { if (command === 'decide_document_review') return pending; } });
+    const { h } = f;
+    try {
+      await f.open(); await f.choose(); h.el('entities-decision').value = 'keep'; await h.act('entities-apply');
+      assert.equal(h.calls.filter(isDecision).length, 1);
+      h.api.invalidateConnection(); await h.api.open((successor === 'same' ? 'a' : 'b').repeat(64));
+      await h.act(h.el('documents-list').children[0].children[1].children[0]); await f.choose();
+      h.el('entities-decision').value = 'person'; await h.act('entities-decision', 'change');
+      const before = { status: h.el('documents-status').textContent, action: h.el('document-action-status').textContent,
+        name: h.el('document-name').textContent, revision: h.el('document-revision').textContent, text: h.el('document-markdown').value };
+      finish(entityRefusal([{ name: 'Retired.docx', reason_code: 'DOCUMENT_REVIEW_RESIDUAL_PII' }])); await tick(); await tick();
+      assert.deepEqual({ status: h.el('documents-status').textContent, action: h.el('document-action-status').textContent,
+        name: h.el('document-name').textContent, revision: h.el('document-revision').textContent, text: h.el('document-markdown').value }, before);
+      assert.equal(h.el('entities-list').children[0].children[0].children[0].checked, true);
+      assert.equal(h.el('entities-decision').value, 'person'); assert.equal(h.el('entities-apply').disabled, false);
+      assert.equal(h.calls.filter(isDecision).length, 1); assert.equal(h.calls.some(call => call.command === 'publish_result_documents'), false);
+    } finally { finish(null); await tick(); }
+  });
+
+function privateRepairFixture(options = {}) {
+  const control = { unsafe: new Set(['1'.repeat(32), '2'.repeat(32)]), commits: 0, published: false,
+    lostNext: false, staleNext: false, reply: null, reads: 0 };
+  const texts = new Map([['1'.repeat(32), options.text1 || 'Name: Anna Berger'], ['2'.repeat(32), 'Name: Murat Kaya']]);
+  const binding = () => crypto.createHash('sha256').update(JSON.stringify(h.rows.map(row => [row.document_id, row.revision, row.output_sha256])) + control.commits).digest('hex');
+  const dto = () => ({ state: control.unsafe.size ? 'repair_required' : control.published ? 'current' : 'pending',
+    generation_id: control.published ? 'e'.repeat(32) : null, count: h.rows.length, current_revision: Math.max(...h.rows.map(row => row.revision)),
+    ...(control.unsafe.size ? { repair_binding: binding() } : {}) });
+  const h = harness({ invoke(command, args) {
+    if (command === 'get_document_reviews') {
+      control.reads++;
+      return { documents: structuredClone(h.rows), processing_mode: options.mode || 'markdown-and-anonymize', processing_complete: options.complete !== false,
+        unavailable: [], result_publication: options.project ? options.project(dto(), control) : dto(), local_ui_only: true, external_disclosure: false };
+    }
+    if (command === 'get_document_review_chunk') return { ...h.rows.find(row => row.document_id === args.documentId),
+      chunk_index: args.chunkIndex, original_text: args.documentId.startsWith('1') ? options.text1 || 'Name: Anna Berger' : 'Name: Murat Kaya',
+      markdown: texts.get(args.documentId), local_ui_only: true, external_disclosure: false };
+    if (command === 'get_document_entities') return { ok: true, ...h.rows.find(row => row.document_id === args.documentId),
+      page: args.page, pages: 1, entities: [{ entity_id: 'entity_000001', original: args.documentId.startsWith('1') ? 'Anna Berger' : 'Murat Kaya',
+        replacement: '[PERSON_001]', disabled: false, kind: 'PERSON', run_eligible: true, count: 1, decision: 'keep',
+        output_start: 6, output_end: texts.get(args.documentId).length }], local_ui_only: true, external_disclosure: false };
+    if (command === 'decide_document_review') {
+      if (control.reply) return control.reply(args);
+      const row = h.rows.find(row => row.document_id === args.documentId), choice = args.decision;
+      if (control.staleNext) { control.staleNext = false; control.commits++; throw Error('DOCUMENT_REVIEW_STALE'); }
+      assert.equal(choice.revision, row.revision); assert.equal(choice.output_sha256, row.output_sha256);
+      if (control.unsafe.size) { assert.ok(['entities','redact','restore_base'].includes(choice.action)); assert.equal(choice.repair_binding, binding()); }
+      else assert.equal(Object.hasOwn(choice, 'repair_binding'), false);
+      const text = texts.get(row.document_id), next = choice.action === 'redact'
+        ? text.slice(0, choice.ranges[0].start) + '[MANUAL_REDACTION]' + text.slice(choice.ranges[0].end) : 'Name: [PERSON_001]';
+      row.revision++; row.output_sha256 = crypto.createHash('sha256').update(next).digest('hex'); row.approved = false; row.text_modified = true;
+      texts.set(row.document_id, next); control.unsafe.delete(row.document_id); control.commits++; control.published = false;
+      if (control.lostNext) { control.lostNext = false; throw Error('STANDALONE_BUSY'); }
+      return { ok: true, ...row, local_ui_only: true, external_disclosure: false };
+    }
+    if (command === 'publish_result_documents') {
+      assert.equal(control.unsafe.size, 0, 'no publication until all private candidates are safe');
+      assert.deepEqual(args, { batchId: 'a'.repeat(64) }); control.published = true;
+      return { ok: true, batch_id: args.batchId, result_publication: dto(), local_ui_only: true, external_disclosure: false };
+    }
+  } });
+  h.rows.forEach((row, index) => Object.assign(row, { processing_mode: options.mode || 'markdown-and-anonymize', revision: index === 0 ? 2 : 1, text_modified: true,
+    output_sha256: crypto.createHash('sha256').update(texts.get(row.document_id)).digest('hex'),
+    entity_review_available: true, entity_count: 1, run_entity_review_available: true }));
+  return { h, control, binding, dto, texts, async open(index = 0) {
+    if (h.api.activeBatchId() === null) await h.api.open('a'.repeat(64));
+    await h.act(h.el('documents-list').children[index].children[1].children[0]);
+  }, async entity() {
+    const check = h.el('entities-list').children[0].children[0].children[0]; check.checked = true; await h.act(check, 'change');
+    h.el('entities-decision').value = 'person'; await h.act('entities-decision', 'change'); await h.act('entities-apply'); await tick(); await tick();
+  } };
+}
+
+testAsync('repair-required private comparisons expose a conscious repair step, never an opener, approval, export or automatic save', async () => {
+  const f = privateRepairFixture(); await f.open(); const { h } = f;
+  assert.equal(h.el('document-markdown').value, 'Name: Anna Berger'); assert.match(h.el('document-revision').textContent, /Stand 2/u);
+  assert.equal(h.el('documents-open-results').disabled, true); assert.equal(h.el('documents-publish').hidden, true);
+  assert.match(h.el('documents-purpose').textContent, /sichere Nachbearbeitung.*nichts automatisch geändert/u);
+  assert.match(h.el('document-edit-hint').textContent, /maskieren.*sichere Behandlung.*Basisstand/u);
+  assert.equal(h.guides.at(-1).phase, 'result_repair_required'); assert.notEqual(h.guides.at(-1).stages[2].status, 'done');
+  const before = structuredClone(h.rows);
+  await h.act('documents-open-results'); await h.act('documents-publish'); await h.all(); await h.act('documents-approve');
+  await h.act('documents-approve-proceed'); await h.act('documents-revoke'); await h.act('documents-export'); await h.act('document-export-confirm');
+  await h.act('document-save-correction'); await h.act('documents-identities');
+  assert.deepEqual(h.rows, before); assert.equal(h.calls.some(isDecision), false);
+  assert.equal(h.calls.some(call => ['open_history_results','publish_result_documents','preview_document_export','export_approved_documents','open_document_identity_overview'].includes(call.command)), false);
+});
+
+for (const action of ['entities','redact','restore_base'])
+  testAsync(`two private documents repair sequentially through ${action}; fresh bindings precede exactly one final publication`, async () => {
+    const f = privateRepairFixture(); await f.open(); const { h } = f, firstBinding = f.binding();
+    const oldRevisions = h.rows.map(row => row.revision);
+    if (action === 'entities') await f.entity();
+    else if (action === 'redact') { await h.mark(6, h.el('document-markdown').value.length); await h.act('document-redact'); await tick(); await tick(); }
+    else {
+      await h.act('document-restore'); assert.equal(h.calls.some(isDecision), false, 'preparation is not restoration');
+      assert.match(h.el('document-change-confirm-text').textContent, /Weitere private Reparaturen können nötig bleiben/u);
+      await h.act('document-change-save'); await tick(); await tick();
+    }
+    assert.deepEqual(h.rows.map(row => row.revision), [oldRevisions[0] + 1, oldRevisions[1]]);
+    assert.equal(h.calls.filter(isDecision).length, 1); assert.equal(h.calls.find(isDecision).args.decision.repair_binding, firstBinding);
+    assert.equal(h.calls.find(isDecision).args.decision.action, action);
+    assert.notEqual(f.binding(), firstBinding); assert.equal(h.calls.some(call => call.command === 'publish_result_documents'), false);
+    assert.match(h.el('documents-status').textContent, /Änderung gespeichert.*Weitere private Reparaturen.*noch kein neuer Ergebnisstand/u);
+    assert.doesNotMatch(h.el('documents-status').textContent, /gespeichert und aktueller Ergebnisstand bereitgestellt/u);
+    assert.equal(h.el('documents-open-results').disabled, true); assert.equal(h.el('documents-publish').hidden, true);
+    await h.act('documents-open-results'); await h.act('documents-publish'); assert.equal(h.calls.some(call => call.command === 'open_history_results'), false);
+    const secondBinding = f.binding(); await f.open(1); await f.entity();
+    const decisions = h.calls.filter(isDecision); assert.equal(decisions.length, 2); assert.equal(decisions[1].args.decision.repair_binding, secondBinding);
+    assert.deepEqual(h.rows.map(row => row.revision), [oldRevisions[0] + 1, oldRevisions[1] + 1]);
+    assert.equal(h.calls.filter(call => call.command === 'publish_result_documents').length, 1);
+    assert.equal(h.el('documents-open-results').disabled, false); assert.match(h.el('documents-status').textContent, /gespeichert und aktueller Ergebnisstand bereitgestellt/u);
+    await h.act('documents-open-results'); assert.equal(h.calls.filter(call => call.command === 'open_history_results').length, 1);
+  });
+
+const malformedRepairStates = {
+  'missing binding': value => { delete value.repair_binding; },
+  'null binding': value => { value.repair_binding = null; },
+  'undefined binding': value => { value.repair_binding = undefined; },
+  'non-string binding': value => { value.repair_binding = 7; },
+  'uppercase binding': value => { value.repair_binding = 'A'.repeat(64); },
+  'short binding': value => { value.repair_binding = 'a'.repeat(63); },
+  'long binding': value => { value.repair_binding = 'a'.repeat(65); },
+  'missing generation': value => { delete value.generation_id; },
+  'undefined generation': value => { value.generation_id = undefined; },
+  'missing count': value => { delete value.count; },
+  'undefined count': value => { value.count = undefined; },
+  'missing revision': value => { delete value.current_revision; },
+  'undefined revision': value => { value.current_revision = undefined; },
+  'foreign generation': value => { value.generation_id = '../other'; },
+  'foreign count': value => { value.count = 1; },
+  'invalid revision': value => { value.current_revision = -1; },
+  'extra grant': value => { value.writable = true; }
+};
+for (const [variant, mutate] of Object.entries(malformedRepairStates))
+  testAsync(`malformed repair projection ${variant} grants neither comparison mutations nor public access`, async () => {
+    const f = privateRepairFixture({ project(value) { mutate(value); return value; } }); await f.h.api.open('a'.repeat(64)); const { h } = f;
+    assert.match(h.el('documents-status').textContent, /DOCUMENT_REVIEW_INVALID/u);
+    assert.equal(h.el('documents-open-results').disabled, true); assert.equal(h.el('entities-apply').disabled, true);
+    await h.act('documents-open-results'); await h.act('documents-publish'); await h.act('document-redact'); await h.act('entities-apply');
+    assert.equal(h.calls.some(isDecision), false); assert.equal(h.calls.some(call => ['publish_result_documents','open_history_results'].includes(call.command)), false);
+  });
+for (const state of ['initial','current','pending','conflict','unavailable'])
+  testAsync(`${state} cannot carry a repair token or inherit repair-only mutation rights`, async () => {
+    const f = privateRepairFixture({ project(value) { return { ...value, state, generation_id: state === 'current' ? 'e'.repeat(32) : null }; } });
+    await f.h.api.open('a'.repeat(64)); const { h } = f;
+    assert.match(h.el('documents-status').textContent, /DOCUMENT_REVIEW_INVALID/u); await h.act('documents-publish'); await h.act('document-redact');
+    assert.equal(h.calls.some(isDecision), false); assert.equal(h.calls.some(call => call.command === 'publish_result_documents'), false);
+  });
+
+testAsync('a stale repair reply never retries the decision; a later conscious choice uses the reloaded binding', async () => {
+  const f = privateRepairFixture(); await f.open(); const old = f.binding(); f.control.staleNext = true; await f.entity(); const { h } = f;
+  assert.match(h.el('documents-status').textContent, /Bestätigung ist unklar/u); assert.equal(h.rows[0].revision, 2);
+  assert.equal(h.calls.filter(isDecision).length, 1); assert.equal(h.calls.find(isDecision).args.decision.repair_binding, old);
+  assert.equal(h.calls.some(call => call.command === 'publish_result_documents'), false);
+  const current = f.binding(); assert.notEqual(current, old); await f.entity();
+  assert.equal(h.calls.filter(isDecision).length, 2); assert.equal(h.calls.filter(isDecision)[1].args.decision.repair_binding, current);
+  assert.equal(h.rows[0].revision, 3); assert.equal(h.calls.some(call => call.command === 'publish_result_documents'), false);
+});
+for (const last of [false,true])
+  testAsync(`a lost ${last ? 'last' : 'first'} repair ACK reloads the saved revision without replay or premature publication`, async () => {
+    const f = privateRepairFixture(); if (last) f.control.unsafe.delete('2'.repeat(32)); await f.open(); f.control.lostNext = true; await f.entity(); const { h } = f;
+    assert.equal(h.rows[0].revision, 3); assert.match(h.el('document-revision').textContent, /Stand 3/u);
+    assert.match(h.el('documents-status').textContent, /Bestätigung ist unklar/u);
+    assert.equal(h.calls.filter(isDecision).length, 1); assert.equal(h.calls.some(call => call.command === 'publish_result_documents'), false);
+    assert.equal(h.el('documents-open-results').disabled, true); assert.equal(h.el('documents-publish').hidden, !last);
+    if (last) { await h.act('documents-publish'); assert.equal(h.calls.filter(call => call.command === 'publish_result_documents').length, 1);
+      assert.equal(h.calls.filter(isDecision).length, 1); assert.equal(h.el('documents-open-results').disabled, false); }
+    else assert.equal(h.guides.at(-1).phase, 'result_repair_required');
+  });
+
+testAsync('a confirmed entity refusal while repairing retains the old revision, binding and chosen treatment', async () => {
+  const f = privateRepairFixture(); await f.open(); const binding = f.binding();
+  f.control.reply = () => entityRefusal([{ name: f.h.rows[0].name, reason_code: 'DOCUMENT_REVIEW_RESIDUAL_PII' }]);
+  await f.entity(); const { h } = f;
+  assert.equal(h.rows[0].revision, 2); assert.equal(f.binding(), binding); assert.match(h.el('documents-status').textContent, /Behandlung nicht gespeichert/u);
+  assert.equal(h.el('entities-list').children[0].children[0].children[0].checked, true);
+  assert.equal(h.calls.some(call => call.command === 'publish_result_documents'), false);
+});
+
+for (const successor of ['same','different'])
+  testAsync(`retired repair ACK cannot publish or overwrite a ${successor}-batch successor`, async () => {
+    const f = privateRepairFixture(); let finish; const pending = new Promise(resolve => { finish = resolve; });
+    f.control.reply = () => pending;
+    try {
+      await f.open(); await f.entity(); const { h } = f, request = h.calls.find(isDecision).args;
+      const acknowledgement = { ok: true, ...h.rows[0], revision: request.decision.revision + 1, approved: false,
+        local_ui_only: true, external_disclosure: false };
+      h.api.invalidateConnection(); await h.api.open((successor === 'same' ? 'a' : 'b').repeat(64));
+      await h.act(h.el('documents-list').children[1].children[1].children[0]);
+      const before = { status: h.el('documents-status').textContent, name: h.el('document-name').textContent,
+        revision: h.el('document-revision').textContent, text: h.el('document-markdown').value };
+      finish(acknowledgement); await tick(); await tick();
+      assert.deepEqual({ status: h.el('documents-status').textContent, name: h.el('document-name').textContent,
+        revision: h.el('document-revision').textContent, text: h.el('document-markdown').value }, before);
+      assert.equal(h.calls.filter(isDecision).length, 1); assert.equal(h.calls.some(call => call.command === 'publish_result_documents'), false);
+      assert.equal(h.el('documents-open-results').disabled, true); assert.equal(h.el('documents-publish').hidden, true);
+    } finally { finish(null); await tick(); }
+  });
+
+testAsync('ordinary ready mutations and publication never acquire a repair token', async () => {
+  const f = privateRepairFixture(); f.control.unsafe.clear(); f.control.published = true; await f.open(); await f.entity(); const { h } = f;
+  assert.equal(Object.hasOwn(h.calls.find(isDecision).args.decision, 'repair_binding'), false);
+  assert.deepEqual(h.calls.find(call => call.command === 'publish_result_documents').args, { batchId: 'a'.repeat(64) });
+  assert.equal(h.el('documents-open-results').disabled, false);
+});
+testAsync('repair admission does not bypass exact CRLF and astral-character masking positions', async () => {
+  const source = '😀\r\nName: Anna Berger\r\nEnde', f = privateRepairFixture({ text1: source }); await f.open(); const { h } = f;
+  const start = h.el('document-markdown').value.indexOf('Anna Berger'); await h.mark(start, start + 'Anna Berger'.length);
+  const token = f.binding(); await h.act('document-redact'); await tick(); await tick();
+  const decision = h.calls.find(isDecision).args.decision;
+  assert.deepEqual(decision.ranges, [{ start: source.indexOf('Anna Berger'), end: source.indexOf('Anna Berger') + 'Anna Berger'.length }]);
+  assert.equal(decision.repair_binding, token); assert.equal(f.texts.get(h.rows[0].document_id), '😀\r\nName: [MANUAL_REDACTION]\r\nEnde');
+  assert.equal(h.calls.some(call => call.command === 'publish_result_documents'), false);
+});
+testAsync('a repair token cannot grant raw editing or mutation before terminal completion', async () => {
+  const raw = privateRepairFixture({ mode: 'markdown-only' }); await raw.h.api.open('a'.repeat(64));
+  assert.match(raw.h.el('documents-status').textContent, /DOCUMENT_REVIEW_INVALID/u);
+  await raw.h.act('document-save-correction'); assert.equal(raw.h.calls.some(isDecision), false);
+  const incomplete = privateRepairFixture({ complete: false }); await incomplete.open(); await incomplete.entity();
+  assert.match(incomplete.h.el('entities-reason').textContent, /noch nicht abgeschlossen/u);
+  assert.equal(incomplete.h.calls.some(isDecision), false); assert.equal(incomplete.h.calls.some(call => call.command === 'publish_result_documents'), false);
+});
+testAsync('a failed fresh repair-binding read after an acknowledged commit leaves all new mutations blocked', async () => {
+  const f = privateRepairFixture({ project(value, control) { return control.commits ? { ...value, repair_binding: 'malformed' } : value; } });
+  await f.open(); await f.entity(); const { h } = f;
+  assert.equal(h.rows[0].revision, 3); assert.equal(h.calls.filter(isDecision).length, 1);
+  assert.equal(h.calls.some(call => call.command === 'publish_result_documents'), false);
+  assert.equal(h.el('documents-open-results').disabled, true); assert.equal(h.el('entities-apply').disabled, true); assert.equal(h.el('document-redact').disabled, true);
+  assert.match(h.el('documents-status').textContent, /Bestätigung ist unklar/u);
+  assert.doesNotMatch(h.el('documents-status').textContent, /gespeichert und aktueller Ergebnisstand bereitgestellt/u);
+});
+
 done();

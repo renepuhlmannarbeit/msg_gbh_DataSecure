@@ -5040,4 +5040,81 @@ for (const retirement of ['interaction', 'connection']) testAsync(`a delayed glo
   assert.equal(reads, 3); assert.equal(h.el('open-count').textContent, '2 offen'); assert.equal(h.el('open-count').hidden, false);
 });
 
+const privateRepairPublication = () => ({ state: 'repair_required', generation_id: null, count: 2, current_revision: 2, repair_binding: '9'.repeat(64) });
+testAsync('history repair projection blocks result opening and offers private repair without automatic mutation', async () => {
+  const h = harness({ invoke(command, args, fallback) {
+    return command === 'get_document_review_history_summary' ? reviewSummary({ result_publication: privateRepairPublication() }) : fallback();
+  } }); await tick();
+  h.model.entries = [markdownHistoryEntry(B, { processing_mode: 'markdown-and-anonymize', selected_count: 2, completed_count: 2, failed_count: 0 })];
+  await h.act('nav-history'); await toggleHistorySummary(h, B);
+  const opener = h.el(`history-${B}-results`), editor = h.el(`history-${B}-documents`);
+  assert.equal(opener.disabled, true); assert.equal(editor.disabled, false); assert.match(editor.textContent, /Gespeicherte Texte nachbearbeiten/u);
+  assert.match(h.el(`history-${B}-state`).textContent, /Gespeicherte Anonymisierung.*nachbearbeiten/u);
+  assert.match(h.el(`history-${B}-summary`).textContent, /private Dokumentstände.*nichts automatisch geändert/u);
+  assert.match(h.el(`history-${B}-summary`).textContent, /Erst alle betroffenen Dokumente reparieren/u);
+  assert.doesNotMatch(h.el(`history-${B}-summary`).textContent, /Ergebnisdateien erstellt|Ergebnisstand abgleichen/u);
+  await h.act(opener); assert.equal(h.calls.some(call => call.command === 'open_history_results'), false);
+  assert.equal(h.calls.some(call => ['publish_result_documents','decide_document_review','decide_document_review_batch','export_approved_documents'].includes(call.command)), false);
+});
+testAsync('a failed or malformed history refresh cannot release a previously confirmed repair restriction', async () => {
+  let phase = 'repair';
+  const h = harness({ invoke(command, args, fallback) {
+    if (command === 'get_document_review_history_summary') return reviewSummary({ result_publication: phase === 'current'
+      ? { state: 'current', generation_id: 'e'.repeat(32), count: 2, current_revision: 3 }
+      : { ...privateRepairPublication(), ...(phase === 'malformed' ? { repair_binding: 'A'.repeat(64) } : {}) } });
+    return fallback();
+  } }); await tick(); h.model.entries = [markdownHistoryEntry(B, { processing_mode: 'markdown-and-anonymize', selected_count: 2, completed_count: 2, failed_count: 0 })];
+  await h.act('nav-history'); await toggleHistorySummary(h, B); assert.equal(h.el(`history-${B}-results`).disabled, true);
+  phase = 'malformed'; await h.act(`history-${B}-summary-reload`); await tick();
+  assert.match(h.el(`history-${B}-summary`).textContent, /DOCUMENT_REVIEW_INVALID/u); assert.equal(h.el(`history-${B}-results`).disabled, true);
+  await h.act(`history-${B}-results`); assert.equal(h.calls.some(call => call.command === 'open_history_results'), false);
+  phase = 'current'; await h.act(`history-${B}-summary-reload`); await tick();
+  assert.equal(h.el(`history-${B}-results`).disabled, false); assert.match(h.el(`history-${B}-summary`).textContent, /Ergebnisdateien erstellt/u);
+  assert.equal(h.calls.some(call => ['publish_result_documents','decide_document_review','export_approved_documents'].includes(call.command)), false);
+});
+testAsync('the retained current job uses its bound repair projection as a private action instead of a green result opener', async () => {
+  const h = await finishedAnonymousWorkspace({ invoke(command, args, fallback) {
+    return command === 'get_document_review_history_summary' ? reviewSummary({ result_publication: privateRepairPublication() }) : fallback();
+  } }); await openFinishedSnapshot(h); await h.act('nav-details');
+  assert.match(h.el('job-title').textContent, /Gespeicherte Anonymisierung.*nachbearbeiten/u);
+  assert.doesNotMatch(h.el('job-status').className, /success/u);
+  assert.equal(h.el('job-action-results'), undefined);
+  assert.equal(h.el('job-action-documents').className, 'primary');
+  assert.match(h.el('job-action-documents').textContent, /Gespeicherte Texte nachbearbeiten/u);
+  assert.doesNotMatch(h.el('job-description').textContent, /technisch geprüfte anonymisierte Ergebnisse.*verfügbar|Ergebnisordner öffnen/u);
+  assert.equal(h.calls.some(call => ['publish_result_documents','decide_document_review','export_approved_documents','open_history_results'].includes(call.command)), false);
+});
+testAsync('a failed bound repair-summary refresh cannot restore the retained current-job opener', async () => {
+  let malformed = false;
+  const h = await finishedAnonymousWorkspace({ invoke(command, args, fallback) {
+    return command === 'get_document_review_history_summary' ? reviewSummary({ result_publication: {
+      ...privateRepairPublication(), ...(malformed ? { repair_binding: 'A'.repeat(64) } : {}) } }) : fallback();
+  } }); await openFinishedSnapshot(h);
+  malformed = true; await h.act(`history-${A}-summary-reload`); await tick();
+  assert.match(h.el(`history-${A}-summary`).textContent, /DOCUMENT_REVIEW_INVALID/u);
+  await h.act('nav-details');
+  assert.match(h.el('job-title').textContent, /Gespeicherte Anonymisierung.*nachbearbeiten/u);
+  assert.equal(h.el('job-action-results'), undefined); assert.equal(h.el('job-action-documents').className, 'primary');
+  assert.equal(h.calls.some(call => ['publish_result_documents','decide_document_review','export_approved_documents','open_history_results'].includes(call.command)), false);
+});
+testAsync('actual document-view navigation retains repair restrictions and then authoritative normal pending without granting an opener', async () => {
+  let publication = privateRepairPublication();
+  const h = await finishedAnonymousWorkspace({ documentRenderer: true, invoke(command, args, fallback) {
+    if (command === 'get_document_review_history_summary') return reviewSummary({ result_publication: publication, approved_count: 0 });
+    if (command === 'get_document_reviews') return { ...documentResponse('markdown-and-anonymize', 2),
+      processing_complete: true, result_publication: publication, unavailable: [], content_notices: [],
+      content_notice_count: 0, content_notice_breakdown_complete: true };
+    return fallback();
+  } }); await openFinishedSnapshot(h); await h.act(`history-${A}-documents`); await tick(); await tick();
+  assert.equal(h.el('documents-view').hidden, false); assert.equal(h.el('documents-open-results').disabled, true);
+  await h.act('documents-back'); await tick();
+  assert.equal(h.el('job-action-results'), undefined); assert.match(h.el('job-title').textContent, /sicher nachbearbeiten/u);
+  await h.act('job-action-documents'); await tick(); await tick();
+  publication = { state: 'pending', generation_id: null, count: 2, current_revision: 3 };
+  await h.act('documents-reload'); await tick(); assert.equal(h.el('documents-open-results').disabled, true);
+  await h.act('documents-back'); await tick();
+  assert.equal(h.el('job-action-results'), undefined); assert.match(h.el('job-title').textContent, /Ergebnisstand.*nicht bestätigt/u);
+  assert.equal(h.calls.some(call => ['publish_result_documents','decide_document_review','decide_document_review_batch','export_approved_documents','open_history_results'].includes(call.command)), false);
+});
+
 done();

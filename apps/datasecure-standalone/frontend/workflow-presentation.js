@@ -4,8 +4,11 @@
 (() => {
   const integer = value => Number.isSafeInteger(value) && value >= 0 && value <= 200;
   function resultPublication(value) {
-    if (!value || !['initial', 'current', 'pending', 'conflict', 'unavailable'].includes(value.state) ||
-        Object.keys(value).some(key => !['state', 'generation_id', 'count', 'current_revision'].includes(key)) ||
+    if (!value || !['initial', 'current', 'pending', 'conflict', 'unavailable', 'repair_required'].includes(value.state) ||
+        Object.keys(value).some(key => !['state', 'generation_id', 'count', 'current_revision', 'repair_binding'].includes(key)) ||
+        (value.state === 'repair_required' ? Object.keys(value).sort().join(',') !== 'count,current_revision,generation_id,repair_binding,state' ||
+          value.generation_id === undefined || value.count === undefined || value.current_revision === undefined ||
+          typeof value.repair_binding !== 'string' || !/^[a-f0-9]{64}$/u.test(value.repair_binding) : Object.prototype.hasOwnProperty.call(value, 'repair_binding')) ||
         value.generation_id !== undefined && value.generation_id !== null && !/^[a-f0-9]{32}$/u.test(value.generation_id) ||
         value.state === 'current' && !/^[a-f0-9]{32}$/u.test(value.generation_id || '') ||
         value.count !== undefined && !integer(value.count) || value.current_revision !== undefined &&
@@ -152,8 +155,12 @@
       else {
         const publication = value.result_publication === undefined ? null : resultPublication(value.result_publication);
         if (value.result_publication !== undefined && (!publication ||
-            publication.count !== undefined && publication.count !== value.document_count)) return output;
-        if (publication?.state === 'unavailable' && wholeRun) {
+            publication.count !== undefined && publication.count !== value.document_count || raw && publication.state === 'repair_required')) return output;
+        if (publication?.state === 'repair_required' && wholeRun) {
+          output.stages[1].status = 'warning';
+          set('result_repair_required', review, 'Gespeicherte Anonymisierung sicher nachbearbeiten',
+            'Mindestens ein privater Textstand benötigt eine sichere Nachbearbeitung. Eine Datei öffnen und sensible Stellen bewusst maskieren, sicher ersetzen oder den Basisstand ausdrücklich wiederherstellen. Es wird nichts automatisch geändert. Erst nach vollständiger Reparatur neue Ergebnisdateien bereitstellen; frühere Ergebnisse bleiben unverändert.');
+        } else if (publication?.state === 'unavailable' && wholeRun) {
           output.stages[copy].status = 'done';
           Object.assign(output, { phase: 'results_unavailable', heading: 'Verarbeitung abgeschlossen – Ergebnisordner nicht verfügbar',
             next: 'Der bereitgestellte Ordner ist nicht mehr sicher erreichbar. Private Prüfstände bleiben erhalten; es wird nichts neu angelegt oder überschrieben.' });
@@ -166,8 +173,8 @@
         } else if (wholeRun) set('result_pending', copy, 'Aktueller Ergebnisstand nicht bestätigt', 'Der Nachbearbeitungsstand ist noch nicht als Ergebnisdateien bestätigt. Bereitstellung erneut prüfen.');
         else set('documents', -1, 'Verfügbare Ergebnisse ansehen (optional)', 'Der Laufabschluss ist noch nicht bestätigt. Bereits verfügbare Dateien sind nicht der gesamte Stapel.');
       }
-      output.stages[review].status = value.dirty === true ? 'current' : 'optional';
-      output.counts = `${value.document_count} Ergebnisdateien · Nachbearbeitung freiwillig`;
+      output.stages[review].status = output.phase === 'result_repair_required' || value.dirty === true ? 'current' : 'optional';
+      output.counts = output.phase === 'result_repair_required' ? `${value.document_count} private Dokumentstände · sichere Nachbearbeitung nötig` : `${value.document_count} Ergebnisdateien · Nachbearbeitung freiwillig`;
       if (fast) output.next += ' Bekannte unklare Fundstellen wurden automatisch maskiert, nicht manuell geprüft.';
       if (!wholeRun) output.next += ' Der Laufabschluss ist noch nicht bestätigt; verfügbare Dokumente sind nicht der gesamte Stapel.';
       if (value.problem_count) output.next += ` ${value.problem_count} Dateien sind nicht vollständig verfügbar; betroffene Dateien ansehen.`;
@@ -233,6 +240,13 @@
         : 'Fundstellen prüfen oder bewusst später fortsetzen.');
     } else if (value.state === 'results_available') {
       const publication = value.result_publication === undefined ? null : resultPublication(value.result_publication);
+      if (!raw && publication?.state === 'repair_required' && complete && value.result_count > 0 &&
+          publication.count === value.result_count) {
+        output.stages[0].status = failed ? 'warning' : 'done'; output.stages[1].status = 'warning';
+        set('result_repair_required', 3, 'Gespeicherte Anonymisierung sicher nachbearbeiten',
+          'Die privaten Textstände öffnen und verbliebene sensible Stellen bewusst maskieren, sicher ersetzen oder den Basisstand ausdrücklich wiederherstellen. Keine automatische Änderung oder erneute Bereitstellung; erst alle betroffenen Dokumente reparieren. Frühere Ergebnisse bleiben unverändert.');
+        return output;
+      }
       if (publication?.state === 'unavailable' && complete && value.result_count > 0 &&
           (publication.count === undefined || publication.count === value.result_count)) {
         output.stages[0].status = failed ? 'warning' : 'done';
@@ -242,7 +256,7 @@
           next: 'Der bereitgestellte Ordner ist nicht mehr sicher erreichbar. Private Prüfstände bleiben erhalten; es wird nichts neu angelegt oder überschrieben.' });
         return output;
       }
-      if (value.result_publication !== undefined && !publication || publication && (['pending', 'conflict'].includes(publication.state) ||
+      if (value.result_publication !== undefined && !publication || publication && (['pending', 'conflict', 'repair_required'].includes(publication.state) ||
           publication.count !== undefined && publication.count !== value.result_count) ||
           value.results_available === false || !complete || value.result_count === 0) {
         set('result_pending', 2, 'Ergebnisbereitstellung noch nicht bestätigt', 'Den gespeicherten Ergebnisstand dieses Laufs abgleichen. Keine neue Verarbeitung blind starten.');

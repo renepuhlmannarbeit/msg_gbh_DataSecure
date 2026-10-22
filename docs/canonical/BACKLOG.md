@@ -2,7 +2,45 @@
 
 Stand: 22.10.2026 · Produktstand 3.2.0-rc171 · gemeinsamer Windows-/Mac-Test-Pre-Release in Vorbereitung; RC170 bleibt unverändert.
 
-## Quellenabschluss22.10.2026 02:18UTC vor Source07
+## Aktive Übergabegates nach Quellenkorrektur, 22.10.2026 04:05 UTC
+
+Precommit-Entitykandidatenprüfung und gebundener privater Reparaturzustand sind
+implementiert und unabhängig am echten Code gegengelesen. Autoren:68+101 Backend-
+und819 Frontend-/Presentation-/Workspacefälle PASS; Main las alle Deltas selbst.
+Der eigene unveränderte10-Gruppen-Gegenlauf bestand vollständig (Exit0,
+inputs_unchangedtrue,04:14:56UTC). Danach neuer gemeinsamer
+Commit/Fingerprint, frische Gesamt-/Native-/Konverter-/Paket-/Macbelege und echte
+neue paketgebundene Windows-GUI, einschließlich Ablehnung ohne Commit und
+bewusster Reparatur des tatsächlich gespeicherten synthetischen Source07-Altstands.
+Noch kein nativer Recovery-PASS, Freeze, neues Paket oder RC171-Release.
+Der Mac-Receiptrollenfix und der lokale Altprofil-Helper sind vorbereitet und
+gegengelesen. Keine unmögliche Direktunit-Receipt oder erfundene Desktopabnahme.
+
+### Historische Releaseblocker nach echtem Windows-GUI-Test, 03:23 UTC
+
+1. Entity-Kandidaten vor atomarem Entscheidungscommit verifizieren, statt einen
+   gespeicherten Keep-Stand erst bei der Bereitstellung zu verweigern. Fachlich
+   sichere Ablehnung verständlich ohne Revision/Publikation; unknown/IO/ACL-ACK
+   bleibt konservativ. Gemeinsamer Windows-/Mac-JS-Pfad, keine Rechteursache.
+2. Bereits gespeicherte, nicht bereitstellbare ältere Revisionen bewusst sicher
+   reparierbar machen: gebundene aktuelle Selection/Journal/Initial-/ACK-Kette,
+   keine offenen Native-/Legacy-Operationen, kein Export-/Readygrant. Keine
+   automatische Rücknahme oder Änderung alter Ergebnisse/Belege. Policy bleibt.
+3. Danach neuer gemeinsamer Commit/FP und alle frischen Headless-/Native-/
+   Konverter-/Paket-/Mac-/Windows-GUI-Endgates. Source07-GUI05 ist FAIL; alte grüne
+   Gates/GUI01/06 ersetzen das nicht. Kein Release mit bekanntem Blocker.
+4. Im neuen Mac-Reviewhelper ausschließlich die unmögliche direkte Unit-Receipt-
+   Anforderung korrigieren. Tatsächliches natives Budgetorakel bleibt Pflicht;
+   Mac-direkter Unit-Test NOT_RUN, Windows-Headlessbeleg getrennt. Menschliche
+   Mac-/Windows-/Excel-/Numbers-/Finder-/TCC-/M2-Abnahme weiterhin USER_PENDING.
+
+Source07 vollständig grüne Gesamt-/Native-/Konverter-/Paketgates und erfolgreiche
+beide Macconsumer39710736315 bleiben erhalten. Echte GUI01/06 PASS,04 positiver
+Korrekturteilfall,05 FAIL,Rest NOT_RUN. App normal geschlossen,89Inputs bytegleich.
+Ausführliche Bindungen und negative GUI-Evidenz: Source07-CHECKPOINT.md und
+docs/acceptance/RC171_SHARED_RELEASE_20261022.md. Noch keine finale Übergabe.
+
+### Historischer Quellenabschluss 02:18 UTC vor Source07
 
 Zwei reine Zusatztestkorrekturen fertig und unabhängig am tatsächlichen Delta
 gegen Produktionsparser/Worker/CheckpointStream gegengelesen, kein bestätigter

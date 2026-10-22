@@ -36,6 +36,24 @@
       (!['approve', 'revoke'].includes(action) || result.output_sha256 === previous.output_sha256) &&
       result.approved === (action === 'approve') && result.local_ui_only === true && result.external_disclosure === false;
   }
+  function rejectedEntityDecision(result) {
+    const closed = (value, fields) => value && typeof value === 'object' && !Array.isArray(value) &&
+      Object.keys(value).sort().join(',') === fields;
+    const reasons = ['DOCUMENT_ENTITY_RUN_UNAVAILABLE', 'DOCUMENT_ENTITY_RUN_CONFLICT', 'DOCUMENT_REVIEW_INVALID',
+      'DOCUMENT_REVIEW_RESIDUAL_PII', 'DOCUMENT_REVIEW_POLICY_CHANGED'];
+    // Only the complete, explicit pre-commit refusal proves that this request
+    // saved nothing. An unknown/malformed reply still takes uncertain recovery.
+    if (!closed(result, 'blocked_files,external_disclosure,local_ui_only,ok,reason_code') || result.ok !== false ||
+        result.reason_code !== 'DOCUMENT_ENTITY_RUN_CONFLICT' || result.local_ui_only !== true || result.external_disclosure !== false ||
+        !Array.isArray(result.blocked_files) || !result.blocked_files.length || result.blocked_files.length > 200 ||
+        !result.blocked_files.every(file => closed(file, 'name,reason_code') && typeof file.name === 'string' &&
+          file.name.length > 0 && file.name.length <= 1024 && !/[:\\\p{Cc}]/u.test(file.name) && !file.name.startsWith('/') &&
+          file.name.split('/').every(part => part && part !== '.' && part !== '..') && reasons.includes(file.reason_code))) return null;
+    return { names: result.blocked_files.map(file => file.name).join(', '),
+      residual: result.blocked_files.some(file => file.reason_code === 'DOCUMENT_REVIEW_RESIDUAL_PII'),
+      policy: result.blocked_files.some(file => file.reason_code === 'DOCUMENT_REVIEW_POLICY_CHANGED'),
+      unavailable: result.blocked_files.some(file => !['DOCUMENT_REVIEW_RESIDUAL_PII', 'DOCUMENT_REVIEW_POLICY_CHANGED'].includes(file.reason_code)) };
+  }
   async function decideSelection(expected, action, rows) {
     // One atomic, operation-bound acknowledgement even for a single file.
     // This is also used by the combined approval/export confirmation.
@@ -100,8 +118,11 @@
   let resultPublication = null;
   let directResultsSupported = false;
   function publication(value) {
-    if (!value || !['initial', 'current', 'pending', 'conflict', 'unavailable'].includes(value.state) ||
-        Object.keys(value).some(key => !['state', 'generation_id', 'count', 'current_revision'].includes(key)) ||
+    if (!value || !['initial', 'current', 'pending', 'conflict', 'unavailable', 'repair_required'].includes(value.state) ||
+        Object.keys(value).some(key => !['state', 'generation_id', 'count', 'current_revision', 'repair_binding'].includes(key)) ||
+        (value.state === 'repair_required' ? Object.keys(value).sort().join(',') !== 'count,current_revision,generation_id,repair_binding,state' ||
+          value.generation_id === undefined || value.count === undefined || value.current_revision === undefined ||
+          typeof value.repair_binding !== 'string' || !/^[a-f0-9]{64}$/u.test(value.repair_binding) : Object.prototype.hasOwnProperty.call(value, 'repair_binding')) ||
         value.generation_id !== undefined && value.generation_id !== null && !/^[a-f0-9]{32}$/u.test(value.generation_id) ||
         value.state === 'current' && !/^[a-f0-9]{32}$/u.test(value.generation_id || '') ||
         value.count !== undefined && (!Number.isSafeInteger(value.count) || value.count < 0 || value.count > 200) ||
@@ -167,6 +188,7 @@
     if (!directResultsSupported) return 'Dieser ältere Lauf ist hier nur lesbar; eine neue Ergebnisbereitstellung ist nicht belegt.';
     if (publicDirectoryUnavailable()) return 'Der ursprüngliche Ergebnisordner ist nicht verfügbar. Private Dokumentstände bleiben lesbar; Änderungen und neue Bereitstellungen bleiben gesperrt.';
     if (publicationUnsettled()) return 'Der aktuelle Ergebnisstand ist noch nicht bestätigt. Zuerst „Bereitstellung erneut prüfen“ verwenden.';
+    if (repairRequired() && !['select', 'mask', 'entities', 'restore', 'restore-save'].includes(action)) return repairInstructions;
     if (recoveryDraft) return 'Der erhaltene Korrekturentwurf muss zuerst mit dem gespeicherten Stand abgeglichen oder verworfen werden.';
     if (action === 'correct') return raw() && dirty() ? '' : 'Bitte den rechten Markdown-Text zuerst bearbeiten.';
     if (raw()) return 'Zusätzliche Maskierung und Behandlung gehören nur zum Anonymisierungsweg.';
@@ -218,9 +240,14 @@
   function forgetTextSelection() { textSelection = null; selectionOwner = null; }
   const publicationUnsettled = () => ['pending', 'conflict'].includes(resultPublication?.state);
   const publicDirectoryUnavailable = () => resultPublication?.state === 'unavailable';
+  const repairRequired = () => resultPublication?.state === 'repair_required';
+  const repairInstructions = 'Mindestens ein gespeicherter Textstand benötigt eine sichere Nachbearbeitung. Links eine Datei öffnen und sensible Stellen bewusst maskieren, eine sichere Behandlung wählen oder den Basisstand ausdrücklich wiederherstellen. Es wird nichts automatisch geändert. Ergebnisöffnen und Bereitstellung bleiben bis zur vollständigen Reparatur gesperrt; frühere Ergebnisstände bleiben unverändert.';
+  const repairRemaining = 'Änderung gespeichert. Weitere private Reparaturen sind nötig. Die übrigen Dateien vergleichen und sicher nachbearbeiten; noch kein neuer Ergebnisstand bereitgestellt. Frühere Ergebnisstände bleiben unverändert.';
+  const repairDecision = action => repairRequired() && ['entities', 'redact', 'restore_base'].includes(action)
+    ? { repair_binding: resultPublication.repair_binding } : {};
   async function publishCurrent(expected, ownership, connection) {
     if (expected !== batchId || ownership !== busyGeneration || connection !== connectionGeneration ||
-        !busy || !stateFresh || !processingComplete || !directResultsSupported || publicDirectoryUnavailable() || dirty() || exportRequest) throw Error('DOCUMENT_REVIEW_STALE');
+        !busy || !stateFresh || !processingComplete || !directResultsSupported || publicDirectoryUnavailable() || repairRequired() || dirty() || exportRequest) throw Error('DOCUMENT_REVIEW_STALE');
     resultPublication = { state: 'pending' }; controls();
     status('Änderung gespeichert. Der vollständige aktuelle Ergebnisstand wird sicher bereitgestellt …');
     const result = await invoke('publish_result_documents', { batchId: expected });
@@ -250,7 +277,7 @@
     DOCUMENT_ENTITY_UNAVAILABLE: 'Für diese Datei ist kein vollständig rückverfolgbarer Entitätenplan verfügbar. Textvergleich und zusätzliche Maskierung bleiben möglich.',
     DOCUMENT_ENTITY_INVALID: 'Die Entitätenentscheidung passt nicht zum aktuellen Textstand. Bitte die Datei neu laden.',
     DOCUMENT_ENTITY_RUN_UNAVAILABLE: 'Für diese Auswahl ist keine eindeutige laufweite Identität belegt. Bitte „Nur diese Datei“ wählen.',
-    DOCUMENT_ENTITY_RUN_CONFLICT: 'Die laufweite Änderung wurde nicht übernommen. Mindestens ein betroffener Prüfstand ist nicht bearbeitbar. Die genannten Dateien zuerst prüfen.',
+    DOCUMENT_ENTITY_RUN_CONFLICT: 'Die Entitätenentscheidung konnte nicht sicher bestätigt werden. Die genannten Prüfstände und den gespeicherten Stand prüfen; nicht blind erneut speichern.',
     DOCUMENT_REVIEW_RESIDUAL_PII: 'Diese Fassung enthält mögliche personenbezogene Angaben oder unlesbare Zeichen. Die Freigabe ist nicht bestätigt. Bitte die Werte prüfen; bei unlesbarem Text eine lesbare Kopie der Quelldatei neu verarbeiten. Nicht weitergeben.',
     DOCUMENT_REVIEW_POLICY_CHANGED: 'Die gespeicherte Prüfung gehört zu einer älteren Datenschutzregel. Bitte diese Quelldatei mit der aktuellen Version neu verarbeiten.',
     AI_EXPORT_CONFLICT: 'Im Exportordner besteht ein Konflikt. Es wurde nichts überschrieben.',
@@ -317,7 +344,7 @@
   const canLeaveCompletion = () => Boolean(batchId && !busy && !navigationDraft() &&
     (!loading || confirmedCopy?.batchId === batchId && !exportRequest));
   function controls() {
-    const directoryUnavailable = publicDirectoryUnavailable();
+    const directoryUnavailable = publicDirectoryUnavailable(), needsRepair = repairRequired();
     const blocked = busy || !stateFresh, mutationBlocked = blocked || !processingComplete || !directResultsSupported || directoryUnavailable || publicationUnsettled();
     const shown = visibleDocuments(), rows = documents.filter(row => selected.has(row.document_id));
     const anotherCopy = completedCopyCount > 0 || confirmedCopy?.batchId === batchId;
@@ -338,11 +365,12 @@
       completionText = `${copied} ausgewählte ${copied === 1 ? 'Datei wurde' : 'Dateien wurden'} lokal kopiert. Dieser Kopiervorgang ist bestätigt und wird nicht automatisch wiederholt. ${!stateFresh ? 'Der heutige Dokumentstatus wird getrennt neu geprüft; Änderungen bleiben bis dahin gesperrt. Das stellt diese bereits bestätigte Kopie nicht infrage.' : exportComplete ? 'Alle derzeit verfügbaren Dokumentstände dieses Laufs sind in dieser Kopie enthalten.' : 'Weitere Dateien oder spätere Textänderungen sind darin nicht automatisch enthalten und brauchen bei Bedarf eine neue Freigabe und Kopie.'} Im Verlauf kannst du Abschluss und Ausnahmen getrennt ansehen. Es erfolgte kein Upload.`;
     } else if (currentCompletion) {
       const unsettled = ['pending', 'conflict'].includes(resultPublication?.state);
-      completionTitle = directoryUnavailable ? 'Verarbeitung abgeschlossen · Ergebnisordner nicht verfügbar'
+      completionTitle = needsRepair ? 'Gespeicherte Anonymisierung sicher nachbearbeiten'
+        : directoryUnavailable ? 'Verarbeitung abgeschlossen · Ergebnisordner nicht verfügbar'
         : unsettled ? resultPublication.state === 'conflict' ? 'Ergebnisbereitstellung nicht bestätigt' : 'Ergebnisstand wird abgeglichen'
         : raw() ? 'Umwandlung abgeschlossen' : 'Anonymisierungslauf abgeschlossen';
       if (hasHints) completionTitle += ' · mit Hinweisen';
-      completionText = directoryUnavailable
+      completionText = needsRepair ? `${documents.length} private Dokumentstände bleiben zum Vergleichen lesbar. ${repairInstructions}` : directoryUnavailable
         ? `Der Lauf verarbeitet keine weiteren Dateien. ${documents.length} private Dokumentstände bleiben lesbar. Der ursprüngliche Ergebnisordner ist nicht verfügbar; öffentliche Ergebnisdateien werden hier nicht als erreichbar bestätigt. Änderungen und neue Bereitstellungen bleiben gesperrt. Es wird kein Ersatzordner übernommen oder neu angelegt. Es erfolgte kein Upload.`
         : `Der Lauf verarbeitet keine weiteren Dateien. ${documents.length} ${documents.length === 1 ? 'Ergebnis ist' : 'Ergebnisse sind'} verfügbar. ` +
         (unsettled ? 'Der aktuelle Nachbearbeitungsstand ist noch nicht als Ergebnisdateien bestätigt. Bereitstellung erneut prüfen; frühere Ergebnisordner bleiben unverändert. '
@@ -371,7 +399,7 @@
     $('documents-loading-text').textContent = loading ? 'Dokumente und Hinweise werden geladen …' : 'DataSecure verarbeitet den lokalen Vorgang …';
     $('documents-review-controls').hidden = Boolean(bulkReviewProgress);
     $('documents-approve-confirm').hidden = !pendingApproval || Boolean(bulkReviewProgress);
-    $('documents-approve-proceed').disabled = blocked || directoryUnavailable || !pendingApproval || Boolean(exportRequest) || dirty();
+    $('documents-approve-proceed').disabled = blocked || directoryUnavailable || needsRepair || !pendingApproval || Boolean(exportRequest) || dirty();
     $('documents-approve-cancel').disabled = busy;
     $('documents-bulk-progress').hidden = !bulkReviewProgress;
     if (bulkReviewProgress) {
@@ -401,19 +429,19 @@
     // eventual receipt visible until the operation has actually settled.
     $('document-export-close').disabled = busy && !dialogCompleted;
     $('documents-identity-reference').hidden = mode() !== 'markdown-and-anonymize';
-    $('documents-identities').disabled = blocked || dirty() || Boolean(recoveryDraft) || !documents.length;
+    $('documents-identities').disabled = blocked || needsRepair || dirty() || Boolean(recoveryDraft) || !documents.length;
     $('documents-all').disabled = true;
-    $('documents-selected').textContent = `${shown.length} angezeigt · ${documents.length} ${directoryUnavailable ? 'private Dokumentstände lesbar' : 'Ergebnisdateien verfügbar'}`;
+    $('documents-selected').textContent = `${shown.length} angezeigt · ${documents.length} ${directoryUnavailable || needsRepair ? 'private Dokumentstände lesbar' : 'Ergebnisdateien verfügbar'}`;
     $('documents-approve').hidden = raw(); $('documents-revoke').hidden = raw();
-    $('documents-approve').disabled = blocked || directoryUnavailable || dirty() || Boolean(exportRequest) || !rows.length; $('documents-revoke').disabled = blocked || directoryUnavailable || dirty() || Boolean(exportRequest) || !rows.length;
+    $('documents-approve').disabled = blocked || directoryUnavailable || needsRepair || dirty() || Boolean(exportRequest) || !rows.length; $('documents-revoke').disabled = blocked || directoryUnavailable || needsRepair || dirty() || Boolean(exportRequest) || !rows.length;
     if (!raw() && rows.length && rows.every(row => row.approved)) $('documents-approve').disabled = true;
     $('documents-approve').textContent = !raw() && rows.length && rows.every(row => row.approved) ? 'Auswahl bereits freigegeben' : 'Auswahl nur freigeben';
     $('documents-export').hidden = !exportRequest;
     // Hidden compatibility controls keep the old explicitly selected copy
     // transaction contract. The normal UI exposes no new copy selection.
-    $('documents-export').disabled = blocked || directoryUnavailable || dirty() || !exportRequest && !rows.length;
+    $('documents-export').disabled = blocked || directoryUnavailable || needsRepair || dirty() || !exportRequest && !rows.length;
     $('documents-export').textContent = exportRequest ? knownExport || pendingMetadata?.status === 'completed' ? 'Empfang erneut abgleichen' : pendingMetadata ? 'Export erneut abgleichen' : 'Export erneut versuchen' : raw() ? anotherCopy ? 'Weitere Markdown-Kopie speichern' : 'Zusätzliche Markdown-Kopie speichern' : anotherCopy ? 'Weitere Dateien exportieren' : 'Auswahl exportieren';
-    $('documents-heading').textContent = raw() ? 'Markdown freiwillig nachbearbeiten · nicht anonymisiert' : 'Ergebnisse nachbearbeiten (optional)';
+    $('documents-heading').textContent = needsRepair ? 'Gespeicherte Anonymisierung sicher nachbearbeiten' : raw() ? 'Markdown freiwillig nachbearbeiten · nicht anonymisiert' : 'Ergebnisse nachbearbeiten (optional)';
     if (!mode()) {
       $('documents-heading').textContent = loading ? 'Dokumentprüfstände werden geladen' : 'Dokumentprüfstände dieses Laufs';
       $('documents-purpose').textContent = loading
@@ -422,23 +450,24 @@
       $('documents-export').textContent = 'Keine belegbare Exportauswahl';
       $('documents-export').disabled = true;
     }
-    $('document-markdown-caption').textContent = directoryUnavailable ? 'Privater gespeicherter Text (nur lesen)' : raw() ? 'Aktueller Markdown-Text (für Korrekturen bearbeitbar)' :
+    $('document-markdown-caption').textContent = needsRepair ? 'Privater gespeicherter Text (nur markieren)' : directoryUnavailable ? 'Privater gespeicherter Text (nur lesen)' : raw() ? 'Aktueller Markdown-Text (für Korrekturen bearbeitbar)' :
       mode() === 'markdown-and-anonymize' ? 'Aktueller Ergebnistext (nur markieren)' : 'Markdown-Text (Modus wird geladen)';
     $('documents-main-guide').hidden = true;
     $('documents-approval-extras').hidden = true;
     $('documents-purpose').textContent = !mode() ? loading ? 'Gespeicherte Dokumentstände werden geladen. Bitte warten.' : 'Der Verarbeitungszweck ist nicht bestätigt. Den gespeicherten Stand abgleichen.'
+      : needsRepair ? repairInstructions
       : directoryUnavailable ? 'Die Verarbeitung ist abgeschlossen. Der ursprüngliche Ergebnisordner ist nicht verfügbar. Private Dokumentstände können gelesen und verglichen werden; Änderungen und neue Bereitstellungen bleiben gesperrt. Es wird nichts neu angelegt oder als Ersatz übernommen.'
       : stateFresh && !directResultsSupported ? 'Älterer Lauf: Dokumente und damalige Kopierbelege bleiben lesbar. Automatische Bereitstellung neuer Nachbearbeitungsstände ist für diesen Lauf nicht verfügbar. Deshalb hier keine weiteren Textänderungen speichern; vorhandene Ergebnisdateien bleiben unverändert. ' +
         (raw() ? 'Markdown enthält Originalinhalte und ist nicht anonymisiert.' : automatic() ? 'Bekannte unklare Fundstellen wurden automatisch maskiert, nicht manuell geprüft.' : '')
       : 'Die erzeugten Dateien liegen im Ergebnisordner. Zum freiwilligen Vergleichen den Dateinamen anklicken. Gespeicherte Änderungen werden ohne weitere Dateiauswahl oder Exportbestätigung als neuer Ergebnisstand bereitgestellt. ' +
         (raw() ? 'Markdown enthält Originalinhalte und ist nicht anonymisiert. ' : automatic() ? 'Bekannte unklare Fundstellen wurden automatisch maskiert, nicht manuell geprüft. ' : '') +
         'Originaldateien und frühere Ergebnisstände bleiben unverändert. DataSecure lädt nichts hoch.';
-    const publicationBlocked = ['pending', 'conflict'].includes(resultPublication?.state);
-    $('documents-open-results').disabled = blocked || navigationDraft() || !processingComplete || !documents.length || publicationBlocked || directoryUnavailable;
+    const publicationBlocked = publicationUnsettled();
+    $('documents-open-results').disabled = blocked || navigationDraft() || !processingComplete || !documents.length || publicationBlocked || directoryUnavailable || needsRepair;
     $('documents-publish').hidden = !publicationBlocked || !directResultsSupported;
-    $('documents-publish').disabled = blocked || directoryUnavailable || navigationDraft() || !processingComplete || !directResultsSupported || Boolean(exportRequest);
+    $('documents-publish').disabled = blocked || directoryUnavailable || needsRepair || navigationDraft() || !processingComplete || !directResultsSupported || Boolean(exportRequest);
     $('document-markdown').setAttribute('aria-label', $('document-markdown-caption').textContent);
-    $('document-edit-hint').textContent = directoryUnavailable ? 'Der ursprüngliche Ergebnisordner ist nicht verfügbar. Du kannst die privaten Texte vergleichen, zwischen Dateien wechseln und den gespeicherten Stand neu laden. Änderungen und neue Bereitstellungen bleiben gesperrt.'
+    $('document-edit-hint').textContent = needsRepair ? repairInstructions : directoryUnavailable ? 'Der ursprüngliche Ergebnisordner ist nicht verfügbar. Du kannst die privaten Texte vergleichen, zwischen Dateien wechseln und den gespeicherten Stand neu laden. Änderungen und neue Bereitstellungen bleiben gesperrt.'
       : stateFresh && !directResultsSupported ? 'Dieser ältere Lauf ist hier nur lesbar. Eine neue automatische Ergebnisbereitstellung ist nicht belegt; vorhandene Dateien und alte Kopierbelege bleiben unverändert.'
       : raw() ? 'Du kannst den rechten Markdown-Text direkt bearbeiten. Die Datei ist nicht anonymisiert. „Markdown-Korrektur speichern“ speichert die Änderung und stellt danach den gesamten aktuellen Ergebnisstand bereit. Erst die Bestätigung beendet diesen Vorgang. Originaldateien und frühere Ergebnisstände bleiben unverändert.'
       : !detail ? 'Wähle links ein Dokument, um Original und anonymisierten Text freiwillig zu vergleichen. Die Ergebnisdateien benötigen keine weitere Freigabe oder Exportbestätigung.'
@@ -468,8 +497,8 @@
       : `${entitySelected.size} erkannte Werte ausgewählt, noch nicht gespeichert. Behandlung wählen und speichern oder die Auswahl bewusst verwerfen. Die Auswahl bleibt beim Fundstellenseitenwechsel erhalten.`);
     $('document-navigation-reason').hidden = !hasDraft;
     quietText('document-navigation-reason', hasDraft ? 'Ungespeicherter Entwurf: zuerst speichern oder ausdrücklich verwerfen, bevor du die Datei wechselst, neu lädst oder die Ansicht verlässt.' : '');
-    $('document-export-confirm').disabled = blocked || directoryUnavailable;
-    $('document-export-abandon').disabled = blocked || directoryUnavailable || !$('document-export-abandon-check').checked;
+    $('document-export-confirm').disabled = blocked || directoryUnavailable || needsRepair;
+    $('document-export-abandon').disabled = blocked || directoryUnavailable || needsRepair || !$('document-export-abandon-check').checked;
     $('document-recovery-draft').hidden = !recoveryDraft;
     $('document-recovery-text').value = recoveryDraft?.text || '';
     $('document-recovery-label').textContent = recoveryDraft ? `${recoveryDraft.name}: nicht bestätigter Korrekturentwurf (Ausgangsstand ${recoveryDraft.revision}). Der Text bleibt hier erhalten; bei abweichendem gespeicherten Stand bitte vergleichen und benötigte Änderungen kopieren.` : '';
@@ -492,12 +521,13 @@
     $('entities-count').textContent = `${entitySelected.size} ausgewählt (über alle Fundstellenseiten, höchstens 500) · ${detail?.entity_count || 0} unterschiedliche Werte in dieser Datei`;
     quietText('entities-reason', treatmentReason || ($('entities-scope').value === 'run'
       ? 'Die gewählte Behandlung gilt für belegte gleiche Identitäten auch in anderen Dateien dieses Laufs. „Originalwert beibehalten“ kann echte personenbezogene Angaben sichtbar machen.'
-      : 'Die gewählte Behandlung gilt nur für diese Datei. „Originalwert beibehalten“ kann echte personenbezogene Angaben sichtbar machen.'));
+      : 'Die gewählte Behandlung gilt nur für diese Datei. „Originalwert beibehalten“ kann echte personenbezogene Angaben sichtbar machen.') +
+      ' Auch dabei gelten die Schutzprüfungen für ausdrücklich beschriftete Namensfelder.');
     $('entities-pagination').hidden = entityPages <= 1;
     $('entities-previous').disabled = Boolean(pageReason) || entityPage <= 0; $('entities-next').disabled = Boolean(pageReason) || entityPage >= entityPages - 1;
     quietText('entities-pagination-reason', pageReason || (entityPages > 1 ? 'Nur Fundstellenseiten wechseln; noch nichts speichern. Deine Auswahl bleibt erhalten.' : 'Alle erkannten Stellen stehen auf dieser Seite.'));
     for (const { node, row, checkbox } of entityControls) { node.disabled = Boolean(checkbox ? selectionReason : readingReason) || row.disabled; if (checkbox) node.checked = entitySelected.has(row.entity_id); }
-    for (const node of receiptControls) node.disabled = blocked;
+    for (const node of receiptControls) node.disabled = blocked || needsRepair;
   }
   function clearText() { pendingDocumentChange = null; $('document-change-confirm').hidden = true; $('document-extra-actions').open = false; $('document-restore-actions').open = false;
     detail = null; loadedMarkdown = ''; markdownPositions = null; originalPositions = null; forgetTextSelection();
@@ -507,7 +537,7 @@
     $('entities-list').replaceChildren(); $('document-entities').hidden = true;
     $('document-name').textContent = 'Dokument auswählen'; $('document-revision').textContent = ''; controls(); }
   async function openIdentities(operation) {
-    if (busy || !stateFresh || !batchId || dirty() || recoveryDraft ||
+    if (busy || !stateFresh || repairRequired() || !batchId || dirty() || recoveryDraft ||
         !operation && (mode() !== 'markdown-and-anonymize' || !documents.length)) return;
     const expected = batchId; const ownership = ++busyGeneration; busy = true; controls();
     try {
@@ -530,7 +560,7 @@
       const item = make('li'), label = `Beleg für abgeschlossene Kopie (${row.exported_count} Datei${row.exported_count === 1 ? '' : 'en'}): ${namespace(row.processing_mode)} → ${row.folder_name}${row.processing_mode === 'markdown-only' ? ' · nicht anonymisiert' : ''}. Aktuelle Verfügbarkeit erst beim Öffnen geprüft.`;
       const open = make('button', 'Exportordner öffnen'); open.setAttribute('aria-label', `${row.folder_name} öffnen`);
       open.addEventListener('click', async () => {
-        if (busy || !stateFresh || !batchId) return;
+        if (busy || !stateFresh || repairRequired() || !batchId) return;
         const expected = batchId; const ownership = ++busyGeneration; busy = true; controls();
         try {
           const result = await invoke('open_document_export', { batchId: expected, operationId: row.operation_id });
@@ -689,6 +719,7 @@
       : publication(data.result_publication);
     if (resultPublication?.count !== undefined && resultPublication.count !== data.documents.length)
       throw Error('DOCUMENT_REVIEW_INVALID');
+    if (repairRequired() && nextMode !== 'markdown-and-anonymize') throw Error('DOCUMENT_REVIEW_INVALID');
     processingComplete = data.processing_complete === true;
     if (runMode && data.pending_exports?.some(row => row.processing_mode !== runMode)) throw Error('AI_EXPORT_INVALID');
     renderUnavailable(data);
@@ -743,6 +774,7 @@
       : 'Für diesen Export liegt noch kein bestätigter Beleg vor. Prüfe den Ergebnisordner und versuche denselben Auftrag nur ausdrücklich erneut; es wird nichts automatisch kopiert.');
     else if (data.unavailable?.length) status(`Prüfstände nicht verfügbar: ${data.unavailable.map(row => row.name || `Dokument ${row.document_id.slice(0, 8)}`).join(', ')}. Diese Dateien können nicht freigegeben oder exportiert werden.`, true);
     else if (publicDirectoryUnavailable()) status('Die Verarbeitung ist abgeschlossen. Der ursprüngliche Ergebnisordner ist nicht verfügbar. Private Dokumentstände bleiben lesbar; Änderungen und neue Bereitstellungen bleiben gesperrt. Es wird nichts neu angelegt.');
+    else if (repairRequired()) status(repairInstructions, true);
     else status(`${comparisonInvalidated ? `${previousName}: Der zuvor angezeigte Dokumentstand hat sich geändert oder ist nicht mehr verfügbar. Vergleich und betroffene Auswahl wurden zurückgesetzt; bitte den aktuellen Stand erneut öffnen. ` : ''}${documents.length} Markdown-Datei${documents.length === 1 ? '' : 'en'} verfügbar. ${publicationUnsettled() ? 'Die Bereitstellung des aktuellen Nachbearbeitungsstands ist noch nicht bestätigt. Frühere Ergebnisdateien bleiben unverändert. Bereitstellung erneut prüfen.' : raw() ? contentNotices ? `${visibleDocuments().length} in der aktuellen Ansicht. Inhaltshinweise stammen aus dem Verarbeitungslauf; eine gespeicherte Korrektur löst sie nicht automatisch auf.` : 'Dateibezogene Hinweise nicht sicher zuordenbar; alle Dateien werden angezeigt.' : 'Zum freiwilligen Vergleichen den Dateinamen anklicken. Die Ergebnisdateien benötigen keine weitere Auswahl, Freigabe oder Exportbestätigung.'}`);
     return true;
     } catch (error) { if (expected === batchId && request === ticket) { stateFresh = false; render(); } throw error; }
@@ -855,23 +887,35 @@
     const connection = connectionGeneration;
     const row = detail, expected = batchId, treatment = $('entities-decision').value;
     const scope = $('entities-scope').value;
-    const ownership = ++busyGeneration; busy = true; controls(); let updated, failure, publicationAttempted = false;
+    const repair = repairDecision('entities');
+    const ownership = ++busyGeneration; busy = true; controls(); let updated, failure, publicationAttempted = false, furtherRepair = false;
     try {
       updated = await invoke('decide_document_review', { batchId: expected, documentId: row.document_id,
         decision: { action: 'entities', revision: row.revision, output_sha256: row.output_sha256, ranges: [], operation_id: operationId(),
           entity_decisions: [...entitySelected].map(entity_id => ({ entity_id, decision: treatment })),
-          ...(scope === 'run' ? { scope } : {}) } });
+          ...(scope === 'run' ? { scope } : {}), ...repair } });
       if (expected !== batchId || connection !== connectionGeneration || ownership !== busyGeneration) return;
-      if (updated?.ok === false && updated.reason_code === 'DOCUMENT_ENTITY_RUN_CONFLICT' && updated.local_ui_only === true &&
-          updated.external_disclosure === false && Array.isArray(updated.blocked_files) && updated.blocked_files.length <= 200 &&
-          updated.blocked_files.every(file => typeof file.name === 'string' && file.name.length <= 1024)) {
-        const names = updated.blocked_files.map(file => file.name).join(', ');
-        status(`${reasons.DOCUMENT_ENTITY_RUN_CONFLICT} Betroffen: ${names}.`, true); updated = null; return;
+      const rejected = rejectedEntityDecision(updated);
+      if (rejected) {
+        const explanations = [];
+        if (rejected.residual) explanations.push('Mögliche personenbezogene Angaben bleiben sichtbar. „Originalwert beibehalten“ nimmt ausdrücklich beschriftete Namensfelder nicht von der Schutzprüfung aus. Bitte eine sichere Ersetzung wählen.');
+        if (rejected.policy) explanations.push('Die Datenschutzregel hat sich geändert. Bitte die genannten Quelldateien mit der aktuellen Version neu verarbeiten.');
+        if (rejected.unavailable) explanations.push('Mindestens ein betroffener Prüfstand ist nicht bearbeitbar. Die genannten Dateien zuerst prüfen.');
+        const message = `Behandlung nicht gespeichert; die Änderung wurde nicht übernommen. Der bisherige Stand bleibt erhalten. ${explanations.join(' ')} Betroffen: ${rejected.names}.`;
+        actionStatus(message, true); status(message, true); updated = null; return;
       }
       if (!decisionAcknowledged(updated, row, 'entities')) throw Error('DOCUMENT_REVIEW_STALE');
       if (scope === 'run' && (updated.scope !== 'run' || !Number.isSafeInteger(updated.affected_count) ||
           updated.affected_count < 1 || updated.affected_count > 200)) throw Error('DOCUMENT_REVIEW_STALE');
-      if (expected === batchId) { clearText(); await reload(); publicationAttempted = true; await publishCurrent(expected, ownership, connection); }
+      if (expected === batchId) {
+        clearText(); await reload();
+        if (expected !== batchId || connection !== connectionGeneration || ownership !== busyGeneration) return;
+        furtherRepair = repairRequired();
+        if (!furtherRepair) {
+          if (repair.repair_binding && resultPublication?.state !== 'pending') throw Error('DOCUMENT_REVIEW_STALE');
+          publicationAttempted = true; await publishCurrent(expected, ownership, connection);
+        }
+      }
     } catch (error) {
       if (connection !== connectionGeneration) return;
       failure = error; updated = null;
@@ -883,7 +927,7 @@
     if (connection !== connectionGeneration) return;
     if (updated && expected === batchId) { await loadDetail(documents.find(value => value.document_id === row.document_id));
       if (expected !== batchId || connection !== connectionGeneration) return;
-      status(scope === 'run' ? `Behandlung für ${updated.affected_count} Dateien gespeichert und aktueller Ergebnisstand bereitgestellt. Frühere Ergebnisstände bleiben unverändert.` :
+      status(furtherRepair ? repairRemaining : scope === 'run' ? `Behandlung für ${updated.affected_count} Dateien gespeichert und aktueller Ergebnisstand bereitgestellt. Frühere Ergebnisstände bleiben unverändert.` :
         'Behandlung gespeichert und aktueller Ergebnisstand bereitgestellt. Ergebnisordner öffnen; keine weitere Freigabe oder Exportbestätigung nötig.'); }
     else if (failure && expected === batchId) {
       if (stateFresh) await loadDetail(documents.find(value => value.document_id === row.document_id));
@@ -895,12 +939,13 @@
   }
   async function decideRows(action, rows, ranges = []) {
     if (busy || publicationUnsettled() || publicDirectoryUnavailable() || !stateFresh || recoveryDraft || exportRequest || !batchId || !rows.length || dirty() && action !== 'correct') return;
+    if (repairRequired() && !['redact', 'restore_base'].includes(action)) return;
     if ((!processingComplete || !directResultsSupported) && !['approve', 'revoke'].includes(action)) return;
     if (action === 'redact' && raw()) return;
     if (rows.some(row => !documents.some(current => sameDocumentBinding(row, current))) ||
         ['correct', 'redact', 'restore_base'].includes(action) && !detailCurrent()) return;
     const draft = action === 'correct' ? { ...detail, text: $('document-markdown').value } : null;
-    const connection = connectionGeneration;
+    const connection = connectionGeneration, repair = repairDecision(action);
     const expected = batchId; let failed, confirmed = 0, publicationAttempted = false; const updates = []; const ownership = ++busyGeneration;
     bulkReviewProgress = !raw() && ['approve', 'revoke'].includes(action) && rows.length > 1
       ? { action, total: rows.length, done: 0 } : null;
@@ -914,7 +959,7 @@
         if (bulkReviewProgress) { bulkReviewProgress.done = confirmed; controls(); }
       } else for (const row of rows) {
         try { const result = await invoke('decide_document_review', { batchId: expected, documentId: row.document_id,
-          decision: { action, revision: row.revision, output_sha256: row.output_sha256, ranges, operation_id: operationId() } });
+          decision: { action, revision: row.revision, output_sha256: row.output_sha256, ranges, operation_id: operationId(), ...repair } });
           if (batchId !== expected || connection !== connectionGeneration || ownership !== busyGeneration) return;
           if (!decisionAcknowledged(result, row, action)) throw Error('DOCUMENT_REVIEW_STALE');
           // Only an exactly bound acknowledgement may advance a selection
@@ -927,12 +972,16 @@
       if (batchId !== expected) return;
       exportRequest = null; clearText(); await reload();
       if (batchId !== expected || connection !== connectionGeneration || ownership !== busyGeneration) return;
-      if (!['approve', 'revoke'].includes(action)) { publicationAttempted = true; await publishCurrent(expected, ownership, connection); }
-      status(!['approve', 'revoke'].includes(action) ? `${rows[0].name}: Änderung gespeichert und aktueller Ergebnisstand bereitgestellt. Ergebnisordner öffnen; frühere Ergebnisstände bleiben unverändert.` :
+      const furtherRepair = repairRequired();
+      if (!['approve', 'revoke'].includes(action) && !furtherRepair) {
+        if (repair.repair_binding && resultPublication?.state !== 'pending') throw Error('DOCUMENT_REVIEW_STALE');
+        publicationAttempted = true; await publishCurrent(expected, ownership, connection);
+      }
+      status(furtherRepair ? repairRemaining : !['approve', 'revoke'].includes(action) ? `${rows[0].name}: Änderung gespeichert und aktueller Ergebnisstand bereitgestellt. Ergebnisordner öffnen; frühere Ergebnisstände bleiben unverändert.` :
         raw() && action === 'restore_base' ? `${rows[0].name}: Der technisch erzeugte Textstand wurde wiederhergestellt. Die ursprünglich erstellte Markdown-Datei bleibt unverändert.` :
           !raw() && action === 'approve' ? `${rows.length} Freigabeentscheidung${rows.length === 1 ? '' : 'en'} gespeichert. Die Dokumente können später weiter geprüft werden; durch diese Freigabe wurde kein neuer Export erstellt. Dafür die freigegebenen Stände auswählen und die Exportvorschau ausdrücklich öffnen.` :
           `${rows.length} Entscheidung${rows.length === 1 ? '' : 'en'} gespeichert. Ein Export erfolgt nur über den eigenen Exportbutton.`);
-      return { batchId: expected, updates };
+      return { batchId: expected, updates, repair_required: furtherRepair };
     } catch (error) { if (connection === connectionGeneration && batchId === expected) {
       for (const row of rows.slice(0, confirmed)) selected.delete(row.document_id);
       if (draft) recoveryDraft = draft;
@@ -946,7 +995,7 @@
     finally { if (batchId === expected) { if (ownership !== busyGeneration) return; busy = false; bulkReviewProgress = null; render(); } }
   }
   function requestApproval() {
-    if (busy || !stateFresh || publicDirectoryUnavailable() || raw() || exportRequest || dirty()) return;
+    if (busy || !stateFresh || publicDirectoryUnavailable() || repairRequired() || raw() || exportRequest || dirty()) return;
     const rows = documents.filter(row => selected.has(row.document_id));
     if (!rows.length) return;
     const notOpened = rows.filter(row => !sameDocumentBinding(viewedBindings.get(row.document_id), row)).length;
@@ -959,7 +1008,7 @@
   }
   function confirmApproval() {
     const pending = pendingApproval;
-    if (!pending || busy || !stateFresh || publicDirectoryUnavailable() || raw() || exportRequest || dirty() || pending.batchId !== batchId ||
+    if (!pending || busy || !stateFresh || publicDirectoryUnavailable() || repairRequired() || raw() || exportRequest || dirty() || pending.batchId !== batchId ||
         !validSelection(pending.selection)) return;
     const rows = pending.selection.map(binding => documents.find(row => row.document_id === binding.document_id &&
       row.revision === binding.revision && row.output_sha256 === binding.output_sha256));
@@ -990,13 +1039,13 @@
     $('document-export-filenames-heading').textContent = isRaw ? 'Enthaltene Markdown-Dateien · gespeicherter Dateinamenplan' : 'Enthalten · neutrale Dateinamen';
     $('document-export-confirm').textContent = complete ? 'Empfang bestätigen' : exportRequest ? pendingMetadata ? 'Export erneut abgleichen' : 'Export erneut versuchen' : isRaw ? 'Kopie speichern' : 'Freigeben und exportieren';
     $('document-export-configure').hidden = !!pendingMetadata || !!knownExport || complete || !!exportRequest && !exportFolderNeeded;
-    $('document-export-configure').disabled = busy || publicDirectoryUnavailable();
+    $('document-export-configure').disabled = busy || publicDirectoryUnavailable() || repairRequired();
     $('document-export-abandon-option').hidden = !pendingMetadata || complete;
     $('document-export-abandon').hidden = !pendingMetadata || complete;
     controls();
   }
   async function openExportDialog() {
-    if (busy || !stateFresh || publicDirectoryUnavailable() || dirty()) return;
+    if (busy || !stateFresh || publicDirectoryUnavailable() || repairRequired() || dirty()) return;
     const rows = documents.filter(row => selected.has(row.document_id));
     if (!exportRequest && !rows.length) return;
     dialogSelection = exportRequest ? exportRequest.selection.map(row => ({ ...row })) : rows.map(({ document_id, revision, output_sha256 }) => ({ document_id, revision, output_sha256 }));
@@ -1029,7 +1078,7 @@
     dialogFocus = document.activeElement; $('document-export-dialog').showModal(); $('document-export-close').focus();
   }
   async function exportRows() {
-    if (!stateFresh || publicDirectoryUnavailable() || dirty() || !validSelection(dialogSelection)) return;
+    if (!stateFresh || publicDirectoryUnavailable() || repairRequired() || dirty() || !validSelection(dialogSelection)) return;
     const rows = documents.filter(row => selected.has(row.document_id));
     if (busy || !batchId || !exportRequest && !rows.length) return;
     const connection = connectionGeneration;
@@ -1181,7 +1230,7 @@
     finally { if (exportHeartbeat === heartbeat) stopExportHeartbeat(); if (expected === batchId) { if (ownership !== busyGeneration) return; busy = false; render(); if (exportRequest) renderExportDialog(); $('document-export-result').textContent = $('documents-status').textContent; } }
   }
   async function configureExportFolder() {
-    if (busy || publicDirectoryUnavailable() || !batchId || !$('document-export-dialog').open || $('document-export-preview').hidden ||
+    if (busy || publicDirectoryUnavailable() || repairRequired() || !batchId || !$('document-export-dialog').open || $('document-export-preview').hidden ||
         pendingMetadata || knownExport || exportRequest && !exportFolderNeeded) return;
     const expected = batchId, connection = connectionGeneration, ownership = ++busyGeneration;
     busy = true; renderExportDialog();
@@ -1253,7 +1302,7 @@
       clearText(); renderReceipts(); render(); await invoke('close_document_reviews').catch(() => {}); return true; }
   });
   $('documents-open-results').addEventListener('click', async () => {
-    if (busy || !stateFresh || publicDirectoryUnavailable() || navigationDraft() || !processingComplete || !documents.length || !batchId || ['pending', 'conflict'].includes(resultPublication?.state)) return;
+    if (busy || !stateFresh || publicDirectoryUnavailable() || repairRequired() || navigationDraft() || !processingComplete || !documents.length || !batchId || publicationUnsettled()) return;
     const expected = batchId, connection = connectionGeneration, ownership = ++busyGeneration;
     busy = true; controls();
     try {
@@ -1263,7 +1312,7 @@
     finally { if (expected === batchId && ownership === busyGeneration) { busy = false; controls(); } }
   });
   $('documents-publish').addEventListener('click', async () => {
-    if (busy || !stateFresh || publicDirectoryUnavailable() || navigationDraft() || !batchId || !processingComplete || !directResultsSupported || !publicationUnsettled() || exportRequest) return;
+    if (busy || !stateFresh || publicDirectoryUnavailable() || repairRequired() || navigationDraft() || !batchId || !processingComplete || !directResultsSupported || !publicationUnsettled() || exportRequest) return;
     const expected = batchId, connection = connectionGeneration, ownership = ++busyGeneration;
     busy = true; controls();
     try {
@@ -1359,7 +1408,7 @@
   });
   $('document-export-abandon-check').addEventListener('change', controls);
   $('document-export-abandon').addEventListener('click', async () => {
-    if (busy || !stateFresh || publicDirectoryUnavailable() || !pendingMetadata || pendingMetadata.status !== 'incomplete' || knownExport || !$('document-export-abandon-check').checked) return;
+    if (busy || !stateFresh || publicDirectoryUnavailable() || repairRequired() || !pendingMetadata || pendingMetadata.status !== 'incomplete' || knownExport || !$('document-export-abandon-check').checked) return;
     const ownership = ++busyGeneration; busy = true; controls();
     try {
       const result = await invoke('abandon_document_export', { batchId, operationId: pendingMetadata.operation_id, digest: pendingMetadata.digest });
@@ -1406,7 +1455,7 @@
     if (!allowAction('restore')) return;
     forgetTextSelection();
     pendingDocumentChange = { action: 'restore_base', row: { ...detail }, ranges: [] };
-    $('document-change-confirm-text').textContent = `${detail.name}: Noch nichts geändert. Das Speichern stellt den automatisch erzeugten Basisstand dieser Datei wieder her und verwirft ihre späteren Text- und Entitätenänderungen. Danach wird der vollständige aktuelle Ergebnisstand in einem neuen Ordner bereitgestellt; frühere Ergebnisstände bleiben unverändert.`;
+    $('document-change-confirm-text').textContent = `${detail.name}: Noch nichts geändert. Das Speichern stellt den automatisch erzeugten Basisstand dieser Datei wieder her und verwirft ihre späteren Text- und Entitätenänderungen. ${repairRequired() ? 'Weitere private Reparaturen können nötig bleiben. Erst nach sicherer Prüfung aller Dokumente kann ein neuer Ergebnisstand bereitgestellt werden.' : 'Danach wird der vollständige aktuelle Ergebnisstand in einem neuen Ordner bereitgestellt; frühere Ergebnisstände bleiben unverändert.'}`;
     $('document-change-save').textContent = 'Basisstand jetzt wiederherstellen';
     controls(); $('document-change-save').focus();
     actionStatus('Wiederherstellung vorbereitet, noch nicht gespeichert. Bitte ausdrücklich bestätigen oder abbrechen.');
@@ -1442,7 +1491,7 @@
       actionStatus('Änderung gespeichert, der neue Text konnte aber nicht geöffnet werden. Bitte den gespeicherten Stand neu laden.', true);
       return;
     }
-    const message = pending.action === 'redact'
+    const message = result.repair_required ? `${updated.name}: ${repairRemaining}` : pending.action === 'redact'
       ? `${updated.name}: Zusätzliche Maskierung in Stand ${updated.revision} gespeichert und aktueller Ergebnisstand bereitgestellt. Prüfe rechts den Platzhalter [MANUAL_REDACTION].`
       : `${updated.name}: Technisch geprüfter Basisstand als Stand ${updated.revision} gespeichert und aktueller Ergebnisstand bereitgestellt. Frühere Ergebnisstände bleiben unverändert.`;
     actionStatus(message); status(message);

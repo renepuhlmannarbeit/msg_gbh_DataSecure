@@ -153,8 +153,12 @@ function validatePrivateMessage(message) {
   if (message.action === 'decide_document_review') {
     allowedFields.add('decision');
     const value = message.decision;
-    if (!value || Object.keys(value).sort().join(',') !== (value.action === 'entities' ?
-        `action,entity_decisions,operation_id,output_sha256,ranges,revision${Object.hasOwn(value, 'scope') ? ',scope' : ''}` : 'action,operation_id,output_sha256,ranges,revision') ||
+    const fields = value && ((value.action === 'entities' ?
+      `action,entity_decisions,operation_id,output_sha256,ranges,revision${Object.hasOwn(value, 'scope') ? ',scope' : ''}` : 'action,operation_id,output_sha256,ranges,revision') +
+      (Object.hasOwn(value, 'repair_binding') ? ',repair_binding' : '')).split(',').sort().join(',');
+    if (!value || Object.keys(value).sort().join(',') !== fields ||
+        Object.hasOwn(value, 'repair_binding') && (typeof value.repair_binding !== 'string' || !/^[a-f0-9]{64}$/u.test(value.repair_binding) ||
+          !['entities', 'redact', 'restore_base'].includes(value.action)) ||
         Object.hasOwn(value, 'scope') && !['document', 'run'].includes(value.scope) ||
         !['approve', 'revoke', 'redact', 'restore_base', 'correct', 'entities'].includes(value.action) ||
         !/^[a-f0-9]{32}$/u.test(value.operation_id || '') || !/^[a-f0-9]{64}$/u.test(value.output_sha256 || '') ||

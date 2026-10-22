@@ -7,7 +7,87 @@ Nachtauftrag: Hauptagent prüft auch die gebundene eigene Windows-App nativ mit
 synthetischen Daten. Menschliche Abnahme bleibt davon getrennt USER_PENDING.
 RC170 und sämtliche früheren Pakete, Nutzerdateien, Profile und Evidenzen erhalten.
 
-## Quellenabschluss22.10.2026 02:18UTC vor Source07
+## Neuer Quellenprüfstand 22.10.2026 nach 04:05 UTC
+
+Beide eng begrenzten Korrekturen sind implementiert. Entity-Projektionen werden
+für alle betroffenen Dateien vor dem atomaren Commit geprüft. Eine vollständig
+bestätigte fachliche Ablehnung erhält die Auswahl ohne neue Revision; unbekannte
+oder verlorene Antworten behaupten dagegen nicht, dass nichts gespeichert wurde.
+
+Der getrennte Zustand `repair_required` setzt vollständige Initial-/Generations-/
+ACK-Belege und ausschließlich eine Residualverweigerung voraus. Die frische
+Reparaturbindung umfasst Batch, vollständige Selection und Journalende. Nur
+bewusste private Behandlung, Maskierung oder Basiswiederherstellung sind möglich;
+keine neue Ergebnisautorität bei offenen Native-/Legacy-Operationen oder anderen
+Schutzfehlern. Private Originalobjekte werden bis zum Commit erneut gebunden;
+Beobachtungen behalten nur Hash/Größe/Identität statt sämtliche Textkörper.
+Öffentliche fertige Arbeitsdateien werden dadurch nicht erneut gehasht.
+
+Autoren: 68/68 Dokumentreview, 101/101 Ergebnisgenerationen und 819/819
+Frontend-/Presentation-/Workspacefälle PASS. Unabhängiges tatsächliches
+Produktquellengegenlesen ohne neuen Deltablocker. Hauptagent las alle fünf
+Produktdeltas und zugehörigen neuen Tests selbst. Ein zusätzlicher unveränderter
+10-Gruppen-Main-Gegenlauf unter `dist/rc171-entity-repair-main-20261022`
+bestand am22.10.04:14:56UTC vollständig mit unveränderten Inputs (Exit0).
+Produktfingerprint d73e5ee1e73b79b6d21432b4d3d1c4d4c68e8bb7a1b1f97cb2d56ee7f69e6a76,
+340 Produktdateien;578 Test-/Scriptinputs mit Manifest
+9dbef57f81f3404cccb43ebb8310f9aaab4c5703df605c6fc7a6958af4b5fd58.
+Dies ist gezielte Quellengegenprüfung, kein Source08-Gesamt-/Paket- oder
+nativer Recovery-GUI-PASS. Der folgende neue gemeinsame Commit bindet erst die
+frischen Windows-/Mac-Endläufe; der ältere Source07-Commit bleibt historisch.
+
+Source08-Helfer sind create-only vorbereitet. Ein eigener Zählfehler im lokalen
+Altprofil-Testhelfer wurde anhand des echten ZIPs korrigiert: Payload plus
+Manifest und SHA256SUMS werden nun vollständig durch den bestehenden
+Inventarvalidator geprüft, nicht durch eine bloße gelockerte Zählung.
+Unabhängiges Gegenlesen ohne Restblocker; kein Profil-/Paketstart erfolgt.
+Source07 bleibt unverändert NICHT freigabefähig. Ein neuer gemeinsamer Commit
+benötigt frische Gesamt-/Native-/Paket-/Macbelege und echte Windows-Bedienung.
+
+### Historischer tatsächlicher Prüfstand 03:23 UTC vor Source08
+
+Source07 `3a2693a6e5fa94df5aea219b0c5946f9c512d6bf` ist trotz grüner
+Gesamtprüfung **nicht freigabefähig**. Alle vier lokalen Endgates bestanden
+mit unveränderten Inputs: 289+11 Headless, 298 Rusttests (3 ignoriert) sowie
+Clippy/Prepare/Node-Rust/Release, 30 PDF-/67 Worker-/37 Office-Gruppen und
+5 Paketgates einschließlich 100/100 Markdown. Beide Macconsumer in
+39710736315 erfolgreich. Tatsächliche ZIP-/DMG-/Core-/Seal-/Log-Gegenreviews
+ohne bestätigten Paketblocker; menschliche Zielhostabnahme weiterhin offen.
+
+Die echte Windows-Bedienung fand einen zusätzlichen Nachbearbeitungsfehler:
+positionsgenaue Maskierung nach Emoji/CRLF funktionierte, anschließend wurde
+„Originalwert beibehalten“ für eine Person laufweit gespeichert, obwohl die
+nachfolgende unveränderte Residualprüfung das explizite Namensfeld verweigert.
+Private Revisionen 2/1 blieben dadurch ohne bereitstellbaren aktuellen Stand.
+Kein Positionsfehler: unabhängiger RAM-Replay bestätigt alle Spannen und Hashes.
+Ein Retry kann die Schutzprüfung nicht beheben. Das Frontend sperrt außerdem
+die bewusste Reparatur dieses älteren gespeicherten Stands dauerhaft als pending.
+
+Zwei eng getrennte Korrekturen sind deshalb vor dem nächsten gemeinsamen Freeze
+nötig: Kandidatenprüfung aller betroffenen Entity-Projektionen **vor** atomarem
+Entscheidungscommit; zusätzlich ein autoritativ gebundener Reparaturzustand nur
+für nachweislich unveröffentlichte, residualverweigerte aktuelle Revisionen ohne
+offene Publikations-/Legacy-ACKs. Keine automatische Rücknahme, kein Umgehen der
+Namensfeldpolicy, keine erfundene Ready-/Export-/Schreibberechtigung. Unbekannte,
+Policy-, ACL-, I/O-, Schema- und Native-Intentkonflikte bleiben gesperrt. Beide
+Produkt-/Testdeltas werden unabhängig gegengelesen und frisch geprüft.
+
+Source07-GUI: 01 und 06 vollständig PASS; 06 mit 317,829 s echter Denkpause,
+zwei normalen Neustarts, erhaltenen gespeicherten OCR-Entscheidungen und neuem
+Ergebnisziel. 04 Wortkorrektur/Unicode/Zeilenenden/neue Generation nachgewiesen,
+Restartunterfall offen. 05 FAIL; 02/03/07–19 NOT_RUN. Typisierter negativer
+AGENT-GUI-EVIDENCE-Beleg verhindert die Übergabe. Eigene App normal geschlossen,
+Rootprozessinventar null, Profile und alle Ergebnisse erhalten. Alle 89 Eingaben
+am 22.10.03:23:44 UTC bytegleich. Belege unter
+`dist/rc171-partial-extraction-source07-20261022` bleiben unverändert historisch.
+
+Ein separater Mac-Verifier verlangte fälschlich eine direkte Unit-Logzeile,
+deren Test im Mac-Workflow nicht ausgewählt wird. Das reale native Budgetorakel
+lief dagegen auf beiden Macs. Für den neuen Freeze wird nur dieser fehlerhafte
+Nachweisanspruch korrigiert; kein erfundener Mac-Unit-PASS. Keine RC171-Übergabe,
+kein Tag/Release und kein Mainmerge vor geeigneten frischen Endbelegen.
+
+### Historischer Quellenabschluss 02:18 UTC vor Source07
 
 Zwei reine Zusatztestkorrekturen fertig und unabhängig am tatsächlichen Delta
 gegen Produktionsparser/Worker/CheckpointStream gegengelesen, kein bestätigter

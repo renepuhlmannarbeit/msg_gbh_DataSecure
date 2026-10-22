@@ -316,7 +316,207 @@ function assertGenerationReceiptInventory(receiptBytes, mode, count, folder) {
   if (anonymize) assert.equal(receipt.confidential_directory.path, path.join(folder, 'Vertraulich'));
   else assert.equal(Object.hasOwn(receipt, 'confidential_directory'), false);
 }
+function historicalUnsafeKeep(f, index) {
+  // Test-owned pre-fix committed journal, never a decision accepted by the
+  // repaired service. Replay its exact bytes through the real current reader.
+  const row = f.row(index), run = path.join(data, 'document-reviews', f.batchId);
+  const group = f.store.entities(f.batchId, row.document_id, row.revision, 0).entities.find(value => value.kind === 'PERSON');
+  assert.ok(group);
+  const request = { action: 'entities', ranges: [], revision: row.revision, output_sha256: row.output_sha256,
+    operation_id: crypto.randomBytes(16).toString('hex'), entity_decisions: [{ entity_id: group.entity_id, decision: 'keep' }] };
+  const snapshot = JSON.parse(fs.readFileSync(path.join(run, row.document_id, 'base.json')));
+  const entity = require('../plugins/data-secure/server/gateway/standalone-entity-review');
+  let entities = entity.initialEntities(snapshot);
+  const records = fs.readdirSync(run).filter(name => /^decision-[0-9]{6}\.json$/u.test(name)).sort()
+    .map(name => JSON.parse(fs.readFileSync(path.join(run, name))));
+  for (const record of records) {
+    const event = record.targets.find(target => target.document_id === row.document_id)?.event;
+    if (!event) continue;
+    if (['approve', 'revoke'].includes(event.action)) continue;
+    assert.equal(event.action, 'redact', 'fixture only seeds after the preceding real mask');
+    entities = entity.relocate(entities, event.ranges.map(range => ({ ...range, replacement: '[MANUAL_REDACTION]' })), true);
+  }
+  const current = f.store.chunk(f.batchId, row.document_id, row.revision, 0).markdown;
+  const key = Buffer.from(JSON.parse(fs.readFileSync(path.join(run, 'entity-key.json'))).key, 'hex');
+  const next = entity.applyEntityDecisions(current, entities, request.entity_decisions, key);
+  const event = { schema: 'datasecure-document-revision/1', revision: row.revision + 1, parent_sha256: row.output_sha256,
+    output_sha256: sha(next.markdown), approved: false, action: 'entities', ranges: [],
+    operation_id: request.operation_id, request_sha256: sha(JSON.stringify(request)), entity_decisions: request.entity_decisions };
+  const record = { schema: 'datasecure-run-decision/1', batch_id: f.batchId, sequence: records.length + 1,
+    parent_sha256: records.at(-1)?.event_sha256 || sha(`datasecure-run-decisions/1:${f.batchId}`),
+    origin_document_id: row.document_id, operation_id: request.operation_id, request_sha256: event.request_sha256,
+    scope: 'document', targets: [{ document_id: row.document_id, event }] };
+  record.event_sha256 = sha(JSON.stringify(record));
+  if (!fs.existsSync(path.join(run, 'journal-format.json'))) fs.writeFileSync(path.join(run, 'journal-format.json'), JSON.stringify({
+    schema: 'datasecure-run-decision-commit/2', batch_id: f.batchId }), { flag: 'wx', mode: 0o600 });
+  const sequence = String(record.sequence).padStart(6, '0');
+  fs.writeFileSync(path.join(run, `commit-${sequence}.json`), JSON.stringify({ schema: 'datasecure-run-commit-proof/1',
+    batch_id: f.batchId, sequence: record.sequence, event_sha256: record.event_sha256, record }), { flag: 'wx', mode: 0o600 });
+  fs.writeFileSync(path.join(run, `decision-${sequence}.json`), JSON.stringify(record), { flag: 'wx', mode: 0o600 });
+  return { documentId: row.document_id, request };
+}
+function repairRequest(f, index, action, binding) {
+  const row = f.row(index), request = { action, ranges: [], revision: row.revision, output_sha256: row.output_sha256,
+    operation_id: crypto.randomBytes(16).toString('hex'), ...(binding ? { repair_binding: binding } : {}) };
+  if (action === 'entities') {
+    const group = f.store.entities(f.batchId, row.document_id, row.revision, 0).entities.find(value => value.kind === 'PERSON');
+    request.entity_decisions = [{ entity_id: group.entity_id, decision: 'default' }];
+  } else if (action === 'redact') {
+    const text = f.store.chunk(f.batchId, row.document_id, row.revision, 0).markdown, start = text.indexOf('Anna Beispiel');
+    assert.ok(start >= 0); request.ranges = [{ start, end: start + 'Anna Beispiel'.length }];
+  }
+  return { row, request };
+}
+function historicalNewerCorrection(f, index) {
+  // Retain the old obsolete-intent counteroracle without asking the repaired
+  // service to authorize a newer decision while a native intent is pending.
+  const row = f.row(index), run = path.join(data, 'document-reviews', f.batchId);
+  const text = f.store.chunk(f.batchId, row.document_id, row.revision, 0).markdown, start = text.indexOf('42');
+  assert.ok(start >= 0);
+  const request = { action: 'correct', ranges: [{ start, end: start + 2, replacement: '43' }], revision: row.revision,
+    output_sha256: row.output_sha256, operation_id: crypto.randomBytes(16).toString('hex') };
+  const records = fs.readdirSync(run).filter(name => /^decision-[0-9]{6}\.json$/u.test(name)).sort()
+    .map(name => JSON.parse(fs.readFileSync(path.join(run, name))));
+  const event = { schema: 'datasecure-document-revision/1', revision: row.revision + 1, parent_sha256: row.output_sha256,
+    output_sha256: sha(text.slice(0, start) + '43' + text.slice(start + 2)), approved: false, action: 'correct', ranges: request.ranges,
+    operation_id: request.operation_id, request_sha256: sha(JSON.stringify(request)) };
+  const record = { schema: 'datasecure-run-decision/1', batch_id: f.batchId, sequence: records.length + 1,
+    parent_sha256: records.at(-1).event_sha256, origin_document_id: row.document_id,
+    operation_id: request.operation_id, request_sha256: event.request_sha256, scope: 'document', targets: [{ document_id: row.document_id, event }] };
+  record.event_sha256 = sha(JSON.stringify(record));
+  const sequence = String(record.sequence).padStart(6, '0');
+  fs.writeFileSync(path.join(run, `commit-${sequence}.json`), JSON.stringify({ schema: 'datasecure-run-commit-proof/1',
+    batch_id: f.batchId, sequence: record.sequence, event_sha256: record.event_sha256, record }), { flag: 'wx', mode: 0o600 });
+  fs.writeFileSync(path.join(run, `decision-${sequence}.json`), JSON.stringify(record), { flag: 'wx', mode: 0o600 });
+}
 async function run() {
+  for (const action of ['entities', 'redact', 'restore_base']) await testAsync(`historical unsafe private result: explicit ${action} repairs without publishing unsafe bytes`, async () => {
+    const f = await fixture({ mode: 'markdown-and-anonymize', count: 1 });
+    f.edit(); const previous = await f.publish(), priorFiles = fileSnapshot(fs.readdirSync(f.target(previous), { recursive: true })
+      .map(name => path.join(f.target(previous), name)).filter(file => fs.statSync(file).isFile()));
+    const historical = historicalUnsafeKeep(f, 0), listing = f.store.list(f.batchId), publication = listing.result_publication;
+    assert.equal(publication.state, 'repair_required'); assert.match(publication.repair_binding, /^[a-f0-9]{64}$/u);
+    assert.deepEqual(Object.keys(publication).sort(), ['count', 'current_revision', 'generation_id', 'repair_binding', 'state']);
+    assert.equal(publication.generation_id, previous.result_publication.generation_id);
+    const calls = f.calls.length; await rejects(() => f.publish(), 'DOCUMENT_REVIEW_RESIDUAL_PII');
+    assert.equal(f.calls.length, calls); assert.equal(f.store.decide(f.batchId, historical.documentId, historical.request).ok, true, 'old exact ACK remains idempotent');
+    const input = repairRequest(f, 0, action, publication.repair_binding);
+    assert.throws(() => f.store.decide(f.batchId, input.row.document_id, { ...input.request, repair_binding: '0'.repeat(64) }), { code: 'DOCUMENT_REVIEW_STALE' });
+    const missing = { ...input.request }; delete missing.repair_binding;
+    assert.throws(() => f.store.decide(f.batchId, input.row.document_id, missing), { code: 'DOCUMENT_REVIEW_STALE' });
+    assert.equal(f.store.decide(f.batchId, input.row.document_id, input.request).ok, true);
+    assert.equal(f.calls.length, calls, 'repair is private only');
+    assert.equal(f.store.list(f.batchId).result_publication.state, 'pending');
+    const next = await f.publish(); assert.equal(next.result_publication.state, 'current');
+    assertFileSnapshot(priorFiles);
+    const stale = repairRequest(f, 0, 'restore_base', publication.repair_binding);
+    assert.throws(() => f.store.decide(f.batchId, stale.row.document_id, stale.request), { code: 'DOCUMENT_REVIEW_STALE' });
+  });
+  await testAsync('two historical unsafe documents are repaired separately with fresh full-vector bindings', async () => {
+    const f = await fixture({ mode: 'markdown-and-anonymize' }); historicalUnsafeKeep(f, 0); historicalUnsafeKeep(f, 1);
+    const first = f.store.list(f.batchId).result_publication, input = repairRequest(f, 0, 'entities', first.repair_binding);
+    f.store.decide(f.batchId, input.row.document_id, input.request);
+    const second = f.store.list(f.batchId).result_publication; assert.equal(second.state, 'repair_required');
+    assert.notEqual(second.repair_binding, first.repair_binding);
+    const stale = repairRequest(f, 1, 'entities', first.repair_binding);
+    assert.throws(() => f.store.decide(f.batchId, stale.row.document_id, stale.request), { code: 'DOCUMENT_REVIEW_STALE' });
+    const next = repairRequest(f, 1, 'entities', second.repair_binding); f.store.decide(f.batchId, next.row.document_id, next.request);
+    assert.equal((await f.publish()).result_publication.state, 'current'); assert.equal(f.operations.size, 1);
+  });
+  await testAsync('an unfinished native intent never grants private repair, even for a historical residual vector', async () => {
+    const f = await fixture({ mode: 'markdown-and-anonymize', count: 1 }); f.edit(); f.controls.losePublish = true;
+    await rejects(() => f.publish(), 'STANDALONE_IPC_TIMEOUT'); historicalUnsafeKeep(f, 0);
+    const publication = f.store.list(f.batchId).result_publication; assert.equal(publication.state, 'pending');
+    assert.equal(Object.hasOwn(publication, 'repair_binding'), false);
+    const input = repairRequest(f, 0, 'restore_base');
+    assert.throws(() => f.store.decide(f.batchId, input.row.document_id, input.request), { code: 'RESULT_PUBLICATION_PENDING' });
+    const operations = f.operations.size; await rejects(() => f.publish(), 'DOCUMENT_REVIEW_RESIDUAL_PII');
+    assert.equal(f.operations.size, operations);
+  });
+  await testAsync('an outstanding legacy export confirmation never grants private repair', async () => {
+    const f = await fixture({ mode: 'markdown-and-anonymize', count: 1 }), row = f.row(0);
+    f.store.decide(f.batchId, row.document_id, { action: 'approve', ranges: [], revision: row.revision,
+      output_sha256: row.output_sha256, operation_id: crypto.randomBytes(16).toString('hex') });
+    const selected = f.row(0), selection = [{ document_id: selected.document_id, revision: selected.revision, output_sha256: selected.output_sha256 }];
+    let nativeAttempts = 0;
+    const interrupted = createDocumentReviewStore({ ...f.options, nativeExport() {
+      nativeAttempts++; throw Object.assign(Error('test-owned legacy native refusal'), { code: 'SYNTHETIC_NATIVE_STOP' });
+    } });
+    await rejects(() => interrupted.exportApproved(f.batchId, crypto.randomBytes(16).toString('hex'), selection), 'SYNTHETIC_NATIVE_STOP');
+    assert.equal(nativeAttempts, 1, 'the real legacy writer persisted its intent before the explicit negative native model');
+    historicalUnsafeKeep(f, 0);
+    const listing = f.store.list(f.batchId); assert.equal(listing.pending_export_count, 1);
+    assert.equal(listing.result_publication.state, 'pending'); assert.equal(Object.hasOwn(listing.result_publication, 'repair_binding'), false);
+    const input = repairRequest(f, 0, 'restore_base');
+    assert.throws(() => f.store.decide(f.batchId, input.row.document_id, input.request), { code: 'RESULT_PUBLICATION_PENDING' });
+    assert.equal(f.calls.length, 0);
+  });
+  await testAsync('a previously observed initial contract cannot disappear into the legacy decision path', async () => {
+    const f = await fixture(), row = f.row(0); let reads = 0;
+    const store = createDocumentReviewStore({ ...f.options, initialResultPublication: () => ++reads === 1 ? f.bound : null });
+    assert.throws(() => store.decide(f.batchId, row.document_id, { action: 'restore_base', ranges: [], revision: row.revision,
+      output_sha256: row.output_sha256, operation_id: crypto.randomBytes(16).toString('hex') }), { code: 'RESULT_PUBLICATION_CONFLICT' });
+    assert.equal(reads, 2); assert.equal(f.row(0).revision, 0); assert.equal(f.calls.length, 0);
+    assert.equal(fs.existsSync(path.join(data, 'document-reviews', f.batchId, 'commit-000001.json')), false);
+  });
+  for (const role of ['initial-binding', 'initial-outbox', 'journal']) await testAsync(`repair retains the original ${role} object through the final decision assertion`, async () => {
+    const f = await fixture({ mode: 'markdown-and-anonymize', count: 1 }); historicalUnsafeKeep(f, 0);
+    const publication = f.store.list(f.batchId).result_publication, input = repairRequest(f, 0, 'entities', publication.repair_binding);
+    const run = path.join(data, 'document-reviews', f.batchId), target = role === 'initial-binding'
+      ? path.join(data, 'result-publication-bindings', `${f.batchId}.json`) : role === 'initial-outbox'
+        ? path.join(data, 'result-export-state', `re_${sha(f.batchId).slice(0, 32)}.json`) : path.join(run, 'decision-000001.json');
+    const before = fs.readFileSync(target), engine = require('../plugins/data-secure/server/pii-engine'), scan = engine.scanResidual;
+    let calls = 0, replaced = false;
+    engine.scanResidual = function(...args) {
+      if (++calls === 2) { fs.renameSync(target, target + '.test-owned-original'); fs.writeFileSync(target, before, { flag: 'wx', mode: 0o600 }); replaced = true; }
+      return scan.apply(this, args);
+    };
+    try { assert.throws(() => f.store.decide(f.batchId, input.row.document_id, input.request)); }
+    finally { engine.scanResidual = scan; }
+    assert.equal(replaced, true); assert.equal(fs.existsSync(path.join(run, 'commit-000002.json')), false);
+    assert.equal(f.calls.length, 0);
+  });
+  await testAsync('actual recovery reader retains only digest/identity metadata, not private payload buffers', async () => {
+    const f = await fixture({ mode: 'markdown-and-anonymize', count: 1 }); historicalUnsafeKeep(f, 0);
+    let observations = 0;
+    class ObservedMap extends Map {
+      set(key, value) {
+        if (typeof key === 'string' && value?.identity && value?.directory && Object.hasOwn(value, 'sha256')) {
+          assert.deepEqual(Object.keys(value).sort(), ['directory', 'identity', 'sha256', 'size']);
+          assert.equal(Buffer.isBuffer(value), false); assert.equal(Object.hasOwn(value, 'bytes'), false);
+          assert.match(value.sha256, /^[a-f0-9]{64}$/u); assert.ok(Number.isSafeInteger(value.size)); observations++;
+        }
+        return super.set(key, value);
+      }
+    }
+    const filename = require.resolve('../plugins/data-secure/server/gateway/standalone-document-review-store');
+    const model = { exports: {} }, localRequire = require('node:module').createRequire(filename);
+    new Function('require', 'module', 'exports', 'Map', fs.readFileSync(filename, 'utf8'))(localRequire, model, model.exports, ObservedMap);
+    const store = model.exports.createDocumentReviewStore(f.options);
+    assert.equal(store.list(f.batchId).result_publication.state, 'repair_required');
+    assert.ok(observations > 5, 'the actual reader observed multiple held private originals without retaining their bodies');
+  });
+  for (const code of ['DOCUMENT_REVIEW_POLICY_CHANGED', 'EIO', 'OWNERSHIP_GUARD_BUSY']) await testAsync(`repair projection never downgrades ${code} to a residual repair grant`, async () => {
+    const f = await fixture({ mode: 'markdown-and-anonymize', count: 1 }); historicalUnsafeKeep(f, 0);
+    const engine = require('../plugins/data-secure/server/pii-engine'), scan = engine.scanResidual;
+    engine.scanResidual = () => { throw Object.assign(Error('synthetic classified boundary failure'), { code }); };
+    try { assert.equal(f.store.list(f.batchId).result_publication.state, 'conflict'); }
+    finally { engine.scanResidual = scan; }
+  });
+  test('private IPC repair digest is closed, action-limited and never an approval/export field', () => {
+    const make = (action, binding = 'f'.repeat(64)) => ({ schema: 'datasecure-standalone-private-ipc/1', request_id: '1'.repeat(16),
+      action: 'decide_document_review', batch_id: 'a'.repeat(64), document_id: 'b'.repeat(32), decision: {
+        action, revision: 1, output_sha256: 'c'.repeat(64), ranges: action === 'redact' ? [{ start: 0, end: 1 }] : [],
+        operation_id: 'd'.repeat(32), repair_binding: binding,
+        ...(action === 'entities' ? { entity_decisions: [{ entity_id: 'entity_000001', decision: 'default' }] } : {}) } });
+    for (const action of ['entities', 'redact', 'restore_base']) assert.equal(validatePrivateMessage(make(action)).action, 'decide_document_review');
+    for (const action of ['approve', 'revoke', 'correct']) assert.throws(() => validatePrivateMessage(make(action)));
+    for (const bad of ['', 'A'.repeat(64), 'f'.repeat(63), 1, null]) assert.throws(() => validatePrivateMessage(make('restore_base', bad)));
+    let coerced = false;
+    assert.throws(() => validatePrivateMessage(make('restore_base', { toString() { coerced = true; return 'f'.repeat(64); } })));
+    assert.equal(coerced, false, 'a non-string repair field is rejected without running a stringifier');
+    const extra = make('restore_base'); extra.decision.extra = true; assert.throws(() => validatePrivateMessage(extra));
+  });
   if (process.platform === 'darwin') {
   for (const mode of ['markdown-only', 'markdown-and-anonymize'])
   await testAsync(`Darwin process / ${mode}: opaque metadata survives initial/gen opening but is never copied, counted or receipted`, async () => {
@@ -835,8 +1035,12 @@ async function run() {
   });
   await testAsync('pending obsolete intent cannot silently publish a changed newer vector', async () => {
     const f = await fixture(); f.edit(); f.controls.losePublish = true;
-    await rejects(() => f.publish(), 'STANDALONE_IPC_TIMEOUT'); f.edit(1);
-    await rejects(() => f.publish(), 'RESULT_PUBLICATION_CONFLICT'); assert.equal(f.operations.size, 1);
+    await rejects(() => f.publish(), 'STANDALONE_IPC_TIMEOUT');
+    assert.throws(() => f.edit(1), { code: 'RESULT_PUBLICATION_PENDING' });
+    assert.equal(f.operations.size, 1, 'new decisions cannot obsolete an unacknowledged native intent');
+    historicalNewerCorrection(f, 1);
+    await rejects(() => f.publish(), 'RESULT_PUBLICATION_CONFLICT');
+    assert.equal(f.operations.size, 1, 'an actual historical obsolete vector still cannot redirect the pending native intent');
   });
   for (const timing of ['afterAck', 'beforeReconcile']) await testAsync(`equal-byte output swap ${timing} cannot acquire a completion receipt`, async () => {
     const f = await fixture(); f.edit(); f.controls[timing] = sameByteSwap;
@@ -879,6 +1083,8 @@ async function run() {
     assert.equal(await f.resolve(), null, 'legacy uses initial resolver, not absent new generation metadata');
     await rejects(() => f.publish(), 'RESULT_PUBLICATION_LEGACY'); assert.ok(fs.readFileSync(outbox).equals(before));
     assert.equal(f.calls.length, 0);
+    const input = repairRequest(f, 0, 'restore_base', 'f'.repeat(64));
+    assert.throws(() => f.store.decide(f.batchId, input.row.document_id, input.request), { code: 'DOCUMENT_REVIEW_STALE' });
   });
   await done();
 }

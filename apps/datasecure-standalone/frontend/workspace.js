@@ -190,19 +190,51 @@
     const matches = job?.batchId === entry.batch_id && current?.batch_id === entry.batch_id;
     if (projection && matches && (view === 'history' || view === 'details' && runDetails?.batchId === entry.batch_id) && !busy && !reconnecting && !contextRequired) {
       runReviewSnapshot = { batchId: entry.batch_id, connection: connectionEpoch, generation, job,
-        total: entry.selected_count, results: entry.result_count, failed: entry.failed_count, policy: entry.review_policy ?? null, projection };
+        total: entry.selected_count, results: entry.result_count, failed: entry.failed_count, policy: entry.review_policy ?? null, projection,
+        repair_recovery: projection.phase === 'result_repair_required' ||
+          runReviewSnapshot?.repair_recovery === true && projection.phase !== 'results_ready' };
       boundRunReview(current); // Reject a history/current-status disagreement.
-    } else if (runReviewSnapshot?.batchId === entry.batch_id) runReviewSnapshot = null;
+    } else if (runReviewSnapshot?.batchId === entry.batch_id) {
+      // Failure to refresh cannot turn an already confirmed repair restriction
+      // into a new result-opening grant. The original epoch/job/count checks
+      // still retire this display-only snapshot when its owner changes.
+      if (!projection && (runReviewSnapshot.projection?.phase === 'result_repair_required' || runReviewSnapshot.repair_recovery === true) && boundRunReview(current)) return;
+      runReviewSnapshot = null;
+    }
     else return;
     lastJobSignature = '';
     if (job && current) renderJob(current); else refreshRunGuide();
   }
   function clearRunReview(announcementView = view) {
     if (!runReviewSnapshot) return;
+    if (runReviewSnapshot.repair_recovery === true && ['history','documents','details'].includes(announcementView) && boundRunReview(current)) return;
     runReviewSnapshot = null; lastJobSignature = '';
     if (job && current) renderJob(current, announcementView); else refreshRunGuide();
   }
   function rememberDocumentApproval(metadata) {
+    const wasRepair = runReviewSnapshot?.batchId === metadata.batch_id && runReviewSnapshot.repair_recovery === true;
+    const recoveryProjection = !closed && !busy && !reconnecting && !contextRequired &&
+      job?.batchId === metadata.batch_id && job.task === 'markdown-and-anonymize' &&
+      current?.batch_id === metadata.batch_id && metadata.processing_mode === 'markdown-and-anonymize' &&
+      metadata.fresh === true && metadata.busy === false && metadata.dirty === false && metadata.processing_complete === true &&
+      Number.isSafeInteger(metadata.document_count) && metadata.document_count > 0 && metadata.document_count <= 200 &&
+      current.result_count === metadata.document_count && Number.isSafeInteger(current.selected_count) &&
+      current.selected_count >= metadata.document_count && current.selected_count <= 200 && Number.isSafeInteger(current.failed_count) &&
+      current.failed_count >= 0 && current.failed_count <= current.selected_count &&
+      window.__DATASECURE_PRESENTATION__?.resultPublication(metadata.result_publication)
+      ? window.__DATASECURE_PRESENTATION__.projectRun(metadata) : null;
+    if (recoveryProjection?.phase === 'result_repair_required' || wasRepair &&
+        ['result_pending', 'results_ready', 'results_unavailable'].includes(recoveryProjection?.phase)) {
+      // Retain only a display restriction/reconciled publication projection.
+      // No cached repair token grants a write; opening the editor always reads
+      // a fresh backend binding. All original owner/epoch/count checks remain.
+      runReviewSnapshot = { batchId: metadata.batch_id, connection: connectionEpoch, generation, job,
+        total: current.selected_count, results: metadata.document_count, failed: current.failed_count,
+        policy: metadata.review_policy ?? null, projection: recoveryProjection,
+        repair_recovery: recoveryProjection.phase !== 'results_ready' };
+      boundRunReview(current); lastJobSignature = ''; return;
+    }
+    if (wasRepair && boundRunReview(current)) return;
     // The already validated, explicitly open document renderer can supply a
     // display-only approval snapshot for the same completed job. It grants no
     // new decision/export authority and cannot certify omitted/unknown sources.
@@ -1114,6 +1146,10 @@
     $('job-progress').hidden = false;
     const working = ['preparing', 'processing'].includes(state.state);
     const rawResults = state.processing_mode === 'markdown-only', anonymousResults = state.processing_mode === 'markdown-and-anonymize';
+    const needsRepair = anonymousResults && state.state === 'results_available' && !working && (reviewProjection?.phase === 'result_repair_required' ||
+      window.__DATASECURE_PRESENTATION__?.resultPublication(state.result_publication)?.state === 'repair_required');
+    const resultBlocked = needsRepair || ['result_pending', 'results_unavailable'].includes(reviewProjection?.phase) ||
+      ['pending','conflict','unavailable'].includes(window.__DATASECURE_PRESENTATION__?.resultPublication(state.result_publication)?.state);
     const summary = window.__DATASECURE_PRESENTATION__?.conversionSummary(state);
     const completedAnonymous = anonymousResults && state.state === 'results_available';
     const contentNotices = window.__DATASECURE_PRESENTATION__?.contentNoticeSummary(state);
@@ -1121,18 +1157,20 @@
     const fastRun = completedAnonymous && state.review_policy === 'automatic-conservative';
     // Success is positive evidence for a terminal outcome, never the fallback
     // for an unknown state, a deferred decision or an incomplete delivery.
-    $('job-icon').textContent = working ? '⚙' : completedAnonymous ? anonymousAttention ? '✓ !' : '✓'
+    $('job-icon').textContent = working ? '⚙' : needsRepair ? '!' : completedAnonymous ? anonymousAttention ? '✓ !' : '✓'
       : summary ? summary.error_count ? '!' : summary.ocr_omitted_count || summary.content_notice_count ? '✓ !' : '✓'
       : state.state === 'paused' ? 'Ⅱ' : '!';
     $('job-icon').className = `status-icon${working ? ' working' : ''}`;
-    $('job-status').className = `job-status${completedAnonymous || summary && !summary.error_count ? ' success' : ''}`;
-    $('job-title').textContent = summary?.heading || (state.state === 'results_available'
+    $('job-status').className = `job-status${!resultBlocked && (completedAnonymous || summary && !summary.error_count) ? ' success' : ''}`;
+    $('job-title').textContent = needsRepair ? 'Gespeicherte Anonymisierung sicher nachbearbeiten' : resultBlocked ? reviewProjection?.heading || 'Ergebnisbereitstellung nicht bestätigt' : summary?.heading || (state.state === 'results_available'
       ? rawResults ? 'Textübernahme abgeschlossen' : anonymousResults ? anonymousAttention
         ? 'Anonymisierungslauf abgeschlossen mit Hinweisen' : 'Anonymisierungslauf abgeschlossen' : 'Verarbeitungszweck nicht bestätigt'
       : states[state.state] || 'Status wird geprüft');
     const total = count(state.selected_count) || job.selectedCount, done = count(state.completed_count), failed = count(state.failed_count), reviews = count(state.review_count);
     $('job-description').className = reviewProjection?.not_processed_count ? 'run-notice' : 'muted';
-    $('job-description').textContent = summary?.description || (state.state === 'review_required' ? state.processing_mode === 'markdown-only'
+    $('job-description').textContent = resultBlocked ? reviewProjection?.next || (needsRepair
+      ? 'Die privaten Textstände öffnen und verbliebene sensible Stellen bewusst maskieren, sicher ersetzen oder den Basisstand ausdrücklich wiederherstellen. Keine automatische Änderung oder Bereitstellung. Frühere Ergebnisse bleiben unverändert.'
+      : 'Der aktuelle Ergebnisordner ist nicht bestätigt. Den gespeicherten Stand in der Nachbearbeitung prüfen; keine Änderung blind wiederholen.') : summary?.description || (state.state === 'review_required' ? state.processing_mode === 'markdown-only'
       ? `${reviews} Datei${reviews === 1 ? ' wartet' : 'en warten'} auf deine Entscheidung. Du kannst erkannte E-Mail-Adressen und Telefonnummern mit dem Originalbild vergleichen oder ohne diese zusätzliche Prüfung fortfahren. Die Werte sind beim Fortfahren nicht als richtig bestätigt; OCR-Lesefehler bleiben möglich. Danach läuft die Markdown-Umwandlung weiter.`
       : `${reviews} Datei${reviews === 1 ? ' benötigt' : 'en benötigen'} eine lokale Entscheidung. Jetzt prüfen oder später fortsetzen.`
       : working ? state.pause_requested ? 'Pause angefordert. Die aktuelle Datei einschließlich Bereitstellung und Zuordnung wird fertiggestellt; danach beginnt keine weitere Datei.' : `${done} von ${total} Dateien abgeschlossen. Bitte warten; die Verarbeitung bleibt lokal.`
@@ -1142,8 +1180,8 @@
       : state.state === 'export_pending' ? 'Die sichtbare Bereitstellung der Ergebnisse ist noch nicht bestätigt. Im Verlauf kannst du den gespeicherten Stand prüfen und fehlende Ergebnisdateien ausdrücklich bereitstellen lassen. Dabei wird kein Export erstellt; bereits vorhandene Dateien bleiben erhalten.'
       : state.state === 'export_abandoned' ? 'Die automatische Bereitstellung wurde für diesen Lauf aufgegeben. Teilkopien bleiben unverändert; es gibt keine vollständige Ergebnisfreigabe.'
       : 'Der aktuelle Status bleibt diesem Lauf zugeordnet.');
-    if (completedAnonymous && reviewProjection) $('job-description').textContent += ' ' + reviewProjection.next;
-    else if (completedAnonymous) $('job-description').textContent += fastRun
+    if (!resultBlocked && completedAnonymous && reviewProjection) $('job-description').textContent += ' ' + reviewProjection.next;
+    else if (!resultBlocked && completedAnonymous) $('job-description').textContent += fastRun
       ? ' Bekannte unklare Fundstellen wurden automatisch maskiert, nicht manuell geprüft. Ergebnisordner öffnen; keine zusätzliche Freigabe oder Exportbestätigung nötig.'
       : ' Der Lauf verarbeitet keine weiteren Dateien. Ergebnisordner öffnen und die fertigen Dateien dort auswählen oder weiterverwenden. Nachbearbeitung ist freiwillig.';
     if (completedAnonymous && !reviewProjection && contentNotices?.description) $('job-description').textContent += ` ${contentNotices.description}`;
@@ -1180,8 +1218,9 @@
       actions.append(action('skip-ocr', 'Ohne diesen Vergleich fortfahren', () => offerSkipOcrContactReview(job.batchId)));
     if (['stopped', 'paused'].includes(state.state)) actions.append(action('resume', 'Verarbeitung fortsetzen', async () => { if (await perform('continue_current_batch')) { lastJobSignature = ''; await refresh(); } }, true));
     if (state.state === 'export_pending') actions.append(action('history', 'Bereitstellung im Verlauf prüfen', () => showView('history'), true));
-    if (state.state === 'results_available' && state.results_available && !working) actions.append(action('results', 'Ergebnisordner öffnen', () => perform('open_history_results', { batchId: job.batchId }), true));
-    if (state.state === 'results_available' && state.results_available && !working) secondary.append(action('documents', rawResults ? 'Markdown nachkorrigieren (optional)' : 'Nachbearbeitung öffnen (optional)', () => openDocuments(job.batchId)));
+    if (state.state === 'results_available' && state.results_available && !working && !resultBlocked) actions.append(action('results', 'Ergebnisordner öffnen', () => perform('open_history_results', { batchId: job.batchId }), true));
+    if (state.state === 'results_available' && !working && needsRepair) actions.append(action('documents', 'Gespeicherte Texte nachbearbeiten', () => openDocuments(job.batchId), true));
+    else if (state.state === 'results_available' && state.results_available && !working) secondary.append(action('documents', rawResults ? 'Markdown nachkorrigieren (optional)' : 'Nachbearbeitung öffnen (optional)', () => openDocuments(job.batchId)));
     if (state.state === 'export_pending' && anonymousResults) secondary.append(action('abandon-export', 'Bereitstellung aufgeben …', () =>
       offerAbandonResultExport({ batch_id: job.batchId, status: state.state, processing_mode: state.processing_mode,
         result_count: state.result_count, failed_count: state.failed_count,
@@ -1268,9 +1307,12 @@
           throw Error('DOCUMENT_REVIEW_INVALID');
         const raw = data.processing_mode === 'markdown-only';
         if (data.result_publication !== undefined && (!window.__DATASECURE_PRESENTATION__?.resultPublication(data.result_publication) ||
+            raw && data.result_publication.state === 'repair_required' ||
             data.result_publication.count !== undefined && data.result_publication.count !== data.reviewable_count))
           throw Error('DOCUMENT_REVIEW_INVALID');
-        contents.append(element('p', `${data.reviewable_count} gespeicherte Ergebnisstände. Nachbearbeitung ist freiwillig; keine zusätzliche Dateiauswahl, Dokumentfreigabe oder Exportbestätigung nötig.`, 'history-meta'));
+        contents.append(element('p', data.result_publication?.state === 'repair_required'
+          ? `${data.reviewable_count} private Dokumentstände. Vor neuen Ergebnisdateien ist eine sichere Nachbearbeitung nötig. Es wird nichts automatisch geändert.`
+          : `${data.reviewable_count} gespeicherte Ergebnisstände. Nachbearbeitung ist freiwillig; keine zusätzliche Dateiauswahl, Dokumentfreigabe oder Exportbestätigung nötig.`, 'history-meta'));
         if (data.review_policy) contents.append(element('p',
           'Bekannte unklare Fundstellen wurden automatisch maskiert, nicht manuell geprüft.', 'history-meta'));
         if (data.unavailable_count) contents.append(element('p', `${data.unavailable_count} Dokumentprüfstände nicht verfügbar. Betroffene Dateien in der optionalen Nachbearbeitung ansehen.`, 'history-meta'));
@@ -1292,7 +1334,9 @@
         }
         if (data.pending_incomplete_count || data.pending_confirmation_count) contents.append(element('p',
           `${data.pending_incomplete_count} unvollständige Exportaufträge · ${data.pending_confirmation_count} fertige Kopien mit offener Empfangsbestätigung. In der Dokumentansicht abgleichen, nicht neu exportieren.`, 'history-meta'));
-        status.textContent = data.result_publication?.state === 'unavailable'
+        status.textContent = data.result_publication?.state === 'repair_required'
+          ? 'Gespeicherte Texte nachbearbeiten: sensible Stellen bewusst maskieren, sicher ersetzen oder den Basisstand ausdrücklich wiederherstellen. Erst alle betroffenen Dokumente reparieren; kein wiederholter Bereitstellungsversuch. Frühere Ergebnisse bleiben unverändert.'
+          : data.result_publication?.state === 'unavailable'
           ? 'Die Verarbeitung ist abgeschlossen. Der bereitgestellte Ergebnisordner ist nicht mehr sicher erreichbar; private Prüfstände bleiben erhalten. Es wird nichts neu angelegt.'
           : data.result_publication && ['pending', 'conflict'].includes(data.result_publication.state)
           ? 'Die Bereitstellung des aktuellen Nachbearbeitungsstands ist noch nicht bestätigt. Nachbearbeitung öffnen und denselben Ergebnisstand abgleichen.'
@@ -1721,6 +1765,7 @@
         // Summary data may improve the next action, but never supersedes an
         // active worker or unprocessed work. File exceptions remain directly
         // visible beside usable results; document opening reloads revisions.
+        let repairObserved = job?.batchId === entry.batch_id && boundRunReview(current)?.phase === 'result_repair_required';
         const updateAction = data => {
           updateRunReview(entry, data);
           const candidate = window.__DATASECURE_PRESENTATION__?.historyReviewProjection(entry, data);
@@ -1734,16 +1779,23 @@
           // Additional historical copies are not a prerequisite for the
           // normal result files. Never turn their approval/ACK counts into
           // another mandatory export or file selection.
-          const publication = data?.available === true && !data.loading ? data.result_publication : null;
-          const unsettled = publication && ['pending', 'conflict'].includes(publication.state);
-          const directoryUnavailable = publication?.state === 'unavailable';
-          stateLabel.textContent = directoryUnavailable ? 'Verarbeitung abgeschlossen · Ergebnisordner nicht verfügbar'
+          const publication = data?.available === true && !data.loading ? window.__DATASECURE_PRESENTATION__?.resultPublication(data.result_publication) : null;
+          const retainedRestriction = ownCurrent && runReviewSnapshot?.repair_recovery === true && boundRunReview(current);
+          const unsettled = publication && ['pending', 'conflict'].includes(publication.state) ||
+            !publication && retainedRestriction?.phase === 'result_pending';
+          const directoryUnavailable = publication?.state === 'unavailable' || !publication && retainedRestriction?.phase === 'results_unavailable';
+          if (candidate && publication) repairObserved = !raw && publication.state === 'repair_required';
+          const needsRepair = !raw && (repairObserved || publication?.state === 'repair_required');
+          stateLabel.textContent = needsRepair ? 'Gespeicherte Anonymisierung sicher nachbearbeiten' : directoryUnavailable ? 'Verarbeitung abgeschlossen · Ergebnisordner nicht verfügbar'
             : unsettled ? 'Verarbeitung beendet · aktueller Ergebnisstand noch nicht bestätigt' : baseStateLabel;
           if (missingLocation && !stateLabel.textContent.includes('Ergebnisordner fehlt')) stateLabel.textContent += ' · Ergebnisordner fehlt';
           if (finishDetail) finishDetail.textContent = finishedProcessingText;
           if (finishNext && unsettled) finishNext.textContent = 'Nachbearbeitung gespeichert, Bereitstellung noch nicht bestätigt. Nachbearbeitung öffnen und denselben Ergebnisstand erneut prüfen; keine weitere Änderung blind wiederholen.';
           if (finishNext && directoryUnavailable) finishNext.textContent = 'Der bereitgestellte Ordner ist nicht mehr sicher erreichbar. Private Prüfstände bleiben erhalten; keine automatische Neuerstellung oder Übernahme eines Ersatzordners.';
-          if (main?.id.endsWith('-results')) setControlDisabled(main, Boolean(unsettled || directoryUnavailable));
+          if (finishNext && needsRepair) finishNext.textContent = 'Gespeicherte Texte öffnen und sensible Stellen bewusst sicher nachbearbeiten. Keine automatische Änderung; erst alle betroffenen Dokumente reparieren. Frühere Ergebnisstände bleiben unverändert.';
+          const resultOpener = $(`history-${entry.batch_id}-results`), editor = $(`history-${entry.batch_id}-documents`);
+          if (resultOpener) setControlDisabled(resultOpener, Boolean(unsettled || directoryUnavailable || needsRepair));
+          if (editor) editor.textContent = needsRepair ? 'Gespeicherte Texte nachbearbeiten' : raw ? 'Nachkorrektur öffnen (optional)' : 'Nachbearbeitung öffnen (optional)';
           return false;
         };
         row.append(detail, actions);
