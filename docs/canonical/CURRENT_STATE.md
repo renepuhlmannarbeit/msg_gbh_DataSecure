@@ -2,6 +2,80 @@
 
 Stand: 22.10.2026 · 3.2.0-rc171 · neuer gemeinsamer Windows-/Mac-Test-Pre-Release in Vorbereitung; RC170 unverändert veröffentlicht.
 
+## Quellenabschluss22.10.2026 02:18UTC vor Source07
+
+Zwei reine Zusatztestkorrekturen fertig und unabhängig am tatsächlichen Delta
+gegen Produktionsparser/Worker/CheckpointStream gegengelesen, kein bestätigter
+Deltablocker. Main las beide Testdeltas und relevante Produktionsgrenzen selbst.
+Lexical80Checks/10Protokollnegative/33echte isolierteWorker und Character492/
+21Protokollnegative/157echteWorker PASS. Legacy bleibt strikt; ungültiger Hauptpart
+bleibt konkreter Fehler, beschädigter Nebenpart nur ganz ausgelassen mit Hinweis
+und erhaltenem unabhängigen Text. Nulltext kein Erfolg. Vollständiger /2-Stream,
+kein recover()/Lastline, keine beliebigen zulässigen Codes. Umlaute/ß/Emoji/literale
+Entitäten durch Positive geschützt. Keine Produkt-/Guard-/ACK-/Deadlineänderung.
+
+Mainvorprüfung aller11Zusatzgates tatsächlich PASS/Inputs unverändert,
+02:16:07.769–02:18:00.154UTC, einschließlich beider echter Workerrollen, vier
+nativer Guard-/Integrations-/Epoch-/Pausegates, beider nativer Lease-/Admission-
+Profile sowie drei Headless-Browserorakel. Dies ist gezielte Vorprüfung, keine
+finale Gesamt-/Paket-/GUI-/Releaseabnahme. Beleg
+ dist/rc171-supplemental-preflight-20261022/attempt-IdfAkg/RESULT.json.
+Dateipins a0acece3e2a1967414aecd621ff627ad5714c2e2240ac93191c96ca841b685f7
+und022846a8019ff63569be884628541e99860a68c7d32f2596f63e44acf1606629.
+578Test-/Scriptinputs jetzt Manifestfdf1916a48578ac9864eff37cb27a52e030f733c6ec823b3db6a00842d762c2c;
+Produktfingerprint unverändert1320d938f4976b0647b5db970252edf48d792793860bad956acf59dee5a6c29b/340.
+
+Source07-Helfer allein create-only vorbereitet/Maingegenlesen: sieben Driver-
+Deltas nur neuer Prefix/Zeilenenden, keine Schutz-/Nachweislockerung. Main31Proof-
+negative/78Pin-/9Konverter-/33GUI-/2FAIL-Sperrnegative und629statischeChecks PASS.
+Noch kein Source07-Freeze/Build/GUI-/Endgatenachweis. Jetzt gemeinsamer neuer
+Commit/Push, beide frischen Macjobs, Freeze und sämtliche frischen lokalen Gates
+an diesem Commit; neue Windowsbytes wirklich nativ prüfen. Source06roteFINALs
+und alle alten Belege/Profile bleiben unverändert, kein Umetikettieren.
+
+
+## Neuer Endstand22.10.2026 nach02:10UTC
+
+Source06 bd5d255eb7bbe565b863f029a172d98505fd94d3 ist NICHT freigabefähig:
+HEADLESS-FINAL tatsächlich ROT/inputs_unchanged:true,289/289 Haupttests und0/11
+Zusatztests, Ende02:03:43.009UTC. EXTRA1 erwartet den alten DOCX-Strukturcode,
+der neue Content-Options-Partialpfad verweigert ungültiges Haupt-XML bereits
+präzise mit OOXML_XML_CHARACTER_INVALID. Tatsächlicher Read-only-Gegenreview
+belegt zudem veraltete Nebenpart-/Nulltext- und /2-Transporterwartungen in genau
+zwei Zusatztests. Enger reiner Testfix nach Ende aller Freezejobs beauftragt;
+Legacy/Hauptteil-/Protokoll-/Isolationsschutz nicht lockern. Vor neuem gemeinsamen
+Freeze alle elf Zusatzgates gezielt prüfen und tatsächliches Delta unabhängig
+gegenlesen. Neue Source07-Helfer vorbereitet, noch kein Source07-Commit/Freeze.
+
+Native298Rusttests(3ignoriert)/Clippy/Node-Rust/Release,Konverter30PDF/67Worker/
+37Office und alle5Windows-Paketgates einschließlich100/100Markdown tatsächlich
+PASS mit unveränderten Inputs. Macconsumer39705544455 auf genau bd5d255:
+ARM119584646755 und Intel119584646742 beide SUCCESS. Noch keine finale unabhängige
+Artefakt-/Releasefreigabe; rote Headless-Evidenz bleibt erhalten.
+
+Echte gebundene Source06-GUI01 PASS und06 PASS:323.527s ungespeicherte Denkpause,
+zwei normale Neustarts/gleiches Profil, unsaved verworfen/saved OCR erhalten,
+neues Ergebnisziel, derselbe Lauf dcdfc612, Personenentscheidung und165BMD plus
+alle3Vertraulich-Beilagen. Unabhängiger tatsächlicher Ordner-/Workbookgegenreview
+bestätigt CSV-Dateinamen, TXT/XLSX-Zuordnungen/Vorkommen/Revision0/MD-Hash und
+89/89Originalinputs bytegleich. Badge nach Abschluss korrekt leer.03nur Auto-
+OCR-AUS-Teilfall bestanden(2MD+OCR-Auslassung,keine manuelle Freigabe,Ordnerlabels
+auch zugeklappt);02/04/05/07–19 NOT_RUN. App normal geschlossen,Rootprozess0.
+Keine alte GUI auf neue Commit-/Paketbytes übertragen. Historischer Source05-
+Primärfehler weiterhin UNPROVEN; neuer GUI-PASS ist keine rückwirkende Ursache.
+
+Gemeinsamer Produktfingerprint1320d938f4976b0647b5db970252edf48d792793860bad956acf59dee5a6c29b,
+340Dateien; alte Source06-Testinputs578/Manifestc845ece7300cc5b047542fa456509e0fb61416d3cd2d7490deee637282e2155f.
+Source06-ZIPcae5053dbf9dfb799776462ee37cbf1f981b9ed018765ddc617d28be387c808e,
+EXE53027c4e8f514afe635da16f1951a024d921d5566c760210119f34c712cd6dd9.
+Belege dist/rc171-partial-extraction-source06-20261022; nicht veröffentlichen.
+Kein Tag/Pre-Release/lokaleRC171-Übergabe. Menschliche Windows-/Mac-/Excel-/
+Numbers-/Finder-/TCC-/M2-/Enterprise-/VoiceOver-Abnahme USER_PENDING.
+
+Ältere folgende Aktiv-/Vorbereitungsmeldungen sind historische Fortschritte;
+dieser neue Endstand ersetzt widersprechende Angaben, keine alten FINALs ändern.
+
+
 Neuester Quellenabschluss22.10.01:23UTC: enger Mapping-Metadatengegenfix und
 Navigationsbadgefix fertig. Unabhängige tatsächliche Gegenreviews beider Deltas
 ohne bestätigten Deltablocker; Main las alle sechs Produktionsdateien. Autor
