@@ -2,7 +2,28 @@
 
 Stand: 22.10.2026 · 3.2.0-rc171 · neuer gemeinsamer Windows-/Mac-Test-Pre-Release in Vorbereitung; RC170 unverändert veröffentlicht.
 
-## Neuester Quellenprüfstand 22.10.2026 nach 04:05 UTC
+## Neuester Quellenabschluss22.10.2026 04:34UTC
+
+Reiner Zwei-Testfix fertig:9/9Einzel-/12/12RunfällePASS,unabhängig am echten Code
+gegengelesen. Main las Delta und bestand sechs vollständige Nachbarsuiten mit
+unveränderten Inputs/Exit0 am04:34:05UTC. Kein Produkt-/Policy-/Scannerdelta;
+FPd73e5ee1e73b79b6d21432b4d3d1c4d4c68e8bb7a1b1f97cb2d56ee7f69e6a76/340 bleibt,
+578Testinputs jetztdd1e1b721e4646c3ef05ce4264af171644ab262c6a20acd69524a94a1f441b78.
+Source09normale+Altprofilhelper nur vorbereitet/gegengelesen/pureNegativePASS.
+Neuer gemeinsamer Commit und frische Endgates folgen, keine09Paket-/GUI-/Releaseabnahme.
+
+### Historischer tatsächlicher Source08-Prüfstand04:24UTC
+
+Source08/06bbeb5820f4ef0f2685bfc59c8c9a4a9a8225c4 ist NICHT freigabefähig.
+Windows Native298Rust/3ignored/Clippy/Release,Konverter30/67/37 und Paket5/100MD
+PASS/stabileInputs. HeadlessROT39/289+0/11 und beideMac39721379901ROT am selben
+veralteten Entity-Keep-Test. Main+zwei Gegenreviews bestätigen ignorierte neue
+Precommit-Ablehnung, kein zusätzlicher Produkt-/Macrechtefehler. Genau2Tests eng
+korrigieren und historische Unsafe-Approval-/Exportgegenproben erhalten; keine
+Produktlockerung. Alle08Jobs beendet,keineGUI/Snapshot/Release. Source09Helfer
+nur vorbereitet, neuer gemeinsamer Commit/Belege nach Testfix. DetailsRC171Shared.
+
+### Historischer Quellenprüfstand04:05UTC
 
 Precommit-Entityprüfung und frisch gebundene private Reparatur sind implementiert
 und unabhängig am tatsächlichen Produktionsdelta gegengelesen. Autorenprüfungen:

@@ -2,7 +2,28 @@
 
 Stand: 22.10.2026 · Produktstand 3.2.0-rc171 · gemeinsamer Windows-/Mac-Test-Pre-Release in Vorbereitung; RC170 bleibt unverändert.
 
-## Aktive Übergabegates nach Quellenkorrektur, 22.10.2026 04:05 UTC
+## Aktive Übergabegates nach Testfix,22.10.2026 04:34UTC
+
+Zwei reine Entitytests korrigiert/9+12FällePASS; historischer Schutz und neue
+Precommit-Nichtmutation getrennt erhalten. Unabhängiges tatsächliches Gegenlesen
+und MainsechsNachbarsuitenPASS/inputs_unchangedtrue/Exit0. Kein Produktdelta,
+FPd73e5ee1…6a76/340 unverändert. Noch offen: neuer gemeinsamer Commit und alle
+frischen Source09-Endgates, echte neueWindowsGUI19inklLegacyreparatur, beide
+Macpakete/Review und lokale+GitHubÜbergabe. Alle menschlichen UAT USER_PENDING.
+
+### Historische Übergabegates nach Source08-Endläufen04:24UTC
+
+Reiner enger Testfix in test-standalone-entities.js und test-standalone-run-entities.js:
+neue direkte Entity-Ablehnung vor Commit exakt samt Nichtmutation prüfen, alte
+Unsafe-Approval-/Exportnegative mit klarer testeigener Altstand-Fixture erhalten.
+Main+zwei unabhängige Code-/Primärlog-Gegenreviews bestätigen alten Testablauf als
+Ursache. BeideMac39721379901 und WindowsHeadless39/289ROT an derselben Assertion;
+keinMacrechte-/Corefehler aus diesem Test. WindowsNative298/Clippy/Release,
+Konverter30/67/37 und Paket5/100MD bestanden/inputsstabil, alle08Jobs beendet.
+Keine produktive Schutzlockerung; erst Testfixgegenreview/neuer gemeinsamer
+Source09Commit und frische Endgates. Noch kein09Freeze/Paket/GUI/Release.
+
+### Historische Übergabegates04:05UTC
 
 Precommit-Entitykandidatenprüfung und gebundener privater Reparaturzustand sind
 implementiert und unabhängig am echten Code gegengelesen. Autoren:68+101 Backend-

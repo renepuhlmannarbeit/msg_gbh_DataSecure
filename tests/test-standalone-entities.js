@@ -32,8 +32,48 @@ function fixture(raw = '😀 Name: Anna Beispiel\nAnna Beispiel hat 42 Projekte.
       ...(action === 'entities' ? { entity_decisions: entities } : {}) };
     return { request, response: create().decide(batchId, item.id, request) };
   };
-  return { batchId, item, result, folder, data, create, row, values, decide,
+  return { batchId, item, result, folder, data, output, results, create, row, values, decide,
     markdown: () => create().chunk(batchId, item.id, row().revision, 0).markdown };
+}
+function persistentPins(f) {
+  const rows = [];
+  for (const [role, folder] of [['private', f.data], ['packages', f.output], ['results', f.results]]) {
+    const walk = target => {
+      const stat = fs.lstatSync(target, { bigint: true }); assert.equal(stat.isSymbolicLink(), false);
+      rows.push([role, path.relative(folder, target), stat.isDirectory() ? 'directory' : 'file',
+        String(stat.dev), String(stat.ino), String(stat.mode), ...(stat.isFile() ? [hash(fs.readFileSync(target))] : [])]);
+      if (stat.isDirectory()) for (const name of fs.readdirSync(target).sort()) walk(path.join(target, name));
+    };
+    walk(folder);
+  }
+  return rows;
+}
+function fixtureEntityKey(f) {
+  // This older single-document fixture has no run manifest, so entities()
+  // does not initialize the key. Supply the same closed test-owned initial
+  // key before observing a decision's nonmutation, never a decision or ACK.
+  const file = path.join(f.data, 'document-reviews', f.batchId, 'entity-key.json');
+  if (!fs.existsSync(file)) fs.writeFileSync(file, JSON.stringify({ schema: 'datasecure-document-entity-key/1',
+    key: crypto.randomBytes(32).toString('hex') }), { flag: 'wx', mode: 0o600 });
+  const value = JSON.parse(fs.readFileSync(file));
+  assert.equal(value.schema, 'datasecure-document-entity-key/1'); assert.match(value.key, /^[a-f0-9]{64}$/u);
+  return Buffer.from(value.key, 'hex');
+}
+function seedHistoricalKeep(f, entityId) {
+  // Explicitly test-owned pre-fix private revision. The current service never
+  // authorizes this Keep: the actual replay/approval/export readers inspect it.
+  const row = f.row(); assert.equal(row.revision, 0);
+  const run = path.join(f.data, 'document-reviews', f.batchId), snapshot = JSON.parse(fs.readFileSync(path.join(run, f.item.id, 'base.json')));
+  const key = fixtureEntityKey(f);
+  const entity = require('../plugins/data-secure/server/gateway/standalone-entity-review');
+  const request = { action: 'entities', ranges: [], revision: 0, output_sha256: row.output_sha256,
+    operation_id: crypto.randomBytes(16).toString('hex'), entity_decisions: [{ entity_id: entityId, decision: 'keep' }] };
+  const next = entity.applyEntityDecisions(snapshot.markdown, entity.initialEntities(snapshot), request.entity_decisions, key);
+  const event = { schema: 'datasecure-document-revision/1', revision: 1, parent_sha256: row.output_sha256,
+    output_sha256: hash(next.markdown), approved: false, action: 'entities', ranges: [],
+    operation_id: request.operation_id, request_sha256: hash(JSON.stringify(request)), entity_decisions: request.entity_decisions };
+  fs.writeFileSync(path.join(run, f.item.id, 'revision-000001.json'), JSON.stringify(event), { flag: 'wx', mode: 0o600 });
+  return request;
 }
 test('actual repeated source spans group once and source/output offsets match exact text', () => {
   const f = fixture(), rows = f.values(), person = rows.find(row => row.kind === 'PERSON');
@@ -50,14 +90,36 @@ test('typed changes are durable, idempotent and invalidate approval without touc
   assert.equal(f.markdown().split(value.replacement).length, 3); f.decide('approve');
   assert.equal(fs.readFileSync(path.join(f.folder, `ds_${f.item.id}.md`), 'utf8'), f.result.text);
 });
-test('keeping explicit personal fields or direct contacts cannot be approved or exported', () => {
+test('unsafe Keep is refused before any private revision, package or result mutation', () => {
   for (const kind of ['PERSON', 'EMAIL']) {
     const f = fixture(), entity = f.values().find(row => row.kind === kind);
-    f.decide('entities', [{ entity_id: entity.entity_id, decision: 'keep' }]); assert.equal(f.row().approved, false);
-    assert.throws(() => f.decide('approve'), error => error.code === 'DOCUMENT_REVIEW_RESIDUAL_PII');
-    assert.equal(f.row().revision, 1); assert.equal(f.row().approved, false);
+    assert.ok(entity); fixtureEntityKey(f);
+    const row = f.row(), entities = f.values(), markdown = f.markdown(), before = persistentPins(f);
+    const { request, response } = f.decide('entities', [{ entity_id: entity.entity_id, decision: 'keep' }]);
+    assert.deepEqual(response, { ok: false, reason_code: 'DOCUMENT_ENTITY_RUN_CONFLICT',
+      blocked_files: [{ name: f.item.name, reason_code: 'DOCUMENT_REVIEW_RESIDUAL_PII' }], local_ui_only: true, external_disclosure: false });
+    assert.deepEqual(f.create().decide(f.batchId, f.item.id, request), response, 'a refused operation grants no historical success ACK');
+    assert.deepEqual(f.row(), row); assert.deepEqual(f.values(), entities); assert.equal(f.markdown(), markdown);
+    assert.equal(f.row().revision, 0); assert.equal(f.row().approved, false);
     assert.throws(() => f.create().exportApproved(f.batchId, 'a'.repeat(32), [{ document_id: f.item.id,
-      revision: f.row().revision, output_sha256: f.row().output_sha256 }]), error => error.code === 'DOCUMENT_REVIEW_UNAPPROVED');
+      revision: row.revision, output_sha256: row.output_sha256 }]), error => error.code === 'DOCUMENT_REVIEW_UNAPPROVED');
+    assert.deepEqual(persistentPins(f), before, 'all private/package/result objects and bytes remain unchanged');
+    assert.equal(f.decide('approve').response.approved, true, 'the unchanged safe basis still passes its real approval gate');
+  }
+});
+test('historical unsafe Keep cannot acquire a new approval, preview or export', () => {
+  for (const kind of ['PERSON', 'EMAIL']) {
+    const f = fixture(), entity = f.values().find(row => row.kind === kind);
+    assert.ok(entity); const request = seedHistoricalKeep(f, entity.entity_id), row = f.row(), before = persistentPins(f);
+    assert.equal(row.revision, 1); assert.equal(row.approved, false);
+    assert.ok(f.markdown().includes(entity.original), 'the historical fixture actually contains the kept personal value');
+    assert.equal(f.create().decide(f.batchId, f.item.id, request).revision, 1, 'only the exact historical ACK remains idempotent');
+    assert.throws(() => f.decide('approve'), error => error.code === 'DOCUMENT_REVIEW_RESIDUAL_PII');
+    const selection = [{ document_id: f.item.id, revision: row.revision, output_sha256: row.output_sha256 }];
+    assert.throws(() => f.create().previewExport(f.batchId, 'b'.repeat(32), selection), error => error.code === 'DOCUMENT_REVIEW_RESIDUAL_PII');
+    assert.throws(() => f.create().exportApproved(f.batchId, 'a'.repeat(32), [{ document_id: f.item.id,
+      revision: row.revision, output_sha256: row.output_sha256 }]), error => error.code === 'DOCUMENT_REVIEW_UNAPPROVED');
+    assert.deepEqual(f.row(), row); assert.deepEqual(persistentPins(f), before, 'historical refusal never rewrites or publishes the unsafe revision');
   }
 });
 test('an exact false-positive Keep is local to its occurrence, never a global allowlist', () => {

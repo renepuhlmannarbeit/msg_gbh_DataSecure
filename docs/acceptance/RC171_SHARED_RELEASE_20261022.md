@@ -7,7 +7,59 @@ Nachtauftrag: Hauptagent prüft auch die gebundene eigene Windows-App nativ mit
 synthetischen Daten. Menschliche Abnahme bleibt davon getrennt USER_PENDING.
 RC170 und sämtliche früheren Pakete, Nutzerdateien, Profile und Evidenzen erhalten.
 
-## Neuer Quellenprüfstand 22.10.2026 nach 04:05 UTC
+## Neuer Quellenabschluss22.10.2026 04:34UTC vor Source09
+
+Genau zwei Tests korrigiert, kein Produkt-/Policy-/Scanner-/Runtimeunterschied
+gegenüber06bbeb5. Neue direkte Keep-Ablehnung beweist Nichtmutation; historische
+unsichere Einzel-/Runrevisionen bleiben testeigene gültige Altstand-Fixtures mit
+realem Replay, exakten ACKs und weiterhin verweigertem Approval/Preview/Export.
+Autor9/9Einzel-/12/12RunfällePASS, unabhängiges tatsächliches Gegenlesen ohne
+Blocker. Main las beide Testdeltas selbst und bestand danach sechs vollständige
+Nachbarsuiten04:31:46–04:34:05UTC mit unveränderten Inputs/Exit0, einschließlich
+Privat-/Zuordnungs-/Trace-/Context-/Pfadgrenzen. Die ersten eigenen Testsetup-
+Fehler (fehlender Fixturekey) wurden ausschließlich im test-owned Vorzustand
+korrigiert, keine Scannerstubs oder gelockerten Assertions.
+
+Produktfingerprint bleibt d73e5ee1e73b79b6d21432b4d3d1c4d4c68e8bb7a1b1f97cb2d56ee7f69e6a76/340;
+578Test-/Scriptinputs jetzt dd1e1b721e4646c3ef05ce4264af171644ab262c6a20acd69524a94a1f441b78.
+Mainbelegdist/rc171-source09-entity-test-main-20261022/RESULT.json. Source09normale
+Helfer und separater Altprofilhelper create-only vorbereitet und am tatsächlichen
+Port gegengelesen: keine alten FINALs/GUI/Pakete kopiert. Main31Proof/78Pin/
+9Conversion/33GUI/2Release/5Mac-Rollennegative+645static100Receipts sowie5Positive/
+43+33LegacynegativePASS. Die eigene erste mechanische Compareassertion hatte nur
+einen umbenannten Kommentar07/08→07/09 übersehen, kein Verhaltensfehler.
+
+Neuer gemeinsamer Commit/Push/Macdispatch/Source09Freeze folgt; sämtliche
+Gesamt-/Native-/Konverter-/Paket-/Mac- und Windows-GUI-Endbelege frisch nötig.
+Keine Source08-Bytes umetikettieren. Noch kein09Paket/GUI/Release.
+
+### Historischer tatsächlicher Source08-Prüfstand04:24UTC
+
+Source08-Appcommit06bbeb5820f4ef0f2685bfc59c8c9a4a9a8225c4 gepusht und frisch
+eingefroren, Produktfingerprint d73e5ee1e73b79b6d21432b4d3d1c4d4c68e8bb7a1b1f97cb2d56ee7f69e6a76.
+Native298Rust/3ignoriert,Prepare/Clippy/Node-Rust/Release,Konverter30PDF/67Worker/
+37Office sowie Paket5/100MD0Fehler bestanden, sämtlich unveränderte Inputs.
+Gesamtprüfung dagegen ROT39/289+0/11 bei test-standalone-entities.js:57.
+Beide frischen Macconsumer39721379901 scheitern an exakt derselben Assertion.
+Keine neue Mac-App/ZIP/DMG und kein Produkt-Core-/Rechtefehler daraus ableiten.
+
+Main und zwei unabhängige tatsächliche Gegenreviews bestätigen: alter Test ruft
+Keep auf, ignoriert die neue geschlossene Vor-Commit-Ablehnung und erwartet dann
+eine Freigabeverweigerung. Tatsächlich bleibt der sichere Basisstand erhalten
+und darf korrekt freigegeben werden. Der Nachbartest test-standalone-run-entities
+enthält dasselbe Muster. Enger reiner Testfix in genau diesen zwei Dateien:
+vollständige Nichtmutation nach direkter Ablehnung beweisen und historische
+unsichere Freigabe-/Exportgegenproben durch explizite testeigene Altstand-Fixtures
+erhalten. Keine Produkt-/Scanner-/Policy-/Deadlineänderung. Alle Source08-Jobs
+beendet, erst danach Schreibfreigabe. Source08-Originalbelege bleiben rot erhalten.
+
+Primärlogs unter dist/rc171-source08-mac-failure-20261022 mit Run/Source/Hashbindung;
+lokale Belege/ZIP unter dist/rc171-partial-extraction-source08-20261022 und seinem
+eigenen Engineeringprefix. Kein SourceSnapshot oder GUI-LAUNCH. Frischer Source09-
+Helferport nur vorbereitet, kein Freeze/Commit/Job/Paket/GUI daraus. Neue gemeinsame
+Belege nach geprüftem Testfix nötig, keine08Bytes als09 umetikettieren.
+
+### Historischer Quellenprüfstand04:05UTC vor Source08-Endläufen
 
 Beide eng begrenzten Korrekturen sind implementiert. Entity-Projektionen werden
 für alle betroffenen Dateien vor dem atomaren Commit geprüft. Eine vollständig

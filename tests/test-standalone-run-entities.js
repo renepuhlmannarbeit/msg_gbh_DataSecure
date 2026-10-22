@@ -38,6 +38,42 @@ function fixture(texts = ['Name: Anna Beispiel\n42 Projekte.', 'Name: Anna Beisp
   return { batchId, items, state, data, output, results, create, capture, row, entities, request, runRequest, decide, text,
     journal: () => path.join(data, 'document-reviews', batchId) };
 }
+function persistentPins(f) {
+  const rows = [];
+  for (const [role, folder] of [['private', f.data], ['packages', f.output], ['results', f.results]]) {
+    const walk = target => {
+      const stat = fs.lstatSync(target, { bigint: true }); assert.equal(stat.isSymbolicLink(), false);
+      rows.push([role, path.relative(folder, target), stat.isDirectory() ? 'directory' : 'file',
+        String(stat.dev), String(stat.ino), String(stat.mode), ...(stat.isFile() ? [sha(fs.readFileSync(target))] : [])]);
+      if (stat.isDirectory()) for (const name of fs.readdirSync(target).sort()) walk(path.join(target, name));
+    };
+    walk(folder);
+  }
+  return rows;
+}
+function seedHistoricalRunKeep(f) {
+  // Start with the actual closed run-journal shape/rule from a valid safe
+  // organization edit, then replace ONLY this test-owned fixture with a
+  // historical pre-fix Keep record. No scanner or service authorization stub.
+  const request = f.runRequest(0, 'keep'), safe = { ...request,
+    entity_decisions: request.entity_decisions.map(row => ({ ...row, decision: 'organization' })) };
+  assert.equal(f.decide(0, safe).affected_count, 2);
+  const run = f.journal(), filename = path.join(run, 'decision-000001.json'), record = JSON.parse(fs.readFileSync(filename));
+  const key = Buffer.from(JSON.parse(fs.readFileSync(path.join(run, 'entity-key.json'))).key, 'hex');
+  const entity = require('../plugins/data-secure/server/gateway/standalone-entity-review'), requestHash = sha(JSON.stringify(request));
+  record.request_sha256 = requestHash; record.rules = record.rules.map(row => ({ ...row, decision: 'keep' }));
+  for (const target of record.targets) {
+    const snapshot = JSON.parse(fs.readFileSync(path.join(run, target.document_id, 'base.json')));
+    const choices = target.event.entity_decisions.map(row => ({ ...row, decision: 'keep' }));
+    const next = entity.applyEntityDecisions(snapshot.markdown, entity.initialEntities(snapshot), choices, key);
+    target.event = { ...target.event, request_sha256: requestHash, output_sha256: sha(next.markdown), entity_decisions: choices };
+  }
+  delete record.event_sha256; record.event_sha256 = sha(JSON.stringify(record));
+  fs.writeFileSync(filename, JSON.stringify(record));
+  fs.writeFileSync(path.join(run, 'commit-000001.json'), JSON.stringify({ schema: 'datasecure-run-commit-proof/1',
+    batch_id: f.batchId, sequence: 1, event_sha256: record.event_sha256, record }));
+  return request;
+}
 test('same exact person changes atomically across documents, not an unrelated local PERSON_001', () => {
   const f = fixture(); f.decide(0, f.request(0, 'approve')); f.decide(1, f.request(1, 'approve'));
   const request = f.runRequest(0, 'organization'), result = f.decide(0, request);
@@ -77,10 +113,32 @@ test('a masked matching document aborts the run action with its filename and no 
   assert.equal(response.blocked_files[0].name, 'Unterordner/Quelle-2.txt');
   assert.equal(f.row(0).revision, 0); assert.equal(f.row(1).revision, 1); assert.equal(f.row(2).revision, 0);
 });
-test('run Keep never grants an exemption for explicit personal fields or direct contact details', () => {
-  const f = fixture(); f.decide(0, f.runRequest(0, 'keep'));
+test('unsafe run Keep refuses all matching targets before any durable mutation', () => {
+  const f = fixture(), request = f.runRequest(0, 'keep'), rows = f.create().list(f.batchId).documents;
+  const texts = f.items.map((_item, index) => f.text(index)), entities = f.items.map((_item, index) => f.entities(index)), before = persistentPins(f);
+  const result = f.decide(0, request);
+  assert.deepEqual(result, { ok: false, reason_code: 'DOCUMENT_ENTITY_RUN_CONFLICT', blocked_files: f.items.slice(0, 2)
+    .map(item => ({ name: item.name, reason_code: 'DOCUMENT_REVIEW_RESIDUAL_PII' })), local_ui_only: true, external_disclosure: false });
+  assert.deepEqual(f.decide(0, request), result, 'a refused run operation cannot gain an idempotent success ACK');
+  assert.deepEqual(f.create().list(f.batchId).documents, rows);
+  assert.deepEqual(f.items.map((_item, index) => f.text(index)), texts);
+  assert.deepEqual(f.items.map((_item, index) => f.entities(index)), entities);
+  assert.ok(f.items.every((_item, index) => f.row(index).revision === 0 && !f.row(index).approved));
+  assert.deepEqual(persistentPins(f), before, 'no matching or unrelated document, rule, package or result changed');
+});
+test('historical run Keep still cannot acquire new approvals, previews or exports', () => {
+  const f = fixture(), request = seedHistoricalRunKeep(f), rows = f.create().list(f.batchId).documents, before = persistentPins(f);
+  assert.equal(f.row(0).revision, 1); assert.equal(f.row(1).revision, 1); assert.equal(f.row(2).revision, 0);
+  assert.ok([0, 1].every(index => f.text(index).includes('Anna Beispiel')), 'the actual replay contains both historical unsafe values');
+  const ack = f.decide(0, request); assert.equal(ack.affected_count, 2); assert.equal(ack.revision, 1);
   for (const index of [0, 1]) assert.throws(() => f.decide(index, f.request(index, 'approve')), error => error.code === 'DOCUMENT_REVIEW_RESIDUAL_PII');
-  assert.equal(f.row(0).approved, false); assert.equal(f.row(1).approved, false);
+  for (const index of [0, 1]) {
+    const { document_id, revision, output_sha256 } = f.row(index), selection = [{ document_id, revision, output_sha256 }];
+    assert.throws(() => f.create().previewExport(f.batchId, crypto.randomBytes(16).toString('hex'), selection), error => error.code === 'DOCUMENT_REVIEW_RESIDUAL_PII');
+    assert.throws(() => f.create().exportApproved(f.batchId, crypto.randomBytes(16).toString('hex'), selection), error => error.code === 'DOCUMENT_REVIEW_UNAPPROVED');
+  }
+  assert.deepEqual(f.create().list(f.batchId).documents, rows);
+  assert.deepEqual(persistentPins(f), before, 'old unsafe run records remain immutable without a new public copy');
 });
 test('exact NFC/case/whitespace identities match, different accents and surnames do not', () => {
   const f = fixture(['Name: Anna Beispiel', 'Name: ANNA   BEISPIEL', 'Name: Anna Béispiel']);
