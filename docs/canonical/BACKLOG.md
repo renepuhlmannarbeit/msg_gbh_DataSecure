@@ -13,6 +13,16 @@ GitHub-Test-Pre-Release, Windows lokal mit Testplan. Desktoptests Nutzer.
 Keine Formelausführung/aktiven PDFaktionen/externen Workbookloads; bestehende
 Schutz- und Teilabdeckungsgrenzen behalten. Noch kein RC174-Endnachweis.
 
+Quellenmodelle und begrenzte unabhängige Gegenreviews umgesetzt; Diagramme/
+PDFwerte beide Modi, neue OfficeMath-Projektion content-v1. Zusätzlicher echter
+Breiten-/Argumentlimitfehler in Chart-XML durch gleichgeordneten Iterator statt
+vararg-Push korrigiert, ohne höhere Budgets oder Fehlerumdeutung.116Chartfälle
+einschließlich150k/200k/echten Owner-/Modusketten vorgeprüft. Drei alte Endlauf-
+Test-/Fixturefehler eng und unabhängig korrigiert, Originale bleiben rot.
+Aktuelle Formatmatrix fachlich aktualisiert; neue gemeinsame Source02-Endgates,
+beide native Mac-Pakete und Release-/Remoteprüfung weiterhin offen. Desktoptests
+bleiben beim Nutzer; keine Mainintegration oder neue Apple-Signierautorität.
+
 ## BL-049.4 – Legacy-Zellverbindungen und umfassende Konvertierungsrobustheit
 
 23.10.2026 ausdrücklich beauftragt, in Arbeit: Word-w:hMerge korrekt ergänzen,

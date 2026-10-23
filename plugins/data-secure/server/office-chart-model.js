@@ -165,7 +165,8 @@ function readOfficeChart(xml, decode, error) {
   // silently counted as covered. Known independent cached series still work.
   const pending = [root];
   while (pending.length) {
-    const node = pending.pop(); pending.push(...node.children);
+    const node = pending.pop();
+    for (const child of node.children) pending.push(child);
     if (((is(node, C, 'v') || is(node, A, 't')) && node.text && !used.has(node)) ||
         (is(node, C, 'externalData')) || (C.has(node.namespaceURI) && /(?:Chart|Ref)$/u.test(node.localName) && !used.has(node) &&
           !CHARTS.has(node.localName) && !['strRef', 'numRef', 'multiLvlStrRef'].includes(node.localName))) issues.add('CONTENT_UNMODELED');

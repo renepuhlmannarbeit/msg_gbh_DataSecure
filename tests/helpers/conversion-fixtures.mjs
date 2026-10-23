@@ -35,9 +35,12 @@ export function passivePresentation() {
     ['ppt/embeddings/oleObject1.bin', Buffer.from([1, 2, 3])]
   ]);
 }
-export function literalSupplementPresentation() {
+export function literalSupplementPresentation({ chartReference = true, chartModel = true } = {}) {
+  const C = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
   const source = '![Literal](data:image/png;base64,AAAA) <img src=secret.png> ~~Fachwort~~ § € ± →';
   const xml = source.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+  const frame = `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="2" name="Literal chart"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="0" y="0"/><a:ext cx="100" cy="100"/></p:xfrm><a:graphic><a:graphicData uri="${C}"><c:chart r:id="c1"/></a:graphicData></a:graphic></p:graphicFrame>`;
+  const modeledChart = `<c:chartSpace xmlns:c="${C}" xmlns:a="${A}"><c:chart><c:title><c:tx><c:rich><a:bodyPr/><a:lstStyle/><a:p><a:r><a:t>${xml}</a:t></a:r></a:p></c:rich></c:tx></c:title><c:plotArea><c:pieChart><c:ser><c:idx val="0"/><c:order val="0"/><c:cat><c:strLit><c:ptCount val="1"/><c:pt idx="0"><c:v>Fachkategorie</c:v></c:pt></c:strLit></c:cat><c:val><c:numLit><c:ptCount val="1"/><c:pt idx="0"><c:v>42</c:v></c:pt></c:numLit></c:val></c:ser></c:pieChart></c:plotArea></c:chart></c:chartSpace>`;
   const relationships = values => `<Relationships xmlns="${PR}">${values.map(([id, kind, target]) =>
     `<Relationship Id="${id}" Type="${R}/${kind}" Target="${target}"/>`).join('')}</Relationships>`;
   return zipStore([
@@ -48,9 +51,9 @@ export function literalSupplementPresentation() {
     ] }),
     ['ppt/presentation.xml', `<p:presentation xmlns:p="${P}" xmlns:r="${R}"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="m1"/></p:sldMasterIdLst><p:sldIdLst><p:sldId id="256" r:id="s1"/></p:sldIdLst></p:presentation>`],
     ['ppt/_rels/presentation.xml.rels', relationships([['s1', 'slide', 'slides/slide1.xml'], ['m1', 'slideMaster', 'slideMasters/slideMaster1.xml']])],
-    ['ppt/slides/slide1.xml', `<p:sld xmlns:p="${P}" xmlns:a="${A}"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>Fachlicher Haupttext</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>`],
+    ['ppt/slides/slide1.xml', `<p:sld xmlns:p="${P}" xmlns:a="${A}" xmlns:c="${C}" xmlns:r="${R}"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>Fachlicher Haupttext</a:t></a:r></a:p></p:txBody></p:sp>${chartReference ? frame : ''}</p:spTree></p:cSld></p:sld>`],
     ['ppt/slides/_rels/slide1.xml.rels', relationships([['c1', 'chart', '../charts/chart1.xml'], ['l1', 'slideLayout', '../slideLayouts/slideLayout1.xml']])],
-    ['ppt/charts/chart1.xml', `<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="${A}"><c:chart><c:title><a:t>${xml}</a:t></c:title><c:v>42</c:v></c:chart></c:chartSpace>`],
+    ['ppt/charts/chart1.xml', chartModel ? modeledChart : `<c:chartSpace xmlns:c="${C}" xmlns:a="${A}"><c:chart><c:title><a:t>${xml}</a:t></c:title><c:v>42</c:v></c:chart></c:chartSpace>`],
     ['ppt/slideLayouts/slideLayout1.xml', `<p:sldLayout xmlns:p="${P}" xmlns:a="${A}"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>${xml}</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sldLayout>`],
     ['ppt/slideLayouts/_rels/slideLayout1.xml.rels', relationships([['m1', 'slideMaster', '../slideMasters/slideMaster1.xml']])],
     ['ppt/slideMasters/slideMaster1.xml', `<p:sldMaster xmlns:p="${P}" xmlns:a="${A}"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>${xml}</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sldMaster>`]

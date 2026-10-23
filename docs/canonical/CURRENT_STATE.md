@@ -1,6 +1,6 @@
 # Aktueller Iststand
 
-Arbeitsquelle: 3.2.0-rc174 in Entwicklung, noch nicht eingefroren/veröffentlicht.
+Arbeitsquelle: 3.2.0-rc174 in gemeinsamer Endprüfung, noch nicht veröffentlicht.
 Letzter veröffentlichter Test-Pre-Release: RC173, Desktopabnahme USER_PENDING.
 
 ## RC174 beauftragt – semantische Inhaltsmodelle
@@ -9,7 +9,15 @@ Diagramme/Chartsheets, OfficeMath und passive PDFformularwerte werden zusätzlic
 zum unveröffentlichten Robustheitsdelta implementiert. Gemeinsame Windows-/
 Macquelle, getrennte native Endprüfungen, unabhängige Fachreviews und neuer
 Test-Pre-Release; Desktoptests Nutzer. [Aktueller RC174-Plan](../acceptance/RC174_SHARED_RELEASE_20261023.md).
-Noch kein RC174-Build-/Mac-/Release-PASS. Keine neue Macberechtigung oder
+Semantische Quellen und begrenzte Fachgegenreviews umgesetzt. Erster gemeinsamer
+Source01-Endversuch nicht freigabefähig (drei kausal bestätigte Test-/Fixturefehler,
+Originale erhalten); Windows Native300Rust/3ignored dort PASS/stabil, nicht als
+neuer Gesamtbeleg übernehmen. Zusätzlicher tatsächlicher Chart-RangeError bei
+breiter regulärer extLst eng ohne Budgetlockerung korrigiert und mit116Chart-/
+73Extractor-/18Partial-/30Dokumentationsfällen vorgeprüft. Aktueller Produkt-FP
+465a463a7e14da35bd88551dcad91264e25c5ed7ce49c72f7c7911449d5c1393/357.
+Neue Source02-Bindung und alle frischen lokalen/doppelten Mac-Endgates nötig.
+Noch kein RC174-Gesamt-/Mac-/Release-PASS. Keine neue Macberechtigung oder
 externe Apple-Signierung; alte RC173-Belege gelten nicht als RC174-Abnahme.
 
 ## Neuer Auftrag nach RC173 – Konvertierungsrobustheit / BL-049.4

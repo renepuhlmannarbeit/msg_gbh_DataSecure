@@ -155,3 +155,79 @@ ausgeführt. CI ersetzt keinen Finder/TCC/M2/Enterprise/VoiceOvertest.
   vorhandene31+11Semantiknegative/98 Quellenchecks PASS. Keine FINALs erfunden.
   Noch keine Desktop-/Mac-/Endgateabnahme: nun gemeinsamer Commit/Freeze und
   tatsächlich frische lokale sowie doppelte native Mac-Prüfung erforderlich.
+- Source01 gemeinsamer Commit3c000e176a009ac4789c56860dc2732ffa7b3bbf gepusht,
+  FP58beb34710af223ef81e6b56fdf39711d2c2d95704434fe38b4fadbf2bc0246e/357.
+  Native Windows PASS/stabil22:50:05.797UTC. Frischer Headlessversuch ROT bei
+  Workspace-CSV-Hinweis (26/306+0/11), frischer Konverterversuch ROT beim
+  Diagramm-Literalorakel. Mac40035683614: ARM echter XLSX-Orphan-Bildtestfehler,
+  Intel gezielt cancelled; Run abgeschlossen. Alle Originale und vollständigen
+  Macjoblogs erhalten, keine Pakete/SourceSnapshot/Release aus diesem Versuch.
+  Unabhängige Ursachenprüfung vor engsten Korrekturen und neuer Source02-Bindung.
+- Alle drei Source01-Primärfehler unabhängig kausal eingegrenzt: CSVtest verlangte
+  alten Hinweis trotz korrekter genauerer Metadatenauslassung; XLSX-Quelltest
+  erwartete weiterhin Bildautorität ohne tatsächlichen Drawingknoten; native
+  Diagramm-Literalfixture hatte weder echten Folienverweis noch regulären
+  Titel/Cache. Nur Tests/Fixture eng korrigiert, keine Schutzlockerung. Alle
+  ursprünglichen Positiv-/Negativpflichten erhalten; zusätzliche echte native
+  Diagramm-Orphan-/Unmodelliert-Gegenfälle in beiden Ausgabemodi aufgenommen.
+- Neue breite Vorprüfung vor erneutem Freeze vollständig beendet/stabil:
+  305/306 Dateien Exit0, einzig FORMAT_COVERAGE_MATRIX-Versionskopf veraltet.
+  Originales RESULT bleibt FAIL; kein neuer Produktfehler daraus. Alle fünf
+  nativen Konvertersuiten Exit0/stabil (71Worker/49Office/43Grafik/21passivePDF
+  und PDFsichtbarkeit), FP58beb347…/599Testinputs/d6ed16e0… separat gebunden.
+  Keine dieser Vorprüfungen ersetzt die späteren neuen gemeinsamen Endgates.
+- Zusätzliche Main-/Fachgegenprüfung fand echten neuen Robustheitsblocker:
+  150000 reguläre eindeutige c:ext-Einträge,150034Knoten/3.94MB unter beiden
+  Budgets, erzeugten durch vararg-Push einen internen RangeError. Echte gebundene
+  PPTX-/DOCX-/Chartsheet-Extraktion verlor dadurch auch unabhängigen Inhalt.
+  Original-REDs unter rc174-chart-wide-node-review-20261024 bleiben erhalten.
+  Nach Ende aller laufenden Jobs nur diesen Push durch gleichgeordnetes
+  for-of ersetzt. Kein Limit, Quellmodell, Catch oder Fehlercode erweitert.
+- Maingezielter neuer Nachlauf116Chart/73Extractor/18Partial/30Dokumentationsfälle
+  Exit0/stabil, FP465a463a7e14da35bd88551dcad91264e25c5ed7ce49c72f7c7911449d5c1393/357,
+  599Test-/Scriptinputs Manifestd9ddb23ff3fd34c57ccb2eef9d3316284289537b0f83f9406606151c9b2169bc.
+  Neue150k-/späterUnknown-/200kLimit- und echte Drei-Owner-/Zweimodusgegenfälle
+  erhalten Caches, Auslassungen und unabhängigen Body; Originalbytes identisch.
+  Eigene erste neue Ownerassertion erwartete rohe statt GFM-escaped Unterstriche;
+  nur die Anzeigeassertion auf tatsächliches Markdownrendering korrigiert,
+  RED vollständig erhalten. Separater erster Nachlauf hatte falschen Dateinamen
+  test-standalone-markdown-extractor.js; nur ignored Driver in neuem v2 korrigiert,
+  altes RESULT bleibt FAIL. Keine Produktkorrektur wegen dieser Eigenprüffehler.
+- FORMAT_COVERAGE_MATRIX auf tatsächliche RC174-Arbeitsquelle/Modusgrenzen
+  aktualisiert; ältere Detailmatrix klar historisch abgegrenzt. Unabhängiger
+  begrenzter Zieleaudit gelesen: kein Universalreader-/Artefaktfreiheitsversprechen;
+  Legacy/Vollrenderer/Codecs und menschliche Windows-/Mac-Abnahme weiter offen.
+  Source02-Helfer separat mechanisch geprüft, sieben tatsächliche Pins bestätigt,
+  keine FINALs/Checkpoints/Archive kopiert. Neuer Ressourcenfix-Gegenreview und
+  danach neuer gemeinsamer Commit/Freeze/frische vier Endgates plus beide Macs
+  sind Pflicht; noch keine RC174-Paket-/Releasefreigabe.
+- Unabhängiger tatsächlicher Ressourcenfix-Gegenreview abgeschlossen und vom
+  Main vollständig gelesen: exakt derselbe Ein-Stellen-for-of-Produktdelta,
+  alle sechs ursprünglichen breiten OPC-Archive byteidentisch reproduziert,
+  zwölf Reader-/Extractorbeobachtungen einschließlich spätem Unknown und
+  unverändertem 200k-Limit bestanden. Zusätzlich genau eine echte isolierte
+  Windowsworkerprobe des ursprünglichen regulären extLst-PPTX mit unveränderten
+  Ressourcen-/Permission-/Netzgrenzen Exit0 und identischem Kontroll-MDhash.
+  FIX-RECHECK.md/Belege unter rc174-chart-wide-node-review-20261024 erhalten;
+  kein Ersatz für gemeinsame Gesamt-/Mac-/Paket-/Desktopabnahme. Alle eigenen
+  begrenzten Gegenprüfprozesse beendet. Source02 kann nun neu gebunden werden.
+
+## Abschließende Ziel-Revalidierung
+
+Die technische Umsetzung ist erst geeignet, wenn folgende Ziele gemeinsam
+belegt sind; einzelne Modelltests oder ältere Releasegrüns ersetzen dies nicht:
+
+| Ziel | Nachweis und verbleibende Grenze |
+| --- | --- |
+| Lesbares, möglichst vollständiges Markdown | Echte index-/ownergenaue Officeketten und passive PDFwerte; Format-/Quellbudgets und Auslassungen sichtbar. Kein Universalreader für beliebige Defekte oder proprietäre Renderer. |
+| Sichere Teilverarbeitung | Unabhängige lesbare Inhalte erhalten; unlesbare Teilmodelle ehrlich ausweisen. Container-/Identitäts-/Ressourcen-/Prozess-/Anonymisierungsschutz nicht abschalten. |
+| Konsistente Anonymisierung | Neue Diagramm-/Formel-/Formularwerte durch dieselben Feldwert-, Residual-, Trace- und Keepprüfungen; Pseudonymzuordnungen/Excel konsistent. |
+| Originale und Offlinebetrieb | Keine aktiven Formeln, Makros, PDFaktionen, externen Workbook-/Linkdownloads. Originale/alte Ergebnisse/Profile/Evidenzen erhalten. |
+| Windows und beide Macs | Genau ein gepushter Appcommit/Fingerprint, getrennte tatsächliche native Endgates, Paket-/Rollen-/Seal-/Hashprüfung. Keine neue Developer-ID, Notarisierung oder OSschutzänderung. |
+| Ehrliche Testübergabe | Frische Gesamt-/Native-/5Konverter-/Paket-/Macbelege, lokales Windows-ZIP+Plan und GitHub-Test-Pre-Release; Tag/Assets/Remotehashes erneut prüfen. Desktop-/Finder-/TCC-/Office-/VoiceOverabnahme bleibt beim Nutzer. |
+
+Noch nicht integrierte größere Erweiterungen (unter anderem chartEx, zusätzliche
+proprietäre/Legacy-Codecs und ein separat isolierter voller Office-Renderer)
+werden nicht als vorhandene RC174-Abdeckung ausgegeben. Diese Grenzen bleiben
+im Robustheitsplan; auch Renderer würden keine sichere universelle Reparatur
+beliebiger aktiver, verschlüsselter oder zerstörter Dateien garantieren.

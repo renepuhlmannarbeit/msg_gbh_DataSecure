@@ -78,6 +78,46 @@ function xyChart({type='scatterChart',xLabel='Name',yLabel='Messwert',x='Qvx / Q
  return `<c:chartSpace xmlns:c="${C}" xmlns:a="${A}"><c:chart><c:plotArea><c:${type}><c:ser><c:idx val="0"/><c:order val="0"/><c:xVal>${ref('strRef',point(0,x),{count:1})}</c:xVal><c:yVal>${ref('numRef',point(0,y),{count:1})}</c:yVal>${type==='bubbleChart'?`<c:bubbleSize>${ref('numRef',point(0,size),{count:1})}</c:bubbleSize>`:''}</c:ser><c:axId val="${reversed?18:17}"/><c:axId val="${reversed?17:18}"/></c:${type}>${axes.join('')}</c:plotArea></c:chart></c:chartSpace>`;
 }
 
+const wideExtensions = (count, lateValue = false) => '<c:extLst>' + Array.from({length:count},(_,index) =>
+ `<c:ext uri="urn:wide:${index}">${lateValue && index === count - 1 ? '<c:v>UNMODELED_PRIVATE_VALUE</c:v>' : ''}</c:ext>`).join('') + '</c:extLst>';
+test('wide bounded extension lists avoid argument-vector limits and still scan unknown values',()=>{
+ const value=model(chart({extra:wideExtensions(150000,true)}));
+ assert.ok(value.issues.has('CONTENT_UNMODELED'));
+ const rendered=renderOfficeChart(value,value=>String(value),fail);
+ for(const text of ['Revenue','North','South','100','200'])assert.ok(rendered.markdown.includes(text));
+ assert.doesNotMatch(rendered.markdown,/UNMODELED_PRIVATE_VALUE/u);
+ assert.equal(rendered.hasSource,true);
+});
+test('wide reached charts retain actual caches in Word, PowerPoint and chartsheets in both output modes',()=>{
+ const xml=chart({extra:wideExtensions(150000,true)});
+ for(const [extension,build,owner]of [['.pptx',value=>pptSource(value),'FHIR_SLIDE_1'],
+  ['.docx',value=>wordSource(value),'FHIR_WORD'],['.xlsx',value=>xlsxSource(value,{chartsheet:true}),'Original sheet']]){
+  const bytes=build(xml),before=Buffer.from(bytes);
+  for(const mode of ['content-v1','notes-v1']){
+   const result=extract(bytes,extension,mode);assert.ok(require('markdown-it')().render(result.markdown).includes(owner));
+   for(const text of ['Revenue','North','South','100','200'])assert.ok(result.markdown.includes(text));
+   assert.doesNotMatch(result.markdown,/UNMODELED_PRIVATE_VALUE/u);
+   assert.equal(result.coverage.status,'incomplete');
+   assert.ok(result.coverage.reason_codes.includes('SOURCE_COVERAGE_UNVERIFIED'));
+  }
+  assert.deepEqual(bytes,before);
+ }
+});
+test('the declared chart node limit remains typed and partial mode retains independent owner text',()=>{
+ const xml=chart({extra:wideExtensions(200001)});
+ assert.throws(()=>model(xml),{code:'PPTX_STRUCTURE_LIMIT'});
+ for(const [extension,build,owner]of [['.pptx',value=>pptSource(value),'FHIR_SLIDE_1'],
+  ['.docx',value=>wordSource(value),'FHIR_WORD'],['.xlsx',value=>xlsxSource(value),'FHIR_WORKSHEET']]){
+  const bytes=build(xml),before=Buffer.from(bytes);
+  for(const mode of ['content-v1','notes-v1']){
+   const result=extract(bytes,extension,mode);assert.ok(require('markdown-it')().render(result.markdown).includes(owner));
+   assert.doesNotMatch(result.markdown,/Revenue|North|South/u);
+   assert.equal(result.coverage.status,'incomplete');
+   assert.ok(result.coverage.reason_codes.includes('DOCUMENT_PARTS_DAMAGED'));
+  }
+  assert.deepEqual(bytes,before);
+ }
+});
 test('explicit point indices bind shuffled cache values, never XML order',()=>{
  const m=model(chart()); assert.equal(m.groups[0].series[0].channels.get('val').levels[0].get(0),'100');
  const result=render(chart());assert.match(result.markdown,/\| 0 \| North \| 100 \|/u);assert.match(result.markdown,/\| 1 \| South \| 200 \|/u);

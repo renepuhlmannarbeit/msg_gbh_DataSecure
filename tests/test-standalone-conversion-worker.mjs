@@ -299,6 +299,27 @@ try {
     assert.match(html, /42/u);
     assert.doesNotMatch(clean.markdown, /## (?:Diagrammdaten|Folienlayout|Folienmaster) [^\n]+\.xml/u);
   });
+  await test('actual isolated Office worker never substitutes an orphan relation or unmodeled value for a placed cached chart', async () => {
+    const oracle = require('markdown-it')({ html: true });
+    for (const [chartReference, chartModel] of [[false, false], [true, false], [false, true]]) {
+      const bytes = literalSupplementPresentation({ chartReference, chartModel }), original = hash(bytes);
+      for (const markdownOutput of ['content-v1', 'notes-v1']) {
+        const result = await convertBuffer(bytes, '.pptx', { contentOptions: {
+          schema: 'datasecure-content-options/1', markdownOutput, scanOcr: false, imageOcr: false } });
+        assert.match(result.markdown, /Fachlicher Haupttext/u);
+        assert.doesNotMatch(result.markdown, /42/u);
+        assert.equal(result.coverage.status, 'incomplete');
+        assert.ok(result.coverage.reason_codes.includes('SOURCE_COVERAGE_UNVERIFIED'));
+        if (markdownOutput === 'content-v1') {
+          const html = oracle.render(result.markdown);
+          assert.equal((html.match(/!\[Literal\]\(data:image\/png;base64,AAAA\)/gu) || []).length, 2);
+          assert.equal((html.match(/~~Fachwort~~/gu) || []).length, 2);
+          assert.doesNotMatch(html, /<(?:img|s)(?:\s|>)/u);
+        }
+      }
+      assert.equal(hash(bytes), original);
+    }
+  });
   await test('content-only PDF/OCR suppresses only owned notices and keeps exact contact spans/crops', async () => {
     const native = await convertBuffer(pdf([{ text: 'Text mit § 5 und EUR 2026' }]), '.pdf', { markdownOutput: 'content-v1' });
     assert.match(native.markdown, /Text mit § 5 und EUR 2026/u);

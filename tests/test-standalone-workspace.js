@@ -2987,7 +2987,12 @@ testAsync('actual pure CSV notice presenter spells out all partial reasons witho
   for (const [code, expected] of partialContentNotices) {
     const csv = present({ schema: legacySchema, items: [{ source_label: 'Quelle.pptx', file: 'Quelle.md',
       extraction_grade: 'incomplete', reason_codes: [code] }] }).toString('utf8');
-    assert.match(csv, expected); assert.match(csv, /nur teilweise übernommen|nur ein Teil des Dokuments/u);
+    assert.match(csv, expected);
+    // A limit can omit optional PDF metadata while retaining the whole body.
+    // Require the actual bounded omission statement, not a false body-loss claim.
+    assert.match(csv, code === 'TEXT_LIMIT_PARTIAL'
+      ? /Teile des Dokuments oder seiner Dokumentinformationen wurden nicht übernommen/u
+      : /nur teilweise übernommen|nur ein Teil des Dokuments/u);
     assert.doesNotMatch(csv, new RegExp(code, 'u'));
     assert.doesNotMatch(csv, /ausgeschaltet|ohne OCR|Text vollständig extrahiert/u);
   }

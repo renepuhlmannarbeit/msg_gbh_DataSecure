@@ -76,7 +76,9 @@ for (const type of ['docx', 'xlsx', 'pptx']) {
   }
   test(`${type}: image node in unreachable story/drawing/slide cannot authorize media`, () => {
     const source = fixture(type, 'visible', false);
-    assert.equal(parseOoxml(source, `.${type}`, undefined, { preserveText: true }).attachments.length, 1);
+    // The XLSX source graph itself now admits only actual drawing occurrences;
+    // a relationship without its worksheet node is not an image occurrence.
+    assert.equal(parseOoxml(source, `.${type}`, undefined, { preserveText: true }).attachments.length, type === 'xlsx' ? 0 : 1);
     assert.equal(extractOfficeMarkdownAndMedia(source, `.${type}`, { markdownOutput: 'content-v1' }).attachments.length, 0);
   });
 }

@@ -1,8 +1,9 @@
 # Aktuelle Format-Coverage
 
-Quellstand: 3.2.0-rc173 · 23.10.2026 · Test-Pre-Release; Desktop-/Officeabnahme USER_PENDING.
+Arbeitsquelle: 3.2.0-rc174 · 24.10.2026 · Implementierung/Endprüfung, noch nicht veröffentlicht.
+Letzter veröffentlichter Test-Pre-Release: RC173. Desktop-/Officeabnahme USER_PENDING.
 
-## Unveröffentlichte Folgearbeit BL-049.4
+## Unveröffentlichte Folgearbeit BL-049.4 / BL-049.5
 
 Separat vom veröffentlichten RC173 implementiert: Word-hMerge mit echten
 physischen Besitz-/Spanmodellen, BOM-deklariertes UTF-16LE/BE für Standalone-
@@ -19,9 +20,16 @@ Feldwerte nicht wieder zur Veröffentlichung autorisieren. Kein globales
 Zeichenlöschen, keine Formel-/Makro-/Objektausführung oder neue Cloudverarbeitung.
 Keine neue Version oder Windows-/Mac-Paketabnahme allein aus diesen Quellen.
 
-Noch offene Modelle: indexgebundene Diagramm-/Serienwerte und Chartsheets,
-OMML, klassische Kommentarautoren/-bezüge, passive PDFformularwerte, zusätzliche
-Grafikcodecs und ggf. ein separat isolierter Office-Renderer. Keine universelle
+Zusätzlich implementiert, noch ohne endgültige Paketfreigabe: index-/owner-
+gebundene klassische Diagramm-/Serienwerte einschließlich Chartsheets sowie
+gespeicherte passive PDFformular-/Anmerkungswerte in content-v1 und notes-v1.
+Die neue lesbare OfficeMath-Projektion gilt nur für content-v1. Reale sensible
+Feldkontexte bleiben im bestehenden Privacy-/Residual-/Keep-/Tracepfad; keine
+Formelberechnung, externen Workbookloads oder PDFaktions-/XFAausführung.
+[Aktueller RC174-Plan und Grenzen](acceptance/RC174_SHARED_RELEASE_20261023.md).
+
+Noch offene Modelle: chartEx, klassische Kommentarautoren/-bezüge, weitere
+Legacy-/Grafikcodecs und ggf. ein separat isolierter Office-Renderer. Keine universelle
 PNG-/Office-/PDF-, OCR-/Rendering- oder Artefaktfreiheitszusage. APNG/unbekannte
 Chunks bleiben eingeschränkt; Hinweise teilweise noch generisch.
 [Audit, Primärquellen, Prüfstand und Umsetzungspakete](acceptance/CONVERSION_RESILIENCE_REVIEW_20261023.md).
@@ -60,6 +68,17 @@ separat an RC151 gebunden.
 Diese Matrix trennt implementierte Verarbeitung, Extraktionsvollständigkeit und
 Zielhost-Abnahme. Ein erfolgreicher Konvertierungstest allein beweist keine
 erfolgreiche Anonymisierung, Cowork-Freigabe oder einen Endnutzerrollout.
+
+## Ältere Detailmatrix: versiongebundene technische Belege
+
+Die folgenden Detailtabellen und Paketangaben enthalten ältere, jeweils
+versionsgebundene Entwicklungs-/Releasebelege. Die aktuelle RC174-Ergänzung
+oben hat Vorrang: ausdrücklich BOM-markiertes UTF16, bekannte sichere
+Teilkonvertierung und die neuen semantischen Modelle werden nicht durch ältere
+UTF8-/Alles-oder-nichts-/Formularauslassungsbeschreibungen zurückgenommen.
+Binäre .doc/.xls/.ppt, .xlsb und Makroformate sind keine neu zugelassenen
+RC174-Dateitypen. Keiner der folgenden historischen E0-/Paketstände ersetzt
+die noch nötigen gemeinsamen RC174-Endgates oder menschliche Desktopabnahme.
 
 ## Anonymisierung: Claude-Plugin und Standalone
 
