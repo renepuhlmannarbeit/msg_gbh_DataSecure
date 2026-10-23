@@ -1,5 +1,70 @@
 # RC172 – BL-049.2 Inhaltsabdeckung und lesbares Markdown
 
+## Neuester Abschluss 23.10.2026 – technische Testübergabe
+
+[RC172-Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc172)
+ist veröffentlicht, Release421933371, GitHub-Zeit14:25:11UTC,
+PreRelease=true/Draft=false. Alle fünf Apparchive binden denselben Appcommit
+`2d4a5fe2ef67ffa10e4015e34827853e08dfa0da` (Build2d4a5fe2) und FP
+`9f18d7932883665efd64e94e7a79c6d8f701ffca639aac0f143442b2838cfc3a`/348.
+Test-/Scriptmanifest588Inputs:
+`d9db14cd9c2e158d71692a4330d1436b17d64eaedce80df6b07a2ed1cd7f8b69`.
+Keine Mainintegration. Nachfolgende reine Dokumentationscommits sind nicht der
+App-/Tagcommit und verändern die veröffentlichten Pakete oder FINALs nicht.
+
+Alle vier neuen Source03-Endgates regulär Exit0/PASS/inputsunverändert:
+Headless298/298+11/11 bis13:53:51.482UTC; NativePrepare/Clippy/300Rusttests
+(3Hilfs-Einstiegspunkteignoriert)/echteNode-RustIntegration/Release13:14:08.043;
+38PDF/67Worker(0skipped)/49Office/41Grafik13:14:56.962; Paket5/100MD0Fehler/
+Originalehashgleich13:18:27.689. SourceSnapshot13:55:10.590,968Dateien/
+8734111Bytes/SHA8d0cec7576d7436eaa4634d2916a7886cfb78e1bb19e6353449d4559908ada24.
+Alle Startsessionen regulär beendet; keine offenen eigenen Tests/Builds.
+
+Beide nativen Macconsumer39958898162 auf genau2d4a5fe SUCCESS:
+ARM12043163836913:35:02UTC/Intel12043163833614:03:51UTC. Je38PDF,
+65Worker+2Windows-onlySKIP,49Office,41Grafik,283Rust+3ignored sowie echte
+Core/Guard/Seal/App/ZIP/DMG/IPC-Gates. NativePDF-/OCRproben sind keine GUI-UAT.
+Beide unveränderten Collector-/VERIFYs oktrue; separate frische Windows-
+Ganzlog-/Byte-, ARM6873Zeilen-, Intel6935Zeilen- und Mac-Artefaktbytegegenreviews
+vollständig durch Main gelesen, kein bestätigter neuer Blocker. Quellen-/
+Compilemarker-/Runtime-/Lizenz-/PDFderivations-/Core-/Converter-/Arch-/Seal-
+Bindungen tatsächlich gegengeprüft; keine lokale Macausführung.
+
+| Apparchiv | Bytes | SHA-256 |
+| --- | ---: | --- |
+| Windows x64 ZIP | 113389301 | `30f4a1df4da0cda2d9790bebd75d4198b7765a497b5113b4a126abfe43a1d2c4` |
+| macOS ARM64 ZIP | 118736342 | `e7a53332d3f388a3d492601e3f9af11327ca4bd066414d0d2bb9c8bc2dd35821` |
+| macOS ARM64 DMG | 131891730 | `fdac0adfe9491bbf6da42953480b862735d371c585d440f53884d460824cc599` |
+| macOS Intel ZIP | 121991745 | `5792980b1c42f903430b90a879584aa729f7bd486c19c48d3b8013d06ded3962` |
+| macOS Intel DMG | 136975344 | `974d799b4934f064bcca275748657fb9cf256794c8fea9de92200326049ee0f8` |
+
+WindowsEXE7f093a5a3efee75a9dbeb4b45b4cff65a1774914c8bf95ad2976ac8101a45484.
+Create-only lokale Übergabe `C:\Users\arkud\Documents\Software DataSecure\RC172`
+19Dateien: WindowsZIP, aktueller19Fallplan+RC172FachprobenA–F, drei unveränderte
+synthetische Archive, SHA/README/technischeBelege/USER-ACCEPTANCE USER_PENDING.
+Kein Desktopstart, keine agentische GUI-FINAL oder bestandene Nutzerabnahme.
+
+20öffentlicheAssets:5Apparchive+3synthetischeArchive+8SingleSHA+2Pläne+
+RELEASE-EVIDENCE+SHA256SUMS. Ausschließlich geprüfte Whitelist, keine Nutzerdaten/
+Diagnosen/Profile. Alle20Assetdateien im Draft und nach Veröffentlichung erneut frisch
+heruntergeladen und gehasht, identische IDs/Inventar/Tagquelle/PreReleaseflag;
+Notesbody davor/danach exakt lokalgleich, SHA
+f597b1d4cbae6cb97024cd5547c579154a7cb8b1bdc9530521cfea8c00306664.
+Remote-Publishedreceipt lokal14:26:16.316UTC; GH-Publikationszeit separat oben.
+Belege unverändert unter `dist/rc172-content-coverage-source03-20261023/`:
+USER-TEST-HANDOFF, STAGED-RELEASE, REMOTE-DRAFT-VERIFIED und
+REMOTE-PUBLISHED-VERIFIED.json. Alte Source01/02-RED/Grüns unverändert.
+
+**Offen beim Nutzer:** alle19Desktopfälle+FachprobenA–F, Excel/Numbers/Finder/
+TCC/M2/Enterprise/VoiceOver/macOS26. NativeEpoch/Pause/Lease NOT_RUN,
+ACLadversarialPARTIAL, LaunchServicesexit unbekannt, innerer Smoke-Writerjoin
+UNCONFIRMED/Extraktion erhalten/deletionNOT_ATTEMPTED. Keine Vollprozessbaum-
+oder Universal-OCR-/Artefakt-/Anonymitätszusage. Unbewiesene komplexe Office-
+Feldkontexte konvertieren nur; Anonymisierung bleibt hart verweigert. Eigene
+App/Core ad hoc, keine Developer-ID/Notarisierung/Schlüsselsuche/OS-Abschaltung.
+Keine Schutzprüfungen entfernt; weitere Abdeckung nur nach eigenem Quell-/
+Sicherheits-/Zielhostnachweis. Historische Abschnitte darunter sind Laufchronik.
+
 ## Auftrag und Bindung
 
 23.10.2026 ausdrücklich beauftragt: BL-049.2 für Windows x64, macOS ARM64 und
@@ -8,7 +73,7 @@ neue Testversion lokal/GitHub bereitstellen. Menschliche Desktoptests führt
 der Nutzer durch. RC171 und frühere Pakete/Profile/Evidenzen bleiben erhalten.
 Keine Mainintegration mit diesem Auftrag. Startquelle
 `00c328dedeb097bf4abc50815773e2e7ae5da320`, Branch
-`codex/standalone-export-usability`. Noch kein finaler RC172-Freeze oder Build-PASS.
+`codex/standalone-export-usability`. Startzustand vor dem oben belegten Abschluss.
 
 ## Ausführung (Quellimplementierung getrennt von finalen Endgates)
 
@@ -28,9 +93,9 @@ Keine Mainintegration mit diesem Auftrag. Startquelle
   SVG/Raster-/Metafilekandidaten und konkrete Lizenz-/Sicherheitsgrenzen prüfen.
 - [x] F: Schutz-/DRM-/Format-/Ressourcenstatus verständlich unterscheiden,
   keine Entschlüsselung/aktive Inhalte/externen Nachladungen.
-- [ ] Synthetische positive/negative Gegenfälle, unabhängige echte Code- und
+- [x] Synthetische positive/negative Gegenfälle, unabhängige echte Code- und
   Dependencyreviews; gezielte Nachprüfungen und vollständige Regression.
-- [ ] Gemeinsamer Commit/Fingerprint/Quellenfreeze, frische lokale Headless-/
+- [x] Gemeinsamer Commit/Fingerprint/Quellenfreeze, frische lokale Headless-/
   Native-/Konverter-/Paketgates, beide normalen nativen Macconsumer, Artefakt- und
   Ganzlogprüfung, lokale Windowsübergabe/Testplan/Prüfsummen, GitHub-Pre-Release.
 

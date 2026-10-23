@@ -1,10 +1,11 @@
 # Aktives Entwicklungsbacklog
 
-Quellstand: 3.2.0-rc172 (Entwicklungsstand; keine Paket- oder Releasefreigabe).
+Quellstand: 3.2.0-rc172 (Test-Pre-Release; menschliche Abnahme USER_PENDING).
 
 ## BL-049.2 – Inhaltsabdeckung und lesbares Markdown nach RC171 (23.10.2026)
 
-Status: **Umsetzung und neue Testversion am 23.10.2026 beauftragt; in Arbeit**.
+Status: **Technisch umgesetzt/revalidiert; RC172 für Windows und beide Macs
+am 23.10.2026 veröffentlicht. Desktop-/Fachabnahme USER_PENDING.**
 Aktueller Ausführungsstand: [RC172_SHARED_RELEASE_20261023.md](../acceptance/RC172_SHARED_RELEASE_20261023.md).
 Vorheriger expliziter Nutzerauftrag:
 zuerst Anforderungen, Ursachen und Rendereroptionen dauerhaft festhalten,
@@ -22,6 +23,26 @@ Suchtexte, echte Fach-/Personennamen, Umlaute/ß und andere gültige Sprachen ni
 pauschal löschen. Neue Texte vor Anonymisierung in dieselbe Schutzkette einspeisen.
 Offline-, I/O-, ZIP-, Rechte-, Guard- und Residualprüfungen bleiben erhalten.
 
+Gemeinsamer Appcommit `2d4a5fe2ef67ffa10e4015e34827853e08dfa0da`, FP
+`9f18d7932883665efd64e94e7a79c6d8f701ffca639aac0f143442b2838cfc3a`/348.
+Frische vier lokale Endgates PASS/stabil (298+11,300Rust/3ignored,
+38PDF/67Worker/49Office/41Grafik,Paket5/100MD0Fehler), beide nativen Macjobs
+39958898162 SUCCESS mit unabhängigen Ganzlog-/Bytegegenreviews. 20Releaseassets
+vor/nach Publikation frisch gehasht; Windows lokal mit19Fallplan+FachprobenA–F.
+Keine Mainintegration; ältere Pakete/Profile und echte Nutzerdateien unverändert.
+
+Verbleibende klar benannte Abdeckungsgrenzen, keine stillen Schutzlockerungen:
+Nicht gleichmäßige/vertikale/verschachtelte Word-Zellmodelle, sehr sparse XLSX-
+Koordinatenlisten und geerbte PPTX-Tabellen konvertierbar, aber Anonymisierung
+ohne sichere Feldbindung hart verweigert. Uniforme horizontale Wordpartitionen
+bleiben unterstützt. Grafikdecoder decken geprüfte Teilmengen ab; unbekannte
+Records/Codecs/Ressourcenstopps sichtbar, keine universelle Rendering-/OCR- oder
+Artefaktfreiheitszusage. 120MP zählt primäre Office-OCR-Raster; separat begrenzte
+Nachsegmentierung und unveränderte30MP-Spitzen-/Zeit-/OS-Grenzen bleiben.
+Nächste menschliche Abnahme: aktuelle19Fälle und RC172A–F auf Windows sowie
+beiden Macs, darunter echte Officeanzeige/Finder/TCC/Organisationsprofile.
+Kein eigener neuer Implementierungsauftrag allein aus diesen Coveragegrenzen.
+
 Zusätzliche Laufanalyse nur lokal, datensparsame Backlogbefunde ohne echte
 Nutzerdateien, Personal-/Angebotsinhalte oder Diagnosepayloads in Git/CI/Releases.
 Ausgewählter Lauf jetzt abgegrenzt analysiert: 117 Quellen, 107 gebundene MDs,
@@ -34,7 +55,7 @@ Historische RC163–RC171-Einträge darunter bleiben historische Belege und sind
 keine erneut kumulierte Aufgabenliste. Frühere UX-/Export-/Zuordnungsanforderungen
 bleiben erhalten; die neue Arbeit darf diese Funktionen nicht zurückbauen.
 
-Stand: 23.10.2026 · RC172 in Entwicklung; RC171 und ältere Pakete unverändert.
+Stand: 23.10.2026 · RC172 Test-Pre-Release; RC171 und ältere Pakete unverändert.
 
 ## Historische RC171-Übergabegates22.10.2026 10:49UTC nach geprüftem Nestedfix
 

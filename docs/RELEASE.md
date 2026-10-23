@@ -1,10 +1,40 @@
 # Release- und Distributionsvertrag
 
-Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc172 · Veröffentlichungsnachtrag: 20.10.2026
+Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc172 · Veröffentlichungsnachtrag: 23.10.2026
 
-Der aktuelle Quellstand ist RC172-Entwicklungsstand und noch kein neu gebundener Paketkandidat. Nachfolgende reine
+Der aktuelle Quellstand ist RC172 und als Windows-/Mac-Test-Pre-Release gebunden. Nachfolgende reine
 Dokumentation ändert dessen App-/Paket-/Tagbindung nicht. Menschliche Desktop-/
 Office-/Zielhost- und N3/N4-Produktionsfreigaben bleiben offen.
+
+### RC172 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
+
+Quellcommit `2d4a5fe2ef67ffa10e4015e34827853e08dfa0da` bindet den
+[RC172-Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc172).
+Build2d4a5fe2, Produktfingerprint
+`9f18d7932883665efd64e94e7a79c6d8f701ffca639aac0f143442b2838cfc3a`/348.
+BL-049.2: SmartArt und Bildvorkommen, moderne Excel-Kommentare/Anzeigewerte,
+Word-Zellraster, PDF-Suchtext-/OCR-Kontext, Inhaltsmodus und präzise Schutzgründe.
+Begrenzte zusätzliche Grafikdecoder; kein vollständiger Office-Renderer und
+keine universelle OCR-/Artefaktfreiheit. Unbewiesene komplexe Tabellenkontexte
+bleiben konvertierbar, ihre Anonymisierung aber hart verweigert.
+
+Vier frische lokale Endgates PASS/stabil:298+11Headless,300Rust/3ignored/
+Clippy/Node-Rust/Release,38PDF/67Worker/49Office/41Grafik und5Paketgates/
+100MD0Fehler. Beide nativen Macconsumer39958898162 SUCCESS; je38PDF/
+65Worker+2Windows-skips/49Office/41Grafik/283Rust+3ignored. Unabhängige
+Produktquellen-, ganze Windows-/ARM-/Intellogs und tatsächliche Paketbytes
+gegengelesen; kein bestätigter neuer Releaseblocker.
+
+Release421933371, GitHub-Publikationszeit23.10.2026 14:25:11UTC,
+PreRelease=true/Draft=false. Alle20Assets im Draft und nach Veröffentlichung
+frisch heruntergeladen/gehasht; dieselben IDs, Inventar, Tagquelle und
+Quellcommit bestätigt; Notesbody unverändert. Windows lokal create-only unter
+`Software DataSecure/RC172`, Testplan19Fälle+RC172A–F und drei synthetische Archive.
+Desktop-/Excel-/Numbers-/Finder-/TCC-/M2-/Enterprise-/VoiceOver-/macOS26-Abnahme
+bleibt USER_PENDING, keine eigene GUI-Aktion. Keine Developer-ID/Notarisierung,
+Schlüsselsuche oder OS-Schutzabschaltung, keine Mainintegration.
+LinuxRC159/CoworkRC151 und sämtliche älteren Pakete bleiben unverändert.
+[Exakte Hashes, historische Gegenbelege und Grenzen](acceptance/RC172_SHARED_RELEASE_20261023.md).
 
 ### RC169 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
 

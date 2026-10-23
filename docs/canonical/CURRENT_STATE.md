@@ -1,27 +1,43 @@
 # Aktueller Iststand
 
-Quellstand: 3.2.0-rc172 (Entwicklungsstand; keine Paket- oder Releasefreigabe).
+Quellstand: 3.2.0-rc172 (Test-Pre-Release; menschliche Abnahme USER_PENDING).
 
 ## Aktueller Nutzerauftrag 23.10.2026 – BL-049.2 implementieren und RC172 bereitstellen
 
 Windows und beide Macs ausdrücklich beauftragt, inklusive unabhängiger Reviews,
-Tests und neuer Testversion; Desktoptests beim Nutzer. Ausführungsjournal und
-noch offene Nachweise: [RC172_SHARED_RELEASE_20261023.md](../acceptance/RC172_SHARED_RELEASE_20261023.md).
-Noch kein neuer Freeze/Build-/Release-PASS. Keine Mainintegration, alte Pakete/
-Profile/Evidenzen und laufende Nutzer-App erhalten.
+Tests und neuer Testversion; Desktoptests beim Nutzer. Technischer Abschluss:
+[RC172_SHARED_RELEASE_20261023.md](../acceptance/RC172_SHARED_RELEASE_20261023.md).
+RC172 am 23.10.2026 um 14:25:11UTC als GitHub-Test-Pre-Release veröffentlicht:
+Windows-x64-ZIP sowie ARM64-/Intel-Mac jeweils ZIP/DMG aus Appcommit
+`2d4a5fe2ef67ffa10e4015e34827853e08dfa0da`, Fingerprint
+`9f18d7932883665efd64e94e7a79c6d8f701ffca639aac0f143442b2838cfc3a`/348.
+298/298+11/11Headless, 300Rust/3ignored/Clippy/Node-Rust/Release,
+38PDF/67Worker/49Office/41Grafik und Paket5/100MD0Fehler tatsächlich PASS/stabil.
+Beide Macjobs39958898162 SUCCESS, je38PDF/65Worker+2Windows-skips/49Office/
+41Grafik/283Rust+3ignored; echte Ganzlog- und Artefaktbytegegenreviews gelesen.
+Alle20Assets vor und nach Veröffentlichung frisch heruntergeladen/gehasht,
+Inventar/IDs/Tag/Quellcommit/PreReleaseflag/Notesbody erneut bestätigt.
+Windows zusätzlich create-only lokal unter `Software DataSecure/RC172`, mit
+aktuellem19Fallplan, RC172FachprobenA–F, drei synthetischen Archiven und Belegen.
+Keine Mainintegration, Desktopaktion oder Nutzerprofiländerung. Dokumentations-
+nachtrag ändert App-/Paket-/Tagcommit nicht. Alte Pakete/Profile/Evidenzen erhalten.
 
-RC172-Entwicklung: SmartArt/Owner-Bildtexte, XLSX-Kommentare/Anzeige und sparse
+RC172: SmartArt/Owner-Bildtexte, XLSX-Kommentare/Anzeige und sparse
 Projektion, Word-Grid, konkrete Schutzdiagnose und begrenzte lokale Grafikdecoder
 integriert. Bestätigte PDF-OCR-/Grafikbudget-/Policy-/Office-Tabellenrandfälle
-eng korrigiert und unabhängig gegengeprüft. Neue gemeinsame vollständige
-Endgates und beide Macartefakte bleiben erforderlich; noch kein Paket-PASS.
+eng korrigiert und unabhängig gegengeprüft; gemeinsame Endgates bestanden.
 Nicht sicher feldgebundene komplexe Word-Tabellen, sehr sparse XLSX-Listen und
 geerbte PPTX-Tabellen bleiben konvertierbar; Anonymisierung dort mit typisiertem
 OFFICE_TABLE_CONTEXT_UNVERIFIED-Grund hart verweigert. Details im RC172-Journal.
+Kein Universalversprechen für OCR-/Lesereihenfolge-/Artefaktfreiheit. Eigene Mac-
+App/Core nur ad hoc, keine Developer-ID/Notarisierung oder OS-Schutzabschaltung.
+Menschliche19Desktopfälle, Excel/Numbers/Finder/TCC/M2/Enterprise/VoiceOver/
+macOS26 bleiben USER_PENDING; nativeEpoch/Pause/Lease NOT_RUN, ACLadversarial
+PARTIAL, LaunchServicesexit unbekannt, innerer Smoke-Writerjoin unbestätigt.
 
 ### Abgeschlossene vorausgehende Analysephase
 
-Produktquellen bleiben auf `00c328dedeb097bf4abc50815773e2e7ae5da320` unverändert.
+Die damalige Analyse ließ `00c328dedeb097bf4abc50815773e2e7ae5da320` unverändert.
 Die neue Nachbereitung erfasst nachgewiesene Kontextauslassungen und OCR-/
 Lesbarkeitsprobleme als **BL-049.2**, einschließlich Renderer- und Ressourcen-
 entscheidungen für Windows x64/macOS ARM64/Intel. Verbindliche Zusammenfassung:
@@ -35,7 +51,7 @@ keine vollständige visuelle oder semantische Inhaltsfreigabe. Keine Nutzerdaten
 keine Produkt-/Teständerungen, neuen Pakete oder Mainintegration. Ältere Stand-
 und Übergabeabschnitte darunter nicht als neue offene Gesamtaufgabe übernehmen.
 
-Stand: 23.10.2026 · 3.2.0-rc172 in Vorbereitung; RC171 und ältere Releases unverändert.
+Stand: 23.10.2026 · RC172 Test-Pre-Release; RC171 und ältere Releases unverändert.
 
 ## Historischer RC171-Quellenabschluss22.10.2026 10:49UTC vor Source12
 
