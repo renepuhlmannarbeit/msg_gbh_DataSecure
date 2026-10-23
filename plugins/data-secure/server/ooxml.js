@@ -939,9 +939,8 @@ function parseWordStructure(body, options = {}) {
             if (value !== undefined && !['continue', 'restart'].includes(value)) throw wordStructureError();
             node.verticalMerge = value || 'continue';
           } else if (name === 'w:hMerge') {
-            // Legacy hMerge is not gridSpan. Do not mislabel its hidden cells
-            // as independent columns until that separate syntax is modelled.
-            throw wordStructureError();
+            if (value !== undefined && !['continue', 'restart'].includes(value)) throw wordStructureError();
+            node.horizontalMerge = value || 'continue';
           } else node[name === 'w:gridBefore' ? 'gridBefore' : 'gridAfter'] = wordGridNumber(value, true, wordStructureError);
           wordGridLeaf = true;
         }
@@ -1002,6 +1001,7 @@ function renderWordStructure(root, options = {}) {
     function flush() { if(paragraphs.length) { blocks.push({text:paragraphs.join('\n')}); paragraphs=[]; } }
     function visit(value) {
       if(typeof value === 'string') { paragraphs.push(value); return; }
+      if(options.contentMode&&!content(value))return;
       if(value.type === 'tbl') { flush(); blocks.push({table:value}); return; }
       if(value.type === 'p' && !value.children.some(child=>typeof child!=='string')) {
         paragraphs.push((value.prefix||'')+value.children.join('')); return;
@@ -1015,14 +1015,52 @@ function renderWordStructure(root, options = {}) {
     // GFM section rather than keeping it escaped inside its parent value.
     // Do not change the established uniform-partition path unnecessarily.
     if(!inherited&&!hasNestedTable(node)&&(!node.grid.complex||uniformWordPartition(node))){emit(node,false);return;}
-    const blocks = new Map();
+    const blocks = new Map(), positionedCells = new Map();
     const rows = node.grid.rows.map(({row,cells},index)=>({number:index+1,header:row.header===true,cells:cells.map(positioned=>{
       const actual=cellBlocks(positioned.cell);
       const cell={column:positioned.column,span:positioned.span,continuationOf:positioned.continuationOf===null?null:positioned.continuationOf+1,
         text:actual.map(block=>block.table?'Untertabelle':block.text).join('\n')};
-      blocks.set(cell,actual);return cell;
+      blocks.set(cell,actual);positionedCells.set(positioned,cell);return cell;
     })}));
-    const plan=tableFieldPlan(rows), ownScope=rows.some(row=>row.header)||[...plan.values()].some(value=>value!=='Inhalt');
+    const plan=tableFieldPlan(rows);
+    if(node.grid.horizontalSplitContent){
+      // A logical legacy merge may contain a sensitive label in a nonanchor
+      // physical payload (e.g. Technologie / Name). Whole-cell text alone is
+      // not proof that its following value is harmless. Supplement the true
+      // logical plan with the actual, nonoverlapping source segments. This
+      // auxiliary plan deliberately supplies NO vertical/merged-owner claim:
+      // it can only strengthen a logical label to generic protected content,
+      // never establish a new typed identity or release an existing duty.
+      // Physical spans sum to the same bounded Word grid, not an area expansion.
+      const segments=new Map(), mergedColumns=new Set();
+      const physicalRows=node.grid.rows.map(({row,cells},index)=>({number:index+1,header:row.header===true,
+        cells:cells.flatMap(positioned=>{
+          const owner=positionedCells.get(positioned);let column=positioned.column;
+          const actual=(positioned.cell.sourceCells||[positioned.cell]).map(source=>{
+            const segment={column,span:source.gridSpan||1,continuationOf:null,
+              text:cellBlocks(source).map(block=>block.table?'Untertabelle':block.text).join('\n')};
+            column+=segment.span;return segment;
+          });
+          if(positioned.cell.sourceCells&&actual.filter(segment=>segment.text.trim()).length>1)
+            for(let column=positioned.column;column<positioned.column+positioned.span;column++)mergedColumns.add(column);
+          segments.set(owner,actual);return actual;
+        })}));
+      const physicalPlan=tableFieldPlan(physicalRows);
+      for(const row of rows)for(const cell of row.cells){
+        const label=plan.get(cell);
+        // The extra uncertainty belongs to the actual merged source range,
+        // not an arbitrary neighbouring logical cell. In particular a Name
+        // and value already inside one merge are not a second key for the
+        // unrelated factual cell which follows it in that row.
+        const affected=segments.get(cell).some(segment=>{
+          for(let column=segment.column;column<segment.column+segment.span;column++)if(mergedColumns.has(column))return true;
+          return false;
+        });
+        if(affected&&segments.get(cell).some(segment=>physicalPlan.get(segment)!=='Inhalt'&&physicalPlan.get(segment)!==label))
+          plan.set(cell,'Geschützter Tabellenwert');
+      }
+    }
+    const ownScope=rows.some(row=>row.header)||[...plan.values()].some(value=>value!=='Inhalt');
     let first=true;
     function separate() { if(!first)write('\n\n'); first=false; }
     for(const row of rows)for(const cell of row.cells){
@@ -1045,7 +1083,7 @@ function renderWordStructure(root, options = {}) {
   }
   function uniformWordPartition(node){
     const partition=node.grid.rows[0]?.cells,logicalColumns=node.grid.columns;
-    return node.grid.complex&&partition?.length>0&&partition[0].column===0&&
+    return node.grid.complex&&!node.grid.horizontalSplitContent&&partition?.length>0&&partition[0].column===0&&
       partition.at(-1).column+partition.at(-1).span===logicalColumns&&
       node.grid.rows.every(({row,cells})=>!row.gridBefore&&!row.gridAfter&&cells.length===partition.length&&
         cells.every((positioned,index)=>!positioned.cell.verticalMerge&&positioned.column===partition[index].column&&positioned.span===partition[index].span));
@@ -1065,7 +1103,7 @@ function renderWordStructure(root, options = {}) {
     const logicalColumns = node.grid.columns;
     if (!logicalColumns) return;
     const partition = node.grid.rows[0]?.cells;
-    const uniformPartition = node.grid.complex && partition?.length > 0 &&
+    const uniformPartition = node.grid.complex && !node.grid.horizontalSplitContent && partition?.length > 0 &&
       partition[0].column === 0 && partition.at(-1).column + partition.at(-1).span === logicalColumns &&
       node.grid.rows.every(({ row, cells }) => !row.gridBefore && !row.gridAfter && cells.length === partition.length &&
         cells.every((positioned, index) => !positioned.cell.verticalMerge &&
@@ -1122,7 +1160,7 @@ function renderWordStructure(root, options = {}) {
     for (let rowIndex = 0; rowIndex < node.children.length; rowIndex++) {
       if (rowIndex) write(inCell ? '<br>' : '\n');
       write(pipe + ' ');
-      const cells = node.children[rowIndex].children;
+      const cells = node.grid.rows[rowIndex].cells.map(positioned => positioned.cell);
       for (let column = 0; column < cells.length; column++) {
         if (column) write(' ' + pipe + ' ');
         children(cells[column], true);
@@ -2160,6 +2198,88 @@ function drawingText(xml) {
   }
   return paragraphs.join('\n\n');
 }
+// Selection for whole, namespace-bound presentation parts. Fragment-oriented
+// historical renderers above keep their separate legacy contract. A prefix
+// spelling is not an Office role; only expanded names and selected MC owners
+// can expose source text or authorize a slide relationship.
+function presentationXmlSelection() {
+  const mc = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
+  const selected = new WeakMap(), ignored = new WeakSet();
+  const understood = new Set([...RAW_IMAGE_NAMESPACES.presentation, ...RAW_IMAGE_NAMESPACES.drawing]);
+  function start(node) {
+    // XML syntax/characters/budgets are still checked for the whole part, but
+    // semantic checks inside an unselected branch cannot veto its fallback.
+    if (node.parent && !active(node.parent)) { ignored.add(node); return; }
+    if (node.parent?.namespaceURI === mc && node.parent.localName === 'AlternateContent' &&
+        !(node.namespaceURI === mc && ['Choice', 'Fallback'].includes(node.localName))) {
+      ignored.add(node); return; // Direct payload is not a selected branch.
+    }
+    if (node.namespaceURI !== mc) return;
+    if (node.localName === 'AlternateContent') selected.set(node, false);
+    if (['Choice', 'Fallback'].includes(node.localName)) {
+      if (node.parent?.namespaceURI !== mc || node.parent.localName !== 'AlternateContent') throw pptxStructureError();
+      const required = (node.attributes.get('{}Requires') || '').trim().split(/\s+/u).filter(Boolean);
+      const usable = node.localName === 'Fallback' || (required.length && required.every(prefix => understood.has(node.namespaces.get(prefix))));
+      if (selected.get(node.parent) || !usable) ignored.add(node);
+      else selected.set(node.parent, true);
+    }
+  }
+  function active(node) {
+    for (let value = node; value; value = value.parent) if (ignored.has(value)) return false;
+    return true;
+  }
+  function parent(node) {
+    let value = node.parent;
+    while (value?.namespaceURI === mc && ['AlternateContent', 'Choice', 'Fallback'].includes(value.localName)) value = value.parent;
+    return value;
+  }
+  return { start, active, parent };
+}
+function presentationSlideIds(xml) {
+  const selection = presentationXmlSelection(), ids = [], seen = new Set();
+  let issues = 0;
+  const root = readXml(xml, { decode: xmlDecode, error: pptxStructureError, start(node) {
+    selection.start(node);
+    if (!selection.active(node) || !RAW_IMAGE_NAMESPACES.presentation.has(node.namespaceURI) || node.localName !== 'sldId') return;
+    const list = selection.parent(node), owner = list && selection.parent(list);
+    if (!list || !RAW_IMAGE_NAMESPACES.presentation.has(list.namespaceURI) || list.localName !== 'sldIdLst' ||
+        !owner || owner.parent || !RAW_IMAGE_NAMESPACES.presentation.has(owner.namespaceURI) || owner.localName !== 'presentation') { issues++; return; }
+    const id = rawRelationshipId(node);
+    if (!id || seen.has(id)) { issues++; return; }
+    seen.add(id); ids.push(id);
+  } });
+  if (!RAW_IMAGE_NAMESPACES.presentation.has(root.namespaceURI) || root.localName !== 'presentation') throw pptxStructureError();
+  return { ids, issues };
+}
+function presentationNotesText(xml) {
+  const selection = presentationXmlSelection(), paragraphs = [];
+  const isP = (node, name) => node && RAW_IMAGE_NAMESPACES.presentation.has(node.namespaceURI) && node.localName === name;
+  const isA = (node, names) => node && RAW_IMAGE_NAMESPACES.drawing.has(node.namespaceURI) && names.includes(node.localName);
+  let paragraph = null;
+  function ownedParagraph(node) {
+    const body = selection.parent(node), shape = body && selection.parent(body);
+    if (!isP(body, 'txBody') || !isP(shape, 'sp')) return false;
+    let owner = selection.parent(shape);
+    while (isP(owner, 'grpSp')) owner = selection.parent(owner);
+    if (!isP(owner, 'spTree')) return false;
+    owner = selection.parent(owner);
+    return isP(owner, 'cSld') && isP(selection.parent(owner), 'notes') && !selection.parent(owner).parent;
+  }
+  const root = readXml(xml, { decode: xmlDecode, error: pptxStructureError, start(node) {
+    selection.start(node);
+    if (!selection.active(node)) return;
+    if (isA(node, ['p']) && ownedParagraph(node)) paragraph = { node, text: '' };
+    if (paragraph && isA(node, ['br']) && selection.parent(node) === paragraph.node) paragraph.text += '\n';
+  }, text(value, node) {
+    if (!paragraph || !selection.active(node) || !isA(node, ['t'])) return;
+    const run = selection.parent(node);
+    if (isA(run, ['r', 'fld']) && selection.parent(run) === paragraph.node) paragraph.text += value;
+  }, end(node) {
+    if (paragraph?.node === node) { paragraphs.push(paragraph.text); paragraph = null; }
+  } });
+  if (!isP(root, 'notes')) throw pptxStructureError();
+  return paragraphs.join('\n\n');
+}
 function contentDrawingText(xml) {
   // Office presentation paragraphs only; literal TXT/MD never use this path.
   return drawingText(xml).split(/\r\n|\r|\n/u).filter(line=>line.trim()).join('\n\n');
@@ -2283,7 +2403,11 @@ function parsePptx(entries, options = {}) {
   options={...options,officeTableContext:{unverified:false}};
   validatePptxXmlEntries(entries);
   const presentation=entries.get('ppt/presentation.xml')?.toString('utf8')||'';const slides=[];let issues=0,tableIssues=0,m;const rootIssues=packageMainRelationshipIssueCount(entries, 'ppt/presentation.xml');
-  const sr=/<p:sldId\b([^>]+?)\/?>(?:<\/p:sldId>)?/gi;while((m=sr.exec(presentation))){const id=/\br:id=["']([^"']+)["']/i.exec(m[1])?.[1],target=id&&pptRelationshipTarget(entries,'ppt/_rels/presentation.xml.rels',id,'slide','ppt');if(!target){issues++;continue;}slides.push(target);}
+  const sr=/<p:sldId\b([^>]+?)\/?>(?:<\/p:sldId>)?/gi;
+  let slideIds;
+  if (options.preserveText) { const selected = presentationSlideIds(presentation); slideIds = selected.ids; issues += selected.issues; }
+  else { slideIds = []; while ((m = sr.exec(presentation))) slideIds.push(/\br:id=["']([^"']+)["']/i.exec(m[1])?.[1]); }
+  for (const id of slideIds) { const target=id&&pptRelationshipTarget(entries,'ppt/_rels/presentation.xml.rels',id,'slide','ppt');if(!target){issues++;continue;}slides.push(target); }
   if(!presentation||!slides.length)issues++;
   const notesCoverage = pptNotesRelationshipCoverage(entries, slides);
   const masterCoverage = pptMasterLayoutCoverage(entries, slides);
@@ -2299,7 +2423,7 @@ function parsePptx(entries, options = {}) {
     if(!omitEmptyPptxSection(entries,options,s,diagramText?['SmartArt']:rawTexts))sections.push({kind:'text',source_part:s,markdown:slide.join('\n\n')});
     sections.push(...tableCoverage.tables);
     const notes=pptRelationshipTarget(entries,`ppt/slides/_rels/${path.basename(s)}.rels`,null,'notesSlide','ppt/slides');
-    if(notes&&notesCoverage.safeNotes.has(notes)){const rawNotes=options.preserveText?[drawingText(entries.get(notes).toString('utf8'))]:textTags(entries.get(notes).toString('utf8'),'a:t').filter(x=>!/^\d+$/.test(x.trim())),nt=options.preserveText?rawNotes.map(value=>extractionText(value,false,options.literalMarkup)):rawNotes;if(nt.length&&!omitEmptyPptxSection(entries,options,notes,rawNotes))sections.push({kind:'text',source_part:notes,markdown:`## Notizen\n\n${nt.join('\n\n')}`});}
+    if(notes&&notesCoverage.safeNotes.has(notes)){const rawNotes=options.preserveText?[presentationNotesText(entries.get(notes).toString('utf8'))]:textTags(entries.get(notes).toString('utf8'),'a:t').filter(x=>!/^\d+$/.test(x.trim())),nt=options.preserveText?rawNotes.map(value=>extractionText(value,false,options.literalMarkup)):rawNotes;if(nt.length&&!omitEmptyPptxSection(entries,options,notes,rawNotes))sections.push({kind:'text',source_part:notes,markdown:`## Notizen\n\n${nt.join('\n\n')}`});}
   }
   const chartCoverage = pptChartRelationshipCoverage(entries, slides);
   for(const [name,data] of entries) if(chartCoverage.safeCharts.has(name)){const rawValues=textTags(data.toString('utf8'),'c:v').concat(textTags(data.toString('utf8'),'a:t')),vals=rawValues.map(value=>options.literalMarkup?extractionText(value,false,true):value);if(vals.length&&!omitEmptyPptxSection(entries,options,name,rawValues))sections.push({kind:'table',source_part:name,markdown:`## Diagrammdaten ${path.basename(name)}\n\n${vals.join(' | ')}`});}

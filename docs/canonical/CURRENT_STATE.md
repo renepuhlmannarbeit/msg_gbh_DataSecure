@@ -2,6 +2,32 @@
 
 Quellstand: 3.2.0-rc173 (Test-Pre-Release veröffentlicht; Desktopabnahme USER_PENDING).
 
+## Neuer Auftrag nach RC173 – Konvertierungsrobustheit / BL-049.4
+
+23.10.2026: Word-w:hMerge ergänzen, zusätzlich alle unterstützten Dateitypen
+auf fehlende Renderer/Inhaltsmodelle und unnötige Stopps prüfen, aktuelle
+Internet-/GitHubmethoden am tatsächlichen Code revalidieren und geeignete
+Verbesserungen umsetzen. [Arbeitsplan und Befunde](../acceptance/CONVERSION_RESILIENCE_REVIEW_20261023.md).
+Unveröffentlichte Folgearbeit; RC173-Tag/Pakete und alte Nutzerläufe unverändert.
+Kein Universalformatversprechen, keine Schutz-/Rechte-/OSänderung. Separate
+Reviews für Word, XLSX/PPTX, Text und PDF/Grafiken sind für das erste begrenzte
+Delta abgeschlossen; Desktoptests beim Nutzer. hMerge, BOM-UTF16,
+ST_Xstring/x:v, PowerPoint-Namespaces, optionale PDFmetadatenauslassung und
+statische PNGvarianten implementiert. Zusätzlich reale Zellfeld-/Header-/
+Formelcache-Privacybefunde behoben und mit unveränderten Gegenfällen nachgeprüft.
+Native Konverterregression unter `dist/rc174-conversion-followup-v2-20261023`
+PASS/stabil (PDF/70Worker/49Office/43Grafik).45Quellsuiten dort Exit0, Original-
+FINAL wegen schwankender rg-Ignore-Liste FAIL erhalten;590gebundene Bytes direkt
+identisch. Frischer45er mit591Gitinputs unter
+`dist/rc174-conversion-followup-v3-20261023` vollständig PASS/Exit0/stabil,
+21:19:39.353UTC.353Produktinputs FP
+`0830f92ce05aa4073f778936784e55b02698bc7230e761479c9e23b99be8cc66`,
+591Git-Test-/Scriptinputs Manifest
+`a662626b31ad32119f995b5d3860e116c1b328692024439fc1ba73b0e6315c32`.
+Erstes Delta und Quellenrecherche abgeschlossen, keine Build-/Mac-/Desktopabnahme.
+Charts/Chartsheets/OMML/passive PDFformulare und größere Rendererergänzungen
+bleiben getrennt offene, im Arbeitsplan konkretisierte Umsetzungspakete.
+
 ## Technischer Abschluss – RC173 Tabellenaufbereitung (23.10.2026)
 
 BL-049.3 ausdrücklich beauftragt: keine pauschale Anonymisierungsverweigerung

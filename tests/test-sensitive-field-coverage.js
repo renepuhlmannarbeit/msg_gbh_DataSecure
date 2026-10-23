@@ -63,6 +63,72 @@ test('legacy product policy remains unchanged by the content-only fallback', () 
   assert.equal(anonymize(source).text, source);
 });
 
+for (const label of ['Name', 'Unternehmen', 'Full Name']) for (const value of ['Qvx\rQvy', 'Qvx&#13;Qvy', 'Qvx<br>Qvy', 'Qvx / Qvy']) {
+  test(`explicit inline cell field ${label}/${JSON.stringify(value)} retains protection, replay and Keep refusal`, () => {
+    const original = '😀\n\n| Inhalt | Fachtext |\n| --- | --- |\n' + `| ${label}: ${value} | FHIR REST HL7 |`;
+    const source = canonicalizeRenderedText(original, 'content-person-fields/1');
+    const actual = anonymize(source, 'general', options);
+    assert.doesNotMatch(actual.text, /Qvx|Qvy/u);
+    assert.match(actual.text, /FHIR REST HL7/u);
+    assert.equal(replayTransformTrace(actual.transform_trace), actual.text);
+    assert.deepEqual(scanResidual(actual.text, 'general', actual.dictionary, options), []);
+    assert.ok(scanResidual(source, 'general', [], options).some(row => row.type === 'SENSITIVE_FIELD'));
+    if (source.includes('\r')) assert.deepEqual(actual.dictionary, [], 'uncertain CR-delimited values gain no invented identity');
+    const entities = initialEntities({ transform_trace: actual.transform_trace, markdown: actual.text });
+    const target = entities.find(row => row.original.includes('Qvx'));
+    assert.ok(target);
+    const kept = applyEntityDecisions(actual.text, entities, [{ entity_id: target.entity_id, decision: 'keep' }], Buffer.alloc(32, 9));
+    assert.ok(scanResidual(kept.markdown, 'general', [], { ...options, originalSourceText: source }).some(row => row.type === 'SENSITIVE_FIELD'));
+  });
+}
+test('inline field duty stays inside the actual source cell and does not reclassify technical labels or prose', () => {
+  const source = '| Inhalt | Nachbar |\n| --- | --- |\n| Name: Qvx\rQvy | Fachtext: FHIR |\n' +
+    '| Dateiname: FHIR.md | Technologie: HL7 |\n\nFreier Satz Name: Qvx / Qvy';
+  const actual = anonymize(source, 'general', options);
+  assert.match(actual.text, /Fachtext: FHIR/u);
+  assert.match(actual.text, /Dateiname: FHIR\.md/u);
+  assert.match(actual.text, /Technologie: HL7/u);
+  assert.match(actual.text, /Freier Satz Name: Qvx \/ Qvy/u);
+  assert.equal(anonymize('| Inhalt |\n| --- |\n| Name: Qvx\rQvy |').text,
+    '| Inhalt |\n| --- |\n| Name: Qvx\rQvy |', 'historical product policy stays separate');
+});
+for (const label of ['Name' + ' '.repeat(161), 'Name' + ' (1)'.repeat(42), 'Name\\']) for (const header of [false, true]) {
+  test(`closed inline ${header ? 'header' : 'data'} label has no silent local length/escape exemption: ${label.length}`, () => {
+    const cell = `${label}: Qvx / Qvy`;
+    const source = header ? `| ${cell} | Fachtext |\n| --- | --- |\n| sachlich | FHIR REST HL7 |` :
+      `| Inhalt | Fachtext |\n| --- | --- |\n| ${cell} | FHIR REST HL7 |`;
+    const basis = canonicalizeRenderedText(source, 'content-person-fields/1');
+    const actual = anonymize(basis, 'general', options);
+    assert.doesNotMatch(actual.text, /Qvx|Qvy/u); assert.match(actual.text, /FHIR REST HL7/u);
+    assert.equal(replayTransformTrace(actual.transform_trace), actual.text);
+    assert.deepEqual(scanResidual(actual.text, 'general', [], options), []);
+    assert.ok(scanResidual(source, 'general', [], options).some(row => row.type === 'SENSITIVE_FIELD'));
+    const entities = initialEntities({ markdown: actual.text, transform_trace: actual.transform_trace });
+    const target = entities.find(row => row.original.includes('Qvx')); assert.ok(target);
+    const kept = applyEntityDecisions(actual.text, entities, [{ entity_id: target.entity_id, decision: 'keep' }], Buffer.alloc(32, 5));
+    assert.ok(scanResidual(kept.markdown, 'general', [], { ...options, originalSourceText: source }).some(row => row.type === 'SENSITIVE_FIELD'));
+  });
+}
+test('inline header payload is protected even without data rows, while pure semantic headers stay unchanged', () => {
+  const input = '| Name: Qvx / Qvy | Fachtext |\n| --- | --- |';
+  assert.doesNotMatch(anonymize(input, 'general', options).text, /Qvx|Qvy/u);
+  assert.ok(scanResidual(input, 'general', [], options).some(row => row.type === 'SENSITIVE_FIELD'));
+  assert.equal(anonymize('| Name | Fachtext |\n| --- | --- |', 'general', options).text,
+    '| Name | Fachtext |\n| --- | --- |');
+});
+for (const value of ['Name: Qvx\rQvy', 'Name' + ' '.repeat(161) + ': Qvx\rQvy', 'Name\\: Qvx / Qvy', 'Name: [PERSON_DENISEKOCH]']) {
+  test(`nested stored-value field remains protected inside its actual formula cell: ${value.length}`, () => {
+    const source = '| Inhalt | Fachtext |\n| --- | --- |\n| Formel: "cached source only"<br>Gespeicherter Wert: ' +
+      value + ' (nicht neu berechnet) | FHIR REST HL7 |';
+    const basis = canonicalizeRenderedText(source, 'content-person-fields/1'), actual = anonymize(basis, 'general', options);
+    assert.doesNotMatch(actual.text, /Qvx|Qvy|DENISEKOCH/u);
+    assert.match(actual.text, /Formel: "cached source only"/u); assert.match(actual.text, /FHIR REST HL7/u);
+    assert.equal(replayTransformTrace(actual.transform_trace), actual.text);
+    assert.deepEqual(scanResidual(actual.text, 'general', [], { ...options, originalSourceText: source }), []);
+    assert.ok(scanResidual(source, 'general', [], { ...options, originalSourceText: source }).some(row => row.type === 'SENSITIVE_FIELD'));
+  });
+}
+
 for(const suffix of ['', ' (1)', ' (1) (2)', ' (1) (2) (3)'])for(const rawLabel of ['Name','Vorname','Nachname','Person','Ansprechpartner','Autor','Verfasser','Empfänger','Absender','Unterzeichner','Full Name']) {
   const label=rawLabel+suffix;
   test(`source value equal to ${label} cannot remove field ownership`, () => {

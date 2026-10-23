@@ -268,6 +268,24 @@ try {
     assert.doesNotMatch(oracle.render(clean.markdown), /<(?:img|s)(?:\s|>)/u);
     assert.match(oracle.render(clean.markdown), /~~Fachwort~~ !\[Literal\]\(private.png\)/u);
   });
+  await test('actual isolated worker decodes only explicit UTF-16 BOMs, preserving source text and privacy binding', async () => {
+    for (const [extension,text] of [['.txt','Name: Anna Berger\r\nÄÖÜß 😀 FHIR'],
+      ['.md','# ÄÖÜß 😀\r\nName: Anna Berger'],['.csv','Name;Fachtext\r\nAnna Berger;ÄÖÜß 😀 FHIR']]) {
+      const choices = {schema:'datasecure-content-options/1',markdownOutput:'content-v1',scanOcr:false,imageOcr:false};
+      const expected = await convertBuffer(Buffer.from(text),extension,{contentOptions:choices});
+      for (const endian of ['le','be']) {
+        const encoded = Buffer.from(text,'utf16le'); if(endian === 'be') encoded.swap16();
+        const bytes = Buffer.concat([Buffer.from(endian === 'le' ? [0xff,0xfe] : [0xfe,0xff]),encoded]);
+        const before = hash(bytes);
+        const result = await convertBuffer(bytes,extension,{contentOptions:choices});
+        assert.deepEqual(result,expected); assert.equal(hash(bytes),before);
+      }
+    }
+    for (const bytes of [Buffer.from([0xff,0xfe,0x41]),Buffer.from([0xfe,0xff,0xd8,0]),Buffer.from([0xc3,0x28])]) {
+      await assert.rejects(convertBuffer(bytes,'.txt'),{code:'TEXT_ENCODING_INVALID'});
+    }
+    await assert.rejects(convertBuffer(Buffer.from([0xff,0xfe,0x41,0,0,0]),'.txt'),{code:'TEXT_CONTROL_INVALID'});
+  });
   await test('actual isolated Office chart/layout/master content is inert and retains every source value', async () => {
     const bytes = literalSupplementPresentation(), oracle = require('markdown-it')({ html: true });
     const legacy = await convertBuffer(bytes, '.pptx');
@@ -420,6 +438,20 @@ try {
     const notes = await convertBuffer(bytes, '.pdf', { contentOptions: contentChoices(false, false, 'notes-v1') });
     assert.match(notes.markdown, /Dokumentinformationen[\s\S]*Max Mustermann/u);
     assert.deepEqual(notes.private_document_metadata, content.private_document_metadata);
+  });
+  await test('real PDF optional metadata size cannot discard independently readable page content', async () => {
+    for (const markdownOutput of ['content-v1', 'notes-v1']) for (const size of [4096, 4097]) {
+      const title = 'T'.repeat(size), bytes = pdf([{ text: 'BODY_REMAINS_READABLE' }], '', { info: true, infoTitle: title });
+      const before = hash(bytes);
+      const result = await convertBuffer(bytes, '.pdf', { contentOptions: contentChoices(false, false, markdownOutput) });
+      assert.match(result.markdown, /BODY/u);
+      assert.ok(result.private_document_metadata.entries.some(entry => entry.key === 'Author' && entry.value === 'Max Mustermann'));
+      assert.equal(result.private_document_metadata.entries.some(entry => entry.key === 'Title'), size === 4096);
+      assert.equal(result.coverage.reason_codes.includes('TEXT_LIMIT_PARTIAL'), size === 4097);
+      if (size === 4097 || markdownOutput === 'content-v1') assert.ok(!result.markdown.includes(title));
+      else assert.ok(result.markdown.includes(title));
+      assert.equal(hash(bytes), before);
+    }
   });
   await test('disabled raster OCR preserves native headers without even starting Tesseract and rejects empty exports', async () => {
     let diagnostic = '';
@@ -651,6 +683,23 @@ try {
     assert.ok(children.every(entry => entry.closed), 'success follows real supervisor close');
     return result;
   }
+  await test('packaged PNG worker reads validated indexed Adam7 and 16-bit grayscale through the fixed native fallback', async () => {
+    const variants = require('./lib/png-static-variants.cjs'), canvas = image();
+    const pixels = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+    try {
+      for (const indexed of [true, false]) {
+        const samples = Array.from({ length: canvas.width * canvas.height }, (_, index) =>
+          indexed ? (pixels[index * 4] < 128 ? 1 : 0) : pixels[index * 4] * 257);
+        const bytes = variants.png({ width: canvas.width, height: canvas.height, depth: indexed ? 1 : 16,
+          color: indexed ? 3 : 0, interlace: indexed ? 1 : 0, samples,
+          ...(indexed ? { palette: [[255,255,255],[0,0,0]] } : {}) });
+        const result = await convert(bytes, '.png', { contentOptions: {
+          schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: true, imageOcr: true } });
+        assert.match(result.markdown, /Max Mustermann/u); assert.match(result.markdown, /Nordstern GmbH/u);
+        assert.ok(result.coverage.reason_codes.includes('OCR_NOT_VERIFIED'));
+      }
+    } finally { pixels.fill(0); canvas.width = 1; canvas.height = 1; }
+  });
   for (const extension of ['.txt', '.md', '.csv', '.docx', '.xlsx', '.pptx']) {
     await test(`packaged real ${extension} preserves names and bank data`, async () => {
       const bytes = ['.docx', '.xlsx', '.pptx'].includes(extension) ? office(extension.slice(1)) :

@@ -22,12 +22,12 @@ const { attachContactCrops } = require('./ocr-contact-crops');
 const { nativeTextSeparator, nativeColumnOrder, renderPdfOcrLayer, paintedTextGeometryAvailable, nativeTextRegions, nativeSingleTokenRegions, uncoveredOcrText } = require('./pdf-text-layout');
 const { classifyPdfTextVisibility } = require('./pdf-text-visibility');
 const { SOURCE_TYPES, ERROR_CODES, MAX_INPUT_BYTES } = require('../core/conversion-worker-contract');
-const { decodePng } = require('../images/png');
+const { decodeRasterPng } = require('./png-raster-decoder');
 const { decodeBmp } = require('../images/bmp');
 const { MAX_PIXELS, MAX_IMAGE_BYTES } = require('../images/common');
 const { validateContentOptions, serializeContentOptions } = require('../core/content-options');
 const { pdfOcrAction } = require('../core/content-ocr-plan');
-const { PDF_KEYS, validatePrivateDocumentMetadata } = require('../core/private-document-metadata');
+const { PDF_KEYS, selectOptionalPrivatePdfMetadata } = require('../core/private-document-metadata');
 const root = path.join(__dirname, 'conversion-runtime');
 const localRequire = createRequire(path.join(root, 'package.json'));
 const fail = code => { throw Object.assign(new Error(code), { code }); };
@@ -121,7 +121,7 @@ async function imageMarkdown(bytes, type, markdownOutput, contentOptions, ownedO
       context.fillStyle = 'white'; context.fillRect(0, 0, canvas.width, canvas.height);
       context.drawImage(image, 0, 0);
     } else {
-      const decoded = type === 'png' ? decodePng(bytes) : decodeBmp(bytes);
+      const decoded = type === 'png' ? await decodeRasterPng(bytes, { createCanvas, loadImage }) : decodeBmp(bytes);
       dimensions(decoded.width, decoded.height);
       canvas = createCanvas(decoded.width, decoded.height);
       // Composite transparency against white before OCR (not black text loss).
@@ -414,12 +414,17 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
         if (passiveObjects) continue;
         fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
       }
-      metadataLines.push(`${key}: ${String(value)}`);
       if (contentOptions) metadataEntries.push({ key, value: String(value) });
+      else metadataLines.push(`${key}: ${String(value)}`);
     }
     let privateMetadata;
     if (metadataEntries.length) {
-      try { privateMetadata = validatePrivateDocumentMetadata({ schema: 'datasecure-private-document-metadata/1', source_type: 'pdf', entries: metadataEntries }); }
+      try {
+        const selected = selectOptionalPrivatePdfMetadata({ schema: 'datasecure-private-document-metadata/1', source_type: 'pdf', entries: metadataEntries });
+        privateMetadata = selected.metadata;
+        if (selected.omitted_entries) optionalReasons.add('TEXT_LIMIT_PARTIAL');
+        for (const entry of privateMetadata?.entries || []) metadataLines.push(`${entry.key}: ${entry.value}`);
+      }
       catch { fail('CONVERSION_METADATA_LIMIT'); }
     }
     const sections = [];

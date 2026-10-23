@@ -2,6 +2,32 @@
 
 Quellstand: 3.2.0-rc173 · 23.10.2026 · Test-Pre-Release; Desktop-/Officeabnahme USER_PENDING.
 
+## Unveröffentlichte Folgearbeit BL-049.4
+
+Separat vom veröffentlichten RC173 implementiert: Word-hMerge mit echten
+physischen Besitz-/Spanmodellen, BOM-deklariertes UTF-16LE/BE für Standalone-
+TXT/MD/CSV, Excel-ST_Xstring in Textblättern und x:v einschließlich Formelcache,
+namespacegebundene PowerPoint-Folienlisten/Notizen sowie statische PNGvarianten
+nach vollständiger Pixel-/CRC-/Zlibvorprüfung. Zu große optionale PDFmetadaten
+dürfen als ganze Felder mit TEXT_LIMIT_PARTIAL entfallen, ohne lesbare Seiten
+vorab zu verwerfen. Unicode/Schema/Quellidentität/Budgets bleiben verbindlich.
+
+Die neuen Zelltexte durchlaufen den erweiterten Feld- und unabhängigen
+Residualschutz, auch bei CR-geteiltem Namen, langem Label, Kopfzeilenwert oder
+Name-Feld hinter einem Formelcache-Wrapper. Keep darf solche ungeschützten
+Feldwerte nicht wieder zur Veröffentlichung autorisieren. Kein globales
+Zeichenlöschen, keine Formel-/Makro-/Objektausführung oder neue Cloudverarbeitung.
+Keine neue Version oder Windows-/Mac-Paketabnahme allein aus diesen Quellen.
+
+Noch offene Modelle: indexgebundene Diagramm-/Serienwerte und Chartsheets,
+OMML, klassische Kommentarautoren/-bezüge, passive PDFformularwerte, zusätzliche
+Grafikcodecs und ggf. ein separat isolierter Office-Renderer. Keine universelle
+PNG-/Office-/PDF-, OCR-/Rendering- oder Artefaktfreiheitszusage. APNG/unbekannte
+Chunks bleiben eingeschränkt; Hinweise teilweise noch generisch.
+[Audit, Primärquellen, Prüfstand und Umsetzungspakete](acceptance/CONVERSION_RESILIENCE_REVIEW_20261023.md).
+
+## Veröffentlichter Stand RC173
+
 RC173 veröffentlicht (23.10.2026, Build e253380e): unterstützte nichtuniforme,
 vertikale und verschachtelte Wordraster, sparse/verbundene XLSX-Zellen und
 erreichte PowerPoint-Layout-/Mastertabellen werden im Inhaltsmodus als begrenzte

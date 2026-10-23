@@ -3,7 +3,8 @@
 // In-memory extraction used by the isolated Standalone conversion worker.
 // No PII normalization, anonymization, OCR, AI, filesystem writes or external
 // calls happen in this direct-format module. PDF/OCR belongs to its worker.
-const { decodeUtf8Source, parseCsvDialect } = require('../document-parser');
+const { parseCsvDialect } = require('../document-parser');
+const { decodeStandaloneTextSource } = require('../core/source-text-codec');
 const { parseOoxml } = require('../ooxml');
 const { RESOURCE_LIMITS } = require('../resource-limits');
 const { createMarkdownExtraction, MAX_MARKDOWN_CHARS } = require('./markdown-contract');
@@ -84,12 +85,12 @@ function extractMarkdownAndMedia(buffer, extension, options = {}, referencedImag
     let attachments = [];
     const reasons = new Set();
     if (source_type === 'txt' || source_type === 'md') {
-      // UTF-8 BOM is encoding metadata. Otherwise keep source Unicode,
+      // An explicit UTF-8/UTF-16 BOM is encoding metadata. Keep source Unicode,
       // whitespace, line endings and punctuation exactly as decoded.
-      const source = decodeUtf8Source(buffer);
+      const source = decodeStandaloneTextSource(buffer);
       markdown = source_type === 'txt' && options.markdownOutput === 'content-v1' ? literalText(source) : source;
     } else if (source_type === 'csv') {
-      markdown = extractCsv(decodeUtf8Source(buffer), options.markdownOutput === 'content-v1');
+      markdown = extractCsv(decodeStandaloneTextSource(buffer), options.markdownOutput === 'content-v1');
     } else {
       const parsed = parseOoxml(buffer, `.${source_type}`, undefined, {
         preserveText: true,

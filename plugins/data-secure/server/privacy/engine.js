@@ -849,6 +849,30 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
   if (personFieldPolicy === CONTENT_PERSON_FIELD_POLICY) {
     const { isProtectedFieldHeader } = require('./field-value-coverage');
     const values = markdownTableColumnValues(rendered, { test: label => isProtectedFieldHeader(label, personFieldPolicy) });
+    // Independently inspect complete, actually parsed data cells for their
+    // own explicit field label. This does not reuse the redactor's span list
+    // or its dictionary. A positional column cannot waive "Name: <value>".
+    const inlineValue = value => {
+      let from = 0;
+      for (let index = 0; index < value.length; index++) if (value[index] === ':' || value[index] === '=') {
+        if (isProtectedFieldHeader(value.slice(from, index).trim(), personFieldPolicy)) return value.slice(index + 1);
+        from = index + 1;
+      }
+      return null;
+    };
+    const allTableValues = text => {
+      const values = markdownTableColumnValues(text, { test: () => true }), rows = text.split('\n');
+      for (let index = 0; index + 1 < rows.length; index++) {
+        const headers = markdownTableCells(rows[index], true), separator = markdownTableCells(rows[index + 1], true);
+        if (headers && separator && headers.length === separator.length && separator.every(value => /^:?-{3,}:?$/u.test(value)))
+          for (const value of headers) values.push(value);
+      }
+      return values;
+    };
+    for (const cell of allTableValues(rendered)) {
+      const value = inlineValue(cell);
+      if (value !== null) values.push(value);
+    }
     const sourceView = canonicalizeRenderedText(options.originalSourceText || '', personFieldPolicy);
     const imported = sourceVariableTokens(sourceView);
     // Literal Markdown cell escapes are intentionally retained by general
@@ -858,6 +882,10 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
     for (const sourceValue of markdownTableColumnValues(sourceView,
       { test: label => isProtectedFieldHeader(label, personFieldPolicy) }))
       for (const token of sourceVariableTokens(sourceValue)) imported.add(token);
+    for (const sourceCell of allTableValues(sourceView)) {
+      const sourceValue = inlineValue(sourceCell);
+      if (sourceValue !== null) for (const token of sourceVariableTokens(sourceValue)) imported.add(token);
+    }
     for (const value of values) if (/[\p{L}\p{M}\p{N}\p{S}]/u.test(maskPlaceholders(value)) ||
         [...sourceVariableTokens(value)].some(token => imported.has(token))) {
       out.push({ type: 'SENSITIVE_FIELD', text: '' });
@@ -938,17 +966,17 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
   ];
   const intactPersonKeys = new Set(intactPersonSeeds.map((seed) => key(seed.value)));
   const residualPersonSeeds = [...intactPersonSeeds];
-  // A value-bearing sole header ("Name: [PERSON_001]") is not the
+  // A value-bearing header ("Name: [PERSON_001]") is not the
   // column label "Name:". Masking its marker into spaces must not confer
   // person-column authority on every subsequent factual cell.
   const discoveryPieces = []; let discoveryCursor = 0;
   for (const line of rendered.matchAll(/[^\r\n]+/gu)) {
     const headers = markdownTableCells(line[0], true);
-    if (headers?.length !== 1 || !placeholderSpans(line[0]).length) continue;
+    if (!headers?.length || !placeholderSpans(line[0]).length) continue;
     const tail = rendered.slice(line.index + line[0].length);
     const nextLine = /^(?:\r\n|\r|\n)([^\r\n]*)/u.exec(tail)?.[1];
     const separator = nextLine === undefined ? null : markdownTableCells(nextLine, true);
-    if (separator?.length !== 1 || !/^:?-{3,}:?$/u.test(separator[0])) continue;
+    if (separator?.length !== headers.length || !separator.every(value => /^:?-{3,}:?$/u.test(value))) continue;
     discoveryPieces.push(clean.slice(discoveryCursor, line.index), line[0]);
     discoveryCursor = line.index + line[0].length;
   }

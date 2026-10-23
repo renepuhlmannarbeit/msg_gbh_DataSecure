@@ -17,6 +17,23 @@ const { RESOURCE_LIMITS } = require('../plugins/data-secure/server/resource-limi
 const { unreadableSymbolRun, cleanOcrSymbolLines, visualNotices } = require('../plugins/data-secure/server/standalone/markdown-visuals');
 const { test, done, assert } = createSuite('Content-preserving engineering Markdown extraction');
 
+test('Standalone UTF-16 BOM inputs produce the same literal TXT/Markdown/CSV as UTF-8', () => {
+  for (const [extension,text] of [['.txt','Name: Anna Berger\r\nÄÖÜß 😀\rEnde'],
+    ['.md','# ÄÖÜß\r\n\nName: Anna Berger 😀'], ['.csv','Name;Fachtext\r\nAnna Berger;ÄÖÜß 😀']]) {
+    for (const markdownOutput of [undefined,'notes-v1',...(extension === '.md' ? [] : ['content-v1'])]) {
+      const options = markdownOutput ? {markdownOutput} : {};
+      const expected = extractMarkdownBuffer(Buffer.from(text),extension,options);
+      for (const endian of ['le','be']) {
+        const encoded = Buffer.from(text,'utf16le'); if(endian === 'be') encoded.swap16();
+        const bytes = Buffer.concat([Buffer.from(endian === 'le' ? [0xff,0xfe] : [0xfe,0xff]),encoded]);
+        const original = Buffer.from(bytes);
+        assert.deepEqual(extractMarkdownBuffer(bytes,extension,options),expected);
+        assert.deepEqual(bytes,original);
+      }
+    }
+  }
+});
+
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 const S = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
 const P = 'http://schemas.openxmlformats.org/presentationml/2006/main';
@@ -296,6 +313,92 @@ test('PPTX preserves numeric notes and rich-text run order, labels source sequen
   assert.ok(result.markdown.startsWith('# Folie 1\n\nBeforeAfter  \nNext'));
   assert.ok(result.markdown.includes('## Notizen\n\n123456'));
   assert.strictEqual(result.coverage.status, 'incomplete');
+});
+
+test('PPTX slide lists and notes bind expanded XML names rather than prefix spellings', () => {
+  for (const strict of [false, true]) for (const prefix of ['p', 'q', '']) for (const relationshipPrefix of ['r', 'rel']) {
+    const p = strict ? 'http://purl.oclc.org/ooxml/presentationml/main' : P;
+    const a = strict ? 'http://purl.oclc.org/ooxml/drawingml/main' : A;
+    const r = strict ? 'http://purl.oclc.org/ooxml/officeDocument/relationships' : R;
+    const tag = name => prefix ? `${prefix}:${name}` : name;
+    const presentation = `<${tag('presentation')} xmlns${prefix ? `:${prefix}` : ''}="${p}" xmlns:${relationshipPrefix}="${r}"><${tag('sldIdLst')}><${tag('sldId')} id="256" ${relationshipPrefix}:id="s1"/></${tag('sldIdLst')}></${tag('presentation')}>`;
+    const notes = `<q:notes xmlns:q="${p}" xmlns:d="${a}"><q:cSld><q:spTree><q:sp><q:txBody><d:p><d:r><d:t>Änne </d:t></d:r><d:fld id="x" type="slidenum"><d:t>Berger</d:t></d:fld><d:br/><d:r><d:t>123456</d:t></d:r></d:p></q:txBody></q:sp></q:spTree></q:cSld></q:notes>`;
+    const bytes = pptx([['ppt/presentation.xml', presentation], ['ppt/notesSlides/notesSlide2.xml', notes]]);
+    const original = Buffer.from(bytes);
+    for (const markdownOutput of ['notes-v1', 'content-v1']) {
+      const result = extractMarkdownBuffer(bytes, '.pptx', { markdownOutput, partialExtraction: true });
+      assert.match(result.markdown, /BeforeAfter/u);
+      assert.match(result.markdown, /Änne Berger[\s\S]*123456/u);
+      assert.equal((result.markdown.match(/Änne Berger/gu) || []).length, 1);
+    }
+    assert.deepEqual(bytes, original);
+  }
+});
+
+test('PPTX namespaced notes select one MC branch and never read foreign-owner lookalikes', () => {
+  const mc = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
+  const paragraph = value => `<d:p><d:r><d:t>${value}</d:t></d:r></d:p>`;
+  const notes = `<q:notes xmlns:q="${P}" xmlns:d="${A}" xmlns:mc="${mc}" xmlns:u="urn:unknown"><q:cSld><q:spTree><q:sp><q:txBody>` +
+    `<mc:AlternateContent><mc:Choice Requires="d">${paragraph('SELECTED_NOTE')}</mc:Choice><mc:Fallback>${paragraph('NOT_SELECTED_NOTE')}</mc:Fallback></mc:AlternateContent>` +
+    `<mc:AlternateContent><mc:Choice Requires="u">${paragraph('UNKNOWN_CHOICE')}</mc:Choice><mc:Fallback>${paragraph('FALLBACK_NOTE')}</mc:Fallback></mc:AlternateContent>` +
+    `<u:p><d:r><d:t>FOREIGN_OWNER</d:t></d:r></u:p><u:container>${paragraph('FOREIGN_WRAPPER')}</u:container>` +
+    `<d:p xmlns:d="urn:foreign"><d:r><d:t>WRONG_URI</d:t></d:r></d:p>` +
+    `</q:txBody></q:sp></q:spTree></q:cSld></q:notes>`;
+  const result = extractMarkdownBuffer(pptx([['ppt/notesSlides/notesSlide2.xml', notes]]), '.pptx',
+    { markdownOutput: 'content-v1', partialExtraction: true });
+  const literal = result.markdown.replace(/\\_/gu, '_');
+  assert.match(literal, /SELECTED_NOTE[\s\S]*FALLBACK_NOTE/u);
+  assert.doesNotMatch(literal, /NOT_SELECTED_NOTE|UNKNOWN_CHOICE|FOREIGN_OWNER|FOREIGN_WRAPPER|WRONG_URI/u);
+});
+
+test('PPTX slide references reject wrong URI, unqualified id and lookalike owners', () => {
+  for (const list of [
+    '<q:sldIdLst xmlns:q="urn:foreign"><q:sldId r:id="s1"/></q:sldIdLst>',
+    '<p:sldIdLst><p:sldId id="s1"/></p:sldIdLst>',
+    '<p:sldIdLst><p:sldId xmlns:r="urn:foreign" r:id="s1"/></p:sldIdLst>',
+    '<p:sldIdLst><p:sldId r:id="s1" xmlns:t="http://purl.oclc.org/ooxml/officeDocument/relationships" t:id="s1"/></p:sldIdLst>',
+    '<u:wrapper xmlns:u="urn:foreign"><p:sldIdLst><p:sldId r:id="s1"/></p:sldIdLst></u:wrapper>'
+  ]) {
+    const presentation = `<p:presentation xmlns:p="${P}" xmlns:r="${R}">${list}</p:presentation>`;
+    const result = extractMarkdownBuffer(pptx([['ppt/presentation.xml', presentation]]), '.pptx',
+      { markdownOutput: 'content-v1', partialExtraction: true });
+    assert.equal(result.markdown, '');
+    assert.equal(result.coverage.status, 'incomplete');
+  }
+});
+
+test('PPTX slide-list MC choice is selected once and duplicate relationship ids cannot duplicate source text', () => {
+  const mc = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
+  for (const required of ['p', 'unknown']) {
+    const chosen = '<p:sldIdLst><p:sldId id="256" r:id="s1"/><p:sldId id="257" r:id="s1"/></p:sldIdLst>';
+    const ignored = '<p:sldIdLst><p:sldId id="258" r:id="missing"/></p:sldIdLst>';
+    const main = `<p:presentation xmlns:p="${P}" xmlns:r="${R}" xmlns:mc="${mc}" xmlns:unknown="urn:unknown">` +
+      `<mc:AlternateContent><mc:Choice Requires="${required}">${required === 'p' ? chosen : ignored}</mc:Choice>` +
+      `<mc:Fallback>${required === 'p' ? ignored : chosen}</mc:Fallback></mc:AlternateContent></p:presentation>`;
+    const result = extractMarkdownBuffer(pptx([['ppt/presentation.xml', main]]), '.pptx',
+      { markdownOutput: 'content-v1', partialExtraction: true });
+    assert.equal((result.markdown.match(/BeforeAfter/gu) || []).length, 1);
+    assert.equal(result.coverage.status, 'incomplete');
+  }
+});
+
+test('PPTX MC ignores unselected semantic subtrees and direct payload cannot acquire branch authority', () => {
+  const mc = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
+  const declaration = `xmlns:p="${P}" xmlns:a="${A}" xmlns:r="${R}" xmlns:mc="${mc}" xmlns:u="urn:unknown"`;
+  const badChoice = '<mc:Choice Requires="u"><u:container><mc:Choice Requires="u"/></u:container></mc:Choice>';
+  const fallback = '<p:sldIdLst><p:sldId id="256" r:id="s1"/></p:sldIdLst>';
+  const main = `<p:presentation ${declaration}><mc:AlternateContent>` +
+    '<p:sldIdLst><p:sldId id="257" r:id="missing"/></p:sldIdLst>' + badChoice +
+    `<mc:Fallback>${fallback}</mc:Fallback></mc:AlternateContent></p:presentation>`;
+  const notes = `<p:notes ${declaration}><p:cSld><p:spTree><p:sp><p:txBody><mc:AlternateContent>` +
+    '<a:p><a:r><a:t>DIRECT_PAYLOAD</a:t></a:r></a:p>' + badChoice +
+    '<mc:Fallback><a:p><a:r><a:t>SAFE_FALLBACK</a:t></a:r></a:p></mc:Fallback>' +
+    '</mc:AlternateContent></p:txBody></p:sp></p:spTree></p:cSld></p:notes>';
+  const result = extractMarkdownBuffer(pptx([['ppt/presentation.xml', main], ['ppt/notesSlides/notesSlide2.xml', notes]]), '.pptx',
+    { markdownOutput: 'content-v1', partialExtraction: true });
+  assert.match(result.markdown, /BeforeAfter/u);
+  assert.match(result.markdown.replace(/\\_/gu, '_'), /SAFE_FALLBACK/u);
+  assert.doesNotMatch(result.markdown.replace(/\\_/gu, '_'), /DIRECT_PAYLOAD/u);
 });
 test('PPTX malformed XML in any package part fails before returning a readable prefix', () => {
   for (const part of ['ppt/presentation.xml', 'ppt/_rels/presentation.xml.rels',

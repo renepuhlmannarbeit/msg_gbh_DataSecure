@@ -1,6 +1,38 @@
 # Aktives Entwicklungsbacklog
 
-Quellstand: 3.2.0-rc173 (Entwicklungsstand; noch keine neue Paketfreigabe).
+Quellstand: 3.2.0-rc173 (veröffentlicht); neue unveröffentlichte Folgearbeit.
+
+## BL-049.4 – Legacy-Zellverbindungen und umfassende Konvertierungsrobustheit
+
+23.10.2026 ausdrücklich beauftragt, in Arbeit: Word-w:hMerge korrekt ergänzen,
+unterstützte Dateitypen systematisch auf fehlende Inhaltsmodelle/Renderer und
+vermeidbare Dateistopps prüfen, aktuelle bekannte Internet-/GitHubverfahren am
+tatsächlichen eigenen Code vergleichen und sichere Verbesserungen umsetzen.
+Möglichst viel geprüftes Original als lesbares MD erhalten; unabhängige
+Auslassungen sichtbar melden. Kein allgemeiner catch, keine erfundenen/leeren
+Erfolge oder Abschaltung von Quell-/Container-/Guard-/Prozess-/Residual-/
+Ressourcenprüfungen. Offline, Windows+beideMacs, ohne Applekonto/Developer-ID.
+[Arbeitsplan, Befunde und Rendererentscheidung](../acceptance/CONVERSION_RESILIENCE_REVIEW_20261023.md).
+RC173-Downloads/Tag und alte Nutzerläufe unverändert; Desktoptests Nutzer.
+
+Erstes unveröffentlichtes Delta implementiert und unabhängig quellenrevalidiert:
+hMerge, Standalone-BOM-UTF16, Excel-ST_Xstring einschließlich x:v/Formelcache,
+PPTX-Folienlisten/Notiznamespaces, optionale PDFmetadatengrenzen und statische
+PNGvarianten über bestehendes Canvas. Zusätzlich echte zellinterne/Header-/
+Cache-Privacybefunde kausal geschlossen; Original-REDs erhalten. Gemeinsame
+Vier native Konvertersuiten unter `dist/rc174-conversion-followup-v2-20261023`
+PASS/stabil (PDF,70Worker/49Office/43Grafik). Dessen45Quellsuiten Exit0, originales
+FINAL wegen wechselnder rg-Ignore-Inventarisierung FAIL erhalten.590gebundene
+Dateien direkt bytegleich; frischer45er-Gegenlauf mit591Gitinputs unter
+`dist/rc174-conversion-followup-v3-20261023` vollständig PASS/Exit0/stabil,
+Ende21:19:39.353UTC. Gemeinsamer Produkt-FP
+`0830f92ce05aa4073f778936784e55b02698bc7230e761479c9e23b99be8cc66`/353.
+Erste Implementierungs-/Recherchephase abgeschlossen; keine neue Paketfreigabe.
+Weitere offene Umsetzungspakete explizit im Arbeitsplan: indexgebundene Charts/
+Chartsheets, OMML, klassische Kommentarbezüge, passive PDFformularwerte,
+weitere Codec-/OPCmodelle und ggf. separat isolierter Office-Renderer. Konkreter
+Docling-/Calamine-/MarkItDowncode und offizielle Format-/Rendererquellen gelesen;
+keine pauschale Drittbibliothek-/Rechte-/Ressourcenlockerung oder Universalzusage.
 
 ## BL-049.3 – Tabellen ohne pauschalen Layoutstopp / RC173 (23.10.2026)
 

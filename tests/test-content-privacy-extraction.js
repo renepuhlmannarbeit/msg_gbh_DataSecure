@@ -9,6 +9,32 @@ const options = (change = {}) => ({ schema: 'datasecure-content-options/1', mark
 const source = (type, markdown, contract = options(), more = {}) => createMarkdownExtraction({ source_type: type, markdown,
   coverage: { status: 'complete', reason_codes: [] }, ...(contract ? { content_options: contract } : {}), ...more });
 
+testAsync('explicit UTF-16 CSV BOMs preserve the actual privacy header and values, without guessed decoding', async () => {
+  const { extractMarkdownBuffer } = require('../plugins/data-secure/server/standalone/markdown-extractor');
+  const { anonymizeMarkdown } = require('../plugins/data-secure/server/gateway/compliance');
+  const text = 'Name;Fachtext\r\nAnna Berger;ÄÖÜß 😀 FHIR\r\nMurat Kaya;€ 42';
+  for (const markdownOutput of ['content-v1','notes-v1']) {
+    const contract = options({markdownOutput,scanOcr:false,imageOcr:false});
+    const convert = async bytes => {const actual = extractMarkdownBuffer(bytes,'.csv',{markdownOutput});
+      return createMarkdownExtraction({source_type:actual.source_type,markdown:actual.markdown,
+        coverage:actual.coverage,content_options:contract});};
+    const expected = await extractSourceForPrivacy(Buffer.from(text),'.csv',{contentOptions:contract,convertBuffer:convert});
+    for (const endian of ['le','be']) {
+      const encoded = Buffer.from(text,'utf16le'); if(endian === 'be') encoded.swap16();
+      const bytes = Buffer.concat([Buffer.from(endian === 'le' ? [0xff,0xfe] : [0xfe,0xff]),encoded]);
+      const original = Buffer.from(bytes);
+      const actual = await extractSourceForPrivacy(bytes,'.csv',{contentOptions:contract,convertBuffer:convert});
+      assert.deepEqual(actual,expected);
+      for (const profile of ['applicant','personnel_profile']) {
+        const result = anonymizeMarkdown(actual.markdown,profile,{productChannel:'standalone',contentOptions:contract});
+        assert.doesNotMatch(result.text,/Anna Berger|Murat Kaya/u);
+        assert.match(result.text,/ÄÖÜß 😀 FHIR/u);
+      }
+      assert.deepEqual(bytes,original);
+    }
+  }
+});
+
 testAsync('full contracts add text formats without widening legacy or Cowork', async () => {
   for (const extension of ['.txt', '.md', '.markdown', '.csv']) {
     assert.equal(isMarkdownFirstPrivacyExtension(extension, 'standalone', options()), true);

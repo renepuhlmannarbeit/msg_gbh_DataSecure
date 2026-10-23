@@ -193,10 +193,11 @@ function privacyConsumerOptions(options) {
 
 function csvPrivacyMarkdown(bytes) {
   if (bytes.length > RESOURCE_LIMITS.MAX_CSV_SOURCE_BYTES) throw Object.assign(new Error('INPUT_FORMAT_LIMIT'), { code: 'INPUT_FORMAT_LIMIT' });
-  const { decodeUtf8Source, parseCsvDialect } = require('../document-parser');
+  const { parseCsvDialect } = require('../document-parser');
+  const { decodeStandaloneTextSource } = require('./source-text-codec');
   const { literalTableCell } = require('./markdown-literal-content');
   try {
-    const { rows } = parseCsvDialect(decodeUtf8Source(bytes), { preserveRecords: true });
+    const { rows } = parseCsvDialect(decodeStandaloneTextSource(bytes), { preserveRecords: true });
     if (!rows.length) throw new Error('CSV_EMPTY');
     const width = rows[0].length;
     if (rows.some(row => row.length !== width && !(row.length === 1 && row[0] === ''))) throw new Error('CSV_ROW_WIDTH_INVALID');

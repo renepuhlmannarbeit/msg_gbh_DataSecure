@@ -492,7 +492,8 @@ function rasterOperation(observed, created) {
   } };
   return vm.runInNewContext(`(function(){${workerSlice('function dimensions(', 'function checkedModels(')}${workerSlice('function hasRasterContrast(', 'function imageOmission(')};return imageMarkdown;})()`, {
     Buffer, Uint8ClampedArray, fail: integrationFail, canvasApi: () => canvasApi, errors: new Set(ERROR_CODES), MAX_IMAGE_BYTES, MAX_PIXELS,
-    decodePng, decodeBmp: require('../plugins/data-secure/server/images/bmp').decodeBmp, createMarkdownExtraction: makeExtraction,
+    decodePng, decodeRasterPng: require('../plugins/data-secure/server/standalone/png-raster-decoder').decodeRasterPng,
+    decodeBmp: require('../plugins/data-secure/server/images/bmp').decodeBmp, createMarkdownExtraction: makeExtraction,
     ...require('../plugins/data-secure/server/standalone/readable-markdown'), ...require('../plugins/data-secure/server/standalone/ocr-quality'),
     recognize: async () => ({ text: 'FHIR', omitted: false, quality: require('../plugins/data-secure/server/standalone/ocr-quality').contactQuality(null, 'FHIR'), wordData: [], cropText: 'FHIR' })
   });
@@ -536,4 +537,93 @@ await test('invalid private OCR shares fail hard instead of disabling downsampli
     }
   } finally { bytes.fill(0); }
 });
+
+// Native PNG execution belongs to this explicit native gate, never source CI.
+const runtime = path.join(root, 'plugins/data-secure/server');
+const staticPng = require('../plugins/data-secure/server/standalone/png-raster-decoder');
+const pngVariants = require('./lib/png-static-variants.cjs');
+const { encodePng, decodeBmp } = require('../plugins/data-secure/server/image-sanitizer');
+const pilotRequire = createRequire(path.join(root, 'native/ocr/pilot/package.json'));
+function solidRgba(width, height, color = [255, 255, 255, 255]) {
+  const rgba = Buffer.alloc(width * height * 4);
+  for (let i = 0; i < width * height; i++) rgba.set(color, i * 4);
+  return { width, height, rgba };
+}
+await test('real existing Canvas decodes validated static PNG variants with exact whole-image pixel positions', async () => {
+  const prior=process.env.DISABLE_SYSTEM_FONTS_LOAD;process.env.DISABLE_SYSTEM_FONTS_LOAD='1';
+  assert.equal(pilotRequire('@napi-rs/canvas/package.json').version,'1.0.7');
+  const created=[],seen=[];
+  const wrapped={loadImage:async bytes=>{assert.ok(Buffer.isBuffer(bytes));seen.push(Buffer.from(bytes));return api.loadImage(bytes);},
+    createCanvas:(w,h)=>{const c=api.createCanvas(w,h);created.push(c);return c;}};
+  try{
+    for(const [color,depths]of [[0,[1,2,4,16]],[2,[16]],[3,[1,2,4,8]],[4,[16]],[6,[16]]])for(const depth of depths)for(const interlace of [0,1]){
+      const bytes=pngVariants.checker(depth,color,interlace,4),before=Buffer.from(bytes);
+      const image=await staticPng.decodeRasterPng(bytes,wrapped);assert.deepEqual([image.width,image.height],[9,7]);
+      for(let y=0;y<7;y++)for(let x=0;x<9;x++){
+        const expected=color===3?((x+y)%2?[0,0,255,255]:[255,0,0,255]):
+          [...Array(3)].map((_,c)=>[0,4].includes(color)?(x+y)%2*255:(x+y+c)%2*255).concat(255);
+        assert.deepEqual([...image.rgba.subarray((y*9+x)*4,(y*9+x+1)*4)],expected,`${color}/${depth}/${interlace} @ ${x},${y}`);
+      }
+      assert.deepEqual(bytes,before);image.rgba.fill(0);
+    }
+    const metadata=pngVariants.chunks(pngVariants.checker(1));metadata.splice(1,0,['tEXt',Buffer.from('Author\0PRIVATE_PNG_METADATA')]);
+    await staticPng.decodeRasterPng(pngVariants.assemble(metadata),wrapped);
+    assert.ok(seen.every(bytes=>!bytes.includes('PRIVATE_PNG_METADATA')&&!bytes.includes('tEXt')),'native input is private critical pixel chunks only');
+    for(const depth of [1,2,4]) {
+      const gray=pngVariants.png({width:2,height:1,depth,color:0,samples:[0,2**depth-1],alpha:[1,0]});
+      const before=Buffer.from(gray),decoded=await staticPng.decodeRasterPng(gray,wrapped);
+      assert.deepEqual([...decoded.rgba].filter((_value,index)=>index%4===3),[0,255],'ignored high tRNS sample bits cannot erase transparency');
+      assert.deepEqual(gray,before);
+    }
+    const own=encodePng(solidRgba(2,2));let calls=0;
+    const decoded=await staticPng.decodeRasterPng(own,{loadImage:()=>{calls++;throw Error('must not run');}});
+    assert.equal(calls,0);assert.deepEqual(decoded.rgba,solidRgba(2,2).rgba);
+    const apng=pngVariants.chunks(pngVariants.checker(1));apng.splice(1,0,['acTL',Buffer.from([0,0,0,1,0,0,0,0])]);
+    const badCrc=Buffer.from(pngVariants.checker(1));badCrc[29]^=1;
+    const badDeflate=pngVariants.chunks(pngVariants.checker(1));
+    badDeflate.find(item=>item[0]==='IDAT')[1]=zlib.deflateSync(Buffer.alloc(100000));
+    for(const bytes of [pngVariants.assemble(apng),Buffer.from('damaged PNG'),badCrc,pngVariants.assemble(badDeflate)]){
+      await assert.rejects(staticPng.decodeRasterPng(bytes,{loadImage:()=>{calls++;throw Error('must not run');}}));
+    }
+    assert.equal(calls,0,'unsupported APNG and damaged bytes never reach native decode');
+    await assert.rejects(staticPng.decodeRasterPng(pngVariants.checker(1),{}),{code:'CONVERSION_POLICY_FAILED'});
+    await assert.rejects(staticPng.decodeRasterPng(pngVariants.checker(1),{...wrapped,loadImage:async()=>({width:10,height:7})}),{code:'CONVERSION_IMAGE_INVALID'});
+    assert.ok(created.every(c=>c.width===1&&c.height===1),'owned native canvases released');
+  }finally{for(const c of created){c.width=1;c.height=1;}for(const bytes of seen)bytes.fill(0);
+    if(prior===undefined)delete process.env.DISABLE_SYSTEM_FONTS_LOAD;else process.env.DISABLE_SYSTEM_FONTS_LOAD=prior;}
+});
+await test('actual worker raster slice consumes validated PNG fallback and composites indexed alpha against white', async () => {
+  const fs=require('node:fs'),vm=require('node:vm');
+  const workerFile=path.join(runtime,'standalone/conversion-worker-child.js'),source=fs.readFileSync(workerFile,'utf8');
+  const slice=(a,b)=>{const from=source.indexOf(a),to=source.indexOf(b,from);assert.ok(from>=0&&to>from);return source.slice(from,to);};
+  const prior=process.env.DISABLE_SYSTEM_FONTS_LOAD;process.env.DISABLE_SYSTEM_FONTS_LOAD='1';
+  const created=[],seen=[];
+  const wrapped={...api,createCanvas:(width,height)=>{const c=api.createCanvas(width,height);created.push(c);return c;}};
+  const options={schema:'datasecure-content-options/1',markdownOutput:'content-v1',scanOcr:true,imageOcr:true};
+  const quality=require('../plugins/data-secure/server/standalone/ocr-quality');
+  const operation=vm.runInNewContext(`(function(){${slice('function dimensions(','function checkedModels(')}${slice('function hasRasterContrast(','function imageOmission(')};return imageMarkdown;})()`,{
+    Buffer,Uint8ClampedArray,fail:code=>{throw Object.assign(new Error(code),{code});},
+    canvasApi:()=>wrapped,errors:new Set(require('../plugins/data-secure/server/core/conversion-worker-contract').ERROR_CODES),
+    MAX_IMAGE_BYTES:require('../plugins/data-secure/server/images/common').MAX_IMAGE_BYTES,
+    MAX_PIXELS:require('../plugins/data-secure/server/images/common').MAX_PIXELS,
+    decodePng,decodeRasterPng:staticPng.decodeRasterPng,decodeBmp,
+    // VM globals have another Object.prototype; preserve the production DTO
+    // validation by the same explicit clone bridge as other source-slice tests.
+    createMarkdownExtraction:value=>require('../plugins/data-secure/server/standalone/markdown-contract').createMarkdownExtraction(structuredClone(value)),
+    ...require('../plugins/data-secure/server/standalone/readable-markdown'),...quality,
+    recognize:async canvas=>{seen.push([...canvas.getContext('2d').getImageData(0,0,canvas.width,canvas.height).data]);
+      return{text:'PNG_RASTER_BOUND',omitted:false,quality:quality.contactQuality(null,'PNG_RASTER_BOUND'),wordData:[],cropText:'PNG_RASTER_BOUND'};}
+  });
+  try{
+    const bytes=pngVariants.png({width:2,height:1,depth:1,color:3,samples:[0,1],palette:[[0,0,0],[0,0,0]],alpha:[0,255]});
+    const before=Buffer.from(bytes),result=await operation(bytes,'png','content-v1',options,{ocr:{},cropBudget:{bytes:0,pixels:0}});
+    assert.equal(result.markdown,'PNG_RASTER_BOUND');
+    assert.deepEqual(seen,[[255,255,255,255,0,0,0,255]]);
+    assert.deepEqual(bytes,before);
+    await assert.rejects(operation(bytes,'png','content-v1',{...options,imageOcr:false},{ocr:{}}),{code:'IMAGE_OCR_REQUIRED'});
+    assert.equal(seen.length,1,'OCR consent remains required before decode');
+    assert.ok(created.every(c=>c.width===1&&c.height===1));
+  }finally{for(const c of created){c.width=1;c.height=1;}if(prior===undefined)delete process.env.DISABLE_SYSTEM_FONTS_LOAD;else process.env.DISABLE_SYSTEM_FONTS_LOAD=prior;}
+});
+
 console.log(`passed ${passed} bounded Office visual decoder groups; no desktop/native-target UAT claim`);

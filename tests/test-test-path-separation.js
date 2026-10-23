@@ -97,6 +97,14 @@ test('native conversion resources are required by PKG-04, not silently added to 
   const pkg04 = fs.readFileSync(path.join(root, 'scripts/run-pkg-04.ps1'), 'utf8');
   assert.ok(pkg04.indexOf("@('run', 'test:standalone:conversion')") < pkg04.indexOf("foreach ($label"));
   assert.match(pkg04, /Invoke-Checked 'npm.cmd' @\('run', 'test:standalone:conversion'\)/u);
+  const pngSource = fs.readFileSync(path.join(__dirname, 'test-image-sanitizer.js'), 'utf8');
+  const pngNative = fs.readFileSync(path.join(__dirname, 'test-office-visual-decoder.mjs'), 'utf8');
+  assert.doesNotMatch(pngSource, /native\/ocr\/pilot|@napi-rs\/canvas/u,
+    'pure PNG preflight checks must not acquire native Canvas in source CI');
+  for (const name of ['real existing Canvas decodes validated static PNG variants',
+    'actual worker raster slice consumes validated PNG fallback']) {
+    assert.ok(pngNative.includes(name), 'real PNG execution remains in the explicit native conversion gate');
+  }
 });
 
 test('standalone package source contracts run in every product gate as well as the target gate', () => {

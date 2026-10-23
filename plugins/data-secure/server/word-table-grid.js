@@ -15,8 +15,46 @@ function wordGridNumber(value, allowZero, error) {
   return number;
 }
 
+// hMerge is a sequence of physical cells, each of which still consumes its
+// own gridSpan. Build a parser-local logical view instead of overwriting the
+// first span or dropping continuation payloads. The original tree and every
+// source node remain intact; only the view's children join the actual members
+// in source order. Nested tables therefore retain their own independent grid.
+function horizontalWordCells(row, error) {
+  const groups = [];
+  let group = null;
+  for (const cell of row.children) {
+    if (cell.horizontalMerge === 'continue') {
+      if (!group) throw error();
+      group.push(cell);
+    } else {
+      group = cell.horizontalMerge === 'restart' ? [cell] : null;
+      groups.push(group || [cell]);
+    }
+  }
+  return groups.map(members => {
+    if (members.length === 1) return members[0];
+    const verticalMerge = members[0].verticalMerge;
+    // A horizontal owner covers the complete union. A 2D continuation can
+    // only inherit that exact rectangle: differing vertical states inside a
+    // single horizontal group do not prove a common owner. Never promote the
+    // anchor's vMerge to physical members which omitted or restarted it.
+    if (members.some(cell => cell.verticalMerge !== verticalMerge)) throw error();
+    return { type: 'tc', boxes: members[0].boxes,
+      children: members.flatMap(cell => cell.children),
+      gridSpan: members.reduce((sum, cell) => sum + (cell.gridSpan || 1), 0),
+      verticalMerge, horizontalMerge: 'restart', sourceCells: members };
+  });
+}
+
 function bindWordTableGrids(root, error) {
   const pending = [root];
+  const textPresence = new WeakMap();
+  function hasText(node) {
+    if (typeof node === 'string') return /\S/u.test(node);
+    if (!textPresence.has(node)) textPresence.set(node, node.children.some(hasText));
+    return textPresence.get(node);
+  }
   let gridSlots = 0;
   while (pending.length) {
     const node = pending.pop();
@@ -26,6 +64,7 @@ function bindWordTableGrids(root, error) {
     if (node.children.length > MAX_WORD_TABLE_ROWS) throw error(true);
     let columns = node.gridColumns || 0;
     let complex = false;
+    let horizontalSplitContent = false;
     let previousMerges = new Map();
     const rows = [];
     for (let rowIndex = 0; rowIndex < node.children.length; rowIndex++) {
@@ -38,7 +77,7 @@ function bindWordTableGrids(root, error) {
       const cells = [];
       const merges = new Map();
       complex ||= column > 0 || (row.gridAfter || 0) > 0;
-      for (const cell of row.children) {
+      for (const cell of horizontalWordCells(row, error)) {
         const span = cell.gridSpan || 1;
         const end = column + span;
         if (end > MAX_WORD_TABLE_COLUMNS) throw error(true);
@@ -54,6 +93,9 @@ function bindWordTableGrids(root, error) {
           merges.set(column, { span, row: rowIndex });
         }
         complex ||= span !== 1 || Boolean(cell.verticalMerge);
+        // A merged header split over physical payloads must use the explicit
+        // field-aware projection, not an inferred GFM header such as Na<br>me.
+        horizontalSplitContent ||= Boolean(cell.sourceCells && cell.sourceCells.filter(hasText).length > 1);
         cells.push(positioned);
         column = end;
       }
@@ -67,7 +109,7 @@ function bindWordTableGrids(root, error) {
     }
     gridSlots += columns * rows.length;
     if (gridSlots > MAX_WORD_TABLE_GRID_SLOTS) throw error(true);
-    node.grid = { columns, complex, rows };
+    node.grid = { columns, complex, horizontalSplitContent, rows };
   }
 }
 

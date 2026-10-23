@@ -27,24 +27,39 @@ function utf8Size(text) {
 // Private source-bearing data: never spread into a Markdown artifact, export,
 // diagnosis or model response. Only an explicitly private document consumer may
 // retain this closed record. Plain strings render locally as text, not HTML.
-function validatePrivateDocumentMetadata(value) {
+function readPrivateDocumentMetadata(value, omitSizeOnly) {
   if (!exact(value, ['schema', 'source_type', 'entries']) || value.schema !== SCHEMA || value.source_type !== 'pdf' ||
       !Array.isArray(value.entries) || value.entries.length < 1 || value.entries.length > PDF_KEYS.length) invalid();
   const entryDescriptors = Object.getOwnPropertyDescriptors(value.entries);
   if (Object.getPrototypeOf(value.entries) !== Array.prototype || Reflect.ownKeys(entryDescriptors).length !== value.entries.length + 1 ||
       Array.from({ length: value.entries.length }, (_, index) => String(index)).some(key =>
         !entryDescriptors[key]?.enumerable || !Object.hasOwn(entryDescriptors[key], 'value'))) invalid();
-  let bytes = 0;
+  let bytes = 0, omittedEntries = 0;
   const seen = new Set(), entries = [];
   for (let index = 0; index < value.entries.length; index++) {
     const entry = entryDescriptors[String(index)].value;
     if (!exact(entry, ['key', 'value']) || !PDF_KEYS.includes(entry.key) || seen.has(entry.key) ||
-        typeof entry.value !== 'string' || !entry.value.length || entry.value.length > MAX_VALUE_CHARS) invalid();
-    bytes += utf8Size(entry.key) + utf8Size(entry.value);
-    if (bytes > MAX_TOTAL_BYTES) invalid();
+        typeof entry.value !== 'string' || !entry.value.length) invalid();
+    // Validate the whole entry before considering an optional size omission.
+    // In particular, an oversized malformed string/duplicate/accessor must
+    // not acquire a recovery path merely because it also exceeds a limit.
+    const entryBytes = utf8Size(entry.key) + utf8Size(entry.value);
     seen.add(entry.key);
+    if (entry.value.length > MAX_VALUE_CHARS || bytes + entryBytes > MAX_TOTAL_BYTES) {
+      if (!omitSizeOnly) invalid();
+      omittedEntries++;
+      continue;
+    }
+    bytes += entryBytes;
     entries.push(Object.freeze({ key: entry.key, value: entry.value }));
   }
-  return Object.freeze({ schema: SCHEMA, source_type: 'pdf', entries: Object.freeze(entries) });
+  const metadata = entries.length ? Object.freeze({ schema: SCHEMA, source_type: 'pdf', entries: Object.freeze(entries) }) : undefined;
+  return Object.freeze({ metadata, omitted_entries: omittedEntries });
 }
-module.exports = Object.freeze({ SCHEMA, PDF_KEYS, MAX_VALUE_CHARS, MAX_TOTAL_BYTES, validatePrivateDocumentMetadata });
+function validatePrivateDocumentMetadata(value) { return readPrivateDocumentMetadata(value, false).metadata; }
+// Only the PDF producer may omit whole optional metadata fields on a size-only
+// boundary. The public/private serialized validators above remain unchanged.
+// The caller must disclose omission; no raw omitted value leaves this helper.
+function selectOptionalPrivatePdfMetadata(value) { return readPrivateDocumentMetadata(value, true); }
+module.exports = Object.freeze({ SCHEMA, PDF_KEYS, MAX_VALUE_CHARS, MAX_TOTAL_BYTES,
+  validatePrivateDocumentMetadata, selectOptionalPrivatePdfMetadata });

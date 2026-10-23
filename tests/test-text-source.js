@@ -10,6 +10,37 @@ const pii = require('../plugins/data-secure/server/pii-engine');
 
 const { test, done, assert } = createSuite('Text and Markdown source contract');
 
+test('Standalone BOM decoding preserves UTF-16 LE/BE Unicode without widening the legacy parser', () => {
+  const { decodeStandaloneTextSource, sourceTextEncoding } = require('../plugins/data-secure/server/core/source-text-codec');
+  const text = 'Name: Anna Berger\r\nÄ Ö Ü ä ö ü ß € 😀 e\u0301\rEnde\tWert';
+  const le = Buffer.from(text, 'utf16le');
+  const be = Buffer.from(le); be.swap16();
+  for (const [prefix, payload, encoding] of [[Buffer.from([0xff,0xfe]),le,'utf-16le'], [Buffer.from([0xfe,0xff]),be,'utf-16be']]) {
+    const bytes = Buffer.concat([prefix,payload]), original = Buffer.from(bytes);
+    assert.equal(sourceTextEncoding(bytes, true),encoding);
+    assert.equal(sourceTextEncoding(bytes), 'utf-8');
+    assert.equal(decodeStandaloneTextSource(bytes),text);
+    assert.throws(() => decodeUtf8Source(bytes), /TEXT_ENCODING_INVALID/);
+    assert.deepEqual(bytes, original);
+  }
+  assert.equal(decodeStandaloneTextSource(Buffer.from('\ufeff'+text)),text);
+  assert.equal(decodeStandaloneTextSource(Buffer.from(text)),text);
+});
+
+test('Standalone BOM decoding refuses malformed surrogates, odd tails, controls and undeclared legacy encodings', () => {
+  const { decodeStandaloneTextSource } = require('../plugins/data-secure/server/core/source-text-codec');
+  for (const bytes of [[0xff,0xfe,0x41], [0xfe,0xff,0x00], [0xff,0xfe,0x00,0xd8],
+    [0xfe,0xff,0xdc,0x00], [0xc3,0x28], [0x4a,0xf6,0x72,0x67]]) {
+    assert.throws(() => decodeStandaloneTextSource(Buffer.from(bytes)), /TEXT_ENCODING_INVALID/);
+  }
+  for (const control of ['\0','\u0001','\u001b','\u007f']) {
+    const bytes = Buffer.concat([Buffer.from([0xff,0xfe]),Buffer.from('A'+control+'B','utf16le')]);
+    assert.throws(() => decodeStandaloneTextSource(bytes), /TEXT_CONTROL_INVALID/);
+  }
+  assert.throws(() => decodeStandaloneTextSource(Buffer.from('AB','utf16le')), /TEXT_CONTROL_INVALID/);
+  assert.throws(() => decodeStandaloneTextSource(Buffer.from([0xff,0xfe,0,0,0x41,0,0,0])), /TEXT_CONTROL_INVALID/);
+});
+
 test('UTF-8 BOM is removed and line endings plus Unicode are normalized', () => {
   const source = Buffer.concat([
     Buffer.from([0xEF, 0xBB, 0xBF]),

@@ -218,6 +218,57 @@ test('an interlaced or high bit depth PNG is refused instead of half decoded', (
   assert.throws(() => decodePng(interlaced), (e) => e instanceof ImageSafetyError);
 });
 
+// Standalone-only: the old synchronous sanitizer remains deliberately narrow.
+// A complete bounded preflight, not its thrown error, authorizes native PNG.
+const staticPng = require('../plugins/data-secure/server/standalone/png-raster-decoder');
+const pngVariants = require('./lib/png-static-variants.cjs');
+test('static PNG preflight admits exact low-depth, indexed, 16-bit and Adam7 scanlines', () => {
+  for (const [color, depths] of [[0,[1,2,4,8,16]],[2,[8,16]],[3,[1,2,4,8]],[4,[8,16]],[6,[8,16]]]) {
+    for (const depth of depths) for (const interlace of [0,1]) for (const filter of [0,1,2,3,4]) {
+      const bytes = pngVariants.checker(depth,color,interlace,filter), before = Buffer.from(bytes);
+      const plan = staticPng.inspectStaticPng(bytes);
+      assert.deepEqual([plan.width,plan.height,plan.depth,plan.color,plan.interlace],[9,7,depth,color,interlace]);
+      assert.equal(plan.ownSubset,depth===8&&interlace===0&&color!==3);
+      assert.deepEqual(bytes,before); plan.nativeBytes.fill(0);
+    }
+  }
+});
+test('static PNG CRC/order/type/palette/scanline negatives never become unsupported-feature dispatch', () => {
+  const good=pngVariants.checker(2), entries=pngVariants.chunks(good), get=name=>entries.find(item=>item[0]===name)[1];
+  const mutate=fn=>pngVariants.assemble(fn(entries.map(([name,data])=>[name,Buffer.from(data)])));
+  const raw=zlib.inflateSync(get('IDAT'));
+  const badFilter=Buffer.from(raw);badFilter[0]=5;
+  const badPalette=Buffer.from(raw);badPalette[1]=0xff;
+  const badHeader=Buffer.from(get('IHDR'));badHeader[8]=16;
+  const badReserved=Buffer.from(good);badReserved[14]=0x68;badReserved.writeUInt32BE(crc32(badReserved.subarray(12,29)),29);
+  const badCrc=Buffer.from(good);badCrc[29]^=1;
+  const badHighType=Buffer.from(good);badHighType[12]|=128;badHighType.writeUInt32BE(crc32(badHighType.subarray(12,29)),29);
+  const badLength=Buffer.from(good);badLength.writeUInt32BE(0x7fffffff,8);
+  const badDimension=Buffer.from(get('IHDR'));badDimension.writeUInt32BE(30000001,0);badDimension.writeUInt32BE(1,4);
+  const cases=[badCrc,badReserved,badHighType,badLength,Buffer.concat([good,Buffer.from('x')]),good.subarray(0,-1),
+    mutate(x=>[x[0],x[0],...x.slice(1)]), mutate(x=>x.filter(i=>i[0]!=='PLTE')),
+    mutate(x=>x.map(i=>i[0]==='IHDR'?['IHDR',badHeader]:i)),
+    mutate(x=>x.map(i=>i[0]==='PLTE'?['PLTE',Buffer.alloc(15)]:i)),
+    mutate(x=>[x[0],['tRNS',Buffer.from([0])],...x.slice(1)]),
+    mutate(x=>[...x.slice(0,-1),['tRNS',Buffer.from([0])],x.at(-1)]),
+    mutate(x=>[x[0],x[1],['IDAT',get('IDAT').subarray(0,2)],['tEXt',Buffer.from('A\0B')],['IDAT',get('IDAT').subarray(2)],x.at(-1)]),
+    ...[badFilter,badPalette,raw.subarray(0,-1),Buffer.concat([raw,Buffer.from([0])])].map(value=>
+      mutate(x=>x.map(i=>i[0]==='IDAT'?['IDAT',zlib.deflateSync(value)]:i))),
+    mutate(x=>x.map(i=>i[0]==='IDAT'?['IDAT',Buffer.concat([i[1],Buffer.from([0])])]:i)),
+    mutate(x=>[...x.slice(0,-1),['IEND',Buffer.from([0])]])];
+  for(const bytes of cases)assert.throws(()=>staticPng.inspectStaticPng(bytes),e=>e instanceof staticPng.PngRasterError&&e.code==='CONVERSION_IMAGE_INVALID');
+  assert.throws(()=>staticPng.inspectStaticPng(mutate(x=>x.map(i=>i[0]==='IHDR'?['IHDR',badDimension]:i))),{code:'CONVERSION_PIXEL_LIMIT'});
+});
+test('static PNG explicitly refuses APNG and unknown critical/ancillary features', () => {
+  const entries=pngVariants.chunks(pngVariants.checker(1));
+  for(const [extra,feature]of [[['acTL',Buffer.from([0,0,0,1,0,0,0,0])],'APNG'],[['ABCD',Buffer.alloc(0)],'UNKNOWN_CRITICAL'],[['abCd',Buffer.alloc(0)],'UNKNOWN_ANCILLARY']]){
+    const bytes=pngVariants.assemble([entries[0],extra,...entries.slice(1)]);
+    assert.throws(()=>staticPng.inspectStaticPng(bytes),e=>e instanceof staticPng.PngUnsupportedFeatureError&&e.feature===feature);
+  }
+  for(const value of ['https://example.invalid/x.png','C:/private.png','<svg/>',new Uint8Array([1,2])])
+    assert.throws(()=>staticPng.inspectStaticPng(value),{code:'CONVERSION_IMAGE_INVALID'});
+});
+
 // ---------------------------------------------------------------------------
 // BMP
 // ---------------------------------------------------------------------------

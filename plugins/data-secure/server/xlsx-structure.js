@@ -90,10 +90,13 @@ function disjointMergeRanges(ranges) {
   return Object.freeze(ranges);
 }
 
-function commentXstring(value) {
-  // Only the schema-typed modern-comment ST_Xstring fields use this Office
-  // layer, after XML decoding and before Markdown/privacy. One replacement
-  // pass preserves _x005F_xHHHH_ as a literal _xHHHH_, never a second escape.
+function schemaXstring(value) {
+  // Only actual schema-typed SpreadsheetML text/modern-comment fields use
+  // this Office layer, after complete XML text assembly and before Markdown/
+  // privacy. One pass preserves _x005F_xHHHH_ as literal _xHHHH_, never a
+  // second escape. Cell x:v also has this schema type, but its decoded value
+  // must still pass the separate cell-type interpretation. Formulas and
+  // arbitrary input do not use this Office layer.
   const decoded = value.replace(/_x([0-9a-fA-F]{4})_/gu,
     (_, hex) => String.fromCharCode(Number.parseInt(hex, 16)));
   // Escapes must not bypass the existing source-character policy (including
@@ -138,16 +141,31 @@ function createXlsxReader(decode, options = {}) {
   }
   function sharedStrings(xml) {
     const result = [];
-    let item = null, chunks = [], chars = 0;
+    let item = null, chunks = [], chars = 0, currentText = null;
     const root = parse(xml, {
-      start(node) { if (main(node, 'si') && main(node.parent, 'sst')) { item = node; chunks = []; } },
+      start(node) {
+        // x:t is a simple ST_Xstring leaf; nested elements must not hide
+        // source text or join a false escape around an unmodelled child.
+        if (currentText) throw structureError();
+        if (main(node, 'si') && main(node.parent, 'sst')) { item = node; chunks = []; }
+        else if (item && richText(node, item)) currentText = { node, chunks: [] };
+      },
       text(value, node) {
-        if (item && richText(node, item)) {
+        if (currentText?.node === node) {
           chars += value.length; if (chars > 8000000) throw structureError(true);
-          chunks.push(value);
+          currentText.chunks.push(value);
         }
       },
-      end(node) { if (node === item) { if (result.length >= 200000) throw structureError(true); result.push(chunks.join('')); item = null; } }
+      end(node) {
+        if (currentText?.node === node) {
+          const value = currentText.chunks.join('');
+          // Each separate rich-text x:t has its own typed value. Joining runs
+          // before decoding would manufacture escapes across field boundaries.
+          chunks.push(MAIN_NS.has(node.namespaceURI) ? schemaXstring(value) : value);
+          currentText = null;
+        }
+        if (node === item) { if (result.length >= 200000) throw structureError(true); result.push(chunks.join('')); item = null; }
+      }
     });
     expect(root, 'sst');
     return result;
@@ -204,7 +222,7 @@ function createXlsxReader(decode, options = {}) {
       const id = attr(node, 'id')?.toUpperCase(), name = attr(node, 'displayName');
       if (!GUID.test(id || '') || name === undefined || result.has(id)) throw structureError();
       if (result.size >= 10000 || name.length > 4096) throw structureError(true);
-      result.set(id, commentXstring(name));
+      result.set(id, schemaXstring(name));
     } });
     if (root.namespaceURI !== COMMENTS_NS || root.localName !== 'personList') throw structureError();
     return result;
@@ -235,7 +253,7 @@ function createXlsxReader(decode, options = {}) {
         }
       },
       end(node) { if (comment?.node === node) { result.push({ id: comment.id, parentId: comment.parentId,
-        ref: comment.ref, author: comment.author, text: commentXstring(chunks.join('')) }); comment = null; } }
+        ref: comment.ref, author: comment.author, text: schemaXstring(chunks.join('')) }); comment = null; } }
     });
     if (root.namespaceURI !== COMMENTS_NS || root.localName !== 'ThreadedComments') throw structureError();
     const byId = new Map(result.map(value => [value.id, value]));
@@ -265,6 +283,9 @@ function createXlsxReader(decode, options = {}) {
     }
     const root = parse(xml, {
       start(node) {
+        // Both x:v (ST_Xstring) and x:f (formula text) are simple leaves.
+        // Never hide child payloads or manufacture a value around a child.
+        if (field || cell?.inlineText) throw structureError();
         if(!node.parent){
           if(!main(node,'worksheet'))throw structureError();
           worksheetRoot=node;
@@ -325,25 +346,42 @@ function createXlsxReader(decode, options = {}) {
           cell.fields.add(node.localName);
           if (main(node, 'is')) cell.inlineNode = node;
           else field = { node, chunks: [] };
-        }
+        } else if (cell?.inlineNode && richText(node, cell.inlineNode)) cell.inlineText = { node, chunks: [] };
       },
       text(value, node) {
         if ((node === mergeNode || node === mergeContainer) && /[^ \t\r\n]/u.test(value)) throw structureError();
         if (field && node === field.node) { field.chunks.push(value); chars += value.length; }
-        else if (cell?.inlineNode && richText(node, cell.inlineNode)) { cell.inline.push(value); chars += value.length; }
+        else if (cell?.inlineText?.node === node) { cell.inlineText.chunks.push(value); chars += value.length; }
         if (chars > 8000000) throw structureError(true);
       },
       end(node) {
+        if (cell?.inlineText?.node === node) {
+          const value = cell.inlineText.chunks.join('');
+          cell.inline.push(MAIN_NS.has(node.namespaceURI) ? schemaXstring(value) : value);
+          cell.inlineText = null;
+        }
         if (node === mergeNode) mergeNode = null;
         if (node === mergeContainer) {
           if (!mergeRanges.length || (mergeCount !== undefined && mergeCount !== mergeRanges.length)) throw structureError();
           mergeContainer = null;
         }
         if (field?.node === node) {
-          cell[main(node, 'f') ? 'formula' : 'value'] = field.chunks.join(''); field = null;
+          const value = field.chunks.join(''), formula = main(node, 'f');
+          cell[formula ? 'formula' : 'value'] = !formula && MAIN_NS.has(node.namespaceURI)
+            ? schemaXstring(value) : value;
+          field = null;
         }
         if (cell?.node === node) {
           let value = cell.value ?? '';
+          if (MAIN_NS.has(node.namespaceURI) && cell.value !== null) {
+            // ST_Xstring is the wire representation, not authority to turn
+            // arbitrary decoded text into a Boolean/number/shared index.
+            // Shared-string bounds remain checked by their own guard below;
+            // number formatting still owns representability and precision.
+            if (cell.type === 'b' && !['0', '1', 'true', 'false'].includes(value)) throw structureError();
+            if ((cell.type === undefined || cell.type === 'n') && value !== '' &&
+                !/^[+-]?(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[Ee][+-]?[0-9]+)?$/u.test(value)) throw structureError();
+          }
           if (cell.type === 's' && cell.value !== null) {
             if (!/^[0-9]+$/u.test(value) || !Object.hasOwn(shared, Number(value))) {
               const error = new Error('XLSX-Zeichenkettenverweis ist ungültig.'); error.code = 'XLSX_SHARED_STRING_INVALID'; throw error;

@@ -19,6 +19,7 @@ const CORE_POLICY_FILES = Object.freeze([
   'core/markdown-first-privacy.js',
   'core/person-field-policy.js',
   'core/processing-mode.js',
+  'core/source-text-codec.js',
   'standalone/anonymized-artifact.js',
   'standalone/anonymized-store.js',
   'gateway/batch-review-publication.js',

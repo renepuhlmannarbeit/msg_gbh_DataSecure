@@ -42,6 +42,36 @@ async function main() {
       assert.throws(() => contract.createMarkdownExtraction({ ...input, coverage: { ...input.coverage, status: 'complete' } }));
     }
   });
+  await check('optional PDF metadata omits whole size-only fields without weakening the serialized validator', () => {
+    const record = entries => ({ schema: metadata.SCHEMA, source_type: 'pdf', entries });
+    const valid = { key: 'Author', value: 'Änne Beispiel 😀' };
+    const oversized = { key: 'Title', value: 'T'.repeat(metadata.MAX_VALUE_CHARS + 1) };
+    const input = record([oversized, valid]), before = JSON.stringify(input);
+    const selected = metadata.selectOptionalPrivatePdfMetadata(input);
+    assert.equal(selected.omitted_entries, 1);
+    assert.deepEqual(selected.metadata, record([valid]));
+    assert.equal(JSON.stringify(input), before);
+    assert.deepEqual(metadata.validatePrivateDocumentMetadata(selected.metadata), selected.metadata);
+    assert.throws(() => metadata.validatePrivateDocumentMetadata(input), { code: 'PRIVATE_DOCUMENT_METADATA_INVALID' });
+    assert.deepEqual(metadata.selectOptionalPrivatePdfMetadata(record([oversized])), { metadata: undefined, omitted_entries: 1 });
+    const maximum = record([{ key: 'Title', value: '😀'.repeat(metadata.MAX_VALUE_CHARS / 2) }]);
+    assert.deepEqual(metadata.selectOptionalPrivatePdfMetadata(maximum), { metadata: maximum, omitted_entries: 0 });
+    const total = record(metadata.PDF_KEYS.map(key => ({ key, value: '漢'.repeat(metadata.MAX_VALUE_CHARS) })));
+    const bounded = metadata.selectOptionalPrivatePdfMetadata(total);
+    assert.ok(bounded.omitted_entries > 0);
+    assert.deepEqual(metadata.validatePrivateDocumentMetadata(bounded.metadata), bounded.metadata);
+    for (const invalid of [
+      record([{ ...oversized, value: oversized.value + '\ud800' }]),
+      record([oversized, oversized]), record([{ key: 'Unknown', value: oversized.value }]),
+      record([{ key: 'Title', value: 42 }]), record([]),
+      { ...input, schema: 'unknown' }, { ...input, source_type: 'docx' },
+      record(Object.assign([valid], { extra: true })), record([Object.assign(Object.create({}), valid)])
+    ]) assert.throws(() => metadata.selectOptionalPrivatePdfMetadata(invalid), { code: 'PRIVATE_DOCUMENT_METADATA_INVALID' });
+    let accessed = false;
+    const accessor = { key: 'Title', get value() { accessed = true; return oversized.value; } };
+    assert.throws(() => metadata.selectOptionalPrivatePdfMetadata(record([accessor])), { code: 'PRIVATE_DOCUMENT_METADATA_INVALID' });
+    assert.equal(accessed, false);
+  });
   await check('Office visual families are planned without decoder execution; unknown formats retain explicit omissions', () => {
     for (const ext of ['emf','wmf','svg','gif','tiff','tif','webp','other']) {
       const rows = [attachment('png', tiny), attachment(ext, Buffer.from('not executable'), 1), attachment('png', tiny, 2)];
@@ -123,6 +153,7 @@ async function main() {
     const context = { path,root:'isolated-local-runtime',errors,fail,MAX_UNITS,...contract,...readable,...visuals,...metadata,
       createMarkdownExtraction:input=>contract.createMarkdownExtraction(JSON.parse(JSON.stringify(input))),
       validatePrivateDocumentMetadata:input=>metadata.validatePrivateDocumentMetadata(JSON.parse(JSON.stringify(input))),
+      selectOptionalPrivatePdfMetadata:input=>metadata.selectOptionalPrivatePdfMetadata(JSON.parse(JSON.stringify(input))),
       populated:value=>Boolean(value && (typeof value !== 'object' || Object.keys(value).length)),
       pdfOcrAction:(opts,facts)=>pdfOcrAction(opts,JSON.parse(JSON.stringify(facts))),nativeTextSeparator,nativeColumnOrder,renderPdfOcrLayer,contactQuality,contactSpans,
       mockModule:{ OPS:{paintImageXObject:1},AnnotationMode:{DISABLE:0},getDocument:()=>({promise:Promise.resolve(document),destroy:async()=>{destroyed++;}}) },
@@ -142,6 +173,29 @@ async function main() {
     assert.match(output.result.markdown,/Erster Ä ß/u); assert.match(output.result.markdown,/Zweiter/u);
     assert.ok(output.result.coverage.reason_codes.includes('PDF_IMAGE_NOT_READ'));
     assert.deepEqual(output.frames.map(row=>row.index),[0,0,1,1]);
+  });
+  await check('actual PDF producer omits only optional size-bound metadata while all useful page checkpoints survive', async () => {
+    const title = 'PRIVATE_OVERSIZE_SENTINEL'.repeat(200);
+    const info = { Title: title, Author: 'Valid private author' };
+    const output = await run([page('Readable first'), page('Readable second')], off,
+      { document: { getMetadata: async () => ({ metadata: null, info }) } });
+    assert.match(output.result.markdown, /Readable first[\s\S]*Readable second/u);
+    assert.doesNotMatch(output.result.markdown, /PRIVATE_OVERSIZE_SENTINEL|Valid private author/u);
+    assert.deepEqual(output.result.private_document_metadata.entries, [{ key: 'Author', value: info.Author }]);
+    assert.ok(output.result.coverage.reason_codes.includes('TEXT_LIMIT_PARTIAL'));
+    assert.ok(output.frames.every(frame => frame.result.coverage.reason_codes.includes('TEXT_LIMIT_PARTIAL')));
+    assert.equal(info.Title, title);
+    const omitted = await run([page('Readable')], off,
+      { document: { getMetadata: async () => ({ metadata: null, info: { Title: title } }) } });
+    assert.equal(omitted.result.private_document_metadata, undefined);
+    let requested = 0;
+    await assert.rejects(run([page('Body')], off, { document: {
+      getMetadata: async () => ({ metadata: null, info: { Title: title + '\ud800' } }),
+      getPage: async () => { requested++; return page('Body'); }
+    } }), { code: 'CONVERSION_METADATA_LIMIT' });
+    assert.equal(requested, 0, 'malformed Unicode does not become a size-only omission');
+    await assert.rejects(run([page('')], off,
+      { document: { getMetadata: async () => ({ metadata: null, info }) } }), { code: 'PDF_TEXT_UNAVAILABLE_BY_POLICY' });
   });
   await check('PDF failed page is omitted whole; no unvalidated string prefix escapes',async()=> {
     const output = await run([page('Sicher'),page('',{getTextContent:async()=>({items:[{str:'UNTRUSTED PREFIX'},{str:42}]})}),page('Danach')]);

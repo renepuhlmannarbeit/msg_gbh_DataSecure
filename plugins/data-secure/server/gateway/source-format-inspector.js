@@ -5,6 +5,7 @@ const path = require('path');
 const { inspectZipDirectoryFromFd, ZipError } = require('../zip-reader');
 const { validateOpcControls, OpcValidationError } = require('./opc-source-validator');
 const { cfbHasProtectedPackage } = require('./cfb-protection');
+const { sourceTextEncoding } = require('../core/source-text-codec');
 
 const PILOT_TYPES = new Set(['txt', 'md', 'csv', 'docx']);
 const EXTENSION_TYPES = Object.freeze({
@@ -48,8 +49,8 @@ function sameIdentity(actual, expected) {
   return true;
 }
 
-function validateTextFromFd(fd, size, readSync) {
-  const decoder = new TextDecoder('utf-8', { fatal: true });
+function validateTextFromFd(fd, size, readSync, encoding = 'utf-8') {
+  const decoder = new TextDecoder(encoding, { fatal: true, ignoreBOM: false });
   const buffer = Buffer.allocUnsafe(Math.min(64 * 1024, size));
   let position = 0;
   try {
@@ -221,8 +222,10 @@ function inspectSourceFormatFromFd(fd, stat, extension, options = {}) {
       })();
       return finish(verdict(declaredType, magic, 'rejected', encryptedZip ? 'SOURCE_ENCRYPTED_UNSUPPORTED' : 'SOURCE_TYPE_MISMATCH'));
     }
-    if (!validateTextFromFd(fd, size, safeRead)) {
-      return finish(verdict(declaredType, 'binary-or-invalid-utf8', 'rejected', 'SOURCE_TEXT_INVALID'));
+    const encoding = sourceTextEncoding(header, options.productChannel === 'standalone' &&
+      ['markdown-only', 'markdown-and-anonymize'].includes(options.processingMode));
+    if (!validateTextFromFd(fd, size, safeRead, encoding)) {
+      return finish(verdict(declaredType, 'binary-or-invalid-text', 'rejected', 'SOURCE_TEXT_INVALID'));
     }
     const result = verdict(declaredType, 'text', 'candidate', 'SOURCE_FORMAT_CANDIDATE');
     return finish(result);

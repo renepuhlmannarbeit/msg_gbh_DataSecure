@@ -51,6 +51,30 @@ test('valid UTF-8 TXT, Markdown and CSV are candidates, not final verification',
   }
 });
 
+test('Standalone admits explicit UTF-16 BOMs for text formats without widening Cowork or guessing binary text', () => {
+  for (const extension of ['txt','md','markdown','csv']) for (const encoding of ['le','be']) {
+    const data = Buffer.from('Name;Wert\r\nJörg;42 😀\n','utf16le');
+    if (encoding === 'be') data.swap16();
+    const bytes = Buffer.concat([Buffer.from(encoding === 'le' ? [0xff,0xfe] : [0xfe,0xff]),data]);
+    for (const processingMode of ['markdown-only','markdown-and-anonymize']) {
+      const options = {processingMode,productChannel:'standalone'};
+      assert.equal(inspectBuffer(`bom-${encoding}.${extension}`,bytes,options).verdict,'candidate');
+      // A real decoder has to maintain UTF-16 byte/surrogate state across reads.
+      assert.equal(inspectBuffer(`short-${encoding}.${extension}`,bytes,{...options,
+        readSync(fd,buffer,offset,length,position) {return fs.readSync(fd,buffer,offset,Math.min(length,1),position);}
+      }).verdict,'candidate');
+    }
+    assert.equal(inspectBuffer(`legacy-${encoding}.${extension}`,bytes).code,'SOURCE_TEXT_INVALID');
+    assert.equal(inspectBuffer(`cowork-${encoding}.${extension}`,bytes,
+      {processingMode:'markdown-and-anonymize',productChannel:'plugin'}).code,'SOURCE_TEXT_INVALID');
+  }
+  for (const bytes of [Buffer.from([0xff,0xfe,0x41]),Buffer.from([0xfe,0xff,0xd8,0]),
+    Buffer.from([0xff,0xfe,0x41,0,0,0]),Buffer.from('AB','utf16le'),Buffer.from([0x4a,0xf6,0x72,0x67])]) {
+    assert.equal(inspectBuffer('invalid-bom.txt',bytes,
+      {processingMode:'markdown-only',productChannel:'standalone'}).code,'SOURCE_TEXT_INVALID');
+  }
+});
+
 test('wide formats require an explicit product/mode and Cowork admits only XLSX/PPTX privacy extraction', () => {
   const samples = [['sheet.xlsx', officeZip('xlsx')], ['slides.pptx', officeZip('pptx')],
     ['source.pdf', Buffer.from('%PDF-1.7\n')],

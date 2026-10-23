@@ -1219,7 +1219,7 @@ function visibleMappingBytes(record) {
     EXTERNAL_CONTENT_NOT_READ: 'Extern verknüpfte Inhalte wurden nicht nachgeladen; der Dokumentinhalt wurde nur teilweise übernommen',
     CONVERSION_RESOURCE_LIMIT_PARTIAL: 'Eine technische Ressourcenbegrenzung beendete die weitere Verarbeitung; nur ein Teil des Dokuments wurde übernommen',
     CONVERSION_TIMEOUT_PARTIAL: 'Die verfügbare Verarbeitungszeit war ausgeschöpft; nur ein Teil des Dokuments wurde übernommen',
-    TEXT_LIMIT_PARTIAL: 'Die Textmengengrenze wurde erreicht; nur ein Teil des Dokuments wurde übernommen',
+    TEXT_LIMIT_PARTIAL: 'Eine Textmengengrenze wurde erreicht; Teile des Dokuments oder seiner Dokumentinformationen wurden nicht übernommen',
     PDF_PAGE_NOT_READ: 'Mindestens eine PDF-Seite konnte nicht gelesen werden; der PDF-Inhalt wurde nur teilweise übernommen',
     PDF_IMAGE_NOT_READ: 'Mindestens ein Bildbereich der PDF konnte nicht gelesen werden; der PDF-Inhalt wurde nur teilweise übernommen'
   };

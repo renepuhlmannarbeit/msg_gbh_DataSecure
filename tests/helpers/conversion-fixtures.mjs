@@ -137,7 +137,11 @@ export function pdf(pages, catalog = '', documentOptions = {}) {
     catalogAdditions.push(`/Names << /EmbeddedFiles ${nameTreeNumber} 0 R >> /AF [${fileSpecNumber} 0 R]`);
   }
   const infoNumber = documentOptions.info ? objects.length + 1 : null;
-  if (infoNumber) objects.push(Buffer.from('<< /Title (Private title) /Author (Max Mustermann) >>'));
+  if (infoNumber) {
+    const title = documentOptions.infoTitle ?? 'Private title';
+    if (typeof title !== 'string' || /[^\x20-\x7e]/u.test(title)) throw new Error('PDF_FIXTURE_METADATA_INVALID');
+    objects.push(Buffer.from(`<< /Title (${title.replace(/[\\()]/gu, character => `\\${character}`)}) /Author (Max Mustermann) >>`));
+  }
   objects[0] = Buffer.from(`<< /Type /Catalog /Pages 2 0 R ${catalogAdditions.filter(Boolean).join(' ')} >>`);
   objects[1] = Buffer.from(`<< /Type /Pages /Count ${pages.length} /Kids [${kids.join(' ')}] >>`);
   const chunks = [Buffer.from('%PDF-1.7\n')], offsets = [0]; let size = chunks[0].length;
