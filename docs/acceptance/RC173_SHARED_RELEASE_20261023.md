@@ -235,3 +235,54 @@ Office/OCRgruppen. Zusätzlich91 Parserfälle nach dessen einem URI-Testfix
 PASS. Produktfingerprint unverändert8b1644e…/351. Neuer gemeinsamer Source02-
 Commit, frische lokale Endgates und beide neue Macconsumer folgen; Source01-
 FINALs/Reports nicht umetikettieren. Source02-Helfer create-only vorbereitet.
+
+### Source02: Dokumentationskopf statt Produktfehler
+
+Appcommit a66c5e46fe9614dfae92d43dd9ddc3d6dd5b3b72 gepusht, Produktfingerprint
+unverändert8b1644e…/351;592Testinputs/4701bf40…. Native16:22:00.313UTC PASS
+(300Rust/3ignored/Clippy/Node-Rust/Release), Konverter16:22:54.919UTC PASS
+(38PDF/67Worker/49Office/41Grafik), Paket16:25:36.622UTC PASS(5Gates,
+100/100MD/0Fehler/Originale unverändert), sämtliche Inputs unverändert.
+ZIP1358e449d2bc314f04dc683e7fd6e414327171c97050a5290dff4305c022d3df,
+113404382Bytes;EXEdfb0c11a…4c5cb8. Neuer voller Commit im Binary bestätigt;
+unabhängiger wirklicher Archivbytegegenreviewa494cb4b… ohne Bindungsblocker.
+
+Headless16:48:03.658UTC ROT171/302+0/11/inputs_unchangedtrue, allein
+test-current-documentation-contract.js:94. Formatmatrix enthielt die richtige
+Version erst nach neuer Einleitung, außerhalb der vorgeschriebenen ersten8
+Zeilen;29Dokumentationsgruppen PASS/1FAIL. Keine Runtime-/Policyänderung daraus.
+Nach tatsächlichem Ende aller Jobs nur aktuellen Versionskopf ergänzt und
+veralteten Stand15.10 ausdrücklich als historischen Paketstand markiert;
+Prüfung nicht gelockert. Neuer kompletter Source03-Endstand folgt.
+
+ARM120523834799 in39985588418 tatsächlich SUCCESS16:40:41UTC, vollständigen
+unabhängigen Ganzlogreviewb89824e2… gelesen(Logf6390ca6…). Neue Tabellenfamilien
+39/107/58/17,38PDF/65Worker+2Windows-Skips/49Office/41Grafik/283Rust+3ignored;
+Core/Guard/App/ZIP/DMG-Belege ohne bestätigten Logblocker. Kein lokaler Macbyte-
+oder physischer UAT-PASS daraus. Intel120523834599 gezielt wegen des bereits
+bestätigten gemeinsamen Dokumentationsgates abgebrochen; tatsächliches
+Run-/Jobende cancelled geprüft, ARM-SUCCESS erhalten. Kein Intelproduktfehler
+oder ganzer erfolgreicher Macrun behauptet. Keine Snapshot-/Release-/lokale
+RC173-Übergabe; alle Source02-Rots/ZIPs/Logs/Profile/Temps unverändert bewahrt.
+
+Zusätzlicher unabhängiger echter, begrenzter Anwenderquellencheck72c32a9e…
+nur lokal: sechs autorisierte Originale,775 gemessene Text-Einheiten in
+Quellreihenfolge, nichtleere Spans/Mergeanker korrekt beschriftet; früherer
+Wordstopp jetzt normalisiert. Keine reale Nested-/vMerge-Wordprobe in dieser
+Auswahl, keine vollständige Privacy-/Publikations-/visuelle Abnahme daraus.
+Alle sechs Originale erneut hashgleich; alte Ergebnisse wurden nicht verändert,
+in dieser Zusatzprobe aber nicht erneut gehasht. Private Quellen und Detailbericht
+nicht in Git, CI oder Release übernommen. Source03 benötigt frische komplette
+Belege am neuen gemeinsamen Commit, kein Übernehmen alter FINALs.
+
+Nach tatsächlichem Ende/cancelled aller Source02-Jobs nur zwei Dokumente
+korrigiert; unabhängigen engen Docgegenreviewfd2521e1… gelesen. Unveränderter
+Dokumentationsvertrag30/30PASS. Zusätzlich zuvor unerreichten kanonischen Rest
+ab Datei173 plus alle11Zusatzgates am unveränderten Produkt-/Teststand geprüft:
+16:54:35–17:08:43UTC,141/141PASS/inputs_unchangedtrue, eigene Session71536
+regulär beendet. Dieser zusätzliche Bericht ist ausdrücklich Diagnostik,
+kein Ersatz des roten Source02-Gesamt-FINAL oder neuer Source03-Endnachweis.
+Source03-Helfer922statische/VMAssertions+ProofnegativenMainPASS, unabhängigen
+reinen Rollendiff-/Pingegenreviewfa6281ea… vollständig gelesen. Keine
+Produkt-/Test-/Script-/Ressourcen-/Policyänderung aus dem Dokufix; neue Quellen-
+bindung und sämtliche frischen Endgates werden jetzt hergestellt.
