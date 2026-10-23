@@ -41,7 +41,7 @@ function fixture(type, usage = 'visible', reachable = true) {
   ] : [
     ['ppt/presentation.xml', `<p:presentation xmlns:p="${P}" xmlns:r="${R}"><p:sldIdLst><p:sldId id="256" r:id="slide"/></p:sldIdLst></p:presentation>`],
     ['ppt/_rels/presentation.xml.rels', relationships(relation('slide', 'slides/slide1.xml', 'slide'))],
-    ['ppt/slides/slide1.xml', `<p:sld xmlns:p="${P}" xmlns:a="${a}" xmlns:r="${R}"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>NATIVE ORIGINAL</a:t></a:r></a:p></p:txBody></p:sp>${reachable ? `<p:pic>${picture}</p:pic>` : ''}</p:spTree></p:cSld></p:sld>`],
+    ['ppt/slides/slide1.xml', `<p:sld xmlns:p="${P}" xmlns:a="${a}" xmlns:t="${A}" xmlns:r="${R}"><p:cSld><p:spTree><p:sp><p:txBody><t:p><t:r><t:t>NATIVE ORIGINAL</t:t></t:r></t:p></p:txBody></p:sp>${reachable ? `<p:pic>${picture}</p:pic>` : ''}</p:spTree></p:cSld></p:sld>`],
     ['ppt/slides/_rels/slide1.xml.rels', relationships(images)],
     ...(!reachable ? [['ppt/slides/slide2.xml', `<p:sld xmlns:p="${P}" xmlns:a="${a}" xmlns:r="${R}"><p:cSld><p:spTree><p:pic>${picture}</p:pic></p:spTree></p:cSld></p:sld>`],
       ['ppt/slides/_rels/slide2.xml.rels', relationships(images)]] : [])
@@ -142,6 +142,15 @@ test('empty first raster preserves the subsequent contact ordinal and exact appe
   assert.equal(result.ocr_contacts[0].page, 2);
   assert.equal(result.markdown.slice(result.ocr_contacts[0].start, result.ocr_contacts[0].end), text);
   assert.equal(result.coverage.reason_codes.includes('OCR_TEXT_EMPTY'), false);
+});
+test('PPTX foreign prose is not promoted to native source text by prefix spelling',()=>{
+  const {readZip}=require('../plugins/data-secure/server/zip-reader');
+  const entries=readZip(fixture('pptx','wrong-namespace'));
+  const part='ppt/slides/slide1.xml';
+  entries.set(part,Buffer.from(entries.get(part).toString('utf8').replace(`xmlns:t="${A}"`,'xmlns:t="urn:foreign-text"')));
+  const value=extractOfficeMarkdownAndMedia(zipStore([...entries]),'.pptx',{markdownOutput:'content-v1'});
+  assert.equal(value.attachments.length,0);
+  assert.doesNotMatch(value.extraction.markdown,/NATIVE ORIGINAL/u);
 });
 console.log(`${passed} passed, ${failed} failed; source-only, no native OCR or GUI run`);
 if (failed) process.exitCode = 1;

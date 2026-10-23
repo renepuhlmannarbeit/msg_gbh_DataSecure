@@ -196,3 +196,42 @@ bestätigte offene Produktlücke aus den aktuellen begrenzten Quellenreviews.
 Die alten roten Berichte bleiben historische Belege. Neuer Quellstand vor
 Commit: Fingerprint8b1644e102d65f40985825300693dee901f0e21c08cb924a201d42b94c5479bc,
 351 Produktdateien. Finaler Commit und tatsächliche neue Endbelege noch offen.
+
+### Source01: erhaltene echte rote Endgates und enge Testkorrekturen
+
+Gemeinsamer gepushter Appcommit b2088a194a521b3cdc3662bfb744d86dfc2bacdc,
+FP8b1644e…/351; 592 Test-/Scriptinputs/Manifest7b0368c2…. Freeze16:02:38.911UTC,
+Macconsumer39983295016. Keine Produkt-/Test-/Script-/HEAD-/Driveränderung während
+der Jobs. Alle Jobs inzwischen regulär beendet; keine Duplikate oder Pakete.
+
+- Headless16:03:30.007UTC ROT:30/302+0/11/stabletrue. Testoffice-image-relevance
+  erwartete native Prosa, deren Namespace er selbst absichtlich fremd setzte.
+  Neue strikte echte Namespaceprojektion übernimmt diese nicht. Kein Beleg,
+  dass tatsächlich gültige Originalprosa verloren ging.
+- Native16:06:03.889UTC PASS/stabletrue: Prepare/Clippy/300Rust+3ignored/
+  Node-Rust-Integration/Release. Kein neuer Paket-/Desktop-PASS.
+- Konverter16:06:44.378UTC ROT/stabletrue: PDF38 und Worker67 bestanden,
+  Office32 Positivgruppen dann PPTX_STRUCTURE_UNSAFE an positivem Tabellen-
+  fixture ohne erforderliche Tabellen-URI. Rohe Logs/rotes FINAL und neues
+  eigenes .tmp-standalone-package-office-ocr-0H5fE1 erhalten, Grafiklauf nicht
+  mehr erreicht. Kein neuer Konvertergesamt-PASS aus Teilgrün.
+- Beide Macjobs ROT vor späteren App-/Paketstufen: tatsächliche ARM-/Intellogs
+  unabhängig vollständig gelesen, Hashes ae58aaad…/cf958aa5…. Beide stoppen
+  an tests/test-partial-conversion.js:33,28!==27. Frühe Core-/Preparestufen
+  bestanden; spätere Native-/App-/ZIP-/DMG-/Uploadgates nicht erreicht.
+
+Nach sämtlichen Jobenden ausschließlich fünf Tests eng korrigiert:
+Partial-/Markdownartifact-Reasoncount28 samt explizitem neuen Code; valide
+PPTX-Kontrollprosa in eigenem kanonischem Namespace, negativer Bildnamespace
+bleibt fremd und zusätzliche echte Fremdprosa wird weiterhin ausgeschlossen;
+korrekte Tabellen-URI im nativen OCR-Positivfixture und einem zusätzlichen,
+statisch bestätigten Parser-/CDATA-Positivfixture. Keine Produkt-, Policy-,
+Timeout-, Ressourcen- oder Schutzänderung. Statischer unabhängiger302er-Scan
+begrenzt ähnliche aktuelle Fixtureannahmen, alte reine Legacytests unverändert.
+
+Frischer enger4Dateilauf16:10:09.943–16:11:05.504UTC PASS/inputs_unchangedtrue:
+13 Partial-,17 Markdownartifact-,33 Relevanz- und49 tatsächliche native
+Office/OCRgruppen. Zusätzlich91 Parserfälle nach dessen einem URI-Testfix
+PASS. Produktfingerprint unverändert8b1644e…/351. Neuer gemeinsamer Source02-
+Commit, frische lokale Endgates und beide neue Macconsumer folgen; Source01-
+FINALs/Reports nicht umetikettieren. Source02-Helfer create-only vorbereitet.

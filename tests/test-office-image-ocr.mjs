@@ -41,7 +41,7 @@ function office(type, media, relationship = 'internal', sensitiveTable = false, 
     `<w:tr><w:tc><w:p><w:r><w:t>${text}</w:t></w:r></w:p></w:tc></w:tr>`).join('') + '</w:tbl>' : '';
   const sheetRows = (sensitiveTable ? ['Name', 'Qvx', sourceText] : [sourceText]).map((text, index) =>
     `<row r="${index + 1}"><c r="A${index + 1}" t="inlineStr"><is><t>${text}</t></is></c></row>`).join('');
-  const slideTable = sensitiveTable ? '<p:graphicFrame><a:graphic><a:graphicData><a:tbl>' + ['Name', 'Qvx'].map(text =>
+  const slideTable = sensitiveTable ? '<p:graphicFrame><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table"><a:tbl>' + ['Name', 'Qvx'].map(text =>
     `<a:tr><a:tc><a:txBody><a:p><a:r><a:t>${text}</a:t></a:r></a:p></a:txBody></a:tc></a:tr>`).join('') +
     '</a:tbl></a:graphicData></a:graphic></p:graphicFrame>' : '';
   const entries = type === 'docx' ? [
