@@ -13,6 +13,7 @@ const { pdfOcrAction } = require('../plugins/data-secure/server/core/content-ocr
 const { nativeTextSeparator,nativeColumnOrder,renderPdfOcrLayer } = require('../plugins/data-secure/server/standalone/pdf-text-layout');
 const visuals = require('../plugins/data-secure/server/standalone/markdown-visuals');
 const metadata = require('../plugins/data-secure/server/core/private-document-metadata');
+const { createPassivePdfContent } = require('../plugins/data-secure/server/standalone/pdf-passive-content');
 const { contactSpans } = require('../plugins/data-secure/server/core/ocr-contact-review');
 const { contactQuality } = require('../plugins/data-secure/server/standalone/ocr-quality');
 const { MAX_UNITS } = require('../plugins/data-secure/server/standalone/conversion-checkpoints');
@@ -140,17 +141,17 @@ async function main() {
     }
   });
   function page(text, overrides = {}) {
-    return { getTextContent:async()=>({items:text ? [{str:text,hasEOL:true}] : [],styles:{}}),
+    return { getTextContent:async()=>({items:text ? [{str:text,hasEOL:true}] : [],styles:{}}), getAnnotations:async()=>[],
       getOperatorList:async()=>({fnArray:[]}),getViewport:()=>({width:400,height:300}),cleanup(){},...overrides };
   }
   async function run(pages, contentOptions = options, extra = {}) {
     const frames = []; let destroyed = 0;
     const document = { numPages:pages.length,getPermissions:async()=>null,hasJSActions:async()=>false,
       getFieldObjects:async()=>null,getAttachments:async()=>null,getOutline:async()=>null,
-      getMetadata:async()=>({metadata:null,info:{}}),getPage:async number=> {
+      getMetadata:async()=>({metadata:null,info:{IsXFAPresent:false}}),getPage:async number=> {
         const value = pages[number-1]; if (value instanceof Error) throw value; return value;
       },...extra.document };
-    const context = { path,root:'isolated-local-runtime',errors,fail,MAX_UNITS,...contract,...readable,...visuals,...metadata,
+    const context = { path,root:'isolated-local-runtime',errors,fail,MAX_UNITS,createPassivePdfContent,...contract,...readable,...visuals,...metadata,
       createMarkdownExtraction:input=>contract.createMarkdownExtraction(JSON.parse(JSON.stringify(input))),
       validatePrivateDocumentMetadata:input=>metadata.validatePrivateDocumentMetadata(JSON.parse(JSON.stringify(input))),
       selectOptionalPrivatePdfMetadata:input=>metadata.selectOptionalPrivatePdfMetadata(JSON.parse(JSON.stringify(input))),
@@ -173,6 +174,33 @@ async function main() {
     assert.match(output.result.markdown,/Erster Ä ß/u); assert.match(output.result.markdown,/Zweiter/u);
     assert.ok(output.result.coverage.reason_codes.includes('PDF_IMAGE_NOT_READ'));
     assert.deepEqual(output.frames.map(row=>row.index),[0,0,1,1]);
+  });
+  await check('passive omission-only notice cannot discard a valid almost-full native page before its first checkpoint',async()=>{
+    const native='N'.repeat(7_999_900);
+    const output=await run([page(native,{getAnnotations:async()=>[{id:'1R',subtype:'Link'}]})],off);
+    assert.ok(output.result.markdown.includes(native));
+    assert.ok(output.result.markdown.length<=8_000_000);
+    assert.ok(output.result.coverage.reason_codes.includes('TEXT_LIMIT_PARTIAL'));
+    assert.ok(output.frames.some(frame=>frame.result.markdown.includes(native)));
+  });
+  await check('optional XFA omission notice cannot overflow and invalidate an already secured native body',async()=>{
+    const native='a'.repeat(7_999_980);
+    const output=await run([page(native)],off,{document:{getMetadata:async()=>({metadata:null,info:{IsXFAPresent:true}})}});
+    assert.ok(output.result.markdown.includes(native));assert.ok(output.result.markdown.length<=8_000_000);
+    assert.equal(output.result.markdown,output.frames[0].result.markdown);
+    assert.ok(output.result.coverage.reason_codes.includes('TEXT_LIMIT_PARTIAL'));
+  });
+  await check('omitted or unconfirmed XFA cannot enable annotation appearance operators for OCR planning',async()=>{
+    for(const fact of [true,undefined,false]){
+      const modes=[];let fieldReads=0,annotationReads=0;
+      const output=await run([page('Independent native body',{
+        getOperatorList:async value=>{modes.push(value?.annotationMode);return {fnArray:[]};},
+        getAnnotations:async()=>{annotationReads++;return [];}
+      })],off,{document:{getMetadata:async()=>({metadata:null,info:fact===undefined?{}:{IsXFAPresent:fact}}),
+        getFieldObjects:async()=>{fieldReads++;return null;}}});
+      assert.deepEqual(modes,[0]);assert.match(output.result.markdown,/Independent native body/u);
+      assert.equal(fieldReads,fact===false?1:0);assert.equal(annotationReads,fact===false?1:0);
+    }
   });
   await check('actual PDF producer omits only optional size-bound metadata while all useful page checkpoints survive', async () => {
     const title = 'PRIVATE_OVERSIZE_SENTINEL'.repeat(200);

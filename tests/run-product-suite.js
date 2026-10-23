@@ -42,6 +42,7 @@ const baseFiles = [
   'tests/test-workflow-presentation.js', 'tests/test-markdown-start-transport.js', 'tests/test-office-image-ocr.mjs', 'tests/test-office-image-relevance.js',
   'tests/test-partial-conversion.js', 'tests/test-conversion-checkpoints.js',
   'tests/test-office-diagrams.js', 'tests/test-office-occurrences.js',
+  'tests/test-office-chart-model.js', 'tests/test-office-math.js', 'tests/test-office-math-projection.js', 'tests/test-office-math-integration.js',
   'tests/test-office-projection-countercases.js', 'tests/test-docx-table-grid.js',
   'tests/test-office-table-context.js',
   'tests/test-office-table-projection.js', 'tests/test-sensitive-field-coverage.js',

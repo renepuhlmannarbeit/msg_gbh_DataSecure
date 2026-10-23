@@ -1,6 +1,17 @@
 # Aktives Entwicklungsbacklog
 
-Quellstand: 3.2.0-rc173 (veröffentlicht); neue unveröffentlichte Folgearbeit.
+Arbeitsquelle: 3.2.0-rc174, noch unveröffentlicht; RC173 bleibt letzter Testrelease.
+
+## BL-049.5 – RC174 Diagramme, OfficeMath und passive PDFwerte
+
+23.10.2026 zusätzlich ausdrücklich beauftragt und in Umsetzung: index-/owner-
+gebundene Diagrammmodelle inklusive Chartsheets, lesbare OfficeMath-Strukturen
+und gespeicherte passive PDFformularwerte. Windows+Mac ARM64/Intel aus derselben
+neuen Quelle; fachlich unabhängige Quellreviews, neue native Endtests und neuer
+GitHub-Test-Pre-Release, Windows lokal mit Testplan. Desktoptests Nutzer.
+[Verbindlicher Plan und Journal](../acceptance/RC174_SHARED_RELEASE_20261023.md).
+Keine Formelausführung/aktiven PDFaktionen/externen Workbookloads; bestehende
+Schutz- und Teilabdeckungsgrenzen behalten. Noch kein RC174-Endnachweis.
 
 ## BL-049.4 – Legacy-Zellverbindungen und umfassende Konvertierungsrobustheit
 
@@ -1705,7 +1716,7 @@ in dieselbe Korrekturrunde.
 
 ## Historische Nachweise bis R4 (kein aktueller R5-Abschluss)
 
-Stand: 17.10.2026 · Produktstand 3.2.0-rc173 · veröffentlicht Standalone RC162 (Windows und beide Mac-Architekturen; M2-Abnahme offen), Linux RC159 / Cowork RC151 · lokaler Arbeitsstand nach RC162 noch nicht veröffentlicht
+Stand: 17.10.2026 · Produktstand 3.2.0-rc174 · veröffentlicht Standalone RC162 (Windows und beide Mac-Architekturen; M2-Abnahme offen), Linux RC159 / Cowork RC151 · lokaler Arbeitsstand nach RC162 noch nicht veröffentlicht
 
 ## Gezielter R3-Abschlussreview
 

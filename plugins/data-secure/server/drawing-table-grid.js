@@ -94,7 +94,23 @@ function createDrawingTableCollector(isDrawing, error) {
     }
     tables.push({ rows: current.rows, columns }); current = null;
   }
-  return { start, text, end, inTable: () => current !== null, tables };
+  // Formula text is rendered by the separately bounded OMML reader. It can
+  // enter this cell only through its actual currently open paragraph owner;
+  // no detached formula, source callback or generic append is accepted.
+  function appendMath(value, owner, result) {
+    if (!paragraph || !cell) throw error();
+    if (owner.localName !== 'oMath') throw error();
+    let parent = owner.parent;
+    const skip = value => { while(value?.namespaceURI === 'http://schemas.openxmlformats.org/markup-compatibility/2006' && ['AlternateContent','Choice','Fallback'].includes(value.localName))value=value.parent;return value; };
+    parent=skip(parent);
+    if(parent?.namespaceURI!=='http://schemas.microsoft.com/office/drawing/2010/main'||parent.localName!=='m')throw error();
+    parent=skip(parent.parent);
+    if (parent !== paragraph) throw error();
+    cell.mathSpans ||= [];
+    cell.mathSpans.push({ start: cell.text.length, end: cell.text.length + value.length, result });
+    cell.text += value;
+  }
+  return { start, text, end, appendMath, inTable: () => current !== null, tables };
 }
 
 module.exports = { createDrawingTableCollector };

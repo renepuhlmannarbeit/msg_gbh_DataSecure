@@ -209,6 +209,10 @@ jobs:
           node tests/test-partial-conversion.js
           node tests/test-office-diagrams.js
           node tests/test-office-occurrences.js
+          node tests/test-office-chart-model.js
+          node tests/test-office-math.js
+          node tests/test-office-math-projection.js
+          node tests/test-office-math-integration.js
           node tests/test-office-projection-countercases.js
           node tests/test-docx-table-grid.js
           node tests/test-office-table-context.js

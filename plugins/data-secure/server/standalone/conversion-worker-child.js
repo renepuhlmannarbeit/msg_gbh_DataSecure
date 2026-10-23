@@ -28,6 +28,7 @@ const { MAX_PIXELS, MAX_IMAGE_BYTES } = require('../images/common');
 const { validateContentOptions, serializeContentOptions } = require('../core/content-options');
 const { pdfOcrAction } = require('../core/content-ocr-plan');
 const { PDF_KEYS, selectOptionalPrivatePdfMetadata } = require('../core/private-document-metadata');
+const { createPassivePdfContent } = require('./pdf-passive-content');
 const root = path.join(__dirname, 'conversion-runtime');
 const localRequire = createRequire(path.join(root, 'package.json'));
 const fail = code => { throw Object.assign(new Error(code), { code }); };
@@ -395,12 +396,21 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
         optionalReasons.add('DOCUMENT_PARTS_DAMAGED'); return fallback;
       }
     }
-    const hasDocumentObjects = await passiveRead(() => document.hasJSActions(), false) ||
-      populated(await passiveRead(() => document.getFieldObjects(), null)) ||
+    const currentPassive = Boolean(contentOptions && passiveObjects);
+    const earlyMetadata = currentPassive ? await passiveRead(() => document.getMetadata(), null) : undefined;
+    // PDF.js may substitute XFA dataset values inside getFieldObjects even
+    // with enableXfa:false, and hasJSActions itself consults those fields.
+    // Only the pinned API's explicit no-XFA fact admits the new passive read.
+    const omittedPassive = currentPassive && earlyMetadata?.info?.IsXFAPresent !== false;
+    const hasActions = omittedPassive ? false : await passiveRead(() => document.hasJSActions(), false);
+    const fieldObjects = omittedPassive || hasActions && !currentPassive ? null
+      : await passiveRead(() => document.getFieldObjects(), null);
+    const hasDocumentObjects = omittedPassive || hasActions || populated(fieldObjects) ||
       populated(await passiveRead(() => document.getAttachments(), null));
     if (hasDocumentObjects && !passiveObjects) fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
+    const passiveContent = currentPassive && !omittedPassive ? createPassivePdfContent({ fieldObjects }) : null;
     const outline = await passiveRead(() => document.getOutline(), null);
-    const metadata = await passiveRead(() => document.getMetadata(), null);
+    const metadata = currentPassive ? earlyMetadata : await passiveRead(() => document.getMetadata(), null);
     const metadataKeys = PDF_KEYS;
     if (((Array.isArray(outline) && outline.length > 0) || metadata?.metadata !== null) && !passiveObjects) {
       fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
@@ -454,12 +464,17 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
         // completed pages and label the terminal result explicitly partial.
         reasons.add('CONVERSION_RESOURCE_LIMIT_PARTIAL'); break;
       }
-      let page, canvas, nativeUnit, finalUnit;
+      let page, canvas, nativeUnit, finalUnit, passivePage;
       try {
         page = await document.getPage(number);
         if (page.isPureXfa) fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
         if (!passiveObjects && (populated(await page.getJSActions()) ||
             (await page.getAnnotations({ intent: 'display' })).length > 0)) fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
+        if (passiveContent) {
+          passivePage = passiveContent.readPage({ pageNumber: number,
+            annotations: await passiveRead(() => page.getAnnotations({ intent: 'display' }), []) });
+          for (const code of passivePage.reason_codes) reasons.add(code);
+        }
         const content = await page.getTextContent({ disableNormalization: true });
         let text = '';
         let omittedSymbols = false;
@@ -496,18 +511,29 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
         if (contentOptions) {
           // Commit a fully read native page before rasterization. Existing search
           // text remains useful even if a later image decoder or OCR fails.
-          const candidate = pageUnit(number, hasNativeText ? `## Seite ${number}\n\n${readableText(nativeText).markdown}` : '');
+          const bodyMarkdown = hasNativeText ? `## Seite ${number}\n\n${readableText(nativeText).markdown}` : '';
+          if (passivePage?.markdown && total + bodyMarkdown.length + passivePage.markdown.length + 4 > MAX_MARKDOWN_CHARS) {
+            // Optional whole annotation units cannot discard an independently
+            // readable native page at the unchanged combined text budget.
+            reasons.add('TEXT_LIMIT_PARTIAL'); passivePage = { markdown: '', meaningful: false };
+          }
+          const nativeParts = [bodyMarkdown,
+            passivePage?.markdown && (hasNativeText || passivePage.meaningful) ? passivePage.markdown : ''].filter(Boolean);
+          const candidate = pageUnit(number, nativeParts.join('\n\n'));
           if (total + candidate.markdown.length + (sections.length && candidate.markdown ? 2 : 0) > MAX_MARKDOWN_CHARS) fail('TEXT_TOO_LARGE');
           nativeUnit = candidate;
           await checkpoint(nativeUnit, number - 1);
         }
-        const operators = await page.getOperatorList();
+        // Excluded/unconfirmed XFA values must not re-enable appearance
+        // operators solely because no passive field reader was admitted.
+        // Match the already-disabled raster policy; parsing is not execution.
+        const operators = await page.getOperatorList(currentPassive ? { annotationMode: AnnotationMode.DISABLE } : undefined);
         const hasPaintedImage = operators?.fnArray.some(operation => imageOperations.has(operation));
         const hasNonTextGraphicPaint = operators?.fnArray.some(operation => graphicOperations.has(operation));
         let additional = '';
         let retainedContacts = [];
         let retainedOcr = false;
-        const plan = contentOptions ? pdfOcrAction(contentOptions, { hasNativeText, hasPaintedImage: Boolean(hasPaintedImage),
+        const plan = contentOptions ? pdfOcrAction(contentOptions, { hasNativeText: hasNativeText || Boolean(passivePage?.meaningful), hasPaintedImage: Boolean(hasPaintedImage),
           hasNonTextGraphicPaint: Boolean(hasNonTextGraphicPaint), omittedSymbols }) : null;
         if (plan?.action === 'scope-required') fail('PDF_OCR_SCOPE_REQUIRED');
         for (const code of plan?.reason_codes || []) reasons.add(code);
@@ -581,6 +607,7 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
           renderedContacts = supplement.contacts;
         }
         const localContacts = renderedContacts.map(item => ({ ...item, start: contactOffset + item.start, end: contactOffset + item.end }));
+        if (passivePage?.markdown) section += `\n\n${passivePage.markdown}`;
         if (contacts.length + localContacts.length > 5000) fail('TEXT_TOO_LARGE');
         documentNotice.image ||= Boolean(hasPaintedImage);
         documentNotice.symbols ||= omittedSymbols;
@@ -588,7 +615,7 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
         documentNotice.contacts ||= retainedContacts.length > 0;
         if (total + section.length + (sections.length ? 2 : 0) > MAX_MARKDOWN_CHARS) fail('TEXT_TOO_LARGE');
         if (contentOptions) {
-          finalUnit = pageUnit(number, text.trim() || additional.trim() ? section : '', localContacts);
+          finalUnit = pageUnit(number, text.trim() || additional.trim() || passivePage?.meaningful ? section : '', localContacts);
           await checkpoint(finalUnit, number - 1);
         } else finalUnit = { markdown: section, ocr_contacts: localContacts };
       } catch (cause) {
@@ -598,7 +625,7 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
         if (!contentOptions || (errors.has(cause?.code) && !omission && cause.code !== 'PDF_EXTRACTION_FAILED')) throw cause;
         reasons.add(nativeUnit ? 'PDF_IMAGE_NOT_READ' : 'PDF_PAGE_NOT_READ');
         if (omission) reasons.add(omission);
-        finalUnit = pageUnit(number, nativeUnit?.markdown || '');
+        finalUnit = pageUnit(number, nativeUnit?.markdown || (passivePage?.meaningful ? passivePage.markdown : ''));
         await checkpoint(finalUnit, number - 1);
       } finally {
         if (canvas) { canvas.width = 1; canvas.height = 1; }
@@ -611,6 +638,22 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
         sections.push(finalUnit.markdown);
         meaningfulText = true;
       }
+    }
+    if (passiveContent) {
+      const extra = passiveContent.finalize();
+      for (const code of extra.reason_codes) reasons.add(code);
+      if (extra.meaningful) {
+        if (total + extra.markdown.length + (sections.length ? 2 : 0) <= MAX_MARKDOWN_CHARS) {
+          total += extra.markdown.length + (sections.length ? 2 : 0);
+          sections.push(extra.markdown); meaningfulText = true;
+        } else reasons.add('TEXT_LIMIT_PARTIAL');
+      }
+    }
+    if (omittedPassive && meaningfulText) {
+      const notice = '> PDF-Hinweis: Interaktive PDF-Felder und Anmerkungen wurden nicht übernommen, weil XFA-Inhalte vorhanden sind oder deren Abwesenheit nicht bestätigt ist. Unabhängig gelesener Seiteninhalt bleibt erhalten.';
+      if (total + notice.length + (sections.length ? 2 : 0) <= MAX_MARKDOWN_CHARS) {
+        total += notice.length + (sections.length ? 2 : 0); sections.push(notice);
+      } else reasons.add('TEXT_LIMIT_PARTIAL');
     }
     // Metadata and a single concise notice do not interrupt the page prose.
     // They are retained, not silently removed, and receive no invented values.

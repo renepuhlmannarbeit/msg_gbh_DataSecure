@@ -1,6 +1,6 @@
 # Entscheidungs-Traceability
 
-Stand: 16.10.2026 · 3.2.0-rc173 · veröffentlicht Standalone RC161 (Mac- und Windows-Test-Pre-Release), Linux RC159 / Cowork RC151
+Stand: 16.10.2026 · 3.2.0-rc174 · veröffentlicht Standalone RC161 (Mac- und Windows-Test-Pre-Release), Linux RC159 / Cowork RC151
 
 M2-Zielhostfehler RC161 → Die deduplizierten Desktop-Ereignisse zeigen
 `runtime_resolved` und `sidecar_spawned`, danach 16-mal Signal 5 vor

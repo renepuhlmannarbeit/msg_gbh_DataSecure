@@ -139,6 +139,20 @@ function createXlsxReader(decode, options = {}) {
   function richText(node, owner) {
     return main(node, 't') && (node.parent === owner || (main(node.parent, 'r') && node.parent.parent === owner));
   }
+  function sheetDrawings(xml, kind = 'worksheet') {
+    if (!['worksheet', 'chartsheet'].includes(kind)) throw structureError();
+    const ids = []; let owner, issues = 0;
+    const root = parse(xml, { start(node) {
+      if (!node.parent) owner = node;
+      if (!main(node, 'drawing')) return;
+      if (node.parent !== owner || node.namespaceURI !== owner.namespaceURI) { issues++; return; }
+      const values = REL_NS.map(namespace => attr(node, 'id', namespace)).filter(value => value !== undefined);
+      if (values.length !== 1 || !values[0] || ids.length) throw structureError();
+      ids.push(values[0]);
+    } });
+    expect(root, kind);
+    return { ids, issues };
+  }
   function sharedStrings(xml) {
     const result = [];
     let item = null, chunks = [], chars = 0, currentText = null;
@@ -418,7 +432,7 @@ function createXlsxReader(decode, options = {}) {
     return { rows, rowRecords, formulaCells, missingFormulaCaches, unsupportedNumberFormats,
       mergeRanges: disjointMergeRanges(mergeRanges) };
   }
-  return { validate: parse, workbook, workbookProperties, styles, relationships, sharedStrings, worksheet, modernPersons, threadedComments };
+  return { validate: parse, workbook, workbookProperties, styles, relationships, sharedStrings, worksheet, sheetDrawings, modernPersons, threadedComments };
 }
 
 module.exports = Object.freeze({ createXlsxReader });

@@ -68,6 +68,10 @@ test('PDF visibility uses the real native conversion gate on both Mac targets, n
   assert.ok(pkg.scripts['test:standalone:conversion'].includes('node tests/test-pdf-text-visibility.mjs &&'));
   assert.ok(!require('./run-product-suite').baseFiles.includes('tests/test-pdf-text-visibility.mjs'));
   assert.ok(workflow('standalone-macos-sandbox.yml').includes('npm run test:standalone:conversion'));
+  assert.ok(pkg.scripts['test:standalone:conversion'].includes('node tests/test-pdf-passive-content.mjs'));
+  assert.ok(!require('./run-product-suite').baseFiles.includes('tests/test-pdf-passive-content.mjs'));
+  assert.equal(workflow('standalone-macos-sandbox.yml').split('node tests/test-pdf-passive-content.mjs').length,1,
+    'native PDF test runs once through its canonical converter command, not twice');
 });
 
 test('engineering and historical evidence have explicit opt-in scripts', () => {
@@ -92,7 +96,7 @@ test('native conversion resources are required by PKG-04, not silently added to 
   const suite = require('./run-product-suite');
   const nativeTest = 'test-standalone-conversion-worker.mjs';
   assert.ok(![...suite.baseFiles.map(file => path.basename(file)), ...suite.ciFiles, ...suite.fullOnly].includes(nativeTest));
-  assert.strictEqual(pkg.scripts['test:standalone:conversion'], `node tests/test-pdf-text-visibility.mjs && node tests/${nativeTest} && node tests/test-office-image-ocr.mjs && node tests/test-office-visual-decoder.mjs`);
+  assert.strictEqual(pkg.scripts['test:standalone:conversion'], `node tests/test-pdf-text-visibility.mjs && node tests/${nativeTest} && node tests/test-office-image-ocr.mjs && node tests/test-office-visual-decoder.mjs && node tests/test-pdf-passive-content.mjs`);
   assert.ok(!suite.executionPlan('headless').headlessFiles.includes('tests/test-office-visual-decoder.mjs'));
   const pkg04 = fs.readFileSync(path.join(root, 'scripts/run-pkg-04.ps1'), 'utf8');
   assert.ok(pkg04.indexOf("@('run', 'test:standalone:conversion')") < pkg04.indexOf("foreach ($label"));

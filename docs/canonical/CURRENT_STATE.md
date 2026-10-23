@@ -1,6 +1,16 @@
 # Aktueller Iststand
 
-Quellstand: 3.2.0-rc173 (Test-Pre-Release veröffentlicht; Desktopabnahme USER_PENDING).
+Arbeitsquelle: 3.2.0-rc174 in Entwicklung, noch nicht eingefroren/veröffentlicht.
+Letzter veröffentlichter Test-Pre-Release: RC173, Desktopabnahme USER_PENDING.
+
+## RC174 beauftragt – semantische Inhaltsmodelle
+
+Diagramme/Chartsheets, OfficeMath und passive PDFformularwerte werden zusätzlich
+zum unveröffentlichten Robustheitsdelta implementiert. Gemeinsame Windows-/
+Macquelle, getrennte native Endprüfungen, unabhängige Fachreviews und neuer
+Test-Pre-Release; Desktoptests Nutzer. [Aktueller RC174-Plan](../acceptance/RC174_SHARED_RELEASE_20261023.md).
+Noch kein RC174-Build-/Mac-/Release-PASS. Keine neue Macberechtigung oder
+externe Apple-Signierung; alte RC173-Belege gelten nicht als RC174-Abnahme.
 
 ## Neuer Auftrag nach RC173 – Konvertierungsrobustheit / BL-049.4
 
@@ -112,7 +122,7 @@ keine vollständige visuelle oder semantische Inhaltsfreigabe. Keine Nutzerdaten
 keine Produkt-/Teständerungen, neuen Pakete oder Mainintegration. Ältere Stand-
 und Übergabeabschnitte darunter nicht als neue offene Gesamtaufgabe übernehmen.
 
-Stand: 23.10.2026 · 3.2.0-rc173 als Test-Pre-Release; RC172 und ältere Releases unverändert.
+Stand: 23.10.2026 · 3.2.0-rc174 als Test-Pre-Release; RC172 und ältere Releases unverändert.
 
 ## Historischer RC171-Quellenabschluss22.10.2026 10:49UTC vor Source12
 

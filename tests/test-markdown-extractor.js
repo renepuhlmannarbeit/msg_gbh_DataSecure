@@ -650,8 +650,11 @@ test('whole-section budget includes every two-character separator and preserves 
 
 test('actual content projection precedes budgeting and is idempotent at the chart-label boundary', () => {
   const make = value => pptx([
-    ['ppt/slides/_rels/slide7.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="n1" Type="${R}/notesSlide" Target="../notesSlides/notesSlide2.xml"/><Relationship Id="c1" Type="${R}/chart" Target="../charts/chart1.xml"/></Relationships>`],
-    ['ppt/charts/chart1.xml', `<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:v>${value}</c:v></c:chartSpace>`]
+    ...opcControlEntries('pptx', { additionalOverrides: [{ part: 'ppt/charts/chart1.xml',
+      contentType: 'application/vnd.openxmlformats-officedocument.drawingml.chart+xml' }] }),
+    ['ppt/slides/slide7.xml', `<p:sld xmlns:p="${P}" xmlns:a="${A}" xmlns:r="${R}" xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>BeforeAfter</a:t></a:r></a:p></p:txBody></p:sp><p:graphicFrame><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart r:id="c1"/></a:graphicData></a:graphic></p:graphicFrame></p:spTree></p:cSld></p:sld>`],
+    ['ppt/slides/_rels/slide7.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="c1" Type="${R}/chart" Target="../charts/chart1.xml"/></Relationships>`],
+    ['ppt/charts/chart1.xml', `<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:plotArea><c:barChart><c:ser><c:idx val="0"/><c:order val="0"/><c:cat><c:strLit><c:ptCount val="1"/><c:pt idx="0"><c:v>${value}</c:v></c:pt></c:strLit></c:cat><c:val><c:numLit><c:ptCount val="1"/><c:pt idx="0"><c:v>1</c:v></c:pt></c:numLit></c:val></c:ser></c:barChart></c:plotArea></c:chart></c:chartSpace>`]
   ]);
   const overhead = officeContent(parseOoxml(make('x'), '.pptx', undefined,
     { preserveText: true, literalMarkup: true }).sections).length - 1;
@@ -831,10 +834,12 @@ test('partial textless PPTX owns only its reached embedding and never an orphan 
 
 test('partial empty chart, layout, master and table labels cannot invent source text or revoke a reached chart embedding', () => {
   const source = pictureOnlyPptx('emf', Buffer.from('unsupported EMF'), [
+    ...opcControlEntries('pptx', { additionalOverrides: [{ part: 'ppt/charts/chart1.xml',
+      contentType: 'application/vnd.openxmlformats-officedocument.drawingml.chart+xml' }] }),
     ['ppt/_rels/presentation.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="s1" Type="${R}/slide" Target="slides/slide7.xml"/><Relationship Id="m1" Type="${R}/slideMaster" Target="slideMasters/slideMaster1.xml"/></Relationships>`],
-    ['ppt/slides/slide7.xml', `<p:sld xmlns:p="${P}" xmlns:a="${A}" xmlns:r="${R}"><p:cSld><p:spTree><p:pic><a:blip r:embed="i1"/></p:pic><p:graphicFrame><a:graphic><a:graphicData><a:tbl><a:tr><a:tc><a:txBody><a:p><a:r><a:t></a:t></a:r></a:p></a:txBody></a:tc></a:tr></a:tbl></a:graphicData></a:graphic></p:graphicFrame></p:spTree></p:cSld></p:sld>`],
+    ['ppt/slides/slide7.xml', `<p:sld xmlns:p="${P}" xmlns:a="${A}" xmlns:r="${R}" xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><p:cSld><p:spTree><p:pic><a:blip r:embed="i1"/></p:pic><p:graphicFrame><a:graphic><a:graphicData><a:tbl><a:tr><a:tc><a:txBody><a:p><a:r><a:t></a:t></a:r></a:p></a:txBody></a:tc></a:tr></a:tbl></a:graphicData></a:graphic></p:graphicFrame><p:graphicFrame><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart r:id="c1"/></a:graphicData></a:graphic></p:graphicFrame></p:spTree></p:cSld></p:sld>`],
     ['ppt/slides/_rels/slide7.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="i1" Type="${R}/image" Target="../media/image1.emf"/><Relationship Id="c1" Type="${R}/chart" Target="../charts/chart1.xml"/><Relationship Id="l1" Type="${R}/slideLayout" Target="../slideLayouts/slideLayout1.xml"/></Relationships>`],
-    ['ppt/charts/chart1.xml', '<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:v></c:v></c:chartSpace>'],
+    ['ppt/charts/chart1.xml', '<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart"><c:chart><c:plotArea><c:barChart/></c:plotArea></c:chart></c:chartSpace>'],
     ['ppt/slideLayouts/slideLayout1.xml', `<p:sldLayout xmlns:p="${P}" xmlns:a="${A}"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t></a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sldLayout>`],
     ['ppt/slideLayouts/_rels/slideLayout1.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="m1" Type="${R}/slideMaster" Target="../slideMasters/slideMaster1.xml"/></Relationships>`],
     ['ppt/slideMasters/slideMaster1.xml', `<p:sldMaster xmlns:p="${P}" xmlns:a="${A}"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t></a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sldMaster>`]

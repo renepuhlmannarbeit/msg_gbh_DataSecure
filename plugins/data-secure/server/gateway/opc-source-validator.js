@@ -77,6 +77,11 @@ const XLSX_TEXT_RELATIONSHIPS = new Map([
       /^xl\/threadedComments\/threadedComment[1-9][0-9]*\.xml$/u,
       'application/vnd.ms-excel.threadedcomments+xml']]
 ]);
+const XLSX_CHARTSHEET_RELATIONSHIPS = new Set([
+  'http://schemas.openxmlformats.org/officeDocument/2006/relationships/chartsheet',
+  'http://purl.oclc.org/ooxml/officeDocument/relationships/chartsheet'
+]);
+const XLSX_CHARTSHEET_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.chartsheet+xml';
 const MAIN = Object.freeze({
   docx: Object.freeze({
     part: 'word/document.xml',
@@ -307,7 +312,7 @@ function validateOpcControls({ declaredType, entries, controlParts, passivePrese
   if (!expected.contentTypes.has(overrides.get(`/${expected.part}`))) throw new OpcValidationError('SOURCE_TYPE_MISMATCH');
 
   const office = [];
-  const xlsxTextTargets = new Set(), xlsxTextOwners = new Set();
+  const xlsxTextTargets = new Set(), xlsxTextOwners = new Set(), chartsheetTargets = new Set();
   let externalReferences = 0;
   for (const [name, xml] of Object.entries(controlParts)) {
     if (!name.endsWith('.rels')) continue;
@@ -320,6 +325,7 @@ function validateOpcControls({ declaredType, entries, controlParts, passivePrese
       const rawTargetMode = String(attribute(node, 'TargetMode'));
       const targetMode = rawTargetMode.toLowerCase();
       const xlsxTextRole = declaredType === 'xlsx' ? XLSX_TEXT_RELATIONSHIPS.get(type) : null;
+      const chartsheetRole = declaredType === 'xlsx' && XLSX_CHARTSHEET_RELATIONSHIPS.has(type);
       if (!id || !type || !target || ids.has(id)) throw new OpcValidationError();
       ids.add(id);
       // OPC enumeration values are case-sensitive. Do not quarantine an edge
@@ -327,7 +333,7 @@ function validateOpcControls({ declaredType, entries, controlParts, passivePrese
       // differently and resolve the same target against local package bytes.
       if (partialExtraction && !['', 'Internal', 'External'].includes(rawTargetMode)) throw new OpcValidationError();
       if (targetMode === 'external') {
-        if (xlsxTextRole) throw new OpcValidationError('SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
+        if (xlsxTextRole || chartsheetRole) throw new OpcValidationError('SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
         // Partial Standalone extraction has no external resolver. Preserve
         // independent local text, but never treat an external package root as
         // a source binding and never expose the target in public findings.
@@ -361,6 +367,13 @@ function validateOpcControls({ declaredType, entries, controlParts, passivePrese
       }
       const resolvedTarget = resolveRelationshipTarget(name, target);
       if (!resolvedTarget || !entries.has(resolvedTarget)) throw new OpcValidationError();
+      if (declaredType === 'xlsx' && type.toLowerCase().endsWith('/chartsheet')) {
+        if (!chartsheetRole || name !== 'xl/_rels/workbook.xml.rels' || !entries.has('xl/workbook.xml') ||
+            !/^xl\/chartsheets\/sheet[1-9][0-9]*\.xml$/u.test(resolvedTarget) ||
+            !['', 'Internal'].includes(rawTargetMode) || chartsheetTargets.has(resolvedTarget) ||
+            overrides.get(`/${resolvedTarget}`) !== XLSX_CHARTSHEET_CONTENT_TYPE) throw new OpcValidationError('SOURCE_TYPE_MISMATCH');
+        chartsheetTargets.add(resolvedTarget);
+      }
       if (xlsxTextRole) {
         const owner = name.replace('/_rels/', '/').slice(0, -'.rels'.length);
         const relationOwner = `${name}\0${type}`;
