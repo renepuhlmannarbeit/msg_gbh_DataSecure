@@ -1401,9 +1401,10 @@ testAsync(`optional text review explains a partial result without raw codes or a
 });
 testAsync('the full bounded coverage vocabulary remains visible, while oversized or future notices stay neutral', async () => {
   const all = [...partialContentNotices.map(([code]) => code), 'DOCX_HEADER_FOOTER_EXCLUDED_BY_POLICY',
+    'OFFICE_TABLE_LAYOUT_NORMALIZED',
     'IMAGE_OCR_DISABLED_BY_POLICY', 'OCR_CONTACT_VALUES_UNVERIFIED', 'OCR_NOT_VERIFIED', 'OCR_TEXT_EMPTY',
     'PDF_OCR_SCOPE_UNVERIFIED', 'SCAN_OCR_DISABLED_BY_POLICY', 'SOURCE_COVERAGE_UNVERIFIED', 'VISUAL_CONTENT_NOT_EXTRACTED'].sort();
-  assert.equal(all.length, 27);
+  assert.equal(all.length, 28);
   const h = partialNoticeRenderer(all); await h.api.open('a'.repeat(64));
   assert.equal(h.el('documents-filter').value, 'notices');
   assert.equal(h.el('documents-list').children.length, 1);
@@ -1420,6 +1421,13 @@ testAsync('the full bounded coverage vocabulary remains visible, while oversized
   assert.doesNotMatch(textTree(future.el('documents-list')), /FUTURE_CONTENT_NOTICE/u);
   for (const item of [h, oversized, future]) assert.equal(item.calls.some(call => isDecision(call) ||
     ['start_admitted_batch', 'continue_history_batch', 'publish_result_documents', 'export_approved_documents'].includes(call.command)), false);
+});
+
+testAsync('normalised complex table is a nonblocking notice, not an automatic privacy action',async()=>{
+  const h=partialNoticeRenderer(['OFFICE_TABLE_LAYOUT_NORMALIZED']);await h.api.open('a'.repeat(64));
+  assert.match(textTree(h.el('documents-list')),/Zellabschnitte mit Koordinaten.*bei Anonymisierung/u);
+  assert.doesNotMatch(textTree(h.el('documents-list')),/OFFICE_TABLE_LAYOUT_NORMALIZED|Datenschutz-Prüfstopp/u);
+  assert.equal(h.calls.some(call=>isDecision(call)||['publish_result_documents','continue_history_batch'].includes(call.command)),false);
 });
 
 testAsync('bound raw notices filter the optional editor; selection and navigation stay within the visible files', async () => {

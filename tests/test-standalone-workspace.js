@@ -2980,6 +2980,10 @@ testAsync('actual pure CSV notice presenter spells out all partial reasons witho
     between(exporter, 'function validSourceLabel(', 'function validResultFile(') + '\n' +
     between(exporter, 'function visibleMappingBytes(', 'function exportVisibleMapping(') + '\nvisibleMappingBytes;', { Buffer });
   const legacySchema = /const LEGACY_MARKDOWN_SCHEMA = '([^']+)';/u.exec(exporter)[1];
+  const normalized=present({schema:legacySchema,items:[{source_label:'Quelle.pptx',file:'Quelle.md',
+    extraction_grade:'incomplete',reason_codes:['OFFICE_TABLE_LAYOUT_NORMALIZED']}]}).toString('utf8');
+  assert.match(normalized,/Zellabschnitte mit Koordinaten.*bei Anonymisierung/u);
+  assert.doesNotMatch(normalized,/OFFICE_TABLE_LAYOUT_NORMALIZED/u);
   for (const [code, expected] of partialContentNotices) {
     const csv = present({ schema: legacySchema, items: [{ source_label: 'Quelle.pptx', file: 'Quelle.md',
       extraction_grade: 'incomplete', reason_codes: [code] }] }).toString('utf8');
@@ -2991,6 +2995,21 @@ testAsync('actual pure CSV notice presenter spells out all partial reasons witho
   const anonymous = present({ schema: anonymousSchema, items: [{ source_label: 'Quelle.pptx', file: 'Dokument_01.md',
     extraction_grade: 'incomplete', reason_codes: ['IMAGE_OCR_FAILED'] }] }).toString('utf8');
   assert.equal(anonymous, '\uFEFFOriginaldatei;Anonymisiertes Ergebnis\r\n"Quelle.pptx";"Dokument_01.md"\r\n');
+});
+
+for(const mode of ['markdown-only','markdown-and-anonymize'])testAsync(`normalised table remains a completed result with a concrete notice: ${mode}`,async()=>{
+  const fb=conversionFeedback({ocr_enabled:false,selected_count:1,result_count:1,not_converted_count:0,ocr_omitted_count:0,error_count:0,content_notice_count:1});
+  const h=harness({invoke(command,args,fallback){if(command==='get_run_failures')return{
+    local_ui_only:true,external_disclosure:false,available:true,total:0,files:[],content_notice_count:1,
+    content_notice_breakdown_complete:true,...(mode==='markdown-only'?{conversion_feedback:fb}:{}),
+    content_notices:[{name:'Tabelle.docx',reason_codes:['OFFICE_TABLE_LAYOUT_NORMALIZED']}]};return fallback();}});await tick();
+  h.model.entries=[{batch_id:B,processing_mode:mode,status:'results_available',selected_count:1,result_count:1,
+    failed_count:0,results_available:true,result_location:'available',content_notice_count:1,content_notice_breakdown_complete:true,
+    ...(mode==='markdown-only'?{conversion_feedback:fb}:{})}];
+  await h.act('nav-history');await h.act(`history-${B}-problems`);
+  assert.match(h.el(`history-${B}-files`).textContent,/Zellabschnitte mit Koordinaten.*bei Anonymisierung/u);
+  assert.equal(h.el(`history-${B}-results`).textContent,'Ergebnisordner öffnen');
+  assert.equal(h.calls.some(call=>call.command==='continue_history_batch'),false);noAutomaticDecision(h);
 });
 
 testAsync('bound raw completion makes results primary, explains omissions and separates content notices', async () => {

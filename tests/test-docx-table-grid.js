@@ -184,8 +184,9 @@ test('different horizontal partitions, offsets and vertical merges never become 
       tr([tc('', span('2') + vertical()), tc('FHIR')])], 3)
   ]) {
     const result = parse(body, { preserveText: true, contentMode: true });
-    assert.match(result.markdown, /^Tabelle mit verbundenen oder versetzten Zellen/u);
-    assert.doesNotMatch(result.markdown, /Logische Spaltenbereiche|\| ---/u);
+    assert.match(result.markdown, /^Tabelle als Zellabschnitte/u);
+    assert.doesNotMatch(result.markdown, /Logische Spaltenbereiche/u);
+    assert.ok(result.warnings.includes('OFFICE_TABLE_LAYOUT_NORMALIZED'));
   }
 });
 
@@ -212,7 +213,7 @@ testAsync('actual uniform gridSpan DOCX reaches bound source privacy and residua
   }
 });
 
-testAsync('actual simple and uniform nested DOCX tables retain plaintext but cannot authorize short-Name privacy', async () => {
+testAsync('content nested grids normalize and protect fields; legacy notes keep the old refusal', async () => {
   const { extractSourceForPrivacy } = require('../plugins/data-secure/server/core/markdown-first-privacy');
   const { createMarkdownExtraction } = require('../plugins/data-secure/server/standalone/markdown-contract');
   for (const markdownOutput of ['content-v1', 'notes-v1']) for (const strict of [false, true]) {
@@ -224,19 +225,28 @@ testAsync('actual simple and uniform nested DOCX tables retain plaintext but can
       const bytes = reviewDocx(body, strict ? { prefix: 'q', namespace: 'http://purl.oclc.org/ooxml/wordprocessingml/main' } : {});
       const before = Buffer.from(bytes);
       const converted = extractMarkdownBuffer(bytes, '.docx', { markdownOutput, partialExtraction: true });
-      assert.ok(converted.coverage.reason_codes.includes('OFFICE_TABLE_CONTEXT_UNVERIFIED'));
-      for (const value of ['Name', 'Qvx', 'FHIR', 'VORHER', 'NACHHER']) once(converted.markdown, value);
+      assert.equal(converted.coverage.reason_codes.includes('OFFICE_TABLE_CONTEXT_UNVERIFIED'),markdownOutput==='notes-v1');
+      for (const value of ['Qvx', 'FHIR', 'VORHER', 'NACHHER']) once(converted.markdown, value);
+      if(markdownOutput==='notes-v1')once(converted.markdown,'Name');
+      else assert.equal((converted.markdown.match(/\| --- \|\n\| Name \|/gu)||[]).length,1,'one original header payload');
       assert.ok(converted.markdown.indexOf('VORHER') < converted.markdown.indexOf('Name'));
       assert.ok(converted.markdown.indexOf('Qvx') < converted.markdown.indexOf('NACHHER'));
       let conversions = 0;
-      await assert.rejects(extractSourceForPrivacy(bytes, '.docx', { contentOptions: contract, convertBuffer: async input => {
+      const operation=extractSourceForPrivacy(bytes, '.docx', { contentOptions: contract, convertBuffer: async input => {
         conversions++; assert.deepEqual(input, before);
         // Transport binding only: source parsing and coverage are actual, not
         // a handwritten Markdown/coverage stand-in for the broken sequence.
         const actual = extractMarkdownBuffer(input, '.docx', { markdownOutput, partialExtraction: true });
         return createMarkdownExtraction({ source_type: 'docx', markdown: actual.markdown,
           coverage: actual.coverage, content_options: contract });
-      } }), error => error.code === 'PARSER_COVERAGE_UNVERIFIED' && !/Qvx|VORHER|NACHHER/u.test(error.message));
+      } });
+      if(markdownOutput==='notes-v1')await assert.rejects(operation,error => error.code === 'PARSER_COVERAGE_UNVERIFIED' && !/Qvx|VORHER|NACHHER/u.test(error.message));
+      else{
+        const source=await operation;
+        const actual=require('../plugins/data-secure/server/gateway/compliance').anonymizeMarkdown(source.markdown,'general',{productChannel:'standalone',contentOptions:contract});
+        assert.doesNotMatch(actual.text,/Qvx/u);assert.match(actual.text,/FHIR/u);
+        assert.match(actual.text,/VORHER/u);assert.match(actual.text,/NACHHER/u);
+      }
       assert.equal(conversions, 1); assert.deepEqual(bytes, before);
     }
   }
@@ -325,7 +335,8 @@ test('actual permission-bound conversion child retains merged content in both OC
     assert.ifError(child.error); assert.equal(child.signal, null); assert.equal(child.status, 0);
     const stream = new CheckpointStream('docx', contentOptions); stream.push(child.stdout);
     const response = stream.response(); assert.equal(response.ok, true);
-    assert.match(response.result.markdown, /Spalten 1–2: ÄÖÜ ß 😀 CONTEXT/u);
+    assert.match(response.result.markdown, /Spalten 1–2/u);
+    assert.match(response.result.markdown, /\| ÄÖÜ ß 😀 CONTEXT \|/u);
     assert.match(response.result.markdown, /verbunden mit Zeile 1/u);
     once(response.result.markdown, 'VALUEFIRST'); once(response.result.markdown, 'VALUELAST');
   }

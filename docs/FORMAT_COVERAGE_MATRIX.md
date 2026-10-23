@@ -1,6 +1,17 @@
 # Aktuelle Format-Coverage
 
-Stand: 15.10.2026 · 3.2.0-rc172 · veröffentlicht Standalone RC160 (Windows x64, macOS Intel/Apple Silicon) / Cowork RC151; Linux Standalone RC159
+RC173-Folgearbeit (23.10.2026, noch keine Paketfreigabe): gültige nichtuniforme,
+vertikale und verschachtelte Wordraster, sparse/verbundene XLSX-Zellen und
+erreichte PowerPoint-Layout-/Mastertabellen werden im Inhaltsmodus als begrenzte
+Zellabschnitte mit ursprünglichen Koordinaten normalisiert. Echte sensible
+Feldbezüge werden erhalten; nicht typisierbare sensible Restwerte erhalten eine
+generische Maske statt einer erfundenen Identität. Schutz-, Quell-, Struktur-,
+Ressourcen- und Rest-PII-Prüfungen bleiben erhalten. Unmodellierte alte
+Legacy-hMerge-Konstrukte und defekte/mehrdeutige Besitzmodelle sind dadurch
+nicht pauschal unterstützt. [Plan/Nachweise](acceptance/RC173_SHARED_RELEASE_20261023.md)
+und [externe Lösungsansätze](acceptance/RC173_TABLE_RESEARCH_20261023.md).
+
+Stand: 15.10.2026 · 3.2.0-rc173 · veröffentlicht Standalone RC160 (Windows x64, macOS Intel/Apple Silicon) / Cowork RC151; Linux Standalone RC159
 
 Der [RC160-Quellcommit](RELEASE.md#rc160--standalone-test-pre-release-windows-und-macos)
 `b5d52c550ead3fb4cea5acc9e9774de9863db32c` ist auf Windows x64 und

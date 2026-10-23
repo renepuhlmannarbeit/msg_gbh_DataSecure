@@ -13,7 +13,7 @@
 // these legacy output tokens also keeps re-anonymisation idempotent; syntax is
 // not an attestation that a token in an imported document was generated here.
 // In particular [BEISPIEL], [NAME] and [ABC_123] remain ordinary source text.
-const PLACEHOLDER_RE = /\[(?:(?:PERSON|ORGANISATION|UNTERNEHMEN|KUNDE|PROJEKT|PERSON_UNKLAR|UNTERNEHMEN_UNKLAR|PROJEKT_UNKLAR)_(?:[0-9]{3,5}|[A-Z2-7]{10,52})|ARBEITGEBER_001|ORGANISATION_UNKLAR|PERSON_REVIEW_[0-9]{6}|(?:BANK_DATA|CONTACT|CREDENTIAL|DATE|EMAIL|ID|IP|LOCATION|PHONE|URL)_REDACTED|MANUAL_REDACTION)\]/gu;
+const PLACEHOLDER_RE = /\[(?:(?:PERSON|ORGANISATION|UNTERNEHMEN|KUNDE|PROJEKT|PERSON_UNKLAR|UNTERNEHMEN_UNKLAR|PROJEKT_UNKLAR)_(?:[0-9]{3,5}|[A-Z2-7]{10,52})|ARBEITGEBER_001|ORGANISATION_UNKLAR|PERSON_REVIEW_[0-9]{6}|(?:BANK_DATA|CONTACT|CREDENTIAL|DATE|EMAIL|FIELD|ID|IP|LOCATION|PHONE|URL)_REDACTED|MANUAL_REDACTION)\]/gu;
 
 // Unlike fixed redaction vocabulary, an imported variable suffix can be
 // written as a real name or internal identifier. Syntax alone is no provenance:

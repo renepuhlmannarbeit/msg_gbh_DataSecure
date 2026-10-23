@@ -377,7 +377,7 @@ testAsync('actual compact XLSX coordinates cannot hide a sensitive source header
   assert.ok(!anonymizeMarkdown(result.markdown,'general',{productChannel:'standalone',contentOptions:options()}).text.includes('Qvx'));
 });
 
-testAsync('nonuniform and vertical Word coordinate grids cannot authorize privacy without a complete field-owner model',async()=>{
+testAsync('nonuniform and vertical Word cells preserve their model and protect values without layout refusal',async()=>{
   const {zipStore}=require('./lib/zip'),{opcControlEntries}=require('./lib/opc');
   const {extractMarkdownBuffer}=require('../plugins/data-secure/server/standalone/markdown-extractor');
   const w='http://schemas.openxmlformats.org/wordprocessingml/2006/main';
@@ -389,9 +389,12 @@ testAsync('nonuniform and vertical Word coordinate grids cannot authorize privac
     const bytes=zipStore([...opcControlEntries('docx'),['word/document.xml',`<w:document xmlns:w="${w}"><w:body><w:tbl><w:tblGrid><w:gridCol/><w:gridCol/></w:tblGrid>${body}</w:tbl></w:body></w:document>`]]);
     const converted=extractMarkdownBuffer(bytes,'.docx',{markdownOutput:'content-v1',partialExtraction:true});
     assert.match(converted.markdown,/Qvx/u,'plain conversion retains original context');
-    assert.match(converted.markdown,/Tabelle mit verbundenen oder versetzten Zellen/u);
-    assert.ok(converted.coverage.reason_codes.includes('OFFICE_TABLE_CONTEXT_UNVERIFIED'));
-    await assert.rejects(extractSourceForPrivacy(bytes,'.docx',{contentOptions:options(),convertBuffer:async()=>source('docx',converted.markdown,options(),{coverage:converted.coverage})}),{code:'PARSER_COVERAGE_UNVERIFIED'});
+    assert.match(converted.markdown,/Tabelle als Zellabschnitte/u);
+    assert.ok(converted.coverage.reason_codes.includes('OFFICE_TABLE_LAYOUT_NORMALIZED'));
+    assert.ok(!converted.coverage.reason_codes.includes('OFFICE_TABLE_CONTEXT_UNVERIFIED'));
+    const actual=await extractSourceForPrivacy(bytes,'.docx',{contentOptions:options(),convertBuffer:async()=>source('docx',converted.markdown,options(),{coverage:converted.coverage})});
+    const masked=require('../plugins/data-secure/server/gateway/compliance').anonymizeMarkdown(actual.markdown,'general',{productChannel:'standalone',contentOptions:options()});
+    assert.doesNotMatch(masked.text,/Qvx/u);
   }
 });
 

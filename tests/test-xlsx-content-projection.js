@@ -201,7 +201,8 @@ test('content-v1 huge sparse row-column cross product stays sparse, not an alloc
     return `<row r="${i + 1}"><c r="${col}${i + 1}"><v>${i + 1}</v></c></row>`;
   }).join(''));
   const result = contentExtract(source);
-  assert.ok(result.markdown.includes('Zeile 1000:')); assert.ok(result.markdown.includes('Spalte 1000 (ALL1000): 1000'));
+  assert.ok(result.markdown.includes('Zeile 1000')); assert.ok(result.markdown.includes('Zelle ALL1000'));
+  assert.ok(result.markdown.includes('| 1000 |'));
   assert.ok(result.markdown.length < 100000);
 });
 test('content-v1 format projection preserves units, formula-cache warnings and workbook date system', () => {

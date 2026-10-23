@@ -9,6 +9,9 @@ const REL_NS = ['http://schemas.openxmlformats.org/officeDocument/2006/relations
 const PACKAGE_NS = 'http://schemas.openxmlformats.org/package/2006/relationships';
 const COMMENTS_NS = 'http://schemas.microsoft.com/office/spreadsheetml/2018/threadedcomments';
 const GUID = /^\{[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\}$/iu;
+const MAX_MERGE_RANGES = 200000;
+const MAX_SHEET_COLUMNS = 16384;
+const MAX_SHEET_ROWS = 1048576;
 
 function structureError(limit = false) {
   const error = new Error(limit ? 'XLSX-Struktur überschreitet die sichere Verarbeitungsgrenze.'
@@ -17,6 +20,75 @@ function structureError(limit = false) {
   return error;
 }
 const attr = (node, name, namespace = '') => node.attributes.get(`{${namespace}}${name}`);
+
+function worksheetMergeRange(reference) {
+  // Only actual worksheet A1 refs, never sheet names, unions, formulas or
+  // caller-authored Markdown coordinates. All model coordinates are 1-based.
+  if (typeof reference !== 'string' || reference.length > 21) throw structureError();
+  const match = /^([A-Z]{1,3})([1-9][0-9]*)(?::([A-Z]{1,3})([1-9][0-9]*))?$/u.exec(reference);
+  if (!match) throw structureError();
+  const column = letters => [...letters].reduce((value, letter) => value * 26 + letter.charCodeAt(0) - 64, 0);
+  const start = { row: Number(match[2]), column: column(match[1]) };
+  const end = { row: Number(match[4] ?? match[2]), column: column(match[3] ?? match[1]) };
+  if (start.row > end.row || start.column > end.column || end.row > MAX_SHEET_ROWS ||
+      end.column > MAX_SHEET_COLUMNS) throw structureError();
+  return Object.freeze({ reference, start: Object.freeze(start), end: Object.freeze(end),
+    anchor: Object.freeze({ reference: `${match[1]}${match[2]}`, row: start.row, column: start.column }) });
+}
+
+function disjointMergeRanges(ranges) {
+  // Sweep rows with an end-row heap and a fixed 16,384-column segment tree.
+  // Work is O(n log n + n log columns), independent of merged rectangle area;
+  // even an entire-sheet merge never creates rows, cells or copied text.
+  ranges.sort((left, right) => left.start.row - right.start.row || left.start.column - right.start.column ||
+    left.end.row - right.end.row || left.end.column - right.end.column);
+  if (ranges.length < 2) return Object.freeze(ranges);
+  const maximum = new Int32Array(MAX_SHEET_COLUMNS * 4), lazy = new Int32Array(MAX_SHEET_COLUMNS * 4), active = [];
+  function change(first, last, delta, node = 1, low = 1, high = MAX_SHEET_COLUMNS) {
+    if (first <= low && high <= last) { maximum[node] += delta; lazy[node] += delta; return; }
+    const middle = (low + high) >>> 1;
+    if (first <= middle) change(first, last, delta, node * 2, low, middle);
+    if (last > middle) change(first, last, delta, node * 2 + 1, middle + 1, high);
+    maximum[node] = lazy[node] + Math.max(maximum[node * 2], maximum[node * 2 + 1]);
+  }
+  function occupied(first, last, node = 1, low = 1, high = MAX_SHEET_COLUMNS, inherited = 0) {
+    if (first <= low && high <= last) return inherited + maximum[node] > 0;
+    const middle = (low + high) >>> 1, count = inherited + lazy[node];
+    return (first <= middle && occupied(first, last, node * 2, low, middle, count)) ||
+      (last > middle && occupied(first, last, node * 2 + 1, middle + 1, high, count));
+  }
+  function insert(value) {
+    let index = active.length; active.push(value);
+    while (index) {
+      const parent = (index - 1) >>> 1;
+      if (active[parent].end.row <= value.end.row) break;
+      active[index] = active[parent]; index = parent;
+    }
+    active[index] = value;
+  }
+  function remove() {
+    const result = active[0], tail = active.pop();
+    if (active.length) {
+      let index = 0;
+      while (index * 2 + 1 < active.length) {
+        let child = index * 2 + 1;
+        if (child + 1 < active.length && active[child + 1].end.row < active[child].end.row) child++;
+        if (active[child].end.row >= tail.end.row) break;
+        active[index] = active[child]; index = child;
+      }
+      active[index] = tail;
+    }
+    return result;
+  }
+  for (const range of ranges) {
+    while (active.length && active[0].end.row < range.start.row) {
+      const expired = remove(); change(expired.start.column, expired.end.column, -1);
+    }
+    if (occupied(range.start.column, range.end.column)) throw structureError();
+    change(range.start.column, range.end.column, 1); insert(range);
+  }
+  return Object.freeze(ranges);
+}
 
 function commentXstring(value) {
   // Only the schema-typed modern-comment ST_Xstring fields use this Office
@@ -183,16 +255,35 @@ function createXlsxReader(decode, options = {}) {
     return result;
   }
   function worksheet(xml, shared, formatting = {}) {
-    const rows = [], rowRecords = [], columnStyles = [];
+    const rows = [], rowRecords = [], columnStyles = [], mergeRanges = [];
     let row = null, cell = null, field = null, previousRow = 0, cellCount = 0, chars = 0, formulaCells = 0,
-      missingFormulaCaches = 0, unsupportedNumberFormats = 0;
+      missingFormulaCaches = 0, unsupportedNumberFormats = 0, mergeContainer = null, mergeNode = null,
+      mergeCount, seenMerges = false, worksheetRoot = null;
     function rowNumber(value) {
       if (!/^[1-9][0-9]*$/u.test(value) || Number(value) > 1048576) throw structureError();
       return Number(value);
     }
     const root = parse(xml, {
       start(node) {
-        if (options.contentMode && main(node, 'col') && main(node.parent, 'cols') && main(node.parent.parent, 'worksheet')) {
+        if(!node.parent){
+          if(!main(node,'worksheet'))throw structureError();
+          worksheetRoot=node;
+        }
+        if (mergeNode || (mergeContainer && node.parent === mergeContainer && !main(node, 'mergeCell'))) throw structureError();
+        if (node.localName === 'mergeCells' && node.parent === worksheetRoot) {
+          if (!main(node, 'mergeCells') || node.namespaceURI !== worksheetRoot.namespaceURI || seenMerges) throw structureError();
+          seenMerges = true; mergeContainer = node;
+          const count = attr(node, 'count');
+          if (count !== undefined) {
+            if (!/^[0-9]+$/u.test(count)) throw structureError();
+            if (Number(count) > MAX_MERGE_RANGES) throw structureError(true);
+            mergeCount = Number(count);
+          }
+        } else if (main(node, 'mergeCell') && node.namespaceURI === worksheetRoot.namespaceURI && node.parent === mergeContainer) {
+          if (mergeRanges.length >= MAX_MERGE_RANGES) throw structureError(true);
+          mergeRanges.push(worksheetMergeRange(attr(node, 'ref'))); mergeNode = node;
+        } else if (main(node, 'mergeCells') || main(node, 'mergeCell')) throw structureError();
+        else if (options.contentMode && main(node, 'col') && main(node.parent, 'cols') && main(node.parent.parent, 'worksheet')) {
           const first = attr(node, 'min'), last = attr(node, 'max'), style = attr(node, 'style');
           if (style !== undefined) {
             if (!/^[1-9][0-9]*$/u.test(first || '') || !/^[1-9][0-9]*$/u.test(last || '') ||
@@ -237,11 +328,17 @@ function createXlsxReader(decode, options = {}) {
         }
       },
       text(value, node) {
+        if ((node === mergeNode || node === mergeContainer) && /[^ \t\r\n]/u.test(value)) throw structureError();
         if (field && node === field.node) { field.chunks.push(value); chars += value.length; }
         else if (cell?.inlineNode && richText(node, cell.inlineNode)) { cell.inline.push(value); chars += value.length; }
         if (chars > 8000000) throw structureError(true);
       },
       end(node) {
+        if (node === mergeNode) mergeNode = null;
+        if (node === mergeContainer) {
+          if (!mergeRanges.length || (mergeCount !== undefined && mergeCount !== mergeRanges.length)) throw structureError();
+          mergeContainer = null;
+        }
         if (field?.node === node) {
           cell[main(node, 'f') ? 'formula' : 'value'] = field.chunks.join(''); field = null;
         }
@@ -280,7 +377,8 @@ function createXlsxReader(decode, options = {}) {
       }
     });
     expect(root, 'worksheet');
-    return { rows, rowRecords, formulaCells, missingFormulaCaches, unsupportedNumberFormats };
+    return { rows, rowRecords, formulaCells, missingFormulaCaches, unsupportedNumberFormats,
+      mergeRanges: disjointMergeRanges(mergeRanges) };
   }
   return { validate: parse, workbook, workbookProperties, styles, relationships, sharedStrings, worksheet, modernPersons, threadedComments };
 }

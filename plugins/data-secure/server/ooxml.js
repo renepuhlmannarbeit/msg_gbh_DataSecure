@@ -7,6 +7,8 @@ const { readXml, assertXmlCharacters } = require('./xml-reader');
 const { validateOpcControls } = require('./gateway/opc-source-validator');
 const { ownerDiagrams } = require('./office-diagrams');
 const { wordGridNumber, bindWordTableGrids, MAX_WORD_TABLE_COLUMNS } = require('./word-table-grid');
+const { renderTableCells, tableFieldPlan } = require('./office-table-projection');
+const { createDrawingTableCollector } = require('./drawing-table-grid');
 
 const MAX_EMBEDDED_DEPTH = 3;
 const MAX_EMBEDDED_DOCUMENTS = 20;
@@ -522,6 +524,26 @@ function renderPptTable(table, options = {}) {
 }
 function pptSlideTableSections(xml, sourcePart, options = {}) {
   const source = xmlTextSource(xml);
+  if(options.contentMode===true){
+    const tableModels=[];
+    const values=inheritedContentValues(source,{...options,keepTemplatePrompts:true,tableModels});
+    const tables=[];
+    for(const model of tableModels){
+      const complex=model.rows.some(row=>row.cells.some(cell=>cell.span>1||cell.rowSpan>1||cell.continuationOf!==null));
+      let markdown;
+      if(complex){
+        if(options.officeTableContext)options.officeTableContext.normalized=true;
+        markdown=renderTableCells(model.rows,{escapeCell:value=>extractionText(value,true,options.literalMarkup)});
+      }else{
+        const rows=model.rows.map(row=>row.cells.map(cell=>extractionText(cell.text,true,options.literalMarkup)));
+        if(!rows.length)continue;
+        markdown='| '+Array.from({length:model.columns},(_,column)=>`Spalte ${column+1}`).join(' | ')+' |\n| '+
+          Array.from({length:model.columns},()=> '---').join(' | ')+' |\n'+rows.map(cells=>'| '+cells.join(' | ')+' |').join('\n');
+      }
+      if(markdown.trim())tables.push({kind:'table',source_part:sourcePart,markdown:`## Tabelle\n\n${markdown}`});
+    }
+    return {tables,prose:'',proseText:values.join('\n\n'),issues:0};
+  }
   const opened = (source.match(/<a:tbl\b/gi) || []).length;
   const closed = (source.match(/<\/a:tbl\s*>/gi) || []).length;
   const tables = []; let match;
@@ -975,8 +997,66 @@ function renderWordStructure(root, options = {}) {
       emitted = true;
     }
   }
+  function cellBlocks(node) {
+    const blocks = []; let paragraphs = [];
+    function flush() { if(paragraphs.length) { blocks.push({text:paragraphs.join('\n')}); paragraphs=[]; } }
+    function visit(value) {
+      if(typeof value === 'string') { paragraphs.push(value); return; }
+      if(value.type === 'tbl') { flush(); blocks.push({table:value}); return; }
+      if(value.type === 'p' && !value.children.some(child=>typeof child!=='string')) {
+        paragraphs.push((value.prefix||'')+value.children.join('')); return;
+      }
+      for(const child of value.children)visit(child);
+    }
+    for(const child of node.children)visit(child); flush(); return blocks;
+  }
+  function projectedWordTable(node, inherited = null) {
+    // Flatten a nested, already supported rectangular grid into an independent
+    // GFM section rather than keeping it escaped inside its parent value.
+    // Do not change the established uniform-partition path unnecessarily.
+    if(!inherited&&!hasNestedTable(node)&&(!node.grid.complex||uniformWordPartition(node))){emit(node,false);return;}
+    const blocks = new Map();
+    const rows = node.grid.rows.map(({row,cells},index)=>({number:index+1,header:row.header===true,cells:cells.map(positioned=>{
+      const actual=cellBlocks(positioned.cell);
+      const cell={column:positioned.column,span:positioned.span,continuationOf:positioned.continuationOf===null?null:positioned.continuationOf+1,
+        text:actual.map(block=>block.table?'Untertabelle':block.text).join('\n')};
+      blocks.set(cell,actual);return cell;
+    })}));
+    const plan=tableFieldPlan(rows), ownScope=rows.some(row=>row.header)||[...plan.values()].some(value=>value!=='Inhalt');
+    let first=true;
+    function separate() { if(!first)write('\n\n'); first=false; }
+    for(const row of rows)for(const cell of row.cells){
+      const label=inherited&&!ownScope?'Geschützter Tabellenwert':plan.get(cell);
+      const coordinate=`Zeile ${row.number} · `+(cell.span===1?`Spalte ${cell.column+1}`:`Spalten ${cell.column+1}–${cell.column+cell.span}`)+
+        (cell.continuationOf===null?'':` · verbunden mit Zeile ${cell.continuationOf}`);
+      if(cell.continuationOf!==null&&!blocks.get(cell).some(block=>block.table||block.text.trim())){separate();write(coordinate+' · ohne eigenen Zelltext');}
+      for(const block of blocks.get(cell)){
+        if(block.table){separate();write(coordinate+' · Untertabelle:\n\n');projectedWordTable(block.table,label==='Inhalt'?null:label);}
+        else if(block.text.trim()){separate();write(coordinate+`\n\n| ${label} |\n| --- |\n| `+
+          extractionText(block.text,true,options.literalMarkup)+' |');}
+      }
+    }
+  }
+  function hasNestedTable(node) {
+    const pending=[...node.children];
+    while(pending.length){const child=pending.pop();if(typeof child==='string')continue;
+      if(child.type==='tbl')return true;pending.push(...child.children);}
+    return false;
+  }
+  function uniformWordPartition(node){
+    const partition=node.grid.rows[0]?.cells,logicalColumns=node.grid.columns;
+    return node.grid.complex&&partition?.length>0&&partition[0].column===0&&
+      partition.at(-1).column+partition.at(-1).span===logicalColumns&&
+      node.grid.rows.every(({row,cells})=>!row.gridBefore&&!row.gridAfter&&cells.length===partition.length&&
+        cells.every((positioned,index)=>!positioned.cell.verticalMerge&&positioned.column===partition[index].column&&positioned.span===partition[index].span));
+  }
   function emit(node, inCell) {
     if (node.type !== 'tbl') { children(node, inCell); return; }
+    if(options.contentMode===true&&((node.grid.complex&&!uniformWordPartition(node))||hasNestedTable(node))){
+      if(options.officeTableContext)options.officeTableContext.normalized=true;
+      write(`Tabelle als Zellabschnitte (${node.grid.columns} logische Spalten):\n\n`);
+      projectedWordTable(node);return;
+    }
     // Even uniform nested grids become escaped inline text inside a cell,
     // not an independent GFM table. Their field owners therefore cannot be
     // proven by the privacy table grammar. Retain conversion text, but never
@@ -1546,7 +1626,7 @@ function parseDocx(entries, options = {}) {
   }
   sections.push(...metadataSections(entries,options));
   const imageCoverage = docxImageRelationshipCoverage(entries, options);
-  return { markdown:sections.map(section=>section.markdown).join('\n\n'), sections, attachments:mediaAttachments(entries,'word/media/', imageCoverage.safeTargets), warnings:[...docxCoverageWarnings(entries),...imageCoverage.warnings,...customMetadataWarnings(entries),...(options.officeTableContext.unverified?['OFFICE_TABLE_CONTEXT_UNVERIFIED']:[])] };
+  return { markdown:sections.map(section=>section.markdown).join('\n\n'), sections, attachments:mediaAttachments(entries,'word/media/', imageCoverage.safeTargets), warnings:[...docxCoverageWarnings(entries),...imageCoverage.warnings,...customMetadataWarnings(entries),...(options.officeTableContext.unverified?['OFFICE_TABLE_CONTEXT_UNVERIFIED']:[]),...(options.officeTableContext.normalized?['OFFICE_TABLE_LAYOUT_NORMALIZED']:[])] };
 }
 function xlsxSheetRelationshipMap(entries, reader, options = {}) {
   const rels = entries.get('xl/_rels/workbook.xml.rels');
@@ -1711,17 +1791,28 @@ function xlsxContentTable(parsed, options, append) {
   // Most source tables remain ordinary tables with original row/column labels.
   // For genuinely sparse cross-products, use bounded per-source-row cells rather
   // than expanding N far-apart values into N*N blank intersections.
-  if (used.length * parsed.rowRecords.length > 200000) {
-    if(options.officeTableContext)options.officeTableContext.unverified=true;
-    for (const row of parsed.rowRecords) {
-      append(`Zeile ${row.number}:\n`);
-      for (const key of Object.keys(row.values).sort((a, b) => Number(a) - Number(b))) {
-        if (row.values[key] === '') continue;
-        const index = Number(key);
-        append(`- Spalte ${index + 1} (${xlsxColumnLabel(index)}${row.number}): ${extractionText(String(row.values[key]), false, options.literalMarkup)}`);
-      }
-      append('');
-    }
+  if (used.length * parsed.rowRecords.length > 200000 || parsed.mergeRanges?.length) {
+    if(options.officeTableContext)options.officeTableContext.normalized=true;
+    // Only real anchors expand a header's logical interval. The actual cell
+    // list stays sparse; never allocate a maxRow*maxColumn sheet. Nonanchor
+    // source values are retained, even if an Office viewer would hide them.
+    const anchors=new Map((parsed.mergeRanges||[]).map(range=>[range.anchor.reference,range]));
+    const coordinates=new Map();
+    const rows=parsed.rowRecords.map(row=>{
+      let origin=null;
+      return {number:row.number,header:false,cells:Object.keys(row.values).sort((a,b)=>Number(a)-Number(b)).map(key=>{
+        const column=Number(key),ref=`${xlsxColumnLabel(column)}${row.number}`,range=anchors.get(ref);
+        const continuation=origin && column<origin.column+origin.span;
+        const cell={column,span:range?range.end.column-range.start.column+1:1,text:String(row.values[key]),
+          continuationOf:continuation?row.number:null};
+        if(!continuation)origin=cell;
+        coordinates.set(cell,range?`Zelle ${range.reference} · Zeile ${row.number} · Spalten ${range.start.column}–${range.end.column}`:
+          `Zelle ${ref} · Zeile ${row.number} · Spalte ${column+1}`);
+        return cell;
+      })};
+    });
+    append(renderTableCells(rows,{escapeCell:value=>extractionText(value,true,options.literalMarkup),
+      coordinates:(_row,cell)=>coordinates.get(cell)}));
     return;
   }
   append(`| Quellzeile | ${used.map(index => `Spalte ${index + 1} (${xlsxColumnLabel(index)})`).join(' | ')} |`);
@@ -1891,6 +1982,7 @@ function parseXlsx(entries, options = {}) {
   const imageCoverage = packageImageRelationshipCoverage(entries, 'xl', 'XLSX', supplementCoverage.safeDrawings);
   const warnings=[...customMetadataWarnings(entries), ...xlsxCoverageWarnings(entries, sheetMeta, options.contentMode ? modernComments : null), ...imageCoverage.warnings, ...supplementCoverage.warnings, ...commentCoverage.warnings, ...modernComments.warnings, ...numberWarnings];
   if(options.officeTableContext.unverified)warnings.push('OFFICE_TABLE_CONTEXT_UNVERIFIED');
+  if(options.officeTableContext.normalized)warnings.push('OFFICE_TABLE_LAYOUT_NORMALIZED');
   if(rootIssues)warnings.push(`XLSX enthält ${rootIssues} nicht eindeutig über die interne Paketwurzel abgesicherte Struktur(en); Freigabe wird blockiert.`);
   if(issues)warnings.push(`XLSX enthält ${issues} nicht eindeutig über eine interne Arbeitsblattbeziehung abgesicherte Struktur(en); Freigabe wird blockiert.`);
   if(formulaCells)warnings.push(`XLSX enthält ${formulaCells} Formelzelle(n); Freigabe wird bis zur vollständigen Formelcoverage blockiert.`);
@@ -2086,6 +2178,7 @@ function inheritedContentValues(xml,options={}) {
   const mc='http://schemas.openxmlformats.org/markup-compatibility/2006';
   const selected=new WeakMap(),ignored=new WeakSet();
   const understood=new Set([...RAW_IMAGE_NAMESPACES.presentation,...RAW_IMAGE_NAMESPACES.drawing]);
+  const tableCollector = options.contentMode ? createDrawingTableCollector(namespace => RAW_IMAGE_NAMESPACES.drawing.has(namespace), pptxStructureError) : null;
   const active=node=>{for(let scope=node;scope;scope=scope.parent)if(ignored.has(scope))return false;return true;};
   readXml(xml,{decode:xmlDecode,error:xmlTextError,start(node){
     if(node.namespaceURI===mc&&node.localName==='AlternateContent')selected.set(node,false);
@@ -2096,6 +2189,8 @@ function inheritedContentValues(xml,options={}) {
       if(selected.get(node.parent)||!usable)ignored.add(node);else selected.set(node.parent,true);
     }
     if(!active(node))return;
+    tableCollector?.start(node);
+    if(tableCollector?.inTable())return;
     // This parser-private flag describes a reached, actually selected table,
     // never a text spelling or an unselected MC alternative. The prose-only
     // inherited projection cannot currently prove its header/value ownership.
@@ -2108,13 +2203,28 @@ function inheritedContentValues(xml,options={}) {
     if(RAW_IMAGE_NAMESPACES.drawing.has(node.namespaceURI)&&node.localName==='p')paragraph={node,text:'',owner};
     if(paragraph&&RAW_IMAGE_NAMESPACES.drawing.has(node.namespaceURI)&&node.localName==='br')paragraph.text+='\n';
     if(RAW_IMAGE_NAMESPACES.drawing.has(node.namespaceURI)&&node.localName==='t')legacyText={node,chunks:[]};
-  },text(value,node){if(active(node)&&RAW_IMAGE_NAMESPACES.drawing.has(node.namespaceURI)&&node.localName==='t'){
+  },text(value,node){
+    if(!active(node))return;
+    tableCollector?.text(value,node);
+    if(tableCollector?.inTable())return;
+    if(RAW_IMAGE_NAMESPACES.drawing.has(node.namespaceURI)&&node.localName==='t'){
     if(paragraph)paragraph.text+=value;
     if(legacyText?.node===node)legacyText.chunks.push(value);
   }},end(node){
+    if(!active(node))return;
+    const wasTable=tableCollector?.inTable(); tableCollector?.end(node); if(wasTable)return;
     if(legacyText?.node===node){legacyTexts.push(legacyText.chunks.join(''));legacyText=null;}
     if(paragraph?.node===node){paragraph.owner?.paragraphs.push(paragraph.text);paragraphs.push(paragraph);paragraph=null;}
   }});
+  if(tableCollector?.tables.length){
+    if(options.tableModels)options.tableModels.push(...tableCollector.tables);
+    else{
+      if(options.officeTableContext)options.officeTableContext.normalized=true;
+      for(const table of tableCollector.tables)options.inheritedTableSections?.push(renderTableCells(table.rows,{
+        escapeCell:value=>extractionText(value,true,options.literalMarkup)
+      }));
+    }
+  }
   // Bound notes-v1 retains the previous individual text-node whitespace and
   // separators, but shares the actual namespace/MC-selected source scope.
   // Only content-v1 applies the established editor-prompt cleanup below.
@@ -2126,7 +2236,7 @@ function inheritedContentValues(xml,options={}) {
       const ownerValues=item.owner.paragraphs.flatMap(value=>value.split(/\r\n|\r|\n/u)).filter(value=>value.trim());
       omitOwner.set(item.owner,item.owner.placeholder&&ownerValues.length>0&&ownerValues.every(value=>editorPrompts.has(value.trim())));
     }
-    if(item.owner&&omitOwner.get(item.owner))continue;
+    if(item.owner&&omitOwner.get(item.owner)&&options.keepTemplatePrompts!==true)continue;
     if(values.length)retained.push(values.join('\n\n'));
   }
   return retained.length?[retained.join('\n\n')]:[];
@@ -2179,7 +2289,7 @@ function parsePptx(entries, options = {}) {
   const masterCoverage = pptMasterLayoutCoverage(entries, slides);
   const sections=sectionList(entries, options);
   for(const [slideIndex,s] of slides.entries()){
-    const n=options.preserveText?slideIndex+1:slideNumber(s),xml=entries.get(s).toString('utf8'),tableCoverage=pptSlideTableSections(xml,s,options),rawTexts=options.preserveText?[options.contentMode?contentDrawingText(tableCoverage.prose):drawingText(tableCoverage.prose)]:textTags(tableCoverage.prose,'a:t'),texts=options.preserveText?rawTexts.map(value=>extractionText(value,false,options.literalMarkup)):rawTexts,slide=[`# Folie ${n}`];
+    const n=options.preserveText?slideIndex+1:slideNumber(s),xml=entries.get(s).toString('utf8'),tableCoverage=pptSlideTableSections(xml,s,options),rawTexts=tableCoverage.proseText!==undefined?[tableCoverage.proseText]:options.preserveText?[options.contentMode?contentDrawingText(tableCoverage.prose):drawingText(tableCoverage.prose)]:textTags(tableCoverage.prose,'a:t'),texts=options.preserveText?rawTexts.map(value=>extractionText(value,false,options.literalMarkup)):rawTexts,slide=[`# Folie ${n}`];
     tableIssues+=tableCoverage.issues;
     if(texts.length)slide.push(texts.join('\n\n'));
     // Keep an actual reached slide anchor if its native SmartArt is its only
@@ -2193,12 +2303,20 @@ function parsePptx(entries, options = {}) {
   }
   const chartCoverage = pptChartRelationshipCoverage(entries, slides);
   for(const [name,data] of entries) if(chartCoverage.safeCharts.has(name)){const rawValues=textTags(data.toString('utf8'),'c:v').concat(textTags(data.toString('utf8'),'a:t')),vals=rawValues.map(value=>options.literalMarkup?extractionText(value,false,true):value);if(vals.length&&!omitEmptyPptxSection(entries,options,name,rawValues))sections.push({kind:'table',source_part:name,markdown:`## Diagrammdaten ${path.basename(name)}\n\n${vals.join(' | ')}`});}
-  for(const [name,data] of entries) if(masterCoverage.safeLayouts.has(name)){const rawValues=options.contentMode||options.preserveText?inheritedContentValues(data.toString('utf8'),options):textTags(data.toString('utf8'),'a:t'),vals=rawValues.map(value=>options.literalMarkup?extractionText(value,false,true):value);if(vals.length&&!omitEmptyPptxSection(entries,options,name,rawValues))sections.push({kind:'text',source_part:name,markdown:`## Folienlayout ${path.basename(name)}\n\n${vals.join('\n\n')}`});}
-  for(const [name,data] of entries) if(masterCoverage.safeMasters.has(name)){const rawValues=options.contentMode||options.preserveText?inheritedContentValues(data.toString('utf8'),options):textTags(data.toString('utf8'),'a:t'),vals=rawValues.map(value=>options.literalMarkup?extractionText(value,false,true):value);if(vals.length&&!omitEmptyPptxSection(entries,options,name,rawValues))sections.push({kind:'text',source_part:name,markdown:`## Folienmaster ${path.basename(name)}\n\n${vals.join('\n\n')}`});}
+  function appendInherited(name,data,label){
+    const inheritedTableSections=[];
+    const rawValues=options.contentMode||options.preserveText?inheritedContentValues(data.toString('utf8'),{...options,inheritedTableSections}):textTags(data.toString('utf8'),'a:t');
+    const vals=rawValues.map(value=>options.literalMarkup?extractionText(value,false,true):value);
+    if(vals.length&&!omitEmptyPptxSection(entries,options,name,rawValues))sections.push({kind:'text',source_part:name,markdown:`## ${label} ${path.basename(name)}\n\n${vals.join('\n\n')}`});
+    for(const markdown of inheritedTableSections)if(markdown.trim())sections.push({kind:'table',source_part:name,markdown:`## ${label} ${path.basename(name)}\n\n${markdown}`});
+  }
+  for(const [name,data] of entries) if(masterCoverage.safeLayouts.has(name))appendInherited(name,data,'Folienlayout');
+  for(const [name,data] of entries) if(masterCoverage.safeMasters.has(name))appendInherited(name,data,'Folienmaster');
   sections.push(...metadataSections(entries,options));
   const imageCoverage = packageImageRelationshipCoverage(entries, 'ppt', 'PPTX', new Set(slides));
   const warnings=[...customMetadataWarnings(entries), ...pptxCoverageWarnings(entries, slides, notesCoverage.safeNotes, masterCoverage), ...imageCoverage.warnings, ...chartCoverage.warnings, ...notesCoverage.warnings, ...masterCoverage.warnings];if(issues)warnings.push(`PPTX enthält ${issues} nicht eindeutig über eine interne Folienbeziehung abgesicherte Struktur(en); Freigabe wird blockiert.`);
   if(options.officeTableContext.unverified)warnings.push('OFFICE_TABLE_CONTEXT_UNVERIFIED');
+  if(options.officeTableContext.normalized)warnings.push('OFFICE_TABLE_LAYOUT_NORMALIZED');
   if(rootIssues)warnings.push(`PPTX enthält ${rootIssues} nicht eindeutig über die interne Paketwurzel abgesicherte Struktur(en); Freigabe wird blockiert.`);
   if(tableIssues)warnings.push(`PPTX enthält ${tableIssues} nicht vollständig strukturierte DrawingML-Tabelle(n); Freigabe wird blockiert.`);
   return { markdown:sections.map(section=>section.markdown).join('\n\n'), sections, attachments:mediaAttachments(entries,'ppt/media/', imageCoverage.safeTargets), warnings };

@@ -1011,6 +1011,7 @@
           element('p', 'Diese Markdown-Dateien wurden erstellt. Hinweise auf ausgelassene Bildinhalte oder nicht bestätigte Vollständigkeit sind keine weiteren fehlgeschlagenen Dateien. Bei Bedarf mit dem Original vergleichen.', 'meta'));
         const descriptions = { SOURCE_COVERAGE_UNVERIFIED: 'Vollständigkeit der Textübernahme nicht unabhängig bestätigt',
           OFFICE_TABLE_CONTEXT_UNVERIFIED: 'Office-Tabelleninhalt lesbar, Kontext nur teilweise übernommen; sichere Feldzuordnung für Anonymisierung nicht vollständig modelliert',
+          OFFICE_TABLE_LAYOUT_NORMALIZED: 'Komplexe Office-Tabelle als lesbare Zellabschnitte mit Koordinaten aufbereitet; bei Anonymisierung werden unklare sensible Feldwerte zusätzlich maskiert',
           VISUAL_CONTENT_NOT_EXTRACTED: 'Visuelle Inhalte wurden nicht übernommen',
           IMAGE_OCR_DISABLED_BY_POLICY: 'Text in Bildern wurde wegen ausgeschalteter OCR nicht gelesen',
           SCAN_OCR_DISABLED_BY_POLICY: 'Scantext wurde wegen ausgeschalteter OCR nicht gelesen',

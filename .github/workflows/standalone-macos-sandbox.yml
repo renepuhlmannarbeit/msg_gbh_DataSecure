@@ -212,6 +212,10 @@ jobs:
           node tests/test-office-projection-countercases.js
           node tests/test-docx-table-grid.js
           node tests/test-office-table-context.js
+          node tests/test-office-table-projection.js
+          node tests/test-sensitive-field-coverage.js
+          node tests/test-xlsx-table-ranges.js
+          node tests/test-drawing-table-grid.js
           node tests/test-xlsx-content-projection.js
           node tests/test-xlsx-counterregressions.js
           node tests/test-cfb-protection.js

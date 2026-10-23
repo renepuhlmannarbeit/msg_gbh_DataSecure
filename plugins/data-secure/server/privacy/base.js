@@ -778,6 +778,23 @@ function isResolvedSensitiveTableHeader(value, personFieldPolicy = LEGACY_PERSON
   return isSensitiveTableHeader(value) || isPersonFieldLabel(normalizeSensitiveLabel(value), personFieldPolicy);
 }
 
+function effectiveTableFieldLabel(value, personFieldPolicy = CONTENT_PERSON_FIELD_POLICY) {
+  const label = normalizeSensitiveLabel(String(value)).trim();
+  if(personFieldPolicy !== CONTENT_PERSON_FIELD_POLICY)return normalizeSensitiveLabel(label.replace(/\s+\(\d+\)$/u,'')).trim();
+  // Idempotent content semantics, one backwards scan. Repeated regex suffix
+  // stripping in different consumers used to give Name (1) (2) different
+  // meanings. Avoid a nested repeated-suffix regex on attacker-sized text.
+  let end = label.length;
+  while(label[end-1] === ')') {
+    let cursor = end-2;
+    while(cursor >= 0 && label.charCodeAt(cursor) >= 48 && label.charCodeAt(cursor) <= 57)cursor--;
+    if(cursor === end-2 || label[cursor] !== '(' || cursor < 1 || !/\s/u.test(label[cursor-1]))break;
+    end = cursor;
+    while(end > 0 && /\s/u.test(label[end-1]))end--;
+  }
+  return normalizeSensitiveLabel(label.slice(0,end)).trim();
+}
+
 function combineHeaderRows(rows) {
   return rows[0].map((_, column) =>
     normalizeSensitiveLabel(rows.map((row) => row[column]).join(' '))
@@ -877,7 +894,7 @@ function buildTableIndex(text, personFieldPolicy) {
       }
       return header;
     });
-    const cleaned = headers.map((header) => normalizeSensitiveLabel(header.replace(/\s+\(\d+\)$/u, '')));
+    const cleaned = headers.map(header=>effectiveTableFieldLabel(header,personFieldPolicy));
     const resolvedSensitiveColumns = cleaned.map(header => isResolvedSensitiveTableHeader(header, personFieldPolicy));
     const hasSensitiveHeader = resolvedSensitiveColumns.some(Boolean);
     const headerHasSensitiveFragment = hasCredentialHeaderFragmentSequence(headerBlock) || headerBlock
@@ -1052,6 +1069,7 @@ module.exports = {
   isResolvedSensitiveTableHeader,
   assertPersonFieldStructure,
   normalizeSensitiveLabel,
+  effectiveTableFieldLabel,
   NAME_PARTICLE,
   NAME_PARTICLES,
   ID_LABEL_HEADER_RE,

@@ -44,6 +44,8 @@ const baseFiles = [
   'tests/test-office-diagrams.js', 'tests/test-office-occurrences.js',
   'tests/test-office-projection-countercases.js', 'tests/test-docx-table-grid.js',
   'tests/test-office-table-context.js',
+  'tests/test-office-table-projection.js', 'tests/test-sensitive-field-coverage.js',
+  'tests/test-xlsx-table-ranges.js', 'tests/test-drawing-table-grid.js',
   'tests/test-xlsx-content-projection.js', 'tests/test-cfb-protection.js',
   'tests/test-xlsx-counterregressions.js',
   'tests/test-pdf-native-ocr-layout.js',

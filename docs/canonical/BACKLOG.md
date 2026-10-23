@@ -1,6 +1,21 @@
 # Aktives Entwicklungsbacklog
 
-Quellstand: 3.2.0-rc172 (Test-Pre-Release; menschliche Abnahme USER_PENDING).
+Quellstand: 3.2.0-rc173 (Entwicklungsstand; noch keine neue Paketfreigabe).
+
+## BL-049.3 – Tabellen ohne pauschalen Layoutstopp / RC173 (23.10.2026)
+
+Status: **Implementiert und eng unabhängig revalidiert; gemeinsame Endgates/
+Pakete noch offen.** Schwierige gültige
+Word-Zellspans/Nestedtabellen, große Excel-Zelllisten und geerbte PPTX-Tabellen
+sollen automatisch anonymisiert werden. Neutrale Ersatzspalten/Koordinaten
+dürfen echte Inhalte und sensible Header-Wert-Beziehungen nicht verlieren.
+Mehrdeutige Bezüge konservativ behandeln statt ungeprüft durchlassen; keine
+pauschale Maskierung aller Fachtexte und keine bloße Sperrcodeunterdrückung.
+Schutz-/Residual-/I/O-/Guard-/Ressourcenprüfungen und sichtbare Auslassungen
+bleiben. RC173 Windows/beideMacs mit unabhängigen echten Quellenreviews und
+frischen Endbelegen bereitstellen; Desktoptests Nutzer, keine Mainintegration.
+[Plan und Nachweise](../acceptance/RC173_SHARED_RELEASE_20261023.md).
+RC172 und alle älteren Pakete/Profile/Nutzerläufe bleiben unverändert.
 
 ## BL-049.2 – Inhaltsabdeckung und lesbares Markdown nach RC171 (23.10.2026)
 
@@ -1646,7 +1661,7 @@ in dieselbe Korrekturrunde.
 
 ## Historische Nachweise bis R4 (kein aktueller R5-Abschluss)
 
-Stand: 17.10.2026 · Produktstand 3.2.0-rc169 · veröffentlicht Standalone RC162 (Windows und beide Mac-Architekturen; M2-Abnahme offen), Linux RC159 / Cowork RC151 · lokaler Arbeitsstand nach RC162 noch nicht veröffentlicht
+Stand: 17.10.2026 · Produktstand 3.2.0-rc173 · veröffentlicht Standalone RC162 (Windows und beide Mac-Architekturen; M2-Abnahme offen), Linux RC159 / Cowork RC151 · lokaler Arbeitsstand nach RC162 noch nicht veröffentlicht
 
 ## Gezielter R3-Abschlussreview
 

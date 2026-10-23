@@ -251,8 +251,16 @@ function personProseCandidateSpans(text, options = {}) {
   if (options.productChannel === 'standalone') {
     candidates.push(...standalonePresentationCandidateSpans(original, options.profile, consumerOptions));
     const ranges = protectedEvidenceRanges(original, options.profile, personFieldPolicy);
+    const fields = require('./field-value-coverage');
+    const fieldContexts = [...fields.protectedHeaderRanges(original,personFieldPolicy),
+      ...fields.uncoveredFieldSpans(original,personFieldPolicy)].sort((left,right)=>left.start-right.start||left.end-right.end);
+    // Actual closed field headers/values are not prose hypotheses. Reserving
+    // them would hide field semantics during redaction and restore raw data
+    // afterwards. This grants no Keep choice or exception: the ordinary
+    // entity path, complete-field fallback and independent residual gate run.
     return disjointCandidates(original, candidates.filter(candidate =>
-      !ranges.some(range => candidate.start < range.end && range.start < candidate.end)));
+      !ranges.some(range => candidate.start < range.end && range.start < candidate.end) &&
+      !fields.isWithinProtectedHeader(fieldContexts,candidate)));
   }
   return candidates.filter((candidate, index) => !candidates.some((other, otherIndex) =>
     (otherIndex < index && other.start === candidate.start && other.end === candidate.end) ||

@@ -1,6 +1,22 @@
 # Aktueller Iststand
 
-Quellstand: 3.2.0-rc172 (Test-Pre-Release; menschliche Abnahme USER_PENDING).
+Quellstand: 3.2.0-rc173 (Entwicklungsstand; noch keine neue Paketfreigabe).
+
+## Aktueller Folgeauftrag – RC173 Tabellenaufbereitung (23.10.2026)
+
+BL-049.3 ausdrücklich beauftragt: keine pauschale Anonymisierungsverweigerung
+allein durch gültige komplexe Tabellenlayouts. Echte Zell-/Feldbindungen,
+Schutzprüfungen und konservative Behandlung unklarer Bezüge erhalten. Windows
+und beide Macs mit frischen Tests/Fachreviews/Test-Pre-Release; Desktoptests
+Nutzer. [Aktueller Plan und Journal](../acceptance/RC173_SHARED_RELEASE_20261023.md).
+Start0b30c5e, jetzt RC173-Implementierung mit parsergebundenem Zell-/Spanmodell,
+lesbaren Zellabschnitten und vollständigem sensiblen Feldwertschutz in Arbeit.
+Internet-/GitHubansätze und tatsächliche Quellengegenfälle dokumentiert. Die
+engen Fachreviews schlossen die belegten Header-/Merge-/Bindungs-/SourceMarker-
+Befunde, einschließlich der echten kodierten Keep-Gegenorakel. Gezielte
+25/25 Testdateien stabil PASS, nach letztem engen Fix 107 Feldfälle PASS;
+abschließender gemeinsamer Freeze und frische Endgates folgen.
+Noch kein RC173-Gesamt-/Paket-PASS, keine Mainintegration oder UI-Aktion.
 
 ## Aktueller Nutzerauftrag 23.10.2026 – BL-049.2 implementieren und RC172 bereitstellen
 
@@ -51,7 +67,7 @@ keine vollständige visuelle oder semantische Inhaltsfreigabe. Keine Nutzerdaten
 keine Produkt-/Teständerungen, neuen Pakete oder Mainintegration. Ältere Stand-
 und Übergabeabschnitte darunter nicht als neue offene Gesamtaufgabe übernehmen.
 
-Stand: 23.10.2026 · RC172 Test-Pre-Release; RC171 und ältere Releases unverändert.
+Stand: 23.10.2026 · 3.2.0-rc173 in Entwicklung; RC172 und ältere Releases unverändert.
 
 ## Historischer RC171-Quellenabschluss22.10.2026 10:49UTC vor Source12
 

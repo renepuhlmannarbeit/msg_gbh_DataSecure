@@ -144,6 +144,7 @@
   const noticeExplanation = codes => {
     const messages = { SOURCE_COVERAGE_UNVERIFIED: 'Inhaltsübernahme nicht vollständig belegbar',
       OFFICE_TABLE_CONTEXT_UNVERIFIED: 'Office-Tabellenkontext nur teilweise übernommen: sichere Feldzuordnung nicht vollständig modelliert',
+      OFFICE_TABLE_LAYOUT_NORMALIZED: 'Komplexe Office-Tabelle als Zellabschnitte mit Koordinaten aufbereitet; bei Anonymisierung werden unklare sensible Feldwerte zusätzlich maskiert',
       OCR_NOT_VERIFIED: 'OCR-Text nicht vollständig fachlich geprüft. Die Kontaktprüfung betrifft nur erkannte E-Mail-Adressen und Telefonnummern, nicht die übrigen Wörter, Zahlen oder Lesereihenfolge.',
       OCR_CONTACT_VALUES_UNVERIFIED: 'Erkannte OCR-Kontaktwerte sind noch nicht bestätigt',
       VISUAL_CONTENT_NOT_EXTRACTED: 'Bildinhalt nicht als Text übernommen',

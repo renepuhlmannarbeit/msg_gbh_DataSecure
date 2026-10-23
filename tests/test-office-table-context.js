@@ -11,6 +11,10 @@ const { createMarkdownExtraction, COVERAGE_REASON_CODES } = require('../plugins/
 const { extractSourceForPrivacy } = require('../plugins/data-secure/server/core/markdown-first-privacy');
 const neutral = require('../plugins/data-secure/server/core/source-extraction-contract');
 const { anonymizeMarkdown } = require('../plugins/data-secure/server/gateway/compliance');
+const { prepareTextPrivacyReview, resolveTextPrivacyReview, finalizeTextPrivacyReview } = require('../plugins/data-secure/server/gateway/privacy-text-operation');
+const { verifyAnonymizedPublication } = require('../plugins/data-secure/server/standalone/anonymized-artifact');
+const { initialEntities, applyEntityDecisions } = require('../plugins/data-secure/server/gateway/standalone-entity-review');
+const { replayTransformTrace, entityPlanFromTrace } = require('../plugins/data-secure/server/privacy/transform-plan');
 const { test, testAsync, assert, done } = createSuite('Office parser-bound table context refusal');
 const marker = 'OFFICE_TABLE_CONTEXT_UNVERIFIED';
 const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships';
@@ -64,9 +68,10 @@ async function boundPrivacy(bytes, extension, markdownOutput, beforePrivacy) {
   return anonymizeMarkdown(result.markdown, 'general', { productChannel: 'standalone', contentOptions: options });
 }
 
-test('one unpublished reason is generalized without enlarging either closed vocabulary', () => {
+test('closed reason vocabularies agree and include the nonblocking normalization notice', () => {
   assert.deepEqual(COVERAGE_REASON_CODES, neutral.COVERAGE_REASON_CODES);
-  assert.equal(COVERAGE_REASON_CODES.length, 27); assert.equal(new Set(COVERAGE_REASON_CODES).size, 27);
+  assert.equal(COVERAGE_REASON_CODES.length, 28); assert.equal(new Set(COVERAGE_REASON_CODES).size, 28);
+  assert.ok(COVERAGE_REASON_CODES.includes('OFFICE_TABLE_LAYOUT_NORMALIZED'));
   assert.ok(COVERAGE_REASON_CODES.includes(marker));
   assert.ok(!COVERAGE_REASON_CODES.includes('DOCX_TABLE_CONTEXT_UNVERIFIED'));
   assert.ok(COVERAGE_REASON_CODES.every((value, i, values) => !i || values[i - 1] < value));
@@ -75,15 +80,18 @@ test('one unpublished reason is generalized without enlarging either closed voca
   }
 });
 
-testAsync('original 450x450 XLSX coordinate false-success is now readable but rejected before privacy', async () => {
+testAsync('original 450x450 XLSX countercase is now bounded and protected without a layout refusal', async () => {
   const bytes = xlsx(true), before = Buffer.from(bytes);
   const converted = extractMarkdownBuffer(bytes, '.xlsx', { markdownOutput: 'content-v1', partialExtraction: true });
-  assert.ok(converted.coverage.reason_codes.includes(marker)); assert.match(converted.markdown, /Spalte 1 \(A1\): Name/u);
-  assert.match(converted.markdown, /Spalte 1 \(A2\): Qvx/u); assert.match(converted.markdown, /Zeile 450/u);
-  assert.ok(converted.markdown.length < 30000, 'no N*N expansion was introduced');
+  assert.ok(!converted.coverage.reason_codes.includes(marker)); assert.match(converted.markdown, /Zelle A1/u);
+  assert.ok(converted.coverage.reason_codes.includes('OFFICE_TABLE_LAYOUT_NORMALIZED'));
+  assert.match(converted.markdown, /Zelle A2/u); assert.match(converted.markdown, /Zeile 450/u);
+  assert.equal(converted.markdown.split('Qvx').length-1,1);
+  assert.ok(converted.markdown.length < 80000, 'source-cell sections, no N*N expansion');
   let calls = 0;
-  await assert.rejects(boundPrivacy(bytes, '.xlsx', 'content-v1', () => calls++), { code: 'PARSER_COVERAGE_UNVERIFIED' });
-  assert.equal(calls, 0); assert.deepEqual(bytes, before);
+  const result=await boundPrivacy(bytes, '.xlsx', 'content-v1', () => calls++);
+  assert.doesNotMatch(result.text,/Qvx/u);assert.match(result.text,/PERSON_|FIELD_REDACTED/u);
+  assert.equal(calls, 1); assert.deepEqual(bytes, before);
 });
 
 for (const profile of ['content-v1', 'notes-v1']) {
@@ -99,12 +107,20 @@ for (const profile of ['content-v1', 'notes-v1']) {
     testAsync(`${profile}: reached active inherited ${owner} table is retained but cannot authorize anonymization`, async () => {
       const bytes = pptx({ owner }), before = Buffer.from(bytes);
       const converted = extractMarkdownBuffer(bytes, '.pptx', { markdownOutput: profile, partialExtraction: true });
-      assert.ok(converted.coverage.reason_codes.includes(marker));
-      assert.equal(converted.markdown.split('Name').length - 1, 1); assert.equal(converted.markdown.split('Qvx').length - 1, 1);
+      assert.equal(converted.coverage.reason_codes.includes(marker),profile==='notes-v1');
+      if(profile==='notes-v1')assert.equal(converted.markdown.split('Name').length - 1, 1);
+      else assert.equal((converted.markdown.match(/\| --- \|\n\| Name \|/gu)||[]).length,1,'original header value occurs once');
+      assert.equal(converted.markdown.split('Qvx').length - 1, 1);
       assert.ok(converted.markdown.includes('FHIR'));
       let calls = 0;
-      await assert.rejects(boundPrivacy(bytes, '.pptx', profile, () => calls++), { code: 'PARSER_COVERAGE_UNVERIFIED' });
-      assert.equal(calls, 0); assert.deepEqual(bytes, before);
+      if(profile==='notes-v1'){
+        await assert.rejects(boundPrivacy(bytes, '.pptx', profile, () => calls++), { code: 'PARSER_COVERAGE_UNVERIFIED' });
+        assert.equal(calls, 0);
+      }else{
+        const actual=await boundPrivacy(bytes,'.pptx',profile,()=>calls++);
+        assert.doesNotMatch(actual.text,/Qvx/u);assert.match(actual.text,/FHIR/u);assert.equal(calls,1);
+      }
+      assert.deepEqual(bytes, before);
     });
     testAsync(`${profile}: unselected MC ${owner} table contributes neither a context flag nor text`, async () => {
       const bytes = pptx({ owner, unselected: true });
@@ -132,11 +148,51 @@ test('notes inherited text retains source-bearing spaces, tabs, CR/LF and editor
 
 test('parser-owned context is fresh per call and cannot be set by a literal source marker or caller object', () => {
   const supplied = { unverified: true }, options = { preserveText: true, contentMode: true, officeTableContext: supplied };
-  assert.ok(parseOoxml(xlsx(true), '.xlsx', undefined, options).warnings.includes(marker));
+  assert.ok(parseOoxml(xlsx(true), '.xlsx', undefined, options).warnings.includes('OFFICE_TABLE_LAYOUT_NORMALIZED'));
   assert.ok(!parseOoxml(xlsx(false), '.xlsx', undefined, options).warnings.includes(marker));
   assert.deepEqual(supplied, { unverified: true });
   const literal = extractMarkdownBuffer(pptx({ owner: 'none', prose: marker }), '.pptx', { markdownOutput: 'content-v1' });
   assert.ok(!literal.coverage.reason_codes.includes(marker));
+});
+
+function complexWord(rows) {
+  const { reviewDocx,paragraph }=require('./lib/docx-review-fixtures');
+  return reviewDocx('<w:tbl><w:tblGrid>'+ '<w:gridCol/>'.repeat(4)+'</w:tblGrid>'+rows.map((values,index)=>
+    '<w:tr>'+(index===0?'<w:trPr><w:tblHeader/></w:trPr>':'')+values.map((value,column)=>'<w:tc>'+ (column===2?
+      `<w:tcPr><w:gridSpan w:val="2"/><w:vMerge w:val="${index?'continue':'restart'}"/></w:tcPr>`:'')+paragraph(value)+'</w:tc>').join('')+'</w:tr>').join('')+'</w:tbl>');
+}
+function nonanchorXlsx(){
+  return zipStore([...opcControlEntries('xlsx'),
+    ['xl/workbook.xml',`<workbook xmlns="${S}" xmlns:r="${R}"><sheets><sheet name="Synthetic" sheetId="1" r:id="s"/></sheets></workbook>`],
+    ['xl/_rels/workbook.xml.rels',relationships(relation('s','worksheet','worksheets/sheet1.xml'))],
+    ['xl/worksheets/sheet1.xml',`<worksheet xmlns="${S}"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Fachtext</t></is></c><c r="B1" t="inlineStr"><is><t>Name</t></is></c></row><row r="2"><c r="B2" t="inlineStr"><is><t>Qvx</t></is></c></row></sheetData><mergeCells count="1"><mergeCell ref="A1:B1"/></mergeCells></worksheet>`]]);
+}
+for(const profile of ['general','personnel_profile'])for(const [label,bytes,extension,secret] of [
+  ['unmarked header transition',complexWord([['Name','Name','Fachtext'],['Qvx','Rtz','FHIR'],['Company','Status','Kommentar'],['Ryx','Tzx','Java']]),'.docx','Tzx'],
+  ['repeated same-row sensitive key',complexWord([['Name','Fachtext','Status'],['Qvx','FHIR','Open'],['Name','Rtz','Rust']]),'.docx','Rtz'],
+  ['real text-bearing XLSX nonanchor',nonanchorXlsx(),'.xlsx','Qvx']
+])testAsync(`${profile}: ${label} reaches real publication verification without releasing short values`,async()=>{
+  const original=Buffer.from(bytes),contentOptions=contract('content-v1');
+  const source=await extractSourceForPrivacy(bytes,extension,{contentOptions,convertBuffer:async input=>{
+    const actual=extractMarkdownBuffer(input,extension,{markdownOutput:'content-v1',partialExtraction:true});
+    assert.ok(!actual.coverage.reason_codes.includes(marker));
+    return createMarkdownExtraction({source_type:extension.slice(1),markdown:actual.markdown,coverage:actual.coverage,content_options:contentOptions});
+  }});
+  const prepared=prepareTextPrivacyReview({text:source.markdown,profile,productChannel:'standalone',
+    consumerOptions:{productChannel:'standalone',contentOptions},registry:require('../plugins/data-secure/server/privacy/entities').makeRegistry(),captureTrace:true});
+  const reviewed=await resolveTextPrivacyReview(prepared,null,{reviewPolicy:'automatic-conservative'});
+  const final=finalizeTextPrivacyReview(prepared,reviewed,{prefix:'',suffix:''});
+  assert.ok(!final.markdown.includes(secret),secret);
+  assert.equal(replayTransformTrace(final.transform_trace),final.markdown);
+  assert.ok(entityPlanFromTrace(final.transform_trace).occurrences.length>0);
+  const proofInput={markdown:final.markdown,profile,content_options:contentOptions,source_extraction:source.sourceExtraction,
+    dictionary:final.dictionary,strong_person_anchor:final.strong_person_anchor,reviewed_person_candidates:final.reviewed_person_candidates};
+  assert.ok(verifyAnonymizedPublication(proofInput));
+  const entities=initialEntities({markdown:final.markdown,transform_trace:final.transform_trace});
+  const target=entities.find(row=>row.original.includes(secret));assert.ok(target);
+  const kept=applyEntityDecisions(final.markdown,entities,[{entity_id:target.entity_id,decision:'keep'}],Buffer.alloc(32,9));
+  assert.throws(()=>verifyAnonymizedPublication({...proofInput,markdown:kept.markdown}),{code:'STANDALONE_PUBLICATION_INVALID'});
+  assert.deepEqual(bytes,original);
 });
 
 done();

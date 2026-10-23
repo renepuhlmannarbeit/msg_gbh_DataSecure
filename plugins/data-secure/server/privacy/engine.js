@@ -50,7 +50,7 @@ const { anonymizePersonnel } = require('./personnel');
 const { reviewedPersonRanges, importedSourceMarkerCandidates } = require('./residual-person-review');
 const { findStructuredSpans, scanStructured, replaceStructured } = require('./structured');
 const { scanNumericIdentifierResiduals } = require('./numeric-identifier-residual');
-const { placeholderSpans, maskPlaceholders, applySpans } = require('./spans');
+const { placeholderSpans, maskPlaceholders, applySpans, sourceVariableTokens } = require('./spans');
 const {
   credentialContextSpans,
   credentialContextDetails,
@@ -771,7 +771,9 @@ function anonymize(text, profile = 'general', options = {}) {
   }
 
   const reserved = placeholderSpans(out);
-  const usable = spans.filter((s) => !reserved.some((r) => s.start < r.end && r.start < s.end &&
+  const protectedHeaders = require('./field-value-coverage').protectedHeaderRanges(out, personFieldPolicy);
+  const usable = spans.filter(s => !require('./field-value-coverage').isWithinProtectedHeader(protectedHeaders, s))
+    .filter((s) => !reserved.some((r) => s.start < r.end && r.start < s.end &&
     // A label-bound credential span owns the entire sensitive value, including
     // forged/misplaced marker inside it. A marker must not shield neighbouring
     // password text. Pure credential/manual-redaction values were excluded by
@@ -792,6 +794,12 @@ function anonymize(text, profile = 'general', options = {}) {
   }
 
   out = applySpans(out, usable, trace ? (input, output, edits) => trace.append('entities', input, output, edits) : undefined);
+
+  const fieldRemainders = require('./field-value-coverage').uncoveredFieldSpans(out, personFieldPolicy, src);
+  if (fieldRemainders.length) {
+    out = applySpans(out, fieldRemainders, trace ? (input, output, edits) => trace.append('field-coverage', input, output, edits) : undefined);
+    for (const span of fieldRemainders) findings.push({ type: span.type, value_hash: hashShort(span.text) });
+  }
 
   return {
     text: out,
@@ -822,6 +830,8 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
   // stand for already replaced text, not whitespace in an intact source name.
   // Keep the exact UTF-16 coordinates and an opaque, non-whitespace barrier.
   const personOccurrenceText = maskPlaceholders(rendered, '\uFFFC');
+  const protectedHeaders = require('./field-value-coverage').protectedHeaderRanges(rendered, personFieldPolicy);
+  const isActualFieldHeader = span => require('./field-value-coverage').isWithinProtectedHeader(protectedHeaders, span);
   const reviewedRanges = reviewedPersonRanges(options.reviewedPersonCandidates, rendered);
   const reviewedLiterals = require('./residual-person-review').reviewedLiteralRanges(options.reviewedPersonCandidates, rendered);
   const credentialRanges = credentialContextDetails(clean);
@@ -832,6 +842,28 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
     .filter((f) => !(f.type === 'URL' && isProtectedProfessionalDomain(clean,f.start,f.end,credentialRanges)))
     .filter((f) => f.type === 'CREDENTIAL' || !insideCredentialValue(f.start, f.end))
     .map((f) => ({ type: f.type, text: f.type === 'CREDENTIAL' ? '' : f.text }));
+  // Independent complete-value check, not the replacement span enumerator:
+  // parse whole GFM columns again and inspect their decoded visible values.
+  // Keep/review choices cannot waive an explicitly source-bound field. The
+  // redactor's dictionary and its guessed name length play no role here.
+  if (personFieldPolicy === CONTENT_PERSON_FIELD_POLICY) {
+    const { isProtectedFieldHeader } = require('./field-value-coverage');
+    const values = markdownTableColumnValues(rendered, { test: label => isProtectedFieldHeader(label, personFieldPolicy) });
+    const sourceView = canonicalizeRenderedText(options.originalSourceText || '', personFieldPolicy);
+    const imported = sourceVariableTokens(sourceView);
+    // Literal Markdown cell escapes are intentionally retained by general
+    // canonicalisation. Decode only actual protected source cells through the
+    // same GFM cell reader used for this independent whole-value check, never
+    // by globally unescaping arbitrary TXT/prose or trusting token syntax.
+    for (const sourceValue of markdownTableColumnValues(sourceView,
+      { test: label => isProtectedFieldHeader(label, personFieldPolicy) }))
+      for (const token of sourceVariableTokens(sourceValue)) imported.add(token);
+    for (const value of values) if (/[\p{L}\p{M}\p{N}\p{S}]/u.test(maskPlaceholders(value)) ||
+        [...sourceVariableTokens(value)].some(token => imported.has(token))) {
+      out.push({ type: 'SENSITIVE_FIELD', text: '' });
+      break;
+    }
+  }
   for (const finding of scanNumericIdentifierResiduals(clean)) {
     if (insideCredentialValue(finding.start, finding.end)) continue;
     if (!out.some((current) => current.type === finding.type && current.text === finding.text))
@@ -933,7 +965,7 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
   }
   for (const seed of residualPersonSeeds) {
     const occurrences=findLiteralSpans(personOccurrenceText,seed.value,'','PERSON',PRIORITY.PERSON)
-      .filter((span) => !insideCredentialValue(span.start, span.end));
+      .filter((span) => !insideCredentialValue(span.start, span.end) && !isActualFieldHeader(span));
     if (!occurrences.length) continue;
     const issuerOnly=occurrences.length>0 && occurrences.every((span) =>
       inCredentialContext(clean,span.start,span.end,credentialRanges) &&
@@ -989,7 +1021,7 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
     if (v.length < 3) continue;
     const occurrences=findLiteralSpans(clean,v,'','RESIDUAL_ENTITY',0);
     const credentialOrg=typed ? ['ORGANIZATION','PROJECT'].includes(value.type) : residualOrgKeys.has(key(v));
-    const remaining = occurrences.filter((s)=>!reviewedLiterals.some(range => s.start >= range.start && s.end <= range.end) &&
+    const remaining = occurrences.filter((s)=>!isActualFieldHeader(s) && !reviewedLiterals.some(range => s.start >= range.start && s.end <= range.end) &&
         !insideCredentialValue(s.start, s.end) && !(credentialOrg &&
         (credentialOrganizationRole(clean,s.start,s.end,credentialRanges)!=='private' ||
          isTechnologyOrganizationSpan(clean,s.start,s.end))));
