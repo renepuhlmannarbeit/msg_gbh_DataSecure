@@ -2,9 +2,40 @@
 
 Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc173 · Veröffentlichungsnachtrag: 23.10.2026
 
-Der aktuelle Quellstand ist RC173-Entwicklungsstand und noch kein neu gebundener Paketkandidat. Nachfolgende reine
+Der aktuelle Quellstand ist RC173, als gebundener Test-Pre-Release veröffentlicht. Nachfolgende reine
 Dokumentation ändert dessen App-/Paket-/Tagbindung nicht. Menschliche Desktop-/
 Office-/Zielhost- und N3/N4-Produktionsfreigaben bleiben offen.
+
+### RC173 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
+
+Quellcommit `e253380e708de4c347e1aaad7ba836763aabec56` bindet den
+[RC173-Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc173).
+Build e253380e, Produktfingerprint
+`8b1644e102d65f40985825300693dee901f0e21c08cb924a201d42b94c5479bc`/351.
+Unterstützte komplexe Word-/XLSX-/DrawingML-Tabellen werden quellbezogen
+normalisiert, mit eindeutigen Textvorkommen und konservativem ganzen Wertschutz
+in gebundenen sensiblen Feldern. Kein erfundener Personenmappingeintrag für
+FIELD_REDACTED; Keep umgeht Residualschutz nicht. Altes Word-w:hMerge bleibt
+unmodelliert; Struktur-/Schutz-/Quell-/Guard-/Ressourcenfehler bleiben hart.
+
+Vier frische lokale Endgates PASS/stabil:302+11Headless,300Rust/3ignored/
+Clippy/Node-Rust/Release,38PDF/67Worker/49Office/41Grafik und5Paketgates/
+100MD0Fehler. Beide Macconsumer39992799112SUCCESS, je38PDF/65Worker+
+2Windows-SKIPs/49Office/41Grafik/283Rust+3ignored. Tatsächliche Quellen-,
+Windows-/ARM-/Intel-Ganzlog- und Archivbytegegenreviews vollständig gelesen.
+Eigene Core-/Konverterrollen unverändert getrennt, keine neue Producerfreigabe.
+
+Release422165357, Publikationszeit23.10.2026 18:17:26UTC,
+PreRelease=true/Draft=false. Alle20Assets im Draft und nach Publikation frisch
+heruntergeladen/gehasht; Inventar, dieselbenIDs, Tagquelle, Quellcommit und
+Notesbody bestätigt. Windows create-only lokal unter `Software DataSecure/RC173`,
+19Fallplan+FachprobenA–F+neueTabellenproben und3synthetische Archive.
+Menschliche Desktop-/Office-/Finder/TCC/M2/Enterprise/VoiceOver/macOS26-Abnahme
+USER_PENDING; keine agentische UI-Aktion. NativeEpoch/Pause/LeaseNOT_RUN,
+ACLadversarialPARTIAL, LaunchServicesexit unbekannt, Smoke-Writerjoin unbestätigt.
+Eigene MacApp/Core nur ad hoc; keine Developer-ID/Notarisierung, OS-Schutzänderung
+oder Mainintegration. LinuxRC159/CoworkRC151/RC172 und alle älteren Pakete bleiben.
+[Exakte Hashes, historische Gegenbelege und Grenzen](acceptance/RC173_SHARED_RELEASE_20261023.md).
 
 ### RC172 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
 

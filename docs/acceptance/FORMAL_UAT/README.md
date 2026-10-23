@@ -1,8 +1,25 @@
 # Formale N3/N4-Abnahme mit Windows und macOS
 
-Stand: 20.10.2026 · veröffentlichte Standalone Windows/macOS RC168 · Linux RC159 · Cowork RC151
+Stand: 23.10.2026 · veröffentlichte Standalone Windows/macOS RC173 · Linux RC159 · Cowork RC151
 
 **Aktueller Windows-/Mac-Standalone-Kandidat:** Das
+[RC173-Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc173)
+bindet Windows x64 und beide Mac-Architekturen an Quellcommit
+`e253380e708de4c347e1aaad7ba836763aabec56`. Alle vier lokalen Endgates und beide
+nativen Macconsumer39992799112 bestanden; beide Mac-ZIPs und beide DMGs sind
+mit exakten Quell-/Core-/Konverter-/Architektur-/Sealbelegen geprüft. Alle20
+Releaseassets vor und nach Publikation frisch heruntergeladen/gehasht.
+Unterstützte komplexe Tabellenmodelle werden normalisiert, quellgebundene
+sensible Felder bleiben geschützt; altes Word-w:hMerge weiter unmodelliert.
+Alle19Desktopfälle, beibehaltene FachprobenA–F und zusätzliche RC173Tabellenproben,
+Excel/Numbers und reale Mac-/Finder-/TCC-/M2-/VoiceOver-Abnahme USER_PENDING.
+Eine neue Kampagne bindet ausschließlich die exakten RC173-Pakethashes an
+diesen Produktcommit. Leere Vorlagen, historische Kandidaten und alte Nutzerläufe
+sind kein RC173-PASS. Eigene MacApp/Core nur ad hoc, keine Developer-ID oder
+Notarisierung; OS-Schutz nicht abschalten. Linux-Standalone und Cowork behalten
+RC159 beziehungsweise RC151. Reine Dokumentation ändert App-/Paket-/Tagbindung nicht.
+
+**Historischer Windows-/Mac-Standalone-Kandidat:** Das
 [RC168-Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc168)
 bindet Windows x64 und beide Mac-Architekturen an Quellcommit
 `0049513a9ba661bee4190a6677bb3ddffef461a9`. Neue Positions-/Maskierungs- und

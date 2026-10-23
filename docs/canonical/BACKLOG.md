@@ -4,8 +4,8 @@ Quellstand: 3.2.0-rc173 (Entwicklungsstand; noch keine neue Paketfreigabe).
 
 ## BL-049.3 – Tabellen ohne pauschalen Layoutstopp / RC173 (23.10.2026)
 
-Status: **Implementiert und eng unabhängig revalidiert; gemeinsame Endgates/
-Pakete noch offen.** Schwierige gültige
+Status: **Technisch umgesetzt/revalidiert; RC173 Windows und beide Macs am
+23.10.2026 veröffentlicht. Desktop-/Officeabnahme USER_PENDING.** Schwierige gültige
 Word-Zellspans/Nestedtabellen, große Excel-Zelllisten und geerbte PPTX-Tabellen
 sollen automatisch anonymisiert werden. Neutrale Ersatzspalten/Koordinaten
 dürfen echte Inhalte und sensible Header-Wert-Beziehungen nicht verlieren.
@@ -16,6 +16,18 @@ bleiben. RC173 Windows/beideMacs mit unabhängigen echten Quellenreviews und
 frischen Endbelegen bereitstellen; Desktoptests Nutzer, keine Mainintegration.
 [Plan und Nachweise](../acceptance/RC173_SHARED_RELEASE_20261023.md).
 RC172 und alle älteren Pakete/Profile/Nutzerläufe bleiben unverändert.
+
+Gemeinsamer App-/Tagcommit e253380e708de4c347e1aaad7ba836763aabec56,
+FP8b1644e102d65f40985825300693dee901f0e21c08cb924a201d42b94c5479bc/351.
+Frische302+11/Native300Rust+3ignored/Konverter38PDF+67Worker+49Office+41Grafik/
+5Paketgates100MD PASS/stabil, beide Mac39992799112SUCCESS. Tatsächliche
+Quellen-, Ganzlog- und Archivbytegegenreviews ohne neuen bestätigten Blocker.
+Release422165357/18:17:26UTC/20Assets vor und nach Publikation frisch gehasht,
+Tag/Commit/Inventar/IDs/Notesbody bestätigt; Windows lokal mit aktuellem Testplan.
+Unterstützte Word-gridSpan/vMerge-/Nested-, XLSX- und DrawingML-Modelle;
+altes Word-w:hMerge weiter unmodelliert. Generischer ganzer Wertschutz in
+quellgebundenen sensiblen Feldern, keine universelle Felderkennung. Keine
+Schutzlockerung, Mainintegration, Desktop-/Office- oder Applefreigabe daraus.
 
 ## BL-049.2 – Inhaltsabdeckung und lesbares Markdown nach RC171 (23.10.2026)
 

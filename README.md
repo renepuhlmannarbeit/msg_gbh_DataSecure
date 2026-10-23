@@ -1,9 +1,9 @@
-# GBH DataSecure – Standalone Windows/macOS RC172 · Linux RC159 · Cowork RC151
+# GBH DataSecure – Standalone Windows/macOS RC173 · Linux RC159 · Cowork RC151
 
 Quellstand: 3.2.0-rc173
 
-Der [Standalone-Test-Pre-Release RC172 für Windows und macOS](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc172)
-bindet Quellcommit `2d4a5fe2ef67ffa10e4015e34827853e08dfa0da` (Build `2d4a5fe2`).
+Der [Standalone-Test-Pre-Release RC173 für Windows und macOS](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc173)
+bindet Quellcommit `e253380e708de4c347e1aaad7ba836763aabec56` (Build `e253380e`).
 Linux bleibt beim [RC159-Paket](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc159)
 aus Quellcommit `7af2a9d0268864a01b954e0175cae9f5a3616fe8`.
 Die neue Oberfläche ist der reguläre Einstieg: **Neue Verarbeitung**, schnelle
@@ -19,15 +19,18 @@ Markdown-Dateien und den getrennten Unterordner **Vertraulich** mit
 MD weitergeben, nicht Vertraulich oder zusätzliche OS-Metadaten. Es erfolgt kein Upload, und
 die Ergebnisse sind nicht auf KI-Nutzung beschränkt. Reine Konvertierung anonymisiert nicht.
 
-**Neu in RC172:** SmartArt-/Bildkontext, moderne Excel-Kommentare und
-Anzeigewerte, logisches Word-Tabellenraster, PDF-Suchtext-/OCR-Gegenfälle,
-quellbezogenes Inhaltsmarkdown und präzisere Schutzdiagnosen. Zusätzliche
-Grafikformate werden als klar begrenzte Teilmengen lokal verarbeitet;
-unbekannte Records/Codecs und Ressourcenstopps bleiben sichtbare Auslassungen.
-Kein universeller Office-Renderer oder Artefaktfreiheitsversprechen.
-Nicht sicher modellierte komplexe Tabellen bleiben lesbar konvertierbar,
-ihre Anonymisierung aber hart verweigert, statt den Feldschutz zu umgehen.
-[RC172-Umfang, Grenzen und Prüfstand](docs/acceptance/RC172_SHARED_RELEASE_20261023.md).
+**Neu in RC173:** Unterstützte komplexe Word-, Excel- und PowerPoint-Tabellen
+werden im Inhaltsmodus quellbezogen normalisiert, statt allein wegen des
+Layouts von der Anonymisierung ausgeschlossen. Echte Zell-/Spanmodelle und
+neutrale Koordinaten erhalten Zusammenhänge und jedes Zelltextvorkommen einmal.
+Geschützte unklare Feldreste erhalten `[FIELD_REDACTED]`, keine erfundene
+Personenidentität. Die unabhängige Restprüfung gilt auch nach Nachbearbeitung.
+Altes Word-`w:hMerge` bleibt unmodelliert; widersprüchliche Strukturen,
+Schutz-/Quell-/Guard-/Protokoll-/Ressourcenfehler bleiben konkrete Grenzen.
+SmartArt-/Bildkontext, Excel-Kommentare/Anzeigewerte, PDF-/OCR-Verbesserungen
+und begrenzte Grafikdecoder aus RC172 bleiben erhalten. Kein universeller
+Office-Renderer oder Artefaktfreiheitsversprechen.
+[RC173-Umfang, Grenzen und Prüfstand](docs/acceptance/RC173_SHARED_RELEASE_20261023.md).
 
 **Aus RC169 beibehalten:** Das erste Excelblatt **Zuordnungen** enthält dieselben
 Pseudonym-/Typ-/Originalwert-/Vorkommenszuordnungen wie die TXT, zusätzlich den
@@ -51,7 +54,7 @@ Erst-/neue Korrekturstände erhalten die drei vertraulichen Begleitdateien.
 Alte Workbookbytes werden beim Lesen/No-op nicht neu erzeugt oder umbenannt.
 [Umsetzung und Prüfstand](docs/acceptance/RC169_SHARED_RELEASE_20261020.md).
 
-Für RC172 bestanden 298 Haupttestdateien, elf Zusatzprüfungen, Windows-Native-/
+Für RC173 bestanden 302 Haupttestdateien, elf Zusatzprüfungen, Windows-Native-/
 300Rust-/Node-Rust-/Paketgates,38PDF/67Worker/49Office/41Grafik sowie beide
 nativen Mac-Consumer desselben Appcommits (je65Worker+2Windows-SKIP).
 Alle 20 veröffentlichten Dateien wurden vor und nach Publikation frisch
@@ -65,7 +68,7 @@ Workbookreader-Proben sind kein universeller nativer Office-Gleichheitsnachweis.
 Manuelle Bearbeitung ist erlaubt; vertrauliche Zuordnungen bleiben auch nach
 Bearbeitung vertraulich. Belege beschreiben den ursprünglich von der App
 bereitgestellten Stand, nicht externe Änderungen.
-RC172 ist ein Teststand mit synthetischen Daten, keine Produktionsfreigabe.
+RC173 ist ein Teststand mit synthetischen Daten, keine Produktionsfreigabe.
 [Exakte Nachweise und Prüfsummen](docs/RELEASE.md).
 
 Das getrennte [Cowork-Plugin bleibt auf RC151](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc151),
@@ -92,15 +95,15 @@ Für die Standalone-App werden **weder Claude noch Cowork, Node.js, Python oder
 Rust** benötigt. Das zur eigenen CPU passende ZIP vollständig entpacken und
 nicht direkt aus dem ZIP starten; auf dem Mac gibt es alternativ ein DMG:
 
-**[RC172: Windows-/Mac-ZIPs, Mac-DMGs, Testpläne und Prüfsummen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc172)** ·
+**[RC173: Windows-/Mac-ZIPs, Mac-DMGs, Testpläne und Prüfsummen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc173)** ·
 [Linux RC159](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc159)
 
-Für die19Abschlusstests und RC172-FachprobenA–F gibt es [synthetische RC164-Testdaten](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc172/DataSecure-3.2.0-rc164-Abnahmetests.zip),
-einen [Windows-Testplan](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc172/WINDOWS-TESTPLAN.txt)
-und [Mac-Testhinweise](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc172/MAC-TEST-HINWEISE.txt).
+Für die19Abschlusstests, beibehaltene FachprobenA–F und neue RC173-Tabellenproben gibt es [synthetische RC164-Testdaten](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc173/DataSecure-3.2.0-rc164-Abnahmetests.zip),
+einen [Windows-Testplan](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc173/WINDOWS-TESTPLAN.txt)
+und [Mac-Testhinweise](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc173/MAC-TEST-HINWEISE.txt).
 Pro Fall nur dessen EINGABEN wählen. Zusätzlich steht das unveränderte
-[100-Dateien-Testpaket aus RC160](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc172/DataSecure-Standalone-3.2.0-rc160-Testdatenpaket.zip)
-und die separate [36-Dateien-Large-Beilage](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc172/DataSecure-3.2.0-rc166-Large-Testdaten.zip)
+[100-Dateien-Testpaket aus RC160](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc173/DataSecure-Standalone-3.2.0-rc160-Testdatenpaket.zip)
+und die separate [36-Dateien-Large-Beilage](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc173/DataSecure-3.2.0-rc166-Large-Testdaten.zip)
 bereit. Die historischen Anleitungen in diesen unveränderten Archiven gelten
 nicht für den neuen Direktablauf; die zwei aktuellen Testpläne sind maßgeblich.
 In der App für den 100-Dateien-Bestand nur den enthaltenen Eingabeordner
@@ -110,27 +113,27 @@ Eingabedateien.
 **Mac-Kompatibilitätshinweis:** Der erneute Paketreview hat in den veröffentlichten
 Standalone-RC140-ZIPs einen Helfer mit höherer Mindestversion gefunden: Intel
 verlangt macOS 15, Apple Silicon macOS 14. Die bisherige Angabe 13.5 war für
-diese ZIPs falsch. Für Mac die unten verlinkten RC172-ZIPs oder DMGs verwenden:
+diese ZIPs falsch. Für Mac die unten verlinkten RC173-ZIPs oder DMGs verwenden:
 ihr Binärvertrag ist für macOS 13.5 geprüft; ein realer Lauf auf 13.5 bleibt offen.
 Die RC140-Downloads werden nicht verändert. Die Mac-Pakete bleiben interne,
 ad-hoc-signierte Piloten ohne bestätigte Finder-/Gatekeeper-Abnahme auf dem
 betroffenen verwalteten M2.
 
 - **Windows 10/11 x64:**
-  [DataSecure-Standalone-3.2.0-rc172-windows-x64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc172/DataSecure-Standalone-3.2.0-rc172-windows-x64.zip)
+  [DataSecure-Standalone-3.2.0-rc173-windows-x64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc173/DataSecure-Standalone-3.2.0-rc173-windows-x64.zip)
   herunterladen, vollständig entpacken und
   `DataSecure Standalone.exe` doppelklicken. Microsoft Edge WebView2 muss als
   Windows-Systemkomponente vorhanden sein. [Ausführliche Windows-Anleitung](apps/datasecure-standalone/START-WINDOWS.md)
 - **Mac mit Intel-Prozessor:**
-  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc172/DataSecure-Standalone-3.2.0-rc172-macos-x64.zip)
-  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc172/DataSecure-Standalone-3.2.0-rc172-macos-x64.dmg)
+  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc173/DataSecure-Standalone-3.2.0-rc173-macos-x64.zip)
+  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc173/DataSecure-Standalone-3.2.0-rc173-macos-x64.dmg)
   herunterladen, die jeweils passende `.sha256` derselben Release-Seite prüfen
   und die enthaltene `DataSecure Standalone.app` nach **Programme** ziehen.
 - **Mac mit Apple Silicon (M1 oder neuer):**
-  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc172/DataSecure-Standalone-3.2.0-rc172-macos-arm64.zip)
-  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc172/DataSecure-Standalone-3.2.0-rc172-macos-arm64.dmg)
+  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc173/DataSecure-Standalone-3.2.0-rc173-macos-arm64.zip)
+  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc173/DataSecure-Standalone-3.2.0-rc173-macos-arm64.dmg)
   herunterladen und genauso installieren.
-  Die Architektur zeigt **Apple-Menü → Über diesen Mac**. RC172 wurde auf
+  Die Architektur zeigt **Apple-Menü → Über diesen Mac**. RC173 wurde auf
   macOS 15 (Intel) und macOS 14 (ARM) automatisch ausgeführt; macOS 13.5 ist die deklarierte,
   in allen nativen Komponenten geprüfte Mindestversion (siehe Hinweis oben).
   [Ausführliche macOS-Anleitung](apps/datasecure-standalone/MACOS-START.md)

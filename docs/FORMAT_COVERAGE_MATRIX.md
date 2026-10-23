@@ -1,8 +1,8 @@
 # Aktuelle Format-Coverage
 
-Quellstand: 3.2.0-rc173 · 23.10.2026 · RC173-Endprüfung noch offen.
+Quellstand: 3.2.0-rc173 · 23.10.2026 · Test-Pre-Release; Desktop-/Officeabnahme USER_PENDING.
 
-RC173-Folgearbeit (23.10.2026, noch keine Paketfreigabe): gültige nichtuniforme,
+RC173 veröffentlicht (23.10.2026, Build e253380e): unterstützte nichtuniforme,
 vertikale und verschachtelte Wordraster, sparse/verbundene XLSX-Zellen und
 erreichte PowerPoint-Layout-/Mastertabellen werden im Inhaltsmodus als begrenzte
 Zellabschnitte mit ursprünglichen Koordinaten normalisiert. Echte sensible

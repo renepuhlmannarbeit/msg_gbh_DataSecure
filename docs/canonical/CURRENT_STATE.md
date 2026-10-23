@@ -1,22 +1,41 @@
 # Aktueller Iststand
 
-Quellstand: 3.2.0-rc173 (Entwicklungsstand; noch keine neue Paketfreigabe).
+Quellstand: 3.2.0-rc173 (Test-Pre-Release veröffentlicht; Desktopabnahme USER_PENDING).
 
-## Aktueller Folgeauftrag – RC173 Tabellenaufbereitung (23.10.2026)
+## Technischer Abschluss – RC173 Tabellenaufbereitung (23.10.2026)
 
 BL-049.3 ausdrücklich beauftragt: keine pauschale Anonymisierungsverweigerung
 allein durch gültige komplexe Tabellenlayouts. Echte Zell-/Feldbindungen,
 Schutzprüfungen und konservative Behandlung unklarer Bezüge erhalten. Windows
 und beide Macs mit frischen Tests/Fachreviews/Test-Pre-Release; Desktoptests
 Nutzer. [Aktueller Plan und Journal](../acceptance/RC173_SHARED_RELEASE_20261023.md).
-Start0b30c5e, jetzt RC173-Implementierung mit parsergebundenem Zell-/Spanmodell,
-lesbaren Zellabschnitten und vollständigem sensiblen Feldwertschutz in Arbeit.
-Internet-/GitHubansätze und tatsächliche Quellengegenfälle dokumentiert. Die
-engen Fachreviews schlossen die belegten Header-/Merge-/Bindungs-/SourceMarker-
-Befunde, einschließlich der echten kodierten Keep-Gegenorakel. Gezielte
-25/25 Testdateien stabil PASS, nach letztem engen Fix 107 Feldfälle PASS;
-abschließender gemeinsamer Freeze und frische Endgates folgen.
-Noch kein RC173-Gesamt-/Paket-PASS, keine Mainintegration oder UI-Aktion.
+RC173 am23.10.2026 um18:17:26UTC veröffentlicht, Release422165357,
+PreRelease=true/Draft=false. App-/Tagcommit
+`e253380e708de4c347e1aaad7ba836763aabec56`, Fingerprint
+`8b1644e102d65f40985825300693dee901f0e21c08cb924a201d42b94c5479bc`/351.
+Alle vier frischen lokalen Endgates PASS/stabil:302/302+11/11Headless,
+300Rust/3ignored/Clippy/Node-Rust/Release,38PDF/67Worker/49Office/41Grafik,
+5Paketgates/100MD0Fehler. Beide Macconsumer39992799112 SUCCESS,
+je38PDF/65Worker+2Windows-SKIPs/49Office/41Grafik/283Rust+3ignored.
+Unabhängige tatsächliche Produktionsquellen-/Ganzlog-/Paketbytegegenreviews
+gelesen; neue Header-/Merge-/Bindungs-/SourceMarker-/Keep-Befunde geschlossen.
+Alle20Assets vor und nach Veröffentlichung frisch heruntergeladen/gehasht;
+Inventar/IDs/Tagquelle/Quellcommit/PreReleaseflag/Notesbody erneut bestätigt.
+Windows zusätzlich create-only lokal unter `Software DataSecure/RC173`,
+aktueller19Fallplan+FachprobenA–F+RC173Tabellenproben und3synthetische Archive.
+
+Unterstützte Word-gridSpan/vMerge-/Nested-, XLSX- und DrawingML-Modelle werden
+quellbezogen normalisiert statt allein wegen des Layouts ausgeschlossen.
+Neutrale Koordinaten, jedes Zelltextvorkommen einmal und echte Feldbezüge;
+unerkannte geschützte Restwerte erhalten FIELD_REDACTED, keine erfundene
+Identität. Altes Word-w:hMerge bleibt unmodelliert; Schutz-/Quell-/Struktur-/
+Guard-/Protokoll-/Ressourcen-/Residualfehler bleiben hart. Internet-/GitHub-
+Lösungsansätze dauerhaft dokumentiert; kein Fremdcodeimport oder neuer Renderer.
+Menschliche Desktop-/Office-/Finder/TCC/M2/Enterprise/VoiceOver/macOS26-Abnahme
+USER_PENDING. NativeEpoch/Pause/Lease NOT_RUN, ACLadversarialPARTIAL,
+LaunchServicesexit unbekannt, innerer Smoke-Writerjoin unbestätigt.
+Keine Mainintegration, UI-Aktion, Nutzerprofiländerung, Developer-ID oder
+Notarisierung. Reiner Dokumentationsnachtrag ändert App-/Paket-/Tagbindung nicht.
 
 ## Aktueller Nutzerauftrag 23.10.2026 – BL-049.2 implementieren und RC172 bereitstellen
 
@@ -67,7 +86,7 @@ keine vollständige visuelle oder semantische Inhaltsfreigabe. Keine Nutzerdaten
 keine Produkt-/Teständerungen, neuen Pakete oder Mainintegration. Ältere Stand-
 und Übergabeabschnitte darunter nicht als neue offene Gesamtaufgabe übernehmen.
 
-Stand: 23.10.2026 · 3.2.0-rc173 in Entwicklung; RC172 und ältere Releases unverändert.
+Stand: 23.10.2026 · 3.2.0-rc173 als Test-Pre-Release; RC172 und ältere Releases unverändert.
 
 ## Historischer RC171-Quellenabschluss22.10.2026 10:49UTC vor Source12
 

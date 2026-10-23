@@ -1,5 +1,12 @@
 # RC173 – Tabellenaufbereitung ohne layoutbedingten Anonymisierungsstopp
 
+Aktueller technischer Abschluss: RC173 veröffentlicht23.10.2026 18:17:26UTC,
+gemeinsamer App-/Tagcommit e253380e708de4c347e1aaad7ba836763aabec56. Frische
+vier lokale Endgates und beide Macconsumer PASS, tatsächliche Paketbytes und
+20Remoteassets vor/nach Publikation geprüft. Menschliche Desktopabnahme bleibt
+USER_PENDING. Vollständiger Source03-Abschluss unten; alte Zwischenstände sind
+historische unveränderte Belege, keine wieder geöffneten kumulativen Aufgaben.
+
 ## Auftrag und unveränderte Grenzen
 
 23.10.2026 ausdrücklich beauftragt: gültige komplexe Word-, Excel- und
@@ -286,3 +293,111 @@ Source03-Helfer922statische/VMAssertions+ProofnegativenMainPASS, unabhängigen
 reinen Rollendiff-/Pingegenreviewfa6281ea… vollständig gelesen. Keine
 Produkt-/Test-/Script-/Ressourcen-/Policyänderung aus dem Dokufix; neue Quellen-
 bindung und sämtliche frischen Endgates werden jetzt hergestellt.
+
+### Source03: tatsächlicher gemeinsamer Endstand und Veröffentlichung
+
+App-/Tagcommit `e253380e708de4c347e1aaad7ba836763aabec56`, gepusht und remote
+bestätigt. Produktfingerprint
+`8b1644e102d65f40985825300693dee901f0e21c08cb924a201d42b94c5479bc`/351,
+592Test-/Scriptinputs/Manifest
+`4701bf403488855bb8be12a7609f88a27a377ad1f17ec216486e4a8742e06506`.
+Source03 gegenüber Source02 nur zwei Dokumentationskorrekturen, keine Produkt-,
+Test-, Script-, Timeout-, Ressourcen- oder Schutzänderung. Sieben Driver und
+alle Produkt-/Testinputs während sämtlicher Jobs unverändert.
+
+- Headless302/302+11/11 tatsächlich PASS/inputs_unchangedtrue,
+  17:10:20.466–18:05:56.683UTC, Session31867 regulärExit0.
+- Native Prepare/Clippy/300Rust+3ignored/echteNode-Rust-Integration/Release
+  PASS/stabil, Ende17:13:47.334UTC, Session99803 geschlossen.
+- Native Konverterkampagne native-regression-ss9aQx PASS/stabil,
+  17:10:22.324–17:14:50.840UTC:38PDF/67Worker+0Skip/49Office/41Grafik.
+- Paket5/100MD0Fehler/Originale unverändert, Ende17:18:01.074UTC,
+  Session69837 regulärExit0, PACKAGE-FINALPASS/stabil. Exakter Vollcommit im
+  wirklichen Windowsbinary und PDF.js-Derivation/Grafikclosure separat geprüft.
+
+Neue Tabellenfamilien39/107/58/17 und tatsächliche kodierte Quellen-/Keep-
+Gegenorakel grün. Nicht disjunkte Unterfamilien nicht zu einer künstlichen
+Gesamtzahl addiert. Kein Desktop-PASS aus VM/Headless abgeleitet.
+
+Beide neuen Macconsumer39992799112 exakt aufe253380e… SUCCESS:
+ARM120548621637 Ende17:32:33UTC, Intel120548621595 Ende18:02:38UTC.
+Je283Rust+3ignored/38PDF/65Worker+2Windows-SKIPs/49Office/41Grafik plus
+tatsächliche Core-/Ownership-/App-/ZIP-/DMG-/Native-Seal-Gates. Neue separate
+Ganzlogreviews gelesen: ARMef6d62ca…(Log5a558c0d…/7122Zeilen),
+Intel3f4051cf…(Logef2879cc…/7182nichtleereZeilen), ohne neuen bestätigten
+Primär-/Bindungsblocker. Erwartete Negativdiagnosen/Windows-SKIPs nicht zu
+Fehlern oder PASS umetikettiert. Temporäre PDF-Testloader-Canvaswarnung mit
+tatsächlich explizitem Canvas-/Pixellauf eingeordnet, nicht still beseitigt.
+
+Beide tatsächlichen Transportartefakte create-only gesammelt, unveränderte
+VERIFYsoktrue/Exit0. Zusätzlich unabhängigen Windowsbytegegenreviewf78cb0d0…
+und separaten Macbytegegenrevieweb7f63c4… vollständig gelesen:351Quell-Gitblobs,
+243gemeinsameRuntimequellen,Inventare,47Policyinputs,Core/Converter,
+PDF-Derivation,Grafik-/Font-/Lizenz-/SBOMpins tatsächlich passend. Macprüfung
+rechnete63247ARM-/65898Intel-CodeDirectory-Seitenhashes nach. Kein lokaler
+nativer codesign-/DMGmount-/Appletrust-/UAT-PASS daraus; diese nativen Rollen
+sind getrennt durch die exakten CI-Logs belegt. Keine Macbytes aufWindows ausgeführt.
+
+| Tatsächliches Apparchiv | Bytes | SHA256 |
+| --- | ---: | --- |
+| Windows x64 ZIP | 113404384 | 0fe15225011281e659b3f07f8b37c42e1f1e50635008223b9902036b6a2966c2 |
+| macOS ARM64 ZIP | 118751741 | 696377512bca66c096e91d5ba5a4114fdb864c27d4d9088dc1ef2253e4c428b2 |
+| macOS ARM64 DMG | 131955539 | 5a60f9d0a40cbbb5533e20692cfc7ad7336f9d62b1d94adb8402391eb82b4137 |
+| macOS Intel ZIP | 122007160 | d317625e26d4b855c2e5f44e9880fe24c5efbe28a5ab6945b116a95807a08837 |
+| macOS Intel DMG | 135181731 | 02b359a66337a4a3e18dba698e91d8a2d472baac8ccfe2626d1e7bae53035e46 |
+
+WindowsEXE07a3768dd909eae11f77d1d08876a01720a19850f049902454a237a3f35fc6c7.
+SourceSnapshot18:07:39.515UTC,977Dateien/8784104Bytes,
+SHAa3eaba19a207ca63d0a147aa4a9b6a4d065067b301ad40fcd539c6c7020f38eb,
+exakte Archivbytes geprüft. Getrennter lokaler Quellenoverlay, kein alter
+Snapshot umetikettiert oder als eigenständiger vollständiger Checkout beworben.
+Keine privaten Nutzerdokumente/-Diagnosen/-Läufe/-Zuordnungen/Realprobe in Git,
+CI oder öffentliche Assets übernommen.
+
+Nach Jobende nur Übergabe-Copy präzisiert: unterstützte Modelle statt beliebiger
+gültiger Tabellen, explizit altes Word-w:hMerge unmodelliert; ganzer Wertschutz
+für quellgebundene sensible Felder statt universeller sensibler Felderkennung.
+Unabhängige Statement-/Copyreviews8d5779af…/d76c1ba8… gelesen, keine ausführbare
+Kontrollflussänderung. Alle sieben Driverpins unverändert. Eigener späterer
+Aufruf des reinen Vorbereitungstests scheiterte an dessen Forderung
+nach noch nicht vorhandenem CHECKPOINT.json; nicht als Produktfehler gewertet,
+keine Prüfung/FINALdatei gelockert oder entfernt. Unveränderte synthetische
+Proofnegativen erneut PASS, echte Übergabe-check-only-Gates anschließend PASS.
+
+Windowslokal create-only `C:\Users\arkud\Documents\Software DataSecure\RC173`,
+19Dateien vollständig hashgleich kopiert:ZIP,50723ByteTestplan,3unveränderte
+synthetische Archive,README,Prüfsummen,Quellen-/Paket-/Testbelege und
+USER-ACCEPTANCE.json/PENDING. Alte Ordner/Ergebnisse/Profile unberührt.
+Stage exakt20Assets:5Apparchive+3Testarchive+8SingleSHA+2Pläne+Evidence+SHA256SUMS.
+Die19Aggregateinträge schließen SHA256SUMS selbst aus. Native-/Mac-/GUI-
+Evidence wird nicht aus alten Versionen übernommen; GUI0PASS/19NOT_RUN.
+
+Neuer Tagv3.2.0-rc173 exakt aufe253380e… remote nachgelesen. Release422165357
+veröffentlicht23.10.2026 18:17:26UTC, PreRelease=true/Draft=false,
+[GitHub-Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc173).
+Alle20Assets im Draft und erneut nach Veröffentlichung vollständig frisch
+heruntergeladen/gehasht:625600867Bytes je Modus. Exaktes Inventar/dieselbenIDs/
+Tagcommit/Quellcommit/PreReleaseflag bestätigt. Remote-Draftproof18:17:13.087UTC,
+Publishedproof18:18:34.767UTC, beide regulärExit0. Tatsächlichen Notesbody in
+beiden Modi separat CRLF-normalisiert/TrimEnd mit lokalerDatei verglichen:gleich;
+NotesSHA5f5ad9d970bb473f758e35d2cd89e3a0a9434c36f7afefb158f57dd7f4530b50.
+
+Desktop-/Office-/Excel/Numbers-/Finder/TCC/M2/Enterprise/VoiceOver/macOS26-
+Abnahme bleibt USER_PENDING. macOS26-CIgateSkipped, nativeEpoch/Pause/Lease/
+GUINOT_RUN,ACLadversarialPARTIAL,LaunchServicesexitcodeunbekannt,
+Smoke-WriterquieszenzUNCONFIRMED/Extraktionerhalten/deletionNOT_ATTEMPTED.
+Keine Vollprozessbaum-/Universalformat-/Artefaktfreiheits-/Anonymitätszusage.
+Eigene MacApp/Core nur ad hoc, keine Developer-ID/Notarisierung/Zertifikatssuche/
+Appleeinreichung oder OS-Schutzänderung. Keine Mainintegration. Nachfolgender
+reiner Dokumentationscommit verändert App-/Paket-/Tagbindung nicht.
+
+Nach Veröffentlichung aktuelle Versions-/Canonical-/Dokumentationsvertrag30/30-,
+Link3/3- und UATkit6/6-Prüfungen grün. Zusätzliche formale UAT-Dokprüfung deckte
+einen veralteten aktuellen RC168-Verweis im FORMAL_UAT/README auf, nachdem der
+Releasevertrag nun RC173 bindet. Nur diesen Dokumentationsverweis eng ergänzt,
+RC168 als historischen Kandidaten bewahrt; kein App-/Test-/Paketedelta oder
+Abnahmestatus geändert. Keine neue Runtimeursache aus diesem Dokufehlversuch.
+Danach unveränderte Formal-UAT-Prüfung5/5 und Fixturegenerierung3/3 PASS,
+Dokumentationsvertrag30/30,Links3/3 und Canonical erneut PASS. Fingerprint
+weiter exakt8b1644e…/351. Abschließender Nachtrag nur sieben Dokumente,
+keine Änderung der getesteten Produkt-/Test-/Paketbytes oder Releaseassets.
