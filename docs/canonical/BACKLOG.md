@@ -1,5 +1,7 @@
 # Aktives Entwicklungsbacklog
 
+Quellstand: 3.2.0-rc172 (Entwicklungsstand; keine Paket- oder Releasefreigabe).
+
 ## BL-049.2 – Inhaltsabdeckung und lesbares Markdown nach RC171 (23.10.2026)
 
 Status: **Umsetzung und neue Testversion am 23.10.2026 beauftragt; in Arbeit**.

@@ -1,5 +1,7 @@
 # Aktueller Iststand
 
+Quellstand: 3.2.0-rc172 (Entwicklungsstand; keine Paket- oder Releasefreigabe).
+
 ## Aktueller Nutzerauftrag 23.10.2026 – BL-049.2 implementieren und RC172 bereitstellen
 
 Windows und beide Macs ausdrücklich beauftragt, inklusive unabhängiger Reviews,

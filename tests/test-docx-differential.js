@@ -68,7 +68,8 @@ async function verifyNestedTables() {
     const buffer = rawDocx(run(expected[0]) + table + run(expected[expected.length - 1]));
     const local = parseOoxml(buffer, '.docx');
     const oracle = await mammoth.extractRawText({ buffer });
-    assert.deepStrictEqual(local.warnings, [], `local nested-table case ${index}`);
+    // Matching textual order does not prove a nested table's privacy field ownership.
+    assert.deepStrictEqual(local.warnings, ['OFFICE_TABLE_CONTEXT_UNVERIFIED'], `local nested-table case ${index}`);
     assert.deepStrictEqual(oracle.messages, [], `Mammoth nested-table case ${index}`);
     orderedOnce(local.markdown, expected, 'local nested tables');
     orderedOnce(oracle.value, expected, 'Mammoth nested tables');

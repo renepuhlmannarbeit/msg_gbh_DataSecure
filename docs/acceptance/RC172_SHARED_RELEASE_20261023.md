@@ -243,3 +243,61 @@ Neun unabhängige negative Anforderungsproben, anschließend Main46Frontend-/53
 Workflowfälle grün. Kein Produkt-, Schutz-, Timeout- oder Rechtefix dafür.
 Neuer gemeinsamer Commit/Source02 und vollständig frische Endgates erforderlich;
 Source01-Grüns bleiben historische bytegebundene Belege.
+
+## Source02-Abschluss und Dokumentations-/Orakelkorrektur
+
+Gemeinsamer e522a8c43cecfa01868b22044cf3242d994413a0 gepusht, Produktfingerprint
+9f18d7932883665efd64e94e7a79c6d8f701ffca639aac0f143442b2838cfc3a/348
+unverändert. 588Testinputs c6f83dc40804ba67f32374afcab18c2a388252e9c5ebad6d621d5c27e5fad5dd.
+Native300Rust/3ignored/Clippy/Node-Rust/Release12:20:39.735UTC, Konverter
+38PDF/67Worker/49Office/41Graphics12:21:53.283UTC und Paket5/5/100MD0Fehler
+12:24:44.944UTC tatsächlich PASS/inputsunverändert. Echter Windows-Ganzlog- und
+Bytegegenreview ohne neuen Blocker; Negativfehler kausal zugeordnet.
+Zwischen-ZIP96a187604ccfaa6d260d28983298c7c94dfb91b3b6f20620b167b47f1ece96a0,
+EXE34ac7a4bfaa99d4430fc036e36aa846ec0e38917457219c1edd720fd622f03c8.
+Kein finaler lokaler RC172-Ordner oder Release daraus erstellt.
+
+Source02Headless echt ROT12:46:34.888UTC bei168/298, 167bestanden/0von11extras,
+inputs_unchanged=true: aktueller Dokumentationskopf trägt die exakte Quellversion
+nicht in den ersten acht Zeilen. Unabhängiger kompletter Zwölf-Dokument-Scan
+bestätigt dieselbe fehlende Metadatenzeile in CURRENT_STATE UND BACKLOG, die zehn
+anderen Köpfe stimmen. Main ergänzt nach tatsächlichem Ende aller Jobs genau
+eine ehrliche Entwicklungsstandzeile in beiden Dokumenten, ohne historische
+Belege zu ersetzen. Unveränderter Dokumentationsvertrag danach30/30 und kanonischer
+Verifier110Decisions/24Epics/127Stories PASS. Keine Testbedingung gelockert.
+
+Mac39952111675: ARM120408883558 SUCCESS12:39:35UTC, unabhängiger vollständiger
+6874Zeilen-Review ohne neuen Blocker: PDF38, Worker65PASS/2Windows-skips,
+Office49/Graphics41, Rust283PASS/3ignored, tatsächliche native Core-/Guard-/
+App-/ZIP-/DMG-/IPC-Gates. Gesamtstand trotzdem nicht geeignet; Intel120408883450
+gezielt gecancelled, Gesamtjob tatsächlich completed/cancelled. Kein Corecrash
+behauptet, keine neuen Coreproducer/Artefaktimports oder falsche Mac-GUI-Abnahme.
+
+Main führte nach dem roten Endlauf die übrigen130kanonischen Dateien und11
+Zusatzgates separat rein diagnostisch aus: 140/141Exit0, unveränderteInputs,
+genau ein weiterer Fail in test-docx-differential.js bei der alten Erwartung
+warnings[] für verschachtelte Tabellen. Tatsächlich exakt der neue notwendige
+OFFICE_TABLE_CONTEXT_UNVERIFIED-Schutzgrund. Reihenfolge/Genau-einmal-Abdeckung
+gegen Mammoth bleibt unverändert Pflicht; enger unabhängiger Quellengegenreview
+vor Korrektur. Die zwei Diagnoseabschnitte sind KEIN zusammengesetzter grüner
+Endlauf. Rote FINALs und Diagnosebelege bleiben erhalten.
+
+Übergabetexte wurden zusätzlich unabhängig gegen echte Quellen gelesen:
+120MP ist die Summe primärer Office-OCR-Raster, nicht die separat begrenzte
+Zeilen-Nachsegmentierung. Uniforme horizontale Wordpartitionen bleiben unterstützt;
+nur genau benannte noch nicht modellierte Feldbindungen verweigern Anonymisierung.
+Vier ignorierte Texte präzisiert, keine Produkt-/Budget-/Schutzänderung.
+Source03Helfer frisch create-only vorbereitet: nur16MJS+Plan, keine altenFINALs.
+732statische/VM-Prüfungen und Proofnegativen bei Main/Autor PASS, 15Rollen exakt
+mechanisch Prefix/Prosa, nur neuePins und zusätzliche altePrefixnegativen sonst.
+Neuer gemeinsamer Commit und vollständig frische vier lokale Endgates/beideMacs
+bleiben erforderlich. Keine Desktoptests durch Agenten, Nutzerabnahme USER_PENDING.
+
+Unabhängiger tatsächlicher DOCX-Orakelgegenreview bestätigt den neuen notwendigen
+Feldschutz, keinen Produktfehler. Unveränderte vollständige Mammothsuite mit
+exakt dieser einen Erwartungsänderung zuerst nur in Memory5/5PASS: 24Nested mit
+unveränderter Reihenfolge/Genau-einmal-Prüfung, 96Normaldokumente weiterhin exakt
+warnungsfrei, 16Textboxen/echteWordkommentare. Fehlender/zusätzlicher/doppelter
+Schutzgrund bleibt Fehler. Main ändert genau die eine Erwartung plus Begründung,
+keine Warnungsfilterung oder Aufweichung der Inhaltsassertionen. Vollständige
+frische Gesamt-/Native-/Konverter-/Paket-/Macendgates ersetzen diese Vorabgrüns.
