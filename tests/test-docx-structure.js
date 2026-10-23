@@ -217,7 +217,7 @@ for (const story of stories) {
       [paragraph(expected[6])]
     ]) + paragraph(expected[7]);
     const result = parse(content, story);
-    assert.deepStrictEqual(result.warnings, []);
+    assert.deepStrictEqual(result.warnings, ['OFFICE_TABLE_CONTEXT_UNVERIFIED']);
     onceInOrder(result.markdown, expected);
     assert.match(result.markdown, /OUTER_BEFORE<br>\\\| INNER_FIRST \\\| INNER_SECOND \\\|<br>/);
     assert.match(result.markdown, /OUTER_AFTER \| NEXT_CELL \|/);
@@ -251,7 +251,7 @@ test('nested table and textbox combinations preserve each text leaf once', () =>
   const result = parse(content);
   const expected = Array.from({ length: 8 }, (_, i) => `BEFORE_${7 - i}_`).concat('INNERMOST', ...Array.from({ length: 8 }, (_, i) => [`AFTER_${i}_`, `ROW_${i}_`]));
   onceInOrder(result.markdown, expected);
-  assert.deepStrictEqual(result.warnings, []);
+  assert.deepStrictEqual(result.warnings, ['OFFICE_TABLE_CONTEXT_UNVERIFIED']);
 });
 
 test('table leaves escape backslashes and pipes once, including nested tables', () => {
@@ -267,16 +267,12 @@ test('run joining, paragraph styles, empty cells and paragraph boundaries remain
   assert.strictEqual(result.markdown, '## First part\tsecond\nthird\n\n| A<br>B |  |\n| --- | --- |\n| C |  |');
 });
 
-test('ordinary table cells remain supported while merged Word cells fail closed', () => {
+test('ordinary table cells remain supported while unmatched vertical continuation fails closed', () => {
   const ordinary = parse(table([[paragraph('Name'), paragraph('Steuer-ID')], [paragraph('Max Mustermann'), paragraph('26954371827')]]));
   assert.deepStrictEqual(ordinary.warnings, []);
   assertPresent(ordinary.markdown, '| Name | Steuer-ID |');
 
-  for (const property of [
-    '<w:gridSpan w:val="2"/>',
-    '<w:vMerge w:val="restart"/>',
-    '<w:vMerge/>'
-  ]) {
+  for (const property of ['<w:vMerge/>', '<w:vMerge w:val="continue"/>']) {
     rejects(`<w:tbl><w:tr><w:tc><w:tcPr>${property}</w:tcPr>${paragraph('SECRET')}</w:tc></w:tr></w:tbl>`);
   }
 });

@@ -333,8 +333,8 @@ function failedFileExplanation(code) {
     next: 'Die Originaldatei in der ursprünglichen Anwendung öffnen und als unterstütztes Format neu speichern; anschließend einzeln erneut auswählen.'
   };
   if (['SOURCE_ENCRYPTED_UNSUPPORTED', 'PASSWORD_PROTECTED_DOCUMENT_UNSUPPORTED'].includes(code)) return {
-    reason: 'Diese Datei ist verschlüsselt oder passwortgeschützt und konnte nicht gelesen werden.',
-    next: 'Mit berechtigtem Zugriff eine ungeschützte lokale Kopie aus der ursprünglichen Anwendung speichern und diese erneut auswählen.'
+    reason: 'Diese Datei ist verschlüsselt, passwort- oder rechtegeschützt und konnte nicht gelesen werden.',
+    next: 'Mit berechtigtem Zugriff eine entschlüsselte lokale Kopie separat auswählen. Schutzrechte werden nicht umgangen; das Original bleibt unverändert.'
   };
   if (/^(?:SOURCE|PDF|IMAGE|OOXML|DOCX|XLSX|PPTX|CONVERSION|TEXT|INPUT).*(?:SIZE|LIMIT|TOO_LARGE)/u.test(code || '')) return {
     reason: 'Die Datei oder ihre extrahierten Inhalte überschreiten eine unterstützte Verarbeitungsgrenze.',

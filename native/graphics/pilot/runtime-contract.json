@@ -1,0 +1,18 @@
+{
+  "schema": "datasecure-office-graphics/1",
+  "package": "emf-converter",
+  "version": "4.18.1",
+  "entry": "dist/browser.js",
+  "files": {
+    "package.json": "41a46e1120222387d7bcad8abb98c4b3a02f6f01a9bd882f2c1eff9f70d216f4",
+    "dist/browser.js": "00d79f4bf38405d7cae45129ca8367451f866cfb29a0722f8b21d3f107834634",
+    "LICENSE": "2c27550900d2cabf83527a04600ba8042e3ba89e70ec077ff220afa48c8230a7",
+    "THIRD_PARTY_NOTICES": "704660e21c5c53db7b50e86edc948d6121cb34019b65264411b109d6b6044c0c"
+  },
+  "font": {
+    "file": "LiberationSans-Regular.ttf",
+    "sha256": "f8ace1f892b2bd9dc1792ba7f097fa7588f84fed48321480e04de5390828221f",
+    "license": "LICENSE_LIBERATION",
+    "license_sha256": "93fed46019c38bbe566b479d22148e2e8a1e85ada614accb0211c37b2c61c19b"
+  }
+}

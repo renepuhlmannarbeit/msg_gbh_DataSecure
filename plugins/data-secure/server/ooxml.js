@@ -5,6 +5,8 @@ const { readZip, readZipPartial, ZipError } = require('./zip-reader');
 const { createXlsxReader } = require('./xlsx-structure');
 const { readXml, assertXmlCharacters } = require('./xml-reader');
 const { validateOpcControls } = require('./gateway/opc-source-validator');
+const { ownerDiagrams } = require('./office-diagrams');
+const { wordGridNumber, bindWordTableGrids, MAX_WORD_TABLE_COLUMNS } = require('./word-table-grid');
 
 const MAX_EMBEDDED_DEPTH = 3;
 const MAX_EMBEDDED_DOCUMENTS = 20;
@@ -225,9 +227,13 @@ function contentType(name) {
 }
 function mediaAttachments(entries, prefix, allowedParts = null) {
   const out=[];
-  for(const [name,data] of entries) if(name.startsWith(prefix) && /\.(png|jpe?g|bmp|gif|tiff?|webp|svg|emf|wmf)$/i.test(name)) {
+  const names=allowedParts?[...allowedParts]:[...entries.keys()];
+  for(const name of names) if(name.startsWith(prefix) && /\.(png|jpe?g|bmp|gif|tiff?|webp|svg|emf|wmf)$/i.test(name)) {
     if (allowedParts && !allowedParts.has(name)) continue;
-    out.push({ type:'image', mimeType:contentType(name), data:data.toString('base64'), name:path.basename(name), extension:path.extname(name).slice(1).toLowerCase(), source_part:name });
+    const data=entries.get(name);if(!data)continue;
+    const occurrences=allowedParts?.occurrences?.filter(item=>item.source_part===name);
+    out.push({ type:'image', mimeType:contentType(name), data:data.toString('base64'), name:path.basename(name), extension:path.extname(name).slice(1).toLowerCase(), source_part:name,
+      ...(occurrences?.length?{occurrences}: {}) });
   }
   return out;
 }
@@ -256,13 +262,19 @@ function rawRelationshipId(node, attribute = 'id') {
   return found;
 }
 function rawOfficePartUsage(entries, part, family, rootName, ext, selectedStory = null) {
-  const usage = { images: new Set(), references: new Map(), storyIds: new Map() };
+  const usage = { images: new Set(), imageOccurrences: [], references: new Map(), storyIds: new Map() };
+  const mc='http://schemas.openxmlformats.org/markup-compatibility/2006';
+  const selected=new WeakMap(),ignored=new WeakSet(),blips=new WeakMap();
+  const understood=new Set([...Object.values(RAW_IMAGE_NAMESPACES).flatMap(set=>[...set]),
+    'http://schemas.microsoft.com/office/word/2010/wordprocessingShape',
+    'http://schemas.microsoft.com/office/drawing/2016/SVG/main']);
   const data = entries.get(part);
   if (!data) return usage;
   let rootValid = false;
   const inScope = node => {
     let story = selectedStory === null, foundStory = false, body = family !== 'word' || rootName !== 'document';
     for (let parent = node; parent; parent = parent.parent) {
+      if (ignored.has(parent)) return false;
       if (RAW_IMAGE_NAMESPACES.word.has(parent.namespaceURI)) {
         if (parent.localName === 'body') body = true;
         if (selectedStory && !foundStory && parent.localName === selectedStory.name) {
@@ -275,13 +287,32 @@ function rawOfficePartUsage(entries, part, family, rootName, ext, selectedStory 
   };
   readXml(data.toString('utf8'), { decode: xmlDecode, error: limit => rawImageStructureError(ext, limit), start(node) {
     if (!node.parent) rootValid = RAW_IMAGE_NAMESPACES[family].has(node.namespaceURI) && node.localName === rootName;
+    if (node.namespaceURI===mc&&node.localName==='AlternateContent') selected.set(node,false);
+    if (node.namespaceURI===mc&&['Choice','Fallback'].includes(node.localName)) {
+      if (node.parent?.namespaceURI!==mc||node.parent.localName!=='AlternateContent') throw rawImageStructureError(ext);
+      const required=(node.attributes.get('{}Requires')||'').trim().split(/\s+/u).filter(Boolean);
+      const usable=node.localName==='Fallback'||(required.length&&required.every(prefix=>understood.has(node.namespaces.get(prefix))));
+      if(selected.get(node.parent)||!usable)ignored.add(node);else selected.set(node.parent,true);
+    }
     if (!inScope(node)) return;
     if (RAW_IMAGE_NAMESPACES.drawing.has(node.namespaceURI) && node.localName === 'blip') {
-      const id = rawRelationshipId(node, 'embed'); if (id) usage.images.add(id);
+      const id = rawRelationshipId(node, 'embed'); if (id) {usage.images.add(id);blips.set(node,usage.imageOccurrences.length);usage.imageOccurrences.push(id);}
+    }
+    if (node.namespaceURI==='http://schemas.microsoft.com/office/drawing/2016/SVG/main'&&node.localName==='svgBlip') {
+      const id=rawRelationshipId(node,'embed');if(id){
+        usage.images.add(id);let ancestor=node.parent;
+        while(ancestor&&!(RAW_IMAGE_NAMESPACES.drawing.has(ancestor.namespaceURI)&&ancestor.localName==='blip'))ancestor=ancestor.parent;
+        const index=ancestor&&blips.get(ancestor);
+        // An SVG extension can have a relationship-bound raster representation
+        // on its enclosing blip. Keep that existing compatible representation;
+        // do not revoke it before the SVG decoder has even made a decision.
+        // SVG-only shapes still enter the bounded vector decoder once.
+        if(index===undefined)usage.imageOccurrences.push(id);
+      }
     }
     if (node.namespaceURI === 'urn:schemas-microsoft-com:vml' && node.localName === 'imagedata') {
       const id = rawRelationshipId(node) || node.attributes.get('{urn:schemas-microsoft-com:office:office}relid');
-      if (id) usage.images.add(id);
+      if (id) {usage.images.add(id);usage.imageOccurrences.push(id);}
     }
     if (!RAW_IMAGE_NAMESPACES[family].has(node.namespaceURI)) return;
     const kinds = family === 'word' ? { headerReference: 'header', footerReference: 'footer' }
@@ -334,13 +365,17 @@ function referencedOfficeMedia(entries, ext, options) {
   const main = { '.docx': 'word/document.xml', '.xlsx': 'xl/workbook.xml', '.pptx': 'ppt/presentation.xml' }[ext];
   const mediaPattern = new RegExp(`^${packageRoot}/media/[^/]+\\.(?:png|jpe?g|bmp|gif|tiff?|webp|svg|emf|wmf)$`, 'i');
   const targets = new Set();
+  Object.defineProperty(targets,'occurrences',{value:[]});
   if (packageMainRelationshipIssueCount(entries, main)) return targets;
   const mainPattern = { '.docx': /^word\/document\.xml$/, '.xlsx': /^xl\/workbook\.xml$/, '.pptx': /^ppt\/presentation\.xml$/ }[ext];
   if (rawSingleOfficeTarget(entries, '', rawOfficeRelationships(entries, '', ext), 'officeDocument', mainPattern) !== main) return targets;
-  const collect = (part, usage, relationships) => {
-    for (const id of usage.images) {
+  const collect = (part, usage, relationships, placement = {kind:'document',index:1,section_part:part}) => {
+    for (const id of usage.imageOccurrences) {
       const target = rawOfficeTarget(entries, part, relationships, id, 'image', mediaPattern);
-      if (target) targets.add(target);
+      if (target) {
+        if (targets.occurrences.length>=1000) throw rawImageStructureError(ext,true);
+        targets.add(target);targets.occurrences.push({source_part:target,owner:part,...placement});
+      }
     }
   };
   const mainRelationships = rawOfficeRelationships(entries, main, ext);
@@ -360,13 +395,15 @@ function referencedOfficeMedia(entries, ext, options) {
     }
   } else if (ext === '.xlsx') {
     const usage = rawOfficePartUsage(entries, main, 'sheet', 'workbook', ext);
+    let sheetIndex=0;
     for (const id of usage.references.get('worksheet') || []) {
+      sheetIndex++;
       const sheet = rawOfficeTarget(entries, main, mainRelationships, id, 'worksheet', /^xl\/worksheets\/[^/]+\.xml$/i);
       if (!sheet) continue;
       const sheetUsage = rawOfficePartUsage(entries, sheet, 'sheet', 'worksheet', ext), rels = rawOfficeRelationships(entries, sheet, ext);
       for (const drawingId of sheetUsage.references.get('drawing') || []) {
         const drawing = rawOfficeTarget(entries, sheet, rels, drawingId, 'drawing', /^xl\/drawings\/[^/]+\.xml$/i);
-        if (drawing) collect(drawing, rawOfficePartUsage(entries, drawing, 'spreadsheetDrawing', 'wsDr', ext), rawOfficeRelationships(entries, drawing, ext));
+        if (drawing) collect(drawing, rawOfficePartUsage(entries, drawing, 'spreadsheetDrawing', 'wsDr', ext), rawOfficeRelationships(entries, drawing, ext),{kind:'sheet',index:sheetIndex,section_part:sheet});
       }
     }
   } else {
@@ -376,20 +413,23 @@ function referencedOfficeMedia(entries, ext, options) {
       const master = rawOfficeTarget(entries, main, mainRelationships, id, 'slideMaster', /^ppt\/slideMasters\/slideMaster\d+\.xml$/i);
       if (master) masters.add(master);
     }
+    let slideIndex=0;
     for (const id of usage.references.get('slide') || []) {
+      slideIndex++;
       const slide = rawOfficeTarget(entries, main, mainRelationships, id, 'slide', /^ppt\/slides\/slide\d+\.xml$/i);
       if (!slide) continue;
       const rels = rawOfficeRelationships(entries, slide, ext);
-      collect(slide, rawOfficePartUsage(entries, slide, 'presentation', 'sld', ext), rels);
+      const placement={kind:'slide',index:slideIndex,section_part:slide};
+      collect(slide, rawOfficePartUsage(entries, slide, 'presentation', 'sld', ext), rels,placement);
       const notes = rawSingleOfficeTarget(entries, slide, rels, 'notesSlide', /^ppt\/notesSlides\/notesSlide\d+\.xml$/i);
-      if (notes) collect(notes, rawOfficePartUsage(entries, notes, 'presentation', 'notes', ext), rawOfficeRelationships(entries, notes, ext));
+      if (notes) collect(notes, rawOfficePartUsage(entries, notes, 'presentation', 'notes', ext), rawOfficeRelationships(entries, notes, ext),{...placement,section_part:notes,kind:'notes'});
       const layout = rawSingleOfficeTarget(entries, slide, rels, 'slideLayout', /^ppt\/slideLayouts\/slideLayout\d+\.xml$/i);
       if (!layout) continue;
       const layoutRels = rawOfficeRelationships(entries, layout, ext);
       const master = rawSingleOfficeTarget(entries, layout, layoutRels, 'slideMaster', /^ppt\/slideMasters\/slideMaster\d+\.xml$/i);
       if (!master || !masters.has(master)) continue;
-      collect(layout, rawOfficePartUsage(entries, layout, 'presentation', 'sldLayout', ext), layoutRels);
-      collect(master, rawOfficePartUsage(entries, master, 'presentation', 'sldMaster', ext), rawOfficeRelationships(entries, master, ext));
+      collect(layout, rawOfficePartUsage(entries, layout, 'presentation', 'sldLayout', ext), layoutRels,placement);
+      collect(master, rawOfficePartUsage(entries, master, 'presentation', 'sldMaster', ext), rawOfficeRelationships(entries, master, ext),placement);
     }
   }
   return targets;
@@ -439,11 +479,14 @@ function customMetadataWarnings(entries) {
   return unsupported?[`OOXML enthält ${unsupported} nicht unterstützte benutzerdefinierte Metadatenwerte; Freigabe wird blockiert.`]:[];
 }
 function metadataSections(entries, options = {}) {
-  return [
+  const validated = [
     metadataSection(entries,'docProps/core.xml',CORE_PROPERTIES,options),
     metadataSection(entries,'docProps/app.xml',APP_PROPERTIES,options),
     customMetadataSection(entries,options)
   ].filter(Boolean);
+  // Excluding technical metadata is an output choice, never permission to
+  // bypass its existing lexical/scalar checks (including non-partial callers).
+  return options.contentMode===true?[]:validated;
 }
 function relMap(entries, relPath, baseDir) {
   const buf=entries.get(relPath); if(!buf) return new Map();
@@ -719,10 +762,22 @@ function parseWordStructure(body, options = {}) {
   const tag = /<(\/)?([A-Za-z_][\w.:-]*)(?=[\s/>])((?:[^<>"']|"[^"<]*"|'[^'<]*')*)>/y;
   const attribute = /([A-Za-z_][\w.:-]*)\s*=\s*(?:"([^"<]*)"|'([^'<]*)')/gy;
   let cursor = 0, nodes = 0, elements = 0;
+  function propertyParents() {
+    // Markup compatibility may choose property branches as well as content.
+    // Only its already selected wrappers are transparent; arbitrary wrappers
+    // must not attach a span to a different structural owner.
+    return stack.filter(item => !/^mc:(?:AlternateContent|ChoiceSupported|ChoiceUnsupported|Fallback)$/u.test(item.name));
+  }
+  function oneProperty(node, key) {
+    node.gridProperties ||= new Set();
+    if (node.gridProperties.has(key)) throw wordStructureError();
+    node.gridProperties.add(key);
+  }
   function flush(node) {
     if (node.type !== 'p' || !node.pending.length) return;
     const raw = node.pending.join('');
-    const value = options.preserveText ? raw : raw.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+    const value = options.contentMode && !/\S/u.test(raw) ? '' : options.preserveText ? raw
+      : raw.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
     if (value) node.children.push(value);
     node.pending.length = 0;
   }
@@ -790,13 +845,6 @@ function parseWordStructure(body, options = {}) {
       offset = attribute.lastIndex;
       if (offset < attributes.length && !/\s/.test(attributes[offset])) throw wordStructureError();
     }
-    // Merged Word table cells do not have a one-to-one column coordinate.
-    // Rendering them as ordinary Markdown cells would let values shift under a
-    // different privacy label. Until the renderer carries gridSpan/vMerge
-    // semantics end to end, stop the document instead of guessing.
-    if (!frame.skipped && (name === 'w:gridSpan' || name === 'w:vMerge')) {
-      throw wordStructureError();
-    }
     // These canonical Word constructs are already counted by the package
     // coverage gate below.  Keep their payload out of the structural renderer
     // so the caller receives the intended content-free coverage warning.
@@ -826,9 +874,9 @@ function parseWordStructure(body, options = {}) {
     }
     const skipped = frame.skipped || branchSkipped || blockedWordElement;
     const boxes = frame.boxes + (name === 'w:txbxContent' ? 1 : 0);
-    let node = frame.node, created = false;
+    let node = frame.node, created = false, wordGridLeaf = false;
     if (!skipped) {
-      if (frame.name === 'w:t') throw wordStructureError();
+      if (frame.name === 'w:t' || frame.wordGridLeaf) throw wordStructureError();
       const type = /^w:(p|tbl|tr|tc)$/.exec(name)?.[1];
       if (type) {
         const allowed = type === 'tr' ? node.type === 'tbl'
@@ -841,6 +889,40 @@ function parseWordStructure(body, options = {}) {
         node.children.push(child);
         node = child;
         created = true;
+      } else if (['w:tblGrid', 'w:gridCol', 'w:tcPr', 'w:trPr', 'w:gridSpan', 'w:vMerge',
+        'w:hMerge', 'w:gridBefore', 'w:gridAfter'].includes(name)) {
+        const parents = propertyParents();
+        const parent = parents.at(-1)?.name;
+        const grandparent = parents.at(-2)?.name;
+        if (name === 'w:tblGrid') {
+          if (node.type !== 'tbl' || parent !== 'w:tbl') throw wordStructureError();
+          oneProperty(node, name);
+          node.gridColumns = 0;
+        } else if (name === 'w:gridCol') {
+          if (node.type !== 'tbl' || parent !== 'w:tblGrid' || grandparent !== 'w:tbl') throw wordStructureError();
+          if (++node.gridColumns > MAX_WORD_TABLE_COLUMNS) throw wordStructureError(true);
+          wordGridLeaf = true;
+        } else if (name === 'w:tcPr' || name === 'w:trPr') {
+          if (node.type !== (name === 'w:tcPr' ? 'tc' : 'tr') || parent !== `w:${node.type}`) throw wordStructureError();
+          oneProperty(node, name);
+        } else {
+          const cellProperty = ['w:gridSpan', 'w:vMerge', 'w:hMerge'].includes(name);
+          if (node.type !== (cellProperty ? 'tc' : 'tr') ||
+              parent !== (cellProperty ? 'w:tcPr' : 'w:trPr') || grandparent !== `w:${node.type}`) throw wordStructureError();
+          oneProperty(node, name);
+          if ([...attrs.keys()].some(key => key !== 'w:val')) throw wordStructureError();
+          const value = attrs.has('w:val') ? xmlDecode(attrs.get('w:val')) : undefined;
+          if (name === 'w:gridSpan') node.gridSpan = wordGridNumber(value, false, wordStructureError);
+          else if (name === 'w:vMerge') {
+            if (value !== undefined && !['continue', 'restart'].includes(value)) throw wordStructureError();
+            node.verticalMerge = value || 'continue';
+          } else if (name === 'w:hMerge') {
+            // Legacy hMerge is not gridSpan. Do not mislabel its hidden cells
+            // as independent columns until that separate syntax is modelled.
+            throw wordStructureError();
+          } else node[name === 'w:gridBefore' ? 'gridBefore' : 'gridAfter'] = wordGridNumber(value, true, wordStructureError);
+          wordGridLeaf = true;
+        }
       } else if (name === 'w:t' || name === 'w:tab' || name === 'w:br' || name === 'w:cr') {
         if (node.type !== 'p') throw wordStructureError();
         if (name !== 'w:t') node.pending.push(name === 'w:tab' ? '\t' : '\n');
@@ -851,12 +933,13 @@ function parseWordStructure(body, options = {}) {
         if (level) node.prefix = '#'.repeat(Number(level)) + ' ';
       } else if (node.type === 'p' && name === 'w:numPr' && !node.prefix) node.prefix = '- ';
     }
-    if (!selfClosing) stack.push({ name, node, skipped, boxes, created, alternate });
+    if (!selfClosing) stack.push({ name, node, skipped, boxes, created, alternate, wordGridLeaf });
     else if (name === 'mc:AlternateContent' || (name === 'mc:Fallback' && !frame.alternate?.selected)) {
       throw wordStructureError();
     } else if (created) flush(node);
   }
   if (stack.length !== 1) throw wordStructureError();
+  bindWordTableGrids(root, wordStructureError);
   return root;
 }
 function renderWordStructure(root, options = {}) {
@@ -873,7 +956,7 @@ function renderWordStructure(root, options = {}) {
   }
   function content(node) {
     if (typeof node === 'string') return Boolean(node);
-    if (options.preserveText && node.type === 'p') return true;
+    if (options.preserveText && !options.contentMode && node.type === 'p') return true;
     // Memoization visits each node only once, including empty drawing wrappers.
     if (node.visible === undefined) node.visible = node.type === 'tbl'
       ? node.children.some(row => row.children.length)
@@ -894,9 +977,55 @@ function renderWordStructure(root, options = {}) {
   }
   function emit(node, inCell) {
     if (node.type !== 'tbl') { children(node, inCell); return; }
-    let columns = 0;
-    for (const row of node.children) columns = Math.max(columns, row.children.length);
-    if (!columns) return;
+    // Even uniform nested grids become escaped inline text inside a cell,
+    // not an independent GFM table. Their field owners therefore cannot be
+    // proven by the privacy table grammar. Retain conversion text, but never
+    // let a nested Name/value relationship authorize anonymization silently.
+    if (inCell && options.officeTableContext) options.officeTableContext.unverified = true;
+    const logicalColumns = node.grid.columns;
+    if (!logicalColumns) return;
+    const partition = node.grid.rows[0]?.cells;
+    const uniformPartition = node.grid.complex && partition?.length > 0 &&
+      partition[0].column === 0 && partition.at(-1).column + partition.at(-1).span === logicalColumns &&
+      node.grid.rows.every(({ row, cells }) => !row.gridBefore && !row.gridAfter && cells.length === partition.length &&
+        cells.every((positioned, index) => !positioned.cell.verticalMerge &&
+          positioned.column === partition[index].column && positioned.span === partition[index].span));
+    const columns = uniformPartition ? partition.length : logicalColumns;
+    if (node.grid.complex && !uniformPartition) {
+      if(options.officeTableContext)options.officeTableContext.unverified=true;
+      // Pipe tables cannot express rowspan/colspan. An explicit grid/range
+      // projection preserves each text leaf once and makes its ownership
+      // visible, instead of silently moving values under a different header.
+      const line = inCell ? '<br>' : '\n';
+      write(`Tabelle mit verbundenen oder versetzten Zellen (${columns} Spalten):`);
+      for (let rowIndex = 0; rowIndex < node.grid.rows.length; rowIndex++) {
+        const { row, cells } = node.grid.rows[rowIndex];
+        write(line + line + `Zeile ${rowIndex + 1}${row.header ? ' (Kopfzeile)' : ''}:`);
+        for (const positioned of cells) {
+          const first = positioned.column + 1;
+          const label = positioned.span === 1 ? `Spalte ${first}` : `Spalten ${first}–${first + positioned.span - 1}`;
+          write(line + '- ' + label);
+          if (positioned.continuationOf !== null) write(` (verbunden mit Zeile ${positioned.continuationOf + 1})`);
+          write(': ');
+          children(positioned.cell, true);
+        }
+      }
+      return;
+    }
+    if (uniformPartition) {
+      // An identical, gap-free horizontal partition has the same header/value
+      // binding in every row. Keep that binding in a physical GFM table, with
+      // one generated legend retaining its real logical spans. Never repeat
+      // source header text or infer a partition across offsets/vertical merges.
+      write(`Logische Spaltenbereiche (${logicalColumns} Spalten): `);
+      for (let column = 0; column < partition.length; column++) {
+        if (column) write('; ');
+        const positioned = partition[column], first = positioned.column + 1;
+        write(`Tabellenspalte ${column + 1} = ` + (positioned.span === 1
+          ? `Spalte ${first}` : `Spalten ${first}–${first + positioned.span - 1}`));
+      }
+      write(inCell ? '<br><br>' : '\n\n');
+    }
     const pipe = inCell ? '\\|' : '|';
     const neutralHeader = options.preserveText && !inCell &&
       !(node.children[0]?.header && !node.children.slice(1).some((row) => row.header));
@@ -1379,6 +1508,7 @@ function docxCoverageWarnings(entries) {
     : [];
 }
 function parseDocx(entries, options = {}) {
+  options={...options,officeTableContext:{unverified:false}};
   const main=entries.get('word/document.xml'); if(!main) throw new Error('DOCX enthält kein word/document.xml.');
   const sections=sectionList(entries, options); const body=renderWordBody(main.toString('utf8'), options);
   if(body)sections.push({kind:'text',source_part:'word/document.xml',markdown:body});
@@ -1416,15 +1546,17 @@ function parseDocx(entries, options = {}) {
   }
   sections.push(...metadataSections(entries,options));
   const imageCoverage = docxImageRelationshipCoverage(entries, options);
-  return { markdown:sections.map(section=>section.markdown).join('\n\n'), sections, attachments:mediaAttachments(entries,'word/media/', imageCoverage.safeTargets), warnings:[...docxCoverageWarnings(entries),...imageCoverage.warnings,...customMetadataWarnings(entries)] };
+  return { markdown:sections.map(section=>section.markdown).join('\n\n'), sections, attachments:mediaAttachments(entries,'word/media/', imageCoverage.safeTargets), warnings:[...docxCoverageWarnings(entries),...imageCoverage.warnings,...customMetadataWarnings(entries),...(options.officeTableContext.unverified?['OFFICE_TABLE_CONTEXT_UNVERIFIED']:[])] };
 }
-function xlsxSheetRelationshipMap(entries, reader) {
+function xlsxSheetRelationshipMap(entries, reader, options = {}) {
   const rels = entries.get('xl/_rels/workbook.xml.rels');
   if (!rels) return { targets: new Map(), issues: 1 };
   const targets = new Map(); let issues = 0;
   for (const relationship of reader.relationships(rels.toString('utf8'))) {
     const { id, target, external } = relationship;
     const type = relationshipKind(relationship.type);
+    if (options.contentMode && (relationship.type === 'http://schemas.microsoft.com/office/2017/10/relationships/person' ||
+        ['styles', 'sharedStrings', 'theme'].includes(type))) continue;
     if (!id) { issues++; continue; }
     if (type !== 'worksheet' || external || !target || /[\\?#\0]/u.test(target) || /^(?:\/|[A-Za-z]:|[a-z][a-z0-9+.-]*:)/iu.test(target) || /(?:^|\/)\.\.(?:\/|$)/u.test(target)) { issues++; continue; }
     const resolved = path.posix.normalize(path.posix.join('xl', target));
@@ -1513,7 +1645,124 @@ function xlsxCommentRelationshipCoverage(entries, sheetMeta) {
     warnings: issues ? [`XLSX enthält ${issues} nicht eindeutig über interne Arbeitsblattbeziehungen abgesicherte Kommentarstruktur(en); Freigabe wird blockiert.`] : []
   };
 }
-function xlsxCoverageWarnings(entries, sheetMeta) {
+const XLSX_PERSON_RELATIONSHIP = 'http://schemas.microsoft.com/office/2017/10/relationships/person';
+const XLSX_THREAD_RELATIONSHIP = 'http://schemas.microsoft.com/office/2017/10/relationships/threadedComment';
+function xlsxContentStructureError() {
+  return Object.assign(new Error('XLSX-Inhaltsbeziehung ist nicht eindeutig lesbar.'), { code: 'XLSX_STRUCTURE_UNSAFE' });
+}
+function xlsxContentOverrides(entries) {
+  const result = new Map(), namespace = 'http://schemas.openxmlformats.org/package/2006/content-types';
+  const source = entries.get('[Content_Types].xml');
+  if (!source) throw xlsxContentStructureError();
+  const root = readXml(source.toString('utf8'), { decode: xmlDecode, error: xlsxContentStructureError, start(node) {
+    if (node.namespaceURI !== namespace || node.localName !== 'Override' || node.parent?.localName !== 'Types' ||
+        node.parent.namespaceURI !== namespace) return;
+    const name = node.attributes.get('{}PartName'), type = node.attributes.get('{}ContentType');
+    if (!name || !type || result.has(name)) throw xlsxContentStructureError(); result.set(name, type);
+  } });
+  if (root.namespaceURI !== namespace || root.localName !== 'Types') throw xlsxContentStructureError();
+  return result;
+}
+function xlsxContentTarget(owner, target) {
+  if (!target || /[\\?#\0]/u.test(target) || /^(?:\/|[A-Za-z]:|[a-z][a-z0-9+.-]*:)/iu.test(target)) throw xlsxContentStructureError();
+  const parts = owner.split('/').slice(0, -1);
+  for (const raw of target.split('/')) {
+    let value; try { value = decodeURIComponent(raw); } catch { throw xlsxContentStructureError(); }
+    if (!value || value === '.' || /[\/\\?#\0]/u.test(value) || (value === '..' && raw !== '..')) throw xlsxContentStructureError();
+    if (value === '..') { if (!parts.length) throw xlsxContentStructureError(); parts.pop(); }
+    else parts.push(value);
+  }
+  return parts.join('/');
+}
+function xlsxContentRole(entries, overrides, owner, type, allowedTarget, contentType) {
+  const slash = owner.lastIndexOf('/'), relPath = `${owner.slice(0, slash)}/_rels/${owner.slice(slash + 1)}.rels`;
+  const source = entries.get(relPath); if (!source) return null;
+  const namespace = 'http://schemas.openxmlformats.org/package/2006/relationships';
+  const candidates = [];
+  const root = readXml(source.toString('utf8'), { decode: xmlDecode, error: xlsxContentStructureError, start(node) {
+    if (node.namespaceURI !== namespace || node.localName !== 'Relationship' || node.parent?.localName !== 'Relationships' ||
+        node.parent.namespaceURI !== namespace || node.attributes.get('{}Type') !== type) return;
+    const target = node.attributes.get('{}Target') || '', mode = node.attributes.get('{}TargetMode') || '';
+    if (!entries.has(owner) || !['', 'Internal'].includes(mode)) throw xlsxContentStructureError();
+    if ((type === XLSX_PERSON_RELATIONSHIP && owner !== 'xl/workbook.xml') ||
+        (type === XLSX_THREAD_RELATIONSHIP && !/^xl\/worksheets\/sheet[1-9][0-9]*\.xml$/u.test(owner))) throw xlsxContentStructureError();
+    const resolved = xlsxContentTarget(owner, target);
+    if (!allowedTarget.test(resolved) || !entries.has(resolved) || overrides.get(`/${resolved}`) !== contentType) throw xlsxContentStructureError();
+    const partSlash = resolved.lastIndexOf('/');
+    if ([XLSX_PERSON_RELATIONSHIP, XLSX_THREAD_RELATIONSHIP].includes(type) &&
+        entries.has(`${resolved.slice(0, partSlash)}/_rels/${resolved.slice(partSlash + 1)}.rels`)) throw xlsxContentStructureError();
+    candidates.push(resolved);
+  } });
+  if (root.namespaceURI !== namespace || root.localName !== 'Relationships' || candidates.length > 1) throw xlsxContentStructureError();
+  return candidates[0] || null;
+}
+function xlsxColumnLabel(index) {
+  let value = index + 1, result = '';
+  while (value) { result = String.fromCharCode(65 + ((value - 1) % 26)) + result; value = Math.floor((value - 1) / 26); }
+  return result;
+}
+function xlsxContentTable(parsed, options, append) {
+  if (!parsed.rowRecords.length) return;
+  const columns = new Set();
+  for (const row of parsed.rowRecords) for (const index of Object.keys(row.values)) {
+    if (row.values[index] !== '') columns.add(Number(index));
+  }
+  const used = [...columns].sort((left, right) => left - right);
+  // Most source tables remain ordinary tables with original row/column labels.
+  // For genuinely sparse cross-products, use bounded per-source-row cells rather
+  // than expanding N far-apart values into N*N blank intersections.
+  if (used.length * parsed.rowRecords.length > 200000) {
+    if(options.officeTableContext)options.officeTableContext.unverified=true;
+    for (const row of parsed.rowRecords) {
+      append(`Zeile ${row.number}:\n`);
+      for (const key of Object.keys(row.values).sort((a, b) => Number(a) - Number(b))) {
+        if (row.values[key] === '') continue;
+        const index = Number(key);
+        append(`- Spalte ${index + 1} (${xlsxColumnLabel(index)}${row.number}): ${extractionText(String(row.values[key]), false, options.literalMarkup)}`);
+      }
+      append('');
+    }
+    return;
+  }
+  append(`| Quellzeile | ${used.map(index => `Spalte ${index + 1} (${xlsxColumnLabel(index)})`).join(' | ')} |`);
+  append(`| --- | ${used.map(() => '---').join(' | ')} |`);
+  for (const row of parsed.rowRecords) append(`| ${row.number} | ${used.map(index =>
+    extractionText(String(row.values[index] ?? ''), true, options.literalMarkup)).join(' | ')} |`);
+}
+function xlsxModernCommentSections(entries, reader, overrides, sheets, options) {
+  const sections = [], safeParts = new Set(), seenTargets = new Set(); let issues = 0;
+  let persons = new Map();
+  const personPart = xlsxContentRole(entries, overrides, 'xl/workbook.xml', XLSX_PERSON_RELATIONSHIP,
+    /^xl\/persons\/person(?:[1-9][0-9]*)?\.xml$/u, 'application/vnd.ms-excel.person+xml');
+  if (personPart) {
+    try { persons = reader.modernPersons(entries.get(personPart).toString('utf8')); safeParts.add(personPart); }
+    catch (error) { if (!partialPartFailure(entries, personPart, error)) throw error; issues++; }
+  }
+  for (const sheet of sheets) {
+    const part = xlsxContentRole(entries, overrides, sheet.target, XLSX_THREAD_RELATIONSHIP,
+      /^xl\/threadedComments\/threadedComment[1-9][0-9]*\.xml$/u, 'application/vnd.ms-excel.threadedcomments+xml');
+    if (!part) continue;
+    if (seenTargets.has(part)) throw xlsxContentStructureError(); seenTargets.add(part);
+    try {
+      const comments = reader.threadedComments(entries.get(part).toString('utf8'), persons);
+      let rendered = 0; const lines = [];
+      const append = line => { rendered += line.length + 2; if (rendered > MAX_WORD_RENDERED_CHARS) throw xlsxRenderLimit(); lines.push(line); };
+      if (comments.length) append(`## Kommentare: ${extractionText(sheet.name, false, options.literalMarkup)}`);
+      for (const comment of comments) {
+        append(`Zelle ${comment.ref} · Autor: ${extractionText(comment.author, false, options.literalMarkup)}${comment.parentId ? ' · Antwort' : ''}`);
+        if (comment.text) append(extractionText(comment.text, false, options.literalMarkup));
+      }
+      if (lines.length) sections.push({ kind: 'text', source_part: part, markdown: lines.join('\n\n') });
+      safeParts.add(part);
+    } catch (error) { if (!partialPartFailure(entries, part, error)) throw error; issues++; }
+  }
+  // An orphan person/thread cannot be swept into public output by its filename.
+  // Keep the gap visible even if some unrelated sheet was read successfully.
+  for (const name of entries.keys()) if (/^xl\/(?:persons|threadedComments)\/[^/]+\.xml$/u.test(name) && !safeParts.has(name)) issues++;
+  return { sections, safeParts, warnings: issues
+    ? [`XLSX enthält ${issues} nicht eindeutig zugeordnete moderne Kommentar-/Autorenstruktur(en); Inhaltsabdeckung bleibt unvollständig.`] : [] };
+}
+function xlsxCoverageWarnings(entries, sheetMeta, content = null) {
   // XLSX is intentionally not a released input format yet. Parsing it during
   // development must still make every unrendered content-bearing part visible
   // as a content-free warning; otherwise it could appear complete.
@@ -1534,11 +1783,14 @@ function xlsxCoverageWarnings(entries, sheetMeta) {
   ]);
   let issues = 0;
   for (const [name, data] of entries) {
-    if (!supportedParts.some((pattern) => pattern.test(name))) issues++;
+    if (!supportedParts.some((pattern) => pattern.test(name)) && !content?.safeParts.has(name)) issues++;
     if (/\.rels$/i.test(name)) {
       for (const match of data.toString('utf8').matchAll(/<Relationship\b([^>]+?)\/?>(?:<\/Relationship>)?/gi)) {
         const type = relationshipKind(/\bType=["']([^"']+)["']/i.exec(match[1])?.[1]);
-        if (!type || !knownRelationshipTypes.has(type)) issues++;
+        const exactType = /\bType=["']([^"']+)["']/i.exec(match[1])?.[1];
+        if ((!type || !knownRelationshipTypes.has(type)) && !(content &&
+            ([XLSX_PERSON_RELATIONSHIP, XLSX_THREAD_RELATIONSHIP].includes(exactType) ||
+              (type === 'styles' && content.stylesBound)))) issues++;
       }
     }
   }
@@ -1559,6 +1811,7 @@ function xlsxRenderLimit() {
   return error;
 }
 function parseXlsx(entries, options = {}) {
+  options={...options,officeTableContext:{unverified:false}};
   const reader = createXlsxReader(xmlDecode, options);
   // A well-formed but only partly modelled part is an honest coverage limit.
   // Broken XML anywhere in this workbook is a source failure, never a prefix.
@@ -1567,7 +1820,7 @@ function parseXlsx(entries, options = {}) {
   let shared = [];
   if (sharedPart) try { shared = reader.sharedStrings(sharedPart.toString('utf8')); }
   catch (error) { if (!partialPartFailure(entries, 'xl/sharedStrings.xml', error)) throw error; }
-  const workbook=entries.get('xl/workbook.xml')?.toString('utf8')||''; const relationState=xlsxSheetRelationshipMap(entries, reader); const rootIssues=packageMainRelationshipIssueCount(entries, 'xl/workbook.xml');
+  const workbook=entries.get('xl/workbook.xml')?.toString('utf8')||''; const relationState=xlsxSheetRelationshipMap(entries, reader, options); const rootIssues=packageMainRelationshipIssueCount(entries, 'xl/workbook.xml');
   const sheetMeta=[]; let issues=relationState.issues;
   for (const { name, rid } of workbook ? reader.workbook(workbook) : []) {
     const target = rid && relationState.targets.get(rid);
@@ -1575,15 +1828,39 @@ function parseXlsx(entries, options = {}) {
     sheetMeta.push({ name, target });
   }
   if(!workbook || !sheetMeta.length) issues++;
-  const sections=sectionList(entries, options), renderedSheets=[]; let formulaCells=0;
+  let contentStyles, contentDate1904 = false, contentOverrides = null, stylesPart = null;
+  const numberWarnings = [];
+  if (options.contentMode) {
+    contentOverrides = xlsxContentOverrides(entries);
+    contentDate1904 = reader.workbookProperties(workbook).date1904;
+    const styles = OFFICE_RELATIONSHIP_NAMESPACES.map(namespace => xlsxContentRole(entries, contentOverrides,
+      'xl/workbook.xml', `${namespace}styles`, /^xl\/styles\.xml$/u,
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml')).filter(Boolean);
+    if (styles.length > 1) throw xlsxContentStructureError();
+    stylesPart = styles[0] || null;
+    if (stylesPart) {
+      try { contentStyles = reader.styles(entries.get(stylesPart).toString('utf8')); }
+      catch (error) {
+        if (!partialPartFailure(entries, stylesPart, error)) throw error;
+        stylesPart = null; numberWarnings.push('XLSX-Zahlenformate konnten nicht sicher gelesen werden; Rohwerte bleiben erhalten und werden nicht als formatierte Anzeige ausgegeben.');
+      }
+    } else if (entries.has('xl/styles.xml')) {
+      numberWarnings.push('XLSX-Zahlenformate sind nicht eindeutig intern gebunden; Rohwerte bleiben ohne behauptete Datums-/Einheitenanzeige erhalten.');
+    } else contentStyles = [];
+  }
+  const sections=sectionList(entries, options), renderedSheets=[];
+  let formulaCells=0, missingFormulaCaches=0, unsupportedNumberFormats=0;
   for(const s of sheetMeta){const buf=entries.get(s.target);if(!buf)continue;
     try {
-    const parsed = reader.worksheet(buf.toString('utf8'), shared);
+    const parsed = reader.worksheet(buf.toString('utf8'), shared,
+      options.contentMode ? { styles: contentStyles, date1904: contentDate1904 } : {});
     const rows = parsed.rows; formulaCells += parsed.formulaCells;
+    missingFormulaCaches += parsed.missingFormulaCaches; unsupportedNumberFormats += parsed.unsupportedNumberFormats;
     const parts=[];let rendered=0;
     const append=(part)=>{rendered+=part.length+2;if(rendered>MAX_WORD_RENDERED_CHARS)throw xlsxRenderLimit();parts.push(part);};
     append(`# Arbeitsblatt: ${options.preserveText?extractionText(s.name,false,options.literalMarkup):s.name}`);
-    if(rows.length){
+    if (options.contentMode) xlsxContentTable(parsed, options, append);
+    else if(rows.length){
       const cols=rows.reduce((maximum,row)=>Math.max(maximum,row.length),0);
       // A sparse far-right cell must not expand into an unbounded dense table.
       // Stop explicitly at the output budget; never return a successful prefix.
@@ -1601,15 +1878,24 @@ function parseXlsx(entries, options = {}) {
   }
   const supplementCoverage = xlsxSupplementRelationshipCoverage(entries, renderedSheets);
   const commentCoverage = xlsxCommentRelationshipCoverage(entries, renderedSheets);
+  const modernComments = options.contentMode
+    ? xlsxModernCommentSections(entries, reader, contentOverrides, renderedSheets, options)
+    : { sections: [], safeParts: new Set(), warnings: [] };
+  if (stylesPart) modernComments.safeParts.add(stylesPart);
+  modernComments.stylesBound = Boolean(stylesPart);
   for(const [name,data] of entries) if(supplementCoverage.safeCharts.has(name)){const vals=textTags(data.toString('utf8'),'c:v').concat(textTags(data.toString('utf8'),'a:t')).map(value=>options.literalMarkup?extractionText(value,false,true):value); if(vals.length)sections.push({kind:'table',source_part:name,markdown:`## Diagrammdaten ${path.basename(name)}\n\n${vals.join(' | ')}`});}
   for(const [name,data]of entries)if(supplementCoverage.safeDrawings.has(name)){const vals=textTags(data.toString('utf8'),'a:t').map(value=>options.literalMarkup?extractionText(value,false,true):value);if(vals.length)sections.push({kind:'text',source_part:name,markdown:`## Grafiktext ${path.basename(name)}\n\n${vals.join(' ')}`});}
   for(const [name,data]of entries)if(commentCoverage.safeComments.has(name)){const vals=textTags(data.toString('utf8'),'t').map(value=>options.literalMarkup?extractionText(value,false,true):value);if(vals.length)sections.push({kind:'text',source_part:name,markdown:`## Tabellenkommentare\n\n${vals.join('\n\n')}`});}
+  sections.push(...modernComments.sections);
   sections.push(...metadataSections(entries,options));
   const imageCoverage = packageImageRelationshipCoverage(entries, 'xl', 'XLSX', supplementCoverage.safeDrawings);
-  const warnings=[...customMetadataWarnings(entries), ...xlsxCoverageWarnings(entries, sheetMeta), ...imageCoverage.warnings, ...supplementCoverage.warnings, ...commentCoverage.warnings];
+  const warnings=[...customMetadataWarnings(entries), ...xlsxCoverageWarnings(entries, sheetMeta, options.contentMode ? modernComments : null), ...imageCoverage.warnings, ...supplementCoverage.warnings, ...commentCoverage.warnings, ...modernComments.warnings, ...numberWarnings];
+  if(options.officeTableContext.unverified)warnings.push('OFFICE_TABLE_CONTEXT_UNVERIFIED');
   if(rootIssues)warnings.push(`XLSX enthält ${rootIssues} nicht eindeutig über die interne Paketwurzel abgesicherte Struktur(en); Freigabe wird blockiert.`);
   if(issues)warnings.push(`XLSX enthält ${issues} nicht eindeutig über eine interne Arbeitsblattbeziehung abgesicherte Struktur(en); Freigabe wird blockiert.`);
   if(formulaCells)warnings.push(`XLSX enthält ${formulaCells} Formelzelle(n); Freigabe wird bis zur vollständigen Formelcoverage blockiert.`);
+  if(options.contentMode && missingFormulaCaches)warnings.push(`XLSX enthält ${missingFormulaCaches} Formelzelle(n) ohne gespeicherten Wert; keine Formel wurde berechnet.`);
+  if(options.contentMode && unsupportedNumberFormats)warnings.push(`XLSX enthält ${unsupportedNumberFormats} nicht vollständig dargestellte Zahlenformat(e); Rohwert und Formatcode bleiben im Text erhalten.`);
   return { markdown:sections.map(section=>section.markdown).join('\n\n'), sections, attachments:mediaAttachments(entries,'xl/media/', imageCoverage.safeTargets), warnings };
 }
 function slideNumber(name){return Number(/slide(\d+)\.xml$/i.exec(name)?.[1]||0);}
@@ -1782,7 +2068,109 @@ function drawingText(xml) {
   }
   return paragraphs.join('\n\n');
 }
+function contentDrawingText(xml) {
+  // Office presentation paragraphs only; literal TXT/MD never use this path.
+  return drawingText(xml).split(/\r\n|\r|\n/u).filter(line=>line.trim()).join('\n\n');
+}
+function inheritedContentValues(xml,options={}) {
+  // Only known editor prompts inside an actual template placeholder are noise.
+  // A custom/inherited title or footer remains source content, even when its
+  // surrounding shape has a placeholder marker. Never use this on real slides.
+  const editorPrompts=new Set(['Mastertitelformat bearbeiten','Mastertextformat bearbeiten',
+    'Titelmasterformat durch Klicken bearbeiten','Textmasterformat durch Klicken bearbeiten',
+    'Untertitelformat bearbeiten','Untertitel bearbeiten','Zweite Ebene','Dritte Ebene',
+    'Vierte Ebene','Fünfte Ebene','Click to edit Master title style','Click to edit Master text styles',
+    'Click to edit Master subtitle style','Second level','Third level','Fourth level','Fifth level',
+    '<#>','‹#›']);
+  const retained=[],shapes=new WeakMap(),paragraphs=[],legacyTexts=[];let paragraph=null,legacyText=null;
+  const mc='http://schemas.openxmlformats.org/markup-compatibility/2006';
+  const selected=new WeakMap(),ignored=new WeakSet();
+  const understood=new Set([...RAW_IMAGE_NAMESPACES.presentation,...RAW_IMAGE_NAMESPACES.drawing]);
+  const active=node=>{for(let scope=node;scope;scope=scope.parent)if(ignored.has(scope))return false;return true;};
+  readXml(xml,{decode:xmlDecode,error:xmlTextError,start(node){
+    if(node.namespaceURI===mc&&node.localName==='AlternateContent')selected.set(node,false);
+    if(node.namespaceURI===mc&&['Choice','Fallback'].includes(node.localName)){
+      if(node.parent?.namespaceURI!==mc||node.parent.localName!=='AlternateContent')throw xmlTextError();
+      const required=(node.attributes.get('{}Requires')||'').trim().split(/\s+/u).filter(Boolean);
+      const usable=node.localName==='Fallback'||(required.length&&required.every(prefix=>understood.has(node.namespaces.get(prefix))));
+      if(selected.get(node.parent)||!usable)ignored.add(node);else selected.set(node.parent,true);
+    }
+    if(!active(node))return;
+    // This parser-private flag describes a reached, actually selected table,
+    // never a text spelling or an unselected MC alternative. The prose-only
+    // inherited projection cannot currently prove its header/value ownership.
+    if(RAW_IMAGE_NAMESPACES.drawing.has(node.namespaceURI)&&node.localName==='tbl'&&options.officeTableContext)options.officeTableContext.unverified=true;
+    if(RAW_IMAGE_NAMESPACES.presentation.has(node.namespaceURI)&&node.localName==='sp'){
+      shapes.set(node,{paragraphs:[],placeholder:false});
+    }
+    let owner=null;for(let parent=node.parent;parent;parent=parent.parent)if(shapes.has(parent)){owner=shapes.get(parent);break;}
+    if(owner&&RAW_IMAGE_NAMESPACES.presentation.has(node.namespaceURI)&&node.localName==='ph')owner.placeholder=true;
+    if(RAW_IMAGE_NAMESPACES.drawing.has(node.namespaceURI)&&node.localName==='p')paragraph={node,text:'',owner};
+    if(paragraph&&RAW_IMAGE_NAMESPACES.drawing.has(node.namespaceURI)&&node.localName==='br')paragraph.text+='\n';
+    if(RAW_IMAGE_NAMESPACES.drawing.has(node.namespaceURI)&&node.localName==='t')legacyText={node,chunks:[]};
+  },text(value,node){if(active(node)&&RAW_IMAGE_NAMESPACES.drawing.has(node.namespaceURI)&&node.localName==='t'){
+    if(paragraph)paragraph.text+=value;
+    if(legacyText?.node===node)legacyText.chunks.push(value);
+  }},end(node){
+    if(legacyText?.node===node){legacyTexts.push(legacyText.chunks.join(''));legacyText=null;}
+    if(paragraph?.node===node){paragraph.owner?.paragraphs.push(paragraph.text);paragraphs.push(paragraph);paragraph=null;}
+  }});
+  // Bound notes-v1 retains the previous individual text-node whitespace and
+  // separators, but shares the actual namespace/MC-selected source scope.
+  // Only content-v1 applies the established editor-prompt cleanup below.
+  if(!options.contentMode)return legacyTexts;
+  const omitOwner=new WeakMap();
+  for(const item of paragraphs){
+    const values=item.text.split(/\r\n|\r|\n/u).filter(value=>value.trim());
+    if(item.owner&&!omitOwner.has(item.owner)){
+      const ownerValues=item.owner.paragraphs.flatMap(value=>value.split(/\r\n|\r|\n/u)).filter(value=>value.trim());
+      omitOwner.set(item.owner,item.owner.placeholder&&ownerValues.length>0&&ownerValues.every(value=>editorPrompts.has(value.trim())));
+    }
+    if(item.owner&&omitOwner.get(item.owner))continue;
+    if(values.length)retained.push(values.join('\n\n'));
+  }
+  return retained.length?[retained.join('\n\n')]:[];
+}
+function augmentDiagramText(result,entries,options) {
+  if (options.contentMode!==true) return result;
+  const original=[...result.sections], byOwner=new Map();
+  for (const section of original) {
+    if (!byOwner.has(section.source_part)) byOwner.set(section.source_part,[]);
+  }
+  // A chart-only/SmartArt-only sheet drawing can have no ordinary text section.
+  // Reach it from a retained sheet's actual namespaced drawing reference.
+  for (const owner of [...byOwner.keys()]) if (/^xl\/worksheets\/sheet[0-9]+\.xml$/u.test(owner)) {
+    const usage=rawOfficePartUsage(entries,owner,'sheet','worksheet','.xlsx'),rels=rawOfficeRelationships(entries,owner,'.xlsx');
+    for (const id of usage.references.get('drawing')||[]) {
+      const target=rawOfficeTarget(entries,owner,rels,id,'drawing',/^xl\/drawings\/drawing[0-9]+\.xml$/u);
+      if (target&&!byOwner.has(target)) byOwner.set(target,[]);
+    }
+  }
+  for (const owner of byOwner.keys()) {
+    try {
+      for (const model of ownerDiagrams(entries,owner,xmlDecode)) {
+        if (!model.rows.length) continue;
+        byOwner.get(owner).push({kind:'text',source_part:owner,markdown:'## SmartArt\n\n'+model.rows.map(row=>
+          `${'  '.repeat(row.depth)}- ${extractionText(row.text,false,options.literalMarkup)}`).join('\n')});
+      }
+    } catch (error) {
+      if (error?.code!=='PPTX_STRUCTURE_UNSAFE') throw error;
+      result.warnings.push('SmartArt konnte nicht eindeutig intern und strukturiert gelesen werden; Inhaltsabdeckung bleibt unvollständig.');
+    }
+  }
+  const sections=sectionList(entries,options), emitted=new Set();
+  for (const section of original) {
+    sections.push(section);
+    if (!emitted.has(section.source_part)) {
+      sections.push(...(byOwner.get(section.source_part)||[]));emitted.add(section.source_part);
+    }
+  }
+  for (const [owner,extra] of byOwner) if (!emitted.has(owner)) sections.push(...extra);
+  result.sections=sections;result.markdown=sections.map(section=>section.markdown).join('\n\n');
+  return result;
+}
 function parsePptx(entries, options = {}) {
+  options={...options,officeTableContext:{unverified:false}};
   validatePptxXmlEntries(entries);
   const presentation=entries.get('ppt/presentation.xml')?.toString('utf8')||'';const slides=[];let issues=0,tableIssues=0,m;const rootIssues=packageMainRelationshipIssueCount(entries, 'ppt/presentation.xml');
   const sr=/<p:sldId\b([^>]+?)\/?>(?:<\/p:sldId>)?/gi;while((m=sr.exec(presentation))){const id=/\br:id=["']([^"']+)["']/i.exec(m[1])?.[1],target=id&&pptRelationshipTarget(entries,'ppt/_rels/presentation.xml.rels',id,'slide','ppt');if(!target){issues++;continue;}slides.push(target);}
@@ -1791,21 +2179,26 @@ function parsePptx(entries, options = {}) {
   const masterCoverage = pptMasterLayoutCoverage(entries, slides);
   const sections=sectionList(entries, options);
   for(const [slideIndex,s] of slides.entries()){
-    const n=options.preserveText?slideIndex+1:slideNumber(s),xml=entries.get(s).toString('utf8'),tableCoverage=pptSlideTableSections(xml,s,options),rawTexts=options.preserveText?[drawingText(tableCoverage.prose)]:textTags(tableCoverage.prose,'a:t'),texts=options.preserveText?rawTexts.map(value=>extractionText(value,false,options.literalMarkup)):rawTexts,slide=[`# Folie ${n}`];
+    const n=options.preserveText?slideIndex+1:slideNumber(s),xml=entries.get(s).toString('utf8'),tableCoverage=pptSlideTableSections(xml,s,options),rawTexts=options.preserveText?[options.contentMode?contentDrawingText(tableCoverage.prose):drawingText(tableCoverage.prose)]:textTags(tableCoverage.prose,'a:t'),texts=options.preserveText?rawTexts.map(value=>extractionText(value,false,options.literalMarkup)):rawTexts,slide=[`# Folie ${n}`];
     tableIssues+=tableCoverage.issues;
     if(texts.length)slide.push(texts.join('\n\n'));
-    if(!omitEmptyPptxSection(entries,options,s,rawTexts))sections.push({kind:'text',source_part:s,markdown:slide.join('\n\n')});
+    // Keep an actual reached slide anchor if its native SmartArt is its only
+    // authored text. Pure picture-only slides still cannot invent native text.
+    let diagramText=false;
+    if(options.contentMode===true)try{diagramText=ownerDiagrams(entries,s,xmlDecode).some(model=>model.rows.length);}catch(error){if(error?.code!=='PPTX_STRUCTURE_UNSAFE')throw error;}
+    if(!omitEmptyPptxSection(entries,options,s,diagramText?['SmartArt']:rawTexts))sections.push({kind:'text',source_part:s,markdown:slide.join('\n\n')});
     sections.push(...tableCoverage.tables);
     const notes=pptRelationshipTarget(entries,`ppt/slides/_rels/${path.basename(s)}.rels`,null,'notesSlide','ppt/slides');
     if(notes&&notesCoverage.safeNotes.has(notes)){const rawNotes=options.preserveText?[drawingText(entries.get(notes).toString('utf8'))]:textTags(entries.get(notes).toString('utf8'),'a:t').filter(x=>!/^\d+$/.test(x.trim())),nt=options.preserveText?rawNotes.map(value=>extractionText(value,false,options.literalMarkup)):rawNotes;if(nt.length&&!omitEmptyPptxSection(entries,options,notes,rawNotes))sections.push({kind:'text',source_part:notes,markdown:`## Notizen\n\n${nt.join('\n\n')}`});}
   }
   const chartCoverage = pptChartRelationshipCoverage(entries, slides);
   for(const [name,data] of entries) if(chartCoverage.safeCharts.has(name)){const rawValues=textTags(data.toString('utf8'),'c:v').concat(textTags(data.toString('utf8'),'a:t')),vals=rawValues.map(value=>options.literalMarkup?extractionText(value,false,true):value);if(vals.length&&!omitEmptyPptxSection(entries,options,name,rawValues))sections.push({kind:'table',source_part:name,markdown:`## Diagrammdaten ${path.basename(name)}\n\n${vals.join(' | ')}`});}
-  for(const [name,data] of entries) if(masterCoverage.safeLayouts.has(name)){const rawValues=textTags(data.toString('utf8'),'a:t'),vals=rawValues.map(value=>options.literalMarkup?extractionText(value,false,true):value);if(vals.length&&!omitEmptyPptxSection(entries,options,name,rawValues))sections.push({kind:'text',source_part:name,markdown:`## Folienlayout ${path.basename(name)}\n\n${vals.join('\n\n')}`});}
-  for(const [name,data] of entries) if(masterCoverage.safeMasters.has(name)){const rawValues=textTags(data.toString('utf8'),'a:t'),vals=rawValues.map(value=>options.literalMarkup?extractionText(value,false,true):value);if(vals.length&&!omitEmptyPptxSection(entries,options,name,rawValues))sections.push({kind:'text',source_part:name,markdown:`## Folienmaster ${path.basename(name)}\n\n${vals.join('\n\n')}`});}
+  for(const [name,data] of entries) if(masterCoverage.safeLayouts.has(name)){const rawValues=options.contentMode||options.preserveText?inheritedContentValues(data.toString('utf8'),options):textTags(data.toString('utf8'),'a:t'),vals=rawValues.map(value=>options.literalMarkup?extractionText(value,false,true):value);if(vals.length&&!omitEmptyPptxSection(entries,options,name,rawValues))sections.push({kind:'text',source_part:name,markdown:`## Folienlayout ${path.basename(name)}\n\n${vals.join('\n\n')}`});}
+  for(const [name,data] of entries) if(masterCoverage.safeMasters.has(name)){const rawValues=options.contentMode||options.preserveText?inheritedContentValues(data.toString('utf8'),options):textTags(data.toString('utf8'),'a:t'),vals=rawValues.map(value=>options.literalMarkup?extractionText(value,false,true):value);if(vals.length&&!omitEmptyPptxSection(entries,options,name,rawValues))sections.push({kind:'text',source_part:name,markdown:`## Folienmaster ${path.basename(name)}\n\n${vals.join('\n\n')}`});}
   sections.push(...metadataSections(entries,options));
   const imageCoverage = packageImageRelationshipCoverage(entries, 'ppt', 'PPTX', new Set(slides));
   const warnings=[...customMetadataWarnings(entries), ...pptxCoverageWarnings(entries, slides, notesCoverage.safeNotes, masterCoverage), ...imageCoverage.warnings, ...chartCoverage.warnings, ...notesCoverage.warnings, ...masterCoverage.warnings];if(issues)warnings.push(`PPTX enthält ${issues} nicht eindeutig über eine interne Folienbeziehung abgesicherte Struktur(en); Freigabe wird blockiert.`);
+  if(options.officeTableContext.unverified)warnings.push('OFFICE_TABLE_CONTEXT_UNVERIFIED');
   if(rootIssues)warnings.push(`PPTX enthält ${rootIssues} nicht eindeutig über die interne Paketwurzel abgesicherte Struktur(en); Freigabe wird blockiert.`);
   if(tableIssues)warnings.push(`PPTX enthält ${tableIssues} nicht vollständig strukturierte DrawingML-Tabelle(n); Freigabe wird blockiert.`);
   return { markdown:sections.map(section=>section.markdown).join('\n\n'), sections, attachments:mediaAttachments(entries,'ppt/media/', imageCoverage.safeTargets), warnings };
@@ -1926,7 +2319,9 @@ function augmentEmbedded(result, entries, context, options = {}) {
       result.sections.push({kind:'text',source_part:embedded.name,markdown:heading});
       for(const section of nested.sections)result.sections.push({...section,source_part:`${embedded.name}!/${section.source_part}`});
     }
-    for(const attachment of nested.attachments)result.attachments.push({...attachment,source_part:`${embedded.name}!/${attachment.source_part}`});
+    for(const attachment of nested.attachments)result.attachments.push({...attachment,source_part:`${embedded.name}!/${attachment.source_part}`,
+      ...(attachment.occurrences?{occurrences:attachment.occurrences.map(value=>({...value,source_part:`${embedded.name}!/${value.source_part}`,
+        owner:`${embedded.name}!/${value.owner}`,section_part:`${embedded.name}!/${value.section_part}`}))}:{})});
     result.warnings.push(...nested.warnings);
   }
   result.markdown=result.sections.map(section=>section.markdown).join('\n\n');
@@ -1992,6 +2387,7 @@ function parseOoxml(buffer, ext, context, options = {}) {
   else if(ext==='.xlsx')result=parseXlsx(entries,options);
   else if(ext==='.pptx')result=parsePptx(entries,options);
   else throw new Error('OOXML-Format nicht unterstützt.');
+  result=augmentDiagramText(result,entries,options);
   if(ext!=='.docx')result.warnings.push(...genericSecurityWarnings(entries));
   if(options.preserveText){
     // This entry is an engineering extractor, not a format-release switch.

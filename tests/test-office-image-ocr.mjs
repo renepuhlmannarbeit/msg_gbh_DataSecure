@@ -200,17 +200,43 @@ if (process.argv.includes('--source-only')) {
     // from an OCR result and no mocked raster/recognition data is used.
     // Own the native addon lifetime in a completed fixture subprocess, so the
     // Windows test can clean its exact runtime scope without a DLL lock.
-    const rasterFixture = `const { createCanvas } = require(process.argv[1]);
+    const rasterFixture = `const { createCanvas, GifEncoder } = require(process.argv[1]);
       const canvas = createCanvas(1500, 450), context = canvas.getContext('2d');
       context.fillStyle = 'white'; context.fillRect(0, 0, 1500, 450); context.fillStyle = 'black'; context.font = '62px Arial';
       context.fillText('RASTER ORIGINAL', 60, 100); context.fillText('E-Mail: qa77@quality.example.invalid', 60, 220);
       context.fillText('Telefon: +49 30 555 1077', 60, 340);
-      process.stdout.write(JSON.stringify({ png: canvas.toBuffer('image/png').toString('base64'),
-        jpg: canvas.toBuffer('image/jpeg').toString('base64') }));`;
+      const encoder=new GifEncoder(1500,450,{repeat:1}),pixels=new Uint8Array(context.getImageData(0,0,1500,450).data);
+      let gif;try{encoder.addFrame(pixels,1500,450);encoder.addFrame(pixels,1500,450);gif=Buffer.from(encoder.finish()).toString('base64');}finally{encoder.dispose();}
+      process.stdout.write(JSON.stringify({ png: canvas.toBuffer('image/png').toString('base64'),gif,
+        webp:canvas.toBuffer('image/webp').toString('base64'),jpg: canvas.toBuffer('image/jpeg').toString('base64') }));`;
     const generated = JSON.parse(childProcess.execFileSync(process.execPath,
       ['-e', rasterFixture, path.join(runtime, 'node_modules/@napi-rs/canvas')],
       { windowsHide: true, encoding: 'utf8', timeout: 30000, maxBuffer: 4 * 1024 * 1024 }));
     const png = Buffer.from(generated.png, 'base64'), jpg = Buffer.from(generated.jpg, 'base64'), bmp = encodeBmp(decodePng(png));
+    const raster=decodePng(png),tagRows=[[256,4,raster.width],[257,4,raster.height],[258,3,8],[259,3,1],[262,3,1],
+      [273,4,146],[274,3,1],[277,3,1],[278,4,raster.height],[279,4,raster.width*raster.height],[284,3,1]];
+    const tif=Buffer.alloc(146+raster.width*raster.height);tif.write('II');tif.writeUInt16LE(42,2);tif.writeUInt32LE(8,4);tif.writeUInt16LE(tagRows.length,8);
+    for(const [index,[tag,type,value]] of tagRows.entries()){const pos=10+index*12;tif.writeUInt16LE(tag,pos);tif.writeUInt16LE(type,pos+2);tif.writeUInt32LE(1,pos+4);if(type===3)tif.writeUInt16LE(value,pos+8);else tif.writeUInt32LE(value,pos+8);}
+    for(let index=0;index<raster.width*raster.height;index++)tif[146+index]=raster.rgba[index*4];
+    const svg=Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="450"><rect width="1500" height="450" fill="white"/><text x="60" y="100" font-size="62">VECTOR ORIGINAL</text><text x="60" y="220" font-size="62">E-Mail: qa77@quality.example.invalid</text><text x="60" y="340" font-size="62">Telefon: +49 30 555 1077</text></svg>');
+    for(const type of ['docx','xlsx','pptx'])for(const [ext,bytes,expected,copies] of [
+      ['svg',svg,'VECTOR ORIGINAL',1],['webp',Buffer.from(generated.webp,'base64'),'RASTER ORIGINAL',1],
+      ['gif',Buffer.from(generated.gif,'base64'),'RASTER ORIGINAL',2],['tiff',tif,'RASTER ORIGINAL',1]]){
+      await check(`${target}: actual ${type} ${ext} decoder feeds OCR and unchanged privacy positions`,async()=>{
+        const original=office(type,[{ext,bytes}]),before=hash(original);
+        const result=await convertBuffer(original,`.${type}`,{contentOptions:options(true)});
+        assert.equal(hash(original),before);assert.match(result.markdown,/NATIVE ORIGINAL/u);
+        assert.equal(result.markdown.split(expected).length-1,copies);assert.ok(result.ocr_contacts?.length>=copies*2);
+        assert.ok(!result.coverage.reason_codes.some(code=>/FORMAT_.*_UNSUPPORTED/u.test(code)));
+        if(copies>1){assert.match(result.markdown,/Teil 1 von 2/u);assert.match(result.markdown,/Teil 2 von 2/u);}
+        for(const contact of result.ocr_contacts)assert.ok(result.markdown.slice(contact.start,contact.end).includes(contact.kind==='email'?'@':'555'));
+        const {extractSourceForPrivacy}=require(path.join(server,'core/markdown-first-privacy'));
+        const {automaticallyRedactOcrContacts}=require(path.join(server,'gateway/bound-content-input'));
+        const privateText=await extractSourceForPrivacy(original,`.${type}`,{contentOptions:options(true),convertBuffer:async()=>result});
+        const masked=automaticallyRedactOcrContacts({original_text:privateText.markdown,source_type:type,contacts:privateText.ocrContacts});
+        assert.doesNotMatch(masked.text,/@|555/u);assert.match(masked.text,/NATIVE ORIGINAL/u);
+      });
+    }
     await check(`${target}: actual worker composes tRNS against white on direct Office and Markdown routes`, async () => {
       for (const bytes of transparentSamples) {
         diagnostics = '';
@@ -242,7 +268,8 @@ if (process.argv.includes('--source-only')) {
         const result = await convertBuffer(source, `.${type}`, { contentOptions: options(true) });
         assert.equal(result.source_type, type); assert.equal(result.anonymized, false);
         assert.match(result.markdown, /NATIVE ORIGINAL/u); assert.match(result.markdown, /RASTER ORIGINAL/u);
-        assert.doesNotMatch(result.markdown, /data:image|image0|Bildtext|Zusätzlicher|Dokumentinformationen/u);
+        assert.doesNotMatch(result.markdown, /data:image|image0|Zusätzlicher|Dokumentinformationen/u);
+        assert.match(result.markdown,/### Bildtext · (?:Dokumentabschnitt|Arbeitsblatt|Folie) 1 · Grafik 1/u,'actual reached owner remains identified');
         assert.equal(hash(source), before); assert.ok(result.ocr_contacts?.length >= 2);
         assert.ok(result.ocr_contacts.some(contact => contact.image?.png_base64));
         for (const contact of result.ocr_contacts) {
@@ -291,14 +318,14 @@ if (process.argv.includes('--source-only')) {
       const result = await convertBuffer(source,`.${type}`,{contentOptions:options(true)});
       assert.equal(hash(source),before); assert.match(result.markdown,/NATIVE ORIGINAL/u);
       assert.equal((result.markdown.match(/RASTER ORIGINAL/gu)||[]).length,2);
-      for (const code of ['OFFICE_IMAGE_FORMAT_EMF_UNSUPPORTED','OFFICE_IMAGE_FORMAT_SVG_UNSUPPORTED','IMAGE_CONTENT_DAMAGED'])
+      for (const code of ['OFFICE_IMAGE_FORMAT_SVG_UNSUPPORTED','IMAGE_CONTENT_DAMAGED'])
         assert.ok(result.coverage.reason_codes.includes(code),code);
       assert.deepEqual([...new Set(result.ocr_contacts.map(item=>item.page))],[3,5]);
       for (const contact of result.ocr_contacts) assert.ok(result.markdown.slice(contact.start,contact.end).includes(contact.kind==='email'?'@':'555'));
       const { extractSourceForPrivacy } = require(path.join(server,'core/markdown-first-privacy'));
       const privateText = await extractSourceForPrivacy(source,`.${type}`,{contentOptions:options(true),convertBuffer:async()=>result});
       assert.equal(privateText.sourceExtractionCoverage.status,'incomplete');
-      assert.ok(privateText.sourceExtractionCoverage.reason_codes.includes('OFFICE_IMAGE_FORMAT_EMF_UNSUPPORTED'));
+      assert.ok(privateText.sourceExtractionCoverage.reason_codes.includes('IMAGE_CONTENT_DAMAGED'));
       assert.equal(privateText.ocrContacts.length,result.ocr_contacts.length);
     });
     await check(`${target}: completed native Office sections survive the unchanged 8M document budget and reach the checkpoint pipe`, async () => {

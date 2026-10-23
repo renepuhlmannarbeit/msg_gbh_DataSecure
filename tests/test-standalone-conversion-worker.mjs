@@ -126,6 +126,9 @@ try {
     assert.deepEqual(derivedPdf.bytes, derivePdfjsTextPaintModule(originalPdf.bytes));
     assert.equal(manifest.pdf_text_paint_contract, 'datasecure-pdf-text-paint/1');
     assert.deepEqual(manifest.pdf_text_paint_upstream, PDFJS_TEXT_PAINT_HOOK);
+    assert.equal(manifest.office_graphics_contract,'datasecure-office-graphics/1');
+    for(const name of ['package.json','dist/browser.js','LICENSE','THIRD_PARTY_NOTICES'])assert.ok(a.some(item=>item.relative===`node_modules/emf-converter/${name}`));
+    assert.ok(!a.some(item=>item.relative.startsWith('node_modules/emf-converter/dist/index.')||item.relative.includes('resvg')));
     assert.throws(() => collectConversionRuntime(repo, 'unsupported-target'), /CONVERSION_PACKAGE_TARGET_UNSUPPORTED/u);
     writeStandaloneRuntime(path.join(repo, 'plugins', 'data-secure', 'server'), server, target);
     writeConversionRuntime(repo, runtime, target);

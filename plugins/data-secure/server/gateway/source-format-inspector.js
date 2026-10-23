@@ -4,6 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { inspectZipDirectoryFromFd, ZipError } = require('../zip-reader');
 const { validateOpcControls, OpcValidationError } = require('./opc-source-validator');
+const { cfbHasProtectedPackage } = require('./cfb-protection');
 
 const PILOT_TYPES = new Set(['txt', 'md', 'csv', 'docx']);
 const EXTENSION_TYPES = Object.freeze({
@@ -132,7 +133,8 @@ function inspectSourceFormatFromFd(fd, stat, extension, options = {}) {
   const magic = detectedMagic(header);
 
   if (magic === 'cfb') {
-    return finish(verdict(declaredType, 'cfb', 'rejected', 'SOURCE_COMPOUND_BINARY_UNSUPPORTED'));
+    const protectedPackage=size>=512&&cfbHasProtectedPackage(fd,size,(descriptor,length,position)=>exactRead(descriptor,length,position,safeRead));
+    return finish(verdict(declaredType, 'cfb', 'rejected', protectedPackage?'SOURCE_ENCRYPTED_UNSUPPORTED':'SOURCE_COMPOUND_BINARY_UNSUPPORTED'));
   }
 
   if (['docx', 'xlsx', 'pptx'].includes(declaredType)) {

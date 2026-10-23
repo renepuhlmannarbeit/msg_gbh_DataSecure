@@ -129,6 +129,7 @@ jobs:
           npm ci --prefix native/ocr/pilot --ignore-scripts --no-audit --no-fund
           npm ci --prefix native/pdfjs/pilot --ignore-scripts --no-audit --no-fund
           npm ci --prefix native/markdown/pilot --ignore-scripts --no-audit --no-fund
+          npm ci --prefix native/graphics/pilot --ignore-scripts --legacy-peer-deps --no-audit --no-fund
           node native/ocr/pilot/fetch-models.mjs
       - name: Compile and verify the target-native POSIX supervisor
         shell: bash
@@ -206,6 +207,15 @@ jobs:
           set -euo pipefail
           node tests/test-import-macos-core-candidate.mjs
           node tests/test-partial-conversion.js
+          node tests/test-office-diagrams.js
+          node tests/test-office-occurrences.js
+          node tests/test-office-projection-countercases.js
+          node tests/test-docx-table-grid.js
+          node tests/test-office-table-context.js
+          node tests/test-xlsx-content-projection.js
+          node tests/test-xlsx-counterregressions.js
+          node tests/test-cfb-protection.js
+          node tests/test-pdf-native-ocr-layout.js
           node tests/test-conversion-checkpoints.js
           node tests/test-uat-fixture-generation.js
           node tests/test-legacy-input-migration.js

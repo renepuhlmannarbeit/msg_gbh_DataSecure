@@ -1,8 +1,40 @@
 # Aktives Entwicklungsbacklog
 
-Stand: 22.10.2026 · Produktstand 3.2.0-rc171 · gemeinsamer Windows-/Mac-Test-Pre-Release in Vorbereitung; RC170 bleibt unverändert.
+## BL-049.2 – Inhaltsabdeckung und lesbares Markdown nach RC171 (23.10.2026)
 
-## Aktive Übergabegates22.10.2026 10:49UTC nach geprüftem Nestedfix
+Status: **Umsetzung und neue Testversion am 23.10.2026 beauftragt; in Arbeit**.
+Aktueller Ausführungsstand: [RC172_SHARED_RELEASE_20261023.md](../acceptance/RC172_SHARED_RELEASE_20261023.md).
+Vorheriger expliziter Nutzerauftrag:
+zuerst Anforderungen, Ursachen und Rendereroptionen dauerhaft festhalten,
+zusätzlichen ausgewählten Mehrformatlauf gegen Originale und MD analysieren.
+Die erste Analysephase änderte noch kein Produkt. Der neue Auftrag umfasst
+Implementierung/Tests und Test-Pre-Release, keine Mainintegration; Desktoptests beim Nutzer.
+
+Verbindlicher Umsetzungs-/Entscheidungsstand:
+[CONTENT_COVERAGE_BACKLOG_20261023.md](../acceptance/CONTENT_COVERAGE_BACKLOG_20261023.md).
+Er umfasst native SmartArt-/Diagrammtexte, konkrete Folien-/Bildvorkommen,
+fair begrenzte sequentielle Bildverarbeitung statt frühem gemeinsamem Pixelverbrauch,
+sichere zusätzliche Grafikdecoder/-renderer, OCR-Qualität, sauberes Inhaltsmarkdown,
+sichtbare präzise Auslassungsgründe und getrennte Windows-/Mac-Nachweise.
+Suchtexte, echte Fach-/Personennamen, Umlaute/ß und andere gültige Sprachen nicht
+pauschal löschen. Neue Texte vor Anonymisierung in dieselbe Schutzkette einspeisen.
+Offline-, I/O-, ZIP-, Rechte-, Guard- und Residualprüfungen bleiben erhalten.
+
+Zusätzliche Laufanalyse nur lokal, datensparsame Backlogbefunde ohne echte
+Nutzerdateien, Personal-/Angebotsinhalte oder Diagnosepayloads in Git/CI/Releases.
+Ausgewählter Lauf jetzt abgegrenzt analysiert: 117 Quellen, 107 gebundene MDs,
+zehn aufgezeichnete Stopps. Neue Teilaufträge A–F im verlinkten Dokument:
+moderne Excel-Kommentar-/Autorenrelationen, Word-Zellspans, OCR-Duplikate und
+räumlicher Kontext, Excel-Leerbereiche/Zahlenformate, Vorlagenballast und präzise
+Schutzdiagnose. Verschlüsselte/DRM-geschützte Quellen nicht als Rendererfehler
+behandeln. Keine komplette visuelle Inhaltsfreigabe aus dieser Quellenanalyse ableiten.
+Historische RC163–RC171-Einträge darunter bleiben historische Belege und sind
+keine erneut kumulierte Aufgabenliste. Frühere UX-/Export-/Zuordnungsanforderungen
+bleiben erhalten; die neue Arbeit darf diese Funktionen nicht zurückbauen.
+
+Stand: 23.10.2026 · RC172 in Entwicklung; RC171 und ältere Pakete unverändert.
+
+## Historische RC171-Übergabegates22.10.2026 10:49UTC nach geprüftem Nestedfix
 
 Enger Drei-Produktmodulfix samt sechs neuen Testgruppen abgeschlossen und
 unabhängig tatsächlich gegengelesen. Finale Restprüfung unverändert hart,

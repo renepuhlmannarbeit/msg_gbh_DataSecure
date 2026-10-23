@@ -2917,6 +2917,7 @@ function conversionFeedback(overrides = {}) {
     not_converted_count: 17, ocr_omitted_count: 17, error_count: 0, content_notice_count: 35, pending_count: 0, complete: true, ...overrides };
 }
 const partialContentNotices = [
+  ['OFFICE_TABLE_CONTEXT_UNVERIFIED', /Office-Tabell.*Feldzuordnung/u],
   ['OFFICE_IMAGE_FORMAT_EMF_UNSUPPORTED', /EMF-Grafiken/u],
   ['OFFICE_IMAGE_FORMAT_WMF_UNSUPPORTED', /WMF-Grafiken/u],
   ['OFFICE_IMAGE_FORMAT_SVG_UNSUPPORTED', /SVG-Grafiken/u],

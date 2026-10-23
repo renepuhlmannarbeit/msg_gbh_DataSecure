@@ -17,6 +17,20 @@ function nativeTextSeparator(previous, item) {
   return item.transform[4] - previous.transform[4] - previous.width > height * 0.25 ? ' ' : '';
 }
 
+// A gutter (even with staggered baselines) cannot distinguish a data table from
+// prose columns. TextContent does not carry an independently proven row/column
+// owner model here. Preserve every item in the original draw order until such
+// a model exists; never turn Name/Account record pairs into unrelated columns.
+function nativeColumnOrder(items) { return items; }
+
+// TextContent and glyph.unicode share the same untrusted ToUnicode mapping.
+// Their agreement cannot prove that native text matches the visible glyph.
+// Keep the actual OCR raster wholly unchanged; only exact, geometrically bound
+// comparisons AFTER independent OCR may remove duplicate transcript words.
+async function renderPdfOcrLayer({ page, canvas, viewport, annotationMode }) {
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport, background: 'white', annotationMode }).promise;
+}
+
 function paintedTextGeometryAvailable(operators, ops, { strictMarkedContent = false } = {}) {
   if (!Array.isArray(operators?.fnArray) || !Array.isArray(operators?.argsArray)) return false;
   const textPaint = new Set(['showText', 'showSpacedText', 'nextLineShowText', 'nextLineSetSpacingShowText'].map(key => ops[key]).filter(Number.isInteger));
@@ -139,4 +153,5 @@ function uncoveredOcrText(data, regions, { singleTokenOnly = false } = {}) {
   return omitted ? output.join('') : data.text;
 }
 
-module.exports = Object.freeze({ nativeTextSeparator, paintedTextGeometryAvailable, nativeTextRegions, nativeSingleTokenRegions, uncoveredOcrText });
+module.exports = Object.freeze({ nativeTextSeparator, nativeColumnOrder, renderPdfOcrLayer,
+  paintedTextGeometryAvailable, nativeTextRegions, nativeSingleTokenRegions, uncoveredOcrText });

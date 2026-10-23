@@ -361,4 +361,38 @@ testAsync('inconsistent person headers stop before alias discovery instead of gu
   }
 });
 
+testAsync('actual compact XLSX coordinates cannot hide a sensitive source header before residual privacy',async()=>{
+  const {zipStore}=require('./lib/zip'),{opcControlEntries}=require('./lib/opc');
+  const {extractMarkdownBuffer}=require('../plugins/data-secure/server/standalone/markdown-extractor');
+  const {anonymizeMarkdown}=require('../plugins/data-secure/server/gateway/compliance');
+  const s='http://schemas.openxmlformats.org/spreadsheetml/2006/main',r='http://schemas.openxmlformats.org/officeDocument/2006/relationships';
+  const bytes=zipStore([...opcControlEntries('xlsx'),
+    ['xl/workbook.xml',`<workbook xmlns="${s}" xmlns:r="${r}"><sheets><sheet name="Quelle" sheetId="1" r:id="s"/></sheets></workbook>`],
+    ['xl/_rels/workbook.xml.rels',`<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="s" Type="${r}/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`],
+    ['xl/worksheets/sheet1.xml',`<worksheet xmlns="${s}"><sheetData><row r="5"><c r="C5" t="inlineStr"><is><t>Name</t></is></c></row><row r="9"><c r="C9" t="inlineStr"><is><t>Qvx</t></is></c></row></sheetData></worksheet>`]]);
+  const converted=extractMarkdownBuffer(bytes,'.xlsx',{markdownOutput:'content-v1',partialExtraction:true});
+  assert.match(converted.markdown,/Quellzeile/u);assert.match(converted.markdown,/C/u);
+  const result=await extractSourceForPrivacy(bytes,'.xlsx',{contentOptions:options(),convertBuffer:async()=>source('xlsx',converted.markdown)});
+  assert.doesNotMatch(result.markdown,/Spalte 3/u);assert.match(result.markdown,/Name/u);
+  assert.ok(!anonymizeMarkdown(result.markdown,'general',{productChannel:'standalone',contentOptions:options()}).text.includes('Qvx'));
+});
+
+testAsync('nonuniform and vertical Word coordinate grids cannot authorize privacy without a complete field-owner model',async()=>{
+  const {zipStore}=require('./lib/zip'),{opcControlEntries}=require('./lib/opc');
+  const {extractMarkdownBuffer}=require('../plugins/data-secure/server/standalone/markdown-extractor');
+  const w='http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+  const para=value=>`<w:p><w:r><w:t>${value}</w:t></w:r></w:p>`;
+  const cell=(value,props)=>`<w:tc><w:tcPr>${props}</w:tcPr>${para(value)}</w:tc>`;
+  for(const body of [
+    `<w:tr>${cell('Name','<w:gridSpan w:val="2"/>')}</w:tr><w:tr>${cell('Qvx','')}${cell('FHIR','')}</w:tr>`,
+    `<w:tr>${cell('Name','<w:gridSpan w:val="2"/><w:vMerge w:val="restart"/>')}</w:tr><w:tr>${cell('Qvx','<w:gridSpan w:val="2"/><w:vMerge/>')}</w:tr>`]){
+    const bytes=zipStore([...opcControlEntries('docx'),['word/document.xml',`<w:document xmlns:w="${w}"><w:body><w:tbl><w:tblGrid><w:gridCol/><w:gridCol/></w:tblGrid>${body}</w:tbl></w:body></w:document>`]]);
+    const converted=extractMarkdownBuffer(bytes,'.docx',{markdownOutput:'content-v1',partialExtraction:true});
+    assert.match(converted.markdown,/Qvx/u,'plain conversion retains original context');
+    assert.match(converted.markdown,/Tabelle mit verbundenen oder versetzten Zellen/u);
+    assert.ok(converted.coverage.reason_codes.includes('OFFICE_TABLE_CONTEXT_UNVERIFIED'));
+    await assert.rejects(extractSourceForPrivacy(bytes,'.docx',{contentOptions:options(),convertBuffer:async()=>source('docx',converted.markdown,options(),{coverage:converted.coverage})}),{code:'PARSER_COVERAGE_UNVERIFIED'});
+  }
+});
+
 done();

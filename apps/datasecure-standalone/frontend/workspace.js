@@ -53,7 +53,7 @@
     SOURCE_ACCESS_DENIED: 'Das Betriebssystem hat den Lesezugriff verweigert.',
     SOURCE_READ_FAILED: 'Die Datei konnte nicht gelesen werden.', SOURCE_PATH_UNSAFE: 'Der Pfad ist keine sichere reguläre lokale Datei.',
     SOURCE_IDENTITY_CHANGED: 'Die Datei hat sich seit der Auswahl verändert.',
-    SOURCE_ENCRYPTED_UNSUPPORTED: 'Die Datei ist verschlüsselt oder passwortgeschützt. Eine ungeschützte Kopie separat auswählen.',
+    SOURCE_ENCRYPTED_UNSUPPORTED: 'Die Datei ist verschlüsselt, passwort- oder rechtegeschützt. Eine berechtigt entschlüsselte Kopie separat auswählen; Schutzrechte werden nicht umgangen.',
     PASSWORD_PROTECTED_DOCUMENT_UNSUPPORTED: 'Die Datei ist passwortgeschützt. Kein Entsperren in DataSecure möglich.',
     LOCAL_REVIEW_TOO_LARGE: 'Die lokale Prüfgrenze wurde überschritten. Das Dokument in kleinere Teile aufteilen.',
     AMBIGUITY_REVIEW_REQUIRED: 'Die Datenschutzprüfung konnte den Inhalt nicht sicher freigeben.',
@@ -1010,6 +1010,7 @@
         details.append(element('summary', `${noticeCount} erstellte Dateien mit Inhaltshinweisen`),
           element('p', 'Diese Markdown-Dateien wurden erstellt. Hinweise auf ausgelassene Bildinhalte oder nicht bestätigte Vollständigkeit sind keine weiteren fehlgeschlagenen Dateien. Bei Bedarf mit dem Original vergleichen.', 'meta'));
         const descriptions = { SOURCE_COVERAGE_UNVERIFIED: 'Vollständigkeit der Textübernahme nicht unabhängig bestätigt',
+          OFFICE_TABLE_CONTEXT_UNVERIFIED: 'Office-Tabelleninhalt lesbar, Kontext nur teilweise übernommen; sichere Feldzuordnung für Anonymisierung nicht vollständig modelliert',
           VISUAL_CONTENT_NOT_EXTRACTED: 'Visuelle Inhalte wurden nicht übernommen',
           IMAGE_OCR_DISABLED_BY_POLICY: 'Text in Bildern wurde wegen ausgeschalteter OCR nicht gelesen',
           SCAN_OCR_DISABLED_BY_POLICY: 'Scantext wurde wegen ausgeschalteter OCR nicht gelesen',

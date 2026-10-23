@@ -111,7 +111,11 @@ for (const type of ['docx', 'xlsx', 'pptx']) for (const imageOcr of [undefined, 
   assert.match(decodeHTML(markdown.render(valid.result.markdown).replace(/<[^>]*>/gu, '')), /Ä€🙂 &#127; &#x85; &unknown;/u); checks += 2;
   const validMetadata = run(office(type, '<![CDATA[Ä€🙂 &#127; &unknown;]]>', 'metadata'), type, imageOcr);
   assert.equal(validMetadata.ok, true);
-  assert.match(decodeHTML(markdown.render(validMetadata.result.markdown).replace(/<[^>]*>/gu, '')), /Ä€🙂 &#127; &unknown;/u); checks += 2;
+  // Both protocol entrances explicitly request content-v1. Valid technical
+  // metadata is omitted, but invalid source scalars below remain hard errors
+  // (or an explicit damaged-part omission in the partial protocol).
+  assert.doesNotMatch(validMetadata.result.markdown,/Ä€🙂|unknown/u);assert.match(validMetadata.result.markdown,/UNCHANGED/u);
+  checks += 2;
   for (const control of ['\u007f', '\u0080', '\u0085', '\u009f']) for (const value of [control, `<![CDATA[${control}]]>`]) {
     const actual = run(office(type, `4111${value}1111${value}1111${value}1111`, 'body', type !== 'docx'), type, imageOcr);
     if (imageOcr !== undefined && type !== 'docx') expectDamagedPartOmission(actual, null);

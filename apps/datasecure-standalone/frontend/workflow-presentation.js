@@ -298,7 +298,7 @@
     if (code === 'CONVERSION_OCR_TEXT_EMPTY') return 'Die Originaldatei auf lesbaren Text und ausreichende Scanqualität prüfen. Es wurde kein leerer Scheinerfolg erstellt.';
     if (code === 'MARKDOWN_CONTENT_TRANSFORM_FAILED') return 'Bild-/SVG-Syntax in einer separaten Kopie prüfen und diese neu auswählen. Die App löscht keine unklar begrenzten Inhalte.';
     if (code === 'OCR_CONTACT_REVIEW_INVALID') return 'Die unveränderten Originaldateien für einen neuen Lauf auswählen. Die alte OCR-Entscheidung wird nicht automatisch übernommen.';
-    if (['SOURCE_ENCRYPTED_UNSUPPORTED', 'PASSWORD_PROTECTED_DOCUMENT_UNSUPPORTED'].includes(code)) return 'Eine ungeschützte Kopie separat auswählen. Das Original bleibt unverändert.';
+    if (['SOURCE_ENCRYPTED_UNSUPPORTED', 'PASSWORD_PROTECTED_DOCUMENT_UNSUPPORTED'].includes(code)) return 'Eine berechtigt entschlüsselte Kopie separat auswählen. Schutzrechte werden nicht umgangen; das Original bleibt unverändert.';
     if (['CONVERSION_EXECUTABLE_MISSING', 'CONVERSION_DEPENDENCY_MISSING', 'CONVERSION_ARCHITECTURE_INVALID'].includes(code)) return 'Das vollständige Paket für dieses Betriebssystem und diese Architektur neu entpacken. Fehlende Komponenten nicht einzeln ersetzen.';
     if (['CONVERSION_EXECUTABLE_DENIED', 'SOURCE_ACCESS_DENIED'].includes(code)) return 'Zugriffsrechte beziehungsweise OS-Blockade mit der IT prüfen. Schutzfunktionen nicht deaktivieren.';
     if (['CONVERSION_LIMIT_SETUP_FAILED', 'CONVERSION_ISOLATION_FAILED', 'CONVERSION_ISOLATION_UNAVAILABLE', 'CONVERSION_TERMINATION_UNCONFIRMED'].includes(code)) return 'Nicht erneut starten. Die inhaltsfreie Diagnose und das bestätigte Ende des Hintergrundprozesses prüfen.';

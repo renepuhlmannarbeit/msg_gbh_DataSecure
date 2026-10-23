@@ -143,6 +143,7 @@
   const currentTextState = row => row.text_modified === true ? 'Korrektur gespeichert' : 'Markdown verfügbar';
   const noticeExplanation = codes => {
     const messages = { SOURCE_COVERAGE_UNVERIFIED: 'Inhaltsübernahme nicht vollständig belegbar',
+      OFFICE_TABLE_CONTEXT_UNVERIFIED: 'Office-Tabellenkontext nur teilweise übernommen: sichere Feldzuordnung nicht vollständig modelliert',
       OCR_NOT_VERIFIED: 'OCR-Text nicht vollständig fachlich geprüft. Die Kontaktprüfung betrifft nur erkannte E-Mail-Adressen und Telefonnummern, nicht die übrigen Wörter, Zahlen oder Lesereihenfolge.',
       OCR_CONTACT_VALUES_UNVERIFIED: 'Erkannte OCR-Kontaktwerte sind noch nicht bestätigt',
       VISUAL_CONTENT_NOT_EXTRACTED: 'Bildinhalt nicht als Text übernommen',
@@ -614,7 +615,7 @@
   function renderUnavailable(data) {
     const missing = data.unavailable || [], unknown = data.unclassified_documents || [], rejected = data.not_processed_documents || [], knownDocuments = data.documents || [];
     const fileReasons = { SOURCE_FORMAT_UNSUPPORTED: 'Dieses Dateiformat wird nicht unterstützt.',
-      SOURCE_TYPE_MISMATCH: 'Dateiendung und Dateiinhalt passen nicht zusammen.', SOURCE_ENCRYPTED_UNSUPPORTED: 'Die Datei ist verschlüsselt oder passwortgeschützt. Eine ungeschützte Kopie separat auswählen.',
+      SOURCE_TYPE_MISMATCH: 'Dateiendung und Dateiinhalt passen nicht zusammen.', SOURCE_ENCRYPTED_UNSUPPORTED: 'Die Datei ist verschlüsselt, passwort- oder rechtegeschützt. Eine berechtigt entschlüsselte Kopie separat auswählen; Schutzrechte werden nicht umgangen.',
       SOURCE_POLYGLOT_UNSUPPORTED: 'Die Datei enthält widersprüchliche Formatstrukturen.', SOURCE_CONTAINER_CORRUPT: 'Der Dateicontainer ist beschädigt oder unvollständig.',
       SOURCE_CONTAINER_LIMIT: 'Der Dateicontainer überschreitet eine sichere Verarbeitungsgrenze.', SOURCE_ACTIVE_CONTENT_UNSUPPORTED: 'Die Datei enthält nicht unterstützte aktive Inhalte.',
       SOURCE_TEXT_INVALID: 'Der Text konnte nicht sicher dekodiert werden.', SOURCE_COMPOUND_BINARY_UNSUPPORTED: 'Dieses ältere Binärformat wird nicht unterstützt.',

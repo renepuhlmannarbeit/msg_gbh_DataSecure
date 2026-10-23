@@ -51,9 +51,9 @@ export function literalSupplementPresentation() {
     ['ppt/slides/slide1.xml', `<p:sld xmlns:p="${P}" xmlns:a="${A}"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>Fachlicher Haupttext</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>`],
     ['ppt/slides/_rels/slide1.xml.rels', relationships([['c1', 'chart', '../charts/chart1.xml'], ['l1', 'slideLayout', '../slideLayouts/slideLayout1.xml']])],
     ['ppt/charts/chart1.xml', `<c:chartSpace xmlns:c="http://schemas.openxmlformats.org/drawingml/2006/chart" xmlns:a="${A}"><c:chart><c:title><a:t>${xml}</a:t></c:title><c:v>42</c:v></c:chart></c:chartSpace>`],
-    ['ppt/slideLayouts/slideLayout1.xml', `<p:sldLayout xmlns:p="${P}" xmlns:a="${A}"><p:cSld><a:t>${xml}</a:t></p:cSld></p:sldLayout>`],
+    ['ppt/slideLayouts/slideLayout1.xml', `<p:sldLayout xmlns:p="${P}" xmlns:a="${A}"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>${xml}</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sldLayout>`],
     ['ppt/slideLayouts/_rels/slideLayout1.xml.rels', relationships([['m1', 'slideMaster', '../slideMasters/slideMaster1.xml']])],
-    ['ppt/slideMasters/slideMaster1.xml', `<p:sldMaster xmlns:p="${P}" xmlns:a="${A}"><p:cSld><a:t>${xml}</a:t></p:cSld></p:sldMaster>`]
+    ['ppt/slideMasters/slideMaster1.xml', `<p:sldMaster xmlns:p="${P}" xmlns:a="${A}"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>${xml}</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sldMaster>`]
   ]);
 }
 export function embeddedWorkbookPresentation() {

@@ -1356,6 +1356,7 @@ testAsync('raw Markdown editing is explicit, protects unsaved changes and submit
 });
 
 const partialContentNotices = [
+  ['OFFICE_TABLE_CONTEXT_UNVERIFIED', /Office-Tabell.*Feldzuordnung/u],
   ['OFFICE_IMAGE_FORMAT_EMF_UNSUPPORTED', /EMF-Grafiken/u],
   ['OFFICE_IMAGE_FORMAT_WMF_UNSUPPORTED', /WMF-Grafiken/u],
   ['OFFICE_IMAGE_FORMAT_SVG_UNSUPPORTED', /SVG-Grafiken/u],
@@ -1402,11 +1403,12 @@ testAsync('the full bounded coverage vocabulary remains visible, while oversized
   const all = [...partialContentNotices.map(([code]) => code), 'DOCX_HEADER_FOOTER_EXCLUDED_BY_POLICY',
     'IMAGE_OCR_DISABLED_BY_POLICY', 'OCR_CONTACT_VALUES_UNVERIFIED', 'OCR_NOT_VERIFIED', 'OCR_TEXT_EMPTY',
     'PDF_OCR_SCOPE_UNVERIFIED', 'SCAN_OCR_DISABLED_BY_POLICY', 'SOURCE_COVERAGE_UNVERIFIED', 'VISUAL_CONTENT_NOT_EXTRACTED'].sort();
-  assert.equal(all.length, 26);
+  assert.equal(all.length, 27);
   const h = partialNoticeRenderer(all); await h.api.open('a'.repeat(64));
   assert.equal(h.el('documents-filter').value, 'notices');
   assert.equal(h.el('documents-list').children.length, 1);
   for (const [, expected] of partialContentNotices) assert.match(textTree(h.el('documents-list')), expected);
+  assert.match(textTree(h.el('documents-list')),/Office-Tabelle.*Feldzuordnung/u);
   for (const code of all) assert.doesNotMatch(textTree(h.el('documents-list')), new RegExp(code, 'u'));
   const oversized = partialNoticeRenderer(Array.from({ length: 33 }, () => 'SOURCE_COVERAGE_UNVERIFIED'));
   await oversized.api.open('a'.repeat(64));

@@ -31,6 +31,8 @@ export const SOURCE_INPUT_FILES = Object.freeze([
   'native/ocr/pilot/package.json', 'native/ocr/pilot/package-lock.json', 'native/ocr/pilot/models.lock.json',
   'native/pdfjs/pilot/package.json', 'native/pdfjs/pilot/package-lock.json',
   'native/markdown/pilot/package.json', 'native/markdown/pilot/package-lock.json',
+  'native/graphics/pilot/package.json', 'native/graphics/pilot/package-lock.json',
+  'native/graphics/pilot/runtime-contract.json',
   'native/windows/datasecure-sandbox.cpp', 'native/ocr/pilot/posix-sandbox.c',
   'native/ownership-guard/ownership-guard.c', 'scripts/build-ownership-guard.mjs',
   'native/ownership-guard/macos-static-link.cc', 'native/ownership-guard/macos-static-link.h',

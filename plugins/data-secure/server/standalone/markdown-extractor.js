@@ -93,6 +93,7 @@ function extractMarkdownAndMedia(buffer, extension, options = {}, referencedImag
     } else {
       const parsed = parseOoxml(buffer, `.${source_type}`, undefined, {
         preserveText: true,
+        ...(options.markdownOutput === 'content-v1' ? { contentMode: true } : {}),
         ...(options.partialExtraction === true ? { partialExtraction: true,
           // Internal, fixed renderer only. No caller callback crosses this
           // module's closed options or the worker's serialized request.
@@ -107,11 +108,20 @@ function extractMarkdownAndMedia(buffer, extension, options = {}, referencedImag
       // receives these bytes; the public extraction record never contains them.
       attachments = parsed.attachments;
       markdown = options.markdownOutput === 'content-v1' ? officeContent(parsed.sections) : parsed.markdown;
+      if (referencedImagesOnly) {
+        const ends=new Map();let offset=0;
+        for (const [index,section] of parsed.sections.entries()) {
+          const text=options.markdownOutput==='content-v1'?officeContent([section]):section.markdown;
+          offset+=(index?2:0)+text.length;ends.set(section.source_part,offset);
+        }
+        attachments=attachments.map(item=>({...item,...(item.occurrences?{occurrences:item.occurrences.map(value=>
+          ({...value,after:ends.get(value.section_part)??markdown.length}))}:{})}));
+      }
       const retainedSourceText = Boolean(markdown.trim());
       if (options.omitDocxHeaderFooter === true) reasons.add('DOCX_HEADER_FOOTER_EXCLUDED_BY_POLICY');
       if (parsed.warnings.length || source_type === 'xlsx' || source_type === 'pptx') reasons.add('SOURCE_COVERAGE_UNVERIFIED');
       for (const warning of parsed.warnings) {
-        if (['DOCUMENT_PARTS_DAMAGED', 'EXTERNAL_CONTENT_NOT_READ', 'IMAGE_PROCESSING_LIMIT', 'TEXT_LIMIT_PARTIAL'].includes(warning)) reasons.add(warning);
+        if (['DOCUMENT_PARTS_DAMAGED', 'EXTERNAL_CONTENT_NOT_READ', 'IMAGE_PROCESSING_LIMIT', 'TEXT_LIMIT_PARTIAL','OFFICE_TABLE_CONTEXT_UNVERIFIED'].includes(warning)) reasons.add(warning);
       }
       // An automatically generated omission notice is not a source section.
       // Only the worker's media entrance may still recover actual image text

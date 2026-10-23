@@ -83,6 +83,30 @@ export function collectConversionRuntime(repoRoot, productTarget) {
     }
   }
   for (const directory of ['cmaps', 'standard_fonts', 'iccs', 'wasm']) tree(path.join(pdfSource, directory), `node_modules/pdfjs-dist/${directory}`);
+  // Only the self-contained SVG-only browser entry is shipped. In particular
+  // the Node entry and its optional newer Canvas peer never enter this runtime.
+  const graphicsPilot=path.join(root,'native','graphics','pilot');
+  const graphicsLock=JSON.parse(readRegular(path.join(graphicsPilot,'package-lock.json'),64*1024));
+  const graphicsSource=path.join(graphicsPilot,'node_modules','emf-converter');
+  const graphicsPackage=JSON.parse(readRegular(path.join(graphicsSource,'package.json'),128*1024));
+  const graphicsPin=graphicsLock.packages?.['node_modules/emf-converter'];
+  if(graphicsPackage.name!=='emf-converter'||graphicsPackage.version!=='4.18.1'||graphicsPin?.version!=='4.18.1'||
+    graphicsPin.integrity!=='sha512-e/H8eBnj/QO8sWL2Yav02n58wWVo3GWYqFM2SqJh2bk9Prc2rgexPUSs8VV42GL5l/x49GaK/kPueCDW+j+6Sg=='||
+    Object.keys(graphicsPackage.dependencies||{}).length||Object.keys(graphicsLock.packages).length!==2)throw new Error('CONVERSION_PACKAGE_VERSION_INVALID');
+  packages.push({name:'emf-converter',version:'4.18.1',license:'Apache-2.0; bundled notices apply',integrity:graphicsPin.integrity});
+  const graphicsContractBytes=readRegular(path.join(graphicsPilot,'runtime-contract.json'),64*1024);
+  const graphicsContract=JSON.parse(graphicsContractBytes);
+  if(graphicsContract.schema!=='datasecure-office-graphics/1'||graphicsContract.package!=='emf-converter'||graphicsContract.version!=='4.18.1'||
+    graphicsContract.entry!=='dist/browser.js'||Object.keys(graphicsContract.files||{}).sort().join('|')!==['LICENSE','THIRD_PARTY_NOTICES','dist/browser.js','package.json'].sort().join('|'))throw new Error('CONVERSION_GRAPHICS_CONTRACT_INVALID');
+  for(const relative of ['package.json','dist/browser.js','LICENSE','THIRD_PARTY_NOTICES']){
+    const bytes=regularBytes(path.join(graphicsSource,...relative.split('/')));
+    if(sha256(bytes)!==graphicsContract.files[relative])throw new Error('CONVERSION_GRAPHICS_SOURCE_CHANGED');
+    add(`node_modules/emf-converter/${relative}`,bytes);
+  }
+  for(const [file,digest]of [[graphicsContract.font.file,graphicsContract.font.sha256],[graphicsContract.font.license,graphicsContract.font.license_sha256]]){
+    if(!['LiberationSans-Regular.ttf','LICENSE_LIBERATION'].includes(file)||sha256(files.get(`node_modules/pdfjs-dist/standard_fonts/${file}`)?.bytes||Buffer.alloc(0))!==digest)throw new Error('CONVERSION_GRAPHICS_FONT_CHANGED');
+  }
+  add('office-graphics-contract.json',graphicsContractBytes);
   // Syntax readers belong exclusively to this isolated runtime. The sidecar
   // never resolves them from repo node_modules or fetches them on user devices.
   const syntaxPilot = path.join(root, 'native', 'markdown', 'pilot');
@@ -139,6 +163,7 @@ export function collectConversionRuntime(repoRoot, productTarget) {
   add('RUNTIME.json', Buffer.from(`${JSON.stringify({ schema: 'datasecure-conversion-runtime/1', target: productTarget,
     node_file: nodeFile, node_version: contract.node_version,
     syntax_reader_contract: 'datasecure-markdown-syntax/1',
+    office_graphics_contract: 'datasecure-office-graphics/1',
     pdf_text_paint_contract: 'datasecure-pdf-text-paint/1', pdf_text_paint_upstream: PDFJS_TEXT_PAINT_HOOK,
     packages, files: inventory }, null, 2)}\n`));
   add('THIRD_PARTY_NOTICES.txt', Buffer.from(`Offline Markdown conversion runtime\n\n${packages.map(item => `${item.name} ${item.version}: ${item.license}`).join('\n')}\n\nPDF.js: upstream pdf.mjs remains unchanged; pdf.datasecure.mjs is a DataSecure text-paint-observer derivative of precisely pinned ${PDFJS_TEXT_PAINT_HOOK.upstreamVersion} (${PDFJS_TEXT_PAINT_HOOK.upstreamSha256}), under the same upstream licence. NPM integrity identifies the upstream package, not this derivative. Both module hashes are listed in RUNTIME.json.\nTessdata fast 4.1.0: Apache-2.0 (models/LICENSE)\nNode.js: LICENSE.node.txt\nDependency license files remain beside each package.\n`));

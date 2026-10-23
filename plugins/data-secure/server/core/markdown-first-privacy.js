@@ -61,7 +61,18 @@ function sensitiveTableHeaderPlan(markdown, literalHeaders) {
     const sourceHeader = markdownCells(sourceLines[lines[index + 2]]);
     if (!generated || !separator || !sourceHeader || generated.length !== separator.length ||
       generated.length !== sourceHeader.length) continue;
-    if (!generated.every((value, column) => value === `Spalte ${column + 1}`) ||
+    // The compact XLSX projection retains original row/column coordinates.
+    // They must not hide an authored Name/Person header from the same privacy
+    // table grammar. Accept only our closed, self-consistent coordinate labels.
+    let priorColumn=0;
+    const coordinateHeader=generated[0]==='Quellzeile'&&generated.length>1&&generated.slice(1).every(value=>{
+      const match=/^Spalte ([1-9][0-9]{0,4}) \(([A-Z]{1,3})\)$/u.exec(value);
+      if(!match)return false;
+      const column=[...match[2]].reduce((sum,ch)=>sum*26+ch.charCodeAt(0)-64,0);
+      if(column!==Number(match[1])||column<=priorColumn||column>16384)return false;
+      priorColumn=column;return true;
+    });
+    if (!(coordinateHeader||generated.every((value, column) => value === `Spalte ${column + 1}`)) ||
       !separator.every((value) => /^:?-{3,}:?$/u.test(value))) continue;
     // Detect only the visible label of our own literal cell serializer. Keep
     // the original header line unchanged; this view is never source output.
@@ -298,6 +309,12 @@ async function extractSourceForPrivacy(bytes, extension, options = {}) {
     failure.code = 'FORMAT_COVERAGE_UNVERIFIED';
     throw failure;
   }
+  // Some Office tables retain readable source text without a complete field-
+  // owner projection (nested/nonuniform Word grids, sparse XLSX coordinates,
+  // inherited PPTX tables). A parser-private context, never a Markdown text
+  // heuristic, prevents those projections from authorizing anonymization.
+  // This gate does not affect Nur umwandeln or private/public finished files.
+  if(coverage.reason_codes.includes('OFFICE_TABLE_CONTEXT_UNVERIFIED'))throw coverageFailure(ErrorType);
   const tablePlan = ['docx', 'xlsx', 'pptx'].includes(expectedType)
     ? sensitiveTableHeaderPlan(extraction.markdown, Boolean(contentOptions)) : null;
   const privacyMarkdown = contentOptions && expectedType === 'csv' ? csvPrivacyMarkdown(bytes)

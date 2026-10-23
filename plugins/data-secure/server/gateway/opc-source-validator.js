@@ -65,6 +65,18 @@ const PASSIVE_PRESENTATION_METADATA = new Map([
   ['http://schemas.microsoft.com/office/2011/relationships/chartstyle',
     [/^ppt\/charts\/_rels\/chart[0-9]+\.xml\.rels$/iu, /^ppt\/charts\/style[0-9]+\.xml$/iu]]
 ]);
+// MS-XLSX 2.1.17/2.1.18: exact inert text roles, not a Microsoft namespace
+// exception. Authors belong to the workbook; threads belong to one worksheet.
+// Payload XML is read separately by the bounded XLSX reader, never executed.
+const XLSX_TEXT_RELATIONSHIPS = new Map([
+  ['http://schemas.microsoft.com/office/2017/10/relationships/person',
+    [/^xl\/_rels\/workbook\.xml\.rels$/u, /^xl\/persons\/person(?:[1-9][0-9]*)?\.xml$/u,
+      'application/vnd.ms-excel.person+xml']],
+  ['http://schemas.microsoft.com/office/2017/10/relationships/threadedComment',
+    [/^xl\/worksheets\/_rels\/sheet[1-9][0-9]*\.xml\.rels$/u,
+      /^xl\/threadedComments\/threadedComment[1-9][0-9]*\.xml$/u,
+      'application/vnd.ms-excel.threadedcomments+xml']]
+]);
 const MAIN = Object.freeze({
   docx: Object.freeze({
     part: 'word/document.xml',
@@ -295,6 +307,7 @@ function validateOpcControls({ declaredType, entries, controlParts, passivePrese
   if (!expected.contentTypes.has(overrides.get(`/${expected.part}`))) throw new OpcValidationError('SOURCE_TYPE_MISMATCH');
 
   const office = [];
+  const xlsxTextTargets = new Set(), xlsxTextOwners = new Set();
   let externalReferences = 0;
   for (const [name, xml] of Object.entries(controlParts)) {
     if (!name.endsWith('.rels')) continue;
@@ -306,6 +319,7 @@ function validateOpcControls({ declaredType, entries, controlParts, passivePrese
       const target = String(attribute(node, 'Target'));
       const rawTargetMode = String(attribute(node, 'TargetMode'));
       const targetMode = rawTargetMode.toLowerCase();
+      const xlsxTextRole = declaredType === 'xlsx' ? XLSX_TEXT_RELATIONSHIPS.get(type) : null;
       if (!id || !type || !target || ids.has(id)) throw new OpcValidationError();
       ids.add(id);
       // OPC enumeration values are case-sensitive. Do not quarantine an edge
@@ -313,6 +327,7 @@ function validateOpcControls({ declaredType, entries, controlParts, passivePrese
       // differently and resolve the same target against local package bytes.
       if (partialExtraction && !['', 'Internal', 'External'].includes(rawTargetMode)) throw new OpcValidationError();
       if (targetMode === 'external') {
+        if (xlsxTextRole) throw new OpcValidationError('SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
         // Partial Standalone extraction has no external resolver. Preserve
         // independent local text, but never treat an external package root as
         // a source binding and never expose the target in public findings.
@@ -338,6 +353,7 @@ function validateOpcControls({ declaredType, entries, controlParts, passivePrese
         throw new OpcValidationError('SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
       }
       if (!hasSupportedRelationshipNamespace(type) &&
+          !xlsxTextRole &&
           !passiveMetadata &&
           !(passivePresentation && declaredType === 'pptx' &&
             PASSIVE_PRESENTATION_REL_TYPES.has(type.toLowerCase()))) {
@@ -345,6 +361,19 @@ function validateOpcControls({ declaredType, entries, controlParts, passivePrese
       }
       const resolvedTarget = resolveRelationshipTarget(name, target);
       if (!resolvedTarget || !entries.has(resolvedTarget)) throw new OpcValidationError();
+      if (xlsxTextRole) {
+        const owner = name.replace('/_rels/', '/').slice(0, -'.rels'.length);
+        const relationOwner = `${name}\0${type}`;
+        const slash = resolvedTarget.lastIndexOf('/');
+        const outgoing = `${resolvedTarget.slice(0, slash)}/_rels/${resolvedTarget.slice(slash + 1)}.rels`;
+        if (!xlsxTextRole[0].test(name) || !xlsxTextRole[1].test(resolvedTarget) ||
+            !['', 'Internal'].includes(rawTargetMode) || !entries.has(owner) ||
+            overrides.get(`/${resolvedTarget}`) !== xlsxTextRole[2] ||
+            entries.has(outgoing) || xlsxTextTargets.has(resolvedTarget) || xlsxTextOwners.has(relationOwner)) {
+          throw new OpcValidationError('SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
+        }
+        xlsxTextTargets.add(resolvedTarget); xlsxTextOwners.add(relationOwner);
+      }
       if (passiveOle && !/^ppt\/embeddings\/oleObject[0-9]+\.bin$/iu.test(resolvedTarget)) {
         throw new OpcValidationError('SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
       }

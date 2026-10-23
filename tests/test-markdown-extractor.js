@@ -191,10 +191,12 @@ test('DOCX unknown content-bearing XML and invalid UTF-8 stop instead of droppin
   rejects(docx('<w:unknown>SYNTHETIC_SECRET</w:unknown>'), '.docx', 'DOCX_STRUCTURE_UNSAFE');
   rejects(docx(paragraph('Valid'), [['word/document.xml', Buffer.from([0xc0, 0xaf])]]), '.docx', 'OOXML_ENCODING_INVALID');
 });
-test('DOCX malformed/foreign namespace and merged cells remain fail-closed', () => {
+test('DOCX foreign namespace and invalid merged cells remain fail-closed; valid grid spans retain text', () => {
   const foreign=extract(docx('', [['word/document.xml', '<w:document xmlns:w="urn:fake"><w:body><w:p><w:r><w:t>SYNTHETIC_SECRET</w:t></w:r></w:p></w:body></w:document>']]), '.docx');
   assert.strictEqual(foreign.coverage.status,'incomplete');
-  rejects(docx(`<w:tbl><w:tr><w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr>${paragraph('SYNTHETIC_SECRET')}</w:tc></w:tr></w:tbl>`), '.docx', 'DOCX_STRUCTURE_UNSAFE');
+  const merged=extract(docx(`<w:tbl><w:tr><w:tc><w:tcPr><w:gridSpan w:val="2"/></w:tcPr>${paragraph('SYNTHETIC_SECRET')}</w:tc></w:tr></w:tbl>`),'.docx');
+  assert.match(merged.markdown,/SYNTHETIC/u);
+  rejects(docx(`<w:tbl><w:tr><w:tc><w:tcPr><w:gridSpan w:val="0"/></w:tcPr>${paragraph('SYNTHETIC_SECRET')}</w:tc></w:tr></w:tbl>`), '.docx', 'DOCX_STRUCTURE_UNSAFE');
 });
 test('DOCX media and external relationships cannot produce complete extraction', () => {
   const result = extract(docx(paragraph('Control'), [
@@ -509,7 +511,12 @@ test('partial XLSX retains one whole 4M sheet when two independently valid sheet
   assert.ok(!parsed.markdown.includes('b'.repeat(32)));
   assert.ok(parsed.warnings.includes('TEXT_LIMIT_PARTIAL'));
   const extracted = extractMarkdownBuffer(source, '.xlsx', { partialExtraction: true, markdownOutput: 'content-v1' });
-  assert.strictEqual(extracted.markdown, parsed.markdown);
+  const contentParsed = parseOoxml(source, '.xlsx', undefined, { ...partialOptions, contentMode: true });
+  assert.strictEqual(contentParsed.sections.length, 1);
+  assert.strictEqual(contentParsed.sections[0].source_part, 'xl/worksheets/sheet1.xml');
+  assert.ok(contentParsed.markdown.includes('Quellzeile'));
+  assert.ok(!contentParsed.markdown.includes('b'.repeat(32)));
+  assert.strictEqual(extracted.markdown, contentParsed.markdown);
   assert.ok(extracted.coverage.reason_codes.includes('TEXT_LIMIT_PARTIAL'));
 });
 
@@ -660,9 +667,12 @@ test('partial picture-only PPTX has no generated native text while its authorize
       assert.strictEqual(plan.length, 1);
       assert.strictEqual(plan[0].ordinal, 1);
       const content_options = { schema: 'datasecure-content-options/1', markdownOutput, scanOcr: false, imageOcr: true };
-      const reason = extension === 'emf' ? 'OFFICE_IMAGE_FORMAT_EMF_UNSUPPORTED' : 'OCR_TEXT_EMPTY';
-      if (extension === 'emf') assert.strictEqual(plan[0].reason, reason);
-      else assert.deepStrictEqual(plan[0].bytes, bytes);
+      const reason = extension === 'emf' ? 'IMAGE_CONTENT_DAMAGED' : 'OCR_TEXT_EMPTY';
+      assert.deepStrictEqual(plan[0].bytes, bytes);
+      if (extension === 'emf') {
+        assert.strictEqual(plan[0].visual,true);
+        assert.throws(()=>require('../plugins/data-secure/server/standalone/office-visual-decoder').inspectOfficeVisual(plan[0].bytes,'emf'),{code:'VISUAL_CONTENT_DAMAGED'});
+      }
       const omitted = createMarkdownExtraction({ source_type: 'pptx', content_options, markdown: '',
         coverage: { status: 'incomplete', reason_codes: [reason] } });
       assert.throws(() => appendOfficeOcr(extraction, [omitted], content_options), error => error.code === 'CONVERSION_OCR_TEXT_EMPTY');

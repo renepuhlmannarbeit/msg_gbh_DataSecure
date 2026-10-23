@@ -1,8 +1,41 @@
 # Aktueller Iststand
 
-Stand: 22.10.2026 · 3.2.0-rc171 · neuer gemeinsamer Windows-/Mac-Test-Pre-Release in Vorbereitung; RC170 unverändert veröffentlicht.
+## Aktueller Nutzerauftrag 23.10.2026 – BL-049.2 implementieren und RC172 bereitstellen
 
-## Neuester Quellenabschluss22.10.2026 10:49UTC vor Source12
+Windows und beide Macs ausdrücklich beauftragt, inklusive unabhängiger Reviews,
+Tests und neuer Testversion; Desktoptests beim Nutzer. Ausführungsjournal und
+noch offene Nachweise: [RC172_SHARED_RELEASE_20261023.md](../acceptance/RC172_SHARED_RELEASE_20261023.md).
+Noch kein neuer Freeze/Build-/Release-PASS. Keine Mainintegration, alte Pakete/
+Profile/Evidenzen und laufende Nutzer-App erhalten.
+
+RC172-Entwicklung: SmartArt/Owner-Bildtexte, XLSX-Kommentare/Anzeige und sparse
+Projektion, Word-Grid, konkrete Schutzdiagnose und begrenzte lokale Grafikdecoder
+integriert. Bestätigte PDF-OCR-/Grafikbudget-/Policy-/Office-Tabellenrandfälle
+eng korrigiert und unabhängig gegengeprüft. Neue gemeinsame vollständige
+Endgates und beide Macartefakte bleiben erforderlich; noch kein Paket-PASS.
+Nicht sicher feldgebundene komplexe Word-Tabellen, sehr sparse XLSX-Listen und
+geerbte PPTX-Tabellen bleiben konvertierbar; Anonymisierung dort mit typisiertem
+OFFICE_TABLE_CONTEXT_UNVERIFIED-Grund hart verweigert. Details im RC172-Journal.
+
+### Abgeschlossene vorausgehende Analysephase
+
+Produktquellen bleiben auf `00c328dedeb097bf4abc50815773e2e7ae5da320` unverändert.
+Die neue Nachbereitung erfasst nachgewiesene Kontextauslassungen und OCR-/
+Lesbarkeitsprobleme als **BL-049.2**, einschließlich Renderer- und Ressourcen-
+entscheidungen für Windows x64/macOS ARM64/Intel. Verbindliche Zusammenfassung:
+[CONTENT_COVERAGE_BACKLOG_20261023.md](../acceptance/CONTENT_COVERAGE_BACKLOG_20261023.md).
+Zusätzlicher ausgewählter Mehrformat-Nutzerlauf rein lokal gegen Originale,
+MD und gespeicherte Laufbelege abgegrenzt analysiert: 117 Quellen, 107 gebundene
+MDs, zehn dokumentierte Stopps. Bestätigte neue Fehlerklassen/Umsetzungsaufträge
+A–F im verlinkten Dokument, Detailbericht und 117-Dateiindex ausschließlich unter
+ignoriertem `dist/rc171-user-bulk-comparison-20261023/`. Alle Originale/MD unverändert;
+keine vollständige visuelle oder semantische Inhaltsfreigabe. Keine Nutzerdaten in Git/CI/Release,
+keine Produkt-/Teständerungen, neuen Pakete oder Mainintegration. Ältere Stand-
+und Übergabeabschnitte darunter nicht als neue offene Gesamtaufgabe übernehmen.
+
+Stand: 23.10.2026 · 3.2.0-rc172 in Vorbereitung; RC171 und ältere Releases unverändert.
+
+## Historischer RC171-Quellenabschluss22.10.2026 10:49UTC vor Source12
 
 Nested-/Alias-pending-Fix in drei Privacyproduktmodulen fertig, unabhängig am
 tatsächlichen finalen Delta gegengelesen. Vollständige einzelne Quellbindungen,

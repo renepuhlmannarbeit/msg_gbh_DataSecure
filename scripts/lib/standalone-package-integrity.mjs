@@ -83,6 +83,20 @@ export function verifyConversionInventory(entries, prefix, manifest) {
   // and SHA256SUMS; all other conversion payload files must occur exactly once.
   assert.ok(files.has('RUNTIME.json') && files.has('THIRD_PARTY_NOTICES.txt'), 'CONVERSION_INVENTORIES_MISSING');
   verifyInventory(files, manifest.files, new Set(['RUNTIME.json', 'THIRD_PARTY_NOTICES.txt']), 'CONVERSION_MANIFEST');
+  if(manifest.office_graphics_contract!==undefined||files.has('node_modules/emf-converter/dist/browser.js')){
+    assert.equal(manifest.office_graphics_contract,'datasecure-office-graphics/1','CONVERSION_GRAPHICS_CONTRACT_INVALID');
+    for(const name of ['package.json','dist/browser.js','LICENSE','THIRD_PARTY_NOTICES'])assert.ok(files.has(`node_modules/emf-converter/${name}`),'CONVERSION_GRAPHICS_FILE_MISSING');
+    assert.equal(JSON.parse(files.get('node_modules/emf-converter/package.json')).version,'4.18.1','CONVERSION_GRAPHICS_VERSION_INVALID');
+    assert.ok(!files.has('node_modules/emf-converter/dist/index.js'),'CONVERSION_GRAPHICS_NODE_ENTRY_FORBIDDEN');
+    assert.ok(![...files.keys()].some(name=>name.includes('resvg')),'CONVERSION_GRAPHICS_UNAPPROVED_WASM');
+    assert.ok(files.has('node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf'),'CONVERSION_GRAPHICS_FONT_MISSING');
+    assert.ok(files.has('office-graphics-contract.json'),'CONVERSION_GRAPHICS_PINS_MISSING');
+    const graphics=JSON.parse(files.get('office-graphics-contract.json'));
+    assert.equal(graphics.schema,manifest.office_graphics_contract,'CONVERSION_GRAPHICS_PINS_INVALID');
+    for(const name of ['package.json','dist/browser.js','LICENSE','THIRD_PARTY_NOTICES'])assert.equal(sha256(files.get(`node_modules/emf-converter/${name}`)),graphics.files[name],'CONVERSION_GRAPHICS_SOURCE_CHANGED');
+    assert.equal(sha256(files.get('node_modules/pdfjs-dist/standard_fonts/LiberationSans-Regular.ttf')),graphics.font.sha256,'CONVERSION_GRAPHICS_FONT_CHANGED');
+    assert.equal(sha256(files.get('node_modules/pdfjs-dist/standard_fonts/LICENSE_LIBERATION')),graphics.font.license_sha256,'CONVERSION_GRAPHICS_FONT_LICENSE_CHANGED');
+  }
   // Earlier packages retain their historical runtime contract. New packages
   // explicitly inventory the unchanged upstream and the named derivative.
   if (manifest.pdf_text_paint_contract !== undefined || files.has('node_modules/pdfjs-dist/legacy/build/pdf.datasecure.mjs')) {

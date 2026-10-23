@@ -10,7 +10,7 @@ const { preparePartialOfficeImagePlan, prepareOfficeImagePlan, appendOfficeOcr }
 const { encodePng } = require('../plugins/data-secure/server/images/png');
 const readable = require('../plugins/data-secure/server/standalone/readable-markdown');
 const { pdfOcrAction } = require('../plugins/data-secure/server/core/content-ocr-plan');
-const { nativeTextSeparator } = require('../plugins/data-secure/server/standalone/pdf-text-layout');
+const { nativeTextSeparator,nativeColumnOrder,renderPdfOcrLayer } = require('../plugins/data-secure/server/standalone/pdf-text-layout');
 const visuals = require('../plugins/data-secure/server/standalone/markdown-visuals');
 const metadata = require('../plugins/data-secure/server/core/private-document-metadata');
 const { contactSpans } = require('../plugins/data-secure/server/core/ocr-contact-review');
@@ -24,14 +24,14 @@ let passed = 0;
 async function check(name, fn) { await fn(); passed++; process.stdout.write(`PASS ${name}\n`); }
 const tiny = encodePng({ width: 1, height: 1, rgba: Buffer.from([255,255,255,255]) });
 const attachment = (extension, data, index = 0) => ({ type: 'image', extension,
-  mimeType: extension === 'png' ? 'image/png' : 'image/unsupported',
+  mimeType: ({png:'image/png',emf:'image/x-emf',wmf:'image/x-wmf',svg:'image/svg+xml',gif:'image/gif',tif:'image/tiff',tiff:'image/tiff',webp:'image/webp'})[extension]||'image/unsupported',
   source_part: `word/media/image${index}.${extension}`, data: data.toString('base64') });
 
 async function main() {
   await check('closed partial vocabulary is shared, bounded and never authorizes complete coverage', () => {
     assert.deepEqual(contract.COVERAGE_REASON_CODES, neutral.COVERAGE_REASON_CODES);
-    assert.equal(contract.COVERAGE_REASON_CODES.length, 26);
-    assert.equal(new Set(contract.COVERAGE_REASON_CODES).size, 26);
+    assert.equal(contract.COVERAGE_REASON_CODES.length, 27);
+    assert.equal(new Set(contract.COVERAGE_REASON_CODES).size, 27);
     assert.ok(contract.COVERAGE_REASON_CODES.every((code, index, codes) => index === 0 || codes[index - 1] < code),
       'both closed vocabularies must be strictly ascending, not merely equal as unsorted lists');
     for (const code of contract.COVERAGE_REASON_CODES.filter(code => code !== 'OCR_CONTACT_VALUES_UNVERIFIED')) {
@@ -41,13 +41,13 @@ async function main() {
       assert.throws(() => contract.createMarkdownExtraction({ ...input, coverage: { ...input.coverage, status: 'complete' } }));
     }
   });
-  await check('all six non-raster Office families are isolated without executing or decoding them', () => {
+  await check('Office visual families are planned without decoder execution; unknown formats retain explicit omissions', () => {
     for (const ext of ['emf','wmf','svg','gif','tiff','tif','webp','other']) {
       const rows = [attachment('png', tiny), attachment(ext, Buffer.from('not executable'), 1), attachment('png', tiny, 2)];
       const plan = preparePartialOfficeImagePlan(rows);
       assert.deepEqual(plan.map(item => item.ordinal), [1,2,3]);
-      assert.match(plan[1].reason, /^OFFICE_IMAGE_FORMAT_[A-Z]+_UNSUPPORTED$/u);
-      assert.equal(plan[1].bytes, undefined);
+      if(ext==='other'){assert.match(plan[1].reason,/^OFFICE_IMAGE_FORMAT_OTHER_UNSUPPORTED$/u);assert.equal(plan[1].bytes,undefined);}
+      else {assert.equal(plan[1].reason,undefined);assert.equal(plan[1].visual,true);assert.ok(plan[1].bytes.equals(Buffer.from('not executable')));}
       assert.throws(() => prepareOfficeImagePlan(rows), { code: 'OFFICE_IMAGE_OCR_UNAVAILABLE' });
       for (const item of plan) item.bytes?.fill(0);
     }
@@ -86,7 +86,8 @@ async function main() {
   assert.ok(start > 0 && end > start);
   const importExpression = "await import(pathToFileURL(path.join(pdfRoot, 'legacy', 'build', 'pdf.datasecure.mjs')).href)";
   const functionSource = source.slice(start,end); assert.equal(functionSource.split(importExpression).length,2);
-  const omissionStart = source.indexOf('function imageOmission('), omissionEnd = source.indexOf('\nasync function officeImageMarkdown(',omissionStart);
+  const omissionStart = source.indexOf('function imageOmission('), omissionEnd = source.indexOf('\nfunction visualOmission(',omissionStart);
+  assert.ok(omissionEnd>omissionStart,'closed helper slice, not an adjacent declaration');
   await check('actual Office worker refuses an empty no-media native unit instead of returning a generated or empty success',async()=> {
     const officeStart = source.indexOf('async function officeImageMarkdown('), officeEnd = source.indexOf('\nasync function markdownRasterImages(',officeStart);
     assert.ok(officeStart > 0 && officeEnd > officeStart);
@@ -122,11 +123,11 @@ async function main() {
       createMarkdownExtraction:input=>contract.createMarkdownExtraction(JSON.parse(JSON.stringify(input))),
       validatePrivateDocumentMetadata:input=>metadata.validatePrivateDocumentMetadata(JSON.parse(JSON.stringify(input))),
       populated:value=>Boolean(value && (typeof value !== 'object' || Object.keys(value).length)),
-      pdfOcrAction:(opts,facts)=>pdfOcrAction(opts,JSON.parse(JSON.stringify(facts))),nativeTextSeparator,contactQuality,contactSpans,
+      pdfOcrAction:(opts,facts)=>pdfOcrAction(opts,JSON.parse(JSON.stringify(facts))),nativeTextSeparator,nativeColumnOrder,renderPdfOcrLayer,contactQuality,contactSpans,
       mockModule:{ OPS:{paintImageXObject:1},AnnotationMode:{DISABLE:0},getDocument:()=>({promise:Promise.resolve(document),destroy:async()=>{destroyed++;}}) },
       dimensions(){},canvasApi:()=>({createCanvas:()=>({getContext:()=>({})})}),
       classifyPdfTextVisibility:async()=>({wordRegions:[]}),paintedTextGeometryAvailable:()=>false,
-      nativeTextRegions:()=>[],nativeSingleTokenRegions:()=>[],createOcr:async()=>({terminate:async()=>{}}),
+      nativeTextRegions:()=>[],nativeSingleTokenRegions:()=>[],createOcr:async()=>({terminate:async()=>{},setParameters:async value=>assert.ok(['3','6'].includes(value.tessedit_pageseg_mode))}),
       recognize:async()=>fail('CONVERSION_OCR_FAILED'),attachContactCrops:spans=>spans,Uint8Array,Set,Boolean,
       ...extra.context };
     context.imageOmission = vm.runInNewContext(`(${source.slice(omissionStart,omissionEnd)})`,context);

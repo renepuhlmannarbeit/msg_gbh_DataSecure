@@ -218,7 +218,9 @@ test('CDATA and equivalent source references retain identical Office bodies, met
       const actual = extractMarkdownBuffer(bytes, `.${type}`, { markdownOutput: 'content-v1' });
       assert.deepEqual(actual, extractMarkdownBuffer(expected, `.${type}`, { markdownOutput: 'content-v1' }), type);
       assert.ok(actual.markdown.includes('A &amp; B &lt; C &gt; D'));
-      assert.ok(actual.markdown.includes('Kontakt &amp;lt;'), 'property-name attributes are still decoded once');
+      assert.ok(!actual.markdown.includes('Kontakt &amp;lt;'), 'technical metadata is not document prose in content-v1');
+      assert.ok(parseOoxml(bytes,`.${type}`,undefined,{preserveText:true,literalMarkup:true}).markdown.includes('Kontakt &amp;lt;'),
+        'legacy property-name attributes are still decoded once');
       assert.doesNotMatch(actual.markdown, /<!\[CDATA\[|<!--cdata-->/u, 'serialization markers are not output text');
     }
   }
