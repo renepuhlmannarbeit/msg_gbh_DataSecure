@@ -215,3 +215,31 @@ content-v1-Koordinatenprojektion, keine pauschale Dateigrößenverweigerung.
 Vollständige gemeinsame 298+11-/Native-/Konverter-/Paket-Endläufe und beide
 Macartefakte bleiben zwingend offen. Kein Desktop-PASS, keine universelle
 Format-/OCR-/Spalten-/Tabellenmodell- oder Anonymitätszusage.
+
+## Gemeinsamer Source01-Endlauf und enger Testfix
+
+Appcommit dab25976daf9f1527612e1ea2da6d8824823869c gepusht; FP
+9f18d7932883665efd64e94e7a79c6d8f701ffca639aac0f143442b2838cfc3a/348.
+588 Test-/Scriptinputs607cf043affee9392beb36b1d965ca8d945a07f3b223f21b8b7f7adb346ea94e.
+Source01 unter dist/rc172-content-coverage-source01-20261023 neu eingefroren.
+Headless echt ROT25/298+0/11 bei test-standalone-frontend.js1329: veraltetes
+„passwortgeschützt“ passt nicht zum präzisierten „verschlüsselt, passwort- oder
+rechtegeschützt“. inputs_unchanged=true, Beleg nicht umgeschrieben. Gemeinsamen
+Mac39950648379 gezielt früh abgebrochen (completed/cancelled), da dieselbe
+deterministische Assertion im gemeinsamen npmtest liegt; kein Maccrash behauptet.
+
+Andere Source01-Jobs unverändert regulär beendet: NATIVE-FINAL12:09:33.439UTC
+PASS, Prepare/Clippy/300Rusttests(3ignored)/echte Node-Rust-Integration/Release;
+ConversionFINAL12:10:23.472UTC PASS, 38PDF/67Worker/49Office/41Grafikgruppen.
+Beide inputs_unchanged=true. Keine Paketierung dieses nicht geeigneten Commits.
+Alle eigenen Freezejobs vor Testedit tatsächlich beendet/gezielt gecancelled.
+
+Unabhängiger reiner Quellen-/Assertiongegenreview belegt zusätzlich genau eine
+zweite stale Copy in test-workflow-presentation.js („ungeschützte Kopie“ statt
+„berechtigt entschlüsselte Kopie“). Main korrigiert ausschließlich diese zwei
+Tests: weiterhin alle drei Schutzarten, berechtigter Zugriff/Entschlüsselung,
+kein Umgehen und unverändertes Original ausdrücklich verlangt; beide Codealiasse.
+Neun unabhängige negative Anforderungsproben, anschließend Main46Frontend-/53
+Workflowfälle grün. Kein Produkt-, Schutz-, Timeout- oder Rechtefix dafür.
+Neuer gemeinsamer Commit/Source02 und vollständig frische Endgates erforderlich;
+Source01-Grüns bleiben historische bytegebundene Belege.

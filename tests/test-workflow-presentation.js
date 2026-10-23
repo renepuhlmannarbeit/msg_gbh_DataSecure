@@ -152,7 +152,11 @@ test('invalid counters and unknown totals do not manufacture progress', () => {
 test('guidance preserves OS facts and never recommends a security bypass', () => {
   assert.match(failureAdvice('CONVERSION_EXECUTABLE_DENIED'), /IT prüfen.*nicht deaktivieren/u);
   assert.match(failureAdvice('CONVERSION_TERMINATION_UNCONFIRMED'), /Nicht erneut starten/u);
-  assert.match(failureAdvice('SOURCE_ENCRYPTED_UNSUPPORTED'), /ungeschützte Kopie/u);
+  for (const code of ['SOURCE_ENCRYPTED_UNSUPPORTED', 'PASSWORD_PROTECTED_DOCUMENT_UNSUPPORTED']) {
+    const advice = failureAdvice(code);
+    assert.match(advice, /Eine berechtigt entschlüsselte Kopie separat auswählen\./u);
+    assert.match(advice, /Schutzrechte werden nicht umgangen; das Original bleibt unverändert\./u);
+  }
   assert.match(failureAdvice('UNKNOWN_CAUSE'), /Ursache.*nicht bestätigt/u);
   assert.match(failureAdvice('MARKDOWN_CONTENT_TRANSFORM_FAILED'), /separaten Kopie.*keine unklar begrenzten Inhalte/u);
 });

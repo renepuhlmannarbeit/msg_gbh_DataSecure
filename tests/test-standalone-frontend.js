@@ -1326,7 +1326,10 @@ async function failureReasonCategoriesCase() {
     assert.match(rendered[index].textContent, /Nächster Schritt:/u);
     assert.doesNotMatch(rendered[index].textContent, /untrusted detail/u, 'backend error prose is never forwarded');
   });
-  assert.match(rendered[0].textContent, /passwortgeschützt[\s\S]*berechtigtem Zugriff/u);
+  const protectedText = rendered[0].textContent;
+  assert.match(protectedText, /verschlüsselt, passwort- oder rechtegeschützt/u);
+  assert.match(protectedText, /Mit berechtigtem Zugriff eine entschlüsselte lokale Kopie separat auswählen\./u);
+  assert.match(protectedText, /Schutzrechte werden nicht umgangen; das Original bleibt unverändert\./u);
   assert.match(rendered[1].textContent, /Verarbeitungsgrenze[\s\S]*kleinere Dokumente/u);
   assert.match(rendered[2].textContent, /nicht am Dokument[\s\S]*vollständige Standalone-Paket/u);
   assert.match(rendered[3].textContent, /verändert[\s\S]*erneut auswählen/u);
