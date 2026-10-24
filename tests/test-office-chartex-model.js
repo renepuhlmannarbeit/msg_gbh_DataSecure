@@ -11,6 +11,62 @@ const fail=limit=>Object.assign(new Error('Synthetic chartEx failure'),{code:lim
 const model=xml=>readOfficeChartEx(xml,xmlDecode,fail),render=xml=>renderOfficeChartEx(model(xml),String,fail);
 const extract=(bytes,extension,mode='content-v1')=>extractMarkdownBuffer(bytes,extension,{markdownOutput:mode,partialExtraction:true});
 const controls=(bytes,extension,partial=true)=>{const entries=require('../plugins/data-secure/server/zip-reader').readZip(bytes);return validateOpcControls({declaredType:extension.slice(1),entries:new Set(entries.keys()),controlParts:Object.fromEntries([...entries].filter(([name])=>name==='[Content_Types].xml'||name.endsWith('.rels')).map(([name,data])=>[name,data.toString('utf8')])),partialExtraction:partial,passivePresentation:extension==='.pptx'});};
+const {zipStore}=require('./lib/zip'),{readZip}=require('../plugins/data-secure/server/zip-reader');
+test('unrelated legacy missing-root coverage remains closed without incidental chartEx CT parsing',()=>{
+ const bytes=zipStore([['word/document.xml',`<w:document xmlns:w="${F.W}"><w:body><w:p><w:r><w:t>PRIVATE_ROOT_SENTINEL</w:t></w:r></w:p></w:body></w:document>`]]);
+ const result=parseOoxml(bytes,'.docx');assert.equal(result.warnings.length,1);assert.match(result.markdown,/PRIVATE_ROOT_SENTINEL/u);assert.doesNotMatch(JSON.stringify(result.warnings),/PRIVATE_ROOT_SENTINEL/u);
+ assert.throws(()=>controls(bytes,'.docx'),{code:'SOURCE_CONTAINER_CORRUPT'},'legacy warning is not real OPC admission');
+ assert.throws(()=>extract(bytes,'.docx'),{code:'MARKDOWN_EXTRACTION_FAILED'},'direct extractor keeps its existing content-free error wrapper');
+});
+test('unselected supported embeddings keep their warning without gaining legacy CT or child authority',()=>{
+ const bytes=zipStore([['word/document.xml',`<w:document xmlns:w="${F.W}"><w:body/></w:document>`],['word/embeddings/orphan.xlsx',Buffer.from('OPAQUE_UNSELECTED')]]);
+ const result=parseOoxml(bytes,'.docx');assert.ok(result.warnings.length>0);assert.doesNotMatch(result.markdown,/OPAQUE_UNSELECTED|Eingebettetes Dokument/u);
+});
+const nestedWorkbook=(value='UNSELECTED_WORKBOOK_SENTINEL')=>zipStore([...require('./lib/opc').opcControlEntries('xlsx'),
+ ['xl/workbook.xml',`<workbook xmlns="${F.S}" xmlns:r="${F.R}"><sheets><sheet name="Data" sheetId="1" r:id="s1"/></sheets></workbook>`],
+ ['xl/_rels/workbook.xml.rels',`<Relationships xmlns="${F.PR}"><Relationship Id="s1" Type="${F.R}/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`],
+ ['xl/worksheets/sheet1.xml',`<worksheet xmlns="${F.S}"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>${value}</t></is></c></row></sheetData></worksheet>`]]);
+function legacyChartWorkbook(role,types,payload='extended'){
+ const entries=[...readZip(source('.pptx',chart({extra:'<a:r><a:t>CHART_SOURCE_TEXT</a:t></a:r>'})))].map(([name,value])=>[
+  name.replaceAll('chartEx1','chart1'),/\.(?:xml|rels)$/u.test(name)?value.toString('utf8').replaceAll('chartEx1','chart1'):value]);
+ let ct=entries.find(([name])=>name==='[Content_Types].xml')[1].replace('</Types>','<Override PartName="/ppt/embeddings/cache.xlsx" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"/></Types>');
+ if(types==='classic')ct=ct.replace(F.TYPE,'application/vnd.openxmlformats-officedocument.drawingml.chart+xml');
+ if(types==='malformed')ct='<Types>';
+ const extras=[['[Content_Types].xml',ct],['ppt/charts/_rels/chart1.xml.rels',`<Relationships xmlns="${F.PR}"><Relationship Id="cache" Type="${F.R}/package" Target="../embeddings/cache.xlsx"/></Relationships>`],['ppt/embeddings/cache.xlsx',nestedWorkbook()]];
+ return zipStore([...new Map([...entries,...extras])].filter(([name])=>types!=='absent'||name!=='[Content_Types].xml').map(([name,value])=>[name,
+  name==='ppt/slides/_rels/slide1.xml.rels'&&role==='classic'?value.replace(F.CR,`${F.R}/chart`):name==='ppt/charts/chart1.xml'&&payload==='classic'?value.replaceAll(F.CX,'http://schemas.openxmlformats.org/drawingml/2006/chart'):value]));
+}
+for(const role of ['chartEx','classic'])for(const types of ['exact','classic','absent','malformed'])test(`legacy ${role}/${types} never adopts the actual chartEx-root workbook`,()=>{
+ const input=legacyChartWorkbook(role,types),before=Buffer.from(input);
+ if(types==='malformed')assert.throws(()=>parseOoxml(input,'.pptx'),{code:'PPTX_STRUCTURE_UNSAFE'});
+ else{const result=parseOoxml(input,'.pptx');assert.doesNotMatch(result.markdown,/UNSELECTED_WORKBOOK_SENTINEL|Eingebettetes Dokument/u);assert.ok(result.warnings.length>0);}
+ assert.deepEqual(input,before);
+});
+test('genuine classic-root selected workbook retains the existing bounded legacy child path',()=>{
+ const result=parseOoxml(legacyChartWorkbook('classic','classic','classic'),'.pptx');assert.match(result.markdown,/UNSELECTED_WORKBOOK_SENTINEL/u);assert.match(result.markdown,/Eingebettetes Dokument/u);
+});
+function sharedChartWorkbooks(secondClassic){
+ const entries=[...readZip(legacyChartWorkbook('classic','exact'))].map(([name,value])=>[name,/\.(?:xml|rels)$/u.test(name)?value.toString('utf8'):value]);
+ const additions=`<Override PartName="/ppt/charts/chart2.xml" ContentType="application/vnd.openxmlformats-officedocument.drawingml.chart+xml"/><Override PartName="/ppt/embeddings/unique.xlsx" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"/>`;
+ const changed=entries.map(([name,value])=>[name,name==='[Content_Types].xml'?value.replace('</Types>',additions+'</Types>'):name==='ppt/slides/_rels/slide1.xml.rels'?value.replace('</Relationships>',`<Relationship Id="second" Type="${F.R}/chart" Target="../charts/chart2.xml"/></Relationships>`):name==='ppt/charts/_rels/chart1.xml.rels'?value.replace('</Relationships>',`<Relationship Id="unique" Type="${F.R}/package" Target="../embeddings/unique.xlsx"/></Relationships>`):value]);
+ changed.push(['ppt/charts/chart2.xml',chart({extra:'<a:r><a:t>SECOND_CHART_SOURCE</a:t></a:r>'}).replaceAll(F.CX,secondClassic?'http://schemas.openxmlformats.org/drawingml/2006/chart':F.CX)],['ppt/charts/_rels/chart2.xml.rels',`<Relationships xmlns="${F.PR}"><Relationship Id="cache" Type="${F.R}/package" Target="../embeddings/cache.xlsx"/></Relationships>`],['ppt/embeddings/unique.xlsx',nestedWorkbook('UNSELECTED_UNIQUE_SENTINEL')]);
+ return zipStore(changed);
+}
+test('quarantine closes over duplicate-target owners before one coverage recomputation',()=>{
+ const input=sharedChartWorkbooks(false),before=Buffer.from(input),result=parseOoxml(input,'.pptx');
+ assert.doesNotMatch(result.markdown,/UNSELECTED_WORKBOOK_SENTINEL|UNSELECTED_UNIQUE_SENTINEL|Eingebettetes Dokument/u);assert.match(result.markdown,/SECOND_CHART_SOURCE/u);assert.ok(result.warnings.length>0);assert.deepEqual(input,before);
+});
+test('a genuine classic shared owner keeps only its own selected target after chartEx quarantine',()=>{
+ const input=sharedChartWorkbooks(true),before=Buffer.from(input),result=parseOoxml(input,'.pptx');
+ assert.equal(result.markdown.match(/UNSELECTED_WORKBOOK_SENTINEL/gu)?.length,1);assert.doesNotMatch(result.markdown,/UNSELECTED_UNIQUE_SENTINEL/u);assert.equal(result.markdown.match(/## Eingebettetes Dokument/gu)?.length,1);assert.ok(result.warnings.length>0);assert.deepEqual(input,before);
+});
+test('a no-CT legacy Word child preserves its full locator but gains no content-preserving admission',()=>{
+ const body=value=>`<w:document xmlns:w="${F.W}"><w:body><w:p><w:r><w:t>${value}</w:t></w:r></w:p></w:body></w:document>`;
+ const inner=zipStore([['word/document.xml',body('INNER_CHAIN_SENTINEL')]]),input=zipStore([['word/document.xml',body('OUTER_CHAIN_SENTINEL')],['word/embeddings/inner.docx',inner],['word/_rels/document.xml.rels',`<Relationships><Relationship Id="child" Type="${F.R}/package" Target="embeddings/inner.docx"/></Relationships>`]]),before=Buffer.from(input);
+ const result=require('../plugins/data-secure/server/document-parser').parseDocumentBuffer(input,'.docx');assert.match(result.markdown,/INNER_CHAIN_SENTINEL/u);assert.ok(result.content_graph.nodes.some(node=>node.locator.source_part==='word/embeddings/inner.docx!/word/document.xml'));assert.ok(result.warnings.length>0);
+ for(const options of [{preserveText:true},{contentMode:'content-v1'}])assert.throws(()=>parseOoxml(input,'.docx',undefined,options),{code:'XLSX_STRUCTURE_UNSAFE'});
+ assert.throws(()=>controls(input,'.docx'),{code:'SOURCE_CONTAINER_CORRUPT'});assert.throws(()=>extract(input,'.docx'),{code:'MARKDOWN_EXTRACTION_FAILED'});assert.deepEqual(input,before);
+});
 test('chartEx uses its own data-ID, direct point text and explicit shuffled indices',()=>{
  const result=render(chart());assert.match(result.markdown,/\| 0 \| North \| 100 \|/u);assert.match(result.markdown,/\| 1 \| South \| 200 \|/u);assert.ok(result.hasSource);assert.match(result.markdown,/keine Formeln/u);
 });

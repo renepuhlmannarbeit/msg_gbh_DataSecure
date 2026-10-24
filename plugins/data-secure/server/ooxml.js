@@ -2846,7 +2846,7 @@ function relationshipOwner(relPath) {
   return match?`${match[1]||''}${match[2]}`:null;
 }
 function embeddedRelationshipCoverage(entries, reachableParts) {
-  const safeTargets=new Set(),unsafeTargets=new Set(),packageTargetCounts=new Map();let invalidPackageRelationships=0;
+  const safeTargets=new Set(),unsafeTargets=new Set(),packageTargetCounts=new Map(),candidateEdges=new Map();let invalidPackageRelationships=0;
   const trustedParts=reachableParts instanceof Set?reachableParts:new Set();
   for(const [name,data] of entries){
     if(!/\.rels$/i.test(name))continue;
@@ -2875,6 +2875,7 @@ function embeddedRelationshipCoverage(entries, reachableParts) {
         else if(SUPPORTED_EMBEDDED.test(target)&&entries.has(target)){
           packageTargetCounts.set(target,(packageTargetCounts.get(target)||0)+1);
           safeTargets.add(target);
+          if(!candidateEdges.has(owner))candidateEdges.set(owner,new Set());candidateEdges.get(owner).add(target);
         }
         else invalidPackageRelationships++;
       } else if(SUPPORTED_EMBEDDED.test(target))unsafeTargets.add(target);
@@ -2888,7 +2889,11 @@ function embeddedRelationshipCoverage(entries, reachableParts) {
   }
   const warnings=[];
   if(missing||invalidPackageRelationships)warnings.push(`OOXML enthält ${missing+invalidPackageRelationships} nicht eindeutig über eine interne Paketbeziehung abgesicherte Einbettung(en); Freigabe wird blockiert.`);
-  return {safeTargets,warnings};
+  // Quarantine can change duplicate counts: an initially ineligible owner's
+  // target may become unique after another owner is removed. Classify every
+  // bounded candidate owner before the single coverage recomputation.
+  const candidateOwners=new Set(candidateEdges.keys());
+  return {safeTargets,warnings,candidateOwners};
 }
 function embeddedState(context) {
   if(context===undefined)return {depth:0,budget:{documents:0,archiveBytes:0,expandedBytes:0}};
@@ -2898,14 +2903,27 @@ function embeddedState(context) {
 }
 function augmentEmbedded(result, entries, context, options = {}) {
   const state=embeddedState(context);
-  const overrides=xlsxContentOverrides(entries);
-  // chartEx externalData is a refresh/calculation source, not a selected
-  // embedded document. Its opaque workbook stays quarantined. Cached chart
-  // text already passed the real graph; do not append unselected sheet data.
-  const reachableParts=new Set(result.sections.map((section)=>section.source_part).filter(part=>
-    overrides.get(`/${part}`)!=='application/vnd.ms-office.chartex+xml'));
-  for(const part of PARTIAL_ENTRY_STATE.get(entries)?.textlessPptxOwners||[])if(overrides.get(`/${part}`)!=='application/vnd.ms-office.chartex+xml')reachableParts.add(part);
-  const coverage=embeddedRelationshipCoverage(entries,reachableParts),matches=[];
+  const reachableParts=new Set(result.sections.map((section)=>section.source_part));
+  for(const part of PARTIAL_ENTRY_STATE.get(entries)?.textlessPptxOwners||[])reachableParts.add(part);
+  let coverage=embeddedRelationshipCoverage(entries,reachableParts);
+  // Do not replace an unrelated legacy reader's closed coverage warning with
+  // an incidental strict CT error when no child can acquire append authority.
+  // Real source admission and content-preserving entrances remain strict.
+  // Only the old direct legacy reader may lack CT; an absent map grants no
+  // authority, and every possible owner still needs actual root classification.
+  // A present CT is never treated as missing on parse failure. Exact Override
+  // MIME and actual payload root independently deny chartEx workbook authority.
+  if(coverage.safeTargets.size){
+    const overrides=entries.has('[Content_Types].xml')||options.preserveText||options.contentMode||options.partialExtraction
+      ?xlsxContentOverrides(entries):new Map();
+    for(const owner of coverage.candidateOwners){
+      if(overrides.get(`/${owner}`)==='application/vnd.ms-office.chartex+xml'){reachableParts.delete(owner);continue;}
+      const root=readXml(entries.get(owner).toString('utf8'),{decode:xmlDecode,error:xlsxContentStructureError});
+      if(root.namespaceURI===CHARTEX_NAMESPACE&&root.localName==='chartSpace')reachableParts.delete(owner);
+    }
+    coverage=embeddedRelationshipCoverage(entries,reachableParts);
+  }
+  const matches=[];
   result.warnings.push(...coverage.warnings);
   for(const [name,data]of entries){const match=SUPPORTED_EMBEDDED.exec(name);if(match&&coverage.safeTargets.has(name))matches.push({name,data,ext:`.${match[1].toLowerCase()}`});}
   let ordinal=0;

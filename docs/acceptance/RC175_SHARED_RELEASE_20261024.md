@@ -124,3 +124,113 @@ Commit/Freeze und sämtliche neuen tatsächlichen lokalen/Mac-Endgates.
 Offen bleiben derzeit vollständige neue Endgates, native Macartefakte, lokale
 Übergabe und Veröffentlichung. Unbekannte Dashboards, externe Workbooks,
 Statistik-/Georendering und aktive Inhalte sind keine Universalzusage.
+
+### Erster gemeinsamer Source01-Endlauf – ausdrücklich nicht freigabefähig
+
+Appcommit d4d5372abcc373e710d9e1ce6f9e0381b348978e, FP123ee4958064cdcc923ac7c4a180728eda2a7f60bbe9012af1ca579d5d70095d/358,
+601Test-/Scriptinputs/9c115d6d…6fea. Windows Native/300Rust+3ignored/
+Clippy/Node-Rust/Release, fünf native Konvertersuiten (38PDF/71Worker/55Office/
+43Grafik/21passivePDF) und fünf Paketgates/100MD0Fehler PASS/stabileInputs.
+Neues unveröffentlichtes Windows-ZIP113456357Bytes/SHAab75e7d5261da7cfeaa0070c2949391d232a82f42a9a1aa4b2f0e378c25728d5,
+EXE051df04e5e5c3a1b761da58e99f2a6db3ffac47b3532234723f7906e8d8aa97e.
+Tatsächlicher Windowsarchiv-Gegenreview ohne bestätigten Bindungsblocker.
+
+Beide Macconsumer40076404431SUCCESS am selben Commit: ARM120820578718
+08:34:22UTC, Intel120820578661 08:42:02UTC; echte Archive separat gesammelt
+und jeweils einmal verifiziert. ARM-Ganzlogreview vollständig gelesen, kein
+bestätigter neuer Logblocker. Intel-Ganzlogreview ausdrücklich unvollständig
+(Kapazitätsstörung, später nur1–650/7743Zeilen); kein erfundener Review-PASS.
+Diese Artefakte und alle alten FINAL/VERIFYs bleiben unverändert historisch.
+
+Headless tatsächlich **ROT** am24.10.2026 08:56UTC, Exit1 und
+inputs_unchanged=true:205/307Programme,0/11Zusatzgates, Test206/test-parsers.js
+63PASS/28FAIL. Ursache unabhängig bestätigt: neuer bedingungsloser strikter
+Content-Type-Lookup in augmentEmbedded verdrängt bestehende geschlossene
+Legacy-/Direktparser-Warnverträge selbst ohne auswählbare Einbettung. Kein
+Beweis für Mac-Corecrash, aber echter fehlender Gesamtregressionsnachweis.
+Kein SourceSnapshot, lokalerRC175-Ordner, Tag oder Release erzeugt.
+
+### Enge Nachkorrektur und zusätzlicher Zielreview vor Source02
+
+Einbettungskandidaten werden zunächst unverändert über tatsächliche erreichte
+Owner/Beziehungen geprüft. Nur wenn ein Kind tatsächlich Appendautorität
+erlangen könnte, wird ContentTypes strikt benötigt. ChartEx bleibt anhand
+exaktem MIME **oder tatsächlicher chartSpace/CX-Wurzel** quarantänisiert, auch
+bei klassischer vorgetäuschter Rolle/MIME; echte Classic-Owner bleiben möglich.
+Retained- und private Textlessowner, alle Rekursions-/Byte-/Dokumentbudgets,
+Quelladmission und Privacy-/Residual-/Trace-/Keepregeln unverändert. Kein
+allgemeines try/catch oder pauschales MissingCT→leereAutoritätsmap.
+
+Unabhängige Diagnose39RAM-Beobachtungen verwarf beide unsicheren Einzeiler;
+Rohreview SHA7d48391e9f3f0c323235a6e22f5a077e4bf52da8b12ead634f5c57259af04561.
+Main Originalparser91/91 unverändert und erweiterte130chartEx-Fälle PASS.
+Neue eigene Harnessfehler eng korrigiert: Legacy-MissingRoot erhält Body plus
+geschlossenen Warnstatus, nicht automatisch leeren Body; OPCcode und bestehender
+inhaltsfreier Extraktionswrapper sind verschiedene Codes; malformedCT kann
+schon vorher als PPTX_STRUCTURE_UNSAFE verweigert werden. Keine Produktprüfung
+für diese falschen neuen Assertions gelockert. Neue11Regressionsfälle binden
+genau die Legacy-/Orphan-/MIME-/Payload-/CThard-/Classicpositiv-Konstellationen.
+Unabhängige tatsächliche Fixnachprüfung sowie diagnostischer kanonischer Tail
+ab206 laufen noch; kein endgültiger neuer Gesamt-/Paket-/Mac-PASS daraus.
+
+Zusätzlich ausdrücklich beauftragter breiter Ziel-/Internet-/GitHub-Gapreview
+in [GOAL_COVERAGE_REVIEW_20261024.md](GOAL_COVERAGE_REVIEW_20261024.md) dokumentiert;
+Main-PDF-/Grafikreview plus unabhängiger vollständiger Office-Gapreview gelesen.
+Größere Renderer/Folgefeatures sind Backlog, keine ungeprüfte neue RC175-Runtime.
+Nach abgeschlossener Korrektur neuer gemeinsamer Appcommit/FP und frische
+Source02-Endgates erforderlich; Source01-Macgrün/ZIP nicht umetikettieren.
+
+Tatsächlicher Fixgegenreview fand einen weiteren P2 im neuen Nachpass:
+zwei erreichte Diagrammowner teilen einen Workbooktarget; nach Ausschluss des
+ersten Owners konnte ein zunächst wegen Duplikat unbeachteter tatsächlicher
+chartEx-Owner Appendautorität erlangen. Direkter Legacyparser hängt dann das
+unselektierte Workbook an; eine blockierende Warnung bleibt. Keine erfolgreiche
+öffentliche Privacy-Freigabe bewiesen, aber echter zu schließender Quarantäne-
+Grenzfall. Rohreview FIX-RECHECK.md SHA1a8a86cb…bfe samt40RAM-Gruppen erhalten.
+Vorbehebung/Tailgrün darf diesen Befund nicht widerlegen. Nächste Korrektur:
+alle bereits begrenzten Kandidatenowner vor einmaliger Neuberechnung prüfen,
+nicht nur erste überlebende Targets; symmetrisches echtes Classicpositiv halten.
+
+Source02-Helfervorbereitung separat create-only: Main las den wörtlichen Diff
+aller16MJS plusPlan, Syntax aller16,147Quellbindungen und alle synthetischen
+Proofnegativen PASS. Dies erzeugte keinen neuen Freeze/FINAL/Paket-/GUIbeleg.
+Unabhängiger Dokumentgegencheck des Main-Zielreviews vollständig gelesen, kein
+bestätigter sachlicher Blocker; keine Erweiterung der Produkt-/Mac-Abdeckung.
+
+Diagnostischer Tail tatsächlich beendet am24.10.11:20:36.307UTC, Exit1 und
+inputs_unchanged=true,49/102Programme erfolgreich. Primärfehler Test255/
+test-content-graph.js:268: echter alter ausgewählter Word→DOCX-Containerketten-
+Direktreader besitzt kein CT und wird noch zu früh abgewiesen. Originaltest
+und alle REDbelege unverändert. Kein bloßer transienter Fehler und kein Grund,
+moderne OPC-Admisson zu lockern. Gemeinsame enge Korrekturrichtung mit offenem
+Owner-Wiederzulassungsbefund wird unabhängig an tatsächlichen Quellen geprüft.
+
+Gemeinsame Korrektur inzwischen implementiert, noch kein neuer Releasefreeze:
+alle bereits begrenzten candidateEdges-Owner vor genau einer Neuberechnung
+klassifizieren; vorhandenes CT bleibt strikt, fehlendes CT ausschließlich im
+alten Direktreader ohne preserveText/contentMode/partialExtraction tolerieren.
+Eine leere Map erteilt keine positive Autorität; exaktes Override-MIME oder
+tatsächliche chartEx-Root sperren unabhängig. Default-CT führt keine neue
+chartEx-Admisson ein. Unveränderte öffentliche OPC-/Extractorgrenzen geprüft.
+Unabhängige RAM-Diagnose16Gruppen/SHA cf2a4c98…5171 vollständig gelesen;
+dies war eine Hypothese, die tatsächlichen Fixgegenreviews laufen separat.
+
+Main frische acht gezielte Quellsuiten unter
+dist/rc175-chartex-fix-final-20261024 PASS/Exit0/inputs_unchanged=true,
+24.10.11:28:42.957UTC:133chartEx/116Classic/91Originalparser/18OriginalGraph/
+27OPC/18Teilkonvertierung/30Dokumentverträge und Versionssync. Produkt-FP dieses
+Vorabstands5eaddabb199b075e9133d5561f5055989db952ae329269dbb3f9675a2cc4bc3e.
+Neue14permanente Fälle einschließlich beider Sharedtargetrichtungen und
+NoCT-Direkt-vs-Moderneintritt; Originalparser/Graph/OPC/Extractor bytegleich.
+Kein Gesamt-/Native-/Paket-/Mac-/Desktop-PASS aus diesen Vorabprüfungen.
+
+Beide abschließenden tatsächlichen Produktionsdelta-Gegenreviews vollständig
+von Main gelesen, ohne bestätigten verbleibenden Deltablocker. Erster22eigene
+Gruppen PASS/Pin7bd9de34…297df, Bericht8280107f…531a; zweiter6frische eigene
+Gruppen PASS/gleicherPin, Bericht636a347d…ec4b. Zweiter eigener erster roter
+Harnesslauf forderte eine nicht autoritative Warnanzahl für echten klassischen
+Legacy-PPTX-Kindtext; ausschließlich diese Zusatzassertion entfernt, komplette
+sechs Gruppen frisch wiederholt, Fehlerbeleg erhalten. Keine Produktlockerung
+und keine fremden Autorenfälle als unabhängig ausgeführt gezählt.
+Nächster Stand wird eigener gemeinsamer Source02-Appcommit mit allen neuen
+Endgates/Artefakten; alte Source01-Belege bleiben unverändert rot bzw. historisch.

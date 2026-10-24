@@ -12,6 +12,27 @@ und neue Pakete. [Plan](../acceptance/RC175_SHARED_RELEASE_20261024.md).
 RC174 und darunterstehende abgeschlossene Bindungen bleiben historisch gültig;
 keine Umdeklaration alter Artefakte, Mainintegration oder neue Appleautorität.
 
+Erster Source01-Endlauf d4d5372…/FP123ee495… trotz nativen Windows-/Paket- und
+beiden Macgrüns **nicht freigabefähig**: Headless205/307 bei test-parsers mit
+XLSX_STRUCTURE_UNSAFE rot, Inputs stabil. Echte Legacy-/Direktparserregression
+im unbedingten ContentTypes-Nachpass kausal eingegrenzt; enge Lazyprüfung mit
+weiterer MIME-/Payloadwurzelquarantäne implementiert, Main91Parser/130chartEx
+PASS auf dem ersten Reparaturstand. Unabhängiger Gegenreview fand zusätzlich
+eine Kandidaten-Wiederzulassung nach Ownerquarantäne. Diagnostischer Tail
+206–307 tatsächlich beendet/stabil ROT49/102 am24.10.11:20:36.307UTC:
+test-content-graph.js verliert einen alten ausgewählten DOCX-Containerkettenfall
+ohne CT. Beide Befunde werden gemeinsam eng korrigiert; danach unabhängige
+Nachprüfung, eigener neuer Freeze und alle Endgates erforderlich.
+Gemeinsame Korrektur implementiert: AllCandidateOwners plus enge NoCT-
+Legacygrenze, moderne OPC-/Inhaltseintritte unverändert strikt. Main acht
+gezielte Suiten PASS/stabil,133chartEx/91Parser/18Graph darunter; beide finale
+tatsächliche Quellengegenreviews gelesen,22+6eigene begrenzte Gruppen PASS,
+kein bestätigter verbleibender Deltablocker. Kein neuer Freeze oder neuer
+Gesamt-/Native-/Mac-/Paketnachweis. KeinRC175Release/Tag/lokalerÜbergabeordner.
+Zusätzlicher beauftragter [Ziel-/Rendererreview](../acceptance/GOAL_COVERAGE_REVIEW_20261024.md)
+mit konkreten nächsten Inhaltsmodellen/Primärquellen, keine ungeprüften neuen
+Renderer oder Apple-/OSrechte. Desktoptests weiterhin Nutzer.
+
 ## Technischer Abschluss RC174 – semantische Inhaltsmodelle
 
 Klassische Diagramme/Chartsheets und passive PDFformularwerte in beiden Modi,

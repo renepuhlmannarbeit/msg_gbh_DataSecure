@@ -12,6 +12,22 @@ Eigener offlinefähiger semantischer Leser in Arbeit, keine Formelausführung,
 externen Workbook-/Geodatenloads oder Statistik-/Visualvollständigkeitszusage.
 Noch keine finale Paket-/Mac-/Releasefreigabe oder Mainintegration.
 
+### Zusatzauftrag 24.10. – Zielbezogener weiterer Inhalts-/Rendererreview
+
+Aktuellen Code mit offiziellen Internet-/GitHubmethoden auf weitere sinnvolle
+Konstellationen/Renderer/Funktionen prüfen. [Review und Prioritäten](../acceptance/GOAL_COVERAGE_REVIEW_20261024.md).
+PDFstruktur/Lesereihenfolge, häufige TIFFvarianten, EMF+/weitere Officeobjekte,
+vorhandenen Windows-only PDFiumspike und optionale Docling-/LibreOfficepfade
+getrennt bewerten. Keine ungeprüfte Rendereraufnahme in RC175, kein behaupteter
+Universalreader. Native Macrollen ohne Developer-ID/Notarisierung oder
+Abschaltung von LibraryValidation/OSschutz planen; Desktoptests bleiben Nutzer.
+Der erste gemeinsame RC175-Endlauf ist bei test-parsers rot; ältere Mac-/
+Paketgrüns sind keine Gesamtfreigabe und dürfen nicht als neuer Finalstand gelten.
+Die enge Legacy-/Ownerquarantäne-Korrektur ist danach implementiert und von zwei
+tatsächlichen Quellengegenreviews ohne verbleibenden Deltablocker nachgeprüft.
+Frische gemeinsame Source02-Endgates/Archive bleiben vor Veröffentlichung nötig;
+die breiteren Zielreview-Empfehlungen sind getrennte Folgepakete, kein neuer Renderer.
+
 ## BL-049.5 – RC174 Diagramme, OfficeMath und passive PDFwerte
 
 23.10.2026 zusätzlich ausdrücklich beauftragt, technisch umgesetzt/revalidiert
