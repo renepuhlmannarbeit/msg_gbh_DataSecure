@@ -1,10 +1,48 @@
 # Release- und Distributionsvertrag
 
-Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc174 · Veröffentlichungsnachtrag: 23.10.2026
+Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc174 · Veröffentlichungsnachtrag: 24.10.2026
 
-Der aktuelle Quellstand ist RC174-Entwicklungsstand und noch kein neu gebundener Paketkandidat. Nachfolgende reine
+Der aktuelle Quellstand ist RC174; der gemeinsame Standalone-Test-Pre-Release
+ist veröffentlicht. Nachfolgende reine
 Dokumentation ändert dessen App-/Paket-/Tagbindung nicht. Menschliche Desktop-/
 Office-/Zielhost- und N3/N4-Produktionsfreigaben bleiben offen.
+
+### RC174 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
+
+Quellcommit `444b14e0020ebb8cf7f7de08fb36d6e71234da91` bindet den
+[RC174-Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc174).
+Build444b14e0, Produktfingerprint
+`465a463a7e14da35bd88551dcad91264e25c5ed7ce49c72f7c7911449d5c1393`/357.
+Klassische Diagrammmodelle/Chartsheets und passive gespeicherte PDFwerte in
+beiden Ausgabemodi; neue OfficeMath-Projektion nur content-v1. hMerge,
+BOM-UTF16, Excel-Xstring/Formelcache, echte PPTXnamespaces und zusätzliche
+statische PNGvarianten. Keine Formel-/PDFaktion/XFAausführung, externen
+Workbookloads, neue OSrechte oder pauschale Limitserhöhung.
+
+Vier frische lokale Endgates PASS/stabil:306+11Headless,300Rust/3ignored/
+Clippy/Node-Rust/Release,38PDF/71Worker/49Office/43Grafik/21passivePDF,
+5Paketgates/100MD0Fehler. Beide Macconsumer40041545630SUCCESS, je38PDF/
+69Worker+2Windows-SKIPs/49Office/43Grafik/21passivePDF/283Rust+3ignored.
+Neue semantische Receipts je Target116Chart/58Math/55MathSource/20MathIntegration.
+Unabhängige tatsächliche Quellen-/Windowsarchiv-, ganze ARM-/Intellog- und
+beiderseitige Mac-Archivinventar-/Bytegegenreviews gelesen; alte rote Belege erhalten.
+
+Release422424877, Publikationszeit24.10.2026 00:43:28UTC,
+PreRelease=true/Draft=false. Alle20Assets vor und nach Publikation frisch
+heruntergeladen/gehasht; gleicheIDs, Inventar, Tagquelle und Quellcommit
+bestätigt. Notesbody separat textgleich nachgelesen. Windows create-only lokal
+unter `Software DataSecure/RC174`, aktueller Testplan, Proofs/Prüfsummen und
+drei unveränderte synthetische Testarchive. SourceSnapshot990Dateien/8896114Bytes,
+SHA256b84be2b81bbd07f371f2d7729ad95d154847674ce4bc75226d5de2ef8c710cda.
+
+Menschliche Desktop-/Excel-/Numbers-/Finder/TCC/M2/Enterprise/VoiceOver/macOS26-
+Abnahme USER_PENDING. Keine eigene UI-Aktion, Developer-ID/Notarisierung,
+Schlüssel-/Zertifikatssuche, OS-Schutzänderung oder Mainintegration. Native
+Epoch/Pause/Lease/GUI NOT_RUN, ACLadversarialPARTIAL, LaunchServicesexit unbekannt,
+Smoke-Writerjoin UNCONFIRMED/Extraktion erhalten. Kein Universalrenderer oder
+universelles Vollständigkeits-/Artefaktfreiheitsversprechen. LinuxRC159,
+CoworkRC151, RC173 und sämtliche älteren Pakete/Nutzerläufe bleiben unverändert.
+[Exakte Hashes, Quellenbindung und Grenzen](acceptance/RC174_SHARED_RELEASE_20261023.md).
 
 ### RC173 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
 

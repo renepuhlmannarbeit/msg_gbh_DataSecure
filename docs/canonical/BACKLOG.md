@@ -1,17 +1,18 @@
 # Aktives Entwicklungsbacklog
 
-Arbeitsquelle: 3.2.0-rc174, noch unveröffentlicht; RC173 bleibt letzter Testrelease.
+Arbeitsquelle: 3.2.0-rc174, Windows/beideMacs als Test-Pre-Release veröffentlicht.
 
 ## BL-049.5 – RC174 Diagramme, OfficeMath und passive PDFwerte
 
-23.10.2026 zusätzlich ausdrücklich beauftragt und in Umsetzung: index-/owner-
+23.10.2026 zusätzlich ausdrücklich beauftragt, technisch umgesetzt/revalidiert
+und am24.10.2026 als RC174 veröffentlicht: index-/owner-
 gebundene Diagrammmodelle inklusive Chartsheets, lesbare OfficeMath-Strukturen
 und gespeicherte passive PDFformularwerte. Windows+Mac ARM64/Intel aus derselben
 neuen Quelle; fachlich unabhängige Quellreviews, neue native Endtests und neuer
 GitHub-Test-Pre-Release, Windows lokal mit Testplan. Desktoptests Nutzer.
 [Verbindlicher Plan und Journal](../acceptance/RC174_SHARED_RELEASE_20261023.md).
 Keine Formelausführung/aktiven PDFaktionen/externen Workbookloads; bestehende
-Schutz- und Teilabdeckungsgrenzen behalten. Noch kein RC174-Endnachweis.
+Schutz- und Teilabdeckungsgrenzen behalten. Menschliche Desktoptests USER_PENDING.
 
 Quellenmodelle und begrenzte unabhängige Gegenreviews umgesetzt; Diagramme/
 PDFwerte beide Modi, neue OfficeMath-Projektion content-v1. Zusätzlicher echter
@@ -19,9 +20,15 @@ Breiten-/Argumentlimitfehler in Chart-XML durch gleichgeordneten Iterator statt
 vararg-Push korrigiert, ohne höhere Budgets oder Fehlerumdeutung.116Chartfälle
 einschließlich150k/200k/echten Owner-/Modusketten vorgeprüft. Drei alte Endlauf-
 Test-/Fixturefehler eng und unabhängig korrigiert, Originale bleiben rot.
-Aktuelle Formatmatrix fachlich aktualisiert; neue gemeinsame Source02-Endgates,
-beide native Mac-Pakete und Release-/Remoteprüfung weiterhin offen. Desktoptests
-bleiben beim Nutzer; keine Mainintegration oder neue Apple-Signierautorität.
+Aktuelle Formatmatrix fachlich aktualisiert; gemeinsame Source02-Endgates
+306+11/300Rust/5Konverter/5Paketgates und beide native Mac-Pakete erfolgreich,
+tatsächliche Quellen-/ganzeLog-/Archivgegenreviews abgeschlossen. App-/Tagcommit
+444b14e0020ebb8cf7f7de08fb36d6e71234da91/FP465a463a…1393, Release422424877,
+20Remoteassets vor/nach Publikation frisch nachgeprüft. Windows lokal RC174
+mit Testplan/Proofs/3Testarchiven. Desktoptests bleiben beim Nutzer; keine
+Mainintegration/neue Apple-Signierautorität oder Universalformatzusage.
+Größere Renderer-/chartEx-/Legacy-/Spezialmodellergänzungen bleiben Restarbeit,
+nicht als RC174- oder menschliche Abnahme ausgegeben.
 
 ## BL-049.4 – Legacy-Zellverbindungen und umfassende Konvertierungsrobustheit
 
@@ -36,7 +43,8 @@ Ressourcenprüfungen. Offline, Windows+beideMacs, ohne Applekonto/Developer-ID.
 [Arbeitsplan, Befunde und Rendererentscheidung](../acceptance/CONVERSION_RESILIENCE_REVIEW_20261023.md).
 RC173-Downloads/Tag und alte Nutzerläufe unverändert; Desktoptests Nutzer.
 
-Erstes unveröffentlichtes Delta implementiert und unabhängig quellenrevalidiert:
+Erstes begrenztes Delta implementiert, unabhängig quellenrevalidiert und
+in RC174 mit frischen gemeinsamen Endnachweisen veröffentlicht:
 hMerge, Standalone-BOM-UTF16, Excel-ST_Xstring einschließlich x:v/Formelcache,
 PPTX-Folienlisten/Notiznamespaces, optionale PDFmetadatengrenzen und statische
 PNGvarianten über bestehendes Canvas. Zusätzlich echte zellinterne/Header-/

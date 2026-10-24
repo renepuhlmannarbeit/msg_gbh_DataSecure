@@ -1,24 +1,29 @@
 # Aktueller Iststand
 
-Arbeitsquelle: 3.2.0-rc174 in gemeinsamer Endprüfung, noch nicht veröffentlicht.
-Letzter veröffentlichter Test-Pre-Release: RC173, Desktopabnahme USER_PENDING.
+Stand: 24.10.2026 · 3.2.0-rc174 · gemeinsamer Test-Pre-Release veröffentlicht.
+Desktop-/Office-/physischeMac-Abnahme weiterhin USER_PENDING.
 
-## RC174 beauftragt – semantische Inhaltsmodelle
+## Technischer Abschluss RC174 – semantische Inhaltsmodelle
 
-Diagramme/Chartsheets, OfficeMath und passive PDFformularwerte werden zusätzlich
-zum unveröffentlichten Robustheitsdelta implementiert. Gemeinsame Windows-/
-Macquelle, getrennte native Endprüfungen, unabhängige Fachreviews und neuer
-Test-Pre-Release; Desktoptests Nutzer. [Aktueller RC174-Plan](../acceptance/RC174_SHARED_RELEASE_20261023.md).
-Semantische Quellen und begrenzte Fachgegenreviews umgesetzt. Erster gemeinsamer
-Source01-Endversuch nicht freigabefähig (drei kausal bestätigte Test-/Fixturefehler,
-Originale erhalten); Windows Native300Rust/3ignored dort PASS/stabil, nicht als
-neuer Gesamtbeleg übernehmen. Zusätzlicher tatsächlicher Chart-RangeError bei
-breiter regulärer extLst eng ohne Budgetlockerung korrigiert und mit116Chart-/
-73Extractor-/18Partial-/30Dokumentationsfällen vorgeprüft. Aktueller Produkt-FP
+Klassische Diagramme/Chartsheets und passive PDFformularwerte in beiden Modi,
+neue OfficeMath-Projektion content-v1 plus begrenztes Robustheitsdelta umgesetzt,
+unabhängig am tatsächlichen Code revalidiert. Gemeinsamer App-/Tagcommit
+444b14e0020ebb8cf7f7de08fb36d6e71234da91, Produkt-FP
 465a463a7e14da35bd88551dcad91264e25c5ed7ce49c72f7c7911449d5c1393/357.
-Neue Source02-Bindung und alle frischen lokalen/doppelten Mac-Endgates nötig.
-Noch kein RC174-Gesamt-/Mac-/Release-PASS. Keine neue Macberechtigung oder
-externe Apple-Signierung; alte RC173-Belege gelten nicht als RC174-Abnahme.
+Neue Source02-Belege PASS/stabil:306+11Headless,300Rust/3ignored/Clippy/
+Node-Rust/Release,5nativeKonvertersuiten und5Paketgates/100MD0Fehler.
+Mac40041545630 beideSUCCESS; ganze Logs und tatsächliche beide Archive/Module/
+Rollen/Seals/Architekturen/Hashbindungen unabhängig gegengeprüft. Alle früheren
+roten Source01-/Entwicklungs- und Eigenprüfbelege bleiben erhalten.
+Release422424877 am24.10.2026 00:43:28UTC veröffentlicht, PreRelease=true/
+Draft=false,20Assets vor/nach Publikation frisch gehasht/IDs/Inventar/Tagquelle
+erneut gelesen. Windows zusätzlich lokal create-only Software DataSecure/RC174
+mit Testplan/Proofs/Prüfsummen/3Testarchiven. [Journal und Grenzen](../acceptance/RC174_SHARED_RELEASE_20261023.md).
+Desktoptests Nutzer, keine eigene UI/Mainintegration oder neue Appleberechtigung.
+Nur bestehendes Adhoc-Sealing, keine Developer-ID/Notarisierung/Schutzabschaltung.
+NativeEpoch/Pause/Lease/GUI NOT_RUN, ACL PARTIAL, LaunchServicesexit unbekannt,
+SmokeWriterjoin UNCONFIRMED/Extraktion erhalten. Kein universeller Renderer;
+chartEx/weitere Legacy-/Spezialmodelle bleiben konkrete Restabdeckung.
 
 ## Neuer Auftrag nach RC173 – Konvertierungsrobustheit / BL-049.4
 
@@ -26,7 +31,9 @@ externe Apple-Signierung; alte RC173-Belege gelten nicht als RC174-Abnahme.
 auf fehlende Renderer/Inhaltsmodelle und unnötige Stopps prüfen, aktuelle
 Internet-/GitHubmethoden am tatsächlichen Code revalidieren und geeignete
 Verbesserungen umsetzen. [Arbeitsplan und Befunde](../acceptance/CONVERSION_RESILIENCE_REVIEW_20261023.md).
-Unveröffentlichte Folgearbeit; RC173-Tag/Pakete und alte Nutzerläufe unverändert.
+Erstes begrenztes Delta inzwischen in RC174 veröffentlicht; RC173-Tag/Pakete
+und alte Nutzerläufe unverändert. Historische Vorabbelege darunter sind kein
+Ersatz für den tatsächlichen Source02-Abschluss oben.
 Kein Universalformatversprechen, keine Schutz-/Rechte-/OSänderung. Separate
 Reviews für Word, XLSX/PPTX, Text und PDF/Grafiken sind für das erste begrenzte
 Delta abgeschlossen; Desktoptests beim Nutzer. hMerge, BOM-UTF16,
@@ -43,8 +50,9 @@ identisch. Frischer45er mit591Gitinputs unter
 591Git-Test-/Scriptinputs Manifest
 `a662626b31ad32119f995b5d3860e116c1b328692024439fc1ba73b0e6315c32`.
 Erstes Delta und Quellenrecherche abgeschlossen, keine Build-/Mac-/Desktopabnahme.
-Charts/Chartsheets/OMML/passive PDFformulare und größere Rendererergänzungen
-bleiben getrennt offene, im Arbeitsplan konkretisierte Umsetzungspakete.
+Charts/Chartsheets/OMML/passive PDFformulare sind im oberen RC174-Abschluss
+begrenzt umgesetzt; größere Rendererergänzungen und weitere Spezialmodelle
+bleiben getrennte im Arbeitsplan konkretisierte Umsetzungspakete.
 
 ## Technischer Abschluss – RC173 Tabellenaufbereitung (23.10.2026)
 
@@ -130,7 +138,7 @@ keine vollständige visuelle oder semantische Inhaltsfreigabe. Keine Nutzerdaten
 keine Produkt-/Teständerungen, neuen Pakete oder Mainintegration. Ältere Stand-
 und Übergabeabschnitte darunter nicht als neue offene Gesamtaufgabe übernehmen.
 
-Stand: 23.10.2026 · 3.2.0-rc174 als Test-Pre-Release; RC172 und ältere Releases unverändert.
+Historischer RC173-Stand:23.10.2026 als Test-Pre-Release; RC172 und ältere Releases unverändert.
 
 ## Historischer RC171-Quellenabschluss22.10.2026 10:49UTC vor Source12
 

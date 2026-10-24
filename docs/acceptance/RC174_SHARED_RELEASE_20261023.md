@@ -16,6 +16,22 @@ Macconsumer und Artefaktprüfungen sind trotzdem Pflicht. Kein Applekonto,
 Schlüssel-/Zertifikatssuchen oder OS-/Rechte-/Schutzänderungen. Bereits geprüfte
 statische Maccores aus Producer39167676290/7d0ee31 bleiben unverändert.
 
+## Aktueller Abschlussstand – 24.10.2026
+
+RC174 veröffentlicht als Test-Pre-Release, Release422424877,
+24.10.2026 00:43:28UTC, PreRelease=true/Draft=false. Gemeinsamer App-/Tagcommit
+`444b14e0020ebb8cf7f7de08fb36d6e71234da91`, Produktfingerprint
+`465a463a7e14da35bd88551dcad91264e25c5ed7ce49c72f7c7911449d5c1393`/357.
+Vier frische lokale Endgates und beide nativen Macjobs bestanden, technische
+Quellen-/Log-/Archivgegenprüfungen abgeschlossen. Keine bestätigten neuen
+Releaseblocker im beauftragten begrenzten Delta. Desktop-/Office-/Zielhostabnahme
+bleibt USER_PENDING; keine eigene UI-Aktion oder Mainintegration.
+
+[Downloads, beide Testpläne und Prüfsummen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc174).
+Windows zusätzlich create-only lokal `C:\Users\arkud\Documents\Software DataSecure\RC174`.
+Frühere Entwicklungs-/Source01-Zustände im Journal sind historische Belege,
+keine neue kumulative Aufgabenliste oder nachträglich grün erklärte Versuche.
+
 ## Umsetzung und Prüfplan
 
 1. Vorhandenes unveröffentlichtes Robustheitsdelta 4b57119398b1a28a88994ef9d2415baecf8c753d
@@ -212,10 +228,72 @@ ausgeführt. CI ersetzt keinen Finder/TCC/M2/Enterprise/VoiceOvertest.
   kein Ersatz für gemeinsame Gesamt-/Mac-/Paket-/Desktopabnahme. Alle eigenen
   begrenzten Gegenprüfprozesse beendet. Source02 kann nun neu gebunden werden.
 
+- Source02 tatsächlich neu gepusht/eingefroren:444b14e0020ebb8cf7f7de08fb36d6e71234da91,
+  FP465a463a…1393/357,599Test-/Scriptinputs,
+  Manifestd9ddb23ff3fd34c57ccb2eef9d3316284289537b0f83f9406606151c9b2169bc.
+  Vier tatsächliche Endgates PASS/inputs_unchanged=true, alle Sessions regulär Exit0:
+  Native23.10.23:50:04.726UTC (Prepare/Clippy/300Rust+3ignored/Node-Rust/Release),
+  Konverter23:52:05.868UTC (38PDF/71Worker/49Office/43Grafik/21passivePDF),
+  Paket23:53:36.829UTC (5Gates/100MD0Fehler/Originalbytes identisch),
+  Headless24.10.00:29:30.783UTC (306/306+11/11).
+  Kein alter Vorab-/Source01-Nachweis übernommen, sieben Driver unverändert.
+- SourceSnapshot tatsächlich nach allen vier lokalen PASSs erzeugt00:29:56.969UTC:
+  990Dateien/8896114Bytes,
+  SHAb84be2b81bbd07f371f2d7729ad95d154847674ce4bc75226d5de2ef8c710cda,
+  exakte Archivbytes geprüft. Kein GUI-/Universalnachweis aus einem Snapshot.
+- Macconsumer40041545630 beideSUCCESS auf exakt demselben Appcommit:
+  ARM12071356888700:10:15UTC, Intel12071356908200:28:41UTC. Beide echte ganze
+  Joblogs unabhängig vollständig gelesen und vom Main nachgelesen. Je38PDF/
+  69Konverter+2Windows-SKIPs/49Office/43Grafik/21passivePDF/283Rust+3ignored,
+  neue semantische Receipts116Chart/58Math/55MathSource/20MathIntegration.
+  Native Core-/forkIPC/require/Worker-/Guard-/Rollen-/App-/ZIP-/DMG-Gates und
+  tatsächliche Shutdownbelege gelesen. Kein pauschaler Prozessbaum-/GUI-PASS.
+- Beide Artefakte genau einmal kanonisch gesammelt; beide unveränderten
+  verify-macos-review Exit0/VERIFY.ok=true. Transport, alle1177Archivdateien,
+  alle249 gemeinsamen Serverquellen, neue semantische Module, Gitmarker/FP,
+  Thinarch/MinOS/Systemlibs/Sealmetadaten und getrennte Core-/Konverterrollen
+  zusätzlich unabhängig an echten Bytes gegengeprüft. Native Kryptographie/
+  DMGmount aus konkreter CI, keine lokale Macausführung auf Windows behauptet.
+  Unveränderte Coreproducer39167676290/7d0ee31, keine neue Freigabe/Produktion.
+- Windowsarchiv zusätzlich unabhängig komplett geprüft:1174Dateien,357 echte
+  Gitblobs/599Testinputs, gesamte Server-/Konverterclosure, sechs native PErollen,
+  Guard und genaue PDF.js-Derivation. Echter vollständiger Gitcommit im EXE.
+  Hauptagent las alle tatsächlichen Begrenzungen und Eigenprüferkorrekturen;
+  kein Eigenbasis-/Desktop-/CleanMachine-PASS daraus.
+- Finale SHA256 der fünf Apparchive:
+  WindowsZIP17ab7dbe6d882575be5eeaeaec5b5da6c6a59f25b0b536cfd92c0b3dbc6ba4ce
+  (113448032Bytes), EXEdbf175ed6d6eca079f29e5350c80c8eaf329e3cb89d504c4934470311b934a3b;
+  ARMZIP4c1839a2c347003d32b16e7cca868cf64c1aa237a280f1becc313a5010e64b2f,
+  ARMDMG6ef92bb9fd620f88c1782624a6141a4c8f5ed94d13858724e28b4b62b819127a;
+  IntelZIPb60f399d7321f2a58cc2199a9aaa1b9bc7027e5bb02f498c8eb6a650d54ac838,
+  IntelDMGc32188389f442b5d828c1fa25264754cbaaad9c5ab1e7ea66c65804bd2e7ce31.
+- Lokale create-only Übergabe mit19Dateien vollständig bytegeprüft:WindowsZIP,
+  aktueller Testplan/README/Proofs/Prüfsummen/3unveränderte synthetische Archive.
+  USER-ACCEPTANCE und AgentGUIstatus ausdrücklich USER_PENDING/NOT_RUN19,
+  keine GUI-FINAL oder Bedienung erfunden. Testplan enthält neue semantische
+  Fachproben zusätzlich zu19Fällen, A–F und Tabellenproben. Keine echten
+  Nutzerunterlagen/Diagnosen/Profile in Git/Release hochgeladen.
+- Genau20Remoteassets vorbereitet und erst als Draft hochgeladen. Tatsächliche
+  REMOTE-DRAFT-VERIFIED und REMOTE-PUBLISHED-VERIFIED vollständig erfolgreich:
+  alle20Bytes in beiden Modi jeweils frisch zurückgeladen/gehasht, Inventar,
+  gleicheIDs/Größen/Tagquelle/40stelliger Appcommit/PreReleaseflag nachgelesen.
+  Notesbody separat vor/nach Publikation textgleich nach TrimEnd bestätigt;
+  ein widersprüchlicher GUI-Beleg-Satz ausschließlich im ignorierten Notes-
+  artefakt auf tatsächlich fehlenden Beleg/NOT_RUN präzisiert. Keine Änderung
+  eingefrorener Produkt-/Test-/Driverbytes. Alle alten Archive/Temps erhalten.
+- Grenzen bleiben:macOS26-Skip, NativeEpoch/Pause/Lease/GUI NOT_RUN,
+  ACLadversarialPARTIAL, LaunchServicesexit unbekannt, SmokeWriterjoin
+  UNCONFIRMED/Extraktion erhalten/deletionNOT_ATTEMPTED. Keine Developer-ID,
+  Notarisierung, Zertifikat-/Schlüsselsuche oder OSschutz-/Rechteänderung.
+  Menschliche Windows-/Mac-/Excel-/Numbers-/Finder-/TCC-/M2-/Enterprise-/VoiceOver-
+  Abnahme USER_PENDING. Reine Abschlussdokumentation danach ist kein neuer
+  App-/Tagcommit und schreibt keine FINALs rückwirkend um.
+
 ## Abschließende Ziel-Revalidierung
 
-Die technische Umsetzung ist erst geeignet, wenn folgende Ziele gemeinsam
-belegt sind; einzelne Modelltests oder ältere Releasegrüns ersetzen dies nicht:
+Der begrenzte technische RC174-Abschluss ist durch die neuen obigen Nachweise
+belegt. Folgende Ziele und verbleibende Grenzen wurden erneut abgeglichen;
+einzelne Modelltests oder ältere Releasegrüns ersetzen dies nicht:
 
 | Ziel | Nachweis und verbleibende Grenze |
 | --- | --- |

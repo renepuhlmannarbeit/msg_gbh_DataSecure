@@ -1,11 +1,12 @@
 # Aktuelle Format-Coverage
 
-Arbeitsquelle: 3.2.0-rc174 · 24.10.2026 · Implementierung/Endprüfung, noch nicht veröffentlicht.
-Letzter veröffentlichter Test-Pre-Release: RC173. Desktop-/Officeabnahme USER_PENDING.
+Arbeitsquelle: 3.2.0-rc174 · 24.10.2026 · Test-Pre-Release veröffentlicht.
+Gemeinsamer App-/Tagcommit444b14e0020ebb8cf7f7de08fb36d6e71234da91.
+Windows und beide Macs technisch geprüft; Desktop-/Officeabnahme USER_PENDING.
 
-## Unveröffentlichte Folgearbeit BL-049.4 / BL-049.5
+## RC174 – begrenzte Ergänzungen BL-049.4 / BL-049.5
 
-Separat vom veröffentlichten RC173 implementiert: Word-hMerge mit echten
+Zusätzlich zu unverändertem RC173 veröffentlicht: Word-hMerge mit echten
 physischen Besitz-/Spanmodellen, BOM-deklariertes UTF-16LE/BE für Standalone-
 TXT/MD/CSV, Excel-ST_Xstring in Textblättern und x:v einschließlich Formelcache,
 namespacegebundene PowerPoint-Folienlisten/Notizen sowie statische PNGvarianten
@@ -18,9 +19,10 @@ Residualschutz, auch bei CR-geteiltem Namen, langem Label, Kopfzeilenwert oder
 Name-Feld hinter einem Formelcache-Wrapper. Keep darf solche ungeschützten
 Feldwerte nicht wieder zur Veröffentlichung autorisieren. Kein globales
 Zeichenlöschen, keine Formel-/Makro-/Objektausführung oder neue Cloudverarbeitung.
-Keine neue Version oder Windows-/Mac-Paketabnahme allein aus diesen Quellen.
+Frische Gesamt-/Windows-/beideMac-/Paket- und Remotehashbelege gehören zum
+RC174-Release; Quellenmodelle allein sind keine menschliche Paketabnahme.
 
-Zusätzlich implementiert, noch ohne endgültige Paketfreigabe: index-/owner-
+Zusätzlich implementiert und technisch neu paketgeprüft: index-/owner-
 gebundene klassische Diagramm-/Serienwerte einschließlich Chartsheets sowie
 gespeicherte passive PDFformular-/Anmerkungswerte in content-v1 und notes-v1.
 Die neue lesbare OfficeMath-Projektion gilt nur für content-v1. Reale sensible
@@ -34,7 +36,7 @@ PNG-/Office-/PDF-, OCR-/Rendering- oder Artefaktfreiheitszusage. APNG/unbekannte
 Chunks bleiben eingeschränkt; Hinweise teilweise noch generisch.
 [Audit, Primärquellen, Prüfstand und Umsetzungspakete](acceptance/CONVERSION_RESILIENCE_REVIEW_20261023.md).
 
-## Veröffentlichter Stand RC173
+## Beibehaltene historische Grundlage RC173
 
 RC173 veröffentlicht (23.10.2026, Build e253380e): unterstützte nichtuniforme,
 vertikale und verschachtelte Wordraster, sparse/verbundene XLSX-Zellen und
@@ -78,7 +80,7 @@ Teilkonvertierung und die neuen semantischen Modelle werden nicht durch ältere
 UTF8-/Alles-oder-nichts-/Formularauslassungsbeschreibungen zurückgenommen.
 Binäre .doc/.xls/.ppt, .xlsb und Makroformate sind keine neu zugelassenen
 RC174-Dateitypen. Keiner der folgenden historischen E0-/Paketstände ersetzt
-die noch nötigen gemeinsamen RC174-Endgates oder menschliche Desktopabnahme.
+die tatsächlichen gemeinsamen RC174-Endgates oder menschliche Desktopabnahme.
 
 ## Anonymisierung: Claude-Plugin und Standalone
 
