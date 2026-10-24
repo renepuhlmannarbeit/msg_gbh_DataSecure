@@ -234,3 +234,85 @@ sechs Gruppen frisch wiederholt, Fehlerbeleg erhalten. Keine Produktlockerung
 und keine fremden Autorenfälle als unabhängig ausgeführt gezählt.
 Nächster Stand wird eigener gemeinsamer Source02-Appcommit mit allen neuen
 Endgates/Artefakten; alte Source01-Belege bleiben unverändert rot bzw. historisch.
+
+### Abschließender Source02-Freeze und tatsächliche Veröffentlichung
+
+Gemeinsamer App-/Tagcommit `223a04f54bc4fcfb2a95f12807685ed764ec6f0c`,
+FP `5eaddabb199b075e9133d5561f5055989db952ae329269dbb3f9675a2cc4bc3e`/358,
+601Test-/Scriptinputs/Manifest456617b938a0510c7816853df97c029b67bf82054bda41aeb8e8dde7bfc67298.
+Sieben Driver vor Start eingefroren, sämtliche neuen Endgates bei unveränderten
+Produkt-/Test-/Script-/HEAD-/Driverinputs. Keine Source01-FINALs übernommen.
+
+Vier lokale Endgates regulär Exit0, alle PASS/inputs_unchanged=true:
+
+- Headless307/307 plus11/11Zusatzgates, alle318Steps Status0, Ende24.10.12:47:51.885UTC.
+- Prepare/Clippy/300Rust+3ignored/echteNode-Rust-Integration/Release,11:42:26.219UTC.
+- Tatsächliche native Konverter38PDF/71Worker+0skip/55Office/43Grafik/21passivePDF,11:45:34.754UTC.
+- Fünf Paketgates einschließlich100/100Markdown mit0Fehlern und unveränderten Originalen,11:46:59.653UTC.
+
+SourceSnapshot danach genau einmal erzeugt12:48:17.198UTC,995Dateien/8936873Bytes,
+SHAe70f5548bc788f2f768d76b1641b5e3e0a566fa891863f7845fd4b4516791661,
+alle Archivbytes geprüft. WINDOWS-BUILD-COMMIT.json bindet tatsächliche neue EXE
+an literalen vollen Appcommit/FP und exakte PDF.js-/Graphicsderivation.
+
+Neues WindowsZIP113456746Bytes,
+SHA15762f62e846a456552d98589b98cc6c3f5698618b60ba79a155b5e50c2bb3b4;
+EXE5388800Bytes/SHA239eb95db8e3622816e509f9f2b756a2ee01b6fdcdbba92ab37c2e1c74f1fdfc.
+Canonicalevidenz dist/rc175-chartex-source02-20261024, neues Paket ausschließlich
+dist/engineering-rc175-chartex-source02-20261024. Alte ZIPs/Belege bleiben erhalten.
+
+Macconsumer40090612106 exakt am gemeinsamen Appcommit beideSUCCESS:
+ARM12086234689112:04:19UTC, Intel12086234690312:15:42UTC. Beide nativeCI je
+133chartEx/116Classic/58Math/55MathSource/20MathIntegration/21passivePDF,
+38PDF/69Worker+2Windows-SKIPs/55Office/43Grafik/283Rust+3ignored. Beide Artefakte
+create-only gesammelt und je einmal aktuelles verify-macos-review Exit0/oktrue;
+keine Macbytes auf Windows ausgeführt. Coreproducer39167676290/7d0ee31d…7071
+und eigene statische Core-/separate offizielle Converterrollen unverändert.
+
+Tatsächliche Macarchive:
+
+- ARM ZIP118805393Bytes/SHA4c1167f57094109084bf1f4e0cdb5cc16172c9de1821fadd1b9f6ecafce8009e;
+  DMG132765954Bytes/SHA0767cf1bcf51bb8a3717947a6a64ae0876fe86c27df278ba31c3759c31c22b44.
+- Intel ZIP122061015Bytes/SHA4f600dc3538581124d032f4b450cc7cda76a71d547f3afe355a963c8c9eeae39;
+  DMG136817347Bytes/SHA43daf0e5b196301c365766f7caa19cfbd2c3d59d3b634b19a177a6abec9e4188.
+
+Main las alle tatsächlichen neuen unabhängigen Gegenreviews vollständig:
+Windowsarchivbericht e1c7b3ec…d958c (1175Dateien/358Produkt-/601Testinputs),
+ARM-Ganzlog7804725a…1db5 (7740Zeilen), Intel-Ganzlogd95e63dd…05d3
+(7789Records/exakteLogfassung separat), BothMacbytebericht4b0c6f3e…ec646
+(je1178Einträge/250Commonmodule/48Policykomponenten/904Konverterdateien/
+5ThinMachO/Seals-/Rollen-/Architekturbezüge). Kein bestätigter neuer Bindungs-
+oder Logblocker; keine universelle Audit-/Signier-/Desktopfreigabe daraus.
+
+Lokale Nutzerübergabe nach Check-only genau einmal create-only erzeugt:
+C:\Users\arkud\Documents\Software DataSecure\RC175, USER-TEST-HANDOFF12:49:27.538UTC,
+19Dateien mit neuemWindowsZIP, aktuellem19Fall-Testplan/chartEx-/A–F-/Tabellenproben,
+Prüfsummen/Proofs und3unveränderten synthetischen Testarchiven. Kopierbytes und
+Inventar tatsächlich nachgeprüft. Kein alter lokalerRC175-Ordner überschrieben,
+keine Benutzerdateien/Diagnosen/Profile hochgeladen und keine GUI-FINAL erzeugt.
+
+[RC175-Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc175)
+Release422730420 am24.10.2026 **12:55:05UTC** veröffentlicht,
+PreRelease=true/Draft=false, Tag und target_commitish exakt gemeinsamerAppcommit.
+Genau20Assets:5Apparchive+3Testarchive+8SingleSHA+2Pläne+Evidence+SHA256SUMS.
+Vor Veröffentlichung alle20Remoteassets frisch heruntergeladen/gehasht,
+danach nochmals alle20 frisch heruntergeladen/gehasht, gleicheIDs/Inventar/
+Tagquelle/Commit/Flag nachgelesen. Finale Remoteprüfung12:56:18UTC, Exit0;
+Notesbody zusätzlich vor/nach Publikation textgleich mit vollständig gelesenem
+aktuellen Entwurf. Alte Releaseassets/Tags/Belege nie ersetzt oder umetikettiert.
+
+Desktoptests bleiben beim Nutzer/Kollegen: USER_PENDING, agentischeGUI NOT_RUN.
+Mac weiterhin ohne Developer-ID/Notarisierung/Apple-Einreichung oder Abschaltung
+von Gatekeeper/HardenedRuntime/eigener CoreLibraryValidation. OffiziellerConverter
+behält seine separat belegten breiteren Upstreamentitlements. NativeEpoch/Pause/
+Lease/GUI NOT_RUN, ACLadversarialPARTIAL, LaunchServicesexit unbekannt,
+PackagedSmokeWriterquiescenceUNCONFIRMED/Extraktion erhalten/deletionNOT_ATTEMPTED.
+macOS26/Finder/TCC/M2/Enterprise/VoiceOver/Office/Excel/Numbers menschlich offen;
+keine vollständige Prozessbaum-, Format-, Anonymitäts- oder Artefaktfreiheit.
+Keine Mainintegration. Spätere reine Abschlussdocs ändern App-/Paket-/Tagbindung nicht.
+
+Zusatzauftrag Ziel-/Internet-/GitHubreview abgeschlossen und bereits im gemeinsamen
+Appcommit dokumentiert: Main-PDF-/Grafikteil, unabhängiger Office-Gapreview und
+tatsächlicher Dokumentgegencheck gelesen. Prioritäten/Quellen/Adaptierungspins in
+GOAL_COVERAGE_REVIEW_20261024.md; größere Renderer und weitere Inhaltsmodelle
+bleiben separate Backlogpakete, keine ungeprüfte neue RC175-Runtime.

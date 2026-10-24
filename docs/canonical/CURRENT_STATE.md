@@ -1,37 +1,48 @@
 # Aktueller Iststand
 
-Stand: 24.10.2026 · 3.2.0-rc175 · chartEx in Entwicklung, noch kein RC175-Release.
+Stand: 24.10.2026 · 3.2.0-rc175 · chartEx technisch abgeschlossen und veröffentlicht.
 Desktop-/Office-/physischeMac-Abnahme weiterhin USER_PENDING.
 
-## Aktueller Auftrag RC175
+## Technischer Abschluss RC175
 
-chartEx für Windows/beideMacs autorisiert. Eigener semantischer Cacheleser mit
-exakten Owner-/MIME-/Daten-ID-/Punktbezügen und unverändertem Schutzpfad in Arbeit.
-Unabhängige Primärquellen-/Quellreviews, danach frische gemeinsame native Endgates
-und neue Pakete. [Plan](../acceptance/RC175_SHARED_RELEASE_20261024.md).
-RC174 und darunterstehende abgeschlossene Bindungen bleiben historisch gültig;
-keine Umdeklaration alter Artefakte, Mainintegration oder neue Appleautorität.
+chartEx für Windows und beide Macs umgesetzt: eigener semantischer Cacheleser
+mit exakten Owner-/MIME-/Daten-ID-/Punktbezügen, unveränderten Source-/Privacy-/
+Residual-/Trace-/Keep-/I/O-/Prozess-/Ressourcenschutzregeln. Keine Formel-/
+Workbook-/Geodatenauflösung oder universelle Diagramm-/Renderingtreue.
+Gemeinsamer App-/Tagcommit223a04f54bc4fcfb2a95f12807685ed764ec6f0c,
+Produktfingerprint5eaddabb199b075e9133d5561f5055989db952ae329269dbb3f9675a2cc4bc3e/358.
 
-Erster Source01-Endlauf d4d5372…/FP123ee495… trotz nativen Windows-/Paket- und
-beiden Macgrüns **nicht freigabefähig**: Headless205/307 bei test-parsers mit
-XLSX_STRUCTURE_UNSAFE rot, Inputs stabil. Echte Legacy-/Direktparserregression
-im unbedingten ContentTypes-Nachpass kausal eingegrenzt; enge Lazyprüfung mit
-weiterer MIME-/Payloadwurzelquarantäne implementiert, Main91Parser/130chartEx
-PASS auf dem ersten Reparaturstand. Unabhängiger Gegenreview fand zusätzlich
-eine Kandidaten-Wiederzulassung nach Ownerquarantäne. Diagnostischer Tail
-206–307 tatsächlich beendet/stabil ROT49/102 am24.10.11:20:36.307UTC:
-test-content-graph.js verliert einen alten ausgewählten DOCX-Containerkettenfall
-ohne CT. Beide Befunde werden gemeinsam eng korrigiert; danach unabhängige
-Nachprüfung, eigener neuer Freeze und alle Endgates erforderlich.
-Gemeinsame Korrektur implementiert: AllCandidateOwners plus enge NoCT-
-Legacygrenze, moderne OPC-/Inhaltseintritte unverändert strikt. Main acht
-gezielte Suiten PASS/stabil,133chartEx/91Parser/18Graph darunter; beide finale
-tatsächliche Quellengegenreviews gelesen,22+6eigene begrenzte Gruppen PASS,
-kein bestätigter verbleibender Deltablocker. Kein neuer Freeze oder neuer
-Gesamt-/Native-/Mac-/Paketnachweis. KeinRC175Release/Tag/lokalerÜbergabeordner.
+Vier frische Source02-Endgates PASS/stabil:307+11Headless (Ende12:47:51.885UTC),
+300Rust/3ignored/Clippy/Node-Rust/Release, fünf native Konvertersuiten
+(38PDF/71Worker/55Office/43Grafik/21passivePDF), fünf Paketgates/100MD0Fehler.
+Mac40090612106 beideSUCCESS; je133chartEx/116Classic/58Math/55MathSource/
+20MathIntegration/21passivePDF,69Worker+2Windows-SKIPs/55Office/43Grafik,
+283Rust+3ignored. Zwei finale Produktionsquellenreviews sowie tatsächliche
+Windowsarchiv-, ganze ARM-/Intellog- und beide Macbytegegenreviews gelesen.
+Source01-RED, diagnostischer Tail-RED und eigene falsche Harnessproben bleiben
+erhalten. Enge AllCandidateOwners-/NoCT-Legacykorrektur ersetzt deren fehlenden
+Endnachweis erst durch diesen neuen vollständigen Freeze, nicht rückwirkend.
+
+[RC175-Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc175)
+Release422730420 am24.10.2026 12:55:05UTC veröffentlicht, PreRelease=true/
+Draft=false. Alle20Assets vor und nach Publikation frisch heruntergeladen und
+gehasht; IDs, Inventar, Tagquelle und Notesbody passend. Windows lokal create-only
+Software DataSecure/RC175 mit Testplan/Proofs/Prüfsummen/3Testarchiven.
+SourceSnapshot995Dateien/8936873Bytes/SHAe70f5548…91661.
+[Exakte Bindungen und Grenzen](../acceptance/RC175_SHARED_RELEASE_20261024.md).
+Desktoptests Nutzer, keine agentische UI, Mainintegration oder neue Appleautorität.
+Mac nur vorhandenes Adhoc-Sealing, keine Developer-ID/Notarisierung oder
+Schutzabschaltung. NativeEpoch/Pause/Lease/GUI dort NOT_RUN, ACL PARTIAL,
+LaunchServicesexit unbekannt, SmokeWriterjoin UNCONFIRMED/Extraktion erhalten;
+kein Finder/TCC/M2/Enterprise/VoiceOver/macOS26-/Office-PASS.
+
 Zusätzlicher beauftragter [Ziel-/Rendererreview](../acceptance/GOAL_COVERAGE_REVIEW_20261024.md)
-mit konkreten nächsten Inhaltsmodellen/Primärquellen, keine ungeprüften neuen
-Renderer oder Apple-/OSrechte. Desktoptests weiterhin Nutzer.
+mit Internet-/GitHub-Primärquellen, unabhängigem Office-Gapreview und Gegencheck
+des Main-PDF-/Grafikteils abgeschlossen. Priorität: PDFstruktur/Lesereihenfolge,
+häufige TIFFvarianten, Word-Feld-/Nummerierungs-/Kommentarmodelle und weitere
+Office-Vorkommensgeometrie. Größere Renderer nur separate Prototypen; keine neue
+ungeprüfte Runtime, Apple-/OSrechte oder Universalformatzusage. RC174 und alle
+älteren Pakete, Profile, Nutzerläufe und Belege bleiben unverändert.
 
 ## Technischer Abschluss RC174 – semantische Inhaltsmodelle
 

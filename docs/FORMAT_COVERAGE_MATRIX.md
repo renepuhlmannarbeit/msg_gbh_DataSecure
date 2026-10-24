@@ -1,7 +1,7 @@
 # Aktuelle Format-Coverage
 
-Arbeitsquelle: 3.2.0-rc175 chartEx in Entwicklung · 24.10.2026; RC174 veröffentlicht.
-Gemeinsamer App-/Tagcommit444b14e0020ebb8cf7f7de08fb36d6e71234da91.
+Arbeitsquelle: 3.2.0-rc175 chartEx veröffentlicht · 24.10.2026; RC174 unverändert.
+Gemeinsamer App-/Tagcommit223a04f54bc4fcfb2a95f12807685ed764ec6f0c.
 Windows und beide Macs technisch geprüft; Desktop-/Officeabnahme USER_PENDING.
 
 ## RC174 – begrenzte Ergänzungen BL-049.4 / BL-049.5
@@ -30,10 +30,17 @@ Feldkontexte bleiben im bestehenden Privacy-/Residual-/Keep-/Tracepfad; keine
 Formelberechnung, externen Workbookloads oder PDFaktions-/XFAausführung.
 [Aktueller RC174-Plan und Grenzen](acceptance/RC174_SHARED_RELEASE_20261023.md).
 
-chartEx wird in RC175 separat ergänzt: gespeicherte Daten-ID-/Dimension-/Level-/
+chartEx ist in RC175 separat ergänzt: gespeicherte Daten-ID-/Dimension-/Level-/
 Punktcaches und reale Ownerbezüge, keine Berechnung von Formeln/Statistiken oder
-Karten. Native Endgates/Pakete noch offen, Desktoptests USER_PENDING.
+Karten. Frische307+11Headless-/Windows-/beideMac-/Paketgates und tatsächliche
+Quellen-/Ganzlog-/Archivgegenreviews abgeschlossen; je133chartEx-Fälle,
+20Remoteassets vor/nach Veröffentlichung geprüft. Desktoptests USER_PENDING.
 [RC175-Plan und Grenzen](acceptance/RC175_SHARED_RELEASE_20261024.md).
+
+Zusätzlicher [Ziel-/Internet-/Rendererreview](acceptance/GOAL_COVERAGE_REVIEW_20261024.md)
+priorisiert PDF-Lesereihenfolge/Strukturbaum, weitere Scan-TIFFvarianten und
+Word-/Excel-/Office-Kontextmodelle. LibTIFF, PDFium, LibreOffice und Layoutmodelle
+sind Vergleichs-/Prototypkandidaten, keine neu freigegebenen RC175-Abhängigkeiten.
 
 Weitere offene Modelle: klassische Kommentarautoren/-bezüge, weitere
 Legacy-/Grafikcodecs und ggf. ein separat isolierter Office-Renderer. Keine universelle

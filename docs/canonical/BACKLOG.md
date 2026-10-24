@@ -1,6 +1,7 @@
 # Aktives Entwicklungsbacklog
 
-Arbeitsquelle: 3.2.0-rc175 chartEx in Entwicklung; RC174 bleibt veröffentlicht.
+Arbeitsquelle: 3.2.0-rc175 chartEx technisch abgeschlossen und veröffentlicht;
+Desktop-/Office-/Zielhostabnahme USER_PENDING. RC174/ältere Pakete unverändert.
 
 ## BL-049.6 – RC175 chartEx
 
@@ -8,9 +9,15 @@ Arbeitsquelle: 3.2.0-rc175 chartEx in Entwicklung; RC174 bleibt veröffentlicht.
 und beide Macs owner-/daten-ID-/indexgebunden ergänzen, Schutzprüfungen erhalten,
 unabhängig revalidieren/frisch testen, RC175 als GitHub-Test-Pre-Release und
 Windows lokal mit Testplan. Desktoptests Nutzer. [Plan und Primärquellen](../acceptance/RC175_SHARED_RELEASE_20261024.md).
-Eigener offlinefähiger semantischer Leser in Arbeit, keine Formelausführung,
+Eigener offlinefähiger semantischer Leser umgesetzt, keine Formelausführung,
 externen Workbook-/Geodatenloads oder Statistik-/Visualvollständigkeitszusage.
-Noch keine finale Paket-/Mac-/Releasefreigabe oder Mainintegration.
+Gemeinsamer App-/Tagcommit223a04f54bc4fcfb2a95f12807685ed764ec6f0c,
+FP5eaddabb…4bc3e/358. Source02 vollständig307+11/300Rust/5Konverter-/5Paketgates
+PASS/stabil; beideMac40090612106SUCCESS, je133chartEx-Fälle. Tatsächliche
+Produktquellen-, ganze Log- und Archivbytegegenreviews gelesen. Release422730420
+am24.10.12:55:05UTC,20Assets vor/nach Publikation frisch gehasht/Inventar/Tagquelle/
+Notesbody nachgelesen. Windows lokalRC175 mit Testplan/3Testarchiven. Desktoptests
+Nutzer, keine Mainintegration/neue Appleautorität oder Universalformatfreigabe.
 
 ### Zusatzauftrag 24.10. – Zielbezogener weiterer Inhalts-/Rendererreview
 
@@ -25,8 +32,14 @@ Der erste gemeinsame RC175-Endlauf ist bei test-parsers rot; ältere Mac-/
 Paketgrüns sind keine Gesamtfreigabe und dürfen nicht als neuer Finalstand gelten.
 Die enge Legacy-/Ownerquarantäne-Korrektur ist danach implementiert und von zwei
 tatsächlichen Quellengegenreviews ohne verbleibenden Deltablocker nachgeprüft.
-Frische gemeinsame Source02-Endgates/Archive bleiben vor Veröffentlichung nötig;
-die breiteren Zielreview-Empfehlungen sind getrennte Folgepakete, kein neuer Renderer.
+Frische gemeinsame Source02-Endgates/Archive inzwischen vollständig abgeschlossen
+und ausschließlich dieser neue Stand veröffentlicht. Die breiteren Zielreview-
+Empfehlungen bleiben getrennte Folgepakete, kein neuer RC175-Renderer:
+PDF-Strukturbaum/MCID/Lesereihenfolge, häufige TIFF-Codecs/Orientierungen,
+Word-Feldresultate/Nummerierung/Revisionsansicht, Kommentaranker, Excel-RichValues/
+Bild-in-Zelle/Pivotkontext und Office-Clipping/Rotation/Überlagerung. Größere
+LibTIFF-/PDFium-/LibreOffice-/Docling-/Markerpfade zuerst isoliert vergleichen,
+Lizenzen/Modelle/Prozessgrenzen und alle drei Zielarchitekturen tatsächlich belegen.
 
 ## BL-049.5 – RC174 Diagramme, OfficeMath und passive PDFwerte
 

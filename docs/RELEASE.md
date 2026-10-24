@@ -2,9 +2,44 @@
 
 Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc175 · Veröffentlichungsnachtrag: 24.10.2026
 
-Der aktuelle Quellstand ist RC175-Entwicklungsstand und noch kein neu gebundener Paketkandidat. Nachfolgende reine
-Dokumentation ändert dessen App-/Paket-/Tagbindung nicht. Menschliche Desktop-/
+Der aktuelle Quellstand ist der technisch geprüfte RC175-Test-Pre-Release. Nachfolgende reine
+Abschlussdokumentation ändert dessen App-/Paket-/Tagbindung nicht. Menschliche Desktop-/
 Office-/Zielhost- und N3/N4-Produktionsfreigaben bleiben offen.
+
+### RC175 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
+
+Quellcommit `223a04f54bc4fcfb2a95f12807685ed764ec6f0c` bindet den
+[RC175-Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc175).
+Build223a04f5, Produktfingerprint
+`5eaddabb199b075e9133d5561f5055989db952ae329269dbb3f9675a2cc4bc3e`/358.
+Unterstützte gespeicherte chartEx-Diagramme mit tatsächlichen Owner-/MIME-/Daten-ID-/
+Dimensions-/Punktbezügen. Keine Formelausführung, externen Workbook-/Geodatenloads,
+neue OSrechte oder pauschale Ressourcenlockerung. Vorhandene Schutzprüfungen bleiben.
+
+Vier frische Source02-Endgates PASS/stabil:307+11Headless,300Rust/3ignored/
+Clippy/Node-Rust/Release,38PDF/71Worker/55Office/43Grafik/21passivePDF,
+5Paketgates/100MD0Fehler. Beide Macconsumer40090612106SUCCESS, je38PDF/
+69Worker+2Windows-SKIPs/55Office/43Grafik/21passivePDF/283Rust+3ignored.
+Semantische Receipts je Target133chartEx/116Classic/58Math/55MathSource/20MathIntegration.
+Unabhängige tatsächliche Produktionsquellen-/Windowsarchiv-, ganze ARM-/Intellog-
+und beiderseitige Mac-Archivbytegegenreviews gelesen. Historische REDs erhalten.
+
+Release422730420, Publikationszeit24.10.2026 12:55:05UTC,
+PreRelease=true/Draft=false. Alle20Assets vor und nach Publikation frisch
+heruntergeladen/gehasht; dieselbenIDs, Inventar, Tagquelle/Commit und Notesbody
+bestätigt. Windows create-only lokal Software DataSecure/RC175 mit aktuellem
+Testplan/Proofs/Prüfsummen und3synthetischen Archiven. SourceSnapshot995Dateien/
+8936873Bytes/SHAe70f5548bc788f2f768d76b1641b5e3e0a566fa891863f7845fd4b4516791661.
+
+Desktop-/Office-/Finder/TCC/M2/Enterprise/VoiceOver/macOS26-Abnahme USER_PENDING,
+keine agentische UI oder Mainintegration. Mac nur bestehendes Adhoc-Sealing,
+keine Developer-ID/Notarisierung/Schutzabschaltung. NativeEpoch/Pause/Lease/GUI
+NOT_RUN, ACLadversarialPARTIAL, LaunchServicesexit unbekannt, SmokeWriterjoin
+UNCONFIRMED/Extraktion erhalten. Keine universelle Format-/Rendering-/Artefaktfreiheit.
+[Exakte Bindungen und Grenzen](acceptance/RC175_SHARED_RELEASE_20261024.md).
+Der zusätzliche [Ziel-/Rendererreview](acceptance/GOAL_COVERAGE_REVIEW_20261024.md)
+ist dokumentiert; weitere Inhaltsmodelle/Renderer sind getrennte Backlogpakete,
+keine still aufgenommenen Produktabhängigkeiten. Alle älteren Pakete bleiben.
 
 ### RC174 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
 
