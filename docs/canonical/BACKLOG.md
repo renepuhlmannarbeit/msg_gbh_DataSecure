@@ -1,9 +1,28 @@
 # Aktives Entwicklungsbacklog
 
-Arbeitsquelle: 3.2.0-rc176 Source04-Vorbereitung nach echtem Dateigegenvergleich;
+Arbeitsquelle: 3.2.0-rc176 Source05 in Arbeit nach echtem Desktop-Modusbefund;
 Desktop-/Office-/Zielhostabnahme USER_PENDING. RC175/ältere Pakete unverändert.
 
 ## BL-049.7 – RC176 priorisierte Inhalts-/Grafikverbesserungen
+
+25.10.: Source04 alle vier lokalen Gates und beide Macs technisch grün;
+nach Nutzerupdate funktioniert die vorgeschriebene Desktopsteuerung wieder.
+Echte Main-Proben Default/OCR/Vertagen/Neustarts/Zuordnungen und Mehrdateipause
+erreicht. Neuer bestätigter Releaseblocker: adoptRun überschreibt den Modus des
+neuen Entwurfs mit dem Zweck eines fortgesetzten Bestandslaufs, ohne dessen
+Radiobuttons zu ändern. Minimalfix: Modus nur durch bewusste Entwurfswahl ändern;
+Bestandslaufzweck getrennt behalten. Beide Richtungen samt tatsächlichem Start-DTO
+prüfen, neue gemeinsame Source05-Endgates/Pakete/Desktopbelege erforderlich.
+Keine Veröffentlichung aus Source04, keine alten Grüns als Widerlegung.
+Source05-Modusfix umgesetzt; acht tatsächliche Renderer-/Start-DTO-Gegenfälle
+kausal478/8ROT→486/0PASS, unabhängig gegengelesen. Reiner Pendinghinweis rät
+zunächst zum Warten; tatsächlicher36Dateien-Lauf war automatisch erfolgreich.
+Neue Endgates/Pakete/Desktopbelege vor Freigabe weiterhin offen.
+Separate Zeilenendenabweichung stammt nach tatsächlichem Eingabe-/Journalvergleich
+aus der ganzen Accessibility-SetValue-Testeingabe; altes FAIL bleibt erhalten,
+frische Tastaturprobe erforderlich. Kein unbelegter weiterer Produktfix.
+
+Historischer Vorbereitungsstand:
 
 24.10. später: Source03 technisch318+11/Native/Konverter/Paket/Macbeidegrün,
 aber vor Veröffentlichung zwei echte modernComment-Dateinamen mit uppercase

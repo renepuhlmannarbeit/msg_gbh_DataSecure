@@ -4497,6 +4497,9 @@ testAsync('incomplete delivery offers primary history navigation without an auto
   assert.equal(h.el('job-action-history').textContent, 'Bereitstellung im Verlauf prüfen');
   assert.equal(h.nodes.filter(node => node.isConnected && node.id === 'job-action-history').length, 1);
   assert.match(h.el('job-description').textContent, /noch nicht bestätigt/u);
+  assert.match(h.el('job-description').textContent, /Bitte zunächst warten\. Bleibt dieser Zustand bestehen,.*im Verlauf.*gespeicherten Stand prüfen/u);
+  assert.doesNotMatch(h.el('job-description').textContent,
+    /fehlende Ergebnisdateien.*bereitstellen lassen|Bereitstellung.*abgeschlossen|Worker.*aktiv/u);
   assert.doesNotMatch(h.el('job-description').textContent, /Zugriffsrechte/u);
   const before = h.calls.length; await h.act('job-action-history');
   assert.equal(h.el('history-view').hidden, false);
@@ -4547,6 +4550,71 @@ testAsync('a newly prepared unstarted selection survives History and New tab nav
   assert.equal(h.el(`source-${source.source_id}`).checked, false);
   assert.equal(h.el('selection-count').textContent, selection);
   assert.equal(h.el('text-ocr').checked, true);
+  assert.equal(h.calls.filter(call => call.command === 'cancel_admission').length, 0);
+});
+
+for (const adoption of ['history-resume', 'background'])
+for (const draft of [
+  { task: 'markdown-only', ocr: false, automatic: false, sourceNames: false, contactReview: false },
+  { task: 'markdown-only', ocr: true, automatic: false, sourceNames: false, contactReview: true },
+  { task: 'markdown-and-anonymize', ocr: false, automatic: false, sourceNames: false, contactReview: false },
+  { task: 'markdown-and-anonymize', ocr: true, automatic: true, sourceNames: true, contactReview: false }
+]) testAsync(`${adoption}: an opposite-purpose run cannot rewrite the visible ${draft.task} draft or its actual Start DTO, OCR=${draft.ocr}`, async () => {
+  const h = harness(); await tick(); await tick();
+  const anonymous = draft.task === 'markdown-and-anonymize';
+  const foreignTask = anonymous ? 'markdown-only' : 'markdown-and-anonymize';
+  h.el('mode-markdown').checked = !anonymous; h.el('mode-anonymize').checked = anonymous;
+  await h.act(anonymous ? 'mode-anonymize' : 'mode-markdown', 'change');
+  h.el('text-ocr').checked = draft.ocr; await h.act('text-ocr', 'change');
+  if (anonymous) {
+    h.el('manual-anonymize').checked = !draft.automatic; h.el('fast-anonymize').checked = draft.automatic;
+    await h.act(draft.automatic ? 'fast-anonymize' : 'manual-anonymize', 'change');
+    h.el('naming-neutral').checked = !draft.sourceNames; h.el('naming-source').checked = draft.sourceNames;
+    await h.act(draft.sourceNames ? 'naming-source' : 'naming-neutral', 'change');
+  }
+  h.el('ocr-review').checked = draft.contactReview;
+  const visibleDraft = () => Object.fromEntries([
+    ...['mode-markdown', 'mode-anonymize', 'text-ocr', 'ocr-review', 'manual-anonymize', 'fast-anonymize', 'naming-neutral', 'naming-source']
+      .map(name => [name + ':checked', h.el(name).checked]),
+    ...['ocr-option', 'ocr-option-help', 'text-ocr-options', 'output-naming', 'fast-anonymize-option']
+      .map(name => [name + ':hidden', h.el(name).hidden]),
+    ...['ocr-review', 'manual-anonymize', 'fast-anonymize', 'naming-neutral', 'naming-source']
+      .map(name => [name + ':disabled', h.el(name).disabled])
+  ]);
+  const chosenDraft = visibleDraft();
+  assert.equal(h.el('output-naming').hidden, !anonymous);
+  assert.equal(h.el('fast-anonymize-option').hidden, !anonymous);
+  assert.equal(h.el('ocr-option').hidden, anonymous);
+  assert.equal(h.calls.some(call => call.command === 'start_admitted_batch'), false);
+  if (adoption === 'history-resume') {
+    h.model.entries = [{ batch_id: B, processing_mode: foreignTask, selected_count: 1, result_count: 0,
+      failed_count: 0, resumable: true, status: 'stopped' }];
+    await h.act('nav-history'); await h.act(`history-${B}-continue`); await tick();
+  } else {
+    h.model.state = { state: 'processing', batch_id: B, processing_mode: foreignTask, selected_count: 1,
+      completed_count: 0, result_count: 0, failed_count: 0 };
+    await h.poll(); await tick();
+  }
+  const foreignPurposeLabel = h.el('job-task').textContent;
+  h.model.state = { ...h.model.state, state: 'stopped' };
+  await h.poll(); await h.act('nav-new');
+  const returnedDraft = visibleDraft();
+  assert.equal(h.el('new-view').hidden, false); assert.equal(h.el('setup').hidden, false);
+  await h.act('select-folder'); await h.act('start');
+  const starts = h.calls.filter(call => call.command === 'start_admitted_batch');
+  assert.equal(starts.length, 1, 'one conscious start, not a replay of the foreign run');
+  const args = JSON.parse(JSON.stringify(starts[0].args));
+  assert.equal(args.processingMode, draft.task, 'the actual IPC purpose must match the retained checked radio');
+  assert.deepEqual(returnedDraft, chosenDraft, 'run adoption cannot silently change checked controls or draft option visibility');
+  assert.equal(foreignPurposeLabel, foreignTask === 'markdown-only' ? 'Nur umwandeln' : 'Umwandeln und anonymisieren',
+    'the existing run still displays its own purpose, independent of the new draft');
+  assert.deepEqual(args.sourceIds, [id(1), id(2), id(3)]); assert.equal(args.catalogueRevision, 1);
+  assert.deepEqual(args.contentOptions, { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1',
+    scanOcr: draft.ocr, imageOcr: draft.ocr });
+  assert.equal(args.outputNamingMode, anonymous ? draft.sourceNames ? 'source-with-suffix' : 'neutral' : undefined);
+  assert.equal(args.reviewPolicy, anonymous && draft.automatic ? 'automatic-conservative' : undefined);
+  assert.equal(args.ocrContactReview, !anonymous && draft.ocr && draft.contactReview ? true : undefined);
+  assert.equal(h.calls.filter(call => call.command === 'continue_history_batch').length, adoption === 'history-resume' ? 1 : 0);
   assert.equal(h.calls.filter(call => call.command === 'cancel_admission').length, 0);
 });
 

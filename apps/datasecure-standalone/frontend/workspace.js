@@ -865,7 +865,9 @@
   }
   function adoptRun(run) {
     invalidateHistoryCount();
-    job = run; mode = run.task;
+    // Existing runs own their purpose through job.task; they must not rewrite
+    // the new-processing draft's explicitly selected radio mode.
+    job = run;
     announcedTerminalPhases.clear();
     lastJobAnnouncement = ''; lastJobAnnouncementTerminal = false; $('job-announcement').textContent = '';
     $('setup').hidden = true; $('job').hidden = false;
@@ -1179,7 +1181,7 @@
       : state.state === 'results_available' ? `${count(state.result_count)} ${rawResults ? 'Markdown-Ergebnisse (nicht anonymisiert)' : anonymousResults ? 'technisch geprüfte anonymisierte Ergebnisse' : 'Ergebnisse mit unbestätigtem Verarbeitungszweck'} verfügbar.${failed && reviewProjection?.not_processed_count !== failed ? ` ${failed} Datei${failed === 1 ? '' : 'en'} mit Problemen.` : ''}`
       : state.state === 'stopped' ? 'Der lokale Zwischenstand ist gespeichert. Fortsetzen verarbeitet nur noch offene Schritte.'
       : state.state === 'paused' ? 'Der Lauf ist pausiert. Fortsetzen verarbeitet nur offene Dateien. Die privaten Arbeitskopien unterliegen weiterhin der eingestellten Aufbewahrung.'
-      : state.state === 'export_pending' ? 'Die sichtbare Bereitstellung der Ergebnisse ist noch nicht bestätigt. Im Verlauf kannst du den gespeicherten Stand prüfen und fehlende Ergebnisdateien ausdrücklich bereitstellen lassen. Dabei wird kein Export erstellt; bereits vorhandene Dateien bleiben erhalten.'
+      : state.state === 'export_pending' ? 'Die sichtbare Bereitstellung der Ergebnisse ist noch nicht bestätigt. Bitte zunächst warten. Bleibt dieser Zustand bestehen, kannst du im Verlauf den gespeicherten Stand prüfen. Dabei wird kein Export erstellt; bereits vorhandene Dateien bleiben erhalten.'
       : state.state === 'export_abandoned' ? 'Die automatische Bereitstellung wurde für diesen Lauf aufgegeben. Teilkopien bleiben unverändert; es gibt keine vollständige Ergebnisfreigabe.'
       : 'Der aktuelle Status bleibt diesem Lauf zugeordnet.');
     if (!resultBlocked && completedAnonymous && reviewProjection) $('job-description').textContent += ' ' + reviewProjection.next;

@@ -1,9 +1,49 @@
 # Aktueller Iststand
 
-Stand: 24.10.2026 · 3.2.0-rc176 · Source03 technisch grün; echte Kommentar-Namenslücke gefunden, Source04-Nachweis noch offen.
+Stand: 25.10.2026 · 3.2.0-rc176 · Source04 technisch grün; echter Desktop-Modusfehler blockiert Veröffentlichung, Source05 in Arbeit.
 Desktop-/Office-/physischeMac-Abnahme weiterhin USER_PENDING.
 
-## RC176 – Source04 nach echtem schwierigen Dateivergleich
+## RC176 – tatsächliche Desktoptests nach wiederhergestellter Steuerung
+
+Source04-App b3e7997c9257a2b6f68203e93162a42ac8901ed0 / Produktfingerprint
+ad1cf80465b8045f0090f702fd6e768b21ccdb36def32d388a6d52de3a0eb59f:
+vier lokale Endgates und beide Mac40133457284 erfolgreich, Inputs unverändert.
+Der ursprüngliche Headlessversuch blieb ohne Abschluss-/Exitbeleg erhalten;
+separater vollständiger318+11-Versuch endete24.10.22:29:47.680UTC mit Exit0.
+Native300Rust/3ignoriert, acht Konvertersuiten und5Paketgates/100MD0Fehler
+sowie tatsächliche Mac-Logs/ZIP-/DMGbytes unabhängig gegengeprüft. Kein Release.
+
+Nach Nutzer-Appupdate funktioniert der vorgeschriebene Computer-Use-Skill.
+Main führt echte Windows-Tests auf einem neuen isolierten synthetischen Profil
+aus: fehlender Defaultordner ohne erneute Auswahl, OCR-Vertagen mit311Sekunden
+Denkpause, zwei normale Neustarts, ungespeicherte Auswahl verworfen/gespeicherte
+OCR erhalten, Zielwechsel und1MD+3vertrauliche Zuordnungen tatsächlich geprüft.
+Ein36Dateien-Automatiklauf wurde pausiert, ein anderer Markdownlauf abgeschlossen
+und der alte Lauf unter derselben Kennung fortgesetzt. Keine19Fall-Gesamtabnahme.
+
+Dabei neuer bestätigter Fehler: adoptRun übernimmt den Bestandslaufzweck in die
+Modusvariable des neuen Entwurfs. Die sichtbaren Radiobuttons bleiben unverändert;
+ein späterer Start könnte dadurch einen anderen Modus übertragen als ausgewählt.
+Produktcode und tatsächliche GUI wurden unabhängig gegengelesen. Source04 bleibt
+trotz technischer Grüns gesperrt. Minimalfix trennt Bestandslaufübernahme und
+Entwurfsmodus; Gegenfälle in beiden Richtungen, neue gemeinsame Pakete/Endgates
+und gebundene Desktopproben folgen als Source05. Alte Belege bleiben unverändert.
+
+Source05-Modusfix plus rein erklärender Pendingtext fertig: acht kausale
+Renderer-/Start-DTO-Gegenfälle vorher478/8ROT, nachher486/0, unabhängiges
+Modusgegenlesen ohne bestätigten Blocker. Main kombinierte486/0 erneutPASS.
+Der36Dateien-Lauf publizierte selbst vor dem späteren Statusabruf;39Dateien
+hashgebunden vollständig, kein bestätigter Publikationsfehler. Pendingtext rät
+zunächst zum Warten, ohne neuen Status/Retry/Schutzdelta. Frische technische
+und native Desktopbelege auf neuem Source05-Commit nötig, kein alter Paketpass.
+
+Eine gesonderte Wortkorrekturprobe änderte auch Zeilenenden/Endleerraum. Die
+tatsächliche ganze Accessibility-SetValue-Eingabe hatte diese Zeichen bereits
+verloren; privater Journalbereich erklärt die Ausgabe exakt. Ursprüngliches
+Artefaktorakel bleibt FAIL, kein bewiesener Produktverlust daraus. Frische echte
+Tastatur-Wortprobe noch offen. Menschliche Windows-/Mac-/Officeabnahme bleibt offen.
+
+## Historischer Source04-Vorbereitungsstand nach schwierigem Dateivergleich
 
 Source03-Appcommit0cd07ffb54d59863bcf23f1f852c372781143673 hatte alle vier
 lokalen Endgates sowie beide Mac40124421536SUCCESS. Der zuerst rote Headless-

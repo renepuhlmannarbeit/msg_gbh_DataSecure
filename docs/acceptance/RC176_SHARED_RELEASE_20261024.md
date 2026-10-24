@@ -682,3 +682,86 @@ keine Docs-Overlay-Brücke für den neuen gemeinsamen Commit. Main197Bindungs-
 checks, synthetische geschlossene Proofnegativen und16HelfersyntaxchecksPASS.
 Neue Gesamt-/Native-/Konverter-/Paket-/Macläufe und tatsächliche Paketgegen-
 prüfungen bleiben erforderlich; alle Source03Proofs bleiben historisch erhalten.
+
+## Source04 technisch vollständig; tatsächlicher Desktopbefund vor Source05
+
+Source04-App b3e7997c9257a2b6f68203e93162a42ac8901ed0 und oben genannter FP
+erhielten alle vier tatsächlichen lokalen Endgates, Inputs unverändert. Native
+300Rust/3ignoriert/5Schritte21:20:55.273UTC, acht Konvertersuiten21:23:15.136,
+Paket5Gates/100MD0Fehler21:24:53.409. Originalheadless67624 nach Appunterbrechung
+ohne FINAL/Exitbeleg; Teillog unverändert erhalten, keine Updatekausalität bewiesen.
+Frischer bytegleich getriebener vollständiger318+11-Versuch25647 endete
+24.10.22:29:47.680UTC Exit0/stabil, separate Attempt02-Receipt und Originalbelege.
+Beide Mac40133457284 exaktb3eSUCCESS; tatsächliche komplette Logs und Archive
+unabhängig gegengeprüft, Main las beide Berichte. Keine physische Mac-Abnahme.
+
+Nach Nutzerupdate geht der vorgeschriebene Computer-Use-Skill wieder. Nur Main
+bedient eigene lokal gebaute Source04-Bytes, neues isoliertes Profil und89gehashte
+synthetische Eingaben. Defaultordner selbst angelegt/2MD+Scan-Auslassung;
+OCR-Prüfung311Sekunden Denkpause, Vertagen/zwei normale Neustarts, ungespeicherte
+Vormerkung verworfen und gespeicherte OCR erhalten; neues Ziel, gleiche Lauf-ID,
+1anonymisierteMD+Dateizuordnung.csv/Pseudonym-Zuordnung.txt/.xlsx tatsächlich
+vorhanden und über Explorer geöffnet. TXT/Erstblatt-Zuordnungen passen; keine
+Excel-/Numbers-Darstellungsabnahme. Alle89Originale bytegleich. Diese Belege sind
+fallbezogen, keine19Fall-Gesamtabnahme und kein nativer Mac-PASS.
+
+Mehrdateiprobe36Auto/OCRan: Pause→wirklich Pausiert/1abgeschlossen→NeueVerarbeitung
+leer→andererMarkdownlauf ohneBUSY abgeschlossen→alten Lauf unter exakt gleicher
+Lauf-ID fortgesetzt. Beim anschließenden Wechsel zum neuen Entwurf tatsächlicher
+Defekt: Nurumwandeln sichtbar ausgewählt, intern jedoch Anonymisierung aktiv.
+Unabhängiger Produktionsquellenreview bestätigt workspace.js/adoptRun:
+job=run;mode=run.task überschreibt den Entwurfsmodus, während Radios unverändert
+bleiben. updateStart und start-DТО verwenden denselben überschriebenen Wert.
+Die umgekehrte Datenschutzrichtung ist aus Code möglich, nicht tatsächlich
+gestartet. Native gültige DTO-Prüfung kennt die abweichende sichtbare Wahl nicht.
+
+Source04 wird deshalb trotz aller technischen Grüns NICHT veröffentlicht.
+Nach nachgewiesenem Ende aller Freezejobs wird ausschließlich diese Vermischung
+eng korrigiert: Bestandslauf über job.task/state.processing_mode beschreiben,
+Entwurfsmodus nur aus bewusster neuer Wahl. Beide Richtungen/Optionen/Start-DТО
+kausal gegenprüfen, unabhängig revalidieren und Source05 mit neuem gemeinsamen
+Commit/Fingerprint/frischen lokalen+Mac-Gates und Desktopproben binden.
+Keine alten FINALs, Archive oder GUI-Beobachtungen umetikettieren.
+
+Gesonderte GUI04-Accessibilityprobe: Main ersetzte das ganze rechte Textfeld aus
+accessibility.document_text; dieser String hatte bereits Endleerraum verloren.
+Das ursprüngliche Artefaktorakel meldet korrekt mehr als nur Wortänderung (FAIL).
+Neuer read-only Eingabe-/Privatjournalvergleich erklärt den gespeicherten Bereich
+und Ausgabebytes exakt aus dieser Eingabe, ohne bestätigten Produktverlust.
+Kein rotes Orakel überschrieben. Neue echte Tastatur-Wortprobe mit vollständig
+erhaltenem Feldinhalt nötig; kein pauschales Zeilenenden-/GUI-PASS daraus.
+
+## Source05: enger Modusfix und verständlicher Zwischenstatus
+
+Der36Dateien-Lauf stellte automatisch36MD und3vertrauliche Beilagen bereit.
+Die tatsächliche Pendingaufnahme22:35:04.451UTC lag vor dem vollständigen
+Publikationsplan22:35:24.473 und erfolgreichem Terminal/Workerende22:35:24.853/
+24.923. Der manuelle Statusabruf war erst22:36:17.577. Alle39öffentlichen
+Dateihashes passen zu ihren privaten Bindungen, alle89Goldeninputs unverändert.
+Kein belegter Publikations-/36Dateien-/Residualfehler; der spätere separate
+LOCAL_NOTICE_FAILED bleibt ursächlich ungeklärt. Das vor Publikationsbindung
+bewusst geänderte Ziel wurde verwendet, kein bestehender Plan umgebunden.
+
+Minimaler Produktdelta: adoptRun setzt nur job, nicht mehr den Entwurfsmodus.
+Acht kausale tatsächliche Renderer-/Start-DTO-Gegenfälle über History und
+Background in beiden Richtungen: alter Code478PASS/8FAIL, Fix486/486PASS.
+Separater Dokument-Renderer294/294PASS am Modusfix. Unabhängiger tatsächlicher
+Quellenreview ohne bestätigten Modus-Deltablocker, Grenzen synthetischer IPC
+ausgewiesen. Zusätzlich nur ein export_pending-Text: zunächst warten, erst bei
+anhaltendem Zustand gespeicherten Stand im Verlauf prüfen. Kein neuer Status,
+Retry, Timeout, DTO oder Schutz-/Publikationsdelta. Verschärfte bestehende
+Copyprobe vorher485/1ROT, nachher486/0; Main kombinierte486/0 erneut ausgeführt.
+Copy separat unabhängig gegengelesen, kein bestätigter Deltablocker; Main las
+den Bericht vollständig. Frische Endgates/Desktopprüfung weiterhin erforderlich.
+
+Finale uncommittete Produkt-/Testpins858ccb035e6a464b7cf958b37a33604a205dcf2ddd6c41a2e7f4927b19f42f69/
+c17e13b10db887431ad30af8a6de6a86c9a1bebede17046ba78483ce66907dcd.
+Neuer FP0e7918832ec2a016874edb2505d20ccf34f4f81d79723a4bd2b81280d905ea34/368,
+621Test-/Scriptinputs/ed01a9ce538c9e2fbc06ade47c38ebaf1a46e752141569b9137c1a631b0a01f4.
+Neue Source05-Helfer create-only, tatsächliche211Quellbindungen und geschlossene
+RAM-Proofnegativen PASS; keine alte FINAL-/Attempt02-Brücke übernommen.
+Main las die wörtlichen Änderungen einschließlich neuer GUI-Kampagnen-/Neustart-
+Bindungen; einmal falsch geratener Prepdateiname im Lesediff ohne Mutation,
+tatsächlicher prepare-gui-campaign-v2.mjs danach vollständig gegengelesen.
+Source04-App normal geschlossen, eigenes Rootprozessinventar0; Profil erhalten.
+Source05 noch kein Freeze/Paket/GUI/Release. Menschliche Zielhostabnahme offen.
