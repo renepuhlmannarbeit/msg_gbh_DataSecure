@@ -13,7 +13,7 @@ PDFstruktur/MCID/volle Itembindung und reale Tabellenbesitzer; TIFFLZW/CCITT/
 Orientierungen; Word gespeicherte Feldresultate/explizite Revisionsansicht/
 Nummerierung/Kommentaranker; Excel Kommentare/TablePart/Pivot/RichValue;
 Officegrafiken nur geschlossene nachgewiesene Teilmengen. Kein blanket catch,
-keine Erfindung fehlender Werte oder Quell-/Privacy-/Ressourcenlockerung.
+keine Erfindung fehlender Werte oder unbegründete pauschale Quell-/Privacy-/Ressourcenlockerung.
 EMF+-DrawString wegen belegter ignorierter LayoutRect-Semantik vorerst explizit
 nicht unterstützt; andere Formen und plainGDItext separat. Größere Renderer
 bleiben isolierte Folgeprototypen; keine unbewiesene Aufnahme in den MacCore.
@@ -25,6 +25,28 @@ Konkrete neue Befunde kausal schließen. Nach ausdrücklicher Nutzerpräzisierun
 dürfen auch Schutzprüfungen/Tests geändert oder ersetzt werden, wenn dies den
 Zielen dient; Nutzen, Sicherheits-/Vollständigkeitsfolgen und Gegenproben
 belegen, keine bloße Grünfärbung oder starre Bewahrung veralteter Regeln.
+
+Source02-Endregression116/318ROT an unvollständiger künstlicher Builder-
+Importkopie. Genau TIFF+CCITT in Testfixture ergänzt,7gezielte GruppenPASS;
+Produkt-/Assertion-/Timeoutbytes dafür unverändert. Unabhängig gegengelesen.
+Restdiagnostik findet zusätzlich echte Word-Supportlücke: freistehendes
+instrText wird im neuen Inhaltsmodell unnötig hart verweigert, obwohl die
+[normative FieldCode-Semantik](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.fieldcode?view=openxml-3.0.1)
+regulären Text verlangt. Source03 soll diese Ablehnung eng durch normale
+Textübernahme mit echtem Absatz-/Feld-/UTF16-/Privacy-/Trace-/Keepbezug ersetzen.
+Echte Feldcodephasen bleiben unausgeführt/verborgen; keine pauschale Freigabe
+von gelöschtem Feldcode oder unbewiesener Feld-/Owner-Reparatur. Defekte alte
+Kommentar-Positivfixture getrennt korrigieren; ursprünglichen Literalfall nicht
+aus dem Test entfernen. Neue gemeinsame Endgates/Pakete/Macs erst danach;
+noch kein Source03-Freeze oder RC176-Release. Desktoptests Nutzer.
+Die enge instrText-/Run-/CT_Text-Korrektur und ein zusätzlicher tatsächlicher
+content-v1-GFM-Blockgrenzenfix sind inzwischen implementiert und unabhängig
+am finalen Produktionscode gegengelesen. Vorheriger kombinierter Tabellenfall
+hatte einen sicheren RESIDUAL_PII-Stopp, keinen bestätigten Publicationleak.
+Exakte Original-ZIPs jetzt positive vollständige Privacy-/Trace-/Keepketten;
+notes/direct getrennt. Ein separater tatsächlicher Testmodell-Gegenreview
+bestätigt die begründeten geänderten Annahmen/erhaltenen Negativen. Neue native
+und gemeinsame Endgates bleiben erforderlich; kein Endnachweis aus Vorproben.
 
 ### Konkrete Folgegrenze: XLSX-TablePart-Felder im Legacy-Notespfad
 

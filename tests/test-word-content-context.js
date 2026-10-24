@@ -46,6 +46,46 @@ test('nested complex instruction/results never expose a nested instruction resul
   const r=story(`<w:p>${char('begin')}${code('IF ')}${field('HIDDEN_NESTED_CODE_RESULT')}${code(' rest')}${char('separate')}${run('Saved ')}${field('visible nested')}${char('end')}${run(' tail')}</w:p>`);
   assert.equal(r.text,'Saved visible nested tail');assert.equal(r.report.fieldCount,3);
 });
+
+test('instrText outside a complex instruction region is ordinary source, not a field or an instruction notice',()=>{
+  const r=story(`<w:p>${run('Before ')}${code('Name: Qvx / Qvy')}${run(' After')}</w:p>`);
+  assert.equal(r.text,'Before Name: Qvx / Qvy After');assert.equal(r.report.fieldCount,0);
+  assert.deepEqual(r.report.notices,[]);assert.equal(r.report.complete,true);
+});
+test('regular instruction-looking source is literal regardless of command, file or URL spelling',()=>{
+  for(const value of ['DDE AUTO server topic','INCLUDETEXT file:///NEVER_READ','INCLUDEPICTURE https://example.invalid/NEVER_FETCH','MACROBUTTON NEVER_RUN']) {
+    assert.equal(story(`<w:p>${code(value)}</w:p>`).text,value);
+  }
+});
+test('instrText in complex or simple saved results retains current source values without exposing attribute instructions',()=>{
+  const r=story(`<w:p>${char('begin')}${code('HIDDEN_CODE')}${char('separate')}${code('Name: Qvx')}${char('end')}${run(' / ')}<w:fldSimple w:instr="NEVER_EXECUTE">${code('Qvy')}</w:fldSimple></w:p>`);
+  assert.equal(r.text,'Name: Qvx / Qvy');assert.equal(r.report.fieldCount,2);
+  assert.deepEqual(r.report.notices,['WORD_FIELD_STORED_RESULT']);
+});
+test('an outer instruction still hides nested complex results and simple-field payloads named instrText',()=>{
+  const r=story(`<w:p>${char('begin')}${code('IF ')}<w:fldSimple w:instr="X">${code('HIDDEN_SIMPLE')}</w:fldSimple>${char('begin')}${code('INNER_CODE')}${char('separate')}${code('HIDDEN_RESULT')}${char('end')}${char('separate')}${code('VISIBLE_RESULT')}${char('end')}${code(' VISIBLE_PROSE')}</w:p>`);
+  assert.equal(r.text,'VISIBLE_RESULT VISIBLE_PROSE');assert.equal(r.report.fieldCount,3);
+});
+test('ordinary instrText keeps Unicode, CDATA and exactly-once entity decoding in both authentic Word namespaces',()=>{
+  for(const ns of [W,S]) {
+    const r=story('<w:p><w:r><w:instrText xml:space="preserve"> ÄÖÜß 😀 &#x1F642; &amp;amp; <![CDATA[<literal> &unknown;]]> </w:instrText></w:r></w:p>',{ns});
+    assert.equal(r.text,' ÄÖÜß 😀 🙂 &amp; <literal> &unknown; ');
+  }
+});
+test('instrText has a real run parent and no nested text-leaf child can create another field or owner',()=>{
+  for(const body of ['<w:p><w:instrText>WRONG_PARENT</w:instrText></w:p>',
+    '<w:p><w:r><w:t><w:instrText>NESTED</w:instrText></w:t></w:r></w:p>',
+    '<w:p><w:r><w:instrText><w:t>NESTED</w:t></w:instrText></w:r></w:p>',
+    `<w:p>${char('begin')}<w:r><w:instrText>${char('separate')}</w:instrText></w:r>${char('end')}</w:p>`])badStory(body);
+});
+test('literal code-text follows the selected revision view but does not broaden deleted-code admission',()=>{
+  const b=`<w:p><w:ins>${code('NEW')}</w:ins><w:moveTo>${code('TARGET')}</w:moveTo><w:moveFrom>${code('OLDMOVE')}</w:moveFrom><w:del><w:r><w:delInstrText>OLD_DELETED_CODE</w:delInstrText></w:r></w:del></w:p>`;
+  assert.equal(story(b).text,'NEWTARGET');
+  assert.equal(story(`<w:p><w:moveFrom>${code('OLDMOVE')}</w:moveFrom><w:ins>${code('NEW')}</w:ins></w:p>`,{view:'original'}).text,'OLDMOVE');
+  assert.throws(()=>story('<w:p><w:del><w:r><w:delInstrText>OLD</w:delInstrText></w:r></w:del></w:p>',{view:'original'}),e=>e.code==='DOCX_STRUCTURE_UNSAFE');
+  assert.throws(()=>story(`<w:p><w:del>${code('NONCONFORMANT')}</w:del></w:p>`,{view:'original'}),e=>e.code==='DOCX_STRUCTURE_UNSAFE');
+  assert.equal(story(`<w:p><w:pPr><w:rPrChange><w:r>${code('OLD_PROPERTY')}</w:r></w:rPrChange></w:pPr>${code('CURRENT')}</w:p>`).text,'CURRENT');
+});
 test('a complex field without separator has no stored result; subsequent real prose remains visible',()=>{
   const r=story(`<w:p>${char('begin')}${code('DATE')}${run('NOT_A_RESULT')}${char('end')}${run('REAL')}</w:p>`);
   assert.equal(r.text,'REAL');

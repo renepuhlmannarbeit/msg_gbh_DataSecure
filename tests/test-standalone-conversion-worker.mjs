@@ -146,6 +146,24 @@ try {
     assert.ok(!out.markdown.includes('REMOVED\\_REVISION\\_SENTINEL'),'selected final view must not retain the escaped deleted source sentinel');
     assert.ok(out.markdown.includes('ECHTE\\_LISTENZEILE'));assert.ok(out.markdown.includes('| 3\\. |'));assert.equal(hash(source),before);
   });
+  await test('actual isolated worker retains literal Word instrText but never evaluates actual hidden field instructions',async()=>{
+    const W='http://schemas.openxmlformats.org/wordprocessingml/2006/main';
+    const source=zipStore([...opcControlEntries('docx'),['word/document.xml',`<w:document xmlns:w="${W}"><w:body>`+
+      '<w:p><w:r><w:instrText>LITERALINSTR ÄÖÜß😀 &amp;amp;</w:instrText></w:r></w:p>'+
+      '<w:p><w:r><w:t>Name: </w:t><w:instrText>Qiv / Qiw</w:instrText></w:r></w:p>'+
+      '<w:p><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText>DDE AUTO UNEXECUTEDNATIVE</w:instrText></w:r>'+
+      '<w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:instrText>SAVEDRESULT</w:instrText></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>'+
+      '<w:p><w:r><w:t>Protokoll: HTTP/2 FHIR REST HL7</w:t></w:r></w:p></w:body></w:document>']]),before=hash(source);
+    const contentOptions={schema:'datasecure-content-options/1',markdownOutput:'content-v1',scanOcr:false,imageOcr:false};
+    const out=await convertBuffer(source,'.docx',{contentOptions});
+    for(const value of ['LITERALINSTR ÄÖÜß😀','Name: Qiv / Qiw','SAVEDRESULT','Protokoll: HTTP/2 FHIR REST HL7'])assert.equal(out.markdown.split(value).length-1,1,value);
+    assert.ok(out.markdown.includes('&amp;amp;'));assert.doesNotMatch(out.markdown,/DDE AUTO|UNEXECUTEDNATIVE/u);
+    for(const profile of ['general','personnel_profile']){
+      const protectedText=anonymizeMarkdown(out.markdown,profile,{productChannel:'standalone',contentOptions,deferPersonReview:true});
+      assert.doesNotMatch(protectedText.text,/Qiv|Qiw/u);assert.match(protectedText.text,/Protokoll: HTTP\/2 FHIR REST HL7/u);
+    }
+    assert.equal(hash(source),before);
+  });
   await test('actual isolated worker imports source-bound modern PowerPoint comments and distinct in-cell Excel images',async()=>{
     const {presentationComments}=require('./lib/rc176-office-context.cjs'),ppt=presentationComments(),pptHash=hash(ppt);
     const choices={schema:'datasecure-content-options/1',markdownOutput:'content-v1',scanOcr:false,imageOcr:false};

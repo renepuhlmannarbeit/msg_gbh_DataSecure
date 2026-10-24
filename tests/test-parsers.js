@@ -285,14 +285,21 @@ test('DOCX lexical validation includes secondary stories and skipped Word region
   ];
   const paragraph = value => `<w:p><w:r><w:t>${value}</w:t></w:r></w:p>`;
   const story = (name, root, value) => docx(['MAIN'], [
-    [`word/${name}.xml`, `<w:${root} xmlns:w="${W}">${paragraph(value)}</w:${root}>`],
+    [`word/${name}.xml`, `<w:${root} xmlns:w="${W}">${root === 'comments'
+      ? `<w:comment w:id="0" w:author="Lexical Author">${paragraph(value)}</w:comment>`
+      : root === 'footnotes' || root === 'endnotes'
+        ? `<w:${root === 'footnotes' ? 'footnote' : 'endnote'} w:id="1">${paragraph(value)}</w:${root === 'footnotes' ? 'footnote' : 'endnote'}>`
+        : paragraph(value)}</w:${root}>`],
     ['word/_rels/document.xml.rels', '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">' +
       `<Relationship Id="story" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/${root === 'hdr' ? 'header' : root === 'ftr' ? 'footer' : root}" Target="${name}.xml"/></Relationships>`]
   ]);
+  const literalInstruction = value => reviewDocx(`<w:p><w:r><w:instrText>${value}</w:instrText><w:t>VISIBLE</w:t></w:r></w:p>`);
+  const hiddenInstruction = value => reviewDocx(`<w:p><w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText>${value}</w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r><w:t>VISIBLE</w:t></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>`);
   const containers = [
     ...[['header1', 'hdr'], ['footer1', 'ftr'], ['comments', 'comments'], ['footnotes', 'footnotes'], ['endnotes', 'endnotes']]
       .map(([name, root]) => value => story(name, root, value)),
-    value => reviewDocx(`<w:p><w:r><w:instrText>${value}</w:instrText><w:t>VISIBLE</w:t></w:r></w:p>`),
+    literalInstruction,
+    hiddenInstruction,
     value => reviewDocx(`<mc:AlternateContent xmlns:mc="${MC}"><mc:Choice Requires="vendor">${paragraph(value)}</mc:Choice><mc:Fallback>${paragraph('VISIBLE')}</mc:Fallback></mc:AlternateContent>`)
   ];
   for (const container of containers) {
@@ -300,6 +307,11 @@ test('DOCX lexical validation includes secondary stories and skipped Word region
       for (const extract of entrances) assert.deepEqual(extract(container(`A${token}B`)), extract(container('AB')));
     for (const token of ['<!--bad--->', '<!--bad--inside-->', '<??>', '<?xml version="1.0"?>'])
       for (const extract of entrances) assert.throws(() => extract(container(`A${token}B`)), { code: 'DOCX_STRUCTURE_UNSAFE' });
+  }
+  for (const extract of entrances) {
+    assert.match(extract(literalInstruction('AB')).markdown, /ABVISIBLE/u, 'standalone instrText is visible source, not equally discarded text');
+    const hidden = extract(hiddenInstruction('SECRETLEXICAL')).markdown;
+    assert.match(hidden, /VISIBLE/u); assert.doesNotMatch(hidden, /SECRETLEXICAL/u);
   }
   for (const token of ['<!--bad--->', '<??>', '<?xml version="1.0"?>']) {
     const bytes = story('header1', 'hdr', `A${token}B`);

@@ -310,6 +310,7 @@ function createWordStoryContext(options) {
     if((node.parent||null)!==(stack.at(-1)||null))throw failure();
     if(!root){if(!W.has(node.namespaceURI)||!['document','body','hdr','ftr','footnotes','endnotes','comment','comments'].includes(node.localName))throw failure();root=node;}
     const parent=states.get(node.parent), state={structural:parent?parent.structural:true,metadata:parent?parent.metadata:false};
+    if(parent?.structural&&['t','instrText','delInstrText'].some(name=>is(node.parent,name)))throw failure();
     // Story input is the already-selected actual Word walker. Passing raw MC
     // alternatives would mix views, so refuse rather than guess another branch.
     if(node.namespaceURI===MC)throw failure();
@@ -325,9 +326,17 @@ function createWordStoryContext(options) {
         revisionCount++;notices.add(config.revisionView==='final'?'WORD_REVISION_FINAL_VIEW':'WORD_REVISION_ORIGINAL_VIEW');
         const keep=config.revisionView==='final'?['ins','moveTo']:['del','moveFrom'];state.structural&&=keep.includes(name);
       }
-      if(state.structural&&!state.metadata&&['instrText','delInstrText'].includes(name)&&
+      if(state.structural&&!state.metadata&&name==='instrText') {
+        // ISO 29500: outside a complex field's code region instrText is
+        // regular source text, not an executable field. An outer instruction
+        // still hides an inner result; a simple field's instr attribute never
+        // becomes text. Do not clear inherited metadata/revision exclusion.
+        if(!is(logicalParent(node),'r')||stack.some(value=>is(value,'del')))throw failure();
+        if(fields.some(field=>field.phase==='instruction'))state.metadata=true;
+      }
+      if(state.structural&&!state.metadata&&name==='delInstrText'&&
           !fields.some(field=>field.phase==='instruction'))throw failure();
-      if(['instrText','delInstrText','fldData','ffData'].includes(name))state.metadata=true;
+      if(['delInstrText','fldData','ffData'].includes(name))state.metadata=true;
     }
     states.set(node,state);stack.push(node);
     if(state.structural&&!state.metadata&&is(node,'fldSimple')) {
@@ -357,7 +366,7 @@ function createWordStoryContext(options) {
   }
   function textAllowed(node) {
     if(!visible(node)||!is(logicalParent(node),'r'))return false;
-    if(is(node,'t'))return true;
+    if(is(node,'t')||is(node,'instrText'))return true;
     return is(node,'delText')&&config.revisionView==='original'&&stack.some(n=>is(n,'del')||is(n,'moveFrom'));
   }
   function projectionState(node) {

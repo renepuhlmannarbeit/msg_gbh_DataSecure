@@ -960,7 +960,7 @@ function parseWordStructure(body, options = {}) {
       const end = next === -1 ? body.length : next;
       if (!frame.skipped && frame.mathEvent && math.owns(frame.mathEvent)) {
         math.text(xmlDecode(body.slice(cursor, end)), frame.mathEvent);
-      } else if (!frame.skipped && frame.name === 'w:t') {
+      } else if (!frame.skipped && (frame.name === 'w:t'||(story&&frame.name==='w:instrText'))) {
         try { if(!story||story.textAllowed(frame.storyEvent))sourceText(frame.node,xmlDecode(body.slice(cursor, end)),frame.storyEvent); }
         catch (error) {
           if (error?.code === 'OOXML_XML_CHARACTER_INVALID') throw error;
@@ -990,7 +990,7 @@ function parseWordStructure(body, options = {}) {
         const value = body.slice(cursor + special[1], end);
         if (frame.mathEvent && math.owns(frame.mathEvent)) math.text(value, frame.mathEvent);
         else {
-          if (frame.name !== 'w:t') throw wordStructureError();
+          if (frame.name !== 'w:t'&&!(story&&frame.name==='w:instrText')) throw wordStructureError();
           if(!story||story.textAllowed(frame.storyEvent))sourceText(frame.node,value,frame.storyEvent);
         }
       }
@@ -1063,10 +1063,14 @@ function parseWordStructure(body, options = {}) {
     const mcWrapper = /^mc:(?:AlternateContent|ChoiceSupported|ChoiceUnsupported|Fallback)$/u.test(name);
     let storyEvent=frame.storyEvent||null,ownStoryEvent=false,storyProjection=null;
     if(story&&!skipped&&!mcWrapper){
+      // Authentic CT_Text leaves cannot contain another owner or field
+      // control, including when their instruction payload is not displayed.
+      if(['w:t','w:instrText','w:delInstrText'].includes(frame.name))throw wordStructureError();
       storyEvent=mathEvent(name,attrs,frame.storyEvent);story.start(storyEvent);ownStoryEvent=true;
       storyProjection=story.projectionState(storyEvent);if(!storyProjection.structural)skipped=true;
       if(name==='w:t'&&storyProjection.metadata&&!frame.revisionMetadata)throw wordStructureError();
-      if(name==='w:t'&&storyProjection.structural&&(storyEvent.parent?.localName!=='r'||storyEvent.parent?.namespaceURI!==mathNamespaces.get('w')))throw wordStructureError();
+      if(['w:t','w:instrText'].includes(name)&&storyProjection.structural&&
+          (storyEvent.parent?.localName!=='r'||storyEvent.parent?.namespaceURI!==mathNamespaces.get('w')))throw wordStructureError();
     }
     const revisionMetadata=frame.revisionMetadata||(story&&WORD_REVISION_PROPERTIES.has(name));
     let event = frame.mathEvent || null, ownMathEvent = false;
@@ -1076,7 +1080,7 @@ function parseWordStructure(body, options = {}) {
       math.start(event); ownMathEvent = true;
     }
     if (!skipped && !revisionMetadata && !mathInside && !mathRoot) {
-      if (frame.name === 'w:t' || frame.wordGridLeaf) throw wordStructureError();
+      if (frame.name === 'w:t' || (story&&['w:instrText','w:delInstrText'].includes(frame.name)) || frame.wordGridLeaf) throw wordStructureError();
       const type = /^w:(p|tbl|tr|tc)$/.exec(name)?.[1];
       if (type) {
         const allowed = type === 'tr' ? node.type === 'tbl'
@@ -1122,9 +1126,9 @@ function parseWordStructure(body, options = {}) {
           } else node[name === 'w:gridBefore' ? 'gridBefore' : 'gridAfter'] = wordGridNumber(value, true, wordStructureError);
           wordGridLeaf = true;
         }
-      } else if (name === 'w:t' || name === 'w:tab' || name === 'w:br' || name === 'w:cr') {
+      } else if (name === 'w:t' || (story&&name==='w:instrText') || name === 'w:tab' || name === 'w:br' || name === 'w:cr') {
         if (node.type !== 'p') throw wordStructureError();
-        if (name !== 'w:t'&&(!story||story.visible(storyEvent))) sourceText(node,name === 'w:tab' ? '\t' : '\n',storyEvent);
+        if (!['w:t','w:instrText'].includes(name)&&(!story||story.visible(storyEvent))) sourceText(node,name === 'w:tab' ? '\t' : '\n',storyEvent);
       } else if (node.type === 'tr' && name === 'w:tblHeader') {
         node.header = !['0', 'false', 'off'].includes(attrs.get('w:val') || '1');
       } else if (node.type === 'p' && name === 'w:pStyle') {

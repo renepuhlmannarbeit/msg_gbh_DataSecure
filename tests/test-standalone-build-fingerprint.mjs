@@ -71,6 +71,8 @@ function builderFixture() {
     'scripts/lib/standalone-windows-layout.mjs',
     'scripts/lib/windows-native-contract.mjs', 'native/runtime/standalone-windows-runtime.json',
     'plugins/data-secure/server/standalone/macos-bundle-layout.js',
+    'plugins/data-secure/server/standalone/tiff-scan-codecs.js',
+    'plugins/data-secure/server/standalone/ccitt-fax-decoder.js',
     'scripts/lib/zip.mjs', 'scripts/lib/cargo-license-inventory.mjs', 'scripts/lib/standalone-font-license.mjs',
     'plugins/data-secure/server/core/bound-file-io.js', 'plugins/data-secure/server/zip-reader.js',
     'native/runtime/runtime-contract.json', 'apps/datasecure-standalone/desktop-targets.json',

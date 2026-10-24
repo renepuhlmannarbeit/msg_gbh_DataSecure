@@ -460,3 +460,126 @@ FP bleibt fea58e5d…b878e/368 unverändert,621Testinputs nun Manifest
 da07a492b29ea8b7006bb04039c056c24d05c86bfde1d37cd30177d3ee2977cb.
 Frischer gemeinsamer Commit/Source02-Endlauf bleibt für alle drei Ziele nötig;
 Mac-Coreproducer/Approval nicht neu erzeugen, keine Mainintegration/GUI.
+
+## Source02-Endstand und neue Standardskorrektur vor Source03
+
+Gepushter gemeinsamer Source02 d39497abd61bbc07489e2bac9b5592f05b81183e,
+Produkt-FP fea58e5d…b878e/368 und621Testinputs/Manifestda07a492…977cb.
+Native300Rust+3ignored/Clippy/Node-Rust/ReleasePASS17:33:54.552UTC,
+8KonvertersuitenPASS17:37:31.346UTC,5Paketgates/100MD0FehlerPASS17:39:19.844UTC,
+alle Inputs unverändert. WindowsZIP113514113Bytes/SHA01f5181a87bf3c9a7569c926fc338bc3f16a6b201626b07c8f5bd598da0b18de,
+EXE1ad2d1d739ea2629832dfaa1b2f04752c84f02cbd6e9a461f2bbd0e5d6a28bce.
+Unabhängiger tatsächlicher Windowsarchivgegenreview vollständig gelesen,
+REVIEW.md SHA2910a3e…12f8. Kein aktueller Source03- oder Desktopnachweis.
+
+Headless endet18:08:35.157UTC116/318+0/11ROT, Inputs unverändert. Test117
+Paket-Fingerprint-Builderfixture kopiert tatsächlichen Runtimecollector ohne
+dessen neue statische TIFF-/CCITT-Abhängigkeiten. Importfehler vor echter
+Markerprüfung, kein akzeptierter fremder Binärmarker. Original-Log/FINAL bleiben
+ROT. Erst nach allen lokalen Jobenden und gezielt beendetem Macrun zwei echte
+Source-copy-list-Einträge ergänzt; Assertions/Produkt/Budgets unverändert.
+Unabhängiger Ursachen-/Diffbericht e165b684…4d68 vollständig gelesen; Main
+ganze7Gruppen einschließlich6echter Windows-/Mac-Builder-VerweigerungenPASS.
+Unabhängiger Restplan-Closureaudit f74e00a8…bc12 ohne zweiten bestätigten
+TIFF-Importkopierfehler; das ist kein vorweggenommener Ausführungs-PASS.
+
+Mac40116281775 ARM120938146426SUCCESS17:51:16UTC; unabhängiger ganzer
+8113Zeilen-Loggegenreview ae61bbe8…971a gelesen. Verbleibender Inteljob
+120938146414 auf exaktd39497a gezielt cancelled18:10:26UTC, da ein neuer
+gemeinsamer Commit nötig ist; aktueller runstatuscompleted/cancelled. Originale
+827301Byte-Intellog SHA8d25bb02a064cb54a5bc2367ec25bd35689c6560d2de9205b78055ded84375c0
+separat erhalten. Kein alter Macartifact-Import, keine umgeschriebenen FINALs,
+kein Source02Snapshot/Übergabe/Tag/Release.
+
+Zwei zusätzliche diagnostische Restläufe, ausdrücklich keine Gesamtfreigabe:
+117..216PASS, dann test-parsers90PASS1FAIL;218..318PASS+Extra1(DOCXlexical80/
+10Protokollnegativen/33echtePermissionchildren)PASS, Extra2characterWorker
+scheitert am selben freistehenden WordinstrText. Jeweils unveränderte Inputs,
+Originale Ergebnis-/Log-/Driverdateien erhalten; spätere Extras nicht erreicht.
+
+Unabhängige tatsächliche7Container-/112Token-/Entrancematrix plus32Kontrollen
+vollständig gelesen: c34fe1b1…eba5. Kommentare-Positivfixture ist semantisch
+unvollständig (w:p direkt unter w:comments). Ein zweiter Fall ist dagegen
+eine echte neue Supportlücke: instrText außerhalb eines komplexen Feldcode-
+Bereichs soll normaler Text sein, nicht pauschaler Strukturfehler. Main las
+[FieldCode](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.fieldcode?view=openxml-3.0.1),
+[FieldChar](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.fieldchar?view=openxml-3.0.1)
+und [Comments](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.comments?view=openxml-3.0.1)
+direkt. Den Literaltext nur aus der Testfixture zu entfernen würde diese Lücke
+verdecken. Enger Wordfix nach abgeschlossenem Restlauf beauftragt: tatsächliche
+Run-/Absatz-/Feldphase/UTF16- und Textleafbindung, normaler Source-/Privacy-/
+Trace-/Keepweg, keine Ausführung oder neue Limits. Äußere Codephase darf durch
+inneres Resultat nicht sichtbar werden; deleted-code/Legacy nicht pauschal
+öffnen. Vollständig gelesener Fachplan bc650e26…a1bd7, Umsetzung/Tests noch offen.
+
+Neue17Source03-Helferquellen create-only vorbereitet, keine alten Verdicts/
+Snapshots übernommen. Ein geerbter Source01-Logtext korrigiert, Source02RED
+ehrlich im Notesentwurf. Unabhängiger mechanischer Gegenreview377348de…651d
+gelesen; sieben aktuelle Pins passen. Dessen Präzisierung zur Negativliste
+umgesetzt: alte gleicheRC-Source01/02-Präfixe nun zusätzlich verweigert,
+183HelperchecksPASS. Kein Produkt-/Testendnachweis daraus. Source03-Produkt-FP
+wird durch den echten Wordfix neu gebunden; noch kein finaler Freeze/Commit.
+
+## Source03 – tatsächliche Word-/Tabellenkorrektur vor gemeinsamem Endlauf
+
+Die gezielte Wordkorrektur ist implementiert: authentisches instrText außerhalb
+aller komplexen Codephasen ist normaler Quelltext; echte äußere Codephasen,
+Revision-/Metadatenansicht und CT_Text-Blatt-/Runbindung bleiben getrennt.
+Main las den vollständigen tatsächlichen Produkt-/Testdiff sowie den
+Autorenbericht d90a4f5c…ac355. Dessen stabile Vorproben54Wordcontext/26Integration/
+36ParentScope/91Parser und516Characterchecks mit21Protokollnegativen und166echten
+Permissionchildren sind gezielte Belege, keine neue Gesamtfreigabe. Main hat
+die ursprüngliche kombinierte Wordquelle anschließend wieder aufgenommen.
+
+Dabei wurde ein zusätzlicher echter unnötiger Stopp kausal belegt: historische
+SourcePrivacy-Zeilenverdichtung entfernte echte GFM-Leerzeilen zwischen einer
+Math-/Feldtabelle und einer unabhängigen Wordtabelle. Ergebnis war eine
+inkonsistente Pipe-Tabellenregion, die prepare mit RESIDUAL_PII hart verweigerte.
+Kein tatsächlicher Normalpfad-Publication-Leak bestätigt; frühere direkte
+Engineausgaben sind kein entsprechender Beweis. Originale und alle roten
+Diagnosen bleiben erhalten. Microsoft tblHeader ist Zeilenwiederholung, nicht
+die einzige Autorität für ein reales Namefeld; GFM beendet Tabellen an Leerzeilen.
+
+Enger Adapterfix erhält deshalb nur bei explizitem content-v1 die echten
+Blockgrenzen. Bestehende Quellheaderpromotion und zeilenidentitätsgebundene
+UTF16-Kontaktabbildung bleiben; notes-v1/direct behalten ihre historische
+Normalisierung. Keine neue PII-/Residual-/Keepausnahme oder erfundene Quellzeile.
+Main las offizielle [FieldCode](https://learn.microsoft.com/en-us/dotnet/api/documentformat.openxml.wordprocessing.fieldcode?view=openxml-3.0.1)-
+und [GFM-Tabellenregeln](https://github.github.com/gfm/#tables-extension-) direkt.
+
+Unabhängiger tatsächlicher finaler Produktionsreview vollständig gelesen:
+dist/rc176-source03-word-adapter-counterreview-20261024/REPORT.md,
+SHAde6ff254ab38fa32adafe8997de3e386f8fb0b4bee665aaabc663d969e2b6b7c.
+16volle Source-/manuelle+automatische Review-/Trace-/Publicationketten,
+140tatsächliche Keepverweigerungen,22Feld-/Revision-/MC-/CT_Text-Gegenfälle,
+9Kontaktgruppen/27ungültige Karten; drei Produktpins vor/nach identisch.
+Kein bestätigter Deltablocker; kein Native-/Desktop-/ReleasePASS daraus.
+
+Separater tatsächlicher Testmodell-Gegenreview vollständig gelesen:
+SHA b293fbb4b54d0172eb2c4a1fc4e37e25b91cdabe1703d01ca5c725e65e2b7921.
+Main verlangt nun die exakten drei historischen kombinierten ZIP-SHAs in
+beiden Profilen/manuellen+automatischen Endketten statt bequemere Quellen oder
+eine dauerhafte Fehlererwartung. Inhaltstests unterscheiden echte zusammen-
+hängende content-v1-Zeilen von historischen notes-Zeilengaps; Positions-/
+Bild-/Kontaktselektivität und harte ungültige Karten bleiben konkret geprüft.
+Gezielte Mainproben22Content/54Context/38Integration/36ParentScope/91Parser/
+7Fingerprintgruppen bisherPASS. Echter isolierter Windowskonvertervorlauf
+noch aktiv, Zusatz-/gemeinsame Endgates ausstehend; kein Source03-Freeze.
+
+Neuer tatsächlicher Entwicklungs-FP4a6d63c9ef0c77368a4d75d33013db4de5a2f09b008732bfa4249094404a0ecf/368,
+621Testinputs/Manifest11e84207dfe4d5bff2da1fab0bbf5291281f27dc06072f6afe731e6f92abb209.
+Diese Bindung ist noch kein neuer Git-/Paket-/Macnachweis. Frühere gegenteilige
+unveränderter-FP-Aussagen gelten nur vor diesen drei Produktänderungen.
+
+Main-Vorlauf19:09:30.296UTC vollständig7/7PASS/Inputs unverändert, einschließlich
+75echter isolierter Windowskonvertergruppen/0SKIPs. Die11Zusatzproben wurden
+danach diagnostisch ausgeführt: erste7ChildExit0; eigener neuer Vorlaufhelper
+scheitert vor Fall8 nur an einer doppelten Basename-Logdatei (zwei legitime
+Runnerrollen). Originalhelper/Logs/Fehler bleiben, keine ursprüngliche FINAL
+erfunden. Separater ordinalbenannter Suffix führt genau die restlichen4 aus,
+PASS/Inputs unverändert.516Characterchecks/166echteChildren, echte Guard-/
+Epoch-/Pause-/Lease-/Admissionproben und3synthetische Browserproben erreicht.
+Keine Produkt-/Test-/Enddriverkorrektur dafür. Der frische gemeinsame Endlauf
+muss trotzdem alle318+11 selbst vollständig ausführen.16Helfersyntaxchecks,
+183Bindungs- und geschlossene Proofnegativen MainPASS. Jetzt gemeinsamer
+Source03-Commit/Freeze und neue lokale4Endgates/Macconsumer nötig.

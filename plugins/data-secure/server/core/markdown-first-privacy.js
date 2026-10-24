@@ -44,16 +44,19 @@ function markdownCells(line) {
   return cells;
 }
 
-function sensitiveTableHeaderPlan(markdown, literalHeaders) {
+function sensitiveTableHeaderPlan(markdown, literalHeaders, preserveTableBoundaries = false) {
   const source = String(markdown || '');
   const sourceLines = source.split('\n');
   // The direct OOXML parser separates rendered table rows with one empty
   // Markdown line. Compact only blanks between two table rows so the privacy
   // table grammar sees the same structure as the Standalone converter while
-  // all non-table whitespace remains untouched.
+  // all non-table whitespace remains untouched. Explicit content-v1 already
+  // carries GFM block structure: a blank line ends a table and must not merge
+  // an independent Math/field/Office table into the preceding source owner.
+  // Keep the historical normalization separate for notes-v1/direct callers.
   // Line ordinals, not per-character maps or duplicate line objects, retain
   // exact origin identities while keeping the existing bounded text budget.
-  const lines = sourceLines.map((_line, index) => index).filter(index => !(sourceLines[index].trim() === '' &&
+  const lines = sourceLines.map((_line, index) => index).filter(index => !(!preserveTableBoundaries && sourceLines[index].trim() === '' &&
     markdownCells(sourceLines[index - 1]) && markdownCells(sourceLines[index + 1])));
   for (let index = 0; index + 2 < lines.length; index++) {
     const generated = markdownCells(sourceLines[lines[index]]);
@@ -317,7 +320,7 @@ async function extractSourceForPrivacy(bytes, extension, options = {}) {
   // This gate does not affect Nur umwandeln or private/public finished files.
   if(coverage.reason_codes.includes('OFFICE_TABLE_CONTEXT_UNVERIFIED'))throw coverageFailure(ErrorType);
   const tablePlan = ['docx', 'xlsx', 'pptx'].includes(expectedType)
-    ? sensitiveTableHeaderPlan(extraction.markdown, Boolean(contentOptions)) : null;
+    ? sensitiveTableHeaderPlan(extraction.markdown, Boolean(contentOptions), contentOptions?.markdownOutput === 'content-v1') : null;
   const privacyMarkdown = contentOptions && expectedType === 'csv' ? csvPrivacyMarkdown(bytes)
     : tablePlan ? tablePlan.markdown : extraction.markdown;
   const ocrContacts = productChannel === 'standalone' && extraction.ocr_contacts

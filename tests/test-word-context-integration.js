@@ -41,6 +41,46 @@ test('actual simple and nested complex fields retain stored results once, never 
  for(const value of ['BEFORE','SIMPLE','MIDDLE','OUTER','INNER','AFTER HTTP/2'])count(md,value);
  assert.doesNotMatch(md,/UNEXECUTED|INCLUDETEXT|NOT_READ|NOT.VISIBLE.INSTRUCTION/u);assert.match(md,/gespeicherte Feldresultate, nicht neu berechnet/u);assert.equal(hash(b),before);
 });
+
+test('actual content entrances retain standalone instrText exactly like ordinary run text, not an unexecuted field',()=>{
+ const {extractOfficeMarkdownAndMedia}=require('../plugins/data-secure/server/standalone/markdown-extractor');
+ for(const namespace of [W,S])for(const value of ['Name: Qvx / Qvy ÄÖÜß 😀','DDE AUTO file:///NEVER_READ https://example.invalid/NEVER_FETCH','A &amp; <literal> | [PERSON_001]']){
+  const literal=doc(`<w:p>${run('BEFORE ')}${code(value)}${run(' AFTER')}</w:p>`,{namespace}),ordinary=doc(`<w:p>${run('BEFORE ')}${run(value)}${run(' AFTER')}</w:p>`,{namespace}),before=hash(literal);
+  for(const entrance of [extract,b=>extractOfficeMarkdownAndMedia(b,'.docx',opts).extraction]){
+   const result=entrance(literal);assert.equal(result.markdown,entrance(ordinary).markdown);assert.match(result.markdown,/BEFORE[\s\S]*AFTER/u);
+   // The pre-existing engineering coverage inventory remains conservative
+   // about non-basic Word tags; literal support is not universal completeness.
+   assert.deepEqual(result.coverage,{status:'incomplete',reason_codes:['SOURCE_COVERAGE_UNVERIFIED']});
+   assert.doesNotMatch(result.markdown,/Word-Felder: gespeicherte Feldresultate/u);
+  }
+  assert.equal(hash(literal),before);
+ }
+});
+test('literal instrText CDATA and entities preserve source scalars once and update genuine comment UTF-16 anchors',()=>{
+ const value='😀ÄÖÜß🙂 &amp; <literal>',b=doc(`<w:p><w:r><w:instrText xml:space="preserve">😀ÄÖÜß&#x1F642; &amp;amp; &lt;literal&gt;</w:instrText></w:r>${ref('0')}</w:p>`,{parts:{comments:comments(comment('0','Independent comment fact'))}});
+ const before=hash(b),md=extract(b).markdown;assert.ok(md.includes(`Quelltextposition ${value.length} (UTF-16)`));
+ assert.equal(extract(doc('<w:p><w:r><w:instrText><![CDATA[ <literal> &unknown; ÄÖÜß😀 ]]></w:instrText></w:r></w:p>')).markdown,
+  extract(doc(`<w:p>${run(' <literal> &unknown; ÄÖÜß😀 ')}</w:p>`)).markdown);
+ assert.equal(hash(b),before);
+});
+test('real saved-result instrText keeps the authentic field owner; outer code still hides inner cached text',()=>{
+ const body=`<w:p>${char('begin')}${code('OUTER_CODE')}${simple('HIDDEN_SIMPLE')}${char('begin')}${code('INNER_CODE')}${char('separate')}${code('HIDDEN_RESULT')}${char('end')}${char('separate')}${code('Name: Qvx')}${char('end')}${run(' / ')}<w:fldSimple w:instr="NEVER_EXECUTE">${code('Qvy')}</w:fldSimple>${code(' HTTP/2')}</w:p>`;
+ const md=extract(doc(body)).markdown;assert.match(md,/\| Name: Qvx \/ Qvy HTTP\/2 \|/u);
+ assert.doesNotMatch(md,/OUTER.CODE|INNER.CODE|HIDDEN.SIMPLE|HIDDEN.RESULT|NEVER.EXECUTE/u);count(md,'Qvx');count(md,'Qvy');
+});
+test('actual literal text leaves reject wrong owners, nested elements, foreign vocabularies and malformed Unicode',()=>{
+ for(const body of ['<w:p><w:instrText>WRONG_PARENT</w:instrText></w:p>',
+  '<w:r><w:instrText>NO_PARAGRAPH</w:instrText></w:r>',
+  '<w:p><w:r><w:instrText><w:t>NESTED</w:t></w:instrText></w:r></w:p>',
+  `<w:p>${char('begin')}<w:r><w:instrText><w:fldChar w:fldCharType="separate"/></w:instrText></w:r>${char('end')}</w:p>`,
+  '<w:p><w:r><w:instrText><mc:AlternateContent><mc:Choice Requires="w"><w:t>NESTED</w:t></mc:Choice><mc:Fallback/></mc:AlternateContent></w:instrText></w:r></w:p>',
+  '<w:p><w:r><w:instrText><mc:AlternateContent><mc:Choice Requires="w"/><mc:Fallback/></mc:AlternateContent></w:instrText></w:r></w:p>',
+  `<w:p>${char('begin')}<w:r><w:instrText><mc:AlternateContent><mc:Choice Requires="foreign" xmlns:foreign="urn:foreign">${run('UNSELECTED')}</mc:Choice><mc:Fallback/></mc:AlternateContent></w:instrText></w:r>${char('end')}</w:p>`,
+  '<w:p><w:r><f:instrText xmlns:f="urn:foreign">FOREIGN</f:instrText></w:r></w:p>'])assert.throws(()=>strict(doc(body)),{code:'DOCX_STRUCTURE_UNSAFE'});
+ // A raw JS lone surrogate is replaced by Buffer.from before these real UTF-8
+ // bytes exist; use actual forbidden source scalars/references in this layer.
+ for(const value of ['&#0;','&#xD800;','\u0000','&#127;','&unknown;'])assert.throws(()=>strict(doc(`<w:p><w:r><w:instrText>${value}</w:instrText></w:r></w:p>`)));
+});
 test('field closure preserves actual cross-paragraph text but does not declassify the same-parent suffix',()=>{
  const md=extract(doc(`<w:p>${char('begin')}${code('FORMTEXT')}${char('separate')}${run('Name:')}</w:p><w:p>${run('Qvx / Qvy')}${char('end')}${run(' HTTP/2 FHIR 123')}</w:p>`)).markdown;
  assert.match(md,/\| Name:<br>Qvx \/ Qvy \|/u);assert.match(md,/\| Geschützter Tabellenwert \|[\s\S]*HTTP\/2 FHIR 123/u);count(md,'Qvx / Qvy');count(md,'HTTP/2 FHIR 123');
@@ -98,11 +138,11 @@ test('unreferenced, hidden-revision and unselected-MC comment bodies never leak 
  const md=extract(doc(body,{parts:{comments:comments(comment('0','DELETED_COMMENT')+comment('1','UNSELECTED_COMMENT')+comment('2','ORPHAN_COMMENT'))}})).markdown;
  assert.match(md,/FACT[\s\S]*SELECTED/u);assert.doesNotMatch(md,/COMMENT|Anna Berger/u);
 });
-test('field cell ownership, malformed controls, orphan instructions and duplicate comment references fail typed',()=>{
+test('field cell ownership, malformed controls, misplaced text and duplicate comment references fail typed',()=>{
  for(const body of [
   `<w:p>${char('end')}${run('X')}</w:p>`,
   `<w:p>${char('begin')}${char('separate')}${run('X')}</w:p>`,
-  `<w:p>${code('ORPHAN')}${run('X')}</w:p>`,
+  `<w:p><w:instrText>MISPLACED_TEXT</w:instrText>${run('X')}</w:p>`,
   `<w:p><w:pPr>${run('MISPLACED CURRENT TEXT')}</w:pPr>${run('X')}</w:p>`,
   `<w:p><w:pPr>NON_PROPERTY_PROSE</w:pPr>${run('X')}</w:p>`,
   `<w:tbl><w:tr><w:tc><w:p>${char('begin')}${char('separate')}${run('X')}</w:p></w:tc><w:tc><w:p>${run('Y')}${char('end')}</w:p></w:tc></w:tr></w:tbl>`,
@@ -158,4 +198,62 @@ for(const profile of ['general','personnel_profile'])testAsync('actual OPC sourc
  assert.throws(()=>verifyAnonymizedPublication({...proof,markdown:kept.markdown,reviewed_person_candidates:bindStandaloneDocumentKeeps(kept.markdown,[],kept.entities.filter(value=>value.decision==='keep').map(({start,end})=>({start,end})))}),{code:'STANDALONE_PUBLICATION_INVALID'});
  assert.equal(hash(b),before);
 });
+for(const profile of ['general','personnel_profile'])for(const reviewPolicy of ['manual','automatic-conservative'])
+ for(const layout of ['isolated','adjacent','ordinary-adjacent','header-adjacent'])
+ testAsync('literal instrText actual OPC/source/privacy/trace/publication/Keep '+profile+'/'+reviewPolicy+'/'+layout,async()=>{
+  const {extractSourceForPrivacy}=require('../plugins/data-secure/server/core/markdown-first-privacy');
+  const {prepareTextPrivacyReview,resolveTextPrivacyReview,finalizeTextPrivacyReview}=require('../plugins/data-secure/server/gateway/privacy-text-operation');
+  const {reviewedBatchText}=require('../plugins/data-secure/server/gateway/batch-review-policy');
+  const {replayTransformTrace}=require('../plugins/data-secure/server/privacy/transform-plan');
+  const {verifyAnonymizedPublication}=require('../plugins/data-secure/server/standalone/anonymized-artifact');
+  const {initialEntities,applyEntityDecisions}=require('../plugins/data-secure/server/gateway/standalone-entity-review');
+  const {bindStandaloneDocumentKeeps}=require('../plugins/data-secure/server/privacy/residual-person-review');
+  const contentOptions={schema:'datasecure-content-options/1',markdownOutput:'content-v1',scanOcr:false,imageOcr:false};
+  const math='<m:oMath><m:r><m:t>1</m:t></m:r></m:oMath>';
+  const box=`<w:r><w:drawing><w:txbxContent>${p('Protokoll: HTTP/2 FHIR REST HL7')}</w:txbxContent></w:drawing></w:r>`;
+  let body=`<w:p>${run('Name: ')}${code('Qix / Qiy')}</w:p>`+
+   `<w:p>${code('Name: Qjx')}${math}${code(' / Qjy')}</w:p>`+
+   (layout==='isolated'?p('Tabellenbezug: HTTP/2'):'')+
+   `<w:tbl><w:tr>${layout==='isolated'||layout==='header-adjacent'?'<w:trPr><w:tblHeader/></w:trPr>':''}<w:tc>${p('Name')}</w:tc><w:tc>${p('Fachtext')}</w:tc></w:tr><w:tr><w:tc><w:p>${code('Qkx / Qky')}</w:p></w:tc><w:tc>${p('FHIR REST 123')}</w:tc></w:tr></w:tbl>`+
+   `<w:p>${char('begin')}${code('UNEXECUTED_HIDDEN_CODE')}${char('separate')}${code('Name: Qmx')}${char('end')}${code(' / Qmy')}</w:p>`+
+   `<w:p>${run('Anchor😀')}${ref('0')}</w:p>`+p('Unabhängiger Kontext: HTTP/2 FHIR 123');
+  const parts={comments:comments(`<w:comment w:id="0" w:author="Anna Berger"><w:p>${code('Name: Qlx')}${box}${code(' / Qly')}</w:p></w:comment>`)};
+  if(layout==='ordinary-adjacent'){
+   body=body.replaceAll('w:instrText','w:t');parts.comments=parts.comments.replaceAll('w:instrText','w:t');
+  }
+  const b=doc(body,{parts}),before=hash(b);
+  const originalPins={adjacent:'1a8e515b1491bdb373bde097cd4613095cc53a3b9431ac63ae99bc0da95a4797',
+   'ordinary-adjacent':'8479b204c961eb2d1e472e083bfc4dcb0358fc1f70ee83052632873684820924',
+   'header-adjacent':'f9ac2234f2e27b7dc2e3bc0e53b983c4548f84bbb9896a6d4d18b20015a1e8b3'};
+  if(originalPins[layout])assert.equal(before,originalPins[layout],'retain exact original failing ZIP, not a repaired fixture');
+  const source=await extractSourceForPrivacy(b,'.docx',{contentOptions,convertBuffer:async bytes=>{
+   const out=extract(bytes);return createMarkdownExtraction({source_type:out.source_type,markdown:out.markdown,coverage:out.coverage,content_options:contentOptions});
+  }});
+  const values=['Qix','Qiy','Qjx','Qjy','Qkx','Qky','Qlx','Qly','Qmx','Qmy'];
+  for(const value of values)count(source.markdown,value);
+  assert.doesNotMatch(source.markdown,/UNEXECUTED.HIDDEN.CODE/u);assert.match(source.markdown,/Name: Qix \/ Qiy/u);
+  const prepared=prepareTextPrivacyReview({text:source.markdown,profile,productChannel:'standalone',consumerOptions:{productChannel:'standalone',contentOptions},registry:require('../plugins/data-secure/server/privacy/entities').makeRegistry(),captureTrace:true});
+  let manualCalls=0;
+  const reviewed=await resolveTextPrivacyReview(prepared,reviewPolicy==='manual'?draft=>{
+   manualCalls++;return reviewedBatchText(draft,draft.ambiguities.map(value=>({ambiguity_id:value.ambiguity_id,decision:'redact'})));
+  }:null,{reviewPolicy});
+  if(reviewPolicy==='manual')assert.equal(manualCalls,1);
+  const final=finalizeTextPrivacyReview(prepared,reviewed,{prefix:'',suffix:''});
+  for(const value of [...values,'Anna Berger'])assert.ok(!final.markdown.includes(value),value+' must not survive');
+  assert.equal(replayTransformTrace(final.transform_trace),final.markdown);
+  for(const fact of ['Protokoll: HTTP/2 FHIR REST HL7','Unabhängiger Kontext: HTTP/2 FHIR 123','FHIR REST 123'])assert.ok(final.markdown.includes(fact));
+  const proof={markdown:final.markdown,profile,content_options:contentOptions,source_extraction:source.sourceExtraction,dictionary:final.dictionary,strong_person_anchor:final.strong_person_anchor,reviewed_person_candidates:final.reviewed_person_candidates};
+  assert.ok(verifyAnonymizedPublication(proof));
+  const entities=initialEntities({markdown:final.markdown,transform_trace:final.transform_trace});
+  for(const value of values){
+   const target=entities.find(entity=>entity.original.includes(value));assert.ok(target,'real trace source for '+value);
+   const kept=applyEntityDecisions(final.markdown,entities,[{entity_id:target.entity_id,decision:'keep'}],Buffer.alloc(32,23));
+   assert.throws(()=>verifyAnonymizedPublication({...proof,markdown:kept.markdown,reviewed_person_candidates:bindStandaloneDocumentKeeps(kept.markdown,[],kept.entities.filter(entity=>entity.decision==='keep').map(({start,end})=>({start,end})))}),{code:'STANDALONE_PUBLICATION_INVALID'});
+  }
+  assert.equal(hash(b),before);
+  // tblHeader is a repeat-header presentation instruction, not the only
+  // authority for recognising an authored Name label. The original adjacent
+  // cases must now succeed without inserting a paragraph or guessing data.
+ });
+
 done();

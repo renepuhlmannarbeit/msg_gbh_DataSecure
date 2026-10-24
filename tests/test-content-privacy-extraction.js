@@ -135,8 +135,11 @@ testAsync('Office table edits preserve exact repeated OCR corridors across forma
   for (const type of ['docx', 'xlsx', 'pptx']) for (const profile of ['content-v1', 'notes-v1'])
     for (const newline of ['\n', '\r\n']) for (const tail of ['', ' Fachtext 42: keine Freigabe. '.repeat(12)]) {
       const contract = options({ markdownOutput: profile, imageOcr: true });
-      const native = ['# Δ 😀 e\u0301', '', '| Spalte 1 | Spalte 2 |', '', '| --- | --- |', '',
-        '| Name | Kennzahl |', '', '| Qvx | 42 |', '', `Native Quelle: ${email}`].join(newline);
+      // Real content-v1 tables have contiguous rows. Only the historical
+      // notes serializer separates its rows; a content blank is a block end.
+      const rows = ['| Spalte 1 | Spalte 2 |', '| --- | --- |', '| Name | Kennzahl |', '| Qvx | 42 |'];
+      const native = ['# Δ 😀 e\u0301', '', rows.join(newline.repeat(profile === 'notes-v1' ? 2 : 1)),
+        '', `Native Quelle: ${email}`].join(newline);
       const imageText = `Bild 😀 e\u0301${newline}E-Mail: ${email}${newline}Telefon: ${phone}${tail}`;
       const emailStart = imageText.indexOf(email), phoneStart = imageText.indexOf(phone);
       const image = createMarkdownExtraction({ source_type: 'png', markdown: imageText, content_options: contract,
@@ -198,10 +201,12 @@ testAsync('moved real table header preserves contact identity and private image 
 });
 
 testAsync('deleted table structure and malformed contact maps fail closed instead of silently losing or relocating contacts', async () => {
-  const contract = options({ imageOcr: true });
-  const raw = '| Spalte 1 |\n   \n| --- |\n| Name |\n| Qvx |\n\nE-Mail: same@example.invalid';
-  for (const type of ['docx', 'xlsx', 'pptx']) {
-    for (const [start, end] of [[2, 10], [raw.indexOf('   '), raw.indexOf('   ') + 3]]) {
+  for (const type of ['docx', 'xlsx', 'pptx']) for (const profile of ['content-v1', 'notes-v1']) {
+    const contract = options({ markdownOutput: profile, imageOcr: true });
+    const raw = '| Spalte 1 |\n' + (profile === 'notes-v1' ? '   \n' : '') + '| --- |\n| Name |\n| Qvx |\n\nE-Mail: same@example.invalid';
+    const removed = [[2, 10]];
+    if (profile === 'notes-v1') removed.push([raw.indexOf('   '), raw.indexOf('   ') + 3]);
+    for (const [start, end] of removed) {
       const converted = source(type, raw, contract, { coverage: { status: 'incomplete', reason_codes: ['OCR_CONTACT_VALUES_UNVERIFIED'] },
         ocr_contacts: [{ start, end, page: 1, line: 1, kind: 'contact' }] });
       await assert.rejects(extractSourceForPrivacy(Buffer.from('synthetic'), '.' + type,
@@ -233,15 +238,21 @@ testAsync('legacy Office extraction remaps contact offsets without changing its 
 });
 
 testAsync('multiple Office tables accumulate exact shifts while no-op and consecutive blank lines retain their source bytes', async () => {
-  const contract = options({ imageOcr: true }), email = 'qa@example.invalid';
+  const email = 'qa@example.invalid';
+  for (const profile of ['content-v1', 'notes-v1']) {
+  const contract = options({ markdownOutput: profile, imageOcr: true });
   for (const [raw, expected] of [
     [`😀 Native Quelle\n\nE-Mail: ${email}`, `😀 Native Quelle\n\nE-Mail: ${email}`],
     [`| Spalte 1 |\n\n| --- |\n\n| Kennzahl |\n\n| 42 |\n\nE-Mail: ${email}`,
-      `| Spalte 1 |\n| --- |\n| Kennzahl |\n| 42 |\n\nE-Mail: ${email}`],
+      profile === 'content-v1' ? `| Spalte 1 |\n\n| --- |\n\n| Kennzahl |\n\n| 42 |\n\nE-Mail: ${email}`
+        : `| Spalte 1 |\n| --- |\n| Kennzahl |\n| 42 |\n\nE-Mail: ${email}`],
     [`| Spalte 1 |\n\n\n| --- |\n\n\n| Name |\n\nE-Mail: ${email}`,
       `| Spalte 1 |\n\n\n| --- |\n\n\n| Name |\n\nE-Mail: ${email}`],
     [`| Spalte 1 |\n| --- |\n| Name |\n| Qvx |\n\nZwischenstand 😀\n\n| Spalte 1 |\n\n| --- |\n\n| Firma |\n\n| Qzx |\n\nE-Mail: ${email}`,
-      `| Name |\n| --- |\n| Qvx |\n\nZwischenstand 😀\n\n| Firma |\n| --- |\n| Qzx |\n\nE-Mail: ${email}`]
+      profile === 'content-v1' ? `| Name |\n| --- |\n| Qvx |\n\nZwischenstand 😀\n\n| Spalte 1 |\n\n| --- |\n\n| Firma |\n\n| Qzx |\n\nE-Mail: ${email}`
+        : `| Name |\n| --- |\n| Qvx |\n\nZwischenstand 😀\n\n| Firma |\n| --- |\n| Qzx |\n\nE-Mail: ${email}`],
+    [`| Spalte 1 |\n| --- |\n| Name |\n| Qvx |\n\n| Spalte 1 |\n| --- |\n| Firma |\n| Qzx |\n\nE-Mail: ${email}`,
+      `| Name |\n| --- |\n| Qvx |` + (profile === 'content-v1' ? '\n\n' : '\n') + `| Firma |\n| --- |\n| Qzx |\n\nE-Mail: ${email}`]
   ]) {
     const converted = source('docx', raw, contract, { coverage: { status: 'incomplete', reason_codes: ['OCR_CONTACT_VALUES_UNVERIFIED'] },
       ocr_contacts: [{ start: raw.indexOf(email), end: raw.length, page: 2, line: 1, kind: 'email' }] });
@@ -249,6 +260,37 @@ testAsync('multiple Office tables accumulate exact shifts while no-op and consec
     assert.equal(result.markdown, expected);
     assert.equal(result.ocrContacts[0].start, expected.indexOf(email));
     assert.equal(result.ocrContacts[0].end, expected.length);
+  }
+  }
+});
+
+testAsync('content Office table blocks preserve independent GFM owners, Unicode and exact repeated contact identities', async () => {
+  const email = 'same@example.invalid', contract = options({ imageOcr: true });
+  for (const type of ['docx', 'xlsx', 'pptx']) for (const newline of ['\n', '\r\n']) {
+    const raw = ['😀 ÄÖÜß e\u0301', '', '| Inhalt |', '| --- |', '| Name: Qjx / Qjy |', '',
+      '| Spalte 1 | Spalte 2 |', '| --- | --- |', '| Name | Fachtext |', '| Qkx / Qky | FHIR REST 123 |', '',
+      `Native: ${email}`, '', `Bild1: ${email}`, '', `Bild2: ${email}`].join(newline);
+    const expected = ['😀 ÄÖÜß e\u0301', '', '| Inhalt |', '| --- |', '| Name: Qjx / Qjy |', '',
+      '| Name | Fachtext |', '| --- | --- |', '| Qkx / Qky | FHIR REST 123 |', '',
+      `Native: ${email}`, '', `Bild1: ${email}`, '', `Bild2: ${email}`].join(newline);
+    const starts = [raw.indexOf(email), raw.indexOf(email, raw.indexOf(email) + email.length), raw.lastIndexOf(email)];
+    const contacts = starts.map((start, index) => ({ start, end: start + email.length, page: index + 1, line: index + 11, kind: 'email' }));
+    const converted = source(type, raw, contract, { coverage: { status: 'incomplete', reason_codes: ['OCR_CONTACT_VALUES_UNVERIFIED'] }, ocr_contacts: contacts });
+    const before = JSON.stringify(converted);
+    const result = await extractSourceForPrivacy(Buffer.from('synthetic'), '.' + type, { contentOptions: contract, convertBuffer: async () => converted });
+    assert.equal(result.markdown, expected);
+    assert.equal(require('markdown-it')().render(result.markdown).split('<table>').length - 1, 2, 'GFM table ends at the blank line');
+    assert.deepEqual(result.ocrContacts.map(({start,end,page,line,kind}) => [start,end,page,line,kind]),
+      [expected.indexOf(email), expected.indexOf(email, expected.indexOf(email) + email.length), expected.lastIndexOf(email)]
+        .map((start, index) => [start,start + email.length,index + 1,index + 11,'email']));
+    assert.equal(JSON.stringify(converted), before);
+    const anonymized = require('../plugins/data-secure/server/gateway/compliance').anonymizeMarkdown(result.markdown, 'general', { productChannel: 'standalone', contentOptions: contract });
+    assert.doesNotMatch(anonymized.text, /Qjx|Qjy|Qkx|Qky/u);
+    assert.match(anonymized.text, /FHIR REST 123/u);
+    for (const bad of [
+      [{...contacts[0], end: contacts[1].end}], [contacts[0], contacts[0]], [{...contacts[0], end: raw.length + 1}]
+    ]) await assert.rejects(extractSourceForPrivacy(Buffer.from('synthetic'), '.' + type,
+      { contentOptions: contract, convertBuffer: async () => ({...converted, ocr_contacts: bad}) }), { code: 'OCR_CONTACT_REVIEW_INVALID' });
   }
 });
 

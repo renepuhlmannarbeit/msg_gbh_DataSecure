@@ -1,6 +1,6 @@
 # Aktueller Iststand
 
-Stand: 24.10.2026 · 3.2.0-rc176 erster gemeinsamer Endlauf ROT, nicht freigabefähig.
+Stand: 24.10.2026 · RC176 Source02-Gesamtregression ROT; Source03-Korrektur in Arbeit, nicht freigabefähig.
 Desktop-/Office-/physischeMac-Abnahme weiterhin USER_PENDING.
 
 ## RC176 – priorisierte Inhalts-/Grafikverbesserungen in Arbeit
@@ -20,7 +20,33 @@ Konverter74Worker grün, danach gleiche XLSX-Fixture ROT. Beide Mac40114508384
 ROT im alten PDF-Funktions-VM-Test: fehlendes getStructTree-Testdouble, kein
 belegter nativer PDF-Corecrash. Belege unverändert erhalten; enge Korrekturen
 erst nach Prozess-/Jobende, neuer gemeinsamer Source02-Endlauf erforderlich.
-Noch keine RC176-Pakete oder Veröffentlichung. RC175 bleibt unverändert
+Source02 d39497abd61bbc07489e2bac9b5592f05b81183e/gleicher Produkt-FP hat
+Native300Rust/3ignored/Node-Rust/Release,8Konvertersuiten und5Paketgates/100MD
+PASS/stabil. Headless endet18:08:35UTC116/318+0/11ROT: kopierte künstliche
+Builder-Fixture ohne neue statische TIFF-/CCITT-Importe. Enger Zweizeilen-
+Testfix unabhängig gegengelesen, unveränderte7Fingerprintgruppen danachPASS.
+Mac40116281775 ARM120938146426SUCCESS17:51:16UTC; verbleibender Inteljob
+gezielt CANCELLED18:10:26UTC, weil ein neuer gemeinsamer Stand nötig ist.
+Alle Originalbelege/Archive erhalten, kein alter Pass wird neu etikettiert.
+
+Diagnostische Restläufe sind kein Endnachweis:117..216PASS, dann ältere
+Parserlexicalprobe90PASS1FAIL;218..318PASS+Extra1PASS, Extra2scheitert am
+gleichen freistehenden instrText. Unabhängige Matrixdiagnose trennt defekte
+Kommentar-Positivfixture von echter neuer Word-Supportlücke: instrText
+außerhalb komplexer Feldcodes ist laut ISO-Modell regulärer Text. Gezielte
+Produktkorrektur samt echten Privacy-/Trace-/Keep-Gegenproben implementiert;
+kein bloßer Testumbau zum Verdecken der Supportlücke. Zusätzlich echte GFM-
+Blockgrenzen nur im Inhaltsadapter erhalten: vorher wurden Math-/Wordtabellen
+fälschlich verbunden und sicher hart verweigert, kein belegter Publicationleak.
+Unabhängiger finaler Produktionsreview16volle Ketten/140Keepverweigerungen/
+22Owner-/Feldgegenfälle und separater Testmodellreview ohne Deltablocker.
+Main22Content/54Context/38Integration/36ParentScope/91Parser/7Fingerprint und
+75echte Windowskonvertergruppen PASS/stabil. Alle11Zusatzproben diagnostisch
+erreicht (eigener Lognamehelperfehler getrennt erhalten,4Suffixproben stabil);
+kein vollständiger Endlauf daraus. Neue Endgates noch offen. Entwicklungs-FP4a6d63c9…a0ecf/368,
+621Testinputs/Manifest11e84207…bb209. Source03 noch NICHT eingefroren.
+Kein SourceSnapshot, lokalerRC176-Übergabeordner, Tag oder Release.
+RC175 bleibt unverändert
 veröffentlicht; nachfolgende RC175-Bindungen gelten nur für diese alten Bytes.
 
 ## Technischer Abschluss RC175

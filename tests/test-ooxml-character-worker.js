@@ -48,6 +48,11 @@ function office(type, value, location = 'body', independentSafeUnit = false) {
   }
   if (location === 'skipped') {
     assert.equal(type, 'docx');
+    parts[0][1] = parts[0][1].replace('<w:r>', `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText>${value}</w:instrText></w:r><w:r><w:fldChar w:fldCharType="separate"/></w:r><w:r>`)
+      .replace('</w:p>', '<w:r><w:fldChar w:fldCharType="end"/></w:r></w:p>');
+  }
+  if (location === 'literal-instr') {
+    assert.equal(type, 'docx');
     parts[0][1] = parts[0][1].replace('<w:r>', `<w:r><w:instrText>${value}</w:instrText>`);
   }
   if (location === 'header') {
@@ -127,15 +132,17 @@ for (const type of ['docx', 'xlsx', 'pptx']) for (const imageOcr of [undefined, 
     else expectDamagedPartOmission(actual, unchanged.result.markdown);
   }
   if (type === 'docx') for (const value of ['4111\u00851111', '<![CDATA[4111\u009f1111]]>']) {
-    for (const [location, omit] of [['header', false], ['header', true], ['skipped', false]]) {
+    for (const [location, omit] of [['header', false], ['header', true], ['skipped', false], ['literal-instr', false]]) {
       const actual = run(office(type, value, location), type, imageOcr, omit);
       if (imageOcr !== undefined && location === 'header') expectDamagedPartOmission(actual, unchanged.result.markdown, omit);
       else expectCharacterFailure(actual);
     }
   }
-  if (type === 'docx') for (const [location, omit] of [['header', false], ['header', true], ['skipped', false]]) {
+  if (type === 'docx') for (const [location, omit] of [['header', false], ['header', true], ['skipped', false], ['literal-instr', false]]) {
     const response = run(office(type, 'VALID', location), type, imageOcr, omit);
     assert.equal(response.ok, true); assert.match(response.result.markdown, /UNCHANGED/u); checks += 2;
+    if(location === 'literal-instr') { assert.match(response.result.markdown,/VALIDUNCHANGED/u); checks++; }
+    if(location === 'skipped') { assert.doesNotMatch(response.result.markdown,/VALID/u); checks++; }
   }
   if (type !== 'docx' && imageOcr !== undefined) {
     // No independent valid sheet/slide: an omission marker or generated
