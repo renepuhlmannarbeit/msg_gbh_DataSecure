@@ -24,6 +24,12 @@ function officeMathCollector(errorFactory) {
   return { start: call('start'), text: call('text'), end: call('end'), owns: reader.owns };
 }
 const { readOfficeChart, renderOfficeChart, officeChartReferences, wordChartStoryReferences } = require('./office-chart-model');
+const { readOfficeChartEx, renderOfficeChartEx } = require('./office-chartex-model');
+const CHARTEX_NAMESPACE='http://schemas.microsoft.com/office/drawing/2014/chartex';
+// Known Office 2016 chart-frame compatibility marker, not the payload URI.
+// Payload children still require their own exact namespace/model/coverage.
+const CHARTEX_CHOICE_NAMESPACE='http://schemas.microsoft.com/office/drawing/2015/9/8/chartex';
+const CHARTEX_RELATIONSHIP='http://schemas.microsoft.com/office/2014/relationships/chartEx';
 
 const MAX_EMBEDDED_DEPTH = 3;
 const MAX_EMBEDDED_DOCUMENTS = 20;
@@ -156,6 +162,7 @@ const PACKAGE_CORE_PROPERTIES_RELATIONSHIP =
   'http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties';
 function relationshipKind(value) {
   const source = String(value || '');
+  if(source===CHARTEX_RELATIONSHIP)return 'chartEx';
   if (source === PACKAGE_CORE_PROPERTIES_RELATIONSHIP) return 'core-properties';
   for (const namespace of OFFICE_RELATIONSHIP_NAMESPACES) {
     if (!source.startsWith(namespace)) continue;
@@ -283,6 +290,8 @@ function rawOfficePartUsage(entries, part, family, rootName, ext, selectedStory 
   const mc='http://schemas.openxmlformats.org/markup-compatibility/2006';
   const selected=new WeakMap(),ignored=new WeakSet(),blips=new WeakMap();
   const understood=new Set([...Object.values(RAW_IMAGE_NAMESPACES).flatMap(set=>[...set]),
+    CHARTEX_NAMESPACE,
+    CHARTEX_CHOICE_NAMESPACE,
     'http://schemas.microsoft.com/office/word/2010/wordprocessingShape',
     'http://schemas.microsoft.com/office/drawing/2016/SVG/main']);
   const data = entries.get(part);
@@ -615,6 +624,8 @@ const MARKUP_COMPATIBILITY_NAMESPACE = 'http://schemas.openxmlformats.org/markup
 // never from attacker-controlled prefix spelling. Every other choice uses its
 // declared fallback or stops safely when no fallback exists.
 const SUPPORTED_WORD_MARKUP_CHOICE_NAMESPACES = new Set([
+  CHARTEX_NAMESPACE,
+  CHARTEX_CHOICE_NAMESPACE,
   'http://schemas.microsoft.com/office/word/2010/wordprocessingShape'
 ]);
 const OFFICE_MATH_NAMESPACES = new Set([
@@ -1848,8 +1859,10 @@ function boundOwnerCharts(entries, owner, family, error, overrides, scope = {}) 
   const relationships = rawOfficeRelationships(entries, owner, family === 'xl' ? '.xlsx' : family==='word'?'.docx':'.pptx');
   const targets = []; let issues = 0;
   for (const id of ids) {
-    const target = rawOfficeTarget(entries, owner, relationships, typeof id==='string'?id:id.id, 'chart', new RegExp(`^${family}/charts/chart[1-9][0-9]*\\.xml$`, 'u'));
-    if (!target || overrides.get(`/${target}`) !== 'application/vnd.openxmlformats-officedocument.drawingml.chart+xml') { issues++; continue; }
+    const extended=typeof id!=='string'&&id.extended===true;
+    const target = rawOfficeTarget(entries, owner, relationships, typeof id==='string'?id:id.id, extended?'chartEx':'chart', new RegExp(`^${family}/${extended?'(?:charts/chart(?:Ex)?|extendedCharts/chart)':'charts/chart'}[1-9][0-9]*\\.xml$`, 'u'));
+    if (!target || overrides.get(`/${target}`) !== (extended?'application/vnd.ms-office.chartex+xml':'application/vnd.openxmlformats-officedocument.drawingml.chart+xml')) { issues++; continue; }
+    if(extended){targets.push({part:target,extended:true,...(id.storyId!==undefined?{storyId:id.storyId}:{})});continue;}
     targets.push(typeof id==='string'?target:{part:target,storyId:id.storyId});
   }
   return { targets, issues };
@@ -1861,8 +1874,9 @@ function boundChartSections(entries, targets, ownerLabel, options, cache, warnin
     let rendered = cache.get(part);
     if (!cache.has(part)) {
       try {
-        const model = readOfficeChart(entries.get(part).toString('utf8'), xmlDecode, error);
-        rendered = renderOfficeChart(model, value => extractionText(value, true, options.literalMarkup), error);
+        const extended=typeof target!=='string'&&target.extended===true;
+        const model = (extended?readOfficeChartEx:readOfficeChart)(entries.get(part).toString('utf8'), xmlDecode, error);
+        rendered = (extended?renderOfficeChartEx:renderOfficeChart)(model, value => extractionText(value, true, options.literalMarkup), error);
       } catch (failure) { if (!partialPartFailure(entries, part, failure)) throw failure; rendered = null; }
       cache.set(part, rendered);
       if (rendered?.issues.length) warnings.push(`Diagramm enthält ${rendered.issues.length} nicht vollständig modellierte Cache-/Inhaltsstruktur(en); unlesbare oder fehlende Werte wurden nicht als vollständige Daten ausgegeben. Keine Formel oder externe Datenquelle wurde berechnet.`);
@@ -1874,7 +1888,7 @@ function boundChartSections(entries, targets, ownerLabel, options, cache, warnin
       // reached chart owner may still contain an independently bound workbook.
       result.push({kind:'table',source_part:part,markdown:`## Diagrammdaten ${path.posix.basename(part)}\n\n`});continue;
     }
-    const label=typeof target==='string'?ownerLabel:`${ownerLabel} · Quellkennung ${target.storyId}`;
+    const label=typeof target==='string'||target.storyId===undefined?ownerLabel:`${ownerLabel} · Quellkennung ${target.storyId}`;
     const markdown = `## Diagrammdaten${part.startsWith('word/')?'':` ${path.posix.basename(part)}`}\n\nBesitzer: ${extractionText(label, false, options.literalMarkup)} · Diagrammvorkommen ${ordinal + 1}\n\n${rendered.markdown}`;
     // The actual owned content projection must precede the partial budget:
     // it removes only our matching internal chart label. Non-partial callers
@@ -1886,7 +1900,7 @@ function boundChartSections(entries, targets, ownerLabel, options, cache, warnin
 }
 function xlsxSupplementRelationshipCoverage(entries, sheetMeta, reader, options = {}) {
   const drawings = new Set([...entries.keys()].filter((name) => /^xl\/drawings\/[^/]+\.xml$/i.test(name)));
-  const charts = new Set([...entries.keys()].filter((name) => /^xl\/charts\/chart\d+\.xml$/i.test(name)));
+  const charts = new Set([...entries.keys()].filter((name) => /^xl\/(?:charts\/chart(?:Ex)?|extendedCharts\/chart)\d+\.xml$/u.test(name)));
   const safeDrawings = new Set();
   const safeCharts = new Set();
   const bySheet = new Map();
@@ -1906,7 +1920,7 @@ function xlsxSupplementRelationshipCoverage(entries, sheetMeta, reader, options 
           issues += linked.issues;
           for (const target of linked.targets) {
             if (++occurrences > 1000) throw xlsxRenderLimit();
-            targets.push(target); safeCharts.add(target);
+            targets.push(target); safeCharts.add(typeof target==='string'?target:target.part);
           }
         } catch (error) { if (!partialPartFailure(entries, drawing, error)) throw error; issues++; }
       }
@@ -2101,13 +2115,13 @@ function xlsxCoverageWarnings(entries, sheetMeta, content = null) {
     /^xl\/chartsheets\/sheet[1-9][0-9]*\.xml$/u, /^xl\/chartsheets\/_rels\/sheet[1-9][0-9]*\.xml\.rels$/u,
     /^xl\/sharedStrings\.xml$/i, /^xl\/comments\d+\.xml$/i,
     /^xl\/drawings\/[^/]+\.xml$/i, /^xl\/drawings\/_rels\/[^/]+\.xml\.rels$/i,
-    /^xl\/charts\/chart\d+\.xml$/i, /^xl\/charts\/_rels\/chart\d+\.xml\.rels$/i,
+    /^xl\/(?:charts\/chart(?:Ex)?|extendedCharts\/chart)\d+\.xml$/u, /^xl\/(?:charts|extendedCharts)\/_rels\/chart(?:Ex)?\d+\.xml\.rels$/u,
     /^xl\/media\/[^/]+\.(?:png|jpe?g|bmp|gif|tiff?|webp|svg|emf|wmf)$/i,
     /^xl\/embeddings\/[^/]+\.(?:docx|xlsx|pptx)$/i
   ];
   const knownRelationshipTypes = new Set([
     'officeDocument', 'core-properties', 'extended-properties', 'custom-properties',
-    'worksheet', 'chartsheet', 'sharedStrings', 'drawing', 'chart', 'image', 'comments', 'hyperlink', 'package'
+    'worksheet', 'chartsheet', 'sharedStrings', 'drawing', 'chart', 'chartEx', 'image', 'comments', 'hyperlink', 'package'
   ]);
   let issues = 0;
   for (const [name, data] of entries) {
@@ -2275,7 +2289,7 @@ function validatePptxXmlEntries(entries) {
   }
 }
 function pptChartRelationshipCoverage(entries, slides, options = {}) {
-  const charts = new Set([...entries.keys()].filter((name) => /^ppt\/charts\/chart\d+\.xml$/i.test(name)));
+  const charts = new Set([...entries.keys()].filter((name) => /^ppt\/(?:charts\/chart(?:Ex)?|extendedCharts\/chart)\d+\.xml$/u.test(name)));
   const safeCharts = new Set();
   const byOwner = new Map();
   let issues = 0;
@@ -2285,7 +2299,7 @@ function pptChartRelationshipCoverage(entries, slides, options = {}) {
       try {
         const linked = boundOwnerCharts(entries,slide,'ppt',pptxStructureError,overrides);
         issues += linked.issues; byOwner.set(slide,linked.targets);
-        for(const target of linked.targets){if(++occurrences>1000)throw pptxStructureError(true);safeCharts.add(target);}
+        for(const target of linked.targets){if(++occurrences>1000)throw pptxStructureError(true);safeCharts.add(typeof target==='string'?target:target.part);}
       } catch(error) {if(!partialPartFailure(entries,slide,error))throw error;issues++;}
     }
     for(const chart of charts)if(!safeCharts.has(chart))issues++;
@@ -2386,7 +2400,7 @@ function pptxCoverageWarnings(entries, slides, safeNotes, masterCoverage) {
     /^ppt\/notesSlides\/notesSlide\d+\.xml$/i,
     /^ppt\/slideLayouts\/slideLayout\d+\.xml$/i, /^ppt\/slideLayouts\/_rels\/slideLayout\d+\.xml\.rels$/i,
     /^ppt\/slideMasters\/slideMaster\d+\.xml$/i, /^ppt\/slideMasters\/_rels\/slideMaster\d+\.xml\.rels$/i,
-    /^ppt\/charts\/chart\d+\.xml$/i, /^ppt\/charts\/_rels\/chart\d+\.xml\.rels$/i,
+    /^ppt\/(?:charts\/chart(?:Ex)?|extendedCharts\/chart)\d+\.xml$/u, /^ppt\/(?:charts|extendedCharts)\/_rels\/chart(?:Ex)?\d+\.xml\.rels$/u,
     /^ppt\/media\/[^/]+\.(?:png|jpe?g|bmp|gif|tiff?|webp|svg|emf|wmf)$/i,
     /^ppt\/embeddings\/[^/]+\.(?:docx|xlsx|pptx)$/i
   ];
@@ -2437,6 +2451,8 @@ function presentationXmlSelection() {
   const mc = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
   const selected = new WeakMap(), ignored = new WeakSet();
   const understood = new Set([...RAW_IMAGE_NAMESPACES.presentation, ...RAW_IMAGE_NAMESPACES.drawing,
+    CHARTEX_NAMESPACE,
+    CHARTEX_CHOICE_NAMESPACE,
     ...OFFICE_MATH_NAMESPACES, 'http://schemas.microsoft.com/office/drawing/2010/main']);
   function start(node) {
     // XML syntax/characters/budgets are still checked for the whole part, but
@@ -2566,6 +2582,8 @@ function inheritedContentValues(xml,options={}) {
   const mc='http://schemas.openxmlformats.org/markup-compatibility/2006';
   const selected=new WeakMap(),ignored=new WeakSet();
   const understood=new Set([...RAW_IMAGE_NAMESPACES.presentation,...RAW_IMAGE_NAMESPACES.drawing,
+    CHARTEX_NAMESPACE,
+    CHARTEX_CHOICE_NAMESPACE,
     ...OFFICE_MATH_NAMESPACES,'http://schemas.microsoft.com/office/drawing/2010/main']);
   const tableCollector = options.contentMode ? createDrawingTableCollector(namespace => RAW_IMAGE_NAMESPACES.drawing.has(namespace), pptxStructureError) : null;
   const math = options.contentMode ? officeMathCollector(pptxStructureError) : null;
@@ -2880,8 +2898,13 @@ function embeddedState(context) {
 }
 function augmentEmbedded(result, entries, context, options = {}) {
   const state=embeddedState(context);
-  const reachableParts=new Set(result.sections.map((section)=>section.source_part));
-  for(const part of PARTIAL_ENTRY_STATE.get(entries)?.textlessPptxOwners||[])reachableParts.add(part);
+  const overrides=xlsxContentOverrides(entries);
+  // chartEx externalData is a refresh/calculation source, not a selected
+  // embedded document. Its opaque workbook stays quarantined. Cached chart
+  // text already passed the real graph; do not append unselected sheet data.
+  const reachableParts=new Set(result.sections.map((section)=>section.source_part).filter(part=>
+    overrides.get(`/${part}`)!=='application/vnd.ms-office.chartex+xml'));
+  for(const part of PARTIAL_ENTRY_STATE.get(entries)?.textlessPptxOwners||[])if(overrides.get(`/${part}`)!=='application/vnd.ms-office.chartex+xml')reachableParts.add(part);
   const coverage=embeddedRelationshipCoverage(entries,reachableParts),matches=[];
   result.warnings.push(...coverage.warnings);
   for(const [name,data]of entries){const match=SUPPORTED_EMBEDDED.exec(name);if(match&&coverage.safeTargets.has(name))matches.push({name,data,ext:`.${match[1].toLowerCase()}`});}

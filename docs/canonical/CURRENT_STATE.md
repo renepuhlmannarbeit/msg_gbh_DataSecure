@@ -1,7 +1,16 @@
 # Aktueller Iststand
 
-Stand: 24.10.2026 · 3.2.0-rc174 · gemeinsamer Test-Pre-Release veröffentlicht.
+Stand: 24.10.2026 · 3.2.0-rc175 · chartEx in Entwicklung, noch kein RC175-Release.
 Desktop-/Office-/physischeMac-Abnahme weiterhin USER_PENDING.
+
+## Aktueller Auftrag RC175
+
+chartEx für Windows/beideMacs autorisiert. Eigener semantischer Cacheleser mit
+exakten Owner-/MIME-/Daten-ID-/Punktbezügen und unverändertem Schutzpfad in Arbeit.
+Unabhängige Primärquellen-/Quellreviews, danach frische gemeinsame native Endgates
+und neue Pakete. [Plan](../acceptance/RC175_SHARED_RELEASE_20261024.md).
+RC174 und darunterstehende abgeschlossene Bindungen bleiben historisch gültig;
+keine Umdeklaration alter Artefakte, Mainintegration oder neue Appleautorität.
 
 ## Technischer Abschluss RC174 – semantische Inhaltsmodelle
 

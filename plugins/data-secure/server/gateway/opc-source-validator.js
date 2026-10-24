@@ -82,6 +82,15 @@ const XLSX_CHARTSHEET_RELATIONSHIPS = new Set([
   'http://purl.oclc.org/ooxml/officeDocument/relationships/chartsheet'
 ]);
 const XLSX_CHARTSHEET_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.chartsheet+xml';
+const CHARTEX_RELATIONSHIP='http://schemas.microsoft.com/office/2014/relationships/chartEx';
+const CHARTEX_OWNERS={docx:/^word\/_rels\/(?:document|header[1-9][0-9]*|footer[1-9][0-9]*|comments|footnotes|endnotes)\.xml\.rels$/u,
+  pptx:/^ppt\/slides\/_rels\/slide[1-9][0-9]*\.xml\.rels$/u,
+  xlsx:/^xl\/drawings\/_rels\/drawing[1-9][0-9]*\.xml\.rels$/u};
+const CHARTEX_STYLES=new Map([
+ ['http://schemas.microsoft.com/office/2011/relationships/chartStyle',['style','application/vnd.ms-office.chartstyle+xml']],
+ ['http://schemas.microsoft.com/office/2011/relationships/chartColorStyle',['colors','application/vnd.ms-office.chartcolorstyle+xml']]
+]);
+const CHARTEX_PACKAGE_TYPES=new Set(['http://schemas.openxmlformats.org/officeDocument/2006/relationships/package','http://purl.oclc.org/ooxml/officeDocument/relationships/package']);
 const MAIN = Object.freeze({
   docx: Object.freeze({
     part: 'word/document.xml',
@@ -311,12 +320,25 @@ function validateOpcControls({ declaredType, entries, controlParts, passivePrese
   }
   if (!expected.contentTypes.has(overrides.get(`/${expected.part}`))) throw new OpcValidationError('SOURCE_TYPE_MISMATCH');
 
+  // Order-independent incoming role proof. Outgoing dependencies are never
+  // admitted merely because their owner has a chart-looking filename/MIME.
+  const chartExParts=new Set(),relationshipTrees=new Map();
+  for(const [name,xml]of Object.entries(controlParts))if(name.endsWith('.rels')){
+    const tree=parseXml(xml,RELATIONSHIPS_NS,'Relationships');relationshipTrees.set(name,tree);
+    for(const node of elements(tree,RELATIONSHIPS_NS,'Relationship'))if(attribute(node,'Type')===CHARTEX_RELATIONSHIP){
+      const target=resolveRelationshipTarget(name,String(attribute(node,'Target'))),mode=String(attribute(node,'TargetMode'));
+      const owner=name.replace('/_rels/','/').slice(0,-'.rels'.length),family={docx:'word',pptx:'ppt',xlsx:'xl'}[declaredType];
+      if(CHARTEX_OWNERS[declaredType]?.test(name)&&entries.has(owner)&&target&&entries.has(target)&&['','Internal'].includes(mode)&&
+          new RegExp(`^${family}/(?:charts/chart(?:Ex)?|extendedCharts/chart)[1-9][0-9]*\\.xml$`,'u').test(target)&&overrides.get(`/${target}`)==='application/vnd.ms-office.chartex+xml')chartExParts.add(target);
+    }
+  }
+
   const office = [];
   const xlsxTextTargets = new Set(), xlsxTextOwners = new Set(), chartsheetTargets = new Set();
   let externalReferences = 0;
   for (const [name, xml] of Object.entries(controlParts)) {
     if (!name.endsWith('.rels')) continue;
-    const relationships = parseXml(xml, RELATIONSHIPS_NS, 'Relationships');
+    const relationships = relationshipTrees.get(name);
     const ids = new Set();
     for (const node of elements(relationships, RELATIONSHIPS_NS, 'Relationship')) {
       const id = String(attribute(node, 'Id'));
@@ -326,6 +348,10 @@ function validateOpcControls({ declaredType, entries, controlParts, passivePrese
       const targetMode = rawTargetMode.toLowerCase();
       const xlsxTextRole = declaredType === 'xlsx' ? XLSX_TEXT_RELATIONSHIPS.get(type) : null;
       const chartsheetRole = declaredType === 'xlsx' && XLSX_CHARTSHEET_RELATIONSHIPS.has(type);
+      const chartExRole=type===CHARTEX_RELATIONSHIP;
+      const dependencyOwner=name.replace('/_rels/','/').slice(0,-'.rels'.length);
+      const chartExDependency=chartExParts.has(dependencyOwner),chartExStyle=chartExDependency?CHARTEX_STYLES.get(type):null;
+      const chartExPackage=partialExtraction&&chartExDependency&&CHARTEX_PACKAGE_TYPES.has(type);
       if (!id || !type || !target || ids.has(id)) throw new OpcValidationError();
       ids.add(id);
       // OPC enumeration values are case-sensitive. Do not quarantine an edge
@@ -333,7 +359,7 @@ function validateOpcControls({ declaredType, entries, controlParts, passivePrese
       // differently and resolve the same target against local package bytes.
       if (partialExtraction && !['', 'Internal', 'External'].includes(rawTargetMode)) throw new OpcValidationError();
       if (targetMode === 'external') {
-        if (xlsxTextRole || chartsheetRole) throw new OpcValidationError('SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
+        if (xlsxTextRole || chartsheetRole || chartExRole) throw new OpcValidationError('SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
         // Partial Standalone extraction has no external resolver. Preserve
         // independent local text, but never treat an external package root as
         // a source binding and never expose the target in public findings.
@@ -348,18 +374,20 @@ function validateOpcControls({ declaredType, entries, controlParts, passivePrese
             OFFICE_REL_NAMESPACES.some(namespace => type.toLowerCase() === `${namespace}hyperlink`)) continue;
         throw new OpcValidationError('SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
       }
-      const passiveOle = passivePresentation && declaredType === 'pptx' &&
+      const passiveOle = passivePresentation && declaredType === 'pptx' && !chartExDependency &&
         OFFICE_REL_NAMESPACES.some(namespace => type.toLowerCase() === `${namespace}oleobject`);
-      const passivePackage = passivePresentation && declaredType === 'pptx' &&
+      const passivePackage = passivePresentation && declaredType === 'pptx' && !chartExDependency &&
         OFFICE_REL_NAMESPACES.some(namespace => type.toLowerCase() === `${namespace}package`) &&
         /^ppt\/(?:slides\/_rels\/slide[0-9]+|charts\/_rels\/chart[0-9]+)\.xml\.rels$/iu.test(name);
-      const passiveMetadata = passivePresentation && declaredType === 'pptx'
+      const passiveMetadata = passivePresentation && declaredType === 'pptx' && !chartExDependency
         ? PASSIVE_PRESENTATION_METADATA.get(type.toLowerCase()) : null;
-      if (isBlockedRelationshipType(type) && !passiveOle && !passivePackage) {
+      if (isBlockedRelationshipType(type) && !passiveOle && !passivePackage && !chartExPackage) {
         throw new OpcValidationError('SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
       }
       if (!hasSupportedRelationshipNamespace(type) &&
           !xlsxTextRole &&
+          !chartExRole &&
+          !chartExStyle &&
           !passiveMetadata &&
           !(passivePresentation && declaredType === 'pptx' &&
             PASSIVE_PRESENTATION_REL_TYPES.has(type.toLowerCase()))) {
@@ -367,6 +395,22 @@ function validateOpcControls({ declaredType, entries, controlParts, passivePrese
       }
       const resolvedTarget = resolveRelationshipTarget(name, target);
       if (!resolvedTarget || !entries.has(resolvedTarget)) throw new OpcValidationError();
+      if(chartExStyle||chartExPackage){
+        const family={docx:'word',pptx:'ppt',xlsx:'xl'}[declaredType];
+        if(!['','Internal'].includes(rawTargetMode))throw new OpcValidationError('SOURCE_TYPE_MISMATCH');
+        if(chartExStyle&&(!new RegExp(`^${family}/(?:charts|extendedCharts)/${chartExStyle[0]}[1-9][0-9]*\\.xml$`,'u').test(resolvedTarget)||
+            overrides.get(`/${resolvedTarget}`)!==chartExStyle[1]))throw new OpcValidationError('SOURCE_TYPE_MISMATCH');
+        if(chartExPackage&&(!new RegExp(`^${family}/embeddings/[^/]+\\.xlsx$`,'u').test(resolvedTarget)||
+            overrides.get(`/${resolvedTarget}`)!=='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'))throw new OpcValidationError('SOURCE_TYPE_MISMATCH');
+      }
+      if(chartExRole){
+        const family={docx:'word',pptx:'ppt',xlsx:'xl'}[declaredType];
+        const owner=name.replace('/_rels/','/').slice(0,-'.rels'.length);
+        if(!CHARTEX_OWNERS[declaredType]?.test(name)||!entries.has(owner)||
+            !new RegExp(`^${family}/(?:charts/chart(?:Ex)?|extendedCharts/chart)[1-9][0-9]*\\.xml$`,'u').test(resolvedTarget)||
+            !['','Internal'].includes(rawTargetMode)||overrides.get(`/${resolvedTarget}`)!=='application/vnd.ms-office.chartex+xml')
+          throw new OpcValidationError('SOURCE_TYPE_MISMATCH');
+      }
       if (declaredType === 'xlsx' && type.toLowerCase().endsWith('/chartsheet')) {
         if (!chartsheetRole || name !== 'xl/_rels/workbook.xml.rels' || !entries.has('xl/workbook.xml') ||
             !/^xl\/chartsheets\/sheet[1-9][0-9]*\.xml$/u.test(resolvedTarget) ||
@@ -390,7 +434,7 @@ function validateOpcControls({ declaredType, entries, controlParts, passivePrese
       if (passiveOle && !/^ppt\/embeddings\/oleObject[0-9]+\.bin$/iu.test(resolvedTarget)) {
         throw new OpcValidationError('SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
       }
-      if (passivePackage && !/^ppt\/embeddings\/[^/]+\.xlsx$/iu.test(resolvedTarget)) {
+      if (passivePackage && !chartExPackage && !/^ppt\/embeddings\/[^/]+\.xlsx$/iu.test(resolvedTarget)) {
         throw new OpcValidationError('SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
       }
       if (passiveMetadata && (!passiveMetadata[0].test(name) || !passiveMetadata[1].test(resolvedTarget))) {

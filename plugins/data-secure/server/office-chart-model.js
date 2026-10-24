@@ -14,6 +14,8 @@ const W = new Set(['http://schemas.openxmlformats.org/wordprocessingml/2006/main
 const WP = new Set(['http://schemas.openxmlformats.org/drawingml/2006/wordprocessingDrawing','http://purl.oclc.org/ooxml/drawingml/wordprocessingDrawing']);
 const R = ['http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'http://purl.oclc.org/ooxml/officeDocument/relationships'];
 const MC = 'http://schemas.openxmlformats.org/markup-compatibility/2006';
+const CX = 'http://schemas.microsoft.com/office/drawing/2014/chartex';
+const CX1 = 'http://schemas.microsoft.com/office/drawing/2015/9/8/chartex';
 const MAX_POINTS = 200000, MAX_SERIES = 4096, MAX_LEVELS = 64, MAX_CHARS = 8000000;
 const CHARTS = new Set(['areaChart', 'area3DChart', 'barChart', 'bar3DChart', 'bubbleChart', 'doughnutChart', 'lineChart', 'line3DChart', 'ofPieChart', 'pieChart', 'pie3DChart', 'radarChart', 'scatterChart', 'stockChart', 'surfaceChart', 'surface3DChart']);
 const AXES = new Set(['catAx', 'dateAx', 'valAx', 'serAx']);
@@ -332,10 +334,11 @@ function officeChartReferences(xml, family, decode, error, scope = {}) {
   const ns = family === 'ppt' ? P : family==='word'?W:XDR;
   const rootName=family==='ppt'?'sld':family==='xl'?'wsDr':scope.root||'document';
   const result = [];
-  const root=selectedTree(xml,decode,error,family==='word'?scope.understoodNamespaces:undefined,{end(node,root){
-    if (!is(node, C, 'chart')) return;
+  const root=selectedTree(xml,decode,error,family==='word'?scope.understoodNamespaces:new Set([...C,...A,...P,...XDR,CX,CX1,'http://schemas.microsoft.com/office/drawing/2010/main']),{end(node,root){
+    const extended=node.namespaceURI===CX&&node.localName==='chart';
+    if (!extended&&!is(node, C, 'chart')) return;
     const data = node.parent, graphic = data?.parent, frame = graphic?.parent;
-    if (!is(data, A, 'graphicData') || !C.has(attr(data, 'uri')) || !is(graphic, A, 'graphic')) return;
+    if (!is(data, A, 'graphicData') || !(extended?attr(data,'uri')===CX:C.has(attr(data,'uri'))) || !is(graphic, A, 'graphic')) return;
     if(family==='word'){
       if(!WP.has(frame?.namespaceURI)||!['inline','anchor'].includes(frame.localName)||!is(frame.parent,W,'drawing')||
           !is(frame.parent.parent,W,'r')||!wordScope(root,frame.parent,scope.storyIds))return;
@@ -348,11 +351,11 @@ function officeChartReferences(xml, family, decode, error, scope = {}) {
     if (result.length >= 1000) throw error(true);
     if(family==='word'&&scope.storyIds){
       let story=frame;while(story&&story.parent!==root)story=story.parent;
-      result.push({id,storyId:story?.attributes.get(`{${story.namespaceURI}}id`)});
-    }else result.push(id);
+      result.push({id,storyId:story?.attributes.get(`{${story.namespaceURI}}id`),...(extended?{extended:true}:{})});
+    }else result.push(extended?{id,extended:true}:id);
   }});
   if(!is(root,ns,rootName)||family==='word'&&!['document','hdr','ftr','comments','footnotes','endnotes'].includes(rootName))throw error();
   return result;
 }
 
-module.exports = Object.freeze({ readOfficeChart, renderOfficeChart, officeChartReferences, wordChartStoryReferences });
+module.exports = Object.freeze({ readOfficeChart, renderOfficeChart, officeChartReferences, wordChartStoryReferences, selectedChartTree:selectedTree });

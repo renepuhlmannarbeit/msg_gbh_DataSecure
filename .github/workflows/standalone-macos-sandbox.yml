@@ -210,6 +210,7 @@ jobs:
           node tests/test-office-diagrams.js
           node tests/test-office-occurrences.js
           node tests/test-office-chart-model.js
+          node tests/test-office-chartex-model.js
           node tests/test-office-math.js
           node tests/test-office-math-projection.js
           node tests/test-office-math-integration.js

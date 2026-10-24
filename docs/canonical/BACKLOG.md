@@ -1,6 +1,16 @@
 # Aktives Entwicklungsbacklog
 
-Arbeitsquelle: 3.2.0-rc174, Windows/beideMacs als Test-Pre-Release veröffentlicht.
+Arbeitsquelle: 3.2.0-rc175 chartEx in Entwicklung; RC174 bleibt veröffentlicht.
+
+## BL-049.6 – RC175 chartEx
+
+24.10.2026 ausdrücklich beauftragt: gespeicherte chartEx-Inhalte für Windows
+und beide Macs owner-/daten-ID-/indexgebunden ergänzen, Schutzprüfungen erhalten,
+unabhängig revalidieren/frisch testen, RC175 als GitHub-Test-Pre-Release und
+Windows lokal mit Testplan. Desktoptests Nutzer. [Plan und Primärquellen](../acceptance/RC175_SHARED_RELEASE_20261024.md).
+Eigener offlinefähiger semantischer Leser in Arbeit, keine Formelausführung,
+externen Workbook-/Geodatenloads oder Statistik-/Visualvollständigkeitszusage.
+Noch keine finale Paket-/Mac-/Releasefreigabe oder Mainintegration.
 
 ## BL-049.5 – RC174 Diagramme, OfficeMath und passive PDFwerte
 
@@ -1734,7 +1744,7 @@ in dieselbe Korrekturrunde.
 
 ## Historische Nachweise bis R4 (kein aktueller R5-Abschluss)
 
-Stand: 17.10.2026 · Produktstand 3.2.0-rc174 · veröffentlicht Standalone RC162 (Windows und beide Mac-Architekturen; M2-Abnahme offen), Linux RC159 / Cowork RC151 · lokaler Arbeitsstand nach RC162 noch nicht veröffentlicht
+Stand: 17.10.2026 · Produktstand 3.2.0-rc175 · veröffentlicht Standalone RC162 (Windows und beide Mac-Architekturen; M2-Abnahme offen), Linux RC159 / Cowork RC151 · lokaler Arbeitsstand nach RC162 noch nicht veröffentlicht
 
 ## Gezielter R3-Abschlussreview
 

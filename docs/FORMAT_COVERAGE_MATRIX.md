@@ -1,6 +1,6 @@
 # Aktuelle Format-Coverage
 
-Arbeitsquelle: 3.2.0-rc174 · 24.10.2026 · Test-Pre-Release veröffentlicht.
+Arbeitsquelle: 3.2.0-rc175 chartEx in Entwicklung · 24.10.2026; RC174 veröffentlicht.
 Gemeinsamer App-/Tagcommit444b14e0020ebb8cf7f7de08fb36d6e71234da91.
 Windows und beide Macs technisch geprüft; Desktop-/Officeabnahme USER_PENDING.
 
@@ -30,7 +30,12 @@ Feldkontexte bleiben im bestehenden Privacy-/Residual-/Keep-/Tracepfad; keine
 Formelberechnung, externen Workbookloads oder PDFaktions-/XFAausführung.
 [Aktueller RC174-Plan und Grenzen](acceptance/RC174_SHARED_RELEASE_20261023.md).
 
-Noch offene Modelle: chartEx, klassische Kommentarautoren/-bezüge, weitere
+chartEx wird in RC175 separat ergänzt: gespeicherte Daten-ID-/Dimension-/Level-/
+Punktcaches und reale Ownerbezüge, keine Berechnung von Formeln/Statistiken oder
+Karten. Native Endgates/Pakete noch offen, Desktoptests USER_PENDING.
+[RC175-Plan und Grenzen](acceptance/RC175_SHARED_RELEASE_20261024.md).
+
+Weitere offene Modelle: klassische Kommentarautoren/-bezüge, weitere
 Legacy-/Grafikcodecs und ggf. ein separat isolierter Office-Renderer. Keine universelle
 PNG-/Office-/PDF-, OCR-/Rendering- oder Artefaktfreiheitszusage. APNG/unbekannte
 Chunks bleiben eingeschränkt; Hinweise teilweise noch generisch.

@@ -196,6 +196,15 @@ if (process.argv.includes('--source-only')) {
     writeStandaloneRuntime(path.join(repo, 'plugins', 'data-secure', 'server'), server, target);
     writeConversionRuntime(repo, runtime, target);
     const { convertBuffer } = require(path.join(server, 'standalone/conversion-worker'));
+    for(const type of ['docx','xlsx','pptx'])await check(`${target}: actual ${type} chartEx cache conversion is source-bound in both modes`,async()=>{
+      const fixture=require('./lib/office-chartex-fixtures.cjs');
+      const bytes=fixture.source(`.${type}`,fixture.chart({dimensions:fixture.dim('cat',[[0,'North'],[1,'South']],{name:'Region'})+fixture.dim('val',[[1,'200'],[0,'100']],{numeric:true}),seriesXml:fixture.series(17,{layout:'treemap'})}),{chartsheet:true}),before=hash(bytes);
+      for(const markdownOutput of ['content-v1','notes-v1']){
+        const result=await convertBuffer(bytes,`.${type}`,{contentOptions:{...options(false),markdownOutput}});
+        assert.match(result.markdown,/\| 0 \| North \| 100 \|/u);assert.match(result.markdown,/\| 1 \| South \| 200 \|/u);assert.doesNotMatch(result.markdown,/\| 0 \| North \| 200 \||\| 1 \| South \| 100 \|/u);assert.match(result.markdown,/treemap/u);assert.notEqual(result.coverage.status,'complete');
+      }
+      assert.equal(hash(bytes),before);
+    });
     // Independent text oracle specified before rendering. It is not derived
     // from an OCR result and no mocked raster/recognition data is used.
     // Own the native addon lifetime in a completed fixture subprocess, so the
@@ -303,6 +312,26 @@ if (process.argv.includes('--source-only')) {
       assert.equal((masked.text.match(/\[EMAIL_REDACTED\]/gu) || []).length, 2);
       assert.equal((masked.text.match(/\[PHONE_REDACTED\]/gu) || []).length, 2);
       assert.equal(hash(bytes), before);
+    });
+    for(const type of ['docx','xlsx','pptx'])await check(`${target}: actual ${type} chartEx plus two images preserves indexed facts and private OCR provenance`,async()=>{
+      const fixture=require('./lib/office-chartex-fixtures.cjs'),{readZip}=require('../plugins/data-secure/server/zip-reader');
+      const entries=readZip(fixture.source(`.${type}`)),family={docx:'word',xlsx:'xl',pptx:'ppt'}[type];
+      const owner={docx:'word/document.xml',xlsx:'xl/drawings/drawing1.xml',pptx:'ppt/slides/slide1.xml'}[type];
+      const rel=owner.replace(/\/([^/]+)$/u,'/_rels/$1.rels');
+      const shapes=[0,1].map(index=>type==='docx'?`<w:p><w:r><w:drawing><wp:inline><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:blipFill><a:blip r:embed="img${index}"/></pic:blipFill></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r></w:p>`:type==='pptx'?`<p:pic><p:blipFill><a:blip r:embed="img${index}"/></p:blipFill></p:pic>`:`<xdr:absoluteAnchor><xdr:pic><xdr:blipFill><a:blip r:embed="img${index}"/></xdr:blipFill></xdr:pic></xdr:absoluteAnchor>`).join('');
+      const close={docx:'</w:body>',xlsx:'</xdr:wsDr>',pptx:'</p:spTree>'}[type];
+      entries.set(owner,Buffer.from(entries.get(owner).toString('utf8').replace(close,shapes+close)));
+      entries.set(rel,Buffer.from(entries.get(rel).toString('utf8').replace('</Relationships>',[0,1].map(index=>`<Relationship Id="img${index}" Type="${R}/image" Target="${type==='docx'?'':'../'}media/image${index}.png"/>`).join('')+'</Relationships>')));
+      entries.set('[Content_Types].xml',Buffer.from(entries.get('[Content_Types].xml').toString('utf8').replace('</Types>',[0,1].map(index=>`<Override PartName="/${family}/media/image${index}.png" ContentType="image/png"/>`).join('')+'</Types>')));
+      for(const index of [0,1])entries.set(`${family}/media/image${index}.png`,png);
+      const bytes=zipStore([...entries]),before=hash(bytes),result=await convertBuffer(bytes,`.${type}`,{contentOptions:options(true)});
+      assert.match(result.markdown,/\| 0 \| North \| 100 \|/u);assert.match(result.markdown,/\| 1 \| South \| 200 \|/u);assert.equal((result.markdown.match(/RASTER ORIGINAL/gu)||[]).length,2);
+      assert.deepEqual([...new Set(result.ocr_contacts.map(item=>item.page))],[1,2]);
+      for(const contact of result.ocr_contacts)assert.ok(result.markdown.slice(contact.start,contact.end).includes(contact.kind==='email'?'@':'555'));
+      const {extractSourceForPrivacy}=require(path.join(server,'core/markdown-first-privacy')),{automaticallyRedactOcrContacts}=require(path.join(server,'gateway/bound-content-input'));
+      const privateText=await extractSourceForPrivacy(bytes,`.${type}`,{contentOptions:options(true),convertBuffer:async()=>result});
+      const masked=automaticallyRedactOcrContacts({original_text:privateText.markdown,source_type:type,contacts:privateText.ocrContacts});
+      assert.doesNotMatch(masked.text,/@|555/u);assert.equal((masked.text.match(/\[EMAIL_REDACTED\]/gu)||[]).length,2);assert.equal((masked.text.match(/\[PHONE_REDACTED\]/gu)||[]).length,2);assert.match(masked.text,/North/u);assert.equal(hash(bytes),before);
     });
     await check(`${target}: two office images retain separate crop coordinates and global Markdown offsets`, async () => {
       const result = await convertBuffer(office('docx', [{ ext: 'png', bytes: png }, { ext: 'png', bytes: png }]), '.docx', { contentOptions: options(true) });

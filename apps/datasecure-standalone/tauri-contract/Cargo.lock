@@ -499,7 +499,7 @@ dependencies = [
 
 [[package]]
 name = "datasecure-standalone"
-version = "3.2.0-rc174"
+version = "3.2.0-rc175"
 dependencies = [
  "getrandom 0.3.4",
  "icu_normalizer",
