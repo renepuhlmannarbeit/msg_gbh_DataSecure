@@ -1,9 +1,33 @@
 # Aktives Entwicklungsbacklog
 
-Arbeitsquelle: 3.2.0-rc176 Entwicklung, noch kein neuer Paketfreeze;
+Arbeitsquelle: 3.2.0-rc176 Source04-Vorbereitung nach echtem Dateigegenvergleich;
 Desktop-/Office-/Zielhostabnahme USER_PENDING. RC175/ältere Pakete unverändert.
 
 ## BL-049.7 – RC176 priorisierte Inhalts-/Grafikverbesserungen
+
+24.10. später: Source03 technisch318+11/Native/Konverter/Paket/Macbeidegrün,
+aber vor Veröffentlichung zwei echte modernComment-Dateinamen mit uppercase
+Hexanteilen im privaten schwierigen Originaltest als ausgelassen erkannt.
+EngeA–F-Ergänzung/exakteParts+MIME/20gezielteKommentar-/Privacygruppen;
+neuer gemeinsamer Source04 samt unabhängiger Revalidierung erforderlich.
+Der Nutzer erlaubt nun auch agentische Desktoptests; vorgeschriebene Steuerung
+wegen Kernel-Assets-Pfadfehler vor jeder UI-Aktion nicht verfügbar. Keine
+Desktopabnahme ableiten. Sechs echte Tabellenquellen775gemesseneTextbausteine
+erhalten; weitere visuelle Renderer-/Office-/Privacygrenzen bleiben separat.
+
+### Konkreter visueller Folgeumfang aus privaten Originalvergleichen
+
+775Tabellentextbausteine sowie783Folienabsätze/128Notizabsätze/19SmartArt-
+Zeilen sind im begrenzten Source03-Vergleich erhalten. Das beweist nicht deren
+visuelle semantische Gruppierung. SmartArt-Phasen/zugehörige Beschreibungen
+werden noch flach ausgegeben; kleine eingebettete Screenshottexte und manche
+EMF/SVG-/Kompositgrafiken bleiben unvollständig. PPTX-/PDF-OCR kann weiterhin
+gültig kodierten, aber unlesbaren Erkennungstext und naheliegende Dopplungen
+enthalten. Folgearbeit: quellgebundene Gruppen-/Grafikregionen und belastbare
+positionsbezogene Normalisierung untersuchen, keine pauschale Zeichen-/Sprach-
+Whitelist, kein Löschen nativer Suchtexte oder bloßer Confidencefilter. Vor
+Aufnahme Renderer-/Quell-/Privacy-/Provenienz-/Ressourcenbelege auf allenZielen.
+Diese Restgrenzen sind kein neuer RC176-Vollständigkeits-/ArtefaktfreiheitsPASS.
 
 24.10.2026 ausdrücklich beauftragt: priorisierte Punkte aus dem Zielreview für
 Windows x64 und beide Macs implementieren, Schutzprüfungen erhalten, unabhängig

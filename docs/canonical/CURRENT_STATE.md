@@ -1,9 +1,38 @@
 # Aktueller Iststand
 
-Stand: 24.10.2026 · RC176 Source02-Gesamtregression ROT; Source03-Korrektur in Arbeit, nicht freigabefähig.
+Stand: 24.10.2026 · 3.2.0-rc176 · Source03 technisch grün; echte Kommentar-Namenslücke gefunden, Source04-Nachweis noch offen.
 Desktop-/Office-/physischeMac-Abnahme weiterhin USER_PENDING.
 
-## RC176 – priorisierte Inhalts-/Grafikverbesserungen in Arbeit
+## RC176 – Source04 nach echtem schwierigen Dateivergleich
+
+Source03-Appcommit0cd07ffb54d59863bcf23f1f852c372781143673 hatte alle vier
+lokalen Endgates sowie beide Mac40124421536SUCCESS. Der zuerst rote Headless-
+Dokumentationskopf wurde als genau eine dokumentierte Zeile korrigiert;
+anschließend frische unveränderte318+11PASS/stabil20:58:32.209UTC, alterRED
+erhalten. Native300Rust/3ignored/Clippy/Node-Rust/Release, acht Konvertersuiten
+und5Paketgates/100MD0Fehler ebensoPASS. Keine Publikation aus diesen Bytes.
+
+Zusätzlich vom Nutzer autorisierter lokaler schwieriger Dateivergleich fand
+eine echte Supportlücke: zwei modernComment-Parts mit großgeschriebenen Hex-
+Namensanteilen wurden vom lowercase-only Muster als optional beschädigt
+ausgelassen. Die tatsächlichen Beziehungen, MIME und Inhalte passen; die enge
+Korrektur akzeptiert A–F, ohne Ziel-/MIME-Namen zu falten oder Teile zu erraten.
+20gezielte Kommentar-/OPC-/Privacy-/Trace-/PublicationgruppenPASS; unabhängiges
+Delta-Gegenlesen und neuer gemeinsamer Source04-Endlauf vor Release nötig.
+Die sechs Word-/Excel-/PPTX-Tabellenquellen enthalten775/775gemessene Texte in
+Quellfolge und Mindesthäufigkeit; das ist keine visuelle/Anonymisierungsabnahme.
+Der eigene erste PDF-Harness hatte den tatsächlichen Desktopflag passiveObjects
+nicht übergeben; separat korrigierter Prüfaufruf erzeugt PDF mit/ohneOCR,
+kein Produktfix oder rückwirkendes Grün der falschen Aufrufe. Originale erhalten.
+
+Nutzer hat jetzt auch Desktoptests freigegeben. Der vorgeschriebene Computer-
+Use-NodeREPL scheitert jedoch schon beim Initialisieren mit Kernel-Assets/
+Dateipfadfehler, auch nach begrenzter Recovery. Kein Fenster gelesen, keine
+Desktopaktion oder GUI-PASS, kein Lock-/Sicherheitsbypass. Desktopzustand
+unbekannt; Windows-GUI NOT_RUN wegen Toolinfrastruktur. Physische Mac-/Office-
+Abnahme bleibt offen. Private Nutzerdokumente und neue Vergleiche nie hochladen.
+
+### Historischer Entwicklungsstand vor Source03
 
 Auftrag: PDFstruktur/Lesereihenfolge, häufige TIFFvarianten, begrenztes EMF+,
 Word-Feld-/Revisions-/Nummerierungs-/Kommentarkontext, weitere Excelkontexte und

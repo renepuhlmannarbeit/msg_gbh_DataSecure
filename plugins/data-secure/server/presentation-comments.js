@@ -29,7 +29,10 @@ function edges(entries,owner,kind,pattern){const part=path.posix.join(path.posix
  if(out.length>1)throw fail();return out;}
 function readPresentationComments(entries,{slidePart}){
  if(!(entries instanceof Map)||!/^ppt\/slides\/slide[1-9][0-9]*\.xml$/u.test(slidePart)||!entries.has(slidePart))throw fail();
- const parts=edges(entries,slidePart,COMMENTS,/^ppt\/comments\/modernComment_[\da-f]+_[\da-f]+\.xml$/u);if(!parts.length)return Object.freeze({comments:Object.freeze([]),notices:Object.freeze([]),consumedParts:Object.freeze([])});
+ // Hex components emitted by PowerPoint may use upper- or lowercase. Keep
+ // the exact relationship-resolved package name: accepting A-F here must not
+ // case-fold a missing target, infer a sibling or relax MIME/owner validation.
+ const parts=edges(entries,slidePart,COMMENTS,/^ppt\/comments\/modernComment_[\da-fA-F]+_[\da-fA-F]+\.xml$/u);if(!parts.length)return Object.freeze({comments:Object.freeze([]),notices:Object.freeze([]),consumedParts:Object.freeze([])});
  const [authorsPart]=edges(entries,'ppt/presentation.xml',AUTHORS,/^ppt\/authors\.xml$/u);if(!authorsPart)throw fail();
  // Required exact MIME in the same actual package, no filename-only admission.
  const overrides=new Map(),types=tree(entries.get('[Content_Types].xml'));if(types.namespaceURI!==CT||types.localName!=='Types')throw fail();

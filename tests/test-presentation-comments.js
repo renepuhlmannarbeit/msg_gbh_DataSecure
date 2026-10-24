@@ -17,10 +17,40 @@ function fixture(reply=true){return new Map([
  ['ppt/authors.xml',`<p:authorLst xmlns:p="${NS}"><p:author id="${A}" name="Anna Berger" initials="AB" userId="anna@example.invalid" providerId="AD"/></p:authorLst>`],
  ['ppt/comments/modernComment_a_b.xml',`<p:cmLst xmlns:p="${NS}" xmlns:a="${D}"><p:cm id="${C}" authorId="${A}" created="2026-10-24T10:00:00Z"><p:unknownAnchor/>${reply?`<p:replyLst><p:reply id="${C2}" authorId="${A}" created="2026-10-24T11:00:00Z">${body('Antwort &amp; ÄÖÜß')}</p:reply></p:replyLst>`:''}${body('Name: Max Mustermann')}</p:cm></p:cmLst>`]
  ].map(([key,value])=>[key,Buffer.isBuffer(value)?value:Buffer.from(value)]));}
+function namedFixture(name,reply=true){
+ const entries=fixture(reply),before='ppt/comments/modernComment_a_b.xml',after=`ppt/comments/${name}`;
+ if(before===after)return entries;
+ entries.set(after,entries.get(before));entries.delete(before);
+ for(const part of ['[Content_Types].xml','ppt/slides/_rels/slide1.xml.rels'])
+  entries.set(part,Buffer.from(entries.get(part).toString().replaceAll('modernComment_a_b.xml',name)));
+ return entries;
+}
 let passed=0;function test(name,fn){fn();console.log(`PASS ${++passed} ${name}`);}
 test('actual slide -> comment -> authors/MIME graph preserves Unicode, replies and distinct identities',()=>{const entries=fixture(),before=Buffer.concat([...entries.values()]);const result=readPresentationComments(entries,{slidePart:'ppt/slides/slide1.xml'});
  assert.equal(result.comments.length,2);assert.equal(result.comments[0].text,'Name: Max Mustermann\nHTTP/2');assert.equal(result.comments[1].text,'Antwort & ÄÖÜß\nHTTP/2');assert.equal(result.comments[1].parentId,C.toLowerCase());assert.equal(result.comments[0].author.name,'Anna Berger');assert.deepEqual(Buffer.concat([...entries.values()]),before);assert.ok(Object.isFrozen(result.comments[0]));});
 test('orphan metadata cannot become comment text',()=>{const e=fixture();e.delete('ppt/slides/_rels/slide1.xml.rels');assert.deepEqual(readPresentationComments(e,{slidePart:'ppt/slides/slide1.xml'}).comments,[]);});
+test('upper/mixed-case hex names retain exact relationship, MIME and Unicode comment binding',()=>{
+ for(const name of ['modernComment_7ABCDEF0_1B2C3D4E.xml','modernComment_7AbCdEf0_1b2C3d4E.xml']){
+  const e=namedFixture(name),snapshot=Buffer.concat([...e.values()]);
+  const out=readPresentationComments(e,{slidePart:'ppt/slides/slide1.xml'});
+  assert.equal(out.comments.length,2);assert.equal(out.comments[0].source_part,`ppt/comments/${name}`);
+  assert.equal(out.comments[1].text,'Antwort & ÄÖÜß\nHTTP/2');
+  const result=extractMarkdownBuffer(zipStore([...e]),'.pptx',{markdownOutput:'content-v1',partialExtraction:true});
+  assert.equal(result.markdown.split('Max Mustermann').length-1,1);
+  assert.ok(!result.coverage.reason_codes.includes('DOCUMENT_PARTS_DAMAGED'));
+  assert.deepEqual(Buffer.concat([...e.values()]),snapshot);
+ }
+});
+test('uppercase support never case-folds an absent entry or MIME override and never admits nonhex names',()=>{
+ const name='modernComment_7ABCDEF0_1B2C3D4E.xml';
+ for(const modify of [
+  e=>{const part=`ppt/comments/${name}`;e.set(part.toLowerCase(),e.get(part));e.delete(part);},
+  e=>e.set('[Content_Types].xml',Buffer.from(e.get('[Content_Types].xml').toString().replace(name,name.toLowerCase()))),
+  e=>e.set('[Content_Types].xml',Buffer.from(e.get('[Content_Types].xml').toString().replace('application/vnd.ms-powerpoint.comments+xml','text/plain')))
+ ]){const e=namedFixture(name);modify(e);assert.throws(()=>readPresentationComments(e,{slidePart:'ppt/slides/slide1.xml'}),{code:'PPTX_STRUCTURE_UNSAFE'});}
+ for(const invalid of ['modernComment_ABC_G1.xml','modernComment_ABC_DEF.XML','ModernComment_ABC_DEF.xml'])
+  assert.throws(()=>readPresentationComments(namedFixture(invalid),{slidePart:'ppt/slides/slide1.xml'}),{code:'PPTX_STRUCTURE_UNSAFE'});
+});
 test('external, wrong-role, duplicate-edge and MIME mismatch stay closed',()=>{for(const modify of [
  e=>e.set('ppt/slides/_rels/slide1.xml.rels',Buffer.from(rel('comments','https://bad.invalid/x'))),
  e=>e.set('ppt/_rels/presentation.xml.rels',Buffer.from(rel('comments','authors.xml'))),
@@ -47,16 +77,24 @@ test('comment body never traverses MC alternatives, foreign wrappers or nested p
  const {createMarkdownExtraction}=require('../plugins/data-secure/server/standalone/markdown-contract');
  const {replayTransformTrace}=require('../plugins/data-secure/server/privacy/transform-plan');
  const {verifyAnonymizedPublication}=require('../plugins/data-secure/server/standalone/anonymized-artifact');
- for(const profile of ['general','personnel_profile'])for(const weak of [false,true]){
-  const entries=fixture();if(weak)entries.set('ppt/comments/modernComment_a_b.xml',Buffer.from(entries.get('ppt/comments/modernComment_a_b.xml').toString().replace('Max Mustermann','Qvx / Qvy')));
+ const {initialEntities,applyEntityDecisions}=require('../plugins/data-secure/server/gateway/standalone-entity-review');
+ const {bindStandaloneDocumentKeeps}=require('../plugins/data-secure/server/privacy/residual-person-review');
+ for(const profile of ['general','personnel_profile'])for(const weak of [false,true])for(const name of ['modernComment_a_b.xml','modernComment_7ABCDEF0_1B2C3D4E.xml','modernComment_7AbCdEf0_1b2C3d4E.xml']){
+  const entries=namedFixture(name),part=`ppt/comments/${name}`;if(weak)entries.set(part,Buffer.from(entries.get(part).toString().replace('Max Mustermann','Qvx / Qvy')));
   const source=zipStore([...entries]),base=extractMarkdownBuffer(source,'.pptx',{markdownOutput:'content-v1',partialExtraction:true});
   const contentOptions={schema:'datasecure-content-options/1',markdownOutput:'content-v1',scanOcr:false,imageOcr:false};
   const extracted=await extractSourceForPrivacy(source,'.pptx',{contentOptions,convertBuffer:async()=>createMarkdownExtraction({source_type:'pptx',markdown:base.markdown,coverage:base.coverage,content_options:contentOptions})});
   const prepared=prepareTextPrivacyReview({text:extracted.markdown,profile,productChannel:'standalone',consumerOptions:{productChannel:'standalone',contentOptions},registry:require('../plugins/data-secure/server/privacy/entities').makeRegistry(),captureTrace:true});
   const reviewed=await resolveTextPrivacyReview(prepared,null,{reviewPolicy:'automatic-conservative'}),final=finalizeTextPrivacyReview(prepared,reviewed,{prefix:'',suffix:''});
   assert.doesNotMatch(final.markdown,/Anna Berger|Max Mustermann|anna@example|Qvx|Qvy/u);assert.match(final.markdown,/HTTP\/2/u);assert.equal(replayTransformTrace(final.transform_trace),final.markdown);
-  assert.ok(verifyAnonymizedPublication({markdown:final.markdown,profile,content_options:contentOptions,source_extraction:extracted.sourceExtraction,dictionary:final.dictionary,strong_person_anchor:final.strong_person_anchor,reviewed_person_candidates:final.reviewed_person_candidates}));
-  console.log(`PASS ${++passed} real OPC comment -> source/author privacy/trace/publication ${profile}/weak=${weak}`);
+  const proof={markdown:final.markdown,profile,content_options:contentOptions,source_extraction:extracted.sourceExtraction,dictionary:final.dictionary,strong_person_anchor:final.strong_person_anchor,reviewed_person_candidates:final.reviewed_person_candidates};
+  assert.ok(verifyAnonymizedPublication(proof));
+  const entities=initialEntities({markdown:final.markdown,transform_trace:final.transform_trace});
+  const target=entities.find(entity=>(weak?/Qvx/u:/Max Mustermann/u).test(entity.original));assert.ok(target);
+  const kept=applyEntityDecisions(final.markdown,entities,[{entity_id:target.entity_id,decision:'keep'}],Buffer.alloc(32,23));
+  const keep=bindStandaloneDocumentKeeps(kept.markdown,[],kept.entities.filter(entity=>entity.decision==='keep').map(({start,end})=>({start,end})));
+  assert.throws(()=>verifyAnonymizedPublication({...proof,markdown:kept.markdown,reviewed_person_candidates:keep}),{code:'STANDALONE_PUBLICATION_INVALID'});
+  console.log(`PASS ${++passed} real OPC comment -> source/author privacy/trace/publication ${profile}/weak=${weak}/${name}`);
  }
  console.log(`${passed} modern presentation comment groups passed`);
 })().catch(error=>{console.error(error);process.exitCode=1;});

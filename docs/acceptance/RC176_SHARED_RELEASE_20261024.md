@@ -5,7 +5,8 @@
 24.10.2026 ausdrücklich beauftragt: priorisierte Verbesserungen aus
 GOAL_COVERAGE_REVIEW_20261024.md für Windows x64 und macOS ARM64/Intel umsetzen,
 technische Schutzprüfungen erhalten, mit unabhängigen Fachreviews testen und
-einen neuen RC176-Test-Pre-Release bereitstellen. Desktoptests beim Nutzer.
+einen neuen RC176-Test-Pre-Release bereitstellen. Desktoptests zunächst beim Nutzer;
+später zusätzlich ausdrücklich für den Hauptagenten autorisiert, siehe Nachtrag.
 Keine Mainintegration; RC175 und alle älteren Archive, Profile, Nutzerläufe,
 Originale und positiven/negativen Belege bleiben erhalten.
 
@@ -583,3 +584,101 @@ Keine Produkt-/Test-/Enddriverkorrektur dafür. Der frische gemeinsame Endlauf
 muss trotzdem alle318+11 selbst vollständig ausführen.16Helfersyntaxchecks,
 183Bindungs- und geschlossene Proofnegativen MainPASS. Jetzt gemeinsamer
 Source03-Commit/Freeze und neue lokale4Endgates/Macconsumer nötig.
+
+## Source03 grün und tatsächlicher schwieriger Dateigegenvergleich
+
+Gemeinsamer Appcommit0cd07ffb54d59863bcf23f1f852c372781143673/FP
+4a6d63c9ef0c77368a4d75d33013db4de5a2f09b008732bfa4249094404a0ecf/368.
+Native300Rust/3ignored/Clippy/Node-Rust/Release19:20:01UTC, acht tatsächliche
+Konvertersuiten38PDF/75Worker/55Office/43Grafik/16TIFF/10EMF+/33TaggedPDF/
+21PassivePDF,5Paketgates/100MD0Fehler19:25:32UTC. Beide Mac40124421536SUCCESS
+auf genau0cd, ARM19:35:52/Intel19:47:11UTC; ganze native Logs und tatsächlich
+heruntergeladene ZIP-/DMGbytes unabhängig gegengelesen, CanonicalVERIFYbeideok.
+Keine neuen Coreproducer/-importe; unveränderte Adhoc-/Guard-/Converterrollen.
+
+Der Headlesslauf endete zunächst187/318ROT bei gültiger Dokumentationsassertion:
+CURRENT_STATE-Versionskopf ohne volle3.2.0-rc176. Nur diese Kopfzeile korrigiert,
+Test nicht abgeschwächt. Voller neuer bytegleicher318+11-Plan anschließend
+20:58:32.209UTC PASS/Inputs unverändert; separate Docs-Overlay-Receipt bindet
+alle1676trackedDateien und die rote/grüne Attemptrolle. OriginalRED bleibt.
+SourceSnapshot1025Dateien/9119432Bytes/SHA
+a1f53869dfc481bc844ed8498b8d4489071951f00facd9f937d754390f18fdd2.
+Es wurde KEIN lokalerRC176-Übergabeordner, Tag oder Release erzeugt.
+
+Der spätere Nutzerauftrag erlaubt ausdrücklich Desktoptests durch Main und
+neue Läufe mit den schwierigen, weiterhin unveränderten Nutzeroriginalen.
+Nach vollständigem Computer-Use-Skill/guidance/API/confirmations scheitert
+das vorgeschriebene NodeREPL schon vor der ersten Fensterbeobachtung beim
+Kernel-Assets-Schreiben (Dateipfad/os error3). Begrenzte Retry/Reset-Recovery
+ebenfalls erfolglos, danach gestoppt. Keine alternative Desktopsteuerung,
+keine Anmeldung/OS-/Sicherheitsänderung; Lockzustand unbekannt. GUI NOT_RUN
+wegen Werkzeugblocker; physischer Mac/Finder/TCC/Office/VoiceOverweiteroffen.
+
+Statt GUI wurden ergänzend acht autorisierte schwierige Originale ausschließlich
+lokal über den bytegleichen gebauten Windows-Konverter verglichen. Der eigene
+erste PDF-Prüfaufruf ließ passiveObjects:true aus, das beide echten Desktopcaller
+ausdrücklich setzen. Die dadurch strikte Outline-/XMP-Verweigerung ist ein
+Prüfaufbaufehler, kein belegter Appfehler. Alte Receipts bleiben; separater
+create-onlyV2-Aufruf mit tatsächlichemDTO erstellt PDF mit/ohneOCR erfolgreich,
+wie auch beidePPTX-Varianten. Kein Produkt-/Timeout-/Schutzfix dafür.
+Alle Originale, alten Ergebnisse und Paket-/Produkt-/Testbytes blieben bei den
+Vergleichen unverändert, alle beobachteten Supervisoren geschlossen. Kein
+vollständiger Prozessbaum-, GUI- oder Anonymisierungsnachweis daraus.
+
+Sechs tatsächliche Word-/Excel-/PPTX-Tabellenquellen: unabhängige Standard-
+ZIP/XML-Textgegenprüfung findet775/775gemessene Textbausteine in Quellfolge und
+Mindesthäufigkeit. Numerik/Formelcacheaktualität, visuelle Zellbindung und
+Privacy werden damit nicht vollständig bewiesen. Daten bleiben privat;
+keine Originale, Nutzertexte, Profile oder neue private Resultate hochladen.
+
+## Neue echte Kommentar-Namenslücke vor Source04
+
+Der unabhängige tatsächliche Präsentationsvergleich reproduziert zwei nicht
+übernommene moderne Bearbeitungskommentare. Ursache ist das eigene Muster
+modernComment_[a-f0-9]…: reale PowerPoint-Parts verwenden auch A–F. Exakte
+Beziehung, MIME, Autoren und XML passen; reine RAM-A–F-Gegenkontrolle liest
+beide Kommentare. Folientexte bleiben erhalten, aber diese vermeidbare
+Kommentar-Auslassung wird vor Veröffentlichung korrigiert.
+
+[Microsoft MS-PPTX Comment Part](https://learn.microsoft.com/en-us/openspecs/office_standards/ms-pptx/b85a9293-bdca-4c6b-a554-8f3918db9791)
+bindet Kommentarinhalt an die interne explizite Folienbeziehung, MIME und cmLst.
+[Microsoft OPC Parts Overview](https://learn.microsoft.com/en-us/previous-versions/windows/desktop/opc/parts-overview)
+beschreibt Beziehungstyp/Zielauflösung und Content-Type als maßgebliche Bindung,
+nicht geratenen Dateinamen. Enger tatsächlicher Fix akzeptiert A–F in den
+bisherigen Hexsegmenten; kein pauschales Casefold, Suchfallback, MIME- oder
+Owner-/Pfadbypass. Weitere nicht modellierte Namens-/Ankermodelle sind dadurch
+nicht universell unterstützt. Unveränderte Originale/private Resultate bleiben.
+
+20gezielteGruppen MainPASS: ursprüngliche lowercaseFälle unverändert,
+uppercase/mixedcase vollständigeOPC/MIME/Unicode-Positiven, fehlendes anders
+geschriebenes Target und MIME/Nonhex/Prefixgegenfälle sowie2Profile×2Wertarten×
+3Namensformen tatsächliche Source-/Privacy-/Trace-/Publicationketten. Kein
+wegdefinierter Fehler. Unabhängiges finales Delta-Gegenlesen und neuer
+gemeinsamer Source04-Commit mit frischen Gesamt-/Native-/Konverter-/Paket-/
+Macbeide-Belegen nötig. Source03 wird nicht rückwirkend umetikettiert.
+
+Main las beide abschließenden privaten Gegenreviews vollständig: PPTX/PDF-
+Bericht453048c6…2baba9 und unabhängiger775Tabellentextreview054a34d1…f33ce.
+Alle783gemessenen Folienabsätze/128Notizabsätze/19SmartArt-Zeilen vorhanden;
+PDF-OCR enthält alle44nativen Seitenblöcke unverändert. Keine vollständige
+Grafik-/Zell-/SmartArt-Gruppierungstreue: flache Phasenlisten, kleine Screenshot-
+Inhalte und unlesbarer OCR-Text bleiben konkrete Folgegrenzen. Quellbezogene
+Grafik-/Gruppennormalisierung statt globaler Zeichenfilter im Backlog festhalten.
+
+Kommentarfix unabhängig gelesen: Produkt801bf5a2…26af7, kein bestätigter
+Deltablocker. Die20gezielten Gruppen wurden Main zusätzlich um12tatsächliche
+Entity-Keep-/Restprüfungsverweigerungen erweitert; kein neuer Keep-Ausnahmepfad.
+TestdateiSHA d723e882ad41bda77acf4aebd6c236aa54704ae55a1c51d4b1f617e03d76233a.
+Neue direkte tatsächliche private Parsergegenprobe liest exakt beide früher
+ausgelassenen Kommentartexte; DOCUMENT_PARTS_DAMAGED tritt dort nicht mehr auf,
+Original bytegleich. Das ist kein nativer Paket-/GUI-/Gesamtnachweis.
+
+Source04-Vorbereitung: Produktfingerprint
+ad1cf80465b8045f0090f702fd6e768b21ccdb36def32d388a6d52de3a0eb59f/368,
+621Test-/Scriptinputs, Manifest
+2bc7b0e7a5d430c0946b745bc8200213f6aaaefeedb9cdd70102bfd42fc41261.
+17neue create-onlyHelfer aus den OriginalSource03-Rollen, keine Belege kopiert,
+keine Docs-Overlay-Brücke für den neuen gemeinsamen Commit. Main197Bindungs-
+checks, synthetische geschlossene Proofnegativen und16HelfersyntaxchecksPASS.
+Neue Gesamt-/Native-/Konverter-/Paket-/Macläufe und tatsächliche Paketgegen-
+prüfungen bleiben erforderlich; alle Source03Proofs bleiben historisch erhalten.
