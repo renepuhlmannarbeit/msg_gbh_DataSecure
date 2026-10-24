@@ -1,7 +1,18 @@
 # Aktueller Iststand
 
-Stand: 24.10.2026 · 3.2.0-rc175 · chartEx technisch abgeschlossen und veröffentlicht.
+Stand: 24.10.2026 · 3.2.0-rc176 Entwicklungsstand, noch kein neuer Paketfreeze.
 Desktop-/Office-/physischeMac-Abnahme weiterhin USER_PENDING.
+
+## RC176 – priorisierte Inhalts-/Grafikverbesserungen in Arbeit
+
+Auftrag: PDFstruktur/Lesereihenfolge, häufige TIFFvarianten, begrenztes EMF+,
+Word-Feld-/Revisions-/Nummerierungs-/Kommentarkontext, weitere Excelkontexte und
+ehrliche Office-Vorkommensgeometrie; [Plan und laufende Gegenbefunde](../acceptance/RC176_SHARED_RELEASE_20261024.md).
+Keine neue universelle Rendererzusage, Cloud, OSrechte oder Appleidentität.
+Unabhängige Quellen-/Pixelgegenreviews laufen; konkrete neue Entwicklungsfehler
+werden vor dem Freeze behoben oder eng als nicht unterstützt abgegrenzt.
+Noch keine RC176-Endgates, Pakete oder Veröffentlichung. RC175 bleibt unverändert
+veröffentlicht; nachfolgende RC175-Bindungen gelten nur für diese alten Bytes.
 
 ## Technischer Abschluss RC175
 

@@ -1,7 +1,45 @@
 # Aktives Entwicklungsbacklog
 
-Arbeitsquelle: 3.2.0-rc175 chartEx technisch abgeschlossen und veröffentlicht;
-Desktop-/Office-/Zielhostabnahme USER_PENDING. RC174/ältere Pakete unverändert.
+Arbeitsquelle: 3.2.0-rc176 Entwicklung, noch kein neuer Paketfreeze;
+Desktop-/Office-/Zielhostabnahme USER_PENDING. RC175/ältere Pakete unverändert.
+
+## BL-049.7 – RC176 priorisierte Inhalts-/Grafikverbesserungen
+
+24.10.2026 ausdrücklich beauftragt: priorisierte Punkte aus dem Zielreview für
+Windows x64 und beide Macs implementieren, Schutzprüfungen erhalten, unabhängig
+am tatsächlichen Code revalidieren, neue Endgates und RC176-Test-Pre-Release;
+Desktoptests Nutzer. [Umsetzungsplan/Journal](../acceptance/RC176_SHARED_RELEASE_20261024.md).
+PDFstruktur/MCID/volle Itembindung und reale Tabellenbesitzer; TIFFLZW/CCITT/
+Orientierungen; Word gespeicherte Feldresultate/explizite Revisionsansicht/
+Nummerierung/Kommentaranker; Excel Kommentare/TablePart/Pivot/RichValue;
+Officegrafiken nur geschlossene nachgewiesene Teilmengen. Kein blanket catch,
+keine Erfindung fehlender Werte oder Quell-/Privacy-/Ressourcenlockerung.
+EMF+-DrawString wegen belegter ignorierter LayoutRect-Semantik vorerst explizit
+nicht unterstützt; andere Formen und plainGDItext separat. Größere Renderer
+bleiben isolierte Folgeprototypen; keine unbewiesene Aufnahme in den MacCore.
+Noch kein RC176-Abschluss-/GUI-/ReleasePASS; alte RC175-Bindungen bleiben getrennt.
+Zusatz24.10.: unabhängige Code-/Best-Practice-Revalidierung vor Freigabe,
+insbesondere Zuständigkeiten/geschlossene APIs/Fehlerbehandlung/Ressourcen-
+und Komplexitätsgrenzen/Determinismus/Crossplatform/selektive Regressionen.
+Konkrete neue Befunde kausal schließen. Nach ausdrücklicher Nutzerpräzisierung
+dürfen auch Schutzprüfungen/Tests geändert oder ersetzt werden, wenn dies den
+Zielen dient; Nutzen, Sicherheits-/Vollständigkeitsfolgen und Gegenproben
+belegen, keine bloße Grünfärbung oder starre Bewahrung veralteter Regeln.
+
+### Konkrete Folgegrenze: XLSX-TablePart-Felder im Legacy-Notespfad
+
+Unabhängiger echter Gegenreview24.10. bestätigt am unveränderten Hidden-Name-
+TablePart-/defekterKommentar-ZIP962031bc…7431: content-v1 schützt Qzx/Qzy; der
+alte und neue notes-v1-Pfad übernehmen die verborgene TablePart.Name-Feldrolle
+nicht und publizieren diese schwachen Werte in beiden Profilen unverändert.
+Kein neuer Session-/Quarantänefehler, keine geschlossene oder durch Grüns
+widerlegte Lücke. Die normale Desktopoberfläche setzt fest content-v1.
+Neue Word-/Excelmodelle sind ausdrücklich nur für content-v1 aufgenommen;
+technischer Legacy-/Notesvertrag bleibt gesonderte Restabdeckung ohne
+produktweiten Anonymisierungsnachweis. Folgearbeit: gleiche echte TablePart-
+Feldautorität ohne Wertduplikate, erfundene Header oder blanket Stop auch im
+Legacy-Notesmodell erhalten; Original-Source-/Trace-/Publication-/Keep-Gegenfälle
+beibehalten. Beleg rc176-office-p2-independent-review-20261024/NOTES-BOUNDARY-RESULT.json.
 
 ## BL-049.6 – RC175 chartEx
 
@@ -1773,7 +1811,7 @@ in dieselbe Korrekturrunde.
 
 ## Historische Nachweise bis R4 (kein aktueller R5-Abschluss)
 
-Stand: 17.10.2026 · Produktstand 3.2.0-rc175 · veröffentlicht Standalone RC162 (Windows und beide Mac-Architekturen; M2-Abnahme offen), Linux RC159 / Cowork RC151 · lokaler Arbeitsstand nach RC162 noch nicht veröffentlicht
+Stand: 17.10.2026 · Produktstand 3.2.0-rc176 · veröffentlicht Standalone RC162 (Windows und beide Mac-Architekturen; M2-Abnahme offen), Linux RC159 / Cowork RC151 · lokaler Arbeitsstand nach RC162 noch nicht veröffentlicht
 
 ## Gezielter R3-Abschlussreview
 

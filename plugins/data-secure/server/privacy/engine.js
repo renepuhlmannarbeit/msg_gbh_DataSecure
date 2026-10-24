@@ -873,8 +873,40 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
       const value = inlineValue(cell);
       if (value !== null) values.push(value);
     }
+    // Independent complete-value check for actual closed prose-line fields.
+    // Do not use the redactor's remainder spans/dictionary/review ranges.
+    // A sentence containing "Name:" is not itself a closed field prefix;
+    // the next source line retains its independent factual context.
+    const proseValues = text => {
+      const result = [], rows = text.split('\n'); let position = 0;
+      const container = /[ \t]*(?:>[ \t]*|(?:[-*+]|\d{1,9}[.)])[ \t]+(?:\[[ xX]\][ \t]+)?|#{1,6}[ \t]+)/uy;
+      for (let row = 0; row < rows.length; row++) {
+        const line = rows[row], cells = markdownTableCells(line, true), separator = markdownTableCells(rows[row + 1] || '', true);
+        const tableHeader = cells && separator && cells.length === separator.length && separator.every(value => /^:?-{3,}:?$/u.test(value));
+        if (!tableHeader && !require('./base').tableHeadersAt(text, position, personFieldPolicy)) {
+          let start = 0;
+          while (start < line.length) {
+            container.lastIndex = start; const match = container.exec(line);
+            if (!match) break;
+            start = container.lastIndex;
+          }
+          const colon = line.indexOf(':', start), equal = line.indexOf('=', start);
+          const boundary = colon < 0 ? equal : equal < 0 ? colon : Math.min(colon, equal);
+          if (boundary >= 0) {
+            const label = line.slice(start, boundary + 1)
+              .replace(/\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/gu, '$1').slice(0, -1).trim();
+            if (isProtectedFieldHeader(label, personFieldPolicy)) result.push(line.slice(boundary + 1));
+          }
+        }
+        position += line.length + 1;
+      }
+      return result;
+    };
+    for (const value of proseValues(rendered)) values.push(value);
     const sourceView = canonicalizeRenderedText(options.originalSourceText || '', personFieldPolicy);
     const imported = sourceVariableTokens(sourceView);
+    for (const sourceValue of proseValues(sourceView))
+      for (const token of sourceVariableTokens(sourceValue)) imported.add(token);
     // Literal Markdown cell escapes are intentionally retained by general
     // canonicalisation. Decode only actual protected source cells through the
     // same GFM cell reader used for this independent whole-value check, never

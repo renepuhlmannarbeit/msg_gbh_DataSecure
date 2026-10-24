@@ -17,6 +17,31 @@ function isProtectedFieldHeader(value, policy) {
     ORGANIZATION_FIELD.test(label) || label === GENERIC_FIELD);
 }
 
+// Only a closed source-line prefix is a prose field, never an arbitrary
+// occurrence of "Name:" inside a sentence. Consume Markdown containers
+// without changing UTF-16 coordinates; their nesting is source structure,
+// not an identity claim. The native document/text budget bounds this loop.
+function proseFieldStart(line, policy) {
+  if (policy !== CONTENT_PERSON_FIELD_POLICY) return null;
+  let cursor = 0;
+  while (cursor < line.length) {
+    const whitespace = /^[ \t]*/u.exec(line.slice(cursor))[0].length;
+    cursor += whitespace;
+    const marker = /^(?:>[ \t]*|(?:[-*+]|\d{1,9}[.)])[ \t]+(?:\[[ xX]\][ \t]+)?|#{1,6}[ \t]+)/u.exec(line.slice(cursor));
+    if (!marker) break;
+    cursor += marker[0].length;
+  }
+  const labelStart = cursor;
+  for (; cursor < line.length; cursor++) {
+    if (line[cursor] !== ':' && line[cursor] !== '=') continue;
+    const label = line.slice(labelStart, cursor + 1)
+      .replace(/\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/gu, '$1').slice(0, -1);
+    if (isProtectedFieldHeader(label.trim(), policy)) return { labelStart, valueStart: cursor + 1 };
+    return null;
+  }
+  return null;
+}
+
 // Exact raw UTF-16 cell boundaries, not .indexOf(value): duplicate values and
 // escaped pipes must retain their distinct positions in the actual basis.
 function cellRanges(line) {
@@ -39,9 +64,11 @@ function cellRanges(line) {
 function protectedHeaderRanges(text, policy) {
   if(policy !== CONTENT_PERSON_FIELD_POLICY)return [];
   const lines = text.split('\n'), result = []; let offset = 0;
-  for(let index = 0; index + 2 < lines.length; index++) {
-    const line = lines[index], headers = cellRanges(line), separator = cellRanges(lines[index + 1]);
-    if(!line.includes('|') || !headers.length || headers.length !== separator.length ||
+  for(let index = 0; index < lines.length; index++) {
+    const field = proseFieldStart(lines[index], policy);
+    if (field) result.push({ start: offset + field.labelStart, end: offset + field.valueStart });
+    const line = lines[index], headers = cellRanges(line), separator = cellRanges(lines[index + 1] || '');
+    if(index + 2 >= lines.length || !line.includes('|') || !headers.length || headers.length !== separator.length ||
         !separator.every(range => /^:?-{3,}:?$/u.test(lines[index + 1].slice(range.start,range.end).trim()))) {
       offset += line.length + 1; continue;
     }
@@ -76,6 +103,20 @@ function uncoveredFieldSpans(text, policy, sourceText = '') {
   // field their variable payload cannot borrow the weak-prose Keep exception.
   const imported = sourceVariableTokens(sourceText);
   const result = [], lines = text.split('\n'); let offset = 0;
+  function appendUncovered(fragment, valueStart, base) {
+    const opaque = placeholderSpans(fragment).filter(span => span.start >= valueStart && !imported.has(span.text));
+    let cursor = valueStart;
+    for (const boundary of [...opaque, { start: fragment.length, end: fragment.length }]) {
+      const gap = fragment.slice(cursor, boundary.start);
+      // Punctuation between real pseudonyms is not another field value.
+      if (/[\p{L}\p{M}\p{N}\p{S}]/u.test(gap)) {
+        const leading = gap.length - gap.trimStart().length, end = gap.trimEnd().length;
+        result.push({ start: base + cursor + leading, end: base + cursor + end,
+          type: 'SENSITIVE_FIELD', text: gap.trim(), priority: 100, replacement: '[FIELD_REDACTED]' });
+      }
+      cursor = boundary.end;
+    }
+  }
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index];
     const table = tableHeadersAt(text, offset, policy);
@@ -112,22 +153,11 @@ function uncoveredFieldSpans(text, policy, sourceText = '') {
           }
           if (!found) continue;
         }
-        const opaque = placeholderSpans(fragment).filter(span => span.start >= valueStart && !imported.has(span.text));
-        let cursor = valueStart;
-        for (const boundary of [...opaque, { start: fragment.length, end: fragment.length }]) {
-          const gap = fragment.slice(cursor, boundary.start);
-          // Harmless punctuation separating real pseudonyms is not a value.
-          // Combining marks/symbols are not an exemption for an unknown value.
-          if (/[\p{L}\p{M}\p{N}\p{S}]/u.test(gap)) {
-            const leading = gap.length - gap.trimStart().length, end = gap.trimEnd().length;
-            const start = offset + cell.start + cursor + leading;
-            result.push({ start, end: offset + cell.start + cursor + end,
-              type: 'SENSITIVE_FIELD', text: gap.trim(), priority: 100,
-              replacement: '[FIELD_REDACTED]' });
-          }
-          cursor = boundary.end;
-        }
+        appendUncovered(fragment, valueStart, offset + cell.start);
       }
+    } else {
+      const field = proseFieldStart(line, policy);
+      if (field) appendUncovered(line, field.valueStart, offset);
     }
     offset += line.length + 1;
   }

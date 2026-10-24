@@ -196,7 +196,22 @@ function appendPlacedOfficeOcr(extraction,recognized,contentOptions,placements) 
 
 function officeOcrLabel(item,label){
   if(item.parts!==undefined&&(!Number.isSafeInteger(item.parts)||item.parts<2||item.parts>150||!Number.isSafeInteger(item.part)||item.part<1||item.part>item.parts))fail('CONVERSION_INPUT_INVALID');
-  return `\n\n### Bildtext · ${label} ${item.index} · Grafik ${item.ordinal}${item.parts?` · Teil ${item.part} von ${item.parts}`:''}\n\n`;
+  if(item.cell!==undefined){
+    const match=typeof item.cell==='string'&&/^([A-Z]{1,3})([1-9][0-9]{0,6})$/u.exec(item.cell);
+    const column=match?[...match[1]].reduce((value,letter)=>value*26+letter.charCodeAt(0)-64,0):0;
+    if(item.kind!=='sheet'||!match||column>16384||Number(match[2])>1048576)fail('CONVERSION_INPUT_INVALID');
+  }
+  let context='';const geometry=item.sourceGeometry;
+  if(geometry){
+    // Descriptive source context only. Full-asset OCR is NOT promoted to a
+    // composed slide/page viewport or used to discard existing native text.
+    context='Quellgrafik vollständig gelesen; nicht als komponierter Office-Seitenausschnitt gerendert.';
+    if(geometry.crop&&[geometry.crop.left,geometry.crop.top,geometry.crop.right,geometry.crop.bottom].some(value=>value!==0))context+=' Das Vorkommen hat einen Quellausschnitt.';
+    if(geometry.rotation||geometry.flipH||geometry.flipV)context+=' Das Vorkommen ist gedreht oder gespiegelt.';
+    if(geometry.grouped||geometry.compositionUnmodeled)context+=' Gruppierung, Überlagerung oder Form-/Effektdarstellung sind nicht vollständig rekonstruiert.';
+    context+='\n\n';
+  }
+  return `\n\n### Bildtext · ${label} ${item.index}${item.cell?` · Zelle ${item.cell}`:''} · Grafik ${item.ordinal}${item.parts?` · Teil ${item.part} von ${item.parts}`:''}\n\n${context}`;
 }
 
 // Checkpoints are concatenated by the parent, so their budget must count every

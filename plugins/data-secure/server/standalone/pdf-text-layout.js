@@ -153,5 +153,5 @@ function uncoveredOcrText(data, regions, { singleTokenOnly = false } = {}) {
   return omitted ? output.join('') : data.text;
 }
 
-module.exports = Object.freeze({ nativeTextSeparator, nativeColumnOrder, renderPdfOcrLayer,
+module.exports = Object.freeze({ ...require('./pdf-structure-layout'), nativeTextSeparator, nativeColumnOrder, renderPdfOcrLayer,
   paintedTextGeometryAvailable, nativeTextRegions, nativeSingleTokenRegions, uncoveredOcrText });

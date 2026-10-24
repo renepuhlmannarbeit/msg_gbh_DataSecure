@@ -127,6 +127,9 @@ try {
     assert.equal(manifest.pdf_text_paint_contract, 'datasecure-pdf-text-paint/1');
     assert.deepEqual(manifest.pdf_text_paint_upstream, PDFJS_TEXT_PAINT_HOOK);
     assert.equal(manifest.office_graphics_contract,'datasecure-office-graphics/1');
+    const tiff=require('../plugins/data-secure/server/standalone/tiff-scan-codecs');
+    assert.deepEqual(manifest.tiff_ccitt_upstream,tiff.tiffCcittUpstream);
+    assert.equal(manifest.tiff_ccitt_derivative_sha256,hash(fs.readFileSync(path.join(repo,'plugins/data-secure/server/standalone/ccitt-fax-decoder.js'))));
     for(const name of ['package.json','dist/browser.js','LICENSE','THIRD_PARTY_NOTICES'])assert.ok(a.some(item=>item.relative===`node_modules/emf-converter/${name}`));
     assert.ok(!a.some(item=>item.relative.startsWith('node_modules/emf-converter/dist/index.')||item.relative.includes('resvg')));
     assert.throws(() => collectConversionRuntime(repo, 'unsupported-target'), /CONVERSION_PACKAGE_TARGET_UNSUPPORTED/u);
@@ -135,6 +138,62 @@ try {
     assert.throws(() => writeConversionRuntime(repo, runtime, target), /CONVERSION_PACKAGE_DESTINATION_EXISTS/u);
   });
   const { convertBuffer, conversionStartFailureCode, nativeConversionExitCode } = require(path.join(server, 'standalone', 'conversion-worker.js'));
+  await test('actual isolated worker preserves saved Word field boundaries, final revisions and source-bound list context',async()=>{
+    const {wordFields}=require('./lib/rc176-office-context.cjs'),source=wordFields(),before=hash(source);
+    const out=await convertBuffer(source,'.docx',{contentOptions:{schema:'datasecure-content-options/1',markdownOutput:'content-v1',scanOcr:false,imageOcr:false}});
+    assert.match(out.markdown,/VORHER FHIR/u);assert.match(out.markdown,/Name: Qvx \/ Qvy/u);assert.match(out.markdown,/NACHHER HTTP\/2/u);
+    assert.ok(out.markdown.includes('FINAL\\_REVISION\\_SENTINEL ÄÖÜß'));assert.doesNotMatch(out.markdown,/REMOVED_REVISION_SENTINEL|DDE AUTO UNEXECUTED/u);
+    assert.ok(!out.markdown.includes('REMOVED\\_REVISION\\_SENTINEL'),'selected final view must not retain the escaped deleted source sentinel');
+    assert.ok(out.markdown.includes('ECHTE\\_LISTENZEILE'));assert.ok(out.markdown.includes('| 3\\. |'));assert.equal(hash(source),before);
+  });
+  await test('actual isolated worker imports source-bound modern PowerPoint comments and distinct in-cell Excel images',async()=>{
+    const {presentationComments}=require('./lib/rc176-office-context.cjs'),ppt=presentationComments(),pptHash=hash(ppt);
+    const choices={schema:'datasecure-content-options/1',markdownOutput:'content-v1',scanOcr:false,imageOcr:false};
+    const comment=await convertBuffer(ppt,'.pptx',{contentOptions:choices});assert.match(comment.markdown,/Gebundene Fachfolie/u);
+    assert.match(comment.markdown,/Name: Qvx \/ Qvy/u);assert.match(comment.markdown,/FHIR REST 123 ÄÖÜß/u);
+    assert.match(comment.markdown,/Kommentarautor:/u);assert.match(comment.markdown,/\| Anna Berger \|/u);assert.equal(hash(ppt),pptHash);
+    const fixture=require('./lib/xlsx-context-writer-fixture.cjs'),xlsx=Buffer.from(fixture.xlsx_base64,'base64');assert.equal(hash(xlsx),fixture.xlsx_sha256);
+    const native=await convertBuffer(xlsx,'.xlsx',{contentOptions:choices});assert.match(native.markdown,/Zellkommentar · E7/u);assert.match(native.markdown,/Tabellenkontext · G3:H5/u);assert.match(native.markdown,/Quellzelle C2/u);assert.match(native.markdown,/HTTP\/2/u);
+    // imageOcr:false uses the native-text entrance, not the authorized media
+    // entrance. Its real contract remains incomplete SOURCE_COVERAGE_UNVERIFIED
+    // and explicitly identifies both cell values as Alt text, never as OCR.
+    assert.equal(native.coverage.status,'incomplete');assert.ok(native.coverage.reason_codes.includes('SOURCE_COVERAGE_UNVERIFIED'));
+    for(const cell of ['C2','D2'])assert.ok(native.markdown.includes(`Quellzelle ${cell} · Bild-Alternativtext (kein OCR-Nachweis)`));
+    // Same genuine metadata graph, replaced only with locally generated test
+    // pixels: actual OCR must reach the actual cell occurrence, not Alt text.
+    const {readZip}=require('./../plugins/data-secure/server/zip-reader'),parts=readZip(xlsx);
+    const firstCanvas=image(true),secondCanvas=image(true);
+    firstCanvas.getContext('2d').fillText('QUELLZELLE ALPHA',60,130);secondCanvas.getContext('2d').fillText('QUELLZELLE BRAVO',60,130);
+    const firstPixels=firstCanvas.toBuffer('image/png'),secondPixels=secondCanvas.toBuffer('image/png');assert.notEqual(hash(firstPixels),hash(secondPixels));
+    parts.set('xl/media/image1.png',firstPixels);parts.set('xl/media/image2.png',secondPixels);
+    const withOcr=await convertBuffer(zipStore([...parts]),'.xlsx',{contentOptions:{...choices,imageOcr:true}});
+    assert.match(withOcr.markdown,/Bildtext · Arbeitsblatt 1 · Zelle C2/u);assert.match(withOcr.markdown,/Bildtext · Arbeitsblatt 1 · Zelle D2/u);
+    const imageSections=withOcr.markdown.split(/(?=\n\n### Bildtext · )/u);
+    for(const [cell,own,other]of [['C2','ALPHA','BRAVO'],['D2','BRAVO','ALPHA']]){
+      const matching=imageSections.filter(section=>section.startsWith(`\n\n### Bildtext · Arbeitsblatt 1 · Zelle ${cell} · `));assert.equal(matching.length,1);
+      assert.match(matching[0],new RegExp(`QUELLZELLE\\s+${own}`,'u'));assert.doesNotMatch(matching[0],new RegExp(`QUELLZELLE\\s+${other}`,'u'));
+    }
+    assert.match(withOcr.markdown,/HTTP\/2/u);assert.equal(hash(xlsx),fixture.xlsx_sha256);
+  });
+  await test('actual native worker uses complete tagged PDF order/table owners without removing native fallback text',async()=>{
+    const {taggedPdf}=require('./lib/rc176-tagged-pdf.cjs'),P=(...children)=>({role:'P',children});
+    const groups=[{id:1,text:'Right column',x:270,y:300},{id:0,text:'Left column',x:20,y:300},{id:2,text:'Name: Qvx / Qvy',x:20,y:180}];
+    const model=[{role:'Document',children:[P(0),P(1),P(2)]}],options={contentOptions:{schema:'datasecure-content-options/1',markdownOutput:'content-v1',scanOcr:false,imageOcr:false}};
+    const source=taggedPdf(groups,model,{pageGeneration:2}),before=hash(source),out=await convertBuffer(source,'.pdf',options);
+    for(const text of ['Left column','Right column'])assert.equal(out.markdown.split(text).length-1,1);
+    assert.ok(out.markdown.indexOf('Left column')<out.markdown.indexOf('Right column'));assert.match(out.markdown,/Name: Qvx \/ Qvy/u);assert.equal(hash(source),before);
+    const fallback=await convertBuffer(taggedPdf(groups,model,{unmarked:'\nBT /F1 12 Tf 20 100 Td (Retained search text) Tj ET'}),'.pdf',options);
+    for(const text of ['Left column','Right column'])assert.equal(fallback.markdown.split(text).length-1,1);
+    assert.ok(fallback.markdown.indexOf('Right column')<fallback.markdown.indexOf('Left column'));assert.match(fallback.markdown,/Retained search text/u);
+    const tableGroups=[{id:3,text:'HTTP/2',x:240,y:250},{id:2,text:'Qvx / Qvy',x:20,y:250},{id:1,text:'Fachtext',x:240,y:300},{id:0,text:'Name',x:20,y:300}];
+    const table=[{role:'Document',children:[{role:'Table',children:[{role:'THead',children:[{role:'TR',children:[{role:'TH',children:[P(0)]},{role:'TH',children:[P(1)]}]}]},
+      {role:'TBody',children:[{role:'TR',children:[{role:'TD',children:[P(2)]},{role:'TD',children:[P(3)]}]}]}]}]}];
+    // The pinned real PDF.js entrance retains its leading cell hasEOL marker;
+    // do not delete native source line breaks merely to match a RAM model.
+    const tableResult=await convertBuffer(taggedPdf(tableGroups,table),'.pdf',options);assert.ok(tableResult.markdown.includes('| Name | <br>Fachtext |'));assert.match(tableResult.markdown,/\| Qvx \/ Qvy \| HTTP\/2 \|/u);
+    const draft=anonymizeMarkdown(tableResult.markdown,'general',{productChannel:'standalone',...options,deferPersonReview:true});
+    assert.doesNotMatch(draft.text,/Qvx|Qvy/u);assert.match(draft.text,/HTTP\/2/u);
+  });
   await test('saved /7 anonymization captures all ten real formats without publishing a result or document basis', async () => {
     const saved = new Map(['EU_PRIVACY_DATA_ROOT', 'EU_PRIVACY_ROOT', 'EU_PRIVACY_RESULT_ROOT', 'DATASECURE_PRODUCT_CHANNEL'].map(key => [key, process.env[key]]));
     const own = path.join(scope, 'content-capture'); fs.mkdirSync(own);

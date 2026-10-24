@@ -96,7 +96,8 @@ test('native conversion resources are required by PKG-04, not silently added to 
   const suite = require('./run-product-suite');
   const nativeTest = 'test-standalone-conversion-worker.mjs';
   assert.ok(![...suite.baseFiles.map(file => path.basename(file)), ...suite.ciFiles, ...suite.fullOnly].includes(nativeTest));
-  assert.strictEqual(pkg.scripts['test:standalone:conversion'], `node tests/test-pdf-text-visibility.mjs && node tests/${nativeTest} && node tests/test-office-image-ocr.mjs && node tests/test-office-visual-decoder.mjs && node tests/test-pdf-passive-content.mjs`);
+  assert.strictEqual(pkg.scripts['test:standalone:conversion'], `node tests/test-pdf-text-visibility.mjs && node tests/${nativeTest} && node tests/test-office-image-ocr.mjs && node tests/test-office-visual-decoder.mjs && node tests/test-tiff-scan-codecs.mjs && node tests/test-emfplus-preflight.mjs && node tests/test-pdf-structure-layout.mjs && node tests/test-pdf-passive-content.mjs`);
+  for(const file of ['test-tiff-scan-codecs.mjs','test-emfplus-preflight.mjs','test-pdf-structure-layout.mjs'])assert.ok(!require('./run-product-suite').baseFiles.includes('tests/'+file));
   assert.ok(!suite.executionPlan('headless').headlessFiles.includes('tests/test-office-visual-decoder.mjs'));
   const pkg04 = fs.readFileSync(path.join(root, 'scripts/run-pkg-04.ps1'), 'utf8');
   assert.ok(pkg04.indexOf("@('run', 'test:standalone:conversion')") < pkg04.indexOf("foreach ($label"));

@@ -23,7 +23,11 @@ export function office(type) {
       ['ppt/_rels/presentation.xml.rels', `<Relationships xmlns="${PR}"><Relationship Id="s1" Type="${R}/slide" Target="slides/slide1.xml"/></Relationships>`],
       ['ppt/slides/slide1.xml', `<p:sld xmlns:p="${P}" xmlns:a="${A}"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>${text}</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:sld>`]
     ];
-  return zipStore([...opcControlEntries(type), ...entries]);
+  // The shared real-converter XLSX fixture must declare its actual worksheet
+  // MIME, not only the workbook. No source bytes/guards are relaxed to make a
+  // historically underdeclared synthetic package acquire context authority.
+  const controls=type==='xlsx'?{additionalOverrides:[{part:'xl/worksheets/sheet1.xml',contentType:'application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml'}]}:{};
+  return zipStore([...opcControlEntries(type,controls), ...entries]);
 }
 export function passivePresentation() {
   return zipStore([

@@ -3,6 +3,7 @@ import path from 'node:path';
 import boundFileIo from '../../plugins/data-secure/server/core/bound-file-io.js';
 import { readRegular, sha256, readStandaloneRuntimeContract, verifyTargetEvidence } from './bundled-runtime.mjs';
 import { derivePdfjsTextPaintModule, PDFJS_TEXT_PAINT_HOOK } from './pdfjs-text-paint-hook.mjs';
+import tiffScanCodecs from '../../plugins/data-secure/server/standalone/tiff-scan-codecs.js';
 
 const BINDINGS = Object.freeze({ 'windows-x64': 'canvas-win32-x64-msvc',
   'macos-x64': 'canvas-darwin-x64', 'macos-arm64': 'canvas-darwin-arm64',
@@ -160,13 +161,15 @@ export function collectConversionRuntime(repoRoot, productTarget) {
   const inventory = [...files.values()].sort((a, b) => a.relative.localeCompare(b.relative)).map(file => ({
     path: file.relative, bytes: file.bytes.length, sha256: sha256(file.bytes), executable: file.executable
   }));
+  const tiffCcittDerivative = readRegular(path.join(root, 'plugins/data-secure/server', tiffScanCodecs.tiffCcittUpstream.module), 128 * 1024);
   add('RUNTIME.json', Buffer.from(`${JSON.stringify({ schema: 'datasecure-conversion-runtime/1', target: productTarget,
     node_file: nodeFile, node_version: contract.node_version,
     syntax_reader_contract: 'datasecure-markdown-syntax/1',
     office_graphics_contract: 'datasecure-office-graphics/1',
     pdf_text_paint_contract: 'datasecure-pdf-text-paint/1', pdf_text_paint_upstream: PDFJS_TEXT_PAINT_HOOK,
+    tiff_ccitt_upstream: tiffScanCodecs.tiffCcittUpstream, tiff_ccitt_derivative_sha256: sha256(tiffCcittDerivative),
     packages, files: inventory }, null, 2)}\n`));
-  add('THIRD_PARTY_NOTICES.txt', Buffer.from(`Offline Markdown conversion runtime\n\n${packages.map(item => `${item.name} ${item.version}: ${item.license}`).join('\n')}\n\nPDF.js: upstream pdf.mjs remains unchanged; pdf.datasecure.mjs is a DataSecure text-paint-observer derivative of precisely pinned ${PDFJS_TEXT_PAINT_HOOK.upstreamVersion} (${PDFJS_TEXT_PAINT_HOOK.upstreamSha256}), under the same upstream licence. NPM integrity identifies the upstream package, not this derivative. Both module hashes are listed in RUNTIME.json.\nTessdata fast 4.1.0: Apache-2.0 (models/LICENSE)\nNode.js: LICENSE.node.txt\nDependency license files remain beside each package.\n`));
+  add('THIRD_PARTY_NOTICES.txt', Buffer.from(`Offline Markdown conversion runtime\n\n${packages.map(item => `${item.name} ${item.version}: ${item.license}`).join('\n')}\n\nPDF.js: upstream pdf.mjs remains unchanged; pdf.datasecure.mjs is a DataSecure text-paint-observer derivative of precisely pinned ${PDFJS_TEXT_PAINT_HOOK.upstreamVersion} (${PDFJS_TEXT_PAINT_HOOK.upstreamSha256}), under the same upstream licence. NPM integrity identifies the upstream package, not this derivative. Both module hashes are listed in RUNTIME.json.\nTIFF CCITT: DataSecure strict byte-only derivative of Mozilla PDF.js ${tiffScanCodecs.tiffCcittUpstream.version} src/core/ccitt.js, commit ${tiffScanCodecs.tiffCcittUpstream.commit}, original SHA256 ${tiffScanCodecs.tiffCcittUpstream.sha256}. Copyright 2012 Mozilla Foundation; Copyright 1996-2003 Glyph & Cog, LLC. Apache-2.0; full license: node_modules/pdfjs-dist/LICENSE. Modified recovery/EOF/operation bounds; included source server/${tiffScanCodecs.tiffCcittUpstream.module}, actual derivative hash in RUNTIME.json. This is not a PDF.js runtime downgrade.\nTessdata fast 4.1.0: Apache-2.0 (models/LICENSE)\nNode.js: LICENSE.node.txt\nDependency license files remain beside each package.\n`));
   return [...files.values()].sort((a, b) => a.relative.localeCompare(b.relative));
 }
 

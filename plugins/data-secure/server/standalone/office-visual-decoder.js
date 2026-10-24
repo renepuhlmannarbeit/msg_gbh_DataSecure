@@ -10,6 +10,8 @@ const crypto = require('node:crypto');
 const { readXml, assertXmlCharacters } = require('../xml-reader');
 const { MAX_PIXELS, MAX_IMAGE_BYTES } = require('../images/common');
 const { RESOURCE_LIMITS } = require('../resource-limits');
+const { decodeTiffLzw, decodeTiffFax } = require('./tiff-scan-codecs');
+const { createEmfPlusPreflight } = require('./emfplus-preflight');
 const MAX_UNITS = RESOURCE_LIMITS.MAX_VISUAL_ASSETS;
 const MAX_RECORDS = 10000, MAX_SVG_BYTES = 4 * 1024 * 1024;
 const SVG = 'http://www.w3.org/2000/svg';
@@ -339,9 +341,10 @@ function inspectTiff(bytes) {
     for (let index = 0; index < count; index++) {
       const entry = offset + 2 + index * 12, tag = u16(entry), type = u16(entry + 2), n = u32(entry + 4);
       if (tags.has(tag)) damaged();
-      if (tag === 266 && type !== 3) unsupported(); // FillOrder is a SHORT, never ignored as unrelated metadata.
+      if ([266, 274].includes(tag) && type !== 3) unsupported(); // FillOrder/Orientation are SHORTs, not unrelated metadata.
+      if ([292, 293].includes(tag) && type !== 4) unsupported(); // T4/T6 options are LONG bitfields.
       if (![1, 3, 4].includes(type)) {
-        if ([256, 257, 258, 259, 262, 266, 273, 274, 277, 278, 279, 284, 317, 320, 322, 323, 324, 325, 330, 338, 339].includes(tag)) unsupported();
+        if ([256, 257, 258, 259, 262, 266, 273, 274, 277, 278, 279, 284, 292, 293, 317, 320, 322, 323, 324, 325, 330, 338, 339].includes(tag)) unsupported();
         continue; // unrelated rational/string metadata never reaches a decoder
       }
       const size = type === 1 ? 1 : type === 3 ? 2 : 4;
@@ -354,16 +357,21 @@ function inspectTiff(bytes) {
     const scalar = (tag, fallback) => tags.has(tag) ? tags.get(tag).length === 1 ? tags.get(tag)[0] : damaged() : fallback;
     const width = scalar(256), height = scalar(257); checkSize(width, height);
     const page = { width, height, little, tags, bits: tags.get(258) || [1], compression: scalar(259, 1), photo: scalar(262, 0),
-      samples: scalar(277, 1), rows: scalar(278, height), predictor: scalar(317, 1), fillOrder: scalar(266, 1) };
+      samples: scalar(277, 1), rows: scalar(278, height), predictor: scalar(317, 1), fillOrder: scalar(266, 1),
+      orientation: scalar(274, 1), t4: scalar(292, 0), t6: scalar(293, 0) };
+    page.outputWidth = page.orientation >= 5 ? height : width;
+    page.outputHeight = page.orientation >= 5 ? width : height;
     const depths = new Set(page.bits);
     page.bits = page.bits[0];
     if (depths.size !== 1 || ![1, 8].includes(page.bits) || ![0, 1, 2, 3].includes(page.photo) ||
-        ![1, 8, 32946, 32773].includes(page.compression) || scalar(274, 1) !== 1 || scalar(284, 1) !== 1 ||
+        ![1, 2, 3, 4, 5, 8, 32946, 32773].includes(page.compression) || ![1, 2, 3, 4, 5, 6, 7, 8].includes(page.orientation) || scalar(284, 1) !== 1 ||
         scalar(339, 1) !== 1 || tags.has(322) || tags.has(323) || tags.has(324) || tags.has(330) ||
         ![1, 2].includes(page.predictor) || (page.predictor === 2 && page.bits !== 8) ||
-        ![1, 2].includes(page.fillOrder) || (page.fillOrder === 2 && (page.bits !== 1 || page.compression !== 1)) ||
+        ![1, 2].includes(page.fillOrder) || (page.fillOrder === 2 && (page.bits !== 1 || ![1, 2, 3, 4].includes(page.compression))) ||
         (page.photo === 2 ? ![3, 4].includes(page.samples) || page.bits !== 8 : ![1, 2].includes(page.samples)) ||
         (page.photo === 3 && page.samples !== 1) || (page.samples === 2 && page.bits !== 8)) page.omission_code = 'VISUAL_FEATURE_UNSUPPORTED';
+    if ([2, 3, 4].includes(page.compression) && (page.bits !== 1 || page.samples !== 1 || ![0, 1].includes(page.photo) ||
+        page.predictor !== 1 || ![0, 1, 4, 5].includes(page.t4) || page.t6 !== 0)) page.omission_code = 'VISUAL_FEATURE_UNSUPPORTED';
     if (page.samples === 2 || page.samples === 4) {
       const extra = scalar(338); if (![1, 2].includes(extra)) page.omission_code = 'VISUAL_FEATURE_UNSUPPORTED';
       page.associated = extra === 1;
@@ -404,6 +412,8 @@ function tiffPixels(bytes, page) {
       const compressed = bytes.subarray(strips[i], strips[i] + lengths[i]); let decoded;
       try {
         if (page.compression === 1) decoded = compressed;
+        else if (page.compression === 5) decoded = decodeTiffLzw(compressed, expected);
+        else if ([2, 3, 4].includes(page.compression)) decoded = decodeTiffFax(compressed, width, Math.min(page.rows, height - startRow), page);
         else if (page.compression === 32773) decoded = packbits(compressed, expected);
         else decoded = zlib.inflateSync(compressed, { maxOutputLength: expected });
         if (decoded.length !== expected) damaged(); decoded.copy(raw, startRow * rowBytes);
@@ -417,11 +427,14 @@ function tiffPixels(bytes, page) {
     }
     const colors = tags.get(320), paletteSize = 1 << bits;
     for (let y = 0; y < height; y++) for (let x = 0; x < width; x++) {
-      const pixel = (y * width + x) * 4, source = y * rowBytes + x * samples;
+      const orientation = page.orientation || 1;
+      const dx = orientation === 2 || orientation === 3 ? width - 1 - x : orientation === 5 || orientation === 8 ? y : orientation === 6 || orientation === 7 ? height - 1 - y : x;
+      const dy = orientation === 3 || orientation === 4 ? height - 1 - y : orientation === 5 || orientation === 6 ? x : orientation === 7 || orientation === 8 ? width - 1 - x : y;
+      const pixel = (dy * page.outputWidth + dx) * 4, source = y * rowBytes + x * samples;
       // TIFF FillOrder2 places the earliest uncompressed bilevel column in
       // the low bit. Do not guess bit order for other sample/compression
       // models (TIFF6 recommends only uncompressed or CCITT for FillOrder2).
-      const value = bits === 1 ? (raw[y * rowBytes + (x >> 3)] >> (page.fillOrder === 2 ? (x & 7) : 7 - (x & 7))) & 1 : raw[source];
+      const value = bits === 1 ? (raw[y * rowBytes + (x >> 3)] >> (page.fillOrder === 2 && page.compression === 1 ? (x & 7) : 7 - (x & 7))) & 1 : raw[source];
       const alpha = [2, 4].includes(samples) ? raw[source + samples - 1] : 255;
       const channel = value => page.associated && alpha ? Math.min(255, Math.round(value * 255 / alpha)) : value;
       if (page.photo === 2) for (let c = 0; c < 3; c++) rgba[pixel + c] = channel(raw[source + c]);
@@ -438,12 +451,12 @@ function tiffPixels(bytes, page) {
   } finally { raw.fill(0); }
 }
 
-// Closed plain-GDI subset only. Unknown records and EMF+/escapes are not passed
+// Closed GDI/EMF+ subsets only. Unknown records and effects/escapes are not passed
 // to upstream's permissive replay (which otherwise warns and returns a picture).
 const EMF_RECORDS = new Map([[1, 88], [14, 20], [9, 16], [10, 16], [11, 16], [12, 16], [17, 12], [18, 12],
   [19, 12], [20, 12], [21, 12], [22, 12], [24, 12], [25, 12], [27, 16], [33, 8], [34, 12],
   [35, 32], [36, 36], [37, 12], [38, 28], [39, 24], [40, 12], [42, 24], [43, 24], [54, 16],
-  [59, 8], [60, 8], [61, 8], [62, 24], [63, 24], [64, 24], [67, 12], [68, 8], [82, 104], [84, 76]]);
+  [59, 8], [60, 8], [61, 8], [62, 24], [63, 24], [64, 24], [67, 12], [68, 8], [70,16], [82, 104], [84, 76]]);
 const WMF_RECORDS = new Map([[0x0000, 6], [0x0102, 8], [0x0103, 8], [0x0104, 8], [0x0106, 8], [0x012e, 8],
   [0x0201, 10], [0x0209, 10], [0x020b, 10], [0x020c, 10], [0x020d, 10], [0x020e, 10],
   [0x0213, 10], [0x0214, 10], [0x0418, 14], [0x041b, 14], [0x001e, 6], [0x0127, 8],
@@ -456,13 +469,23 @@ function inspectMetafile(bytes, format) {
     width = bytes.readInt32LE(16) - bytes.readInt32LE(8) + 1; height = bytes.readInt32LE(20) - bytes.readInt32LE(12) + 1;
     checkSize(width, height); cursor = 0;
     const handles = new Set(), stock = new Set([0, 1, 2, 3, 4, 5, 6, 7, 8, 10, 11, 12, 13, 14, 17]);
-    let saves = 0;
+    let saves = 0; const plus=createEmfPlusPreflight(MAX_RECORDS);
     while (cursor < bytes.length) {
       if (++count > MAX_RECORDS || cursor + 8 > bytes.length) fail('VISUAL_PROCESSING_LIMIT');
       const type = bytes.readUInt32LE(cursor), size = bytes.readUInt32LE(cursor + 4), minimum = EMF_RECORDS.get(type);
       if (!minimum) fail(type === 70 && size >= 16 && cursor + 16 <= bytes.length && bytes.readUInt32LE(cursor + 12) === 0x2b464d45
         ? 'VISUAL_EMF_PLUS_UNSUPPORTED' : 'VISUAL_METAFILE_RECORD_UNSUPPORTED');
       if (size < minimum || size % 4 || cursor + size > bytes.length) damaged();
+      if (type === 1 && cursor !== 0) damaged();
+      if (plus.ended && type !== 14) unsupported();
+      if (type === 70) {
+        if (!plus.records && count !== 2) fail('VISUAL_EMF_PLUS_UNSUPPORTED');
+        if(bytes.readUInt32LE(cursor+12)!==0x2b464d45)unsupported();
+        const length=bytes.readUInt32LE(cursor+8);
+        if(length<4||12+length>size||size-(12+length)>3)damaged();
+        plus.accept(bytes.subarray(cursor+16,cursor+12+length));
+        if(count+plus.records>MAX_RECORDS)fail('VISUAL_PROCESSING_LIMIT');
+      }
       if (type === 19 && bytes.readUInt32LE(cursor + 8) !== 13) unsupported(); // no approximate ROP2 composition
       if ([35, 36].includes(type)) for (let i = 0; i < 6; i++) {
         const value = bytes.readFloatLE(cursor + 8 + i * 4); if (!Number.isFinite(value) || Math.abs(value) > 1000000) unsupported();
@@ -495,6 +518,7 @@ function inspectMetafile(bytes, format) {
       if (type === 14) { ended = true; break; }
     }
     if (!ended || cursor !== bytes.length || count !== bytes.readUInt32LE(52)) damaged();
+    const plusState=plus.finish(); hasText ||= plusState.hasText;
   } else {
     if (bytes.length < 40 || bytes.readUInt32LE(0) !== 0x9ac6cdd7) unsupported(); // no guessed bounds for nonplaceable WMF
     let checksum = 0; for (let i = 0; i < 20; i += 2) checksum ^= bytes.readUInt16LE(i);
@@ -694,7 +718,7 @@ async function* decodeUnits(bytes, format, options = {}) {
     let work = 0;
     const unitLimit = Math.floor(limit / inspected.pages.length);
     for (const [index, page] of inspected.pages.entries()) {
-      const base = { width: page.width, height: page.height, index: index + 1, total: inspected.pages.length };
+      const base = { width: page.outputWidth, height: page.outputHeight, index: index + 1, total: inspected.pages.length };
       if (page.omission_code) { yield omit(base.index, base.total, page.omission_code); continue; }
       work += page.width * page.height;
       if (work > MAX_PIXELS * 4 || unitLimit < 1) { yield omit(base.index, base.total, 'VISUAL_PROCESSING_LIMIT'); continue; }
@@ -708,7 +732,7 @@ async function* decodeUnits(bytes, format, options = {}) {
           if (error?.code !== 'VISUAL_CONTENT_DAMAGED') throw error;
           yield omit(base.index, base.total, error.code); continue;
         }
-        const result = rgbaPng(rgba, page.width, page.height, options.canvasApi, unitLimit);
+        const result = rgbaPng(rgba, page.outputWidth, page.outputHeight, options.canvasApi, unitLimit);
         yield { ...base, ...result, warning_codes: result.downsampled ? ['VISUAL_RASTER_DOWNSAMPLED'] : [] };
       }
       finally { rgba?.fill(0); }

@@ -264,7 +264,18 @@ function renderTableCells(rows, options) {
         : `Spalten ${cell.column + 1}–${cell.column + cell.span}`) +
         (cell.continuationOf === null ? '' : ` · verbunden mit Zeile ${cell.continuationOf}`);
     if (typeof coordinates !== 'string' || !coordinates.trim()) invalid();
-    const section = `${oneCell(coordinates, options.escapeCell)}\n\n| ${plan.get(cell)} |\n| --- |\n| ${oneCell(cell.text, options.escapeCell)} |`;
+    let label=plan.get(cell);
+    if(options.sourceColumnLabels!==undefined){
+      if(!(options.sourceColumnLabels instanceof WeakMap))invalid();
+      const bound=options.sourceColumnLabels.get(cell);
+      // A parser-owned, source-bound column role can only strengthen the
+      // existing actual-cell plan, never declassify a protected source value.
+      if(bound!==undefined){
+        if(!['Name','Unternehmen','Telefon','Geburtsdatum','Steuer-ID',PROTECTED].includes(bound))invalid();
+        label=label===CONTENT?bound:label===bound?label:PROTECTED;
+      }
+    }
+    const section = `${oneCell(coordinates, options.escapeCell)}\n\n| ${label} |\n| --- |\n| ${oneCell(cell.text, options.escapeCell)} |`;
     characters += section.length + (output.length ? 2 : 0);
     if (characters > MAX_CHARACTERS) invalid(true);
     output.push(section);
@@ -272,4 +283,6 @@ function renderTableCells(rows, options) {
   return output.join('\n\n');
 }
 
-module.exports = Object.freeze({ renderTableCells, tableFieldPlan });
+// Closed label normalization only, not a source/owner/privacy capability.
+// The format parser must separately prove any metadata→actual-cell relation.
+module.exports = Object.freeze({ renderTableCells, tableFieldPlan, sourceColumnFieldLabel:fieldLabel });

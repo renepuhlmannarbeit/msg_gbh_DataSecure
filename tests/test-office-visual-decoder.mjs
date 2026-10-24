@@ -237,7 +237,8 @@ await test('many TIFF pages are sequential and share one bounded output allocati
   assert.deepEqual(units.map(unit => at(unit, 0, 0)[0]), [0, 20, 40, 60, 80, 100, 120, 140, 160, 180]);
 });
 await test('unsupported TIFF page emits a typed omission while later independent page survives', async () => {
-  const units = await collect(tiff([{ width: 1, height: 1, compression: 5, data: Buffer.from([42]) }, { width: 1, height: 1, data: Buffer.from([77]) }]), 'tiff');
+  // LZW5 is supported in RC176; JPEG-in-TIFF7 remains an explicit unsupported page.
+  const units = await collect(tiff([{ width: 1, height: 1, compression: 7, data: Buffer.from([42]) }, { width: 1, height: 1, data: Buffer.from([77]) }]), 'tiff');
   assert.deepEqual(units[0], { index: 1, total: 2, omission_code: 'VISUAL_FEATURE_UNSUPPORTED' });
   assert.deepEqual(at(units[1], 0, 0), [77, 77, 77, 255]);
 });

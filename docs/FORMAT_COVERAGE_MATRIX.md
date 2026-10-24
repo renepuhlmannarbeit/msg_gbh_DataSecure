@@ -1,6 +1,22 @@
 # Aktuelle Format-Coverage
 
-Arbeitsquelle: 3.2.0-rc175 chartEx veröffentlicht · 24.10.2026; RC174 unverändert.
+Arbeitsquelle: 3.2.0-rc176 Entwicklung · 24.10.2026; RC175 veröffentlicht/unverändert.
+
+RC176-Erweiterungen sind in Arbeit und noch nicht durch neue gemeinsame
+Windows-/Mac-Endpakete belegt. [Plan, konkrete Gegenbefunde und Grenzen](acceptance/RC176_SHARED_RELEASE_20261024.md).
+
+Implementierte RC176-Teilmodelle vor Endfreeze: optionale eindeutige PDFtags/
+Tabellen mit Nativefallback bei unbewiesenen Inlinegrenzen; TIFF-LZW/CCITT-
+Streifen und Orientierungen; gespeicherte Word-Felder/finale Revisionen/
+Nummerierung/Kommentaranker; klassische Excel-Kommentarautoren, TablePart-/
+Pivotkontext und lokale RichValue-Zellbilder; moderne PPT-Kommentare und
+beschreibende Office-Bildgeometrie. Geschlossene sensible Prosa-Zeilenfelder
+im Standalone-Inhaltsvertrag erhalten zusätzlichen ganzen Feldrestschutz und
+unabhängigen Residual-/Keepcheck. Keine neue Formel-/Link-/Codeausführung,
+kein universeller Bild-/Layout-/Namensdetektor. EMF+-DrawString bleibt wegen
+der belegten LayoutRect-Lücke ausdrücklich nicht unterstützt.
+
+Nachfolgende technische Bindungen beziehen sich auf RC175, nicht neue RC176bytes:
 Gemeinsamer App-/Tagcommit223a04f54bc4fcfb2a95f12807685ed764ec6f0c.
 Windows und beide Macs technisch geprüft; Desktop-/Officeabnahme USER_PENDING.
 
@@ -42,7 +58,7 @@ priorisiert PDF-Lesereihenfolge/Strukturbaum, weitere Scan-TIFFvarianten und
 Word-/Excel-/Office-Kontextmodelle. LibTIFF, PDFium, LibreOffice und Layoutmodelle
 sind Vergleichs-/Prototypkandidaten, keine neu freigegebenen RC175-Abhängigkeiten.
 
-Weitere offene Modelle: klassische Kommentarautoren/-bezüge, weitere
+Weitere offene Modelle außerhalb dieser begrenzten RC176-Ergänzungen: weitere
 Legacy-/Grafikcodecs und ggf. ein separat isolierter Office-Renderer. Keine universelle
 PNG-/Office-/PDF-, OCR-/Rendering- oder Artefaktfreiheitszusage. APNG/unbekannte
 Chunks bleiben eingeschränkt; Hinweise teilweise noch generisch.

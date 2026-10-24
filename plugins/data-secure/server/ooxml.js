@@ -11,6 +11,13 @@ const { renderTableCells, tableFieldPlan } = require('./office-table-projection'
 const { createDrawingTableCollector } = require('./drawing-table-grid');
 const { createOfficeMathCollector } = require('./office-math');
 const { mathMarkdown, mathParagraphMarkdown } = require('./office-math-projection');
+const {readWordNumbering,createWordNumberingSession,readWordCommentMetadata,createWordStoryContext}=require('./word-content-context');
+const {isProtectedFieldHeader}=require('./privacy/field-value-coverage');
+const {CONTENT_PERSON_FIELD_POLICY}=require('./core/person-field-policy');
+const { readPresentationComments } = require('./presentation-comments');
+const { createOfficeImageGeometry } = require('./office-image-geometry');
+const { createXlsxContextSession } = require('./xlsx-content-context');
+const { xlsxContextSections,xlsxSourceColumnFields } = require('./xlsx-context-projection');
 
 function officeMathCollector(errorFactory) {
   const reader = createOfficeMathCollector();
@@ -37,6 +44,9 @@ const MAX_EMBEDDED_BYTES = 50 * 1024 * 1024;
 const MAX_EMBEDDED_EXPANDED_BYTES = 100 * 1024 * 1024;
 const SUPPORTED_EMBEDDED = /^(?:word|xl|ppt)\/embeddings\/[^/]+\.(docx|xlsx|pptx)$/i;
 const PARTIAL_ENTRY_STATE = new WeakMap();
+// Only successful, actually read worksheet models can authorize in-cell images.
+// This private cache never turns consumed metadata into a coverage waiver.
+const XLSX_CONTEXT_MODELS = new WeakMap();
 const PARTIAL_PART_ERRORS = new Set(['OOXML_XML_CHARACTER_INVALID', 'OOXML_ENCODING_INVALID',
   'DOCX_STRUCTURE_UNSAFE', 'DOCX_STRUCTURE_LIMIT', 'XLSX_STRUCTURE_UNSAFE', 'XLSX_STRUCTURE_LIMIT',
   'XLSX_SHARED_STRING_INVALID', 'PPTX_STRUCTURE_UNSAFE', 'PPTX_STRUCTURE_LIMIT']);
@@ -287,6 +297,7 @@ function rawRelationshipId(node, attribute = 'id') {
 }
 function rawOfficePartUsage(entries, part, family, rootName, ext, selectedStory = null) {
   const usage = { images: new Set(), imageOccurrences: [], references: new Map(), storyIds: new Map() };
+  const geometry=createOfficeImageGeometry(),occurrenceNodes=[];
   const mc='http://schemas.openxmlformats.org/markup-compatibility/2006';
   const selected=new WeakMap(),ignored=new WeakSet(),blips=new WeakMap();
   const understood=new Set([...Object.values(RAW_IMAGE_NAMESPACES).flatMap(set=>[...set]),
@@ -321,8 +332,9 @@ function rawOfficePartUsage(entries, part, family, rootName, ext, selectedStory 
       if(selected.get(node.parent)||!usable)ignored.add(node);else selected.set(node.parent,true);
     }
     if (!inScope(node)) return;
+    geometry.start(node);
     if (RAW_IMAGE_NAMESPACES.drawing.has(node.namespaceURI) && node.localName === 'blip') {
-      const id = rawRelationshipId(node, 'embed'); if (id) {usage.images.add(id);blips.set(node,usage.imageOccurrences.length);usage.imageOccurrences.push(id);}
+      const id = rawRelationshipId(node, 'embed'); if (id) {usage.images.add(id);blips.set(node,usage.imageOccurrences.length);usage.imageOccurrences.push(id);occurrenceNodes.push(node);}
     }
     if (node.namespaceURI==='http://schemas.microsoft.com/office/drawing/2016/SVG/main'&&node.localName==='svgBlip') {
       const id=rawRelationshipId(node,'embed');if(id){
@@ -333,12 +345,12 @@ function rawOfficePartUsage(entries, part, family, rootName, ext, selectedStory 
         // on its enclosing blip. Keep that existing compatible representation;
         // do not revoke it before the SVG decoder has even made a decision.
         // SVG-only shapes still enter the bounded vector decoder once.
-        if(index===undefined)usage.imageOccurrences.push(id);
+        if(index===undefined){usage.imageOccurrences.push(id);occurrenceNodes.push(node);}
       }
     }
     if (node.namespaceURI === 'urn:schemas-microsoft-com:vml' && node.localName === 'imagedata') {
       const id = rawRelationshipId(node) || node.attributes.get('{urn:schemas-microsoft-com:office:office}relid');
-      if (id) {usage.images.add(id);usage.imageOccurrences.push(id);}
+      if (id) {usage.images.add(id);usage.imageOccurrences.push(id);occurrenceNodes.push(node);}
     }
     if (!RAW_IMAGE_NAMESPACES[family].has(node.namespaceURI)) return;
     const kinds = family === 'word' ? { headerReference: 'header', footerReference: 'footer' }
@@ -356,6 +368,7 @@ function rawOfficePartUsage(entries, part, family, rootName, ext, selectedStory 
       }
     }
   } });
+  usage.imageGeometries=occurrenceNodes.map(node=>geometry.forBlip(node));
   return usage;
 }
 function rawOfficeRelationships(entries, part, ext) {
@@ -396,11 +409,12 @@ function referencedOfficeMedia(entries, ext, options) {
   const mainPattern = { '.docx': /^word\/document\.xml$/, '.xlsx': /^xl\/workbook\.xml$/, '.pptx': /^ppt\/presentation\.xml$/ }[ext];
   if (rawSingleOfficeTarget(entries, '', rawOfficeRelationships(entries, '', ext), 'officeDocument', mainPattern) !== main) return targets;
   const collect = (part, usage, relationships, placement = {kind:'document',index:1,section_part:part}) => {
-    for (const id of usage.imageOccurrences) {
+    for (const [imageIndex,id] of usage.imageOccurrences.entries()) {
       const target = rawOfficeTarget(entries, part, relationships, id, 'image', mediaPattern);
       if (target) {
         if (targets.occurrences.length>=1000) throw rawImageStructureError(ext,true);
-        targets.add(target);targets.occurrences.push({source_part:target,owner:part,...placement});
+        targets.add(target);targets.occurrences.push({source_part:target,owner:part,...placement,
+          ...(usage.imageGeometries?.[imageIndex]?{sourceGeometry:usage.imageGeometries[imageIndex]}:{})});
       }
     }
   };
@@ -430,6 +444,12 @@ function referencedOfficeMedia(entries, ext, options) {
       for (const drawingId of sheetUsage.references.get('drawing') || []) {
         const drawing = rawOfficeTarget(entries, sheet, rels, drawingId, 'drawing', /^xl\/drawings\/[^/]+\.xml$/i);
         if (drawing) collect(drawing, rawOfficePartUsage(entries, drawing, 'spreadsheetDrawing', 'wsDr', ext), rawOfficeRelationships(entries, drawing, ext),{kind:'sheet',index:sheetIndex,section_part:sheet});
+      }
+      if(options.contentMode)for(const value of XLSX_CONTEXT_MODELS.get(entries)?.get(sheet)?.richValues||[]){
+        if(value.status!=='local-image'||!mediaPattern.test(value.mediaPart))continue;
+        if(targets.occurrences.length>=1000)throw rawImageStructureError(ext,true);
+        targets.add(value.mediaPart);targets.occurrences.push({source_part:value.mediaPart,owner:sheet,
+          kind:'sheet',index:sheetIndex,section_part:sheet,cell:value.cell});
       }
     }
   } else {
@@ -654,6 +674,11 @@ const BLOCKED_WORD_CONTENT = new Set([
   'customXmlDelRangeStart', 'customXmlDelRangeEnd', 'customXmlMoveFromRangeStart',
   'customXmlMoveFromRangeEnd', 'customXmlMoveToRangeStart', 'customXmlMoveToRangeEnd'
 ].map(name => `w:${name}`).concat(['m:oMath', 'm:oMathPara', 'm:t']));
+// Only a parser-owned successful model can waive the old content-only gates.
+const WORD_CONTENT_CONTEXTS=new WeakMap();
+const MODELED_WORD_CONTEXT=new Set(['instrText','fldSimple','delText','del','ins','moveFrom','moveTo',
+  'pPrChange','rPrChange','sectPrChange','tblGridChange','tblPrChange','tblPrExChange','trPrChange','tcPrChange','numberingChange'].map(name=>'w:'+name));
+const WORD_REVISION_PROPERTIES=new Set(['pPrChange','rPrChange','sectPrChange','tblGridChange','tblPrChange','tblPrExChange','trPrChange','tcPrChange','numberingChange'].map(name=>'w:'+name));
 
 function normalizedWordQName(qname, namespaces, attribute = false) {
   const parts = String(qname).split(':');
@@ -812,7 +837,13 @@ function wordPartScope(xml, rootTag, onElement, options = {}) {
 function renderWordPart(xml, rootTag, options = {}) {
   const scope = wordPartScope(String(xml), rootTag, undefined, options);
   if (!scope.found || !scope.body) return '';
-  return renderWordStructure(parseWordStructure(scope.body, options), options);
+  const tree=parseWordStructure(scope.body, {...options,wordStoryRoot:rootTag}),markdown=renderWordStructure(tree,options);
+  const context=WORD_CONTENT_CONTEXTS.get(options.wordContentContext);
+  if(context){
+    for(const anchor of tree.wordReportAnchors||[]){if(context.commentAnchors.has(anchor.id))throw wordStructureError();context.commentAnchors.set(anchor.id,anchor);}
+    context.renderedParts.add(options.wordStoryPart);
+  }
+  return markdown;
 }
 
 // These are structural/resource bounds, not a page-count limit. Each XML token
@@ -832,6 +863,10 @@ function wordStructureError(limit = false) {
 function parseWordStructure(body, options = {}) {
   const root = { type: 'root', children: [] };
   const stack = [{ name: '', node: root, skipped: false, boxes: 0 }];
+  const context=WORD_CONTENT_CONTEXTS.get(options.wordContentContext);
+  const story=context?createWordStoryContext({revisionView:'final',comments:context.commentsModel,pointRangeBoundaries:true}):null;
+  const numbering=context?createWordNumberingSession(context.numberingModel):null;
+  const storyOwners=new WeakMap();let paragraphIndex=0;
   const math = options.contentMode === true ? officeMathCollector(wordStructureError) : null;
   // wordPartScope already proved the original namespace URIs and normalized
   // only authentic Word/Math names. Never grant a source prefix or stripped
@@ -850,13 +885,47 @@ function parseWordStructure(body, options = {}) {
     }
     return { namespaceURI, localName: split.at(-1), attributes, namespaces: mathNamespaces, parent };
   }
+  if(story){const event=mathEvent('w:'+options.wordStoryRoot,new Map(),null);story.start(event);stack[0].storyEvent=event;}
+  function pendingField(node,id){
+      if(node.pending.length&&node.pendingFieldId!==id){
+        // Preserve an actual immediately preceding closed field label with
+        // its real saved value. No value-shape/name inference or generated
+        // numbering is allowed to create field authority.
+        const pending=node.pending.join(''),match=/^([^\r\n]*?)([:=])\s*$/u.exec(pending);
+        if(id!==null&&node.pendingFieldId===null&&match&&isProtectedFieldHeader(match[1].trim(),CONTENT_PERSON_FIELD_POLICY))node.pendingFieldId=id;
+        else flush(node);
+      }
+      if(!node.pending.length)node.pendingFieldId=id;
+  }
+  function sourceText(node,value,event){
+    if(story){
+      const projection=story.projectionState(event),id=projection.fieldId;pendingField(node,id);
+      node.wordTextOffset+=value.length;if(id!==null)node.wordStoredResult=true;
+      if(projection.revisedText)node.wordRevisionText=true;
+    }
+    node.pending.push(value);
+  }
+  function finishParagraph(node){
+    if(!story||node.type!=='p'||node.wordNumbered)return;
+    node.wordNumbered=true;
+    // Text boxes are distinct text contexts. Their nested end-tag order must
+    // not advance the containing body's list counters. Until this path has a
+    // separately bound numbering story, retain prose without invented numbers.
+    if(node.boxes){if(Object.keys(node.wordNumbering||{}).length)context.unverified.add('WORD_NUMBERING_UNMODELED');return;}
+    const value=numbering.next(node.wordNumbering||{});
+    if(!value.complete)context.unverified.add('WORD_NUMBERING_UNMODELED');
+    if(value.prefix)node.wordListPrefix=value.prefix;
+  }
   function endMath(event, node) {
     if (!event) return;
     const result = math.end(event);
     if (!result) return;
     if (node.type !== 'p') throw wordStructureError();
+    const fieldId=story?story.projectionState(stack.at(-1)?.storyEvent).fieldId:null;
+    if(story)pendingField(node,fieldId);
     flush(node);
-    node.children.push({ type: 'math', rawText: result.rawText, result, children: [result.rawText] });
+    node.children.push({ type: 'math', rawText: result.rawText, result, children: [result.rawText],...(fieldId!==null?{wordFieldId:fieldId}:{}) });
+    if(story){node.wordTextOffset+=result.rawText.length;if(fieldId!==null)node.wordStoredResult=true;if(story.projectionState(stack.at(-1)?.storyEvent).revisedText)node.wordRevisionText=true;}
     if (!result.complete && options.officeMathContext) options.officeMathContext.unverified = true;
   }
   // Quoted attribute values may contain `>`; an unquoted `<` is never a tag.
@@ -879,8 +948,10 @@ function parseWordStructure(body, options = {}) {
     const raw = node.pending.join('');
     const value = options.contentMode && !/\S/u.test(raw) ? '' : options.preserveText ? raw
       : raw.replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
-    if (value) node.children.push(value);
+    if (value) node.children.push(story&&node.pendingFieldId!==null
+      ?{type:'wordField',wordFieldId:node.pendingFieldId,text:value,children:[value]}:value);
     node.pending.length = 0;
+    node.pendingFieldId=null;
   }
   while (cursor < body.length) {
     const frame = stack[stack.length - 1];
@@ -890,12 +961,13 @@ function parseWordStructure(body, options = {}) {
       if (!frame.skipped && frame.mathEvent && math.owns(frame.mathEvent)) {
         math.text(xmlDecode(body.slice(cursor, end)), frame.mathEvent);
       } else if (!frame.skipped && frame.name === 'w:t') {
-        try { frame.node.pending.push(xmlDecode(body.slice(cursor, end))); }
+        try { if(!story||story.textAllowed(frame.storyEvent))sourceText(frame.node,xmlDecode(body.slice(cursor, end)),frame.storyEvent); }
         catch (error) {
           if (error?.code === 'OOXML_XML_CHARACTER_INVALID') throw error;
           throw wordStructureError();
         }
-      } else if (!frame.skipped && /\S/.test(body.slice(cursor, end)) &&
+      } else if (!frame.skipped && !(story&&story.projectionState(frame.storyEvent).metadata&&
+          (frame.revisionMetadata||['w:instrText','w:delInstrText','w:fldData'].includes(frame.name))) && /\S/.test(body.slice(cursor, end)) &&
           !NON_CONTENT_DRAWING_TEXT.has(frame.name)) {
         // Text outside a canonical Word text node is content, not formatting.
         // Silently dropping vendor/extension text would create a coverage gap
@@ -919,7 +991,7 @@ function parseWordStructure(body, options = {}) {
         if (frame.mathEvent && math.owns(frame.mathEvent)) math.text(value, frame.mathEvent);
         else {
           if (frame.name !== 'w:t') throw wordStructureError();
-          frame.node.pending.push(value);
+          if(!story||story.textAllowed(frame.storyEvent))sourceText(frame.node,value,frame.storyEvent);
         }
       }
       cursor = end + special[0].length;
@@ -935,7 +1007,8 @@ function parseWordStructure(body, options = {}) {
     if (closing) {
       if (selfClosing || attributes.trim() || stack.length === 1 || frame.name !== name) throw wordStructureError();
       if (frame.ownMathEvent) endMath(frame.mathEvent, frame.node);
-      if (frame.created) flush(frame.node);
+      if (frame.created) {finishParagraph(frame.node);flush(frame.node);}
+      if(frame.ownStoryEvent)story.end(frame.storyEvent);
       if (frame.name === 'mc:AlternateContent' && !frame.alternate?.selected) throw wordStructureError();
       stack.pop();
       continue;
@@ -959,8 +1032,10 @@ function parseWordStructure(body, options = {}) {
     // Unknown/foreign elements are deliberately not skipped: direct text in
     // those elements must still fail closed instead of disappearing.
     const mathInside = Boolean(frame.mathEvent && math?.owns(frame.mathEvent));
-    const mathRoot = Boolean(math && !mathInside && ['m:oMath', 'm:oMathPara'].includes(name));
-    const blockedWordElement = BLOCKED_WORD_CONTENT.has(name) && !(mathInside || mathRoot);
+    if(math&&!frame.skipped&&['m:oMath','m:oMathPara'].includes(name)&&story&&
+        story.projectionState(frame.storyEvent).metadata&&!frame.revisionMetadata)throw wordStructureError();
+    const mathRoot = Boolean(math && !mathInside && ['m:oMath', 'm:oMathPara'].includes(name)&&(!story||story.visible(frame.storyEvent)));
+    const blockedWordElement = BLOCKED_WORD_CONTENT.has(name) && !(mathInside || mathRoot) && !(story&&MODELED_WORD_CONTEXT.has(name));
     let branchSkipped = false;
     let alternate = null;
     if (name === 'mc:AlternateContent') {
@@ -982,17 +1057,25 @@ function parseWordStructure(body, options = {}) {
       // Choice/Fallback are the only legal direct children of AlternateContent.
       throw wordStructureError();
     }
-    const skipped = frame.skipped || branchSkipped || blockedWordElement;
+    let skipped = frame.skipped || branchSkipped || blockedWordElement;
     const boxes = frame.boxes + (name === 'w:txbxContent' ? 1 : 0);
     let node = frame.node, created = false, wordGridLeaf = false;
     const mcWrapper = /^mc:(?:AlternateContent|ChoiceSupported|ChoiceUnsupported|Fallback)$/u.test(name);
+    let storyEvent=frame.storyEvent||null,ownStoryEvent=false,storyProjection=null;
+    if(story&&!skipped&&!mcWrapper){
+      storyEvent=mathEvent(name,attrs,frame.storyEvent);story.start(storyEvent);ownStoryEvent=true;
+      storyProjection=story.projectionState(storyEvent);if(!storyProjection.structural)skipped=true;
+      if(name==='w:t'&&storyProjection.metadata&&!frame.revisionMetadata)throw wordStructureError();
+      if(name==='w:t'&&storyProjection.structural&&(storyEvent.parent?.localName!=='r'||storyEvent.parent?.namespaceURI!==mathNamespaces.get('w')))throw wordStructureError();
+    }
+    const revisionMetadata=frame.revisionMetadata||(story&&WORD_REVISION_PROPERTIES.has(name));
     let event = frame.mathEvent || null, ownMathEvent = false;
     if (!skipped && (mathInside || mathRoot) && !mcWrapper) {
       if (mathRoot && (node.type !== 'p' || !['w:p', 'w:r'].includes(propertyParents().at(-1)?.name))) throw wordStructureError();
       event = mathEvent(name, attrs, mathInside ? frame.mathEvent : null);
       math.start(event); ownMathEvent = true;
     }
-    if (!skipped && !mathInside && !mathRoot) {
+    if (!skipped && !revisionMetadata && !mathInside && !mathRoot) {
       if (frame.name === 'w:t' || frame.wordGridLeaf) throw wordStructureError();
       const type = /^w:(p|tbl|tr|tc)$/.exec(name)?.[1];
       if (type) {
@@ -1002,7 +1085,7 @@ function parseWordStructure(body, options = {}) {
         if (!allowed) throw wordStructureError();
         if (++nodes > MAX_WORD_STRUCTURE_NODES) throw wordStructureError(true);
         flush(node);
-        const child = { type, children: [], boxes, ...(type === 'p' ? { pending: [], prefix: '' } : {}) };
+        const child = { type, children: [], boxes,...(story?{wordStructureId:nodes}:{}), ...(type === 'p' ? { pending: [], prefix: '',...(story?{wordParagraphIndex:++paragraphIndex,wordTextOffset:0,wordNumbering:{}}:{}) } : {}) };
         node.children.push(child);
         node = child;
         created = true;
@@ -1041,27 +1124,79 @@ function parseWordStructure(body, options = {}) {
         }
       } else if (name === 'w:t' || name === 'w:tab' || name === 'w:br' || name === 'w:cr') {
         if (node.type !== 'p') throw wordStructureError();
-        if (name !== 'w:t') node.pending.push(name === 'w:tab' ? '\t' : '\n');
+        if (name !== 'w:t'&&(!story||story.visible(storyEvent))) sourceText(node,name === 'w:tab' ? '\t' : '\n',storyEvent);
       } else if (node.type === 'tr' && name === 'w:tblHeader') {
         node.header = !['0', 'false', 'off'].includes(attrs.get('w:val') || '1');
       } else if (node.type === 'p' && name === 'w:pStyle') {
         const level = /^heading\s*([1-6])$/i.exec(attrs.get('w:val') || '')?.[1];
         if (level) node.prefix = '#'.repeat(Number(level)) + ' ';
-      } else if (node.type === 'p' && name === 'w:numPr' && !node.prefix) node.prefix = '- ';
+        if(story){const p=propertyParents();if(p.at(-1)?.name!=='w:pPr'||p.at(-2)?.name!=='w:p')throw wordStructureError();oneProperty(node,'w:pStyle');node.wordNumbering.pStyle=xmlDecode(attrs.get('w:val')||'');}
+      } else if (node.type === 'p' && name === 'w:numPr') {
+        if(story){const p=propertyParents();if(p.at(-1)?.name!=='w:pPr'||p.at(-2)?.name!=='w:p')throw wordStructureError();oneProperty(node,'w:numPr');}
+        else if(!node.prefix)node.prefix='- ';
+      } else if(story&&node.type==='p'&&['w:numId','w:ilvl'].includes(name)){
+        const p=propertyParents();if(p.at(-1)?.name!=='w:numPr'||p.at(-2)?.name!=='w:pPr'||p.at(-3)?.name!=='w:p')throw wordStructureError();
+        oneProperty(node,name);node.wordNumbering[name==='w:numId'?'numId':'ilvl']=xmlDecode(attrs.get('w:val')||'');wordGridLeaf=true;
+      }
     }
+    if(story&&ownStoryEvent)storyOwners.set(storyEvent,{node,offset:node.wordTextOffset??null,structure:node.wordStructureId??0,boundary:node.children.length});
     if (!selfClosing) stack.push({ name, node, skipped, boxes, created, alternate, wordGridLeaf,
-      mathEvent: event, ownMathEvent });
+      mathEvent: event, ownMathEvent,storyEvent,ownStoryEvent,revisionMetadata });
     else if (name === 'mc:AlternateContent' || (name === 'mc:Fallback' && !frame.alternate?.selected)) {
       throw wordStructureError();
-    } else if (created) flush(node);
+    } else if (created) {finishParagraph(node);flush(node);}
     if (selfClosing && ownMathEvent) endMath(event, node);
+    if(selfClosing&&ownStoryEvent)story.end(storyEvent);
   }
   if (stack.length !== 1) throw wordStructureError();
+  if(story){
+    story.end(stack[0].storyEvent);const report=story.finish();
+    for(const reason of report.reasons)context.unverified.add(reason);
+    for(const notice of report.notices)context.notices.add(notice);
+    root.wordReportAnchors=[];
+    for(const anchor of report.comments){
+      const placement=storyOwners.get(anchor.referenceNode),start=anchor.startNode?storyOwners.get(anchor.startNode):null,end=anchor.endNode?storyOwners.get(anchor.endNode):null;
+      if(!placement||placement.node.type!=='p'||[start,end].some(value=>value&&!['root','p','tbl','tr','tc'].includes(value.node.type)))throw wordStructureError();
+      const range=value=>value?{paragraph:value.node.wordParagraphIndex??null,offset:value.offset,kind:value.node.type,structure:value.structure,boundary:value.boundary}:null;
+      const actual={id:anchor.id,definition:anchor.definition,part:options.wordStoryPart,paragraph:placement.node.wordParagraphIndex,offset:placement.offset,
+        start:start&&end?range(start):null,end:start&&end?range(end):null,point:Boolean(start)!==Boolean(end)?range(placement):null,
+        singleBoundary:Boolean(start)!==Boolean(end)?range(start||end):null};
+      root.wordReportAnchors.push(actual);(placement.node.wordCommentReferences||=[]).push(actual);
+    }
+    root.wordContext=true;
+    root.wordCommentBody=options.wordStoryRoot==='comment';
+    // A complex stored result can span real paragraphs, but never another
+    // cell/story (the field collector already proves this). Retain the entire
+    // actual result once at its first source occurrence, with paragraph and
+    // formula boundaries. A storage-field end is NOT a declassification of
+    // ordinary source values in the same actual paragraph; the renderer keeps
+    // the independent parent-paragraph obligation below.
+    const groups=new Map();
+    function fields(node,paragraph=null){
+      if(typeof node==='string')return;
+      if(node.type==='p')paragraph=node;
+      if(node.wordFieldId!==undefined){
+        let group=groups.get(node.wordFieldId);
+        if(!group){group={raw:'',spans:[],paragraph:null};groups.set(node.wordFieldId,group);node.wordFieldResult=group;}
+        else{node.wordFieldSkip=true;node.wordFieldContinuation=group;}
+        if(group.paragraph&&group.paragraph!==paragraph)group.raw+='\n';
+        group.paragraph=paragraph;
+        const text=node.type==='math'?node.rawText:node.text;
+        if(node.type==='math')group.spans.push({start:group.raw.length,end:group.raw.length+text.length,result:node.result});
+        group.raw+=text;
+        if(group.raw.length>MAX_WORD_RENDERED_CHARS)throw wordStructureError(true);
+        return;
+      }
+      for(const child of node.children)fields(child,paragraph);
+    }
+    fields(root);
+  }
   bindWordTableGrids(root, wordStructureError);
   return root;
 }
 function renderWordStructure(root, options = {}) {
   const output = [];
+  const wordFieldDuty=new WeakMap();
   let chars = 0;
   function write(value) {
     chars += value.length;
@@ -1074,6 +1209,8 @@ function renderWordStructure(root, options = {}) {
   }
   function content(node) {
     if (typeof node === 'string') return Boolean(node);
+    if(node.wordFieldSkip)return false;
+    if(root.wordContext&&node.type==='p'&&(node.wordListPrefix||node.wordCommentReferences?.length))return true;
     if (options.preserveText && !options.contentMode && node.type === 'p') return true;
     // Memoization visits each node only once, including empty drawing wrappers.
     if (node.visible === undefined) node.visible = node.type === 'tbl'
@@ -1090,11 +1227,17 @@ function renderWordStructure(root, options = {}) {
         if (!inCell && !emitted) write(node.prefix || '');
         write(options.preserveText ? extractionText(child, inCell, options.literalMarkup) : (inCell ? escapeMarkdownTableCell(child) : child));
       } else emit(child, inCell);
+      if(root.wordContext&&node.type==='root'&&typeof child!=='string'){
+        const pending=[child];while(pending.length){const current=pending.pop();if(typeof current==='string')continue;
+          for(const anchor of current.wordCommentReferences||[])write(`\n\nKommentarverweis ${anchor.id} · Absatz ${anchor.paragraph} · Quelltextposition ${anchor.offset} (UTF-16).`);
+          for(let index=current.children.length-1;index>=0;index--)pending.push(current.children[index]);}
+      }
       emitted = true;
     }
   }
   function paragraphMathModel(node) {
     if(node.type!=='p'||!node.children.some(value=>typeof value!=='string'&&value.type==='math'))return null;
+    if(node.children.some(value=>typeof value!=='string'&&value.wordFieldId!==undefined))return null;
     // Each math result belongs to this actual paragraph. Never flatten a
     // nested paragraph/table or borrow an adjacent source field's identity.
     if(node.children.some(value=>typeof value!=='string'&&value.type!=='math'))throw wordStructureError();
@@ -1108,18 +1251,54 @@ function renderWordStructure(root, options = {}) {
     }
     return {raw,spans,prefix:node.prefix||''};
   }
+  function wordParagraphBlocks(node){
+    if(node.type!=='p'||!root.wordContext||!(root.wordCommentBody||node.wordRevisionText||node.wordListPrefix||
+        node.children.some(value=>typeof value!=='string'&&(value.wordFieldId!==undefined||value.type==='p'||value.type==='tbl'))))return null;
+    // Actual Word paragraphs, not MERGEFIELD identities, own contiguous
+    // ordinary/saved value fragments. Do not detach the second part of Name:
+    // Qdx / Qdy merely because a cache or fldChar happens to end in between.
+    // Real nested owners are emitted independently, with the parent's field
+    // duty retained only on later source fragments of that same parent.
+    const blocks=[];let raw='',spans=[],stored=false,active=false;
+    function actualFieldPrefix(value){let start=0;for(let index=0;index<value.length;index++)if(value[index]===':'||value[index]==='='){
+      if(isProtectedFieldHeader(value.slice(start,index).trim(),CONTENT_PERSON_FIELD_POLICY))return true;start=index+1;}return false;}
+    function ownDuty(value,mathSpans){let cursor=0;for(const span of mathSpans){if(actualFieldPrefix(value.slice(cursor,span.start)))return true;cursor=span.end;}return actualFieldPrefix(value.slice(cursor));}
+    function groupDuty(group){if(!wordFieldDuty.has(group))wordFieldDuty.set(group,ownDuty(group.raw,group.spans));return wordFieldDuty.get(group);}
+    function flush(){
+      if(raw){const own=ownDuty(raw,spans),block=stored?{text:raw,field:{raw,spans}}:spans.length?{math:raw,paragraph:{raw,spans,prefix:''}}:{text:raw};
+        block.protected=active&&!own;blocks.push(block);active||=own;raw='';spans=[];stored=false;}
+    }
+    for(const child of node.children){
+      if(typeof child==='string'){raw+=child;continue;}
+      if(child.wordFieldSkip){if(child.wordFieldContinuation)active||=groupDuty(child.wordFieldContinuation);continue;}
+      if(child.wordFieldResult){const group=child.wordFieldResult,offset=raw.length;for(const span of group.spans)spans.push({...span,start:offset+span.start,end:offset+span.end});raw+=group.raw;stored=true;}
+      else if(child.type==='math'){
+        spans.push({start:raw.length,end:raw.length+child.rawText.length,result:child.result});raw+=child.rawText;flush();
+        // A formula has its own argument model, but its end does not waive
+        // a Name duty already proved on the enclosing paragraph's prose.
+        // Conversely ownDuty() never promotes an inner math label to that
+        // enclosing parent: only actual non-math source fragments can do so.
+      }
+      else{flush();blocks.push({node:child});}
+    }
+    flush();return blocks;
+  }
   function cellBlocks(node) {
     const blocks = []; let paragraphs = [];
     function flush() { if(paragraphs.length) { blocks.push({text:paragraphs.join('\n')}); paragraphs=[]; } }
     function visit(value) {
       if(typeof value === 'string') { paragraphs.push(value); return; }
       if(options.contentMode&&!content(value))return;
+      if(value.wordFieldResult){flush();blocks.push({text:value.wordFieldResult.raw,field:value.wordFieldResult});return;}
+      if(value.wordListPrefix){flush();blocks.push({numbering:value.wordListPrefix});}
+      const fieldParagraph=wordParagraphBlocks(value);
+      if(fieldParagraph){flush();for(const block of fieldParagraph){if(block.node)visit(block.node);else blocks.push(block);}return;}
       const paragraph=paragraphMathModel(value);
       if(paragraph){flush();blocks.push({math:paragraph.raw,paragraph});return;}
       if(value.type === 'math') { flush(); blocks.push({math:value.rawText,result:value.result}); return; }
       if(value.type === 'tbl') { flush(); blocks.push({table:value}); return; }
       if(value.type === 'p' && !value.children.some(child=>typeof child!=='string')) {
-        paragraphs.push((value.prefix||'')+value.children.join('')); return;
+        paragraphs.push((value.wordStoredResult||value.wordListPrefix?'':value.prefix||'')+value.children.join('')); return;
       }
       for(const child of value.children)visit(child);
     }
@@ -1129,7 +1308,7 @@ function renderWordStructure(root, options = {}) {
     // Flatten a nested, already supported rectangular grid into an independent
     // GFM section rather than keeping it escaped inside its parent value.
     // Do not change the established uniform-partition path unnecessarily.
-    if(!inherited&&!hasNestedTable(node)&&!hasMath(node)&&(!node.grid.complex||uniformWordPartition(node))){emit(node,false);return;}
+    if(!inherited&&!hasNestedTable(node)&&!hasMath(node)&&!hasWordLists(node)&&!hasWordFields(node)&&(!node.grid.complex||uniformWordPartition(node))){emit(node,false);return;}
     const blocks = new Map(), positionedCells = new Map();
     const rows = node.grid.rows.map(({row,cells},index)=>({number:index+1,header:row.header===true,cells:cells.map(positioned=>{
       const actual=cellBlocks(positioned.cell);
@@ -1185,32 +1364,44 @@ function renderWordStructure(root, options = {}) {
       if(cell.continuationOf!==null&&!blocks.get(cell).some(block=>block.table||(block.math??block.text??'').trim())){separate();write(coordinate+' · ohne eigenen Zelltext');}
       for(const block of blocks.get(cell)){
         if(block.table){separate();write(coordinate+' · Untertabelle:\n\n');projectedWordTable(block.table,label==='Inhalt'?null:label);}
+        else if(block.numbering){separate();write(coordinate+' · Listennummerierung:\n\n| Inhalt |\n| --- |\n| '+extractionText(block.numbering.trimEnd(),true,options.literalMarkup)+' |');}
         else if(block.math?.trim()){
           separate();write(coordinate+' · Formel:\n\n');
           // A real sensitive column remains a field. Otherwise formula source
           // arguments need actual paragraph boundaries, not GFM <br> folding
           // behind generated role labels, before the normal privacy entry.
-          if(label!=='Inhalt')write(`| ${label} |\n| --- |\n| `+extractionText(block.math,true,options.literalMarkup)+' |');
+          if(label!=='Inhalt'||block.protected)write(`| ${label!=='Inhalt'?label:'Geschützter Tabellenwert'} |\n| --- |\n| `+extractionText(block.math,true,options.literalMarkup)+' |');
           else write(block.paragraph
             ?mathParagraphMarkdown(block.paragraph.raw,block.paragraph.spans,(value,inCell)=>extractionText(value,inCell,options.literalMarkup),wordStructureError)
             :mathMarkdown(block.result,(value,inCell)=>extractionText(value,inCell,options.literalMarkup),wordStructureError));
         }
-        else if(block.text?.trim()){separate();write(coordinate+`\n\n| ${label} |\n| --- |\n| `+
-          extractionText(block.text,true,options.literalMarkup)+' |');}
+        else if(block.text?.trim()){
+          separate();write(coordinate+(block.field?' · gespeichertes Feldresultat':'')+'\n\n');
+          if(block.field?.spans.length&&label==='Inhalt'&&!block.protected)write(mathParagraphMarkdown(block.field.raw,block.field.spans,(value,inCell)=>extractionText(value,inCell,options.literalMarkup),wordStructureError));
+          else write(`| ${label!=='Inhalt'?label:block.protected?'Geschützter Tabellenwert':'Inhalt'} |\n| --- |\n| `+extractionText(block.text,true,options.literalMarkup)+' |');
+        }
       }
     }
   }
   function hasNestedTable(node) {
     const pending=[...node.children];
     while(pending.length){const child=pending.pop();if(typeof child==='string')continue;
-      if(child.type==='tbl')return true;pending.push(...child.children);}
+      if(child.type==='tbl')return true;for(const value of child.children)pending.push(value);}
     return false;
   }
   function hasMath(node) {
     const pending=[...node.children];
     while(pending.length){const child=pending.pop();if(typeof child==='string')continue;
-      if(child.type==='math')return true;pending.push(...child.children);}
+      if(child.type==='math')return true;for(const value of child.children)pending.push(value);}
     return false;
+  }
+  function hasWordLists(node){
+    const pending=[node];while(pending.length){const child=pending.pop();if(typeof child==='string')continue;
+      if(child.wordListPrefix)return true;for(const value of child.children)pending.push(value);}return false;
+  }
+  function hasWordFields(node){
+    const pending=[node];while(pending.length){const child=pending.pop();if(typeof child==='string')continue;
+      if(child.wordFieldId!==undefined)return true;for(const value of child.children)pending.push(value);}return false;
   }
   function uniformWordPartition(node){
     const partition=node.grid.rows[0]?.cells,logicalColumns=node.grid.columns;
@@ -1220,18 +1411,50 @@ function renderWordStructure(root, options = {}) {
         cells.every((positioned,index)=>!positioned.cell.verticalMerge&&positioned.column===partition[index].column&&positioned.span===partition[index].span));
   }
   function emit(node, inCell) {
+    if(node.wordFieldResult){
+      const field=node.wordFieldResult;
+      write('Gespeichertes Word-Feldresultat:\n\n');
+      if(field.spans.length)write(mathParagraphMarkdown(field.raw,field.spans,(value,cell)=>extractionText(value,cell,options.literalMarkup),wordStructureError));
+      else write('| Inhalt |\n| --- |\n| '+extractionText(field.raw,true,options.literalMarkup)+' |');
+      return;
+    }
+    if(root.wordContext&&node.type==='p'&&node.wordListPrefix&&!inCell){
+      write('Listennummerierung:\n\n| Inhalt |\n| --- |\n| '+extractionText(node.wordListPrefix.trimEnd(),true,options.literalMarkup)+' |');
+      if(node.children.length)write('\n\n');
+    }
+    const fieldParagraph=wordParagraphBlocks(node);
+    if(fieldParagraph){
+      let first=true;
+      for(const block of fieldParagraph){
+        if(!first)write('\n\n');first=false;
+        if(block.field){write('Word-Absatz mit gespeicherten Feldresultaten:\n\n');if(block.field.spans.length&&!block.protected)write(mathParagraphMarkdown(block.field.raw,block.field.spans,(value,cell)=>extractionText(value,cell,options.literalMarkup),wordStructureError));else write(`| ${block.protected?'Geschützter Tabellenwert':'Inhalt'} |\n| --- |\n| `+extractionText(block.text,true,options.literalMarkup)+' |');}
+        else if(block.math){if(block.protected)write('Absatzwert mit Formel:\n\n| Geschützter Tabellenwert |\n| --- |\n| '+extractionText(block.math,true,options.literalMarkup)+' |');else{write('Word-Absatz mit Formel:\n\n');write(mathParagraphMarkdown(block.paragraph.raw,block.paragraph.spans,(value,cell)=>extractionText(value,cell,options.literalMarkup),wordStructureError));}}
+        else if(block.node)emit(block.node,inCell);
+        else if(!inCell)write('Absatzinhalt:\n\n| '+(block.protected?'Geschützter Tabellenwert':'Inhalt')+' |\n| --- |\n| '+extractionText(block.text,true,options.literalMarkup)+' |');
+        else write(extractionText(block.text,inCell,options.literalMarkup));
+      }
+      return;
+    }
     const paragraph=paragraphMathModel(node);
     if(paragraph){
       // Generated Word list numbering is not part of the actual source field
       // prefix. Keep it separate from the real GFM field projection.
       if(paragraph.prefix)write(extractionText(paragraph.prefix.trimEnd(),false,options.literalMarkup)+'\n\n');
+      // An actual paragraph remains an independent owner even when its math
+      // projection begins with a GFM source cell. The source adapter compacts
+      // row-spacing inside tables; do not let adjacent owners become rows of
+      // the previous paragraph's sensitive table merely through blank lines.
+      if(root.wordContext)write('Word-Absatz mit Formel:\n\n');
       write(mathParagraphMarkdown(paragraph.raw,paragraph.spans,(value,cell)=>extractionText(value,cell,options.literalMarkup),wordStructureError));return;
     }
     if(node.type==='math'){
       write(mathMarkdown(node.result,(value,cell)=>extractionText(value,cell,options.literalMarkup),wordStructureError));return;
     }
+    if(root.wordContext&&!inCell&&node.type==='p'&&(node.wordListPrefix||root.wordCommentBody||node.wordRevisionText)&&node.children.every(value=>typeof value==='string')){
+      const raw=node.children.join('');if(raw)write((root.wordCommentBody?'Kommentarabsatz '+node.wordParagraphIndex:'Absatzinhalt')+':\n\n| Inhalt |\n| --- |\n| '+extractionText(raw,true,options.literalMarkup)+' |');return;
+    }
     if (node.type !== 'tbl') { children(node, inCell); return; }
-    if(options.contentMode===true&&((node.grid.complex&&!uniformWordPartition(node))||hasNestedTable(node)||hasMath(node))){
+    if(options.contentMode===true&&((node.grid.complex&&!uniformWordPartition(node))||hasNestedTable(node)||hasMath(node)||hasWordLists(node)||hasWordFields(node))){
       if(options.officeTableContext)options.officeTableContext.normalized=true;
       write(`Tabelle als Zellabschnitte (${node.grid.columns} logische Spalten):\n\n`);
       projectedWordTable(node);return;
@@ -1593,7 +1816,60 @@ function packageImageRelationshipCoverage(entries, packageRoot, label, allowedSo
     warnings: issues ? [`${label} enthält ${issues} nicht eindeutig über eine interne Bildbeziehung abgesicherte Grafik(en); Freigabe wird blockiert.`] : []
   };
 }
+function prepareWordContentContext(entries) {
+  const state={numberingModel:readWordNumbering(),commentsModel:readWordCommentMetadata(),commentsBound:false,
+    renderedParts:new Set(),commentAnchors:new Map(),notices:new Set(),unverified:new Set()};
+  const packageNamespace='http://schemas.openxmlformats.org/package/2006/relationships',ctNamespace='http://schemas.openxmlformats.org/package/2006/content-types';
+  const relationNamespaces=['http://schemas.openxmlformats.org/officeDocument/2006/relationships','http://purl.oclc.org/ooxml/officeDocument/relationships'];
+  function relationships(part){
+    const relPart=part?path.posix.join(path.posix.dirname(part),'_rels',path.posix.basename(part)+'.rels'):'_rels/.rels';
+    const data=entries.get(relPart);if(!data)return [];
+    const result=[],ids=new Set();let valid=false;
+    readXml(data.toString('utf8'),{decode:xmlDecode,error:wordStructureError,start(node){
+      if(!node.parent){valid=node.namespaceURI===packageNamespace&&node.localName==='Relationships';if(!valid)throw wordStructureError();return;}
+      if(node.parent.parent||node.namespaceURI!==packageNamespace||node.localName!=='Relationship'||node.parent.namespaceURI!==packageNamespace)throw wordStructureError();
+      const get=name=>node.attributes.get('{}'+name),id=get('Id');if(!id||ids.has(id))throw wordStructureError();ids.add(id);
+      result.push({type:get('Type'),target:get('Target'),mode:get('TargetMode')});
+    }});return result;
+  }
+  const overrides=new Map(),types=entries.get('[Content_Types].xml');
+  if(!types)return null;
+  readXml(types.toString('utf8'),{decode:xmlDecode,error:wordStructureError,start(node){
+    if(!node.parent){if(node.namespaceURI!==ctNamespace||node.localName!=='Types')throw wordStructureError();return;}
+    if(node.localName==='Override'&&node.namespaceURI===ctNamespace&&!node.parent.parent){const p=node.attributes.get('{}PartName'),type=node.attributes.get('{}ContentType');if(!p||!type||overrides.has(p))throw wordStructureError();overrides.set(p,type);}
+  }});
+  const main='word/document.xml',mainEdges=relationships('').filter(r=>relationNamespaces.some(ns=>r.type===ns+'/officeDocument'));
+  if(mainEdges.length!==1||mainEdges[0].target!==main||(mainEdges[0].mode!==undefined&&mainEdges[0].mode!=='Internal')||
+    overrides.get('/'+main)!=='application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml')return null;
+  const mainRelationships=relationships(main);
+  function role(kind,mime){
+    const part='word/'+kind+'.xml',edges=mainRelationships.filter(r=>relationNamespaces.some(ns=>r.type===ns+'/'+kind));
+    if(!edges.length&&!entries.has(part))return undefined;
+    if(edges.length!==1||edges[0].target!==kind+'.xml'||(edges[0].mode!==undefined&&edges[0].mode!=='Internal')||!entries.has(part)||overrides.get('/'+part)!==mime){state.unverified.add('WORD_'+kind.toUpperCase()+'_BINDING_UNVERIFIED');return undefined;}
+    return entries.get(part).toString('utf8');
+  }
+  const numbering=role('numbering','application/vnd.openxmlformats-officedocument.wordprocessingml.numbering+xml'),
+    styles=role('styles','application/vnd.openxmlformats-officedocument.wordprocessingml.styles+xml'),
+    comments=role('comments','application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml');
+  state.numberingModel=readWordNumbering(numbering,styles);
+  if(comments!==undefined){state.commentsModel=readWordCommentMetadata(comments,{contentMath:true});state.commentsBound=true;}
+  return state;
+}
+function serializeBoundWordComment(definition) {
+  const namespaces=new Map(),prefixes=new Map();let count=0,length=0;const parts=[];
+  function prefix(uri){if(!uri)return '';if(uri===XML_NAMESPACE)return 'xml';if(!prefixes.has(uri)){const p='n'+prefixes.size;prefixes.set(uri,p);namespaces.set(p,uri);}return prefixes.get(uri);}
+  function inspect(node){if(++count>MAX_WORD_XML_ELEMENTS)throw wordStructureError(true);prefix(node.namespaceURI);for(const key of node.attributes.keys())prefix(/^\{([^}]*)\}/u.exec(key)?.[1]||'');for(const child of node.children)inspect(child);}
+  inspect(definition.node);
+  const escape=value=>String(value).replace(/&/gu,'&amp;').replace(/</gu,'&lt;').replace(/>/gu,'&gt;').replace(/"/gu,'&quot;');
+  function append(value){length+=value.length;if(length>MAX_WORD_RENDERED_CHARS)throw wordStructureError(true);parts.push(value);}
+  function emit(node,root){const p=prefix(node.namespaceURI),name=(p?p+':':'')+node.localName;append('<'+name);
+    if(root)for(const [p,uri]of namespaces)append(' xmlns:'+p+'="'+escape(uri)+'"');
+    for(const [key,value]of node.attributes){const match=/^\{([^}]*)\}(.*)$/u.exec(key);if(!match)throw wordStructureError();const p=prefix(match[1]);append(' '+(p?p+':':'')+match[2]+'="'+escape(value)+'"');}
+    append('>');if(node.children.length&&/\S/u.test(node.text))throw wordStructureError();append(escape(node.text));for(const child of node.children)emit(child,false);append('</'+name+'>');}
+  emit(definition.node,true);return parts.join('');
+}
 function docxCoverageWarnings(entries, options = {}) {
+  const contentContext=WORD_CONTENT_CONTEXTS.get(options.wordContentContext);
   const supported = [
     /^\[Content_Types\]\.xml$/i,
     /^_rels\/\.rels$/i,
@@ -1726,9 +2002,10 @@ function docxCoverageWarnings(entries, options = {}) {
             : path.posix.basename(name, '.xml');
       let inspected;
       let blockedContent = false;
+      const modeled=contentContext?.renderedParts.has(name)||(name==='word/comments.xml'&&contentContext?.commentsBound);
       try { inspected = wordPartScope(xml, rootTag, (element, attributes, namespaces, parent) => {
-        if (BLOCKED_WORD_CONTENT.has(element) && !(options.contentMode === true && element.startsWith('m:'))) blockedContent = true;
-        inspectComment(name, element, attributes, namespaces, parent);
+        if (BLOCKED_WORD_CONTENT.has(element) && !(options.contentMode === true && element.startsWith('m:'))&&!(modeled&&MODELED_WORD_CONTEXT.has(element))) blockedContent = true;
+        if(!modeled)inspectComment(name, element, attributes, namespaces, parent);
       }, options).body; }
       catch (error) { if (XML_NON_TEXT_FAILURES.has(error)) throw error; unsupported++; continue; }
       // Until a namespace-aware field/revision/math renderer exists, these
@@ -1738,7 +2015,7 @@ function docxCoverageWarnings(entries, options = {}) {
         /<w:(?:comment|comments)\b[^>]*\bw:(?:author|initials)=/iu
       ];
       if (blockedContent) unsupported++;
-      for (const pattern of blocked) if (pattern.test(inspected)) unsupported++;
+      if(!modeled)for (const pattern of blocked) if (pattern.test(inspected)) unsupported++;
     }
     if (name === 'word/settings.xml') {
       try {
@@ -1768,8 +2045,10 @@ function docxCoverageWarnings(entries, options = {}) {
 }
 function parseDocx(entries, options = {}) {
   options={...options,officeTableContext:{unverified:false},officeMathContext:{unverified:false}};
+  const contentContext=options.contentMode===true&&options.preserveText===true?prepareWordContentContext(entries):null;
+  if(contentContext){const token=Object.freeze({});WORD_CONTENT_CONTEXTS.set(token,contentContext);options.wordContentContext=token;}
   const main=entries.get('word/document.xml'); if(!main) throw new Error('DOCX enthält kein word/document.xml.');
-  const sections=sectionList(entries, options); const body=renderWordBody(main.toString('utf8'), options);
+  const sections=sectionList(entries, options); const body=renderWordBody(main.toString('utf8'), {...options,wordStoryPart:'word/document.xml'});
   if(body)sections.push({kind:'text',source_part:'word/document.xml',markdown:body});
   const headerFooter = docxReferencedHeaderFooter(entries);
   const orderedStories = headerFooter.present ? headerFooter.orderedParts : [
@@ -1789,7 +2068,7 @@ function parseDocx(entries, options = {}) {
       continue;
     }
     try {
-      const root=name.includes('header')?'hdr':'ftr'; const t=renderWordPart(data.toString('utf8'),root,options);
+      const root=name.includes('header')?'hdr':'ftr'; const t=renderWordPart(data.toString('utf8'),root,{...options,wordStoryPart:name});
       if(t) sections.push({kind:'text',source_part:name,markdown:`## ${root==='hdr'?'Kopfzeile':'Fußzeile'}\n\n${t}`});
     } catch (error) { if (!partialPartFailure(entries, name, error)) throw error; }
   }
@@ -1798,14 +2077,28 @@ function parseDocx(entries, options = {}) {
     ['word/footnotes.xml','footnotes','Fußnoten'],
     ['word/endnotes.xml','endnotes','Endnoten']
   ]) if(entries.has(extra)) {
+    if(contentContext&&extra==='word/comments.xml')continue;
     try {
-      const t=renderWordPart(entries.get(extra).toString('utf8'),root,options);
+      const t=renderWordPart(entries.get(extra).toString('utf8'),root,{...options,wordStoryPart:extra});
       if(t)sections.push({kind:'text',source_part:extra,markdown:`## ${label}\n\n${t}`});
     } catch (error) { if (!partialPartFailure(entries, extra, error)) throw error; }
   }
+  if(contentContext){
+    if(contentContext.notices.has('WORD_REVISION_FINAL_VIEW'))sections.push({kind:'text',source_part:'word/document.xml',markdown:'Word-Ansicht: gespeicherter Endstand. Eingefügte und verschobene Zieltexte sind enthalten; gelöschte Texte und alte Eigenschaften werden nicht mit dem Endstand vermischt.'});
+    if(contentContext.notices.has('WORD_FIELD_STORED_RESULT'))sections.push({kind:'text',source_part:'word/document.xml',markdown:'Word-Felder: gespeicherte Feldresultate, nicht neu berechnet. Feldcodes, Makros und externe Verknüpfungen wurden nicht ausgeführt.'});
+    for(const anchor of contentContext.commentAnchors.values()){
+      try{
+        const xml=serializeBoundWordComment(anchor.definition),text=renderWordPart(xml,'comment',{...options,wordStoryPart:'word/comments.xml'}),author=anchor.definition.author;
+        const range=value=>value.paragraph===null?`Quellstruktur ${value.kind} ${value.structure}, Grenze ${value.boundary}`:`Absatz ${value.paragraph}, Position ${value.offset}`;
+        const location=`Kommentar ${anchor.id} · Bezug: ${anchor.part} · Absatz ${anchor.paragraph} · Quelltextposition ${anchor.offset} (UTF-16).`+
+          (anchor.start?` Bereich: ${range(anchor.start)} bis ${range(anchor.end)}.`:anchor.point?` Punktanker: ${range(anchor.point)}. Einzelne Quellbereichsgrenze: ${range(anchor.singleBoundary)}.`:' Punktkommentar.');
+        sections.push({kind:'text',source_part:'word/comments.xml',markdown:location+'\n\n'+(author===null?'Kommentarautor nicht gespeichert.':'| Autor |\n| --- |\n| '+extractionText(author,true,options.literalMarkup)+' |')+(text?'\n\n'+text:'')});
+      }catch(error){if(!partialPartFailure(entries,'word/comments.xml',error))throw error;break;}
+    }
+  }
   sections.push(...metadataSections(entries,options));
   const imageCoverage = docxImageRelationshipCoverage(entries, options);
-  return { markdown:sections.map(section=>section.markdown).join('\n\n'), sections, attachments:mediaAttachments(entries,'word/media/', imageCoverage.safeTargets), warnings:[...docxCoverageWarnings(entries,options),...imageCoverage.warnings,...customMetadataWarnings(entries),...(options.officeTableContext.unverified?['OFFICE_TABLE_CONTEXT_UNVERIFIED']:[]),...(options.officeTableContext.normalized?['OFFICE_TABLE_LAYOUT_NORMALIZED']:[]),...(options.officeMathContext.unverified?['MARKDOWN_SOURCE_COVERAGE_UNVERIFIED']:[])] };
+  return { markdown:sections.map(section=>section.markdown).join('\n\n'), sections, attachments:mediaAttachments(entries,'word/media/', imageCoverage.safeTargets), warnings:[...docxCoverageWarnings(entries,options),...imageCoverage.warnings,...customMetadataWarnings(entries),...(contentContext?.unverified.size?['DOCX enthält nicht vollständig gebundenen oder darstellbaren Word-Kontext; gespeicherter Quelltext bleibt erhalten, unbewiesene Nummerierungen werden nicht erfunden.']:[]),...(options.officeTableContext.unverified?['OFFICE_TABLE_CONTEXT_UNVERIFIED']:[]),...(options.officeTableContext.normalized?['OFFICE_TABLE_LAYOUT_NORMALIZED']:[]),...(options.officeMathContext.unverified?['MARKDOWN_SOURCE_COVERAGE_UNVERIFIED']:[])] };
 }
 function xlsxSheetRelationshipMap(entries, reader, options = {}) {
   const rels = entries.get('xl/_rels/workbook.xml.rels');
@@ -2031,7 +2324,7 @@ function xlsxColumnLabel(index) {
   while (value) { result = String.fromCharCode(65 + ((value - 1) % 26)) + result; value = Math.floor((value - 1) / 26); }
   return result;
 }
-function xlsxContentTable(parsed, options, append) {
+function xlsxContentTable(parsed, options, append, sourceFields=null) {
   if (!parsed.rowRecords.length) return;
   const columns = new Set();
   for (const row of parsed.rowRecords) for (const index of Object.keys(row.values)) {
@@ -2041,16 +2334,17 @@ function xlsxContentTable(parsed, options, append) {
   // Most source tables remain ordinary tables with original row/column labels.
   // For genuinely sparse cross-products, use bounded per-source-row cells rather
   // than expanding N far-apart values into N*N blank intersections.
-  if (used.length * parsed.rowRecords.length > 200000 || parsed.mergeRanges?.length) {
+  if (used.length * parsed.rowRecords.length > 200000 || parsed.mergeRanges?.length || sourceFields) {
     if(options.officeTableContext)options.officeTableContext.normalized=true;
     // Only real anchors expand a header's logical interval. The actual cell
     // list stays sparse; never allocate a maxRow*maxColumn sheet. Nonanchor
     // source values are retained, even if an Office viewer would hide them.
     const anchors=new Map((parsed.mergeRanges||[]).map(range=>[range.anchor.reference,range]));
-    const coordinates=new Map();
+    const coordinates=new Map(),sourceColumnLabels=new WeakMap();
     const rows=parsed.rowRecords.map(row=>{
       let origin=null;
-      return {number:row.number,header:false,cells:Object.keys(row.values).sort((a,b)=>Number(a)-Number(b)).map(key=>{
+      const actualRow={number:row.number,header:false,cells:[]};
+      actualRow.cells=Object.keys(row.values).sort((a,b)=>Number(a)-Number(b)).map(key=>{
         const column=Number(key),ref=`${xlsxColumnLabel(column)}${row.number}`,range=anchors.get(ref);
         const continuation=origin && column<origin.column+origin.span;
         const cell={column,span:range?range.end.column-range.start.column+1:1,text:String(row.values[key]),
@@ -2058,11 +2352,12 @@ function xlsxContentTable(parsed, options, append) {
         if(!continuation)origin=cell;
         coordinates.set(cell,range?`Zelle ${range.reference} · Zeile ${row.number} · Spalten ${range.start.column}–${range.end.column}`:
           `Zelle ${ref} · Zeile ${row.number} · Spalte ${column+1}`);
+        const label=sourceFields?.(actualRow,cell);if(label)sourceColumnLabels.set(cell,label);
         return cell;
-      })};
+      });return actualRow;
     });
     append(renderTableCells(rows,{escapeCell:value=>extractionText(value,true,options.literalMarkup),
-      coordinates:(_row,cell)=>coordinates.get(cell)}));
+      coordinates:(_row,cell)=>coordinates.get(cell),sourceColumnLabels}));
     return;
   }
   append(`| Quellzeile | ${used.map(index => `Spalte ${index + 1} (${xlsxColumnLabel(index)})`).join(' | ')} |`);
@@ -2191,6 +2486,15 @@ function parseXlsx(entries, options = {}) {
     } else contentStyles = [];
   }
   let sections=sectionList(entries, options); const renderedSheets=[], sheetSections=new Map();
+  const contextModels=new Map(),contextSections=new Map(),contextWarnings=[];
+  const contextSession=options.contentMode?createXlsxContextSession(entries):null;
+  const contextPartFailure=(part,error)=>{
+    if(!partialPartFailure(entries,part,error))return false;
+    // Partial quarantine mutates the actual private Map/buffers. No cached
+    // CT/workbook/owner authority may outlive that mutation.
+    contextSession?.invalidate();return true;
+  };
+  if(options.contentMode)XLSX_CONTEXT_MODELS.set(entries,contextModels);
   let formulaCells=0, missingFormulaCaches=0, unsupportedNumberFormats=0;
   for(const s of sheetMeta){const buf=entries.get(s.target);if(!buf)continue;
     try {
@@ -2205,10 +2509,28 @@ function parseXlsx(entries, options = {}) {
       options.contentMode ? { styles: contentStyles, date1904: contentDate1904 } : {});
     const rows = parsed.rows; formulaCells += parsed.formulaCells;
     missingFormulaCaches += parsed.missingFormulaCaches; unsupportedNumberFormats += parsed.unsupportedNumberFormats;
+    let contextModel,projectedContext,sourceFields,tableContext;
+    if(options.contentMode)try{
+      // Field authority is independent of optional comments/Pivot/RichValues.
+      // A later optional failure must never declassify actual table values.
+      tableContext=contextSession.readTableContext({sheetPart:s.target});
+      sourceFields=xlsxSourceColumnFields(tableContext);
+    }catch(error){if(!contextPartFailure(s.target,error))throw error;
+      // Unprovable table context is not permission to publish unknown values.
+      // Keep real source text once, under a conservative nonidentity field role.
+      sourceFields=()=>'Geschützter Tabellenwert';options.officeTableContext.unverified=true;
+      contextWarnings.push('XLSX-Tabellenfeldbindung ist unvollständig; betroffene Blattwerte bleiben als konservativ geschützte Quellwerte erhalten.');}
+    if(options.contentMode)try{
+      contextModel=contextSession.readSheetContext({sheetPart:s.target});
+      projectedContext=xlsxContextSections(contextModel,(value,inCell)=>extractionText(value,inCell,options.literalMarkup));
+    }catch(error){if(!contextPartFailure(s.target,error))throw error;
+      contextModel=null;
+      projectedContext=tableContext?xlsxContextSections(tableContext,(value,inCell)=>extractionText(value,inCell,options.literalMarkup)):[];
+      contextWarnings.push('XLSX-Zellkommentare oder zusätzlicher Tabellen-/Bildkontext konnten nicht eindeutig gelesen werden; unabhängig gelesene Arbeitsblattwerte und Tabellenfeldbindungen bleiben erhalten.');}
     const parts=[];let rendered=0;
     const append=(part)=>{rendered+=part.length+2;if(rendered>MAX_WORD_RENDERED_CHARS)throw xlsxRenderLimit();parts.push(part);};
     append(`# Arbeitsblatt: ${options.preserveText?extractionText(s.name,false,options.literalMarkup):s.name}`);
-    if (options.contentMode) xlsxContentTable(parsed, options, append);
+    if (options.contentMode) xlsxContentTable(parsed, options, append,sourceFields);
     else if(rows.length){
       const cols=rows.reduce((maximum,row)=>Math.max(maximum,row.length),0);
       // A sparse far-right cell must not expand into an unbounded dense table.
@@ -2225,8 +2547,14 @@ function parseXlsx(entries, options = {}) {
     sections.push({kind:'table',source_part:s.target,markdown:options.preserveText?parts[0]+'\n\n'+parts.slice(1).join('\n'):parts.join('\n\n')});
     sheetSections.set(s, sections.length > before ? sections[before] : null);
     renderedSheets.push(s);
-    } catch (error) { if (!partialPartFailure(entries, s.target, error)) throw error; }
+    if(contextModel){contextModels.set(s.target,contextModel);contextSections.set(s,projectedContext);
+      if(contextModel.notices.length)contextWarnings.push(`XLSX enthält ${contextModel.notices.length} begrenzte Kontextprojektion(en); Filter, Pivot-Caches oder unbekannte Zellmodelle wurden nicht neu ausgewertet.`);}
+    else if(projectedContext?.length)contextSections.set(s,projectedContext);
+    } catch (error) { if (!contextPartFailure(s.target, error)) throw error; }
   }
+  // No context reads follow. Release control AST/index references before the
+  // later chart/media passes, rather than extending their live peak to return.
+  contextSession?.invalidate();
   const supplementCoverage = xlsxSupplementRelationshipCoverage(entries, renderedSheets, reader, options);
   const worksheets = renderedSheets.filter(sheet => sheet.kind === 'worksheet');
   const commentCoverage = xlsxCommentRelationshipCoverage(entries, worksheets);
@@ -2240,17 +2568,18 @@ function parseXlsx(entries, options = {}) {
     const ordered=sectionList(entries,options), cache=new Map();
     for (const sheet of renderedSheets) {
       const section=sheetSections.get(sheet); if(section)ordered.push(section);
+      ordered.push(...(contextSections.get(sheet)||[]));
       ordered.push(...boundChartSections(entries,supplementCoverage.bySheet.get(sheet)||[],
         `${sheet.kind === 'chartsheet' ? 'Diagrammblatt' : 'Arbeitsblatt'}: ${sheet.name}`,options,cache,chartWarnings,limit=>limit?xlsxRenderLimit():xlsxContentStructureError()));
     }
     sections=ordered;
   } else for(const [name,data] of entries) if(supplementCoverage.safeCharts.has(name)){const vals=textTags(data.toString('utf8'),'c:v').concat(textTags(data.toString('utf8'),'a:t')).map(value=>options.literalMarkup?extractionText(value,false,true):value); if(vals.length)sections.push({kind:'table',source_part:name,markdown:`## Diagrammdaten ${path.basename(name)}\n\n${vals.join(' | ')}`});}
   for(const [name,data]of entries)if(supplementCoverage.safeDrawings.has(name)){const vals=textTags(data.toString('utf8'),'a:t').map(value=>options.literalMarkup?extractionText(value,false,true):value);if(vals.length)sections.push({kind:'text',source_part:name,markdown:`## Grafiktext ${path.basename(name)}\n\n${vals.join(' ')}`});}
-  for(const [name,data]of entries)if(commentCoverage.safeComments.has(name)){const vals=textTags(data.toString('utf8'),'t').map(value=>options.literalMarkup?extractionText(value,false,true):value);if(vals.length)sections.push({kind:'text',source_part:name,markdown:`## Tabellenkommentare\n\n${vals.join('\n\n')}`});}
+  if(!options.contentMode)for(const [name,data]of entries)if(commentCoverage.safeComments.has(name)){const vals=textTags(data.toString('utf8'),'t').map(value=>options.literalMarkup?extractionText(value,false,true):value);if(vals.length)sections.push({kind:'text',source_part:name,markdown:`## Tabellenkommentare\n\n${vals.join('\n\n')}`});}
   sections.push(...modernComments.sections);
   sections.push(...metadataSections(entries,options));
   const imageCoverage = packageImageRelationshipCoverage(entries, 'xl', 'XLSX', supplementCoverage.safeDrawings);
-  const warnings=[...customMetadataWarnings(entries), ...xlsxCoverageWarnings(entries, sheetMeta, options.contentMode ? modernComments : null), ...imageCoverage.warnings, ...supplementCoverage.warnings, ...commentCoverage.warnings, ...modernComments.warnings, ...numberWarnings,...chartWarnings];
+  const warnings=[...customMetadataWarnings(entries), ...xlsxCoverageWarnings(entries, sheetMeta, options.contentMode ? modernComments : null), ...imageCoverage.warnings, ...supplementCoverage.warnings, ...commentCoverage.warnings, ...modernComments.warnings, ...numberWarnings,...chartWarnings,...contextWarnings];
   if(options.officeTableContext.unverified)warnings.push('OFFICE_TABLE_CONTEXT_UNVERIFIED');
   if(options.officeTableContext.normalized)warnings.push('OFFICE_TABLE_LAYOUT_NORMALIZED');
   if(rootIssues)warnings.push(`XLSX enthält ${rootIssues} nicht eindeutig über die interne Paketwurzel abgesicherte Struktur(en); Freigabe wird blockiert.`);
@@ -2761,6 +3090,16 @@ function augmentWordChartText(result,entries,options) {
 }
 function parsePptx(entries, options = {}) {
   options={...options,officeTableContext:{unverified:false},officeMathContext:{unverified:false}};
+  const optionalCommentFailure=(slidePart,error)=>{
+    const state=PARTIAL_ENTRY_STATE.get(entries);
+    if(options.partialExtraction!==true||!state||!['PPTX_STRUCTURE_UNSAFE','PPTX_STRUCTURE_LIMIT'].includes(error?.code))return false;
+    // The valid slide and its independently proven image edges did not fail.
+    // Quarantine only this optional comment model: no comment text/author or
+    // comment-owned dependency can be rediscovered through a retained section.
+    state.quarantinedPptComments ||= new Set();state.quarantinedPptComments.add(slidePart);
+    notePartialPart(entries,'DOCUMENT_PARTS_DAMAGED',`ppt-comment-model:${slidePart}`);
+    return true;
+  };
   validatePptxXmlEntries(entries);
   const presentation=entries.get('ppt/presentation.xml')?.toString('utf8')||'';const slides=[];let issues=0,tableIssues=0,m;const rootIssues=packageMainRelationshipIssueCount(entries, 'ppt/presentation.xml');
   const sr=/<p:sldId\b([^>]+?)\/?>(?:<\/p:sldId>)?/gi;
@@ -2792,6 +3131,26 @@ function parsePptx(entries, options = {}) {
       const nt=note?[note.markdown]:rawNotes;
       if(nt.length&&!omitEmptyPptxSection(entries,options,notes,rawNotes))sections.push({kind:'text',source_part:notes,markdown:`## Notizen\n\n${nt.join('\n\n')}`});
     }
+    if(options.contentMode)try{
+      const comments=readPresentationComments(entries,{slidePart:s});
+      for(const [index,comment]of comments.comments.entries()){
+        const pieces=[`## Folie ${n} · Bearbeitungskommentar ${index+1}${comment.parentId?' (Antwort)':''}`];
+        pieces.push('Kommentarautor: Name, Initialen und Benutzerkennung in dieser Reihenfolge, soweit gespeichert (vertrauliche Quellmetadaten).');
+        // One real owner/table, not adjacent miniature tables whose repeated
+        // separator rows would merge during the source Markdown parse.
+        const authorValues=[comment.author.name,comment.author.initials,comment.author.userId].filter(value=>value);
+        if(authorValues.length)pieces.push('| Geschützter Tabellenwert |\n| --- |\n'+authorValues.map(value=>`| ${extractionText(value,true,options.literalMarkup)} |`).join('\n'));
+        if(comment.title)pieces.push('Kommentartitel',`| Inhalt |\n| --- |\n| ${extractionText(comment.title,true,options.literalMarkup)} |`);
+        for(const [paragraphIndex,paragraph]of comment.paragraphs.entries())if(paragraph){
+          pieces.push(`Kommentarabsatz ${paragraphIndex+1}`);
+          pieces.push(`| Inhalt |\n| --- |\n| ${extractionText(paragraph,true,options.literalMarkup)} |`);
+        }
+        pieces.push('Bearbeitungskommentar der gebundenen Folie; keine Aussage über sichtbaren Folientext oder einen genauen Text-/Formanker.');
+        const markdown=pieces.join('\n\n');if(markdown.length>MAX_WORD_RENDERED_CHARS)throw pptxStructureError(true);
+        sections.push({kind:'text',source_part:comment.source_part,markdown});
+      }
+      if(comments.notices.length)chartWarnings.push('PowerPoint-Kommentare: Spezialanker oder Erweiterungs-/Formatierungsmetadaten sind nicht vollständig dargestellt.');
+    }catch(error){if(!optionalCommentFailure(s,error))throw error;}
   }
   if(!options.preserveText)for(const [name,data] of entries) if(chartCoverage.safeCharts.has(name)){const rawValues=textTags(data.toString('utf8'),'c:v').concat(textTags(data.toString('utf8'),'a:t')),vals=rawValues.map(value=>options.literalMarkup?extractionText(value,false,true):value);if(vals.length&&!omitEmptyPptxSection(entries,options,name,rawValues))sections.push({kind:'table',source_part:name,markdown:`## Diagrammdaten ${path.basename(name)}\n\n${vals.join(' | ')}`});}
   function appendInherited(name,data,label){

@@ -209,6 +209,12 @@ jobs:
           node tests/test-partial-conversion.js
           node tests/test-office-diagrams.js
           node tests/test-office-occurrences.js
+          node tests/test-office-image-geometry.js
+          node tests/test-presentation-comments.js
+          node tests/test-word-content-context.js
+          node tests/test-word-context-integration.js
+          node tests/test-word-parent-scope.js
+          node tests/test-xlsx-content-context.js
           node tests/test-office-chart-model.js
           node tests/test-office-chartex-model.js
           node tests/test-office-math.js
@@ -219,12 +225,17 @@ jobs:
           node tests/test-office-table-context.js
           node tests/test-office-table-projection.js
           node tests/test-sensitive-field-coverage.js
+          node tests/test-explicit-prose-field-coverage.js
           node tests/test-xlsx-table-ranges.js
           node tests/test-drawing-table-grid.js
           node tests/test-xlsx-content-projection.js
           node tests/test-xlsx-counterregressions.js
           node tests/test-cfb-protection.js
           node tests/test-pdf-native-ocr-layout.js
+          node tests/test-pdf-structure-projection.mjs
+          node tests/test-pdf-structure-checkpoint.mjs
+          node tests/test-xlsx-content-integration.js
+          node tests/test-office-context-session.js
           node tests/test-conversion-checkpoints.js
           node tests/test-uat-fixture-generation.js
           node tests/test-legacy-input-migration.js

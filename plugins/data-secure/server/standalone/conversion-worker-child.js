@@ -19,7 +19,8 @@ const { readableText, readableNotice } = require('./readable-markdown');
 const { refineOcr } = require('./ocr-refinement');
 const { contactSpans } = require('../core/ocr-contact-review');
 const { attachContactCrops } = require('./ocr-contact-crops');
-const { nativeTextSeparator, nativeColumnOrder, renderPdfOcrLayer, paintedTextGeometryAvailable, nativeTextRegions, nativeSingleTokenRegions, uncoveredOcrText } = require('./pdf-text-layout');
+const { nativeTextSeparator, nativeColumnOrder, taggedPdfTextLayout, renderPdfOcrLayer, paintedTextGeometryAvailable, nativeTextRegions, nativeSingleTokenRegions, uncoveredOcrText } = require('./pdf-text-layout');
+const { projectTaggedPdf } = require('./pdf-structure-projection');
 const { classifyPdfTextVisibility } = require('./pdf-text-visibility');
 const { SOURCE_TYPES, ERROR_CODES, MAX_INPUT_BYTES } = require('../core/conversion-worker-contract');
 const { decodeRasterPng } = require('./png-raster-decoder');
@@ -465,6 +466,7 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
         reasons.add('CONVERSION_RESOURCE_LIMIT_PARTIAL'); break;
       }
       let page, canvas, nativeUnit, finalUnit, passivePage;
+      let readingOptionalStructure = false;
       try {
         page = await document.getPage(number);
         if (page.isPureXfa) fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
@@ -475,7 +477,7 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
             annotations: await passiveRead(() => page.getAnnotations({ intent: 'display' }), []) });
           for (const code of passivePage.reason_codes) reasons.add(code);
         }
-        const content = await page.getTextContent({ disableNormalization: true });
+        const content = await page.getTextContent({ disableNormalization: true, ...(contentOptions ? { includeMarkedContent:true } : {}) });
         let text = '';
         let omittedSymbols = false;
         let previousTextItem;
@@ -508,10 +510,7 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
         }
         const nativeText = text;
         const hasNativeText = Boolean(nativeText.trim());
-        if (contentOptions) {
-          // Commit a fully read native page before rasterization. Existing search
-          // text remains useful even if a later image decoder or OCR fails.
-          const bodyMarkdown = hasNativeText ? `## Seite ${number}\n\n${readableText(nativeText).markdown}` : '';
+        function nativeCandidate(bodyMarkdown) {
           if (passivePage?.markdown && total + bodyMarkdown.length + passivePage.markdown.length + 4 > MAX_MARKDOWN_CHARS) {
             // Optional whole annotation units cannot discard an independently
             // readable native page at the unchanged combined text budget.
@@ -521,8 +520,33 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
             passivePage?.markdown && (hasNativeText || passivePage.meaningful) ? passivePage.markdown : ''].filter(Boolean);
           const candidate = pageUnit(number, nativeParts.join('\n\n'));
           if (total + candidate.markdown.length + (sections.length && candidate.markdown ? 2 : 0) > MAX_MARKDOWN_CHARS) fail('TEXT_TOO_LARGE');
-          nativeUnit = candidate;
+          return candidate;
+        }
+        if (contentOptions) {
+          // Secure the fully validated neutral page BEFORE any optional model
+          // lookup/projection, as well as before later raster/decoder work.
+          nativeUnit = nativeCandidate(hasNativeText ? `## Seite ${number}\n\n${readableText(nativeText).markdown}` : '');
           await checkpoint(nativeUnit, number - 1);
+        }
+        // Keep original native items/text for visibility and OCR deduplication.
+        // Tags may change only the Markdown projection. The one permitted unit
+        // UPDATE is still emitted by the final/catch path, never an extra third
+        // version solely because a tagged projection was successfully read.
+        let taggedProjection;
+        if (contentOptions) {
+          readingOptionalStructure = true;
+          let structureTree;
+          try { structureTree = await page.getStructTree(); }
+          catch (cause) {
+            if (!['FormatError','InvalidPDFException'].includes(cause?.name) || cause?.code !== undefined) throw cause;
+            reasons.add('SOURCE_COVERAGE_UNVERIFIED');
+          }
+          const tagged = taggedPdfTextLayout({ items:content.items, structureTree, pageNumber:number, pageRef:page.ref });
+          if (tagged.applied) taggedProjection = projectTaggedPdf(tagged);
+          else if (structureTree) reasons.add('SOURCE_COVERAGE_UNVERIFIED');
+          omittedSymbols ||= taggedProjection?.omittedSymbols === true;
+          if (hasNativeText && taggedProjection) nativeUnit = nativeCandidate(`## Seite ${number}\n\n${taggedProjection.markdown}`);
+          readingOptionalStructure = false;
         }
         // Excluded/unconfirmed XFA values must not re-enable appearance
         // operators solely because no passive field reader was admitted.
@@ -596,7 +620,8 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
           if (!recognized.text.trim() && !hasNativeText) reasons.add('OCR_TEXT_EMPTY');
         }
         if (!contentOptions) meaningfulText ||= Boolean(text.trim() || additional.trim());
-        const main = readableText(text, hasNativeText ? [] : retainedContacts);
+        const main = hasNativeText && taggedProjection ? { markdown:taggedProjection.markdown, contacts:[] }
+          : readableText(text, hasNativeText ? [] : retainedContacts);
         let section = `## Seite ${number}\n\n${main.markdown}`;
         let renderedContacts = main.contacts;
         let contactOffset = `## Seite ${number}\n\n`.length;
@@ -621,9 +646,14 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
       } catch (cause) {
         // Only a component/extraction failure is local. Requests requiring a
         // different OCR scope and policy/model/source failures remain hard.
+        // A generic optional parser/transport failure can retain secured text,
+        // but coded errors, cancellation/resource and unknown exception kinds
+        // must not acquire successful-model or generic-partial authority here.
+        if (readingOptionalStructure && (cause?.code !== undefined ||
+            !['Error','UnknownErrorException'].includes(cause?.name))) throw cause;
         const omission = imageOmission(cause);
         if (!contentOptions || (errors.has(cause?.code) && !omission && cause.code !== 'PDF_EXTRACTION_FAILED')) throw cause;
-        reasons.add(nativeUnit ? 'PDF_IMAGE_NOT_READ' : 'PDF_PAGE_NOT_READ');
+        reasons.add(readingOptionalStructure ? 'DOCUMENT_PARTS_DAMAGED' : nativeUnit ? 'PDF_IMAGE_NOT_READ' : 'PDF_PAGE_NOT_READ');
         if (omission) reasons.add(omission);
         finalUnit = pageUnit(number, nativeUnit?.markdown || (passivePage?.meaningful ? passivePage.markdown : ''));
         await checkpoint(finalUnit, number - 1);

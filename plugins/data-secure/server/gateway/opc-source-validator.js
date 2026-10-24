@@ -82,6 +82,14 @@ const XLSX_CHARTSHEET_RELATIONSHIPS = new Set([
   'http://purl.oclc.org/ooxml/officeDocument/relationships/chartsheet'
 ]);
 const XLSX_CHARTSHEET_CONTENT_TYPE = 'application/vnd.openxmlformats-officedocument.spreadsheetml.chartsheet+xml';
+// Closed passive local-image metadata graph; not a Microsoft-URI wildcard.
+// Actual cells/metadata indexes/media are bound by the separate XLSX reader.
+const XLSX_RICH_ROLES=new Map([
+ ['http://schemas.microsoft.com/office/2017/06/relationships/rdRichValue',['application/vnd.ms-excel.rdrichvalue+xml',/^xl\/richData\/[A-Za-z0-9_.-]+\.xml$/u]],
+ ['http://schemas.microsoft.com/office/2017/06/relationships/rdRichValueStructure',['application/vnd.ms-excel.rdrichvaluestructure+xml',/^xl\/richData\/[A-Za-z0-9_.-]+\.xml$/u]],
+ ['http://schemas.microsoft.com/office/2017/06/relationships/rdRichValueTypes',['application/vnd.ms-excel.rdrichvaluetypes+xml',/^xl\/richData\/[A-Za-z0-9_.-]+\.xml$/u]],
+ ['http://schemas.microsoft.com/office/2022/10/relationships/richValueRel',['application/vnd.ms-excel.richvaluerel+xml',/^xl\/richData\/[A-Za-z0-9_.-]+\.xml$/u]]
+]);
 const CHARTEX_RELATIONSHIP='http://schemas.microsoft.com/office/2014/relationships/chartEx';
 const CHARTEX_OWNERS={docx:/^word\/_rels\/(?:document|header[1-9][0-9]*|footer[1-9][0-9]*|comments|footnotes|endnotes)\.xml\.rels$/u,
   pptx:/^ppt\/slides\/_rels\/slide[1-9][0-9]*\.xml\.rels$/u,
@@ -335,6 +343,7 @@ function validateOpcControls({ declaredType, entries, controlParts, passivePrese
 
   const office = [];
   const xlsxTextTargets = new Set(), xlsxTextOwners = new Set(), chartsheetTargets = new Set();
+  const richOwners=new Set(),richTargets=new Set();
   let externalReferences = 0;
   for (const [name, xml] of Object.entries(controlParts)) {
     if (!name.endsWith('.rels')) continue;
@@ -347,6 +356,7 @@ function validateOpcControls({ declaredType, entries, controlParts, passivePrese
       const rawTargetMode = String(attribute(node, 'TargetMode'));
       const targetMode = rawTargetMode.toLowerCase();
       const xlsxTextRole = declaredType === 'xlsx' ? XLSX_TEXT_RELATIONSHIPS.get(type) : null;
+      const xlsxRichRole=partialExtraction&&declaredType==='xlsx'?XLSX_RICH_ROLES.get(type):null;
       const chartsheetRole = declaredType === 'xlsx' && XLSX_CHARTSHEET_RELATIONSHIPS.has(type);
       const chartExRole=type===CHARTEX_RELATIONSHIP;
       const dependencyOwner=name.replace('/_rels/','/').slice(0,-'.rels'.length);
@@ -359,7 +369,7 @@ function validateOpcControls({ declaredType, entries, controlParts, passivePrese
       // differently and resolve the same target against local package bytes.
       if (partialExtraction && !['', 'Internal', 'External'].includes(rawTargetMode)) throw new OpcValidationError();
       if (targetMode === 'external') {
-        if (xlsxTextRole || chartsheetRole || chartExRole) throw new OpcValidationError('SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
+        if (xlsxTextRole || xlsxRichRole || chartsheetRole || chartExRole) throw new OpcValidationError('SOURCE_ACTIVE_CONTENT_UNSUPPORTED');
         // Partial Standalone extraction has no external resolver. Preserve
         // independent local text, but never treat an external package root as
         // a source binding and never expose the target in public findings.
@@ -386,6 +396,7 @@ function validateOpcControls({ declaredType, entries, controlParts, passivePrese
       }
       if (!hasSupportedRelationshipNamespace(type) &&
           !xlsxTextRole &&
+          !xlsxRichRole &&
           !chartExRole &&
           !chartExStyle &&
           !passiveMetadata &&
@@ -395,6 +406,13 @@ function validateOpcControls({ declaredType, entries, controlParts, passivePrese
       }
       const resolvedTarget = resolveRelationshipTarget(name, target);
       if (!resolvedTarget || !entries.has(resolvedTarget)) throw new OpcValidationError();
+      if(xlsxRichRole){
+        const mime=overrides.get('/'+resolvedTarget),key=name+'\0'+type;
+        if(name!=='xl/_rels/workbook.xml.rels'||!entries.has('xl/workbook.xml')||!xlsxRichRole[1].test(resolvedTarget)||
+            typeof mime!=='string'||mime.toLowerCase()!==xlsxRichRole[0]||!['','Internal'].includes(rawTargetMode)||
+            richOwners.has(key)||richTargets.has(resolvedTarget))throw new OpcValidationError('SOURCE_TYPE_MISMATCH');
+        richOwners.add(key);richTargets.add(resolvedTarget);
+      }
       if(chartExStyle||chartExPackage){
         const family={docx:'word',pptx:'ppt',xlsx:'xl'}[declaredType];
         if(!['','Internal'].includes(rawTargetMode))throw new OpcValidationError('SOURCE_TYPE_MISMATCH');
