@@ -46,7 +46,9 @@ function fixture(type, usage = 'visible', reachable = true) {
     ...(!reachable ? [['ppt/slides/slide2.xml', `<p:sld xmlns:p="${P}" xmlns:a="${a}" xmlns:r="${R}"><p:cSld><p:spTree><p:pic>${picture}</p:pic></p:spTree></p:cSld></p:sld>`],
       ['ppt/slides/_rels/slide2.xml.rels', relationships(images)]] : [])
   ];
-  return zipStore([...opcControlEntries(type), ...entries, [`${root}/media/image.png`, image]]);
+  const controls = type === 'xlsx' ? { additionalOverrides: [{ part: 'xl/worksheets/sheet1.xml',
+    contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml' }] } : {};
+  return zipStore([...opcControlEntries(type, controls), ...entries, [`${root}/media/image.png`, image]]);
 }
 let passed = 0, failed = 0;
 function test(label, fn) { try { fn(); passed++; console.log(`PASS ${label}`); } catch (error) { failed++; console.error(`FAIL ${label}: ${error.message}`); } }
@@ -69,6 +71,20 @@ for (const type of ['docx', 'xlsx', 'pptx']) {
       }
       const legacy = parseOoxml(source, `.${type}`, undefined, { preserveText: true, literalMarkup: true });
       assert.equal(legacy.attachments.length, 1, 'legacy parser behavior must remain unchanged');
+      if (usage === 'duplicate-id') {
+        const original = Buffer.from(source);
+        // The actual partial container gate already rejects ambiguous control
+        // IDs; an unsafe owner cannot become an optional image omission.
+        assert.throws(() => extractOfficeMarkdownAndMedia(source, `.${type}`,
+          { markdownOutput: 'content-v1', partialExtraction: true }), { code: 'MARKDOWN_EXTRACTION_FAILED' });
+        if (type === 'docx' || type === 'pptx') {
+          assert.throws(() => extractOfficeMarkdownAndMedia(source, `.${type}`, { markdownOutput: 'content-v1' }),
+            { code: type === 'docx' ? 'DOCX_STRUCTURE_UNSAFE' : 'PPTX_STRUCTURE_UNSAFE' });
+          assert.deepEqual(source, original);
+          return;
+        }
+        assert.deepEqual(source, original);
+      }
       const value = extractOfficeMarkdownAndMedia(source, `.${type}`, { markdownOutput: 'content-v1' });
       assert.equal(value.attachments.length, 0);
       assert.match(value.extraction.markdown, /NATIVE ORIGINAL/u);

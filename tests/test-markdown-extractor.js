@@ -581,7 +581,10 @@ function budgetDocx(mainText, stories = []) {
 
 function budgetXlsx(values) {
   return zipStore([
-    ...opcControlEntries('xlsx'),
+    ...opcControlEntries('xlsx', { additionalOverrides: values.map((_value, index) => ({
+      part: `xl/worksheets/sheet${index + 1}.xml`,
+      contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml'
+    })) }),
     ['xl/workbook.xml', `<workbook xmlns="${S}" xmlns:r="${R}"><sheets>${values.map((_value, index) =>
       `<sheet name="Sheet${index + 1}" sheetId="${index + 1}" r:id="s${index}"/>`).join('')}</sheets></workbook>`],
     ['xl/_rels/workbook.xml.rels', `<Relationships xmlns="${PR}">${values.map((_value, index) =>

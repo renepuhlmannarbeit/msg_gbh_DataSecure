@@ -1,6 +1,6 @@
 # Aktueller Iststand
 
-Stand: 24.10.2026 · 3.2.0-rc176 Entwicklungsstand, noch kein neuer Paketfreeze.
+Stand: 24.10.2026 · 3.2.0-rc176 erster gemeinsamer Endlauf ROT, nicht freigabefähig.
 Desktop-/Office-/physischeMac-Abnahme weiterhin USER_PENDING.
 
 ## RC176 – priorisierte Inhalts-/Grafikverbesserungen in Arbeit
@@ -11,7 +11,16 @@ ehrliche Office-Vorkommensgeometrie; [Plan und laufende Gegenbefunde](../accepta
 Keine neue universelle Rendererzusage, Cloud, OSrechte oder Appleidentität.
 Unabhängige Quellen-/Pixelgegenreviews laufen; konkrete neue Entwicklungsfehler
 werden vor dem Freeze behoben oder eng als nicht unterstützt abgegrenzt.
-Noch keine RC176-Endgates, Pakete oder Veröffentlichung. RC175 bleibt unverändert
+Erster gemeinsamer Source01-Appcommit452270b5c6f7ed8dd7644f2b99b99aaf2dad6faf,
+FPfea58e5d…b878e/368,621Test-/Scriptinputs. Alle eigenen Endjobs beendet, Inputs
+unverändert: Headless29/318+0/11ROT an unterdeklarierter synthetischer XLSX-
+Worksheet-MIME; Native300Rust/3ignored grün, danach Exportintegration477ROT
+(AI_EXPORT_CONFLICT statt simuliertem IPCtimeout), Ursache separat prüfen.
+Konverter74Worker grün, danach gleiche XLSX-Fixture ROT. Beide Mac40114508384
+ROT im alten PDF-Funktions-VM-Test: fehlendes getStructTree-Testdouble, kein
+belegter nativer PDF-Corecrash. Belege unverändert erhalten; enge Korrekturen
+erst nach Prozess-/Jobende, neuer gemeinsamer Source02-Endlauf erforderlich.
+Noch keine RC176-Pakete oder Veröffentlichung. RC175 bleibt unverändert
 veröffentlicht; nachfolgende RC175-Bindungen gelten nur für diese alten Bytes.
 
 ## Technischer Abschluss RC175

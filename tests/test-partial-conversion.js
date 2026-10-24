@@ -10,7 +10,8 @@ const { preparePartialOfficeImagePlan, prepareOfficeImagePlan, appendOfficeOcr }
 const { encodePng } = require('../plugins/data-secure/server/images/png');
 const readable = require('../plugins/data-secure/server/standalone/readable-markdown');
 const { pdfOcrAction } = require('../plugins/data-secure/server/core/content-ocr-plan');
-const { nativeTextSeparator,nativeColumnOrder,renderPdfOcrLayer } = require('../plugins/data-secure/server/standalone/pdf-text-layout');
+const { nativeTextSeparator,nativeColumnOrder,taggedPdfTextLayout,renderPdfOcrLayer } = require('../plugins/data-secure/server/standalone/pdf-text-layout');
+const { projectTaggedPdf } = require('../plugins/data-secure/server/standalone/pdf-structure-projection');
 const visuals = require('../plugins/data-secure/server/standalone/markdown-visuals');
 const metadata = require('../plugins/data-secure/server/core/private-document-metadata');
 const { createPassivePdfContent } = require('../plugins/data-secure/server/standalone/pdf-passive-content');
@@ -141,7 +142,7 @@ async function main() {
     }
   });
   function page(text, overrides = {}) {
-    return { getTextContent:async()=>({items:text ? [{str:text,hasEOL:true}] : [],styles:{}}), getAnnotations:async()=>[],
+    return { getTextContent:async()=>({items:text ? [{str:text,hasEOL:true}] : [],styles:{}}), getStructTree:async()=>null, getAnnotations:async()=>[],
       getOperatorList:async()=>({fnArray:[]}),getViewport:()=>({width:400,height:300}),cleanup(){},...overrides };
   }
   async function run(pages, contentOptions = options, extra = {}) {
@@ -157,6 +158,10 @@ async function main() {
       selectOptionalPrivatePdfMetadata:input=>metadata.selectOptionalPrivatePdfMetadata(JSON.parse(JSON.stringify(input))),
       populated:value=>Boolean(value && (typeof value !== 'object' || Object.keys(value).length)),
       pdfOcrAction:(opts,facts)=>pdfOcrAction(opts,JSON.parse(JSON.stringify(facts))),nativeTextSeparator,nativeColumnOrder,renderPdfOcrLayer,contactQuality,contactSpans,
+      // Recreate only the plain argument carrier across the VM realm. The
+      // actual production layout/projection and original native items remain.
+      taggedPdfTextLayout:input=>taggedPdfTextLayout({items:input.items,structureTree:input.structureTree,pageNumber:input.pageNumber,pageRef:input.pageRef}),
+      projectTaggedPdf,
       mockModule:{ OPS:{paintImageXObject:1},AnnotationMode:{DISABLE:0},getDocument:()=>({promise:Promise.resolve(document),destroy:async()=>{destroyed++;}}) },
       dimensions(){},canvasApi:()=>({createCanvas:()=>({getContext:()=>({})})}),
       classifyPdfTextVisibility:async()=>({wordRegions:[]}),paintedTextGeometryAvailable:()=>false,
@@ -169,6 +174,23 @@ async function main() {
       async(result,index)=>{ contract.validateMarkdownExtractionForOptions(result,contentOptions); frames.push({result,index}); }),frames }; }
     finally { assert.equal(destroyed,1); }
   }
+  await check('actual PDF VM binds optional tags without changing untagged fallback or masking missing API methods',async()=> {
+    let lookups=0;
+    const marked=(id,str,x)=>[{type:'beginMarkedContentProps',id:`p3R_mc${id}`},
+      {str,dir:'ltr',width:str.length*5,transform:[12,0,0,12,x,300],hasEOL:true},{type:'endMarkedContent'}];
+    const items=[...marked(1,'Right',260),...marked(0,'Left',20)],before=JSON.stringify(items);
+    const structureTree={role:'Root',children:[{role:'Document',children:[
+      {role:'P',children:[{type:'content',id:'p3R_mc0'}]},
+      {role:'P',children:[{type:'content',id:'p3R_mc1'}]}]}]};
+    const output=await run([page('',{ref:{num:3,gen:0},getTextContent:async()=>({items,styles:{}}),
+      getStructTree:async()=>{lookups++;return structureTree;}})],off);
+    assert.equal(lookups,1);assert.match(output.frames[0].result.markdown,/Right[\s\S]*Left/u);
+    assert.match(output.result.markdown,/Left[\s\S]*Right/u);
+    assert.deepEqual(output.frames.map(row=>row.index),[0,0]);assert.equal(JSON.stringify(items),before);
+    const plain=await run([page('Unchanged Ä ß',{getStructTree:async()=>{lookups++;return null;}})],off);
+    assert.equal(lookups,2);assert.equal(plain.result.markdown,plain.frames[0].result.markdown);
+    await assert.rejects(run([page('Body',{getStructTree:undefined})],off),{code:'PDF_EXTRACTION_FAILED'});
+  });
   await check('PDF raster failure keeps the fully validated search text and proceeds to next page',async()=> {
     const output = await run([page('Erster Ä ß',{getOperatorList:async()=>{throw new Error('damaged image');}}),page('Zweiter')]);
     assert.match(output.result.markdown,/Erster Ä ß/u); assert.match(output.result.markdown,/Zweiter/u);

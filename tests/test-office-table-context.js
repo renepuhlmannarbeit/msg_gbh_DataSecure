@@ -34,7 +34,8 @@ function xlsx(wide) {
     return `<row r="${row}">${row === 1 ? '<c r="A1" t="inlineStr"><is><t>Name</t></is></c>'
       : `${row === 2 ? '<c r="A2" t="inlineStr"><is><t>Qvx</t></is></c>' : ''}<c r="${column(row)}${row}"><v>${row}</v></c>`}</row>`;
   }).join('') : '<row r="1"><c r="A1" t="inlineStr"><is><t>Name</t></is></c></row><row r="2"><c r="A2" t="inlineStr"><is><t>Qvx</t></is></c></row>';
-  return zipStore([...opcControlEntries('xlsx'),
+  return zipStore([...opcControlEntries('xlsx', { additionalOverrides: [{ part: 'xl/worksheets/sheet1.xml',
+    contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml' }] }),
     ['xl/workbook.xml', `<workbook xmlns="${S}" xmlns:r="${R}"><sheets><sheet name="Synthetic" sheetId="1" r:id="s"/></sheets></workbook>`],
     ['xl/_rels/workbook.xml.rels', relationships(relation('s', 'worksheet', 'worksheets/sheet1.xml'))],
     ['xl/worksheets/sheet1.xml', `<worksheet xmlns="${S}"><sheetData>${rows}</sheetData></worksheet>`]]);
@@ -162,7 +163,8 @@ function complexWord(rows) {
       `<w:tcPr><w:gridSpan w:val="2"/><w:vMerge w:val="${index?'continue':'restart'}"/></w:tcPr>`:'')+paragraph(value)+'</w:tc>').join('')+'</w:tr>').join('')+'</w:tbl>');
 }
 function nonanchorXlsx(){
-  return zipStore([...opcControlEntries('xlsx'),
+  return zipStore([...opcControlEntries('xlsx', { additionalOverrides: [{ part: 'xl/worksheets/sheet1.xml',
+    contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml' }] }),
     ['xl/workbook.xml',`<workbook xmlns="${S}" xmlns:r="${R}"><sheets><sheet name="Synthetic" sheetId="1" r:id="s"/></sheets></workbook>`],
     ['xl/_rels/workbook.xml.rels',relationships(relation('s','worksheet','worksheets/sheet1.xml'))],
     ['xl/worksheets/sheet1.xml',`<worksheet xmlns="${S}"><sheetData><row r="1"><c r="A1" t="inlineStr"><is><t>Fachtext</t></is></c><c r="B1" t="inlineStr"><is><t>Name</t></is></c></row><row r="2"><c r="B2" t="inlineStr"><is><t>Qvx</t></is></c></row></sheetData><mergeCells count="1"><mergeCell ref="A1:B1"/></mergeCells></worksheet>`]]);

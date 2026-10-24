@@ -583,7 +583,10 @@ test('partial OPC and XLSX extraction never reinterpret a noncanonical external 
     `<is><t>${value}</t></is></c></row></sheetData></worksheet>`;
   for (const mode of ['External', 'EXTERNAL', 'external', 'eXtErNaL']) {
     const archive = zipStore([
-      ...opcControlEntries('xlsx'),
+      ...opcControlEntries('xlsx', { additionalOverrides: [1, 2].map(index => ({
+        part: `xl/worksheets/sheet${index}.xml`,
+        contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml'
+      })) }),
       ['xl/workbook.xml', `<workbook xmlns="${main}" xmlns:r="${office}"><sheets>` +
         '<sheet name="Good" sheetId="1" r:id="s1"/><sheet name="External" sheetId="2" r:id="s2"/>' +
         '</sheets></workbook>'],

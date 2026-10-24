@@ -60,7 +60,9 @@ function office(type, media, relationship = 'internal', sensitiveTable = false, 
     ['ppt/slides/slide1.xml', `<p:sld xmlns:p="${P}" xmlns:a="${A}" xmlns:r="${R}"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>${sourceText}</a:t></a:r></a:p></p:txBody></p:sp>${slideTable}${media.map((_, index) => `<p:pic><a:blip r:embed="img${index}"/></p:pic>`).join('')}</p:spTree></p:cSld></p:sld>`],
     ...(relationship === 'orphan' ? [] : [['ppt/slides/_rels/slide1.xml.rels', relations(imageRows)]])
   ];
-  return zipStore([...opcControlEntries(type), ...entries, ...media.map((item, index) => [`${root}/media/image${index}.${item.ext}`, item.bytes])]);
+  const controls = type === 'xlsx' ? { additionalOverrides: [{ part: 'xl/worksheets/sheet1.xml',
+    contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml' }] } : {};
+  return zipStore([...opcControlEntries(type, controls), ...entries, ...media.map((item, index) => [`${root}/media/image${index}.${item.ext}`, item.bytes])]);
 }
 
 let passed = 0;
@@ -87,6 +89,18 @@ for (const type of ['docx', 'xlsx', 'pptx']) await check(`${type}: only internal
   assert.equal(own.attachments.length, 1); assert.match(own.extraction.markdown, /NATIVE ORIGINAL/u);
   assert.equal(Object.hasOwn(own.extraction, 'attachments'), false);
   assert.deepEqual(extractMarkdownBuffer(input, `.${type}`, { markdownOutput: 'content-v1' }), own.extraction);
+  if (type === 'xlsx') {
+    const { readZip } = require('../plugins/data-secure/server/zip-reader');
+    const worksheetType = '<Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>';
+    for (const declaredType of ['', worksheetType.replace('application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml', 'application/xml')]) {
+      const entries = readZip(input), original = hash(input), contentTypes = entries.get('[Content_Types].xml').toString('utf8');
+      assert.ok(contentTypes.includes(worksheetType));
+      entries.set('[Content_Types].xml', Buffer.from(contentTypes.replace(worksheetType, declaredType)));
+      assert.throws(() => extractOfficeMarkdownAndMedia(zipStore([...entries]), '.xlsx', { markdownOutput: 'content-v1' }),
+        { code: 'XLSX_STRUCTURE_UNSAFE' });
+      assert.equal(hash(input), original, 'the missing/wrong worksheet-MIME negative cannot modify its valid source');
+    }
+  }
   for (const role of ['external', 'orphan', 'wrong-type']) {
     const rejected = extractOfficeMarkdownAndMedia(office(type, [{ ext: 'png', bytes: tiny }], role), `.${type}`, { markdownOutput: 'content-v1' });
     assert.equal(rejected.attachments.length, 0, role);

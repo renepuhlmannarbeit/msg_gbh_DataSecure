@@ -392,7 +392,8 @@ testAsync('actual compact XLSX coordinates cannot hide a sensitive source header
   const {extractMarkdownBuffer}=require('../plugins/data-secure/server/standalone/markdown-extractor');
   const {anonymizeMarkdown}=require('../plugins/data-secure/server/gateway/compliance');
   const s='http://schemas.openxmlformats.org/spreadsheetml/2006/main',r='http://schemas.openxmlformats.org/officeDocument/2006/relationships';
-  const bytes=zipStore([...opcControlEntries('xlsx'),
+  const bytes=zipStore([...opcControlEntries('xlsx', { additionalOverrides: [{ part: 'xl/worksheets/sheet1.xml',
+    contentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml' }] }),
     ['xl/workbook.xml',`<workbook xmlns="${s}" xmlns:r="${r}"><sheets><sheet name="Quelle" sheetId="1" r:id="s"/></sheets></workbook>`],
     ['xl/_rels/workbook.xml.rels',`<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="s" Type="${r}/worksheet" Target="worksheets/sheet1.xml"/></Relationships>`],
     ['xl/worksheets/sheet1.xml',`<worksheet xmlns="${s}"><sheetData><row r="5"><c r="C5" t="inlineStr"><is><t>Name</t></is></c></row><row r="9"><c r="C9" t="inlineStr"><is><t>Qvx</t></is></c></row></sheetData></worksheet>`]]);

@@ -26,6 +26,56 @@ let stderr = '', outer, binding, seq = 0, nativeSession, loseNextPublish = false
 const nativeCommands = [], nativeActions = [];
 const admissionSnapshots = [], nativeConfigureFailures = [];
 let invalidNativeConfigureFailures = 0;
+// Test evidence only: a bounded, closed phase trace never retains a frame,
+// body, identifier, binding, pathname or native/vendor error text.
+function createPublicationPhaseDiagnostics() {
+  const actions = new Set(['configure_export_root', 'prepare_configured_export_root', 'prepare_initial_output_root', 'bind_result_root', 'export_documents']);
+  const commands = new Set(['write_body', 'publish', 'reconcile', 'acknowledge', 'abandon']);
+  const modes = new Set(['markdown-only', 'markdown-and-anonymize']);
+  const statuses = new Set(['receiving', 'staged', 'unprepared', 'prepared', 'completed', 'acknowledged', 'abandoned']);
+  const errors = new Set(['AI_EXPORT_CONFLICT', 'AI_EXPORT_VOLUME_MISMATCH', 'AI_EXPORT_UNCERTAIN', 'AI_EXPORT_ALREADY_COMPLETE',
+    'AI_EXPORT_INCOMPLETE', 'AI_EXPORT_ABANDONED', 'STANDALONE_CLOSING', 'STANDALONE_RESULT_ROOT_UNSAFE']);
+  const events = []; let dropped = 0, hooks = 0, successfulHooks = 0;
+  let last = { processing_mode: 'none', phase: 'none', lost_receipt_expected: false,
+    lost_receipt_hook_reached: false, lost_receipt_hook_after_successful_publish: false };
+  const boundedIncrement = value => Math.min(value + 1, 1_000_000);
+  const append = event => { if (events.length === 256) { events.shift(); dropped = boundedIncrement(dropped); } events.push(event); };
+  const sequence = value => Number.isInteger(value) && value >= 1 && value <= 9000 ? value : null;
+  const mode = value => modes.has(value) ? value : value === undefined ? 'none' : 'unknown';
+  return {
+    begin(expected) {
+      last = { processing_mode: 'none', phase: 'none', lost_receipt_expected: expected === true,
+        lost_receipt_hook_reached: false, lost_receipt_hook_after_successful_publish: false };
+      append({ kind: 'attempt', lost_receipt_expected: last.lost_receipt_expected });
+    },
+    request(frame) {
+      const action = actions.has(frame.action) ? frame.action : 'unknown';
+      const command = frame.command === undefined ? 'none' : commands.has(frame.command) ? frame.command : 'unknown';
+      last.processing_mode = mode(frame.operation?.processing_mode);
+      last.phase = command !== 'none' ? command : action;
+      append({ kind: 'request', action, command, processing_mode: last.processing_mode, sequence: sequence(frame.sequence) });
+    },
+    response(reply) {
+      append({ kind: 'response', ok: reply.ok === true ? true : reply.ok === false ? false : null,
+        status: reply.status === undefined ? 'none' : statuses.has(reply.status) ? reply.status : 'unknown',
+        error_code: reply.error_code === undefined ? 'none' : errors.has(reply.error_code) ? reply.error_code : 'unknown',
+        sequence: sequence(reply.sequence) });
+    },
+    lostReceipt(processingMode, status) {
+      const succeeded = status === 'completed' || status === 'acknowledged';
+      hooks = boundedIncrement(hooks); if (succeeded) successfulHooks = boundedIncrement(successfulHooks);
+      last.lost_receipt_hook_reached = true;
+      last.lost_receipt_hook_after_successful_publish = succeeded;
+      append({ kind: 'lost_receipt_hook', processing_mode: mode(processingMode), successful_publish: succeeded });
+    },
+    snapshot() {
+      return { schema: 'datasecure-native-publication-phase-diagnostics/1', maximum_events: 256,
+        dropped_events: dropped, events: events.map(event => ({ ...event })), last_attempt: { ...last },
+        lost_receipt_hook_count: hooks, lost_receipt_successful_publish_count: successfulHooks };
+    }
+  };
+}
+const publicationPhaseDiagnostics = createPublicationPhaseDiagnostics();
 const configureStages = new Set(('nonce guard public_open data_open roots anonymize_bind anonymize_volume markdown_bind markdown_volume private_create private_sync data_sync public_sync root_encoding ' +
   'admission_digest_encoding admission_guard admission_data_open admission_settings_open admission_settings_read admission_settings_digest admission_settings_parse admission_root admission_record admission_native_identity admission_public_open admission_node_identity admission_identity_match admission_settings_binding admission_data_reopen admission_repeat_data_open admission_repeat_settings_binding admission_repeat_settings_read admission_repeat_settings_match').split(' '));
 const configureKinds = new Set('NotFound PermissionDenied ConnectionRefused ConnectionReset HostUnreachable NetworkUnreachable ConnectionAborted NotConnected AddrInUse AddrNotAvailable NetworkDown BrokenPipe AlreadyExists WouldBlock NotADirectory IsADirectory DirectoryNotEmpty ReadOnlyFilesystem FilesystemLoop StaleNetworkFileHandle InvalidInput InvalidData TimedOut WriteZero StorageFull NotSeekable QuotaExceeded FileTooLarge ResourceBusy ExecutableFileBusy Deadlock CrossesDevices TooManyLinks InvalidFilename ArgumentListTooLong Interrupted Unsupported UnexpectedEof OutOfMemory InProgress Other Uncategorized'.split(' '));
@@ -60,6 +110,7 @@ function observeAdmissionSnapshot(snapshot, batchId, operationId) {
   } catch { admissionSnapshots.push({ diagnostic_unavailable: true }); }
 }
 const channel = new NativeExportChannel({ write: frame => {
+  publicationPhaseDiagnostics.request(frame);
   if (frame.action) nativeActions.push(frame.action);
   if (frame.command) nativeCommands.push(frame.command);
   if (poisonedBody && frame.command === 'write_body') {
@@ -71,6 +122,7 @@ readline.createInterface({ input: child.stdout }).on('line', line => {
   const marker = line.indexOf('NATIVE:');
   if (marker < 0) return;
   const reply = JSON.parse(line.slice(marker + 7));
+  publicationPhaseDiagnostics.response(reply);
   if (reply.harness_error) console.error(reply.harness_error);
   try { channel.accept(reply); } catch (e) { channel.abort(e.code); }
 });
@@ -80,6 +132,7 @@ child.once('error', () => { channel.abort('STANDALONE_IPC_FAILED'); });
 const deadlineAt = performance.now() + 180000;
 const deadline = setTimeout(() => { channel.abort('STANDALONE_IPC_FAILED'); child.kill(); }, 180000);
 function context(action, extra = {}) {
+  publicationPhaseDiagnostics.begin(loseNextPublish);
   outer = { schema: 'datasecure-standalone-private-ipc/1', request_id: (++seq).toString(16).padStart(16, '0'), action, ...extra };
   nativeSession = channel.publication(outer);
 }
@@ -106,7 +159,8 @@ function fixture(mode, index, extraText = '', raw = null, native = true) {
         return prepared;
       }), nativeExport: async (operation, command, body) => {
       const status = await nativeSession.send('export_documents', { operation, command, ...(body ? { body } : {}) });
-      if (loseNextPublish && command === 'publish') { loseNextPublish = false; throw Object.assign(Error('lost receipt'), { code: 'STANDALONE_IPC_TIMEOUT' }); }
+      if (loseNextPublish && command === 'publish') { publicationPhaseDiagnostics.lostReceipt(mode, status);
+        loseNextPublish = false; throw Object.assign(Error('lost receipt'), { code: 'STANDALONE_IPC_TIMEOUT' }); }
       return status;
     } } : { resultRoot: () => nodeRoot }) };
   const store = createDocumentReviewStore(storeOptions);
@@ -324,7 +378,7 @@ async function run() {
     const options = { dataRoot: data, controlOwnerPid: process.pid, nativeBinding: () => pickerBinding,
       nativeExport: async (operation, command, body) => {
         const status = await nativeSession.send('export_documents', { operation, command, ...(body ? { body } : {}) });
-        if (loseNextPublish && command === 'publish') { loseNextPublish = false;
+        if (loseNextPublish && command === 'publish') { publicationPhaseDiagnostics.lostReceipt(mode, status); loseNextPublish = false;
           throw Object.assign(Error('lost real result receipt'), { code: 'STANDALONE_IPC_TIMEOUT' }); }
         return status;
       } };
@@ -568,6 +622,7 @@ async function run() {
       schema: 'datasecure-native-export-test-diagnostics/1', test_mode: firstInstallOnly ? 'first-install-only' : 'full',
       configured_admissions: configuredAdmissions, admission_snapshots: admissionSnapshots,
       native_configure_failures: nativeConfigureFailures, invalid_native_configure_failures: invalidNativeConfigureFailures,
+      publication_phase_diagnostics: publicationPhaseDiagnostics.snapshot(),
       child_exit_code: completion.exit_code, child_exit_confirmed: completion.exit_confirmed,
       child_close_confirmed: completion.close_confirmed, test_exit_code: process.exitCode || 0
     }, null, 2), { flag: 'wx', mode: 0o600 });

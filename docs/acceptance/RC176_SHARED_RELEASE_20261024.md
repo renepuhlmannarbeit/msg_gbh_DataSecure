@@ -396,3 +396,67 @@ Freigabe umgedeutet. Alle Autoren-/Reviewprozesse beendet. Umsetzung ist nun
 für den gemeinsamen Appfreeze vorbereitet; neue318+11Headless-, Windows-
 Native-/8Konverter-/Paketgates und beide Macjobs müssen diesen Stand erst noch
 unverändert belegen. Keine Desktop-/Releasefreigabe aus Vorproben ableiten.
+
+## Erster gemeinsamer Source01-Endlauf / enge Testkorrekturen
+
+Appcommit452270b5c6f7ed8dd7644f2b99b99aaf2dad6faf gepusht; Produkt-FP
+fea58e5d49a0f3def1e13e142662ec2d431c2ca35f0bb4cedcbd734c3c5b878e/368,
+621Test-/Scriptinputs/Manifest7f2f5705…b1a87c. Alle drei lokalen Endjobs und
+beide Macjobs inzwischen beendet. Originale FINALs haben unveränderte Inputs,
+bleiben ROT und werden nicht umgeschrieben:
+
+- Headless29/318+0/11, Ende17:06:40.516UTC: alte positive XLSX-Imagefixture
+  deklariert Workbook, aber nicht die reale Worksheet-MIME. Exakter Typguard
+  verweigert XLSX_STRUCTURE_UNSAFE. Konverterkampagne74Worker grün, danach
+  gleiche Fixture ROT17:09:19.796UTC; spätere Suiten nicht erreicht.
+- Native Prepare/Clippy/300Rust+3ignored grün; Node-Rust-Exportintegration477
+  erwartet simulierten LostReceipt-Timeout, bekommt vorher AI_EXPORT_CONFLICT;
+  Ende17:07:42.497UTC, Releasebuild nicht erreicht. Originalroot0oWeIk erhalten.
+  Body/Hash passen, keine operationseigenen nativen Intent-/Stage-/Complete-
+  Belege: kein erfolgreicher Publish, also nicht der künstliche Timeoutpfad.
+  Einzelner nativer I/O-/Konfliktauslöser aus Originaldiagnose nicht beweisbar.
+  Ein neuer enger unveränderter Prefixgegenlauf in frischem Root besteht beide
+  LostReceiptketten; fehlende Reproduktion ist keine rückwirkende Ursache oder
+  Reparatur. Inhaltsfreie eng begrenzte Testdiagnosen werden ergänzt.
+- Mac40114508384 ARM120932939003/Intel120932939013 beide ROT: alter
+  PDF-Funktions-VM-Test hat kein getStructTree-Testdouble. Beide echten Logs
+  getrennt gelesen und gesichert; in-memory Ursachendiagnose zeigt genau diesen
+  TypeError hinter PDF_EXTRACTION_FAILED. Kein nativer PDF-Corecrash daraus.
+
+Erst nach tatsächlichem Job-/Prozessende enge Teständerungen: sechs Dateien/
+sieben positive XLSX-Factorys deklarieren jeweils tatsächliche Worksheets,
+dynamische Budgets alle Blätter. Fehlende/falsche MIME bleibt exakt negativ.
+Zwei alte DOCX/PPTX-Doppel-ID-Orakel erwarten nun die echte getypte Control-
+Owner-Verweigerung; Legacy bleibt1Anhang, XLSXstrict0Anhänge, actualPartial
+alle3verweigert weiterhin denselben ambigen Container. Keine Union/Guardlockerung
+oder Änderung negativer Originalbytes. Frisch184Gruppen+6Syntax PASS/stabil;
+Bericht366752c3…60c8. Main las Bericht und tatsächlichen Diff vollständig.
+
+Main korrigierte nur das PDF-VM: aktuelle getStructTree-Schnittstelle, echte
+Layout-/Projektionsabhängigkeiten, nur plain Argumentcarrier realmübergreifend
+rekonstruiert. Neue Tagorder-/untagged-/missingAPI-Gegenfälle, alte Budget-/
+Policy-/Scope-/Unicodegegenfälle erhalten.19Teilgruppen+24Checkpointgruppen
+MainPASS. Unabhängige Fixgegenreviews und frischer gemeinsamer Source02 sind
+noch erforderlich; kein Produktdelta oder Endlauf-/Mac-/PaketPASS aus Vorproben.
+
+PDF-VM-Fix unabhängig tatsächlich gegengelesen: f5df8d62…b7a69, Main las den
+ganzen Bericht. Eigene19Gruppen PASS plus drei gezielte RAM-Mutationen korrekt
+ROT (API fehlt, falscher Realmcarrier, No-op-Projektor). Tatsächliche gepinnte
+PDF.js-API quellenbestätigt, keine Produkt- oder Native-Ausführung daraus.
+Native-Test erhielt ausschließlich einen passiven geschlossenen256Eventring:
+Aktion/Command/Modus/Status/Code/Sequenz und LostReceipt-Hookbools, keine Bodies,
+Pfade/Bindungen/Identitäten/vendorErrortexte. Assertions/Runtime/Rust/180sBudget/
+Retry unverändert. Genau ein frischer vollständiger Native-Exporttest auf
+Testpin75714e4f…c650 PASS/ChildExit0/Closebestätigt, Root8ceGOm, alle großen
+Kontakt-/Body-/Bindinggegenfälle erreicht.4von4Hooks nach erfolgreichem Publish;
+alte Originalbelege8von8bytegleich. Main las ganzen Log/Diagnoserecord;10eigene
+und6unabhängige Closedform-/NoLeak-/Ringgegenproben bestanden. Originaler
+Source01-I/O-Auslöser bleibt ausdrücklich unbewiesen, kein behaupteter Fix.
+
+Neue create-only Source02-Helfer vorbereitet, nur17Quellvorlagen übernommen,
+keine FINALs/Prüfverdicts/Snapshots kopiert. Präfixe und7Pins frisch angepasst;
+16Syntax-/155Helperbindungen und selektive Proofgegenfälle MainPASS. Produkt-
+FP bleibt fea58e5d…b878e/368 unverändert,621Testinputs nun Manifest
+da07a492b29ea8b7006bb04039c056c24d05c86bfde1d37cd30177d3ee2977cb.
+Frischer gemeinsamer Commit/Source02-Endlauf bleibt für alle drei Ziele nötig;
+Mac-Coreproducer/Approval nicht neu erzeugen, keine Mainintegration/GUI.
