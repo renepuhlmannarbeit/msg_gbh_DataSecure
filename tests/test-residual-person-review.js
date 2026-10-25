@@ -665,6 +665,48 @@ test('nested residual hypotheses retain only individually bound child Keep capab
   'nested weak Keep never waives a dictionary hard finding');
 });
 
+test('a prose Keep binds only actual nested weak findings, never an arbitrary child or a hard alias', () => {
+  const source = 'NATIVE TEXT ON DAMAGED IMAGE PAGE';
+  const parent = { ambiguity_id: 'person:v1:000001', type: 'person_prose_ambiguous', replacement_kind: 'PERSON',
+    original_start: 0, original_end: source.length, anonymized_start: 0, anonymized_end: source.length };
+  const start = source.indexOf('IMAGE PAGE');
+  const findings = [{ type: 'PERSON_CANDIDATE', text: 'IMAGE PAGE', start, end: source.length }];
+  assert.deepEqual(residualPersonAmbiguities(source, source, findings,
+    { productChannel: 'standalone', proseAmbiguities: [parent] }), []);
+  const binding = createPersonReviewBinding(source, [parent], { productChannel: 'standalone' });
+  binding.confirm([{ ambiguity_id: parent.ambiguity_id, decision: 'keep' }], [], source);
+  const token = binding.forPublication('', source, '');
+  const { reviewedPersonRanges } = require('../plugins/data-secure/server/privacy/residual-person-review');
+  assert.deepEqual(reviewedPersonRanges(token, source), [{ start: 0, end: source.length }, { start, end: source.length }]);
+  assert.ok(!reviewedPersonRanges(token, source).some(range => range.start === source.indexOf('PAGE')),
+    'no implicit approval for a new last-word hypothesis');
+  assert.ok(pii.scanResidual(source, 'general', [{ type: 'PERSON_ALIAS', value: 'page' }], {
+    strongPersonAnchor: true, reviewedPersonCandidates: token }).some(row => row.type === 'RESIDUAL_ENTITY'));
+  assert.deepEqual(reviewedPersonRanges(token, source + '!'), [], 'changed bytes invalidate the whole approval');
+});
+
+test('prose-child binding rejects crossed source owners, stale parents, default callers and excess shared budget', () => {
+  const source = 'OUTER IMAGE PAGE';
+  const parent = { ambiguity_id: 'person:v1:000001', type: 'person_prose_ambiguous', replacement_kind: 'PERSON',
+    original_start: 0, original_end: source.length, anonymized_start: 0, anonymized_end: source.length };
+  const finding = { type: 'PERSON_CANDIDATE', text: 'IMAGE PAGE', start: 6, end: source.length };
+  const options = { productChannel: 'standalone', proseAmbiguities: [parent] };
+  for (const bad of [{ ...parent, original_start: 1 }, { ...parent, original_end: 999 },
+    { ...parent, type: 'credential_issuer_ambiguous' }])
+    assert.throws(() => residualPersonAmbiguities(source, source, [finding], { ...options, proseAmbiguities: [bad] }),
+      error => error.code === 'AMBIGUITY_REVIEW_REQUIRED');
+  assert.throws(() => residualPersonAmbiguities(source, source, [finding], { proseAmbiguities: [parent] }),
+    error => error.code === 'AMBIGUITY_REVIEW_REQUIRED');
+  assert.throws(() => residualPersonAmbiguities(source, source, [finding], { ...options, proseAmbiguities: [parent,
+    { ...parent, ambiguity_id: 'person:v1:000002' }] }), error => error.code === 'AMBIGUITY_REVIEW_REQUIRED');
+  for (const count of [4999, 5000]) {
+    residualPersonAmbiguities(source, source, Array(count).fill(finding), options);
+    const bind = () => createPersonReviewBinding(source, [parent], { productChannel: 'standalone' });
+    if (count === 4999) assert.ok(bind());
+    else assert.throws(bind, error => error.code === 'LOCAL_REVIEW_TOO_LARGE');
+  }
+});
+
 test('nested residual grouping never repairs crossing, stale, missing-copy or surrogate provenance', () => {
   const source = 'ALPHA BETA GAMMA';
   assert.throws(() => residualPersonAmbiguities(source, source, [
@@ -747,7 +789,7 @@ test('private dictionary coordinates use the unchanged scanner and retain type c
 });
 
 async function main() {
-  await testAsync('partial-PDF text prepares nested hypotheses and masks every restored alias before final publication', async () => {
+  await testAsync('partial-PDF presentation hypotheses are reviewed before a false global surname can be learned', async () => {
     const { prepareTextPrivacyReview, resolveTextPrivacyReview, finalizeTextPrivacyReview } =
       require('../plugins/data-secure/server/gateway/privacy-text-operation');
     const { createBatchPseudonymRegistry, READABLE_CONTRACT_VERSION } =
@@ -764,20 +806,35 @@ async function main() {
         const state = prepareTextPrivacyReview({ text, profile: 'general', productChannel: 'standalone',
           consumerOptions: { productChannel: 'standalone' }, registry, captureTrace: true, ocrLineReview: true });
         assert.equal(state.ambiguities.length, 3);
+        assert.deepEqual(state.ambiguities.map(candidate => state.draft.original_text.slice(candidate.original_start, candidate.original_end)).sort(),
+          ['FIRST VALID PAGE', 'LAST VALID PAGE RETAINED', 'NATIVE TEXT ON DAMAGED IMAGE PAGE'].sort());
+        assert.equal(registry.lookup('PERSON', 'Page'), null, 'a merely contact-adjacent caption is not surname evidence');
         const body = await resolveTextPrivacyReview(state, keep ? input => reviewedBatchText(input,
           input.ambiguities.map(candidate => ({ ambiguity_id: candidate.ambiguity_id,
             decision: input.original_text.slice(candidate.original_start, candidate.original_end) === 'FIRST VALID PAGE'
               ? 'keep' : 'redact' }))) : null,
         { reviewPolicy: keep ? 'manual' : 'automatic-conservative' });
-        if (keep) assert.throws(() => finalizeTextPrivacyReview(state, body, { prefix: '', suffix: '' }),
-          error => error.code === 'RESIDUAL_PII', 'a restored known surname alias cannot be kept through a weak review');
-        else {
-          const result = finalizeTextPrivacyReview(state, body, { prefix: '', suffix: '' });
-          assert.equal(result.transform_trace.complete, true);
+        const result = finalizeTextPrivacyReview(state, body, { prefix: '', suffix: '' });
+        assert.equal(result.transform_trace.complete, true);
+        assert.equal(registry.lookup('PERSON', 'Page'), null);
+        if (keep) {
+          assert.match(result.markdown, /FIRST VALID PAGE/u);
+          assert.doesNotMatch(result.markdown, /Anna|Berger|Elbwiese|GmbH|IMAGE PAGE|LAST VALID|NATIVE TEXT|anna@example|DE10370400440532013001|10115 Berlin/iu);
+          assert.deepEqual(pii.scanResidual(result.markdown, 'general', result.dictionary, {
+            strongPersonAnchor: result.strong_person_anchor, reviewedPersonCandidates: result.reviewed_person_candidates }), []);
+        } else {
           assert.doesNotMatch(result.markdown, /Anna|Berger|Elbwiese|GmbH|PAGE|anna@example|DE10370400440532013001|10115 Berlin/iu);
           assert.deepEqual(pii.scanResidual(result.markdown, 'general', result.dictionary), []);
         }
       } finally { registry.dispose(); }
+    }
+    for (const label of ['Name: Erika Page', 'Herr Erik Page', 'Zertifikat für Erika Page']) {
+      const state = prepareTextPrivacyReview({ text: `FIRST VALID PAGE\n${label}`, profile: 'general',
+        productChannel: 'standalone', consumerOptions: { productChannel: 'standalone' }, captureTrace: true });
+      const body = await resolveTextPrivacyReview(state, input => reviewedBatchText(input,
+        input.ambiguities.map(candidate => ({ ambiguity_id: candidate.ambiguity_id, decision: 'keep' }))));
+      assert.throws(() => finalizeTextPrivacyReview(state, body, { prefix: '', suffix: '' }),
+        error => error.code === 'RESIDUAL_PII', 'a real surname remains hard even inside a separate kept caption');
     }
   });
   await testAsync('ordinary Standalone conversational names require a bound choice and preserve technical language', async () => {

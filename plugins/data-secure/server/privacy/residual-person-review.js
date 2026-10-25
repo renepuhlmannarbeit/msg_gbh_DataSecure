@@ -43,6 +43,26 @@ function residualPersonAmbiguities(originalText, anonymizedText, findings, optio
   const anonymized = String(anonymizedText);
   if (canonicalizeRenderedText(anonymized) !== anonymized || !Array.isArray(findings)) throw invalidReview();
   assertReviewCount(findings.length, options);
+  const proseParents = options.proseAmbiguities === undefined ? [] : options.proseAmbiguities;
+  if (!Array.isArray(proseParents) || proseParents.length && options.productChannel !== 'standalone') throw invalidReview();
+  assertReviewCount(proseParents.length, options);
+  const parentIds = new Set();
+  for (const parent of proseParents) {
+    if (parent?.type !== 'person_prose_ambiguous' || parent.replacement_kind !== 'PERSON' ||
+        !/^person:v1:[0-9]{6}$/u.test(parent.ambiguity_id || '') || parentIds.has(parent.ambiguity_id) ||
+        !Number.isSafeInteger(parent.original_start) || !Number.isSafeInteger(parent.original_end) ||
+        !Number.isSafeInteger(parent.anonymized_start) || !Number.isSafeInteger(parent.anonymized_end) ||
+        parent.original_start < 0 || parent.original_end <= parent.original_start || parent.original_end > original.length ||
+        parent.anonymized_start < 0 || parent.anonymized_end <= parent.anonymized_start || parent.anonymized_end > anonymized.length ||
+        original.slice(parent.original_start, parent.original_end) !== anonymized.slice(parent.anonymized_start, parent.anonymized_end) ||
+        [original[parent.original_start], original[parent.original_end], anonymized[parent.anonymized_start], anonymized[parent.anonymized_end]]
+          .some(unit => /[\uDC00-\uDFFF]/u.test(unit || ''))) throw invalidReview();
+    parentIds.add(parent.ambiguity_id);
+  }
+  const orderedParents = [...proseParents].sort((left, right) => left.anonymized_start - right.anonymized_start);
+  if (orderedParents.some((parent, index) => index > 0 &&
+      (parent.anonymized_start < orderedParents[index - 1].anonymized_end ||
+       parent.original_start < orderedParents[index - 1].original_end))) throw invalidReview();
   const identical = original === anonymized;
   const preserved = identical ? [{ original_start: 0, original_end: original.length, anonymized_start: 0 }]
     : preservedTextRanges(original, anonymized, { preserveSourceVariableMarkers: true });
@@ -69,14 +89,15 @@ function residualPersonAmbiguities(originalText, anonymizedText, findings, optio
     fragmentProvenance.set(fragment, complete);
     return complete;
   };
-  const candidates = [], children = new Map();
+  const candidates = [], children = new Map(proseParents.map(parent => [parent, []]));
   for (const finding of [...findings].sort((a, b) => a.start - b.start || b.end - a.end)) {
     if (finding?.type !== 'PERSON_CANDIDATE' || !Number.isSafeInteger(finding.start) ||
         !Number.isSafeInteger(finding.end) || finding.start < 0 || finding.end <= finding.start ||
         finding.end > anonymized.length || anonymized.slice(finding.start, finding.end) !== finding.text ||
         /[\uDC00-\uDFFF]/u.test(anonymized[finding.start] || '') ||
         /[\uDC00-\uDFFF]/u.test(anonymized[finding.end] || '')) throw invalidReview();
-    if (candidates.some((item) => item.anonymized_start === finding.start && item.anonymized_end === finding.end)) continue;
+    if (proseParents.some((item) => item.anonymized_start === finding.start && item.anonymized_end === finding.end) ||
+        candidates.some((item) => item.anonymized_start === finding.start && item.anonymized_end === finding.end)) continue;
     const retained = preserved.find((range) => finding.start >= range.anonymized_start &&
       finding.end <= range.anonymized_start + range.original_end - range.original_start);
     if (!retained) throw invalidReview();
@@ -88,7 +109,8 @@ function residualPersonAmbiguities(originalText, anonymizedText, findings, optio
     const start = retained.original_start + finding.start - retained.anonymized_start;
     const end = start + finding.end - finding.start;
     if (original.slice(start, end) !== finding.text) throw invalidReview();
-    const outer = candidates.find(item => item.anonymized_start < finding.end && finding.start < item.anonymized_end);
+    const outer = proseParents.find(item => item.anonymized_start < finding.end && finding.start < item.anonymized_end) ||
+      candidates.find(item => item.anonymized_start < finding.end && finding.start < item.anonymized_end);
     if (outer) {
       // Only an existing, fully bound outer hypothesis may own an inner one.
       // Crossing hypotheses, different source offsets and generated text still
@@ -111,7 +133,11 @@ function residualPersonAmbiguities(originalText, anonymizedText, findings, optio
     });
     children.set(candidates.at(-1), []);
   }
-  for (const item of candidates) if (children.get(item).length) nestedHypotheses.set(item, {
+  // A prose parent may contain a separately detected weak hypothesis. Bind
+  // only that actual, individually source-checked child, as for residual
+  // parents; do not grant approval to arbitrary contents of a kept phrase.
+  // Dictionary aliases, fields, credentials and contacts never enter here.
+  for (const item of [...proseParents, ...candidates]) if (children.get(item).length) nestedHypotheses.set(item, {
     text: anonymized, fields: Object.freeze({ ...item }), ranges: Object.freeze(children.get(item))
   });
   return candidates;

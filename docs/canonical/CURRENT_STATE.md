@@ -1,7 +1,50 @@
 # Aktueller Iststand
 
-Stand: 25.10.2026 · 3.2.0-rc176 · Source04 technisch grün; echter Desktop-Modusfehler blockiert Veröffentlichung, Source05 in Arbeit.
+Stand: 25.10.2026 · 3.2.0-rc176 · Source05 technisch grün; neuer geführter Keep-/Alias-Konflikt blockiert Veröffentlichung, Source06 in Arbeit.
 Desktop-/Office-/physischeMac-Abnahme weiterhin USER_PENDING.
+
+## Neuer Source05-Desktopbefund: genaue Sachtextentscheidung und Nachnamenalias
+
+5394adeba256f60b8bff6be81f5e98f853862643/0e7918832ec2a016874edb2505d20ccf34f4f81d79723a4bd2b81280d905ea34:
+318+11 Headless,300Rust/3ignoriert, acht Konvertersuiten, fünf Paketgates und
+beide Mac40140094387 PASS; Inputs unverändert, Jobs beendet, Snapshot vorhanden.
+Die tatsächlichen Source05-Windowsproben schließen unter anderem den Modusfix
+in beiden Richtungen, gezielte Unicodekorrektur, Maskierung/Keep-Verweigerung,
+318s OCR-Denkpause/zwei Vertagungen/Neustarts/Zielwechsel und extern bearbeitete
+Arbeitskopien einschließlich Excel-Lock und fehlendem Zielordner begrenzt ab.
+Keine19Fall-Gesamtabnahme und kein Release.
+
+Neue geführte Teiltextprobe c496fd7e: trotz gespeicherter, authentifizierter
+Keep-Entscheidungen zu sachlichen PDF-Überschriften hält RESIDUAL_PII die PDF
+zurück. Tatsächlicher Registryzustand bindet IMAGE PAGE sowie page an PERSON_002;
+die unabhängige finale Aliasprüfung kollidiert mit dem genauen initialen Keep.
+Ein ausreichender Ursachenpfad ist belegt, die unpersistierte finale Findingliste
+bleibt unbekannt. Enger Quellen-/Hypothesenfix mit Gegenfällen und unabhängiger
+Revalidierung läuft; neue gemeinsame Source06-Belege erforderlich. Source05-
+FINALs, Pakete und alle roten/grünen GUI-Belege bleiben historisch unverändert.
+App normal geschlossen, eigenes Profil erhalten. Keine Mainintegration.
+
+Source06-Folgefix: vollständiger begrenzter Großbuchstabenlauf statt erfundener
+Nachnamenautorität; tatsächlich gebundene schwache Child-Hypothesen verwenden
+den bestehenden privaten Keep-Nachweis und das gemeinsame5000er-Budget.
+Bekannte Mehrwortidentitäten bleiben außerhalb größerer Reservierungen. Ein
+neuer tatsächlicher İpek-Müller-Gegenfall fand im ersten Entwicklungsdelta einen
+Unicodevergleichsfehler; enger Registry-Vergleichsview korrigiert ihn ohne Text-/
+Positionsänderung. Autor270gezielte Fälle und Main11aktuelle Shared-Gegenfälle
+PASS/stabil. Finaler Deltareview und neue Gesamt-/Native-/Paket-/Mac-/Desktop-
+Belege stehen noch aus; alte Belege nicht umschreiben.
+
+Zusätzlicher unabhängiger J+U030C-Gegenfall bestätigte in der Entwicklungsfassung
+eine bekannte sichtbare Identität trotz Proof: erneutes Kanonisieren eines
+Registry-Rückgabewerts war falsch. Enger einmaliger Vergleich schließt dieselbe
+unveränderte tatsächliche Gegenprobe in beiden Profilen; Autorv4 erneut270PASS/
+stabil. Keine Schlüssel-/Quelltext-/Positions-/Gateänderung. Vorversionen bleiben
+unveröffentlicht erhalten; finaler Review und neue Gesamtbelege folgen.
+
+Letzter unabhängiger Unicode-Deltareview b70eca55… ohne bestätigten Blocker,
+Endpins Main abgeglichen,11Shared-Gruppen nach letztem Fix erneutPASS/stabil.
+Quellfix bereit für neuen gemeinsamen Freeze; neue vollständige Plattform-/
+Paket-/Desktopbelege und Veröffentlichung weiterhin ausstehend.
 
 ## RC176 – tatsächliche Desktoptests nach wiederhergestellter Steuerung
 

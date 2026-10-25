@@ -16,7 +16,8 @@ const {
   CREDENTIAL_LABEL_HEADER_RE,
   ID_LABEL_HEADER_RE
 } = require('./base');
-const { PERSON_LABEL, collectPersonAnchors, collectPersonSeeds, collectOrganizations, hasAbstractNounShape } = require('./entities');
+const { PERSON_LABEL, collectPersonAnchors, collectPersonSeeds, collectOrganizations, hasAbstractNounShape,
+  capitalisedRuns } = require('./entities');
 const { findStructuredSpans } = require('./structured');
 const { preservedTextRanges } = require('./credentials');
 
@@ -168,6 +169,25 @@ function standalonePresentationCandidateSpans(text, profile = 'personnel_profile
   const evidenceRanges = protectedEvidenceRanges(source, profile, personFieldPolicy);
   const candidates = [];
   const seen = new Set();
+  let uppercaseRuns = null;
+  const contactPresentationRange = (range) => {
+    // Keep the complete, bounded, source-contiguous typographic run together.
+    // Masking just its trailing two-word contact window can expose a new weak
+    // prefix ("NATIVE TEXT ON DAMAGED [PERSON_...]") after the user's decision.
+    // No generated text, punctuation, adjacent line or inferred surname is
+    // added. The range remains one uncertain occurrence, not a new identity.
+    uppercaseRuns ||= capitalisedRuns(source).filter(run => run.every(token =>
+      /\p{Lu}/u.test(token.text) && !/\p{Ll}/u.test(token.text)))
+      .map(run => ({ start: run[0].start, end: run.at(-1).end }))
+      .filter(run => run.end - run.start <= 120);
+    let low = 0, high = uppercaseRuns.length;
+    while (low < high) {
+      const middle = (low + high) >> 1;
+      if (uppercaseRuns[middle].start <= range.start) low = middle + 1; else high = middle;
+    }
+    const run = uppercaseRuns[low - 1];
+    return run && range.start >= run.start && range.end <= run.end ? run : range;
+  };
   const add = (start, end) => {
     const value = source.slice(start, end);
     if (!value || explicit.has(key(value)) || evidenceRanges.some(range => start < range.end && range.start < end)) return;
@@ -177,9 +197,21 @@ function standalonePresentationCandidateSpans(text, profile = 'personnel_profile
   const uncertain = new Set(['caps_line', 'caps_dash', 'header_block', 'header_comma', 'header_particle',
     'header_tab', 'cjk_header', 'profile_structure', 'markdown_structure', 'markdown_link_label', 'markdown_metadata']);
   for (const seed of collectPersonSeeds(source, profile, null, null, personFieldPolicy)) {
-    if (!uncertain.has(seed.confidence)) continue;
+    // A nearby contact label can select a two-word window from a longer
+    // all-caps caption ("... DAMAGED IMAGE PAGE - Kontakt ..."). This is still
+    // a presentation hypothesis, not proof of a person or of its last word as
+    // a batch-wide surname. Reserve the exact source occurrence before the
+    // engine builds aliases. Explicit person fields/honorifics/holders remain
+    // excluded by the independent evidence ranges above; mixed-case contact
+    // names and the default/Cowork engine keep their existing behaviour.
+    const uppercaseContactHypothesis = seed.confidence === 'context' &&
+      /\p{Lu}/u.test(seed.value) && !/\p{Ll}/u.test(seed.value);
+    if (!uncertain.has(seed.confidence) && !uppercaseContactHypothesis) continue;
     const value = seed.matchValue || seed.value;
-    for (const range of sourceLiteralSpans(source, value)) add(range.start, range.end);
+    for (const sourceRange of sourceLiteralSpans(source, value)) {
+      const range = uppercaseContactHypothesis ? contactPresentationRange(sourceRange) : sourceRange;
+      add(range.start, range.end);
+    }
   }
   // Native CSV/XLSX converters also produce single-column Markdown tables.
   // Inspect headers AND rows, without guessing column labels or decoding an

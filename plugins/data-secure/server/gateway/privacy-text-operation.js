@@ -9,7 +9,8 @@ const { personFieldContextForConsumer } = require('../core/person-field-policy')
 const { credentialIssuerAmbiguities } = require('../privacy/credentials');
 const { personProseCandidateSpans, personProseAmbiguities } = require('../privacy/person-ambiguities');
 const { residualPersonAmbiguities, createPersonReviewBinding, reviewedPersonRanges } = require('../privacy/residual-person-review');
-const { canonicalizeRenderedText } = require('../privacy/base');
+const { canonicalizeRenderedText, escapeRegExp } = require('../privacy/base');
+const { canonicalValue: registryComparisonValue } = require('../batch-pseudonym-registry');
 const { createTransformTrace, applyEdits } = require('../privacy/transform-plan');
 const { PRIVACY_RULESET_VERSION, CREDENTIAL_CONTEXT_POLICY_VERSION } = require('../privacy/policy');
 const { LIMITS } = require('./common');
@@ -21,9 +22,30 @@ function reservePersonReviewCandidates(text, registry, allowOrganizationReview =
   if (Object.hasOwn(fieldContext.consumerOptions, 'contentOptions') && !allowOrganizationReview)
     throw Object.assign(new SafeError('Der Inhaltsvertrag ist für diesen Produktweg nicht erlaubt.'), { code: 'CONTENT_OPTIONS_FORBIDDEN' });
   const original = canonicalizeRenderedText(text, fieldContext.policy);
-  const reservations = personProseCandidateSpans(original, { ...fieldContext.consumerOptions,
-    productChannel: allowOrganizationReview ? 'standalone' : 'cowork', profile, ocrLineReview })
-    .filter(span => !registry?.lookup?.('PERSON', span.value) && !(allowOrganizationReview && registry?.lookup?.('ORG', span.value)))
+  const candidates = personProseCandidateSpans(original, { ...fieldContext.consumerOptions,
+    productChannel: allowOrganizationReview ? 'standalone' : 'cowork', profile, ocrLineReview });
+  // A larger uncertain caption must not hide an independently established
+  // multi-word identity inside it. Single persisted surnames are deliberately
+  // not global source seeds ("Sommer" may be ordinary prose); the engine's
+  // existing occurrence/strong-field policy continues to handle those.
+  const knownIdentities = allowOrganizationReview && candidates.length > 0 && typeof registry?.matchKnownAliases === 'function'
+    ? registry.matchKnownAliases(original).filter(alias => alias.kind === 'ORG' || /\s/u.test(alias.value))
+      // Membership already returns its canonical comparison spelling. Do not
+      // normalize it again: NFC followed by lowercase is not idempotent for
+      // every Unicode sequence (J + caron becomes composable only after case
+      // conversion). The raw candidate below receives exactly one such view.
+      .map(alias => new RegExp(`(?<![\\p{L}\\p{N}_])${alias.value.split(' ').map(escapeRegExp).join(' ')}(?![\\p{L}\\p{N}_])`, 'u'))
+    : [];
+  const reservations = candidates
+    .filter(span => {
+      if (registry?.lookup?.('PERSON', span.value) || allowOrganizationReview && registry?.lookup?.('ORG', span.value)) return false;
+      if (!knownIdentities.length) return true;
+      // Registry comparison can change Unicode length (İ -> i + combining
+      // dot), which /iu alone does not reproduce. This is a comparison view
+      // only: the source text, reservation and UTF-16 offsets stay untouched.
+      const comparison = registryComparisonValue(span.value);
+      return !knownIdentities.some(literal => literal.test(comparison));
+    })
     .map((span, index) => ({ ...span, token: `[PERSON_REVIEW_${String(index + 1).padStart(6, '0')}]` }));
   const ordered = [...reservations].sort((a, b) => a.start - b.start);
   if (ordered.some((span, index) => original.slice(span.start, span.end) !== span.value ||
@@ -80,8 +102,9 @@ function prepareTextPrivacyReview({ text, profile, productChannel, consumerOptio
     strongPersonAnchor: anon.strongPersonAnchor, includePersonCandidateSpans: true,
     includeKnownValueSpans: productChannel === 'standalone', originalSourceText: personReview.original });
   const personAmbiguities = [...proseAmbiguities, ...residualPersonAmbiguities(personReview.original, anon.text,
-    residual.filter(finding => finding.type === 'PERSON_CANDIDATE' && !proseAmbiguities.some(candidate =>
-      finding.start >= candidate.anonymized_start && finding.end <= candidate.anonymized_end)), { productChannel })];
+    residual.filter(finding => finding.type === 'PERSON_CANDIDATE' && (productChannel === 'standalone' ||
+      !proseAmbiguities.some(candidate => finding.start >= candidate.anonymized_start && finding.end <= candidate.anonymized_end))),
+    { productChannel, ...(productChannel === 'standalone' ? { proseAmbiguities } : {}) })];
   // A known surname alias may survive only inside an already source-bound
   // open choice. This is a private pending draft, NOT an allowlist: Keep still
   // fails the unchanged final dictionary gate unless the alias is really gone.

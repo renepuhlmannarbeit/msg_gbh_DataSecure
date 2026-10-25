@@ -1,9 +1,37 @@
 # Aktives Entwicklungsbacklog
 
-Arbeitsquelle: 3.2.0-rc176 Source05 in Arbeit nach echtem Desktop-Modusbefund;
+Arbeitsquelle: 3.2.0-rc176 Source06 in Arbeit nach echtem geführten Keep-/Alias-Konflikt;
 Desktop-/Office-/Zielhostabnahme USER_PENDING. RC175/ältere Pakete unverändert.
 
 ## BL-049.7 – RC176 priorisierte Inhalts-/Grafikverbesserungen
+
+25.10. nach01:35UTC: Source05 alle vier lokalen Endgates und beide Macs PASS,
+aber neue echte geführte PDF-Probe c496fd7e mit RESIDUAL_PII statt Ergebnis.
+Drei authentifiziert gespeicherte Sachtext-Keeps kollidieren mit dem tatsächlich
+aus IMAGE PAGE abgeleiteten PERSON_002-Nachnamenalias page. Initiale genaue
+Reviewentscheidung ist keine Ausnahme der finalen Dictionaryprüfung; kein
+Klickverlust belegt. Unpersistierte finale Findingliste nicht erfinden. Enger
+Quellen-/Präsentationshypothesenfix, kausale echte Pipeline-Gegenfälle und
+unabhängiger Produktionsreview vor neuem gemeinsamen Source06-Freeze. Echte
+Personen-/Alias-/Feld-/Kontakt-/Residualprüfungen bleiben wirksam. Alle alten
+Pakete und Belege erhalten; Source05 nicht veröffentlichen oder umetikettieren.
+
+Source06-Vorabfix: source-bound vollständiger Uppercaselauf bis120UTF-16 und
+einzeln nachgewiesene schwache Child-Hypothesen, keine allgemeine Keep-Ausnahme.
+Bekannte innere Mehrwortidentitäten werden vor Reservierung ausgenommen;
+deren Vergleich nutzt nach zusätzlichem echtem İpek-Müller-Gegenfall dieselbe
+Unicodekanonisierung wie die Registry, unveränderte Quell-/Ausgabepositionen.
+Autor270gezielte Fälle und Main11aktuellerSharedfälle PASS/stabil. Finale
+Revalidierung und neue gemeinsame Endbelege/GUI bleiben erforderlich.
+
+Letzter J+U030C-Vergleichsgegenfall tatsächlich vorher/nachher reproduziert:
+Registry-Rückgabewert nicht erneut kanonisieren, rohe Vergleichsansicht einmal.
+Autorv4 erneut270PASS/stabil; keine Änderung von Registrykeys/Quelltext/Positionen/
+Gates. Unabhängiger finaler Deltareview und frische Gesamtbelege erforderlich.
+
+Finaler enger Deltareview b70eca55… abgeschlossen ohne bestätigten Blocker,
+Main-Endpins und aktuelle11Shared-Fälle PASS/stabil. Neuer gemeinsamer Freeze
+und frische Gesamt-/Paket-/Plattform-/Desktopbelege sind der nächste Schritt.
 
 25.10.: Source04 alle vier lokalen Gates und beide Macs technisch grün;
 nach Nutzerupdate funktioniert die vorgeschriebene Desktopsteuerung wieder.

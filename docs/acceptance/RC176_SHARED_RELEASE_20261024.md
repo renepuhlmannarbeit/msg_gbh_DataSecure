@@ -1,5 +1,68 @@
 # RC176 – priorisierte Inhalts- und Grafikverbesserungen
 
+## Neuer tatsächlicher Desktopbefund25.10.: geführtes Beibehalten
+
+Source05-Appcommit5394adeba256f60b8bff6be81f5e98f853862643 und Fingerprint
+0e7918832ec2a016874edb2505d20ccf34f4f81d79723a4bd2b81280d905ea34 haben
+vier lokale Endgates und beide Mac40140094387 bestanden; die unveränderten
+FINALs, Pakete, SourceSnapshot und tatsächlichen GUI-Belege bleiben erhalten.
+Ein neuer nativer Windowsbefund blockiert dennoch die Veröffentlichung.
+
+Geführter Teiltextlauf c496fd7e: vier tatsächlich verglichene OCR-Kontaktwerte
+gespeichert, danach drei sachliche PDF-Überschriften bewusst beibehalten.
+Ergebnis: ein DOCX mit drei vertraulichen Beilagen; PDF mit RESIDUAL_PII
+zurückgehalten, bild-only EMF separat erwartbar ohne lesbaren Text. Die drei
+Keep-Entscheidungen sind unabhängig authentifiziert. IMAGE PAGE und der
+abgeleitete Nachnamenalias page sind zugleich als PERSON_002 gebunden. Der
+initiale genaue Keep hebt die unabhängige Dictionary-Restprüfung nicht auf;
+der Alias bleibt in den beibehaltenen Überschriften ein ausreichender Konflikt.
+Kein belegter Klick-/Speicherverlust. Die genaue finale PDF-Fundstellenliste
+wurde nicht persistiert; keine Exklusivität dieses Ursachenpfads behaupten.
+
+Enger Folgefix: Präsentationshypothesen und deren Quellenpositionen vor der
+Erzeugung globaler Nachnamenautorität prüfen. Keine pauschale Keep-Ausnahme,
+keine Deaktivierung der Restprüfung oder Freigabe echter Namen/Kontakte/starker
+Felder. Kausale Gegenprobe, unabhängiger Produktionsreview und neuer gemeinsamer
+Source06-Commit mit frischen Endgates/Paketen und gebundenen Desktopproben nötig.
+Der eigene Source05-Appprozess ist normal geschlossen; Profil und Ergebnisse
+bleiben erhalten. Keine Veröffentlichung oder Mainintegration erfolgt.
+
+Der Folgefix erfasst den vollständigen quellkontiguierlichen Großbuchstabenlauf
+innerhalb120UTF-16-Einheiten und bindet tatsächlich darin erneut gefundene
+schwache Hypothesen an den bestehenden privaten Parent-/Child-Nachweis. Keine
+globale Bereichsausnahme; gemeinsame5000er-Grenze und alle harten Gates bleiben.
+Bereits bekannte Mehrwortidentitäten dürfen nicht in einer größeren Reservierung
+verschwinden. Eine zusätzlich tatsächlich reproduzierte İpek-Müller-Gegenprobe
+fand im ersten neuen Vergleich einen Unicodefehler: Regex-/iu reproduziert nicht
+die Registrykanonisierung. Der enge Folgefix verwendet deren eigenen Vergleichs-
+view, ohne Quelltext oder Positionen zu verändern. Das ursprüngliche synthetische
+PII-Gegenbeispiel und die früheren Zwischenstände bleiben erhalten; nie gebaut
+oder veröffentlicht. Alte falsche Registrybindungen werden nicht migriert.
+
+Autor:270gezielte tatsächliche Fälle in sechs Suiten PASS bei stabilen Inputs.
+Main:61Fälle der vorherigen Fassung und nach Unicodefix11Shared-Gegenfälle erneut
+PASS/stabil. Früherer Snapshot-Gegenreview ohne Fund widerlegt den späteren
+Unicodebefund nicht; finaler unabhängiger Unicode-Deltareview ist erforderlich.
+Neue gemeinsame vollständige Endgates und native Desktopbelege bleiben offen.
+
+Der abschließende unabhängige Vergleichsreview fand zusätzlich einen echten
+J+U030C-Gegenfall: erneutes Kanonisieren des bereits kanonischen Registrywerts
+war nicht idempotent. Unveränderte tatsächliche Vorbereitung/Keep/Finalisierung/
+Publikationsproof gaben die bekannte Identität in beiden Profilen noch sichtbar
+aus. Die gleiche Gegenprobe ist nach enger Korrektur geschlossen: Rückgabewert
+der Registry unverändert vergleichen, nur die rohe Vergleichsansicht einmal
+kanonisieren. Keine Änderung der Schlüssel, Quellbytes, Positionen oder Gates.
+Autorv4 erneut270Gruppen PASS/stabil; alte v3-/Rotbelege unverändert. Der
+unabhängige letzte Deltaabschluss und die neuen vollständigen Endgates folgen.
+
+Finaler Unicode-Deltareview b70eca55…/JSON4e64efdc… ohne bestätigten Blocker,
+Main vollständig gelesen und gegen Endpins abgeglichen: person-ambiguities48578a…,
+residual-person-reviewc9e746… und privacy-text-operatione77ad4db… . Main führte
+die11Shared-Gruppen nach genau diesem letzten Fix nochmals PASS/stabil aus.
+Damit ist der Quellfix für den neuen gemeinsamen Freeze bereit; vollständige
+neue Paket-/Plattform-/Desktopbelege entstehen erst danach. Kein altes Grün
+wird übertragen, keine universelle Unicode-/Formatgarantie.
+
 ## Auftrag / Grenzen
 
 24.10.2026 ausdrücklich beauftragt: priorisierte Verbesserungen aus
