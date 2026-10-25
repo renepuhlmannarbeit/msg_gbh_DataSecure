@@ -86,7 +86,7 @@ function fixture(v2 = false, traced = false, rejected = null, fields = null) {
     ...(v2 ? { standalone_document_review: true } : {}),
     ...(fields?.contentOptions ? { schema: 'datasecure-batch/7', content_options: fields.contentOptions } : {}) };
   const create = () => createDocumentReviewStore({ dataRoot: data, outputRoot: () => output, resultRoot: () => results, expectedDocuments: () => items });
-  const capture = source => traced ? require('../plugins/data-secure/server/pii-engine').anonymize(source, 'general', { captureTransformPlan: true,
+  const capture = source => fields?.capture ? fields.capture(source) : traced ? require('../plugins/data-secure/server/pii-engine').anonymize(source, 'general', { captureTransformPlan: true,
     ...(fields?.contentOptions && !fields.legacyRedactor ? { productChannel: 'standalone', contentOptions: fields.contentOptions } : {}) }) : null;
   const captured = capture(originalFor(0));
   const store = create(), text = captured?.text || '# Inhalt\n[PERSON_001] hat 42 Projekte.\n';
@@ -101,7 +101,7 @@ function fixture(v2 = false, traced = false, rejected = null, fields = null) {
       const coverage = { status: 'complete', reason_codes: [] };
       const proof = pub.verifyAnonymizedPublication({ markdown: documentText, profile: 'general', content_options: fields.contentOptions,
         source_extraction: createSourceExtraction({ source_type: 'pdf', content_options: fields.contentOptions, coverage, markdown: documentOriginal }, 8_000_000),
-        dictionary: documentCapture.dictionary, strong_person_anchor: documentCapture.strongPersonAnchor === true, reviewed_person_candidates: null });
+        dictionary: documentCapture.dictionary, strong_person_anchor: documentCapture.strongPersonAnchor === true, reviewed_person_candidates: fields?.reviewed || null });
       boundArtifact = pub.createAnonymizedArtifact({ package_id: packageId, content_options: fields.contentOptions, source_type: 'pdf', profile: 'general',
         operation_id: crypto.randomUUID(), created_at: new Date().toISOString(), coverage, markdown: documentText, verification_proof: proof });
       const target = path.join(require('../plugins/data-secure/server/standalone/anonymized-store').anonymizedArtifactRoots().output, packageId);
@@ -115,7 +115,7 @@ function fixture(v2 = false, traced = false, rejected = null, fields = null) {
         ruleset: require('../plugins/data-secure/server/privacy/policy').PRIVACY_RULESET_VERSION,
         credential_policy: require('../plugins/data-secure/server/privacy/policy').CREDENTIAL_CONTEXT_POLICY_VERSION,
         ...(fields && Object.hasOwn(fields, 'policyMarker') ? { person_field_policy: fields.policyMarker } : {}),
-        publication_frame: { prefix: '', suffix: '' }, reviewed_ranges: [] } } : {}) });
+        publication_frame: { prefix: '', suffix: '' }, reviewed_ranges: fields?.reviewedRanges || [] } } : {}) });
     fs.writeFileSync(path.join(packageDir, `${packageId}.md`), documentText);
     fs.writeFileSync(path.join(packageDir, 'manifest.json'), JSON.stringify({ schema: 'eu-privacy-package/3', package_id: packageId,
       document: `${packageId}.md`, verification: { text_residual_pii: 'passed' }, document_sha256: sha(documentText) }));
@@ -159,12 +159,15 @@ function persistentDecisionPins(f) {
   }
   return rows;
 }
-function assertCandidateBlocked(f, input, blocked) {
+function assertCandidateBlocked(f, input, blocked, expectedRevisions = f.items.map(() => 0)) {
+  const documents = f.create().list(f.batchId).documents;
+  assert.deepEqual(documents.map(row => row.revision), expectedRevisions);
+  assert.ok(documents.every(row => !row.approved));
   const before = persistentDecisionPins(f), result = f.store.decide(f.batchId, input.documentId, input.request);
   assert.deepEqual(result, { ok: false, reason_code: 'DOCUMENT_ENTITY_RUN_CONFLICT', blocked_files: blocked,
     local_ui_only: true, external_disclosure: false });
   assert.deepEqual(persistentDecisionPins(f), before, 'no decision, revision, rule, package or result mutation');
-  assert.ok(f.create().list(f.batchId).documents.every(row => row.revision === 0 && !row.approved));
+  assert.deepEqual(f.create().list(f.batchId).documents, documents, 'the exact pre-existing metadata vector survives the refusal');
   return result;
 }
 function seedHistoricalEntityKeep(f, index) {
@@ -1054,7 +1057,7 @@ test('new export combines planning, residual checks and identity capture but rer
   try { result = f.store.exportApproved(f.batchId, 'e'.repeat(32), selection); }
   finally { fs.openSync = open; engine.scanResidual = residual; }
   assert.equal(sources, selection.length * 2, 'one preparation pass and an independent fresh copy pass');
-  assert.equal(residuals, selection.length, 'every candidate retains its residual gate');
+  assert.equal(residuals, selection.length * 2, 'each immutable basis and each actual candidate passes its independent residual gate');
   const target = path.join(f.results, 'DataSecure-KI-Export', result.folder_name);
   assert.ok(fs.readdirSync(target).every(name => fs.readFileSync(path.join(target, name), 'utf8') === f.text));
   const reference = f.store.resolveIdentityOverview(f.batchId, 'e'.repeat(32));
@@ -1081,7 +1084,7 @@ test('source corruption after combined preparation is still rejected before a co
   assert.equal(changed, true);
   assert.equal(fs.existsSync(path.join(f.data, 'document-reviews', f.batchId, `export-${operation}-complete.json`)), false);
 });
-test('automatic basis approval is freshly reverified for copy without a duplicate preparation residual scan', () => {
+test('automatic basis admission and current approval retain their gates while fresh copy bindings are reread', () => {
   const f = fixture(true, true, null, { documentCount: 2, reviewPolicy: 'automatic-conservative',
     contentOptions: { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: false, imageOcr: false },
     policyMarker: require('../plugins/data-secure/server/core/person-field-policy').CONTENT_PERSON_FIELD_POLICY });
@@ -1090,7 +1093,7 @@ test('automatic basis approval is freshly reverified for copy without a duplicat
   engine.scanResidual = function(...args) { checks++; return residual.apply(this, args); };
   try { assert.equal(f.store.exportApproved(f.batchId, '6'.repeat(32), selection).exported_count, selection.length); }
   finally { engine.scanResidual = residual; }
-  assert.equal(checks, selection.length * 2, 'each fresh current() verifies the automatic basis, in preparation and before copying');
+  assert.equal(checks, selection.length * 3, 'one fresh immutable-basis admission plus current approval in both preparation and copy passes');
 });
 test('membership read fast path still rejects changed source bindings instead of repairing or trusting them', () => {
   const f = fixture(true), approved = f.store.decideBatch(f.batchId, batchRequest(f));
@@ -1114,7 +1117,92 @@ if (process.env.DATASECURE_PREVIEW_STRESS === '1') test('synthetic 132-document 
   assert.equal(plan.files.length, 132);
   assert.ok(elapsed < 30_000, `synthetic 132-document preview took ${Math.round(elapsed)} ms`);
 });
-testAsync('native preparation streams independently revalidated bodies with a single preparation pass', async () => {
+test('masked field labels cannot turn a run-wide Keep into a partial commit', () => {
+  const f = fixture(true, true, null, entityFields({ originals: [
+    'Anna Beispiel\nProjekt erledigt.', 'Name: Anna Beispiel\nBericht 42.'
+  ] }));
+  let row = f.row(1), text = f.store.chunk(f.batchId, row.document_id, row.revision, 0).markdown;
+  const start = text.indexOf('Name'); assert.ok(start >= 0);
+  assert.equal(f.decision(1, 'redact', [{ start, end: start + 4 }]).ok, true);
+  const input = entityRequest(f, 0, 'keep', 'run');
+  assertCandidateBlocked(f, input, [{ name: f.items[1].name, reason_code: 'DOCUMENT_REVIEW_RESIDUAL_PII' }], [0, 1]);
+  assert.equal(f.row(0).revision, 0); assert.equal(f.row(1).revision, 1);
+});
+test('the real source callee remains protected after request-label masking', () => {
+  const f = fixture(true, true, null, entityFields({ documentCount: 1,
+    original: 'Rufen Sie Frau Anna Berger an unter: Qvx / Qvy\nFachtext: HTTP/2 31415' }));
+  let row = f.row(0);
+  const target = f.store.entities(f.batchId, row.document_id, row.revision, 0).entities.find(value => value.original.includes('Anna'));
+  assert.ok(target);
+  const text = f.store.chunk(f.batchId, row.document_id, row.revision, 0).markdown, start = text.indexOf('Rufen Sie');
+  assert.ok(start >= 0); f.decision(0, 'redact', [{ start, end: start + 9 }]); row = f.row(0);
+  assertCandidateBlocked(f, { documentId: row.document_id, request: { action: 'entities', ranges: [],
+    revision: row.revision, output_sha256: row.output_sha256, operation_id: crypto.randomBytes(16).toString('hex'),
+    entity_decisions: [{ entity_id: target.entity_id, decision: 'keep' }] } },
+  [{ name: f.items[0].name, reason_code: 'DOCUMENT_REVIEW_RESIDUAL_PII' }], [1]);
+});
+test('a newly refused historical basis stays readable but label masking cannot manufacture fresh admission', () => {
+  for (const code of ['DOCUMENT_REVIEW_RESIDUAL_PII', 'DOCUMENT_REVIEW_POLICY_CHANGED']) {
+    const f = fixture(true, true, null, entityFields({ documentCount: 1 }));
+    const engine = require('../plugins/data-secure/server/pii-engine'), scan = engine.scanResidual;
+    // Explicit classifier-change model: only the immutable old basis now
+    // refuses; the masked current text alone would pass. No historical source
+    // or proof is mutated and this is not a new policy implementation.
+    engine.scanResidual = function(text, ...args) {
+      if (text === f.text) throw Object.assign(Error('test-owned newer admission refusal'), { code });
+      return scan.call(this, text, ...args);
+    };
+    try {
+      let row = f.row(0);
+      assert.equal(f.store.chunk(f.batchId, row.document_id, 0, 0).markdown, f.text);
+      const start = f.text.indexOf('Name'); assert.ok(start >= 0);
+      assert.equal(f.decision(0, 'redact', [{ start, end: start + 4 }]).ok, true);
+      row = f.row(0); assert.equal(row.revision, 1);
+      assert.match(f.store.chunk(f.batchId, row.document_id, 1, 0).markdown, /MANUAL_REDACTION/u);
+      throwsCode(() => f.decision(0, 'approve'), code);
+      throwsCode(() => f.store.previewExport(f.batchId, 'd'.repeat(32), f.selection(0)), code);
+      assert.equal(f.row(0).approved, false);
+    } finally { engine.scanResidual = scan; }
+  }
+});
+for (const [label,original] of [['Telefon','Telefon: Qvx / Qvy\nFachtext: HTTP/2 31415'],
+  ['Name','Name: Anna Berger\nFachtext: HTTP/2 31415'],['Unternehmen','Unternehmen: Nordstern GmbH\nFachtext: HTTP/2 31415'],
+  ['Geburtsdatum','Geburtsdatum: 11.09.1990\nFachtext: HTTP/2 31415'],['Telefon','Telefon: +49 30 5551000\nFachtext: HTTP/2 31415']])
+test(`source-duty follows actual other-kind occurrence after label mask and reclassification ${original.split('\n')[0]}`,()=>{
+  const f=fixture(true,true,null,entityFields({original,documentCount:1}));let value=f.row(0);
+  const targets=f.store.entities(f.batchId,value.document_id,value.revision,0).entities;
+  assert.ok(targets.length);const target=targets.find(row=>row.source_start>original.indexOf(':'));
+  assert.ok(target);assert.equal(target.disabled,false);
+  const request=decision=>({action:'entities',ranges:[],revision:value.revision,output_sha256:value.output_sha256,
+    operation_id:crypto.randomBytes(16).toString('hex'),entity_decisions:[{entity_id:target.entity_id,decision}]});
+  assert.equal(f.store.decide(f.batchId,value.document_id,request('organization')).ok,true);value=f.row(0);
+  const text=f.store.chunk(f.batchId,value.document_id,value.revision,0).markdown,start=text.indexOf(label);assert.ok(start>=0);
+  assert.equal(f.decision(0,'redact',[{start,end:start+label.length}]).ok,true);value=f.row(0);
+  const before=persistentDecisionPins(f),kept=f.store.decide(f.batchId,value.document_id,request('keep'));
+  assert.equal(kept.ok,false);assert.equal(kept.blocked_files[0].reason_code,'DOCUMENT_REVIEW_RESIDUAL_PII');
+  assert.deepEqual(persistentDecisionPins(f),before);
+  assert.equal(f.store.decide(f.batchId,value.document_id,request('default')).ok,true);assert.ok(f.create().list(f.batchId).documents.length===1);
+});
+
+(async () => {
+  await testAsync('a genuine weak annotation Keep and equal factual occurrence remain selective',async()=>{
+  const original='Telefon (Weitere Angaben): Qvx / Qvy\nFachtext: HTTP/2 31415';
+  const options=entityFields().contentOptions,op=require('../plugins/data-secure/server/gateway/privacy-text-operation');
+  const prepared=op.prepareTextPrivacyReview({text:original,profile:'general',productChannel:'standalone',consumerOptions:{productChannel:'standalone',contentOptions:options},captureTrace:true});
+  const reviewed=await op.resolveTextPrivacyReview(prepared,async draft=>require('../plugins/data-secure/server/gateway/batch-review-policy').reviewedBatchText(draft,draft.ambiguities.map(row=>({ambiguity_id:row.ambiguity_id,
+    decision:draft.original_text.slice(row.original_start,row.original_end)==='Weitere Angaben'?'keep':'redact'}))));
+  const final=op.finalizeTextPrivacyReview(prepared,reviewed,{prefix:'',suffix:''});assert.match(final.markdown,/Weitere Angaben/u);
+  const f=fixture(true,true,null,entityFields({original,documentCount:1,reviewed:final.reviewed_person_candidates,
+    reviewedRanges:require('../plugins/data-secure/server/privacy/residual-person-review').reviewedPersonRanges(final.reviewed_person_candidates,final.markdown),capture:()=>({text:final.markdown,dictionary:final.dictionary,strongPersonAnchor:final.strong_person_anchor,
+    transform_trace:final.transform_trace})}));
+  assert.equal(f.decision(0,'approve').ok,true);
+  const pure=require('../plugins/data-secure/server/privacy/source-field-restoration'),source='Telefon: Qvx / Qvy\nFachtext: Qvx / Qvy';
+  const sourceStart=source.lastIndexOf('Qvx'),safe=source.replace('Qvx / Qvy','[FIELD_REDACTED]'),start=safe.lastIndexOf('Qvx'),basis=safe.slice(0,start)+'[PERSON_001]';
+  const edit={start,end:start+12,original:'[PERSON_001]',replacement:'Qvx / Qvy',kind:'PERSON'};
+  const state=pure.createRestoration(source,basis,'content-person-fields/1');
+  assert.equal(pure.assertRestoration(pure.advanceRestoration(state,basis,safe,[edit],[{edit,sourceStart,sourceEnd:sourceStart+9,original:'Qvx / Qvy'}]),safe),true);
+});
+  await testAsync('native preparation streams independently revalidated bodies with a single preparation pass', async () => {
   const f = fixture(true, false, null, { documentCount: 3 }), approved = f.store.decideBatch(f.batchId, batchRequest(f));
   const selection = approved.documents.map(({ document_id, revision, output_sha256 }) => ({ document_id, revision, output_sha256 }));
   const identity = { volume: '1', object: '1', created_ns: '1' }, bodies = new Map();
@@ -1153,4 +1241,5 @@ testAsync('native preparation streams independently revalidated bodies with a si
   assert.deepEqual(nativeCommands, ['acknowledge'], 'native ACK already revalidates the complete copy, without a preceding duplicate reconcile');
   await assert.rejects(native.exportApproved(f.batchId, '7'.repeat(32), selection), { code: 'DOCUMENT_REVIEW_STALE' });
 });
-done();
+  await done();
+})().catch(error => { console.error(error); process.exitCode = 1; return done(); });

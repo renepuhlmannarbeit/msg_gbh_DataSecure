@@ -43,13 +43,13 @@ let serial = 0;
 // initialResultPublication dependency. It is also the fixture contract used by
 // the separate real Node->Rust pipe test (which has its own native callback).
 async function fixture({ mode = 'markdown-only', count = 2, legacy = false, separateFolders = false, sourceFolders = null,
-  legacyLayout = false, legacyCompanions = false, deferInitial = false } = {}) {
+  legacyLayout = false, legacyCompanions = false, deferInitial = false, originalSource = null } = {}) {
   const batchId = (++serial).toString(16).padStart(64, '0'), results = path.join(root, `results-${serial}`);
   fs.mkdirSync(results); process.env.EU_PRIVACY_RESULT_ROOT = results;
   const state = { schema: 'datasecure-batch/7', token: batchId, product_channel: 'standalone', processing_mode: mode,
     standalone_document_review: true, content_options: content, profile: 'general', output_naming_mode: 'neutral',
     created_at: new Date(Date.UTC(2026, 9, 20, 0, 0, serial)).toISOString(), items: [] };
-  const operations = new Map(), calls = [], controls = {}, original = 'Name: Anna Beispiel\nAnna Beispiel hat 42 Projekte.\nE-Mail: anna@example.invalid';
+  const operations = new Map(), calls = [], controls = {}, original = originalSource || 'Name: Anna Beispiel\nAnna Beispiel hat 42 Projekte.\nE-Mail: anna@example.invalid';
   const nativeIdentity = { volume: '1', object: '2', created_ns: '3' };
   const binding = { schema: 'datasecure-native-export-binding/1', root: results, private_name: `native-export-${'a'.repeat(32)}`,
     root_identity: nativeIdentity, data_root_identity: nativeIdentity, private_identity: nativeIdentity,
@@ -316,11 +316,11 @@ function assertGenerationReceiptInventory(receiptBytes, mode, count, folder) {
   if (anonymize) assert.equal(receipt.confidential_directory.path, path.join(folder, 'Vertraulich'));
   else assert.equal(Object.hasOwn(receipt, 'confidential_directory'), false);
 }
-function historicalUnsafeKeep(f, index) {
+function historicalUnsafeKeep(f, index, matches = value => value.kind === 'PERSON') {
   // Test-owned pre-fix committed journal, never a decision accepted by the
   // repaired service. Replay its exact bytes through the real current reader.
   const row = f.row(index), run = path.join(data, 'document-reviews', f.batchId);
-  const group = f.store.entities(f.batchId, row.document_id, row.revision, 0).entities.find(value => value.kind === 'PERSON');
+  const group = f.store.entities(f.batchId, row.document_id, row.revision, 0).entities.find(matches);
   assert.ok(group);
   const request = { action: 'entities', ranges: [], revision: row.revision, output_sha256: row.output_sha256,
     operation_id: crypto.randomBytes(16).toString('hex'), entity_decisions: [{ entity_id: group.entity_id, decision: 'keep' }] };
@@ -486,27 +486,44 @@ async function run() {
     }
   });
   await testAsync('pending metadata keeps original initial-binding, outbox and journal objects through single and batch commit', async () => {
+    for (const phase of ['early-basis', 'early-candidate', 'late-candidate'])
     for (const scope of ['document', 'batch']) for (const role of ['initial-binding', 'initial-outbox', 'journal']) for (const mutation of ['missing', 'same-bytes-swap']) {
       const f = await fixture({ mode: 'markdown-and-anonymize', count: 1 }); f.edit();
       const input = metadataInput(f, 'approve', scope), run = path.join(data, 'document-reviews', f.batchId);
       const target = role === 'initial-binding' ? path.join(data, 'result-publication-bindings', `${f.batchId}.json`)
         : role === 'initial-outbox' ? exporter.recordPath(f.batchId) : path.join(run, 'decision-000001.json');
-      const retired = path.join(root, `retired-pending-metadata-${serial}-${scope}-${role}-${mutation}.json`);
+      const retired = path.join(root, `retired-pending-metadata-${serial}-${phase}-${scope}-${role}-${mutation}.json`);
       assert.equal(fs.existsSync(retired), false);
       const bytes = fs.readFileSync(target), engine = require('../plugins/data-secure/server/pii-engine'), scan = engine.scanResidual;
-      let calls = 0, changed = false;
+      const current = input.rows[0], candidateText = f.store.chunk(f.batchId, current.document_id, current.revision, 0).markdown;
+      const basisText = JSON.parse(fs.readFileSync(path.join(run, current.document_id, 'base.json'))).markdown;
+      assert.notEqual(candidateText, basisText, 'the actual masked candidate is distinguishable from immutable basis admission');
+      let calls = 0, candidateCalls = 0, changed = false, injected = null;
       engine.scanResidual = function(...args) {
-        if (++calls === 2) {
+        calls++;
+        if (args[0] === candidateText) candidateCalls++;
+        // Preserve the original second-scan negative, add the new first basis
+        // scan, and separately exercise the later exact current candidate.
+        // Its second occurrence is after the complete held assessment and
+        // before the decision's final original-object assertion.
+        const trigger = phase === 'early-basis' ? calls === 1 : phase === 'early-candidate' ? calls === 2
+          : args[0] === candidateText && candidateCalls === 2;
+        if (trigger) {
+          injected = { calls, candidateCalls, actual_sha256: sha(args[0]) };
+          assert.equal(args[0], phase === 'early-basis' ? basisText : candidateText);
           fs.renameSync(target, retired); // outside every observed private/run inventory
           if (mutation === 'same-bytes-swap') fs.writeFileSync(target, bytes, { flag: 'wx', mode: 0o600 });
           changed = true;
         }
         return scan.apply(this, args);
       };
-      const expectedCode = mutation === 'missing' && role !== 'journal' ? 'RESULT_PUBLICATION_CONFLICT' : 'DOCUMENT_REVIEW_CONFLICT';
+      const expectedCode = phase !== 'late-candidate' || mutation === 'missing' && role !== 'journal'
+        ? 'RESULT_PUBLICATION_CONFLICT' : 'DOCUMENT_REVIEW_CONFLICT';
       try { assert.throws(input.apply, { code: expectedCode }); }
       finally { engine.scanResidual = scan; }
-      assert.equal(changed, true, `${scope}/${role}/${mutation}: real candidate check reached the precommit fault`);
+      assert.equal(changed, true, `${phase}/${scope}/${role}/${mutation}: the exact named gate reached its fault`);
+      assert.equal(injected.actual_sha256, sha(phase === 'early-basis' ? basisText : candidateText));
+      if (phase === 'late-candidate') assert.equal(injected.candidateCalls, 2);
       assert.equal(fs.existsSync(path.join(run, 'commit-000002.json')), false); assert.equal(f.calls.length, 0);
     }
   });
@@ -519,6 +536,72 @@ async function run() {
       finally { engine.scanResidual = scan; }
       assert.deepEqual(privateRunPins(f), before); assert.equal(f.calls.length, 0);
     }
+  });
+  await testAsync('ACKed historical strong Keep stays privately repairable after label loss and partial entity disabling', async () => {
+    const f = await fixture({ mode: 'markdown-and-anonymize', count: 1,
+      originalSource: 'Telefon: Qvx / Qvy\nFachtext: HTTP/2 31415' });
+    let row = f.row(0), text = f.store.chunk(f.batchId, row.document_id, row.revision, 0).markdown;
+    const start = text.indexOf('Telefon');
+    assert.equal(f.store.decide(f.batchId, row.document_id, { action: 'redact', ranges: [{ start, end: start + 7 }],
+      revision: row.revision, output_sha256: row.output_sha256, operation_id: crypto.randomBytes(16).toString('hex') }).ok, true);
+    await f.publish();
+    const historical = historicalUnsafeKeep(f, 0, value => value.original.includes('Qvx'));
+    // Transparent historical fixture only: the old service lacked precisely
+    // this newly added guard. The real exporter/private store and the existing
+    // explicitly modeled native callback produce the old completed receipt.
+    // This is NOT evidence of a native transaction or acceptance by this fix.
+    const filename = require.resolve('../plugins/data-secure/server/gateway/standalone-document-review-store');
+    const source = fs.readFileSync(filename, 'utf8'), guard = 'sourceRestoration.assertRestoration(value.fieldRestoration, value.markdown)';
+    assert.equal(source.split(guard).length - 1, 2);
+    const model = { exports: {} }, localRequire = require('node:module').createRequire(filename);
+    new Function('require', 'module', 'exports', source.replaceAll(guard, 'true /* historical source-duty guard absent */'))(localRequire, model, model.exports);
+    const prior = await f.publish(model.exports.createDocumentReviewStore(f.options));
+    const oldFolder = f.target(prior), oldFiles = fs.readdirSync(oldFolder, { recursive: true })
+      .map(name => path.join(oldFolder, name)).filter(file => fs.statSync(file).isFile());
+    const oldMarkdown = oldFiles.find(file => file.endsWith('.md'));
+    assert.match(fs.readFileSync(oldMarkdown, 'utf8'), /Qvx \/ Qvy/u);
+    fs.writeFileSync(oldMarkdown, 'Synthetic user-edited completed working copy.');
+    const before = fileSnapshot(oldFiles), read = fs.readFileSync;
+    const previousRecords = privateRunPins(f);
+    let oldLeafReads = 0;
+    fs.readFileSync = function(file, ...args) {
+      if (typeof file === 'string' && oldFiles.includes(file)) { oldLeafReads++; throw Error('OLD_PUBLIC_LEAF_MUST_NOT_BE_READ'); }
+      return read.call(this, file, ...args);
+    };
+    try {
+      const fresh = f.reload();
+      let publication = fresh.list(f.batchId).result_publication;
+      assert.equal(publication.state, 'repair_required');
+      assert.equal(publication.generation_id, prior.result_publication.generation_id);
+      row = fresh.list(f.batchId).documents[0];
+      text = fresh.chunk(f.batchId, row.document_id, row.revision, 0).markdown;
+      assert.match(text, /Qvx \/ Qvy/u, 'unsafe historical private text remains readable');
+      assert.equal(fresh.decide(f.batchId, historical.documentId, historical.request).ok, true, 'old ACK does not issue a new decision');
+      const mask = token => {
+        row = fresh.list(f.batchId).documents[0];
+        text = fresh.chunk(f.batchId, row.document_id, row.revision, 0).markdown;
+        const at = text.indexOf(token); assert.ok(at >= 0);
+        return fresh.decide(f.batchId, row.document_id, { action: 'redact', ranges: [{ start: at, end: at + token.length }],
+          revision: row.revision, output_sha256: row.output_sha256, operation_id: crypto.randomBytes(16).toString('hex'),
+          repair_binding: publication.repair_binding });
+      };
+      assert.equal(mask('Qvx').ok, true);
+      publication = fresh.list(f.batchId).result_publication;
+      assert.equal(publication.state, 'repair_required', 'a disabled occurrence with a raw descendant remains unsafe');
+      const calls = f.calls.length;
+      await rejects(() => f.publish(fresh), 'DOCUMENT_REVIEW_RESIDUAL_PII');
+      assert.equal(f.calls.length, calls, 'partial repair cannot reach native writing');
+      assert.equal(mask('Qvy').ok, true);
+      assert.equal(fresh.list(f.batchId).result_publication.state, 'pending');
+      const next = await f.publish(fresh);
+      assert.equal(next.result_publication.state, 'current');
+      const output = fs.readFileSync(path.join(f.target(next), 'Dokument_01.md'), 'utf8');
+      assert.doesNotMatch(output, /Qvx|Qvy/u); assert.match(output, /HTTP\/2 31415/u);
+    } finally { fs.readFileSync = read; }
+    assert.equal(oldLeafReads, 0);
+    assertFileSnapshot(before);
+    const currentRecords = new Map(privateRunPins(f).map(value => [value[0], value]));
+    for (const value of previousRecords) assert.deepEqual(currentRecords.get(value[0]), value, 'old private events and ACKs stay immutable');
   });
   for (const action of ['entities', 'redact', 'restore_base']) await testAsync(`historical unsafe private result: explicit ${action} repairs without publishing unsafe bytes`, async () => {
     const f = await fixture({ mode: 'markdown-and-anonymize', count: 1 });

@@ -1,5 +1,42 @@
 # Aktives Entwicklungsbacklog · 3.2.0-rc176
 
+25.10.2026 nach17:31UTC: Source12-Implementierung und beide finalen unabhängigen
+Produktreviews abgeschlossen. Main367/148/9/30 gezielt grün; R4 regulär mit31
+Context/77Document/112Generations PASS und sechs stabilen Inputs abgeschlossen.
+Danach nur eine zusätzliche terminale Helper-Leerzeile entfernt, exakter
+Bytevergleich/Original erhalten; sämtliche gemeinsamen Endgates frisch nötig.
+Zusätzlicher Testhunk-Gegenreview erhält
+alle ursprünglichen NoCommit-/I/O-/Ownership-Orakel und präzisen Fehlercodes.
+Quellgebundene Keep-Nachfahren schließen den Source11-Labelverlustfehler;
+keine globale Wortliste, UI-Flagautorität oder veränderte Quoten/Deadlines.
+Noch offen: gemeinsamer Appcommit/Freeze,
+vier frische lokale Endgates, beide Macconsumer samt Archiv-/Loggegenreviews,
+Windows-ZIP lokal mit Testplan und gemeinsamer GitHub-RC176-Pre-Release.
+Nutzer übernimmt alle Desktoptests; kein Agent-GUI-PASS/neue Automation.
+Details und Grenzen im aktuellen RC176-Abnahmedokument; alte Belege erhalten.
+
+25.10.2026 neuer manueller Abschlussauftrag bis zum Testkandidaten. Kein Desktop-
+Zugriff: Nutzer übernimmt Windows-/Mac-UAT selbst, keine neue Automation.
+Source12-Fix/Reviews/gezielte Gegenfälle sowie neue gemeinsame Gesamt-/Native-/
+Konverter-/Paket-/Mac-Endgates stehen noch aus. Context31 gezielt grün;
+ROUND2 hat reale Integrations-REDs bei held Recovery-/I/O-Grenzen, kein Freigabe-
+PASS. Basisadmission an Capability-Gates verlagern und Originalbindungen vor
+Scans halten; ursprüngliche negative Orakel nicht lockern. Danach neue geprüfte
+Windows-ZIP lokal mit Testplan und beide Macs als gemeinsamer RC176-Pre-Release.
+Agent-GUI ehrlich NOT_RUN, menschliche Abnahme USER_PENDING.
+
+25.10.2026 nach 13:37 UTC: NEUER bestätigter P1 blockiert Source11/0b930f1
+trotz vier grüner lokaler Endgates und beider erfolgreichen Macconsumer.
+Realer Store/API-Pfad: Feldlabel manuell maskieren, neu laden, ursprünglichen
+Feldwert behalten; 11/13 aktuelle synthetische Ketten committen und exportieren
+rohe Qvx/Qvy. Zwei selektive Kontrollen verweigern korrekt; keine GUI-/native
+Initialpublikationsabnahme daraus. Geerbter Fehler, nicht durch alte Grüns
+widerlegt. Beleg 7640b74f…fe58 vollständig gelesen. Nächster Schritt: enges
+Design samt Gegenreview für unveränderliche quellgebundene Vorkommenspflicht
+über Maskierung/Entityänderung/Replay/Restore, dann gezielte echte API-Gegenfälle
+und frische gemeinsame Windows-/Mac-Endbelege. Keine Produktänderung bisher.
+Source11-Archive/FINALs bleiben erhalten, keine Veröffentlichung/Automation.
+
 25.10.2026 nach 12:20 UTC: Source11-Schlussreviews Privacy 3ac674ba…edd24 und
 Architektur a683703e…7c9aa vollständig von Main gelesen. Keine verbleibenden
 bestätigten Deltablocker auf fünf finalen Pins; eigene 367/148/30 und tatsächliche

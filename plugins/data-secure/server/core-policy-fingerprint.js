@@ -52,6 +52,7 @@ const CORE_POLICY_FILES = Object.freeze([
   'privacy/personnel.js',
   'privacy/policy.js',
   'privacy/residual-person-review.js',
+  'privacy/source-field-restoration.js',
   'privacy/spans.js',
   'privacy/structured.js',
   'privacy/transform-plan.js'

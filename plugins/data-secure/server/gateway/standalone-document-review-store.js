@@ -20,6 +20,7 @@ const { syncParentDirectory } = require('../gateway/batch-journal-io');
 const { RESOURCE_LIMITS } = require('../resource-limits');
 const { validateDocumentResult, isDocumentResultReasonCode, GRADES } = require('../core/document-result-grade');
 const entityReview = require('./standalone-entity-review');
+const sourceRestoration = require('../privacy/source-field-restoration');
 const { safeMarkdownOutputNames, validMarkdownInventory } = require('../core/markdown-output-names');
 const { contentOptionsForBatch, validateContentOptions } = require('../core/content-options');
 const { validateReviewPolicy, reviewPolicyForBatch } = require('../core/standalone-review-policy');
@@ -75,6 +76,10 @@ function createDocumentReviewStore(options = {}) {
   // Synchronous, call-local observation only. Never retained across an await or
   // exported as a capability; the mutation rechecks its held observations.
   let recoveryReadContext = null;
+  // Only metadata and source interval indexes, tied to an actual private
+  // journal array owned by one operation. Never retained bodies or a cache
+  // keyed solely by text across requests; every reuse rehashes the fresh basis.
+  const basisAdmissions = new WeakMap();
   // One synchronous, control-locked list/decision operation may share its
   // immutable run manifest and already bound private-store setup. No document,
   // revision, approval or hash result is cached, and no context survives a call.
@@ -567,7 +572,9 @@ function createDocumentReviewStore(options = {}) {
         contentOptionsDigest(context.content_options) !== contentOptionsDigest(contentOptionsForBatch(state))) throw fail('DOCUMENT_REVIEW_CONFLICT');
   }
   function preparedInputs(snapshot) {
-    return candidateVerificationInputs({ snapshot, markdown: snapshot.markdown, ...initialProjection(snapshot) });
+    const value = { snapshot, markdown: snapshot.markdown, ...initialProjection(snapshot) };
+    admitBasis(value);
+    return candidateVerificationInputs(value);
   }
   function preparedOwnerPath(state, item) {
     return path.join(ensurePrivateDirectory(base(), state.token), `prepared-${item.id}.json`);
@@ -823,10 +830,11 @@ function createDocumentReviewStore(options = {}) {
       throw fail('DOCUMENT_REVIEW_CONFLICT');
     }
     const snapshot = reconcile(batchId, documentId, context), dir = directory(batchId, documentId, false, context);
+    if (!basisAdmissions.has(events)) basisAdmissions.set(events, new Map());
     const files = fs.readdirSync(dir).filter(name => /^revision-[0-9]{6}\.json$/u.test(name)).sort();
     if (files.length > 1000) throw fail('DOCUMENT_REVIEW_LIMIT');
     let value = { revision: 0, markdown: snapshot.markdown, output_sha256: snapshot.output_sha256, approved: false,
-      ...initialProjection(snapshot) };
+      ...initialProjection(snapshot, basisAdmissions.get(events)) };
     for (let index = 0; index < files.length; index++) {
       const event = read(path.join(dir, files[index]), context);
       if (files[index] !== `revision-${String(index + 1).padStart(6, '0')}.json` ||
@@ -835,7 +843,7 @@ function createDocumentReviewStore(options = {}) {
           typeof event.approved !== 'boolean' || !valid(event.operation_id, 32) || !valid(event.request_sha256, 64)) throw fail('DOCUMENT_REVIEW_INVALID');
       // Re-derive every edit, not only its claimed hash. A forged revision
       // cannot insert raw source text and then obtain a human approval.
-      const projection = deriveProjection(batchId, value, snapshot, event), markdown = projection.markdown;
+      const projection = deriveProjection(batchId, value, snapshot, event, basisAdmissions.get(events)), markdown = projection.markdown;
       if (markdown.length > RESOURCE_LIMITS.MAX_TEXT_CHARS || Buffer.byteLength(markdown) > MAX_TEXT) throw fail('DOCUMENT_REVIEW_LIMIT');
       if (hash(markdown) !== event.output_sha256 || event.approved !== (event.action === 'approve')) throw fail('DOCUMENT_REVIEW_INVALID');
       value = { ...event, ...projection };
@@ -859,7 +867,7 @@ function createDocumentReviewStore(options = {}) {
           event.revision !== value.revision + 1 || event.parent_sha256 !== value.output_sha256 ||
           event.operation_id !== record.operation_id || event.request_sha256 !== record.request_sha256 || !Array.isArray(event.ranges) ||
           event.approved !== (event.action === 'approve')) throw fail('DOCUMENT_REVIEW_INVALID');
-      const projection = deriveProjection(batchId, value, snapshot, event), digest = hash(projection.markdown);
+      const projection = deriveProjection(batchId, value, snapshot, event, basisAdmissions.get(events)), digest = hash(projection.markdown);
       if (target && digest !== event.output_sha256) throw fail('DOCUMENT_REVIEW_INVALID');
       if (event.revision > 1000 || projection.markdown.length > RESOURCE_LIMITS.MAX_TEXT_CHARS || Buffer.byteLength(projection.markdown) > MAX_TEXT)
         throw fail('DOCUMENT_REVIEW_LIMIT');
@@ -870,11 +878,15 @@ function createDocumentReviewStore(options = {}) {
     // by reopening, polling, recovery, or restarting the application.
     if (value.revision === 0 && snapshot.review_policy === 'automatic-conservative') {
       if (snapshot.transform_trace?.complete !== true) throw fail('DOCUMENT_REVIEW_INVALID');
-      verifyCandidate({ ...value, snapshot }); value.approved = true;
+      try { verifyCandidate({ ...value, snapshot }); value.approved = true; }
+      catch (error) {
+        if (!['DOCUMENT_REVIEW_RESIDUAL_PII', 'DOCUMENT_REVIEW_POLICY_CHANGED'].includes(error?.code)) throw error;
+        value.basisAdmissionError = error.code;
+      }
     }
     return { ...value, snapshot };
   }
-  function initialProjection(snapshot) {
+  function initialProjection(snapshot, admissionCache = null) {
     let entities = null;
     if (purpose(snapshot) === ANONYMIZE && snapshot.transform_trace?.complete === true) {
       if (require('../privacy/transform-plan').replayTransformTrace(snapshot.transform_trace) !== snapshot.markdown)
@@ -884,7 +896,31 @@ function createDocumentReviewStore(options = {}) {
     const weakRanges = snapshot.verification_context?.reviewed_ranges || [];
     if (!Array.isArray(weakRanges) || weakRanges.some(row => !Number.isSafeInteger(row?.start) || !Number.isSafeInteger(row?.end) ||
         row.start < 0 || row.end <= row.start || row.end > snapshot.markdown.length)) throw fail('DOCUMENT_REVIEW_INVALID');
-    return { entities, weakRanges };
+    const applies = snapshot.schema === 'datasecure-document-review/2' && purpose(snapshot) === ANONYMIZE && snapshot.transform_trace?.complete === true;
+    const basisKey = applies ? hash(JSON.stringify(snapshot)) : null;
+    let admission = admissionCache?.get(basisKey), fieldRestoration = null;
+    const projection = { entities, weakRanges, fieldRestoration, basisAdmission: null, basisAdmissionError: null };
+    // Default/restore may contain retained basis text, not only opaque tokens.
+    // Reading only reconstructs the private source model. Admission is checked
+    // at the capability gate, after the caller holds its private originals.
+    // A saved historical passed flag grants nothing, and a newer refusal must
+    // not make the old text disappear before a repair view can read it.
+    if (applies) {
+      try {
+        const policy = require('../core/person-field-policy').personFieldPolicyForContentOptions(snapshot.content_options);
+        if (!admission) admission = { index: sourceRestoration.createSourceIndex(snapshot.transform_trace.canonical_input, policy), error: null, checked: false };
+        fieldRestoration = sourceRestoration.createRestoration(snapshot.transform_trace.canonical_input, snapshot.markdown, policy, admission.index);
+        projection.fieldRestoration = fieldRestoration;
+        projection.basisAdmission = admission;
+        projection.basisAdmissionError = admission.error;
+      } catch (error) {
+        if (!['DOCUMENT_REVIEW_RESIDUAL_PII', 'DOCUMENT_REVIEW_POLICY_CHANGED'].includes(error?.code)) throw error;
+        projection.basisAdmissionError = error.code;
+        admission = { index: admission?.index || null, error: error.code, checked: true };
+      }
+      if (admissionCache) admissionCache.set(basisKey, admission);
+    }
+    return projection;
   }
   function entityKey(batchId, create = false) {
     const file = path.join(ensurePrivateDirectory(base(), batchId), 'entity-key.json');
@@ -893,22 +929,36 @@ function createDocumentReviewStore(options = {}) {
     if (record.schema !== 'datasecure-document-entity-key/1' || !valid(record.key, 64)) throw fail('DOCUMENT_ENTITY_INVALID');
     return Buffer.from(record.key, 'hex');
   }
-  function deriveProjection(batchId, value, snapshot, event) {
+  function deriveProjection(batchId, value, snapshot, event, admissionCache = null) {
     if (event.action === 'entities') {
       if (purpose(snapshot) !== ANONYMIZE || event.ranges.length !== 0) throw fail('DOCUMENT_ENTITY_INVALID');
       const result = entityReview.applyEntityDecisions(value.markdown, value.entities, event.entity_decisions, entityKey(batchId), event.identities);
+      const choices = new Map(event.entity_decisions.map(choice => [choice.entity_id, choice.decision]));
+      const occurrences = new Map(value.entities.map(row => [row.occurrence_id, row]));
+      const keeps = result.edits.flatMap(edit => {
+        const row = occurrences.get(edit.occurrence_id);
+        if (!row) throw fail('DOCUMENT_ENTITY_INVALID');
+        return choices.get(row.entity_id) === 'keep' ? [{ edit, sourceStart: row.source_start, sourceEnd: row.source_end, original: row.original }] : [];
+      });
       return { markdown: result.markdown, entities: result.entities,
+        basisAdmission: value.basisAdmission,
+        basisAdmissionError: value.basisAdmissionError,
+        fieldRestoration: value.fieldRestoration ? sourceRestoration.advanceRestoration(value.fieldRestoration, value.markdown, result.markdown, result.edits, keeps) : null,
         weakRanges: entityReview.relocate(value.weakRanges, result.edits) };
     }
     if (event.entity_decisions !== undefined) throw fail('DOCUMENT_ENTITY_INVALID');
     const markdown = derive(value.markdown, snapshot.markdown, event.action, event.ranges, purpose(snapshot));
-    if (event.action === 'restore_base') return { markdown, ...initialProjection(snapshot) };
+    if (event.action === 'restore_base') return { markdown, ...initialProjection(snapshot, admissionCache) };
     if (event.action === 'redact') {
-      const edits = event.ranges.map(row => ({ ...row, replacement: '[MANUAL_REDACTION]' }));
+      const edits = event.ranges.map(row => ({ ...row, original: value.markdown.slice(row.start, row.end), kind: 'MANUAL_REDACTION', replacement: '[MANUAL_REDACTION]' }));
       return { markdown, entities: value.entities && entityReview.relocate(value.entities, edits, true),
+        basisAdmission: value.basisAdmission,
+        basisAdmissionError: value.basisAdmissionError,
+        fieldRestoration: value.fieldRestoration ? sourceRestoration.advanceRestoration(value.fieldRestoration, value.markdown, markdown, edits) : null,
         weakRanges: entityReview.relocate(value.weakRanges, edits) };
     }
-    return { markdown, entities: value.entities, weakRanges: value.weakRanges };
+    return { markdown, entities: value.entities, weakRanges: value.weakRanges, fieldRestoration: value.fieldRestoration,
+      basisAdmission: value.basisAdmission, basisAdmissionError: value.basisAdmissionError };
   }
   function candidateVerificationInputs(value) {
     if (purpose(value.snapshot) !== ANONYMIZE) return;
@@ -963,8 +1013,23 @@ function createDocumentReviewStore(options = {}) {
       strongPersonAnchor: context.strong_person_anchor === true, originalSourceText: value.snapshot.transform_trace.canonical_input,
       reviewedPersonCandidates: token };
   }
-  function verifyCandidate(value) {
-    const fields = candidateVerificationInputs(value);
+  function admitBasis(value) {
+    if (value.basisAdmissionError) throw fail(value.basisAdmissionError);
+    const admission = value.basisAdmission;
+    if (!admission) return;
+    if (admission.error) throw fail(admission.error);
+    if (admission.checked) return;
+    const basis = { snapshot: value.snapshot, markdown: value.snapshot.markdown,
+      entities: null, weakRanges: value.snapshot.verification_context?.reviewed_ranges || [] };
+    try { verifyResidual(basis, candidateVerificationInputs(basis)); admission.checked = true; }
+    catch (error) {
+      if (['DOCUMENT_REVIEW_RESIDUAL_PII', 'DOCUMENT_REVIEW_POLICY_CHANGED'].includes(error?.code)) {
+        admission.error = error.code; admission.checked = true;
+      }
+      throw error;
+    }
+  }
+  function verifyResidual(value, fields) {
     if (!fields) return;
     let residual;
     try { residual = require('../pii-engine').scanResidual(value.markdown, fields.profile, fields.dictionary, {
@@ -975,6 +1040,13 @@ function createDocumentReviewStore(options = {}) {
       throw error;
     }
     if (residual.length) throw fail('DOCUMENT_REVIEW_RESIDUAL_PII');
+  }
+  function verifyCandidate(value) {
+    const fields = candidateVerificationInputs(value);
+    if (!fields) return;
+    admitBasis(value);
+    verifyResidual(value, fields);
+    if (value.fieldRestoration) sourceRestoration.assertRestoration(value.fieldRestoration, value.markdown);
   }
   function derive(text, original, action, ranges, mode = ANONYMIZE) {
     if (['approve', 'revoke'].includes(action) && ranges.length === 0) return text;
@@ -1003,7 +1075,18 @@ function createDocumentReviewStore(options = {}) {
   function reviewOriginal(value) {
     return value.snapshot.transform_trace?.complete ? value.snapshot.transform_trace.canonical_input : value.snapshot.original_text;
   }
-  function metadata(value, context = null) { return { document_id: value.snapshot.document_id, name: value.snapshot.name,
+  function metadata(value, context = null) {
+    if (context && value.fieldRestoration) {
+      try { sourceRestoration.assertRestoration(value.fieldRestoration, value.markdown); }
+      catch (error) {
+        if (error?.code !== 'DOCUMENT_REVIEW_RESIDUAL_PII') throw error;
+        // Call-local private observation only: not an IPC or persisted verdict.
+        // Historical unsafe text stays readable so the held repair path can
+        // assess the exact current private vector even after an old native ACK.
+        context.sourceRestorationUnsafe = true;
+      }
+    }
+    return { document_id: value.snapshot.document_id, name: value.snapshot.name,
     processing_mode: purpose(value.snapshot),
     revision: value.revision, output_sha256: value.output_sha256, approved: value.approved,
     ...(value.snapshot.review_policy ? { review_policy: value.snapshot.review_policy,
@@ -1923,6 +2006,12 @@ function createDocumentReviewStore(options = {}) {
     try {
       recoveryReadContext = context;
       observeRecoveryDirectory(context, context.runDirectory.path);
+      // The new basis admission also invokes the real scanner. Retain these
+      // original objects before ANY such call, not only after the loop, so an
+      // equal-byte swap during admission cannot become a newly adopted owner.
+      const privateRoot = options.dataRoot || dataRoot();
+      observeRecoveryFile(context, path.join(privateRoot, 'result-publication-bindings', `${batchId}.json`));
+      observeRecoveryFile(context, path.join(privateRoot, 'result-export-state', `re_${hash(batchId).slice(0, 32)}.json`));
       events = journal(batchId, context); // missing mirrors remain RAM-only here
       const members = publishedMembership(batchId, runManifest(batchId, true, context), context);
       if (JSON.stringify(members.map(row => row.document_id).sort()) !==
@@ -2005,7 +2094,7 @@ function createDocumentReviewStore(options = {}) {
       if (inspection) {
         inspection.context.repairAssessment = null;
         inspection.context.pendingMetadataAssessment = null;
-        if (state === 'pending') {
+        if (state === 'pending' || state === 'current' && initial.processing_mode === ANONYMIZE && inspection.context.sourceRestorationUnsafe === true) {
           const assessment = privatePublicationAssessment(batchId, documents, initial, records, inspection,
             inspection.context.metadataDecision === true);
           const repair = assessment?.binding ? assessment : null;

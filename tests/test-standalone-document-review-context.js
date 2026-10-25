@@ -108,7 +108,7 @@ test('a traced content-bound selection shares only run facts, with fresh replay 
     assert.equal(manifestReadCount(f, () => assert.ok(f.store.decideBatch(f.batchId, request).documents.every(row => row.approved))), 3,
       'one manifest shared with journal validation, validation before commit, and validation before the response');
   } finally { engine.scanResidual = scan; }
-  assert.equal(residualChecks, 2, 'both actual traced candidates still run the real residual detector');
+  assert.equal(residualChecks, 4, 'both immutable bases are admitted and both actual candidates run the real residual detector');
   const listed = f.create().list(f.batchId);
   assert.ok(listed.documents.every(row => row.approved && row.revision === 1));
   const first = listed.documents[0];
@@ -334,6 +334,55 @@ test('terminal capture rechecks the original manifest object after sharing it wi
     fs.writeFileSync(file, original, { flag: 'wx' });
   }, () => assert.throws(() => f.store.captureRun(f.state), error => error.code === 'DOCUMENT_REVIEW_CONFLICT'));
   assert.ok(fs.readFileSync(file).equals(original), 'equal bytes do not authorize adoption of a replacement object mid-call');
+});
+
+test('independent source-duty reader binds raw owners instead of equal values or detector kinds', () => {
+  const m=require('../plugins/data-secure/server/privacy/source-field-restoration');
+  const source='😀\r\n> 1. Name \\(1\\)\\: Qvx / Qvy\rUnternehmen: Nordstern GmbH\nFachtext: Qvx / Qvy';
+  const ranges=m.sourceIntervals(source),inside=token=>ranges.some(range=>range.start<=token.start&&range.end>=token.end);
+  const first=source.indexOf('Qvx'),last=source.lastIndexOf('Qvx');
+  assert.equal(inside({start:first,end:first+3}),true);assert.equal(inside({start:last,end:last+3}),false);
+  assert.ok(ranges.every((row,index)=>source.slice(row.start,row.end).isWellFormed()&&(!index||ranges[index-1].end<=row.start)));
+  for(const text of ['Rufen Sie Frau Anna Berger an unter: Qvx / Qvy',
+    '| Rufen Sie Frau Anna Berger an unter | Fachtext |\n| --- | --- |\n| Qvx / Qvy | HTTP/2 |',
+    '| Inhalt | Fachtext |\n| --- | --- |\n| Formel: "A\\|B"<br>Gespeicherter Wert: Telefon (Format=XX): Qvx\rQvy | HTTP/2 |']) {
+    const actual=m.sourceIntervals(text);assert.ok(actual.some(row=>text.slice(row.start,row.end).includes('Qvx')));
+    if(text.includes('Anna'))assert.ok(actual.some(row=>text.slice(row.start,row.end).includes('Anna')));
+  }
+  assert.equal(m.sourceIntervals('Telefon (Weitere Angaben): Qvx').some(row=>row.start<24),false,'weak annotation is not a callee');
+});
+
+test('actual raw Keep descendants survive disabling/partial masks and disappear after complete byte replacement', () => {
+  const m=require('../plugins/data-secure/server/privacy/source-field-restoration'),source='😀\nTelefon: Qvx / Qvy\nFachtext: Qvx / Qvy';
+  const valueStart=source.indexOf('Qvx'),basis=source.slice(0,valueStart)+'[FIELD_REDACTED]'+source.slice(valueStart+9);
+  let token=m.createRestoration(source,basis,'content-person-fields/1');assert.equal(m.assertRestoration(token,basis),true);
+  const edit={start:valueStart,end:valueStart+16,original:'[FIELD_REDACTED]',replacement:'Qvx / Qvy',kind:'PERSON',occurrence_id:'occ_000001'};
+  const kept=require('../plugins/data-secure/server/privacy/transform-plan').applyEdits(basis,[edit]);
+  token=m.advanceRestoration(token,basis,kept,[edit],[{edit,sourceStart:valueStart,sourceEnd:valueStart+9,original:'Qvx / Qvy'}]);
+  assert.throws(()=>m.assertRestoration(token,kept),{code:'DOCUMENT_REVIEW_RESIDUAL_PII'});
+  const mask={start:valueStart,end:valueStart+3,original:'Qvx',replacement:'[MANUAL_REDACTION]',kind:'MANUAL_REDACTION'};
+  const partly=require('../plugins/data-secure/server/privacy/transform-plan').applyEdits(kept,[mask]);
+  const partial=m.advanceRestoration(token,kept,partly,[mask]);assert.throws(()=>m.assertRestoration(partial,partly),{code:'DOCUMENT_REVIEW_RESIDUAL_PII'});
+  const rest=partly.indexOf('Qvy'),last={start:rest,end:rest+3,original:'Qvy',replacement:'[MANUAL_REDACTION]',kind:'MANUAL_REDACTION'};
+  const repaired=require('../plugins/data-secure/server/privacy/transform-plan').applyEdits(partly,[last]);
+  const complete=m.advanceRestoration(partial,partly,repaired,[last]);assert.equal(m.assertRestoration(complete,repaired),true);
+  assert.ok(repaired.endsWith('Fachtext: Qvx / Qvy'),'equal factual source occurrence outside the actual owner survives');
+  assert.throws(()=>m.assertRestoration(complete,repaired+'x'),{code:'DOCUMENT_REVIEW_INVALID'});
+  assert.throws(()=>m.advanceRestoration(token,kept,kept,[],[{edit:{...edit},sourceStart:0,sourceEnd:9,original:'Qvx / Qvy'}]),{code:'DOCUMENT_REVIEW_INVALID'});
+});
+
+test('source markers, raw escaped cells and fragmented descendants keep bounded exact UTF16 lineage', () => {
+  const m=require('../plugins/data-secure/server/privacy/source-field-restoration'),source='Name: [PERSON_DENISEKOCH]\nName: [FIELD_REDACTED]';
+  const ranges=m.sourceIntervals(source);assert.ok(ranges.some(row=>source.slice(row.start,row.end).includes('DENISEKOCH')));
+  assert.equal(ranges.some(row=>source.slice(row.start,row.end).includes('FIELD_REDACTED')),false,'fixed source token has no variable payload');
+  assert.throws(()=>m.createRestoration('x'.repeat(8_000_001),'','content-person-fields/1'),{code:'DOCUMENT_REVIEW_INVALID'});
+  const raw='Name: '+('Q'.repeat(4096)),basis='Name: [FIELD_REDACTED]',first={start:6,end:22,original:'[FIELD_REDACTED]',replacement:raw.slice(6),kind:'SENSITIVE_FIELD'};
+  let state=m.createRestoration(raw,basis,'content-person-fields/1');state=m.advanceRestoration(state,basis,raw,[first],[{edit:first,sourceStart:6,sourceEnd:raw.length,original:raw.slice(6)}]);
+  const edits=Array.from({length:500},(_,index)=>({start:6+index*8,end:7+index*8,original:'Q',replacement:'[MANUAL_REDACTION]',kind:'MANUAL_REDACTION'}));
+  const after=require('../plugins/data-secure/server/privacy/transform-plan').applyEdits(raw,edits);
+  const projected=m.advanceRestoration(state,raw,after,edits);assert.throws(()=>m.assertRestoration(projected,after),{code:'DOCUMENT_REVIEW_RESIDUAL_PII'});
+  const all={start:6,end:after.length,original:after.slice(6),replacement:'[MANUAL_REDACTION]',kind:'MANUAL_REDACTION'};
+  const final=require('../plugins/data-secure/server/privacy/transform-plan').applyEdits(after,[all]);assert.equal(m.assertRestoration(m.advanceRestoration(projected,after,final,[all]),final),true);
 });
 
 done(() => safeRemovePrivateTree(path.dirname(root), path.basename(root)));

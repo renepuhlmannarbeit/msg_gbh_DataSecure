@@ -1,5 +1,56 @@
 # Aktueller Iststand · 3.2.0-rc176
 
+25.10.2026 nach17:31UTC: Source12-Produktdelta stabil und von Main sowie zwei
+unabhängigen tatsächlichen Fachreviews gelesen; kein bestätigter neuer
+Deltablocker. Quellgebundene starke Wertreste bleiben nach Labelmaskierung,
+Keep, Replay und Teilmaskierung geschützt. Echte schwache Annotationen und
+unabhängige Sachwerte bleiben selektiv; historische Reparatur nur bei gültiger
+sicherer Basis. Kein pauschales Rehabilitieren unsicherer Altprofile.
+Main367/148/9/30 gezielt PASS/stabil, ursprüngliche13 Angriffsketten verweigert;
+R4 regulär17:37:58.670UTC mit31Context/77Document/112Generations PASS und allen
+sechs Inputs unverändert beendet, eigene Prozesse geschlossen. R4-Testhunks
+separat ohne bestätigte Abschwächung gegengelesen. Noch kein neuer Commit/Freeze.
+Nach R4 nur genau eine zusätzliche Helper-EOF-Leerzeile entfernt, Original und
+exakter Bytevergleich erhalten; keine semantische Änderung, frische Endgates nötig.
+Kandidat 407cb28589025f276d8c0139d7f0e8c0d402fc8211c63ec5c62a4d3ce01683d3/369;
+621 Tests/Scripts c4233d4f676e2b7539540ad17edb023bd22306cdf7fcd7ce3e672c7658f6c2ff.
+Nach Abschluss frische vollständige gemeinsame Windows-/Mac-/Paketbelege und
+RC176-Testübergabe erforderlich. Desktop ausschließlich beim Nutzer, Agent
+NOT_RUN/USER_PENDING; keine Automation, Mainintegration oder Apple-Signierung.
+
+25.10.2026 manuell erneut fortgesetzt: Nutzer beauftragt Abschluss bis zum
+Testkandidaten mit Implementierung, Gegenreviews und automatischen Prüfungen.
+Desktoptests macht ausschließlich der Nutzer; keine Desktopsteuerung, GUI-
+Starts/Neustarts oder neue Automation. Source12 ist ungecommitted, noch nicht
+eingefroren und nicht freigabefähig. Enger Source-Restoration-Fix in Arbeit;
+Context31 grün, aber ROUND2 Dokument-/Generationsfälle noch rot. Die neue frühe
+Basisprüfung verändert gehaltene Recovery-/Fehlergrenzen und wird kausal
+korrigiert; bestehende Swap-/I/O-/Ownership-Negative bleiben verbindlich.
+Keine neue ZIP/Commit-/Mac-/Releasefreigabe aus den Vorabtests ableiten.
+
+Der getrennte Source11-Altstand wurde nur zur synthetischen Reproduktion
+gestartet; physisches Escape stoppte den ersten Auswahlklick. Keine Verarbeitung,
+Maskierung oder native Reparatur beobachtet. Fenster/Profil beim Nutzer belassen,
+ausdrücklich kein neuer Testkandidat. Source12 Desktopstatus bleibt NOT_RUN/
+USER_PENDING. Alle alten Pakete, Belege und Nutzerläufe erhalten.
+
+25.10.2026 nach 13:37 UTC: Source11/0b930f167411cc6aadda3d46696776fdeefb31d2
+ist trotz vier grüner/stabiler lokaler Endgates und beider erfolgreicher Macs
+NICHT freigabefähig. Neue tatsächliche Store-API-Ketten bestätigen einen
+geerbten P1: Zusätzliche Maskierung einer Feldbeschriftung kann die ursprüngliche
+Schutzpflicht ihres Werts verlieren; anschließendes Keep schreibt Qvx/Qvy roh.
+13 aktuelle synthetische Ketten, 11 reale rohe Commits/Exporte, zwei korrekte
+Verweigerungen, keine Harnessfehler. Keine native GUI-/Initial-ACK-Ausführung
+behauptet. Report 7640b74f3eda07a782e65a6235861bb11a7af7344c9a773af6b48f927c90fe58
+von Main vollständig gelesen. Design zur unveränderlichen quellgebundenen
+Vorkommenspflicht in Arbeit; noch keine Produktkorrektur oder neue Freigabe.
+
+Alle Source11-Jobs regulär beendet; keine Reruns nötig. Main las außerdem den
+vollständigen Intel-Log-/beidseitigen Artefaktgegenreview 28af21ca…8973: keine
+bestätigte CI-/Artefaktbindungsabweichung, kein Gegenbeweis gegen diesen P1.
+Kein Source11-Snapshot/GUI-Start/lokale RC176-Übergabe/Tag/Release. Alte Belege
+und Pakete unverändert erhalten. Keine Automation/Mainintegration.
+
 25.10.2026 nach 12:20 UTC: Beide unabhängigen Source11-Schlussreviews vollständig
 von Main gelesen (Privacy 3ac674ba…edd24; Architektur a683703e…7c9aa). Kein
 weiterer bestätigter Deltablocker auf den fünf finalen Pins. Main 367/148/30

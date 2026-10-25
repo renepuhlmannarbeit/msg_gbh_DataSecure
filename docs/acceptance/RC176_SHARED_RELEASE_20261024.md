@@ -1,5 +1,99 @@
 # RC176 – priorisierte Inhalts- und Grafikverbesserungen
 
+## Source12: Schlussreview der Quellen abgeschlossen · 25.10.2026 nach 17:31 UTC
+
+Die drei Produktdateien sind stabil: source-field-restoration.js
+b97ba9492ff3addbbb78489be12500e61817253c5da382c7861dc4e0dd600927,
+standalone-document-review-store.js
+edbc1fbd65647bb195fcd57c56389743b2437f8b253b451d1f9101ed0d02110f,
+core-policy-fingerprint.js
+9b378f46078937dd5de8c51020f73246b87a37dcc3d99fb510df67aabe5c272e.
+Die tatsächliche gemeinsame Runtime sammelt den neuen Helper ein; er ist auch
+in den 49 expliziten Policyinputs registriert. Keine neue Plattform-/Apple-API.
+
+Ursprüngliche starke Feld-/Callee-Werte werden unabhängig aus dem unveränderten
+Quelltrace abgeleitet. Echte Keep-Edits verfolgen ihre wiederhergestellten
+UTF16-Teilbereiche durch weitere Maskierungen und Replay. Entfernte Labels,
+Teilmaskierungen oder geänderte Entitytypen erteilen keine neue Freigabe.
+Unabhängige gleiche Sachwerte und tatsächlich schwache Annotationen bleiben
+selektiv. Basisadmission und aktueller Restcheck sind getrennte Pflichtgates;
+historische Texte bleiben lesbar. Reparatur bestehender unsafe-Keeps gilt nur
+bei gültiger sicherer Ausgangsbasis, nicht für beliebige unsichere Altprofile.
+Öffentliche Arbeitskopien und alte private Belege werden dabei nicht verändert.
+
+Main las die vollständige Implementierung und beide tatsächlichen unabhängigen
+Schlussreviews: Privacy e1e980fc…98e209, Architektur afc8b727…9837c8. Eigene
+367 Prosa-/148 Tabellen-/9 Produktpolicy-/30 Dokumentationsfälle PASS/stabil.
+Die ursprünglichen 13 realen Angriffsketten verweigern alle Keeps ohne Commit;
+zusätzliche unabhängige Store-/Export-/Replay-/Repair-/Owner-/UTF16-Proben grün.
+Die R4-Testhunks sind separat gegengelesen (1dd6ce03…2cd07f6): ursprüngliche
+Tauschnegative/NoCommit/0nativeCalls unverändert, exakte frühe/späte Fehlercodes
+und vollständige vorherige Metadatavektoren statt falscher Rev0-Annahme.
+
+Autor R4 ist regulär beendet, 17:37:58.670 UTC: Context31/31, Document77/77 und
+Generations112/112 PASS, alle sechs Inputs unverändert, sämtliche Kinder beendet.
+Main las die tatsächliche ROUND4.json mit allen Exit0-/Signalnull-/Hashwerten.
+Danach ausschließlich eine zusätzliche abschließende Leerzeile des neuen Helpers
+entfernt: 21016→21015 Bytes, alter c6cd9f55…ce6c447 entspricht exakt neu+LF.
+Original/Bytevergleich in EOF-NORMALIZATION.json erhalten, Syntax grün; keine
+semantische Änderung. Frische gemeinsame Endgates laufen auf dem neuen Hash.
+Noch kein neuer Appcommit, Freeze oder neues Paket.
+Gemessener Kandidat 407cb28589025f276d8c0139d7f0e8c0d402fc8211c63ec5c62a4d3ce01683d3/369;
+621 Test-/Scriptinputs c4233d4f676e2b7539540ad17edb023bd22306cdf7fcd7ce3e672c7658f6c2ff.
+Erst nach Abschluss: gemeinsamer Commit, neue vollständige lokale Endgates und
+beide Macconsumer, tatsächliche neue Archive prüfen, RC176-Übergabe/Pre-Release.
+Desktoptests ausschließlich Nutzer: Agent NOT_RUN, menschliche UAT USER_PENDING.
+Keine neue Automation, Mainintegration oder Developer-ID/Notarisierung.
+
+## Erneuter manueller Abschlussauftrag, Desktop beim Nutzer · 25.10.2026
+
+Nutzer verlangt Implementierung/Prüfabschluss/Reviews bis zum Testkandidaten;
+Desktoptests macht er selbst. Keine weitere GUI-Steuerung, Starts/Neustarts,
+Altprofil-Reparaturbedienung oder neue Automation. Der isolierte Source11-
+Altstart blieb nach physischem Escape ohne beobachteten Verarbeitungslauf;
+keine native Fehlerreproduktion oder Source12-Desktopabnahme daraus ableiten.
+Source12-GUI bleibt NOT_RUN, Windows/Mac-Zielhostabnahme USER_PENDING.
+
+Source12 ist noch ungecommitted/nicht eingefroren. Neuer reiner quellgebundener
+Keep-Nachfahrenhelper, Storeintegration und Fingerprintregistrierung in Arbeit.
+Context31 gezielt grün; ROUND2 tatsächliche Dokument-/Generationsprüfungen rot,
+Inputs stabil. Frühe Basis-Scans verschieben gehaltene Recovery-Beobachtungen
+und Fehlerbehandlung. Enger kausaler Fix läuft: historische Rekonstruktion
+lesbar lassen, Basisadmission erst an neuer Capability, private Originalbindung
+vor Scans beobachten. Keine Assert-/I/O-/Ownership-Abschwächung. Erst geeigneter
+stabiler Fix mit unabhängigen tatsächlichen Gegenreviews erlaubt neue gemeinsame
+Bindungen, frische Windows-/Mac-Endgates und Pakete. Source11 bleibt gesperrt.
+
+## Source11 gesperrt: quellgebundene Feldpflicht bei Nachbearbeitung · 25.10.2026 nach 13:37 UTC
+
+Common App 0b930f167411cc6aadda3d46696776fdeefb31d2, FP
+589b4015c8ad68277859df3bc63668a85b45ab65787b9f5895c3e506266b25b2/368,
+621 Test-/Scriptinputs 51c20b51f993097fc317fce16a959e4af9b47ac67e221b83331b1de8b4ef2b88.
+Alle vier lokalen Endgates PASS/inputs_unchanged:true; Headless318+11 endete
+13:12:51.559 UTC. Beide Macjobs in40192814346 SUCCESS; tatsächliche VERIFYs
+und unabhängig vollständig gelesene Logs/Bytes passen. Main las zuletzt
+28af21ca00342efed93202a8f18b356c40cdb8df40d48da349b1cf6845cf8973 vollständig.
+Das bestätigt Paketbindung, nicht die Sicherheit einer neuen Nachbearbeitung.
+
+Report dist/rc176-source11-manual-label-keep-diagnosis-20261025/REVIEW.md,
+SHA7640b74f3eda07a782e65a6235861bb11a7af7344c9a773af6b48f927c90fe58,
+belegt 13 reale aktuelle synthetische Store-Ketten: zuerst Label-/Teilmarker-
+Maskierung, dann frischer Store/Entity-Keep/Approve/Export. 11 Commit-/Export-
+Ergebnisse enthalten rohe geschützte Qvx/Qvy; zwei rollenbewahrende Kontrollen
+verweigern unverändert korrekt. Der alte Drei-Modulvergleich bestätigt einen
+geerbten Fehler. Kein realer Nutzerlauf, GUI, nativer Initialpublisher oder ACK
+wurde simuliert oder als bestanden ausgegeben. Originale und Evidenzen erhalten.
+
+Ursache: aktuelle Labelrekonstruktion verliert eine bereits belegte Feldpflicht
+nach legitimer zusätzlicher Maskierung. Design muss diese tatsächliche
+ursprüngliche Vorkommenspflicht unabhängig durch echte Trace-/Journaloperationen
+erhalten; keine globale Wortliste, current_kind- oder covered-Flag-Autorität.
+Schwache Annotation-Keeps und unabhängige gleiche Sachwerte bleiben selektiv.
+Designreview steht an; noch keine Implementierung/Fixfreigabe. Source11 trotz
+grüner Gates nicht veröffentlichen, keinen Snapshot/GUI/Tag/Release erzeugen.
+Neue geeignete Produktbytes brauchen neue gemeinsame Belege und Pakete.
+Keine Automation/Mainintegration/Apple-Signierungs- oder Rechteänderung.
+
 ## Source11 Quellenabschluss · 25.10.2026 nach 12:20 UTC
 
 Beide unabhängigen tatsächlichen Schlussreviews sind abgeschlossen und von Main
