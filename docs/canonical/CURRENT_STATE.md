@@ -1,4 +1,27 @@
-# Aktueller Iststand
+# Aktueller Iststand · 3.2.0-rc176
+
+NeuesterStand25.10.nach05:08UTC: Source08/dbd10a617d5277f0d2681cbf1b0ad12866a5a8b4
+hat Native300Rust/3ignoriert/Clippy/Integration/Release, achtKonvertersuiten
+(75Worker-/55Officegruppen) und fünfPaketgates/100MD0Fehler PASS/stabil.
+Gemeinsamer FPdccad717d3e3ae4dbcd00c882b11fc5d8d476a90bd3f4808b34fa1ca456e8ab0/368,
+621Test-/Scriptinputs/a5a0d5c6…. WindowsZIP44401271…/EXEa13ee3e9… bleibt
+unveröffentlichter Zwischenstand, keine neue Desktopbedienung gestartet.
+
+Headless05:03:30.434UTC tatsächlichROT187/318+0/11/inputs_unchanged=true:
+Dokumentationsvertrag188 verlangt die Paketversion in den ersten8Kopfzeilen.
+Main hatte durch vorgeschobene Statusabsätze die vorhandene Versionszeile
+versehentlich nach unten verschoben. Enger Fix: Versionsangabe direkt im Titel,
+keine Test-/Produkt-/Guard-/Timeoutänderung. Alte roteFINAL73a0a83b… und Log
+b1b2484a… bleiben erhalten. Vor neuer Gesamtprüfung zunächst gezielten echten
+Dokumentationsvertrag prüfen; neuer gemeinsamer Source09-Commit/Frischbelege nötig.
+
+Source08ARM121075886326 SUCCESS04:52:48UTC, tatsächlicher vollständiger
+unabhängiger Logreview345425e1…/c5f5b1fe… von Main gelesen, keine bestätigten
+ARM-Logblocker. Intel121075886367 im alten Run40162182828 nach dem bestätigten
+lokalenDokumentationsfehler gezielt cancelled, Run vollständig beendet.
+Keine neue Source08GUI/SourceSnapshot/lokaleÜbergabe/Tag/Release/Mainintegration.
+Historische Source07-Staging-/Installationsverlustursachen weiter unbewiesen;
+Diagnostik bleibt eng und Schutzprüfungen unverändert. Menschliche UAT offen.
 
 NeuesterStand25.10.nach04:18UTC: Source07/6ebe37fe5e8de5f2e110448455212efbfbe8cd4e
 ist NICHT freigabefähig. FPbcaefae9…/368,621Test-/Scriptinputs/2c2f47bf…;
