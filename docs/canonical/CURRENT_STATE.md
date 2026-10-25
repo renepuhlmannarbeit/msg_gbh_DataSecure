@@ -1,5 +1,49 @@
 # Aktueller Iststand · 3.2.0-rc176
 
+25.10.2026 nach 12:20 UTC: Beide unabhängigen Source11-Schlussreviews vollständig
+von Main gelesen (Privacy 3ac674ba…edd24; Architektur a683703e…7c9aa). Kein
+weiterer bestätigter Deltablocker auf den fünf finalen Pins. Main 367/148/30
+gezielt PASS/stabil; tatsächliche unabhängige Publikations-/Keep-/Trace-/Owner-
+und Laufzeitgegenproben bestanden. Geeignet für neuen gemeinsamen Appcommit,
+Freeze und frische vollständige Windows-/Mac-/Paket-/Desktopbelege. Diese neuen
+Endgates und RC176-Übergabe stehen noch aus; keine alte Source10-Abnahme
+übernehmen. Keine Automation/Mainintegration/Developer-ID oder Notarisierung.
+
+25.10.2026 12:03 UTC: Source11 gezielt stabil, noch nicht eingefroren. Autor und
+Main 367/367 Prosa + 148/148 Tabellen PASS; Main 30/30 Dokumentation PASS,
+alle fünf Produkt-/Testinputs unverändert. Main hat alle Deltas und Bericht
+e825093216843028dd879ab505c860c2304ef3fccd53ecbcde25765096852a1d gelesen.
+Die alten 72/84 API-Ketten beim Autor: 156 echte Publikationen ohne gemessene
+Offenlegung, alle 156 Wert-Keeps verweigert und 36 benigne Kontrollen erhalten.
+Ganzes belegtes Callee-Masking korrigiert Mixed-Reste und echte reversible
+Titel-/Entity-Teilgrenzen; konservativ FIELD_REDACTED, keine neue Identität.
+Klammern bleiben im normalen Detektor-/Reviewmodell. Marker verstärken nur
+Wertschutz; Rohbindung, Imported-Marker- und unabhängige Keepprüfung bleiben.
+
+Gemessener Kandidat 589b4015c8ad68277859df3bc63668a85b45ab65787b9f5895c3e506266b25b2/368;
+621 Test-/Scriptinputs 51c20b51f993097fc317fce16a959e4af9b47ac67e221b83331b1de8b4ef2b88.
+Zwei unabhängige Schlussreviews laufen auf den fünf finalen Pins. Neuer gemeinsamer
+Commit, Freeze, vollständige Endgates/Macs/Pakete/neue Desktopbelege und RC176-
+Übergabe stehen noch aus. Source10 bleibt gesperrt und unverändert erhalten.
+Keine Automation/Mainintegration, keine Developer-ID/Notarisierung. Zielhost-UAT
+bleibt USER_PENDING. Details im aktuellen RC176-Abnahmedokument und Source11-Kit.
+
+25.10.2026 nach11:03UTC: Source10/239640f07c115cbd46f329e11be2a943511bf714
+ist trotz vier tatsächlich grüner/stabiler lokaler Endgates NICHT freigabefähig.
+Zusätzliche echte API-Gegenproben belegen Call-/Klammer-Metadatenlecks und einen
+neuen Verlust der Wertpflicht nach Callee-Maskierung. Keine ZIP-Übergabe/GUI/Tag/
+Release. Mac40183705137 gezielt abgebrochen, tatsächlich CANCELLED. Alle lokalen
+Sessions51209/16907/20768/76561 regulär beendet. Keine Belege umgeschrieben.
+
+Main las vollständige unabhängige Reports2702d471…/6a51e838…:72Call-Konfigurationen
+mit32 geerbten Namenslecks und8 neuen Inline-Qvx/Qvy-Wertlecks (Altmodul0), sowie
+84Klammerfälle mit40 Namenslecks/alle84Werte geschützt/36benigneKontrollenlesbar.
+Der geprüfte enge Plan454a5b20… plus Gegenreview8fed80b5… trennt statische
+Labelsyntax, dynamische Slots und volle Wertpflicht. Implementierung nach
+Jobabschluss in base/FVC/engine+zweiFeldtests freigegeben; noch kein Fix-PASS.
+Source11-Helferkit nur vorbereitet/PENDING, keine neuen Endgates. Neue gemeinsame
+Bindungen, Gesamt-/Mac-/Paket-/Desktopbelege erforderlich. Keine Automation/Mainintegration.
+
 25.10.2026 nach10:09UTC: finale Privacy-/Architekturquellenreviews0680aed0…/
 b58347db… vollständig von Main gelesen, kein bestätigter Deltablocker auf den
 finalen vier Pins. 247Prosa/141Tabellen/30Docs gezielt grün; geeignet für neuen

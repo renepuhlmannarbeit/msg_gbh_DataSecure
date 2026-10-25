@@ -1,5 +1,43 @@
 # Aktives Entwicklungsbacklog · 3.2.0-rc176
 
+25.10.2026 nach 12:20 UTC: Source11-Schlussreviews Privacy 3ac674ba…edd24 und
+Architektur a683703e…7c9aa vollständig von Main gelesen. Keine verbleibenden
+bestätigten Deltablocker auf fünf finalen Pins; eigene 367/148/30 und tatsächliche
+unabhängige Publish-/Keep-/Trace-/Owner-/Laufzeitproben grün. Nächster Schritt:
+neuer gemeinsamer Commit/Freeze, vier vollständige lokale Endgates, beide Macs,
+neue Paket-/Desktopbelege, lokale Windows-Übergabe und GitHub-Pre-Release.
+Keine alten Belege umetikettieren, keine neue Automation oder Mainintegration.
+
+25.10.2026 12:03 UTC: Source11 Rollenfix gezielt 367/367 Prosa und 148/148 Tabellen
+bei Autor und Main PASS/stabil, Main zusätzlich 30/30 Dokumentation. Main las
+vollständige Deltas und Autorenbericht e8250932…52a1d. Alte 72/84 Gegenketten:
+156 tatsächliche Publikationen ohne gemessene Offenlegung, 156 verweigerte
+Wert-Keeps, 36 erhaltene benigne Kontrollen. Mixed-Callee und echte generierte
+Titel-Teilgrenze durch vollständigen quellengebundenen generischen Callee-Edit
+korrigiert; keine Traceheuristik oder Keep-Ausnahme. Statische Metadata,
+dynamische Slots und vollständige Wertpflicht getrennt, Originalgrammatik
+bytegleich, beliebige Klammerannotation kein pauschaler Schutz- oder Safe-Waiver.
+
+Kandidat 589b4015c8ad68277859df3bc63668a85b45ab65787b9f5895c3e506266b25b2/368,
+621 Test-/Scriptinputs 51c20b51f993097fc317fce16a959e4af9b47ac67e221b83331b1de8b4ef2b88.
+Offen: zwei laufende unabhängige Schlussreviews lesen; danach neuer gemeinsamer
+Commit/Freeze, sämtliche frischen lokalen und Mac-Endgates, neue Pakete,
+Desktopvergleich und geeignete lokale/GitHub-Übergabe. Source10-REDs/Grüns und
+alte Pakete bleiben erhalten. Keine neue automatische Aufgabe/Mainintegration.
+
+25.10.2026 nach11:03UTC: Source10 trotz318+11Headless/300Rust3ignoriert/
+8Konvertersuiten/5Paketgates PASS/stabil NICHT veröffentlichen. Neue tatsächliche
+Call-/Klammer-Gegenreviews2702d471…/6a51e838… bestätigen Namens-Metadatenlecks
+und8 neue rohe Inline-Feldwerte nach Callee-Maskierung. Mac40183705137 CANCELLED;
+alle lokalen Freezejobs regulär beendet, Originalbelege erhalten, kein GUI/Release.
+Enger gemeinsamer Rollenplan454a5b20… unabhängig8fed80b5… gegengelesen und nach
+Quieszenz zur Implementierung in base/FVC/engine+zweiFeldtests freigegeben. Feste
+Syntax, dynamische Namen/Klammerdaten und vollständige Wertpflicht trennen,
+gerenderte Marker nur für stärkeren Schutz, niemals als Identitäts-/Keep-Autorität.
+72/84 Originalmatrizen sowie Teilmarker/langeMarker und Delimiter in Slots als
+Abnahmeobligation. Neue Source11-Quellenreviews/Commit/Freeze/alle Endgates/
+Macs/GUI/Übergabe folgen erst nach geeignetem Fix. Keine neue Automation/Mainintegration.
+
 25.10.2026 nach10:09UTC: beide finalen unabhängigen Quellen-/Deltagegenreviews
 0680aed0…/b58347db… von Main vollständig gelesen; kein bestätigter Deltablocker.
 Gezielte247Prosa/141Tabellen/30Docs bestanden. Jetzt neuer gemeinsamer Commit/

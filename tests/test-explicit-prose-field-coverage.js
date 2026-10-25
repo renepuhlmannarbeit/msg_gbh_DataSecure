@@ -266,6 +266,97 @@ test('a comparison-only person hypothesis without a raw caption match cannot bec
     import('../native/markdown/pilot/node_modules/mdast-util-from-markdown/index.js'),
     import('../native/markdown/pilot/node_modules/parse5/dist/index.js')]);
   const neutralTable = value => `| Inhalt | Fachtext |\n| --- | --- |\n| ${value} | FHIR REST 31415 |`;
+  // These are actual source/parser -> review -> publication/trace chains,
+  // including real long entity replacements. A mask's syntax supplies only
+  // a protection role, never generated-origin or a new Keep capability.
+  const roleScopes = {
+    prose: (label,value) => `${label}: ${value}\nFachtext: HTTP/2 31415`,
+    header: (label,value) => `| ${label} | Fachtext |\n| --- | --- |\n| ${value} | HTTP/2 31415 |`,
+    inline: (label,value) => `| Inhalt | Fachtext |\n| --- | --- |\n| Formel: "A\\|B" 😀<br>Gespeicherter Wert: ${label}: ${value} | HTTP/2 31415 |`
+  };
+  async function actualLabelRoleSource(raw,scope,markdownOutput,profile,guidedQualifier=null) {
+    const actualOptions={...contentOptions,markdownOutput},bytes=Buffer.from(raw),before=sha(bytes),extension=scope==='prose'?'.txt':'.md';
+    const source=await extractSourceForPrivacy(bytes,extension,{contentOptions:actualOptions,convertBuffer:async input=>{
+      const extraction=extractMarkdownBuffer(input,extension,extension==='.md'?{}:{markdownOutput});
+      const markdown=extension==='.md'&&markdownOutput==='content-v1'?require('../plugins/data-secure/server/standalone/markdown-image-content')
+        .markdownImageContent(extraction.markdown,{fromMarkdown,parseFragment}).markdown:extraction.markdown;
+      return createMarkdownExtraction({source_type:extension.slice(1),markdown,coverage:extraction.coverage,content_options:actualOptions});
+    }});
+    const prepared=prepareTextPrivacyReview({text:source.markdown,profile,productChannel:'standalone',consumerOptions:{productChannel:'standalone',contentOptions:actualOptions},
+      captureTrace:true,registry:require('../plugins/data-secure/server/privacy/entities').makeRegistry()});
+    let reviewed;
+    if (guidedQualifier!==null) {
+      assert.ok(prepared.ambiguities.some(row=>prepared.draft.original_text.slice(row.original_start,row.original_end)===guidedQualifier));
+      reviewed=await resolveTextPrivacyReview(prepared,async draft=>require('../plugins/data-secure/server/gateway/batch-review-policy')
+        .reviewedBatchText(draft,draft.ambiguities.map(row=>({ambiguity_id:row.ambiguity_id,
+          decision:draft.original_text.slice(row.original_start,row.original_end)===guidedQualifier?'keep':'redact'}))));
+    } else reviewed=await resolveTextPrivacyReview(prepared,null,{reviewPolicy:'automatic-conservative'});
+    const final=finalizeTextPrivacyReview(prepared,reviewed,{prefix:'',suffix:''});
+    const proof={markdown:final.markdown,profile,content_options:actualOptions,source_extraction:source.sourceExtraction,dictionary:final.dictionary,
+      strong_person_anchor:final.strong_person_anchor,reviewed_person_candidates:final.reviewed_person_candidates};
+    assert.ok(verifyAnonymizedPublication(proof)); assert.equal(replayTransformTrace(final.transform_trace),final.markdown);
+    assert.equal(sha(bytes),before); assert.match(final.markdown,/HTTP\/2 31415/u);
+    return {source,final,proof,actualOptions};
+  }
+  for (const scope of Object.keys(roleScopes)) for (const markdownOutput of ['content-v1','notes-v1']) for (const profile of ['general','personnel_profile']) {
+    for (const caption of ['Rufen Sie Frau Anna Berger an unter','Rufen Sie Frau Anna berGEr an unter',
+      'Rufen Sie Frau Prof. Dr. med. Anna maRIa von der den Schmidt bitte an unter'])
+      await testAsync(`actual whole callee/mixed remainder/long mask/value and callee Keep ${scope}/${markdownOutput}/${profile}/${caption}`,async()=>{
+        const raw=roleScopes[scope](caption,'Qvx / Qvy'),{source,final,proof}=await actualLabelRoleSource(raw,scope,markdownOutput,profile);
+        assert.doesNotMatch(final.markdown,/Anna|Berger|berGEr|maRIa|Schmidt|Qvx|Qvy/u);
+        const entities=initialEntities({markdown:final.markdown,transform_trace:final.transform_trace});
+        const callee=entities.find(row=>row.original.includes('Anna')),value=entities.find(row=>row.original.includes('Qvx'));
+        assert.ok(callee); assert.ok(value);
+        for (const target of [callee,value,...entities.filter(row=>row.original.includes('berGEr'))]) {
+          const kept=applyEntityDecisions(final.markdown,entities,[{entity_id:target.entity_id,decision:'keep'}],Buffer.alloc(32,91));
+          const binding=bindStandaloneDocumentKeeps(kept.markdown,[],kept.entities.filter(row=>row.decision==='keep').map(({start,end})=>({start,end})));
+          assert.throws(()=>verifyAnonymizedPublication({...proof,markdown:kept.markdown,reviewed_person_candidates:binding}),{code:'STANDALONE_PUBLICATION_INVALID'});
+        }
+        const changed=applyEntityDecisions(final.markdown,entities,[{entity_id:callee.entity_id,decision:'person'}],Buffer.alloc(32,92));
+        assert.match(changed.markdown,/\[PERSON_[A-Z2-7]{52}\]/u,'actual entity operation creates the legitimate long HMAC replacement');
+        assert.ok(verifyAnonymizedPublication({...proof,markdown:changed.markdown}));
+        const trace=require('../plugins/data-secure/server/privacy/transform-plan').createTransformTrace(final.transform_trace.canonical_input);
+        trace.appendTrace('source-privacy',final.transform_trace);trace.append('entity-decision',final.markdown,changed.markdown,changed.edits);
+        assert.equal(replayTransformTrace(trace.finish(changed.markdown)),changed.markdown);
+        const changedValue=changed.entities.find(row=>row.original.includes('Qvx')); assert.ok(changedValue);
+        const restored=applyEntityDecisions(changed.markdown,changed.entities,[{entity_id:changedValue.entity_id,decision:'keep'}],Buffer.alloc(32,93));
+        const binding=bindStandaloneDocumentKeeps(restored.markdown,[],restored.entities.filter(row=>row.decision==='keep').map(({start,end})=>({start,end})));
+        assert.throws(()=>verifyAnonymizedPublication({...proof,markdown:restored.markdown,reviewed_person_candidates:binding}),{code:'STANDALONE_PUBLICATION_INVALID'});
+        assert.match(source.markdown,/Qvx/u,'raw source stays available in its real source owner');
+      });
+    for (const caption of ['Telefon (Anna: Berger)','Geburtsdatum (Format=JJJJ-MM-TT)','Telefon (anna@example.invalid)',
+      'Telefon (privat)','Geburtsdatum (JJJJ-MM-TT)','Telefon (Dienstanschluss)'])
+      await testAsync(`actual annotation delimiter/contact/benign value duty ${scope}/${markdownOutput}/${profile}/${caption}`,async()=>{
+        const {final,proof}=await actualLabelRoleSource(roleScopes[scope](caption,'Qvx / Qvy'),scope,markdownOutput,profile);
+        assert.doesNotMatch(final.markdown,/Qvx|Qvy|anna@example\.invalid/u);
+        if (/privat|JJJJ-MM-TT|Dienstanschluss/u.test(caption)) assert.ok(final.markdown.includes(caption));
+        const entities=initialEntities({markdown:final.markdown,transform_trace:final.transform_trace}),target=entities.find(row=>row.original.includes('Qvx'));
+        assert.ok(target); const kept=applyEntityDecisions(final.markdown,entities,[{entity_id:target.entity_id,decision:'keep'}],Buffer.alloc(32,94));
+        const binding=bindStandaloneDocumentKeeps(kept.markdown,[],kept.entities.filter(row=>row.decision==='keep').map(({start,end})=>({start,end})));
+        assert.throws(()=>verifyAnonymizedPublication({...proof,markdown:kept.markdown,reviewed_person_candidates:binding}),{code:'STANDALONE_PUBLICATION_INVALID'});
+      });
+    await testAsync(`actual annotation long mask and occurrence-bound weak Keep ${scope}/${markdownOutput}/${profile}`,async()=>{
+      const automatic=await actualLabelRoleSource(roleScopes[scope]('Telefon (Anna Berger)','Qvx / Qvy'),scope,markdownOutput,profile);
+      assert.doesNotMatch(automatic.final.markdown,/Anna|Berger|Qvx|Qvy/u);
+      const entities=initialEntities({markdown:automatic.final.markdown,transform_trace:automatic.final.transform_trace});
+      const caller=entities.find(row=>row.original.includes('Anna')); assert.ok(caller);
+      const changed=applyEntityDecisions(automatic.final.markdown,entities,[{entity_id:caller.entity_id,decision:'person'}],Buffer.alloc(32,95));
+      assert.match(changed.markdown,/\[PERSON_[A-Z2-7]{52}\]/u);
+      assert.ok(verifyAnonymizedPublication({...automatic.proof,markdown:changed.markdown}));
+      const trace=require('../plugins/data-secure/server/privacy/transform-plan').createTransformTrace(automatic.final.transform_trace.canonical_input);
+      trace.appendTrace('source-privacy',automatic.final.transform_trace);trace.append('entity-decision',automatic.final.markdown,changed.markdown,changed.edits);
+      assert.equal(replayTransformTrace(trace.finish(changed.markdown)),changed.markdown);
+      const value=changed.entities.find(row=>row.original.includes('Qvx')); assert.ok(value);
+      const kept=applyEntityDecisions(changed.markdown,changed.entities,[{entity_id:value.entity_id,decision:'keep'}],Buffer.alloc(32,96));
+      const keep=bindStandaloneDocumentKeeps(kept.markdown,[],kept.entities.filter(row=>row.decision==='keep').map(({start,end})=>({start,end})));
+      assert.throws(()=>verifyAnonymizedPublication({...automatic.proof,markdown:kept.markdown,reviewed_person_candidates:keep}),{code:'STANDALONE_PUBLICATION_INVALID'});
+      const guided=await actualLabelRoleSource(roleScopes[scope]('Telefon (Weitere Angaben)','Qvx / Qvy'),scope,markdownOutput,profile,'Weitere Angaben');
+      assert.match(guided.final.markdown,/Weitere Angaben/u);assert.doesNotMatch(guided.final.markdown,/Qvx|Qvy/u);
+      const unchanged=scanResidual(guided.final.markdown,profile,[],{productChannel:'standalone',contentOptions:guided.actualOptions,
+        originalSourceText:guided.source.markdown,reviewedPersonCandidates:guided.final.reviewed_person_candidates});
+      assert.equal(unchanged.some(row=>row.type==='SENSITIVE_FIELD'),false,'weak annotation choice never waives the complete following value');
+    });
+  }
   const inlineQualifierCases = [
     ['original-dob', neutralTable('Anna Berger Geburtsdatum: Qvx / Qvy'), 'Geburtsdatum', 'FHIR REST 31415'],
     ['original-phone', neutralTable('Anna Berger Telefonnummer: Qvx / Qvy'), 'Telefonnummer', 'FHIR REST 31415'],

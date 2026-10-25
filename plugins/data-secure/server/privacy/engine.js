@@ -854,8 +854,9 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
     // own explicit field label. This does not reuse the redactor's span list
     // or its dictionary. A positional column cannot waive "Name: <value>".
     const inlineValue = value => {
-      let from = 0;
+      let from = 0; const ignored = require('./base').structuredLabelSeparators(value);
       for (let index = 0; index < value.length; index++) if (value[index] === ':' || value[index] === '=') {
+        if (ignored.has(index)) continue;
         if (isProtectedFieldHeader(value.slice(from, index).trim(), personFieldPolicy)) return value.slice(index + 1);
         from = index + 1;
       }
@@ -886,8 +887,25 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
         grammar.DATE_OF_BIRTH_LABEL_RE, grammar.PHONE_LABEL_RE, grammar.DE_TAX_LABEL_RE,
         grammar.ID_LABEL_HEADER_RE, grammar.CREDENTIAL_LABEL_HEADER_RE,
         /^(?:Firma|Unternehmen|Organisation|Organization|Company(?:\s+Name)?|Employer|Arbeitgeber)$/iu
-      ].map(pattern => unanchor(pattern.source)), 'Geschützter Tabellenwert'].join('|') + ')$', 'giu');
+      ].map(pattern => unanchor(pattern.source)), 'Geschützter Tabellenwert', grammar.STRUCTURED_LABEL_VALUE_PATTERN].join('|') + ')$', 'giu');
       const unescapeLabel = value => value.replace(/\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/gu, '$1');
+      const rawPoints = (raw, requested) => {
+        const mapped = new Map(); let at = 0, logicalAt = 0;
+        for (const point of [...new Set(requested)].sort((a,b) => a-b)) {
+          while (logicalAt < point && at < raw.length) {
+            at += raw[at] === '\\' && /[!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~]/u.test(raw[at+1] || '') ? 2 : 1;
+            logicalAt++;
+          }
+          if (logicalAt === point) mapped.set(point, at);
+        }
+        return mapped;
+      };
+      const rawSlotSeparators = raw => {
+        if (!raw.includes('(')) return new Set();
+        const ignored = grammar.structuredLabelSeparators(unescapeLabel(raw));
+        const mapped = rawPoints(raw, [...ignored].map(point => point+1));
+        return new Set([...ignored].map(point => mapped.get(point+1)-1));
+      };
       const prefixLength = value => {
         let start = 0;
         while (start < value.length) {
@@ -897,13 +915,33 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
         }
         return start + /^[ \t]*/u.exec(value.slice(start))[0].length;
       };
-      const completePrefix = value => {
-        const start = prefixLength(value), colon = value.indexOf(':', start), equal = value.indexOf('=', start);
-        const boundary = colon < 0 ? equal : equal < 0 ? colon : Math.min(colon, equal);
+      const completePrefix = (value, ignored, base = 0) => {
+        const start = prefixLength(value); let boundary = -1;
+        for (let at = start; at < value.length; at++) if ((value[at] === ':' || value[at] === '=') && !ignored.has(base+at)) { boundary = at; break; }
         return boundary >= 0 && isProtectedFieldHeader(unescapeLabel(value.slice(start, boundary + 1)).slice(0, -1).trim(), personFieldPolicy);
       };
       const rememberQualifier = (raw, start, logical = unescapeLabel(raw)) => {
-        if (!qualifiers || !isProtectedFieldHeader(logical.trim(), personFieldPolicy)) return;
+        if (!isProtectedFieldHeader(logical.trim(), personFieldPolicy)) return;
+        const role = grammar.structuredLabelRole(logical);
+        if (role?.slots.length) {
+          const mapped = rawPoints(raw, role.slots.flatMap(slot => [slot.start,slot.end]));
+          for (const slot of role.slots) {
+            const from = mapped.get(slot.start), to = mapped.get(slot.end);
+            if (from === undefined || to === undefined || unescapeLabel(raw.slice(from,to)) !== logical.slice(slot.start,slot.end)) {
+              result.push(raw); continue; // A missing raw binding is never proof of safe label content.
+            }
+            const slotValue = unescapeLabel(raw.slice(from,to));
+            // Independently inspect the complete actual callee slot. A
+            // partial pseudonym is not proof that its remaining name/title
+            // bytes are safe, and a Keep cannot waive this field obligation.
+            // Source-view calls only gather imported marker payloads here;
+            // they never donate offsets or redactor coverage to this gate.
+            if (slot.kind === 'callee') result.push(slotValue);
+            if (qualifiers) qualifiers.push({start:start+from,end:start+to,fallbackEnd:start+to,
+              comparison:slotValue.replace(/\s+/gu,' '),role:slot.kind});
+          }
+        }
+        if (!qualifiers) return;
         const comparison = grammar.effectiveTableFieldLabel(logical).replace(/\s+/gu, ' ');
         labelEnd.lastIndex = 0; const match = labelEnd.exec(comparison);
         if (!match || match.index === 0) return;
@@ -935,9 +973,10 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
       };
       for (let row = 0; row < rows.length; row++) {
         const line = rows[row], cells = markdownTableCells(line, true), separator = markdownTableCells(rows[row + 1] || '', true);
+        const ignored = rawSlotSeparators(line);
         const tableHeader = cells && separator && cells.length === separator.length && separator.every(value => /^:?-{3,}:?$/u.test(value));
         const table = grammar.tableHeadersAt(text, position, personFieldPolicy);
-        if ((tableHeader || table) && qualifiers) {
+        if (tableHeader || table) {
           const ranges = []; let from = 0, escaped = false;
           for (let index = 0; index < line.length; index++) {
             if (escaped) { escaped = false; continue; }
@@ -956,8 +995,10 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
               // retaining its actual cell and UTF16 owner. CR remains part
               // of this one cell; it never starts another prose field here.
               let from = 0;
+              const slotSeparators = rawSlotSeparators(raw);
               for (let boundary = 0; boundary < raw.length; boundary++) {
                 if (raw[boundary] !== ':' && raw[boundary] !== '=') continue;
+                if (slotSeparators.has(boundary)) continue;
                 const logical = unescapeLabel(raw.slice(from, boundary + 1)).slice(0, -1);
                 if (isProtectedFieldHeader(logical.trim(), personFieldPolicy)) {
                   rememberQualifier(raw.slice(from, boundary), position + start + from, logical);
@@ -967,8 +1008,9 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
               }
             }
           } else if (cells?.some(cell => {
-            let from = 0;
+            let from = 0; const slotSeparators = grammar.structuredLabelSeparators(cell);
             for (let boundary = 0; boundary < cell.length; boundary++) if (cell[boundary] === ':' || cell[boundary] === '=') {
+              if (slotSeparators.has(boundary)) continue;
               if (isProtectedFieldHeader(cell.slice(from, boundary).trim(), personFieldPolicy)) return true;
               from = boundary + 1;
             }
@@ -983,7 +1025,8 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
           let valueStart = -1, groupStart = 0;
           for (let boundary = 0; boundary < line.length; boundary++) {
             if (line[boundary] !== ':' && line[boundary] !== '=') continue;
-            let owner = groupStart === 0 && completePrefix(line.slice(0, boundary + 1)) ? 0 : -1;
+            if (ignored.has(boundary)) continue;
+            let owner = groupStart === 0 && completePrefix(line.slice(0, boundary + 1),ignored) ? 0 : -1;
             {
               const group = line.slice(groupStart, boundary), pieces = [], allowed = new Map();
               let at = 0, length = 0;
@@ -1035,7 +1078,7 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
                 }
                 if (previous >= 0) {
                   const start = owners.get(starts[previous]);
-                  if (completePrefix(line.slice(start, boundary + 1))) { if (owner < 0) owner = start; break; }
+                  if (completePrefix(line.slice(start, boundary + 1),ignored,start)) { if (owner < 0) owner = start; break; }
                 }
               }
             }

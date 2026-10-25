@@ -1,5 +1,110 @@
 # RC176 – priorisierte Inhalts- und Grafikverbesserungen
 
+## Source11 Quellenabschluss · 25.10.2026 nach 12:20 UTC
+
+Beide unabhängigen tatsächlichen Schlussreviews sind abgeschlossen und von Main
+vollständig gelesen: Privacy 3ac674baad7f47cbab123dc57e43fcf485a84c40e939537d819d6548e3aedd24,
+Architektur a683703e199ac538702c112638039a54acd36fc4c7713425de98cf34eda7c9aa.
+Kein weiterer bestätigter Deltablocker auf den unten vollständig genannten fünf
+Pins. Privacy führte selbst 72/84 Originalketten, 367/148 Feldgruppen und 30
+direkte Finalreader-Negative ohne Dictionary aus. Architektur prüfte 22 echte
+Source-/Publikationsketten, 20 tatsächliche lange Entityänderungen mit erneut
+exakter reversibler Quellbindung, 8 Owner-/Markergruppen und 5 begrenzte
+unveränderte 300-ms-Kontrollen einschließlich 4.096 geschlossener Maskenatome.
+Der Node-/CJS-/Frontendabschluss wurde an tatsächlichen Quellen geprüft.
+
+Geeignet für einen neuen gemeinsamen Appcommit/Freeze und frische vollständige
+Gates. Noch kein neuer App-/Paket-/Mac-/Desktop-/Release-PASS. Vorherige Source10-
+Grüns widerlegen seine gesicherten P1 nicht; Source10 bleibt unveröffentlicht.
+Keine neue Automation, Mainintegration oder Apple-Signierungs-/Rechteänderung.
+
+## Source11 Rollenmodell: gezielt geprüft, Schlussreviews offen · 25.10.2026 12:03 UTC
+
+Autor und Main haben auf denselben fünf stabilen Dateien 367/367 Prosa- und
+148/148 Tabellenfälle bestanden; Main zusätzlich 30/30 Dokumentationsfälle.
+Die 247/141 bisherigen Feldfälle bleiben erhalten. Main hat die vollständigen
+Produkt- und Testdeltas sowie den Autorenbericht e825093216843028dd879ab505c860c2304ef3fccd53ecbcde25765096852a1d gelesen.
+Eigener Beleg: dist/rc176-source11-main-targeted-20261025/RESULT.json,
+Abschluss 12:02:37.754 UTC, alle fünf Eingaben unverändert.
+
+Der reine gemeinsame Labelparser trennt statische Syntax, echte dynamische
+Callee-/Klammer-Slots und vollständige Feldwertpflicht. Die öffentliche alte
+Telefon-/Geburtsdatum-Grammatik bleibt bytegleich. Markerformen verstärken nur
+den Schutz; sie sind keine Herkunfts-, Identitäts-, Metadaten- oder Keepfreigabe.
+Beide tatsächlichen Reader rekonstruieren ihre Roh-/Zellbesitzer unabhängig.
+Klammerinterne :/=, gemischte und lange Masken verlieren die Wertpflicht nicht.
+
+Die unveränderten 72 Call- und 84 Klammerketten ergeben beim Autor 156 echte
+Publikationen ohne gemessene Namens-/Feldwertoffenlegung, 156 verweigerte echte
+Wert-Keeps und 36 erhaltene benigne Kontrollen. Zusätzliche tatsächliche Ketten
+prüfen Nachbearbeitung, lange HMAC-Ersetzung, reale Header ohne eigenen Doppelpunkt,
+escaped Pipes, zwei Profile und beide Markdownverträge. Das ist keine universelle
+Personen-/Annotationszusage und noch keine unabhängige Schlussfreigabe.
+
+Ein zusätzlich belegter Mixed-Callee-Rest und ein echter reversibler Tracefehler
+bei drei Titeln sind eng korrigiert: Bei verbleibendem Rohrest wird der gesamte
+bewiesene Callee generisch FIELD_REDACTED ersetzt. Keine Teilgrenze innerhalb
+eines generierten Entitysegments, keine neue Personenidentität oder Trace-/Keep-
+Ausnahme. Titel und grammatisch mehrdeutiges an/bitte können konservativ mitmaskiert
+werden. Beliebige Klammerannotation erhält daraus keine pauschale Maskierung.
+ROUND2/ROUND3 und sämtliche Source10-Belege bleiben unverändert erhalten.
+
+Finale Produktpins: base f16a93210f1fb1bf3b97289250911d66eda8384c94702ca92f53ebaa5197ffbd,
+FVC 31029c54fd44b7a49a41841f68ffd62bbfdc03138b80f853da64219c8cce21ac,
+Engine 7509ab850876261296d4cb83a7dfc822c2345e45827d93e7fb76917f8e75e295.
+Testpins: Prosa f78eccb079cd2c5879ead64572097474e93eda88bd0f2d25743ca96d8989043a,
+Tabelle 1096ee9b8891b03569142532d3ed47b424e4c39bc60a5840b744658ca855d211.
+Gemessener ungefrorener Fingerprint 589b4015c8ad68277859df3bc63668a85b45ab65787b9f5895c3e506266b25b2/368;
+621 Test-/Scriptinputs 51c20b51f993097fc317fce16a959e4af9b47ac67e221b83331b1de8b4ef2b88.
+Zwei unabhängige tatsächliche Schlussreviews laufen auf diesen fünf Pins.
+Erst danach neuer gemeinsamer Commit/Freeze und frische vollständige lokale,
+Mac-, Paket- und Desktopbelege. Keine Source11-Pakete/GUI/Übergabe/Veröffentlichung,
+keine Automation oder Mainintegration. Mac ohne Developer-ID/Notarisierung.
+
+## Source10 gestoppt / Source11 Rollenfix · 25.10.2026 nach11:03UTC
+
+Der gemeinsame239640f07c115cbd46f329e11be2a943511bf714/ece2b8ac… hat tatsächlich
+318/318+11/11 Headless,300Rust/3ignoriert/Prepare/Clippy/NodeRust/Release,
+8 native Konvertersuiten und5Paketgates bestanden, alle Inputs unverändert.
+Headlessende11:01:16.911UTC, Native10:15:44.896, Konverter10:17:33.913,
+Paket10:21:44.476. LOCAL-FINAL-READBACK.json prüft alle vier echten Proofverträge
+und bleibt ausdrücklich diagnostic_only/release_eligible:false.
+
+Grund sind zusätzlich tatsächlich gemessene P1, nicht ein Mac-Rechtefehler:
+Main-Direktprobe maskiert die echte Nummer, publiziert aber „Frau Anna Berger“
+im Call-Label. Unabhängiger Report2702d471d97b9f46146982a2013cc585509c59cd18001baad7f92a03ea717a1b:
+72 aktuelle/72 Altmodulketten,32 geerbte Call-Namenlecks Prosa/Header und8 NEUE
+Inline-Qvx/Qvy-Wertlecks nach korrekter Namensmaskierung (Altvergleich0solche
+Wertlecks). Der neue Calltext mit Pseudonym verliert seine Feldrolle vor FVC/
+Finalreader. Nur die Metadatenfreistellung zu entfernen würde das nicht lösen.
+
+Zusätzlicher Report6a51e83874efa72fd810a9ad345812e5d280d5032467c8d58e4db3b349751de1:
+84 tatsächliche Klammer-Labelketten,40 rohe Anna-Publikationen in Telefon/
+Geburtsdatum (Anna Berger),32 davon Prosa/Header auch mit KnownAnna,8unseeded
+Inline. Alle84Feldwerte geschützt und tatsächliche StrongKeeps verweigert;
+36benigne privat/JJJJ-MM-TT/Dienstanschluss-Kontrollen bleiben lesbar. Beliebige
+LABEL_QUALIFIER-Daten sind keine privacyfreie statische Syntax.
+
+Main las beide Reports, Plan454a5b20f14b24be4495b1484cf3ff74812efd727147c1f82a035bd0035140cf
+und Designgegenreview8fed80b5b3428b98ca3e8031a3fdab3e3798761f8ffdfc545449042415d62eca
+vollständig. Gemeinsames reines Rollenmodell trennt Syntax, dynamische Slots und
+ganzen Wertschutz; gerenderte Marker dürfen nur mehr Schutzpflicht erzeugen.
+Raw-Owner-/Source-/Marker-/Keep-Bindung und unabhängige Endprüfung bleiben.
+Gemischte/teilweise/lange Marker sowie :/= im zugelassenen Klammerinhalt sind
+verbindliche Kontrollen: Wertpflicht bleibt oder sichere Verweigerung, niemals
+verschwinden. Nach tatsächlichem Ende aller eigenen Freezejobs ist der Fix in
+base/FVC/engine+zweibestehendenFeldtests freigegeben. Noch kein neuer Fix-PASS.
+
+Mac40183705137 wurde wegen dieses belegten Sourcefehlers gezielt abgebrochen,
+tatsächlich completed/CANCELLED10:37:43UTC. Keine Reruns/Artefaktübernahmen.
+Source10-ZIP bleibt unveröffentlichtes113522184Byte-Zwischenpaket/SHAeebe0600…,
+EXE60a8f93d…; keine aktuelle GUI oder lokaleRC176-Übergabe/Tag/PreRelease.
+Alte grüne/rote Belege bleiben unverändert; neue Quellenreviews und gemeinsamer
+Source11-Commit/Freeze mit frischen Gesamt-/Native-/Konverter-/Paket-/Mac-/GUI-
+Belegen erforderlich. Source11-Kit22Rollen wurde nur mechanisch vorbereitet,
+Main hat vollen Bericht/Diff gelesen, aktuelle Identitäten PENDING. Keine neue
+Automation/Mainintegration/Developer-ID oder OS-Schutzänderung.
+
 ## Source10 Quellenabschluss · 25.10.2026 nach10:09UTC
 
 Beide tatsächlichen finalen Gegenreviews wurden von Main vollständig gelesen:

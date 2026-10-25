@@ -220,6 +220,119 @@ const DATE_OF_BIRTH_LABEL_RE = new RegExp(
   `${LABEL_QUALIFIER}\\s*:?\\s*$`,
   'iu'
 );
+// Protection roles are separate from the unchanged public literal grammar.
+// Opaque atoms can retain value duties, never marker origin or Keep authority.
+const FIELD_ROLE_ATOM = require('./spans').PLACEHOLDER_RE.source;
+const FIELD_ANNOTATION_BODY = `(?:${FIELD_ROLE_ATOM}|(?!${FIELD_ROLE_ATOM})[^)\\n]){1,40}`;
+const FIELD_ANNOTATION = `(?:\\s*\\(${FIELD_ANNOTATION_BODY}\\))?`;
+const FIELD_CALL_CALLEE = PHONE_CALL_CALLEE.split(PHONE_CALL_NAME)
+  .join(`(?:${PHONE_CALL_NAME}|${FIELD_ROLE_ATOM})`);
+const FIELD_CALL_MIXED_NAME = PHONE_CALL_PERSON_NAME.split(PHONE_CALL_NAME)
+  .join(`(?:${PHONE_CALL_NAME}|${FIELD_ROLE_ATOM})`);
+// Complete rest protection can replace several separate raw gaps around
+// already opaque atoms, including original title/particle/name punctuation.
+// Their opaque-only closure retains the value role without accepting any
+// additional literal callee words or treating a source marker as provenance.
+// The separator class cannot consume an atom's '['; this repetition is not a
+// corridor with competing token boundaries or an increased source budget.
+const FIELD_CALL_OPAQUE = `${FIELD_ROLE_ATOM}(?:[${SEP_CHARS}'’.-]*${FIELD_ROLE_ATOM})*`;
+const FIELD_CALL_SLOT = `(?:${FIELD_CALL_CALLEE}|${FIELD_CALL_MIXED_NAME}(?:${PHONE_CALL_SPACE}${PHONE_CALL_COURTESY})?|${FIELD_CALL_OPAQUE})`;
+const FIELD_CALL_REQUEST = PHONE_CALL_REQUEST.replace(PHONE_CALL_CALLEE, FIELD_CALL_SLOT);
+const FIELD_PHONE_PATTERN = PHONE_LABEL_PATTERN.replace(PHONE_CALL_REQUEST, FIELD_CALL_REQUEST)
+  .replace(LABEL_QUALIFIER, FIELD_ANNOTATION);
+const FIELD_DOB_PATTERN = DATE_OF_BIRTH_LABEL_RE.source.slice(0, -'\\s*:?\\s*$'.length)
+  .replace(LABEL_QUALIFIER, FIELD_ANNOTATION);
+const FIELD_PHONE_ROLES = FIELD_PHONE_PATTERN.replace(FIELD_CALL_SLOT, `(?<phone_callee>${FIELD_CALL_SLOT})`)
+  .replace(FIELD_ANNOTATION, `(?:\\s*\\((?<phone_annotation>${FIELD_ANNOTATION_BODY})\\))?`);
+const FIELD_DOB_ROLES = FIELD_DOB_PATTERN.replace(FIELD_ANNOTATION,
+  `(?:\\s*\\((?<dob_annotation>${FIELD_ANNOTATION_BODY})\\))?`);
+const STRUCTURED_LABEL_VALUE_PATTERN = `(?:${FIELD_PHONE_PATTERN}\\s*\\.?\\s*:?\\s*|${FIELD_DOB_PATTERN}\\s*:?\\s*)`;
+const FIELD_ROLE_END_SOURCE = `(?<phone>${FIELD_PHONE_ROLES}\\s*\\.?\\s*:?\\s*)$|(?<dob>${FIELD_DOB_ROLES}\\s*:?\\s*)$`;
+const FIELD_ROLE_END_RE = new RegExp(FIELD_ROLE_END_SOURCE, 'diu');
+const FIELD_ROLE_RAW_RE = new RegExp(`^(?:${FIELD_ROLE_END_SOURCE})`, 'diu');
+const FIELD_ROLE_PREFIX_SOURCE = `(?:${FIELD_PHONE_ROLES}\\s*\\.?\\s*|${FIELD_DOB_ROLES}\\s*)(?=[:=])`;
+
+function whitespacePointReader(text) {
+  let raw = 0, comparison = 0;
+  return point => {
+    while (comparison < point && raw < text.length) {
+      if (/\s/u.test(text[raw])) { do { raw++; } while (raw < text.length && /\s/u.test(text[raw])); }
+      else raw++;
+      comparison++;
+    }
+    return comparison === point ? raw : null;
+  };
+}
+function annotationRoleFits(text) {
+  const atom = new RegExp(FIELD_ROLE_ATOM, 'uy'); let units = 0;
+  for (let at = 0; at < text.length;) {
+    if (++units > 40 || text[at] === '\n' || text[at] === ')') return false;
+    atom.lastIndex = at;
+    const match = text[at] === '[' ? atom.exec(text) : null;
+    at += match ? match[0].length : text.codePointAt(at) > 0xffff ? 2 : 1;
+  }
+  return units > 0;
+}
+function structuredLabelRole(value) {
+  const source = String(value), trimmedEnd = source.trimEnd().length;
+  let ordinalEnd = trimmedEnd;
+  while (source[ordinalEnd - 1] === ')') {
+    let at = ordinalEnd - 2;
+    while (at >= 0 && source.charCodeAt(at) >= 48 && source.charCodeAt(at) <= 57) at--;
+    if (at === ordinalEnd - 2 || source[at] !== '(' || at < 1 || !/\s/u.test(source[at - 1])) break;
+    ordinalEnd = at;
+    while (ordinalEnd > 0 && /\s/u.test(source[ordinalEnd - 1])) ordinalEnd--;
+  }
+  for (const end of ordinalEnd === trimmedEnd ? [trimmedEnd] : [trimmedEnd, ordinalEnd]) {
+    const raw = source.slice(0, end), comparable = raw.replace(/\s+/gu, ' ');
+    const probe = FIELD_ROLE_END_RE.exec(comparable);
+    if (!probe) continue;
+    const points = [...new Set([probe.index, ...Object.entries(probe.indices.groups)
+      .filter(([name, span]) => span && name.endsWith('_annotation')).flatMap(([, span]) => span)])].sort((a,b) => a-b);
+    const reader = whitespacePointReader(raw), mapped = new Map(points.map(point => [point, reader(point)]));
+    if ([...mapped.values()].some(point => point === null)) continue;
+    if (Object.entries(probe.indices.groups).some(([name, span]) => span && name.endsWith('_annotation') &&
+      !annotationRoleFits(raw.slice(mapped.get(span[0]), mapped.get(span[1]))))) continue;
+    const start = mapped.get(probe.index), exact = FIELD_ROLE_RAW_RE.exec(raw.slice(start));
+    if (!exact) continue;
+    const slots = Object.entries(exact.indices.groups).filter(([name, span]) => span && (name.endsWith('_callee') || name.endsWith('_annotation')))
+      .map(([name, span]) => ({kind: name.endsWith('_callee') ? 'callee' : 'annotation', start: start + span[0], end: start + span[1]}))
+      .sort((a,b) => a.start-b.start);
+    // Dropping an honorific during an actual partial replacement may leave
+    // mixed literal/opaque name parts. That alternative is protection-only:
+    // it must contain a closed opaque atom unless the old grammar admitted it.
+    const literal = exact.groups.phone === undefined ? DATE_OF_BIRTH_LABEL_RE : PHONE_LABEL_RE;
+    if (!literal.test(raw.slice(start)) && !slots.some(slot => require('./spans').placeholderSpans(source.slice(slot.start,slot.end)).length)) continue;
+    const staticSpans = []; let cursor = start;
+    for (const slot of slots) { if (cursor < slot.start) staticSpans.push({start: cursor, end: slot.start}); cursor = slot.end; }
+    if (cursor < source.length) staticSpans.push({start: cursor, end: source.length});
+    return {family: exact.groups.phone === undefined ? 'dob' : 'phone', protectsValue: true,
+      start, end: source.length, slots, staticSpans, wholeMetadata: slots.length === 0 && source.slice(0,start).trim() === ''};
+  }
+  return null;
+}
+
+// Lexical slots only; callers retain actual owners and reconstruct values
+// independently. Streaming remapping avoids a whole-document offset array.
+function* structuredLabelParts(value) {
+  const text = String(value);
+  if (!text.includes('(')) return;
+  const comparable = text.replace(/\s+/gu, ' '), pattern = new RegExp(FIELD_ROLE_PREFIX_SOURCE, 'dgiu');
+  const reader = whitespacePointReader(text);
+  for (let match; (match = pattern.exec(comparable));) {
+    const start = reader(match.index), end = reader(pattern.lastIndex);
+    if (start === null || end === null) return;
+    const role = structuredLabelRole(text.slice(start, end));
+    if (role) yield {start, end, role};
+  }
+}
+function structuredLabelSeparators(value) {
+  const result = new Set();
+  for (const part of structuredLabelParts(value)) for (const slot of part.role.slots) if (slot.kind === 'annotation')
+    for (let at = part.start + slot.start; at < part.start + slot.end; at++)
+      if (value[at] === ':' || value[at] === '=') result.add(at);
+  return result;
+}
 const VEHICLE_PLATE_RE = new RegExp(`${NB}[A-ZÄÖÜ]{1,3}-[A-Z]{1,2}[ ]?\\d{1,4}[EH]?${NA}`, 'giu');
 const VEHICLE_PLATE_LABEL_RE = /(?:kennzeichen|kfz-?kennzeichen|nummernschild)\s*:?\s*$/i;
 
@@ -1018,6 +1131,9 @@ module.exports = {
   PHONE_RE,
   PHONE_LABEL_RE,
   PHONE_LABEL_PATTERN,
+  STRUCTURED_LABEL_VALUE_PATTERN,
+  structuredLabelRole,
+  structuredLabelSeparators,
   PHONE_LABEL_WINDOW,
   FRENCH_PHONE_RE,
   IBAN_RE,

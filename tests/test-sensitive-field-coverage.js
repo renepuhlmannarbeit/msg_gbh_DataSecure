@@ -299,6 +299,110 @@ test('qualifier decoration view accepts actual RGI clusters but never trims arbi
   for (const prefix of ['1 ', '§ ', '— ', '() ', 'FHIR REST 31415']) assert.equal(actualRecognizer.exec(prefix), null);
 });
 
+test('structured field roles preserve the public literal phone and DOB grammar exactly', () => {
+  const crypto = require('node:crypto'), base = require('../plugins/data-secure/server/privacy/base');
+  const sha = value => crypto.createHash('sha256').update(value).digest('hex');
+  assert.equal(sha(base.PHONE_LABEL_RE.source), '95bb928e886b90e9ac9ab70ddcf6d5dc5ff4ef0a83e9056a22018077cad5a15f');
+  assert.equal(sha(base.PHONE_LABEL_PATTERN), '5d8366475e3411e1b06db45341dac4534f74cbe70e257c3cd35e7824299870b2');
+  assert.equal(sha(base.DATE_OF_BIRTH_LABEL_RE.source), '9a2734d206fd52acd1058698c34cfae4f702425b9a5388ba236f2d749048533f');
+  for (const label of ['Telefonnummer','Rufen Sie mich an unter','Rückfragen gerne unter'])
+    assert.equal(base.structuredLabelRole(label).wholeMetadata, true);
+});
+
+test('callee and arbitrary parenthetical slots are actual dynamic content, never whole-label metadata', () => {
+  const {structuredLabelRole} = require('../plugins/data-secure/server/privacy/base');
+  const {protectedHeaderRanges,isWithinProtectedHeader} = require('../plugins/data-secure/server/privacy/field-value-coverage');
+  for (const label of ['Rufen Sie Frau Anna Berger an unter','Telefon (Anna Berger)','Geburtsdatum (Anna Berger)']) {
+    const role = structuredLabelRole(label); assert.ok(role.protectsValue); assert.equal(role.wholeMetadata,false);
+    assert.ok(role.slots.some(slot => label.slice(slot.start,slot.end).includes('Anna Berger')));
+    const source = `Name: Anna Berger\n\n${label}: Qvx / Qvy\n\n| ${label} | Fachtext |\n| --- | --- |\n| Qvx / Qvy | HTTP/2 31415 |`;
+    const ranges = protectedHeaderRanges(source,'content-person-fields/1');
+    for (const occurrence of source.matchAll(/Anna Berger/gu))
+      assert.equal(isWithinProtectedHeader(ranges,{start:occurrence.index,end:occurrence.index+occurrence[0].length}),false);
+    assert.ok(ranges.every((range,index) => !index || ranges[index-1].end < range.start));
+  }
+  for (const label of ['Telefon (privat)','Geburtsdatum (JJJJ-MM-TT)','Telefon (Dienstanschluss)']) {
+    const role = structuredLabelRole(label); assert.equal(role.wholeMetadata,false); assert.equal(role.slots.length,1);
+  }
+  assert.equal(anonymize(cell('Name','Telefon'), 'general', options).text.includes('| Telefon |'), false,
+    'an ordinary data occurrence does not borrow label metadata');
+});
+
+test('mixed and long opaque call forms retain only a stronger independent complete-value duty', () => {
+  const {structuredLabelRole} = require('../plugins/data-secure/server/privacy/base');
+  const long = '[PERSON_'+'A'.repeat(52)+']';
+  for (const label of ['Rufen Sie [PERSON_001] an unter','Rufen Sie Frau [PERSON_001] Berger an unter',
+    'Rufen Sie [MANUAL_REDACTION] Berger an unter',`Rufen Sie Dr. Anna ${long} an unter`,
+    `Telefon (Anna ${long})`,`Geburtsdatum (${long})`,
+    'Rufen Sie '+Array.from({length:12},(_,i)=>`[PERSON_${String(i+1).padStart(3,'0')}]`).join(' ')+' an unter',
+    'Rufen Sie [PERSON_001]-[FIELD_REDACTED]’[PERSON_002].[FIELD_REDACTED] unter']) {
+    const role = structuredLabelRole(label); assert.ok(role?.protectsValue); assert.equal(role.wholeMetadata,false);
+    assert.equal(Object.hasOwn(role,'identity'),false); assert.equal(Object.hasOwn(role,'generated'),false);
+    for (const source of [label+': Qvx / Qvy',cell('Inhalt',label+': Qvx / Qvy')])
+      assert.ok(scanResidual(source,'general',[],options).some(row => row.type === 'SENSITIVE_FIELD'));
+  }
+  assert.equal(structuredLabelRole('Rufen Sie [ABC_123] an unter'),null);
+});
+
+test('colon and equals inside admitted annotations retain raw actual value and cell owners', () => {
+  const {uncoveredFieldSpans}=require('../plugins/data-secure/server/privacy/field-value-coverage');
+  for (const label of ['Telefon (Anna: Berger)','Geburtsdatum (Format=JJJJ-MM-TT)','Telefon (Anna\rBerger: privat)',
+    'Telefon \\(Anna\\: Berger\\)']) {
+    for (const source of [label+': Qvx / Qvy\nFachtext: HTTP/2 31415',cell('Inhalt','Formel: "A\\|B"<br>Gespeicherter Wert: '+label+': Qvx / Qvy')]) {
+      const basis=canonicalizeRenderedText(source,'content-person-fields/1'), spans=uncoveredFieldSpans(basis,'content-person-fields/1');
+      assert.ok(spans.some(span => span.text.includes('Qvx')));
+      for (const span of spans) assert.equal(basis.slice(span.start,span.end),span.text);
+      assert.ok(scanResidual(basis,'general',[],options).some(row => row.type === 'SENSITIVE_FIELD'));
+      assert.doesNotMatch(anonymize(basis,'general',options).text,/Qvx|Qvy/u);
+    }
+  }
+});
+
+test('whole callee duty covers literal remainders without declaring annotations or ordinary prose whole fields', () => {
+  const label='Rufen Sie [PERSON_001] berGEr an unter';
+  for (const source of [label+': [FIELD_REDACTED]',cell(label,'[FIELD_REDACTED]'),cell('Inhalt',label+': [FIELD_REDACTED]')]) {
+    const {uncoveredFieldSpans}=require('../plugins/data-secure/server/privacy/field-value-coverage');
+    const spans=uncoveredFieldSpans(source,'content-person-fields/1');
+    assert.ok(spans.some(span=>span.text.includes('berGEr')));
+    for (const span of spans) assert.equal(source.slice(span.start,span.end),span.text);
+    assert.ok(scanResidual(source,'general',[],options).some(row=>row.type==='SENSITIVE_FIELD'));
+    const actual=anonymize(source,'general',options); assert.doesNotMatch(actual.text,/berGEr/u);
+    assert.deepEqual(scanResidual(actual.text,'general',[],{...options,originalSourceText:source}),[]);
+  }
+  assert.equal(scanResidual('Telefon (privat): [FIELD_REDACTED]','general',[],options)
+    .some(row=>row.type==='SENSITIVE_FIELD'),false,'annotation is not a complete callee value');
+  const free='Freier Satz Name: Qvx / Qvy';
+  assert.equal(require('../plugins/data-secure/server/privacy/field-value-coverage').uncoveredFieldSpans(free,'content-person-fields/1').length,0);
+  assert.equal(require('../plugins/data-secure/server/privacy/field-value-coverage').uncoveredFieldSpans(label+': Qvx / Qvy',undefined).length,0);
+});
+
+test('source marker syntax in a callee cannot establish generated origin or waive complete slot checks', () => {
+  const marker='[PERSON_DENISEKOCH]';
+  for (const caption of [`Rufen Sie ${marker} an unter`,`Rufen Sie Frau ${marker} Berger an unter`]) {
+    for (const source of [caption+': [FIELD_REDACTED]',cell(caption,'[FIELD_REDACTED]'),cell('Inhalt','Formel: "A\\|B"<br>Gespeicherter Wert: '+caption+': [FIELD_REDACTED]')]) {
+      const basis=canonicalizeRenderedText(source,'content-person-fields/1');
+      const residual=scanResidual(basis,'general',[],{...options,originalSourceText:basis});
+      assert.ok(residual.some(row=>row.type==='SENSITIVE_FIELD'));
+      const actual=anonymize(basis,'general',options);assert.doesNotMatch(actual.text,/DENISEKOCH|Berger/u);
+      assert.deepEqual(scanResidual(actual.text,'general',[],{...options,originalSourceText:basis}),[]);
+      for (const span of entityPlanFromTrace(actual.transform_trace).occurrences)
+        assert.equal(actual.transform_trace.canonical_input.slice(span.source_start,span.source_end),span.original);
+    }
+  }
+});
+
+test('role matching bounds source whitespace and invalid annotation corridors without a larger timeout', () => {
+  const fs=require('node:fs'),vm=require('node:vm'),{createRequire}=require('node:module');
+  const file=require.resolve('../plugins/data-secure/server/privacy/base'),context=vm.createContext({module:{exports:{}},require:createRequire(file)});
+  vm.runInContext(fs.readFileSync(file,'utf8'),context,{timeout:1000});
+  for (const size of [128,512,2048]) {
+    context.value='Name: Qza\rTelefon'+' '.repeat(size)+'X: Qvx / Qvy';
+    assert.equal(vm.runInContext('module.exports.structuredLabelRole(value)',context,{timeout:300}),null);
+    context.value='Telefon ('+' '.repeat(size)+'X): Qvx / Qvy';
+    assert.equal(vm.runInContext('module.exports.structuredLabelSeparators(value).size',context,{timeout:300}),0);
+  }
+});
+
 (async () => {
   const {fromMarkdown}=await import('../native/markdown/pilot/node_modules/mdast-util-from-markdown/index.js');
   const {parseFragment}=await import('../native/markdown/pilot/node_modules/parse5/dist/index.js');

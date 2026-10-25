@@ -6,7 +6,8 @@
 // ordinary entity detection runs first; only uncovered field fragments are
 // conservatively masked afterwards, with real edits in the existing trace.
 const { isResolvedSensitiveTableHeader, effectiveTableFieldLabel, tableHeadersAt, normalizeSensitiveLabel,
-  DATE_OF_BIRTH_LABEL_RE, PHONE_LABEL_RE, DE_TAX_LABEL_RE, ID_LABEL_HEADER_RE, CREDENTIAL_LABEL_HEADER_RE } = require('./base');
+  DATE_OF_BIRTH_LABEL_RE, PHONE_LABEL_RE, DE_TAX_LABEL_RE, ID_LABEL_HEADER_RE, CREDENTIAL_LABEL_HEADER_RE,
+  STRUCTURED_LABEL_VALUE_PATTERN, structuredLabelRole, structuredLabelSeparators } = require('./base');
 const { placeholderSpans, sourceVariableTokens } = require('./spans');
 const { CONTENT_PERSON_FIELD_POLICY, personFieldPattern } = require('../core/person-field-policy');
 const ORGANIZATION_FIELD = /^(?:Firma|Unternehmen|Organisation|Organization|Company(?:\s+Name)?|Employer|Arbeitgeber)$/iu;
@@ -14,13 +15,48 @@ const GENERIC_FIELD = 'Geschützter Tabellenwert';
 // Candidate discovery uses the actual existing closed policy grammar, not a
 // separate word/length allowlist. The full raw prefix is still revalidated.
 const unanchor = pattern => pattern.replace(/^\^/u, '').replace(/\$$/u, '');
-const PROSE_LABEL_PATTERN = [personFieldPattern(CONTENT_PERSON_FIELD_POLICY),
+const PROSE_LITERAL_LABEL_PATTERN = [personFieldPattern(CONTENT_PERSON_FIELD_POLICY),
   ...[DATE_OF_BIRTH_LABEL_RE, PHONE_LABEL_RE, DE_TAX_LABEL_RE, ID_LABEL_HEADER_RE,
     CREDENTIAL_LABEL_HEADER_RE, ORGANIZATION_FIELD].map(pattern => unanchor(pattern.source)), GENERIC_FIELD].join('|');
+const PROSE_LABEL_PATTERN = PROSE_LITERAL_LABEL_PATTERN + '|' + STRUCTURED_LABEL_VALUE_PATTERN;
 const PROSE_LABEL_END = new RegExp('(?:' + PROSE_LABEL_PATTERN + ')$', 'giu');
-const EXACT_HEADER_METADATA = new RegExp('^(?:' + PROSE_LABEL_PATTERN + ')$', 'iu');
+const EXACT_HEADER_METADATA = new RegExp('^(?:' + PROSE_LITERAL_LABEL_PATTERN + ')$', 'iu');
 const proseUnescape = value => value.replace(/\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/gu, '$1');
-const isExactHeaderMetadata = value => EXACT_HEADER_METADATA.test(effectiveTableFieldLabel(value).replace(/\s+/gu, ' '));
+const isExactHeaderMetadata = value => {
+  const label = effectiveTableFieldLabel(value).replace(/\s+/gu, ' '), role = structuredLabelRole(label);
+  return role ? role.wholeMetadata : EXACT_HEADER_METADATA.test(label);
+};
+
+function rawLabelPoints(raw, points) {
+  const result = new Map(); let at = 0, logical = 0;
+  for (const point of [...new Set(points)].sort((a,b) => a-b)) {
+    while (logical < point && at < raw.length) {
+      at += raw[at] === '\\' && /[!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~]/u.test(raw[at+1] || '') ? 2 : 1;
+      logical++;
+    }
+    if (logical === point) result.set(point, at);
+  }
+  return result;
+}
+function rawStructuredSeparators(raw) {
+  if (!raw.includes('(')) return new Set();
+  const positions = structuredLabelSeparators(proseUnescape(raw)), points = rawLabelPoints(raw, [...positions].map(point => point+1));
+  return new Set([...positions].map(point => points.get(point+1)-1));
+}
+function metadataRanges(raw, separator = false) {
+  const logical = separator ? proseUnescape(raw).slice(0,-1) : proseUnescape(raw);
+  const role = structuredLabelRole(logical);
+  if (role) {
+    if (logical.slice(0,role.start).trim() !== '') return [];
+    const points = rawLabelPoints(raw, role.staticSpans.flatMap(span => [span.start,span.end]));
+    return role.staticSpans.filter(span => points.has(span.start)&&points.has(span.end)&&
+      proseUnescape(raw.slice(points.get(span.start),points.get(span.end))) === logical.slice(span.start,span.end))
+      .map(span => ({start:points.get(span.start),end:points.get(span.end)}));
+  }
+  // A normalizer-created role is not a raw offset map or a metadata proof.
+  if (structuredLabelRole(effectiveTableFieldLabel(logical))) return [];
+  return isExactHeaderMetadata(logical) ? [{start:0,end:raw.length}] : [];
+}
 
 // Comparison only: one whitespace corridor must not become ambiguous work in
 // the legacy suffix predicates. Keep source-owner points, not repaired text.
@@ -45,14 +81,14 @@ function compactProseComparison(value, owners) {
 function isProtectedFieldHeader(value, policy) {
   const label = effectiveTableFieldLabel(value);
   return policy === CONTENT_PERSON_FIELD_POLICY && (isResolvedSensitiveTableHeader(label, policy) ||
-    ORGANIZATION_FIELD.test(label) || label === GENERIC_FIELD);
+    ORGANIZATION_FIELD.test(label) || label === GENERIC_FIELD || structuredLabelRole(label)?.protectsValue === true);
 }
 
 // Only a closed source-line prefix is a prose field, never an arbitrary
 // occurrence of "Name:" inside a sentence. Consume Markdown containers
 // without changing UTF-16 coordinates; their nesting is source structure,
 // not an identity claim. The native document/text budget bounds this loop.
-function proseFieldStart(line, policy) {
+function proseFieldStart(line, policy, ignored = rawStructuredSeparators(line), base = 0) {
   if (policy !== CONTENT_PERSON_FIELD_POLICY) return null;
   let cursor = 0;
   while (cursor < line.length) {
@@ -65,6 +101,7 @@ function proseFieldStart(line, policy) {
   const labelStart = cursor;
   for (; cursor < line.length; cursor++) {
     if (line[cursor] !== ':' && line[cursor] !== '=') continue;
+    if (ignored.has(base+cursor)) continue;
     const label = line.slice(labelStart, cursor + 1)
       .replace(/\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/gu, '$1').slice(0, -1);
     if (isProtectedFieldHeader(label.trim(), policy)) return { labelStart, valueStart: cursor + 1 };
@@ -79,14 +116,16 @@ function proseFieldStart(line, policy) {
 // no character or line ending is rewritten. Actual table rows use their
 // original cell scope and must never acquire these prose boundaries.
 function proseFieldRanges(line, policy, allowBareCr = true) {
+  const ignored = rawStructuredSeparators(line);
   if (!allowBareCr) {
-    const field = proseFieldStart(line, policy);
+    const field = proseFieldStart(line, policy, ignored);
     return field ? [{ ...field, end: line.length }] : [];
   }
   const fields = []; let groupStart = 0;
   for (const delimiter of line.matchAll(/[:=]/gu)) {
     const separator = delimiter.index;
-    let field = groupStart === 0 ? proseFieldStart(line.slice(0, separator + 1), policy) : null;
+    if (ignored.has(separator)) continue;
+    let field = groupStart === 0 ? proseFieldStart(line.slice(0, separator + 1), policy, ignored) : null;
     let fieldStart = 0;
     if (!field) {
       const group = line.slice(groupStart, separator);
@@ -139,7 +178,7 @@ function proseFieldRanges(line, policy, allowBareCr = true) {
         }
         if (found < 0) continue;
         const start = compact.owners.get(points[found]);
-        const candidate = proseFieldStart(line.slice(start, separator + 1), policy);
+        const candidate = proseFieldStart(line.slice(start, separator + 1), policy, ignored, start);
         if (candidate) { field = {labelStart: start + candidate.labelStart, valueStart: separator + 1}; fieldStart = start; break; }
       }
     }
@@ -179,13 +218,13 @@ function protectedHeaderRanges(text, policy) {
     const inlineHeader = line.includes('|') && (lines[index + 1] || '').includes('|') &&
       headers.length === separator.length && separator.every(range =>
         /^:?-{3,}:?$/u.test(lines[index + 1].slice(range.start, range.end).trim()));
-    const allowBareCr = !inlineHeader && !tableHeadersAt(text, offset, policy);
-    for (const field of proseFieldRanges(line, policy, allowBareCr)) {
+    const table = tableHeadersAt(text, offset, policy);
+    for (const field of !inlineHeader && !table ? proseFieldRanges(line, policy) : []) {
       // A suffix predicate can own a field's value without declaring every
       // preceding qualifier privacy-free. Only the complete semantic label
       // receives metadata exemption; qualifiers retain ordinary PII checks.
-      const label = proseUnescape(line.slice(field.labelStart, field.valueStart)).slice(0, -1);
-      if (isExactHeaderMetadata(label)) result.push({ start: offset + field.labelStart, end: offset + field.valueStart });
+      const raw = line.slice(field.labelStart, field.valueStart);
+      for (const span of metadataRanges(raw,true)) result.push({start:offset+field.labelStart+span.start,end:offset+field.labelStart+span.end});
     }
     if(index + 2 >= lines.length || !line.includes('|') || !headers.length || headers.length !== separator.length ||
         !separator.every(range => /^:?-{3,}:?$/u.test(lines[index + 1].slice(range.start,range.end).trim()))) {
@@ -198,12 +237,19 @@ function protectedHeaderRanges(text, policy) {
     // in a heading. Their DATA occurrences remain normal private identifiers.
     for(const range of headers) {
       const raw = line.slice(range.start,range.end);
-      if(isExactHeaderMetadata(raw)&&isProtectedFieldHeader(raw,policy))result.push({ start: offset + range.start,
-        end: offset + range.end });
+      if(isProtectedFieldHeader(proseUnescape(raw),policy)) for (const span of metadataRanges(raw))
+        result.push({start:offset+range.start+span.start,end:offset+range.start+span.end});
     }
     offset += line.length + 1;
   }
-  return result;
+  result.sort((a,b) => a.start-b.start||a.end-b.end);
+  const merged = [];
+  for (const span of result) {
+    const last = merged[merged.length-1];
+    if (last && span.start <= last.end) last.end = Math.max(last.end,span.end);
+    else merged.push(span);
+  }
+  return merged;
 }
 
 function isWithinProtectedHeader(ranges, span) {
@@ -236,6 +282,31 @@ function uncoveredFieldSpans(text, policy, sourceText = '') {
       cursor = boundary.end;
     }
   }
+  function appendCalleeRemainders(raw, base) {
+    const logical = proseUnescape(raw), role = structuredLabelRole(logical);
+    const slots = role?.slots.filter(slot => slot.kind === 'callee') || [];
+    if (!slots.length) return;
+    const points = rawLabelPoints(raw, slots.flatMap(slot => [slot.start, slot.end]));
+    for (const slot of slots) {
+      const start = points.get(slot.start), end = points.get(slot.end);
+      if (start === undefined || end === undefined || proseUnescape(raw.slice(start,end)) !== logical.slice(slot.start,slot.end))
+        throw Object.assign(new Error('Die Feldstruktur erlaubt keine sichere Zuordnung des angesprochenen Werts.'), {code:'RESIDUAL_PII'});
+      // A proven named-callee slot carries a complete protection duty, not a
+      // new person identity. Ordinary name detection can cover only a part;
+      // cover its remaining source text generically. Parenthetical annotation
+      // slots deliberately retain the ordinary person/review model instead.
+      const fragment=raw.slice(start,end), before=result.length;
+      appendUncovered(fragment, 0, base + start);
+      if (result.length>before) {
+        // A real entity replacement may include retained title text as well
+        // as its opaque pseudonym. Never cut that generated entity into an
+        // invented reversible source fragment. The complete proven slot is
+        // the conservative generic replacement boundary whenever raw remains.
+        result.splice(before,result.length-before,{start:base+start,end:base+end,type:'SENSITIVE_FIELD',
+          text:fragment,priority:100,replacement:'[FIELD_REDACTED]'});
+      }
+    }
+  }
   for (let index = 0; index < lines.length; index++) {
     const line = lines[index];
     const table = tableHeadersAt(text, offset, policy);
@@ -248,6 +319,7 @@ function uncoveredFieldSpans(text, policy, sourceText = '') {
     if (table || inlineHeader) {
       if (inlineHeader || cells.length === table.headers.length) for (let column = 0; column < cells.length; column++) {
         const cell = cells[column], fragment = line.slice(cell.start, cell.end);
+        if (inlineHeader) appendCalleeRemainders(fragment, offset + cell.start);
         let valueStart = 0;
         if (inlineHeader || !isProtectedFieldHeader(table.headers[column], policy)) {
           // A real data cell may carry its own closed sensitive field label,
@@ -262,10 +334,13 @@ function uncoveredFieldSpans(text, policy, sourceText = '') {
           // "Formel: … Gespeicherter Wert: Name: …". Inspect each successive
           // label segment, not only the first colon, in linear source order.
           let labelStart = 0, found = false;
+          const ignored = rawStructuredSeparators(fragment);
           for (const separator of fragment.matchAll(/[:=]/gu)) {
+            if (ignored.has(separator.index)) continue;
             const label = fragment.slice(labelStart, separator.index + 1)
               .replace(/\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/gu, '$1').slice(0, -1);
             if (isProtectedFieldHeader(label.trim(), policy)) {
+              appendCalleeRemainders(fragment.slice(labelStart,separator.index), offset + cell.start + labelStart);
               valueStart = separator.index + 1; found = true; break;
             }
             labelStart = separator.index + 1;
@@ -275,9 +350,11 @@ function uncoveredFieldSpans(text, policy, sourceText = '') {
         appendUncovered(fragment, valueStart, offset + cell.start);
       }
     } else {
-      for (const field of proseFieldRanges(line, policy))
+      for (const field of proseFieldRanges(line, policy)) {
+        appendCalleeRemainders(line.slice(field.labelStart, field.valueStart - 1), offset + field.labelStart);
         appendUncovered(line.slice(field.labelStart, field.end), field.valueStart - field.labelStart,
           offset + field.labelStart);
+      }
     }
     offset += line.length + 1;
   }
