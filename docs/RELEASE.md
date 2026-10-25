@@ -1,8 +1,38 @@
 # Release- und Distributionsvertrag
 
-Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc165 · Veröffentlichungsnachtrag: 19.10.2026
+Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc165 · Veröffentlichungsnachtrag: 25.10.2026
 
-Der aktuelle Quellstand ist RC165, als Standalone-Test-Pre-Release für Windows und macOS veröffentlicht. Menschliche N3/N4-Produktionsfreigaben bleiben offen.
+Der aktuelle Quellstand ist RC165-Entwicklungsstand auf main; die Produktversion bleibt 3.2.0-rc165. Die aktuellen Windows-/Mac-Downloads stammen aus dem separat veröffentlichten RC176-Tag. Die historische RC165-Veröffentlichung bleibt unverändert. Menschliche N3/N4-Produktionsfreigaben bleiben offen.
+
+### RC176 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
+
+Quellcommit `706c1fad6fbf26bf6745768c0d6a5bd4fc48040b` bindet den
+[veröffentlichten RC176-Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc176)
+für Windows x64, macOS ARM64 und Intel. Sichtbare Buildkennung `706c1fad`,
+Produktfingerprint `407cb28589025f276d8c0139d7f0e8c0d402fc8211c63ec5c62a4d3ce01683d3`.
+Die fünf Apparchive, drei synthetischen Testarchive, acht Einzelprüfsummen,
+zwei aktuellen Testpläne, RELEASE-EVIDENCE.json und SHA256SUMS.txt sind auf der
+Release-Seite verfügbar: 20 Assets, Release 423600091, Pre-Release und kein Draft.
+Der Tag wurde am 25.10.2026 erneut direkt auf diesen Appcommit aufgelöst.
+
+Der normale Standalone-Ablauf liefert Ergebnisdateien nach den erforderlichen
+Prüfungen direkt; zusätzliche Dateiauswahl, Dokumentfreigabe und Exportbestätigung
+entfallen. Anonymisierung ergänzt Vertraulich/Dateizuordnung.csv sowie
+Pseudonym-Zuordnung.txt und Pseudonym-Zuordnung.xlsx. Vertraulich enthält
+Originalangaben und gehört nicht zur Weitergabe. Manuelle Änderungen an fertigen
+Arbeitskopien bleiben möglich; Appkorrekturen erzeugen neue Ergebnisordner.
+Unterstützte Tabellen-/Diagramm-/Formel-/Formular- und Teilinhaltsmodelle sowie
+konkrete Grenzen stehen in den Releasehinweisen und den beiden aktuellen Plänen.
+
+Linux bleibt RC159, Cowork RC151. Menschliche Desktop-/Office-/Finder-/TCC-/
+Gatekeeper-/Enterprise-/VoiceOver-/Zielhostabnahmen bleiben offen; keine
+Produktionsfreigabe. Mac bleibt lokal ad-hoc versiegelt ohne eigene Developer ID
+oder Notarisierung; keine Apple-Einreichung oder globale Schutzabschaltung.
+RC177 ist getrennte laufende Weiterentwicklung und noch kein veröffentlichter
+Paketkandidat. Dieser reine Dokumentationsnachtrag integriert keinen RC176-/
+RC177-Produktcode nach main und verändert keine älteren Releasebelege.
+
+Die nachfolgenden RC165- und älteren Abschnitte sind historische Belege.
 
 ### RC165 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
 

@@ -1,47 +1,63 @@
-# GBH DataSecure – Standalone Windows/macOS RC165 · Linux RC159 · Cowork RC151
+# GBH DataSecure – Standalone Windows/macOS RC176 · Linux RC159 · Cowork RC151
 
-Quellstand: 3.2.0-rc165
+Quellstand: 3.2.0-rc165 (Codezweig `main`; Produktcode unverändert)
 
-Der [Standalone-Test-Pre-Release RC165 für Windows und macOS](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc165)
-bindet Quellcommit `973274f17cda46bb66621d956af2cbc96e2272e3` (Build `973274f1`).
-Linux bleibt beim [RC159-Paket](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc159)
-aus Quellcommit `7af2a9d0268864a01b954e0175cae9f5a3616fe8`.
-Die neue Oberfläche ist der reguläre Einstieg: **Neue Verarbeitung**, schnelle
-Sammelprüfung mit Checkboxen und Original-/Markdown-Vergleich, Pausieren,
-laufgebundene Fortsetzung und konkrete Dateiprobleme. Nach Abschluss der
-Fundstellenprüfung öffnet sich die Dokumentprüfung desselben Laufs.
-**Auswahl exportieren** öffnet eine lesende Vorschau. **Freigeben und exportieren**
-bestätigt Freigabe und Export gemeinsam; die technischen revisions-/hashgebundenen
-Prüfungen bleiben aktiv. Nur diese Markdown-Stände werden in einen separaten
-Ordner kopiert. Vertrauliche Zuordnungen bleiben lokal; Export ist kein Upload
-und nicht auf KI-Nutzung beschränkt. Reine Markdown-Konvertierung anonymisiert nicht.
-Für RC165 bestanden 280 Haupttests, zehn Zusatzprüfungen, Windows-Native-/Rust-
-und Paketgates sowie beide nativen Mac-Consumer aus demselben Appcommit.
-Die Mac-Pakete enthalten einen eigenen statischen Core und eine getrennte
-offizielle Konverterruntime. Alle 18 veröffentlichten Dateien wurden erneut
-heruntergeladen und gegen ihre Prüfsummen kontrolliert. Die manuelle Windows-
-Abnahme übernimmt der Nutzer, die praktische Mac-/M2-Abnahme sein Kollege.
-Finder-/Gatekeeper-/TCC-/VoiceOver- und macOS-26-Zielhostabnahmen bleiben offen.
-RC165 ist ein Teststand mit synthetischen Daten, keine Produktionsfreigabe.
-[Exakte Nachweise und Prüfsummen](docs/RELEASE.md).
+Die folgenden Windows-/Mac-Downloads gehören zum separat veröffentlichten
+RC176-Tag. Die Weiterentwicklung RC177 ist noch nicht veröffentlicht.
 
-Das getrennte [Cowork-Plugin bleibt auf RC151](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc151),
-aus Quellcommit `fdb8288c9bef2a64eeb10d584e1bf59a6cb864c3`. Seine Downloads
-werden durch den Standalone-Release nicht ersetzt. Menschliche N3/N4-,
-macOS-/Linux-Installations-, Accessibility- und Cowork-Modellabnahmen bleiben
-eigene Nachweise; die Vorabkandidaten sind keine pauschale Produktionsfreigabe.
+**Dokumente lokal in Markdown umwandeln – auf Wunsch anonymisiert.**
+DataSecure arbeitet offline. Originaldateien bleiben unverändert; die Anwendung
+lädt keine Dokumente hoch. Die Standalone-App benötigt weder Claude noch eine
+KI-Anbindung. Fertige Markdown-Dateien lassen sich mit Menschen oder anderen
+Werkzeugen verwenden.
 
-Die Überschrift nennt zwei getrennte Produkte. Auch bei gleicher RC-Nummer
-bleiben ihre Pakete und Abnahmen getrennt. Ein neuer Quellstand aktualisiert
-bestehende Downloads nicht automatisch.
+**[Aktueller Windows-/Mac-Teststand: RC176 herunterladen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc176)**
 
-Frühere Kandidaten und ihre unveränderten Nachweise sind im
-[Releasevertrag](docs/RELEASE.md) dokumentiert.
+| Aufgabe | Was die Standalone-App macht |
+| --- | --- |
+| Nur umwandeln | Text und unterstützte Dokumentstrukturen als lesbares Markdown bereitstellen. Dieser Modus anonymisiert nicht. |
+| Umwandeln und anonymisieren | Personen-, Unternehmens- und weitere sensible Angaben prüfen und ersetzen; selbst entscheiden oder automatisch maskieren. |
+| OCR | Text aus ausgewählten Scans und Grafiken lokal erkennen. OCR kann Zeichenfehler und Auslassungen enthalten. |
+| Nachbearbeiten | Original und Ergebnis vergleichen, zusätzliche Stellen exakt maskieren und einen neuen vollständigen Ergebnisstand speichern. |
+| Ergebnisse verwenden | Nach den erforderlichen Prüfungen direkt den Ergebnisordner öffnen. Keine zweite Dateiauswahl, Dokumentfreigabe oder Exportbestätigung im normalen Ablauf. |
 
-DataSecure de-identifiziert lokale Geschäftsdokumente, bevor Claude deren Inhalt
-verwendet. Originale werden über einen Betriebssystemdialog gewählt, nur lesend
-verarbeitet und niemals automatisch verändert oder gelöscht. Claude erhält nur
-freigegebene Markdown-Ergebnisse.
+Unterstützte Eingaben sind **PDF, DOCX, XLSX, PPTX, TXT, Markdown, CSV sowie
+PNG, JPEG und BMP**. In Office-Dateien werden zusätzlich unterstützte eingebettete
+Raster- und Vektorgrafiken verarbeitet. Text, Tabellen, SmartArt, Diagramme,
+gespeicherte Formelwerte, unterstützte Office-Formeln und passive PDFformularwerte
+werden je nach vorhandenem Quellmodell übernommen. Formeln, Makros, PDFaktionen
+und externe Verknüpfungen werden nicht ausgeführt oder nachgeladen.
+
+**Grenzen sichtbar machen:** Ein nicht unterstütztes Bild soll den unabhängig
+lesbaren übrigen Dokumentinhalt nicht verwerfen. Teilabdeckung wird mit einem
+Hinweis kenntlich gemacht. Verschlüsselte, beschädigte oder nicht sicher
+verarbeitbare Quellen können weiterhin dateibezogen ausfallen. Komplexe Layouts,
+Spezialgrafiken und OCR werden nicht universell originalgetreu wiedergegeben.
+Ergebnisse vor der Verwendung inhaltlich prüfen.
+
+Anonymisierte Ergebnisse enthalten zusätzlich **Vertraulich/Dateizuordnung.csv**,
+**Vertraulich/Pseudonym-Zuordnung.txt** und **Vertraulich/Pseudonym-Zuordnung.xlsx**.
+Das erste Excelblatt enthält dieselben Zuordnungen und Vorkommen wie die TXT.
+**Vertraulich enthält Originalangaben und gehört nicht zur Weitergabe.**
+Fertige MD-/CSV-/TXT-/XLSX-Arbeitskopien dürfen manuell bearbeitet werden. Eine
+spätere Appkorrektur erstellt einen neuen Ordner aus der privaten Basis und
+überschreibt keine von Hand geänderten Ergebnisse.
+
+RC176 für Windows und beide Macs stammt aus demselben geprüften Appcommit
+`706c1fad6fbf26bf6745768c0d6a5bd4fc48040b` (Build `706c1fad`).
+Automatische Regressionen, native Build-/Konverterprüfungen und unabhängige
+Quellen-/Paketreviews sind abgeschlossen. Die Desktopabnahme und echte
+Office-/Finder-/TCC-/VoiceOver-/Zielhosttests bleiben bei den Testenden.
+Es ist ein **Beta-/Test-Pre-Release, keine Produktionsfreigabe**.
+[Genauer Umfang und Nachweise](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/blob/v3.2.0-rc176/docs/acceptance/RC176_SHARED_RELEASE_20261024.md).
+Die Verbesserungen aus dem anschließenden großen Nutzerlauf werden für RC177
+entwickelt; RC177 ist noch nicht veröffentlicht.
+
+Linux bleibt beim getrennten [RC159-Paket](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc159)
+(Quellcommit `7af2a9d0268864a01b954e0175cae9f5a3616fe8`). Das getrennte
+[Cowork-Plugin bleibt auf RC151](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc151)
+(Quellcommit `fdb8288c9bef2a64eeb10d584e1bf59a6cb864c3`). Deren Downloads und
+Abnahmen werden durch einen neuen Windows-/Mac-Standalone-Release nicht ersetzt.
 
 ## Standalone-App installieren (Windows, macOS und Linux)
 
@@ -49,45 +65,48 @@ Für die Standalone-App werden **weder Claude noch Cowork, Node.js, Python oder
 Rust** benötigt. Das zur eigenen CPU passende ZIP vollständig entpacken und
 nicht direkt aus dem ZIP starten; auf dem Mac gibt es alternativ ein DMG:
 
-**[RC165: Windows-/Mac-ZIPs, Mac-DMGs, Testpläne und Prüfsummen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc165)** ·
+**[RC176: Windows-/Mac-ZIPs, Mac-DMGs, Testpläne und Prüfsummen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc176)** ·
 [Linux RC159](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc159)
 
-Für die zehn Abschlusstests gibt es [synthetische RC164-Testdaten](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc165/DataSecure-3.2.0-rc164-Abnahmetests.zip),
-einen [Windows-Testplan](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc165/WINDOWS-TESTPLAN.txt)
-und [Mac-Testhinweise](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc165/MAC-TEST-HINWEISE.txt).
+Für die 19 Abschlusstests, neue PDF-/TIFF-/Office-/Feldschutzproben und beibehaltene chartEx-/FachprobenA–F/Diagramm-/Formel-/PDF-/Tabellenproben gibt es [synthetische RC164-Testdaten](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc176/DataSecure-3.2.0-rc164-Abnahmetests.zip),
+einen [Windows-Testplan](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc176/WINDOWS-TESTPLAN.txt)
+und [Mac-Testhinweise](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc176/MAC-TEST-HINWEISE.txt).
 Pro Fall nur dessen EINGABEN wählen. Zusätzlich steht das unveränderte
-[100-Dateien-Testpaket aus RC160](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc165/DataSecure-Standalone-3.2.0-rc160-Testdatenpaket.zip)
-bereit. In der App dafür nur den enthaltenen Eingabeordner
+[100-Dateien-Testpaket aus RC160](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc176/DataSecure-Standalone-3.2.0-rc160-Testdatenpaket.zip)
+und die separate [36-Dateien-Large-Beilage](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc176/DataSecure-3.2.0-rc166-Large-Testdaten.zip)
+bereit. Die historischen Anleitungen in diesen unveränderten Archiven gelten
+nicht für den neuen Direktablauf; die zwei aktuellen Testpläne sind maßgeblich.
+In der App für den 100-Dateien-Bestand nur den enthaltenen Eingabeordner
 `DataSecure-RC160-Testdaten-100` wählen; Anleitung und Manifest sind keine
 Eingabedateien.
 
 **Mac-Kompatibilitätshinweis:** Der erneute Paketreview hat in den veröffentlichten
 Standalone-RC140-ZIPs einen Helfer mit höherer Mindestversion gefunden: Intel
 verlangt macOS 15, Apple Silicon macOS 14. Die bisherige Angabe 13.5 war für
-diese ZIPs falsch. Für Mac die unten verlinkten RC165-ZIPs oder DMGs verwenden:
+diese ZIPs falsch. Für Mac die unten verlinkten RC176-ZIPs oder DMGs verwenden:
 ihr Binärvertrag ist für macOS 13.5 geprüft; ein realer Lauf auf 13.5 bleibt offen.
 Die RC140-Downloads werden nicht verändert. Die Mac-Pakete bleiben interne,
 ad-hoc-signierte Piloten ohne bestätigte Finder-/Gatekeeper-Abnahme auf dem
 betroffenen verwalteten M2.
 
 - **Windows 10/11 x64:**
-  [DataSecure-Standalone-3.2.0-rc165-windows-x64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc165/DataSecure-Standalone-3.2.0-rc165-windows-x64.zip)
+  [DataSecure-Standalone-3.2.0-rc176-windows-x64.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc176/DataSecure-Standalone-3.2.0-rc176-windows-x64.zip)
   herunterladen, vollständig entpacken und
   `DataSecure Standalone.exe` doppelklicken. Microsoft Edge WebView2 muss als
-  Windows-Systemkomponente vorhanden sein. [Ausführliche Windows-Anleitung](apps/datasecure-standalone/START-WINDOWS.md)
+  Windows-Systemkomponente vorhanden sein. [Ausführliche Windows-Anleitung](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/blob/v3.2.0-rc176/apps/datasecure-standalone/START-WINDOWS.md)
 - **Mac mit Intel-Prozessor:**
-  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc165/DataSecure-Standalone-3.2.0-rc165-macos-x64.zip)
-  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc165/DataSecure-Standalone-3.2.0-rc165-macos-x64.dmg)
+  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc176/DataSecure-Standalone-3.2.0-rc176-macos-x64.zip)
+  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc176/DataSecure-Standalone-3.2.0-rc176-macos-x64.dmg)
   herunterladen, die jeweils passende `.sha256` derselben Release-Seite prüfen
   und die enthaltene `DataSecure Standalone.app` nach **Programme** ziehen.
 - **Mac mit Apple Silicon (M1 oder neuer):**
-  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc165/DataSecure-Standalone-3.2.0-rc165-macos-arm64.zip)
-  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc165/DataSecure-Standalone-3.2.0-rc165-macos-arm64.dmg)
+  [ZIP](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc176/DataSecure-Standalone-3.2.0-rc176-macos-arm64.zip)
+  oder [DMG](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc176/DataSecure-Standalone-3.2.0-rc176-macos-arm64.dmg)
   herunterladen und genauso installieren.
-  Die Architektur zeigt **Apple-Menü → Über diesen Mac**. RC165 wurde auf
-  macOS 15 (Intel) und macOS 14 (ARM) ausgeführt; macOS 13.5 ist die deklarierte,
+  Die Architektur zeigt **Apple-Menü → Über diesen Mac**. RC176 wurde auf
+  macOS 15 (Intel) und macOS 14 (ARM) automatisch ausgeführt; macOS 13.5 ist die deklarierte,
   in allen nativen Komponenten geprüfte Mindestversion (siehe Hinweis oben).
-  [Ausführliche macOS-Anleitung](apps/datasecure-standalone/MACOS-START.md)
+  [Ausführliche macOS-Anleitung](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/blob/v3.2.0-rc176/apps/datasecure-standalone/MACOS-START.md)
 - **Linux x64 mit glibc:**
   [DataSecure-Standalone-3.2.0-rc159-linux-x64-glibc.zip](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/download/v3.2.0-rc159/DataSecure-Standalone-3.2.0-rc159-linux-x64-glibc.zip)
   vollständig entpacken, die enthaltene AppImage ausführbar machen und starten.
@@ -178,11 +197,11 @@ Sie konvertiert TXT, Markdown, CSV, DOCX, XLSX, PPTX, PDF/Scan-PDF sowie
 PNG/JPEG/BMP nach Markdown. Im Anonymisierungsmodus laufen TXT, Markdown und CSV
 direkt; DOCX und die breiten Formate werden genau einmal lokal nach Markdown
 extrahiert und anschließend mit demselben Privacy-Core anonymisiert.
-DOCX-Kopf- und Fußzeilen werden weiterhin vollständig auf sichere Struktur
-geprüft. Reine Markdown-Konvertierung erhält sie; Cowork- und
-Standalone-Anonymisierung geben sie sowie ausschließlich dort referenzierte
-Bilder nicht aus. PDF-/Scan-PDF-Seitenränder werden nicht unsicher geraten oder
-automatisch abgeschnitten.
+Im normalen Standalone-Inhaltsmodus werden unterstützte sichtbare Wordinhalte
+einschließlich Kopf-/Fußzeilen quellbezogen gelesen und durch die normalen
+Anonymisierungsprüfungen geführt. Cowork und der technische Legacy-/Notes-Pfad
+haben einen getrennten Formatvertrag. PDF-/Scan-PDF-Seitenränder werden nicht
+unsicher geraten oder automatisch abgeschnitten.
 
 ## Einfacher Cowork-Ablauf
 
@@ -212,14 +231,10 @@ automatisch abgeschnitten.
    noch aktiv, fehlgeschlagen oder noch nicht vollständig exportiert, wird kein
    älterer Ergebnisordner ersatzweise geöffnet. Im
    Cowork-Ergebnisordner liegen ausschließlich neutrale freigegebene Markdown-
-   Dateien; Originalnamen, Mapping, Review und Recovery bleiben privat. Die
-   eigenständige Standalone-App ergänzt bei der **Anonymisierung** lokal im
-   jeweiligen Laufordner `DataSecure-Zuordnung.csv`, damit Anwender Quelle und
-   Ergebnis ohne einen versteckten AppData-Pfad zuordnen können. Standalone lässt
-   dafür pro Stapel neutrale Dateinamen (Standard) oder den Quellbasisnamen mit
-   `-anonymisiert` wählen. Jede
-   Zeile verweist auf eine tatsächlich erzeugte Datei; gestoppte Quellen stehen
-   in Abschluss und Diagnose, nicht in dieser Zuordnung.
+   Dateien; Originalnamen, Mapping, Review und Recovery bleiben privat.
+   Der getrennte Standalone-Teststand liefert seine lokalen Zuordnungen im
+   Unterordner **Vertraulich**; dessen Dateien enthalten Originalangaben und
+   gehören nicht zur Weitergabe.
 7. Erst danach bei Bedarf ausdrücklich um die Auswertung der fertigen Ergebnisse
    bitten.
 
@@ -234,74 +249,56 @@ gesamte Ordnerauswahl ab; der Grund bleibt in der Oberfläche sichtbar.
 Die eigentliche Verarbeitung läuft lokal und offline. Cowork ist der bequeme
 Einstieg und kann die freigegebenen Markdown-Ergebnisse anschließend auswerten;
 die Anonymisierungsengine ist davon fachlich getrennt. Die eigenständige
-Desktop-Oberfläche ohne Claude/Cowork wird als Engineering-Pilot entwickelt und
-verwendet dieselbe Engine und dieselben Prüfregeln. Das Mapping gilt nur für
-Anonymisierung; reine Markdown-Konvertierung behält die Quellbasisnamen und
-benötigt keine Zuordnungsdatei.
+Desktop-Oberfläche ohne Claude/Cowork ist als eigener Beta-Teststand verfügbar
+und verwendet dieselbe Engine mit ihrem getrennten Inhalts-/Ablaufvertrag.
+Das Mapping gilt nur für Anonymisierung; reine Markdown-Konvertierung behält
+die Quellbasisnamen und benötigt keine Zuordnungsdatei.
 
-## Standalone ohne Claude – Entwicklungsstand
+## Standalone ohne Claude – RC176 testen
 
-Standalone ist ein **eigenes, noch nicht freigegebenes Produkt** mit derselben
-lokalen DataSecure-Engine. Ziel ist eine gewöhnliche Desktop-App: Dateien oder
-Ordner wählen, einmal starten, nur bei echten Mehrdeutigkeiten gesammelt prüfen
-und den Ergebnisordner öffnen. Tauri 2 ist ausschließlich die kleine native
-Fenster- und Dialoghülle. Rust, Node und Python sind Buildwerkzeuge beziehungsweise
-gebündelte Laufzeiten und werden nicht auf Anwenderrechnern installiert.
+1. Unter **Neue Verarbeitung** den Zweck wählen: **Nur umwandeln** oder
+   **Umwandeln und anonymisieren**. Beim Anonymisieren zwischen **Selbst
+   entscheiden** und **Automatisch maskieren** wählen; OCR bleibt eine eigene
+   Option. Dateien oder Ordner auswählen beziehungsweise hineinziehen.
+2. Ergebnisziel kontrollieren und die Verarbeitung einmal starten. Lesbare
+   unabhängige Inhalte bleiben auch bei einzelnen nicht unterstützten Grafiken
+   erhalten; konkrete Auslassungen und Fehler stehen beim jeweiligen Lauf.
+3. Im geführten Anonymisierungsablauf nötige OCR-/Text- und Fundstellenprüfungen
+   durchführen und Änderungen bewusst speichern. Der automatische Weg kann
+   konservativ maskieren; automatisch behandelt bedeutet nicht manuell geprüft.
+4. Danach **Ergebnisordner öffnen** verwenden. Die aktuellen Markdown-Dateien
+   stehen direkt bereit; keine weitere Dateiauswahl, Dokumentfreigabe oder
+   Exportbestätigung im normalen Ablauf. **Nur umwandeln** anonymisiert nicht.
+5. Bei Anonymisierung den Ordner **Vertraulich** getrennt aufbewahren:
+   Dateizuordnung sowie TXT-/Excel-Pseudonymzuordnung enthalten Originalangaben.
+   Nur die gewünschten Markdown-Dateien weitergeben.
+6. Falls nötig, über **Nachbearbeitung öffnen (optional)** Original und Ergebnis
+   vergleichen, zusätzliche Stellen maskieren und speichern. Eine Appkorrektur
+   erzeugt einen neuen vollständigen Ergebnisordner; vorhandene oder manuell
+   bearbeitete fertige Arbeitskopien bleiben unverändert. Erneutes Bereitstellen
+   erfolgt weiterhin erst nach den technischen Schutzprüfungen.
 
-Die Standalone-Auswahl ist auch per Drag-and-drop möglich; erst der Startknopf
-beginnt die Verarbeitung. Vorher lassen sich einzelne Dateien entfernen oder
-die gesamte Auswahl leeren. Neue Stapel erhalten lesbare, über alle Dokumente
-gleichbleibende Kennungen wie `[PERSON_001]` und `[UNTERNEHMEN_001]`. Diese
-Nummern gelten nur im jeweiligen Stapel; bestehende v1-Ausgaben und das
-Claude-Plugin behalten ihr bisheriges Kennungsformat.
+Der Verlauf zeigt das begrenzte Fenster der letzten fünf Läufe. Ausblenden
+löscht keine Dateien und lässt keinen älteren Lauf nachrücken. Neue Läufe
+verwenden laufintern konsistente Pseudonyme wie `[PERSON_001]` und
+`[UNTERNEHMEN_001]`; daraus entsteht keine globale laufübergreifende Zuordnungsdatenbank.
+Ordnerstruktur und Dateinamen richten sich nach Zweck und gewählter Benennung;
+die Dateizuordnung erklärt die tatsächlich erzeugten anonymisierten Dateien.
 
-Standalone öffnet eine **Startseite** mit beiden Funktionen, ohne vorausgewählte
-Betriebsart. **Nur in Markdown umwandeln** wählen, Dateien auswählen oder
-hineinziehen, **Starten**. Der **Verlauf** zeigt die letzten 20 Verarbeitungen
-mit jeweils eigenen Aktionen für Ergebnisse, Zuordnung und mögliche Fortsetzung.
-Ein Abschluss wechselt die Ansicht nicht automatisch. Nach einem Neustart bleibt
-die aktuelle Prozesskarte frei; alte fortsetzbare Läufe stehen ausschließlich
-in ihrer Verlaufszeile. Als solche belegte Office-Besitzerdateien
-`~$*.docx/xlsx/pptx` werden bei rekursiver Ordneraufnahme gezählt und
-übersprungen; ein echtes OPC-Dokument wird nicht nur wegen seines Namens
-verworfen. TXT, Markdown, CSV, DOCX,
-XLSX, PPTX, Text-PDF, Scan-PDF und PNG/JPEG/BMP werden lokal verarbeitet.
-Die App bringt Konverter und deutsche/englische OCR-Modelle mit. Ergebnisse
-liegen in `DataSecure-Markdown/Lauf-…` unter dem gewählten Ziel. Bei einer
-Ordnerauswahl bleibt die relative Unterordnerstruktur erhalten. Jede Datei
-behält ihren ursprünglichen Basisnamen; nur die Endung wird `.md`. Bei gleichen
-Basisnamen wird deterministisch ` (2)`, ` (3)` usw. ergänzt. Da dadurch keine
-Zuordnung nötig ist, wird in diesem Modus keine `DataSecure-Zuordnung.csv`
-erzeugt und die Verlaufsaktion **Zuordnung** bleibt deaktiviert. Namen und andere Originalinhalte bleiben erhalten: Diese Dateien
-sind **nicht anonymisiert** und werden nicht automatisch hochgeladen.
-OCR-/Extraktionshinweise und nicht verarbeitbare Dateien stehen in der Übersicht;
-es gibt keinen PII-Review oder zusätzlichen Bestätigungsdialog. Markdown erhält
-Text und Tabellen, nicht das vollständige grafische Originallayout. Der Stand
-der technischen und menschlichen Abnahme steht unter
-[BL-010.28 im kanonischen Backlog](docs/canonical/BACKLOG.md).
+Text, Tabellen, Diagramme, SmartArt, Formeln und OCR sind nur in den jeweils
+unterstützten Modellen abgedeckt. Quellenabdeckung und Anonymisierungsprüfung
+bleiben verschiedene Aussagen: Das Originaldokument wird nicht anonymisiert,
+und ein Hinweis auf Teilabdeckung darf nicht als vollständige Inhaltsübernahme
+verstanden werden. Verschlüsselte, global beschädigte oder nicht sicher
+gebundene Quellen können weiterhin ohne Ergebnis ausfallen. Ein Abbruch oder
+Schutzfehler ist keine erfolgreiche Verarbeitung.
 
-Im Modus **In Markdown umwandeln und anonymisieren** verarbeitet Standalone
-TXT/Markdown/CSV direkt. DOCX, XLSX, PPTX, PDF/Scan-PDF und Bilder werden genau
-einmal lokal nach Markdown extrahiert; anschließend wird dieser Markdown-Inhalt
-automatisch anonymisiert. Das Ergebnis trennt zwei Aussagen: Die Anonymisierung
-des extrahierten Markdown-Inhalts ist vollständig geprüft, während die
-Vollständigkeit der Extraktion aus dem Originalcontainer je nach Format nicht
-garantiert sein kann. Das Original bleibt unverändert und gilt nicht als
-vollständig anonymisiert. Leere OCR, beschädigte, verschlüsselte oder unsichere
-Quellen stoppen weiterhin ohne Ergebnis.
-
-Heute sind Application-Service, getrenntes Datenverzeichnis, UI-Zustandsvertrag,
-privates gerahmtes IPC, Sidecar-Lifecycle und Zielpaketkatalog implementiert.
-Getrennte selbsttragende Engineering-Pakete sind technisch für Windows x64,
-macOS Intel, macOS Apple Silicon und Linux x64 glibc gebaut und nativ bis durch
-App → private IPC → Core geprüft; Rust, Node und Python werden auf
-Anwenderrechnern nicht benötigt. Es bleibt bewusst ein **Engineering-Pilot**,
-bis die sichtbare menschliche UAT auf den jeweiligen Zielsystemen abgeschlossen
-ist. Linux ARM64 und Windows ARM64 sind keine aktuellen Paketziele. Eine reine
-Browser-Webanwendung ist nicht vorgesehen: Ohne lokale Komponente kann sie die
-zugesagte lokale, offlinefähige Dateiverarbeitung und Betriebssystemdialoge nicht
-zuverlässig bereitstellen. Cowork bleibt davon getrennt ein Claude-Desktop-Weg
-für Windows und macOS; Linux wird nur durch Standalone unterstützt.
+Windows ARM64 und Linux ARM64 sind keine aktuellen Pakete. Linux bleibt auf
+RC159 mit eigenem Funktions-/Teststand. Die Desktoptests der drei RC176-Zielpakete
+für Windows, Mac Intel und Apple Silicon bleiben Sache der Testenden; insbesondere sind
+Finder, TCC, verwaltete Geräte, VoiceOver und das deklarierte MindestmacOS nicht
+durch CI vollständig abgenommen. RC177 ist in Arbeit und liefert derzeit keine
+neuen Downloads.
 
 Keine sensiblen Originale als Chat-Anhang hochladen. Eine in Web oder Mobil
 gestartete Aufgabe, eine geplante Aufgabe und eine geschlossene oder getrennte
