@@ -1,7 +1,46 @@
 # Aktueller Iststand
 
-Stand: 25.10.2026 · 3.2.0-rc176 · Source05 technisch grün; neuer geführter Keep-/Alias-Konflikt blockiert Veröffentlichung, Source06 in Arbeit.
+Stand: 25.10.2026 · 3.2.0-rc176 · Source06 vier lokale Endgates grün; tatsächliche Guided-/Auto-GUI-Deltaproben grün. Neuer ARM-Pakettestbefund erfordert engen Testfix und frischen Source07-Gemeinschaftslauf.
 Desktop-/Office-/physischeMac-Abnahme weiterhin USER_PENDING.
+
+## Neuester tatsächlicher Abschluss03:03UTC: Source06
+
+0964b42dbfc00c297551b6b485f6447f07a4a923/FPbcaefae9…/368Produktdateien:
+318+11Headless,300Rust/3ignoriert/Clippy/Integration/Release, achtKonvertersuiten
+und fünfPaketgates PASS/Exit0/Inputs unverändert. Headless03:00:59.033UTC,
+alle lokalen Jobs beendet; SourceSnapshot1025Dateien/9138021Bytes/SHA1a2210a5…
+vorhanden. Alter Source05-Keepfehler bleibt historisch; Source06Guided tatsächlich
+2MD+3Beilagen/1erwarteterEMF-Stopp ohne falschen PAGE-Alias, drei exakteKeeps.
+Main und unabhängiger tatsächlicher Artefaktreview2727f9f9… prüfen Bindungen,
+UTF16Traces/ACKs/TXT-XLSX4Zeilen8Vorkommen. Neuer Auto-Gegenlauf ebenfalls
+2MD+3Beilagen; fehlender Default-Zielordner wird ohne Repick angelegt.
+Unicode-Quelldaten bleiben erhalten, OCR-Zeichenfehler/Doppelungen ehrlich offen.
+Source06-App normal geschlossen, eigene Rootprozesse0; Profile/Belege bewahrt.
+
+Mac40153613480/ARM121050151509 tatsächlich ROT in Distributionstep26:
+Terminale kompakte Historysumme enthält hier kein optionales aktuelles
+conversion_feedback, das der Pakettest ohne Bereitschaftsvoraussetzung verlangt.
+Tatsächlicher unabhängiger Quellen-/Logreviewfa88eddb… bestätigt diesen
+Testvertragsfehler; genaue ursprüngliche ARM-Journalursache UNBEWIESEN.
+Kein Produktcrash-/Transient-PASS. Intel danach gezielt im alten Run abgebrochen,
+keine Wiederholung desselben Commits. Enger Testfix mit echtem Kompositions-
+gegenfall, gleicher180sDeadline/unveränderten Assertions und geschlossener
+Diagnostik in Arbeit. Danach neuer gemeinsamer Source07-Commit und frische
+Endbelege für alle drei Plattformen, keine Übernahme alter FINALs/GUI-Identität.
+Kein lokalerRC176Ordner/Tag/Release/Mainintegration. Folgende Source05-/frühe
+Source06-Abschnitte sind historische Entwicklung, keine erneute Aufgabenliste.
+
+Zwei-Testfolgefix inzwischen tatsächlich RED→GREEN am realen Historykompositor;
+Main unabhängig Exit0/stabil, echter Windows-Paketsmoke auf Source06Bytes Exit0
+mitOCRaus8/4 undOCRan12/0. Produktbytes unverändert,180sBudget und fachliche
+Assertions/hartenFehler beibehalten. Finaler unabhängiger Quellenreview6f2bd381…
+abgeschlossen: kein bestätigter Deltablocker,34RAMgegenproben PASS, alte50Assertions
+byteidentisch. Jetzt gemeinsamer Source07-Commit und neue Endbelege, keine
+Umbenennung alter Belege oder neue Produktänderung für diesen Testfix.
+GUI14-Einwortkorrektur unabhängig bytegenau mitRevision1/ACK/neuerGeneration
+bestätigt. OCR-Dopplungen sind eine konkrete Qualitätsgrenze; mangels gespeicherter
+Wortrechtecke kein bewiesener gebundener Deduplikationsfehler. Textfreie
+Geometriediagnostik als Folgearbeit, keine Suchtextlöschung/Schutzlockerung.
 
 ## Neuer Source05-Desktopbefund: genaue Sachtextentscheidung und Nachnamenalias
 

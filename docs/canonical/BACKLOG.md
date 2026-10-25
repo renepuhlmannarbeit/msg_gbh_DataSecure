@@ -1,9 +1,51 @@
 # Aktives Entwicklungsbacklog
 
-Arbeitsquelle: 3.2.0-rc176 Source06 in Arbeit nach echtem geführten Keep-/Alias-Konflikt;
+Arbeitsquelle: 3.2.0-rc176 Source06 lokal vollständig grün; Mac-Testvoraussetzung wird für frischen Source07-Gemeinschaftslauf eng korrigiert;
 Desktop-/Office-/Zielhostabnahme USER_PENDING. RC175/ältere Pakete unverändert.
 
 ## BL-049.7 – RC176 priorisierte Inhalts-/Grafikverbesserungen
+
+Neuester25.10.nach03:03UTC: Source06/0964b42…/bcaefae9… tatsächlich318+11,
+Native300Rust/3ignoriert, achtKonvertersuiten und fünfPaketgates PASS/stabil;
+SourceSnapshot1a2210a5… vorhanden. Guided/Auto-GUI19 schließen den alten
+Sachtext-Keep-/PAGEalias-Konflikt in frischen echten Läufen begrenzt ab;
+unabhängige tatsächliche Artefaktprüfung2727f9f9…/1123Pins/TXT-XLSX4Zeilen8Vorkommen.
+Keine pauschale19Fall-Abnahme. NativeUnicode erhalten, OCR kann doppeln/fehllesen.
+
+Neue tatsächliche ARM-Distributionprobe40153613480/121050151509 ROT: fehlendes
+optionales conversion_feedback in terminaler kompakter Historysumme. Test
+beendete seine Wartebedingung zu früh; unabhängiger tatsächlicher Reviewfa88…
+belegt den Vertragsfehler, konkrete ARM-Journalursache bleibt UNBEWIESEN.
+Intel gezielt alt abgebrochen. Enger Testfolgefix+echter Kompositionsgegenfall,
+ursprüngliches180sBudget/Assertions/HardErrors beibehalten, begrenzte Diagnose;
+dann Source07 gemeinsamerCommit/frische4lokale+beideMac+gebundeneGUI erforderlich.
+Alte Source06-/Source05-Belege nicht umetikettieren. KeinRelease/Mainmerge.
+
+Der enge Zwei-Testfix ist tatsächlich implementiert und vorab geprüft: realer
+History-Kompositionsfall ROT→GRÜN, Main unabhängig Exit0/stabil, echter Windows-
+Paketsmoke Exit0/OCRaus8Ergebnisse4Auslassungen und OCRan12Ergebnisse. Keine
+Produktänderung;180sBudget/hartenFehler/alle50bisherigenScenarioassertionen
+erhalten. Finaler unabhängiger Testquellenreview6f2bd381… abgeschlossen ohne
+bestätigten Deltablocker/34RAMgegenproben PASS. Neuer gemeinsamer Source07-Commit
+und frische Endgates erforderlich; vorläufige Entwicklung ist keine Endfreigabe.
+
+### Folgearbeit: PDF-Deduplikationsdiagnostik ohne Text-/Rechteausweitung
+
+Tatsächlicher GUI14-Source06-Vergleich: NativeUnicode bleibt vollständig,
+OCR liefert zusätzliche Rasterwerte, aber auch fünf identische native Zeilen
+und weitere fehlerhafte Wiederholungen. Unabhängiger Quellenreview3f806575…:
+Bildpaint nach Text sperrt den groben Fallback;32MPDokument-Probenbudget gibt
+auf dieser Seite höchstens63Renders gegenüber141nativenTokens. Genaue
+Laufzeit-Wortregionen/Verbrauchswerte fehlen. Keine bewiesene Fehlentscheidung
+eines bereits exakt positionsgebundenen Wortes, keine universelle Artefaktfreiheit.
+Später begrenzte textfreie private Zähler für Bindungen/Regionen/Proben/Pixels/
+Auslassungsgründe ergänzen und denselben Mischseitenfall bei unverändertem
+Budget vermessen. Eine Effizienzänderung braucht echte Overpaint-/falsche
+ToUnicode-/gleicherTextAnderePosition-Gegenfälle. Keine globale Gleichtext-
+oder Fuzzylöschung, kein Wegwerfen gültiger Suchtexte oder Budgethochsetzen.
+Diese gemessene Qualitätsgrenze bleibt in RC176-Testplan/Releasehinweisen offen.
+
+### Historische RC176-Entwicklungsnotizen
 
 25.10. nach01:35UTC: Source05 alle vier lokalen Endgates und beide Macs PASS,
 aber neue echte geführte PDF-Probe c496fd7e mit RESIDUAL_PII statt Ergebnis.

@@ -1,5 +1,81 @@
 # RC176 – priorisierte Inhalts- und Grafikverbesserungen
 
+## Neuester tatsächlicher Stand25.10.nach03:03UTC: Source06 und enger Testfolgefix
+
+Gemeinsamer gepushter Appcommit0964b42dbfc00c297551b6b485f6447f07a4a923,
+Produktfingerprintbcaefae9d0c2b930b846885879e2d1845dbf02572806ebaa2a6f4aec26797fd6
+mit368Produktdateien. Der abschließende unabhängige Unicode-Gegenreview ist
+tatsächlich beendet und von Main vollständig gelesen; keine offene weitere
+Reviewpflicht für diesen Produktfix. Alle vier lokalen Source06-Endgates
+PASS/Exit0/inputs_unchanged:318+11Headless03:00:59.033UTC,300Rust/3ignoriert
+mitClippy/Integration/Release02:17:46.808UTC, achtKonvertersuiten02:19:30.028UTC,
+fünfPaketgates/100MD0Fehler02:23:02.839UTC. SourceSnapshot1025Dateien/
+9138021Bytes/SHA1a2210a5d4320ad505324f6db6f55b8ce1e88350480cb5df70d13068ddc016b0.
+Diese Belege bleiben an genau0964 und621Test-/Scriptinputs/f276f064… gebunden.
+
+Neuer echter ARM-Macbefund40153613480/job121050151509: Distributionstep26
+scheitert an fehlendem optionalen conversion_feedback.schema einer bereits
+terminalen kompakten Verlaufssumme. VollständigesLog850277Bytes/e9b873a9…
+und unabhängiger tatsächlicher Quellenreviewfa88eddb… erhalten. Der Test
+wartete nur auf Terminalzähler, obwohl diese keine gleichzeitige aktuelle
+Journalprojektion garantieren. Die genaue ursprüngliche ARM-Journalauslassung
+ist UNBEWIESEN; keine Behauptung eines transienten Ereignisses oder Corecrashs.
+Alle früheren ARM-Produkt-/Seal-/Worker-/Appstartstufen grün, DMG/Upload nicht
+gelaufen. Intel wurde danach gezielt in derselben alten Source06-Ausführung
+abgebrochen; der Stand wird nicht veröffentlicht oder erneut bis Grün gestartet.
+
+Enger rein testseitiger Folgefix nach Ende aller Freezejobs: tatsächlicher
+History-Kompositionsgegenfall und frische vollständige Feedbackvoraussetzung
+im ursprünglichen180sBudget, unveränderte fachliche Assertions/HardErrors und
+begrenzte inhaltfreie Fehlerdiagnostik. Keine Produkt-/Schutz-/Timeoutänderung.
+Unabhängiges Gegenlesen, neuer gemeinsamer Source07-Commit und frische lokale
+und beide Mac-Endbelege sind vor Veröffentlichung erforderlich.
+
+Der enge Testfix ist jetzt implementiert: nur standalone-packaged-markdown.mjs
+(4649370a…) und test-standalone-history.js (7fbe09f9…). Tatsächlicher neuer
+History-Kompositionsgegenfall vor Fix ROT/Exit1, danach GRÜN/Exit0, mit zehn
+ungültigen Snapshot-/Options-/Zählergegenfällen, unveränderter harter API-
+Fehleridentität und bewiesener180s-Grenze einschließlich wartender IPC.
+Main führt denselben tatsächlichen Historytest unabhängig erneut aus: Exit0,
+Inputs stabil. Echter isolierter Windows-Paketsmoke auf unveränderten Source06-
+Bytes ebenfalls Exit0, OCRaus8/4 und OCRan12/0 sowie alle bisherigen
+Nachkorrektur-/Export-/Neustartassertionen erhalten. Das ist gezielte Entwicklung,
+keine neue gemeinsame Source07-Endfreigabe. Timeoutdiagnose umfasst nur die
+letzte inhaltfreie Historymomentaufnahme und den exakten Readerstatus; keine
+zusätzliche Fehlerlisten-/Publicstate-RPC nach Frist. Originale ARM-Ursache
+weiterhin UNBEWIESEN. Unabhängiger finaler Testquellenreview6f2bd381… ist
+abgeschlossen und von Main vollständig gelesen: kein bestätigter Deltablocker,
+34reineRAM-/DTO-/Deadlinegegenproben PASS, alle50altenScenarioassertionen
+byteidentisch.368Produktinputs/619andereTestinputs/7Driver/HEAD unverändert.
+Source07 ist damit für einen neuen gemeinsamen Commit/Freeze vorbereitet;
+frische Endgates und paketgebundene Desktopbelege bleiben vor Release nötig.
+
+Nach Codexupdate funktioniert Main-ComputerUse tatsächlich. Neuer Source06-
+Guided-GUI19-Lauf liefert2MD+3Zuordnungen/1erwarteten textlosenEMF-Stopp;
+drei vollständige Sachtext-Keeps werden korrekt gespeichert, kein PAGE-Alias.
+Unabhängiger tatsächlicher Artefaktreview2727f9f9…:1123Pins, exakteUTF16Traces/
+ACKs, TXT/erstesXLSX-Blatt4Zeilen/8Vorkommen stimmen. Auto-Gegenlauf ebenfalls
+2MD+3Beilagen/7Zeilen ohne manuelle Reviewentscheidungen. GUI01 legt fehlenden
+Default selbst an und öffnet genau2MD. GUI14nativeUnicode bleibt mit/ohneOCR
+erhalten; OCR-Bildwerte werden gelesen, kann aber native Zeilen doppeln und
+Zeichen falsch erkennen. Diese Grenzen sind tatsächlich sichtbar ausgewiesen.
+Eine gezielte native Wortkorrektur nach Unicodezeilen wurde einmal gespeichert
+und als neuer Stand bereitgestellt; exakter Artefaktgegenvergleich folgt.
+Keine19Fall-Gesamtabnahme. Source06-App normal geschlossen/Rootprozesszahl0;
+Profile, Originale und alle roten/grünen Belege erhalten. Menschliche Desktop-/
+Office-/physischeMac-Abnahme USER_PENDING. Kein lokalerRC176Ordner/Tag/Release.
+
+Unabhängiger GUI14-Artefaktreview c2688fce…/de17a5be… bestätigt die genaue
+Einwortkorrektur, Revision1/eine neue Generation/NativeACKs/1640öffentlicheBytes,
+alle übrigen Bytes und alte Ergebnisse unverändert. Separater Quellenreview
+3f806575… findet keinen bestätigten Verstoß einer bereits bewiesenen Wortbindung:
+Bildpaint nach Text sperrt den groben Fallback; das begrenzte32MP-Probenbudget
+erlaubt auf dieser Seite höchstens63Renders für141nativeTokens. Tatsächliche
+Wortrechtecke/Verbrauchszähler sind nicht gespeichert, daher exakter Grund der
+einzelnen Doppelungen unbewiesen. Kein GUI13-Deduplikations-PASS aus dieser Probe.
+Begrenzte textfreie Geometriediagnostik ist als Folgearbeit erfasst; keine
+globale Dopplungslöschung, Budgeterhöhung oder Schutzlockerung durchgeführt.
+
 ## Neuer tatsächlicher Desktopbefund25.10.: geführtes Beibehalten
 
 Source05-Appcommit5394adeba256f60b8bff6be81f5e98f853862643 und Fingerprint

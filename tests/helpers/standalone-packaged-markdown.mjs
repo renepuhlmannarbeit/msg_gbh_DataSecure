@@ -13,6 +13,67 @@ const renderer = new MarkdownIt();
 const sha = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 const options = enabled => ({ schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: enabled, imageOcr: enabled });
 
+export async function waitForPackagedMarkdownFeedback({ send, batchId, selectedCount, deadline, enabled,
+  now = Date.now, sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds)) }) {
+  let row, targeted = false;
+  const count = value => Number.isSafeInteger(value) && value >= 0 && value <= 200 ? value : null;
+  const diagnostic = () => ({ targeted_reader: targeted, batch_matches: row?.batch_id === batchId,
+    status: ['preparing', 'processing', 'paused', 'review_required', 'stopped', 'results_available',
+      'export_pending', 'export_abandoned', 'completed_without_results', 'failed'].includes(row?.status) ? row.status : null,
+    processing_mode: ['markdown-only', 'markdown-and-anonymize'].includes(row?.processing_mode) ? row.processing_mode : null,
+    selected_count: count(row?.selected_count), result_count: count(row?.result_count), failed_count: count(row?.failed_count),
+    feedback_present: Boolean(row && Object.hasOwn(row, 'conversion_feedback')),
+    feedback_schema_valid: row?.conversion_feedback?.schema === 'datasecure-conversion-feedback/1',
+    feedback_complete: row?.conversion_feedback?.complete === true });
+  const timeout = () => new assert.AssertionError({ message: `MD_OPTIONS_WORKFLOW_TIMEOUT:${JSON.stringify(diagnostic())}` });
+  const withinBudget = async operation => {
+    const remaining = deadline - now();
+    if (remaining <= 0) throw timeout();
+    let timer;
+    try {
+      const result = await Promise.race([operation(), new Promise((_, reject) => {
+        timer = setTimeout(() => reject(timeout()), remaining);
+      })]);
+      if (now() >= deadline) throw timeout();
+      return result;
+    } finally { clearTimeout(timer); }
+  };
+  for (;;) {
+    // A compact terminal summary can outlive (or temporarily lack) the current
+    // journal. After observing it, use the existing exact batch reader on the
+    // next ordinary poll; no recovery or extra post-deadline RPC is allowed.
+    row = (await withinBudget(() => send('get_run_history', targeted ? { batch_id: batchId } : {})))
+      .entries.find(item => item.batch_id === batchId);
+    if (row) {
+      assert.equal(row.processing_mode, 'markdown-only');
+      assert.equal(row.selected_count, selectedCount);
+      const feedback = row.conversion_feedback;
+      if (Object.hasOwn(row, 'conversion_feedback')) {
+        assert.equal(feedback?.schema, 'datasecure-conversion-feedback/1');
+        assert.equal(feedback.ocr_enabled, enabled);
+        assert.equal(feedback.selected_count, selectedCount);
+        for (const key of ['result_count', 'not_converted_count', 'ocr_omitted_count', 'error_count',
+          'content_notice_count', 'pending_count']) assert.notEqual(count(feedback[key]), null, key);
+        assert.equal(typeof feedback.complete, 'boolean');
+        assert.equal(feedback.result_count + feedback.not_converted_count + feedback.pending_count, selectedCount);
+        assert.equal(feedback.ocr_omitted_count + feedback.error_count, feedback.not_converted_count);
+        assert.ok(feedback.content_notice_count <= feedback.result_count);
+        if (feedback.complete) assert.equal(feedback.pending_count, 0);
+      }
+      if (!['preparing', 'processing'].includes(row.status) && row.result_count + row.failed_count === selectedCount) {
+        if (feedback?.complete === true && feedback.pending_count === 0) {
+          assert.equal(feedback.result_count, row.result_count);
+          assert.equal(feedback.not_converted_count, row.failed_count);
+          return row;
+        }
+        targeted = true;
+      }
+    }
+    if (now() >= deadline) throw timeout();
+    await sleep(Math.min(150, deadline - now()));
+  }
+}
+
 export async function runPackagedMarkdownScenario({ request: initialRequest, restart, sourceDirectory }) {
   let request = initialRequest, sequence = 0xb000;
   const send = async (action, fields = {}) => {
@@ -44,13 +105,7 @@ export async function runPackagedMarkdownScenario({ request: initialRequest, res
       content_options: options(enabled), source_ids: selection.ui_context.source_catalogue.map(item => item.source_id),
       catalogue_revision: selection.ui_context.catalogue_revision });
     const batchId = started.batch_id, deadline = Date.now() + 180000;
-    let row;
-    for (;;) {
-      row = (await send('get_run_history')).entries.find(item => item.batch_id === batchId);
-      if (row && !['preparing', 'processing'].includes(row.status) && row.result_count + row.failed_count === files.size) break;
-      assert.ok(Date.now() < deadline, `MD_OPTIONS_WORKFLOW_TIMEOUT:${JSON.stringify(row)}`);
-      await new Promise(resolve => setTimeout(resolve, 150));
-    }
+    const row = await waitForPackagedMarkdownFeedback({ send, batchId, selectedCount: files.size, deadline, enabled });
     const expectedFailures = enabled ? 0 : 4; // standalone rasters + pure scan
     assert.equal(row.processing_mode, 'markdown-only');
     const failures = await send('get_run_failures', { batch_id: batchId });

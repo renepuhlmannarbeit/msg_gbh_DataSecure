@@ -678,6 +678,83 @@ function code(expected) { return (error) => error?.code === expected; }
     assert.equal(path.dirname(path.dirname(olderIdentity)), identityLedger.resolveDirectory(),
       'the private directory action keeps older mappings locally reachable');
     assert.equal(fs.existsSync(secondRun), true, 'last-five history never deletes visible results');
+    // Real history composition: a valid compact terminal row does not prove
+    // that this same read also obtained its current detailed journal.
+    {
+      const { waitForPackagedMarkdownFeedback } = await import('./helpers/standalone-packaged-markdown.mjs');
+      const { validatePrivateMessage } = require('../plugins/data-secure/server/standalone/desktop-ipc');
+      const snapshotState = { ...displayState, token: crypto.createHash('sha256').update('markdown-feedback-snapshot').digest('hex'),
+        created_at: new Date(now + 1000000).toISOString(), items: [
+          { id: '1'.repeat(32), name: 'native.txt', status: 'released' },
+          { id: '2'.repeat(32), name: 'scan.png', status: 'stopped', error_code: 'IMAGE_OCR_REQUIRED' }] };
+      historyStore.recordStandaloneState(snapshotState);
+      let live = false, polls = 0, clock = 0;
+      const composed = createRunHistory({ readStates: () => live ? [snapshotState] : [],
+        readState: () => live ? snapshotState : null, readExports: () => [], readExport: () => null,
+        recentHistory: () => [{ batch_id: snapshotState.token }], recoverableStates: () => [], liveExecutor: () => false });
+      const compactOnly = composed.history().entries.find(row => row.batch_id === snapshotState.token);
+      assert.equal(compactOnly.result_count + compactOnly.failed_count, 2);
+      assert.equal(compactOnly.status, 'export_pending');
+      assert.equal(compactOnly.conversion_feedback, undefined, 'a valid compact row has no invented live feedback');
+      const row = await waitForPackagedMarkdownFeedback({ batchId: snapshotState.token, selectedCount: 2, enabled: false,
+        deadline: 180000, now: () => clock, sleep: async milliseconds => { clock += milliseconds; },
+        send: async (action, fields = {}) => {
+          assert.equal(action, 'get_run_history');
+          validatePrivateMessage({ schema: 'datasecure-standalone-private-ipc/1', request_id: 'ab'.repeat(8), action, ...fields });
+          if (polls > 0) assert.equal(fields.batch_id, snapshotState.token, 'the fresh read targets this exact batch');
+          const result = composed.history(fields.batch_id ? { batchId: fields.batch_id } : {});
+          polls++; live = true;
+          return result;
+        } });
+      assert.equal(row.conversion_feedback?.schema, 'datasecure-conversion-feedback/1');
+      assert.equal(polls, 2, 'completion counters alone cannot end the packaged feedback wait');
+      assert.equal(row.conversion_feedback.complete, true);
+      assert.equal(row.conversion_feedback.ocr_omitted_count, 1);
+      const feedback = row.conversion_feedback;
+      for (const patch of [{ processing_mode: 'markdown-and-anonymize' }, { selected_count: 3 },
+        { conversion_feedback: null }, { conversion_feedback: { ...feedback, schema: 'wrong' } },
+        { conversion_feedback: { ...feedback, ocr_enabled: true } },
+        { conversion_feedback: { ...feedback, selected_count: 3 } },
+        { conversion_feedback: { ...feedback, result_count: -1 } },
+        { conversion_feedback: { ...feedback, content_notice_count: 2 } },
+        { conversion_feedback: { ...feedback, result_count: 0, pending_count: 1 } },
+        { conversion_feedback: { ...feedback, result_count: 2, not_converted_count: 0, ocr_omitted_count: 0 } }]) {
+        let calls = 0;
+        await assert.rejects(() => waitForPackagedMarkdownFeedback({ batchId: snapshotState.token,
+          selectedCount: 2, enabled: false, deadline: 180000, now: () => 0,
+          sleep: async () => { throw Error('MALFORMED_FEEDBACK_MUST_NOT_POLL'); },
+          send: async () => { calls++; return { entries: [{ ...row, ...patch }] }; } }),
+        error => error.code === 'ERR_ASSERTION');
+        assert.equal(calls, 1, 'present malformed metadata is a hard failure, not optional absence');
+      }
+      const hardError = Object.assign(new Error('exact history refused'), { code: 'STANDALONE_HISTORY_UNAVAILABLE' });
+      await assert.rejects(() => waitForPackagedMarkdownFeedback({ batchId: snapshotState.token,
+        selectedCount: 2, enabled: false, deadline: 180000, now: () => 0,
+        send: async () => { throw hardError; } }), error => error === hardError);
+      let expiryClock = 0, expiryCalls = 0;
+      await assert.rejects(() => waitForPackagedMarkdownFeedback({ batchId: snapshotState.token,
+        selectedCount: 2, enabled: false, deadline: 180000, now: () => expiryClock,
+        sleep: async milliseconds => { expiryClock += milliseconds; },
+        send: async (action, fields = {}) => {
+          expiryCalls++;
+          if (expiryCalls > 1) assert.equal(fields.batch_id, snapshotState.token);
+          return { entries: [{ ...compactOnly, private_source_name: 'MUST_NOT_ENTER_TIMEOUT', local_path: 'SECRET_PATH' }] };
+        } }), error => {
+          assert.match(error.message, /^MD_OPTIONS_WORKFLOW_TIMEOUT:/u);
+          assert.match(error.message, /"targeted_reader":true/u);
+          assert.doesNotMatch(error.message, /MUST_NOT_ENTER_TIMEOUT|SECRET_PATH|local_path/u);
+          return true;
+        });
+      assert.equal(expiryClock, 180000, 'the original workflow budget is not extended for diagnosis');
+      assert.equal(expiryCalls, 1200, 'no diagnostic request starts after the deadline');
+      let inFlightCalls = 0;
+      await assert.rejects(() => waitForPackagedMarkdownFeedback({ batchId: snapshotState.token,
+        selectedCount: 2, enabled: false, deadline: Date.now() + 20,
+        send: async () => { inFlightCalls++; return new Promise(() => {}); } }),
+      error => error.code === 'ERR_ASSERTION' && /^MD_OPTIONS_WORKFLOW_TIMEOUT:/u.test(error.message));
+      assert.equal(inFlightCalls, 1, 'an in-flight IPC cannot add its own 45/60-second timeout to this budget');
+      process.stdout.write('STANDALONE MARKDOWN FEEDBACK SNAPSHOT COMPOSITION PASS\n');
+    }
     process.stdout.write('STANDALONE HISTORY PASS\n');
   } finally {
     if (path.dirname(base) !== temporaryRoot || !path.basename(base).startsWith('datasecure-standalone-history-')) throw new Error('TEST_CLEANUP_TARGET_INVALID');
