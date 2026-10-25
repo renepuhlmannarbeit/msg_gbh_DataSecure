@@ -1,5 +1,33 @@
 # Aktueller Iststand
 
+NeuesterStand25.10.nach04:18UTC: Source07/6ebe37fe5e8de5f2e110448455212efbfbe8cd4e
+ist NICHT freigabefähig. FPbcaefae9…/368,621Test-/Scriptinputs/2c2f47bf…;
+Native300Rust/3ignoriert/Clippy/Integration/Release, achtKonvertersuiten und
+fünfPaketgates sowie beideMac40157987238 PASS/stabil. Headless jedoch tatsächlich
+ROT256/318+0/11/inputs_unchanged=true04:03:02.098UTC: zweiteBodydatei der
+zweiten nativen Markdown-Korrektur verweigert vorPublish, erwarteter absichtlich
+verlorener Publishbeleg daher nicht erreicht. Ursprünglicher genauer native/OS-
+Fehlerzweig UNBEWIESEN, roteFINAL und134Originalbelege unverändert erhalten.
+
+Nur cfg(test)-Phasendiagnostik und geschlossener Testsammler ergänzt, keine
+Produktlogik-/Schutz-/Retry-/Deadline-/Assertionänderung. Genau eine frische
+isolierte Probe GREEN,41Records/4erreichteLostReceiptHooks/0ungültigeRecords;
+das diagnostiziert oder behebt den altenFehler NICHT. Main vollständige Berichte
+und Quellen gelesen, unabhängiger Gegenreview87da3c9a… abgeschlossen:131alte
+Assertions/9Frist-/Retryzeilen unverändert,1119Pins stabil, kein bestätigter
+Diagnostikregressionsbefund. Main-Clippy alleTargets Exit0. Ein neuer gemeinsamer
+Source08-Stand mit frischen Endgates ist erforderlich, keine altenFINALs umbenennen.
+
+ComputerUse funktioniert wieder. Echte Source07GUI01/19Guided+Auto und05präzise
+Maske/Keepverweigerung/sichererPersonenfolgecommit mit nativen ACKs und3Beilagen
+unabhängig bytegeprüft. Kein19Fall-GesamtPASS. App normal geschlossen/Census0;
+originale candidate+results im Temp-Root427ed… später fehlend, Entferner unbekannt.
+Einziger Restart verweigert vorReservierung; unabhängige genauePreflightdiagnose
+und28Quellen-Cleanup-Audit1b1338c3… ohne belegten Root-Löschaufruf,
+keinRetry/Restore/Profilreset/Ordneridentitätsersatz. GUI05-Neustart NOT_RUN.
+Kein Source07Snapshot, lokalerRC176Ordner, Tag, Release oder Mainintegration.
+Folgende Source06-/ältere Abschnitte sind historische Belege, keine neue Aufgabenliste.
+
 Stand: 25.10.2026 · 3.2.0-rc176 · Source06 vier lokale Endgates grün; tatsächliche Guided-/Auto-GUI-Deltaproben grün. Neuer ARM-Pakettestbefund erfordert engen Testfix und frischen Source07-Gemeinschaftslauf.
 Desktop-/Office-/physischeMac-Abnahme weiterhin USER_PENDING.
 

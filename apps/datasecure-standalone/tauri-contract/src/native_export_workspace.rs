@@ -8,6 +8,8 @@ use crate::{export_directory::{Directory, ExpectedFile, ConfidentialFiles, deser
     native_export_transaction::{Parents, Plan, PublicationRole, Transaction, deserialize_publication_role, publication_directory_name}};
 use serde::{Deserialize, Serialize};
 use std::io;
+#[cfg(test)]
+use crate::native_export_broker::body_diagnostic::{self, Phase as BodyPhase};
 
 const LIMIT: usize = 128 * 1024;
 fn error(code: &'static str) -> io::Error { io::Error::other(code) }
@@ -127,12 +129,14 @@ impl<'a> Workspace<'a> {
     }
     fn open_checkpoints(root: &'a Directory, target: &'a Directory, request: Request, guard: &NativeGuard,
         mut checkpoint: impl FnMut(&str) -> io::Result<()>) -> io::Result<Self> {
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::WorkspaceRoot);
         request.validate()?;
         if request.private_root != root.identity().into() || request.target != target.identity().into() { return Err(conflict()); }
         root.verify_controlled()?;
         guard.checkpoint().map_err(|_| error("STANDALONE_CLOSING"))?;
         let _ownership = root.lock_control()?;
         let intent = Intent { schema: "datasecure-native-export-parent-intent/1".into(), request: request.clone() };
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::WorkspaceRecords);
         let previous = read::<Intent>(root, &request.record_name("intent"))?;
         let binding = read::<Binding>(root, &request.record_name("binding"))?;
         let abandoned = read::<Abandoned>(root, &request.record_name("abandoned"))?;
@@ -145,11 +149,15 @@ impl<'a> Workspace<'a> {
             return Err(conflict());
         }
         if previous.is_some() && binding.is_none() { return Err(error("AI_EXPORT_UNCERTAIN")); }
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::WorkspacePut);
         put(root, &request.record_name("intent"), &intent, guard)?;
         checkpoint("intent")?;
         let (journal, staging) = if let Some(binding) = binding {
+            #[cfg(test)] body_diagnostic::phase(BodyPhase::WorkspaceBinding);
             if binding.schema != "datasecure-native-export-parent-binding/1" || binding.request != request { return Err(conflict()); }
+            #[cfg(test)] body_diagnostic::phase(BodyPhase::WorkspaceJournal);
             let j = root.open_controlled_child(&request.journal_name(), binding.journal.identity()?)?;
+            #[cfg(test)] body_diagnostic::phase(BodyPhase::WorkspaceStaging);
             let s = root.open_controlled_child(&request.staging_name(), binding.staging.identity()?)?;
             (j, s)
         } else {
@@ -166,6 +174,7 @@ impl<'a> Workspace<'a> {
                 request: request.clone(), journal: j.identity().into(), staging: s.identity().into() }, guard)?;
             (j, s)
         };
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::WorkspacePost);
         checkpoint("bound")?;
         root.inspect_child(&request.journal_name(), journal.identity())?;
         root.inspect_child(&request.staging_name(), staging.identity())?;

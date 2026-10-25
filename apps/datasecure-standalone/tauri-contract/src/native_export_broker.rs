@@ -6,6 +6,76 @@ use crate::{export_directory::{Directory, ExpectedFile, ConfidentialFiles, deser
 use serde::{Deserialize, Serialize};
 use std::{io, path::{Path, PathBuf}};
 
+// Test pipe evidence only. It records the original call without creating
+// authority, retaining payloads, retrying or changing the returned error.
+#[cfg(test)]
+pub(crate) mod body_diagnostic {
+    use std::{cell::RefCell, io, sync::atomic::{AtomicUsize, Ordering}};
+    use serde::Serialize;
+    #[derive(Clone, Copy, Serialize)]
+    #[serde(rename_all = "snake_case")]
+    pub(crate) enum Phase {
+        BodyDecode, BodyPayload, BodyBounds, BodyFinal, BrokerPublic, BrokerData,
+        BrokerPrivate, BrokerTarget, BrokerRequest, BrokerWorkspace, BrokerTransaction,
+        BrokerWrite, BrokerPostPrivate, BrokerPostPublic, WorkspaceRoot, WorkspaceRecords,
+        WorkspacePut, WorkspaceBinding, WorkspaceJournal, WorkspaceStaging, WorkspacePost,
+        TransactionParents, TransactionJournal, TransactionStaging, TransactionControl,
+        TransactionIntent, TransactionEvidence, TransactionBody, TransactionGuard,
+        TransactionStage, TransactionWrite, TransactionReadback, TransactionSync,
+        TransactionStageSync, TransactionPost, DirectoryReadOpen, DirectoryReadIdentity,
+        DirectoryReadBefore, DirectoryReadBody, DirectoryReadAfter, DirectoryReadVerify,
+        DirectoryReadDone, StageOpen, StageIdentity, StageParent, LeafCreate,
+        LeafWrite, LeafSync, LeafVerify,
+    }
+    #[derive(Serialize)]
+    struct Trace {
+        schema: &'static str, ordinal: usize, mode: &'static str,
+        body_index: Option<usize>, body_offset_zero: bool, body_final_chunk: bool,
+        body_index_in_range: Option<bool>, body_length_matches: Option<bool>,
+        phase: Phase, phases: Vec<Phase>, phase_overflow: bool,
+        outcome: &'static str, io_error_kind: Option<String>, raw_os_error: Option<i32>,
+    }
+    std::thread_local! { static CURRENT: RefCell<Option<Trace>> = const { RefCell::new(None) }; }
+    static EMITTED: AtomicUsize = AtomicUsize::new(0);
+    pub(crate) fn begin(mode: &str, index: usize, offset_zero: bool, final_chunk: bool) {
+        CURRENT.with(|slot| *slot.borrow_mut() = Some(Trace {
+            schema: "datasecure-native-body-test-diagnostic/1", ordinal: 0,
+            mode: match mode { "markdown-only" => "markdown-only", "markdown-and-anonymize" => "markdown-and-anonymize", _ => "unknown" },
+            body_index: (index <= 203).then_some(index), body_offset_zero: offset_zero,
+            body_final_chunk: final_chunk, body_index_in_range: None, body_length_matches: None,
+            phase: Phase::BodyDecode, phases: Vec::new(), phase_overflow: false,
+            outcome: "unknown", io_error_kind: None, raw_os_error: None,
+        }));
+    }
+    pub(crate) fn phase(value: Phase) {
+        CURRENT.with(|slot| if let Some(trace) = slot.borrow_mut().as_mut() {
+            trace.phase = value;
+            if trace.phases.len() == 64 { trace.phases.remove(0); trace.phase_overflow = true; }
+            trace.phases.push(value);
+        });
+    }
+    pub(crate) fn body_checks(index_in_range: bool, length_matches: bool) {
+        CURRENT.with(|slot| if let Some(trace) = slot.borrow_mut().as_mut() {
+            trace.body_index_in_range = Some(index_in_range); trace.body_length_matches = Some(length_matches);
+        });
+    }
+    pub(crate) fn finish<T>(result: &io::Result<T>) {
+        CURRENT.with(|slot| if let Some(mut trace) = slot.borrow_mut().take() {
+            let ordinal = EMITTED.fetch_add(1, Ordering::Relaxed);
+            if ordinal >= 64 { return; }
+            trace.ordinal = ordinal + 1;
+            match result {
+                Ok(_) => trace.outcome = "success",
+                Err(error) => { trace.outcome = "failure";
+                    trace.io_error_kind = Some(format!("{:?}", error.kind())); trace.raw_os_error = error.raw_os_error(); }
+            }
+            if let Ok(value) = serde_json::to_string(&trace) { eprintln!("NATIVE_BODY_DIAGNOSTIC:{value}"); }
+        });
+    }
+}
+#[cfg(test)]
+use body_diagnostic::Phase as BodyPhase;
+
 fn error(code: &'static str) -> io::Error { io::Error::other(code) }
 fn hex(s: &str, n: usize) -> bool { s.len() == n && s.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)) }
 fn require_same_volume(private_parent: Identity, destinations: &[Identity]) -> io::Result<()> {
@@ -319,15 +389,20 @@ fn execute_inner(data: &Path, op: &Operation, command: &str, body: Option<(usize
         !op.binding.private_name.strip_prefix("native-export-").is_some_and(|s| hex(s, 32)) {
         return Err(error("AI_EXPORT_INVALID"));
     }
+    #[cfg(test)] body_diagnostic::phase(BodyPhase::BrokerPublic);
     let public = Directory::open_existing(Path::new(&op.binding.root), Some(op.binding.root_identity.identity()?))?;
+    #[cfg(test)] body_diagnostic::phase(BodyPhase::BrokerData);
     let parent = Directory::open_existing(data, Some(op.binding.data_root_identity.identity()?))?;
+    #[cfg(test)] body_diagnostic::phase(BodyPhase::BrokerPrivate);
     let private = parent.open_controlled_child(&op.binding.private_name, op.binding.private_identity.identity()?)?;
     let (name, id) = match op.processing_mode.as_str() {
         "markdown-only" => ("DataSecure-Markdown-Korrektur", &op.binding.markdown_identity),
         "markdown-and-anonymize" => ("DataSecure-KI-Export", &op.binding.anonymize_identity),
         _ => return Err(error("AI_EXPORT_INVALID")),
     };
+    #[cfg(test)] body_diagnostic::phase(BodyPhase::BrokerTarget);
     let target = public.open_bound_child(name, id.identity()?)?;
+    #[cfg(test)] body_diagnostic::phase(BodyPhase::BrokerRequest);
     let request = Request::new(op.batch_id.clone(), op.operation_id.clone(), op.request_sha256.clone(),
         op.processing_mode.clone(), op.files.clone(), &private, &target)?
         .with_publication_role(op.publication_role).with_confidential(op.confidential.clone())?;
@@ -336,14 +411,19 @@ fn execute_inner(data: &Path, op: &Operation, command: &str, body: Option<(usize
         public.inspect_child(name, target.identity())?;
         return Ok("abandoned");
     }
+    #[cfg(test)] body_diagnostic::phase(BodyPhase::BrokerWorkspace);
     let workspace = if inspect_only { Workspace::open_existing(&private, &target, request, guard)? }
         else { Workspace::open(&private, &target, request, guard)? };
+    #[cfg(test)] body_diagnostic::phase(BodyPhase::BrokerTransaction);
     let tx = if inspect_only { workspace.existing_transaction(guard)? } else { workspace.transaction(guard)? };
     if let Some((index, bytes)) = body {
         // No Node pathname write precedes this native identity/ACL check.
         // Each body lives only in this operation's bound transaction stage.
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::BrokerWrite);
         tx.write_body(index, bytes)?;
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::BrokerPostPrivate);
         parent.inspect_child(&op.binding.private_name, private.identity())?;
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::BrokerPostPublic);
         public.inspect_child(name, target.identity())?;
         return Ok("staged");
     }

@@ -8,6 +8,8 @@ use crate::{export_directory::{self, Directory, ExpectedFile, ConfidentialFiles,
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::io;
+#[cfg(test)]
+use crate::native_export_broker::body_diagnostic::{self, Phase as BodyPhase};
 
 const MAX_RECORD: usize = 128 * 1024;
 #[cfg(test)]
@@ -108,23 +110,29 @@ impl<'a> Transaction<'a> {
     }
     fn open_mode(journal: &'a Directory, staging: &'a Directory, target: &'a Directory, plan: Plan, guard: &'a NativeGuard,
         existing_only: bool) -> io::Result<Self> {
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::TransactionParents);
         plan.validate()?;
         if plan.journal != journal.identity().into() || plan.staging_parent != staging.identity().into() ||
             plan.target_parent != target.identity().into() { return Err(conflict()); }
         // A caller's assertion of privacy is not authority. Recheck native
         // owner/ACL/mode evidence on every reopened transaction.
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::TransactionJournal);
         journal.verify_controlled()?;
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::TransactionStaging);
         staging.verify_controlled()?;
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::TransactionControl);
         guard.checkpoint().map_err(|_| failure("STANDALONE_CLOSING"))?;
         let control = if existing_only { journal.lock_existing_control()? } else { journal.lock_control()? };
         // The owned plan is immutable for this instance. Reusing its digest
         // never reuses journal evidence, directory authority or inventory facts.
         let plan_sha256 = plan.digest()?;
         let tx = Self { journal, staging, target, plan, guard, plan_sha256, _control: control };
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::TransactionIntent);
         if existing_only {
             if tx.read::<Plan>("intent")?.as_ref() != Some(&tx.plan) { return Err(conflict()); }
         } else { tx.put("intent", &tx.plan)?; }
         // Closed record dependencies matter even when a later receipt exists.
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::TransactionEvidence);
         tx.evidence()?;
         Ok(tx)
     }
@@ -233,12 +241,16 @@ impl<'a> Transaction<'a> {
     /// Every body must match the already-bound neutral inventory. A partial
     /// write is preserved and conflicts on resume; it is never overwritten.
     pub fn write_body(&self, index: usize, bytes: &[u8]) -> io::Result<()> {
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::TransactionEvidence);
         let (identity, prepared, started, _, _, abandoned) = self.evidence()?;
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::TransactionBody);
         if prepared || started || abandoned { return Err(conflict()); }
         let file = export_directory::publication_body(&self.plan.files, self.plan.confidential.as_ref(), index).ok_or_else(conflict)?;
         if bytes.len() as u64 != file.bytes || <[u8; 32]>::from(Sha256::digest(bytes)) != file.sha256 { return Err(conflict()); }
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::TransactionGuard);
         self.guard.checkpoint().map_err(|_| failure("STANDALONE_CLOSING"))?;
         let stage = if let Some(identity) = identity {
+            #[cfg(test)] body_diagnostic::phase(BodyPhase::TransactionStage);
             self.staging.reopen_private_stage(&self.plan.stage_name(), identity)?
         } else {
             // New confidential stages are themselves admitted as controlled
@@ -253,15 +265,20 @@ impl<'a> Transaction<'a> {
         };
         let confidential = if index >= self.plan.files.len() { Some(self.confidential_stage(&stage)?) } else { None };
         let destination = confidential.as_ref().unwrap_or(&stage);
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::TransactionWrite);
         match destination.write_new(&file.name, bytes) {
             Ok(()) => {},
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {},
             Err(error) => return Err(error),
         }
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::TransactionReadback);
         if destination.read_bounded(&file.name, 32_000_000)? != bytes { return Err(conflict()); }
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::TransactionSync);
         destination.sync()?;
         if let Some(child) = &confidential { stage.inspect_child(CONFIDENTIAL_DIRECTORY, child.identity())?; }
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::TransactionStageSync);
         stage.sync()?;
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::TransactionPost);
         self.staging.inspect_child(&self.plan.stage_name(), stage.identity())?;
         Ok(())
     }

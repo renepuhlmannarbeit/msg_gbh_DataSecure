@@ -1,5 +1,62 @@
 # RC176 – priorisierte Inhalts- und Grafikverbesserungen
 
+## Neuester tatsächlicher Stand25.10.nach04:18UTC: Source07 rot, begrenzte Diagnose
+
+Gepushter gemeinsamer Source07-Commit6ebe37fe5e8de5f2e110448455212efbfbe8cd4e,
+FPbcaefae9d0c2b930b846885879e2d1845dbf02572806ebaa2a6f4aec26797fd6/368.
+Native300Rust/3ignoriert/Clippy/Integration/Release, achtKonvertersuiten und
+fünfPaketgates/100MD bestanden mit unveränderten Inputs; beideMac40157987238
+SUCCESS. Diese Belege ersetzen den tatsächlich ROTEN Gesamtlauf nicht:
+HEADLESS-FINAL04:03:02.098UTC,256/318+0/11,inputs_unchanged=true. Es gibt
+keinen Source07-SourceSnapshot, lokalenRC176Ordner, Tag oder Pre-Release.
+
+tests/test-standalone-native-export.js:461 erwartet absichtlich eine verlorene
+Antwort NACH erfolgreichem nativen Publish. Tatsächlich verweigerte Rust schon
+das zweite write_body der zweiten Markdown-Korrekturgeneration mit
+AI_EXPORT_CONFLICT. Publish und Lost-Receipt-Hook wurden nicht erreicht.
+Originalrootdatasecure-native-store-axzXpC/134Belegdateien und roteFINAL bleiben
+unverändert. Tatsächlicher unabhängiger Revieweba0655c…/43c27a45… bestätigt
+die Phase, passende gespeicherte Plan-/Hash-/Requestbindungen und vorhandene
+ersteBodydatei. Exakter nativer Fehlerzweig und OS-Ursache sind UNBEWIESEN;
+keine Antivirus-/Sharing-/Transientbehauptung und keine gelockerte Assertion.
+
+Nach Ende aller Freezejobs wurde ausschließlich cfg(test)-Phasendiagnostik in
+fünfRustdateien plus ein geschlossener Testsammler ergänzt: maximal64Records,
+geschlossene Phase/Modus/ErrorKind, i32OSCode und Gleichheitsflags, keine
+Inhalte/Pfade/IDs/Fehlertexte. Genau eine neue isolierte native Einzelprobe
+lief GREEN/Exit0; alle vier Lost-Receipt-Hooks wurden nach echtem Publish
+erreicht,41Diagnostikrecords/2erwarteteNegative/0ungültigeRecords. Das beweist
+KEINE Ursache oder Reparatur des alten ROT. Report9d0894e1…/RESULTced10aac…
+unterdist/rc176-source08-native-stage-diagnosis-20261025; RootMAG1F0 erhalten.
+Produktlogik/Schutzprüfungen/Retry/Timeout/alteAssertions unverändert. Main
+liest Quellen und Bericht. Unabhängige finale Revalidierung87da3c9a…/7bc07b34…
+abgeschlossen und vollständig gelesen:131alteAssertions/9Frist-/Retryzeilen
+byteidentisch, alle49Phasen geschlossen,1119Belegpins stabil. Main-Clippy
+--offline --locked --all-targets -- -D warnings Exit0. Keine bestätigte neue
+Autoritäts-/Produktregression; historischeUrsache weiterhin unbewiesen. Ein neuer
+gemeinsamer Commit/FP mit vollständig frischen Endbelegen ist vor weiterer
+Freigabebewertung erforderlich; Source07 bleibt historisch nicht freigegeben.
+
+ComputerUse funktioniert nach Appupdate tatsächlich. Source07GUI01 Default-
+Neuanlage/2MD/1ehrlicheAuslassung/Ordneröffner und GUI19 geführt+automatisch
+mit2MD/3vertraulichenZuordnungen/1textloserEMF-Auslassung sind begrenzt echt
+geprüft und unabhängig bytegebunden gegengelesen. GUI05 präzise11Zeichen-
+Maskierung nach Emoji/Mischzeilenenden, zwei starkeName-Keepverweigerungen
+und sichere laufweite Personenkorrektur stimmen mit nativen ACKs und alten
+unveränderten Dateien überein. Kein19Fall-GesamtPASS und kein Belegtransfer
+auf künftige Bytes. Originalapp normal geschlossen/Rootprozesszahl0.
+
+Der ursprüngliche candidate- UND results-Ordner im Source07-Temp-Root427ed…
+fehlen jetzt physisch; profile/temp/webview bleiben erhalten. Entferner und
+Mechanismus sind UNBEWIESEN. Der einmalige normale Neustart scheitert daher
+vor Reservierung am fehlenden candidate, unabhängig e93c6b05…/f3d3247b…
+reproduziert. Keine Wiederholung, Wiederherstellung, Profilkopie oder stille
+Übernahme neuer Ordneridentität; GUI05-Neustart bleibt NOT_RUN. Separater
+read-onlyCleanup-Quellenreview1b1338c3…/9ecf02f6… abgeschlossen/Main gelesen:
+28Quellen gebunden, kein tatsächlich an Root427ed… gebundener Löschaufruf
+gefunden; keine exhaustive Fremd-/OS-Akteurfreigabe. Menschliche Office-/physischeMac-/
+Finder-/TCC-/M2-/VoiceOver-Abnahmen bleiben USER_PENDING. Keine Mainintegration.
+
 ## Neuester tatsächlicher Stand25.10.nach03:03UTC: Source06 und enger Testfolgefix
 
 Gemeinsamer gepushter Appcommit0964b42dbfc00c297551b6b485f6447f07a4a923,

@@ -6,6 +6,8 @@ use crate::{export_directory::Directory, ipc_transport::{self, Lifecycle}, ipc_a
 use serde::Deserialize;
 use serde_json::{json, Value};
 use std::{path::Path, sync::mpsc, time::Instant};
+#[cfg(test)]
+use crate::native_export_broker::body_diagnostic::{self, Phase as BodyPhase};
 
 pub const REQUEST_SCHEMA: &str = "datasecure-native-export-request/1";
 pub const RESPONSE_SCHEMA: &str = "datasecure-native-export-response/1";
@@ -117,8 +119,11 @@ fn initial_output_role(outer: &Value) -> Option<InitialOutputRole> {
 fn initial_output_outer(outer: &Value) -> bool { initial_output_role(outer).is_some() }
 fn receive_body(state: &mut PublicationState, op: &crate::native_export_broker::Operation, chunk: BodyChunk,
     data: &Path, guard: Option<&ipc_transport::NativeGuard>, reporter: Option<&ExportReporter>) -> std::io::Result<&'static str> {
+    #[cfg(test)] body_diagnostic::begin(&op.processing_mode, chunk.index, chunk.offset == 0, chunk.final_chunk);
+    #[cfg(test)] body_diagnostic::phase(BodyPhase::BodyPayload);
     let invalid = || std::io::Error::other("AI_EXPORT_CONFLICT");
     let file = op.payload_file(chunk.index).map_err(|_| invalid())?;
+    #[cfg(test)] body_diagnostic::phase(BodyPhase::BodyBounds);
     if file.bytes > 32_000_000 || chunk.hex.len() > 2 * 65536 || !chunk.hex.len().is_multiple_of(2) ||
         !chunk.hex.bytes().all(|c| c.is_ascii_digit() || (b'a'..=b'f').contains(&c)) ||
         chunk.hex.is_empty() && file.bytes != 0 { return Err(invalid()); }
@@ -133,6 +138,8 @@ fn receive_body(state: &mut PublicationState, op: &crate::native_export_broker::
         let digit = |v: u8| if v.is_ascii_digit() { v - b'0' } else { v - b'a' + 10 };
         bytes.push(digit(pair[0]) * 16 + digit(pair[1]));
     }
+    #[cfg(test)] body_diagnostic::body_checks(true, bytes.len() as u64 == file.bytes);
+    #[cfg(test)] body_diagnostic::phase(BodyPhase::BodyFinal);
     if chunk.final_chunk != (bytes.len() as u64 == file.bytes) { return Err(invalid()); }
     if let Some(reporter) = reporter { reporter.phase(ExportPhase::Copying, op.files.len()); }
     if !chunk.final_chunk { return Ok("receiving"); }
@@ -315,6 +322,7 @@ fn handle_publication_owned(frame: &Value, outer: &Value, state: &mut Publicatio
                 crate::native_export_broker::inspect_results(data, op, guard.ok_or_else(invalid)?)
             } else { crate::native_export_broker::execute(data, op, &request.command, guard.ok_or_else(invalid)?) }
         };
+        #[cfg(test)] body_diagnostic::finish(&result);
         if result.is_err() { state.body = None; }
         if let (Some(reporter), Ok(status)) = (reporter, &result) {
             match *status {

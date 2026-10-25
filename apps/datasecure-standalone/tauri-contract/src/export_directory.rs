@@ -141,6 +141,8 @@ mod controlled_create_diagnostic_tests {
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(crate) struct Identity { pub volume: u64, pub object: u128, pub created_ns: u128 }
+#[cfg(test)]
+use crate::native_export_broker::body_diagnostic::{self, Phase as BodyPhase};
 /// Legacy Node22 setting admission only. Never use this representation for
 /// recovery/publication; those always retain the full native Identity.
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -543,16 +545,23 @@ impl Directory {
     pub fn read_bounded(&self, name: &str, limit: usize) -> io::Result<Vec<u8>> {
         if limit > 32_000_000 { return Err(unsafe_io()); }
         leaf(name)?; self.check()?;
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::DirectoryReadOpen);
         let mut file = platform::read_file(&self.inner, name)?;
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::DirectoryReadIdentity);
         let identity = platform::regular_identity(&file)?;
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::DirectoryReadBefore);
         let before = file.metadata()?;
         if before.len() > limit as u64 { return Err(unsafe_io()); }
         let mut bytes = Vec::with_capacity(before.len() as usize);
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::DirectoryReadBody);
         std::io::Read::by_ref(&mut file).take(limit as u64 + 1).read_to_end(&mut bytes)?;
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::DirectoryReadAfter);
         let after = file.metadata()?;
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::DirectoryReadVerify);
         if bytes.len() as u64 != before.len() || after.len() != before.len() || after.modified()? != before.modified()? ||
             platform::regular_identity(&file)? != identity ||
             platform::regular_identity(&platform::read_file(&self.inner, name)?)? != identity { return Err(unsafe_io()); }
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::DirectoryReadDone);
         self.check()?; Ok(bytes)
     }
     /// Diagnostic-only inventory. Unlike export evidence, an append-only log
@@ -645,8 +654,11 @@ impl Directory {
     /// Unlike a public recovery capability it can be renamed for publication.
     pub fn reopen_private_stage(&self, name: &str, expected: Identity) -> io::Result<Self> {
         leaf(name)?; self.check()?;
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::StageOpen);
         let inner = platform::open_stage_child(&self.inner, name)?;
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::StageIdentity);
         if platform::directory_identity(&inner)? != expected { return Err(unsafe_io()); }
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::StageParent);
         self.inspect_child(name, expected)?;
         Ok(Self { inner, identity: expected })
     }
@@ -798,10 +810,15 @@ impl Directory {
     }
     pub fn write_new(&self, name: &str, bytes: &[u8]) -> io::Result<()> {
         leaf(name)?; self.check()?;
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::LeafCreate);
         let mut file = platform::create_file(&self.inner, name)?;
         let identity = platform::regular_identity(&file)?;
         if file.metadata()?.len() != 0 { return Err(unsafe_io()); }
-        file.write_all(bytes)?; file.sync_all()?;
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::LeafWrite);
+        file.write_all(bytes)?;
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::LeafSync);
+        file.sync_all()?;
+        #[cfg(test)] body_diagnostic::phase(BodyPhase::LeafVerify);
         if platform::regular_identity(&file)? != identity || file.metadata()?.len() != bytes.len() as u64 {
             return Err(unsafe_io());
         }

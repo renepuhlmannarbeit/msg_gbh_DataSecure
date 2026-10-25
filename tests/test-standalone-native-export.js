@@ -26,6 +26,9 @@ let stderr = '', outer, binding, seq = 0, nativeSession, loseNextPublish = false
 const nativeCommands = [], nativeActions = [];
 const admissionSnapshots = [], nativeConfigureFailures = [];
 let invalidNativeConfigureFailures = 0;
+const nativeBodyDiagnostics = [];
+let invalidNativeBodyDiagnostics = 0;
+const bodyDiagnosticPhases = new Set(('body_decode body_payload body_bounds body_final broker_public broker_data broker_private broker_target broker_request broker_workspace broker_transaction broker_write broker_post_private broker_post_public workspace_root workspace_records workspace_put workspace_binding workspace_journal workspace_staging workspace_post transaction_parents transaction_journal transaction_staging transaction_control transaction_intent transaction_evidence transaction_body transaction_guard transaction_stage transaction_write transaction_readback transaction_sync transaction_stage_sync transaction_post directory_read_open directory_read_identity directory_read_before directory_read_body directory_read_after directory_read_verify directory_read_done stage_open stage_identity stage_parent leaf_create leaf_write leaf_sync leaf_verify').split(' '));
 // Test evidence only: a bounded, closed phase trace never retains a frame,
 // body, identifier, binding, pathname or native/vendor error text.
 function createPublicationPhaseDiagnostics() {
@@ -81,6 +84,24 @@ const configureStages = new Set(('nonce guard public_open data_open roots anonym
 const configureKinds = new Set('NotFound PermissionDenied ConnectionRefused ConnectionReset HostUnreachable NetworkUnreachable ConnectionAborted NotConnected AddrInUse AddrNotAvailable NetworkDown BrokenPipe AlreadyExists WouldBlock NotADirectory IsADirectory DirectoryNotEmpty ReadOnlyFilesystem FilesystemLoop StaleNetworkFileHandle InvalidInput InvalidData TimedOut WriteZero StorageFull NotSeekable QuotaExceeded FileTooLarge ResourceBusy ExecutableFileBusy Deadlock CrossesDevices TooManyLinks InvalidFilename ArgumentListTooLong Interrupted Unsupported UnexpectedEof OutOfMemory InProgress Other Uncategorized'.split(' '));
 child.stderr.on('data', bytes => { stderr = `${stderr}${bytes}`.slice(-8192); });
 readline.createInterface({ input: child.stderr }).on('line', line => {
+  const bodyPrefix = 'NATIVE_BODY_DIAGNOSTIC:';
+  if (line.startsWith(bodyPrefix)) {
+    try {
+      const value = JSON.parse(line.slice(bodyPrefix.length));
+      if (!value || Object.keys(value).sort().join(',') !== 'body_final_chunk,body_index,body_index_in_range,body_length_matches,body_offset_zero,io_error_kind,mode,ordinal,outcome,phase,phase_overflow,phases,raw_os_error,schema' ||
+          value.schema !== 'datasecure-native-body-test-diagnostic/1' || !Number.isInteger(value.ordinal) || value.ordinal < 1 || value.ordinal > 64 ||
+          !['markdown-only', 'markdown-and-anonymize', 'unknown'].includes(value.mode) ||
+          value.body_index !== null && (!Number.isInteger(value.body_index) || value.body_index < 0 || value.body_index > 203) ||
+          ['body_final_chunk', 'body_offset_zero', 'phase_overflow'].some(key => typeof value[key] !== 'boolean') ||
+          ['body_index_in_range', 'body_length_matches'].some(key => value[key] !== null && typeof value[key] !== 'boolean') ||
+          !bodyDiagnosticPhases.has(value.phase) || !Array.isArray(value.phases) || value.phases.length > 64 || value.phases.some(item => !bodyDiagnosticPhases.has(item)) ||
+          !['success', 'failure'].includes(value.outcome) || value.io_error_kind !== null && !configureKinds.has(value.io_error_kind) ||
+          value.raw_os_error !== null && (!Number.isInteger(value.raw_os_error) || value.raw_os_error < -(2 ** 31) || value.raw_os_error >= 2 ** 31) ||
+          nativeBodyDiagnostics.length >= 64) throw Error('closed body diagnostic required');
+      nativeBodyDiagnostics.push(value);
+    } catch { invalidNativeBodyDiagnostics++; }
+    return;
+  }
   const prefix = 'NATIVE_CONFIGURE_FAILURE:';
   if (!line.startsWith(prefix)) return;
   try {
@@ -618,10 +639,13 @@ async function run() {
     }
     if (completion.exit_code !== 0 || completion.error_observed) { console.error('Native pipe helper did not exit cleanly', completion, stderr); process.exitCode = 1; }
     if (invalidNativeConfigureFailures !== 0) { console.error('Closed native configure diagnostic rejected'); process.exitCode = 1; }
+    if (invalidNativeBodyDiagnostics !== 0) { console.error('Closed native body diagnostic rejected'); process.exitCode = 1; }
     fs.writeFileSync(path.join(root, 'NATIVE-ADMISSION-DIAGNOSTIC.json'), JSON.stringify({
       schema: 'datasecure-native-export-test-diagnostics/1', test_mode: firstInstallOnly ? 'first-install-only' : 'full',
       configured_admissions: configuredAdmissions, admission_snapshots: admissionSnapshots,
       native_configure_failures: nativeConfigureFailures, invalid_native_configure_failures: invalidNativeConfigureFailures,
+      native_body_diagnostics: nativeBodyDiagnostics, invalid_native_body_diagnostics: invalidNativeBodyDiagnostics,
+      native_body_diagnostic_maximum: 64, native_body_diagnostic_may_be_truncated: nativeBodyDiagnostics.length === 64,
       publication_phase_diagnostics: publicationPhaseDiagnostics.snapshot(),
       child_exit_code: completion.exit_code, child_exit_confirmed: completion.exit_confirmed,
       child_close_confirmed: completion.close_confirmed, test_exit_code: process.exitCode || 0

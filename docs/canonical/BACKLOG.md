@@ -5,6 +5,31 @@ Desktop-/Office-/Zielhostabnahme USER_PENDING. RC175/ältere Pakete unverändert
 
 ## BL-049.7 – RC176 priorisierte Inhalts-/Grafikverbesserungen
 
+Neuester25.10.nach04:18UTC: Source07/6ebe37f…/bcaefae9… ist nicht freigegeben.
+Native300Rust/3ignoriert, achtKonvertersuiten, fünfPaketgates und beideMac
+40157987238 PASS/stabil, aber Headless04:03:02.098UTC tatsächlichROT256/318+0/11
+bei nativer Zweitgenerations-Body2-Verweigerung vorPublish. Erwartete verlorene
+Antwort nachPublish wurde nie injiziert. AlteFINAL/134synthetischeOriginalbelege
+erhalten; exakter native/OS-Grund UNBEWIESEN. Keine pauschale Transientannahme.
+
+Begrenzte cfg(test)-Diagnostik/geschlossener Sammler, genau eine frische isolierte
+GREEN-Probe mit41Records/4echtenLostReceiptHooks, keine Produkt-/Guard-/Retry-/
+Deadline-/Assertionänderung. GREEN ist kein Ursachenbeweis und kein Fix. Main
+las tatsächliche Berichte/Code; unabhängige Revalidierung87da3c9a…/7bc07b34…
+abgeschlossen ohne bestätigte Diagnostik-/Autoritätsregression,131alteAssertions/
+9Fristzeilen unverändert/1119Pins stabil. Main-Clippy alleTargets Exit0. Neuer gemeinsamer
+Source08-Commit/FP und frische Endbelege vor weiterer Freigabebewertung nötig.
+Kein Source07Snapshot/Release/Mainmerge. Echte Source07GUI01/19/05Teilproben
+unabhängig bytegebunden geprüft, keine19Fall-Gesamtabnahme/Übertragung.
+
+Separater offener Diagnostikpunkt: Originalcandidate+results im Source07Temp-
+Root427ed… fehlen nach normalem Appschluss, profile/temp/webview erhalten;
+Entfernungsursache unbewiesen. Restart verweigert korrekt vorReservierung,
+keinRetry/Restore/Profilkopie/Identitätsersatz. Read-onlyCleanup-Quellenaudit
+1b1338c3…/9ecf02f6… mit28gebundenenQuellen abgeschlossen, kein belegter
+Löschaufruf für diesenRoot; Ursache weiterunbewiesen,
+danach geeignete neue gebundene Desktopkampagne; GUI05Restart bleibt NOT_RUN.
+
 Neuester25.10.nach03:03UTC: Source06/0964b42…/bcaefae9… tatsächlich318+11,
 Native300Rust/3ignoriert, achtKonvertersuiten und fünfPaketgates PASS/stabil;
 SourceSnapshot1a2210a5… vorhanden. Guided/Auto-GUI19 schließen den alten
