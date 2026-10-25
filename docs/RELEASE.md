@@ -1,10 +1,49 @@
 # Release- und Distributionsvertrag
 
-Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc176 · Veröffentlichungsnachtrag: 24.10.2026
+Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc176 · Veröffentlichungsnachtrag: 25.10.2026
 
-Der aktuelle Quellstand ist RC176-Entwicklungsstand und noch kein neu gebundener Paketkandidat. Nachfolgende reine
-Abschlussdokumentation ändert dessen App-/Paket-/Tagbindung nicht. Menschliche Desktop-/
-Office-/Zielhost- und N3/N4-Produktionsfreigaben bleiben offen.
+Der aktuelle Quellstand ist RC176 mit dem unten gebundenen Test-Pre-Release.
+Nachfolgende reine Abschlussdokumentation ändert dessen App-/Paket-/Tagbindung
+nicht. Menschliche Desktop-/Office-/Zielhostabnahmen und menschliche N3/N4-
+Produktionsfreigaben bleiben offen.
+
+### RC176 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
+
+Quellcommit `706c1fad6fbf26bf6745768c0d6a5bd4fc48040b` bindet den
+[RC176-Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc176).
+Build706c1fad, Produktfingerprint
+`407cb28589025f276d8c0139d7f0e8c0d402fc8211c63ec5c62a4d3ce01683d3`/369.
+Getaggte PDF-Struktur, begrenzte TIFF-Codecs/Orientierungen, gespeicherter
+Word-/Excel-/PowerPoint-Kontext und quellgebundener sensibler Feldwertschutz
+auch nach Labelmaskierung/Keep/Nachbearbeitung. Keine Formel-/Feld-/Makro-
+oder externe Linkausführung, keine Universalreparatur unsicherer Altprofile.
+
+Vier frische Source13-Endgates PASS/stabil:318+11Headless,300Rust/3ignoriert/
+Clippy/echteNode-Rust-Integration/Release, acht Konvertersuiten mit38PDF/
+75Worker/55Office/43Grafik/16TIFF/10EMF+/33TaggedPDF/21passivePDF,
+5Paketgates/100MD/0Fehler. Beide Macconsumer40219039035SUCCESS, je73Worker+
+2Windows-SKIPs/283Rust+3ignoriert. Ganze tatsächliche ARM-/Intel-Logs und
+Archivbytes unabhängig geprüft, Windows zusätzlich mit Python/.NET gegengelesen.
+Beide finalen Produktionsquellenreviews und der enge Testorakelreview sind
+abgeschlossen. Historische Source11-P1 und Source12-REDs bleiben erhalten;
+keine alten Grüns als neue Freigabe oder rückwirkende Ursachenerklärung.
+
+Release423600091, Publikation25.10.2026 19:07:07UTC,
+PreRelease=true/Draft=false. Alle20Assets vor und nach Publikation jeweils
+frisch heruntergeladen/gehasht; dieselbenIDs, Inventar, Tag-/Quellcommit und
+exakter Notesbody nachgelesen. Windows create-only lokal unter
+`Software DataSecure/RC176`: aktueller Testplan, Prüfsummen, Proofs und drei
+unveränderte synthetische Testarchive. SourceSnapshot1026Dateien/9213705Bytes,
+SHA5a014c1ac6f38b7d4f4b0680df0950b6ea802a31b85ec5770914bdad932a80f7.
+
+Alle19menschlichen Desktopfälle und Office-/Finder-/TCC-/M2-/Enterprise-/
+VoiceOver-/macOS26-Abnahme bleiben USER_PENDING; Agent-GUI NOT_RUN.
+Mac nur bestehendes Adhoc-Sealing, keine Developer-ID/Notarisierung oder
+OS-Schutzänderung. MacNativeEpoch/Pause/Lease/GUI NOT_RUN, ACLadversarialPARTIAL,
+LaunchServicesexit unbekannt, SmokeWriterjoinUNCONFIRMED/Extraktion erhalten.
+Keine universelle Format-/Rendering-/Anonymitäts- oder Artefaktfreiheitszusage.
+[Exakte Bindungen, Korrekturen und Grenzen](acceptance/RC176_SHARED_RELEASE_20261024.md).
+Linux bleibt RC159, Cowork RC151; keine Mainintegration oder neue Automation.
 
 ### RC175 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
 

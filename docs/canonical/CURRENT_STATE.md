@@ -1,5 +1,21 @@
 # Aktueller Iststand · 3.2.0-rc176
 
+25.10.2026: RC176-Source13 als Test-Pre-Release423600091 veröffentlicht19:07:07UTC.
+App/Tag706c1fad6fbf26bf6745768c0d6a5bd4fc48040b,
+FP407cb28589025f276d8c0139d7f0e8c0d402fc8211c63ec5c62a4d3ce01683d3/369.
+318+11Headless/300Rust3ignoriert/Clippy/Node-Rust/Release/achtKonvertersuiten/
+5Paketgates+100MD0Fehler PASS/stabil; beideMacs40219039035SUCCESS, tatsächliche
+Log-/Archivgegenreviews gelesen. Alle20GitHubassets vor und nach Publikation
+frisch heruntergeladen/gehasht; IDs/Inventar/Tagquelle/exakterNotesbody bestätigt.
+Windows-ZIP lokal `Software DataSecure/RC176` mit Testplan/Proofs/Prüfsummen und
+drei unveränderten synthetischen Testarchiven. Source13-Checkpoint und aktuelles
+RC176-Abnahmedokument enthalten genaue Bindungen und historische REDs.
+Für diesen Testkandidaten sind Implementierung/Reviews/automatische Endgates
+abgeschlossen. Menschliche19Desktopfälle/Fachproben/Office-/Mac-Zielhostabnahme
+USER_PENDING; Agent-GUI NOT_RUN. Keine Desktopübernahme/Automation/Mainintegration,
+Developer-ID oder Notarisierung. Bekannte Formatgrenzen bleiben dokumentiert.
+Nachfolgende reine Abschlussdokumentation ändert App-/Paket-/Tagbindung nicht.
+
 25.10.2026 nach17:53UTC: Source12/3c0b69a NICHT freigabefähig. Headless66/318
 und beide Macs40217722084 rot am gleichen veralteten Alttext-Testorakel. Native,
 Konverter8 undPaket5 tatsächlich grün/stabil; alle Jobs regulär beendet, Belege

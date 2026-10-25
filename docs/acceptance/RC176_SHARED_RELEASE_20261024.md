@@ -1,5 +1,47 @@
 # RC176 – priorisierte Inhalts- und Grafikverbesserungen
 
+## RC176-Source13 als Testkandidat veröffentlicht · 25.10.2026
+
+Gemeinsamer App-/Tagcommit706c1fad6fbf26bf6745768c0d6a5bd4fc48040b,
+FP407cb28589025f276d8c0139d7f0e8c0d402fc8211c63ec5c62a4d3ce01683d3/369,
+621Test-/Scriptinputs958d9f3a7c6ca9793e1e996cf75602cac9698066c939bce80270767e6eb02f4e.
+Alle vier tatsächlichen lokalen Endgates PASS/Exit0/inputs_unchanged:true:
+318/318+11/11Headless beendet18:54:30.520UTC;300Rust/3ignoriert/Clippy/
+Node-Rust/Release18:02:54.623;achtKonvertersuiten18:05:05.817;fünfPaketgates/
+100Markdown/0Fehler18:07:49.419. Keine Produkt-/Test-/Driver-/HEADänderung
+während dieser Jobs. Beide Macs40219039035SUCCESS, tatsächliche VERIFYs und
+unabhängige vollständige Log-/Bytegegenreviews von Main gelesen:
+ARMd3500952…6c18d5, Inteld86ba04f…8493f; Windows-Bytegegencheck9face9e9…b56dd.
+Beide finalen Produktreviews/Testgegenreview und die exakte EOF-Brücke gelten
+weiterhin; keine weitere Implementierung für diesen Kandidaten offen.
+
+Windows-ZIP113534715B/SHAfa384edc0e2135dd147e4d19f6b54185a27feb369263f653a020960925e8b673,
+EXE1f683c3367ff364dacedf257b8685e1bb65a68d96aa428a48d549e7735efb110.
+ARMZIP441197fe456dfb8d78eecb66445553d1ca7c8310dc3c8e1695387c0ea0b50411,
+DMG2a722e75c1456b35fa307decfb34e73cf28f9b3d3daeb2cc17e1570409eb9525.
+IntelZIPb78eb74794788a658ab5f51fc37b89717859c5ccf142102ff5305566abe9c70a,
+DMG7c21c50721d8a238e4fd24add3e10c90e072b9496e586fbdb16013e551658436.
+SourceSnapshot1026Dateien/9213705B/SHA5a014c1ac6f38b7d4f4b0680df0950b6ea802a31b85ec5770914bdad932a80f7,
+alle archivierten Bytes geprüft. Voller Buildcommit tatsächlich in Windows-EXE
+und beiden Mac-Desktops; gemeinsame JS-/PDF-/Grafik-/CCITTbindungen geprüft.
+
+Release423600091/v3.2.0-rc176 veröffentlicht19:07:07UTC, PreRelease=true,
+Draft=false. Alle20Remoteassets vor UND nach Veröffentlichung separat frisch
+heruntergeladen/gehasht, gleicheIDs/Inventar/Tagquelle bestätigt. Notesbody exakt
+SHA46512d06c8e0424d2ad8655b6dda4abad4d23e543cb75def65a6d22af5e2a0fe nachgelesen.
+Windows lokal create-only `C:\Users\arkud\Documents\Software DataSecure\RC176`,
+19Dateien mit aktuellem Testplan/README/Proofs/Prüfsummen und drei unveränderten
+synthetischen Archiven; alle kopierten Bytes geprüft. Keine Nutzeroriginale,
+Profile oder Diagnosen hochgeladen. Rohbelege im Source13-Evidenzordner.
+
+Offen bleiben eure19Desktopfälle samt Fachproben und echte Windows-/Mac-/
+Office-/Finder-/TCC-/M2-/Enterprise-/VoiceOver-/macOS26-Abnahme. Agent-GUI
+NOT_RUN/0PASS/19NOT_RUN, keine künstliche GUI-FINAL. Kein weiterer Desktop-
+Zugriff/Start/Neustart/Schließen und keine Automation. Bekannte Formatgrenzen
+stehen in Testplan/Releasehinweisen; keine universelle Verarbeitungsgarantie.
+Keine Mainintegration, Developer-ID/Notarisierung oder Schutzabschaltung.
+Folgende reine Dokumentationsänderungen verschieben weder Appcommit noch Tag.
+
 ## Source13-Testorakel: historische Lesbarkeit ohne Freigabe · 25.10.2026 nach 17:53 UTC
 
 Source12/3c0b69a10214ae05c866a6f459504fa0398a7ecf ist NICHT freigabefähig:

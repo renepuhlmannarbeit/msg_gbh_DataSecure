@@ -1,5 +1,19 @@
 # Aktives Entwicklungsbacklog · 3.2.0-rc176
 
+25.10.2026 abgeschlossen bis zum RC176-Testkandidaten: gemeinsamer706c1fa,
+ProduktFP407cb285…1683d3, alle vier lokalen Endgates und beideMacs40219039035
+PASS/stabil. Tatsächliche finale Quellen-/Testorakel-/Windows-/Mac-Log-/
+Archivgegenreviews abgeschlossen/gelesen, kein bestätigter Kandidatenblocker.
+Release423600091/v3.2.0-rc176 seit19:07:07UTC als PreRelease veröffentlicht;
+20Assets vor/nach Pub frisch nachgeladen/gehasht/Tagquelle bestätigt. Windows
+lokal Software DataSecure/RC176 mit Plan/Prüfsummen/Proofs und3Testarchiven.
+Offen bleiben die vom Nutzer übernommenen19Desktopfälle samt Fachproben sowie
+echte Office-/Mac-Zielhostabnahme. Dokumentierte Spezialformat-/Renderinggrenzen
+bleiben getrennte Restabdeckung; keine universelle Garantie. Keine weitere
+Implementierung oder Build-/Testwiederholung für diesen Kandidaten erforderlich.
+Keine Desktopübernahme/neue Automation/Mainintegration oder Developer-ID/Notarisierung.
+Details im RC176-Abnahmedokument; alte P1-/RED-Belege unverändert erhalten.
+
 25.10.2026 nach17:53UTC: Source12 trotz Native/Konverter/Paket PASS gesperrt,
 Headless66/318 und beideMacs40217722084 tatsächliches RED im alten U+FFFD-
 Historienorakel. Ursachenreview bestätigt beabsichtigte Read-/Capabilitytrennung;
