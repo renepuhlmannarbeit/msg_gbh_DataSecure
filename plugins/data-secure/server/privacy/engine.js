@@ -842,6 +842,7 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
     .filter((f) => !(f.type === 'URL' && isProtectedProfessionalDomain(clean,f.start,f.end,credentialRanges)))
     .filter((f) => f.type === 'CREDENTIAL' || !insideCredentialValue(f.start, f.end))
     .map((f) => ({ type: f.type, text: f.type === 'CREDENTIAL' ? '' : f.text }));
+  const proseDiscoveryBreaks = new Set(), qualifierScopes = [];
   // Independent complete-value check, not the replacement span enumerator:
   // parse whole GFM columns again and inspect their decoded visible values.
   // Keep/review choices cannot waive an explicitly source-bound field. The
@@ -877,32 +878,184 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
     // Do not use the redactor's remainder spans/dictionary/review ranges.
     // A sentence containing "Name:" is not itself a closed field prefix;
     // the next source line retains its independent factual context.
-    const proseValues = text => {
+    const proseValues = (text, discoveryBreaks = null, qualifiers = null) => {
       const result = [], rows = text.split('\n'); let position = 0;
       const container = /[ \t]*(?:>[ \t]*|(?:[-*+]|\d{1,9}[.)])[ \t]+(?:\[[ xX]\][ \t]+)?|#{1,6}[ \t]+)/uy;
+      const grammar = require('./base'), unanchor = pattern => pattern.replace(/^\^/u, '').replace(/\$$/u, '');
+      const labelEnd = new RegExp('(?:' + [personFieldPattern(personFieldPolicy), ...[
+        grammar.DATE_OF_BIRTH_LABEL_RE, grammar.PHONE_LABEL_RE, grammar.DE_TAX_LABEL_RE,
+        grammar.ID_LABEL_HEADER_RE, grammar.CREDENTIAL_LABEL_HEADER_RE,
+        /^(?:Firma|Unternehmen|Organisation|Organization|Company(?:\s+Name)?|Employer|Arbeitgeber)$/iu
+      ].map(pattern => unanchor(pattern.source)), 'Geschützter Tabellenwert'].join('|') + ')$', 'giu');
+      const unescapeLabel = value => value.replace(/\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/gu, '$1');
+      const prefixLength = value => {
+        let start = 0;
+        while (start < value.length) {
+          container.lastIndex = start; const match = container.exec(value);
+          if (!match) break;
+          start = container.lastIndex;
+        }
+        return start + /^[ \t]*/u.exec(value.slice(start))[0].length;
+      };
+      const completePrefix = value => {
+        const start = prefixLength(value), colon = value.indexOf(':', start), equal = value.indexOf('=', start);
+        const boundary = colon < 0 ? equal : equal < 0 ? colon : Math.min(colon, equal);
+        return boundary >= 0 && isProtectedFieldHeader(unescapeLabel(value.slice(start, boundary + 1)).slice(0, -1).trim(), personFieldPolicy);
+      };
+      const rememberQualifier = (raw, start, logical = unescapeLabel(raw)) => {
+        if (!qualifiers || !isProtectedFieldHeader(logical.trim(), personFieldPolicy)) return;
+        const comparison = grammar.effectiveTableFieldLabel(logical).replace(/\s+/gu, ' ');
+        labelEnd.lastIndex = 0; const match = labelEnd.exec(comparison);
+        if (!match || match.index === 0) return;
+        const leading = raw.length - raw.trimStart().length, end = raw.trimEnd().length;
+        // A comparison-only name may not have a literal raw occurrence.
+        // Preserve the real technical suffix when it can be proved exactly:
+        // replacing that suffix as PERSON would destroy the field's later
+        // whole-value/Keep duty. No normalized offset is adopted as raw.
+        let labelEndAt = logical.trimEnd().length;
+        while (logical[labelEndAt - 1] === ')') {
+          let digit = labelEndAt - 2;
+          while (digit >= 0 && logical.charCodeAt(digit) >= 48 && logical.charCodeAt(digit) <= 57) digit--;
+          if (digit === labelEndAt - 2 || logical[digit] !== '(' || digit < 1 || !/\s/u.test(logical[digit - 1])) break;
+          labelEndAt = digit;
+          while (labelEndAt > 0 && /\s/u.test(logical[labelEndAt - 1])) labelEndAt--;
+        }
+        let fallbackEnd = null, qualifierEnd = labelEndAt - match[0].length;
+        if (qualifierEnd > 0 && logical.slice(qualifierEnd, labelEndAt) === match[0]) {
+          while (qualifierEnd > 0 && /\s/u.test(logical[qualifierEnd - 1])) qualifierEnd--;
+          let rawAt = 0, logicalAt = 0;
+          for (; logicalAt < qualifierEnd && rawAt < raw.length; logicalAt++) {
+            rawAt += raw[rawAt] === '\\' && /[!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~]/u.test(raw[rawAt + 1] || '') ? 2 : 1;
+          }
+          if (logicalAt === qualifierEnd && rawAt > leading &&
+              unescapeLabel(raw.slice(0, rawAt)) === logical.slice(0, qualifierEnd)) fallbackEnd = start + rawAt;
+        }
+        if (end > leading) qualifiers.push({start: start + leading, end: start + end, fallbackEnd,
+          comparison: comparison.slice(0, match.index).trim()});
+      };
       for (let row = 0; row < rows.length; row++) {
         const line = rows[row], cells = markdownTableCells(line, true), separator = markdownTableCells(rows[row + 1] || '', true);
         const tableHeader = cells && separator && cells.length === separator.length && separator.every(value => /^:?-{3,}:?$/u.test(value));
-        if (!tableHeader && !require('./base').tableHeadersAt(text, position, personFieldPolicy)) {
-          let start = 0;
-          while (start < line.length) {
-            container.lastIndex = start; const match = container.exec(line);
-            if (!match) break;
-            start = container.lastIndex;
+        const table = grammar.tableHeadersAt(text, position, personFieldPolicy);
+        if ((tableHeader || table) && qualifiers) {
+          const ranges = []; let from = 0, escaped = false;
+          for (let index = 0; index < line.length; index++) {
+            if (escaped) { escaped = false; continue; }
+            if (line[index] === '\\') { escaped = true; continue; }
+            if (line[index] === '|') { ranges.push([from, index]); from = index + 1; }
           }
-          const colon = line.indexOf(':', start), equal = line.indexOf('=', start);
-          const boundary = colon < 0 ? equal : equal < 0 ? colon : Math.min(colon, equal);
-          if (boundary >= 0) {
-            const label = line.slice(start, boundary + 1)
-              .replace(/\\([!"#$%&'()*+,\-./:;<=>?@[\\\]^_`{|}~])/gu, '$1').slice(0, -1).trim();
-            if (isProtectedFieldHeader(label, personFieldPolicy)) result.push(line.slice(boundary + 1));
+          ranges.push([from, line.length]);
+          if (line.trimStart().startsWith('|')) ranges.shift();
+          if (line.trimEnd().endsWith('|')) ranges.pop();
+          if (cells && ranges.length === cells.length && (!table || ranges.length === table.headers.length)) {
+            for (const [start, end] of ranges) {
+              const raw = line.slice(start, end);
+              if (tableHeader) { rememberQualifier(raw, position + start); continue; }
+              // A data cell can contain its own explicit field after a
+              // producer prefix. Reconstruct that prefix independently,
+              // retaining its actual cell and UTF16 owner. CR remains part
+              // of this one cell; it never starts another prose field here.
+              let from = 0;
+              for (let boundary = 0; boundary < raw.length; boundary++) {
+                if (raw[boundary] !== ':' && raw[boundary] !== '=') continue;
+                const logical = unescapeLabel(raw.slice(from, boundary + 1)).slice(0, -1);
+                if (isProtectedFieldHeader(logical.trim(), personFieldPolicy)) {
+                  rememberQualifier(raw.slice(from, boundary), position + start + from, logical);
+                  break;
+                }
+                from = boundary + 1;
+              }
+            }
+          } else if (cells?.some(cell => {
+            let from = 0;
+            for (let boundary = 0; boundary < cell.length; boundary++) if (cell[boundary] === ':' || cell[boundary] === '=') {
+              if (isProtectedFieldHeader(cell.slice(from, boundary).trim(), personFieldPolicy)) return true;
+              from = boundary + 1;
+            }
+            return false;
+          })) result.push(line); // Proven field, unbound cell owner: no absence proof.
+        }
+        if (!tableHeader && !table) {
+          // Independent separator-bound reconstruction. A CR inside the old
+          // complete label grammar is not an end of that label. Only another
+          // actual closed source prefix ends an already established value.
+          // No redactor ranges/spans/dictionary or Keep waiver is used here.
+          let valueStart = -1, groupStart = 0;
+          for (let boundary = 0; boundary < line.length; boundary++) {
+            if (line[boundary] !== ':' && line[boundary] !== '=') continue;
+            let owner = groupStart === 0 && completePrefix(line.slice(0, boundary + 1)) ? 0 : -1;
+            {
+              const group = line.slice(groupStart, boundary), pieces = [], allowed = new Map();
+              let at = 0, length = 0;
+              while (at <= group.length) {
+                const carriage = group.indexOf('\r', at), end = carriage < 0 ? group.length : carriage;
+                const raw = group.slice(at, end), last = end === group.length;
+                const comparable = grammar.normalizeSensitiveLabel(last ? unescapeLabel(raw + line[boundary]).slice(0, -1) : unescapeLabel(raw));
+                if (groupStart + at === 0 || line[groupStart + at - 1] === '\r') {
+                  const prefix = grammar.normalizeSensitiveLabel(unescapeLabel(raw.slice(0, prefixLength(raw))));
+                  allowed.set(length + prefix.length, groupStart + at);
+                }
+                pieces.push(comparable); length += comparable.length;
+                if (last) break;
+                pieces.push('\r'); length++; at = end + 1;
+              }
+              // Bounded comparison corridors. Remap only the real owner
+              // positions; source text/UTF16 coordinates remain untouched.
+              const positions = [...allowed], owners = new Map(); let next = 0, reduction = 0;
+              const comparable = pieces.join('').replace(/\s+/gu, (space, offset) => {
+                while (next < positions.length && positions[next][0] <= offset) {
+                  const [point, raw] = positions[next++]; owners.set(point - reduction, raw);
+                }
+                while (next < positions.length && positions[next][0] < offset + space.length) {
+                  const [, raw] = positions[next++]; owners.set(offset - reduction + 1, raw);
+                }
+                reduction += space.length - 1;
+                return ' ';
+              });
+              while (next < positions.length) {
+                const [point, raw] = positions[next++]; owners.set(point - reduction, raw);
+              }
+              const starts = [...owners.keys()]; let end = comparable.length;
+              while (end > 0 && /\s/u.test(comparable[end - 1])) end--;
+              // Resolve the already supported repeated numeric ordinal suffix
+              // once, backwards, before searching the actual policy patterns.
+              while (comparable[end - 1] === ')') {
+                let digit = end - 2;
+                while (digit >= 0 && comparable.charCodeAt(digit) >= 48 && comparable.charCodeAt(digit) <= 57) digit--;
+                if (digit === end - 2 || comparable[digit] !== '(' || digit < 1 || !/\s/u.test(comparable[digit - 1])) break;
+                end = digit;
+                while (end > 0 && /\s/u.test(comparable[end - 1])) end--;
+              }
+              const label = comparable.slice(0, end); labelEnd.lastIndex = 0;
+              for (let match; (match = labelEnd.exec(label)); labelEnd.lastIndex = match.index + 1) {
+                let left = 0, right = starts.length - 1, previous = -1;
+                while (left <= right) {
+                  const middle = (left + right) >>> 1;
+                  if (starts[middle] <= match.index) { previous = middle; left = middle + 1; } else right = middle - 1;
+                }
+                if (previous >= 0) {
+                  const start = owners.get(starts[previous]);
+                  if (completePrefix(line.slice(start, boundary + 1))) { if (owner < 0) owner = start; break; }
+                }
+              }
+            }
+            if (owner >= 0) {
+              if (valueStart >= 0) result.push(line.slice(valueStart, owner - 1));
+              valueStart = boundary + 1;
+              if (discoveryBreaks && owner > 0 && line[owner - 1] === '\r') discoveryBreaks.add(position + owner - 1);
+              const labelStart = owner + prefixLength(line.slice(owner, boundary));
+              rememberQualifier(line.slice(labelStart, boundary), position + labelStart,
+                unescapeLabel(line.slice(labelStart, boundary + 1)).slice(0, -1));
+            }
+            groupStart = boundary + 1;
           }
+          if (valueStart >= 0) result.push(line.slice(valueStart));
         }
         position += line.length + 1;
       }
       return result;
     };
-    for (const value of proseValues(rendered)) values.push(value);
+    for (const value of proseValues(rendered, proseDiscoveryBreaks, qualifierScopes)) values.push(value);
     const sourceView = canonicalizeRenderedText(options.originalSourceText || '', personFieldPolicy);
     const imported = sourceVariableTokens(sourceView);
     for (const sourceValue of proseValues(sourceView))
@@ -980,6 +1133,17 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
     residualOrgSpans.push(...orgOccurrences);
   }
 
+  const proseDiscoveryView = value => {
+    if (!proseDiscoveryBreaks.size) return value;
+    // This view uses only current rendered-reader boundaries. Each proven
+    // source CR becomes one LF for discovery; output and occurrence matching
+    // retain the original bytes/UTF16 coordinates. Qualifiers remain visible.
+    const parts = []; let cursor = 0;
+    for (const offset of proseDiscoveryBreaks) if (offset >= cursor && value[offset] === '\r') {
+      parts.push(value.slice(cursor, offset), '\n'); cursor = offset + 1;
+    }
+    parts.push(value.slice(cursor)); return parts.join('');
+  };
   const strongPersonAnchor = options.strongPersonAnchor === true;
   // Explicit person context also makes an unrelated uppercase Markdown title
   // or link label ambiguous in the general profile. Use the existing bounded
@@ -990,14 +1154,45 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
   // Both views are necessary: intact placeholders preserve actual Markdown
   // boundaries, but masking them exposes adjacent names and prevents already
   // redacted lines from exhausting the bounded profile-header window.
+  const intactPersonText = proseDiscoveryView(rendered);
   const intactPersonSeeds = [
-    ...collectPersonSeeds(rendered, profile, null, strongPersonAnchor, personFieldPolicy),
-    ...presentationCandidates(rendered),
-    ...collectContextualNameCandidates(rendered, profile, { includeNegation: true }),
-    ...collectNestedMarkdownPersonCandidates(rendered, profile)
+    ...collectPersonSeeds(intactPersonText, profile, null, strongPersonAnchor, personFieldPolicy),
+    ...presentationCandidates(intactPersonText),
+    ...collectContextualNameCandidates(intactPersonText, profile, { includeNegation: true }),
+    ...collectNestedMarkdownPersonCandidates(intactPersonText, profile)
   ];
   const intactPersonKeys = new Set(intactPersonSeeds.map((seed) => key(seed.value)));
   const residualPersonSeeds = [...intactPersonSeeds];
+  const leadingQualifierEmoji = /^(?:\p{RGI_Emoji}[ \t]*)+/v;
+  for (const scope of qualifierScopes) {
+    const caption = rendered.slice(scope.start, scope.end), seen = new Set();
+    // These are hypotheses from a proven current caption's qualifier, never
+    // proof that a caption is PII-free. Bind every actual raw occurrence in
+    // this same caption; no first-index guess, dictionary or review waiver.
+    const qualifierViews = [scope.comparison, maskPlaceholders(scope.comparison)];
+    // RGI strings include the runtime's complete VS/ZWJ/modifier/flag/keycap
+    // sequences, not arbitrary symbols, punctuation or bare numbers. This
+    // one additional discovery view is confined to an already bound caption;
+    // original views, raw occurrence ownership and review duties still apply.
+    const emojiPrefix = leadingQualifierEmoji.exec(scope.comparison);
+    if (emojiPrefix && emojiPrefix[0].length < scope.comparison.length)
+      qualifierViews.push(scope.comparison.slice(emojiPrefix[0].length));
+    for (const view of qualifierViews) {
+      for (const seed of [...collectPersonSeeds(view, profile, null, strongPersonAnchor, personFieldPolicy),
+        ...collectContextualNameCandidates(view, profile, {includeNegation: true}),
+        ...collectNestedMarkdownPersonCandidates(view, profile)]) {
+        const identity = key(seed.value); if (seen.has(identity)) continue; seen.add(identity);
+        const raw = findLiteralSpans(caption, seed.value, '', 'PERSON', PRIORITY.PERSON);
+        if (raw.length) residualPersonSeeds.push({...seed, qualifier_occurrences: raw.map(span => ({...span,
+          start: scope.start + span.start, end: scope.start + span.end}))});
+        else if (scope.fallbackEnd !== null) {
+          const qualifier = rendered.slice(scope.start, scope.fallbackEnd);
+          residualPersonSeeds.push({value: qualifier, confidence: 'qualified_caption_unbound',
+            qualifier_occurrences: [{start: scope.start, end: scope.fallbackEnd, text: qualifier}]});
+        } else out.push({type: 'SENSITIVE_FIELD', text: ''}); // Unproved raw suffix ownership is not a release.
+      }
+    }
+  }
   // A value-bearing header ("Name: [PERSON_001]") is not the
   // column label "Name:". Masking its marker into spaces must not confer
   // person-column authority on every subsequent factual cell.
@@ -1013,7 +1208,7 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
     discoveryCursor = line.index + line[0].length;
   }
   discoveryPieces.push(clean.slice(discoveryCursor));
-  const personDiscoveryText = discoveryPieces.join('').replace(/^([ \t]*)[–—](?=[ \t])/gmu, '$1-');
+  const personDiscoveryText = proseDiscoveryView(discoveryPieces.join('').replace(/^([ \t]*)[–—](?=[ \t])/gmu, '$1-'));
   for (const seed of [...collectPersonSeeds(personDiscoveryText, profile, null, strongPersonAnchor, personFieldPolicy),
     ...presentationCandidates(personDiscoveryText),
     ...collectContextualNameCandidates(personDiscoveryText, profile, { includeNegation: true }),
@@ -1024,7 +1219,7 @@ function scanResidual(text, profile = 'general', knownValues = [], options = {})
     residualPersonSeeds.push(seed);
   }
   for (const seed of residualPersonSeeds) {
-    const occurrences=findLiteralSpans(personOccurrenceText,seed.value,'','PERSON',PRIORITY.PERSON)
+    const occurrences=(seed.qualifier_occurrences || findLiteralSpans(personOccurrenceText,seed.value,'','PERSON',PRIORITY.PERSON))
       .filter((span) => !insideCredentialValue(span.start, span.end) && !isActualFieldHeader(span));
     if (!occurrences.length) continue;
     const issuerOnly=occurrences.length>0 && occurrences.every((span) =>

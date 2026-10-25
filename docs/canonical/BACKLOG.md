@@ -1,9 +1,118 @@
-# Aktives Entwicklungsbacklog
+# Aktives Entwicklungsbacklog · 3.2.0-rc176
 
-Arbeitsquelle: 3.2.0-rc176 Source06 lokal vollständig grün; Mac-Testvoraussetzung wird für frischen Source07-Gemeinschaftslauf eng korrigiert;
-Desktop-/Office-/Zielhostabnahme USER_PENDING. RC175/ältere Pakete unverändert.
+25.10.2026 nach10:09UTC: beide finalen unabhängigen Quellen-/Deltagegenreviews
+0680aed0…/b58347db… von Main vollständig gelesen; kein bestätigter Deltablocker.
+Gezielte247Prosa/141Tabellen/30Docs bestanden. Jetzt neuer gemeinsamer Commit/
+Freeze, vier vollständige lokale Endgates/beideMacs/frische Desktopbelege und
+geeignete RC176-Übergabe; keine alte Paket-/GUI-Freigabe übernehmen. Acht bekannte
+FHIR-Header-Schutzstopps bleiben dokumentiert. Keine neue Automation/Mainintegration.
+
+25.10.2026 nach10:02UTC: Enger Source10-Kandidat gezielt stabil247Prosa/
+141Tabellen, Autor+Main PASS; Main30Docs PASS. Finale unabhängige Quellen-/
+Deltagegenreviews laufen. Die zwei P2 und zusätzlich tatsächlich belegte
+Inline-/Emoji-Qualifier-Publikationslücken sowie NoBind-Keep-Kontextverlust sind
+gezielt korrigiert; alle REDs bleiben erhalten. Noch keine neue Endfreigabe.
+Gemeinsamer Kandidaten-FP ece2b8ac…/368,621Testmanifest e8e6f06b….
+Offen vor Übergabe: geeignete Gegenreviews lesen, neuer gemeinsamer Commit/
+Freeze, vier komplette neue lokale Endgates/beide Macs/neue Desktopbelege,
+lokale RC176-Übergabe und tatsächlich remotegeprüfter Pre-Release. Acht bekannte
+unseeded-FHIR-Header-Schutzstopps bleiben als begrenzte Abdeckung dokumentiert,
+keine universelle Namens-/Formatzusage. Keine neue Automation/Mainintegration.
+
+25.10.2026 nach09:23UTC: Beide offenen P2 sind im unveröffentlichten Source10
+gezielt korrigiert; finale unabhängige Quellenreviews laufen. Autor und Main
+bestätigen auf identischen vier Pins163/163 Prosa- und137/137 Tabellenfälle,
+Inputs unverändert. Der ursprüngliche2077-UTF16-Whitespacegegenfall endet in
+beiden getrennten Readern innerhalb unverändertem300ms-VM-Budget. Das ist kein
+allgemeiner App-Laufzeitnachweis. Vollständige neue Endgates bleiben erforderlich.
+Technische Labels bleiben lesbar; private oder unklare qualifizierende Zusätze
+erhalten keine pauschale Metadaten-Ausnahme. Auto darf unklare Namenshypothesen
+konservativ maskieren, geführt bleibt eine echte lokale Nicht-Person-Entscheidung
+möglich. Acht tatsächliche Publikationslecks eines unveröffentlichten Zwischen-
+stands sind gesichert und durch neue echte Endpfad-Gegenproben geschlossen.
+Noch kein Commit/Freeze/Build/Release. Keine neue automatische Aufgabe.
+
+Mainvorlauf dist/rc176-source10-main-targeted-v3-20261025: beide Produktsuiten
+grün/stabil, Dokumentvertrag29/30 wegen fehlender Versionsnummer in diesem
+Backlogkopf rot. Originalbeleg bleibt unverändert; nur diesen Kopf korrigieren
+und den Dokumentvertrag erneut ausführen, kein Produkt-/Testwaiver.
+
+25.10.2026 neuer Nutzerauftrag: manuell die beiden offenen P2 korrigieren,
+unabhängig gegenlesen/testen und RC176 für Windows und beide Macs bereitstellen.
+Keine neue automatische Aufgabe. Enger Fix in Arbeit, keine neue Endfreigabe.
+
+Nachtlauf25.10.2026 auf ausdrücklichen Nutzerwunsch gestoppt, Automation
+datasecure-rc171-nachtabschluss gelöscht. Keine automatische Fortsetzung.
+Aktueller Source10-Stand ist noch nicht freigabefähig; Details im Stopcheckpoint.
+
+Arbeitsquelle: 3.2.0-rc176; nach tatsächlichem Source09-Desktopbefund ist der
+enge Source10-Prosefeldfix nach Gegenreviewkorrektur gezielt geprüft; finale Quellengegenreviews laufen. Desktop-/Office-/Zielhostabnahme
+USER_PENDING. RC175 und alle älteren Pakete bleiben unverändert.
 
 ## BL-049.7 – RC176 priorisierte Inhalts-/Grafikverbesserungen
+
+Offen nach finalem Quellenreview f443b8e4…: teure neue Regex-Candidatesuche
+für kurze fehlschlagende Whitespace-Präfixe und weiter maskierte qualifizierte
+CR-Beschriftungen. Werte bleiben im gemessenen Captionfall geschützt; kein
+App-Timeout behauptet. Nach später beauftragter Korrektur neue Gegenreviews,
+gemeinsamer Commit/Freeze und vollständige Endgates/Windows+Mac-Pakete/GUI nötig.
+Keine Korrektur nach Nutzerstop begonnen. Frühere gezielte101/135 Fälle und
+40 weitere API-Gegenketten grün, aber kein Gegenbeweis und keine Freigabe.
+
+Source10 nach 08:12 UTC: vollständige alte Labelgrammatik wiederhergestellt,
+bestätigte neue CR-Feldgrenzen rohpositionsgebunden; unabhängiger Finalreader
+bleibt separat. Autor101Prosa/135Tabellen PASS/stabil; Main99Prosa/135Tabellen/
+30Docs auf denselben Produktbytes PASS/stabil. LiteralTXT/echteMD-Escapes
+korrekt getrennt, Original-RED und Altmodul-Gegenkontrolle erhalten.
+Kandidat FP3c3b8a1e…/368,621Testmanifest8974f3a0…. Zwei finale unabhängige
+Reviews laufen. Offen: tatsächliche Ergebnisse lesen, gemeinsamer Commit/Freeze,
+vier vollständige frische lokale Endgates/beide Macs/neue native Desktopbelege
+und geeignete lokale/GitHub-Übergabe. Keine Mainintegration, UAT USER_PENDING.
+
+Neuer unabhängiger Source10-Blocker nach ROUND3: CR innerhalb eines vorher
+gültigen Labelpräfixes (Name plus whitespace-/Ordinalfortsetzung vor Separator)
+verliert in beiden neuen Readern die starke Feldpflicht. Quellenreview35dc0b7a…
+von Main gelesen. Echter ROUND4-RED auf stabilen ROUND3-Pins bestätigt danach
+12/20 synthetische Publikationen mit verbliebenem Qvx/Qvy/leerem Dictionary
+und fehlender unabhängiger Feldpflicht, nur im unveröffentlichten Fixstand.
+Keine Source09-Offenlegung behauptet. Alte Labelgrammatik eng erhalten, danach
+gezielte Gegenfälle/erneute finale Reviews. Kein neuer Freeze/Build/Release.
+
+25.10.2026 nach 07:43 UTC: Enger Fix in Feldabdeckung und unabhängigem
+abschließendem Prosewert-Reader umgesetzt. Autor+Main 55 Prosa/133 Tabellen
+PASS/stabile Inputs, Main 30 Dokumentationsfälle PASS. Echte 121-Byte-Quelle
+mit erhaltenen Captions/Fachtext und geschützten Identitäten durch tatsächliche
+Extraktion/Review/Trace/Publication geprüft. Zwei unabhängige finale Quellen-
+gegenreviews laufen. Offen: Ergebnisse lesen, neuer gemeinsamer Source10-Commit,
+vollständige frische Windows-/Mac-/Paket-/Desktop-Endgates und geeignete Übergabe.
+RohUTF16/Tabellen-/Fortsetzungs-/Keep-/Residualschutz erhalten; Original-RED,
+Vorläufe und Source09-Profile/Archive/Belege unverändert. Keine Mainintegration.
+
+25.10.2026 nach 07:24 UTC: Source09/2799a6c4… wurde vollständig automatisch
+geprüft (318+11 Headless, 300 Rust/3 ignoriert, acht Konvertersuiten, fünf
+Paketgates/100 MD) und beide Macs40164924332 samt tatsächlichen Artefakten,
+Logs/Byte-/Seal-Gegenreviews sind grün. Der native Windows-Test fand jedoch
+einen neuen bestätigten P2-Inhaltsverlust: bare CR zwischen „Name:“ und
+„Unternehmen:“ wird im gemeinsamen field-value-coverage.js nur an LF getrennt.
+Die zweite Überschrift wird unnötig als SENSITIVE_FIELD maskiert. Echte Trace
+UTF-16 [69,81), Gegenstück mit LF korrekt; keine beobachtete Offenlegung oder
+verschobene Benutzerauswahl. Quellenreview c89ebcb3…/Originalbelege erhalten.
+
+Offen vor Veröffentlichung: enger raw-UTF16-erhaltender Prosefeld-Grenzfix,
+gleiche Grenzen in Headererkennung/Feldabdeckung; unbekannte Fortsetzungen,
+Tabellenzellen-CR, lange/getrennte Werte und importierte Pseudonyme weiter
+schützen. Gezielte echte Gegenfälle, unabhängige Quellengegenreviews und neuer
+gemeinsamer Source10-Appstand mit frischen Windows-/Mac-/Paket-/GUI-Belegen.
+Source09-GUI01/04 und begrenzte06-Proben bestanden,05 enthält diesen echten
+Inhaltsfehler; übrige Fälle nicht rückwirkend als bestanden ausgeben. Alle
+alten Artefakte/Profile/Evidenzen bleiben erhalten, keine Mainintegration.
+
+Zum selben Fix gehört der zweite LF-only-Prose-Reader in der unabhängigen
+abschließenden Engineprüfung: Der erste gezielte Gegenlauf stoppte nach der
+Redaktorkorrektur noch mit SENSITIVE_FIELD. Eigenständig korrekte Wertgrenzen
+nachziehen, ohne Redaktorspans/Dictionary/Keepwaiver zu übernehmen oder die
+Abschlussprüfung zu entfernen. Vorabrot bewahren, echte Ende-zu-Ende- und
+negative Gegenproben vor neuem Freeze erforderlich.
 
 Neuester25.10.nach05:08UTC: Source08/dbd10a6…/dccad717… hat Native300Rust/
 3ignoriert, achtKonvertersuiten/75Worker55Office sowie fünfPaketgates/100MD

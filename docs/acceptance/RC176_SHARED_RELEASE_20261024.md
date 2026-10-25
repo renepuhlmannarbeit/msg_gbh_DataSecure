@@ -1,5 +1,282 @@
 # RC176 – priorisierte Inhalts- und Grafikverbesserungen
 
+## Source10 Quellenabschluss · 25.10.2026 nach10:09UTC
+
+Beide tatsächlichen finalen Gegenreviews wurden von Main vollständig gelesen:
+Privacy0680aed0d08530284af25a3c8104e4090229a84e488525a5210d1a78c461b777,
+Architektur/Performanceb58347db97abc1067da76c6152f4638c185dc403b8587f1d07907822025bfbbe.
+Kein zusätzlicher bestätigter Deltablocker auf den nachfolgend exakt gepinnten
+vier Quellen. Privacy führte selbst247/141 und Original16+4Gegenketten aus;
+Architektur las tatsächliche Node-/Frontend-Importgrenze und prüfte16 weitere
+Publication-/Keepketten,21 Ownergruppen und die unveränderten300ms-Proben.
+Die v/RGI-Syntax liegt im gepinnten Node-Serverpfad, nicht in WKWebView.
+Geeignet für neuen gemeinsamen Commit/Freeze und frische Gesamtgates, noch
+keine App-/Paket-/Mac-/Desktop-/Releasefreigabe. Acht dokumentierte FHIR-
+Schutzstopps bleiben ehrlich begrenzte Abdeckung. Keine neue automatische Aufgabe.
+
+## Source10 finaler Kandidat · 25.10.2026 nach10:02UTC
+
+Autor und Main tatsächlich247/247 Prosa+141/141 Tabellen PASS/Inputs unverändert;
+Main zusätzlich30/30 Dokumentationsfälle. Mainbeleg
+dist/rc176-source10-main-targeted-v4-20261025/RESULT.json. Endgültige Produktpins:
+FVC7544ca7053fc5199acb7768fc6fcaf118334534bbb3420ed308a07fb8e7c2a22,
+Enginec50a9de0b62ee6f9b325da6f011ee8b83038e169b700c75de0f2dd8d6a20503b.
+Testpins: Prosa92f9d7f5f076963211a551a323d9cabf3180580908ad50edf653e535167828e7,
+Tabelle63e460652a9538ee78b1071a2af42e63476f7042b952683b3a4d08b95d36dea9.
+Gemessener noch nicht eingefrorener FP
+ece2b8ac667eab363f6a9d2a7057f39f9f0252398055481cd8ce79353f909b84/368;
+621Test-/Scriptinputs e8e6f06bf912b3eeeb2014b8f9c2ca5bb00f865813e0d7779a74af327a249ff0.
+
+Nach ursprünglichem P2-Fix bestätigte unabhängiger Review2d63bd4b… sechzehn
+geerbte tatsächliche Privatqualifier-Publikationen in neutralen Tabellenzellen.
+Eigener enger Inline-Collector rekonstruiert tatsächliche Zell-/Prefixowner;
+keine .indexOf-Wertadoption und keine neue Zell-CR-Prosegrenze. Tatsächliche
+NoBind-Gegenproben fanden zudem nach kompletter Captionmaskierung verlorene
+Feldautorität: Qvx/Qvy-Keep wurde in Prosa/Header/Inline akzeptiert. Jetzt wird
+nur ein exakt rohbelegter Qualifierprefix maskiert, technischer Suffix bleibt.
+Nicht beweisbare Suffix-/Zellbindung verweigert statt aus Abwesenheit freizugeben.
+Original-REDs und Followupbericht f9406c83… bleiben unverändert erhalten.
+
+Vier weitere echte Publikationen mit führendem Emoji im privaten Qualifier
+wurden separat gesichert. Unabhängige Quellenempfehlung c376e8c2… von Main
+vollständig gelesen: genau eine zusätzliche lokale Entdeckungsansicht entfernt
+nur führende vom gepinnten Node unterstützte RGI-Emojicluster und nutzt dieselben
+Detektoren/Rawbind-/Keepregeln. Keine neue Namensregex, Wort-/Zahlenentfernung,
+Identitätsautorität oder globale Normalisierung. Offizielle Grundlagen:
+[V8 v-Flag/Stringproperties](https://v8.dev/features/regexp-v-flag) und
+[Unicode Emoji-Sets](https://www.unicode.org/reports/tr51/#Emoji_Sets).
+Die tatsächlich gepinnte Windowsruntime meldet Unicode17.0; daraus keine Mac-
+Unicodeversion oder Unterstützung neuerer Unicode-Sets ableiten. Native Mac-
+Consumer müssen denselben Code mit ihrem tatsächlichen Core erst ausführen.
+
+Das unveränderte ursprüngliche56er-Orakel hat nun48 vollständige PASS,
+0Privatpublikationen und8 weiter schützend verweigerte bekannte FHIR-Headerfälle.
+Vier ursprüngliche Emoji-Leaks sind in echter Publication/Trace/StrongKeepprobe
+geschlossen;12 echte geführte schwache Keeps bleiben möglich. Neue Erwartungen
+wurden an die bereits bestehende ZWJ-Entfernung der kanonischen Privacybasis
+gebunden, nicht an erfundene Rohglyphenerhaltung. Base/Policy/Keep-Gate/Deadlines
+unverändert; kein universeller Personen-/Qualifier-/Legacykonvertierungsnachweis.
+
+Zwei tatsächliche finale Quellen-/Deltagegenreviews laufen noch. Erst geeignete
+Ergebnisse lesen, dann neuen gemeinsamen Commit/Freeze und vier vollständige
+lokale Endgates, beide Macconsumer und neue native GUI-Belege. Noch kein neues
+Windows-/Mac-Paket, lokalerRC176-Ordner, Tag oder Release. Keine Mainintegration
+und keine neue automatische Aufgabe.
+
+## Source10 P2-Korrektur · 25.10.2026 nach09:23UTC · finale Reviews laufend
+
+Stabile finale Pins: field-value-coverage.js7544ca7053fc5199acb7768fc6fcaf118334534bbb3420ed308a07fb8e7c2a22,
+engine.jsf9e2db8bdbf331f1128559f3d2658a96f8d8c2752ad2fed0074ac0999d26bc6d,
+Prosetestc781b8732b58339692770a29a70f5eaeab3f11024741b86574fb0594e3780c86,
+Tabellentest6deb450fe4a6f7551ebdc3b51b6e7f8b422a276d5ccebb5233b012db01113a53.
+AutorROUND11 und Main163/163 Prosa +137/137 Tabellen PASS/Inputs unverändert.
+Main-Dokumentvorlauf29/30 rot wegen fehlender Versionsnummer im Backlogkopf;
+Originalbeleg dist/rc176-source10-main-targeted-v3-20261025 bleibt erhalten.
+Nur Dokumentkopf korrigiert, vor Commit neue Dokumentprüfung erforderlich.
+
+Die Kandidatensuche komprimiert nur Vergleichs-Whitespace mit tatsächlicher
+Ownerabbildung; beide Reader bleiben unabhängig. Exakter2077-UTF16-Gegenfall
+744cdbb8… und weitere Whitespacearten unter unverändertem300ms-VM-Budget,
+keine Behauptung allgemein linearer Enginezeit. RawUTF16/Originaltext und
+Tablecell-/Fortsetzungs-/Credential-/Keep-Schutz bleiben erhalten.
+
+Nur exakte technische Header sind Metadaten. Qualifizierende echte Personen/
+Kontakte werden in ihren tatsächlichen Quellbereichen erneut geprüft; ein
+nicht rückbindbarer Vergleichstreffer bleibt konservativ auffällig. Keine
+Caption-Wortliste oder pauschaler Keepwaiver. „Dienstliche Telefonnummer“ bleibt
+lesbar; „Weitere Angaben“ kann der bestehende Namensdetektor Auto-konservativ
+maskieren und geführt lokal als Nicht-Person behandelt werden. Die technischen
+Labels bleiben erhalten. Acht echte unseededAnna-Publikationslecks aus einem
+unveröffentlichten Zwischenstand sind separat als RED erhalten, neue tatsächliche
+Endpfadketten schließen sie. Kein Rückschluss auf alte veröffentlichte Pakete.
+
+Belege unter dist/rc176-source10-cr-field-p2-fix-20261025; Original-REDs/
+Zwischenrunden unverändert. base.js unverändert. Zwei finale unabhängige
+Produktionsgegenreviews noch offen; vor geeigneten Ergebnissen kein Commit,
+Freeze, neue Gesamtjobs oder Release. Keine neue automatische Aufgabe.
+
+## Manuell fortgesetzt · 25.10.2026 · keine neue automatische Aufgabe
+
+Der Nutzer hat die Korrektur beider offenen P2, unabhängige Fachreviews,
+vollständige Prüfung und RC176-Übergabe für Windows/ARM-Mac/Intel-Mac erneut
+ausdrücklich beauftragt. Der vorherige Stop ist historisch; die gelöschte
+Nachtaufgabe bleibt gelöscht. Keine neue Automation anlegen.
+
+Der Autor bearbeitet eng die teure Kandidatensuche und qualifizierte
+CR-Feldbeschriftungen in denselben beiden Produktionsmodulen mit unabhängiger
+abschließender Wertprüfung. Aktuell noch keine neue Fixfreigabe, kein Commit,
+Freeze, Build oder Dispatch. Alte positive und negative Belege bleiben erhalten.
+Parallel nur unabhängige synthetische Quellvorbereitung/Handoff-Quellenprüfung.
+Vor Endläufen neue tatsächliche Gegenreviews lesen; keine Freigabe aus alten
+101/135 gezielten Fällen oder historischen Source09-Gesamtläufen ableiten.
+
+## Nachtlauf auf Nutzerwunsch beendet · 25.10.2026
+
+Die automatische Aufgabe datasecure-rc171-nachtabschluss wurde tatsächlich
+gelöscht (deleteStatus=deleted). Keine weiteren Implementierungen, Tests,
+Builds oder Veröffentlichungen starten. Stand und alle Zwischenbelege erhalten.
+Source10 ist weiterhin NICHT freigabefähig und nicht committed/eingefroren.
+
+Beide finalen unabhängigen Reviews wurden von Main vollständig gelesen. Der
+Privacy-Gegenreview bestätigt40/40 enge tatsächliche API-/Publication-/Keep-
+Konfigurationen ohne zusätzlichen Befund in seinem Umfang. Der unabhängige
+Architekturreview f443b8e40ef8e72fa82677d706fe3de2b92a9bec81016ba2ea6af7cb02ced7f7
+findet dennoch zwei offene P2: neue teure Regex-Candidatesuche (2077-Zeichen-
+Zeile überschreitet in beiden isolierten Produktionsreadern300ms VM-Budget,
+alte Vergleichspfade schnell; kein beobachteter App-Timeout) und weiter
+unnötig maskierte qualifizierte Beschriftung „Dienstliche Telefonnummer“ nach
+CR (vier echte Publikationsketten, Werte bleiben geschützt). Positives Grün
+widerlegt diese konkreten Befunde nicht. Keine weitere Korrektur begonnen.
+
+Offen: beide Befunde eng korrigieren und erneut gegenlesen; dann neuer
+gemeinsamer Commit/Freeze, vollständige frische vier lokale Endgates/beide
+Macconsumer, neue native Desktopbelege und geeignete RC176-Übergabe. Noch
+keine lokalen RC176-Dateien, kein GitHub-Tag oder Pre-Release. Source09 hat
+historisch automatisierte Gates und Macs bestanden, bleibt wegen echtem GUI-
+Captionfehler unveröffentlicht. Source10-Vorprüfungen sind keine Endabnahme.
+Siehe dist/rc176-content-context-source10-20261025/NIGHT-STOP-20261025.md.
+
+## Source10: neuer stabiler Quellstand nach 08:12 UTC, finale Reviews laufend
+
+Der nachfolgend dokumentierte unveröffentlichte ROUND3-Blocker ist eng
+korrigiert: vollständige bisherige Prosefeld-Präfixe bleiben vor ihrem Separator
+zusammenhängend; neue CR-Grenzen werden nur aus bestätigten geschlossenen
+Quellpräfixen abgeleitet. Beide Reader rekonstruieren ihre eigenen Grenzen.
+Candidate-Suche verwendet bestehende Policygrammatik und bestätigt jedes rohe
+Präfix erneut; keine neue Caption-/Wertallowlist und keine globale Normalisierung.
+
+Finale Autor-Runde7: 101/101 Prosa +135/135 Tabellen, Syntax/Exit0 und alle vier
+Inputs unverändert. Main las vollständige neue Produktions-/Testdeltas und
+führte auf denselben Produktbytes Runde6 mit99/99 Prosa,135/135 Tabellen und
+30/30 Dokumentationsfällen erfolgreich aus; die zwei anschließend nur neu
+ergänzten Literal-TXT-Kontrollen sind damit nicht rückwirkend Mainfälle.
+Mainbelege: dist/rc176-source10-main-targeted-v2-20261025.
+Beide gezielten Feldsuiten sind bereits im Headlessplan und ausdrücklich im
+echten Mac-Consumerstep enthalten. Neue gemeinsame Endläufe ersetzen Vorabgrün.
+
+Die tatsächliche Altmodule-RAM-Kontrolle liest nur die ursprünglichen beiden
+2799-Module: unescaped Ordinalfelder waren vorher geschützt. Literal-TXT mit
+Backslashes wird im Inhaltsmodus dagegen schon bisher literal escaped und
+hat dann keine geschlossene Markdown-Labelgrammatik. Deshalb sind nicht alle
+zwölf ROUND4-Survivals neue Regressionen. Echte Markdown-Escapes werden jetzt
+über den tatsächlichen MD-Contentparser getestet; kein zweites/globales Unescape.
+Alle roten Gegenläufe und alte Belege bleiben erhalten.
+
+Gemessener noch nicht eingefrorener Kandidat: FP
+3c3b8a1ee9b51d658817c34ebd581419be8b2308d711767a0b71de71b0b4e3ee/368;
+621 Test-/Scriptinputs/8974f3a0bad3018fc085c6144253fa15ae4e0be874a766673b5505ecf1d74c23.
+Zwei unabhängige finale Reviews auf diesen Produktpins laufen. Noch kein neuer
+Appcommit/Freeze/Gesamtlauf/Macjob/Windows-Paket/GUI-/Release-PASS.
+
+## Neuer Source10-Gegenreviewblocker 25.10.2026
+
+Der finale unabhängige Quellenreview fand nach ROUND3 einen P1-Schutzabdeckungs-
+regressionsfall: ein CR innerhalb eines bisher gültigen Labelpräfixes vor dem
+Separator, etwa `Name \r(1): Qvx / Qvy`, wird von beiden neuen segmentierten
+Prose-Readern nicht mehr als starkes Feld erkannt. Die alte vollständige
+Labelgrammatik akzeptierte die whitespace-/Ordinalfortsetzung. Zunächst
+statisch bestätigt; der nachfolgende tatsächliche ROUND4-RED auf stabilen
+ROUND3-Pins reproduziert 20 Ende-zu-Ende-Kombinationen. Zwölf davon stellen
+die synthetischen Qvx/Qvy trotz fehlender Feldpflicht bereit (Dictionary leer,
+unabhängige rohe SENSITIVE_FIELD-Prüfung fehlt ebenfalls). Das betrifft nur
+den unveröffentlichten Fixstand; kein Nachweis einer Offenlegung in Source09.
+Report35dc0b7a7ac22060cab995dbf06fe6c81320f8666b075c8d999187c0bcdb495b
+unter dist/rc176-source10-cr-field-source-counterreview-20261025 wurde von
+Main vollständig gelesen. ROUND3-Grün widerlegt diesen neuen Befund nicht.
+
+ROUND4-RED.cjs/json/log bleiben unverändert erhalten. Autor erhält nun eng
+die vollständige alte geschlossene
+Labelgrammatik vor dem Separator erhalten; beide Reader unabhängig korrigieren,
+ohne rohe Positionen/Originalbytes, Tabellen- oder Fortsetzungsschutz zu ändern.
+Vor neuer Quellenfreigabe gezielte Gegenproben und erneute tatsächliche finale
+Reviews. Noch kein Source10-Commit/Freeze/Build/Dispatch oder Release.
+
+## Source10-Korrekturstand 25.10.2026 nach 07:43 UTC
+
+Der enge CR-Prosefeldfix ist in zwei gemeinsamen Produktionsdateien umgesetzt.
+Feldabdeckung und unabhängig implementierter abschließender Prosewert-Reader
+erkennen nur vor einem weiteren geschlossenen, unterstützten Feldpräfix eine
+neue CR-Grenze. Rohbytes/UTF-16-Positionen bleiben erhalten; echte Tabellenzellen,
+unbekannte Fortsetzungen, importierte Pseudonyme und Keep-Verweigerungen bleiben
+geschützt. Kein neuer nativer Renderer, Mac-Rechtebedarf oder Signierweg.
+
+Autor und Main prüften die stabilen finalen Bytes tatsächlich: 55/55 Prosa-
+und 133/133 Tabellenfälle PASS/Exit0/inputs_unchanged=true; Main zusätzlich
+30/30 Dokumentationsfälle PASS. Der echte 121-Byte-Fall durchläuft Extraktion,
+Privacy-Review, Trace und Veröffentlichung mit beiden erhaltenen Überschriften,
+erhaltenem Fachtext und geschützten Identitäten. Original-RED und beide roten
+neuen Testvorläufe bleiben unverändert. Nur neue falsche Testannahmen wurden
+präzisiert; keine alten Assertions, technischen Gates oder Fristen abgeschwächt.
+Bericht dist/rc176-source10-cr-field-fix-20261025/REPORT.md,
+SHA 812d277fbf7dfc8dd83fe09aa241ba5db6f16285a9ce3debece0fc9c4c25a5a0.
+Main-Gegenprobe dist/rc176-source10-main-targeted-20261025/RESULT.json.
+
+Zwei unabhängige finale Produktionsquellengegenreviews laufen. Vor neuem
+gemeinsamen Commit/Freeze sind ihre tatsächlichen Ergebnisse zu lesen. Die
+Source10-Helfer sind nur PREPARED_NOT_FROZEN; sämtliche vollständigen neuen
+Windows-/Mac-/Paket-/Desktopbelege und der neue gemeinsame Appcommit stehen
+noch aus. Source09 bleibt historisch nicht freigabefähig. Keine Veröffentlichung,
+lokale Übergabe oder Mainintegration; menschliche Zielhostabnahme USER_PENDING.
+
+## Neuester tatsächlicher Stand 25.10.2026 nach 07:24 UTC: Source09-GUI-Befund
+
+Source09/2799a6c4d88719a96bd1c1f78341e77891c34364 ist noch nicht zur Übergabe
+geeignet. FP dccad717…/368,621 Test-/Scriptinputs/a5a0d5c6…; sämtliche vier
+lokalen Endgates sind tatsächlich PASS/stabil/Exit0:318/318+11/11 Headless,
+300 Rust/3 ignoriert/Clippy/Node-Rust-Integration/Release, acht Konvertersuiten
+und fünf Paketgates/100 MD ohne Fehler. SourceSnapshot e5bc19af…/1025 Dateien
+ist vorhanden. Windows-ZIP113516667B/d27f5fcb… und EXE4590dd05… bleiben ein
+unveröffentlichtes Zwischenpaket. Beide Mac-Jobs40164924332 auf exakt2799a6c4
+sind SUCCESS, tatsächliche kanonische Archive/VERIFYs und unabhängige vollständige
+Logs-/Byte-/Seal-Gegenreviews wurden gelesen. Keine erneuten Producer/Imports.
+
+Nach dem Codex-Update funktioniert Computer Use. Main führte tatsächlich auf
+diesen Bytes Defaultordneranlage (01), OCR-Vormerkung/321610ms Denkpause/zwei
+normale Neustarts/Zielwechsel vor erster Bereitstellung (06) sowie exakte
+Markdown-Wortkorrektur mit Emoji/gemischten Zeilenenden/neuer Generation und
+Ordneröffner nach Neustart (04) aus. Unabhängige tatsächliche Ausgabe-/Trace-/
+ACK-/Mappingprüfungen bestätigen diese begrenzten Fälle. Excel öffnet die
+bytegleiche aktuelle Zuordnung mit richtigem Erstblatt, zwei Identitäten und
+numerischen Vorkommen; keine Reparatur oder Änderung. Menschliche UAT bleibt offen.
+
+GUI05 bestätigt links keine Maskierungsberechtigung, rechts exakt elf Zeichen,
+ein Speichern, vollständige neue Generation4c00681c…/Revisionen[1,0] und drei
+Beilagen; alle55 alten Dateien bleiben bytegleich. „Originalwert beibehalten“
+für Anna Berger im ausdrücklichen Namensfeld wurde vor Commit verweigert;
+alle80 gesicherten privaten/öffentlichen Dateien unverändert. Es gibt aber
+einen neuen echten P2: Die initiale erste MD maskiert die Überschrift
+„Unternehmen:“ als FIELD_REDACTED. Die originale121-Byte-TXT hat einen alleinigen
+CR zwischen Name-/Firmenzeilen. Unabhängiger Produktionsquellenreview
+dist/rc176-source09-gui05-cr-field-source-review-20261025/REVIEW.md,
+SHA c89ebcb31343601fadaa2cfbc7d079caf3530b48d43209612a67e9f328657573,
+bestätigt den LF-only-Parser und die exakte Trace [69,81); kein Auswahlpositions-
+oder Offenlegungsbefund. Alte grüne Hash-/Traceprüfungen widerlegen diesen
+semantisch unnötigen Inhaltsverlust nicht.
+
+Vor Veröffentlichung: gemeinsamer enger Prosefeld-Grenzfix mit unveränderten
+rohen UTF-16-Positionen; Header-/Feldabdeckung angleichen. Echte Tabellenzellen,
+unbekannte Fortsetzungen und alle technischen Schutzregeln weiter schützen.
+Gezielte Positiv-/Negativproben und unabhängige neue Produktionsgegenreviews,
+danach neuer Source10-Appcommit/FP und vollständige frische Endbelege für drei
+Targets. Noch kein Source10-Freeze oder neuer Run. Source09-App44000 normal
+geschlossen; Root471516… prozessfrei. Keine lokale RC176-Übergabe, Tag, Release
+oder Mainintegration. Alle alten Profile/Archive/roten+grünen Belege erhalten.
+
+Ein zusätzlicher synthetischer21-Datei-Sammelsatz mit unabhängiger Quellreferenz
+ist für spätere native PDF-/Office-Teilproben vorbereitet, noch nicht konvertiert.
+Nicht vollständig gültige ältere XLSX-Testmodelle werden nicht als positive
+vollständige Office-Dokumente umetikettiert. Schwierige echte Benutzeroriginale
+und ihre Quellreferenz bleiben ausschließlich lokal; kein Upload dieser Daten.
+
+Der erste eng gezielte Fixlauf ist ausdrücklich noch kein grüner Endbeleg:
+Die unabhängige komplette Prose-Wertprüfung in engine.js besitzt denselben
+LF-only-Grenzfehler und verweigert nach erhaltener Firmenüberschrift noch die
+Bereitstellung mit SENSITIVE_FIELD. Sie wird getrennt und eng korrigiert;
+keine gemeinsame Redaktor-Spansquelle, kein Dictionary-/Keepwaiver und kein
+Abschalten der Residualprüfung. Drei neue Testannahmen zu sichtbaren Markdown-
+Escapes waren zusätzlich falsch und werden nur auf tatsächliche unveränderte
+Quell-Captions präzisiert. Originale rote Vorabbelege bleiben erhalten.
+
 ## Neuester tatsächlicher Stand25.10.nach05:08UTC: Source08 und enger Kopfzeilenfix
 
 Source08/dbd10a617d5277f0d2681cbf1b0ad12866a5a8b4 wurde nach tatsächlichem
