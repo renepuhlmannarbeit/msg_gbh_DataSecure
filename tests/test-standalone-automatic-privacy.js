@@ -176,7 +176,29 @@ function historicalUnsafeTextFixture() {
   // refuse the old automatic approval; a stale version/hash is not the oracle.
   assert.equal(require('../plugins/data-secure/server/standalone/anonymized-store')
     .readAnonymizedArtifact(saved.manifest.package_id, saved.expectation).markdown, saved.markdown);
-  return { token, item, create, resultRoot, selection: [{ document_id: id, revision: 0, output_sha256: saved.manifest.document_sha256 }] };
+  const immutablePins = () => {
+    const rows = [];
+    for (const [role, root] of [['private', privateRoot], ['artifact', artifact]]) {
+      const visit = folder => {
+        for (const name of fs.readdirSync(folder).sort()) {
+          const file = path.join(folder, name), stat = fs.lstatSync(file);
+          assert.equal(stat.isSymbolicLink(), false);
+          if (stat.isDirectory()) visit(file);
+          else {
+            assert.equal(stat.isFile(), true);
+            const bytes = fs.readFileSync(file);
+            rows.push([role + '/' + path.relative(root, file).split(path.sep).join('/'), bytes.length,
+              crypto.createHash('sha256').update(bytes).digest('hex')]);
+          }
+        }
+      };
+      visit(root);
+    }
+    return rows;
+  };
+  return { token, item, create, resultRoot, markdown: saved.markdown, immutablePins,
+    basisPath: path.join(privateRoot, 'document-reviews', token, id, 'base.json'),
+    selection: [{ document_id: id, revision: 0, output_sha256: saved.manifest.document_sha256 }] };
 }
 
 function legacyTraceFreeTextFixture(text) {
@@ -507,19 +529,34 @@ async function main() {
     assertUnsafeTextStopped('md', '`' + cardReferences + '`'));
   await testAsync('fenced code cannot exempt a complete numeric-reference card corridor', () =>
     assertUnsafeTextStopped('md', '```text\n' + cardReferences + '\n```'));
-  await testAsync('a saved pre-fix U+FFFD publication loses automatic approval and cannot preview or create a new export under the same ruleset', () => {
+  await testAsync('a saved pre-fix U+FFFD publication stays privately readable without automatic approval or new publication authority', () => {
     const f = historicalUnsafeTextFixture(), current = f.create();
-    // Read/preview/export are independent fresh operations: collect all three
-    // before asserting so the red phase exercises actual selected-export IO.
+    const before = f.immutablePins();
+    assert.equal(JSON.parse(fs.readFileSync(f.basisPath)).review_policy, 'automatic-conservative');
+    // Read, preview, explicit approval and export are independent fresh
+    // operations. Readability must not grant authority or rewrite the old
+    // unsafe artifact, immutable basis, trace or claimed historical proof.
     const listed = current.list(f.token), attempt = action => {
       try { return { result: action() }; } catch (error) { return { error }; }
     };
+    const chunk = attempt(() => f.create().chunk(f.token, f.item.id, 0, 0));
     const preview = attempt(() => f.create().previewExport(f.token, 'd'.repeat(32), f.selection));
+    const approved = attempt(() => f.create().decide(f.token, f.item.id, { action: 'approve', ranges: [],
+      revision: 0, output_sha256: f.selection[0].output_sha256, operation_id: 'b'.repeat(32) }));
     const exported = attempt(() => f.create().exportApproved(f.token, 'c'.repeat(32), f.selection));
     assert.deepEqual({ reviewable: listed.documents.length, unavailable: listed.unavailable.map(row => row.reason_code),
-      preview_error: preview.error?.code || null, export_error: exported.error?.code || null },
-    { reviewable: 0, unavailable: ['DOCUMENT_REVIEW_RESIDUAL_PII'],
-      preview_error: 'DOCUMENT_REVIEW_RESIDUAL_PII', export_error: 'DOCUMENT_REVIEW_RESIDUAL_PII' });
+      preview_error: preview.error?.code || null, approval_error: approved.error?.code || null, export_error: exported.error?.code || null },
+    { reviewable: 1, unavailable: [], preview_error: 'DOCUMENT_REVIEW_RESIDUAL_PII',
+      approval_error: 'DOCUMENT_REVIEW_RESIDUAL_PII', export_error: 'DOCUMENT_REVIEW_UNAPPROVED' });
+    const row = listed.documents[0];
+    assert.equal(row.document_id, f.item.id); assert.equal(row.revision, 0);
+    assert.equal(row.output_sha256, f.selection[0].output_sha256);
+    assert.equal(row.approved, false); assert.equal(row.approval_basis, null);
+    assert.equal(chunk.error, undefined); assert.equal(chunk.result.markdown, f.markdown);
+    assert.match(chunk.result.markdown, /\ufffd/u);
+    for (const result of [preview, approved, exported]) assert.equal(Object.hasOwn(result, 'result'), false);
+    assert.deepEqual(f.create().list(f.token).documents, listed.documents, 'all private revisions and approval fields remain unchanged');
+    assert.deepEqual(f.immutablePins(), before, 'no old evidence mutation or added decision/commit/export record');
     assert.deepEqual(fs.readdirSync(f.resultRoot), [], 'unsafe old approval may not create a new public export');
   });
   for (const [label, text] of [['replacement', '4111\ufffd1111\ufffd1111\ufffd1111'], ['raw-C1', '4111\u00851111\u00851111\u00851111'],

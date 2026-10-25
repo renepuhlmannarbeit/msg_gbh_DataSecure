@@ -1,5 +1,20 @@
 # Aktueller Iststand · 3.2.0-rc176
 
+25.10.2026 nach17:53UTC: Source12/3c0b69a NICHT freigabefähig. Headless66/318
+und beide Macs40217722084 rot am gleichen veralteten Alttext-Testorakel. Native,
+Konverter8 undPaket5 tatsächlich grün/stabil; alle Jobs regulär beendet, Belege
+erhalten. Kein Source12-Release. Nach unabhängiger Kausalanalyse nur ein Test
+angepasst: historische U+FFFD-Bytes privat lesbar, weiterhin unapproved;
+Preview/ausdrückliche Freigabe exakt RESIDUAL_PII, Export exakt UNAPPROVED,
+keine privaten Beleg-/Revisionsänderungen oder öffentlichen Dateien.
+Main gezielt50/50 PASS/Exit0/stabil17:56:46.392UTC, vollständiger unabhängiger
+Testgegenreviewe382bf1f…f1d73 ohne bestätigten Blocker gelesen. Keine Produktänderung;
+FP407cb28589025f276d8c0139d7f0e8c0d402fc8211c63ec5c62a4d3ce01683d3/369 bleibt.
+621 Test-/Scriptinputs958d9f3a7c6ca9793e1e996cf75602cac9698066c939bce80270767e6eb02f4e.
+Jetzt neuer gemeinsamer Source13-Commit, frische vollständige Endgates/Macs/
+Archive, Windows-ZIP lokal mit Plan und RC176-Pre-Release. Desktoptests Nutzer,
+AgentNOT_RUN/USER_PENDING; keine Automation/Mainintegration/Apple-Signierung.
+
 25.10.2026 nach17:31UTC: Source12-Produktdelta stabil und von Main sowie zwei
 unabhängigen tatsächlichen Fachreviews gelesen; kein bestätigter neuer
 Deltablocker. Quellgebundene starke Wertreste bleiben nach Labelmaskierung,

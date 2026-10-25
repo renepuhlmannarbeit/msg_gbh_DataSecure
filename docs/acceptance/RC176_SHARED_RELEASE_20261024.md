@@ -1,5 +1,37 @@
 # RC176 – priorisierte Inhalts- und Grafikverbesserungen
 
+## Source13-Testorakel: historische Lesbarkeit ohne Freigabe · 25.10.2026 nach 17:53 UTC
+
+Source12/3c0b69a10214ae05c866a6f459504fa0398a7ecf ist NICHT freigabefähig:
+Headless66/318+0/11 rot bei automatic-privacy; beide Macs40217722084 rot im
+gleichen historischen U+FFFD-Fall49/1. Alle lokalen Freezejobs regulär beendet,
+sämtliche Inputs unverändert; Native300Rust3ignoriert/Integration/Release,
+8Konvertersuiten und5Paketgates bestanden. Diese Belege bleiben getrennt erhalten.
+Kein Snapshot/lokaleÜbergabe/Tag/Release; alte ZIP nicht umetikettieren.
+
+Main und unabhängiger tatsächlicher Quellenreview bestätigen das veraltete
+Testorakel: Der neue Vertrag trennt lesbare private Historie von neuer Autorität.
+Der unverändert unsichere Alttext bleibt lesbar, erhält jedoch keine automatische
+Freigabe. Preview und ausdrückliche Freigabe verweigern RESIDUAL_PII; direkter
+Export verweigert bereits UNAPPROVED. Kein belegter Auto-Grant/Rohtextexport.
+Originale eingefrorene Quelle/Trace/Manifest und ihre Bindungen nicht regeneriert.
+
+Nach bestätigter Quieszenz nur tests/test-standalone-automatic-privacy.js angepasst:
+exakte Lesbarkeit/Revision0/Hash/U+FFFD, approved:false/approval_basis:null,
+präzise Fehlercodes je Operation, kein zurückgegebener Plan, unveränderte private
+und Artefakt-Dateiinventare/Bytes, identischer Metadatavektor und leerer Ergebnis-
+ordner. Keine Produkt-, Guard-, Fehlerbehandlungs-, Quoten- oder Deadlineänderung.
+Gezielter Mainlauf beendet17:56:46.392UTC, 50/50 PASS/Exit0, alle Produkt-/Test-/
+Frozenfixtureinputs unverändert. Main las vollständigen unabhängigen Schlussreview
+e382bf1fb4078d8f61682bbc7031f32fa730ae1d7cd84fb6b13cbcd1103f1d73: kein
+bestätigter Blocker/keine Abschwächung. Testpin ffbc71797ca14bbe079c9810048b945b12f7c5a69dc4499748c4b6ec82f9a578;
+Frozenfixture weiterhin0700817484efa4dabe7fa74da0f56e6ff29055c007eded24d563f05e91314d87.
+621 Test-/Scriptinputs jetzt958d9f3a7c6ca9793e1e996cf75602cac9698066c939bce80270767e6eb02f4e.
+Nächster Schritt: neuer gemeinsamer Appcommit mit unverändertem Produktfingerprint
+407cb28589025f276d8c0139d7f0e8c0d402fc8211c63ec5c62a4d3ce01683d3/369,
+frische vollständige Windows-/Mac-/Paketbelege und RC176-Testübergabe.
+Desktop ausschließlich Nutzer, kein Agent-GUI-PASS/neue Automation/Mainintegration.
+
 ## Source12: Schlussreview der Quellen abgeschlossen · 25.10.2026 nach 17:31 UTC
 
 Die drei Produktdateien sind stabil: source-field-restoration.js

@@ -1,5 +1,16 @@
 # Aktives Entwicklungsbacklog · 3.2.0-rc176
 
+25.10.2026 nach17:53UTC: Source12 trotz Native/Konverter/Paket PASS gesperrt,
+Headless66/318 und beideMacs40217722084 tatsächliches RED im alten U+FFFD-
+Historienorakel. Ursachenreview bestätigt beabsichtigte Read-/Capabilitytrennung;
+kein neuer belegter Produkt-/Autograntfehler. Alle Freezejobs beendet/stabil.
+Enger Testfix erhält eingefrorene Quelldaten und prüft zusätzlich fehlende
+Freigabeautorität, präzise Verweigerung und unveränderte private/öffentliche
+Belege. Gezielter50/50-Testabschluss regulär/stabil und unabhängiger vollständiger
+Testgegenreview ohne bestätigten Blocker von Main gelesen. Offen: Source13-Commoncommit,
+frische vier lokale Endgates/beideMacs/Archivreviews und gemeinsame Testübergabe.
+Keine Produkt-/Schutz-/Quotenänderung, neue Automation oder Desktopübernahme.
+
 25.10.2026 nach17:31UTC: Source12-Implementierung und beide finalen unabhängigen
 Produktreviews abgeschlossen. Main367/148/9/30 gezielt grün; R4 regulär mit31
 Context/77Document/112Generations PASS und sechs stabilen Inputs abgeschlossen.
