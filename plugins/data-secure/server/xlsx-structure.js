@@ -90,17 +90,25 @@ function disjointMergeRanges(ranges) {
   return Object.freeze(ranges);
 }
 
-function schemaXstring(value) {
+function schemaXstring(value, projectControl) {
   // Only actual schema-typed SpreadsheetML text/modern-comment fields use
   // this Office layer, after complete XML text assembly and before Markdown/
   // privacy. One pass preserves _x005F_xHHHH_ as literal _xHHHH_, never a
   // second escape. Cell x:v also has this schema type, but its decoded value
   // must still pass the separate cell-type interpretation. Formulas and
   // arbitrary input do not use this Office layer.
-  const decoded = value.replace(/_x([0-9a-fA-F]{4})_/gu,
-    (_, hex) => String.fromCharCode(Number.parseInt(hex, 16)));
-  // Escapes must not bypass the existing source-character policy (including
-  // C0/C1, unpaired UTF-16 surrogates and XML noncharacters).
+  const decoded = value.replace(/_x([0-9a-fA-F]{4})_/gu, (_, hex) => {
+    const code = Number.parseInt(hex, 16);
+    // ST_Xstring can carry escaped XML-inexpressible controls. This is a
+    // typed cell-text projection, never permission for a raw XML control or
+    // an invalid scalar. Visible boundaries avoid inventing a joined word.
+    if (projectControl && ((code < 0x20 && ![9, 10, 13].includes(code)) ||
+        (code >= 0x7f && code <= 0x9f))) return projectControl(code);
+    return String.fromCharCode(code);
+  });
+  // Any explicitly projected typed controls are now safe visible text. All
+  // remaining invalid characters (including unpaired UTF-16/noncharacters)
+  // still fail; raw XML was validated independently before reaching here.
   assertXmlCharacters(decoded, structureError);
   return decoded;
 }
@@ -111,6 +119,27 @@ function createXlsxReader(decode, options = {}) {
   const main = (node, localName) => Boolean(node && node.localName === localName &&
     (MAIN_NS.has(node.namespaceURI) || (!options.preserveText && node.namespaceURI === '')));
   const parse = (xml, events = {}) => readXml(xml, { decode, error: structureError, ...events });
+  const sharedStringProjections = new WeakMap();
+  const cellProjectionEnabled = options.contentMode === true && options.preserveText === true;
+  const newProjection = () => ({ count: 0, codes: new Set() });
+  function cellText(value, projection) {
+    const rendered = schemaXstring(value, cellProjectionEnabled ? code => {
+      projection.count++;
+      const hex = code.toString(16).toUpperCase().padStart(4, '0');
+      projection.codes.add(hex);
+      return ` ⟦U+${hex}⟧ `;
+    } : undefined);
+    if (rendered.length > 8000000) throw structureError(true);
+    return rendered;
+  }
+  function mergeProjection(target, source) {
+    if (!source) return;
+    target.count += source.count;
+    for (const code of source.codes) target.codes.add(code);
+  }
+  function freezeProjection(projection) {
+    return Object.freeze({ count: projection.count, codes: Object.freeze([...projection.codes].sort()) });
+  }
   function expect(root, localName) { if (!main(root, localName)) throw structureError(); }
   function workbook(xml) {
     const sheets = [];
@@ -155,13 +184,14 @@ function createXlsxReader(decode, options = {}) {
   }
   function sharedStrings(xml) {
     const result = [];
-    let item = null, chunks = [], chars = 0, currentText = null;
+    const projections = new Map();
+    let item = null, chunks = [], chars = 0, projectedChars = 0, currentText = null, projection = null;
     const root = parse(xml, {
       start(node) {
         // x:t is a simple ST_Xstring leaf; nested elements must not hide
         // source text or join a false escape around an unmodelled child.
         if (currentText) throw structureError();
-        if (main(node, 'si') && main(node.parent, 'sst')) { item = node; chunks = []; }
+        if (main(node, 'si') && main(node.parent, 'sst')) { item = node; chunks = []; projection = newProjection(); }
         else if (item && richText(node, item)) currentText = { node, chunks: [] };
       },
       text(value, node) {
@@ -175,13 +205,21 @@ function createXlsxReader(decode, options = {}) {
           const value = currentText.chunks.join('');
           // Each separate rich-text x:t has its own typed value. Joining runs
           // before decoding would manufacture escapes across field boundaries.
-          chunks.push(MAIN_NS.has(node.namespaceURI) ? schemaXstring(value) : value);
+          const rendered = MAIN_NS.has(node.namespaceURI) ? cellText(value, projection) : value;
+          projectedChars += rendered.length;
+          if (projectedChars > 8000000) throw structureError(true);
+          chunks.push(rendered);
           currentText = null;
         }
-        if (node === item) { if (result.length >= 200000) throw structureError(true); result.push(chunks.join('')); item = null; }
+        if (node === item) {
+          if (result.length >= 200000) throw structureError(true);
+          if (projection.count) projections.set(result.length, freezeProjection(projection));
+          result.push(chunks.join('')); item = null; projection = null;
+        }
       }
     });
     expect(root, 'sst');
+    if (projections.size) sharedStringProjections.set(result, projections);
     return result;
   }
   function workbookProperties(xml) {
@@ -288,6 +326,7 @@ function createXlsxReader(decode, options = {}) {
   }
   function worksheet(xml, shared, formatting = {}) {
     const rows = [], rowRecords = [], columnStyles = [], mergeRanges = [];
+    const controlCharacterProjections = [], sharedProjections = sharedStringProjections.get(shared);
     let row = null, cell = null, field = null, previousRow = 0, cellCount = 0, chars = 0, formulaCells = 0,
       missingFormulaCaches = 0, unsupportedNumberFormats = 0, mergeContainer = null, mergeNode = null,
       mergeCount, seenMerges = false, worksheetRoot = null;
@@ -353,7 +392,7 @@ function createXlsxReader(decode, options = {}) {
           row.columns.add(index); row.next = index + 1;
           const style = attr(node, 's');
           if (options.contentMode && style !== undefined && (!/^[0-9]+$/u.test(style) || Number(style) > 65535)) throw structureError();
-          cell = { node, index, type: attr(node, 't'), style: style === undefined ? (row.style ?? columnStyles[index] ?? 0) : Number(style),
+          cell = { node, index, type: attr(node, 't'), projection: newProjection(), style: style === undefined ? (row.style ?? columnStyles[index] ?? 0) : Number(style),
             value: null, formula: null, inline: [], fields: new Set() };
         } else if (cell && node.parent === cell.node && (main(node, 'v') || main(node, 'f') || main(node, 'is'))) {
           if (cell.fields.has(node.localName)) throw structureError();
@@ -371,7 +410,7 @@ function createXlsxReader(decode, options = {}) {
       end(node) {
         if (cell?.inlineText?.node === node) {
           const value = cell.inlineText.chunks.join('');
-          cell.inline.push(MAIN_NS.has(node.namespaceURI) ? schemaXstring(value) : value);
+          cell.inline.push(MAIN_NS.has(node.namespaceURI) ? cellText(value, cell.projection) : value);
           cell.inlineText = null;
         }
         if (node === mergeNode) mergeNode = null;
@@ -382,7 +421,7 @@ function createXlsxReader(decode, options = {}) {
         if (field?.node === node) {
           const value = field.chunks.join(''), formula = main(node, 'f');
           cell[formula ? 'formula' : 'value'] = !formula && MAIN_NS.has(node.namespaceURI)
-            ? schemaXstring(value) : value;
+            ? cell.type === 'str' ? cellText(value, cell.projection) : schemaXstring(value) : value;
           field = null;
         }
         if (cell?.node === node) {
@@ -401,6 +440,7 @@ function createXlsxReader(decode, options = {}) {
               const error = new Error('XLSX-Zeichenkettenverweis ist ungültig.'); error.code = 'XLSX_SHARED_STRING_INVALID'; throw error;
             }
             value = shared[Number(value)];
+            mergeProjection(cell.projection, sharedProjections?.get(Number(cell.value)));
           } else if (cell.type === 'inlineStr') value = cell.inline.join('');
           if (options.contentMode && options.preserveText && formatting.styles && !['s', 'inlineStr', 'str', 'b', 'e', 'd'].includes(cell.type) && value !== '') {
             const code = formatting.styles[cell.style];
@@ -416,6 +456,12 @@ function createXlsxReader(decode, options = {}) {
             else if (options.preserveText && cell.formula) value = `Formel: ${cell.formula}\nGespeicherter Wert: ${value}`;
           }
           row.values[cell.index] = value;
+          if (cell.projection.count) {
+            let column = cell.index + 1, letters = '';
+            while (column) { column--; letters = String.fromCharCode(65 + column % 26) + letters; column = Math.floor(column / 26); }
+            controlCharacterProjections.push(Object.freeze({ reference: `${letters}${row.number}`,
+              row: row.number, column: cell.index + 1, ...freezeProjection(cell.projection) }));
+          }
           cell = null;
         }
         if (row?.node === node) {
@@ -430,6 +476,7 @@ function createXlsxReader(decode, options = {}) {
     });
     expect(root, 'worksheet');
     return { rows, rowRecords, formulaCells, missingFormulaCaches, unsupportedNumberFormats,
+      ...(controlCharacterProjections.length ? { controlCharacterProjections: Object.freeze(controlCharacterProjections) } : {}),
       mergeRanges: disjointMergeRanges(mergeRanges) };
   }
   return { validate: parse, workbook, workbookProperties, styles, relationships, sharedStrings, worksheet, sheetDrawings, modernPersons, threadedComments };

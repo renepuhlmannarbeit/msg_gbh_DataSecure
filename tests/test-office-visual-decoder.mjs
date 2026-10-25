@@ -119,6 +119,147 @@ await test('actual approved Canvas SVG raster matches exact filled shape pixels'
   assert.deepEqual(at(unit, 10, 10), [255, 0, 0, 255]); assert.deepEqual(at(unit, 90, 30), [255, 255, 255, 255]);
   assert.equal(sha(source), before);
 });
+await test('fractional viewBox-only extents bind a complete integer raster viewport', async () => {
+  const source = Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" viewBox="10 20 19.5 9.5"><rect x="10" y="20" width="19.5" height="9.5" fill="red"/></svg>');
+  const [unit] = await collect(source, 'svg'); assert.equal(unit.width, 20); assert.equal(unit.height, 10);
+  assert.deepEqual(at(unit, 10, 5), [255, 0, 0, 255]);
+  assert.throws(() => inspectOfficeVisual(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 19.5 9.5" width="100%" height="100%"/>'), 'svg'), { code: 'VISUAL_FEATURE_UNSUPPORTED' });
+});
+await test('static class, element and id styles respect specificity, source order and inline priority', async () => {
+  const source = svg(`<style>rect {fill:red}.paint {fill:blue} #first {fill:lime}
+    .paint {fill:yellow} rect.paint#second {fill:purple}</style>
+    <rect id="first" class="paint" x="0" width="20" height="20" fill="black"/>
+    <rect id="second" class="paint" x="25" width="20" height="20" style="fill:blue;fill:red"/>
+    <rect class="paint" x="50" width="20" height="20"/><rect x="75" width="20" height="20"/>`);
+  const before = sha(source), inspected = inspectOfficeVisual(source, 'svg');
+  assert.ok(!inspected.source.includes('<style'));
+  const [unit] = await collect(source, 'svg');
+  assert.deepEqual(at(unit, 10, 10), [0, 255, 0, 255]);
+  assert.deepEqual(at(unit, 30, 10), [255, 0, 0, 255]);
+  assert.deepEqual(at(unit, 60, 10), [255, 255, 0, 255]);
+  assert.deepEqual(at(unit, 85, 10), [255, 0, 0, 255]); assert.equal(sha(source), before);
+});
+await test('selector-list specificity and later style elements use document-wide order', async () => {
+  const [unit] = await collect(svg(`<rect id="first" class="paint" width="20" height="20"/>
+    <rect class="paint" x="25" width="20" height="20"/>
+    <style>#first,rect {fill:lime}.paint {fill:red}</style>
+    <style type="text/css" media="all">.paint{fill:blue}</style>`), 'svg');
+  assert.deepEqual(at(unit, 10, 10), [0, 255, 0, 255]); assert.deepEqual(at(unit, 30, 10), [0, 0, 255, 255]);
+});
+await test('static styles preserve inheritance, currentColor, explicit child paint and group compositing', async () => {
+  const [unit] = await collect(svg(`<style>.paint{color:blue;fill:currentColor}.half{opacity:0.5}</style>
+    <g class="paint"><rect width="20" height="20"/><rect x="25" width="20" height="20" fill="red"/></g>
+    <g class="half" fill="black"><rect x="50" width="20" height="20"/><rect x="55" width="15" height="20"/></g>`), 'svg');
+  assert.deepEqual(at(unit, 10, 10), [0, 0, 255, 255]); assert.deepEqual(at(unit, 30, 10), [255, 0, 0, 255]);
+  assert.equal(at(unit, 60, 10)[0], at(unit, 52, 10)[0]); assert.ok(at(unit, 60, 10)[0] >= 126 && at(unit, 60, 10)[0] <= 128);
+});
+await test('explicit inherit beats a presentation attribute; unimplemented defaulting values refuse', async () => {
+  const [unit] = await collect(svg(`<style>.inherit{FILL:INHERIT}</style>
+    <g fill="blue"><rect class="inherit" fill="red" width="20" height="20"/></g>`), 'svg');
+  assert.deepEqual(at(unit, 10, 10), [0, 0, 255, 255]);
+  for (const value of ['initial', 'unset', 'revert', 'revert-layer']) {
+    assert.throws(() => inspectOfficeVisual(svg(`<style>.a{fill:${value}}</style>`), 'svg'), { code: 'VISUAL_FEATURE_UNSUPPORTED' });
+  }
+});
+await test('explicit opacity inheritance is an honest refusal before Canvas, numeric groups remain composited', async () => {
+  let calls = 0; const fake = { ...api, loadImage() { calls++; throw new Error('MUST_NOT_RENDER'); } };
+  for (const body of [
+    '<style>.half{opacity:0.5}.copy{opacity:inherit}</style><g class="half"><rect class="copy" width="20" height="20"/></g>',
+    '<g opacity="0.5"><rect opacity="inherit" width="20" height="20"/></g>',
+    '<g opacity="0.5"><rect style="opacity:INHERIT;opacity:not-a-value" width="20" height="20"/></g>',
+    '<g><rect style="op&#97;city&#x3a;inherit" width="20" height="20"/></g>'
+  ]) await assert.rejects(collect(svg(body), 'svg', { canvasApi: fake }), { code: 'VISUAL_FEATURE_UNSUPPORTED' });
+  assert.equal(calls, 0);
+  const [numeric] = await collect(svg('<style>.half{opacity:0.5}.copy{opacity:0.5}</style><g class="half"><rect class="copy" width="20" height="20"/></g>'), 'svg');
+  assert.deepEqual(at(numeric, 10, 10), [191, 191, 191, 255]);
+  const [overridden] = await collect(svg('<g opacity="0.5"><rect opacity="inherit" style="opacity:0.5" width="20" height="20"/></g>'), 'svg');
+  assert.deepEqual(at(overridden, 10, 10), [191, 191, 191, 255]);
+});
+await test('visible overrides inside hidden containers refuse instead of silently losing content', async () => {
+  let calls = 0; const fake = { ...api, loadImage() { calls++; throw new Error('MUST_NOT_RENDER'); } };
+  for (const body of [
+    '<style>.hidden{visibility:hidden}.show{visibility:visible}</style><g class="hidden"><rect class="show" width="20" height="20"/></g>',
+    '<g visibility="hidden"><rect visibility="visible" width="20" height="20"/></g>',
+    '<g style="v&#105;sibility&#x3a;hidden"><rect style="v&#105;sibility&#x3a;visible" width="20" height="20"/></g>',
+    '<g style="visibility:collapse"><g><rect style="visibility:visible;visibility:invalid" width="20" height="20"/></g></g>',
+    '<defs><g id="shape"><rect visibility="visible" width="20" height="20"/></g></defs><g visibility="hidden"><use xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#shape"/></g>',
+    '<defs><g id="shape"><rect width="20" height="20"/></g></defs><g visibility="hidden"><use visibility="visible" href="#shape"/></g>'
+  ]) await assert.rejects(collect(svg(body), 'svg', { canvasApi: fake }), { code: 'VISUAL_FEATURE_UNSUPPORTED' });
+  assert.equal(calls, 0);
+  const [safe] = await collect(svg('<style>.hidden{visibility:hidden}.show{visibility:visible}</style><g class="hidden"><rect width="20" height="20"/></g><g class="show"><rect x="25" width="20" height="20" fill="blue"/></g>'), 'svg');
+  assert.deepEqual(at(safe, 10, 10), [255, 255, 255, 255]); assert.deepEqual(at(safe, 30, 10), [0, 0, 255, 255]);
+  const [display] = await collect(svg('<style>.hidden{display:none}.show{display:inline}</style><g class="hidden"><rect class="show" width="20" height="20"/></g>'), 'svg');
+  assert.deepEqual(at(display, 10, 10), [255, 255, 255, 255]);
+});
+await test('supported visibility inheritance and quoted unrelated declarations retain exact pixels', async () => {
+  const [unit] = await collect(svg('<g visibility="visible"><rect visibility="hidden" style="visibility:inherit" width="20" height="20" fill="blue"/></g><g visibility="hidden"><rect style="visibility:inherit" x="25" width="20" height="20" fill="red"/></g><rect x="50" width="20" height="20" fill="lime" style="font-family:\'opacity:inherit;visibility:visible\'"/>'), 'svg');
+  assert.deepEqual(at(unit, 10, 10), [0, 0, 255, 255]);
+  assert.deepEqual(at(unit, 30, 10), [255, 255, 255, 255]);
+  assert.deepEqual(at(unit, 60, 10), [0, 255, 0, 255]);
+});
+await test('the closed paint value grammar renders alpha, percentages, keyword case and visibility', async () => {
+  const [unit] = await collect(svg(`<style>.a{fill:RGBA(255,0,0,0.5)}.b{fill:rgb(0%,100%,0%)}
+    .c{color:BLUE;fill:CURRENTCOLOR;fill-opacity:0.5}.d{fill:red;display:NONE}</style>
+    <rect class="a" width="20" height="20"/><rect class="b" x="25" width="20" height="20"/>
+    <rect class="c" x="50" width="20" height="20"/><rect class="d" x="75" width="20" height="20"/>`), 'svg');
+  const red = at(unit, 10, 10), blue = at(unit, 60, 10);
+  assert.equal(red[0], 255); assert.ok(red[1] >= 126 && red[1] <= 128); assert.equal(red[1], red[2]);
+  assert.deepEqual(at(unit, 30, 10), [0, 255, 0, 255]);
+  assert.equal(blue[2], 255); assert.ok(blue[0] >= 126 && blue[0] <= 128); assert.equal(blue[0], blue[1]);
+  assert.deepEqual(at(unit, 85, 10), [255, 255, 255, 255]);
+});
+await test('class rules remain local on use instances and retain namespaced references', async () => {
+  const [unit] = await collect(svg(`<style>.red{fill:red}.blue{fill:blue}</style><defs>
+    <g id="shape"><rect width="15" height="15"/></g></defs>
+    <use class="red" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#shape"/><use class="blue" x="25" xmlns:xlink="http://www.w3.org/1999/xlink" xlink:href="#shape"/>`), 'svg');
+  assert.deepEqual(at(unit, 5, 5), [255, 0, 0, 255]); assert.deepEqual(at(unit, 30, 5), [0, 0, 255, 255]);
+});
+await test('CDATA, safe comments, mixed XML entities and duplicate CSS declarations have exact paint', async () => {
+  const [unit] = await collect(svg(`<style><![CDATA[/* closed paint sheet */ .paint {fill:red;fill:#00ff00;stroke:rgb(0,0,255);stroke-width:2}]]></style>
+    <rect class="p&#97;int" x="4" y="4" width="20" height="20"/>`), 'svg');
+  assert.deepEqual(at(unit, 10, 10), [0, 255, 0, 255]); assert.deepEqual(at(unit, 4, 10), [0, 0, 255, 255]);
+});
+await test('static paint sheets retain bundled-only font binding and German glyph coverage', async () => {
+  const [unit] = await collect(svg('<style>.ink{fill:blue}</style><text class="ink" x="2" y="25" font-family="PrivateFont" font-size="20">ÄÖÜß</text>'), 'svg');
+  assert.ok(rgba(unit).some((value, index) => index % 4 === 0 && value < 200));
+  assert.deepEqual(unit.warning_codes, ['VISUAL_BUNDLED_FONT_SUBSTITUTION']);
+  await assert.rejects(collect(svg('<style>.ink{fill:blue}</style><text class="ink">李明</text>'), 'svg'), { code: 'VISUAL_FONT_UNAVAILABLE' });
+});
+await test('unknown or unsafe stylesheet models never reach native Canvas', async () => {
+  let calls = 0; const fake = { ...api, loadImage() { calls++; throw new Error('MUST_NOT_RENDER'); } };
+  const bodies = ['<style>@import "https://example.invalid/x";</style>',
+    '<style>.a {fill:url(#gradient)}</style>', '<style>.a {fill:u\\72l(#a)}</style>',
+    '<style>.a{fill:red!important}</style>', '<style>.a{--paint:red;fill:var(--paint)}</style>',
+    '<style>.a{filter:blur(2px)}</style>', '<style>.a{font-family:PrivateFont}</style>',
+    '<style>.a{animation:flash 1s}</style>', '<style>.a:hover{fill:red}</style>',
+    '<style>g rect{fill:red}</style>', '<style>[class=a]{fill:red}</style>',
+    '<style>.a{fill:revert}</style>', '<style media="screen">.a{fill:red}</style>',
+    '<style title="alternate">.a{fill:red}</style>', '<style onload="anything">.a{fill:red}</style>',
+    '<style><g/></style>', '<style>.a{fill:red</style>', '<style>.a{fill:red}garbage</style>',
+    '<style>.a{fill:#00000000}</style>', '<style>.a{stroke-width:NaN}</style>',
+    '<style>.a{fill:rgb(0%,0,0)}</style>', '<style>.a{fill:red}/*not closed</style>', '<style>.a{stroke-dasharray:1, ,2}</style>',
+    '<style>.a{fill:red}</style><rect class="a" style="font:20px PrivateFont"/>'];
+  for (const body of bodies) await assert.rejects(collect(svg(body), 'svg', { canvasApi: fake }), error => error.code?.startsWith('VISUAL_'));
+  assert.equal(calls, 0);
+});
+await test('static CSS never suppresses existing XML, reference, path or active-content gates', () => {
+  for (const body of ['<style>.a{fill:red}</style><script/>', '<style>.a{fill:red}</style><use href="#absent"/>',
+    '<style>.a{fill:red}</style><rect id="same"/><rect id="same"/>', '<style>.a{fill:red}</style><path d="Mbad"/>',
+    '<style>.a{fill:red}</style><g onclick="anything"/>', '<style>.a{fill:red}</style><foreignObject/>']) {
+    assert.throws(() => inspectOfficeVisual(svg(body), 'svg'), error => error.code?.startsWith('VISUAL_'));
+  }
+});
+await test('static stylesheet byte, rule, selector, declaration and evaluation budgets are explicit refusals', () => {
+  const refused = body => assert.throws(() => inspectOfficeVisual(svg(body), 'svg'), { code: 'VISUAL_PROCESSING_LIMIT' });
+  refused(`<style>/*${' '.repeat(262144)}*/</style>`);
+  refused(`<style>${'.a{fill:red}'.repeat(1025)}</style>`);
+  refused(`<style>${Array.from({ length: 4097 }, (_, i) => `.a${i}`).join(',')}{fill:red}</style>`);
+  refused(`<style>.a{${'fill:red;'.repeat(8193)}}</style>`);
+  refused(`<style>${'.a'.repeat(17)}{fill:red}</style>`);
+  refused(`<style>${Array.from({ length: 1001 }, (_, i) => `.a${i}`).join(',')}{fill:red}</style>${'<rect/>'.repeat(1000)}`);
+  refused(`<style/>${'<![CDATA[a]]>'.repeat(40000)}`);
+  refused(`<style>*{stroke-dasharray:${Array(128).fill('1000000').join(' ')}}</style>${'<rect/>'.repeat(4200)}`);
+});
 await test('bundled-only German glyphs render and source font overrides cannot select a private font', async () => {
   const [unit] = await collect(svg('<text x="2" y="25" style="font:20px PrivateUserFont">ÄÖÜß</text>'), 'svg');
   assert.ok(rgba(unit).some((value, index) => index % 4 !== 3 && value < 200));
@@ -431,6 +572,8 @@ async function integrationPolicyCase(change) {
     Buffer, crypto, path, root: 'SYNTHETIC-BUNDLED-RUNTIME', fail: integrationFail, decodeOfficeVisual, canvasApi: () => api,
     extractOfficeMarkdownAndMedia, preparePartialOfficeImagePlan: imageHelpers.preparePartialOfficeImagePlan,
     appendOfficeOcr: imageHelpers.appendOfficeOcr, officeOcrCheckpoint: imageHelpers.officeOcrCheckpoint,
+    officeVisualOmission: require('../plugins/data-secure/server/standalone/office-visual-omission').officeVisualOmission,
+    conversionTimings: require('../plugins/data-secure/server/standalone/conversion-timings').createConversionTimings(),
     MAX_MARKDOWN_CHARS: markdownContract.MAX_MARKDOWN_CHARS, createMarkdownExtraction: makeExtraction,
     imageMarkdown: async () => makeExtraction({ source_type: 'png', markdown: 'GRAPHIC CONTEXT', content_options: contentOptions,
       coverage: { status: 'incomplete', reason_codes: ['OCR_NOT_VERIFIED'] } }),
@@ -493,6 +636,8 @@ function rasterOperation(observed, created) {
   } };
   return vm.runInNewContext(`(function(){${workerSlice('function dimensions(', 'function checkedModels(')}${workerSlice('function hasRasterContrast(', 'function imageOmission(')};return imageMarkdown;})()`, {
     Buffer, Uint8ClampedArray, fail: integrationFail, canvasApi: () => canvasApi, errors: new Set(ERROR_CODES), MAX_IMAGE_BYTES, MAX_PIXELS,
+    conversionTimings: require('../plugins/data-secure/server/standalone/conversion-timings').createConversionTimings(),
+    sourceCropBlocks: require('../plugins/data-secure/server/standalone/ocr-crop-geometry').sourceCropBlocks,
     decodePng, decodeRasterPng: require('../plugins/data-secure/server/standalone/png-raster-decoder').decodeRasterPng,
     decodeBmp: require('../plugins/data-secure/server/images/bmp').decodeBmp, createMarkdownExtraction: makeExtraction,
     ...require('../plugins/data-secure/server/standalone/readable-markdown'), ...require('../plugins/data-secure/server/standalone/ocr-quality'),
@@ -520,7 +665,8 @@ await test('real Canvas strip downsample respects original 800k share and preser
       assert.equal(field.source_width, width); assert.equal(field.source_height, height);
       assert.deepEqual(field.arguments, [0, 0, field.width, field.height], 'five-argument drawImage scales the whole source, not a crop');
       if (share >= 2) { assert.ok(field.first[0] > 200 && field.first[2] < 30); assert.ok(field.last[2] > 200 && field.last[0] < 30); }
-      assert.ok(result.coverage.reason_codes.includes('IMAGE_PROCESSING_LIMIT'));
+      assert.ok(result.coverage.reason_codes.includes('IMAGE_DOWNSAMPLED'), 'successful reduced-resolution OCR is disclosed as downsampled');
+      assert.ok(!result.coverage.reason_codes.includes('IMAGE_PROCESSING_LIMIT'), 'successful downsampling is not reported as omitted image content');
       assert.equal(sha(bytes), before);
       assert.ok(created.every(canvas => canvas.width === 1 && canvas.height === 1), 'all owned raster dimensions released');
     } finally { bytes.fill(0); for (const canvas of created) { canvas.width = 1; canvas.height = 1; } }
@@ -605,6 +751,8 @@ await test('actual worker raster slice consumes validated PNG fallback and compo
   const operation=vm.runInNewContext(`(function(){${slice('function dimensions(','function checkedModels(')}${slice('function hasRasterContrast(','function imageOmission(')};return imageMarkdown;})()`,{
     Buffer,Uint8ClampedArray,fail:code=>{throw Object.assign(new Error(code),{code});},
     canvasApi:()=>wrapped,errors:new Set(require('../plugins/data-secure/server/core/conversion-worker-contract').ERROR_CODES),
+    conversionTimings:require('../plugins/data-secure/server/standalone/conversion-timings').createConversionTimings(),
+    sourceCropBlocks:require('../plugins/data-secure/server/standalone/ocr-crop-geometry').sourceCropBlocks,
     MAX_IMAGE_BYTES:require('../plugins/data-secure/server/images/common').MAX_IMAGE_BYTES,
     MAX_PIXELS:require('../plugins/data-secure/server/images/common').MAX_PIXELS,
     decodePng,decodeRasterPng:staticPng.decodeRasterPng,decodeBmp,

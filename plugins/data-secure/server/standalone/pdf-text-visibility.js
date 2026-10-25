@@ -65,7 +65,7 @@ function explicitlyInvisible(run) {
 
 function sameRun(left, right, geometry = false) {
   if (!left || !right || ['text', 'fontName', 'eligible', 'geometryEligible', 'glyphCount',
-    'renderMode', 'fillAlpha', 'strokeAlpha', 'contentVisible', 'fontSize'].some(key => left[key] !== right[key]) ||
+    'renderMode', 'fillAlpha', 'strokeAlpha', 'solidFillColor', 'contentVisible', 'fontSize'].some(key => left[key] !== right[key]) ||
       left.baseline[0] !== right.baseline[0] || left.baseline[1] !== right.baseline[1]) return false;
   if (!geometry) return true;
   const a = left.glyphs || [], b = right.glyphs || [];

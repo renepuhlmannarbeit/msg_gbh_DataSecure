@@ -1,8 +1,8 @@
 # Release- und Distributionsvertrag
 
-Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc176 · Veröffentlichungsnachtrag: 25.10.2026
+Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc177 · Veröffentlichungsnachtrag: 25.10.2026
 
-Der aktuelle Quellstand ist RC176 mit dem unten gebundenen Test-Pre-Release.
+Der aktuelle Quellstand ist RC177-Entwicklungsstand und noch kein neu gebundener Paketkandidat.
 Nachfolgende reine Abschlussdokumentation ändert dessen App-/Paket-/Tagbindung
 nicht. Menschliche Desktop-/Office-/Zielhostabnahmen und menschliche N3/N4-
 Produktionsfreigaben bleiben offen.

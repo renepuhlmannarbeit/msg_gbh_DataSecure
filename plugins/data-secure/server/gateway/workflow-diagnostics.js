@@ -14,6 +14,7 @@ const crypto = require('crypto');
 const { dataRoot } = require('../runtime');
 const { VERSION } = require('../version');
 const { RESOURCE_LIMITS } = require('../resource-limits');
+const { validateConversionTimings } = require('../core/conversion-timing-contract');
 const { recordSupportTrace, newTraceId } = require('./support-trace');
 const {
   publishEvent, eventFiles, pruneEvents, pruneExpiredLegacyFile
@@ -38,6 +39,7 @@ const EVENTS = new Set([
   'automatic_review_claim_failed', 'automatic_review_failed',
   'automatic_review_release_failed',
   'content_operation_failed', 'batch_worker_failed',
+  'conversion_worker_closed',
   'startup_refused', 'terminal_state_delegated_to_product_ui',
   'local_results_reuse_started', 'local_results_reuse_page', 'local_results_reuse_finished',
   'local_results_reuse_cancelled', 'local_results_reuse_failed', 'local_results_reuse_expired'
@@ -90,6 +92,7 @@ function sanitizeWorkflowEvent(record = {}, options = {}) {
   // nothing (no token, path, hash or PID) and only lets support group the events
   // of one run (DS-071).
   const runId = String(record.run_id || (options.env || process.env).DATASECURE_RUN_ID || '');
+  const metrics = event === 'conversion_worker_closed' ? validateConversionTimings(record.metrics) : null;
   return {
     schema: WORKFLOW_DIAGNOSTIC_SCHEMA,
     timestamp: safeTimestamp(record.timestamp, now),
@@ -103,7 +106,8 @@ function sanitizeWorkflowEvent(record = {}, options = {}) {
     stopped_count: boundedCount(record.stopped_count),
     duration_ms: boundedDuration(record.duration_ms),
     exit_code: Number.isSafeInteger(exitCode) && exitCode >= 0 && exitCode <= 255 ? exitCode : 0,
-    error_code: ERROR_CODES.has(errorCode) ? errorCode : 'INTERNAL_FAILURE'
+    error_code: ERROR_CODES.has(errorCode) ? errorCode : 'INTERNAL_FAILURE',
+    ...(metrics ? { metrics } : {})
   };
 }
 

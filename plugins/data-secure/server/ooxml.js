@@ -2330,6 +2330,19 @@ function xlsxColumnLabel(index) {
 }
 function xlsxContentTable(parsed, options, append, sourceFields=null) {
   if (!parsed.rowRecords.length) return;
+  const projections=parsed.controlCharacterProjections||[];
+  const protectedFrom=new Map();
+  const mergeAnchors=new Map((parsed.mergeRanges||[]).map(range=>[range.anchor.reference,range]));
+  for(const projected of projections){
+    const merge=mergeAnchors.get(projected.reference);
+    const start=merge?merge.start.column-1:projected.column-1;
+    const end=merge?merge.end.column:projected.column;
+    // An encoded control may split a header as well as its value. Its actual
+    // authored column/range remains uncertain below that point, including
+    // sparse rows; never reconstruct a Name role from a damaged-looking word.
+    for(let column=start;column<end;column++)protectedFrom.set(column,
+      Math.min(protectedFrom.get(column)??projected.row,projected.row));
+  }
   const columns = new Set();
   for (const row of parsed.rowRecords) for (const index of Object.keys(row.values)) {
     if (row.values[index] !== '') columns.add(Number(index));
@@ -2338,7 +2351,7 @@ function xlsxContentTable(parsed, options, append, sourceFields=null) {
   // Most source tables remain ordinary tables with original row/column labels.
   // For genuinely sparse cross-products, use bounded per-source-row cells rather
   // than expanding N far-apart values into N*N blank intersections.
-  if (used.length * parsed.rowRecords.length > 200000 || parsed.mergeRanges?.length || sourceFields) {
+  if (used.length * parsed.rowRecords.length > 200000 || parsed.mergeRanges?.length || sourceFields || projections.length) {
     if(options.officeTableContext)options.officeTableContext.normalized=true;
     // Only real anchors expand a header's logical interval. The actual cell
     // list stays sparse; never allocate a maxRow*maxColumn sheet. Nonanchor
@@ -2356,7 +2369,11 @@ function xlsxContentTable(parsed, options, append, sourceFields=null) {
         if(!continuation)origin=cell;
         coordinates.set(cell,range?`Zelle ${range.reference} · Zeile ${row.number} · Spalten ${range.start.column}–${range.end.column}`:
           `Zelle ${ref} · Zeile ${row.number} · Spalte ${column+1}`);
-        const label=sourceFields?.(actualRow,cell);if(label)sourceColumnLabels.set(cell,label);
+        let label=sourceFields?.(actualRow,cell);
+        for(let covered=column;covered<column+cell.span;covered++)if(row.number>=(protectedFrom.get(covered)??Infinity)){
+          label='Geschützter Tabellenwert';break;
+        }
+        if(label)sourceColumnLabels.set(cell,label);
         return cell;
       });return actualRow;
     });
@@ -2499,7 +2516,7 @@ function parseXlsx(entries, options = {}) {
     contextSession?.invalidate();return true;
   };
   if(options.contentMode)XLSX_CONTEXT_MODELS.set(entries,contextModels);
-  let formulaCells=0, missingFormulaCaches=0, unsupportedNumberFormats=0;
+  let formulaCells=0, missingFormulaCaches=0, unsupportedNumberFormats=0, controlProjection=false;
   for(const s of sheetMeta){const buf=entries.get(s.target);if(!buf)continue;
     try {
     const drawings = options.preserveText ? reader.sheetDrawings(buf.toString('utf8'), s.kind) : { ids: [], issues: 0 };
@@ -2512,6 +2529,7 @@ function parseXlsx(entries, options = {}) {
     const parsed = reader.worksheet(buf.toString('utf8'), shared,
       options.contentMode ? { styles: contentStyles, date1904: contentDate1904 } : {});
     const rows = parsed.rows; formulaCells += parsed.formulaCells;
+    controlProjection ||= Boolean(parsed.controlCharacterProjections?.length);
     missingFormulaCaches += parsed.missingFormulaCaches; unsupportedNumberFormats += parsed.unsupportedNumberFormats;
     let contextModel,projectedContext,sourceFields,tableContext;
     if(options.contentMode)try{
@@ -2586,6 +2604,7 @@ function parseXlsx(entries, options = {}) {
   const warnings=[...customMetadataWarnings(entries), ...xlsxCoverageWarnings(entries, sheetMeta, options.contentMode ? modernComments : null), ...imageCoverage.warnings, ...supplementCoverage.warnings, ...commentCoverage.warnings, ...modernComments.warnings, ...numberWarnings,...chartWarnings,...contextWarnings];
   if(options.officeTableContext.unverified)warnings.push('OFFICE_TABLE_CONTEXT_UNVERIFIED');
   if(options.officeTableContext.normalized)warnings.push('OFFICE_TABLE_LAYOUT_NORMALIZED');
+  if(controlProjection)warnings.push('XLSX_CONTROL_CHARACTERS_PROJECTED');
   if(rootIssues)warnings.push(`XLSX enthält ${rootIssues} nicht eindeutig über die interne Paketwurzel abgesicherte Struktur(en); Freigabe wird blockiert.`);
   if(issues)warnings.push(`XLSX enthält ${issues} nicht eindeutig über eine interne Arbeitsblattbeziehung abgesicherte Struktur(en); Freigabe wird blockiert.`);
   if(formulaCells)warnings.push(`XLSX enthält ${formulaCells} Formelzelle(n); Freigabe wird bis zur vollständigen Formelcoverage blockiert.`);

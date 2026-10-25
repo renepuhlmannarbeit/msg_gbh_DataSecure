@@ -197,6 +197,11 @@ if (process.argv.includes('--source-only')) {
       : process.platform === 'linux' && process.arch === 'x64' ? 'linux-x64-glibc' : null;
   if (!target) throw new Error('CONVERSION_TEST_HOST_UNSUPPORTED');
   const scope = fs.mkdtempSync(path.join(repo, '.tmp-standalone-package-office-ocr-'));
+  const originalDiagnosticEnvironment = new Map(['EU_PRIVACY_DATA_ROOT','EU_PRIVACY_ROOT','EU_PRIVACY_RESULT_ROOT']
+    .map(key=>[key,process.env[key]]));
+  process.env.EU_PRIVACY_DATA_ROOT=path.join(scope,'diagnostic-data');
+  process.env.EU_PRIVACY_ROOT=path.join(scope,'private');
+  process.env.EU_PRIVACY_RESULT_ROOT=path.join(scope,'results');
   const server = path.join(scope, 'server'), runtime = path.join(server, 'standalone', 'conversion-runtime');
   const originalSpawn = childProcess.spawn, children = [];
   let diagnostics = '';
@@ -523,6 +528,7 @@ if (process.argv.includes('--source-only')) {
     childProcess.spawn = originalSpawn;
     for (const entry of children) if (!entry.closed()) entry.child.kill('SIGTERM');
     await Promise.all(children.map(entry => entry.done));
+    for(const [key,value] of originalDiagnosticEnvironment){if(value===undefined)delete process.env[key];else process.env[key]=value;}
     removePackageSmokeScope(repo, scope);
   }
 }

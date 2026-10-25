@@ -4,14 +4,16 @@ import path from 'node:path';
 import os from 'node:os';
 import { pathToFileURL, fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
-import { derivePdfjsTextPaintModule } from '../scripts/lib/pdfjs-text-paint-hook.mjs';
+import { derivePdfjsTextPaintModule, PDFJS_TEXT_PAINT_HOOK } from '../scripts/lib/pdfjs-text-paint-hook.mjs';
 
 const require = createRequire(import.meta.url);
 const { bindTextRuns, classifyPdfTextVisibility, wordCandidates } = require('../plugins/data-secure/server/standalone/pdf-text-visibility');
 const { uncoveredOcrText, renderPdfOcrLayer, nativeColumnOrder } = require('../plugins/data-secure/server/standalone/pdf-text-layout');
+const { renderPdfNativeWordEvidence } = require('../plugins/data-secure/server/standalone/pdf-ocr-native-words');
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const pdfRoot = path.join(root, 'native', 'pdfjs', 'pilot', 'node_modules', 'pdfjs-dist');
 const original = fs.readFileSync(path.join(pdfRoot, 'legacy', 'build', 'pdf.mjs'));
+assert.equal(PDFJS_TEXT_PAINT_HOOK.version, 3, 'local solid-paint event evidence is a new derivative API version');
 assert.throws(() => derivePdfjsTextPaintModule(Buffer.concat([original, Buffer.from(' ')])), /SOURCE_MISMATCH/u);
 const canvasApi = require('../native/ocr/pilot/node_modules/@napi-rs/canvas');
 for (const key of ['DOMMatrix', 'Path2D', 'ImageData']) globalThis[key] = canvasApi[key];
@@ -28,15 +30,19 @@ class CanvasFactory {
   reset(value, width, height) { value.canvas.width = width; value.canvas.height = height; }
   destroy(value) { value.canvas.width = 1; value.canvas.height = 1; value.canvas = null; value.context = null; }
 }
-function pdf(stream, { wrongToUnicode = false } = {}) {
+function pdf(stream, { wrongToUnicode = false, unusedBlend = false, pattern = false } = {}) {
   // Font glyph painting stays ABC; the syntactically valid but incorrect
   // semantic CMap claims XYZ. Native TextContent and glyph.unicode share it.
   const cmap = '/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CIDSystemInfo << /Registry (Adobe) /Ordering (UCS) /Supplement 0 >> def\n/CMapName /SyntheticMap def\n/CMapType 2 def\n1 begincodespacerange\n<00> <FF>\nendcodespacerange\n3 beginbfchar\n<41> <0058>\n<42> <0059>\n<43> <005A>\nendbfchar\nendcmap\nCMapName currentdict /CMap defineresource pop\nend end';
   const objects = ['<< /Type /Catalog /Pages 2 0 R >>', '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
-    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 300] /Resources << /Font << /F1 5 0 R >> /ExtGState << /GS0 << /ca 0 /CA 0 >> /GSweak << /ca 0.000000001 /CA 0.000000001 >> >> >> /Contents 4 0 R >>',
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 300] /Resources << /Font << /F1 5 0 R >> /ExtGState << /GS0 << /ca 0 /CA 0 >> /GSweak << /ca 0.000000001 /CA 0.000000001 >> ${unusedBlend ? '/UnusedBlend << /BM /Multiply >>' : ''} >> ${pattern ? '/Pattern << /Pat 7 0 R >>' : ''} >> /Contents 4 0 R >>`,
     `<< /Length ${Buffer.byteLength(stream)} >>\nstream\n${stream}\nendstream`,
     `<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding ${wrongToUnicode ? '/ToUnicode 6 0 R' : ''} >>`,
     `<< /Length ${Buffer.byteLength(cmap)} >>\nstream\n${cmap}\nendstream`];
+  if (pattern) {
+    const paint = '0 0 1 rg 0 0 5 5 re f';
+    objects.push(`<< /Type /Pattern /PatternType 1 /PaintType 1 /TilingType 1 /BBox [0 0 5 5] /XStep 5 /YStep 5 /Resources << >> /Length ${Buffer.byteLength(paint)} >>\nstream\n${paint}\nendstream`);
+  }
   let output = '%PDF-1.7\n'; const offsets = [0];
   for (const [index, value] of objects.entries()) { offsets.push(Buffer.byteLength(output)); output += `${index + 1} 0 obj\n${value}\nendobj\n`; }
   const start = Buffer.byteLength(output);
@@ -166,6 +172,16 @@ assert.equal(unstable.items.length, 2);
 assert.equal(observer, null, 'observer released');
 console.log('PASS event reproducibility failure discards all prior classifications');
 
+let paintEvents = 0;
+const unstableColor = await check('actual solid-paint event change invalidates geometry evidence',
+  'BT /F1 20 Tf 3 Tr 30 200 Td (Alpha Beta) Tj ET', ['Alpha Beta'], {
+    setTextPaintObserver: observer => pdfjs.setDataSecureTextPaintObserver(observer ? event => {
+      const color = ++paintEvents === 1 ? '#000000' : '#ff0000';
+      return observer(Object.freeze({ ...event, solidFillColor: color }));
+    } : null)
+  });
+assert.equal(unstableColor.hiddenIndices.size, 0); assert.deepEqual(unstableColor.wordRegions, []);
+
 async function renderOcrPixels(stream, ocrRaster, wrongToUnicode = false) {
   const task = pdfjs.getDocument({ data: pdf(stream, { wrongToUnicode }), CanvasFactory,
     isEvalSupported: false, stopAtErrors: true, disableAutoFetch: true,
@@ -293,3 +309,68 @@ try {
 } finally { if (ocrWorker) await ocrWorker.terminate(); }
 console.log('PASS actual local pinned Tesseract7 AUTO retains native-mismapped glyphs and genuine inline-image text');
 console.log('PASS actual local pinned Tesseract7 SINGLE_BLOCK retains vector-outline CLOUD and wrong-ToUnicode image context');
+
+async function directWordEvidence(stream, wrongToUnicode = false, { unusedBlend = false, pattern = false, onEvent, scale = 1 } = {}) {
+  const task = pdfjs.getDocument({ data:pdf(stream, { wrongToUnicode, unusedBlend, pattern }), CanvasFactory,
+    isEvalSupported:false, stopAtErrors:true, useSystemFonts:false, enableXfa:false, verbosity:0,
+    standardFontDataUrl:path.join(pdfRoot,'standard_fonts').replaceAll('\\','/')+'/' });
+  const canvas = canvasApi.createCanvas(Math.ceil(400*scale),Math.ceil(300*scale)), ordinary = canvasApi.createCanvas(Math.ceil(400*scale),Math.ceil(300*scale));
+  try {
+    const doc=await task.promise, page=await doc.getPage(1), content=await page.getTextContent({disableNormalization:true});
+    const viewport=page.getViewport({scale}), operators=await page.getOperatorList({annotationMode:pdfjs.AnnotationMode.DISABLE});
+    await page.render({canvasContext:ordinary.getContext('2d'),viewport,background:'white',annotationMode:pdfjs.AnnotationMode.DISABLE}).promise;
+    const regions=await renderPdfNativeWordEvidence({page,canvas,viewport,annotationMode:pdfjs.AnnotationMode.DISABLE,
+      textItems:content.items,styles:content.styles,operators,ops:pdfjs.OPS,
+      setTextPaintObserver: observer => pdfjs.setDataSecureTextPaintObserver(observer && onEvent ? event => {
+        onEvent(event, canvas); return observer(event);
+      } : observer)});
+    assert.deepEqual(canvas.toBuffer('image/png'),ordinary.toBuffer('image/png'),'word evidence never alters original paint');
+    return regions;
+  } finally {canvas.width=ordinary.width=1;canvas.height=ordinary.height=1;await task.destroy();}
+}
+const direct=await directWordEvidence('BT /F1 20 Tf 30 200 Td (Alpha          Beta) Tj ET');
+assert.deepEqual(direct.map(word=>word.text),['Alpha','Beta']);
+assert.ok(direct[0].x1+20<direct[1].x0,'no artificial coverage across whitespace');
+const exactNativeOcr={text:'Alpha Alpha Beta\n',blocks:[{paragraphs:[{lines:[{text:'Alpha Alpha Beta\n',words:[
+  {text:'Alpha',bbox:direct[0]},
+  {text:'Alpha',bbox:{x0:direct[0].x1+3,y0:direct[0].y0,x1:direct[0].x1+16,y1:direct[0].y1}},
+  {text:'Beta',bbox:direct[1]}
+]}]}]}]};
+assert.equal(uncoveredOcrText(exactNativeOcr,direct,{singleTokenOnly:true}).trim(),'Alpha');
+for(const stream of [
+  'BT /F1 20 Tf 3 Tr 30 200 Td (Alpha Beta) Tj ET',
+  '1 1 1 rg BT /F1 20 Tf 30 200 Td (Alpha Beta) Tj ET',
+  'q /GSweak gs BT /F1 20 Tf 30 200 Td (Alpha Beta) Tj ET Q',
+  'BT /F1 20 Tf 30 200 Td (Alpha Beta) Tj ET 1 1 1 rg 30 190 100 40 re f'
+]) {
+  const regions=await directWordEvidence(stream);
+  assert.ok(regions===null||regions.length===0,'unproven/white/transparent/covered text retains the fallback');
+}
+const wrongDirect=await directWordEvidence('BT /F1 20 Tf 30 200 Td (ABC) Tj ET',true);
+assert.deepEqual(wrongDirect.map(word=>word.text),['XYZ']);
+const independentlyReadAbc={text:'ABC\n',blocks:[{paragraphs:[{lines:[{text:'ABC\n',words:[{text:'ABC',bbox:wrongDirect[0]}]}]}]}]};
+assert.equal(uncoveredOcrText(independentlyReadAbc,wrongDirect,{singleTokenOnly:true}),independentlyReadAbc.text);
+console.log('PASS actual unchanged-raster native-word fast path, whitespace, paint refusal and ToUnicode countercases');
+
+// An unused non-normal blend resource switches PDF.js to an internal page
+// composition canvas, without adding a group/blend operator to page contents.
+// The external context stays black while the actual text paint is white.
+const whiteRun = '1 1 1 rg BT /F1 20 Tf 30 200 Td (Alpha          Beta) Tj ET';
+for (const unusedBlend of [false,true]) {
+  const observed = [];
+  const regions = await directWordEvidence(whiteRun,false,{unusedBlend,scale:2,onEvent(event,canvas) {
+    assert.ok(Object.isFrozen(event)); assert.equal(event.solidFillColor,'#ffffff');
+    assert.throws(() => { event.solidFillColor='#000000'; },TypeError,'paint evidence is an immutable primitive');
+    observed.push(canvas.getContext('2d').fillStyle);
+  }});
+  assert.deepEqual(regions,[],'white paint must never receive direct OCR coverage');
+  assert.deepEqual(observed,[unusedBlend?'#000000':'#ffffff'],'the causal internal-context switch remains reproduced');
+}
+const blendBlack = await directWordEvidence('BT /F1 20 Tf 30 200 Td (Alpha Beta) Tj ET',false,{unusedBlend:true,scale:2,
+  onEvent(event) { assert.equal(event.solidFillColor,'#000000'); }});
+assert.deepEqual(blendBlack.map(word=>word.text),['Alpha','Beta']);
+let patternEvents = 0;
+const patternRegions = await directWordEvidence('/Pattern cs /Pat scn BT /F1 20 Tf 30 200 Td (Pattern) Tj ET',false,{pattern:true,
+  onEvent(event) { patternEvents++; assert.equal(event.solidFillColor,null,'pattern paint is never a solid-color proof'); }});
+assert.ok(patternEvents>0); assert.deepEqual(patternRegions,[]);
+console.log('PASS real internal-page-composition color binding, immutable events, pattern refusal and unchanged normal raster');

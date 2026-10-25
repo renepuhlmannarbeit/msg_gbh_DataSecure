@@ -60,6 +60,43 @@ test('equal basenames receive independent identities and minimally disambiguated
   assert.strictEqual(discardIncompleteBatches({ confirmed: true }).ok, true);
 });
 
+test('unique folder-relative labels survive equal basenames and a repeated queue merge', () => {
+  const selected = ['Auswahl/Vertrag/Profil.txt', 'Auswahl/Anlage/Profil.txt'].map(sourceLabel => ({
+    sourcePath: path.join(base, ...sourceLabel.split('/')), sourceBytes: 17, sourceLabel
+  }));
+  const queue = batchQueueFromSelection(selected);
+  assert.deepStrictEqual(queue.map(item => item.sourceLabel), selected.map(item => item.sourceLabel));
+  const merged = batchQueueFromSelection([...queue.map(item => ({ sourcePath: item.full,
+    sourceBytes: item.sourceBytes, sourceLabel: item.sourceLabel })), {
+    sourcePath: path.join(base, 'Andere', 'Profil.txt'), sourceBytes: 21, sourceLabel: 'Andere/Profil.txt'
+  }]);
+  assert.deepStrictEqual(merged.map(item => item.sourceLabel), [...selected.map(item => item.sourceLabel), 'Andere/Profil.txt']);
+});
+
+test('true case-equivalent label collisions are resolved without stealing another existing label', () => {
+  const selected = [
+    ['left', 'Profil.txt', 'Profil.txt'], ['right', 'Profil.txt', 'profil.txt'],
+    ['third', 'other.txt', 'left/Profil.txt']
+  ].map(([folder, name, sourceLabel]) => ({ sourcePath: path.join(base, folder, name), sourceBytes: 17, sourceLabel }));
+  const labels = batchQueueFromSelection(selected).map(item => item.sourceLabel);
+  assert.strictEqual(labels[2], 'left/Profil.txt');
+  assert.strictEqual(new Set(labels.map(label => label.normalize('NFC').toLowerCase())).size, 3);
+  assert.ok(labels[0].endsWith('/left/Profil.txt'));
+  assert.ok(labels[1].endsWith('/right/Profil.txt'));
+});
+
+test('indistinguishable duplicate paths cannot acquire invented ordinal source identities', () => {
+  const item = { sourcePath: path.join(base, 'same.txt'), sourceBytes: 17, sourceLabel: 'same.txt' };
+  assert.throws(() => batchQueueFromSelection([item, item]), /nicht eindeutig/u);
+});
+
+test('normalization-equivalent labels resolve without changing an independent relative label', () => {
+  const items=[['left','Größe/Profil.txt'],['right','Gro\u0308ße/Profil.txt'],['other','Auswahl/FHIR.txt']]
+    .map(([folder,sourceLabel])=>({sourcePath:path.join(base,folder,'Profil.txt'),sourceBytes:17,sourceLabel}));
+  const labels=batchQueueFromSelection(items).map(item=>item.sourceLabel);
+  assert.deepStrictEqual(labels,['left/Profil.txt','right/Profil.txt','Auswahl/FHIR.txt']);
+});
+
 test('the picker and batch reject a source beneath a link or reparse component before any source read', () => {
   const source = path.join(base, 'linked-parent-source.txt');
   fs.writeFileSync(source, 'Vertrag zwischen Beispiel GmbH und Max Beispiel', 'utf8');

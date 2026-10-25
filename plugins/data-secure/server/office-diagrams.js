@@ -13,63 +13,140 @@ const R = ['http://schemas.openxmlformats.org/officeDocument/2006/relationships'
 const PR = 'http://schemas.openxmlformats.org/package/2006/relationships';
 const fail = () => Object.assign(new Error('Office diagram structure is unsupported'), { code:'PPTX_STRUCTURE_UNSAFE' });
 const own = (node,name) => node.attributes.get(`{}${name}`);
+const POINT_TYPES = new Set(['node','doc','asst','parTrans','sibTrans','pres']);
+const DATA_POINTS = new Set(['node','doc','asst']);
+const CONNECTION_TYPES = new Set(['parOf','presOf','presParOf']);
+const token = value => value?.replace(/^[ \t\r\n]+|[ \t\r\n]+$/gu,'');
+function sourceOrder(value) {
+  // CT_Cxn.srcOrd is required unsignedInt, not an optional zero default.
+  const raw=token(value);
+  if(typeof raw!=='string'||!/^\+?[0-9]{1,10}$/u.test(raw)||Number(raw)>0xffffffff)throw fail();
+  return Number(raw);
+}
 function relationshipAttribute(node,name) {
   const values=R.map(ns=>node.attributes.get(`{${ns}}${name}`)).filter(x=>x!==undefined);
   return values.length===1 ? values[0] : null;
 }
 function diagramModel(bytes, decode) {
   if (!Buffer.isBuffer(bytes) || bytes.length>2*1024*1024) throw fail();
-  const points=new Map(), edges=[]; let point=null, chars=0;
-  const root=readXml(new TextDecoder('utf-8',{fatal:true}).decode(bytes), {decode,error:fail,
+  let source;
+  try {source=new TextDecoder('utf-8',{fatal:true}).decode(bytes);}catch{throw fail();}
+  const points=new Map(), edges=[], connectionIds=new Set();
+  let model,pointList,connectionList,point=null,textBody=null,chars=0;
+  const textNamespace=()=>model.namespaceURI==='http://purl.oclc.org/ooxml/drawingml/diagram'
+    ? 'http://purl.oclc.org/ooxml/drawingml/main' : 'http://schemas.openxmlformats.org/drawingml/2006/main';
+  const paragraph=node=>node?.namespaceURI===textNamespace()&&node.localName==='p'&&node.parent===textBody;
+  function append(value){point.text+=value;chars+=value.length;if(chars>1_000_000)throw fail();}
+  const root=readXml(source, {decode,error:fail,
     start(node) {
+      if(!node.parent){
+        if(!D.has(node.namespaceURI)||node.localName!=='dataModel')throw fail();
+        model=node;
+      }
       // Diagram models with MC extensions need an explicit model vocabulary
       // implementation before their alternatives can be interpreted. Never
       // merge two mutually exclusive model graphs/text representations.
-      if(node.namespaceURI==='http://schemas.openxmlformats.org/markup-compatibility/2006'&&node.localName==='AlternateContent')throw fail();
-      if (D.has(node.namespaceURI) && node.localName==='pt' && node.parent?.localName==='ptLst' && D.has(node.parent.namespaceURI)) {
-        const id=own(node,'modelId');
-        if (!id || points.has(id) || points.size>=5000 || point) throw fail();
-        point={id,text:'',index:points.size,node};points.set(id,point);
+      if(node.namespaceURI==='http://schemas.openxmlformats.org/markup-compatibility/2006'&&
+          ['AlternateContent','Choice','Fallback'].includes(node.localName))throw fail();
+      if(D.has(node.namespaceURI)&&['ptLst','cxnLst','pt','cxn'].includes(node.localName)&&node.namespaceURI!==model.namespaceURI)throw fail();
+      if(node.namespaceURI===model.namespaceURI&&['ptLst','cxnLst'].includes(node.localName)){
+        if(node.parent!==model)throw fail();
+        if(node.localName==='ptLst'){if(pointList)throw fail();pointList=node;}
+        else {if(connectionList)throw fail();connectionList=node;}
       }
-      if (point && A.has(node.namespaceURI) && node.localName==='br') point.text+='\n';
-      if (D.has(node.namespaceURI) && node.localName==='cxn' && own(node,'type')==='parOf') {
-        const raw=own(node,'srcOrd')??'0';
-        if (edges.length>=10000 || !/^[0-9]{1,6}$/u.test(raw)) throw fail();
-        edges.push({source:own(node,'srcId'),target:own(node,'destId'),order:Number(raw)});
+      if(node.namespaceURI===model.namespaceURI&&node.localName==='pt'){
+        const id=own(node,'modelId'),type=token(own(node,'type')??'node');
+        if(node.parent!==pointList||!id||points.has(id)||points.size>=5000||point||!POINT_TYPES.has(type))throw fail();
+        point={id,type,text:'',index:points.size,node};points.set(id,point);
+      }
+      if(point&&node.namespaceURI===model.namespaceURI&&node.localName==='t'&&node.parent===point.node){
+        if(textBody||point.hasTextBody)throw fail();
+        textBody=node;point.hasTextBody=true;
+      }
+      if(textBody&&node.namespaceURI===textNamespace()&&node.localName==='br'){
+        if(!paragraph(node.parent))throw fail();append('\n');
+      }
+      if(node.namespaceURI===model.namespaceURI&&node.localName==='cxn'){
+        // The normative CT_Cxn default is parOf. Requiring the literal type
+        // attribute incorrectly flattened normal Office-created SmartArt.
+        const type=token(own(node,'type')??'parOf'),id=own(node,'modelId');
+        if(node.parent!==connectionList||edges.length>=10000||!CONNECTION_TYPES.has(type)||
+            (id!==undefined&&(!id||connectionIds.has(id))))throw fail();
+        if(id!==undefined)connectionIds.add(id);
+        edges.push({type,source:own(node,'srcId'),target:own(node,'destId'),order:sourceOrder(own(node,'srcOrd'))});
       }
     },
     text(value,node) {
-      if (point && A.has(node.namespaceURI) && node.localName==='t') {
-        point.text+=value;chars+=value.length;if (chars>1_000_000) throw fail();
+      if(textBody&&node.namespaceURI===textNamespace()&&node.localName==='t'){
+        if(node.parent?.namespaceURI!==textNamespace()||!['r','fld'].includes(node.parent.localName)||!paragraph(node.parent.parent))throw fail();
+        append(value);
       }
     },
     end(node) {
-      if (point && A.has(node.namespaceURI) && node.localName==='p') point.text+='\n';
+      if(textBody&&paragraph(node))append('\n');
+      if(node===textBody)textBody=null;
       if (point?.node===node) {point.text=point.text.trim();point=null;}
     }
   });
-  if (!D.has(root.namespaceURI) || root.localName!=='dataModel') throw fail();
-  const children=new Map(), parents=new Map();
+  if(root!==model||!pointList)throw fail();
+  const children=new Map(), parents=new Map(), presentationChildren=new Map(), presentationParents=new Set();
   for (const edge of edges) {
-    if (!points.has(edge.source)||!points.has(edge.target)||edge.source===edge.target||parents.has(edge.target)) throw fail();
+    const from=points.get(edge.source),to=points.get(edge.target);
+    if(!from||!to||edge.source===edge.target)throw fail();
+    if(edge.type==='presOf'){
+      if(from.type==='pres'||to.type!=='pres')throw fail();
+      continue;
+    }
+    if(edge.type==='presParOf'){
+      if(from.type!=='pres'||to.type!=='pres'||presentationParents.has(to.id))throw fail();
+      presentationParents.add(to.id);
+      if(!presentationChildren.has(from.id))presentationChildren.set(from.id,[]);
+      presentationChildren.get(from.id).push(edge);
+      continue;
+    }
+    if(!DATA_POINTS.has(from.type)||!DATA_POINTS.has(to.type)||to.type==='doc'||parents.has(to.id))throw fail();
     parents.set(edge.target,edge.source);
     if (!children.has(edge.source)) children.set(edge.source,[]);
     children.get(edge.source).push(edge);
   }
-  for (const list of children.values()) list.sort((a,b)=>a.order-b.order||points.get(a.target).index-points.get(b.target).index);
-  const roots=[...points.values()].filter(p=>!parents.has(p.id)), seen=new Set(), rows=[];
-  const stack=roots.reverse().map(p=>({id:p.id,depth:0}));
+  for(const list of children.values()){
+    const orders=new Set();
+    for(const edge of list){if(orders.has(edge.order))throw fail();orders.add(edge.order);}
+    list.sort((a,b)=>a.order-b.order);
+  }
+  // Presentation/transition points never acquire parent authority in the data
+  // tree. Their nonempty text is not, however, proven to be a duplicate: keep
+  // it separately below instead of silently discarding independently readable
+  // source content merely because it has a layout-oriented point role.
+  const data=[...points.values()].filter(value=>DATA_POINTS.has(value.type));
+  if(data.filter(value=>value.type==='doc').length>1)throw fail();
+  const roots=data.filter(value=>!parents.has(value.id)),seen=new Set(),rows=[];
+  const stack=roots.reverse().map(value=>({id:value.id,depth:0,indent:0}));
   while (stack.length) {
     const item=stack.pop();
     if (seen.has(item.id)||item.depth>128) throw fail();
     seen.add(item.id);const value=points.get(item.id);
-    if (value.text) rows.push({text:value.text,depth:item.depth});
-    for (const edge of [...(children.get(item.id)||[])].reverse()) stack.push({id:edge.target,depth:item.depth+1});
+    if(value.text)rows.push({text:value.text,depth:item.indent});
+    // Empty container points do not fabricate a visible heading/indentation.
+    // The actual graph depth remains independently bounded above.
+    for(const edge of [...(children.get(item.id)||[])].reverse())stack.push({id:edge.target,
+      depth:item.depth+1,indent:item.indent+(value.text?1:0)});
   }
-  if (seen.size!==points.size) throw fail(); // cycle or unreachable connected component
-  // A synthetic empty document root should not add an artificial indentation.
-  const minimum=rows.length?Math.min(...rows.map(row=>row.depth)):0;
-  return rows.map(row=>({...row,depth:row.depth-minimum}));
+  if(seen.size!==data.length)throw fail(); // cycle or unreachable data component
+  const presentation=[...points.values()].filter(value=>value.type==='pres'),presentationSeen=new Set();
+  const pending=presentation.filter(value=>!presentationParents.has(value.id)).map(value=>({id:value.id,depth:0}));
+  while(pending.length){
+    const item=pending.pop();if(presentationSeen.has(item.id)||item.depth>128)throw fail();
+    presentationSeen.add(item.id);
+    for(const edge of presentationChildren.get(item.id)||[])pending.push({id:edge.target,depth:item.depth+1});
+  }
+  if(presentationSeen.size!==presentation.length)throw fail();
+  const additional=[...points.values()].filter(value=>!DATA_POINTS.has(value.type)&&value.text);
+  if(additional.length){
+    rows.push({text:'SmartArt-Zusatztexte · Zuordnung zum Datenbaum nicht bestätigt',depth:0});
+    for(const value of additional)rows.push({text:value.text,depth:1});
+  }
+  return rows;
 }
 function ownerDiagrams(entries,owner,decode) {
   const bytes=entries.get(owner);if (!bytes) return [];

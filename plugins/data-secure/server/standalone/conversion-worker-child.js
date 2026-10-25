@@ -1,5 +1,9 @@
 'use strict';
 
+const { createConversionTimings, serializeConversionTimings } = require('./conversion-timings');
+const conversionTimings = createConversionTimings();
+const runtimeInitialized = conversionTimings.begin('runtime_init');
+
 // One owned process per source. OCR uses worker_threads inside this process;
 // there are no detached children, source paths, network reads or raw temp files.
 const fs = require('node:fs');
@@ -10,6 +14,7 @@ const { pathToFileURL } = require('node:url');
 const { extractMarkdownBuffer, extractOfficeMarkdownAndMedia } = require('./markdown-extractor');
 const { prepareOfficeImagePlan, preparePartialOfficeImagePlan, appendOfficeOcr, officeOcrCheckpoint } = require('./office-image-ocr');
 const {decodeOfficeVisual}=require('./office-visual-decoder');
+const { officeVisualOmission } = require('./office-visual-omission');
 const { createCheckpointEmitter, MAX_UNITS } = require('./conversion-checkpoints');
 const { markdownImageContent, extractMarkdownImageMedia } = require('./markdown-image-content');
 const { createMarkdownExtraction, MAX_MARKDOWN_CHARS } = require('./markdown-contract');
@@ -19,15 +24,18 @@ const { readableText, readableNotice } = require('./readable-markdown');
 const { refineOcr } = require('./ocr-refinement');
 const { contactSpans } = require('../core/ocr-contact-review');
 const { attachContactCrops } = require('./ocr-contact-crops');
+const { sourceCropBlocks } = require('./ocr-crop-geometry');
 const { nativeTextSeparator, nativeColumnOrder, taggedPdfTextLayout, renderPdfOcrLayer, paintedTextGeometryAvailable, nativeTextRegions, nativeSingleTokenRegions, uncoveredOcrText } = require('./pdf-text-layout');
 const { projectTaggedPdf } = require('./pdf-structure-projection');
 const { classifyPdfTextVisibility } = require('./pdf-text-visibility');
+const { renderPdfNativeWordEvidence } = require('./pdf-ocr-native-words');
 const { SOURCE_TYPES, ERROR_CODES, MAX_INPUT_BYTES } = require('../core/conversion-worker-contract');
 const { decodeRasterPng } = require('./png-raster-decoder');
 const { decodeBmp } = require('../images/bmp');
 const { MAX_PIXELS, MAX_IMAGE_BYTES } = require('../images/common');
 const { validateContentOptions, serializeContentOptions } = require('../core/content-options');
 const { pdfOcrAction } = require('../core/content-ocr-plan');
+const { pdfOcrLayoutMode } = require('./pdf-ocr-layout-mode');
 const { PDF_KEYS, selectOptionalPrivatePdfMetadata } = require('../core/private-document-metadata');
 const { createPassivePdfContent } = require('./pdf-passive-content');
 const root = path.join(__dirname, 'conversion-runtime');
@@ -37,6 +45,7 @@ const errors = new Set(ERROR_CODES);
 let requestedContentOptions;
 // Vendor console messages must not contaminate the framed response or logs.
 for (const method of ['log', 'info', 'warn', 'error', 'debug']) console[method] = () => {};
+runtimeInitialized();
 
 function canvasApi() {
   try {
@@ -50,6 +59,7 @@ function dimensions(width, height) {
   }
 }
 function checkedModels() {
+  const measured = conversionTimings.begin('model_check');
   try {
   const lock = JSON.parse(fs.readFileSync(path.join(root, 'models.lock.json'), 'utf8'));
   for (const language of ['deu', 'eng']) {
@@ -58,10 +68,12 @@ function checkedModels() {
     const model = fs.readFileSync(path.join(root, 'models', expected.file));
     if (model.length !== expected.bytes || crypto.createHash('sha256').update(model).digest('hex') !== expected.sha256) fail('CONVERSION_MODEL_INVALID');
   }
-  } catch { fail('CONVERSION_MODEL_INVALID'); }
+  } catch { fail('CONVERSION_MODEL_INVALID'); } finally { measured(); }
 }
 
 async function createOcr() {
+  const measured = conversionTimings.begin('ocr_init');
+  try {
   checkedModels();
   try {
   if (localRequire('tesseract.js/package.json').version !== '7.0.0') fail('CONVERSION_POLICY_FAILED');
@@ -74,19 +86,20 @@ async function createOcr() {
   process.stderr.write('CONVERSION_OCR_READY\n');
   return worker;
   } catch { fail('CONVERSION_POLICY_FAILED'); }
+  } finally { measured(); }
 }
 
 async function recognize(canvas, ocr, nativeRegions = [], singleTokenOnly = false) {
   // Keep word confidence local to this isolated worker. A high whole-page
   // confidence does not establish that a contact value was read correctly.
   let result;
-  try { result = await ocr.recognize(canvas.toBuffer('image/png'), {}, { text: true, blocks: true }); }
+  try { result = await conversionTimings.measureAsync('ocr', () => ocr.recognize(canvas.toBuffer('image/png'), {}, { text: true, blocks: true })); }
   catch (cause) { if (errors.has(cause?.code)) throw cause; fail('CONVERSION_OCR_FAILED'); }
   if (typeof result?.data?.text !== 'string') fail('CONVERSION_OCR_FAILED');
   if (result.data.text.length > MAX_MARKDOWN_CHARS) fail('TEXT_TOO_LARGE');
   // Re-segmentation stays in original pixel coordinates. Never change OCR
   // geometry when a native PDF mask is in use, or duplicate its exact text.
-  const data = nativeRegions.length ? result.data : await refineOcr(result.data, canvas, ocr, canvasApi().createCanvas);
+  const data = nativeRegions.length ? result.data : await conversionTimings.measureAsync('refinement', () => refineOcr(result.data, canvas, ocr, canvasApi().createCanvas));
   if (data.text.length > MAX_MARKDOWN_CHARS) fail('TEXT_TOO_LARGE');
   const recognized = cleanExtractedSymbolText(nativeRegions.length ? uncoveredOcrText(data, nativeRegions, { singleTokenOnly }) : data.text);
   return { ...recognized, quality: contactQuality(data, recognized.text), wordData: data.blocks,
@@ -112,6 +125,7 @@ async function imageMarkdown(bytes, type, markdownOutput, contentOptions, ownedO
   if (bytes.length > MAX_IMAGE_BYTES) fail('INPUT_FORMAT_LIMIT');
   const { createCanvas, ImageData, loadImage } = canvasApi();
   let canvas;
+  const decoded = conversionTimings.begin('image_decode');
   try {
     if (type === 'jpeg') {
       // Buffer-only API: no URL, file name or SVG input can reach loadImage.
@@ -136,10 +150,21 @@ async function imageMarkdown(bytes, type, markdownOutput, contentOptions, ownedO
       canvas.getContext('2d').putImageData(new ImageData(rgba, decoded.width, decoded.height), 0, 0);
     }
   } catch (cause) { if (errors.has(cause?.code)) throw cause; fail('CONVERSION_IMAGE_INVALID'); }
-  let downsampled=false;
+  finally { decoded(); }
+  let downsampled=false, sourceCanvas;
   let ocr;
   try {
     const share=ownedOfficeSession?.ocrPixels;
+    if(ownedOfficeSession?.ocrScale===2){
+      const width=canvas.width*2,height=canvas.height*2;
+      dimensions(width,height);
+      if(!Number.isSafeInteger(share)||width*height>share)fail('CONVERSION_POLICY_FAILED');
+      const enlarged=createCanvas(width,height);
+      try{const context=enlarged.getContext('2d');context.fillStyle='white';context.fillRect(0,0,width,height);
+        context.drawImage(canvas,0,0,width,height);}
+      catch(cause){enlarged.width=1;enlarged.height=1;throw cause;}
+      sourceCanvas=canvas;canvas=enlarged;
+    }
     if(share!==undefined){
       if(!Number.isSafeInteger(share)||share<1||share>MAX_PIXELS)fail('CONVERSION_POLICY_FAILED');
       if(canvas.width*canvas.height>share){
@@ -169,11 +194,13 @@ async function imageMarkdown(bytes, type, markdownOutput, contentOptions, ownedO
     const text = recognized.text;
     if (contentOptions && !text.trim() && !ownedOfficeSession) fail('CONVERSION_OCR_TEXT_EMPTY');
     const reasons = ['OCR_NOT_VERIFIED', 'VISUAL_CONTENT_NOT_EXTRACTED'];
-    if(downsampled)reasons.push('IMAGE_PROCESSING_LIMIT');
+    if(downsampled)reasons.push('IMAGE_DOWNSAMPLED');
     if (recognized.quality.contact_lines.length) reasons.push('OCR_CONTACT_VALUES_UNVERIFIED');
     if (!text.trim()) reasons.push('OCR_TEXT_EMPTY');
+    const cropCanvas=sourceCanvas||canvas;
+    const cropBlocks=sourceCanvas?sourceCropBlocks(recognized.wordData,canvas.width,canvas.height,sourceCanvas.width,sourceCanvas.height):recognized.wordData;
     const contacts = recognized.quality.contact_lines.length ? attachContactCrops(
-      contactSpans(text, recognized.quality), text, recognized.wordData, canvas,
+      contactSpans(text, recognized.quality), text, cropBlocks, cropCanvas,
       ownedOfficeSession?.cropBudget || { bytes: 0 }, recognized.cropText) : [];
     const rendered = readableText(text, contacts);
     const notices = markdownOutput === 'content-v1' ? '' : readableNotice({ image: true, symbols: recognized.omitted, ocr: Boolean(text.trim()), contacts: contacts.length > 0,
@@ -185,8 +212,11 @@ async function imageMarkdown(bytes, type, markdownOutput, contentOptions, ownedO
       ...(contacts.length ? { ocr_contacts: rendered.contacts } : {}),
       coverage: { status: 'incomplete', reason_codes: reasons.sort() } });
   } finally {
-    if (ocr && !ownedOfficeSession) await ocr.terminate();
-    if (canvas) { canvas.width = 1; canvas.height = 1; }
+    try { if (ocr && !ownedOfficeSession) await ocr.terminate(); }
+    finally {
+      try { if (canvas) { canvas.width = 1; canvas.height = 1; } }
+      finally { if (sourceCanvas) { sourceCanvas.width = 1; sourceCanvas.height = 1; } }
+    }
   }
 }
 
@@ -202,12 +232,7 @@ function imageOmission(cause) {
 }
 
 function visualOmission(cause,type){
-  if(cause?.code==='VISUAL_DECODER_POLICY')fail('CONVERSION_POLICY_FAILED');
-  if(['VISUAL_FEATURE_UNSUPPORTED','VISUAL_EXTERNAL_REFERENCE','VISUAL_ANIMATION_UNSUPPORTED','VISUAL_FONT_UNAVAILABLE','VISUAL_EMF_PLUS_UNSUPPORTED','VISUAL_METAFILE_RECORD_UNSUPPORTED'].includes(cause?.code)){
-    const format={svg:'SVG',gif:'GIF',tif:'TIFF',tiff:'TIFF',webp:'WEBP',emf:'EMF',wmf:'WMF'}[type];
-    if(format)return `OFFICE_IMAGE_FORMAT_${format}_UNSUPPORTED`;
-  }
-  return imageOmission(cause);
+  return officeVisualOmission(cause?.code,type)||imageOmission(cause);
 }
 async function* officeRasters(item){
   if(!item.visual){yield{png:item.bytes,type:item.type,index:1,total:1,warning_codes:[]};return;}
@@ -219,7 +244,7 @@ async function* officeRasters(item){
     if(crypto.createHash('sha256').update(font).digest('hex')!==contract.font.sha256)fail('CONVERSION_POLICY_FAILED');
   }catch{fail('CONVERSION_POLICY_FAILED');}
   try{
-    yield* decodeOfficeVisual(item.bytes,item.type,{canvasApi:canvasApi(),fontBuffers:[font],maxOutputPixels:item.ocrPixels,
+    const decoder=decodeOfficeVisual(item.bytes,item.type,{canvasApi:canvasApi(),fontBuffers:[font],maxOutputPixels:item.ocrPixels,
       loadBundledModule:id=>{
         try{
         if(id!=='emf-converter/dist/browser.js')fail('VISUAL_DECODER_POLICY');
@@ -231,20 +256,25 @@ async function* officeRasters(item){
         // CONVERSION_* error here would be mistaken for damaged source content.
         }catch{fail('VISUAL_DECODER_POLICY');}
       }});
+    // Time only each decoder advance, never the downstream OCR while a frame
+    // is yielded. Forward generator return/throw so its cleanup stays owned.
+    yield* { [Symbol.asyncIterator](){return this;},
+      next(...args){return conversionTimings.measureAsync('image_decode',()=>decoder.next(...args));},
+      return(...args){return decoder.return(...args);},throw(...args){return decoder.throw(...args);} };
   }finally{font.fill(0);}
 }
 
 async function officeImageMarkdown(bytes, type, extractionOptions, contentOptions, checkpoint) {
   // One parser supplies both text and its authorized attachment list. Do not
   // re-open ZIP media separately or read Relationship targets from disk/URLs.
-  const { extraction, attachments } = extractOfficeMarkdownAndMedia(bytes, `.${type}`, extractionOptions);
+  const { extraction, attachments } = conversionTimings.measure('native_extract', () => extractOfficeMarkdownAndMedia(bytes, `.${type}`, extractionOptions));
   const native = createMarkdownExtraction({ source_type: type, markdown: extraction.markdown,
     coverage: extraction.coverage, content_options: contentOptions });
   await checkpoint(native, 0);
-  const plan = preparePartialOfficeImagePlan(attachments);
+  const plan = conversionTimings.measure('structure_ops', () => preparePartialOfficeImagePlan(attachments));
   if (!plan.length) {
     if (!extraction.markdown.trim()) fail(extraction.coverage.reason_codes.includes('TEXT_LIMIT_PARTIAL')
-      ? 'TEXT_TOO_LARGE' : 'CONVERSION_OCR_TEXT_EMPTY');
+      ? 'TEXT_TOO_LARGE' : 'CONVERSION_EXTRACTION_FAILED');
     return native;
   }
   const session = { ocr: null, cropBudget: { bytes: 0, pixels: 0 } };
@@ -259,6 +289,7 @@ async function officeImageMarkdown(bytes, type, extractionOptions, contentOption
       if (!omission) {
         try {
           session.ocrPixels=item.ocrPixels;
+          session.ocrScale=item.ocrScale||1;
           const key=item.type+':'+crypto.createHash('sha256').update(item.bytes).digest('hex');
           results=cache.get(key);
           if(!results){
@@ -271,7 +302,9 @@ async function officeImageMarkdown(bytes, type, extractionOptions, contentOption
               finally{if(raster.png!==item.bytes)raster.png.fill(0);}
               if(retainedChars+result.markdown.length>MAX_MARKDOWN_CHARS){results.push({omission:'TEXT_LIMIT_PARTIAL'});continue;}
               retainedChars+=result.markdown.length;
-              if(raster.warning_codes?.length)result={...result,coverage:{status:'incomplete',reason_codes:[...new Set([...result.coverage.reason_codes,'SOURCE_COVERAGE_UNVERIFIED'])].sort()}};
+              if(raster.warning_codes?.length)result={...result,coverage:{status:'incomplete',reason_codes:[...new Set([...result.coverage.reason_codes,
+                ...(raster.warning_codes.includes('VISUAL_RASTER_DOWNSAMPLED')?['IMAGE_DOWNSAMPLED']:[]),
+                ...(raster.warning_codes.some(code=>code!=='VISUAL_RASTER_DOWNSAMPLED')?['SOURCE_COVERAGE_UNVERIFIED']:[])])].sort()}};
               results.push({result,index:raster.index,total:raster.total});
             }
             cache.set(key,results);
@@ -366,7 +399,7 @@ function additionalOcrText(nativeText, ocrText) {
 async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, contentOptions, checkpoint) {
   if (bytes.length > 25 * 1024 * 1024) fail('INPUT_FORMAT_LIMIT');
   const pdfRoot = path.join(root, 'node_modules', 'pdfjs-dist');
-  const { getDocument, OPS, AnnotationMode, setDataSecureTextPaintObserver } = await import(pathToFileURL(path.join(pdfRoot, 'legacy', 'build', 'pdf.datasecure.mjs')).href);
+  const { getDocument, OPS, AnnotationMode, setDataSecureTextPaintObserver } = await conversionTimings.measureAsync('runtime_init', () => import(pathToFileURL(path.join(pdfRoot, 'legacy', 'build', 'pdf.datasecure.mjs')).href));
   // Actual painted operators, not merely image resources declared in the PDF.
   // These are the image operations of the bundled PDF.js display API.
   const imageOperations = new Set([OPS.paintImageXObject, OPS.paintInlineImageXObject,
@@ -383,7 +416,7 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
     standardFontDataUrl: resource('standard_fonts'), iccUrl: resource('iccs'), wasmUrl: resource('wasm') });
   let ocr;
   try {
-    const document = await task.promise;
+    const document = await conversionTimings.measureAsync('native_extract', () => task.promise);
     if (await document.getPermissions() !== null) fail('SOURCE_ENCRYPTED_UNSUPPORTED');
     // Never execute forms, JavaScript or attachments. Markdown-only and
     // Standalone Markdown-first privacy may omit them with incomplete source
@@ -468,7 +501,7 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
       let page, canvas, nativeUnit, finalUnit, passivePage;
       let readingOptionalStructure = false;
       try {
-        page = await document.getPage(number);
+        page = await conversionTimings.measureAsync('native_extract', () => document.getPage(number));
         if (page.isPureXfa) fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
         if (!passiveObjects && (populated(await page.getJSActions()) ||
             (await page.getAnnotations({ intent: 'display' })).length > 0)) fail('PDF_OBJECT_COVERAGE_UNVERIFIED');
@@ -477,7 +510,8 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
             annotations: await passiveRead(() => page.getAnnotations({ intent: 'display' }), []) });
           for (const code of passivePage.reason_codes) reasons.add(code);
         }
-        const content = await page.getTextContent({ disableNormalization: true, ...(contentOptions ? { includeMarkedContent:true } : {}) });
+        const content = await conversionTimings.measureAsync('native_extract', () => page.getTextContent({ disableNormalization: true, ...(contentOptions ? { includeMarkedContent:true } : {}) }));
+        const hasRawNativeText = content.items.some(item => typeof item.str === 'string' && Boolean(item.str.trim()));
         let text = '';
         let omittedSymbols = false;
         let previousTextItem;
@@ -536,13 +570,13 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
         if (contentOptions) {
           readingOptionalStructure = true;
           let structureTree;
-          try { structureTree = await page.getStructTree(); }
+          try { structureTree = await conversionTimings.measureAsync('structure_ops', () => page.getStructTree()); }
           catch (cause) {
             if (!['FormatError','InvalidPDFException'].includes(cause?.name) || cause?.code !== undefined) throw cause;
             reasons.add('SOURCE_COVERAGE_UNVERIFIED');
           }
-          const tagged = taggedPdfTextLayout({ items:content.items, structureTree, pageNumber:number, pageRef:page.ref });
-          if (tagged.applied) taggedProjection = projectTaggedPdf(tagged);
+          const tagged = conversionTimings.measure('structure_ops', () => taggedPdfTextLayout({ items:content.items, structureTree, pageNumber:number, pageRef:page.ref }));
+          if (tagged.applied) taggedProjection = conversionTimings.measure('structure_ops', () => projectTaggedPdf(tagged));
           else if (structureTree) reasons.add('SOURCE_COVERAGE_UNVERIFIED');
           omittedSymbols ||= taggedProjection?.omittedSymbols === true;
           if (hasNativeText && taggedProjection) nativeUnit = nativeCandidate(`## Seite ${number}\n\n${taggedProjection.markdown}`);
@@ -551,7 +585,7 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
         // Excluded/unconfirmed XFA values must not re-enable appearance
         // operators solely because no passive field reader was admitted.
         // Match the already-disabled raster policy; parsing is not execution.
-        const operators = await page.getOperatorList(currentPassive ? { annotationMode: AnnotationMode.DISABLE } : undefined);
+        const operators = await conversionTimings.measureAsync('structure_ops', () => page.getOperatorList(currentPassive ? { annotationMode: AnnotationMode.DISABLE } : undefined));
         const hasPaintedImage = operators?.fnArray.some(operation => imageOperations.has(operation));
         const hasNonTextGraphicPaint = operators?.fnArray.some(operation => graphicOperations.has(operation));
         let additional = '';
@@ -567,16 +601,19 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
           dimensions(width, height);
           // Only an already selected OCR operation may spend raster-probe
           // work. No extra visibility rendering for ordinary PDF text reads.
-          const paintAnalysis = hasNativeText ? await classifyPdfTextVisibility({ page, textItems: content.items,
+          canvas = canvasApi().createCanvas(width, height);
+          const directRegions = contentOptions && hasNativeText ? await conversionTimings.measureAsync('paint_probe', () => renderPdfNativeWordEvidence({ page, canvas, viewport,
+            annotationMode: AnnotationMode.DISABLE, textItems: content.items, styles: content.styles,
+            operators, ops: OPS, setTextPaintObserver: setDataSecureTextPaintObserver })) : null;
+          if (contentOptions && !hasNativeText) await conversionTimings.measureAsync('pdf_raster', () => renderPdfOcrLayer({ page, canvas, viewport, annotationMode: AnnotationMode.DISABLE }));
+          if (!contentOptions) await conversionTimings.measureAsync('pdf_raster', () => page.render({ canvasContext: canvas.getContext('2d'), viewport, background: 'white',
+            annotationMode: AnnotationMode.DISABLE }).promise);
+          const paintAnalysis = hasNativeText && directRegions === null ? await conversionTimings.measureAsync('paint_probe', () => classifyPdfTextVisibility({ page, textItems: content.items,
             viewport: page.getViewport({ scale: 1 }), createCanvas: canvasApi().createCanvas,
             setTextPaintObserver: setDataSecureTextPaintObserver, annotationMode: AnnotationMode.DISABLE,
-            budget: visibilityBudget }) : { wordRegions: [] };
-          canvas = canvasApi().createCanvas(width, height);
-          if (contentOptions) await renderPdfOcrLayer({ page, canvas, viewport, annotationMode: AnnotationMode.DISABLE });
-          else await page.render({ canvasContext: canvas.getContext('2d'), viewport, background: 'white',
-            annotationMode: AnnotationMode.DISABLE }).promise;
+            budget: visibilityBudget })) : { wordRegions: [] };
           ocr ??= await createOcr(); // One session per document, never across customers.
-          const legacyRegions = hasNativeText && paintedTextGeometryAvailable(operators, OPS, { strictMarkedContent: Boolean(contentOptions) })
+          const legacyRegions = hasNativeText && directRegions === null && paintedTextGeometryAvailable(operators, OPS, { strictMarkedContent: Boolean(contentOptions) })
             ? (contentOptions ? nativeSingleTokenRegions : nativeTextRegions)(content.items, content.styles, viewport) : [];
           // These extra per-word regions come from actual glyph positions and
           // final pixel differences, never a proportional split of a line box.
@@ -586,7 +623,7 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
           // The OCR raster retains every original paint operation. Remove a
           // transcript word only AFTER OCR supplies exact text and bounded
           // geometry; a different visible glyph/ToUnicode value must survive.
-          const regions = [...provenRegions, ...legacyRegions];
+          const regions = [...(directRegions || []), ...provenRegions, ...legacyRegions];
           let recognized;
           if (contentOptions) {
             // AUTO's page-layout classifier can discard large vector-outline
@@ -594,7 +631,8 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
             // Use the existing SINGLE_BLOCK reading, without altering pixels,
             // removing native/search text or inventing column semantics. Exact
             // geometry/text dedup still runs only after independent recognition.
-            await ocr.setParameters({ tessedit_pageseg_mode: '6' });
+            await ocr.setParameters({ tessedit_pageseg_mode: markdownOutput === 'content-v1' ? pdfOcrLayoutMode({ hasRawNativeText,
+              hasPaintedImage: Boolean(hasPaintedImage), hasNonTextGraphicPaint: Boolean(hasNonTextGraphicPaint) }) : '6' });
             try { recognized = await recognize(canvas, ocr, regions, true); }
             finally { await ocr.setParameters({ tessedit_pageseg_mode: '6' }); }
           } else recognized = await recognize(canvas, ocr, regions, false);
@@ -762,7 +800,7 @@ async function main() {
   if (contentOptions?.imageOcr && ['docx', 'xlsx', 'pptx'].includes(type)) {
     return officeImageMarkdown(bytes, type, extractionOptions, contentOptions, checkpoint);
   }
-  const result = extractMarkdownBuffer(bytes, `.${type}`, extractionOptions);
+  const result = conversionTimings.measure('native_extract', () => extractMarkdownBuffer(bytes, `.${type}`, extractionOptions));
   if (contentOptions && ['docx', 'xlsx', 'pptx'].includes(type) && !result.markdown.trim()) {
     fail('CONVERSION_EXTRACTION_FAILED');
   }
@@ -786,6 +824,13 @@ async function main() {
 }
 
 process.stdout.on('error', () => process.exit(2));
-main().then(result => process.stdout.write(JSON.stringify({ schema: requestedContentOptions ? 'datasecure-conversion-response/2' : 'datasecure-conversion-response/1', ok: true, result }), () => process.exit(0)),
+process.stderr.on('error', () => {}); // a diagnostic pipe cannot replace the result
+function exitWithTimings(exitCode) {
+  let line;
+  try { line = serializeConversionTimings(conversionTimings.finish(process.argv[2], exitCode === 0 ? 'ok' : 'error')); } catch {}
+  if (!line) { process.exit(exitCode); return; }
+  try { process.stderr.write(line, () => process.exit(exitCode)); } catch { process.exit(exitCode); }
+}
+main().then(result => process.stdout.write(JSON.stringify({ schema: requestedContentOptions ? 'datasecure-conversion-response/2' : 'datasecure-conversion-response/1', ok: true, result }), () => exitWithTimings(0)),
   cause => process.stdout.write(JSON.stringify({ schema: requestedContentOptions ? 'datasecure-conversion-response/2' : 'datasecure-conversion-response/1', ok: false,
-    error_code: errors.has(cause?.code) ? cause.code : 'CONVERSION_EXTRACTION_FAILED' }), () => process.exit(2)));
+    error_code: errors.has(cause?.code) ? cause.code : 'CONVERSION_EXTRACTION_FAILED' }), () => exitWithTimings(2)));

@@ -148,7 +148,12 @@ for (const kind of ['shared', 'inline']) {
     assert.equal(stringReader(kind, '<t>_xD83D_<![CDATA[_xDE00_]]></t>'), '😀');
     assert.throws(() => stringReader(kind, '<r><t>_xD83D_</t></r><r><t>_xDE00_</t></r>'), e => e.code === 'XLSX_STRUCTURE_UNSAFE');
   });
-  for (const code of ['0000', '0001', '0008', '000B', '000C', '001F', '007F', '0085', '009F', 'D800', 'DC00', 'FFFE', 'FFFF']) {
+  for (const code of ['0000', '0001', '0008', '000B', '000C', '001F', '007F', '0085', '009F']) {
+    test(`${kind} typed cell control is visible and bounded for _x${code}_`, () => {
+      assert.equal(stringReader(kind, `<t>Anna_x${code}_Berger</t>`), `Anna ⟦U+${code}⟧ Berger`);
+    });
+  }
+  for (const code of ['D800', 'DC00', 'FFFE', 'FFFF']) {
     test(`${kind} decoded x:t character guard stays hard for _x${code}_`, () => {
       assert.throws(() => stringReader(kind, `<t>Anna_x${code}_Berger</t>`), e => e.code === 'XLSX_STRUCTURE_UNSAFE');
     });
@@ -193,7 +198,12 @@ test('cached formula string decodes once while formula syntax remains literal an
   assert.equal(parsed.formulaCells, 1); assert.equal(parsed.missingFormulaCaches, 0);
   assert.equal(parsed.rowRecords[0].values[0], 'Formel: "_x000D_"&WEBSERVICE("https://invalid.test")\nGespeicherter Wert: Anna\rBerger (nicht neu berechnet)');
 });
-for (const code of ['0000', '0001', '0008', '000B', '000C', '001F', '007F', '0085', '009F', 'D800', 'DC00', 'FFFE', 'FFFF']) {
+for (const code of ['0000', '0001', '0008', '000B', '000C', '001F', '007F', '0085', '009F']) {
+  test(`cached string x:v control is visible and bounded for _x${code}_`, () => {
+    assert.equal(valueReader(`Anna_x${code}_Berger`).rowRecords[0].values[0], `Anna ⟦U+${code}⟧ Berger`);
+  });
+}
+for (const code of ['D800', 'DC00', 'FFFE', 'FFFF']) {
   test(`cached x:v decoded character policy remains hard for _x${code}_`, () => {
     assert.throws(() => valueReader(`Anna_x${code}_Berger`), e => e.code === 'XLSX_STRUCTURE_UNSAFE');
   });
@@ -286,7 +296,7 @@ for (const kind of ['shared', 'inline', 'cached', 'value']) {
     assert.ok(result.markdown.includes('# Arbeitsblatt: \\_x000D\\_'));
   });
   test(`${kind} invalid decoded text omits its atomic part, not a successful source prefix`, () => {
-    const input = stringWorkbook(kind, 'Name: Anna_x0000_Berger', { damagedSecond: true });
+    const input = stringWorkbook(kind, 'Name: Anna_xD800_Berger', { damagedSecond: true });
     assert.throws(() => extractMarkdownBuffer(input, '.xlsx', { markdownOutput: 'content-v1' }));
     const partial = extracted(input);
     assert.ok(partial.markdown.includes('FHIR')); assert.ok(!partial.markdown.includes('Anna')); assert.ok(!partial.markdown.includes('Berger'));

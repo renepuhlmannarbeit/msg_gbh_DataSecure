@@ -495,24 +495,37 @@ function batchQueueFromSelection(selected) {
     return { item, name: path.basename(full), full, sourceBytes };
   });
   const labels = prepared.map(({ item, name }) => typeof item?.sourceLabel === 'string' ? item.sourceLabel : name);
-  const duplicateNames = new Set(prepared.map(({ name }) => name).filter((name, index, names) =>
-    names.findIndex((candidate) => candidate === name) !== index));
-  for (const duplicate of duplicateNames) {
-    const indices = prepared.map(({ name }, index) => name === duplicate ? index : -1).filter((index) => index >= 0);
+  // Folder intake already supplies an origin-relative label. Equal basenames
+  // in different subfolders do not make those labels ambiguous. Replacing
+  // them here used to discard the selected root on a later merge/reselection.
+  // Use the conservative cross-platform key: macOS may also be case-insensitive
+  // and normalization-equivalent names must not collide in a Windows handoff.
+  const key = value => value.normalize('NFC').toLowerCase();
+  const counts = new Map();
+  for (const label of labels) counts.set(key(label), (counts.get(key(label)) || 0) + 1);
+  for (const [duplicate, count] of counts) {
+    if (count < 2) continue;
+    const indices = labels.map((label, index) => key(label) === duplicate ? index : -1).filter(index => index >= 0);
+    const group = new Set(indices);
+    const occupied = new Set(labels.filter((_, index) => !group.has(index)).map(key));
     const parts = indices.map((index) => {
       const full = prepared[index].full;
       const root = path.parse(full).root;
       return { root: root.replace(/[^A-Za-z0-9_-]/gu, '') || 'root',
         segments: path.relative(root, full).split(path.sep) };
     });
-    const key = (value) => process.platform === 'win32' ? value.toLowerCase() : value;
     let resolved = null;
     const depthLimit = Math.max(...parts.map(({ segments }) => segments.length));
     for (let depth = 2; depth <= depthLimit; depth++) {
       const candidates = parts.map(({ segments }) => segments.slice(-depth).join('/'));
-      if (new Set(candidates.map(key)).size === candidates.length) { resolved = candidates; break; }
+      if (new Set(candidates.map(key)).size === candidates.length && !candidates.some(candidate => occupied.has(key(candidate)))) {
+        resolved = candidates; break;
+      }
     }
     if (!resolved) resolved = parts.map(({ root, segments }) => `${root}/${segments.join('/')}`);
+    if (new Set(resolved.map(key)).size !== resolved.length || resolved.some(candidate => occupied.has(key(candidate)))) {
+      throw new SafeError('Die lokale Dateiauswahl enthält nicht eindeutig unterscheidbare Quellnamen. Bitte die Auswahl getrennt prüfen.');
+    }
     for (let offset = 0; offset < indices.length; offset++) labels[indices[offset]] = resolved[offset];
   }
   return prepared.map(({ name, full, sourceBytes }, index) => ({

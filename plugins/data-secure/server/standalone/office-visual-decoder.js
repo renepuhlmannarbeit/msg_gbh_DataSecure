@@ -12,6 +12,7 @@ const { MAX_PIXELS, MAX_IMAGE_BYTES } = require('../images/common');
 const { RESOURCE_LIMITS } = require('../resource-limits');
 const { decodeTiffLzw, decodeTiffFax } = require('./tiff-scan-codecs');
 const { createEmfPlusPreflight } = require('./emfplus-preflight');
+const { flattenStaticSvgStyles, assertStaticSvgPaintSemantics } = require('./office-svg-style');
 const MAX_UNITS = RESOURCE_LIMITS.MAX_VISUAL_ASSETS;
 const MAX_RECORDS = 10000, MAX_SVG_BYTES = 4 * 1024 * 1024;
 const SVG = 'http://www.w3.org/2000/svg';
@@ -98,16 +99,17 @@ function inspectSvg(bytes) {
   // No entity/DTD/processing-instruction resolver, CSS escapes/imports, scripts,
   // foreignObject, filters or animation. Internal references are closed below.
   if (/<!DOCTYPE|<!ENTITY|<\?(?!xml\s)/iu.test(source)) unsupported();
-  const elements = new Set(['svg', 'g', 'defs', 'title', 'desc', 'path', 'rect', 'circle', 'ellipse', 'line',
+  const elements = new Set(['svg', 'g', 'defs', 'style', 'title', 'desc', 'path', 'rect', 'circle', 'ellipse', 'line',
     'polyline', 'polygon', 'text', 'tspan', 'textPath', 'linearGradient', 'radialGradient', 'stop', 'clipPath', 'mask', 'pattern', 'use']);
   const ids = new Set(), refs = [], edges = new Map(), sizes = new Map();
-  let width, height, nodes = 0, hasText = false, drawingTokens = 0;
+  let width, height, nodes = 0, hasText = false, hasStylesheet = false, drawingTokens = 0;
   const xmlError = limit => Object.assign(new Error(limit ? 'VISUAL_PROCESSING_LIMIT' : 'VISUAL_CONTENT_DAMAGED'),
     { code: limit ? 'VISUAL_PROCESSING_LIMIT' : 'VISUAL_CONTENT_DAMAGED' });
   const root = readXml(source, { decode: xmlDecode, error: xmlError, start(node) {
     if (++nodes > MAX_RECORDS) fail('VISUAL_PROCESSING_LIMIT');
     if (node.namespaceURI !== SVG || !elements.has(node.localName)) unsupported();
     if (!node.parent && node.localName !== 'svg') damaged();
+    if (node.localName === 'style') hasStylesheet = true;
     const get = name => node.attributes.get(`{}${name}`);
     const id = get('id');
     if (id !== undefined) {
@@ -183,6 +185,11 @@ function inspectSvg(bytes) {
   for (const id of edges.keys()) visit(id, new Set());
   let expanded = nodes;
   for (const ref of refs) { expanded += costs.get(ref) || sizes.get(ref) || 1; if (expanded > MAX_RECORDS) fail('VISUAL_PROCESSING_LIMIT'); }
+  // Embedded sheets are compiled to a closed paint-only subset before any
+  // Canvas call. No stylesheet or source-selected font is newly delegated to
+  // the native renderer. SVGs without a sheet retain their existing contract.
+  if (hasStylesheet) source = flattenStaticSvgStyles(source, { readXml, decode: xmlDecode, error: xmlError });
+  assertStaticSvgPaintSemantics(source, { readXml, decode: xmlDecode, error: xmlError });
   // Actual text nodes are collected by the same strict XML parser, not a tag
   // regex that could confuse XML entities, escaped text and attributes.
   let visibleText = '';
@@ -664,7 +671,16 @@ function canvasSvgSource(inspected) {
         // source font shorthands cannot escape the explicitly registered alias.
         attributes.push(`${name}="${encode(local === 'style' && ['text', 'tspan', 'textPath'].includes(node.localName) ? value + ';font-family:DataSecureOffice' : value)}"`);
       }
-      if (!node.parent) attributes.push(`xmlns="${SVG}"`, `xmlns:xlink="${XLINK}"`, 'font-family="DataSecureOffice"');
+      if (!node.parent) {
+        attributes.push(`xmlns="${SVG}"`, `xmlns:xlink="${XLINK}"`, 'font-family="DataSecureOffice"');
+        // A viewBox-only SVG can have fractional coordinate extents. Bind the
+        // actual raster viewport to the already validated integer allocation;
+        // otherwise this backend truncates them and the strict dimension check
+        // rejects an intact graphic. Preserve the original viewBox geometry.
+        if (!node.attributes.has('{}width') && !node.attributes.has('{}height')) {
+          attributes.push(`width="${inspected.width}"`, `height="${inspected.height}"`);
+        }
+      }
       if (['text', 'tspan', 'textPath'].includes(node.localName)) {
         attributes.push('font-family="DataSecureOffice"');
         if (!node.attributes.has('{}style')) attributes.push('style="font-family:DataSecureOffice"');

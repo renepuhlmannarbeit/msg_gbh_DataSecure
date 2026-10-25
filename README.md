@@ -1,117 +1,60 @@
 # GBH DataSecure – Standalone Windows/macOS RC176 · Linux RC159 · Cowork RC151
 
-Quellstand: 3.2.0-rc176
+Quellstand: 3.2.0-rc177
 
-Der [Standalone-Test-Pre-Release RC176 für Windows und macOS](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc176)
-bindet Quellcommit `706c1fad6fbf26bf6745768c0d6a5bd4fc48040b` (Build `706c1fad`).
-Linux bleibt beim [RC159-Paket](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc159)
-aus Quellcommit `7af2a9d0268864a01b954e0175cae9f5a3616fe8`.
-Die neue Oberfläche ist der reguläre Einstieg: **Neue Verarbeitung**, schnelle
-Sammelprüfung mit Checkboxen und Original-/Markdown-Vergleich, Pausieren,
-laufgebundene Fortsetzung und konkrete Dateiprobleme. Nach den notwendigen
-OCR-/Fundstellenprüfungen direkt **Ergebnisordner öffnen**: keine zweite
-Dokumentauswahl, Freigabe oder Exportbestätigung im normalen Ablauf.
-Optionale Nachbearbeitung stellt einen vollständigen neuen aktuellen Stand
-bereit; frühere Stände bleiben erhalten. Private Prüfstände und neue Schreibvorgänge
-bleiben revisions-/hash-/ordnergebunden geschützt. Neue Anonymisierungsstände enthalten die
-Markdown-Dateien und den getrennten Unterordner **Vertraulich** mit
-**Dateizuordnung.csv**, **Pseudonym-Zuordnung.txt** und **Pseudonym-Zuordnung.xlsx**. Nur gewünschte
-MD weitergeben, nicht Vertraulich oder zusätzliche OS-Metadaten. Es erfolgt kein Upload, und
-die Ergebnisse sind nicht auf KI-Nutzung beschränkt. Reine Konvertierung anonymisiert nicht.
+**Dokumente lokal in Markdown umwandeln – auf Wunsch anonymisiert.**
+DataSecure arbeitet offline. Originaldateien bleiben unverändert; die Anwendung
+lädt keine Dokumente hoch. Die Standalone-App benötigt weder Claude noch eine
+KI-Anbindung. Fertige Markdown-Dateien lassen sich mit Menschen oder anderen
+Werkzeugen verwenden.
 
-**Neu in RC176:** Getaggte PDF-Struktur und begrenzte TIFF-Codecs/Orientierungen
-sowie zusätzliche gespeicherte Word-/Excel-/PowerPoint-Inhalte verbessern den
-Dokumentkontext. Sensible Feldwerte bleiben auch nach dem Maskieren ihrer
-Beschriftung und einer späteren Nachbearbeitung quellgebunden geschützt.
-Historische Texte können privat lesbar bleiben, ohne dadurch eine neue Freigabe
-oder Exportberechtigung zu erhalten. Keine Formel-/Makroausführung, automatische
-Reparatur beliebiger Altprofile oder universelle Renderingtreue.
+**[Aktueller Windows-/Mac-Teststand: RC176 herunterladen](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc176)**
 
-**Aus RC175 beibehalten:** Unterstützte moderne chartEx-Diagramme werden über tatsächlich
-gebundene gespeicherte Daten-ID-/Dimensions-/Level-/Punktcaches gelesen. Keine
-externen Workbook-/Geodatenloads, Berechnung von Statistik/Karten oder universelle
-Diagramm-/Renderingtreue. Fehlende/unmodellierte Inhalte bleiben ehrlich erkennbar.
+| Aufgabe | Was die Standalone-App macht |
+| --- | --- |
+| Nur umwandeln | Text und unterstützte Dokumentstrukturen als lesbares Markdown bereitstellen. Dieser Modus anonymisiert nicht. |
+| Umwandeln und anonymisieren | Personen-, Unternehmens- und weitere sensible Angaben prüfen und ersetzen; selbst entscheiden oder automatisch maskieren. |
+| OCR | Text aus ausgewählten Scans und Grafiken lokal erkennen. OCR kann Zeichenfehler und Auslassungen enthalten. |
+| Nachbearbeiten | Original und Ergebnis vergleichen, zusätzliche Stellen exakt maskieren und einen neuen vollständigen Ergebnisstand speichern. |
+| Ergebnisse verwenden | Nach den erforderlichen Prüfungen direkt den Ergebnisordner öffnen. Keine zweite Dateiauswahl, Dokumentfreigabe oder Exportbestätigung im normalen Ablauf. |
 
-**Aus RC174 beibehalten:** Quellgebundene klassische Diagrammreihen/Punktindizes und
-Excel-Diagrammblätter sowie gespeicherte passive PDFformular-/Anmerkungswerte
-ergänzen beide Markdown-Ausgabemodi. Unterstützte native Word-/PowerPoint-
-OfficeMath wird im Inhaltsmodus als lesbare Formelstruktur dargestellt.
-Keine Formelberechnung, externen Workbookloads, PDFaktionen oder XFAausführung.
-Zusätzlich: gültiges altes Word-`w:hMerge`, BOM-markiertes UTF16,
-Excel-Xstring/Formelcache, präzise PowerPoint-Namespaces und statische PNGvarianten.
-Sehr breite reguläre Diagrammstrukturen werden innerhalb derselben bestehenden
-Budgets ohne internen Argumentlimitfehler gelesen.
+Unterstützte Eingaben sind **PDF, DOCX, XLSX, PPTX, TXT, Markdown, CSV sowie
+PNG, JPEG und BMP**. In Office-Dateien werden zusätzlich unterstützte eingebettete
+Raster- und Vektorgrafiken verarbeitet. Text, Tabellen, SmartArt, Diagramme,
+gespeicherte Formelwerte, unterstützte Office-Formeln und passive PDFformularwerte
+werden je nach vorhandenem Quellmodell übernommen. Formeln, Makros, PDFaktionen
+und externe Verknüpfungen werden nicht ausgeführt oder nachgeladen.
 
-Aus RC173 beibehalten: unterstützte komplexe Word-, Excel- und PowerPoint-
-Tabellen werden im Inhaltsmodus quellbezogen normalisiert. Geschützte unklare
-Feldreste erhalten `[FIELD_REDACTED]`, keine erfundene Personenidentität.
-Die unabhängige Restprüfung gilt auch nach Nachbearbeitung/Beibehalten.
-Schutz-/Quell-/Guard-/Protokoll-/Ressourcenfehler bleiben konkrete Grenzen.
-SmartArt-/Bildkontext, Excel-Kommentare/Anzeigewerte, PDF-/OCR-Verbesserungen
-und begrenzte Grafikdecoder bleiben erhalten. Kein universeller
-Office-Renderer oder Artefaktfreiheitsversprechen; unmodellierte chartEx-Dashboards
-und weitere Spezial-/Legacy-Modelle bleiben konkrete Restabdeckung.
-[RC176-Umfang, Grenzen und Prüfstand](docs/acceptance/RC176_SHARED_RELEASE_20261024.md).
-[Weiterer Ziel-/Rendererreview und Folgepakete](docs/acceptance/GOAL_COVERAGE_REVIEW_20261024.md).
+**Grenzen sichtbar machen:** Ein nicht unterstütztes Bild soll den unabhängig
+lesbaren übrigen Dokumentinhalt nicht verwerfen. Teilabdeckung wird mit einem
+Hinweis kenntlich gemacht. Verschlüsselte, beschädigte oder nicht sicher
+verarbeitbare Quellen können weiterhin dateibezogen ausfallen. Komplexe Layouts,
+Spezialgrafiken und OCR werden nicht universell originalgetreu wiedergegeben.
+Ergebnisse vor der Verwendung inhaltlich prüfen.
 
-**Aus RC169 beibehalten:** Das erste Excelblatt **Zuordnungen** enthält dieselben
-Pseudonym-/Typ-/Originalwert-/Vorkommenszuordnungen wie die TXT, zusätzlich den
-Dateikontext. Genau eine Zeile pro TXT-Eintrag; numerische Vorkommen werden nicht
-je Schreibvariante vervielfacht oder über gleichlautende Marker verschiedener
-Dokumente erfunden. Übersicht/Hinweise, bisherige Detailblätter und ggf.
-verlustfreie Langwerte stehen dahinter.
+Anonymisierte Ergebnisse enthalten zusätzlich **Vertraulich/Dateizuordnung.csv**,
+**Vertraulich/Pseudonym-Zuordnung.txt** und **Vertraulich/Pseudonym-Zuordnung.xlsx**.
+Das erste Excelblatt enthält dieselben Zuordnungen und Vorkommen wie die TXT.
+**Vertraulich enthält Originalangaben und gehört nicht zur Weitergabe.**
+Fertige MD-/CSV-/TXT-/XLSX-Arbeitskopien dürfen manuell bearbeitet werden. Eine
+spätere Appkorrektur erstellt einen neuen Ordner aus der privaten Basis und
+überschreibt keine von Hand geänderten Ergebnisse.
 
-Fertige Ergebnisdateien sind bearbeitbare Arbeitskopien: MD/CSV/TXT/XLSX dürfen
-manuell gespeichert, ersetzt, ergänzt oder gelöscht werden. Office-Locks und
-Datei-ctime allein blockieren das normale Ordneröffnen nicht mehr. Private
-Abschlussbelege und ursprüngliche Zielordnerbindung bleiben geschützt; fehlende
-oder ersetzte Ordner sind neutral nicht verfügbar, keine Wiederanlage.
-Externe Edits werden nicht importiert: eine neue Appkorrektur erzeugt aus der
-privaten Basis einen neuen Ordner und überschreibt keine bearbeitete Arbeitskopie.
+RC176 für Windows und beide Macs stammt aus demselben geprüften Appcommit
+`706c1fad6fbf26bf6745768c0d6a5bd4fc48040b` (Build `706c1fad`).
+Automatische Regressionen, native Build-/Konverterprüfungen und unabhängige
+Quellen-/Paketreviews sind abgeschlossen. Die Desktopabnahme und echte
+Office-/Finder-/TCC-/VoiceOver-/Zielhosttests bleiben bei den Testenden.
+Es ist ein **Beta-/Test-Pre-Release, keine Produktionsfreigabe**.
+[Genauer Umfang und Nachweise](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/blob/v3.2.0-rc176/docs/acceptance/RC176_SHARED_RELEASE_20261024.md).
+Die Verbesserungen aus dem anschließenden großen Nutzerlauf werden für RC177
+entwickelt; RC177 ist noch nicht veröffentlicht.
 
-Weiter enthalten: rechts exakt markieren, Vorschau prüfen, einmal **Maskierung
-speichern**, mit gebundenen CRLF/LF/CR-/UTF-16-Positionen. Nur anonymisierte
-Erst-/neue Korrekturstände erhalten die drei vertraulichen Begleitdateien.
-**Vertraulich enthält Originalangaben: nicht weitergeben oder hochladen.**
-Alte Workbookbytes werden beim Lesen/No-op nicht neu erzeugt oder umbenannt.
-[Umsetzung und Prüfstand](docs/acceptance/RC169_SHARED_RELEASE_20261020.md).
-
-Für RC176 bestanden 318 Haupttestdateien, elf Zusatzprüfungen, Windows-Native-/
-300Rust-/Node-Rust-/Paketgates,38PDF/75Worker/55Office/43Grafik/21passivePDF sowie beide
-nativen Mac-Consumer desselben Appcommits (je73Worker+2Windows-SKIP/283Rust+3ignoriert).
-Je133chartEx-Fälle und tatsächliche unabhängige Quellen-/Log-/Archivgegenreviews.
-Neue semantische Receipts je Target:116Chart/58Math/55MathSource/20MathIntegration/21passivePDF.
-Alle 20 veröffentlichten Dateien wurden vor und nach Publikation frisch
-heruntergeladen und gegen ihre Prüfsummen kontrolliert. Die eigene statische
-Mac-Core-Rolle und die offizielle Konverterruntime bleiben getrennt hashgebunden;
-keine Developer-ID/Notarisierung oder Abschaltung von OS-Schutzfunktionen.
-
-Die Desktoptests macht der Nutzer/Kollege selbst. Echte Excel-/Numbers-,
-Finder-/Gatekeeper-/TCC-/M2-/VoiceOver-/macOS-26-Zielhostabnahmen bleiben offen.
-Workbookreader-Proben sind kein universeller nativer Office-Gleichheitsnachweis.
-Manuelle Bearbeitung ist erlaubt; vertrauliche Zuordnungen bleiben auch nach
-Bearbeitung vertraulich. Belege beschreiben den ursprünglich von der App
-bereitgestellten Stand, nicht externe Änderungen.
-RC176 ist ein Teststand mit synthetischen Daten, keine Produktionsfreigabe.
-[Exakte Nachweise und Prüfsummen](docs/RELEASE.md).
-
-Das getrennte [Cowork-Plugin bleibt auf RC151](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc151),
-aus Quellcommit `fdb8288c9bef2a64eeb10d584e1bf59a6cb864c3`. Seine Downloads
-werden durch den Standalone-Release nicht ersetzt. Menschliche N3/N4-,
-macOS-/Linux-Installations-, Accessibility- und Cowork-Modellabnahmen bleiben
-eigene Nachweise; die Vorabkandidaten sind keine pauschale Produktionsfreigabe.
-
-Die Überschrift nennt zwei getrennte Produkte. Auch bei gleicher RC-Nummer
-bleiben ihre Pakete und Abnahmen getrennt. Ein neuer Quellstand aktualisiert
-bestehende Downloads nicht automatisch.
-
-Frühere Kandidaten und ihre unveränderten Nachweise sind im
-[Releasevertrag](docs/RELEASE.md) dokumentiert.
-
-DataSecure de-identifiziert lokale Geschäftsdokumente, bevor Claude deren Inhalt
-verwendet. Originale werden über einen Betriebssystemdialog gewählt, nur lesend
-verarbeitet und niemals automatisch verändert oder gelöscht. Claude erhält nur
-freigegebene Markdown-Ergebnisse.
+Linux bleibt beim getrennten [RC159-Paket](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc159)
+(Quellcommit `7af2a9d0268864a01b954e0175cae9f5a3616fe8`). Das getrennte
+[Cowork-Plugin bleibt auf RC151](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc151)
+(Quellcommit `fdb8288c9bef2a64eeb10d584e1bf59a6cb864c3`). Deren Downloads und
+Abnahmen werden durch einen neuen Windows-/Mac-Standalone-Release nicht ersetzt.
 
 ## Standalone-App installieren (Windows, macOS und Linux)
 

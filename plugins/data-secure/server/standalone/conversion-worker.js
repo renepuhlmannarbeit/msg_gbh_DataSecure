@@ -11,6 +11,7 @@ const { createMarkdownExtraction, validateMarkdownExtractionForOptions, exactKey
 const { validateContentOptions, serializeContentOptions } = require('../core/content-options');
 const { SOURCE_TYPES, ERROR_CODES, MAX_INPUT_BYTES } = require('../core/conversion-worker-contract');
 const { CheckpointStream, MAX_RESPONSE_BYTES } = require('./conversion-checkpoints');
+const { createConversionTimingStream } = require('../core/conversion-timing-contract');
 const ERROR_SET = new Set(ERROR_CODES);
 const DEFAULT_TIMEOUT_MS = 300_000;
 const TERMINATION_GRACE_MS = 1500;
@@ -131,16 +132,25 @@ async function convertBuffer(bytes, extension, options = {}) {
       env: environment, stdio: ['pipe', 'pipe', 'pipe'], shell: false, windowsHide: true }); }
     catch (failure) { reject(error(conversionStartFailureCode(failure, invocation.command))); return; }
     const chunks = [];
+    const timingStream = createConversionTimingStream(type);
     // Only the new Standalone Office/PDF path can produce partial units.
     // Legacy/plugin and standalone raster/Markdown responses stay unchanged.
     const checkpointStream = contentOptions && ['docx', 'xlsx', 'pptx', 'pdf'].includes(type)
       ? new CheckpointStream(type, contentOptions) : null;
-    let size = 0, stderrSize = 0, stopped = null, closed = false, settled = false, inputFlushed = false, grace;
+    let size = 0, stopped = null, closed = false, settled = false, inputFlushed = false, grace, closedMetrics = null;
     const finish = (failure, result) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer); clearTimeout(grace);
       abortSignal?.unsubscribe(abort);
+      // The worker exit fact is separate from the now-known conversion result.
+      // Persist only after actual close and final protocol/input/error checks;
+      // a diagnostic exception cannot replace the original resolve/reject.
+      try {
+        if (closed && closedMetrics) require('../gateway/workflow-diagnostics').recordWorkflowEvent({ event: 'conversion_worker_closed',
+          outcome: failure ? 'stopped' : 'ok', phase: 'content_extract', item_count: 1,
+          duration_ms: closedMetrics.worker_total_ms, metrics: closedMetrics });
+      } catch { /* best effort, fixed numeric diagnostics only */ }
       if (failure) reject(error(failure)); else resolve(result);
     };
     const stop = code => {
@@ -190,10 +200,20 @@ async function convertBuffer(bytes, extension, options = {}) {
       chunks.push(chunk);
     });
     // Drain vendor diagnostics, never return/persist raw document text or paths.
-    child.stderr.on('data', chunk => { stderrSize += chunk.length; if (stderrSize > 64 * 1024) stop('CONVERSION_OUTPUT_LIMIT'); });
+    child.stderr.on('data', chunk => {
+      timingStream.push(chunk);
+      if (timingStream.exceededBudget()) stop('CONVERSION_OUTPUT_LIMIT'); });
     child.stdin.on('error', inputFailure);
     child.once('close', code => {
       closed = true;
+      // A final canonical metric has its own fixed line reserve. All invalid,
+      // mismatched or incomplete frames count fully as opaque vendor stderr.
+      // A newly proven hard overflow outranks a pending recoverable timeout,
+      // while an earlier hard fault/cancellation keeps its original priority.
+      try {
+        closedMetrics = timingStream.close(code);
+        if (timingStream.exceededBudget() && (!stopped || stopped === 'CONVERSION_TIMEOUT')) stopped = 'CONVERSION_OUTPUT_LIMIT';
+      } catch { /* unavailable diagnostics never replace a product result */ }
       // A launcher that cannot start its parser can close stdin first (EPIPE).
       // Keep the confirmed inner OS fact instead of hiding it behind that
       // secondary incomplete-input symptom; deliberate cancellation still wins.

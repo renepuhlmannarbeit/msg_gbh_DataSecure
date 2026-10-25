@@ -1,5 +1,19 @@
 # RC176 – priorisierte Inhalts- und Grafikverbesserungen
 
+## Nachfolgender echter Nutzerlauf: offene Inhaltskorrekturen · 25.10.2026
+
+Der veröffentlichte Testkandidat bleibt unverändert. Sein tatsächlicher
+Nur-Markdown-Lauf77008b67 wurde mit119Originalen/114MD/fünfStopps unabhängig
+gegengelesen. Drei Schutzfälle sind plausibel; zwei XLSX mit lesbaren Zellen
+werden durch typisierte `_x0002_`-Werte vollständig verworfen und irreführend
+als OCR-leer gemeldet. Weitere bestätigte Restarbeit betrifft SmartArt-
+Gruppierung, PDF-OCR-Dopplung/Spalten, kleine Bildtexte und präzise Medienhinweise.
+Native Text-/Zellanwesenheit ist stark belegt, aber keine vollständige Semantik-
+oder Anonymisierungsabnahme. Die alten automatisierten PASSs widerlegen die
+neuen echten Gegenfälle nicht. BL-049.3/BL-047.2–.7 und konkrete Umsetzung:
+[Laufvergleich und Performance-Backlog](RC176_RUN_COMPARISON_AND_PERFORMANCE_BACKLOG_20261025.md).
+Noch keine neue Produktimplementierung, Version, Automation oder Desktopsteuerung.
+
 ## RC176-Source13 als Testkandidat veröffentlicht · 25.10.2026
 
 Gemeinsamer App-/Tagcommit706c1fad6fbf26bf6745768c0d6a5bd4fc48040b,

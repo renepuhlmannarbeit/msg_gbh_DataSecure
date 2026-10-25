@@ -1,4 +1,62 @@
-# Aktives Entwicklungsbacklog · 3.2.0-rc176
+# Aktives Entwicklungsbacklog · 3.2.0-rc177
+
+## RC177 beauftragt und in Umsetzung · 25.10.2026
+
+Der nachfolgende Nutzerauftrag autorisiert jetzt die priorisierten Korrekturen
+für Windows und beide Macs, unabhängige Fachreviews/Tests sowie RC177 als neuen
+Test-Pre-Release und Windows-ZIP lokal mit Plan. Desktoptests bleiben beim Nutzer;
+keine neue Automation oder Main-Produktintegration. README-Startseite ebenfalls
+aktualisieren, tatsächlich verfügbare Downloads von laufender Entwicklung trennen.
+Der ältere reine Analysestand unten bleibt als Beleg erhalten. BL-049.3 und die
+begrenzten OCR-/Budget-/Messanteile BL-047.3/.4/.6/.7 sind **in Arbeit**, nicht
+abgenommen. Allgemeiner persistenter Cache und paralleles processBatchNext
+bleiben nach Messung zurückgestellt. Einzelumfang und Freigabekette:
+[RC177](../acceptance/RC177_SHARED_RELEASE_20261025.md).
+
+26.10.2026: Begrenzte Format-/Labelkorrekturen integriert und unabhängig
+gegengelesen; ursprüngliche Excel-/SmartArt-/SVG-/PDF-Gegenfälle korrigiert.
+Erste native Windows-Konvertersuite PASS/stabil. Letzter Diagnose-Framingrand
+bei65536Vendorbytes ohneLF eng behoben und unabhängig mit92Fokus-/15Core-
+und44zusätzlichen Proben gegengeprüft, keine Budget-/Deadlineänderung.
+Gemeinsamer Freeze/Endgates/Pakete/Macs/Übergabe weiterhin offen.
+README-Maincommit4170c683bded197201377ebd4985b7930aa5c973 und dessenCI
+40242216266 tatsächlich grün, ausschließlich Dokumentation/kein Produktmerge.
+BL-049.3 bleibt in seiner breiteren Restabdeckung offen: komplexe PDF-Clips/
+Forms, schwierige Scan-/Tabellenlayouts, QR-/Foto-/Unterschrift-OCR und
+SVG2-use-href-Backendgrenze sind keine universell gelösten Formatfälle.
+
+## Neuer Nutzerlauf und Performance-Folgearbeit · 25.10.2026
+
+Nach Veröffentlichung beauftragter tatsächlicher Laufvergleich, keine neue
+Produktimplementierung oder Version. Der große Markdownlauf `77008b67` hat
+119 Eingaben, 114 bytegebundene MD-Ergebnisse und fünf Stopps. Drei Eingaben
+sind strukturell verschlüsselt/rechteverwaltet; zwei unverschlüsselte XLSX
+verlieren lesbare Zellen durch die ST_Xstring-/XML-Zeichengrenze und melden
+irreführend leere OCR. Weitere Folgearbeit: PDF-OCR-Dopplungen, SmartArt-
+Eltern-/Kindzuordnung, Spalten-/Zellbezüge, kleine Grafiktexte, präzisere
+Medien-/Limitdiagnosen und stabile Quellordnerlabels.
+
+Die fünf Performancepunkte sind einschließlich Revalidierung von Punkt 1
+festgehalten. Neun bytegleiche Zusatzvorkommen kosten hier nur etwa 7,7 Sekunden
+Konvertierung (0,38 %); der getrennte Prozessweg bleibt zunächst bestehen.
+Ein privater neutraler Zwischenstand für den späteren Zweckwechsel ist eine
+gesonderte Design-/Messaufgabe, keine Wiederverwendung fertiger MDs oder Rechte.
+Konkrete Lösungen, Abnahmebedingungen und Primärquellen:
+[RC176-Laufvergleich und Performance-Backlog](../acceptance/RC176_RUN_COMPARISON_AND_PERFORMANCE_BACKLOG_20261025.md).
+Private Original-/MD-/Protokollbelege bleiben ignoriert und lokal. Bisherige
+RC176-Tests widerlegen die neuen Befunde nicht. Windows und beide Macs sind
+Ziel der späteren Umsetzung; jetzt keine Builds, Desktopübernahme, Automation,
+Mainintegration oder Applefreigabe.
+
+| ID | Konkrete Folgeaufgabe | Status |
+| --- | --- | --- |
+| BL-049.3 | Tatsächlichen Mehrformatvergleich als Regression bewahren und bestätigte Inhaltsverluste/-zuordnungen korrigieren: zwei XLSX-ST_Xstring-Stopps zuerst; danach SmartArt-Graph, PDF-Spalten/Dopplungen, kleine Bildtexte, statische SVG-Teilmenge, präzise Diagnose und stabile Quelllabels. Keine pauschale Zeichenlöschung, Schutzlockerung oder universelle Formatgarantie; Einzelabnahmen im verlinkten Plan. | **offen** |
+| BL-047.2 | Punkt 1: neutrale Extraktion zwischen Aufträgen nur nach belegtem Nutzen und vollständiger Quell-/Options-/Modell-/Policy-/Profilbindung wiederverwenden. Erste Dateiisolierung beibehalten; öffentliche Arbeitskopien, Entscheidungen und ACKs sind keine Cacheautorität. Neun Duplikate allein rechtfertigen hier keinen allgemeinen Cache. | **offen** |
+| BL-047.3 | Punkt 2: PDF-OCR-Planung auf tatsächlich zusätzlich texttragende Bereiche verfeinern. Logo/Vektorrahmen nicht ohne Abdeckungsprüfung mit unnötiger Vollseitenarbeit beantworten; Suchtexte und echte Bild-/Vektortexte erhalten. | **offen** |
+| BL-047.4 | Punkt 3: PDF-Paint-/Wortproben und OCR-Dopplungsvermeidung gemeinsam optimieren. Weniger vollständige Render-/Pixelvergleiche bei gleicher belegter Unterdrückungsqualität; reale Dopplungsgegenfälle und Budgeterschöpfung prüfen. | **offen** |
+| BL-047.5 | Punkt 4: nach Unterzeit-/Speichermessung begrenzte parallele Konvertervorbereitung bewerten, zunächst höchstens zwei unabhängige Quellen. Laufweite Pseudonyme, Ownership, Journal und Bereitstellung geordnet; kein paralleles processBatchNext. | **offen** |
+| BL-047.6 | Punkt 5: verlustfreie Rasterzwischenstufen und wiederholte Manifest-/Statusrekonstruktion messen und begrenzt zusammenlegen. Exakte Pixel/Positionen, Frische und dauerhafte Commitgrenzen erhalten; keine globale Freigabecache oder pauschale Fsync-Reduktion. | **offen** |
+| BL-047.7 | Voraussetzung: inhaltsfreie Unterzeiten/Zähler für Worker, Modelle, native Extraktion, Struktur, Renderproben, Hauptraster, OCR, Refinement, Transport und Abschluss. Gleichen Korpus kalt/warm mit Inhaltserhalt, Artefakten, Zeit und Peak-RAM vergleichen; keine Beschleunigungszusage. | **offen** |
 
 25.10.2026 abgeschlossen bis zum RC176-Testkandidaten: gemeinsamer706c1fa,
 ProduktFP407cb285…1683d3, alle vier lokalen Endgates und beideMacs40219039035
@@ -2191,7 +2249,7 @@ in dieselbe Korrekturrunde.
 
 ## Historische Nachweise bis R4 (kein aktueller R5-Abschluss)
 
-Stand: 17.10.2026 · Produktstand 3.2.0-rc176 · veröffentlicht Standalone RC162 (Windows und beide Mac-Architekturen; M2-Abnahme offen), Linux RC159 / Cowork RC151 · lokaler Arbeitsstand nach RC162 noch nicht veröffentlicht
+Stand: 17.10.2026 · Produktstand 3.2.0-rc177 · veröffentlicht Standalone RC162 (Windows und beide Mac-Architekturen; M2-Abnahme offen), Linux RC159 / Cowork RC151 · lokaler Arbeitsstand nach RC162 noch nicht veröffentlicht
 
 ## Gezielter R3-Abschlussreview
 

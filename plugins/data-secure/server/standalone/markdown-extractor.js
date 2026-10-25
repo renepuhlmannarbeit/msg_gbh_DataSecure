@@ -122,7 +122,7 @@ function extractMarkdownAndMedia(buffer, extension, options = {}, referencedImag
       if (options.omitDocxHeaderFooter === true) reasons.add('DOCX_HEADER_FOOTER_EXCLUDED_BY_POLICY');
       if (parsed.warnings.length || source_type === 'xlsx' || source_type === 'pptx') reasons.add('SOURCE_COVERAGE_UNVERIFIED');
       for (const warning of parsed.warnings) {
-        if (['DOCUMENT_PARTS_DAMAGED', 'EXTERNAL_CONTENT_NOT_READ', 'IMAGE_PROCESSING_LIMIT', 'TEXT_LIMIT_PARTIAL','OFFICE_TABLE_CONTEXT_UNVERIFIED','OFFICE_TABLE_LAYOUT_NORMALIZED'].includes(warning)) reasons.add(warning);
+        if (['DOCUMENT_PARTS_DAMAGED', 'EXTERNAL_CONTENT_NOT_READ', 'IMAGE_PROCESSING_LIMIT', 'TEXT_LIMIT_PARTIAL','OFFICE_TABLE_CONTEXT_UNVERIFIED','OFFICE_TABLE_LAYOUT_NORMALIZED','XLSX_CONTROL_CHARACTERS_PROJECTED'].includes(warning)) reasons.add(warning);
       }
       // An automatically generated omission notice is not a source section.
       // Only the worker's media entrance may still recover actual image text

@@ -207,7 +207,11 @@ jobs:
           set -euo pipefail
           node tests/test-import-macos-core-candidate.mjs
           node tests/test-partial-conversion.js
+          node tests/test-conversion-timings.js
           node tests/test-office-diagrams.js
+          node tests/test-smartart-hierarchy.js
+          node tests/test-xlsx-xstring-content.js
+          node tests/test-pdf-ocr-layout-mode.js
           node tests/test-office-occurrences.js
           node tests/test-office-image-geometry.js
           node tests/test-presentation-comments.js

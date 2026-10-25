@@ -1,6 +1,15 @@
 # Aktuelle Format-Coverage
 
-Arbeitsquelle: 3.2.0-rc176 Entwicklung · 24.10.2026; RC175 veröffentlicht/unverändert.
+Arbeitsquelle: 3.2.0-rc177 Entwicklung · 26.10.2026; RC176 veröffentlicht/unverändert.
+
+RC177 ergänzt typisierte Excel-ST_Xstring-Zellprojektion mit konservativem
+Quellfeldschutz, geordnete SmartArt-Datenbäume mit getrennten Zusatztexten,
+geschlossene statische SVG-Stile, exakt belegte native PDF-Wortregionen und
+begrenzte OCR-/Medienplanung. Gezielte Gegenreviews und Vorabtests sind erfolgt;
+gemeinsame Endpakete und Nutzer-Desktoptests noch offen.
+[Aktueller Plan und ehrliche Qualitätsgrenzen](acceptance/RC177_SHARED_RELEASE_20261025.md).
+
+## Historischer RC176-Entwicklungsstand
 
 RC176-Erweiterungen sind in Arbeit und noch nicht durch neue gemeinsame
 Windows-/Mac-Endpakete belegt. [Plan, konkrete Gegenbefunde und Grenzen](acceptance/RC176_SHARED_RELEASE_20261024.md).

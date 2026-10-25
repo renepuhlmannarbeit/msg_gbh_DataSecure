@@ -29,6 +29,11 @@ if (!target) throw new Error('CONVERSION_TEST_HOST_UNSUPPORTED');
 // Resolve target-native fixture dependencies only after the explicit host gate.
 const { office, passivePresentation, literalSupplementPresentation, image, pdf, encryptedPdf, text } = await import('./helpers/conversion-fixtures.mjs');
 const scope = fs.mkdtempSync(path.join(repo, '.tmp-standalone-package-conversion-'));
+const originalDiagnosticEnvironment = new Map(['EU_PRIVACY_DATA_ROOT','EU_PRIVACY_ROOT','EU_PRIVACY_RESULT_ROOT']
+  .map(key=>[key,process.env[key]]));
+process.env.EU_PRIVACY_DATA_ROOT=path.join(scope,'diagnostic-data');
+process.env.EU_PRIVACY_ROOT=path.join(scope,'private');
+process.env.EU_PRIVACY_RESULT_ROOT=path.join(scope,'results');
 const server = path.join(scope, 'server');
 const runtime = path.join(server, 'standalone', 'conversion-runtime');
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
@@ -138,6 +143,21 @@ try {
     assert.throws(() => writeConversionRuntime(repo, runtime, target), /CONVERSION_PACKAGE_DESTINATION_EXISTS/u);
   });
   const { convertBuffer, conversionStartFailureCode, nativeConversionExitCode } = require(path.join(server, 'standalone', 'conversion-worker.js'));
+  await test('actual closed native worker emits one content-free diagnostic without changing success or hard errors',async()=>{
+    const { _test:{readWorkflowEvents} }=require(path.join(server,'gateway/workflow-diagnostics.js'));
+    const events=()=>readWorkflowEvents().filter(row=>row.event==='conversion_worker_closed');
+    const before=events().length, source=Buffer.from('PRIVATE TIMING SENTINEL FHIR');
+    const result=await convertBuffer(source,'.txt',{contentOptions:{schema:'datasecure-content-options/1',markdownOutput:'content-v1',scanOcr:false,imageOcr:false}});
+    assert.match(result.markdown,/PRIVATE TIMING SENTINEL FHIR/u);
+    const after=events();assert.equal(after.length,before+1);
+    assert.equal(after.at(-1).metrics.source_type,'txt');assert.equal(after.at(-1).metrics.outcome,'ok');
+    assert.ok(after.at(-1).metrics.counts.native_extract>=1);
+    assert.doesNotMatch(JSON.stringify(after),/PRIVATE TIMING SENTINEL|sourcePath|png_base64/u);
+    await assert.rejects(convertBuffer(Buffer.from('PRIVATE TIMING SENTINEL\u0000FHIR'),'.txt'),{code:'TEXT_CONTROL_INVALID'});
+    const errors=events();assert.equal(errors.length,before+2);
+    assert.equal(errors.at(-1).metrics.outcome,'error');assert.equal(errors.at(-1).outcome,'stopped');
+    assert.doesNotMatch(JSON.stringify(errors),/PRIVATE TIMING SENTINEL|sourcePath|png_base64/u);
+  });
   await test('actual isolated worker preserves saved Word field boundaries, final revisions and source-bound list context',async()=>{
     const {wordFields}=require('./lib/rc176-office-context.cjs'),source=wordFields(),before=hash(source);
     const out=await convertBuffer(source,'.docx',{contentOptions:{schema:'datasecure-content-options/1',markdownOutput:'content-v1',scanOcr:false,imageOcr:false}});
@@ -1459,5 +1479,6 @@ try {
   try { await Promise.race([Promise.all(children.map(entry => entry.done)), new Promise((_, reject) => {
     timer = setTimeout(() => reject(new Error('CONVERSION_TEST_CLEANUP_UNCONFIRMED')), 6000);
   })]); } finally { clearTimeout(timer); }
+  for(const [key,value] of originalDiagnosticEnvironment){if(value===undefined)delete process.env[key];else process.env[key]=value;}
   removePackageSmokeScope(repo, scope);
 }

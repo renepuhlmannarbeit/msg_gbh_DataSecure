@@ -6,6 +6,8 @@
 const { RESOURCE_LIMITS } = require('../resource-limits');
 const { MAX_IMAGE_BYTES, MAX_PIXELS } = require('../images/common');
 const { createMarkdownExtraction, MAX_MARKDOWN_CHARS } = require('./markdown-contract');
+const { inspectOfficeVisual } = require('./office-visual-decoder');
+const { officeVisualOmission } = require('./office-visual-omission');
 const TYPES = Object.freeze({ png: ['png', 'image/png'], jpg: ['jpeg', 'image/jpeg'],
   jpeg: ['jpeg', 'image/jpeg'], bmp: ['bmp', 'image/bmp'] });
 const VISUAL_TYPES=Object.freeze({svg:'image/svg+xml',gif:'image/gif',tif:'image/tiff',tiff:'image/tiff',webp:'image/webp',emf:'image/x-emf',wmf:'image/x-wmf'});
@@ -116,11 +118,20 @@ function preparePartialOfficeImagePlan(attachments) {
         if (bytes.toString('base64') !== attachment.data || !bytes.length) fail('CONVERSION_IMAGE_INVALID');
         if (bytes.length > MAX_IMAGE_BYTES || totalBytes + bytes.length > RESOURCE_LIMITS.MAX_ASSET_BYTES) fail('INPUT_FORMAT_LIMIT');
         totalBytes += bytes.length;
-        const size = pair?imageSize(bytes, pair[0]):{};
+        let size;
+        if(pair)size=imageSize(bytes,pair[0]);
+        else {
+          const inspected=inspectOfficeVisual(bytes,attachment.extension);
+          // Multi-frame formats retain their decoder's aggregate allocation;
+          // do not mistake one frame for the work of the whole asset.
+          size=inspected.pages||inspected.frames?{}:{width:Math.ceil(inspected.width),height:Math.ceil(inspected.height)};
+        }
         plan.push({ type: pair?pair[0]:attachment.extension, visual:!pair, bytes, ...size, ordinal,
           occurrences:attachment.occurrences });
         bytes = undefined;
       } catch (cause) {
+        if(visual){const reason=officeVisualOmission(cause?.code,attachment.extension);
+          if(reason){plan.push({ordinal,reason});continue;}}
         if (!['CONVERSION_IMAGE_INVALID', 'CONVERSION_PIXEL_LIMIT', 'INPUT_FORMAT_LIMIT'].includes(cause?.code)) throw cause;
         plan.push({ ordinal, reason: cause.code === 'CONVERSION_IMAGE_INVALID' ? 'IMAGE_CONTENT_DAMAGED' : 'IMAGE_PROCESSING_LIMIT' });
       } finally { bytes?.fill(0); }
@@ -133,6 +144,18 @@ function preparePartialOfficeImagePlan(attachments) {
       const done=new Set(small);
       for(const item of small){item.ocrPixels=Math.min(MAX_PIXELS,item.width*item.height||MAX_PIXELS);remaining-=item.ocrPixels;}
       pending=pending.filter(item=>!done.has(item));
+    }
+    const readable=plan.filter(item=>!item.reason);
+    const fullCost=readable.reduce((sum,item)=>sum+(item.width*item.height||MAX_PIXELS),0);
+    // Spend only genuinely spare document work after every asset has its full
+    // native raster. Enlarging a small bitmap must never downsample another
+    // source image or raise the existing total/per-decoder resource boundary.
+    let spare=MAX_OFFICE_OCR_PIXELS-fullCost;
+    if(spare>0)for(const item of readable){
+      const area=item.width*item.height;
+      if(item.visual||!Number.isSafeInteger(area)||area>750000||Math.max(item.width,item.height)>1500)continue;
+      const extra=area*3;
+      if(extra<=spare&&area*4<=MAX_PIXELS){item.ocrScale=2;item.ocrPixels=area*4;spare-=extra;}
     }
     return plan;
   } catch (cause) { for (const item of plan) item.bytes?.fill(0); throw cause; }
@@ -205,7 +228,7 @@ function officeOcrLabel(item,label){
   if(geometry){
     // Descriptive source context only. Full-asset OCR is NOT promoted to a
     // composed slide/page viewport or used to discard existing native text.
-    context='Quellgrafik vollständig gelesen; nicht als komponierter Office-Seitenausschnitt gerendert.';
+    context='Ganze Quellgrafik verarbeitet; OCR-Inhalt ungeprüft. Nicht als komponierter Office-Seitenausschnitt gerendert.';
     if(geometry.crop&&[geometry.crop.left,geometry.crop.top,geometry.crop.right,geometry.crop.bottom].some(value=>value!==0))context+=' Das Vorkommen hat einen Quellausschnitt.';
     if(geometry.rotation||geometry.flipH||geometry.flipV)context+=' Das Vorkommen ist gedreht oder gespiegelt.';
     if(geometry.grouped||geometry.compositionUnmodeled)context+=' Gruppierung, Überlagerung oder Form-/Effektdarstellung sind nicht vollständig rekonstruiert.';

@@ -1,6 +1,12 @@
 # Produktvertrag: GBH DataSecure
 
-Stand: 22.10.2026 · 3.2.0-rc176 · Ist-Zustand RC176 (Teilkonvertierung, neuer Test-Pre-Release in Vorbereitung) · Windows/macOS RC170 unverändert veröffentlicht · Linux RC159 · Cowork RC151
+Stand: 26.10.2026 · 3.2.0-rc177 · Ist-Zustand RC177 in Vorbereitung · Windows/macOS RC176 veröffentlicht · Linux RC159 · Cowork RC151
+
+RC177 erweitert begrenzt Excel-Zelltexte, SmartArt-Strukturen, statische SVG-
+Stile und PDF-/Medien-OCR. Gemeinsame Endgates und neue Pakete stehen noch aus;
+Desktoptests übernimmt der Nutzer. Aktueller Umfang und Grenzen:
+[RC177-Abnahmeplan](../acceptance/RC177_SHARED_RELEASE_20261025.md).
+Die folgenden RC170-Angaben sind historische Implementierungsbelege.
 
 RC170 ergänzt die eng passive Zulassung moderner PPTX-Folienkommentare,
 konservative PDF-/OCR-Zeichenhygiene und exakt belegte OCR-Dopplungsentfernung.

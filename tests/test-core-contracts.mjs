@@ -16,7 +16,7 @@ const contracts = [
   ['document-result-grade', 'gateway']
 ];
 const coreRoots = [...contracts.map(([name]) => name), 'batch-result-projection', 'batch-progress',
-  'processing-mode', 'content-options', 'person-field-policy', 'content-ocr-plan', 'private-document-metadata', 'result-naming-mode', 'product-bootstrap', 'source-extraction-contract'];
+  'processing-mode', 'content-options', 'person-field-policy', 'content-ocr-plan', 'private-document-metadata', 'result-naming-mode', 'product-bootstrap', 'source-extraction-contract', 'conversion-timing-contract'];
 const pureFiles = [...coreRoots.map((name) => `core/${name}.js`), 'resource-limits.js'];
 const sources = new Map(pureFiles.map(name => [name, fs.readFileSync(path.join(server, name), 'utf8')]));
 
@@ -170,6 +170,17 @@ test('the pure-leaf guard rejects native I/O and both product composition import
     const isolated = pureLoader(new Map([['core/batch-next-action.js', `require(${JSON.stringify(dependency)});`]]));
     assert.throws(() => isolated.load('core/batch-next-action.js'), /CORE_IMPORT_FORBIDDEN/u);
   }
+});
+
+test('the shared timing parser runs with only ECMAScript data primitives and remains diagnostic-only', () => {
+  const contract = pureLoader().load('core/conversion-timing-contract.js');
+  const record = { schema: contract.SCHEMA, source_type: 'pdf', outcome: 'ok', worker_total_ms: 4,
+    durations_ms: Object.fromEntries(Array.from(contract.STAGES, stage => [stage, 0])),
+    counts: Object.fromEntries(Array.from(contract.STAGES, stage => [stage, 0])) };
+  const stream = contract.createConversionTimingStream('pdf');
+  stream.push(Uint8Array.from(Buffer.from(`${contract.FRAME_PREFIX}${JSON.stringify(record)}\n`)));
+  assert.equal(JSON.stringify(stream.close(0)), JSON.stringify(record));
+  assert.equal(stream.close(0), null); assert.equal(contract.validateConversionTimings(null), null);
 });
 
 test('person field policies are closed pure data and do not globally change legacy labels', () => {

@@ -1,4 +1,41 @@
-# Aktueller Iststand · 3.2.0-rc176
+# Aktueller Iststand · 3.2.0-rc177
+
+25.10.2026, nachfolgender Umsetzungsauftrag: RC177 für Windows und beide Macs
+ist ausdrücklich beauftragt, einschließlich unabhängiger Reviews, automatischer
+Prüfungen, GitHub-Test-Pre-Release und lokaler Windows-ZIP mit Testplan. Die
+Desktoptests übernimmt weiterhin der Nutzer. Keine neue Automation oder
+Main-Produktintegration. README-Startseite ist ebenfalls zur Aktualisierung
+beauftragt und auf Main mit ausschließlich zwei Dokumentdateien umgesetzt:
+4170c683bded197201377ebd4985b7930aa5c973, CI40242216266SUCCESS.
+Main-Produktcode bleibt RC165; Startseite unterscheidet aktuelle RC176-Downloads
+und noch nicht veröffentlichtes RC177.
+
+Excel-/SmartArt-/SVG-/PDF-Implementierung und Quellordnerlabels integriert,
+unabhängig am tatsächlichen Code und begrenzten realen Quellen gegengeprüft.
+Bestätigte Zellschutz-/Zusatztext-/Pixel-/Kontextgegenfälle eng korrigiert;
+alle früheren roten Belege erhalten. Erste echte Windows-Konvertersuite
+PASS/stabil, noch kein finaler Endnachweis. Letzter Diagnose-Framingrand bei
+unterminiertem Vendorstderr eng behoben und unabhängig mit ursprünglichen
+Gegenfällen,92Fokus-/15Core-/44zusätzlichen Proben revalidiert. Keine neuen
+Budgets/Deadlines/Autorisierungen. Noch kein finaler RC177-Commit, Endgate
+oder Paket; nächster Schritt gemeinsamer Freeze. PDF/OCR-Qualitätsgrenzen und teilweise neue Randzeichen
+bleiben ausdrücklich dokumentiert; kein neuer vollständiger119Dateienlauf.
+[Aktueller RC177-Umsetzungs- und Abnahmeplan](../acceptance/RC177_SHARED_RELEASE_20261025.md).
+
+25.10.2026, nachfolgende Nutzerabnahme: tatsächlicher Nur-Markdown-Lauf77008b67
+mit119Eingaben/114MD/fünfStopps unabhängig gegen Originale, Abschlussbelege und
+aktuelle Interaktionslogs gelesen. Drei geschützte Eingaben plausibel, zwei
+unverschlüsselte XLSX mit lesbaren Zellen fälschlich OCR-leer verworfen
+(typisierte ST_Xstring-Steuerzeichen gegen rohe XML-Prüfung). Native geprüfte
+Word-/Excel-/Folien-/PDFtexte weitgehend erhalten; konkrete SmartArt-Gruppierungs-,
+PDF-Dopplungs-/Spalten- und Bildtextmängel bleiben. Keine Anonymisierungsabnahme
+aus diesem Markdownlauf. BL-049.3 und BL-047.2–.7 mit Lösungen und Gegenfällen
+neu offen; Punkt1 nach Messung präzisiert: neun exakte Zusatzduplikate nur7,7s/
+0,38%desKonverterblocks, zunächst getrennte Prozesse erhalten.
+Details: [Laufvergleich und Performance-Folgearbeit](../acceptance/RC176_RUN_COMPARISON_AND_PERFORMANCE_BACKLOG_20261025.md).
+Nur Analyse/Dokumentation, kein Produkt-/Test-/Appcommit-/Tag-/Assetdelta, keine
+neue Version/Automation/Mainintegration/OS-Rechteänderung. Desktoptests Nutzer;
+private Original-/MD-/Protokollbelege nicht nach Git/CI hochladen.
 
 25.10.2026: RC176-Source13 als Test-Pre-Release423600091 veröffentlicht19:07:07UTC.
 App/Tag706c1fad6fbf26bf6745768c0d6a5bd4fc48040b,
@@ -307,7 +344,7 @@ keinRetry/Restore/Profilreset/Ordneridentitätsersatz. GUI05-Neustart NOT_RUN.
 Kein Source07Snapshot, lokalerRC176Ordner, Tag, Release oder Mainintegration.
 Folgende Source06-/ältere Abschnitte sind historische Belege, keine neue Aufgabenliste.
 
-Stand: 25.10.2026 · 3.2.0-rc176 · Source06 vier lokale Endgates grün; tatsächliche Guided-/Auto-GUI-Deltaproben grün. Neuer ARM-Pakettestbefund erfordert engen Testfix und frischen Source07-Gemeinschaftslauf.
+Stand: 25.10.2026 · 3.2.0-rc177 · Source06 vier lokale Endgates grün; tatsächliche Guided-/Auto-GUI-Deltaproben grün. Neuer ARM-Pakettestbefund erfordert engen Testfix und frischen Source07-Gemeinschaftslauf.
 Desktop-/Office-/physischeMac-Abnahme weiterhin USER_PENDING.
 
 ## Neuester tatsächlicher Abschluss03:03UTC: Source06

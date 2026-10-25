@@ -32,8 +32,10 @@ const attachment = (extension, data, index = 0) => ({ type: 'image', extension,
 async function main() {
   await check('closed partial vocabulary is shared, bounded and never authorizes complete coverage', () => {
     assert.deepEqual(contract.COVERAGE_REASON_CODES, neutral.COVERAGE_REASON_CODES);
-    assert.equal(contract.COVERAGE_REASON_CODES.length, 28);
-    assert.equal(new Set(contract.COVERAGE_REASON_CODES).size, 28);
+    assert.equal(contract.COVERAGE_REASON_CODES.length, 30);
+    assert.equal(new Set(contract.COVERAGE_REASON_CODES).size, 30);
+    assert.ok(contract.COVERAGE_REASON_CODES.includes('IMAGE_DOWNSAMPLED'));
+    assert.ok(contract.COVERAGE_REASON_CODES.includes('XLSX_CONTROL_CHARACTERS_PROJECTED'));
     assert.ok(contract.COVERAGE_REASON_CODES.includes('OFFICE_TABLE_LAYOUT_NORMALIZED'));
     assert.ok(contract.COVERAGE_REASON_CODES.every((code, index, codes) => index === 0 || codes[index - 1] < code),
       'both closed vocabularies must be strictly ascending, not merely equal as unsorted lists');
@@ -74,13 +76,13 @@ async function main() {
     assert.throws(() => metadata.selectOptionalPrivatePdfMetadata(record([accessor])), { code: 'PRIVATE_DOCUMENT_METADATA_INVALID' });
     assert.equal(accessed, false);
   });
-  await check('Office visual families are planned without decoder execution; unknown formats retain explicit omissions', () => {
+  await check('Office visual metadata preflight quarantines malformed media before allocation; unknown formats remain explicit', () => {
     for (const ext of ['emf','wmf','svg','gif','tiff','tif','webp','other']) {
       const rows = [attachment('png', tiny), attachment(ext, Buffer.from('not executable'), 1), attachment('png', tiny, 2)];
       const plan = preparePartialOfficeImagePlan(rows);
       assert.deepEqual(plan.map(item => item.ordinal), [1,2,3]);
       if(ext==='other'){assert.match(plan[1].reason,/^OFFICE_IMAGE_FORMAT_OTHER_UNSUPPORTED$/u);assert.equal(plan[1].bytes,undefined);}
-      else {assert.equal(plan[1].reason,undefined);assert.equal(plan[1].visual,true);assert.ok(plan[1].bytes.equals(Buffer.from('not executable')));}
+      else {assert.equal(plan[1].reason,ext==='wmf'?'OFFICE_IMAGE_FORMAT_WMF_UNSUPPORTED':'IMAGE_CONTENT_DAMAGED');assert.equal(plan[1].bytes,undefined);}
       assert.throws(() => prepareOfficeImagePlan(rows), { code: 'OFFICE_IMAGE_OCR_UNAVAILABLE' });
       for (const item of plan) item.bytes?.fill(0);
     }
@@ -117,7 +119,7 @@ async function main() {
   const source = fs.readFileSync(path.join(__dirname,'../plugins/data-secure/server/standalone/conversion-worker-child.js'),'utf8');
   const start = source.indexOf('async function pdfMarkdown('), end = source.indexOf('\nasync function main()',start);
   assert.ok(start > 0 && end > start);
-  const importExpression = "await import(pathToFileURL(path.join(pdfRoot, 'legacy', 'build', 'pdf.datasecure.mjs')).href)";
+  const importExpression = "import(pathToFileURL(path.join(pdfRoot, 'legacy', 'build', 'pdf.datasecure.mjs')).href)";
   const functionSource = source.slice(start,end); assert.equal(functionSource.split(importExpression).length,2);
   const omissionStart = source.indexOf('function imageOmission('), omissionEnd = source.indexOf('\nfunction visualOmission(',omissionStart);
   assert.ok(omissionEnd>omissionStart,'closed helper slice, not an adjacent declaration');
@@ -126,12 +128,13 @@ async function main() {
     assert.ok(officeStart > 0 && officeEnd > officeStart);
     for (const [markdown,reasons,expected] of [
       ['', ['TEXT_LIMIT_PARTIAL'],'TEXT_TOO_LARGE'],
-      ['', [],'CONVERSION_OCR_TEXT_EMPTY'],
+      ['', [],'CONVERSION_EXTRACTION_FAILED'],
       ['Behaltener Text äöüß', ['TEXT_LIMIT_PARTIAL'],null]
     ]) {
       const frames=[],extraction=contract.createMarkdownExtraction({source_type:'pptx',markdown,
         coverage:{status:reasons.length?'incomplete':'complete',reason_codes:reasons}});
-      const context={fail,extractOfficeMarkdownAndMedia:()=>({extraction,attachments:[]}),preparePartialOfficeImagePlan,
+      const context={fail,conversionTimings:require('../plugins/data-secure/server/standalone/conversion-timings').createConversionTimings(),
+        extractOfficeMarkdownAndMedia:()=>({extraction,attachments:[]}),preparePartialOfficeImagePlan,
         createMarkdownExtraction:input=>contract.createMarkdownExtraction(JSON.parse(JSON.stringify(input)))};
       const operation=vm.runInNewContext(`(${source.slice(officeStart,officeEnd)})`,context);
       const result=operation(Buffer.from('owned synthetic source'),'pptx',{},options,
@@ -153,6 +156,9 @@ async function main() {
         const value = pages[number-1]; if (value instanceof Error) throw value; return value;
       },...extra.document };
     const context = { path,root:'isolated-local-runtime',errors,fail,MAX_UNITS,createPassivePdfContent,...contract,...readable,...visuals,...metadata,
+      conversionTimings:require('../plugins/data-secure/server/standalone/conversion-timings').createConversionTimings(),
+      pdfOcrLayoutMode:facts=>require('../plugins/data-secure/server/standalone/pdf-ocr-layout-mode').pdfOcrLayoutMode(JSON.parse(JSON.stringify(facts))),
+      renderPdfNativeWordEvidence:async()=>null,
       createMarkdownExtraction:input=>contract.createMarkdownExtraction(JSON.parse(JSON.stringify(input))),
       validatePrivateDocumentMetadata:input=>metadata.validatePrivateDocumentMetadata(JSON.parse(JSON.stringify(input))),
       selectOptionalPrivatePdfMetadata:input=>metadata.selectOptionalPrivatePdfMetadata(JSON.parse(JSON.stringify(input))),
@@ -281,13 +287,15 @@ async function main() {
     const ocrStart = modelEnd + 1, ocrEnd = source.indexOf('\nasync function recognize(',ocrStart);
     const modelSource = source.slice(modelStart,modelEnd), ocrSource = source.slice(ocrStart,ocrEnd);
     for (const readFileSync of [()=>{throw Object.assign(new Error('missing'),{code:'ENOENT'});},()=>'{invalid JSON}']) {
-      const context = {fs:{readFileSync},root:'owned-runtime',path,fail};
+      const context = {fs:{readFileSync},root:'owned-runtime',path,fail,
+        conversionTimings:require('../plugins/data-secure/server/standalone/conversion-timings').createConversionTimings()};
       const checkedModels = vm.runInNewContext(`(${modelSource})`,context);
       assert.throws(checkedModels,{code:'CONVERSION_MODEL_INVALID'});
       await assert.rejects(run([page('native',{getOperatorList:async()=>({fnArray:[1]}),render:()=>({promise:Promise.resolve()})})],options,
         {context:{createOcr:vm.runInNewContext(`(${ocrSource})`,{...context,checkedModels})}}),{code:'CONVERSION_MODEL_INVALID'});
     }
     const missingComponent = vm.runInNewContext(`(${ocrSource})`,{checkedModels(){},fail,
+      conversionTimings:require('../plugins/data-secure/server/standalone/conversion-timings').createConversionTimings(),
       localRequire(){throw Object.assign(new Error('missing'),{code:'MODULE_NOT_FOUND'});} });
     await assert.rejects(missingComponent(),{code:'CONVERSION_POLICY_FAILED'});
   });

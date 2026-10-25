@@ -54,6 +54,26 @@ test('fair OCR budget does not discard later images because earlier dimensions u
  assert.ok(plan.every(p=>p.ocrPixels<=30_000_000));
  for(const p of plan)p.bytes.fill(0);
 });
+test('known tiny vector sizes do not reserve full-page work and downsample an unrelated bitmap',()=>{
+ const header=Buffer.from(image);header.writeUInt32BE(7000,16);header.writeUInt32BE(4000,20);
+ const svg=Buffer.from('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"><path d="M1 1L19 19"/></svg>');
+ const attachments=[{type:'image',mimeType:'image/png',extension:'png',source_part:'large',data:header.toString('base64')},
+  ...Array.from({length:30},(_,i)=>({type:'image',mimeType:'image/svg+xml',extension:'svg',source_part:`vector${i}`,data:svg.toString('base64')}))];
+ const plan=preparePartialOfficeImagePlan(attachments);
+ assert.equal(plan[0].ocrPixels,28_000_000);assert.ok(plan.every(item=>!item.reason));
+ assert.ok(plan.slice(1).every(item=>item.width===20&&item.height===20&&item.ocrPixels===400));
+ for(const item of plan)item.bytes?.fill(0);
+});
+test('small raster enlargement spends only spare work and never reduces another source allocation',()=>{
+ const tiny={type:'image',mimeType:'image/png',extension:'png',source_part:'tiny',data:image.toString('base64')};
+ const plan=preparePartialOfficeImagePlan([tiny]);assert.equal(plan[0].ocrScale,2);assert.equal(plan[0].ocrPixels,8);
+ plan[0].bytes.fill(0);
+ const large=Buffer.from(image);large.writeUInt32BE(5000,16);large.writeUInt32BE(5000,20);
+ const full=preparePartialOfficeImagePlan([tiny,...Array.from({length:5},(_,i)=>({...tiny,source_part:`big${i}`,data:large.toString('base64')}))]);
+ assert.equal(full[0].ocrScale,undefined);assert.equal(full[0].ocrPixels,2);
+ assert.ok(full.reduce((sum,item)=>sum+item.ocrPixels,0)<=120_000_000);
+ for(const item of full)item.bytes?.fill(0);
+});
 test('placement rejects offset and label injection instead of guessing',()=>{
  const options={schema:'datasecure-content-options/1',markdownOutput:'content-v1',scanOcr:true,imageOcr:true};
  const base=createMarkdownExtraction({source_type:'pptx',markdown:'BASE',coverage:{status:'complete',reason_codes:[]}});
