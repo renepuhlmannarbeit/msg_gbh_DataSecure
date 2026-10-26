@@ -549,6 +549,7 @@ const workerSlice = (startText, endText) => {
   return workerSource.slice(start, end);
 };
 const imageHelpers = require('../plugins/data-secure/server/standalone/office-image-ocr');
+const { createOfficeOcrWorkLedger } = require('../plugins/data-secure/server/core/office-ocr-work-plan');
 const markdownContract = require('../plugins/data-secure/server/standalone/markdown-contract');
 const { MAX_PIXELS, MAX_IMAGE_BYTES } = require('../plugins/data-secure/server/images/common');
 const { ERROR_CODES } = require('../plugins/data-secure/server/core/conversion-worker-contract');
@@ -574,6 +575,7 @@ async function integrationPolicyCase(change) {
     appendOfficeOcr: imageHelpers.appendOfficeOcr, officeOcrCheckpoint: imageHelpers.officeOcrCheckpoint,
     officeVisualOmission: require('../plugins/data-secure/server/standalone/office-visual-omission').officeVisualOmission,
     conversionTimings: require('../plugins/data-secure/server/standalone/conversion-timings').createConversionTimings(),
+    createOfficeOcrWorkLedger: assets => createOfficeOcrWorkLedger(structuredClone(assets)),
     MAX_MARKDOWN_CHARS: markdownContract.MAX_MARKDOWN_CHARS, createMarkdownExtraction: makeExtraction,
     imageMarkdown: async () => makeExtraction({ source_type: 'png', markdown: 'GRAPHIC CONTEXT', content_options: contentOptions,
       coverage: { status: 'incomplete', reason_codes: ['OCR_NOT_VERIFIED'] } }),

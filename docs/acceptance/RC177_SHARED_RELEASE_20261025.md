@@ -48,6 +48,36 @@ Finder/Gatekeeper/TCC/Excel/Numbers und die reale GUI bleiben Nutzerabnahmen.
 
 ## Laufendes Journal
 
+- Source05-Vorprüfung26.10.: ausschließlich2Zeilen in
+  tests/test-office-visual-decoder.mjs ergänzt: tatsächliche Produktionsfactory
+  createOfficeOcrWorkLedger importiert/mit bestehendem structuredClone-DTO-
+  Übergang an VM gebunden. Keine Produkt-/Budget-/Policyänderung, sämtliche
+  ursprünglichen Assertions unverändert. Vollständiger nativer58Gruppentest
+  PASS11:45:46.185UTC/10Inputs stabil, Testhash0c30e1fd…36fe0. Tatsächlicher
+  Bericht be48dd05…fc55c/Originaltest gesichert, Main prüfte Bericht und2Zeilen-
+  Diff gegen echten Worker/Factory. Getrennter Quellaudit8d8e0308…3b53 fand in
+  sieben anderen Konverterharnesses keinen weiteren bestätigten Closuremangel.
+  Main führte zusätzlich16TIFF-/10EMF+-,33PDF-Struktur-/21passivePDFgruppen
+  erfolgreich aus, letzter echter Childclose/4Inputs stabil. Nur Fokusbelege,
+  kein kumulierter Endgate-PASS. Source05 braucht neuen gemeinsamen Commit/
+  Freeze/alle frischen Endgates. Produktfingerprint1df160c3…82b5a4/382 gleich.
+
+- Source04/4a94e521b27b119355800d9f717ce6b8e7baf7f5 eingefroren11:33:21UTC.
+  Native300Rust/3ignoriert/Clippy/Node-Rust/Release PASS11:37:32.634UTC; Paket5/
+  100MD0Fehler PASS11:41:59.261UTC. Quellen/646Inputs/7Driver unverändert.
+  ZIP72ed040d…f9a01/EXEb5bbab10…46c50 bleibt unveröffentlicht. Konverter:
+  PDF-Sichtbarkeit,76reale Workergruppen einschließlich der fünf ursprünglich
+  roten Bildgegenfälle und Office-Bildsuite PASS. Vierter Test nach52Gruppen
+  ROT: VM-extrahiertes officeImageMarkdown erwartet Runtime-Policyfehler,
+  erhält aber ReferenceError:createOfficeOcrWorkLedgerundefined. Enger
+  Testclosurefix wird gegen tatsächliche Produktionsfactory geprüft; keine
+  Schutzassertion lockern/Produktursache erfinden. Main beendet eigene Jobs vor
+  Quelländerung: Native41530/Converter40336/Package83610geschlossen, Headless
+  95204gezielt nach Start75/328 gestoppt/keinFINAL. Mac40315874344beideJobs
+  completedcancelled, tatsächlicheLogs/Run/Jobs/Stopdiagnose unter
+  dist/rc177-source04-final-gate-failure-20261026, Inputs weiterhin unverändert.
+  Source05 nur neue Helferquellen vorbereitet, keine alten FINALs übernommen.
+
 - 26.10., Source04-Vorprüfung abgeschlossen: neuer reiner Wortpixel-Fallback
   5d3a0329…6e56 und Caller d5ca6b23…e68 behalten ursprüngliche Daten/Geometrien,
   gemeinsame32768Pixel, Kontakte und Literal-/Besitzerprüfungen.32 kontinuierliche
