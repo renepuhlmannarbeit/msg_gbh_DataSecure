@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { test } = require('node:test');
 const { NativeExportChannel, RESPONSE_SCHEMA, PUBLICATION_RESPONSE } = require('../plugins/data-secure/server/standalone/native-export-channel');
 const { FrameDecoder, validatePrivateMessage } = require('../plugins/data-secure/server/standalone/desktop-ipc');
-const { validNativeDirectoryIdentity } = require('../plugins/data-secure/server/core/native-directory-identity');
+const { validNativeDirectoryIdentity, plainDataFields } = require('../plugins/data-secure/server/core/native-directory-identity');
 const outer = () => ({ schema: 'datasecure-standalone-private-ipc/1', action: 'configure_results',
   native_export_binding: true, request_id: '1'.repeat(16), source_paths: ['/synthetic/results'] });
 const identity = { volume: '18446744073709551615', object: '340282366920938463463374607431768211455', created_ns: '9007199254740993' };
@@ -18,6 +18,10 @@ test('native identities preserve u128 precision and reject coercion and unexpect
   for (const value of [{ ...identity, volume: '18446744073709551616' }, { ...identity, object: '340282366920938463463374607431768211456' },
     { ...identity, created_ns: 9007199254740992 }, { ...identity, created_ns: '01' }, { ...identity, extra: '1' }, null])
     assert.equal(validNativeDirectoryIdentity(value), false);
+});
+test('plain native DTO fields cannot merge two expected names into one key', () => {
+  assert.equal(plainDataFields({ volume: '1', object: '2' }, ['volume', 'object']), true);
+  assert.equal(plainDataFields({ 'object,volume': '1' }, ['volume', 'object']), false);
 });
 test('closed internal channel binds only the exact outstanding callback, not renderer commands', async () => {
   const { channel, frames, promise, reply } = setup();

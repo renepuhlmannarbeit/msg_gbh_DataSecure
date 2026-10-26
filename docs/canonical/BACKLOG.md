@@ -73,8 +73,8 @@ P2 Schema-/Fehlerpfadkonsistenz. Beleg:
   Produktdateien; der präzisere AST-Scan der RC177-Gitblobs findet121
   Kandidaten in64eigenen Dateien,101davon im Produkt. Treffer sind nur
   Triageinput, keine bestätigten Defekte.
-  Das manuelle Symbolregister enthält bisher13begründete Entscheidungen,
-  43703JS-Einträge bleiben `PENDING`.
+  Das manuelle Symbolregister enthält bisher15begründete Entscheidungen,
+  43701JS-Einträge bleiben `PENDING`.
 R2-Teilfluss für vertrauliche Zuordnungen (Prepare → Read → Generation →
 native DTO → ACK) ist unter `dist/rc177-full-code-review-20261026/
 FLOW-CONFIDENTIAL-COMPANIONS.md` quellengebunden; übrige Flüsse offen.
@@ -107,6 +107,21 @@ Pflichtzähler. Vorher gezielt34/35 rot, nach engem Feldvergleich35/35PASS.
 Der normale Produzent erzeugt seine Zähler aus der validierten Projektion;
 kein betroffener realer Nutzerlauf oder Datenabfluss ist belegt. P2
 Verifikationskonsistenz. Beleg `dist/rc177-full-code-review-20261026/FINDING-004.md`.
+
+**Reviewbefund 005, lokal korrigiert, noch nicht veröffentlicht:**
+Der generische native DTO-Feldprüfer akzeptierte einen kombinierten
+`object,volume`-Schlüssel als zwei erwartete Schlüssel. Die betrachteten
+Aufrufer validieren die Einzelwerte ebenfalls; kein OS-/Rechtebypass ist
+belegt. Enger Vergleich von Feldanzahl und Feldnamen, ursprünglicher Test
+9/10 rot, danach10/10 und angrenzende Receipt-/Provisioningtests83/83PASS.
+P2 Validierungsintegrität, `FINDING-005.md`.
+
+**Reviewbefund 006, lokal korrigiert, noch nicht veröffentlicht:**
+Der Renderer der vertraulichen Zuordnungsübersicht nahm einen kombinierten
+`ambiguous,kept`-Schlüssel statt der getrennten Ausschlusszähler an. Der
+normale Builder erzeugt sie getrennt; keine fehlerhafte echte Laufdatei
+belegt. Gegenfall zuerst15/16rot, nach engem Feldvergleich16/16PASS;
+Excel-/TXT-Beilagensuite47/47PASS. P2 Anzeigeintegrität, `FINDING-006.md`.
 
 - [ ] `batch-recovery.js`/`genericStatus` und UI-Verbraucher prüfen, ob
   unlesbare Journalwurzel als echte Null oder als unbekannter Cleanup-Status

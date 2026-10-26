@@ -120,6 +120,12 @@ test('closed projections reject bad hashes, duplicate IDs, foreign keys, invalid
   assert.throws(() => overview([value, value]), error => error.code === 'DOCUMENT_REVIEW_INVALID');
   assert.throws(() => overview([]), error => error.code === 'DOCUMENT_REVIEW_MISSING');
 });
+test('confidential exclusion summary requires four distinct counters', () => {
+  const generated = overview([document(actual())]);
+  const altered = structuredClone(generated.value);
+  altered.documents[0].excluded = { 'ambiguous,kept': 0, masked: 0, not_identity: 0 };
+  assert.throws(() => renderConfidentialOverview(altered), error => error.code === 'DOCUMENT_REVIEW_INVALID');
+});
 
 function repeatedProjection(count, contact = true) {
   const seed = actual(contact ? 'E-Mail: anna@example.invalid' : 'Name: Anna Beispiel');

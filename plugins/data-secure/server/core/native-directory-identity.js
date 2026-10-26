@@ -7,7 +7,9 @@ function plainDataFields(value, fields) {
   if (prototype !== Object.prototype && prototype !== null) return false;
   const descriptors = Object.getOwnPropertyDescriptors(value);
   const keys = Reflect.ownKeys(descriptors);
-  return keys.every(key => typeof key === 'string') && keys.sort().join(',') === fields.slice().sort().join(',') &&
+  const expected = fields.slice().sort();
+  return keys.length === expected.length && keys.every(key => typeof key === 'string') &&
+    keys.sort().every((key, index) => key === expected[index]) &&
     Object.values(descriptors).every(item => Object.hasOwn(item, 'value') && item.enumerable === true);
 }
 function validNode22BigIntIdentity(value) {

@@ -161,8 +161,8 @@ Windows- und beide Mac-Gates; RC177 selbst bleibt unverändert.
   SHA-256 `bec5c1313ac1c1185b4c21f2ec0a342f8811674e9d36f71596771d7523777035`
   ist Triage, kein Befund/PASS je Stelle. Jeder mögliche Fehlerpfad benötigt
   gesonderte Eingabe-/Wirkungsprüfung. Von 43716
-  JS-Inventareinträgen haben erst 13 eine begründete manuelle Entscheidung
-  (`REVIEW-DECISIONS.json`); 43703 stehen weiterhin auf `PENDING`.
+  JS-Inventareinträgen haben erst 15 eine begründete manuelle Entscheidung
+  (`REVIEW-DECISIONS.json`); 43701 stehen weiterhin auf `PENDING`.
 - R2-Teilfluss der vertraulichen Zuordnungen vom privaten Prepare über
   erneutes Read/Generation/IPC bis zum Rust-Inventar und Abschluss-ACK in
   `FLOW-CONFIDENTIAL-COMPANIONS.md` beschrieben. Dies schließt andere
@@ -197,6 +197,20 @@ Windows- und beide Mac-Gates; RC177 selbst bleibt unverändert.
   35/35 grün; angrenzend `test-local-handoff-resume.js` 20/20 und
   `test-local-handoff-reuse.js` 30/30 grün. P2 Schema-Verifikation;
   `FINDING-004.md`. Diese Tests ersetzen keine Plattform- oder Gesamtgates.
+- 26.10., R3/R5-Befund 005: `plainDataFields` im nativen DTO-Kern nahm einen
+  einzigen Schlüssel `object,volume` als zwei erwartete Felder an. Der
+  generische Vertrag war damit falsch, obwohl die bislang geprüften Aufrufer
+  Werte zusätzlich validieren; kein nativer Rechte-/Ordnerbypass belegt.
+  Vorher 9/10 gezielt rot, nach Einzelvergleich 10/10 grün; initiale
+  Ergebnisordner-/Receipt-Suite 83/83 grün. Proxy-/Getter-/Prototypschutz
+  blieb bestehen. P2 Validierungsintegrität; `FINDING-005.md`.
+- 26.10., R3-Befund 006: Der exportierte Renderer der vertraulichen
+  Zuordnungsübersicht akzeptierte einen kombinierten Exklusions-Schlüssel
+  anstelle zweier Einzelzähler. Der normale Builder schreibt die vier Felder
+  getrennt; kein betroffener Nutzerlauf belegt. Synthetischer Test aus echter
+  Builderprojektion vor Fix 15/16 rot, nach engem Einzelkeyvergleich 16/16
+  grün; angrenzende Excel-/TXT-Suite 47/47 grün. P2 Anzeigeintegrität;
+  `FINDING-006.md`.
 - R1/R3-Fehlerpfadinventar: Parsergestützt aus den originalen RC177-Gitblobs
   1168 produktive JavaScript-`catch`-Klauseln erfasst. 230 haben einen leeren
   Rumpf, 650 enthalten lokal weder `throw` noch eines der groben

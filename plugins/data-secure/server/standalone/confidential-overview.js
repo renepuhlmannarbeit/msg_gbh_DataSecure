@@ -8,8 +8,11 @@ const { RESOURCE_LIMITS } = require('../resource-limits');
 const MAX_BYTES = 16 * 1024 * 1024, MAX_OCCURRENCES = 100000;
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 const fail = (code = 'DOCUMENT_REVIEW_INVALID') => Object.assign(Error(code), { code });
-const closed = (value, fields) => value && typeof value === 'object' && !Array.isArray(value) &&
-  Object.keys(value).sort().join(',') === fields.split(',').sort().join(',');
+const closed = (value, fields) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const actual = Object.keys(value).sort(), expected = fields.split(',').sort();
+  return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
+};
 const validId = (value, size) => typeof value === 'string' && new RegExp(`^[a-f0-9]{${size}}$`, 'u').test(value);
 const normalize = text => text.normalize('NFC').replace(/\s+/gu, ' ').trim().toLocaleLowerCase('de-DE');
 const entityFields = new Set(['occurrence_id', 'entity_id', 'kind', 'current_kind', 'original', 'replacement',
