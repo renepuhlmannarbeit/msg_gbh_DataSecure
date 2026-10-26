@@ -1,5 +1,16 @@
 # Aktives Entwicklungsbacklog · 3.2.0-rc177
 
+**RC177-Abschluss 26.10.2026:** Die priorisierten BL-049.3- sowie begrenzten
+BL-047.3/.4/.6/.7-Korrekturen sind im Test-Pre-Release
+[v3.2.0-rc177](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc177)
+für Windows und beide Macs umgesetzt. Gemeinsamer Appcommit
+`fc39f820bd6e3c9528ffad911eada5aee20c56cb`; lokale und Mac-Endgates,
+unabhängige Reviews und Remotehashprüfung PASS. **Offen:** Nutzer-Desktoptests
+und daraus gegebenenfalls neue, konkret belegte Befunde. Ein universeller
+Konverter-/OCR-/Anonymitätsnachweis ist damit nicht erbracht. Die früheren
+Source01–05-Statusblöcke unten bleiben als historische Belege erhalten;
+zurückgestellte generelle Cache- und Parallelisierungsarbeit bleibt gesondert.
+
 Source05-Testfix26.10.: Visual-VM bindet reale Ledgerfactory über bereits
 vorhandene DTO-Clone-Grenze ein, nur2Testzeilen zusätzlich/keine Assertion
 entfernt.58/58native Visualgruppen PASS/stabil; Main prüfte Diff/Originalbericht.

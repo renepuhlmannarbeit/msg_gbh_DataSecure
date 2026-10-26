@@ -1,11 +1,37 @@
 # RC177: Inhaltskorrekturen nach dem großen Nutzerlauf
 
-Stand: 25.10.2026. Beauftragt sind Implementierung, unabhängige Fachreviews,
-automatische Prüfungen und ein neuer gemeinsamer Test-Pre-Release für Windows
-x64, macOS ARM64 und macOS Intel. Windows-ZIP zusätzlich lokal mit Testplan.
-**In Arbeit; noch kein RC177-Kandidat oder Download veröffentlicht.** Desktoptests
-übernimmt der Nutzer. Keine neue Automation, Main-Produktintegration,
-Developer-ID, Notarisierung oder Änderung von OS-Schutzfunktionen.
+Stand: 26.10.2026. RC177 ist als Test-Pre-Release für Windows x64, macOS ARM64
+und macOS Intel veröffentlicht; das Windows-ZIP liegt zusätzlich lokal mit
+Testplan bereit. Die automatisierten Endprüfungen und unabhängigen Reviews sind
+abgeschlossen. Desktoptests übernimmt der Nutzer. Keine neue Automation,
+Main-Produktintegration, Developer-ID, Notarisierung oder Änderung von
+OS-Schutzfunktionen. Die älteren Journalabschnitte unten dokumentieren
+Zwischenstände und sind keine offenen Endgates.
+
+## Abschluss und verbleibende Abnahme
+
+- Gemeinsamer Appcommit `fc39f820bd6e3c9528ffad911eada5aee20c56cb`,
+  Produktfingerprint `1df160c305aa7b2740e6261075ce7fa5a09ade3f3ee75f48debe65db3c82b5a4`
+  (382 Produktdateien). Vier lokale Endgates PASS und unveränderte Inputs:
+  328/328 Headless plus 11/11 Zusatzfälle, Windows Native mit 300 Rusttests
+  (3 ignoriert), acht Konvertersuiten sowie fünf Paketgates/100 Markdownfälle.
+- Beide Mac-Consumer im GitHub-Run `40317861812` erfolgreich. Beide Archive
+  wurden aus demselben Appcommit gesammelt, bytegebunden verifiziert und
+  unabhängig anhand der tatsächlichen Logs und Artefakte gegengelesen.
+- [GitHub-Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc177):
+  ID `424250166`, 20 Assets, `prerelease=true`, `draft=false`; Tagquelle,
+  Inventar und alle nach Veröffentlichung frisch geladenen Assethashes PASS.
+  Lokale Übergabe: `C:\Users\arkud\Documents\Software DataSecure\RC177`
+  mit ZIP, `WINDOWS-TESTPLAN.txt`, Prüfsummen und drei synthetischen Datenpaketen.
+  Belege: `dist/rc177-content-context-source05-20261026`.
+- README und `docs/RELEASE.md` wurden auf `main` ausschließlich als
+  Dokumentationscommit `76d0626777a2b3cc34754e69114d628a09203d8c`
+  aktualisiert. Main-Produktcode bleibt RC165. CI `40327933564` SUCCESS.
+- Offen: tatsächliche Windows-/Mac-Desktopabnahme durch den Nutzer,
+  einschließlich realer Finder-/TCC-/Gatekeeper- und Dokumentqualitätspfade.
+  Die Macs sind ad hoc versiegelt, nicht mit Developer-ID signiert oder
+  notarisiert. Spezialformate und OCR bleiben begrenzt; keine universelle
+  Umwandlungs- oder Anonymitätsgarantie.
 
 ## Umfang und Abnahme
 

@@ -1,5 +1,19 @@
 # Aktueller Iststand · 3.2.0-rc177
 
+**Abschluss 26.10.2026:** RC177 ist als Test-Pre-Release mit Windows x64 und
+macOS ARM64/Intel aus Appcommit `fc39f820bd6e3c9528ffad911eada5aee20c56cb`
+und Produktfingerprint `1df160c305aa7b2740e6261075ce7fa5a09ade3f3ee75f48debe65db3c82b5a4`
+veröffentlicht: [v3.2.0-rc177](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc177).
+Alle vier lokalen Endgates und beide Mac-Jobs PASS; unabhängige Log- und
+Artefaktreviews ohne bestätigten Blocker. 20 veröffentlichte Assets wurden
+nachgeladen und gehasht. Das Windows-ZIP mit Testplan liegt unter
+`C:\Users\arkud\Documents\Software DataSecure\RC177`. README und
+`docs/RELEASE.md` sind als reiner Docs-Commit `76d0626777a2b3cc34754e69114d628a09203d8c`
+auf Main; CI `40327933564` SUCCESS. Der Main-Produktcode bleibt RC165.
+**Offen sind die Nutzer-Desktoptests**; Mac weiterhin ohne Developer-ID und
+Notarisierung. Alle folgenden Source01–05-Abschnitte sind historische
+Zwischenbelege, keine erneut offenen RC177-Freigabegates.
+
 Source05-Vorprüfung26.10.: bestätigter reiner VM-Testclosuremangel mit genau
 zwei zusätzlichen Testzeilen behoben. Echte Produktionsfactory über bestehende
 structuredClone-DTO-Grenze eingebunden; keine Produkt-/Budget-/Schutzänderung
