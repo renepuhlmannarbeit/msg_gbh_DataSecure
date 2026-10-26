@@ -310,18 +310,22 @@ function createBatchRecovery(options = {}) {
   function localCleanupStatus() {
     let pending = 0;
     let expiredPending = 0;
+    let complete = true;
     const owner = readActiveLock();
     if (owner && processAlive(owner.pid)) {
-      return { private_work_copy_cleanup_pending: pending, expired_batch_cleanup_pending: expiredPending };
+      return { private_work_copy_cleanup_pending: pending, expired_batch_cleanup_pending: expiredPending,
+        local_cleanup_counts_complete: false };
     }
     let entries = [];
     try { entries = io.readdirSync(rootPath(), { withFileTypes: true }); } catch {
-      return { private_work_copy_cleanup_pending: 0, expired_batch_cleanup_pending: 0 };
+      return { private_work_copy_cleanup_pending: 0, expired_batch_cleanup_pending: 0,
+        local_cleanup_counts_complete: false };
     }
     for (const entry of entries) {
       const orphanToken = intakeToken(entry);
       if (orphanToken) {
-        try { if (intakeIntent.orphan(orphanToken, nowMs())) expiredPending++; } catch { pending++; }
+        try { if (intakeIntent.orphan(orphanToken, nowMs())) expiredPending++; }
+        catch { pending++; complete = false; }
         continue;
       }
       if (!entry.isFile() || !entry.name.endsWith('.json')) continue;
@@ -335,9 +339,14 @@ function createBatchRecovery(options = {}) {
         } else {
           pending += (state.items || []).filter((item) => item.work_copy_cleanup_pending === true).length;
         }
-      } catch { /* malformed private state stays unavailable */ }
+      } catch {
+        // Malformed or unreadable private state stays unavailable; other counts
+        // remain known lower bounds, not a complete cleanup inventory.
+        complete = false;
+      }
     }
-    return { private_work_copy_cleanup_pending: pending, expired_batch_cleanup_pending: expiredPending };
+    return { private_work_copy_cleanup_pending: pending, expired_batch_cleanup_pending: expiredPending,
+      local_cleanup_counts_complete: complete };
   }
 
   function maintenanceToken() {

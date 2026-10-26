@@ -160,9 +160,11 @@ Windows- und beide Mac-Gates; RC177 selbst bleibt unverändert.
   JS-Dateien wurden ohne Parsefehler gelesen. `KEYSET-AST-CANDIDATES.json`
   SHA-256 `bec5c1313ac1c1185b4c21f2ec0a342f8811674e9d36f71596771d7523777035`
   ist Triage, kein Befund/PASS je Stelle. Jeder mögliche Fehlerpfad benötigt
-  gesonderte Eingabe-/Wirkungsprüfung. Von 43716
-  JS-Inventareinträgen haben erst 15 eine begründete manuelle Entscheidung
-  (`REVIEW-DECISIONS.json`); 43701 stehen weiterhin auf `PENDING`.
+  gesonderte Eingabe-/Wirkungsprüfung. Der damalige Registerstand hatte
+  15 manuelle Entscheidungen bei 43716 JS-Inventareinträgen. Nach Befund
+  008 enthält `REVIEW-DECISIONS.json` 23 begründete Entscheidungen
+  einschließlich der drei betroffenen `try`-/`catch`-Paare;
+  43693 Einträge stehen weiterhin auf `PENDING`.
 - R2-Teilfluss der vertraulichen Zuordnungen vom privaten Prepare über
   erneutes Read/Generation/IPC bis zum Rust-Inventar und Abschluss-ACK in
   `FLOW-CONFIDENTIAL-COMPANIONS.md` beschrieben. Dies schließt andere
@@ -222,9 +224,37 @@ Windows- und beide Mac-Gates; RC177 selbst bleibt unverändert.
   Erstes manuelles Gegenlesen in `result-export.js` fand mehrere bewusst
   nachrangige Cleanup-Catches; der vollständige Primär-/Sekundärfehlerpfad
   muss weiterhin je Aufrufer belegt werden.
-- R3-Offenpunkt ohne bestätigten Befund: `batch-recovery.js:310-340`
-  gibt bei unlesbarem privaten Journalroot für die rein lesenden
-  Cleanup-Zähler null zurück. Ob dies in `genericStatus` eine fachlich
-  irreführende Null oder ein vereinbarter unbekannter Zustand ist, benötigt
-  noch eine Status-/UI-Vertragsprüfung. Keine Sicherheits-/Cleanup-Autorität
-  wurde aus diesem ersten Quellenblick abgeleitet.
+- R3-Hypothese vor Befund 007: `batch-recovery.js:310-340` gab bei
+  unlesbarem privatem Journalroot für rein lesende Cleanup-Zähler null
+  zurück. Diese erste Quellenbeobachtung war noch kein bestätigter Befund;
+  Status- und Verbraucherprüfung erfolgten danach.
+- 26.10., R3/R5-Befund 007 nach Status-/Verbraucherprüfung: Die beiden
+  Cleanup-Zähler wurden über `genericStatus` auch dann als unqualifizierte
+  Null veröffentlicht, wenn ein aktiver Besitzer den Scan bewusst ausließ,
+  `readdirSync` scheiterte oder ein einzelnes Journal nicht lesbar war.
+  Die Referenzdokumentation beschrieb Null als Zähler, aber keinen
+  unbekannten Zustand. Ein neuer inhaltsfreier Boolean
+  `local_cleanup_counts_complete` trennt vollständige Zählung von
+  bestätigten Untergrenzen; die Zahlen und `engine_ready` bleiben erhalten,
+  keine automatische Löschung. Der gezielte Test war zunächst 29 PASS/
+  3 FAIL und nach Fix 32/32 PASS. Angrenzend `test-mcp-protocol.js` 66/66
+  und `test-batch-session.js` 72/72, `test-status-app-server.js` 13/13,
+  `test-gateway-e2e.js` 50/50 PASS. `FINDING-007.md`; Gesamt- und
+  Plattformgates bleiben offen. Kein realer
+  Nutzerfehler oder unbereinigter Bestand wurde daraus behauptet.
+- 26.10., R3/R5-Befund 008: `batch-intake-intent.js` ließ durch denselben
+  nicht injektiven Feldnamenvergleich eine `work_identity` mit kombiniertem
+  `birthtimeNs,dev`-Schlüssel passieren. Der echte lokale Intent-Fixture
+  belegt 29 PASS/1 FAIL vor und 30/30 PASS nach dem engen Feldnamensfix.
+  Nachgelagerter Identitäts- und Löschguard blieb separat streng; kein
+  unbefugtes Löschen belegt. Angrenzende Batch- und Gateway-Suiten
+  72/72 und 50/50 PASS. `FINDING-008.md`. Weitere Intake-/Recovery-
+  Varianten und Zielhostgates offen.
+- R3-Triage ohne weitere Entwarnung: Fünf `Object.keys`-Vergleiche in
+  `standalone-history-store.js` quellenbasiert mit ihren tatsächlichen
+  Einzelwertprüfungen verfolgt. Für die konkrete Kommaschlüssel-Kollision
+  kein weiterer Annahmepfad bestätigt; vollständige Funktions-/I/O-/
+  Race-Prüfung und Tests weiterhin `PENDING`. Enger Beleg:
+  `KEYSET-TRIAGE-HISTORY.md`. Der neue Befund 008 zeigt ausdrücklich,
+  warum sich diese Einschätzung nicht auf alle 101 Produktstellen übertragen
+  lässt.

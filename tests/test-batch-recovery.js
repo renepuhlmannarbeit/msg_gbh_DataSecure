@@ -180,7 +180,8 @@ test('read-only enumeration yields to a live global owner and never mutates stor
   });
   assert.deepStrictEqual(item.recovery.localCleanupStatus(), {
     private_work_copy_cleanup_pending: 0,
-    expired_batch_cleanup_pending: 0
+    expired_batch_cleanup_pending: 0,
+    local_cleanup_counts_complete: false
   });
   assert.ok(!item.events.includes('readdir'));
   assert.ok(item.events.every((event) => !/^(write|unlink|remove-work|acquire):/u.test(event)));
@@ -205,9 +206,33 @@ test('status separates live executors, resumable batches, delivery and cleanup c
     batch_processing_active: true
   });
   const cleanup = item.recovery.localCleanupStatus();
-  assert.deepStrictEqual(cleanup, { private_work_copy_cleanup_pending: 2, expired_batch_cleanup_pending: 1 });
+  assert.deepStrictEqual(cleanup, { private_work_copy_cleanup_pending: 2, expired_batch_cleanup_pending: 1,
+    local_cleanup_counts_complete: true });
   assert.doesNotMatch(JSON.stringify({ status, cleanup }), /[a-e]{64}|name|path|hash/u);
   assert.ok(item.events.every((event) => !/^(write|unlink|remove-work|acquire):/u.test(event)));
+});
+
+test('cleanup counters identify unreadable journals as lower bounds without changing storage', () => {
+  const denied = fixture({ readdirError: Object.assign(new Error('denied'), { code: 'EACCES' }) });
+  assert.deepStrictEqual(denied.recovery.localCleanupStatus(), {
+    private_work_copy_cleanup_pending: 0, expired_batch_cleanup_pending: 0,
+    local_cleanup_counts_complete: false
+  });
+  const unreadable = fixture({ states: [state(tokens[0])], readFailure: tokens[0] });
+  assert.deepStrictEqual(unreadable.recovery.localCleanupStatus(), {
+    private_work_copy_cleanup_pending: 0, expired_batch_cleanup_pending: 0,
+    local_cleanup_counts_complete: false
+  });
+  const partial = fixture({ states: [state(tokens[0], {
+    items: [{ status: 'retryable', work_copy_cleanup_pending: true }]
+  }), state(tokens[1])], readFailure: tokens[1] });
+  assert.deepStrictEqual(partial.recovery.localCleanupStatus(), {
+    private_work_copy_cleanup_pending: 1, expired_batch_cleanup_pending: 0,
+    local_cleanup_counts_complete: false
+  });
+  for (const item of [denied, unreadable, partial]) {
+    assert.ok(item.events.every((event) => !/^(write|unlink|remove-work|acquire):/u.test(event)));
+  }
 });
 
 test('policy-incompatible journals are never advertised as executable continuations', () => {

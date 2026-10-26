@@ -68,6 +68,11 @@ widerrufen oder dieselbe Quelle erneut zu verarbeiten.
 deren sichere Bereinigung noch aussteht. Er enthält weder Batch-ID noch Dokumentanzahl,
 Name, Pfad oder Inhalt. Der Zähler bedeutet nicht, dass Daten an Claude gelangt sind;
 er ist ein Hinweis für IT, die lokale Wartung beziehungsweise Zugriffsrechte zu prüfen.
+Beide Zähler sind nur dann vollständig, wenn `local_cleanup_counts_complete` `true` ist.
+Bei einem aktiven anderen Verarbeiter oder nicht lesbaren privaten Journalen ist der
+Wert `false`; die angezeigten Zahlen sind dann nur bestätigte Untergrenzen und auch
+eine Null bescheinigt keine abgeschlossene Bereinigung. Diese reine Statusanzeige
+startet keine Löschung und gibt keine privaten Pfade preis.
 
 Das Diagnosejournal ist auf 14 Tage beziehungsweise 200 Ereignisse begrenzt und enthält
 keine Dateinamen, Pfade, Inhalte, erkannten Werte oder Dokument-Hashes. Ein separater,

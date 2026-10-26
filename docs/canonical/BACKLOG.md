@@ -73,8 +73,9 @@ P2 Schema-/Fehlerpfadkonsistenz. Beleg:
   Produktdateien; der präzisere AST-Scan der RC177-Gitblobs findet121
   Kandidaten in64eigenen Dateien,101davon im Produkt. Treffer sind nur
   Triageinput, keine bestätigten Defekte.
-  Das manuelle Symbolregister enthält bisher15begründete Entscheidungen,
-  43701JS-Einträge bleiben `PENDING`.
+  Das manuelle Symbolregister enthält nach Befund008 erst23begründete
+  Entscheidungen einschließlich der drei betroffenen `try`-/`catch`-Paare;
+  43693JS-Einträge bleiben `PENDING`.
 R2-Teilfluss für vertrauliche Zuordnungen (Prepare → Read → Generation →
 native DTO → ACK) ist unter `dist/rc177-full-code-review-20261026/
 FLOW-CONFIDENTIAL-COMPANIONS.md` quellengebunden; übrige Flüsse offen.
@@ -123,9 +124,36 @@ normale Builder erzeugt sie getrennt; keine fehlerhafte echte Laufdatei
 belegt. Gegenfall zuerst15/16rot, nach engem Feldvergleich16/16PASS;
 Excel-/TXT-Beilagensuite47/47PASS. P2 Anzeigeintegrität, `FINDING-006.md`.
 
-- [ ] `batch-recovery.js`/`genericStatus` und UI-Verbraucher prüfen, ob
-  unlesbare Journalwurzel als echte Null oder als unbekannter Cleanup-Status
-  gemeldet werden muss. Bisher nur Quellenhypothese, kein bestätigter Befund.
+- [x] `batch-recovery.js`/`genericStatus` und Verbraucher prüfen, ob eine
+  unlesbare Journalwurzel als echte Null gemeldet werden darf. Befund 007
+  trennt nun bestätigte Untergrenzen vom vollständigen Scan.
+
+**Reviewbefund 007, lokal korrigiert, noch nicht veröffentlicht:**
+`localCleanupStatus()` meldete bei aktivem Besitzer oder unlesbarem
+Journalroot/Einzeljournal numerische Null ohne Kennzeichen der unvollständigen
+Zählung; `genericStatus` gab diese Zahl weiter. Der zusätzliche Boolean
+`local_cleanup_counts_complete` markiert nur den vollständigen Scan als
+`true`, sonst bleiben die Zahlen bestätigte Untergrenzen. Kein
+Verarbeitungsstopp und keine private Diagnoseausgabe. Vor Fix 29/32 gezielte
+Tests grün, danach32/32; angrenzend MCP66/66, Batch72/72,
+Status-App13/13 und Gateway50/50 grün,
+Gesamt-/Plattformgates separat. Beleg
+`dist/rc177-full-code-review-20261026/FINDING-007.md`.
+
+**Reviewbefund 008, lokal korrigiert, noch nicht veröffentlicht:**
+`batch-intake-intent.js` akzeptierte eine private `work_identity` mit
+kombiniertem `birthtimeNs,dev`-Schlüssel als vollständiges Dreierobjekt.
+Der echte Intent-Leser nahm es vor Fix an; nach Feldanzahl-/Einzelkeyprüfung
+weist er es zurück. `test-batch-intake.js` vor Fix29/30, danach30/30.
+Der separate Objekt-/Löschguard wurde nicht gelockert; keine reale
+Fehllöschung nachgewiesen. Angrenzend Batch72/72 und Gateway50/50 PASS.
+Beleg `FINDING-008.md`.
+
+R3-Schlüssellisten-Triage: Die fünf Verlaufsspeicherstellen wurden nur für
+die Kommaschlüssel-Kollision bis zu den Einzelwertprüfungen verfolgt;
+`KEYSET-TRIAGE-HISTORY.md` belegt keinen weiteren bestätigten Fehler,
+aber auch keinen vollständigen Funktions-PASS. Übrige Stellen, Fehlerpfade,
+Formatketten und Zielhostgates bleiben offen.
 
 R1/R3-Fehlerpfad-Triage:1168produktiveJS-Catches aus originalen RC177-Blobs;
 230leere Rümpfe,650ohne lokalen Throw/heuristischen Beobachtungsbegriff,

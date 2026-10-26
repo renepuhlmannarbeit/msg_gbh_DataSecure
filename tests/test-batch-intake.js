@@ -262,6 +262,19 @@ function orphanFixture() {
   };
 }
 
+test('intake identity requires three separate named fields before recovery', () => {
+  const item = orphanFixture();
+  try {
+    const record = JSON.parse(fs.readFileSync(item.target, 'utf8'));
+    record.work_identity = { 'birthtimeNs,dev': '1', ino: '1' };
+    fs.writeFileSync(item.target, `${JSON.stringify(record)}\n`, { mode: 0o600 });
+    assert.throws(() => item.intent.read(token), /BATCH_INTAKE_INTENT_INVALID/);
+    assert.throws(() => item.intent.cleanup(token, Date.now()), /BATCH_INTAKE_INTENT_INVALID/);
+    assert.strictEqual(fs.existsSync(item.work), true);
+    item.assertExternalFiles();
+  } finally { item.cleanup(); }
+});
+
 for (const method of ['recoverBatches', 'cleanupExpiredBatchSnapshots']) test(`${method}: actual bound-copy deletion needs only ESRCH, not TTL expiry`, () => {
   const item = orphanFixture();
   try {

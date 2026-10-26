@@ -16,7 +16,8 @@ const { optionalContentOptions, validateContentOptions } = require('../core/cont
 
 const SUFFIX = '.intake';
 const identity = (stat) => ({ dev: String(stat.dev), ino: String(stat.ino), birthtimeNs: String(stat.birthtimeNs) });
-const validIdentity = (value) => value && Object.keys(value).sort().join(',') === 'birthtimeNs,dev,ino' &&
+const validIdentity = (value) => value && Object.keys(value).length === 3 &&
+  ['birthtimeNs', 'dev', 'ino'].every((key) => Object.hasOwn(value, key)) &&
   Object.values(value).every((part) => typeof part === 'string' && /^(?:0|[1-9][0-9]*)$/u.test(part));
 const sameIdentity = (left, right) => ['dev', 'ino', 'birthtimeNs'].every((key) => left[key] === right[key]);
 

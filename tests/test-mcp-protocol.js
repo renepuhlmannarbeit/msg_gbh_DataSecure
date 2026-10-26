@@ -1076,6 +1076,7 @@ async function main() {
     assert.strictEqual(typeof result.structuredContent.batch_processing_active, 'boolean');
     assert.strictEqual(typeof result.structuredContent.private_work_copy_cleanup_pending, 'number');
     assert.strictEqual(typeof result.structuredContent.expired_batch_cleanup_pending, 'number');
+    assert.strictEqual(typeof result.structuredContent.local_cleanup_counts_complete, 'boolean');
     assert.strictEqual(typeof result.structuredContent.audit_write_errors, 'number');
     assert.strictEqual(result.structuredContent.companion_api_version, 'data-secure-companion/1');
     assert.strictEqual(result.structuredContent.companion_phase, 'txt_docx_vertical_slice_ready');
