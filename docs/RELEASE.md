@@ -1,8 +1,39 @@
 # Release- und Distributionsvertrag
 
-Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc165 · Veröffentlichungsnachtrag: 25.10.2026
+Stand: 06.10.2026 (gebundene Cowork-Buildmetadaten) · 3.2.0-rc165 · Veröffentlichungsnachtrag: 26.10.2026
 
-Der aktuelle Quellstand ist RC165-Entwicklungsstand auf main; die Produktversion bleibt 3.2.0-rc165. Die aktuellen Windows-/Mac-Downloads stammen aus dem separat veröffentlichten RC176-Tag. Die historische RC165-Veröffentlichung bleibt unverändert. Menschliche N3/N4-Produktionsfreigaben bleiben offen.
+Der aktuelle Quellstand ist RC165-Entwicklungsstand auf main; die Produktversion bleibt 3.2.0-rc165. Die aktuellen Windows-/Mac-Downloads stammen aus dem separat veröffentlichten RC177-Tag. Die historische RC165-Veröffentlichung bleibt unverändert. Menschliche N3/N4-Produktionsfreigaben bleiben offen.
+
+### RC177 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
+
+Quellcommit `fc39f820bd6e3c9528ffad911eada5aee20c56cb` bindet den veröffentlichten
+[RC177-Test-Pre-Release](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc177) für Windows x64, macOS ARM64 und Intel.
+Produktfingerprint `1df160c305aa7b2740e6261075ce7fa5a09ade3f3ee75f48debe65db3c82b5a4`.
+Release 424250166, Pre-Release, kein Draft; 20 Assets wurden frisch
+heruntergeladen und gehasht. Der Tag wurde auf diesen Appcommit aufgelöst.
+Automatische 328/328 Hauptprüfungen plus 11/11 Zusatzprüfungen, Windows-Native-/
+Konverter-/Paketgates und beide nativen Mac-Consumer sind anhand der tatsächlichen
+Endbelege und veröffentlichten Downloads geprüft.
+
+Neu in RC177:
+
+- Excel-Zelltexte mit OOXML-Zeichenescapes werden quellbezogen gelesen; sensible Werte behalten ihre normalen Schutzprüfungen. Das erste Zuordnungsblatt bleibt mit der TXT verbunden.
+- SmartArt übernimmt den belegten Datenbaum und seine Reihenfolge. Nicht eindeutig zuordenbare Zusatztexte werden getrennt gekennzeichnet; Beziehungen werden nicht geraten.
+- Unterstützte SVG-Stile und Grafikabmessungen werden begrenzt lokal aufgelöst. Nicht unterstützte Darstellung erhält einen Hinweis statt stiller Vollständigkeitsbehauptung.
+- OCR erhält vorhandene Lesungen bei widersprechender Nachlese und weist auf den Unterschied hin. Eine eng begrenzte Umlautkorrektur verlangt zusätzlich passende Original-Glyphpixel und eine sonst identische ganze Zeile. Das ist kein Wahrheitsbeweis und keine Anonymisierungsfreigabe.
+
+Kleine Grafiktexte, komplexe Layouts und OCR können weiterhin fehlen oder falsch
+gelesen sein. Keine automatische Bereinigung nach Wörterbuch, keine Garantie für
+beliebige Schriften oder defekte Dateien. Vorhandene PDF-Suchtexte bleiben erhalten.
+
+Der normale Direkt-Ergebnisablauf, vertrauliche Zuordnungen, Originalschutz und
+Anonymisierungs-/Restprüfungen bleiben bestehen. Desktop-/Zielhostabnahmen bleiben
+USER_PENDING. Mac bleibt ad-hoc versiegelt ohne eigene Developer ID oder
+Notarisierung; keine Schutzabschaltung oder Apple-Zertifizierung. Linux RC159
+und Cowork RC151 bleiben unverändert. Dieser Dokumentationsnachtrag übernimmt
+keinen RC177-Produktcode nach main; dessen Quellversion bleibt 3.2.0-rc165.
+
+Die folgenden RC176- und älteren Abschnitte sind historische Belege ihres damaligen Stands.
 
 ### RC176 – Standalone Windows sowie macOS ZIP und zusätzlich DMG
 
