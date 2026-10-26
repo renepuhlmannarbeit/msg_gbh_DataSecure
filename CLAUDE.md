@@ -35,14 +35,17 @@
 - Nur verifiziertes anonymisiertes Markdown gelangt nach `DataSecure-Output`.
   Reine Konvertate bleiben **nicht anonymisiert** in `DataSecure-Markdown` und
   außerhalb des Plugin-Handoffs. Standalone ergänzt nur Anonymisierungsläufe um
-  eine lokale `DataSecure-Zuordnung.csv` (DS-083); reine Markdown-Konvertierung
-  erzeugt keine Zuordnungsdatei. Das globale Mapping bleibt privat.
+  eine lokale `DataSecure-Zuordnung.csv` (DS-083); neuere gebundene
+  Anonymisierungs-Ergebnisgenerationen enthalten außerdem im lokalen Ordner
+  `Vertraulich` die Dateizuordnung als CSV und die Pseudonym-Zuordnung als TXT
+  und XLSX; reine Markdown-Konvertierung erzeugt keine Zuordnungsdatei.
+  Das globale Mapping bleibt privat.
   Cowork-Outputs enthalten keine Zuordnung oder Originalnamen.
 - Standalone zeigt gewählte Quellenordner, Dateinamen und Ergebnisziele lokal
   als Text (DS-082), ohne freie Datei-/Netzwerkrechte. Diese Anzeige gehört
   nicht in Diagnose, Supportspur oder Claude-Rückgaben.
 - Standalone startet auf **Start** ohne vorbelegten Zweck; Picker/Drop allein
-  starten keine Verarbeitung. Verlauf zeigt höchstens 20 Läufe mit an den
+  starten keine Verarbeitung. Der aktuelle Verlauf zeigt die letzten 5 Läufe mit an den
   konkreten Lauf gebundenen Aktionen. Keine automatische Ergebnisnavigation;
   neue Standardziele ändern keine früheren Öffnungsziele (DS-086).
 - Empfangs-ACK, dauerhafter Checkpoint und sichtbarer Abschluss sind getrennt.

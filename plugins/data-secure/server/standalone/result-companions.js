@@ -16,8 +16,11 @@ const MAX_TOTAL_BYTES = 500 * 1024 * 1024;
 const LEGACY_PATHS = Object.freeze({ filename_mapping: FILENAME_MAPPING_PATH, identities: LEGACY_IDENTITIES_PATH });
 const PATHS = Object.freeze({ filename_mapping: FILENAME_MAPPING_PATH, identities: IDENTITIES_PATH, workbook: WORKBOOK_PATH });
 const hash = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
-const closed = (value, fields) => value && typeof value === 'object' && !Array.isArray(value) &&
-  Object.keys(value).sort().join(',') === fields.split(',').sort().join(',');
+const closed = (value, fields) => {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const actual = Object.keys(value).sort(), expected = fields.split(',').sort();
+  return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
+};
 const validHash = value => typeof value === 'string' && /^[a-f0-9]{64}$/u.test(value);
 const failure = () => Object.assign(Error('RESULT_COMPANIONS_INVALID'), { code: 'RESULT_COMPANIONS_INVALID' });
 function validConfidentialDescriptor(value, version = null) {

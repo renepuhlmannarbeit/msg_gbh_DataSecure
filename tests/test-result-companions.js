@@ -186,6 +186,9 @@ function fixture(count = 2) {
 test('fixed descriptor has exactly two roles, byte caps and no caller-selected paths', () => {
   const value = companions.confidentialDescriptor(Buffer.from('csv'), Buffer.from('txt'));
   assert.equal(companions.validConfidentialDescriptor(value), true);
+  // A single JSON key containing a comma must not impersonate two fixed roles.
+  const joinedRole = { 'filename_mapping,identities': clone(value.identities) };
+  assert.equal(companions.validConfidentialDescriptor(joinedRole, 2), false);
   for (const change of [v => { v.extra = v.identities; }, v => { v.identities.name = '../x'; },
     v => { v.filename_mapping.bytes = 0; }, v => { v.filename_mapping.bytes = companions.MAX_MAPPING_BYTES + 1; },
     v => { v.identities.bytes = companions.MAX_IDENTITY_BYTES + 1; }, v => { v.identities.sha256[0] = 256; },
@@ -203,6 +206,9 @@ test('new descriptor has exactly three closed roles, fixed names and no null or 
   assert.equal(companions.confidentialVersion(value), 3);
   assert.equal(companions.validConfidentialDescriptor(value, 2), false);
   assert.equal(companions.validConfidentialDescriptor(value, 3), true);
+  assert.equal(companions.validConfidentialDescriptor({
+    'filename_mapping,identities': clone(value.identities), workbook: clone(value.workbook)
+  }, 3), false);
   assert.deepEqual(companions.confidentialFiles(value).map(file => file.name),
     ['Vertraulich/Dateizuordnung.csv', 'Vertraulich/Pseudonym-Zuordnung.txt', 'Vertraulich/Pseudonym-Zuordnung.xlsx']);
   assert.equal(companions.confidentialBytes(value), 10);

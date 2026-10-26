@@ -1,5 +1,89 @@
 # Aktives Entwicklungsbacklog · 3.2.0-rc177
 
+## Neuer Auftrag 26.10.2026 · vollständiges Code- und Fachreview von RC177
+
+Der Nutzer beauftragt eine detaillierte Prüfung jeder eigenen produktiven
+Funktion/Methode/Klasse, jedes Parameters und jedes Fehlerbehandlungsblocks
+auf allen Ebenen, einschließlich Tests, Build und Windows/Mac-Grenzen. Der
+[vollständige Plan](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md)
+definiert Symbolregister, Prüfraster, Evidenz und Abnahmekriterien. Ausgangs-
+Appcommit ist der veröffentlichte Tag `v3.2.0-rc177` auf `fc39f820…`, nicht ein
+späterer Docs-HEAD. RC177-Pakete bleiben unverändert; Nutzer-Desktoptests
+werden nicht als Agentennachweis übernommen.
+
+- [x] Auftrag/Quellbasis/Geltung und kanonische Regeln zuerst abgleichen.
+- [ ] R0: versioniertes, klassifiziertes Dateimanifest einschließlich
+  eigener/angepasster, generierter und unveränderter Drittanbieterquellen.
+- [ ] R1: vollständiges JS-/Rust-/C-/C++-Symbol- und Fehlerpfadinventar;
+  Parserlücken, dynamische Imports und HTML-/UI-Handler manuell schließen.
+- [ ] R2: Fach- und Vertrauensgrenzen aller Produktmodi und Formatketten
+  mit konkreten Sequenzen und Zustands-/Recoveryübergängen nachzeichnen.
+- [ ] R3: alle eigenen Symbole anhand des einheitlichen Parameter-, Zustands-,
+  Fehler-, Daten- und Testorakels einzeln prüfen; keinen PENDING-Eintrag als
+  bestanden melden.
+- [ ] R4: tatsächliche Original↔Markdown-/Anonymisierungsvergleiche für
+  alle unterstützten Formatklassen und kritischen früheren Problemfälle.
+- [ ] R5: private/öffentliche Ausgabe, Pfad-/Objekt-/ACL-/Guardbindung,
+  Netzwerkgrenze, Race/Timeout/Crash und Plattformgrenzen revalidieren.
+- [ ] R6: Test-, Fixture-, Build-, Dependency-, Lizenz-, Manifest- und
+  CI-Integrität inklusive Aussagegrenzen bestehender PASS-Belege prüfen.
+- [ ] R7: unabhängige Fachgegenreviews an tatsächlichem Code/offiziellen
+  APIs; Befunde vom Hauptagenten einzeln entscheiden.
+- [ ] R8: bestätigte Befunde priorisiert eng korrigieren und mit frischen,
+  zum neuen Quellstand gebundenen Tests prüfen; alte RC177-Pakete nicht ändern.
+- [ ] R9: vollständigen Abdeckungs-/Befundbericht mit offenen Nutzer- und
+  Zielhostgates vorlegen. Eine neue Veröffentlichung wird gesondert entschieden.
+
+Fortschritt 26.10.: Projektregeln, Dokumentkanon, Sicherheitsmodell, Testvertrag,
+Paket-/Rustkonfiguration und Hauptquellbereiche gelesen. R0-Teilschritt am
+veröffentlichten Appcommit gebunden: 1702 Gitdateien, davon1336 als eigene,
+109 als generierte Pfade und257 als Fremd-/Vendorpfade vorläufig klassifiziert;
+361 eigene produktive
+Code-Dateien,492 Tests,113 Build-/Benchmarkdateien,2 Repository-Code-Dateien.
+Alle geprüften Arbeitsbaum-Codeblobs entsprechen dem Tag, keine Parserfehler.
+Vendor-Provenienz und die vorläufige Pfadklassifikation sind noch zu prüfen;
+R0 ist deshalb offen.
+R1 bislang **nur Teilinventar, kein Review-PASS**: gepinnter Node22.23.2-Acorn
+erfasste 43716 JS-AST-Stellen einschließlich Callback-/Throw-/Catchstellen;
+offline `syn` erfasste4350 Rust-AST-Stellen aus21Dateien. C/C++, Makrokörper,
+HTML/CSS, PowerShell, dynamische Pfade und manuelle Abdeckung sind offen.
+Create-only Maschinenbelege unter `dist/rc177-full-code-review-20261026`.
+Revalidierte Dokumentendrift eng korrigiert: `CLAUDE.md` nannte noch20
+sichtbare Verlaufsläufe und nur die erste sichtbare CSV; RC177-Quellen
+verwenden ein Fünferfenster sowie drei zusätzliche vertrauliche
+Begleitdateien. Keine Produktcodeursache daraus abgeleitet.
+
+**Reviewbefund 001, lokal korrigiert, noch nicht veröffentlicht:**
+`result-companions.js` verglich Feldnamen über eine kommaseparierte
+Zeichenkette. Der einzelne fremde Schlüssel `filename_mapping,identities`
+wurde als zwei erlaubte Rollen akzeptiert. Reproduktion im echten
+`test-result-companions.js`: erst19/20 mit gezielt rotem Negativfall, nach
+engem Feld-für-Feld-Vergleich20/20 PASS. Nachgelagerte Zugriffe und das
+native Rust-DTO erwarten getrennte Rollen; keine Offenlegung nachgewiesen.
+P2 Schema-/Fehlerpfadkonsistenz. Beleg:
+`dist/rc177-full-code-review-20261026/FINDING-001.md`.
+- [ ] Alle weiteren kommaseparierten `Object.keys`-Gleichheitsprüfungen
+  nach Eingabeherkunft, erlaubten Schlüsseln und tatsächlicher Wirkung
+  einzeln triagieren; keine pauschale Befund-/Entwarnungsübertragung.
+- [ ] Angrenzende Gateway-/Workerfälle und neue gebundene Plattformgates
+  für den lokalen Fix prüfen, bevor ein neuer Kandidat als geeignet gilt.
+  Der direkte Worker-/Gatewaytest ist jetzt mit66Checks/325Einträgen/
+  44Wartevorgängen grün; breitere und Plattformgates bleiben offen.
+  Ein erstes `rg`-Muster ergibt104Schlüssellisten-Vergleiche in51
+  Produktdateien; der präzisere AST-Scan der RC177-Gitblobs findet121
+  Kandidaten in64eigenen Dateien,101davon im Produkt. Treffer sind nur
+  Triageinput, keine bestätigten Defekte.
+  Das manuelle Symbolregister enthält bisher9begründete Entscheidungen,
+  43707JS-Einträge bleiben `PENDING`.
+R2-Teilfluss für vertrauliche Zuordnungen (Prepare → Read → Generation →
+native DTO → ACK) ist unter `dist/rc177-full-code-review-20261026/
+FLOW-CONFIDENTIAL-COMPANIONS.md` quellengebunden; übrige Flüsse offen.
+R0-Teilprüfung in `SCOPE-PROVENANCE.md`:231 OCR-Runtime-Vendorpfade,
+26historische Keyring-Testvendorpfade; lokale OCR-Manifestprüfung und
+referenzierter erfolgreicher Run, fünf Keyring-Binärhashes und13/13
+Package-Lock-Integritätswerte passen. Externe Pakettarballs, Generatoren
+und Lizenzvollständigkeit offen; Vendorpfade nicht als ungenutzt abtun.
+
 **RC177-Abschluss 26.10.2026:** Die priorisierten BL-049.3- sowie begrenzten
 BL-047.3/.4/.6/.7-Korrekturen sind im Test-Pre-Release
 [v3.2.0-rc177](https://github.com/renepuhlmannarbeit/msg_gbh_DataSecure/releases/tag/v3.2.0-rc177)
