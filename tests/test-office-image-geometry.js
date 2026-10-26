@@ -25,7 +25,7 @@ test('full-asset OCR is labeled honestly, original native text and exact contact
  const result=createMarkdownExtraction({source_type:'pptx',markdown:'E-Mail: mail@example.invalid',content_options:contentOptions,coverage:{status:'incomplete',reason_codes:['OCR_CONTACT_VALUES_UNVERIFIED']},
  ocr_contacts:[{start:8,end:28,page:1,line:1,kind:'email'}]});
  const occurrence={after:extraction.markdown.length,kind:'slide',index:1,ordinal:1,result:0,sourceGeometry:geometry(families[0],'rot="5400000"','l="10000"',true)};
- const out=appendOfficeOcr(extraction,[result],contentOptions,[occurrence]);assert.match(out.markdown,/Native Suchtexte/u);assert.match(out.markdown,/Quellgrafik vollständig gelesen/u);assert.match(out.markdown,/Quellausschnitt/u);assert.match(out.markdown,/gedreht oder gespiegelt/u);assert.match(out.markdown,/Gruppierung/u);
+ const out=appendOfficeOcr(extraction,[result],contentOptions,[occurrence]);assert.match(out.markdown,/Native Suchtexte/u);assert.match(out.markdown,/Ganze Quellgrafik verarbeitet; OCR-Inhalt ungeprüft\./u);assert.doesNotMatch(out.markdown,/Quellgrafik vollständig gelesen/u);assert.match(out.markdown,/Quellausschnitt/u);assert.match(out.markdown,/gedreht oder gespiegelt/u);assert.match(out.markdown,/Gruppierung/u);
  assert.equal(out.markdown.slice(out.ocr_contacts[0].start,out.ocr_contacts[0].end),'mail@example.invalid');
  const unit=officeOcrCheckpoint(extraction,result,contentOptions,[occurrence],{chars:0,contacts:0,bytes:0,pixels:0,units:0});
  assert.equal(unit.markdown.slice(unit.ocr_contacts[0].start,unit.ocr_contacts[0].end),'mail@example.invalid');

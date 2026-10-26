@@ -14,9 +14,13 @@ const { sourceCropBlocks } = require('../plugins/data-secure/server/standalone/o
 const { attachContactCrops } = require('../plugins/data-secure/server/standalone/ocr-contact-crops');
 const { validateContactImage } = require('../plugins/data-secure/server/core/ocr-contact-image');
 const { decodePng } = require('../plugins/data-secure/server/images/png');
-const base = fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-conversion-timings-'));
+const environmentKeys = ['LOCALAPPDATA', 'EU_PRIVACY_ROOT', 'EU_PRIVACY_DATA_ROOT', 'EU_PRIVACY_RESULT_ROOT'];
+const previousEnvironment = Object.fromEntries(environmentKeys.map(key => [key, process.env[key]]));
+const base = fs.realpathSync.native(fs.mkdtempSync(path.join(os.tmpdir(), 'datasecure-conversion-timings-')));
 process.env.LOCALAPPDATA = path.join(base, 'local');
 process.env.EU_PRIVACY_ROOT = path.join(base, 'privacy');
+process.env.EU_PRIVACY_DATA_ROOT = path.join(base, 'data');
+process.env.EU_PRIVACY_RESULT_ROOT = path.join(base, 'results');
 const { sanitizeWorkflowEvent, recordWorkflowEvent, _test } = require('../plugins/data-secure/server/gateway/workflow-diagnostics');
 let passed = 0;
 async function test(name, run) { await run(); passed++; process.stdout.write(`PASS ${name}\n`); }
@@ -177,8 +181,12 @@ const { MAX_STREAM_BYTES, FRAME_PREFIX, FRAME_START } = require('../plugins/data
     record.private_text = 'PRIVATE'; assert.equal(sanitizeWorkflowEvent({ event: 'conversion_worker_closed', metrics: record }).metrics, undefined);
   });
   await test('the private diagnostic spool retains only closed fields once per submitted source event', () => {
-    const record = fixture(); assert.equal(recordWorkflowEvent({ event: 'conversion_worker_closed', item_count: 1,
-      outcome: 'ok', metrics: record, private_path: 'PRIVATE' }, { dataRoot: base }), true);
+    assert.equal(fs.realpathSync.native(base), base);
+    let writeError;
+    const record = fixture(), written = recordWorkflowEvent({ event: 'conversion_worker_closed', item_count: 1,
+      outcome: 'ok', metrics: record, private_path: 'PRIVATE' }, { dataRoot: base, onError(cause) { writeError = cause; } });
+    const errorFact = writeError?.code || writeError?.message;
+    assert.equal(written, true, `Synthetic spool refusal: ${typeof errorFact === 'string' && /^[A-Z0-9_]{1,80}$/u.test(errorFact) ? errorFact : 'UNCLASSIFIED'}`);
     const events = _test.readWorkflowEvents({ dataRoot: base }); assert.equal(events.length, 1);
     assert.deepEqual(events[0].metrics, record); assert.equal(events[0].item_count, 1); assert.doesNotMatch(JSON.stringify(events), /PRIVATE/u);
   });
@@ -367,4 +375,7 @@ const { MAX_STREAM_BYTES, FRAME_PREFIX, FRAME_START } = require('../plugins/data
     const decoded=decodePng(Buffer.from(image.png_base64,'base64'));assert.ok(decoded.rgba.every(value=>value===123));decoded.rgba.fill(0);
   });
   process.stdout.write(`${passed} conversion timing and native-crop cases PASS\n`);
-})().catch(cause => { process.stderr.write(`Conversion timing test failed: ${cause?.stack || 'UNKNOWN'}\n`); process.exitCode=1; });
+})().catch(cause => { process.stderr.write(`Conversion timing test failed: ${cause?.stack || 'UNKNOWN'}\n`); process.exitCode=1; })
+  .finally(() => { for (const key of environmentKeys) {
+    if (previousEnvironment[key] === undefined) delete process.env[key]; else process.env[key] = previousEnvironment[key];
+  } });

@@ -19,6 +19,12 @@ Erste native Windows-Konvertersuite PASS/stabil. Letzter Diagnose-Framingrand
 bei65536Vendorbytes ohneLF eng behoben und unabhängig mit92Fokus-/15Core-
 und44zusätzlichen Proben gegengeprüft, keine Budget-/Deadlineänderung.
 Gemeinsamer Freeze/Endgates/Pakete/Macs/Übergabe weiterhin offen.
+Source01/d967838a danach tatsächlich geprüft: HeadlessROT37/322 am alten
+Captionorakel, beideMacs40245585007 ROT an synthetischer Spoolfixture;
+WindowsNative und Konverter8 PASS/stabil. Nach allen Jobenden ausschließlich
+sechs Tests eng aktualisiert, ProduktFP1e0a2c57…641e52 unverändert. Native
+Mac-Aliasursache weiterhin keine rückwirkend bewiesene Diagnose; Source02 mit
+frischen gemeinsamen Belegen erforderlich. Kein Source01-Paket/Tag/Release.
 README-Maincommit4170c683bded197201377ebd4985b7930aa5c973 und dessenCI
 40242216266 tatsächlich grün, ausschließlich Dokumentation/kein Produktmerge.
 BL-049.3 bleibt in seiner breiteren Restabdeckung offen: komplexe PDF-Clips/

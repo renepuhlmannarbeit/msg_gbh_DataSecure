@@ -71,7 +71,9 @@ async function boundPrivacy(bytes, extension, markdownOutput, beforePrivacy) {
 
 test('closed reason vocabularies agree and include the nonblocking normalization notice', () => {
   assert.deepEqual(COVERAGE_REASON_CODES, neutral.COVERAGE_REASON_CODES);
-  assert.equal(COVERAGE_REASON_CODES.length, 28); assert.equal(new Set(COVERAGE_REASON_CODES).size, 28);
+  assert.equal(COVERAGE_REASON_CODES.length, 30); assert.equal(new Set(COVERAGE_REASON_CODES).size, 30);
+  assert.ok(COVERAGE_REASON_CODES.includes('IMAGE_DOWNSAMPLED'));
+  assert.ok(COVERAGE_REASON_CODES.includes('XLSX_CONTROL_CHARACTERS_PROJECTED'));
   assert.ok(COVERAGE_REASON_CODES.includes('OFFICE_TABLE_LAYOUT_NORMALIZED'));
   assert.ok(COVERAGE_REASON_CODES.includes(marker));
   assert.ok(!COVERAGE_REASON_CODES.includes('DOCX_TABLE_CONTEXT_UNVERIFIED'));

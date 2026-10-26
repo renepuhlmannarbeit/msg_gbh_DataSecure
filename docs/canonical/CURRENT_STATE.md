@@ -10,6 +10,18 @@ beauftragt und auf Main mit ausschließlich zwei Dokumentdateien umgesetzt:
 Main-Produktcode bleibt RC165; Startseite unterscheidet aktuelle RC176-Downloads
 und noch nicht veröffentlichtes RC177.
 
+26.10.2026: RC177-Source01/d967838a gepusht und alle Jobs beendet, kein Release.
+HeadlessROT37/322 am alten Bildcaptionorakel; WindowsNative300Rust/3ignoriert/
+Clippy/Node-Rust/Release und alle acht Konvertersuiten PASS/stabil. Beide Macs
+40245585007 ROT in derselben synthetischen Diagnose-Spool-Testprobe. Sechs
+Testintegrationen eng nachgeführt, ProduktFP1e0a2c57…641e52/376 unverändert.
+Alte Mac-Aliasursache mangels nativer Tempfakten nicht rückwirkend bewiesen;
+kanonischer eigener Testroot ist gegen tatsächlichen Guard modelliert.
+Beide unabhängigen engen Testgegenreviews abgeschlossen: fünf Suites
+3/6/17/22/24 sowie92Timingfälle PASS, Envrestaurierung tatsächlich geprüft;
+Produktbytes unverändert, keine Schutzassertion abgeschwächt.
+Source02-Commit/Endgates/Pakete/Macs/Übergabe noch offen; alte Belege bleiben.
+
 Excel-/SmartArt-/SVG-/PDF-Implementierung und Quellordnerlabels integriert,
 unabhängig am tatsächlichen Code und begrenzten realen Quellen gegengeprüft.
 Bestätigte Zellschutz-/Zusatztext-/Pixel-/Kontextgegenfälle eng korrigiert;
@@ -18,7 +30,8 @@ PASS/stabil, noch kein finaler Endnachweis. Letzter Diagnose-Framingrand bei
 unterminiertem Vendorstderr eng behoben und unabhängig mit ursprünglichen
 Gegenfällen,92Fokus-/15Core-/44zusätzlichen Proben revalidiert. Keine neuen
 Budgets/Deadlines/Autorisierungen. Noch kein finaler RC177-Commit, Endgate
-oder Paket; nächster Schritt gemeinsamer Freeze. PDF/OCR-Qualitätsgrenzen und teilweise neue Randzeichen
+oder Paket freigegeben; nächster Schritt neuer gemeinsamer Source02-Freeze nach
+Testgegenreview. PDF/OCR-Qualitätsgrenzen und teilweise neue Randzeichen
 bleiben ausdrücklich dokumentiert; kein neuer vollständiger119Dateienlauf.
 [Aktueller RC177-Umsetzungs- und Abnahmeplan](../acceptance/RC177_SHARED_RELEASE_20261025.md).
 

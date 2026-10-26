@@ -41,9 +41,11 @@ test('OCR contact uncertainty crosses both closed contracts without claiming ver
   const standalone = require('../plugins/data-secure/server/standalone/markdown-contract');
   assert.deepEqual(COVERAGE_REASON_CODES, standalone.COVERAGE_REASON_CODES,
     'converter and privacy extraction vocabularies must stay synchronized');
-  assert.equal(COVERAGE_REASON_CODES.length, 28);
+  assert.equal(COVERAGE_REASON_CODES.length, 30);
   assert.ok(COVERAGE_REASON_CODES.includes('OFFICE_TABLE_CONTEXT_UNVERIFIED'));
-  assert.equal(new Set(COVERAGE_REASON_CODES).size, 28);
+  assert.equal(new Set(COVERAGE_REASON_CODES).size, 30);
+  assert.ok(COVERAGE_REASON_CODES.includes('IMAGE_DOWNSAMPLED'));
+  assert.ok(COVERAGE_REASON_CODES.includes('XLSX_CONTROL_CHARACTERS_PROJECTED'));
   assert.ok(COVERAGE_REASON_CODES.includes('OFFICE_TABLE_LAYOUT_NORMALIZED'));
   assert.ok(COVERAGE_REASON_CODES.every((code, index, codes) => index === 0 || codes[index - 1] < code),
     'the shared closed coverage vocabulary must remain strictly ascending');

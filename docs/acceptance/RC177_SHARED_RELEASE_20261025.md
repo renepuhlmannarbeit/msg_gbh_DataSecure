@@ -48,6 +48,36 @@ Finder/Gatekeeper/TCC/Excel/Numbers und die reale GUI bleiben Nutzerabnahmen.
 
 ## Laufendes Journal
 
+- 26.10.2026, Source01-Endlauf: d967838a243630c13d7244651eba4c2419c4a6a5
+  tatsächlich gepusht/23:37:52.836UTC eingefroren. ProduktFP
+  `1e0a2c571f380b30eb66fc9d9a39b05dedafa05b3b90f95a1d614bd5b3641e52`/376,
+  638Tests/Scripts/Workflows, Manifest
+  `c3465e8de6f973ea4be69e2950a4f517afcfdc14b9b85bd27d464bdc76cc918f`.
+  Alle lokalen Jobs regulär/stabil beendet: Headless ROT37/322+0/11 bei altem
+  Office-Captionorakel; Native PASS23:41:46.228UTC mit300Rust/3ignoriert,
+  Clippy/Node-Rust/Release; alle acht Konvertersuiten PASS23:43:41.947UTC.
+  Kein Source01-Paket oder Snapshot. Beide Macjobs40245585007 beendet ROT
+  (ARM121326353670/Intel121326353686) bei derselben Diagnose-Spool-Testprobe,
+  noch vor tatsächlichem Paketlauf. Beide Original-Logs gebunden erhalten;
+  kein Produkt-/Core-/Signaturfehler daraus bewiesen, keine Veröffentlichung.
+- Nach Ende aller Source01-Jobs ausschließlich sechs Tests eng nachgeführt:
+  ehrliche Bildcaption mit zusätzlichem Verbot der alten Vollständigkeits-
+  behauptung; drei feste30erCodeverträge samt expliziten beiden neuen Codes;
+  PDF-Quellfunktions-VM mit innerem Importslice und tatsächlichem frischem
+  Timingobjekt; kanonischer eigener temporärer Diagnose-Testroot und vollständige
+  Env-Isolation/-Restaurierung. Spoolguard und Erfolgspflicht bleiben unverändert.
+  Ein Aliasroot reproduziert im tatsächlichen Quellenmodell die Verweigerung,
+  kanonischer Root funktioniert und verlinktes Kind bleibt verweigert. Die
+  alten Mac-Logs enthalten keine TMPDIR-/UID-/Modusfakten: konkrete native
+  Aliasursache bleibt führende Diagnose, kein nachträglich bewiesener Mac-PASS.
+  Gezielte fünf Tests3/6/17/22/24 und Timing92 PASS. Erster vollständiger
+  Fünf-Hunk-Gegenreview8d6a469e…61eb9 bestätigt alle alten Schutzassertionen/
+  ursprünglichen roten Belege. Timingfixture-Gegenreview0d682fd8…609bb ebenfalls
+  abgeschlossen:92PASS und alle vier Envwerte tatsächlich restauriert,
+  ursprüngliche Budget-/Close-/Cancel-/Cropassertionen bytegleich. Produktbytes/FP
+  unverändert. Source02 vorbereitet, keine alten FINALs kopiert; frischer
+  gemeinsamer Commit/Endgates/beideMacs und erst danach geeignete Übergabe nötig.
+
 - 26.10.2026, vor gemeinsamem Freeze: Diagnose-Framingrand eng behoben.
   Genau ein explizites RS-Byte gehört zum unveränderten2048Byte-Framebudget;
   Vendorbudget65536 und Streamcap67584 bleiben. Originale fünf Gegenfälle,

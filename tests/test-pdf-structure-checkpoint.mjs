@@ -13,7 +13,7 @@ const {CheckpointStream,SCHEMA,MAX_UNITS}=require('../plugins/data-secure/server
 const {pdfOcrAction}=require('../plugins/data-secure/server/core/content-ocr-plan');
 const source=fs.readFileSync(path.join(root,'plugins/data-secure/server/standalone/conversion-worker-child.js'),'utf8');
 const start=source.indexOf('async function pdfMarkdown('),end=source.indexOf('\nasync function main()',start);
-const expression="await import(pathToFileURL(path.join(pdfRoot, 'legacy', 'build', 'pdf.datasecure.mjs')).href)";
+const expression="import(pathToFileURL(path.join(pdfRoot, 'legacy', 'build', 'pdf.datasecure.mjs')).href)";
 assert.ok(start>0&&end>start);const actual=source.slice(start,end);assert.equal(actual.split(expression).length,2);
 const omissionStart=source.indexOf('function imageOmission('),omissionEnd=source.indexOf('\nfunction visualOmission(',omissionStart);assert.ok(omissionStart>0&&omissionEnd>omissionStart);
 const errors=new Set(require('../plugins/data-secure/server/core/conversion-worker-contract').ERROR_CODES);
@@ -28,6 +28,7 @@ async function run(pages,{options=off,context:extra={},beforeLookup,document:doc
     const original=pages[number-1],lookup=original.getStructTree;return {...original,cleanup(){cleaned++;original.cleanup();},getStructTree:async()=>{lookups++;beforeLookup?.({frames,number});return lookup();}};
   },...docExtra};
  const context={path,root:'isolated-test-runtime',errors,fail,MAX_UNITS,...contract,...metadata,...layout,projectTaggedPdf,
+  conversionTimings:require('../plugins/data-secure/server/standalone/conversion-timings').createConversionTimings(),
   // The production argument record is plain in its own realm. Recreate only
   // that carrier in this VM boundary; retain the exact original item objects.
   taggedPdfTextLayout:input=>layout.taggedPdfTextLayout({items:input.items,structureTree:input.structureTree,pageNumber:input.pageNumber,pageRef:input.pageRef}),
