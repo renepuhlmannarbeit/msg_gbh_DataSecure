@@ -178,6 +178,9 @@ test('invalid or inconsistent counters fail closed', () => {
   const invalid = graded(2, 1, 0, 1);
   invalid.result_grade_counts.complete = 2;
   assert.throws(() => validateSummary(invalid), /Ungültige/);
+  const merged = graded(1, 1, 0, 0);
+  merged.result_omission_counts = { 'images_removed_by_request,visual_assets_withheld_locally': 1 };
+  assert.throws(() => validateSummary(merged), /Ungültige/);
 });
 
 test('intake failure notices contain only fixed local wording', () => {

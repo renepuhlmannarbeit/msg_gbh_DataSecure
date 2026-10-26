@@ -73,8 +73,8 @@ P2 Schema-/Fehlerpfadkonsistenz. Beleg:
   Produktdateien; der präzisere AST-Scan der RC177-Gitblobs findet121
   Kandidaten in64eigenen Dateien,101davon im Produkt. Treffer sind nur
   Triageinput, keine bestätigten Defekte.
-  Das manuelle Symbolregister enthält bisher9begründete Entscheidungen,
-  43707JS-Einträge bleiben `PENDING`.
+  Das manuelle Symbolregister enthält bisher12begründete Entscheidungen,
+  43704JS-Einträge bleiben `PENDING`.
 R2-Teilfluss für vertrauliche Zuordnungen (Prepare → Read → Generation →
 native DTO → ACK) ist unter `dist/rc177-full-code-review-20261026/
 FLOW-CONFIDENTIAL-COMPANIONS.md` quellengebunden; übrige Flüsse offen.
@@ -83,6 +83,22 @@ R0-Teilprüfung in `SCOPE-PROVENANCE.md`:231 OCR-Runtime-Vendorpfade,
 referenzierter erfolgreicher Run, fünf Keyring-Binärhashes und13/13
 Package-Lock-Integritätswerte passen. Externe Pakettarballs, Generatoren
 und Lizenzvollständigkeit offen; Vendorpfade nicht als ungenutzt abtun.
+
+**Reviewbefund 002, lokal korrigiert, noch nicht veröffentlicht:**
+`batch-evidence.js` akzeptierte im lokalen Nachweis einen einzigen
+kommahaltigen Feldnamen statt der zwei Auslassungszähler. Reine
+Nachweisschema-Integrität P2; normale Writerausgabe, Datenoffenlegung und
+Umwandlung dadurch nicht als fehlerhaft belegt. Synthetischer Gegenfall
+vorher angenommen/nachher abgewiesen; tatsächlicher Batch-Test72/72PASS.
+Details unter `dist/rc177-full-code-review-20261026/FINDING-002.md`.
+
+**Reviewbefund 003, lokal korrigiert, noch nicht veröffentlicht:**
+`completion-summary.js` akzeptierte denselben zusammengefassten
+Auslassungs-Key in einer verifizierten lokalen Abschlusszusammenfassung;
+der Nutzerhinweis zu Auslassungen fehlte danach. Synthetisch reproduziert,
+kein solcher echter Nutzerlauf belegt. Enger Feldvergleich,
+`test-completion-summary.js`19/19PASS. P2 fachliche Anzeigeintegrität;
+`dist/rc177-full-code-review-20261026/FINDING-003.md`.
 
 **RC177-Abschluss 26.10.2026:** Die priorisierten BL-049.3- sowie begrenzten
 BL-047.3/.4/.6/.7-Korrekturen sind im Test-Pre-Release

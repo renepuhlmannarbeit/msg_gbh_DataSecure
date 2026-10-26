@@ -161,8 +161,8 @@ Windows- und beide Mac-Gates; RC177 selbst bleibt unverändert.
   SHA-256 `bec5c1313ac1c1185b4c21f2ec0a342f8811674e9d36f71596771d7523777035`
   ist Triage, kein Befund/PASS je Stelle. Jeder mögliche Fehlerpfad benötigt
   gesonderte Eingabe-/Wirkungsprüfung. Von 43716
-  JS-Inventareinträgen haben erst neun eine begründete manuelle Entscheidung
-  (`REVIEW-DECISIONS.json`); 43707 stehen weiterhin auf `PENDING`.
+  JS-Inventareinträgen haben erst zwölf eine begründete manuelle Entscheidung
+  (`REVIEW-DECISIONS.json`); 43704 stehen weiterhin auf `PENDING`.
 - R2-Teilfluss der vertraulichen Zuordnungen vom privaten Prepare über
   erneutes Read/Generation/IPC bis zum Rust-Inventar und Abschluss-ACK in
   `FLOW-CONFIDENTIAL-COMPANIONS.md` beschrieben. Dies schließt andere
@@ -175,3 +175,17 @@ Windows- und beide Mac-Gates; RC177 selbst bleibt unverändert.
   Testkitdaten und vier Tauri-Schemas sind als vorläufig generiert benannt.
   Externe Tarball-Provenienz/Generatorherkunft und Lizenzvollständigkeit
   bleiben offen; `SCOPE-PROVENANCE.md` nennt die Grenzen.
+- 26.10., R3/R5-Befund 002: `batch-evidence.js` akzeptierte bei ansonsten
+  gültigem lokalen Nachweis einen einzigen Schlüssel
+  `images_removed_by_request,visual_assets_withheld_locally` als beide
+  Auslassungszähler. Synthetische Vorher-/Nachherprobe `true`/`false`;
+  enger Fix und tatsächlicher Receipt-Gegenfall im unveränderten
+  `test-batch-session.js` 72/72 PASS. P2 Integrität des Nachweisschemas,
+  keine Verarbeitung-/Offenlegungswirkung belegt. `FINDING-002.md`.
+- 26.10., R3-Fachbefund 003: `completion-summary.js` akzeptierte bei einem
+  verifizierten DTO denselben zusammengefassten Auslassungs-Key und ließ
+  danach den Auslassungshinweis in der lokalen Abschlussanzeige weg.
+  Vorherprobe `accepted:true,hasOmission:false`; enger Einzelkeyvergleich,
+  tatsächliche Abschlusssuite 19/19 PASS. Ein echter Nutzerlauf mit
+  solcher korrupten Zusammenfassung ist nicht nachgewiesen. P2 wegen
+  irreführender Anzeige; `FINDING-003.md`.

@@ -665,6 +665,9 @@ async function main() {
     assert.doesNotMatch(encoded, /Alice|Example|Document|\.txt|package_id|batch_token|sha256|path/i);
     assert.throws(() => validateEvidenceRecord({ ...receipt.records[0], original_name: 'Alice Example' }), /ungültiges Format/);
     assert.throws(() => validateEvidenceRecord({ ...receipt.records[0], counts: { ...receipt.records[0].counts, total: 2 } }), /ungültiges Format/);
+    assert.throws(() => validateEvidenceRecord({ ...receipt.records[0], omission_counts: {
+      'images_removed_by_request,visual_assets_withheld_locally': 0
+    } }), /ungültiges Format/);
   });
 
   await testAsync('a damaged local evidence receipt does not retract an otherwise released package', async () => {

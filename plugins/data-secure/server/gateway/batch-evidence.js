@@ -135,8 +135,9 @@ function evidenceRecord(
 }
 
 function exactKeys(value, keys) {
-  return value && typeof value === 'object' && !Array.isArray(value) &&
-    Object.keys(value).sort().join(',') === keys.join(',');
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const actual = Object.keys(value).sort();
+  return actual.length === keys.length && actual.every((key, index) => key === keys[index]);
 }
 
 function validTimestamp(value) {

@@ -8,6 +8,12 @@ const { LIMITS } = require('../gateway/common');
 const { RESOURCE_LIMITS } = require('../resource-limits');
 const { VERSION } = require('../version');
 
+function exactCountKeys(value, expected) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const actual = Object.keys(value).sort();
+  return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
+}
+
 function validateSummary(summary) {
   const selected = summary?.selected_count;
   const released = summary?.released_count;
@@ -27,12 +33,8 @@ function validateSummary(summary) {
       gradesVerified: false
     };
   }
-  const gradeKeys = gradeInput && typeof gradeInput === 'object' && !Array.isArray(gradeInput)
-    ? Object.keys(gradeInput).sort().join(',') : '';
-  const omissionKeys = omissionInput && typeof omissionInput === 'object' && !Array.isArray(omissionInput)
-    ? Object.keys(omissionInput).sort().join(',') : '';
-  const gradeCounts = gradeKeys === 'complete,not_processed,unavailable,usable_with_omissions' ? gradeInput : null;
-  const omissionCounts = omissionKeys === 'images_removed_by_request,visual_assets_withheld_locally' ? omissionInput : null;
+  const gradeCounts = exactCountKeys(gradeInput, ['complete', 'not_processed', 'unavailable', 'usable_with_omissions']) ? gradeInput : null;
+  const omissionCounts = exactCountKeys(omissionInput, ['images_removed_by_request', 'visual_assets_withheld_locally']) ? omissionInput : null;
   const maximumOmissions = selected * RESOURCE_LIMITS.MAX_VISUAL_ASSETS;
   if (!gradeCounts || !omissionCounts || !Object.values(gradeCounts).every((value) => Number.isSafeInteger(value) && value >= 0) ||
       !Object.values(omissionCounts).every((value) => Number.isSafeInteger(value) && value >= 0 && value <= maximumOmissions) ||
