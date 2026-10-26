@@ -5,10 +5,12 @@
 // The supervisor's existing deadline/owned process covers every extra pass.
 const { isContactLine } = require('./ocr-quality');
 const { diaeresisCandidate } = require('./ocr-diaeresis-evidence');
+const { wordDiaeresisCandidate } = require('./ocr-word-diaeresis-evidence');
 const MAX_PASSES = 32;
 const MAX_TOTAL_PIXELS = 2_000_000;
 const MAX_CROP_PIXELS = 200_000;
 const MIN_WORD_CONFIDENCE = 95;
+const MAX_GLYPH_EVIDENCE_PIXELS = 32768;
 const spacingKey = text => text.replace(/[ \t]+/gu, ' ').trim();
 
 function validBox(box, width, height) {
@@ -139,7 +141,7 @@ function glyphBinding(data, entry, width, height) {
   if (!owner || literalOffset(data.text, allLines, entry.line) !== entry.start) return null;
   const paragraphOffset = literalOffset(owner.paragraph.text, owner.paragraph.lines, entry.line);
   const blockOffset = literalOffset(owner.block.text, owner.block.paragraphs.flatMap(paragraph => paragraph.lines), entry.line);
-  return paragraphOffset === null || blockOffset === null ? null : { ...owner, paragraphOffset, blockOffset, neighbours };
+  return paragraphOffset === null || blockOffset === null ? null : { ...owner, paragraphOffset, blockOffset, neighbours, pageLines: allLines };
 }
 
 function glyphLine(line, value) {
@@ -200,19 +202,39 @@ async function refineOcr(data, canvas, ocr, createCanvas, options) {
         // can change these six letters; uncertainty and scores remain intact.
         const binding = !entry.contact && readings.length === 1 ? glyphBinding(data, entry, canvas.width, canvas.height) : null;
         const pixels = [];
-        let value = null;
+        let value = null, sampledPixels = 0;
+        // Both optional geometric interpretations share ONE finite source
+        // pixel budget. A failed primary attempt does not refund its reads.
+        const readPixels = box => {
+          if (!validBox(box, canvas.width, canvas.height)) throw new Error('OCR_GLYPH_UNBOUND');
+          const area = (box.x1 - box.x0) * (box.y1 - box.y0);
+          if (area > MAX_GLYPH_EVIDENCE_PIXELS - sampledPixels) throw new Error('OCR_GLYPH_BUDGET');
+          sampledPixels += area;
+          const image = canvas.getContext('2d').getImageData(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0);
+          pixels.push(image); return image;
+        };
         try {
+          const reading = readings[0].replace(/(?:\r?\n){1,2}$/u, '');
           if (binding) value = diaeresisCandidate({ line: entry.line,
-            reading: readings[0].replace(/(?:\r?\n){1,2}$/u, ''),
+            reading,
             width: canvas.width, height: canvas.height, contact: entry.contact, readPixels: box => {
               // Other lines may contain another known owner of these pixels.
               // Edge-touching boxes are disjoint; an actual overlap refuses
               // this optional correction before reading or borrowing pixels.
               if (binding.neighbours.some(other => other.x0 < box.x1 && box.x0 < other.x1 &&
                   other.y0 < box.y1 && box.y0 < other.y1)) throw new Error('OCR_GLYPH_AMBIGUOUS');
-              const image = canvas.getContext('2d').getImageData(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0);
-              pixels.push(image); return image;
+              return readPixels(box);
             } });
+          // LSTM character boxes can overlap even when the word is correct.
+          // An optional complete pixel-word partition may supply the missing
+          // glyph position; it must remain inside that same original word and
+          // exclude every foreign owner. It is never a free crop-text choice.
+          // The pinned JSON API currently emits numeric 1; synthetic/typed
+          // callers may use true. No string/truthiness coercion is admitted.
+          if (value === null && binding && (binding.paragraph.is_ltr === true || binding.paragraph.is_ltr === 1)) value = wordDiaeresisCandidate({
+            line: entry.line, reading, width: canvas.width, height: canvas.height,
+            contact: entry.contact, direction: 'ltr', pageLines: binding.pageLines, readPixels
+          });
         } finally { for (const image of pixels) image?.data?.fill(0); }
         if (typeof value === 'string' && value.length === entry.literal.length) {
           lineChanges.set(entry.line, glyphLine(entry.line, value));

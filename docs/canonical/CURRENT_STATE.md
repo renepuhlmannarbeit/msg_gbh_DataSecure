@@ -1,5 +1,21 @@
 # Aktueller Iststand · 3.2.0-rc177
 
+Neuer verbindlicher Source04-Vorprüfstand26.10.2026: Die begrenzte originale
+Wortpixelaufteilung ist implementiert, wenn unbrauchbare OCR-Zeichenboxen die
+primäre Umlautprobe verweigern. Gemeinsames Pixelbudget, vollständige Literal-/
+Besitzerbindung, Kontakte und fehlende neue Freigabeautorität bleiben erhalten.
+Bewusste Kontrastheuristik:32 aufeinanderfolgende Intensitätswerte (Spanne31),
+alle zulässigen Fenster mit gemeinsamem Separator; kein physischer Glyphbeweis.
+Unveränderte fünf native Bildgegenproben jetzt5/5PASS, einschließlich Härtetest
+und beträgt42Prozent. Unabhängiger tatsächlicher Deltareview:239 eigene sowie
+68Wort-/41Pixel-/32Flow-/34Refinerfälle PASS; kein bestätigter Zusatzblocker.
+Frischer privater Acht-Quellenlauf11:29:03.439UTC:8/8CONVERTED, sämtliche MDs
+bytegleich zum inhaltlich gegengeprüften Source03-Achtlauf;352Original-/Kopie-/
+AltMD-Bindungen unverändert. ProduktFP1df160c3…82b5a4/382, kanonisch328+11;
+noch WIP auf96391e34, kein gemeinsamer Source04-Endcommit oder Endgate-PASS.
+Nächster Schritt neuer gemeinsamer Freeze und frische Windows-/beideMac-Gates.
+Alle älteren roten/grünen Belege bleiben historisch; Desktoptests beim Nutzer.
+
 25.10.2026, nachfolgender Umsetzungsauftrag: RC177 für Windows und beide Macs
 ist ausdrücklich beauftragt, einschließlich unabhängiger Reviews, automatischer
 Prüfungen, GitHub-Test-Pre-Release und lokaler Windows-ZIP mit Testplan. Die
@@ -9,6 +25,21 @@ beauftragt und auf Main mit ausschließlich zwei Dokumentdateien umgesetzt:
 4170c683bded197201377ebd4985b7930aa5c973, CI40242216266SUCCESS.
 Main-Produktcode bleibt RC165; Startseite unterscheidet aktuelle RC176-Downloads
 und noch nicht veröffentlichtes RC177.
+
+Neuerer verbindlicher Endstand26.10.: Source03/96391e3425c41f8797ef2cee238e79dd2896c01c
+ist **nicht freigabefähig**. Windows-Native300Rust/3ignoriert/Clippy/Node-Rust/
+Release und Paket5/100MD0Fehler PASS/stabil; tatsächliche Konverterkampagne ROT
+an unveränderter schwacher JPEG-Gegenprobe: Härtetest wird Hartetest. ARM im
+Macrun40303228659 reproduziert denselben Fehler, Intel gezielt danach abgebrochen.
+Headless nach beobachtetem Start79/327 gezielt gestoppt, kein FINAL/kein Gesamt-PASS.
+Alle Jobs beendet; Belege und unveröffentlichtes Source03-ZIP bleiben erhalten.
+Frische8Originalquellen mit13korrekten Umlautkorrekturen und Inhaltserhalt sind
+separat gegengeprüft; sie widerlegen die JPEG-Regression nicht. Kausal: originale
+und Crop-Zeichenboxen überlappen Nachbarn und verpassen einen Umlautpunkt; keine
+nachgewiesene Modell-/Signatur-/Lastursache. Source04-Helfer nur vorbereitet,
+noch kein Fix/Freeze/Paket/Release. Nächster Schritt geschlossene begrenzte
+Wortpixelaufteilung prüfen; ursprüngliche fünf positiven Bildtests beibehalten.
+Desktop bleibt Nutzeraufgabe, keine neue Automation oder Main-Produktintegration.
 
 26.10.2026: RC177-Source01/d967838a gepusht und alle Jobs beendet, kein Release.
 HeadlessROT37/322 am alten Bildcaptionorakel; WindowsNative300Rust/3ignoriert/

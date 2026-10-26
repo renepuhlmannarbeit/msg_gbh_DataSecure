@@ -38,13 +38,14 @@ function glyph(kind = 'dots') {
   if (kind === 'circumflex') ink(7, 5, 17, 8);
   return { width, height, data };
 }
-async function run(data, readings, { kind = 'dots', pixelFailure = false, options } = {}) {
+async function run(data, readings, { kind = 'dots', pixelFailure = false, options, pixelsFor } = {}) {
   const pixels = [], crops = [], parameters = [], boxes = [];
   const canvas = { width: 1600, height: 200, getContext: () => ({ getImageData(x, y, width, height) {
     boxes.push({ x, y, width, height });
     if (pixelFailure) throw new Error('optional pixel read unavailable');
-    assert.equal(width, 24); assert.equal(height, 30);
-    const image = glyph(kind); pixels.push(image); return image;
+    if (!pixelsFor) { assert.equal(width, 24); assert.equal(height, 30); }
+    const image = pixelsFor ? pixelsFor({ x, y, width, height }) : glyph(kind);
+    pixels.push(image); return image;
   } }) };
   const createCanvas = (width, height) => {
     const crop = { width, height, getContext: () => ({ fillRect() {}, drawImage() {} }), toBuffer: () => Buffer.alloc(1) };
@@ -186,6 +187,66 @@ async function test(name, fn) { await fn(); console.log(`PASS ${++count} ${name}
     data.blocks[0].paragraphs[0].text += '\n';
     const { result } = await run(freeze(data), ['Ä Test\n\n']);
     assert.equal(result.text, 'Ä Test\n\n'); assert.equal(lines(result)[0].text, result.text);
+  });
+  const wordFixture = () => {
+    const data = fixture(['AU Test']); data.blocks[0].paragraphs[0].is_ltr = true;
+    // Deliberately inaccurate primary character geometry, contained in its
+    // correct word. Neither box expansion nor accepting that overlap is used.
+    lines(data)[0].words[0].symbols[0].bbox = { x0: 15, y0: 0, x1: 38, y1: 30 };
+    return data;
+  };
+  const wordPixels = () => {
+    const image = { width: 50, height: 30, data: new Uint8ClampedArray(50 * 30 * 4) }; image.data.fill(255);
+    for (const [offset, kind] of [[0, 'dots'], [26, 'ascii']]) {
+      const source = glyph(kind);
+      for (let row = 0; row < 30; row++) image.data.set(source.data.subarray(row * 24 * 4, (row + 1) * 24 * 4), (row * 50 + offset) * 4);
+      source.data.fill(0);
+    }
+    return image;
+  };
+  await test('closed original-word pixels can supply an optional position when primary character boxes overlap', async () => {
+    const data = freeze(wordFixture()), { result, boxes } = await run(data, ['ÄU Test\n'], { pixelsFor(box) {
+      assert.deepEqual(box, { x: 0, y: 0, width: 50, height: 30 }); return wordPixels();
+    } });
+    assert.equal(result.text, 'ÄU Test\n'); assert.equal(lines(result)[0].reading_disagreement, true);
+    assert.equal(lines(result)[0].words[0].symbols[0].bbox, lines(data)[0].words[0].symbols[0].bbox);
+    assert.equal(lines(result)[0].words[0].confidence, lines(data)[0].words[0].confidence);
+    assert.equal(result.blocks[0].text, result.text); assert.equal(result.blocks[0].paragraphs[0].text, result.text);
+    assert.deepEqual(boxes, [{ x: 0, y: 0, width: 50, height: 30 }]);
+  });
+  await test('missing LTR authority leaves inaccurate primary character boxes untouched', async () => {
+    const data = wordFixture(); delete data.blocks[0].paragraphs[0].is_ltr;
+    const { result, boxes } = await run(freeze(data), ['ÄU Test\n']);
+    assert.equal(result.text, data.text); assert.equal(boxes.length, 0);
+  });
+  await test('actual numeric LTR metadata is accepted without admitting truthy strings or other numbers', async () => {
+    for (const direction of [1, '1', 'true', 2, 0, false]) {
+      const data = wordFixture(); data.blocks[0].paragraphs[0].is_ltr = direction;
+      const { result, boxes } = await run(freeze(data), ['ÄU Test\n'], { pixelsFor: () => wordPixels() });
+      assert.equal(result.text, direction === 1 ? 'ÄU Test\n' : data.text);
+      assert.equal(boxes.length, direction === 1 ? 1 : 0);
+    }
+  });
+  await test('a foreign original word cannot overlap the complete fallback word', async () => {
+    const data = wordFixture(); lines(data)[0].words[1].bbox.x0 = 40;
+    const { result, boxes } = await run(freeze(data), ['ÄU Test\n']);
+    assert.equal(result.text, data.text); assert.equal(boxes.length, 0);
+  });
+  await test('fallback cannot add a digit change to the same optional umlaut candidate', async () => {
+    const data = fixture(['A Wert 6']); data.blocks[0].paragraphs[0].is_ltr = true;
+    const { result, boxes } = await run(freeze(data), ['Ä Wert 8\n']);
+    assert.equal(result.text, data.text); assert.equal(boxes.length, 0);
+  });
+  await test('a primary pixel read is not refunded before a maximal word fallback', async () => {
+    const data = fixture(['AAAAAAAAA Test']), line = lines(data)[0]; data.blocks[0].paragraphs[0].is_ltr = true;
+    line.words[0].bbox = { x0: 0, y0: 0, x1: 512, y1: 64 };
+    const other = line.words[1], shift = 1100 - other.bbox.x0;
+    other.bbox.x0 += shift; other.bbox.x1 += shift;
+    for (const symbol of other.symbols) { symbol.bbox.x0 += shift; symbol.bbox.x1 += shift; }
+    line.bbox.x1 = 1500; line.bbox.y1 = 64;
+    const { result, boxes } = await run(freeze(data), ['ÄAAAAAAAA Test\n'], { kind: 'ascii' });
+    assert.equal(result.text, data.text);
+    assert.deepEqual(boxes, [{ x: 0, y: 0, width: 24, height: 30 }], '32768-pixel word must not be read after the primary attempt');
   });
   console.log(`OCR diaeresis actual refiner flow: ${count} passed, 0 failed`);
 })().catch(error => { console.error(error); process.exitCode = 1; });

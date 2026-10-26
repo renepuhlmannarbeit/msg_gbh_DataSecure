@@ -224,6 +224,7 @@ jobs:
           node tests/test-office-ocr-raster-flow.js
           node tests/test-ocr-diaeresis-evidence.js
           node tests/test-ocr-diaeresis-flow.js
+          node tests/test-ocr-word-diaeresis-evidence.js
           node tests/test-presentation-comments.js
           node tests/test-word-content-context.js
           node tests/test-word-context-integration.js

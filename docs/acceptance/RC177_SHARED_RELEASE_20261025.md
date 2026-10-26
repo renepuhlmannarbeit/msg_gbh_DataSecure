@@ -48,6 +48,57 @@ Finder/Gatekeeper/TCC/Excel/Numbers und die reale GUI bleiben Nutzerabnahmen.
 
 ## Laufendes Journal
 
+- 26.10., Source04-Vorprüfung abgeschlossen: neuer reiner Wortpixel-Fallback
+  5d3a0329…6e56 und Caller d5ca6b23…e68 behalten ursprüngliche Daten/Geometrien,
+  gemeinsame32768Pixel, Kontakte und Literal-/Besitzerprüfungen.32 kontinuierliche
+  Intensitätswerte (Spanne31) ersetzen bewusst drei phasenabhängige16er-Samples;
+  alle geeigneten Fenster müssen gemeinsame Separatoren haben. Körper-/Zwei-
+  Punkte-Prädikat bytegleich; weiterhin unsicher/reading_disagreement, keine ACK.
+  Merge-/Split-Kompensation und pixelgleiches Rauschen bleiben ehrliche Grenzen.
+  Tatsächlicher unabhängiger Review a1f7f1aa…1063:239 eigene Gegenproben sowie
+  68Wort-/41Pixel-/32Flow-/34Refinerfälle PASS. Hauptagent las tatsächlichen Code
+  und beide Berichte. Frische native fünf ursprüngliche Bildfälle5/5PASS/stabil
+  unter dist/rc177-weak-image-source04-prevalidation-v3-20261026; Erwartungen
+  Härtetest und beträgt42Prozent unverändert. Gespeicherter vollständiger Scan61-
+  Refinerreplayv4 bestätigt7korrekte Umlaute/2falsche französische Änderungen
+  verweigert, keine anderen Zeichen-/Metadatenänderungen/keine neue OCR.
+  Frischer privater Achtlauf11:24:58.675–11:29:03.439UTC:8/8CONVERTED, alle acht
+  MDs bytegleich zum vorher tatsächlich gegengeprüften Source03-Achtlauf;
+  352Original-/Kopie-/AltMD-Bindungen und Quellinputs unverändert. WIP-ProduktFP
+  1df160c3…82b5a4/382, kanonisch328+11,646Test-/Scriptinputs. Noch kein Source04-
+  gemeinsamer Commit/Freeze/Endgate/Paket/Release. Keine privaten Dokumente in
+  Git/CI/Release; nächste Schritte frische gemeinsame Endgates und beide Macs.
+
+- Neuer verbindlicher Endstand26.10.: gemeinsamer Source03-Appcommit96391e3425c41f8797ef2cee238e79dd2896c01c,
+  FP897af9b1…5940a/381 und645Test-/Scriptinputs, Manifest06dbe7d9…af7c76,
+  ist NICHT freigabefähig. Native300Rust/3ignoriert/Clippy/Node-Rust/Release
+  PASS/stabil09:59:43.222UTC. Paket5/100MD0Fehler PASS/stabil10:04:39.484UTC;
+  ZIP8abe5246…fe9f7, EXEaeee8a5f…2bc57 unveröffentlicht erhalten. Konverterkampagne
+  native-regression-4hCLIQ ROT nach43Gruppen im zweiten Testfile: quality009clean
+  JPG verliert ä in Härtetest, unveränderte positive Erwartung bleibt bestehen.
+  ARM121505983138 im frischen40303228659 reproduziert denselben Fehler10:06:17UTC;
+  Intel121505983107 gezielt danach cancelled. Beide echten Joblogs/Metadaten
+  gesichert, keine späteren App-/ZIP-/DMG-PASSbehauptungen. Headless nach Start79/
+ 327 gezielt beendet; ABORTED-HEADLESS diagnostisch, kein FINAL/kein Gesamt-PASS.
+  Keine Inputs während Jobs verändert; alle Freezejobs beendet, keine Duplikate.
+- Gesonderte frische8Quellenprobe auf genauSource03 endete10:00:11.176UTC mit
+  8/8CONVERTED/stabilenInputs/352unverändertenOriginal-Kopie-AltMD-Bindungen.
+  Gegenreview7dd252d9…5090 von Main gelesen: sieben bekannte Scan61-Akzente und
+  sechs zusätzliche PDF119-Akzente originalkorrekt; zwei falsche französische Ö
+  verweigert, echtes Ô weiterhin fehlend.2097/2097nativePDFlinien auf93Seiten,
+  68Excelwerte und45PPTX-Blöcke/vier Zahlenkontrollen über exakte Quellen-/MD-
+  Identität erhalten. Kein vollständiger119Dateien-/Anonymisierungs-/Desktop-
+  oder allgemeiner Artefaktfreiheitsnachweis, widerlegt JPEG-Regression nicht.
+- Begrenzte tatsächliche JPEG-Ursachendiagnose8da9f7c8…85bb: eine Primärlesung+
+  sechs bestehende Crops, aktueller Primär-a-Bereich221..232 überlappt H/r und
+  verpasst den zweiten Punkt. Korrekte Crop-Lesung vorhanden, aber zusätzlicher
+  einzelner Crop-Metadatenversuch7c8d3373…a0ee1 liefert ebenfalls falsch
+  überlappende ä-Box218..232. Wort-/Zeilenflächen dagegen exakt gebunden.
+  Reine Oberkantenänderung oder direkte Cropglyphübernahme sind keine Lösungen.
+  Noch kein neuer Produktfix; vollständige bounded Wortpixel-Aufteilung als
+  nächster Machbarkeitskandidat. Source04 enthält nur17create-onlyHelferquellen,
+  131Helferchecks/Vertragsnegative PASS, keine alten FINALs kopiert, kein Freeze.
+
 - 26.10., aktueller enger Umlautfolgefix vor Freeze: ein offizieller zusätzlicher
   best-German-/Standard-SIMD-Versuch ist ausführbar, behebt aber0/7gleiche
   Problemvorkommen und verliert weitere zuvor richtige Akzente; nicht übernommen.

@@ -1,5 +1,15 @@
 # Aktives Entwicklungsbacklog · 3.2.0-rc177
 
+Aktueller Source04-Vorprüfstand26.10.: begrenzter originaler Wortpixel-Fallback
+implementiert; fünf ursprüngliche native Bildgegenproben5/5PASS ohne gelockerte
+Erwartungen.32 kontinuierliche Intensitätswerte sind eine bewusst geänderte
+Kontrastheuristik, kein Glyphwahrheits-/ACK-Beweis.239 unabhängige zusätzliche
+Gegenproben plus68/41/32/34Fokusfälle PASS. Frische8Originalquellen11:29UTC
+konvertiert, alle8MDs bytegleich zum gegengeprüften Source03-Qualitätslauf und
+352Original-/Kopie-/AltMD-Bindungen unverändert.328+11Headless geplant, noch
+kein neuer gemeinsamer Commit/Freeze/Endgate/Paket/Release. Anschließend alle
+Windows-/Mac-Gates frisch, Desktop weiter Nutzeraufgabe; alte Belege erhalten.
+
 ## RC177 beauftragt und in Umsetzung · 25.10.2026
 
 Der nachfolgende Nutzerauftrag autorisiert jetzt die priorisierten Korrekturen
@@ -12,6 +22,17 @@ begrenzten OCR-/Budget-/Messanteile BL-047.3/.4/.6/.7 sind **in Arbeit**, nicht
 abgenommen. Allgemeiner persistenter Cache und paralleles processBatchNext
 bleiben nach Messung zurückgestellt. Einzelumfang und Freigabekette:
 [RC177](../acceptance/RC177_SHARED_RELEASE_20261025.md).
+
+Neuerer Source03-Endstand26.10./96391e34: Native/Paketgrün reicht nicht; echter
+Konverter und ARM-Macjob zeigen weiterhin den Umlautverlust Härtetest→Hartetest
+in quality009clean-JPG. Bestehende fünf Bildpositiven nicht lockern. Kausal sind
+falsch überlappende primäre und Crop-Zeichenboxen; nur zum Wortoberrand erweitern
+hilft nicht. Begrenzte geschlossene vollständige Wortpixel-Segmentierung wird
+geprüft, noch kein Fix behauptet. Source03-Headless gezielt nach Start79 gestoppt,
+Mac40303228659 ARMfailure/Intelcancelled, sämtliche Jobs beendet. Source04 nur
+Helfer/Testplanquellen vorbereitet; neuer gemeinsamer Commit und alle Endgates
+erst nach tatsächlicher Reparatur/ursprünglichen Gegenfällen. Kein Release/Tag/
+lokaler RC177, alte Pakete/FINALs unverändert erhalten.
 
 Aktuell26.10.: Source02/724b72e6 Windows Native/Konverter/Paket und beide Macs
 40247356580 samt Byteverifikation PASS/stabil. Gesamtregression ROT141/322,
