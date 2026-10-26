@@ -6,6 +6,7 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
+const crypto = require('node:crypto');
 const assert = require('node:assert/strict');
 const temporary = fs.realpathSync.native(os.tmpdir());
 const scope = fs.realpathSync.native(fs.mkdtempSync(path.join(temporary, 'datasecure-contact-flow-')));
@@ -20,7 +21,7 @@ const { contactQuality } = require('../plugins/data-secure/server/standalone/ocr
 const { contactSpans } = require('../plugins/data-secure/server/core/ocr-contact-review');
 const { createReviewBroker } = require('../plugins/data-secure/server/standalone/review-broker');
 const { encodeFrame, FrameDecoder } = require('../plugins/data-secure/server/standalone/desktop-ipc');
-const { readOutput } = require('../plugins/data-secure/server/gateway/package-store');
+const { safeResolvePackage, readVerifiedFile } = require('../plugins/data-secure/server/gateway/package-files');
 const { workPath } = require('../plugins/data-secure/server/gateway/batch-private-store');
 let sequence = 0;
 function serializedAnswer(broker, reviewId, answer) {
@@ -113,7 +114,11 @@ function cleanup() {
   assert.equal(entities, 1);
   assert.equal(resumed.packages.length, 2);
   for (const result of resumed.packages) {
-    const released = readOutput(result.package_id, result.read_capability, 0, 30000).text;
+    assert.equal(result.read_capability, undefined, 'Standalone does not mint a Cowork read grant');
+    const { p, m } = safeResolvePackage(result.package_id);
+    const bytes = readVerifiedFile(p, m.document, 32 * 1024 * 1024);
+    assert.equal(crypto.createHash('sha256').update(bytes).digest('hex'), m.document_sha256);
+    const released = bytes.toString('utf8');
     assert.doesNotMatch(released, /wrong@|zora@|987654321|Zora Eibenhang/u);
     assert.match(released, /\[EMAIL_REDACTED\]/u); assert.match(released, /\[PHONE_REDACTED\]/u);
     assert.match(released, /SYNTHETISCHER HÄRTETEST/u); assert.match(released, /Java bleibt/u);

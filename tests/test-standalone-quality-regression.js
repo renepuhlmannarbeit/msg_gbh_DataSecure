@@ -9,9 +9,11 @@ const scope = fs.mkdtempSync(path.join(temporaryRoot, 'datasecure-quality-regres
 process.env.EU_PRIVACY_ROOT = path.join(scope, 'private');
 process.env.EU_PRIVACY_DATA_ROOT = path.join(scope, 'data');
 process.env.EU_PRIVACY_RESULT_ROOT = path.join(scope, 'results');
+process.env.DATASECURE_PRODUCT_CHANNEL = 'standalone';
 fs.mkdirSync(process.env.EU_PRIVACY_RESULT_ROOT);
 const { anonymizeSelectedSource } = require('../plugins/data-secure/server/gateway/orchestrator');
-const { readOutput } = require('../plugins/data-secure/server/gateway/package-store');
+const { reader } = require('./lib/read-product-package.cjs');
+const readOutput = reader(path.join(__dirname, '../plugins/data-secure/server'), 'standalone');
 const { reviewedBatchText } = require('../plugins/data-secure/server/gateway/batch-review-policy');
 const { createBatchPseudonymState } = require('../plugins/data-secure/server/batch-pseudonym-context');
 const { prepareStandaloneReviewChoices, mergeStandaloneReviewChoices, rememberStandaloneReviewChoices } =

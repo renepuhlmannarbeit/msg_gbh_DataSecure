@@ -1,6 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
+import { createRequire } from 'node:module';
 import boundFileIo from '../../plugins/data-secure/server/core/bound-file-io.js';
+
+const require = createRequire(import.meta.url);
 
 const ENTRYPOINTS = Object.freeze([
   'standalone/desktop-sidecar.js',
@@ -9,7 +13,6 @@ const ENTRYPOINTS = Object.freeze([
   'gateway/batch-worker.js',
   'gateway/review-worker.js',
   'gateway/result-export-replay-worker.js',
-  'companion/stdio-server.js',
   'parser-worker.js',
   'network-deny.cjs'
 ]);
@@ -22,7 +25,7 @@ const PLATFORM_ASSETS = Object.freeze({
   'macos-arm64': Object.freeze(['native/macos-arm64/datasecure-sandbox', 'native/macos-arm64/datasecure-sandbox.sha256']),
   'linux-x64-glibc': Object.freeze(['native/linux-x64/datasecure-sandbox', 'native/linux-x64/datasecure-sandbox.sha256'])
 });
-const FORBIDDEN = /(^|\/)(?:ocr-runtime|status-app)(?:\/|$)|(^|\/)mcp-server\.js$|(^|\/)index\.js$|(^|\/)converters\/markitdown(?:\/|$)/iu;
+const FORBIDDEN = /(^|\/)(?:ocr-runtime|status-app)(?:\/|$)|(^|\/)mcp-server\.js$|(^|\/)index\.js$|(^|\/)converters\/markitdown(?:\/|$)|^companion\/|^gateway\/(?:worker-terminal-presentation|package-store)\.js$/iu;
 
 function regular(file) {
   const stat = fs.lstatSync(file);
@@ -67,6 +70,21 @@ export function collectStandaloneRuntime(serverRoot, productTarget) {
       if (!match[2].startsWith('.')) continue;
       pending.push(resolveRelative(current.resolved, match[2], root));
     }
+  }
+  if (files.has('core-policy-fingerprint.js')) {
+    const policy = require(path.join(root, 'core-policy-fingerprint.js'));
+    const fingerprint = policy.calculateStandalonePolicyFingerprint({ root });
+    if (fingerprint !== policy.STANDALONE_POLICY_FINGERPRINT) throw new Error('STANDALONE_POLICY_SOURCE_CHANGED');
+    const policyHashes = {};
+    for (const relative of policy.STANDALONE_POLICY_FILES) {
+      const bytes = files.get(relative)?.bytes;
+      if (!bytes) throw new Error(`STANDALONE_POLICY_SOURCE_MISSING:${relative}`);
+      policyHashes[relative] = crypto.createHash('sha256').update(bytes).digest('hex');
+    }
+    const relative = 'standalone-core-policy-fingerprint.json';
+    files.set(relative, { relative, source: null, bytes: Buffer.from(`${JSON.stringify({
+      schema: 'datasecure-standalone-core-policy/2', fingerprint, files: policyHashes
+    })}\n`) });
   }
   return [...files.values()].sort((left, right) => left.relative.localeCompare(right.relative));
 }

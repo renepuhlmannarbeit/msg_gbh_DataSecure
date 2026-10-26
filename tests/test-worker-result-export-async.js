@@ -121,7 +121,7 @@ async function actualWorker(filename, platform, token) {
     require(id) {
       if (id === './batch') return gateway;
       if (id === './workflow-diagnostics') return { recordWorkflowEvent() {} };
-      if (id === '../companion/completion-summary') return new Proxy({}, { get() { return () => { throw Error('NO_GUI'); }; } });
+      if (id === './product-terminal-notice') return new Proxy({}, { get() { return () => { throw Error('NO_GUI'); }; } });
       return normalRequire(id);
     }, Buffer, console,
     setTimeout() { return {}; }, clearTimeout() {},

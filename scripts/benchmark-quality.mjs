@@ -218,7 +218,8 @@ export async function runQualityBenchmark(output, options = {}) {
     writeConversionRuntime(repo, path.join(server, 'standalone/conversion-runtime'), target);
     const batch = require(path.join(server, 'gateway/batch'));
     const engine = require(path.join(server, 'privacy/engine'));
-    const { readOutput } = require(path.join(server, 'gateway/package-store'));
+    const { reader } = require('../tests/lib/read-product-package.cjs');
+    const readOutput = reader(server, 'standalone');
     const { readMarkdownArtifact } = require(path.join(server, 'standalone/markdown-store'));
     const { saveConfiguredResultRoot } = require(path.join(server, 'gateway/result-folder-config'));
     saveConfiguredResultRoot(process.env.EU_PRIVACY_RESULT_ROOT);
@@ -229,7 +230,7 @@ export async function runQualityBenchmark(output, options = {}) {
       let text = '', offset = 0;
       for (let page = 0; page < 100; page++) {
         const response = readOutput(result.package_id, result.read_capability, offset, 30000);
-        if (response.content_is_verified_anonymized_markdown !== true) throw new Error('QUALITY_UNVERIFIED_PUBLICATION');
+        if (result.read_capability !== undefined) throw new Error('QUALITY_STANDALONE_COWORK_GRANT');
         text += response.text;
         if (!response.has_more) return text;
         if (!(response.next_offset > offset)) throw new Error('QUALITY_PUBLICATION_PAGING_INVALID');

@@ -20,7 +20,16 @@ const { extractWideSourceForPrivacy } = require('../plugins/data-secure/server/s
 const { anonymizeMarkdown } = require('../plugins/data-secure/server/gateway/compliance');
 const { scanResidual } = require('../plugins/data-secure/server/privacy/engine');
 const { anonymizeNext } = require('../plugins/data-secure/server/gateway/orchestrator');
-const { readOutput } = require('../plugins/data-secure/server/gateway/package-store');
+const { reader } = require('./lib/read-product-package.cjs');
+const readOutput = reader(path.join(__dirname, '../plugins/data-secure/server'), 'standalone');
+// This suite deliberately drives both product contracts in one Standalone
+// process. A synthetic plugin call cannot receive the plugin process grant;
+// grant only inside this test oracle when inspecting that plugin result.
+const pluginPackageStore = require('../plugins/data-secure/server/gateway/package-store');
+function readPluginOutput(result) {
+  const grant = result.read_capability || pluginPackageStore.issueReadCapability(result.package_id).read_capability;
+  return pluginPackageStore.readOutput(result.package_id, grant);
+}
 const { reviewedBatchText } = require('../plugins/data-secure/server/gateway/batch-review-policy');
 const { createBatchPseudonymRegistry, READABLE_CONTRACT_VERSION } = require('../plugins/data-secure/server/batch-pseudonym-registry');
 const { zipStore } = require('./lib/zip');
@@ -148,7 +157,7 @@ testAsync('complete wide extraction is converted once, anonymized and published 
   assert.equal(result.raw_content_sent_to_claude, false);
   assert.ok(entry.private_bytes.every(byte => byte === 0));
   const released = readOutput(result.package_id, result.read_capability);
-  assert.equal(released.ok, true);
+  assert.equal(result.read_capability, undefined, 'Standalone does not grant Cowork model reads');
   assert.doesNotMatch(released.text, /max\.mustermann|12345678|DE89370400440532013000/iu);
   assert.match(released.text, /\[EMAIL_REDACTED\]|\[PHONE_REDACTED\]|\[BANK_DATA_REDACTED\]/u);
   const rawRoot = path.join(process.env.EU_PRIVACY_DATA_ROOT, 'markdown-artifacts');
@@ -253,7 +262,7 @@ testAsync('Cowork DOCX privacy omits header and footer through the isolated pars
   assert.deepEqual(result.source_extraction_coverage, {
     status: 'incomplete', reason_codes: ['DOCX_HEADER_FOOTER_EXCLUDED_BY_POLICY']
   });
-  const released = readOutput(result.package_id, result.read_capability).text;
+  const released = readPluginOutput(result).text;
   assert.match(released, /DOCX-Struktur wurde vollständig geprüft/u);
   assert.match(released, /bewusst keine Kopf- und Fußzeilen/u);
   assert.doesNotMatch(released, /Vollständigkeit der Extraktion aus der Originaldatei ist nicht garantiert/u);
@@ -282,7 +291,7 @@ testAsync('Cowork anonymizes XLSX and PPTX through its isolated Markdown-first O
     assert.deepEqual(result.source_extraction_coverage,
       { status: 'incomplete', reason_codes: ['SOURCE_COVERAGE_UNVERIFIED'] });
     assert.equal(result.raw_content_sent_to_claude, false);
-    const released = readOutput(result.package_id, result.read_capability).text;
+    const released = readPluginOutput(result).text;
     assert.match(released, /\[PERSON_[A-Z0-9]+\]|\[UNTERNEHMEN_[A-Z0-9]+\]/u, extension);
     assert.doesNotMatch(released, /Max Mustermann|Nordlicht GmbH/u, extension);
     assert.ok(entry.private_bytes.every(byte => byte === 0));
@@ -298,7 +307,7 @@ testAsync('the real isolated Cowork parser processes XLSX and PPTX locally', asy
     assert.equal(result.privacy_scope, 'extracted-markdown-only');
     assert.deepEqual(result.source_extraction_coverage,
       { status: 'incomplete', reason_codes: ['SOURCE_COVERAGE_UNVERIFIED'] });
-    const readResult = readOutput(result.package_id, result.read_capability);
+    const readResult = readPluginOutput(result);
     assert.equal(readResult.privacy_scope, 'extracted-markdown-only', extension);
     assert.deepEqual(readResult.source_extraction_coverage,
       { status: 'incomplete', reason_codes: ['SOURCE_COVERAGE_UNVERIFIED'] }, extension);

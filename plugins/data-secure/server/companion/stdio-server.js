@@ -3,6 +3,8 @@
 if (process.platform === 'darwin' && process.env.DATASECURE_NATIVE_EXPORT_CHANNEL === '1')
   require('../core/ownership-control').assertNativeOwnershipRuntime();
 
+require('./release-verifier');
+
 const fs = require('fs');
 const readline = require('readline');
 const { SafeError } = require('../runtime');

@@ -29,7 +29,8 @@ if (stage === 'prepare') fs.mkdirSync(process.env.EU_PRIVACY_RESULT_ROOT);
 const server = path.join(directory, 'server');
 phase('runtime_loading');
 const batch = require(path.join(server, 'gateway', 'batch'));
-const { readOutput } = require(path.join(server, 'gateway', 'package-store'));
+const { reader } = require('./read-product-package.cjs');
+const readOutput = reader(server, channel);
 const pii = require(path.join(server, 'pii-engine'));
 phase('runtime_loaded');
 runProductScenarios({ directory, channel, profile, stage, server, batch, readOutput, pii, phase })

@@ -461,6 +461,7 @@ function stdioStartupFixture(options = {}) {
           assert.strictEqual(selected, input); return input;
         } };
         if (name === '../runtime') return require('../plugins/data-secure/server/runtime');
+        if (name === './release-verifier') { events.push('release-verifier'); return {}; }
         if (name === './ipc-session') return { createCompanionSession(received) {
           events.push('session'); sessionSecret = Buffer.from(received.secret);
           return createCompanionSession(received);

@@ -24,7 +24,8 @@ const savedEnvironment = new Map();
 // titles require per-occurrence decisions. Every other residual hypothesis,
 // including damaged OCR names, is explicitly redacted by this conservative
 // synthetic reviewer. Independent technical anchors catch over-redaction.
-const syntheticTitles = new Set(['SYNTHETISCHER HÄRTETEST', 'SYNTHETISCHER HAERTETEST']);
+const syntheticTitles = new Set(['SYNTHETISCHER HÄRTETEST', 'SYNTHETISCHER HAERTETEST',
+  'Langer Prüfbericht', 'Multilingual Customer Profile', 'Fragmentierte Runs und Tabellen']);
 const originalSpawn = childProcess.spawn, children = [];
 childProcess.spawn = (...args) => {
   const child = originalSpawn(...args), entry = { child, closed: false };
@@ -53,8 +54,9 @@ try {
   pii.scanResidual = (...args) => {
     const residual = realScanResidual(...args); observedResidual = residual; return residual;
   };
-  const { enumerateSourceFolderAsync } = require(path.join(server, 'companion/source-folder'));
-  const { readOutput } = require(path.join(server, 'gateway/package-store'));
+  const { enumerateSourceFolderAsync } = require(path.join(server, 'local-ui/source-folder'));
+  const { reader } = require('./lib/read-product-package.cjs');
+  const readOutput = reader(server, 'standalone');
   const { readMarkdownArtifact } = require(path.join(server, 'standalone/markdown-store'));
   const { visibleExportDirectory } = require(path.join(server, 'gateway/result-export'));
   const { saveConfiguredResultRoot } = require(path.join(server, 'gateway/result-folder-config'));
@@ -76,7 +78,7 @@ try {
     let offset = 0, text = '';
     for (let page = 0; page < 100; page++) {
       const response = readOutput(result.package_id, result.read_capability, offset, 30000);
-      assert.equal(response.content_is_verified_anonymized_markdown, true);
+      assert.equal(result.read_capability, undefined);
       text += response.text;
       if (!response.has_more) { assert.equal(text.length, response.total_chars); return text; }
       assert.ok(response.next_offset > offset); offset = response.next_offset;
@@ -111,10 +113,18 @@ try {
     if (batch.readBatchProgress(token).deferred_review) {
       assert.equal(processingMode, 'markdown-and-anonymize');
       const reviewed = await batch.reviewDeferredBatch(token, { reviewTextLocally(draft) {
+        if (draft.ocr_contact_review === true) {
+          const knownContacts = new Set(identities.flatMap(identity => [identity.email, identity.phone]));
+          return { action: 'reviewed', redactions: [], decisions: draft.ambiguities.map(item => {
+            const observed = draft.original_text.slice(item.original_start, item.original_end);
+            assert.ok(knownContacts.has(observed), `golden OCR contact needs an exact synthetic source match: ${observed}`);
+            return { ambiguity_id: item.ambiguity_id, decision: 'confirm_contact' };
+          }) };
+        }
         return { action: 'reviewed', redactions: [], decisions: draft.ambiguities.map(item => {
           const value = semanticText(draft.original_text.slice(item.original_start, item.original_end));
           if (diagnostics) process.stdout.write(`golden review candidate ${item.type}: ${JSON.stringify(value)}\n`);
-          if (item.type === 'person_residual_ambiguous') {
+          if (['person_prose_ambiguous', 'person_residual_ambiguous'].includes(item.type)) {
             if (syntheticTitles.has(value)) reviewedTitles++;
             else if (value === 'KEINE REALDATEN') reviewedDisclaimers++;
             else return { ambiguity_id: item.ambiguity_id, decision: 'redact' };

@@ -12,11 +12,12 @@ const digest = bytes => crypto.createHash('sha256').update(bytes).digest('hex');
 // in-memory Markdown extractor: the separate package smoke proves the real
 // sandboxed worker/runtime, while this semantic test stays small enough to run
 // every profile across fresh processes. Intake, extraction semantics, PII,
-// journal/recovery, review reconstruction, publication and capability reads all
-// use the actual projected product.
+// journal/recovery and review reconstruction use the actual projected product.
+// Cowork capability reads and Standalone's bound file oracle remain distinct.
 async function runProductScenarios({ directory, channel, profile, stage, server, batch, readOutput, pii, phase }) {
   const { roots } = require(path.join(server, 'gateway', 'common'));
-  const { issueReadCapability } = require(path.join(server, 'gateway', 'package-store'));
+  const issueReadCapability = channel === 'plugin'
+    ? require(path.join(server, 'gateway', 'package-store')).issueReadCapability : null;
   const { batchNextAction } = require(path.join(server, 'core', 'batch-next-action'));
   let uiCalls = 0;
   const noUi = () => { uiCalls++; throw new Error('GOLDEN_UNEXPECTED_LOCAL_REVIEW'); };
@@ -93,14 +94,12 @@ async function runProductScenarios({ directory, channel, profile, stage, server,
   const savedPackages = entries => entries.map(({ read_capability, ...entry }) => entry);
   const renewPackages = (token, entries) => {
     const journal = batch._test.readState(token);
-    // Capabilities are intentionally process-local, not restart credentials.
-    // Rebind only the exact previously released journal packages. The common
-    // internal grant and real read verifier stay intact for both product roots;
-    // the Plugin-only public result listing must not expose Standalone batches.
+    // Cowork capabilities are process-local, not restart credentials. Both
+    // products rebind only exact journal packages; Standalone has no model grant.
     for (const entry of entries) {
       assert.equal(entry.read_capability, undefined);
       assert.ok(journal.items.some(item => item.status === 'released' && item.package_id === entry.package_id));
-      entry.read_capability = issueReadCapability(entry.package_id).read_capability;
+      if (channel === 'plugin') entry.read_capability = issueReadCapability(entry.package_id).read_capability;
     }
   };
   const recordPackage = (token, result) => {

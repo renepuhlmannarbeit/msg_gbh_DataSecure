@@ -1,6 +1,6 @@
 'use strict';
 
-const { validateReviewResult } = require('../companion/text-review');
+const { validateReviewResult } = require('../core/local-review-model');
 const { MAX_STANDALONE_REVIEW_FINDINGS } = require('../gateway/standalone-review-budget');
 const { ERROR_CODES: PROCESS_IDENTITY_ERROR_CODES } = require('../gateway/process-identity');
 

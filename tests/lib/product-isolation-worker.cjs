@@ -13,7 +13,15 @@ if (channel === 'standalone') require(path.join(server, 'standalone/application-
 const { dataRoot, SafeError, convertDocument } = require(path.join(server, 'runtime'));
 const { roots } = require(path.join(server, 'gateway/common'));
 const batch = require(path.join(server, 'gateway/batch'));
-const packages = require(path.join(server, 'gateway/package-store'));
+const packages = require(path.join(server, channel === 'plugin' ? 'gateway/package-store' : 'gateway/package-files'));
+if (channel === 'standalone') {
+  assert.throws(() => require(path.join(server, 'gateway/package-store')), { code: 'MODULE_NOT_FOUND' });
+}
+function readOwnPackage(packageId, capability) {
+  if (channel === 'plugin') return packages.readOutput(packageId, capability, 0, 30000).text;
+  const { p, m } = packages.safeResolvePackage(packageId);
+  return packages.readVerifiedFile(p, m.document, 32 * 1024 * 1024).toString('utf8');
+}
 let own;
 
 async function dispatch(message) {
@@ -73,7 +81,7 @@ async function dispatch(message) {
       queue: [{ name: 'synthetic.txt', full: source, stat, sourceBytes: stat.size }] });
     const result = await batch.processBatchNext(begun.batch_token);
     assert.strictEqual(result.ok, true, JSON.stringify(result));
-    const body = packages.readOutput(result.package_id, result.read_capability, 0, 30000).text;
+    const body = readOwnPackage(result.package_id, result.read_capability);
     assert.ok(body.includes(marker));
     assert.ok(!body.includes(`${channel}@example.invalid`));
     batch.acknowledgeDeliveredPackage(begun.batch_token, result.package_id);
@@ -90,11 +98,16 @@ async function dispatch(message) {
     const foreign = message.foreign;
     assert.throws(() => batch._test.readState(foreign.token), SafeError);
     assert.throws(() => batch.readBatchProgress(foreign.token), SafeError);
-    assert.throws(() => packages.readOutput(foreign.package_id, foreign.read_capability, 0, 30000), SafeError);
-    assert.throws(() => packages.readOutput(own.package_id, foreign.read_capability, 0, 30000), SafeError);
-    assert.throws(() => packages.readOutput(foreign.package_id, own.read_capability, 0, 30000), SafeError);
+    if (channel === 'plugin') {
+      assert.throws(() => packages.readOutput(foreign.package_id, foreign.read_capability, 0, 30000), SafeError);
+      assert.throws(() => packages.readOutput(own.package_id, foreign.read_capability, 0, 30000), SafeError);
+      assert.throws(() => packages.readOutput(foreign.package_id, own.read_capability, 0, 30000), SafeError);
+    } else {
+      assert.equal(own.read_capability, undefined, 'Standalone must not mint a Cowork read grant');
+      assert.throws(() => packages.safeResolvePackage(foreign.package_id), SafeError);
+    }
     assert.ok(!fs.existsSync(path.join(own.output, foreign.package_id)));
-    assert.ok(packages.readOutput(own.package_id, own.read_capability, 0, 30000).text.includes(own.marker));
+    assert.ok(readOwnPackage(own.package_id, own.read_capability).includes(own.marker));
     assert.deepStrictEqual(fs.readdirSync(batch._test.batchRoot()).filter(name => /^[a-f0-9]{64}\.json$/u.test(name)),
       [`${own.token}.json`]);
     return { isolated: true };

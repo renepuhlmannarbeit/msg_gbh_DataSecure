@@ -11,7 +11,7 @@ function elAfterLoad() {
 const el = (id) => document.getElementById(id);
 const state = { draft: null, reviewId: null, cursor: 0, choices: new Map(), history: [],
   rows: [], rowById: new Map(), candidateIndex: new Map(), groups: new Map(), selected: new Set(), inputs: new Map(), page: 0,
-  waiting: false, waitingViewActive: false, submitted: false, closed: false, disconnected: false, continuing: false, continuationAvailable: false,
+  waiting: false, waitingViewActive: false, handoffAccepted: false, closed: false, disconnected: false, continuing: false, continuationAvailable: false,
   generation: 0, loadGeneration: null, pollTimer: null, pollFailures: 0, connectionReady: embedded,
   uncertainAnswer: null, continuationFailure: null, continuationSnapshot: null, lastSession: null };
 const START_FAILURE_TEXT = Object.freeze({
@@ -566,13 +566,13 @@ async function sendAnswer(answer) {
     if (result?.accepted !== true) throw Error('review answer not confirmed');
     clearDraft();
     state.uncertainAnswer = null;
-    state.submitted = answer.action === 'reviewed';
+    state.handoffAccepted = answer.action === 'reviewed';
     state.waiting = false;
     setWaiting(answer.action === 'deferred'
-      ? 'Prüfung vertagt. Der Lauf bleibt im Verlauf unter „Prüfung offen“ und kann dort fortgesetzt werden.'
+      ? 'Die Vertagung wurde an die lokale Prüfung übergeben. Prüfe im Verlauf, ob dieser Lauf unter „Prüfung offen“ fortgesetzt werden kann.'
       : markdownContact
-        ? 'OCR-Kontaktentscheidungen gespeichert. DataSecure setzt die Markdown-Umwandlung fort. Weitere Kontaktgruppen erscheinen hier bei Bedarf. Eine Dokumentfreigabe zur Anonymisierung ist nicht erforderlich. Den Abschlussstatus siehst du beim Lauf im Hauptfenster.'
-        : 'Entscheidungen gespeichert. Weitere Fundstellen werden geprüft. Bitte warten; die nächste Gruppe erscheint hier. Nach der letzten Gruppe werden die fertigen Ergebnisdateien bereitgestellt. Keine zweite Dateiauswahl, Freigabe oder Exportbestätigung nötig.',
+        ? 'OCR-Kontaktentscheidungen wurden an die lokale Verarbeitung übergeben. DataSecure setzt die Markdown-Umwandlung nach gesicherter Übernahme fort. Weitere Kontaktgruppen erscheinen hier bei Bedarf. Eine Dokumentfreigabe zur Anonymisierung ist nicht erforderlich. Den Abschlussstatus siehst du beim Lauf im Hauptfenster.'
+        : 'Entscheidungen wurden an die lokale Verarbeitung übergeben. DataSecure prüft ihre Übernahme und ob weitere Fundstellen folgen. Bitte warten; die nächste Gruppe erscheint hier. Nach der letzten Gruppe werden die Ergebnisdateien bereitgestellt. Keine zweite Dateiauswahl, Freigabe oder Exportbestätigung nötig.',
     answer.action === 'reviewed');
     if (answer.action === 'reviewed') schedulePoll();
   } catch {
@@ -638,8 +638,8 @@ async function poll(manual = false) {
           ? `${reviewFailureMessage({ ...state.continuationSnapshot, error_code: state.continuationFailure, retry_available: false })}\nBeim letzten Fortsetzungsversuch wurde dieser Fehler gemeldet. DataSecure prüft den aktuellen Laufstatus; bitte nicht erneut starten.`
         : state.continuationAvailable
         ? 'Weitere Fundstellen in diesem Lauf benötigen eine Entscheidung. Du kannst die Prüfung hier fortsetzen.'
-        : state.submitted
-          ? 'Deine Entscheidung ist gespeichert. DataSecure verarbeitet sie und prüft, ob weitere Fundstellen folgen. Bitte dieses Fenster offen lassen.'
+        : state.handoffAccepted
+          ? 'Deine Entscheidung wurde an die lokale Verarbeitung übergeben. DataSecure prüft den aktuellen Stand und ob weitere Fundstellen folgen. Bitte dieses Fenster offen lassen.'
           : 'Die lokale Verarbeitung bereitet die Fundstellen vor. Bitte dieses Fenster offen lassen.',
       !state.continuationAvailable);
       schedulePoll();
@@ -668,7 +668,7 @@ async function poll(manual = false) {
     prepareRows();
     prepareDocumentFilter();
     state.cursor = 0;
-    state.submitted = false;
+    state.handoffAccepted = false;
     state.continuationAvailable = false;
     state.waiting = false;
     state.continuationFailure = null;
@@ -698,7 +698,7 @@ async function poll(manual = false) {
       : state.continuationFailure
         ? `${reviewFailureMessage({ ...state.continuationSnapshot, error_code: state.continuationFailure, retry_available: false })}\nDer aktuelle Laufstatus wird erneut abgefragt.`
         : isBusyRead(error)
-          ? `${state.submitted ? 'Deine Entscheidungen sind gespeichert. ' : ''}DataSecure speichert gerade einen lokalen Vorgang. Der nächste Prüfstatus wird automatisch erneut geladen. Bitte kurz warten; nichts erneut bestätigen.`
+          ? `${state.handoffAccepted ? 'Deine Entscheidungen wurden an die lokale Verarbeitung übergeben. ' : ''}DataSecure verarbeitet gerade einen lokalen Vorgang. Der nächste Prüfstatus wird automatisch erneut geladen. Bitte kurz warten; nichts erneut bestätigen.`
           : 'Die lokale Prüfung konnte nicht sicher geladen werden. DataSecure fragt den Status erneut ab. Du kannst den Status im Hauptfenster prüfen oder hier erneut versuchen.');
     schedulePoll(Math.min(10000, 1200 * (2 ** Math.min(state.pollFailures, 4))));
   } finally {

@@ -70,12 +70,13 @@ const {
   createPrivateIoSummary,
   incrementPrivateIoSummary
 } = require('./performance');
-const { reviewTextLocally, reviewBatchTextLocally: runBatchReviewLocally } = require('../companion/text-review');
+const { reviewTextLocally, reviewBatchTextLocally: runBatchReviewLocally } = require('./local-review-adapter');
 const { createPrivateWorkStore } = require('./private-work-store');
 const { migrateLegacyBatchState } = require('./batch-private-artifact-migration');
 const {
   createBatchPseudonymState,
   validateBatchPseudonymState,
+  standalonePolicyRestartRequired,
   withBatchPseudonymRegistry
 } = require('../batch-pseudonym-context');
 
@@ -427,7 +428,7 @@ const {
   writeState,
   assertLocalExecutorAccess,
   regularPublishedPackage,
-  issueReadCapability: (packageId) => require('./package-store').issueReadCapability(packageId),
+  issueReadCapability: (packageId) => require('./product-read-capability').issueReadCapability(packageId),
   publicProgress,
   writeTerminalEvidence,
   deliveryPendingStatus: DELIVERY_PENDING,
@@ -520,6 +521,7 @@ const { resumeBatch, continueMostRecentBatch, continueStandaloneBatch } = create
   reconcilePreflightStoppedMappings,
   markInterruptedItemsRetryable,
   recoverableBatchStates,
+  policyRestartRequired: standalonePolicyRestartRequired,
   publicProgress,
   deferredReviewStatus: DEFERRED_REVIEW,
   mappingPendingStatus: MAPPING_PENDING,
@@ -588,7 +590,7 @@ const { resultCursor, parseResultCursor, listBatchResults, completedLocalOnlyCan
   publishedPackageRecord,
   publishedPackageIdentityRecord,
   sameDocumentResult,
-  issueReadCapability: (packageId) => require('./package-store').issueReadCapability(packageId)
+  issueReadCapability: (packageId) => require('./product-read-capability').issueReadCapability(packageId)
 });
 
 const { captureDeferredReviewInput } = createBatchReviewCapture({

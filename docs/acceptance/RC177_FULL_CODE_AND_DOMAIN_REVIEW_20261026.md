@@ -9,6 +9,15 @@ Der spätere Branch-Commit `e95f033f637b57d164d7f49b4a74547224153c45`
 enthält nur Abschlussdokumentation. Die menschlichen Windows- und Mac-Desktoptests
 bleiben Nutzeraufgabe. Es ist keine neue Veröffentlichung beauftragt.
 
+**Nutzerpriorität 26.10.:** Das vollständige Review richtet sich zuerst auf
+die eigenständige Standalone-App für Windows und macOS, einschließlich
+Frontend, Tauri/Rust, Sidecar, lokalem Core, Konvertern und Dateien. Der
+Cowork-Adapter wird dort vertieft, wo er denselben Core oder eine gemeinsame
+Vertrauensgrenze verwendet; reine Cowork-Funktionen sind nachgeordnet.
+`CLAUDE.md` enthält Regeln für **beide** Produkte. Seine allgemeine
+Main-Checkout-Anweisung ersetzt weder den beauftragten Review-Branch noch
+den unveränderlichen veröffentlichten RC177-Referenzcommit.
+
 ## Ziel und Urteilsgrenze
 
 Jede **eigene oder lokal modifizierte** produktive Funktion, Methode, Klasse,
@@ -268,3 +277,162 @@ Windows- und beide Mac-Gates; RC177 selbst bleibt unverändert.
   PASS. Eine fehlerhafte normale UI-Antwort oder ein echter Nutzerlauf ist
   nicht belegt. Enger ID-Arrayvergleich, keine fachliche Lockerung;
   `FINDING-009.md`. Gesamt- und Plattformgates bleiben offen.
+- 26.10., R8-Zwischenprüfung auf Review-Commit
+  `54e6bb610eb2999e04ce08f577aa57a2e0d8318e`: vollständiger
+  `headless`-Produktlauf mit gepinntem Node22.23.2 **328/328
+  Testdateien, Exit0**, danach getrackter Arbeitsbaum sauber. Originallog
+  882772Bytes/SHA-256 `2b91ac80bcfcab8fe28da14a119ce114f6b9341c11b9935de5617429a3def121`,
+  lokaler Beleg `HEADLESS-54E6BB61.json`. Native Windows-Forms,
+  Standalone-GUI/Paketabnahme und Mac-Zielhost wurden dadurch **nicht**
+  ausgeführt. Der Lauf gilt nur für diesen Review-Commit und ersetzt keine
+  frischen Gates nach späteren Produktänderungen.
+- 26.10., `CLAUDE.md`-Abgleich für den Standalone-Schwerpunkt begonnen:
+  direkte Quellformate aus `application-service.js:20` passen zu TXT/MD/CSV,
+  DOCX/XLSX/PPTX/PDF und PNG/JPEG/BMP; das Fünferfenster ist durch
+  `standalone-history-window.js:15,43`, die vertraulichen CSV/TXT/XLSX-
+  Beilagen durch `result-companions.js:7-11` gebunden. Das sind
+  einzelne Quellkonstanten, kein Nachweis für sämtliche Laufzeit- und
+  Plattformbehauptungen in `CLAUDE.md`. Deren weitere Prüfung bleibt offen.
+- 26.10., Prüfregel in `CLAUDE.md` an den tatsächlichen Runner angepasst:
+  `test:product` fordert auf Windows explizite native UI-Freigabe und ist bei
+  vom Nutzer selbst übernommenen Desktoptests kein stiller Standardlauf.
+  `test:product:headless` ist das passende Quellen-Baselinegate; Cowork-Plugin-
+  ZIP/Build beweisen kein Standalone-Paket. Getrennter direkter
+  Standalone-Broker-Gegenfall für Befund009: kombinierte ID bleibt vor dem
+  Worker-Send abgewiesen, die vollständige Zweierantwort danach angenommen;
+  `test-standalone-review-broker.js` 11/11 PASS. Version-/Kanon-/Docs-/UAT-
+  Einzelgates und `test-claude-code-pilot.mjs` mit gepinntem Node PASS.
+  Der 328er-Gesamtlauf liegt **vor** diesem neuen Testinput; kein neuer
+  kompletter Gesamt- oder nativer Paketnachweis wird daraus abgeleitet.
+- 26.10., erster frischer Headlesslauf nach dem Standalone-Brokergegenfall:
+  gepinnter Node22.23.2, 328/328 Testdateien, Exit0; Log
+  `headless-current-standalone-focused.log` SHA-256
+  `c8251c3daeec12077da9ad087ca4c66a28645af04301420915df90f2864420e3`.
+  `HEADLESS-STANDALONE-FOCUSED-PREFIX.json` bindet die damaligen Inputs.
+  Dieser Lauf liegt **vor** der nachfolgenden Frontend-Korrektur und ist kein
+  Nachweis für sie. Native UI-/Paket-/Mac-Gates waren nicht Teil davon.
+- 26.10., R3/R5-Befund 010: Die Standalone-Prüfansicht behauptete nach dem
+  bloßen lokalen Worker-Handoff dauerhaft gespeicherte Entscheidungen und
+  Vertagung. `accepted:true` belegt das spätere Worker-Checkpoint nicht.
+  VM-Gegenfall `accepted:true` und weiter aktivem Worker vor Fix 67/68 rot;
+  nach enger Status-/Textkorrektur 68/68 und Brokervertrag 11/11 PASS.
+  Keine Änderung an privatem Journal, Freigabe, Export, Timeout oder Retry;
+  kein realer Datenverlust belegt. `FINDING-010.md`; frische Gesamtregression
+  und native Plattformgates für einen neuen Kandidaten noch offen.
+
+## Standalone-/Cowork-Quellgrenze (26.10., in Prüfung)
+
+Der Nutzer verlangt, dass die eigenständigen Windows- und Mac-Pakete keine
+Cowork-Laufzeitbestandteile enthalten. Die geprüfte Architekturentscheidung
+ist **ein** neutraler Kern mit getrennten Produktadaptern und einer geschlossenen
+Standalone-Dateiprojektion. Eine vollständige Kopie des Sicherheitskerns würde
+Korrekturen und Policyidentitäten auseinanderlaufen lassen. Die Trennung folgt
+dem Abhängigkeitsprinzip: Domänenregeln hängen nicht von Dialogen, MCP oder
+Cowork-Jobs ab; Produktadapter hängen vom Kern ab. Diese Entscheidung ist
+eine Architekturinferenz aus dem aktuellen Code und den Microsoft-Grundsätzen
+zu [Separation of Concerns](https://learn.microsoft.com/en-gb/dotnet/architecture/modern-web-apps-azure/architectural-principles)
+und [Clean Architecture](https://learn.microsoft.com/en-us/dotnet/architecture/modern-web-apps-azure/common-web-application-architectures).
+
+Im **unveröffentlichten Arbeitsbaum** sind native Dateiauswahl/Ordnerfunktionen
+unter `server/local-ui`, reine Reviewmodelle unter `server/core` und
+Cowork-Dialoge, Jobstore und MCP-Einstieg unter `server/companion` getrennt.
+Die Standalone-Projektion verbietet `companion/` vollständig und erzeugt eine
+beim Start gegen alle beigelegten neutralen Policydateien geprüfte
+Fingerprint-Quittung. Der neutrale verifizierte Paketdateileser liegt nun in
+`gateway/package-files.js`; der Cowork-eigene Modell-Lesegrant, Seitenvertrag
+und Snapshotcache verbleiben in `gateway/package-store.js` und werden nicht
+in Standalone installiert. Das gemischte Testharness prüft synthetische
+Standalone-Pakete direkt anhand von Manifest, Bytehash und UTF-8, ohne dafür
+einen Cowork-Grant zu erfinden. Der neue Standalone-Fingerprint bindet nur die
+neutralen Policydateien; Cowork behält die historische vollständige
+Quellenliste und den Berechnungsvertrag, nicht zwingend denselben Hashwert
+nach geänderten Quellen. Cowork-exklusive Policy-Quellbytes fließen weder in den neuen
+Standalone-Fingerprint noch als ausführbare Dateien ins Paket. Die projizierte
+Windows-Liste enthält aktuell 269 Dateien,
+null `companion/`-Module und weder MCP-Einstieg noch Cowork-Paketstore oder
+Cowork-Reviewmodul. Gemeinsam genutzte Gateway-Dateien enthalten noch
+produktspezifische Zweige: Das Manifest beweist die Modulgrenze, nicht die
+vollständige Entflechtung jeder Quellzeile. Der gemeinsame Kern und die
+unterschiedlichen Produktrollen bleiben weiter byte- und semantisch zu prüfen.
+Dies ist **kein** neues ZIP-/Mac-Artefakt und keine native Zielhostabnahme.
+
+Der Policyfingerprint ändert sich bei dieser Quelltrennung absichtlich.
+Bereits abgeschlossene Ergebnisdateien und Historien werden nicht umgeschrieben.
+Ein unter einem anderen Policyfingerprint angefangener Anonymisierungszustand
+darf ohne bewiesene Migration nicht unter der neuen Policy fortgesetzt werden;
+ein pauschaler Fingerprint-Alias wäre eine Schutzlockerung. Diese
+Bestandszustandsfrage wurde im unveröffentlichten Arbeitsbaum konkret geprüft:
+Ein unvollständiger alter Anonymisierungslauf mit anderem gebundenen Hash
+bleibt lesbar, erscheint als nicht fortsetzbar und verlangt einen neuen Lauf
+aus den unveränderten Originaldateien. History-Projektion und direkter
+Fortsetzungsversuch an einem gespeicherten Journal bestätigten den spezifischen
+Fehler `BATCH_PSEUDONYM_CONTEXT_UNAVAILABLE` und bytegleiches Journal vor/nach
+beiden Aktionen. Bereits erstellte Ergebnisse und Entscheidungen werden nicht
+umgeschrieben. Das ist keine Migration und kein Nachweis für jede historische
+Journalvariante; vor einem neuen Paket bleibt die Plattformdarstellung offen.
+Die Quittung verwendet das neue Standalone-Schema `/2`. Ein gezielter Gegenfall
+ändert die beiden Cowork-exklusiven Quelldateien: Coworks historischer
+Fingerprint ändert sich, Standalones neuer Fingerprint bleibt bytegleich.
+Der neue Standalone-Zustand verweigert den alten gemischten Hash; dessen
+eventuelle Migration bleibt vor Paketfreigabe offen und wird nicht durch einen
+Alias vorweggenommen.
+Gezielte Projektion 10/10, Produktisolation 4/4, Pseudonymzustand 26/26,
+Companion-IPC 29/29, Cowork-Prozessor 38/38, Paket-Leserechte 27/27,
+Paket-Snapshots 2/2, Gateway-E2E 50/50, gemischte Wide-Privacy-Fälle 11/11,
+Corepolicy-Goldenbindung 9/9 und echte Standalone-Sidecar-Lebensdauer PASS.
+Der erste zusätzliche 16-Dateien-Härtetest war **rot**: Nach expliziten synthetischen
+OCR-Kontakt- und Textentscheidungen verweigert der automatische erste lange
+Anonymisierungslauf wegen `RESIDUAL_PII`; 15 weitere Positionen erreichen
+ihre Reviewphase. Diesen historischen Sicherheitsstopp weder als anonymisierte Ausgabe
+noch als Architekturregression umdeuten. Der kanonische frische 328-Dateien-
+Headlesslauf mit gepinntem Node22.23.2 war **PASS, Exit0** vor der anschließenden
+Trennung des Standalone-Fingerprints. Originallog:
+`dist/rc177-full-code-review-20261026/headless-after-cowork-boundary-20261026.log`,
+SHA-256 `be8cef177b3a408c1c9b57a5e0575f97880b86c88217790365bcddcf19c32055f`.
+Es liefen keine sechs nativen Windows-Formfälle und keine Standalone-GUI-/Paket-
+oder Mac-Zielhostabnahme. Frühere rote Zwischenläufe mit veralteten Testannahmen
+bleiben separat erhalten. Nach der neuen Fingerprintänderung bestanden
+`test-batch-pseudonym-state.js` 26/26 und
+`test-standalone-build-fingerprint.mjs` 10/10 sowie die semantische
+Corepolicy-Goldenbindung 9/9. Der danach unverändert gestartete zweite
+vollständige Headlesslauf ist **328/328, Exit0**; Log
+`dist/rc177-full-code-review-20261026/headless-after-standalone-policy-v2-20261026.log`,
+SHA-256 `34c767a417828aaf6186ab0446dfd304b3f685a9b25ef44b2afa25d8857448fc`.
+`npm run test:docs` bestand mit dem gepinnten Node22.23.2, Originallog
+`dist/rc177-full-code-review-20261026/docs-after-policy-v2-20261026.log`,
+SHA-256 `9f77c5475bf4d3c9823577cb92a986e94806bd9875b36b44b93227db9b47aee6`.
+`git diff --check` meldet keinen Whitespacefehler (nur eine CRLF-Normalisierungswarnung).
+Diese Quellgates ersetzen weder ein neues Windows-/Mac-Paket noch native UI-
+und Zielhostprüfungen. Der veröffentlichte RC177 ist davon unberührt.
+
+**Neuer gebundener Gegenbeleg 26.10. nach der Bestandszustandskorrektur:**
+Der erste lange Härtetest reservierte 21 Vorkommen von „Max Mustermann“ und
+21 von „María-José Núñez“ trotz eigenständig belegtem Personenkontext. Die
+Anonymisierung entfernte die übrigen Vorkommen, die Reservierungen setzten
+jedoch Klartext wieder ein; das finale Restdatengate stoppte zu Recht. Der
+enge Standalone-Fix überspringt die Reservierung für exakt kontextbelegte
+gemischtschreibende Namen. Unbelegte Prosa und rein großgeschriebene Titel
+bleiben in der lokalen Entscheidung. `test-privacy-text-operation.js` 12/12
+PASS einschließlich der neuen Abgrenzung. Der **neue** echte 16-Dateien-Lauf
+lieferte 16/16 Konvertierungen und 16/16 anonymisierte Veröffentlichungen
+nach expliziten synthetischen lokalen Entscheidungen; technische Anker,
+Identitätsfreiheit und dokumentübergreifende Pseudonyme wurden geprüft.
+Originales neues Log `dist/rc177-full-code-review-20261026/adversarial-after-anchor-fix.log`,
+14141 Bytes/SHA-256 `a8a5b1d2eedaee5edd47b33e5ff72d2994279265a35d8b08f5d1ebc6f18006e0`.
+Das ältere rote Log bleibt als ursprünglicher Gegenbefund erhalten.
+
+Danach lief der **unveränderte** aktuelle Test-/Produktstand mit gepinntem
+Node22.23.2 durch `tests/run-product-suite.js headless`: 328/328
+Testdateien, Exit0; Originallog
+`dist/rc177-full-code-review-20261026/headless-after-old-policy-and-anchor-20261026.log`,
+883751 Bytes/SHA-256 `13defec1249f32bd65cc0908655f81c86ff50e2b63205c36f85a794702e4ef2e`.
+Die gezielte History-Suite und die Batch-Fortsetzung waren ebenfalls PASS.
+Nach der Dokumentaktualisierung bestand `npm run test:docs` mit vorn in
+`PATH` gepinntem Node22.23.2, Exit0; neues Originallog
+`dist/rc177-full-code-review-20261026/docs-after-old-policy-and-anchor-20261026.log`,
+5061 Bytes/SHA-256 `9f77c5475bf4d3c9823577cb92a986e94806bd9875b36b44b93227db9b47aee6`.
+Sechs native Windows-Formfälle, echte Desktop-GUI, neues Windows-Paket und
+native Mac-Zielhostgates blieben **NOT_RUN**; einzelne Symlink-Gegenfälle der
+Quellsuite waren mangels OS-Berechtigung ebenfalls ausdrücklich NOT_RUN.
+Dieser Abschluss ist ein Quell- und Testzwischenstand, kein vollständiges
+R0–R9-Review und kein neuer Release.

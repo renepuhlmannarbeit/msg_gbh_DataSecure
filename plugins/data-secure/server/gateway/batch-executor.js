@@ -11,10 +11,10 @@ const {
   readBatchProcessingMode
 } = require('./batch');
 const {
-  validateSummary,
   showLocalIntakeNoticeConfirmed,
   showBatchStateNoticeConfirmed
-} = require('../companion/completion-summary');
+} = require('./product-terminal-notice');
+const { validateSummary } = require('../core/local-completion-summary-contract');
 const { recordWorkflowEvent, newRunId: mintRunId } = require('./workflow-diagnostics');
 // Harnesses replace ./workflow-diagnostics with a bare recorder; the run id then
 // still has to exist so every event of one run can be grouped (DS-071).

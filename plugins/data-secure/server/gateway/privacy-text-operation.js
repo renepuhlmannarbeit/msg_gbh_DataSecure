@@ -9,6 +9,7 @@ const { personFieldContextForConsumer } = require('../core/person-field-policy')
 const { credentialIssuerAmbiguities } = require('../privacy/credentials');
 const { personProseCandidateSpans, personProseAmbiguities } = require('../privacy/person-ambiguities');
 const { residualPersonAmbiguities, createPersonReviewBinding, reviewedPersonRanges } = require('../privacy/residual-person-review');
+const { collectContextualNameCandidates } = require('../privacy/entities');
 const { canonicalizeRenderedText, escapeRegExp } = require('../privacy/base');
 const { canonicalValue: registryComparisonValue } = require('../batch-pseudonym-registry');
 const { createTransformTrace, applyEdits } = require('../privacy/transform-plan');
@@ -24,6 +25,13 @@ function reservePersonReviewCandidates(text, registry, allowOrganizationReview =
   const original = canonicalizeRenderedText(text, fieldContext.policy);
   const candidates = personProseCandidateSpans(original, { ...fieldContext.consumerOptions,
     productChannel: allowOrganizationReview ? 'standalone' : 'cowork', profile, ocrLineReview });
+  // An exact identity independently anchored by person/contact/employment
+  // context must remain visible to the redactor. Reserving only its prose
+  // occurrences would restore raw names after anonymization and then fail
+  // the final dictionary gate. Unanchored attribution stays in local review.
+  const contextualIdentities = allowOrganizationReview ? new Set(
+    collectContextualNameCandidates(original, profile).filter(seed => /\p{Ll}/u.test(seed.value))
+      .map(seed => registryComparisonValue(seed.value))) : null;
   // A larger uncertain caption must not hide an independently established
   // multi-word identity inside it. Single persisted surnames are deliberately
   // not global source seeds ("Sommer" may be ordinary prose); the engine's
@@ -38,6 +46,7 @@ function reservePersonReviewCandidates(text, registry, allowOrganizationReview =
     : [];
   const reservations = candidates
     .filter(span => {
+      if (contextualIdentities?.has(registryComparisonValue(span.value))) return false;
       if (registry?.lookup?.('PERSON', span.value) || allowOrganizationReview && registry?.lookup?.('ORG', span.value)) return false;
       if (!knownIdentities.length) return true;
       // Registry comparison can change Unicode length (İ -> i + combining

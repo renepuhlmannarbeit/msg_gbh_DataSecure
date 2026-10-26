@@ -1,5 +1,7 @@
 'use strict';
 
+require('./release-verifier');
+
 const crypto = require('crypto');
 const { SafeError } = require('../runtime');
 const { anonymizeSelectedSource } = require('../gateway/orchestrator');

@@ -162,8 +162,8 @@ function defaultDependencies(options = {}) {
   // the optional Claude/MCP product even when both are installed.
   const privateRoot = activateStandaloneNamespace(options);
   const { createRunHistory } = require('./run-history');
-  const filePicker = require('../companion/file-picker');
-  const sourceFolder = require('../companion/source-folder');
+  const filePicker = require('../local-ui/file-picker');
+  const sourceFolder = require('../local-ui/source-folder');
   const resultFolder = require('../gateway/result-folder-config');
   const supportTrace = require('../gateway/support-trace');
   const { replayPendingResultExports, readStandaloneExportHistory, readStandaloneExportHistoryEntry, abandonPendingResultExport } = require('../gateway/result-export');
@@ -179,7 +179,6 @@ function defaultDependencies(options = {}) {
   const { assertRootSeparation, rootSeparationFailure } = require('../gateway/root-boundary');
   const { verifyBundledRuntime, refuseStartup } = require('../gateway/startup-guard');
   const { migrateLegacyAuditReceipts } = require('../gateway/audit');
-  const { cleanupCompanionJobs } = require('../companion/retention');
   const { cleanupAbandonedWorkingJobs } = require('../gateway/orchestrator');
   const { startBatchMaintenance } = require('../gateway/batch-maintenance');
   const batchExecutor = require('../gateway/batch-executor');
@@ -272,7 +271,10 @@ function defaultDependencies(options = {}) {
           standaloneLazyRetentionProtection: true,
           openBatchPackageProtection,
           cleanupLocalData,
-          cleanupUiJobs: cleanupCompanionJobs,
+          // Standalone never creates Cowork companion jobs. Preserve any
+          // historical files in its private namespace; do not load or run the
+          // Cowork retention adapter during desktop startup.
+          cleanupUiJobs: () => ({ skipped: true, reason: 'standalone_no_companion_jobs' }),
           recoverBatches,
           replayMappingOutbox,
           startBatchMaintenance,
@@ -354,7 +356,7 @@ function defaultDependencies(options = {}) {
     validateSelectedPathAsync: filePicker.validateSelectedPathAsync,
     pickSourceFolderAsync: sourceFolder.pickSourceFolderAsync,
     enumerateSourceFolderAsync: sourceFolder.enumerateSourceFolderAsync,
-    pickFolderAsync: require('../companion/folder-picker').pickFolderAsync,
+    pickFolderAsync: require('../local-ui/folder-picker').pickFolderAsync,
     reserveIntake: require('../gateway/batch-intake-reservation').reserveIntake,
     releaseIntake: require('../gateway/batch-intake-reservation').releaseIntake,
     readConfiguredResultRoot: resultFolder.readConfiguredResultRoot,
@@ -971,7 +973,9 @@ class StandaloneApplicationService {
       throw fixedFailure('STANDALONE_BUSY', 'Ein lokaler Stapel wird bereits verarbeitet.');
     }
     const selected = this.deps.runHistory.find(batchId);
-    if (!selected.resumable) throw fixedFailure('STANDALONE_NOTHING_TO_CONTINUE', 'Dieser lokale Lauf kann nicht fortgesetzt werden.');
+    if (!selected.resumable) throw fixedFailure(selected.policy_restart_required === true
+      ? 'BATCH_PSEUDONYM_CONTEXT_UNAVAILABLE' : 'STANDALONE_NOTHING_TO_CONTINUE',
+    'Dieser lokale Lauf kann nicht fortgesetzt werden.');
     this.interactionActive = true;
     let reservation;
     try {

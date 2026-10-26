@@ -56,7 +56,11 @@ export const SOURCE_INPUT_FILES = Object.freeze([
   'scripts/lib/standalone-build-fingerprint.mjs', 'scripts/lib/standalone-runtime-projection.mjs',
   'scripts/lib/standalone-conversion-runtime.mjs', 'scripts/lib/pdfjs-text-paint-hook.mjs', 'scripts/lib/bundled-runtime.mjs',
   'scripts/lib/standalone-package-integrity.mjs', 'scripts/lib/standalone-windows-layout.mjs',
-  'plugins/data-secure/server/core/bound-file-io.js'
+  'plugins/data-secure/server/core/bound-file-io.js',
+  // Historical durable policy identity includes this Cowork-only source byte
+  // input. Bind it at build time without installing its executable module.
+  'plugins/data-secure/server/companion/processor.js',
+  'plugins/data-secure/server/companion/text-review.js'
 ]);
 export const SOURCE_INPUT_TREES = Object.freeze([
   'apps/datasecure-standalone/frontend',

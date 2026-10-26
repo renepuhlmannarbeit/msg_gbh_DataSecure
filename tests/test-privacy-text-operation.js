@@ -249,6 +249,20 @@ async function main() {
     assert.equal(reserved.mask_edits.length, 1);
     assert.equal(reserved.mask_edits[0].original, 'Anna Berger');
   });
+  await testAsync('an independently contextual person remains visible to redaction while unanchored prose still needs review', async () => {
+    const source = 'Name: Anna Berger\nMax Mustermann arbeitet bei Nordstern Gesundheit AG.\n' +
+      'Max Mustermann berichtet heute. Ferdinand Quastenflosser berichtet heute.';
+    const reserved = require('../plugins/data-secure/server/gateway/privacy-text-operation').reservePersonReviewCandidates(
+      source, makeRegistry(), true, 'personnel_profile');
+    assert.ok(!reserved.mask_edits.some(row => row.original === 'Max Mustermann'));
+    assert.ok(reserved.mask_edits.some(row => row.original === 'Ferdinand Quastenflosser'));
+    const value = prepare(source, { profile: 'personnel_profile' });
+    assert.doesNotMatch(value.draft.anonymized_text, /Max Mustermann/u);
+    const reviewed = await resolveTextPrivacyReview(value, review('redact'));
+    const final = finalizeTextPrivacyReview(value, reviewed, { prefix: '', suffix: '' });
+    assert.doesNotMatch(final.markdown, /Max Mustermann|Ferdinand Quastenflosser/u);
+    assert.equal(replayTransformTrace(final.transform_trace), final.markdown);
+  });
   await done();
 }
 main().catch(error => { console.error(error); process.exitCode = 1; });

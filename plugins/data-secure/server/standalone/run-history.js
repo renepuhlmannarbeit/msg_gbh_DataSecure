@@ -12,6 +12,7 @@ const { conversionFeedback, isOcrOmission, isAnonymizationOcrOmission, isAnonymi
   hasContentNotice } = require('./conversion-feedback');
 const { contentOptionsForBatch } = require('../core/content-options');
 const { isMarkdownBatch } = require('../core/processing-mode');
+const { standalonePolicyRestartRequired } = require('../batch-pseudonym-context');
 const visibility = require('../gateway/standalone-history-visibility');
 const { LIMIT: HISTORY_LIMIT } = require('../gateway/standalone-history-window');
 const { SCHEMA, failure, validateBatchId, historyProgress, validSummary, summarizeState,
@@ -236,6 +237,7 @@ function createRunHistory(deps) {
           : run && regularFile(path.join(run, MAPPING)));
         const processing = Boolean(state && deps.liveExecutor(state));
         const canResume = !processing && !summary.complete && resumable.has(summary.batch_id);
+        const policyRestartRequired = !summary.complete && !processing && standalonePolicyRestartRequired(state);
         // History is a read-only projection of this exact journal snapshot.
         // Re-reading every old batch through the full public progress path is
         // expensive and can race a worker's next publication. The lightweight
@@ -285,7 +287,7 @@ function createRunHistory(deps) {
           ...(problems !== summary.failed_count ? { problem_count: problems } : {}),
           identity_mapping_available: Boolean(readableIdentity || capturedIdentity?.available),
           ...(identityWarning ? { identity_mapping_warning: identityWarning } : {}),
-          resumable: canResume, _run: run };
+          resumable: canResume, ...(policyRestartRequired ? { policy_restart_required: true } : {}), _run: run };
       });
     if (!recoverExports) return { entries, open_count: openIds.size, hidden_count: hiddenIds.size,
       ...(exportInventoryUnavailable ? { history_degraded: true } : {}) };

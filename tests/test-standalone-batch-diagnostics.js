@@ -253,10 +253,12 @@ function reviewExecutorFixture(platform) {
     if (id === '../runtime') return { SafeError: Error };
     if (id === './batch') return batch;
     if (id === './process-identity') return require('../plugins/data-secure/server/gateway/process-identity');
-    if (id === '../companion/completion-summary') return {
+    if (id === './product-terminal-notice') return {
       showBatchStateNoticeConfirmed() { assert.fail('no completion UI from a diagnostic'); },
       showLocalIntakeNoticeConfirmed() { assert.fail('no failure UI from a diagnostic'); }
     };
+    if (id === '../core/local-completion-summary-contract')
+      return require('../plugins/data-secure/server/core/local-completion-summary-contract');
     if (id === './workflow-diagnostics') return { newRunId: () => '12345678',
       recordWorkflowEvent() { assert.fail('application must provide the mirror recorder'); } };
     if (id === './batch-execution-diagnostic') return diagnostic;

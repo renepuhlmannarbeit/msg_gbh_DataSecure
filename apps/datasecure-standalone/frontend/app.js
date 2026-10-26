@@ -37,7 +37,7 @@ const messages = {
   CONTENT_OPTIONS_BINDING_MISSING: 'Der unveränderliche Nachweis der Inhalts- und OCR-Auswahl fehlt. Dieser Lauf wird nicht fortgesetzt. Bitte die Originaldateien für einen neuen Lauf auswählen.',
   MARKDOWN_CONVERSION_NOT_READY: 'Die installierte Version unterstützt diese Betriebsart nicht. Bitte die aktuelle Standalone-Version verwenden. Der Stapel wurde nicht gestartet; deine Dateiauswahl bleibt erhalten.',
   STANDALONE_NOTHING_TO_CONTINUE: 'Es gibt keinen fortsetzbaren Stapel.',
-  BATCH_PSEUDONYM_CONTEXT_UNAVAILABLE: 'Dieser ältere Stapel verwendet nicht mehr den aktuellen Datenschutz-Regelsatz. Bitte die Originaldateien neu auswählen.',
+  BATCH_PSEUDONYM_CONTEXT_UNAVAILABLE: 'Dieser angefangene Anonymisierungslauf passt nicht zum aktuellen Datenschutz-Regelsatz und kann nicht fortgesetzt werden. Bitte die unveränderten Originaldateien für einen neuen Lauf auswählen. Bereits erstellte Ergebnisse und frühere Entscheidungen bleiben erhalten.',
   BATCH_PSEUDONYM_CAPACITY_EXCEEDED: 'Die laufweite Grenze für Identitäten oder Schreibweisen wurde erreicht. Bereits geprüfte Ergebnisse bleiben erhalten. Bitte die hier genannten verbleibenden Originaldateien in einem kleineren neuen Lauf verarbeiten.',
   STANDALONE_RUNTIME_MISSING: 'Der lokale DataSecure-Core fehlt.',
   STANDALONE_RUNTIME_START_FAILED: 'Der lokale DataSecure-Core konnte nicht gestartet werden.',

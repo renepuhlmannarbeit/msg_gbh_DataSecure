@@ -1693,6 +1693,10 @@
           detail.append(activity);
         }
         const missingLocation = !working && !entry.resumable && entry.result_location === 'missing';
+        if (entry.policy_restart_required === true) {
+          stateLabel.textContent = 'Mit dieser Datenschutzregel nicht fortsetzbar';
+          detail.append(element('p', 'Dieser angefangene Anonymisierungslauf passt nicht zum aktuellen Datenschutz-Regelsatz. Bitte die unveränderten Originaldateien für einen neuen Lauf auswählen. Bereits erstellte Ergebnisse und frühere Entscheidungen bleiben erhalten.', 'history-meta'));
+        }
         if (missingLocation) {
           stateLabel.textContent = verifiedTotals && entry.status === 'results_available'
             ? 'Verarbeitung abgeschlossen · Ergebnisordner fehlt' : 'Ergebnisordner fehlt';

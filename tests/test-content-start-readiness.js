@@ -150,7 +150,7 @@ async function main() {
           if (id === '../core/content-options') return require('../plugins/data-secure/server/core/content-options');
           if (id === './batch') return { readBatchProgress: guarded, reviewDeferredBatch: guarded, releaseLocalBatchExecutor: guarded };
           if (id === './workflow-diagnostics') return { recordWorkflowEvent() {} };
-          if (id === '../companion/review-timeouts') return { DETACHED_REVIEW_TIMEOUT_MS: 300000 };
+          if (id === '../local-ui/review-timeouts') return { DETACHED_REVIEW_TIMEOUT_MS: 300000 };
           return {};
         }
       }, { filename: 'review-worker.js' });

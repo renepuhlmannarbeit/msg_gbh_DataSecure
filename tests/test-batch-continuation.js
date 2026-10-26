@@ -42,6 +42,11 @@ function fixture(options = {}) {
       if (options.failRead) throw new Error('READ_FAILED');
       return structuredClone(current);
     },
+    readStateForMaintenance(value) {
+      events.push(`maintenance:${value}`);
+      return structuredClone(current);
+    },
+    policyRestartRequired: options.policyRestartRequired,
     writeState(value) {
       events.push('write');
       if (options.failWrite) throw new Error('WRITE_FAILED');
@@ -193,6 +198,18 @@ test('continue returns a fixed content-free no-batch response without taking a l
     raw_content_sent_to_claude: false
   });
   assert.strictEqual(value.events.some((event) => event.startsWith('acquire:')), false);
+});
+
+test('an excluded old-policy Standalone journal reports a restart without mutating its decisions', () => {
+  const old = { ...state([{ status: 'deferred_review' }]), product_channel: 'standalone',
+    expires_at: new Date(Date.now() + 60_000).toISOString(), core_policy_fingerprint: 'a'.repeat(64) };
+  const value = fixture({ state: old, policyRestartRequired: candidate =>
+    candidate.core_policy_fingerprint === old.core_policy_fingerprint });
+  assert.throws(() => value.continueStandaloneBatch(token),
+    error => error.code === 'BATCH_PSEUDONYM_CONTEXT_UNAVAILABLE');
+  assert.deepEqual(value.current(), old);
+  assert.equal(value.events.includes('write'), false);
+  assert.equal(value.events.filter(event => event === `maintenance:${token}`).length, 1);
 });
 
 test('continue selects the newest state and delegates interrupted work through resume', () => {

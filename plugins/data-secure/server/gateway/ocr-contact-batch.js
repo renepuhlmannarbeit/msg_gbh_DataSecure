@@ -3,7 +3,7 @@
 // Standalone-only gateway adapter. Never normalise UTF-16 text/offsets, group contacts
 // by spelling, or pass these private source labels to the main renderer.
 const { buildContactDraft, validateContactDraft, validateContactAnswer } = require('../core/ocr-contact-review');
-const { MAX_REVIEW_CHARS } = require('../companion/text-review');
+const { MAX_REVIEW_CHARS } = require('../core/local-review-model');
 const invalid = () => Object.assign(new Error('Die OCR-Prüfgruppe konnte nicht sicher zugeordnet werden.'), { code: 'OCR_CONTACT_REVIEW_INVALID' });
 
 function buildContactBatch(entries) {

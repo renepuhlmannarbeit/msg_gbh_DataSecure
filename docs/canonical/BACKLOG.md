@@ -11,6 +11,54 @@ Appcommit ist der veröffentlichte Tag `v3.2.0-rc177` auf `fc39f820…`, nicht e
 späterer Docs-HEAD. RC177-Pakete bleiben unverändert; Nutzer-Desktoptests
 werden nicht als Agentennachweis übernommen.
 
+**Priorität nach Nutzerhinweis:** Zuerst alle Standalone-Pfade für Windows und
+beide Macs prüfen. `CLAUDE.md` spricht sowohl über Standalone als auch über
+Cowork und ist eine Projektregelquelle, kein Beweis für heutige
+Implementierungsdetails. Cowork nur dort zuerst mitverfolgen, wo Core oder
+Sicherheitsgrenze geteilt sind; seine ausschließlich eigene Oberfläche und
+Handofffälle nachordnen. Der ausdrücklich beauftragte Release-Worktree bleibt
+die Arbeitsbasis; keine Main-Integration im Rahmen dieses Reviews.
+
+**Neue Architekturvorgabe:** Die Standalone-Pakete sollen keine
+`server/companion/`-Laufzeitmodule und keinen MCP-/Cowork-Einstieg enthalten.
+Ein neutraler gemeinsamer Kern bleibt für identische Datenschutz- und
+Konvertierungsregeln; native Auswahl und Reviewmodelle werden aus dem
+Cowork-Adapter herausgelöst. Der unveröffentlichte Arbeitsbaum projiziert
+Windows mit 269 Serverdateien ohne `companion/`, MCP-Einstieg,
+Cowork-Paketstore und Cowork-Reviewmodul. Der neutrale verifizierte Dateileser
+bleibt für Standalone, kurzlebige Modell-Lesegrants sind Cowork-exklusiv.
+Gemeinsame Gateway-Dateien enthalten noch Produktzweige; eine vollständige
+Quelltextentflechtung ist durch das Modulmanifest allein nicht bewiesen.
+Der neue Standalone-Policyfingerprint bindet nur beigelegte neutrale Quellen;
+Coworks bisheriger Berechnungsvertrag mit vollständiger Quellenliste bleibt
+erhalten; sein konkreter Hash kann sich mit geänderten Quellbytes ändern. Ein
+Gegenfall bestätigt,
+dass Änderungen an zwei Cowork-eigenen Quellmodulen den neuen Standalone-Hash
+nicht ändern. Der frische 328-Dateien-Headlesslauf nach dieser letzten Änderung
+ist vollständig grün (Exit0), ebenso `test:docs`; Logs und Hashes stehen im
+RC177-Reviewplan. Vor Kandidatenfreigabe fehlen noch Windows-/Mac-Paketprüfung,
+native Zielhostgates und ein
+sicherer Befund zur Fortsetzung alter, per Policyfingerprint gebundener
+Anonymisierungszustände. Keine pauschale Kompatibilitätsfreigabe.
+
+- [x] Alte angefangene Anonymisierungszustände mit anderem
+  Standalone-Policyfingerprint erhalten einen konkreten Neustarthinweis.
+  Die tatsächliche History-Projektion und ein direkter Fortsetzungsversuch
+  am gespeicherten Journal verweigern die alte Policy; dessen Bytes bleiben
+  unverändert. Keine ungeprüfte Migration und kein Fingerprint-Alias.
+- [x] Cowork-exklusive Quellen aus dem neuen Standalone-Policyfingerprint
+  entfernt; Plugin-Journale behalten ihre bisherige Identität. Alte
+  Standalone-Zustände werden ohne geprüfte Migration nicht als kompatibel
+  umgedeutet.
+- [x] Separaten synthetischen 16-Dateien-Härtetest kausal eingeordnet:
+  Die Reservierung stellte belegte Personennamen nach der Anonymisierung
+  wieder her und löste zu Recht `RESIDUAL_PII` aus. Der enge Standalone-Fix
+  lässt eigenständig kontextbelegte Namen durch den Redaktor; ungeklärte
+  Namensstellen bleiben in der lokalen Prüfung. Neue tatsächliche Probe:
+  16/16 Konvertierungen und 16/16 anonymisierte Veröffentlichungen nach
+  expliziten synthetischen Entscheidungen; Restdatengate unverändert.
+  Historisches rotes Log erhalten, neues grünes Log separat gebunden.
+
 - [x] Auftrag/Quellbasis/Geltung und kanonische Regeln zuerst abgleichen.
 - [ ] R0: versioniertes, klassifiziertes Dateimanifest einschließlich
   eigener/angepasster, generierter und unveränderter Drittanbieterquellen.
@@ -53,6 +101,12 @@ der möglichen Wirkung auf private Daten und veröffentlichte Ergebnisse.
 | D Anonymisierung | PII-Engine, Personen-/Unternehmenshypothesen, lokaler Dialog, Entscheidung/ACK, Nachbearbeitung und drei vertrauliche Zuordnungen | Jede Fundstelle und jeder Entscheidungstyp, gleiche Identität über Dateien, Keep-/Maskierungsfehler und öffentliche/private Ausgabe. |
 | E Oberfläche | `frontend` (6), Verlauf/Status, Ordner/OCR/Export, Fehlertexte und Barrierefreiheit | Zustand nach Neustart/Wechsel, getrennte UI-/Quell-/Anwendertests, keine Desktopübernahme. |
 | F Integrität | Eigene Tests (492), Build-/Benchmarkquellen (113), CI, Lockfiles, generierte/Fremdquellen | Testorakel unabhängig vom Ist, Fixture-Tracking, Version/Lizenz/Provenienz, Paket- und Remotehashbelege. |
+
+Stand `CLAUDE.md`-Gegenlesen: Formatliste, Fünferfenster und vertrauliche
+Beilagennamen sind an konkrete RC177-Quellkonstanten gebunden; Aussagen über
+Originalschutz, Offlinegrenze, Teilabbrüche und Windows-/Mac-Verhalten bleiben
+auf Code-/API-/Zielhostebene zu revalidieren. Die Regel „vom sauberen main“
+ändert den ausdrücklich beauftragten Review-Worktree nicht.
 
 Maschinelle Ausgangszählung aus RC177: Unter den produktiven JS-Symbolen
 liegen 3734 Pfeilfunktionen, 2937 Funktionsdeklarationen, 268
@@ -183,6 +237,34 @@ belegt. Vor Fix Validator37/38, danach38/38; Policy9/9 und angrenzende
 Privacy11/11 PASS. Enger sortierter Einzel-ID-Vergleich; P2
 Prüfvollständigkeit. `FINDING-009.md`. Weitere Prüfpfade, Zielhostgates und
 vollständiger Symbolreview bleiben offen.
+
+Review-Commit `54e6bb610eb2999e04ce08f577aa57a2e0d8318e`:
+kompletter Headless-Produktlauf328/328 Dateien/Exit0 mit gepinntem Node22.23.2
+und sauberem getracktem Arbeitsbaum danach; Log-SHA
+`2b91ac80bcfcab8fe28da14a119ce114f6b9341c11b9935de5617429a3def121`
+unter `dist/rc177-full-code-review-20261026`. Windows-Native-GUI,
+Paket-/Desktopabnahme und Mac-Zielhosttests bleiben `NOT_RUN` für diesen
+Review-Commit; ein neuer Release ist nicht beauftragt.
+
+Nach dem Gesamtgate ergänzter direkter Standalone-Broker-Gegenfall zu Befund
+009: Eine kombinierte Credential-ID wird vor dem Worker-Send abgewiesen;
+eine anschließende vollständige Zweierentscheidung bleibt möglich. Gezielter
+Brokerlauf11/11 PASS. Die Prüfregel in `CLAUDE.md` nennt jetzt für die
+Quellenbasis `test:product:headless` und trennt native Standalone-Gates von
+Cowork-Plugin-Build/ZIP. Version, Kanon, Dokumentations- und UAT-Verträge sowie
+Claude-Code-Pilot gezielt PASS. Wegen des neuen Testinputs ist der alte
+328er-Lauf kein vollständiger Endlauf für den jetzigen Arbeitsbaum.
+
+**Reviewbefund 010, lokal korrigiert, noch nicht veröffentlicht:** Die
+Standalone-Prüfansicht meldete Entscheidungen oder eine Vertagung unmittelbar
+nach `submit_review` als gespeichert. Dessen `accepted:true` bestätigt aber
+nur die Übergabe an den Worker; dessen Verarbeitung und dauerhafter Prüfstand
+folgen asynchron. Ein neuer Frontend-VM-Gegenfall mit aktivem Worker war vor
+dem Fix 67/68 rot, nach einer reinen Status-/Textkorrektur 68/68 grün;
+der Brokervertrag bleibt 11/11 grün. Kein tatsächlicher Datenverlust oder
+Freigabebypass belegt. `FINDING-010.md`. Der erste frische 328/328-Headlesslauf
+liegt vor diesem Fix; Gesamt- und Zielhostgates für einen neuen Kandidaten
+bleiben offen. RC177-Pakete und Tag sind unverändert.
 
 R3-Schlüssellisten-Triage: Die fünf Verlaufsspeicherstellen wurden nur für
 die Kommaschlüssel-Kollision bis zu den Einzelwertprüfungen verfolgt;

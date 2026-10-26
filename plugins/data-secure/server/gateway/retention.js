@@ -4,7 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const { SafeError } = require('../runtime');
 const { roots, safeRemovePrivateTree } = require('./common');
-const { writeReviewMetaAtomically } = require('./review');
+const { writeReviewMetaAtomically } = require('./review-meta-io');
 const { bindDirectory, assertDirectory, fileIdentity, sameFile: sameBoundFile } = require('../core/bound-file-io');
 
 const DEFAULT_RETENTION_DAYS = 7;

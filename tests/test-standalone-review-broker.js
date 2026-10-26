@@ -59,6 +59,30 @@ test('a private draft is chunked and one complete answer reaches only its owning
   assert.strictEqual(broker.lastReviewedBatchId(), batchId);
 });
 
+test('a combined ambiguity id cannot acknowledge two Standalone review decisions', () => {
+  const broker = createReviewBroker();
+  const owner = child();
+  const credentialDraft = buildReviewDraft('Microsoft Amazon', 'Microsoft Amazon', 'personnel_profile', [
+    { ambiguity_id: 'credential:v2:000001', type: 'credential_issuer_ambiguous',
+      original_start: 0, original_end: 9, anonymized_start: 0, anonymized_end: 9 },
+    { ambiguity_id: 'credential:v2:000002', type: 'credential_issuer_ambiguous',
+      original_start: 10, original_end: 16, anonymized_start: 10, anonymized_end: 16 }
+  ], { allowDefer: true });
+  assert.strictEqual(broker.receive(owner, { type: 'standalone-review-draft', review_id: reviewId,
+    batch_token: batchId, draft: credentialDraft }), true);
+  assert.throws(() => broker.submit(reviewId, { action: 'reviewed', redactions: [], decisions: [
+    { ambiguity_id: 'credential:v2:000001,credential:v2:000002', decision: 'keep' }
+  ] }), { code: 'STANDALONE_REVIEW_DECISION_INVALID' });
+  assert.strictEqual(owner.messages.length, 0);
+  assert.strictEqual(broker.session().ready, true);
+  assert.deepStrictEqual(broker.submit(reviewId, { action: 'reviewed', redactions: [], decisions: [
+    { ambiguity_id: 'credential:v2:000001', decision: 'keep' },
+    { ambiguity_id: 'credential:v2:000002', decision: 'keep' }
+  ] }), { accepted: true, action: 'reviewed' });
+  assert.strictEqual(owner.messages.length, 1);
+  assert.strictEqual(owner.messages[0].answer.decisions.length, 2);
+});
+
 test('overlapping drafts are deferred, and worker exit discards only its draft', () => {
   const broker = createReviewBroker();
   const first = child();

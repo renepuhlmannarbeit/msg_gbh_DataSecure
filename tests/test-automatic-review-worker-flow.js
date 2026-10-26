@@ -92,15 +92,13 @@ async function runWorker(reviewOutcome, initial = waiting, { executorError = nul
           return progress.complete === true ? exporter() : { exported: 0, pending: 0, available: false };
         }
       };
-      if (name === './worker-terminal-presentation') return {
+      if (name === './product-terminal-notice') return {
         async presentTerminalEnvelope(options) {
           calls.presentations++;
           calls.envelope = options.envelope;
           await options.present();
           return { presenter: 'worker' };
-        }
-      };
-      if (name === '../companion/completion-summary') return {
+        },
         showBatchStateNoticeConfirmed(progress, options) { calls.notices++; calls.notice = progress; calls.noticeOptions = options; return true; },
         showLocalIntakeNoticeConfirmed() { throw new Error('unexpected failure notice'); }
       };

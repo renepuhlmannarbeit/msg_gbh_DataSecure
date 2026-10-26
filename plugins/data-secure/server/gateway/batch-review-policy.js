@@ -4,9 +4,9 @@ const { SafeError } = require('../runtime');
 const {
   buildReviewDraft,
   validateReviewResult,
-  applyManualRedactions,
-  reviewTextLocally
-} = require('../companion/text-review');
+  applyManualRedactions
+} = require('../core/local-review-model');
+const { reviewTextLocally } = require('./local-review-adapter');
 
 function localReviewError(code, message) {
   const error = new SafeError(message);

@@ -11,7 +11,7 @@ const frontend = path.join(root, 'apps/datasecure-standalone/frontend');
 
 export function syntheticDraft(kind = 'ocr') {
   if (kind === 'entities') {
-    const { buildBatchReviewDraft } = require('../../plugins/data-secure/server/companion/text-review');
+    const { buildBatchReviewDraft } = require('../../plugins/data-secure/server/core/local-review-model');
     const texts = ['Erika Linden arbeitet bei Fennwerk GmbH.', 'Erika Linden betreut ein zweites Dokument.'];
     return buildBatchReviewDraft(texts.map(text => ({ original_text: text, anonymized_text: text,
       allowOrganizationReview: true, ambiguities: [{ ambiguity_id: 'person:v1:000001', type: 'person_prose_ambiguous',

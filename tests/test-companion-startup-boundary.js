@@ -58,6 +58,7 @@ function bootstrapFixture(bytes, options = {}) {
       } };
       if (name === 'readline') return { createInterface: () => new EventEmitter() };
       if (name === '../runtime') return { SafeError };
+      if (name === './release-verifier') return {};
       if (name === './ipc-session') return { createCompanionSession({ secret }) {
         received = Buffer.from(secret); return { descriptor: () => ({}) };
       } };

@@ -71,6 +71,30 @@ funktioniert ohne Claude, Cowork, Skills, MCP, Agenten, Chat, Internetzugang und
 vom Anwender installierte Node-/Python-Runtimes. Das vorhandene Claude-Plugin
 bleibt ein separates Produkt.
 
+**Unveröffentlichter Reviewstand 26.10.2026:** Die Trennung wird jetzt auch
+an den ausgelieferten Dateien durchgesetzt. Die Standalone-Projektion schließt
+alle `server/companion/`-Module, den MCP-Einstieg und Cowork-Präsentation aus.
+Neutrale native Dateiauswahl liegt unter `server/local-ui/`, transportneutrale
+Review-/Abschlussverträge unter `server/core/`. Cowork behält eigene Dialoge,
+Jobs und seinen Freigabeadapter. Die gemeinsame, überprüfte Paketdatei-Leselogik
+liegt unter `gateway/package-files.js`; der kurzlebige Modell-Lesegrant und
+Snapshotcache bleiben ausschließlich in `gateway/package-store.js`, das die
+Standalone-Projektion nicht enthält. Standalone erteilt keinen Cowork-Lesegrant
+und lehnt Manifeste mit behaupteter Companion-Freigabe ohne ihren Cowork-Beleg
+ab. Beide Produkte nutzen weiter denselben
+Datenschutzkern und dieselben semantischen Prüfregeln; eine zweite Corekopie
+würde Sicherheitskorrekturen auseinanderlaufen lassen. Ein geprüfter
+Fingerprint-Beleg bindet im Standalone-Paket nur die tatsächlich beigelegten
+neutralen Policydateien. Cowork behält seinen bisherigen Berechnungsvertrag mit
+voller Quellenliste; der konkrete Hash ändert sich bei geänderten Quellbytes.
+Eine reine Änderung an den beiden Cowork-exklusiven Policy-Quellmodulen ändert
+den neuen Standalone-Fingerprint nicht. Gemeinsam genutzte
+Gateway-Dateien enthalten noch produktspezifische Zweige; die Projektion
+beweist den Ausschluss der Cowork-eigenen Module, nicht die vollständige
+Entflechtung jeder Codezeile. Noch kein neu
+gebautes Windows-/Mac-Paket und keine Freigabe für alte angefangene Zustände;
+siehe [Reviewstand](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md).
+
 **Verbindliches Zielbild:** Beide Produkte verwenden denselben neutralen
 DataSecure-Core: sichere Aufnahme, versiegelte Arbeitskopie, Format- und
 Coverage-Gates, Parser/Konverter, Journal/Fortsetzung, Mapping, Export und

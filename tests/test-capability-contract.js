@@ -131,7 +131,7 @@ test('runtime, MCP schema, skills and active handbooks retain the 200-file/500-M
   const common = read('plugins/data-secure/server/gateway/common.js');
   const batch = read('plugins/data-secure/server/gateway/batch.js');
   const intake = read('plugins/data-secure/server/gateway/batch-intake.js');
-  const picker = read('plugins/data-secure/server/companion/file-picker.js');
+  const picker = read('plugins/data-secure/server/local-ui/file-picker.js');
   assert.match(picker, /MAX_SELECTED_SOURCES = LIMITS\.MAX_BATCH_FILES/u);
   assert.match(picker, /LIMITS\.MAX_BATCH_TOTAL_BYTES/u);
   assert.match(common, /PILOT_SUPPORTED=new Set\(\['\.docx','\.txt','\.md','\.markdown','\.csv'\]\)/u);

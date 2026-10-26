@@ -16,6 +16,7 @@ const CORE_POLICY_FILES = Object.freeze([
   'core/batch-next-action.js',
   'core/conversion-worker-contract.js',
   'core/document-result-grade.js',
+  'core/local-review-model.js',
   'core/markdown-first-privacy.js',
   'core/person-field-policy.js',
   'core/processing-mode.js',
@@ -57,12 +58,14 @@ const CORE_POLICY_FILES = Object.freeze([
   'privacy/structured.js',
   'privacy/transform-plan.js'
 ]);
+const STANDALONE_POLICY_FILES = Object.freeze(CORE_POLICY_FILES.filter(relative =>
+  relative !== 'companion/processor.js' && relative !== 'companion/text-review.js'));
 
-function calculateCorePolicyFingerprint(options = {}) {
+function calculatePolicyFingerprint(files, options = {}) {
   const root = path.resolve(options.root || __dirname);
   const io = options.fs || fs;
   const hash = crypto.createHash('sha256');
-  for (const relative of CORE_POLICY_FILES) {
+  for (const relative of files) {
     const target = path.resolve(root, ...relative.split('/'));
     if (path.relative(root, target).startsWith('..')) throw new Error('CORE_POLICY_FILE_INVALID');
     const bytes = io.readFileSync(target);
@@ -74,7 +77,42 @@ function calculateCorePolicyFingerprint(options = {}) {
   }
   return hash.digest('hex');
 }
+function calculateCorePolicyFingerprint(options = {}) {
+  return calculatePolicyFingerprint(CORE_POLICY_FILES, options);
+}
+function calculateStandalonePolicyFingerprint(options = {}) {
+  return calculatePolicyFingerprint(STANDALONE_POLICY_FILES, options);
+}
 
-const CORE_POLICY_FINGERPRINT = calculateCorePolicyFingerprint();
+// A Standalone journal binds only the policy inputs it actually carries. The
+// Cowork fingerprint remains unchanged for its existing durable journals.
+function packagedStandaloneFingerprint() {
+  const receiptPath = path.join(__dirname, 'standalone-core-policy-fingerprint.json');
+  if (!fs.existsSync(receiptPath)) return null;
+  const stat = fs.lstatSync(receiptPath);
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size < 100 || stat.size > 16 * 1024)
+    throw new Error('STANDALONE_POLICY_RECEIPT_INVALID');
+  const receipt = JSON.parse(fs.readFileSync(receiptPath, 'utf8'));
+  const expectedFiles = STANDALONE_POLICY_FILES;
+  if (receipt?.schema !== 'datasecure-standalone-core-policy/2' ||
+      !/^[a-f0-9]{64}$/.test(String(receipt.fingerprint || '')) ||
+      !receipt.files || typeof receipt.files !== 'object' || Array.isArray(receipt.files) ||
+      Object.keys(receipt.files).length !== expectedFiles.length ||
+      Object.keys(receipt).sort().join(',') !== 'files,fingerprint,schema')
+    throw new Error('STANDALONE_POLICY_RECEIPT_INVALID');
+  for (const relative of expectedFiles) {
+    const expected = receipt.files[relative];
+    if (!/^[a-f0-9]{64}$/.test(String(expected || '')) ||
+        crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname, relative))).digest('hex') !== expected)
+      throw new Error('STANDALONE_POLICY_RECEIPT_INVALID');
+  }
+  return receipt.fingerprint;
+}
 
-module.exports = { CORE_POLICY_FILES, CORE_POLICY_FINGERPRINT, calculateCorePolicyFingerprint };
+const packaged = packagedStandaloneFingerprint();
+const STANDALONE_POLICY_FINGERPRINT = packaged || calculateStandalonePolicyFingerprint();
+const CORE_POLICY_FINGERPRINT = packaged || calculateCorePolicyFingerprint();
+
+module.exports = { CORE_POLICY_FILES, CORE_POLICY_FINGERPRINT, STANDALONE_POLICY_FILES,
+  STANDALONE_POLICY_FINGERPRINT, calculateCorePolicyFingerprint,
+  calculateStandalonePolicyFingerprint, packagedStandaloneFingerprint };

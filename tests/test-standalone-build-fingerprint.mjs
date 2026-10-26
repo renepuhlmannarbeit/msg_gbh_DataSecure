@@ -10,11 +10,58 @@ import {
   standaloneBuildFingerprint, assertStandaloneBuildFingerprint, assertStandaloneSourceUnchanged, cargoFingerprintDirectives,
   assertStandaloneRuntimeSource
 } from '../scripts/lib/standalone-build-fingerprint.mjs';
-import { standaloneProjectionContract } from '../scripts/lib/standalone-runtime-projection.mjs';
+import { collectStandaloneRuntime, standaloneProjectionContract } from '../scripts/lib/standalone-runtime-projection.mjs';
 import { sha256 } from '../scripts/lib/bundled-runtime.mjs';
 
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const temporaryRoot = fs.realpathSync.native(os.tmpdir());
+test('Standalone source projection excludes Cowork-only runtime modules independent of native assets', () => {
+  for (const target of [null, 'windows-x64']) {
+    const files = new Set(collectStandaloneRuntime(path.join(repository, 'plugins/data-secure/server'), target)
+      .map(file => file.relative));
+    assert.ok(files.has('standalone/desktop-sidecar.js'));
+    assert.ok(files.has('gateway/review-worker.js'));
+    assert.ok(files.has('standalone-core-policy-fingerprint.json'));
+    assert.ok([...files].every(relative => !relative.startsWith('companion/')),
+      `${target || 'common'}: no Cowork companion module may enter the Standalone archive`);
+    assert.ok(files.has('local-ui/file-picker.js'));
+    assert.ok(files.has('core/local-review-model.js'));
+    assert.ok(files.has('gateway/package-files.js'));
+    assert.ok(files.has('gateway/review-meta-io.js'));
+    for (const relative of ['companion/stdio-server.js', 'companion/ipc-session.js',
+      'companion/processor.js', 'companion/job-store.js', 'companion/batch-start-confirmation.js',
+      'companion/retention.js', 'companion/completion-summary.js', 'companion/local-confirmation.js',
+      'companion/release-verifier.js', 'companion/text-review.js', 'gateway/worker-terminal-presentation.js',
+      'gateway/package-store.js', 'gateway/review.js']) {
+      assert.equal(files.has(relative), false, `${target}: ${relative} is Cowork-only runtime code`);
+    }
+  }
+});
+test('Standalone review adapter accepts only an explicit app reviewer and never loads Cowork code', () => {
+  const adapter = path.join(repository, 'plugins/data-secure/server/gateway/local-review-adapter.js');
+  const source = `
+    const assert = require('node:assert/strict');
+    const adapter = require(process.argv[1]);
+    const text = 'Microsoft Zertifikat';
+    const document = { original_text: text, anonymized_text: text, profile: 'personnel_profile',
+      ambiguities: [{ ambiguity_id: 'credential:v2:000001', type: 'credential_issuer_ambiguous',
+        original_start: 0, original_end: 9, anonymized_start: 0, anonymized_end: 9 }] };
+    (async () => {
+      const result = await adapter.reviewBatchTextLocally([document], {
+        reviewTextLocally: () => ({ action: 'cancelled' })
+      });
+      assert.deepEqual(result, { action: 'cancelled', documents: [] });
+      await assert.rejects(adapter.reviewBatchTextLocally([document]),
+        /COWORK_REVIEW_UNAVAILABLE_IN_STANDALONE/);
+      assert.throws(() => adapter.reviewTextLocally(), /COWORK_REVIEW_UNAVAILABLE_IN_STANDALONE/);
+      assert.equal(Object.keys(require.cache).some(name => /[\\/]companion[\\/]/u.test(name)), false);
+    })().catch(error => { process.stderr.write(String(error.stack || error)); process.exitCode = 1; });`;
+  const result = spawnSync(process.execPath, ['-e', source, adapter], {
+    cwd: repository, encoding: 'utf8', windowsHide: true, timeout: 10000,
+    env: { ...process.env, DATASECURE_PRODUCT_CHANNEL: 'standalone', NODE_OPTIONS: '' }
+  });
+  assert.equal(result.status, 0, result.stderr);
+});
 function write(scope, relative, bytes) {
   const target = path.join(scope, ...relative.split('/'));
   fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -60,6 +107,26 @@ function cleanup(scope) {
     if (stat.isDirectory()) fs.rmdirSync(target); else fs.unlinkSync(target);
   }
 }
+test('packaged Standalone policy identity loads without Cowork sources and refuses neutral-byte drift', () => {
+  const scope = fs.mkdtempSync(path.join(temporaryRoot, 'datasecure-build-fingerprint-'));
+  try {
+    const projected = collectStandaloneRuntime(path.join(repository, 'plugins/data-secure/server'), null);
+    for (const file of projected) write(scope, `server/${file.relative}`, file.bytes);
+    assert.equal(fs.existsSync(path.join(scope, 'server', 'companion')), false);
+    const policy = path.join(scope, 'server', 'core-policy-fingerprint.js');
+    const command = 'process.stdout.write(require(process.argv[1]).STANDALONE_POLICY_FINGERPRINT)';
+    const options = { cwd: scope, encoding: 'utf8', windowsHide: true, timeout: 10000,
+      env: { ...process.env, DATASECURE_PRODUCT_CHANNEL: 'standalone', NODE_OPTIONS: '' } };
+    const pristine = spawnSync(process.execPath, ['-e', command, policy], options);
+    assert.equal(pristine.status, 0, pristine.stderr);
+    assert.match(pristine.stdout, /^[a-f0-9]{64}$/u);
+    const member = path.join(scope, 'server', 'privacy', 'policy.js');
+    fs.appendFileSync(member, '\n ');
+    const changed = spawnSync(process.execPath, ['-e', command, policy], options);
+    assert.notEqual(changed.status, 0);
+    assert.match(changed.stderr, /STANDALONE_POLICY_RECEIPT_INVALID/u);
+  } finally { cleanup(scope); }
+});
 const marker = fingerprint => Buffer.from(`${SOURCE_MARKER_PREFIX}${fingerprint}${SOURCE_MARKER_SUFFIX}`);
 
 function builderFixture() {

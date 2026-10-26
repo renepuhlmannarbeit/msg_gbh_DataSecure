@@ -8,7 +8,7 @@ const { bindContentReviewDependencies } = require('./content-consumer-dependenci
 const { prepareStandaloneReviewChoices, mergeStandaloneReviewChoices,
   rememberStandaloneReviewChoices } = require('./standalone-review-choices');
 
-const { MAX_REVIEW_CHARS, MAX_DARWIN_REVIEW_FINDINGS, reviewSizeError } = require('../companion/text-review');
+const { MAX_REVIEW_CHARS, MAX_DARWIN_REVIEW_FINDINGS, reviewSizeError } = require('../core/local-review-model');
 const { MAX_STANDALONE_REVIEW_FINDINGS, standaloneReviewSizeError } = require('./standalone-review-budget');
 
 // Covers both per-document separator labels (at most 100 documents).

@@ -18,11 +18,10 @@ const {
   markTerminalNoticePresented,
   releaseTerminalNoticeReservation
 } = require('./batch');
-const { showBatchStateNoticeConfirmed } = require('../companion/completion-summary');
-const { presentTerminalEnvelope } = require('./worker-terminal-presentation');
+const { showBatchStateNoticeConfirmed, presentTerminalEnvelope } = require('./product-terminal-notice');
 const standaloneChannel = process.env.DATASECURE_PRODUCT_CHANNEL === 'standalone';
 const { recordWorkflowEvent } = require('./workflow-diagnostics');
-const { DETACHED_REVIEW_TIMEOUT_MS } = require('../companion/review-timeouts');
+const { DETACHED_REVIEW_TIMEOUT_MS } = require('../local-ui/review-timeouts');
 const { terminalVisibleExportAsync } = require('./result-export');
 const { assertLegacyContentOperation } = require('../core/content-options');
 

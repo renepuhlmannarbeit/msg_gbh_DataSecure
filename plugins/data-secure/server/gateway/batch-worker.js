@@ -18,8 +18,7 @@ const {
 } = require('./batch');
 const { releaseIntake, RESERVATION_ID_RE } = require('./batch-intake-reservation');
 const { terminalVisibleExportAsync } = require('./result-export');
-const { presentTerminalEnvelope } = require('./worker-terminal-presentation');
-const { showBatchStateNoticeConfirmed, showLocalIntakeNoticeConfirmed } = require('../companion/completion-summary');
+const { presentTerminalEnvelope, showBatchStateNoticeConfirmed, showLocalIntakeNoticeConfirmed } = require('./product-terminal-notice');
 const { recordWorkflowEvent } = require('./workflow-diagnostics');
 const { continueIntoLocalReview } = require('./automatic-local-review');
 const { validateBatchQueueEnvelope, validateBatchMessagePurpose, LOCAL_QUEUE_SCHEMA_INVALID, PURPOSE_ERROR_CODES } = require('./batch-queue-envelope');

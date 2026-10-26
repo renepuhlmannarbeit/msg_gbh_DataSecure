@@ -2,8 +2,10 @@
 
 ## Einstieg und Kanon
 
-- Arbeite vom Repository-Root auf einem sauberen `main` und beginne mit
-  `git pull --ff-only origin main`.
+- Ohne ausdrücklich vorgegebenen Worktree/Branch arbeite vom Repository-Root
+  auf einem sauberen `main` und beginne mit `git pull --ff-only origin main`.
+  Einen für den aktuellen Auftrag vorgegebenen Worktree oder Branch nicht
+  durch einen Wechsel nach `main` oder einen dortigen Pull ersetzen.
 - Lies zuerst `docs/canonical/README.md` und
   `docs/canonical/DOCUMENT_REGISTER.md`. Bei Widersprüchen gilt die dort
   definierte Rangfolge.
@@ -61,6 +63,11 @@
   Zusatzkonto-, VM- oder Cloud-Zwang wieder einführen.
 - Das Produkt reduziert personenbezogene Daten, garantiert aber weder rechtliche
   Anonymität noch DSGVO-/EU-AI-Act-Konformität.
+- Standalone-macOS-Testpakete verwenden die dokumentierte lokale Ad-hoc-
+  Signierung mit eigenem statischem Core und getrennt gebundenem offiziellem
+  Konverter. Keine Developer-ID/Notarisierung oder Abschaltung von Gatekeeper,
+  Hardened Runtime und Core-Library-Validation aus CI-Erfolg ableiten;
+  Finder-/TCC- und Anwenderabnahme bleiben eigenständige Zielhostprüfungen.
 
 ## Arbeitsweise
 
@@ -76,10 +83,18 @@
 
 ## Verifikation
 
-- Gezielt testen, danach mindestens `npm run test:product`, `npm run test:docs`,
-  `npm run build`, `npm run test:plugin-zip` und `git diff --check`.
-- Pluginstruktur zusätzlich mit der installierten Claude CLI streng prüfen.
+- Gezielt testen, danach mindestens `npm run test:product:headless`,
+  `npm run test:docs` und `git diff --check`. Auf Windows fordert
+  `npm run test:product` die ausdrücklich freigegebene native Desktop-UI;
+  der Headless-Lauf ersetzt diese Abnahme nicht.
+- Für Standalone-Änderungen die betroffenen Konverter-, Rust-, Native-,
+  Paket- und Windows-/Mac-Zielhostgates zusätzlich getrennt prüfen. Ein
+  Cowork-Plugin-Build ist kein Standalone-Paketnachweis.
+- Für Cowork-Plugin-Änderungen zusätzlich `npm run build`,
+  `npm run test:plugin-zip` und die strenge Strukturprüfung mit der
+  installierten Claude CLI ausführen.
 - Paket, Manifest, SBOM, Prüfsummen, Runtime, Skills und Dokumentation müssen
-  dieselbe Version und denselben Produktvertrag abbilden.
+  für das jeweils betroffene Produkt dieselbe Version und denselben Vertrag
+  abbilden.
 - Commit und Push erst bei grünem, sauber dokumentiertem Stand. Der aktuelle
   Arbeitsauftrag bestimmt, ob ein Push zulässig ist.

@@ -113,7 +113,7 @@ function fixture(platform, options = {}) {
   const actualAdmission = sourceModule(gateway + 'batch-processing-admission.js', platform).createBatchProcessingAdmission;
   const actualProcessing = sourceModule(gateway + 'batch-processing-orchestrator.js', platform).createBatchProcessingOrchestrator;
   const actualReview = sourceModule(gateway + 'batch-review-orchestrator.js', platform, {
-    '../companion/text-review': { MAX_REVIEW_CHARS: 10000, MAX_DARWIN_REVIEW_FINDINGS: 10000 }
+    '../core/local-review-model': { MAX_REVIEW_CHARS: 10000, MAX_DARWIN_REVIEW_FINDINGS: 10000 }
   }).createBatchReviewOrchestrator;
   const modules = {
     fs: memory.io, path, crypto: require('node:crypto'), '../runtime': runtime,
@@ -172,7 +172,7 @@ function fixture(platform, options = {}) {
     './standalone-document-review-store': 'createDocumentReviewStore'
   })) modules[id] = { [name]: deps => { if (name === 'createBatchExecutorRunner') captured.executor = deps; return {}; } };
   for (const id of ['../standalone/convert-next', '../standalone/identity-ledger', './orchestrator', './retention',
-    './mapping', './document-result-grade', './package-identity', './performance', '../companion/text-review',
+    './mapping', './document-result-grade', './package-identity', './performance', './local-review-adapter',
     './private-work-store', './batch-lock-release', './process-identity', './result-export',
     './batch-source-admission', './batch-review-policy', './batch-journal-io']) modules[id] = {};
   const module = { exports: {} }, filename = path.join(repository, gateway, 'batch.js');

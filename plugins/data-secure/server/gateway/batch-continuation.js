@@ -133,6 +133,14 @@ function createBatchContinuation(options = {}) {
           const candidates = recoverableBatchStates({ ignoreActiveLock: true, includeActiveExecutors: true });
           if (candidates.some((state) => options.liveLocalExecutor?.(state))) throw fail('STANDALONE_BUSY');
           if (!candidates.some((state) => state.token === token && state.product_channel === 'standalone')) {
+            // The recovery scan excludes old policy states. Inspect only the
+            // requested journal under the held lock, without rewriting it.
+            if (typeof options.policyRestartRequired === 'function') {
+              const excluded = options.readStateForMaintenance(token);
+              if (excluded.product_channel === 'standalone' && excluded.invalidated !== true &&
+                  Date.now() <= Date.parse(excluded.expires_at) && options.policyRestartRequired(excluded))
+                throw fail('BATCH_PSEUDONYM_CONTEXT_UNAVAILABLE');
+            }
             throw fail('STANDALONE_NOTHING_TO_CONTINUE');
           }
           const state = options.readStateForMaintenance(token);
@@ -158,7 +166,7 @@ function createBatchContinuation(options = {}) {
           }
           return { ok: true, ...publicProgress(state), batch_token: token, raw_content_sent_to_claude: false };
         } catch (error) {
-          if (/^(?:STANDALONE_|OWNERSHIP_GUARD_)/u.test(error?.code || '')) throw error;
+          if (/^(?:STANDALONE_|OWNERSHIP_GUARD_|BATCH_PSEUDONYM_CONTEXT_UNAVAILABLE$)/u.test(error?.code || '')) throw error;
           throw fail('STANDALONE_NOTHING_TO_CONTINUE');
         } finally { active.delete(token); }
       });

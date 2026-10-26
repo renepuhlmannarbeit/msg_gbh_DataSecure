@@ -6,7 +6,7 @@
 
 const crypto = require('crypto');
 const { PRIVACY_RULESET_VERSION } = require('./privacy/policy');
-const { CORE_POLICY_FINGERPRINT } = require('./core-policy-fingerprint');
+const { CORE_POLICY_FINGERPRINT, STANDALONE_POLICY_FINGERPRINT } = require('./core-policy-fingerprint');
 const {
   SECRET_BYTES,
   CONTRACT_VERSION,
@@ -41,7 +41,8 @@ function createBatchPseudonymState(options = {}) {
     return {
       pseudonym_contract_version: options.productChannel === 'standalone' ? READABLE_CONTRACT_VERSION : CONTRACT_VERSION,
       pseudonym_ruleset_version: PRIVACY_RULESET_VERSION,
-      core_policy_fingerprint: CORE_POLICY_FINGERPRINT,
+      core_policy_fingerprint: options.productChannel === 'standalone'
+        ? STANDALONE_POLICY_FINGERPRINT : CORE_POLICY_FINGERPRINT,
       pseudonym_seed: seed.toString('base64url'),
       ...(options.productChannel === 'standalone'
         ? { pseudonym_registry_state: { bindings: [], labels: [] } }
@@ -55,7 +56,9 @@ function createBatchPseudonymState(options = {}) {
 function validateBatchPseudonymState(state) {
   if (!state || ![CONTRACT_VERSION, READABLE_CONTRACT_VERSION].includes(state.pseudonym_contract_version) ||
       state.pseudonym_ruleset_version !== PRIVACY_RULESET_VERSION ||
-      (Object.hasOwn(state, 'core_policy_fingerprint') && state.core_policy_fingerprint !== CORE_POLICY_FINGERPRINT) ||
+      (Object.hasOwn(state, 'core_policy_fingerprint') && state.core_policy_fingerprint !==
+        (state.pseudonym_contract_version === READABLE_CONTRACT_VERSION
+          ? STANDALONE_POLICY_FINGERPRINT : CORE_POLICY_FINGERPRINT)) ||
       (state.pseudonym_contract_version === READABLE_CONTRACT_VERSION && !state.pseudonym_registry_state) ||
       typeof state.pseudonym_seed !== 'string' || !ENCODED_SEED_RE.test(state.pseudonym_seed)) {
     throw unavailable('Der Stapel besitzt keinen kompatiblen Pseudonymkontext. Bitte die Originaldateien neu auswählen.');
@@ -66,6 +69,17 @@ function validateBatchPseudonymState(state) {
     throw unavailable('Der Stapel besitzt keinen kompatiblen Pseudonymkontext. Bitte die Originaldateien neu auswählen.');
   }
   return seed;
+}
+
+// This is a display/continuation classification, never a migration permit.
+// A mismatched journal stays readable, but unfinished privacy decisions
+// cannot run under the current policy.
+function standalonePolicyRestartRequired(state) {
+  return state?.product_channel === 'standalone' && state.processing_mode === 'markdown-and-anonymize' &&
+    typeof state.core_policy_fingerprint === 'string' && /^[a-f0-9]{64}$/u.test(state.core_policy_fingerprint) &&
+    state.core_policy_fingerprint !== STANDALONE_POLICY_FINGERPRINT &&
+    Array.isArray(state.items) && state.items.some(item =>
+      ['pending', 'processing', 'retryable', 'deferred_review'].includes(item?.status));
 }
 
 async function withBatchPseudonymRegistry(state, action, options = {}) {
@@ -130,6 +144,7 @@ module.exports = {
   ENCODED_SEED_RE,
   createBatchPseudonymState,
   validateBatchPseudonymState,
+  standalonePolicyRestartRequired,
   withBatchPseudonymRegistry,
   ownedRegistrySnapshot,
   refuseOwnedRegistryPersist,

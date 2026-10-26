@@ -172,14 +172,16 @@ function fixture(role, firstChild, faults = {}) {
           return child;
         }
       };
-      if (name === '../companion/completion-summary') return {
+      if (name === '../core/local-completion-summary-contract') return {
         validateSummary(summary) {
           return {
             gradeCounts: summary.result_grade_counts,
             omissionCounts: summary.result_omission_counts,
             gradesVerified: summary.result_grades_verified === true
           };
-        },
+        }
+      };
+      if (name === './product-terminal-notice') return {
         showLocalIntakeNotice: stage => notices.push({ type: 'failure', stage }),
         showBatchStateNotice: state => notices.push({ type: 'state', state }),
         showLocalIntakeNoticeConfirmed: stage => { notices.push({ type: 'failure', stage }); return true; },

@@ -154,7 +154,21 @@ try {
       'one-time migration publishes only five chosen locators, not one per historical export');
     assert.equal(fs.readdirSync(migrationOutbox).length, 36, 'all old export records remain untouched');
   } finally { process.env.EU_PRIVACY_DATA_ROOT = savedData; }
-  console.log('PASS: persistent five-run window, real bounded production reads/capture, restart, hide, old worker, migration, missing/corrupt records, exact details');
+  const obsolete = save(30);
+  obsolete.processing_mode = 'markdown-and-anonymize';
+  obsolete.core_policy_fingerprint = 'f'.repeat(64);
+  obsolete.items = [{ id: obsolete.token.slice(0, 32), name: 'synthetic.txt', status: 'deferred_review' }];
+  batch._test.writeState(obsolete);
+  const oldJournal = path.join(data, 'batches', `${obsolete.token}.json`);
+  const oldBytes = fs.readFileSync(oldJournal);
+  const oldRow = history.history({ batchId: obsolete.token }).entries[0];
+  assert.equal(oldRow.resumable, false);
+  assert.equal(oldRow.policy_restart_required, true, 'the exact old policy is explained in the read-only history');
+  assert.throws(() => batch.continueStandaloneBatch(obsolete.token),
+    error => error.code === 'BATCH_PSEUDONYM_CONTEXT_UNAVAILABLE',
+    'a direct continuation of the same persisted journal gives the specific restart reason');
+  assert.deepEqual(fs.readFileSync(oldJournal), oldBytes, 'display never migrates or rewrites old decisions');
+  console.log('PASS: persistent five-run window, real bounded production reads/capture, restart, hide, old worker, migration, missing/corrupt records, exact details and old-policy notice');
 } finally {
   assert.equal(path.dirname(root), fs.realpathSync.native(os.tmpdir()));
   assert.ok(path.basename(root).startsWith('datasecure-history-window-'));

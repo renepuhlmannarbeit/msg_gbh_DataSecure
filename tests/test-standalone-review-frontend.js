@@ -181,7 +181,7 @@ for (const total of [1, 2]) testAsync(`OCR matrix document counts use the ${tota
   assert.equal(h.calls.some(call => call.command === 'submit_review'), false, 'copy changes never submit staged choices');
 });
 
-testAsync('confirmed OCR handoff copy follows the loaded purpose before clearing its draft', async () => {
+testAsync('accepted OCR handoff copy follows the loaded purpose before clearing its draft', async () => {
   const { buildContactDraft } = require('../plugins/data-secure/server/core/ocr-contact-review');
   for (const markdown of [true, false]) {
     const h = harness(null, false, true, { modifyDraft(draft) {
@@ -197,11 +197,26 @@ testAsync('confirmed OCR handoff copy follows the loaded purpose before clearing
     assert.equal(h.element('matrix-body').children.length, 0, 'private draft cleared after confirmed handoff');
     const message = h.element('waiting-text').textContent;
     if (markdown) {
-      assert.match(message, /OCR-Kontaktentscheidungen gespeichert.*Markdown-Umwandlung fort/u);
+      assert.match(message, /OCR-Kontaktentscheidungen wurden.*übergeben.*Markdown-Umwandlung nach gesicherter Übernahme fort/u);
       assert.match(message, /Dokumentfreigabe zur Anonymisierung ist nicht erforderlich/u);
       assert.doesNotMatch(message, /Dokumentfreigabe und Export folgen|Export abgeschlossen/u);
-    } else assert.match(message, /fertigen Ergebnisdateien bereitgestellt.*Keine zweite Dateiauswahl, Freigabe oder Exportbestätigung/u);
+    } else assert.match(message, /Ergebnisdateien bereitgestellt.*Keine zweite Dateiauswahl, Freigabe oder Exportbestätigung/u);
   }
+});
+
+testAsync('an accepted worker handoff does not claim a durable review decision before worker status', async () => {
+  const h = harness([
+    { ready: true, review_id: 'a'.repeat(32), chunk_count: 1 },
+    { ready: false, phase: 'publishing', worker_active: true, run_complete: false }
+  ]);
+  await new Promise(resolve => setImmediate(resolve));
+  selectAll(h); applySelected(h, 'keep');
+  h.callbacks.get('release')(); await new Promise(resolve => setImmediate(resolve));
+  assert.equal(h.calls.filter(call => call.command === 'submit_review').length, 1);
+  assert.doesNotMatch(h.element('waiting-text').textContent, /gespeichert|fertige Ergebnisdateien bereitgestellt/u);
+  await h.timers.shift()();
+  assert.doesNotMatch(h.element('waiting-text').textContent, /gespeichert/u);
+  assert.equal(h.calls.filter(call => call.command === 'submit_review').length, 1);
 });
 
 testAsync('Markdown contact deferral does not claim a saved decision or document approval', async () => {
@@ -211,7 +226,7 @@ testAsync('Markdown contact deferral does not claim a saved decision or document
   } });
   await new Promise(resolve => setImmediate(resolve));
   h.callbacks.get('defer')(); await new Promise(resolve => setImmediate(resolve));
-  assert.match(h.element('waiting-text').textContent, /Prüfung vertagt/u);
+  assert.match(h.element('waiting-text').textContent, /Vertagung wurde.*übergeben/u);
   assert.doesNotMatch(h.element('waiting-text').textContent, /Entscheidungen gespeichert|Dokumentfreigabe/u);
 });
 
@@ -648,7 +663,7 @@ testAsync('identical busy replies do not mutate waiting DOM or relax the existin
       return normal(command, args);
     } });
     await new Promise(resolve => setImmediate(resolve));
-    assert.match(h.element('waiting-text').textContent, /speichert gerade.*automatisch erneut geladen/u);
+    assert.match(h.element('waiting-text').textContent, /verarbeitet gerade.*automatisch erneut geladen/u);
     h.element('retry').focus(); h.mutations.length = 0;
     for (let index = 0; index < 4; index++) await h.timers.shift()();
     assert.deepEqual(h.mutations, []);
@@ -668,7 +683,7 @@ testAsync('accepted explicit defer stops waiting without polling, restarting or 
   const before = h.calls.length;
   await h.callbacks.get('defer')(); await new Promise(resolve => setImmediate(resolve));
   assert.equal(h.element('work-indicator').hidden, true);
-  assert.match(h.element('waiting-text').textContent, /Prüfung vertagt.*im Verlauf/u);
+  assert.match(h.element('waiting-text').textContent, /Vertagung wurde.*übergeben.*im Verlauf/u);
   assert.doesNotMatch(h.element('waiting-text').textContent, /bitte warten|arbeitet weiter/iu);
   assert.equal(h.timers.length, 0, 'the accepted deferral adds no automatic poll');
   const added = h.calls.slice(before);
@@ -1348,7 +1363,8 @@ testAsync('acknowledged review then busy status read waits neutrally without res
   selectAll(h); applySelected(h, 'keep'); h.callbacks.get('release')();
   await new Promise(resolve => setImmediate(resolve));
   await h.timers.shift()();
-  assert.match(h.element('waiting-text').textContent, /Entscheidungen sind gespeichert.*automatisch erneut geladen/u);
+  assert.match(h.element('waiting-text').textContent, /Entscheidungen wurden.*übergeben.*automatisch erneut geladen/u);
+  assert.doesNotMatch(h.element('waiting-text').textContent, /gespeichert/u);
   assert.doesNotMatch(h.element('waiting-text').textContent, /unklar|nicht sicher geladen/u);
   assert.equal(h.calls.filter(call => call.command === 'submit_review').length, 1);
   assert.equal(h.calls.filter(call => call.command === 'close_review_window').length, 0);

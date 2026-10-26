@@ -1,6 +1,7 @@
 'use strict';
 // Product MCP implementation. server/index.js is the deliberately tiny
 // fail-closed bootstrap which also catches errors while this module is loaded.
+require('./companion/release-verifier');
 const {SafeError,roots,genericStatus,diagnosticStatus,exportDiagnosticPackage,openFolder,startLocalBatchExecutor,startLocalIntakeExecutor,startLocalReviewExecutor,readBatchProgress,listBatchResults,completedLocalOnlyCandidates,resumeBatch,continueMostRecentBatch,discardIncompleteBatches,latestProductResultDirectory,acknowledgeDeliveredPackage,acknowledgeDeliveredPackages,recoverBatches,replayMappingOutbox,cleanupExpiredBatchSnapshots,openBatchPackageProtection,readOutput,readOutputs,openVerifiedMarkdownSnapshot,openVerifiedMarkdownSnapshotAsync,listReviewItems,cleanupLocalData,purgeLocalData}=require('./gateway');
 const {VERSION}=require('./version');
 const {verifyCompletedLocalOnlyGeneration}=require('./gateway');

@@ -1,14 +1,13 @@
 'use strict';
-const { readHeldBytes } = require('../core/bound-file-io');
-const fs=require('fs');const path=require('path');const crypto=require('crypto');
-const {isUtf8}=require('buffer');
-const {SafeError}=require('../runtime');
-const {roots,sha256Buffer,sha256File,listPackageDirs,PROFILES}=require('./common');
-const {readEvents}=require('../companion/job-store');
-const {validateManifestDocumentResult,DocumentResultError}=require('./document-result-grade');
-const {publicPositiveDocumentResult}=require('./batch-result-projection');
-const {RESOURCE_LIMITS}=require('../resource-limits');
-
+const fs = require('fs');
+const path = require('path');
+const crypto = require('crypto');
+const { isUtf8 } = require('buffer');
+const { SafeError } = require('../runtime');
+const { sha256Buffer, listPackageDirs } = require('./common');
+const { publicPositiveDocumentResult } = require('./batch-result-projection');
+const { RESOURCE_LIMITS } = require('../resource-limits');
+const { readManifest, safeResolvePackage, safeFile, readVerifiedFile, readVerifiedFileAsync, validateIncludedAsset, installExternalReleaseVerifier } = require('./package-files');
 // Read capabilities are deliberately process-local and never persisted. A
 // package id identifies data on disk; it is not authorization to disclose that
 // data to the model. Restarting the MCP server revokes every outstanding grant.
@@ -17,7 +16,6 @@ const DEFAULT_CAPABILITY_TTL_MS=15*60*1000;
 // Markdown only. It is never persisted, exported, diagnosed or made public.
 const MAX_HANDOFF_SNAPSHOT_BYTES=32*1024*1024;
 const MAX_RELEASED_MARKDOWN_BYTES=32*1024*1024;
-const MAX_MANIFEST_BYTES=1024*1024;
 const MAX_ACTIVE_CAPABILITIES=256;
 const readCapabilities=new Map();
 const capabilityByPackage=new Map();
@@ -57,35 +55,16 @@ function requireReadCapability(packageId,token,now=Date.now()){
   return grant;
 }
 
-function validateCompanionRelease(manifest){if(!manifest.companion_job_id)return manifest;let events;try{events=readEvents(manifest.companion_job_id);}catch{throw new SafeError('Companion-Freigabenachweis fehlt oder ist ungültig.');}const released=events[events.length-1];if(released.state!=='Released'||released.output_sha256!==manifest.document_sha256)throw new SafeError('Companion-Paket ist nicht atomar freigegeben.');return manifest;}
-function readManifest(dir){try{return validateCompanionRelease(JSON.parse(readVerifiedFile(dir,'manifest.json',MAX_MANIFEST_BYTES).toString('utf8')));}catch(e){if(e instanceof SafeError)throw e;throw new SafeError('Paketmanifest fehlt oder ist ungültig.');}}
-function validateIncludedAsset(asset){
-  const assetId=String(asset&&asset.asset_id||'');
-  const expectedFile=`assets/${assetId}.png`;
-  const reviewedFile=`assets/${assetId}_reviewed.png`;
-  if(!/^asset-\d{3,}$/u.test(assetId)||!asset||asset.output_mime!=='image/png'||(asset.file!==expectedFile&&asset.file!==reviewedFile)||!/^[a-f0-9]{64}$/iu.test(String(asset.sha256||''))||!Number.isInteger(asset.bytes)||asset.bytes<1||asset.bytes>RESOURCE_LIMITS.MAX_ASSET_BYTES){
-    throw new SafeError('Paketmanifest fehlt oder ist ungültig.');
-  }
-  return asset;
+let companionReleaseEvents = null;
+function installCompanionReleaseVerifier(readEvents) {
+  if (process.env.DATASECURE_PRODUCT_CHANNEL === 'standalone')
+    throw new TypeError('COMPANION_RELEASE_VERIFIER_UNAVAILABLE_IN_STANDALONE');
+  if (typeof readEvents !== 'function' || companionReleaseEvents && companionReleaseEvents !== readEvents)
+    throw new TypeError('COMPANION_RELEASE_VERIFIER_INVALID');
+  companionReleaseEvents = readEvents;
+  installExternalReleaseVerifier(validateCompanionRelease);
 }
-function validatePublicManifest(manifest,id){
-  // New Standalone binding fields cannot be adopted by changing only the
-  // schema. Historical producers never emitted these reserved fields.
-  if(!manifest||['content_options','product_channel','processing_mode','anonymized','publication_binding'].some(key=>Object.hasOwn(manifest,key))||!['eu-privacy-package/2','eu-privacy-package/3'].includes(manifest.schema)||manifest.package_id!==id||!PROFILES.has(manifest.profile)||!Number.isFinite(Date.parse(manifest.created_at))||manifest.document!==`${id}.md`||!/^[a-f0-9]{64}$/iu.test(String(manifest.document_sha256||''))){
-    throw new SafeError('Paketmanifest fehlt oder ist ungültig.');
-  }
-  if(!Array.isArray(manifest.assets)||manifest.assets.length>RESOURCE_LIMITS.MAX_VISUAL_ASSETS)throw new SafeError('Paketmanifest fehlt oder ist ungültig.');
-  const assetIds=new Set(),assetFiles=new Set();
-  for(const asset of manifest.assets){if(asset&&asset.status==='included'){
-    validateIncludedAsset(asset);
-    if(assetIds.has(asset.asset_id)||assetFiles.has(asset.file))throw new SafeError('Paketmanifest fehlt oder ist ungültig.');
-    assetIds.add(asset.asset_id);assetFiles.add(asset.file);
-  }}
-  if(manifest.schema==='eu-privacy-package/3'){
-    try{validateManifestDocumentResult(manifest);}catch(error){if(error instanceof DocumentResultError)throw new SafeError('Paketmanifest fehlt oder ist ungültig.');throw error;}
-  }
-  return manifest;
-}
+function validateCompanionRelease(manifest){if(!manifest.companion_job_id)return manifest;let events;try{if(process.env.DATASECURE_PRODUCT_CHANNEL==='standalone'||!companionReleaseEvents)throw new Error('unavailable');events=companionReleaseEvents(manifest.companion_job_id);}catch{throw new SafeError('Companion-Freigabenachweis fehlt oder ist ungültig.');}const released=events[events.length-1];if(released.state!=='Released'||released.output_sha256!==manifest.document_sha256)throw new SafeError('Companion-Paket ist nicht atomar freigegeben.');return manifest;}
 function packageBinding(base,manifest){
   try{
     const stat=fs.lstatSync(base);
@@ -101,90 +80,6 @@ function resolveAuthorizedPackage(packageId,token){
   const current=packageBinding(resolved.p,resolved.m);
   if(grant.binding!==current)throw new SafeError('Das freigegebene Paket hat sich seit Erteilung der Leseberechtigung verändert.');
   return resolved;
-}
-function safeResolvePackage(id){
-  const r=roots(),name=path.basename(String(id||''));
-  if(!name||name!==String(id||'')||name.startsWith('.'))throw new SafeError('Ungültige Paket-ID.');
-  try{
-    const p=path.join(r.output,name);
-    if(!fs.existsSync(p))throw new SafeError('Paket nicht gefunden.');
-    const st=fs.lstatSync(p);
-    if(st.isSymbolicLink()||!st.isDirectory())throw new SafeError('Paketpfad ist nicht freigegeben.');
-    const real=fs.realpathSync(p),base=fs.realpathSync(r.output)+path.sep;
-    if(!real.startsWith(base))throw new SafeError('Paket außerhalb des Output-Bereichs.');
-    const m=validatePublicManifest(readManifest(p),name);
-    for(const asset of m.assets.filter((item)=>item?.status==='included')){
-      const file=safeFile(p,asset.file.split('/').join(path.sep));
-      const stat=fs.lstatSync(file);
-      if(!stat.isFile()||stat.isSymbolicLink()||stat.size!==asset.bytes||stat.size>RESOURCE_LIMITS.MAX_ASSET_BYTES){
-        throw new SafeError('Assetgröße stimmt nicht mit dem freigegebenen Manifest überein.');
-      }
-    }
-    return{p,m};
-  }catch(error){if(error instanceof SafeError)throw error;throw new SafeError('Paketpfad ist nicht freigegeben.');}
-}
-function safeFile(base,rel){
-  try{
-    const f=path.join(base,rel);
-    if(!fs.existsSync(f))throw new SafeError('Paketdatei fehlt.');
-    const st=fs.lstatSync(f);
-    if(st.isSymbolicLink()||!st.isFile())throw new SafeError('Paketdatei ist nicht freigegeben.');
-    const rp=fs.realpathSync(f),br=fs.realpathSync(base)+path.sep;
-    if(!rp.startsWith(br))throw new SafeError('Paketdatei außerhalb des Pakets.');
-    return f;
-  }catch(error){if(error instanceof SafeError)throw error;throw new SafeError('Paketdatei ist nicht freigegeben.');}
-}
-function readVerifiedFile(base,rel,maxBytes=Number.POSITIVE_INFINITY){
-  const file=safeFile(base,rel);let descriptor,data,failure;
-  try{
-    descriptor=fs.openSync(file,fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW||0) | (fs.constants.O_NONBLOCK || 0));
-    const before=fs.fstatSync(descriptor),named=fs.lstatSync(file);
-    if(!before.isFile()||!named.isFile()||named.isSymbolicLink()||before.dev!==named.dev||before.ino!==named.ino)throw new SafeError('Paketdatei ist nicht freigegeben.');
-    if(!Number.isSafeInteger(before.size)||before.size<0||before.size>maxBytes)throw new SafeError('Paketdatei überschreitet die sichere Größenbegrenzung.');
-    if(Number.isFinite(maxBytes)){
-      data=Buffer.alloc(before.size);let read=0;
-      while(read<data.length){const count=fs.readSync(descriptor,data,read,data.length-read,read);if(count<=0)break;read+=count;}
-      if(read!==data.length)throw new SafeError('Paketdatei wurde während des Lesens verändert.');
-    }else data=readHeldBytes(descriptor, before.size, fs);
-    const after=fs.fstatSync(descriptor),namedAfter=fs.lstatSync(file);
-    if(after.dev!==before.dev||after.ino!==before.ino||after.size!==before.size||!namedAfter.isFile()||namedAfter.isSymbolicLink()||namedAfter.dev!==before.dev||namedAfter.ino!==before.ino||data.length!==before.size){
-      throw new SafeError('Paketdatei wurde während des Lesens verändert.');
-    }
-  }catch(error){failure=error instanceof SafeError?error:new SafeError('Paketdatei ist nicht freigegeben.');}
-  finally{
-    if(descriptor!==undefined){
-      try{fs.closeSync(descriptor);}catch{if(!failure)failure=new SafeError('Paketdatei ist nicht freigegeben.');}
-    }
-  }
-  if(failure){if(Buffer.isBuffer(data))data.fill(0);throw failure;}
-  return data;
-}
-async function readVerifiedFileAsync(base,rel,maxBytes=Number.POSITIVE_INFINITY){
-  const file=safeFile(base,rel);let descriptor,data,failure;
-  try{
-    descriptor=await fs.promises.open(file,fs.constants.O_RDONLY|(fs.constants.O_NOFOLLOW||0) | (fs.constants.O_NONBLOCK || 0));
-    const before=await descriptor.stat(),named=await fs.promises.lstat(file);
-    if(!before.isFile()||!named.isFile()||named.isSymbolicLink()||before.dev!==named.dev||before.ino!==named.ino)throw new SafeError('Paketdatei ist nicht freigegeben.');
-    if(!Number.isSafeInteger(before.size)||before.size<0||before.size>maxBytes)throw new SafeError('Paketdatei überschreitet die sichere Größenbegrenzung.');
-    data=Buffer.alloc(before.size);let read=0;
-    while(read<data.length){
-      const result=await descriptor.read(data,read,Math.min(1024*1024,data.length-read),read);
-      if(result.bytesRead<=0)break;
-      read+=result.bytesRead;
-    }
-    if(read!==data.length)throw new SafeError('Paketdatei wurde während des Lesens verändert.');
-    const after=await descriptor.stat(),namedAfter=await fs.promises.lstat(file);
-    if(after.dev!==before.dev||after.ino!==before.ino||after.size!==before.size||!namedAfter.isFile()||namedAfter.isSymbolicLink()||namedAfter.dev!==before.dev||namedAfter.ino!==before.ino||data.length!==before.size){
-      throw new SafeError('Paketdatei wurde während des Lesens verändert.');
-    }
-  }catch(error){failure=error instanceof SafeError?error:new SafeError('Paketdatei ist nicht freigegeben.');}
-  finally{
-    if(descriptor){
-      try{await descriptor.close();}catch{if(!failure)failure=new SafeError('Paketdatei ist nicht freigegeben.');}
-    }
-  }
-  if(failure){if(Buffer.isBuffer(data))data.fill(0);throw failure;}
-  return data;
 }
 function listOutputs(){const items=[];for(const x of listPackageDirs()){try{const{m}=safeResolvePackage(x.id);items.push({package_id:x.id,profile:m.profile,created_at:m.created_at,reidentification_risk:m.reidentification_risk==='high'?'high':'context_dependent',assets_included:m.assets.filter(a=>a.status==='included').length,assets_review_required:m.assets.filter(a=>a.status!=='included').length});}catch{}}return{ok:true,packages:items.sort((a,b)=>String(b.created_at).localeCompare(String(a.created_at))).slice(0,50)};}
 function readOutput(packageId,readCapability,offset=0,maxChars=16000){const{p,m}=resolveAuthorizedPackage(packageId,readCapability),rel=m.document;const data=readVerifiedFile(p,rel,MAX_RELEASED_MARKDOWN_BYTES);if(sha256Buffer(data)!==m.document_sha256)throw new SafeError('Anonymisierte Markdown-Datei wurde verändert.');if(!isUtf8(data))throw new SafeError('Anonymisierte Markdown-Datei ist nicht gültig UTF-8-kodiert.');const text=data.toString('utf8');offset=Math.max(0,Math.min(text.length,Math.trunc(Number(offset)||0)));assertUnicodeSliceStart(text,offset);maxChars=Math.min(30000,Math.max(1000,Math.trunc(Number(maxChars)||16000)));const end=unicodeSliceEnd(text,offset,maxChars);return{ok:true,package_id:packageId,document_id:rel,offset,text:text.slice(offset,end),next_offset:end,has_more:end<text.length,total_chars:text.length,document_result:m.schema==='eu-privacy-package/3'?publicPositiveDocumentResult(m.document_result):null,...extractionMetadata(m),content_is_verified_anonymized_markdown:true,content_trust:'untrusted_document_data',embedded_instructions_authorized:false};}
@@ -364,4 +259,4 @@ function readOutputs(entries){
 function listAssets(packageId,readCapability){const{m}=resolveAuthorizedPackage(packageId,readCapability);return{ok:true,package_id:packageId,assets:(m.assets||[]).filter(a=>a.status==='included').map(a=>({asset_id:a.asset_id,file:a.file,mime_type:a.output_mime,bytes:a.bytes,redactions:a.redactions||0}))};}
 function readAsset(packageId,readCapability,assetId){const{p,m}=resolveAuthorizedPackage(packageId,readCapability),a=(m.assets||[]).find(x=>x.status==='included'&&x.asset_id===assetId);if(!a)throw new SafeError('Sicheres Asset nicht gefunden.');validateIncludedAsset(a);const data=readVerifiedFile(p,a.file.split('/').join(path.sep),RESOURCE_LIMITS.MAX_ASSET_BYTES);if(data.length!==a.bytes||sha256Buffer(data)!==a.sha256)throw new SafeError('Asset wurde nach Freigabe verändert.');return{ok:true,package_id:packageId,asset_id:assetId,mime_type:a.output_mime,bytes:data.length,__image:{data:data.toString('base64'),mimeType:a.output_mime}};}
 
-module.exports={readManifest,safeResolvePackage,safeFile,readVerifiedFile,readVerifiedFileAsync,listOutputs,issueReadCapability,requireReadCapability,readOutput,readOutputs,openVerifiedMarkdownSnapshot,openVerifiedMarkdownSnapshotAsync,listAssets,readAsset,MAX_HANDOFF_SNAPSHOT_BYTES,MAX_RELEASED_MARKDOWN_BYTES,MAX_ACTIVE_CAPABILITIES};
+module.exports={readManifest,safeResolvePackage,safeFile,readVerifiedFile,readVerifiedFileAsync,listOutputs,issueReadCapability,requireReadCapability,readOutput,readOutputs,openVerifiedMarkdownSnapshot,openVerifiedMarkdownSnapshotAsync,listAssets,readAsset,MAX_HANDOFF_SNAPSHOT_BYTES,MAX_RELEASED_MARKDOWN_BYTES,MAX_ACTIVE_CAPABILITIES,installCompanionReleaseVerifier};

@@ -10,11 +10,12 @@ import { collectStandaloneRuntime } from '../scripts/lib/standalone-runtime-proj
 const require = createRequire(import.meta.url);
 const { createSuite } = require('./helpers');
 const { expected, canonicalizeBodies, profiles, formats, reviewProfiles, goldenFixture } = require('./lib/core-policy-golden');
-const { CORE_POLICY_FILES } = require('../plugins/data-secure/server/core-policy-fingerprint');
+const { STANDALONE_POLICY_FILES, STANDALONE_POLICY_FINGERPRINT } =
+  require('../plugins/data-secure/server/core-policy-fingerprint');
 const { test, assert, done } = createSuite('Shared core policy projection and semantic golden binding');
 const root = path.resolve(import.meta.dirname, '..');
 const serverRoot = path.join(root, 'plugins', 'data-secure', 'server');
-const shared = Object.freeze([...CORE_POLICY_FILES].sort());
+const shared = Object.freeze([...STANDALONE_POLICY_FILES].sort());
 const plugin = new Map(collectProductFiles(path.dirname(serverRoot))
   .filter(file => file.archivePath.startsWith('server/'))
   .map(file => [file.archivePath.slice(7), fs.readFileSync(file.fullPath)]));
@@ -38,6 +39,16 @@ test('the actual product projections contain byte-identical selected shared code
   assert.equal(fingerprint(plugin), fingerprint(standalone));
   assert.equal(fingerprint(plugin), fingerprint(new Map([...plugin].reverse())));
   assert.equal(standalone.has('mcp-server.js'), false);
+  assert.equal(standalone.has('companion/processor.js'), false);
+  assert.equal(standalone.has('companion/text-review.js'), false);
+  const receipt = JSON.parse(standalone.get('standalone-core-policy-fingerprint.json').toString('utf8'));
+  assert.equal(receipt.schema, 'datasecure-standalone-core-policy/2');
+  assert.equal(receipt.fingerprint, STANDALONE_POLICY_FINGERPRINT,
+    'the packaged Standalone identity binds its own durable policy inputs');
+  assert.deepEqual(Object.keys(receipt.files).sort(), shared);
+  for (const name of shared) {
+    assert.equal(receipt.files[name], crypto.createHash('sha256').update(standalone.get(name)).digest('hex'));
+  }
   assert.equal(plugin.has('standalone/desktop-sidecar.js'), false);
 });
 

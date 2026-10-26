@@ -30,7 +30,7 @@ const {
 } = require('./compliance');
 const { migrateLegacyAuditReceipts, createPreparedAuditRun } = require('./audit');
 const { recordDiagnostic, classifyDiagnosticError } = require('./diagnostics');
-const { issueReadCapability } = require('./package-store');
+const { issueReadCapability } = require('./product-read-capability');
 const { assertLegacyContentOperation } = require('../core/content-options');
 const { personFieldContextForConsumer } = require('../core/person-field-policy');
 const { types } = require('node:util');

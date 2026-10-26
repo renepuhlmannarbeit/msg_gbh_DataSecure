@@ -6,7 +6,7 @@ const crypto = require('node:crypto');
 const { types } = require('node:util');
 const { createBatchPseudonymRegistry, READABLE_CONTRACT_VERSION } = require('../batch-pseudonym-registry');
 const { PRIVACY_RULESET_VERSION } = require('../privacy/policy');
-const { CORE_POLICY_FINGERPRINT } = require('../core-policy-fingerprint');
+const { STANDALONE_POLICY_FINGERPRINT } = require('../core-policy-fingerprint');
 const SCHEMA = 'datasecure-prepared-registry-commit/1';
 const DOMAIN = 'datasecure-private-prepared-registry/1\0';
 const SHA = /^[a-f0-9]{64}$/u, ID = /^[a-f0-9]{32}$/u, ENCODED = /^[A-Za-z0-9_-]{43}$/u;
@@ -77,11 +77,11 @@ function identity(context, manifestSha) {
   if (!context || typeof context.batch_id !== 'string' || !SHA.test(context.batch_id) ||
       typeof context.document_id !== 'string' || !ID.test(context.document_id) || typeof context.source_sha256 !== 'string' || !SHA.test(context.source_sha256) ||
       typeof manifestSha !== 'string' || !SHA.test(manifestSha) || context.pseudonym_contract_version !== READABLE_CONTRACT_VERSION ||
-      context.core_policy_fingerprint !== CORE_POLICY_FINGERPRINT) throw invalid();
+      context.core_policy_fingerprint !== STANDALONE_POLICY_FINGERPRINT) throw invalid();
   return { schema: SCHEMA, batch_id: context.batch_id, document_id: context.document_id,
     source_sha256: context.source_sha256, manifest_sha256: manifestSha,
     pseudonym_contract_version: READABLE_CONTRACT_VERSION, pseudonym_ruleset_version: PRIVACY_RULESET_VERSION,
-    core_policy_fingerprint: CORE_POLICY_FINGERPRINT };
+    core_policy_fingerprint: STANDALONE_POLICY_FINGERPRINT };
 }
 function unsigned(context, manifestSha, state) { return { ...identity(context, manifestSha), registry_state: state }; }
 const authenticate = (seed, value) => crypto.createHmac('sha256', seed).update(DOMAIN).update(JSON.stringify(value)).digest('base64url');

@@ -7,13 +7,15 @@ const path = require('path');
 const crypto = require('crypto');
 const { createBatchJournalStore } = require('../plugins/data-secure/server/gateway/batch-journal-store');
 const { PRIVACY_RULESET_VERSION } = require('../plugins/data-secure/server/privacy/policy');
-const { CORE_POLICY_FILES, CORE_POLICY_FINGERPRINT, calculateCorePolicyFingerprint } =
+const { CORE_POLICY_FILES, CORE_POLICY_FINGERPRINT, STANDALONE_POLICY_FINGERPRINT,
+  calculateCorePolicyFingerprint, calculateStandalonePolicyFingerprint } =
   require('../plugins/data-secure/server/core-policy-fingerprint');
 const { CONTRACT_VERSION, READABLE_CONTRACT_VERSION } = require('../plugins/data-secure/server/batch-pseudonym-registry');
 const { anonymizeMarkdown } = require('../plugins/data-secure/server/gateway/compliance');
 const {
   createBatchPseudonymState,
   validateBatchPseudonymState,
+  standalonePolicyRestartRequired,
   withBatchPseudonymRegistry
 } = require('../plugins/data-secure/server/batch-pseudonym-context');
 
@@ -44,6 +46,24 @@ await test('a private journal state contains only versioned random seed material
   assert.match(state.pseudonym_seed, /^[A-Za-z0-9_-]{43}$/u);
   assert.ok(source.equals(Buffer.alloc(32)), 'caller-provided seed buffer is zeroed');
   assert.doesNotMatch(JSON.stringify(state), /Erika|Beispiel|mapping|keyring|password/iu);
+});
+
+await test('Standalone journals bind their own policy and refuse the old mixed identity', () => {
+  const state = createBatchPseudonymState({ productChannel: 'standalone',
+    randomBytes: () => Buffer.alloc(32, 12) });
+  assert.strictEqual(state.pseudonym_contract_version, READABLE_CONTRACT_VERSION);
+  assert.strictEqual(state.core_policy_fingerprint, STANDALONE_POLICY_FINGERPRINT);
+  assert.doesNotThrow(() => validateBatchPseudonymState(state));
+  const mixed = { ...state, core_policy_fingerprint: CORE_POLICY_FINGERPRINT };
+  assert.throws(() => validateBatchPseudonymState(mixed),
+    (error) => error.code === 'BATCH_PSEUDONYM_CONTEXT_UNAVAILABLE');
+  const pending = { ...mixed, product_channel: 'standalone', processing_mode: 'markdown-and-anonymize',
+    items: [{ status: 'deferred_review' }] };
+  assert.equal(standalonePolicyRestartRequired(pending), true);
+  assert.equal(standalonePolicyRestartRequired({ ...pending, core_policy_fingerprint: STANDALONE_POLICY_FINGERPRINT }), false);
+  assert.equal(standalonePolicyRestartRequired({ ...pending, items: [{ status: 'released' }] }), false);
+  assert.equal(standalonePolicyRestartRequired({ ...pending, processing_mode: 'markdown-only' }), false);
+  assert.equal(standalonePolicyRestartRequired({ ...pending, product_channel: 'plugin' }), false);
 });
 
 await test('separate registries reconstructed after a restart derive the same label', async () => {
@@ -144,6 +164,15 @@ await test('the core-policy fingerprint covers every explicit shared policy file
     fs.copyFileSync(path.join(sourceRoot, ...relative.split('/')), target);
   }
   assert.strictEqual(calculateCorePolicyFingerprint({ root }), CORE_POLICY_FINGERPRINT);
+  assert.strictEqual(calculateStandalonePolicyFingerprint({ root }), STANDALONE_POLICY_FINGERPRINT);
+  for (const relative of ['companion/processor.js', 'companion/text-review.js']) {
+    const target = path.join(root, ...relative.split('/'));
+    const original = fs.readFileSync(target);
+    fs.appendFileSync(target, '\n// Cowork-only change\n');
+    assert.notStrictEqual(calculateCorePolicyFingerprint({ root }), CORE_POLICY_FINGERPRINT);
+    assert.strictEqual(calculateStandalonePolicyFingerprint({ root }), STANDALONE_POLICY_FINGERPRINT);
+    fs.writeFileSync(target, original);
+  }
   for (const relative of CORE_POLICY_FILES) {
     const target = path.join(root, ...relative.split('/'));
     const original = fs.readFileSync(target);
