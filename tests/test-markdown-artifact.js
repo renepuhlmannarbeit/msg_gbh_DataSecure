@@ -79,9 +79,10 @@ test('empty text has an honest zero-byte digest rather than an invented placehol
 });
 
 test('incomplete conversion is retained with its explicit non-anonymized grade and reasons', () => {
-  assert.strictEqual(COVERAGE_REASON_CODES.length, 30);
-  assert.strictEqual(new Set(COVERAGE_REASON_CODES).size, 30);
+  assert.strictEqual(COVERAGE_REASON_CODES.length, 31);
+  assert.strictEqual(new Set(COVERAGE_REASON_CODES).size, 31);
   assert.ok(COVERAGE_REASON_CODES.includes('IMAGE_DOWNSAMPLED'));
+  assert.ok(COVERAGE_REASON_CODES.includes('OCR_READING_DISAGREEMENT'));
   assert.ok(COVERAGE_REASON_CODES.includes('XLSX_CONTROL_CHARACTERS_PROJECTED'));
   assert.ok(COVERAGE_REASON_CODES.includes('OFFICE_TABLE_LAYOUT_NORMALIZED'));
   assert.ok(COVERAGE_REASON_CODES.every((code, index, codes) => index === 0 || codes[index - 1] < code),

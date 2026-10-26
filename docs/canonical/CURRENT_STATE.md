@@ -20,7 +20,33 @@ kanonischer eigener Testroot ist gegen tatsächlichen Guard modelliert.
 Beide unabhängigen engen Testgegenreviews abgeschlossen: fünf Suites
 3/6/17/22/24 sowie92Timingfälle PASS, Envrestaurierung tatsächlich geprüft;
 Produktbytes unverändert, keine Schutzassertion abgeschwächt.
-Source02-Commit/Endgates/Pakete/Macs/Übergabe noch offen; alte Belege bleiben.
+Source02/724b72e6 danach geprüft: Native/8Konverter/5Paketgates und beide
+Macs40247356580 samt Byteverifikation PASS/stabil. Gesamtregression ROT141/322,
+weitere191Dateien-Diagnose mit einer zweiten veralteten Fixture-Erwartung.
+Beide eng korrigiert; kein kumulierter Gesamt-PASS. Tatsächlicher privater
+Acht-Quellen-Vergleich beweist zusätzlich OCR-Regression trotz erhaltener
+nativer Texte. Source03 in Umsetzung: Primärtextretention, ehrlicher
+Lesungskonflikthinweis und geometrisch/budgetär begrenzter Bitmapzusatz.
+Kontakt-/Ownership-/Anonymisierungsprüfungen bleiben. Enger Metadaten-P2 nach
+privater Vorprobe behoben und unabhängig21Flow/43Planer/92Timing gegengeprüft.
+Tatsächlicher Originalvergleich bestätigt native Inhalte und vier reparierte
+PPTX-Zahlen. Sieben verlorene zuvor richtige Umlaute sind jetzt durch eine enge
+glyphgebundene Kandidatenprüfung adressiert: gespeicherte echte32Cropantworten
+liefern wieder genau die sieben richtigen Vorkommen, beide falschen französischen
+Akzentänderungen werden verweigert; alle übrigen Zeichen/Geometrien/Scores gleich.
+Das ist ein Wiederholungstest, noch kein frischer gemeinsamer Endnachweis.
+41Pixel-/Textgegenfälle,26Refinerflussgruppen,34Refiner-,21Office- und92Timingfälle
+PASS. Unabhängiger Implementierungs- und Fixgegenreview abgeschlossen; neue
+gemeinsame Endgates offen.
+Kontaktwerte, Wörter/Ziffern und Privacyautorität bleiben unverändert; ein
+Kandidat bleibt unsicher/reading_disagreement, keine neue ACK. Zwei im tatsächlichen
+Gegenreview gefundene Textabdeckungs-/zeilenübergreifende Glyphbindungsfehler eng
+behoben: vollständige Container samt Rest und begrenzter globaler Glyphpool vor
+Übernahme. Neue Gegenfälle und gespeicherte32Antworten erneut PASS. Unabhängiger
+Fixgegenreview9deb0f8c…1423: fünf ursprüngliche rote Fälle nun verweigert,
+20Beobachtungen/101Fokusgruppen/44Textaggregate konsistent, kein weiterer
+bestätigter Deltablocker. Kein RC177-Release,
+keine lokale Übergabe/GUI-Abnahme; alte Pakete und rote Belege erhalten.
 
 Excel-/SmartArt-/SVG-/PDF-Implementierung und Quellordnerlabels integriert,
 unabhängig am tatsächlichen Code und begrenzten realen Quellen gegengeprüft.
@@ -30,8 +56,15 @@ PASS/stabil, noch kein finaler Endnachweis. Letzter Diagnose-Framingrand bei
 unterminiertem Vendorstderr eng behoben und unabhängig mit ursprünglichen
 Gegenfällen,92Fokus-/15Core-/44zusätzlichen Proben revalidiert. Keine neuen
 Budgets/Deadlines/Autorisierungen. Noch kein finaler RC177-Commit, Endgate
-oder Paket freigegeben; nächster Schritt neuer gemeinsamer Source02-Freeze nach
-Testgegenreview. PDF/OCR-Qualitätsgrenzen und teilweise neue Randzeichen
+oder Paket freigegeben; nächster Schritt Source03 nach Abschluss der neuen
+Qualitätskorrektur und Gegenreviews. Ein zusätzlich erprobtes offizielles
+best-German-Modell behebt die sieben Vorkommen nicht und wird nicht übernommen.
+Die alte Actions-Coretransporthülle ist nicht mehr verfügbar. Ein separater
+bytegebundener Buildinput-PreRelease423996893 erhält Originalproducer39167676290/
+7d0ee31, genehmigte Corebytes und Policy unverändert; kein neuer Corebuild oder
+neue Coreapproval. Eigene GET-Downloads beider Original-TARs mit strengen
+Mitglieds-/Hash-/Tag-/Provenienzprüfungen PASS; zukünftige Consumer liefern und
+verifizieren den getrennten Transportreceipt zusätzlich. PDF/OCR-Grenzen und neue Randzeichen
 bleiben ausdrücklich dokumentiert; kein neuer vollständiger119Dateienlauf.
 [Aktueller RC177-Umsetzungs- und Abnahmeplan](../acceptance/RC177_SHARED_RELEASE_20261025.md).
 

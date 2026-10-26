@@ -777,11 +777,12 @@ test('partial picture-only PPTX has no generated native text while its authorize
       assert.strictEqual(plan[0].ordinal, 1);
       const content_options = { schema: 'datasecure-content-options/1', markdownOutput, scanOcr: false, imageOcr: true };
       const reason = extension === 'emf' ? 'IMAGE_CONTENT_DAMAGED' : 'OCR_TEXT_EMPTY';
-      assert.deepStrictEqual(plan[0].bytes, bytes);
       if (extension === 'emf') {
-        assert.strictEqual(plan[0].visual,true);
-        assert.throws(()=>require('../plugins/data-secure/server/standalone/office-visual-decoder').inspectOfficeVisual(plan[0].bytes,'emf'),{code:'VISUAL_CONTENT_DAMAGED'});
-      }
+        // This ASCII dummy is damaged, not a valid EMF raster. Early local
+        // preflight must reject it without inventing native document text.
+        assert.strictEqual(plan[0].reason, 'IMAGE_CONTENT_DAMAGED');
+        assert.strictEqual(plan[0].bytes, undefined);
+      } else assert.deepStrictEqual(plan[0].bytes, bytes);
       const omitted = createMarkdownExtraction({ source_type: 'pptx', content_options, markdown: '',
         coverage: { status: 'incomplete', reason_codes: [reason] } });
       assert.throws(() => appendOfficeOcr(extraction, [omitted], content_options), error => error.code === 'CONVERSION_OCR_TEXT_EMPTY');

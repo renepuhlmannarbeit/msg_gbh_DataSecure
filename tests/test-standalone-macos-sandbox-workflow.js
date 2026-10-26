@@ -105,13 +105,19 @@ assert.match(workflow, /cancel-in-progress: \$\{\{ inputs\.produce_static_core !
   'a producer dispatch must not cancel an earlier long-running native Core build');
 assert.match(workflow, /^  actions: read$/mu);
 assert.doesNotMatch(workflow, /cache:/u, 'the evidence run must not persist a dependency cache');
-assert.equal((workflow.match(/uses: actions\/download-artifact@/gu) || []).length, 1);
-assert.match(workflow, /uses: actions\/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131/u);
-for (const transport of [
-  'github-token: ${{ github.token }}', 'repository: ${{ github.repository }}',
-  'run-id: ${{ inputs.core_candidate_run_id }}',
-  'name: DataSecure-Mac-Core-${{ matrix.target }}-${{ inputs.core_candidate_source_sha }}'
-]) assert.ok(workflow.includes(transport), `Core transport must be explicit: ${transport}`);
+assert.equal((workflow.match(/uses: actions\/download-artifact@/gu) || []).length, 0,
+  'expired producer envelopes must not be silently adopted or downloaded by a name wildcard');
+const coreTransportStep = workflow.match(/      - name: Download the byte-locked approved Core archive[^\n]*\n([\s\S]*?)(?=\n      - name:)/u)?.[1];
+assert.ok(coreTransportStep);
+for (const transport of ['GH_TOKEN: ${{ github.token }}',
+  'CORE_CANDIDATE_RUN_ID: ${{ inputs.core_candidate_run_id }}',
+  'CORE_CANDIDATE_SOURCE_SHA: ${{ inputs.core_candidate_source_sha }}',
+  'node scripts/download-approved-macos-core.mjs --target "${{ matrix.target }}" --output "$candidate"',
+  'test ! -e "$receipt"', 'cp "$candidate/MACOS-CORE-TRANSPORT.json" "$receipt"'])
+  assert.ok(coreTransportStep.includes(transport), `Core archive transport must remain explicitly bound: ${transport}`);
+assert.ok(workflow.indexOf('node scripts/download-approved-macos-core.mjs') < workflow.indexOf('node scripts/import-macos-core-candidate.mjs'));
+assert.ok(workflow.includes('dist/macos-core-transport-${{ matrix.target }}.json'), 'transport evidence must accompany the actual package artifact');
+assert.ok(workflow.includes('node tests/test-macos-core-transport.mjs'));
 assert.doesNotMatch(workflow, /pattern:|merge-multiple:/u);
 assert.ok(workflow.indexOf('node scripts/import-macos-core-candidate.mjs') <
   workflow.indexOf('node scripts/lib/macos-core-artifact.mjs --verify'));

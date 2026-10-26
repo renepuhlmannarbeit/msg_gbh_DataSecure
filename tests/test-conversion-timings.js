@@ -330,7 +330,10 @@ const { MAX_STREAM_BYTES, FRAME_PREFIX, FRAME_START } = require('../plugins/data
   });
   await test('the actual PDF parameter expression grants AUTO only to the content-v1 pure raster plan', async () => {
     const source=fs.readFileSync(path.resolve(__dirname,'../plugins/data-secure/server/standalone/conversion-worker-child.js'),'utf8');
-    const statement=source.match(/await ocr\.setParameters\(\{ tessedit_pageseg_mode: [\s\S]*? \}\);/u)?.[0];assert.ok(statement);
+    const pdfStart=source.indexOf('async function pdfMarkdown('),pdfEnd=source.indexOf('\nasync function ',pdfStart+1);
+    assert.ok(pdfStart>=0&&pdfEnd>pdfStart,'bind the actual PDF function instead of the first unrelated Office parameter');
+    const pdfSource=source.slice(pdfStart,pdfEnd);
+    const statement=pdfSource.match(/await ocr\.setParameters\(\{ tessedit_pageseg_mode: [\s\S]*? \}\);/u)?.[0];assert.ok(statement);
     const apply=new Function('ocr','pdfOcrLayoutMode','markdownOutput','hasRawNativeText','hasPaintedImage','hasNonTextGraphicPaint',`return ${statement.slice('await '.length)}`);
     const {pdfOcrLayoutMode}=require('../plugins/data-secure/server/standalone/pdf-ocr-layout-mode');
     for(const [mode,native,image,graphic,expected] of [
@@ -339,7 +342,7 @@ const { MAX_STREAM_BYTES, FRAME_PREFIX, FRAME_START } = require('../plugins/data
       const received=[];await apply({setParameters:value=>received.push(value)},pdfOcrLayoutMode,mode,native,image,graphic);
       assert.deepEqual(received,[{tessedit_pageseg_mode:expected}]);
     }
-    assert.match(source,/finally \{ await ocr\.setParameters\(\{ tessedit_pageseg_mode: '6' \}\); \}/u);
+    assert.match(pdfSource,/finally \{ await ocr\.setParameters\(\{ tessedit_pageseg_mode: '6' \}\); \}/u);
   });
   await test('the actual raw native-text fact includes undecodable PUA text rather than treating it as an image-only scan', () => {
     const source=fs.readFileSync(path.resolve(__dirname,'../plugins/data-secure/server/standalone/conversion-worker-child.js'),'utf8');

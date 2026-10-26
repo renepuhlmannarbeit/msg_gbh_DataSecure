@@ -48,6 +48,96 @@ Finder/Gatekeeper/TCC/Excel/Numbers und die reale GUI bleiben Nutzerabnahmen.
 
 ## Laufendes Journal
 
+- 26.10., aktueller enger Umlautfolgefix vor Freeze: ein offizieller zusätzlicher
+  best-German-/Standard-SIMD-Versuch ist ausführbar, behebt aber0/7gleiche
+  Problemvorkommen und verliert weitere zuvor richtige Akzente; nicht übernommen.
+  Neues reines Glyph-Kandidatenmodul verlangt ganze gleicheUTF16-Zeile, nur
+  aouAOU→äöüÄÖÜ, exakte Wort-/Symbol-/Zeilenbindung, originale nichtüberlappende
+  Box und stabilen Körper+Zweipunktbeleg in Originalpixeln. Begrenzte Arbeit,
+  keine Wörterbücher, Zahlen-/Kontakt-/sonstige Lexikänderung oder Scoreanhebung.
+  Alle Aggregate Seite/Block/Absatz/Zeile/Wort/Symbol konsistent; Inputimmutable,
+  frische Pixelkopien genullt, ursprüngliche Pass-/Pixel-/Prozessbudgets erhalten.
+  ReadingDisagreement bleibt auch bei Annahme; Rauschpunkte können pixelidentisch
+  sein, deshalb keine Wahrheits-/Anonymisierungs-/ACK-Autorität.41reine Fälle,
+  26Refinerflussgruppen,34bestehende Refiner-,21Office- und92Timingfälle PASS.
+  Tatsächliche gespeicherte32Antworten wiederholen genau7richtige Vorkommen,
+  verweigern2falsche französische Akzente und behalten jeden übrigen Textindex,
+  Geometrien/Scores gleich. Noch kein frischer nativer oder gemeinsamer Endlauf.
+  Unabhängiger tatsächlicher Implementierungsreview läuft; keine Releasefreigabe.
+- Anschließender tatsächlicher Implementierungsgegenreview71ac3afa…741f fand
+  zweiP2: unrepräsentierte Textreste/gleiche Zusatzzeilen konnten den falschen
+  Textindex binden; bekannte Glyphen anderer Zeilen konnten dieselben Pixel
+  besitzen. Beide eng korrigiert, ohne Erkennung oder Schutz zu lockern:
+  ganze geordnete Container einschließlich ASCII-Trennlücken und Rest prüfen,
+  globalen Original-Glyphpool≤20000 mit validen Boxen vor Pixelübernahme binden.
+  Überlapp verweigert, bloße Randberührung erlaubt.26Flussgruppen mit fünf
+  ursprünglichen Kausalgegenfällen und Poolgrenzen PASS; frischer gespeicherter
+ 32Antworten-Replay wieder exakt7richtigeVorkommen/2falscheAkzenteverweigert,
+  alle übrigen Textindizes/Geometrien/Scores gleich. Unabhängiger Fixgegenreview
+  9deb0f8c…1423 vollständig von Main gelesen: byteidentische alte20Beobachtungen
+  konform, fünf ursprüngliche rote Fälle korrekt verweigert,101Fokusgruppen PASS,
+  tatsächlicher gespeicherter Replay mit44konsistenten Aggregaten/7richtigen/2
+  verweigerten Akzenten unabhängig gegengeprüft. Kein weiterer bestätigter
+  Deltablocker. Neue gemeinsame Endgates/Pakete noch erforderlich; aktueller
+  Plan327+11/381Produktdateien/645Test-, Script- und Workflowinputs.
+- 26.10., Mac-Coretransport: Originalproducer39167676290 bleibt SUCCESS, hat
+  jedoch keine herunterladbare Actions-Hülle mehr. Vorhandene Original-TARs
+  vollständig gegen vier Mitglieder, importierte Bytes, kanonische Provenienz
+  und bestehende Approval verglichen. Separater Buildinput-PreRelease423996893,
+  Tagbuild-inputs-macos-core-7d0ee31-39167676290 aufOriginalquelle7d0ee31,
+  beide Original-TARs vor/nach Veröffentlichung nachgeladen und gehasht. Kein
+  neuer Corebuild/-seal/-import/Approval oder App-Release. Neuer geschlossener
+  Source-Lock/GET-Helfer,76Gegenfälle und echte beide CLI-Downloads PASS;
+  Workflow weitercontents/actions:read, unveränderte Import-/Seal-/ACLrollen.
+  Eigener zusätzlicher Transportreceipt an konkretem Consumer/Core/Provenienz
+  gebunden; neuer äußerer Macartefaktumfang genau5Dateien. Unabhängig entdeckte
+  Vier-/Fünfer-Inventar- und alterStepname-Helferfehler eng korrigiert;26Inventar-,
+  44Receipt-,78Pinnegative und131Helferchecks PASS. Alle sieben Pins vor künftigem
+  Freeze erneuert. Original-Macgrenzen und USER_PENDING bleiben unverändert.
+
+- Aktueller Qualitätsstand26.10.: private8Quellen-Vorprobe beendet8/8CONVERTED,
+  352Original-/Kopie-/alteMDVektoren unverändert. Nach Probeende optionalen
+  Metadaten-P2 eng behoben; unabhängiger Folgegegenreview729c0938…08cc bestätigt
+  21Flow-/43Planer-/92Timingfälle plus6Originalpixel-/Wrappermodelle. Kein
+  finaler gemeinsamer Freeze oder neuer Build. Tatsächlicher PPTX-Vergleich
+  19a73693…3906 erhält alle45Nicht-OCR-Folienblöcke bytegleich, vier geprüfte
+  Zahlen jetzt richtig, kleine Labels13/13und2/10. Weiter acht Labels fehlend.
+  Gegenreviewad35585f…e843 bestätigt68/68Excelwerte und2097/2097nativePDFzeilen,
+  meldet aber sieben verlorene zuvor richtige Umlaute im Bildscan durch
+  entfallene Cropkorrekturen sowie weiterhin Dopplungs-/Spaltenrauschen.
+  Diese neue Qualitätsabwägung bleibt vor Kandidatenfreigabe zu bearbeiten;
+  kein pauschales Restore lexikalischer Ersetzungen oder Zeichenwhitelist.
+  Vorprobe liegt vor dem späteren Metadatenfix, keine umetikettierte Endabnahme.
+
+- 26.10.2026, Source03 in Umsetzung nach Ende aller Source02-Jobs.
+  Source02/724b72e6: Native/8Konverter/5Paketgates und beide tatsächlichen
+  Macs40247356580 inklusive read-only Byteverifikation PASS/stabil. Kanonische
+  Gesamtregression ROT141/322; zusätzliche191Dateien-Restdiagnose mit genau
+  einer weiteren veralteten Erwartung. Beschädigter ASCII-EMF-Dummy und
+  No-Media-OCR-Fehlercode eng korrigiert, harte Leer-/Ownerguards bleiben.
+  Kein Source02-Snapshot, Tag oder Release; alle alten Belege erhalten.
+- Der private tatsächliche Acht-Quellen-Vergleich erhielt native Texte, bewies
+  aber neue OCR-Zahl-/Rollenfehler. Kausal wirken Rasterwahl und eine schon
+  zuvor lexikalisch überschreibende Zeilennachlese. Source03 behält Primärtext,
+  Wortboxen und Scores; unterschiedliche Lesungen erhalten den geschlossenen
+  Hinweis OCR_READING_DISAGREEMENT, keine Freigabe-/Exportautorität.
+  Ein weiterer Office-Bitmapdurchlauf wird nur aus gemessener dichter
+  Feinschrift, höchstens einmal2x und aus freiem120MP-Vollrasterbudget erlaubt.
+  Grundanteile/Small2x bleiben reserviert, unbekannte Frameobergrenzen sperren
+  Zusätze, Primär- plus Zusatzcanvas gemeinsam höchstens30MP. PSM6 ausdrücklich,
+  keine bisherige Default3-Ursache behauptet. Gewöhnliche Office-Zeilencrops
+  entfallen nach Textretention; gepaarte Kontaktcrops bleiben mit separaten
+ 32Pass-/200kCrop-/2MP-je-Aufruf-Caps.120MP sind keine Gesamtsumme aller Crops.
+- Vorab Source03: Refiner34Fälle/93 gespeicherte Antworten replayt, Rasterplan43,
+  Workerfunktionssequenz9synthetische Gruppen PASS. Enger unabhängiger
+  Integrationsgegenreview60a363c7…7821 bestätigt beide Testkorrekturen und
+ 31Codeverträge/Reasonmaps, nimmt Child/Refiner/Raster nicht ab. Main-Fokus10/11
+  grün; ein PDF-Parameterträger traf den ersten Officeparameter. Eng auf die
+  echte PDFfunktion gebunden: unveränderte92Timing-/Cropfälle PASS, Rot bleibt.
+  Weitere Produktionsgegenreviews, echter Originalvergleich und frische
+  gemeinsame Endgates offen. Source03-Helfer create-only/124Quellenchecks und
+  Vertragsnegative PASS; noch kein Freeze/Build/Download oder Desktop-PASS.
+
 - 26.10.2026, Source01-Endlauf: d967838a243630c13d7244651eba4c2419c4a6a5
   tatsächlich gepusht/23:37:52.836UTC eingefroren. ProduktFP
   `1e0a2c571f380b30eb66fc9d9a39b05dedafa05b3b90f95a1d614bd5b3641e52`/376,

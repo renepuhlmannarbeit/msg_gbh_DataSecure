@@ -13,7 +13,37 @@ abgenommen. Allgemeiner persistenter Cache und paralleles processBatchNext
 bleiben nach Messung zurückgestellt. Einzelumfang und Freigabekette:
 [RC177](../acceptance/RC177_SHARED_RELEASE_20261025.md).
 
-26.10.2026: Begrenzte Format-/Labelkorrekturen integriert und unabhängig
+Aktuell26.10.: Source02/724b72e6 Windows Native/Konverter/Paket und beide Macs
+40247356580 samt Byteverifikation PASS/stabil. Gesamtregression ROT141/322,
+weitere191Dateien-Diagnose mit zweiter veralteter Fixture-Erwartung. Beide eng
+korrigiert. Tatsächlicher privater Quellenvergleich beweist zusätzliche
+OCR-Regression durch lexikalische Cropüberschreibung und Rasterwahl.
+Source03: Primärtextretention, ehrlicher Lesungskonflikthinweis und begrenzte
+geometrische Zusatzlesung aus reserviertem Vollrasterbudget. Kontaktprüfungen
+mit ursprünglichen separaten Caps; keine OCR-Wahrheitszusage. Quellengegenreviews,
+Originalvergleich und neue Endgates offen; kein RC177-Release/Tag/Übergabe.
+
+26.10., aktueller enger Umlautfolgefix: nachweislich unveränderte32Cropantworten
+ergeben durch Originalglyph-Pixel+exakte UTF16-/Symbol-/Wortbindung wieder genau
+die sieben zuvor richtigen Umlaute; beide falschen französischen Akzentvorschläge
+verweigert. Alle anderen Zeichen/Geometrien/Scores unverändert, Kontaktwerte
+ausgenommen, ReadingDisagreement bleibt.41reine Gegenfälle und26tatsächliche
+Refinerflussgruppen PASS; unabhängiger Code-/Fixgegenreview abgeschlossen,
+frische gemeinsame Endläufe nötig.
+Zwei konkrete Gegenreview-P2 für unvollständige Containerabdeckung und überlappende
+bekannte Glyphen anderer Zeilen eng korrigiert; vollständige Textabdeckung und
+begrenzter globaler Original-Glyphpool verweigern beide Fälle ohne Textverlust.
+Gespeicherte32Antworten nach Fix wieder7richtige/2verweigerteAkzente; Fixreview
+9deb0f8c…1423 bestätigt ursprüngliche Gegenfälle und alle44Aggregate, kein weiterer
+bestätigter Deltablocker im begrenzten Umfang. Künftiger gemeinsamer Plan327+11,
+381Produktdateien/645Test-, Script- und Workflowinputs; noch kein Gesamt-PASS.
+Der alternative stärkere Modell-/Coreroutenversuch löst die sieben Vorkommen
+nicht und wird nicht integriert. Keine universelle Erkennungsgarantie.
+Separater dauerhaft bytegebundener Mac-Buildinputtransport vorbereitet und
+read-only geprüft; alte Coreapproval/Originalproducer unverändert. Kein neues
+App-Paket oder App-Release aus diesen Vorprüfungen ableiten.
+
+Historisch26.10.2026: Begrenzte Format-/Labelkorrekturen integriert und unabhängig
 gegengelesen; ursprüngliche Excel-/SmartArt-/SVG-/PDF-Gegenfälle korrigiert.
 Erste native Windows-Konvertersuite PASS/stabil. Letzter Diagnose-Framingrand
 bei65536Vendorbytes ohneLF eng behoben und unabhängig mit92Fokus-/15Core-

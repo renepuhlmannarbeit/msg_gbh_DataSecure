@@ -1019,6 +1019,7 @@
           IMAGE_OCR_DISABLED_BY_POLICY: 'Text in Bildern wurde wegen ausgeschalteter OCR nicht gelesen',
           SCAN_OCR_DISABLED_BY_POLICY: 'Scantext wurde wegen ausgeschalteter OCR nicht gelesen',
           OCR_NOT_VERIFIED: 'Automatisch erkannter Text kann Lesefehler enthalten; nicht jedes Zeichen wurde mit dem Original verglichen',
+          OCR_READING_DISAGREEMENT: 'Zusätzliche OCR-Lesungen unterscheiden sich. Die verwendete Lesung ist ungeprüft; bitte mit dem Original vergleichen.',
           OCR_CONTACT_VALUES_UNVERIFIED: 'Erkannte E-Mail-Adressen und Telefonnummern wurden nicht mit dem Original verglichen',
           OFFICE_IMAGE_FORMAT_EMF_UNSUPPORTED: 'EMF-Grafiken konnten nicht gelesen werden; der Dokumentinhalt wurde nur teilweise übernommen',
           OFFICE_IMAGE_FORMAT_WMF_UNSUPPORTED: 'WMF-Grafiken konnten nicht gelesen werden; der Dokumentinhalt wurde nur teilweise übernommen',

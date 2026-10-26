@@ -167,14 +167,19 @@ jobs:
           echo "${{ matrix.sha256 }}  ${{ matrix.archive }}" | shasum -a 256 --check
           node scripts/build-runtime-target.mjs --target "${{ matrix.target }}" \
             --archive "${{ matrix.archive }}" --output "dist/${{ matrix.target }}"
-      - name: Download only the exact final Core candidate from the fixed repository run
-        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
-        with:
-          github-token: ${{ github.token }}
-          repository: ${{ github.repository }}
-          run-id: ${{ inputs.core_candidate_run_id }}
-          name: DataSecure-Mac-Core-${{ matrix.target }}-${{ inputs.core_candidate_source_sha }}
-          path: ${{ runner.temp }}/datasecure-core-candidate-${{ matrix.target }}
+      - name: Download the byte-locked approved Core archive without changing producer provenance
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CORE_CANDIDATE_RUN_ID: ${{ inputs.core_candidate_run_id }}
+          CORE_CANDIDATE_SOURCE_SHA: ${{ inputs.core_candidate_source_sha }}
+        run: |
+          set -euo pipefail
+          candidate="${RUNNER_TEMP}/datasecure-core-candidate-${{ matrix.target }}"
+          node scripts/download-approved-macos-core.mjs --target "${{ matrix.target }}" --output "$candidate"
+          receipt="dist/macos-core-transport-${{ matrix.target }}.json"
+          test ! -e "$receipt"
+          cp "$candidate/MACOS-CORE-TRANSPORT.json" "$receipt"
       - name: Import four regular Core candidate files without granting artifact approval
         env:
           CORE_CANDIDATE_DIRECTORY: ${{ runner.temp }}/datasecure-core-candidate-${{ matrix.target }}
@@ -206,6 +211,7 @@ jobs:
         run: |
           set -euo pipefail
           node tests/test-import-macos-core-candidate.mjs
+          node tests/test-macos-core-transport.mjs
           node tests/test-partial-conversion.js
           node tests/test-conversion-timings.js
           node tests/test-office-diagrams.js
@@ -214,6 +220,10 @@ jobs:
           node tests/test-pdf-ocr-layout-mode.js
           node tests/test-office-occurrences.js
           node tests/test-office-image-geometry.js
+          node tests/test-office-ocr-work-plan.js
+          node tests/test-office-ocr-raster-flow.js
+          node tests/test-ocr-diaeresis-evidence.js
+          node tests/test-ocr-diaeresis-flow.js
           node tests/test-presentation-comments.js
           node tests/test-word-content-context.js
           node tests/test-word-context-integration.js
@@ -556,6 +566,7 @@ jobs:
             dist/DataSecure-Standalone-*-${{ matrix.target }}.zip.sha256
             dist/DataSecure-Standalone-*-${{ matrix.target }}.dmg
             dist/DataSecure-Standalone-*-${{ matrix.target }}.dmg.sha256
+            dist/macos-core-transport-${{ matrix.target }}.json
           if-no-files-found: error
           retention-days: 1
           compression-level: 0

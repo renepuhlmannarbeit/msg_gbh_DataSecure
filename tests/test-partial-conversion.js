@@ -32,9 +32,10 @@ const attachment = (extension, data, index = 0) => ({ type: 'image', extension,
 async function main() {
   await check('closed partial vocabulary is shared, bounded and never authorizes complete coverage', () => {
     assert.deepEqual(contract.COVERAGE_REASON_CODES, neutral.COVERAGE_REASON_CODES);
-    assert.equal(contract.COVERAGE_REASON_CODES.length, 30);
-    assert.equal(new Set(contract.COVERAGE_REASON_CODES).size, 30);
+    assert.equal(contract.COVERAGE_REASON_CODES.length, 31);
+    assert.equal(new Set(contract.COVERAGE_REASON_CODES).size, 31);
     assert.ok(contract.COVERAGE_REASON_CODES.includes('IMAGE_DOWNSAMPLED'));
+    assert.ok(contract.COVERAGE_REASON_CODES.includes('OCR_READING_DISAGREEMENT'));
     assert.ok(contract.COVERAGE_REASON_CODES.includes('XLSX_CONTROL_CHARACTERS_PROJECTED'));
     assert.ok(contract.COVERAGE_REASON_CODES.includes('OFFICE_TABLE_LAYOUT_NORMALIZED'));
     assert.ok(contract.COVERAGE_REASON_CODES.every((code, index, codes) => index === 0 || codes[index - 1] < code),

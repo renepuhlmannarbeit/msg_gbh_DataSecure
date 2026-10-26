@@ -1,0 +1,30 @@
+{
+  "schema": "datasecure-macos-core-transport-lock/1",
+  "repository": "renepuhlmannarbeit/msg_gbh_DataSecure",
+  "release": {
+    "id": "423996893",
+    "tag": "build-inputs-macos-core-7d0ee31-39167676290"
+  },
+  "original_producer": {
+    "run_id": "39167676290",
+    "source_sha": "7d0ee31dc65ce31ce54f1b4a1a0cefa348ef7071"
+  },
+  "targets": [
+    {
+      "target": "macos-arm64",
+      "asset_id": "677498076",
+      "name": "macos-arm64-core.tar",
+      "bytes": 116112384,
+      "sha256": "3247a2622ca591dfc37786f79152eaa77c43ab38a5d1c5c39cd39df2277b8f61",
+      "approved_artifact_sha256": "97ee40f251f96892c382b17b39ab0fceddb0531fe87b228db48e38d3e0fb232e"
+    },
+    {
+      "target": "macos-x64",
+      "asset_id": "677498078",
+      "name": "macos-x64-core.tar",
+      "bytes": 118743552,
+      "sha256": "a9afae78831845ad30b46aed71c2960fcec537041a3cf923ee5998c138dd0cf7",
+      "approved_artifact_sha256": "17450b40b31b577377ce58e83411c550f2f25cf328dca905bf8ab0166aeb7189"
+    }
+  ]
+}

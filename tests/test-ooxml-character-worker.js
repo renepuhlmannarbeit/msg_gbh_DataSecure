@@ -149,7 +149,9 @@ for (const type of ['docx', 'xlsx', 'pptx']) for (const imageOcr of [undefined, 
     // heading cannot become a successful document with no usable source text.
     const empty = run(office(type, '4111\u00851111'), type, imageOcr);
     assert.equal(empty.ok, false);
-    assert.equal(empty.error_code, imageOcr ? 'CONVERSION_OCR_TEXT_EMPTY' : 'CONVERSION_EXTRACTION_FAILED'); checks += 2;
+    // This fixture contains no pictures: image consent cannot invent an OCR
+    // attempt or turn omitted invalid native text into usable source content.
+    assert.equal(empty.error_code, 'CONVERSION_EXTRACTION_FAILED'); checks += 2;
   }
 }
 for (const type of ['docx', 'xlsx', 'pptx']) {

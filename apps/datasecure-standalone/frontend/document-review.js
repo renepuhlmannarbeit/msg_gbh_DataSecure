@@ -147,6 +147,7 @@
       OFFICE_TABLE_LAYOUT_NORMALIZED: 'Komplexe Office-Tabelle als Zellabschnitte mit Koordinaten aufbereitet; bei Anonymisierung werden unklare sensible Feldwerte zusätzlich maskiert',
       XLSX_CONTROL_CHARACTERS_PROJECTED: 'Excel enthält kodierte Steuerzeichen: als sichtbare U+Notationen erhalten; betroffene Zellwerte und unklare nachfolgende Spaltenwerte werden bei Anonymisierung vorsorglich vollständig geschützt',
       OCR_NOT_VERIFIED: 'OCR-Text nicht vollständig fachlich geprüft. Die Kontaktprüfung betrifft nur erkannte E-Mail-Adressen und Telefonnummern, nicht die übrigen Wörter, Zahlen oder Lesereihenfolge.',
+      OCR_READING_DISAGREEMENT: 'Zusätzliche OCR-Lesungen unterscheiden sich. Die verwendete Lesung ist ungeprüft; bitte mit dem Original vergleichen. Dieser Hinweis bestätigt weder Wörter noch Zahlen.',
       OCR_CONTACT_VALUES_UNVERIFIED: 'Erkannte OCR-Kontaktwerte sind noch nicht bestätigt',
       VISUAL_CONTENT_NOT_EXTRACTED: 'Bildinhalt nicht als Text übernommen',
       OCR_TEXT_EMPTY: 'OCR lieferte keinen zusätzlichen Text',

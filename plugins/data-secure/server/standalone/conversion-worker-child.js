@@ -22,6 +22,7 @@ const { unreadableSymbolRun, cleanExtractedSymbolText } = require('./markdown-vi
 const { contactQuality } = require('./ocr-quality');
 const { readableText, readableNotice } = require('./readable-markdown');
 const { refineOcr } = require('./ocr-refinement');
+const { assessExtraOfficeOcrRaster, createOfficeOcrWorkLedger } = require('../core/office-ocr-work-plan');
 const { contactSpans } = require('../core/ocr-contact-review');
 const { attachContactCrops } = require('./ocr-contact-crops');
 const { sourceCropBlocks } = require('./ocr-crop-geometry');
@@ -89,21 +90,61 @@ async function createOcr() {
   } finally { measured(); }
 }
 
-async function recognize(canvas, ocr, nativeRegions = [], singleTokenOnly = false) {
+async function recognize(canvas, ocr, nativeRegions = [], singleTokenOnly = false, officeWork) {
   // Keep word confidence local to this isolated worker. A high whole-page
   // confidence does not establish that a contact value was read correctly.
-  let result;
-  try { result = await conversionTimings.measureAsync('ocr', () => ocr.recognize(canvas.toBuffer('image/png'), {}, { text: true, blocks: true })); }
-  catch (cause) { if (errors.has(cause?.code)) throw cause; fail('CONVERSION_OCR_FAILED'); }
-  if (typeof result?.data?.text !== 'string') fail('CONVERSION_OCR_FAILED');
-  if (result.data.text.length > MAX_MARKDOWN_CHARS) fail('TEXT_TOO_LARGE');
-  // Re-segmentation stays in original pixel coordinates. Never change OCR
-  // geometry when a native PDF mask is in use, or duplicate its exact text.
-  const data = nativeRegions.length ? result.data : await conversionTimings.measureAsync('refinement', () => refineOcr(result.data, canvas, ocr, canvasApi().createCanvas));
-  if (data.text.length > MAX_MARKDOWN_CHARS) fail('TEXT_TOO_LARGE');
-  const recognized = cleanExtractedSymbolText(nativeRegions.length ? uncoveredOcrText(data, nativeRegions, { singleTokenOnly }) : data.text);
-  return { ...recognized, quality: contactQuality(data, recognized.text), wordData: data.blocks,
-    cropText: nativeRegions.length ? null : data.text };
+  let result, enlarged, selectedCanvas = canvas, rasterDisagreement = false;
+  const read = async raster => {
+    let value;
+    try { value = await conversionTimings.measureAsync('ocr', () => ocr.recognize(raster.toBuffer('image/png'), {}, { text: true, blocks: true })); }
+    catch (cause) { if (errors.has(cause?.code)) throw cause; fail('CONVERSION_OCR_FAILED'); }
+    if (typeof value?.data?.text !== 'string') fail('CONVERSION_OCR_FAILED');
+    if (value.data.text.length > MAX_MARKDOWN_CHARS) fail('TEXT_TOO_LARGE');
+    return value;
+  };
+  try {
+    result = await read(canvas);
+    if (officeWork?.facts.kind && !nativeRegions.length) {
+      // These geometry-only records come from this exact primary OCR/raster.
+      // The model never receives filenames, expected words or confidence scores.
+      const lines = [];
+      let words = 0, overflow = !Array.isArray(result.data.blocks);
+      outer: for (const block of Array.isArray(result.data.blocks) ? result.data.blocks : []) {
+        if (!Array.isArray(block?.paragraphs)) { overflow = true; break; }
+        for (const paragraph of block.paragraphs) {
+          if (!Array.isArray(paragraph?.lines)) { overflow = true; break outer; }
+          for (const line of paragraph.lines) {
+            if (!Array.isArray(line?.words) || lines.length >= 2000 || words + line.words.length > 5000) { overflow = true; break outer; }
+            const box = value => value && ({ x0: value.x0, y0: value.y0, x1: value.x1, y1: value.y1 });
+            words += line.words.length;
+            lines.push({ box: box(line.bbox), words: line.words.map(word => box(word?.bbox)) });
+          }
+        }
+      }
+      const candidate = !overflow && assessExtraOfficeOcrRaster(officeWork.facts, lines);
+      if (candidate?.eligible && officeWork.ledger.reserveUpscale(officeWork.assetId, candidate).admitted === true) {
+        enlarged = canvasApi().createCanvas(candidate.targetWidth, candidate.targetHeight);
+        const context = enlarged.getContext('2d');
+        context.fillStyle = 'white'; context.fillRect(0, 0, enlarged.width, enlarged.height);
+        context.drawImage(canvas, 0, 0, enlarged.width, enlarged.height);
+        const additional = await read(enlarged);
+        rasterDisagreement = additional.data.text !== result.data.text;
+        // The predetermined geometric policy selects the larger raster, never a
+        // score/expected value. An empty second reading cannot erase usable text.
+        if (additional.data.text.trim()) { result = additional; selectedCanvas = enlarged; }
+      }
+    }
+    const data = nativeRegions.length ? result.data : await conversionTimings.measureAsync('refinement', () =>
+      refineOcr(result.data, selectedCanvas, ocr, canvasApi().createCanvas, officeWork ? { contactOnly: true } : undefined));
+    if (data.text.length > MAX_MARKDOWN_CHARS) fail('TEXT_TOO_LARGE');
+    const recognized = cleanExtractedSymbolText(nativeRegions.length ? uncoveredOcrText(data, nativeRegions, { singleTokenOnly }) : data.text);
+    const readingDisagreement = rasterDisagreement || (Array.isArray(data.blocks) && data.blocks.some(block =>
+      Array.isArray(block?.paragraphs) && block.paragraphs.some(paragraph =>
+        Array.isArray(paragraph?.lines) && paragraph.lines.some(line => line?.reading_disagreement === true))));
+    return { ...recognized, quality: contactQuality(data, recognized.text), wordData: data.blocks,
+      readingDisagreement, rasterWidth: selectedCanvas.width, rasterHeight: selectedCanvas.height,
+      cropText: nativeRegions.length ? null : data.text };
+  } finally { if (enlarged) { enlarged.width = 1; enlarged.height = 1; } }
 }
 
 function hasRasterContrast(canvas) {
@@ -189,16 +230,25 @@ async function imageMarkdown(bytes, type, markdownOutput, contentOptions, ownedO
     if (hasRasterContrast(canvas)) {
       ocr = ownedOfficeSession?.ocr || await createOcr();
       if (ownedOfficeSession) ownedOfficeSession.ocr = ocr;
-      recognized = await recognize(canvas, ocr);
+      const officeWork = ownedOfficeSession?.workLedger ? {
+        ledger: ownedOfficeSession.workLedger, assetId: ownedOfficeSession.assetId,
+        facts: { kind: ownedOfficeSession.rasterKind, width: (sourceCanvas || canvas).width, height: (sourceCanvas || canvas).height,
+          primaryWidth: canvas.width, primaryHeight: canvas.height, initialScale: ownedOfficeSession.ocrScale || 1, downsampled }
+      } : undefined;
+      if (officeWork) await ocr.setParameters({ tessedit_pageseg_mode: '6' });
+      recognized = await recognize(canvas, ocr, [], false, officeWork);
     } else recognized = { text: '', omitted: false, quality: contactQuality(null, ''), wordData: [], cropText: '' };
     const text = recognized.text;
     if (contentOptions && !text.trim() && !ownedOfficeSession) fail('CONVERSION_OCR_TEXT_EMPTY');
     const reasons = ['OCR_NOT_VERIFIED', 'VISUAL_CONTENT_NOT_EXTRACTED'];
+    if (recognized.readingDisagreement && text.trim()) reasons.push('OCR_READING_DISAGREEMENT');
     if(downsampled)reasons.push('IMAGE_DOWNSAMPLED');
     if (recognized.quality.contact_lines.length) reasons.push('OCR_CONTACT_VALUES_UNVERIFIED');
     if (!text.trim()) reasons.push('OCR_TEXT_EMPTY');
     const cropCanvas=sourceCanvas||canvas;
-    const cropBlocks=sourceCanvas?sourceCropBlocks(recognized.wordData,canvas.width,canvas.height,sourceCanvas.width,sourceCanvas.height):recognized.wordData;
+    const rasterWidth = recognized.rasterWidth || canvas.width, rasterHeight = recognized.rasterHeight || canvas.height;
+    const cropBlocks=rasterWidth!==cropCanvas.width||rasterHeight!==cropCanvas.height
+      ?sourceCropBlocks(recognized.wordData,rasterWidth,rasterHeight,cropCanvas.width,cropCanvas.height):recognized.wordData;
     const contacts = recognized.quality.contact_lines.length ? attachContactCrops(
       contactSpans(text, recognized.quality), text, cropBlocks, cropCanvas,
       ownedOfficeSession?.cropBudget || { bytes: 0 }, recognized.cropText) : [];
@@ -277,7 +327,13 @@ async function officeImageMarkdown(bytes, type, extractionOptions, contentOption
       ? 'TEXT_TOO_LARGE' : 'CONVERSION_EXTRACTION_FAILED');
     return native;
   }
-  const session = { ocr: null, cropBudget: { bytes: 0, pixels: 0 } };
+  // Full-field OCR work remains separate from the unchanged, bounded contact
+  // verification crops. Unknown frame counts cannot create spare raster work.
+  const workLedger = createOfficeOcrWorkLedger(plan.filter(item => item.ordinal <= 150).map(item => {
+    const bounded = Boolean(item.reason || (Number.isSafeInteger(item.width) && Number.isSafeInteger(item.height)));
+    return { assetId: item.ordinal - 1, basePixels: !bounded ? null : item.reason ? 0 : item.ocrPixels, bounded };
+  }));
+  const session = { ocr: null, cropBudget: { bytes: 0, pixels: 0 }, workLedger };
   try {
     // imageMarkdown starts the shared session only after its image decoder has
     // accepted the first raster; metadata-only preflight is not decode proof.
@@ -290,6 +346,8 @@ async function officeImageMarkdown(bytes, type, extractionOptions, contentOption
         try {
           session.ocrPixels=item.ocrPixels;
           session.ocrScale=item.ocrScale||1;
+          session.assetId=item.ordinal-1;
+          session.rasterKind=item.visual?null:item.type;
           const key=item.type+':'+crypto.createHash('sha256').update(item.bytes).digest('hex');
           results=cache.get(key);
           if(!results){
@@ -341,6 +399,7 @@ async function officeImageMarkdown(bytes, type, extractionOptions, contentOption
     // Recognition is cached per asset; publication is per actual occurrence.
     return appendOfficeOcr(extraction, recognized, contentOptions,placements);
   } finally {
+    workLedger.close();
     try { if (session.ocr) await session.ocr.terminate(); }
     finally { for (const item of plan) item.bytes?.fill(0); }
   }
@@ -645,6 +704,7 @@ async function pdfMarkdown(bytes, passiveObjects = false, markdownOutput, conten
           // Only retained OCR text carries a warning. Native text suppressed
           // by the geometry mask is not falsely reported as an uncertain scan.
           const retained = hasNativeText ? additional : text;
+          if (recognized.readingDisagreement && retained.trim()) reasons.add('OCR_READING_DISAGREEMENT');
           retainedOcr = Boolean(retained.trim());
           const quality = retained === recognized.text ? recognized.quality : contactQuality({ blocks: recognized.wordData }, retained);
           documentNotice.disagreement ||= quality.disagreement_lines.length > 0;

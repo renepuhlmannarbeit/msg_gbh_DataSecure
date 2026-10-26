@@ -1203,6 +1203,7 @@ function visibleMappingBytes(record) {
     XLSX_CONTROL_CHARACTERS_PROJECTED: 'Excel enthält kodierte Steuerzeichen: als sichtbare U+Notationen erhalten; betroffene Zellwerte und unklare nachfolgende Spaltenwerte werden bei Anonymisierung vorsorglich vollständig geschützt',
     OCR_CONTACT_VALUES_UNVERIFIED: 'OCR-Kontaktwerte können Zeichenfehler enthalten; betroffene OCR-Zeilen und Seiten stehen im Markdown',
     OCR_NOT_VERIFIED: 'OCR-Texterkennung nicht fachlich geprüft',
+    OCR_READING_DISAGREEMENT: 'Zusätzliche OCR-Lesungen unterscheiden sich; die verwendete Lesung ist ungeprüft und sollte mit dem Original verglichen werden',
     OCR_TEXT_EMPTY: 'Kein Text durch OCR erkannt',
     SOURCE_COVERAGE_UNVERIFIED: 'Vollständigkeit der Inhaltsextraktion nicht bestätigt',
     VISUAL_CONTENT_NOT_EXTRACTED: 'Bilder oder visuelle Inhalte nicht vollständig als Markdown enthalten',

@@ -46,6 +46,8 @@ export const SOURCE_INPUT_FILES = Object.freeze([
   'scripts/build-standalone-package.mjs', 'scripts/build-standalone-macos-package.mjs',
   'scripts/verify-standalone-macos-package.mjs', '.github/workflows/standalone-macos-sandbox.yml',
   '.github/workflows/standalone-macos-static-core.yml', 'scripts/import-macos-core-candidate.mjs',
+  'native/runtime/macos-core-transport-lock.json', 'scripts/download-approved-macos-core.mjs',
+  'scripts/lib/macos-core-transport.mjs',
   'scripts/relocate-standalone-macos-native.mjs', 'scripts/finalize-standalone-macos-runtime-evidence.mjs',
   'native/macos/relocate-bundle-native.c', 'scripts/build-standalone-macos-relocator.mjs',
   'scripts/lib/macos-build-relocator.mjs',
