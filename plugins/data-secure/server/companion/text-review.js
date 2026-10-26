@@ -696,7 +696,8 @@ function validateReviewResult(value, draft = null) {
     if (draft) {
       const expected = (draft.ambiguities || []).map((item) => item.ambiguity_id).sort();
       const actual = decisions.map((item) => item.ambiguity_id).sort();
-      if (new Set(actual).size !== actual.length || actual.join(',') !== expected.join(',')) {
+      if (new Set(actual).size !== actual.length || actual.length !== expected.length ||
+          actual.some((id, index) => id !== expected[index])) {
         throw new SafeError('Nicht alle mehrdeutigen Stellen wurden lokal entschieden.');
       }
       const byId = new Map((draft.ambiguities || []).map((item) => [item.ambiguity_id, item]));

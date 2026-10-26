@@ -281,6 +281,19 @@ async function main() {
     }), /Nicht alle mehrdeutigen/);
   });
 
+  await testAsync('one comma-combined ambiguity id cannot replace two local decisions', async () => {
+    const value = 'Microsoft Amazon';
+    const draft = buildReviewDraft(value, value, 'personnel_profile', [
+      { ambiguity_id: 'credential:v2:000001', type: 'credential_issuer_ambiguous',
+        original_start: 0, original_end: 9, anonymized_start: 0, anonymized_end: 9 },
+      { ambiguity_id: 'credential:v2:000002', type: 'credential_issuer_ambiguous',
+        original_start: 10, original_end: 16, anonymized_start: 10, anonymized_end: 16 }
+    ]);
+    assert.throws(() => validateReviewResult({ action: 'reviewed', redactions: [],
+      decisions: [{ ambiguity_id: 'credential:v2:000001,credential:v2:000002', decision: 'keep' }]
+    }, draft), /Nicht alle mehrdeutigen/);
+  });
+
   await testAsync('a local review deferral is a bounded action without draft data', async () => {
     const draft = buildReviewDraft('Microsoft Azure Administrator Associate', 'Microsoft Azure Administrator Associate', 'personnel_profile', [{
       ambiguity_id: 'credential:v2:000001', type: 'credential_issuer_ambiguous',

@@ -158,6 +158,29 @@ async function main() {
     assert.strictEqual(output.text, '[MANUAL_REDACTION] Zertifikat');
   });
 
+  await testAsync('a combined ambiguity id cannot approve two local issuer decisions', async () => {
+    const input = {
+      original_text: 'Microsoft Amazon',
+      anonymized_text: 'Microsoft Amazon',
+      profile: 'personnel_profile',
+      ambiguities: [
+        { ambiguity_id: 'credential:v2:000001', type: 'credential_issuer_ambiguous',
+          original_start: 0, original_end: 9, anonymized_start: 0, anonymized_end: 9 },
+        { ambiguity_id: 'credential:v2:000002', type: 'credential_issuer_ambiguous',
+          original_start: 10, original_end: 16, anonymized_start: 10, anonymized_end: 16 }
+      ]
+    };
+    const item = {};
+    let confirmationCalls = 0;
+    input.confirmPersonReview = () => { confirmationCalls++; };
+    await assert.rejects(reviewSingleBatchTextLocally(input, { product_channel: 'plugin', items: [item] }, item, {
+      platform: 'win32',
+      reviewTextLocally: () => ({ action: 'reviewed', redactions: [],
+        decisions: [{ ambiguity_id: 'credential:v2:000001,credential:v2:000002', decision: 'keep' }] })
+    }), /Nicht alle mehrdeutigen/u);
+    assert.strictEqual(confirmationCalls, 0);
+  });
+
   await testAsync('Standalone defers single and multiple ambiguous files to the app, never the native dialog', async () => {
     for (const platform of ['win32', 'darwin', 'linux']) {
       for (const count of [1, 2]) {

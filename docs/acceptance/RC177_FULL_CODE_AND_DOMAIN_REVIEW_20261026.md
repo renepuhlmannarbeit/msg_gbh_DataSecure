@@ -258,3 +258,13 @@ Windows- und beide Mac-Gates; RC177 selbst bleibt unverändert.
   `KEYSET-TRIAGE-HISTORY.md`. Der neue Befund 008 zeigt ausdrücklich,
   warum sich diese Einschätzung nicht auf alle 101 Produktstellen übertragen
   lässt.
+- 26.10., R3/R5-Befund 009: `text-review.js` verglich die sortierten IDs
+  lokaler Mehrdeutigkeitsentscheidungen als kommaseparierte Zeichenkette.
+  Eine einzige künstlich kombinierte `keep`-ID konnte zwei Credential-
+  Fundstellen ersetzen; im Cowork-Einzeldokumentpfad greift für reine
+  Credential-Fundstellen keine zweite Personenkandidatenprüfung. Der
+  gezielte Validatorgegenfall war vor Fix 37/38 rot, danach 38/38 grün;
+  tatsächlicher Policy-Gegenfall 9/9 und angrenzende Privacy-Suite 11/11
+  PASS. Eine fehlerhafte normale UI-Antwort oder ein echter Nutzerlauf ist
+  nicht belegt. Enger ID-Arrayvergleich, keine fachliche Lockerung;
+  `FINDING-009.md`. Gesamt- und Plattformgates bleiben offen.

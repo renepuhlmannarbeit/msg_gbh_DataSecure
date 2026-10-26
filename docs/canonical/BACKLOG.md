@@ -34,6 +34,31 @@ werden nicht als Agentennachweis übernommen.
 - [ ] R9: vollständigen Abdeckungs-/Befundbericht mit offenen Nutzer- und
   Zielhostgates vorlegen. Eine neue Veröffentlichung wird gesondert entschieden.
 
+### Konkrete Abarbeitungsfolge und Beleg je Prüfschnitt
+
+Jeder Schnitt wird gegen den veröffentlichten RC177-Blob und den jeweils
+aktuellen Korrekturstand getrennt bewertet. Ein Treffer aus AST/`rg` ist nur
+Triage. Ein Symbol gilt erst als geprüft, wenn **alle Parameter**, Aufrufer,
+Rückgabe, Persistenz, Fehler-/Cleanupzweige und ein unabhängiges Fachorakel
+im Entscheidungsregister stehen. Ein produktiver Fix erhält erst dann einen
+positiven neuen Kandidatenstatus, wenn die gebundenen Gesamt- und
+Plattformgates frisch laufen. Die Reihenfolge innerhalb eines Schnitts folgt
+der möglichen Wirkung auf private Daten und veröffentlichte Ergebnisse.
+
+| Schnitt | Konkreter Umfang | Noch zu schließen |
+| --- | --- | --- |
+| A Privater Zustand | `server/gateway` (114 Produktdateien), `server/privacy` (18), Intake, Journal, Locks, Recovery, Pseudonymregister, Mapping, Freigabe und Ergebnisveröffentlichung | Alle eigenen Symbole/Parameter/Catches, Objekt- und ACL-Bindung, Crash-/Racefälle, echte Negativorakel; bisher nur punktuelle Befunde 001–009. |
+| B Native Grenze | `tauri-contract` (21), Guard-/Launcher-C-/C++-Quellen, IPC/DTO und Windows-/Mac-Lebensdauer | Rust-/C-/C++-Inventar, Aufrufketten, OS-API-Quellen, Owner-/Worker-/Restartbelege. |
+| C Inhalt | Office/PDF/Bild/OCR/ZIP/XML-Parser, Renderer, Worker, Teilresultat und Ressourcenlimits | Pro Formatklasse Original↔MD, Unsicherheit/Auslassung, Sicherheitsgrenze, Laufzeitkosten, passende Mac-/Windows-Gegenproben. |
+| D Anonymisierung | PII-Engine, Personen-/Unternehmenshypothesen, lokaler Dialog, Entscheidung/ACK, Nachbearbeitung und drei vertrauliche Zuordnungen | Jede Fundstelle und jeder Entscheidungstyp, gleiche Identität über Dateien, Keep-/Maskierungsfehler und öffentliche/private Ausgabe. |
+| E Oberfläche | `frontend` (6), Verlauf/Status, Ordner/OCR/Export, Fehlertexte und Barrierefreiheit | Zustand nach Neustart/Wechsel, getrennte UI-/Quell-/Anwendertests, keine Desktopübernahme. |
+| F Integrität | Eigene Tests (492), Build-/Benchmarkquellen (113), CI, Lockfiles, generierte/Fremdquellen | Testorakel unabhängig vom Ist, Fixture-Tracking, Version/Lizenz/Provenienz, Paket- und Remotehashbelege. |
+
+Maschinelle Ausgangszählung aus RC177: Unter den produktiven JS-Symbolen
+liegen 3734 Pfeilfunktionen, 2937 Funktionsdeklarationen, 268
+Funktionsausdrücke, 26 Klassen, 1313 `try`-, 1168 `catch`- und 3765
+`throw`-Stellen. Das Inventar allein ist **kein** Einzelreview.
+
 Fortschritt 26.10.: Projektregeln, Dokumentkanon, Sicherheitsmodell, Testvertrag,
 Paket-/Rustkonfiguration und Hauptquellbereiche gelesen. R0-Teilschritt am
 veröffentlichten Appcommit gebunden: 1702 Gitdateien, davon1336 als eigene,
@@ -73,9 +98,9 @@ P2 Schema-/Fehlerpfadkonsistenz. Beleg:
   Produktdateien; der präzisere AST-Scan der RC177-Gitblobs findet121
   Kandidaten in64eigenen Dateien,101davon im Produkt. Treffer sind nur
   Triageinput, keine bestätigten Defekte.
-  Das manuelle Symbolregister enthält nach Befund008 erst23begründete
+  Das manuelle Symbolregister enthält nach Befund009 erst24begründete
   Entscheidungen einschließlich der drei betroffenen `try`-/`catch`-Paare;
-  43693JS-Einträge bleiben `PENDING`.
+  43692JS-Einträge bleiben `PENDING`.
 R2-Teilfluss für vertrauliche Zuordnungen (Prepare → Read → Generation →
 native DTO → ACK) ist unter `dist/rc177-full-code-review-20261026/
 FLOW-CONFIDENTIAL-COMPANIONS.md` quellengebunden; übrige Flüsse offen.
@@ -148,6 +173,16 @@ weist er es zurück. `test-batch-intake.js` vor Fix29/30, danach30/30.
 Der separate Objekt-/Löschguard wurde nicht gelockert; keine reale
 Fehllöschung nachgewiesen. Angrenzend Batch72/72 und Gateway50/50 PASS.
 Beleg `FINDING-008.md`.
+
+**Reviewbefund 009, lokal korrigiert, noch nicht veröffentlicht:**
+`text-review.js` akzeptierte eine einzige kommaverbundene `keep`-ID als
+zwei lokale Credential-Entscheidungen. Der Cowork-Einzeldokumentpfad konnte
+die so formal akzeptierte Antwort ohne zweite Credential-Prüfung weitergeben;
+eine fehlerhafte normale UI-Antwort oder ein echter Nutzerlauf ist nicht
+belegt. Vor Fix Validator37/38, danach38/38; Policy9/9 und angrenzende
+Privacy11/11 PASS. Enger sortierter Einzel-ID-Vergleich; P2
+Prüfvollständigkeit. `FINDING-009.md`. Weitere Prüfpfade, Zielhostgates und
+vollständiger Symbolreview bleiben offen.
 
 R3-Schlüssellisten-Triage: Die fünf Verlaufsspeicherstellen wurden nur für
 die Kommaschlüssel-Kollision bis zu den Einzelwertprüfungen verfolgt;
