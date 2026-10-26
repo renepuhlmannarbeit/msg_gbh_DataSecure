@@ -161,8 +161,8 @@ Windows- und beide Mac-Gates; RC177 selbst bleibt unverändert.
   SHA-256 `bec5c1313ac1c1185b4c21f2ec0a342f8811674e9d36f71596771d7523777035`
   ist Triage, kein Befund/PASS je Stelle. Jeder mögliche Fehlerpfad benötigt
   gesonderte Eingabe-/Wirkungsprüfung. Von 43716
-  JS-Inventareinträgen haben erst zwölf eine begründete manuelle Entscheidung
-  (`REVIEW-DECISIONS.json`); 43704 stehen weiterhin auf `PENDING`.
+  JS-Inventareinträgen haben erst 13 eine begründete manuelle Entscheidung
+  (`REVIEW-DECISIONS.json`); 43703 stehen weiterhin auf `PENDING`.
 - R2-Teilfluss der vertraulichen Zuordnungen vom privaten Prepare über
   erneutes Read/Generation/IPC bis zum Rust-Inventar und Abschluss-ACK in
   `FLOW-CONFIDENTIAL-COMPANIONS.md` beschrieben. Dies schließt andere
@@ -189,3 +189,28 @@ Windows- und beide Mac-Gates; RC177 selbst bleibt unverändert.
   tatsächliche Abschlusssuite 19/19 PASS. Ein echter Nutzerlauf mit
   solcher korrupten Zusammenfassung ist nicht nachgewiesen. P2 wegen
   irreführender Anzeige; `FINDING-003.md`.
+- 26.10., R3/R5-Befund 004: Der interne Cowork-Handoff akzeptierte einen
+  einzelnen zusammengefassten Schlüssel als zwei `omission_counts`-Felder.
+  Der tatsächliche Produzent leitet seine Zähler aus der validierten
+  Projektion ab; ein betroffener Nutzerlauf ist nicht belegt. Der gezielte
+  Gegenfall in `test-local-only-handoff.js` war vor Fix 34/35 rot und danach
+  35/35 grün; angrenzend `test-local-handoff-resume.js` 20/20 und
+  `test-local-handoff-reuse.js` 30/30 grün. P2 Schema-Verifikation;
+  `FINDING-004.md`. Diese Tests ersetzen keine Plattform- oder Gesamtgates.
+- R1/R3-Fehlerpfadinventar: Parsergestützt aus den originalen RC177-Gitblobs
+  1168 produktive JavaScript-`catch`-Klauseln erfasst. 230 haben einen leeren
+  Rumpf, 650 enthalten lokal weder `throw` noch eines der groben
+  Beobachtungs-Schlüsselwörter, 219 enthalten ein `return` ohne lokales
+  `throw`. Diese Heuristiken beweisen **weder** ein verschlucktes Problem
+  noch einen gültigen Cleanup. `CATCH-AST-CANDIDATES.json` SHA-256
+  `ff52dd10b583b1880c17f65bf33318857637afd3ac00e8da41036af8d75962cd`
+  hält jeden Catch mit Owner/Zeile/Statement-Typ/Excerpt als `PENDING`.
+  Erstes manuelles Gegenlesen in `result-export.js` fand mehrere bewusst
+  nachrangige Cleanup-Catches; der vollständige Primär-/Sekundärfehlerpfad
+  muss weiterhin je Aufrufer belegt werden.
+- R3-Offenpunkt ohne bestätigten Befund: `batch-recovery.js:310-340`
+  gibt bei unlesbarem privaten Journalroot für die rein lesenden
+  Cleanup-Zähler null zurück. Ob dies in `genericStatus` eine fachlich
+  irreführende Null oder ein vereinbarter unbekannter Zustand ist, benötigt
+  noch eine Status-/UI-Vertragsprüfung. Keine Sicherheits-/Cleanup-Autorität
+  wurde aus diesem ersten Quellenblick abgeleitet.

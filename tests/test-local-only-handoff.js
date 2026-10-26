@@ -131,6 +131,22 @@ await testAsync('token-free handoff reads a verified page without exposing local
   assert.deepStrictEqual(acknowledgements, [{ token: 'a'.repeat(64), packageIds: ['ds_1234567890abcdef1234567890abcdef'] }]);
 });
 
+await testAsync('combined omission key cannot stand in for two handoff counters', async () => {
+  let reads = 0;
+  const handoff = createLocalOnlyHandoff({
+    completedLocalOnlyCandidates: () => [{
+      token: 'a'.repeat(64), released: 1, stopped: 0,
+      grade_counts: { complete: 1, usable_with_omissions: 0, not_processed: 0, unavailable: 0 },
+      omission_counts: { 'images_removed_by_request,visual_assets_withheld_locally': 0 },
+      grades_verified: true
+    }],
+    listBatchResults: () => { reads++; return { results: [], next_cursor: null }; },
+    acknowledgeDeliveredPackages: () => {}
+  });
+  await assert.rejects(() => handoff.start(), error => error.code === 'LOCAL_HANDOFF_VERIFICATION_FAILED');
+  assert.strictEqual(reads, 0, 'invalid batch projection must stop before reading a result page');
+});
+
 await testAsync('handoff preserves validated extracted-Markdown scope and coverage without local capabilities', async () => {
   const coverage = { status: 'incomplete', reason_codes: ['SOURCE_COVERAGE_UNVERIFIED'] };
   const handoff = createLocalOnlyHandoff({

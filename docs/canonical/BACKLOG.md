@@ -73,8 +73,8 @@ P2 Schema-/Fehlerpfadkonsistenz. Beleg:
   Produktdateien; der präzisere AST-Scan der RC177-Gitblobs findet121
   Kandidaten in64eigenen Dateien,101davon im Produkt. Treffer sind nur
   Triageinput, keine bestätigten Defekte.
-  Das manuelle Symbolregister enthält bisher12begründete Entscheidungen,
-  43704JS-Einträge bleiben `PENDING`.
+  Das manuelle Symbolregister enthält bisher13begründete Entscheidungen,
+  43703JS-Einträge bleiben `PENDING`.
 R2-Teilfluss für vertrauliche Zuordnungen (Prepare → Read → Generation →
 native DTO → ACK) ist unter `dist/rc177-full-code-review-20261026/
 FLOW-CONFIDENTIAL-COMPANIONS.md` quellengebunden; übrige Flüsse offen.
@@ -99,6 +99,25 @@ der Nutzerhinweis zu Auslassungen fehlte danach. Synthetisch reproduziert,
 kein solcher echter Nutzerlauf belegt. Enger Feldvergleich,
 `test-completion-summary.js`19/19PASS. P2 fachliche Anzeigeintegrität;
 `dist/rc177-full-code-review-20261026/FINDING-003.md`.
+
+**Reviewbefund 004, lokal korrigiert, noch nicht veröffentlicht:**
+Der Cowork-Handoff akzeptierte im internen Abschluss-Datentransfer einen
+einzigen zusammengefassten Auslassungs-Schlüssel statt der beiden
+Pflichtzähler. Vorher gezielt34/35 rot, nach engem Feldvergleich35/35PASS.
+Der normale Produzent erzeugt seine Zähler aus der validierten Projektion;
+kein betroffener realer Nutzerlauf oder Datenabfluss ist belegt. P2
+Verifikationskonsistenz. Beleg `dist/rc177-full-code-review-20261026/FINDING-004.md`.
+
+- [ ] `batch-recovery.js`/`genericStatus` und UI-Verbraucher prüfen, ob
+  unlesbare Journalwurzel als echte Null oder als unbekannter Cleanup-Status
+  gemeldet werden muss. Bisher nur Quellenhypothese, kein bestätigter Befund.
+
+R1/R3-Fehlerpfad-Triage:1168produktiveJS-Catches aus originalen RC177-Blobs;
+230leere Rümpfe,650ohne lokalen Throw/heuristischen Beobachtungsbegriff,
+219mitReturn ohne lokalen Throw. Das sind **keine** bestätigten Fehler.
+Alle sind unter `dist/rc177-full-code-review-20261026/CATCH-AST-CANDIDATES.json`
+einzeln mit Owner/Zeile als `PENDING` erfasst; Primärfehler, Cleanup,
+Reentrancy, private Logs und fachliche Rückgabe pro Aufrufer noch prüfen.
 
 **RC177-Abschluss 26.10.2026:** Die priorisierten BL-049.3- sowie begrenzten
 BL-047.3/.4/.6/.7-Korrekturen sind im Test-Pre-Release

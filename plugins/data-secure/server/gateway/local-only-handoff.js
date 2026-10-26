@@ -83,9 +83,11 @@ function publicBatchSummary(candidate) {
   const hasProjection = candidate.grade_counts !== undefined || candidate.omission_counts !== undefined || candidate.grades_verified !== undefined;
   const counts = hasProjection ? candidate.grade_counts : { complete: 0, usable_with_omissions: 0, not_processed: 0, unavailable: total };
   const omissions = hasProjection ? candidate.omission_counts : { images_removed_by_request: 0, visual_assets_withheld_locally: 0 };
-  const validCounts = counts && Object.keys(counts).sort().join(',') === 'complete,not_processed,unavailable,usable_with_omissions' &&
+  const validCounts = counts && Object.keys(counts).length === 4 &&
+    ['complete', 'not_processed', 'unavailable', 'usable_with_omissions'].every(key => Object.hasOwn(counts, key)) &&
     Object.values(counts).every((value) => Number.isSafeInteger(value) && value >= 0);
-  const validOmissions = omissions && Object.keys(omissions).sort().join(',') === 'images_removed_by_request,visual_assets_withheld_locally' &&
+  const validOmissions = omissions && Object.keys(omissions).length === 2 &&
+    ['images_removed_by_request', 'visual_assets_withheld_locally'].every(key => Object.hasOwn(omissions, key)) &&
     Object.values(omissions).every((value) => Number.isSafeInteger(value) && value >= 0);
   const verified = hasProjection && candidate.grades_verified === true;
   const validCrossProduct = verified
