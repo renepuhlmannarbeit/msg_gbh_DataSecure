@@ -120,6 +120,15 @@ test('packaged Standalone policy identity loads without Cowork sources and refus
     const pristine = spawnSync(process.execPath, ['-e', command, policy], options);
     assert.equal(pristine.status, 0, pristine.stderr);
     assert.match(pristine.stdout, /^[a-f0-9]{64}$/u);
+    const receiptPath = path.join(scope, 'server', 'standalone-core-policy-fingerprint.json');
+    const receiptBytes = fs.readFileSync(receiptPath);
+    const forgedReceipt = JSON.parse(receiptBytes.toString('utf8'));
+    forgedReceipt.fingerprint = forgedReceipt.fingerprint === '0'.repeat(64) ? '1'.repeat(64) : '0'.repeat(64);
+    fs.writeFileSync(receiptPath, JSON.stringify(forgedReceipt));
+    const forged = spawnSync(process.execPath, ['-e', command, policy], options);
+    assert.notEqual(forged.status, 0, 'the receipt aggregate must be derived from the packaged policy bytes');
+    assert.match(forged.stderr, /STANDALONE_POLICY_RECEIPT_INVALID/u);
+    fs.writeFileSync(receiptPath, receiptBytes);
     const member = path.join(scope, 'server', 'privacy', 'policy.js');
     fs.appendFileSync(member, '\n ');
     const changed = spawnSync(process.execPath, ['-e', command, policy], options);

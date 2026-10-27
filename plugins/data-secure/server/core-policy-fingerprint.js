@@ -100,12 +100,17 @@ function packagedStandaloneFingerprint() {
       Object.keys(receipt.files).length !== expectedFiles.length ||
       Object.keys(receipt).sort().join(',') !== 'files,fingerprint,schema')
     throw new Error('STANDALONE_POLICY_RECEIPT_INVALID');
+  const aggregate = crypto.createHash('sha256');
   for (const relative of expectedFiles) {
     const expected = receipt.files[relative];
+    const bytes = fs.readFileSync(path.join(__dirname, relative));
     if (!/^[a-f0-9]{64}$/.test(String(expected || '')) ||
-        crypto.createHash('sha256').update(fs.readFileSync(path.join(__dirname, relative))).digest('hex') !== expected)
+        crypto.createHash('sha256').update(bytes).digest('hex') !== expected)
       throw new Error('STANDALONE_POLICY_RECEIPT_INVALID');
+    aggregate.update(relative, 'utf8').update('\0', 'utf8').update(bytes).update('\0', 'utf8');
   }
+  if (aggregate.digest('hex') !== receipt.fingerprint)
+    throw new Error('STANDALONE_POLICY_RECEIPT_INVALID');
   return receipt.fingerprint;
 }
 
