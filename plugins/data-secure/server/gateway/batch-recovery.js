@@ -8,6 +8,8 @@ const { createBatchIntakeIntent, SUFFIX: INTAKE_SUFFIX } = require('./batch-inta
 const { releaseOwnedLock } = require('./batch-lock-release');
 const { batchReviewReady } = require('./batch-next-action');
 const { isMarkdownBatch } = require('../core/processing-mode');
+const { ownErrorCode } = require('./batch-execution-diagnostic');
+const ACQUISITION_CONTENTION_CODES = new Set(['BATCH_ACTIVE_LOCK_BUSY', 'OWNERSHIP_GUARD_BUSY']);
 
 function createBatchRecovery(options = {}) {
   const io = options.io || fs;
@@ -431,11 +433,9 @@ function createBatchRecovery(options = {}) {
         return { recovered, removed, failures, skipped_active: false };
       });
     } catch (error) {
-      if (!entered) {
-        // Ordinary contention alone is a maintenance skip, never a missing or
-        // unsafe native boundary. Release/action errors are never swallowed.
-        if (typeof error?.code === 'string' && error.code.startsWith('OWNERSHIP_GUARD_') &&
-            error.code !== 'OWNERSHIP_GUARD_BUSY') throw error;
+      // Only a fixed acquisition-contention code may skip the scan. Publisher
+      // IO/integrity failures and every action/release failure remain errors.
+      if (!entered && ACQUISITION_CONTENTION_CODES.has(ownErrorCode(error))) {
         return { recovered, removed, failures, skipped_active: true };
       }
       throw error;
@@ -482,9 +482,7 @@ function createBatchRecovery(options = {}) {
         return { removed, failures, skipped_active: false };
       });
     } catch (error) {
-      if (!entered) {
-        if (typeof error?.code === 'string' && error.code.startsWith('OWNERSHIP_GUARD_') &&
-            error.code !== 'OWNERSHIP_GUARD_BUSY') throw error;
+      if (!entered && ACQUISITION_CONTENTION_CODES.has(ownErrorCode(error))) {
         return { removed, failures, skipped_active: true };
       }
       throw error;

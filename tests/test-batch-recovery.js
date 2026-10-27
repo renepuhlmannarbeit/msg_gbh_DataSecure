@@ -12,6 +12,12 @@ const tokens = ['a', 'b', 'c', 'd', 'e'].map((character) => character.repeat(64)
 const now = Date.parse('2026-08-25T12:00:00.000Z');
 const future = '2026-08-26T12:00:00.000Z';
 const past = '2026-08-24T12:00:00.000Z';
+function assertExactThrow(action, expected) {
+  let caught = false;
+  try { action(); }
+  catch (actual) { caught = true; assert.strictEqual(actual, expected); }
+  assert.strictEqual(caught, true, 'the exact failure must propagate, including falsy values');
+}
 const { publicProgress } = createBatchProgress({
   deliveryPendingStatus: 'delivery_pending', deferredReviewStatus: 'deferred_review',
   mappingPendingStatus: 'mapping_pending', liveLocalExecutor: (value) => value.live === true,
@@ -84,7 +90,7 @@ function fixture(options = {}) {
     processAlive(pid) { events.push(`alive:${pid}`); return alive.has(pid); },
     acquireActiveLock(token) {
       events.push(`acquire:${token}`);
-      if (options.acquireError) throw options.acquireError;
+      if (Object.hasOwn(options, 'acquireError')) throw options.acquireError;
     },
     releaseActiveLock(token) {
       events.push(`release:${token}`);
@@ -446,8 +452,8 @@ test('both product status paths carry completion debt separately from released d
   assert.strictEqual(item.recovery.latestProductBatchStatus('standalone').completion_available, true);
 });
 
-test('lock acquisition failure skips recovery without touching journals and root-read failure still releases once', () => {
-  const blocked = fixture({ acquireError: new Error('busy'), states: [state(tokens[0])] });
+test('classified lock contention skips recovery without touching journals and root-read failure still releases once', () => {
+  const blocked = fixture({ acquireError: Object.assign(new Error('busy'), { code: 'BATCH_ACTIVE_LOCK_BUSY' }), states: [state(tokens[0])] });
   assert.deepStrictEqual(blocked.recovery.recoverBatches(), {
     recovered: 0, removed: 0, failures: 0, skipped_active: true
   });
@@ -472,6 +478,58 @@ test('native boundary refusals are not misreported as an ordinary active mainten
     }
     const busy = fixture({ acquireError: Object.assign(new Error('busy'), { code: 'OWNERSHIP_GUARD_BUSY' }) });
     assert.strictEqual(busy.recovery[method]().skipped_active, true);
+  }
+});
+
+test('maintenance skips only the two own fixed contention codes, never IO, invalid records or executable codes', () => {
+  for (const method of ['recoverBatches', 'cleanupExpiredBatchSnapshots']) {
+    for (const code of ['BATCH_ACTIVE_LOCK_BUSY', 'OWNERSHIP_GUARD_BUSY']) {
+      const item = fixture({ acquireError: Object.assign(new Error('fixed contention'), { code }) });
+      assert.strictEqual(item.recovery[method]().skipped_active, true);
+      assert.ok(!item.events.includes('readdir'));
+      assert.ok(!item.events.some(event => event.startsWith('release:')));
+    }
+    let getters = 0, traps = 0;
+    const accessor = Object.defineProperty(new Error('private accessor'), 'code', {
+      get() { getters++; return 'BATCH_ACTIVE_LOCK_BUSY'; }
+    });
+    const proxy = new Proxy(new Error('private proxy'), { get() { traps++; return 'OWNERSHIP_GUARD_BUSY'; } });
+    const errors = [undefined, null, false, 0, '', 'OWNERSHIP_GUARD_BUSY', new Error('busy'),
+      accessor, proxy, Object.create({ code: 'BATCH_ACTIVE_LOCK_BUSY' }),
+      Object.assign(() => {}, { code: 'OWNERSHIP_GUARD_BUSY' }),
+      ...['ENOSPC', 'EIO', 'EACCES', 'EROFS', 'EBUSY', 'BATCH_ACTIVE_LOCK_RECORD_INVALID',
+        'BATCH_ACTIVE_LOCK_RECOVERY_FAILED', 'BATCH_ACTIVE_LOCK_PUBLICATION_FAILED', 'UNKNOWN']
+        .map(code => Object.assign(new Error('fixed refused acquisition'), { code }))];
+    for (const failure of errors) {
+      const item = fixture({ acquireError: failure, states: [state(tokens[0])] });
+      assertExactThrow(() => item.recovery[method](), failure);
+      assert.ok(!item.events.includes('readdir'));
+      assert.ok(!item.events.some(event => event.startsWith('release:')));
+    }
+    assert.strictEqual(getters, 0); assert.strictEqual(traps, 0);
+  }
+});
+
+test('a hard acquisition error refuses the actual bootstrap instead of returning a successful startup', () => {
+  for (const code of ['ENOSPC', 'EIO', 'BATCH_ACTIVE_LOCK_RECORD_INVALID']) {
+    const failure = Object.assign(new Error('fixed acquisition failure'), { code });
+    const item = fixture({ acquireError: failure });
+    assertExactThrow(() => bootstrap(item.recovery, item.events), failure);
+    assert.ok(item.events.includes('startup-refused'));
+    assert.ok(!item.events.includes('readdir'));
+  }
+});
+
+test('after entering a maintenance action even a busy or falsy failure propagates exactly', () => {
+  for (const method of ['recoverBatches', 'cleanupExpiredBatchSnapshots']) {
+    for (const failure of [undefined, null, false, 0, Object.assign(new Error('close failure'), { code: 'OWNERSHIP_GUARD_BUSY' })]) {
+      let scans = 0;
+      const recovery = createBatchRecovery({ batchRoot: () => 'synthetic-unused-root',
+        randomBytes: () => Buffer.alloc(32, 1), io: { readdirSync() { scans++; return []; } },
+        withSynchronousActiveLock(_token, action) { action(); throw failure; } });
+      assertExactThrow(() => recovery[method](), failure);
+      assert.strictEqual(scans, 1);
+    }
   }
 });
 
@@ -513,7 +571,7 @@ test('recovery expiry cleanup is ordered, isolated per journal and counts partia
 });
 
 test('periodic expiry cleanup uses the same lock, liveness and work-before-journal contract', () => {
-  const blocked = fixture({ acquireError: new Error('busy') });
+  const blocked = fixture({ acquireError: Object.assign(new Error('busy'), { code: 'BATCH_ACTIVE_LOCK_BUSY' }) });
   assert.deepStrictEqual(blocked.recovery.cleanupExpiredBatchSnapshots(), {
     removed: 0, failures: 0, skipped_active: true
   });

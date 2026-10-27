@@ -636,7 +636,7 @@ function synchronousCallerFixture(name, options = {}) {
   const journal = path.join(batchRoot(), `${name}-journal.json`);
   let held = false, entries = 0, writes = 0;
   const guard = { assertHeld() { assert.equal(held, true); } };
-  const owner = createBatchActiveLock({ lockPath: () => target,
+  const owner = createBatchActiveLock({ lockPath: () => target, ...(options.fs ? { fs: options.fs } : {}),
     withOwnershipControl(_root, action) {
       assert.equal(held, false, 'only the outer acquisition is used');
       entries++;
@@ -787,6 +787,35 @@ test('real maintenance skips only acquire contention and exposes hard acquisitio
     const value = synchronousCallerFixture(`caller-${method}-close`, { closeError });
     assert.throws(() => recoveryFor(value)[method](), error => error === closeError);
     assert.equal(fs.existsSync(value.target), false);
+  }
+});
+
+test('real owner-record publication failures and invalid records cannot masquerade as active maintenance', () => {
+  for (const method of ['recoverBatches', 'cleanupExpiredBatchSnapshots']) {
+    for (const code of ['ENOSPC', 'EIO', 'EACCES', 'EROFS', 'BATCH_ACTIVE_LOCK_RECORD_INVALID']) {
+      let attempts = 0;
+      const io = { ...fs, openSync(name, flags, ...rest) {
+        if (String(name).includes('-active.json.prepared-') && code !== 'BATCH_ACTIVE_LOCK_RECORD_INVALID') {
+          attempts++; throw Object.assign(new Error('fixed publisher failure'), { code });
+        }
+        return fs.openSync(name, flags, ...rest);
+      } };
+      const value = synchronousCallerFixture(`caller-${method}-publisher-${code}`, { fs: io });
+      const invalid = Buffer.from('{"invalid":true}\n');
+      if (code === 'BATCH_ACTIVE_LOCK_RECORD_INVALID') fs.writeFileSync(value.target, invalid);
+      const before = fs.readFileSync(value.journal);
+      assert.throws(() => recoveryFor(value)[method](), error => error.code === code);
+      assert.deepEqual(fs.readFileSync(value.journal), before);
+      assert.deepEqual(value.counts(), { entries: 1, writes: 0, held: false });
+      if (code === 'BATCH_ACTIVE_LOCK_RECORD_INVALID') assert.deepEqual(fs.readFileSync(value.target), invalid);
+      else { assert.equal(attempts, 1); assert.equal(fs.existsSync(value.target), false); }
+    }
+    const live = synchronousCallerFixture(`caller-${method}-real-live`);
+    writeLock(live.target, tokenB, process.pid, tokenB.slice(0, 32));
+    const original = fs.readFileSync(live.target);
+    assert.equal(recoveryFor(live)[method]().skipped_active, true);
+    assert.deepEqual(fs.readFileSync(live.target), original);
+    assert.deepEqual(live.counts(), { entries: 1, writes: 0, held: false });
   }
 });
 
