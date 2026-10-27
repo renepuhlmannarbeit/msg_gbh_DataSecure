@@ -342,7 +342,7 @@ const { MAX_STREAM_BYTES, FRAME_PREFIX, FRAME_START } = require('../plugins/data
       const received=[];await apply({setParameters:value=>received.push(value)},pdfOcrLayoutMode,mode,native,image,graphic);
       assert.deepEqual(received,[{tessedit_pageseg_mode:expected}]);
     }
-    assert.match(pdfSource,/finally \{ await ocr\.setParameters\(\{ tessedit_pageseg_mode: '6' \}\); \}/u);
+    assert.match(pdfSource,/try \{ await ocr\.setParameters\(\{ tessedit_pageseg_mode: '6' \}\); \}/u);
   });
   await test('the actual raw native-text fact includes undecodable PUA text rather than treating it as an image-only scan', () => {
     const source=fs.readFileSync(path.resolve(__dirname,'../plugins/data-secure/server/standalone/conversion-worker-child.js'),'utf8');
