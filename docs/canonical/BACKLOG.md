@@ -1,5 +1,42 @@
 # Aktives Entwicklungsbacklog · 3.2.0-rc177
 
+**Fortsetzung 27.10.2026, Produktgrenze und Recovery:** Die lokalen Commits
+`307a8292`, `1e97535f`, `ef6cb05a` und `16e8f6ca` trennen Policyadapter,
+Hintergrundrollen und Qualitätsidentität von Cowork-Buildinputs beziehungsweise
+Runtime-Cache. Fünf eigene Appadapter und alle 270 projizierten Windowsdateien
+sind am neuen Engineering-ZIP gegengeprüft; kein Companion, Paketstore oder
+Cowork-Cache darin. Die bisherigen Policyhashes und ein älterer synthetischer
+Zustand bleiben exakt gültig. Ein bestätigter Recoveryfehler wurde eng behoben:
+nur eigene feste Busy-Codes dürfen vor Eintritt überspringen; Schreib- und
+Sperrrecordfehler bleiben Fehler. Windows-Build, Paket/Sidecar und Plugin-
+Erhaltungsprüfung sind grün. Der volle 328er-Lauf auf `16e8f6ca` endete dagegen
+bei Datei 305 rot: zwei Intakefälle erwarteten für absichtlich beschädigtes
+Lock-JSON noch Busy. Reiner Testfix `6bdde433` erhält alle Schutzassertionen;
+30 Intake-, 35 Recovery-, 38 Lock- und sechs Bootstrapfälle danach grün.
+Noch kein neuer voller grüner Gesamtlauf; keine Veröffentlichung/Mainintegration.
+Exakte Bindungen und Grenzen: [Reviewplan](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md).
+
+**Nächster bestätigter P2 – METHOD-20261027-NAMING-01:** Automatische vollständige
+Korrekturgenerationen verlieren Unterordner und die gebundene Namensvariante,
+obwohl DS-089/091 beides verlangen. Der aktuelle Ergebnisöffner folgt dieser
+Generation; der bewusst separate KI-Export darf weiterhin flach bleiben.
+Umsetzung beauftragt und nach drei unabhängigen begrenzten Quellen-/Designreviews
+konkret geplant: neue Ergebnisgeneration `/4`, Namen ausschließlich aus der
+privaten Erstbindung je Dokument-ID, aktueller Inhaltshash aus der privaten
+Revision; eigener geschlossener Results-Baumvertrag bis Rust, gehaltene Eltern,
+Erstellungsintents/Identitätsbelege und exakte rekursive Inventur. Alte komplette
+und angefangene `/1`–`/3`-Aufträge unverändert lesen/fortsetzen; keine automatische
+Verschiebung, Adoptions-/Löschrechte oder generische Pfadfreigabe. Erst rote
+Gegenfälle für beide Zwecke/Namensmodi/Unterordner und echte Node→Rust-Probe,
+danach unabhängiges Gegenlesen und frische Gesamt-/Rust-/Paketgates. Noch nicht
+implementiert. Der lokale Detailplan liegt unter
+`dist/rc177-recovery-final-16e8f6ca-20261027/RESULTS-NAME-CONTINUITY-FINDING-AND-PLAN.md`.
+Das vollständige R0–R9-Review bleibt offen: v12 inventarisiert 44075 JS-Objekte;
+274 gebundene manuelle Urteile in 18 Dateien und fünf Adapterdateiurteile sind
+ein begrenzter Fortschritt, keine Gesamtfreigabe. Desktoptests bleiben beim
+Nutzer; keine neue automatische Aufgabe und keine Mac-Actions unter dem
+aktuellen Reviewauftrag.
+
 **Fortsetzung 27.10.2026, Adaptergrenze:** Der unveröffentlichte
 Branchcommit `4186fcb0` bindet drei Standalone-Adapter aus eigenen Appquellen
 unter unveränderten Gateway-Modulnamen. Ihre alten Cowork-Dateien sind für

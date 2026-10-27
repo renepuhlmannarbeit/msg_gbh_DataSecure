@@ -1,5 +1,34 @@
 # Aktueller Iststand · 3.2.0-rc177
 
+**Unveröffentlichter Quellenreview 27.10.2026:** Produktstand
+`16e8f6ca7e919fa15835c7957bd163e6e14391bf`, Fingerprint
+`c4947ae735f453d6fb2de9ca079770ca6af4d71ad4e06fd8c99b7c625b10ed58`.
+Policyadapter und Hintergrundrollen sind produktgetrennt; Standalone enthält
+fünf eigene Adapter und benötigt die beiden früheren Companion-Buildinputs
+sowie Coworks Runtime-Cache nicht mehr. Der neutrale Fachkern bleibt eine
+Quellimplementierung.
+Die Policyidentität alter Standalone-Zustände bleibt unverändert. Ein eng
+bestätigter Startupfehler klassifiziert harte Sperrdateifehler nicht länger als
+gewöhnliche Konkurrenz. Neues Windows-Engineering-ZIP: SHA-256
+`ca299a7fb5b599f7bb9acb3ae28f83172ad5f10fa15d403306aa785461615b7b`;
+Build, Archiv, unabhängiger Bytevergleich und paketierter Sidecar-Smoke PASS.
+Der vollständige Headlesslauf war bei Datei 305/328 rot: zwei alte Tests
+erwarteten trotz absichtlich beschädigter Sperrdatei noch Busy. Der reine
+Testfix `6bdde4337fbb8bf77bb4aeb2fc76f9a9e92abf8e` bestand 109 gezielte Fälle;
+ein neuer vollständiger grüner Lauf steht aus. Alle 1726 Inputs des roten Laufs
+blieben unverändert. Kein Desktop- oder neuer Mac-Paketnachweis.
+
+Im weiteren Methodenreview wurde ein zweiter P2 bestätigt: Die automatisch
+bereitgestellte Korrekturgeneration flacht relative Dateipfade ab und ändert
+die gewählte Namensvariante. Das verletzt DS-089/091; ein versionierter
+JS-/Rust-Fix mit Namen aus der privaten Erstbindung ist geplant, noch nicht
+implementiert. Kein belegter Verlust oder Überschreiben alter Dateibytes.
+Das Arbeitsregister v12 enthält 44075 JS-Prüfobjekte ohne Parserfehler;
+274 begrenzte manuelle Urteile plus fünf Appadapterdateiurteile ersetzen keine
+vollständige Einzelmethodenprüfung. Der veröffentlichte RC177, seine Assets
+und `main` bleiben unverändert. Aktuelle Arbeit und Belege im
+[Reviewplan](../acceptance/RC177_FULL_CODE_AND_DOMAIN_REVIEW_20261026.md).
+
 **Unveröffentlichter Adapter-Reviewschnitt 27.10.2026:** Commit
 `4186fcb07ff0640616bd8815a99261d49b0b6113` trennt drei zuvor
 gemischte Gatewayadapter als Standalone-Appquellen. Das neue, unveröffentlichte
