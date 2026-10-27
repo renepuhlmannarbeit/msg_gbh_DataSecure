@@ -16,6 +16,9 @@ const semanticWords = value => tokens(value).words.map(word => word.value).join(
 const evaluationFiles = ['benchmarks/quality-reference.js', 'benchmarks/evaluate-quality.js',
   'scripts/generate-quality-corpus.mjs', 'scripts/benchmark-quality.mjs', 'scripts/check-quality-gate.mjs',
   'scripts/lib/standalone-runtime-projection.mjs', 'scripts/lib/standalone-conversion-runtime.mjs', 'package.json'];
+export function qualityPolicyFingerprint() {
+  return require('../plugins/data-secure/server/core/standalone-policy-fingerprint').calculateStandalonePolicyFingerprint();
+}
 export function qualitySourceIdentity(target) {
   const digest = crypto.createHash('sha256');
   for (const { relative, bytes } of collectStandaloneRuntime(path.join(repo, 'plugins/data-secure/server'), target)) {
@@ -27,7 +30,8 @@ export function qualitySourceIdentity(target) {
   for (const { relative, bytes } of collectConversionRuntime(repo, target)) {
     conversion.update(relative).update('\0').update(bytes).update('\0');
   }
-  return { runtime_sha256: digest.digest('hex'), conversion_runtime_sha256: conversion.digest('hex'),
+  return { core_policy_fingerprint: qualityPolicyFingerprint(),
+    runtime_sha256: digest.digest('hex'), conversion_runtime_sha256: conversion.digest('hex'),
     evaluation_sha256: Object.fromEntries(evaluationFiles
     .map(file => [file, hash(fs.readFileSync(path.join(repo, ...file.split('/'))))])) };
 }
@@ -190,7 +194,6 @@ export async function runQualityBenchmark(output, options = {}) {
   const sourceIdentity = qualitySourceIdentity(target);
   const sourceRevision = childProcess.execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repo, encoding: 'utf8', windowsHide: true }).trim();
   const sourceVersion = JSON.parse(fs.readFileSync(path.join(repo, 'package.json'), 'utf8')).version;
-  const coreFingerprint = require('../plugins/data-secure/server/core-policy-fingerprint').calculateCorePolicyFingerprint();
   const corpusRoot = path.resolve(output);
   const manifest = await generateQualityCorpus(corpusRoot);
   const referenceBytes = fs.readFileSync(path.join(corpusRoot, 'REFERENZ.json'));
@@ -349,7 +352,7 @@ export async function runQualityBenchmark(output, options = {}) {
     target, reference_sha256: referenceHash, synthetic_only: true, human_reference_review: 'NOT_RUN',
     review_decisions: 'synthetic-reference-bound', exact_release_package: false, fatal_error: fatal,
     fatal_file: activeFile, runtime_cleanup: cleanupConfirmed ? 'confirmed' : 'unconfirmed',
-    source_revision: sourceRevision, core_policy_fingerprint: coreFingerprint, ...sourceIdentity,
+    source_revision: sourceRevision, ...sourceIdentity,
     corpus_selection: options.nativeOnly === true ? 'native-text-only' : 'all-formats',
     full_corpus_executed: entries.length === manifest.entries.length, summary: summarizeQuality(results), results };
   report.synthetic_review = { invoked: records.some(record => record.review.decisions || record.review.unannotated ||

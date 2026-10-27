@@ -52,7 +52,6 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   const target = process.platform === 'win32' ? 'windows-x64' : process.platform === 'darwin' ? `macos-${process.arch}` : 'linux-x64-glibc';
   const expected = { ...qualitySourceIdentity(target), target, variants: reference.variants, files: reference.entries.map(entry => entry.file),
     version: require('../package.json').version,
-    core_policy_fingerprint: require('../plugins/data-secure/server/core-policy-fingerprint').calculateCorePolicyFingerprint(),
     reference_sha256: require('node:crypto').createHash('sha256').update(referenceBytes).digest('hex') };
   const strictExtraction = process.argv[3] === '--strict-extraction';
   const failures = qualityGateFailures(report, expected, { strictExtraction });

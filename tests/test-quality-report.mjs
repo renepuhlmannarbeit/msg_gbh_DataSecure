@@ -2,12 +2,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { createRequire } from 'node:module';
-import { writeQualityReport, reviewChoice, boundReviewChoice, contactReviewChoice, boundContactReviewChoice, selectQualityEntries } from '../scripts/benchmark-quality.mjs';
+import { writeQualityReport, reviewChoice, boundReviewChoice, contactReviewChoice, boundContactReviewChoice, selectQualityEntries, qualityPolicyFingerprint } from '../scripts/benchmark-quality.mjs';
 import { qualityGateFailures } from '../scripts/check-quality-gate.mjs';
 const require = createRequire(import.meta.url);
 const { createSuite } = require('./helpers');
 const { evaluateQuality, summarizeQuality, assessQuality, qualityHasFindings } = require('../benchmarks/evaluate-quality');
 const { test, done, assert } = createSuite('Quality reports and reference-bound synthetic review');
+test('Standalone quality identity binds the actual Standalone policy', () => {
+  const { STANDALONE_POLICY_FINGERPRINT } = require('../plugins/data-secure/server/core/standalone-policy-fingerprint');
+  assert.equal(qualityPolicyFingerprint(), STANDALONE_POLICY_FINGERPRINT);
+});
 const reference = 'Name: Anna Linden. Anna ist ein Produktname. Java bleibt.';
 const sample = { id: 'one', reference, entities: [{ start: 6, end: 17, value: 'Anna Linden', type: 'PERSON', severity: 3 }],
   preserve: [{ start: 19, end: 23, value: 'Anna', category: 'factual' }], location: 'Seite 1', split: 'holdout' };
