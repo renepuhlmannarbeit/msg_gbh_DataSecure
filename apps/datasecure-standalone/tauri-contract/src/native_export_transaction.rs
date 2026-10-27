@@ -145,10 +145,13 @@ impl<'a> Transaction<'a> {
         }
     }
     fn put<T: Serialize>(&self, kind: &str, value: &T) -> io::Result<()> {
+        self.put_with_sync(kind, value, || self.journal.sync())
+    }
+    fn put_with_sync<T: Serialize>(&self, kind: &str, value: &T, sync: impl FnOnce() -> io::Result<()>) -> io::Result<()> {
         let bytes = serde_json::to_vec(value).map_err(|_| conflict())?;
         if bytes.len() > MAX_RECORD { return Err(conflict()); }
         match self.journal.read_bounded(&self.name(kind), MAX_RECORD) {
-            Ok(existing) => return if existing == bytes { Ok(()) } else { Err(conflict()) },
+            Ok(existing) => return if existing == bytes { sync() } else { Err(conflict()) },
             Err(error) if error.kind() == io::ErrorKind::NotFound => {},
             Err(error) => return Err(error),
         }
@@ -158,7 +161,7 @@ impl<'a> Transaction<'a> {
             Err(error) => return Err(error),
         }
         if self.journal.read_bounded(&self.name(kind), MAX_RECORD)? != bytes { return Err(conflict()); }
-        self.journal.sync()
+        sync()
     }
     fn record(&self, kind: &str, stage: Option<Identity>) -> io::Result<()> {
         self.put(kind, &Record { schema: format!("datasecure-native-export-{kind}/1"), plan_sha256: self.plan_sha256, stage: stage.map(Into::into) })
@@ -1165,6 +1168,27 @@ mod tests {
                 assert_eq!(tx.acknowledge().unwrap(), Status::Acknowledged, "{kind}/{cut}");
                 assert_eq!(fs::read_dir(f.path.join("target")).unwrap().count(), 1);
             }
+        }
+    }
+    #[test]
+    fn byte_identical_complete_and_ack_retries_confirm_directory_sync() {
+        for kind in ["complete", "ack"] {
+            let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+            let guard = Lifecycle::default().begin_native().unwrap();
+            let tx = Transaction::open(&j, &s, &t, f.plan(&j, &s, &t), &guard).unwrap();
+            let record = Record { schema: format!("datasecure-native-export-{kind}/1"),
+                plan_sha256: tx.plan.digest().unwrap(), stage: None };
+            let bytes = serde_json::to_vec(&record).unwrap();
+            assert!(j.write_record_fault(&tx.name(kind), &bytes, "renamed").is_err());
+            assert_eq!(j.read_bounded(&tx.name(kind), MAX_RECORD).unwrap(), bytes);
+            let calls = std::cell::Cell::new(0);
+            let error = tx.put_with_sync(kind, &record, || {
+                calls.set(calls.get() + 1); Err(io::Error::other("INJECTED_DIRECTORY_SYNC_FAILURE"))
+            }).unwrap_err();
+            assert_eq!(error.to_string(), "INJECTED_DIRECTORY_SYNC_FAILURE");
+            assert_eq!(calls.get(), 1, "{kind}: a visible final name does not prove durable directory metadata");
+            tx.put_with_sync(kind, &record, || { calls.set(calls.get() + 1); j.sync() }).unwrap();
+            assert_eq!(calls.get(), 2, "{kind}: retry must confirm the same bound journal");
         }
     }
     // Invoked only by the parent regression below in its own test process.
