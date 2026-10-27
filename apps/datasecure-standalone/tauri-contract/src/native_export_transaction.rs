@@ -8,6 +8,7 @@ use crate::{export_directory::{self, Directory, ExpectedFile, ConfidentialFiles,
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::io;
+use crate::export_directory::relative_results::{self, Layout, Tree, deserialize_layout};
 #[cfg(test)]
 use crate::native_export_broker::body_diagnostic::{self, Phase as BodyPhase};
 
@@ -53,6 +54,8 @@ pub(crate) struct Plan {
     processing_mode: String, journal: ObjectId, staging_parent: ObjectId, target_parent: ObjectId,
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_publication_role")]
     publication_role: Option<PublicationRole>,
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_layout")]
+    relative_layout: Option<Layout>,
     files: Vec<ExpectedFile>,
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_confidential")]
     confidential: Option<ConfidentialFiles>,
@@ -61,9 +64,15 @@ pub(crate) struct Parents<'a> { pub journal: &'a Directory, pub staging: &'a Dir
 impl Plan {
     pub fn new(batch_id: String, operation_id: String, request_sha256: String, processing_mode: String,
         files: Vec<ExpectedFile>, parents: &Parents<'_>) -> io::Result<Self> {
-        let plan = Self { schema: "datasecure-native-export-plan/1".into(), batch_id, operation_id, request_sha256,
+        Self::new_publication(batch_id, operation_id, request_sha256, processing_mode, files, parents, None, None, None)
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_publication(batch_id: String, operation_id: String, request_sha256: String, processing_mode: String,
+        files: Vec<ExpectedFile>, parents: &Parents<'_>, publication_role: Option<PublicationRole>,
+        relative_layout: Option<Layout>, confidential: Option<ConfidentialFiles>) -> io::Result<Self> {
+        let plan = Self { schema: if relative_layout.is_some() { "datasecure-native-export-plan/2" } else { "datasecure-native-export-plan/1" }.into(), batch_id, operation_id, request_sha256,
             processing_mode, journal: parents.journal.identity().into(), staging_parent: parents.staging.identity().into(),
-            target_parent: parents.target.identity().into(), publication_role: None, files, confidential: None };
+            target_parent: parents.target.identity().into(), publication_role, relative_layout, files, confidential };
         plan.validate()?; Ok(plan)
     }
     pub fn with_publication_role(mut self, role: Option<PublicationRole>) -> Self {
@@ -73,12 +82,13 @@ impl Plan {
         self.confidential = confidential; self.validate()?; Ok(self)
     }
     fn validate(&self) -> io::Result<()> {
-        if self.schema != "datasecure-native-export-plan/1" || !hex(&self.batch_id, 64) || !hex(&self.operation_id, 32) ||
+        if self.schema != if self.relative_layout.is_some() { "datasecure-native-export-plan/2" } else { "datasecure-native-export-plan/1" } || !hex(&self.batch_id, 64) || !hex(&self.operation_id, 32) ||
             !hex(&self.request_sha256, 64) || !["markdown-only", "markdown-and-anonymize"].contains(&self.processing_mode.as_str()) ||
             self.files.is_empty() || self.files.len() > 200 { return Err(conflict()); }
         self.journal.identity()?; self.staging_parent.identity()?; self.target_parent.identity()?;
-        crate::export_directory::validate_publication_inventory(&self.processing_mode,
-            self.publication_role == Some(PublicationRole::Results), &self.files, self.confidential.as_ref()).map_err(|_| conflict())?;
+        relative_results::validate_inventory(&self.processing_mode,
+            self.publication_role == Some(PublicationRole::Results), &self.files, self.confidential.as_ref(), self.relative_layout).map_err(|_| conflict())?;
+        if serde_json::to_vec(self).map_err(|_| conflict())?.len() > self.record_limit() { return Err(conflict()); }
         Ok(())
     }
     fn digest(&self) -> io::Result<[u8; 32]> {
@@ -86,6 +96,7 @@ impl Plan {
         Ok(Sha256::digest(serde_json::to_vec(self).map_err(|_| conflict())?).into())
     }
     fn stage_name(&self) -> String { format!("stage-{}", self.operation_id) }
+    fn record_limit(&self) -> usize { if self.relative_layout.is_some() { relative_results::MAX_RECORD_BYTES } else { MAX_RECORD } }
     pub fn target_name(&self) -> String { publication_directory_name(self.publication_role, &self.operation_id) }
 }
 #[derive(Debug, Eq, PartialEq)]
@@ -96,9 +107,16 @@ struct Record { schema: String, plan_sha256: [u8; 32], stage: Option<ObjectId> }
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ConfidentialRecord { schema: String, plan_sha256: [u8; 32], stage: ObjectId, directory: ObjectId }
+#[derive(Eq, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RelativeDirectoryRecord {
+    schema: String, plan_sha256: [u8; 32], path: String, stage: ObjectId, parent: ObjectId,
+    directory: Option<ObjectId>,
+}
 pub(crate) struct Transaction<'a> {
     journal: &'a Directory, staging: &'a Directory, target: &'a Directory, plan: Plan, guard: &'a NativeGuard,
     plan_sha256: [u8; 32],
+    tree: Option<Tree>,
     _control: export_directory::ControlLock,
 }
 impl<'a> Transaction<'a> {
@@ -126,7 +144,8 @@ impl<'a> Transaction<'a> {
         // The owned plan is immutable for this instance. Reusing its digest
         // never reuses journal evidence, directory authority or inventory facts.
         let plan_sha256 = plan.digest()?;
-        let tx = Self { journal, staging, target, plan, guard, plan_sha256, _control: control };
+        let tree = plan.relative_layout.map(|_| Tree::new(&plan.files, plan.confidential.is_some())).transpose()?;
+        let tx = Self { journal, staging, target, plan, guard, plan_sha256, tree, _control: control };
         #[cfg(test)] body_diagnostic::phase(BodyPhase::TransactionIntent);
         if existing_only {
             if tx.read::<Plan>("intent")?.as_ref() != Some(&tx.plan) { return Err(conflict()); }
@@ -138,7 +157,7 @@ impl<'a> Transaction<'a> {
     }
     fn name(&self, kind: &str) -> String { format!("{}-{kind}.json", self.plan.operation_id) }
     fn read<T: for<'de> Deserialize<'de>>(&self, kind: &str) -> io::Result<Option<T>> {
-        match self.journal.read_bounded(&self.name(kind), MAX_RECORD) {
+        match self.journal.read_bounded(&self.name(kind), self.plan.record_limit()) {
             Ok(bytes) => serde_json::from_slice(&bytes).map(Some).map_err(|_| conflict()),
             Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(None),
             Err(error) => Err(error),
@@ -149,18 +168,20 @@ impl<'a> Transaction<'a> {
     }
     fn put_with_sync<T: Serialize>(&self, kind: &str, value: &T, sync: impl FnOnce() -> io::Result<()>) -> io::Result<()> {
         let bytes = serde_json::to_vec(value).map_err(|_| conflict())?;
-        if bytes.len() > MAX_RECORD { return Err(conflict()); }
-        match self.journal.read_bounded(&self.name(kind), MAX_RECORD) {
+        if bytes.len() > self.plan.record_limit() { return Err(conflict()); }
+        match self.journal.read_bounded(&self.name(kind), self.plan.record_limit()) {
             Ok(existing) => return if existing == bytes { sync() } else { Err(conflict()) },
             Err(error) if error.kind() == io::ErrorKind::NotFound => {},
             Err(error) => return Err(error),
         }
-        match self.journal.write_record_atomic(&self.name(kind), &bytes) {
+        let write = if self.tree.is_some() { self.journal.write_relative_result_record_atomic(&self.name(kind), &bytes) }
+            else { self.journal.write_record_atomic(&self.name(kind), &bytes) };
+        match write {
             Ok(()) => {},
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {},
             Err(error) => return Err(error),
         }
-        if self.journal.read_bounded(&self.name(kind), MAX_RECORD)? != bytes { return Err(conflict()); }
+        if self.journal.read_bounded(&self.name(kind), self.plan.record_limit())? != bytes { return Err(conflict()); }
         sync()
     }
     fn record(&self, kind: &str, stage: Option<Identity>) -> io::Result<()> {
@@ -209,7 +230,81 @@ impl<'a> Transaction<'a> {
         directory.verify_controlled()?;
         Ok(directory)
     }
+    fn relative_kind(path: &str, started: bool) -> String {
+        format!("directory-{:x}{}", Sha256::digest(path.as_bytes()), if started { "-started" } else { "" })
+    }
+    fn relative_identity(&self, path: &str, stage: Identity, parent: Identity, required: bool) -> io::Result<Option<Identity>> {
+        let started = self.read::<RelativeDirectoryRecord>(&Self::relative_kind(path, true))?;
+        let saved = self.read::<RelativeDirectoryRecord>(&Self::relative_kind(path, false))?;
+        let expected = RelativeDirectoryRecord { schema: "datasecure-native-results-directory-started/1".into(),
+            plan_sha256: self.plan_sha256, path: path.into(), stage: stage.into(), parent: parent.into(), directory: None };
+        if started.as_ref().is_some_and(|record| record != &expected) { return Err(conflict()); }
+        if let Some(saved) = saved {
+            if started.is_none() || saved.schema != "datasecure-native-results-directory/1" ||
+                saved.plan_sha256 != expected.plan_sha256 || saved.path != path || saved.stage != expected.stage ||
+                saved.parent != expected.parent { return Err(conflict()); }
+            return Ok(Some(saved.directory.ok_or_else(conflict)?.identity()?));
+        }
+        if started.is_some() { return Err(failure("AI_EXPORT_UNCERTAIN")); }
+        if required { return Err(failure("AI_EXPORT_INCOMPLETE")); }
+        Ok(None)
+    }
+    fn relative_identities(&self, stage: Identity) -> io::Result<Vec<Identity>> {
+        let tree = self.tree.as_ref().ok_or_else(conflict)?;
+        let mut identities = vec![stage];
+        for node in tree.nodes.iter().skip(1) {
+            let parent = *identities.get(node.parent).ok_or_else(conflict)?;
+            identities.push(self.relative_identity(&node.path, stage, parent, true)?.ok_or_else(conflict)?);
+        }
+        Ok(identities)
+    }
+    fn relative_parent_chain(&self, stage: &Directory, file: usize) -> io::Result<Vec<Directory>> {
+        let tree = self.tree.as_ref().ok_or_else(conflict)?;
+        let mut chain: Vec<Directory> = vec![];
+        for index in tree.ancestors(*tree.file_parents.get(file).ok_or_else(conflict)?) {
+            let node = &tree.nodes[index];
+            let parent = chain.last().unwrap_or(stage);
+            parent.verify_controlled()?;
+            let directory = if let Some(identity) = self.relative_identity(&node.path, stage.identity(), parent.identity(), false)? {
+                parent.open_controlled_child(&node.name, identity)?
+            } else {
+                if !parent.child_absent(&node.name)? { return Err(conflict()); }
+                self.guard.checkpoint().map_err(|_| failure("STANDALONE_CLOSING"))?;
+                let mut record = RelativeDirectoryRecord { schema: "datasecure-native-results-directory-started/1".into(),
+                    plan_sha256: self.plan_sha256, path: node.path.clone(), stage: stage.identity().into(),
+                    parent: parent.identity().into(), directory: None };
+                self.put(&Self::relative_kind(&node.path, true), &record)?;
+                self.guard.checkpoint().map_err(|_| failure("STANDALONE_CLOSING"))?;
+                let child = parent.create_controlled_child(&node.name).map_err(|_| failure("AI_EXPORT_UNCERTAIN"))?;
+                child.sync()?; parent.sync()?;
+                record.schema = "datasecure-native-results-directory/1".into(); record.directory = Some(child.identity().into());
+                self.put(&Self::relative_kind(&node.path, false), &record)?;
+                parent.inspect_child(&node.name, child.identity())?; child.verify_controlled()?;
+                child
+            };
+            chain.push(directory);
+        }
+        Ok(chain)
+    }
+    fn check_relative_chain(&self, stage: &Directory, file: usize, chain: &[Directory]) -> io::Result<()> {
+        let tree = self.tree.as_ref().ok_or_else(conflict)?;
+        let ancestors = tree.ancestors(tree.file_parents[file]);
+        if ancestors.len() != chain.len() { return Err(conflict()); }
+        stage.verify_controlled()?;
+        for (index, node) in ancestors.iter().enumerate() {
+            let parent = if index == 0 { stage } else { &chain[index - 1] };
+            parent.inspect_child(&tree.nodes[*node].name, chain[index].identity())?;
+            chain[index].verify_controlled()?;
+        }
+        Ok(())
+    }
     fn verify_stage_inventory(&self, stage: &Directory) -> io::Result<()> {
+        if let Some(tree) = &self.tree {
+            let identities = self.relative_identities(stage.identity())?;
+            let confidential = self.plan.confidential.as_ref().map(|value| self.confidential_identity(Some(stage.identity()), true)
+                .and_then(|id| id.ok_or_else(conflict)).map(|identity| (value, identity))).transpose()?;
+            return tree.verify(stage, &identities, &self.plan.files, confidential, false);
+        }
         if let Some(confidential) = &self.plan.confidential {
             let identity = self.confidential_identity(Some(stage.identity()), true)?.ok_or_else(conflict)?;
             stage.open_controlled_child(CONFIDENTIAL_DIRECTORY, identity)?.verify_controlled()?;
@@ -217,6 +312,12 @@ impl<'a> Transaction<'a> {
         } else { stage.verify_inventory(&self.plan.files) }
     }
     fn verify_recovered_stage_inventory(&self, stage: &RecoveredDirectory<'_>, stage_identity: Identity) -> io::Result<()> {
+        if let Some(tree) = &self.tree {
+            let identities = self.relative_identities(stage_identity)?;
+            let confidential = self.plan.confidential.as_ref().map(|value| self.confidential_identity(Some(stage_identity), true)
+                .and_then(|id| id.ok_or_else(conflict)).map(|identity| (value, identity))).transpose()?;
+            return stage.verify_relative_results(tree, &identities, &self.plan.files, confidential, false);
+        }
         if let Some(confidential) = &self.plan.confidential {
             let identity = self.confidential_identity(Some(stage_identity), true)?.ok_or_else(conflict)?;
             stage.verify_confidential_stage_inventory(&self.plan.files, confidential, identity)
@@ -239,6 +340,9 @@ impl<'a> Transaction<'a> {
         if started.is_some() && prepared.is_none() || complete.is_some() && started.is_none() ||
             ack.is_some() && complete.is_none() || abandoned.is_some() && (abandoned != Some(identity) || complete.is_some() || ack.is_some()) { return Err(conflict()); }
         self.confidential_identity(identity, prepared.is_some() || started.is_some() || complete.is_some() || ack.is_some())?;
+        if self.tree.is_some() && (prepared.is_some() || started.is_some() || complete.is_some() || ack.is_some()) {
+            self.relative_identities(identity.ok_or_else(conflict)?)?;
+        }
         Ok((identity, prepared.is_some(), started.is_some(), complete.is_some(), ack.is_some(), abandoned.is_some()))
     }
     /// Every body must match the already-bound neutral inventory. A partial
@@ -260,24 +364,28 @@ impl<'a> Transaction<'a> {
             // parents before creating the protected child. Inherited Windows
             // ACEs alone do not carry SE_DACL_PROTECTED. Supply the descriptor
             // at exclusive creation; do not weaken verification or repair ACLs.
-            let stage = if self.plan.confidential.is_some() {
+            let stage = if self.plan.confidential.is_some() || self.tree.is_some() {
                 self.staging.create_controlled_child(&self.plan.stage_name())?
             } else { self.staging.create_private_child(&self.plan.stage_name())? };
             self.record("stage", Some(stage.identity()))?;
             stage
         };
         let confidential = if index >= self.plan.files.len() { Some(self.confidential_stage(&stage)?) } else { None };
-        let destination = confidential.as_ref().unwrap_or(&stage);
+        let chain = if self.tree.is_some() && index < self.plan.files.len() { self.relative_parent_chain(&stage, index)? } else { vec![] };
+        let destination = confidential.as_ref().or_else(|| chain.last()).unwrap_or(&stage);
+        let name = if let Some(tree) = &self.tree { tree.leaves.get(index).map(String::as_str).unwrap_or(&file.name) } else { &file.name };
+        if self.tree.is_some() && index < self.plan.files.len() { self.check_relative_chain(&stage, index, &chain)?; }
         #[cfg(test)] body_diagnostic::phase(BodyPhase::TransactionWrite);
-        match destination.write_new(&file.name, bytes) {
+        match destination.write_new(name, bytes) {
             Ok(()) => {},
             Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {},
             Err(error) => return Err(error),
         }
         #[cfg(test)] body_diagnostic::phase(BodyPhase::TransactionReadback);
-        if destination.read_bounded(&file.name, 32_000_000)? != bytes { return Err(conflict()); }
+        if destination.read_bounded(name, 32_000_000)? != bytes { return Err(conflict()); }
         #[cfg(test)] body_diagnostic::phase(BodyPhase::TransactionSync);
         destination.sync()?;
+        if self.tree.is_some() && index < self.plan.files.len() { self.check_relative_chain(&stage, index, &chain)?; }
         if let Some(child) = &confidential { stage.inspect_child(CONFIDENTIAL_DIRECTORY, child.identity())?; }
         #[cfg(test)] body_diagnostic::phase(BodyPhase::TransactionStageSync);
         stage.sync()?;
@@ -297,6 +405,13 @@ impl<'a> Transaction<'a> {
     /// Reconcile before retry, ACK and abandonment. A receipt alone is never
     /// evidence that the exact destination still exists with the same contents.
     fn verify_published_inventory(&self, output: &RecoveredDirectory<'_>) -> io::Result<()> {
+        if let Some(tree) = &self.tree {
+            let stage = self.existing("stage")?.flatten().ok_or_else(conflict)?;
+            let identities = self.relative_identities(stage)?;
+            let confidential = self.plan.confidential.as_ref().map(|value| self.confidential_identity(Some(stage), true)
+                .and_then(|id| id.ok_or_else(conflict)).map(|identity| (value, identity))).transpose()?;
+            return output.verify_relative_results(tree, &identities, &self.plan.files, confidential, true);
+        }
         // Only this already-published public target gains the exact metadata
         // exception. Its Results role is part of the durable hashed plan.
         if self.plan.publication_role == Some(PublicationRole::Results) {
@@ -482,6 +597,110 @@ mod tests {
     fn workbook_companions() -> ConfidentialFiles {
         let mut value = companions();
         value.workbook = Some(ConfidentialFile { bytes: 8, sha256: Sha256::digest(b"workbook").into() }); value
+    }
+    fn relative_plan(j: &Directory, s: &Directory, t: &Directory, anonymous: bool) -> Plan {
+        Plan::new_publication("a".repeat(64), "b".repeat(32), "c".repeat(64),
+            if anonymous { "markdown-and-anonymize" } else { "markdown-only" }.into(),
+            vec![ExpectedFile { name: "A/B/Bericht.md".into(), bytes: 5, sha256: Sha256::digest(b"hello").into() },
+                ExpectedFile { name: "C/Bericht.md".into(), bytes: 5, sha256: Sha256::digest(b"world").into() }],
+            &Parents { journal: j, staging: s, target: t }, Some(PublicationRole::Results), Some(Layout::InitialRelative),
+            anonymous.then(workbook_companions)).unwrap()
+    }
+    fn stage_relative(tx: &Transaction<'_>, anonymous: bool) {
+        tx.write_body(0, b"hello").unwrap(); tx.write_body(1, b"world").unwrap();
+        if anonymous {
+            tx.write_body(2, b"mapping").unwrap(); tx.write_body(3, b"identities").unwrap(); tx.write_body(4, b"workbook").unwrap();
+        }
+    }
+    #[test]
+    fn relative_plan_constructors_versions_and_layout_are_bound_before_validation() {
+        let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+        let legacy = f.plan(&j, &s, &t);
+        let bytes = serde_json::to_value(&legacy).unwrap();
+        assert!(bytes.get("relative_layout").is_none()); assert_eq!(bytes["schema"], "datasecure-native-export-plan/1");
+        let relative = relative_plan(&j, &s, &t, false); relative.validate().unwrap();
+        assert_eq!(relative.schema, "datasecure-native-export-plan/2"); assert_ne!(relative.digest().unwrap(), legacy.digest().unwrap());
+        for invalid in [serde_json::Value::Null, serde_json::json!(false), serde_json::json!("other"), serde_json::json!({})] {
+            let mut value = serde_json::to_value(&relative).unwrap(); value["relative_layout"] = invalid;
+            assert!(serde_json::from_value::<Plan>(value).is_err());
+        }
+        let mut missing = relative.clone(); missing.relative_layout = None; assert!(missing.validate().is_err());
+        let mut wrong_role = relative.clone(); wrong_role.publication_role = None; assert!(wrong_role.validate().is_err());
+        let mut wrong_schema = relative; wrong_schema.schema = "datasecure-native-export-plan/1".into(); assert!(wrong_schema.validate().is_err());
+    }
+    #[test]
+    fn relative_results_publish_exact_recursive_inventory_and_recover_the_same_lost_completion() {
+        for anonymous in [false, true] {
+            let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+            let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
+            let plan = relative_plan(&j, &s, &t, anonymous);
+            {
+                let tx = Transaction::open(&j, &s, &t, plan.clone(), &guard).unwrap(); stage_relative(&tx, anonymous);
+                tx.prepare().unwrap(); publish_without_receipt(&tx);
+            }
+            let tx = Transaction::open(&j, &s, &t, plan, &guard).unwrap();
+            assert_eq!(tx.commit().unwrap(), Status::Completed); assert_eq!(tx.acknowledge().unwrap(), Status::Acknowledged);
+            let output = f.path.join("target").join(tx.plan.target_name());
+            assert_eq!(fs::read(output.join("A/B/Bericht.md")).unwrap(), b"hello");
+            assert_eq!(fs::read(output.join("C/Bericht.md")).unwrap(), b"world");
+            if anonymous { assert_eq!(fs::read(output.join("Vertraulich/Pseudonym-Zuordnung.xlsx")).unwrap(), b"workbook"); }
+            fs::write(output.join("A/B/Bericht.md"), b"user edited").unwrap();
+            assert!(tx.inspect_completed().is_err(), "strict transaction inspection never accepts changed public bytes");
+            assert_eq!(tx.inspect_completed_directory().unwrap(), Status::Acknowledged, "completed editable directory opener remains leaf-free");
+        }
+    }
+    #[test]
+    fn relative_directory_creation_receipt_gap_is_never_adopted_or_recreated() {
+        for exists in [false, true] {
+            let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+            let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
+            let tx = Transaction::open(&j, &s, &t, relative_plan(&j, &s, &t, false), &guard).unwrap();
+            let stage = s.create_controlled_child(&tx.plan.stage_name()).unwrap(); tx.record("stage", Some(stage.identity())).unwrap();
+            tx.put(&Transaction::relative_kind("A", true), &RelativeDirectoryRecord {
+                schema: "datasecure-native-results-directory-started/1".into(), plan_sha256: tx.plan_sha256,
+                path: "A".into(), stage: stage.identity().into(), parent: stage.identity().into(), directory: None }).unwrap();
+            if exists { stage.create_controlled_child("A").unwrap(); }
+            // The real callback reopens the stage after the previous owned
+            // handle drops; retaining this test handle would refuse on Windows
+            // sharing before reaching the intended missing-receipt oracle.
+            let stage_identity = stage.identity(); drop(stage);
+            assert_eq!(tx.write_body(0, b"hello").unwrap_err().to_string(), "AI_EXPORT_UNCERTAIN");
+            assert!(t.child_absent(&tx.plan.target_name()).unwrap());
+            let stage = s.reopen_private_stage(&tx.plan.stage_name(), stage_identity).unwrap();
+            assert_eq!(stage.child_absent("A").unwrap(), !exists, "neither fresh creation nor unknown adoption is permitted");
+        }
+    }
+    #[test]
+    fn relative_result_with_thirty_three_parent_directories_uses_the_same_native_transaction() {
+        let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+        let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
+        let name = format!("{}x.md", "a/".repeat(33));
+        let plan = Plan::new_publication("a".repeat(64), "b".repeat(32), "c".repeat(64), "markdown-only".into(),
+            vec![ExpectedFile { name: name.clone(), bytes: 5, sha256: Sha256::digest(b"hello").into() }],
+            &Parents { journal: &j, staging: &s, target: &t }, Some(PublicationRole::Results), Some(Layout::InitialRelative), None).unwrap();
+        let tx = Transaction::open(&j, &s, &t, plan, &guard).unwrap();
+        tx.write_body(0, b"hello").unwrap(); tx.prepare().unwrap(); tx.commit().unwrap();
+        assert_eq!(tx.acknowledge().unwrap(), Status::Acknowledged);
+        assert_eq!(fs::read(f.path.join("target").join(tx.plan.target_name()).join(name)).unwrap(), b"hello");
+        assert_eq!(tx.relative_identities(tx.evidence().unwrap().0.unwrap()).unwrap().len(), 34);
+    }
+    #[test]
+    fn relative_inventory_refuses_extra_entries_hardlinks_and_same_bytes_directory_replacements() {
+        for fault in ["extra-file", "extra-directory", "hardlink", "directory-replacement"] {
+            let f = Fixture::new(); let (j, s, t) = (f.open("journal"), f.open("staging"), f.open("target"));
+            let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
+            let tx = Transaction::open(&j, &s, &t, relative_plan(&j, &s, &t, false), &guard).unwrap(); stage_relative(&tx, false);
+            let stage = f.path.join("staging").join(tx.plan.stage_name());
+            match fault {
+                "extra-file" => fs::write(stage.join("A/B/foreign.md"), b"foreign").unwrap(),
+                "extra-directory" => fs::create_dir(stage.join("A/B/foreign")).unwrap(),
+                "hardlink" => fs::hard_link(stage.join("A/B/Bericht.md"), f.path.join("hardlink")).unwrap(),
+                _ => { fs::rename(stage.join("A/B"), f.path.join("retired-B")).unwrap();
+                    let parent = Directory::open_existing(&stage.join("A"), None).unwrap();
+                    parent.create_controlled_child("B").unwrap().write_new("Bericht.md", b"hello").unwrap(); }
+            }
+            assert!(tx.prepare().is_err(), "{fault}"); assert!(t.child_absent(&tx.plan.target_name()).unwrap());
+        }
     }
     #[test]
     fn confidential_plan_is_closed_optional_digest_bound_and_never_a_legacy_or_markdown_capability() {

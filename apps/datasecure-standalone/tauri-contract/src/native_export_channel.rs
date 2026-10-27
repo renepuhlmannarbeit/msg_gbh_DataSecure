@@ -458,7 +458,7 @@ mod tests {
         fn operation(&self, lifecycle: &Lifecycle) -> Operation {
             let guard = lifecycle.begin_native().unwrap();
             let binding = crate::native_export_broker::configure(&self.root.join("public"), &self.data(), &"d".repeat(32), &guard).unwrap();
-            Operation { batch_id: "a".repeat(64), operation_id: "b".repeat(32), request_sha256: "c".repeat(64), publication_role: None,
+            Operation { batch_id: "a".repeat(64), operation_id: "b".repeat(32), request_sha256: "c".repeat(64), publication_role: None, relative_layout: None,
                 confidential: None,
                 processing_mode: "markdown-and-anonymize".into(), binding,
                 files: [b"hello", b"world"].into_iter().enumerate().map(|(index, bytes)| ExpectedFile {

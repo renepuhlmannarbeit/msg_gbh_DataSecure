@@ -384,7 +384,8 @@ async function run() {
     }
     console.log(`ok ${mode}: actual results role, complete generation, software ACK, repeat/readonly reconciliation and closed legacy/role/batch boundaries`);
   }
-  for (const [modeIndex, mode] of ['markdown-only', 'markdown-and-anonymize'].entries()) {
+  for (const [modeIndex, [mode, naming]] of [['markdown-only', 'neutral'], ['markdown-and-anonymize', 'neutral'],
+    ['markdown-and-anonymize', 'source-with-suffix']].entries()) {
     // Full production composition: real content-bound initial publication,
     // private correction journal, current-vector planner AND native Rust pipe.
     const anonymous = mode === 'markdown-and-anonymize', serial = 800 + modeIndex * 10;
@@ -392,10 +393,10 @@ async function run() {
     const contentOptions = { schema: 'datasecure-content-options/1', markdownOutput: 'content-v1', scanOcr: false, imageOcr: false };
     const state = { schema: 'datasecure-batch/7', token: batchId, product_channel: 'standalone',
       processing_mode: mode, standalone_document_review: true, content_options: contentOptions,
-      ...(anonymous ? { profile: 'general', output_naming_mode: 'neutral' } : {}),
+      ...(anonymous ? { profile: 'general', output_naming_mode: naming } : {}),
       created_at: '2026-10-19T19:00:00.000Z', items: [1, 2].map(index => ({
-        id: (serial + index).toString(16).padStart(32, '0'), name: `nested/Quelle-${index}.txt`,
-        source_label: `nested/Quelle-${index}.txt`, sha256: sha(`source ${index}`), status: 'released' })) };
+        id: (serial + 3 - index).toString(16).padStart(32, '0'), name: `${index === 1 ? 'A/B' : 'C'}/Bericht.txt`,
+        source_label: `${index === 1 ? 'A/B' : 'C'}/Bericht.txt`, sha256: sha(`source ${index}`), status: 'released' })) };
     const options = { dataRoot: data, controlOwnerPid: process.pid, nativeBinding: () => pickerBinding,
       nativeExport: async (operation, command, body) => {
         const status = await nativeSession.send('export_documents', { operation, command, ...(body ? { body } : {}) });
@@ -442,10 +443,13 @@ async function run() {
       assert.equal(exporter.exportCompletedState(state).available, true);
       initial = exporter.initialResultPublication(batchId, true);
     } finally { delete process.env.EU_PRIVACY_RESULT_ROOT; }
-    assert.deepEqual(initial.files.map(file => file.name).sort(), anonymous
-      ? ['nested/Dokument-001-anonymisiert.md', 'nested/Dokument-002-anonymisiert.md'] : ['nested/Quelle-1.md', 'nested/Quelle-2.md']);
-    const initialBytes = initial.files.map(file => fs.readFileSync(path.join(initial.directory.path, file.name)));
-    if (process.platform === 'darwin') for (const folder of [initial.directory.path, path.join(initial.directory.path, 'nested')])
+    const expectedNames = !anonymous ? ['A/B/Bericht.md', 'C/Bericht.md'] : naming === 'neutral'
+      ? ['A/B/Dokument-001-anonymisiert.md', 'C/Dokument-002-anonymisiert.md'] : ['A/B/Bericht-anonymisiert.md', 'C/Bericht-anonymisiert.md'];
+    assert.deepEqual(initial.files.map(file => file.name).sort(), expectedNames.sort());
+    const initialNameMap = new Map(initial.files.map(file => [file.document_id, file.name]));
+    const initialByteMap = new Map(initial.files.map(file => [file.document_id, fs.readFileSync(path.join(initial.directory.path, file.name))]));
+    const initialBytes = state.items.map(item => initialByteMap.get(item.id));
+    if (process.platform === 'darwin') for (const folder of [initial.directory.path, path.join(initial.directory.path, 'A/B')])
       fs.writeFileSync(path.join(folder, '.DS_Store'), 'opaque initial OS metadata', { flag: 'wx' });
     assert.ok(store.list(batchId).documents.every(row => row.approved === false), 'no fabricated initial human approval');
     const edit = replacement => {
@@ -460,9 +464,16 @@ async function run() {
     const first = await publish(), generation = first.result_publication.generation_id;
     assert.equal(first.result_publication.state, 'current'); assert.equal(first.result_publication.count, 2);
     const namespace = anonymous ? 'DataSecure-KI-Export' : 'DataSecure-Markdown-Korrektur';
-    const names = anonymous ? ['Dokument_01.md', 'Dokument_02.md', 'Vertraulich'] : ['Quelle-1.md', 'Quelle-2.md'];
+    const names = state.items.map(item => initialNameMap.get(item.id));
+    const expectedTree = ['A', 'A/B', 'C', ...names, ...(anonymous ? ['Vertraulich', 'Vertraulich/Dateizuordnung.csv',
+      'Vertraulich/Pseudonym-Zuordnung.txt', 'Vertraulich/Pseudonym-Zuordnung.xlsx'] : [])].sort();
+    const assertTree = folder => assert.deepEqual(fs.readdirSync(folder, { recursive: true }).map(name => name.split(path.sep).join('/')).sort(), expectedTree);
     const directory = path.join(results, namespace, `Ergebnisse-${generation}`);
-    assert.deepEqual(fs.readdirSync(directory).sort(), names);
+    assertTree(directory);
+    const plan = JSON.parse(fs.readFileSync(path.join(data, 'document-reviews', batchId, `results-generation-${generation}.json`)));
+    assert.equal(plan.schema, 'datasecure-results-generation/4'); assert.equal(plan.relative_layout, 'initial-relative/1');
+    assert.notEqual(plan.selection[0].document_id, state.items[0].id, 'native integration uses a different ID-sorted revision order');
+    assert.deepEqual([...new Map(plan.selection.map((row, index) => [row.document_id, plan.files[index].name]))].sort(), [...initialNameMap].sort());
     if (!anonymous) assert.match(fs.readFileSync(path.join(directory, names[0]), 'utf8'), /42 korrigierte Projekte/u);
     if (anonymous) {
       const expected = initialBytes[0].toString('utf8').replace('42 Projekte', '[MANUAL_REDACTION] Projekte');
@@ -470,7 +481,7 @@ async function run() {
       assert.equal(fs.readFileSync(path.join(directory, names[0]), 'utf8'), expected);
       assert.doesNotMatch(expected, /Anna Beispiel/u);
       assert.deepEqual(fs.readdirSync(path.join(directory, 'Vertraulich')).sort(), ['Dateizuordnung.csv', 'Pseudonym-Zuordnung.txt', 'Pseudonym-Zuordnung.xlsx']);
-      assert.match(fs.readFileSync(path.join(directory, 'Vertraulich/Dateizuordnung.csv'), 'utf8'), /Dokument_01\.md/u);
+      for (const name of names) assert.ok(fs.readFileSync(path.join(directory, 'Vertraulich/Dateizuordnung.csv'), 'utf8').includes(name));
       assert.match(fs.readFileSync(path.join(directory, 'Vertraulich/Pseudonym-Zuordnung.txt'), 'utf8'), /Anna Beispiel/u);
       assert.equal(fs.readFileSync(path.join(directory, 'Vertraulich/Pseudonym-Zuordnung.xlsx')).subarray(0, 2).toString(), 'PK');
     }
@@ -486,13 +497,13 @@ async function run() {
     context('resolve_history_results', { batch_id: batchId });
     const resolved = await store.resolveResultsGeneration(batchId);
     assert.equal(resolved.local_path, path.join(results, namespace, `Ergebnisse-${resumed.result_publication.generation_id}`));
-    assert.deepEqual(fs.readdirSync(resolved.local_path).sort(), names, 'OS metadata is never propagated to a new generation');
+    assertTree(resolved.local_path); // OS metadata never propagates to a new generation.
     if (!anonymous) assert.match(fs.readFileSync(path.join(resolved.local_path, names[0]), 'utf8'), /42 nochmals korrigierte Projekte/u);
     else assert.equal(fs.readFileSync(path.join(resolved.local_path, names[0]), 'utf8'), initialBytes[0].toString('utf8')
       .replace('42 Projekte', '[MANUAL_REDACTION] Projekte').replace('42 Aufträge', '[MANUAL_REDACTION] Aufträge'),
       'both independent explicit masking decisions must occur in the actual native current file');
-    for (const [index, file] of initial.files.entries())
-      assert.deepEqual(fs.readFileSync(path.join(initial.directory.path, file.name)), initialBytes[index], 'initial files are preserved');
+    for (const file of initial.files)
+      assert.deepEqual(fs.readFileSync(path.join(initial.directory.path, file.name)), initialByteMap.get(file.document_id), 'initial files are preserved');
     const corrupt = path.join(resolved.local_path, names[1]);
     fs.writeFileSync(corrupt, '# Manuell geaendert\n');
     fs.writeFileSync(path.join(resolved.local_path, '~$Office.xlsx'), 'public lock marker');
@@ -521,7 +532,7 @@ async function run() {
       : privateText.replace('42 Projekte', '42 privat korrigierte Projekte'), 'new bytes come only from the private revision');
     context('resolve_history_results', { batch_id: batchId });
     assert.equal((await store.resolveResultsGeneration(batchId)).local_path, nextFolder);
-    console.log(`ok ${mode}: production initial -> correction -> native full-vector generation -> LostReceipt -> fresh store -> readonly working-copy opener; public edits preserved, new private generation never imports them`);
+    console.log(`ok ${mode}/${naming}: production initial ID/name map -> correction -> native recursive full-vector generation -> LostReceipt -> fresh store -> readonly working-copy opener; public edits preserved, new private generation never imports them`);
   }
   for (const mode of ['markdown-only', 'markdown-and-anonymize']) {
     const admissionsBefore = configuredAdmissions;

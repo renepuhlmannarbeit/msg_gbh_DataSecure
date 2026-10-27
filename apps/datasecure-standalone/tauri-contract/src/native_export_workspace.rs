@@ -8,6 +8,7 @@ use crate::{export_directory::{Directory, ExpectedFile, ConfidentialFiles, deser
     native_export_transaction::{Parents, Plan, PublicationRole, Transaction, deserialize_publication_role, publication_directory_name}};
 use serde::{Deserialize, Serialize};
 use std::io;
+use crate::export_directory::relative_results::{self, Layout, deserialize_layout};
 #[cfg(test)]
 use crate::native_export_broker::body_diagnostic::{self, Phase as BodyPhase};
 
@@ -38,13 +39,21 @@ pub(crate) struct Request {
     private_root: ObjectId, target: ObjectId, files: Vec<ExpectedFile>,
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_publication_role")]
     publication_role: Option<PublicationRole>,
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_layout")]
+    relative_layout: Option<Layout>,
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_confidential")]
     confidential: Option<ConfidentialFiles>,
 }
 impl Request {
     pub fn new(batch_id: String, operation_id: String, request_sha256: String, processing_mode: String,
         files: Vec<ExpectedFile>, private_root: &Directory, target: &Directory) -> io::Result<Self> {
-        let request = Self { batch_id, operation_id, request_sha256, processing_mode, files, publication_role: None, confidential: None,
+        Self::new_publication(batch_id, operation_id, request_sha256, processing_mode, files, private_root, target, None, None, None)
+    }
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_publication(batch_id: String, operation_id: String, request_sha256: String, processing_mode: String,
+        files: Vec<ExpectedFile>, private_root: &Directory, target: &Directory, publication_role: Option<PublicationRole>,
+        relative_layout: Option<Layout>, confidential: Option<ConfidentialFiles>) -> io::Result<Self> {
+        let request = Self { batch_id, operation_id, request_sha256, processing_mode, files, publication_role, relative_layout, confidential,
             private_root: private_root.identity().into(), target: target.identity().into() };
         request.validate()?; Ok(request)
     }
@@ -61,11 +70,14 @@ impl Request {
         let root = self.private_root.identity()?; let target = self.target.identity()?;
         if root == target { return Err(conflict()); }
         if root.volume != target.volume { return Err(error("AI_EXPORT_VOLUME_MISMATCH")); }
-        crate::export_directory::validate_publication_inventory(&self.processing_mode,
-            self.publication_role == Some(PublicationRole::Results), &self.files, self.confidential.as_ref()).map_err(|_| conflict())?;
+        relative_results::validate_inventory(&self.processing_mode,
+            self.publication_role == Some(PublicationRole::Results), &self.files, self.confidential.as_ref(), self.relative_layout).map_err(|_| conflict())?;
+        // Include the largest fixed envelope before any private namespace IO.
+        if serde_json::to_vec(self).map_err(|_| conflict())?.len() + 1024 > self.record_limit() { return Err(conflict()); }
         Ok(())
     }
     fn journal_name(&self) -> String { format!("journal-{}", self.operation_id) }
+    fn record_limit(&self) -> usize { if self.relative_layout.is_some() { relative_results::MAX_RECORD_BYTES } else { LIMIT } }
     fn staging_name(&self) -> String { format!("staging-{}", self.operation_id) }
     fn published_name(&self) -> String { publication_directory_name(self.publication_role, &self.operation_id) }
     fn record_name(&self, kind: &str) -> String { format!("{}-parents-{kind}.json", self.operation_id) }
@@ -80,26 +92,28 @@ struct Binding { schema: String, request: Request, journal: ObjectId, staging: O
 #[serde(deny_unknown_fields)]
 struct Abandoned { schema: String, request: Request }
 
-fn read<T: for<'de> Deserialize<'de>>(root: &Directory, name: &str) -> io::Result<Option<T>> {
-    match root.read_bounded(name, LIMIT) {
+fn read<T: for<'de> Deserialize<'de>>(root: &Directory, name: &str, request: &Request) -> io::Result<Option<T>> {
+    match root.read_bounded(name, request.record_limit()) {
         Ok(bytes) => serde_json::from_slice(&bytes).map(Some).map_err(|_| conflict()),
         Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
         Err(e) => Err(e),
     }
 }
-fn put<T: Serialize>(root: &Directory, name: &str, value: &T, guard: &NativeGuard) -> io::Result<()> {
+fn put<T: Serialize>(root: &Directory, name: &str, value: &T, guard: &NativeGuard, request: &Request) -> io::Result<()> {
     guard.checkpoint().map_err(|_| error("STANDALONE_CLOSING"))?;
     let bytes = serde_json::to_vec(value).map_err(|_| conflict())?;
-    if bytes.len() > LIMIT { return Err(conflict()); }
-    match root.read_bounded(name, LIMIT) {
+    if bytes.len() > request.record_limit() { return Err(conflict()); }
+    match root.read_bounded(name, request.record_limit()) {
         Ok(existing) => return if existing == bytes { Ok(()) } else { Err(conflict()) },
         Err(e) if e.kind() == io::ErrorKind::NotFound => {},
         Err(e) => return Err(e),
     }
-    match root.write_record_atomic(name, &bytes) {
+    let write = if request.relative_layout.is_some() { root.write_relative_result_record_atomic(name, &bytes) }
+        else { root.write_record_atomic(name, &bytes) };
+    match write {
         Ok(()) => {}, Err(e) if e.kind() == io::ErrorKind::AlreadyExists => {}, Err(e) => return Err(e),
     }
-    if root.read_bounded(name, LIMIT)? != bytes { return Err(conflict()); }
+    if root.read_bounded(name, request.record_limit())? != bytes { return Err(conflict()); }
     root.sync()
 }
 
@@ -117,9 +131,9 @@ impl<'a> Workspace<'a> {
         guard.checkpoint().map_err(|_| error("STANDALONE_CLOSING"))?;
         let _ownership = root.lock_existing_control()?;
         let intent = Intent { schema: "datasecure-native-export-parent-intent/1".into(), request: request.clone() };
-        if read::<Intent>(root, &request.record_name("intent"))?.as_ref() != Some(&intent) ||
-            read::<Abandoned>(root, &request.record_name("abandoned"))?.is_some() { return Err(conflict()); }
-        let binding = read::<Binding>(root, &request.record_name("binding"))?.ok_or_else(|| error("AI_EXPORT_UNCERTAIN"))?;
+        if read::<Intent>(root, &request.record_name("intent"), &request)?.as_ref() != Some(&intent) ||
+            read::<Abandoned>(root, &request.record_name("abandoned"), &request)?.is_some() { return Err(conflict()); }
+        let binding = read::<Binding>(root, &request.record_name("binding"), &request)?.ok_or_else(|| error("AI_EXPORT_UNCERTAIN"))?;
         if binding.schema != "datasecure-native-export-parent-binding/1" || binding.request != request { return Err(conflict()); }
         let journal = root.open_controlled_child(&request.journal_name(), binding.journal.identity()?)?;
         let staging = root.open_controlled_child(&request.staging_name(), binding.staging.identity()?)?;
@@ -137,9 +151,9 @@ impl<'a> Workspace<'a> {
         let _ownership = root.lock_control()?;
         let intent = Intent { schema: "datasecure-native-export-parent-intent/1".into(), request: request.clone() };
         #[cfg(test)] body_diagnostic::phase(BodyPhase::WorkspaceRecords);
-        let previous = read::<Intent>(root, &request.record_name("intent"))?;
-        let binding = read::<Binding>(root, &request.record_name("binding"))?;
-        let abandoned = read::<Abandoned>(root, &request.record_name("abandoned"))?;
+        let previous = read::<Intent>(root, &request.record_name("intent"), &request)?;
+        let binding = read::<Binding>(root, &request.record_name("binding"), &request)?;
+        let abandoned = read::<Abandoned>(root, &request.record_name("abandoned"), &request)?;
         if let Some(saved) = abandoned {
             if saved != (Abandoned { schema: "datasecure-native-export-parent-abandoned/1".into(), request: request.clone() }) ||
                 previous.as_ref() != Some(&intent) || binding.is_some() { return Err(conflict()); }
@@ -150,7 +164,7 @@ impl<'a> Workspace<'a> {
         }
         if previous.is_some() && binding.is_none() { return Err(error("AI_EXPORT_UNCERTAIN")); }
         #[cfg(test)] body_diagnostic::phase(BodyPhase::WorkspacePut);
-        put(root, &request.record_name("intent"), &intent, guard)?;
+        put(root, &request.record_name("intent"), &intent, guard, &request)?;
         checkpoint("intent")?;
         let (journal, staging) = if let Some(binding) = binding {
             #[cfg(test)] body_diagnostic::phase(BodyPhase::WorkspaceBinding);
@@ -171,7 +185,7 @@ impl<'a> Workspace<'a> {
             checkpoint("staging")?;
             j.sync()?; s.sync()?; root.sync()?;
             put(root, &request.record_name("binding"), &Binding { schema: "datasecure-native-export-parent-binding/1".into(),
-                request: request.clone(), journal: j.identity().into(), staging: s.identity().into() }, guard)?;
+                request: request.clone(), journal: j.identity().into(), staging: s.identity().into() }, guard, &request)?;
             (j, s)
         };
         #[cfg(test)] body_diagnostic::phase(BodyPhase::WorkspacePost);
@@ -192,9 +206,9 @@ impl<'a> Workspace<'a> {
         guard.checkpoint().map_err(|_| error("STANDALONE_CLOSING"))?;
         let _ownership = root.lock_control()?;
         let intent = Intent { schema: "datasecure-native-export-parent-intent/1".into(), request: request.clone() };
-        let previous = read::<Intent>(root, &request.record_name("intent"))?;
-        let binding = read::<Binding>(root, &request.record_name("binding"))?;
-        let abandoned = read::<Abandoned>(root, &request.record_name("abandoned"))?;
+        let previous = read::<Intent>(root, &request.record_name("intent"), request)?;
+        let binding = read::<Binding>(root, &request.record_name("binding"), request)?;
+        let abandoned = read::<Abandoned>(root, &request.record_name("abandoned"), request)?;
         if previous.as_ref().is_some_and(|saved| saved != &intent) || previous.is_none() && binding.is_some() ||
             abandoned.is_some() && (previous.is_none() || binding.is_some()) { return Err(conflict()); }
         if previous.is_none() || binding.is_some() { return Ok(false); }
@@ -205,7 +219,7 @@ impl<'a> Workspace<'a> {
         }
         let marker = Abandoned { schema: "datasecure-native-export-parent-abandoned/1".into(), request: request.clone() };
         if abandoned.as_ref().is_some_and(|saved| saved != &marker) { return Err(conflict()); }
-        put(root, &request.record_name("abandoned"), &marker, guard)?;
+        put(root, &request.record_name("abandoned"), &marker, guard, request)?;
         if !target.child_absent(&request.published_name()).map_err(|_| error("AI_EXPORT_UNCERTAIN"))? {
             return Err(error("AI_EXPORT_UNCERTAIN"));
         }
@@ -221,10 +235,10 @@ impl<'a> Workspace<'a> {
         self.root.verify_controlled()?;
         self.root.inspect_child(&self.request.journal_name(), self.journal.identity())?;
         self.root.inspect_child(&self.request.staging_name(), self.staging.identity())?;
-        let plan = Plan::new(self.request.batch_id.clone(), self.request.operation_id.clone(), self.request.request_sha256.clone(),
+        let plan = Plan::new_publication(self.request.batch_id.clone(), self.request.operation_id.clone(), self.request.request_sha256.clone(),
             self.request.processing_mode.clone(), self.request.files.clone(),
-            &Parents { journal: &self.journal, staging: &self.staging, target: self.target })?
-            .with_publication_role(self.request.publication_role).with_confidential(self.request.confidential.clone())?;
+            &Parents { journal: &self.journal, staging: &self.staging, target: self.target },
+            self.request.publication_role, self.request.relative_layout, self.request.confidential.clone())?;
         if existing_only { Transaction::open_existing(&self.journal, &self.staging, self.target, plan, guard) }
         else { Transaction::open(&self.journal, &self.staging, self.target, plan, guard) }
     }
@@ -267,6 +281,51 @@ mod tests {
             }
             fs::remove_dir_all(&self.path).unwrap();
         }
+    }
+    #[test]
+    fn relative_request_is_initialized_before_validation_and_resumes_its_exact_workspace() {
+        let f = Fixture::new(); let (r, t) = (f.open("private"), f.open("public"));
+        let old = f.request(&r, &t); let serialized = serde_json::to_value(&old).unwrap();
+        assert!(serialized.get("relative_layout").is_none());
+        let files = vec![ExpectedFile { name: "A/B/Bericht.md".into(), bytes: 5, sha256: Sha256::digest(b"hello").into() }];
+        assert!(Request::new("a".repeat(64), "b".repeat(32), "c".repeat(64), "markdown-only".into(), files.clone(), &r, &t).is_err());
+        let request = Request::new_publication("a".repeat(64), "b".repeat(32), "c".repeat(64), "markdown-only".into(), files,
+            &r, &t, Some(PublicationRole::Results), Some(Layout::InitialRelative), None).unwrap();
+        for invalid in [serde_json::Value::Null, serde_json::json!("other"), serde_json::json!({})] {
+            let mut value = serde_json::to_value(&request).unwrap(); value["relative_layout"] = invalid;
+            assert!(serde_json::from_value::<Request>(value).is_err());
+        }
+        let mut wrong_role = request.clone(); wrong_role.publication_role = None; assert!(wrong_role.validate().is_err());
+        let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
+        { let workspace = Workspace::open(&r, &t, request.clone(), &guard).unwrap();
+          let tx = workspace.transaction(&guard).unwrap(); tx.write_body(0, b"hello").unwrap(); tx.prepare().unwrap(); }
+        let workspace = Workspace::open_existing(&r, &t, request.clone(), &guard).unwrap();
+        let tx = workspace.existing_transaction(&guard).unwrap();
+        assert_eq!(tx.commit().unwrap(), Status::Completed); assert_eq!(tx.acknowledge().unwrap(), Status::Acknowledged);
+        assert_eq!(fs::read(f.path.join("public").join(request.published_name()).join("A/B/Bericht.md")).unwrap(), b"hello");
+        assert!(Workspace::open_existing(&r, &t, old, &guard).is_err(), "same operation ID cannot reinterpret the bound relative request");
+    }
+    #[test]
+    fn relative_request_and_plan_record_bounds_cover_two_hundred_maximum_unicode_paths() {
+        let f = Fixture::new(); let (r, t) = (f.open("private"), f.open("public"));
+        let files: Vec<_> = (0..200).map(|n| {
+            let mut parts = vec![format!("{n:03}{}", "中".repeat(81))];
+            parts.extend((0..11).map(|_| "中".repeat(84))); parts.push(format!("{}x.md", "中".repeat(32)));
+            let name = parts.join("/"); assert_eq!(name.encode_utf16().count(), 1056);
+            ExpectedFile { name, bytes: 2_000_000, sha256: [255; 32] }
+        }).collect();
+        let request = Request::new_publication("a".repeat(64), "b".repeat(32), "c".repeat(64), "markdown-only".into(), files,
+            &r, &t, Some(PublicationRole::Results), Some(Layout::InitialRelative), None).unwrap();
+        let bytes = serde_json::to_vec(&request).unwrap();
+        assert!(bytes.len() > LIMIT); assert!(bytes.len() + 1024 <= relative_results::MAX_RECORD_BYTES);
+        let intent = Intent { schema: "datasecure-native-export-parent-intent/1".into(), request: request.clone() };
+        let lifecycle = Lifecycle::default(); let guard = lifecycle.begin_native().unwrap();
+        put(&r, "maximum-relative-record.json", &intent, &guard, &request).unwrap();
+        assert!(read::<Intent>(&r, "maximum-relative-record.json", &request).unwrap().as_ref() == Some(&intent));
+        assert!(r.read_bounded("maximum-relative-record.json", LIMIT).is_err(), "legacy read bound stays unchanged");
+        // The unchanged outer pipe budget also covers the operation payload,
+        // a worst-sized body chunk and conservative binding/envelope overhead.
+        assert!(bytes.len() + 2 * 65536 + 128 * 1024 < 1024 * 1024);
     }
     #[test]
     fn confidential_request_is_durable_and_cannot_cross_adopt_the_old_results_request() {

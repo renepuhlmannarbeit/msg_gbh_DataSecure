@@ -11,6 +11,7 @@
 #![allow(dead_code)]
 use sha2::{Digest, Sha256};
 use std::{fs::File, io::{self, Read, Seek, SeekFrom, Write}, path::Path};
+pub(crate) mod relative_results;
 
 // Closed diagnostic data only: no names, handles, descriptors or error text.
 // String labels "0".."5"/"unknown" are classes, never raw ULONG_PTR values.
@@ -626,12 +627,22 @@ impl Directory {
         self.write_record_checkpoints(name, bytes, checkpoint)
     }
     fn write_record_checkpoints(&self, name: &str, bytes: &[u8], mut checkpoint: impl FnMut(&str) -> io::Result<()>) -> io::Result<()> {
+        self.write_record_bounded(name, bytes, 128 * 1024, 2048, &mut checkpoint)
+    }
+    /// Only the new closed Results tree contract uses these larger, fixed
+    /// record/entry bounds. Legacy records keep their original limits.
+    pub(crate) fn write_relative_result_record_atomic(&self, name: &str, bytes: &[u8]) -> io::Result<()> {
+        self.write_record_bounded(name, bytes, relative_results::MAX_RECORD_BYTES,
+            relative_results::MAX_RECORD_ENTRIES, |_| Ok(()))
+    }
+    fn write_record_bounded(&self, name: &str, bytes: &[u8], maximum: usize, entries: usize,
+        mut checkpoint: impl FnMut(&str) -> io::Result<()>) -> io::Result<()> {
         use std::sync::atomic::{AtomicU64, Ordering};
         static NEXT: AtomicU64 = AtomicU64::new(0);
         leaf(name)?; self.check()?;
-        if bytes.len() > 128 * 1024 { return Err(unsafe_io()); }
+        if bytes.len() > maximum { return Err(unsafe_io()); }
         // Bound abandoned private preparations; never traverse/delete them.
-        platform::list_names(&self.inner, 2048)?;
+        platform::list_names(&self.inner, entries)?;
         let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map_err(|_| unsafe_io())?.as_nanos();
         let temp = format!("pending-{}-{stamp}-{}", std::process::id(), NEXT.fetch_add(1, Ordering::Relaxed));
         let mut file = platform::create_record(&self.inner, &temp)?;
@@ -727,8 +738,12 @@ impl Directory {
         self.verify_inventory_policy_confidential(expected, public_results && cfg!(target_os = "macos"), Some((confidential, identity)))
     }
     fn verify_public_results_names(&self, expected: &[String], public_results: bool) -> io::Result<()> {
+        self.verify_public_results_names_size(expected, public_results).map(|_| ())
+    }
+    fn verify_public_results_names_size(&self, expected: &[String], public_results: bool) -> io::Result<u64> {
         let limit = expected.len().checked_add(if public_results { 1 } else { 0 }).ok_or_else(unsafe_io)?;
         let mut actual = platform::list_names(&self.inner, limit)?;
+        let mut metadata_size = 0;
         if public_results {
             if let Some(index) = actual.iter().position(|name| name == ".DS_Store") {
                 // Opaque OS metadata: no parser, digest, receipt, selection or
@@ -741,11 +756,13 @@ impl Directory {
                 if platform::regular_identity(&named)? != identity ||
                     named.metadata()?.len() > 1024 * 1024 || metadata.metadata()?.len() > 1024 * 1024 ||
                     platform::regular_identity(&metadata)? != identity { return Err(unsafe_io()); }
+                metadata_size = named.metadata()?.len().max(metadata.metadata()?.len());
+                if metadata_size > 1024 * 1024 { return Err(unsafe_io()); }
                 actual.remove(index);
             }
         }
         if actual.as_slice() != expected { return Err(unsafe_io()); }
-        self.check()
+        self.check()?; Ok(metadata_size)
     }
     fn verify_inventory_policy(&self, expected: &[ExpectedFile], public_results: bool) -> io::Result<()> {
         self.verify_inventory_policy_confidential(expected, public_results, None)
@@ -779,7 +796,13 @@ impl Directory {
             Ok(())
         };
         verify_confidential()?;
-        for item in expected {
+        for item in expected { self.verify_expected_file(item)?; }
+        verify_confidential()?;
+        self.verify_public_results_names(&names, public_results)?;
+        self.check()
+    }
+    fn verify_expected_file(&self, item: &ExpectedFile) -> io::Result<()> {
+            leaf(&item.name)?; self.check()?;
             let mut file = platform::read_file(&self.inner, &item.name)?;
             let identity = platform::regular_identity(&file)?;
             let before = file.metadata()?;
@@ -803,9 +826,6 @@ impl Directory {
             // subsequently named in the export directory.
             let named = platform::read_file(&self.inner, &item.name)?;
             if platform::regular_identity(&named)? != identity { return Err(unsafe_io()); }
-        }
-        verify_confidential()?;
-        self.verify_public_results_names(&names, public_results)?;
         self.check()
     }
     pub fn write_new(&self, name: &str, bytes: &[u8]) -> io::Result<()> {

@@ -5,6 +5,7 @@ use crate::{export_directory::{Directory, ExpectedFile, ConfidentialFiles, deser
     native_export_transaction::{Status, PublicationRole, deserialize_publication_role}, native_export_workspace::{Request, Workspace}};
 use serde::{Deserialize, Serialize};
 use std::{io, path::{Path, PathBuf}};
+use crate::export_directory::relative_results::{self, Layout, deserialize_layout};
 
 // Test pipe evidence only. It records the original call without creating
 // authority, retaining payloads, retrying or changing the returned error.
@@ -132,13 +133,15 @@ pub(crate) struct Operation {
     pub processing_mode: String, pub binding: Binding, pub files: Vec<ExpectedFile>,
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_publication_role")]
     pub publication_role: Option<PublicationRole>,
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_layout")]
+    pub relative_layout: Option<Layout>,
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deserialize_confidential")]
     pub confidential: Option<ConfidentialFiles>,
 }
 impl Operation {
     pub(crate) fn payload_file(&self, index: usize) -> io::Result<ExpectedFile> {
-        crate::export_directory::validate_publication_inventory(&self.processing_mode,
-            self.publication_role == Some(PublicationRole::Results), &self.files, self.confidential.as_ref())
+        relative_results::validate_inventory(&self.processing_mode,
+            self.publication_role == Some(PublicationRole::Results), &self.files, self.confidential.as_ref(), self.relative_layout)
             .map_err(|_| error("AI_EXPORT_INVALID"))?;
         crate::export_directory::publication_body(&self.files, self.confidential.as_ref(), index)
             .ok_or_else(|| error("AI_EXPORT_INVALID"))
@@ -403,9 +406,9 @@ fn execute_inner(data: &Path, op: &Operation, command: &str, body: Option<(usize
     #[cfg(test)] body_diagnostic::phase(BodyPhase::BrokerTarget);
     let target = public.open_bound_child(name, id.identity()?)?;
     #[cfg(test)] body_diagnostic::phase(BodyPhase::BrokerRequest);
-    let request = Request::new(op.batch_id.clone(), op.operation_id.clone(), op.request_sha256.clone(),
-        op.processing_mode.clone(), op.files.clone(), &private, &target)?
-        .with_publication_role(op.publication_role).with_confidential(op.confidential.clone())?;
+    let request = Request::new_publication(op.batch_id.clone(), op.operation_id.clone(), op.request_sha256.clone(),
+        op.processing_mode.clone(), op.files.clone(), &private, &target,
+        op.publication_role, op.relative_layout, op.confidential.clone())?;
     if command == "abandon" && Workspace::abandon_unbound(&private, &target, &request, guard)? {
         parent.inspect_child(&op.binding.private_name, private.identity())?;
         public.inspect_child(name, target.identity())?;
@@ -471,7 +474,7 @@ mod tests {
         }
         fn op(&self, guard: &NativeGuard) -> Operation {
             let binding = configure(&self.path.join("public"), &self.path.join("private"), &"d".repeat(32), guard).unwrap();
-            Operation { batch_id: "a".repeat(64), operation_id: "b".repeat(32), request_sha256: "c".repeat(64), publication_role: None,
+            Operation { batch_id: "a".repeat(64), operation_id: "b".repeat(32), request_sha256: "c".repeat(64), publication_role: None, relative_layout: None,
                 confidential: None,
                 processing_mode: "markdown-and-anonymize".into(), binding,
                 files: vec![ExpectedFile { name: "Dokument_01.md".into(), bytes: 5, sha256: Sha256::digest(b"hello").into() }] }

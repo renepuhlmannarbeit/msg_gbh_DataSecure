@@ -5,6 +5,7 @@
 // Bodies are consumed one at a time; only bounded mapping rows survive add().
 const crypto = require('node:crypto');
 const { RESOURCE_LIMITS } = require('../resource-limits');
+const { MAX_PATH_CHARS: MAX_RESULT_NAME_CHARS } = require('../core/relative-result-layout');
 const MAX_BYTES = 16 * 1024 * 1024, MAX_OCCURRENCES = 100000;
 const hash = value => crypto.createHash('sha256').update(value).digest('hex');
 const fail = (code = 'DOCUMENT_REVIEW_INVALID') => Object.assign(Error(code), { code });
@@ -41,7 +42,7 @@ function renderConfidentialOverview(value) {
   let occurrenceCount = 0;
   for (const document of value.documents) {
     if (!closed(document, 'document_id,name,revision,output_sha256,trace_available,entries,excluded') ||
-        !validId(document.document_id, 32) || !text(document.name) || document.name.length > 1024 ||
+        !validId(document.document_id, 32) || !text(document.name) || document.name.length > MAX_RESULT_NAME_CHARS ||
         /[\u0000-\u001f\u007f]/u.test(document.name) || !Number.isSafeInteger(document.revision) ||
         document.revision < 0 || document.revision > 1000 || !validId(document.output_sha256, 64) ||
         typeof document.trace_available !== 'boolean' || !Array.isArray(document.entries) || document.entries.length > 10000 ||
@@ -73,7 +74,7 @@ function createConfidentialOverview(batchId) {
   function add(document) {
     if (!closed(document, 'document_id,name,revision,output_sha256,markdown,entities') ||
         !validId(document.document_id, 32) || ids.has(document.document_id) || documents.length >= 200 ||
-        !text(document.name) || document.name.length > 1024 || /[\u0000-\u001f\u007f]/u.test(document.name) ||
+        !text(document.name) || document.name.length > MAX_RESULT_NAME_CHARS || /[\u0000-\u001f\u007f]/u.test(document.name) ||
         !Number.isSafeInteger(document.revision) || document.revision < 0 || document.revision > 1000 ||
         !validId(document.output_sha256, 64) || typeof document.markdown !== 'string' ||
         !document.markdown.isWellFormed() || document.markdown.length > RESOURCE_LIMITS.MAX_TEXT_CHARS ||

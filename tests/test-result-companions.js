@@ -312,22 +312,22 @@ test('hardlinked private companion is not accepted as immutable private evidence
   code(() => f.store.readResultCompanions(f.batchId, plan.binding_sha256, selection, files));
 });
 async function run() {
-  await testAsync('v3 generation publishes three complete companions after MD bodies without fake approval', async () => {
+  await testAsync('v4 generation publishes three complete companions after MD bodies without fake approval', async () => {
     const f = fixture(); f.edit(); const result = await f.publish(), id = result.result_publication.generation_id;
     const privateOp = JSON.parse(fs.readFileSync(path.join(data, 'document-reviews', f.batchId, `results-generation-${id}.json`)));
-    assert.equal(privateOp.schema, 'datasecure-results-generation/3'); assert.equal(privateOp.files.length, 2);
+    assert.equal(privateOp.schema, 'datasecure-results-generation/4'); assert.equal(privateOp.files.length, 2);
     assert.equal(companions.validConfidentialDescriptor(privateOp.confidential), true);
     const target = f.target(privateOp); assert.equal(fs.readdirSync(target).length, 3);
     assert.deepEqual(fs.readdirSync(path.join(target, 'Vertraulich')).sort(), ['Dateizuordnung.csv', 'Pseudonym-Zuordnung.txt', 'Pseudonym-Zuordnung.xlsx']);
-    assert.match(fs.readFileSync(path.join(target, companions.FILENAME_MAPPING_PATH), 'utf8'), /Dokument_01.md/u);
+    assert.match(fs.readFileSync(path.join(target, companions.FILENAME_MAPPING_PATH), 'utf8'), /Initial-1\.md/u);
     assert.deepEqual(f.calls.filter(call => call.command === 'write_body' && call.body.final_chunk).map(call => call.body.index), [0, 1, 2, 3, 4]);
     assert.equal(f.store.list(f.batchId).documents[0].approved, false, 'publication never creates an approval');
     const receipt = JSON.parse(fs.readFileSync(path.join(data, 'document-reviews', f.batchId, `results-generation-${id}-complete.json`)));
-    assert.equal(receipt.schema, 'datasecure-results-generation-complete/3'); assert.equal(receipt.files.length, 5);
+    assert.equal(receipt.schema, 'datasecure-results-generation-complete/4'); assert.equal(receipt.files.length, 5);
     assert.equal(receipt.confidential_directory.path, path.join(target, 'Vertraulich'));
     assert.equal((await f.resolve()).local_path, target);
   });
-  await testAsync('lost publication reply resumes identical v3 operation, not a second generation', async () => {
+  await testAsync('lost publication reply resumes identical v4 operation, not a second generation', async () => {
     const f = fixture(); f.edit(); f.controls.losePublish = true;
     await assert.rejects(() => f.publish(), error => error.code === 'STANDALONE_IPC_TIMEOUT');
     const result = await f.publish(createDocumentReviewStore(f.options));
@@ -342,7 +342,7 @@ async function run() {
     assert.ok(fs.readFileSync(path.join(data, 'document-reviews', f.batchId, `results-generation-${legacy.operation_id}.json`)).equals(before));
     assert.equal(fs.readdirSync(path.join(data, 'document-reviews', f.batchId)).some(name => name.startsWith('companions-')), false);
   });
-  await testAsync('confirmed legacy v1 remains unchanged on no-op, actual new save creates separate v3 generation', async () => {
+  await testAsync('confirmed legacy v1 remains unchanged on no-op, actual new save creates separate v4 generation', async () => {
     const f = fixture(); f.edit(); const legacy = f.seedLegacy(true), before = fs.readdirSync(f.target(legacy));
     assert.equal((await f.resolve()).local_path, f.target(legacy));
     assert.equal(fs.existsSync(path.join(f.target(legacy), 'Vertraulich')), false);

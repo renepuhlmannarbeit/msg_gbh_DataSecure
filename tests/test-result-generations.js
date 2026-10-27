@@ -43,11 +43,12 @@ let serial = 0;
 // initialResultPublication dependency. It is also the fixture contract used by
 // the separate real Node->Rust pipe test (which has its own native callback).
 async function fixture({ mode = 'markdown-only', count = 2, legacy = false, separateFolders = false, sourceFolders = null,
-  legacyLayout = false, legacyCompanions = false, deferInitial = false, originalSource = null } = {}) {
+  legacyLayout = false, legacyCompanions = false, deferInitial = false, originalSource = null,
+  sourceLabels = null, outputNamingMode = 'neutral', reverseDocumentIds = false } = {}) {
   const batchId = (++serial).toString(16).padStart(64, '0'), results = path.join(root, `results-${serial}`);
   fs.mkdirSync(results); process.env.EU_PRIVACY_RESULT_ROOT = results;
   const state = { schema: 'datasecure-batch/7', token: batchId, product_channel: 'standalone', processing_mode: mode,
-    standalone_document_review: true, content_options: content, profile: 'general', output_naming_mode: 'neutral',
+    standalone_document_review: true, content_options: content, profile: 'general', output_naming_mode: outputNamingMode,
     created_at: new Date(Date.UTC(2026, 9, 20, 0, 0, serial)).toISOString(), items: [] };
   const operations = new Map(), calls = [], controls = {}, original = originalSource || 'Name: Anna Beispiel\nAnna Beispiel hat 42 Projekte.\nE-Mail: anna@example.invalid';
   const nativeIdentity = { volume: '1', object: '2', created_ns: '3' };
@@ -82,7 +83,15 @@ async function fixture({ mode = 'markdown-only', count = 2, legacy = false, sepa
       if (!record.directory) {
         fs.mkdirSync(target(op), { recursive: true });
         if (op.confidential) fs.mkdirSync(path.join(target(op), 'Vertraulich'));
-        for (const [index, file] of payloadFiles(op).entries()) fs.writeFileSync(path.join(target(op), file.name), record.bodies[index], { flag: 'wx' });
+        for (const [index, file] of payloadFiles(op).entries()) {
+          const filename = path.resolve(target(op), file.name), relative = path.relative(target(op), filename);
+          assert.ok(relative && relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+          assert.ok(!file.name.includes('\\') && file.name.split('/').every(part => part && part !== '.' && part !== '..'));
+          // Explicit native model only: create exactly announced parents. The
+          // separate real Node->Rust test proves native ownership/inventory.
+          fs.mkdirSync(path.dirname(filename), { recursive: true });
+          fs.writeFileSync(filename, record.bodies[index], { flag: 'wx' });
+        }
         record.directory = bindDirectory(target(op)); record.status = 'completed';
       }
       if (controls.losePublish) { controls.losePublish = false; throw Object.assign(Error('lost native publish reply'), { code: 'STANDALONE_IPC_TIMEOUT' }); }
@@ -101,8 +110,8 @@ async function fixture({ mode = 'markdown-only', count = 2, legacy = false, sepa
   const options = { dataRoot: data, controlOwnerPid: process.pid, resultRoot: () => results, nativeBinding: () => binding, nativeExport };
   const store = createDocumentReviewStore(options);
   for (let index = 0; index < count; index++) {
-    const id = (serial * 100 + index + 1).toString(16).padStart(32, '0');
-    const sourceLabel = `${sourceFolders?.[index] || (separateFolders ? `folder-${index + 1}` : 'nested')}/Quelle-${index + 1}.txt`;
+    const id = (serial * 100 + (reverseDocumentIds ? count - index : index + 1)).toString(16).padStart(32, '0');
+    const sourceLabel = sourceLabels?.[index] || `${sourceFolders?.[index] || (separateFolders ? `folder-${index + 1}` : 'nested')}/Quelle-${index + 1}.txt`;
     const item = { id, name: sourceLabel, source_label: sourceLabel,
       sha256: sha(original), status: 'released' };
     state.items.push(item);
@@ -253,6 +262,53 @@ function payloadFiles(op) {
   return [...op.files, ...(op.confidential ? require('../plugins/data-secure/server/standalone/result-companions').confidentialFiles(op.confidential)
     .map(({ key, name }) => ({ name, ...op.confidential[key] })) : [])];
 }
+async function seedHistoricalGeneration(f, version) {
+  // Explicit frozen /1-/3 protocol fixture with genuine private revisions and
+  // companion bodies, not a product migration or a native Rust claim.
+  const mode = f.state.processing_mode;
+  const selection = f.store.list(f.batchId).documents.map(({ document_id, revision, output_sha256 }) =>
+    ({ document_id, revision, output_sha256 })).sort((a, b) => a.document_id.localeCompare(b.document_id));
+  const names = selection.map((_row, index) => mode === 'markdown-only' ? `Quelle-${index + 1}.md` : `Dokument_${String(index + 1).padStart(2, '0')}.md`);
+  const bodies = selection.map(row => Buffer.from(f.store.chunk(f.batchId, row.document_id, row.revision, 0).markdown));
+  const run = path.join(data, 'document-reviews', f.batchId);
+  let prepared;
+  if (version > 1) {
+    prepared = f.store.prepareResultCompanions(f.batchId, selection, names.map((name, index) => ({ name, sha256: selection[index].output_sha256 })));
+    if (version === 2) {
+      const source = JSON.parse(fs.readFileSync(path.join(run, `companions-${prepared.binding_sha256}.json`)));
+      const { workbook: _workbook, ...confidential } = source.confidential;
+      const legacy = { ...source, schema: 'datasecure-result-companions/1', confidential }, binding = sha(JSON.stringify(legacy));
+      for (const [role, extension] of [['filename_mapping', 'csv'], ['identities', 'txt']])
+        fs.copyFileSync(path.join(run, `companions-${prepared.binding_sha256}-${role}.${extension}`), path.join(run, `companions-${binding}-${role}.${extension}`), fs.constants.COPYFILE_EXCL);
+      fs.writeFileSync(path.join(run, `companions-${binding}.json`), JSON.stringify(legacy), { flag: 'wx', mode: 0o600 });
+      prepared = { binding_sha256: binding, confidential };
+    }
+  }
+  const vector = { schema: `datasecure-results-vector/${version}`, batch_id: f.batchId, processing_mode: mode,
+    initial_binding_sha256: f.bound.binding_sha256, selection,
+    ...(prepared ? { companion_binding_sha256: prepared.binding_sha256, confidential: prepared.confidential } : {}) };
+  const operationId = sha(JSON.stringify(vector)).slice(0, 32);
+  const op = { schema: `datasecure-results-generation/${version}`, batch_id: f.batchId, operation_id: operationId,
+    publication_role: 'results', processing_mode: mode, selection, initial_binding_sha256: f.bound.binding_sha256,
+    root: f.results, binding: f.options.nativeBinding(), files: names.map((name, index) =>
+      ({ name, bytes: bodies[index].length, sha256: [...Buffer.from(selection[index].output_sha256, 'hex')] })),
+    sequence: 1, parent_generation_id: null,
+    ...(prepared ? { companion_binding_sha256: prepared.binding_sha256, confidential: prepared.confidential } : {}) };
+  op.request_sha256 = sha(JSON.stringify(op));
+  const filename = path.join(run, `results-generation-${operationId}.json`);
+  fs.writeFileSync(filename, JSON.stringify(op), { flag: 'wx', mode: 0o600 });
+  const native = { batch_id: f.batchId, operation_id: operationId, processing_mode: mode, request_sha256: op.request_sha256,
+    publication_role: 'results', binding: op.binding, files: op.files, ...(prepared ? { confidential: prepared.confidential } : {}) };
+  if (prepared) {
+    const values = f.store.readResultCompanions(f.batchId, prepared.binding_sha256, selection,
+      names.map((name, index) => ({ name, sha256: selection[index].output_sha256 })));
+    for (const { key } of require('../plugins/data-secure/server/standalone/result-companions').confidentialFiles(prepared.confidential)) bodies.push(values[key]);
+  }
+  for (const [index, body] of bodies.entries())
+    assert.equal(await f.options.nativeExport(native, 'write_body', { index, offset: 0, hex: body.toString('hex'), final_chunk: true }), 'staged');
+  assert.equal(await f.options.nativeExport(native, 'publish'), 'completed');
+  return { op, filename, bodies };
+}
 const rejects = (action, code) => assert.rejects(action, error => !code || error.code === code);
 function sameByteSwap(folder) {
   const old = path.join(root, `retired-${serial}-${crypto.randomBytes(6).toString('hex')}`);
@@ -305,12 +361,12 @@ function metadataScope(label) {
   const directory = fs.mkdtempSync(path.join(root, `${label}-`));
   return { directory, filename: putMetadata(directory) };
 }
-function assertGenerationReceiptInventory(receiptBytes, mode, count, folder) {
+const initialName = (fixture, index) => fixture.bound.files.find(file => file.document_id === fixture.state.items[index].id).name;
+function assertGenerationReceiptInventory(receiptBytes, mode, initialFiles, folder) {
   const receipt = JSON.parse(receiptBytes), anonymize = mode === 'markdown-and-anonymize';
-  const expected = Array.from({ length: count }, (_, index) => anonymize
-    ? `Dokument_${String(index + 1).padStart(2, '0')}.md` : `Quelle-${index + 1}.md`);
+  const expected = initialFiles.map(file => file.name);
   if (anonymize) expected.push('Vertraulich/Dateizuordnung.csv', 'Vertraulich/Pseudonym-Zuordnung.txt', 'Vertraulich/Pseudonym-Zuordnung.xlsx');
-  assert.equal(receipt.schema, `datasecure-results-generation-complete/${anonymize ? 3 : 1}`);
+  assert.equal(receipt.schema, 'datasecure-results-generation-complete/4');
   assert.deepEqual(receipt.files.map(file => file.name).sort(), expected.sort(), 'receipt has exactly the MD and required companion roles, never OS metadata');
   for (const file of receipt.files) assert.equal(file.sha256, sha(fs.readFileSync(path.join(folder, file.name))));
   if (anonymize) assert.equal(receipt.confidential_directory.path, path.join(folder, 'Vertraulich'));
@@ -407,6 +463,99 @@ function privateRunPins(f) {
   });
 }
 async function run() {
+  test('relative-name planner keeps exact spellings, closed IDs, portable names and independent tree bounds', () => {
+    const { initialNamesForSelection, inspectRelativeNames, initialResultNamePlan } = require('../plugins/data-secure/server/core/relative-result-layout');
+    const ids = ['1'.repeat(32), '2'.repeat(32)];
+    const initial = [{ document_id: ids[1], name: 'A/B/Bericht.md' }, { document_id: ids[0], name: 'C/Bericht.md' }];
+    assert.deepEqual(initialNamesForSelection(initial, ids.map(document_id => ({ document_id }))), ['C/Bericht.md', 'A/B/Bericht.md']);
+    assert.deepEqual(inspectRelativeNames(initial.map(row => row.name)).directories, ['A', 'C', 'A/B']);
+    assert.ok(inspectRelativeNames(['Äpfel/Gru\u0308ße.md', 'Vertraulich/Kontext.md']));
+    assert.ok(inspectRelativeNames([`${'a/'.repeat(33)}x.md`]), 'do not impose the new scanner depth limit on old initial names');
+    assert.equal(inspectRelativeNames(['Vertraulich/Kontext.md'], true), null);
+    assert.ok(inspectRelativeNames(['Vertraulich (Quelle 2)/Kontext.md'], true));
+    for (const name of ['/A.md', '../A.md', 'A/../B.md', './A.md', 'A//B.md', 'C:/A.md', 'A\\B.md', 'A/NUL/B.md',
+      'A/COM¹/B.md', 'A/.DS_Store/B.md', 'A/Ende./B.md', 'A/Ende /B.md', 'A/\u202eB.md', `A/${'中'.repeat(86)}.md`,
+      `${'a/'.repeat(512)}B.md`]) assert.equal(inspectRelativeNames([name]), null, name);
+    for (const names of [['Ä.md', 'A\u0308.md'], ['A/B.md', 'a/C.md'], ['A.md', 'A.md/B.md']])
+      assert.equal(inspectRelativeNames(names), null);
+    for (const selection of [[{ document_id: ids[0] }], [{ document_id: ids[0] }, { document_id: ids[0] }],
+      [{ document_id: ids[0] }, { document_id: '3'.repeat(32) }]])
+      assert.throws(() => initialNamesForSelection(initial, selection), { code: 'RESULT_PUBLICATION_CONFLICT' });
+    assert.throws(() => initialNamesForSelection([initial[0], initial[0]], ids.map(document_id => ({ document_id }))),
+      { code: 'RESULT_PUBLICATION_CONFLICT' });
+    const longName = ['Vertraulich', ...Array(4).fill('a'.repeat(200)), 'x'.repeat(205) + '.md'].join('/');
+    assert.equal(longName.length, 1024);
+    const plan = initialResultNamePlan({ schema: 'datasecure-initial-results/1', processing_mode: 'markdown-and-anonymize',
+      files: [{ document_id: ids[0], name: longName }] }, [{ document_id: ids[0] }], true);
+    assert.ok(plan.names[0].length > 1024 && plan.names[0].length <= 1056);
+    assert.deepEqual(plan.rebases, [{ document_id: ids[0], initial_name: longName, result_name: plan.names[0] }]);
+    assert.equal(plan.names[0].split('/')[0], 'Vertraulich (Quelle)');
+    const companion = require('../plugins/data-secure/server/standalone/result-companions');
+    const files = [{ name: plan.names[0], sha256: sha('text') }];
+    assert.equal(companion.validResultCompanionFiles(files), false, 'initial path bound stays1024');
+    assert.equal(companion.validCorrectionCompanionFiles(files), true);
+    assert.ok(companion.buildFilenameMapping(['source.txt'], files).toString('utf8').includes(plan.names[0]));
+    const overview = require('../plugins/data-secure/server/standalone/confidential-overview').createConfidentialOverview('a'.repeat(64));
+    overview.add({ document_id: ids[0], name: plan.names[0], revision: 1, output_sha256: sha('text'), markdown: 'text', entities: null });
+    const finished = overview.finish();
+    assert.ok(finished.text.includes(plan.names[0]));
+    assert.equal(require('../plugins/data-secure/server/standalone/confidential-workbook').renderConfidentialWorkbook(finished.value).subarray(0, 2).toString(), 'PK');
+  });
+  for (const [label, mode, outputNamingMode] of [
+    ['Markdown', 'markdown-only', 'neutral'],
+    ['anonymous neutral', 'markdown-and-anonymize', 'neutral'],
+    ['anonymous source names', 'markdown-and-anonymize', 'source-with-suffix']
+  ]) await testAsync(`${label}: a new correction preserves initial relative names by document ID`, async () => {
+    const f = await fixture({ mode, outputNamingMode, reverseDocumentIds: true,
+      sourceLabels: ['A/B/Bericht.txt', 'C/Bericht.txt'] });
+    const expected = new Map(f.bound.files.map(file => [file.document_id, file.name]));
+    assert.equal(expected.size, 2);
+    assert.ok([...expected.values()].every(name => name.includes('/')));
+    const initialFiles = fileSnapshot(f.bound.files.map(file => path.join(f.bound.directory.path, file.name)));
+    f.edit(0);
+    const result = await f.publish(), folder = f.target(result);
+    const plan = JSON.parse(fs.readFileSync(path.join(data, 'document-reviews', f.batchId,
+      `results-generation-${result.result_publication.generation_id}.json`)));
+    assert.notEqual(plan.selection[0].document_id, f.state.items[0].id, 'initial order intentionally differs from the revision vector');
+    const actual = new Map(plan.selection.map((row, index) => [row.document_id, plan.files[index].name]));
+    assert.deepEqual([...actual].sort(), [...expected].sort(), 'the independently bound initial ID/name map survives the correction');
+    assert.equal(plan.schema, 'datasecure-results-generation/4');
+    for (const [index, row] of plan.selection.entries()) {
+      const name = expected.get(row.document_id);
+      assert.equal(sha(fs.readFileSync(path.join(folder, name))), row.output_sha256);
+      assert.equal(Buffer.from(plan.files[index].sha256).toString('hex'), row.output_sha256, 'current content hash, not the initial hash');
+    }
+    if (mode === 'markdown-and-anonymize') {
+      const csv = fs.readFileSync(path.join(folder, 'Vertraulich/Dateizuordnung.csv'), 'utf8');
+      for (const name of expected.values()) assert.ok(csv.includes(name), 'confidential mapping names match actual relative results');
+    }
+    assertFileSnapshot(initialFiles);
+    assert.equal((await f.resolve()).local_path, folder);
+  });
+  for (const version of [1, 2, 3]) await testAsync(`frozen generation /${version}: lost reply resumes exact old intent, no-op preserves bytes, only a real edit uses /4`, async () => {
+    const f = await fixture({ mode: version === 1 ? 'markdown-only' : 'markdown-and-anonymize' });
+    f.edit(); const historical = await seedHistoricalGeneration(f, version);
+    const intent = fs.readFileSync(historical.filename);
+    const resumed = await f.publish(f.reload());
+    assert.equal(resumed.result_publication.generation_id, historical.op.operation_id);
+    assert.deepEqual(fs.readFileSync(historical.filename), intent);
+    const run = path.join(data, 'document-reviews', f.batchId);
+    const receiptFile = path.join(run, `results-generation-${historical.op.operation_id}-complete.json`);
+    const receipt = JSON.parse(fs.readFileSync(receiptFile));
+    assert.equal(receipt.schema, `datasecure-results-generation-complete/${version}`);
+    assert.equal(Object.hasOwn(receipt, 'directories'), false);
+    assert.equal(Object.hasOwn(historical.op, 'relative_layout'), false);
+    const files = [historical.filename, receiptFile, ...payloadFiles(historical.op).map(file => path.join(f.target(resumed), file.name))];
+    const before = fileSnapshot(files), calls = f.calls.length;
+    assert.deepEqual(await f.publish(f.reload()), resumed); assert.equal(f.calls.length, calls);
+    f.edit(1); const next = await f.publish(f.reload());
+    assert.notEqual(next.result_publication.generation_id, historical.op.operation_id);
+    const plan = JSON.parse(fs.readFileSync(path.join(run, `results-generation-${next.result_publication.generation_id}.json`)));
+    assert.equal(plan.schema, 'datasecure-results-generation/4');
+    assert.equal(plan.parent_generation_id, historical.op.operation_id);
+    assert.deepEqual(plan.files.map(file => file.name).sort(), f.bound.files.map(file => file.name).sort());
+    assertFileSnapshot(before);
+  });
   await testAsync('batch decision rejects unexpected own symbol and inherited request fields before publication', async () => {
     const f = await fixture({ mode: 'markdown-only', count: 1 });
     const input = metadataInput(f, 'approve', 'batch');
@@ -604,7 +753,7 @@ async function run() {
       assert.equal(fresh.list(f.batchId).result_publication.state, 'pending');
       const next = await f.publish(fresh);
       assert.equal(next.result_publication.state, 'current');
-      const output = fs.readFileSync(path.join(f.target(next), 'Dokument_01.md'), 'utf8');
+      const output = fs.readFileSync(path.join(f.target(next), initialName(f, 0)), 'utf8');
       assert.doesNotMatch(output, /Qvx|Qvy/u); assert.match(output, /HTTP\/2 31415/u);
     } finally { fs.readFileSync = read; }
     assert.equal(oldLeafReads, 0);
@@ -763,7 +912,7 @@ async function run() {
     assert.equal(f.store.list(f.batchId).result_publication.state, 'current');
     assert.equal(f.store.list(f.batchId).result_publication.count, 2);
     assert.ok(fs.readFileSync(receipt).equals(receiptBytes), 'OS metadata cannot be added to an existing private receipt');
-    assertGenerationReceiptInventory(receiptBytes, mode, 2, firstFolder);
+    assertGenerationReceiptInventory(receiptBytes, mode, f.bound.files, firstFolder);
     f.edit(1); const next = await f.publish(), nextFolder = f.target(next);
     assert.notEqual(next.result_publication.generation_id, first.result_publication.generation_id);
     assert.equal(next.result_publication.count, 2); assert.equal(fs.existsSync(path.join(nextFolder, '.DS_Store')), false);
@@ -915,15 +1064,30 @@ async function run() {
     assert.equal(f.calls.length, 0, 'initial/list never invoke correction publication');
     f.edit(); const result = await f.publish();
     assertGenerationReceiptInventory(fs.readFileSync(path.join(data, 'document-reviews', f.batchId,
-      `results-generation-${result.result_publication.generation_id}-complete.json`)), 'markdown-only', 2, f.target(result));
+      `results-generation-${result.result_publication.generation_id}-complete.json`)), 'markdown-only', f.bound.files, f.target(result));
   });
   for (const sourceFolder of ['Vertraulich', 'vertraulich', 'VERTRAULICH']) for (const mode of ['markdown-only', 'markdown-and-anonymize'])
-  await testAsync(`companion-free initial ${mode} keeps legitimate ${sourceFolder} source folders readable`, async () => {
+  await testAsync(`companion-free initial ${mode} keeps legitimate ${sourceFolder} source folders readable and correctable`, async () => {
     const f = await fixture({ mode, legacyLayout: mode === 'markdown-and-anonymize', sourceFolders: [sourceFolder, sourceFolder] });
     assert.equal(f.bound.schema, 'datasecure-initial-results/1');
     assert.ok(f.bound.files.every(file => file.name.startsWith(sourceFolder + '/')));
     assert.equal((await f.resolve()).local_path, f.bound.directory.path);
     assert.equal(f.store.list(f.batchId).result_publication.state, 'initial');
+    const before = fileSnapshot(f.bound.files.map(file => path.join(f.bound.directory.path, file.name)));
+    f.edit(); const result = await f.publish();
+    const op = JSON.parse(fs.readFileSync(path.join(data, 'document-reviews', f.batchId,
+      `results-generation-${result.result_publication.generation_id}.json`)));
+    assert.equal(op.name_rule, 'initial-names-reserved-confidential/1');
+    const expectedNames = f.bound.files.map(file => mode === 'markdown-only' ? file.name :
+      'Vertraulich (Quelle)/' + file.name.split('/').slice(1).join('/'));
+    assert.deepEqual(op.files.map(file => file.name).sort(), expectedNames.sort());
+    assert.deepEqual(op.name_rebases, mode === 'markdown-only' ? [] : op.selection.map((row, index) =>
+      ({ document_id: row.document_id, initial_name: f.bound.files.find(file => file.document_id === row.document_id).name,
+        result_name: op.files[index].name })));
+    if (mode !== 'markdown-only') for (const name of expectedNames)
+      assert.ok(fs.readFileSync(path.join(f.target(result), 'Vertraulich/Dateizuordnung.csv'), 'utf8').includes(name));
+    assertFileSnapshot(before);
+    assert.equal((await f.resolve()).local_path, f.target(result));
   });
   for (const legacyCompanions of [true, false]) await testAsync(`companion-bearing initial /${legacyCompanions ? 2 : 3} never admits a reserved MD namespace collision`, async () => {
     const f = await fixture({ mode: 'markdown-and-anonymize', legacyCompanions });
@@ -999,11 +1163,12 @@ async function run() {
     assert.match(fs.readFileSync(mapping, 'utf8'), /Quelle-1/u); assert.equal(f.row(0).approved, false);
     f.edit(); const result = await f.publish();
     assert.equal(result.result_publication.count, 2); assert.equal(f.row(0).approved, false);
-    assert.deepEqual(fs.readdirSync(f.target(result)).sort(), ['Dokument_01.md', 'Dokument_02.md', 'Vertraulich']);
+    assert.deepEqual(fs.readdirSync(f.target(result)).sort(), ['Vertraulich', 'nested']);
     assertGenerationReceiptInventory(fs.readFileSync(path.join(data, 'document-reviews', f.batchId,
-      `results-generation-${result.result_publication.generation_id}-complete.json`)), 'markdown-and-anonymize', 2, f.target(result));
+      `results-generation-${result.result_publication.generation_id}-complete.json`)), 'markdown-and-anonymize', f.bound.files, f.target(result));
     const nextCsv = fs.readFileSync(path.join(f.target(result), 'Vertraulich/Dateizuordnung.csv'), 'utf8');
-    assert.match(nextCsv, /Dokument_01\.md/u); assert.doesNotMatch(nextCsv, /Dokument-001-anonymisiert/u);
+    for (const file of f.bound.files) assert.ok(nextCsv.includes(file.name));
+    assert.doesNotMatch(nextCsv, /Dokument_01\.md/u);
     assert.equal(fs.readFileSync(path.join(f.bound.directory.path, 'Vertraulich/Dateizuordnung.csv'), 'utf8'), csv);
   });
   await testAsync('source Vertraulich roots cannot collide with confidential output namespace, including case variants', async () => {
@@ -1015,6 +1180,27 @@ async function run() {
     assert.deepEqual(fs.readdirSync(path.join(f.bound.directory.path, 'Vertraulich')).sort(),
       ['Dateizuordnung.csv', 'Pseudonym-Zuordnung.txt', 'Pseudonym-Zuordnung.xlsx']);
     assert.equal((await f.resolve()).local_path, f.bound.directory.path);
+    const before = fileSnapshot(f.bound.files.map(file => path.join(f.bound.directory.path, file.name)));
+    f.edit(); const result = await f.publish();
+    const op = JSON.parse(fs.readFileSync(path.join(data, 'document-reviews', f.batchId,
+      `results-generation-${result.result_publication.generation_id}.json`)));
+    assert.deepEqual(op.files.map(file => file.name).sort(), f.bound.files.map(file => file.name).sort());
+    assert.deepEqual(op.name_rebases, [], 'a new initial layout already reserved its source roots');
+    assertFileSnapshot(before);
+    assert.equal((await f.resolve()).local_path, f.target(result));
+  });
+  await testAsync('legacy reserved source root uses an explicitly bound unused replacement without changing other roots or leaves', async () => {
+    const f = await fixture({ mode: 'markdown-and-anonymize', legacyLayout: true, count: 3,
+      sourceFolders: ['Vertraulich', 'Vertraulich (Quelle)', 'Vertraulich'] });
+    const oldFiles = fileSnapshot(f.bound.files.map(file => path.join(f.bound.directory.path, file.name)));
+    f.edit(); const result = await f.publish();
+    const op = JSON.parse(fs.readFileSync(path.join(data, 'document-reviews', f.batchId,
+      `results-generation-${result.result_publication.generation_id}.json`)));
+    assert.equal(op.files[0].name, 'Vertraulich (Quelle 2)/Dokument-001-anonymisiert.md');
+    assert.equal(op.files[1].name, 'Vertraulich (Quelle)/Dokument-002-anonymisiert.md');
+    assert.equal(op.files[2].name, 'Vertraulich (Quelle 2)/Dokument-003-anonymisiert.md');
+    assert.equal(op.name_rebases.length, 2); assertFileSnapshot(oldFiles);
+    assert.equal((await f.resolve()).local_path, f.target(result));
   });
   await testAsync('old /1 anonymization stays immutable; an explicit later correction gains version-bound companions', async () => {
     const f = await fixture({ mode: 'markdown-and-anonymize', legacyLayout: true });
@@ -1043,7 +1229,7 @@ async function run() {
       assert.equal(f.calls.length, 0, 'initial reads/completed worker no-op never invoke a correction transaction');
     }
   });
-  await testAsync('historical initial /2: partial MD publication resumes old two-body plan, then a real edit publishes only a new /3 generation', async () => {
+  await testAsync('historical initial /2: partial MD publication resumes old two-body plan, then a real edit publishes only a new /4 generation', async () => {
     const f = await fixture({ mode: 'markdown-and-anonymize', legacyCompanions: true, deferInitial: true });
     const historicalBodies = fileSnapshot([f.historical.planFile, ...f.historical.privateFiles]);
     const blocked = f.historical.privateFiles.find(file => file.endsWith('-identities.txt'));
@@ -1083,11 +1269,11 @@ async function run() {
       ['Dateizuordnung.csv', 'Pseudonym-Zuordnung.txt', 'Pseudonym-Zuordnung.xlsx']);
     const savedGeneration = JSON.parse(fs.readFileSync(path.join(data, 'document-reviews', f.batchId,
       `results-generation-${result.result_publication.generation_id}.json`)));
-    assert.equal(savedGeneration.schema, 'datasecure-results-generation/3');
+    assert.equal(savedGeneration.schema, 'datasecure-results-generation/4');
     assertGenerationReceiptInventory(fs.readFileSync(path.join(data, 'document-reviews', f.batchId,
-      `results-generation-${result.result_publication.generation_id}-complete.json`)), 'markdown-and-anonymize', 2, folder);
+      `results-generation-${result.result_publication.generation_id}-complete.json`)), 'markdown-and-anonymize', proof.files, folder);
     assert.equal(fs.readFileSync(path.join(folder, 'Vertraulich/Pseudonym-Zuordnung.xlsx')).readUInt32LE(0), 0x04034b50);
-    assert.match(fs.readFileSync(path.join(folder, 'Dokument_01.md'), 'utf8'), /\[MANUAL_REDACTION\] Projekte/u);
+    assert.match(fs.readFileSync(path.join(folder, proof.files.find(file => file.document_id === f.state.items[0].id).name), 'utf8'), /\[MANUAL_REDACTION\] Projekte/u);
     assertFileSnapshot(oldFiles); assert.deepEqual(fs.readdirSync(proof.directory.path, { recursive: true }).sort(), oldInventory);
     assert.equal(fs.existsSync(path.join(proof.directory.path, 'Vertraulich/Pseudonym-Zuordnung.txt')), false);
     assert.equal(fs.existsSync(path.join(proof.directory.path, 'Vertraulich/Pseudonym-Zuordnung.xlsx')), false);
@@ -1118,7 +1304,7 @@ async function run() {
     assert.notEqual(f.target(next), folder);
     assert.deepEqual(fs.readdirSync(folder, { recursive: true }).sort(), before);
     assertGenerationReceiptInventory(fs.readFileSync(path.join(data, 'document-reviews', f.batchId,
-      `results-generation-${next.result_publication.generation_id}-complete.json`)), 'markdown-and-anonymize', 2, f.target(next));
+      `results-generation-${next.result_publication.generation_id}-complete.json`)), 'markdown-and-anonymize', f.bound.files, f.target(next));
   });
   await testAsync('real new-layout identity opener returns explicit private scope without publication or a false warning', async () => {
     const f = await fixture({ mode: 'markdown-and-anonymize' });
@@ -1152,8 +1338,9 @@ async function run() {
     assert.equal(result.result_publication.state, 'current'); assert.equal(result.result_publication.count, 2);
     assert.ok(!JSON.stringify(result).includes(f.results)); assert.ok(!JSON.stringify(result).includes('identity'));
     assert.ok(f.store.list(f.batchId).documents.every(row => !row.approved));
-    const target = f.target(result); assert.equal(fs.readdirSync(target).length, 2);
-    assert.match(fs.readFileSync(path.join(target, 'Quelle-1.md'), 'utf8'), /43 Projekte/u);
+    const target = f.target(result);
+    assert.equal(fs.readdirSync(target, { recursive: true }).filter(name => fs.statSync(path.join(target, name)).isFile()).length, 2);
+    assert.match(fs.readFileSync(path.join(target, initialName(f, 0)), 'utf8'), /43 Projekte/u);
     for (const [index, file] of f.bound.files.entries()) assert.ok(fs.readFileSync(path.join(f.bound.directory.path, file.name)).equals(initialBytes[index]));
     assert.deepEqual(await f.publish(f.reload()), result, 'same vector reuses one operation after restart');
     assert.equal(f.operations.size, 1); assert.equal(f.calls.filter(row => row.command === 'publish').length, 1);
@@ -1162,10 +1349,10 @@ async function run() {
   });
   await testAsync('second edit creates a new whole generation and preserves old bytes, opener follows only current', async () => {
     const f = await fixture(); f.edit(); const first = await f.publish(), firstTarget = f.target(first);
-    const firstBytes = fs.readFileSync(path.join(firstTarget, 'Quelle-1.md'));
+    const firstBytes = fs.readFileSync(path.join(firstTarget, initialName(f, 0)));
     f.edit(1); await rejects(() => f.resolve(), 'RESULT_PUBLICATION_PENDING');
     const second = await f.publish(); assert.notEqual(first.result_publication.generation_id, second.result_publication.generation_id);
-    assert.ok(fs.readFileSync(path.join(firstTarget, 'Quelle-1.md')).equals(firstBytes));
+    assert.ok(fs.readFileSync(path.join(firstTarget, initialName(f, 0))).equals(firstBytes));
     assert.equal((await f.resolve()).local_path, f.target(second)); assert.equal(f.operations.size, 2);
   });
   for (const phase of ['initial', 'generation']) await testAsync(`completed ${phase}: timestamps, edits, deleted leaves and Office extras require no public-leaf IO`, async () => {
@@ -1204,7 +1391,8 @@ async function run() {
     assert.ok(fs.readdirSync(f.target(next), { recursive: true }).filter(name => name.endsWith('.md')).every(name =>
       !fs.readFileSync(path.join(f.target(next), name), 'utf8').includes('MANUAL USER EDIT')));
   });
-  for (const field of ['files-missing', 'files-extra', 'name', 'digest', 'identity-number', 'identity-extra', 'identity-missing', 'directory-chain'])
+  for (const field of ['files-missing', 'files-extra', 'name', 'digest', 'identity-number', 'identity-extra', 'identity-missing', 'directory-chain',
+    'subdirectory-missing', 'subdirectory-extra', 'subdirectory-identity'])
   await testAsync(`completed private receipt ${field} remains a conflict before any public authority`, async () => {
     const f = await fixture(); f.edit(); const result = await f.publish(), id = result.result_publication.generation_id;
     const file = path.join(data, 'document-reviews', f.batchId, `results-generation-${id}-complete.json`), receipt = JSON.parse(fs.readFileSync(file));
@@ -1216,10 +1404,30 @@ async function run() {
     if (field === 'identity-extra') receipt.files[0].identity.extra = true;
     if (field === 'identity-missing') delete receipt.files[0].identity.ctime;
     if (field === 'directory-chain') receipt.directory.chain.push(receipt.directory.chain.at(-1));
+    if (field === 'subdirectory-missing') receipt.directories.pop();
+    if (field === 'subdirectory-extra') receipt.directories.push(receipt.directories[0]);
+    if (field === 'subdirectory-identity') receipt.directories[0].identity.ino = 1;
     fs.writeFileSync(file, JSON.stringify(receipt)); const calls = f.calls.length;
     assert.equal(f.store.list(f.batchId).result_publication.state, 'conflict');
     await rejects(() => f.resolve(), 'RESULT_PUBLICATION_CONFLICT');
     await rejects(() => f.publish(), 'RESULT_PUBLICATION_CONFLICT'); assert.equal(f.calls.length, calls);
+  });
+  await testAsync('malformed generation records and rehashed layout/name-rule substitutions cannot grant native authority', async () => {
+    const f = await fixture(); f.edit(); const result = await f.publish();
+    const filename = path.join(data, 'document-reviews', f.batchId, `results-generation-${result.result_publication.generation_id}.json`);
+    const original = fs.readFileSync(filename), op = JSON.parse(original);
+    for (const replacement of [null, false, 7, 'record', [], { ...op, relative_layout: null },
+      { ...op, name_rule: 'another-rule' }, { ...op, name_rebases: [{ document_id: op.selection[0].document_id, initial_name: 'A.md', result_name: 'B.md' }] }]) {
+      if (replacement && !Array.isArray(replacement) && typeof replacement === 'object') {
+        const { request_sha256: _oldHash, ...bound } = replacement; replacement.request_sha256 = sha(JSON.stringify(bound));
+      }
+      fs.writeFileSync(filename, JSON.stringify(replacement)); const calls = f.calls.length;
+      assert.equal(f.store.list(f.batchId).result_publication.state, 'conflict');
+      await rejects(() => f.resolve(), 'RESULT_PUBLICATION_CONFLICT'); await rejects(() => f.publish(), 'RESULT_PUBLICATION_CONFLICT');
+      assert.equal(f.calls.length, calls);
+    }
+    fs.writeFileSync(filename, original);
+    assert.equal((await f.resolve()).local_path, f.target(result));
   });
   for (const phase of ['initial', 'generation']) await testAsync(`completed ${phase}: unreadable original directory is unavailable, not a content conflict`, async () => {
     const f = await fixture(); let folder = f.bound.directory.path;
@@ -1272,11 +1480,11 @@ async function run() {
   });
   await testAsync('changed prior generation remains user-owned while a new correction comes only from private revisions', async () => {
     const f = await fixture(); f.edit(); const first = await f.publish(); f.edit(1);
-    fs.appendFileSync(path.join(f.target(first), 'Quelle-1.md'), 'changed');
+    fs.appendFileSync(path.join(f.target(first), initialName(f, 0)), 'changed');
     assert.equal(f.store.list(f.batchId).result_publication.state, 'pending');
     const next = await f.publish(); assert.equal(f.operations.size, 2);
-    assert.match(fs.readFileSync(path.join(f.target(first), 'Quelle-1.md'), 'utf8'), /changed$/u);
-    assert.doesNotMatch(fs.readFileSync(path.join(f.target(next), 'Quelle-1.md'), 'utf8'), /changed/u);
+    assert.match(fs.readFileSync(path.join(f.target(first), initialName(f, 0)), 'utf8'), /changed$/u);
+    assert.doesNotMatch(fs.readFileSync(path.join(f.target(next), initialName(f, 0)), 'utf8'), /changed/u);
   });
   for (const tamper of ['root', 'initial_binding_sha256', 'operation_id']) await testAsync(`rehashing a private ${tamper} change cannot redirect or rebind a saved generation`, async () => {
     const f = await fixture(); f.edit(); const result = await f.publish();

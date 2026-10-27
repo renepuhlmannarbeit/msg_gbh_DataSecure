@@ -315,18 +315,7 @@ function neutralAnonymizedOutputNames(items) {
     return parent === '.' ? leaf : `${parent}/${leaf}`;
   });
 }
-function reserveConfidentialDirectory(names) {
-  // Source folders must never merge with the confidential namespace, including
-  // on a case-insensitive/NFC filesystem. Pick one deterministic unused root.
-  const rootNames = new Set(names.map(name => name.split('/')[0].normalize('NFC').toLowerCase()));
-  let replacement = 'Vertraulich (Quelle)', index = 1;
-  while (rootNames.has(replacement.normalize('NFC').toLowerCase())) replacement = `Vertraulich (Quelle ${++index})`;
-  return names.map(name => {
-    const segments = name.split('/');
-    if (segments.length > 1 && segments[0].normalize('NFC').toLowerCase() === 'vertraulich') segments[0] = replacement;
-    return segments.join('/');
-  });
-}
+const { reserveConfidentialDirectory } = require('../core/relative-result-layout');
 function confidentialSelection(record) {
   return record.items.map(item => ({ document_id: item.package_id.slice(3), revision: 0, output_sha256: item.sha256 }));
 }

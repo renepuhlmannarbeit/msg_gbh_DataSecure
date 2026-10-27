@@ -4,6 +4,7 @@
 // ever a native write capability. Legacy exports do not consume this contract.
 const crypto = require('node:crypto');
 const { csvField } = require('../gateway/mapping');
+const { MAX_PATH_CHARS: MAX_CORRECTION_NAME_CHARS } = require('../core/relative-result-layout');
 const DIRECTORY = 'Vertraulich';
 const FILENAME_MAPPING_PATH = `${DIRECTORY}/Dateizuordnung.csv`;
 const LEGACY_IDENTITIES_PATH = `${DIRECTORY}/Personen-Pseudonym-Zuordnung.txt`;
@@ -46,7 +47,13 @@ function confidentialBytes(value) {
   return Object.values(value).reduce((total, file) => total + file.bytes, 0);
 }
 function validResultCompanionFiles(files) {
-  const safeName = name => typeof name === 'string' && name.isWellFormed() && name.length <= 1024 &&
+  return validCompanionFiles(files, 1024);
+}
+function validCorrectionCompanionFiles(files) {
+  return validCompanionFiles(files, MAX_CORRECTION_NAME_CHARS);
+}
+function validCompanionFiles(files, maximum) {
+  const safeName = name => typeof name === 'string' && name.isWellFormed() && name.length <= maximum &&
     // Match the initial writer's existing relative-path contract; do not
     // impose Windows flat native-correction naming rules on macOS folders.
     name.endsWith('.md') && !/[\u0000-\u001f\u007f\\]/u.test(name) && !/^[A-Za-z]:/u.test(name) &&
@@ -57,7 +64,7 @@ function validResultCompanionFiles(files) {
     new Set(files.map(file => file.name.normalize('NFC').toLowerCase())).size === files.length;
 }
 function buildFilenameMapping(sources, files) {
-  if (!validResultCompanionFiles(files) || !Array.isArray(sources) || sources.length !== files.length ||
+  if (!validCorrectionCompanionFiles(files) || !Array.isArray(sources) || sources.length !== files.length ||
       sources.some(name => typeof name !== 'string' || !name || name.length > 1024 || !name.isWellFormed() ||
         /[\u0000-\u001f\u007f]/u.test(name))) throw failure();
   const lines = [['Originaldatei', 'Anonymisiertes Ergebnis'],
@@ -78,5 +85,5 @@ function confidentialDescriptor(filenameMapping, identities, workbook) {
 }
 module.exports = { DIRECTORY, FILENAME_MAPPING_PATH, IDENTITIES_PATH, LEGACY_IDENTITIES_PATH, WORKBOOK_PATH,
   PATHS, LEGACY_PATHS, MAX_MAPPING_BYTES, MAX_IDENTITY_BYTES, MAX_WORKBOOK_BYTES, MAX_TOTAL_BYTES,
-  validConfidentialDescriptor, confidentialVersion, confidentialFiles, confidentialBytes, validResultCompanionFiles,
+  validConfidentialDescriptor, confidentialVersion, confidentialFiles, confidentialBytes, validResultCompanionFiles, validCorrectionCompanionFiles,
   buildFilenameMapping, confidentialDescriptor };
