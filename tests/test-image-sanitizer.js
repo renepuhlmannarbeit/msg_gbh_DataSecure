@@ -6,6 +6,8 @@
 // that property and the pixel-level redaction.
 
 const path = require('path');
+const fs = require('node:fs');
+const vm = require('node:vm');
 const zlib = require('zlib');
 const { createSuite } = require('./helpers');
 const { crc32 } = require('./lib/zip');
@@ -308,6 +310,30 @@ test('BMP alpha masks and inconsistent header extents are explicitly refused', (
 test('a truncated BMP is refused', () => {
   const bmp = encodeBmp(solidRgba(8, 8));
   assert.throws(() => decodeBmp(bmp.subarray(0, 60)), (e) => e instanceof ImageSafetyError);
+});
+
+test('a truncated large BMP is refused before allocating its decoded pixels', () => {
+  const header = Buffer.alloc(54);
+  header.write('BM', 0);
+  header.writeUInt32LE(54, 10);
+  header.writeUInt32LE(40, 14);
+  header.writeInt32LE(30_000, 18);
+  header.writeInt32LE(1_000, 22);
+  header.writeUInt16LE(1, 26);
+  header.writeUInt16LE(24, 28);
+  const bmpModule = { exports: {} };
+  let allocations = 0;
+  vm.runInNewContext(fs.readFileSync(path.join(runtime, 'images', 'bmp.js'), 'utf8'), {
+    module: bmpModule,
+    require(specifier) {
+      if (specifier === './common') return require(path.join(runtime, 'images', 'common.js'));
+      throw new Error(`UNEXPECTED_DEPENDENCY:${specifier}`);
+    },
+    Buffer: { alloc() { allocations++; throw new Error('BMP_ALLOCATED_BEFORE_PREFLIGHT'); } }
+  });
+  assert.throws(() => bmpModule.exports.decodeBmp(header),
+    error => error instanceof ImageSafetyError && error.message === 'BMP-Daten unvollständig.');
+  assert.strictEqual(allocations, 0);
 });
 
 // ---------------------------------------------------------------------------

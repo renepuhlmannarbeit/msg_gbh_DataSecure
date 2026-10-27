@@ -9,7 +9,9 @@ function decodeBmp(buf) {
   const width=buf.readInt32LE(18), hSigned=buf.readInt32LE(22), bpp=buf.readUInt16LE(28), compression=buf.readUInt32LE(30);
   if(width<=0||hSigned===0||![24,32].includes(bpp)||compression!==0) throw new ImageSafetyError('BMP-Variante nicht sicher bearbeitbar.');
   if (width*Math.abs(hSigned)>MAX_PIXELS) throw new ImageSafetyError('BMP ist für die sichere lokale Bildverarbeitung zu groß.');
-  const height=Math.abs(hSigned), topDown=hSigned<0, rowSize=Math.floor((bpp*width+31)/32)*4; const rgba=Buffer.alloc(width*height*4);
+  const height=Math.abs(hSigned), topDown=hSigned<0, rowSize=Math.floor((bpp*width+31)/32)*4;
+  if (pixelOffset+rowSize*height>buf.length) throw new ImageSafetyError('BMP-Daten unvollständig.');
+  const rgba=Buffer.alloc(width*height*4);
   for(let y=0;y<height;y++){
     const sy=topDown?y:(height-1-y), base=pixelOffset+sy*rowSize;
     if(base+rowSize>buf.length) throw new ImageSafetyError('BMP-Daten unvollständig.');
