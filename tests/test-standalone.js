@@ -990,7 +990,13 @@ test('private desktop IPC assembles fragmented bounded frames without repeated f
     Buffer.concat = originalConcat;
   }
   assert.deepStrictEqual(messages, [{ text: 'x'.repeat(8192) }]);
-  assert.strictEqual(decoder.buffer.length, 0, 'a complete frame must leave no pending EOF bytes');
+  assert.strictEqual(decoder.hasPendingFrame(), false, 'a complete frame must leave no pending EOF bytes');
+  const abandoned = new FrameDecoder({ validate: value => value });
+  abandoned.push(frame.subarray(0, 5));
+  assert.strictEqual(abandoned.hasPendingFrame(), true);
+  abandoned.discard();
+  assert.strictEqual(abandoned.hasPendingFrame(), false);
+  assert.deepStrictEqual(abandoned.push(frame), [{ text: 'x'.repeat(8192) }]);
   assert.ok(concatCalls < 10, `fragmented frame copied repeatedly: ${concatCalls}`);
 });
 

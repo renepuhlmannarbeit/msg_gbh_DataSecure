@@ -288,6 +288,15 @@ class FrameDecoder {
     this.validate = validate;
   }
 
+  hasPendingFrame() { return this.used !== 0; }
+
+  discard() {
+    this.buffer.fill(0);
+    this.buffer = Buffer.alloc(0);
+    this.used = 0;
+    this.frameSize = 0;
+  }
+
   push(chunk) {
     if (!Buffer.isBuffer(chunk)) fail('DESKTOP_IPC_BYTES_REQUIRED', 'Desktop-Kanal erwartet Bytes.');
     const messages = [];

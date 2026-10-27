@@ -168,7 +168,7 @@ function stopInput() {
   stopping = true;
   nativeChannel.abort();
   process.stdin.pause();
-  decoder.buffer = Buffer.alloc(0);
+  decoder.discard();
 }
 
 function endHost(code, event, errorCode) {
@@ -366,7 +366,7 @@ process.stdin.on('data', (chunk) => {
 });
 
 process.stdin.on('end', () => {
-  const truncated = decoder.buffer.length !== 0;
+  const truncated = decoder.hasPendingFrame();
   endHost(truncated ? 65 : 0, truncated ? 'private_ipc_truncated' : 'private_ipc_closed',
     truncated ? 'DESKTOP_IPC_FRAME_TRUNCATED' : undefined);
 });
