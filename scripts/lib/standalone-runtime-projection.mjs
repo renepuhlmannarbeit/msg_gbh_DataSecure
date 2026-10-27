@@ -26,8 +26,9 @@ const PLATFORM_ASSETS = Object.freeze({
   'linux-x64-glibc': Object.freeze(['native/linux-x64/datasecure-sandbox', 'native/linux-x64/datasecure-sandbox.sha256'])
 });
 // Keep the shared gateway import names stable for existing journals and worker
-// entrypoints, while sourcing these three adapters only from the app tree.
+// entrypoints, while sourcing product adapters only from the app tree.
 const ADAPTER_SOURCES = Object.freeze({
+  'core-policy-fingerprint.js': 'core-policy-fingerprint.js',
   'gateway/local-review-adapter.js': 'gateway/local-review-adapter.js',
   'gateway/product-read-capability.js': 'gateway/product-read-capability.js',
   'gateway/product-terminal-notice.js': 'gateway/product-terminal-notice.js'
@@ -84,7 +85,7 @@ export function collectStandaloneRuntime(serverRoot, productTarget) {
     }
   }
   if (files.has('core-policy-fingerprint.js')) {
-    const policy = require(path.join(root, 'core-policy-fingerprint.js'));
+    const policy = require(path.join(root, 'core/standalone-policy-fingerprint.js'));
     const fingerprint = policy.calculateStandalonePolicyFingerprint({ root });
     if (fingerprint !== policy.STANDALONE_POLICY_FINGERPRINT) throw new Error('STANDALONE_POLICY_SOURCE_CHANGED');
     const policyHashes = {};

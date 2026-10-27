@@ -37,6 +37,34 @@ test('Standalone source projection excludes Cowork-only runtime modules independ
     }
   }
 });
+test('Standalone build identity never reads Cowork-only source files', () => {
+  const source = `
+    const assert = require('node:assert/strict');
+    const fs = require('node:fs');
+    const path = require('node:path');
+    const { pathToFileURL } = require('node:url');
+    for (const method of ['readFileSync', 'openSync', 'lstatSync']) {
+      const original = fs[method];
+      fs[method] = function(file, ...args) {
+        const name = String(file).replaceAll('\\\\', '/');
+        assert.equal(name.includes('/server/companion/'), false, 'Standalone touched a Cowork source: ' + name);
+        return original.call(this, file, ...args);
+      };
+    }
+    (async () => {
+      const build = await import(pathToFileURL(path.join(process.argv[1], 'scripts/lib/standalone-build-fingerprint.mjs')));
+      const identity = build.standaloneBuildFingerprint(process.argv[1]);
+      assert.match(identity.fingerprint, /^[a-f0-9]{64}$/);
+      assert.equal(identity.files.some(file => file.path.includes('/companion/')), false);
+    })().catch(error => { process.stderr.write(String(error.stack || error)); process.exitCode = 1; });`;
+  for (const channel of ['standalone', 'plugin']) {
+    const result = spawnSync(process.execPath, ['-e', source, repository], {
+      cwd: repository, encoding: 'utf8', windowsHide: true, timeout: 30000,
+      env: { ...process.env, DATASECURE_PRODUCT_CHANNEL: channel, NODE_OPTIONS: '' }
+    });
+    assert.equal(result.status, 0, `${channel}: ${result.stderr}`);
+  }
+});
 test('Standalone review adapter accepts only an explicit app reviewer and never loads Cowork code', () => {
   const adapter = path.join(repository, 'plugins/data-secure/server/gateway/local-review-adapter.js');
   const source = `
@@ -110,10 +138,10 @@ test('Standalone adapter projection does not depend on the legacy adapter files'
       write(root, relative, "'use strict';\nmodule.exports = {};\n");
     write(root, 'standalone/desktop-sidecar.js',
       "require('../gateway/local-review-adapter'); require('../gateway/product-read-capability'); require('../gateway/product-terminal-notice');\n");
-    for (const relative of Object.values(standaloneProjectionContract.adapterSources))
+    for (const relative of Object.values(standaloneProjectionContract.adapterSources).filter(name => name.startsWith('gateway/')))
       write(scope, `apps/datasecure-standalone/runtime-adapters/${relative}`, "module.exports = {};\n");
     const projected = collectStandaloneRuntime(root, null);
-    for (const name of Object.keys(standaloneProjectionContract.adapterSources))
+    for (const name of Object.keys(standaloneProjectionContract.adapterSources).filter(name => name.startsWith('gateway/')))
       assert.ok(projected.some(file => file.relative === name));
   } finally { cleanup(scope); }
 });
@@ -166,6 +194,9 @@ test('packaged Standalone policy identity loads without Cowork sources and refus
   const scope = fs.mkdtempSync(path.join(temporaryRoot, 'datasecure-build-fingerprint-'));
   try {
     const projected = collectStandaloneRuntime(path.join(repository, 'plugins/data-secure/server'), null);
+    const policyAdapter = projected.find(file => file.relative === 'core-policy-fingerprint.js');
+    assert.match(policyAdapter.source, /apps[\\/]datasecure-standalone[\\/]runtime-adapters[\\/]/u);
+    assert.doesNotMatch(policyAdapter.bytes.toString('utf8'), /cowork|companion/iu);
     for (const file of projected) write(scope, `server/${file.relative}`, file.bytes);
     assert.equal(fs.existsSync(path.join(scope, 'server', 'companion')), false);
     const policy = path.join(scope, 'server', 'core-policy-fingerprint.js');
