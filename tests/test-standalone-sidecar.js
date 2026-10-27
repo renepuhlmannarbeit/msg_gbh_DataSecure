@@ -349,9 +349,12 @@ function removeOwnedRoot(root, initial) {
     assert.equal(refused.error_code, 'AI_EXPORT_CONFLICT');
     assert.equal(fs.readFileSync(configFile, 'utf8'), persisted, 'native refusal cannot mutate existing settings');
     const legacyConfiguration = await nativeClient.send('configure_results', '03'.repeat(8), { source_paths: [path.join(nativeRoot, 'output')] });
-    assert.equal(legacyConfiguration.ok, process.platform !== 'win32', JSON.stringify(legacyConfiguration));
-    if (process.platform === 'win32') assert.equal(legacyConfiguration.error_code, 'STANDALONE_IPC_FAILED',
-      'a native Windows direct caller without the configured capability cannot invent phase2 authorization');
+    assert.equal(legacyConfiguration.ok, true, JSON.stringify(legacyConfiguration));
+    if (process.platform === 'win32') assert.deepStrictEqual(legacyConfiguration.result, {
+      ok: false, configuration_changed: true, result_folder: path.join(nativeRoot, 'output'),
+      preparation_pending: true, local_ui_only: true, external_disclosure: false
+    }, 'a saved legacy setting without the native capability remains unprepared and cannot authorize phase2');
+    else assert.equal(legacyConfiguration.result.ok, true);
     assert.equal(callbacks, process.platform === 'win32' ? 3 : 2, 'legacy request cannot silently acquire a native binding');
     const nodeConfiguration = JSON.parse(fs.readFileSync(configFile, 'utf8'));
     assert.equal(nodeConfiguration.schema, 'datasecure-result-root/5');
