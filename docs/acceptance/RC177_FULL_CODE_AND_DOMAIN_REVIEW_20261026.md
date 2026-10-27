@@ -163,6 +163,19 @@ prioritärer Produktfix. Vollbild-RGBA für die Kontrastprüfung und die
 großen Ergebnisgenerationen bleiben Zielhost-RAM-/Zeitmessungen offen.
 Einzelheiten: `dist/rc177-current-code-review-v2-20261027/`.
 
+Die neun eigenen nativen C/C++-/Headerdateien sind jetzt in einer separaten
+manuellen Funktionsliste erfasst (`NATIVE-C-SCOPE-INVENTORY.md`). Ein
+unabhängiger Quellblick fand darin keinen neuen bestätigten Hochrisikofehler.
+Die POSIX-Aufsicht misst den direkten Childprozess; die behauptbare
+Nachkommen-/Prozessgruppengrenze sowie Windows-/Mac-ACL und Ressourcenlimits
+bleiben native Zielhost-Gegenproben. Die Liste ist ein R1-Teilschritt, kein
+vollständiger Review aller Makros, Parameter und Fehlerzweige.
+Im kleinen Frontend-Adapter `text-positions.js` sind CRLF-/UTF-16-Abbildung,
+alle Eingabegrenzen und die Korrekturrange als erster vollständiger
+UI-Methodenschnitt manuell dokumentiert; die bestehende Frontend-Suite prüft
+Rundläufe, Astralzeichen, Stale-Werte und unpaarige Surrogate. Eine native
+WebView-Bedienung wurde dafür nicht behauptet.
+
 Auch nach diesen Gates bleiben R0–R9 als Gesamtauftrag offen: Das Inventar
 ist erst Arbeitsliste, nicht Einzelmethodenreview; der erste Stagingfehler
 ist nicht kausal erklärt; native Paket-/Windows-/Mac-Zielhostgates und

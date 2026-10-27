@@ -51,6 +51,9 @@ Workflow erwartete sieben Limits, native Quelle lieferte fünf; jetzt werden
 die fünf exakten Namen geprüft. Kein GitHub-Job gestartet, kein neues Paket.
 `cargo fmt --check` meldet vorbestehende breite Stilabweichungen in 20
 Rustdateien; keine automatische Massenformatierung in diesem Fixschnitt.
+Eine manuelle Funktionsliste der neun eigenen nativen C/C++-/Headerdateien
+steht als R1-Teilschritt unter `NATIVE-C-SCOPE-INVENTORY.md`; Makroexpansion,
+alle Parameter-/Fehlerurteile und Zielhostausführung bleiben offen.
 Die separate `test:standalone:conversion`-Kette bestand, Exit0. Die enthaltene
 100-TXT-Probe benötigte 27269 ms und las die schwere Runtime kein zweites Mal;
 eine Resolver-Cacheänderung bleibt ohne Vergleichsmessung offen. Die drei
