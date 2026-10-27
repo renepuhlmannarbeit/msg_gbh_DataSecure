@@ -142,6 +142,11 @@ deshalb ohne weitere vergleichbare Lastmessung keinen Cache-Refactor.
 Die drei Korrekturthemen sind getrennt lokal committed: `7e006ff5`
 (Policybeleg), `2da6179a` (Office-OCR) und `38605c95` (Pilot-Workflow).
 Sie wurden weder auf `main` übertragen noch als neuer Kandidat veröffentlicht.
+Der zusätzliche statische Modulgraph (`ARCHITECTURE-GRAPH-REVIEW.md`) fand
+zwei verzögerte Kopplungsbereiche, aber keinen Zyklus unter 1068
+Initialisierungsbezügen. Die 23 Gatewaymodule im größeren Bereich und die
+große Dokumentprüfungs-Factory sind Wartbarkeits-Prüfspuren; daraus folgt
+ohne Vertrags-/Zustandsreview noch kein sicherer Refactor.
 
 Auch nach diesen Gates bleiben R0–R9 als Gesamtauftrag offen: Das Inventar
 ist erst Arbeitsliste, nicht Einzelmethodenreview; der erste Stagingfehler

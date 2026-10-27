@@ -64,6 +64,13 @@ Registers, die 1168 produktiven `catch`-Kandidaten, Fachvergleiche,
 performancegebundene Refactorings, native Paket-/Zielhostgates und die
 Erklärung des ersten Stagingfehlers. Nur die in `CURRENT-SLICE-DECISIONS.md`
 genannten eng abgegrenzten Methoden sind aktuell manuell eingeordnet.
+Ein zusätzlicher statischer Abhängigkeitsgraph erfasste 318 Servermodule,
+1226 literal Bezüge und zwei verzögerte Kopplungsbereiche (23 Gateway-, vier
+Privacymodule); bei 1068 Initialisierungsbezügen fand er keinen Zyklus.
+Diese Zahlen sind eine Pflege-Prüfspur, kein Beweis eines Ladefehlers oder
+einer vollständigen Standalone-Isolation. Die große Dokumentprüfungs-Factory
+und Gateway↔Standalone-Kopplung bleiben für begrenzte, vertragserhaltende
+Refactor-Entscheidungen offen (`ARCHITECTURE-GRAPH-REVIEW.md`).
 
 **Priorität nach Nutzerhinweis:** Zuerst alle Standalone-Pfade für Windows und
 beide Macs prüfen. `CLAUDE.md` spricht sowohl über Standalone als auch über
